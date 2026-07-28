@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, ShoppingCart, Plus, Search, Trash2, X, Coins,
   ClipboardCheck, Download, Link2, Paperclip, Upload, PackagePlus,
-  Check, Circle,
+  Check, Circle, Boxes, FileDown, PenLine,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,6 +56,11 @@ export default function PengadaanPage({ user, onBack }) {
   const [opsiAnggaran, setOpsiAnggaran] = useState([]);
   // Pejabat ber-peran PPK untuk dropdown penetapan (Referensi Pejabat).
   const [opsiPpk, setOpsiPpk] = useState([]);
+  // Hasil "Catat Semua Barang" — LPB yang baru TERBIT ditampilkan sebagai
+  // dialog, bukan hanya toast. Nomor surat yang menghilang bersama toast
+  // memaksa operator berpindah ke modul Persediaan hanya untuk mencetaknya.
+  const [hasilCatat, setHasilCatat] = useState(null);
+  const [tautanTtd, setTautanTtd] = useState(null);
 
   const muat = useCallback(() => {
     axios.get(`${API}/pengadaan`)
@@ -206,6 +211,18 @@ export default function PengadaanPage({ user, onBack }) {
       if (bagian.length) {
         toast.success(`Tercatat: ${bagian.join(" dan ")}`
           + (d.nomor_lpb ? ` · LPB ${d.nomor_lpb}` : ""));
+        // LPB baru terbit = dokumen resmi yang harus DICETAK dan DITEKEN.
+        // Nomornya di dalam toast akan lenyap dalam beberapa detik, dan
+        // satu-satunya jalan mencetaknya dulu adalah berpindah ke modul
+        // Persediaan → Riwayat LPB. Loop-nya ditutup di tempat kerjanya.
+        if (d.lpb_id) {
+          setHasilCatat({
+            lpbId: d.lpb_id, nomor: d.nomor_lpb || d.lpb_id.slice(0, 8),
+            asetDibuat: d.aset_dibuat || 0,
+            persediaanMasuk: d.persediaan_masuk || 0,
+            nomorBast: draftAset.perolehan.nomor_bast, mengirim: false,
+          });
+        }
       } else if (!(d.gagal || []).length && !d.tanpa_kode) {
         toast.info("Semua barang di BAST ini sudah tercatat sebelumnya");
       }
@@ -227,6 +244,37 @@ export default function PengadaanPage({ user, onBack }) {
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal mencatat barang");
       setDraftAset((d) => (d ? { ...d, saving: false } : d));
+    }
+  };
+
+  // Kirim LPB yang BARU terbit untuk ditandatangani — tanpa berpindah modul.
+  // Endpoint-nya milik Persediaan karena `db.lpb` satu koleksi untuk kedua
+  // kategori; yang berbeda hanya pintu masuknya.
+  const kirimTtdLpbBaru = async () => {
+    if (!hasilCatat?.lpbId) return;
+    const ok = await confirm({
+      title: "Kirim LPB untuk ditandatangani?",
+      description: `${hasilCatat.nomor} — dokumen PDF dibekukan sekarang, lalu `
+        + "tiap penanda tangan menerima tautan sendiri. Penanda tangan diambil "
+        + "dari Referensi Pejabat (Pengurus Barang → Pemeriksa LPB → KPB).",
+      confirmLabel: "Kirim",
+    });
+    if (!ok) return;
+    setHasilCatat((h) => (h ? { ...h, mengirim: true } : h));
+    try {
+      const r = await axios.post(`${API}/persediaan/lpb/${hasilCatat.lpbId}/kirim-ttd`, {});
+      const tautan = r.data?.links || [];
+      toast.success(`Permintaan TTD terkirim ke ${tautan.length} penanda tangan`
+        + (tautan.some((x) => x.email_terkirim) ? " (email terkirim)" : ""));
+      // Tautannya DITAMPILKAN, bukan hanya jumlahnya: tanpa email
+      // terkonfigurasi, tautan yang tak pernah muncul di layar berarti
+      // permintaan TTD tak sampai ke siapa pun.
+      setTautanTtd({ nomor: hasilCatat.nomor, links: tautan });
+      setHasilCatat(null);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mengirim permintaan TTD",
+        { duration: 9000 });
+      setHasilCatat((h) => (h ? { ...h, mengirim: false } : h));
     }
   };
 
@@ -487,9 +535,18 @@ export default function PengadaanPage({ user, onBack }) {
                               <span className="block text-xs font-semibold text-foreground truncate">
                                 {b.uraian} <span className="font-normal text-muted-foreground">×{b.jumlah} @ {fmtRp(b.harga_satuan)}</span>
                               </span>
+                              {/* Tiga keadaan, bukan dua. Baris yang sudah masuk
+                                  KARTU STOK dulu ikut berbunyi "belum tertaut"
+                                  — kalimat yang menyuruh operator menautkannya
+                                  ke aset, persis pencatatan ganda yang penjaga
+                                  golongan dipasang untuk mencegah. */}
                               {b.asset_id ? (
                                 <span className="block text-[10px] text-emerald-600 dark:text-emerald-400 font-mono truncate">
                                   <Link2 className="w-3 h-3 inline mr-0.5 align-[-2px]" />{b.asset_name} ({b.asset_code} · {b.NUP})
+                                </span>
+                              ) : b.psd_item_id ? (
+                                <span className="block text-[10px] text-cyan-600 dark:text-cyan-400">
+                                  <Boxes className="w-3 h-3 inline mr-0.5 align-[-2px]" />Tercatat sebagai persediaan (kartu stok)
                                 </span>
                               ) : (
                                 <span className="block text-[10px] text-amber-600 dark:text-amber-400">Belum tertaut ke aset master</span>
@@ -500,11 +557,16 @@ export default function PengadaanPage({ user, onBack }) {
                                 Ekstrakomptabel
                               </span>
                             )}
-                            <Button size="sm" variant="outline" className="h-6 text-[10px] min-h-0 px-2"
-                              onClick={() => { setCari(""); setHasilCari([]); setTaut({ perolehan: p, index: i, saving: false }); }}
-                              data-testid={`pengadaan-taut-${p.id}-${i}`}>
-                              {b.asset_id ? "Ubah Tautan" : "Tautkan"}
-                            </Button>
+                            {/* Baris yang sudah di kartu stok TIDAK menawarkan
+                                "Tautkan": server menolaknya, dan tombol yang
+                                pasti gagal hanyalah undangan untuk mencoba. */}
+                            {!b.psd_item_id && (
+                              <Button size="sm" variant="outline" className="h-6 text-[10px] min-h-0 px-2"
+                                onClick={() => { setCari(""); setHasilCari([]); setTaut({ perolehan: p, index: i, saving: false }); }}
+                                data-testid={`pengadaan-taut-${p.id}-${i}`}>
+                                {b.asset_id ? "Ubah Tautan" : "Tautkan"}
+                              </Button>
+                            )}
                           </li>
                         ))}
                       </ul>
@@ -813,6 +875,90 @@ export default function PengadaanPage({ user, onBack }) {
               Catat Semua
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── LPB yang baru terbit: cetak & teken di tempat kerjanya ── */}
+      <Dialog open={!!hasilCatat} onOpenChange={(o) => { if (!o) setHasilCatat(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Laporan Penerimaan Barang terbit</DialogTitle>
+            <DialogDescription className="text-xs">
+              BAST {hasilCatat?.nomorBast} sudah tercatat. LPB ini adalah bukti
+              resmi penerimaannya — cetak dan tandatangani sekarang, atau buka
+              lagi kapan pun lewat <strong>Persediaan → Riwayat LPB</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border border-border bg-muted/40 px-3 py-2.5">
+            <p className="font-mono text-sm font-semibold text-foreground break-all"
+               data-testid="pengadaan-lpb-nomor">
+              {hasilCatat?.nomor}
+            </p>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              {[hasilCatat?.asetDibuat ? `${hasilCatat.asetDibuat} aset ber-NUP` : null,
+                hasilCatat?.persediaanMasuk ? `${hasilCatat.persediaanMasuk} barang persediaan` : null,
+              ].filter(Boolean).join(" · ") || "—"}
+            </p>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button variant="outline" onClick={() => setHasilCatat(null)}>Nanti saja</Button>
+            <Button variant="outline"
+              onClick={() => downloadFileWithProgress(
+                `${API}/persediaan/lpb/${hasilCatat.lpbId}/pdf`,
+                `LPB_${String(hasilCatat.nomor).replace(/[/\s]/g, "_")}.pdf`,
+                { label: "Laporan Penerimaan Barang" }).catch(() => {})}
+              data-testid="pengadaan-lpb-unduh">
+              <FileDown className="w-4 h-4 mr-1.5" />Unduh PDF
+            </Button>
+            <Button onClick={kirimTtdLpbBaru} disabled={hasilCatat?.mengirim}
+              data-testid="pengadaan-lpb-kirim-ttd">
+              {hasilCatat?.mengirim
+                ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
+                : <PenLine className="w-4 h-4 mr-1.5" />}
+              Kirim TTD
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Tautan TTD LPB yang baru dikirim ── */}
+      <Dialog open={!!tautanTtd} onOpenChange={(o) => { if (!o) setTautanTtd(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Tautan tanda tangan — LPB {tautanTtd?.nomor}</DialogTitle>
+            <DialogDescription className="text-xs">
+              Satu tautan per penanda tangan. Bagikan lewat WhatsApp/email bila
+              pengiriman otomatis tak aktif — tanpa tautan ini permintaan TTD
+              tak sampai ke siapa pun.
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="divide-y divide-border/60">
+            {(tautanTtd?.links || []).map((t, i) => (
+              <li key={i} className="py-2">
+                <p className="text-xs font-medium text-foreground">
+                  {t.nama}
+                  {t.email_terkirim && (
+                    <span className="ml-1.5 text-[9px] font-semibold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                      email terkirim
+                    </span>
+                  )}
+                </p>
+                <div className="flex items-center gap-2 mt-1">
+                  <code className="flex-1 min-w-0 truncate text-[10px] bg-muted rounded px-2 py-1">
+                    {t.link}
+                  </code>
+                  <Button size="sm" variant="outline" className="h-7 text-[11px] flex-shrink-0"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(t.link)
+                        .then(() => toast.success("Tautan disalin"))
+                        .catch(() => toast.error("Gagal menyalin — salin manual dari kotak di samping"));
+                    }}>
+                    Salin
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
         </DialogContent>
       </Dialog>
 

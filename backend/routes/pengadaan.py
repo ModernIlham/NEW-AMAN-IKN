@@ -422,6 +422,25 @@ async def tautkan_barang(perolehan_id: str, payload: TautkanIn,
     prev_aid = str(row.get("asset_id") or "").strip()   # aset lama (lepas back-link)
     aid = str(payload.asset_id or "").strip()
     if aid:
+        # PINTU MANUAL KE PENCATATAN GANDA. Jalur otomatis
+        # (`buat_draft_aset_dari_perolehan` / `catat-semua`) sudah dijaga penjaga
+        # golongan, tetapi tombol "Tautkan" di layar tidak — dan ia menulis ke
+        # baris yang sama. Satu rim kertas HVS bisa berdiri di kartu stok DAN
+        # sebagai BMN ber-NUP sekaligus, keduanya berjurnal ke Neraca.
+        # Melepas tautan (`asset_id` kosong) tetap boleh: data lama yang telanjur
+        # salah harus bisa dibetulkan.
+        if str(row.get("psd_item_id") or "").strip():
+            raise HTTPException(
+                status_code=400,
+                detail=("Baris ini sudah tercatat sebagai persediaan (kartu "
+                        "stok). Menautkannya ke aset membuat barang yang sama "
+                        "terhitung dua kali di Neraca."))
+        if is_persediaan(row.get("kode")):
+            raise HTTPException(
+                status_code=400,
+                detail=(f"Kode {str(row.get('kode') or '').strip()} bergolongan 1 "
+                        "= barang persediaan, bukan aset tetap. Catat lewat "
+                        "\"Catat Semua Barang\" agar masuk ke kartu stok."))
         a = await db.assets.find_one({"id": aid}, {**_PROJ_ASET, "activity_id": 1})
         if not a:
             raise HTTPException(status_code=404, detail="Aset tidak ditemukan")

@@ -467,3 +467,96 @@ def test_stok_tak_masuk_kartu_barang_yang_salah(dbx):
         assert a4["stok"] == 0, "stok masuk ke kartu barang yang SALAH"
         assert f4["stok"] == 5
     _jalan(skenario())
+
+
+# ── Pintu MANUAL ke pencatatan ganda ───────────────────────────────────────
+
+def test_baris_yang_sudah_di_kartu_stok_tak_bisa_ditautkan_ke_aset(dbx):
+    """Tombol "Tautkan" adalah pintu KEDUA ke baris `barang[]` yang sama.
+
+    Jalur otomatis sudah dijaga penjaga golongan, tetapi `tautkan_barang`
+    tidak — dan ia menulis `asset_id` ke baris yang sudah memegang
+    `psd_item_id`. Satu rim kertas HVS lalu berdiri di kartu stok DAN sebagai
+    BMN ber-NUP sekaligus, keduanya berjurnal ke Neraca. Penjaga otomatis
+    yang bisa dilangkahi lewat tombol di sebelahnya bukan penjaga.
+    """
+    async def skenario():
+        await _seed(dbx)
+        rec = await _unwrap(rp.buat_perolehan)(_perolehan_baru(), user=USER)
+        await _unwrap(rp.daftarkan_persediaan)(rec["id"], user=USER)
+        segar = await dbx.pengadaan.find_one({"id": rec["id"]})
+        assert segar["barang"][1].get("psd_item_id"), "prasyarat: baris 1 di kartu stok"
+
+        await dbx.assets.insert_one({
+            "id": "aset-x", "asset_code": "3050102001", "NUP": "9",
+            "asset_name": "Printer", "kode_satker": "", "activity_id": "keg1"})
+        with pytest.raises(Exception) as ex:
+            await _unwrap(rp.tautkan_barang)(
+                rec["id"], rp.TautkanIn(index=1, asset_id="aset-x"), _user=USER)
+        assert getattr(ex.value, "status_code", None) == 400
+        assert "persediaan" in str(getattr(ex.value, "detail", "")).lower()
+
+        segar = await dbx.pengadaan.find_one({"id": rec["id"]})
+        assert not segar["barang"][1].get("asset_id"), "tautan tetap tertulis"
+    _jalan(skenario())
+
+
+def test_kode_golongan_satu_tak_bisa_ditautkan_ke_aset(dbx):
+    """Barang golongan 1 = persediaan menurut kodefikasi BMN.
+
+    Menautkannya ke BMN ber-NUP berarti mencatat barang habis pakai sebagai
+    aset tetap — salah kelas, salah neraca, salah penyusutan. Ditolak SEBELUM
+    ia pernah masuk kartu stok, bukan hanya sesudahnya.
+    """
+    async def skenario():
+        await _seed(dbx)
+        rec = await _unwrap(rp.buat_perolehan)(_perolehan_baru(), user=USER)
+        await dbx.assets.insert_one({
+            "id": "aset-y", "asset_code": "3050102001", "NUP": "8",
+            "asset_name": "Printer", "kode_satker": "", "activity_id": "keg1"})
+        with pytest.raises(Exception) as ex:
+            await _unwrap(rp.tautkan_barang)(
+                rec["id"], rp.TautkanIn(index=1, asset_id="aset-y"), _user=USER)
+        assert getattr(ex.value, "status_code", None) == 400
+        assert "golongan 1" in str(getattr(ex.value, "detail", ""))
+    _jalan(skenario())
+
+
+def test_baris_aset_tetap_boleh_ditautkan_seperti_biasa(dbx):
+    """Penjaganya tak boleh membunuh alur yang benar.
+
+    Tanpa uji ini, `tautkan_barang` yang menolak SEGALANYA akan lulus kedua
+    uji di atas — dan fitur penautan manual mati diam-diam.
+    """
+    async def skenario():
+        await _seed(dbx)
+        rec = await _unwrap(rp.buat_perolehan)(_perolehan_baru(), user=USER)
+        await dbx.assets.insert_one({
+            "id": "aset-z", "asset_code": "3050102001", "NUP": "7",
+            "asset_name": "Printer LaserJet", "kode_satker": "",
+            "activity_id": "keg1"})
+        hasil = await _unwrap(rp.tautkan_barang)(
+            rec["id"], rp.TautkanIn(index=0, asset_id="aset-z"), _user=USER)
+        assert hasil["barang"][0]["asset_id"] == "aset-z"
+        assert hasil["barang"][0]["NUP"] == "7"
+    _jalan(skenario())
+
+
+def test_melepas_tautan_tetap_boleh_pada_baris_persediaan(dbx):
+    """Data lama yang telanjur salah harus bisa DIBETULKAN.
+
+    Penjaga yang juga menutup jalan keluar akan mengunci kesalahan yang
+    sudah terlanjur tersimpan menjadi permanen.
+    """
+    async def skenario():
+        await _seed(dbx)
+        rec = await _unwrap(rp.buat_perolehan)(_perolehan_baru(), user=USER)
+        # Keadaan warisan: baris persediaan yang TELANJUR bertaut ke aset.
+        await dbx.pengadaan.update_one(
+            {"id": rec["id"]},
+            {"$set": {"barang.1.asset_id": "aset-lama",
+                      "barang.1.psd_item_id": "psd-lama"}})
+        hasil = await _unwrap(rp.tautkan_barang)(
+            rec["id"], rp.TautkanIn(index=1, asset_id=""), _user=USER)
+        assert hasil["barang"][1]["asset_id"] == ""
+    _jalan(skenario())
