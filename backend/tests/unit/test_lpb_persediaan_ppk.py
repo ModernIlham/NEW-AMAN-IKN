@@ -34,7 +34,12 @@ async def _diam(*a, **k):
 def dbx(monkeypatch):
     fake = AsyncMongoMockClient()["uji"]
     import shared_utils as su
-    for mod in (rps, su):
+    # `routes.persuratan` WAJIB ikut ditambal: jalur booking nomor LPB membaca
+    # setelan penomoran & counter agenda lewat db MILIKNYA SENDIRI. Tanpa ini
+    # ia menyentuh koneksi asli dan meledak dengan "attached to a different
+    # loop" — kegagalan yang menyamar sebagai galat infrastruktur, bukan bug.
+    import routes.persuratan as rsu
+    for mod in (rps, su, rsu):
         monkeypatch.setattr(mod, "db", fake, raising=False)
         if hasattr(mod, "log_audit"):
             monkeypatch.setattr(mod, "log_audit", _diam, raising=False)
@@ -172,4 +177,92 @@ def test_lpb_persediaan_berkategori_persediaan_dan_tampil_di_filter(dbx):
 
         aset = await _unwrap(rps.daftar_lpb)(kategori="aset", _user=USER)
         assert aset["total"] == 0
+    _jalan(skenario())
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TEMUAN AUDIT: privasi NIP, scope penerbit, cakupan penomoran
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_nip_ppk_non_asn_tak_dicetak_di_info_lpb():
+    """Aturan privasi Non-ASN berlaku juga di baris info, bukan hanya blok TTD.
+
+    `snapshot_ppk` sengaja membekukan `ppk_status_kepegawaian` justru untuk
+    keputusan ini. Mencetak `ppk_nip` mentah membatalkan aturan yang ditegakkan
+    di seluruh dokumen lain lewat pintu belakang.
+    """
+    baris = rps._baris_nip_ppk({
+        "ppk_nama": "Andi Pratama", "ppk_nip": "3201010101900001",
+        "ppk_status_kepegawaian": "non_asn"})
+    assert baris == "", "NIK/NIP Non-ASN tercetak di LPB"
+
+
+def test_nip_ppk_asn_tetap_dicetak():
+    baris = rps._baris_nip_ppk({
+        "ppk_nama": "Budi Santoso", "ppk_nip": "199001012015011001",
+        "ppk_status_kepegawaian": "pns"})
+    assert "199001012015011001" in baris
+
+
+def test_baris_nip_ppk_tanpa_ppk_tetap_bertitik():
+    assert rps._baris_nip_ppk({}) == "NIP PPK: <b>-</b>"
+    assert rps._baris_nip_ppk({"ppk_nama": ""}) == "NIP PPK: <b>-</b>"
+
+
+def test_lpb_membekukan_status_kepegawaian_ppk(dbx):
+    """Status ikut disimpan di dokumen — kalau tidak, `_baris_nip_ppk` buta."""
+    async def skenario():
+        await _seed(dbx, ppk_di_bast=False)
+        await dbx.pejabat.insert_one({
+            "id": "pj-ppk", "nama": "Andi Pratama", "nip": "3201010101900001",
+            "jabatan": "PPK", "peran": ["ppk"], "kode_satker": "",
+            "berlaku_mulai": "2026-01-01", "status_kepegawaian": "non_asn"})
+        hasil = await _unwrap(rps.transaksi_massal)(_massal(), user=USER)
+        lpb = await dbx.lpb.find_one({"id": hasil["lpb_id"]})
+        assert lpb["ppk_status_kepegawaian"] == "non_asn"
+        assert rps._baris_nip_ppk(lpb) == ""
+    _jalan(skenario())
+
+
+def test_booking_nomor_lpb_benar_benar_menerbitkan_nomor(dbx):
+    """CAKUPAN PENOMORAN — seluruh uji lain mematikannya (temuan audit).
+
+    Nomor LPB adalah nomor surat resmi yang tercatat di buku agenda satker.
+    Jalur yang tak pernah dijalankan uji apa pun adalah jalur yang tak pernah
+    dijamin bekerja.
+    """
+    async def skenario():
+        await _seed(dbx)
+        m = _massal()
+        m.booking_otomatis = True
+        m.no_bukti = ""                     # kosongkan agar booking dipakai
+        hasil = await _unwrap(rps.transaksi_massal)(m, user=USER)
+        assert hasil["nomor_lpb"], "nomor LPB tak pernah terbit"
+
+        lpb = await dbx.lpb.find_one({"id": hasil["lpb_id"]})
+        assert lpb["nomor"] == hasil["nomor_lpb"]
+        assert lpb["surat_id"], "LPB tak tertaut ke surat yang dipesan"
+
+        # Surat benar-benar tercatat di buku agenda, berstatus dibooking.
+        surat = await dbx.surat.find_one({"id": lpb["surat_id"]})
+        assert surat is not None
+        assert surat["status"] == "dibooking"
+        assert surat["jenis"] == "keluar"
+        assert surat["referensi"] == "LPB"
+        assert surat["nomor"] == hasil["nomor_lpb"]
+    _jalan(skenario())
+
+
+def test_nomor_lpb_tak_pernah_terpakai_dua_kali(dbx):
+    """Deret nomor agenda maju — dua LPB tak boleh bernomor sama."""
+    async def skenario():
+        await _seed(dbx)
+        nomor = []
+        for _ in range(3):
+            m = _massal()
+            m.booking_otomatis = True
+            m.no_bukti = ""
+            hasil = await _unwrap(rps.transaksi_massal)(m, user=USER)
+            nomor.append(hasil["nomor_lpb"])
+        assert len(set(nomor)) == 3, f"nomor LPB berulang: {nomor}"
     _jalan(skenario())

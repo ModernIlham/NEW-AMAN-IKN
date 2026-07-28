@@ -690,6 +690,9 @@ async def catat_semua_barang(perolehan_id: str, payload: CatatSemuaIn,
             "perolehan_id": perolehan_id,
             "ppk_nama": str(p.get("ppk_nama") or "").strip(),
             "ppk_nip": str(p.get("ppk_nip") or "").strip(),
+            # Status ikut disalin: `_baris_nip_ppk` di LPB memakainya untuk
+            # menegakkan aturan privasi Non-ASN. Tanpa ini NIP tercetak mentah.
+            "ppk_status_kepegawaian": str(p.get("ppk_status_kepegawaian") or "").strip(),
             "keterangan": (f"Penerimaan BMN dari BAST "
                            f"{p.get('nomor_bast') or '-'}"),
             "items": items, "total_nilai": total_nilai_lpb(items),

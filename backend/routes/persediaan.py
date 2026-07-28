@@ -936,15 +936,23 @@ async def transaksi_massal(payload: TransaksiMassalIn, user: dict = Depends(requ
         # harus tetap menyebut PPK-nya sendiri.
         ppk_nama = str(snap_asal.get("perolehan_ppk_nama") or "").strip()
         ppk_nip = str(snap_asal.get("perolehan_ppk_nip") or "").strip()
+        ppk_status = ""
         if not ppk_nama:
             from shared_utils import resolve_pejabat_peran as _rpp
             _pj = await _rpp("ppk", per_iso=tgl_lpb, kode_satker=_ks_lpb)
             ppk_nama = str((_pj or {}).get("nama") or "").strip()
             ppk_nip = str((_pj or {}).get("nip") or "").strip()
+            ppk_status = str((_pj or {}).get("status_kepegawaian") or "").strip()
+        elif ppk_nip:
+            # PPK dari BAST: statusnya tak ikut di snapshot jurnal, jadi
+            # dilengkapi lewat master pegawai — aturan Non-ASN tetap berlaku.
+            from shared_utils import status_kepegawaian_by_nip as _skn
+            ppk_status = await _skn(ppk_nip)
         await db.lpb.insert_one({
             "id": lpb_id, "nomor": nomor_lpb, "surat_id": surat_id,
             "tanggal": tgl_lpb,
             "ppk_nama": ppk_nama, "ppk_nip": ppk_nip,
+            "ppk_status_kepegawaian": ppk_status,
             "jenis": payload.jenis, "jenis_dokumen": payload.jenis_dokumen,
             "penyedia": str(payload.penyedia or "").strip(),
             "perolehan_id": str(payload.perolehan_id or "").strip(),
@@ -988,6 +996,26 @@ async def daftar_lpb(page: int = 1, page_size: int = 30, kategori: str = "",
                    .to_list(page_size))
     return {"items": items, "total": total, "page": page,
             "total_pages": max(1, -(-total // page_size))}
+
+
+def _baris_nip_ppk(lpb: dict) -> str:
+    """Baris "NIP PPK" untuk info LPB — TUNDUK pada aturan privasi Non-ASN.
+
+    `baris_identitas_ttd` mengembalikan list KOSONG untuk penanda tangan
+    Non-ASN atau nomor berformat NIK; itulah aturan yang berlaku di seluruh
+    blok tanda tangan aplikasi ini. Mencetak `ppk_nip` mentah di info LPB
+    membatalkan aturan tersebut lewat pintu belakang — dan `snapshot_ppk`
+    sengaja membekukan `ppk_status_kepegawaian` justru supaya keputusan itu
+    bisa diambil di sini, dari keadaan SAAT dokumen terbit.
+    """
+    d = lpb or {}
+    if not str(d.get("ppk_nama") or "").strip():
+        return "NIP PPK: <b>-</b>"
+    baris = baris_identitas_ttd(d.get("ppk_nip"), "",
+                               d.get("ppk_status_kepegawaian"))
+    if not baris:
+        return ""          # Non-ASN / NIK: cukup namanya saja
+    return f"<b>{baris[0]}</b>"
 
 
 async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
@@ -1055,8 +1083,14 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
         # PPK: pihak yang berkomitmen atas pengadaan barang ini (Perpres
         # 16/2018 Pasal 11). Selama ini absen di LPB — pemeriksa yang menelusuri
         # satu penerimaan tak menemukan atas komitmen siapa barang itu datang.
+        #
+        # NIP-nya melewati `baris_identitas_ttd`, ATURAN YANG SAMA dengan blok
+        # tanda tangan di bawah (temuan audit): Non-ASN tak dicetak nomornya.
+        # `snapshot_ppk` sengaja membekukan `ppk_status_kepegawaian` justru
+        # untuk ini — mencetak NIP mentah di sini membatalkan aturan privasi
+        # yang ditegakkan di seluruh dokumen lain.
         [Paragraph(f"PPK: <b>{lpb.get('ppk_nama') or '-'}</b>", meta),
-         Paragraph("NIP PPK: <b>" + (lpb.get('ppk_nip') or '-') + "</b>", meta)],
+         Paragraph(_baris_nip_ppk(lpb), meta)],
     ], colWidths=[doc.width * 0.52, doc.width * 0.48], hAlign='LEFT')
     info.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
@@ -1108,10 +1142,16 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
     el.append(Spacer(1, 6 * rl_mm))
 
     # Tanda tangan 3 kolom: Dibuat (pengurus barang), Diperiksa (atasan
-    # langsung — dititik bila belum diatur), Disetujui (KPB). Pejabat ter-scope
-    # satker penerbit LPB (isolasi M-SCOPE) + era-lama tanpa kode.
-    from shared_utils import kode_satker_user
-    _kode = kode_satker_user(_user)
+    # langsung — dititik bila belum diatur), Disetujui (KPB).
+    #
+    # Ter-scope ke satker PENERBIT dokumen, BUKAN satker pembaca (temuan audit
+    # adversarial). Dulu memakai `kode_satker_user(_user)`: super-admin yang
+    # mencetak LPB satker A memperoleh `""` → `_q_pejabat_satker("")` kosong →
+    # pejabat SELURUH satker jadi kandidat, dan yang SK-nya paling baru menang.
+    # Dokumen resmi satker A bisa tercetak dengan nama pejabat satker B.
+    # `lpb["kode_satker"]` adalah stempel yang dibekukan saat LPB terbit; itulah
+    # jawaban yang benar, dan ia tak berubah siapa pun yang membukanya.
+    _kode = str(lpb.get("kode_satker") or "").strip()
     pengurus = await resolve_pejabat_peran("pengurus_barang",
                                            per_iso=lpb.get("tanggal"),
                                            kode_satker=_kode)

@@ -109,6 +109,9 @@ export default function PersediaanPage({ user, onBack }) {
   const [riwayatLpb, setRiwayatLpb] = useState(null);
   const massalTimer = useRef(null);
   const { confirm, confirmDialog } = useConfirm();
+  // Tautan TTD yang baru terbit: {nomor, links[]} — ditampilkan agar bisa
+  // disalin/dibagikan manual saat email tak terkonfigurasi.
+  const [tautanTtd, setTautanTtd] = useState(null);
   const searchTimer = useRef(null);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
@@ -380,7 +383,11 @@ export default function PersediaanPage({ user, onBack }) {
       const r = await axios.post(`${API}/persediaan/lpb/${l.id}/kirim-ttd`, {});
       const tautan = r.data?.links || [];
       toast.success(`Permintaan TTD terkirim ke ${tautan.length} penanda tangan`
-        + (tautan.some((t) => t.email_terkirim) ? " (email terkirim)" : ""));
+        + (tautan.some((x) => x.email_terkirim) ? " (email terkirim)" : ""));
+      // TAUTANNYA DITAMPILKAN, bukan hanya jumlahnya (temuan audit): tanpa
+      // email terkonfigurasi, tautan yang tak pernah muncul di layar berarti
+      // permintaan TTD tak bisa disampaikan ke siapa pun.
+      setTautanTtd({ nomor: l.nomor || l.id.slice(0, 8), links: tautan });
       bukaRiwayatLpb();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal mengirim permintaan TTD",
@@ -1788,6 +1795,47 @@ export default function PersediaanPage({ user, onBack }) {
               })}
             </ul>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog tautan TTD LPB yang baru dikirim ── */}
+      <Dialog open={!!tautanTtd} onOpenChange={(o) => { if (!o) setTautanTtd(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Tautan tanda tangan — LPB {tautanTtd?.nomor}</DialogTitle>
+            <DialogDescription className="text-xs">
+              Satu tautan per penanda tangan. Bagikan lewat WhatsApp/email bila
+              pengiriman otomatis tak aktif — tanpa tautan ini permintaan TTD
+              tak sampai ke siapa pun.
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="divide-y divide-border/60">
+            {(tautanTtd?.links || []).map((t, i) => (
+              <li key={i} className="py-2">
+                <p className="text-xs font-medium text-foreground">
+                  {t.nama}
+                  {t.email_terkirim && (
+                    <span className="ml-1.5 text-[9px] font-semibold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                      email terkirim
+                    </span>
+                  )}
+                </p>
+                <div className="flex items-center gap-2 mt-1">
+                  <code className="flex-1 min-w-0 truncate text-[10px] bg-muted rounded px-2 py-1">
+                    {t.link}
+                  </code>
+                  <Button size="sm" variant="outline" className="h-7 text-[11px] flex-shrink-0"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(t.link)
+                        .then(() => toast.success("Tautan disalin"))
+                        .catch(() => toast.error("Gagal menyalin — salin manual dari kotak di samping"));
+                    }}>
+                    Salin
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
         </DialogContent>
       </Dialog>
 

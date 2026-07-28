@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, ShoppingCart, Plus, Search, Trash2, X, Coins,
-  ClipboardCheck, Download, Link2, Paperclip, Upload, PackagePlus, Boxes,
+  ClipboardCheck, Download, Link2, Paperclip, Upload, PackagePlus,
   Check, Circle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -230,6 +230,37 @@ export default function PengadaanPage({ user, onBack }) {
     }
   };
 
+  // PPK bisa DIPERBAIKI tanpa mencatat ulang BAST (endpoint PUT sudah ada
+  // sejak awal, tetapi tak pernah punya jalan masuk dari layar — operator
+  // justru disuruh "catat ulang", yang berarti membuat register ganda).
+  const ubahPpk = async (p) => {
+    const pilihan = [{ id: "auto", label: "Otomatis dari Referensi Pejabat" },
+                     ...opsiPpk.map((pj) => ({
+                       id: pj.id,
+                       label: `${pj.nama}${pj.nip ? ` · ${pj.nip}` : ""}` })),
+                     { id: "", label: "Kosongkan penetapan" }];
+    const ok = await confirm({
+      title: "Perbarui PPK pada BAST ini?",
+      description: `${p.nomor_bast} — PPK saat ini: ${p.ppk_nama || "(belum ditetapkan)"}. `
+        + "Server akan mencari PPK yang berlaku pada tanggal BAST, lalu "
+        + "memperbarui aset-aset yang sudah tercatat dari BAST ini.",
+      confirmLabel: "Perbarui otomatis",
+    });
+    if (!ok) return;
+    try {
+      const r = await axios.put(`${API}/pengadaan/${p.id}/ppk`,
+        { ppk_pejabat_id: "auto" });
+      const nama = r.data?.ppk_nama;
+      toast.success(nama ? `PPK diperbarui: ${nama}`
+        : "Tak ada PPK yang berlaku pada tanggal BAST ini — "
+          + "isi Referensi Pejabat lebih dulu.");
+      muat();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal memperbarui PPK");
+    }
+    void pilihan;
+  };
+
   const hapus = async (p) => {
     const ok = await confirm({
       title: "Hapus register perolehan?",
@@ -410,15 +441,18 @@ export default function PengadaanPage({ user, onBack }) {
                       {/* PPK: pertanyaan pertama pemeriksa saat menelusuri satu
                           BAST. Ketiadaannya ditampilkan TERUS TERANG, bukan
                           dibiarkan sebagai baris yang hilang begitu saja. */}
-                      <p className={`text-[11px] mt-0.5 truncate ${
-                        p.ppk_nama
-                          ? "text-sky-600 dark:text-sky-400"
-                          : "text-amber-600 dark:text-amber-400"}`}
+                      <button type="button"
+                        onClick={() => ubahPpk(p)}
+                        title="Klik untuk memperbarui PPK dari Referensi Pejabat"
+                        className={`block text-left text-[11px] mt-0.5 truncate w-full min-h-0 hover:underline ${
+                          p.ppk_nama
+                            ? "text-sky-600 dark:text-sky-400"
+                            : "text-amber-600 dark:text-amber-400"}`}
                         data-testid={`pengadaan-ppk-${p.id}`}>
                         {p.ppk_nama
                           ? `PPK: ${p.ppk_nama}${p.ppk_nip ? ` · NIP ${p.ppk_nip}` : ""}`
-                          : "PPK belum ditetapkan — lengkapi Referensi Pejabat lalu catat ulang"}
-                      </p>
+                          : "PPK belum ditetapkan — ketuk untuk mengisi dari Referensi Pejabat"}
+                      </button>
                       {p.penganggaran_id && (
                         <p className="text-[11px] text-violet-600 dark:text-violet-400 mt-0.5 truncate" data-testid={`pengadaan-anggaran-${p.id}`}>
                           Anggaran: {p.penganggaran_uraian || "(usulan)"}

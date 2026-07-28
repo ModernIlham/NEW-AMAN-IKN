@@ -170,9 +170,31 @@ pertama**:
 Toast hijau juga berhenti berbunyi "tidak ada barang baru" saat semua baris
 gagal, dan seluruh alasan gagal ditampilkan — bukan hanya yang pertama.
 
+### Gelombang ketiga: delapan temuan SEDANG/RENDAH sisanya
+
+- **Blok tanda tangan LPB di-scope ke satker PENERBIT, bukan pembaca.**
+  Dulu memakai satker pengguna yang membuka: super-admin (`kode_satker == ""`)
+  mendapat kandidat pejabat dari SELURUH satker, dan yang SK-nya terbaru
+  menang — dokumen resmi satker A bisa tercetak dengan nama pejabat satker B.
+  Kini dibaca dari stempel `lpb.kode_satker` yang dibekukan saat LPB terbit.
+- **NIP PPK tunduk pada aturan privasi Non-ASN.** `snapshot_ppk` sengaja
+  membekukan `ppk_status_kepegawaian` untuk keputusan ini, lalu status itu tak
+  pernah dipakai dan NIP tercetak mentah — membatalkan lewat pintu belakang
+  aturan yang ditegakkan di seluruh blok tanda tangan.
+- **`PUT /pengadaan/{id}/ppk` akhirnya punya jalan masuk.** Endpointnya ada
+  sejak awal, tetapi layar justru menyuruh operator "catat ulang" BAST — yang
+  berarti membuat register ganda. Kini baris PPK bisa diketuk.
+- **Tautan tanda tangan ditampilkan, bukan hanya jumlahnya.** Tanpa email
+  terkonfigurasi, tautan yang tak pernah muncul di layar berarti permintaan
+  TTD tak sampai ke siapa pun.
+- **Penomoran LPB akhirnya diuji.** Seluruh uji sebelumnya mematikan
+  `booking_otomatis`; jalur yang tak pernah dijalankan uji apa pun adalah
+  jalur yang tak pernah dijamin bekerja. Kini dijaga sampai ke buku agenda,
+  termasuk jaminan nomor tak pernah terpakai dua kali.
+
 ### Verifikasi
 
-1.230 uji backend (47 baru), eslint 0 galat, build kompilasi. **Enam mutasi**
+1.236 uji backend (53 baru), eslint 0 galat, build kompilasi. **Enam mutasi**
 dibuktikan tertangkap: membuang penjaga golongan → 4 uji gagal; mempersempit
 proyeksi `ppk_*` → 2 uji gagal; mencabut `lpb` dari gerbang `doc_ref` → 2 uji
 gagal; mencabut scope satker dari lookup perolehan → 1 uji gagal; mematok
