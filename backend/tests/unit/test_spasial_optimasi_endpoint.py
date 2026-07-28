@@ -177,6 +177,28 @@ def test_node_belum_dioptimalkan_tetap_muncul_di_peta(dbx):
     _jalan(skenario())
 
 
+def test_saklar_asli_tak_ikut_menarik_salinan_ringan(dbx):
+    """`asli=1` sudah paling berat; jangan ditambahi muatan yang tak dipakai.
+
+    Pada mode asli, `geometry_opt` tak pernah dikirim maupun dibaca — menariknya
+    dari DB hanya menambah beban di endpoint yang seluruh alasan keberadaannya
+    justru memangkas beban. Dijaga lewat perilaku yang terlihat: fitur mode asli
+    tak boleh membawa jejak salinan ringan sama sekali.
+    """
+    async def skenario():
+        await _seed(dbx, 1)
+        await _unwrap(rs.optimasi_massal)(None, rs.OptimasiMassalIn(), user=USER)
+        fc = await _unwrap(rs.geojson_viewport)(
+            bbox="", level_maks=100, induk="", dalam="", asli=True, _user=USER)
+        f = fc["features"][0]
+        assert "geometry_opt" not in f and "geometry_opt" not in f["properties"]
+        assert f["properties"]["dioptimalkan"] is False
+        # Dan yang dikirim memang geometri PENUH, bukan diam-diam yang ringan.
+        node = await dbx.spasial_node.find_one({"id": "n0"})
+        assert so._titik_geom(f["geometry"]) == so._titik_geom(node["geometry"])
+    _jalan(skenario())
+
+
 # ── Ekspor: pilihan asli vs optimize ───────────────────────────────────────
 
 def test_ekspor_bawaan_memberi_geometri_asli(dbx):

@@ -53,6 +53,80 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#658] Audit alur lintas-modul — pintu belakang, dokumen yatim, muatan siluman — 2026-07-28
+
+Pemeriksaan menyeluruh atas rantai **Pengadaan → Pencatatan → LPB → TTD**
+dan atas optimalisasi peta yang baru dipasang, mencari alur yang terlewat,
+langkah yang ambigu, dan janji yang tak ditepati.
+
+### Penjaga yang bisa dilangkahi bukan penjaga
+
+Penjaga golongan yang dipasang di jalur otomatis ternyata punya **pintu
+kedua**. `tautkan_barang` menulis `asset_id` ke baris `barang[]` yang sama —
+tanpa memeriksa apa pun, termasuk ke baris yang sudah memegang `psd_item_id`.
+Satu rim kertas HVS lalu berdiri di kartu stok **dan** sebagai BMN ber-NUP
+sekaligus, keduanya berjurnal ke Neraca. Persis kerusakan yang penjaga itu
+dipasang untuk mencegah, lewat tombol di sebelahnya.
+
+Baris yang sudah di kartu stok, dan baris berkode golongan 1, kini ditolak
+dengan pesan yang bisa ditindaklanjuti. **Melepas** tautan tetap boleh: data
+lama yang telanjur salah harus bisa dibetulkan, bukan dikunci permanen.
+
+Layarnya ikut berhenti mengundang. Baris yang sudah tercatat sebagai
+persediaan dulu berbunyi *"Belum tertaut ke aset master"* — kalimat yang
+menyuruh operator melakukan persis pencatatan ganda itu — dan menyodorkan
+tombol "Tautkan" yang kini pasti gagal. Keduanya diganti keadaan **ketiga**
+yang jujur: *"Tercatat sebagai persediaan (kartu stok)"*.
+
+### LPB yang terbit lalu hilang
+
+"Catat Semua Barang" menerbitkan LPB, menyebut nomornya di dalam toast, dan
+selesai. Beberapa detik kemudian nomor itu lenyap, dan satu-satunya jalan
+mencetak dokumen resmi tersebut adalah berpindah ke **Persediaan → Riwayat
+LPB** — modul lain, untuk dokumen yang baru saja Anda buat.
+
+Kini alurnya berakhir dengan dialog ber-tombol **Unduh PDF** dan **Kirim
+TTD**, lengkap dengan tautan penanda tangan yang ditampilkan apa adanya.
+Loop-nya ditutup di tempat pekerjaannya terjadi; Riwayat LPB tetap ada
+sebagai pintu masuk kedua, bukan satu-satunya.
+
+### Muatan siluman di daftar node — regresi dari perbaikan sendiri
+
+Daftar node sengaja membuang `geometry` karena poligon kawasan bisa ribuan
+verteks dan daftar itu memuat sampai 20.000 node sekaligus. **`geometry_opt`
+lolos dari proyeksi itu.** Per node ia memang jauh lebih ringan, tetapi
+ratusan verteks dikali puluhan ribu baris tetap payload raksasa — di daftar
+yang tak satu pun layarnya menggambar poligon.
+
+Yang dibutuhkan layar hanya satu boolean, jadi itulah yang diturunkan:
+`dioptimalkan`. Ia sekaligus menutup lubang alur — "Ringankan Peta" dulu
+hanya melaporkan angka di toast, tanpa cara melihat denah **mana** yang
+masih berat. Kini tiap baris berbadge "ringan" / "belum ringan".
+
+Hal yang sama berlaku di peta: pada mode `asli=1`, `geometry_opt` tak pernah
+dikirim maupun dibaca, jadi ia berhenti ditarik dari basis data sama sekali.
+Menambah ±13% pada payload terberat, di endpoint yang seluruh alasan
+keberadaannya memangkas berat itu, adalah lelucon yang mahal.
+
+### Editor selalu menyunting yang asli
+
+`GET /spasial/node/{id}` berhenti menyerahkan `geometry_opt`. Bila ikut
+terkirim, cepat atau lambat ada layar yang memakai "geometri mana pun yang
+tersedia", dan penyimpanan berikutnya menuliskan versi sederhana ke atas
+geometri asli — penyederhanaan yang seharusnya bisa dibatalkan berubah jadi
+permanen, tanpa satu pun galat.
+
+### Verifikasi
+
+1.281 uji backend, eslint 0 galat, build kompilasi. **Tiga mutasi**
+dibuktikan tertangkap: membuang penjaga `tautkan_barang` → 2 uji gagal;
+mengembalikan `geometry_opt` ke proyeksi daftar node → 1 uji gagal;
+mengembalikan `geometry_opt` ke detail node → 1 uji gagal. Dua uji lain
+(`baris aset tetap boleh ditautkan`, `melepas tautan tetap boleh`) menjaga
+agar penjaganya tak diam-diam membunuh alur yang benar.
+
+---
+
 ## [#657] Optimalisasi peta gaya mapshaper — ringan di layar, asli tetap utuh — 2026-07-28
 
 Denah kawasan hasil impor SHP membawa ribuan verteks per poligon. Di HP

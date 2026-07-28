@@ -841,8 +841,13 @@ async def geojson_viewport(bbox: str = Query("", description="lon_min,lat_min,lo
                  "ordinal_level": 1, "titik_wakil": 1, "bbox": 1}
                 if terpotong else
                 {"_id": 0, "id": 1, "tipe": 1, "nama": 1, "kode": 1,
-                 "ordinal_level": 1, "geometry": 1, "geometry_opt": 1,
-                 "optimasi": 1, "bbox": 1, "parent_id": 1})
+                 "ordinal_level": 1, "geometry": 1, "bbox": 1, "parent_id": 1})
+    if not terpotong and not asli:
+        # `geometry_opt` HANYA ditarik saat memang akan dipakai. Pada `asli=1`
+        # ia tak pernah dikirim maupun dibaca, dan menariknya berarti menambah
+        # ±13% pada payload yang justru paling berat — di endpoint yang seluruh
+        # alasan keberadaannya adalah memangkas berat itu.
+        proyeksi["geometry_opt"] = 1
     rows = await db.spasial_node.find(query, proyeksi).sort(
         "ordinal_level", 1).to_list(BATAS_FITUR_PETA)
 
