@@ -15,6 +15,7 @@ Pola pohon HYBRID: `parent_id` satu-satunya yang boleh diedit pengguna;
 """
 import asyncio
 import re
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -924,6 +925,15 @@ async def geojson_viewport(bbox: str = Query("", description="lon_min,lat_min,lo
 # yang sudah terisi tak ikut dipilih lagi).
 BATAS_OPTIMASI = 500
 
+# ...dan plafon WAKTU, yang justru lebih menentukan. Biaya per poligon berbeda
+# satu orde besaran menurut jumlah verteksnya — diukur di mesin pengembangan:
+# 34 ms untuk 1.000 verteks, 155 ms untuk 5.000, 613 ms untuk 20.000. Dengan
+# plafon cacah saja, 500 node hasil impor SHP berarti permintaan HTTP selama
+# 77-307 detik: jauh melewati batas waktu proxy lazim, sehingga operator
+# melihat galat 504 sementara servernya justru masih bekerja dan sebagian
+# pekerjaannya sudah tersimpan tanpa pernah dilaporkan.
+ANGGARAN_OPTIMASI_DETIK = 20.0
+
 MAKS_UKURAN_IMPOR = 20 * 1024 * 1024      # 20 MB — kecamatan penuh pun cukup
 _IMPOR_TASKS = set()                      # pegang referensi task agar tak di-GC
 # Satu impor pada satu waktu per proses: parsing+shapely CPU-berat di VPS kecil,
@@ -1249,8 +1259,10 @@ async def optimasi_massal(request: Request, payload: OptimasiMassalIn,
 
     diproses = dilewati = 0
     titik_sebelum = titik_sesudah = 0
+    kehabisan_waktu = False
+    mulai = time.monotonic()
     now = datetime.now(timezone.utc).isoformat()
-    for r in rows:
+    for i, r in enumerate(rows):
         geom = r.get("geometry")
         # shapely memblokir event loop; dilempar ke thread supaya satu satker
         # ber-2.000 poligon tak membekukan seluruh server.
@@ -1259,13 +1271,26 @@ async def optimasi_massal(request: Request, payload: OptimasiMassalIn,
         if not hasil["geometry"]:
             dilewati += 1
             titik_sesudah += int(hasil["metrik"].get("titik_asli") or 0)
-            continue
-        titik_sesudah += int(hasil["metrik"].get("titik_hasil") or 0)
-        await db.spasial_node.update_one(
-            {"id": r["id"]},
-            {"$set": {"geometry_opt": hasil["geometry"],
-                      "optimasi": {**hasil["metrik"], "pada": now}}})
-        diproses += 1
+        else:
+            titik_sesudah += int(hasil["metrik"].get("titik_hasil") or 0)
+            await db.spasial_node.update_one(
+                {"id": r["id"]},
+                {"$set": {"geometry_opt": hasil["geometry"],
+                          "optimasi": {**hasil["metrik"], "pada": now}}})
+            diproses += 1
+        # ANGGARAN WAKTU, bukan sekadar cacah node. Biaya per poligon berbeda
+        # satu orde besaran menurut jumlah verteksnya (diukur: 34 ms untuk
+        # 1.000 verteks, 613 ms untuk 20.000), jadi plafon berupa ANGKA node
+        # akan aman bagi denah gambar-sendiri dan menghasilkan permintaan
+        # bermenit-menit bagi hasil impor SHP — melewati batas waktu proxy,
+        # dan operator melihat galat padahal pekerjaannya justru sedang jalan.
+        #
+        # Diperiksa SESUDAH satu node selesai: anggaran sekecil apa pun tetap
+        # menghasilkan kemajuan, kalau tidak "tekan sekali lagi" jadi lingkaran
+        # yang tak pernah maju.
+        if (time.monotonic() - mulai) >= ANGGARAN_OPTIMASI_DETIK and i + 1 < len(rows):
+            kehabisan_waktu = True
+            break
 
     await log_audit("spasial_optimasi_massal", "", payload.dalam or "semua",
                     username=user.get("username", "system"),
@@ -1273,7 +1298,8 @@ async def optimasi_massal(request: Request, payload: OptimasiMassalIn,
                             f"{titik_sebelum} → {titik_sesudah} titik"))
     return {
         "diproses": diproses, "dilewati": dilewati,
-        "kandidat": len(rows), "terpotong": len(rows) >= BATAS_OPTIMASI,
+        "kandidat": len(rows),
+        "terpotong": len(rows) >= BATAS_OPTIMASI or kehabisan_waktu,
         "titik_sebelum": titik_sebelum, "titik_sesudah": titik_sesudah,
         "hemat_persen": (round(100.0 * (titik_sebelum - titik_sesudah)
                                / titik_sebelum, 1) if titik_sebelum else 0.0),

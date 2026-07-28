@@ -139,6 +139,41 @@ def test_optimasi_massal_terisolasi_satker(dbx):
     _jalan(skenario())
 
 
+def test_optimasi_massal_berhenti_pada_anggaran_waktu(dbx, monkeypatch):
+    """Plafon berupa CACAH node tidak cukup.
+
+    Biaya per poligon berbeda satu orde besaran menurut verteksnya, jadi 500
+    node hasil impor SHP berarti permintaan HTTP bermenit-menit — melewati
+    batas waktu proxy, dan operator melihat 504 padahal servernya masih
+    bekerja dan sebagian hasilnya sudah tersimpan tanpa pernah dilaporkan.
+    """
+    async def skenario():
+        await _seed(dbx, 3)
+        monkeypatch.setattr(rs, "ANGGARAN_OPTIMASI_DETIK", 0.0, raising=False)
+        h = await _unwrap(rs.optimasi_massal)(
+            None, rs.OptimasiMassalIn(), user=USER)
+        # Anggaran nol pun WAJIB menghasilkan kemajuan — kalau tidak,
+        # "tekan sekali lagi" jadi lingkaran yang tak pernah maju.
+        assert h["diproses"] == 1, "anggaran habis = tak ada kemajuan sama sekali"
+        assert h["terpotong"] is True, "sisanya tak dilaporkan; operator mengira selesai"
+        assert h["kandidat"] == 3
+        # Dan yang belum sempat digarap memang belum tersentuh.
+        belum = [r async for r in dbx.spasial_node.find({"geometry_opt": None})]
+        assert len(belum) == 2
+    _jalan(skenario())
+
+
+def test_optimasi_massal_tuntas_tak_mengaku_terpotong(dbx):
+    """Kebalikannya sama pentingnya: pekerjaan yang SELESAI tak boleh menyuruh
+    operator menekan tombolnya lagi tanpa henti."""
+    async def skenario():
+        await _seed(dbx, 2)
+        h = await _unwrap(rs.optimasi_massal)(
+            None, rs.OptimasiMassalIn(), user=USER)
+        assert h["diproses"] == 2 and h["terpotong"] is False
+    _jalan(skenario())
+
+
 # ── Peta memakai versi optimize ────────────────────────────────────────────
 
 def test_peta_mengirim_versi_ringan_secara_bawaan(dbx):

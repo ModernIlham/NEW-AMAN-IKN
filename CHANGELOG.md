@@ -130,15 +130,33 @@ permintaan pengguna lain yang tak ada urusannya dengan peta.
 penulisannya dipisah ke `_pasang_optimasi` agar jalur sinkron dan jalur thread
 tak punya dua salinan yang bisa berbeda diam-diam.
 
+### Plafon yang salah satuannya
+
+`POST /spasial/optimasi` dibatasi **500 node per panggilan** — plafon yang
+mengabaikan bahwa biaya per poligon berbeda satu orde besaran menurut jumlah
+verteksnya. Diukur: **34 ms** untuk 1.000 verteks, **155 ms** untuk 5.000,
+**613 ms** untuk 20.000. Untuk denah gambar-sendiri, 500 node adalah 17 detik;
+untuk hasil impor SHP, **77–307 detik** — jauh melewati batas waktu proxy
+lazim. Operator melihat galat 504 sementara servernya justru masih bekerja,
+dan sebagian pekerjaan sudah tersimpan tanpa pernah dilaporkan.
+
+Plafonnya kini **anggaran waktu** (20 detik), dengan cacah node tinggal
+sebagai pagar terluar. Ia menyesuaikan diri: poligon kecil → banyak per
+tekan, poligon raksasa → sedikit. Anggaran diperiksa **sesudah** satu node
+selesai, sehingga anggaran sekecil apa pun tetap menghasilkan kemajuan —
+kalau tidak, "tekan sekali lagi" menjadi lingkaran yang tak pernah maju.
+
 ### Verifikasi
 
-1.284 uji backend, eslint 0 galat, build kompilasi. **Empat mutasi**
+1.286 uji backend, eslint 0 galat, build kompilasi. **Empat mutasi**
 dibuktikan tertangkap: membuang penjaga `tautkan_barang` → 2 uji gagal;
 mengembalikan `geometry_opt` ke proyeksi daftar node → 1 uji gagal;
 mengembalikan `geometry_opt` ke detail node → 1 uji gagal; jalur thread lupa
-memasang hasil optimasinya → 3 uji gagal. Dua uji lain (`baris aset tetap
-boleh ditautkan`, `melepas tautan tetap boleh`) menjaga agar penjaganya tak
-diam-diam membunuh alur yang benar.
+memasang hasil optimasinya → 3 uji gagal; anggaran waktu diabaikan → 1 uji
+gagal; anggaran diperiksa SEBELUM node pertama (tak pernah maju) → 1 uji
+gagal. Tiga uji lain (`baris aset tetap boleh ditautkan`, `melepas tautan
+tetap boleh`, `pekerjaan tuntas tak mengaku terpotong`) menjaga agar
+penjaganya tak diam-diam membunuh alur yang benar.
 
 ---
 
