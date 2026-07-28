@@ -16,6 +16,7 @@ import { startUpdateCheck } from "@/lib/updateCheck";
 import BackgroundTaskBar from "@/components/BackgroundTaskBar";
 import { clearAllSnapshots, ensureSnapshotOwner } from "@/lib/offlineSnapshot";
 import axios from "axios";
+import { TENGGAT_BAKA } from "@/lib/muatAndal";
 import { terapkanHeaderSatker } from "./lib/satkerAktif";
 import SatkerAktifBar from "@/components/SatkerAktifBar";
 
@@ -114,6 +115,20 @@ function App() {
   // which left every other endpoint un-authenticated on the wire — a hidden
   // security gap when the backend started requiring auth.
   useEffect(() => {
+    // LANTAI TENGGAT GLOBAL. Sebelumnya `axios.defaults.timeout` tak pernah
+    // dipasang di mana pun, dan hanya 14 dari 227 pemanggil `axios.get`
+    // menyetel timeout sendiri. Di jaringan lapangan bentuk kegagalan yang
+    // paling sering BUKAN "koneksi ditolak" — itu cepat dan tertangkap catch —
+    // melainkan koneksi MENGGANTUNG. Tanpa tenggat, `await` pada keadaan itu
+    // tak pernah selesai: catch tak jalan, finally tak membereskan spinner,
+    // dan operator menatap loading tanpa akhir lalu menyimpulkan aplikasinya
+    // rusak. Penjaga yang sudah ada pun ikut mandul — pagar "8 kegagalan
+    // beruntun" hanya menghitung permintaan yang SELESAI.
+    //
+    // Ini LANTAI, bukan plafon: pemanggil yang memang berat (unggah/ekspor)
+    // tetap boleh menaikkannya sendiri lewat `{ timeout: ... }` per-request,
+    // dan nilai per-request selalu menang atas default ini.
+    axios.defaults.timeout = TENGGAT_BAKA;
     const id = axios.interceptors.request.use(config => {
       const token = localStorage.getItem('token');
       if (token && !config.headers.Authorization) {
