@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Plus, Pencil, Trash2, Loader2, Layers, ChevronRight, ChevronDown,
   Search, MapPinned, LandPlot, Upload, Download, Boxes, ClipboardCheck,
-  MoreVertical,
+  MoreVertical, Gauge,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,6 +56,7 @@ export default function SpasialMasterPage({ user, onBack }) {
   const [eksporBuka, setEksporBuka] = useState(false); // dialog ekspor + template
   const [isiNode, setIsiNode] = useState(null);        // node yang dilihat isinya (Fase 9)
   const [opnameNode, setOpnameNode] = useState(null);  // node yang di-opname via scan (Fase 11)
+  const [optimasi, setOptimasi] = useState(false);     // tombol optimasi sedang berjalan
   const { confirm, confirmDialog } = useConfirm();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
@@ -246,6 +247,43 @@ export default function SpasialMasterPage({ user, onBack }) {
   };
 
   const toggle = (id) => setBuka((b) => ({ ...b, [id]: !b[id] }));
+
+  // Hitung versi RINGAN untuk denah yang sudah terlanjur tersimpan. Node baru
+  // dioptimalkan otomatis saat disimpan; tombol ini untuk denah lama —
+  // lazimnya hasil impor SHP kawasan, yang justru paling berat.
+  const jalankanOptimasi = async () => {
+    const ok = await confirm({
+      title: "Ringankan denah untuk tampilan peta?",
+      description: "Server menghitung SALINAN ringan tiap poligon supaya peta "
+        + "cepat dibuka di HP lapangan. Geometri ASLI tidak diubah sama sekali "
+        + "\u2014 luas ruangan SBSK, deteksi lokasi, dan ekspor tetap memakai "
+        + "angka survei yang sama persis.",
+      confirmLabel: "Jalankan",
+    });
+    if (!ok) return;
+    setOptimasi(true);
+    try {
+      const r = await axios.post(`${API}/spasial/optimasi`, {});
+      const d = r.data || {};
+      if (!d.kandidat) {
+        toast.info("Semua denah sudah diringankan \u2014 tak ada yang perlu dihitung");
+      } else {
+        toast.success(`${d.diproses} denah diringankan: `
+          + `${d.titik_sebelum.toLocaleString("id-ID")} \u2192 `
+          + `${d.titik_sesudah.toLocaleString("id-ID")} titik (hemat ${d.hemat_persen}%)`,
+        { duration: 9000 });
+      }
+      if (d.terpotong) {
+        toast.warning("Masih ada denah tersisa \u2014 tekan sekali lagi untuk "
+          + "melanjutkan (dibatasi agar server tak kewalahan).", { duration: 9000 });
+      }
+      loadNodes();
+    } catch (e) {
+      toast.error(getApiError(e, "Gagal meringankan denah"));
+    } finally {
+      setOptimasi(false);
+    }
+  };
 
   const Baris = ({ node, level }) => {
     if (idTampil && !idTampil.has(node.id)) return null;   // pencarian: sembunyikan
@@ -496,6 +534,16 @@ export default function SpasialMasterPage({ user, onBack }) {
                     title="Impor denah dari Shapefile / KML / KMZ / GeoJSON"
                     data-testid="spasial-impor">
               <Upload className="w-4 h-4 mr-1" /> Impor
+            </Button>
+          )}
+          {isWriter && (
+            <Button variant="outline" onClick={jalankanOptimasi} size="sm"
+                    disabled={optimasi}
+                    title="Hitung salinan ringan untuk peta \u2014 geometri asli tak diubah"
+                    data-testid="spasial-optimasi">
+              {optimasi ? <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                        : <Gauge className="w-4 h-4 mr-1" />}
+              <span className="hidden sm:inline">Ringankan Peta</span>
             </Button>
           )}
           {isWriter && (

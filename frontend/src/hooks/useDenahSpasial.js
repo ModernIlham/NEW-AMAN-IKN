@@ -19,6 +19,13 @@ import {
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+// Kunci pilihan "lihat geometri asli". Bawaannya MATI: yang selalu ditampilkan
+// di web adalah versi ringan (geometry_opt), karena itulah yang membuat peta
+// tetap lincah di HP lapangan. Saklar ini untuk saat-saat presisi penuh memang
+// dibutuhkan — memeriksa hasil impor SHP, menyanggah sengketa batas — dan
+// pilihannya SENGAJA tak disimpan antar sesi: peta harus selalu terbuka ringan.
+const KUNCI_ASLI = "aman_denah_asli";
+
 // Pane sendiri di BAWAH overlay & marker (overlayPane 400, markerPane 600) —
 // denah adalah latar, pin aset harus selalu tetap di atasnya dan tetap diklik.
 const PANE = "denahSpasial";
@@ -56,6 +63,10 @@ export function useDenahSpasial(peta, { aktif = false } = {}) {
   const [lantai, setLantai] = useState([]);
   const [lantaiId, setLantaiId] = useState("");
   const [memuatLantai, setMemuatLantai] = useState(false);
+  const [asli, setAsli] = useState(() => {
+    try { return sessionStorage.getItem(KUNCI_ASLI) === "1"; } catch { return false; }
+  });
+  const [hemat, setHemat] = useState({ sumber: "optimize", hemat_persen: 0 });
 
   const levelSembunyiRef = useRef(levelSembunyi);
   useEffect(() => { levelSembunyiRef.current = levelSembunyi; }, [levelSembunyi]);
@@ -166,7 +177,7 @@ export function useDenahSpasial(peta, { aktif = false } = {}) {
     setMemuat(true);
     try {
       const r = await axios.get(`${API}/spasial/geojson`, {
-        params: { bbox: bboxKeParam(diminta), level_maks: levelMaks },
+        params: { bbox: bboxKeParam(diminta), level_maks: levelMaks, asli: asli ? 1 : 0 },
         signal: ctrl?.signal,
       });
       if (seq !== seqRef.current) return; // hasil basi
@@ -184,6 +195,10 @@ export function useDenahSpasial(peta, { aktif = false } = {}) {
         terpotong,
         level_maks: levelMaks,
       });
+      setHemat({
+        sumber: r.data?.sumber || "optimize",
+        hemat_persen: Number(r.data?.hemat_persen) || 0,
+      });
       galatRef.current = false;
     } catch (e) {
       if (axios.isCancel?.(e) || e?.name === "CanceledError" || e?.code === "ERR_CANCELED") return;
@@ -198,7 +213,7 @@ export function useDenahSpasial(peta, { aktif = false } = {}) {
     } finally {
       if (seq === seqRef.current) setMemuat(false);
     }
-  }, [peta, aktif, render]);
+  }, [peta, aktif, render, asli]);
 
   const muatRef = useRef(muat);
   useEffect(() => { muatRef.current = muat; }, [muat]);
@@ -246,6 +261,7 @@ export function useDenahSpasial(peta, { aktif = false } = {}) {
     termuatRef.current = null;
     setMemuat(false);
     setInfo({ jumlah: 0, jumlah_total: 0, terpotong: false, level_maks: 0 });
+    setHemat({ sumber: "optimize", hemat_persen: 0 });
     setCacahPerLevel([]);
     setGedung(null);
     setLantai([]);
@@ -317,6 +333,20 @@ export function useDenahSpasial(peta, { aktif = false } = {}) {
     susunUlangUrutan(sembunyiBaru);
   }, [susunUlangUrutan]);
 
+  // ── Saklar asli ↔ optimize ────────────────────────────────────────────────
+  // Cache viewport diputus paksa: `perluMuatUlang` hanya membandingkan bbox &
+  // level, jadi tanpa ini mengganti sumber geometri tidak menghasilkan request
+  // apa pun — saklarnya berpindah, petanya tidak.
+  const lewatiMuatAwalRef = useRef(true);
+  useEffect(() => {
+    try { sessionStorage.setItem(KUNCI_ASLI, asli ? "1" : "0"); } catch { /* storage diblokir */ }
+    if (lewatiMuatAwalRef.current) { lewatiMuatAwalRef.current = false; return; }
+    termuatRef.current = null;
+    muatRef.current(true);
+  }, [asli]);
+
+  const toggleAsli = useCallback(() => setAsli((v) => !v), []);
+
   // ── Lantai & ruangan ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!gedung?.id) return undefined;
@@ -353,14 +383,15 @@ export function useDenahSpasial(peta, { aktif = false } = {}) {
     if (typeof navigator !== "undefined" && navigator.onLine === false) return undefined;
     let batal = false;
     const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
-    axios.get(`${API}/spasial/geojson`, { params: { dalam: lantaiId }, signal: ctrl?.signal })
+    axios.get(`${API}/spasial/geojson`,
+             { params: { dalam: lantaiId, asli: asli ? 1 : 0 }, signal: ctrl?.signal })
       .then((r) => { if (!batal) render(r.data?.features || [], { keRuangan: true }); })
       .catch((e) => {
         if (batal || axios.isCancel?.(e) || e?.name === "CanceledError" || e?.code === "ERR_CANCELED") return;
         toast.error("Gagal memuat denah ruangan");
       });
     return () => { batal = true; try { ctrl?.abort(); } catch { /* sudah selesai */ } };
-  }, [peta, aktif, lantaiId, render]);
+  }, [peta, aktif, lantaiId, render, asli]);
 
   const tutupGedung = useCallback(() => {
     setGedung(null); setLantai([]); setLantaiId("");
@@ -376,6 +407,7 @@ export function useDenahSpasial(peta, { aktif = false } = {}) {
   return {
     memuat, info, lapis, toggleLapis,
     gedung, lantai, lantaiId, setLantaiId, memuatLantai, tutupGedung,
+    asli, toggleAsli, hemat,
     muatUlang: useCallback(() => muatRef.current(true), []),
   };
 }

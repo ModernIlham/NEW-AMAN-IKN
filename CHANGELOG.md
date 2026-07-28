@@ -53,6 +53,103 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#657] Optimalisasi peta gaya mapshaper — ringan di layar, asli tetap utuh — 2026-07-28
+
+Denah kawasan hasil impor SHP membawa ribuan verteks per poligon. Di HP
+lapangan itu berarti peta yang tersendat setiap kali digeser. Pendekatan
+mapshaper.org diadopsi — **sederhanakan geometri**, **kurangi presisi desimal**,
+**muat per bounding box** — dengan satu syarat mutlak dari pemilik: **berkas
+asli tidak pernah dihapus.**
+
+### Salinan, bukan penggantian
+
+Penyederhanaan ditulis ke field **baru** `geometry_opt`; `geometry` tak pernah
+disentuh. Begitu pula `bbox`, `titik_wakil`, dan `metrik.luas_m2` — luas SBSK,
+deteksi lokasi otomatis, dan bahan ekspor QGIS tetap dihitung dari bentuk asli.
+Menekan tombol optimasi dua kali tidak menggerus peta sedikit demi sedikit,
+karena sumbernya selalu yang asli.
+
+Yang mendasari seluruh berkas uji: **optimasi yang bocor ke `geometry` berarti
+presisi survei terbuang tanpa bisa dipulihkan — dan tanpa satu pun galat.**
+
+### Sweet spot: dicari, bukan ditebak
+
+Toleransi tetap tidak bisa dipakai. Angka yang aman untuk kawasan 27 km akan
+melenyapkan ruangan 10 m. Maka `optimalkan()` **menaiki tangga toleransi** dan
+berhenti di anak tangga terbesar yang masih di bawah anggaran:
+
+- **Pergeseran garis** (jarak Hausdorff) ≤ **0,35 m**, atau 0,005% diagonal
+  objek untuk kawasan besar — mana yang lebih longgar.
+- **Perubahan luas** ≤ **0,5%**.
+- Poligon di bawah 12 titik **tidak disentuh**: tak ada yang bisa dihemat, dan
+  penyederhanaan justru bisa merusaknya.
+
+Hasil terukur pada tiga skala:
+
+| Objek | Verteks | Hemat | Geser garis | Δ luas |
+|---|---|---|---|---|
+| Kawasan ±890 m | 1.001 → 129 | 87,1% | 0,144 m | 0,04% |
+| Kawasan 27 km | 2.001 → 257 | 87,2% | 2,188 m | 0,01% |
+| Ruangan ±11 m | 201 → 41 | 79,6% | 0,025 m | 0,42% |
+
+Delta luas dipakai **bersama** jarak Hausdorff, bukan menggantikannya: dua sisi
+poligon bisa bergeser berlawanan arah puluhan meter sementara luasnya persis
+sama. Selisih luas saja akan menyatakan itu aman.
+
+Metrik yang dilaporkan **diukur ulang setelah pembulatan presisi**, sebab
+pembulatan terjadi sesudah penyederhanaan dan dapat menggeser garis lagi.
+Melaporkan angka pra-pembulatan berarti menjanjikan ketelitian yang tidak
+dimiliki geometri yang benar-benar tersimpan.
+
+### Yang tampil di web selalu yang ringan — dengan saklar ke yang asli
+
+- `GET /spasial/geojson` mengirim `geometry_opt` secara bawaan dan melaporkan
+  `sumber`, `titik_dikirim`, `titik_asli`, serta `hemat_persen`. Node yang belum
+  dioptimalkan **tetap muncul** dengan bentuk aslinya — peta tak boleh kosong
+  hanya karena tombolnya belum ditekan.
+- `?asli=1` adalah saklarnya. Di layar: tombol **Bentuk ringan / Bentuk asli**
+  pada panel Lapis Denah, lengkap dengan angka penghematan yang sedang berlaku.
+  Pilihannya sengaja **tidak** disimpan antar sesi — peta harus selalu terbuka
+  dalam keadaan ringan.
+- **Poligon yang digambar sendiri lewat web pun ikut**: `_terapkan_geometri`
+  membuat versi ringannya pada setiap penyimpanan, tanpa operator perlu tahu
+  tombol optimasi ada. Mengosongkan geometri ikut membuang salinannya — salinan
+  yatim akan tergambar sebagai bentuk yang sudah tak ada.
+- `POST /spasial/optimasi` (**Ringankan Peta**) memproses denah yang belum punya
+  salinan; `paksa_ulang` untuk menghitung ulang semuanya. Ter-scope satker,
+  ber-rate-limit, dan shapely dijalankan di thread agar event loop tak tertahan.
+
+### Ekspor: bawaannya ASLI, dan itu disengaja
+
+Berkas ekspor menjadi arsip cadangan dan bahan olah di QGIS. Diam-diam memberi
+versi sederhana berarti presisi terkikis setiap putaran ekspor–impor. Maka
+`geometri=asli` adalah bawaannya; pilihan **"Versi ringan (optimize)"** ada di
+dialog ekspor, dan berkasnya diberi tanda `-optimize` **pada nama berkas** —
+berkas berpindah tangan, sementara pilihan di layar tidak ikut berpindah.
+
+Node yang belum dioptimalkan tetap ikut terekspor dengan bentuk aslinya:
+berkas bolong lebih berbahaya daripada berkas yang sebagian berat.
+
+### Editor selalu menyunting yang asli
+
+`GET /spasial/node/{id}` **tidak** lagi menyerahkan `geometry_opt`. Bila ikut
+terkirim, cepat atau lambat ada layar yang memakai "geometri mana pun yang
+tersedia", dan penyimpanan berikutnya menuliskan versi sederhana ke atas
+geometri asli — penyederhanaan yang seharusnya bisa dibatalkan berubah jadi
+permanen. Konteks tetangga di DenahEditor memang memakai versi ringan (latar
+orientasi, tak bisa diklik, tak ikut tersimpan), dan itu kini ditulis
+terang-terangan sebagai `asli: 0`.
+
+### Verifikasi
+
+1.275 uji backend (39 baru), eslint 0 galat, build kompilasi. **Empat mutasi**
+dibuktikan tertangkap: menulis hasil optimasi ke `geometry` → 3 uji gagal;
+membuat ekspor diam-diam memakai versi ringan → 1 uji gagal; mengabaikan
+saklar `asli` → 1 uji gagal; mengembalikan `geometry_opt` di detail node →
+1 uji gagal.
+
+---
+
 ## [#656] Rantai penerimaan barang: PPK, satu tombol catat, LPB aset ber-TTD — 2026-07-28
 
 Tiga permintaan pemilik yang ternyata satu rantai: nama **PPK** tak pernah

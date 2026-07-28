@@ -8,7 +8,7 @@ import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import axios from "axios";
-import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layers, ChevronDown, Boxes, MousePointerClick, CheckCheck, Eraser, PencilLine, SquareDashed, Share2, ImageIcon, Lock, LockOpen, LandPlot, Building2, Eye, EyeOff } from "lucide-react";
+import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layers, ChevronDown, Boxes, MousePointerClick, CheckCheck, Eraser, PencilLine, SquareDashed, Share2, ImageIcon, Lock, LockOpen, LandPlot, Building2, Eye, EyeOff, Gauge } from "lucide-react";
 import { toast } from "sonner";
 import { compressImageFile } from "../../lib/imageCompression";
 import {
@@ -1537,6 +1537,29 @@ const AssetMapFullView = memo(function AssetMapFullView({
                 {denah.info.jumlah_total.toLocaleString("id-ID")} objek di area ini — hanya titik pusat yang digambar. Perbesar peta untuk melihat bentuknya.
               </p>
             )}
+            {/* Saklar geometri. Peta SELALU terbuka pada versi ringan; ini
+                pintu ke bentuk asli saat presisi penuh memang dibutuhkan —
+                memeriksa hasil impor SHP, menyanggah sengketa batas. */}
+            <button
+              type="button"
+              onClick={denah.toggleAsli}
+              aria-pressed={denah.asli}
+              className="w-full px-2 py-1.5 border-t border-border flex items-center gap-1.5 text-left hover:bg-muted transition-colors"
+              data-testid="denah-saklar-asli"
+              title={denah.asli
+                ? "Sedang menampilkan geometri asli (presisi penuh, lebih berat)"
+                : "Sedang menampilkan geometri ringan — ketuk untuk melihat versi aslinya"}
+            >
+              <Gauge className={`w-3 h-3 flex-shrink-0 ${denah.asli ? "text-amber-600" : "text-teal-600"}`} />
+              <span className="text-[10px] font-medium truncate flex-1">
+                {denah.asli ? "Bentuk asli" : "Bentuk ringan"}
+              </span>
+              {!denah.asli && denah.hemat.hemat_persen > 0 && (
+                <span className="text-[9px] text-muted-foreground tabular-nums flex-shrink-0">
+                  −{Math.round(denah.hemat.hemat_persen)}%
+                </span>
+              )}
+            </button>
           </div>
         )}
 
