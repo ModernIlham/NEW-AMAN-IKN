@@ -15,6 +15,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  rahasia:
+    name: Pemeriksa rahasia (kredensial ter-commit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # Kunci iLovePDF, Compresto, Uploadcare, WhipDoc, Tinify, Resend,
+      # MONGO_URL, dan JWT_SECRET pernah ter-commit ke repositori PUBLIK dan
+      # bertahan berminggu-minggu tanpa satu pun mekanisme menghalanginya.
+      # JWT_SECRET yang terbaca publik berarti siapa pun dapat menempa token
+      # super-admin dan membaca seluruh data BMN semua satker.
+      - name: Cari kredensial di berkas ter-track
+        run: python3 scripts/cek_rahasia.py
+
   backend:
     name: Backend (compileall + pytest unit)
     runs-on: ubuntu-latest

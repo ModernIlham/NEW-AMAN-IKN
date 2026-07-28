@@ -530,18 +530,31 @@ nano /var/www/inventarisasi/backend/.env
 **Isi file `/var/www/inventarisasi/backend/.env`:**
 ```env
 MONGO_URL="mongodb://localhost:27017"
-DB_NAME="inventarisasi_bmn"
-CORS_ORIGINS="https://amanikn-inventarisasi.com,http://amanikn-inventarisasi.com"
-TINIFY_API_KEY=WX6Md8zwtPLg740tmWF9j5h1s82Ydmb2
-RESEND_API_KEY=re_W7pMzGpS_KWVouHVdY4pLrbqRNVrK2ogu
-SENDER_EMAIL=noreply@amanikn-inventarisasi.com
-JWT_SECRET=inv_mgmt_s3cur3_k3y_2026_pr0d_x7q9w2m4
-APP_PUBLIC_URL="https://amanikn-inventarisasi.com"
+DB_NAME="inventaris_bmn"
+CORS_ORIGINS="https://domain-anda.com"
+
+# Buat SEKARANG dengan: openssl rand -hex 32
+# JANGAN memakai nilai contoh mana pun — rahasia yang pernah tertulis di
+# dokumen berarti rahasia yang bisa dibaca siapa pun yang membacanya.
+JWT_SECRET=<tempel-hasil-openssl-rand-hex-32-di-sini>
+
+# Opsional. Kosongkan bila belum punya; fitur terkait mati dan itu terlihat
+# jujur di indikator kuota, bukan tersembunyi.
+TINIFY_API_KEY=
+RESEND_API_KEY=
+SENDER_EMAIL=
+ILOVEAPI_PUBLIC_KEY=
+ILOVEAPI_SECRET_KEY=
+APP_PUBLIC_URL="https://domain-anda.com"
 ```
 
 > ⚠️ **PENTING:** 
 > - `DB_NAME` bisa Anda ganti sesuai keinginan
-> - `JWT_SECRET` **HARUS diganti** dengan string random yang lebih kuat untuk production!
+> - `JWT_SECRET` **WAJIB acak dan rahasia.** Siapa pun yang mengetahuinya
+>   dapat menempa token super-admin dan membaca seluruh data BMN semua
+>   satker — seluruh isolasi satker dilewati begitu saja. Buat dengan
+>   `openssl rand -hex 32`, simpan HANYA di `.env` server (mode 600), dan
+>   jangan pernah menuliskannya di dokumen, skrip, atau pesan chat.
 > - `CORS_ORIGINS` sudah diset ke domain Anda
 > - `APP_PUBLIC_URL` = alamat publik frontend — dipakai membentuk **link e-sign
 >   yang dibagikan** dan **QR verifikasi** pada Lembar Pengesahan TTD. Bila
@@ -937,7 +950,7 @@ exit
 > ```
 > Edit `.env` backend:
 > ```env
-> MONGO_URL="mongodb://inventarisasi_admin:PASSWORD@localhost:27017/inventarisasi_bmn?authSource=admin"
+> MONGO_URL="mongodb://<pengguna>:<sandi-anda>@localhost:27017/inventarisasi_bmn?authSource=admin"
 > ```
 > Restart: `sudo systemctl restart mongod`
 

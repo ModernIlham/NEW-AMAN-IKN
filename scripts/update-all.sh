@@ -124,11 +124,36 @@ add_env_if_missing() {
     fi
 }
 
-add_env_if_missing "COMPRESTO_API_KEY" "ck_ftwwJBRiofLUICf9O9I8qCX6upXgEPKX"
-add_env_if_missing "UPLOADCARE_PUBLIC_KEY" "da1f1b4189357675173a"
-add_env_if_missing "ILOVEAPI_PUBLIC_KEY" "project_public_1d28556af9962529937217591602fe9d_r656956aaff5765b9c189bb8d6b80f32ba370"
-add_env_if_missing "ILOVEAPI_SECRET_KEY" "secret_key_006da3731d10909ea16490b8846ffd8f_uname90245b6fde6990f363066570644381a7"
-add_env_if_missing "WHIPDOC_API_KEY" "pdf_live_kXs5zajHDuXLWgDJ5weXeLLvF88wFJSM"
+# ── Kredensial penyedia: DIBACA DARI ENVIRONMENT, tidak pernah ditulis di sini ──
+#
+# Kunci-kunci ini DULU tertulis apa adanya di berkas ini. Repositori bersifat
+# publik, jadi selama berkas ini ada di riwayat git, kunci itu terbaca siapa
+# pun. Menghapusnya dari sini TIDAK memulihkan yang sudah terekspos — rotasi
+# di dasbor penyedia tetap wajib — tetapi menghentikan kebocoran berikutnya.
+#
+# Cara memakai: ekspor kuncinya lebih dulu, lalu jalankan skrip ini.
+#     export ILOVEAPI_PUBLIC_KEY="..."  ILOVEAPI_SECRET_KEY="..."
+#     export COMPRESTO_API_KEY="..."    UPLOADCARE_PUBLIC_KEY="..."
+#     sudo -E bash scripts/update-all.sh
+#
+# Kunci yang tidak diekspor akan DILEWATI dengan peringatan, bukan diisi nilai
+# bawaan. Nilai bawaan yang diam-diam dipakai adalah persis bagaimana kunci
+# bocor bisa hidup berbulan-bulan tanpa ada yang sadar.
+add_env_from_environment() {
+    local key="$1"
+    local value="${!key:-}"
+    if [ -z "${value}" ]; then
+        echo "  ! ${key} tidak diekspor — DILEWATI (fitur terkait akan mati)"
+        return 0
+    fi
+    add_env_if_missing "${key}" "${value}"
+}
+
+add_env_from_environment "COMPRESTO_API_KEY"
+add_env_from_environment "UPLOADCARE_PUBLIC_KEY"
+add_env_from_environment "ILOVEAPI_PUBLIC_KEY"
+add_env_from_environment "ILOVEAPI_SECRET_KEY"
+
 
 chmod 600 "${ENV_FILE}"
 echo -e "${GREEN}  ✅ Backend .env updated${NC}"

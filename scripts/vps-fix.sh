@@ -101,15 +101,45 @@ if [ -f "${BACKUP_DIR}/backend.env" ]; then
     echo -e "  ${GREEN}✅ backend/.env di-restore${NC}"
 else
     # Create default .env if it doesn't exist
-    cat > "${APP_DIR}/backend/.env" << 'ENVEOF'
-MONGO_URL="mongodb://localhost:27017"
-DB_NAME="inventarisasi_bmn"
-CORS_ORIGINS="https://amanikn-inventarisasi.com,http://amanikn-inventarisasi.com"
-TINIFY_API_KEY=WX6Md8zwtPLg740tmWF9j5h1s82Ydmb2
-RESEND_API_KEY=re_W7pMzGpS_KWVouHVdY4pLrbqRNVrK2ogu
-SENDER_EMAIL=noreply@amanikn-inventarisasi.com
-JWT_SECRET=inv_mgmt_s3cur3_k3y_2026_pr0d_x7q9w2m4
-ENVEOF
+    # ── .env backend: SELURUH rahasia dibaca dari environment ──────────────────
+    #
+    # Berkas ini DULU menuliskan MONGO_URL, JWT_SECRET, TINIFY_API_KEY, dan
+    # RESEND_API_KEY apa adanya. Repositori bersifat PUBLIK — kredensial itu
+    # terbaca siapa pun, dan JWT_SECRET yang terbaca publik berarti siapa pun
+    # dapat menempa token super-admin lalu membaca seluruh data BMN semua satker.
+    # Mencabutnya dari sini TIDAK memulihkan yang sudah terekspos; rotasi di
+    # masing-masing penyedia tetap wajib.
+    #
+    # Cara memakai:
+    #     export MONGO_URL="..." JWT_SECRET="$(openssl rand -hex 32)"
+    #     export CORS_ORIGINS="https://domain-anda"
+    #     sudo -E bash scripts/vps-fix.sh
+    #
+    # JWT_SECRET dan MONGO_URL WAJIB. Menyediakan nilai bawaan untuk keduanya
+    # berarti setiap pemasangan memakai rahasia yang sama — persis keadaan yang
+    # baru saja diperbaiki. Skrip berhenti, bukan mengarang.
+    : "${MONGO_URL:?WAJIB diekspor lebih dulu}"
+    : "${JWT_SECRET:?WAJIB diekspor lebih dulu — buat acak: openssl rand -hex 32}"
+    if [ "${#JWT_SECRET}" -lt 32 ]; then
+        echo "JWT_SECRET terlalu pendek (${#JWT_SECRET} karakter, minimal 32)." >&2
+        echo "Buat yang baru: openssl rand -hex 32" >&2
+        exit 1
+    fi
+
+    {
+        echo "MONGO_URL=\"${MONGO_URL}\""
+        echo "DB_NAME=\"${DB_NAME:-inventaris_bmn}\""
+        echo "CORS_ORIGINS=\"${CORS_ORIGINS:-http://localhost:3000}\""
+        echo "JWT_SECRET=${JWT_SECRET}"
+        # Opsional: fitur terkait mati bila kosong, dan itu DINYATAKAN lewat
+        # indikator kuota, bukan ditutupi nilai bawaan.
+        [ -n "${TINIFY_API_KEY:-}" ]      && echo "TINIFY_API_KEY=${TINIFY_API_KEY}"
+        [ -n "${RESEND_API_KEY:-}" ]      && echo "RESEND_API_KEY=${RESEND_API_KEY}"
+        [ -n "${SENDER_EMAIL:-}" ]        && echo "SENDER_EMAIL=${SENDER_EMAIL}"
+        [ -n "${ILOVEAPI_PUBLIC_KEY:-}" ] && echo "ILOVEAPI_PUBLIC_KEY=${ILOVEAPI_PUBLIC_KEY}"
+        [ -n "${ILOVEAPI_SECRET_KEY:-}" ] && echo "ILOVEAPI_SECRET_KEY=${ILOVEAPI_SECRET_KEY}"
+        true
+    } > "${APP_DIR}/backend/.env"
     chmod 600 "${APP_DIR}/backend/.env"
     echo -e "  ${YELLOW}⚠️  backend/.env dibuat baru (default)${NC}"
 fi
@@ -143,11 +173,36 @@ add_env_if_missing() {
     fi
 }
 
-add_env_if_missing "COMPRESTO_API_KEY" "ck_ftwwJBRiofLUICf9O9I8qCX6upXgEPKX"
-add_env_if_missing "UPLOADCARE_PUBLIC_KEY" "da1f1b4189357675173a"
-add_env_if_missing "ILOVEAPI_PUBLIC_KEY" "project_public_1d28556af9962529937217591602fe9d_r656956aaff5765b9c189bb8d6b80f32ba370"
-add_env_if_missing "ILOVEAPI_SECRET_KEY" "secret_key_006da3731d10909ea16490b8846ffd8f_uname90245b6fde6990f363066570644381a7"
-add_env_if_missing "WHIPDOC_API_KEY" "pdf_live_kXs5zajHDuXLWgDJ5weXeLLvF88wFJSM"
+# ── Kredensial penyedia: DIBACA DARI ENVIRONMENT, tidak pernah ditulis di sini ──
+#
+# Kunci-kunci ini DULU tertulis apa adanya di berkas ini. Repositori bersifat
+# publik, jadi selama berkas ini ada di riwayat git, kunci itu terbaca siapa
+# pun. Menghapusnya dari sini TIDAK memulihkan yang sudah terekspos — rotasi
+# di dasbor penyedia tetap wajib — tetapi menghentikan kebocoran berikutnya.
+#
+# Cara memakai: ekspor kuncinya lebih dulu, lalu jalankan skrip ini.
+#     export ILOVEAPI_PUBLIC_KEY="..."  ILOVEAPI_SECRET_KEY="..."
+#     export COMPRESTO_API_KEY="..."    UPLOADCARE_PUBLIC_KEY="..."
+#     sudo -E bash scripts/vps-fix.sh
+#
+# Kunci yang tidak diekspor akan DILEWATI dengan peringatan, bukan diisi nilai
+# bawaan. Nilai bawaan yang diam-diam dipakai adalah persis bagaimana kunci
+# bocor bisa hidup berbulan-bulan tanpa ada yang sadar.
+add_env_from_environment() {
+    local key="$1"
+    local value="${!key:-}"
+    if [ -z "${value}" ]; then
+        echo "  ! ${key} tidak diekspor — DILEWATI (fitur terkait akan mati)"
+        return 0
+    fi
+    add_env_if_missing "${key}" "${value}"
+}
+
+add_env_from_environment "COMPRESTO_API_KEY"
+add_env_from_environment "UPLOADCARE_PUBLIC_KEY"
+add_env_from_environment "ILOVEAPI_PUBLIC_KEY"
+add_env_from_environment "ILOVEAPI_SECRET_KEY"
+
 
 # ============================================
 # STEP 4: Verifikasi semua file backend
