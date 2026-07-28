@@ -10,7 +10,7 @@
 // berisi aset apa pun — ruang menganggur. Itulah bukti yang menahan usulan
 // pengadaan ruang baru, dan karena itu ia ditaruh sebagai kartu, bukan
 // disembunyikan di kolom tabel.
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { TENGGAT_BAKA, muatAndal } from "@/lib/muatAndal";
 import { toast } from "sonner";
@@ -56,6 +56,7 @@ export default function SbskRuangPanel() {
   const [memuat, setMemuat] = useState(false);
   // Bedakan "daftar memang kosong" dari "gagal memuat daftar".
   const [gagalDaftar, setGagalDaftar] = useState(false);
+  const reqRef = useRef(0);
   const [galat, setGalat] = useState("");
 
   // Node yang LAYAK jadi lingkup: yang punya keturunan ruangan. Menawarkan
@@ -100,6 +101,12 @@ export default function SbskRuangPanel() {
 
   const muat = useCallback(async (nodeId) => {
     if (!nodeId) { setData(null); return; }
+    // PENJAGA URUTAN. Mengganti lingkup memicu muatan baru sementara yang lama
+    // masih terbang, dan lingkup ber-ruangan banyak jauh lebih lama. Tanpa
+    // penjaga ini balasan LAMA yang GAGAL menghapus data lingkup BARU yang
+    // sudah berhasil tampil (`setData(null)` di blok catch) — layar kosong
+    // padahal datanya baru saja ada.
+    const seq = ++reqRef.current;
     setMemuat(true);
     setGalat("");
     try {
@@ -107,14 +114,16 @@ export default function SbskRuangPanel() {
         params: { node_id: nodeId, dalam: "true", tipe: "RUANGAN" },
         timeout: 30000,
       });
+      if (seq !== reqRef.current) return;
       setData(r.data);
     } catch (e) {
+      if (seq !== reqRef.current) return;
       setData(null);
       // Tanpa ini panel jadi KOTAK KOSONG PERMANEN: `!data ? null` menyembunyikan
       // segalanya dan tak ada jalan mencoba lagi selain memuat ulang halaman.
       setGalat(e?.response?.data?.detail || "Gagal memuat SBSK ruang — periksa sinyal");
       toast.error(e?.response?.data?.detail || "Gagal memuat SBSK ruang");
-    } finally { setMemuat(false); }
+    } finally { if (seq === reqRef.current) setMemuat(false); }
   }, []);
 
   useEffect(() => { muat(pilih); }, [muat, pilih]);

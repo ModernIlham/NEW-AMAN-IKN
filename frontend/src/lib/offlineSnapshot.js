@@ -18,6 +18,7 @@
 import { openDB } from "idb";
 import axios from "axios";
 import { isQuotaExceeded } from "./idbErrors";
+import { TENGGAT_BERAT, muatAndal } from "./muatAndal";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -150,7 +151,16 @@ export async function syncSnapshot(activityId, userId, onProgress, { forceFull =
     const params = new URLSearchParams({ activity_id: activityId, limit: String(PAGE_LIMIT) });
     if (cursor) params.append("cursor", cursor);
     if (since) params.append("since", since);
-    const r = await axios.get(`${API}/assets/offline-snapshot?${params.toString()}`);
+    // Sinkron ini berhalaman-halaman: satu kegiatan besar bisa puluhan
+    // permintaan berturut-turut, dan justru dilakukan tepat sebelum berangkat
+    // ke lapangan — sering di sinyal yang paling buruk. Dulu SATU halaman yang
+    // gagal membatalkan seluruh sinkron dan operator berangkat tanpa cache.
+    // Kini tiap halaman diulang otomatis untuk kegagalan yang memang layak
+    // diulang (jaringan/tenggat/server), dengan jeda menanjak. Aman diulang:
+    // ini GET, dan kursor keyset-nya tak bergerak sebelum halaman berhasil.
+    const r = await muatAndal(() => axios.get(
+      `${API}/assets/offline-snapshot?${params.toString()}`,
+      { timeout: TENGGAT_BERAT }));
     const { items = [], deleted_ids: deletedIds = [], requires_full_refresh: needsFull,
             next_cursor: nextCursor = "" } = r.data || {};
     total = r.data?.total ?? total;

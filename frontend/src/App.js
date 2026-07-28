@@ -3,9 +3,13 @@
 // ============================================================================
 // Code splitting with React.lazy + Suspense
 // Lazy loads pages for smaller initial bundle
+//
+// Setiap halaman dibungkus <HalamanLazy> = BatasGalat + Suspense. Tanpa batas
+// galat, satu potongan kode yang gagal diunduh (luring / versi baru ter-deploy)
+// melepas SELURUH pohon React dan menyisakan layar putih polos.
 // ============================================================================
 
-import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react";
+import React, { useState, useEffect, useCallback, useRef, lazy } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import "@/App.css";
 import { Toaster } from "@/components/ui/sonner";
@@ -19,6 +23,7 @@ import axios from "axios";
 import { TENGGAT_BAKA } from "@/lib/muatAndal";
 import { terapkanHeaderSatker } from "./lib/satkerAktif";
 import SatkerAktifBar from "@/components/SatkerAktifBar";
+import { HalamanLazy } from "@/components/BatasGalat";
 
 // ============================================================================
 // LAZY LOADED PAGES - Code Splitting
@@ -365,9 +370,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <TtdPublikPage />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -380,9 +385,9 @@ function App() {
   if (window.location.pathname.startsWith('/lacak')) {
     return (
       <div className="App">
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <LacakPage />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -395,9 +400,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <PetaKolaborasiPage />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -411,9 +416,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <InfoPage onBack={() => setShowInfo(false)} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -424,9 +429,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <KodefikasiPage user={user} onBack={() => setShowKodefikasi(false)} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -437,9 +442,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <PejabatPage user={user} onBack={() => setShowPejabat(false)} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -450,9 +455,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <SpasialMasterPage user={user} onBack={() => setShowSpasial(false)} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -463,9 +468,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <PelacakanPage user={user} onBack={() => setShowPelacakan(false)} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -476,9 +481,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <RuanganPage user={user} onBack={() => setShowRuangan(false)} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -489,9 +494,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <ReferensiAkunPage user={user} onBack={() => kembaliSubHalaman(() => setShowReferensiAkun(false))} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -502,9 +507,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <PegawaiPage user={user} onBack={() => setShowPegawai(false)} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -515,9 +520,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <PersediaanPage user={user} onBack={() => setShowPersediaan(false)} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -528,9 +533,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <PersuratanPage user={user} onBack={() => kembaliSubHalaman(() => setShowPersuratan(false))} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -541,9 +546,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <PelaporanPage user={user} onBack={() => kembaliSubHalaman(() => setShowPelaporan(false))} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -554,9 +559,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <PenggunaanPage user={user} onBack={() => setShowPenggunaan(false)} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -567,9 +572,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <PengamananPage user={user} onBack={() => setShowPengamanan(false)} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -580,9 +585,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <PemeliharaanPage user={user} onBack={() => setShowPemeliharaan(false)} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -593,9 +598,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <PerencanaanPage user={user} onBack={() => setShowPerencanaan(false)} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -606,9 +611,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <PenilaianPage user={user} onBack={() => setShowPenilaian(false)} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -619,9 +624,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <PenghapusanPage user={user} onBack={() => setShowPenghapusan(false)} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -632,9 +637,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <PemanfaatanPage user={user} onBack={() => setShowPemanfaatan(false)} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -645,9 +650,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <PemusnahanPage user={user} onBack={() => setShowPemusnahan(false)} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -658,9 +663,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <PemindahtangananPage user={user} onBack={() => setShowPemindahtanganan(false)} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -671,9 +676,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <WasdalPage user={user} onBack={() => setShowWasdal(false)} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -684,9 +689,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <PenganggaranPage user={user} onBack={() => setShowPenganggaran(false)} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -697,9 +702,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <PengadaanPage user={user} onBack={() => setShowPengadaan(false)} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -710,9 +715,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <TtdPermintaanPage user={user} onBack={() => setShowTtd(false)} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -723,7 +728,7 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <PengaturanPage
             user={user}
             dark={dark}
@@ -734,7 +739,7 @@ function App() {
             onOpenPersuratan={() => bukaDariPengaturan(() => setShowPersuratan(true))}
             onOpenPelaporan={() => bukaDariPengaturan(() => setShowPelaporan(true))}
           />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -745,9 +750,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <PembukuanPage user={user} onBack={() => setShowPembukuan(false)} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -758,9 +763,9 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <SatkerPage user={user} onBack={() => kembaliSubHalaman(() => setShowSatker(false))} />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -773,7 +778,7 @@ function App() {
     return (
       <div className="App">
       <SatkerAktifBar user={user} />
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <ModuleHomePage
             user={user}
             onLogout={handleLogout}
@@ -808,7 +813,7 @@ function App() {
             onOpenPengaturan={() => setShowPengaturan(true)}
             onOpenPembukuan={() => setShowPembukuan(true)}
           />
-        </Suspense>
+        </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
     );
@@ -822,7 +827,7 @@ function App() {
         Lewati ke konten utama
       </a>
       <BrowserRouter>
-        <Suspense fallback={<PageLoader />}>
+        <HalamanLazy fallback={<PageLoader />}>
           <main id="main-content" role="main" aria-label="Konten utama aplikasi AMAN">
             <Routes>
               <Route
@@ -848,7 +853,7 @@ function App() {
               />
             </Routes>
           </main>
-        </Suspense>
+        </HalamanLazy>
       </BrowserRouter>
       <Toaster position="top-right" richColors />
       <BackgroundTaskBar isAdmin={user?.role === "admin"} />

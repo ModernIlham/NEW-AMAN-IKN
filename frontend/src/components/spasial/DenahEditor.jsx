@@ -15,10 +15,10 @@ import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import "@/lib/leafletImageOverlayRotated";   // efek samping: L.imageOverlay.rotated
 import axios from "axios";
 import { toast } from "sonner";
-import { TENGGAT_BAKA } from "@/lib/muatAndal";
+import { TENGGAT_BAKA, pesanGalat } from "@/lib/muatAndal";
 import {
   Loader2, Save, Trash2, Wand2, X, AlertTriangle,
-  ImagePlus, Move, Check, RotateCcw,
+  ImagePlus, Move, Check, RotateCcw, RefreshCw,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -71,6 +71,10 @@ export default function DenahEditor({ node, onClose, onSaved }) {
   // siap membuat effect return diam SELAMANYA (lihat catatan di effect init).
   const [wadahEl, setWadahEl] = useState(null);
   const [galatInit, setGalatInit] = useState("");
+  // Kegagalan MEMUAT data node (beda dari galatInit = peta gagal dibuat).
+  // Menetap di layar sampai berhasil dimuat ulang — lihat catatan di effect.
+  const [galatMuat, setGalatMuat] = useState("");
+  const [ulangMuat, setUlangMuat] = useState(0);   // dinaikkan tombol "Coba lagi"
   // Pesan tahap yang SEDANG dikerjakan — spinner tanpa keterangan
   // membuat pemuatan berat terbaca sebagai aplikasi macet.
   const [tahap, setTahap] = useState("");
@@ -269,20 +273,33 @@ export default function DenahEditor({ node, onClose, onSaved }) {
     const map = mapRef.current;
     if (!petaSiap || !map || !nodeId) return undefined;
     let batal = false;
+    // Apakah `map.setView` sudah dipanggil. Tanpa pusat+zoom, Leaflet MELEMPAR
+    // pada hampir semua operasi (`getBounds`, `getCenter`, alat gambar), jadi
+    // "editor tetap bisa dipakai" hanya BENAR setelah peta terposisi. Watchdog
+    // di bawah memakai penanda ini agar tak menjanjikan hal yang mustahil.
+    let terposisi = false;
     // Watchdog: apa pun yang terjadi (request menggantung, jaringan mati,
     // galat tak terduga), spinner WAJIB hilang dalam 25 dtk supaya operator
-    // tak menatap loading tanpa akhir. Editor tetap bisa dipakai menggambar.
+    // tak menatap loading tanpa akhir.
     const jagaWaktu = setTimeout(() => {
-      if (!batal) {
-        setMemuat(false);
+      if (batal) return;
+      setMemuat(false);
+      if (terposisi) {
         toast.error("Memuat konteks peta lambat/gagal — Anda tetap bisa menggambar");
+      } else {
+        setGalatMuat("Data node tak kunjung dimuat (jaringan lambat atau server sibuk).");
       }
     }, 25000);
     // Timeout per-request supaya satu endpoint yang menggantung tak menahan
     // seluruh pemuatan sampai watchdog.
-    const OPS = { timeout: 20000 };
+    const OPS = { timeout: TENGGAT_BAKA };
     (async () => {
       setMemuat(true);
+      setGalatMuat("");
+      // Bentuk node ditambahkan ke grup ini di bawah. Pada percobaan ULANG grup
+      // bisa sudah berisi hasil percobaan sebelumnya yang gagal di tengah;
+      // tanpa dibersihkan, kumpulkanGeometri akan menyimpan poligon GANDA.
+      grupGambarRef.current?.clearLayers();
       try {
         setTahap("Mengambil batas wilayah…");
         const detail = (await axios.get(`${API}/spasial/node/${nodeId}`, OPS)).data;
@@ -328,6 +345,12 @@ export default function DenahEditor({ node, onClose, onSaved }) {
         // penyebab "loading terus tak menampilkan apa pun" (bug lapangan).
         const pusat = pusatAwal(detail, induk);
         map.setView([pusat.lat, pusat.lng], pusat.zoom);
+        terposisi = true;
+        // Watchdog bisa sudah menyerah lebih dulu (permintaan mengantre di
+        // belakang batas koneksi peramban, jadi tenggat per-request-nya belum
+        // mulai berjalan) lalu datanya toh sampai. Tanpa baris ini pesan galat
+        // itu MENETAP menutupi peta yang justru sudah siap dipakai.
+        if (!batal) setGalatMuat("");
         if (detail?.geometry) {
           const lyr = L.geoJSON({ type: "Feature", geometry: detail.geometry });
           lyr.eachLayer((l) => grupGambarRef.current?.addLayer(l));
@@ -370,15 +393,20 @@ export default function DenahEditor({ node, onClose, onSaved }) {
           }
         } catch { /* konteks gagal — editor tetap berfungsi */ }
         if (!batal) setTahap("");        // konteks selesai; penanda latar padam
-      } catch {
-        if (!batal) { toast.error("Gagal memuat data node"); }
+      } catch (e) {
+        // Kegagalan di sini berarti `map.setView` tak pernah dipanggil: peta
+        // tinggal kanvas putih. Dulu satu-satunya jejaknya adalah toast yang
+        // padam beberapa detik kemudian, meninggalkan layar yang tampak rusak
+        // tanpa satu pun jalan pulih — pemulihan hanya lewat tutup lalu buka
+        // ulang dialog. Kini pesannya MENETAP dengan tombol Coba lagi.
+        if (!batal) setGalatMuat(pesanGalat(e, "Gagal memuat data node"));
       } finally {
         clearTimeout(jagaWaktu);
         if (!batal) { setMemuat(false); setTahap(""); }
       }
     })();
     return () => { batal = true; clearTimeout(jagaWaktu); };
-  }, [nodeId, petaSiap, pasangOverlay]);
+  }, [nodeId, petaSiap, pasangOverlay, ulangMuat]);
 
   // ── Belah wilayah dengan garis (Fase 16) ──────────────────────────────────
   const mintaBelah = useCallback(async (garis, terapkan) => {
@@ -763,6 +791,29 @@ export default function DenahEditor({ node, onClose, onSaved }) {
                 Denah kawasan besar butuh beberapa detik. Proses berjalan di
                 latar — jangan tutup jendela ini.
               </p>
+            </div>
+          )}
+          {/* Gagal memuat data node = peta TAK PERNAH diposisikan; yang tersisa
+              hanyalah kanvas kosong. Pesan ini MENETAP (bukan toast yang padam)
+              dan membawa jalan pulih di tempat, supaya operator tak perlu
+              menutup lalu membuka ulang dialog untuk mencoba lagi. */}
+          {!memuat && galatMuat && (
+            <div className="absolute inset-0 z-[600] bg-background/95 flex flex-col
+                            items-center justify-center gap-2 px-4 text-center"
+                 data-testid="denah-galat-muat">
+              <AlertTriangle className="w-6 h-6 text-red-600" />
+              <p className="text-xs font-medium text-red-700 dark:text-red-300 max-w-[22rem] break-words">
+                {galatMuat}
+              </p>
+              <p className="text-[10px] text-muted-foreground max-w-[20rem]">
+                Bentuk tersimpan dan batas wilayah belum tampil. Menggambar
+                sekarang berisiko menimpa data yang belum sempat dimuat.
+              </p>
+              <Button size="sm" variant="outline" className="mt-1 h-7 text-xs"
+                      onClick={() => setUlangMuat((n) => n + 1)}
+                      data-testid="denah-muat-ulang">
+                <RefreshCw className="w-3.5 h-3.5 mr-1" />Coba lagi
+              </Button>
             </div>
           )}
           {/* Konteks sekitar masih menyusul SETELAH peta bisa dipakai — ditandai

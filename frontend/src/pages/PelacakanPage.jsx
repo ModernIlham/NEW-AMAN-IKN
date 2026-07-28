@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Plus, Trash2, Loader2, RadioTower, ShieldAlert, Fence,
   KeyRound, Copy, Check, BellRing, MapPin, BatteryLow, Clock, Pencil,
-  ShieldCheck, ArrowUpRight, Info, RefreshCw, Unlock, X,
+  ShieldCheck, ArrowUpRight, Info, RefreshCw, Unlock, X, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,11 +13,33 @@ import {
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { TENGGAT_BAKA, muatAndal, pesanGalat } from "@/lib/muatAndal";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 function getApiError(err, fallback) {
   return err?.response?.data?.detail || fallback;
+}
+
+/**
+ * Blok "bagian ini gagal dimuat" — dipakai menggantikan kalimat kosong tiap tab.
+ * Kalimat kosong ("Belum ada …", "Tidak ada peringatan. Itu kabar baik.")
+ * menyatakan sebuah FAKTA tentang data. Bila datanya tak pernah sampai, kalimat
+ * itu berubah jadi jaminan palsu — paling berbahaya di tab Peringatan, yang
+ * seluruh gunanya adalah memberi tahu ada aset keluar dari batas wilayahnya.
+ */
+function BagianGagal({ pesan, catatan, onUlang, testid }) {
+  return (
+    <div className="text-center py-8 px-4" data-testid={testid}>
+      <AlertTriangle className="w-7 h-7 mx-auto mb-2 text-amber-500" />
+      <p className="text-xs text-foreground break-words">{pesan}</p>
+      {catatan && <p className="text-[11px] text-muted-foreground mt-1">{catatan}</p>}
+      <Button variant="outline" size="sm" className="mt-3 h-7 text-[11px]"
+              onClick={onUlang} data-testid={`${testid}-coba-lagi`}>
+        <RefreshCw className="w-3 h-3 mr-1" />Coba lagi
+      </Button>
+    </div>
+  );
 }
 
 const TABS = [
@@ -65,6 +87,9 @@ export default function PelacakanPage({ user, onBack }) {
   const isWriter = user?.role !== "viewer";
   const [tab, setTab] = useState("perangkat");
   const [memuat, setMemuat] = useState(false);
+  // Kegagalan PER BAGIAN — supaya bagian yang berhasil tetap tampil dan bagian
+  // yang gagal tak menyamar sebagai "tidak ada data".
+  const [gagalBagian, setGagalBagian] = useState({});
   const [perangkat, setPerangkat] = useState([]);
   const [profilTersedia, setProfilTersedia] = useState([]);
   const [aturan, setAturan] = useState([]);
@@ -90,30 +115,47 @@ export default function PelacakanPage({ user, onBack }) {
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
+  // EMPAT BAGIAN BERDIRI SENDIRI-SENDIRI.
+  //
+  // Dulu `Promise.all`: satu endpoint gagal → SELURUH `try` melompat ke `catch`,
+  // keempat daftar tetap kosong, dan tab Peringatan lalu mencetak "Tidak ada
+  // peringatan. Itu kabar baik." Layar MENJAMIN AMAN justru ketika ia tidak tahu
+  // apa-apa — pada halaman yang seluruh gunanya adalah memberi tahu bahwa ada
+  // aset keluar dari batas wilayahnya. Itu bukan sekadar tampilan keliru.
+  //
+  // `allSettled` membuat bagian yang berhasil tetap tampil, dan bagian yang
+  // gagal mengatakannya sendiri.
   const muat = useCallback(async () => {
     setMemuat(true);
-    try {
-      const [rp, ra, re, rz] = await Promise.all([
-        axios.get(`${API}/iot/perangkat`),
-        axios.get(`${API}/geofence/aturan`),
-        axios.get(`${API}/geofence/event`, { params: { batas: 100 } }),
-        axios.get(`${API}/iot/izin-darurat`),
-      ]);
-      setPerangkat(rp.data?.items || []);
-      setProfilTersedia(rp.data?.profil_tersedia || []);
-      setAturan(ra.data?.items || []);
-      setParamBawaan(ra.data?.param_bawaan || null);
-      setJenisTersedia(ra.data?.jenis_tersedia || []);
-      setEvent(re.data?.items || []);
-      setBelumDibaca(re.data?.belum_dibaca || 0);
-      setIzin(rz.data?.items || []);
-      setIzinMaksJam(rz.data?.maks_jam || 72);
-      setIzinMinAlasan(rz.data?.alasan_min_karakter || 10);
-    } catch (e) {
-      toast.error(getApiError(e, "Gagal memuat data pelacakan"));
-    } finally {
-      setMemuat(false);
-    }
+    const ambil = (url, params) => muatAndal(
+      () => axios.get(`${API}${url}`, { params, timeout: TENGGAT_BAKA }));
+    const [rp, ra, re, rz] = await Promise.allSettled([
+      ambil("/iot/perangkat"),
+      ambil("/geofence/aturan"),
+      ambil("/geofence/event", { batas: 100 }),
+      ambil("/iot/izin-darurat"),
+    ]);
+    const gagal = {};
+    if (rp.status === "fulfilled") {
+      setPerangkat(rp.value.data?.items || []);
+      setProfilTersedia(rp.value.data?.profil_tersedia || []);
+    } else gagal.perangkat = pesanGalat(rp.reason, "Daftar perangkat gagal dimuat");
+    if (ra.status === "fulfilled") {
+      setAturan(ra.value.data?.items || []);
+      setParamBawaan(ra.value.data?.param_bawaan || null);
+      setJenisTersedia(ra.value.data?.jenis_tersedia || []);
+    } else gagal.aturan = pesanGalat(ra.reason, "Daftar aturan pagar gagal dimuat");
+    if (re.status === "fulfilled") {
+      setEvent(re.value.data?.items || []);
+      setBelumDibaca(re.value.data?.belum_dibaca || 0);
+    } else gagal.event = pesanGalat(re.reason, "Daftar peringatan gagal dimuat");
+    if (rz.status === "fulfilled") {
+      setIzin(rz.value.data?.items || []);
+      setIzinMaksJam(rz.value.data?.maks_jam || 72);
+      setIzinMinAlasan(rz.value.data?.alasan_min_karakter || 10);
+    } else gagal.izin = pesanGalat(rz.reason, "Daftar izin darurat gagal dimuat");
+    setGagalBagian(gagal);
+    setMemuat(false);
   }, []);
 
   useEffect(() => { muat(); }, [muat]);
@@ -368,7 +410,11 @@ export default function PelacakanPage({ user, onBack }) {
                 <Plus className="w-3.5 h-3.5 mr-1" />Daftarkan perangkat
               </Button>
             )}
-            {!perangkat.length && !memuat && (
+            {gagalBagian.perangkat ? (
+              <BagianGagal pesan={gagalBagian.perangkat} onUlang={muat}
+                           catatan="Daftar perangkat belum tentu kosong — ia belum sempat dibaca."
+                           testid="pelacakan-perangkat-galat" />
+            ) : !perangkat.length && !memuat && (
               <p className="text-xs text-muted-foreground text-center py-8">
                 Belum ada perangkat pelacak terdaftar.
               </p>
@@ -448,11 +494,17 @@ export default function PelacakanPage({ user, onBack }) {
                 <Plus className="w-3.5 h-3.5 mr-1" />Pasang pagar
               </Button>
             )}
-            {!perangkat.length && (
+            {/* Hanya benar bila daftar perangkat MEMANG terbaca kosong. */}
+            {!perangkat.length && !gagalBagian.perangkat && (
               <p className="text-[11px] text-muted-foreground px-1">
                 Daftarkan perangkat lebih dulu — pagar memantau perangkat, bukan aset
                 secara langsung.
               </p>
+            )}
+            {gagalBagian.aturan && (
+              <BagianGagal pesan={gagalBagian.aturan} onUlang={muat}
+                           catatan="Pagar yang terpasang tidak sedang ditampilkan — jangan disimpulkan belum ada."
+                           testid="pelacakan-aturan-galat" />
             )}
             {aturan.map((a) => (
               <div key={a.id} className="rounded-xl border border-border bg-card p-3 flex items-start gap-2"
@@ -504,7 +556,14 @@ export default function PelacakanPage({ user, onBack }) {
                      data-testid="pelacakan-filter-belum" />
               Hanya yang belum dibaca
             </label>
-            {!eventTampil.length && !memuat && (
+            {/* "Itu kabar baik" HANYA boleh diucapkan bila daftarnya memang
+                berhasil dimuat. Saat gagal, layar wajib mengatakan bahwa ia
+                TIDAK TAHU — bukan menjamin aman. */}
+            {gagalBagian.event ? (
+              <BagianGagal pesan={gagalBagian.event} onUlang={muat}
+                           catatan="Ada tidaknya peringatan tidak diketahui — jangan disimpulkan aman."
+                           testid="pelacakan-event-galat" />
+            ) : !eventTampil.length && !memuat && (
               <p className="text-xs text-muted-foreground text-center py-8">
                 Tidak ada peringatan. Itu kabar baik.
               </p>
@@ -596,7 +655,11 @@ export default function PelacakanPage({ user, onBack }) {
                 <Plus className="w-3.5 h-3.5 mr-1" />Ajukan pembukaan presisi
               </Button>
             )}
-            {!izin.length && !memuat && (
+            {gagalBagian.izin ? (
+              <BagianGagal pesan={gagalBagian.izin} onUlang={muat}
+                           catatan="Izin yang sedang berlaku tidak sedang ditampilkan."
+                           testid="pelacakan-izin-galat" />
+            ) : !izin.length && !memuat && (
               <p className="text-xs text-muted-foreground text-center py-8">
                 Belum pernah ada pembukaan presisi darurat.
               </p>

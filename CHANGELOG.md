@@ -53,6 +53,108 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#663] Keandalan gelombang 3 — layar putih dihabisi, dan layar berhenti menjamin yang tak diketahuinya — 2026-07-28
+
+Penutup rangkaian `[#661]`–`[#662]`. Dua gelombang sebelumnya membereskan
+**permintaan** yang gagal. Gelombang ini membereskan apa yang TERJADI PADA LAYAR
+setelah permintaan itu gagal — dan di sini ditemukan kelas kegagalan yang lebih
+buruk daripada lambat: layar yang **tampak baik-baik saja padahal tidak tahu
+apa-apa**.
+
+### 1. Layar putih total saat potongan kode gagal diunduh
+
+Seluruh 32 halaman aplikasi ini dimuat `React.lazy(() => import(...))`. Aplikasi
+ini **tidak punya satu pun error boundary**. Artinya: satu potongan yang gagal
+diunduh — luring, sinyal putus di tengah unduhan, atau versi baru sudah dipasang
+sehingga berkas ber-hash yang lama tak ada lagi di server — membuat React
+melepas SELURUH pohon komponen. Yang tersisa di layar operator adalah **putih
+polos**: tanpa pesan, tanpa tombol, tanpa apa pun untuk ditekan.
+
+`components/BatasGalat.jsx` menutupnya. Setiap halaman kini dibungkus
+`<HalamanLazy>` (boundary DI LUAR Suspense — ditaruh di dalam, galatnya lewat
+begitu saja).
+
+> **Tombol yang sengaja TIDAK dipasang.** Untuk galat unduh potongan, layar ini
+> hanya menawarkan *Muat ulang halaman* — bukan *Coba lagi*. `React.lazy`
+> mengingat penolakan `import()` pada objek lazy tingkat-modul dan melempar
+> galat yang SAMA selamanya; memasang ulang anaknya tidak mengulang unduhan.
+> Tombol "Coba lagi" di situ akan gagal seketika, setiap kali ditekan. Untuk
+> galat render biasa ia tetap ditawarkan, karena di sana ia memang bekerja.
+
+Klasifikasinya dipisah ke `lib/galatRender.js` agar bisa diuji tanpa DOM (10
+uji). Dua di antaranya menangkap cacat nyata pada rancangan pertama: pola
+`err.message || err` membocorkan kata "Error" ke layar untuk `new Error("")`,
+dan regex-nya tak mengenali *"Loading **CSS** chunk 3 failed"* — webpack
+menyisipkan jenis berkas di tengah kalimat untuk potongan CSS.
+
+### 2. "Tidak ada peringatan. Itu kabar baik."
+
+Halaman Pelacakan memuat empat daftar dengan satu `Promise.all`. Satu endpoint
+gagal → seluruh `try` melompat ke `catch` → keempat daftar tetap kosong → dan
+tab Peringatan mencetak kalimat di atas.
+
+Layar itu **menjamin aman justru ketika ia tidak tahu apa-apa**, pada halaman
+yang seluruh gunanya adalah memberi tahu bahwa ada aset keluar dari batas
+wilayahnya. Kini `Promise.allSettled` dengan status per bagian: yang berhasil
+tetap tampil, yang gagal mengatakannya sendiri berikut tombol Coba lagi. Kalimat
+"tidak diketahui — jangan disimpulkan aman" menggantikan jaminan palsu itu di
+keempat tab, termasuk *"Daftarkan perangkat lebih dulu"* di tab Pagar Area yang
+juga hanya benar bila daftarnya memang terbaca kosong.
+
+### 3. Editor denah: kanvas putih permanen tanpa jalan pulih
+
+Bila `GET /spasial/node/{id}` gagal, `map.setView` tak pernah dipanggil dan peta
+tinggal kanvas kosong. Satu-satunya jejaknya adalah toast yang padam beberapa
+detik kemudian; pemulihannya hanya menutup lalu membuka ulang dialog. Pesan kini
+MENETAP dengan tombol Coba lagi.
+
+Dua hal yang menyertainya:
+
+- Watchdog 25 detik dulu berjanji *"Anda tetap bisa menggambar"* — tidak benar
+  sebelum peta terposisi: tanpa pusat+zoom, Leaflet melempar pada hampir semua
+  operasi. Kini janji itu hanya diucapkan bila `setView` memang sudah terjadi.
+- Percobaan ulang membersihkan grup gambar lebih dulu. Tanpa itu, percobaan yang
+  gagal di tengah meninggalkan poligonnya di grup dan simpan berikutnya menulis
+  bentuk **ganda**.
+
+### 4. Sinkron luring tak lagi batal karena satu halaman
+
+`syncSnapshot` menarik satu kegiatan dalam puluhan halaman berurutan — dan
+dilakukan tepat sebelum berangkat ke lapangan, sering di sinyal terburuk. Satu
+halaman gagal membatalkan seluruh sinkron dan petugas berangkat tanpa cache.
+Tiap halaman kini diulang otomatis (`muatAndal`) dengan jeda menanjak; aman
+karena ini GET dan kursor keyset-nya tak bergerak sebelum halamannya berhasil.
+
+### 5. Antrean scan opname mengosongkan diri saat sinyal pulih
+
+Antrean itu lahir tepat ketika jaringan mati. Dulu satu-satunya cara
+mengosongkannya adalah menekan "Kirim ulang" — petugas harus INGAT, sambil
+dialognya kebetulan terbuka. Yang tak terkirim tak pernah masuk rekonsiliasi:
+barang tercatat *tidak ditemukan* padahal sudah dipindai. Kini dipicu event
+`online`; aman diotomatiskan karena `scan_id` adalah kunci idempotensi server.
+
+### 6. "Sesi berakhir", bukan "Invalid authorization header"
+
+401 pada antrean simpan menampilkan pesan mentah server, yang terbaca seperti
+kerusakan aplikasi. Kini: *"Sesi berakhir — masuk kembali lalu tekan Sinkronkan.
+Data Anda masih tersimpan di perangkat."* **403 sengaja tidak ikut**: itu hak
+akses (viewer, satker lain), bukan sesi habis — masuk ulang tak menolongnya.
+
+### 7. Penjaga urutan respons di panel SBSK ruang
+
+Mengganti lingkup memicu muatan baru sementara yang lama masih terbang. Balasan
+LAMA yang gagal menghapus data lingkup BARU yang sudah tampil.
+
+**Uji:** 1.330 backend, 268 frontend (+10), lint & build bersih.
+
+**Belum dikerjakan (jujur dicatat):** pohon node masih ditarik utuh alih-alih
+mekar-per-cabang lewat `parent_id` (backend sudah mendukungnya); indeks geo
+belum berawalan `kode_satker`; service worker belum mem-precache potongan
+halaman, jadi halaman yang belum pernah dibuka saat daring tetap gagal saat
+luring — kini setidaknya dengan pesan yang benar, bukan layar putih.
+
+---
+
 ## [#662] Keandalan gelombang 2 — sisi server: izin sebelum pemotongan, sortir berbatas, payload dilangsingkan — 2026-07-28
 
 Lanjutan `[#661]`. Gelombang pertama membereskan sisi klien (tenggat, coba-ulang,

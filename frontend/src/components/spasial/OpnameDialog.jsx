@@ -175,9 +175,15 @@ export default function OpnameDialog({ node, labelLevel, isWriter, onClose }) {
     } finally { setSibuk(false); }
   }, [kandidat, kirim]);
 
+  // Penjaga satu-aliran: melindungi dari klik ganda DAN dari pemicu otomatis
+  // "online" yang datang saat aliran sebelumnya masih jalan.
+  const mengalirRef = useRef(false);
+
   const kirimUlangSemua = useCallback(async () => {
+    if (mengalirRef.current) return;
     const antre = bacaTertunda();
     if (!antre.length) return;
+    mengalirRef.current = true;
     setSibuk(true);
     let berhasil = 0;
     try {
@@ -189,8 +195,28 @@ export default function OpnameDialog({ node, labelLevel, isWriter, onClose }) {
       }
       toast.success(`${berhasil} dari ${antre.length} scan terkirim`);
       await muat(dalam);          // satu penyegaran, setelah semuanya selesai
-    } finally { setSibuk(false); }
+    } finally { mengalirRef.current = false; setSibuk(false); }
   }, [kirim, dalam, muat]);
+
+  // KOSONGKAN ANTREAN SENDIRI BEGITU SINYAL PULIH.
+  //
+  // Antrean ini lahir tepat ketika jaringan mati di lapangan. Dulu satu-satunya
+  // cara mengosongkannya adalah menekan "Kirim ulang" — artinya petugas harus
+  // INGAT melakukannya, sambil dialog ini kebetulan masih terbuka. Yang tak
+  // terkirim tak pernah masuk rekonsiliasi: barang tercatat "tidak ditemukan"
+  // padahal sudah dipindai.
+  //
+  // Aman diotomatiskan karena `scan_id` dibuat sekali dan dipakai ulang sebagai
+  // kunci idempotensi server (lihat catatan di `kirim`) — terkirim dua kali
+  // tetap satu catatan. Lewat ref supaya pemasangan listener tak ikut berganti
+  // tiap kali `kirimUlangSemua` dibuat ulang.
+  const kirimUlangRef = useRef(kirimUlangSemua);
+  kirimUlangRef.current = kirimUlangSemua;
+  useEffect(() => {
+    const pulih = () => { if (bacaTertunda().length) kirimUlangRef.current?.(); };
+    window.addEventListener("online", pulih);
+    return () => window.removeEventListener("online", pulih);
+  }, []);
 
   const terapkan = useCallback(async () => {
     const ids = [...terpilih];
