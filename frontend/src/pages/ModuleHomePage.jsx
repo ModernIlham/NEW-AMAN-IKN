@@ -336,7 +336,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
       <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
         <div className="max-w-6xl mx-auto flex flex-wrap items-center gap-2 sm:gap-3 gap-y-2">
           <div
-            className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-sm cursor-pointer flex-shrink-0"
+            className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-600 to-teal-700 flex items-center justify-center shadow-sm cursor-pointer flex-shrink-0"
             {...(onShowInfo ? { onClick: activateInfo, title: "" } : {})}
           >
             <Package className="w-5 h-5 text-white" />

@@ -259,7 +259,7 @@ export function RestoreDialog({ open, onClose, token, onSuccess }) {
     <div className="fixed inset-0 z-[100] flex items-center justify-center" onKeyDown={handleKeyDown}>
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={submitting ? undefined : onClose} />
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Pulihkan data sistem" className="relative w-full max-w-md mx-4 bg-[#1a1a2e] border border-blue-900/50 rounded-xl shadow-2xl shadow-blue-900/20 overflow-hidden">
-        <div className="h-1 bg-gradient-to-r from-blue-600 via-cyan-500 to-blue-600" />
+        <div className="h-1 bg-gradient-to-r from-teal-600 via-cyan-500 to-teal-600" />
 
         {step === 1 && (
           <div className="p-6">

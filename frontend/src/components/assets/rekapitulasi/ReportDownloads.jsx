@@ -223,7 +223,7 @@ export default function ReportDownloads({
       <div className="border-t border-border pt-3 space-y-2">
         <div className="flex gap-2 items-stretch">
           <button data-testid="download-lhi" onClick={() => onDownloadPDF("lhi")} disabled={!!downloading}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-600 hover:from-indigo-700 hover:via-blue-700 hover:to-cyan-700 disabled:from-indigo-300 disabled:via-blue-300 disabled:to-cyan-300 dark:from-indigo-700 dark:via-blue-700 dark:to-cyan-700 dark:hover:from-indigo-600 dark:hover:via-blue-600 dark:hover:to-cyan-600 text-white rounded-lg text-sm font-semibold transition-all shadow-sm">
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-teal-600 via-teal-700 to-cyan-700 hover:from-teal-700 hover:via-teal-800 hover:to-cyan-800 disabled:from-teal-300 disabled:via-teal-300 disabled:to-cyan-300 dark:from-teal-700 dark:via-teal-800 dark:to-cyan-800 dark:hover:from-teal-600 dark:hover:via-teal-700 dark:hover:to-cyan-700 text-white rounded-lg text-sm font-semibold transition-all shadow-sm">
             {downloading === "lhi" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
             Download LHI Lengkap
           </button>
