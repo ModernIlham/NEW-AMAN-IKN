@@ -146,15 +146,24 @@ tekan, poligon raksasa → sedikit. Anggaran diperiksa **sesudah** satu node
 selesai, sehingga anggaran sekecil apa pun tetap menghasilkan kemajuan —
 kalau tidak, "tekan sekali lagi" menjadi lingkaran yang tak pernah maju.
 
+Satu lubang lagi di saringan kandidatnya: ia memilih node ber-`geometry_opt`
+kosong, padahal **poligon sederhana memang tak pernah menghasilkan versi
+ringan** — kotak lima titik tak punya apa pun untuk dihemat. Node semacam itu
+terpilih lagi pada setiap tekanan, selamanya; satker yang denahnya digambar
+tangan akan terus disuruh "tekan sekali lagi" tanpa satu pun kemajuan yang
+terlihat. Saringannya kini `optimasi` — "sudah pernah dicoba" — dan percobaan
+yang tak menghasilkan apa-apa tetap dicatat.
+
 ### Verifikasi
 
-1.286 uji backend, eslint 0 galat, build kompilasi. **Empat mutasi**
+1.287 uji backend, eslint 0 galat, build kompilasi. **Empat mutasi**
 dibuktikan tertangkap: membuang penjaga `tautkan_barang` → 2 uji gagal;
 mengembalikan `geometry_opt` ke proyeksi daftar node → 1 uji gagal;
 mengembalikan `geometry_opt` ke detail node → 1 uji gagal; jalur thread lupa
 memasang hasil optimasinya → 3 uji gagal; anggaran waktu diabaikan → 1 uji
 gagal; anggaran diperiksa SEBELUM node pertama (tak pernah maju) → 1 uji
-gagal. Tiga uji lain (`baris aset tetap boleh ditautkan`, `melepas tautan
+gagal; saringan kandidat kembali memakai `geometry_opt` → 1 uji gagal;
+percobaan yang tak menghasilkan apa-apa tak dicatat → 1 uji gagal. Tiga uji lain (`baris aset tetap boleh ditautkan`, `melepas tautan
 tetap boleh`, `pekerjaan tuntas tak mengaku terpotong`) menjaga agar
 penjaganya tak diam-diam membunuh alur yang benar.
 

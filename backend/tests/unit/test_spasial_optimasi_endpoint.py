@@ -139,6 +139,38 @@ def test_optimasi_massal_terisolasi_satker(dbx):
     _jalan(skenario())
 
 
+def test_poligon_sederhana_tak_dipilih_lagi_pada_tekanan_berikutnya(dbx):
+    """Kotak lima titik memang tak menghasilkan versi ringan — dan justru itu
+    yang membuatnya berbahaya bagi saringan kandidat.
+
+    Menyaring dengan `geometry_opt: None` membuat poligon semacam ini terpilih
+    lagi pada SETIAP tekanan, selamanya: CPU terbakar berulang, `terpotong`
+    tak pernah padam, dan satker yang denahnya digambar tangan terus disuruh
+    "tekan sekali lagi" tanpa satu pun kemajuan yang terlihat.
+    """
+    async def skenario():
+        await dbx.spasial_node.insert_one({
+            "id": "kotak", "nama": "Ruang Arsip", "tipe": "RUANGAN",
+            "status": "aktif", "kode_satker": "", "ordinal_level": 6,
+            "ancestors": [], "ancestors_nama": [], "parent_id": None,
+            "geometry": {"type": "Polygon", "coordinates": [[
+                [116.700, -0.950], [116.701, -0.950], [116.701, -0.949],
+                [116.700, -0.949], [116.700, -0.950]]]},
+            "bbox": [116.700, -0.950, 116.701, -0.949]})
+        pertama = await _unwrap(rs.optimasi_massal)(
+            None, rs.OptimasiMassalIn(), user=USER)
+        assert pertama["kandidat"] == 1 and pertama["dilewati"] == 1
+        node = await dbx.spasial_node.find_one({"id": "kotak"})
+        assert node.get("geometry_opt") is None, "kotak tak boleh punya versi ringan"
+        assert node.get("optimasi"), "percobaannya tak dicatat"
+
+        kedua = await _unwrap(rs.optimasi_massal)(
+            None, rs.OptimasiMassalIn(), user=USER)
+        assert kedua["kandidat"] == 0, "terpilih lagi — lingkaran tanpa kemajuan"
+        assert kedua["terpotong"] is False
+    _jalan(skenario())
+
+
 def test_optimasi_massal_berhenti_pada_anggaran_waktu(dbx, monkeypatch):
     """Plafon berupa CACAH node tidak cukup.
 

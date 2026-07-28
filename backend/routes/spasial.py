@@ -1250,9 +1250,15 @@ async def optimasi_massal(request: Request, payload: OptimasiMassalIn,
     if str(payload.dalam or "").strip():
         q["$or"] = [{"id": payload.dalam}, {"ancestors": payload.dalam}]
     if not payload.paksa_ulang:
-        # Hanya yang BELUM punya versi optimize — menekan tombol dua kali tak
-        # membakar CPU mengulang pekerjaan yang sama.
-        q["geometry_opt"] = None
+        # Hanya yang BELUM PERNAH DICOBA — menekan tombol dua kali tak membakar
+        # CPU mengulang pekerjaan yang sama.
+        #
+        # Saringannya `optimasi`, BUKAN `geometry_opt`. Poligon sederhana (kotak
+        # lima titik) memang tak menghasilkan versi ringan; menyaring dengan
+        # `geometry_opt: None` membuat mereka terpilih lagi pada SETIAP tekanan,
+        # selamanya. Satker yang denahnya digambar tangan akan terus disuruh
+        # "tekan sekali lagi" tanpa satu pun kemajuan yang terlihat.
+        q["optimasi"] = None
     rows = await db.spasial_node.find(
         scope_query_field_satker(user, q),
         {"_id": 0, "id": 1, "nama": 1, "geometry": 1}).to_list(BATAS_OPTIMASI)
@@ -1271,6 +1277,12 @@ async def optimasi_massal(request: Request, payload: OptimasiMassalIn,
         if not hasil["geometry"]:
             dilewati += 1
             titik_sesudah += int(hasil["metrik"].get("titik_asli") or 0)
+            # Percobaannya TETAP DICATAT meski tak ada yang bisa dihemat —
+            # itulah yang membuat node ini tak terpilih lagi pada tekanan
+            # berikutnya. `geometry_opt` sengaja tidak disentuh.
+            await db.spasial_node.update_one(
+                {"id": r["id"]},
+                {"$set": {"optimasi": {**hasil["metrik"], "pada": now}}})
         else:
             titik_sesudah += int(hasil["metrik"].get("titik_hasil") or 0)
             await db.spasial_node.update_one(
