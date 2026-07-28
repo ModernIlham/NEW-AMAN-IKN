@@ -198,6 +198,13 @@ async def compress_pdf_ilovepdf(pdf_bytes: bytes, filename: str,
                 # HTTP 200 TAPI gagal — inilah kasus yang dulu tak terlihat.
                 return None, None, f"proses ditolak: {sebab}"
 
+            # KUOTA DICATAT DI SINI, bukan setelah unduh. iLovePDF menagih
+            # kredit pada /process; unduh hanya mengambil hasilnya. Mencatat
+            # setelah unduh membuat penghitung kita optimistis: setiap unduh
+            # yang gagal atau timeout menghanguskan kredit nyata tanpa terlihat,
+            # lalu rantai terus mencoba penyedia yang sebenarnya sudah habis.
+            await increment_pdf_quota("ilovepdf", sisa)
+
             # 4) download
             r = await client.get(f"https://{server}/v1/download/{task}",
                                  headers=h)
@@ -205,8 +212,6 @@ async def compress_pdf_ilovepdf(pdf_bytes: bytes, filename: str,
                 return None, None, f"unduh gagal ({r.status_code})"
             if not pcu.layak_dipakai(pdf_bytes, r.content):
                 return None, None, "hasil iLovePDF tak lebih kecil / bukan PDF"
-
-            await increment_pdf_quota("ilovepdf", sisa)
             return r.content, "ilovepdf", ""
     except Exception as e:
         # Nama galat saja, TANPA pesan: pesan httpx bisa memuat URL berisi
