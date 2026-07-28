@@ -104,6 +104,38 @@ def test_ppk_dibekukan_saat_perolehan_dicatat(dbx):
     _jalan(skenario())
 
 
+def test_ppk_diresolusi_pada_tanggal_bast_bukan_hari_ini(dbx):
+    """PPK yang dipakai adalah yang BERLAKU saat BAST ditandatangani.
+
+    Register perolehan lazim diisi berbulan setelah barang datang. Kalau
+    resolusinya memakai tanggal HARI INI, dokumen akan menyebut pejabat yang
+    belum menjabat waktu itu — atau tak menyebut siapa pun karena PPK-nya
+    sudah purna. Uji ini memakai dua pejabat dengan masa berlaku berbeda
+    supaya jawabannya berbeda antara "tanggal BAST" dan "hari ini"; tanpa itu
+    uji apa pun akan lulus untuk kedua perilaku.
+    """
+    async def skenario():
+        await _seed(dbx, ppk=False)
+        await dbx.pejabat.insert_many([
+            # Menjabat SAAT BAST (Maret 2026), berakhir sebelum hari ini.
+            # NB: field-nya `berlaku_selesai` (lihat pejabat_utils._berlaku_pada).
+            # Salah nama = rentangnya terbuka = uji ini lulus untuk KEDUA
+            # perilaku, alias tak menjaga apa pun.
+            {"id": "pj-lama", "nama": "PPK Masa BAST", "nip": "1",
+             "jabatan": "PPK", "peran": ["ppk"], "kode_satker": "",
+             "berlaku_mulai": "2026-01-01", "berlaku_selesai": "2026-04-30"},
+            # Baru menjabat SETELAH BAST.
+            {"id": "pj-baru", "nama": "PPK Sekarang", "nip": "2",
+             "jabatan": "PPK", "peran": ["ppk"], "kode_satker": "",
+             "berlaku_mulai": "2026-05-01"},
+        ])
+        rec = await _unwrap(rp.buat_perolehan)(_perolehan_baru(), user=USER)
+        assert rec["ppk_nama"] == "PPK Masa BAST", (
+            "dokumen menyebut PPK yang menjabat hari ini, bukan yang "
+            "menandatangani komitmennya")
+    _jalan(skenario())
+
+
 def test_tanpa_pejabat_ppk_snapshot_kosong_bukan_galat(dbx):
     """Satker yang belum mengisi Referensi Pejabat tetap bisa mencatat BAST."""
     async def skenario():

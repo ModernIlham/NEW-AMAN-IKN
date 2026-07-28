@@ -93,6 +93,51 @@ def test_baris_lpb_satu_nup_satu_baris():
     assert total_nilai_lpb(baris) == 5_000_000
 
 
+def test_baris_lpb_memakai_jumlah_bast_saat_baris_tak_dipecah():
+    """LPB adalah dokumen resmi yang menyatakan BERAPA BANYAK barang diterima.
+
+    Pemecahan per-NUP hanya berlaku untuk jumlah bulat 2..50. Di luar itu satu
+    draft mewakili seluruh baris BAST — dan mematok `jumlah: 1` membuat
+    dokumen menyebut 1 kursi padahal 100 datang, dengan total nilai yang ikut
+    mengecil seratus kali lipat.
+    """
+    baris = baris_lpb_dari_aset([
+        {"id": "a1", "asset_code": "3050201001", "NUP": "1",
+         "asset_name": "Kursi rapat", "harga_satuan": 500_000,
+         "jumlah_bast": 100},
+    ])
+    assert baris[0]["jumlah"] == 100
+    assert baris[0]["total"] == 50_000_000
+    assert total_nilai_lpb(baris) == 50_000_000
+
+
+def test_baris_lpb_tetap_satu_saat_baris_dipecah_per_nup():
+    """Sebaliknya: baris yang DIPECAH per-NUP tetap 1 unit per baris —
+    kalau tidak, 5 printer akan tercetak sebagai 5 baris × 5 unit = 25."""
+    baris = baris_lpb_dari_aset([
+        {"id": f"a{i}", "asset_code": "3050102001", "NUP": str(i),
+         "asset_name": "Printer", "harga_satuan": 2_000_000, "jumlah_bast": 1}
+        for i in (1, 2, 3, 4, 5)])
+    assert [b["jumlah"] for b in baris] == [1, 1, 1, 1, 1]
+    assert total_nilai_lpb(baris) == 10_000_000
+
+
+def test_baris_lpb_tanpa_jumlah_bast_default_satu():
+    """Data lama / pemanggil yang belum menitipkan jumlah tetap aman."""
+    baris = baris_lpb_dari_aset([
+        {"id": "a1", "asset_code": "3x", "NUP": "1", "asset_name": "X",
+         "harga_satuan": 100}])
+    assert baris[0]["jumlah"] == 1 and baris[0]["total"] == 100
+
+
+def test_baris_lpb_jumlah_pecahan_tak_dibulatkan_diam_diam():
+    baris = baris_lpb_dari_aset([
+        {"id": "a1", "asset_code": "3x", "NUP": "1", "asset_name": "Semen",
+         "harga_satuan": 1_000_000, "jumlah_bast": 2.5}])
+    assert baris[0]["jumlah"] == 2.5
+    assert baris[0]["total"] == 2_500_000
+
+
 def test_baris_lpb_harga_tak_terbaca_jadi_nol_bukan_meledak():
     baris = baris_lpb_dari_aset([
         {"id": "a1", "asset_code": "3x", "NUP": "1", "asset_name": "X",

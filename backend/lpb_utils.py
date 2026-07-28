@@ -44,7 +44,7 @@ GOLONGAN_BARANG = {
 # hanya bermakna untuk BMN) dan judul dokumennya.
 KATEGORI_LPB = {
     "persediaan": "Persediaan",
-    "aset": "XXXX",
+    "aset": "Barang Milik Negara (Aset Tetap)",
 }
 
 
@@ -110,19 +110,30 @@ def baris_lpb_dari_aset(aset_dibuat) -> list:
     `harga_satuan` baris BAST asalnya. Satu unit = satu baris ber-NUP: itulah
     seluruh gunanya LPB aset — membuktikan NUP mana saja yang benar-benar
     masuk, bukan sekadar "printer 5 unit".
+
+    JUMLAH TIDAK SELALU 1 (temuan audit adversarial). Pemecahan per-NUP di
+    `buat_draft_aset_dari_perolehan` hanya berlaku untuk jumlah bulat 2..50;
+    di luar itu (100 kursi, atau 2,5 ton) satu draft mewakili SELURUH baris
+    BAST. Mematok `jumlah: 1` membuat LPB — dokumen resmi yang menyatakan
+    berapa banyak barang diterima — menyebut 1 unit padahal 100 datang, dan
+    total nilainya ikut mengecil seratus kali lipat. Karena itu pemanggil
+    boleh menitipkan `jumlah_bast`; bila ada, itulah yang dicetak.
     """
     baris = []
     for a in aset_dibuat or []:
         d = a or {}
         harga = _angka(d.get("harga_satuan"))
+        jml = _angka(d.get("jumlah_bast"), 1.0) or 1.0
+        # Angka bulat dicetak tanpa ekor desimal (100, bukan 100.0).
+        jml = int(jml) if float(jml).is_integer() else jml
         baris.append({
             "asset_id": str(d.get("id") or d.get("asset_id") or ""),
             "kode_barang": str(d.get("asset_code") or "").strip(),
             "nup": str(d.get("NUP") or d.get("nup") or "").strip(),
             "nama_barang": str(d.get("asset_name") or "").strip(),
             "golongan": label_golongan(d.get("asset_code")),
-            "jumlah": 1, "satuan": "Unit",
-            "harga_satuan": harga, "total": harga,
+            "jumlah": jml, "satuan": str(d.get("satuan") or "Unit"),
+            "harga_satuan": harga, "total": round(harga * float(jml), 2),
             "keterangan": str(d.get("keterangan") or "Kondisi Baik & Lengkap"),
         })
     return baris

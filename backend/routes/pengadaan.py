@@ -7,6 +7,7 @@ resmi tetap di SAKTI; kanal pengadaan tetap SiRUP/SPSE/e-Katalog — AMAN
 alat bantu tertib dokumen satker. Barang perolehan yang belum tertaut
 dapat dibuatkan draft aset otomatis (buat-draft-aset, NUP berurut).
 """
+import re
 import uuid
 from datetime import datetime, timezone
 
@@ -21,6 +22,7 @@ from lpb_utils import (
     baris_lpb_dari_aset, is_persediaan, pilah_barang_perolehan,
     ringkas_pencatatan, total_nilai_lpb,
 )
+from persediaan_utils import KODE_PENUH_LEN
 from db import db, fs_bucket
 from shared_utils import kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker, delete_document_from_gridfs, get_document_from_gridfs, log_audit
 from pengadaan_utils import (
@@ -210,14 +212,31 @@ async def daftarkan_persediaan(perolehan_id: str, user: dict = Depends(require_w
         if str(row.get("asset_id") or "").strip():
             dilewati_terdaftar += 1
             continue
-        jumlah = max(1, int(float(row.get("jumlah") or 1)))
+        jumlah_asli = float(row.get("jumlah") or 1)
+        jumlah = max(1, int(jumlah_asli))
+        if jumlah != jumlah_asli:
+            # Pemotongan pecahan JANGAN senyap: 2,5 liter tercatat 2 dan
+            # setengahnya lenyap dari stok tanpa jejak (temuan audit).
+            gagal.append(
+                f"{row.get('uraian')}: jumlah {jumlah_asli:g} dibulatkan ke "
+                f"bawah menjadi {jumlah} — stok persediaan hanya menerima "
+                f"bilangan bulat; pecah barisnya atau ubah satuannya.")
         # Lookup master DALAM LINGKUP SATKER (REVIEW-9 R3): tanpa scope,
         # master satker lain yang kebetulan ber-kode sama terpilih → jalur
         # create terlewati → transaksi_masuk 403 dan baris macet permanen.
+        #
+        # COCOKKAN PER-AWALAN, bukan persis (temuan audit adversarial).
+        # `create_persediaan` menyimpan kode 16 digit (`next_kode_penuh`:
+        # 10 digit kodefikasi + 6 digit nomor urut), sedangkan baris BAST
+        # membawa kode 10 digit. Pencocokan persis SELALU meleset → master
+        # baru dibuat SETIAP KALI barang yang sama dibeli, dan satu jenis
+        # kertas HVS pecah jadi puluhan kartu stok terpisah.
         from shared_utils import scope_query_field_satker
+        q_kode = ({"kode_barang": {"$regex": f"^{re.escape(kode)}"}}
+                  if len(kode) < KODE_PENUH_LEN else {"kode_barang": kode})
         it = await db.persediaan.find_one(
-            scope_query_field_satker(user, {"kode_barang": kode}),
-            {"_id": 0, "id": 1})
+            scope_query_field_satker(user, q_kode),
+            {"_id": 0, "id": 1}, sort=[("kode_barang", 1)])
         if not it:
             try:
                 it = await create_persediaan(PersediaanCreate(
@@ -536,7 +555,12 @@ async def buat_draft_aset_dari_perolehan(perolehan_id: str,
                 "sumber_modul": "pengadaan", "ref_id": perolehan_id,
                 "keterangan": f"Draft aset dari BAST {p.get('nomor_bast') or '-'}",
                 "oleh": user.get("username", "system")})
-            aset_dibuat.append({**doc, "harga_satuan": float(row.get("harga_satuan") or 0)})
+            # `jumlah_bast` menjaga LPB tetap jujur saat satu draft mewakili
+            # SELURUH baris (jumlah > 50 atau pecahan — lihat n_unit di atas).
+            # Bila barisnya memang dipecah per-NUP, tiap draft = 1 unit.
+            aset_dibuat.append({**doc,
+                                "harga_satuan": float(row.get("harga_satuan") or 0),
+                                "jumlah_bast": 1 if n_unit > 1 else jumlah})
             dibuat += 1
         if gagal_baris:
             continue
