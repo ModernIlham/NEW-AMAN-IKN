@@ -68,7 +68,18 @@ def is_persediaan(kode) -> bool:
     return golongan_kode(kode) == "1"
 
 
-def pilah_barang_perolehan(barang) -> dict:
+def sudah_tercatat(baris) -> bool:
+    """Baris BAST ini sudah punya tujuan pencatatannya?
+
+    `asset_id` = sudah jadi aset; `psd_item_id` = sudah masuk kartu stok.
+    Salah satunya cukup — sebuah baris hanya boleh punya SATU tujuan.
+    """
+    b = baris or {}
+    return bool(str(b.get("asset_id") or "").strip()
+                or str(b.get("psd_item_id") or "").strip())
+
+
+def pilah_barang_perolehan(barang, hanya_belum_tercatat: bool = True) -> dict:
     """Baris barang BAST → tiga keranjang tujuan pencatatan.
 
     - `persediaan`  — golongan 1: masuk stok lewat jurnal FIFO.
@@ -78,6 +89,15 @@ def pilah_barang_perolehan(barang) -> dict:
                       dikembalikan apa adanya supaya layar bisa berkata
                       "tiga baris ini butuh kode barang dulu".
 
+    `hanya_belum_tercatat` (bawaan True) MENGABAIKAN baris yang sudah punya
+    `asset_id`/`psd_item_id`. Ini bukan kenyamanan, melainkan penutup JALAN
+    BUNTU (temuan audit adversarial): dulu baris yang sudah jadi aset tetap
+    dihitung sebagai "aset", sehingga gerbang `activity_id` di
+    `catat_semua_barang` menuntut kegiatan untuk pekerjaan yang sudah selesai —
+    sementara layar TIDAK merender dropdown-nya karena ia menghitung baris yang
+    BELUM tertaut. Hasilnya galat 400 yang menyuruh memilih sesuatu yang tak
+    pernah muncul, dan sisi persediaan BAST setengah-jalan macet permanen.
+
     Tiap keranjang memuat `(indeks_asli, baris)` — indeksnya dipertahankan
     karena `POST /pengadaan/{id}/tautkan` mengalamatkan baris dengan indeks,
     dan keranjang yang kehilangan indeks membuat hasil tak bisa ditautkan
@@ -86,6 +106,8 @@ def pilah_barang_perolehan(barang) -> dict:
     hasil = {"persediaan": [], "aset": [], "tanpa_kode": []}
     for i, b in enumerate(barang or []):
         row = b or {}
+        if hanya_belum_tercatat and sudah_tercatat(row):
+            continue
         kode = str(row.get("kode") or "").strip()
         if not kode:
             hasil["tanpa_kode"].append((i, row))

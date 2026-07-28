@@ -200,10 +200,15 @@ export default function PengadaanPage({ user, onBack }) {
       const bagian = [];
       if (d.aset_dibuat) bagian.push(`${d.aset_dibuat} aset`);
       if (d.persediaan_masuk) bagian.push(`${d.persediaan_masuk} barang persediaan`);
-      toast.success(
-        bagian.length
-          ? `Tercatat: ${bagian.join(" dan ")}${d.nomor_lpb ? ` · LPB ${d.nomor_lpb}` : ""}`
-          : "Tidak ada barang baru yang perlu dicatat");
+      // Toast HIJAU hanya bila memang ada yang tercatat. Saat semua baris
+      // gagal, "tidak ada barang baru" adalah kalimat yang menyesatkan —
+      // seolah tak ada yang perlu dikerjakan (temuan audit).
+      if (bagian.length) {
+        toast.success(`Tercatat: ${bagian.join(" dan ")}`
+          + (d.nomor_lpb ? ` · LPB ${d.nomor_lpb}` : ""));
+      } else if (!(d.gagal || []).length && !d.tanpa_kode) {
+        toast.info("Semua barang di BAST ini sudah tercatat sebelumnya");
+      }
       // Kegagalan sebagian TIDAK boleh tenggelam di balik toast hijau — jalur
       // ini memang tak transaksional.
       if (d.tanpa_kode) {
@@ -211,8 +216,11 @@ export default function PengadaanPage({ user, onBack }) {
           + `(baris ${(d.baris_tanpa_kode || []).join(", ")}) — isi kode dulu.`,
         { duration: 9000 });
       }
+      // SELURUH alasan gagal ditampilkan, bukan hanya yang pertama: baris
+      // kedua dan seterusnya bisa gagal karena sebab yang sama sekali lain.
       if ((d.gagal || []).length) {
-        toast.error(`${d.total_gagal} baris gagal — ${d.gagal[0]}`, { duration: 12000 });
+        toast.error(`${d.total_gagal} baris gagal:\n· ${d.gagal.join("\n· ")}`,
+          { duration: 15000 });
       }
       setDraftAset(null);
       muat();

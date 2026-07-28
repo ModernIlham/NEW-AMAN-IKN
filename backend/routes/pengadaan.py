@@ -22,7 +22,7 @@ from lpb_utils import (
     baris_lpb_dari_aset, is_persediaan, pilah_barang_perolehan,
     ringkas_pencatatan, total_nilai_lpb,
 )
-from persediaan_utils import KODE_PENUH_LEN
+from persediaan_utils import KODE_PENUH_LEN, KODE_PREFIX_LEN
 from db import db, fs_bucket
 from shared_utils import kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker, delete_document_from_gridfs, get_document_from_gridfs, log_audit
 from pengadaan_utils import (
@@ -225,15 +225,34 @@ async def daftarkan_persediaan(perolehan_id: str, user: dict = Depends(require_w
         # master satker lain yang kebetulan ber-kode sama terpilih → jalur
         # create terlewati → transaksi_masuk 403 dan baris macet permanen.
         #
-        # COCOKKAN PER-AWALAN, bukan persis (temuan audit adversarial).
-        # `create_persediaan` menyimpan kode 16 digit (`next_kode_penuh`:
-        # 10 digit kodefikasi + 6 digit nomor urut), sedangkan baris BAST
-        # membawa kode 10 digit. Pencocokan persis SELALU meleset → master
-        # baru dibuat SETIAP KALI barang yang sama dibeli, dan satu jenis
-        # kertas HVS pecah jadi puluhan kartu stok terpisah.
+        # COCOKKAN PER-AWALAN **DAN NAMA** (dua temuan audit berturut-turut).
+        #
+        # Ronde 1: `create_persediaan` menyimpan kode 16 digit (`next_kode_penuh`:
+        # 10 digit kodefikasi + 6 digit nomor urut) sedangkan baris BAST membawa
+        # 10 digit, jadi pencocokan PERSIS selalu meleset → master baru dibuat
+        # setiap kali barang yang sama dibeli, dan satu jenis kertas HVS pecah
+        # jadi puluhan kartu stok.
+        #
+        # Ronde 2: mencocokkan per-awalan SAJA lebih buruk lagi. Enam digit
+        # terakhir itu justru yang MEMBEDAKAN barang berbeda pada kodefikasi
+        # 10-digit yang sama ("Kertas HVS A4" vs "Kertas HVS F4"). Mengambil
+        # nomor urut terkecil membuang stok & layer FIFO ke kartu barang yang
+        # SALAH — lebih merusak daripada kartu yang pecah.
+        #
+        # Karena itu: awalan kode + nama barang yang sama (abaikan kapital &
+        # spasi berlebih). Tak ada yang cocok → master baru, sebagaimana
+        # mestinya. Kode yang lebih pendek dari awalan baku (mis. "1") tak
+        # pernah dicocokkan per-awalan — dulu ditolak, dan tetap harus ditolak.
         from shared_utils import scope_query_field_satker
-        q_kode = ({"kode_barang": {"$regex": f"^{re.escape(kode)}"}}
-                  if len(kode) < KODE_PENUH_LEN else {"kode_barang": kode})
+        nama_row = str(row.get("uraian") or "").strip()
+        if len(kode) == KODE_PENUH_LEN:
+            q_kode = {"kode_barang": kode}
+        elif len(kode) >= KODE_PREFIX_LEN:
+            q_kode = {"kode_barang": {"$regex": f"^{re.escape(kode)}"},
+                      "nama_barang": {"$regex": f"^{re.escape(nama_row)}$",
+                                      "$options": "i"}}
+        else:
+            q_kode = {"kode_barang": kode}     # kode cacat: jangan menebak
         it = await db.persediaan.find_one(
             scope_query_field_satker(user, q_kode),
             {"_id": 0, "id": 1}, sort=[("kode_barang", 1)])
@@ -555,12 +574,25 @@ async def buat_draft_aset_dari_perolehan(perolehan_id: str,
                 "sumber_modul": "pengadaan", "ref_id": perolehan_id,
                 "keterangan": f"Draft aset dari BAST {p.get('nomor_bast') or '-'}",
                 "oleh": user.get("username", "system")})
+            # HANYA field yang dibutuhkan LPB — JANGAN pernah menyalin dokumen
+            # aset mentah (temuan audit adversarial). `buat_aset_draft`
+            # mengembalikan dict YANG SAMA yang dioper ke `insert_one()`, dan
+            # Motor menyisipkan `_id: ObjectId` ke dalamnya IN-PLACE. Dokumen
+            # itu ikut jadi nilai balik route; `jsonable_encoder` FastAPI tak
+            # bisa membuat serial ObjectId → HTTP 500, padahal aset, back-link,
+            # jurnal, dan audit SUDAH tertulis. Uji unit tak menangkapnya karena
+            # memanggil handler langsung, melewati lapisan serialisasi.
+            #
             # `jumlah_bast` menjaga LPB tetap jujur saat satu draft mewakili
             # SELURUH baris (jumlah > 50 atau pecahan — lihat n_unit di atas).
-            # Bila barisnya memang dipecah per-NUP, tiap draft = 1 unit.
-            aset_dibuat.append({**doc,
-                                "harga_satuan": float(row.get("harga_satuan") or 0),
-                                "jumlah_bast": 1 if n_unit > 1 else jumlah})
+            aset_dibuat.append({
+                "id": doc.get("id"),
+                "asset_code": doc.get("asset_code"),
+                "NUP": doc.get("NUP"),
+                "asset_name": doc.get("asset_name"),
+                "harga_satuan": float(row.get("harga_satuan") or 0),
+                "jumlah_bast": 1 if n_unit > 1 else jumlah,
+            })
             dibuat += 1
         if gagal_baris:
             continue

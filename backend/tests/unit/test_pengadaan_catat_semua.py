@@ -326,3 +326,144 @@ def test_ppk_id_yang_tak_ada_ditolak_404(dbx):
                 user=USER)
         assert e.value.status_code == 404
     _jalan(skenario())
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TEMUAN AUDIT ADVERSARIAL GELOMBANG-2 (5 TINGGI)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_ppk_pejabat_satker_lain_tak_pernah_dipakai(dbx):
+    """Klaim "dokumen satker ini hanya menyebut pejabatnya sendiri" DIUJI.
+
+    Dua mutasi dulu LOLOS seluruh suite: membuang `kode_satker` dari
+    `resolve_pejabat_peran`, dan membuang `_q_pejabat_satker` dari lookup id
+    eksplisit. Fixture lamanya memakai `kode_satker=""` (super-admin) dan tak
+    pernah menaruh pejabat milik satker lain — jadi penjaga apa pun lulus.
+    """
+    async def skenario():
+        await dbx.inventory_activities.insert_one(
+            {"id": "keg1", "nama_kegiatan": "Inv", "kode_satker": "111111"})
+        await dbx.pejabat.insert_one({
+            "id": "pj-asing", "nama": "PPK Satker Lain",
+            "nip": "199901012020011001", "jabatan": "PPK", "peran": ["ppk"],
+            "kode_satker": "999999", "berlaku_mulai": "2026-01-01"})
+        user_a = {"username": "op-a", "role": "admin", "name": "Op",
+                  "kode_satker": "111111"}
+        rec = await _unwrap(rp.buat_perolehan)(_perolehan_baru(), user=user_a)
+        assert rec["ppk_nama"] == "", (
+            "nama & NIP pejabat satker lain tercetak di BAST satker ini")
+    _jalan(skenario())
+
+
+def test_tetapkan_ppk_id_satker_lain_ditolak(dbx):
+    """Jalur id EKSPLISIT juga ber-scope — bukan hanya resolusi otomatis."""
+    from fastapi import HTTPException
+
+    async def skenario():
+        await dbx.inventory_activities.insert_one(
+            {"id": "keg1", "nama_kegiatan": "Inv", "kode_satker": "111111"})
+        await dbx.pejabat.insert_one({
+            "id": "pj-asing", "nama": "PPK Satker Lain", "nip": "1",
+            "jabatan": "PPK", "peran": ["ppk"], "kode_satker": "999999",
+            "berlaku_mulai": "2026-01-01"})
+        user_a = {"username": "op-a", "role": "admin", "name": "Op",
+                  "kode_satker": "111111"}
+        rec = await _unwrap(rp.buat_perolehan)(_perolehan_baru(), user=user_a)
+        with pytest.raises(HTTPException) as e:
+            await _unwrap(rp.tetapkan_ppk)(
+                rec["id"], rp.TetapkanPpkIn(ppk_pejabat_id="pj-asing"),
+                user=user_a)
+        assert e.value.status_code == 404
+    _jalan(skenario())
+
+
+def test_hasil_catat_semua_bisa_diserialkan_json(dbx):
+    """Nilai balik route WAJIB lolos `jsonable_encoder`.
+
+    `buat_aset_draft` mengembalikan dict YANG SAMA yang dioper ke
+    `insert_one()`, dan Motor menyisipkan `_id: ObjectId` in-place. Menyalin
+    dokumen itu ke respons membuat FastAPI melempar 500 SETELAH aset, jurnal,
+    dan audit tertulis — operator hanya melihat "gagal" padahal datanya ada.
+    Uji unit biasa tak menangkapnya karena melewati lapisan serialisasi.
+    """
+    from fastapi.encoders import jsonable_encoder
+
+    async def skenario():
+        await _seed(dbx)
+        rec = await _unwrap(rp.buat_perolehan)(_perolehan_baru(), user=USER)
+        hasil = await _unwrap(rp.catat_semua_barang)(
+            rec["id"], rp.CatatSemuaIn(activity_id="keg1", booking_nomor=False),
+            user=USER)
+        jsonable_encoder(hasil)          # meledak bila ada ObjectId tersisa
+        draft = await _unwrap(rp.buat_draft_aset_dari_perolehan)(
+            rec["id"], rp.BuatDraftAsetIn(activity_id="keg1"), user=USER)
+        jsonable_encoder(draft)
+
+        # `jsonable_encoder` saja TIDAK CUKUP sebagai penjaga: mongomock tak
+        # menyisipkan `_id` ke dict yang dioper seperti Motor sungguhan, jadi
+        # kebocorannya tak akan pernah muncul di sini. Yang dijaga adalah
+        # bentuk DAFTAR PUTIH-nya — sifat yang sama di kedua driver, dan yang
+        # justru menjadi aturannya: jangan salin dokumen aset mentah.
+        BOLEH = {"id", "asset_code", "NUP", "asset_name",
+                 "harga_satuan", "jumlah_bast"}
+        for a in draft.get("aset_dibuat") or []:
+            asing = set(a) - BOLEH
+            assert not asing, (
+                f"dokumen aset mentah ikut ke respons: {sorted(asing)} — "
+                "Motor menyisipkan _id in-place dan FastAPI akan 500")
+    _jalan(skenario())
+
+
+def test_bast_yang_asetnya_sudah_tercatat_tak_jadi_jalan_buntu(dbx):
+    """BAST setengah-jalan: aset sudah dicatat, persediaan belum.
+
+    Dulu `pilah_barang_perolehan` tetap menghitung baris yang SUDAH jadi aset,
+    sehingga gerbang `activity_id` menuntut kegiatan untuk pekerjaan yang
+    sudah selesai — sementara layar tak merender dropdown-nya. Kertasnya tak
+    akan pernah bisa masuk stok lewat layar mana pun.
+    """
+    async def skenario():
+        await _seed(dbx)
+        rec = await _unwrap(rp.buat_perolehan)(_perolehan_baru(), user=USER)
+        # Langkah 1: hanya sisi ASET yang dicatat (jalur lama).
+        await _unwrap(rp.buat_draft_aset_dari_perolehan)(
+            rec["id"], rp.BuatDraftAsetIn(activity_id="keg1"), user=USER)
+        # Langkah 2: "Catat Semua" TANPA activity_id — persis seperti yang
+        # dikirim layar, karena tak ada lagi baris aset yang belum tertaut.
+        hasil = await _unwrap(rp.catat_semua_barang)(
+            rec["id"], rp.CatatSemuaIn(activity_id="", booking_nomor=False),
+            user=USER)
+        assert hasil["persediaan_masuk"] == 1, "kertas macet permanen"
+    _jalan(skenario())
+
+
+def test_stok_tak_masuk_kartu_barang_yang_salah(dbx):
+    """Dua barang berbeda pada kodefikasi 10-digit yang SAMA.
+
+    Enam digit terakhir kode 16-digit justru yang membedakan keduanya.
+    Mencocokkan per-awalan saja lalu mengambil nomor urut terkecil akan
+    membuang stok & layer FIFO ke kartu barang yang salah — lebih merusak
+    daripada kartu yang pecah.
+    """
+    async def skenario():
+        await _seed(dbx)
+        await dbx.persediaan.insert_many([
+            {"id": "psd-a4", "kode_satker": "", "kode_barang": "1010301001000001",
+             "nup": "1", "nama_barang": "Kertas HVS A4", "satuan": "Rim",
+             "stok": 0, "batches": [], "harga_satuan": 0},
+            {"id": "psd-f4", "kode_satker": "", "kode_barang": "1010301001000002",
+             "nup": "2", "nama_barang": "Kertas HVS F4", "satuan": "Rim",
+             "stok": 0, "batches": [], "harga_satuan": 0},
+        ])
+        rec = await _unwrap(rp.buat_perolehan)(rp.PerolehanIn(
+            jenis="pembelian", pihak="PT X", nomor_bast="BAST-9/2026",
+            tanggal_bast="2026-03-12",
+            barang=[rp.BarangIn(uraian="Kertas HVS F4", kode="1010301001",
+                                jumlah=5, harga_satuan=60_000)]), user=USER)
+        await _unwrap(rp.daftarkan_persediaan)(rec["id"], user=USER)
+
+        a4 = await dbx.persediaan.find_one({"id": "psd-a4"})
+        f4 = await dbx.persediaan.find_one({"id": "psd-f4"})
+        assert a4["stok"] == 0, "stok masuk ke kartu barang yang SALAH"
+        assert f4["stok"] == 5
+    _jalan(skenario())

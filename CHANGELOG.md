@@ -143,12 +143,49 @@ juga nama + NIP PPK** — ke jurnal persediaan dan LPB satker A. Bukan sekadar
 terbaca: tersimpan permanen di dokumen resmi, lengkap dengan data pribadi
 pejabatnya.
 
+### Gelombang kedua audit: 39 dugaan → 18 bertahan, 21 gugur
+
+Lima TINGGI, **satu di antaranya regresi yang lahir dari perbaikan gelombang
+pertama**:
+
+- **`POST /pengadaan/{id}/buat-draft-aset` jadi 500.** `buat_aset_draft`
+  mengembalikan dict YANG SAMA yang dioper ke `insert_one()`, dan Motor
+  menyisipkan `_id: ObjectId` ke dalamnya *in-place*. Menyalinnya ke respons
+  membuat FastAPI gagal membuat serial — **setelah** aset, jurnal, dan audit
+  tertulis. Kini hanya field ber-daftar-putih yang disalin.
+- **Pencocokan per-awalan membuang stok ke kartu yang SALAH.** Perbaikan
+  gelombang pertama ("cocokkan awalan") ternyata lebih berbahaya daripada
+  penyakitnya: enam digit terakhir justru yang **membedakan** "Kertas HVS A4"
+  dari "Kertas HVS F4". Kini awalan **dan nama** harus cocok.
+- **Jalan buntu untuk BAST setengah-jalan.** `pilah_barang_perolehan`
+  menghitung baris yang **sudah** jadi aset, sehingga gerbang `activity_id`
+  menuntut kegiatan untuk pekerjaan yang selesai — sementara layar tak merender
+  dropdown-nya. Sisi persediaannya macet permanen, dan tombol lamanya sudah
+  dihapus. Kini pemilahan mengabaikan baris yang sudah punya tujuan.
+- **Klaim "PPK ter-scope satker" tak diuji sama sekali** — dua mutasi lolos
+  1.213 uji karena seluruh fixture memakai satker kosong.
+- Pembatalan TTD LPB kini **mengosongkan** `signature_request_id`; tanpa itu
+  tombol "Kirim TTD" hilang selamanya.
+
+Toast hijau juga berhenti berbunyi "tidak ada barang baru" saat semua baris
+gagal, dan seluruh alasan gagal ditampilkan — bukan hanya yang pertama.
+
 ### Verifikasi
 
-1.220 uji backend (42 baru), eslint 0 galat, build kompilasi. **Empat mutasi**
+1.230 uji backend (47 baru), eslint 0 galat, build kompilasi. **Enam mutasi**
 dibuktikan tertangkap: membuang penjaga golongan → 4 uji gagal; mempersempit
 proyeksi `ppk_*` → 2 uji gagal; mencabut `lpb` dari gerbang `doc_ref` → 2 uji
-gagal; mencabut scope satker dari lookup perolehan → 1 uji gagal.
+gagal; mencabut scope satker dari lookup perolehan → 1 uji gagal; mematok
+kembali `jumlah: 1` di baris LPB → 2 uji gagal; membuang penyaring
+"sudah tercatat" dari pemilahan → 1 uji gagal; mencocokkan awalan tanpa nama
+→ 1 uji gagal.
+
+**Batas yang dinyatakan terus terang:** kebocoran `_id` dijaga dengan
+memeriksa DAFTAR PUTIH field pada nilai balik, bukan dengan memancing galat
+serialisasinya. `mongomock` tidak menyisipkan `_id` ke dict yang dioper seperti
+Motor sungguhan, jadi mode gagal aslinya **tak bisa direproduksi** di uji unit —
+yang bisa dijaga hanyalah aturannya: jangan pernah menyalin dokumen aset mentah
+ke respons.
 
 ---
 

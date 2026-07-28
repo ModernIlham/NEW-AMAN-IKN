@@ -932,7 +932,13 @@ async def batal_permintaan(sr_id: str, user: dict = Depends(require_writer)):
             if milik:
                 await db.lpb.update_one(
                     {"id": milik["id"]},
+                    # `signature_request_id` DIKOSONGKAN: layar memakainya
+                    # sebagai penanda "sudah dikirim", jadi membiarkannya
+                    # terisi setelah dibatalkan membuat tombol "Kirim TTD"
+                    # hilang SELAMANYA — LPB yang tandatangannya dicabut tak
+                    # akan pernah bisa dikirim ulang.
                     {"$set": {"tt_dicabut": True,
+                              "signature_request_id": "",
                               "tt_dicabut_pada": datetime.now(timezone.utc).isoformat()}})
         except Exception:
             pass  # best-effort, seperti cascade BAST di atas
