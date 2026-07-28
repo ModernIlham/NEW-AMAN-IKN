@@ -117,6 +117,16 @@ export default function SpasialMasterPage({ user, onBack }) {
         } });
       if (seq !== reqNodeRef.current) return;      // muatan lain sudah menyusul
       setNodes(rn.data?.items || []);
+      // Server memotong di plafon node. Dulu ini SENYAP, dan karena urutannya
+      // menaik menurut ordinal_level, yang hilang justru tingkat TERDALAM
+      // (ruangan) — persis yang paling dibutuhkan opname. Operator berhak tahu
+      // bahwa pohon yang dilihatnya belum lengkap.
+      if (rn.data?.terpotong) {
+        toast.warning(
+          `Pohon dipotong pada ${(rn.data.batas || 0).toLocaleString("id-ID")} `
+          + "node — tingkat terdalam (ruangan) mungkin belum tampil. Pakai "
+          + "pencarian untuk menemukan node tertentu.", { duration: 12000 });
+      }
     } catch (err) {
       if (seq !== reqNodeRef.current) return;
       // Disimpan di state, BUKAN sekadar toast: toast hilang setelah beberapa

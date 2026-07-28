@@ -53,6 +53,82 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#662] Keandalan gelombang 2 — sisi server: izin sebelum pemotongan, sortir berbatas, payload dilangsingkan — 2026-07-28
+
+Lanjutan `[#661]`. Gelombang pertama membereskan sisi klien (tenggat, coba-ulang,
+layar yang jujur); gelombang ini membereskan yang menyebabkan permintaannya
+lambat atau salah sejak di server.
+
+### 1. Izin dijalankan SEBELUM pemotongan — dan bukan lagi N+1
+
+`GET /spasial/node/{id}/isi` dulu:
+
+```python
+rows = ...find(...).to_list(500)          # dipotong DULU
+for r in rows:
+    await pastikan_akses_aset(user, r)    # baru disaring
+```
+
+Dua cacat sekaligus, dan keduanya nyata:
+
+- **BENAR.** Pemotongan mendahului penyaringan. Bila 500 baris teratas kebetulan
+  milik satker lain, pengguna menerima jauh kurang dari yang BERHAK ia lihat —
+  dan angka itulah yang dipakai untuk opname fisik.
+- **CEPAT.** `pastikan_akses_aset` menembak `inventory_activities.find_one`
+  untuk TIAP baris: sampai **500 perjalanan bolak-balik berurutan** hanya untuk
+  membuka isi satu ruangan.
+
+Penyaring kini berjalan di dalam kueri. Memindahkan aturan otorisasi berarti
+**menyalinnya**, dan salinan bisa menyimpang diam-diam — karena itu ujinya tidak
+berhenti pada "hasilnya benar": `test_kueri_izin_SETARA_gelung_guard_asli`
+menjalankan kueri baru DAN gelung guard yang asli atas fixture yang sama, lalu
+menuntut hasilnya identik. Fixture-nya mencakup seluruh cabang aturan: kegiatan
+milik satker, milik satker lain, kegiatan era-lama tanpa stempel, aset tanpa
+kegiatan, dan aset **yatim** (kegiatan induk sudah dihapus — tetap fail-closed,
+sesuai REVIEW-9 R15).
+
+### 2. `.sort()` tanpa `.limit()` di `/spasial/geojson`
+
+`to_list(N)` hanya membatasi berapa dokumen yang DIBACA klien; kursornya sendiri
+tak berbatas, sehingga MongoDB menyortir SELURUH hasil cocok lebih dulu. Sortir
+tanpa indeks penopang berjalan di memori dengan plafon 100 MB — pada satker
+ber-denah lengkap kueri ini bisa gagal seluruhnya dengan *"Sort exceeded memory
+limit"*: **peta kosong, bukan peta lambat.** Limit kini ikut turun ke server.
+
+### 3. Payload daftar node dilangsingkan — dan bahaya yang menyertainya
+
+`properties` dibuang dari proyeksi `GET /spasial/node`. Ia menyimpan
+`properties.impor.atribut` — puluhan kunci berisi ratusan karakter **per node** —
+dan tak satu pun layar yang memakai daftar itu membacanya.
+
+> **Yang hampir terlewat.** `DenahEditor` memakai item DAFTAR sebagai cadangan
+> dasar `PUT /spasial/node/{id}`, dan PUT mengganti SELURUH field. Melangsingkan
+> daftar tanpa membereskan itu akan **menghapus jejak audit impor dan denah
+> overlay** node yang disimpan — kehilangan data senyap. Cadangan itu kini
+> dicabut: bila tak ada dasar lengkap, penyimpanan DITOLAK dengan pesan jelas,
+> dan gambar operator tetap di layar.
+
+### 4. Pemotongan 20.000 node tak lagi senyap
+
+Daftar berhenti di plafon tanpa penanda apa pun. Karena urutannya menaik menurut
+`ordinal_level`, yang hilang justru tingkat **terdalam** (ruangan) — persis yang
+paling dibutuhkan opname. Kini ada `terpotong`/`batas`, dan layar memberi tahu.
+Penanda itu diperoleh dengan mengambil satu baris lebih banyak, bukan dengan
+`count_documents` kedua atas kueri yang sama.
+
+### 5. `max_time_ms` sisi server
+
+Dipasang **di bawah** tenggat klien (15 dtk vs 20 dtk). Tanpa ini server tetap
+membanting CPU untuk permintaan yang klien-nya sudah menyerah dan sudah mencoba
+ulang — beban berlipat justru saat jaringan buruk, yaitu saat kapasitas paling
+dibutuhkan.
+
+**Uji:** 1.330 backend (+8), 258 frontend, lint & build bersih. Dua mutasi
+diperiksa pada jalur izin (urutan potong-saring dikembalikan; penyaring
+dilonggarkan) — tertangkap 2 dan 5 uji.
+
+---
+
 ## [#661] Keandalan pemuatan node & konteks — tenggat, coba-ulang, dan layar yang berhenti berbohong — 2026-07-28
 
 Pemilik bertanya: *"bagaimana cara membuat handal saat memuat data node agar tidak
