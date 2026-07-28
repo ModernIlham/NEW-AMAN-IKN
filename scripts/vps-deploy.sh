@@ -42,15 +42,45 @@ pip install emergentintegrations --extra-index-url https://d33sy5i8bnduwe.cloudf
 mkdir -p uploads
 
 # Setup .env backend
-cat > .env << 'ENVEOF'
-MONGO_URL="mongodb://localhost:27017"
-DB_NAME="inventarisasi_bmn"
-CORS_ORIGINS="https://amanikn-inventarisasi.com,http://amanikn-inventarisasi.com"
-TINIFY_API_KEY=WX6Md8zwtPLg740tmWF9j5h1s82Ydmb2
-RESEND_API_KEY=re_W7pMzGpS_KWVouHVdY4pLrbqRNVrK2ogu
-SENDER_EMAIL=noreply@amanikn-inventarisasi.com
-JWT_SECRET=inv_mgmt_s3cur3_k3y_2026_pr0d_x7q9w2m4
-ENVEOF
+# ── .env backend: SELURUH rahasia dibaca dari environment ──────────────────
+#
+# Berkas ini DULU menuliskan MONGO_URL, JWT_SECRET, TINIFY_API_KEY, dan
+# RESEND_API_KEY apa adanya. Repositori bersifat PUBLIK — kredensial itu
+# terbaca siapa pun, dan JWT_SECRET yang terbaca publik berarti siapa pun
+# dapat menempa token super-admin lalu membaca seluruh data BMN semua satker.
+# Mencabutnya dari sini TIDAK memulihkan yang sudah terekspos; rotasi di
+# masing-masing penyedia tetap wajib.
+#
+# Cara memakai:
+#     export MONGO_URL="..." JWT_SECRET="$(openssl rand -hex 32)"
+#     export CORS_ORIGINS="https://domain-anda"
+#     sudo -E bash scripts/vps-deploy.sh
+#
+# JWT_SECRET dan MONGO_URL WAJIB. Menyediakan nilai bawaan untuk keduanya
+# berarti setiap pemasangan memakai rahasia yang sama — persis keadaan yang
+# baru saja diperbaiki. Skrip berhenti, bukan mengarang.
+: "${MONGO_URL:?WAJIB diekspor lebih dulu}"
+: "${JWT_SECRET:?WAJIB diekspor lebih dulu — buat acak: openssl rand -hex 32}"
+if [ "${#JWT_SECRET}" -lt 32 ]; then
+    echo "JWT_SECRET terlalu pendek (${#JWT_SECRET} karakter, minimal 32)." >&2
+    echo "Buat yang baru: openssl rand -hex 32" >&2
+    exit 1
+fi
+
+{
+    echo "MONGO_URL=\"${MONGO_URL}\""
+    echo "DB_NAME=\"${DB_NAME:-inventaris_bmn}\""
+    echo "CORS_ORIGINS=\"${CORS_ORIGINS:-http://localhost:3000}\""
+    echo "JWT_SECRET=${JWT_SECRET}"
+    # Opsional: fitur terkait mati bila kosong, dan itu DINYATAKAN lewat
+    # indikator kuota, bukan ditutupi nilai bawaan.
+    [ -n "${TINIFY_API_KEY:-}" ]      && echo "TINIFY_API_KEY=${TINIFY_API_KEY}"
+    [ -n "${RESEND_API_KEY:-}" ]      && echo "RESEND_API_KEY=${RESEND_API_KEY}"
+    [ -n "${SENDER_EMAIL:-}" ]        && echo "SENDER_EMAIL=${SENDER_EMAIL}"
+    [ -n "${ILOVEAPI_PUBLIC_KEY:-}" ] && echo "ILOVEAPI_PUBLIC_KEY=${ILOVEAPI_PUBLIC_KEY}"
+    [ -n "${ILOVEAPI_SECRET_KEY:-}" ] && echo "ILOVEAPI_SECRET_KEY=${ILOVEAPI_SECRET_KEY}"
+    true
+} > .env
 
 chmod 600 .env
 deactivate

@@ -35,6 +35,8 @@ export default function SimanSyncCard({ isAdmin }) {
   const [terbuka, setTerbuka] = useState(false);
   const [selisih, setSelisih] = useState(null); // {items,total,page,total_pages}
   const [muatSelisih, setMuatSelisih] = useState(false);
+  // "" = seluruh kegiatan; "-" = aset yang belum terikat kegiatan mana pun.
+  const [kegiatanPilih, setKegiatanPilih] = useState("");
   const [bukaAset, setBukaAset] = useState(null); // id aset yang rinciannya terbuka
   const [menerapkan, setMenerapkan] = useState(null); // id aset yang sedang diterapkan
   const [mereklas, setMereklas] = useState(null);     // id aset yang sedang direklasifikasi
@@ -52,17 +54,29 @@ export default function SimanSyncCard({ isAdmin }) {
 
   useEffect(() => { muatRingkasan(); }, [muatRingkasan]);
 
-  const ambilSelisih = useCallback(async (page = 1) => {
+  const ambilSelisih = useCallback(async (page = 1, kegiatan = kegiatanPilih) => {
     setMuatSelisih(true);
     try {
-      const r = await axios.get(`${API}/siman/selisih?page=${page}&page_size=50`);
+      const q = kegiatan ? `&activity_id=${encodeURIComponent(kegiatan)}` : "";
+      const r = await axios.get(`${API}/siman/selisih?page=${page}&page_size=50${q}`);
       setSelisih(r.data);
     } catch {
       toast.error("Gagal memuat daftar selisih SIMAN");
     } finally {
       setMuatSelisih(false);
     }
-  }, []);
+  }, [kegiatanPilih]);
+
+  // Menyaring daftar selisih ke SATU kegiatan. Klik ulang baris yang sama =
+  // kembali ke seluruh kegiatan, jadi tak perlu tombol "hapus filter" tersendiri.
+  const pilihKegiatan = (id) => {
+    const baru = kegiatanPilih === id ? "" : id;
+    setKegiatanPilih(baru);
+    setTerbuka(true);
+    setBukaAset(null);
+    setSelisih(null);
+    ambilSelisih(1, baru);
+  };
 
   useEffect(() => {
     if (terbuka && !selisih) ambilSelisih(1);
@@ -273,12 +287,62 @@ export default function SimanSyncCard({ isAdmin }) {
           )}
         </div>
 
+        {/* RINCIAN PER KEGIATAN INVENTARISASI.
+            Angka global ("12 selisih") tak bisa ditindaklanjuti begitu satker
+            punya lebih dari satu kegiatan: operator tahu ada selisih, tapi tak
+            tahu kegiatan mana yang harus dibuka. Baris di sini menjawab itu
+            sekaligus menjadi penyaring daftar di bawahnya. */}
+        {(ringkasan?.per_kegiatan || []).length > 0 && (
+          <div className="rounded-lg border border-border overflow-hidden"
+            data-testid="siman-per-kegiatan">
+            <p className="px-2.5 py-1 bg-muted/50 text-[10px] font-semibold text-foreground">
+              Status per kegiatan inventarisasi
+              <span className="font-normal text-muted-foreground"> — klik untuk menyaring daftar selisih</span>
+            </p>
+            <div className="divide-y divide-border/60 max-h-56 overflow-y-auto">
+              {ringkasan.per_kegiatan.map((k) => {
+                const id = k.activity_id || "-";
+                const aktif = kegiatanPilih === id;
+                return (
+                  <button key={id} type="button" onClick={() => pilihKegiatan(id)}
+                    className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-left min-w-0 min-h-0
+                                ${aktif ? "bg-teal-500/10" : "hover:bg-muted/50"}`}
+                    data-testid={`siman-kegiatan-${id}`}>
+                    <span className={`text-[11px] truncate flex-1 min-w-0
+                                      ${aktif ? "font-semibold text-teal-700 dark:text-teal-400" : "text-foreground/90"}`}>
+                      {k.nama_kegiatan}
+                    </span>
+                    <span className="flex items-center gap-1 flex-shrink-0">
+                      <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                        {k.cocok} cocok
+                      </span>
+                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${k.selisih ? "bg-amber-500/15 text-amber-600 dark:text-amber-400" : "bg-muted text-muted-foreground"}`}>
+                        {k.selisih} selisih
+                      </span>
+                      {k.tidak_di_siman > 0 && (
+                        <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/15 text-red-600 dark:text-red-400">
+                          {k.tidak_di_siman} tak ada
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {(ringkasan?.selisih || 0) > 0 && (
           <button type="button" onClick={() => setTerbuka((t) => !t)}
             className="w-full flex items-center gap-1.5 text-left text-[11px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-2.5 py-1.5 min-w-0 min-h-0"
             data-testid="siman-toggle-selisih">
             {terbuka ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-            Tinjau {ringkasan.selisih} aset yang berbeda dengan SIMAN
+            <span className="min-w-0 break-words">
+              Tinjau {ringkasan.selisih} aset yang berbeda dengan SIMAN
+              {kegiatanPilih && (
+                <span className="font-normal"> · disaring ke 1 kegiatan (klik lagi barisnya untuk semua)</span>
+              )}
+            </span>
           </button>
         )}
 
@@ -296,13 +360,28 @@ export default function SimanSyncCard({ isAdmin }) {
                   <div key={a.id} className="px-2.5 py-1.5">
                     <button type="button"
                       onClick={() => setBukaAset(bukaAset === a.id ? null : a.id)}
-                      className="w-full flex items-center gap-2 text-left min-w-0 min-h-0"
+                      className="w-full flex items-start gap-2 text-left min-w-0 min-h-0"
                       data-testid={`siman-selisih-row-${a.id}`}>
-                      {bukaAset === a.id ? <ChevronDown className="w-3 h-3 flex-shrink-0" /> : <ChevronRight className="w-3 h-3 flex-shrink-0" />}
-                      <span className="font-mono text-[11px] text-foreground flex-shrink-0">{a.asset_code}·{a.NUP}</span>
-                      <span className="text-[11px] text-foreground/80 truncate flex-1">{a.asset_name}</span>
-                      <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold flex-shrink-0">
-                        {(a.siman?.selisih || []).length} field
+                      {bukaAset === a.id ? <ChevronDown className="w-3 h-3 flex-shrink-0 mt-1" /> : <ChevronRight className="w-3 h-3 flex-shrink-0 mt-1" />}
+                      <span className="flex-1 min-w-0">
+                        <span className="flex items-center gap-2 min-w-0">
+                          <span className="font-mono text-[11px] text-foreground flex-shrink-0">{a.asset_code}·{a.NUP}</span>
+                          <span className="text-[11px] text-foreground/80 truncate flex-1">{a.asset_name}</span>
+                          <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold flex-shrink-0">
+                            {(a.siman?.selisih || []).length} field
+                          </span>
+                        </span>
+                        {/* Asal kegiatan disebut per baris saat daftar masih
+                            gabungan — tanpa ini operator melihat deretan aset
+                            tanpa tahu satu pun berasal dari kegiatan yang mana.
+                            Saat sudah disaring ke satu kegiatan, ia mubazir. */}
+                        {!kegiatanPilih && (
+                          <span className="block text-[10px] text-muted-foreground truncate"
+                            data-testid={`siman-selisih-kegiatan-${a.id}`}>
+                            {a.nama_kegiatan
+                              || (a.activity_id ? "(kegiatan tak ditemukan)" : "(tanpa kegiatan)")}
+                          </span>
+                        )}
                       </span>
                     </button>
                     {bukaAset === a.id && (

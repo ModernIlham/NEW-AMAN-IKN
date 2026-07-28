@@ -434,7 +434,13 @@ def bersihkan_fitur(geometry, perbaiki: bool = False):
     galat_topo = tu.validasi_topologi(geometry)
     if not galat_topo:
         return geometry, None
-    if not perbaiki:
+    # "Terlalu besar/rumit untuk diperiksa" BUKAN cacat bentuk: `perbaiki_topologi`
+    # dipagari hal yang sama sehingga pasti menolak juga. Dulu kode di sini tetap
+    # mencobanya lalu menempelkan "(perbaikan otomatis gagal)", menghasilkan
+    # kalimat yang membingungkan operator — apalagi karena pesan lamanya
+    # menyarankan "pakai jalur impor file" kepada orang yang SEDANG memakai
+    # jalur impor file. Berhenti di sini dan sampaikan saran yang benar.
+    if not perbaiki or tu.perlu_disederhanakan(galat_topo):
         return None, f"topologi: {galat_topo}"
     usul = tu.perbaiki_topologi(geometry)
     if usul is None:

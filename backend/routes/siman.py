@@ -295,6 +295,56 @@ async def import_siman(request: Request, file: UploadFile = File(...),
     return {k: v for k, v in register.items() if k != "baris_belum_tercatat"}
 
 
+async def _rekap_per_kegiatan(user: dict) -> list:
+    """Rekap status sinkron SIMAN DIPECAH per kegiatan inventarisasi.
+
+    KENAPA PERLU. Angka global ("12 selisih") tak bisa ditindaklanjuti begitu
+    satker punya lebih dari satu kegiatan inventarisasi: operator tahu ada
+    selisih, tetapi tidak tahu kegiatan mana yang harus dibuka, siapa yang
+    menanganinya, atau apakah kegiatan yang BARU saja ia kerjakan sudah bersih.
+    Laporan lapangan menyebutnya persis begitu — "informasi per kegiatannya
+    tidak diinformasikan sehingga bingung".
+
+    Satu pipeline agregasi, bukan N kueri per kegiatan: jumlah kegiatan tumbuh
+    tiap tahun anggaran dan panel ini dimuat pada tiap kunjungan halaman.
+    """
+    q = await scope_query_aset(user, active_asset_filter({"siman": {"$exists": True}}))
+    baris = await db.assets.aggregate([
+        {"$match": q},
+        {"$group": {"_id": {"kegiatan": "$activity_id", "status": "$siman.status"},
+                    "n": {"$sum": 1}}},
+    ]).to_list(5000)
+
+    per = {}
+    for b in baris:
+        kunci = (b.get("_id") or {}).get("kegiatan") or ""
+        status = (b.get("_id") or {}).get("status") or "belum_dicek"
+        slot = per.setdefault(kunci, {"activity_id": kunci, "nama_kegiatan": "",
+                                      "cocok": 0, "selisih": 0, "tidak_di_siman": 0})
+        if status in slot:
+            slot[status] += int(b.get("n") or 0)
+
+    # Nama kegiatan diambil sekali untuk SELURUH id sekaligus.
+    ids = [k for k in per if k]
+    if ids:
+        async for a in db.inventory_activities.find(
+                {"id": {"$in": ids}}, {"_id": 0, "id": 1, "nama_kegiatan": 1}):
+            if a.get("id") in per:
+                per[a["id"]]["nama_kegiatan"] = a.get("nama_kegiatan") or ""
+
+    hasil = list(per.values())
+    for h in hasil:
+        h["total"] = h["cocok"] + h["selisih"] + h["tidak_di_siman"]
+        if not h["nama_kegiatan"]:
+            # Aset tanpa activity_id, atau kegiatannya sudah dihapus. Jangan
+            # disembunyikan: justru baris inilah yang paling perlu dilihat.
+            h["nama_kegiatan"] = ("(tanpa kegiatan)" if not h["activity_id"]
+                                  else "(kegiatan tak ditemukan)")
+    # Yang paling perlu ditindaklanjuti di atas.
+    hasil.sort(key=lambda h: (-h["selisih"], -h["tidak_di_siman"], h["nama_kegiatan"]))
+    return hasil
+
+
 @siman_router.get("/siman/ringkasan")
 async def ringkasan_siman(_user: dict = Depends(require_user)):
     """Status sinkronisasi terkini + riwayat impor (untuk panel UI)."""
@@ -314,6 +364,7 @@ async def ringkasan_siman(_user: dict = Depends(require_user)):
     return {
         "selisih": selisih, "cocok": cocok,
         "tidak_di_siman": tidak_di_siman, "belum_dicek": belum_dicek,
+        "per_kegiatan": await _rekap_per_kegiatan(_user),
         "riwayat": riwayat,
         "import_terakhir": riwayat[0] if riwayat else None,
     }
@@ -464,17 +515,53 @@ async def buat_draft_dari_siman(request: Request, import_id: str,
 
 @siman_router.get("/siman/selisih")
 async def daftar_selisih_siman(page: int = 1, page_size: int = 50,
+                               activity_id: str = "",
                                _user: dict = Depends(require_user)):
-    """Aset yang datanya berbeda dengan SIMAN (untuk tabel tinjau & terapkan)."""
+    """Aset yang datanya berbeda dengan SIMAN (untuk tabel tinjau & terapkan).
+
+    `activity_id` menyaring ke SATU kegiatan inventarisasi — pasangan dari rekap
+    per kegiatan di ringkasan, supaya "8 selisih di Inventarisasi Semester I"
+    bisa langsung dibuka sebagai daftar, bukan dicari manual di antara seluruh
+    selisih satker. Nilai "-" berarti aset yang belum terikat kegiatan mana pun.
+
+    Penyaringan ditambahkan SETELAH `scope_query_aset`, jadi ia mempersempit
+    lingkup — tak pernah bisa dipakai menembus batas satker.
+    """
     page = max(1, page)
     page_size = min(max(1, page_size), 200)
     q = await scope_query_aset(_user, active_asset_filter({"siman.status": "selisih"}))
+    pilih = (activity_id or "").strip()
+    # SELALU lewat `$and`, JANGAN pernah menulis kunci "activity_id" langsung.
+    # `scope_query_aset` menegakkan isolasi satker justru DENGAN kunci itu
+    # (`activity_id: {"$in": [kegiatan milik satker user]}`), sehingga
+    # `{**q, "activity_id": pilih}` menimpanya dan mengubah penyaring tampilan
+    # menjadi IDOR: pengguna satker A cukup menyebut id kegiatan satker B untuk
+    # membaca asetnya. Versi pertama kode ini melakukannya persis, dan uji
+    # `test_penyaring_tak_bisa_menembus_batas_satker` yang menangkapnya.
+    # Lewat `$and`, kedua syarat berlaku bersama → penyaring hanya bisa
+    # MEMPERSEMPIT lingkup yang sudah diizinkan.
+    if pilih == "-":
+        q = {**q, "$and": [*q.get("$and", []),
+                           {"$or": [{"activity_id": {"$in": ["", None]}},
+                                    {"activity_id": {"$exists": False}}]}]}
+    elif pilih:
+        q = {**q, "$and": [*q.get("$and", []), {"activity_id": pilih}]}
     total = await db.assets.count_documents(q)
     items = await (db.assets.find(q, _PROJ_ASET)
                    .sort([("asset_code", 1), ("NUP", 1)])
                    .skip((page - 1) * page_size).limit(page_size)
                    .to_list(page_size))
+    # Nama kegiatan disematkan di sini supaya tiap baris bisa berdiri sendiri:
+    # tanpa ini daftar gabungan tak menunjukkan aset ini milik kegiatan mana.
+    ids = {i.get("activity_id") for i in items if i.get("activity_id")}
+    if ids:
+        nama = {a["id"]: a.get("nama_kegiatan") or "" async for a in
+                db.inventory_activities.find({"id": {"$in": list(ids)}},
+                                             {"_id": 0, "id": 1, "nama_kegiatan": 1})}
+        for i in items:
+            i["nama_kegiatan"] = nama.get(i.get("activity_id"), "")
     return {"items": items, "total": total, "page": page,
+            "activity_id": pilih,
             "total_pages": max(1, -(-total // page_size))}
 
 

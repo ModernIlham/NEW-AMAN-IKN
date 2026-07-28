@@ -17,7 +17,8 @@ from bson import ObjectId  # noqa: F401  (kept for downstream import use)
 from db import db
 from auth_utils import require_admin, require_user, require_writer
 from routes.media import auto_compress_image
-from routes.pdf_compress import compress_pdf_iloveapi, compress_pdf_whipdoc
+import pdf_compress_utils as pcu
+from routes.pdf_compress import compress_pdf_ilovepdf
 from shared_utils import (
     decode_data_url,
     store_document_to_gridfs,
@@ -161,21 +162,28 @@ async def process_activity_documents(documents: List[dict], existing_docs: Optio
         if not pdf_bytes:
             return None
 
+        # PENJAGA YANG SAMA DENGAN /compress-pdf. Jalur ini adalah kembaran
+        # endpoint itu, dan dulu berjalan TANPA satu pun penjaganya: tanpa batas
+        # ukuran, tanpa cek magic byte. Akibatnya seluruh validasi bisa
+        # dilewati hanya dengan mengirim dokumen sebagai base64 di payload
+        # kegiatan — byte sembarang berukuran sembarang dikirim ke penyedia
+        # berbayar lalu disimpan sebagai "dokumen". Satu pintu berpenjaga tak
+        # ada gunanya bila pintu sebelahnya terbuka lebar.
+        sah, alasan_tolak = pcu.pdf_valid(pdf_bytes)
+        if not sah:
+            logger.warning("Dokumen kegiatan '%s' ditolak: %s", name, alasan_tolak)
+            return None
+
         original_size = len(pdf_bytes)
-        compressed, method = None, None
-
-        # Try iLoveAPI → WhipDoc fallback. Both helpers respect quota.
-        try:
-            compressed, method = await compress_pdf_iloveapi(pdf_bytes, name)
-        except Exception as e:
-            logger.warning(f"iLoveAPI compress threw for '{name}': {e}")
+        compressed, method, _alasan = await compress_pdf_ilovepdf(pdf_bytes, name)
         if not compressed:
-            try:
-                compressed, method = await compress_pdf_whipdoc(pdf_bytes, name)
-            except Exception as e:
-                logger.warning(f"WhipDoc compress threw for '{name}': {e}")
+            # Jaring pengaman lokal — sama seperti endpoint, supaya kedua pintu
+            # memberi hasil yang sama.
+            lokal = await asyncio.to_thread(pcu.kompres_pdf_lokal, pdf_bytes)
+            if lokal:
+                compressed, method = lokal, "pypdf-lokal"
 
-        if compressed and len(compressed) < original_size:
+        if compressed and pcu.layak_dipakai(pdf_bytes, compressed):
             final_bytes, final_method = compressed, (method or "none")
             logger.info(
                 f"Activity PDF '{name}' compressed: "
