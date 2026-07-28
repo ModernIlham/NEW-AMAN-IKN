@@ -15,6 +15,7 @@ import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import "@/lib/leafletImageOverlayRotated";   // efek samping: L.imageOverlay.rotated
 import axios from "axios";
 import { toast } from "sonner";
+import { TENGGAT_BAKA } from "@/lib/muatAndal";
 import {
   Loader2, Save, Trash2, Wand2, X, AlertTriangle,
   ImagePlus, Move, Check, RotateCcw,
@@ -580,11 +581,26 @@ export default function DenahEditor({ node, onClose, onSaved }) {
       // orang lain mengganti nama / memindah induk node ini. PUT mengganti
       // SELURUH field, jadi memakai snapshot lama akan membalikkan suntingan
       // mereka tanpa jejak. `detailNode` (hasil GET saat dialog dibuka) jadi
-      // cadangan bila fetch ulang gagal — tetap lebih segar dari prop `node`.
-      let dasar = detailNode || node;
+      // cadangan bila fetch ulang gagal.
+      //
+      // Prop `node` — item dari DAFTAR — SENGAJA TIDAK lagi dipakai sebagai
+      // cadangan. Daftar itu diproyeksikan ramping (tanpa `properties`, demi
+      // payload pohon), sehingga memakainya sebagai dasar PUT yang mengganti
+      // seluruh field akan MENGHAPUS jejak audit impor dan denah overlay node
+      // ini — kehilangan data senyap, ditukar dengan kenyamanan menyimpan.
+      // Bila tak ada dasar yang lengkap, menolak menyimpan adalah sikap yang
+      // benar: gambar tetap di layar dan bisa disimpan lagi setelah sinyal pulih.
+      let dasar = detailNode;
       try {
-        dasar = (await axios.get(`${API}/spasial/node/${nodeId}`)).data || dasar;
+        dasar = (await axios.get(`${API}/spasial/node/${nodeId}`,
+                                 { timeout: TENGGAT_BAKA })).data || dasar;
       } catch { /* jaringan goyah — pakai detail dari pembukaan dialog */ }
+      if (!dasar) {
+        toast.error("Belum bisa menyimpan: data node terbaru gagal dimuat. "
+                    + "Periksa sinyal lalu tekan Simpan lagi — gambar Anda "
+                    + "masih ada di layar dan tidak hilang.", { duration: 9000 });
+        return;
+      }
       const r = await axios.put(`${API}/spasial/node/${nodeId}`,
                                 payloadSimpan(dasar, geometry));
       for (const p of r.data?.peringatan || []) toast.warning(p, { duration: 8000 });
@@ -596,7 +612,9 @@ export default function DenahEditor({ node, onClose, onSaved }) {
     } finally {
       setMenyimpan(false);
     }
-  }, [periksa, nodeId, node, detailNode, onSaved, onClose]);
+  // `node` (item DAFTAR) sengaja BUKAN lagi dependensi: ia tak lagi dipakai
+  // sebagai dasar PUT — lihat alasannya di dalam fungsi ini.
+  }, [periksa, nodeId, detailNode, onSaved, onClose]);
 
   // Terapkan usulan make_valid dari server: ganti seluruh isi grup gambar.
   const terapkanPerbaikan = useCallback(() => {

@@ -37,6 +37,14 @@ spasial_router = APIRouter()
 _PROJ = {"_id": 0}
 _MAKS_NODE = 20000  # plafon per satker; denah kawasan besar pun jauh di bawah ini
 
+# Tenggat kueri SISI SERVER, sengaja DI BAWAH tenggat klien (20 dtk di
+# frontend/src/lib/muatAndal.js). Tanpa ini server tetap membanting CPU untuk
+# permintaan yang klien-nya sudah menyerah dan sudah mencoba ulang — beban
+# berlipat justru pada saat jaringan sedang buruk, yaitu saat kapasitas paling
+# dibutuhkan. Melampauinya menghasilkan galat yang tertangkap sebagai 500, dan
+# itu benar: lebih baik satu permintaan gagal cepat daripada semua melambat.
+_MAKS_MS_KUERI = 15_000
+
 
 # ── Registry level (global, di-seed) ────────────────────────────────────────
 
@@ -333,18 +341,43 @@ async def daftar_node(parent_id: str = Query(""), tipe: str = Query(""),
     # sekaligus — ratusan verteks dikali puluhan ribu baris tetap berarti
     # payload raksasa. Yang dibutuhkan layar hanya "sudah diringankan atau
     # belum", dan itu satu boolean.
+    #
+    # `properties` IKUT DIBUANG (Gelombang keandalan). Ia menyimpan jejak audit
+    # impor — `properties.impor.atribut`, hingga puluhan kunci berisi ratusan
+    # karakter PER NODE — dan tak satu pun layar yang memakai daftar ini
+    # membacanya; editor mengambilnya dari endpoint DETAIL. Pada satker ber-denah
+    # lengkap inilah penyumbang terbesar payload daftar, dan payload itulah yang
+    # membuat pemuatan pohon sering kehabisan waktu di jaringan lapangan.
+    #
+    # PERINGATAN UNTUK PENYUNTING BERIKUTNYA: jangan pernah memakai item daftar
+    # ini sebagai dasar `PUT /spasial/node/{id}`. PUT mengganti SELURUH field,
+    # sehingga dasar yang tak lengkap akan MENGHAPUS field yang tak dikirim.
+    # DenahEditor sempat memakainya sebagai cadangan, dan itu ikut dibereskan
+    # bersama perubahan ini.
     pipeline = [
         {"$match": query},
         {"$sort": {"ordinal_level": 1, "kode": 1, "nama": 1}},
-        {"$limit": _MAKS_NODE},
+        # Ambil SATU lebih banyak dari plafon: itulah cara mengetahui daftar
+        # terpotong tanpa membayar `count_documents` kedua atas kueri yang sama.
+        {"$limit": _MAKS_NODE + 1},
         {"$addFields": {
             "tipe_geometri": {"$ifNull": ["$geometry.type", ""]},
             "dioptimalkan": {"$ne": [{"$ifNull": ["$geometry_opt", None]}, None]},
         }},
-        {"$project": {"_id": 0, "geometry": 0, "geometry_opt": 0}},
+        {"$project": {"_id": 0, "geometry": 0, "geometry_opt": 0,
+                      "properties": 0}},
     ]
-    items = [n async for n in db.spasial_node.aggregate(pipeline)]
-    return {"items": items, "jumlah": len(items)}
+    items = [n async for n in db.spasial_node.aggregate(
+        pipeline, maxTimeMS=_MAKS_MS_KUERI)]
+    # Pemotongan tak boleh SENYAP. Sebelumnya daftar berhenti di plafon tanpa
+    # penanda apa pun, dan karena urutannya menaik menurut ordinal_level, yang
+    # hilang justru tingkat TERDALAM (ruangan) — persis yang paling dibutuhkan
+    # opname. Layar berhak tahu bahwa yang dilihatnya belum lengkap.
+    terpotong = len(items) > _MAKS_NODE
+    if terpotong:
+        items = items[:_MAKS_NODE]
+    return {"items": items, "jumlah": len(items),
+            "terpotong": terpotong, "batas": _MAKS_NODE}
 
 
 @spasial_router.get("/spasial/node/{node_id}")
@@ -877,8 +910,18 @@ async def geojson_viewport(bbox: str = Query("", description="lon_min,lat_min,lo
         # ±13% pada payload yang justru paling berat — di endpoint yang seluruh
         # alasan keberadaannya adalah memangkas berat itu.
         proyeksi["geometry_opt"] = 1
-    rows = await db.spasial_node.find(query, proyeksi).sort(
-        "ordinal_level", 1).to_list(BATAS_FITUR_PETA)
+    # `.limit()` WAJIB menyertai `.sort()`, dan bukan sekadar kerapian:
+    # `to_list(N)` hanya membatasi berapa dokumen yang DIBACA klien — kursornya
+    # sendiri tak berbatas, sehingga MongoDB menyortir SELURUH hasil cocok lebih
+    # dulu. Sortir tanpa indeks penopang berjalan di memori dengan plafon 100 MB,
+    # dan pada satker ber-denah lengkap kueri ini bisa gagal seluruhnya dengan
+    # "Sort exceeded memory limit" — peta kosong, bukan peta lambat. Dengan
+    # limit yang ikut turun ke server, MongoDB cukup memelihara top-N.
+    rows = await (db.spasial_node.find(query, proyeksi)
+                  .sort("ordinal_level", 1)
+                  .limit(BATAS_FITUR_PETA)
+                  .max_time_ms(_MAKS_MS_KUERI)
+                  .to_list(BATAS_FITUR_PETA))
 
     fitur = []
     titik_kirim = titik_asli_total = 0
@@ -1755,6 +1798,44 @@ async def riwayat_lokasi_aset(asset_id: str,
     return {"items": items, "jumlah": len(items)}
 
 
+async def _filter_aset_boleh(user):
+    """Klausa Mongo yang SETARA `pastikan_akses_aset`, tapi ditegakkan di DB.
+
+    None = pengguna lintas-satker (super-admin): tanpa batas.
+
+    Aturannya disalin apa adanya dari `shared_utils.pastikan_akses_kegiatan_id`
+    + `pastikan_akses_kegiatan`, sebuah aset BOLEH dibaca bila:
+
+      a. `activity_id`-nya kosong/tak ada  → guard lama `return` lebih awal;
+      b. kegiatan induknya ADA dan `kode_satker`-nya kosong (data era lama)
+         ATAU sama dengan satker pengguna.
+
+    Yang TIDAK boleh, dan tetap tak boleh di sini: aset "yatim" — `activity_id`
+    menunjuk kegiatan yang sudah dihapus. Kepemilikannya justru tak bisa
+    dipastikan, dan guard lama sengaja FAIL-CLOSED atasnya (REVIEW-9 R15). Di
+    versi kueri ini id tersebut sekadar tak ada dalam daftar `boleh`, jadi
+    hasilnya sama: tersaring keluar.
+
+    MENYALIN aturan otorisasi itu berisiko divergen bila guard aslinya berubah.
+    Karena itu `test_isi_node_izin.py` tidak hanya menguji hasilnya, tetapi
+    membandingkan baris-per-baris terhadap gelung guard yang ASLI — bila
+    keduanya berbeda untuk fixture mana pun, uji itu gagal.
+    """
+    kode = kode_satker_user(user)
+    if not kode:
+        return None
+    boleh = [a["id"] async for a in db.inventory_activities.find(
+        {"$or": [{"kode_satker": kode},
+                 {"kode_satker": {"$in": ["", None]}},
+                 {"kode_satker": {"$exists": False}}]},
+        {"_id": 0, "id": 1})]
+    return {"$or": [
+        {"activity_id": {"$in": boleh}},
+        {"activity_id": {"$in": ["", None]}},
+        {"activity_id": {"$exists": False}},
+    ]}
+
+
 @spasial_router.get("/spasial/node/{node_id}/isi")
 async def isi_node(node_id: str, dalam: bool = Query(True),
                    _user: dict = Depends(require_user)):
@@ -1782,28 +1863,37 @@ async def isi_node(node_id: str, dalam: bool = Query(True),
             {"_id": 0, "id": 1}).to_list(_MAKS_NODE)
         ids.extend(d["id"] for d in anak)
 
+    # Isolasi satker aset mengikuti KEGIATAN induknya (aturan baku modul aset).
+    # Penyaringnya kini dijalankan DI DALAM kueri, bukan sebagai gelung setelah
+    # hasil kembali. Dua alasan, keduanya nyata:
+    #
+    # 1. BENAR. Versi lama memotong di 500 baris DULU, baru menyaring izin —
+    #    sehingga pengguna satker bisa menerima jauh kurang dari 500 aset yang
+    #    BERHAK ia lihat, hanya karena 500 baris teratas kebetulan milik satker
+    #    lain. Angkanya lalu dipakai untuk opname fisik.
+    # 2. CEPAT. Gelung lama memanggil `pastikan_akses_aset` per baris, dan tiap
+    #    panggilan menembak `inventory_activities.find_one` sendiri — sampai 500
+    #    perjalanan bolak-balik BERURUTAN untuk satu kali membuka isi ruangan.
+    q_aset = {"lokasi_spasial.node_id": {"$in": ids}}
+    izin = await _filter_aset_boleh(_user)
+    if izin is not None:
+        q_aset = {"$and": [q_aset, izin]}
+
     rows = await (db.assets.find(
-        {"lokasi_spasial.node_id": {"$in": ids}},
+        q_aset,
         {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "category": 1, "condition": 1, "user": 1, "status": 1,
          "lokasi_spasial": 1, "activity_id": 1})
-        .sort("asset_name", 1).to_list(_MAKS_ISI_NODE))
-
-    # Isolasi satker aset mengikuti KEGIATAN induknya (aturan baku modul aset),
-    # jadi hasil disaring dengan guard yang sama — bukan sekadar percaya bahwa
-    # node ter-scope sudah cukup (aset satker lain bisa saja menunjuk node
-    # era-lama tanpa stempel satker).
-    from shared_utils import pastikan_akses_aset
-    hasil = []
-    for r in rows:
-        try:
-            await pastikan_akses_aset(_user, r)
-        except HTTPException:
-            continue
-        hasil.append(r)
-    return {"node": _ringkas(node), "items": hasil, "jumlah": len(hasil),
+        .sort("asset_name", 1)
+        .limit(_MAKS_ISI_NODE + 1)          # +1 = penanda terpotong tanpa count
+        .max_time_ms(_MAKS_MS_KUERI)
+        .to_list(_MAKS_ISI_NODE + 1))
+    terpotong = len(rows) > _MAKS_ISI_NODE
+    if terpotong:
+        rows = rows[:_MAKS_ISI_NODE]
+    return {"node": _ringkas(node), "items": rows, "jumlah": len(rows),
             "termasuk_keturunan": bool(dalam),
-            "terpotong": len(rows) >= _MAKS_ISI_NODE}
+            "terpotong": terpotong}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
