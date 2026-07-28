@@ -286,10 +286,17 @@ export default function SatkerAktifBar({ user }) {
         </div>
 
         {/* PEGANGAN — SATU-SATUNYA tempat tirai bisa ditarik.
-            Sengaja sesempit ini: ia melayang di atas halaman, jadi apa pun yang
-            lebih lebar akan mencuri ketukan dari isi di bawahnya. Lebarnya
-            ~5,5 rem di tengah — cukup untuk ibu jari, terlalu kecil untuk
-            tersenggol.
+
+            SAAT TERSEMBUNYI ia nyaris tak terlihat: hanya seutas garis tipis
+            setengah-transparan selebar ±3 rem. Wujud pil penuh yang lama
+            (laporan lapangan) menimpa judul halaman di HP dan terbaca sebagai
+            "gambar yang menghalangi" — pegangan tirai tak berhak setebal itu
+            selagi tirainya sendiri tak dibuka. Wujud penuh ber-ikon hanya
+            muncul saat tirai TERBUKA, ketika ia memang sedang jadi kendali.
+
+            Area SENTUHNYA tetap lega (44×24 px, latar transparan) — yang
+            dikecilkan hanya yang TERLIHAT, bukan yang bisa diraba; menarik
+            dari tepi atas tetap semudah sebelumnya.
 
             `touch-action: none` WAJIB: tanpanya peramban seluler menafsirkan
             usapan vertikal sebagai gulir halaman dan pointermove tak pernah
@@ -307,22 +314,29 @@ export default function SatkerAktifBar({ user }) {
             onPointerCancel={batalTarik}
             onKeyDown={tombolTarik}
             style={{ touchAction: "none", transform: `translateY(${geser}px)` }}
-            className="pointer-events-auto relative w-[5.5rem] h-5 -mt-px flex items-end justify-center
-                       rounded-b-xl bg-teal-800 text-white shadow-md
-                       cursor-grab active:cursor-grabbing min-w-0 min-h-0
-                       focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+            className={`pointer-events-auto relative flex items-start justify-center
+                        cursor-grab active:cursor-grabbing min-w-0 min-h-0
+                        focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600/70
+                        ${terbuka
+                          ? "w-[5.5rem] h-5 -mt-px items-end rounded-b-xl bg-teal-800 text-white shadow-md"
+                          : "w-11 h-6 bg-transparent"}`}
             data-testid="satker-aktif-pegangan"
           >
-            <GripHorizontal
-              className={`w-4 h-4 mb-0.5 opacity-70 transition-transform
-                          ${terbuka ? "rotate-180" : ""}`}
-            />
+            {terbuka ? (
+              <GripHorizontal className="w-4 h-4 mb-0.5 opacity-70 rotate-180" />
+            ) : (
+              <span
+                aria-hidden="true"
+                className="mt-0.5 w-8 h-1 rounded-b-full bg-teal-800/40 dark:bg-teal-400/40"
+              />
+            )}
             {/* Umpan balik kemajuan. Tanpa ini redaman berbalik jadi kejam:
                 operator menarik jauh, tirai nyaris tak bergerak, lalu
                 menyimpulkan bilahnya macet. Garis ini berkata "tarikanmu
                 terbaca" tanpa meringankannya. */}
             <span
-              className="absolute left-0 bottom-0 h-0.5 bg-white transition-opacity"
+              className={`absolute left-0 h-0.5 transition-opacity
+                          ${terbuka ? "bottom-0 bg-white" : "top-0 bg-teal-700"}`}
               style={{ width: `${maju * 100}%`, opacity: maju > 0 ? 1 : 0 }}
               data-testid="satker-aktif-kemajuan"
             />

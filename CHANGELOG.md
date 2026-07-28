@@ -53,6 +53,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#667] Pegangan tirai satker mengecil jadi seutas garis — 2026-07-28
+
+Laporan lapangan (tangkapan layar HP): pegangan tirai satker — pil teal gelap
+ber-ikon genggam — menimpa judul halaman pemilih kegiatan dan terbaca sebagai
+"gambar yang menghalangi".
+
+Pegangan tak berhak setebal itu selagi tirainya sendiri tak dibuka. Saat
+TERSEMBUNYI ia kini hanya seutas garis 32×4 px setengah-transparan di tengah
+tepi atas; wujud pil penuh ber-ikon baru muncul saat tirai TERBUKA, ketika ia
+memang sedang menjadi kendali.
+
+Area sentuhnya justru tak menyempit: bidang raba 44×24 px berlatar transparan
+tetap dipertahankan — yang dikecilkan hanya yang TERLIHAT, bukan yang bisa
+diraba, jadi menarik tirai dari tepi atas tetap semudah sebelumnya. Garis
+kemajuan tarikan ikut pindah ke tepi atas pada wujud garis.
+
+**Uji:** 281 frontend, lint & build bersih.
+
+---
+
 ## [#666] Sapu merek — logo & tombol aksi utama ikut keluarga teal — 2026-07-28
 
 Pelengkap `[#665]`. Setelah token dan komponen dasar satu keluarga, yang tersisa
