@@ -53,6 +53,90 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#664] Bilah satker jadi tirai tarik-turun, denah muat di layar HP, dan pemintal Lapis Denah berhenti berputar sia-sia — 2026-07-28
+
+Empat keluhan lapangan atas tampilan, ditutup sekaligus.
+
+### 1. Cap satker: dari bilah tetap jadi TIRAI yang ditarik turun
+
+Bilah "Satker aktif" dulu ikut mengalir bersama dokumen di puncak SETIAP
+halaman. Dua akibatnya sama-sama nyata: ia merampas satu baris penuh di semua
+layar, dan untuk membukanya di halaman yang sudah tergulir operator harus
+menggulir **NAIK** dulu — kebalikan dari gerakan yang wajar untuk menurunkan
+sesuatu dari tepi atas.
+
+Kini ia melayang di tepi atas dan **tersembunyi**; yang tersisa hanya pegangan
+selebar ±5,5 rem. Tirainya punya tiga tahap, dan tiap lapis berikutnya ditarik
+turun dengan usahanya sendiri:
+
+```
+tersembunyi  ──tarik turun──▶  cap satker  ──tarik turun──▶  daftar satker
+             ◀──tarik naik───              ◀──tarik naik───
+```
+
+**Satu tarikan = satu tahap**, sejauh apa pun ditarik. Sapuan panjang tak boleh
+melompat langsung ke daftar satker: menggantinya memuat ulang seluruh aplikasi.
+
+> **Daftar satkernya ikut turun bersama tirai, bukan digantung di bawahnya.**
+> Itu yang menutup keluhan "menu daftar satker terhalang header": sebagai
+> `absolute` di bawah bilah yang ikut tergulir, ia rutin terpotong di layar
+> sempit. Sebagai bagian tirai, tak ada lagi yang bisa menutupinya.
+
+Fisikanya (redaman asimtotik + ambang 72 px) tetap seperti sebelumnya, kini
+berlaku dua arah dengan berat yang sama — 26 uji di `lib/tarikBerat.js`.
+
+### 2. Editor denah muat di layar HP & tablet
+
+Bentuk lama tak pernah muat di HP: header + bilah alas jiplak + panel validasi +
+bilah tombol menumpuk di atas peta yang tingginya sudah **dipatok** `52vh`,
+sehingga yang tersisa untuk menggambar tinggal secarik — sementara toolbar
+geoman (tujuh tombol yang aturan sentuh global memaksa jadi 44 px, bertumpuk
+vertikal ≈ 308 px) menutupi sepertiga sisi kirinya.
+
+- Dialog **penuh layar** di bawah `sm`, `flex flex-col`, peta `flex-1 min-h-0`:
+  semua bilah setinggi isinya, dan SISA layar seluruhnya jadi kanvas.
+- `100dvh`, bukan `100vh` — bilah alamat peramban seluler yang muncul-hilang tak
+  lagi memotong tombol Simpan di tepi bawah.
+- Kontrol Leaflet & geoman **dikecualikan** dari aturan 44 px di `<1024px` dan
+  turun ke 36 px (bawaan Leaflet sendiri 30 px). Itu mengembalikan ±56 px lebar
+  sekaligus tinggi kepada kanvas, tanpa menyentuh satu pun tombol aplikasi.
+- Judul node panjang dipangkas rapi dan tak lagi menabrak tombol tutup.
+
+### 3. Peta Aset: tombol & panel berhenti memakan tempat
+
+Panel **Lapis Denah** dan blok **legenda** kini terlipat di layar sempit —
+keduanya rujukan yang dibaca sekali-sekali, bukan kendali yang dipakai terus,
+tetapi terbuka penuh mereka memakan lebih banyak ruang daripada petanya sendiri.
+Saat terlipat, panel Lapis Denah menyusut jadi satu pita ±26 px yang tetap
+menampilkan cacah lapisnya. Di `sm` ke atas keduanya terbuka apa adanya.
+
+### 4. Pemintal Lapis Denah yang berputar terus — apa sebenarnya fungsinya
+
+Pemintal itu menandai pengambilan denah **per-viewport**: peta hanya menarik
+poligon di kotak yang sedang terlihat, pada tingkat detail sesuai zoom. Jadi ia
+memang bekerja, bukan hiasan. Tetapi ia menyala jauh lebih sering daripada
+perlunya, karena dua sebab yang keduanya kini diperbaiki:
+
+- **`if (termuat.terpotong) return true`.** Pada area padat — persis yang
+  membuat hasilnya terpotong — SETIAP `moveend`/`zoomend`, termasuk geser
+  sejari yang tak mengubah apa pun yang terlihat, menembakkan request baru yang
+  mengembalikan potongan **yang sama persis**. Cache kini tetap berlaku;
+  kekhususan hasil terpotong ditangani dengan menyempitkan wilayah sahnya ke
+  viewport tanpa padding, sehingga berpindah area tetap menarik ulang tetapi
+  diam di tempat tidak.
+- **Pemintal muncul seketika.** Pemuatan viewport umumnya jauh di bawah setengah
+  detik; menyalakan pemintal untuk itu membuat panel berkedip-kedip tiap peta
+  digeser — dibaca operator sebagai "ada yang tak beres" padahal petanya lengkap.
+  Kini ia baru diperlihatkan setelah 450 ms, jadi yang cepat berlalu tanpa satu
+  kedipan pun.
+
+Berputar lagi saat zoom in/out **tetap benar dan tetap dipertahankan**: berganti
+zoom berarti berganti tingkat detail, dan itu memang data yang berbeda.
+
+**Uji:** 1.330 backend, 281 frontend (+13), lint & build bersih.
+
+---
+
 ## [#663] Keandalan gelombang 3 — layar putih dihabisi, dan layar berhenti menjamin yang tak diketahuinya — 2026-07-28
 
 Penutup rangkaian `[#661]`–`[#662]`. Dua gelombang sebelumnya membereskan

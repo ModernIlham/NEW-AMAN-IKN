@@ -1,10 +1,16 @@
 import {
   AMBANG_TARIK,
   MAKS_TAMPAK,
+  TAHAP_CAP,
+  TAHAP_DAFTAR,
+  TAHAP_TERSEMBUNYI,
+  arahSah,
   cukupUntukBuka,
+  geserTahap,
   kemajuanTarik,
-  majuTarik,
+  majuTahap,
   redamTarik,
+  tahapSetelahTarik,
 } from "./tarikBerat";
 
 describe("redamTarik — gerakan harus terasa BERAT", () => {
@@ -76,20 +82,93 @@ describe("kemajuanTarik — umpan balik tanpa membuat ringan", () => {
   });
 });
 
-describe("majuTarik — hanya arah yang sah yang dihitung", () => {
-  test("saat TERTUTUP hanya tarikan ke bawah yang maju", () => {
-    expect(majuTarik(80, false)).toBe(80);      // ke bawah → membuka
-    expect(majuTarik(-80, false)).toBe(-80);    // ke atas → mundur
-    expect(cukupUntukBuka(majuTarik(-80, false))).toBe(false);
+describe("arahSah — tirai punya ujung di kedua sisi", () => {
+  test("tersembunyi: hanya ke bawah yang punya tujuan", () => {
+    expect(arahSah(TAHAP_TERSEMBUNYI, 80)).toBe(true);
+    expect(arahSah(TAHAP_TERSEMBUNYI, -80)).toBe(false);
   });
 
-  test("saat TERBUKA hanya tarikan ke atas yang maju", () => {
-    expect(majuTarik(-80, true)).toBe(80);      // ke atas → menutup
-    expect(cukupUntukBuka(majuTarik(80, true))).toBe(false);
+  test("daftar (tahap terakhir): hanya ke atas yang punya tujuan", () => {
+    expect(arahSah(TAHAP_DAFTAR, -80)).toBe(true);
+    expect(arahSah(TAHAP_DAFTAR, 80)).toBe(false);
   });
 
-  test("masukan cacat → 0", () => {
-    expect(majuTarik(NaN, false)).toBe(0);
-    expect(majuTarik(undefined, true)).toBe(0);
+  test("tahap tengah: kedua arah sah", () => {
+    expect(arahSah(TAHAP_CAP, 80)).toBe(true);
+    expect(arahSah(TAHAP_CAP, -80)).toBe(true);
+  });
+
+  test("diam (dy 0) bukan arah, dan masukan cacat ditolak", () => {
+    expect(arahSah(TAHAP_CAP, 0)).toBe(false);
+    expect(arahSah(TAHAP_CAP, NaN)).toBe(false);
+    expect(arahSah(TAHAP_CAP, undefined)).toBe(false);
+  });
+});
+
+describe("majuTahap — arah buntu tidak menggerakkan apa pun", () => {
+  test("jaraknya MUTLAK: berat yang sama untuk membuka & menutup", () => {
+    expect(majuTahap(80, TAHAP_CAP)).toBe(80);
+    expect(majuTahap(-80, TAHAP_CAP)).toBe(80);
+  });
+
+  test("arah buntu → 0, jadi redaman & ambang ikut mati", () => {
+    expect(majuTahap(-80, TAHAP_TERSEMBUNYI)).toBe(0);
+    expect(majuTahap(80, TAHAP_DAFTAR)).toBe(0);
+    expect(redamTarik(majuTahap(80, TAHAP_DAFTAR))).toBe(0);
+    expect(cukupUntukBuka(majuTahap(80, TAHAP_DAFTAR))).toBe(false);
+  });
+});
+
+describe("tahapSetelahTarik — SATU tarikan, SATU tahap", () => {
+  test("tarikan panjang tetap naik satu tahap saja", () => {
+    // Sapuan 900 px dari tersembunyi TIDAK boleh langsung membuka daftar
+    // satker: menggantinya memuat ulang seluruh aplikasi.
+    expect(tahapSetelahTarik(TAHAP_TERSEMBUNYI, 900)).toBe(TAHAP_CAP);
+    expect(tahapSetelahTarik(TAHAP_CAP, 900)).toBe(TAHAP_DAFTAR);
+  });
+
+  test("usaha kurang dari ambang tidak memindahkan apa pun", () => {
+    expect(tahapSetelahTarik(TAHAP_CAP, AMBANG_TARIK - 1)).toBe(TAHAP_CAP);
+    expect(tahapSetelahTarik(TAHAP_CAP, -(AMBANG_TARIK - 1))).toBe(TAHAP_CAP);
+  });
+
+  test("tepat di ambang sudah cukup", () => {
+    expect(tahapSetelahTarik(TAHAP_CAP, AMBANG_TARIK)).toBe(TAHAP_DAFTAR);
+    expect(tahapSetelahTarik(TAHAP_CAP, -AMBANG_TARIK)).toBe(TAHAP_TERSEMBUNYI);
+  });
+
+  test("tak bisa melewati kedua ujung", () => {
+    expect(tahapSetelahTarik(TAHAP_TERSEMBUNYI, -900)).toBe(TAHAP_TERSEMBUNYI);
+    expect(tahapSetelahTarik(TAHAP_DAFTAR, 900)).toBe(TAHAP_DAFTAR);
+  });
+
+  test("tahap di luar rentang dijepit dulu, bukan dipakai apa adanya", () => {
+    expect(tahapSetelahTarik(99, 900)).toBe(TAHAP_DAFTAR);
+    expect(tahapSetelahTarik(-5, -900)).toBe(TAHAP_TERSEMBUNYI);
+  });
+});
+
+describe("geserTahap — tanda mengikuti arah, berat mengikuti redaman", () => {
+  test("turun positif, naik negatif, besarnya sama", () => {
+    const turun = geserTahap(120, TAHAP_CAP);
+    const naik = geserTahap(-120, TAHAP_CAP);
+    expect(turun).toBeGreaterThan(0);
+    expect(naik).toBeLessThan(0);
+    expect(Math.abs(naik)).toBeCloseTo(turun, 10);
+  });
+
+  test("tak pernah melampaui MAKS_TAMPAK walau ditarik sejauh apa pun", () => {
+    expect(Math.abs(geserTahap(100000, TAHAP_CAP))).toBeLessThan(MAKS_TAMPAK);
+  });
+
+  test("arah buntu tetap diam di tempat", () => {
+    expect(geserTahap(300, TAHAP_DAFTAR)).toBe(0);
+    expect(geserTahap(-300, TAHAP_TERSEMBUNYI)).toBe(-0);
+  });
+});
+
+describe("kemajuanTarik di tirai bertahap", () => {
+  test("indikator memakai jarak MUTLAK, jadi menutup pun terlihat berjalan", () => {
+    expect(kemajuanTarik(majuTahap(-AMBANG_TARIK / 2, TAHAP_CAP))).toBeCloseTo(0.5, 6);
   });
 });

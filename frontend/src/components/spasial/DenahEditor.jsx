@@ -672,7 +672,23 @@ export default function DenahEditor({ node, onClose, onSaved }) {
   return (
     <Dialog open onOpenChange={(o) => !o && onClose?.()}>
       <DialogContent
-        className="max-w-4xl p-0 gap-0 overflow-hidden"
+        // PENUH LAYAR DI HP & TABLET SEMPIT, kotak biasa mulai `sm`.
+        //
+        // Bentuk lama (kotak melayang setinggi isi, peta dipatok `52vh`) tak
+        // pernah muat di HP: header + bilah alas jiplak + panel validasi +
+        // bilah tombol menumpuk di atas peta yang tingginya sudah dipatok,
+        // sehingga yang tersisa untuk menggambar tinggal secarik — sementara
+        // toolbar geoman (7 tombol 44 px bertumpuk vertikal) menutupi
+        // sepertiga sisi kirinya.
+        //
+        // `flex flex-col` + peta `flex-1` membalik hubungannya: semua bilah
+        // mengambil setinggi isinya, dan SISA layar seluruhnya jadi kanvas.
+        // `100dvh` (bukan `100vh`) supaya bilah alamat peramban seluler yang
+        // muncul-hilang tak memotong tombol Simpan di tepi bawah.
+        className="p-0 gap-0 overflow-hidden flex flex-col
+                   w-screen max-w-none h-[100dvh] max-h-[100dvh] rounded-none border-0
+                   sm:w-[calc(100%-2rem)] sm:max-w-4xl sm:h-auto sm:max-h-[92vh]
+                   sm:rounded-lg sm:border"
         data-testid="denah-editor"
         // Escape dipakai geoman untuk MEMBATALKAN goresan yang sedang digambar;
         // membiarkan Radix ikut menutup dialog berarti satu tekan Escape
@@ -683,12 +699,17 @@ export default function DenahEditor({ node, onClose, onSaved }) {
         // peringatan — cegah; tanpa perubahan, tutup seperti biasa.
         onInteractOutside={(e) => { if (kotor || aturPosisi) e.preventDefault(); }}
       >
-        <DialogHeader className="px-4 pt-3 pb-2 border-b border-border">
-          <DialogTitle className="text-sm flex items-center gap-2">
-            Denah: {node?.nama}
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{node?.tipe}</span>
+        {/* `pr-12` memberi ruang untuk tombol X Radix yang melayang di pojok
+            kanan-atas; tanpa itu nama node panjang tepat menabraknya di HP. */}
+        <DialogHeader className="px-4 pr-12 pt-3 pb-2 border-b border-border shrink-0">
+          <DialogTitle className="text-sm flex items-baseline gap-2 min-w-0">
+            <span className="truncate">Denah: {node?.nama}</span>
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0">{node?.tipe}</span>
           </DialogTitle>
-          <DialogDescription className="text-xs">
+          {/* Keterangan alat disembunyikan di HP: di layar sempit ia memakan
+              satu baris penuh yang jauh lebih berharga sebagai kanvas, dan
+              alatnya sendiri sudah terlihat di sisi kiri peta. */}
+          <DialogDescription className="text-xs hidden sm:block">
             Gambar poligon dengan alat di kiri peta. Garis putus-putus hijau = batas induk.
           </DialogDescription>
         </DialogHeader>
@@ -696,7 +717,7 @@ export default function DenahEditor({ node, onClose, onSaved }) {
         {/* Alas jiplak: gambar denah lantai (Fase 7). Interior tak terlihat di
             citra satelit — unggah ekspor CAD/PDF (PNG/JPG), tempatkan dengan
             3 titik sudut, lalu jiplak ruangan di atasnya. */}
-        <div className="px-4 py-1.5 border-b border-border flex flex-wrap items-center gap-2 text-xs"
+        <div className="px-4 py-1.5 border-b border-border flex flex-wrap items-center gap-2 text-xs shrink-0"
              data-testid="denah-overlay-bar">
           <input ref={fileOverlayRef} type="file" className="hidden"
                  accept="image/png,image/jpeg,image/webp"
@@ -712,7 +733,9 @@ export default function DenahEditor({ node, onClose, onSaved }) {
                               : <ImagePlus className="w-3.5 h-3.5 mr-1" />}
                 Unggah Gambar Denah
               </Button>
-              <span className="text-muted-foreground">
+              {/* Disembunyikan di HP — satu baris penuh keterangan di layar
+                  sempit dibayar dengan tinggi kanvas. */}
+              <span className="text-muted-foreground hidden sm:inline">
                 alas jiplak dari CAD/PDF (PNG/JPG, maks {MAKS_GAMBAR_OVERLAY_MB} MB)
               </span>
             </>
@@ -781,9 +804,13 @@ export default function DenahEditor({ node, onClose, onSaved }) {
           )}
         </div>
 
-        <div className="relative">
+        {/* `flex-1 min-h-0` = peta mengambil SISA layar. `min-h-0` wajib:
+            tanpanya anak flex menolak menyusut di bawah tinggi kontennya dan
+            bilah tombol terdorong keluar layar di HP. Di `sm` ke atas tinggi
+            minimumnya dijaga supaya di desktop peta tak jadi pipih. */}
+        <div className="relative flex-1 min-h-0 sm:min-h-[24rem]" data-denah-peta>
           {/* callback ref: effect init jalan TEPAT saat node terpasang */}
-          <div ref={setWadahEl} className="h-[52vh] min-h-[320px] w-full" data-testid="denah-editor-peta" />
+          <div ref={setWadahEl} className="absolute inset-0 w-full h-full" data-testid="denah-editor-peta" />
           {/* Spinner BERKETERANGAN. Denah kawasan bisa berverteks puluhan ribu
               dan pemuatannya memang lama; lingkaran berputar tanpa kata membuat
               operator menyimpulkan aplikasi macet lalu menutup dialog tepat saat
@@ -914,7 +941,7 @@ export default function DenahEditor({ node, onClose, onSaved }) {
             poligon asli node LENYAP dari server, dengan toast hijau pula.
             Peringatan "menggambar sekarang berisiko menimpa data" tak boleh
             cuma tulisan; ia ditegakkan di sini. */}
-        <div className="px-4 py-3 border-t border-border flex items-center gap-2">
+        <div className="px-4 py-3 border-t border-border flex items-center gap-2 shrink-0">
           <Button variant="outline" size="sm" onClick={hapusBentuk}
                   disabled={!!galatMuat}
                   className="text-red-600" data-testid="denah-hapus-bentuk">

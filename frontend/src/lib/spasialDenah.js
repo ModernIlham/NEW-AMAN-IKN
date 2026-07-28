@@ -140,11 +140,23 @@ export function bboxTermuat(luar, dalam) {
  *
  * Tidak, bila viewport sekarang masih di dalam bbox yang sudah dimuat DAN
  * tingkat detailnya sama. Ini yang membuat geser/zoom kecil terasa instan.
- * Hasil yang TERPOTONG selalu dimuat ulang karena isinya belum lengkap.
+ *
+ * HASIL TERPOTONG TIDAK LAGI MEMAKSA MUAT ULANG SETIAP GERAKAN. Dulu barisnya
+ * `if (termuat.terpotong) return true`, dan akibatnya nyata di lapangan: pada
+ * area padat, SETIAP `moveend`/`zoomend` — termasuk geser sejari yang tak
+ * mengubah apa pun yang terlihat — menembakkan request baru yang mengembalikan
+ * potongan yang SAMA. Itulah kenapa penanda memuat di panel Lapis Denah tampak
+ * berputar tanpa henti padahal petanya sudah tergambar penuh.
+ *
+ * Yang benar-benar perlu diperhatikan saat terpotong adalah bahwa pemotongan
+ * server bergantung pada AREA yang diminta: pindah ke area lain memang
+ * menghasilkan kumpulan yang berbeda. Itu ditangani di pemanggil dengan
+ * menyimpan viewport TANPA padding sebagai wilayah sahnya, sehingga geser
+ * sedikit pun sudah keluar dari wilayah itu dan memicu muat ulang — sementara
+ * diam di tempat tidak.
  */
 export function perluMuatUlang(termuat, viewport, levelMaks) {
   if (!termuat || !termuat.bbox) return true;
-  if (termuat.terpotong) return true;
   if (termuat.level_maks !== levelMaks) return true;
   return !bboxTermuat(termuat.bbox, viewport);
 }

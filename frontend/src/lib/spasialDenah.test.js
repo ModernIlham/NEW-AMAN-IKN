@@ -163,8 +163,21 @@ describe("perluMuatUlang", () => {
   test("keluar dari bbox termuat → memuat ulang", () => {
     expect(perluMuatUlang(termuat, { barat: 9, selatan: 9, timur: 12, utara: 12 }, 50)).toBe(true);
   });
-  test("hasil terpotong selalu dimuat ulang — isinya belum lengkap", () => {
-    expect(perluMuatUlang({ ...termuat, terpotong: true }, didalam, 50)).toBe(true);
+  test("terpotong TIDAK lagi memaksa muat ulang saat diam di tempat", () => {
+    // Dulu ini `true`, dan itulah sebab penanda memuat berputar tanpa henti:
+    // tiap moveend/zoomend menembak ulang request yang mengembalikan potongan
+    // yang sama persis. Wilayah sah untuk hasil terpotong kini dipersempit di
+    // pemanggil (viewport tanpa padding), bukan dengan mematikan cache.
+    expect(perluMuatUlang({ ...termuat, terpotong: true }, didalam, 50)).toBe(false);
+  });
+
+  test("terpotong dengan wilayah sah SEMPIT: geser sedikit langsung memuat ulang", () => {
+    // Inilah pengganti perilaku lama — pemanggil menyimpan viewport apa adanya
+    // (tanpa padding) sebagai bbox, sehingga bergeser keluar darinya memicu
+    // muat ulang, tetapi diam di tempat tidak.
+    const sempit = { bbox: { barat: 2, selatan: 2, timur: 8, utara: 8 }, level_maks: 50, terpotong: true };
+    expect(perluMuatUlang(sempit, { barat: 2, selatan: 2, timur: 8, utara: 8 }, 50)).toBe(false);
+    expect(perluMuatUlang(sempit, { barat: 1.9, selatan: 2, timur: 8, utara: 8 }, 50)).toBe(true);
   });
 });
 
