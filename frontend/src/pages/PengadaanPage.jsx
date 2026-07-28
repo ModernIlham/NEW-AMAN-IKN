@@ -54,6 +54,8 @@ export default function PengadaanPage({ user, onBack }) {
 
   // Opsi usulan penganggaran untuk dropdown tautan (#117 ↔ #115)
   const [opsiAnggaran, setOpsiAnggaran] = useState([]);
+  // Pejabat ber-peran PPK untuk dropdown penetapan (Referensi Pejabat).
+  const [opsiPpk, setOpsiPpk] = useState([]);
 
   const muat = useCallback(() => {
     axios.get(`${API}/pengadaan`)
@@ -68,6 +70,15 @@ export default function PengadaanPage({ user, onBack }) {
     axios.get(`${API}/inventory-activities`)
       .then((r) => setKegiatanList(Array.isArray(r.data) ? r.data : []))
       .catch(() => setKegiatanList([]));
+    // Pejabat ber-peran PPK. Dibiarkan kosong bila gagal: server tetap bisa
+    // meresolusi PPK sendiri dari tanggal BAST, jadi dropdown ini pelengkap,
+    // bukan syarat.
+    axios.get(`${API}/pejabat`)
+      .then((r) => {
+        const semua = Array.isArray(r.data) ? r.data : (r.data?.items || []);
+        setOpsiPpk(semua.filter((pj) => (pj?.peran || []).includes("ppk")));
+      })
+      .catch(() => setOpsiPpk([]));
   }, []);
   useEffect(() => { muat(); }, [muat]);
 
@@ -167,26 +178,46 @@ export default function PengadaanPage({ user, onBack }) {
     }
   };
 
-  // Buat aset draft dari baris barang yang belum bertaut (evaluasi #5).
-  const buatDraftAset = async () => {
+  // SATU tombol untuk seluruh barang BAST: server memilah sendiri golongan 1
+  // (persediaan) dari golongan 2–8 (aset tetap), lalu menerbitkan LPB untuk
+  // sisi aset. Sebelumnya operator harus tahu pemilahan itu sendiri DAN
+  // menekan dua tombol berbeda — dan menekan keduanya justru mencatat barang
+  // persediaan dua kali.
+  const catatSemua = async () => {
     if (!draftAset) return;
-    if (!draftAset.activityId) { toast.error("Pilih kegiatan inventarisasi tujuan"); return; }
+    // Kegiatan hanya wajib bila ada barang yang akan jadi ASET. BAST berisi
+    // persediaan saja tak perlu kegiatan inventarisasi sama sekali.
+    if (draftAset.butuhKegiatan && !draftAset.activityId) {
+      toast.error("Pilih kegiatan inventarisasi tujuan"); return;
+    }
     setDraftAset((d) => ({ ...d, saving: true }));
     try {
-      const r = await axios.post(`${API}/pengadaan/${draftAset.perolehan.id}/buat-draft-aset`, {
+      const r = await axios.post(`${API}/pengadaan/${draftAset.perolehan.id}/catat-semua`, {
         activity_id: draftAset.activityId,
+        booking_nomor: draftAset.bookingNomor !== false,
       });
       const d = r.data || {};
-      toast.success(`${d.dibuat} aset draft dibuat di "${d.kegiatan}"`
-        + (d.dilewati_tertaut ? ` · ${d.dilewati_tertaut} sudah tertaut` : "")
-        + (d.dilewati_tanpa_kode ? ` · ${d.dilewati_tanpa_kode} dilewati (tanpa kode barang)` : ""));
+      const bagian = [];
+      if (d.aset_dibuat) bagian.push(`${d.aset_dibuat} aset`);
+      if (d.persediaan_masuk) bagian.push(`${d.persediaan_masuk} barang persediaan`);
+      toast.success(
+        bagian.length
+          ? `Tercatat: ${bagian.join(" dan ")}${d.nomor_lpb ? ` · LPB ${d.nomor_lpb}` : ""}`
+          : "Tidak ada barang baru yang perlu dicatat");
+      // Kegagalan sebagian TIDAK boleh tenggelam di balik toast hijau — jalur
+      // ini memang tak transaksional.
+      if (d.tanpa_kode) {
+        toast.warning(`${d.tanpa_kode} baris belum berkode barang `
+          + `(baris ${(d.baris_tanpa_kode || []).join(", ")}) — isi kode dulu.`,
+        { duration: 9000 });
+      }
       if ((d.gagal || []).length) {
-        toast.warning(`${d.gagal.length} baris gagal — contoh: ${d.gagal[0]}`);
+        toast.error(`${d.total_gagal} baris gagal — ${d.gagal[0]}`, { duration: 12000 });
       }
       setDraftAset(null);
       muat();
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Gagal membuat draft aset");
+      toast.error(e?.response?.data?.detail || "Gagal mencatat barang");
       setDraftAset((d) => (d ? { ...d, saving: false } : d));
     }
   };
@@ -212,7 +243,7 @@ export default function PengadaanPage({ user, onBack }) {
   }));
   // Buka dialog catat perolehan baru — dipakai tombol header & empty-state
   const bukaFormBaru = () => setForm({
-    data: { jenis: "pembelian", pihak: "", nomor_kontrak: "", nomor_bast: "", tanggal_bast: new Date().toISOString().slice(0, 10), keterangan: "", penganggaran_id: "" },
+    data: { jenis: "pembelian", pihak: "", nomor_kontrak: "", nomor_bast: "", tanggal_bast: new Date().toISOString().slice(0, 10), keterangan: "", penganggaran_id: "", ppk_pejabat_id: "" },
     barang: [{ ...BARANG_KOSONG }], saving: false,
   });
   const r = data?.ringkasan;
@@ -326,34 +357,27 @@ export default function PengadaanPage({ user, onBack }) {
                             </span>
                           );
                         })()}
-                        {(p.barang || []).some((b) => !b.asset_id) && (
-                          <button type="button" aria-label="Buat draft aset dari perolehan"
-                            title="Buat draft aset untuk barang yang belum bertaut"
-                            onClick={() => setDraftAset({ perolehan: p, activityId: "", saving: false })}
+                        {/* SATU tombol. Pemilahan persediaan↔aset dikerjakan
+                            server (lihat lpb_utils.pilah_barang_perolehan) —
+                            bukan pengetahuan yang harus dihafal operator. */}
+                        {(p.barang || []).some((b) => !b.asset_id && !b.psd_item_id) && (
+                          <button type="button" aria-label="Catat semua barang BAST ke pencatatan"
+                            title="Barang golongan 1 → Persediaan; golongan 2–8 → aset draft ber-NUP; lalu LPB terbit"
+                            onClick={() => setDraftAset({
+                              perolehan: p, activityId: "", bookingNomor: true,
+                              // Kegiatan inventarisasi hanya wajib bila BAST ini
+                              // memuat barang golongan ASET. Dihitung SEKALI di
+                              // sini — daftar barangnya tak berubah selama
+                              // dialog terbuka.
+                              butuhKegiatan: (p.barang || []).some((b) =>
+                                !b.asset_id && !b.psd_item_id
+                                && String(b.kode || "").trim()
+                                && !String(b.kode || "").trim().startsWith("1")),
+                              saving: false })}
                             className="h-7 px-2 rounded-lg border border-emerald-500/40 bg-emerald-600/10 text-emerald-600 dark:text-emerald-400 flex items-center gap-1 text-[10px] font-semibold hover:bg-emerald-600/20 min-h-0 min-w-0"
-                            data-testid={`pengadaan-draft-aset-${p.id}`}>
+                            data-testid={`pengadaan-catat-semua-${p.id}`}>
                             <PackagePlus className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">Buat Draft Aset</span>
-                          </button>
-                        )}
-                        {(p.barang || []).some((b) => String(b.kode || "").startsWith("1") && !b.psd_item_id) && (
-                          <button type="button" aria-label="Daftarkan barang konsumsi ke Persediaan"
-                            title="Barang ber-kode '1…' → master persediaan + transaksi masuk berjurnal FIFO"
-                            onClick={async () => {
-                              try {
-                                const r = await axios.post(`${API}/pengadaan/${p.id}/daftarkan-persediaan`);
-                                const d = r.data || {};
-                                toast.success(`${d.masuk || 0} barang masuk persediaan (${d.dibuat_master || 0} master baru)`);
-                                if ((d.gagal || []).length) toast.warning(`Gagal: ${d.gagal.join("; ")}`, { duration: 9000 });
-                                muat();
-                              } catch (e) {
-                                toast.error(e?.response?.data?.detail || "Gagal mendaftarkan ke persediaan");
-                              }
-                            }}
-                            className="h-7 px-2 rounded-lg border border-cyan-500/40 bg-cyan-600/10 text-cyan-600 dark:text-cyan-400 flex items-center gap-1 text-[10px] font-semibold hover:bg-cyan-600/20 min-h-0 min-w-0"
-                            data-testid={`pengadaan-daftarkan-psd-${p.id}`}>
-                            <Boxes className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">Daftarkan ke Persediaan</span>
+                            <span className="hidden sm:inline">Catat Semua Barang</span>
                           </button>
                         )}
                         <button type="button" aria-label="Lampiran berkas"
@@ -374,6 +398,18 @@ export default function PengadaanPage({ user, onBack }) {
                         {p.nomor_kontrak && ` · Kontrak ${p.nomor_kontrak}`}
                         {p.keterangan && ` · ${p.keterangan}`}
                         {` · oleh ${p.created_by}`}
+                      </p>
+                      {/* PPK: pertanyaan pertama pemeriksa saat menelusuri satu
+                          BAST. Ketiadaannya ditampilkan TERUS TERANG, bukan
+                          dibiarkan sebagai baris yang hilang begitu saja. */}
+                      <p className={`text-[11px] mt-0.5 truncate ${
+                        p.ppk_nama
+                          ? "text-sky-600 dark:text-sky-400"
+                          : "text-amber-600 dark:text-amber-400"}`}
+                        data-testid={`pengadaan-ppk-${p.id}`}>
+                        {p.ppk_nama
+                          ? `PPK: ${p.ppk_nama}${p.ppk_nip ? ` · NIP ${p.ppk_nip}` : ""}`
+                          : "PPK belum ditetapkan — lengkapi Referensi Pejabat lalu catat ulang"}
                       </p>
                       {p.penganggaran_id && (
                         <p className="text-[11px] text-violet-600 dark:text-violet-400 mt-0.5 truncate" data-testid={`pengadaan-anggaran-${p.id}`}>
@@ -503,6 +539,27 @@ export default function PengadaanPage({ user, onBack }) {
                     </option>
                   ))}
                 </select>
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-ppk">
+                  Pejabat Pembuat Komitmen (PPK)
+                </label>
+                <select id="pgd-ppk" value={form.data.ppk_pejabat_id}
+                  onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, ppk_pejabat_id: e.target.value } }))}
+                  className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+                  data-testid="pengadaan-ppk">
+                  <option value="">— Otomatis: PPK yang berlaku pada tanggal BAST —</option>
+                  {opsiPpk.map((pj) => (
+                    <option key={pj.id} value={pj.id}>
+                      {`${pj.nama}${pj.nip ? ` · ${pj.nip}` : ""}${pj.jabatan ? ` · ${pj.jabatan}` : ""}`}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Namanya <strong>dibekukan</strong> pada dokumen ini — pergantian PPK di
+                  kemudian hari tidak mengubah BAST yang sudah terbit.
+                  {opsiPpk.length === 0 && " Belum ada pejabat ber-peran PPK di Referensi Pejabat."}
+                </p>
               </div>
               <div className="col-span-2 space-y-2">
                 <p className="text-xs font-medium text-foreground">Daftar barang</p>
@@ -635,50 +692,83 @@ export default function PengadaanPage({ user, onBack }) {
         </DialogContent>
       </Dialog>
 
-      {/* ── Dialog buat draft aset dari perolehan (evaluasi #5) ── */}
+      {/* ── Dialog catat semua barang BAST (aset + persediaan sekaligus) ── */}
       <Dialog open={!!draftAset} onOpenChange={(o) => { if (!o) setDraftAset(null); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[92vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Buat Draft Aset — BAST {draftAset?.perolehan?.nomor_bast}</DialogTitle>
+            <DialogTitle>Catat Semua Barang — BAST {draftAset?.perolehan?.nomor_bast}</DialogTitle>
             <DialogDescription className="text-xs">
-              Tiap baris barang yang <strong>belum bertaut</strong> dibuatkan aset draft
-              (status &quot;Belum Diinventarisasi&quot;) di kegiatan terpilih — NUP otomatis,
-              harga/tanggal/BAST terisi dari perolehan, lalu tertaut balik. Baris tanpa
-              kode barang dilewati (isi kode dulu lewat Tautkan/registrasi).
+              Barang <strong>golongan 1</strong> masuk <strong>Persediaan</strong> (stok + jurnal
+              FIFO); <strong>golongan 2–8</strong> jadi <strong>aset draft ber-NUP</strong> di
+              kegiatan terpilih — harga, tanggal, BAST, dan PPK terisi dari perolehan.
+              Setelahnya <strong>LPB</strong> untuk sisi aset diterbitkan otomatis.
             </DialogDescription>
           </DialogHeader>
-          {draftAset && (
-            <div className="space-y-3">
-              <p className="text-xs text-foreground/90">
-                {(draftAset.perolehan.barang || []).filter((b) => !b.asset_id && (b.kode || "").trim()).length} baris siap dibuatkan draft
-                {(draftAset.perolehan.barang || []).some((b) => !b.asset_id && !(b.kode || "").trim())
-                  && ` · ${(draftAset.perolehan.barang || []).filter((b) => !b.asset_id && !(b.kode || "").trim()).length} baris tanpa kode akan dilewati`}
-              </p>
-              <div>
-                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="draft-aset-kegiatan">Kegiatan inventarisasi tujuan</label>
-                <select id="draft-aset-kegiatan" value={draftAset.activityId}
-                  onChange={(e) => setDraftAset((d) => ({ ...d, activityId: e.target.value }))}
-                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
-                  data-testid="pengadaan-draft-kegiatan">
-                  <option value="">— pilih kegiatan —</option>
-                  {kegiatanList.map((k) => (
-                    <option key={k.id} value={k.id}>
-                      {k.nama_kegiatan || k.id}{k.tahun ? ` (${k.tahun})` : ""}
-                    </option>
-                  ))}
-                </select>
-                {kegiatanList.length === 0 && (
-                  <p className="text-[10px] text-muted-foreground mt-1">Belum ada kegiatan inventarisasi — buat dulu di halaman kegiatan.</p>
+          {draftAset && (() => {
+            // Hitungan ditampilkan MUKA supaya operator tahu apa yang akan
+            // terjadi sebelum menekan, bukan sesudahnya lewat toast.
+            const belum = (draftAset.perolehan.barang || [])
+              .filter((b) => !b.asset_id && !b.psd_item_id);
+            const psd = belum.filter((b) => String(b.kode || "").trim().startsWith("1"));
+            const tanpaKode = belum.filter((b) => !String(b.kode || "").trim());
+            const aset = belum.filter((b) => String(b.kode || "").trim()
+              && !String(b.kode || "").trim().startsWith("1"));
+            return (
+              <div className="space-y-3">
+                <ul className="text-xs text-foreground/90 space-y-1">
+                  <li>• <strong>{aset.length}</strong> baris → aset draft ber-NUP</li>
+                  <li>• <strong>{psd.length}</strong> baris → masuk stok persediaan</li>
+                  {tanpaKode.length > 0 && (
+                    <li className="text-amber-600 dark:text-amber-400">
+                      • <strong>{tanpaKode.length}</strong> baris <strong>dilewati</strong> —
+                      belum berkode barang (isi kodenya dulu)
+                    </li>
+                  )}
+                </ul>
+                {/* Kegiatan inventarisasi hanya relevan untuk sisi ASET. BAST
+                    berisi persediaan saja tak perlu memilihnya sama sekali. */}
+                {aset.length > 0 && (
+                  <div>
+                    <label className="text-xs font-medium text-foreground block mb-1" htmlFor="draft-aset-kegiatan">Kegiatan inventarisasi tujuan</label>
+                    <select id="draft-aset-kegiatan" value={draftAset.activityId}
+                      onChange={(e) => setDraftAset((d) => ({ ...d, activityId: e.target.value }))}
+                      className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                      data-testid="pengadaan-draft-kegiatan">
+                      <option value="">— pilih kegiatan —</option>
+                      {kegiatanList.map((k) => (
+                        <option key={k.id} value={k.id}>
+                          {k.nama_kegiatan || k.id}{k.tahun ? ` (${k.tahun})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    {kegiatanList.length === 0 && (
+                      <p className="text-[10px] text-muted-foreground mt-1">Belum ada kegiatan inventarisasi — buat dulu di halaman kegiatan.</p>
+                    )}
+                  </div>
                 )}
+                <label className="flex items-start gap-2 text-xs cursor-pointer">
+                  <input type="checkbox" className="mt-0.5 h-4 w-4"
+                    checked={draftAset.bookingNomor !== false}
+                    onChange={(e) => setDraftAset((d) => ({ ...d, bookingNomor: e.target.checked }))}
+                    data-testid="pengadaan-catat-booking" />
+                  <span>
+                    Pesan <strong>nomor surat</strong> untuk LPB dari Registrasi Persuratan
+                    <span className="block text-[10px] text-muted-foreground">
+                      Nomor tercatat berstatus &quot;dibooking&quot; di buku agenda satker.
+                    </span>
+                  </span>
+                </label>
               </div>
-            </div>
-          )}
+            );
+          })()}
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setDraftAset(null)}>Batal</Button>
-            <Button onClick={buatDraftAset} disabled={draftAset?.saving || !draftAset?.activityId}
+            <Button onClick={catatSemua}
+              disabled={draftAset?.saving
+                || (draftAset?.butuhKegiatan && !draftAset?.activityId)}
               data-testid="pengadaan-draft-submit">
               {draftAset?.saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <PackagePlus className="w-4 h-4 mr-1.5" />}
-              Buat Draft
+              Catat Semua
             </Button>
           </DialogFooter>
         </DialogContent>

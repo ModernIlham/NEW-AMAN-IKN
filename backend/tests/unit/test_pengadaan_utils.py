@@ -146,14 +146,26 @@ from pengadaan_utils import snapshot_perolehan
 
 def test_snapshot_perolehan_lengkap():
     p = {"id": "prl-2", "nomor_bast": "BAST-5/2026", "tanggal_bast": "2026-02-10",
-         "jenis": "pembelian", "pihak": "CV Mitra", "keterangan": "abaikan"}
+         "jenis": "pembelian", "pihak": "CV Mitra", "keterangan": "abaikan",
+         "ppk_nama": "Budi Santoso", "ppk_nip": "199001012015011001"}
     snap = snapshot_perolehan(p)
     assert snap == {
         "perolehan_id": "prl-2", "perolehan_nomor_bast": "BAST-5/2026",
         "perolehan_tanggal_bast": "2026-02-10", "perolehan_jenis": "pembelian",
         "perolehan_pihak": "CV Mitra",
+        # PPK ikut ke jurnal persediaan: LPB pembelian menyebut namanya, dan
+        # jurnalnya harus bisa membuktikan asal nama itu tanpa join balik.
+        "perolehan_ppk_nama": "Budi Santoso",
+        "perolehan_ppk_nip": "199001012015011001",
     }
     assert "keterangan" not in snap                     # field asing tak ikut
+
+
+def test_snapshot_perolehan_bast_lama_tanpa_ppk():
+    """BAST era-lama belum punya field PPK — snapshot tetap berbentuk penuh."""
+    snap = snapshot_perolehan({"id": "prl-lama", "nomor_bast": "BAST-1/2024"})
+    assert snap["perolehan_ppk_nama"] == ""
+    assert snap["perolehan_ppk_nip"] == ""
 
 
 def test_snapshot_perolehan_kosong_melepas_tautan():
@@ -161,7 +173,8 @@ def test_snapshot_perolehan_kosong_melepas_tautan():
         snap = snapshot_perolehan(x)
         assert set(snap) == {"perolehan_id", "perolehan_nomor_bast",
                              "perolehan_tanggal_bast", "perolehan_jenis",
-                             "perolehan_pihak"}
+                             "perolehan_pihak", "perolehan_ppk_nama",
+                             "perolehan_ppk_nip"}
         assert all(v == "" for v in snap.values())
 
 

@@ -53,6 +53,85 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#656] Rantai penerimaan barang: PPK, satu tombol catat, LPB aset ber-TTD — 2026-07-28
+
+Tiga permintaan pemilik yang ternyata satu rantai: nama **PPK** tak pernah
+tercantum, pencatatan dari Pengadaan menuntut operator memilah sendiri, dan
+**LPB** hanya ada untuk persediaan — bukan untuk aset.
+
+### Bug integritas yang ditemukan saat menyatukan dua jalur
+
+Menekan **Daftarkan ke Persediaan** lalu **Buat Draft Aset** atas BAST yang
+sama membuat satu rim kertas HVS **tercatat dua kali**: sekali di kartu stok,
+sekali sebagai BMN ber-NUP — dan **keduanya berjurnal ke Neraca**.
+
+`buat_draft_aset_dari_perolehan` menerima kode barang apa pun; ia hanya
+melewati baris yang sudah punya `asset_id`, dan `psd_item_id` dari jalur
+persediaan bukan `asset_id`. Jadi tak ada yang menahannya. Penjaga golongan
+kini dipasang di **kedua** jalur, dan urutan penekanan tak lagi menentukan.
+
+### PPK — dibekukan, bukan di-join saat baca
+
+Peran `ppk` sudah lama ada di Referensi Pejabat tetapi tak pernah dipakai
+Pengadaan maupun Persediaan. Kini:
+
+- Register perolehan menyimpan snapshot **nama, NIP, jabatan, dan status
+  kepegawaian** PPK. Kosong = server meresolusi sendiri peran `ppk` yang
+  berlaku **pada tanggal BAST** — bukan hari ini, karena register sering diisi
+  belakangan dan PPK hari ini belum tentu yang menandatangani.
+- Snapshot ikut turun ke **aset** yang lahir dari BAST itu, ke **jurnal
+  persediaan**, dan ke **LPB**. Menelusuri "atas komitmen siapa barang ini
+  datang" tak lagi menuntut kueri balik.
+- `PUT /pengadaan/{id}/ppk` melengkapi register lama tanpa membuat ulang
+  dokumen, dan **memproyeksikan ulang** ke aset yang sudah tercatat.
+- Pergantian PPK di kemudian hari **tidak** mengubah dokumen yang sudah terbit.
+
+### Satu tombol: "Catat Semua Barang"
+
+`POST /pengadaan/{id}/catat-semua` memilah sendiri berdasarkan digit pertama
+kode barang (kodefikasi BMN): **golongan 1 → Persediaan**, **golongan 2–8 →
+aset draft ber-NUP**. Baris **tanpa kode** jadi keranjang ketiga yang eksplisit
+dan dilaporkan balik — bukan ditelan diam-diam.
+
+Dialognya menampilkan hitungan **sebelum** ditekan, dan kegagalan sebagian
+tetap muncul sebagai peringatan tersendiri: jalur ini memang tak transaksional
+(Mongo standalone), dan toast hijau di atas separuh kegagalan adalah kebohongan
+yang paling mahal di sini.
+
+### LPB untuk aset, bukan hanya persediaan
+
+- `db.lpb` kini ber-`kategori` (`persediaan` | `aset`). Dokumen lama tanpa
+  field itu tetap terhitung persediaan — memfilter tak boleh menyembunyikan
+  riwayat.
+- LPB aset memuat **kolom NUP**: tanpa itu dokumen hanya berkata "5 printer
+  diterima" dan tak bisa membuktikan printer **yang mana** — padahal itulah
+  seluruh alasan BMN dinomori satu per satu.
+- Nomor surat dipesan lewat helper **bersama** `booking_nomor_lpb` yang
+  diekstrak dari transaksi massal persediaan, sehingga kedua jalur memakai
+  **satu deret nomor**. Dua salinan logika penomoran adalah cara paling pasti
+  melahirkan dua deret yang diam-diam berbeda.
+
+### LPB ber-tanda tangan elektronik
+
+`POST /persediaan/lpb/{id}/kirim-ttd` menyusun PDF **sekarang** lalu
+membekukannya ke GridFS — bukan membangunnya ulang saat penanda tangan membuka
+tautan. Kalau dibangun ulang, kop/pejabat/nomor bisa berubah di antara
+"dikirim" dan "diteken", dan yang bersangkutan menandatangani dokumen yang tak
+pernah ia baca.
+
+Penanda tangan bawaan diambil dari blok TTD LPB sendiri (Pengurus Barang →
+Pemeriksa LPB → KPB, berurutan). Tautan balik dan cascade pembatalan mengikuti
+pola BAST yang sudah ada, lengkap dengan penjaga scope satker dan pencocokan
+`signature_request_id`.
+
+### Verifikasi
+
+1.211 uji backend (33 baru), eslint 0 galat, build kompilasi. Dua mutasi
+dibuktikan tertangkap: membuang penjaga golongan → 4 uji gagal; mempersempit
+proyeksi `ppk_*` → 2 uji gagal.
+
+---
+
 ## [#655] Hierarki Spasial: nama node yang hilang di HP dikembalikan — 2026-07-27
 
 Umpan balik lapangan berupa tangkapan layar HP: baris pohon hanya menampilkan

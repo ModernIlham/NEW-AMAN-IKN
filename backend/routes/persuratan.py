@@ -200,6 +200,58 @@ async def _no_agenda_berikut(jenis: str, tahun: int, kode_satker: str = "") -> i
     return int(c["seq"])
 
 
+async def booking_nomor_lpb(user, tgl_iso: str, perihal: str,
+                            tujuan: str = "", keterangan: str = "") -> tuple:
+    """Pesan satu nomor surat keluar untuk Laporan Penerimaan Barang.
+
+    → `(nomor, surat_id)`; keduanya "" bila gagal dipesan.
+
+    DIEKSTRAK dari `transaksi_massal` persediaan supaya jalur ASET memakai
+    deret nomor yang SAMA PERSIS. Dua salinan logika penomoran adalah cara
+    paling pasti melahirkan dua deret yang diam-diam berbeda — dan nomor surat
+    yang bercabang tak bisa diperbaiki belakangan tanpa menomori ulang arsip.
+
+    Surat tercatat berstatus `dibooking` di buku agenda satker pemanggil,
+    sehingga nomor yang sudah terpakai tak pernah dipakai ulang meski dokumen
+    LPB-nya nanti batal.
+    """
+    from persuratan_utils import bangun_nomor, pilih_klasifikasi
+    now0 = datetime.now(timezone.utc)
+    tgl_surat = str(tgl_iso or "").strip()[:10] or now0.date().isoformat()
+    kode_satker = kode_satker_user(user)
+    atur = await _pengaturan(kode_satker)
+    kode_klas = pilih_klasifikasi(atur["peta_klasifikasi"], "persediaan",
+                                  "Laporan",
+                                  default=atur["kode_klasifikasi_default"])
+    tahun = int(tgl_surat[:4]) if tgl_surat[:4].isdigit() else now0.year
+    no_agenda = await _no_agenda_berikut("keluar", tahun, kode_satker)
+    nomor = bangun_nomor(atur["format_nomor"], no_agenda, tgl_surat,
+                         kode_klasifikasi=kode_klas,
+                         kode_unit=atur["kode_unit"])
+    surat_id = str(uuid.uuid4())
+    await db.surat.insert_one({
+        "id": surat_id, "jenis": "keluar", "no_agenda": no_agenda,
+        "tahun": tahun, "nomor": nomor, "status": "dibooking",
+        # Stempel satker (REVIEW-9 R10): tanpa ini surat booking otomatis
+        # muncul di buku agenda & arsip SEMUA satker.
+        "kode_satker": kode_satker,
+        "perihal": str(perihal or "Laporan Penerimaan Barang (LPB)")[:300],
+        "tujuan": str(tujuan or "").strip(),
+        "jenis_naskah": "Laporan", "modul": "persediaan",
+        "kegiatan_id": "", "nama_kegiatan": "",
+        "kode_klasifikasi": kode_klas, "kode_keamanan": "B",
+        "tanggal_surat": tgl_surat, "referensi": "LPB",
+        "nomor_eksternal": "",
+        "keterangan": str(keterangan or "booking otomatis dari LPB")[:300],
+        "dibuat_oleh": user.get("username", "system"),
+        "riwayat": [{"status": "dibooking", "tanggal": now0.isoformat(),
+                     "oleh": user.get("username", "system"),
+                     "catatan": "booking otomatis dari LPB"}],
+        "created_at": now0.isoformat(), "updated_at": now0.isoformat(),
+    })
+    return nomor, surat_id
+
+
 async def _nama_kegiatan(kegiatan_id: str) -> str:
     if not str(kegiatan_id or "").strip():
         return ""

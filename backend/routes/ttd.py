@@ -904,6 +904,24 @@ async def batal_permintaan(sr_id: str, user: dict = Depends(require_writer)):
                 bast_dicabut = 1
         except Exception:
             bast_dicabut = 0  # cascade best-effort — batal & audit tetap jalan
+    # Cascade setara untuk LPB, dengan penjaga yang sama persis: scope satker
+    # (doc_ref mentah tak dipercaya) + `signature_request_id == sr_id` (hanya
+    # permintaan yang BENAR menandatangani LPB ini yang boleh mencabutnya).
+    if sr.get("doc_type") == "lpb" and str(sr.get("doc_ref") or "").strip():
+        try:
+            from shared_utils import scope_query_field_satker
+            milik = await db.lpb.find_one(
+                scope_query_field_satker(
+                    user, {"id": str(sr["doc_ref"]).strip(),
+                           "signature_request_id": sr_id}),
+                {"_id": 0, "id": 1})
+            if milik:
+                await db.lpb.update_one(
+                    {"id": milik["id"]},
+                    {"$set": {"tt_dicabut": True,
+                              "tt_dicabut_pada": datetime.now(timezone.utc).isoformat()}})
+        except Exception:
+            pass  # best-effort, seperti cascade BAST di atas
     await log_audit("batal_ttd", "", sr_id,
                     username=user.get("username", "system"),
                     detail=(f"Permintaan TTD '{sr.get('judul') or sr_id}' dibatalkan"
@@ -1111,6 +1129,15 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
         await db.assets.update_many(
             {"bast_terakhir.id": doc_ref, "bast_terakhir.tt_dicabut": True},
             {"$set": {"bast_terakhir.tt_dicabut": False}})
+    # Pola yang sama untuk LPB (doc_type='lpb'): tanpa tautan balik ini, layar
+    # Riwayat LPB tak punya cara menjawab "yang mana yang sudah lengkap
+    # tandatangannya" selain membuka satu per satu.
+    if semua and sr.get("doc_type") == "lpb" and str(sr.get("doc_ref") or "").strip():
+        await db.lpb.update_one(
+            {"id": str(sr["doc_ref"]).strip()},
+            {"$set": {"signature_request_id": sr_id,
+                      "tt_esign_selesai_pada": datetime.now(timezone.utc).isoformat(),
+                      "tt_dicabut": False}})
     await log_audit("kirim_ttd", "", sr_id, username=sg.get("nama") or "tamu",
                     detail=f"E-sign '{sr.get('judul')}' oleh {sg.get('nama')}")
     return {"ok": True, "status_dokumen": status_dok,
