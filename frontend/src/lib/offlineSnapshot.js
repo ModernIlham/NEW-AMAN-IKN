@@ -18,7 +18,7 @@
 import { openDB } from "idb";
 import axios from "axios";
 import { isQuotaExceeded } from "./idbErrors";
-import { TENGGAT_BERAT, muatAndal } from "./muatAndal";
+import { TENGGAT_BAKA, muatAndal } from "./muatAndal";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -125,7 +125,34 @@ export function isSnapshotExpired(meta) {
  * full otherwise. onProgress({loaded, total, pct}) fires per page.
  * Returns {count, lastSync}.
  */
-export async function syncSnapshot(activityId, userId, onProgress, { forceFull = false } = {}) {
+/**
+ * Satu sinkron per kegiatan pada satu waktu.
+ *
+ * `syncSnapshot` tak bisa dibatalkan: cleanup effect pemanggil hanya menyetel
+ * penanda `cancelled`, sedangkan permintaan dan tulisan IndexedDB-nya jalan
+ * terus. Dengan coba-ulang per halaman, satu jalankan hidup jauh lebih lama —
+ * cukup lama untuk bertumpang tindih dengan jalankan berikutnya ketika petugas
+ * menyimpulkan macet lalu mematikan-menyalakan mode inventarisasi.
+ *
+ * Dua jalankan FULL yang tumpang tindih saling merusak: yang selesai belakangan
+ * menghitung `stale = existing − fetchedIds` miliknya sendiri, sehingga baris
+ * yang baru ditulis jalankan lain (atau oleh `upsertSnapshotAsset`) dianggap
+ * usang dan DIHAPUS dari cache luring — aset yang sah lenyap sebelum petugas
+ * berangkat ke lapangan. Pemanggil kedua kini menunggu hasil jalankan pertama
+ * alih-alih memulai jalankan tandingan.
+ */
+const _sinkronBerjalan = new Map();   // activityId -> Promise
+
+export function syncSnapshot(activityId, userId, onProgress, opsi = {}) {
+  const berjalan = _sinkronBerjalan.get(activityId);
+  if (berjalan) return berjalan;
+  const janji = _syncSnapshot(activityId, userId, onProgress, opsi)
+    .finally(() => { _sinkronBerjalan.delete(activityId); });
+  _sinkronBerjalan.set(activityId, janji);
+  return janji;
+}
+
+async function _syncSnapshot(activityId, userId, onProgress, { forceFull = false } = {}) {
   if (!activityId || !userId) throw new Error("activityId dan userId wajib diisi");
   await requestPersistentStorage();
 
@@ -158,9 +185,13 @@ export async function syncSnapshot(activityId, userId, onProgress, { forceFull =
     // Kini tiap halaman diulang otomatis untuk kegagalan yang memang layak
     // diulang (jaringan/tenggat/server), dengan jeda menanjak. Aman diulang:
     // ini GET, dan kursor keyset-nya tak bergerak sebelum halaman berhasil.
+    // TENGGAT_BAKA, bukan TENGGAT_BERAT: dengan 3 percobaan, 60 dtk per
+    // percobaan berarti satu halaman bisa menahan sinkron ~3 menit dan bar
+    // progresnya BEKU selama itu — petugas menyimpulkan macet lalu memulai
+    // sinkron kedua. 20 dtk menahan paling lama ~63 dtk per halaman.
     const r = await muatAndal(() => axios.get(
       `${API}/assets/offline-snapshot?${params.toString()}`,
-      { timeout: TENGGAT_BERAT }));
+      { timeout: TENGGAT_BAKA }));
     const { items = [], deleted_ids: deletedIds = [], requires_full_refresh: needsFull,
             next_cursor: nextCursor = "" } = r.data || {};
     total = r.data?.total ?? total;
@@ -169,7 +200,10 @@ export async function syncSnapshot(activityId, userId, onProgress, { forceFull =
     // A bulk delete happened since our cursor — tombstones don't carry ids
     // for it, so restart as a full sync (reconciles all deletes).
     if (needsFull && !fullSync) {
-      return syncSnapshot(activityId, userId, onProgress, { forceFull: true });
+      // Lewat fungsi DALAM, bukan pembungkus ber-penjaga: jalankan ini masih
+      // memegang slotnya sendiri, jadi memanggil pembungkus akan mengembalikan
+      // promise-nya sendiri dan menggantung selamanya.
+      return _syncSnapshot(activityId, userId, onProgress, { forceFull: true });
     }
 
     // Apply tombstones (first delta page only carries them)

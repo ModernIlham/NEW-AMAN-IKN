@@ -26,7 +26,16 @@ export default class BatasGalat extends React.Component {
   }
 
   static getDerivedStateFromError(err) {
-    return { err };
+    // DINORMALKAN, karena nilai galatnya juga dipakai sebagai PENANDA "sedang
+    // gagal" di render(). Melempar nilai falsy itu sah dalam JavaScript
+    // (`throw undefined`, `throw null`, `throw ""` — mudah terjadi pada
+    // `throw e` di dalam catch yang menerima undefined, atau dari pustaka pihak
+    // ketiga). Tanpa normalisasi, state jadi { err: undefined }, `if (!err)`
+    // merender ULANG anaknya, anaknya melempar lagi, dan boundary ini berputar
+    // sampai React menyerah pada batas kedalaman pembaruan — galat ITU dilempar
+    // DI ATAS boundary sehingga seluruh pohon lepas: layar putih polos, persis
+    // yang komponen ini ada untuk mencegahnya.
+    return { err: err || new Error("Galat tanpa keterangan") };
   }
 
   componentDidCatch(err, info) {
@@ -74,9 +83,16 @@ export default class BatasGalat extends React.Component {
             </Button>
           )}
         </div>
+        {/* Janji durabilitas SENGAJA TIDAK MUTLAK. Antrean tulis luring hanya
+            ada di useOptimisticQueue, dan hook itu dipakai satu halaman saja
+            (Inventarisasi). Menjanjikan "data Anda tersimpan" pada 32 halaman
+            berarti berbohong di 31 di antaranya — dan lebih buruk lagi, ia
+            MENDORONG operator menekan Muat ulang yang justru membuang isian
+            formulir yang tak pernah tersimpan di mana pun. */}
         <p className="text-[10px] text-muted-foreground max-w-md">
-          Data yang belum terkirim tetap tersimpan di perangkat ini dan akan
-          dikirim setelah aplikasi bisa dibuka kembali.
+          Pemindaian dan simpanan Inventarisasi yang belum terkirim tetap
+          tersimpan di perangkat ini. <b>Isian formulir yang belum disimpan akan
+          hilang</b> bila halaman dimuat ulang.
         </p>
       </div>
     );

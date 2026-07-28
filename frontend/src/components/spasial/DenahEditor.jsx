@@ -279,8 +279,17 @@ export default function DenahEditor({ node, onClose, onSaved }) {
     // di bawah memakai penanda ini agar tak menjanjikan hal yang mustahil.
     let terposisi = false;
     // Watchdog: apa pun yang terjadi (request menggantung, jaringan mati,
-    // galat tak terduga), spinner WAJIB hilang dalam 25 dtk supaya operator
-    // tak menatap loading tanpa akhir.
+    // galat tak terduga), spinner WAJIB hilang supaya operator tak menatap
+    // loading tanpa akhir.
+    //
+    // AMBANGNYA HARUS DI ATAS AKUMULASI TENGGAT BERURUTAN. Effect ini menunggu
+    // DUA permintaan berurutan sebelum `setView` (detail node, lalu induk),
+    // masing-masing bertenggat TENGGAT_BAKA. Pada 2G lapangan 15 dtk + 12 dtk
+    // adalah pemuatan yang SEHAT — dengan ambang 25 dtk, watchdog menyalakan
+    // alarm palsu 2 detik sebelum datanya tiba, lengkap dengan tombol Coba lagi
+    // yang MEMBUANG kemajuan itu dan memulai rantai dari nol (dan di sinyal yang
+    // sama percobaan berikutnya menabrak ambang itu lagi: livelock).
+    const BATAS_JAGA = 2 * TENGGAT_BAKA + 5000;
     const jagaWaktu = setTimeout(() => {
       if (batal) return;
       setMemuat(false);
@@ -289,7 +298,7 @@ export default function DenahEditor({ node, onClose, onSaved }) {
       } else {
         setGalatMuat("Data node tak kunjung dimuat (jaringan lambat atau server sibuk).");
       }
-    }, 25000);
+    }, BATAS_JAGA);
     // Timeout per-request supaya satu endpoint yang menggantung tak menahan
     // seluruh pemuatan sampai watchdog.
     const OPS = { timeout: TENGGAT_BAKA };
@@ -895,8 +904,19 @@ export default function DenahEditor({ node, onClose, onSaved }) {
           </div>
         ))}
 
+        {/* AKSI PENULIS DIMATIKAN SELAMA PEMUATAN GAGAL.
+            Overlay galat di atas hanya menutupi KOTAK PETA; bilah ini saudaranya
+            dan tetap bisa diklik. Tanpa penguncian ini, urutan berikut menghapus
+            data asli: pemuatan gagal (grup gambar kosong karena geometry tak
+            pernah tiba) → operator menekan "Kosongkan" → `kotor` jadi true →
+            "Simpan Denah" hidup kembali → sinyal sudah pulih sehingga GET segar
+            di dalam simpan() berhasil → PUT mengirim geometry kosong dan
+            poligon asli node LENYAP dari server, dengan toast hijau pula.
+            Peringatan "menggambar sekarang berisiko menimpa data" tak boleh
+            cuma tulisan; ia ditegakkan di sini. */}
         <div className="px-4 py-3 border-t border-border flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={hapusBentuk}
+                  disabled={!!galatMuat}
                   className="text-red-600" data-testid="denah-hapus-bentuk">
             <Trash2 className="w-3.5 h-3.5 mr-1" />Kosongkan
           </Button>
@@ -904,7 +924,8 @@ export default function DenahEditor({ node, onClose, onSaved }) {
           <Button variant="outline" size="sm" onClick={() => onClose?.()} data-testid="denah-batal">
             <X className="w-3.5 h-3.5 mr-1" />Batal
           </Button>
-          <Button size="sm" onClick={simpan} disabled={menyimpan || memuat || !kotor}
+          <Button size="sm" onClick={simpan}
+                  disabled={menyimpan || memuat || !kotor || !!galatMuat}
                   data-testid="denah-simpan">
             {menyimpan ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
                        : <Save className="w-3.5 h-3.5 mr-1" />}

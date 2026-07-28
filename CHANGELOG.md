@@ -63,8 +63,9 @@ apa-apa**.
 
 ### 1. Layar putih total saat potongan kode gagal diunduh
 
-Seluruh 32 halaman aplikasi ini dimuat `React.lazy(() => import(...))`. Aplikasi
-ini **tidak punya satu pun error boundary**. Artinya: satu potongan yang gagal
+Ke-33 halaman aplikasi ini dimuat `React.lazy(() => import(...))` — dibungkus
+32 titik `<Suspense>` (LoginPage & DashboardPage berbagi satu pembungkus di
+dalam `<Routes>`). Aplikasi ini **tidak punya satu pun error boundary**. Artinya: satu potongan yang gagal
 diunduh — luring, sinyal putus di tengah unduhan, atau versi baru sudah dipasang
 sehingga berkas ber-hash yang lama tak ada lagi di server — membuat React
 melepas SELURUH pohon komponen. Yang tersisa di layar operator adalah **putih
@@ -72,7 +73,7 @@ polos**: tanpa pesan, tanpa tombol, tanpa apa pun untuk ditekan.
 
 `components/BatasGalat.jsx` menutupnya. Setiap halaman kini dibungkus
 `<HalamanLazy>` (boundary DI LUAR Suspense — ditaruh di dalam, galatnya lewat
-begitu saja).
+begitu saja). Batasnya berhenti di tingkat HALAMAN: lihat "Belum dikerjakan".
 
 > **Tombol yang sengaja TIDAK dipasang.** Untuk galat unduh potongan, layar ini
 > hanya menawarkan *Muat ulang halaman* — bukan *Coba lagi*. `React.lazy`
@@ -110,28 +111,68 @@ MENETAP dengan tombol Coba lagi.
 
 Dua hal yang menyertainya:
 
-- Watchdog 25 detik dulu berjanji *"Anda tetap bisa menggambar"* — tidak benar
-  sebelum peta terposisi: tanpa pusat+zoom, Leaflet melempar pada hampir semua
-  operasi. Kini janji itu hanya diucapkan bila `setView` memang sudah terjadi.
+- Watchdog dulu berjanji *"Anda tetap bisa menggambar"* — tidak benar sebelum
+  peta terposisi: tanpa pusat+zoom, Leaflet melempar pada hampir semua operasi.
+  Kini janji itu hanya diucapkan bila `setView` memang sudah terjadi. Ambangnya
+  juga dinaikkan di atas akumulasi dua tenggat BERURUTAN (detail node → induk):
+  pada 25 detik, pemuatan 2G yang SEHAT (15 dtk + 12 dtk) menyalakan alarm palsu
+  dua detik sebelum datanya tiba — dan tombol Coba lagi di layar palsu itu
+  membuang kemajuannya lalu memulai dari nol, berulang: livelock.
 - Percobaan ulang membersihkan grup gambar lebih dulu. Tanpa itu, percobaan yang
   gagal di tengah meninggalkan poligonnya di grup dan simpan berikutnya menulis
   bentuk **ganda**.
+- **Peringatannya kini DITEGAKKAN.** Overlay galat hanya menutupi kotak peta;
+  bilah aksi di bawahnya saudaranya dan tetap bisa diklik. Urutan berikut
+  menghapus data asli dari server: pemuatan gagal (grup gambar kosong) →
+  "Kosongkan" → `kotor` jadi true → "Simpan Denah" hidup lagi → sinyal sudah
+  pulih sehingga GET segar berhasil → PUT mengirim geometri kosong, dengan toast
+  hijau. Kedua tombol itu kini mati selama pemuatan gagal.
 
-### 4. Sinkron luring tak lagi batal karena satu halaman
+### 4. Sinkron luring: kegagalan SESAAT tak lagi membatalkan seluruh tarikan
 
 `syncSnapshot` menarik satu kegiatan dalam puluhan halaman berurutan — dan
-dilakukan tepat sebelum berangkat ke lapangan, sering di sinyal terburuk. Satu
-halaman gagal membatalkan seluruh sinkron dan petugas berangkat tanpa cache.
-Tiap halaman kini diulang otomatis (`muatAndal`) dengan jeda menanjak; aman
-karena ini GET dan kursor keyset-nya tak bergerak sebelum halamannya berhasil.
+dilakukan tepat sebelum berangkat ke lapangan, sering di sinyal terburuk. Dulu
+satu halaman yang gagal sekali membatalkan seluruh sinkron dan petugas berangkat
+tanpa cache. Tiap halaman kini diulang otomatis (`muatAndal`); aman karena ini
+GET dan kursor keyset-nya tak bergerak sebelum halamannya berhasil.
 
-### 5. Antrean scan opname mengosongkan diri saat sinyal pulih
+> **Batas klaim ini.** Kegagalan yang BERTAHAN (tiga percobaan habis, atau 401
+> yang memang tak layak diulang) tetap membatalkan sinkron, dan karena `meta`
+> tak pernah ditulis, halaman-halaman yang sudah tersimpan belum dilayani.
+> Melanjutkan sinkron sebagian belum dikerjakan.
+
+Dua hal menyertainya, keduanya menutup jalur **kehilangan baris luring**:
+tenggat per halaman ditahan di 20 dtk (bukan 60) supaya satu halaman menahan
+sinkron paling lama ~63 dtk alih-alih ~3 menit; dan `syncSnapshot` kini
+**satu-aliran per kegiatan**. Ia tak bisa dibatalkan — cleanup pemanggil hanya
+menyetel penanda — sehingga petugas yang menyimpulkan macet lalu memulai ulang
+mode inventarisasi dapat menjalankan dua sinkron FULL sekaligus; yang selesai
+belakangan menghitung `stale` versinya sendiri dan MENGHAPUS baris sah yang
+ditulis jalankan lain.
+
+### 5. Antrean scan opname mengosongkan diri saat sinyal pulih — **selama dialog Opname terbuka**
 
 Antrean itu lahir tepat ketika jaringan mati. Dulu satu-satunya cara
-mengosongkannya adalah menekan "Kirim ulang" — petugas harus INGAT, sambil
-dialognya kebetulan terbuka. Yang tak terkirim tak pernah masuk rekonsiliasi:
-barang tercatat *tidak ditemukan* padahal sudah dipindai. Kini dipicu event
-`online`; aman diotomatiskan karena `scan_id` adalah kunci idempotensi server.
+mengosongkannya adalah menekan "Kirim ulang" — petugas harus INGAT. Yang tak
+terkirim tak pernah masuk rekonsiliasi: barang tercatat *tidak ditemukan*
+padahal sudah dipindai. Kini dipicu event `online`; aman diotomatiskan karena
+`scan_id` adalah kunci idempotensi server.
+
+Cakupannya dinyatakan terus terang di judul: pendengarnya hidup di dalam
+`OpnameDialog`, jadi antrean tetap diam bila dialognya sudah ditutup.
+Memindahkannya ke tingkat aplikasi belum dikerjakan.
+
+Tiga hal yang membuat otomatisasi ini tak berbalik jadi masalah:
+
+- **`checkReachable()` lebih dulu.** Event `online` hanya berarti antarmuka
+  jaringan naik — captive portal, satu bar sinyal. Tanpa pemeriksaan, 30 baris
+  antrean berarti 30 POST berurutan yang masing-masing menunggu tenggat 20 dtk:
+  sepuluh menit tombol Catat/Terapkan mati dan badai 30 toast, tanpa petugas
+  menyentuh apa pun. Plus peredam 3 detik terhadap kedip online/offline.
+- **Nada toast mengikuti hasil.** *"0 dari 30 scan terkirim"* dulu terbit HIJAU
+  bergaya keberhasilan. Kini merah bila nol, kuning bila sebagian.
+- **Umur entri antrean tak lagi ter-reset** tiap kali disimpan ulang, sehingga
+  plafon 7 hari benar-benar berlaku meski rekonek terjadi terus.
 
 ### 6. "Sesi berakhir", bukan "Invalid authorization header"
 
@@ -140,18 +181,52 @@ kerusakan aplikasi. Kini: *"Sesi berakhir — masuk kembali lalu tekan Sinkronka
 Data Anda masih tersimpan di perangkat."* **403 sengaja tidak ikut**: itu hak
 akses (viewer, satker lain), bukan sesi habis — masuk ulang tak menolongnya.
 
-### 7. Penjaga urutan respons di panel SBSK ruang
+### 7. Penjaga urutan respons — SBSK ruang DAN Pelacakan
 
 Mengganti lingkup memicu muatan baru sementara yang lama masih terbang. Balasan
 LAMA yang gagal menghapus data lingkup BARU yang sudah tampil.
 
-**Uji:** 1.330 backend, 268 frontend (+10), lint & build bersih.
+Kelas yang sama ternyata DIBUKA oleh butir 2 di atas, dan tinjauan adversarial
+atas komit ini yang menemukannya. Dengan `Promise.all`, jalankan yang gagal
+melompat ke `catch` dan tak menulis state sama sekali — balasan basi karena itu
+tak berbahaya. `allSettled` menghapus korsleting itu: setiap jalankan kini selalu
+menulis. Urutan yang terperagakan: halaman dibuka (jalankan A, satu endpoint
+menggantung) → operator mendaftarkan perangkat → jalankan B selesai cepat dan
+perangkat baru tampil → A mendarat terakhir dengan potret lama dan **menghapus
+perangkat itu dari layar**, tanpa toast, tanpa galat. `PelacakanPage.muat()` kini
+memakai penjaga yang sama, dan tombol "Coba lagi" diredam selagi memuat.
 
-**Belum dikerjakan (jujur dicatat):** pohon node masih ditarik utuh alih-alih
-mekar-per-cabang lewat `parent_id` (backend sudah mendukungnya); indeks geo
-belum berawalan `kode_satker`; service worker belum mem-precache potongan
-halaman, jadi halaman yang belum pernah dibuka saat daring tetap gagal saat
-luring — kini setidaknya dengan pesan yang benar, bukan layar putih.
+### 8. Lencana berhenti menjamin apa yang tak terbaca
+
+Kegagalan bagian dulu hanya terlihat DI DALAM tabnya sendiri, sementara badge
+"N baru" di header dan angka di tab Peringatan diam — dan toast galat global
+yang lama ikut hilang bersama `Promise.all`. Operator yang duduk di tab
+Perangkat membaca ketiadaan badge sebagai "tak ada peringatan baru". Jumlah
+belum-dibaca kini bernilai **tidak diketahui** (bukan nol) saat daftarnya gagal,
+dan lencananya berubah jadi penanda `?` kuning. Tab Pagar Area & Izin Darurat
+juga menerangkan mengapa tombolnya mati, alih-alih hanya menyembunyikan kalimat
+lama.
+
+**Uji:** 1.330 backend, 268 frontend, lint & build bersih.
+
+**Belum dikerjakan (jujur dicatat):**
+
+- 21 `React.lazy` BERSARANG (dialog & panel di DashboardPage, SpasialMasterPage,
+  PejabatPage, ActivitySelectionPage, PerencanaanPage, WasdalPage) masih memakai
+  `<Suspense>` telanjang. Potongan salah satunya yang gagal diunduh menembus ke
+  boundary tingkat App, sehingga SELURUH halaman induk ter-unmount berikut pohon
+  node yang sudah dijelajah / seleksi batch yang sedang dikerjakan. Jadi judul
+  entri ini benar untuk layar putih, tetapi granularitas pemulihannya berhenti
+  di batas halaman.
+- Pohon node masih ditarik utuh alih-alih mekar-per-cabang lewat `parent_id`
+  (backend sudah mendukungnya); indeks geo belum berawalan `kode_satker`.
+- Service worker belum mem-precache potongan halaman, jadi halaman yang belum
+  pernah dibuka saat daring tetap gagal saat luring — kini setidaknya dengan
+  pesan yang benar dan tombol, bukan layar putih.
+- Rekonsiliasi `stale` pada sinkron penuh masih memakai selisih himpunan mentah,
+  jadi baris yang ditulis `upsertSnapshotAsset` DI TENGAH sinkron bisa
+  digolongkan usang. Penjaga satu-aliran menutup jalur yang paling mudah dipicu;
+  akarnya (bandingkan terhadap `syncStartedAt`) belum.
 
 ---
 
