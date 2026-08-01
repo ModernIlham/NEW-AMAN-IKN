@@ -264,8 +264,12 @@ aside .overflow-x-auto::-webkit-scrollbar-thumb:hover, .category-dropdown-scroll
    ~56 px lebar sekaligus ~56 px tinggi kepada peta. Tak menyentuh tombol
    aplikasi mana pun: selektornya khusus di dalam kontrol peta. */
 @media (max-width: 1023px) {
+  /* PENTING — `:not()` bukan hiasan. Tautan atribusi ("Leaflet", "© OpenStreetMap")
+     dan bar skala juga <a>/<span> di dalam .leaflet-control; tanpa pengecualian
+     ini `line-height: 36px` ikut mengenainya dan kotak atribusi membengkak jadi
+     pita putih setinggi ~40 px di sudut peta — persis keluhan lapangan. */
   .leaflet-container .leaflet-bar a,
-  .leaflet-container .leaflet-control a,
+  .leaflet-container .leaflet-control:not(.leaflet-control-attribution):not(.leaflet-control-scale) a,
   .leaflet-container .leaflet-buttons-control-button {
     min-height: 36px;
     min-width: 36px;
@@ -276,9 +280,24 @@ aside .overflow-x-auto::-webkit-scrollbar-thumb:hover, .category-dropdown-scroll
   /* Toolbar geoman merapat supaya kolomnya tak lagi sepanjang layar. */
   .leaflet-container .leaflet-pm-toolbar .button-container { margin-bottom: 2px; }
   /* Atribusi & skala dikecilkan — di HP keduanya memakan satu baris penuh
-     di tepi bawah, tempat yang lebih berguna untuk peta itu sendiri. */
-  .leaflet-container .leaflet-control-attribution { font-size: 9px; padding: 0 4px; }
-  .leaflet-container .leaflet-control-scale-line { font-size: 9px; padding: 0 4px; }
+     di tepi bawah, tempat yang lebih berguna untuk peta itu sendiri.
+     `line-height` dikunci di sini juga agar tak ada aturan lain yang
+     diam-diam menggembungkannya lagi. */
+  .leaflet-container .leaflet-control-attribution {
+    font-size: 9px;
+    line-height: 1.35;
+    padding: 1px 5px;
+  }
+  .leaflet-container .leaflet-control-attribution a {
+    min-height: 0; min-width: 0; width: auto; height: auto; line-height: inherit;
+  }
+  .leaflet-container .leaflet-control-scale-line { font-size: 9px; line-height: 1.35; padding: 0 4px; }
+  /* Panel peta buatan sendiri (Lapis Denah, pemilih lantai) juga dikecualikan:
+     barisnya ditulis rapat (py-1, teks 10px) tapi aturan 44px di atas
+     menggembungkannya hampir dua kali lipat — panel kecil jadi menjulang
+     menutupi peta. Baris panel selebar panel penuh (~150 px), jadi tingginya
+     tak lagi jadi soal jangkauan jari; 28 px cukup nyaman disentuh. */
+  [data-peta-panel] button { min-height: 28px; min-width: 28px; }
 }
 
 /* Tablet */

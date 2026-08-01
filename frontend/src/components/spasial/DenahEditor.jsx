@@ -135,6 +135,7 @@ export default function DenahEditor({ node, onClose, onSaved }) {
       map = L.map(wadahEl, {
         zoomControl: true, attributionControl: true, maxZoom: 22,
       });
+      map.attributionControl.setPrefix(false); // prefiks "Leaflet" opsional; © OpenStreetMap tetap (wajib lisensi)
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 22, maxNativeZoom: 19,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',

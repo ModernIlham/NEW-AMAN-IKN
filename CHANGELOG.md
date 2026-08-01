@@ -51,6 +51,60 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 > ≤1023px, **cek dulu apakah itu `<button>`/`<a>`** — kemungkinan besar penyebabnya
 > aturan ini. Solusinya `min-w-0 min-h-0` (dan kalau perlu `leading-none`).
 
+### Pengecualiannya pun bisa kelewat lebar (`[#670]`)
+
+Aturan pengecualian yang MENGECILKAN pun punya jebakan yang sama bila
+selektornya terlalu longgar. Contoh nyata: pengecualian 36px untuk kontrol
+Leaflet ditulis `.leaflet-control a`, padahal kotak atribusi
+(`.leaflet-control-attribution`) dan bar skala JUGA `.leaflet-control` — jadi
+`line-height: 36px` ikut mengenai tautan "Leaflet | © OpenStreetMap" dan
+membengkakkannya jadi pita putih 127×36 px di sudut peta.
+
+> Saat menulis pengecualian untuk kontrol peta, **sebut kontrol tombolnya, bukan
+> semua kontrol**: `.leaflet-control:not(.leaflet-control-attribution):not(.leaflet-control-scale) a`.
+> `line-height` tetap berlaku pada elemen inline meski `min-height`/`width` tidak
+> — itulah kenapa gejalanya lolos dari dugaan pertama.
+
+---
+
+## [#670] Peta di HP: kotak atribusi & panel Lapis Denah berhenti menggembung — 2026-08-01
+
+Laporan lapangan (tangkapan layar HP): kotak putih transparan Leaflet
+"Leaflet | © OpenStreetMap" terlalu besar, baris panel **Lapis Denah** terlalu
+tinggi, dan baris "Bentuk ringan" ikut renggang atas-bawah.
+
+Akar keduanya sama — dan keduanya **bukan** dari gaya yang ditulis di
+komponennya, melainkan dari dua aturan global di `index.css`:
+
+- **Kotak atribusi.** Pengecualian 36px untuk kontrol Leaflet ditulis
+  `.leaflet-control a`. Kotak atribusi juga `.leaflet-control`, jadi
+  `line-height: 36px` ikut mengenai tautan di dalamnya. `min-height`/`width`
+  memang tak berlaku pada elemen inline — tapi `line-height` berlaku, dan
+  itulah yang menggembungkannya. Selektor kini menyebut kontrol tombol saja
+  (`:not(.leaflet-control-attribution):not(.leaflet-control-scale)`), plus
+  `line-height` atribusi dikunci 1.35 agar tak ada aturan lain yang
+  diam-diam mengembalikannya.
+- **Baris panel.** `[data-peta-panel]` (Lapis Denah & pemilih lantai) ditulis
+  rapat (`py-1`, teks 10px, ikon 12px — tinggi alami ~22 px), tapi aturan
+  sentuh 44px global menggembungkan setiap barisnya jadi 44 px. Baris panel
+  selebar panel penuh (~150 px), jadi tingginya bukan penentu kemudahan
+  sentuh; kini dibatasi 28 px.
+
+Sekalian: prefiks **"Leaflet"** pada atribusi dimatikan
+(`attributionControl.setPrefix(false)`) di keempat peta aplikasi — Peta Aset,
+Peta Kolaborasi, Lokasi Temuan Wasdal, dan Editor Denah. Prefiks itu opsional;
+yang WAJIB secara lisensi ODbL adalah kredit `© OpenStreetMap`, dan itu tetap
+tercantum utuh.
+
+Diukur di peramban pada viewport 412 px (Leaflet asli, CSS lama vs baru):
+
+| | Sebelum | Sesudah |
+|---|---|---|
+| Kotak atribusi | 126,6 × 36 px | **82,7 × 14,1 px** (luas −74%) |
+| Panel Lapis Denah, 3 baris | 132 px | **84 px** (−36%) |
+
+**Uji:** 281 frontend, lint & build bersih + pengukuran geometri di peramban.
+
 ---
 
 ## [#669] Kotak putih misterius di kiri-atas HP: tautan "lompat ke konten" yang mencuat — 2026-07-28

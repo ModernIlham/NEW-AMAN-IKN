@@ -531,6 +531,10 @@ const AssetMapFullView = memo(function AssetMapFullView({
       zoomControl: true, attributionControl: true, maxZoom: 22, tapHold: true,
     });
     map.setView([-1.4, 116.7], 5); // fallback: kawasan IKN
+    // Prefiks "Leaflet" dibuang: opsional (beda dengan kredit © OpenStreetMap
+    // yang wajib lisensi ODbL) dan hampir menggandakan lebar kotak atribusi
+    // di layar HP yang sempit.
+    map.attributionControl.setPrefix(false);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 22,
       maxNativeZoom: 19,
