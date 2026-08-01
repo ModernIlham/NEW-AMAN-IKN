@@ -170,9 +170,13 @@ const DashboardToolbar = memo(function DashboardToolbar({
             </SelectContent>
           </Select>
 
-          {/* View Mode Toggle */}
+          {/* View Mode Toggle — `flex-shrink-0` seperti seluruh saudaranya di
+              baris nowrap ini: item yang boleh menyusut akan menyerap SELURUH
+              kelebihan lebar dan tergencet sendirian (lihat catatan di
+              TinifyQuotaIndicator). Kalau memang tak muat, biar
+              `overflow-x-auto` baris ini yang bekerja. */}
           {viewMode !== undefined && setViewMode && (
-            <div className="flex bg-muted rounded-lg p-0.5 gap-0.5" data-testid="view-mode-toggle">
+            <div className="flex flex-shrink-0 bg-muted rounded-lg p-0.5 gap-0.5" data-testid="view-mode-toggle">
               <button
                 className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${viewMode === 'list' ? 'bg-card text-blue-600 shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                 onClick={() => setViewMode('list')}
