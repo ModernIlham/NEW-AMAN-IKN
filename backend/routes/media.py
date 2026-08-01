@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 media_router = APIRouter()
 
 # API Keys from environment
+from kompresi_diagnostik import catat_percobaan, ringkas_layanan
+
 COMPRESTO_API_KEY = os.environ.get("COMPRESTO_API_KEY", "")
 UPLOADCARE_PUBLIC_KEY = os.environ.get("UPLOADCARE_PUBLIC_KEY", "")
 
@@ -175,12 +177,46 @@ async def compress_with_tinify(image_bytes: bytes) -> Optional[bytes]:
         return None
 
 
+def _sekarang() -> str:
+    """Cap waktu UTC ISO untuk catatan diagnostik."""
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _alasan_http(response) -> str:
+    """Terjemahkan status HTTP jadi kalimat yang berguna bagi operator.
+
+    Badan respons ikut dilampirkan (dipangkas) karena justru di situlah layanan
+    biasanya menjelaskan penolakannya — dan tanpa itu, "gagal" tetap buntu.
+    """
+    kode = getattr(response, "status_code", None)
+    try:
+        cuplikan = (response.text or "")[:160].replace("\n", " ").strip()
+    except Exception:
+        cuplikan = ""
+    dasar = {
+        400: "Permintaan ditolak — format atau parameter tak sesuai kontrak layanan",
+        401: "Kunci API ditolak (tidak sah)",
+        402: "Layanan menolak: langganan/kuota berbayar bermasalah",
+        403: "Kunci API tidak berhak atas operasi ini",
+        404: "Alamat endpoint tidak ditemukan — kontrak API mungkin sudah berubah",
+        413: "Berkas terlalu besar untuk layanan ini",
+        429: "Batas laju layanan tercapai",
+    }.get(kode)
+    if dasar is None:
+        dasar = ("Layanan sedang bermasalah" if (kode or 0) >= 500
+                 else f"Layanan menjawab {kode}")
+    return f"{dasar}{(' — ' + cuplikan) if cuplikan else ''}"
+
+
 async def compress_with_compresto(image_bytes: bytes) -> Optional[bytes]:
     """Compress using Compresto API."""
     if not COMPRESTO_API_KEY:
         return None
     if not await is_quota_available("compresto"):
         logger.info("Compresto quota exhausted")
+        catat_percobaan("compresto", False, waktu=_sekarang(),
+                        alasan="Kuota bulanan sudah habis")
         return None
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -192,15 +228,22 @@ async def compress_with_compresto(image_bytes: bytes) -> Optional[bytes]:
             )
             if response.status_code == 200:
                 await increment_quota("compresto")
+                catat_percobaan("compresto", True, waktu=_sekarang())
                 return response.content
             elif response.status_code == 429:
                 logger.warning("Compresto rate limit reached")
+                catat_percobaan("compresto", False, kode_http=429, waktu=_sekarang(),
+                                alasan="Batas laju layanan tercapai — tunggu lalu coba lagi")
                 return None
             else:
                 logger.warning(f"Compresto error {response.status_code}: {response.text[:200]}")
+                catat_percobaan("compresto", False, kode_http=response.status_code,
+                                waktu=_sekarang(), alasan=_alasan_http(response))
                 return None
     except Exception as e:
         logger.warning(f"Compresto error: {e}")
+        catat_percobaan("compresto", False, waktu=_sekarang(),
+                        alasan=f"Tidak dapat menghubungi layanan: {type(e).__name__}: {e}")
         return None
 
 
@@ -210,6 +253,8 @@ async def compress_with_uploadcare(image_bytes: bytes) -> Optional[bytes]:
         return None
     if not await is_quota_available("uploadcare"):
         logger.info("Uploadcare quota exhausted")
+        catat_percobaan("uploadcare", False, waktu=_sekarang(),
+                        alasan="Kuota bulanan sudah habis")
         return None
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -224,10 +269,14 @@ async def compress_with_uploadcare(image_bytes: bytes) -> Optional[bytes]:
             )
             if response.status_code != 200:
                 logger.warning(f"Uploadcare upload error: {response.status_code}")
+                catat_percobaan("uploadcare", False, kode_http=response.status_code,
+                                waktu=_sekarang(), alasan=_alasan_http(response))
                 return None
 
             file_id = response.json().get("file")
             if not file_id:
+                catat_percobaan("uploadcare", False, kode_http=200, waktu=_sekarang(),
+                                alasan="Respons unggah tak memuat id berkas — kontrak API berubah?")
                 return None
 
             # Download compressed version via CDN with quality reduction
@@ -235,12 +284,17 @@ async def compress_with_uploadcare(image_bytes: bytes) -> Optional[bytes]:
             dl_response = await client.get(cdn_url)
             if dl_response.status_code == 200:
                 await increment_quota("uploadcare")
+                catat_percobaan("uploadcare", True, waktu=_sekarang())
                 return dl_response.content
             else:
                 logger.warning(f"Uploadcare CDN error: {dl_response.status_code}")
+                catat_percobaan("uploadcare", False, kode_http=dl_response.status_code,
+                                waktu=_sekarang(), alasan=f"CDN menolak: {_alasan_http(dl_response)}")
                 return None
     except Exception as e:
         logger.warning(f"Uploadcare error: {e}")
+        catat_percobaan("uploadcare", False, waktu=_sekarang(),
+                        alasan=f"Tidak dapat menghubungi layanan: {type(e).__name__}: {e}")
         return None
 
 
@@ -371,28 +425,22 @@ async def get_all_compression_quotas(_user: dict = Depends(require_user)):
     })
 
     # Compresto
+    # `available` DULU berarti "env var terisi" — kebohongan yang membuat layar
+    # tampak sehat sementara kompresinya tak pernah jalan. Kini ia berarti
+    # "percobaan terakhir memang berhasil", dan sebab kegagalan ikut dibawa
+    # sampai ke layar (lihat kompresi_diagnostik.py).
     compresto_quota = await get_quota("compresto")
-    quotas.append({
-        "service": "compresto",
-        "name": "Compresto",
-        "used": compresto_quota["used"],
-        "limit": SERVICE_LIMITS["compresto"],
-        "remaining": max(0, SERVICE_LIMITS["compresto"] - compresto_quota["used"]),
-        "available": bool(COMPRESTO_API_KEY),
-        "month": month,
-    })
+    r = ringkas_layanan("compresto", bool(COMPRESTO_API_KEY),
+                        compresto_quota["used"], SERVICE_LIMITS["compresto"])
+    r.update({"name": "Compresto", "available": r["tersedia"], "month": month})
+    quotas.append(r)
 
     # Uploadcare
     uploadcare_quota = await get_quota("uploadcare")
-    quotas.append({
-        "service": "uploadcare",
-        "name": "Uploadcare",
-        "used": uploadcare_quota["used"],
-        "limit": SERVICE_LIMITS["uploadcare"],
-        "remaining": max(0, SERVICE_LIMITS["uploadcare"] - uploadcare_quota["used"]),
-        "available": bool(UPLOADCARE_PUBLIC_KEY),
-        "month": month,
-    })
+    r = ringkas_layanan("uploadcare", bool(UPLOADCARE_PUBLIC_KEY),
+                        uploadcare_quota["used"], SERVICE_LIMITS["uploadcare"])
+    r.update({"name": "Uploadcare", "available": r["tersedia"], "month": month})
+    quotas.append(r)
 
     # Pillow (always available, unlimited)
     quotas.append({
