@@ -20,6 +20,49 @@ import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+// Picker kode barang dari REFERENSI KODEFIKASI — ketik kode/nama, pilih dari
+// daftar. Dulu kolom kode diketik buta; salah satu digit membuat pemilahan
+// aset/persediaan salah kandang. Pola fetch debounce meniru AssetForm.
+function KodeBarangPicker({ value, onChange, onPick, testid }) {
+  const [sug, setSug] = useState(null);   // null = tertutup; [] = kosong
+  const [buka, setBuka] = useState(false);
+  const timerRef = useRef(null);
+  const cari = (q) => {
+    clearTimeout(timerRef.current);
+    if (!q || q.length < 2) { setSug(null); return; }
+    timerRef.current = setTimeout(async () => {
+      try {
+        const r = await axios.get(`${API}/kodefikasi`, { params: { search: q, page_size: 12 } });
+        setSug(r.data?.items || []);
+      } catch { setSug(null); /* offline → biarkan ketik manual */ }
+    }, 300);
+  };
+  return (
+    <div className="relative">
+      <Input placeholder="Kode barang — ketik kode/nama" className="font-mono" value={value}
+        onChange={(e) => { onChange(e.target.value); cari(e.target.value.trim()); setBuka(true); }}
+        onFocus={() => { if (sug) setBuka(true); }}
+        onBlur={() => setTimeout(() => setBuka(false), 150)}
+        data-testid={testid} />
+      {buka && Array.isArray(sug) && sug.length > 0 && (
+        <div className="absolute z-50 left-0 right-0 mt-1 max-h-56 overflow-y-auto rounded-lg border border-border bg-popover shadow-elev-2">
+          {sug.map((k) => (
+            <button key={k.kode} type="button"
+              onMouseDown={(e) => { e.preventDefault(); onPick(k); setBuka(false); }}
+              className="w-full px-2 py-1.5 text-left hover:bg-accent flex items-start gap-2 min-h-0 min-w-0">
+              <span className="font-mono text-[11px] text-teal-700 dark:text-teal-400 flex-shrink-0">{k.kode}</span>
+              <span className="text-[11px] text-foreground flex-1 leading-snug">
+                {k.uraian}
+                <span className="text-muted-foreground"> · {k.label_level}{k.is_persediaan ? " · persediaan" : ""}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const BARANG_KOSONG = { uraian: "", kode: "", jumlah: "1", harga_satuan: "" };
 
 /**
@@ -583,7 +626,7 @@ export default function PengadaanPage({ user, onBack }) {
 
       {/* ── Dialog perolehan baru ── */}
       <Dialog open={!!form} onOpenChange={(o) => { if (!o) setForm(null); }}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl w-[calc(100%-1.5rem)] max-h-[88vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Catat Perolehan</DialogTitle>
             <DialogDescription className="text-xs">
@@ -615,8 +658,8 @@ export default function PengadaanPage({ user, onBack }) {
                   onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, nomor_kontrak: e.target.value } }))} />
               </div>
               <div>
-                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-bast">No. BAST</label>
-                <Input id="pgd-bast" placeholder="BAST-01/2026" value={form.data.nomor_bast}
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-bast">No. BAST (Penyedia → PPK)</label>
+                <Input id="pgd-bast" placeholder="BAST-01/PPK/2026" value={form.data.nomor_bast}
                   onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, nomor_bast: e.target.value } }))}
                   data-testid="pengadaan-nomor-bast" />
               </div>
@@ -625,6 +668,13 @@ export default function PengadaanPage({ user, onBack }) {
                 <Input id="pgd-tgl" type="date" value={form.data.tanggal_bast}
                   onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, tanggal_bast: e.target.value } }))} />
               </div>
+              <p className="col-span-2 -mt-1 text-[11px] text-muted-foreground leading-snug rounded-lg bg-muted/60 px-2.5 py-1.5">
+                BAST ini adalah serah terima dari <b>Penyedia kepada PPK</b>, dan
+                <b> penomorannya dibuat PPK sendiri</b> — cukup catat nomornya di sini,
+                lalu centang dokumen BAST &amp; unggah berkasnya bila sudah ada.
+                Serah terima lanjutan dari PPK kepada KPB dibuatkan dokumennya
+                lewat tombol <b>BAST PPK → KPB</b> setelah perolehan tersimpan.
+              </p>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-ket">Keterangan</label>
                 <Input id="pgd-ket" value={form.data.keterangan}
@@ -667,32 +717,48 @@ export default function PengadaanPage({ user, onBack }) {
               </div>
               <div className="col-span-2 space-y-2">
                 <p className="text-xs font-medium text-foreground">Daftar barang</p>
+                {/* Tiap barang = KARTU berlabel, bukan sebaris kotak sempit:
+                    uraian panjang & kode 10-16 digit butuh ruang baca saat
+                    diketik — laporan lapangan "agar lega". */}
                 {form.barang.map((b, i) => (
-                  <div key={i} className="rounded-lg border border-border p-2 grid grid-cols-6 sm:grid-cols-8 gap-2">
-                    <div className="col-span-6 sm:col-span-3">
-                      <Input placeholder="Uraian barang" value={b.uraian}
+                  <div key={i} className="rounded-lg border border-border p-3 space-y-2 relative">
+                    {form.barang.length > 1 && (
+                      <button type="button" aria-label="Hapus baris barang"
+                        onClick={() => setForm((f) => ({ ...f, barang: f.barang.filter((_, idx) => idx !== i) }))}
+                        className="absolute right-2 top-2 h-7 w-7 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 min-h-0 min-w-0">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <div>
+                      <label className="text-[11px] font-medium text-muted-foreground block mb-1">Uraian barang</label>
+                      <Input placeholder="cth. Laptop Dell Latitude 5440" value={b.uraian} className="pr-9"
                         onChange={(e) => setFormBarang(i, "uraian", e.target.value)}
                         data-testid={`pengadaan-barang-uraian-${i}`} />
                     </div>
-                    <div className="col-span-3 sm:col-span-2">
-                      <Input placeholder="Kode (ops.)" className="font-mono" value={b.kode}
-                        onChange={(e) => setFormBarang(i, "kode", e.target.value)} />
-                    </div>
-                    <div className="col-span-1">
-                      <Input type="number" min="1" placeholder="Jml" value={b.jumlah}
-                        onChange={(e) => setFormBarang(i, "jumlah", e.target.value)} />
-                    </div>
-                    <div className="col-span-2 sm:col-span-2 flex gap-1">
-                      <Input type="number" min="0" placeholder="Harga satuan" value={b.harga_satuan}
-                        onChange={(e) => setFormBarang(i, "harga_satuan", e.target.value)}
-                        data-testid={`pengadaan-barang-harga-${i}`} />
-                      {form.barang.length > 1 && (
-                        <button type="button" aria-label="Hapus baris barang"
-                          onClick={() => setForm((f) => ({ ...f, barang: f.barang.filter((_, idx) => idx !== i) }))}
-                          className="h-9 w-9 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 flex-shrink-0 min-h-0 min-w-0">
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
+                    <div className="grid grid-cols-2 sm:grid-cols-[1fr_5rem_9rem] gap-2">
+                      <div className="col-span-2 sm:col-span-1">
+                        <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+                          Kode barang <span className="font-normal">(10 digit aset · 16 digit persediaan)</span>
+                        </label>
+                        <KodeBarangPicker value={b.kode}
+                          onChange={(v) => setFormBarang(i, "kode", v)}
+                          onPick={(k) => {
+                            setFormBarang(i, "kode", k.kode);
+                            if (!b.uraian) setFormBarang(i, "uraian", k.uraian);
+                          }}
+                          testid={`pengadaan-barang-kode-${i}`} />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-medium text-muted-foreground block mb-1">Jumlah</label>
+                        <Input type="number" min="1" placeholder="1" value={b.jumlah}
+                          onChange={(e) => setFormBarang(i, "jumlah", e.target.value)} />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-medium text-muted-foreground block mb-1">Harga satuan (Rp)</label>
+                        <Input type="number" min="0" placeholder="0" value={b.harga_satuan}
+                          onChange={(e) => setFormBarang(i, "harga_satuan", e.target.value)}
+                          data-testid={`pengadaan-barang-harga-${i}`} />
+                      </div>
                     </div>
                   </div>
                 ))}

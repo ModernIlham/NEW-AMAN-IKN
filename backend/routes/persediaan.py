@@ -2045,6 +2045,144 @@ async def kartu_barang_pdf(item_id: str, _user: dict = Depends(require_user)):
                                       f'attachment; filename="Kartu_Barang_{nama_file}.pdf"'})
 
 
+@persediaan_router.post("/persediaan/referensi-sakti-pdf")
+async def impor_referensi_sakti_pdf(
+    request: Request,
+    file: UploadFile = File(...),
+    terapkan: bool = Query(False),
+    _user: dict = Depends(require_writer),
+):
+    """Baca PDF SAKTI "UC_PER032 — Referensi Tabel Barang Persediaan" dan
+    sinkronkan master persediaan SATKER INI.
+
+    Dua tahap dalam satu endpoint: `terapkan=false` (bawaan) hanya PRATINJAU —
+    berapa baru/berubah/tetap, plus identitas UAKPB — supaya operator melihat
+    dulu apa yang akan terjadi; `terapkan=true` menuliskan.
+
+    Aturan tulis:
+      - Item BARU dibuat dengan kode 16 digit APA ADANYA dari PDF — kode urut
+        SAKTI adalah identitas resmi, bukan deret internal kami.
+      - Item yang SUDAH ADA hanya diperbarui `nama_barang` + `satuan` — stok,
+        layer FIFO, dan field lain tak disentuh.
+      - Tidak ada yang DIHAPUS: laporan bisa diunduh terfilter, dan kode
+        ber-transaksi memang tak boleh hilang.
+    """
+    from persediaan_referensi import parse_teks_uc_per032, rencana_sinkron
+    from shared_utils import kode_satker_user, scope_query_field_satker
+
+    nama = (file.filename or "").lower()
+    if not nama.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Unggah berkas PDF hasil unduhan SAKTI (UC_PER032)")
+    isi = await file.read()
+    if len(isi) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="PDF terlalu besar (maks 20 MB)")
+
+    def _ekstrak(data: bytes) -> str:
+        import io as _io
+        from pypdf import PdfReader
+        r = PdfReader(_io.BytesIO(data))
+        return "\n".join((p.extract_text() or "") for p in r.pages)
+
+    try:
+        teks = await asyncio.to_thread(_ekstrak, isi)
+    except Exception:
+        raise HTTPException(status_code=400, detail="PDF tidak dapat dibaca — pastikan ini unduhan asli SAKTI, bukan hasil scan")
+
+    hasil = parse_teks_uc_per032(teks)
+    if not hasil["items"]:
+        raise HTTPException(status_code=400, detail=(
+            "Tidak ada baris referensi barang yang terbaca. Pastikan berkasnya "
+            "laporan 'Referensi Tabel Barang Persediaan' (UC_PER032) dari SAKTI."))
+
+    # PDF milik satker lain DITOLAK: referensi ini per satker, dan menimpanya
+    # dengan daftar satker sebelah merusak dua-duanya sekaligus.
+    satker_user = kode_satker_user(_user)
+    satker_pdf = hasil["kode_satker"]
+    if satker_user and satker_pdf and satker_user != satker_pdf:
+        raise HTTPException(status_code=400, detail=(
+            f"PDF ini milik satker {satker_pdf} ({hasil['uakpb_nama'] or 'UAKPB tak terbaca'}), "
+            f"sedangkan Anda bekerja atas satker {satker_user}. Unduh UC_PER032 dari SAKTI satker Anda."))
+
+    # Keadaan sekarang milik satker ini, dipetakan per kode 16 digit. NUP tak
+    # dilibatkan: referensi SAKTI berbicara pada tingkat kode, bukan NUP.
+    existing = {}
+    id_per_kode = {}
+    async for d in db.persediaan.find(
+            scope_query_field_satker(_user, {"kode_barang": {"$regex": "^\\d{16}$"}}),
+            {"_id": 0, "id": 1, "kode_barang": 1, "nama_barang": 1, "satuan": 1}):
+        k = d.get("kode_barang")
+        if k and k not in existing:   # NUP>1 berbagi kode — cukup satu wakil
+            existing[k] = {"deskripsi": d.get("nama_barang"), "satuan": d.get("satuan")}
+        id_per_kode.setdefault(k, []).append(d.get("id"))
+
+    rencana = rencana_sinkron(hasil["items"], existing)
+    ringkas = {
+        "uakpb_nama": hasil["uakpb_nama"],
+        "uakpb_kode": hasil["uakpb_kode"],
+        "kode_satker_pdf": satker_pdf,
+        "total_di_pdf": len(hasil["items"]),
+        "baru": len(rencana["baru"]),
+        "berubah": len(rencana["ubah"]),
+        "tetap": len(rencana["tetap"]),
+        "hilang_dari_pdf": len(rencana["hilang_dari_pdf"]),
+        "baris_tak_terbaca": hasil["galat"][:10],
+        "contoh_baru": [
+            {"kode16": i["kode16"], "deskripsi": i["deskripsi"], "satuan": i["satuan"]}
+            for i in rencana["baru"][:8]
+        ],
+        "contoh_berubah": [
+            {"kode16": i["kode16"], "deskripsi": i["deskripsi"], "satuan": i["satuan"],
+             "sebelumnya": existing.get(i["kode16"]) or {}}
+            for i in rencana["ubah"][:8]
+        ],
+    }
+    if not terapkan:
+        return {"pratinjau": True, **ringkas}
+
+    now = datetime.now(timezone.utc).isoformat()
+    dibuat = 0
+    for it in rencana["baru"]:
+        doc = {
+            "id": str(uuid.uuid4()),
+            "kode_barang": it["kode16"],
+            "kode_satker": satker_user,
+            "nup": "1",
+            "nup_num": 1,
+            "nama_barang": it["deskripsi"],
+            "merk": "", "tipe": "",
+            "satuan": it["satuan"] or "Buah",
+            "lokasi": "", "batas_kritis": 0, "expired_default": "",
+            "tahun_anggaran": "",
+            "keterangan": "Impor referensi SAKTI (UC_PER032)",
+            "stok": 0, "batches": [],
+            "version": 1, "created_at": now, "updated_at": now,
+        }
+        await db.persediaan.insert_one({**doc})
+        jadwalkan_sync("persediaan", doc)
+        dibuat += 1
+
+    diubah = 0
+    for it in rencana["ubah"]:
+        for pid in id_per_kode.get(it["kode16"], []):
+            await db.persediaan.update_one(
+                {"id": pid},
+                {"$set": {"nama_barang": it["deskripsi"],
+                          "satuan": it["satuan"] or "Buah",
+                          "updated_at": now}})
+            diubah += 1
+    if diubah:
+        # Nama berubah → indeks pencarian ikut disegarkan.
+        async for d in db.persediaan.find(
+                {"id": {"$in": [pid for it in rencana["ubah"] for pid in id_per_kode.get(it["kode16"], [])]}},
+                {"_id": 0}):
+            jadwalkan_sync("persediaan", d)
+
+    await log_audit(request, _user, "persediaan_impor_referensi_sakti", "persediaan",
+                    detail=f"UAKPB {hasil['uakpb_kode']}: {dibuat} baru, {diubah} diperbarui "
+                           f"dari {len(hasil['items'])} baris PDF")
+    return {"pratinjau": False, **ringkas, "dibuat": dibuat, "diperbarui": diubah}
+
+
 @persediaan_router.delete("/persediaan/{item_id}")
 async def delete_persediaan(item_id: str, _admin: dict = Depends(require_admin)):
     """Hapus master — hanya bila stok 0 & tanpa layer (jejak transaksi aman)."""
@@ -2056,6 +2194,16 @@ async def delete_persediaan(item_id: str, _admin: dict = Depends(require_admin))
     if int(item.get("stok", 0) or 0) > 0 or (item.get("batches") or []):
         raise HTTPException(status_code=409,
                             detail="Barang masih punya stok/layer — keluarkan stoknya dulu lewat transaksi")
+    # Kode yang PERNAH bertransaksi tak boleh hilang walau stoknya sudah nol:
+    # jurnal, LPB, dan dokumen pengadaan menunjuk kode ini — menghapusnya
+    # memutus jejak audit. Keputusan pemilik: kode ber-transaksi hanya boleh
+    # diubah nama & satuannya, tidak dihapus.
+    ada_jurnal = await db.transaksi_persediaan.find_one(
+        {"persediaan_id": item_id}, {"_id": 1})
+    if ada_jurnal:
+        raise HTTPException(status_code=409, detail=(
+            "Kode ini punya riwayat transaksi — tidak bisa dihapus agar jejak "
+            "audit utuh. Yang masih boleh: mengubah nama barang dan satuannya."))
     await db.persediaan.delete_one({"id": item_id})
     jadwalkan_hapus("persediaan", item_id)  # cabut dari indeks Meili (best-effort)
     return {"message": "Barang persediaan dihapus"}

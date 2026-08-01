@@ -305,6 +305,41 @@ export default function PersediaanPage({ user, onBack }) {
     }
   };
 
+  // Impor referensi SAKTI (UC_PER032, PDF). Dua tahap: unggah → server
+  // menjawab PRATINJAU (baru/berubah/tetap + identitas UAKPB); operator
+  // menekan Terapkan → unggah ulang berkas yang sama dengan terapkan=true.
+  const fileSaktiRef = useRef(null);
+  const [sakti, setSakti] = useState(null);   // {file, pratinjau} | null
+  const [saktiProses, setSaktiProses] = useState(false);
+  const onSaktiFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setSaktiProses(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await axios.post(`${API}/persediaan/referensi-sakti-pdf`, fd, { timeout: 120000 });
+      setSakti({ file, pratinjau: r.data });
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Gagal membaca PDF referensi SAKTI");
+    } finally { setSaktiProses(false); }
+  };
+  const terapkanSakti = async () => {
+    if (!sakti?.file) return;
+    setSaktiProses(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", sakti.file);
+      const r = await axios.post(`${API}/persediaan/referensi-sakti-pdf?terapkan=true`, fd, { timeout: 180000 });
+      toast.success(`Referensi SAKTI diterapkan — ${r.data.dibuat} barang baru, ${r.data.diperbarui} diperbarui`);
+      setSakti(null);
+      load();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Gagal menerapkan referensi SAKTI");
+    } finally { setSaktiProses(false); }
+  };
+
   const onImportFile = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -724,6 +759,10 @@ export default function PersediaanPage({ user, onBack }) {
                   onClick={() => fileImporRef.current?.click()}>
                   {importing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}Impor CSV/XLSX
                 </DropdownMenuItem>
+                <DropdownMenuItem className="min-h-[42px]" disabled={saktiProses} data-testid="persediaan-import-sakti"
+                  onClick={() => fileSaktiRef.current?.click()}>
+                  {saktiProses ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}Impor Referensi SAKTI (PDF)
+                </DropdownMenuItem>
                 <DropdownMenuItem className="min-h-[42px]" data-testid="persediaan-template"
                   onClick={() => downloadFileWithProgress(`${API}/persediaan/template`, "template_persediaan.csv", { label: "Template Persediaan" }).catch(() => {})}>
                   <Download className="w-4 h-4 mr-2" />Unduh Template
@@ -739,6 +778,7 @@ export default function PersediaanPage({ user, onBack }) {
               </DropdownMenuContent>
             </DropdownMenu>
             <input ref={fileImporRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={onImportFile} />
+            <input ref={fileSaktiRef} type="file" accept=".pdf" className="hidden" onChange={onSaktiFile} />
           </div>
           {/* Filter status + gudang: 1 baris mulai tablet (md, iPad mini 768);
               di HP boleh membungkus. */}
@@ -1839,6 +1879,63 @@ export default function PersediaanPage({ user, onBack }) {
         </DialogContent>
       </Dialog>
 
+      {/* Pratinjau impor referensi SAKTI */}
+      <Dialog open={!!sakti} onOpenChange={(o) => { if (!o) setSakti(null); }}>
+        <DialogContent className="max-w-lg w-[calc(100%-1.5rem)] max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Impor Referensi SAKTI (UC_PER032)</DialogTitle>
+            <DialogDescription className="text-xs">
+              Kode 16 digit dari SAKTI adalah identitas resmi barang persediaan satker ini.
+              Barang baru ditambahkan, yang sudah ada hanya diperbarui nama &amp; satuannya —
+              stok dan riwayat transaksi tidak disentuh, dan tidak ada yang dihapus.
+            </DialogDescription>
+          </DialogHeader>
+          {sakti?.pratinjau && (
+            <div className="space-y-2 text-sm">
+              <div className="rounded-lg border border-border p-2.5 text-xs">
+                <p className="font-semibold">{sakti.pratinjau.uakpb_nama || "UAKPB"}</p>
+                <p className="text-muted-foreground font-mono">{sakti.pratinjau.uakpb_kode}</p>
+              </div>
+              <div className="grid grid-cols-4 gap-2 text-center">
+                {[
+                  ["Total di PDF", sakti.pratinjau.total_di_pdf, "text-foreground"],
+                  ["Baru", sakti.pratinjau.baru, "text-emerald-600 dark:text-emerald-400"],
+                  ["Berubah", sakti.pratinjau.berubah, "text-amber-600 dark:text-amber-400"],
+                  ["Tetap", sakti.pratinjau.tetap, "text-muted-foreground"],
+                ].map(([l, v, c]) => (
+                  <div key={l} className="rounded-lg border border-border p-2">
+                    <p className={`text-lg font-bold tabular-nums ${c}`}>{v}</p>
+                    <p className="text-[10px] text-muted-foreground">{l}</p>
+                  </div>
+                ))}
+              </div>
+              {sakti.pratinjau.contoh_baru?.length > 0 && (
+                <div className="text-xs">
+                  <p className="font-semibold mb-1">Contoh barang baru</p>
+                  {sakti.pratinjau.contoh_baru.map((c) => (
+                    <p key={c.kode16} className="truncate text-muted-foreground">
+                      <span className="font-mono">{c.kode16}</span> · {c.deskripsi} ({c.satuan})
+                    </p>
+                  ))}
+                </div>
+              )}
+              {sakti.pratinjau.hilang_dari_pdf > 0 && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                  {sakti.pratinjau.hilang_dari_pdf} kode di sistem tidak ada di PDF ini —
+                  dibiarkan utuh (laporan mungkin terfilter).
+                </p>
+              )}
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setSakti(null)}>Batal</Button>
+            <Button onClick={terapkanSakti} disabled={saktiProses} data-testid="persediaan-sakti-terapkan">
+              {saktiProses ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Terapkan ({(sakti?.pratinjau?.baru || 0) + (sakti?.pratinjau?.berubah || 0)} perubahan)
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {confirmDialog}
     </div>
   );
