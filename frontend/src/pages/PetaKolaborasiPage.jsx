@@ -296,6 +296,7 @@ export default function PetaKolaborasiPage() {
   useEffect(() => {
     if (!data || mapRef.current || !mapElRef.current) return;
     const map = L.map(mapElRef.current, { zoomControl: true, attributionControl: true, maxZoom: 22, tapHold: true });
+    map.attributionControl.setPrefix(false); // prefiks "Leaflet" opsional; © OpenStreetMap tetap (wajib lisensi)
     map.setView([-1.4, 116.7], 5);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 22, maxNativeZoom: 19,

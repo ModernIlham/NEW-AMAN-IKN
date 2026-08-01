@@ -64,6 +64,7 @@ export default function LokasiTemuanDialog({ judul, submitUrl, lokasiAwal, onClo
   useEffect(() => {
     if (!wadahRef.current || petaRef.current) return undefined;
     const map = L.map(wadahRef.current, { zoomControl: true, attributionControl: true, maxZoom: 22 });
+    map.attributionControl.setPrefix(false); // prefiks "Leaflet" opsional; © OpenStreetMap tetap (wajib lisensi)
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 22, maxNativeZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
