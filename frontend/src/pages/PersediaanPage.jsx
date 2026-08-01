@@ -1783,16 +1783,21 @@ export default function PersediaanPage({ user, onBack }) {
             <ul className="divide-y divide-border/60">
               {riwayatLpb.items.map((l) => {
                 const isAset = String(l.kategori || "") === "aset";
+                const isGabungan = String(l.kategori || "") === "gabungan";
                 return (
                   <li key={l.id} className="py-2 flex items-start justify-between gap-2" data-testid={`lpb-riwayat-${l.id}`}>
                     <div className="min-w-0 flex-1">
                       <p className="font-mono text-xs text-foreground break-all">{l.nomor || "(tanpa nomor)"}</p>
                       <div className="flex flex-wrap items-center gap-1 mt-0.5">
                         <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${
-                          isAset
-                            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-                            : "bg-cyan-500/15 text-cyan-700 dark:text-cyan-300"}`}>
-                          {isAset ? "aset/BMN" : "persediaan"}
+                          isGabungan
+                            ? "bg-violet-500/15 text-violet-700 dark:text-violet-300"
+                            : isAset
+                              ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                              : "bg-cyan-500/15 text-cyan-700 dark:text-cyan-300"}`}>
+                          {isGabungan
+                            ? `gabungan${l.jumlah_bast ? ` · ${l.jumlah_bast} BAST` : ""}`
+                            : isAset ? "aset/BMN" : "persediaan"}
                         </span>
                         {/* Status TTD dibaca dari tautan balik yang ditulis
                             routes/ttd.py saat semua pihak selesai meneken. */}

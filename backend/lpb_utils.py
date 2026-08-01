@@ -41,10 +41,13 @@ GOLONGAN_BARANG = {
 }
 
 # Kategori LPB. Bukan sekadar label: menentukan kolom mana yang dicetak (NUP
-# hanya bermakna untuk BMN) dan judul dokumennya.
+# hanya bermakna untuk BMN) dan judul dokumennya. `gabungan` = satu LPB yang
+# merangkum BANYAK BAST PPK-KPB sekaligus — aset dan persediaan dalam satu
+# surat laporan (permintaan pemilik).
 KATEGORI_LPB = {
     "persediaan": "Persediaan",
     "aset": "Barang Milik Negara (Aset Tetap)",
+    "gabungan": "Gabungan Aset & Persediaan",
 }
 
 
@@ -158,6 +161,44 @@ def baris_lpb_dari_aset(aset_dibuat) -> list:
             "harga_satuan": harga, "total": round(harga * float(jml), 2),
             "keterangan": str(d.get("keterangan") or "Kondisi Baik & Lengkap"),
         })
+    return baris
+
+
+def baris_lpb_gabungan(perolehan_list) -> list:
+    """Seluruh baris barang dari BANYAK perolehan → baris tabel LPB gabungan.
+
+    LPB gabungan merangkum semua BAST PPK-KPB dalam SATU surat laporan —
+    aset maupun persediaan, apa adanya per baris BAST. Tiap baris membawa
+    keterangan nomor BAST PPK-KPB asalnya (fallback: nomor BAST penyedia)
+    supaya pemeriksa bisa menelusuri setiap baris kembali ke dokumen serah
+    terimanya tanpa membuka register.
+
+    NUP hanya terisi untuk baris yang sudah tertaut aset — dan itu pun NUP
+    unit PERTAMA (pemecahan per-NUP hanya menautkan balik unit pertamanya).
+    Dokumen ini rekap penerimaan, bukan pengganti LPB per-NUP; rinciannya
+    tetap di LPB aset masing-masing BAST.
+    """
+    baris = []
+    for p in perolehan_list or []:
+        d = p or {}
+        ref = str(((d.get("bast_ppk") or {}).get("nomor")) or "").strip()
+        sumber = (f"BAST PPK-KPB {ref}" if ref
+                  else f"BAST {str(d.get('nomor_bast') or '-').strip()}")
+        for b in d.get("barang") or []:
+            row = b or {}
+            harga = _angka(row.get("harga_satuan"))
+            jml = _angka(row.get("jumlah"), 1.0) or 1.0
+            jml = int(jml) if float(jml).is_integer() else jml
+            baris.append({
+                "asset_id": str(row.get("asset_id") or ""),
+                "kode_barang": str(row.get("kode") or "").strip(),
+                "nup": str(row.get("NUP") or "").strip(),
+                "nama_barang": str(row.get("uraian") or "").strip(),
+                "golongan": label_golongan(row.get("kode")),
+                "jumlah": jml, "satuan": "",
+                "harga_satuan": harga, "total": round(harga * float(jml), 2),
+                "keterangan": sumber,
+            })
     return baris
 
 

@@ -67,6 +67,64 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#677] BAST PPK → KPB ber-dokumen resmi + LPB gabungan seluruh BAST — 2026-08-01
+
+Melengkapi rantai serah terima hasil pengadaan (lanjutan mandat pemilik yang
+label formulirnya sudah diperjelas di [#676]): nomor BAST yang diinput operator
+adalah **BAST Penyedia → PPK** (penomorannya dibuat PPK sendiri — aplikasi hanya
+mencatat), sedangkan serah terima tahap kedua **PPK → Kuasa Pengguna Barang**
+kini benar-benar DITERBITKAN aplikasinya, lengkap dengan dokumen resminya.
+
+### Tombol BAST PPK → KPB per perolehan (`routes/pengadaan.py`)
+
+- `POST /pengadaan/{id}/bast-ppk-kpb` — idempoten (klik kedua mengembalikan
+  rekaman yang ada; filter `$exists: False` menutup celah klik-ganda supaya
+  rekaman pemenang tak tertimpa). Nomor **Berita Acara** dipesan dari deret
+  buku agenda keluar yang SAMA dengan generator BAST modul Penggunaan
+  (`_no_agenda_berikut` + `bangun_nomor`), tercatat berstatus `dibooking`.
+- Identitas kedua pihak **dibekukan saat terbit**: PIHAK KESATU dari snapshot
+  PPK perolehan (bukan registry hari ini), PIHAK KEDUA dari resolver KPB pada
+  tanggal dokumen (`resolve_penandatangan_kpb`, ikut awalan Plt./Plh.).
+  Tanpa PPK → 400 dengan petunjuk mengisinya; tanpa KPB → 400 juga.
+- `GET /pengadaan/{id}/bast-ppk-kpb/pdf` — naskah resmi ber-pasal (pola
+  bast.py): kop satker, narasi hari-tanggal terbilang, identitas dua pihak
+  berdampingan, dasar hukum rezim **pengadaan** (Perpres 16/2018 jo. 46/2025 +
+  PMK 181/2016 — bukan PMK 40/2024 milik rezim penggunaan) plus kontrak &
+  BAST penyedia sebagai dasar dinamis, tabel objek ber-golongan & total,
+  pasal dasar serah terima / penatausahaan / penutup, blok TTD dua pihak
+  (privasi NIK Non-ASN tetap ditegakkan `baris_identitas_ttd`).
+- UI: tombol di baris register — belum terbit → terbitkan (konfirmasi dulu);
+  sudah terbit → tombol yang sama mengunduh PDF, dan nomornya tampil di baris
+  meta. Diverifikasi empiris: PDF dirender nyata dan 12 penanda isi
+  (kedua nama, nomor, pasal, golongan, Plt.) ditemukan di teksnya.
+
+### LPB gabungan — satu laporan untuk seluruh BAST PPK → KPB
+
+- `POST /pengadaan/lpb-gabungan` — SATU dokumen `db.lpb` berkategori baru
+  `gabungan` merangkum banyak perolehan sekaligus, **aset maupun persediaan**
+  apa adanya per baris BAST. Setiap baris membawa keterangan nomor BAST
+  PPK-KPB asalnya (`baris_lpb_gabungan`, murni + teruji) sehingga pemeriksa
+  bisa merunut tiap baris tanpa membuka register. Perolehan yang belum
+  ber-BAST PPK→KPB DITOLAK 400 dengan daftar nomornya — rekap yang barisnya
+  tak bisa dirunut adalah rekap yang bohong.
+- Nomornya dipesan dari deret LPB yang sama (`booking_nomor_lpb`); PPK di
+  header: satu nama bila seragam, gabungan nama tanpa NIP bila beda orang.
+- `bangun_lpb_pdf` mengenal kategori `gabungan`: judul "GABUNGAN ASET &
+  PERSEDIAAN", jenis "Rekap n BAST PPK-KPB", kolom NUP ikut dicetak (baris
+  persediaan cukup "-"), tautan menunjuk "n perolehan (gabungan)".
+- UI: tombol **LPB Gabungan** di header Pengadaan → dialog centang per
+  perolehan (yang belum ber-BAST PPK→KPB nonaktif + diberi tanda; ada pilih
+  semua) → dialog hasil yang sama dengan LPB biasa (unduh PDF + kirim TTD —
+  jalur TTD elektronik LPB lama otomatis ikut bekerja karena koleksinya
+  satu). Riwayat LPB di Persediaan menampilkan badge `gabungan · n BAST`
+  dan filter kategorinya mengenali nilai baru.
+
+Verifikasi: 1397 uji unit backend lulus (termasuk 7 uji baru
+`baris_lpb_gabungan`), eslint bersih, build produksi sukses, kedua PDF
+dirender empiris dengan seluruh penanda isi ditemukan.
+
+---
+
 ## [#676] Referensi persediaan 16 digit dari PDF SAKTI + UI iPad/HP + Catat Perolehan lega — 2026-08-01
 
 ### Referensi barang persediaan 16 digit — impor langsung dari PDF SAKTI

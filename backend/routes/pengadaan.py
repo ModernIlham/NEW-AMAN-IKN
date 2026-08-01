@@ -19,8 +19,8 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from lpb_utils import (
-    baris_lpb_dari_aset, is_persediaan, pilah_barang_perolehan,
-    ringkas_pencatatan, total_nilai_lpb,
+    baris_lpb_dari_aset, baris_lpb_gabungan, is_persediaan, label_golongan,
+    pilah_barang_perolehan, ringkas_pencatatan, total_nilai_lpb,
 )
 from persediaan_utils import KODE_PENUH_LEN, KODE_PREFIX_LEN
 from db import db, fs_bucket
@@ -785,6 +785,511 @@ async def tautkan_penganggaran(perolehan_id: str,
         {"id": perolehan_id}, {"$set": {**snap, "updated_at": now}})
     p.update(snap)
     return _enrich(p)
+
+
+# ============================================================================
+# BAST PPK → KPB — serah terima LANJUTAN hasil pengadaan.
+#
+# Rantainya dua tahap: (1) Penyedia menyerahkan kepada PPK — BAST-nya dibuat
+# dan dinomori PPK sendiri, register ini hanya MENCATAT nomornya (field
+# `nomor_bast`); (2) PPK menyerahkan hasil pengadaan itu kepada Kuasa
+# Pengguna Barang untuk ditatausahakan sebagai BMN — dokumen tahap kedua
+# inilah yang DITERBITKAN aplikasi: nomor Berita Acara dipesan dari
+# Persuratan (deret yang sama dengan generator BAST modul Penggunaan) dan
+# PDF resminya dirender dari snapshot yang dibekukan saat terbit.
+# ============================================================================
+
+# Dasar hukum naskah BAST hasil pengadaan (rezim pengadaan + penatausahaan,
+# BUKAN rezim penggunaan yang dipakai bast.py — dokumen ini lahir dari
+# Perpres 16/2018, bukan PMK 40/2024).
+_DASAR_BAST_PPK = (
+    "Undang-Undang Nomor 17 Tahun 2003 tentang Keuangan Negara;",
+    "Peraturan Pemerintah Nomor 27 Tahun 2014 tentang Pengelolaan Barang "
+    "Milik Negara/Daerah jo. PP Nomor 28 Tahun 2020;",
+    "Peraturan Presiden Nomor 16 Tahun 2018 tentang Pengadaan Barang/Jasa "
+    "Pemerintah jo. Perpres Nomor 46 Tahun 2025;",
+    "Peraturan Menteri Keuangan Nomor 181/PMK.06/2016 tentang Penatausahaan "
+    "Barang Milik Negara;",
+    "Peraturan Menteri Keuangan Nomor 53 Tahun 2023 tentang Pengelolaan "
+    "Barang Milik Negara dan Aset Dalam Penguasaan di Ibu Kota Nusantara.",
+)
+
+
+def _tgl_iso_atau_hari_ini(v: str) -> str:
+    """Tanggal ISO tervalidasi; kosong/cacat → hari ini (bukan 400 — tombol
+    satu-klik tak menyediakan input tanggal, jadi cacat berarti bug klien)."""
+    from datetime import date
+    s = str(v or "").strip()[:10]
+    try:
+        return date.fromisoformat(s).isoformat()
+    except ValueError:
+        return datetime.now(timezone.utc).date().isoformat()
+
+
+class BastPpkIn(BaseModel):
+    tanggal: str = ""                  # default hari ini (YYYY-MM-DD)
+    booking_nomor: bool = True         # pesan nomor Berita Acara (Persuratan)
+
+
+@pengadaan_router.post("/pengadaan/{perolehan_id}/bast-ppk-kpb")
+async def terbitkan_bast_ppk_kpb(perolehan_id: str, payload: BastPpkIn,
+                                 user: dict = Depends(require_writer)):
+    """Terbitkan BAST PPK → KPB untuk satu perolehan (idempoten).
+
+    Identitas kedua pihak DIBEKUKAN saat terbit: PIHAK KESATU dari snapshot
+    PPK perolehan (bukan registry hari ini), PIHAK KEDUA dari resolver KPB
+    pada tanggal dokumen. Klik kedua mengembalikan rekaman yang sudah ada —
+    nomor Berita Acara tak boleh terpesan dua kali untuk dokumen yang sama.
+    """
+    p = await db.pengadaan.find_one({"id": perolehan_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
+    await pastikan_akses_dok_satker(user, p)  # isolasi satker (REVIEW-9 R8)
+    lama = p.get("bast_ppk") or {}
+    if lama:
+        return {"bast_ppk": lama, "sudah_ada": True}
+    if not str(p.get("ppk_nama") or "").strip():
+        raise HTTPException(status_code=400, detail=(
+            "PPK belum ditetapkan pada perolehan ini — PIHAK KESATU dokumen "
+            "adalah PPK. Ketuk baris PPK pada register untuk mengisinya dari "
+            "Referensi Pejabat, lalu coba lagi."))
+
+    from shared_utils import resolve_penandatangan_kpb
+    tgl = _tgl_iso_atau_hari_ini(payload.tanggal)
+    settings = await db.report_settings.find_one(
+        {"type": "global"}, {"_id": 0}) or {}
+    kode = str(p.get("kode_satker") or "").strip() or kode_satker_user(user)
+    kpb = await resolve_penandatangan_kpb(settings, per_iso=tgl,
+                                          kode_satker=kode) or {}
+    if not str(kpb.get("nama") or "").strip():
+        raise HTTPException(status_code=400, detail=(
+            "Kuasa Pengguna Barang belum terdaftar — isi peran KPB di "
+            "Referensi Pejabat (atau nama Kasatker di Pengaturan Laporan) "
+            "supaya PIHAK KEDUA dokumen ini punya identitas."))
+
+    now = datetime.now(timezone.utc)
+    nomor, surat_id = "", ""
+    if payload.booking_nomor:
+        # Deret nomor yang SAMA dengan generator BAST Penggunaan (bast.py):
+        # buku agenda keluar per satker, jenis naskah Berita Acara.
+        from persuratan_utils import bangun_nomor, pilih_klasifikasi
+        from routes.persuratan import _no_agenda_berikut, _pengaturan
+        atur = await _pengaturan(kode)
+        kode_klas = pilih_klasifikasi(atur["peta_klasifikasi"], "pengadaan",
+                                      "Berita Acara",
+                                      default=atur["kode_klasifikasi_default"])
+        tahun = int(tgl[:4]) if tgl[:4].isdigit() else now.year
+        no_agenda = await _no_agenda_berikut("keluar", tahun, kode)
+        nomor = bangun_nomor(atur["format_nomor"], no_agenda, tgl,
+                             kode_klasifikasi=kode_klas,
+                             kode_unit=atur["kode_unit"])
+        surat_id = str(uuid.uuid4())
+        await db.surat.insert_one({
+            "id": surat_id, "jenis": "keluar", "no_agenda": no_agenda,
+            "tahun": tahun, "nomor": nomor, "status": "dibooking",
+            "kode_satker": kode,
+            "perihal": ("BAST Hasil Pengadaan PPK-KPB — "
+                        f"{p.get('nomor_bast') or perolehan_id[:8]}"),
+            "tujuan": str(kpb.get("nama") or "").strip(),
+            "jenis_naskah": "Berita Acara", "modul": "pengadaan",
+            "kegiatan_id": "", "nama_kegiatan": "",
+            "kode_klasifikasi": kode_klas, "kode_keamanan": "B",
+            "tanggal_surat": tgl, "referensi": "BAST PPK-KPB",
+            "nomor_eksternal": "",
+            "keterangan": "booking otomatis dari BAST PPK-KPB",
+            "dibuat_oleh": user.get("username", "system"),
+            "riwayat": [{"status": "dibooking", "tanggal": now.isoformat(),
+                         "oleh": user.get("username", "system"),
+                         "catatan": "booking otomatis dari BAST PPK-KPB"}],
+            "created_at": now.isoformat(), "updated_at": now.isoformat(),
+        })
+
+    rekaman = {
+        "nomor": nomor, "surat_id": surat_id, "tanggal": tgl,
+        # Snapshot KPB dibekukan DI SINI: dokumen historis tak boleh berganti
+        # penanda tangan hanya karena registry pejabat berubah kemudian.
+        "kpb_nama": str(kpb.get("nama") or "").strip(),
+        "kpb_nip": str(kpb.get("nip") or "").strip(),
+        "kpb_jabatan": (str(kpb.get("jabatan") or "").strip()
+                        or "Kuasa Pengguna Barang"),
+        "kpb_status_kepegawaian": str(kpb.get("status_kepegawaian") or "").strip(),
+        "kpb_jenis_pelaksana": str(kpb.get("jenis_pelaksana") or "").strip(),
+        "created_by": user.get("username", "system"),
+        "created_at": now.isoformat(),
+    }
+    # Filter "$exists: False" menutup celah klik-ganda di antara pemeriksaan
+    # `lama` di atas dan tulisan ini: yang kalah balapan TIDAK menimpa rekaman
+    # pemenang (nomor booking-nya sendiri dibiarkan berstatus dibooking di
+    # buku agenda — nomor memang tak pernah dipakai ulang).
+    res = await db.pengadaan.update_one(
+        {"id": perolehan_id, "bast_ppk": {"$exists": False}},
+        {"$set": {"bast_ppk": rekaman, "updated_at": now.isoformat()}})
+    if not res.modified_count:
+        segar = await db.pengadaan.find_one(
+            {"id": perolehan_id}, {"_id": 0, "bast_ppk": 1}) or {}
+        return {"bast_ppk": segar.get("bast_ppk") or rekaman, "sudah_ada": True}
+    await log_audit("pengadaan_bast_ppk_terbit", "", perolehan_id,
+                    username=user.get("username", "system"),
+                    detail=(f"BAST PPK-KPB {nomor or '(tanpa nomor)'} untuk "
+                            f"BAST {p.get('nomor_bast') or perolehan_id[:8]}"))
+    return {"bast_ppk": rekaman, "sudah_ada": False}
+
+
+async def bangun_bast_ppk_pdf(perolehan_id: str, _user: dict) -> bytes:
+    """Susun PDF BAST PPK → KPB → bytes (naskah resmi ber-pasal, pola
+    bast.py). Dipisah dari route-nya mengikuti `bangun_lpb_pdf` supaya jalur
+    TTD elektronik kelak bisa membekukan berkas yang sama persis."""
+    import asyncio
+    from io import BytesIO
+    from xml.sax.saxutils import escape as _esc
+
+    from reportlab.lib.colors import HexColor
+    from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm as rl_mm
+    from reportlab.platypus import (
+        KeepTogether, Paragraph, Spacer, Table, TableStyle,
+    )
+
+    from pegawai_utils import (
+        baris_identitas_ttd, deteksi_identitas, label_nomor_identitas,
+    )
+    from pejabat_utils import prefiks_pelaksana
+    from pelaporan_utils import narasi_hari_tanggal
+    from routes.reports import (
+        _fit_col_widths, _fmt_tanggal_id, _get_report_styles,
+        _kop_surat_flowables, _page_footer_factory, _signature_block,
+        _std_doc, _std_table_style, _tempat_tanggal_laporan, _title_block,
+    )
+    from shared_utils import pengaturan_kop
+
+    p = await db.pengadaan.find_one({"id": perolehan_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
+    await pastikan_akses_dok_satker(_user, p)  # isolasi satker (REVIEW-9 R8)
+    bp = p.get("bast_ppk") or {}
+    if not bp:
+        raise HTTPException(status_code=400, detail=(
+            "BAST PPK-KPB belum diterbitkan untuk perolehan ini — tekan "
+            "tombol \"BAST PPK → KPB\" pada barisnya dulu."))
+    settings = await pengaturan_kop(kode_satker=p.get("kode_satker"))
+
+    buffer = BytesIO()
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    body = st['Body']
+    # Gaya naskah resmi yang sama dengan bast.py: isi pasal hitam rata
+    # kiri-kanan, judul pasal tebal-tengah.
+    isi = ParagraphStyle('BastPpkIsi', parent=body, fontSize=8.6, leading=11.6,
+                         alignment=TA_JUSTIFY, textColor=HexColor("#111827"),
+                         spaceAfter=1.5)
+    lbl_pasal = ParagraphStyle('BastPpkPasal', parent=body, fontSize=9,
+                               leading=11.5, alignment=TA_CENTER,
+                               spaceBefore=5, spaceAfter=2.5,
+                               textColor=HexColor("#111827"))
+    ket = ParagraphStyle('BastPpkKet', parent=isi, fontSize=8.2, leading=10.8)
+    _garis = HexColor("#9aa5b1")
+
+    def fmt_rp(v):
+        try:
+            return f"{int(round(float(v))):,}".replace(",", ".")
+        except (ValueError, TypeError):
+            return "0"
+
+    el = []
+    el.extend(_kop_surat_flowables(settings, doc.width))
+    el.extend(_title_block(
+        "BERITA ACARA SERAH TERIMA HASIL PENGADAAN\n"
+        "DARI PEJABAT PEMBUAT KOMITMEN KEPADA KUASA PENGGUNA BARANG",
+        nomor=bp.get("nomor") or "......./......./........"))
+
+    nar = narasi_hari_tanggal(bp.get("tanggal"))
+    tempat = str(settings.get("tempat_laporan")
+                 or settings.get("alamat_instansi") or "").strip()
+    frasa = (f"Pada hari ini, {nar['hari']}, tanggal {nar['tanggal_terbilang']}, "
+             f"bulan {nar['bulan']}, tahun {nar['tahun_terbilang']} "
+             f"({_fmt_tanggal_id(bp.get('tanggal'))})" if nar else "Pada hari ini")
+    if tempat:
+        frasa += f", bertempat di {_esc(tempat.splitlines()[0])}"
+    el.append(Paragraph(f"{frasa}, kami yang bertanda tangan di bawah ini:", isi))
+    el.append(Spacer(1, 1.5 * rl_mm))
+
+    p1 = {"nama": p.get("ppk_nama"), "nip": p.get("ppk_nip"),
+          "jabatan": p.get("ppk_jabatan") or "Pejabat Pembuat Komitmen"}
+    p2 = {"nama": bp.get("kpb_nama"), "nip": bp.get("kpb_nip"),
+          "jabatan": (prefiks_pelaksana(bp.get("kpb_jenis_pelaksana"))
+                      + (bp.get("kpb_jabatan") or "Kuasa Pengguna Barang"))}
+
+    def _kolom_pihak(peran, sebutan, ph):
+        """Identitas satu pihak (pola bast.py, tanpa alamat): NIK Non-ASN
+        tidak dicetak (privasi); label nomor pintar (NIP/NRP)."""
+        nomor_id = str(ph.get("nip") or "").strip()
+        det = deteksi_identitas(nomor_id)
+        pasangan = [("Nama", ph.get("nama"))]
+        if det["jenis"] != "nik" and nomor_id:
+            pasangan.append((label_nomor_identitas(nomor_id) or "NIP",
+                             nomor_id))
+        pasangan.append(("Jabatan", ph.get("jabatan")))
+        rows = [[Paragraph(lbl, ket),
+                 Paragraph(f": <b>{_esc(str(val or '-'))}</b>", ket)]
+                for lbl, val in pasangan]
+        dalam = Table(rows, colWidths=[46, doc.width * 0.5 - 46 - 14])
+        dalam.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+            ('TOPPADDING', (0, 0), (-1, -1), 0.5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0.5)]))
+        return [Paragraph(f"<b>{peran}</b>", ket), dalam,
+                Paragraph(f"<i>— selanjutnya disebut <b>{sebutan}</b> —</i>",
+                          ket)]
+
+    tp = Table([[
+        _kolom_pihak("PIHAK KESATU (yang menyerahkan)", "PIHAK KESATU", p1),
+        _kolom_pihak("PIHAK KEDUA (yang menerima)", "PIHAK KEDUA", p2),
+    ]], colWidths=[doc.width * 0.5, doc.width * 0.5])
+    tp.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (0, -1), 0),
+        ('LEFTPADDING', (1, 0), (1, -1), 8),
+        ('BOX', (0, 0), (-1, -1), 0.4, _garis),
+        ('LINEBEFORE', (1, 0), (1, -1), 0.4, _garis),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    el.append(tp)
+    el.append(Spacer(1, 1.5 * rl_mm))
+
+    el.append(Paragraph(
+        "PIHAK KESATU dan PIHAK KEDUA sepakat melakukan serah terima hasil "
+        "pengadaan barang untuk ditatausahakan sebagai Barang Milik Negara, "
+        "berdasarkan:", isi))
+    dasar = list(_DASAR_BAST_PPK)
+    if str(p.get("nomor_kontrak") or "").strip():
+        dasar.append(f"Kontrak/SPK Nomor {_esc(p['nomor_kontrak'].strip())};")
+    dasar.append(
+        "Berita Acara Serah Terima dari Penyedia/Pemberi kepada PPK Nomor "
+        f"{_esc(str(p.get('nomor_bast') or '-').strip())} tanggal "
+        f"{_fmt_tanggal_id(p.get('tanggal_bast')) or '-'}.")
+    for i, d in enumerate(dasar, 1):
+        el.append(Paragraph(f"{i}. {d}", ket))
+    el.append(Spacer(1, 1.5 * rl_mm))
+
+    # PASAL 1 — objek serah terima: seluruh baris barang perolehan apa adanya
+    # (aset maupun persediaan — pemilahan buku terjadi di pencatatan, bukan
+    # pada serah terimanya).
+    el.append(Paragraph("<b>PASAL 1 — OBJEK SERAH TERIMA</b>", lbl_pasal))
+    el.append(Paragraph(
+        "PIHAK KESATU menyerahkan dan PIHAK KEDUA menerima hasil pengadaan "
+        "dengan rincian sebagai berikut:", isi))
+    data = [[Paragraph(h, st['TableHeader']) for h in
+             ("No", "Kode Barang", "Uraian Barang", "Golongan", "Jumlah",
+              "Harga Satuan (Rp)", "Jumlah Harga (Rp)")]]
+    total = 0.0
+    for i, b in enumerate(p.get("barang") or [], 1):
+        row = b or {}
+        harga = float(row.get("harga_satuan") or 0)
+        jml = float(row.get("jumlah") or 0)
+        tot = harga * jml
+        total += tot
+        jml_txt = str(int(jml)) if float(jml).is_integer() else f"{jml:g}"
+        data.append([
+            Paragraph(str(i), st['CellCenter']),
+            Paragraph(_esc(str(row.get("kode") or "-").strip()), st['CellCenter']),
+            Paragraph(_esc(str(row.get("uraian") or "-").strip()), st['Cell']),
+            Paragraph(label_golongan(row.get("kode")) or "-", st['CellCenter']),
+            Paragraph(jml_txt, st['CellCenter']),
+            Paragraph(fmt_rp(harga), st['CellRight']),
+            Paragraph(fmt_rp(tot), st['CellRight']),
+        ])
+    data.append([Paragraph("", st['Cell']),
+                 Paragraph("<b>JUMLAH</b>", st['Cell']),
+                 Paragraph("", st['Cell']), Paragraph("", st['Cell']),
+                 Paragraph("", st['Cell']), Paragraph("", st['Cell']),
+                 Paragraph(f"<b>{fmt_rp(total)}</b>", st['CellRight'])])
+    t = Table(data, colWidths=_fit_col_widths([24, 84, 148, 86, 40, 80, 84],
+                                              doc.width), repeatRows=1)
+    t.setStyle(_std_table_style(zebra=True, total_row=True))
+    el.append(t)
+
+    nomor_pasal = 2
+
+    def pasal(judul, isi_list):
+        nonlocal nomor_pasal
+        blok = [Paragraph(f"<b>PASAL {nomor_pasal} — {judul}</b>", lbl_pasal)]
+        for i, teks in enumerate(isi_list, 1):
+            blok.append(Paragraph(
+                (f"({i}) {teks}" if len(isi_list) > 1 else teks), isi))
+        el.append(KeepTogether(blok))
+        nomor_pasal += 1
+
+    label_jenis = JENIS_PEROLEHAN.get(p.get("jenis"),
+                                      (p.get("jenis") or "perolehan",))[0]
+    pasal("DASAR SERAH TERIMA", [
+        f"Barang pada Pasal 1 diperoleh melalui {_esc(str(label_jenis).lower())} "
+        f"dari {_esc(str(p.get('pihak') or '-').strip())} dan telah diterima "
+        "PIHAK KESATU dari penyedia/pemberi berdasarkan Berita Acara Serah "
+        f"Terima Nomor {_esc(str(p.get('nomor_bast') or '-').strip())} "
+        f"tanggal {_fmt_tanggal_id(p.get('tanggal_bast')) or '-'}.",
+        "PIHAK KESATU menyatakan barang tersebut telah diperiksa jumlah, "
+        "spesifikasi, dan kelengkapannya serta diterima dalam keadaan baik "
+        "sebagaimana mestinya.",
+    ])
+    pasal("PENATAUSAHAAN DAN TANGGUNG JAWAB", [
+        "Terhitung sejak ditandatanganinya Berita Acara ini, barang beralih "
+        "kepada PIHAK KEDUA untuk ditatausahakan sebagai Barang Milik Negara "
+        "pada satuan kerja sesuai ketentuan peraturan perundang-undangan.",
+        "Barang golongan aset tetap dicatat ke Daftar Barang Pengguna dengan "
+        "Nomor Urut Pendaftaran (NUP), dan barang persediaan dicatat ke "
+        "kartu/kartu kendali persediaan satuan kerja.",
+    ])
+    pasal("PENUTUP", [
+        "Demikian Berita Acara Serah Terima ini dibuat dengan sebenarnya "
+        "dalam rangkap 2 (dua) — 1 (satu) rangkap untuk PIHAK KESATU dan "
+        "1 (satu) rangkap untuk PIHAK KEDUA — yang masing-masing mempunyai "
+        "kekuatan hukum yang sama; apabila di kemudian hari terdapat "
+        "kekeliruan akan diadakan perbaikan sebagaimana mestinya.",
+    ])
+
+    el.append(Spacer(1, 3 * rl_mm))
+    from shared_utils import status_kepegawaian_by_nip
+    el.extend(_signature_block([
+        {'header': 'PIHAK KEDUA,', 'role': 'Yang Menerima,',
+         'nama': p2.get("nama") or "................................",
+         'after': baris_identitas_ttd(
+             p2.get("nip"), "NIP. -", bp.get("kpb_status_kepegawaian"))},
+        {'pre': [_tempat_tanggal_laporan(settings, bp.get("tanggal"))],
+         'header': 'PIHAK KESATU,', 'role': 'Yang Menyerahkan,',
+         'nama': p1.get("nama") or "................................",
+         'after': baris_identitas_ttd(
+             p1.get("nip"), "NIP. -",
+             str(p.get("ppk_status_kepegawaian") or "").strip()
+             or await status_kepegawaian_by_nip(p1.get("nip")))},
+    ], doc.width))
+
+    footer = _page_footer_factory("BAST Hasil Pengadaan PPK-KPB")
+    await asyncio.to_thread(doc.build, el, onFirstPage=footer,
+                            onLaterPages=footer)
+    return buffer.getvalue()
+
+
+@pengadaan_router.get("/pengadaan/{perolehan_id}/bast-ppk-kpb/pdf")
+async def bast_ppk_kpb_pdf(perolehan_id: str,
+                           _user: dict = Depends(require_user_or_query_token)):
+    """Unduh dokumen resmi BAST PPK → KPB (PDF naskah ber-pasal)."""
+    from io import BytesIO
+
+    from fastapi.responses import StreamingResponse
+
+    data = await bangun_bast_ppk_pdf(perolehan_id, _user)
+    return StreamingResponse(
+        BytesIO(data), media_type="application/pdf",
+        headers={"Content-Disposition":
+                 f'attachment; filename="BAST_PPK_KPB_{perolehan_id[:8]}.pdf"'})
+
+
+class LpbGabunganIn(BaseModel):
+    perolehan_ids: list[str] = Field(min_length=1, max_length=100)
+    tanggal: str = ""                  # default hari ini
+    booking_nomor: bool = True
+
+
+@pengadaan_router.post("/pengadaan/lpb-gabungan")
+async def buat_lpb_gabungan(payload: LpbGabunganIn,
+                            user: dict = Depends(require_writer)):
+    """SATU Laporan Penerimaan Barang yang merangkum BANYAK BAST PPK → KPB —
+    aset maupun persediaan dalam satu surat laporan (permintaan pemilik).
+
+    Semua perolehan terpilih WAJIB sudah menerbitkan BAST PPK → KPB: LPB
+    gabungan didefinisikan sebagai rekap dokumen serah terima itu, dan baris
+    yang tak bisa dirunut ke BAST PPK-KPB mana pun membuat rekapnya bohong.
+    Nomornya dipesan dari deret LPB yang sama dengan kedua jalur lain
+    (`booking_nomor_lpb`), dan hasilnya tampil di Riwayat LPB seperti biasa.
+    """
+    ids = sorted({str(i or "").strip() for i in payload.perolehan_ids
+                  if str(i or "").strip()})
+    if not ids:
+        raise HTTPException(status_code=400, detail="Pilih minimal satu perolehan")
+    rows = await db.pengadaan.find(
+        scope_query_field_satker(user, {"id": {"$in": ids}}),
+        {"_id": 0}).to_list(len(ids))
+    if len(rows) != len(ids):
+        raise HTTPException(status_code=404,
+                            detail="Sebagian perolehan tidak ditemukan")
+    tanpa = [str(r.get("nomor_bast") or r.get("id", "")[:8]) for r in rows
+             if not (r.get("bast_ppk") or {})]
+    if tanpa:
+        raise HTTPException(status_code=400, detail=(
+            "Terbitkan BAST PPK-KPB dulu untuk: " + ", ".join(tanpa[:10])
+            + ("…" if len(tanpa) > 10 else "")))
+    # Urutan dokumen mengikuti tanggal BAST (kronologis), bukan urutan klik.
+    rows.sort(key=lambda r: (str(r.get("tanggal_bast") or ""),
+                             str(r.get("nomor_bast") or "")))
+    items = baris_lpb_gabungan(rows)
+    if not items:
+        raise HTTPException(status_code=400, detail=(
+            "Perolehan terpilih tidak memuat baris barang sama sekali"))
+
+    tgl = _tgl_iso_atau_hari_ini(payload.tanggal)
+    nomor_ppk = [str((r.get("bast_ppk") or {}).get("nomor") or "").strip()
+                 or f"(tanpa nomor — BAST {r.get('nomor_bast') or '-'})"
+                 for r in rows]
+    nomor, surat_id = "", ""
+    if payload.booking_nomor:
+        from routes.persuratan import booking_nomor_lpb
+        nomor, surat_id = await booking_nomor_lpb(
+            user, tgl,
+            perihal=(f"Laporan Penerimaan Barang (LPB) Gabungan — "
+                     f"{len(rows)} BAST PPK-KPB"),
+            tujuan="",
+            keterangan="booking otomatis dari LPB gabungan Pengadaan")
+
+    # PPK di header LPB: satu nama bila seragam; beberapa nama digabung tanpa
+    # NIP (baris NIP hanya bermakna untuk satu orang).
+    ppk_unik = {(str(r.get("ppk_nama") or "").strip(),
+                 str(r.get("ppk_nip") or "").strip(),
+                 str(r.get("ppk_status_kepegawaian") or "").strip())
+                for r in rows if str(r.get("ppk_nama") or "").strip()}
+    if len(ppk_unik) == 1:
+        ppk_nama, ppk_nip, ppk_status = next(iter(ppk_unik))
+    else:
+        ppk_nama = ", ".join(sorted(n for n, _, _ in ppk_unik))[:300]
+        ppk_nip, ppk_status = "", ""
+    penyedia_unik = sorted({str(r.get("pihak") or "").strip()
+                            for r in rows if str(r.get("pihak") or "").strip()})
+    penyedia = "; ".join(penyedia_unik[:5]) + (
+        f"; +{len(penyedia_unik) - 5} lainnya" if len(penyedia_unik) > 5 else "")
+
+    lpb_id = str(uuid.uuid4())
+    await db.lpb.insert_one({
+        "id": lpb_id, "nomor": nomor, "surat_id": surat_id,
+        "kategori": "gabungan",
+        "tanggal": tgl,
+        "jenis": "gabungan",
+        "jenis_dokumen": "BAST PPK-KPB",
+        "penyedia": penyedia,
+        "perolehan_id": "",
+        "perolehan_ids": ids,
+        "jumlah_bast": len(rows),
+        "ppk_nama": ppk_nama, "ppk_nip": ppk_nip,
+        "ppk_status_kepegawaian": ppk_status,
+        "keterangan": ("Gabungan seluruh BAST PPK-KPB: "
+                       + "; ".join(nomor_ppk))[:500],
+        "items": items, "total_nilai": total_nilai_lpb(items),
+        "jumlah_barang": len(items),
+        "kode_satker": (str(rows[0].get("kode_satker") or "").strip()
+                        or kode_satker_user(user)),
+        "created_by": user.get("username", "system"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    await log_audit("pengadaan_lpb_gabungan", "", lpb_id,
+                    username=user.get("username", "system"),
+                    detail=(f"LPB gabungan {nomor or '(tanpa nomor)'}: "
+                            f"{len(rows)} BAST PPK-KPB, {len(items)} baris"))
+    return {"lpb_id": lpb_id, "nomor": nomor,
+            "jumlah_bast": len(rows), "jumlah_barang": len(items),
+            "total_nilai": total_nilai_lpb(items)}
 
 
 # Lampiran berkas per perolehan (scan kontrak/BAPHP/BAST/kuitansi/SP2D
