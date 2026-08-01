@@ -67,6 +67,57 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#671] Dialog berhenti melebar menyamping + Muat ulang peta kolaborasi tak lagi memutihkan peta — 2026-08-01
+
+Dua laporan lapangan, dua akar yang berbeda.
+
+### Isi dialog "memanjang menyamping melebihi kanvas"
+
+`DialogContent` adalah `grid`, dan anak grid bawaannya `min-width: auto` —
+lebar minimumnya = lebar **min-content** isinya. Satu saja keturunan
+ber-`white-space: nowrap` (di sini `truncate` pada URL link berbagi) membuat
+min-content-nya selebar teks utuh; jalur grid ikut melar, SEMUA anak lain
+teregang selebar itu, lalu ujung kanannya dipotong `overflow-hidden`. `min-w-0`
+yang sudah lama terpasang pada span teks tak menolong — yang perlu dinolkan
+adalah **anak grid**-nya, bukan cucunya.
+
+Diukur di peramban (DOM dialog + CSS hasil build asli, viewport 412 px):
+
+| | Sebelum | Sesudah |
+|---|---|---|
+| `scrollWidth` / `clientWidth` | 788 / 386 | **386 / 386** |
+| Elemen yang menembus tepi | 22 | **0** |
+
+Perbaikannya satu utilitas di komponen dasar — `[&>*]:min-w-0` pada
+`DialogContent` **dan** `AlertDialogContent` — jadi seluruh dialog aplikasi
+ikut terlindungi, bukan hanya dialog Bagikan Peta. Pada `AlertDialogContent`
+akibatnya bahkan lebih parah sebelum ini karena ia tak punya
+`overflow-hidden`: isinya tumpah ke luar kotak, bukan sekadar terpotong.
+
+Catatan: cacat yang sama pernah ditambal setempat di `ImporDenahDialog`
+(entri dialog impor terpotong). Tambalan itu kini jadi mubazir — akarnya
+sudah tertutup di hulu.
+
+### Tombol "Muat ulang" membuat peta kolaborasi putih
+
+Tombolnya memanggil `setLoading(true)`, dan layar pemuat mengganti SELURUH
+pohon — termasuk `<div>` tempat Leaflet hidup. Saat selesai, React memasang
+`<div>` BARU, sementara `mapRef` masih memegang peta lama yang terikat node
+yang sudah dibuang; efek inisialisasi pun pulang lebih awal (`mapRef` sudah
+terisi) dan wadah baru tinggal kotak putih.
+
+- Muat ulang kini memakai state `menyegarkan` yang terpisah — peta tak pernah
+  dilepas, hanya ikon tombol berputar selama data diambil.
+- Efek inisialisasi juga dibuat tahan banting: bila wadah peta ternyata sudah
+  lepas dari dokumen, peta lama dibongkar dan dibangun ulang. Ini menutup
+  jalur yang tersisa — layar "Koneksi bermasalah"/galat juga mengganti pohon,
+  sehingga "Coba lagi" dulu memunculkan bug yang sama.
+
+**Uji:** 281 uji frontend, lint & build bersih + pengukuran geometri dialog di
+peramban.
+
+---
+
 ## [#670] Peta di HP: kotak atribusi & panel Lapis Denah berhenti menggembung — 2026-08-01
 
 Laporan lapangan (tangkapan layar HP): kotak putih transparan Leaflet
