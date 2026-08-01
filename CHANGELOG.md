@@ -67,6 +67,58 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#678] Chip kuota kompresi berhenti tergencet di toolbar desktop — 2026-08-01
+
+Laporan lapangan (tangkapan layar 1520 px): tombol informasi kuota Tinify di
+toolbar Dashboard **tergencet** jadi serpihan hijau selebar beberapa piksel —
+angkanya terpotong setengah dan tombolnya praktis tak bisa diketuk.
+
+**Akar masalah — chip itu satu-satunya yang boleh menyusut.** Baris toolbar
+desktop `DashboardToolbar.jsx:132` sengaja `flex-nowrap` + `overflow-x-auto`,
+dan SEMUA anaknya diberi `flex-shrink-0` … kecuali dua: chip kuota dan saklar
+List/Galeri. Begitu barisnya meluap — yang terjadi tepat di `xl` (1280 px) ke
+atas, saat label seluruh tombol menyala serentak — **seluruh kekurangan ruang
+jatuh ke chip itu sendirian**. Diperparah `min-w-0` yang dipasang di PR #666
+(untuk melepas diri dari aturan tap-target 44px): kelas itu membuang lantai
+lebar `min-content`, sehingga chip bisa menyusut sampai nyaris nol alih-alih
+berhenti di lebar isinya. Spacer `flex-1` di sebelahnya tidak ikut menyerap
+karena basis lebarnya 0 (faktor susutnya diskalakan basis → nol kontribusi).
+
+Terukur pada replika baris toolbar memakai **CSS produksi** (ikon dipaksa 16px
+oleh `[&_svg]:size-4`, `gap-2` Button asli):
+
+| viewport | lebar chip (render) | lebar alami | selisih |
+|---|---|---|---|
+| 1216 px | 101 px | 101 px | — |
+| **1280 px** | **63 px** | 101 px | **−38 px (tergencet)** |
+
+Ambang persisnya bergeser mengikuti panjang label nyata (mis. "Cetak Kartu
+(1750)" lebih lebar daripada "(50)"), jadi di layar pemilik gejalanya muncul
+pada 1520 px — mekanismenya sama.
+
+**Perbaikan.**
+
+- `flex-shrink-0` pada chip kuota; `min-w-0` dibuang (justru itu yang
+  mengizinkan runtuh total). Kalau barisnya memang tak muat, `overflow-x-auto`
+  milik toolbar yang bekerja — itu memang katup pengaman yang sudah dirancang
+  di sana, bukan menggencet satu tombol sampai tak terbaca.
+- `flex-shrink-0` juga pada saklar List/Galeri — satu-satunya anak lain yang
+  masih bisa menyusut, dan calon korban berikutnya begitu chip diamankan.
+- Bar mini 32px pindah dari `lg:block` ke `2xl:block`. Pada 1280–1535 label
+  semua tombol menyala serentak dan bar itulah yang mendorong barisnya meluap;
+  angka sisa kuota tetap terbaca, dan bar lengkap per layanan memang sudah ada
+  di dalam popover-nya.
+
+Sesudah perbaikan, terukur ulang dengan CSS hasil build baru: chip **tidak
+pernah** lebih sempit dari lebar alaminya pada 1024–1920 px (63 px di
+1024–1535, 101 px di ≥1536 saat bar mini kembali).
+
+> Pola: di baris `flex-nowrap`, **satu anak yang lupa `flex-shrink-0` akan
+> menyerap SELURUH kelebihan lebar** — bukan sebagian. Bila anak itu juga
+> ber-`min-w-0`, ia menyusut sampai nol tanpa perlawanan.
+
+---
+
 ## [#677] BAST PPK → KPB ber-dokumen resmi + LPB gabungan seluruh BAST — 2026-08-01
 
 Melengkapi rantai serah terima hasil pengadaan (lanjutan mandat pemilik yang

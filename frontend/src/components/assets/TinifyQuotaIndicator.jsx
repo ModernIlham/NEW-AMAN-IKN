@@ -115,6 +115,16 @@ function PanelKuota({ imageQuotas, pdfQuotas }) {
 // state `expanded` yang tak pernah dipakai merender apa pun — di tablet & HP
 // (tanpa hover) mengetuknya benar-benar tidak menampilkan apa-apa. Popover
 // bekerja untuk sentuhan DAN kursor, jadi satu mekanisme untuk semua layar.
+//
+// `flex-shrink-0` BUKAN hiasan. Chip ini hidup di baris toolbar `flex-nowrap`
+// tempat SEMUA saudaranya sudah `flex-shrink-0`; begitu barisnya meluap,
+// seluruh kekurangan ruang jatuh ke satu-satunya item yang boleh menyusut —
+// chip ini — dan `min-w-0` (dulu ada di sini) membuang lantai lebar min-content
+// sehingga ia bisa tergencet sampai nyaris nol: yang tampak di layar tinggal
+// serpihan hijau berisi potongan angka. Terukur pada replika toolbar dengan
+// CSS produksi: 101px alami → 63px pada 1280px. Karena itu chip TIDAK boleh
+// menyusut; kalau baris memang tak muat, `overflow-x-auto` milik toolbar yang
+// mengurusnya (itu memang katup pengaman yang sudah dirancang di sana).
 // ============================================================================
 const TinifyQuotaIndicator = memo(({ className = "" }) => {
   const { imageQuotas, pdfQuotas, loading } = useKuota();
@@ -133,16 +143,18 @@ const TinifyQuotaIndicator = memo(({ className = "" }) => {
           type="button"
           aria-label="Kuota kompresi — ketuk untuk rincian"
           title="Kuota kompresi — ketuk untuk rincian"
-          className={`flex items-center gap-1.5 px-2 py-1 rounded-md border cursor-pointer transition-all hover:shadow-sm min-w-0 min-h-0 ${imgColors.bg} border-current/10 ${className}`}
+          className={`flex flex-shrink-0 items-center gap-1.5 px-2 py-1 rounded-md border cursor-pointer transition-all hover:shadow-sm min-h-0 ${imgColors.bg} border-current/10 ${className}`}
           data-testid="kuota-indikator"
         >
-          <Image className={`w-3.5 h-3.5 ${imgColors.text}`} />
+          <Image className={`w-3.5 h-3.5 flex-shrink-0 ${imgColors.text}`} />
           <span className={`text-xs font-semibold tabular-nums ${imgColors.text}`}>
             {activeImg ? `${activeImg.remaining}` : "0"}
           </span>
-          {/* Bar mini hanya di layar lebar — di tablet chip harus sesingkat
-              mungkin agar toolbar tak pecah baris. */}
-          <div className="hidden lg:block w-8 h-1.5 bg-muted rounded-full overflow-hidden">
+          {/* Bar mini hanya di layar SANGAT lebar (2xl+). Di 1280–1535 label
+              semua tombol toolbar menyala serentak dan barisnya jadi sesak;
+              32px bar ini justru yang mendorongnya meluap. Angkanya tetap
+              terbaca, dan bar lengkap tiap layanan ada di dalam popover. */}
+          <div className="hidden 2xl:block w-8 h-1.5 bg-muted rounded-full overflow-hidden">
             <div className={`h-full ${imgColors.bar} transition-all`} style={{ width: `${Math.min(imgPercent, 100)}%` }} />
           </div>
         </button>
