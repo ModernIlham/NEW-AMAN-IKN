@@ -8,7 +8,7 @@ import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import axios from "axios";
-import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layers, ChevronDown, Boxes, MousePointerClick, CheckCheck, Eraser, PencilLine, SquareDashed, Share2, ImageIcon, Lock, LockOpen, LandPlot, Building2, Eye, EyeOff, Gauge } from "lucide-react";
+import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layers, ChevronDown, Boxes, MousePointerClick, CheckCheck, Eraser, PencilLine, SquareDashed, Share2, ImageIcon, Lock, LockOpen, LandPlot, Building2, Eye, EyeOff, Gauge, Ruler } from "lucide-react";
 import { toast } from "sonner";
 import { compressImageFile } from "../../lib/imageCompression";
 import {
@@ -22,6 +22,7 @@ import { getSnapshotAssets } from "../../lib/offlineSnapshot";
 import { downloadFileWithProgress } from "../../lib/downloadFile";
 import { authMediaUrl } from "../../lib/mediaUrl";
 import { useBackGuard } from "../../hooks/useBackGuard";
+import { useUkurPeta } from "../../hooks/useUkurPeta";
 import { useDenahSpasial } from "../../hooks/useDenahSpasial";
 import { warnaLevel, ordinalLantai } from "../../lib/spasialDenah";
 import Lightbox from "./PhotoLightbox";
@@ -258,6 +259,8 @@ const AssetMapFullView = memo(function AssetMapFullView({
   const scaleInfoElRef = useRef(null);   // elemen info skala/zoom (diperbarui saat zoom)
   const onPhotoClickRef = useRef(null);  // dipanggil DOM popup → buka lightbox foto
   const [lightboxRow, setLightboxRow] = useState(null); // aset yang fotonya dibuka
+  // Alat UKUR (jarak & luas). Perhitungan geodesik ada di lib/ukurPeta.js.
+  const [ukurOn, setUkurOn] = useState(false);
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [truncated, setTruncated] = useState(false);
@@ -330,6 +333,10 @@ const AssetMapFullView = memo(function AssetMapFullView({
   const onQuickAddRef = useRef(onQuickAdd);
   useEffect(() => { onEditRef.current = onEditAsset; onDeleteRef.current = onDeleteAsset; onSaveRef.current = onSaveCoords; onCloseRef.current = onClose; onQuickAddRef.current = onQuickAdd; });
   onPhotoClickRef.current = (row) => setLightboxRow(row);
+
+  // Alat ukur: klik menambah titik, klik-kanan/Backspace membatalkan satu titik,
+  // Escape mengosongkan. Lapisannya dibuang otomatis saat mode dimatikan.
+  const ukur = useUkurPeta(mapRef, { aktif: ukurOn });
 
   // Back HP menutup lembar peta (kembali ke baris data), bukan keluar app.
   useBackGuard(useCallback(() => onCloseRef.current?.(), []));
@@ -1299,6 +1306,10 @@ const AssetMapFullView = memo(function AssetMapFullView({
               <ImageIcon className={`w-4 h-4 mr-2 ${markerStyle === "photo" ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground"}`} />
               Gaya Marker: {markerStyle === "photo" ? "Foto (sampul)" : "Pin"}
             </DropdownMenuItem>
+            <DropdownMenuItem className="min-h-[42px]" onClick={() => setUkurOn((v) => !v)} data-testid="map-menu-ukur">
+              <Ruler className={`w-4 h-4 mr-2 ${ukurOn ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`} />
+              Alat Ukur: {ukurOn ? "Aktif" : "Mati"}
+            </DropdownMenuItem>
             {canSelect && (
               <>
                 <DropdownMenuSeparator />
@@ -1531,6 +1542,56 @@ const AssetMapFullView = memo(function AssetMapFullView({
                 ? "Tidak ada aset berkoordinat yang cocok dengan filter aktif"
                 : "Belum ada aset dengan titik koordinat di kegiatan ini"}
             </span>
+          </div>
+        )}
+
+        {/* ── Panel ALAT UKUR (kiri atas, di bawah kontrol zoom) ──
+            Ditempatkan di kiri supaya tak menutupi panel Lapis Denah di kanan.
+            `pointer-events-none` pada wadah + `auto` pada kartunya: pengukuran
+            butuh klik menembus ke PETA, bukan tertahan panel. */}
+        {ukurOn && (
+          <div className="absolute left-2 top-2 z-[600] pointer-events-none" data-peta-panel="ukur">
+            <div className="pointer-events-auto rounded-lg border border-amber-500/50 bg-background/95 backdrop-blur shadow-lg px-2.5 py-2 w-[13rem] max-w-[70vw]">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Ruler className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                <span className="text-[11px] font-bold flex-1 truncate">Alat Ukur</span>
+                <button type="button" onClick={() => setUkurOn(false)} aria-label="Tutup alat ukur"
+                  className="w-5 h-5 rounded flex items-center justify-center hover:bg-muted min-w-0 min-h-0"
+                  data-testid="map-ukur-tutup"><X className="w-3 h-3" /></button>
+              </div>
+              {ukur.titik.length === 0 ? (
+                <p className="text-[10px] text-muted-foreground leading-snug">
+                  Ketuk peta untuk menandai titik. Klik kanan / tekan lama membatalkan satu titik.
+                </p>
+              ) : (
+                <div className="space-y-0.5 text-[11px]">
+                  <p className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Titik</span>
+                    <b className="tabular-nums">{ukur.ringkas.jumlahTitik}</b>
+                  </p>
+                  <p className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Panjang</span>
+                    <b className="tabular-nums" data-testid="map-ukur-panjang">{ukur.ringkas.teksPanjang}</b>
+                  </p>
+                  {ukur.ringkas.teksLuas && (
+                    <p className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">Luas</span>
+                      <b className="tabular-nums text-amber-700 dark:text-amber-400" data-testid="map-ukur-luas">{ukur.ringkas.teksLuas}</b>
+                    </p>
+                  )}
+                </div>
+              )}
+              {ukur.titik.length > 0 && (
+                <div className="flex gap-1 mt-1.5">
+                  <button type="button" onClick={ukur.undo}
+                    className="flex-1 h-6 rounded border border-border text-[10px] font-semibold hover:bg-muted min-w-0 min-h-0"
+                    data-testid="map-ukur-undo">Batal 1</button>
+                  <button type="button" onClick={ukur.bersihkan}
+                    className="flex-1 h-6 rounded border border-border text-[10px] font-semibold hover:bg-muted min-w-0 min-h-0"
+                    data-testid="map-ukur-bersih">Kosongkan</button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

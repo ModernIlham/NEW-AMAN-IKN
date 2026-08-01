@@ -67,6 +67,43 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#675] Alat ukur jarak & luas di Peta Aset dan Peta Kolaborasi — 2026-08-01
+
+Permintaan pemilik: fitur *measure* di halaman peta inventarisasi aset, dan di
+peta kolaborasi juga.
+
+Ketuk peta untuk menandai titik; panjang tiap ruas muncul sebagai label di
+sepanjang jalur, dan begitu titiknya ≥3 bidangnya tertutup sendiri sehingga
+luasnya ikut terbaca. Klik kanan / tekan lama membatalkan satu titik, `Escape`
+mengosongkan — tanpa dialog konfirmasi, karena saat mengukur di lapangan tangan
+sedang sibuk dan konfirmasi memutus alur.
+
+**Geodesik, bukan planar.** Peta digambar dalam proyeksi Web Mercator, dan
+menghitung luas langsung dari koordinat layar akan MELEBIH-LEBIHKAN hasil makin
+jauh dari khatulistiwa. Untuk IKN (±1° LS) galatnya kecil, tetapi angka luas di
+aplikasi ini dipakai untuk hal yang serius — SBSK, sengketa batas, laporan BMN.
+Maka jarak memakai haversine dan luas memakai rumus luas bola (*spherical
+excess*).
+
+Satuannya mengikuti kebiasaan setempat: meter di bawah 1 km, kilometer di
+atasnya, dan **hektar** begitu luasnya ≥1 ha — supaya angkanya bisa langsung
+dibandingkan dengan sertifikat tanah tanpa dihitung ulang.
+
+Perhitungannya dipisah ke `lib/ukurPeta.js` (murni, 23 uji) dan perkabelan
+Leaflet-nya ke `hooks/useUkurPeta.js` yang **dipakai bersama kedua peta** —
+dua salinan pasti menyimpang, dan penyimpangan pada alat ukur berarti dua angka
+berbeda untuk bidang yang sama.
+
+Satu cacat ditemukan oleh ujinya sendiri: `Number(x.toFixed(2)).toLocaleString()`
+membuang nol di belakang, sehingga presisinya tak konsisten — "5,23 m" tetapi
+"5,2 m". Untuk angka yang masuk berita acara itu tidak baik; format kini
+memaksa jumlah desimal, kecuali nilai nol yang tetap ditulis "0 m" (belum ada
+yang diukur, bukan pernyataan presisi).
+
+**Uji:** 329 uji frontend (23 baru), lint & build bersih.
+
+---
+
 ## [#674] Kompresi gambar berhenti gagal diam-diam — sebabnya kini terlihat — 2026-08-01
 
 Laporan pemilik: "kompresi dengan Compresto tidak berfungsi". Menelusurinya

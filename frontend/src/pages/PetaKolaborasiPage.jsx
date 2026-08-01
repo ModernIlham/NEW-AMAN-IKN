@@ -10,11 +10,12 @@ import { toast } from "sonner";
 import {
   MapPin, MessageSquarePlus, Plus, X, Loader2, Send, Users, Clock,
   AlertTriangle, RefreshCcw, WifiOff, Layers, Boxes, Trash2, ShieldCheck,
-  Eraser, MousePointerClick, MessageSquare, ChevronLeft, ChevronRight, ImageIcon,
+  Eraser, MousePointerClick, MessageSquare, ChevronLeft, ChevronRight, ImageIcon, Ruler,
 } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../components/ui/select";
+import { useUkurPeta } from "../hooks/useUkurPeta";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -206,6 +207,7 @@ export default function PetaKolaborasiPage() {
     try { return localStorage.getItem("aman_petakolab_marker_style") === "photo" ? "photo" : "pin"; }
     catch { return "pin"; }
   });
+  const [ukurOn, setUkurOn] = useState(false);           // alat ukur jarak & luas
   const [moderasi, setModerasi] = useState(false);       // mode seleksi (operator)
   const [terpilih, setTerpilih] = useState(() => new Set()); // id titik kolaborasi terpilih
 
@@ -223,6 +225,8 @@ export default function PetaKolaborasiPage() {
   const clusterOnRef = useRef(true);
   const bolehModerasiRef = useRef(false);
   const roRef = useRef(null);
+  // Alat ukur dipakai bersama dengan Peta Aset — satu perilaku, satu rumus.
+  const ukur = useUkurPeta(mapRef, { aktif: ukurOn });
   useEffect(() => { modeTambahRef.current = modeTambah; }, [modeTambah]);
   useEffect(() => { dipilihRef.current = dipilih; }, [dipilih]);
   useEffect(() => { terpilihRef.current = terpilih; }, [terpilih]);
@@ -780,6 +784,15 @@ export default function PetaKolaborasiPage() {
             <MousePointerClick className="w-4 h-4" />
           </button>
         )}
+        <button
+          type="button" onClick={() => setUkurOn((v) => !v)} aria-pressed={ukurOn}
+          aria-label={ukurOn ? "Alat ukur: aktif" : "Alat ukur"}
+          className={`h-8 w-8 rounded-lg border flex items-center justify-center flex-shrink-0 transition-colors ${ukurOn ? "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400" : "border-border text-foreground/80 hover:bg-muted"}`}
+          title="Alat ukur jarak & luas — ketuk peta untuk menandai titik"
+          data-testid="peta-kolab-ukur"
+        >
+          <Ruler className="w-4 h-4" />
+        </button>
         {/* Muat ulang memakai `menyegarkan`, BUKAN `loading`: peta tetap terpasang
             selama data diambil (lihat catatan di deklarasi state). */}
         <button
@@ -815,6 +828,40 @@ export default function PetaKolaborasiPage() {
       {/* Peta */}
       <div className="relative flex-1 min-h-0">
         <div ref={mapElRef} className="absolute inset-0 z-0" data-testid="peta-kolaborasi-map" />
+
+        {/* Bacaan ALAT UKUR — kiri atas, di bawah kontrol zoom Leaflet. */}
+        {ukurOn && (
+          <div className="absolute left-2 top-2 z-[600] pointer-events-none" data-peta-panel="ukur">
+            <div className="pointer-events-auto rounded-lg border border-amber-500/50 bg-background/95 backdrop-blur shadow-lg px-2.5 py-2 w-[13rem] max-w-[70vw]">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Ruler className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                <span className="text-[11px] font-bold flex-1 truncate">Alat Ukur</span>
+                <button type="button" onClick={() => setUkurOn(false)} aria-label="Tutup alat ukur"
+                  className="w-5 h-5 rounded flex items-center justify-center hover:bg-muted min-w-0 min-h-0"
+                  data-testid="peta-kolab-ukur-tutup"><X className="w-3 h-3" /></button>
+              </div>
+              {ukur.titik.length === 0 ? (
+                <p className="text-[10px] text-muted-foreground leading-snug">
+                  Ketuk peta untuk menandai titik. Klik kanan / tekan lama membatalkan satu titik.
+                </p>
+              ) : (
+                <div className="space-y-0.5 text-[11px]">
+                  <p className="flex justify-between gap-2"><span className="text-muted-foreground">Titik</span><b className="tabular-nums">{ukur.ringkas.jumlahTitik}</b></p>
+                  <p className="flex justify-between gap-2"><span className="text-muted-foreground">Panjang</span><b className="tabular-nums" data-testid="peta-kolab-ukur-panjang">{ukur.ringkas.teksPanjang}</b></p>
+                  {ukur.ringkas.teksLuas && (
+                    <p className="flex justify-between gap-2"><span className="text-muted-foreground">Luas</span><b className="tabular-nums text-amber-700 dark:text-amber-400" data-testid="peta-kolab-ukur-luas">{ukur.ringkas.teksLuas}</b></p>
+                  )}
+                </div>
+              )}
+              {ukur.titik.length > 0 && (
+                <div className="flex gap-1 mt-1.5">
+                  <button type="button" onClick={ukur.undo} className="flex-1 h-6 rounded border border-border text-[10px] font-semibold hover:bg-muted min-w-0 min-h-0" data-testid="peta-kolab-ukur-undo">Batal 1</button>
+                  <button type="button" onClick={ukur.bersihkan} className="flex-1 h-6 rounded border border-border text-[10px] font-semibold hover:bg-muted min-w-0 min-h-0" data-testid="peta-kolab-ukur-bersih">Kosongkan</button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Tombol Tambah Titik (FAB) */}
         {bolehTitik && (
