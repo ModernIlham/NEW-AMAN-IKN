@@ -67,9 +67,13 @@ const StatsBar = memo(({ stats, inventoryMode, setInventoryMode, isOnline, pendi
       </div>
     )}
 
-    {/* Large Desktop (lg+): stats grid. Total Nilai gets a wider column
-        (1.6fr) because the rupiah figure is far longer than the count cards. */}
-    <div className="hidden lg:grid grid-cols-[1fr_1.6fr_1fr_1fr_auto] gap-3">
+    {/* Desktop lebar (xl+): grid label-kiri nilai-kanan. Batasnya SENGAJA xl,
+        bukan lg: pada 1024 px (iPad Pro portrait — tepat di ambang lg) empat
+        kartu sebaris membuat nilainya terpotong jadi "1..", "Rp 2.30…" —
+        laporan lapangan berscreenshot. Tata letak bertumpuk di bawah justru
+        muat, jadi 1024–1279 kini memakainya. Total Nilai tetap dapat kolom
+        lebih lebar (1.6fr) karena angka rupiahnya jauh lebih panjang. */}
+    <div className="hidden xl:grid grid-cols-[1fr_1.6fr_1fr_1fr_auto] gap-3">
       {[
         { label: "Total Aset", value: stats.totalAssets.toLocaleString('id-ID'), color: "text-foreground" },
         { label: "Total Nilai", value: `Rp ${stats.totalValue}`, color: "text-blue-600 dark:text-blue-400" },
@@ -78,7 +82,9 @@ const StatsBar = memo(({ stats, inventoryMode, setInventoryMode, isOnline, pendi
       ].map((s, i) => (
         <div key={i} className="min-w-0 bg-card rounded-xl border border-border px-3.5 py-2 shadow-elev-1 hover:shadow-elev-2 transition-shadow duration-180 flex items-center justify-between gap-2" data-testid={`stat-card-${i}`}>
           <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider flex-shrink-0">{s.label}</div>
-          <div className={`text-xl font-bold ${s.color} truncate text-right`}>{s.value}</div>
+          {/* title = nilai utuh: bila suatu saat tetap terpotong (angka
+              triliunan), arahkan kursor/tekan lama masih menunjukkan penuh. */}
+          <div className={`text-xl font-bold ${s.color} truncate text-right tabular-nums`} title={s.value}>{s.value}</div>
         </div>
       ))}
       {/* Desktop (lg+): saklar ikon-saja (hemat ruang; label lewat tooltip/
@@ -91,9 +97,10 @@ const StatsBar = memo(({ stats, inventoryMode, setInventoryMode, isOnline, pendi
       />
     </div>
 
-    {/* Tablet / Phone Landscape (sm to lg): Compact stats + inline toggle.
+    {/* Tablet s.d. desktop sempit (sm–xl): kartu bertumpuk (label di atas,
+        nilai di bawah) — bentuk yang tetap muat pada 1024 px.
         items-stretch so the toggle card matches the stat cards' height. */}
-    <div className="hidden sm:flex lg:hidden items-stretch gap-2">
+    <div className="hidden sm:flex xl:hidden items-stretch gap-2">
       {[
         { label: "Total Aset", value: stats.totalAssets.toLocaleString('id-ID'), color: "text-foreground" },
         { label: "Total Nilai", value: `Rp ${stats.totalValue}`, color: "text-blue-600 dark:text-blue-400" },
@@ -102,7 +109,7 @@ const StatsBar = memo(({ stats, inventoryMode, setInventoryMode, isOnline, pendi
       ].map((s, i) => (
         <div key={i} className={`${i === 1 ? 'flex-[1.7]' : 'flex-1'} min-w-0 bg-card rounded-xl border border-border px-2.5 py-2 shadow-elev-1`} data-testid={`stat-card-compact-${i}`}>
           <div className="text-[9px] text-muted-foreground font-medium uppercase tracking-wider leading-tight">{s.label}</div>
-          <div className={`text-base font-bold ${s.color} mt-0.5 truncate`}>{s.value}</div>
+          <div className={`text-base font-bold ${s.color} mt-0.5 truncate tabular-nums`} title={s.value}>{s.value}</div>
         </div>
       ))}
       <InventoryModeSwitch

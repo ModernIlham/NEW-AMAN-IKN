@@ -67,6 +67,64 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#676] Referensi persediaan 16 digit dari PDF SAKTI + UI iPad/HP + Catat Perolehan lega — 2026-08-01
+
+### Referensi barang persediaan 16 digit — impor langsung dari PDF SAKTI
+
+Di SAKTI, barang persediaan beridentitas kode 16 digit: 10 digit kodefikasi +
+6 digit kode urut yang LAHIR dari pendaftaran satker itu sendiri — daftarnya
+berbeda antar satker dan berubah seiring waktu. Fondasi 16 digit di aplikasi
+ini sudah ada sejak lama (`KODE_PENUH_LEN=16`, generator urut per satker,
+kode & NUP non-editable); yang baru:
+
+- **Parser `persediaan_referensi.py`** (murni, 17 uji) membaca laporan SAKTI
+  "UC_PER032 — Referensi Tabel Barang Persediaan" — terbukti pada PDF asli
+  kiriman pemilik: **708 item terbaca, 0 galat**, identitas UAKPB
+  (`126.01.1600.691778.000.KP` → satker `691778`) terdeteksi otomatis.
+- **Endpoint `POST /persediaan/referensi-sakti-pdf`** dua tahap: pratinjau
+  (baru/berubah/tetap + contoh) lalu terapkan. PDF milik satker LAIN ditolak
+  dengan menyebut kedua kodenya. Barang baru memakai kode 16 digit APA ADANYA
+  dari PDF; yang sudah ada hanya diperbarui nama & satuan; TIDAK ada yang
+  dihapus (laporan bisa terunduh terfilter).
+- **Guard hapus diperkuat**: kode yang PERNAH bertransaksi tak bisa dihapus
+  walau stok sudah nol — dulu guard hanya menahan `stok > 0`, sehingga kode
+  ber-riwayat bisa lenyap dan memutus jejak audit LPB/jurnal/pengadaan.
+  Sesuai keputusan pemilik: kode ber-transaksi hanya boleh diubah nama &
+  satuannya.
+- UI: menu **Data → Impor Referensi SAKTI (PDF)** di halaman Persediaan
+  dengan dialog pratinjau (kartu Total/Baru/Berubah/Tetap + contoh baris).
+
+### Catat Perolehan (Pengadaan) — lega + picker kodefikasi + klarifikasi BAST
+
+- Dialog diperlebar (`max-w-2xl`), tiap barang jadi KARTU berlabel — uraian
+  satu baris penuh, kode/jumlah/harga berlabel jelas.
+- **Kode barang kini ber-picker dari Referensi Kodefikasi** (ketik kode/nama →
+  pilih; uraian ikut terisi bila kosong). Dulu diketik buta — salah satu digit
+  membuat pemilahan aset/persediaan salah kandang.
+- **Klarifikasi BAST**: label menjadi "No. BAST (Penyedia → PPK)" plus catatan:
+  BAST ini serah terima dari Penyedia kepada PPK, penomorannya dibuat PPK
+  sendiri — cukup catat nomornya + centang dokumen. Serah terima PPK → KPB
+  akan dibuatkan dokumennya lewat tombol tersendiri (menyusul).
+
+### Kartu statistik iPad Pro & indikator kuota
+
+- Kartu Total Aset/Total Nilai/Aktif/Maintenance terpotong ("1..",
+  "Rp 2.30…") tepat di 1024 px: tata letak label-kiri nilai-kanan tak muat di
+  ambang bawah `lg`. Grid mendatar kini mulai `xl` (≥1280); 1024–1279 memakai
+  kartu bertumpuk yang memang muat. Nilai diberi `title` (nilai utuh saat
+  disentuh lama) + `tabular-nums`.
+- **Indikator kuota Tinify dkk**: rinciannya dulu hanya hidup di Tooltip
+  (hover) sementara klik men-toggle state yang TAK PERNAH dirender — di
+  tablet/HP mengetuknya tak menampilkan apa-apa. Kini Popover (klik, jalan di
+  sentuh & kursor), chip lebih ringkas (bar mini hanya di layar lebar), dan
+  varian HP jadi tombol angka BERTUMPUK sisa/batas yang hemat ruang kiri-kanan
+  — dua-duanya membuka panel rincian yang sama.
+
+**Uji:** 1.390 backend (17 baru) + 329 frontend, lint & build bersih, parser
+terverifikasi pada PDF SAKTI asli.
+
+---
+
 ## [#675] Alat ukur jarak & luas di Peta Aset dan Peta Kolaborasi — 2026-08-01
 
 Permintaan pemilik: fitur *measure* di halaman peta inventarisasi aset, dan di
