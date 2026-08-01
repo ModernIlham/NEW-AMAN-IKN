@@ -67,6 +67,61 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#674] Kompresi gambar berhenti gagal diam-diam — sebabnya kini terlihat — 2026-08-01
+
+Laporan pemilik: "kompresi dengan Compresto tidak berfungsi". Menelusurinya
+membuka dua cacat yang saling menutupi — dan keduanya menjelaskan kenapa
+masalahnya sulit dilihat.
+
+**1. Setiap kegagalan ditelan menjadi `return None`.** Kunci salah, host tak
+terjangkau, kontrak API berubah, kuota habis — semuanya menghasilkan hasil yang
+persis sama. Rantai lalu jatuh ke Pillow dan endpoint menjawab
+`success: true, method: "pillow"`. Dari kursi operator, layanan itu "tidak
+berfungsi" TANPA satu pun petunjuk sebabnya; satu-satunya jejak ada di log
+server yang tak bisa dia buka.
+
+**2. Indikatornya berbohong.** `"available": bool(COMPRESTO_API_KEY)` — sekadar
+"env var terisi", bukan "layanan menjawab". Kebohongan yang sama pernah
+diperbaiki untuk iLovePDF di `[#665]`; di sini ia masih hidup, dan justru itulah
+yang membuat layar tampak sehat sementara kompresinya tak pernah jalan.
+
+Perbaikan:
+
+- Modul baru `kompresi_diagnostik.py` (murni, 13 uji) mencatat hasil percobaan
+  TERAKHIR per layanan: berhasil/gagal, kode HTTP, sebab, dan waktunya.
+- Setiap cabang kegagalan di Compresto & Uploadcare kini mencatat sebabnya,
+  termasuk cuplikan badan respons — di situlah layanan biasanya menjelaskan
+  penolakannya.
+- Status HTTP diterjemahkan jadi kalimat yang berguna: 401 "Kunci API ditolak",
+  404 "Alamat endpoint tidak ditemukan — kontrak API mungkin sudah berubah",
+  413 "Berkas terlalu besar", dan seterusnya.
+- `available` kini berarti **percobaan terakhir memang berhasil**. Kunci
+  terpasang tapi belum pernah dipakai dilaporkan `belum_dicoba` — bukan
+  "tersedia", karena tak ada satu pun bukti layanannya menjawab.
+- Skrip `scripts/verifikasi_kompresi_gambar.py` mengirim satu gambar uji ke
+  tiap layanan yang kuncinya terpasang dan melaporkan apa yang sebenarnya
+  terjadi. Gambar ujinya sengaja bergradasi, bukan warna polos: berkas polos
+  sudah minimal sehingga layanan yang bekerja benar pun bisa mengembalikan
+  berkas lebih besar — dan itu terbaca sebagai kegagalan palsu.
+
+### Yang TIDAK bisa dikerjakan dari sini
+
+Kontrak API Compresto **tidak diverifikasi**. Kebijakan jaringan lingkungan
+pengembangan memblokir seluruh koneksi keluar (gateway menjawab `403` pada
+`CONNECT`, terbukti bahkan untuk `upload.uploadcare.com`), dan kunci API-nya
+memang tak boleh berada di sini. Menebak-ubah alamat endpoint atau nama header
+tanpa bukti hanya akan menukar satu kegagalan senyap dengan kegagalan senyap
+lain.
+
+Karena itu yang dikerjakan adalah membuat kegagalannya **terlihat dan
+terbaca**. Jalankan skrip verifikasi di VPS dengan kunci di `.env`; satu kali
+jalan akan menyebut persis apa yang salah — alamat, kunci, atau nama field.
+
+**Uji:** 1.373 uji backend (13 baru), compileall bersih, pemeriksa rahasia
+bersih.
+
+---
+
 ## [#673] Impor Excel: tanggal akhirnya divalidasi, dan dropdown kategori memuat SELURUH kodefikasi — 2026-08-01
 
 ### Kolom tanggal tak pernah divalidasi sama sekali
