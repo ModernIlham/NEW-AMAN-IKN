@@ -67,6 +67,74 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#673] Impor Excel: tanggal akhirnya divalidasi, dan dropdown kategori memuat SELURUH kodefikasi — 2026-08-01
+
+### Kolom tanggal tak pernah divalidasi sama sekali
+
+`parse_excel_content` melakukan `str(cell or '')` dan apa pun hasilnya langsung
+masuk basis data. Tiga bentuk sampah lolos diam-diam:
+
+1. Sel bertipe tanggal dibaca openpyxl sebagai `datetime`, lalu `str()`
+   membuatnya `"2024-01-01 00:00:00"` — beda dari tanggal yang ditulis
+   aplikasi sendiri (`YYYY-MM-DD`), sehingga urutan & penyaringan meleset.
+2. Sel berformat Umum berisi **serial date** Excel (mis. `45658`) masuk apa
+   adanya sebagai teks angka.
+3. Ketikan bebas (`17 Agustus 2025`, `32/13/2025`) diterima utuh — termasuk
+   tanggal yang tak pernah ada.
+
+Modul baru `impor_tanggal.py` (murni, 30 uji) menutup ketiganya:
+
+- **Format resmi `DD/MM/YYYY`** — sesuai kebiasaan dokumen resmi Indonesia,
+  dipilih pemilik. Longgar soal nol di depan (`3/4/2025` = 3 April), KETAT
+  soal urutan.
+- Bentuk lain yang tak ambigu tetap diterima agar berkas lama tak tertolak:
+  ISO `YYYY-MM-DD`, `DD-MM-YYYY`, `DD.MM.YYYY`.
+- **Serial Excel** dikonversi dengan basis `1899-12-30` — bukan `1899-12-31`;
+  Excel keliru menganggap 1900 tahun kabisat, dan salah satu hari di sini
+  menggeser seluruh tanggal.
+- Serial di wilayah bug 1900 (1–60) ditolak: angka sekecil itu jauh lebih
+  mungkin salah ketik daripada tanggal sungguhan.
+- Pagar kewarasan tahun 1945–2200.
+- Semua hasil dinormalkan ke satu bentuk `YYYY-MM-DD`.
+
+Sesuai keputusan pemilik, **satu sel tanggal yang tak terbaca membatalkan
+seluruh impor** — perilaku ini sudah menjadi desain yang ada (`If any errors,
+reject ALL data`), jadi tinggal disambungkan. Pesan galat menyebut nomor
+baris, nama kolom, dan nilai aslinya, dan nilai asli itu **dibiarkan di
+tempatnya** supaya operator masih bisa melihat apa yang dia ketik.
+
+### Dropdown kategori hanya memuat sebagian
+
+Plafonnya ketemu: `to_list(500)` di generator template — sementara endpoint
+`GET /categories/all` memakai `50000`. Daftar kodefikasi barang BMN berisi
+ribuan entri, jadi dropdown memotongnya diam-diam **dan tanpa urutan**,
+sehingga 500 mana yang lolos pun tak menentu. Batas kini disamakan dan hasilnya
+diurutkan per `kode_aset`.
+
+### Memilih kategori kini mengisi `asset_code`
+
+Kode barang & deskripsi berpasangan satu-satu di Kelola Kategori Aset, jadi
+pilihan kategori sudah cukup menentukan kodenya. Dikerjakan dua lapis:
+
+- **Di template** — rumus `INDEX`/`MATCH` ke lembar tersembunyi `_lists`
+  (kolom A = label, kolom B = kode sebagai TEKS agar angka berawalan nol tak
+  dipangkas). Rumus, bukan makro: berkas tetap `.xlsx` biasa tanpa peringatan
+  keamanan, dan operator tetap bisa menimpanya dengan ketikan sendiri.
+- **Di server** — bila `asset_code` sampai kosong, impor mengisinya sendiri
+  dari kategori. Ini bukan hiasan: uji asap membuktikan xlsxwriter **tidak**
+  menulis nilai ter-cache, sehingga berkas yang belum pernah dibuka di aplikasi
+  spreadsheet terbaca `None` oleh openpyxl. Jalur CSV juga tak punya rumus
+  sama sekali.
+
+Label ganda (dua kode berbeda berdeskripsi sama) **sengaja tidak dipetakan**
+di kedua lapis — menebak salah satunya berarti mencatat kode barang yang
+keliru, jauh lebih berbahaya daripada meminta operator mengetik.
+
+**Uji:** 1.360 uji backend (30 baru untuk `impor_tanggal`) + uji asap
+pembuatan berkas .xlsx dan pembacaan ulangnya.
+
+---
+
 ## [#672] Unduh foto asli berhenti "sering gagal" + pencarian membawa peta ke hasilnya — 2026-08-01
 
 ### Unduh foto asli sering gagal, tapi berhasil setelah dibuka Layar Penuh

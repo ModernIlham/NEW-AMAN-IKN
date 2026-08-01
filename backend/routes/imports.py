@@ -9,6 +9,7 @@ import csv as csv_module
 
 from asset_fields import ASSET_SCALAR_FIELDS, import_row_value
 from spasial_utils import terapkan_geo, sisip_geo_ke_update
+from impor_tanggal import normalkan_tanggal_baris
 from db import db
 from models import AssetCreate
 from auth_utils import require_user, require_writer
@@ -241,6 +242,34 @@ async def import_assets(request: Request, file: UploadFile = File(...), force_up
         valid_categories = [cat.get("label", "") for cat in categories] + [cat.get("kode_aset", "") for cat in categories if cat.get("kode_aset")]
         # Map kode_aset to label for validation
         category_map = {cat.get("kode_aset", ""): cat.get("label", "") for cat in categories if cat.get("kode_aset")}
+
+        # Peta BALIK label → kode_aset, HANYA untuk label yang unik. Dipakai
+        # sebagai jaring pengaman auto-isi `asset_code`: template menaruh rumus
+        # yang mengisi kode dari kategori terpilih, tetapi rumus baru punya
+        # nilai setelah berkasnya dibuka & disimpan di aplikasi spreadsheet —
+        # dan jalur CSV tak punya rumus sama sekali. Label ganda sengaja
+        # DILEWATI: menebak salah satu dari dua kode akan mencatat kode barang
+        # yang keliru, jauh lebih berbahaya daripada meminta operator mengetik.
+        _hitung_label = {}
+        for cat in categories:
+            lab = str(cat.get("label") or "").strip()
+            if lab:
+                _hitung_label[lab] = _hitung_label.get(lab, 0) + 1
+        label_ke_kode = {}
+        for cat in categories:
+            lab = str(cat.get("label") or "").strip()
+            kode = str(cat.get("kode_aset") or "").strip()
+            if lab and kode and _hitung_label.get(lab) == 1:
+                label_ke_kode[lab] = kode
+
+        # Isi asset_code yang kosong dari kategori — hanya bila kode hasil
+        # pemetaan itu sendiri lolos validasi 10 digit.
+        for row in rows:
+            if str(row.get("asset_code") or "").strip():
+                continue
+            kode = label_ke_kode.get(str(row.get("category") or "").strip())
+            if kode and not validate_asset_code(kode):
+                row["asset_code"] = kode
         
         # Get existing assets in this activity ONCE — peta (kode, NUP) → doc
         # dipakai ulang oleh SEMUA loop di bawah (REVIEW-9 R4: dulu tiap baris
@@ -280,6 +309,16 @@ async def import_assets(request: Request, file: UploadFile = File(...), force_up
                 else:
                     seen_keys[kr_key] = data_start_row + idx
         
+        # Kolom tanggal dibaca & DINORMALKAN sebelum validasi baris. Sebelum
+        # ini tak ada pemeriksaan tanggal sama sekali — sel bertipe tanggal
+        # masuk sebagai "2024-01-01 00:00:00", serial Excel masuk sebagai
+        # "45658", dan tanggal mustahil ("32/13/2025") tersimpan apa adanya.
+        # Sesuai keputusan pemilik: satu sel tanggal yang tak terbaca
+        # MEMBATALKAN seluruh impor (lihat gerbang `all_errors` di bawah),
+        # jadi tak ada tanggal salah yang menyelinap ke pembukuan.
+        for idx, row in enumerate(rows):
+            all_errors.extend(normalkan_tanggal_baris(row, data_start_row + idx))
+
         for idx, row in enumerate(rows):
             row_errors = validate_import_row(row, valid_categories, data_start_row + idx, category_map)
             all_errors.extend(row_errors)

@@ -41,7 +41,9 @@ templates_router = APIRouter()
 # ----------------------------------------------------------------------------
 ASSET_TEMPLATE_SCHEMA = [
     {"field": "asset_code", "required": True, "width": 15,
-     "rule": "Wajib. Tepat 10 digit angka.",
+     "rule": "Wajib. Tepat 10 digit angka. TERISI OTOMATIS saat kolom "
+             "'category' dipilih dari dropdown — boleh juga diketik sendiri "
+             "(ketikan menimpa isian otomatis).",
      "sample1": "3030103001", "sample2": "3050105007", "dropdown": None},
     {"field": "NUP", "required": False, "width": 8,
      "rule": "Nomor Urut Pendaftaran (angka).",
@@ -67,8 +69,10 @@ ASSET_TEMPLATE_SCHEMA = [
      "rule": "Nomor seri pabrikan.",
      "sample1": "SN123456", "sample2": "SN789012", "dropdown": None},
     {"field": "purchase_date", "required": False, "width": 12,
-     "rule": "Format: YYYY-MM-DD.",
-     "sample1": "2024-01-01", "sample2": "2024-01-02", "dropdown": None},
+     "rule": "Tanggal — format DD/MM/YYYY (contoh: 17/08/2025). "
+             "Sel bertipe Tanggal di Excel juga diterima. "
+             "Bila tak terbaca, SELURUH impor dibatalkan.",
+     "sample1": "17/08/2025", "sample2": "02/01/2024", "dropdown": None},
     {"field": "purchase_price", "required": False, "width": 15,
      "rule": "Harga dalam angka tanpa titik/koma.",
      "sample1": "15000000", "sample2": "2500000", "dropdown": None},
@@ -181,9 +185,9 @@ ASSET_TEMPLATE_SCHEMA = [
      "rule": "Keterangan detail sengketa.",
      "sample1": "", "sample2": "", "dropdown": None},
     {"field": "garansi_hingga", "required": False, "width": 16,
-     "rule": "Tanggal berakhir garansi (YYYY-MM-DD); rentang lazim dihitung "
-             "sejak tanggal perolehan.",
-     "sample1": "2027-05-31", "sample2": "", "dropdown": None},
+     "rule": "Tanggal berakhir garansi — format DD/MM/YYYY (contoh: 31/05/2027); "
+             "rentang lazim dihitung sejak tanggal perolehan.",
+     "sample1": "31/05/2027", "sample2": "", "dropdown": None},
     {"field": "garansi_jenis", "required": False, "width": 18,
      "rule": "Jenis/tipe garansi (mis. Pabrikan, Distributor, Toko, "
              "Purna Jual).",
@@ -238,12 +242,46 @@ async def download_xlsx_template():
     Headers, sample data, dropdowns, widths, and Panduan sheet are all derived
     from a single ASSET_TEMPLATE_SCHEMA list, so they cannot drift out of sync.
     """
-    # Resolve dynamic dropdown values (categories from DB)
-    categories = await db.categories.find({}, {"_id": 0}).to_list(500)
-    cat_labels = [c["label"] for c in categories] if categories else [
-        "Elektronik & IT", "Furniture/Mebel", "Kendaraan",
-        "Mesin & Peralatan", "Lainnya",
-    ]
+    # Kategori dinamis dari DB.
+    #
+    # PLAFON 500 DIBUANG — itu sebab laporan "kategori tidak memuat seluruh
+    # data Kelola Kategori Aset, hanya sebagian saja". Daftar kodefikasi barang
+    # BMN berisi ribuan entri, sedangkan `to_list(500)` memotongnya diam-diam
+    # DAN tanpa urutan, sehingga 500 mana yang lolos pun tak menentu. Batas
+    # kini disamakan dengan endpoint `GET /categories/all` (50.000) supaya satu
+    # sumber kebenaran: apa yang tampil di layar Kelola Kategori = apa yang ada
+    # di dropdown template.
+    categories = await db.categories.find(
+        {}, {"_id": 0, "label": 1, "kode_aset": 1}
+    ).sort("kode_aset", 1).to_list(50000)
+
+    # Pasangan label ↔ kode_aset untuk auto-isi kolom asset_code. Label ganda
+    # (dua kode berbeda dengan deskripsi sama) SENGAJA tak dipetakan: menebak
+    # salah satunya akan mengisi kode barang yang keliru — lebih baik operator
+    # mengetiknya sendiri.
+    hitung_label = {}
+    for c in categories:
+        lab = str(c.get("label") or "").strip()
+        if lab:
+            hitung_label[lab] = hitung_label.get(lab, 0) + 1
+
+    cat_labels, pasangan_kode = [], []
+    terlihat = set()
+    for c in categories:
+        lab = str(c.get("label") or "").strip()
+        if not lab or lab in terlihat:
+            continue
+        terlihat.add(lab)
+        cat_labels.append(lab)
+        kode = str(c.get("kode_aset") or "").strip()
+        if kode and hitung_label.get(lab) == 1:
+            pasangan_kode.append((lab, kode))
+
+    if not cat_labels:
+        cat_labels = [
+            "Elektronik & IT", "Furniture/Mebel", "Kendaraan",
+            "Mesin & Peralatan", "Lainnya",
+        ]
 
     n_cols = len(ASSET_TEMPLATE_SCHEMA)
 
@@ -319,7 +357,45 @@ async def download_xlsx_template():
     # We always create it; xlsxwriter will only reference it for long lists.
     helper = workbook.add_worksheet("_lists")
     helper.hide()
-    helper_col = 0  # each long list occupies one column
+
+    # Kolom A & B DIPESAN untuk pasangan (label kategori → kode_aset) yang
+    # dipakai rumus auto-isi `asset_code`. Daftar dropdown panjang mulai dari
+    # kolom C ke kanan.
+    for i, (lab, kode) in enumerate(pasangan_kode):
+        helper.write_string(i, 0, lab)
+        helper.write_string(i, 1, kode)   # sebagai TEKS: kode barang berawalan 0 tak boleh dipangkas
+    n_pasangan = len(pasangan_kode)
+    helper_col = 2  # daftar panjang menempati satu kolom masing-masing, mulai C
+
+    # ── Auto-isi kolom `asset_code` dari kategori yang dipilih ────────────────
+    # Laporan lapangan: memilih kategori di dropdown tidak mengisi kolom
+    # "asset_code *". Kode barang & deskripsi memang berpasangan satu-satu di
+    # Kelola Kategori Aset, jadi pilihan kategori CUKUP untuk menentukan kodenya.
+    #
+    # Rumus, bukan makro: berkas tetap .xlsx biasa tanpa peringatan keamanan.
+    # Operator tetap bisa MENIMPA sel ini dengan ketikan sendiri — rumus hanya
+    # mengisi selama selnya belum disentuh. Baris contoh (2 baris pertama)
+    # sengaja dilewati agar contoh kode aslinya tetap terlihat.
+    #
+    # Jaring pengaman ada di sisi server: bila sel ini sampai kosong (mis.
+    # berkas tak pernah dibuka di Excel sehingga nilai rumus belum ter-cache,
+    # atau operator memakai CSV), impor mengisi sendiri kode dari kategori.
+    if n_pasangan:
+        kolom_kategori = None
+        for i, c in enumerate(ASSET_TEMPLATE_SCHEMA):
+            if c["field"] == "category":
+                kolom_kategori = _excel_col_letter(i)
+                break
+        if kolom_kategori:
+            baris_pertama_kosong = header_row + 3   # setelah 2 baris contoh
+            for r in range(baris_pertama_kosong, 1001):
+                sel_kategori = f"${kolom_kategori}${r + 1}"
+                ws.write_formula(
+                    r, 0,
+                    f'=IF({sel_kategori}="","",IFERROR(INDEX(_lists!$B$1:$B${n_pasangan},'
+                    f'MATCH({sel_kategori},_lists!$A$1:$A${n_pasangan},0)),""))',
+                    None, "",
+                )
 
     # Data validation dropdowns (rows 5-1000 → user data rows)
     for col, c in enumerate(ASSET_TEMPLATE_SCHEMA):
