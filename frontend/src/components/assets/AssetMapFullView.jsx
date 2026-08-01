@@ -236,6 +236,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
   onSaveCoords,       // (row, lat, lng) => void — simpan koordinat (throw = tolak)
   buildParams,        // () => URLSearchParams — filter aktif dashboard (tanpa page)
   clientFilter,       // (rows) => rows — filter yang sama utk data snapshot offline
+  fitKey = "",        // berubah → peta DIBAWA ke hasil (lihat catatan di bawah)
   activeFilterCount = 0,
   selectedIds = null, // Set<id> aset terpilih di daftar → peta & ekspor hanya ini
   onQuickAdd,         // (lat, lng, nama) => void — tambah cepat aset di titik peta
@@ -251,6 +252,8 @@ const AssetMapFullView = memo(function AssetMapFullView({
   const layerRef = useRef(null);         // L.LayerGroup pin
   const markersRef = useRef(new Map());  // id -> { marker, row, lat, lng, iconKey, draggable }
   const didFitRef = useRef(false);       // fitBounds hanya saat muat pertama / ganti kelompok
+  const mintaFitRef = useRef(false);     // pencarian berubah → bawa tampilan ke hasilnya
+  const fitKeyRef = useRef(fitKey);      // nilai fitKey yang sudah ditindaklanjuti
   const firstLoadRef = useRef(true);     // auto-fit HANYA saat peta pertama dibuka (bukan tiap reload/seleksi)
   const scaleInfoElRef = useRef(null);   // elemen info skala/zoom (diperbarui saat zoom)
   const onPhotoClickRef = useRef(null);  // dipanggil DOM popup → buka lightbox foto
@@ -366,6 +369,11 @@ const AssetMapFullView = memo(function AssetMapFullView({
       const all = Array.from(byId.values());
       setTotal(Math.max(serverTotal, all.length));
       setTruncated(hitCap || all.length < serverTotal); // paging terpotong → beri tahu
+      // Permintaan "bawa ke hasil" DIKONSUMSI DI SINI, bukan saat kata kunci
+      // berubah. Kalau dikonsumsi lebih awal, sinkron marker sempat berjalan
+      // dengan baris LAMA, memakai jatah fit-nya di sana, lalu hasil pencarian
+      // yang sebenarnya tiba tanpa perpindahan tampilan.
+      if (mintaFitRef.current) { mintaFitRef.current = false; didFitRef.current = false; }
       setRows(all.filter((a) => parseCoord(a.koordinat_latitude) !== null && parseCoord(a.koordinat_longitude) !== null));
       setLoadedOnce(true);
     } catch {
@@ -376,6 +384,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
         const filtered = clientFilter ? clientFilter(cached) : cached;
         setTotal(filtered.length);
         setTruncated(false);
+        if (mintaFitRef.current) { mintaFitRef.current = false; didFitRef.current = false; }
         setRows(filtered.filter((a) => parseCoord(a.koordinat_latitude) !== null && parseCoord(a.koordinat_longitude) !== null));
         setLoadedOnce(true);
         toast.info("Peta memakai data snapshot offline");
@@ -395,6 +404,24 @@ const AssetMapFullView = memo(function AssetMapFullView({
     if (firstLoadRef.current) { didFitRef.current = false; firstLoadRef.current = false; }
     load();
   }, [load]);
+
+  // ── Pencarian HARUS membawa tampilan ke hasilnya ──────────────────────────
+  // Laporan lapangan: "mengetik di kotak cari tidak berdampak di halaman peta".
+  // Datanya sebenarnya SUDAH tersaring — `buildParams` ikut membawa kata kunci
+  // dan pin yang tak lolos memang dibuang. Yang tidak terjadi adalah
+  // perpindahan tampilan: `didFitRef` sengaja hanya di-reset pada muat pertama
+  // agar posisi/zoom pengguna tak diacak tiap reload. Akibatnya, di peta yang
+  // sudah diperbesar, satu-satunya pin yang cocok berada JAUH DI LUAR layar —
+  // dan dari kursi pengguna itu tak bisa dibedakan dari "pencarian tak jalan".
+  //
+  // Mencari adalah pengecualian yang sah: pengguna menyebut apa yang dituju,
+  // jadi antarkan ke sana. Filter lain (kategori/lanjutan) tetap TIDAK
+  // memindahkan tampilan.
+  useEffect(() => {
+    if (fitKeyRef.current === fitKey) return;
+    fitKeyRef.current = fitKey;
+    mintaFitRef.current = true;
+  }, [fitKey]);
 
   // Unduh titik peta (KML/KMZ/SHP) lengkap dengan atribut — memakai filter
   // aktif yang SAMA dengan peta/daftar (endpoint /export/geo).

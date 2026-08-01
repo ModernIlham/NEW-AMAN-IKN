@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Loader2, X, ChevronLeft, ChevronRight, MapPin, Tag, User, QrCode, FileCheck, FileX, StickyNote, Download, Maximize2, RotateCw } from "lucide-react";
 import { authMediaUrl } from "../../lib/mediaUrl";
 import { peekAnim } from "../../lib/lightboxAnim";
+import { namaBerkasFoto, pemantauMacet, persenUnduh, pesanGagalUnduh } from "../../lib/unduhFoto";
 import {
   SKALA_MIN, jepitGeser, jarak, skalaCubit, skalaGulir, titikTengah, zoomKeTitik,
 } from "../../lib/zoomPan";
@@ -282,6 +283,8 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
   // ulang saat pindah aset → foto "tersangkut" milik aset lama.
   const builtRef = useRef({ id: asset?.id, count: seed.current.count, version: seed.current.version });
   const [downloading, setDownloading] = useState(false);
+  const [unduhPersen, setUnduhPersen] = useState(null); // null = panjang isi tak diketahui
+  const batalUnduhRef = useRef(null);                   // AbortController unduhan berjalan
   const [rot, setRot] = useState(0); // rotasi tampilan foto (0/90/180/270) — preview saja
   const [fullscreen, setFullscreen] = useState(false); // penampil foto layar penuh DALAM aplikasi
   const closeFullscreen = useCallback(() => setFullscreen(false), []);
@@ -321,30 +324,65 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
   }, [goAsset]);
 
   // Unduh foto ASLI (resolusi penuh) — yang tampil hanya varian preview w=1280.
+  //
+  // KENAPA `timeout: 0`. `axios.defaults.timeout` dipasang 20 detik di App.js
+  // sebagai LANTAI tenggat untuk permintaan data. Foto asli dari kamera HP
+  // berukuran beberapa megabyte; di jaringan lapangan transfernya lewat dari 20
+  // detik dan axios memutusnya di tengah jalan — itulah "sering gagal mengunduh"
+  // yang dilaporkan. Membuka Layar Penuh lebih dulu "menyembuhkannya" hanya
+  // karena <img> mengambil URL yang SAMA tanpa terikat tenggat axios, sehingga
+  // berkasnya tersimpan di cache HTTP dan permintaan ini selesai seketika.
+  //
+  // Tenggat tetap adalah alat yang salah untuk unduhan besar. Bahaya asli yang
+  // dijaga tenggat global — soket menggantung — tetap ditutup, tapi oleh
+  // `pemantauMacet`: yang diputus adalah transfer yang BERHENTI mengalir, bukan
+  // transfer yang lambat namun terus jalan.
   const downloadOriginal = useCallback(async () => {
     const cur = fullAsset || asset;
     const id = cur?.id;
     if (!id) return;
+    // Klik saat sedang berjalan = BATALKAN (tombol berubah jadi silang).
+    if (batalUnduhRef.current) { batalUnduhRef.current.abort(); return; }
+    const ctrl = new AbortController();
+    batalUnduhRef.current = ctrl;
+    let macet = false;
+    const pantau = pemantauMacet(() => { macet = true; try { ctrl.abort(); } catch { /* noop */ } });
     setDownloading(true);
+    setUnduhPersen(null);
     try {
       const url = authMediaUrl(`${API}/assets/${id}/photos/${idx}?v=${builtRef.current.version}`); // tanpa w → asli
-      const res = await axios.get(url, { responseType: "blob" });
-      const type = res.data?.type || "";
-      const ext = type.includes("png") ? "png" : type.includes("webp") ? "webp" : "jpg";
+      const res = await axios.get(url, {
+        responseType: "blob",
+        timeout: 0,
+        signal: ctrl.signal,
+        onDownloadProgress: (e) => {
+          pantau.maju();
+          setUnduhPersen(persenUnduh(e.loaded, e.total));
+        },
+      });
       const blobUrl = URL.createObjectURL(res.data);
       const link = document.createElement("a");
       link.href = blobUrl;
-      link.download = `${(cur.asset_code || cur.NUP || id)}_foto-${idx + 1}.${ext}`;
+      link.download = namaBerkasFoto(cur, idx, res.data?.type);
       document.body.appendChild(link);
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(blobUrl), 1500);
-    } catch {
-      toast.error("Gagal mengunduh foto asli");
+    } catch (err) {
+      // Batal atas permintaan pengguna sendiri tak perlu dilaporkan sebagai galat.
+      const dibatalkanSendiri = !macet
+        && (err?.code === "ERR_CANCELED" || err?.name === "CanceledError" || err?.name === "AbortError");
+      if (!dibatalkanSendiri) toast.error(pesanGagalUnduh(err, macet));
     } finally {
+      pantau.hentikan();
+      batalUnduhRef.current = null;
       setDownloading(false);
+      setUnduhPersen(null);
     }
   }, [fullAsset, asset, idx]);
+
+  // Lightbox ditutup di tengah unduhan → putuskan permintaannya.
+  useEffect(() => () => { try { batalUnduhRef.current?.abort(); } catch { /* noop */ } }, []);
 
   // Putar foto PERMANEN di server (mengubah berkas asli) lalu muat ulang dengan
   // versi baru → thumbnail, galeri, unduh, dan layar penuh SEMUA ikut berputar
@@ -527,15 +565,25 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
             preview (w=1280). */}
         {!loading && photos.length > 0 && (
           <div className="absolute left-2 top-2 z-10 flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()}>
+            {/* Sengaja TIDAK di-`disabled` saat mengunduh: foto asli bisa
+                puluhan MB di jaringan lapangan, dan tombol mati tanpa jalan
+                keluar membuat operator mengira aplikasinya menggantung. Selama
+                berjalan tombol menampilkan persentase dan berfungsi sebagai
+                BATAL. */}
             <button
               onClick={(e) => { e.stopPropagation(); downloadOriginal(); }}
-              disabled={downloading}
-              title="Unduh foto asli (resolusi penuh)"
-              aria-label="Unduh foto asli"
-              className="w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white ring-1 ring-white/40 shadow-lg flex items-center justify-center backdrop-blur-sm transition-colors disabled:opacity-70"
+              title={downloading
+                ? `Mengunduh foto asli${unduhPersen != null ? ` ${unduhPersen}%` : ""} — ketuk untuk membatalkan`
+                : "Unduh foto asli (resolusi penuh)"}
+              aria-label={downloading ? "Batalkan unduhan foto asli" : "Unduh foto asli"}
+              className="w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white ring-1 ring-white/40 shadow-lg flex items-center justify-center backdrop-blur-sm transition-colors"
               data-testid="lightbox-download"
             >
-              {downloading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+              {downloading
+                ? (unduhPersen != null
+                  ? <span className="text-[10px] font-bold tabular-nums" data-testid="lightbox-download-persen">{unduhPersen}%</span>
+                  : <Loader2 className="w-5 h-5 animate-spin" />)
+                : <Download className="w-5 h-5" />}
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); setFullscreen(true); }}
