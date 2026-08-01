@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, ShoppingCart, Plus, Search, Trash2, X, Coins,
   ClipboardCheck, Download, Link2, Paperclip, Upload, PackagePlus,
-  Check, Circle, Boxes, FileDown, PenLine,
+  Check, Circle, Boxes, FileDown, PenLine, FileSignature,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -104,6 +104,9 @@ export default function PengadaanPage({ user, onBack }) {
   // memaksa operator berpindah ke modul Persediaan hanya untuk mencetaknya.
   const [hasilCatat, setHasilCatat] = useState(null);
   const [tautanTtd, setTautanTtd] = useState(null);
+  // Dialog LPB gabungan: {pilih: {id: bool}, saving} — merangkum banyak
+  // BAST PPK → KPB (aset & persediaan) dalam SATU surat laporan.
+  const [lpbGab, setLpbGab] = useState(null);
 
   const muat = useCallback(() => {
     axios.get(`${API}/pengadaan`)
@@ -321,6 +324,68 @@ export default function PengadaanPage({ user, onBack }) {
     }
   };
 
+  // BAST PPK → KPB: serah terima LANJUTAN hasil pengadaan. Nomor BAST yang
+  // diinput operator adalah BAST Penyedia → PPK (dinomori PPK sendiri);
+  // dokumen PPK → KPB inilah yang DITERBITKAN aplikasi — sekali terbit,
+  // tombol yang sama menjadi tombol unduh PDF-nya.
+  const unduhBastPpk = (p) => downloadFileWithProgress(
+    `${API}/pengadaan/${p.id}/bast-ppk-kpb/pdf`,
+    `BAST_PPK_KPB_${String(p.bast_ppk?.nomor || p.nomor_bast || p.id.slice(0, 8)).replace(/[/\s]/g, "_")}.pdf`,
+    { label: "BAST PPK → KPB (PDF)" }).catch(() => {});
+
+  const terbitkanBastPpk = async (p) => {
+    if (p.bast_ppk) { unduhBastPpk(p); return; }
+    if (!p.ppk_nama) {
+      toast.error("Tetapkan PPK dulu (ketuk baris PPK) — PIHAK KESATU dokumen ini adalah PPK.");
+      return;
+    }
+    const ok = await confirm({
+      title: "Terbitkan BAST PPK → KPB?",
+      description: `Hasil pengadaan ${p.nomor_bast} diserahterimakan dari `
+        + `${p.ppk_nama} (PPK) kepada Kuasa Pengguna Barang untuk ditatausahakan `
+        + "sebagai BMN. Nomor Berita Acara dipesan otomatis dari Persuratan dan "
+        + "identitas kedua pihak dibekukan pada dokumen.",
+      confirmLabel: "Terbitkan",
+    });
+    if (!ok) return;
+    try {
+      const r = await axios.post(`${API}/pengadaan/${p.id}/bast-ppk-kpb`, {});
+      const nomor = r.data?.bast_ppk?.nomor;
+      toast.success(nomor ? `BAST PPK → KPB terbit: ${nomor}` : "BAST PPK → KPB terbit");
+      unduhBastPpk({ ...p, bast_ppk: r.data?.bast_ppk });
+      muat();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menerbitkan BAST PPK → KPB",
+        { duration: 9000 });
+    }
+  };
+
+  // LPB gabungan: SATU laporan penerimaan merangkum banyak BAST PPK → KPB —
+  // baris aset maupun persediaan. Hanya perolehan yang SUDAH ber-BAST
+  // PPK → KPB yang bisa dipilih (server menolak sisanya juga).
+  const buatLpbGabungan = async () => {
+    if (!lpbGab) return;
+    const ids = Object.keys(lpbGab.pilih).filter((k) => lpbGab.pilih[k]);
+    if (!ids.length) { toast.error("Pilih minimal satu perolehan"); return; }
+    setLpbGab((g) => ({ ...g, saving: true }));
+    try {
+      const r = await axios.post(`${API}/pengadaan/lpb-gabungan`, { perolehan_ids: ids });
+      const d = r.data || {};
+      toast.success(`LPB gabungan terbit${d.nomor ? `: ${d.nomor}` : ""}`);
+      setLpbGab(null);
+      setHasilCatat({
+        lpbId: d.lpb_id, nomor: d.nomor || String(d.lpb_id || "").slice(0, 8),
+        gabungan: d.jumlah_bast || ids.length, jumlahBarang: d.jumlah_barang || 0,
+        mengirim: false,
+      });
+      muat();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal membuat LPB gabungan",
+        { duration: 9000 });
+      setLpbGab((g) => (g ? { ...g, saving: false } : g));
+    }
+  };
+
   // PPK bisa DIPERBAIKI tanpa mencatat ulang BAST (endpoint PUT sudah ada
   // sejak awal, tetapi tak pernah punya jalan masuk dari layar — operator
   // justru disuruh "catat ulang", yang berarti membuat register ganda).
@@ -401,6 +466,12 @@ export default function PengadaanPage({ user, onBack }) {
             onClick={() => downloadFileWithProgress(`${API}/pengadaan/export`, "register_pengadaan.csv", { label: "Ekspor Register Pengadaan (CSV)" }).catch(() => {})}
             data-testid="pengadaan-export">
             <Download className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">CSV</span>
+          </Button>
+          <Button size="sm" variant="outline" className="flex-shrink-0"
+            title="Satu LPB merangkum banyak BAST PPK → KPB (aset & persediaan)"
+            onClick={() => setLpbGab({ pilih: {}, saving: false })}
+            data-testid="pengadaan-lpb-gabungan">
+            <Boxes className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">LPB Gabungan</span>
           </Button>
           <Button size="sm" onClick={bukaFormBaru}
             className="bg-orange-600 hover:bg-orange-700 text-white flex-shrink-0" data-testid="pengadaan-tambah">
@@ -510,6 +581,24 @@ export default function PengadaanPage({ user, onBack }) {
                             <span className="hidden sm:inline">Catat Semua Barang</span>
                           </button>
                         )}
+                        {/* BAST PPK→KPB: belum terbit → terbitkan (butuh PPK);
+                            sudah terbit → tombol yang sama mengunduh PDF-nya. */}
+                        <button type="button"
+                          aria-label={p.bast_ppk ? "Unduh BAST PPK ke KPB (PDF)" : "Terbitkan BAST PPK ke KPB"}
+                          title={p.bast_ppk?.nomor
+                            ? `Unduh BAST PPK → KPB (${p.bast_ppk.nomor})`
+                            : p.bast_ppk
+                              ? "Unduh BAST PPK → KPB (PDF)"
+                              : "Terbitkan BAST PPK → KPB — serah terima lanjutan dari PPK kepada Kuasa Pengguna Barang"}
+                          onClick={() => terbitkanBastPpk(p)}
+                          className={`h-7 px-2 rounded-lg border flex items-center gap-1 text-[10px] font-semibold min-h-0 min-w-0 ${
+                            p.bast_ppk
+                              ? "border-sky-500/40 bg-sky-600/10 text-sky-600 dark:text-sky-400 hover:bg-sky-600/20"
+                              : "border-border text-foreground/70 hover:bg-muted"}`}
+                          data-testid={`pengadaan-bast-ppk-${p.id}`}>
+                          <FileSignature className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">BAST PPK→KPB</span>
+                        </button>
                         <button type="button" aria-label="Lampiran berkas"
                           onClick={() => setLamp({ perolehan: p, uploading: false })}
                           className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted min-h-0 min-w-0"
@@ -526,6 +615,7 @@ export default function PengadaanPage({ user, onBack }) {
                       <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
                         {`BAST ${p.nomor_bast} (${p.tanggal_bast})`}
                         {p.nomor_kontrak && ` · Kontrak ${p.nomor_kontrak}`}
+                        {p.bast_ppk?.nomor && ` · BAST PPK→KPB ${p.bast_ppk.nomor}`}
                         {p.keterangan && ` · ${p.keterangan}`}
                         {` · oleh ${p.created_by}`}
                       </p>
@@ -944,14 +1034,20 @@ export default function PengadaanPage({ user, onBack }) {
         </DialogContent>
       </Dialog>
 
-      {/* ── LPB yang baru terbit: cetak & teken di tempat kerjanya ── */}
+      {/* ── LPB yang baru terbit: cetak & teken di tempat kerjanya ──
+          Dipakai DUA jalur: hasil "Catat Semua Barang" (per BAST) dan hasil
+          LPB gabungan (field `gabungan` terisi jumlah BAST-nya). */}
       <Dialog open={!!hasilCatat} onOpenChange={(o) => { if (!o) setHasilCatat(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Laporan Penerimaan Barang terbit</DialogTitle>
+            <DialogTitle>
+              {hasilCatat?.gabungan ? "LPB Gabungan terbit" : "Laporan Penerimaan Barang terbit"}
+            </DialogTitle>
             <DialogDescription className="text-xs">
-              BAST {hasilCatat?.nomorBast} sudah tercatat. LPB ini adalah bukti
-              resmi penerimaannya — cetak dan tandatangani sekarang, atau buka
+              {hasilCatat?.gabungan
+                ? `Satu laporan merangkum ${hasilCatat.gabungan} BAST PPK → KPB — aset maupun persediaan. `
+                : `BAST ${hasilCatat?.nomorBast} sudah tercatat. LPB ini adalah bukti resmi penerimaannya — `}
+              cetak dan tandatangani sekarang, atau buka
               lagi kapan pun lewat <strong>Persediaan → Riwayat LPB</strong>.
             </DialogDescription>
           </DialogHeader>
@@ -961,9 +1057,11 @@ export default function PengadaanPage({ user, onBack }) {
               {hasilCatat?.nomor}
             </p>
             <p className="text-[11px] text-muted-foreground mt-1">
-              {[hasilCatat?.asetDibuat ? `${hasilCatat.asetDibuat} aset ber-NUP` : null,
-                hasilCatat?.persediaanMasuk ? `${hasilCatat.persediaanMasuk} barang persediaan` : null,
-              ].filter(Boolean).join(" · ") || "—"}
+              {hasilCatat?.gabungan
+                ? `${hasilCatat.jumlahBarang} baris barang · ${hasilCatat.gabungan} BAST PPK → KPB`
+                : [hasilCatat?.asetDibuat ? `${hasilCatat.asetDibuat} aset ber-NUP` : null,
+                   hasilCatat?.persediaanMasuk ? `${hasilCatat.persediaanMasuk} barang persediaan` : null,
+                  ].filter(Boolean).join(" · ") || "—"}
             </p>
           </div>
           <DialogFooter className="gap-2 sm:gap-2">
@@ -1025,6 +1123,95 @@ export default function PengadaanPage({ user, onBack }) {
               </li>
             ))}
           </ul>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog LPB gabungan: pilih BAST PPK→KPB yang dirangkum ── */}
+      <Dialog open={!!lpbGab} onOpenChange={(o) => { if (!o) setLpbGab(null); }}>
+        <DialogContent className="max-w-lg max-h-[88vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>LPB Gabungan — seluruh BAST PPK → KPB</DialogTitle>
+            <DialogDescription className="text-xs">
+              Satu Laporan Penerimaan Barang merangkum banyak BAST PPK → KPB
+              sekaligus — barang <strong>aset maupun persediaan</strong>. Perolehan
+              yang belum menerbitkan BAST PPK → KPB tidak dapat dipilih:
+              terbitkan dulu lewat tombol di barisnya.
+            </DialogDescription>
+          </DialogHeader>
+          {lpbGab && (() => {
+            const semua = data?.items || [];
+            const siap = semua.filter((p) => p.bast_ppk);
+            const terpilih = Object.keys(lpbGab.pilih).filter((k) => lpbGab.pilih[k]);
+            return (
+              <div className="space-y-2">
+                {siap.length > 1 && (
+                  <button type="button"
+                    onClick={() => setLpbGab((g) => ({
+                      ...g,
+                      pilih: terpilih.length === siap.length
+                        ? {}
+                        : Object.fromEntries(siap.map((p) => [p.id, true])),
+                    }))}
+                    className="text-[11px] font-semibold text-sky-600 dark:text-sky-400 hover:underline min-h-0"
+                    data-testid="lpb-gabungan-pilih-semua">
+                    {terpilih.length === siap.length ? "Kosongkan pilihan" : `Pilih semua (${siap.length})`}
+                  </button>
+                )}
+                {semua.length === 0 && (
+                  <p className="text-center text-xs text-muted-foreground py-4">
+                    Belum ada perolehan tercatat.
+                  </p>
+                )}
+                <ul className="divide-y divide-border/60 rounded-lg border border-border">
+                  {semua.map((p) => {
+                    const bisa = !!p.bast_ppk;
+                    return (
+                      <li key={p.id}>
+                        <label className={`flex items-start gap-2 px-2.5 py-2 text-xs ${
+                          bisa ? "cursor-pointer hover:bg-muted/50" : "opacity-55"}`}>
+                          <input type="checkbox" className="mt-0.5 h-4 w-4 flex-shrink-0"
+                            disabled={!bisa}
+                            checked={!!lpbGab.pilih[p.id]}
+                            onChange={(e) => setLpbGab((g) => ({
+                              ...g, pilih: { ...g.pilih, [p.id]: e.target.checked } }))}
+                            data-testid={`lpb-gabungan-pilih-${p.id}`} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-semibold text-foreground truncate">
+                              {p.pihak} <span className="font-normal text-muted-foreground">· {fmtRp(p.nilai)}</span>
+                            </span>
+                            <span className="block text-[11px] text-muted-foreground truncate">
+                              BAST {p.nomor_bast} ({p.tanggal_bast})
+                            </span>
+                            {bisa ? (
+                              <span className="block text-[11px] text-sky-600 dark:text-sky-400 truncate">
+                                BAST PPK→KPB {p.bast_ppk.nomor || "(tanpa nomor)"}
+                              </span>
+                            ) : (
+                              <span className="block text-[11px] text-amber-600 dark:text-amber-400">
+                                BAST PPK→KPB belum terbit
+                              </span>
+                            )}
+                          </span>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            );
+          })()}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setLpbGab(null)}>Batal</Button>
+            <Button onClick={buatLpbGabungan}
+              disabled={lpbGab?.saving
+                || !Object.values(lpbGab?.pilih || {}).some(Boolean)}
+              data-testid="lpb-gabungan-submit">
+              {lpbGab?.saving
+                ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
+                : <Boxes className="w-4 h-4 mr-1.5" />}
+              Terbitkan LPB Gabungan
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

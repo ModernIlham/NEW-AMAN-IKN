@@ -987,8 +987,8 @@ async def daftar_lpb(page: int = 1, page_size: int = 30, kategori: str = "",
     kat = str(kategori or "").strip().lower()
     if kat == "persediaan":
         q_lpb = {**q_lpb, "kategori": {"$in": ["persediaan", "", None]}}
-    elif kat == "aset":
-        q_lpb = {**q_lpb, "kategori": "aset"}
+    elif kat in ("aset", "gabungan"):
+        q_lpb = {**q_lpb, "kategori": kat}
     total = await db.lpb.count_documents(q_lpb)
     items = await (db.lpb.find(q_lpb, {"_id": 0, "items": 0})
                    .sort("created_at", -1)
@@ -1055,21 +1055,32 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
 
     # Kategori menentukan judul, label jenis, dan ADA-TIDAKNYA kolom NUP.
     # Dokumen era-lama tanpa field ini seluruhnya persediaan (hanya jalur itu
-    # yang dulu menerbitkan LPB), jadi default-nya aman-mundur.
+    # yang dulu menerbitkan LPB), jadi default-nya aman-mundur. `gabungan`
+    # (rekap banyak BAST PPK-KPB, aset + persediaan sekaligus) ikut memakai
+    # kolom NUP — baris asetnya ber-NUP, baris persediaan cukup "-".
     from lpb_utils import KATEGORI_LPB
     kategori = str(lpb.get("kategori") or "persediaan").strip().lower()
     is_aset = kategori == "aset"
+    is_gabungan = kategori == "gabungan"
+    pakai_nup = is_aset or is_gabungan
 
     el = []
     el.extend(_kop_surat_flowables(settings, doc.width))
     el.extend(_title_block(
         "LAPORAN PENERIMAAN BARANG (LPB)"
-        + (" — BARANG MILIK NEGARA" if is_aset else ""),
+        + (" — BARANG MILIK NEGARA" if is_aset
+           else " — GABUNGAN ASET & PERSEDIAAN" if is_gabungan else ""),
         nomor=lpb.get("nomor") or "......./......./........"))
 
-    label_jenis = (JENIS_PEROLEHAN.get(lpb.get("jenis"), (lpb.get("jenis") or "-",))[0]
-                   if is_aset
-                   else JENIS_MASUK.get(lpb.get("jenis"), lpb.get("jenis") or "-"))
+    if is_gabungan:
+        _n_bast = int(lpb.get("jumlah_bast") or 0)
+        label_jenis = (f"Rekap {_n_bast} BAST PPK-KPB" if _n_bast
+                       else "Rekap BAST PPK-KPB")
+    elif is_aset:
+        label_jenis = JENIS_PEROLEHAN.get(
+            lpb.get("jenis"), (lpb.get("jenis") or "-",))[0]
+    else:
+        label_jenis = JENIS_MASUK.get(lpb.get("jenis"), lpb.get("jenis") or "-")
     label_kat = KATEGORI_LPB.get(kategori, "Persediaan")
     info = Table([
         [Paragraph(f"Instansi: <b>{settings.get('nama_instansi') or '-'}</b>", meta),
@@ -1077,7 +1088,12 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
         [Paragraph(f"Kantor/Satker: <b>{settings.get('nama_sub_unit') or settings.get('nama_unit_organisasi') or '-'}</b>", meta),
          Paragraph(f"No. Bukti/Faktur: <b>{lpb.get('jenis_dokumen') or '-'}</b>", meta)],
         [Paragraph(f"Tgl Kedatangan: <b>{_fmt_tanggal_id(lpb.get('tanggal')) or '-'}</b>", meta),
-         Paragraph(f"Tautan BAST Pengadaan: <b>{lpb.get('perolehan_id')[:8] + '…' if lpb.get('perolehan_id') else '-'}</b>", meta)],
+         Paragraph("Tautan BAST Pengadaan: <b>"
+                   + (f"{len(lpb.get('perolehan_ids') or [])} perolehan (gabungan)"
+                      if is_gabungan
+                      else (lpb.get('perolehan_id')[:8] + '…'
+                            if lpb.get('perolehan_id') else '-'))
+                   + "</b>", meta)],
         [Paragraph(f"Nama Rekanan/Penyedia: <b>{lpb.get('penyedia') or '-'}</b>", meta),
          Paragraph(f"Keterangan: <b>{lpb.get('keterangan') or '-'}</b>", meta)],
         # PPK: pihak yang berkomitmen atas pengadaan barang ini (Perpres
@@ -1104,7 +1120,7 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
     # LPB aset menambah kolom NUP: tanpa NUP, dokumen ini hanya berkata
     # "5 printer diterima" dan tak bisa dipakai membuktikan printer YANG MANA —
     # padahal itulah satu-satunya alasan BMN dinomori satu per satu.
-    if is_aset:
+    if pakai_nup:
         data = [["No", "Kode Barang", "NUP", "Nama Barang", "Qty", "Satuan",
                  "Harga (Rp)", "Total (Rp)", "Keterangan"]]
         for i, b in enumerate(lpb.get("items") or [], 1):

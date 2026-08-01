@@ -5,9 +5,9 @@ Salah memilah bukan sekadar salah tampilan: golongan 1 yang tersesat ke jalur
 aset akan tercatat DUA KALI di Neraca (kartu stok + BMN ber-NUP).
 """
 from lpb_utils import (
-    GOLONGAN_BARANG, KATEGORI_LPB, baris_lpb_dari_aset, golongan_kode,
-    is_persediaan, label_golongan, pesan_ringkas, pilah_barang_perolehan,
-    ringkas_pencatatan, total_nilai_lpb,
+    GOLONGAN_BARANG, KATEGORI_LPB, baris_lpb_dari_aset, baris_lpb_gabungan,
+    golongan_kode, is_persediaan, label_golongan, pesan_ringkas,
+    pilah_barang_perolehan, ringkas_pencatatan, total_nilai_lpb,
 )
 
 
@@ -193,5 +193,75 @@ def test_pesan_ringkas_saat_tak_ada_yang_tercatat():
     assert "tidak ada barang baru" in pesan_ringkas({})
 
 
-def test_kategori_lpb_punya_dua_bentuk():
-    assert set(KATEGORI_LPB) == {"persediaan", "aset"}
+def test_kategori_lpb_punya_tiga_bentuk():
+    assert set(KATEGORI_LPB) == {"persediaan", "aset", "gabungan"}
+
+
+# ── LPB gabungan: rekap banyak BAST PPK-KPB dalam satu surat ───────────────
+
+_PEROLEHAN_A = {
+    "nomor_bast": "BAST-001/PPK/2026",
+    "bast_ppk": {"nomor": "BA-07/OIKN/2026"},
+    "barang": [
+        {"kode": "3050102001", "uraian": "Printer", "jumlah": 2,
+         "harga_satuan": 2_500_000, "asset_id": "a1", "NUP": "12"},
+        {"kode": "1010301001", "uraian": "Kertas HVS A4", "jumlah": 10,
+         "harga_satuan": 60_000},
+    ],
+}
+_PEROLEHAN_B = {
+    "nomor_bast": "BAST-002/PPK/2026",
+    "barang": [{"kode": "", "uraian": "Barang tanpa kode", "jumlah": 1,
+                "harga_satuan": 100_000}],
+}
+
+
+def test_gabungan_menyatukan_semua_baris_kedua_golongan():
+    """Aset DAN persediaan masuk satu rekap — itulah maksud LPB gabungan."""
+    baris = baris_lpb_gabungan([_PEROLEHAN_A])
+    assert len(baris) == 2
+    assert baris[0]["golongan"] == "Peralatan dan Mesin"
+    assert baris[1]["golongan"] == "Persediaan"
+    assert baris[0]["total"] == 5_000_000
+    assert baris[1]["total"] == 600_000
+    assert total_nilai_lpb(baris) == 5_600_000
+
+
+def test_gabungan_tiap_baris_menunjuk_bast_ppk_asalnya():
+    """Setiap baris harus bisa dirunut kembali ke dokumen serah terimanya
+    tanpa membuka register — nomor BAST PPK-KPB dicetak di keterangan."""
+    baris = baris_lpb_gabungan([_PEROLEHAN_A])
+    assert all(b["keterangan"] == "BAST PPK-KPB BA-07/OIKN/2026" for b in baris)
+
+
+def test_gabungan_tanpa_bast_ppk_jatuh_ke_nomor_bast_penyedia():
+    baris = baris_lpb_gabungan([_PEROLEHAN_B])
+    assert baris[0]["keterangan"] == "BAST BAST-002/PPK/2026"
+
+
+def test_gabungan_nup_hanya_untuk_baris_tertaut_aset():
+    baris = baris_lpb_gabungan([_PEROLEHAN_A])
+    assert baris[0]["nup"] == "12"
+    assert baris[1]["nup"] == ""
+
+
+def test_gabungan_multi_perolehan_urutan_masukan_dipertahankan():
+    baris = baris_lpb_gabungan([_PEROLEHAN_A, _PEROLEHAN_B])
+    assert len(baris) == 3
+    assert baris[2]["nama_barang"] == "Barang tanpa kode"
+
+
+def test_gabungan_jumlah_pecahan_dan_harga_rusak_aman():
+    baris = baris_lpb_gabungan([{
+        "nomor_bast": "X",
+        "barang": [{"kode": "1x", "uraian": "Semen", "jumlah": 2.5,
+                    "harga_satuan": "bukan angka"}],
+    }])
+    assert baris[0]["jumlah"] == 2.5
+    assert baris[0]["harga_satuan"] == 0.0 and baris[0]["total"] == 0.0
+
+
+def test_gabungan_masukan_kosong_aman():
+    assert baris_lpb_gabungan(None) == []
+    assert baris_lpb_gabungan([]) == []
+    assert baris_lpb_gabungan([{}, {"barang": None}]) == []
