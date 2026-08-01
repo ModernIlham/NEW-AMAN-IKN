@@ -175,6 +175,14 @@ export default function PetaKolaborasiPage() {
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  // `menyegarkan` SENGAJA dipisah dari `loading`. `loading` mengganti SELURUH
+  // pohon dengan layar pemuat — termasuk <div ref={mapElRef}> tempat Leaflet
+  // hidup. Dulu tombol "Muat ulang" memakai `loading`, sehingga wadah peta
+  // dilepas, lalu wadah BARU dipasang saat selesai — sementara `mapRef.current`
+  // masih memegang peta lama yang terikat node yang sudah dibuang. Efek init
+  // pun `return` lebih awal (mapRef sudah terisi) dan wadah baru tinggal kotak
+  // PUTIH. Muat ulang kini tak pernah melepas peta.
+  const [menyegarkan, setMenyegarkan] = useState(false);
   const [galat, setGalat] = useState("");
   const [koneksi, setKoneksi] = useState(false);
   const [nama, setNama] = useState(() => { try { return localStorage.getItem("peta_nama") || ""; } catch { return ""; } });
@@ -229,7 +237,7 @@ export default function PetaKolaborasiPage() {
     } catch (e) {
       if (!e?.response) setKoneksi(true);
       else setGalat(e.response?.data?.detail || "Link tidak valid atau masa tayang telah berakhir.");
-    } finally { setLoading(false); }
+    } finally { setLoading(false); setMenyegarkan(false); }
   }, [id, token]);
 
   useEffect(() => { muat(); }, [muat]);
@@ -294,6 +302,19 @@ export default function PetaKolaborasiPage() {
   //    kontrol skala/utara/lokasi. Peta dibuat saat container mount & data
   //    pertama ada; DIHANCURKAN hanya saat unmount (efek terpisah di bawah). ──
   useEffect(() => {
+    // Peta yang WADAHNYA sudah lepas dari dokumen tak bisa dipakai lagi: Leaflet
+    // masih memegang node lama, sedangkan React sudah memasang node baru. Ini
+    // terjadi setiap kali pohon sempat diganti layar penuh (galat/koneksi lalu
+    // "Coba lagi"). Tanpa pembongkaran ini, cabang `mapRef.current` di bawah
+    // memulangkan efek lebih awal dan wadah baru tinggal kotak putih.
+    const lama = mapRef.current;
+    if (lama && typeof lama.getContainer === "function" && !document.body.contains(lama.getContainer())) {
+      try { roRef.current?.disconnect(); } catch { /* noop */ }
+      try { lama.remove(); } catch { /* noop */ }
+      roRef.current = null; mapRef.current = null; layerRef.current = null;
+      markersRef.current = new Map(); previewRef.current = null;
+      fitOnceRef.current = false;
+    }
     if (!data || mapRef.current || !mapElRef.current) return;
     const map = L.map(mapElRef.current, { zoomControl: true, attributionControl: true, maxZoom: 22, tapHold: true });
     map.attributionControl.setPrefix(false); // prefiks "Leaflet" opsional; © OpenStreetMap tetap (wajib lisensi)
@@ -759,12 +780,15 @@ export default function PetaKolaborasiPage() {
             <MousePointerClick className="w-4 h-4" />
           </button>
         )}
+        {/* Muat ulang memakai `menyegarkan`, BUKAN `loading`: peta tetap terpasang
+            selama data diambil (lihat catatan di deklarasi state). */}
         <button
-          type="button" onClick={() => { fitOnceRef.current = false; setLoading(true); muat(); }}
-          className="h-8 w-8 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
+          type="button" onClick={() => { if (menyegarkan) return; fitOnceRef.current = false; setMenyegarkan(true); muat(); }}
+          disabled={menyegarkan}
+          className="h-8 w-8 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0 disabled:opacity-60"
           aria-label="Muat ulang peta" title="Muat ulang peta" data-testid="peta-kolab-refresh"
         >
-          <RefreshCcw className="w-3.5 h-3.5" />
+          {menyegarkan ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCcw className="w-3.5 h-3.5" />}
         </button>
       </div>
 
