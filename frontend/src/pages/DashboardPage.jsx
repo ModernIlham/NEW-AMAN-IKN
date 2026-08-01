@@ -1823,6 +1823,9 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                     onSaveCoords={handleMapCoordsSave}
                     buildParams={buildMapParams}
                     clientFilter={mapClientFilter}
+                    // Kata kunci berubah → peta dibawa ke hasilnya. Sengaja HANYA
+                    // pencarian: filter lain tak boleh mengacak posisi/zoom.
+                    fitKey={debouncedSearch}
                     activeFilterCount={activeFilterCount + (debouncedSearch ? 1 : 0)}
                     selectedIds={selectedAssets}
                     onQuickAdd={perms.canEdit ? handleQuickAddPeta : undefined}

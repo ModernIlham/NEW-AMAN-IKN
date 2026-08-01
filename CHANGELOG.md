@@ -67,6 +67,61 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#672] Unduh foto asli berhenti "sering gagal" + pencarian membawa peta ke hasilnya — 2026-08-01
+
+### Unduh foto asli sering gagal, tapi berhasil setelah dibuka Layar Penuh
+
+Petunjuk dari laporan itu sendiri yang membongkarnya. Membuka Layar Penuh lebih
+dulu "menyembuhkan" unduhan karena `<img>` mengambil **URL yang sama** dan
+pengambilan gambar oleh peramban TIDAK terikat tenggat axios; setelah itu
+berkasnya ada di cache HTTP sehingga permintaan unduh selesai seketika.
+
+Akarnya: `axios.defaults.timeout` dipasang **20 detik** di `App.js` sebagai
+lantai tenggat untuk permintaan data, dan tombol unduh memakai `axios.get`
+polos sehingga ikut terkena. Foto asli dari kamera HP berukuran beberapa
+megabyte — di jaringan lapangan transfernya lewat dari 20 detik dan axios
+memutusnya di tengah jalan.
+
+Tenggat tetap memang alat yang salah untuk unduhan besar. Bahaya asli yang
+dijaga tenggat global — soket yang MENGGANTUNG — tetap ditutup, tetapi kini
+oleh pemantau kemajuan: yang diputus adalah transfer yang **berhenti
+mengalir** (30 detik tanpa satu byte pun), bukan transfer yang lambat namun
+terus jalan.
+
+Sekalian dirapikan:
+
+- Tombol menampilkan **persentase** selama mengunduh, dan berfungsi sebagai
+  **Batal** — sebelumnya tombol dimatikan tanpa jalan keluar, yang di jaringan
+  lambat terbaca sebagai aplikasi menggantung.
+- Pesan gagal menyebut sebabnya (sesi berakhir / foto tak ada / server sibuk /
+  tak ada sinyal / terhenti) alih-alih "Gagal mengunduh foto asli" untuk semua
+  kasus.
+- Nama berkas kini ikut tipe isi sebenarnya (`webp`/`png`/`heic`, bukan selalu
+  `jpg`) dan dibersihkan dari karakter yang ditolak sistem berkas — titik pada
+  kode barang BMN sengaja DIPERTAHANKAN.
+- Menutup lightbox di tengah unduhan memutus permintaannya.
+
+### "Mengetik di kotak cari tidak berdampak di halaman peta"
+
+Datanya sebenarnya SUDAH tersaring: `buildMapParams` ikut membawa kata kunci,
+dan pin yang tak lolos memang dibuang oleh sinkronisasi marker. Yang tidak
+terjadi adalah **perpindahan tampilan** — `didFitRef` sengaja hanya di-reset
+pada muat pertama agar posisi/zoom pengguna tak diacak tiap reload. Akibatnya,
+di peta yang sudah diperbesar, satu-satunya pin yang cocok berada jauh di luar
+layar; dari kursi pengguna itu tak bisa dibedakan dari "pencarian tak jalan".
+
+Mencari adalah pengecualian yang sah: pengguna menyebut apa yang dituju, jadi
+sekarang peta mengantarnya ke sana. Filter lain (kategori/lanjutan) tetap
+TIDAK memindahkan tampilan.
+
+Permintaan "bawa ke hasil" sengaja dikonsumsi saat **data hasil pencarian
+tiba**, bukan saat kata kuncinya berubah — kalau tidak, sinkronisasi marker
+sempat berjalan dengan baris LAMA dan memakai jatah fit-nya di sana.
+
+**Uji:** 306 uji frontend (25 baru untuk `lib/unduhFoto`), lint & build bersih.
+
+---
+
 ## [#671] Dialog berhenti melebar menyamping + Muat ulang peta kolaborasi tak lagi memutihkan peta — 2026-08-01
 
 Dua laporan lapangan, dua akar yang berbeda.
