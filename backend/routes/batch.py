@@ -246,6 +246,16 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
     #                           yang salah diam-diam.
     _geo_unset = sisip_geo_ke_update({}, clean_updates)
 
+    # Jurnal Buku Barang 204/205 untuk ubah massal nilai perolehan: harga
+    # LAMA tiap aset dipotret SEBELUM update_many (sesudahnya selisihnya
+    # hilang). Jurnalnya ditulis setelah update sukses — best-effort.
+    harga_sebelum = []
+    if "purchase_price" in clean_updates:
+        harga_sebelum = [a async for a in db.assets.find(
+            {"id": {"$in": data.asset_ids}},
+            {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1,
+             "purchase_price": 1})]
+
     # 1. Simple field updates — single update_many (fast)
     if len(clean_updates) > 1:
         # $inc version pada SEMUA tulisan ubah-massal (temuan audit G3): tanpa
@@ -257,6 +267,12 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
         if _geo_unset:
             _ops["$unset"] = _geo_unset
         await db.assets.update_many({"id": {"$in": data.asset_ids}}, _ops)
+        if harga_sebelum:
+            from shared_utils import catat_jurnal_edit_harga
+            for _a in harga_sebelum:
+                await catat_jurnal_edit_harga(
+                    _a, clean_updates["purchase_price"],
+                    x_user_name or _user.get("username"), sumber="batch")
 
     # 2. Foto massal — kompres SEKALI per foto, lalu distribusikan ke semua aset
     #    (hormati batas 6 foto/aset). `photo_list` gabungan batch_photo + batch_photos.

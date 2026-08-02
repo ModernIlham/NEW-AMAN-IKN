@@ -46,3 +46,13 @@ def test_akun_persediaan_override():
     # override tanpa uraian → ambil dari default bila dikenal
     peta2 = {"10101": {"akun": "117113"}}
     assert akun_persediaan("1010101001", peta2)["uraian"] == AKUN_PERSEDIAAN_DEFAULT["117113"]
+
+
+def test_katalog_lengkap_dari_seed_bas():
+    """Katalog kini diturunkan dari seed BAS (21 akun 1171xx) — dulu
+    hardcode 7 akun sehingga akun sah (117121 Pita Cukai, 117141 Bansos,
+    117191 Tujuan Strategis, dll.) tak pernah bisa dipilih."""
+    assert len(AKUN_PERSEDIAAN_DEFAULT) == 21
+    for kode in ("117121", "117141", "117191", "117192", "117151"):
+        assert kode in AKUN_PERSEDIAAN_DEFAULT
+    assert "Barang Konsumsi" in AKUN_PERSEDIAAN_DEFAULT["117111"]

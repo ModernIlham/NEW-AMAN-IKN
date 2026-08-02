@@ -1149,6 +1149,38 @@ async def catat_mutasi_bmn(entri: dict):
         return False
 
 
+async def catat_jurnal_edit_harga(asset, harga_baru, oleh, sumber="assets"):
+    """Jurnal Buku Barang 204/205 saat `purchase_price` diubah lewat EDIT
+    (PUT/PATCH/ubah massal) — dulu jalur ini satu-satunya pengubah nilai
+    yang SENYAP tanpa jejak jurnal (SIMAN/pemeliharaan/penilaian sudah
+    berjurnal). Best-effort seperti `catat_mutasi_bmn`; tanpa selisih → no-op.
+
+    `asset` = dokumen SEBELUM diubah (minimal id/asset_code/NUP/
+    purchase_price); `harga_baru` = nilai sesudah.
+    """
+    from datetime import datetime as _dt, timezone as _tz
+
+    from pembukuan_utils import parse_harga
+    lama = parse_harga((asset or {}).get("purchase_price"))
+    baru = parse_harga(harga_baru)
+    selisih = baru - lama
+    if abs(selisih) < 0.005:
+        return False
+    label = "massal" if sumber == "batch" else "manual"
+    return await catat_mutasi_bmn({
+        "asset_id": (asset or {}).get("id"),
+        "kode_transaksi": "204" if selisih > 0 else "205",
+        "kode_barang": str((asset or {}).get("asset_code") or ""),
+        "nup": str((asset or {}).get("NUP") or ""),
+        "tanggal_buku": _dt.now(_tz.utc).date().isoformat(),
+        "jumlah": 0, "nilai": abs(selisih),
+        "sumber_modul": sumber,
+        "keterangan": (f"Edit {label} nilai perolehan "
+                       f"(Rp{int(round(lama)):,} → Rp{int(round(baru)):,})"),
+        "oleh": oleh or "system",
+    })
+
+
 async def proses_keluar_aktif(asset_ids):
     """Peta asset_id → daftar proses KELUAR aktif lintas register (audit G5
     #11 — penanda in-flight): usulan penghapusan (diusulkan/diproses), usulan

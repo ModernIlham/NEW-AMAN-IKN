@@ -67,6 +67,44 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#703] Rantai nilai aset dirapatkan — tiga celah audit ditutup — 2026-08-02
+
+Penutup audit rantai nilai (lanjutan [#699]): tiga celah yang membuat
+angka nilai bisa berubah tanpa jejak atau referensi tak pernah terpakai.
+
+- **Edit nilai perolehan kini berjurnal.** Mengubah `purchase_price`
+  lewat edit manual (PUT/PATCH) atau **Ubah Massal** dulu hanya tercatat
+  di log audit — Buku Barang tak tahu apa-apa, padahal jalur SIMAN/
+  kapitalisasi/revaluasi semuanya berjurnal. Kini setiap perubahan menulis
+  jurnal **204/205** (`catat_jurnal_edit_harga`, best-effort): selisih
+  ber-tanda, keterangan "Edit manual/massal nilai perolehan (Rp lama →
+  Rp baru)", sumber modul `assets`/`batch`. Ubah massal memotret harga
+  lama SEMUA aset terpilih sebelum `update_many`. Jurnal ini otomatis
+  tampil di Riwayat Nilai per Aset [#699].
+- **Field mati `dampak_masa_manfaat` dihidupkan.** Koreksi ber-dampak
+  "masa manfaat baru (akumulasi reset)" divalidasi, disimpan, diekspor
+  CSV, ditampilkan — tapi TIDAK PERNAH dibaca mesin penyusutan: umur baru
+  dari LHIP tak pernah berefek. Kini saat koreksi FINAL (tercatat SAKTI),
+  `masa_manfaat_override_semester` diproyeksikan ke aset dan
+  `status_susut` memakainya menggantikan masa kelompok (hanya sah pada
+  basis revaluasi); dampak "tetap" menghapus override lama.
+  `hitung_penyusutan` kini menghormati semester GANJIL (7 semester =
+  3,5 tahun — tak lagi hilang dibulatkan).
+- **Katalog akun persediaan 7 → 21.** `AKUN_PERSEDIAAN_DEFAULT` dulu
+  hardcode 7 akun sementara seed BAS resmi memuat 21 akun 1171xx —
+  akun sah seperti 117121 Pita Cukai/Meterai, 117141 Bansos, 117191
+  Tujuan Strategis tak pernah bisa dipilih sebagai override. Katalog kini
+  DITURUNKAN dari `data/referensi_akun_bas.json` (fallback minimal bila
+  seed tak terbaca) — dropdown Referensi Akun Persediaan & laporan
+  posisi/SAKTI langsung mengenali 21-nya.
+
+Verifikasi: uji unit baru (proyeksi override set/hapus, masa 7 semester
+utuh di mesin & posisi per aset, override tak berlaku tanpa revaluasi,
+katalog 21 akun) — 1435 uji backend lulus, eslint bersih, `yarn build`
+sukses.
+
+---
+
 ## [#702] Tujuh laporan persediaan gaya SAKTI — persis format resminya — 2026-08-02
 
 - **Lima endpoint PDF baru** (`routes/persediaan_laporan.py`) mencakup

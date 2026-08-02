@@ -24,17 +24,41 @@ from akun_bas_utils import AKUN_NERACA_DEFAULT
 # Akun utama persediaan — satu sumber dari akun_bas golongan "1" (terkonfirmasi).
 AKUN_PERSEDIAAN_UTAMA = AKUN_NERACA_DEFAULT["1"]["akun"]
 
-# Sub-akun neraca persediaan (kode 6-digit → uraian). Sebagian terkonfirmasi
-# sumber sekunder resmi (lihat docstring); 117112 & 117128 masih perlu verifikasi.
-AKUN_PERSEDIAAN_DEFAULT = {
+# Sub-akun neraca persediaan (kode 6-digit → uraian) — DITURUNKAN dari seed
+# BAS resmi `data/referensi_akun_bas.json` (21 akun 1171xx, sumber KEP-211/
+# PB/2018), menutup drift lama saat katalog hardcode hanya memuat 7 akun
+# sementara seed BAS memuat 21 (117121 Pita Cukai, 117122-117128 untuk
+# diserahkan, 117141 Bansos, 117191 Tujuan Strategis, dst. tak pernah bisa
+# dipilih). Fallback minimal dipertahankan bila file seed tak terbaca —
+# jangan sampai laporan posisi mati hanya karena katalog kosong.
+_FALLBACK_AKUN = {
     "117111": "Persediaan — Barang Konsumsi",
-    "117112": "Persediaan — Amunisi [perlu verifikasi]",
     "117113": "Persediaan — Bahan untuk Pemeliharaan",
     "117114": "Persediaan — Suku Cadang",
-    "117128": "Persediaan — untuk Diserahkan kpd Masyarakat/Pemda [perlu verifikasi]",
     "117131": "Persediaan — Bahan Baku",
     "117199": "Persediaan — Lainnya",
 }
+
+
+def _muat_akun_persediaan_dari_seed():
+    import json
+    import os
+    jalur = os.path.join(os.path.dirname(__file__), "data",
+                         "referensi_akun_bas.json")
+    try:
+        with open(jalur, encoding="utf-8") as f:
+            data = json.load(f)
+        hasil = {}
+        for a in data.get("akun") or []:
+            kode = str(a.get("kode") or "")
+            if kode.startswith("1171") and len(kode) == 6:
+                hasil[kode] = f"Persediaan — {a.get('nama') or kode}"
+        return hasil or dict(_FALLBACK_AKUN)
+    except (OSError, ValueError):
+        return dict(_FALLBACK_AKUN)
+
+
+AKUN_PERSEDIAAN_DEFAULT = _muat_akun_persediaan_dari_seed()
 
 
 def validate_akun_persediaan(akun):

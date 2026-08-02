@@ -1967,6 +1967,11 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
     changes = compute_changes(existing, asset.model_dump())
     if changes:
         await log_audit("update", asset.activity_id, asset_id, asset.asset_code, asset.asset_name, audit_user, changes=changes, nup=asset.NUP or "")
+    # Jurnal Buku Barang 204/205 bila nilai perolehan berubah lewat edit —
+    # jalur SIMAN/pemeliharaan/penilaian sudah berjurnal, edit manual dulu
+    # SENYAP (temuan audit rantai nilai). Best-effort, tak menahan respons.
+    from shared_utils import catat_jurnal_edit_harga
+    await catat_jurnal_edit_harga(existing, asset.purchase_price, audit_user)
     # Respons TANPA media: klien sudah memegang foto/dokumennya sendiri —
     # mengirim balik base64 (bisa >1MB) di tiap simpan memboroskan kuota HP.
     updated_asset = _strip_media(await db.assets.find_one({"id": asset_id}, {"_id": 0}))
@@ -2448,6 +2453,11 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
             merged.get("asset_code", ""), merged.get("asset_name", ""),
             audit_user, changes=changes, nup=merged.get("NUP", "")
         )
+    # Jurnal 204/205 bila PATCH mengubah nilai perolehan (lihat PUT di atas).
+    if "purchase_price" in update_data:
+        from shared_utils import catat_jurnal_edit_harga
+        await catat_jurnal_edit_harga(existing, update_data["purchase_price"],
+                                      audit_user)
     # Respons TANPA media (lihat _strip_media) — juga memperkecil dokumen
     # idempotency yang disimpan di bawah.
     updated_asset = _strip_media(await db.assets.find_one({"id": asset_id}, {"_id": 0}))

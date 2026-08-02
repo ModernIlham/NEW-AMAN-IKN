@@ -536,3 +536,47 @@ def test_baris_csv_koreksi():
     # Field hilang → string kosong, bukan None
     kosong = baris_csv_koreksi([{"jenis": "koreksi_pencatatan"}])[1]
     assert kosong[0] == "" and kosong[7] == 0 and kosong[9] == 0
+
+
+def test_masa_manfaat_override_dari_koreksi_final():
+    """Field `dampak_masa_manfaat`/`masa_manfaat_semester` yang dulu MATI
+    (divalidasi-disimpan-diekspor tapi tak pernah dibaca mesin) kini hidup:
+    koreksi FINAL ber-dampak masa_manfaat_baru menetapkan sisa umur sendiri."""
+    from penilaian_utils import (
+        build_asset_revaluasi_projection, hitung_penyusutan, posisi_nilai_aset,
+        status_susut,
+    )
+
+    # Proyeksi FINAL: dampak baru → override tersimpan; "tetap" → 0 (hapus)
+    proj = build_asset_revaluasi_projection(
+        {"nilai_baru": 8_000_000, "dampak_masa_manfaat": "masa_manfaat_baru",
+         "masa_manfaat_semester": 7, "tanggal_dokumen": "2024-01-15"},
+        "2024-01-16T00:00:00")
+    assert proj["masa_manfaat_override_semester"] == 7
+    proj2 = build_asset_revaluasi_projection(
+        {"nilai_baru": 8_000_000, "dampak_masa_manfaat": "tetap",
+         "masa_manfaat_semester": 7, "tanggal_dokumen": "2024-01-15"},
+        "2024-01-16T00:00:00")
+    assert proj2["masa_manfaat_override_semester"] == 0
+
+    # Aset revaluasi ber-override 7 semester: masa dari LHIP, bukan kelompok
+    aset = {"asset_code": "3050104001", "purchase_price": 10_000_000,
+            "purchase_date": "2018-01-01", "nilai_wajar_terakhir": 8_000_000,
+            "revaluasi": {"tanggal_dokumen": "2024-01-15"},
+            "masa_manfaat_override_semester": 7}
+    status, _alasan, masa = status_susut(aset)
+    assert status == "susut" and masa == 3.5          # 7 semester = 3,5 tahun
+    # Semester GANJIL tak hilang dibulatkan: 7 semester utuh
+    d = hitung_penyusutan(8_000_000, masa, "2024-01-15", "2025-07-01")
+    assert d["masa_semester"] == 7
+    assert d["semester_terpakai"] == 3                 # 2024-I..2025-I
+    p = posisi_nilai_aset(aset, "2025-07-01")
+    assert p["masa_semester"] == 7 and p["semester_sisa"] == 4
+    assert p["dasar_sumber"] == "revaluasi"
+
+    # Tanpa revaluasi final, override TIDAK berlaku (hanya sah pasca-reval)
+    tanpa_reval = {"asset_code": "3050104001", "purchase_price": 10_000_000,
+                   "purchase_date": "2018-01-01",
+                   "masa_manfaat_override_semester": 7}
+    _s, _a, masa2 = status_susut(tanpa_reval)
+    assert masa2 == 5                                  # masa kelompok 30501
