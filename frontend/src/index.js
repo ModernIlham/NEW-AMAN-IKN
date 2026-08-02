@@ -10,6 +10,11 @@ import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/500.css";
 import "@/index.css";
 import App from "@/App";
+import { pasangMarqueeEllipsis } from "@/lib/marqueeEllipsis";
+
+// Teks ber-"..." di mana pun otomatis menggulir penuh saat hover/ketuk,
+// lalu kembali ber-elipsis — dipasang sekali, berlaku seluruh aplikasi.
+pasangMarqueeEllipsis();
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(

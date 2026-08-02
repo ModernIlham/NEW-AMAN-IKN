@@ -67,6 +67,55 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#708] Kartu inventaris rapi, kalender sejajar, marquee "..." global, kodefikasi di masa manfaat, halaman 404/403 glitch — 2026-08-02
+
+Lima butir mandat UI dalam satu gelombang:
+
+- **Kartu Inventaris (satuan & massal) dirapikan.** Dua akar: (1) nilai di
+  dalam tile ber-alas dipaku `VALIGN TOP` sehingga menempel tepat di bawah
+  label dan dasar tile menganga kosong ("mepet ke atas"); kini nilai
+  di-tengah-kan vertikal pada sisa tinggi tile. (2) Konten Panel A berhenti
+  ±18 mm di atas dasar panel; kini foto ditinggikan (46 → 52 mm), baris
+  info diberi napas, dan bar ID ASET **dilabuhkan ke dasar panel** dengan
+  spacer terhitung — panel B mengisi rata (tile 11,4 mm), catatan panel
+  C/D ikut melabuh ke dasar.
+- **Kalender tanggal sejajar & rapat + ganti bulan/tahun dua ketukan.**
+  Akar ketaksejajaran: aturan tap-target 44px global (≤1023px) membengkakkan
+  tombol tanggal 32px → 44px sementara header hari (bukan tombol) tetap
+  32px — kolom melenceng dan antar tanggal tampak renggang mulai tablet/HP.
+  Tombol tanggal kini `min-w-0 min-h-0` (pola baku repo) berukuran 36px,
+  header hari memakai kotak flex BERUKURAN SAMA dengan sel tanggal, jarak
+  antarbaris dirapatkan, dan `InputTanggal` mendapat **dropdown bulan +
+  tahun** (`captionLayout="dropdown-buttons"`, 1940 s.d. kini+10) — mundur
+  bertahun-tahun tak lagi menekan panah berkali-kali.
+- **Marquee global untuk semua teks ber-"..."** (`lib/marqueeEllipsis.js`,
+  dipasang sekali di index.js): elemen apa pun yang ter-truncate otomatis
+  menggulir isinya sampai mentok saat di-hover lalu kembali ber-elipsis
+  saat kursor pergi; di layar sentuh ketukan menjadi saklar. Listener
+  terdelegasi di `document` + animasi `scrollLeft` — ±280 titik `truncate`
+  di seluruh aplikasi terlayani tanpa menyentuh satu komponen pun;
+  menghormati `prefers-reduced-motion`; MarqueeOnTap lama tak diganggu.
+- **Masa manfaat ⇆ Referensi Kodefikasi Barang.** Di dialog Tambah/Ubah
+  referensi masa manfaat (Penilaian), begitu kode kelompok 5 digit dikenal
+  aplikasi langsung menampilkan uraian berjenjangnya (golongan → bidang →
+  kelompok) dari `GET /kodefikasi/lookup/{kode}` dan mengisi otomatis
+  kolom Uraian yang masih kosong.
+- **Halaman 404 & 403 eksklusif ber-efek glitch** (`pages/HalamanGalat.jsx`):
+  tulisan raksasa yang hurufnya berganti-ganti simbol acak dengan cepat
+  lalu terkunci membentuk kata, bergantian `404` ⇄ `NOT FOUND` (403 ⇄
+  `AKSES DITOLAK`), plus belahan RGB merah/cyan ber-clip-path yang
+  meloncat, goyangan skew berkala, dan garis pindai ala layar rusak —
+  semua CSS + satu interval JS tanpa pustaka luar, identitas AMAN penuh
+  (logo, pola latar login, tombol Ke Beranda/Muat Ulang), dan tunduk
+  `prefers-reduced-motion`. Alamat tak dikenal kini menampilkan 404 ini
+  (bukan lagi redirect diam-diam ke beranda); `/403` tersedia untuk akses
+  ditolak.
+
+Verifikasi: kartu contoh dirender + diperiksa visual; 404/403 di-screenshot
+dari build produksi; 1462 uji backend lulus; eslint bersih; build sukses.
+
+---
+
 ## [#707] Halaman PRD, slide PPT & proposal DOCX disegarkan ke versi terkini — 2026-08-02
 
 Mandat pemilik: "perbaharui semua halaman di login#fitur baik di PPT
