@@ -263,7 +263,7 @@ export default function InfoPage({ onBack }) {
     setDownloading(type);
     try {
       const endpoint = type === "ppt" ? "/api/documents/ppt" : "/api/documents/proposal";
-      const filename = type === "ppt" ? "InventoryMaster_PRD_Presentation.pptx" : "Proposal_InventoryMaster_Pro.docx";
+      const filename = type === "ppt" ? "AMAN_PRD_Presentasi.pptx" : "Proposal_AMAN.docx";
       await downloadFileWithProgress(`${API}${endpoint}`, filename, {
         label: type === "ppt" ? "Presentasi PPT" : "Proposal DOCX",
         timeout: 60000,
@@ -348,7 +348,7 @@ export default function InfoPage({ onBack }) {
           {/* Stats */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 max-w-4xl mx-auto">
             <StatCard icon={Layers} value="12" label="Tahap Siklus BMN" color="blue" />
-            <StatCard icon={FileText} value="13+" label="Laporan Resmi PDF" color="green" />
+            <StatCard icon={FileText} value="15+" label="Laporan Resmi PDF" color="green" />
             <StatCard icon={MapPinned} value="GIS" label="Peta + KML/KMZ/SHP" color="cyan" />
             <StatCard icon={FileSpreadsheet} value="Multi" label="Master: Pegawai, Pejabat, Kodefikasi, Akun BAS" color="orange" />
             <StatCard icon={Users} value="Multi" label="User Real-time + Offline" color="purple" />
@@ -384,7 +384,7 @@ export default function InfoPage({ onBack }) {
             </div>
             <div className="text-left">
               <div className="font-semibold text-white">Slide Presentasi (PPTX)</div>
-              <div className="text-sm text-slate-400">9 slide profesional — cover, latar belakang, arsitektur, fitur, alur kerja, SE-17, RAB, timeline, penutup</div>
+              <div className="text-sm text-slate-400">10 slide sesuai versi terkini — sampul, latar belakang, arsitektur, siklus &amp; modul, fitur, alur kerja + peran, SE-17 &amp; SAKTI, lisensi &amp; RAB, timeline, penutup</div>
             </div>
             <Download className="w-5 h-5 text-orange-400 shrink-0" />
           </button>
@@ -398,23 +398,43 @@ export default function InfoPage({ onBack }) {
             </div>
             <div className="text-left">
               <div className="font-semibold text-white">Proposal Lengkap (DOCX)</div>
-              <div className="text-sm text-slate-400">BAB I-VI — Pendahuluan, Gambaran Umum, Metodologi, Spesifikasi Teknis, RAB, Penutup</div>
+              <div className="text-sm text-slate-400">BAB I–VI sesuai versi terkini — Pendahuluan, Gambaran Umum (fitur A–L), Metodologi, Spesifikasi Teknis, Skema Lisensi &amp; RAB, Penutup</div>
             </div>
             <Download className="w-5 h-5 text-blue-400 shrink-0" />
           </button>
         </div>
 
         {/* ── SECTIONS ── */}
-        <CollapsibleSection id="rilis" title="Apa yang Baru — Rilis v2.5" icon={Sparkles} defaultOpen={true}>
+        <CollapsibleSection id="rilis" title="Apa yang Baru — Rilis v2.6" icon={Sparkles} defaultOpen={true}>
           <p className="text-sm text-slate-400 mb-5">
-            Rilis v2.5 (Juli 2026) adalah hasil AUDIT MENYELURUH 6 dimensi: isolasi
-            multi-satker dituntaskan sampai transisi status/hapus/foto/ekspor, jurnal
-            Buku Barang kini lengkap dari semua transaksi, server bebas render dokumen
-            berat (offload ke thread), backup/restore/reset diperkokoh, plus pencarian
-            kilat Meilisearch & cache Redis (opsional). Rilis v2.4 sebelumnya memperluas
-            aplikasi menjadi platform siklus penuh BMN. Detail per perubahan di CHANGELOG.
+            Rilis v2.6 (Agustus 2026) menstandarkan persediaan ke SAKTI (45 kode
+            transaksi + 7 laporan persis format resmi), menghadirkan Riwayat Nilai
+            per aset sampai nilai buku, dan merombak keterbacaan stiker label.
+            Rilis v2.5 sebelumnya adalah hasil audit menyeluruh 6 dimensi (isolasi
+            multi-satker, jurnal lengkap, offload render, backup kokoh, Meilisearch
+            &amp; Redis opsional). Detail per perubahan di CHANGELOG.
           </p>
           <div className="grid md:grid-cols-2 gap-4">
+            <ReleaseCard
+              tag="PERSEDIAAN SAKTI" date="Agustus 2026" color="teal"
+              title="45 kode transaksi resmi + 7 laporan persis format SAKTI"
+              points={[
+                "Registry 45 kode (M01–M99, K01–K99, P01, H01–H03) satu sumber kebenaran — kode warisan lama terkoreksi otomatis",
+                "Daftar Transaksi lintas barang ber-filter arah/kode/periode + koreksi nilai proporsional FIFO",
+                "Daftar Usang/Rusak/Tak Dikuasai (bahan CaLK) + hapus definitif ber-SK",
+                "7 laporan PDF: Persediaan, Posisi di Neraca, Mutasi per akun, Per Layer, dan 3 daftar kondisi",
+              ]}
+            />
+            <ReleaseCard
+              tag="NILAI, STIKER & UI" date="Agustus 2026" color="orange"
+              title="Riwayat nilai per aset + stiker terbaca + form lebih nyaman"
+              points={[
+                "Riwayat Nilai per NUP: perolehan → kapitalisasi/revaluasi/koreksi → nilai buku; edit harga pun berjurnal",
+                "Masa manfaat baru dari LHIP benar-benar berefek ke penyusutan (override per aset)",
+                "Stiker label: hierarki huruf terbaca di semua ukuran, nama panjang lanjut baris, stiker contoh berukuran (mm)",
+                "Tanggalan roda Indonesia di Master Pegawai; font judul & halaman masuk dibetulkan",
+              ]}
+            />
             <ReleaseCard
               tag="AUDIT 6 DIMENSI" date="Juli 2026" color="teal"
               title="Keandalan menyeluruh: keamanan, jurnal, performa, backup"
@@ -565,7 +585,7 @@ export default function InfoPage({ onBack }) {
             <FeatureCard icon={Shield} title="Keamanan & Audit" description="JWT + OTP email, role-based access, jejak audit menyeluruh" color="orange" items={["Audit trail semua perubahan per field", "Auto-logout: sesi 401 & idle 30 menit", "Rate limiting + heartbeat sesi"]} />
             <FeatureCard icon={RefreshCw} title="Backup, Restore & Reset" description="Siklus data satu rumah di Pengaturan › Sistem — semua koleksi + GridFS" color="purple" items={["Backup OTOMATIS terjadwal harian + arsip server + retensi", "Pulihkan langsung dari arsip; reset melindungi master referensi", "Background job ZIP + anti path-traversal"]} />
             <FeatureCard icon={RefreshCw} title="Sinkronisasi SIMAN V2" description="Kanal pembaruan berkala via impor ekspor 'Master Aset' SIMAN V2" color="teal" items={["Deteksi header semua sheet + unggah andal (retry saat putus)", "Tandai selisih per aset (≠ SIMAN) + sinkron 1-klik dari galeri/list", "Validasi satker cerdas 6↔20 digit (kode lengkap di kegiatan & master)", "Baris belum tercatat → CSV atau buat aset draft massal 1-klik"]} />
-            <FeatureCard icon={Package} title="Cetak Stiker Label BMN" description="Stiker 3 ukuran × kertas A4/A3, penuh-halaman, ikut filter & kelompok" color="orange" items={["QR ber-payload kode register + logo di tengah (level H)", "Header nama/kode satker; ukuran per aset dikelompokkan", "Rekap jumlah per ukuran sebelum cetak"]} />
+            <FeatureCard icon={Package} title="Cetak Stiker Label BMN" description="Stiker 3 ukuran × kertas A4/A3, penuh-halaman, ikut filter & kelompok" color="orange" items={["QR ber-payload kode register + logo di tengah (level H)", "Hierarki huruf terbaca di semua ukuran; nama barang & sub-sub kelompok lanjut ke baris berikutnya", "Nama instansi panjang menyusut lalu pecah dua baris (tak terpotong)", "Stiker CONTOH berukuran (panjang × lebar mm) tiap kelompok — patokan pesan bahan", "Rekap jumlah per ukuran sebelum cetak"]} />
             <FeatureCard icon={FileText} title="Tanda Tangan Elektronik" description="TTD digital via link per penanda tangan — sah untuk administrasi internal" color="pink" items={["Kanvas goresan mulus atau foto kertas → PNG transparan", "Atur LETAK & UKURAN pembubuhan di pratinjau halaman dokumen", "Tahan rotasi/reload/jaringan putus (draf tersimpan + coba lagi)", "QR + hash verifikasi publik (NIP di-masking), token sekali-pakai"]} />
             <FeatureCard icon={Users} title="Master SDM & Referensi" description="Master Pegawai, Pejabat penanda tangan, Unit Kerja Eselon I–V" color="blue" items={["Impor Excel massal + validasi rekening/WNI-WNA", "Foto pegawai ber-krop persegi (geser/zoom) + avatar di daftar", "Kartu Pegawai UID e-KTP/NFC: tap kartu → identitas terisi di form aset, BAST, & TTD elektronik (hash aman, tanpa data chip)", "Keterkaitan aset↔pegawai: panel Perlu Serah Terima BMN", "Referensi Akun BAS per makna digit 1–6 (KEP-211/PB/2018)", "Tanggalan RODA (hari·bulan·tahun) berbahasa Indonesia di form pegawai"]} />
             <FeatureCard icon={Layers} title="Siklus BMN 12 Tahap" description="Perencanaan → Penghapusan: register & alur resmi tiap tahap" color="cyan" items={["Penganggaran/Pengadaan/Penggunaan/Pemeliharaan/Pemanfaatan", "Penilaian/Pemindahtanganan/Pemusnahan/Penghapusan + Wasdal", "Pembukuan (DBKP/Buku Barang, KIB A–F PMK181) + Pelaporan (LBKP/CaLBMN)"]} />
@@ -622,7 +642,7 @@ export default function InfoPage({ onBack }) {
             <WorkflowStep number="02" title="Siapkan Data Aset" description="Import data BMN dari SIMAN/CSV/XLSX (46 kolom, template dengan dropdown) atau input manual per aset" color="green" />
             <WorkflowStep number="03" title="Pelaksanaan Inventarisasi" description="Tim lapangan memakai mode inventarisasi lapangan: status/kondisi sekali ketuk, foto, GPS, stiker, scan QR — tetap berjalan penuh saat offline" color="orange" />
             <WorkflowStep number="04" title="Verifikasi & Klasifikasi" description="Admin memverifikasi data, mengklasifikasikan aset tidak ditemukan/berlebih/sengketa, memantau lewat audit trail" color="red" />
-            <WorkflowStep number="05" title="Rekapitulasi & Laporan" description="Generate 13+ laporan resmi berdesain seragam dengan kop surat instansi: DBHI, RHI, BAHI, Berita Acara, SPTJM, Surat Koreksi, Eksekutif" color="purple" />
+            <WorkflowStep number="05" title="Rekapitulasi & Laporan" description="Generate 15+ laporan resmi berdesain seragam dengan kop surat instansi: DBHI, RHI, BAHI, Berita Acara, SPTJM, Surat Koreksi, Eksekutif" color="purple" />
             <WorkflowStep number="06" title="Pengesahan, Kunci & Backup" description="Unggah PDF laporan bertanda tangan lalu sahkan — kegiatan terkunci permanen, riwayat masuk Kartu Inventarisasi; cetak kartu BMN & backup penuh" color="cyan" isLast />
           </div>
         </CollapsibleSection>
@@ -636,7 +656,7 @@ export default function InfoPage({ onBack }) {
               unit="/ tahun"
               tagline="Satu satuan kerja, pengguna tidak dibatasi"
               features={[
-                "Semua fitur (offline, real-time, 13+ laporan, pengesahan)",
+                "Semua fitur (offline, real-time, 15+ laporan, pengesahan)",
                 "Update versi & perbaikan bug",
                 "Dukungan teknis jam kerja",
                 "Instalasi di server satker (on-premise) atau VPS sendiri",
@@ -673,7 +693,7 @@ export default function InfoPage({ onBack }) {
             <ul className="grid md:grid-cols-2 gap-x-6 gap-y-2 text-sm text-slate-300">
               {[
                 "Fitur setara sistem enterprise: offline-first penuh (snapshot + antrian sinkron), kolaborasi real-time multi-user yang teruji (OCC, locking, WebSocket ber-JWT)",
-                "13+ laporan resmi format Kemenkeu siap tanda tangan — menggantikan penyusunan manual berhari-hari tiap kegiatan",
+                "15+ laporan resmi format Kemenkeu siap tanda tangan — menggantikan penyusunan manual berhari-hari tiap kegiatan",
                 "Alur pengesahan berkekuatan dokumen + kunci permanen + audit trail per field — akuntabilitas pemeriksaan/audit BPK",
                 "Pembanding: membangun sistem serupa dari nol ± Rp 191,5 juta di tahun pertama (lihat RAB di bawah) — belum termasuk risiko kegagalan proyek",
                 "Biaya tahunan sudah mencakup pemeliharaan, update, dan dukungan teknis (komponen terbesar biaya operasional aplikasi pemerintah)",
@@ -795,7 +815,7 @@ export default function InfoPage({ onBack }) {
             Sistem Inventarisasi Barang Milik Negara (BMN) — sebelumnya InventoryMaster Pro
           </p>
           <p className="text-xs text-slate-600 mt-2">
-            &copy; {new Date().getFullYear()} AMAN v2.3 | Product Requirements Document
+            &copy; {new Date().getFullYear()} AMAN v2.6 | Product Requirements Document
           </p>
           <p className="text-xs text-slate-600 mt-2">
             Ikon animasi pada Peta Siklus oleh{" "}

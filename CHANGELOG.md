@@ -67,6 +67,45 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#707] Halaman PRD, slide PPT & proposal DOCX disegarkan ke versi terkini — 2026-08-02
+
+Mandat pemilik: "perbaharui semua halaman di login#fitur baik di PPT
+maupun DOCX proposalnya dari versi terbaru sekarang".
+
+- **Generator PPT & DOCX ditulis ulang total** — keduanya masih memuat
+  identitas lama "InventoryMaster Pro" dengan 18 modul, klaim teknologi
+  yang tidak pernah dipakai (Kubernetes), dan fokus SE-17 saja. Kini:
+  - **PPT 10 slide**: sampul AMAN (statistik 12 tahap siklus / 31 halaman /
+    15+ laporan / 45 kode SAKTI), latar belakang + dasar hukum termutakhir,
+    arsitektur NYATA (React 19 PWA offline-first, FastAPI + Motor,
+    MongoDB + GridFS, VPS Nginx + Supervisor + CI/CD GitHub Actions,
+    Redis & Meilisearch opsional), slide baru **Siklus Penuh 12 Tahap +
+    penatausahaan tiga serangkai + Persediaan SAKTI**, 12 kartu fitur
+    terkini, alur kerja + peran ber-RBAC, kepatuhan SE-17 & SAKTI, skema
+    lisensi + ringkasan RAB, timeline, penutup.
+  - **DOCX BAB I–VI**: pendahuluan & ruang lingkup 13 butir sesuai kondisi
+    terpasang, dasar hukum +PMK 234/2020 +PMK 207/2021 +PerANRI 5/2021,
+    fitur A–L lengkap (offline-first, siklus 12 tahap, persediaan SAKTI,
+    TTD elektronik, stiker QR, spasial/IoT, master data, keamanan
+    multi-satker), metodologi memakai praktik mutu nyata (1.400+ uji,
+    registry anti-drift, CI/CD), spesifikasi perangkat lunak jujur (tanpa
+    Kubernetes; Redis/Meilisearch opsional), BAB V kini berisi **skema
+    lisensi** + RAB referensi yang identik dengan halaman PRD.
+  - Identitas & angka kunci (stat, tier lisensi, RAB) dipusatkan di satu
+    konstanta modul agar PPT–DOCX–InfoPage tak saling berbeda lagi.
+  - Nama file unduhan menjadi `AMAN_PRD_Presentasi.pptx` dan
+    `Proposal_AMAN.docx` (frontend & backend serempak).
+- **Halaman PRD (login → #fitur) diselaraskan**: seksi "Apa yang Baru"
+  kini Rilis v2.6 (Agustus 2026) dengan dua kartu baru (Persediaan SAKTI;
+  Nilai + Stiker + UI), angka laporan diseragamkan 15+, deskripsi kartu
+  unduhan mengikuti isi dokumen baru, kartu fitur stiker memuat
+  keterbacaan baru + stiker contoh berukuran, footer versi v2.6.
+- Diverifikasi dengan merender kedua dokumen tanpa server: PPTX 10 slide
+  terbuka, DOCX memuat identitas & seluruh angka kunci, dan tak ada lagi
+  jejak nama lama.
+
+---
+
 ## [#706] Stiker label BMN dirombak keterbacaannya + stiker contoh berukuran — 2026-08-02
 
 Mandat pemilik: "informasi di dalam stikernya masih kurang, mulai dari ukuran
