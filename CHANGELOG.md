@@ -67,6 +67,39 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#681] Audit total gel.2 — jurnal ganda & kapitalisasi terkunci — 2026-08-02
+
+Gelombang kedua audit menyeluruh: tiga cacat jurnal ber-severity TINGGI yang
+menghasilkan **uang salah di Buku Barang / CaLBMN** atau menghentikan alur
+kapitalisasi. Semua diverifikasi ulang di kode; pola perbaikan seragam dengan
+`terproyeksi` di `penggunaan.py`.
+
+- **Kapitalisasi pemeliharaan terkunci "diposting" tanpa jurnal 202**
+  (`pemeliharaan.py`). `purchase_price` disimpan SEBAGAI STRING di semua jalur
+  create (AssetCreate `Optional[str]`, pengadaan/siman menulis `str(...)`).
+  `POST /pemeliharaan/{id}/kapitalisasi` menandai CAS `kapitalisasi_diposting`
+  DULU, lalu `$inc {"purchase_price": biaya}` — Mongo menolak `$inc` pada field
+  string → 500. Akibatnya nilai aset tak bertambah, jurnal 202 tak terbit, tapi
+  catatan sudah terkunci (retry 409 "sudah diposting"). Perbaikan: baca harga
+  lama via `parse_harga`, tulis balik jumlahnya sebagai `$set` string, dan bila
+  update/jurnal gagal LEPAS penanda CAS agar bisa diulang.
+- **Jurnal 301 penghapusan ditulis tanpa syarat proyeksi** (`penghapusan.py`).
+  Aset yang sudah keluar buku lewat register lain (tiket idle → 302) membuat
+  `_proyeksi_master_penghapusan` mengembalikan False, tetapi 301 tetap ditulis.
+  Karena penjaga anti-ganda `catat_mutasi_bmn` hanya per `(asset_id,
+  kode_transaksi, ref_id)` dan ref-nya berbeda, kedua jurnal lolos → mutasi
+  KURANG dobel. Kini 301 hanya ditulis bila proyeksi benar-benar men-tombstone.
+- **Jurnal 303/301 pemindahtanganan mengabaikan hasil proyeksi per aset**
+  (`pemindahtanganan.py`). `_proyeksi_master_pemindahtanganan` mengembalikan
+  count yang diabaikan; loop jurnal menulis untuk SEMUA aset usulan walau
+  sebagian sudah dihapus jalur lain — dobel KURANG pada alur Penghapusan↔PT
+  yang justru dirancang saling tertaut (satu SK). Kini helper mengembalikan
+  himpunan asset_id yang benar-benar diproyeksikan; jurnal hanya untuk itu.
+
+Verifikasi: `py_compile` bersih, 1397 uji unit backend lulus.
+
+---
+
 ## [#680] Audit total gel.1 — isolasi satker, auth template, jejak audit SAKTI — 2026-08-02
 
 Gelombang pertama dari audit menyeluruh 10-dimensi (fan-out + verifikasi

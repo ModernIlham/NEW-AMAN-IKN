@@ -233,24 +233,34 @@ async def transisi_usulan(usulan_id: str, payload: TransisiIn,
     # Proyeksi master (Prinsip 3): saat SK terbit, tandai aset `dihapus` di
     # db.assets + audit. Setelah transisi CAS sukses agar tak double-proyeksi.
     if payload.status == "sk_terbit":
-        res["proyeksi_master"] = await _proyeksi_master_penghapusan(
+        terproyeksi = await _proyeksi_master_penghapusan(
             res, admin.get("username") or "system")
+        res["proyeksi_master"] = terproyeksi
         # Jurnal Buku Barang (G7): penghapusan → 301 (best-effort).
-        from pembukuan_utils import parse_harga
-        from shared_utils import catat_mutasi_bmn
-        aset = await db.assets.find_one(
-            {"id": res.get("asset_id")},
-            {"_id": 0, "asset_code": 1, "NUP": 1, "purchase_price": 1})
-        await catat_mutasi_bmn({
-            "asset_id": res.get("asset_id"), "kode_transaksi": "301",
-            "kode_barang": str((aset or {}).get("asset_code") or ""),
-            "nup": str((aset or {}).get("NUP") or ""),
-            "tanggal_buku": (res.get("tanggal_sk") or now[:10]),
-            "jumlah": 1,
-            "nilai": parse_harga((aset or {}).get("purchase_price")),
-            "sumber_modul": "penghapusan", "ref_id": res.get("id"),
-            "keterangan": f"SK Penghapusan {res.get('nomor_sk') or '-'}",
-            "oleh": admin.get("username", "system")})
+        #
+        # HANYA bila proyeksi benar-benar men-tombstone aset ini. Aset yang
+        # SUDAH keluar buku lewat register lain (mis. tiket idle → 302, atau
+        # pemindahtanganan) mengembalikan proyeksi False; menulis 301 tetap
+        # akan menjurnal KURANG kedua kalinya untuk satu aset — dan penjaga
+        # anti-ganda catat_mutasi_bmn hanya per (asset_id, kode_transaksi,
+        # ref_id), sehingga ref usulan yang berbeda lolos → saldo CaLBMN dobel.
+        # Pola sama dengan `terproyeksi` di routes/penggunaan.py.
+        if terproyeksi:
+            from pembukuan_utils import parse_harga
+            from shared_utils import catat_mutasi_bmn
+            aset = await db.assets.find_one(
+                {"id": res.get("asset_id")},
+                {"_id": 0, "asset_code": 1, "NUP": 1, "purchase_price": 1})
+            await catat_mutasi_bmn({
+                "asset_id": res.get("asset_id"), "kode_transaksi": "301",
+                "kode_barang": str((aset or {}).get("asset_code") or ""),
+                "nup": str((aset or {}).get("NUP") or ""),
+                "tanggal_buku": (res.get("tanggal_sk") or now[:10]),
+                "jumlah": 1,
+                "nilai": parse_harga((aset or {}).get("purchase_price")),
+                "sumber_modul": "penghapusan", "ref_id": res.get("id"),
+                "keterangan": f"SK Penghapusan {res.get('nomor_sk') or '-'}",
+                "oleh": admin.get("username", "system")})
     return res
 
 

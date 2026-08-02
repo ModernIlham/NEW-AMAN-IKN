@@ -618,23 +618,46 @@ async def posting_kapitalisasi(catatan_id: str,
     # dibukukan (DBKP/posisi neraca membaca purchase_price); masa manfaat
     # bertambah sesuai Tabel II (dibaca status_susut Penilaian/DBKP/LBP);
     # version naik untuk bust cache/OCC form.
-    inc = {"purchase_price": biaya, "version": 1}
+    #
+    # `purchase_price` DISIMPAN SEBAGAI STRING di seluruh jalur create
+    # (models.AssetCreate Optional[str]; pengadaan/siman menulis str(...)).
+    # `$inc` pada field string ditolak Mongo (WriteError non-numeric) → dulu
+    # endpoint 500 SETELAH penanda CAS terlanjur ter-set, sehingga catatan
+    # terkunci "diposting" padahal nilai aset tak bertambah & jurnal 202 tak
+    # pernah terbit — dokumen yang berbohong. Karena itu: baca harga lama
+    # (parse_harga menerima string/angka), jumlahkan, tulis balik sebagai
+    # STRING (konsisten tipe field), dan bila apa pun gagal, LEPAS penanda
+    # CAS supaya operator bisa mengulang.
+    harga_lama = parse_harga(aset.get("purchase_price"))
+    harga_baru = harga_lama + biaya
+    set_aset = {"purchase_price": str(int(round(harga_baru))),
+                "updated_at": now}
     if tambah_tahun > 0:
-        inc["masa_manfaat_tambah_tahun"] = tambah_tahun
-    await db.assets.update_one(
-        {"id": aset["id"]},
-        {"$inc": inc, "$set": {"updated_at": now}})
-    await catat_mutasi_bmn({
-        "asset_id": aset["id"], "kode_transaksi": "202",
-        "kode_barang": str(aset.get("asset_code") or ""),
-        "nup": str(aset.get("NUP") or ""),
-        # jumlah 0: murni transaksi NILAI pada aset yang sama — tak ada unit
-        # baru (konvensi 204/205; dulu 1 → kuantitas Tabel 17 CaLBMN melenceng).
-        "tanggal_buku": str(rec.get("tanggal") or now)[:10], "jumlah": 0,
-        "nilai": biaya, "sumber_modul": "pemeliharaan", "ref_id": catatan_id,
-        "keterangan": ("Pengembangan nilai dari pemeliharaan: "
-                       + str(rec.get("uraian") or ""))[:200],
-        "oleh": admin.get("username", "system")})
+        mm_lama = parse_harga(aset.get("masa_manfaat_tambah_tahun"))
+        set_aset["masa_manfaat_tambah_tahun"] = int(round(mm_lama + tambah_tahun))
+    try:
+        await db.assets.update_one(
+            {"id": aset["id"]},
+            {"$set": set_aset, "$inc": {"version": 1}})
+        await catat_mutasi_bmn({
+            "asset_id": aset["id"], "kode_transaksi": "202",
+            "kode_barang": str(aset.get("asset_code") or ""),
+            "nup": str(aset.get("NUP") or ""),
+            # jumlah 0: murni transaksi NILAI pada aset yang sama — tak ada unit
+            # baru (konvensi 204/205; dulu 1 → kuantitas Tabel 17 CaLBMN melenceng).
+            "tanggal_buku": str(rec.get("tanggal") or now)[:10], "jumlah": 0,
+            "nilai": biaya, "sumber_modul": "pemeliharaan", "ref_id": catatan_id,
+            "keterangan": ("Pengembangan nilai dari pemeliharaan: "
+                           + str(rec.get("uraian") or ""))[:200],
+            "oleh": admin.get("username", "system")})
+    except Exception:
+        # Kompensasi: penanda CAS dilepas agar kapitalisasi bisa diulang —
+        # tanpa ini catatan macet "diposting" tanpa efek apa pun.
+        await db.pemeliharaan.update_one(
+            {"id": catatan_id},
+            {"$set": {"kapitalisasi_diposting": False, "updated_at": now},
+             "$unset": {"kapitalisasi_oleh": "", "kapitalisasi_pada": ""}})
+        raise
     detail_mm = (f" + masa manfaat +{tambah_tahun} th (Tabel II KMK, {nomor_ba})"
                  if tambah_tahun > 0 else f" (BA {nomor_ba})")
     await log_audit("kapitalisasi_pemeliharaan", "", asset_id=aset["id"],
