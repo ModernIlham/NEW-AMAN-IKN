@@ -67,6 +67,21 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#697] Latar halaman masuk kembali ke ukuran semula — 2026-08-02
+
+Tekstur yang dipantulkan permukaan cair (PR #689) memakai kubus ber-jari-jari
+74 px — hanya ±8 kubus melintang. Tekstur 1024 px itu diregangkan ke lebar
+panel, jadi kubusnya tampil **±2,5x lebih besar** daripada `login-pattern`
+aslinya dan latar terasa membesar.
+
+Ukuran kubus kini **diturunkan dari pola CSS-nya**, bukan ditebak: konstanta
+`SEL_POLA_CSS` (40 px, sama dengan `background-size` di `index.css`) dan
+`LEBAR_PANEL_ACUAN` (720 px = separuh layar 1440) membuat kaitannya tersurat,
+sehingga kerapatannya tak perlu ditebak ulang tiap kali teksturnya dibuat
+ulang. Hasilnya ±18 kubus melintang — sama seperti sebelum efek cair ada.
+
+---
+
 ## [#696] Efek cair asli di halaman masuk — pustakanya dibundel, bukan dari CDN — 2026-08-02
 
 Panel kiri layar masuk kini memakai efek **logam cair `liquid1`** yang asli
