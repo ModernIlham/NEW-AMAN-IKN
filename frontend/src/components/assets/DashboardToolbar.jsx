@@ -1,9 +1,11 @@
-import React, { memo, useState, useEffect, useRef } from "react";
+import React, { memo, useState, useEffect, useMemo, useRef } from "react";
 import {
   Search, Filter, Download, Upload, Settings,
   Loader2, Trash2, Eye, FileText, FileSpreadsheet, CreditCard,
   List, LayoutGrid, MapPinned, Tags,
 } from "lucide-react";
+import { labelDilepas } from "@/lib/labelRingkas";
+import useLebarElemen from "@/hooks/useLebarElemen";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -66,6 +68,45 @@ const DashboardToolbar = memo(function DashboardToolbar({
   viewMode, setViewMode,
   inventoryMode, setInventoryMode,
 }) {
+  // ── Satu baris di lebar berapa pun ────────────────────────────────────────
+  // Lebar diukur dari KONTAINER (bukan viewport) lalu label dilepas satu per
+  // satu sampai muat — lihat `lib/labelRingkas` untuk alasan lengkapnya.
+  const [barisRef, lebarBaris] = useLebarElemen();
+
+  // Urutan array = URUTAN PELEPASAN label. Disusun dari yang paling rela jadi
+  // ikon ke yang paling perlu kata-katanya:
+  //  · "Cetak Kartu (n)" & "Hapus Semua" — label terpanjang, ikonnya (kartu,
+  //    tong sampah) sudah bicara sendiri, jadi paling banyak ruang ditebus
+  //    dengan kerugian paling kecil;
+  //  · Export & Import DITAHAN paling akhir di grup aksi: ikon panah turun dan
+  //    panah naik gampang tertukar, kata-katanyalah yang membedakan;
+  //  · dua Select paling akhir — keduanya tidak kehilangan teks, hanya
+  //    menyempit, karena isinya menyatakan filter yang sedang aktif.
+  // `lebarIkon` 38 px = lebar terukur tombol `size="sm" h-8` bentuk ikon-saja
+  // (px-2 + garis + ikon 12 px). Saklar tampilan & dua Select memakai lebar
+  // eksplisit karena keduanya menyempit, bukan kehilangan teks.
+  const itemLipat = useMemo(() => {
+    const daftar = [
+      { kunci: "kartu", lebarIkon: 38, label: `Cetak Kartu (${assetsCount})` },
+    ];
+    if (perms.canBulkDelete) daftar.push({ kunci: "hapus", lebarIkon: 38, label: "Hapus Semua" });
+    daftar.push({ kunci: "stiker", lebarIkon: 38, label: "Stiker" });
+    if (perms.canImport) daftar.push({ kunci: "impor", lebarIkon: 38, label: "Import" });
+    daftar.push({ kunci: "ekspor", lebarIkon: 38, label: "Export" });
+    if (viewMode !== undefined && setViewMode) {
+      daftar.push({ kunci: "tampilan", lebarIkon: 66, lebarPenuh: 145 });
+    }
+    daftar.push({ kunci: "filter", lebarIkon: 38, label: "Filter Lanjutan" });
+    daftar.push({ kunci: "urut", lebarIkon: 88, lebarPenuh: 128 });
+    daftar.push({ kunci: "kategori", lebarIkon: 112, lebarPenuh: 160 });
+    return daftar;
+  }, [assetsCount, perms.canBulkDelete, perms.canImport, viewMode, setViewMode]);
+
+  // `lebarTetap` = indikator kuota kompresi, satu-satunya penghuni baris yang
+  // tak pernah melipat.
+  const lepas = labelDilepas(lebarBaris, itemLipat, { celah: 6, lebarTetap: 90 });
+  const tampil = (kunci) => !lepas.has(kunci);
+
   return (
     <div className="bg-card rounded-xl border border-border shadow-sm p-1.5 sm:p-2.5 print:hidden" data-testid="dashboard-toolbar">
       <div className="flex flex-col gap-1 sm:gap-2">
@@ -123,36 +164,46 @@ const DashboardToolbar = memo(function DashboardToolbar({
           </Button>
         </div>
 
-        {/* Desktop toolbar (lg+ only) — DUA GRUP yang boleh melipat.
-            Dulu satu baris `flex-nowrap` + `overflow-x-auto`: breakpoint melihat
-            VIEWPORT, bukan kontainer, jadi di halaman kegiatan (panel form kiri
-            ~460px) viewport 1366px tetap memakai label xl padahal lebar efektif
-            toolbar tinggal ~880px → muncul geser samping (dilarang pemilik).
-            Kini grup filter (kiri) dan grup aksi (kanan) masing-masing berdiri
-            sendiri; baris induk `flex-wrap` sehingga saat sempit grup aksi
-            turun utuh ke baris kedua dan tetap rata kanan (`ml-auto`) — tanpa
-            scroll samping pada lebar berapa pun. Grup dalam juga `flex-wrap`
-            sebagai katup terakhir bila satu grup pun tak muat. */}
-        <div className="hidden lg:flex flex-wrap gap-1.5 items-center">
-          <div className="flex flex-wrap items-center gap-1.5">
+        {/* Desktop toolbar (lg+ only) — SATU BARIS di lebar berapa pun.
+            Riwayat: mula-mula `flex-nowrap` + `overflow-x-auto` (geser samping),
+            lalu `flex-wrap` dua grup (grup aksi turun ke baris kedua). Keduanya
+            ditolak pemilik: "jangan membuat row baris baru … usahakan
+            dipersingkat dengan memberikan iconnya saja seiring terhimpitnya
+            tampilan layar."
+            Akar masalahnya: breakpoint `xl:` membaca lebar VIEWPORT, sedangkan
+            yang menentukan muat/tidak adalah lebar KONTAINER — di halaman
+            Kegiatan panel form kiri menyisakan ~880px pada layar 1366px, `xl`
+            tetap menyala, label lengkap tetap dirender, barisnya meluber.
+            Sekarang lebar baris diukur ResizeObserver dan label dilepas satu
+            per satu (`lib/labelRingkas`). Bentuk paling ringkas — semua ikon
+            saja — hanya butuh ±420px, jauh di bawah lebar kontainer mana pun
+            yang bisa muncul di ≥lg, jadi tak perlu lagi katup scroll. */}
+        <div ref={barisRef} className="hidden lg:flex flex-nowrap gap-1.5 items-center">
+          <div className="flex flex-nowrap items-center gap-1.5">
             <CategorySelect
               categories={categories}
               value={filterCategory}
               onValueChange={v => { setFilterCategory(v); refreshData(1); }}
               placeholder="Semua Kategori"
-              className="w-32 xl:w-40 flex-shrink-0"
+              // TANPA `flex-shrink-0`, dan itu disengaja: setelah semua label
+              // dilepas pun ada lebar kontainer ekstrem (panel form di layar
+              // 1024) yang tetap kurang. Dua Select inilah katup terakhirnya —
+              // isinya sudah `truncate`, jadi menyusut hanya memendekkan teks,
+              // bukan memunculkan geser samping. Saudara-saudaranya tetap
+              // `flex-shrink-0` supaya tak ada yang lain ikut tergencet.
+              className={`min-w-0 ${tampil("kategori") ? "w-40" : "w-28"}`}
             />
 
             <Button
               variant={activeFilterCount > 0 ? "default" : "outline"}
               size="sm"
-              className={`h-8 text-xs flex-shrink-0 ${activeFilterCount > 0 ? "bg-teal-700" : ""}`}
+              className={`h-8 text-xs flex-shrink-0 ${tampil("filter") ? "" : "px-2"} ${activeFilterCount > 0 ? "bg-teal-700" : ""}`}
               onClick={() => setShowAdvancedFilter(!showAdvancedFilter)}
               title="Filter Lanjutan"
               data-testid="advanced-filter-btn"
             >
-              <Filter className="w-3 h-3 xl:mr-1" />
-              <span className="hidden xl:inline">Filter Lanjutan</span>
+              <Filter className={`w-3 h-3 ${tampil("filter") ? "mr-1" : ""}`} />
+              {tampil("filter") && <span>Filter Lanjutan</span>}
               {activeFilterCount > 0 && (
                 <span className="ml-1.5 bg-white text-blue-600 rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">
                   {activeFilterCount}
@@ -161,7 +212,8 @@ const DashboardToolbar = memo(function DashboardToolbar({
             </Button>
 
             <Select value={sortBy} onValueChange={v => { setSortBy(v); refreshData(1); }}>
-              <SelectTrigger className="w-24 xl:w-32 h-8 text-xs flex-shrink-0"><SelectValue /></SelectTrigger>
+              {/* Ikut jadi katup terakhir bersama Select kategori — lihat catatan di sana. */}
+              <SelectTrigger className={`h-8 text-xs min-w-0 ${tampil("urut") ? "w-32" : "w-[88px]"}`}><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="newest">Terbaru</SelectItem>
                 <SelectItem value="oldest">Terlama</SelectItem>
@@ -177,35 +229,39 @@ const DashboardToolbar = memo(function DashboardToolbar({
 
             {/* View Mode Toggle — `flex-shrink-0` seperti seluruh saudaranya:
                 item yang boleh menyusut akan menyerap SELURUH kelebihan lebar
-                dan tergencet sendirian (lihat catatan di TinifyQuotaIndicator).
-                Kalau tak muat, biar wrap baris induk yang bekerja. */}
+                dan tergencet sendirian (lihat catatan di TinifyQuotaIndicator). */}
             {viewMode !== undefined && setViewMode && (
               <div className="flex flex-shrink-0 bg-muted rounded-lg p-0.5 gap-0.5" data-testid="view-mode-toggle">
                 <button
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${viewMode === 'list' ? 'bg-card text-blue-600 shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                  className={`flex items-center gap-1 py-1 rounded-md text-xs font-medium transition-all ${tampil("tampilan") ? "px-2.5" : "px-2"} ${viewMode === 'list' ? 'bg-card text-blue-600 shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                   onClick={() => setViewMode('list')}
+                  title="Tampilan daftar"
                   data-testid="view-mode-list"
                 >
-                  <List className="w-3.5 h-3.5" /><span className="hidden xl:inline">List</span>
+                  <List className="w-3.5 h-3.5" />{tampil("tampilan") && <span>List</span>}
                 </button>
                 <button
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${viewMode === 'gallery' ? 'bg-card text-blue-600 shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                  className={`flex items-center gap-1 py-1 rounded-md text-xs font-medium transition-all ${tampil("tampilan") ? "px-2.5" : "px-2"} ${viewMode === 'gallery' ? 'bg-card text-blue-600 shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                   onClick={() => setViewMode('gallery')}
+                  title="Tampilan galeri"
                   data-testid="view-mode-gallery"
                 >
-                  <LayoutGrid className="w-3.5 h-3.5" /><span className="hidden xl:inline">Galeri</span>
+                  <LayoutGrid className="w-3.5 h-3.5" />{tampil("tampilan") && <span>Galeri</span>}
                 </button>
               </div>
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5 ml-auto">
+          <div className="flex flex-nowrap items-center gap-1.5 ml-auto">
             <TinifyQuotaIndicator />
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" disabled={exporting} className="h-8 text-xs flex-shrink-0" title="Export data">
-                  {exporting ? <Loader2 className="w-3 h-3 xl:mr-1 animate-spin" /> : <Download className="w-3 h-3 xl:mr-1" />}<span className="hidden xl:inline">Export</span>
+                <Button variant="outline" size="sm" disabled={exporting} className={`h-8 text-xs flex-shrink-0 ${tampil("ekspor") ? "" : "px-2"}`} title="Export data">
+                  {exporting
+                    ? <Loader2 className={`w-3 h-3 animate-spin ${tampil("ekspor") ? "mr-1" : ""}`} />
+                    : <Download className={`w-3 h-3 ${tampil("ekspor") ? "mr-1" : ""}`} />}
+                  {tampil("ekspor") && <span>Export</span>}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
@@ -221,29 +277,31 @@ const DashboardToolbar = memo(function DashboardToolbar({
               </DropdownMenuContent>
             </DropdownMenu>
             {perms.canImport && (
-              <Button variant="outline" size="sm" className="h-8 text-xs flex-shrink-0" onClick={() => openDialog('import')} title="Import data">
-                <Upload className="w-3 h-3 xl:mr-1" /><span className="hidden xl:inline">Import</span>
+              <Button variant="outline" size="sm" className={`h-8 text-xs flex-shrink-0 ${tampil("impor") ? "" : "px-2"}`} onClick={() => openDialog('import')} title="Import data">
+                <Upload className={`w-3 h-3 ${tampil("impor") ? "mr-1" : ""}`} />{tampil("impor") && <span>Import</span>}
               </Button>
             )}
             {perms.canBulkDelete && (
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 text-xs flex-shrink-0 text-red-500 hover:text-red-700 hover:bg-red-50 border-red-200 hover:border-red-300"
+                className={`h-8 text-xs flex-shrink-0 text-red-500 hover:text-red-700 hover:bg-red-50 border-red-200 hover:border-red-300 ${tampil("hapus") ? "" : "px-2"}`}
                 onClick={() => openDialog('bulkDelete')}
                 disabled={assetsCount === 0}
                 title="Hapus Semua aset yang terfilter"
               >
-                <Trash2 className="w-3 h-3 xl:mr-1" /><span className="hidden xl:inline">Hapus Semua</span>
+                <Trash2 className={`w-3 h-3 ${tampil("hapus") ? "mr-1" : ""}`} />{tampil("hapus") && <span>Hapus Semua</span>}
               </Button>
             )}
-            <Button variant="outline" size="sm" className="h-8 text-xs flex-shrink-0" onClick={handlePrintBulkCards} disabled={assetsCount === 0}
+            {/* Jumlah aset ikut hilang bersama labelnya — `title` tetap
+                menyebutnya agar informasi itu tak lenyap sama sekali. */}
+            <Button variant="outline" size="sm" className={`h-8 text-xs flex-shrink-0 ${tampil("kartu") ? "" : "px-2"}`} onClick={handlePrintBulkCards} disabled={assetsCount === 0}
               title={`Cetak Kartu (${assetsCount})`}>
-              <CreditCard className="w-3 h-3 xl:mr-1" /><span className="hidden xl:inline">Cetak Kartu ({assetsCount})</span>
+              <CreditCard className={`w-3 h-3 ${tampil("kartu") ? "mr-1" : ""}`} />{tampil("kartu") && <span>Cetak Kartu ({assetsCount})</span>}
             </Button>
-            <Button variant="outline" size="sm" className="h-8 text-xs flex-shrink-0" onClick={onCetakStiker} disabled={assetsCount === 0}
+            <Button variant="outline" size="sm" className={`h-8 text-xs flex-shrink-0 ${tampil("stiker") ? "" : "px-2"}`} onClick={onCetakStiker} disabled={assetsCount === 0}
               title="Cetak Stiker Label BMN" data-testid="toolbar-cetak-stiker">
-              <Tags className="w-3 h-3 xl:mr-1" /><span className="hidden xl:inline">Stiker</span>
+              <Tags className={`w-3 h-3 ${tampil("stiker") ? "mr-1" : ""}`} />{tampil("stiker") && <span>Stiker</span>}
             </Button>
           </div>
         </div>
