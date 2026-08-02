@@ -39,7 +39,7 @@ const DashboardHeader = memo(({
             <Package className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
           </div>
           <div className="min-w-0 overflow-hidden">
-            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight truncate font-['Manrope']">
+            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight truncate">
               {activity?.nama_kegiatan || 'Manajemen Aset'}
             </h1>
             <p className="text-[10px] text-muted-foreground hidden sm:flex items-center gap-1.5 truncate">

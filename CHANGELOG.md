@@ -67,6 +67,41 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#704] Tanggalan roda di Master Pegawai, font judul dibetulkan, titik tombol masuk dihapus — 2026-08-02
+
+- **Tanggalan RODA (hari · bulan · tahun) di Master Pegawai** — desain
+  `date-wheel-picker` (21st.dev) yang dipilih pemilik, dikonversi ke JSX
+  (`components/ui/date-wheel-picker.jsx`): tiga kolom roda 3D yang bisa
+  diseret/di-scroll/diketik panah, nama bulan Indonesia (`Intl` id-ID),
+  gradien pudar memakai token `hsl(var(--popover))` (token warna aplikasi
+  ini triplet HSL — `var(--background)` mentah dari aslinya bukan warna
+  sah). Pembungkus `InputTanggalRoda` menyamakan kontraknya dengan
+  `InputTanggal` (ISO + `{target:{name,value}}`) dan menambah tombol
+  **Pakai**/**Kosongkan** — roda berputar bebas tanpa menyimpan, sehingga
+  setengah-gulir tak pernah bocor ke form. Terpasang di TUJUH kolom:
+  Tgl Lahir (1940–kini), Tgl Meninggal, Tgl Pemberitahuan Ahli Waris,
+  TMT & Akhir Periode Jabatan, Mulai & Selesai Kontrak.
+- **Font judul dibetulkan — Manrope hantu dihapus.** Judul halaman masuk,
+  "Verifikasi Email", logo AMAN di header dashboard, dan halaman pemilihan
+  kegiatan memakai `font-['Manrope']` — padahal font Manrope TIDAK PERNAH
+  dimuat (tak ada di @fontsource), jadi peramban diam-diam jatuh ke font
+  sistem yang berbeda dari seluruh aplikasi. Ketujuh titik dikembalikan ke
+  **Plus Jakarta Sans Variable** (font resmi yang memang dibundel), dan
+  `fontFamily.sans/mono` kini DIDEFINISIKAN di `tailwind.config.js` — tanpa
+  itu utilitas `font-sans` memakai stack bawaan Tailwind dan menimpa font
+  aplikasi di elemen mana pun yang memakainya.
+- **Titik hitam di tombol Masuk/Daftar dihapus** — titik kecil "benih"
+  animasi pada tombol interaktif; isian tetap mengembang dari sisi kiri
+  saat disentuh, hanya penandanya yang tak lagi tampak.
+- **Halaman PRD (Info) dimutakhirkan**: dua kartu fitur baru — *Persediaan
+  Standar SAKTI* (45 kode transaksi, Daftar Transaksi, daftar usang/rusak/
+  tak dikuasai + hapus ber-SK, koreksi nilai, 7 laporan format SAKTI) dan
+  *Rantai Nilai & Penyusutan* (nilai buku per NUP, timeline jurnal Buku
+  Barang, jurnal edit harga, masa manfaat LHIP) — plus butir tanggalan
+  roda pada kartu Master SDM.
+
+---
+
 ## [#703] Rantai nilai aset dirapatkan — tiga celah audit ditutup — 2026-08-02
 
 Penutup audit rantai nilai (lanjutan [#699]): tiga celah yang membuat

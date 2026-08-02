@@ -19,6 +19,18 @@ module.exports = {
         },
         extend: {
                 // ============================================================
+                // Font aplikasi — SATU sumber dengan index.css. Tanpa blok ini
+                // utilitas `font-sans` memakai stack bawaan Tailwind (ui-sans-
+                // serif…) dan diam-diam MENIMPA Plus Jakarta Sans di elemen
+                // mana pun yang memakainya.
+                // ============================================================
+                fontFamily: {
+                    sans: ["'Plus Jakarta Sans Variable'", "'Segoe UI'",
+                           "system-ui", "-apple-system", "sans-serif"],
+                    mono: ["'JetBrains Mono'", "ui-monospace",
+                           "'Cascadia Mono'", "monospace"],
+                },
+                // ============================================================
                 // Typography Scale (base 16px, ratio 1.250 Major Third)
                 // Token: [font-size, { lineHeight, letterSpacing, fontWeight }]
                 // ============================================================

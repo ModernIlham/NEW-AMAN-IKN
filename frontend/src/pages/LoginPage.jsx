@@ -108,7 +108,7 @@ function OTPVerification({ email, debugOtp, onVerified, onBack, onDebugOtp }) {
         <div className="mx-auto w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4">
           <ShieldCheck className="w-8 h-8 text-blue-600" />
         </div>
-        <h2 className="text-2xl font-bold text-foreground font-['Manrope']">Verifikasi Email</h2>
+        <h2 className="text-2xl font-bold text-foreground">Verifikasi Email</h2>
         <p className="text-muted-foreground mt-2 text-sm">
           Kode OTP telah dikirim ke <span className="font-medium text-foreground">{email}</span>
         </p>
@@ -298,12 +298,12 @@ export default function LoginPage({ onLogin, onShowInfo }) {
               <Package className="w-6 h-6 text-white" />
             </div>
             <div className="flex flex-col leading-tight">
-              <span className="text-xl font-bold text-white font-['Manrope']">AMAN</span>
+              <span className="text-xl font-bold text-white">AMAN</span>
               <span className="text-[11px] font-medium text-slate-300">Aplikasi Manajemen Aset Negara</span>
             </div>
           </div>
           <div className="space-y-6 max-w-lg">
-            <h1 className="text-4xl xl:text-5xl font-bold text-white leading-tight font-['Manrope']">
+            <h1 className="text-4xl xl:text-5xl font-bold text-white leading-tight">
               Pengelolaan BMN yang
               {/* Tinggi baris dijaga komponennya sendiri (salinan tak terlihat
                   kata terpanjang), jadi barisnya tak berkedut saat berganti. */}
@@ -349,13 +349,13 @@ export default function LoginPage({ onLogin, onShowInfo }) {
                 <Package className="w-6 h-6 text-white" />
               </div>
               <div className="flex flex-col leading-tight text-left">
-                <span className="text-xl font-bold text-foreground font-['Manrope']">AMAN</span>
+                <span className="text-xl font-bold text-foreground">AMAN</span>
                 <span className="text-[11px] font-medium text-muted-foreground">Aplikasi Manajemen Aset Negara</span>
               </div>
             </div>
 
             <div className="text-center lg:text-left">
-              <h2 className="text-2xl font-bold text-foreground font-['Manrope']">
+              <h2 className="text-2xl font-bold text-foreground">
                 {isLogin ? "Selamat Datang" : "Buat Akun Baru"}
               </h2>
               <p className="text-muted-foreground mt-2">
