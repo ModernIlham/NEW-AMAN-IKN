@@ -21,6 +21,24 @@ JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
 
 
+# ── Syarat kekuatan kata sandi (satu sumber untuk register & reset) ─────────
+# Cerminan `frontend/src/lib/passwordRules.js`. Ditegakkan di SERVER karena
+# gerbang di layar hanya menyaring pengguna yang memakai layar itu: sebelum ini
+# `POST /auth/reset-password` hanya menuntut 8 karakter, sehingga akun yang
+# dibuat lewat form Daftar (huruf besar+kecil+angka) bisa direset menjadi
+# "aaaaaaaa" lewat pemanggilan API langsung.
+def periksa_kekuatan_password(password: str) -> str:
+    """Pesan galat pertama yang menghalangi; "" bila kata sandi memenuhi syarat."""
+    p = str(password or "")
+    if len(p) < 8:
+        return "Password minimal 8 karakter"
+    import re as _re
+    if not (_re.search(r"[A-Z]", p) and _re.search(r"[a-z]", p)
+            and _re.search(r"\d", p)):
+        return "Password harus mengandung huruf besar, huruf kecil, dan angka"
+    return ""
+
+
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 

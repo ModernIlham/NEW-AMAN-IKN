@@ -120,9 +120,11 @@ async def request_otp(request: Request, data: OTPRequest):
     if existing:
         raise HTTPException(status_code=400, detail="Email sudah terdaftar")
     
-    # Check if password is valid
-    if not data.password or len(data.password) < 8:
-        raise HTTPException(status_code=400, detail="Password minimal 8 karakter")
+    # Syarat kata sandi ditegakkan di server (auth_utils), bukan hanya di layar.
+    from auth_utils import periksa_kekuatan_password
+    _galat_pw = periksa_kekuatan_password(data.password)
+    if _galat_pw:
+        raise HTTPException(status_code=400, detail=_galat_pw)
     
     # Generate OTP
     otp = generate_otp()
@@ -230,8 +232,13 @@ async def reset_password(request: Request, data: dict):
     baru = str(data.get("new_password") or "")
     if not email or not otp:
         raise HTTPException(status_code=400, detail="Email & kode OTP wajib diisi")
-    if len(baru) < 8:
-        raise HTTPException(status_code=400, detail="Password baru minimal 8 karakter")
+    # Syarat SAMA dengan pendaftaran (auth_utils) — dulu jalur ini hanya
+    # menuntut 8 karakter sehingga akun bisa berakhir dengan kata sandi yang
+    # justru akan ditolak saat mendaftar.
+    from auth_utils import periksa_kekuatan_password
+    _galat_baru = periksa_kekuatan_password(baru)
+    if _galat_baru:
+        raise HTTPException(status_code=400, detail=_galat_baru)
 
     stored = await get_otp(f"reset:{email}")
     if not stored:

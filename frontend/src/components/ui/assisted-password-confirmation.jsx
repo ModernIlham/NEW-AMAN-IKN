@@ -27,6 +27,7 @@ export function AssistedPasswordConfirmationField({
   placeholder = "Ulangi kata sandi baru",
   onMatchChange,
   testId = "assisted-password-confirm",
+  ringkas = false,
 }) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [shake, setShake] = useState(false);
@@ -102,6 +103,42 @@ export function AssistedPasswordConfirmationField({
     borderColor: passwordsMatch ? "#10B981" : "hsl(var(--border))",
     transition: { duration: 0.3 },
   };
+
+  // MODE RINGKAS: satu kolom isian setinggi kolom form biasa (h-9) + strip
+  // penanda setipis 6px tepat di bawahnya. Bentuk lebarnya dulu memakan dua
+  // baris setinggi 52px (kotak titik + kolom) sehingga panel reset menjadi
+  // jauh lebih tinggi daripada kolom-kolom form di sekitarnya.
+  if (ringkas) {
+    return (
+      <motion.div className="w-full" animate={bounceAnimation}>
+        <motion.input
+          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm tracking-[0.25em] text-foreground outline-none placeholder:tracking-normal placeholder:text-muted-foreground focus:border-ring"
+          type="password"
+          placeholder={placeholder}
+          aria-label={placeholder}
+          autoComplete="new-password"
+          value={confirmPassword}
+          onChange={handleConfirmPasswordChange}
+          animate={borderAnimation}
+          data-testid={testId}
+        />
+        <div className="mt-1 flex h-1.5 w-full gap-[2px]" aria-hidden="true">
+          {password.split("").map((letter, index) => (
+            <div
+              key={index}
+              className={`h-full flex-1 rounded-full transition-colors duration-200 ${
+                !confirmPassword[index]
+                  ? "bg-muted"
+                  : confirmPassword[index] === letter
+                    ? "bg-emerald-500"
+                    : "bg-red-500"
+              }`}
+            />
+          ))}
+        </div>
+      </motion.div>
+    );
+  }
 
   return (
     <div className="relative flex w-full flex-col items-start justify-center">

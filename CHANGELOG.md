@@ -67,6 +67,44 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#692] Panel reset ringkas, syarat sandi seragam, kartu aset bertumpuk — 2026-08-02
+
+Tiga perbaikan lanjutan atas PR #684 (konfirmasi sandi) dan penampil foto aset.
+
+- **Panel reset password diringkas.** Bentuk konfirmasi ber-panduan yang lama
+  memakan dua baris setinggi 52 px (kotak titik + kolom isian) sehingga panel
+  reset jauh lebih tinggi dan lebar ketimbang kolom form di sekitarnya. Mode
+  baru `ringkas` memakai SATU kolom setinggi `h-9` — sama seperti kolom form
+  lain — dengan strip penanda setebal 6 px tepat di bawahnya. Penanda tiap
+  karakter (abu → hijau/merah) tetap bekerja penuh, hanya kehilangan kotak
+  titiknya. Kolom Email/OTP/Password baru ikut turun ke `h-9 text-sm`.
+- **Syarat kata sandi baru kini SAMA dengan syarat daftar akun.** Sebelumnya
+  tidak: form Daftar memblokir sandi tanpa huruf besar/kecil/angka, tetapi
+  alur reset OTP — dan **backend di kedua jalur** — hanya memeriksa panjang
+  ≥ 8. Akibatnya `"aaaaaaaa"` lolos lewat reset (bahkan lewat panggilan API
+  langsung, tanpa layar), menghasilkan akun bersandi yang justru DITOLAK bila
+  dipakai mendaftar.
+  - Frontend: `frontend/src/lib/passwordRules.js` (baru) jadi satu-satunya
+    sumber aturan; `PasswordStrength` dan kedua gerbang kirim membacanya.
+    Daftar syarat kini juga tampil di panel reset.
+  - Backend: `auth_utils.periksa_kekuatan_password()` (baru) dipanggil oleh
+    `request_otp` (daftar) **dan** `reset_password` — pemeriksaan ada di
+    server, bukan cuma di layar. Karakter khusus tetap ANJURAN, bukan syarat
+    lulus, supaya sandi pengguna aktif yang sudah ada tidak jadi tak sah.
+- **Kartu informasi aset di penampil foto memakai model tumpukan kartu.**
+  Saat kartu digeser untuk pindah aset, kartu tetangga tak lagi sekadar
+  memudar: ia MENYEBAR ke samping sambil MIRING mengikuti seberapa jauh jari
+  menggeser (`intensitas` 0..1, bukan hidup/mati), lalu merapat kembali
+  dengan pegas saat dilepas. Perhitungan sebarannya (`hitungSebaran`) berada
+  di `components/ui/stacked-cards-interaction.jsx` sebagai fungsi murni —
+  komponen tumpukan kartu dan penampil foto memakai model gerak yang sama.
+  Transisi transform CSS diganti `framer-motion`; saat jari masih menempel
+  animasinya `duration: 0` agar kartu mengikuti jari tanpa tertinggal.
+
+Verifikasi: eslint bersih (0 galat), `yarn build` sukses, 1407 uji backend lulus.
+
+---
+
 ## [#691] Reset password via OTP: ketik ulang sandi baru ber-panduan — 2026-08-02
 
 Komponen konfirmasi kata sandi ber-panduan (PR #683) disematkan ke langkah
