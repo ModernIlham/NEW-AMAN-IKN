@@ -67,6 +67,27 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#710] Marquee "..." kini menampilkan teks UTUH sampai huruf terakhir — 2026-08-02
+
+Tindak lanjut marquee global `[#708]`: teks yang terpotong memang bergeser
+saat di-hover/ketuk, tetapi huruf-huruf TERAKHIR tak pernah tampil — teks
+"hanya tergeser", tidak pernah utuh.
+
+**Akar:** selama elemen masih ber-`text-overflow: ellipsis`, peramban terus
+menggambar "…" di tepi kanan SEPANJANG guliran dan menelan karakter yang
+berada di bawahnya — termasuk saat `scrollLeft` sudah mentok maksimum,
+sehingga ujung teks selamanya tersembunyi di balik elipsis.
+
+**Perbaikan** (`lib/marqueeEllipsis.js`): saat marquee mulai, `text-overflow`
+elemen dipaksa `clip` (elipsis dilepas, huruf tampil apa adanya); nilai
+semula disimpan dan dipulihkan tepat saat teks selesai kembali ke posisi
+awal — "…" muncul lagi seperti sedia kala. Karena elemen ber-`clip` tak
+lagi dikenali saringan gaya, elemen yang sedang bermarquee diberi penanda
+`data-marquee-aktif` agar hover-keluar/ketukan kedua tetap bisa
+mengembalikannya. Diverifikasi harness Playwright: penanda unik di ujung
+teks kini tampil penuh di akhir guliran, dan elipsis pulih setelah kursor
+pergi.
+
 ## [#709] Audit integrasi lintas modul: 14 temuan ditutup — isolasi satker, jurnal nilai, kunci segel, indeks pencarian, pagar memori — 2026-08-02
 
 Audit menyeluruh kebutuhan data antar modul, alur data, rule, dan isolasi

@@ -14,9 +14,11 @@
  *   `text-overflow: ellipsis` + `white-space: nowrap` + overflow-x hidden
  *   DAN isinya benar-benar meluber (scrollWidth > clientWidth).
  * - Animasi memakai `scrollLeft` elemen itu sendiri (elemen overflow:hidden
- *   tetap bisa digulir programatik) — begitu bergeser dari 0, peramban
- *   otomatis melepas elipsisnya; kembali ke 0, elipsis muncul lagi. Tidak
- *   perlu pembungkus/transform, jadi aman untuk markup apa pun.
+ *   tetap bisa digulir programatik). SELAMA bergeser, `text-overflow`
+ *   dipaksa `clip` — bila tidak, peramban tetap menggambar "…" di tepi
+ *   kanan dan MENELAN huruf-huruf terakhir sehingga teks tak pernah tampil
+ *   utuh sampai ujung. Saat kembali ke awal nilai semula dipulihkan dan
+ *   elipsis muncul lagi. Tanpa pembungkus/transform, aman utk markup apa pun.
  * - `prefers-reduced-motion` dihormati: lompat langsung tanpa animasi.
  *
  * Elemen dapat MENOLAK ikut dengan atribut `data-marquee-off`, dan elemen
@@ -35,6 +37,10 @@ function elemenTerpotong(mulai) {
     if (el.hasAttribute?.("data-marquee") || el.hasAttribute?.("data-marquee-off")) {
       return null; // punya penanganan sendiri / menolak
     }
+    // Elemen yang SEDANG bermarquee: elipsisnya sementara `clip` sehingga
+    // saringan gaya di bawah tak lagi mengenalinya — kenali lewat penanda
+    // agar mouseout/klik tetap bisa mengembalikannya ke awal.
+    if (el.dataset?.marqueeAktif) return el;
     // Saring murah dulu lewat className sebelum getComputedStyle.
     const kelas = typeof el.className === "string" ? el.className : "";
     const mungkin = kelas.includes("truncate") || kelas.includes("text-ellipsis")
@@ -56,18 +62,24 @@ function hentikan(el) {
   if (st?.raf) cancelAnimationFrame(st.raf);
 }
 
-function gulirKe(el, tujuan) {
+function gulirKe(el, tujuan, selesai) {
   hentikan(el);
+  // `selesai` hanya dipanggil bila animasi RAMPUNG (tidak diinterupsi
+  // hentikan() oleh animasi baru) — dipakai keAwal utk memulihkan elipsis.
+  const rampung = () => {
+    status.set(el, { ...status.get(el), raf: 0, tujuan });
+    if (selesai) selesai();
+  };
   const kurangiGerak = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
   if (kurangiGerak) {
     el.scrollLeft = tujuan;
-    status.set(el, { raf: 0, tujuan });
+    rampung();
     return;
   }
   const awal = el.scrollLeft;
   const jarak = tujuan - awal;
   if (Math.abs(jarak) < 1) {
-    status.set(el, { raf: 0, tujuan });
+    rampung();
     return;
   }
   const durasi = Math.max(DETIK_MIN, Math.abs(jarak) / KECEPATAN_PX_PER_DETIK) * 1000;
@@ -76,20 +88,33 @@ function gulirKe(el, tujuan) {
     const p = Math.min(1, (t - t0) / durasi);
     el.scrollLeft = awal + jarak * p;
     if (p < 1) {
-      status.set(el, { raf: requestAnimationFrame(langkah), tujuan });
+      status.set(el, { ...status.get(el), raf: requestAnimationFrame(langkah), tujuan });
     } else {
-      status.set(el, { raf: 0, tujuan });
+      rampung();
     }
   };
-  status.set(el, { raf: requestAnimationFrame(langkah), tujuan });
+  status.set(el, { ...status.get(el), raf: requestAnimationFrame(langkah), tujuan });
 }
 
 function keUjung(el) {
+  // Lepas elipsis SEBELUM bergeser: dengan `ellipsis` aktif peramban terus
+  // menggambar "…" di tepi kanan sepanjang guliran dan MENELAN huruf-huruf
+  // terakhir — teks tampak bergeser tapi tak pernah tampil utuh sampai
+  // ujung. Nilai inline semula disimpan agar pulih persis saat kembali.
+  if (!el.dataset.marqueeAktif) {
+    status.set(el, { ...status.get(el), toSebelum: el.style.textOverflow });
+    el.dataset.marqueeAktif = "1";
+    el.style.textOverflow = "clip";
+  }
   gulirKe(el, el.scrollWidth - el.clientWidth);
 }
 
 function keAwal(el) {
-  gulirKe(el, 0);
+  gulirKe(el, 0, () => {
+    const st = status.get(el);
+    el.style.textOverflow = st?.toSebelum || "";
+    delete el.dataset.marqueeAktif;
+  });
 }
 
 /** Pasang sekali di bootstrap aplikasi. Aman dipanggil berulang. */
