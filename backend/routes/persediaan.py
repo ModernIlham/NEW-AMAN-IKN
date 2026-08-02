@@ -335,6 +335,63 @@ async def export_transaksi_persediaan(_user: dict = Depends(require_user)):
                              'attachment; filename="jurnal_transaksi_persediaan.csv"'})
 
 
+@persediaan_router.get("/persediaan/transaksi")
+async def daftar_transaksi_persediaan(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    arah: str = Query("", pattern=r"^(masuk|keluar|mutasi)?$"),
+    kode: str = Query("", max_length=3),
+    dari: str = Query("", pattern=r"^(\d{4}-\d{2}-\d{2})?$"),
+    sampai: str = Query("", pattern=r"^(\d{4}-\d{2}-\d{2})?$"),
+    q: str = Query("", max_length=120),
+    _user: dict = Depends(require_user),
+):
+    """DAFTAR TRANSAKSI persediaan lintas barang (mandat 45 kode SAKTI).
+
+    Satu layar untuk seluruh jurnal: filter arah, kode transaksi SAKTI,
+    rentang tanggal, dan teks (kode/nama barang, no bukti). Kode SAKTI
+    difilter lewat kunci `jenis` (identitas stabil) — field `kode_sakti`
+    tersimpan bisa berisi kode warisan pra-koreksi sehingga tak dipercaya;
+    kode pada respons pun diturunkan ulang dari registry.
+    """
+    import re as re_module
+
+    from persediaan_transaksi_ref import (
+        JENIS_KE_KODE, info_kode, kode_sakti_dari_jenis,
+    )
+
+    query = await _scope_jurnal(_user)
+    if arah:
+        query["arah"] = arah
+    if kode:
+        kunci = [j for j, k in JENIS_KE_KODE.items()
+                 if k == kode.strip().upper()]
+        # Kode tak dikenal / belum pernah dipakai → hasil kosong yang jujur
+        query["jenis"] = {"$in": kunci} if kunci else "__tidak_ada__"
+    if dari:
+        query.setdefault("timestamp", {})["$gte"] = dari
+    if sampai:
+        # Inklusif sampai akhir hari — '~' > semua karakter timestamp ISO
+        query.setdefault("timestamp", {})["$lte"] = sampai + "~"
+    if q.strip():
+        pola = re_module.compile(re_module.escape(q.strip()), re_module.I)
+        query["$or"] = [{"kode_barang": pola}, {"nama_barang": pola},
+                        {"no_bukti": pola}]
+    total = await db.transaksi_persediaan.count_documents(query)
+    rows = [t async for t in db.transaksi_persediaan.find(query, {"_id": 0})
+            .sort("timestamp", -1).skip((page - 1) * page_size).limit(page_size)]
+    items = []
+    for t in rows:
+        kode_benar = kode_sakti_dari_jenis(t.get("jenis"), t.get("kode_sakti"))
+        ref = info_kode(kode_benar)
+        items.append({**t, "kode_sakti": kode_benar,
+                      "uraian_kode": ref.get("uraian") or t.get("jenis_label") or "",
+                      "kelompok": ref.get("kelompok", ""),
+                      "label_kelompok": ref.get("label_kelompok", "")})
+    return {"items": items, "total": total, "page": page,
+            "page_size": page_size}
+
+
 @persediaan_router.post("/persediaan/import")
 async def import_persediaan(file: UploadFile = File(...), _user: dict = Depends(require_writer)):
     """Impor massal master (CSV/XLSX): kode 16+NUP sudah ada → perbarui field
@@ -797,18 +854,33 @@ async def list_jenis_transaksi(_user: dict = Depends(require_user)):
     menyesuaikan sisi aset via Pembukuan → Reklasifikasi (kejujuran klaim,
     hindari dobel catat di Neraca).
     """
+    from persediaan_transaksi_ref import (
+        LABEL_KELOMPOK, daftar_kode_transaksi, info_kode,
+    )
     info_reklas = ("Hanya mencatat sisi persediaan — sesuaikan register aset "
                    "secara terpisah (Pembukuan → Reklasifikasi, jurnal 304/107) "
                    "agar barang tidak tercatat ganda di Neraca.")
     info_per_key = {"reklasifikasi_dari_aset": info_reklas,
-                    "reklasifikasi_keluar": info_reklas}
+                    "reklasifikasi_ke_aset": info_reklas}
+
+    def _baris(peta):
+        out = []
+        for k, v in peta.items():
+            ref = info_kode(v[1])
+            out.append({"key": k, "label": v[0], "kode": v[1],
+                        "kelompok": ref.get("kelompok", ""),
+                        "label_kelompok": ref.get("label_kelompok", ""),
+                        **({"info": info_per_key[k]} if k in info_per_key else {})})
+        return out
+
     return {
-        "masuk": [{"key": k, "label": v[0], "kode": v[1],
-                   **({"info": info_per_key[k]} if k in info_per_key else {})}
-                  for k, v in JENIS_MASUK.items()],
-        "keluar": [{"key": k, "label": v[0], "kode": v[1],
-                    **({"info": info_per_key[k]} if k in info_per_key else {})}
-                   for k, v in JENIS_KELUAR.items()],
+        "masuk": _baris(JENIS_MASUK),
+        "keluar": _baris(JENIS_KELUAR),
+        # Registry LENGKAP 45 kode (termasuk P01/H01-H03/K09/M94 dan koreksi
+        # nilai M97/M98/K97/K98 yang alur pencatatannya menyusul) — layar
+        # "Referensi Kode Transaksi" membacanya dari sini.
+        "referensi": daftar_kode_transaksi(),
+        "label_kelompok": LABEL_KELOMPOK,
     }
 
 
@@ -1904,8 +1976,8 @@ async def opname_persediaan(item_id: str, data: OpnameIn, user: dict = Depends(r
             "id": str(uuid.uuid4()),
             "arah": detail["arah"],
             "jenis": "opname",
-            "jenis_label": "Penyesuaian Opname Fisik",
-            "kode_sakti": "OPN",
+            "jenis_label": "Hasil Opname Fisik",
+            "kode_sakti": "P01",  # kode SAKTI resmi (dulu "OPN" internal)
             "persediaan_id": item_id,
             "kode_barang": updated.get("kode_barang"),
             "nup": updated.get("nup"),
