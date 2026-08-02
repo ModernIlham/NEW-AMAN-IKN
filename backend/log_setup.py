@@ -5,9 +5,15 @@ Menyediakan:
 - `RequestIdLogFilter` : menyisipkan `request_id` ke SETIAP record log (default
   "-" bila di luar request, mis. saat startup / background task).
 - `JsonLogFormatter` : format JSON-lines (satu objek per baris) untuk agregasi.
-- `configure_logging()` : pasang handler root sekali (idempoten). Format dipilih
-  via env `LOG_FORMAT` = "plain" (default, human-readable + request_id) atau
-  "json"; level via `LOG_LEVEL` (default INFO).
+- `RedaksiLogFilter` : SENSOR data sensitif pada SETIAP pesan log (aturan main
+  logging #3) — password/token/secret/api-key/OTP, Bearer/JWT, dan NIK 16
+  digit (disisakan 4 digit akhir). Traceback tidak diubah — jangan pernah
+  menaruh rahasia di pesan exception.
+- `configure_logging()` : pasang handler root sekali (idempoten), keluaran ke
+  STDOUT (aturan #5 — journald/agregator yang menampung, bukan file). Format
+  via env `LOG_FORMAT` = "json" (default — aturan #2, JSON-lines) atau
+  "plain" (human-readable untuk pengembangan); level via `LOG_LEVEL`
+  (default INFO).
 - `RequestContextMiddleware` : ASGI MURNI (aman untuk StreamingResponse — tak
   membuffer body) yang: (1) ambil/lahirkan request-id, set contextvar; (2) sisip
   header `X-Request-ID` pada respons; (3) catat satu baris akses terstruktur
@@ -20,6 +26,7 @@ import json
 import logging
 import os
 import re
+import sys
 import time
 import uuid
 from contextvars import ContextVar
@@ -71,6 +78,53 @@ class RequestIdLogFilter(logging.Filter):
         return True
 
 
+# ── Redaksi data sensitif (aturan main logging #3) ──────────────────────────
+# Ditulis KETAT pada kuncinya, longgar pada nilainya — agar kunci BARU pun
+# tersensor tanpa daftar nilai yang cepat basi (pola yang sama dengan
+# scripts/cek_rahasia.py untuk kredensial ter-commit).
+_POLA_RAHASIA = (
+    # Authorization: <skema> <kredensial> — dua token disensor sekaligus
+    # (nilainya "Basic dXNl…"/"Bearer eyJ…", bukan satu kata).
+    (re.compile(r"(?i)\b(authorization)\b(\s*[=:]\s*)\S+(?:[ \t]+\S+)?"),
+     r"\1\2***"),
+    # kunci=nilai / kunci: nilai (password, token, secret, api key, otp)
+    (re.compile(r"(?i)\b(password|passwd|pwd|token|secret|api[_-]?key|apikey"
+                r"|otp)\b(\s*[=:]\s*)(\S+)"), r"\1\2***"),
+    # Authorization: Bearer <token>
+    (re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]+"), "Bearer ***"),
+    # JWT telanjang (tiga segmen base64url — header selalu diawali eyJ)
+    (re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"
+                r"\.[A-Za-z0-9_-]{8,}\b"), "***jwt***"),
+    # NIK 16 digit persis → sisakan 4 digit akhir (NIP 18 digit & kode satker
+    # 20 digit TIDAK cocok karena butuh batas kata tepat 16 digit).
+    (re.compile(r"\b\d{12}(\d{4})\b"), r"************\1"),
+)
+
+
+def redaksi_log(teks: str) -> str:
+    """Sensor rahasia/PII dari satu baris pesan log. MURNI (teruji unit)."""
+    for pola, ganti in _POLA_RAHASIA:
+        teks = pola.sub(ganti, teks)
+    return teks
+
+
+class RedaksiLogFilter(logging.Filter):
+    """Sensor pesan SEBELUM ditulis handler. Pesan dirender dini
+    (getMessage) supaya argumen %s ikut tersensor; args lalu dikosongkan
+    agar formatter tidak merender dua kali."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            pesan = record.getMessage()
+        except Exception:
+            return True
+        disensor = redaksi_log(pesan)
+        if disensor != pesan:
+            record.msg = disensor
+            record.args = None
+        return True
+
+
 class JsonLogFormatter(logging.Formatter):
     """Satu objek JSON per baris — ramah agregator log (grep/jq/Loki)."""
 
@@ -99,14 +153,18 @@ def configure_logging() -> None:
     Mengganti `logging.basicConfig` — semua `logger.*` app ikut format ini."""
     level_name = str(os.environ.get("LOG_LEVEL", "INFO")).upper()
     level = getattr(logging, level_name, logging.INFO)
-    fmt = str(os.environ.get("LOG_FORMAT", "plain")).lower()
+    # Default JSON (aturan main logging #2); "plain" opsi pengembangan lokal.
+    fmt = str(os.environ.get("LOG_FORMAT", "json")).lower()
 
-    handler = logging.StreamHandler()
+    # STDOUT, bukan stderr (aturan #5): log adalah keluaran normal proses —
+    # journald/agregator yang menampung dan merotasi, bukan file aplikasi.
+    handler = logging.StreamHandler(sys.stdout)
     handler.addFilter(RequestIdLogFilter())
-    if fmt == "json":
-        handler.setFormatter(JsonLogFormatter())
-    else:
+    handler.addFilter(RedaksiLogFilter())
+    if fmt == "plain":
         handler.setFormatter(logging.Formatter(_PLAIN_FMT))
+    else:
+        handler.setFormatter(JsonLogFormatter())
 
     root = logging.getLogger()
     # Idempoten: buang handler lama (mis. dari basicConfig / reload) agar tak
