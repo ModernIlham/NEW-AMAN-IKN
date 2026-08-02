@@ -220,6 +220,17 @@ def status_susut(asset, peta=None, diusulkan=False):
         return ("tanpa_referensi",
                 "Tanggal perolehan/revaluasi tidak tercatat — lengkapi data aset",
                 None)
+    # MASA MANFAAT BARU dari koreksi/revaluasi FINAL ber-dampak
+    # "masa_manfaat_baru" (LHIP menetapkan sisa umur sendiri) — dulu field
+    # ini divalidasi, disimpan, diekspor… tapi tak pernah dibaca mesin
+    # (temuan audit rantai nilai). Override dalam SEMESTER (bisa ganjil)
+    # menggantikan masa kelompok, hanya sah bila basisnya revaluasi.
+    try:
+        override_sem = int(asset.get("masa_manfaat_override_semester") or 0)
+    except (TypeError, ValueError):
+        override_sem = 0
+    if override_sem > 0 and _sumber == "revaluasi":
+        masa = override_sem / 2
     return "susut", "", masa
 
 
@@ -237,7 +248,9 @@ def hitung_penyusutan(harga, masa_tahun, perolehan_iso, per_iso):
     tak berpengaruh.
     """
     h = parse_harga(harga)
-    masa_sem = max(1, int(masa_tahun) * 2)
+    # Dibulatkan ke SEMESTER terdekat — masa manfaat override dari LHIP
+    # bisa ganjil (mis. 7 semester = 3,5 tahun); tahun bulat tak berubah.
+    masa_sem = max(1, int(round(float(masa_tahun) * 2)))
     i0 = semester_index(perolehan_iso)
     i1 = semester_index(per_iso)
     if i0 is None or i1 is None:
@@ -677,8 +690,19 @@ def build_asset_revaluasi_projection(koreksi: dict, now_iso: str) -> dict:
     menambah `$inc: {version: 1}` (bust cache/ETag + picu OCC 409 form usang).
     """
     nilai = float(koreksi.get("nilai_baru") or 0)
+    # Dampak masa manfaat dari koreksi FINAL: "masa_manfaat_baru" menetapkan
+    # sisa umur SENDIRI (semester, dibaca status_susut); "tetap" MENGHAPUS
+    # override lama (0 = tak ada) agar revaluasi berikutnya tidak mewarisi
+    # umur dari LHIP terdahulu.
+    try:
+        override = int(koreksi.get("masa_manfaat_semester") or 0)
+    except (TypeError, ValueError):
+        override = 0
+    if koreksi.get("dampak_masa_manfaat") != "masa_manfaat_baru":
+        override = 0
     return {
         "nilai_wajar_terakhir": nilai,
+        "masa_manfaat_override_semester": max(0, override),
         "revaluasi": {
             "nilai_wajar": nilai,
             "nilai_lama": float(koreksi.get("nilai_lama") or 0),
