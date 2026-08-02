@@ -216,7 +216,7 @@ async def buat_usulan_pt(payload: UsulanPtIn, user: dict = Depends(require_write
     return record
 
 
-async def _proyeksi_master_pemindahtanganan(usulan: dict, oleh: str) -> int:
+async def _proyeksi_master_pemindahtanganan(usulan: dict, oleh: str) -> set:
     """Proyeksikan master aset saat pemindahtanganan SELESAI — tandai `dihapus`
     (SK Penghapusan terbit) untuk SETIAP aset dalam usulan (Prinsip 3 Bab 5).
 
@@ -224,12 +224,16 @@ async def _proyeksi_master_pemindahtanganan(usulan: dict, oleh: str) -> int:
     jurnal sumber; kegagalan/no-op proyeksi TIDAK menggagalkan transisi. Filter
     `dihapus != true` membuat aman dipanggil ulang & tak menimpa jejak
     penghapusan lain (mis. aset sudah dihapus jalur langsung). `$inc version`
-    mem-bust cache/ETag + memicu OCC 409 pada form aset usang. Mengembalikan
-    jumlah aset yang benar-benar diproyeksikan.
+    mem-bust cache/ETag + memicu OCC 409 pada form aset usang.
+
+    Mengembalikan HIMPUNAN asset_id yang BENAR-BENAR diproyeksikan (baru
+    di-tombstone di sini). Pemanggil memakainya untuk menjurnalkan HANYA aset
+    itu — aset yang sudah keluar buku lewat register lain (penghapusan langsung
+    / tiket idle) tak boleh dijurnal keluar untuk kedua kalinya.
     """
     now = datetime.now(timezone.utc).isoformat()
     proj = build_asset_pemindahtanganan_projection(usulan, now)
-    n = 0
+    terproyeksi = set()
     for row in usulan.get("aset") or []:
         aid = row.get("asset_id")
         if not aid:
@@ -244,7 +248,7 @@ async def _proyeksi_master_pemindahtanganan(usulan: dict, oleh: str) -> int:
         if not updated:
             # Aset sudah dihapus/diproyeksikan atau tak ada — SK tetap sah.
             continue
-        n += 1
+        terproyeksi.add(aid)
         await log_audit(
             "penghapusan", updated.get("activity_id", ""), updated.get("id", ""),
             asset_code=updated.get("asset_code", ""),
@@ -254,7 +258,7 @@ async def _proyeksi_master_pemindahtanganan(usulan: dict, oleh: str) -> int:
                     f"({proj['penghapusan']['bentuk']}) — SK "
                     f"{proj['penghapusan']['nomor_sk']}").strip(),
         )
-    return n
+    return terproyeksi
 
 
 @pemindahtanganan_router.post("/pemindahtanganan/{usulan_id}/status")
@@ -305,13 +309,24 @@ async def transisi_pt(usulan_id: str, payload: TransisiPtIn,
     # aset `dihapus` di db.assets agar berhenti double-count di laporan (#256).
     # Setelah CAS sukses agar tak double-proyeksi.
     if payload.status == "selesai":
-        await _proyeksi_master_pemindahtanganan(res, admin.get("username"))
+        terproyeksi = await _proyeksi_master_pemindahtanganan(
+            res, admin.get("username"))
         # Jurnal Buku Barang (G7): hibah keluar → 303; bentuk lain keluar
-        # daftar via SK penghapusan → 301 (best-effort, per aset usulan).
+        # daftar via SK penghapusan → 301 (best-effort).
+        #
+        # HANYA untuk aset yang BENAR-BENAR baru di-tombstone di transisi ini
+        # (`terproyeksi`). Aset yang sudah keluar buku lewat register lain —
+        # mis. usulan penghapusan yang men-taut SK yang sama, atau tiket idle —
+        # akan dijurnal KURANG kedua kalinya bila diloop tanpa syarat; penjaga
+        # anti-ganda catat_mutasi_bmn hanya per (asset_id, kode_transaksi,
+        # ref_id), dan ref_id usulan ≠ ref_id PT sehingga lolos → saldo CaLBMN
+        # dobel. Pola `terproyeksi` yang sama dipakai penggunaan.py/penghapusan.py.
         from pembukuan_utils import parse_harga
         from shared_utils import catat_mutasi_bmn
         kode_trx = "303" if res.get("bentuk") == "hibah" else "301"
         for a_row in res.get("aset") or []:
+            if a_row.get("asset_id") not in terproyeksi:
+                continue
             aset = await db.assets.find_one(
                 {"id": a_row.get("asset_id")},
                 {"_id": 0, "asset_code": 1, "NUP": 1, "purchase_price": 1})
