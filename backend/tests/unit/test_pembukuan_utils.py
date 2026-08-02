@@ -229,6 +229,25 @@ class TestBuildLbkpRows:
             rows, total = per_kelas[kelas]
             assert rows == [] and total["jumlah_akhir"] == 0
 
+    def test_basis_tanggal_perolehan_bukan_pencatatan(self):
+        # Temuan selisih mutasi vs SIMAN: aset perolehan LAMA yang baru
+        # diimpor (created_at dalam periode) harus masuk SALDO AWAL —
+        # bukan "Mutasi Tambah" — selaras definisi mutasi SIMAN/SAKTI.
+        assets = [
+            {"asset_code": "3060102135", "purchase_price": 5_000_000,
+             "purchase_date": "2019-05-20", "created_at": "2026-02-10T08:00:00"},
+            # Perolehan dalam periode → tetap mutasi tambah.
+            {"asset_code": "3060102135", "purchase_price": 2_000_000,
+             "purchase_date": "2026-03-01", "created_at": "2026-03-02T08:00:00"},
+            # Tanpa tanggal perolehan → fallback created_at (perilaku lama).
+            {"asset_code": "3060102135", "purchase_price": 400_000,
+             "purchase_date": "", "created_at": "2026-04-01T08:00:00"},
+        ]
+        per_kelas, _ = build_lbkp_rows(assets, [], self.DARI, self.SAMPAI)
+        _, tot_g = per_kelas["gabungan"]
+        assert (tot_g["jumlah_awal"], tot_g["nilai_awal"]) == (1, 5_000_000)
+        assert (tot_g["jumlah_tambah"], tot_g["nilai_tambah"]) == (2, 2_400_000)
+
 
 class TestPenghapusanMutasi:
     """Penghapusan via SK (dihapus=True, proyeksi #234) tampil sebagai mutasi

@@ -3073,7 +3073,8 @@ async def generate_lbkp_pdf(
     """LBKP per golongan — saldo awal + mutasi + saldo akhir (pustaka §2.3).
 
     Tiga seksi: Intrakomptabel, Ekstrakomptabel, Gabungan. Mutasi tambah
-    dari tanggal pencatatan aset; mutasi kurang dari jejak audit
+    dari tanggal PEROLEHAN aset (fallback tanggal pencatatan — selaras
+    definisi mutasi SIMAN/SAKTI); mutasi kurang dari jejak audit
     penghapusan (nilai terekam sejak #94 — penghapusan lama dihitung
     jumlahnya, nilai 0, dan diungkap di catatan). Tidak pernah memuat
     data dummy: keterbatasan data historis dicantumkan eksplisit.
@@ -3104,8 +3105,8 @@ async def generate_lbkp_pdf(
     # & mutasi SELURUH satker masuk laporan resmi milik satu satker.
     assets = await db.assets.find(
         await filter_aset_perhitungan(await scope_query_aset(_user, {})),
-        {"_id": 0, "asset_code": 1, "purchase_price": 1, "created_at": 1,
-         "dihapus": 1, "penghapusan": 1},
+        {"_id": 0, "asset_code": 1, "purchase_price": 1, "purchase_date": 1,
+         "created_at": 1, "dihapus": 1, "penghapusan": 1},
     ).to_list(500000)
     tombstones = []
     # ISOLASI SATKER (REVIEW-9 R10). Tombstone = aset yang DIHAPUS KERAS; ia
@@ -3209,7 +3210,8 @@ async def generate_lbkp_pdf(
         elements.append(table)
         elements.append(Spacer(1, 4 * rl_mm))
 
-    catatan = ("Catatan: mutasi tambah dihitung dari tanggal pencatatan aset; mutasi kurang dari "
+    catatan = ("Catatan: mutasi tambah dihitung dari tanggal perolehan aset (bila kosong, "
+               "tanggal pencatatan); mutasi kurang dari "
                "jejak audit penghapusan. Aset yang dibuat dan dihapus sebelum awal periode tidak "
                "dapat direkonstruksi dari jejak yang ada. Komponen persediaan/KDP/ATB/penyusutan "
                "LBKP menyusul bertahap.")
@@ -3619,7 +3621,8 @@ async def generate_calbmn_pdf(
         f"inventarisasi, persediaan, dan register siklus BMN satker sebagai "
         f"BAHAN penyusunan CaLBMN. Dokumen resmi tetap disusun melalui "
         f"SIMAK-BMN/SAKTI; narasi akhir difinalkan operator BMN. Mutasi tambah "
-        f"dihitung dari tanggal pencatatan aset dan mutasi kurang dari jejak "
+        f"dihitung dari tanggal perolehan aset (bila kosong, tanggal "
+        f"pencatatan) dan mutasi kurang dari jejak "
         f"audit penghapusan pada AMAN.", st['Meta']))
 
     bab("IV. RINGKASAN BMN (GABUNGAN INTRA + EKSTRAKOMPTABEL)")

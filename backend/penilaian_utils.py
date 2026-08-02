@@ -97,14 +97,25 @@ def validate_masa_manfaat(kode, tahun) -> list:
 
 
 def masa_manfaat_dari_siman(baris_list):
-    """Rangkum masa manfaat (kolom "Umur Aset" SIMAN V2) per KELOMPOK 5 digit.
+    """Rangkum masa manfaat per KELOMPOK 5 digit dari baris ekspor SIMAN V2.
 
-    Dipakai alur "SIMAN menang" (pilihan pemilik): tiap impor, umur aset yang
-    teramati langsung memperbarui referensi masa manfaat kelompok terkait.
-    Prinsip agar aman:
-    - Hanya golongan yang DISUSUTKAN (3/4/5) yang dihitung.
-    - Hanya nilai tahun WAJAR (1-60) — nilai di luar rentang (mis. umur dalam
-      semester atau angka absurd) diabaikan agar tidak merusak penyusutan.
+    TEMUAN EMPIRIS (ekspor nyata SIMAN V2 "Master Aset" 175 baris, 2026-07):
+    kolom "Umur Aset" BUKAN masa manfaat tahunan, melainkan SISA MASA MANFAAT
+    dalam SEMESTER (175/175 baris cocok; 0/175 bila ditafsirkan tahun). Contoh:
+    NAS masa manfaat 4 tahun (8 semester) terpakai 1 semester → kolom berisi 7.
+    Penafsiran lama ("tahun") meracuni referensi: kelompok 30801 terbaca 15
+    "tahun" padahal KMK 8 tahun → beban penyusutan menciut hampir separuh dan
+    hasil aplikasi menyimpang dari SIMAN.
+
+    Maka masa manfaat DIDERIVASI dari identitas garis lurus tanpa residu —
+    bebas asumsi tanggal:  nilai_buku = perolehan × sisa / masa_sem
+    ⇒  masa_sem = perolehan × sisa / nilai_buku.
+    Baris dipakai hanya bila derivasinya KONSISTEN:
+    - Golongan disusutkan (3/4/5); perolehan > 0; sisa (kolom umur) > 0
+      (aset habis susut tak memuat informasi masa manfaat).
+    - nilai_buku > 0; bila kolomnya kosong dipakai perolehan − penyusutan.
+    - masa_sem hasil bagi harus nyaris bulat (toleransi 0.1) dan GENAP
+      (masa manfaat KMK selalu tahun utuh), tahun hasil 1-60.
     - Per kelompok dipakai MODUS (nilai tersering) → tahan pencilan; bila seri
       diambil tahun TERKECIL (konservatif: penyusutan lebih cepat).
 
@@ -113,13 +124,28 @@ def masa_manfaat_dari_siman(baris_list):
     """
     per_kelompok = {}
     for b in baris_list or []:
-        kode = re.sub(r"\D", "", str((b or {}).get("kode_barang") or ""))
+        b = b or {}
+        kode = re.sub(r"\D", "", str(b.get("kode_barang") or ""))
         if len(kode) < 5 or kode[0] not in ("3", "4", "5"):
             continue
-        cocok = re.search(r"\d+", str((b or {}).get("umur_aset") or ""))
+        cocok = re.search(r"\d+", str(b.get("umur_aset") or ""))
         if not cocok:
             continue
-        tahun = int(cocok.group())
+        sisa_sem = int(cocok.group())
+        if sisa_sem <= 0:
+            continue
+        perolehan = parse_harga(b.get("nilai_perolehan"))
+        buku = parse_harga(b.get("nilai_buku"))
+        if buku <= 0:
+            penyusutan = parse_harga(b.get("nilai_penyusutan"))
+            buku = perolehan - penyusutan
+        if perolehan <= 0 or buku <= 0:
+            continue
+        masa_sem_f = perolehan * sisa_sem / buku
+        masa_sem = round(masa_sem_f)
+        if abs(masa_sem_f - masa_sem) > 0.1 or masa_sem % 2 != 0:
+            continue
+        tahun = masa_sem // 2
         if not 1 <= tahun <= 60:
             continue
         per_kelompok.setdefault(kode[:5], Counter())[tahun] += 1
