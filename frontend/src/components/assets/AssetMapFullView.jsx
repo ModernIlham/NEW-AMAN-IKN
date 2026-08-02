@@ -261,6 +261,11 @@ const AssetMapFullView = memo(function AssetMapFullView({
   const [lightboxRow, setLightboxRow] = useState(null); // aset yang fotonya dibuka
   // Alat UKUR (jarak & luas). Perhitungan geodesik ada di lib/ukurPeta.js.
   const [ukurOn, setUkurOn] = useState(false);
+  // Ref kembar utk penangan contextmenu peta (dipasang sekali di efek init):
+  // saat mengukur, klik kanan = UNDO titik — popup "+Tambah aset" tak boleh
+  // ikut terbuka di atasnya.
+  const ukurOnRef = useRef(false);
+  useEffect(() => { ukurOnRef.current = ukurOn; }, [ukurOn]);
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [truncated, setTruncated] = useState(false);
@@ -687,6 +692,9 @@ const AssetMapFullView = memo(function AssetMapFullView({
     //    titik terbentuk di koordinat yang ditekan. ──
     map.on("contextmenu", (ev) => {
       if (!onQuickAddRef.current) return; // viewer / tanpa izin edit
+      // Alat ukur aktif: klik kanan/tekan lama = membatalkan satu titik ukur
+      // (useUkurPeta) — jangan buka popup tambah-aset di atas gerakan itu.
+      if (ukurOnRef.current) return;
       const { lat, lng } = ev.latlng;
       const wrap = L.DomUtil.create("div", "");
       wrap.style.cssText = "font:12px system-ui,sans-serif;min-width:216px";
@@ -1474,6 +1482,28 @@ const AssetMapFullView = memo(function AssetMapFullView({
         >
           <ImageIcon className="w-3.5 h-3.5" />
           <span className="hidden xl:inline">Marker: {markerStyle === "photo" ? "Foto" : "Pin"}</span>
+        </button>
+        {/* Alat Ukur (≥sm) — nasib yang sama dengan Gaya Marker di atas:
+            dulu HANYA hidup di menu gabungan HP (sm:hidden), sehingga di
+            tablet & desktop alat ukur tak punya pintu masuk sama sekali
+            (laporan lapangan). Di HP tetap lewat menu gabungan. */}
+        <button
+          type="button"
+          onClick={() => setUkurOn((v) => !v)}
+          aria-pressed={ukurOn}
+          className={`h-9 w-9 xl:w-auto px-0 xl:px-2.5 rounded-lg border text-xs font-medium hidden sm:flex items-center justify-center xl:justify-start gap-1 flex-shrink-0 transition-colors ${
+            ukurOn
+              ? "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+              : "border-border text-foreground/80 hover:bg-muted"
+          }`}
+          aria-label={ukurOn ? "Matikan alat ukur" : "Hidupkan alat ukur jarak & luas"}
+          title={ukurOn
+            ? "Alat ukur AKTIF — klik peta menandai titik; klik kanan membatalkan satu titik"
+            : "Ukur jarak & luas — klik peta untuk menandai titik"}
+          data-testid="asset-map-ukur-toggle"
+        >
+          <Ruler className="w-3.5 h-3.5" />
+          <span className="hidden xl:inline">Ukur: {ukurOn ? "Aktif" : "Mati"}</span>
         </button>
         <button
           type="button"

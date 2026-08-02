@@ -67,6 +67,44 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#679] Alat ukur peta benar-benar berfungsi + tombolnya hadir di tablet & PC — 2026-08-02
+
+Laporan pemilik: alat ukur di peta tak bisa dipakai, dan tombolnya tak ada di
+tablet/PC. Tiga cacat nyata ditemukan — yang pertama menjelaskan kenapa
+alatnya terasa mati total:
+
+1. **Listener klik tak pernah terpasang.** `useUkurPeta` memasang
+   `map.on("click")` SEKALI saat mount dengan penjaga `aktifRef` di dalamnya —
+   kelihatan hemat, tapi di kedua halaman peta si PETA BARU DIBUAT setelah
+   data termuat (efek init berjalan belakangan). Saat efek listener berjalan,
+   `mapRef.current` masih `null` → listener tidak pernah terpasang → ketukan
+   di peta tak menambah titik sama sekali, selamanya. Kini listener dipasang
+   SAAT MODE DIAKTIFKAN (peta pasti sudah ada — tombolnya baru bisa ditekan
+   setelah peta tampil) dan dilepas saat mode mati.
+2. **Tak ada pintu masuk di tablet/PC (Peta Aset).** Item "Alat Ukur" hanya
+   hidup di menu gabungan HP (`sm:hidden`) — pola bug yang sama dengan "Gaya
+   Marker" dulu. Kini ada tombol Ruler mandiri di toolbar (`hidden sm:flex`,
+   label di xl+, amber saat aktif); HP tetap lewat menu gabungan.
+3. **Klik kanan bentrok dengan "+Tambah aset".** Di Peta Aset, klik kanan =
+   undo titik ukur (hook) SEKALIGUS membuka popup "+Tambah aset di sini"
+   (handler init). Kini popup tambah-aset mengalah selama mode ukur aktif
+   (`ukurOnRef`). Di Peta Kolaborasi, mode "tambah titik" dan alat ukur juga
+   dibuat saling eksklusif — dua mode yang sama-sama memakan klik peta tak
+   boleh hidup berbarengan.
+
+Plus dua penyempurnaan pemakaian:
+- Kelas `peta-ukur-aktif` di kontainer peta (dipasang hook): kursor
+  crosshair + pane marker/popup dibuat tembus-klik — di peta padat pin,
+  ketukan di atas pin kini tetap menanam titik ukur, bukan ditelan popup
+  aset. Lapisan hasil ukur digambar `interactive: false`, tak terpengaruh.
+- Backspace tak lagi membajak ketikan: saat fokus di input/textarea,
+  Backspace menghapus huruf, bukan membatalkan titik ukur.
+
+Verifikasi: eslint bersih, build produksi sukses, aturan CSS dan tombol baru
+terkonfirmasi hadir di bundel hasil build.
+
+---
+
 ## [#678] Chip kuota kompresi berhenti tergencet di toolbar desktop — 2026-08-01
 
 Laporan lapangan (tangkapan layar 1520 px): tombol informasi kuota Tinify di

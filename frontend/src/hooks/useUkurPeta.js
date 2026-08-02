@@ -22,10 +22,8 @@ export function useUkurPeta(mapRef, { aktif, onSelesai } = {}) {
   const [titik, setTitik] = useState([]);
   const lapisRef = useRef(null);       // L.LayerGroup untuk garis/bidang/simpul
   const titikRef = useRef([]);
-  const aktifRef = useRef(false);
 
   useEffect(() => { titikRef.current = titik; }, [titik]);
-  useEffect(() => { aktifRef.current = !!aktif; }, [aktif]);
 
   const bersihkan = useCallback(() => {
     setTitik([]);
@@ -81,26 +79,34 @@ export function useUkurPeta(mapRef, { aktif, onSelesai } = {}) {
     });
   }, [titik, mapRef]);
 
-  // Pasang penangan klik SEKALI; `aktifRef` dibaca di dalam supaya menyalakan/
-  // mematikan mode tak perlu memasang ulang listener (yang bisa kehilangan klik
-  // di tengah gestur).
+  // Pasang penangan klik SAAT MODE AKTIF — bukan sekali saat mount.
+  //
+  // Dulu dipasang sekali di mount dengan penjaga `aktifRef` di dalamnya —
+  // kelihatannya hemat, tapi di kedua halaman peta si PETA BARU DIBUAT setelah
+  // data termuat (efek init berjalan belakangan), jadi saat efek ini berjalan
+  // `mapRef.current` masih null dan listener TIDAK PERNAH terpasang: ketukan
+  // di peta tak menambah titik sama sekali (laporan lapangan "alat ukur tidak
+  // berfungsi"). Mengaitkan pemasangan pada `aktif` menjamin peta sudah ada —
+  // tombolnya baru bisa ditekan setelah peta tampil.
   useEffect(() => {
+    if (!aktif) return undefined;
     const map = mapRef?.current;
     if (!map) return undefined;
 
     const onKlik = (e) => {
-      if (!aktifRef.current) return;
       setTitik((t) => [...t, { lat: e.latlng.lat, lng: e.latlng.lng }]);
     };
     // Klik kanan / tekan-lama = UNDO satu titik. Tak memakai dialog: saat
     // mengukur di lapangan, tangan sedang sibuk dan konfirmasi memutus alur.
     const onKananUndo = (e) => {
-      if (!aktifRef.current) return;
       if (e.originalEvent) e.originalEvent.preventDefault();
       setTitik((t) => t.slice(0, -1));
     };
     const onTombol = (e) => {
-      if (!aktifRef.current) return;
+      // Jangan bajak ketikan: Backspace di input/textarea adalah menghapus
+      // huruf, bukan membatalkan titik ukur.
+      const el = e.target;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
       if (e.key === "Escape") bersihkan();
       if (e.key === "Backspace") setTitik((t) => t.slice(0, -1));
     };
@@ -108,11 +114,18 @@ export function useUkurPeta(mapRef, { aktif, onSelesai } = {}) {
     map.on("click", onKlik);
     map.on("contextmenu", onKananUndo);
     window.addEventListener("keydown", onTombol);
+    // Penanda mode di kontainer peta: index.css memakainya untuk (a) kursor
+    // crosshair dan (b) mematikan pointer-events pane marker/popup — tanpa
+    // itu, ketukan yang jatuh di atas pin aset ditelan popup-nya dan titik
+    // ukur tak pernah tertanam di peta yang padat marker.
+    const elPeta = typeof map.getContainer === "function" ? map.getContainer() : null;
+    if (elPeta) elPeta.classList.add("peta-ukur-aktif");
     return () => {
       try { map.off("click", onKlik); map.off("contextmenu", onKananUndo); } catch { /* peta dilepas */ }
+      if (elPeta) { try { elPeta.classList.remove("peta-ukur-aktif"); } catch { /* dilepas */ } }
       window.removeEventListener("keydown", onTombol);
     };
-  }, [mapRef, bersihkan]);
+  }, [aktif, mapRef, bersihkan]);
 
   // Mode dimatikan → buang bentuknya. Hasil terakhir diserahkan ke pemanggil
   // lebih dulu, supaya angkanya bisa dicatat bila memang dibutuhkan.

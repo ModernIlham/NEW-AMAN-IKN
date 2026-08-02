@@ -227,6 +227,11 @@ export default function PetaKolaborasiPage() {
   const roRef = useRef(null);
   // Alat ukur dipakai bersama dengan Peta Aset — satu perilaku, satu rumus.
   const ukur = useUkurPeta(mapRef, { aktif: ukurOn });
+  // Ref kembar utk penangan klik mode "tambah titik" (dipasang di efek [data]):
+  // saat mengukur, klik peta = menandai titik UKUR — jangan sekaligus
+  // menjatuhkan marker pratinjau titik kolaborasi di tempat yang sama.
+  const ukurOnRef = useRef(false);
+  useEffect(() => { ukurOnRef.current = ukurOn; }, [ukurOn]);
   useEffect(() => { modeTambahRef.current = modeTambah; }, [modeTambah]);
   useEffect(() => { dipilihRef.current = dipilih; }, [dipilih]);
   useEffect(() => { terpilihRef.current = terpilih; }, [terpilih]);
@@ -428,6 +433,7 @@ export default function PetaKolaborasiPage() {
     if (!map) return undefined;
     const onClick = (ev) => {
       if (!modeTambahRef.current) return;
+      if (ukurOnRef.current) return; // sedang mengukur — klik = titik ukur saja
       if (previewRef.current) { try { map.removeLayer(previewRef.current); } catch { /* noop */ } }
       const pm = L.marker(ev.latlng, { icon: previewIcon(), draggable: true, zIndexOffset: 1000, keyboard: false })
         .addTo(map)
@@ -785,7 +791,16 @@ export default function PetaKolaborasiPage() {
           </button>
         )}
         <button
-          type="button" onClick={() => setUkurOn((v) => !v)} aria-pressed={ukurOn}
+          type="button"
+          onClick={() => setUkurOn((v) => {
+            const nyala = !v;
+            // Mode tambah-titik & pratinjaunya dilepas saat mulai mengukur —
+            // dua mode yang sama-sama memakan klik peta tak boleh hidup
+            // berbarengan.
+            if (nyala) { setModeTambah(false); buangPreview(); }
+            return nyala;
+          })}
+          aria-pressed={ukurOn}
           aria-label={ukurOn ? "Alat ukur: aktif" : "Alat ukur"}
           className={`h-8 w-8 rounded-lg border flex items-center justify-center flex-shrink-0 transition-colors ${ukurOn ? "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400" : "border-border text-foreground/80 hover:bg-muted"}`}
           title="Alat ukur jarak & luas — ketuk peta untuk menandai titik"
@@ -866,7 +881,7 @@ export default function PetaKolaborasiPage() {
         {/* Tombol Tambah Titik (FAB) */}
         {bolehTitik && (
           <button
-            onClick={() => { setDipilih(null); if (modeTambah) { setModeTambah(false); } else { buangPreview(); setModeTambah(true); toast.info("Ketuk peta untuk menaruh titik"); } }}
+            onClick={() => { setDipilih(null); if (modeTambah) { setModeTambah(false); } else { buangPreview(); setUkurOn(false); setModeTambah(true); toast.info("Ketuk peta untuk menaruh titik"); } }}
             aria-label={modeTambah ? "Batal tambah titik" : "Tambah titik"}
             title={modeTambah ? "Batal" : "Tambah titik kolaborasi"}
             className={`absolute bottom-5 right-4 z-[500] h-14 w-14 rounded-full shadow-lg flex items-center justify-center ${modeTambah ? "bg-red-600 text-white" : "bg-emerald-600 text-white"}`}
