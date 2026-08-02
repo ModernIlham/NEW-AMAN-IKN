@@ -48,6 +48,23 @@ from pengadaan_utils import JENIS_PEROLEHAN, snapshot_perolehan
 persediaan_router = APIRouter()
 
 
+async def _insert_jurnal(jurnal):
+    """Tulis jurnal transaksi + stempel `kode_satker` dari master item.
+
+    Jurnal lama tidak berstempel sehingga isolasi memakai relasi
+    `persediaan_id` ($in id master) — mahal saat koleksi besar. Baris BARU
+    kini berstempel; setelah backfill (scripts/backfill_kode_satker_
+    transaksi_persediaan.py) `_scope_jurnal` dapat beralih ke
+    `scope_query_field_satker` murni."""
+    if not jurnal.get("kode_satker"):
+        pid = jurnal.get("persediaan_id")
+        if pid:
+            m = await db.persediaan.find_one(
+                {"id": pid}, {"_id": 0, "kode_satker": 1})
+            jurnal["kode_satker"] = str((m or {}).get("kode_satker") or "")
+    await db.transaksi_persediaan.insert_one(jurnal)
+
+
 async def _scope_jurnal(user, query=None) -> dict:
     """Sisipkan isolasi satker ke query jurnal `transaksi_persediaan`.
 
@@ -63,7 +80,16 @@ async def _scope_jurnal(user, query=None) -> dict:
         return q
     ids = [p["id"] async for p in db.persediaan.find(
         scope_query_field_satker(user), {"_id": 0, "id": 1}) if p.get("id")]
-    q["persediaan_id"] = {"$in": ids}
+    # Jangan MENIMPA filter per-item yang sudah ada di query — iris kan
+    # (dulu q["persediaan_id"] ditulis tanpa syarat, filter apa pun hilang).
+    ada = q.get("persediaan_id")
+    if isinstance(ada, str):
+        q["persediaan_id"] = ada if ada in set(ids) else "__tak-berhak__"
+    elif isinstance(ada, dict) and isinstance(ada.get("$in"), list):
+        irisan = [i for i in ada["$in"] if i in set(ids)]
+        q["persediaan_id"] = {"$in": irisan}
+    else:
+        q["persediaan_id"] = {"$in": ids}
     return q
 
 
@@ -328,8 +354,11 @@ async def export_transaksi_persediaan(_user: dict = Depends(require_user)):
 
     from fastapi.responses import Response
 
+    # Batas keras: jurnal append-only tumbuh monoton — tanpa pagar ini
+    # ekspor berubah jadi OOM diam-diam saat koleksi membesar.
     items = [t async for t in db.transaksi_persediaan.find(
-        await _scope_jurnal(_user), {"_id": 0}).sort("timestamp", 1)]
+        await _scope_jurnal(_user), {"_id": 0})
+        .sort("timestamp", 1).limit(200000)]
     buf = io.StringIO()
     w = csv_module.writer(buf)
     for row in baris_csv_transaksi(items):
@@ -486,7 +515,7 @@ async def hapus_definitif_persediaan(item_id: str, data: HapusDefinitifIn,
         "petugas": user.get("username") or user.get("user_id") or "-",
         "timestamp": now.isoformat(),
     }
-    await db.transaksi_persediaan.insert_one({**jurnal})
+    await _insert_jurnal(jurnal)
     await log_audit("persediaan_hapus_definitif", "",
                     username=user.get("username", "system"),
                     detail=(f"{jurnal['jenis_label']} {item.get('kode_barang')} "
@@ -565,7 +594,7 @@ async def koreksi_nilai_persediaan(item_id: str, data: KoreksiNilaiPersediaanIn,
             "timestamp": now.isoformat(),
         }
         try:
-            await db.transaksi_persediaan.insert_one({**jurnal})
+            await _insert_jurnal(jurnal)
         except Exception:
             await db.persediaan.update_one(
                 {"id": item_id},
@@ -1919,7 +1948,7 @@ async def transaksi_masuk(item_id: str, data: TransaksiMasukIn,
         "timestamp": now.isoformat(),
     }
     try:
-        await db.transaksi_persediaan.insert_one({**jurnal})
+        await _insert_jurnal(jurnal)
     except Exception:
         # Kompensasi: cabut layer & stok yang barusan masuk — master tidak
         # boleh menyimpan stok tanpa jejak jurnal.
@@ -2033,7 +2062,7 @@ async def transaksi_keluar(item_id: str, data: TransaksiKeluarIn,
             "timestamp": now.isoformat(),
         }
         try:
-            await db.transaksi_persediaan.insert_one({**jurnal})
+            await _insert_jurnal(jurnal)
         except Exception:
             # Kompensasi: kembalikan snapshot batches & stok sebelum keluar
             await db.persediaan.update_one(
@@ -2117,7 +2146,7 @@ async def pindah_gudang_persediaan(item_id: str, data: PindahGudangIn,
         "timestamp": now.isoformat(),
     }
     try:
-        await db.transaksi_persediaan.insert_one({**jurnal})
+        await _insert_jurnal(jurnal)
     except Exception:
         # Kompensasi: kembalikan lokasi — mutasi tanpa jejak jurnal dilarang.
         await db.persediaan.update_one(
@@ -2192,7 +2221,7 @@ async def opname_persediaan(item_id: str, data: OpnameIn, user: dict = Depends(r
             "timestamp": now.isoformat(),
         }
         try:
-            await db.transaksi_persediaan.insert_one({**jurnal})
+            await _insert_jurnal(jurnal)
         except Exception:
             await db.persediaan.update_one(
                 {"id": item_id},

@@ -301,8 +301,18 @@ async def bulk_delete_assets(request: Request, activity_id: str, _admin: dict = 
     if count == 0:
         return {"message": "Tidak ada aset untuk dihapus", "deleted": 0}
     
+    # Cabut dari indeks pencarian SEBELUM dihapus — dokumen yatim di
+    # Meili memakan kuota hasil dan memangkas pencarian sah.
+    try:
+        from meili_utils import jadwalkan_hapus
+        async for _a in db.assets.find({"activity_id": activity_id},
+                                       {"_id": 0, "id": 1}):
+            if _a.get("id"):
+                jadwalkan_hapus("assets", _a["id"])
+    except Exception:
+        pass
     result = await db.assets.delete_many({"activity_id": activity_id})
-    
+
     logger.info(f"Bulk deleted {result.deleted_count} assets for activity {activity_id}")
     invalidate_asset_cache()
     # Pelaku dari identitas TERAUTENTIKASI (bukan header X-Audit-User yang

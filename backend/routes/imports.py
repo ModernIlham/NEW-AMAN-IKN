@@ -19,6 +19,7 @@ from shared_utils import (
     VALID_SUB_KLASIFIKASI_PENCATATAN, VALID_SUB_KLASIFIKASI_LAINNYA,
     VALID_CONDITIONS, VALID_STATUSES, VALID_STIKER_STATUSES, VALID_STIKER_SIZES
 )
+from meili_utils import jadwalkan_sync
 
 logger = logging.getLogger(__name__)
 imports_router = APIRouter()
@@ -276,7 +277,8 @@ async def import_assets(request: Request, file: UploadFile = File(...), force_up
         # impor memanggil find_one dua kali → 2N query utk file N baris).
         existing_assets = await db.assets.find(
             {"activity_id": activity_id},
-            {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1}
+            {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+             "purchase_price": 1, "kode_register": 1}
         ).to_list(None)
         existing_map = {(str(a.get("asset_code") or ""), str(a.get("NUP") or "")): a
                         for a in existing_assets}
@@ -410,7 +412,7 @@ async def import_assets(request: Request, file: UploadFile = File(...), force_up
                 # sah, DIBUANG bila kosong — agar aset yang koordinatnya terhapus
                 # lewat impor tidak tetap memegang posisi lamanya di indeks.
                 _geo_unset = sisip_geo_ke_update({}, asset_data)
-                _ops = {"$set": asset_data}
+                _ops = {"$set": asset_data, "$inc": {"version": 1}}
                 if _geo_unset:
                     _ops["$unset"] = _geo_unset
                 # Update existing within the same activity
@@ -419,6 +421,23 @@ async def import_assets(request: Request, file: UploadFile = File(...), force_up
                     _ops
                 )
                 updated += 1
+                # Perubahan NILAI lewat impor ikut berjurnal Buku Barang
+                # (204/205) — sama seperti PUT/PATCH/Ubah Massal/SIMAN; dan
+                # dokumen barunya disinkronkan ke indeks pencarian.
+                try:
+                    from shared_utils import catat_jurnal_edit_harga
+                    _harga_baru = asset_data.get("purchase_price")
+                    if _harga_baru not in (None, "") and existing.get("id"):
+                        await catat_jurnal_edit_harga(
+                            {**existing, "activity_id": activity_id},
+                            _harga_baru, _user.get("username"), sumber="import")
+                    _doc_baru = await db.assets.find_one(
+                        {"asset_code": asset_code, "NUP": nup,
+                         "activity_id": activity_id}, {"_id": 0})
+                    if _doc_baru:
+                        jadwalkan_sync("assets", _doc_baru)
+                except Exception as _e:
+                    logger.debug(f"[import] jurnal/sync update dilewati: {_e}")
             elif not existing:
                 # Create new
                 asset_id = str(uuid.uuid4())

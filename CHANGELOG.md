@@ -67,6 +67,72 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#709] Audit integrasi lintas modul: 14 temuan ditutup — isolasi satker, jurnal nilai, kunci segel, indeks pencarian, pagar memori — 2026-08-02
+
+Audit menyeluruh kebutuhan data antar modul, alur data, rule, dan isolasi
+satker (mandat butir "cek keseluruhan aplikasi"). Empat belas temuan
+integrasi ditutup, dikelompokkan per tema:
+
+**Isolasi satker (5 temuan):**
+
+- Ringkasan kodefikasi panel Audit kini di-scope per satker user DAN hanya
+  menghitung aset sah perhitungan (dulu: agregasi seluruh koleksi mentah —
+  angka satker lain + draf belum sah ikut terhitung).
+- Dua query `usulan_penghapusan` di laporan (reports.py) + satu di
+  Penilaian dibungkus `scope_query_field_satker` — data usulan satker lain
+  tak lagi terbaca lintas satker.
+- Stempel `kode_satker` pada record koreksi Penilaian, Penghapusan, dan
+  Pemindahtanganan kini diderivasi dari ASET-nya
+  (`kode_satker_efektif_dari_aset`), bukan dari satker user — super-admin
+  lintas-satker dulu menstempel `""` sehingga record bocor ke semua satker.
+- Jurnal `transaksi_persediaan` BARU kini berstempel `kode_satker` dari
+  master item (helper `_insert_jurnal`, 7 titik insert); baris lama
+  dilengkapi lewat `scripts/backfill_kode_satker_transaksi_persediaan.py`
+  (dry-run default, tulis dengan `--terapkan`).
+- `_scope_jurnal` kini meng-IRIS filter `persediaan_id` yang sudah ada di
+  query alih-alih MENIMPANYA — dulu filter per-item hilang senyap sehingga
+  laporan bisa menampilkan jurnal item lain (masih dalam satker sendiri,
+  tapi bukan yang diminta).
+
+**Alur nilai & jurnal (3 temuan):**
+
+- Ubah harga lewat impor Excel (mode timpa) kini menaikkan `version` (OCC),
+  mencatat jurnal edit harga (`sumber="import"`), dan menyinkron indeks
+  pencarian — dulu ketiganya terlewat sehingga riwayat nilai bolong.
+- Rekap penyusutan LBP kini menerima daftar aset diusulkan-hapus yang
+  ter-scope sehingga barisnya dipisahkan konsisten dengan laporan lain.
+- Proyeksi penyusutan di LBP + 3 laporan kini menyertakan
+  `masa_manfaat_override_semester` — perbaikan yang menambah umur aset
+  (Tabel Masa Manfaat II) dulu tak terbaca di jalur laporan ini.
+
+**Rule & kunci (3 temuan):**
+
+- `ensure_activity_not_sealed` (423) kini dicek di TIGA jalur mutasi yang
+  dulu lolos: terapkan sinkron SIMAN, revaluasi Penilaian, dan kapitalisasi
+  Pemeliharaan — kegiatan tersegel benar-benar beku di semua pintu.
+- Sinkron SIMAN tak lagi menimpa referensi masa manfaat yang diubah manual:
+  hanya kelompok baru atau ber-sumber `siman` yang diisi; entri bersumber
+  lain dilindungi.
+- Update aset dari Opname kini ber-`$inc version` (OCC) — dulu menulis
+  tanpa menaikkan versi sehingga edit bersamaan bisa saling timpa senyap.
+
+**Indeks pencarian & pagar memori (3 temuan):**
+
+- Meilisearch kini disinkron di jalur yang dulu terlewat: buat aset draft,
+  terapkan SIMAN, update Opname; dan di-HAPUS saat hapus massal aset per
+  kegiatan (exports + activities) — hasil pencarian tak lagi menampilkan
+  aset hantu atau data basi.
+- Endpoint publik unduh PPT/DOCX halaman Info kini ber-rate-limit
+  5/menit/IP (dulu tanpa batas, bisa dipakai membebani server pra-login).
+- Ekspor CSV jurnal persediaan + laporan persediaan kini ber-sort stabil
+  `timestamp` dan berpagar `limit(200000)` — koleksi raksasa tak lagi
+  berpotensi menyedot memori tanpa batas.
+
+Lima area yang DIPERIKSA dan terkonfirmasi sudah benar (tanpa perubahan):
+enumerasi koleksi backup, registry 45 kode transaksi persediaan + ujinya,
+derivasi `kode_sakti`, scope stiker & laporan persediaan, dan scope
+per-item persediaan.
+
 ## [#708] Kartu inventaris rapi, kalender sejajar, marquee "..." global, kodefikasi di masa manfaat, halaman 404/403 glitch — 2026-08-02
 
 Lima butir mandat UI dalam satu gelombang:

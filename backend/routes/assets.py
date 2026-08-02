@@ -821,6 +821,9 @@ async def buat_aset_draft(data: AssetCreate, audit_user: str = "system") -> dict
     terapkan_geo(asset_doc)
     await db.assets.insert_one(asset_doc)
     invalidate_asset_cache()
+    # Selaras create_asset (janji docstring): tanpa ini aset hasil Pengadaan
+    # tak pernah masuk indeks pencarian sampai reindex manual.
+    jadwalkan_sync("assets", asset_doc)
     await log_audit("create", data.activity_id, asset_id, data.asset_code,
                     data.asset_name, audit_user,
                     detail="Draft aset dibuat dari perolehan Pengadaan",

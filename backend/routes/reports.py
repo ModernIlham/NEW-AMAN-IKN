@@ -2576,7 +2576,8 @@ async def generate_posisi_bmn_pdf(request: Request, _user: dict = Depends(requir
         {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "purchase_price": 1, "purchase_date": 1, "condition": 1,
          "inventory_status": 1, "nilai_wajar_terakhir": 1, "revaluasi": 1,
-         "masa_manfaat_tambah_tahun": 1},
+         "masa_manfaat_tambah_tahun": 1,
+         "masa_manfaat_override_semester": 1},
     ).to_list(500000)
 
     uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
@@ -2605,7 +2606,8 @@ async def generate_posisi_bmn_pdf(request: Request, _user: dict = Depends(requir
         peta_susut[m["kode"]] = int(m["tahun"])
     diusulkan_ids = set()
     async for u in db.usulan_penghapusan.find(
-            {"status": {"$ne": "ditolak"}}, {"_id": 0, "asset_id": 1}):
+            scope_query_field_satker(_user, {"status": {"$ne": "ditolak"}}),
+            {"_id": 0, "asset_id": 1}):
         if u.get("asset_id"):
             diusulkan_ids.add(u["asset_id"])
 
@@ -2962,11 +2964,13 @@ async def generate_penyusutan_pdf(
     proj = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
             "purchase_price": 1, "purchase_date": 1, "condition": 1,
             "inventory_status": 1, "nilai_wajar_terakhir": 1, "revaluasi": 1,
-            "masa_manfaat_tambah_tahun": 1}
+            "masa_manfaat_tambah_tahun": 1,
+         "masa_manfaat_override_semester": 1}
     assets = await db.assets.find(await filter_aset_perhitungan(await scope_query_aset(_user, active_asset_filter())), proj).to_list(500000)
     diusulkan_ids = set()
     async for u in db.usulan_penghapusan.find(
-            {"status": {"$ne": "ditolak"}}, {"_id": 0, "asset_id": 1}):
+            scope_query_field_satker(_user, {"status": {"$ne": "ditolak"}}),
+            {"_id": 0, "asset_id": 1}):
         if u.get("asset_id"):
             diusulkan_ids.add(u["asset_id"])
     hasil = rekap_penyusutan(assets, per_tanggal, peta=peta,
@@ -3436,7 +3440,8 @@ async def generate_calbmn_pdf(
              "created_at": 1, "inventory_status": 1, "nomor_perkara": 1,
              "pihak_bersengketa": 1, "dihapus": 1, "penghapusan": 1,
              "nilai_wajar_terakhir": 1, "revaluasi": 1,
-             "masa_manfaat_tambah_tahun": 1},
+             "masa_manfaat_tambah_tahun": 1,
+         "masa_manfaat_override_semester": 1},
     ).to_list(500000)
     tombstones = []
     # ISOLASI SATKER (REVIEW-9 R10). Tombstone = aset yang DIHAPUS KERAS; ia

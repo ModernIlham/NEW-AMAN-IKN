@@ -491,9 +491,10 @@ async def _ringkas_identitas_daftar(coll, register, label, filter_q=None):
             "per_masalah": hitung_masalah(temuan)}
 
 
-async def _ringkas_kodefikasi():
+async def _ringkas_kodefikasi(user=None):
     """Ringkas cek kodefikasi FK (§5A Prinsip 2) — hitung asset_code DISTINCT
-    (aset aktif) yang prefix kodefikasinya tak terdaftar."""
+    (aset aktif) yang prefix kodefikasinya tak terdaftar. DI-SCOPE SATKER —
+    dulu satu-satunya baris ringkasan yang menghitung aset SEMUA satker."""
     terdaftar = set()
     async for k in db.kodefikasi.find({}, {"_id": 0, "kode": 1}):
         if k.get("kode"):
@@ -501,7 +502,8 @@ async def _ringkas_kodefikasi():
     temuan = []
     from shared_utils import filter_aset_perhitungan
     async for grp in db.assets.aggregate([
-        {"$match": await filter_aset_perhitungan(active_asset_filter())},
+        {"$match": await scope_query_aset(
+            user, await filter_aset_perhitungan(active_asset_filter()))},
         {"$group": {"_id": "$asset_code"}},
     ]):
         kode = normalize_kode(grp.get("_id"))
@@ -562,7 +564,7 @@ async def _kumpulkan_bagian_integritas(user=None):
         await _ringkas_identitas_snapshot(
             "jadwal_pemeliharaan", "jadwal_pemeliharaan", "Jadwal Pemeliharaan",
             _q),
-        await _ringkas_kodefikasi(),
+        await _ringkas_kodefikasi(user),
         await _ringkas_kategori_kodefikasi(),
     ]
 
