@@ -2493,6 +2493,20 @@ async def delete_asset(asset_id: str, request: Request, _admin: dict = Depends(r
         except Exception as e:
             logger.warning(f"delete_asset: gagal hapus dokumen GridFS {gid}: {e}")
 
+    # Lepas back-link register Pengadaan (best-effort): baris barang yang
+    # menaut aset ini kini menunjuk aset yang sudah tak ada — register akan
+    # mengklaim aset hantu dan tombol "tautkan" bertingkah aneh. Kosongkan
+    # tautan + snapshotnya di SEMUA baris yang menyebut asset_id ini. Gagal di
+    # sini tak boleh menahan penghapusan aset yang sudah terjadi.
+    try:
+        await db.pengadaan.update_many(
+            {"barang.asset_id": asset_id},
+            {"$set": {"barang.$[el].asset_id": "", "barang.$[el].asset_code": "",
+                      "barang.$[el].NUP": "", "barang.$[el].asset_name": ""}},
+            array_filters=[{"el.asset_id": asset_id}])
+    except Exception as e:
+        logger.warning(f"delete_asset: gagal lepas back-link pengadaan {asset_id}: {e}")
+
     logger.info(f"Asset deleted: {asset_id}")
     invalidate_asset_cache()
     # Cabut dari indeks Meilisearch (best-effort; no-op bila nonaktif).
