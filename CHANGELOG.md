@@ -67,6 +67,44 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#702] Tujuh laporan persediaan gaya SAKTI — persis format resminya — 2026-08-02
+
+- **Lima endpoint PDF baru** (`routes/persediaan_laporan.py`) mencakup
+  tujuh laporan resmi Modul Persediaan SAKTI, meniru contoh PDF satker
+  691778 halaman-per-halaman (judul dua baris, blok UAPB/UAKPB kiri, meta
+  Tgl Data/Tanggal/Kode Lap kanan, tabel bergaris penuh dengan subtotal):
+  1. **Laporan Barang Persediaan** — per akun neraca → kode barang 10
+     digit → nilai + keterangan "Persediaan senilai Rp X dalam kondisi
+     rusak/usang" (dari daftar nonaktif [#701]);
+  2. **Laporan Posisi Persediaan di Neraca** — satu baris per akun
+     1171xx; akun yang dipakai master tetap tampil meski Rp0 (pola contoh);
+  3. **Laporan Mutasi Barang Persediaan** — per akun: SALDO AWAL / MUTASI
+     TAMBAH / MUTASI KURANG / NILAI akhir, periode bebas (default semester
+     berjalan), koreksi nilai ikut terhitung;
+  4. **Laporan Barang Persediaan Per Layer** — komposisi layer FIFO per
+     kode 16 digit (layer terurut tanggal, kuantitas & nilai per layer);
+  5-7. **Daftar Persediaan Usang / Rusak / Tidak Dikuasai** — KODE /
+     URAIAN / KUANTITAS / NILAI dari derivasi jurnal.
+- **Semua angka dari JURNAL**: posisi as-of = Σ nilai masuk − keluar s.d.
+  tanggal (`posisi_asof`), saldo awal mutasi = posisi sehari sebelum
+  periode — konsisten FIFO karena keluar dinilai FIFO; kecuali Per Layer
+  yang jujur memotret layer KINI di master (komposisi layer historis
+  memang tidak disimpan per tanggal, dinyatakan di docstring).
+- **Identitas kop dari data sendiri**: UAKPB = kode + nama satker (Master
+  Satker), kode UAPB = 3 digit awal kode satker lengkap 20 digit, nama
+  UAPB = nama instansi pengaturan kop. Uraian kode 10 digit dari referensi
+  kodefikasi (fallback nama barang).
+- Menu Dokumen bertambah bagian **"Laporan gaya SAKTI (PDF)"** — 7 tautan
+  unduh + dialog periode untuk Mutasi (default semester berjalan).
+
+Verifikasi: 8 uji unit baru — penyusun murni per laporan (as-of
+menghormati tanggal, akun Rp0 tetap tampil, saldo awal/tambah/kurang/akhir
+cocok dengan pola contoh 691778, layer urut FIFO & layer habis tak tampil)
++ smoke render PDF nyata (ReportLab tanpa Mongo, bytes `%PDF` sah);
+total 1433 uji backend lulus, eslint bersih, `yarn build` sukses.
+
+---
+
 ## [#701] Persediaan usang/rusak/tak dikuasai punya daftar + koreksi nilai & hapus ber-SK — 2026-08-02
 
 - **Daftar Usang / Rusak / Tidak Dikuasai** (menu Dokumen). Dulu transaksi

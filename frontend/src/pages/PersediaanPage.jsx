@@ -8,7 +8,8 @@ import {
   Layers, X, Warehouse, MoreVertical, ListPlus, CalendarClock,
 } from "lucide-react";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
+  DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -95,6 +96,8 @@ export default function PersediaanPage({ user, onBack }) {
   const [opnameStatus, setOpnameStatus] = useState(null);
   // Dialog laporan mutasi: {dari, sampai} default bulan berjalan
   const [mutasi, setMutasi] = useState(null);
+  // Dialog laporan mutasi gaya SAKTI: {dari, sampai} default semester berjalan
+  const [mutasiSakti, setMutasiSakti] = useState(null);
   // Dialog opname: {item, stok_fisik, alasan}; BAOF: {tanggal}
   const [opname, setOpname] = useState(null);
   // Dialog pindah gudang: {item, lokasi_baru, no_bukti, keterangan, saving}
@@ -860,6 +863,38 @@ export default function PersediaanPage({ user, onBack }) {
                   onClick={muatNonaktif}>
                   <AlertTriangle className="w-4 h-4 mr-2" />Daftar Usang / Rusak / Tak Dikuasai
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-[10px] text-muted-foreground py-1">
+                  Laporan gaya SAKTI (PDF)
+                </DropdownMenuLabel>
+                <DropdownMenuItem className="min-h-[42px]" data-testid="sakti-persediaan"
+                  onClick={() => downloadFileWithProgress(`${API}/persediaan/laporan/sakti/persediaan-pdf`, "Laporan_Persediaan.pdf", { label: "Laporan Barang Persediaan (SAKTI)" }).catch(() => {})}>
+                  <FileDown className="w-4 h-4 mr-2" />Laporan Barang Persediaan
+                </DropdownMenuItem>
+                <DropdownMenuItem className="min-h-[42px]" data-testid="sakti-neraca"
+                  onClick={() => downloadFileWithProgress(`${API}/persediaan/laporan/sakti/neraca-pdf`, "Laporan_Posisi_Persediaan_Neraca.pdf", { label: "Posisi Persediaan di Neraca (SAKTI)" }).catch(() => {})}>
+                  <FileDown className="w-4 h-4 mr-2" />Posisi Persediaan di Neraca
+                </DropdownMenuItem>
+                <DropdownMenuItem className="min-h-[42px]" data-testid="sakti-mutasi"
+                  onClick={() => {
+                    const now = new Date();
+                    const sem1 = now.getMonth() < 6;
+                    setMutasiSakti({ dari: `${now.getFullYear()}-${sem1 ? "01" : "07"}-01`,
+                                     sampai: now.toISOString().slice(0, 10) });
+                  }}>
+                  <FileDown className="w-4 h-4 mr-2" />Mutasi Persediaan (pilih periode)
+                </DropdownMenuItem>
+                <DropdownMenuItem className="min-h-[42px]" data-testid="sakti-layer"
+                  onClick={() => downloadFileWithProgress(`${API}/persediaan/laporan/sakti/layer-pdf`, "Laporan_Persediaan_Per_Layer.pdf", { label: "Persediaan per Layer (SAKTI)" }).catch(() => {})}>
+                  <Layers className="w-4 h-4 mr-2" />Persediaan per Layer
+                </DropdownMenuItem>
+                {[["usang", "Daftar Persediaan Usang"], ["rusak", "Daftar Persediaan Rusak"],
+                  ["tidak_dikuasai", "Daftar Persediaan Tidak Dikuasai"]].map(([kat, label]) => (
+                  <DropdownMenuItem key={kat} className="min-h-[42px]" data-testid={`sakti-${kat}`}
+                    onClick={() => downloadFileWithProgress(`${API}/persediaan/laporan/sakti/nonaktif-pdf?kategori=${kat}`, `${label.replace(/ /g, "_")}.pdf`, { label }).catch(() => {})}>
+                    <FileDown className="w-4 h-4 mr-2" />{label}
+                  </DropdownMenuItem>
+                ))}
               </DropdownMenuContent>
             </DropdownMenu>
             {/* Menu Data: impor / template / ekspor master */}
@@ -1523,6 +1558,50 @@ export default function PersediaanPage({ user, onBack }) {
                 setMutasi(null);
               }}
               data-testid="persediaan-mutasi-unduh"
+            >
+              <FileDown className="w-4 h-4 mr-1.5" />Unduh PDF
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog Laporan Mutasi gaya SAKTI (per akun neraca) ── */}
+      <Dialog open={!!mutasiSakti} onOpenChange={(o) => { if (!o) setMutasiSakti(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Laporan Mutasi Persediaan (SAKTI)</DialogTitle>
+            <DialogDescription className="text-xs">
+              Per akun neraca: SALDO AWAL → MUTASI TAMBAH → MUTASI KURANG →
+              NILAI akhir (rupiah, termasuk koreksi nilai).
+            </DialogDescription>
+          </DialogHeader>
+          {mutasiSakti && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-mutsak-dari">Dari</label>
+                <Input id="psd-mutsak-dari" type="date" value={mutasiSakti.dari}
+                  onChange={(e) => setMutasiSakti((m) => ({ ...m, dari: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-mutsak-sampai">Sampai</label>
+                <Input id="psd-mutsak-sampai" type="date" value={mutasiSakti.sampai}
+                  onChange={(e) => setMutasiSakti((m) => ({ ...m, sampai: e.target.value }))} />
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setMutasiSakti(null)}>Batal</Button>
+            <Button
+              onClick={() => {
+                if (!mutasiSakti?.dari || !mutasiSakti?.sampai) { toast.error("Isi rentang tanggal"); return; }
+                downloadFileWithProgress(
+                  `${API}/persediaan/laporan/sakti/mutasi-pdf?dari=${mutasiSakti.dari}&sampai=${mutasiSakti.sampai}`,
+                  `Laporan_Mutasi_Persediaan_SAKTI_${mutasiSakti.dari}_${mutasiSakti.sampai}.pdf`,
+                  { label: "Laporan Mutasi Barang Persediaan (SAKTI)" },
+                ).catch(() => {});
+                setMutasiSakti(null);
+              }}
+              data-testid="sakti-mutasi-unduh"
             >
               <FileDown className="w-4 h-4 mr-1.5" />Unduh PDF
             </Button>
