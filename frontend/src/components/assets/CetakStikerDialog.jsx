@@ -29,6 +29,7 @@ export default function CetakStikerDialog({ open, onOpenChange, buildParams, tot
   const [kertas, setKertas] = useState("A4");
   const [cakupan, setCakupan] = useState("filter"); // filter | halaman
   const [headerInfo, setHeaderInfo] = useState("nama"); // nama | kode (20 digit)
+  const [sampelUkuran, setSampelUkuran] = useState(true); // stiker contoh berdimensi
   const [rekap, setRekap] = useState(null); // rincian pilihan ukuran per aset
   const [sibuk, setSibuk] = useState(false);
 
@@ -55,6 +56,7 @@ export default function CetakStikerDialog({ open, onOpenChange, buildParams, tot
       params.set("ukuran", ukuran);
       params.set("kertas", kertas);
       params.set("header_info", headerInfo);
+      params.set("sampel_ukuran", sampelUkuran ? "true" : "false");
       const r = await axios.get(`${API}/stiker/label?${params.toString()}`, {
         responseType: "blob", timeout: 180000,
         onDownloadProgress: progress.onDownloadProgress,
@@ -91,7 +93,7 @@ export default function CetakStikerDialog({ open, onOpenChange, buildParams, tot
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Tags className="w-4 h-4" />Cetak Stiker Label BMN</DialogTitle>
           <DialogDescription className="text-xs">
-            Desain mengikuti label resmi satker: logo + nama instansi + nama satker, kode barang/NUP, nama barang, dan QR yang dikenali pemindai aplikasi. Grid otomatis memenuhi seluruh ruang kertas (sisa hanya margin &amp; celah potong).
+            Desain mengikuti label resmi satker: logo + nama instansi + nama satker, lalu kode barang &amp; NUP, nama barang, dan sub-sub kelompok — nama panjang otomatis lanjut ke baris berikutnya, nama instansi panjang menyusut lalu pecah dua baris. QR dikenali pemindai aplikasi. Grid otomatis memenuhi seluruh ruang kertas (sisa hanya margin &amp; celah potong).
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -162,6 +164,20 @@ export default function CetakStikerDialog({ open, onOpenChange, buildParams, tot
                 </label>
               ))}
             </div>
+          </div>
+          <div className="rounded-lg border border-border bg-muted/30 p-2.5">
+            <label className="flex items-start gap-2 text-xs text-foreground/90 cursor-pointer">
+              <input type="checkbox" className="mt-0.5" checked={sampelUkuran}
+                onChange={(e) => setSampelUkuran(e.target.checked)}
+                data-testid="stiker-sampel-ukuran" />
+              <span>
+                <b>Sertakan stiker contoh berukuran</b>
+                <span className="text-muted-foreground"> — satu kotak terakhir tiap ukuran diisi keterangan
+                  panjang × lebar sebenarnya (mis. 98,3 × 46,3 mm) lengkap dengan garis ukur, sebagai
+                  patokan saat memesan bahan stiker. Bertanda putus-putus &amp; bertulisan
+                  &quot;bukan untuk ditempel&quot;.</span>
+              </span>
+            </label>
           </div>
           <div>
             <p className="text-xs font-semibold text-foreground mb-1.5">Kertas</p>
