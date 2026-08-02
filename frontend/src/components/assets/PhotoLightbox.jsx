@@ -1,5 +1,7 @@
 import React, { memo, useState, useCallback, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { motion } from "framer-motion";
+import { hitungSebaran } from "@/components/ui/stacked-cards-interaction";
 import { Loader2, X, ChevronLeft, ChevronRight, MapPin, Tag, User, QrCode, FileCheck, FileX, StickyNote, Download, Maximize2, RotateCw } from "lucide-react";
 import { authMediaUrl } from "../../lib/mediaUrl";
 import { peekAnim } from "../../lib/lightboxAnim";
@@ -536,6 +538,11 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
   const docTotal = a.doc_total || 0;
   // Parameter animasi geser kartu info (opacity peek + skala kartu depan).
   const anim = peekAnim(infoDragX);
+  // Sebaran kartu tetangga (model tumpukan kartu) — intensitasnya mengikuti
+  // jarak geser, jadi kartu "membuka" bertahap alih-alih meloncat.
+  const _sebar = { spreadDistance: 28, rotationAngle: 4, intensitas: Math.abs(infoDragX) / 120 };
+  const sebaranNext = hitungSebaran(2, { ..._sebar, aktif: infoDragX < 0 });
+  const sebaranPrev = hitungSebaran(1, { ..._sebar, aktif: infoDragX > 0 });
   // URL foto ASLI (resolusi penuh) untuk penampil layar penuh.
   const fullSrc = a?.id ? authMediaUrl(`${API}/assets/${a.id}/photos/${idx}?v=${builtRef.current.version}`) : (photos[idx] || null);
 
@@ -664,11 +671,30 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
           {/* Peek kartu tetangga: mulai SAMAR (petunjuk bisa digeser antar-aset),
               opacity BERTAMBAH mengikuti geseran ke sisi itu (peekAnim) → kartu
               berikut/sebelumnya "muncul" makin jelas seiring jempol menggeser. */}
-          {hasNextAsset && <div aria-hidden="true" style={{ opacity: anim.nextOpacity, transition: infoDragX ? "none" : "opacity 0.2s" }} className="absolute inset-y-2 left-10 -right-2 rounded-xl bg-white/70 dark:bg-slate-700/70 border border-white/40 dark:border-white/10 shadow-lg" />}
-          {hasPrevAsset && <div aria-hidden="true" style={{ opacity: anim.prevOpacity, transition: infoDragX ? "none" : "opacity 0.2s" }} className="absolute inset-y-2 right-10 -left-2 rounded-xl bg-white/70 dark:bg-slate-700/70 border border-white/40 dark:border-white/10 shadow-lg" />}
-          <div
+          {/* Model TUMPUKAN KARTU (stacked-cards): kartu tetangga tak lagi
+              sekadar memudar — ia MENYEBAR ke samping sambil MIRING mengikuti
+              seberapa jauh jari menggeser (hitungSebaran, intensitas 0..1),
+              lalu merapat kembali dengan pegas saat dilepas. */}
+          {hasNextAsset && (
+            <motion.div
+              aria-hidden="true"
+              className="absolute inset-y-2 left-10 -right-2 rounded-xl bg-white/70 dark:bg-slate-700/70 border border-white/40 dark:border-white/10 shadow-lg"
+              animate={{ opacity: anim.nextOpacity, ...sebaranNext }}
+              transition={infoDragX ? { duration: 0 } : { type: "spring", stiffness: 260, damping: 26 }}
+            />
+          )}
+          {hasPrevAsset && (
+            <motion.div
+              aria-hidden="true"
+              className="absolute inset-y-2 right-10 -left-2 rounded-xl bg-white/70 dark:bg-slate-700/70 border border-white/40 dark:border-white/10 shadow-lg"
+              animate={{ opacity: anim.prevOpacity, ...sebaranPrev }}
+              transition={infoDragX ? { duration: 0 } : { type: "spring", stiffness: 260, damping: 26 }}
+            />
+          )}
+          <motion.div
             className="relative bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl rounded-xl p-3 border border-white/50 dark:border-white/15 shadow-xl"
-            style={{ transform: infoDragX ? `translateX(${infoDragX}px) scale(${anim.frontScale})` : undefined, transition: infoDragX ? "none" : "transform 0.2s" }}
+            animate={{ x: infoDragX, scale: infoDragX ? anim.frontScale : 1 }}
+            transition={infoDragX ? { duration: 0 } : { type: "spring", stiffness: 260, damping: 26 }}
           >
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0 space-y-1.5">
@@ -712,7 +738,7 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
                 Aset {sibIndex + 1} / {siblings.length} · geser untuk pindah aset
               </div>
             )}
-          </div>
+          </motion.div>
         </div>
       </div>
       {fullscreen && fullSrc && (

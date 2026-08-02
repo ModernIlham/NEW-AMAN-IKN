@@ -8,6 +8,7 @@ import axios from "axios";
 import { getApiError } from "@/lib/utils";
 import { useTripleClick } from "@/hooks/useTripleClick";
 import { AssistedPasswordConfirmationField } from "@/components/ui/assisted-password-confirmation";
+import { galatPassword, statusSyaratPassword } from "@/lib/passwordRules";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -144,13 +145,9 @@ function OTPVerification({ email, debugOtp, onVerified, onBack, onDebugOtp }) {
 
 // Password strength checker
 function PasswordStrength({ password }) {
-  const checks = [
-    { label: "Min. 8 karakter", ok: password.length >= 8 },
-    { label: "Huruf besar (A-Z)", ok: /[A-Z]/.test(password) },
-    { label: "Huruf kecil (a-z)", ok: /[a-z]/.test(password) },
-    { label: "Angka (0-9)", ok: /\d/.test(password) },
-    { label: "Karakter khusus (!@#$)", ok: /[^A-Za-z0-9]/.test(password) },
-  ];
+  // Aturan dari satu sumber bersama (lib/passwordRules) — dipakai form Daftar
+  // MAUPUN alur reset OTP, agar syaratnya tak bisa lagi berbeda antar layar.
+  const checks = statusSyaratPassword(password);
   const passed = checks.filter(c => c.ok).length;
   if (!password) return null;
   return (
@@ -195,17 +192,8 @@ export default function LoginPage({ onLogin, onShowInfo }) {
         toast.error("Password tidak sama. Periksa kembali.");
         return;
       }
-      if (formData.password.length < 8) {
-        toast.error("Password minimal 8 karakter");
-        return;
-      }
-      const hasUpper = /[A-Z]/.test(formData.password);
-      const hasLower = /[a-z]/.test(formData.password);
-      const hasDigit = /\d/.test(formData.password);
-      if (!hasUpper || !hasLower || !hasDigit) {
-        toast.error("Password harus mengandung huruf besar, huruf kecil, dan angka");
-        return;
-      }
+      const galat = galatPassword(formData.password);
+      if (galat) { toast.error(galat); return; }
     }
     setLoading(true);
     try {
@@ -409,31 +397,31 @@ export default function LoginPage({ onLogin, onShowInfo }) {
             {reset && (
               <div className="rounded-xl border border-border bg-muted/40 p-3 space-y-2" data-testid="panel-reset">
                 <p className="text-xs font-semibold text-foreground">Reset password via OTP email</p>
-                <Input type="email" placeholder="Email akun" value={reset.email}
+                <Input type="email" className="h-9 text-sm" placeholder="Email akun" value={reset.email}
                   onChange={(e) => setReset((r) => ({ ...r, email: e.target.value }))} data-testid="reset-email" />
                 {reset.terkirim && (
                   <>
-                    <Input placeholder="Kode OTP (6 digit)" inputMode="numeric" value={reset.otp}
+                    <Input className="h-9 text-sm" placeholder="Kode OTP (6 digit)" inputMode="numeric" value={reset.otp}
                       onChange={(e) => setReset((r) => ({ ...r, otp: e.target.value.replace(/\D/g, "").slice(0, 6) }))} data-testid="reset-otp" />
-                    <Input type="password" placeholder="Password baru (min. 8 karakter)" value={reset.baru}
+                    <Input type="password" className="h-9 text-sm" placeholder="Password baru" value={reset.baru}
                       onChange={(e) => setReset((r) => ({ ...r, baru: e.target.value }))} data-testid="reset-baru" />
-                    {/* Konfirmasi ber-panduan: alur reset ini dulu TANPA ketik
-                        ulang sama sekali — satu salah ketik langsung tersimpan
-                        dan pengguna terkunci dari akunnya sendiri (harus minta
-                        OTP baru). Penanda per-karakter menunjukkan huruf mana
-                        yang meleset tanpa memampangkan sandinya di layar. */}
+                    {/* Syarat kata sandi DITEGAKKAN sama seperti Daftar akun
+                        (passwordRules) — dulu alur ini hanya meminta 8 karakter,
+                        sehingga akun bisa berakhir dengan sandi yang justru
+                        ditolak saat mendaftar. */}
+                    {reset.baru && <PasswordStrength password={reset.baru} />}
+                    {/* Konfirmasi ber-panduan RINGKAS: satu kolom + strip
+                        penanda tipis. Alur reset ini dulu TANPA ketik ulang
+                        sama sekali — satu salah ketik langsung tersimpan dan
+                        pengguna terkunci dari akunnya sendiri. */}
                     {reset.baru && (
-                      <div className="pt-1">
-                        <p className="mb-1 text-[11px] text-muted-foreground">
-                          Ketik ulang untuk memastikan — tiap huruf yang cocok ditandai hijau.
-                        </p>
-                        <AssistedPasswordConfirmationField
-                          password={reset.baru}
-                          onMatchChange={setResetCocok}
-                          placeholder="Ulangi password baru"
-                          testId="reset-baru-konfirmasi"
-                        />
-                      </div>
+                      <AssistedPasswordConfirmationField
+                        ringkas
+                        password={reset.baru}
+                        onMatchChange={setResetCocok}
+                        placeholder="Ulangi password baru"
+                        testId="reset-baru-konfirmasi"
+                      />
                     )}
                   </>
                 )}
@@ -454,6 +442,12 @@ export default function LoginPage({ onLogin, onShowInfo }) {
                           if (r1.data?.debug_otp) toast.info(`OTP (debug): ${r1.data.debug_otp}`);
                           setReset((r) => ({ ...r, terkirim: true, saving: false }));
                         } else {
+                          const galatBaru = galatPassword(reset.baru);
+                          if (galatBaru) {
+                            toast.error(galatBaru);
+                            setReset((r) => (r ? { ...r, saving: false } : r));
+                            return;
+                          }
                           const r2 = await axios.post(`${API}/auth/reset-password`, {
                             email: reset.email.trim(), otp: reset.otp, new_password: reset.baru });
                           toast.success(r2.data?.message || "Password direset — silakan masuk");
