@@ -4,8 +4,9 @@ import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 /**
- * Tombol dengan titik yang MENGEMBANG memenuhi tombol saat disentuh, lalu
- * memunculkan lapisan kedua berisi label + panah.
+ * Tombol dengan isian yang MENGEMBANG memenuhi tombol saat disentuh, lalu
+ * memunculkan lapisan kedua berisi label + panah. (Titik kecil keadaan
+ * diam dari desain aslinya dihapus atas permintaan pemilik.)
  *
  * BEDA dari komponen aslinya: status di sini DIKENDALIKAN pemanggil lewat
  * prop `status`, bukan disimulasikan `setTimeout` di dalam. Versi asli memang
@@ -56,11 +57,9 @@ export default function InteractiveHoverButton({
         aria-hidden="true"
       />
       <span className="flex items-center gap-2">
-        {/* Titik kecil keadaan diam — benih visual isian di atas. */}
-        <span
-          className="h-2 w-2 rounded-full bg-slate-900 dark:bg-slate-200"
-          aria-hidden="true"
-        />
+        {/* Titik "benih" keadaan diam DIHAPUS atas permintaan pemilik —
+            isian tetap mengembang dari sisi kiri (`left-6` pada lingkaran
+            di atas), hanya penandanya yang tak lagi tampak. */}
         {/* Teks ini KEMBAR dengan yang di lapisan kedua — hanya bedanya yang
             satu tergeser keluar saat disentuh. Disembunyikan dari pembaca layar
             supaya nama tombolnya tidak terbaca dua kali; lapisan kedualah yang

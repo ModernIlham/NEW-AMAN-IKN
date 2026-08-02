@@ -307,29 +307,46 @@ Neraca* (`AkunBasPage.jsx`) dari Beranda Modul — semua user melihat pemetaan
 
 ### 3.2 Jenis transaksi resmi (peta enum AMAN → SAKTI)
 
-- **Masuk:** Saldo Awal (M01) · Pembelian (M02) · Transfer Masuk · Hibah
-  Masuk · Rampasan · Perolehan Lainnya · Reklasifikasi Masuk ·
-  Reklasifikasi dari Aset.
-- **Keluar:** Habis Pakai/Pemakaian (K01) · Transfer Keluar (K02) · Hibah
-  Keluar (K03) · **Usang (K04)** · **Rusak (K05** — direkam berdasar hasil
-  opname**)** · Penghapusan Lainnya · Reklasifikasi Keluar.
-- **Lainnya:** Koreksi (qty/harga, teraudit) · Opname Fisik (penyesuaian)
-  · **Penghapusan definitif usang/rusak (H01/H02** — dua tahap: keluar
-  dari saldo dulu, hapus definitif berdasar SK**)** · Persediaan Dalam
-  Proses. Kode M0x/K0x = warisan aplikasi lama [kode internal SAKTI perlu
-  verifikasi]. Alur SAKTI: **operator merekam → approver menyetujui**.
+Daftar resmi **45 kode transaksi** Modul Persediaan SAKTI terpasang penuh
+sebagai registry satu-sumber (`backend/persediaan_transaksi_ref.py`, PR #693):
+
+- **Masuk (M):** Saldo Awal (M01) · Pembelian (M02) · Transfer Masuk (M03)
+  · Hibah Masuk (M04) · Rampasan (M05) · Perolehan Lainnya (M06) ·
+  Internal Transfer Masuk (M07) · Non Aktif UAPKPB Masuk (M08) · Koreksi
+  Hasil Migrasi (M09) · Reklasifikasi Masuk (M10) · Reklasifikasi Dari
+  Aset (M11) · Hibah Masuk BLU (M12) · Transfer Masuk Online (M13) ·
+  Transfer Masuk Likuidasi UAKPB (M14) · Persediaan Dalam Proses Masuk
+  (M15) · Koreksi Penyesuaian Tambah (M90) · Batal Catat Tak Dikuasai
+  (M94) · Koreksi Transfer Keluar Online (M95) · Koreksi Tambah FIFO→HST
+  (M96) · Koreksi Nilai Tambah — Opsik (M97) / biasa (M98, kuantitas
+  tetap) · Koreksi Kuantitas Tambah (M99).
+- **Keluar (K):** Habis Pakai (K01) · Transfer Keluar (K02) · Hibah Keluar
+  (K03) · **Usang (K04)** · **Rusak (K05)** — direkam berdasar hasil
+  opname · **Keluar Lainnya (K06)** · Internal Transfer Keluar (K07) ·
+  Non Aktif UAPKPB Keluar (K08) · Catat Persediaan Tak Dikuasai (K09) ·
+  Reklasifikasi Keluar (K10) · Reklasifikasi Aset (K11) · Transfer Keluar
+  Online (K13) · Transfer Keluar Likuidasi UAKPB (K14) · Persediaan Dalam
+  Proses Keluar (K15) · Koreksi Penyesuaian Kurang (K90) · Koreksi Kurang
+  FIFO→HST (K96) · Koreksi Nilai Kurang — Opsik (K97) / biasa (K98,
+  kuantitas tetap) · Koreksi Kuantitas Kurang (K99).
+- **Opname & Penghapusan:** Hasil Opname Fisik (P01) · **Hapus Usang
+  (H01) / Hapus Rusak (H02) / Hapus Tak Dikuasai (H03)** — dua tahap:
+  keluar dari saldo dulu (K04/K05/K09), lalu hapus definitif dari daftar
+  berdasar SK. Alur SAKTI: **operator merekam → approver menyetujui**.
 - **Implikasi:** enum transaksi AMAN memetakan 1:1 ke daftar ini (demi
-  rekonsiliasi); bedakan transfer antar satker vs pindah gudang internal;
-  workflow operator–approver (pola approval staging masterplan §4).
-- **Status implementasi:** jenis **Masuk** (Saldo Awal, Pembelian, Transfer
-  Masuk, Hibah Masuk, **Rampasan**, **Reklasifikasi Masuk**, **Reklasifikasi
-  dari Aset**, Perolehan Lainnya) & **Keluar** (Habis Pakai, Transfer Keluar,
-  Hibah Keluar, Usang, Rusak, **Penghapusan Lainnya**, **Reklasifikasi Keluar**)
-  sudah terpasang penuh (`JENIS_MASUK`/`JENIS_KELUAR`, muncul otomatis di UI dari
-  `/persediaan/jenis-transaksi`). Kode M05–M07/K06–K07 = kode internal aplikasi
-  **[perlu verifikasi kode SAKTI resmi]**. **BELUM** (governance, ditunda menunggu
-  keputusan): Koreksi sebagai jenis tersendiri, penghapusan definitif 2-tahap
-  (H01/H02) berbasis SK, dan alur approval operator→approver.
+  rekonsiliasi); bedakan transfer antar satker vs pindah gudang internal
+  (`pindah_gudang` = jenis internal non-SAKTI, tanpa kode); workflow
+  operator–approver (pola approval staging masterplan §4).
+- **Status implementasi:** seluruh 45 kode terpasang dengan arah eksplisit
+  (masuk/keluar/nilai/opname/hapus) dan muncul otomatis di UI dari
+  `/persediaan/jenis-transaksi` + layar **Daftar Transaksi** ber-filter
+  (PR #693). Penghapusan definitif ber-SK (H01–H03) dan daftar
+  usang/rusak/tidak dikuasai (derivasi jurnal K04/K05/K09 − H01/H02/H03/
+  M94) terpasang di PR #694; koreksi nilai proporsional lintas layer
+  (M97/M98/K97/K98) juga sudah berjalan. Kode warisan lama bermakna
+  berbeda (M06/M07/M99/K06/K07 pra-koreksi, "OPN") diterjemahkan ulang
+  dari kunci `jenis` via `kode_sakti_dari_jenis`. **BELUM** (governance,
+  ditunda menunggu keputusan): alur approval operator→approver.
 
 ### 3.3 Stock opname
 

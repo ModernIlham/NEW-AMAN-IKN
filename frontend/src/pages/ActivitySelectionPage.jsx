@@ -634,7 +634,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
               <BookOpen className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-foreground font-['Manrope']">AMAN</h1>
+              <h1 className="text-lg font-bold text-foreground">AMAN</h1>
               <p className="text-xs text-muted-foreground">Pilih Kegiatan Inventarisasi</p>
             </div>
           </div>

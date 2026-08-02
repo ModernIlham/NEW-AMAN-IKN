@@ -1681,7 +1681,9 @@ export default function PersediaanPage({ user, onBack }) {
                     <span className={`px-2 py-0.5 rounded-full font-semibold ${
                       t.arah === "masuk" ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
                         : t.arah === "mutasi" ? "bg-sky-500/15 text-sky-600 dark:text-sky-400"
-                          : "bg-red-500/15 text-red-600 dark:text-red-400"}`}>
+                          : t.arah === "nilai" ? "bg-violet-500/15 text-violet-600 dark:text-violet-400"
+                            : t.arah === "hapus" ? "bg-slate-500/15 text-slate-600 dark:text-slate-300"
+                              : "bg-red-500/15 text-red-600 dark:text-red-400"}`}>
                       {t.jenis_label}{t.kode_sakti ? ` (${t.kode_sakti})` : ""}
                     </span>
                     <span className="text-muted-foreground">{(t.timestamp || "").slice(0, 16).replace("T", " ")}</span>
@@ -1690,6 +1692,18 @@ export default function PersediaanPage({ user, onBack }) {
                     <p className="mt-1.5 text-foreground">
                       {t.lokasi_dari || "—"} → <b>{t.lokasi_ke || "—"}</b>
                       <span className="text-muted-foreground"> · stok tetap {t.stok_sesudah}</span>
+                    </p>
+                  ) : t.arah === "nilai" ? (
+                    /* Koreksi nilai: kuantitas tetap — total ber-tanda
+                       (negatif = koreksi kurang), jangan pola "−0 × Rp0". */
+                    <p className="mt-1.5 text-foreground">
+                      Nilai {Number(t.total) >= 0 ? "+" : "−"}<b>{fmtRp(Math.abs(Number(t.total || 0)))}</b>
+                      <span className="text-muted-foreground"> · kuantitas tetap {t.stok_sesudah}</span>
+                    </p>
+                  ) : t.arah === "hapus" ? (
+                    <p className="mt-1.5 text-foreground">
+                      {t.jumlah} unit senilai <b>{fmtRp(t.total)}</b> dihapus dari daftar
+                      <span className="text-muted-foreground"> · stok tak berubah ({t.stok_sesudah})</span>
                     </p>
                   ) : (
                     <p className="mt-1.5 text-foreground">
@@ -2107,6 +2121,8 @@ export default function PersediaanPage({ user, onBack }) {
                       <option value="masuk">Masuk</option>
                       <option value="keluar">Keluar</option>
                       <option value="mutasi">Pindah gudang</option>
+                      <option value="nilai">Koreksi nilai</option>
+                      <option value="hapus">Hapus definitif</option>
                     </select>
                     <select value={daftarTrx.filter.kode}
                       onChange={(e) => muatDaftarTrx(1, { ...daftarTrx.filter, kode: e.target.value }, daftarTrx.tab)}

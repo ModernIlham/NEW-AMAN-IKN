@@ -67,6 +67,76 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#704] Tanggalan roda di Master Pegawai, font judul dibetulkan, titik tombol masuk dihapus — 2026-08-02
+
+- **Tanggalan RODA (hari · bulan · tahun) di Master Pegawai** — desain
+  `date-wheel-picker` (21st.dev) yang dipilih pemilik, dikonversi ke JSX
+  (`components/ui/date-wheel-picker.jsx`): tiga kolom roda 3D yang bisa
+  diseret/di-scroll/diketik panah, nama bulan Indonesia (`Intl` id-ID),
+  gradien pudar memakai token `hsl(var(--popover))` (token warna aplikasi
+  ini triplet HSL — `var(--background)` mentah dari aslinya bukan warna
+  sah). Pembungkus `InputTanggalRoda` menyamakan kontraknya dengan
+  `InputTanggal` (ISO + `{target:{name,value}}`) dan menambah tombol
+  **Pakai**/**Kosongkan** — roda berputar bebas tanpa menyimpan, sehingga
+  setengah-gulir tak pernah bocor ke form. Terpasang di TUJUH kolom:
+  Tgl Lahir (1940–kini), Tgl Meninggal, Tgl Pemberitahuan Ahli Waris,
+  TMT & Akhir Periode Jabatan, Mulai & Selesai Kontrak.
+- **Font judul dibetulkan — Manrope hantu dihapus.** Judul halaman masuk,
+  "Verifikasi Email", logo AMAN di header dashboard, dan halaman pemilihan
+  kegiatan memakai `font-['Manrope']` — padahal font Manrope TIDAK PERNAH
+  dimuat (tak ada di @fontsource), jadi peramban diam-diam jatuh ke font
+  sistem yang berbeda dari seluruh aplikasi. Ketujuh titik dikembalikan ke
+  **Plus Jakarta Sans Variable** (font resmi yang memang dibundel), dan
+  `fontFamily.sans/mono` kini DIDEFINISIKAN di `tailwind.config.js` — tanpa
+  itu utilitas `font-sans` memakai stack bawaan Tailwind dan menimpa font
+  aplikasi di elemen mana pun yang memakainya.
+- **Titik hitam di tombol Masuk/Daftar dihapus** — titik kecil "benih"
+  animasi pada tombol interaktif; isian tetap mengembang dari sisi kiri
+  saat disentuh, hanya penandanya yang tak lagi tampak.
+- **Halaman PRD (Info) dimutakhirkan**: dua kartu fitur baru — *Persediaan
+  Standar SAKTI* (45 kode transaksi, Daftar Transaksi, daftar usang/rusak/
+  tak dikuasai + hapus ber-SK, koreksi nilai, 7 laporan format SAKTI) dan
+  *Rantai Nilai & Penyusutan* (nilai buku per NUP, timeline jurnal Buku
+  Barang, jurnal edit harga, masa manfaat LHIP) — plus butir tanggalan
+  roda pada kartu Master SDM.
+- **Audit kesegaran impor/ekspor/template + backup/restore/reset** —
+  sisiran menyeluruh (mandat pemilik "jangan sampai ada yang terlewat"),
+  16 temuan ditutup:
+  - **Template impor pegawai +3 kolom**: Gelar Depan, Gelar Belakang
+    (setelah Nama Lengkap) dan Unit Kerja (setelah Eselon 5) kini ikut di
+    template, impor, dan ekspor — dulu field-nya ada di form tapi hilang
+    saat impor massal. Baris contoh template dirakit **per nama kolom**
+    dengan pagar `assert` — versi lama menulis 33 sel untuk 34 kolom
+    sehingga "AKTIF" bergeser ke kolom Status Pegawai (SIMPEG).
+  - **Kode SAKTI tak lagi percaya nilai tersimpan** di Kartu Barang PDF &
+    riwayat per barang: kode diturunkan ulang dari `jenis` (warisan
+    M06/M07/M99/K07 lama & "OPN" terkoreksi otomatis), label jenis dari
+    registry 45 kode + pindah gudang.
+  - **Daftar Transaksi**: filter `arah` divalidasi server (pattern) dan UI
+    mendapat opsi **Koreksi nilai** & **Hapus definitif**; dialog riwayat
+    menampilkan baris koreksi nilai (`Nilai ±Rp… · kuantitas tetap`) dan
+    hapus definitif dengan kalimat yang benar — bukan `−0 × Rp0 = Rp…`.
+  - **Header template CSV transaksi persediaan** kini diimpor dari
+    registry field (anti-drift, bukan daftar tersalin).
+  - **Restore kini menghapus koleksi yang tak ada di ZIP** (kecuali
+    `users`) — sebelumnya koleksi baru pasca-backup selamat dari restore
+    sehingga hasilnya bukan potret cadangan; backup melewati
+    `app_runtime` (runtime murni) dan reset mempertahankan `email_usage`
+    (penghitung kuota Resend harus selamat dari reset data).
+  - **Indeks `(jenis, timestamp)`** pada transaksi persediaan untuk
+    filter Daftar Transaksi; lebar kolom ekspor XLSX aset dirapikan untuk
+    kolom Jumlah Foto & Tanggal Input.
+  - **Dokumentasi disegarkan**: deskripsi modul Persediaan
+    (`bmnModules.js`) dan pustaka regulasi §3.2 kini mencerminkan 45 kode
+    terverifikasi (label resmi "Keluar Lainnya" K06), H01–H03 + daftar
+    usang/rusak/tak dikuasai yang SUDAH terpasang, dan catatan kode
+    warisan.
+  - Dinyatakan sadar: field meninggal/ahli waris/kewarganegaraan sengaja
+    TIDAK dimasukkan ke impor massal pegawai (data sensitif diisi lewat
+    form; impor tak menghapusnya karena kunci impor bersifat tetap).
+
+---
+
 ## [#703] Rantai nilai aset dirapatkan — tiga celah audit ditutup — 2026-08-02
 
 Penutup audit rantai nilai (lanjutan [#699]): tiga celah yang membuat

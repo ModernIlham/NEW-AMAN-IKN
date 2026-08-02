@@ -514,6 +514,25 @@ async def run_restore_task(job_id: str, zip_path: Path, username: str):
                     logger.info(f"Restore [{job_id}]: {col_name} = {len(docs)} docs")
                     await asyncio.sleep(0)
 
+                # Koleksi yang ADA di DB tapi TIDAK ada di arsip ikut
+                # DIKOSONGKAN (audit kesegaran): koleksi Mongo baru terbentuk
+                # pada tulisan pertama sehingga arsip lama tak memuat
+                # .json-nya — tanpa langkah ini jurnal/register era baru
+                # (mis. transaksi_persediaan, penilaian_koreksi) selamat utuh
+                # dan bercampur dengan data hasil pemulihan point-in-time.
+                # `users` dikecualikan: arsip tanpa users tak boleh mengunci
+                # semua akun (termasuk admin yang sedang memulihkan).
+                restored_names = {LEGACY_COLLECTION_ALIASES.get(c, c)
+                                  for c in backup_cols}
+                sisa = [n for n in collections_to_process(
+                            await db.list_collection_names())
+                        if n not in restored_names and n != "users"]
+                for name in sisa:
+                    res = await db[name].delete_many({})
+                    if res.deleted_count:
+                        logger.info(f"Restore [{job_id}]: {name} dikosongkan "
+                                    f"({res.deleted_count} dok di luar arsip)")
+
                 # Backup lama tidak membawa counters.json — bangun ulang sequence
                 # tiket dari ticket_number kegiatan yang barusan direstore agar
                 # nomor tiket baru tidak duplikat.

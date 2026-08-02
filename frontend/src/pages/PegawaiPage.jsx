@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import InputTanggalRoda from "@/components/ui/input-tanggal-roda";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
@@ -1217,7 +1218,7 @@ export default function PegawaiPage({ user, onBack }) {
                   </Field>
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="Tempat Lahir"><Input value={form.tempat_lahir} onChange={set("tempat_lahir")} /></Field>
-                    <Field label="Tgl Lahir"><Input type="date" value={form.tanggal_lahir} onChange={set("tanggal_lahir")} /></Field>
+                    <Field label="Tgl Lahir"><InputTanggalRoda name="tanggal_lahir" value={form.tanggal_lahir} onChange={set("tanggal_lahir")} minYear={1940} maxYear={new Date().getFullYear()} data-testid="pegawai-form-tgl-lahir" /></Field>
                   </div>
                   <Field label="Agama">
                     <Select value={form.agama} onChange={set("agama")} opts={ref.agama} />
@@ -1289,8 +1290,8 @@ export default function PegawaiPage({ user, onBack }) {
                     {form.status === "meninggal" && (
                       <>
                         <Field label="Tanggal Meninggal *">
-                          <Input type="date" value={form.tanggal_meninggal} onChange={set("tanggal_meninggal")}
-                            data-testid="pegawai-form-tanggal-meninggal" />
+                          <InputTanggalRoda name="tanggal_meninggal" value={form.tanggal_meninggal} onChange={set("tanggal_meninggal")}
+                            minYear={1990} maxYear={new Date().getFullYear()} data-testid="pegawai-form-tanggal-meninggal" />
                         </Field>
                         <Field label="Nomor Akta Kematian">
                           <Input value={form.nomor_akta_kematian} onChange={set("nomor_akta_kematian")}
@@ -1315,9 +1316,9 @@ export default function PegawaiPage({ user, onBack }) {
                             placeholder="No. HP / alamat untuk pemberitahuan resmi" />
                         </Field>
                         <Field label="Tgl Pemberitahuan Ahli Waris">
-                          <Input type="date" value={form.pemberitahuan_ahli_waris_tanggal}
-                            onChange={set("pemberitahuan_ahli_waris_tanggal")}
-                            data-testid="pegawai-form-pemberitahuan-tanggal" />
+                          <InputTanggalRoda name="pemberitahuan_ahli_waris_tanggal" value={form.pemberitahuan_ahli_waris_tanggal}
+                            onChange={set("pemberitahuan_ahli_waris_tanggal")} minYear={1990}
+                            maxYear={new Date().getFullYear() + 1} data-testid="pegawai-form-pemberitahuan-tanggal" />
                         </Field>
                         <Field label="Nomor Surat Pemberitahuan">
                           <Input value={form.pemberitahuan_ahli_waris_nomor}
@@ -1336,9 +1337,9 @@ export default function PegawaiPage({ user, onBack }) {
                     )}
                     {form.status_kepegawaian !== "non_asn" && (
                       <>
-                        <Field label="TMT Jabatan"><Input type="date" value={form.tmt_jabatan} onChange={set("tmt_jabatan")} /></Field>
+                        <Field label="TMT Jabatan"><InputTanggalRoda name="tmt_jabatan" value={form.tmt_jabatan} onChange={set("tmt_jabatan")} minYear={1970} maxYear={new Date().getFullYear() + 1} data-testid="pegawai-form-tmt-jabatan" /></Field>
                         <Field label="Akhir Periode Jabatan (ops.)">
-                          <Input type="date" value={form.tanggal_akhir_jabatan} onChange={set("tanggal_akhir_jabatan")} data-testid="pegawai-form-akhir-jabatan" />
+                          <InputTanggalRoda name="tanggal_akhir_jabatan" value={form.tanggal_akhir_jabatan} onChange={set("tanggal_akhir_jabatan")} minYear={1970} data-testid="pegawai-form-akhir-jabatan" />
                         </Field>
                       </>
                     )}
@@ -1359,8 +1360,8 @@ export default function PegawaiPage({ user, onBack }) {
                         </Field>
                       )}
                       <Field label="Nomor Kontrak"><Input value={form.nomor_kontrak} onChange={set("nomor_kontrak")} placeholder="cth. 001/KONTRAK/2026" /></Field>
-                      <Field label="Mulai Kontrak"><Input type="date" value={form.tgl_mulai_kontrak} onChange={set("tgl_mulai_kontrak")} /></Field>
-                      <Field label="Selesai Kontrak"><Input type="date" value={form.tgl_selesai_kontrak} onChange={set("tgl_selesai_kontrak")} /></Field>
+                      <Field label="Mulai Kontrak"><InputTanggalRoda name="tgl_mulai_kontrak" value={form.tgl_mulai_kontrak} onChange={set("tgl_mulai_kontrak")} minYear={2000} data-testid="pegawai-form-mulai-kontrak" /></Field>
+                      <Field label="Selesai Kontrak"><InputTanggalRoda name="tgl_selesai_kontrak" value={form.tgl_selesai_kontrak} onChange={set("tgl_selesai_kontrak")} minYear={2000} data-testid="pegawai-form-selesai-kontrak" /></Field>
                     </div>
                   )}
                 </div>
