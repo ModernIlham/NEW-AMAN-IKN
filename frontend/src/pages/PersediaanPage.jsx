@@ -111,6 +111,12 @@ export default function PersediaanPage({ user, onBack }) {
   const [daftarTrx, setDaftarTrx] = useState(null);
   // Registry lengkap 45 kode + label kelompok (dari /jenis-transaksi)
   const [trxRef, setTrxRef] = useState({ referensi: [], label_kelompok: {} });
+  // Daftar usang/rusak/tak dikuasai: {usang[],rusak[],tidak_dikuasai[],loading}
+  const [nonaktif, setNonaktif] = useState(null);
+  // Form hapus definitif ber-SK: {kategori, entri, jumlah, sk_nomor, sk_tanggal, keterangan, saving}
+  const [hapusSk, setHapusSk] = useState(null);
+  // Koreksi nilai per barang: {item, jenis, nilai, alasan, no_bukti, saving}
+  const [koreksiNilai, setKoreksiNilai] = useState(null);
   const massalTimer = useRef(null);
   const { confirm, confirmDialog } = useConfirm();
   // Tautan TTD yang baru terbit: {nomor, links[]} — ditampilkan agar bisa
@@ -412,6 +418,58 @@ export default function PersediaanPage({ user, onBack }) {
   };
 
   const FILTER_TRX_KOSONG = { arah: "", kode: "", dari: "", sampai: "", q: "" };
+
+  const muatNonaktif = async () => {
+    setNonaktif((n) => ({ ...(n || {}), loading: true }));
+    try {
+      const r = await axios.get(`${API}/persediaan/nonaktif`);
+      setNonaktif({ ...r.data, loading: false });
+    } catch (e) {
+      toast.error(getApiError(e, "Gagal memuat daftar usang/rusak"));
+      setNonaktif(null);
+    }
+  };
+
+  const kirimHapusSk = async () => {
+    if (!hapusSk) return;
+    setHapusSk((h) => ({ ...h, saving: true }));
+    const jenis = { usang: "hapus_usang", rusak: "hapus_rusak",
+                    tidak_dikuasai: "hapus_tak_dikuasai" }[hapusSk.kategori];
+    try {
+      const r = await axios.post(
+        `${API}/persediaan/${hapusSk.entri.persediaan_id}/hapus-definitif`, {
+          jenis, jumlah: parseInt(hapusSk.jumlah, 10) || 0,
+          sk_nomor: hapusSk.sk_nomor, sk_tanggal: hapusSk.sk_tanggal,
+          keterangan: hapusSk.keterangan,
+        });
+      toast.success(r.data?.message || "Penghapusan tercatat");
+      setHapusSk(null);
+      muatNonaktif();
+    } catch (e) {
+      toast.error(getApiError(e, "Gagal mencatat penghapusan"));
+      setHapusSk((h) => (h ? { ...h, saving: false } : h));
+    }
+  };
+
+  const kirimKoreksiNilai = async () => {
+    if (!koreksiNilai) return;
+    setKoreksiNilai((k) => ({ ...k, saving: true }));
+    try {
+      const r = await axios.post(
+        `${API}/persediaan/${koreksiNilai.item.id}/koreksi-nilai`, {
+          jenis: koreksiNilai.jenis,
+          nilai: Number(koreksiNilai.nilai) || 0,
+          alasan: koreksiNilai.alasan,
+          no_bukti: koreksiNilai.no_bukti,
+        });
+      toast.success(`${r.data?.message} — nilai Rp${Math.round(r.data?.nilai_lama || 0).toLocaleString("id-ID")} → Rp${Math.round(r.data?.nilai_baru || 0).toLocaleString("id-ID")}`);
+      setKoreksiNilai(null);
+      load(page, search, status, gudang);
+    } catch (e) {
+      toast.error(getApiError(e, "Gagal mencatat koreksi nilai"));
+      setKoreksiNilai((k) => (k ? { ...k, saving: false } : k));
+    }
+  };
 
   // Muat Daftar Transaksi lintas barang; filter dipasok eksplisit supaya
   // tombol Terapkan/halaman selalu memuat dengan nilai terkini.
@@ -798,6 +856,10 @@ export default function PersediaanPage({ user, onBack }) {
                   onClick={() => muatDaftarTrx(1, FILTER_TRX_KOSONG)}>
                   <History className="w-4 h-4 mr-2" />Daftar Transaksi (semua barang)
                 </DropdownMenuItem>
+                <DropdownMenuItem className="min-h-[42px]" data-testid="persediaan-nonaktif"
+                  onClick={muatNonaktif}>
+                  <AlertTriangle className="w-4 h-4 mr-2" />Daftar Usang / Rusak / Tak Dikuasai
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
             {/* Menu Data: impor / template / ekspor master */}
@@ -1005,6 +1067,15 @@ export default function PersediaanPage({ user, onBack }) {
                               data-testid={`persediaan-layers-${it.kode_barang}-${it.nup}`}>
                               <Layers className="w-4 h-4 mr-2 text-amber-600" />Layer FIFO (saldo per layer)
                             </DropdownMenuItem>
+                            {isWriter && it.stok > 0 && (
+                              <DropdownMenuItem onClick={() => setKoreksiNilai({
+                                item: it, jenis: "koreksi_nilai_tambah",
+                                nilai: "", alasan: "", no_bukti: "", saving: false,
+                              })}
+                                data-testid={`persediaan-koreksi-nilai-${it.kode_barang}-${it.nup}`}>
+                                <Pencil className="w-4 h-4 mr-2 text-violet-600" />Koreksi Nilai (M98/K98)
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem onClick={() => setForm({
                               mode: "edit", id: it.id, version: it.version,
                               data: {
@@ -2038,6 +2109,163 @@ export default function PersediaanPage({ user, onBack }) {
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog Daftar Usang / Rusak / Tak Dikuasai (derivasi jurnal) ── */}
+      <Dialog open={!!nonaktif} onOpenChange={(o) => { if (!o) { setNonaktif(null); setHapusSk(null); } }}>
+        <DialogContent className="max-w-2xl max-h-[88vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Daftar Persediaan Usang / Rusak / Tidak Dikuasai</DialogTitle>
+            <DialogDescription className="text-xs">
+              Barang keluar dari saldo saat dicatat K04/K05/K09 dan terdaftar di
+              sini (bahan pengungkapan CaLK) sampai dihapus definitif ber-SK
+              (H01/H02/H03) atau dibatalkan (M94, lewat transaksi masuk).
+            </DialogDescription>
+          </DialogHeader>
+          {nonaktif?.loading ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-emerald-600" /></div>
+          ) : nonaktif && (
+            <div className="space-y-3">
+              {[["usang", "Persediaan Usang (K04 → H01)"],
+                ["rusak", "Persediaan Rusak (K05 → H02)"],
+                ["tidak_dikuasai", "Persediaan Tidak Dikuasai (K09 → M94/H03)"]].map(([kat, judul]) => {
+                const rows = nonaktif[kat] || [];
+                return (
+                  <div key={kat} className="rounded-lg border border-border overflow-hidden" data-testid={`nonaktif-${kat}`}>
+                    <div className="px-3 py-2 bg-muted/40 flex items-center justify-between gap-2">
+                      <p className="text-xs font-bold text-foreground">{judul}</p>
+                      <p className="text-[10px] text-muted-foreground flex-shrink-0">
+                        {rows.length} barang · Rp{Math.round(nonaktif.ringkasan?.[kat]?.total_nilai || 0).toLocaleString("id-ID")}
+                      </p>
+                    </div>
+                    {rows.length === 0 ? (
+                      <p className="text-[11px] text-muted-foreground text-center py-3">Tidak ada.</p>
+                    ) : (
+                      <ul className="divide-y divide-border/60">
+                        {rows.map((e) => (
+                          <li key={e.persediaan_id} className="px-3 py-2 text-xs">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-medium text-foreground flex-1 min-w-[140px] truncate">
+                                {e.nama_barang || "-"}
+                                <span className="font-mono text-[10px] text-muted-foreground ml-1">{e.kode_barang}</span>
+                              </span>
+                              <span className="flex-shrink-0 font-semibold">{e.jumlah} unit</span>
+                              <span className="flex-shrink-0 font-mono">Rp{Math.round(e.nilai).toLocaleString("id-ID")}</span>
+                              {isWriter && (
+                                <Button size="sm" variant="outline"
+                                  className="h-7 text-[11px] min-h-0 border-red-500/50 text-red-600 dark:text-red-400 hover:bg-red-500/10"
+                                  onClick={() => setHapusSk({ kategori: kat, entri: e, jumlah: String(e.jumlah), sk_nomor: "", sk_tanggal: "", keterangan: "", saving: false })}
+                                  data-testid={`nonaktif-hapus-${e.persediaan_id}`}>
+                                  Hapus ber-SK
+                                </Button>
+                              )}
+                            </div>
+                            {hapusSk?.entri?.persediaan_id === e.persediaan_id && hapusSk.kategori === kat && (
+                              <div className="mt-2 grid grid-cols-2 gap-2 rounded-lg border border-red-500/30 p-2">
+                                <div>
+                                  <label className="text-[10px] font-medium block mb-0.5" htmlFor="hapus-sk-jumlah">Jumlah (maks {e.jumlah})</label>
+                                  <Input id="hapus-sk-jumlah" type="number" min="1" max={e.jumlah} className="h-8 text-xs"
+                                    value={hapusSk.jumlah}
+                                    onChange={(ev) => setHapusSk((h) => ({ ...h, jumlah: ev.target.value }))} />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] font-medium block mb-0.5" htmlFor="hapus-sk-nomor">Nomor SK (wajib)</label>
+                                  <Input id="hapus-sk-nomor" className="h-8 text-xs" placeholder="cth. SK-15/2026"
+                                    value={hapusSk.sk_nomor}
+                                    onChange={(ev) => setHapusSk((h) => ({ ...h, sk_nomor: ev.target.value }))} />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] font-medium block mb-0.5" htmlFor="hapus-sk-tgl">Tanggal SK</label>
+                                  <Input id="hapus-sk-tgl" type="date" className="h-8 text-xs"
+                                    value={hapusSk.sk_tanggal}
+                                    onChange={(ev) => setHapusSk((h) => ({ ...h, sk_tanggal: ev.target.value }))} />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] font-medium block mb-0.5" htmlFor="hapus-sk-ket">Keterangan</label>
+                                  <Input id="hapus-sk-ket" className="h-8 text-xs"
+                                    value={hapusSk.keterangan}
+                                    onChange={(ev) => setHapusSk((h) => ({ ...h, keterangan: ev.target.value }))} />
+                                </div>
+                                <div className="col-span-2 flex justify-end gap-1.5">
+                                  <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                                    onClick={() => setHapusSk(null)}>Batal</Button>
+                                  <Button size="sm" className="h-7 text-[11px] min-h-0 bg-red-600 hover:bg-red-700"
+                                    disabled={hapusSk.saving || !hapusSk.sk_nomor.trim()}
+                                    onClick={kirimHapusSk} data-testid="nonaktif-hapus-simpan">
+                                    {hapusSk.saving ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
+                                    Catat Penghapusan
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })}
+              {nonaktif.catatan && <p className="text-[10px] text-muted-foreground">{nonaktif.catatan}</p>}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog Koreksi Nilai (M97/M98/K97/K98 — kuantitas tetap) ── */}
+      <Dialog open={!!koreksiNilai} onOpenChange={(o) => { if (!o) setKoreksiNilai(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Koreksi Nilai — {koreksiNilai?.item?.nama_barang}</DialogTitle>
+            <DialogDescription className="text-xs">
+              Kuantitas TETAP; nilai disebar proporsional ke seluruh layer FIFO.
+              Alasan wajib (bahan pengungkapan).
+            </DialogDescription>
+          </DialogHeader>
+          {koreksiNilai && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kn-jenis">Jenis</label>
+                <select id="kn-jenis" value={koreksiNilai.jenis}
+                  onChange={(e) => setKoreksiNilai((k) => ({ ...k, jenis: e.target.value }))}
+                  className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
+                  data-testid="koreksi-nilai-jenis">
+                  <option value="koreksi_nilai_tambah">Koreksi Nilai Tambah (M98)</option>
+                  <option value="koreksi_nilai_tambah_opsik">Koreksi Nilai Tambah — Opsik (M97)</option>
+                  <option value="koreksi_nilai_kurang">Koreksi Nilai Kurang (K98)</option>
+                  <option value="koreksi_nilai_kurang_opsik">Koreksi Nilai Kurang — Opsik (K97)</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kn-nilai">Selisih Nilai (Rp)</label>
+                <Input id="kn-nilai" type="number" min="1" placeholder="0"
+                  value={koreksiNilai.nilai}
+                  onChange={(e) => setKoreksiNilai((k) => ({ ...k, nilai: e.target.value }))}
+                  data-testid="koreksi-nilai-nilai" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kn-bukti">No. Bukti/Dokumen</label>
+                <Input id="kn-bukti" value={koreksiNilai.no_bukti}
+                  onChange={(e) => setKoreksiNilai((k) => ({ ...k, no_bukti: e.target.value }))} />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kn-alasan">Alasan (wajib)</label>
+                <Input id="kn-alasan" placeholder="cth. hasil opname fisik/verifikasi harga"
+                  value={koreksiNilai.alasan}
+                  onChange={(e) => setKoreksiNilai((k) => ({ ...k, alasan: e.target.value }))}
+                  data-testid="koreksi-nilai-alasan" />
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setKoreksiNilai(null)}>Batal</Button>
+            <Button onClick={kirimKoreksiNilai}
+              disabled={koreksiNilai?.saving || !(Number(koreksiNilai?.nilai) > 0) || (koreksiNilai?.alasan || "").trim().length < 3}
+              className="bg-violet-600 hover:bg-violet-700" data-testid="koreksi-nilai-simpan">
+              {koreksiNilai?.saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Pencil className="w-4 h-4 mr-1.5" />}
+              Catat Koreksi
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

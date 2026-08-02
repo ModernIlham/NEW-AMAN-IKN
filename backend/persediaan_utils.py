@@ -138,7 +138,7 @@ _URUTAN_MASUK = [
     "reklasifikasi_masuk", "reklasifikasi_dari_aset",
     "koreksi_kuantitas_tambah", "koreksi_penyesuaian_tambah",
     "koreksi_hasil_migrasi", "koreksi_transfer_keluar_online",
-    "koreksi_tambah_fifo_hst",
+    "koreksi_tambah_fifo_hst", "batal_catat_tak_dikuasai",
 ]
 
 _URUTAN_KELUAR = [
@@ -148,7 +148,7 @@ _URUTAN_KELUAR = [
     "dalam_proses_keluar", "non_aktif_uapkpb_keluar",
     "reklasifikasi_keluar", "reklasifikasi_ke_aset",
     "koreksi_kuantitas_kurang", "koreksi_penyesuaian_kurang",
-    "koreksi_kurang_fifo_hst",
+    "koreksi_kurang_fifo_hst", "catat_tak_dikuasai",
 ]
 
 
@@ -394,8 +394,20 @@ def mutasi_periode(jurnal_rows, dari_iso: str, sampai_iso: str):
             "masuk_qty": 0, "masuk_nilai": 0.0,
             "keluar_qty": 0, "keluar_nilai": 0.0,
         })
+        if arah == "nilai":
+            # Koreksi NILAI (M97/M98/K97/K98): kuantitas tetap, nilai
+            # bergeser — total ber-tanda (negatif = koreksi kurang).
+            if dari <= tgl <= sampai:
+                if nilai >= 0:
+                    e["masuk_nilai"] += nilai
+                else:
+                    e["keluar_nilai"] += -nilai
+            continue
         if arah not in ("masuk", "keluar"):
-            continue  # mutasi lokasi (pindah gudang) tidak mengubah saldo
+            # mutasi lokasi (pindah gudang) & penghapusan definitif dari
+            # daftar usang/rusak/tak dikuasai (arah "hapus" — stoknya sudah
+            # keluar saat K04/K05/K09) tidak mengubah saldo
+            continue
         if tgl < dari:
             e["saldo_awal"] += qty if arah == "masuk" else -qty
         elif tgl <= sampai:
@@ -413,8 +425,121 @@ def mutasi_periode(jurnal_rows, dari_iso: str, sampai_iso: str):
     # di laporan mutasi → dibuang (temuan review #21).
     rekap = {pid: e for pid, e in rekap.items()
              if e["saldo_awal"] or e["saldo_akhir"]
-             or e["masuk_qty"] or e["keluar_qty"]}
+             or e["masuk_qty"] or e["keluar_qty"]
+             or e["masuk_nilai"] or e["keluar_nilai"]}
     return rekap
+
+
+def koreksi_nilai_layers(batches, selisih):
+    """Sebar KOREKSI NILAI (kuantitas tetap — M97/M98/K97/K98) ke layer.
+
+    `selisih` > 0 menambah nilai, < 0 mengurangi. Nilai disebar
+    PROPORSIONAL terhadap nilai tiap layer (harga dikali faktor yang sama)
+    sehingga komposisi FIFO tak berubah; bila seluruh layer berharga nol
+    (total 0) koreksi tambah dibagi rata per unit. Kembalikan
+    (batches_baru, total_lama, total_baru). ValueError bila tak mungkin:
+    tanpa layer, atau koreksi kurang melebihi nilai tercatat.
+    """
+    aktif = [dict(b) for b in (batches or []) if int(b.get("qty", 0) or 0) > 0]
+    if not aktif:
+        raise ValueError("Tidak ada layer/stok yang bisa dikoreksi nilainya")
+    selisih = float(selisih)
+    total = sum(int(b["qty"]) * float(b.get("harga", 0) or 0) for b in aktif)
+    if selisih < 0 and -selisih > total + 1e-9:
+        raise ValueError(
+            f"Koreksi kurang melebihi nilai tercatat (Rp{int(round(total))})")
+    if total > 0:
+        faktor = (total + selisih) / total
+        for b in aktif:
+            b["harga"] = float(b.get("harga", 0) or 0) * faktor
+    else:  # semua layer Rp0 → koreksi tambah dibagi rata per unit
+        if selisih <= 0:
+            raise ValueError("Nilai tercatat sudah Rp0 — tidak ada yang dikurangi")
+        qty_total = sum(int(b["qty"]) for b in aktif)
+        per_unit = selisih / qty_total
+        for b in aktif:
+            b["harga"] = per_unit
+    total_baru = sum(int(b["qty"]) * float(b["harga"]) for b in aktif)
+    # Layer qty<=0 (harusnya tak ada — konsumsi_fifo membuangnya) tak dibawa.
+    return aktif, total, total_baru
+
+
+# Jenis jurnal pembentuk daftar barang NONAKTIF (usang/rusak — bahan CaLK)
+# dan PERSEDIAAN TIDAK DIKUASAI: pencatat menambah daftar, penghapus/
+# pembatal menguranginya. Daftar DIDERIVASI dari jurnal — tidak ada koleksi
+# terpisah yang bisa melenceng dari transaksinya.
+_PEMBENTUK_NONAKTIF = {
+    "usang": ("usang", +1), "hapus_usang": ("usang", -1),
+    "rusak": ("rusak", +1), "hapus_rusak": ("rusak", -1),
+    "catat_tak_dikuasai": ("tidak_dikuasai", +1),
+    "batal_catat_tak_dikuasai": ("tidak_dikuasai", -1),
+    "hapus_tak_dikuasai": ("tidak_dikuasai", -1),
+}
+
+
+def rekap_nonaktif(jurnal_rows):
+    """Daftar barang usang / rusak / tidak dikuasai dari jurnal → dict
+    {kategori: {persediaan_id: {identitas, jumlah, nilai, entri[]}}}.
+
+    jumlah/nilai = akumulasi pencatatan dikurangi penghapusan ber-SK /
+    pembatalan; baris ber-sisa nol dibuang (sudah tuntas dihapus). Nilai
+    memakai nilai FIFO saat transaksi dicatat (kolom `total`). MURNI.
+    """
+    out = {"usang": {}, "rusak": {}, "tidak_dikuasai": {}}
+    for r in jurnal_rows or []:
+        info = _PEMBENTUK_NONAKTIF.get(str(r.get("jenis") or ""))
+        if not info:
+            continue
+        kategori, arah = info
+        pid = r.get("persediaan_id")
+        if not pid:
+            continue
+        e = out[kategori].setdefault(pid, {
+            "persediaan_id": pid,
+            "kode_barang": r.get("kode_barang"),
+            "nup": r.get("nup"),
+            "nama_barang": r.get("nama_barang"),
+            "jumlah": 0, "nilai": 0.0, "entri": [],
+        })
+        try:
+            qty = arah * int(r.get("jumlah", 0) or 0)
+            rp = arah * float(r.get("total", 0) or 0)
+        except (ValueError, TypeError):
+            continue
+        e["jumlah"] += qty
+        e["nilai"] += rp
+        e["entri"].append({
+            "tanggal": tanggal_wib(r.get("timestamp")),
+            "jenis": r.get("jenis"),
+            "jumlah": abs(qty), "nilai": abs(rp),
+            "arah": "catat" if arah > 0 else "hapus",
+            "no_bukti": r.get("no_bukti") or "",
+            "keterangan": r.get("keterangan") or "",
+        })
+    for kategori in out:
+        # Pembulatan mengambang bisa menyisakan nilai receh pada sisa 0 unit.
+        out[kategori] = {pid: e for pid, e in out[kategori].items()
+                        if e["jumlah"] > 0}
+    return out
+
+
+def validate_hapus_definitif(jenis, jumlah, sisa_jumlah, sk_nomor):
+    """(ok, err) penghapusan definitif ber-SK dari daftar usang/rusak/tak
+    dikuasai (H01/H02/H03): jenis dikenal, jumlah 0<n<=sisa, SK wajib."""
+    if jenis not in ("hapus_usang", "hapus_rusak", "hapus_tak_dikuasai"):
+        return False, "Jenis penghapusan tidak dikenal"
+    if not str(sk_nomor or "").strip():
+        return False, "Nomor SK penghapusan wajib diisi"
+    try:
+        j = int(jumlah)
+    except (ValueError, TypeError):
+        return False, "Jumlah harus bilangan bulat"
+    if j <= 0:
+        return False, "Jumlah harus lebih dari 0"
+    if j > int(sisa_jumlah or 0):
+        return False, (f"Jumlah melebihi sisa tercatat di daftar "
+                       f"({int(sisa_jumlah or 0)})")
+    return True, ""
 
 
 def klasifikasi_kedaluwarsa(batches, today_iso: str, horizon_hari: int = 30):

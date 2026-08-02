@@ -538,3 +538,104 @@ class TestTanggalWib:
                    "timestamp": "2026-06-30T17:30:00+00:00"}]
         rekap = mutasi_periode(jurnal, "2026-07-01", "2026-07-31")
         assert rekap["p"]["masuk_qty"] == 1 and rekap["p"]["saldo_awal"] == 0
+
+
+class TestKoreksiNilaiLayers:
+    from persediaan_utils import koreksi_nilai_layers as _f
+
+    def test_proporsional_tambah_dan_kurang(self):
+        from persediaan_utils import koreksi_nilai_layers
+        layers = [{"batch_id": "a", "qty": 10, "harga": 1000.0},
+                  {"batch_id": "b", "qty": 5, "harga": 2000.0}]  # total 20.000
+        baru, lama, total_baru = koreksi_nilai_layers(layers, 4000)   # +20%
+        assert lama == 20000 and abs(total_baru - 24000) < 1e-6
+        assert abs(baru[0]["harga"] - 1200.0) < 1e-9   # proporsi terjaga
+        assert abs(baru[1]["harga"] - 2400.0) < 1e-9
+        assert [b["qty"] for b in baru] == [10, 5]     # kuantitas TETAP
+        kurang, _, tb = koreksi_nilai_layers(layers, -10000)          # −50%
+        assert abs(tb - 10000) < 1e-6
+        assert abs(kurang[1]["harga"] - 1000.0) < 1e-9
+
+    def test_pagar_pagar(self):
+        import pytest
+        from persediaan_utils import koreksi_nilai_layers
+        with pytest.raises(ValueError):
+            koreksi_nilai_layers([], 1000)                 # tanpa layer
+        layers = [{"batch_id": "a", "qty": 2, "harga": 500.0}]
+        with pytest.raises(ValueError):
+            koreksi_nilai_layers(layers, -2000)            # melebihi tercatat
+        # semua layer Rp0 → tambah dibagi rata per unit; kurang ditolak
+        nol = [{"batch_id": "a", "qty": 4, "harga": 0.0}]
+        baru, _, tb = koreksi_nilai_layers(nol, 1000)
+        assert abs(baru[0]["harga"] - 250.0) < 1e-9 and abs(tb - 1000) < 1e-6
+        with pytest.raises(ValueError):
+            koreksi_nilai_layers(nol, -1)
+
+
+class TestRekapNonaktif:
+    def _rows(self):
+        return [
+            {"persediaan_id": "p1", "jenis": "usang", "jumlah": 10,
+             "total": 50000, "kode_barang": "1010101001000001",
+             "nama_barang": "Kertas", "timestamp": "2026-06-01T00:00:00"},
+            {"persediaan_id": "p1", "jenis": "hapus_usang", "jumlah": 4,
+             "total": 20000, "no_bukti": "SK-1",
+             "timestamp": "2026-07-01T00:00:00"},
+            {"persediaan_id": "p2", "jenis": "rusak", "jumlah": 2,
+             "total": 8000, "timestamp": "2026-06-15T00:00:00"},
+            {"persediaan_id": "p3", "jenis": "catat_tak_dikuasai", "jumlah": 1,
+             "total": 999, "timestamp": "2026-06-20T00:00:00"},
+            {"persediaan_id": "p3", "jenis": "batal_catat_tak_dikuasai",
+             "jumlah": 1, "total": 999, "timestamp": "2026-06-25T00:00:00"},
+            # jenis biasa tidak ikut membentuk daftar
+            {"persediaan_id": "p1", "jenis": "habis_pakai", "jumlah": 3,
+             "total": 15000, "timestamp": "2026-06-02T00:00:00"},
+        ]
+
+    def test_saldo_daftar_dan_jejak(self):
+        from persediaan_utils import rekap_nonaktif
+        r = rekap_nonaktif(self._rows())
+        assert r["usang"]["p1"]["jumlah"] == 6            # 10 − 4
+        assert r["usang"]["p1"]["nilai"] == 30000          # 50.000 − 20.000
+        assert len(r["usang"]["p1"]["entri"]) == 2
+        assert r["usang"]["p1"]["entri"][1]["arah"] == "hapus"
+        assert r["rusak"]["p2"]["jumlah"] == 2
+
+    def test_baris_tuntas_dibuang(self):
+        from persediaan_utils import rekap_nonaktif
+        r = rekap_nonaktif(self._rows())
+        # p3: dicatat lalu dibatalkan penuh → tidak lagi terdaftar
+        assert "p3" not in r["tidak_dikuasai"]
+        assert rekap_nonaktif([]) == {"usang": {}, "rusak": {},
+                                      "tidak_dikuasai": {}}
+
+
+def test_validate_hapus_definitif():
+    from persediaan_utils import validate_hapus_definitif as v
+    assert v("hapus_usang", 3, 5, "SK-9") == (True, "")
+    assert not v("hapus_biasa", 1, 5, "SK")[0]
+    assert not v("hapus_rusak", 1, 5, "")[0]        # SK wajib
+    assert not v("hapus_rusak", 0, 5, "SK")[0]
+    assert not v("hapus_rusak", 6, 5, "SK")[0]      # melebihi sisa
+    assert "sisa" in v("hapus_rusak", 6, 5, "SK")[1]
+
+
+def test_mutasi_periode_koreksi_nilai_dan_hapus():
+    from persediaan_utils import mutasi_periode
+    rows = [
+        {"persediaan_id": "p1", "arah": "masuk", "jumlah": 10,
+         "total": 100_000, "timestamp": "2026-07-01T00:00:00"},
+        # koreksi nilai: kuantitas tetap, nilai bergeser (ber-tanda)
+        {"persediaan_id": "p1", "arah": "nilai", "jumlah": 0,
+         "total": 5_000, "timestamp": "2026-07-05T00:00:00"},
+        {"persediaan_id": "p1", "arah": "nilai", "jumlah": 0,
+         "total": -2_000, "timestamp": "2026-07-06T00:00:00"},
+        # penghapusan definitif dari daftar (H0x) tidak menggeser saldo
+        {"persediaan_id": "p1", "arah": "hapus", "jumlah": 99,
+         "total": 1, "timestamp": "2026-07-07T00:00:00"},
+    ]
+    r = mutasi_periode(rows, "2026-07-01", "2026-07-31")["p1"]
+    assert r["masuk_qty"] == 10 and r["keluar_qty"] == 0
+    assert r["masuk_nilai"] == 105_000     # 100.000 + koreksi tambah 5.000
+    assert r["keluar_nilai"] == 2_000      # koreksi kurang
+    assert r["saldo_akhir"] == 10          # hapus/nilai tak menggeser saldo
