@@ -977,9 +977,20 @@ async def bast_pdf(bast_id: str,
         _nip = str(alm.get("nip") or "").strip()
         _tgl = str(alm.get("tanggal_meninggal") or "").strip()
         _akta = str(alm.get("nomor_akta_kematian") or "").strip()
+        # Nomor identitas almarhum TUNDUK aturan privasi yang sama dengan blok
+        # tanda tangan (temuan audit): NIK (Non-ASN / 16 digit) TIDAK dicetak;
+        # NIP/NRP dicetak dengan label pintar. Dulu selalu "(NIP …)" mentah —
+        # membocorkan NIK di badan pasal, menembus aturan yang ditegakkan di
+        # semua blok TTD dokumen ini.
+        from pegawai_utils import (
+            deteksi_identitas as _dj, label_nomor_identitas as _lni,
+        )
+        _det_alm = _dj(_nip)
+        _frasa_id = ("" if not _nip or _det_alm["jenis"] == "nik"
+                     else f" ({_esc(_lni(_nip) or 'NIP')} {_esc(_nip)})")
         ket_alm = [
             f"BMN dalam berita acara ini sebelumnya tercatat pada pemegang "
-            f"<b>{_nm}</b>" + (f" (NIP {_esc(_nip)})" if _nip else "")
+            f"<b>{_nm}</b>" + _frasa_id
             + (f" yang telah meninggal dunia pada {_esc(_fmt_tanggal_id(_tgl))}"
                if _tgl else " yang telah meninggal dunia") + "."
             + (f" Akta/Surat Keterangan Kematian Nomor {_esc(_akta)}."
