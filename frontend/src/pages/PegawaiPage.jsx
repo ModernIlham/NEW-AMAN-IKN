@@ -1501,9 +1501,12 @@ export default function PegawaiPage({ user, onBack }) {
         </DialogContent>
       </Dialog>
 
-      {/* ── Dialog bagan Struktur Organisasi (pohon unit + jumlah pegawai) ── */}
+      {/* ── Dialog bagan Struktur Organisasi (pohon unit + jumlah pegawai) ──
+          Di HP ruang horizontal sangat sempit untuk pohon berjenjang (indentasi
+          × 5 eselon): lebar dialog dimaksimalkan (sisa 0.5rem per sisi) dan
+          padding dihemat agar nama unit kebagian tempat. */}
       <Dialog open={struktur} onOpenChange={setStruktur}>
-        <DialogContent className="max-w-2xl max-h-[88vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[88vh] overflow-y-auto w-[calc(100%-1rem)] sm:w-[calc(100%-2rem)] p-3 sm:p-6">
           <DialogHeader>
             <DialogTitle>Struktur Organisasi</DialogTitle>
             <DialogDescription className="text-xs">
@@ -1730,21 +1733,25 @@ function PohonUnit({ unit, units, depth, buka, onToggle, jumlah, onFilter }) {
   const terbuka = buka[unit.id] !== false; // default terbuka
   const n = jumlah(unit);
   return (
-    <div style={{ marginLeft: depth ? 16 : 0 }} className={depth ? "border-l border-border/60 pl-2" : ""}>
-      <div className="flex items-center gap-1.5 py-1">
+    // Indentasi responsif: di HP tiap jenjang cukup 8px (5 eselon = 40px) agar
+    // nama unit tetap kebagian lebar; di ≥sm kembali 16px seperti semula.
+    <div className={depth ? "ml-2 sm:ml-4 border-l border-border/60 pl-1.5 sm:pl-2" : ""}>
+      <div className="flex items-center gap-1 sm:gap-1.5 py-1">
         <button type="button" onClick={() => anak.length && onToggle(unit.id)}
-          className={`flex items-center gap-1.5 flex-1 min-w-0 text-left rounded px-1.5 py-1 hover:bg-muted min-h-0 ${anak.length ? "" : "cursor-default"}`}
+          className={`flex items-center gap-1 sm:gap-1.5 flex-1 min-w-0 text-left rounded px-1 sm:px-1.5 py-1 hover:bg-muted min-h-0 ${anak.length ? "" : "cursor-default"}`}
           data-testid={`struktur-unit-${unit.id}`}>
           {anak.length > 0
-            ? <span className="text-[10px] text-muted-foreground w-3">{terbuka ? "▾" : "▸"}</span>
-            : <span className="w-3" />}
-          <span className="text-[12px] font-medium text-foreground truncate">{unit.nama_unit}</span>
-          <span className="px-1 py-0.5 rounded bg-muted text-[9px] font-semibold text-muted-foreground uppercase">Es. {unit.eselon}</span>
+            ? <span className="text-[10px] text-muted-foreground w-3 flex-shrink-0">{terbuka ? "▾" : "▸"}</span>
+            : <span className="w-3 flex-shrink-0" />}
+          {/* break-words (bukan truncate): di HP nama unit panjang harus tetap
+              terbaca utuh — melipat ke baris berikut, bukan terpotong "…". */}
+          <span className="text-[12px] font-medium text-foreground min-w-0 break-words">{unit.nama_unit}</span>
+          <span className="px-1 py-0.5 rounded bg-muted text-[9px] font-semibold text-muted-foreground uppercase flex-shrink-0 whitespace-nowrap">Es. {unit.eselon}</span>
         </button>
         <button type="button" onClick={() => onFilter(unit.nama_unit)}
           title={`Lihat ${n} pegawai unit ini`}
-          className={`px-2 py-0.5 rounded-full text-[10px] font-bold min-w-0 min-h-0 ${n ? "bg-sky-500/15 text-sky-600 dark:text-sky-400 hover:bg-sky-500/25" : "bg-muted text-muted-foreground/60 cursor-default"}`}>
-          {n} <span className="font-normal">pegawai</span>
+          className={`px-2 py-0.5 rounded-full text-[10px] font-bold min-w-0 min-h-0 flex-shrink-0 whitespace-nowrap ${n ? "bg-sky-500/15 text-sky-600 dark:text-sky-400 hover:bg-sky-500/25" : "bg-muted text-muted-foreground/60 cursor-default"}`}>
+          {n} <span className="font-normal hidden sm:inline">pegawai</span>
         </button>
       </div>
       {terbuka && anak.map((a) => (

@@ -123,124 +123,129 @@ const DashboardToolbar = memo(function DashboardToolbar({
           </Button>
         </div>
 
-        {/* Desktop toolbar (lg+ only) — SATU BARIS.
-            `flex-wrap` dibuang: dengan 11 kontrol, di lg (1024px) barisnya pecah
-            jadi dua-tiga tumpuk sehingga toolbar memakan tinggi yang seharusnya
-            jadi milik daftar aset. Sebagai gantinya LABEL tombol aksi baru
-            muncul di xl ke atas; di lg semuanya ikon-saja (judulnya tetap
-            terbaca lewat tooltip). `overflow-x-auto` katup pengaman terakhir. */}
-        <div className="hidden lg:flex gap-1.5 flex-nowrap items-center overflow-x-auto">
-          <CategorySelect
-            categories={categories}
-            value={filterCategory}
-            onValueChange={v => { setFilterCategory(v); refreshData(1); }}
-            placeholder="Semua Kategori"
-            className="w-32 xl:w-40 flex-shrink-0"
-          />
+        {/* Desktop toolbar (lg+ only) — DUA GRUP yang boleh melipat.
+            Dulu satu baris `flex-nowrap` + `overflow-x-auto`: breakpoint melihat
+            VIEWPORT, bukan kontainer, jadi di halaman kegiatan (panel form kiri
+            ~460px) viewport 1366px tetap memakai label xl padahal lebar efektif
+            toolbar tinggal ~880px → muncul geser samping (dilarang pemilik).
+            Kini grup filter (kiri) dan grup aksi (kanan) masing-masing berdiri
+            sendiri; baris induk `flex-wrap` sehingga saat sempit grup aksi
+            turun utuh ke baris kedua dan tetap rata kanan (`ml-auto`) — tanpa
+            scroll samping pada lebar berapa pun. Grup dalam juga `flex-wrap`
+            sebagai katup terakhir bila satu grup pun tak muat. */}
+        <div className="hidden lg:flex flex-wrap gap-1.5 items-center">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <CategorySelect
+              categories={categories}
+              value={filterCategory}
+              onValueChange={v => { setFilterCategory(v); refreshData(1); }}
+              placeholder="Semua Kategori"
+              className="w-32 xl:w-40 flex-shrink-0"
+            />
 
-          <Button
-            variant={activeFilterCount > 0 ? "default" : "outline"}
-            size="sm"
-            className={`h-8 text-xs flex-shrink-0 ${activeFilterCount > 0 ? "bg-teal-700" : ""}`}
-            onClick={() => setShowAdvancedFilter(!showAdvancedFilter)}
-            title="Filter Lanjutan"
-            data-testid="advanced-filter-btn"
-          >
-            <Filter className="w-3 h-3 xl:mr-1" />
-            <span className="hidden xl:inline">Filter Lanjutan</span>
-            {activeFilterCount > 0 && (
-              <span className="ml-1.5 bg-white text-blue-600 rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">
-                {activeFilterCount}
-              </span>
-            )}
-          </Button>
-
-          <Select value={sortBy} onValueChange={v => { setSortBy(v); refreshData(1); }}>
-            <SelectTrigger className="w-24 xl:w-32 h-8 text-xs flex-shrink-0"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="newest">Terbaru</SelectItem>
-              <SelectItem value="oldest">Terlama</SelectItem>
-              <SelectItem value="name_asc">Nama A-Z</SelectItem>
-              <SelectItem value="name_desc">Nama Z-A</SelectItem>
-              <SelectItem value="price_asc">Harga Terendah</SelectItem>
-              <SelectItem value="price_desc">Harga Tertinggi</SelectItem>
-              <SelectItem value="category_asc">Kategori A-Z</SelectItem>
-              <SelectItem value="location_asc">Lokasi A-Z</SelectItem>
-              <SelectItem value="eselon1_asc">Eselon I A-Z</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {/* View Mode Toggle — `flex-shrink-0` seperti seluruh saudaranya di
-              baris nowrap ini: item yang boleh menyusut akan menyerap SELURUH
-              kelebihan lebar dan tergencet sendirian (lihat catatan di
-              TinifyQuotaIndicator). Kalau memang tak muat, biar
-              `overflow-x-auto` baris ini yang bekerja. */}
-          {viewMode !== undefined && setViewMode && (
-            <div className="flex flex-shrink-0 bg-muted rounded-lg p-0.5 gap-0.5" data-testid="view-mode-toggle">
-              <button
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${viewMode === 'list' ? 'bg-card text-blue-600 shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-                onClick={() => setViewMode('list')}
-                data-testid="view-mode-list"
-              >
-                <List className="w-3.5 h-3.5" /><span className="hidden xl:inline">List</span>
-              </button>
-              <button
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${viewMode === 'gallery' ? 'bg-card text-blue-600 shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-                onClick={() => setViewMode('gallery')}
-                data-testid="view-mode-gallery"
-              >
-                <LayoutGrid className="w-3.5 h-3.5" /><span className="hidden xl:inline">Galeri</span>
-              </button>
-            </div>
-          )}
-
-          <div className="flex-1"></div>
-
-          <TinifyQuotaIndicator />
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" disabled={exporting} className="h-8 text-xs flex-shrink-0" title="Export data">
-                {exporting ? <Loader2 className="w-3 h-3 xl:mr-1 animate-spin" /> : <Download className="w-3 h-3 xl:mr-1" />}<span className="hidden xl:inline">Export</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem onClick={() => handleExport('csv')} data-testid="export-csv-btn"><FileText className="w-4 h-4 mr-2" />CSV</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExport('xlsx')} data-testid="export-xlsx-btn"><FileSpreadsheet className="w-4 h-4 mr-2" />Excel</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleExportExecutivePDF} data-testid="export-executive-pdf">
-                <Download className="w-4 h-4 mr-2" />Laporan Eksekutif (PDF)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handlePreviewExecutive} data-testid="preview-executive-html">
-                <Eye className="w-4 h-4 mr-2" />Preview Laporan Eksekutif
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          {perms.canImport && (
-            <Button variant="outline" size="sm" className="h-8 text-xs flex-shrink-0" onClick={() => openDialog('import')} title="Import data">
-              <Upload className="w-3 h-3 xl:mr-1" /><span className="hidden xl:inline">Import</span>
-            </Button>
-          )}
-          {perms.canBulkDelete && (
             <Button
-              variant="outline"
+              variant={activeFilterCount > 0 ? "default" : "outline"}
               size="sm"
-              className="h-8 text-xs flex-shrink-0 text-red-500 hover:text-red-700 hover:bg-red-50 border-red-200 hover:border-red-300"
-              onClick={() => openDialog('bulkDelete')}
-              disabled={assetsCount === 0}
-              title="Hapus Semua aset yang terfilter"
+              className={`h-8 text-xs flex-shrink-0 ${activeFilterCount > 0 ? "bg-teal-700" : ""}`}
+              onClick={() => setShowAdvancedFilter(!showAdvancedFilter)}
+              title="Filter Lanjutan"
+              data-testid="advanced-filter-btn"
             >
-              <Trash2 className="w-3 h-3 xl:mr-1" /><span className="hidden xl:inline">Hapus Semua</span>
+              <Filter className="w-3 h-3 xl:mr-1" />
+              <span className="hidden xl:inline">Filter Lanjutan</span>
+              {activeFilterCount > 0 && (
+                <span className="ml-1.5 bg-white text-blue-600 rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">
+                  {activeFilterCount}
+                </span>
+              )}
             </Button>
-          )}
-          <Button variant="outline" size="sm" className="h-8 text-xs flex-shrink-0" onClick={handlePrintBulkCards} disabled={assetsCount === 0}
-            title={`Cetak Kartu (${assetsCount})`}>
-            <CreditCard className="w-3 h-3 xl:mr-1" /><span className="hidden xl:inline">Cetak Kartu ({assetsCount})</span>
-          </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs flex-shrink-0" onClick={onCetakStiker} disabled={assetsCount === 0}
-            title="Cetak Stiker Label BMN" data-testid="toolbar-cetak-stiker">
-            <Tags className="w-3 h-3 xl:mr-1" /><span className="hidden xl:inline">Stiker</span>
-          </Button>
+
+            <Select value={sortBy} onValueChange={v => { setSortBy(v); refreshData(1); }}>
+              <SelectTrigger className="w-24 xl:w-32 h-8 text-xs flex-shrink-0"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="newest">Terbaru</SelectItem>
+                <SelectItem value="oldest">Terlama</SelectItem>
+                <SelectItem value="name_asc">Nama A-Z</SelectItem>
+                <SelectItem value="name_desc">Nama Z-A</SelectItem>
+                <SelectItem value="price_asc">Harga Terendah</SelectItem>
+                <SelectItem value="price_desc">Harga Tertinggi</SelectItem>
+                <SelectItem value="category_asc">Kategori A-Z</SelectItem>
+                <SelectItem value="location_asc">Lokasi A-Z</SelectItem>
+                <SelectItem value="eselon1_asc">Eselon I A-Z</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* View Mode Toggle — `flex-shrink-0` seperti seluruh saudaranya:
+                item yang boleh menyusut akan menyerap SELURUH kelebihan lebar
+                dan tergencet sendirian (lihat catatan di TinifyQuotaIndicator).
+                Kalau tak muat, biar wrap baris induk yang bekerja. */}
+            {viewMode !== undefined && setViewMode && (
+              <div className="flex flex-shrink-0 bg-muted rounded-lg p-0.5 gap-0.5" data-testid="view-mode-toggle">
+                <button
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${viewMode === 'list' ? 'bg-card text-blue-600 shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                  onClick={() => setViewMode('list')}
+                  data-testid="view-mode-list"
+                >
+                  <List className="w-3.5 h-3.5" /><span className="hidden xl:inline">List</span>
+                </button>
+                <button
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${viewMode === 'gallery' ? 'bg-card text-blue-600 shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                  onClick={() => setViewMode('gallery')}
+                  data-testid="view-mode-gallery"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" /><span className="hidden xl:inline">Galeri</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5 ml-auto">
+            <TinifyQuotaIndicator />
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" disabled={exporting} className="h-8 text-xs flex-shrink-0" title="Export data">
+                  {exporting ? <Loader2 className="w-3 h-3 xl:mr-1 animate-spin" /> : <Download className="w-3 h-3 xl:mr-1" />}<span className="hidden xl:inline">Export</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem onClick={() => handleExport('csv')} data-testid="export-csv-btn"><FileText className="w-4 h-4 mr-2" />CSV</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExport('xlsx')} data-testid="export-xlsx-btn"><FileSpreadsheet className="w-4 h-4 mr-2" />Excel</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleExportExecutivePDF} data-testid="export-executive-pdf">
+                  <Download className="w-4 h-4 mr-2" />Laporan Eksekutif (PDF)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handlePreviewExecutive} data-testid="preview-executive-html">
+                  <Eye className="w-4 h-4 mr-2" />Preview Laporan Eksekutif
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {perms.canImport && (
+              <Button variant="outline" size="sm" className="h-8 text-xs flex-shrink-0" onClick={() => openDialog('import')} title="Import data">
+                <Upload className="w-3 h-3 xl:mr-1" /><span className="hidden xl:inline">Import</span>
+              </Button>
+            )}
+            {perms.canBulkDelete && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs flex-shrink-0 text-red-500 hover:text-red-700 hover:bg-red-50 border-red-200 hover:border-red-300"
+                onClick={() => openDialog('bulkDelete')}
+                disabled={assetsCount === 0}
+                title="Hapus Semua aset yang terfilter"
+              >
+                <Trash2 className="w-3 h-3 xl:mr-1" /><span className="hidden xl:inline">Hapus Semua</span>
+              </Button>
+            )}
+            <Button variant="outline" size="sm" className="h-8 text-xs flex-shrink-0" onClick={handlePrintBulkCards} disabled={assetsCount === 0}
+              title={`Cetak Kartu (${assetsCount})`}>
+              <CreditCard className="w-3 h-3 xl:mr-1" /><span className="hidden xl:inline">Cetak Kartu ({assetsCount})</span>
+            </Button>
+            <Button variant="outline" size="sm" className="h-8 text-xs flex-shrink-0" onClick={onCetakStiker} disabled={assetsCount === 0}
+              title="Cetak Stiker Label BMN" data-testid="toolbar-cetak-stiker">
+              <Tags className="w-3 h-3 xl:mr-1" /><span className="hidden xl:inline">Stiker</span>
+            </Button>
+          </div>
         </div>
 
         {/* Mobile/Tablet toolbar — satu baris kontrol ringkas (semua h-9).
