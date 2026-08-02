@@ -67,6 +67,45 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#695] Thumbnail tak lagi membekukan server + dua N+1 ditutup — 2026-08-02
+
+Tiga temuan dari penelusuran performa atas kode backend.
+
+- **`generate_thumbnail` MEMBEKUKAN event loop** (`routes/activities.py`).
+  Fungsinya Pillow sinkron (dekode + resize LANCZOS) tetapi dipanggil langsung
+  dari `async def _process_one`. Komentar di atasnya bahkan menyatakan
+  *"Tinify/Pillow are async-friendly"* — benar untuk `auto_compress_image`
+  yang di-`await`, **salah** untuk fungsi ini. Akibatnya mengunggah 10 foto
+  kegiatan menghentikan SELURUH permintaan lain di worker yang sama selama
+  ±300–800 ms, bukan hanya unggahan itu; dan `asyncio.gather` di bawahnya
+  hanya tampak paralel. Kini lewat `asyncio.to_thread` di tiga titik panggil.
+  PR-OPT-C dulu memperbaiki jalur aset (`patch_asset`, `rotate_asset_photo`);
+  berkas ini terlewat.
+- **N+1 pada pembuatan draft dari impor SIMAN** (`routes/siman.py`). Tiap
+  baris memanggil `find_one` sendiri hanya untuk memutuskan "lewati atau
+  tidak" — 1.000 baris = 1.000 perjalanan bolak-balik. Kini satu kueri `$in`
+  di luar perulangan, meniru cara `imports.py` menutup N+1 yang sama.
+  Sekaligus menutup dua lubang yang ikut ketahuan: NUP kini dinormalkan ke
+  teks di kedua sisi (data lama bisa menyimpannya sebagai angka, sehingga
+  NUP 5 tak cocok dengan "5" dan barisnya dibuat DUA KALI), dan baris kembar
+  di dalam berkas yang sama tak lagi melahirkan dua aset.
+- **Pembacaan aset pada rekonsiliasi opname dibatch** (`routes/opname.py`) —
+  satu `$in` menggantikan 200 `find_one`. Hanya PEMBACAAN yang dibatch:
+  klaim `diterapkan` dan tulisannya sengaja tetap satu per satu, karena klaim
+  bersyarat itulah penjaga lomba yang mencegah satu perpindahan fisik
+  melahirkan dua baris jejak custody. Menundanya ke `bulk_write` akan
+  melebarkan jendela "sudah diklaim tetapi belum tertulis" — menukar
+  kebenaran dengan ±100 ms, yang tidak sepadan.
+
+Tiga dugaan lain GUGUR setelah diperiksa dan sengaja tidak diubah: dua
+`to_list(None)` ternyata sudah dibatasi (`$group` per-kegiatan; proyeksi tiga
+field), dan satu lagi memang trade-off sadar yang dulu dipasang untuk menutup
+N+1 di `imports.py`.
+
+Verifikasi: `compileall` bersih, 1407 uji unit lulus.
+
+---
+
 ## [#694] Halaman masuk hidup: judul berganti, tombol interaktif, air lokal — 2026-08-02
 
 Panel kiri layar masuk dirombak jadi interaktif, dan isinya diperbarui agar

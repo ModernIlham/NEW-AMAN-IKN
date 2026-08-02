@@ -389,12 +389,23 @@ async def terapkan_perpindahan(request: Request, payload: TerapkanIn,
     username = _user.get("username", "")
     diterapkan, dilewati = [], []
 
+    # Aset dibaca SEKALI untuk semua scan (satu `$in`), bukan `find_one`
+    # per-scan. Hanya PEMBACAAN yang dibatch: klaim `diterapkan` dan tulisannya
+    # SENGAJA tetap satu per satu, karena klaim bersyarat itulah penjaga lomba
+    # yang dijelaskan panjang lebar di bawah — menundanya ke `bulk_write` di
+    # akhir akan melebarkan jendela "sudah diklaim tetapi belum tertulis".
+    id_aset = [s.get("asset_id") for s in scans if s.get("asset_id")]
+    aset_by_id = {}
+    if id_aset:
+        async for a in db.assets.find({"id": {"$in": id_aset}}, _PROJ_ASET):
+            aset_by_id[a.get("id")] = a
+
     for s in scans:
         if s.get("status_rekonsiliasi") not in ("pindah", "baru"):
             dilewati.append({"id": s["id"],
                              "alasan": f"status {s.get('status_rekonsiliasi')}"})
             continue
-        aset = await db.assets.find_one({"id": s.get("asset_id")}, _PROJ_ASET)
+        aset = aset_by_id.get(s.get("asset_id"))
         if not aset:
             dilewati.append({"id": s["id"], "alasan": "aset tidak ditemukan"})
             continue
