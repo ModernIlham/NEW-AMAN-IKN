@@ -67,6 +67,35 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#691] Reset password via OTP: ketik ulang sandi baru ber-panduan — 2026-08-02
+
+Komponen konfirmasi kata sandi ber-panduan (PR #683) disematkan ke langkah
+set kata sandi baru pada alur "Lupa password?" (PR #684).
+
+- **Celah nyata yang ditutup**: alur reset OTP dulu MENERIMA kata sandi baru
+  tanpa konfirmasi sama sekali. Satu salah ketik langsung tersimpan dan
+  pengguna terkunci dari akunnya sendiri — padahal ini justru alur pemulihan
+  akun. Kini ada ketik ulang ber-penanda TIAP karakter (hijau/merah) dan
+  tombol "Setel Password Baru" baru aktif setelah keduanya sama.
+- Komponen dipecah: `AssistedPasswordConfirmationField` (inti, bisa
+  disematkan) + `AssistedPasswordConfirmation` (pembungkus halaman penuh).
+  Warna memakai token tema → ikut mode gelap. Kata sandi acuan TIDAK
+  dipampangkan secara default (`tampilkanSandi`, default false di varian
+  sematan) — layar masuk kerap dibuka di ruang terbuka.
+- Tiga cacat komponen diperbaiki: `onMatchChange` di deps `useEffect`
+  (berpotensi render tak berujung bila pemanggil mengoper fungsi inline —
+  kini disimpan di ref), "cocok" bernilai true saat keduanya masih kosong,
+  dan ketikan ulang tak ikut dipangkas saat sandi acuan memendek. Pada
+  jalur reset, tombol juga memeriksa `!reset.baru` (komponen ter-unmount
+  tanpa sempat melaporkan "tidak cocok").
+- Dependensi baru `framer-motion@12.43.0` (kompatibel React 19) mendarat di
+  chunk terpisah 43,1 kB gzip; `main.js` hanya +23 B karena `LoginPage`
+  sudah lazy-loaded — nol beban pada muat awal aplikasi.
+
+Verifikasi: eslint bersih, `yarn build` sukses.
+
+---
+
 ## [#690] Audit lanjutan modul jarang tersentuh — 14 temuan ditutup — 2026-08-02
 
 Sapu berburu bug atas modul di luar jangkauan enam gelombang audit

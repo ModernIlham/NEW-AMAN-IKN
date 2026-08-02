@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import axios from "axios";
 import { getApiError } from "@/lib/utils";
 import { useTripleClick } from "@/hooks/useTripleClick";
+import { AssistedPasswordConfirmationField } from "@/components/ui/assisted-password-confirmation";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -181,6 +182,10 @@ export default function LoginPage({ onLogin, onShowInfo }) {
   const [debugOtp, setDebugOtp] = useState(null);
   // Alur lupa password: null = tertutup; {email, otp, baru, terkirim, saving}
   const [reset, setReset] = useState(null);
+  // Kecocokan ketikan ulang kata sandi baru (alur reset OTP). Disimpan di state
+  // TERSENDIRI, bukan di dalam objek `reset`: setter useState identitasnya
+  // stabil, jadi aman dioper sebagai callback ke komponen konfirmasi.
+  const [resetCocok, setResetCocok] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -412,11 +417,34 @@ export default function LoginPage({ onLogin, onShowInfo }) {
                       onChange={(e) => setReset((r) => ({ ...r, otp: e.target.value.replace(/\D/g, "").slice(0, 6) }))} data-testid="reset-otp" />
                     <Input type="password" placeholder="Password baru (min. 8 karakter)" value={reset.baru}
                       onChange={(e) => setReset((r) => ({ ...r, baru: e.target.value }))} data-testid="reset-baru" />
+                    {/* Konfirmasi ber-panduan: alur reset ini dulu TANPA ketik
+                        ulang sama sekali — satu salah ketik langsung tersimpan
+                        dan pengguna terkunci dari akunnya sendiri (harus minta
+                        OTP baru). Penanda per-karakter menunjukkan huruf mana
+                        yang meleset tanpa memampangkan sandinya di layar. */}
+                    {reset.baru && (
+                      <div className="pt-1">
+                        <p className="mb-1 text-[11px] text-muted-foreground">
+                          Ketik ulang untuk memastikan — tiap huruf yang cocok ditandai hijau.
+                        </p>
+                        <AssistedPasswordConfirmationField
+                          password={reset.baru}
+                          onMatchChange={setResetCocok}
+                          placeholder="Ulangi password baru"
+                          testId="reset-baru-konfirmasi"
+                        />
+                      </div>
+                    )}
                   </>
                 )}
                 <div className="flex gap-2">
-                  <Button type="button" variant="outline" className="flex-1 h-9" onClick={() => setReset(null)}>Batal</Button>
-                  <Button type="button" className="flex-1 h-9" disabled={reset.saving} data-testid="reset-kirim"
+                  <Button type="button" variant="outline" className="flex-1 h-9"
+                    onClick={() => { setReset(null); setResetCocok(false); }}>Batal</Button>
+                  {/* `!reset.baru` ikut dicek: saat kolom sandi dikosongkan,
+                      komponen konfirmasi ter-unmount tanpa sempat melaporkan
+                      "tidak cocok", sehingga resetCocok bisa tertinggal true. */}
+                  <Button type="button" className="flex-1 h-9" data-testid="reset-kirim"
+                    disabled={reset.saving || (reset.terkirim && (!reset.baru || !resetCocok))}
                     onClick={async () => {
                       setReset((r) => ({ ...r, saving: true }));
                       try {
@@ -430,6 +458,7 @@ export default function LoginPage({ onLogin, onShowInfo }) {
                             email: reset.email.trim(), otp: reset.otp, new_password: reset.baru });
                           toast.success(r2.data?.message || "Password direset — silakan masuk");
                           setReset(null);
+                          setResetCocok(false);
                         }
                       } catch (e2) {
                         toast.error(e2?.response?.data?.detail || "Gagal memproses reset password");
