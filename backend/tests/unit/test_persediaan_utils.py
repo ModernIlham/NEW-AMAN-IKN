@@ -101,16 +101,25 @@ class TestStatusStok:
 
 class TestTransaksiMasuk:
     def test_jenis_masuk_lengkap_dengan_kode_sakti(self):
-        assert set(JENIS_MASUK) == {
-            "saldo_awal", "pembelian", "transfer_masuk", "hibah_masuk",
-            "rampasan", "reklasifikasi_masuk", "reklasifikasi_dari_aset",
-            "perolehan_lainnya",
-        }
+        # Kunci lama tetap ada (baris jurnal lama membacanya) + kunci baru
+        # mandat 45 kode; SEMUA kode kini kode SAKTI resmi.
+        assert {"saldo_awal", "pembelian", "transfer_masuk", "hibah_masuk",
+                "rampasan", "reklasifikasi_masuk", "reklasifikasi_dari_aset",
+                "perolehan_lainnya"} <= set(JENIS_MASUK)
         for label, kode in JENIS_MASUK.values():
             assert label and kode.startswith("M")
-        # jenis SAKTI baru (pustaka §3.2) dapat divalidasi & menambah layer
+        # KOREKSI makna kode warisan: dulu M06/M07/M99 dipakai untuk makna
+        # yang berbeda dari SAKTI — kini mengikuti standar.
+        assert JENIS_MASUK["reklasifikasi_masuk"][1] == "M10"      # dulu M06
+        assert JENIS_MASUK["reklasifikasi_dari_aset"][1] == "M11"  # dulu M07
+        assert JENIS_MASUK["perolehan_lainnya"][1] == "M06"        # dulu M99
+        assert JENIS_MASUK["internal_transfer_masuk"][1] == "M07"
+        assert JENIS_MASUK["koreksi_kuantitas_tambah"][1] == "M99"
+        assert JENIS_MASUK["transfer_masuk_online"][1] == "M13"
+        # jenis SAKTI dapat divalidasi & menambah layer
         assert validate_transaksi_masuk("rampasan", 2, 5000) == (True, "")
         assert validate_transaksi_masuk("reklasifikasi_dari_aset", 1, 1000) == (True, "")
+        assert validate_transaksi_masuk("koreksi_penyesuaian_tambah", 1, 0) == (True, "")
 
     def test_validasi_masuk_valid(self):
         assert validate_transaksi_masuk("pembelian", 5, 12000) == (True, "")
@@ -140,15 +149,21 @@ class TestTransaksiMasuk:
 
 class TestTransaksiKeluar:
     def test_jenis_keluar_lengkap_dengan_kode_sakti(self):
-        assert set(JENIS_KELUAR) == {
-            "habis_pakai", "transfer_keluar", "hibah_keluar", "usang", "rusak",
-            "penghapusan_lainnya", "reklasifikasi_keluar",
-        }
+        assert {"habis_pakai", "transfer_keluar", "hibah_keluar", "usang",
+                "rusak", "penghapusan_lainnya",
+                "reklasifikasi_keluar"} <= set(JENIS_KELUAR)
         for label, kode in JENIS_KELUAR.values():
             assert label and kode.startswith("K")
-        # jenis SAKTI baru (pustaka §3.2) dapat divalidasi (konsumsi FIFO biasa)
+        # KOREKSI makna kode warisan (K06/K07 lama ≠ SAKTI)
+        assert JENIS_KELUAR["penghapusan_lainnya"] == ("Keluar Lainnya", "K06")
+        assert JENIS_KELUAR["reklasifikasi_keluar"][1] == "K10"    # dulu K07
+        assert JENIS_KELUAR["internal_transfer_keluar"][1] == "K07"
+        assert JENIS_KELUAR["reklasifikasi_ke_aset"][1] == "K11"
+        assert JENIS_KELUAR["koreksi_kuantitas_kurang"][1] == "K99"
+        # jenis SAKTI dapat divalidasi (konsumsi FIFO biasa)
         assert validate_transaksi_keluar("penghapusan_lainnya", 2, 10) == (True, "")
         assert validate_transaksi_keluar("reklasifikasi_keluar", 1, 10) == (True, "")
+        assert validate_transaksi_keluar("transfer_keluar_online", 1, 10) == (True, "")
 
     def test_validasi_keluar(self):
         assert validate_transaksi_keluar("habis_pakai", 3, 10) == (True, "")
@@ -447,7 +462,9 @@ class TestBarisCsvTransaksi:
         d = dict(zip(HEADER_CSV_TRANSAKSI, baris))
         assert d["tanggal"] == "2026-07-13"           # dipangkas ke tanggal
         assert d["uraian"] == "Pembelian"             # jenis_label → uraian
-        assert d["kode_sakti"] == "M01" and d["jumlah"] == 10
+        # kode_sakti tersimpan ("M01" — salah) TIDAK dipercaya: kode
+        # diturunkan ulang dari `jenis` lewat registry → pembelian = M02
+        assert d["kode_sakti"] == "M02" and d["jumlah"] == 10
         assert d["total"] == 450000 and d["harga_satuan"] == 45000
         assert d["penyedia"] == "CV Maju" and d["no_kontrak"] == "K-9"
         # field khas transaksi lain kosong pada 'masuk'

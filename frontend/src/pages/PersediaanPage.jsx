@@ -107,6 +107,10 @@ export default function PersediaanPage({ user, onBack }) {
   const [massal, setMassal] = useState(null);
   // Dialog riwayat LPB: {items, loading} — unduh ulang LPB kapan pun
   const [riwayatLpb, setRiwayatLpb] = useState(null);
+  // Daftar Transaksi lintas barang (45 kode SAKTI): {rows,total,page,filter,loading,tab}
+  const [daftarTrx, setDaftarTrx] = useState(null);
+  // Registry lengkap 45 kode + label kelompok (dari /jenis-transaksi)
+  const [trxRef, setTrxRef] = useState({ referensi: [], label_kelompok: {} });
   const massalTimer = useRef(null);
   const { confirm, confirmDialog } = useConfirm();
   // Tautan TTD yang baru terbit: {nomor, links[]} — ditampilkan agar bisa
@@ -140,7 +144,12 @@ export default function PersediaanPage({ user, onBack }) {
       .then((r) => setSatuanList(Array.isArray(r.data) ? r.data : []))
       .catch(() => setSatuanList([]));
     axios.get(`${API}/persediaan/jenis-transaksi`)
-      .then((r) => { setJenisMasuk(r.data?.masuk || []); setJenisKeluar(r.data?.keluar || []); })
+      .then((r) => {
+        setJenisMasuk(r.data?.masuk || []);
+        setJenisKeluar(r.data?.keluar || []);
+        setTrxRef({ referensi: r.data?.referensi || [],
+                    label_kelompok: r.data?.label_kelompok || {} });
+      })
       .catch(() => { setJenisMasuk([]); setJenisKeluar([]); });
     // Unit penerima terhubung Master Unit Kerja (audit W4 #6)
     axios.get(`${API}/unit-kerja`)
@@ -400,6 +409,48 @@ export default function PersediaanPage({ user, onBack }) {
       toast.error(e?.response?.data?.detail || "Gagal memuat riwayat LPB");
       setRiwayatLpb(null);
     }
+  };
+
+  const FILTER_TRX_KOSONG = { arah: "", kode: "", dari: "", sampai: "", q: "" };
+
+  // Muat Daftar Transaksi lintas barang; filter dipasok eksplisit supaya
+  // tombol Terapkan/halaman selalu memuat dengan nilai terkini.
+  const muatDaftarTrx = async (p = 1, f = FILTER_TRX_KOSONG, tab = "daftar") => {
+    setDaftarTrx((d) => ({ rows: d?.rows || [], total: d?.total || 0,
+                           page: p, filter: f, tab, loading: true }));
+    try {
+      const r = await axios.get(`${API}/persediaan/transaksi`, {
+        params: { page: p, page_size: 25,
+                  arah: f.arah || undefined, kode: f.kode || undefined,
+                  dari: f.dari || undefined, sampai: f.sampai || undefined,
+                  q: f.q.trim() || undefined },
+      });
+      setDaftarTrx((d) => (d ? { ...d, rows: r.data?.items || [],
+                                 total: r.data?.total || 0, page: p,
+                                 loading: false } : d));
+    } catch (e) {
+      toast.error(getApiError(e, "Gagal memuat daftar transaksi"));
+      setDaftarTrx((d) => (d ? { ...d, loading: false } : d));
+    }
+  };
+
+  // Opsi jenis transaksi dikelompokkan (Perolehan / Koreksi / dst.) —
+  // daftar 45 kode terlalu panjang untuk satu deret datar.
+  const opsiJenisBerkelompok = (list) => {
+    const grup = [];
+    for (const j of list) {
+      const label = j.label_kelompok || "Lainnya";
+      const g = grup.find((x) => x.label === label);
+      if (g) g.items.push(j);
+      else grup.push({ label, items: [j] });
+    }
+    return grup.map((g) => (
+      <optgroup key={g.label} label={g.label}>
+        {g.items.map((j) => (
+          <option key={j.key} value={j.key}>{j.label} ({j.kode})</option>
+        ))}
+      </optgroup>
+    ));
   };
 
   // Kirim LPB ini untuk ditandatangani elektronik. Penanda tangan bawaan
@@ -742,6 +793,10 @@ export default function PersediaanPage({ user, onBack }) {
                 <DropdownMenuItem className="min-h-[42px]" data-testid="persediaan-riwayat-lpb"
                   onClick={bukaRiwayatLpb}>
                   <FileDown className="w-4 h-4 mr-2" />Riwayat LPB (unduh ulang)
+                </DropdownMenuItem>
+                <DropdownMenuItem className="min-h-[42px]" data-testid="persediaan-daftar-transaksi"
+                  onClick={() => muatDaftarTrx(1, FILTER_TRX_KOSONG)}>
+                  <History className="w-4 h-4 mr-2" />Daftar Transaksi (semua barang)
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -1118,9 +1173,8 @@ export default function PersediaanPage({ user, onBack }) {
                   className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
                   data-testid="persediaan-masuk-jenis"
                 >
-                  {(jenisMasuk.length ? jenisMasuk : [{ key: "pembelian", label: "Pembelian", kode: "M02" }]).map((j) => (
-                    <option key={j.key} value={j.key}>{j.label} ({j.kode})</option>
-                  ))}
+                  {opsiJenisBerkelompok(jenisMasuk.length ? jenisMasuk
+                    : [{ key: "pembelian", label: "Pembelian", kode: "M02" }])}
                 </select>
                 {jenisMasuk.find((j) => j.key === masuk.data.jenis)?.info && (
                   <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">
@@ -1241,9 +1295,8 @@ export default function PersediaanPage({ user, onBack }) {
                   className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
                   data-testid="persediaan-keluar-jenis"
                 >
-                  {(jenisKeluar.length ? jenisKeluar : [{ key: "habis_pakai", label: "Habis Pakai/Pemakaian", kode: "K01" }]).map((j) => (
-                    <option key={j.key} value={j.key}>{j.label} ({j.kode})</option>
-                  ))}
+                  {opsiJenisBerkelompok(jenisKeluar.length ? jenisKeluar
+                    : [{ key: "habis_pakai", label: "Habis Pakai", kode: "K01" }])}
                 </select>
                 {jenisKeluar.find((j) => j.key === keluar.data.jenis)?.info && (
                   <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">
@@ -1839,6 +1892,151 @@ export default function PersediaanPage({ user, onBack }) {
                 );
               })}
             </ul>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog Daftar Transaksi lintas barang (45 kode SAKTI) ── */}
+      <Dialog open={!!daftarTrx} onOpenChange={(o) => { if (!o) setDaftarTrx(null); }}>
+        <DialogContent className="max-w-3xl max-h-[88vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Daftar Transaksi Persediaan</DialogTitle>
+            <DialogDescription className="text-xs">
+              Seluruh jurnal lintas barang dengan kode transaksi baku SAKTI —
+              bahan penyusunan laporan & rekonsiliasi.
+            </DialogDescription>
+          </DialogHeader>
+          {daftarTrx && (
+            <div className="space-y-3">
+              <div className="flex gap-1.5">
+                {[["daftar", "Daftar Transaksi"], ["referensi", "Referensi Kode"]].map(([t, label]) => (
+                  <button key={t} type="button"
+                    onClick={() => setDaftarTrx((d) => ({ ...d, tab: t }))}
+                    className={`h-8 px-3 rounded-full border text-xs font-medium min-w-0 min-h-0 ${
+                      daftarTrx.tab === t
+                        ? "bg-emerald-600 border-emerald-600 text-white"
+                        : "border-border text-muted-foreground hover:bg-muted"}`}
+                    data-testid={`daftar-trx-tab-${t}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {daftarTrx.tab === "referensi" ? (
+                <div className="space-y-2 text-xs" data-testid="daftar-trx-referensi">
+                  {Object.entries(trxRef.label_kelompok).map(([kel, label]) => {
+                    const rows = trxRef.referensi.filter((r) => r.kelompok === kel);
+                    if (!rows.length) return null;
+                    return (
+                      <div key={kel} className="rounded-lg border border-border p-2">
+                        <p className="font-semibold text-foreground mb-1">{label}</p>
+                        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-3">
+                          {rows.map((r) => (
+                            <li key={r.kode} className="flex gap-2 py-0.5">
+                              <span className="font-mono font-semibold w-9 flex-shrink-0 text-foreground/80">{r.kode}</span>
+                              <span className="text-muted-foreground">{r.uraian}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  })}
+                  <p className="text-[10px] text-muted-foreground">
+                    Kode koreksi nilai (M97/M98/K97/K98) serta penghapusan definitif
+                    ber-SK (H01–H03) dan pencatatan tak dikuasai (K09/M94) tercantum
+                    sebagai referensi — alur pencatatannya menyusul bertahap.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 items-end">
+                    <select value={daftarTrx.filter.arah}
+                      onChange={(e) => muatDaftarTrx(1, { ...daftarTrx.filter, arah: e.target.value }, daftarTrx.tab)}
+                      className="h-8 px-2 rounded-lg border border-border bg-background text-xs text-foreground min-h-0"
+                      aria-label="Filter arah" data-testid="daftar-trx-arah">
+                      <option value="">Semua arah</option>
+                      <option value="masuk">Masuk</option>
+                      <option value="keluar">Keluar</option>
+                      <option value="mutasi">Pindah gudang</option>
+                    </select>
+                    <select value={daftarTrx.filter.kode}
+                      onChange={(e) => muatDaftarTrx(1, { ...daftarTrx.filter, kode: e.target.value }, daftarTrx.tab)}
+                      className="h-8 px-2 rounded-lg border border-border bg-background text-xs text-foreground min-h-0"
+                      aria-label="Filter kode transaksi" data-testid="daftar-trx-kode">
+                      <option value="">Semua kode</option>
+                      {trxRef.referensi.map((r) => (
+                        <option key={r.kode} value={r.kode}>{r.kode} — {r.uraian}</option>
+                      ))}
+                    </select>
+                    <Input type="date" className="h-8 text-xs" value={daftarTrx.filter.dari}
+                      aria-label="Dari tanggal"
+                      onChange={(e) => muatDaftarTrx(1, { ...daftarTrx.filter, dari: e.target.value }, daftarTrx.tab)} />
+                    <Input type="date" className="h-8 text-xs" value={daftarTrx.filter.sampai}
+                      aria-label="Sampai tanggal"
+                      onChange={(e) => muatDaftarTrx(1, { ...daftarTrx.filter, sampai: e.target.value }, daftarTrx.tab)} />
+                    <form className="contents" onSubmit={(e) => { e.preventDefault(); muatDaftarTrx(1, daftarTrx.filter, daftarTrx.tab); }}>
+                      <Input placeholder="Cari barang / no bukti…" className="h-8 text-xs"
+                        value={daftarTrx.filter.q} data-testid="daftar-trx-cari"
+                        onChange={(e) => setDaftarTrx((d) => ({ ...d, filter: { ...d.filter, q: e.target.value } }))} />
+                    </form>
+                  </div>
+                  {daftarTrx.loading ? (
+                    <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-emerald-600" /></div>
+                  ) : (daftarTrx.rows || []).length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-6">Tidak ada transaksi yang cocok.</p>
+                  ) : (
+                    <ul className="divide-y divide-border/60" data-testid="daftar-trx-rows">
+                      {daftarTrx.rows.map((t) => (
+                        <li key={t.id} className="py-2 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+                          <span className="text-[10px] text-muted-foreground w-[72px] flex-shrink-0">{String(t.timestamp || "").slice(0, 10)}</span>
+                          <span className={`px-1.5 py-0.5 rounded font-mono text-[10px] font-semibold flex-shrink-0 ${
+                            t.arah === "masuk" ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                              : t.arah === "keluar" ? "bg-red-500/15 text-red-600 dark:text-red-400"
+                              : "bg-slate-500/15 text-slate-600 dark:text-slate-300"}`}>
+                            {t.kode_sakti || "—"}
+                          </span>
+                          <span className="font-medium text-foreground flex-1 min-w-[140px] truncate">
+                            {t.nama_barang || "-"}
+                            <span className="font-mono text-[10px] text-muted-foreground ml-1">{t.kode_barang}</span>
+                          </span>
+                          <span className="flex-shrink-0 font-semibold">
+                            {t.arah === "keluar" ? "−" : t.arah === "masuk" ? "+" : ""}{t.jumlah ?? 0}
+                          </span>
+                          <span className="flex-shrink-0 font-mono">
+                            Rp{Math.round(Number(t.total || 0)).toLocaleString("id-ID")}
+                          </span>
+                          <span className="basis-full text-[10px] text-muted-foreground truncate">
+                            {[t.uraian_kode, t.no_bukti, t.keterangan, t.petugas].filter(Boolean).join(" · ")}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] text-muted-foreground">{daftarTrx.total} transaksi</p>
+                    <div className="flex items-center gap-1">
+                      <Button size="sm" variant="outline" className="h-7 min-h-0 px-2"
+                        disabled={daftarTrx.page <= 1 || daftarTrx.loading}
+                        onClick={() => muatDaftarTrx(daftarTrx.page - 1, daftarTrx.filter, daftarTrx.tab)}
+                        aria-label="Halaman sebelumnya">
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </Button>
+                      <span className="text-[10px] text-muted-foreground px-1">hal {daftarTrx.page}</span>
+                      <Button size="sm" variant="outline" className="h-7 min-h-0 px-2"
+                        disabled={daftarTrx.page * 25 >= daftarTrx.total || daftarTrx.loading}
+                        onClick={() => muatDaftarTrx(daftarTrx.page + 1, daftarTrx.filter, daftarTrx.tab)}
+                        aria-label="Halaman berikutnya">
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                    <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                      onClick={() => downloadFileWithProgress(`${API}/persediaan/transaksi/export`, "jurnal_transaksi_persediaan.csv", { label: "Ekspor Jurnal Transaksi" }).catch(() => {})}
+                      data-testid="daftar-trx-export">
+                      <Download className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">CSV</span>
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
           )}
         </DialogContent>
       </Dialog>

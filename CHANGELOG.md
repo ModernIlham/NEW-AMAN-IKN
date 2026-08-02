@@ -67,6 +67,53 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#700] Daftar Transaksi persediaan: 45 kode SAKTI, lima kode salah makna dikoreksi — 2026-08-02
+
+- **Registry lengkap 45 kode transaksi SAKTI** (`persediaan_transaksi_ref.py`)
+  sesuai daftar transaksi resmi Modul Persediaan: M01–M15 & M90–M99 (masuk/
+  koreksi), K01–K15 & K90–K99 (keluar/koreksi), P01 (hasil opname fisik),
+  H01–H03 (penghapusan definitif ber-SK). Tiap kode membawa uraian resmi,
+  arah (masuk/keluar/nilai/opname/hapus), dan kelompok — satu sumber
+  kebenaran untuk dropdown, Daftar Transaksi, CSV, dan laporan.
+- **Lima kode warisan yang SALAH MAKNA dikoreksi.** Aplikasi lama memakai
+  M06 untuk "Reklasifikasi Masuk", M07 "Reklasifikasi dari Aset", M99
+  "Perolehan Lainnya", K07 "Reklasifikasi Keluar" — padahal di SAKTI M06 =
+  Perolehan Lainnya, M07 = Internal Transfer Masuk, M99 = Koreksi Kuantitas
+  Tambah, K07 = Internal Transfer Keluar. Rekonsiliasi dengan SAKTI akan
+  salah baris diam-diam. Kunci `jenis` internal tetap stabil (baris jurnal
+  lama tetap terbaca), kodenya yang diluruskan: reklasifikasi_masuk → M10,
+  reklasifikasi_dari_aset → M11, perolehan_lainnya → M06, reklasifikasi_
+  keluar → K10; "Penghapusan Lainnya" menjadi "Keluar Lainnya" (K06 tetap);
+  opname "OPN" internal → **P01** resmi.
+- **Kode tersimpan tak lagi dipercaya.** Semua pembacaan (ekspor CSV jurnal,
+  Daftar Transaksi) menurunkan ulang kode dari kunci `jenis` lewat registry
+  (`kode_sakti_dari_jenis`) — baris lama ber-kode warisan otomatis tampil
+  benar tanpa migrasi. Untuk konsumen di luar aplikasi disediakan
+  `scripts/perbaiki_kode_sakti_persediaan.py` (dry-run → `--terapkan`).
+- **Jenis transaksi baru dapat dipilih** — masuk: Transfer Masuk Online
+  (M13), Hibah BLU (M12), Internal Transfer (M07), Likuidasi UAKPB (M14),
+  Dalam Proses (M15), Non-Aktif UAPKPB (M08), serta koreksi kuantitas M99/
+  M90/M09/M95/M96; keluar: Transfer Keluar Online (K13), Internal Transfer
+  (K07), Likuidasi (K14), Dalam Proses (K15), Non-Aktif UAPKPB (K08),
+  Reklasifikasi ke Aset (K11, dengan peringatan sisi aset), serta koreksi
+  K99/K90/K96. Dropdown kini ber-**kelompok** (Perolehan / Penyaluran /
+  Internal / Reklasifikasi / Koreksi) — 19+16 pilihan tak lagi satu deret.
+- **Layar "Daftar Transaksi" lintas barang** (menu Dokumen): seluruh jurnal
+  dalam satu daftar berhalaman dengan filter arah, kode SAKTI, rentang
+  tanggal, dan teks (barang/no bukti) + tab **Referensi Kode** berisi 45
+  kode terkelompok. Endpoint baru `GET /persediaan/transaksi` ber-scope
+  satker; filter kode menerjemahkan lewat kunci `jenis` sehingga baris
+  lama ikut tersaring benar.
+- Kode koreksi nilai (M97/M98/K97/K98), pencatatan tak dikuasai (K09/M94),
+  dan penghapusan definitif (H01–H03) tercantum di referensi; alur
+  pencatatannya menyusul bersama daftar usang/rusak/tidak dikuasai
+  (PR berikutnya) — dinyatakan terus terang di layarnya.
+
+Verifikasi: 21 uji unit baru registry + koreksi uji lama (kode diturunkan
+ulang dari jenis), 1419 uji backend lulus, eslint bersih, `yarn build` sukses.
+
+---
+
 ## [#699] Riwayat Nilai per Aset: penyusutan & nilai buku akhirnya tampil — 2026-08-02
 
 - **Nilai buku per aset kini benar-benar dihitung.** Mesin penyusutan

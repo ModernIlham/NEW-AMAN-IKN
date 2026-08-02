@@ -121,29 +121,50 @@ def nilai_persediaan_dari_batches(batches) -> float:
     return total
 
 
-# ── Transaksi persediaan (pustaka §3.2 — peta 1:1 ke jenis SAKTI) ──────
-# Kunci enum internal → (label Indonesia, kode warisan aplikasi Persediaan)
-JENIS_MASUK = {
-    "saldo_awal": ("Saldo Awal", "M01"),
-    "pembelian": ("Pembelian", "M02"),
-    "transfer_masuk": ("Transfer Masuk", "M03"),
-    "hibah_masuk": ("Hibah Masuk", "M04"),
-    "rampasan": ("Rampasan", "M05"),
-    "reklasifikasi_masuk": ("Reklasifikasi Masuk", "M06"),
-    "reklasifikasi_dari_aset": ("Reklasifikasi dari Aset", "M07"),
-    "perolehan_lainnya": ("Perolehan Lainnya", "M99"),
-}
+# ── Transaksi persediaan — kunci internal → (uraian, kode SAKTI) ───────
+# Diturunkan dari registry 45 kode `persediaan_transaksi_ref` (satu sumber
+# kebenaran). Kode warisan lama yang salah makna (M06/M07/M99/K06/K07)
+# sudah dikoreksi di sana; kunci `jenis` tetap stabil sehingga baris jurnal
+# lama tetap terbaca. Urutan = urutan dropdown (yang lazim di atas).
+from persediaan_transaksi_ref import (  # noqa: E402
+    JENIS_KE_KODE, KODE_TRANSAKSI_PERSEDIAAN,
+)
+
+_URUTAN_MASUK = [
+    "saldo_awal", "pembelian", "transfer_masuk", "transfer_masuk_online",
+    "hibah_masuk", "hibah_masuk_blu", "rampasan", "perolehan_lainnya",
+    "internal_transfer_masuk", "transfer_masuk_likuidasi",
+    "dalam_proses_masuk", "non_aktif_uapkpb_masuk",
+    "reklasifikasi_masuk", "reklasifikasi_dari_aset",
+    "koreksi_kuantitas_tambah", "koreksi_penyesuaian_tambah",
+    "koreksi_hasil_migrasi", "koreksi_transfer_keluar_online",
+    "koreksi_tambah_fifo_hst",
+]
+
+_URUTAN_KELUAR = [
+    "habis_pakai", "transfer_keluar", "transfer_keluar_online",
+    "hibah_keluar", "usang", "rusak", "penghapusan_lainnya",
+    "internal_transfer_keluar", "transfer_keluar_likuidasi",
+    "dalam_proses_keluar", "non_aktif_uapkpb_keluar",
+    "reklasifikasi_keluar", "reklasifikasi_ke_aset",
+    "koreksi_kuantitas_kurang", "koreksi_penyesuaian_kurang",
+    "koreksi_kurang_fifo_hst",
+]
 
 
-JENIS_KELUAR = {
-    "habis_pakai": ("Habis Pakai/Pemakaian", "K01"),
-    "transfer_keluar": ("Transfer Keluar", "K02"),
-    "hibah_keluar": ("Hibah Keluar", "K03"),
-    "usang": ("Usang", "K04"),
-    "rusak": ("Rusak", "K05"),
-    "penghapusan_lainnya": ("Penghapusan Lainnya", "K06"),
-    "reklasifikasi_keluar": ("Reklasifikasi Keluar", "K07"),
-}
+def _peta_jenis(kunci_terurut, arah_wajib):
+    peta = {}
+    for k in kunci_terurut:
+        kode = JENIS_KE_KODE[k]
+        uraian, arah, _kelompok = KODE_TRANSAKSI_PERSEDIAAN[kode]
+        if arah != arah_wajib:  # pagar anti-salah-daftar saat registry berubah
+            raise ValueError(f"jenis {k} ({kode}) bukan arah {arah_wajib}")
+        peta[k] = (uraian, kode)
+    return peta
+
+
+JENIS_MASUK = _peta_jenis(_URUTAN_MASUK, "masuk")
+JENIS_KELUAR = _peta_jenis(_URUTAN_KELUAR, "keluar")
 
 
 def validate_transaksi_keluar(jenis: str, jumlah, stok_tersedia: int):
@@ -510,14 +531,20 @@ def baris_csv_transaksi(transaksi_list) -> list:
     transaksi (mis. unit_penerima hanya di 'keluar', lokasi_* hanya di
     'mutasi') dibiarkan kosong — bukan error.
     """
+    from persediaan_transaksi_ref import kode_sakti_dari_jenis
+
     rows = [list(HEADER_CSV_TRANSAKSI)]
     for t in transaksi_list or []:
+        # Kode SAKTI diturunkan ulang dari `jenis` (registry) — baris lama
+        # menyimpan kode warisan bermakna lain (M06/M07/M99/K06/K07 pra-
+        # koreksi, "OPN" pra-P01) yang tak boleh bocor ke rekonsiliasi.
+        kode = kode_sakti_dari_jenis(t.get("jenis"), t.get("kode_sakti"))
         rows.append([
             str(t.get("timestamp") or "")[:10],
             t.get("arah") or "",
             t.get("jenis") or "",
             t.get("jenis_label") or "",
-            t.get("kode_sakti") or "",
+            kode,
             t.get("kode_barang") or "",
             t.get("nup") or "",
             t.get("nama_barang") or "",
