@@ -2,7 +2,7 @@
 
 > Sistem Inventarisasi Barang Milik Negara (BMN) berbasis web, standar pemerintah Indonesia (SE 17/SE/M/2024 & LKPP 85/2025)
 
-**Versi:** 2.5 (Juli 2026) — Audit menyeluruh 6 dimensi (REVIEW-9): sapu IDOR & guard lintas modul, jurnal Buku Barang lengkap semua transaksi, event loop bebas render berat, keandalan backup/restore/reset, plus pencarian kilat Meilisearch & cache bersama Redis (keduanya opsional ber-feature-flag)
+**Versi:** 2.6 (Agustus 2026) — Selaras SIMAN V2 & tahan-banting operasional: mesin penyusutan terbukti cocok 175/175 baris ekspor SIMAN nyata (kolom "Umur Aset" = sisa SEMESTER — racun referensi masa manfaat dipulihkan), basis mutasi LBKP = tanggal perolehan, jurnal otomatis jalur impor SIMAN (100/204/205), isolasi satker aset pemegang/PSP (stempel efektif + backfill), 14 temuan audit modul jarang tersentuh ditutup (escape PDF Wasdal + anti-SSRF, Infinity/NaN, referensi nasional super-admin, injeksi formula XLSX), indeks komposit `assets`, aturan main logging (JSON default + redaksi rahasia/NIK), dan dokumen optimalisasi VPS
 
 ---
 
@@ -141,6 +141,32 @@ lampiran per tiket insidentil** (#156).
 **Seluruh kartu modul siklus kini bisa dimasuki dari Beranda Modul.**
 
 ---
+
+## 🆕 Highlight Rilis v2.6 (Agustus 2026)
+
+- 📐 **Penyusutan & mutasi selaras SIMAN V2** — mesin garis lurus semesteran
+  dibuktikan cocok 175/175 baris ekspor SIMAN asli; kolom "Umur Aset" SIMAN
+  ternyata **sisa masa manfaat dalam semester** (bukan tahun) — derivasi baru
+  `masa_sem = perolehan × sisa / nilai buku` mereproduksi tabel KMK persis,
+  dan skrip pemulih membersihkan referensi yang telanjur teracuni. Basis
+  mutasi LBKP/CaLBMN/LBP kini tanggal PEROLEHAN; aset impor SIMAN otomatis
+  berjurnal 100, dan "terapkan nilai SIMAN" berjurnal 204/205.
+- 🛡️ **Isolasi satker aset pemegang & PSP** — stempel `kode_satker` efektif
+  diderivasi dari kegiatan aset untuk dokumen buatan super-admin (PSP, idle,
+  proses, BAST + surat booking), kop per-satker pada PDF daftar pemegang,
+  6 sumber timeline diseragamkan, plus skrip backfill data lama.
+- 🔍 **Audit modul jarang tersentuh (14 temuan)** — escape PDF Wasdal +
+  `trustedSchemes` anti-SSRF, penolakan `Infinity`/`NaN` di Pemanfaatan/
+  Perencanaan/Penilaian, kompensasi CAS transisi SAKTI, referensi nasional
+  (masa manfaat & SBSK) khusus super-admin, seeding SBSK idempoten, XLSX
+  anti injeksi formula, nomor BA manual anti-kembar.
+- ⚙️ **Operasional** — 5 indeks komposit `assets` (filter berat per
+  kegiatan), aturan main logging (JSON-lines default, stdout, redaksi
+  password/token/JWT/NIK, request-id), `docs/OPTIMASI-VPS.md` (swap,
+  WiredTiger, keamanan dasar, nasihat OLTP/OLAP bertangga) &
+  `docs/LOGGING.md`.
+- 📱 **UI** — toolbar daftar aset tak pernah geser samping (dua grup
+  melipat), popup Struktur Organisasi rapi di HP.
 
 ## 🆕 Highlight Rilis v2.5 (Juli 2026)
 
