@@ -19,6 +19,10 @@ SKIP_COLLECTIONS = {
     # Progress job latar bersama (ekspor async dll.) — sama transiennya dengan
     # backup_jobs; membawanya ke DB hasil restore = job "running" hantu.
     "background_jobs",
+    # Kursor migrasi thumbnail WebP + stempel waktu activity-tracker —
+    # runtime murni yang dibangun ulang sendiri; membawanya ke DB hasil
+    # restore mengembalikan kursor migrasi ke posisi lama (audit kesegaran).
+    "app_runtime",
     # Observasi posisi IoT (Fase 11) — DIKECUALIKAN demi RETENSI, bukan demi
     # ukuran arsip. Retensi 30/90/365 hari ditegakkan TTL index; kalau observasi
     # ikut masuk arsip backup yang disimpan bertahun, jejak lokasi perangkat
@@ -51,6 +55,11 @@ KEEP_ID_COLLECTIONS = {"counters"}
 # dipertahankan, jadi fotonya juga harus tetap ada (hindari foto_file_id yatim).
 RESET_KEEP_COLLECTIONS = {
     "users", "report_settings", "compression_quotas", "pdf_compression_quotas",
+    # Penghitung kuota kirim email (lingkup, periode) — kuota sebenarnya ada
+    # di penyedia; reset yang me-nol-kannya membuat indikator kuota BERBOHONG
+    # (mengaku sisa penuh padahal jatah harian/bulanan sudah terpakai) —
+    # alasan yang sama dengan compression_quotas di atas (audit kesegaran).
+    "email_usage",
     "persuratan_settings", "klasifikasi_arsip", "masa_manfaat",
     "akun_bas", "persediaan_akun", "referensi_akun", "satker",
     "sbsk_standar",

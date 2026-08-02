@@ -99,6 +99,41 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
   *Rantai Nilai & Penyusutan* (nilai buku per NUP, timeline jurnal Buku
   Barang, jurnal edit harga, masa manfaat LHIP) — plus butir tanggalan
   roda pada kartu Master SDM.
+- **Audit kesegaran impor/ekspor/template + backup/restore/reset** —
+  sisiran menyeluruh (mandat pemilik "jangan sampai ada yang terlewat"),
+  16 temuan ditutup:
+  - **Template impor pegawai +3 kolom**: Gelar Depan, Gelar Belakang
+    (setelah Nama Lengkap) dan Unit Kerja (setelah Eselon 5) kini ikut di
+    template, impor, dan ekspor — dulu field-nya ada di form tapi hilang
+    saat impor massal. Baris contoh template dirakit **per nama kolom**
+    dengan pagar `assert` — versi lama menulis 33 sel untuk 34 kolom
+    sehingga "AKTIF" bergeser ke kolom Status Pegawai (SIMPEG).
+  - **Kode SAKTI tak lagi percaya nilai tersimpan** di Kartu Barang PDF &
+    riwayat per barang: kode diturunkan ulang dari `jenis` (warisan
+    M06/M07/M99/K07 lama & "OPN" terkoreksi otomatis), label jenis dari
+    registry 45 kode + pindah gudang.
+  - **Daftar Transaksi**: filter `arah` divalidasi server (pattern) dan UI
+    mendapat opsi **Koreksi nilai** & **Hapus definitif**; dialog riwayat
+    menampilkan baris koreksi nilai (`Nilai ±Rp… · kuantitas tetap`) dan
+    hapus definitif dengan kalimat yang benar — bukan `−0 × Rp0 = Rp…`.
+  - **Header template CSV transaksi persediaan** kini diimpor dari
+    registry field (anti-drift, bukan daftar tersalin).
+  - **Restore kini menghapus koleksi yang tak ada di ZIP** (kecuali
+    `users`) — sebelumnya koleksi baru pasca-backup selamat dari restore
+    sehingga hasilnya bukan potret cadangan; backup melewati
+    `app_runtime` (runtime murni) dan reset mempertahankan `email_usage`
+    (penghitung kuota Resend harus selamat dari reset data).
+  - **Indeks `(jenis, timestamp)`** pada transaksi persediaan untuk
+    filter Daftar Transaksi; lebar kolom ekspor XLSX aset dirapikan untuk
+    kolom Jumlah Foto & Tanggal Input.
+  - **Dokumentasi disegarkan**: deskripsi modul Persediaan
+    (`bmnModules.js`) dan pustaka regulasi §3.2 kini mencerminkan 45 kode
+    terverifikasi (label resmi "Keluar Lainnya" K06), H01–H03 + daftar
+    usang/rusak/tak dikuasai yang SUDAH terpasang, dan catatan kode
+    warisan.
+  - Dinyatakan sadar: field meninggal/ahli waris/kewarganegaraan sengaja
+    TIDAK dimasukkan ke impor massal pegawai (data sensitif diisi lewat
+    form; impor tak menghapusnya karena kunci impor bersifat tetap).
 
 ---
 

@@ -946,9 +946,9 @@ async def bangun_xlsx_bytes(query, activity_id="", base_url="", token=""):
     worksheet.set_column(2, 2, 15)  # Kode Aset
     worksheet.set_column(3, 3, 8)   # NUP
     worksheet.set_column(4, 4, 25)  # Nama Aset
-    worksheet.set_column(5, 43, 14)
-    worksheet.set_column(44, 44, 12) # Jumlah Foto
-    worksheet.set_column(45, 45, 18) # Tanggal Input
+    worksheet.set_column(5, 46, 14)
+    worksheet.set_column(47, 47, 12) # Jumlah Foto (bergeser sejak +Garansi/Cara Bayar)
+    worksheet.set_column(48, 48, 18) # Tanggal Input
     
     # === SHEET 2: Kelengkapan Dokumen ===
     doc_sheet = workbook.add_worksheet('Kelengkapan Dokumen')

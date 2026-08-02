@@ -453,15 +453,26 @@ async def template_impor_pegawai(_user: dict = Depends(require_user)):
     buf = io.StringIO()
     w = _csv.writer(buf)
     w.writerow(HEADER_IMPOR)
-    w.writerow(["198501012010011001", "Budi Santoso", "Laki-laki", "Jakarta",
-                "1985-01-01", "PNS", "Penata (III/c)",
-                "Analis Pengelolaan BMN", "", "",
-                "Pejabat Pelaksana",
-                "2022-01-01", "",
-                "Sekretariat", "Bagian Umum", "", "", "", "081200000000",
-                "budi@instansi.go.id", "", "S1", "",
-                "BRI", "1234567890", "", "", "", "", "", "",
-                "AKTIF", ""])
+    # Baris contoh WAJIB selaras jumlah & urutan HEADER_IMPOR — versi lama
+    # kurang satu sel sehingga seluruh nilai bergeser satu kolom ("AKTIF"
+    # mendarat di "Status Pegawai" referensi SIMPEG, bukan kolom "Status",
+    # dan pola salah itu ditiru pengguna). Kini dipetakan per nama kolom
+    # lalu ditagih assert agar tak bisa bergeser lagi.
+    contoh = {
+        "NIP/NIK/NRP": "198501012010011001", "Nama Lengkap": "Budi Santoso",
+        "Gelar Belakang": "S.E.", "Jenis Kelamin": "Laki-laki",
+        "Tempat Lahir": "Jakarta", "Tgl Lahir": "1985-01-01",
+        "Status Kepegawaian": "PNS", "Pangkat/Golongan": "Penata (III/c)",
+        "Jabatan": "Analis Pengelolaan BMN",
+        "Kategori Pegawai": "Pejabat Pelaksana", "TMT Jabatan": "2022-01-01",
+        "Eselon 1": "Sekretariat", "Eselon 2": "Bagian Umum",
+        "Unit Kerja": "Bagian Umum", "No Telepon": "081200000000",
+        "Email": "budi@instansi.go.id", "Pendidikan Terakhir": "S1",
+        "Nama Bank": "BRI", "No Rekening": "1234567890",
+        "Status": "AKTIF",
+    }
+    assert set(contoh) <= set(HEADER_IMPOR)
+    w.writerow([contoh.get(h, "") for h in HEADER_IMPOR])
     return Response(
         content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
         headers={"Content-Disposition":

@@ -93,7 +93,7 @@ export const PENATAUSAHAAN_SUBMODULES = [
     nama: "Inventarisasi Persediaan",
     status: "aktif",
     fase: 2,
-    ringkas: "Aktif: master ber-layer FIFO, transaksi masuk/keluar (jenis SAKTI lengkap) + tautan Pengadaan, gudang & impor massal, peringatan + nota dinas, opname + BAOF, rincian layer FIFO, Laporan Posisi per akun neraca (1171xx) & Mutasi.",
+    ringkas: "Aktif: master ber-layer FIFO, 45 kode transaksi SAKTI (M/K/P/H) + Daftar Transaksi, koreksi nilai & hapus definitif ber-SK, daftar usang/rusak/tak dikuasai, gudang & impor massal, peringatan + nota dinas, opname + BAOF, 7 laporan gaya SAKTI.",
     deskripsi:
       "Manajemen barang persediaan (aset lancar, kodefikasi berawalan '1') — pencatatan "
       + "perpetual + penilaian FIFO per layer selaras SAKTI (PMK 234/2020). Inti modul "
@@ -103,11 +103,15 @@ export const PENATAUSAHAAN_SUBMODULES = [
     dasarHukum: [PENATAUSAHAAN_DASAR_HUKUM, "PMK 234/PMK.05/2020 — FIFO (kebijakan akuntansi)"],
     fitur: [
       "✅ Master persediaan: kode '1' 16 digit (nomor urut otomatis), NUP otomatis, batas kritis, kedaluwarsa",
-      "✅ Transaksi masuk/keluar FIFO per layer + jurnal (jenis SAKTI lengkap: masuk M01–M07/M99, keluar K01–K07)",
+      "✅ Transaksi FIFO per layer + jurnal ber-kode SAKTI lengkap 45 kode (masuk M01–M15/M90/M94–M99, keluar K01–K15/K90/K96–K99, opname P01, hapus daftar H01–H03)",
+      "✅ Daftar Transaksi terpusat: semua jurnal lintas barang dengan filter arah/kode/periode/pencarian + referensi 45 kode SAKTI",
+      "✅ Koreksi nilai per barang (proporsional lintas layer FIFO, kuantitas tetap) + hapus definitif ber-SK dari daftar usang/rusak/tak dikuasai",
+      "✅ Daftar persediaan usang/rusak/tidak dikuasai diderivasi dari jurnal (K04/K05/K09) — tanpa pencatatan ganda",
       "✅ Tautan dokumen sumber Pengadaan (BAST) di transaksi masuk + tgl/no kontrak (isi otomatis)",
       "✅ Rincian layer FIFO per barang (saldo, harga melekat, nilai, kedaluwarsa) — telaah 'Persediaan per Layer'",
       "✅ Peringatan habis/kritis/kedaluwarsa + Nota Dinas PDF otomatis",
       "✅ Laporan Posisi per kelompok + kolom Akun & rekap per akun neraca (1171xx) & Mutasi periode (dari jurnal)",
+      "✅ 7 laporan PDF gaya SAKTI ber-kop resmi: Laporan Persediaan, Posisi di Neraca, Per Layer, Mutasi, Tidak Dikuasai, Usang, dan Rusak",
       "✅ Stock opname: selisih → penyesuaian otomatis + kertas kerja & BAOF PDF + pengingat semesteran",
       "✅ Impor/ekspor master + Kartu Barang PDF (riwayat + saldo berjalan) + ekspor CSV jurnal transaksi (rekonsiliasi SAKTI)",
       "✅ Transaksi massal per dokumen (satu bukti, banyak barang)",

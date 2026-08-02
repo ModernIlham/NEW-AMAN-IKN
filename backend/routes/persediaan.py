@@ -262,8 +262,10 @@ def _fmt_rp(val):
         return "0"
 
 
-_TEMPLATE_HEADERS = ["kode_barang", "nup", "nama_barang", "merk", "tipe", "satuan",
-                     "lokasi", "batas_kritis", "expired_default", "tahun_anggaran", "keterangan"]
+# DITURUNKAN dari registry (persediaan_fields.py) — dulu hardcode 11 nama
+# yang kebetulan sama; field baru di registry akan tertinggal diam-diam
+# tanpa satu test pun yang menagih (temuan audit kesegaran template).
+from persediaan_fields import FIELD_NAMES as _TEMPLATE_HEADERS  # noqa: E402
 
 
 @persediaan_router.get("/persediaan/template")
@@ -341,7 +343,7 @@ async def export_transaksi_persediaan(_user: dict = Depends(require_user)):
 async def daftar_transaksi_persediaan(
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100),
-    arah: str = Query("", pattern=r"^(masuk|keluar|mutasi)?$"),
+    arah: str = Query("", pattern=r"^(masuk|keluar|mutasi|nilai|hapus)?$"),
     kode: str = Query("", max_length=3),
     dari: str = Query("", pattern=r"^(\d{4}-\d{2}-\d{2})?$"),
     sampai: str = Query("", pattern=r"^(\d{4}-\d{2}-\d{2})?$"),
@@ -1034,7 +1036,7 @@ async def laporan_mutasi_pdf(
 async def list_jenis_transaksi(_user: dict = Depends(require_user)):
     """Jenis transaksi masuk & keluar (peta 1:1 ke SAKTI) untuk dropdown.
 
-    M07/K07 (reklasifikasi dari/ke aset) hanya mencatat SISI PERSEDIAAN —
+    M11/K11 (reklasifikasi dari/ke aset) hanya mencatat SISI PERSEDIAAN —
     register aset tidak disentuh otomatis; `info` mengingatkan operator agar
     menyesuaikan sisi aset via Pembukuan → Reklasifikasi (kejujuran klaim,
     hindari dobel catat di Neraca).
@@ -2228,7 +2230,14 @@ async def riwayat_persediaan(
     total = await db.transaksi_persediaan.count_documents(query)
     cursor = (db.transaksi_persediaan.find(query, {"_id": 0})
               .sort("timestamp", -1).skip((page - 1) * page_size).limit(page_size))
-    items = [x async for x in cursor]
+    # Kode SAKTI diturunkan ulang dari `jenis` — baris lama menyimpan kode
+    # warisan bermakna lain (M06/M07/M99/K07 pra-#693, "OPN" pra-P01) yang
+    # tak boleh tampil ke operator; Daftar Transaksi & ekspor CSV sudah
+    # menegakkan aturan yang sama.
+    from persediaan_transaksi_ref import kode_sakti_dari_jenis
+    items = [{**x, "kode_sakti": kode_sakti_dari_jenis(
+                  x.get("jenis"), x.get("kode_sakti"))}
+             async for x in cursor]
     return {"items": items, "total": total, "page": page, "page_size": page_size,
             "total_pages": max(1, -(-total // page_size))}
 
@@ -2264,9 +2273,15 @@ async def kartu_barang_pdf(item_id: str, _user: dict = Depends(require_user)):
         raise HTTPException(status_code=404,
                             detail="Belum ada transaksi untuk barang ini")
 
-    label_jenis = {k: v[0] for k, v in JENIS_MASUK.items()}
-    label_jenis.update({k: v[0] for k, v in JENIS_KELUAR.items()})
-    label_jenis["opname"] = "Penyesuaian Opname"
+    # Label diturunkan dari registry LENGKAP 45 kode (bukan dua peta arah
+    # masuk/keluar saja) — tanpa ini jenis koreksi nilai (M97/M98/K97/K98)
+    # dan penghapusan definitif (H01-H03) tercetak sebagai kunci mentah
+    # ("hapus_usang") di dokumen resmi Kartu Barang.
+    from persediaan_transaksi_ref import (
+        JENIS_KE_KODE, KODE_TRANSAKSI_PERSEDIAAN,
+    )
+    label_jenis = {jenis: KODE_TRANSAKSI_PERSEDIAAN[kode][0]
+                   for jenis, kode in JENIS_KE_KODE.items()}
     label_jenis["pindah_gudang"] = "Pindah Gudang"
 
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}

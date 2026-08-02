@@ -564,16 +564,20 @@ KOLOM_IMPOR = {
     "perusahaan penyedia": "perusahaan_penyedia",
     "kode satker lengkap": "kode_satker_lengkap",
     "unit kerja": "unit_kerja",
+    "gelar depan": "gelar_depan",
+    "gelar belakang": "gelar_belakang",
 }
 
 # Urutan kolom template ekspor/impor (header ramah).
 HEADER_IMPOR = [
-    "NIP/NIK/NRP", "Nama Lengkap", "Jenis Kelamin", "Tempat Lahir", "Tgl Lahir",
+    "NIP/NIK/NRP", "Nama Lengkap", "Gelar Depan", "Gelar Belakang",
+    "Jenis Kelamin", "Tempat Lahir", "Tgl Lahir",
     "Status Kepegawaian", "Pangkat/Golongan", "Jabatan",
     "Jenis Pelaksana (Plt/Plh)", "Jabatan Pelaksana (Rangkap)",
     "Kategori Pegawai",
     "TMT Jabatan", "Tgl Akhir Jabatan",
     "Eselon 1", "Eselon 2", "Eselon 3", "Eselon 4", "Eselon 5",
+    "Unit Kerja",
     "No Telepon", "Email", "NPWP", "Pendidikan Terakhir", "Alamat",
     "Nama Bank", "No Rekening",
     "Nomor Kontrak", "Tgl Mulai Kontrak", "Tgl Selesai Kontrak",
@@ -765,7 +769,7 @@ def baris_impor_ke_pegawai(raw):
         "eselon1", "eselon2", "eselon3", "eselon4", "eselon5",
         "no_hp", "email", "nama_bank", "no_rekening", "nomor_kontrak",
         "tgl_mulai_kontrak", "tgl_selesai_kontrak", "keterangan",
-        "sub_kategori_non_asn", "unit_kerja",
+        "sub_kategori_non_asn", "unit_kerja", "gelar_depan", "gelar_belakang",
         "tmt_jabatan", "tanggal_akhir_jabatan", "npwp",
         "pendidikan_terakhir", "alamat", "jenis_kontrak_non_asn",
         "perusahaan_penyedia", "kode_satker_lengkap", "status_pegawai_satker")}
@@ -1138,7 +1142,8 @@ def baris_ekspor_pegawai(doc) -> list:
 
     _pel = {"plt": "Plt.", "plh": "Plh."}.get(g("jenis_pelaksana").lower(), "")
     return [
-        g("nip"), g("nama"), g("jenis_kelamin"), g("tempat_lahir"),
+        g("nip"), g("nama"), g("gelar_depan"), g("gelar_belakang"),
+        g("jenis_kelamin"), g("tempat_lahir"),
         g("tanggal_lahir")[:10],
         label_ekspor_status_kepegawaian(d),
         g("pangkat_golongan"), g("jabatan"),
@@ -1147,6 +1152,7 @@ def baris_ekspor_pegawai(doc) -> list:
                              g("kategori_pegawai")),
         g("tmt_jabatan")[:10], g("tanggal_akhir_jabatan")[:10],
         g("eselon1"), g("eselon2"), g("eselon3"), g("eselon4"), g("eselon5"),
+        g("unit_kerja"),
         g("no_hp"), g("email"), g("npwp"), g("pendidikan_terakhir"),
         g("alamat"), g("nama_bank"), g("no_rekening"),
         g("nomor_kontrak"), g("tgl_mulai_kontrak")[:10],
