@@ -67,6 +67,57 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#698] Tanggalan berbahasa Indonesia & kelengkapan BMN ikut kode barang — 2026-08-02
+
+- **Kalender berbahasa Indonesia + ikon di dalam kolom.** Ikon kalender pada
+  `<input type="date">` itu milik PERAMBAN (`::-webkit-calendar-picker-indicator`),
+  ditempel mepet tepi dengan padding bawaan yang berbeda antar peramban —
+  itulah kenapa ia terlihat menggantung di pinggir. Popup-nya pun memakai
+  bahasa ANTARMUKA PERAMBAN, bukan `lang` dokumen: di Chrome berbahasa
+  Inggris ia akan selalu menulis "August 2026", berapa kali pun `lang="id"`
+  dipasang. Keduanya tak bisa diperbaiki dari CSS.
+  Komponen baru `components/ui/input-tanggal.jsx` memakai `react-day-picker`
+  dengan locale `id` dari `date-fns` (keduanya sudah terpasang) — kalendernya
+  berbahasa Indonesia dan ikonnya tombol biasa di dalam kolom, jaraknya sama
+  dengan kolom form lain. Nilainya tetap ISO `yyyy-mm-dd` dan `onChange`
+  menerima `{ target: { name, value } }`, jadi ia **pengganti langsung**
+  `<Input type="date">` tanpa mengubah penangan yang ada. Terpasang di
+  Tanggal Beli & Garansi hingga pada form aset.
+- **Kelengkapan Dokumen & Peralatan tak lagi selalu 0/5.** Setiap aset baru
+  dulu lahir dengan lima baris yang sama — "Buku Manual, Charger/Adapter,
+  Kabel USB, Kartu Garansi, CD Driver" — daftar yang masuk akal untuk laptop
+  dan **tidak untuk apa pun yang lain**. Sebidang tanah tak punya kabel USB;
+  gedung tak punya CD driver. Akibatnya angka kelengkapan menagih barang yang
+  mustahil ada, sementara yang benar-benar wajib (sertifikat, IMB, BPKB)
+  tak pernah diminta.
+  Kini aset tanpa kode barang mulai dari **0/0** — jujur "belum ditentukan" —
+  dan daftarnya terisi sendiri begitu kodefikasi dipilih.
+- **Registry rekomendasi per golongan/bidang** (`lib/kelengkapanBmn.js`).
+  Dasarnya: dokumen kepemilikan mengikuti pengamanan administratif BMN
+  (sertifikat hak pakai untuk tanah, IMB untuk bangunan, BPKB/STNK untuk
+  kendaraan — penyimpanannya diatur PMK 218/PMK.06/2015), penggolongannya
+  mengikuti KIB A–F, dan perlengkapan fisik kendaraan mengikuti daftar periksa
+  serah terima yang lazim. Pencocokan memakai prefix TERPANJANG, sehingga
+  bidang 302 (Alat Angkutan) mendapat BPKB/STNK/dongkrak alih-alih daftar umum
+  Peralatan dan Mesin. Golongan tak dikenal menghasilkan daftar KOSONG —
+  menebak kelengkapan barang yang belum diketahui jenisnya hanya melahirkan
+  baris palsu yang harus dihapus satu per satu.
+- **Isi yang sudah ada tak pernah hilang.** Pengisian otomatis berhenti begitu
+  pengguna menyentuh daftarnya, dan `bangunChecklist` mempertahankan centang,
+  catatan, foto, serta dokumen pada baris bernama sama — termasuk baris
+  tambahan buatan pengguna, yang dipindah ke bawah alih-alih dibuang. Aset
+  lama yang sudah punya checklist dibiarkan apa adanya saat form dibuka.
+- Panel **Ubah Massal** ikut dibersihkan: daftar nama yang bisa dicentang
+  massal kini murni gabungan nama yang NYATA dipunyai aset terpilih. Dulu lima
+  item bawaan itu ikut disemai, jadi memilih sepuluh bidang tanah pun tetap
+  menawarkan "Kabel USB" untuk dicentang.
+
+Verifikasi: 14 uji unit baru `kelengkapanBmn` (termasuk bidang-mengalahkan-
+golongan, isi lama dipertahankan, masukan tak wajar), total 354 uji frontend
+lulus, eslint bersih, `yarn build` sukses.
+
+---
+
 ## [#697] Latar halaman masuk kembali ke ukuran semula — 2026-08-02
 
 Tekstur yang dipantulkan permukaan cair (PR #689) memakai kubus ber-jari-jari
