@@ -67,6 +67,26 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#685] Audit total gel.6 — validasi perolehan: Infinity & tanggal WIB — 2026-08-02
+
+Gelombang penutup: dua cacat validasi pada pencatatan perolehan Pengadaan.
+
+- **`Infinity`/`NaN` diterima sebagai jumlah/harga.** Token JSON `Infinity`
+  di-parse Starlette menjadi `float('inf')` dan LOLOS batas `gt`/`ge` Pydantic —
+  lalu meracuni register: ekspor CSV & penjumlahan nilai jadi tak terhitung,
+  PDF 500, catat-semua berhenti separuh jalan. `BarangIn` kini menolak nilai
+  tak-hingga di gerbang (`field_validator` + `math.isfinite`). Diuji: `inf` &
+  `nan` keduanya ditolak.
+- **Tanggal BAST hari ini ditolak tiap pagi (00:00–06:59 WIB).** Batas "tak
+  boleh di masa depan" memakai tanggal UTC yang tertinggal 7 jam dari WIB,
+  sehingga BAST bertanggal hari ini keliru dianggap masa depan pada dini hari.
+  Kini memakai `today_wib()` — sama dengan register persediaan.
+
+Verifikasi: `py_compile` bersih, 1397 uji unit backend lulus, penolakan
+Infinity/NaN dibuktikan lewat uji model langsung.
+
+---
+
 ## [#684] Audit total gel.5 — dokumen resmi: privasi NIK & ketahanan teks — 2026-08-02
 
 Gelombang kelima: privasi identitas dan ketahanan PDF terhadap teks bebas.

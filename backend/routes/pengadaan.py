@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
@@ -43,6 +43,18 @@ class BarangIn(BaseModel):
     jumlah: float = Field(gt=0)
     harga_satuan: float = Field(ge=0)
     asset_id: str = ""                 # tautan ke aset master (opsional)
+
+    @field_validator("jumlah", "harga_satuan")
+    @classmethod
+    def _terhingga(cls, v):
+        # Token JSON `Infinity`/`NaN` di-parse Starlette menjadi float('inf')/
+        # nan dan LOLOS gt/ge — lalu meracuni register: ekspor CSV & jurlah
+        # nilai jadi tak terhitung, PDF 500, catat-semua setengah jalan. Tolak
+        # nilai tak-hingga di gerbang.
+        import math
+        if not math.isfinite(v):
+            raise ValueError("harus angka terhingga (Infinity/NaN ditolak)")
+        return v
 
 
 class PerolehanIn(BaseModel):
@@ -341,7 +353,13 @@ async def export_pengadaan(_user: dict = Depends(require_user)):
 @pengadaan_router.post("/pengadaan")
 async def buat_perolehan(payload: PerolehanIn, user: dict = Depends(require_writer)):
     """Catat perolehan baru (barang boleh ditautkan ke aset master)."""
-    today_iso = datetime.now(timezone.utc).date().isoformat()
+    # Hari-ini dalam WIB, bukan UTC: batas "tanggal BAST tak boleh di masa
+    # depan" dulu memakai tanggal UTC yang TERTINGGAL 7 jam dari WIB — sehingga
+    # tiap pagi pukul 00:00–06:59 WIB, BAST bertanggal hari ini (WIB) ditolak
+    # keliru sebagai "masa depan". Register lain (persediaan) sudah memakai
+    # today_wib; disamakan di sini.
+    from persediaan_utils import today_wib
+    today_iso = today_wib()
     data = payload.model_dump()
     errors = validate_perolehan(data, today_iso)
     if errors:
