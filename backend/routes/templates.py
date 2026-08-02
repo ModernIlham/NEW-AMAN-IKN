@@ -7,10 +7,11 @@ bugs are possible from drifting parallel arrays.
 """
 import io
 import logging
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 import xlsxwriter
 
+from auth_utils import require_user
 from db import db
 from shared_utils import (
     VALID_INVENTORY_STATUSES, VALID_KLASIFIKASI, VALID_SUB_KLASIFIKASI_ALL,
@@ -212,8 +213,13 @@ def _excel_col_letter(col_zero_based: int) -> str:
 # CSV TEMPLATE
 # ============================================================================
 @templates_router.get("/templates/csv")
-async def download_csv_template():
-    """Download CSV import template (derived from ASSET_TEMPLATE_SCHEMA)."""
+async def download_csv_template(_user: dict = Depends(require_user)):
+    """Download CSV import template (derived from ASSET_TEMPLATE_SCHEMA).
+
+    Ber-autentikasi: template ekspor kategori dari DB, dan endpoint yang
+    membaca DB tanpa login sama sekali membocorkan daftar kategori satker ke
+    siapa pun — semua saudara endpoint template lain sudah ber-`require_user`.
+    """
     headers = [c["field"] for c in ASSET_TEMPLATE_SCHEMA]
     sample1 = [c["sample1"] for c in ASSET_TEMPLATE_SCHEMA]
     sample2 = [c["sample2"] for c in ASSET_TEMPLATE_SCHEMA]
@@ -236,7 +242,7 @@ async def download_csv_template():
 # XLSX TEMPLATE
 # ============================================================================
 @templates_router.get("/templates/xlsx")
-async def download_xlsx_template():
+async def download_xlsx_template(_user: dict = Depends(require_user)):
     """Download Excel import template with dropdowns and professional formatting.
 
     Headers, sample data, dropdowns, widths, and Panduan sheet are all derived

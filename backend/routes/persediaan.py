@@ -2119,12 +2119,26 @@ async def impor_referensi_sakti_pdf(
             f"PDF ini milik satker {satker_pdf} ({hasil['uakpb_nama'] or 'UAKPB tak terbaca'}), "
             f"sedangkan Anda bekerja atas satker {satker_user}. Unduh UC_PER032 dari SAKTI satker Anda."))
 
+    # Satker EFEKTIF yang disinkronkan. Operator satker-tunggal: satkernya
+    # sendiri. Super-admin (lintas-satker, satker_user kosong): satker yang
+    # TERTULIS di PDF — tanpa ini `scope_query_field_satker("")` melebar ke
+    # SEMUA satker, sehingga terapkan me-rename master ber-kode16 sama di
+    # setiap satker sekaligus DAN item baru lahir tanpa stempel satker
+    # (`kode_satker=""`, bocor ke semua). Bila PDF pun tak menyebut satker,
+    # tak ada tujuan yang aman → tolak.
+    kode_efektif = satker_user or satker_pdf
+    if not kode_efektif:
+        raise HTTPException(status_code=400, detail=(
+            "Kode satker tidak terbaca dari PDF dan akun Anda tidak terikat "
+            "satker tertentu — buka UC_PER032 milik satu satker yang jelas."))
+    q_satker = {"kode_satker": {"$in": [kode_efektif, "", None]}} if kode_efektif else {}
+
     # Keadaan sekarang milik satker ini, dipetakan per kode 16 digit. NUP tak
     # dilibatkan: referensi SAKTI berbicara pada tingkat kode, bukan NUP.
     existing = {}
     id_per_kode = {}
     async for d in db.persediaan.find(
-            scope_query_field_satker(_user, {"kode_barang": {"$regex": "^\\d{16}$"}}),
+            {**q_satker, "kode_barang": {"$regex": "^\\d{16}$"}},
             {"_id": 0, "id": 1, "kode_barang": 1, "nama_barang": 1, "satuan": 1}):
         k = d.get("kode_barang")
         if k and k not in existing:   # NUP>1 berbagi kode — cukup satu wakil
@@ -2161,7 +2175,7 @@ async def impor_referensi_sakti_pdf(
         doc = {
             "id": str(uuid.uuid4()),
             "kode_barang": it["kode16"],
-            "kode_satker": satker_user,
+            "kode_satker": kode_efektif,
             "nup": "1",
             "nup_num": 1,
             "nama_barang": it["deskripsi"],
@@ -2193,7 +2207,12 @@ async def impor_referensi_sakti_pdf(
                 {"_id": 0}):
             jadwalkan_sync("persediaan", d)
 
-    await log_audit(request, _user, "persediaan_impor_referensi_sakti", "persediaan",
+    # (Argumen sebelumnya salah posisi — `request`/`_user` dioper ke slot
+    # action/activity_id, sehingga audit tak pernah tercatat dan pelakunya
+    # tak terlihat. Signature: log_audit(action, activity_id, ...).)
+    await log_audit("persediaan_impor_referensi_sakti", "",
+                    username=_user.get("username", "system"),
+                    kode_satker=kode_efektif,
                     detail=f"UAKPB {hasil['uakpb_kode']}: {dibuat} baru, {diubah} diperbarui "
                            f"dari {len(hasil['items'])} baris PDF")
     return {"pratinjau": False, **ringkas, "dibuat": dibuat, "diperbarui": diubah}
