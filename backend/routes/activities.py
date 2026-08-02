@@ -41,7 +41,12 @@ MAX_ACTIVITY_DOCUMENTS = 5
 
 
 def generate_thumbnail(image_data_b64: str, max_size: int = 200) -> str:
-    """Generate a small thumbnail from a base64 image."""
+    """Generate a small thumbnail from a base64 image.
+
+    SINKRON dan berat (dekode + resize LANCZOS). WAJIB dipanggil lewat
+    `asyncio.to_thread` dari kode async — lihat catatan di
+    `process_activity_photos`.
+    """
     image_bytes = decode_data_url(image_data_b64)
     if not image_bytes:
         return image_data_b64  # Return original if decode failed
@@ -80,16 +85,23 @@ async def process_activity_photos(photos: List[str]) -> tuple:
             return None, None
         try:
             compressed, method, orig_size, comp_size = await auto_compress_image(photo)
-            thumb = generate_thumbnail(compressed, max_size=200)
+            thumb = await asyncio.to_thread(generate_thumbnail, compressed, 200)
             if method != "none":
                 logger.info(f"Activity photo compressed: {orig_size//1024}KB -> {comp_size//1024}KB ({method})")
             return compressed, thumb
         except Exception as e:
             logger.error(f"Photo processing failed: {e}")
-            return photo, generate_thumbnail(photo, max_size=200)
+            return photo, await asyncio.to_thread(generate_thumbnail, photo, 200)
 
-    # Run all per-photo work concurrently — Tinify/Pillow are async-friendly.
-    # 10 photos × 2s sequential → ~2s parallel.
+    # Semua pekerjaan per-foto berjalan bersamaan.
+    #
+    # `auto_compress_image` memang async, TETAPI `generate_thumbnail` adalah
+    # Pillow SINKRON: sebelum diperbaiki ia dipanggil langsung di sini, jadi
+    # resize LANCZOS 10 foto (±300-800 ms) MEMBEKUKAN event loop — seluruh
+    # request lain di worker yang sama ikut berhenti, bukan cuma unggahan ini.
+    # `to_thread` memindahkannya ke thread pool sehingga `gather` di bawah
+    # benar-benar paralel, bukan sekadar tampak paralel.
+    # (PR-OPT-C dulu memperbaiki jalur aset; berkas ini terlewat.)
     results = await asyncio.gather(*(_process_one(p) for p in photos))
     compressed_photos = [r[0] for r in results if r[0] is not None]
     thumbnails = [r[1] for r in results if r[1] is not None]
@@ -897,7 +909,8 @@ async def update_inventory_activity(activity_id: str, activity: InventoryActivit
                 if idx < len(old_thumbnails):
                     kept_thumbnails.append(old_thumbnails[idx])
                 else:
-                    kept_thumbnails.append(generate_thumbnail(photo, max_size=200))
+                    kept_thumbnails.append(
+                        await asyncio.to_thread(generate_thumbnail, photo, 200))
             else:
                 photos_to_process.append(photo)
 

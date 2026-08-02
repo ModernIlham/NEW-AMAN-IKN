@@ -461,6 +461,36 @@ async def buat_draft_dari_siman(request: Request, import_id: str,
     maks = min(max(1, payload.maks), 1000)
     dibuat, dilewati_sudah_ada, gagal = 0, 0, []
     now = datetime.now(timezone.utc).isoformat()
+
+    # Pasangan (kode barang, NUP) yang SUDAH tercatat — diambil SEKALI di luar
+    # perulangan. Sebelumnya tiap baris memanggil `find_one` sendiri: 1.000
+    # baris = 1.000 perjalanan bolak-balik ke MongoDB hanya untuk memutuskan
+    # "lewati atau tidak", padahal satu kueri `$in` menjawab semuanya. Pola ini
+    # menyalin cara `imports.py` menutup N+1 yang sama.
+    pasangan = {(b.get("kode_barang", ""), b.get("nup", "")) for b in baris}
+    pasangan.discard(("", ""))
+    kode_semua = sorted({k for k, _ in pasangan if k})
+    sudah_tercatat = set()
+    if kode_semua:
+        # Saring dulu dengan `$in` pada kode barang (ber-indeks), baru cocokkan
+        # pasangan lengkapnya di Python — jauh lebih murah daripada `$or`
+        # sepanjang ribuan klausa. Yang ditukar: himpunan ini memuat SEMUA aset
+        # ber-kode sama, bukan hanya yang diminta. Proyeksinya dua field, jadi
+        # 50.000 aset ≈ 2,5 MB — masih jauh lebih murah daripada 1.000
+        # perjalanan bolak-balik, dan jumlah kode barang unik (bukan jumlah
+        # baris) yang menentukan panjang `$in`.
+        #
+        # NUP dinormalkan ke teks di kedua sisi. Model menyimpannya sebagai
+        # `Optional[str]`, tetapi data lama hasil impor bisa berupa angka —
+        # `find_one` versi sebelumnya membandingkannya mentah, sehingga NUP 5
+        # (angka) di basis data tak cocok dengan "5" dari berkas dan barisnya
+        # dibuat DUA KALI.
+        async for a in db.assets.find(
+            {"asset_code": {"$in": kode_semua}, "dihapus": {"$ne": True}},
+            {"_id": 0, "asset_code": 1, "NUP": 1},
+        ):
+            sudah_tercatat.add((str(a.get("asset_code") or ""), str(a.get("NUP") or "")))
+
     for b in baris:
         if dibuat >= maks:
             break
@@ -468,11 +498,13 @@ async def buat_draft_dari_siman(request: Request, import_id: str,
         if not kode or not nup:
             continue
         # Lewati bila kini sudah tercatat (impor ulang / dibuat manual).
-        sudah = await db.assets.find_one(
-            {"asset_code": kode, "NUP": nup, "dihapus": {"$ne": True}}, {"_id": 1})
-        if sudah:
+        if (str(kode), str(nup)) in sudah_tercatat:
             dilewati_sudah_ada += 1
             continue
+        # Baris kembar DI DALAM berkas yang sama juga harus dilewati: tanpa ini
+        # daftar di atas tak ikut bertambah saat draft dibuat, sehingga dua
+        # baris ber-NUP sama melahirkan dua aset.
+        sudah_tercatat.add((str(kode), str(nup)))
         draft = AssetCreate(
             asset_code=kode,
             NUP=nup,
