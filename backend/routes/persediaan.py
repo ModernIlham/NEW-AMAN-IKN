@@ -36,10 +36,12 @@ from persediaan_utils import (
     tanggal_wib, today_wib,
     JENIS_KELUAR, JENIS_MASUK, KODE_PENUH_LEN, KODE_PREFIX_LEN, SATUAN_BAKU,
     baris_csv_transaksi, buat_layer, klasifikasi_kedaluwarsa, konsumsi_fifo,
-    mutasi_periode, next_kode_penuh, next_nup, nilai_persediaan_dari_batches,
-    parse_import_persediaan_rows, penyesuaian_opname, status_stok,
-    validate_kode_persediaan, validate_pindah_gudang,
-    validate_transaksi_keluar, validate_transaksi_masuk,
+    koreksi_nilai_layers, mutasi_periode, next_kode_penuh, next_nup,
+    nilai_persediaan_dari_batches, parse_import_persediaan_rows,
+    penyesuaian_opname, rekap_nonaktif, status_stok,
+    validate_hapus_definitif, validate_kode_persediaan,
+    validate_pindah_gudang, validate_transaksi_keluar,
+    validate_transaksi_masuk,
 )
 from pengadaan_utils import JENIS_PEROLEHAN, snapshot_perolehan
 
@@ -390,6 +392,189 @@ async def daftar_transaksi_persediaan(
                       "label_kelompok": ref.get("label_kelompok", "")})
     return {"items": items, "total": total, "page": page,
             "page_size": page_size}
+
+
+@persediaan_router.get("/persediaan/nonaktif")
+async def daftar_persediaan_nonaktif(_user: dict = Depends(require_user)):
+    """Daftar Persediaan USANG / RUSAK / TIDAK DIKUASAI (bahan CaLK & SK).
+
+    DIDERIVASI dari jurnal — barang masuk daftar lewat transaksi K04 Usang /
+    K05 Rusak / K09 Catat Tak Dikuasai, keluar daftar lewat penghapusan
+    definitif ber-SK (H01/H02/H03) atau pembatalan M94. Tidak ada koleksi
+    terpisah yang bisa melenceng dari transaksinya.
+    """
+    jenis_relevan = ["usang", "rusak", "catat_tak_dikuasai",
+                     "hapus_usang", "hapus_rusak", "hapus_tak_dikuasai",
+                     "batal_catat_tak_dikuasai"]
+    rows = [t async for t in db.transaksi_persediaan.find(
+        await _scope_jurnal(_user, {"jenis": {"$in": jenis_relevan}}),
+        {"_id": 0}).sort("timestamp", 1)]
+    rekap = rekap_nonaktif(rows)
+    hasil = {k: sorted(v.values(), key=lambda e: str(e.get("kode_barang") or ""))
+             for k, v in rekap.items()}
+    return {**hasil,
+            "ringkasan": {k: {"jumlah_barang": len(v),
+                              "total_nilai": sum(e["nilai"] for e in v)}
+                          for k, v in hasil.items()},
+            "catatan": ("Barang usang/rusak keluar dari saldo persediaan "
+                        "(neraca) saat dicatat K04/K05 dan tetap terdaftar "
+                        "di sini untuk pengungkapan CaLK sampai dihapus "
+                        "definitif ber-SK (H01/H02). Persediaan tidak "
+                        "dikuasai (K09) menunggu pembatalan (M94) atau "
+                        "penghapusan (H03).")}
+
+
+class HapusDefinitifIn(BaseModel):
+    jenis: str                              # hapus_usang|hapus_rusak|hapus_tak_dikuasai
+    jumlah: int = Field(gt=0)
+    sk_nomor: str = Field(min_length=1, max_length=200)
+    sk_tanggal: str = ""                    # YYYY-MM-DD (opsional)
+    keterangan: str = ""
+
+
+@persediaan_router.post("/persediaan/{item_id}/hapus-definitif")
+async def hapus_definitif_persediaan(item_id: str, data: HapusDefinitifIn,
+                                     user: dict = Depends(require_writer)):
+    """Penghapusan DEFINITIF ber-SK dari daftar usang/rusak/tak dikuasai
+    (H01/H02/H03) — TIDAK menggeser stok (barangnya sudah keluar saldo saat
+    K04/K05/K09); hanya menutup baris daftar + jejak SK di jurnal.
+    """
+    item = await db.persediaan.find_one({"id": item_id}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
+    from shared_utils import pastikan_akses_dok_satker
+    await pastikan_akses_dok_satker(user, item)
+    kategori = {"hapus_usang": "usang", "hapus_rusak": "rusak",
+                "hapus_tak_dikuasai": "tidak_dikuasai"}.get(data.jenis)
+    rows = [t async for t in db.transaksi_persediaan.find(
+        {"persediaan_id": item_id}, {"_id": 0}).sort("timestamp", 1)]
+    sisa = rekap_nonaktif(rows).get(kategori or "", {}).get(item_id) or {
+        "jumlah": 0, "nilai": 0.0}
+    ok, err = validate_hapus_definitif(data.jenis, data.jumlah,
+                                       sisa["jumlah"], data.sk_nomor)
+    if not ok:
+        raise HTTPException(status_code=400, detail=err)
+    # Nilai penghapusan proporsional terhadap sisa tercatat di daftar
+    nilai = (sisa["nilai"] * int(data.jumlah) / sisa["jumlah"]
+             if sisa["jumlah"] else 0.0)
+    from persediaan_transaksi_ref import (
+        JENIS_KE_KODE, KODE_TRANSAKSI_PERSEDIAAN,
+    )
+    kode = JENIS_KE_KODE[data.jenis]
+    now = datetime.now(timezone.utc)
+    jurnal = {
+        "id": str(uuid.uuid4()),
+        "arah": "hapus",
+        "jenis": data.jenis,
+        "jenis_label": KODE_TRANSAKSI_PERSEDIAAN[kode][0],
+        "kode_sakti": kode,
+        "persediaan_id": item_id,
+        "kode_barang": item.get("kode_barang"),
+        "nup": item.get("nup"),
+        "nama_barang": item.get("nama_barang"),
+        "jumlah": int(data.jumlah),
+        "harga_satuan": (nilai / int(data.jumlah)) if data.jumlah else 0.0,
+        "total": float(nilai),
+        "stok_sebelum": int(item.get("stok", 0) or 0),
+        "stok_sesudah": int(item.get("stok", 0) or 0),   # stok tak berubah
+        "no_bukti": data.sk_nomor.strip(),
+        "jenis_dokumen": "SK Penghapusan",
+        "tgl_dokumen": str(data.sk_tanggal or "").strip()[:10],
+        "keterangan": data.keterangan.strip(),
+        "petugas": user.get("username") or user.get("user_id") or "-",
+        "timestamp": now.isoformat(),
+    }
+    await db.transaksi_persediaan.insert_one({**jurnal})
+    await log_audit("persediaan_hapus_definitif", "",
+                    username=user.get("username", "system"),
+                    detail=(f"{jurnal['jenis_label']} {item.get('kode_barang')} "
+                            f"×{int(data.jumlah)} (Rp{int(round(nilai)):,}) — "
+                            f"SK {data.sk_nomor.strip()}"))
+    return {"message": f"{jurnal['jenis_label']} tercatat — SK {data.sk_nomor.strip()}",
+            "transaksi": jurnal}
+
+
+class KoreksiNilaiPersediaanIn(BaseModel):
+    jenis: str                              # koreksi_nilai_(tambah|kurang)[_opsik]
+    nilai: float = Field(gt=0)              # magnitudo selisih (Rp)
+    alasan: str = Field(min_length=3, max_length=500)
+    no_bukti: str = ""
+
+
+@persediaan_router.post("/persediaan/{item_id}/koreksi-nilai")
+async def koreksi_nilai_persediaan(item_id: str, data: KoreksiNilaiPersediaanIn,
+                                   user: dict = Depends(require_writer)):
+    """KOREKSI NILAI persediaan (M97/M98 tambah, K97/K98 kurang) — kuantitas
+    TETAP, nilai layer disebar proporsional (`koreksi_nilai_layers`). Alasan
+    wajib (bahan pengungkapan). Pola OCC retry 3× seperti opname.
+    """
+    from persediaan_transaksi_ref import (
+        JENIS_KE_KODE, KODE_TRANSAKSI_PERSEDIAAN,
+    )
+    kode = JENIS_KE_KODE.get(data.jenis, "")
+    info = KODE_TRANSAKSI_PERSEDIAAN.get(kode)
+    if not info or info[1] != "nilai":
+        raise HTTPException(status_code=400, detail=(
+            "Jenis koreksi nilai tidak dikenal (pilihan: koreksi_nilai_tambah, "
+            "koreksi_nilai_tambah_opsik, koreksi_nilai_kurang, "
+            "koreksi_nilai_kurang_opsik)"))
+    tambah = kode.startswith("M")
+    now = datetime.now(timezone.utc)
+    for _attempt in range(3):
+        item = await db.persediaan.find_one({"id": item_id}, {"_id": 0})
+        if not item:
+            raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
+        from shared_utils import pastikan_akses_dok_satker
+        await pastikan_akses_dok_satker(user, item)
+        batches_lama = item.get("batches") or []
+        selisih = float(data.nilai) if tambah else -float(data.nilai)
+        try:
+            batches_baru, total_lama, total_baru = koreksi_nilai_layers(
+                batches_lama, selisih)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        stok = int(item.get("stok", 0) or 0)
+        updated = await db.persediaan.find_one_and_update(
+            {"id": item_id, "version": item.get("version")},
+            {"$set": {"batches": batches_baru, "updated_at": now.isoformat()},
+             "$inc": {"version": 1}},
+            projection={"_id": 0}, return_document=True,
+        )
+        if updated is None:
+            continue  # balapan — muat ulang lalu coba lagi
+        jurnal = {
+            "id": str(uuid.uuid4()),
+            "arah": "nilai",                 # kuantitas tetap — hanya nilai
+            "jenis": data.jenis,
+            "jenis_label": info[0],
+            "kode_sakti": kode,
+            "persediaan_id": item_id,
+            "kode_barang": updated.get("kode_barang"),
+            "nup": updated.get("nup"),
+            "nama_barang": updated.get("nama_barang"),
+            "jumlah": 0,
+            "harga_satuan": 0.0,
+            "total": selisih,                # ber-tanda: negatif = kurang
+            "stok_sebelum": stok,
+            "stok_sesudah": stok,
+            "no_bukti": data.no_bukti.strip(),
+            "keterangan": data.alasan.strip(),
+            "petugas": user.get("username") or user.get("user_id") or "-",
+            "timestamp": now.isoformat(),
+        }
+        try:
+            await db.transaksi_persediaan.insert_one({**jurnal})
+        except Exception:
+            await db.persediaan.update_one(
+                {"id": item_id},
+                {"$set": {"batches": batches_lama}, "$inc": {"version": 1}})
+            raise HTTPException(status_code=500,
+                                detail="Gagal mencatat jurnal — koreksi dibatalkan")
+        return {"message": f"{info[0]} tercatat", "nilai_lama": total_lama,
+                "nilai_baru": total_baru, "transaksi": jurnal,
+                "version": updated.get("version")}
+    raise HTTPException(status_code=409,
+                        detail="Barang sedang diubah pengguna lain — coba lagi")
 
 
 @persediaan_router.post("/persediaan/import")
@@ -860,8 +1045,20 @@ async def list_jenis_transaksi(_user: dict = Depends(require_user)):
     info_reklas = ("Hanya mencatat sisi persediaan — sesuaikan register aset "
                    "secara terpisah (Pembukuan → Reklasifikasi, jurnal 304/107) "
                    "agar barang tidak tercatat ganda di Neraca.")
-    info_per_key = {"reklasifikasi_dari_aset": info_reklas,
-                    "reklasifikasi_ke_aset": info_reklas}
+    info_per_key = {
+        "reklasifikasi_dari_aset": info_reklas,
+        "reklasifikasi_ke_aset": info_reklas,
+        "usang": ("Barang keluar dari saldo dan masuk Daftar Persediaan "
+                  "Usang (bahan CaLK) sampai dihapus definitif ber-SK (H01)."),
+        "rusak": ("Barang keluar dari saldo dan masuk Daftar Persediaan "
+                  "Rusak (bahan CaLK) sampai dihapus definitif ber-SK (H02)."),
+        "catat_tak_dikuasai": ("Barang keluar dari saldo dan masuk Daftar "
+                               "Persediaan Tidak Dikuasai sampai dibatalkan "
+                               "(M94) atau dihapus ber-SK (H03)."),
+        "batal_catat_tak_dikuasai": ("Hanya untuk membatalkan pencatatan "
+                                     "K09 — barang kembali ke saldo dengan "
+                                     "harga satuan yang diisikan."),
+    }
 
     def _baris(peta):
         out = []

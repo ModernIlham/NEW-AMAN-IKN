@@ -67,6 +67,43 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#701] Persediaan usang/rusak/tak dikuasai punya daftar + koreksi nilai & hapus ber-SK — 2026-08-02
+
+- **Daftar Usang / Rusak / Tidak Dikuasai** (menu Dokumen). Dulu transaksi
+  K04 Usang / K05 Rusak mengeluarkan barang dari saldo lalu **lenyap** —
+  padahal PSAP menuntut barang usang/rusak tetap DIUNGKAP di CaLK sampai
+  dihapus definitif ber-SK, dan konsep "persediaan tidak dikuasai" belum
+  ada sama sekali. Kini ketiganya terdaftar; daftarnya **diderivasi dari
+  jurnal** (`rekap_nonaktif`: pencatatan K04/K05/K09 dikurangi penghapusan
+  H01/H02/H03 dan pembatalan M94) — tidak ada koleksi terpisah yang bisa
+  melenceng dari transaksinya, backup/restore otomatis ikut.
+- **Penghapusan definitif ber-SK (H01/H02/H03)** — tombol "Hapus ber-SK"
+  pada tiap baris daftar: jumlah (maks sisa tercatat), nomor SK wajib,
+  tanggal SK. Tidak menggeser stok (barangnya sudah keluar saldo saat
+  K04/K05/K09) — hanya menutup baris daftar + jejak SK di jurnal, nilai
+  proporsional terhadap sisa. Ber-`log_audit`.
+- **Pencatatan tak dikuasai bisa dijalankan**: K09 (Catat Tak Dikuasai)
+  masuk dropdown transaksi keluar, M94 (Batal Catat) di dropdown masuk —
+  keduanya dengan teks penjelas alurnya; jalur FIFO biasa yang sudah
+  ber-OCC + idempoten dipakai apa adanya.
+- **Koreksi Nilai (M97/M98/K97/K98)** — aksi baru per barang: kuantitas
+  TETAP, nilai disebar **proporsional** ke seluruh layer FIFO
+  (`koreksi_nilai_layers` — komposisi FIFO tak berubah; layer serba-Rp0
+  dibagi rata per unit; koreksi kurang tak boleh melebihi nilai tercatat).
+  Alasan wajib. Jurnalnya ber-arah `nilai` dengan total ber-tanda; pola
+  OCC retry 3× + kompensasi seperti opname.
+- **Laporan Mutasi kini melihat koreksi nilai**: `mutasi_periode`
+  memperhitungkan arah `nilai` (menambah/mengurangi NILAI mutasi tanpa
+  kuantitas) dan mengabaikan arah `hapus` (saldo tak bergeser) — barang
+  yang hanya terkena koreksi nilai pada periode tak lagi hilang dari
+  laporan.
+
+Verifikasi: 6 uji unit baru (proporsi & pagar koreksi nilai, saldo daftar
+nonaktif + baris tuntas dibuang, validasi hapus ber-SK, mutasi periode
+nilai/hapus), 1425 uji backend lulus, eslint bersih, `yarn build` sukses.
+
+---
+
 ## [#700] Daftar Transaksi persediaan: 45 kode SAKTI, lima kode salah makna dikoreksi — 2026-08-02
 
 - **Registry lengkap 45 kode transaksi SAKTI** (`persediaan_transaksi_ref.py`)
