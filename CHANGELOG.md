@@ -67,6 +67,49 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#693] Toolbar & bar peta satu baris — label lepas satu per satu — 2026-08-02
+
+Dua bilah kontrol yang berulang kali pecah baris / memunculkan geser samping
+kini dijamin muat dalam SATU baris di lebar berapa pun, dengan label yang
+menghilang bertahap alih-alih baris yang bertambah.
+
+- **Akar masalahnya sama di keduanya: breakpoint membaca VIEWPORT, bukan
+  kontainer.** `xl:inline` menyala di layar 1366 px, jadi seluruh label
+  dirender lengkap — padahal toolbar bisa berada di dalam panel sempit
+  (halaman Kegiatan hanya menyisakan ~880 px), dan bar peta harus berbagi
+  ruang dengan blok judul. Dua penambal sebelumnya (`overflow-x-auto` lalu
+  `flex-wrap`) hanya memindahkan gejalanya: yang satu jadi geser samping, yang
+  lain jadi baris kedua yang mendorong peta ke bawah.
+- **Lebar kini diukur dari kontainer** (`hooks/useLebarElemen`, ResizeObserver)
+  dan `lib/labelRingkas` melepas label satu per satu mengikuti urutan
+  prioritas sampai barisnya muat. Kontrolnya tidak hilang — hanya berubah jadi
+  ikon, `title`/`aria-label` tetap menyebut namanya.
+- **Urutan pelepasan disusun, bukan asal panjang.** Di toolbar aset,
+  "Cetak Kartu (n)" dan "Hapus Semua" lepas duluan (ikon kartu & tong sampah
+  sudah gamblang), sedangkan **Export & Import ditahan paling akhir** — ikon
+  panah turun dan panah naik gampang tertukar, kata-katanyalah yang
+  membedakan. Di bar peta, "Terkunci"/"Geser: Aktif" ditahan paling akhir
+  karena label itu memberi tahu apakah marker bisa tergeser tak sengaja —
+  satu-satunya keterangan di bar itu yang bisa merusak data koordinat.
+- **Taksiran lebar dikalibrasi terhadap pengukuran nyata di peramban**
+  (5,6–7,6 px/huruf pada `text-xs`; konstanta diambil dari ujung atas rentang).
+  Menaksir terlalu lebar hanya membuat label lepas sedikit lebih awal;
+  menaksir terlalu sempit menyisakan baris meluber — jadi kesalahan sengaja
+  dicondongkan ke sisi yang aman.
+- **Katup terakhir bukan lagi scroll**: bila setelah semua label dilepas pun
+  ruangnya masih kurang, dua `Select` (Kategori & Urutan di toolbar, Barang
+  Serupa di bar peta) yang menyusut — isinya sudah `truncate`. Sisanya tetap
+  `flex-shrink-0` supaya tak ada kontrol lain ikut tergencet.
+- Blok judul "Peta Aset" mendapat jatah lebar minimum. Sebelumnya ia korban
+  pertama: tergencet sampai judulnya pecah dua baris dan menimpa keterangan
+  jumlah titik (tangkapan layar iPad Pro 1366 dari pemilik).
+
+Verifikasi: 11 uji unit `labelRingkas`; pengukuran di Chromium atas 19 kontrol
+nyata pada 9 lebar kontainer (1366→520 px) — tidak ada satu pun yang meluber,
+dan sisa ruang di tiap ambang 34–467 px.
+
+---
+
 ## [#692] Panel reset ringkas, syarat sandi seragam, kartu aset bertumpuk — 2026-08-02
 
 Tiga perbaikan lanjutan atas PR #684 (konfirmasi sandi) dan penampil foto aset.
