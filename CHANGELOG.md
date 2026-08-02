@@ -67,6 +67,27 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#683] Audit total gel.4 — cascade & FK yatim saat hapus — 2026-08-02
+
+Gelombang keempat: penghapusan yang meninggalkan referensi menggantung.
+
+- **Hapus register perolehan tanpa cek anak** (`pengadaan.py`). `hapus_perolehan`
+  melepas back-link aset saja, lalu menghapus — padahal register yang barangnya
+  sudah masuk stok/aset, atau sudah ber-BAST PPK-KPB, atau ditunjuk sebuah LPB,
+  akan meninggalkan stok, jurnal Buku Barang, dokumen resmi, dan nomor surat
+  sebagai anak yatim. Kini penghapusan **ditolak 409** untuk register yang sudah
+  "hidup" (pola sama dengan penjaga hapus master persediaan); hanya register
+  salah-input yang belum melahirkan apa pun yang boleh dihapus.
+- **Hapus aset tak melepas back-link Pengadaan** (`assets.py`). `delete_asset`
+  membersihkan blob GridFS & indeks, tapi `pengadaan.barang[].asset_id` yang
+  menaut aset itu dibiarkan — register lalu mengklaim aset hantu. Kini tautan +
+  snapshotnya dikosongkan di semua baris yang menyebut asset_id itu
+  (`array_filters`, best-effort).
+
+Verifikasi: `py_compile` bersih, 1397 uji unit backend lulus.
+
+---
+
 ## [#682] Audit total gel.3 — stok persediaan: pecahan & idempotensi — 2026-08-02
 
 Gelombang ketiga: dua cacat pada jalur "Daftarkan ke Persediaan" (`pengadaan.py`)

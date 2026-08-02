@@ -1437,17 +1437,49 @@ async def hapus_lampiran_perolehan(perolehan_id: str, file_id: str,
 @pengadaan_router.delete("/pengadaan/{perolehan_id}")
 async def hapus_perolehan(perolehan_id: str,
                           _admin: dict = Depends(require_admin)):
-    """Hapus register perolehan salah input (admin) + berkas lampirannya.
+    """Hapus register perolehan SALAH INPUT (admin) + berkas lampirannya.
 
-    Back-link `perolehan_id`/snapshot di aset tertaut DILEPAS dulu (temuan
-    review #11 — dulu menggantung menunjuk perolehan yang sudah tidak ada).
+    HANYA register yang BELUM melahirkan apa pun. Begitu barangnya sudah
+    dicatat (masuk stok persediaan / jadi draft aset), atau BAST PPK-KPB sudah
+    terbit, atau ada LPB yang menunjuknya, menghapus registernya meninggalkan
+    stok, jurnal Buku Barang, dokumen resmi, dan nomor surat sebagai anak
+    yatim yang menunjuk induk yang tak ada lagi — kerusakan data yang jauh
+    lebih mahal daripada satu register salah. Operator harus membalik
+    pencatatannya lebih dulu (pola sama dengan penjaga hapus master
+    persediaan). Back-link `perolehan_id`/snapshot di aset tertaut DILEPAS
+    setelah lolos penjaga (temuan review #11).
     """
     p = await db.pengadaan.find_one(
         {"id": perolehan_id},
-        {"_id": 0, "kode_satker": 1, "lampiran_berkas": 1, "barang": 1})
+        {"_id": 0, "kode_satker": 1, "lampiran_berkas": 1, "barang": 1,
+         "bast_ppk": 1, "nomor_bast": 1})
     if not p:
         raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
     await pastikan_akses_dok_satker(_admin, p)  # 403 bila register milik satker lain
+
+    # Penjaga anti-yatim: register yang sudah "hidup" tak boleh dihapus.
+    tercatat = [b for b in (p.get("barang") or [])
+                if str(b.get("psd_item_id") or "").strip()
+                or str(b.get("asset_id") or "").strip()]
+    if tercatat:
+        raise HTTPException(status_code=409, detail=(
+            f"{len(tercatat)} barang sudah tercatat ke stok/aset dari perolehan "
+            "ini — batalkan/keluarkan pencatatannya dulu sebelum menghapus "
+            "register (jika tidak, stok & jurnal menjadi yatim)."))
+    if p.get("bast_ppk"):
+        raise HTTPException(status_code=409, detail=(
+            "BAST PPK→KPB sudah diterbitkan untuk perolehan ini — dokumen resmi "
+            "& nomor suratnya akan menggantung. Tidak dapat dihapus."))
+    lpb_terkait = await db.lpb.find_one(
+        {"$or": [{"perolehan_id": perolehan_id},
+                 {"perolehan_ids": perolehan_id}]},
+        {"_id": 0, "id": 1})
+    if lpb_terkait:
+        raise HTTPException(status_code=409, detail=(
+            "Ada Laporan Penerimaan Barang (LPB) yang menunjuk perolehan ini — "
+            "menghapusnya membuat LPB menunjuk data yang tak ada. Tidak dapat "
+            "dihapus."))
+
     res = await db.pengadaan.delete_one({"id": perolehan_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
