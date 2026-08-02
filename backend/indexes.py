@@ -305,6 +305,18 @@ async def create_indexes() -> None:
         # Filter status lazim per-kegiatan (RHI/DBHI, cetak stiker).
         await db.assets.create_index([("activity_id", 1), ("inventory_status", 1)])
         await db.assets.create_index([("activity_id", 1), ("stiker_status", 1)])
+        # ── Filter berat daftar aset per-kegiatan (analisis beban VPS 2026-08) ──
+        # mongotop VPS menunjuk query assets dengan kombinasi activity_id +
+        # location/eselon1/eselon2/condition/status sebagai pemakan CPU utama.
+        # Indeks tunggal location/status/condition sudah ada tetapi planner
+        # memilih indeks activity_id lalu MENYARING sisanya baris-per-baris —
+        # kombinasi di bawah membuat filter selesai di indeks. eselon2 bahkan
+        # belum berindeks sama sekali.
+        await db.assets.create_index([("activity_id", 1), ("condition", 1)])
+        await db.assets.create_index([("activity_id", 1), ("location", 1)])
+        await db.assets.create_index([("activity_id", 1), ("eselon1", 1)])
+        await db.assets.create_index([("activity_id", 1), ("eselon2", 1)])
+        await db.assets.create_index([("activity_id", 1), ("status", 1)])
         # GridFS: pembersih artifact-ekspor yatim (jobs.py) memindai fs.files pada
         # metadata.job_id tiap jam — tanpa indeks = COLLSCAN penuh, makin lambat
         # seiring bertambahnya foto. sparse: hanya dokumen ber-metadata.job_id.
