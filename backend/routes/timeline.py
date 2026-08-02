@@ -125,7 +125,7 @@ async def get_timeline_aset(asset_id: str, user: dict = Depends(require_user)):
 
     # ── 2. Buku Barang (jurnal pembukuan) ──
     async for m in db.mutasi_bmn.find(
-            {"asset_id": {"$in": ids}}, {"_id": 0}).sort(
+            _q_satker_lunak(user, {"asset_id": {"$in": ids}}), {"_id": 0}).sort(
             "tanggal_buku", -1).limit(100):
         nilai = _fmt_rp(m.get("nilai"))
         detail = "; ".join(x for x in (
@@ -177,7 +177,7 @@ async def get_timeline_aset(asset_id: str, user: dict = Depends(require_user)):
 
     # ── 5. Pemeliharaan ──
     async for d in db.pemeliharaan.find(
-            {"asset_id": {"$in": ids}}, {"_id": 0}).sort(
+            _q_satker_lunak(user, {"asset_id": {"$in": ids}}), {"_id": 0}).sort(
             "tanggal", -1).limit(100):
         kondisi = ""
         if d.get("kondisi_sebelum") or d.get("kondisi_setelah"):
@@ -201,7 +201,7 @@ async def get_timeline_aset(asset_id: str, user: dict = Depends(require_user)):
             f"Kasus pengamanan ({d.get('kategori') or 'umum'})",
             ref_id=d.get("id", "")))
     async for d in db.pengamanan_dokumen.find(
-            {"asset_id": {"$in": ids}}, {"_id": 0}).limit(50):
+            _q_satker_lunak(user, {"asset_id": {"$in": ids}}), {"_id": 0}).limit(50):
         events.append(buat_event(
             "pengamanan", "dokumen",
             f"Dokumen pengamanan: {d.get('jenis') or 'dokumen'}",
@@ -210,7 +210,7 @@ async def get_timeline_aset(asset_id: str, user: dict = Depends(require_user)):
 
     # ── 7. Penilaian (koreksi nilai / revaluasi) ──
     async for d in db.penilaian_koreksi.find(
-            {"asset_id": {"$in": ids}}, {"_id": 0}).sort(
+            _q_satker_lunak(user, {"asset_id": {"$in": ids}}), {"_id": 0}).sort(
             "tanggal_dokumen", -1).limit(50):
         detail = (f"Nilai {_fmt_rp(d.get('nilai_lama')) or '0'} → "
                   f"{_fmt_rp(d.get('nilai_baru')) or '0'}")
@@ -268,7 +268,7 @@ async def get_timeline_aset(asset_id: str, user: dict = Depends(require_user)):
 
     # ── 10. BAST serah terima ──
     async for d in db.bast_serah_terima.find(
-            {"asset_ids": {"$in": ids}}, {"_id": 0,
+            _q_satker_lunak(user, {"asset_ids": {"$in": ids}}), {"_id": 0,
             "id": 1, "jenis": 1, "nomor": 1, "tanggal": 1,
             "pihak_kedua": 1}).sort("tanggal", -1).limit(50):
         penerima = ((d.get("pihak_kedua") or {}).get("nama") or "").strip()
@@ -309,7 +309,8 @@ async def get_timeline_aset(asset_id: str, user: dict = Depends(require_user)):
 
     # ── 12. Audit log (pencatatan teknis) ──
     async for a in db.audit_logs.find(
-            {"asset_id": {"$in": ids}}, {"_id": 0, "action": 1,
+            _q_satker_lunak(user, {"asset_id": {"$in": ids}}),
+            {"_id": 0, "action": 1,
             "changes": 1, "detail": 1, "timestamp": 1, "username": 1}
             ).sort("timestamp", -1).limit(60):
         aksi = str(a.get("action") or "").strip()
