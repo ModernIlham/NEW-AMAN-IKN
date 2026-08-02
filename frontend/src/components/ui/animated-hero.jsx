@@ -41,13 +41,27 @@ export function KataBerganti({ kata, jeda = 2200, className }) {
   // sebenarnya, berapa pun ukuran fontnya.
   const terpanjang = daftar.reduce((a, b) => (b.length > a.length ? b : a), "");
 
+  // Setinggi baris pun MASIH kurang. Utilitas ukuran font Tailwind membawa
+  // line-height-nya sendiri (`text-5xl` = 1) dan itu bisa mengalahkan
+  // `leading-tight` di elemen yang sama — kotak barisnya lalu PERSIS setinggi
+  // font, sedangkan rentang ascender-descender Plus Jakarta Sans lebih tinggi
+  // (terukur 6px meluber di bawah pada judul 48px), sehingga ekor "g"
+  // ("Terhubung") tertahan garis potong. Kotak potong diberi kelonggaran di atas
+  // dan bawah; kelonggarannya dibatalkan lagi oleh margin negatif senilai
+  // sama sehingga jarak antarbaris judul tak berubah sedikit pun, dan
+  // kata-katanya digeser turun sebesar padding agar tetap sebaris persis
+  // dengan penjaga tinggi. Kelonggaran ini jauh lebih kecil daripada jarak
+  // lempar animasi (±110px), jadi kata yang sedang keluar/masuk tetap
+  // tersembunyi.
+  const LEGA = "pt-[0.18em] pb-[0.18em] -mt-[0.18em] -mb-[0.18em]";
+
   return (
-    <span className={cn("relative block w-full overflow-hidden", className)}>
+    <span className={cn("relative block w-full overflow-hidden", LEGA, className)}>
       <span className="invisible font-semibold" aria-hidden="true">{terpanjang || " "}</span>
       {daftar.map((k, i) => (
         <motion.span
           key={`${k}-${i}`}
-          className="absolute inset-0 flex items-center font-semibold"
+          className="absolute inset-x-0 top-[0.18em] font-semibold"
           initial={{ opacity: 0, y: -60 }}
           transition={{ type: "spring", stiffness: 50 }}
           animate={
