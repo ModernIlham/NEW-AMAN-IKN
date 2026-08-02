@@ -460,22 +460,26 @@ def create_ktp_card_elements(asset, history=None):
     # --- Reusable field tile (icon + label + value) ---
     def field_tile(icon, icon_color, label, value, width, boxed=False,
                    min_h=9 * mm, raw=False):
+        # Nilai di-VALIGN MIDDLE pada sisa tinggi tile — dulu TOP, sehingga
+        # nilai menempel tepat di bawah label dan dasar tile menganga kosong
+        # ("mepet ke atas" pada tile ber-alas, keluhan pemilik).
         val = value if raw else esc(value)
         t = Table([
             [card_icon(icon, 3.4 * mm, icon_color), Paragraph(label, lbl_style)],
             [Paragraph(val, val_style)],
         ], colWidths=[4.6 * mm, max(width - 4.6 * mm, 6 * mm)],
-            rowHeights=[3.6 * mm, max(min_h - 3.6 * mm, 4 * mm)])
+            rowHeights=[3.9 * mm, max(min_h - 3.9 * mm, 4 * mm)])
         style = [
             ('SPAN', (0, 1), (1, 1)),
             ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
-            ('VALIGN', (0, 1), (1, 1), 'TOP'),
+            ('VALIGN', (0, 1), (1, 1), 'MIDDLE'),
             ('LEFTPADDING', (0, 0), (-1, -1), 1.6 * mm),
             ('RIGHTPADDING', (0, 0), (-1, -1), 1 * mm),
             ('TOPPADDING', (0, 0), (-1, -1), 0.3 * mm),
+            ('TOPPADDING', (0, 0), (0, 0), 0.6 * mm),
             ('BOTTOMPADDING', (0, 0), (0, 0), 0.2 * mm),
-            ('BOTTOMPADDING', (0, 1), (1, 1), 0.6 * mm),
-            ('TOPPADDING', (0, 1), (1, 1), 0.4 * mm),
+            ('BOTTOMPADDING', (0, 1), (1, 1), 0.8 * mm),
+            ('TOPPADDING', (0, 1), (1, 1), 0),
         ]
         if boxed:
             style += [
@@ -543,7 +547,10 @@ def create_ktp_card_elements(asset, history=None):
     # oleh _draw_panel_a_header; di sini cukup sisakan tinggi band-nya.
     elements['A'].append(Spacer(1, PANEL_A_HDR_H - FRAME_PAD + 1.5 * mm))
 
-    photo_w, photo_h = 33 * mm, 46 * mm
+    # Foto ditinggikan (46 → 52mm) supaya badan panel mengisi ruangnya —
+    # dulu konten berhenti ±18mm di atas dasar panel dan terlihat "mepet
+    # ke atas" dengan alas kosong lebar di bawahnya.
+    photo_w, photo_h = 33 * mm, 52 * mm
     photo_el = _decode_photo_flowable(asset, photo_w, photo_h)
 
     info_w = UW - photo_w - 4 * mm
@@ -584,11 +591,11 @@ def create_ktp_card_elements(asset, history=None):
     # tetap tampil utuh di Panel B). Cegah wrap yang menabrak baris badges.
     loc_short = s(asset.get('location'), 26)
     spec_grid = Table([
-        [field_tile('tag', BLUE, "KATEGORI", cat, half, min_h=8.5 * mm),
-         field_tile('barcode', BLUE, "S/N", sn, half, min_h=8.5 * mm)],
-        [field_tile('tag', BLUE, "MEREK/MODEL", f"{brand} / {mdl}", half, min_h=8.5 * mm),
-         field_tile('pin', ORANGE, "LOKASI", loc_short, half, min_h=8.5 * mm)],
-    ], colWidths=[half + 1 * mm, half + 1 * mm], rowHeights=[8.5 * mm, 8.5 * mm])
+        [field_tile('tag', BLUE, "KATEGORI", cat, half, min_h=9.5 * mm),
+         field_tile('barcode', BLUE, "S/N", sn, half, min_h=9.5 * mm)],
+        [field_tile('tag', BLUE, "MEREK/MODEL", f"{brand} / {mdl}", half, min_h=9.5 * mm),
+         field_tile('pin', ORANGE, "LOKASI", loc_short, half, min_h=9.5 * mm)],
+    ], colWidths=[half + 1 * mm, half + 1 * mm], rowHeights=[10 * mm, 10 * mm])
     spec_grid.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('LEFTPADDING', (0, 0), (-1, -1), 0),
@@ -636,7 +643,7 @@ def create_ktp_card_elements(asset, history=None):
         [top_area],
         [spec_grid],
         [badges],
-    ], colWidths=[info_w], rowHeights=[18 * mm, 17 * mm, 11 * mm])
+    ], colWidths=[info_w], rowHeights=[19 * mm, 20 * mm, 12 * mm])
     info_col.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('LEFTPADDING', (0, 0), (-1, -1), 0),
@@ -646,7 +653,7 @@ def create_ktp_card_elements(asset, history=None):
     ]))
 
     body = Table([[photo_el, info_col]], colWidths=[photo_w + 4 * mm, info_w],
-                 rowHeights=[46 * mm])
+                 rowHeights=[photo_h])
     body.setStyle(TableStyle([
         ('VALIGN', (0, 0), (0, 0), 'TOP'),
         ('VALIGN', (1, 0), (1, 0), 'TOP'),
@@ -656,7 +663,10 @@ def create_ktp_card_elements(asset, history=None):
         ('TOPPADDING', (0, 0), (-1, -1), 1 * mm),
     ]))
     elements['A'].append(body)
-    elements['A'].append(Spacer(1, 2 * mm))
+    # Labuhkan footer ke DASAR panel: sisa tinggi jadi spacer di sini,
+    # sehingga tak ada lagi alas kosong lebar di bawah bar ID ASET.
+    _dipakai_a = (PANEL_A_HDR_H - FRAME_PAD + 1.5 * mm) + photo_h + 12 * mm
+    elements['A'].append(Spacer(1, max(2 * mm, UH - _dipakai_a - 1.2 * mm)))
 
     # Footer (bar abu-abu): kotak navy KECIL berisi ikon shield SAJA di kiri |
     # "ID ASET" + kode register (mono, satu baris) | KODE / NUP di kanan.
@@ -715,7 +725,7 @@ def create_ktp_card_elements(asset, history=None):
     elements['B'].append(Spacer(1, 2.5 * mm))
 
     colw = (UW - 3 * mm) / 2
-    tile_h = 10.4 * mm
+    tile_h = 11.4 * mm
     full_w = UW - 3 * mm
 
     pj_tile = field_tile('person', BLUE, "PENANGGUNG JAWAB (PENGGUNA)", pj_value,
@@ -734,7 +744,7 @@ def create_ktp_card_elements(asset, history=None):
          field_tile('check', GREEN, "KELENGKAPAN", kel_value, colw, boxed=True, min_h=tile_h, raw=True)],
     ]
     tiles_grid = Table(tiles_data, colWidths=[colw, colw],
-                       rowHeights=[tile_h + 1.4 * mm] * 6)
+                       rowHeights=[tile_h + 1.6 * mm] * 6)
     tiles_grid.setStyle(TableStyle([
         ('SPAN', (0, 0), (1, 0)),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
@@ -834,7 +844,7 @@ def create_ktp_card_elements(asset, history=None):
             else:
                 data.append([Paragraph('', cell_c) for _ in range(5)])
 
-        tbl = Table(data, colWidths=col_widths, rowHeights=[6 * mm] + [14.5 * mm] * 4)
+        tbl = Table(data, colWidths=col_widths, rowHeights=[6 * mm] + [15 * mm] * 4)
         tbl.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f1f5f9')),
             ('LINEBELOW', (0, 0), (-1, 0), 0.6, LIGHTGRAY),
@@ -867,17 +877,16 @@ def create_ktp_card_elements(asset, history=None):
     tbl_c, note_c = riwayat_panel(mapped[0:4], 1)
     tbl_d, note_d = riwayat_panel(mapped[4:8], 2)
 
-    elements['C'].append(panel_header('clock', "RIWAYAT INVENTARISASI", "Riwayat kegiatan aset ini"))
-    elements['C'].append(Spacer(1, 2.5 * mm))
-    elements['C'].append(tbl_c)
-    elements['C'].append(Spacer(1, 3 * mm))
-    elements['C'].append(note_c)
-
-    elements['D'].append(panel_header('clock', "RIWAYAT INVENTARISASI", "Riwayat kegiatan aset ini"))
-    elements['D'].append(Spacer(1, 2.5 * mm))
-    elements['D'].append(tbl_d)
-    elements['D'].append(Spacer(1, 3 * mm))
-    elements['D'].append(note_d)
+    # Catatan dilabuhkan ke dasar panel (spacer = sisa tinggi).
+    _dipakai_cd = 10.5 * mm + 2.5 * mm + (6 * mm + 15 * mm * 4) + 7.5 * mm
+    _spacer_cd = max(2 * mm, UH - _dipakai_cd - 1.2 * mm)
+    for kunci, tbl, note in (('C', tbl_c, note_c), ('D', tbl_d, note_d)):
+        elements[kunci].append(panel_header('clock', "RIWAYAT INVENTARISASI",
+                                            "Riwayat kegiatan aset ini"))
+        elements[kunci].append(Spacer(1, 2.5 * mm))
+        elements[kunci].append(tbl)
+        elements[kunci].append(Spacer(1, _spacer_cd))
+        elements[kunci].append(note)
 
     return elements
 

@@ -30,6 +30,8 @@ import { HalamanLazy } from "@/components/BatasGalat";
 // Each page becomes a separate chunk, loaded only when needed
 // ============================================================================
 const LoginPage = lazy(() => import("./pages/LoginPage"));
+const HalamanGalat = lazy(() => import("./pages/HalamanGalat"));
+const Halaman403Lazy = lazy(() => import("./pages/HalamanGalat").then((m) => ({ default: m.Halaman403 })));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const InfoPage = lazy(() => import("./pages/InfoPage"));
 const ModuleHomePage = lazy(() => import("./pages/ModuleHomePage"));
@@ -846,11 +848,11 @@ function App() {
                   )
                 }
               />
-              {/* Catch all route */}
-              <Route
-                path="*"
-                element={<Navigate to="/" replace />}
-              />
+              {/* 403 eksplisit (dipakai saat akses ditolak) */}
+              <Route path="/403" element={<Halaman403Lazy />} />
+              {/* Alamat tak dikenal → halaman 404 ber-glitch (bukan lagi
+                  redirect diam-diam ke beranda yang membingungkan) */}
+              <Route path="*" element={<HalamanGalat />} />
             </Routes>
           </main>
         </HalamanLazy>

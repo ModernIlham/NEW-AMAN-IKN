@@ -33,6 +33,9 @@ export default function PenilaianPage({ user, onBack }) {
   // Referensi masa manfaat: {items} | null; dialog: {kode, uraian, tahun, saving, edit}
   const [ref, setRef] = useState(null);
   const [formRef, setFormRef] = useState(null);
+  // Uraian kodefikasi utk kode kelompok di dialog: null | "memuat" | {jenjang, uraian_terdalam}
+  const [infoKode, setInfoKode] = useState(null);
+  const infoKodeTimer = useRef(null);
   // Register koreksi nilai: data GET + dialog catat {data, aset, saving}
   const [koreksi, setKoreksi] = useState(null);
   const [formKoreksi, setFormKoreksi] = useState(null);
@@ -54,6 +57,28 @@ export default function PenilaianPage({ user, onBack }) {
       .catch(() => {});
   }, []);
   useEffect(() => { muatKoreksi(); }, [muatKoreksi]);
+
+  // Kode kelompok diketik → tarik uraian berjenjang dari Referensi Kodefikasi
+  // Barang dan langsung tampilkan; kolom Uraian yang masih kosong diisi
+  // otomatis dari uraian kelompoknya (tetap boleh disunting).
+  useEffect(() => {
+    const kode = String(formRef?.kode || "").trim();
+    if (!formRef || !/^\d{5}$/.test(kode)) { setInfoKode(null); return undefined; }
+    setInfoKode("memuat");
+    clearTimeout(infoKodeTimer.current);
+    infoKodeTimer.current = setTimeout(async () => {
+      try {
+        const r = await axios.get(`${API}/kodefikasi/lookup/${kode}`);
+        setInfoKode(r.data);
+        const uraian = String(r.data?.uraian_terdalam || "").trim();
+        if (uraian) {
+          setFormRef((f) => (f && !String(f.uraian || "").trim()
+            ? { ...f, uraian } : f));
+        }
+      } catch { setInfoKode(null); }
+    }, 300);
+    return () => clearTimeout(infoKodeTimer.current);
+  }, [formRef?.kode, formRef]);
 
   useEffect(() => {
     if (!formKoreksi || cari.trim().length < 2) { setHasilCari([]); return undefined; }
@@ -664,6 +689,37 @@ export default function PenilaianPage({ user, onBack }) {
                 value={formRef?.uraian || ""}
                 onChange={(e) => setFormRef((f) => ({ ...f, uraian: e.target.value }))} />
             </div>
+            {/* Info Referensi Kodefikasi Barang: begitu kode kelompok 5 digit
+                dikenal, uraian berjenjangnya (golongan → bidang → kelompok)
+                langsung ditampilkan — kolom Uraian terisi otomatis darinya. */}
+            {infoKode && (
+              <div className="col-span-2 rounded-lg border border-violet-500/30 bg-violet-500/5 p-2"
+                data-testid="penilaian-ref-info-kode">
+                {infoKode === "memuat" ? (
+                  <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                    <Loader2 className="w-3 h-3 animate-spin" />Mencari di Referensi Kodefikasi Barang…
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-[10px] font-bold text-violet-600 dark:text-violet-400 mb-1">
+                      REFERENSI KODEFIKASI BARANG
+                    </p>
+                    {(infoKode.jenjang || []).filter((j) => j.uraian).map((j) => (
+                      <p key={j.kode} className="text-[11px] text-foreground/90">
+                        <span className="font-mono text-muted-foreground">{j.kode}</span>
+                        {" · "}<span className="text-muted-foreground">{j.label}:</span>{" "}
+                        <span className="font-medium">{j.uraian}</span>
+                      </p>
+                    ))}
+                    {!(infoKode.jenjang || []).some((j) => j.uraian) && (
+                      <p className="text-[11px] text-muted-foreground">
+                        Kode ini belum terdaftar di Referensi Kodefikasi Barang — isi uraian manual.
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setFormRef(null)}>Batal</Button>

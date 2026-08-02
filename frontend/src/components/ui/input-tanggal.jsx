@@ -91,12 +91,18 @@ export function InputTanggal({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
+        {/* Dropdown bulan + tahun: ganti periode jauh cukup dua ketukan —
+            dulu hanya panah per-bulan sehingga mundur bertahun-tahun
+            melelahkan, terutama di tablet/HP. */}
         <Calendar
           mode="single"
           selected={tanggal}
           onSelect={pilih}
           defaultMonth={tanggal}
           locale={localeId}
+          captionLayout="dropdown-buttons"
+          fromYear={1940}
+          toYear={new Date().getFullYear() + 10}
           initialFocus
         />
       </PopoverContent>
