@@ -10467,6 +10467,11 @@ thenify-all@^1.0.0:
   dependencies:
     any-promise "^1.0.0"
 
+threejs-components@0.0.22:
+  version "0.0.22"
+  resolved "https://registry.yarnpkg.com/threejs-components/-/threejs-components-0.0.22.tgz#dcc21a9de563dc49590ce9d9576025b2ca3e37ed"
+  integrity sha512-nb6Mq1tXh9Q4VJMIiK9cZSl/ZA/bA4a1xLxgbKO0aLiVuXPOk3eHUBytaGL+TIa7mHX714uDY+ODpO2JVA+/wA==
+
 throat@^6.0.1:
   version "6.0.2"
   resolved "https://registry.yarnpkg.com/throat/-/throat-6.0.2.tgz#51a3fbb5e11ae72e2cf74861ed5c8020f89f29fe"

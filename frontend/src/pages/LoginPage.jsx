@@ -278,6 +278,17 @@ export default function LoginPage({ onLogin, onShowInfo }) {
         <div className="absolute inset-0 z-0">
           <LiquidEffectAnimation />
         </div>
+        {/* Peredup. Permukaan logam cair itu memantulkan cahaya terang dan
+            bergerak terus, jadi tanpa lapisan ini kontras tulisan berubah-ubah
+            mengikuti riak — kadang jelas, kadang nyaris hilang. Gradiennya
+            berat di kiri (tempat teks) dan hampir bening di kanan, supaya
+            efeknya tetap terlihat utuh di sisi yang kosong.
+            `pointer-events-none` wajib: lapisan ini menutupi seluruh panel dan
+            tanpa itu ia menadah kursor, sehingga cairannya berhenti bereaksi. */}
+        <div
+          className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-r from-slate-950/85 via-slate-950/60 to-slate-950/20"
+          aria-hidden="true"
+        />
         {/* `pointer-events-none` supaya sentuhan/kursor menembus ke kanvas dan
             melahirkan riak di seluruh panel; hanya logo yang menadah klik
             (pintu tersembunyi ke halaman Info). */}
