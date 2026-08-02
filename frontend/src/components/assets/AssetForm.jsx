@@ -16,7 +16,9 @@ import {
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
-import { DocumentChecklist, DEFAULT_DOC_ITEMS } from "./DocumentChecklist";
+import { DocumentChecklist } from "./DocumentChecklist";
+import { InputTanggal } from "@/components/ui/input-tanggal";
+import { bangunChecklist, rekomendasiKelengkapan } from "@/lib/kelengkapanBmn";
 import InventoryFieldSheet, { PENGGUNA_MELEKAT_OPTIONS, PENGGUNA_NAME_LABELS, OPERASIONAL_JENIS_OPTIONS, CONDITION_OPTIONS } from "./InventoryFieldSheet";
 import FullCameraSheet from "./FullCameraSheet";
 import KartuTapDialog from "../pegawai/KartuTapDialog";
@@ -378,10 +380,13 @@ const compressPhotos = async (photos, opts) => {
  */
 function buildEditFormData(a, activityId) {
   const existingCL = Array.isArray(a.document_checklist) ? a.document_checklist : [];
-  const mergedChecklist = [
-    ...DEFAULT_DOC_ITEMS.map(name => existingCL.find(i => i.name === name) || { name, checked: false, notes: "", photos: [], documents: [] }),
-    ...existingCL.filter(i => !DEFAULT_DOC_ITEMS.includes(i.name))
-  ];
+  // Aset yang SUDAH punya checklist dibiarkan apa adanya — daftar itu hasil
+  // kerja petugas dan tak boleh diaduk saat form dibuka. Yang belum punya
+  // baru diisi rekomendasi menurut kode barangnya; bila kodenya pun belum ada,
+  // hasilnya daftar KOSONG (0/0), bukan lima baris tebakan.
+  const mergedChecklist = existingCL.length
+    ? existingCL
+    : bangunChecklist(rekomendasiKelengkapan(a.asset_code), []);
   return {
     asset_code: a.asset_code || "", NUP: a.NUP || "", asset_name: a.asset_name || "", category: a.category || "",
     brand: a.brand || "", model: a.model || "", kode_register: a.kode_register || "",
@@ -526,7 +531,12 @@ const AssetForm = memo(({
     koordinat_latitude: "", koordinat_longitude: "", kronologis: "",
     keterangan_berlebih: "", asal_usul_berlebih: "", nomor_perkara: "", pihak_bersengketa: "", keterangan_sengketa: "",
     garansi_hingga: "", garansi_jenis: "",
-    document_checklist: DEFAULT_DOC_ITEMS.map(name => ({ name, checked: false, notes: "", photos: [], documents: [] })),
+    // KOSONG (0/0), bukan lima baris bawaan. Daftar lama ("Buku Manual,
+    // Charger/Adapter, Kabel USB, Kartu Garansi, CD Driver") masuk akal untuk
+    // laptop dan tidak untuk apa pun yang lain — sebidang tanah tak punya
+    // kabel USB. Baris terisi sendiri begitu Kode Barang dipilih; lihat efek
+    // rekomendasi kelengkapan di bawah.
+    document_checklist: [],
     activity_id: activity?.id || null
   }), [activity?.id]);
 
@@ -1389,6 +1399,32 @@ const AssetForm = memo(({
   }, [formData.koordinat_latitude, formData.koordinat_longitude]);
 
   const handleChecklistChange = useCallback(u => { checklistModifiedRef.current = true; setFormData(p => ({...p, document_checklist: u})); }, []);
+
+  // Kelengkapan mengikuti KODE BARANG: begitu kodefikasinya dipilih, daftar
+  // dokumen & peralatan terisi sesuai golongan/bidangnya (tanah → sertifikat,
+  // kendaraan → BPKB/STNK, komputer → charger/lisensi). Lihat
+  // `lib/kelengkapanBmn` untuk dasar penyusunannya.
+  //
+  // TIDAK menimpa daftar yang sudah disentuh pengguna (`checklistModifiedRef`):
+  // menghapus baris yang sengaja ditambah — atau centang & foto yang sudah
+  // diunggah — hanya karena kodenya dikoreksi adalah kehilangan data, bukan
+  // kepintaran. `bangunChecklist` pun tetap mempertahankan isi baris yang
+  // namanya sama.
+  const kodeUntukKelengkapan = formData.asset_code;
+  useEffect(() => {
+    if (checklistModifiedRef.current) return;
+    const nama = rekomendasiKelengkapan(kodeUntukKelengkapan);
+    setFormData((p) => {
+      const kini = p.document_checklist || [];
+      const baru = bangunChecklist(nama, kini);
+      // Bandingkan hanya urutan NAMA. Membandingkan objeknya akan selalu
+      // "berbeda" (identitas baru tiap panggilan) dan efek ini jadi memicu
+      // dirinya sendiri tanpa henti.
+      const sama = kini.length === baru.length
+        && kini.every((it, i) => it?.name === baru[i]?.name);
+      return sama ? p : { ...p, document_checklist: baru };
+    });
+  }, [kodeUntukKelengkapan]);
 
   // In edit mode, photo count comes from photoItems. In create mode, from formData.photos
   const currentPhotoCount = isEditing ? photoItems.length : formData.photos.length;
@@ -2327,13 +2363,13 @@ const AssetForm = memo(({
               </div>
               <div className="space-y-1"><Label className="text-xs">Kode Register</Label><Input name="kode_register" value={formData.kode_register} onChange={handleInputChange} placeholder="32 karakter hex" maxLength={32} className="h-8" /></div>
               <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1"><Label className="text-xs">Tanggal Beli</Label><Input type="date" name="purchase_date" value={formData.purchase_date} onChange={handleInputChange} className="h-8" /></div>
+                <div className="space-y-1"><Label className="text-xs">Tanggal Beli</Label><InputTanggal name="purchase_date" value={formData.purchase_date} onChange={handleInputChange} className="h-8 text-sm" /></div>
                 <div className="space-y-1"><Label className="text-xs">Harga (Rp)</Label><Input type="number" name="purchase_price" value={formData.purchase_price} onChange={handleInputChange} className="h-8" /></div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <Label className="text-xs">Garansi hingga{garansiOtomatis ? <span className="ml-1 text-[10px] text-sky-600 dark:text-sky-400 font-normal">otomatis</span> : null}</Label>
-                  <Input type="date" name="garansi_hingga" value={formData.garansi_hingga || ""} onChange={handleInputChange} className="h-8" data-testid="asset-garansi" />
+                  <InputTanggal name="garansi_hingga" value={formData.garansi_hingga || ""} onChange={handleInputChange} className="h-8 text-sm" data-testid="asset-garansi" />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Jenis garansi</Label>

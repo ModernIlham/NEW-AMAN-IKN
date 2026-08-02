@@ -17,7 +17,7 @@ import { compressImageFile } from "../../lib/imageCompression";
 import { compressPdfFile } from "../../lib/pdfCompression";
 import { acquireAccuratePosition } from "../../lib/geolocation";
 import { toast } from "sonner";
-import { DEFAULT_DOC_ITEMS } from "./DocumentChecklist";
+
 import {
   PENGGUNA_MELEKAT_OPTIONS, PENGGUNA_NAME_LABELS, OPERASIONAL_JENIS_OPTIONS,
   CONDITION_OPTIONS, STATUS_OPTIONS,
@@ -164,10 +164,14 @@ const BatchEditPanel = memo(function BatchEditPanel({
   const photoInputRef = useRef(null);
   const { confirm, confirmDialog } = useConfirm();
 
-  // Collect unique doc checklist item names from selected assets
+  // Nama kelengkapan yang bisa dicentang massal = GABUNGAN nama yang benar-benar
+  // ada pada aset terpilih. Dulu daftar bawaan lima item (Buku Manual, Kabel
+  // USB, CD Driver, …) ikut disemai di sini, jadi memilih sepuluh bidang tanah
+  // pun tetap menawarkan "Kabel USB" untuk dicentang massal. Kini yang
+  // ditawarkan hanya yang nyata dipunyai aset itu.
   const docItemNames = useMemo(() => {
-    if (!assets || !selectedAssets) return DEFAULT_DOC_ITEMS;
-    const names = new Set(DEFAULT_DOC_ITEMS);
+    if (!assets || !selectedAssets) return [];
+    const names = new Set();
     const selectedIds = selectedAssets instanceof Set ? selectedAssets : new Set(selectedAssets);
     (assets || []).forEach(a => {
       if (selectedIds.has(a.id) && a.document_checklist) {
