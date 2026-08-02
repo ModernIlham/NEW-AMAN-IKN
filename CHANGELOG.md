@@ -67,6 +67,49 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#696] Efek cair asli di halaman masuk — pustakanya dibundel, bukan dari CDN — 2026-08-02
+
+Panel kiri layar masuk kini memakai efek **logam cair `liquid1`** yang asli
+(three.js), bukan tiruan gelombang 2D. Versi sebelumnya memang berjalan, tetapi
+tampilannya jauh berbeda dari komponen rujukan.
+
+- **Pustakanya DIPASANG sebagai dependensi npm** (`threejs-components@0.0.22`)
+  dan ikut di-build, **bukan** diunduh dari `cdn.jsdelivr.net` lewat `<script>`
+  yang disuntikkan saat halaman dibuka seperti komponen contohnya. Alasannya
+  tidak berubah — layar ini menerima kata sandi, dan aplikasi ini PWA yang
+  harus tetap terpakai tanpa jaringan — tetapi jalan keluarnya sekarang jauh
+  lebih baik daripada menirunya sendiri: berkas `liquid1.min.js` membundel
+  three.js di dalamnya, jadi satu impor sudah cukup dan tak ada permintaan
+  keluar sama sekali.
+- **Gambar permukaannya juga lokal.** Komponen contoh memuatnya dari blob
+  penyimpanan pihak ketiga; di sini gambarnya dibuat oleh
+  `scripts/buat_tekstur_login.py` — lewat SKRIP, bukan berkas biner tanpa
+  asal-usul — dan motifnya sengaja meniru `login-pattern` di `index.css`
+  supaya cairan itu tampak memantulkan panel yang sama, bukan gambar asing.
+- **500 kB itu tidak pernah menyentuh HP.** Berkas efeknya diambil lewat
+  `import()` dinamis ke potongan tersendiri (`efek-cair`, 127 kB gzip), dan
+  potongan itu baru diminta SETELAH komponen memutuskan akan memakainya.
+  Panel kiri hanya hidup di ≥lg, jadi HP dan tablet tak mengunduh sebyte pun.
+  `main.js` tidak bertambah.
+- **Tiga jalur mundur, masing-masing dengan alasannya.** Tanpa WebGL, gagal
+  memuat, atau layar < lg → kanvas 2D (`components/ui/air-kanvas-2d.jsx`,
+  pindahan dari berkas lama). Pada `prefers-reduced-motion` → **satu bingkai
+  diam**, bukan sekadar turun ke 2D: menukar animasi WebGL dengan animasi 2D
+  tetap saja animasi, sedangkan yang diminta pengguna adalah tidak ada gerak.
+  Kegagalan muat dicatat `console.warn`, tidak ditelan diam-diam.
+- **Lapisan peredup ditambahkan** di antara cairan dan tulisan. Permukaan
+  logam itu memantulkan cahaya terang dan bergerak terus, jadi tanpa peredam
+  kontras teks berubah-ubah mengikuti riak — kadang jelas, kadang nyaris
+  hilang. Gradiennya berat di kiri (tempat teks) dan hampir bening di kanan
+  agar efeknya tetap terlihat utuh.
+
+Verifikasi: eslint bersih, 340 uji frontend lulus, `yarn build` sukses, dan
+ketiga jalur diperiksa langsung di Chromium ber-WebGL — desktop memuat efeknya
+(opasitas 1), HP 390 px dan mode kurangi-gerak sama-sama **tidak** mengunduh
+potongan 500 kB itu.
+
+---
+
 ## [#695] Thumbnail tak lagi membekukan server + dua N+1 ditutup — 2026-08-02
 
 Tiga temuan dari penelusuran performa atas kode backend.

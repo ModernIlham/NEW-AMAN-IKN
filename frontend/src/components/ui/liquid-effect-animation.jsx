@@ -1,214 +1,134 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
+import { AirKanvas2D } from "@/components/ui/air-kanvas-2d";
+import teksturCair from "@/assets/tekstur-cair-login.jpg";
 
 /**
- * Permukaan air beriak — kanvas 2D MURNI LOKAL.
+ * Permukaan LOGAM CAIR (three.js) — efek `liquid1` dari `threejs-components`.
  *
- * KENAPA TIDAK memakai komponen contoh apa adanya: versi itu menyuntikkan
- * `<script type="module">` yang mengunduh `threejs-components` dari CDN publik
- * saat halaman dibuka, plus satu gambar dari penyimpanan pihak ketiga. Dua
- * alasan itu tidak bisa diterima di sini:
+ * BEDA PENTING dari komponen contoh: pustakanya DIPASANG sebagai dependensi
+ * npm dan diikutkan saat build, BUKAN diunduh dari CDN lewat `<script>` yang
+ * disuntikkan saat halaman dibuka. Dua alasan, dan keduanya berlaku khusus di
+ * layar ini:
  *
- *  1. Halaman ini adalah layar MASUK — tempat kata sandi diketik. Skrip pihak
- *     ketiga yang dimuat saat runtime berarti siapa pun yang menguasai CDN itu
- *     menjalankan kode di halaman tersebut.
- *  2. AMAN adalah PWA yang harus tetap terpakai saat jaringan mati. Efek yang
- *     bergantung pada unduhan luar akan gagal diam-diam justru di kondisi itu.
+ *  1. Ini halaman MASUK — tempat kata sandi diketik. Skrip pihak ketiga yang
+ *     diambil saat runtime berarti siapa pun yang menguasai CDN itu
+ *     menjalankan kode di halaman tersebut, tanpa satu pun tinjauan kode.
+ *  2. AMAN adalah PWA yang harus tetap terpakai saat jaringan mati. Skrip dan
+ *     gambar dari luar gagal diam-diam justru di kondisi itu.
  *
- * Jadi geraknya dibangun sendiri: beberapa lapis gelombang sinus yang berjalan
- * dengan kecepatan berbeda (memberi kesan kedalaman), kilau di puncaknya, dan
- * riak yang lahir dari sentuhan/kursor. Nol permintaan keluar.
+ * Gambar permukaannya pun lokal (`assets/tekstur-cair-login.jpg`, dibuat oleh
+ * `scripts/buat_tekstur_login.py`), bukan blob penyimpanan pihak ketiga.
+ *
+ * Berkas efeknya ±500 kB (three.js ikut di dalamnya), jadi ia diambil lewat
+ * `import()` DINAMIS — potongannya baru diunduh setelah komponen memutuskan
+ * benar-benar akan memakainya. Di HP/tablet keputusan itu "tidak", sehingga
+ * mereka tak mengunduh sebyte pun.
  *
  * @param {Object} props
- * @param {string} [props.className] Kelas wadah (kanvas mengisi penuh).
- * @param {number} [props.lapis] Jumlah lapisan gelombang (2–6 wajar).
+ * @param {string} [props.className] Kelas wadah.
  */
-export function LiquidEffectAnimation({ className, lapis = 4 }) {
+export function LiquidEffectAnimation({ className }) {
   const kanvasRef = useRef(null);
+  // "menimbang" → belum diputuskan; "webgl" → efek cair jalan;
+  // "2d" → cadangan bergerak; "diam" → cadangan SATU BINGKAI (kurangi gerak).
+  const [mode, setMode] = useState("menimbang");
 
   useEffect(() => {
     const kanvas = kanvasRef.current;
-    if (!kanvas) return undefined;
-    const ctx = kanvas.getContext("2d");
-    if (!ctx) return undefined;
+    let app = null;
+    let dibatalkan = false;
 
-    let lebar = 0;
-    let tinggi = 0;
-    let rafId = 0;
-    let berhenti = false;
-    const riak = [];
+    // Panel kiri hanya hidup di ≥lg (`hidden lg:flex`). Memuat 500 kB untuk
+    // elemen yang `display:none` adalah pemborosan murni pada koneksi lapangan.
+    const lebar = window.matchMedia?.("(min-width: 1024px)");
+    const kurangGerak = window.matchMedia?.("(prefers-reduced-motion: reduce)");
 
-    // Rasio piksel dibatasi 2: di layar 3x, kanvas selebar panel menjadi
-    // ±3600 px dan pengecatan tiap frame mulai terasa pada perangkat lemah —
-    // sementara mata tak lagi bisa membedakan hasilnya.
-    const dpr = () => Math.min(window.devicePixelRatio || 1, 2);
-
-    const kurangGerak = window.matchMedia
-      ? window.matchMedia("(prefers-reduced-motion: reduce)")
-      : null;
-
-    // Permukaan sengaja ditaruh di SEPERTIGA BAWAH. Versi pertama memulainya di
-    // 0,42 tinggi panel dan garis airnya memotong tepat di tengah paragraf +
-    // daftar fitur — terbaca masih bisa, tapi tulisannya jadi berenang di
-    // dalam air alih-alih berdiri di atasnya.
-    const LAPIS = Array.from({ length: Math.max(1, Math.min(6, lapis)) }, (_, i) => ({
-      dasar: 0.72 + i * 0.075,     // posisi permukaan (fraksi tinggi)
-      amplitudo: 14 - i * 2.2,     // tinggi ombak (px)
-      panjang: 420 + i * 160,      // panjang gelombang (px)
-      laju: 0.00042 - i * 0.00007, // makin dalam makin lambat → kesan kedalaman
-      alfa: 0.14 + i * 0.07,
-    }));
-
-    function ukur() {
-      const r = kanvas.getBoundingClientRect();
-      lebar = r.width;
-      tinggi = r.height;
-      const p = dpr();
-      kanvas.width = Math.max(1, Math.round(lebar * p));
-      kanvas.height = Math.max(1, Math.round(tinggi * p));
-      ctx.setTransform(p, 0, 0, p, 0, 0);
-    }
-
-    function permukaan(l, x, t) {
-      const k = (Math.PI * 2) / l.panjang;
-      return (
-        tinggi * l.dasar +
-        l.amplitudo * Math.sin(k * x + t * l.laju * 1000) +
-        l.amplitudo * 0.45 * Math.sin(k * 1.9 * x - t * l.laju * 1400)
-      );
-    }
-
-    function gambar(t) {
-      ctx.clearRect(0, 0, lebar, tinggi);
-
-      for (const l of LAPIS) {
-        ctx.beginPath();
-        ctx.moveTo(0, tinggi);
-        // Langkah 6 px sudah mulus untuk gelombang sepanjang ≥420 px, dan
-        // seperenam biaya menggambar tiap piksel.
-        for (let x = 0; x <= lebar; x += 6) ctx.lineTo(x, permukaan(l, x, t));
-        ctx.lineTo(lebar, tinggi);
-        ctx.closePath();
-
-        const grad = ctx.createLinearGradient(0, tinggi * l.dasar - 40, 0, tinggi);
-        grad.addColorStop(0, `rgba(45, 212, 191, ${l.alfa})`);   // teal-400
-        grad.addColorStop(1, `rgba(30, 64, 175, ${l.alfa * 0.5})`); // blue-800
-        ctx.fillStyle = grad;
-        ctx.fill();
-
-        // Garis kilau tipis di permukaan — yang membuatnya terbaca sebagai AIR
-        // dan bukan sekadar bidang berwarna.
-        ctx.beginPath();
-        for (let x = 0; x <= lebar; x += 6) {
-          const y = permukaan(l, x, t);
-          if (x === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        }
-        ctx.strokeStyle = `rgba(148, 233, 226, ${Math.min(0.5, l.alfa + 0.12)})`;
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-
-      // Riak sentuhan: cincin yang melebar sambil memudar.
-      for (let i = riak.length - 1; i >= 0; i--) {
-        const r = riak[i];
-        // Dijepit ke >= 0. `t` adalah cap waktu AWAL frame dari
-        // requestAnimationFrame, sedangkan `r.mulai` diambil `performance.now()`
-        // saat pointer bergerak — yang bisa terjadi SETELAH frame dimulai.
-        // Selisih negatif sekejap itu membuat `arc()` menerima jari-jari minus
-        // dan melempar; gejalanya: efek air mati total begitu kursor digerakkan.
-        const umur = Math.max(0, t - r.mulai);
-        const jari = umur * 0.22;
-        const alfa = 1 - umur / 1400;
-        if (alfa <= 0 || jari > Math.max(lebar, tinggi)) {
-          riak.splice(i, 1);
-          continue;
-        }
-        ctx.beginPath();
-        ctx.arc(r.x, r.y, jari, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(165, 243, 252, ${alfa * 0.45})`;
-        ctx.lineWidth = 2 * alfa + 0.5;
-        ctx.stroke();
+    function adaWebGL() {
+      try {
+        const c = document.createElement("canvas");
+        return !!(c.getContext("webgl2") || c.getContext("webgl"));
+      } catch {
+        return false;
       }
     }
 
-    function bingkai(t) {
-      if (berhenti) return;
-      gambar(t);
-      rafId = window.requestAnimationFrame(bingkai);
-    }
-
-    function mulai() {
-      // Lebar/tinggi nol = elemen sedang `display:none` (panel kiri hanya hidup
-      // di ≥lg). Menjalankan loop di keadaan itu membakar CPU tanpa satu piksel
-      // pun sampai ke layar.
-      if (berhenti || lebar <= 0 || tinggi <= 0 || rafId) return;
-      rafId = window.requestAnimationFrame(bingkai);
-    }
-    function jeda() {
-      if (rafId) window.cancelAnimationFrame(rafId);
-      rafId = 0;
-    }
-
-    ukur();
+    // "Kurangi gerak" dijawab dengan bingkai DIAM, bukan sekadar turun ke
+    // kanvas 2D: menukar animasi WebGL dengan animasi 2D tetap saja animasi,
+    // dan permintaan pengguna itu soal gerak — bukan soal teknologinya.
     if (kurangGerak?.matches) {
-      // Hormati "kurangi gerak": satu bingkai diam, bukan animasi berjalan.
-      gambar(0);
-    } else {
-      mulai();
+      setMode("diam");
+      return undefined;
+    }
+    if (!kanvas || !lebar?.matches || !adaWebGL()) {
+      setMode("2d");
+      return undefined;
     }
 
-    const pengamat = typeof ResizeObserver !== "undefined"
-      ? new ResizeObserver(() => {
-        ukur();
-        if (kurangGerak?.matches) gambar(0);
-        else if (lebar > 0 && tinggi > 0) mulai();
-        else jeda();
-      })
-      : null;
-    pengamat?.observe(kanvas);
-
-    // Tab tersembunyi: rAF memang sudah dijeda peramban, tetapi menjeda sendiri
-    // membuat perilakunya pasti (dan aman bila peramban tak menjeda).
-    const onVisibilitas = () => {
-      if (document.hidden) jeda();
-      else if (!kurangGerak?.matches) mulai();
-    };
-    document.addEventListener("visibilitychange", onVisibilitas);
-
-    const onGerak = (e) => {
-      if (kurangGerak?.matches) return;
-      const r = kanvas.getBoundingClientRect();
-      const x = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
-      const y = (e.touches ? e.touches[0].clientY : e.clientY) - r.top;
-      const akhir = riak[riak.length - 1];
-      // Jangan lahirkan riak tiap piksel gerakan tetikus — cukup tiap 60 px,
-      // kalau tidak layar penuh cincin dan efeknya jadi berisik.
-      if (akhir && Math.hypot(akhir.x - x, akhir.y - y) < 60) return;
-      riak.push({ x, y, mulai: performance.now() });
-      if (riak.length > 12) riak.shift();
-    };
-    kanvas.addEventListener("pointermove", onGerak);
-    kanvas.addEventListener("pointerdown", onGerak);
+    (async () => {
+      try {
+        const mod = await import(
+          /* webpackChunkName: "efek-cair" */
+          "threejs-components/build/backgrounds/liquid1.min.js"
+        );
+        if (dibatalkan) return;
+        const LiquidBackground = mod.default || mod;
+        app = LiquidBackground(kanvas);
+        // Nilai bahan mengikuti contoh resmi komponen: logam mengilap dengan
+        // pantulan tajam, dan gelombang yang cukup dalam untuk terbaca sebagai
+        // cairan alih-alih kain.
+        app.liquidPlane.material.metalness = 0.75;
+        app.liquidPlane.material.roughness = 0.25;
+        app.liquidPlane.uniforms.displacementScale.value = 5;
+        app.setRain(false);
+        await app.loadImage(teksturCair);
+        if (dibatalkan) {
+          app.dispose?.();
+          app = null;
+          return;
+        }
+        setMode("webgl");
+      } catch (e) {
+        // Gagal memuat/menginisialisasi BUKAN alasan menampilkan panel kosong.
+        // Turun ke kanvas 2D, dan jangan menelan galatnya diam-diam.
+        if (!dibatalkan) {
+          console.warn("Efek cair tak dapat dimuat, memakai kanvas 2D:", e);
+          setMode("2d");
+        }
+      }
+    })();
 
     return () => {
-      berhenti = true;
-      jeda();
-      pengamat?.disconnect();
-      document.removeEventListener("visibilitychange", onVisibilitas);
-      kanvas.removeEventListener("pointermove", onGerak);
-      kanvas.removeEventListener("pointerdown", onGerak);
+      dibatalkan = true;
+      // `dispose` melepas konteks WebGL. Tanpa ini, berpindah halaman
+      // berulang-ulang menumpuk konteks sampai peramban membuang yang tertua
+      // dan kanvas lain di aplikasi ikut mati.
+      try {
+        app?.dispose?.();
+      } catch {
+        /* konteks sudah hilang — tak ada yang perlu dibereskan */
+      }
+      app = null;
     };
-  }, [lapis]);
+  }, []);
 
   return (
-    <canvas
-      ref={kanvasRef}
-      className={cn("h-full w-full", className)}
-      // Hiasan murni: tak ada informasi di sini yang perlu dibacakan.
-      aria-hidden="true"
-    />
+    <div className={cn("relative h-full w-full", className)} aria-hidden="true">
+      {/* Kanvas WebGL selalu ada di DOM: pustaka membutuhkannya SEBELUM tahu
+          apakah inisialisasinya berhasil. Ia disembunyikan sampai berhasil,
+          supaya kotak hitam kosong tak sempat berkedip. */}
+      <canvas
+        ref={kanvasRef}
+        className={cn(
+          "absolute inset-0 h-full w-full transition-opacity duration-700",
+          mode === "webgl" ? "opacity-100" : "opacity-0",
+        )}
+      />
+      {(mode === "2d" || mode === "diam") && (
+        <AirKanvas2D className="absolute inset-0" diam={mode === "diam"} />
+      )}
+    </div>
   );
 }
 
