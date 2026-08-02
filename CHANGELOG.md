@@ -67,6 +67,33 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#705] Ekor huruf pada kata berganti di halaman masuk tak lagi terpotong — 2026-08-02
+
+- **Kata berganti ("Terpadu → Terlacak → **Terhubung** → …") di panel kiri
+  halaman masuk kehilangan ±6 px terbawahnya**, sehingga ekor "g"
+  ("Terhubun**g**") dan "p"/"y" ("Te**p**ercay**a**") terpangkas rata.
+  Terukur langsung di halaman yang tayang: kotak `overflow-hidden`
+  berakhir di 368,9 px sementara kotak kata berakhir di 374,9 px.
+- **Akarnya bukan tinggi penjaga baris, melainkan line-height utilitas
+  ukuran font.** `text-5xl` membawa `line-height: 1` sendiri dan itu
+  mengalahkan `leading-tight` pada elemen `h1` yang sama — kotak barisnya
+  jadi PERSIS setinggi font (48 px), padahal rentang ascender–descender
+  Plus Jakarta Sans lebih tinggi dari itu. Huruf berekor meluber keluar
+  kotak baris lalu tertahan garis potong yang menjaga animasi lempar.
+- **Perbaikan di komponennya** (`components/ui/animated-hero.jsx`), bukan
+  di pemanggilnya, supaya kebal berapa pun ukuran/`leading` yang dipakai
+  kelak: kotak potong diberi kelonggaran `0,18em` di atas & bawah,
+  kelonggaran itu dibatalkan lagi dengan margin negatif senilai sama, dan
+  kata-katanya digeser `top: 0.18em` agar tetap sebaris persis dengan
+  penjaga tinggi. Kelonggaran ini jauh lebih kecil daripada jarak lempar
+  animasi (±110 px), jadi kata yang sedang keluar/masuk tetap tersembunyi.
+- Diverifikasi pada halaman NYATA (Chromium 1440×900): posisi kata tak
+  bergeser sedikit pun (374,875 px sebelum & sesudah), paragraf di
+  bawahnya tetap di 392,875 px (tata letak tidak berubah), dan kotak
+  potong kini berakhir di 377,5 px — ekor huruf sepenuhnya di dalam.
+
+---
+
 ## [#704] Tanggalan roda di Master Pegawai, font judul dibetulkan, titik tombol masuk dihapus — 2026-08-02
 
 - **Tanggalan RODA (hari · bulan · tahun) di Master Pegawai** — desain
