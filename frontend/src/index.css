@@ -300,6 +300,16 @@ aside .overflow-x-auto::-webkit-scrollbar-thumb:hover, .category-dropdown-scroll
   [data-peta-panel] button { min-height: 28px; min-width: 28px; }
 }
 
+/* ── Alat ukur peta AKTIF (kelas dipasang useUkurPeta pada kontainer) ──
+   Kursor crosshair menandai mode; pane marker & popup dibuat tembus-klik
+   supaya ketukan yang jatuh di atas pin aset tetap sampai ke peta (menambah
+   titik ukur), bukan ditelan popup pin — di peta padat marker, tanpa ini
+   alat ukur nyaris tak bisa dipakai. Lapisan hasil ukur sendiri digambar
+   `interactive: false`, jadi tak terpengaruh. */
+.leaflet-container.peta-ukur-aktif { cursor: crosshair; }
+.peta-ukur-aktif .leaflet-marker-pane,
+.peta-ukur-aktif .leaflet-popup-pane { pointer-events: none; }
+
 /* Tablet */
 @media (min-width: 768px) and (max-width: 1023px) {
   .container { max-width: 100%; padding-left: 1.5rem; padding-right: 1.5rem; }
