@@ -67,6 +67,26 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#686] Toolbar aset tanpa geser samping + popup Struktur Organisasi rapi di HP — 2026-08-02
+
+Dua perbaikan tampilan dari umpan balik pemilik (PR #678):
+
+- **Deretan filter/aksi toolbar aset tak pernah lagi geser samping.** Breakpoint
+  Tailwind melihat viewport, bukan kontainer: di halaman kegiatan (panel form
+  kiri ~460px) viewport 1366px memakai label `xl` padahal lebar efektif toolbar
+  ~880px → baris `flex-nowrap` meluber 1209/878px (Cetak Kartu & Stiker
+  tersembunyi di balik scroll). Kini dua grup (filter kiri, aksi rata kanan)
+  dalam induk `flex-wrap` — saat sempit grup aksi turun utuh ke baris kedua.
+  Terbukti Playwright (CSS build produksi): 0 geser samping di 700/800/880/1326px.
+- **Popup Struktur Organisasi (Master Pegawai) rapi di HP.** Dialog diperlebar
+  + padding hemat, indentasi pohon 8px/jenjang di HP, nama unit melipat utuh
+  (`break-words`, bukan "…"), pill jumlah pegawai cukup angka di HP, badge
+  eselon & panah tak tergencet (`flex-shrink-0`).
+
+Verifikasi: eslint bersih, `yarn build` sukses, uji numerik Playwright.
+
+---
+
 ## [#685] Audit total gel.6 — validasi perolehan: Infinity & tanggal WIB — 2026-08-02
 
 Gelombang penutup: dua cacat validasi pada pencatatan perolehan Pengadaan.
