@@ -67,6 +67,39 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#680] Audit total gel.1 — isolasi satker, auth template, jejak audit SAKTI — 2026-08-02
+
+Gelombang pertama dari audit menyeluruh 10-dimensi (fan-out + verifikasi
+adversarial per temuan). Wave ini menutup kebocoran lintas-satker & auth yang
+paling langsung — semuanya diverifikasi ulang di kode sebelum disentuh.
+
+- **Impor referensi SAKTI oleh super-admin membocorkan/menimpa satker lain.**
+  `impor_referensi_sakti_pdf` mem-`scope_query_field_satker("")` untuk
+  super-admin (kode_satker kosong) → melebar ke SEMUA satker: `terapkan=true`
+  me-rename master ber-kode16 sama di setiap satker, dan item baru lahir
+  ber-`kode_satker=""` (bocor ke semua). Kini satker efektif diambil dari PDF
+  bila akun tak terikat satker; scope, update, dan stempel semuanya memakai
+  satker itu; PDF tanpa kode satker ditolak.
+- **LPB & nomor surat "Catat Semua" distempel satker PEMANGGIL, bukan
+  perolehan.** Super-admin yang mencatat BAST satker lain menerbitkan LPB
+  ber-`kode_satker=""` (tampil di semua satker) + nomor di deret global. Kini
+  LPB & booking nomor memakai `kode_satker` milik perolehan (pola beku bast.py).
+- **LPB gabungan bisa mencampur banyak satker.** Kini ditolak tegas bila
+  perolehan terpilih berasal dari >1 satker; stempel & nomor ikut satker
+  tunggal itu. `booking_nomor_lpb` menerima override `kode_satker`.
+- **Template impor tanpa autentikasi.** `/templates/csv` & `/templates/xlsx`
+  tak punya `Depends` sama sekali — endpoint pembaca-DB yang membocorkan daftar
+  kategori satker ke siapa pun. Kini ber-`require_user` (frontend sudah
+  melampirkan bearer token).
+- **Impor SAKTI tak pernah teraudit.** `log_audit(request, _user, …)` mengoper
+  argumen ke slot yang salah (`action`=Request, `activity_id`=user); `log_audit`
+  menelan error encode diam-diam sehingga jejaknya hilang tanpa suara. Argumen
+  dibetulkan + `kode_satker` diisi.
+
+Verifikasi: `py_compile` bersih, 1397 uji unit backend lulus.
+
+---
+
 ## [#679] Alat ukur peta benar-benar berfungsi + tombolnya hadir di tablet & PC — 2026-08-02
 
 Laporan pemilik: alat ukur di peta tak bisa dipakai, dan tombolnya tak ada di

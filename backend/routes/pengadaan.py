@@ -688,6 +688,11 @@ async def catat_semua_barang(perolehan_id: str, payload: CatatSemuaIn,
         items = baris_lpb_dari_aset(aset_dibuat)
         tgl = str(p.get("tanggal_bast") or "").strip()[:10] or \
             datetime.now(timezone.utc).date().isoformat()
+        # Satker DOKUMEN dibekukan dari perolehannya, bukan dari pemanggil:
+        # super-admin yang mencatat BAST satker lain tak boleh menstempel LPB
+        # & nomor suratnya "" (yang membuatnya tampil di SEMUA satker) —
+        # pola sama dengan bast.py yang memakai kode_satker milik dokumen.
+        ks_dok = str(p.get("kode_satker") or "").strip() or kode_satker_user(user)
         surat_id = ""
         if payload.booking_nomor:
             from routes.persuratan import booking_nomor_lpb
@@ -696,7 +701,8 @@ async def catat_semua_barang(perolehan_id: str, payload: CatatSemuaIn,
                 perihal=("Laporan Penerimaan Barang (LPB) — BMN "
                          f"{p.get('nomor_bast') or ''}".strip()),
                 tujuan=str(p.get("pihak") or "").strip(),
-                keterangan=f"booking otomatis dari pencatatan BAST {p.get('nomor_bast') or '-'}")
+                keterangan=f"booking otomatis dari pencatatan BAST {p.get('nomor_bast') or '-'}",
+                kode_satker=ks_dok)
         lpb_id = str(uuid.uuid4())
         await db.lpb.insert_one({
             "id": lpb_id, "nomor": nomor_lpb, "surat_id": surat_id,
@@ -716,7 +722,7 @@ async def catat_semua_barang(perolehan_id: str, payload: CatatSemuaIn,
                            f"{p.get('nomor_bast') or '-'}"),
             "items": items, "total_nilai": total_nilai_lpb(items),
             "jumlah_barang": len(items),
-            "kode_satker": kode_satker_user(user),
+            "kode_satker": ks_dok,
             "created_by": user.get("username", "system"),
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
@@ -1223,6 +1229,20 @@ async def buat_lpb_gabungan(payload: LpbGabunganIn,
         raise HTTPException(status_code=400, detail=(
             "Terbitkan BAST PPK-KPB dulu untuk: " + ", ".join(tanpa[:10])
             + ("…" if len(tanpa) > 10 else "")))
+    # SATU satker per LPB gabungan. Untuk operator satker-tunggal, scope query
+    # sudah menjamin ini; tetapi super-admin (lintas-satker) bisa memilih
+    # perolehan dari beberapa satker sekaligus — satu surat laporan yang
+    # mencampur BMN dua satker adalah dokumen yang tak bisa ditandatangani
+    # KPB mana pun dan bocor ke keduanya. Tolak tegas.
+    satker_set = {str(r.get("kode_satker") or "").strip() for r in rows}
+    satker_set.discard("")
+    if len(satker_set) > 1:
+        raise HTTPException(status_code=400, detail=(
+            "Perolehan terpilih berasal dari lebih dari satu satker "
+            f"({', '.join(sorted(satker_set))}). LPB gabungan harus satu satker."))
+    ks_dok = (next(iter(satker_set)) if satker_set
+              else kode_satker_user(user))
+
     # Urutan dokumen mengikuti tanggal BAST (kronologis), bukan urutan klik.
     rows.sort(key=lambda r: (str(r.get("tanggal_bast") or ""),
                              str(r.get("nomor_bast") or "")))
@@ -1243,7 +1263,8 @@ async def buat_lpb_gabungan(payload: LpbGabunganIn,
             perihal=(f"Laporan Penerimaan Barang (LPB) Gabungan — "
                      f"{len(rows)} BAST PPK-KPB"),
             tujuan="",
-            keterangan="booking otomatis dari LPB gabungan Pengadaan")
+            keterangan="booking otomatis dari LPB gabungan Pengadaan",
+            kode_satker=ks_dok)
 
     # PPK di header LPB: satu nama bila seragam; beberapa nama digabung tanpa
     # NIP (baris NIP hanya bermakna untuk satu orang).
@@ -1278,8 +1299,7 @@ async def buat_lpb_gabungan(payload: LpbGabunganIn,
                        + "; ".join(nomor_ppk))[:500],
         "items": items, "total_nilai": total_nilai_lpb(items),
         "jumlah_barang": len(items),
-        "kode_satker": (str(rows[0].get("kode_satker") or "").strip()
-                        or kode_satker_user(user)),
+        "kode_satker": ks_dok,
         "created_by": user.get("username", "system"),
         "created_at": datetime.now(timezone.utc).isoformat(),
     })

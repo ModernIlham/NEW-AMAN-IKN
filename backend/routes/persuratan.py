@@ -201,7 +201,8 @@ async def _no_agenda_berikut(jenis: str, tahun: int, kode_satker: str = "") -> i
 
 
 async def booking_nomor_lpb(user, tgl_iso: str, perihal: str,
-                            tujuan: str = "", keterangan: str = "") -> tuple:
+                            tujuan: str = "", keterangan: str = "",
+                            kode_satker: str = "") -> tuple:
     """Pesan satu nomor surat keluar untuk Laporan Penerimaan Barang.
 
     → `(nomor, surat_id)`; keduanya "" bila gagal dipesan.
@@ -211,14 +212,19 @@ async def booking_nomor_lpb(user, tgl_iso: str, perihal: str,
     paling pasti melahirkan dua deret yang diam-diam berbeda — dan nomor surat
     yang bercabang tak bisa diperbaiki belakangan tanpa menomori ulang arsip.
 
-    Surat tercatat berstatus `dibooking` di buku agenda satker pemanggil,
-    sehingga nomor yang sudah terpakai tak pernah dipakai ulang meski dokumen
-    LPB-nya nanti batal.
+    Surat tercatat berstatus `dibooking` di buku agenda satker penerbit
+    dokumen, sehingga nomor yang sudah terpakai tak pernah dipakai ulang meski
+    dokumen LPB-nya nanti batal.
+
+    `kode_satker` (opsional): satker DOKUMEN — dipakai saat pemanggil bisa
+    lintas-satker (super-admin) agar nomor terbit di buku agenda satker yang
+    benar, bukan deret global. Kosong → jatuh ke satker pemanggil (perilaku
+    lama untuk operator satker-tunggal).
     """
     from persuratan_utils import bangun_nomor, pilih_klasifikasi
     now0 = datetime.now(timezone.utc)
     tgl_surat = str(tgl_iso or "").strip()[:10] or now0.date().isoformat()
-    kode_satker = kode_satker_user(user)
+    kode_satker = str(kode_satker or "").strip() or kode_satker_user(user)
     atur = await _pengaturan(kode_satker)
     kode_klas = pilih_klasifikasi(atur["peta_klasifikasi"], "persediaan",
                                   "Laporan",
