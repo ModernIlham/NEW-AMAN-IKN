@@ -67,6 +67,47 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#706] Stiker label BMN dirombak keterbacaannya + stiker contoh berukuran — 2026-08-02
+
+Mandat pemilik: "informasi di dalam stikernya masih kurang, mulai dari ukuran
+font hingga hierarki ukurannya — buat lebih rapi di semua ukuran".
+
+- **Hierarki huruf yang benar-benar berjenjang.** Dulu ukuran huruf hanya
+  diskalakan dari lebar label lalu dijepit lantai yang terlalu rendah,
+  sehingga pada stiker **kecil** semua peran menumpuk di ±4,2–4,6 pt —
+  praktis tak terbaca setelah dicetak dan tanpa hierarki. Kini tiap peran
+  (kode barang › nama barang › sub-sub kelompok › identitas satker) punya
+  perbandingan tetap + **lantai keterbacaan** sendiri: di stiker kecil kode
+  barang ≥ 6,6 pt, nama barang ≥ 6,0 pt, sub-sub kelompok ≥ 5,2 pt.
+- **Nama barang & sub-sub kelompok LANJUT KE BARIS BERIKUTNYA.** Dulu
+  sub-sub kelompok dipotong keras di 48 karakter dan jatah baris nama
+  barang dipatok tetap per ukuran. Kini jatah baris dihitung dari tinggi
+  badan stiker yang tersisa (nama sampai 3 baris, sub-sub kelompok sampai
+  2 baris) dan **keduanya dijamin muncul di semua ukuran** — sub-sub
+  kelompok tak lagi tergusur di stiker kecil.
+- **Nama instansi panjang tidak lagi terpotong.** Urutannya kini: satu
+  baris penuh → disusutkan bertahap → **pecah dua baris** (kepala stiker
+  boleh tumbuh sampai 46% tinggi label) → baru sebagai upaya terakhir
+  dipotong. "Kementerian Pekerjaan Umum dan Perumahan Rakyat Republik
+  Indonesia" kini utuh bahkan di stiker kecil 48×22 mm.
+- **Kepala stiker proporsional** terhadap tinggi label NYATA (label
+  direntangkan mengisi kertas, jadi memakai angka target apa adanya
+  membuat kepala terlihat terlalu tebal/tipis pada kertas tertentu).
+- **Stiker CONTOH berukuran (baru).** Satu kotak terakhir tiap kelompok
+  ukuran diisi contoh bergaris putus-putus berisi **dimensi nyata per
+  satuan** (mis. `98,3 × 46,3 mm`) lengkap garis ukur mendatar/tegak dan
+  keterangan "bukan untuk ditempel" — patokan saat memesan bahan stiker.
+  Bisa dimatikan lewat saklar di dialog cetak (`sampel_ukuran=false`).
+- **Penggambar dipisah dari router** (`stiker_render.py`) sehingga tata
+  letaknya bisa diuji dengan merender PDF sungguhan tanpa MongoDB.
+
+Verifikasi: 31 uji baru (hierarki font, pemenggalan baris, kepala adaptif,
+jatah baris, render PDF + ekstraksi teks memastikan kode/NUP/nama/sub-sub
+kelompok benar-benar tercetak di ketiga ukuran) — 1462 uji backend lulus,
+eslint bersih, `yarn build` sukses.
+
+---
+
 ## [#705] Ekor huruf pada kata berganti di halaman masuk tak lagi terpotong — 2026-08-02
 
 - **Kata berganti ("Terpadu → Terlacak → **Terhubung** → …") di panel kiri
