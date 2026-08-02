@@ -67,6 +67,29 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#682] Audit total gel.3 — stok persediaan: pecahan & idempotensi — 2026-08-02
+
+Gelombang ketiga: dua cacat pada jalur "Daftarkan ke Persediaan" (`pengadaan.py`)
+yang membuat **stok tak cocok dengan dokumen**.
+
+- **Jumlah pecahan tetap diposting dengan nilai dibulatkan.** `jumlah =
+  max(1, int(jumlah_asli))` LALU tetap `transaksi_masuk`: 2,5 → tercatat 2
+  (0,5 lenyap dari stok), 0,5 → dibulatkan NAIK jadi 1 (mengarang stok) — dan
+  pesan peringatannya bahkan salah ("dibulatkan ke bawah" untuk kasus naik).
+  Angka stok jadi tak cocok dengan register/LPB. Kini baris pecahan/nol
+  **DILEWATI** (tak diposting) dan dilaporkan gagal sungguhan; operator memecah
+  baris atau mengubah satuannya.
+- **Penanda `psd_item_id` dipersist sekali di akhir loop.** Seluruh array
+  `barang` baru ditulis setelah loop selesai; bila proses mati / permintaan
+  diulang di tengah, transaksi persediaan yang SUDAH terposting tak ber-penanda
+  di DB → jalankan-ulang mempostingnya lagi (stok dobel). Kini penanda ditulis
+  **posisional per-baris segera** setelah tiap `transaksi_masuk` sukses,
+  sehingga baris yang sudah masuk langsung dilewati pada pengulangan.
+
+Verifikasi: `py_compile` bersih, 1397 uji unit backend lulus.
+
+---
+
 ## [#681] Audit total gel.2 — jurnal ganda & kapitalisasi terkunci — 2026-08-02
 
 Gelombang kedua audit menyeluruh: tiga cacat jurnal ber-severity TINGGI yang

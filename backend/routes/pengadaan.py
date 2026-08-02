@@ -198,7 +198,7 @@ async def daftarkan_persediaan(perolehan_id: str, user: dict = Depends(require_w
     barang = list(p.get("barang") or [])
     dibuat_master = masuk = dilewati_nonpsd = dilewati_terdaftar = 0
     gagal = []
-    for row in barang:
+    for idx_baris, row in enumerate(barang):
         kode = str(row.get("kode") or "").strip()
         if not is_persediaan(kode):
             dilewati_nonpsd += 1
@@ -212,15 +212,21 @@ async def daftarkan_persediaan(perolehan_id: str, user: dict = Depends(require_w
         if str(row.get("asset_id") or "").strip():
             dilewati_terdaftar += 1
             continue
-        jumlah_asli = float(row.get("jumlah") or 1)
-        jumlah = max(1, int(jumlah_asli))
-        if jumlah != jumlah_asli:
-            # Pemotongan pecahan JANGAN senyap: 2,5 liter tercatat 2 dan
-            # setengahnya lenyap dari stok tanpa jejak (temuan audit).
+        jumlah_asli = float(row.get("jumlah") or 0)
+        # Stok persediaan hanya menerima BILANGAN BULAT POSITIF. Dulu kode
+        # memaksa `max(1, int(jumlah_asli))` LALU tetap memposting: 2,5 →
+        # tercatat 2 (0,5 lenyap), 0,5 → dibulatkan NAIK jadi 1 (mengarang
+        # stok) — dan pesan "dibulatkan ke bawah" bahkan salah untuk kasus
+        # naik. Angka yang diposting jadi tak cocok dengan register/LPB.
+        # Kini baris pecahan/nol DILEWATI (tidak diposting) dan dilaporkan
+        # sebagai gagal sungguhan; operator memecah baris atau mengubah satuan.
+        if jumlah_asli <= 0 or not float(jumlah_asli).is_integer():
             gagal.append(
-                f"{row.get('uraian')}: jumlah {jumlah_asli:g} dibulatkan ke "
-                f"bawah menjadi {jumlah} — stok persediaan hanya menerima "
-                f"bilangan bulat; pecah barisnya atau ubah satuannya.")
+                f"{row.get('uraian')}: jumlah {jumlah_asli:g} bukan bilangan "
+                "bulat positif — stok persediaan hanya menerima bilangan bulat. "
+                "Baris DILEWATI (tak dicatat); pecah barisnya atau ubah satuannya.")
+            continue
+        jumlah = int(jumlah_asli)
         # Lookup master DALAM LINGKUP SATKER (REVIEW-9 R3): tanpa scope,
         # master satker lain yang kebetulan ber-kode sama terpilih → jalur
         # create terlewati → transaksi_masuk 403 dan baris macet permanen.
@@ -279,13 +285,19 @@ async def daftarkan_persediaan(perolehan_id: str, user: dict = Depends(require_w
         except HTTPException as e:
             gagal.append(f"{row.get('uraian')}: {e.detail}")
             continue
+        # Penanda "sudah masuk stok" dipersist SEGERA per baris — bukan sekali
+        # di akhir loop. Dulu seluruh array `barang` baru ditulis setelah loop
+        # selesai; bila proses mati / permintaan diulang di tengah, transaksi
+        # persediaan yang SUDAH terposting tak punya `psd_item_id` di DB,
+        # sehingga jalankan-ulang mempostingnya LAGI → stok dobel. Update
+        # posisional per-baris membuat tiap baris yang sukses langsung
+        # ber-penanda dan dilewati pada pengulangan (guard di atas).
         row["psd_item_id"] = it["id"]
-        masuk += 1
-    if masuk:
         await db.pengadaan.update_one(
             {"id": perolehan_id},
-            {"$set": {"barang": barang,
+            {"$set": {f"barang.{idx_baris}.psd_item_id": it["id"],
                       "updated_at": datetime.now(timezone.utc).isoformat()}})
+        masuk += 1
     await log_audit("pengadaan_daftarkan_persediaan", "", perolehan_id,
                     username=user.get("username", "system"),
                     detail=(f"BAST {p.get('nomor_bast') or perolehan_id[:8]}: "
