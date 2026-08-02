@@ -24,8 +24,8 @@ from shared_utils import (
 from penilaian_utils import (
     MASA_MANFAAT_DEFAULT, rekap_penyusutan, validate_masa_manfaat,
     DAMPAK_MASA_MANFAAT, DOKUMEN_KOREKSI, JENIS_KOREKSI_NILAI,
-    STATUS_SAKTI_KOREKSI, baris_csv_koreksi, rekap_koreksi_nilai,
-    susun_riwayat_nilai, validate_koreksi_nilai,
+    STATUS_SAKTI_KOREKSI, baris_csv_koreksi, posisi_nilai_aset,
+    rekap_koreksi_nilai, susun_riwayat_nilai, validate_koreksi_nilai,
     build_asset_revaluasi_projection,
 )
 
@@ -246,29 +246,47 @@ async def export_koreksi_nilai(_user: dict = Depends(require_user)):
 
 
 @penilaian_router.get("/penilaian/riwayat-nilai/{asset_id}")
-async def riwayat_nilai_aset(asset_id: str, _user: dict = Depends(require_user)):
-    """Jejak kronologis nilai satu aset (perolehan → koreksi/revaluasi).
+async def riwayat_nilai_aset(
+    asset_id: str,
+    per_tanggal: str = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    _user: dict = Depends(require_user),
+):
+    """Jejak nilai satu aset LENGKAP: perolehan → kapitalisasi/koreksi/
+    revaluasi (register + jurnal Buku Barang per NUP) → posisi penyusutan
+    → NILAI BUKU per tanggal.
 
-    Read-only: menggabungkan nilai perolehan master aset dengan peristiwa
-    di register koreksi nilai (#184). Nilai buku terkini mengikuti koreksi
-    non-informasional terakhir.
+    Dirombak dari versi lama yang hanya membaca register koreksi: kini
+    jurnal `mutasi_bmn` (kapitalisasi 202, terapan SIMAN 204/205, perolehan
+    100/101, penghapusan 301, dll.) ikut tampil, dan penyusutan dihitung
+    PER ASET dengan mesin yang sama dengan Laporan Penyusutan — dulu angka
+    penyusutan hanya pernah tersaji agregat per golongan.
     """
+    if not per_tanggal:
+        per_tanggal = datetime.now(timezone.utc).date().isoformat()
     asset = await db.assets.find_one(
-        {"id": asset_id},
-        {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
-         "purchase_date": 1, "purchase_price": 1, "activity_id": 1})
+        {"id": asset_id}, {**_PROJ, "activity_id": 1})
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
     await pastikan_akses_aset(_user, asset)
     koreksi = [k async for k in db.penilaian_koreksi.find(
         {"asset_id": asset_id}, {"_id": 0})]
-    riwayat = susun_riwayat_nilai(asset, koreksi)
-    return {"aset": asset, **riwayat,
+    mutasi = [m async for m in db.mutasi_bmn.find(
+        {"asset_id": asset_id}, {"_id": 0}).sort("tanggal_buku", 1)]
+    # Henti-susut hanya bila rusak berat/hilang DAN telah diusulkan hapus —
+    # kriteria yang sama dengan rekap agregat (PMK 65/2017).
+    diusulkan = await db.usulan_penghapusan.find_one(
+        {"asset_id": asset_id, "status": {"$ne": "ditolak"}}, {"_id": 1})
+    peta, _ = await _peta_masa_manfaat()
+    posisi = posisi_nilai_aset(asset, per_tanggal, peta=peta,
+                               diusulkan=diusulkan is not None)
+    riwayat = susun_riwayat_nilai(asset, koreksi, mutasi)
+    return {"aset": asset, **riwayat, "posisi": posisi,
             "label_jenis": JENIS_KOREKSI_NILAI,
             "label_dokumen": DOKUMEN_KOREKSI,
             "label_sakti": STATUS_SAKTI_KOREKSI,
-            "catatan": ("Read-only — nilai buku terkini indikatif dari koreksi "
-                        "non-informasional terakhir; angka resmi tetap di SAKTI.")}
+            "catatan": ("Read-only — nilai buku = dasar penyusutan − akumulasi "
+                        "(mesin yang sama dengan Laporan Penyusutan); angka "
+                        "resmi tetap di SAKTI.")}
 
 
 @penilaian_router.post("/penilaian/koreksi")

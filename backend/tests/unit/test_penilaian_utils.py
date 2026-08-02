@@ -385,7 +385,7 @@ def test_susun_riwayat_nilai():
         {"tanggal_dokumen": "2023-12-01", "jenis": "revaluasi",
          "nilai_lama": 10_000_000, "nilai_baru": 25_000_000,
          "nomor_dokumen": "LHIP-1", "status_sakti": "tercatat_sakti"},
-        # Informasional: tidak mengubah nilai buku terkini
+        # Informasional: ditandai, tidak mengubah nilai buku
         {"tanggal_dokumen": "2024-06-01", "jenis": "penilaian_tujuan_tertentu",
          "nilai_lama": 25_000_000, "nilai_baru": 30_000_000,
          "nomor_dokumen": "LP-9", "status_sakti": "belum_dicatat"},
@@ -402,14 +402,111 @@ def test_susun_riwayat_nilai():
     assert r["peristiwa"][0]["nilai_lama"] is None
     assert r["peristiwa"][2]["selisih"] == 15_000_000
     assert r["nilai_perolehan"] == 10_000_000
-    # Nilai terkini = revaluasi (25 jt); yang informasional (30 jt) diabaikan
-    assert r["nilai_terkini"] == 25_000_000
+    assert r["nilai_perolehan_awal"] == 10_000_000
     assert r["jumlah_koreksi"] == 3
     assert r["peristiwa"][3]["informasional"] is True
-    # Tanpa koreksi → nilai terkini = perolehan
     kosong = susun_riwayat_nilai(aset, [])
-    assert kosong["nilai_terkini"] == 10_000_000 and kosong["jumlah_koreksi"] == 0
+    assert kosong["jumlah_koreksi"] == 0 and kosong["jumlah_jurnal"] == 0
     assert susun_riwayat_nilai({}, [])["nilai_perolehan"] == 0
+
+
+def test_susun_riwayat_nilai_dengan_jurnal():
+    """Jurnal Buku Barang ikut tampil; jurnal turunan koreksi tak dobel;
+    nilai perolehan AWAL direkonstruksi dari jurnal penggeser."""
+    from penilaian_utils import susun_riwayat_nilai
+
+    # purchase_price KINI sudah termasuk kapitalisasi 2 jt (pemeliharaan
+    # menaikkannya saat posting 202) — riwayat lama menyamarkan ini.
+    aset = {"purchase_date": "2020-03-15", "purchase_price": 12_000_000}
+    koreksi = [{"id": "K-1", "tanggal_dokumen": "2023-12-01",
+                "jenis": "revaluasi", "nilai_lama": 12_000_000,
+                "nilai_baru": 25_000_000, "nomor_dokumen": "LHIP-1",
+                "status_sakti": "tercatat_sakti"}]
+    mutasi = [
+        {"kode_transaksi": "202", "tanggal_buku": "2022-05-01",
+         "nilai": 2_000_000, "sumber_modul": "pemeliharaan",
+         "keterangan": "Perbaikan besar genset"},
+        # Jurnal turunan koreksi K-1 — TIDAK boleh jadi peristiwa kedua
+        {"kode_transaksi": "204", "tanggal_buku": "2023-12-01",
+         "nilai": 13_000_000, "sumber_modul": "penilaian", "ref_id": "K-1"},
+    ]
+    r = susun_riwayat_nilai(aset, koreksi, mutasi)
+    assert [p["jenis"] for p in r["peristiwa"]] == [
+        "perolehan", "jurnal", "revaluasi"]
+    assert r["peristiwa"][1]["kode_transaksi"] == "202"
+    assert r["peristiwa"][1]["arah"] == "tambah"
+    assert r["jumlah_jurnal"] == 1
+    # Rekonstruksi: 12 jt tercatat − 2 jt kapitalisasi = 10 jt awal
+    assert r["nilai_perolehan"] == 12_000_000
+    assert r["nilai_perolehan_awal"] == 10_000_000
+    assert r["peristiwa"][0]["nilai_baru"] == 10_000_000
+
+    # Jurnal perolehan 101 = sumber kebenaran nilai awal (menang atas
+    # rekonstruksi) dan tidak digandakan sebagai peristiwa jurnal.
+    mutasi2 = [{"kode_transaksi": "101", "tanggal_buku": "2020-03-15",
+                "nilai": 9_500_000, "sumber_modul": "pengadaan"}] + mutasi
+    r2 = susun_riwayat_nilai(aset, koreksi, mutasi2)
+    assert r2["nilai_perolehan_awal"] == 9_500_000
+    assert sum(1 for p in r2["peristiwa"]
+               if p.get("kode_transaksi") == "101") == 0
+    # 204/205 dari SIMAN (menimpa purchase_price) ikut menggeser rekonstruksi
+    mutasi3 = [
+        {"kode_transaksi": "204", "tanggal_buku": "2021-01-01",
+         "nilai": 3_000_000, "sumber_modul": "siman", "ref_id": "S-1"}]
+    r3 = susun_riwayat_nilai(aset, [], mutasi3)
+    assert r3["nilai_perolehan_awal"] == 9_000_000
+    assert r3["jumlah_jurnal"] == 1
+    # Jurnal tak utuh → rekonstruksi negatif dilarang mengarang
+    r4 = susun_riwayat_nilai(
+        {"purchase_price": 1_000_000}, [],
+        [{"kode_transaksi": "202", "tanggal_buku": "2022-01-01",
+          "nilai": 5_000_000, "sumber_modul": "pemeliharaan"}])
+    assert r4["nilai_perolehan_awal"] == 1_000_000
+
+
+def test_posisi_nilai_aset():
+    """Posisi nilai per aset: mesin penyusutan yang sama dengan rekap
+    agregat, tapi hasil per asetnya dikembalikan (dulu dibuang)."""
+    from penilaian_utils import posisi_nilai_aset
+
+    # Genset 30501 (5 th = 10 semester), perolehan awal 2020-03 → per
+    # 2022-07-01 terpakai 5 semester (S1-2020..S1-2022 inklusif tutup Jun).
+    aset = {"asset_code": "3050104001", "purchase_price": 10_000_000,
+            "purchase_date": "2020-03-15"}
+    p = posisi_nilai_aset(aset, "2022-07-01")
+    assert p["status"] == "susut"
+    assert p["masa_tahun"] == 5 and p["masa_semester"] == 10
+    assert p["beban_per_semester"] == 1_000_000
+    assert p["semester_terpakai"] == 5 and p["semester_sisa"] == 5
+    assert p["akumulasi"] == 5_000_000 and p["nilai_buku"] == 5_000_000
+    assert p["dasar_sumber"] == "perolehan" and not p["habis"]
+
+    # Tanah: bukan objek penyusutan → nilai buku = nilai tercatat
+    tanah = posisi_nilai_aset(
+        {"asset_code": "2010101001", "purchase_price": 500_000_000,
+         "purchase_date": "2015-01-01"}, "2026-01-01")
+    assert tanah["status"] == "tidak"
+    assert tanah["akumulasi"] == 0 and tanah["nilai_buku"] == 500_000_000
+
+    # Kelompok tanpa referensi masa manfaat → jujur: tidak dihitung
+    tanpa = posisi_nilai_aset(
+        {"asset_code": "3999901001", "purchase_price": 1_000_000,
+         "purchase_date": "2020-01-01"}, "2026-01-01")
+    assert tanpa["status"] == "tanpa_referensi"
+    assert tanpa["akumulasi"] is None and tanpa["nilai_buku"] is None
+
+    # Rusak berat + telah diusulkan hapus → henti-susut
+    henti = posisi_nilai_aset(
+        {"asset_code": "3050104001", "purchase_price": 10_000_000,
+         "purchase_date": "2020-03-15", "condition": "Rusak Berat"},
+        "2026-01-01", diusulkan=True)
+    assert henti["status"] == "henti" and henti["nilai_buku"] is None
+
+    # Habis masa manfaat → nilai buku 0 & flag habis
+    habis = posisi_nilai_aset(
+        {"asset_code": "3050104001", "purchase_price": 10_000_000,
+         "purchase_date": "2015-01-01"}, "2026-01-01")
+    assert habis["habis"] is True and habis["nilai_buku"] == 0
 
 
 def test_baris_csv_koreksi():
