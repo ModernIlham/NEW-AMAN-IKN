@@ -21,6 +21,8 @@ import pathlib
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 SISI = 1024                      # tekstur persegi; dipetakan ke bidang cair
+SEL_POLA_CSS = 40                # lebar satu sel `login-pattern` di index.css
+LEBAR_PANEL_ACUAN = 720          # panel kiri pada layar 1440 (setengah lebar)
 KELIR_DASAR = (15, 23, 42)       # slate-900 — sama dengan bg panel kiri
 KELIR_KUBUS = (30, 41, 59)       # slate-800
 KELIR_SISI = (51, 65, 85)        # slate-700
@@ -41,10 +43,20 @@ def gambar_kubus(d: ImageDraw.ImageDraw, cx: float, cy: float, r: float) -> None
 
 
 def lapisan_kubus() -> Image.Image:
-    """Hamparan kubus rapat; baris ganjil digeser setengah langkah."""
+    """Hamparan kubus rapat; baris ganjil digeser setengah langkah.
+
+    UKURAN KUBUS mengikuti `login-pattern` di `index.css` — sel 40 px pada
+    panel selebar ±720 px, jadi sekitar 18 kubus melintang. Percobaan pertama
+    memakai r=74 (hanya ±8 kubus melintang): tekstur 1024 px itu diregangkan
+    ke lebar panel, sehingga kubusnya tampil ±2,5x lebih besar daripada pola
+    aslinya dan latar terasa membesar. `LEBAR_PANEL_ACUAN` membuat kaitan itu
+    tersurat — bukan angka ajaib yang ditebak ulang tiap kali.
+    """
     img = Image.new("RGB", (SISI, SISI), KELIR_DASAR)
     d = ImageDraw.Draw(img)
-    r = 74.0
+    # Lebar sel pola CSS (40 px) diskalakan dari panel acuan ke lebar tekstur.
+    lebar_sel = SEL_POLA_CSS * (SISI / LEBAR_PANEL_ACUAN)
+    r = lebar_sel / math.sqrt(3)   # langkah_x = r*√3 = lebar satu kubus
     langkah_x = r * math.sqrt(3)
     langkah_y = r * 1.5
     baris, y = 0, -r
