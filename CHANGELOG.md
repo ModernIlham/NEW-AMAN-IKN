@@ -67,6 +67,31 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#689] Optimalisasi VPS (indeks komposit assets) & aturan main logging — 2026-08-02
+
+Dari analisis beban VPS pemilik — CPU ±51% konstan di KVM 2 (PR #681):
+
+- **5 indeks komposit `assets`** — `activity_id` × condition/location/
+  eselon1/eselon2/status (eselon2 dulu tanpa indeks); kombinasi filter yang
+  mendominasi beban mongod kini selesai di indeks. Terpasang otomatis saat
+  deploy.
+- **`docs/OPTIMASI-VPS.md`** — diagnosis sumber CPU (3 tersangka + blok
+  perintah), swap 4 GB + swappiness 10, WiredTiger 2 GB + profiler slowms,
+  keamanan dasar, prioritas 1–7, dan nasihat OLTP/OLAP: Debezium→Kafka→
+  ClickHouse ditolak untuk skala/mesin ini — tangga bijak: indeks+cache →
+  replika hidden → DuckDB → CDC hanya bila jutaan baris.
+- **ATURAN MAIN LOGGING** di `log_setup.py`: JSON-lines jadi DEFAULT,
+  keluaran ke stdout, dan filter REDAKSI baru (password/token/secret/
+  api_key/otp, Authorization skema+kredensial, JWT, NIK 16 digit sisakan 4
+  digit — NIP 18 digit & kode satker tak tersentuh; argumen %s ikut
+  tersensor). `docs/LOGGING.md`: keenam aturan + resep journalctl/jq +
+  kebijakan centralized logging (journald cukup utk 1 VPS; dasbor →
+  Alloy + Grafana Cloud, bukan Loki self-hosted di mesin aplikasi).
+
+Verifikasi: compileall bersih, 1407 uji unit lulus (6 uji redaksi baru).
+
+---
+
 ## [#688] Penyusutan & mutasi selaras SIMAN V2 — umur = sisa semester — 2026-08-02
 
 Investigasi selisih penyusutan & mutasi vs ekspor nyata SIMAN V2, 175 baris
