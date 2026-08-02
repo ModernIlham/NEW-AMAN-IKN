@@ -6,12 +6,13 @@ Kas Negara. Status turunan menandai dokumen kurang / jatuh tempo ≤60
 hari / berakhir. Kontribusi tahunan tercatat per tahun (NTPN) dengan
 pengingat tunggakan; lampiran scan dokumen tersimpan di GridFS.
 """
+import math
 import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
@@ -37,23 +38,39 @@ class PemanfaatanIn(BaseModel):
     jenis_mitra: str = ""         # BUMN/BUMD/PT/koperasi/perorangan/Pemda...
     mulai: str
     berakhir: str
-    nilai: float = 0              # nilai sewa total / kontribusi (informasi)
+    nilai: float = Field(default=0, ge=0)   # nilai sewa total / kontribusi
     nomor_persetujuan: str = ""   # persetujuan Pengelola Barang
     nomor_perjanjian: str = ""
     ntpn: str = ""                # bukti setor PNBP (wajib utk sewa aktif)
-    kontribusi_tahunan: float = 0  # kewajiban PNBP per tahun (0 = tidak ada)
+    kontribusi_tahunan: float = Field(default=0, ge=0)  # kewajiban PNBP/tahun
     # Fasilitas transaksi PMK 18/2024 / PMK 139/2022 (pendamping, opsional)
     dasar_fasilitas: str = "tanpa_fasilitas"
     nomor_penetapan_fasilitas: str = ""
     pelaksana_fasilitas: str = ""  # BUMN penugasan (mis. PT PII utk IKN)
     keterangan: str = ""
 
+    @field_validator("nilai", "kontribusi_tahunan")
+    @classmethod
+    def _terhingga(cls, v: float) -> float:
+        # Token JSON Infinity/NaN LOLOS ge=0 (inf >= 0 True; audit P4 #2) lalu
+        # membuat GET /pemanfaatan 500 permanen (json.dumps allow_nan=False).
+        if not math.isfinite(v):
+            raise ValueError("nilai harus angka terhingga")
+        return v
+
 
 class KontribusiIn(BaseModel):
     tahun: str = Field(min_length=4, max_length=4)
     ntpn: str = Field(min_length=1)
     tanggal: str = ""             # tanggal setor (default hari ini)
-    jumlah: float = 0             # 0 = pakai nilai kontribusi_tahunan
+    jumlah: float = Field(default=0, ge=0)  # 0 = pakai nilai kontribusi_tahunan
+
+    @field_validator("jumlah")
+    @classmethod
+    def _terhingga(cls, v: float) -> float:
+        if not math.isfinite(v):
+            raise ValueError("jumlah harus angka terhingga")
+        return v
 
 
 @pemanfaatan_router.get("/pemanfaatan/bentuk")

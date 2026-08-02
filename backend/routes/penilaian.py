@@ -6,11 +6,12 @@ manfaat) dari data aset nyata. Referensi masa manfaat dapat dikelola
 (GET/POST/DELETE masa-manfaat); koreksi/revaluasi nilai tercatat lewat
 register koreksi dan diproyeksikan ke `nilai_wajar_terakhir` aset.
 """
+import math
 import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from auth_utils import require_admin, require_user, require_writer
 from db import db
@@ -79,10 +80,24 @@ async def list_masa_manfaat(_user: dict = Depends(require_user)):
     return {"items": items, "jumlah": len(items)}
 
 
+def _wajib_super_admin(user: dict) -> None:
+    """Referensi masa manfaat GLOBAL (KMK berlaku nasional; satu baris per
+    kelompok, dibaca semua satker) — perubahan manual dibatasi super-admin
+    pusat (audit P4 #7): dulu admin satker mana pun bisa menyetel "tahun=1"
+    dan seketika penyusutan SEMUA satker berubah tanpa jejak."""
+    from shared_utils import kode_satker_user
+    if kode_satker_user(user):
+        raise HTTPException(status_code=403, detail=(
+            "Referensi masa manfaat berlaku untuk SEMUA satker — hanya "
+            "super-admin pusat yang boleh mengubah/menghapusnya. Impor SIMAN "
+            "tetap memperbarui referensi secara otomatis."))
+
+
 @penilaian_router.post("/penilaian/masa-manfaat")
 async def upsert_masa_manfaat(payload: MasaManfaatIn,
-                              _admin: dict = Depends(require_admin)):
-    """Tambah/ubah masa manfaat satu kelompok (admin; menimpa bawaan)."""
+                              admin: dict = Depends(require_admin)):
+    """Tambah/ubah masa manfaat satu kelompok (super-admin; menimpa bawaan)."""
+    _wajib_super_admin(admin)
     errors = validate_masa_manfaat(payload.kode, payload.tahun)
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
@@ -97,16 +112,23 @@ async def upsert_masa_manfaat(payload: MasaManfaatIn,
          "$setOnInsert": {"created_at": now}},
         upsert=True,
     )
+    await log_audit("masa_manfaat_upsert", "",
+                    username=admin.get("username", "system"),
+                    detail=f"Masa manfaat kelompok {kode} = {int(payload.tahun)} tahun")
     return {"ok": True, "kode": kode, "tahun": int(payload.tahun)}
 
 
 @penilaian_router.delete("/penilaian/masa-manfaat/{kode}")
-async def hapus_masa_manfaat(kode: str, _admin: dict = Depends(require_admin)):
-    """Hapus entri satker (kembali ke bawaan riset bila ada)."""
+async def hapus_masa_manfaat(kode: str, admin: dict = Depends(require_admin)):
+    """Hapus entri referensi (super-admin; kembali ke bawaan riset bila ada)."""
+    _wajib_super_admin(admin)
     res = await db.masa_manfaat.delete_one({"kode": kode.strip()})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404,
-                            detail="Entri satker tidak ditemukan (bawaan riset tidak bisa dihapus)")
+                            detail="Entri tidak ditemukan (bawaan riset tidak bisa dihapus)")
+    await log_audit("masa_manfaat_hapus", "",
+                    username=admin.get("username", "system"),
+                    detail=f"Hapus referensi masa manfaat kelompok {kode.strip()}")
     return {"ok": True, "kode": kode.strip()}
 
 
@@ -171,6 +193,16 @@ class KoreksiNilaiIn(BaseModel):
     dampak_masa_manfaat: str = "tetap"
     masa_manfaat_semester: int = 0
     catatan: str = ""
+
+    @field_validator("nilai_lama", "nilai_baru")
+    @classmethod
+    def _terhingga(cls, v: float) -> float:
+        # Token JSON Infinity LOLOS ge=0 (inf >= 0 True; audit P4 #3) —
+        # lalu meracuni nilai_wajar_terakhir master aset (nilai buku jadi 0
+        # diam-diam) dan mematahkan int() saat penandaan SAKTI.
+        if not math.isfinite(v):
+            raise ValueError("nilai harus angka terhingga")
+        return v
 
 
 @penilaian_router.get("/penilaian/koreksi")
@@ -342,32 +374,46 @@ async def tandai_tercatat_sakti(koreksi_id: str,
     # "Penilaian tujuan tertentu" bersifat INFORMASIONAL — modul ini sendiri
     # mengecualikannya dari nilai buku (rekap_koreksi_nilai/susun_riwayat_
     # nilai) → jangan proyeksikan ke master maupun jurnalkan rupiahnya.
-    informasional = res.get("jenis") == "penilaian_tujuan_tertentu"
-    if not informasional:
-        await _proyeksi_master_revaluasi(res, user.get("username"))
-    # Jurnal Buku Barang (G7, REVIEW-9 R3): revaluasi FINAL → 204 (nilai
-    # bertambah) / 205 (nilai berkurang), magnitudo positif + jumlah 0
-    # (kuantitas barang tidak berubah). Best-effort + anti-ganda via ref_id.
-    selisih = float(res.get("selisih") or 0)
-    if selisih and not informasional:
-        from shared_utils import catat_mutasi_bmn
-        aset = await db.assets.find_one(
-            {"id": res.get("asset_id")},
-            {"_id": 0, "asset_code": 1, "NUP": 1})
-        await catat_mutasi_bmn({
-            "asset_id": res.get("asset_id"),
-            "kode_transaksi": "204" if selisih > 0 else "205",
-            "kode_barang": str((aset or res).get("asset_code") or ""),
-            "nup": str((aset or res).get("NUP") or ""),
-            "tanggal_buku": (str(res.get("tanggal_dokumen") or "").strip()[:10]
-                             or now[:10]),
-            "jumlah": 0, "nilai": abs(selisih),
-            "sumber_modul": "penilaian", "ref_id": res.get("id"),
-            "keterangan": (f"Revaluasi/koreksi nilai {res.get('jenis') or ''} — "
-                           f"dok {res.get('nomor_dokumen') or '-'} "
-                           f"(Rp{int(res.get('nilai_lama') or 0):,} → "
-                           f"Rp{int(res.get('nilai_baru') or 0):,})").strip(),
-            "oleh": user.get("username", "system")})
+    #
+    # Kompensasi CAS (audit P4 #4, pola pemeliharaan.py posting_kapitalisasi):
+    # tiga tulisan berurutan (register → master aset → jurnal) terjadi SETELAH
+    # penanda status terkunci — kegagalan di tengah dulu meninggalkan register
+    # "tercatat_sakti" TANPA jurnal 204/205, dan CAS menolak pengulangan
+    # selamanya. Kini penanda dilepas lagi agar transisi bisa diulang.
+    try:
+        informasional = res.get("jenis") == "penilaian_tujuan_tertentu"
+        if not informasional:
+            await _proyeksi_master_revaluasi(res, user.get("username"))
+        # Jurnal Buku Barang (G7, REVIEW-9 R3): revaluasi FINAL → 204 (nilai
+        # bertambah) / 205 (nilai berkurang), magnitudo positif + jumlah 0
+        # (kuantitas barang tidak berubah). Best-effort + anti-ganda via ref_id.
+        selisih = float(res.get("selisih") or 0)
+        if selisih and not informasional:
+            from shared_utils import catat_mutasi_bmn
+            aset = await db.assets.find_one(
+                {"id": res.get("asset_id")},
+                {"_id": 0, "asset_code": 1, "NUP": 1})
+            await catat_mutasi_bmn({
+                "asset_id": res.get("asset_id"),
+                "kode_transaksi": "204" if selisih > 0 else "205",
+                "kode_barang": str((aset or res).get("asset_code") or ""),
+                "nup": str((aset or res).get("NUP") or ""),
+                "tanggal_buku": (str(res.get("tanggal_dokumen") or "").strip()[:10]
+                                 or now[:10]),
+                "jumlah": 0, "nilai": abs(selisih),
+                "sumber_modul": "penilaian", "ref_id": res.get("id"),
+                "keterangan": (f"Revaluasi/koreksi nilai {res.get('jenis') or ''} — "
+                               f"dok {res.get('nomor_dokumen') or '-'} "
+                               f"(Rp{int(res.get('nilai_lama') or 0):,} → "
+                               f"Rp{int(res.get('nilai_baru') or 0):,})").strip(),
+                "oleh": user.get("username", "system")})
+    except Exception:
+        await db.penilaian_koreksi.update_one(
+            {"id": koreksi_id},
+            {"$set": {"status_sakti": "belum_dicatat",
+                      "updated_at": datetime.now(timezone.utc).isoformat()},
+             "$unset": {"sakti_oleh": "", "sakti_tanggal": ""}})
+        raise
     return res
 
 

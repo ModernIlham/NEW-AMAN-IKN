@@ -285,9 +285,16 @@ async def catat_penertiban(payload: PenertibanIn,
     if str(data.get("asset_id") or "").strip():
         aset = await db.assets.find_one(
             {"id": data["asset_id"].strip()},
-            {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1})
+            {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+             "activity_id": 1})
         if not aset:
             raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+        # Isolasi satker (audit P4 #5): tanpa guard ini satker lain dapat
+        # membaca identitas aset kita (kode/NUP/nama ikut respons & snapshot
+        # register) hanya dari tebakan id — satu-satunya pembaca db.assets
+        # di lingkup wasdal yang dulu tanpa pastikan_akses_aset.
+        from shared_utils import pastikan_akses_aset
+        await pastikan_akses_aset(user, aset)
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
@@ -696,6 +703,10 @@ async def ba_insidentil_pdf(tiket_id: str, _user: dict = Depends(require_user)):
         f"{TENGGAT_PELAKSANAAN_HK} hari kerja.", st['Meta']))
     elements.append(Spacer(1, 3 * rl_mm))
 
+    # Escape teks bebas (audit P4 #1): '<'/'&' dalam uraian/lokasi/hasil
+    # mematahkan parser XML Paragraph → BA 500 permanen; <img src="http://…">
+    # bahkan membuat server mengambil URL (SSRF). Pola sama dgn pemeliharaan.py.
+    from xml.sax.saxutils import escape as _esc
     baris = [
         ("Pemicu", PEMICU_INSIDENTIL.get(t.get("pemicu"), t.get("pemicu") or "-")),
         ("Objek pemantauan", OBJEK_WASDAL.get(t.get("objek"), "") or "Tidak spesifik"),
@@ -703,7 +714,8 @@ async def ba_insidentil_pdf(tiket_id: str, _user: dict = Depends(require_user)):
         ("Lokasi", t.get("lokasi") or "-"),
         ("Hasil pemantauan", t.get("hasil") or "(diisi setelah pemantauan selesai)"),
     ]
-    table_data = [[Paragraph(f"<b>{k}</b>", st['Cell']), Paragraph(str(v), st['Cell'])]
+    table_data = [[Paragraph(f"<b>{_esc(str(k))}</b>", st['Cell']),
+                   Paragraph(_esc(str(v)), st['Cell'])]
                   for k, v in baris]
     table = Table(table_data, colWidths=_fit_col_widths([130, 328], doc.width))
     table.setStyle(_std_table_style(zebra=False))
@@ -794,12 +806,15 @@ async def laporan_wasdal_pdf(
     elements.append(table)
     elements.append(Spacer(1, 5 * rl_mm))
 
-    # Rincian per objek (maks 30 baris per objek)
+    # Rincian per objek (maks 30 baris per objek). Nilai dinamis di-escape
+    # (audit P4 #1): nama aset/pihak/detail berisi '<'/'&' mematahkan parser
+    # XML Paragraph → laporan 500.
+    from xml.sax.saxutils import escape as _esc
     for kunci, label in OBJEK_WASDAL.items():
         temuan = per_objek.get(kunci) or []
         if not temuan:
             continue
-        elements.append(Paragraph(f"<b>{label}</b> — {len(temuan)} temuan",
+        elements.append(Paragraph(f"<b>{_esc(str(label))}</b> — {len(temuan)} temuan",
                                   st['Meta']))
         elements.append(Spacer(1, 1.5 * rl_mm))
         headers = ["No", "Jenis Temuan", "Objek/Aset", "Keterangan"]
@@ -811,9 +826,9 @@ async def laporan_wasdal_pdf(
                 nama = f"{nama} ({kode} · {t.get('NUP') or '-'})"
             rinci.append([
                 Paragraph(str(i), st['CellCenter']),
-                Paragraph(t.get("label") or t.get("jenis") or "-", st['Cell']),
-                Paragraph(nama, st['Cell']),
-                Paragraph(t.get("detail") or "-", st['Cell']),
+                Paragraph(_esc(str(t.get("label") or t.get("jenis") or "-")), st['Cell']),
+                Paragraph(_esc(str(nama)), st['Cell']),
+                Paragraph(_esc(str(t.get("detail") or "-")), st['Cell']),
             ])
         table = Table(rinci,
                       colWidths=_fit_col_widths([26, 140, 160, 132], doc.width),
@@ -958,13 +973,16 @@ async def laporan_tahunan_wasdal_pdf(
         f"({sel} selesai, {len(tertib) - sel} berjalan; tenggat "
         f"{TENGGAT_HARI_KERJA} hari kerja per PMK 207).", st['Meta']))
     if tertib:
+        # Escape teks bebas (audit P4 #1): uraian penertiban ditulis operator —
+        # '<'/'&' mematahkan Paragraph → laporan tahunan seluruh satker 500.
+        from xml.sax.saxutils import escape as _esc2
         td2 = [[Paragraph(h, st['TableHeader']) for h in
                 ("No", "Objek/Temuan", "Sumber", "Status")]]
         for i, x in enumerate(tertib[:30], 1):
             td2.append([Paragraph(str(i), st['CellCenter']),
-                        Paragraph(str(x.get("uraian") or x.get("temuan") or "-")[:120], st['Cell']),
-                        Paragraph(str(x.get("sumber") or "-"), st['CellCenter']),
-                        Paragraph(str(x.get("status") or "-"), st['CellCenter'])])
+                        Paragraph(_esc2(str(x.get("uraian") or x.get("temuan") or "-")[:120]), st['Cell']),
+                        Paragraph(_esc2(str(x.get("sumber") or "-")), st['CellCenter']),
+                        Paragraph(_esc2(str(x.get("status") or "-")), st['CellCenter'])])
         t2 = Table(td2, colWidths=[doc.width * 0.07, doc.width * 0.53,
                                    doc.width * 0.20, doc.width * 0.20], repeatRows=1)
         t2.setStyle(_std_table_style(zebra=True))

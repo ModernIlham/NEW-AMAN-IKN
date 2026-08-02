@@ -512,7 +512,14 @@ async def _konteks_kapitalisasi(catatan_id: str, user=None):
     from penilaian_utils import dasar_penyusutan
     from perbaikan_utils import hitung_penambahan_masa_manfaat
 
-    rec = await db.pemeliharaan.find_one({"id": catatan_id}, {"_id": 0})
+    # Catatan dimuat ter-scope satker (audit P4 #12): guard via aset saja
+    # no-op untuk aset ber-activity_id kosong (impor/SIMAN belum ditautkan
+    # kegiatan) — pratinjau biaya & nilai dasar satker lain dulu terbaca.
+    q_rec = {"id": catatan_id}
+    if user is not None:
+        from shared_utils import scope_query_field_satker
+        q_rec = scope_query_field_satker(user, q_rec)
+    rec = await db.pemeliharaan.find_one(q_rec, {"_id": 0})
     if not rec:
         raise HTTPException(status_code=404, detail="Catatan tidak ditemukan")
     aset = await db.assets.find_one(
@@ -590,6 +597,23 @@ async def posting_kapitalisasi(catatan_id: str,
         # PER SATKER (REVIEW-9 R8) — nomor BA resmi satker tak "bolong".
         nomor_ba = await next_ba_perbaikan_nomor(
             tgl_ba[:4], kode_satker_user(admin))
+    else:
+        # Nomor MANUAL (audit P4 #11): dulu melewati counter tanpa cek — dua
+        # admin mengetik nomor sama = dua BA resmi kembar; dan counter yang
+        # tak digeser bisa menerbitkan ulang nomor manual itu di masa depan.
+        _ks = kode_satker_user(admin)
+        q_dup = {"ba_perbaikan.nomor": nomor_ba, "id": {"$ne": catatan_id}}
+        if _ks:
+            q_dup["kode_satker"] = _ks
+        if await db.pemeliharaan.find_one(q_dup, {"_id": 1}):
+            raise HTTPException(status_code=409, detail=(
+                f"Nomor {nomor_ba} sudah dipakai BA Perbaikan lain di satker "
+                "ini — kosongkan untuk nomor otomatis, atau pakai nomor lain"))
+        bagian = nomor_ba.split("/")
+        if len(bagian) >= 2 and bagian[1].isdigit():
+            cid = f"ba_perbaikan_seq:{_ks}" if _ks else "ba_perbaikan_seq"
+            await db.counters.update_one(
+                {"_id": cid}, {"$max": {"seq": int(bagian[1])}}, upsert=True)
     ba_doc = {
         "nomor": nomor_ba,
         "tanggal": tgl_ba,

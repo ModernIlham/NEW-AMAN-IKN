@@ -324,6 +324,20 @@ async def ubah_klasifikasi(klas_id: str, payload: KlasifikasiIn,
         {"kode": kode, "id": {"$ne": klas_id}}, _PROJ)
     if bentrok:
         raise HTTPException(status_code=409, detail=f"Kode {kode} sudah terdaftar")
+    # Guard "masih dipakai" saat GANTI kode (audit P4 #14) — pintu ubah dulu
+    # tanpa pemeriksaan yang sudah dimiliki pintu hapus: aturan pemetaan
+    # satker lain yang masih merujuk kode LAMA akan kehilangan klasifikasinya.
+    lama = await db.klasifikasi_arsip.find_one({"id": klas_id}, _PROJ)
+    if lama and lama.get("kode") != kode:
+        _dipakai_n = 0
+        async for _st in db.persuratan_settings.find(
+                {}, {"_id": 0, "peta_klasifikasi": 1}):
+            _dipakai_n += sum(1 for a in (_st.get("peta_klasifikasi") or [])
+                              if a.get("kode") == lama.get("kode"))
+        if _dipakai_n:
+            raise HTTPException(status_code=409, detail=(
+                f"Kode {lama.get('kode')} masih dipakai {_dipakai_n} aturan "
+                "pemetaan — ubah aturannya dulu sebelum mengganti kodenya"))
     res = await db.klasifikasi_arsip.find_one_and_update(
         {"id": klas_id},
         {"$set": {"kode": kode, "uraian": str(payload.uraian or "").strip(),

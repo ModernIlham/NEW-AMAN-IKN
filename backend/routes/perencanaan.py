@@ -6,11 +6,12 @@ diusulkan (Baik/Rusak Ringan, dioperasikan) vs yang tidak (rusak berat,
 idle, nonaktif) + riwayat biaya pemeliharaan sebagai bahan pertimbangan.
 RKBMN pengadaan + sanding SBSK menyusul sesuai masterplan.
 """
+import math
 import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from auth_utils import require_admin, require_user, require_writer
 from db import db
@@ -71,7 +72,12 @@ async def rkbmn_pemeliharaan_xlsx(
         tahun = datetime.now(timezone.utc).year
     hasil = await _data_rkbmn(tahun, _user)
     buffer = io_module.BytesIO()
-    wb = xlsxwriter.Workbook(buffer, {"in_memory": True})
+    # strings_to_formulas/urls DIMATIKAN (audit P4 #10): nama aset/lokasi
+    # berawalan "=" akan ditulis sebagai FORMULA (injeksi Excel — dieksekusi
+    # di mesin penerima kertas kerja), dan URL menjadi hyperlink aktif.
+    wb = xlsxwriter.Workbook(buffer, {"in_memory": True,
+                                      "strings_to_formulas": False,
+                                      "strings_to_urls": False})
     f_judul = wb.add_format({"bold": True})
     f_kepala = wb.add_format({"bold": True, "bg_color": "#DDE6F2", "border": 1})
     f_isi = wb.add_format({"bold": True, "bg_color": "#FFF6DD", "border": 1})
@@ -166,6 +172,15 @@ class UsulanRkbmnIn(BaseModel):
     satuan: str = Field(min_length=1)
     asset_id: str = ""                 # opsional (pemeliharaan/eksisting)
     keterangan: str = ""
+
+    @field_validator("volume")
+    @classmethod
+    def _terhingga(cls, v: float) -> float:
+        # Token JSON Infinity LOLOS gt=0 (audit P4 #6) — register usulan
+        # RKBMN lalu 500 permanen saat diserialisasi & CSV berisi "inf".
+        if not math.isfinite(v):
+            raise ValueError("volume harus angka terhingga")
+        return v
 
 
 class TransisiRkbmnIn(BaseModel):
@@ -323,21 +338,39 @@ async def daftar_sbsk(_user: dict = Depends(require_user)):
     """Tabel Standar Barang & Standar Kebutuhan (PMK 138/2024) — dirawat
     admin dari Lampiran PMK; seed default dimuat OTOMATIS saat kosong."""
     from perencanaan_utils import SBSK_SEED_DEFAULT
+    # Seeding idempoten per baris (audit P4 #8): dulu "hitung==0 lalu insert
+    # semua" — dua pengguna membuka bersamaan pada instalasi baru = tabel
+    # standar GANDA (satu ruangan dinilai dua kali terhadap standar kembar).
+    # upsert per kunci alami (kategori, peruntukan) kebal balapan.
     if await db.sbsk_standar.estimated_document_count() == 0:
         now = datetime.now(timezone.utc).isoformat()
         for s in SBSK_SEED_DEFAULT:
-            await db.sbsk_standar.insert_one(
-                {**s, "id": str(uuid.uuid4()), "sumber": "seed",
-                 "created_at": now})
+            await db.sbsk_standar.update_one(
+                {"kategori": s.get("kategori"),
+                 "peruntukan": s.get("peruntukan")},
+                {"$setOnInsert": {**s, "id": str(uuid.uuid4()),
+                                  "sumber": "seed", "created_at": now}},
+                upsert=True)
     items = await db.sbsk_standar.find({}, {"_id": 0}).sort(
         [("kategori", 1), ("peruntukan", 1)]).to_list(1000)
     return {"items": items, "jumlah": len(items),
             "dasar": "PMK 138/2024 — Standar Barang & Standar Kebutuhan BMN"}
 
 
+def _wajib_super_admin_sbsk(user: dict) -> None:
+    """Standar SBSK GLOBAL (PMK 138 berlaku nasional; dibaca semua satker
+    untuk sanding usulan & penilaian ruangan) — perubahan manual dibatasi
+    super-admin pusat (audit P4 #8, sekelas referensi masa manfaat)."""
+    if kode_satker_user(user):
+        raise HTTPException(status_code=403, detail=(
+            "Standar SBSK berlaku untuk SEMUA satker — hanya super-admin "
+            "pusat yang boleh menambah/menghapus barisnya."))
+
+
 @perencanaan_router.post("/perencanaan/sbsk")
 async def tambah_sbsk(payload: SbskIn, admin: dict = Depends(require_admin)):
-    """Tambah/rawat baris standar SBSK (admin — angka dari Lampiran PMK 138)."""
+    """Tambah/rawat baris standar SBSK (super-admin — angka Lampiran PMK 138)."""
+    _wajib_super_admin_sbsk(admin)
     from perencanaan_utils import validate_sbsk
     data = payload.model_dump()
     errors = validate_sbsk(data)
@@ -354,6 +387,7 @@ async def tambah_sbsk(payload: SbskIn, admin: dict = Depends(require_admin)):
 
 @perencanaan_router.delete("/perencanaan/sbsk/{sbsk_id}")
 async def hapus_sbsk(sbsk_id: str, _admin: dict = Depends(require_admin)):
+    _wajib_super_admin_sbsk(_admin)
     res = await db.sbsk_standar.delete_one({"id": sbsk_id})
     if not res.deleted_count:
         raise HTTPException(status_code=404, detail="Baris standar tidak ditemukan")

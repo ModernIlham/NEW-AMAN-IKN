@@ -34,6 +34,14 @@ from log_setup import configure_logging, RequestContextMiddleware
 configure_logging()
 logger = logging.getLogger(__name__)
 
+# ReportLab: JANGAN pernah mengambil URL jaringan dari markup Paragraph —
+# default-nya skema http/https/ftp dipercaya, sehingga teks pengguna berisi
+# <img src="http://host-internal/..."> membuat server melakukan permintaan
+# keluar saat PDF dibangun (SSRF buta; audit P4). Cukup data: (gambar inline)
+# dan file lokal (logo kop).
+import reportlab.rl_config as _rl_config
+_rl_config.trustedSchemes = ["data", "file"]
+
 # Initialize FastAPI
 app = FastAPI()
 api_router = APIRouter(prefix="/api")

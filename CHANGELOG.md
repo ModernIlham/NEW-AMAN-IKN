@@ -67,6 +67,35 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#690] Audit lanjutan modul jarang tersentuh — 14 temuan ditutup — 2026-08-02
+
+Sapu berburu bug atas modul di luar jangkauan enam gelombang audit
+sebelumnya (PR #682): wasdal, pemanfaatan, penilaian, perencanaan,
+pemeliharaan, pelaporan, persuratan. 14 temuan terverifikasi kode
+(3 dibuktikan menjalankan ReportLab/Pydantic/FastAPI langsung):
+
+- **Wasdal**: 3 PDF di-escape ('<' di uraian dulu = BA 500 permanen;
+  `<img src=http>` = SSRF buta) + `trustedSchemes=['data','file']` global;
+  `catat_penertiban` kini ber-`pastikan_akses_aset`.
+- **Infinity/NaN** ditolak di gerbang Pemanfaatan/Perencanaan/Penilaian
+  (`math.isfinite`) — dulu lolos `ge=0`/`gt=0` lalu mematikan GET register
+  permanen & meracuni `nilai_wajar_terakhir` master.
+- **Penilaian**: transisi SAKTI ber-kompensasi CAS (gagal di tengah tak
+  lagi mengunci register tanpa jurnal 204/205); referensi masa manfaat &
+  standar SBSK (nasional) kini super-admin saja + log_audit.
+- **Perencanaan**: seeding SBSK idempoten (anti tabel ganda saat balapan);
+  XLSX RKBMN anti injeksi formula (`strings_to_formulas/urls` off).
+- **Pemeliharaan**: nomor BA manual dicek duplikat + geser counter `$max`;
+  pratinjau kapitalisasi ter-scope satker. **Pelaporan**: filter tulis
+  tenggat `_q_periode`. **Persuratan**: ganti kode klasifikasi ditolak
+  selagi masih dirujuk pemetaan.
+
+Bersih setelah diperiksa: penganggaran, peta kolaborasi publik, penomoran
+atomik, escape PDF pemeliharaan, validasi tanggal. Verifikasi: compileall
+bersih, 1407 uji unit lulus.
+
+---
+
 ## [#689] Optimalisasi VPS (indeks komposit assets) & aturan main logging — 2026-08-02
 
 Dari analisis beban VPS pemilik — CPU ±51% konstan di KVM 2 (PR #681):
