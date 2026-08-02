@@ -67,6 +67,31 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#688] Penyusutan & mutasi selaras SIMAN V2 — umur = sisa semester — 2026-08-02
+
+Investigasi selisih penyusutan & mutasi vs ekspor nyata SIMAN V2, 175 baris
+(PR #680). Mesin penyusutan TERBUKTI benar (cocok 175/175 dengan SIMAN);
+selisihnya dari dua cacat integrasi:
+
+- **Racun referensi masa manfaat.** Kolom "Umur Aset" SIMAN = SISA masa
+  manfaat dalam SEMESTER (bukti: 175/175 vs 0/175 bila dibaca tahun), tapi
+  alur "SIMAN menang" membacanya TAHUN → db.masa_manfaat teracuni (30801 =
+  "15 th" padahal KMK 8 th). Kini masa manfaat DIDERIVASI dari identitas
+  garis lurus (`masa_sem = perolehan × sisa / nilai buku`, validasi
+  bulat-genap-1..60) — diuji pada file asli: 9/9 kelompok = tabel KMK.
+  Pemulih entri lama: `scripts/perbaiki_masa_manfaat_siman.py`.
+- **Dua mesin mutasi tak terhubung.** Basis mutasi LBKP/CaLBMN/LBP kini
+  tanggal PEROLEHAN (fallback pencatatan) — aset lama yang baru diimpor
+  masuk Saldo Awal, bukan "Mutasi Tambah"; draft impor SIMAN berjurnal 100
+  otomatis; "terapkan nilai SIMAN" atas harga perolehan berjurnal 204/205
+  (padanan sejati kolom "Nilai Mutasi" SIMAN); kolom Nilai Mutasi &
+  Perolehan Pertama kini ikut diimpor sebagai referensi.
+
+Verifikasi: 1401 uji unit lulus (6 uji baru); derivasi diuji empiris
+end-to-end pada ekspor SIMAN asli.
+
+---
+
 ## [#687] Isolasi satker aset pemegang & PSP — stempel efektif + kop per-satker — 2026-08-02
 
 Laporan pemilik: data lintas satker tampil di halaman aset pemegang bagian
