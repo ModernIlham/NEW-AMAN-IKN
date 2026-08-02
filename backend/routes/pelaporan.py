@@ -189,8 +189,10 @@ async def atur_tenggat_periode(periode_id: str, payload: TenggatIn,
         raise HTTPException(status_code=400, detail="; ".join(errors))
     tenggat = str(data.get("tenggat") or "").strip()[:10]
     now = datetime.now(timezone.utc).isoformat()
+    # Seragam dengan lima operasi periode lain (audit P4 #13): scope satker
+    # pada FILTER TULIS, bukan hanya pengawal baca di atas.
     res = await db.periode_pelaporan.find_one_and_update(
-        {"id": periode_id, "status": "terbuka"},
+        _q_periode(admin, {"id": periode_id, "status": "terbuka"}),
         {"$set": {"tenggat": tenggat, "updated_at": now},
          "$push": {"riwayat": {"aksi": "tenggat", "tanggal": now,
                                "oleh": admin.get("username"),
