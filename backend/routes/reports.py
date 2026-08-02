@@ -104,18 +104,24 @@ def _kop_surat_flowables(settings, doc_width):
     unit_style = ParagraphStyle('KopUnit', parent=styles['Normal'], fontSize=12, alignment=TA_CENTER, fontName='Helvetica-Bold', leading=15)
     alamat_style = ParagraphStyle('KopAlamat', parent=styles['Normal'], fontSize=8.5, alignment=TA_CENTER, leading=11, textColor=rl_colors.HexColor("#333333"))
 
+    # Escape teks kop sebelum masuk Paragraph. Nama instansi/unit/alamat berasal
+    # dari Pengaturan — satu '&' atau '<' di sana menggagalkan parser XML
+    # ReportLab dan meruntuhkan SETIAP dokumen resmi yang memakai kop ini
+    # (LHI, BAST, LPB, LBP, dst.) dengan 500 permanen. Kop dipakai bersama, jadi
+    # menambal di sini melindungi semua generator sekaligus.
+    from xml.sax.saxutils import escape as _esc
     text_flow = []
     if nama_instansi:
-        text_flow.append(Paragraph(nama_instansi.upper(), instansi_style))
+        text_flow.append(Paragraph(_esc(nama_instansi.upper()), instansi_style))
     if nama_unit:
-        text_flow.append(Paragraph(nama_unit.upper(), unit_style))
+        text_flow.append(Paragraph(_esc(nama_unit.upper()), unit_style))
     if nama_sub_unit:
-        text_flow.append(Paragraph(nama_sub_unit.upper(), unit_style))
+        text_flow.append(Paragraph(_esc(nama_sub_unit.upper()), unit_style))
     # Alamat multi-baris: tiap baris (Enter di pengaturan) jadi baris sendiri
     for line in alamat.splitlines():
         line = line.strip()
         if line:
-            text_flow.append(Paragraph(line, alamat_style))
+            text_flow.append(Paragraph(_esc(line), alamat_style))
 
     # Logo: decode data-URI base64 -> BytesIO -> Image (same approach as _generate_cover_page)
     logo_img = None

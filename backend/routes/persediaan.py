@@ -1047,6 +1047,13 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
     st = _get_report_styles()
     meta, cell, cellc, cellr = st['Meta'], st['Cell'], st['CellCenter'], st['CellRight']
 
+    # Escape teks bebas sebelum diinterpolasi ke Paragraph. Nama penyedia,
+    # keterangan, dan nama barang berasal dari input pengguna; satu karakter
+    # '&' atau '<' merusak parser XML ReportLab dan menggagalkan SELURUH PDF
+    # (500 permanen tiap kali dokumen dibuka). `escape` menangani &, <, > —
+    # markup tebal yang memang disengaja tetap ditulis di luar nilai ini.
+    from xml.sax.saxutils import escape as _esc
+
     def fmt_rp(v):
         try:
             return f"{int(v):,}".replace(",", ".")
@@ -1083,10 +1090,10 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
         label_jenis = JENIS_MASUK.get(lpb.get("jenis"), lpb.get("jenis") or "-")
     label_kat = KATEGORI_LPB.get(kategori, "Persediaan")
     info = Table([
-        [Paragraph(f"Instansi: <b>{settings.get('nama_instansi') or '-'}</b>", meta),
-         Paragraph(f"Jenis: <b>{label_kat} — {label_jenis}</b>", meta)],
-        [Paragraph(f"Kantor/Satker: <b>{settings.get('nama_sub_unit') or settings.get('nama_unit_organisasi') or '-'}</b>", meta),
-         Paragraph(f"No. Bukti/Faktur: <b>{lpb.get('jenis_dokumen') or '-'}</b>", meta)],
+        [Paragraph(f"Instansi: <b>{_esc(str(settings.get('nama_instansi') or '-'))}</b>", meta),
+         Paragraph(f"Jenis: <b>{_esc(label_kat)} — {_esc(label_jenis)}</b>", meta)],
+        [Paragraph(f"Kantor/Satker: <b>{_esc(str(settings.get('nama_sub_unit') or settings.get('nama_unit_organisasi') or '-'))}</b>", meta),
+         Paragraph(f"No. Bukti/Faktur: <b>{_esc(str(lpb.get('jenis_dokumen') or '-'))}</b>", meta)],
         [Paragraph(f"Tgl Kedatangan: <b>{_fmt_tanggal_id(lpb.get('tanggal')) or '-'}</b>", meta),
          Paragraph("Tautan BAST Pengadaan: <b>"
                    + (f"{len(lpb.get('perolehan_ids') or [])} perolehan (gabungan)"
@@ -1094,8 +1101,8 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
                       else (lpb.get('perolehan_id')[:8] + '…'
                             if lpb.get('perolehan_id') else '-'))
                    + "</b>", meta)],
-        [Paragraph(f"Nama Rekanan/Penyedia: <b>{lpb.get('penyedia') or '-'}</b>", meta),
-         Paragraph(f"Keterangan: <b>{lpb.get('keterangan') or '-'}</b>", meta)],
+        [Paragraph(f"Nama Rekanan/Penyedia: <b>{_esc(str(lpb.get('penyedia') or '-'))}</b>", meta),
+         Paragraph(f"Keterangan: <b>{_esc(str(lpb.get('keterangan') or '-'))}</b>", meta)],
         # PPK: pihak yang berkomitmen atas pengadaan barang ini (Perpres
         # 16/2018 Pasal 11). Selama ini absen di LPB — pemeriksa yang menelusuri
         # satu penerimaan tak menemukan atas komitmen siapa barang itu datang.
@@ -1105,7 +1112,7 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
         # `snapshot_ppk` sengaja membekukan `ppk_status_kepegawaian` justru
         # untuk ini — mencetak NIP mentah di sini membatalkan aturan privasi
         # yang ditegakkan di seluruh dokumen lain.
-        [Paragraph(f"PPK: <b>{lpb.get('ppk_nama') or '-'}</b>", meta),
+        [Paragraph(f"PPK: <b>{_esc(str(lpb.get('ppk_nama') or '-'))}</b>", meta),
          Paragraph(_baris_nip_ppk(lpb), meta)],
     ], colWidths=[doc.width * 0.52, doc.width * 0.48], hAlign='LEFT')
     info.setStyle(TableStyle([
@@ -1126,10 +1133,10 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
         for i, b in enumerate(lpb.get("items") or [], 1):
             data.append([str(i), b.get("kode_barang") or "-",
                          b.get("nup") or "-",
-                         Paragraph(b.get("nama_barang") or "-", cell),
+                         Paragraph(_esc(str(b.get("nama_barang") or "-")), cell),
                          str(b.get("jumlah")), b.get("satuan") or "-",
                          fmt_rp(b.get("harga_satuan")), fmt_rp(b.get("total")),
-                         Paragraph(b.get("keterangan") or "", cell)])
+                         Paragraph(_esc(str(b.get("keterangan") or "")), cell)])
         data.append(["", "", "", Paragraph("<b>JUMLAH</b>", cell), "", "", "",
                      Paragraph(f"<b>{fmt_rp(lpb.get('total_nilai'))}</b>", cellr), ""])
         lebar = [24, 100, 46, 150, 34, 44, 68, 78, 96]
@@ -1142,10 +1149,10 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
                  "Harga (Rp)", "Total (Rp)", "Keterangan"]]
         for i, b in enumerate(lpb.get("items") or [], 1):
             data.append([str(i), b.get("kode_barang") or "-",
-                         Paragraph(b.get("nama_barang") or "-", cell),
+                         Paragraph(_esc(str(b.get("nama_barang") or "-")), cell),
                          str(b.get("jumlah")), b.get("satuan") or "-",
                          fmt_rp(b.get("harga_satuan")), fmt_rp(b.get("total")),
-                         Paragraph(b.get("keterangan") or "", cell)])
+                         Paragraph(_esc(str(b.get("keterangan") or "")), cell)])
         data.append(["", "", Paragraph("<b>JUMLAH</b>", cell), "", "", "",
                      Paragraph(f"<b>{fmt_rp(lpb.get('total_nilai'))}</b>", cellr), ""])
         lebar = [24, 105, 170, 34, 48, 70, 80, 110]

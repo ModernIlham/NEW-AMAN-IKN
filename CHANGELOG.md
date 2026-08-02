@@ -67,6 +67,32 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#684] Audit total gel.5 — dokumen resmi: privasi NIK & ketahanan teks — 2026-08-02
+
+Gelombang kelima: privasi identitas dan ketahanan PDF terhadap teks bebas.
+
+- **NIK almarhum tercetak mentah di BAST** (`bast.py`). Pasal DASAR
+  PENGEMBALIAN mencetak "(NIP {nomor})" apa adanya untuk pemegang yang
+  meninggal — menembus aturan privasi yang ditegakkan di SELURUH blok tanda
+  tangan dokumen (NIK Non-ASN tak dicetak). Kini nomor identitas almarhum
+  melewati `deteksi_identitas`: NIK dilewati, NIP/NRP memakai label pintar.
+- **Teks bebas meruntuhkan PDF resmi (500 permanen).** Nama penyedia,
+  keterangan, nama barang — dan bahkan nama instansi/satker di KOP surat —
+  diinterpolasi mentah ke `Paragraph` ReportLab. Satu karakter `&` atau `<`
+  memutus parser XML-nya dan menggagalkan seluruh dokumen setiap kali dibuka.
+  Kini semua field teks bebas di-`escape`: di LPB (`persediaan.py`) dan di
+  helper KOP bersama (`reports.py`) yang dipakai LHI/BAST/LPB/LBP dan semua
+  laporan lain — satu tambalan melindungi seluruh generator.
+
+Diverifikasi empiris: LPB dengan penyedia `"PT A & B <Persero>"`, keterangan
+`"100% <lengkap> & baik"`, dan kop `"OIKN <IKN> & Co"` kini dirender tuntas
+(3547 byte) — sebelumnya `Parse error: saw </para>`.
+
+Verifikasi: `py_compile` bersih, 1397 uji unit backend lulus, render PDF
+bermusuh dibuktikan.
+
+---
+
 ## [#683] Audit total gel.4 — cascade & FK yatim saat hapus — 2026-08-02
 
 Gelombang keempat: penghapusan yang meninggalkan referensi menggantung.
