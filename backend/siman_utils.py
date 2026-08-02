@@ -32,6 +32,7 @@ KOLOM_SIMAN = {
     "status bmn": "status_bmn",
     "nilai perolehan": "nilai_perolehan",
     "nilai perolehan pertama": "nilai_perolehan_pertama",
+    "nilai mutasi": "nilai_mutasi",
     "nilai penyusutan": "nilai_penyusutan",
     "nilai buku": "nilai_buku",
     "tanggal perolehan": "tanggal_perolehan",
@@ -91,6 +92,11 @@ FIELD_TERAPKAN = frozenset(f for f, _, _, _ in PERBANDINGAN)
 KUNCI_REFERENSI = (
     "nilai_penyusutan", "nilai_buku", "umur_aset", "status_penggunaan",
     "no_psp", "tanggal_psp", "intra_ekstra", "status_bmn", "lokasi_ruang",
+    # Definisi SIMAN: Nilai Mutasi = Nilai Perolehan − Nilai Perolehan
+    # Pertama (perubahan nilai aset itu sendiri pasca perolehan pertama,
+    # mis. kapitalisasi/koreksi) — disimpan sebagai referensi agar bisa
+    # dibandingkan dengan jurnal 202/204/205 Buku Barang AMAN.
+    "nilai_perolehan_pertama", "nilai_mutasi",
 )
 
 
@@ -258,6 +264,8 @@ def parse_baris(row, peta_header):
         "tanggal_penghapusan": norm_tanggal(d.get("tanggal_penghapusan")),
         "tanggal_psp": norm_tanggal(d.get("tanggal_psp")),
         "nilai_perolehan": parse_harga(d.get("nilai_perolehan")),
+        "nilai_perolehan_pertama": parse_harga(d.get("nilai_perolehan_pertama")),
+        "nilai_mutasi": parse_harga(d.get("nilai_mutasi")),
         "nilai_penyusutan": parse_harga(d.get("nilai_penyusutan")),
         "nilai_buku": parse_harga(d.get("nilai_buku")),
     }

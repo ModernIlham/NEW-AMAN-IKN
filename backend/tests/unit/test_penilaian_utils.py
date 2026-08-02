@@ -263,37 +263,81 @@ def test_validate_masa_manfaat():
     assert any("1-60" in e for e in validate_masa_manfaat("30201", "x"))
 
 
+def test_masa_manfaat_dari_siman_umur_adalah_sisa_semester():
+    # Baris NYATA ekspor SIMAN V2 (daftaraset 28-07-2026): NAS masa manfaat
+    # 4 TAHUN (8 semester) terpakai 1 semester → kolom "Umur Aset" berisi 7
+    # (SISA SEMESTER, bukan tahun). Derivasi: 39.96jt × 7 / 34.965jt = 8 sem.
+    baris = [{
+        "kode_barang": "3100204037", "umur_aset": "7",
+        "nilai_perolehan": 39_960_000, "nilai_penyusutan": 4_995_000,
+        "nilai_buku": 34_965_000,
+    }]
+    assert masa_manfaat_dari_siman(baris)["31002"] == {"tahun": 4, "observasi": 1}
+
+
+def test_masa_manfaat_dari_siman_racun_penafsiran_tahun_tak_terulang():
+    # Regresi: dulu "15" dibaca 15 TAHUN dan meracuni referensi; padahal
+    # itu sisa semester aset 8 tahun (16 sem) yang terpakai 1 semester.
+    baris = [{
+        "kode_barang": "3080101001", "umur_aset": "15",
+        "nilai_perolehan": 16_000_000, "nilai_penyusutan": 1_000_000,
+        "nilai_buku": 15_000_000,
+    }]
+    assert masa_manfaat_dari_siman(baris)["30801"]["tahun"] == 8
+
+
+def test_masa_manfaat_dari_siman_fallback_tanpa_kolom_buku():
+    # Ekspor tanpa kolom Nilai Buku → buku = perolehan − penyusutan.
+    baris = [{"kode_barang": "3100204037", "umur_aset": "7",
+              "nilai_perolehan": 39_960_000, "nilai_penyusutan": 4_995_000}]
+    assert masa_manfaat_dari_siman(baris)["31002"]["tahun"] == 4
+
+
+def _baris_siman(kode, sisa_sem, masa_sem, terpakai_sem, harga=1_000_000.0):
+    beban = harga / masa_sem
+    return {"kode_barang": kode, "umur_aset": str(sisa_sem),
+            "nilai_perolehan": harga,
+            "nilai_penyusutan": beban * terpakai_sem,
+            "nilai_buku": harga - beban * terpakai_sem}
+
+
 def test_masa_manfaat_dari_siman_modus_dan_filter():
     baris = [
-        # kelompok 30501 → dua kali "5", sekali "7" → modus 5
-        {"kode_barang": "3050101001", "umur_aset": "5"},
-        {"kode_barang": "3050102002", "umur_aset": "5"},
-        {"kode_barang": "3050103003", "umur_aset": "7"},
-        # kelompok 30201 → "10 tahun" (ambil angka) & "10"
-        {"kode_barang": "3020101001", "umur_aset": "10 tahun"},
-        {"kode_barang": "3020102002", "umur_aset": "10"},
+        # kelompok 30501 → dua baris 5 th, satu 7 th → modus 5
+        _baris_siman("3050101001", 9, 10, 1),
+        _baris_siman("3050102002", 8, 10, 2),
+        _baris_siman("3050103003", 12, 14, 2),
+        # kelompok 30201 → 10 th
+        _baris_siman("3020101001", 19, 20, 1),
         # golongan 2 (tanah, tak disusutkan) → diabaikan
-        {"kode_barang": "2010101001", "umur_aset": "30"},
-        # nilai di luar rentang wajar → diabaikan
-        {"kode_barang": "3050104004", "umur_aset": "999"},
+        _baris_siman("2010101001", 30, 60, 30),
+        # aset habis susut (sisa 0) tak memuat info masa manfaat → diabaikan
+        {"kode_barang": "3050104004", "umur_aset": "0",
+         "nilai_perolehan": 1_000_000, "nilai_buku": 0},
         # umur kosong → diabaikan
         {"kode_barang": "3050105005", "umur_aset": ""},
         # kode < 5 digit → diabaikan
         {"kode_barang": "305", "umur_aset": "5"},
+        # inkonsisten (1jt × 5 / 300rb = 16.67 — bukan bulat genap) → diabaikan
+        {"kode_barang": "3050106006", "umur_aset": "5",
+         "nilai_perolehan": 1_000_000, "nilai_buku": 300_000},
     ]
     hasil = masa_manfaat_dari_siman(baris)
     assert hasil["30501"] == {"tahun": 5, "observasi": 3}
-    assert hasil["30201"] == {"tahun": 10, "observasi": 2}
+    assert hasil["30201"] == {"tahun": 10, "observasi": 1}
     assert "20101" not in hasil          # golongan tak disusutkan
     assert masa_manfaat_dari_siman([]) == {}
     assert masa_manfaat_dari_siman(None) == {}
 
 
 def test_masa_manfaat_dari_siman_seri_ambil_terkecil():
-    # 5 dan 7 sama-sama 1x (seri) → ambil terkecil (konservatif)
+    # Aset baru (belum tersusut): buku = perolehan, sisa = masa penuh.
+    # 7 th dan 5 th sama-sama 1x (seri) → ambil terkecil (konservatif).
     baris = [
-        {"kode_barang": "3100101001", "umur_aset": "7"},
-        {"kode_barang": "3100102002", "umur_aset": "5"},
+        {"kode_barang": "3100101001", "umur_aset": "14",
+         "nilai_perolehan": 2_000_000, "nilai_buku": 2_000_000},
+        {"kode_barang": "3100102002", "umur_aset": "10",
+         "nilai_perolehan": 2_000_000, "nilai_buku": 2_000_000},
     ]
     assert masa_manfaat_dari_siman(baris)["31001"]["tahun"] == 5
 

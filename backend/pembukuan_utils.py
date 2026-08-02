@@ -201,7 +201,7 @@ def tombstones_penghapusan(assets, ambang=None):
 def build_lbkp_rows(assets, tombstones, dari, sampai, uraian_map=None, ambang=None):
     """LBKP per golongan: saldo awal + mutasi tambah/kurang + saldo akhir.
 
-    assets: aset HIDUP {asset_code, purchase_price, created_at}.
+    assets: aset HIDUP {asset_code, purchase_price, purchase_date, created_at}.
     tombstones: jejak penghapusan {asset_code, timestamp, nilai} — nilai
     0.0 bila audit lama belum merekam harga; opsional `kelas_komptabel`
     ("intra"/"ekstra") bila kelas semasa hidup diketahui.
@@ -225,7 +225,13 @@ def build_lbkp_rows(assets, tombstones, dari, sampai, uraian_map=None, ambang=No
         return agg[kelas].setdefault(gol, _baris_lbkp_kosong(gol, uraian_map))
 
     for a in assets or []:
-        tanggal = str(a.get("created_at") or "")[:10]
+        # Basis mutasi = tanggal PEROLEHAN (peristiwa ekonomi), bukan tanggal
+        # aset diketik ke aplikasi — aset perolehan 2019 yang baru diimpor
+        # (mis. dari SIMAN V2) masuk SALDO AWAL periode berjalan, bukan
+        # "Mutasi Tambah" (selaras definisi mutasi SIMAN/SAKTI; temuan selisih
+        # nilai mutasi pemilik). created_at tetap fallback bila perolehan kosong.
+        tanggal = (str(a.get("purchase_date") or "")[:10]
+                   or str(a.get("created_at") or "")[:10])
         if not tanggal or tanggal > sampai:
             continue
         # Aset DIHAPUS via SK penghapusan (proyeksi #234) yang SK-nya terbit

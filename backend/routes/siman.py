@@ -198,10 +198,12 @@ async def import_siman(request: Request, file: UploadFile = File(...),
     if ops:
         await db.assets.bulk_write(ops, ordered=False)
 
-    # "SIMAN menang" (pilihan pemilik): kolom "Umur Aset" tiap impor langsung
-    # memperbarui referensi masa manfaat kelompok terkait (dipakai Penilaian).
-    # Terkumpul sedikit demi sedikit dari data lapangan → tak bergantung pada
-    # revisi KMK yang terus berubah. Ditandai sumber="siman" agar transparan.
+    # "SIMAN menang" (pilihan pemilik): tiap impor langsung memperbarui
+    # referensi masa manfaat kelompok terkait (dipakai Penilaian). Kolom
+    # "Umur Aset" SIMAN V2 = SISA masa manfaat dalam SEMESTER (bukan tahun) —
+    # masa manfaat diderivasi dari identitas garis lurus perolehan/nilai buku
+    # (lihat masa_manfaat_dari_siman). Terkumpul sedikit demi sedikit dari
+    # data lapangan → tak bergantung revisi KMK. Ditandai sumber="siman".
     from penilaian_utils import masa_manfaat_dari_siman
     mm_teramati = masa_manfaat_dari_siman(baris_data)
     mm_ops = [
@@ -497,6 +499,22 @@ async def buat_draft_dari_siman(request: Request, import_id: str,
                                     "kode_register": b.get("kode_register", ""),
                                     "import_id": import_id,
                                     "diperiksa_pada": now}}})
+            # Jurnal Buku Barang (temuan selisih mutasi vs SIMAN): aset yang
+            # lahir lewat jalur SIMAN dulu TANPA jurnal sama sekali — Buku
+            # Barang kosong sampai backfill manual. Kini langsung 100 (Saldo
+            # Awal) bertanggal buku = tanggal perolehan SIMAN. Best-effort +
+            # anti-ganda via ref_id (pola create_asset).
+            from shared_utils import catat_mutasi_bmn
+            await catat_mutasi_bmn({
+                "asset_id": doc["id"], "kode_transaksi": "100",
+                "kode_barang": kode, "nup": nup,
+                "tanggal_buku": (str(b.get("tanggal_perolehan") or "")[:10]
+                                 or now[:10]),
+                "jumlah": 1, "nilai": float(b.get("nilai_perolehan") or 0),
+                "sumber_modul": "siman", "ref_id": doc["id"],
+                "keterangan": ("Saldo awal dari impor SIMAN V2 "
+                               f"({reg.get('filename', '')})"),
+                "oleh": user.get("username", "system")})
             dibuat += 1
         except HTTPException as e:
             gagal.append(f"{kode}·{nup}: {e.detail}")
@@ -620,6 +638,31 @@ async def terapkan_siman(asset_id: str, payload: TerapkanIn,
         projection={"_id": 0, "version": 1})
     if res is None:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+
+    # Jurnal 204/205 (temuan selisih mutasi vs SIMAN): menimpa purchase_price
+    # dengan nilai SIMAN adalah KOREKSI NILAI — dulu senyap tanpa jejak Buku
+    # Barang, padahal justru transaksi inilah padanan kolom "Nilai Mutasi"
+    # SIMAN. Best-effort + anti-ganda via ref_id (pola penilaian.py).
+    if "purchase_price" in set_fields:
+        from pembukuan_utils import parse_harga
+        from shared_utils import catat_mutasi_bmn
+        lama = next((parse_harga(c["from"]) for c in changes
+                     if c["field"] == "purchase_price"), 0.0)
+        baru = parse_harga(set_fields["purchase_price"])
+        selisih_nilai = baru - lama
+        if abs(selisih_nilai) > 0.5:
+            await catat_mutasi_bmn({
+                "asset_id": asset_id,
+                "kode_transaksi": "204" if selisih_nilai > 0 else "205",
+                "kode_barang": str(a.get("asset_code") or ""),
+                "nup": str(a.get("NUP") or ""),
+                "tanggal_buku": now[:10],
+                "jumlah": 0, "nilai": abs(selisih_nilai),
+                "sumber_modul": "siman",
+                "ref_id": f"siman-terapkan:{asset_id}:{int(lama)}:{int(baru)}",
+                "keterangan": (f"Terapkan nilai SIMAN V2 — nilai perolehan "
+                               f"Rp{int(lama):,} menjadi Rp{int(baru):,}"),
+                "oleh": user.get("username", "system")})
 
     await log_audit("sinkron_siman", a.get("activity_id", ""), asset_id,
                     asset_code=a.get("asset_code", ""),
