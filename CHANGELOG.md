@@ -67,6 +67,28 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#687] Isolasi satker aset pemegang & PSP — stempel efektif + kop per-satker — 2026-08-02
+
+Laporan pemilik: data lintas satker tampil di halaman aset pemegang bagian
+Penetapan Status Penggunaan (PR #679). Akar: dokumen buatan super-admin pusat
+tanpa "Satker Aktif" terstempel `kode_satker` kosong — dan scope lunak sengaja
+meloloskan "" (era lama) — sehingga tampil di register SEMUA satker.
+
+- **Stempel efektif** `kode_satker_efektif_dari_aset` di POST PSP / idle /
+  proses / BAST (+ surat booking otomatisnya): dokumen user lintas-satker
+  diderivasi dari kegiatan aset yang dirujuk, tak pernah lagi "".
+- **Kop per-satker** di PDF "Daftar Barang yang Digunakan" + default PIHAK
+  KESATU BAST dari kop satker (dulu selalu global).
+- `status_kepegawaian_by_nip` ter-scope satker; cek duplikat tiket idle
+  ter-scope (tutup oracle 409); 6 sumber Timeline aset diseragamkan
+  (`_q_satker_lunak`).
+- `scripts/backfill_kode_satker_dokumen.py` merapikan dokumen lama yang
+  telanjur kosong (dry-run default, `--terapkan` untuk menulis).
+
+Verifikasi: compileall bersih, 1400 uji unit lulus.
+
+---
+
 ## [#686] Toolbar aset tanpa geser samping + popup Struktur Organisasi rapi di HP — 2026-08-02
 
 Dua perbaikan tampilan dari umpan balik pemilik (PR #678):

@@ -280,7 +280,14 @@ async def buat_bast(payload: BastIn, request: Request = None,
     for a in aset:
         await pastikan_akses_aset(user, a)
 
-    settings = await db.report_settings.find_one({"type": "global"}, _PROJ) or {}
+    # Stempel efektif SATU kali untuk BAST + surat booking + default pihak
+    # pertama: dokumen buatan super-admin pusat ikut satker aset yang
+    # diserahterimakan — stempel "" tampil di riwayat & buku agenda SEMUA
+    # satker (kebocoran yang dilaporkan pemilik).
+    from shared_utils import kode_satker_efektif_dari_aset, pengaturan_kop
+    ks_efektif = await kode_satker_efektif_dari_aset(
+        user, [a["id"] for a in aset])
+    settings = await pengaturan_kop(kode_satker=ks_efektif) or {}
     p1 = payload.pihak_pertama
     pihak_pertama = {
         "nama": (p1.nama if p1 and p1.nama.strip() else settings.get("kasatker_nama", "")),
@@ -326,8 +333,7 @@ async def buat_bast(payload: BastIn, request: Request = None,
         from routes.persuratan import _no_agenda_berikut, _pengaturan
         tgl_surat = (str(payload.tanggal or "").strip()[:10]
                      or now.date().isoformat())
-        from shared_utils import kode_satker_user as _ksu2
-        _ks = _ksu2(user)
+        _ks = ks_efektif
         atur = await _pengaturan(_ks)
         kode_klas = pilih_klasifikasi(atur["peta_klasifikasi"], "penggunaan",
                                       "Berita Acara",
@@ -360,7 +366,7 @@ async def buat_bast(payload: BastIn, request: Request = None,
 
     record = {
         "id": str(uuid.uuid4()),
-        "kode_satker": kode_satker_user(user),
+        "kode_satker": ks_efektif,
         "jenis": payload.jenis,
         "judul_lainnya": str(payload.judul_lainnya or "").strip(),
         "nomor": nomor_final,

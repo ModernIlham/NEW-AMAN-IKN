@@ -246,7 +246,7 @@ async def catat_psp(payload: PspIn, user: dict = Depends(require_writer)):
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
     aset_rows = []
-    from shared_utils import kode_satker_user, pastikan_akses_aset
+    from shared_utils import kode_satker_efektif_dari_aset, pastikan_akses_aset
     for aid in dict.fromkeys(data["asset_ids"]):
         a = await db.assets.find_one({"id": aid}, _PROJ_IDLE)
         if not a:
@@ -260,7 +260,10 @@ async def catat_psp(payload: PspIn, user: dict = Depends(require_writer)):
     status_awal = "draf" if data.get("sebagai_draf") else "ditetapkan"
     record = {
         "id": str(uuid.uuid4()),
-        "kode_satker": kode_satker_user(user),
+        # Stempel efektif: SK buatan super-admin pusat ikut satker aset yang
+        # dirujuk — stempel "" membuat SK tampil di register SEMUA satker.
+        "kode_satker": await kode_satker_efektif_dari_aset(
+            user, data["asset_ids"]),
         "nomor_sk": str(data.get("nomor_sk") or "").strip(),
         "tanggal_sk": str(data.get("tanggal_sk") or "").strip()[:10],
         "jenis": data["jenis"],
@@ -676,22 +679,27 @@ async def buat_tiket_idle(payload: TiketIdleIn, user: dict = Depends(require_wri
     a = await db.assets.find_one({"id": payload.asset_id}, _PROJ_IDLE)
     if not a:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
-    from shared_utils import kode_satker_user, pastikan_akses_aset
+    from shared_utils import (kode_satker_efektif_dari_aset,
+                              pastikan_akses_aset, scope_query_field_satker)
     await pastikan_akses_aset(user, a)
     ya, alasan = indikasi_idle(a)
     if not ya:
         raise HTTPException(status_code=400,
                             detail="Aset bukan kandidat idle (berstatus aktif dan berpengguna)")
+    # Cek duplikat ter-scope satker — tiket satker lain tak boleh memblokir
+    # (juga menutup oracle keberadaan tiket lintas satker lewat 409).
     aktif = await db.bmn_idle.find_one(
-        {"asset_id": payload.asset_id,
-         "status": {"$in": ["klarifikasi", "usul_serah"]}}, {"_id": 0, "id": 1})
+        scope_query_field_satker(user, {
+            "asset_id": payload.asset_id,
+            "status": {"$in": ["klarifikasi", "usul_serah"]}}), {"_id": 0, "id": 1})
     if aktif:
         raise HTTPException(status_code=409,
                             detail="Aset ini sudah punya tiket idle aktif")
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
-        "kode_satker": kode_satker_user(user),
+        "kode_satker": await kode_satker_efektif_dari_aset(
+            user, [payload.asset_id]),
         "asset_id": a["id"],
         "asset_code": a.get("asset_code"),
         "NUP": a.get("NUP"),
@@ -867,7 +875,10 @@ async def daftar_pemegang_pdf(
         raise HTTPException(status_code=404,
                             detail="Pemegang tidak ditemukan / tanpa aset")
     rows.sort(key=lambda a: (a.get("asset_name") or "", a.get("asset_code") or ""))
-    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    # Kop per-satker (bukan report_settings global): dokumen resmi satker ini
+    # harus berkop satker ini — selaras bast_psp_pdf di atas.
+    from shared_utils import pengaturan_kop
+    settings = await pengaturan_kop(kode_satker=kode_satker_user(_user))
 
     buffer = BytesIO()
     doc = _std_doc(buffer)
@@ -924,7 +935,8 @@ async def daftar_pemegang_pdf(
          # Label pintar (NIP/NRP); Non-ASN/NIK tidak dicetak (privasi)
          'after': baris_identitas_ttd(
              nip, "NIP. ....................",
-             await status_kepegawaian_by_nip(nip))},
+             await status_kepegawaian_by_nip(
+                 nip, kode_satker=kode_satker_user(_user)))},
         await blok_ttd_kpb_titik(settings, kode_satker=kode_satker_user(_user)),   # KPB dari registry pejabat (temuan #26)
     ], doc.width))
     footer = _page_footer_factory("Daftar Barang yang Digunakan")
@@ -1016,7 +1028,7 @@ async def buat_proses(payload: ProsesIn, user: dict = Depends(require_writer)):
     errors = validate_proses_penggunaan(data)
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
-    from shared_utils import pastikan_akses_aset
+    from shared_utils import kode_satker_efektif_dari_aset, pastikan_akses_aset
     aset_rows = []
     for aid in dict.fromkeys(data["asset_ids"]):
         a = await db.assets.find_one(
@@ -1035,7 +1047,8 @@ async def buat_proses(payload: ProsesIn, user: dict = Depends(require_writer)):
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
-        "kode_satker": kode_satker_user(user),
+        "kode_satker": await kode_satker_efektif_dari_aset(
+            user, data["asset_ids"]),
         "jenis_proses": data["jenis_proses"],
         "arah": data["arah"],
         "pihak_asal": data["pihak_asal"].strip(),

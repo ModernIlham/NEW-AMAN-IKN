@@ -809,16 +809,21 @@ VALID_SUB_KLASIFIKASI_ALL = VALID_SUB_KLASIFIKASI_PENCATATAN + VALID_SUB_KLASIFI
 
 # ── Penanda tangan dokumen resmi (temuan review #26 — satu resolver lintas modul) ──
 
-async def status_kepegawaian_by_nip(nip) -> str:
+async def status_kepegawaian_by_nip(nip, kode_satker: str = "") -> str:
     """Kode status kepegawaian ("pns"/"non_asn"/...) seseorang per NIP —
     registry pejabat dulu, lalu Master Pegawai; "" bila tak ditemukan.
-    Dipakai aturan privasi blok TTD: Non-ASN tidak dicetak NIP/NIK-nya."""
+    Dipakai aturan privasi blok TTD: Non-ASN tidak dicetak NIP/NIK-nya.
+
+    `kode_satker` (opsional) membatasi lookup ke satker penerbit dokumen
+    (+ entri era-lama tanpa kode) — di DB multi-satker, NIP kembar di satker
+    lain tak boleh menentukan status yang dicetak dokumen satker ini."""
     n = str(nip or "").strip()
     if not n or set(n) <= set(".-_ "):
         return ""
+    q_scope = _q_pejabat_satker(kode_satker)
     for koleksi in (db.pejabat, db.pegawai):
         doc = await koleksi.find_one(
-            {"nip": n}, {"_id": 0, "status_kepegawaian": 1})
+            {"nip": n, **q_scope}, {"_id": 0, "status_kepegawaian": 1})
         if doc and str(doc.get("status_kepegawaian") or "").strip():
             return str(doc["status_kepegawaian"]).strip()
     return ""
@@ -859,7 +864,8 @@ async def resolve_penandatangan_kpb(settings, per_iso=None, kode_satker=""):
     # Fallback setelan tidak membawa status — lengkapi via lookup NIP agar
     # aturan Non-ASN tetap berlaku bila orangnya terdaftar di master.
     if not kpb.get("status_kepegawaian"):
-        kpb["status_kepegawaian"] = await status_kepegawaian_by_nip(kpb.get("nip"))
+        kpb["status_kepegawaian"] = await status_kepegawaian_by_nip(
+            kpb.get("nip"), kode_satker=kode_satker)
     return kpb
 
 
@@ -967,6 +973,35 @@ def scope_query_field_satker(user, query=None, field="kode_satker") -> dict:
     if kode:
         q[field] = {"$in": [kode, "", None]}
     return q
+
+
+async def kode_satker_efektif_dari_aset(user, asset_ids) -> str:
+    """Stempel `kode_satker` efektif untuk dokumen yang merujuk aset (PSP,
+    tiket idle/proses, BAST): kode user bila terikat satker; bila user
+    LINTAS-SATKER (super-admin pusat tanpa Satker Aktif) diderivasi dari
+    kegiatan induk aset pertama yang punya kode.
+
+    Tanpa derivasi ini dokumen buatan super-admin terstempel "" — dan karena
+    `scope_query_field_satker` sengaja meloloskan "" (data era lama), dokumen
+    itu tampil di register SEMUA satker (kebocoran yang dilaporkan pemilik
+    pada halaman aset pemegang / PSP). "" tetap mungkin hanya bila aset-aset
+    yang dirujuk pun tak berkegiatan/berkode — data yatim yang memang perlu
+    dirapikan (lihat scripts/backfill_kode_satker_dokumen.py)."""
+    kode = kode_satker_user(user)
+    if kode:
+        return kode
+    for aid in asset_ids or []:
+        a = await db.assets.find_one(
+            {"id": str(aid or "")}, {"_id": 0, "activity_id": 1})
+        act_id = str((a or {}).get("activity_id") or "").strip()
+        if not act_id:
+            continue
+        act = await db.inventory_activities.find_one(
+            {"id": act_id}, {"_id": 0, "kode_satker": 1})
+        k = str((act or {}).get("kode_satker") or "").strip()
+        if k:
+            return k
+    return ""
 
 
 async def pastikan_akses_dok_satker(user, doc, field="kode_satker") -> None:
