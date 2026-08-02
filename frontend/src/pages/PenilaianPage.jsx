@@ -440,7 +440,7 @@ export default function PenilaianPage({ user, onBack }) {
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-bold text-foreground">Riwayat Nilai per Aset</p>
                   <p className="text-[10px] text-muted-foreground truncate">
-                    Jejak satu aset: perolehan → koreksi/revaluasi → nilai terkini (read-only)
+                    Perolehan → kapitalisasi/koreksi/revaluasi → penyusutan → nilai buku (read-only)
                   </p>
                 </div>
                 {riwayat && (
@@ -485,22 +485,64 @@ export default function PenilaianPage({ user, onBack }) {
                       <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate">{riwayat.aset?.asset_name || "-"}</p>
                       <span className="font-mono text-[10px] text-muted-foreground flex-shrink-0">{riwayat.aset?.asset_code} · {riwayat.aset?.NUP}</span>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2" data-testid="riwayat-posisi">
                       <div className="rounded-lg border border-border p-2">
-                        <p className="text-[10px] text-muted-foreground">Nilai perolehan</p>
-                        <p className="text-sm font-bold text-foreground">Rp{Math.round(Number(riwayat.nilai_perolehan || 0)).toLocaleString("id-ID")}</p>
+                        <p className="text-[10px] text-muted-foreground">Nilai perolehan tercatat</p>
+                        <p className="text-sm font-bold text-foreground">{fmtRp(riwayat.nilai_perolehan)}</p>
+                        {Math.round(Number(riwayat.nilai_perolehan_awal || 0)) !== Math.round(Number(riwayat.nilai_perolehan || 0)) && (
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            awal {fmtRp(riwayat.nilai_perolehan_awal)} + kapitalisasi/koreksi
+                          </p>
+                        )}
                       </div>
                       <div className="rounded-lg border border-border p-2">
-                        <p className="text-[10px] text-muted-foreground">Nilai terkini</p>
-                        <p className="text-sm font-bold text-foreground">Rp{Math.round(Number(riwayat.nilai_terkini || 0)).toLocaleString("id-ID")}</p>
+                        <p className="text-[10px] text-muted-foreground">Dasar penyusutan</p>
+                        <p className="text-sm font-bold text-foreground">{fmtRp(riwayat.posisi?.dasar_nilai)}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          {riwayat.posisi?.dasar_sumber === "revaluasi" ? "nilai revaluasi" : "nilai perolehan"}
+                          {riwayat.posisi?.dasar_mulai && ` · mulai ${riwayat.posisi.dasar_mulai}`}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-border p-2">
+                        <p className="text-[10px] text-muted-foreground">Akumulasi penyusutan</p>
+                        <p className="text-sm font-bold text-red-600 dark:text-red-400">
+                          {riwayat.posisi?.akumulasi == null ? "—" : `− ${fmtRp(riwayat.posisi.akumulasi)}`}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">s.d. {riwayat.posisi?.per_tanggal || "-"}</p>
+                      </div>
+                      <div className="rounded-lg border border-emerald-500/40 p-2">
+                        <p className="text-[10px] text-muted-foreground">Nilai buku</p>
+                        <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400" data-testid="riwayat-nilai-buku">
+                          {riwayat.posisi?.nilai_buku == null ? "—" : fmtRp(riwayat.posisi.nilai_buku)}
+                        </p>
+                        {riwayat.posisi?.habis && (
+                          <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">habis masa manfaat</p>
+                        )}
                       </div>
                     </div>
+                    <p className="text-[11px] text-muted-foreground" data-testid="riwayat-status-susut">
+                      {riwayat.posisi?.status === "susut" ? (
+                        <>Disusutkan garis lurus semesteran — masa manfaat{" "}
+                          <strong className="text-foreground/80">{riwayat.posisi.masa_tahun} tahun</strong>{" "}
+                          ({riwayat.posisi.masa_semester} semester) · terpakai {riwayat.posisi.semester_terpakai} ·
+                          sisa {riwayat.posisi.semester_sisa} · beban {fmtRp(riwayat.posisi.beban_per_semester)}/semester</>
+                      ) : (
+                        <>{riwayat.posisi?.status === "henti" ? "Penyusutan dihentikan" :
+                          riwayat.posisi?.status === "tanpa_referensi" ? "Belum dapat dihitung" :
+                          "Bukan objek penyusutan"} — {riwayat.posisi?.alasan || "-"}</>
+                      )}
+                    </p>
                     <ol className="relative border-l border-border/70 ml-1.5 space-y-3">
                       {(riwayat.peristiwa || []).map((p, i) => (
                         <li key={i} className="ml-3.5" data-testid={`riwayat-peristiwa-${i}`}>
-                          <span className={`absolute -left-1.5 w-3 h-3 rounded-full border-2 border-card ${p.jenis === "perolehan" ? "bg-sky-500" : p.informasional ? "bg-slate-400" : "bg-teal-500"}`} />
+                          <span className={`absolute -left-1.5 w-3 h-3 rounded-full border-2 border-card ${p.jenis === "perolehan" ? "bg-sky-500" : p.jenis === "jurnal" ? "bg-violet-500" : p.informasional ? "bg-slate-400" : "bg-teal-500"}`} />
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span className="text-xs font-semibold text-foreground">{p.label}</span>
+                            {p.jenis === "jurnal" && p.sumber_modul && (
+                              <span className="px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-600 dark:text-violet-300 text-[10px] font-semibold">
+                                Buku Barang · {p.sumber_modul}
+                              </span>
+                            )}
                             {p.informasional && (
                               <span className="px-1.5 py-0.5 rounded bg-slate-500/15 text-slate-600 dark:text-slate-300 text-[10px] font-semibold">informasional</span>
                             )}
@@ -512,10 +554,13 @@ export default function PenilaianPage({ user, onBack }) {
                             <span className="text-[10px] text-muted-foreground ml-auto">{p.tanggal || "—"}</span>
                           </div>
                           <p className="text-[11px] text-muted-foreground mt-0.5">
-                            {p.nilai_lama == null
-                              ? `Rp${Math.round(Number(p.nilai_baru || 0)).toLocaleString("id-ID")}`
-                              : `Rp${Math.round(Number(p.nilai_lama || 0)).toLocaleString("id-ID")} → Rp${Math.round(Number(p.nilai_baru || 0)).toLocaleString("id-ID")}`}
+                            {p.jenis === "jurnal"
+                              ? `${p.arah === "tambah" ? "+ " : p.arah === "kurang" ? "− " : ""}${fmtRp(p.nilai)}`
+                              : p.nilai_lama == null
+                                ? fmtRp(p.nilai_baru)
+                                : `${fmtRp(p.nilai_lama)} → ${fmtRp(p.nilai_baru)}`}
                             {p.nomor_dokumen && ` · ${(riwayat.label_dokumen?.[p.jenis_dokumen] || p.jenis_dokumen || "").trim()} ${p.nomor_dokumen}`.replace(/\s+/g, " ")}
+                            {p.jenis === "jurnal" && p.keterangan && ` · ${p.keterangan}`}
                           </p>
                         </li>
                       ))}

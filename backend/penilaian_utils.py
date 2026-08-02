@@ -448,18 +448,114 @@ def rekap_koreksi_nilai(items) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Riwayat nilai per aset (read-only, #203). Gabungkan nilai perolehan
-# (master aset) dengan peristiwa koreksi/revaluasi (penilaian_koreksi #184)
-# menjadi jejak kronologis. Nilai buku terkini = nilai_baru koreksi
-# non-informasional terakhir; penilaian tujuan tertentu tidak mengubah buku.
+# Riwayat nilai per aset (read-only, #203; dirombak total pada mandat
+# "riwayat nilai belum jelas"). Tiga sumber digabung jadi satu jejak:
+#   1. master aset (nilai perolehan tercatat),
+#   2. register koreksi/revaluasi `penilaian_koreksi` (#184),
+#   3. jurnal Buku Barang `mutasi_bmn` per NUP (G7) — kapitalisasi
+#      perbaikan 202, terapan nilai SIMAN 204/205, perolehan 100/101, dst.
+# Posisi penyusutan & NILAI BUKU per aset dihitung `posisi_nilai_aset`
+# (dulu mesinnya hanya dipakai agregat golongan — per aset tak pernah).
 # ---------------------------------------------------------------------------
 
-def susun_riwayat_nilai(asset, koreksi_list) -> dict:
-    """Jejak kronologis nilai satu aset → {peristiwa, nilai_terkini, ...}."""
+def posisi_nilai_aset(asset, per_iso, peta=None, diusulkan=False) -> dict:
+    """Posisi nilai SATU aset per tanggal — mesin yang sama dengan
+    `rekap_penyusutan`, tetapi hasil per asetnya DIKEMBALIKAN (tidak
+    dilebur ke golongan): dasar penyusutan, masa manfaat, beban per
+    semester, semester terpakai/sisa, akumulasi, dan NILAI BUKU
+    (= dasar − akumulasi, definisi yang dipakai Laporan Penyusutan/LBP).
+
+    Kejujuran data dipertahankan: aset henti-susut / tanpa referensi
+    TIDAK ditebak — akumulasi & nilai buku None + alasan; aset bukan
+    objek penyusutan (tanah dll.) nilai bukunya = nilai tercatat.
+    """
     asset = asset or {}
-    harga_awal = parse_harga(asset.get("purchase_price"))
+    status, alasan, masa = status_susut(asset, peta, diusulkan=diusulkan)
+    harga, mulai, sumber = dasar_penyusutan(asset)
+    posisi = {
+        "status": status,
+        "alasan": alasan,
+        "per_tanggal": str(per_iso or "").strip()[:10],
+        "dasar_nilai": harga,
+        "dasar_mulai": str(mulai or "").strip()[:10],
+        "dasar_sumber": sumber,          # "perolehan" | "revaluasi"
+        "masa_tahun": masa,
+        "masa_semester": None,
+        "beban_per_semester": None,
+        "semester_terpakai": None,
+        "semester_sisa": None,
+        "akumulasi": None,
+        "nilai_buku": None,
+        "habis": False,
+    }
+    if status == "susut":
+        d = hitung_penyusutan(harga, masa, mulai, per_iso)
+        posisi.update(
+            masa_semester=d["masa_semester"],
+            beban_per_semester=d["beban_per_semester"],
+            semester_terpakai=d["semester_terpakai"],
+            semester_sisa=max(0, d["masa_semester"] - d["semester_terpakai"]),
+            akumulasi=d["akumulasi"],
+            nilai_buku=d["nilai_buku"],
+            habis=d["habis"],
+        )
+    elif status == "tidak":
+        # Bukan objek penyusutan (tanah, KDP, dll.): nilai buku = nilai
+        # tercatat, akumulasi nol — bukan "tidak diketahui".
+        posisi.update(akumulasi=0.0, nilai_buku=harga)
+    return posisi
+
+
+# Kode jurnal Buku Barang yang MENGGESER nilai perolehan tercatat
+# (`purchase_price`) — dipakai merekonstruksi nilai perolehan AWAL:
+#   202 kapitalisasi perbaikan SELALU menambah purchase_price
+#   (pemeliharaan.py); 204/205 menimpa purchase_price HANYA pada jalur
+#   SIMAN (siman.py) — jalur penilaian menulis `nilai_wajar_terakhir`
+#   saja sehingga tidak ikut dihitung.
+_KODE_GESER_PEROLEHAN = {"202": 1, "204": 1, "205": -1}
+
+
+def susun_riwayat_nilai(asset, koreksi_list, mutasi_list=None) -> dict:
+    """Jejak kronologis nilai satu aset → {peristiwa, nilai_perolehan, ...}.
+
+    `mutasi_list` = entri jurnal `mutasi_bmn` milik aset (opsional, boleh
+    None untuk kompatibilitas). Entri 204/205 bersumber modul "penilaian"
+    yang ref_id-nya ada di register koreksi TIDAK diduplikasi (koreksinya
+    sendiri sudah jadi peristiwa). Nilai perolehan AWAL direkonstruksi:
+    pakai jurnal perolehan 100/101 bila ada; kalau tidak, mundurkan
+    purchase_price tercatat dengan jurnal penggeser (202/204/205-SIMAN).
+    """
+    from mutasi_bmn_utils import KODE_TRANSAKSI_BMN
+
+    asset = asset or {}
+    harga_tercatat = parse_harga(asset.get("purchase_price"))
+    koreksi_ids = {str(k.get("id") or "") for k in (koreksi_list or [])}
+    mutasi = sorted(mutasi_list or [],
+                    key=lambda m: str(m.get("tanggal_buku") or ""))
+
+    # Rekonstruksi nilai perolehan AWAL (sebelum kapitalisasi/terapan SIMAN)
+    jurnal_perolehan = next(
+        (m for m in mutasi
+         if str(m.get("kode_transaksi") or "") in ("100", "101")), None)
+    geser = 0.0
+    for m in mutasi:
+        kode = str(m.get("kode_transaksi") or "")
+        arah = _KODE_GESER_PEROLEHAN.get(kode)
+        if not arah:
+            continue
+        if kode in ("204", "205") and m.get("sumber_modul") != "siman":
+            continue
+        geser += arah * parse_harga(m.get("nilai"))
+    if jurnal_perolehan is not None:
+        harga_awal = parse_harga(jurnal_perolehan.get("nilai"))
+    else:
+        harga_awal = harga_tercatat - geser
+        if harga_awal < 0:  # data jurnal tak utuh → jangan mengarang
+            harga_awal = harga_tercatat
     peristiwa = [{
-        "tanggal": str(asset.get("purchase_date") or "").strip()[:10],
+        "tanggal": (str(jurnal_perolehan.get("tanggal_buku") or "").strip()[:10]
+                    if jurnal_perolehan is not None
+                    else str(asset.get("purchase_date") or "").strip()[:10]),
         "jenis": "perolehan",
         "label": "Perolehan",
         "nilai_lama": None,
@@ -469,9 +565,7 @@ def susun_riwayat_nilai(asset, koreksi_list) -> dict:
         "status_sakti": "",
         "informasional": False,
     }]
-    # Urut koreksi menaik menurut tanggal dokumen (tak valid → di akhir "")
-    for k in sorted(koreksi_list or [],
-                    key=lambda x: str(x.get("tanggal_dokumen") or "")):
+    for k in koreksi_list or []:
         jenis = k.get("jenis")
         informasional = (jenis == "penilaian_tujuan_tertentu")
         peristiwa.append({
@@ -486,16 +580,44 @@ def susun_riwayat_nilai(asset, koreksi_list) -> dict:
             "status_sakti": k.get("status_sakti") or "",
             "informasional": informasional,
         })
-    # Nilai buku terkini: ikuti koreksi non-informasional terakhir
-    nilai_terkini = harga_awal
-    for p in peristiwa[1:]:
-        if not p["informasional"]:
-            nilai_terkini = p["nilai_baru"]
+    for m in mutasi:
+        kode = str(m.get("kode_transaksi") or "").strip()
+        info = KODE_TRANSAKSI_BMN.get(kode)
+        if not info:
+            continue
+        if kode in ("100", "101") and m is jurnal_perolehan:
+            continue  # sudah jadi peristiwa "Perolehan"
+        if (kode in ("204", "205") and m.get("sumber_modul") == "penilaian"
+                and str(m.get("ref_id") or "") in koreksi_ids):
+            continue  # koreksi register-nya sendiri sudah tampil
+        uraian, arah = info
+        peristiwa.append({
+            "tanggal": str(m.get("tanggal_buku") or "").strip()[:10],
+            "jenis": "jurnal",
+            "kode_transaksi": kode,
+            "label": f"{kode} — {uraian}",
+            "arah": arah,
+            "nilai_lama": None,
+            "nilai_baru": None,
+            "nilai": parse_harga(m.get("nilai")),
+            "selisih": None,
+            "nomor_dokumen": "",
+            "keterangan": str(m.get("keterangan") or "").strip(),
+            "sumber_modul": str(m.get("sumber_modul") or "").strip(),
+            "status_sakti": "",
+            "informasional": False,
+        })
+    # Perolehan selalu di depan; sisanya menaik menurut tanggal (tanggal
+    # tak valid/kosong → paling akhir agar tetap terlihat, tidak hilang).
+    awal, sisa = peristiwa[0], peristiwa[1:]
+    sisa.sort(key=lambda p: (p["tanggal"] or "9999-99-99"))
+    peristiwa = [awal] + sisa
     return {
         "peristiwa": peristiwa,
-        "nilai_perolehan": harga_awal,
-        "nilai_terkini": nilai_terkini,
-        "jumlah_koreksi": len(peristiwa) - 1,
+        "nilai_perolehan": harga_tercatat,
+        "nilai_perolehan_awal": harga_awal,
+        "jumlah_koreksi": len(koreksi_list or []),
+        "jumlah_jurnal": sum(1 for p in peristiwa if p["jenis"] == "jurnal"),
     }
 
 

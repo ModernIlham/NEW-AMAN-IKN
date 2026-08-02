@@ -67,6 +67,53 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#699] Riwayat Nilai per Aset: penyusutan & nilai buku akhirnya tampil — 2026-08-02
+
+- **Nilai buku per aset kini benar-benar dihitung.** Mesin penyusutan
+  (`hitung_penyusutan`/`status_susut`/`dasar_penyusutan`) sudah lama teruji,
+  tapi hanya pernah dipakai AGREGAT per golongan — `rekap_penyusutan`
+  menghitung per aset lalu langsung meleburnya, dan tak ada satu pun endpoint
+  yang mengembalikan angka per NUP. Fungsi murni baru `posisi_nilai_aset`
+  mengembalikan hasil per asetnya: dasar penyusutan (+ sumber
+  perolehan/revaluasi), masa manfaat (tahun & semester), beban per semester,
+  semester terpakai/sisa, akumulasi, dan **nilai buku = dasar − akumulasi** —
+  definisi yang SAMA dengan Laporan Penyusutan/LBP, bukan lagi "nilai
+  terkini" versi register koreksi yang tidak dipakai laporan mana pun.
+  Kejujuran data dijaga: aset henti-susut / tanpa referensi masa manfaat
+  tidak ditebak (tampil "—" + alasan), tanah & KDP tampil sebagai bukan
+  objek penyusutan dengan nilai buku = nilai tercatat.
+- **Riwayat kini membaca jurnal Buku Barang.** `mutasi_bmn` per NUP
+  (kapitalisasi perbaikan 202, terapan nilai SIMAN 204/205, perolehan
+  100/101, penghapusan 301, reklasifikasi 304/107) selama ini adalah ledger
+  nilai paling lengkap di aplikasi — dan riwayat nilai tak pernah membacanya,
+  sehingga kapitalisasi/terapan SIMAN mengubah nilai tanpa jejak di layar
+  ini. Kini semua entri jurnal tampil di timeline (badge "Buku Barang" +
+  modul sumber + arah +/−); jurnal 204/205 turunan koreksi register tidak
+  diduplikasi (koreksinya sendiri yang tampil, dicocokkan via `ref_id`).
+- **Peristiwa "Perolehan" berhenti berbohong.** Dulu ia menampilkan
+  `purchase_price` TERKINI — yang sudah dinaikkan kapitalisasi perbaikan
+  atau ditimpa SIMAN — seolah itu nilai asli. Kini nilai perolehan AWAL
+  direkonstruksi: jurnal perolehan 100/101 dipakai bila ada; bila tidak,
+  nilai tercatat dimundurkan dengan jurnal penggeser (202 selalu; 204/205
+  hanya jalur SIMAN karena jalur penilaian tidak menyentuh
+  `purchase_price`). Rekonstruksi yang menghasilkan angka negatif (jurnal
+  tak utuh) jatuh kembali ke nilai tercatat — tidak mengarang.
+- **Layar Riwayat Nilai dirombak**: empat kartu (Nilai perolehan tercatat —
+  plus "awal … + kapitalisasi" bila berbeda, Dasar penyusutan, Akumulasi
+  penyusutan merah, **Nilai buku** hijau) + baris status ("Disusutkan garis
+  lurus semesteran — masa manfaat 8 tahun (16 semester) · terpakai 5 · sisa
+  11 · beban Rp625.000/semester", atau alasan henti/tanpa-referensi/bukan
+  objek). Endpoint menerima `?per_tanggal=` untuk posisi historis.
+- Kriteria henti-susut per aset SAMA dengan rekap agregat: rusak berat/
+  hilang **dan** telah diusulkan penghapusan (cek `usulan_penghapusan`,
+  PMK 65/2017) — bukan sekadar kondisi.
+
+Verifikasi: 2 uji unit baru + 1 dirombak (rekonstruksi perolehan awal,
+dedup jurnal-koreksi, posisi susut/tanah/tanpa-referensi/henti/habis),
+total 1409 uji backend lulus, eslint bersih, `yarn build` sukses.
+
+---
+
 ## [#698] Tanggalan berbahasa Indonesia & kelengkapan BMN ikut kode barang — 2026-08-02
 
 - **Kalender berbahasa Indonesia + ikon di dalam kolom.** Ikon kalender pada
