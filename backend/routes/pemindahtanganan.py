@@ -178,9 +178,12 @@ async def buat_usulan_pt(payload: UsulanPtIn, user: dict = Depends(require_write
                           "harga": a.get("purchase_price"),
                           "kondisi": a.get("condition")})
     now = datetime.now(timezone.utc).isoformat()
+    from shared_utils import kode_satker_efektif_dari_aset
+    _ks = await kode_satker_efektif_dari_aset(
+        user, [r["asset_id"] for r in aset_rows])
     record = {
         "id": str(uuid.uuid4()),
-        "kode_satker": kode_satker_user(user),
+        "kode_satker": _ks,
         "bentuk": data["bentuk"],
         "pihak": data["pihak"].strip(),
         "keterangan": str(data.get("keterangan") or "").strip(),

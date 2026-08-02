@@ -464,7 +464,18 @@ async def terapkan_perpindahan(request: Request, payload: TerapkanIn,
         # bertentangan, dan yang dipegang pemeriksa justru kertasnya.
         if nama_ruang and nama_ruang != lokasi_teks_lama:
             set_aset["location"] = nama_ruang
-        await db.assets.update_one({"id": aset["id"]}, {"$set": set_aset})
+        # $inc version: tanpa ini penjaga OCC/If-Match & cache media buta
+        # terhadap perpindahan lokasi hasil opname (pola batch.py).
+        await db.assets.update_one({"id": aset["id"]},
+                                   {"$set": set_aset,
+                                    "$inc": {"version": 1}})
+        try:
+            from meili_utils import jadwalkan_sync
+            _doc = await db.assets.find_one({"id": aset["id"]}, {"_id": 0})
+            if _doc:
+                jadwalkan_sync("assets", _doc)
+        except Exception:
+            pass
         await log_audit("opname_terapkan", aset.get("activity_id") or "",
                         aset["id"], asset_code=aset.get("asset_code") or "",
                         asset_name=aset.get("asset_name") or "",

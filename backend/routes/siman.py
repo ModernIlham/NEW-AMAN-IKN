@@ -206,6 +206,16 @@ async def import_siman(request: Request, file: UploadFile = File(...),
     # data lapangan → tak bergantung revisi KMK. Ditandai sumber="siman".
     from penilaian_utils import masa_manfaat_dari_siman
     mm_teramati = masa_manfaat_dari_siman(baris_data)
+    # PAGAR LINTAS-SATKER: referensi masa manfaat berlaku untuk SEMUA satker
+    # (penilaian.py menolak admin ber-satker mengubahnya), maka impor SIMAN
+    # milik satu satker TIDAK BOLEH menimpa entri yang dikelola manusia
+    # ("input satker"/"bawaan") — ia hanya boleh MENGISI kelompok yang belum
+    # terdaftar atau menyegarkan entri hasil SIMAN sebelumnya.
+    dilindungi = {
+        d["kode"] async for d in db.masa_manfaat.find(
+            {"kode": {"$in": sorted(mm_teramati)},
+             "sumber": {"$nin": ["siman", None, ""]}},
+            {"_id": 0, "kode": 1})}
     mm_ops = [
         UpdateOne(
             {"kode": kelompok},
@@ -216,6 +226,7 @@ async def import_siman(request: Request, file: UploadFile = File(...),
             upsert=True,
         )
         for kelompok, info in mm_teramati.items()
+        if kelompok not in dilindungi
     ]
     if mm_ops:
         await db.masa_manfaat.bulk_write(mm_ops, ordered=False)
@@ -659,6 +670,15 @@ async def terapkan_siman(asset_id: str, payload: TerapkanIn,
             "tercatat). Field lain tetap bisa diterapkan dengan memilih field "
             "selain kode barang."))
 
+    # Kunci kegiatan disahkan (423): "terapkan SIMAN" mengedit field
+    # inventarisasi yang sama dengan PUT /assets/{id} — pintu ini tak boleh
+    # menembus kegiatan yang sudah disegel.
+    from shared_utils import ensure_activity_not_sealed
+    _a = await db.assets.find_one({"id": asset_id},
+                                  {"_id": 0, "activity_id": 1})
+    if _a:
+        await ensure_activity_not_sealed(_a.get("activity_id"))
+
     sisa = [s for s in selisih if s not in terapkan]
     sub.update({"selisih": sisa, "status": "selisih" if sisa else "cocok",
                 "disinkron_pada": datetime.now(timezone.utc).isoformat()})
@@ -670,6 +690,14 @@ async def terapkan_siman(asset_id: str, payload: TerapkanIn,
         projection={"_id": 0, "version": 1})
     if res is None:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    # Dokumen berubah → indeks pencarian ikut disegarkan (best-effort).
+    try:
+        from meili_utils import jadwalkan_sync
+        _doc = await db.assets.find_one({"id": asset_id}, {"_id": 0})
+        if _doc:
+            jadwalkan_sync("assets", _doc)
+    except Exception:
+        pass
 
     # Jurnal 204/205 (temuan selisih mutasi vs SIMAN): menimpa purchase_price
     # dengan nilai SIMAN adalah KOREKSI NILAI — dulu senyap tanpa jejak Buku

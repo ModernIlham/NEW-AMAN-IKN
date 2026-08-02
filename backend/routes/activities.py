@@ -1014,7 +1014,16 @@ async def delete_inventory_activity(activity_id: str, _admin: dict = Depends(req
     result = await db.inventory_activities.delete_one({"id": activity_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
-    # Delete all assets linked to this activity
+    # Delete all assets linked to this activity — cabut dulu dari indeks
+    # pencarian agar tak meninggalkan dokumen yatim di Meili.
+    try:
+        from meili_utils import jadwalkan_hapus
+        async for _a in db.assets.find({"activity_id": activity_id},
+                                       {"_id": 0, "id": 1}):
+            if _a.get("id"):
+                jadwalkan_hapus("assets", _a["id"])
+    except Exception:
+        pass
     asset_result = await db.assets.delete_many({"activity_id": activity_id})
     logger.info(f"Deleted activity {activity_id} and {asset_result.deleted_count} associated assets "
                 f"(freed {len(photo_gids)} photo + {len(doc_gids)} doc GridFS blobs)")

@@ -154,8 +154,11 @@ async def _data_jurnal(user):
     """Jurnal ter-scope + master ter-scope + peta akun + uraian kode 10."""
     from routes.persediaan import _scope_jurnal
     from shared_utils import scope_query_field_satker
+    # Batas keras 200k baris: jurnal append-only tumbuh monoton — tanpa
+    # pagar ini setiap render PDF memuat seluruh koleksi ke memori.
     jurnal = [t async for t in db.transaksi_persediaan.find(
-        await _scope_jurnal(user), {"_id": 0, "rincian_layer": 0})]
+        await _scope_jurnal(user), {"_id": 0, "rincian_layer": 0})
+        .sort("timestamp", 1).limit(200000)]
     master = [m async for m in db.persediaan.find(
         scope_query_field_satker(user), {"_id": 0})]
     peta_akun = {}

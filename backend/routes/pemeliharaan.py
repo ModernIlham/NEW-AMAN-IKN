@@ -17,7 +17,7 @@ from db import db
 from shared_utils import (
     blok_ttd_kpb, kode_satker_user, pastikan_akses_aset,
     pastikan_akses_dok_satker, pengaturan_kop, scope_query_field_satker,
-)
+    ensure_activity_not_sealed)
 from pemeliharaan_utils import (
     JENIS_PEMELIHARAAN, baris_csv_jadwal, indikasi_kapitalisasi, jatuh_tempo,
     kelompok_dhpb, rekap_pemeliharaan, rentang_periode, status_jadwal,
@@ -652,6 +652,9 @@ async def posting_kapitalisasi(catatan_id: str,
     # (parse_harga menerima string/angka), jumlahkan, tulis balik sebagai
     # STRING (konsisten tipe field), dan bila apa pun gagal, LEPAS penanda
     # CAS supaya operator bisa mengulang.
+    # Kunci kegiatan disahkan (423): kapitalisasi pemeliharaan mengubah
+    # nilai aset — tak boleh menembus kegiatan yang sudah disegel.
+    await ensure_activity_not_sealed(aset.get("activity_id"))
     harga_lama = parse_harga(aset.get("purchase_price"))
     harga_baru = harga_lama + biaya
     set_aset = {"purchase_price": str(int(round(harga_baru))),

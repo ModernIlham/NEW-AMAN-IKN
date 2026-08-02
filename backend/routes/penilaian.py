@@ -20,7 +20,7 @@ from report_filters import active_asset_filter
 from shared_utils import (
     filter_aset_perhitungan, kode_satker_user, log_audit,
     pastikan_akses_aset, scope_query_aset, scope_query_field_satker,
-)
+    ensure_activity_not_sealed)
 from penilaian_utils import (
     MASA_MANFAAT_DEFAULT, rekap_penyusutan, validate_masa_manfaat,
     DAMPAK_MASA_MANFAAT, DOKUMEN_KOREKSI, JENIS_KOREKSI_NILAI,
@@ -154,7 +154,8 @@ async def posisi_penyusutan(
     # (reklas keluar aset tetap, PMK 65/2017); usulan aktif = belum ditolak.
     diusulkan_ids = set()
     async for u in db.usulan_penghapusan.find(
-            {"status": {"$ne": "ditolak"}}, {"_id": 0, "asset_id": 1}):
+            scope_query_field_satker(_user, {"status": {"$ne": "ditolak"}}),
+            {"_id": 0, "asset_id": 1}):
         if u.get("asset_id"):
             diusulkan_ids.add(u["asset_id"])
     hasil = rekap_penyusutan(assets, per_tanggal, peta=peta,
@@ -305,9 +306,13 @@ async def catat_koreksi_nilai(payload: KoreksiNilaiIn,
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
     await pastikan_akses_aset(user, asset)
     now = datetime.now(timezone.utc).isoformat()
+    # Super-admin lintas-satker: derivasi dari kegiatan induk aset — stempel
+    # "" akan lolos scope_query_field_satker dan tampil di SEMUA satker.
+    from shared_utils import kode_satker_efektif_dari_aset
+    _ks = await kode_satker_efektif_dari_aset(user, [asset["id"]])
     record = {
         "id": str(uuid.uuid4()),
-        "kode_satker": kode_satker_user(user),
+        "kode_satker": _ks,
         "asset_id": asset["id"],
         "asset_code": asset.get("asset_code"),
         "NUP": asset.get("NUP"),
@@ -344,6 +349,12 @@ async def _proyeksi_master_revaluasi(koreksi: dict, oleh: str) -> bool:
     asset_id = koreksi.get("asset_id")
     if not asset_id:
         return False
+    # Kunci kegiatan disahkan (423) berlaku juga untuk proyeksi revaluasi —
+    # semua jalur mutasi aset wajib melewatinya (shared_utils).
+    _a = await db.assets.find_one({"id": asset_id},
+                                  {"_id": 0, "activity_id": 1})
+    if _a:
+        await ensure_activity_not_sealed(_a.get("activity_id"))
     now = datetime.now(timezone.utc).isoformat()
     proj = build_asset_revaluasi_projection(koreksi, now)
     updated = await db.assets.find_one_and_update(

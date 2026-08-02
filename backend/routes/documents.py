@@ -10,8 +10,10 @@ import io
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
+
+from shared_utils import limiter
 
 logger = logging.getLogger(__name__)
 documents_router = APIRouter()
@@ -72,7 +74,8 @@ RAB_TOTAL_3TH = "324.500.000"
 # GENERATOR SLIDE PRESENTASI (PPTX)
 # ═══════════════════════════════════════════════════════════════════
 @documents_router.get("/documents/ppt")
-async def generate_ppt():
+@limiter.limit("5/minute")
+async def generate_ppt(request: Request):
     """Slide presentasi PRD AMAN — 10 slide sesuai versi aplikasi terkini."""
     from pptx import Presentation
     from pptx.dml.color import RGBColor
@@ -519,7 +522,8 @@ async def generate_ppt():
 # GENERATOR PROPOSAL (DOCX)
 # ═══════════════════════════════════════════════════════════════════
 @documents_router.get("/documents/proposal")
-async def generate_proposal():
+@limiter.limit("5/minute")
+async def generate_proposal(request: Request):
     """Proposal DOCX BAB I–VI sesuai versi aplikasi terkini + RAB."""
     from docx import Document
     from docx.enum.table import WD_TABLE_ALIGNMENT

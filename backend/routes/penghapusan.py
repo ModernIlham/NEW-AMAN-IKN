@@ -136,9 +136,13 @@ async def buat_usulan(payload: UsulanIn, user: dict = Depends(require_writer)):
         raise HTTPException(status_code=409,
                             detail="Aset ini sudah punya usulan penghapusan aktif")
     now = datetime.now(timezone.utc).isoformat()
+    # Derivasi satker dari kegiatan induk aset utk super-admin lintas-satker
+    # (stempel "" lolos scope dan tampil di semua satker).
+    from shared_utils import kode_satker_efektif_dari_aset
+    _ks = await kode_satker_efektif_dari_aset(user, [asset["id"]])
     record = {
         "id": str(uuid.uuid4()),
-        "kode_satker": kode_satker_user(user),
+        "kode_satker": _ks,
         "asset_id": asset["id"],
         "asset_code": asset.get("asset_code"),
         "NUP": asset.get("NUP"),

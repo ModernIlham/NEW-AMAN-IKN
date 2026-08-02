@@ -199,7 +199,8 @@ async def generate_lbp_docx(tahun: int, semester: int = 0,
         "purchase_price": 1, "purchase_date": 1, "created_at": 1,
         "dihapus": 1, "penghapusan": 1, "nilai_wajar_terakhir": 1,
         "revaluasi": 1, "location": 1,
-        "masa_manfaat_tambah_tahun": 1}).to_list(500000)
+        "masa_manfaat_tambah_tahun": 1,
+         "masa_manfaat_override_semester": 1}).to_list(500000)
     aktif = [a for a in assets if not a.get("dihapus")]
 
     uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
@@ -256,12 +257,21 @@ async def generate_lbp_docx(tahun: int, semester: int = 0,
     per_kelas, _tanpa_nilai = build_lbkp_rows(
         assets, tombstones, dari, sampai, uraian_map, ambang)
 
-    # Penyusutan per golongan
+    # Penyusutan per golongan — `diusulkan_ids` WAJIB ikut: tanpanya aset
+    # Rusak Berat yang sudah diusulkan hapus tetap disusutkan di CaLBMN
+    # sementara Laporan Penyusutan menghentikannya (dua angka resmi beda).
     peta_masa = dict(MASA_MANFAAT_DEFAULT)
     async for m in db.masa_manfaat.find({}, {"_id": 0}):
         peta_masa[m["kode"]] = int(m["tahun"])
+    diusulkan_ids = set()
+    async for u in db.usulan_penghapusan.find(
+            scope_query_field_satker(user, {"status": {"$ne": "ditolak"}}),
+            {"_id": 0, "asset_id": 1}):
+        if u.get("asset_id"):
+            diusulkan_ids.add(u["asset_id"])
     susut = rekap_penyusutan(aktif, per_iso, peta=peta_masa,
-                             uraian_golongan=uraian_map)
+                             uraian_golongan=uraian_map,
+                             diusulkan_ids=diusulkan_ids)
 
     # Susunan tabel CaLBMN
     posisi_akun = baris_posisi_per_akun(rows_dbkp, persediaan_per_akun,
