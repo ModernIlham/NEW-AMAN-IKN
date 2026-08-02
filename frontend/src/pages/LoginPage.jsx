@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Package, Mail, Lock, ArrowRight, Loader2, Eye, EyeOff, User, ShieldCheck, RotateCcw } from "lucide-react";
+import { Package, Mail, Lock, ArrowRight, Loader2, Eye, EyeOff, User, ShieldCheck, RotateCcw, Layers, MapPinned, WifiOff, PenLine, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +9,25 @@ import { getApiError } from "@/lib/utils";
 import { useTripleClick } from "@/hooks/useTripleClick";
 import { AssistedPasswordConfirmationField } from "@/components/ui/assisted-password-confirmation";
 import { galatPassword, statusSyaratPassword } from "@/lib/passwordRules";
+import { KataBerganti } from "@/components/ui/animated-hero";
+import InteractiveHoverButton from "@/components/ui/interactive-hover-button";
+import { LiquidEffectAnimation } from "@/components/ui/liquid-effect-animation";
+
+// Kata yang bergantian pada judul panel kiri. Semuanya menyifati hal yang sama
+// — pengelolaan BMN — dari sudut berbeda, bukan sekadar sinonim berjajar.
+const SIFAT_JUDUL = ["Terpadu", "Terlacak", "Terhubung", "Tepercaya", "Tuntas"];
+
+// Kemampuan yang BENAR-BENAR ada hari ini. Daftar lama masih menyebut "CRUD
+// lengkap dengan foto" dan "Import data massal via CSV" — deskripsi aplikasi
+// dua tahun lalu, jauh sebelum 16 modul siklus BMN, peta berlapis, e-sign, dan
+// isolasi per satuan kerja ada.
+const SOROTAN = [
+  { Ikon: Layers, teks: "16 modul siklus BMN — perencanaan sampai penghapusan" },
+  { Ikon: WifiOff, teks: "Inventarisasi lapangan tetap jalan tanpa sinyal" },
+  { Ikon: Building2, teks: "Selaras SIMAN V2 & SAKTI — penyusutan per semester" },
+  { Ikon: MapPinned, teks: "Peta aset, denah berlapis, dan pelacakan posisi" },
+  { Ikon: PenLine, teks: "Tanda tangan elektronik & BAST resmi ber-QR" },
+];
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -183,6 +202,10 @@ export default function LoginPage({ onLogin, onShowInfo }) {
   // TERSENDIRI, bukan di dalam objek `reset`: setter useState identitasnya
   // stabil, jadi aman dioper sebagai callback ke komponen konfirmasi.
   const [resetCocok, setResetCocok] = useState(false);
+  // Tombol kirim menampilkan centang "berhasil" SETELAH server menjawab —
+  // tidak pernah sebagai tebakan. Sengaja tidak pernah di-reset ke false pada
+  // jalur sukses: begitu bernilai true, halaman memang sedang berpindah.
+  const [sukses, setSukses] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -203,6 +226,7 @@ export default function LoginPage({ onLogin, onShowInfo }) {
           password: formData.password
         });
         toast.success("Login berhasil!");
+        setSukses(true);
         onLogin(res.data.user, res.data.access_token, res.data.media_token);
       } else {
         // Registration: request OTP first
@@ -222,6 +246,7 @@ export default function LoginPage({ onLogin, onShowInfo }) {
         }
         setOtpEmail(email);
         setDebugOtp(res.data.debug_otp || null);
+        setSukses(true);
         setOtpStep(true);
         toast.success(res.data.message || "Kode OTP dikirim ke email");
       }
@@ -247,8 +272,17 @@ export default function LoginPage({ onLogin, onShowInfo }) {
     <div className="min-h-screen flex" data-testid="login-page">
       {/* Left Panel - Branding */}
       <div className="hidden lg:flex lg:w-1/2 bg-slate-900 login-pattern relative overflow-hidden">
-        <div className="relative z-10 flex flex-col justify-between p-12 w-full">
-          <div className={`flex items-center gap-3 ${onShowInfo ? "cursor-pointer" : ""}`} data-testid="login-logo" {...logoProps}>
+        {/* Permukaan air di belakang tulisan. Kanvas LOKAL — lihat catatan
+            panjang di `liquid-effect-animation.jsx` soal kenapa skrip CDN
+            versi contohnya tidak dipakai di layar yang menerima kata sandi. */}
+        <div className="absolute inset-0 z-0">
+          <LiquidEffectAnimation />
+        </div>
+        {/* `pointer-events-none` supaya sentuhan/kursor menembus ke kanvas dan
+            melahirkan riak di seluruh panel; hanya logo yang menadah klik
+            (pintu tersembunyi ke halaman Info). */}
+        <div className="pointer-events-none relative z-10 flex flex-col justify-between p-12 w-full">
+          <div className={`pointer-events-auto flex items-center gap-3 w-fit ${onShowInfo ? "cursor-pointer" : ""}`} data-testid="login-logo" {...logoProps}>
             <div className="w-10 h-10 bg-gradient-to-br from-teal-600 to-teal-700 rounded-lg flex items-center justify-center shadow-elev-2">
               <Package className="w-6 h-6 text-white" />
             </div>
@@ -257,23 +291,29 @@ export default function LoginPage({ onLogin, onShowInfo }) {
               <span className="text-[11px] font-medium text-slate-300">Aplikasi Manajemen Aset Negara</span>
             </div>
           </div>
-          <div className="space-y-6">
-            <h1 className="text-4xl font-bold text-white leading-tight font-['Manrope']">
-              Sistem Inventaris<br />Aset Terpadu
+          <div className="space-y-6 max-w-lg">
+            <h1 className="text-4xl xl:text-5xl font-bold text-white leading-tight font-['Manrope']">
+              Pengelolaan BMN yang
+              {/* Tinggi baris dijaga komponennya sendiri (salinan tak terlihat
+                  kata terpanjang), jadi barisnya tak berkedut saat berganti. */}
+              <KataBerganti kata={SIFAT_JUDUL} className="text-teal-300" />
             </h1>
-            <p className="text-muted-foreground text-lg max-w-md">
-              Kelola aset fisik organisasi Anda dengan mudah, cepat, dan terstruktur.
+            <p className="text-slate-300 text-lg">
+              Satu pintu untuk seluruh daur hidup Barang Milik Negara — dari
+              rencana kebutuhan, penatausahaan, sampai penghapusan.
             </p>
-            <div className="space-y-3 pt-4">
-              {["CRUD lengkap dengan foto", "Export PDF & Excel dengan gambar", "Manajemen kategori dinamis", "Import data massal via CSV"].map((f, i) => (
-                <div key={i} className="flex items-center gap-3 text-muted-foreground">
-                  <div className="w-1.5 h-1.5 bg-blue-500 rounded-full" />
-                  <span className="text-sm">{f}</span>
+            <div className="space-y-3 pt-2">
+              {SOROTAN.map(({ Ikon, teks }) => (
+                <div key={teks} className="flex items-center gap-3 text-slate-300">
+                  <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-teal-500/15 ring-1 ring-teal-400/25">
+                    <Ikon className="h-3.5 w-3.5 text-teal-300" />
+                  </span>
+                  <span className="text-sm">{teks}</span>
                 </div>
               ))}
             </div>
           </div>
-          <div className="text-muted-foreground text-sm">&copy; {new Date().getFullYear()} AMAN — Aplikasi Manajemen Aset Negara</div>
+          <div className="text-slate-400 text-sm">&copy; {new Date().getFullYear()} AMAN — Aplikasi Manajemen Aset Negara</div>
         </div>
       </div>
 
@@ -284,7 +324,10 @@ export default function LoginPage({ onLogin, onShowInfo }) {
             email={otpEmail}
             debugOtp={debugOtp}
             onVerified={onLogin}
-            onBack={() => { setOtpStep(false); setDebugOtp(null); }}
+            // `sukses` ikut dibersihkan: tanpa ini, kembali dari layar OTP
+            // memampangkan tombol bercentang "OTP terkirim" padahal pengguna
+            // justru sedang mengulang dari awal.
+            onBack={() => { setOtpStep(false); setDebugOtp(null); setSukses(false); }}
             onDebugOtp={setDebugOtp}
           />
         ) : (
@@ -377,13 +420,20 @@ export default function LoginPage({ onLogin, onShowInfo }) {
                 </div>
               )}
 
-              <Button type="submit" disabled={loading}
-                className="w-full h-11 bg-slate-900 hover:bg-slate-800 text-white font-medium"
-                data-testid="submit-button">
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (
-                  <>{isLogin ? "Masuk" : "Daftar"}<ArrowRight className="w-4 h-4 ml-2" /></>
-                )}
-              </Button>
+              {/* Status DIKENDALIKAN dari sini, bukan disimulasikan di dalam
+                  tombol: "Berhasil" hanya muncul setelah server benar-benar
+                  menjawab, dan itu jendela nyata — `onLogin` masih harus
+                  memuat potongan dasbor sebelum halaman berganti. */}
+              <InteractiveHoverButton
+                type="submit"
+                disabled={loading}
+                status={sukses ? "success" : loading ? "loading" : "idle"}
+                text={isLogin ? "Masuk" : "Daftar"}
+                loadingText={isLogin ? "Memeriksa..." : "Mengirim OTP..."}
+                successText={isLogin ? "Berhasil masuk" : "OTP terkirim"}
+                className="h-11"
+                data-testid="submit-button"
+              />
             </form>
 
             {isLogin && !reset && (
@@ -467,7 +517,7 @@ export default function LoginPage({ onLogin, onShowInfo }) {
             <div className="text-center text-sm">
               <span className="text-muted-foreground">{isLogin ? "Belum punya akun?" : "Sudah punya akun?"}</span>
               <button type="button"
-                onClick={() => setIsLogin(!isLogin)}
+                onClick={() => { setIsLogin(!isLogin); setSukses(false); }}
                 className="ml-2 text-blue-600 hover:text-blue-700 font-medium"
                 data-testid="toggle-auth-mode">
                 {isLogin ? "Daftar sekarang" : "Masuk"}

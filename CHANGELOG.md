@@ -67,6 +67,60 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#694] Halaman masuk hidup: judul berganti, tombol interaktif, air lokal — 2026-08-02
+
+Panel kiri layar masuk dirombak jadi interaktif, dan isinya diperbarui agar
+menggambarkan aplikasi yang sekarang.
+
+- **Judul dengan kata berganti** (`components/ui/animated-hero.jsx`, adaptasi
+  `.jsx` dari komponen contoh): "Pengelolaan BMN yang **Terpadu / Terlacak /
+  Terhubung / Tepercaya / Tuntas**" — kata lama terlempar ke atas, kata baru
+  masuk dengan pegas. Tinggi barisnya dijaga salinan TAK TERLIHAT dari kata
+  terpanjang, bukan tinggi tetap dalam `em`: percobaan pertama memakai
+  `h-[1.15em]` dan kotak `overflow-hidden`-nya memotong ekor huruf "g" pada
+  "Terhubung".
+- **Daftar sorotan diperbarui.** Isinya masih menyebut "CRUD lengkap dengan
+  foto", "Export PDF & Excel dengan gambar", dan "Import data massal via CSV" —
+  gambaran aplikasi dua tahun lalu, jauh sebelum ada 16 modul siklus BMN, peta
+  & denah berlapis, tanda tangan elektronik, dan isolasi per satuan kerja.
+  Lima poin baru menyebut kemampuan yang benar-benar ada hari ini.
+- **Tombol Masuk/Daftar jadi tombol interaktif** (`interactive-hover-button.jsx`):
+  titik kecil mengembang memenuhi tombol, lalu memunculkan label + panah.
+  Dua penyesuaian dari komponen aslinya:
+  - Lingkaran isian berukuran **relatif terhadap lebar tombol** (`w-[240%]`),
+    bukan kelipatan tetap `scale-[40]`. Kelipatan tetap hanya cukup untuk
+    tombol selebar ±160 px; tombol Masuk di sini selebar form (±450 px),
+    sehingga yang muncul justru persegi gelap di tengah pil putih.
+  - Status **dikendalikan pemanggil**, bukan disimulasikan `setTimeout` di
+    dalam. Versi asli selalu "berhasil" setelah 2 detik — pada layar masuk itu
+    berarti centang hijau muncul walau kata sandinya salah. Kini "Berhasil"
+    hanya tampil setelah server menjawab.
+- **Efek air dibangun sendiri di kanvas 2D lokal** (`liquid-effect-animation.jsx`)
+  — beberapa lapis gelombang sinus berkecepatan beda plus riak yang lahir dari
+  sentuhan/kursor. **Komponen contohnya TIDAK dipakai apa adanya**: ia
+  menyuntikkan `<script type="module">` yang mengunduh `threejs-components`
+  dari CDN publik saat halaman dibuka. Dua alasan menolaknya:
+  1. ini layar MASUK, tempat kata sandi diketik — skrip pihak ketiga yang
+     dimuat saat runtime berarti penguasa CDN itu menjalankan kode di sana;
+  2. AMAN adalah PWA yang harus tetap terpakai saat jaringan mati, sedangkan
+     efek yang bergantung unduhan luar gagal diam-diam persis di kondisi itu.
+  Versi lokal ini nol permintaan keluar, menghormati `prefers-reduced-motion`
+  (satu bingkai diam), berhenti saat tab tersembunyi, dan tidak menjalankan
+  loop saat panelnya `display:none` (< lg).
+- Satu bug ditangkap saat uji peramban: `arc()` menerima jari-jari **negatif**
+  begitu kursor digerakkan — `requestAnimationFrame` memberi cap waktu AWAL
+  frame, sedangkan riak dicatat `performance.now()` yang bisa lebih besar.
+  Efeknya mati total. Umur riak kini dijepit ke ≥ 0.
+
+Tanpa dependensi baru: `framer-motion`, `clsx`, `tailwind-merge`,
+`lucide-react` semuanya sudah terpasang. `main.js` justru −2 B.
+
+Verifikasi: eslint bersih, 340 uji frontend lulus, `yarn build` sukses, dan
+halaman diperiksa langsung di Chromium (terang, gelap, dan lebar HP 390 px —
+tanpa geser samping, tanpa galat konsol dari kode ini).
+
+---
+
 ## [#693] Toolbar & bar peta satu baris — label lepas satu per satu — 2026-08-02
 
 Dua bilah kontrol yang berulang kali pecah baris / memunculkan geser samping
