@@ -64,10 +64,21 @@ function hentikan(el) {
 
 function gulirKe(el, tujuan, selesai) {
   hentikan(el);
+  // Cabut atribut `title` SELAMA teks bergerak: peramban mematikan tooltip
+  // native setiap kali isi elemen digulir, sehingga selama animasi tooltip
+  // tampil-mati-tampil ("berkedip", keluhan pemilik di kolom nama/lokasi/
+  // eselon). Disimpan di state dan dipulihkan begitu guliran RAMPUNG —
+  // tooltip lantas tampil tenang saat teks sudah diam (di ujung atau pulang).
+  if (el.hasAttribute("title")) {
+    status.set(el, { ...status.get(el), judul: el.getAttribute("title") });
+    el.removeAttribute("title");
+  }
   // `selesai` hanya dipanggil bila animasi RAMPUNG (tidak diinterupsi
   // hentikan() oleh animasi baru) — dipakai keAwal utk memulihkan elipsis.
   const rampung = () => {
     status.set(el, { ...status.get(el), raf: 0, tujuan });
+    const st = status.get(el);
+    if (st?.judul != null) el.setAttribute("title", st.judul);
     if (selesai) selesai();
   };
   const kurangiGerak = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;

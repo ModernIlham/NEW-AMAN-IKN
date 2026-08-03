@@ -67,6 +67,21 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#712] Tooltip hover tak lagi berkedip saat teks bermarquee — 2026-08-03
+
+Lanjutan `[#710]`: di desktop, kolom ber-tooltip (nama barang, lokasi,
+eselon — atribut `title` native) berkedip saat di-hover sejak marquee
+aktif. Akar: peramban MEMATIKAN tooltip `title` setiap kali isi elemen
+digulir; selama animasi marquee (beberapa detik) tooltip mencoba tampil,
+terbunuh oleh guliran, mencoba lagi — tampak berkedip.
+
+Perbaikan (`lib/marqueeEllipsis.js`): atribut `title` DICABUT selama teks
+bergerak (disimpan di state) dan DIPULIHKAN tepat saat guliran rampung —
+baik di ujung (saat hover bertahan) maupun saat kembali ke awal. Tooltip
+kini tampil tenang begitu teks diam. Diverifikasi harness Playwright:
+title hilang selama animasi, pulih persis setelah rampung dan setelah
+kursor pergi.
+
 ## [#711] Kartu inventaris: tile terpusat & nilai melipat 2 baris; stiker contoh: label tinggi tak menyentuh garis — 2026-08-02
 
 Dua penyempurnaan lanjutan dari umpan balik pemilik:
