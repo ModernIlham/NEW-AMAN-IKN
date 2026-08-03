@@ -67,6 +67,50 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#727] Cetak ikut seleksi, bagikan jadi ikon di HP, judul peta bisa dikoreksi — 2026-08-03
+
+**Cetak Kartu & Cetak Stiker kini menuruti seleksi.** Menandai 3 aset lalu
+menekan Cetak Kartu tetap menghasilkan kartu untuk SELURUH aset di halaman —
+seleksi diabaikan diam-diam. Sekarang seleksi menang: bila ada aset yang
+ditandai, hanya itu yang dicetak, dan angka pada tombol ikut berubah
+(`Cetak Kartu (3)`) supaya tak ada kejutan setelah PDF jadi. Dialog stiker
+mendapat cakupan ketiga — **"Aset yang sedang diseleksi"** — yang otomatis
+terpilih saat dialog dibuka dengan seleksi aktif; dua cakupan lama (seluruh
+hasil filter / halaman yang tampil) tetap ada. Seleksi yang melampaui halaman
+lewat "Pilih semua N aset" ikut terbawa utuh, tidak disaring ke isi halaman.
+Aturannya dipisah ke `lib/cakupanCetak.js` supaya dua tombol memakai satu
+sumber kebenaran, lengkap dengan ujinya.
+
+**Bagikan & WhatsApp jadi ikon di layar HP.** Dua tombol berlabel memaksa baris
+aksi tiap link pecah jadi dua baris di HP. Di `<sm` labelnya disembunyikan;
+yang tersisa **logo WhatsApp** (digambar sendiri — lucide sengaja tak memuat
+ikon merek, dan gagang telepon generik tak memberitahu ke mana tautan dikirim)
+dan ikon bagikan. Di ≥sm label kembali muncul utuh.
+
+**Judul peta bisa dikoreksi setelah terbit.** Judul ikut tampil di halaman
+publik dan pada teks ajakan WhatsApp, tetapi dulu satu-satunya cara
+memperbaikinya adalah menerbitkan ulang — yang mematikan tautan yang sudah
+tersebar. Kini ada tombol pensil di tiap link: `PUT /peta/share/{id}/judul`
+hanya mengubah judul, `jti` tak dirotasi, tautan lama tetap hidup.
+
+**Daftar link tak lagi menumpuk.** Link yang sudah MATI (dibatalkan atau habis
+masa tayang, termasuk yang pernah diterbitkan ulang lalu mati lagi) dan matinya
+lebih dari sebulan tidak lagi ikut didaftar. Ini penyembunyian, **bukan
+penghapusan**: dokumen share, kontribusi, dan jejak auditnya utuh, dan
+jumlahnya dilaporkan di bawah daftar supaya daftar yang menyusut tak terbaca
+sebagai data hilang. Jam matinya dihitung dari peristiwa yang benar — saat
+pembatalan untuk yang dibatalkan, `berlaku_sampai` untuk yang kedaluwarsa;
+memakai `updated_at` untuk keduanya akan membuat link 30-hari yang sekali
+sentuh dianggap usang persis saat berakhir, sebelum operator sempat
+memperpanjang (dikunci uji).
+
+Diverifikasi: 1516 uji unit backend + 394 uji frontend lulus, lint bersih,
+build produksi sukses. Kedua dialog juga dijalankan sungguhan di Chromium
+dengan CSS produksi: pada 375px tombol WhatsApp/Bagikan berukuran 28px tanpa
+label, pada 1280px berlabel; cetak stiker mengirim `asset_ids` aset terpilih
+(bukan parameter filter); ubah judul memanggil endpoint judul dan langsung
+tampak di layar.
+
 ## [#726] Perpanjang link peta bisa memilih durasi + toolbar peta hemat satu baris — 2026-08-03
 
 **Perpanjang tak lagi terpatok 7 hari.** Tombol Perpanjang di dialog Bagikan

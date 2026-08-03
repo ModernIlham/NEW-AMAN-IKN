@@ -217,3 +217,60 @@ def test_izin_kontribusi_share_lama_tanpa_field():
     from routes.peta_kolaborasi import _izin_kontribusi
     lama = {"status": "aktif", "kode_satker": "527010"}
     assert _izin_kontribusi(lama, {"guest": True}, True, "izinkan_titik_publik") is True
+
+
+# ── Arsip otomatis: link mati > sebulan tak lagi didaftar ───────────────────
+
+def _hari(n):
+    return (datetime.now(timezone.utc) + timedelta(days=n)).isoformat()
+
+
+def test_share_usang_hanya_untuk_yang_sudah_mati():
+    """Link yang MASIH HIDUP tak pernah usang — setua apa pun umurnya. Link
+    berdurasi 1 tahun yang dibuat 6 bulan lalu masih dipakai orang di
+    lapangan."""
+    from routes.peta_kolaborasi import _share_usang
+    hidup_tua = {"status": "aktif", "created_at": _hari(-180),
+                 "updated_at": _hari(-180), "berlaku_sampai": _hari(+180)}
+    assert _share_usang(hidup_tua) is False
+
+
+def test_share_usang_dibatalkan_dihitung_dari_saat_pembatalan():
+    from routes.peta_kolaborasi import _share_usang
+    baru_batal = {"status": "batal", "created_at": _hari(-400),
+                  "updated_at": _hari(-3), "berlaku_sampai": _hari(-390)}
+    lama_batal = dict(baru_batal, updated_at=_hari(-31))
+    # Dibatalkan 3 hari lalu → masih tampil (bisa diterbitkan ulang).
+    assert _share_usang(baru_batal) is False
+    # Dibatalkan 31 hari lalu → disingkirkan dari daftar.
+    assert _share_usang(lama_batal) is True
+
+
+def test_share_usang_kedaluwarsa_dihitung_dari_berlaku_sampai():
+    """Regresi rancangan: memakai `updated_at` untuk link kedaluwarsa membuat
+    link 30-hari yang dibuat sekali sentuh langsung dianggap usang PERSIS saat
+    berakhir — operator kehilangan kesempatan memperpanjangnya."""
+    from routes.peta_kolaborasi import _share_usang
+    sebulan = {"status": "aktif", "created_at": _hari(-30),
+               "updated_at": _hari(-30), "berlaku_sampai": _hari(-1)}
+    assert _share_usang(sebulan) is False       # baru berakhir kemarin
+    lama = dict(sebulan, berlaku_sampai=_hari(-31))
+    assert _share_usang(lama) is True
+
+
+def test_share_usang_tanpa_cap_waktu_tak_disingkirkan():
+    """Data lama/rusak tanpa cap waktu yang bisa dibaca lebih baik tetap
+    tampil daripada hilang tanpa alasan yang bisa dijelaskan."""
+    from routes.peta_kolaborasi import _share_usang
+    assert _share_usang({"status": "batal"}) is False
+    assert _share_usang({"status": "batal", "updated_at": "bukan-tanggal"}) is False
+    assert _share_usang({"status": "aktif", "berlaku_sampai": ""}) is False
+
+
+def test_share_usang_tepat_di_batas_sebulan():
+    from routes.peta_kolaborasi import _share_usang, UMUR_ARSIP_HARI
+    now = datetime(2026, 8, 3, 12, 0, tzinfo=timezone.utc)
+    persis = (now - timedelta(days=UMUR_ARSIP_HARI)).isoformat()
+    lewat = (now - timedelta(days=UMUR_ARSIP_HARI, seconds=1)).isoformat()
+    assert _share_usang({"status": "batal", "updated_at": persis}, now) is False
+    assert _share_usang({"status": "batal", "updated_at": lewat}, now) is True
