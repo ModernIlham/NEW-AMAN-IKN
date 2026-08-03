@@ -162,17 +162,32 @@ export function pasangPenyembunyiTooltip(doc = document) {
   if (doc.__amanTooltipTerpasang) return;
   doc.__amanTooltipTerpasang = true;
   // `capture` agar guliran kontainer mana pun (tabel virtual) ikut tertangkap.
-  // KECUALI guliran yang berasal dari animasi MARQUEE: elemen teks menggeser
-  // `scrollLeft`-nya sendiri dan memicu event scroll bertubi-tubi. Bukan hanya
-  // anchor yang sedang ditooltipkan — elemen LAIN yang sedang bergulir kembali
-  // ke awal pun harus diabaikan, sebab animasi pulangnya berlangsung sampai
-  // beberapa detik dan dulu membunuh tooltip sel yang baru saja di-hover.
-  // Guliran seperti itu tak menggeser posisi tooltip, jadi tak ada alasan
-  // menyembunyikannya.
+  //
+  // KECUALI guliran yang lahir dari animasi MARQUEE: elemen teks menggeser
+  // `scrollLeft`-NYA SENDIRI dan memicu event scroll bertubi-tubi. Posisi
+  // elemen tak bergeser sedikit pun, jadi tak satu pun tooltip perlu
+  // disembunyikan karenanya — termasuk tooltip elemen LAIN yang sedang
+  // bergulir pulang (animasinya bisa beberapa detik dan dulu membunuh tooltip
+  // sel yang baru saja di-hover).
+  //
+  // Event itu DIHENTIKAN TOTAL, bukan sekadar diabaikan, karena Radix Tooltip
+  // menutup tooltipnya begitu ada scroll yang `contains` pemicunya:
+  //
+  //     if (target?.contains(context.trigger)) onClose();
+  //
+  // Sebuah elemen selalu `contains` dirinya sendiri, jadi sel yang teksnya
+  // berjalan MEMBUNUH TOOLTIPNYA SENDIRI ~12 ms setelah muncul — persis
+  // gejala "teks sangat panjang, tooltipnya cuma berkedip". Penyetopan ini
+  // efektif karena listener di sini dipasang saat bootstrap aplikasi
+  // (src/index.js), jauh sebelum konten tooltip mana pun dibuat, sehingga ia
+  // berjalan lebih dulu di simpul & fase yang sama.
   window.addEventListener("scroll", (e) => {
     const n = e.target;
+    if (n && n.nodeType === 1 && n.dataset?.marqueeAktif) {
+      e.stopImmediatePropagation();
+      return;
+    }
     if (sasaran && n === sasaran) return;
-    if (n && n.nodeType === 1 && n.dataset?.marqueeAktif) return;
     sembunyikanTooltip();
   }, true);
   window.addEventListener("resize", sembunyikanTooltip, { passive: true });

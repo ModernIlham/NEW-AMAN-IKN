@@ -52,6 +52,24 @@ test("guliran kontainer biasa tetap menyembunyikan tooltip", () => {
   expect(tampak()).toBe(false);
 });
 
+test("guliran teks berjalan tak sampai ke penutup-tooltip pustaka", () => {
+  // Radix Tooltip menutup tooltipnya untuk setiap scroll yang `contains`
+  // pemicunya — dan elemen selalu `contains` dirinya sendiri, sehingga sel
+  // yang teksnya berjalan dulu membunuh tooltipnya sendiri ~12 ms setelah
+  // muncul ("tooltip cuma berkedip"). Listener tiruan di bawah mewakili
+  // listener Radix: dipasang BELAKANGAN di simpul & fase yang sama.
+  const pustaka = jest.fn();
+  window.addEventListener("scroll", pustaka, true);
+  try {
+    elemen({ marquee: true }).dispatchEvent(new Event("scroll"));
+    expect(pustaka).not.toHaveBeenCalled();
+    elemen().dispatchEvent(new Event("scroll"));    // guliran kontainer biasa
+    expect(pustaka).toHaveBeenCalledTimes(1);       // ini tetap diteruskan
+  } finally {
+    window.removeEventListener("scroll", pustaka, true);
+  }
+});
+
 test("meninggalkan sel lain tidak membatalkan tooltip sel yang aktif", () => {
   const aktif = elemen();
   tampilkanTooltip(aktif, "Sel yang sedang di-hover");

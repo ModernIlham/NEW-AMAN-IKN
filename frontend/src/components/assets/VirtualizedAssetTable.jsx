@@ -313,8 +313,16 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
                 {/* Nama + Merk */}
                 <div className="flex-[2] min-w-0 px-1">
                   <Tooltip>
+                    {/* Pemicu dipasang MEMBUNGKUS elemen ber-elipsis, bukan pada
+                        elemen itu sendiri: teks yang berjalan menggeser
+                        `scrollLeft` elemennya, dan Radix menutup tooltip untuk
+                        setiap guliran yang `contains` pemicunya — elemen selalu
+                        "contains" dirinya sendiri, jadi sel yang jadi pemicunya
+                        sendiri membunuh tooltipnya sendiri. */}
                     <TooltipTrigger asChild>
-                      <div className="text-[11px] text-foreground/80 font-medium truncate cursor-default">{a.asset_name}</div>
+                      <div className="min-w-0">
+                        <div className="text-[11px] text-foreground/80 font-medium truncate cursor-default">{a.asset_name}</div>
+                      </div>
                     </TooltipTrigger>
                     {a.asset_name && a.asset_name.length > 18 && (
                       <TooltipContent side="bottom" className="max-w-xs"><p className="text-xs">{a.asset_name}</p></TooltipContent>

@@ -67,6 +67,48 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#720] Teks sangat panjang: tooltip yang cuma berkedip 12 milidetik — 2026-08-03
+
+Pada sel dengan teks sangat panjang, tooltipnya **muncul lalu langsung hilang**
+— terukur di Chromium: terbuka pada 764 ms, tertutup pada 776 ms. Selebihnya
+tak muncul lagi sampai kursor keluar dan masuk kembali.
+
+**Akarnya: teks yang berjalan membunuh tooltipnya sendiri.** Radix Tooltip
+menutup tooltip untuk setiap guliran yang memuat pemicunya:
+
+```js
+const handleScroll = (event) => {
+  if (event.target?.contains(context.trigger)) onClose();
+};
+window.addEventListener("scroll", handleScroll, { capture: true });
+```
+
+`Node.contains()` bernilai benar untuk elemen itu sendiri. Teks berjalan
+bekerja dengan menggeser `scrollLeft` elemennya, jadi begitu animasinya mulai,
+elemen tersebut mengirim event scroll yang "memuat" dirinya sendiri — dan
+tooltipnya ditutup seketika. Teks pendek tak pernah meluber, tak pernah
+berjalan, sehingga tooltipnya aman; itulah sebabnya gejalanya hanya muncul
+pada teks yang sangat panjang.
+
+Ditutup di dua lapis:
+
+- **Sistemik** — guliran yang lahir dari animasi teks berjalan kini dihentikan
+  total di `lib/tooltipTeks`, sebelum sempat dibaca penutup-tooltip pustaka.
+  Guliran seperti itu tak menggeser posisi elemen sedikit pun, jadi tak ada
+  tooltip yang perlu disembunyikan karenanya. Guliran kontainer sungguhan
+  (tabel/panel digulir pengguna) tetap diteruskan seperti biasa.
+- **Bentuk markup** — kolom Nama di daftar aset kini memasang pemicu tooltip
+  MEMBUNGKUS elemen ber-elipsis, bukan pada elemen itu sendiri, sehingga
+  perbaikannya tak bergantung pada urutan pemasangan listener. Kolom lain
+  (`TruncatedCell`) sudah berbentuk begitu sejak awal.
+
+Diverifikasi di Chromium memakai komponen asli: sebelum perbaikan tercatat
+`delayed-open` → `closed` dalam 12 ms; sesudahnya hanya `delayed-open` yang
+bertahan penuh 6 detik, sementara teksnya tetap berjalan (`scrollLeft=331`).
+Kedua bentuk markup (pemicu = elemen berjalan, dan pemicu = pembungkus) diuji.
+1503 uji unit backend + 368 uji frontend lulus (1 uji regresi baru), lint
+bersih, build produksi sukses.
+
 ## [#719] Akar tooltip dobel di tabel: dua sistem tooltip, satu elemen — 2026-08-03
 
 Perbaikan di `[#718]` **tidak menyentuh masalahnya**. Dugaan waktu itu — tooltip
