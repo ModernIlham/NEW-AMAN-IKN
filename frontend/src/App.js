@@ -18,6 +18,7 @@ import { useDarkMode } from "@/hooks/useDarkMode";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { startUpdateCheck } from "@/lib/updateCheck";
 import BackgroundTaskBar from "@/components/BackgroundTaskBar";
+import PusatUnduhan from "@/components/PusatUnduhan";
 import { clearAllSnapshots, ensureSnapshotOwner } from "@/lib/offlineSnapshot";
 import axios from "axios";
 import { TENGGAT_BAKA } from "@/lib/muatAndal";
@@ -858,7 +859,13 @@ function App() {
         </HalamanLazy>
       </BrowserRouter>
       <Toaster position="top-right" richColors />
-      <BackgroundTaskBar isAdmin={user?.role === "admin"} />
+      {/* Widget latar kanan-bawah DITUMPUK vertikal (bukan saling menimpa):
+          BackgroundTaskBar (backup) + Pusat Unduhan berbagi jangkar & lebar,
+          jadi tanpa kontainer ini yang satu menutupi yang lain. */}
+      <div className="fixed bottom-4 right-4 z-[90] flex flex-col items-end gap-2">
+        <BackgroundTaskBar isAdmin={user?.role === "admin"} />
+        <PusatUnduhan aktif={!!user} />
+      </div>
     </div>
   );
 }

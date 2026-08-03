@@ -195,7 +195,7 @@ export default function BackgroundTaskBar({ isAdmin }) {
   if (minimized) {
     return (
       <div
-        className={`fixed bottom-4 right-4 z-[90] flex items-center gap-2 px-3 py-2 rounded-full border ${colors} backdrop-blur-md cursor-pointer transition-all hover:scale-105`}
+        className={`flex items-center gap-2 px-3 py-2 rounded-full border ${colors} backdrop-blur-md cursor-pointer transition-all hover:scale-105`}
         onClick={() => setMinimized(false)}
         data-testid="bg-task-minimized"
       >
@@ -212,7 +212,7 @@ export default function BackgroundTaskBar({ isAdmin }) {
 
   return (
     <div
-      className={`fixed bottom-4 right-4 z-[90] w-80 rounded-xl border ${colors} backdrop-blur-md shadow-xl transition-all`}
+      className={`w-80 rounded-xl border ${colors} backdrop-blur-md shadow-xl transition-all`}
       data-testid="bg-task-bar"
     >
       {/* Header */}

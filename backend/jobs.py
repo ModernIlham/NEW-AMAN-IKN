@@ -136,6 +136,14 @@ _maintenance_task = None
 
 async def _job_maintenance_loop():
     """Pemeliharaan periodik: relabel job macet + sapu artifact ekspor yatim."""
+    # Sekali saat startup (ambang pendek): job Pusat Unduhan yang mati saat
+    # server dimulai ulang segera di-relabel error, jadi tak menahan slot
+    # 'running'/'queued' sampai sapuan per-jam pertama tiba.
+    try:
+        from routes.unduhan import bersihkan_unduhan_kedaluwarsa
+        await bersihkan_unduhan_kedaluwarsa(ambang_macet_menit=5)
+    except Exception as e:      # noqa: BLE001
+        logger.warning("Sapuan unduhan awal (non-fatal): %s", e)
     while True:
         try:
             await asyncio.sleep(3600)   # tiap jam
@@ -156,6 +164,16 @@ async def _job_maintenance_loop():
                     logger.info("Geofence: %s peringatan tak-kunjung-kembali", n3)
             except Exception as e:      # noqa: BLE001
                 logger.warning("Sapuan geofence (non-fatal): %s", e)
+            # Sapuan Pusat Unduhan: blob GridFS hasil unduhan yang dokumennya
+            # sudah di-TTL (retensi 30 hari) tidak ikut cascade — disapu di sini
+            # agar disk benar-benar kembali nol.
+            try:
+                from routes.unduhan import bersihkan_unduhan_kedaluwarsa
+                n4 = await bersihkan_unduhan_kedaluwarsa()
+                if n4:
+                    logger.info("Pusat Unduhan: %s blob kedaluwarsa dihapus", n4)
+            except Exception as e:      # noqa: BLE001
+                logger.warning("Sapuan unduhan (non-fatal): %s", e)
         except asyncio.CancelledError:
             raise
         except Exception as e:

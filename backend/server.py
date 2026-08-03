@@ -316,6 +316,7 @@ from routes.audit import audit_router
 from routes.media import media_router
 from routes.exports import exports_router
 from routes.jobs import jobs_router
+from routes.unduhan import unduhan_router
 from routes.pdf_compress import pdf_compress_router
 from routes.batch import batch_router
 from routes.documents import documents_router
@@ -365,6 +366,7 @@ api_router.include_router(categories_router)
 api_router.include_router(batch_router)      # MUST be before assets_router (specific routes before {asset_id} catch-all)
 api_router.include_router(exports_router)    # MUST be before assets_router
 api_router.include_router(jobs_router)       # status/unduh job latar (ekspor async)
+api_router.include_router(unduhan_router)    # Pusat Unduhan (unduhan berat + retensi 30 hari)
 api_router.include_router(pengesahan_router)  # MUST be before assets_router (/assets/kartu-inventarisasi)
 api_router.include_router(assets_router)
 api_router.include_router(imports_router)
