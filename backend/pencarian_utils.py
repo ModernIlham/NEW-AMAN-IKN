@@ -70,7 +70,51 @@ def rx_awalan(term: str) -> dict:
     return {"$regex": f"^{re.escape(term)}", "$options": "i"}
 
 
-def klausa_teks(search: str, fields, fields_awalan=(), tambahan=None) -> dict:
+# Pemisah yang lazim dipakai/dilewatkan orang saat mengetik kode & angka:
+# titik, koma, tanda hubung, garis miring, dan spasi.
+_PEMISAH = r"[.,\-/\s]"
+# Batas panjang deret angka yang diberi pola longgar (kode BMN terpanjang jauh
+# di bawah ini; pembatas ini menjaga panjang regex tetap wajar).
+_MAKS_DIGIT_LONGGAR = 24
+
+
+def digit_saja(term: str) -> str:
+    """Ambil hanya angkanya: '3.10.01.02.001' → '3100102001'."""
+    return re.sub(r"\D", "", term or "")
+
+
+def rx_angka_longgar(term: str):
+    """Pola untuk ANGKA/KODE yang boleh ditulis dengan pemisah berbeda.
+
+    Petugas mengetik kode barang tanpa titik (`3100102001`), dengan titik tak
+    lengkap (`310.01.02`), atau memakai titik desimal padahal datanya koma
+    (`1.5` vs `1,5`). Regex literal menolak semuanya. Pola ini mencocokkan
+    deret angkanya dengan pemisah apa pun (atau tanpa pemisah) di antaranya.
+
+    Mengembalikan None bila katanya bukan deret angka yang layak.
+    """
+    digit = digit_saja(term)
+    if len(digit) < 2 or len(digit) > _MAKS_DIGIT_LONGGAR:
+        return None
+    # d1 [pemisah]* d2 [pemisah]* d3 … — linier, tanpa kuantifier bersarang.
+    pola = (_PEMISAH + "*").join(digit)
+    return {"$regex": pola, "$options": "i"}
+
+
+def nilai_angka(term: str):
+    """Ubah kata jadi angka bila memang murni angka (dengan/ tanpa pemisah
+    ribuan Indonesia). None bila bukan angka."""
+    bersih = (term or "").replace(".", "").replace(",", "").strip()
+    if not bersih or not bersih.isdigit():
+        return None
+    try:
+        return int(bersih)
+    except ValueError:
+        return None
+
+
+def klausa_teks(search: str, fields, fields_awalan=(), tambahan=None,
+                fields_kode=(), fields_angka=()) -> dict:
     """Bangun klausa Mongo untuk pencarian teks bebas multi-kata.
 
     - `fields`        : field yang dicocokkan secara substring.
@@ -78,6 +122,11 @@ def klausa_teks(search: str, fields, fields_awalan=(), tambahan=None) -> dict:
                         berupa angka (kode berstruktur seperti kode_barang).
     - `tambahan`      : fungsi opsional `(kata) -> list[dict]` untuk klausa
                         khusus per kata (mis. pencocokan harga numerik).
+    - `fields_kode`   : field yang juga dicocokkan dengan POLA ANGKA LONGGAR —
+                        kode/nomor yang boleh diketik dengan pemisah berbeda.
+    - `fields_angka`  : field yang nilainya bisa tersimpan sebagai ANGKA
+                        (bukan teks). `$regex` tak pernah cocok ke non-string,
+                        jadi ditambah pembandingan kesamaan numerik.
 
     Mengembalikan `{}` bila kata kunci tak layak dicari (kosong/terlalu pendek),
     sehingga pemanggil bisa langsung `query.update(klausa_teks(...))`.
@@ -90,6 +139,12 @@ def klausa_teks(search: str, fields, fields_awalan=(), tambahan=None) -> dict:
         cabang = [{f: rx(k)} for f in fields]
         for f in fields_awalan:
             cabang.append({f: rx_awalan(k) if k.isdigit() else rx(k)})
+        longgar = rx_angka_longgar(k)
+        if longgar:
+            cabang.extend({f: longgar} for f in fields_kode)
+        angka = nilai_angka(k)
+        if angka is not None:
+            cabang.extend({f: angka} for f in fields_angka)
         if tambahan:
             cabang.extend(tambahan(k) or [])
         return cabang

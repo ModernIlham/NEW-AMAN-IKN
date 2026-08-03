@@ -61,7 +61,24 @@ FIELD_CARI_ASET = (
     "pengguna_jabatan", "supplier", "perolehan_dari_nama",
     "condition", "status", "nomor_spm", "kode_register",
     "nomor_kontrak", "nomor_bast", "nomor_bukti_perolehan", "notes",
+    # `year` bukan field registry tetapi ada pada dokumen lama & dipakai
+    # laporan; petugas kerap mengetik tahun perolehan di kotak pencarian.
+    "year",
 )
+
+# Field KODE/NOMOR yang boleh diketik dengan pemisah berbeda: kode barang
+# tanpa titik ("3100102001"), kode sebagian ("310.01.02"), atau nama barang
+# ber-desimal koma yang diketik pakai titik ("1.5" vs "1,5").
+FIELD_KODE_ASET = (
+    "asset_code", "NUP", "kode_register", "serial_number", "nomor_spm",
+    "nomor_kontrak", "nomor_bast", "nomor_bukti_perolehan",
+    "asset_name", "model", "location",
+)
+
+# Field yang nilainya BISA tersimpan sebagai angka (impor/sinkron lama).
+# `$regex` tak pernah cocok ke nilai non-string, jadi aset ber-NUP numerik
+# dulu mustahil ditemukan lewat pencarian.
+FIELD_ANGKA_ASET = ("NUP", "year", "purchase_price")
 # CATATAN PRIVASI: `pengguna_nip` SENGAJA tidak ikut pencarian teks bebas.
 # NIP adalah data pribadi yang tidak diindeks ke mesin pencari eksternal
 # (lihat test_meili_utils.test_proyeksi_aset_hanya_field_terindeks); bila ia
@@ -239,7 +256,9 @@ def build_asset_search_query(
     # Pencarian teks bebas MULTI-KATA: setiap kata wajib ada, boleh di field
     # yang berbeda-beda (lihat pencarian_utils). Diabaikan bila kata kunci
     # < MIN_SEARCH_LEN (cegah COLLSCAN 1-huruf).
-    query.update(klausa_teks(search, FIELD_CARI_ASET, tambahan=_klausa_harga))
+    query.update(klausa_teks(
+        search, FIELD_CARI_ASET, tambahan=_klausa_harga,
+        fields_kode=FIELD_KODE_ASET, fields_angka=FIELD_ANGKA_ASET))
 
     # Basic category filter
     if category:
@@ -368,6 +387,13 @@ async def get_assets(
     # filter lanjutan/sort/paginasi/isolasi tetap dijalankan Mongo (otoritatif).
     # `meili_ids is None` → Meili nonaktif/gagal → pakai regex Mongo 16-field lama.
     meili_ids = await cari_id_aset(_user, activity_id, search) if _search_len_ok(search) else None
+    # Hasil KOSONG dari Meili TIDAK dipercaya sebagai "memang tidak ada":
+    # indeks bisa tertinggal (dokumen gagal sinkron saat Meili mati) dan
+    # pencocokan berbasis kata di Meili tak mengenal kode yang diketik tanpa
+    # pemisah. Nihil → jatuh ke regex Mongo yang otoritatif; biaya pindai
+    # hanya muncul pada pencarian yang memang tak berhasil.
+    if meili_ids is not None and not meili_ids:
+        meili_ids = None
     query = build_asset_search_query(
         search=("" if meili_ids is not None else search),
         category=category, activity_id=activity_id,

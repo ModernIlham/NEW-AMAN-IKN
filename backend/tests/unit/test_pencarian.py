@@ -153,3 +153,40 @@ def test_klausa_teks_kosong_saat_tak_layak():
 def test_satu_kata_pakai_or_banyak_kata_pakai_and():
     assert "$or" in klausa_teks("meja", ("asset_name",))
     assert "$and" in klausa_teks("meja jati", ("asset_name",))
+
+
+# ── Kode & angka yang ditulis berbeda-beda (temuan lapangan gelombang 2) ────
+def test_kode_barang_diketik_tanpa_titik():
+    """Petugas kerap mengetik kode BMN tanpa pemisah; regex literal menolaknya."""
+    aset = {"asset_code": "3.10.01.02.001"}
+    assert cocok(aset, cari("3100102001"))
+    assert cocok(aset, cari("3.10.01.02.001"))     # bentuk asli tetap jalan
+    assert cocok(aset, cari("310.01.02"))          # awalan sebagian
+
+
+def test_desimal_koma_vs_titik():
+    """Data '1,5 PK' harus ketemu meski diketik '1.5' (dan sebaliknya)."""
+    aset = {"asset_name": "AC Split 1,5 PK Daikin"}
+    assert cocok(aset, cari("ac 1.5"))
+    assert cocok(aset, cari("ac 1,5"))
+
+
+def test_nilai_tersimpan_sebagai_angka_tetap_ketemu():
+    """$regex tak pernah cocok ke nilai non-string: NUP/tahun yang tersimpan
+    numerik (impor & sinkron lama) dulu mustahil ditemukan."""
+    assert cocok({"NUP": 120}, cari("120"))
+    assert cocok({"year": 2021}, cari("2021"))
+
+
+def test_kata_bukan_angka_tidak_memicu_pola_longgar():
+    """Pola angka longgar hanya untuk kata berangka — kata biasa tetap literal."""
+    from pencarian_utils import rx_angka_longgar
+    assert rx_angka_longgar("meja") is None
+    assert rx_angka_longgar("A1") is None          # cuma 1 angka
+    assert rx_angka_longgar("12") is not None
+
+
+def test_pola_longgar_dibatasi_panjangnya():
+    """Deret angka sangat panjang tidak dijadikan pola (jaga panjang regex)."""
+    from pencarian_utils import rx_angka_longgar
+    assert rx_angka_longgar("9" * 25) is None

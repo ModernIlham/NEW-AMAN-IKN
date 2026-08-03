@@ -18,6 +18,7 @@ import { authMediaUrl } from "@/lib/mediaUrl";
 import { exportViaJob } from "@/lib/jobExport";
 import { reserveDummyNup, cariKategoriDummy } from "@/lib/dummyNup";
 import { buatTempId, apakahTempId } from "@/lib/idAntrean";
+import { cocokAset } from "@/lib/pencarianLokal";
 import { useDragSelect } from "@/lib/useDragSelect";
 import { syncSnapshot, getSnapshotAssets, snapshotMeta, isSnapshotExpired, upsertSnapshotAsset, removeSnapshotAsset } from "@/lib/offlineSnapshot";
 
@@ -99,19 +100,14 @@ function PanelSegment({ active, onClick, testid, icon: Icon, label, badge, activ
 // Mirrors the server behavior of GET /assets (routes/assets.py) as closely
 // as feasible so switching between live and cached data feels identical.
 // ============================================================================
-// Same fields the server-side multi-field search covers
-const SNAPSHOT_SEARCH_FIELDS = [
-  "asset_code", "asset_name", "serial_number", "location", "brand", "model",
-  "category", "eselon1", "eselon2", "user", "supplier", "condition", "status",
-  "nomor_spm", "kode_register", "notes",
-];
-
 function filterSnapshotRows(rows, { search, category, filters }) {
   let out = rows;
-  if (search) {
-    const q = search.toLowerCase();
-    out = out.filter(r => SNAPSHOT_SEARCH_FIELDS.some(f => String(r[f] ?? "").toLowerCase().includes(q)));
-  }
+  // Pencarian teks bebas memakai SATU semantik dengan server (lib/pencarianLokal
+  // mencerminkan pencarian_utils.py): tiap kata wajib ada, boleh di field
+  // berbeda, kode boleh diketik tanpa pemisah. Dulu di sini kata kunci
+  // diperlakukan sebagai satu frasa utuh pada 16 field saja, sehingga hasil
+  // luring berbeda dari hasil daring untuk kata kunci yang sama.
+  if (search) out = out.filter(r => cocokAset(r, search));
   if (category && category !== "Semua") out = out.filter(r => r.category === category);
   if (filters) {
     const eq = (field, val) => { if (val) out = out.filter(r => String(r[field] ?? "") === val); };
