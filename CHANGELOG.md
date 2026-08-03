@@ -67,6 +67,48 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#724] Kamera lapangan: orientasi foto, resolusi, & kualitas yang melekat pada akun — 2026-08-03
+
+Kamera lapangan memotret dengan angka tetap: sisi terpanjang 1920 px, kualitas
+JPEG 0,85, orientasi apa adanya bingkai kamera. Tak ada cara menyesuaikannya
+dengan kamera HP yang dipakai maupun dengan kebutuhan laporan.
+
+Kini ada panel setelan di dalam mode kamera (ikon roda gigi di deretan tombol
+atas), berisi tiga hal:
+
+- **Orientasi foto** — Auto, Potret, atau Lanskap. Potret/Lanskap **memotong
+  dari tengah bingkai** ke rasio 3:4 / 4:3; gambarnya TIDAK diputar, karena
+  memutar hanya akan membuat pemandangannya rebah. Auto memakai bingkai apa
+  adanya seperti sebelumnya. Stempel watermark tetap terbaca normal karena
+  digambar setelah orientasi ditetapkan.
+- **Resolusi** (sisi terpanjang) — hanya menawarkan yang benar-benar sanggup
+  dilakukan kamera itu, dibaca dari `getCapabilities()`. Kamera yang tak
+  memberitahukan batasnya mendapat seluruh pilihan; kamera yang batasnya di
+  bawah pilihan terkecil tetap dapat satu pilihan, jadi panel tak pernah kosong.
+- **Kualitas JPEG** 50–100%.
+
+**Setelan melekat pada AKUN, bukan perangkat.** Petugas yang berganti HP (atau
+memakai HP pinjaman) tetap memotret dengan setelan yang sama, sehingga hasil
+foto satu satker seragam di laporan & stiker. Server menyimpannya di dokumen
+user lewat `GET/PUT /api/auth/preferensi-kamera`; salinan lokal per akun hanya
+cadangan agar kamera tetap memakai setelan yang benar SAAT LURING — dan
+perubahan langsung berlaku pada jepretan berikutnya walau server sedang tak
+terjangkau (pengguna diberi tahu bahwa penyimpanan ke akun menyusul).
+
+Akun yang belum pernah menyetel memotret PERSIS seperti sebelumnya (auto,
+1920 px, 85%) — tak ada perubahan diam-diam.
+
+Aturan nilainya ditulis dua kali dengan sengaja — `lib/preferensiKamera.js`
+untuk kamera dan `preferensi_kamera.py` untuk server — supaya isi basis data
+tetap masuk akal walau permintaannya datang dari klien lama; keduanya punya uji
+sendiri agar pergeseran di antara keduanya ketahuan. Uji itu sekaligus
+menangkap satu cacat sebelum sampai ke lapangan: `float(True)`/`Number(true)`
+lolos sebagai angka, sehingga `resolusi: true` akan tersimpan diam-diam sebagai
+640 px — kini boolean ditolak di kedua sisi.
+
+Diverifikasi: 1511 uji unit backend + 386 uji frontend lulus (5 + 10 uji baru),
+lint bersih, build produksi sukses.
+
 ## [#723] Halaman publik tak lagi menampilkan pemilih Satker Aktif — 2026-08-03
 
 Peta kolaborasi menampilkan bilah **Satker Aktif** di puncak halaman. Bilah itu

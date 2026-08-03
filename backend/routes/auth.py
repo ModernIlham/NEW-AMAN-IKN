@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Request, Header
 
 from db import db
 from models import UserCreate, UserLogin, UserResponse, TokenResponse, OTPRequest, OTPVerify
+from preferensi_kamera import normalkan as normalkan_preferensi_kamera
 from auth_utils import hash_password, verify_password, verify_password_dummy, create_token, create_media_token, get_current_user
 import hmac
 
@@ -473,6 +474,35 @@ async def get_me(authorization: str = Header(None)):
         is_active=user.get("is_active", True),
         created_at=user["created_at"]
     )
+
+# ── PREFERENSI KAMERA (melekat pada AKUN, bukan perangkat) ─────────────────
+# Dipisah dari UserResponse: ini setelan alat kerja, bukan identitas — dan
+# dibaca/ditulis jauh lebih sering daripada profil.
+
+@auth_router.get("/auth/preferensi-kamera")
+async def get_preferensi_kamera(authorization: str = Header(None)):
+    """Setelan kamera milik akun ini (orientasi stempel, resolusi, kualitas).
+
+    Selalu mengembalikan nilai yang SAH — akun yang belum pernah menyetel
+    menerima bawaan, jadi layar tak perlu menangani keadaan 'belum ada'.
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authorization header required")
+    user = await get_current_user(authorization)
+    return normalkan_preferensi_kamera(user.get("preferensi_kamera"))
+
+
+@auth_router.put("/auth/preferensi-kamera")
+async def set_preferensi_kamera(payload: dict, authorization: str = Header(None)):
+    """Simpan setelan kamera akun ini. Nilai dinormalkan DI SERVER agar isi
+    basis data tetap masuk akal walau permintaannya datang dari klien lama."""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authorization header required")
+    user = await get_current_user(authorization)
+    bersih = normalkan_preferensi_kamera(payload)
+    await db.users.update_one({"id": user["id"]}, {"$set": {"preferensi_kamera": bersih}})
+    return bersih
+
 
 @auth_router.post("/auth/heartbeat")
 async def heartbeat(authorization: str = Header(None)):
