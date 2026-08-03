@@ -67,6 +67,25 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#723] Halaman publik tak lagi menampilkan pemilih Satker Aktif — 2026-08-03
+
+Peta kolaborasi menampilkan bilah **Satker Aktif** di puncak halaman. Bilah itu
+alat kerja di DALAM aplikasi — ia menentukan satker mana yang sedang dikelola
+super-admin pusat — sementara halaman peta kolaborasi dibuka lewat link publik
+dan hanya menampilkan satu kegiatan milik satu satker yang sudah ditetapkan
+oleh linknya sendiri. Tak ada yang bisa dipilih di sana.
+
+Bilah itu hanya tampil untuk super-admin pusat, jadi tamu tak pernah melihatnya
+— yang melihat adalah pemilik peta saat membuka linknya sendiri sambil login.
+
+Ternyata bilahnya tersisip di **dua** cabang halaman publik, `/peta/kolaborasi/`
+dan `/ttd/` (e-sign), sementara `/lacak` sudah bersih sejak awal — tanda bahwa
+penambahannya dulu menyapu semua cabang tanpa memilah mana yang publik.
+Keduanya kini disamakan dengan `/lacak`, dan tiap cabang publik diberi komentar
+alasannya supaya tak tersapu lagi di kemudian hari.
+
+Diverifikasi: lint bersih, build produksi sukses.
+
 ## [#722] Peta kolaborasi: saring Lokasi & Kondisi, semua dalam satu tombol — 2026-08-03
 
 Peta kolaborasi hanya bisa menyaring status inventarisasi dan barang serupa,
