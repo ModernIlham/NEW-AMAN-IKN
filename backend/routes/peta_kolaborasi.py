@@ -497,6 +497,13 @@ async def lihat_peta(share_id: str, request: Request,
         "boleh_moderasi": _operator_satker(sh, ctx),
         "izinkan_titik_publik": bool(sh.get("izinkan_titik_publik", True)),
         "izinkan_komentar_publik": bool(sh.get("izinkan_komentar_publik", True)),
+        # Keputusan SIAP-PAKAI untuk layar: dihitung dengan fungsi yang SAMA
+        # dengan penjaga tulis, jadi tombol yang tampil = aksi yang benar-benar
+        # diterima server. Layar tak boleh menyimpulkan izin sendiri.
+        "boleh_tambah_titik": boleh_kontribusi and _izin_kontribusi(
+            sh, ctx, punya_link, "izinkan_titik_publik"),
+        "boleh_komentar": boleh_kontribusi and _izin_kontribusi(
+            sh, ctx, punya_link, "izinkan_komentar_publik"),
         "tamu": bool(ctx.get("guest")),
         "titik_aset": await _titik_aset(sh),
         "titik_kolaborasi": titik_kolaborasi,
@@ -570,6 +577,28 @@ async def foto_aset_peta(share_id: str, asset_id: str, indeks: int, request: Req
                     headers=_media_headers(etag))
 
 
+def _izin_kontribusi(share: dict, ctx: dict, punya_link: bool,
+                     izin_field: str) -> bool:
+    """Apakah pengunjung ini boleh menulis kontribusi jenis `izin_field`?
+
+    SATU-SATUNYA penentu izin per-link — dipakai baik oleh penjaga tulis maupun
+    oleh payload yang menyalakan/mematikan tombol di layar, supaya UI tak pernah
+    menawarkan aksi yang akan ditolak server (dan sebaliknya).
+
+    Setelan per-link berlaku untuk SETIAP kunjungan LEWAT LINK — tamu maupun
+    pengunjung yang kebetulan sedang login di aplikasi. Dulu setiap user login
+    lolos begitu saja, sehingga link yang dibuat dengan komentar/titik DIMATIKAN
+    tetap bisa dipakai berkontribusi; setelan tiap link jadi tak berarti.
+
+    Yang lolos hanya operator/admin satker pemilik share yang membuka petanya
+    DARI APLIKASI (tanpa token link): itu pengelolaan peta sendiri, bukan
+    kontribusi publik.
+    """
+    if bool(share.get(izin_field, True)):
+        return True
+    return _operator_satker(share, ctx) and not punya_link
+
+
 async def _guard_kontribusi(sh: dict, ctx: dict, request: Request,
                             izin_field: str, aksi: str):
     """Validasi umum saat menulis (titik/komentar): akses + izin publik + plafon."""
@@ -579,10 +608,7 @@ async def _guard_kontribusi(sh: dict, ctx: dict, request: Request,
     if not boleh_kontribusi:
         raise HTTPException(status_code=403,
                             detail=alasan or "Masa tayang berakhir — perpanjang untuk berkontribusi lagi.")
-    # Toggle izin publik berlaku untuk SEMUA pengunjung berlink (tamu maupun
-    # user login satker lain yang hanya lewat link); hanya operator/admin satker
-    # share yang lolos toggle.
-    if not _operator_satker(sh, ctx) and not bool(sh.get(izin_field, True)):
+    if not _izin_kontribusi(sh, ctx, punya_link, izin_field):
         raise HTTPException(status_code=403,
                             detail=f"Pembagi menonaktifkan {aksi} publik untuk peta ini.")
     # Plafon kontribusi per share — cegah pembengkakan tak terbatas & jaga
