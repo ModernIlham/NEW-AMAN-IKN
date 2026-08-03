@@ -21,9 +21,17 @@
  *   elipsis muncul lagi. Tanpa pembungkus/transform, aman utk markup apa pun.
  * - `prefers-reduced-motion` dihormati: lompat langsung tanpa animasi.
  *
+ * TOOLTIP: selama di-hover, atribut `title` DICABUT dan diganti tooltip
+ * kustom (lib/tooltipTeks.js). Alasannya, peramban mematikan tooltip native
+ * setiap kali isi elemen digulir — pada teks sangat panjang (nama barang,
+ * eselon, lokasi) animasinya lama sehingga tooltip native berkedip lalu
+ * hilang sama sekali. Tooltip kustom bertahan selama kursor di elemen dan
+ * menampilkan teks penuh berbilang baris.
+ *
  * Elemen dapat MENOLAK ikut dengan atribut `data-marquee-off`, dan elemen
  * MarqueeOnTap lama (ber-`data-marquee`) dibiarkan memakai logikanya sendiri.
  */
+import { pasangPenyembunyiTooltip, sembunyikanTooltip, tampilkanTooltip } from "./tooltipTeks";
 
 const KECEPATAN_PX_PER_DETIK = 55;
 const DETIK_MIN = 0.6;
@@ -64,21 +72,10 @@ function hentikan(el) {
 
 function gulirKe(el, tujuan, selesai) {
   hentikan(el);
-  // Cabut atribut `title` SELAMA teks bergerak: peramban mematikan tooltip
-  // native setiap kali isi elemen digulir, sehingga selama animasi tooltip
-  // tampil-mati-tampil ("berkedip", keluhan pemilik di kolom nama/lokasi/
-  // eselon). Disimpan di state dan dipulihkan begitu guliran RAMPUNG —
-  // tooltip lantas tampil tenang saat teks sudah diam (di ujung atau pulang).
-  if (el.hasAttribute("title")) {
-    status.set(el, { ...status.get(el), judul: el.getAttribute("title") });
-    el.removeAttribute("title");
-  }
   // `selesai` hanya dipanggil bila animasi RAMPUNG (tidak diinterupsi
   // hentikan() oleh animasi baru) — dipakai keAwal utk memulihkan elipsis.
   const rampung = () => {
     status.set(el, { ...status.get(el), raf: 0, tujuan });
-    const st = status.get(el);
-    if (st?.judul != null) el.setAttribute("title", st.judul);
     if (selesai) selesai();
   };
   const kurangiGerak = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
@@ -107,6 +104,13 @@ function gulirKe(el, tujuan, selesai) {
   status.set(el, { ...status.get(el), raf: requestAnimationFrame(langkah), tujuan });
 }
 
+/** Teks penuh elemen untuk tooltip: `title` bila ada, selain itu isinya. */
+function teksPenuh(el) {
+  const st = status.get(el);
+  const judul = st?.judul ?? el.getAttribute("title");
+  return (judul || el.textContent || "").trim();
+}
+
 function keUjung(el) {
   // Lepas elipsis SEBELUM bergeser: dengan `ellipsis` aktif peramban terus
   // menggambar "…" di tepi kanan sepanjang guliran dan MENELAN huruf-huruf
@@ -117,13 +121,26 @@ function keUjung(el) {
     el.dataset.marqueeAktif = "1";
     el.style.textOverflow = "clip";
   }
+  // Tooltip: cabut `title` (agar tooltip native yang selalu terbunuh oleh
+  // guliran tak ikut muncul) dan tampilkan tooltip kustom yang bertahan.
+  const teks = teksPenuh(el);
+  if (el.hasAttribute("title")) {
+    status.set(el, { ...status.get(el), judul: el.getAttribute("title") });
+    el.removeAttribute("title");
+  }
+  tampilkanTooltip(el, teks);
   gulirKe(el, el.scrollWidth - el.clientWidth);
 }
 
 function keAwal(el) {
+  sembunyikanTooltip();
+  const st = status.get(el);
+  if (st?.judul != null && !el.hasAttribute("title")) {
+    el.setAttribute("title", st.judul);   // pulihkan untuk pembaca layar
+  }
   gulirKe(el, 0, () => {
-    const st = status.get(el);
-    el.style.textOverflow = st?.toSebelum || "";
+    const s = status.get(el);
+    el.style.textOverflow = s?.toSebelum || "";
     delete el.dataset.marqueeAktif;
   });
 }
@@ -132,6 +149,7 @@ function keAwal(el) {
 export function pasangMarqueeEllipsis(doc = document) {
   if (doc.__marqueeEllipsisTerpasang) return;
   doc.__marqueeEllipsisTerpasang = true;
+  pasangPenyembunyiTooltip(doc);   // tooltip hilang saat gulir/klik/Escape
 
   // Hover masuk → jalan ke ujung; hover keluar → kembali (elipsis pulih).
   doc.addEventListener("mouseover", (e) => {

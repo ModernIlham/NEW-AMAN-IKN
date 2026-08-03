@@ -259,6 +259,17 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     resetAdvancedFilters,
   } = filterHook;
 
+  // Query filter aktif untuk LAPORAN EKSEKUTIF (nama param = GET /assets).
+  // Laporan Eksekutif / Barang Serupa / Data Aset ikut tersaring seperti daftar
+  // di layar; dokumen resmi (RHI/BAHI/DBKP dst.) tetap utuh.
+  const filterLaporan = useMemo(() => {
+    const p = new URLSearchParams();
+    if (debouncedSearch) p.append("search", debouncedSearch);
+    if (filterCategory && filterCategory !== "Semua") p.append("category", filterCategory);
+    buildFilterParams(p);
+    return p.toString();
+  }, [debouncedSearch, filterCategory, buildFilterParams]);
+
   // === FORM / EDIT STATE ===
   const [editAssetForForm, setEditAssetForForm] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -1803,7 +1814,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
             </div>
             )}
             {!inventoryMode && !mapOpen && analyticsOpen && <Suspense fallback={null}><AnalyticsPanel embedded activityId={activity?.id} isOpen={analyticsOpen} onToggle={handleAnalyticsToggle} panelHeight={analyticsPanelHeight} onDragStart={handleAnalyticsDragStart} /></Suspense>}
-            {!inventoryMode && !mapOpen && rekapOpen && <Suspense fallback={null}><RekapitulasiPanel embedded activityId={activity?.id} isOpen={rekapOpen} onToggle={() => setRekapOpen(p => !p)} onTotal={setRekapTotal} /></Suspense>}
+            {!inventoryMode && !mapOpen && rekapOpen && <Suspense fallback={null}><RekapitulasiPanel embedded activityId={activity?.id} isOpen={rekapOpen} onToggle={() => setRekapOpen(p => !p)} onTotal={setRekapTotal} filterLaporan={filterLaporan} filterAktifCount={activeFilterCount + (debouncedSearch ? 1 : 0)} /></Suspense>}
             {!mapOpen && groupsOpen && <Suspense fallback={null}><AssetGroupsPanel embedded activityId={activity?.id} isOpen={groupsOpen} onToggle={() => setGroupsOpen(p => !p)} onCount={setGroupsCount} onBatchEdit={perms.canEdit ? handleGroupBatchEdit : undefined} /></Suspense>}
 
             {/* Peta KEEP-ALIVE (di luar ternary): sekali dibuka tetap ter-mount,

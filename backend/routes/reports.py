@@ -4765,8 +4765,89 @@ def _parse_detail_fields(detail_fields: str):
     return {f.strip() for f in (detail_fields or "").split(",") if f.strip()} & valid
 
 
+# ============================================================================
+# FILTER LAPORAN EKSEKUTIF — laporan mengikuti filter yang aktif di layar
+# ============================================================================
+# Laporan Eksekutif, Barang Serupa, dan Data Aset dulu SELALU memuat seluruh
+# aset kegiatan, sehingga pengguna yang sudah menyaring daftar (mis. hanya
+# "Rusak Berat" di satu eselon) tetap menerima PDF berisi semuanya. Kini
+# parameter filter yang sama persis dengan daftar aset (build_asset_search_query
+# di routes/assets.py — SATU builder, tak bisa drift) ikut diterapkan, dan
+# ringkasannya dicetak di laporan supaya pembaca tahu ini bukan data lengkap.
+
+# (nama param, label di laporan) — dipakai untuk ringkasan yang dibaca manusia.
+_LABEL_FILTER = [
+    ("search", "Pencarian"), ("category", "Kategori"), ("condition", "Kondisi"),
+    ("status", "Status"), ("location", "Lokasi"), ("eselon1_filter", "Eselon I"),
+    ("eselon2_filter", "Eselon II"), ("stiker_status", "Stiker"),
+    ("inventory_status", "Status Inventarisasi"), ("nomor_spm", "No. SPM"),
+    ("perolehan_dari", "Perolehan dari"), ("user_filter", "Pengguna"),
+    ("pengguna_nip", "NIP/NIK Pengguna"), ("price_min", "Harga ≥"),
+    ("price_max", "Harga ≤"), ("beli_dari", "Tgl beli ≥"),
+    ("beli_sampai", "Tgl beli ≤"),
+]
+
+
+class FilterLaporan:
+    """Filter aset untuk laporan: `query` (potongan query Mongo) + `ringkasan`
+    (teks siap cetak) + `aktif` (bool)."""
+
+    __slots__ = ("query", "ringkasan", "aktif")
+
+    def __init__(self, query: dict, ringkasan: str):
+        self.query = query or {}
+        self.ringkasan = ringkasan or ""
+        self.aktif = bool(self.query)
+
+
+def filter_laporan_dari_map(m) -> FilterLaporan:
+    """Bangun FilterLaporan dari mapping nama→nilai (query params ATAU dict
+    yang dikirim di body batch ZIP)."""
+    from routes.assets import build_asset_search_query
+
+    def s(k):
+        return str((m or {}).get(k) or "").strip()
+
+    def f(k):
+        v = s(k)
+        try:
+            return float(v) if v else None
+        except ValueError:
+            return None
+
+    q = build_asset_search_query(
+        search=s("search"), category=s("category"), condition=s("condition"),
+        status=s("status"), location=s("location"),
+        eselon1_filter=s("eselon1_filter"), eselon2_filter=s("eselon2_filter"),
+        stiker_status=s("stiker_status"),
+        inventory_status=s("inventory_status"),
+        price_min=f("price_min"), price_max=f("price_max"),
+        nomor_spm=s("nomor_spm"), perolehan_dari=s("perolehan_dari"),
+        user_filter=s("user_filter"), pengguna_nip=s("pengguna_nip"),
+        beli_dari=s("beli_dari"), beli_sampai=s("beli_sampai"))
+    # `activity_id` diterapkan pemanggil (laporan selalu per kegiatan).
+    q.pop("activity_id", None)
+    bagian = [f"{label}: {s(nama)}" for nama, label in _LABEL_FILTER if s(nama)]
+    return FilterLaporan(q, " · ".join(bagian))
+
+
+def filter_laporan(
+    search: str = "", category: str = "", condition: str = "",
+    status: str = "", location: str = "", eselon1_filter: str = "",
+    eselon2_filter: str = "", stiker_status: str = "",
+    inventory_status: str = "", price_min: str = "", price_max: str = "",
+    nomor_spm: str = "", perolehan_dari: str = "", user_filter: str = "",
+    pengguna_nip: str = "", beli_dari: str = "", beli_sampai: str = "",
+) -> FilterLaporan:
+    """Dependency FastAPI: filter daftar aset yang ikut diterapkan ke laporan.
+    Nama parameternya SAMA dengan GET /assets (useAssetFilters.buildFilterParams
+    di frontend mengirimkan persis nama-nama ini)."""
+    return filter_laporan_dari_map(locals())
+
+
 async def _build_executive_summary_data(activity_id: str, detail_fields=None,
-                                        with_asset_rows: bool = True, row_slice=None):
+                                        with_asset_rows: bool = True, row_slice=None,
+                                        filter_aset: "FilterLaporan" = None):
     """Build all data needed for the executive summary template.
 
     detail_fields: optional set of EXEC_DETAIL_FIELDS keys — extra per-asset
@@ -4789,8 +4870,11 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
     # dan 'document_checklist' TETAP diambil (statistik & kolom kelengkapan dokumen).
     # Proyeksi bergaya eksklusi, jadi 'photo_gridfs_ids' & 'thumbnail_index' &
     # 'stiker_photo_index' ikut terambil — dipakai fallback GridFS di bawah.
+    # Filter layar (bila ada) IKUT diterapkan — laporan mencerminkan apa yang
+    # sedang dilihat pengguna, bukan selalu seluruh kegiatan.
+    q_aset = {"activity_id": activity_id, **((filter_aset.query if filter_aset else {}) or {})}
     all_assets = await db.assets.find(
-        {"activity_id": activity_id},
+        q_aset,
         {"_id": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0},
     ).to_list(100000)
     categories = await db.categories.find({}, {"_id": 0}).to_list(10000)
@@ -5161,6 +5245,10 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
         "nama_unit": settings.get("nama_unit_organisasi", ""),
         "alamat_instansi": str(settings.get("alamat_instansi", "") or "").replace("\n", " • "),
         "tahun_anggaran": settings.get("tahun_anggaran", ""),
+        # Filter layar yang diterapkan (kosong = seluruh kegiatan) — dicetak
+        # di laporan supaya pembaca tahu ini data tersaring.
+        "filter_aktif": bool(filter_aset and filter_aset.aktif),
+        "filter_ringkas": (filter_aset.ringkasan if filter_aset else ""),
         "satker_name": satker_name,
         "nomor_sk": activity.get("nomor_surat") or "-",
         "tgl_mulai": _fmt_tanggal_id(activity.get("tanggal_mulai")) or "-",
@@ -5214,12 +5302,13 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
 
 @reports_router.get("/inventory-activities/{activity_id}/executive-summary-html")
 async def executive_summary_html(activity_id: str, detail_fields: str = "",
+                                 filter_aset: FilterLaporan = Depends(filter_laporan),
                                  _user: dict = Depends(require_user_or_query_token)):
     """Serve Executive Summary as interactive HTML preview with real data"""
     await pastikan_akses_kegiatan_id(_user, activity_id)
     from jinja2 import Environment, FileSystemLoader
     data = await _build_executive_summary_data(activity_id, _parse_detail_fields(detail_fields),
-                                               with_asset_rows=False)
+                                               with_asset_rows=False, filter_aset=filter_aset)
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
     data["preview"] = True
@@ -5231,6 +5320,7 @@ async def executive_summary_html(activity_id: str, detail_fields: str = "",
 
 @reports_router.get("/inventory-activities/{activity_id}/executive-summary-pdf")
 async def generate_executive_summary_pdf(activity_id: str, detail_fields: str = "",
+                                         filter_aset: FilterLaporan = Depends(filter_laporan),
                                          _user: dict = Depends(require_user_or_query_token)):
     """Generate Executive Summary PDF (Part 1: Summary only, no data detail)."""
     await pastikan_akses_kegiatan_id(_user, activity_id)
@@ -5238,7 +5328,7 @@ async def generate_executive_summary_pdf(activity_id: str, detail_fields: str = 
     import weasyprint
 
     data = await _build_executive_summary_data(activity_id, _parse_detail_fields(detail_fields),
-                                               with_asset_rows=False)
+                                               with_asset_rows=False, filter_aset=filter_aset)
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
     data["preview"] = False
@@ -5258,6 +5348,7 @@ async def generate_executive_summary_pdf(activity_id: str, detail_fields: str = 
 
 @reports_router.get("/inventory-activities/{activity_id}/executive-data-pdf")
 async def generate_executive_data_pdf(activity_id: str, page: int = 1, detail_fields: str = "",
+                                      filter_aset: FilterLaporan = Depends(filter_laporan),
                                       _user: dict = Depends(require_user_or_query_token)):
     """Generate Executive Summary Data PDF (Part 2: Asset detail pages).
 
@@ -5275,7 +5366,8 @@ async def generate_executive_data_pdf(activity_id: str, page: int = 1, detail_fi
 
     data = await _build_executive_summary_data(
         activity_id, _parse_detail_fields(detail_fields),
-        with_asset_rows=True, row_slice=(start_idx, end_idx))
+        with_asset_rows=True, row_slice=(start_idx, end_idx),
+        filter_aset=filter_aset)
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
@@ -5298,6 +5390,8 @@ async def generate_executive_data_pdf(activity_id: str, page: int = 1, detail_fi
         global_offset=start_idx,
         data_page_num=page,
         total_data_pages=total_data_pages,
+        filter_aktif=data.get("filter_aktif"),
+        filter_ringkas=data.get("filter_ringkas"),
     )
     # Offload render CPU-bound WeasyPrint ke thread agar tak memblok event loop.
     pdf_bytes = await asyncio.to_thread(lambda: weasyprint.HTML(string=html).write_pdf())
@@ -5309,11 +5403,12 @@ async def generate_executive_data_pdf(activity_id: str, page: int = 1, detail_fi
 
 @reports_router.get("/inventory-activities/{activity_id}/executive-data-info")
 async def executive_data_info(activity_id: str, detail_fields: str = "",
+                              filter_aset: FilterLaporan = Depends(filter_laporan),
                               _user: dict = Depends(require_user_or_query_token)):
     """Return info about how many data download pages are available."""
     await pastikan_akses_kegiatan_id(_user, activity_id)
     data = await _build_executive_summary_data(activity_id, _parse_detail_fields(detail_fields),
-                                               with_asset_rows=False)
+                                               with_asset_rows=False, filter_aset=filter_aset)
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
@@ -5327,7 +5422,9 @@ async def executive_data_info(activity_id: str, detail_fields: str = "",
         end = min(p * items_per_download, total_assets)
         pages.append({"page": p, "start": start, "end": end, "count": end - start + 1})
     
-    return {"total_assets": total_assets, "total_pages": total_pages, "pages": pages}
+    return {"total_assets": total_assets, "total_pages": total_pages, "pages": pages,
+            "filter_aktif": bool(filter_aset and filter_aset.aktif),
+            "filter_ringkas": (filter_aset.ringkasan if filter_aset else "")}
 
 
 # ============================================================================
@@ -5364,7 +5461,8 @@ def _compact_nup_ranges(nups):
     return ", ".join(parts) if parts else "-"
 
 
-async def _build_executive_grouped_data(activity_id: str, detail_fields=None):
+async def _build_executive_grouped_data(activity_id: str, detail_fields=None,
+                                        filter_aset: "FilterLaporan" = None):
     """Build data for Laporan Eksekutif per Barang Serupa (grouped assets).
 
     Group key sama dengan /api/assets/groups (batch.py) TAPI tanpa filter
@@ -5390,8 +5488,11 @@ async def _build_executive_grouped_data(activity_id: str, detail_fields=None):
         try: return f"{int(v):,}".replace(",", ".")
         except (ValueError, TypeError): return "0"
 
+    # Filter layar ikut diterapkan pada $match — kelompok "barang serupa"
+    # dihitung HANYA dari aset yang lolos filter (mis. hanya Rusak Berat).
     pipeline = [
-        {"$match": {"activity_id": activity_id}},
+        {"$match": {"activity_id": activity_id,
+                    **((filter_aset.query if filter_aset else {}) or {})}},
         {"$group": {
             "_id": {
                 "asset_code": {"$ifNull": ["$asset_code", ""]},
@@ -5554,6 +5655,8 @@ async def _build_executive_grouped_data(activity_id: str, detail_fields=None):
         "total_groups": len(rows),
         "total_units": total_units,
         "total_value_fmt": fmt(total_value),
+        "filter_aktif": bool(filter_aset and filter_aset.aktif),
+        "filter_ringkas": (filter_aset.ringkasan if filter_aset else ""),
     }
 
 
@@ -5574,13 +5677,15 @@ async def executive_grouped_html(activity_id: str, detail_fields: str = "",
 
 @reports_router.get("/inventory-activities/{activity_id}/executive-grouped-pdf")
 async def generate_executive_grouped_pdf(activity_id: str, detail_fields: str = "",
+                                         filter_aset: FilterLaporan = Depends(filter_laporan),
                                          _user: dict = Depends(require_user_or_query_token)):
     """Generate Laporan Eksekutif per Barang Serupa (grouped assets) PDF"""
     await pastikan_akses_kegiatan_id(_user, activity_id)
     from jinja2 import Environment, FileSystemLoader
     import weasyprint
 
-    data = await _build_executive_grouped_data(activity_id, _parse_detail_fields(detail_fields))
+    data = await _build_executive_grouped_data(activity_id, _parse_detail_fields(detail_fields),
+                                               filter_aset=filter_aset)
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
@@ -6217,6 +6322,11 @@ class BatchPDFRequest(BaseModel):
     # Kolom tambahan PDF Eksekutif (SPM/Perolehan/BAST dll.) — supaya isi
     # ZIP identik dengan unduhan tunggal yang memakai pilihan yang sama.
     detail_fields: str = ""
+    # Filter daftar aset yang sedang aktif di layar (nama kunci = nama query
+    # param GET /assets). Ikut diterapkan ke laporan Eksekutif / Barang
+    # Serupa / Data Aset di dalam ZIP supaya isinya sama dengan unduhan
+    # tunggal saat filter menyala.
+    filter: dict = {}
 
 BATCH_PDF_MAP = {
     "rhi": ("RHI", generate_rhi_pdf),
@@ -6261,6 +6371,7 @@ async def batch_download_pdf_zip(request: Request, activity_id: str,
         raise HTTPException(status_code=400,
                             detail="Terlalu banyak laporan dalam satu batch (maks. 40)")
     detail_fields = str(payload.detail_fields or "")
+    f_aset = filter_laporan_dari_map(payload.filter or {})
 
     zip_buffer = io.BytesIO()
     generated = []
@@ -6305,7 +6416,8 @@ async def batch_download_pdf_zip(request: Request, activity_id: str,
 
                 if report_type == "executive-grouped":
                     response = await generate_executive_grouped_pdf(
-                        activity_id, detail_fields=detail_fields, _user=_user)
+                        activity_id, detail_fields=detail_fields,
+                        filter_aset=f_aset, _user=_user)
                     pdf_buffer = await _get_pdf_buffer_from_response(response)
                     filename = f"Eksekutif_Barang_Serupa_{activity_id[:8]}.pdf"
                     zf.writestr(filename, pdf_buffer.getvalue())
@@ -6314,11 +6426,13 @@ async def batch_download_pdf_zip(request: Request, activity_id: str,
 
                 if report_type == "executive-data":
                     # Seluruh halaman Data Aset (499 aset per halaman).
-                    info = await executive_data_info(activity_id, _user=_user)
+                    info = await executive_data_info(
+                        activity_id, filter_aset=f_aset, _user=_user)
                     for p in info.get("pages", []):
                         response = await generate_executive_data_pdf(
                             activity_id, page=p["page"],
-                            detail_fields=detail_fields, _user=_user)
+                            detail_fields=detail_fields,
+                            filter_aset=f_aset, _user=_user)
                         pdf_buffer = await _get_pdf_buffer_from_response(response)
                         filename = (f"Data_Aset_{p['start']}-{p['end']}"
                                     f"_{activity_id[:8]}.pdf")
@@ -6328,7 +6442,14 @@ async def batch_download_pdf_zip(request: Request, activity_id: str,
 
                 if report_type in BATCH_PDF_MAP:
                     label, gen_func = BATCH_PDF_MAP[report_type]
-                    response = await gen_func(activity_id, _user=_user)
+                    # Laporan Eksekutif ikut filter; laporan resmi lain
+                    # (RHI/BAHI/DBKP dst.) SELALU utuh — dokumen legal
+                    # tak boleh tersaring diam-diam.
+                    if report_type == "executive-summary":
+                        response = await gen_func(activity_id,
+                                                  filter_aset=f_aset, _user=_user)
+                    else:
+                        response = await gen_func(activity_id, _user=_user)
                     pdf_buffer = await _get_pdf_buffer_from_response(response)
                     filename = f"{label}_{activity_id[:8]}.pdf"
                     zf.writestr(filename, pdf_buffer.getvalue())

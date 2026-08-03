@@ -124,6 +124,7 @@ const batchGroupColors = {
 };
 
 export default function ReportDownloads({
+  filterLaporan = "", filterAktifCount = 0,
   data, activityId, downloading, onDownloadPDF, onDownloadDBHI, onDownloadDocx, onDownloadDBHIDocx
 }) {
   const [batchMode, setBatchMode] = useState(false);
@@ -142,10 +143,11 @@ export default function ReportDownloads({
   // Fetch data page info when component mounts
   useEffect(() => {
     if (!activityId) return;
-    axios.get(`${API}/inventory-activities/${activityId}/executive-data-info`)
+    axios.get(`${API}/inventory-activities/${activityId}/executive-data-info`
+              + (filterLaporan ? `?${filterLaporan}` : ""))
       .then(r => setDataInfo(r.data))
       .catch(() => setDataInfo(null));
-  }, [activityId]);
+  }, [activityId, filterLaporan]);
 
   const toggleDetailField = (key) => {
     setDetailFields(prev => {
@@ -163,7 +165,8 @@ export default function ReportDownloads({
     setDataDownloading(pageNum);
     try {
       await downloadFileWithProgress(
-        `${API}/inventory-activities/${activityId}/executive-data-pdf?page=${pageNum}${detailFieldsParam}`,
+        `${API}/inventory-activities/${activityId}/executive-data-pdf?page=${pageNum}${detailFieldsParam}`
+        + (filterLaporan ? `&${filterLaporan}` : ""),
         `Data_Aset_${startIdx}-${endIdx}_${activityId.substring(0, 8)}.pdf`,
         // Laporan berat: lewat 45 dtk otomatis dilanjutkan di Pusat Unduhan.
         { label: `Data Aset ${startIdx}-${endIdx}`, timeout: 45000 }
@@ -177,7 +180,8 @@ export default function ReportDownloads({
     setGroupedDownloading(true);
     try {
       await downloadFileWithProgress(
-        `${API}/inventory-activities/${activityId}/executive-grouped-pdf${detailFieldsValue ? `?detail_fields=${detailFieldsValue}` : ""}`,
+        `${API}/inventory-activities/${activityId}/executive-grouped-pdf${detailFieldsValue ? `?detail_fields=${detailFieldsValue}` : ""}`
+        + (filterLaporan ? `${detailFieldsValue ? "&" : "?"}${filterLaporan}` : ""),
         "Laporan_Eksekutif_Barang_Serupa.pdf",
         // Laporan paling berat (agregasi semua aset kegiatan): lewat 45 dtk
         // otomatis dilanjutkan di Pusat Unduhan alih-alih gagal timeout.
@@ -209,7 +213,9 @@ export default function ReportDownloads({
         { label: `Batch ZIP (${selected.size} laporan)`, method: "post",
           // detail_fields ikut dikirim agar PDF Eksekutif/Data Aset di ZIP
           // memuat kolom tambahan yang sama dgn unduhan tunggal.
-          data: { types: Array.from(selected), detail_fields: detailFieldsValue } }
+          data: { types: Array.from(selected), detail_fields: detailFieldsValue,
+                  // Laporan eksekutif di dalam ZIP ikut filter yang sama.
+                  filter: Object.fromEntries(new URLSearchParams(filterLaporan)) } }
       );
       setBatchMode(false);
       setSelected(new Set());
@@ -316,6 +322,19 @@ export default function ReportDownloads({
         <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
           <BarChart3 className="w-3.5 h-3.5" /> Laporan Eksekutif Inventarisasi BMN
         </p>
+        {/* Laporan eksekutif MENGIKUTI filter aktif — beri tahu terus terang
+            agar tak ada kejutan "kok isinya cuma sebagian". */}
+        {filterAktifCount > 0 && (
+          <div data-testid="rekap-filter-aktif"
+            className="mb-2 flex items-start gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
+            <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
+            <span>
+              Mengikuti <strong>{filterAktifCount} filter aktif</strong> — Laporan
+              Eksekutif, Barang Serupa, dan Data Aset hanya memuat aset yang lolos
+              filter. Dokumen resmi (RHI/BAHI/DBHI/DBKP) tetap memuat seluruh kegiatan.
+            </span>
+          </div>
+        )}
         <div className="space-y-1.5">
           <button data-testid="download-executive-summary" onClick={() => onDownloadPDF("executive-summary")} disabled={!!downloading}
             className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:from-emerald-300 disabled:to-teal-300 dark:from-emerald-700 dark:to-teal-700 dark:hover:from-emerald-600 dark:hover:to-teal-600 text-white rounded-lg text-xs font-semibold transition-all shadow-sm">

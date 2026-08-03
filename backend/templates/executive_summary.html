@@ -68,6 +68,9 @@
         .exec-header-text { flex: 1; }
         .exec-header-text h1 { font-size: 13px; font-weight: 700; color: #fff; letter-spacing: 1.5px; text-transform: uppercase; }
         .exec-header-text p { font-size: 9.5px; color: #94a3b8; margin-top: 2px; }
+        .filter-banner { margin: 8px 0 10px; padding: 6px 12px; border-left: 4px solid #f59e0b;
+            background: rgba(245,158,11,.12); border-radius: 4px; font-size: 10px; line-height: 1.5; }
+        .filter-banner strong { color: #b45309; }
         .exec-header-meta { text-align: right; flex-shrink: 0; }
         .exec-header-meta div { font-size: 9px; color: #94a3b8; line-height: 1.6; }
         .exec-header-meta strong { color: #e2e8f0; }
@@ -343,6 +346,12 @@
         </div>
     </div>
 
+    {% if filter_aktif %}
+    <div class="filter-banner">
+        <strong>Laporan tersaring</strong> — hanya memuat aset yang lolos filter berikut:
+        {{ filter_ringkas }}. Angka &amp; daftar di bawah BUKAN seluruh kegiatan.
+    </div>
+    {% endif %}
     {% if is_in_progress %}
     <div class="on-progress-banner">
         <div class="on-progress-dot"></div>
