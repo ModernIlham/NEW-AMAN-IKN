@@ -43,13 +43,28 @@ function buat() {
   return el;
 }
 
+// Warna tema dibaca dari variabel CSS yang sama dengan tooltip Radix
+// (`--primary` / `--primary-foreground`, ditulis sebagai komponen HSL di
+// index.css). Dengan begitu kedua jenis tooltip tampak SATU keluarga — dulu
+// tooltip ini gelap sendiri sementara tooltip tabel hijau.
+function varTema(nama, cadangan) {
+  try {
+    const v = getComputedStyle(document.documentElement)
+      .getPropertyValue(nama).trim();
+    return v ? `hsl(${v})` : cadangan;
+  } catch {
+    return cadangan;
+  }
+}
+
 function warnai(node) {
-  // Ikut tema: gelap → panel terang, terang → panel gelap (kontras tinggi,
-  // tak bergantung variabel CSS yang mungkin belum termuat).
-  const gelap = document.documentElement.classList.contains("dark");
-  node.style.background = gelap ? "#e2e8f0" : "#0f172a";
-  node.style.color = gelap ? "#0f172a" : "#f8fafc";
-  node.style.border = gelap ? "1px solid #cbd5e1" : "1px solid #334155";
+  // Cadangan ditulis heksa (#18675f = hsl(174 62% 25%), teal --primary bawaan)
+  // agar tetap benar di mesin CSS yang tak menerima sintaks hsl bergaya spasi.
+  const latar = varTema("--primary", "#18675f");
+  const teks = varTema("--primary-foreground", "#ffffff");
+  node.style.background = latar;
+  node.style.color = teks;
+  node.style.border = "1px solid rgba(0,0,0,.12)";
 }
 
 function tempatkan(node, anchor) {
@@ -100,8 +115,16 @@ function pulihkanJudulLeluhur() {
   judulBeku = [];
 }
 
-/** Sembunyikan tooltip (dan batalkan yang sedang menunggu tampil). */
-export function sembunyikanTooltip() {
+/**
+ * Sembunyikan tooltip (dan batalkan yang sedang menunggu tampil).
+ *
+ * `hanyaUntuk` membatasi penyembunyian pada satu elemen: dipakai saat kursor
+ * MENINGGALKAN sebuah elemen. Tanpa pembatas ini, elemen yang ditinggalkan
+ * ikut membunuh tooltip elemen yang BARU saja di-hover — pada tabel, pindah
+ * dari satu sel terpotong ke sel sebelahnya membuat tooltip tak pernah tampil.
+ */
+export function sembunyikanTooltip(hanyaUntuk) {
+  if (hanyaUntuk && sasaran && sasaran !== hanyaUntuk) return;
   clearTimeout(timer);
   timer = null;
   sasaran = null;
@@ -139,12 +162,17 @@ export function pasangPenyembunyiTooltip(doc = document) {
   if (doc.__amanTooltipTerpasang) return;
   doc.__amanTooltipTerpasang = true;
   // `capture` agar guliran kontainer mana pun (tabel virtual) ikut tertangkap.
-  // KECUALI guliran pada elemen anchor SENDIRI: animasi marquee menggeser
-  // `scrollLeft` elemen itu dan memicu event scroll bertubi-tubi — kalau
-  // dihiraukan, tooltip justru dibunuh oleh gerakan teksnya sendiri (persis
-  // penyakit tooltip native yang hendak kita ganti).
+  // KECUALI guliran yang berasal dari animasi MARQUEE: elemen teks menggeser
+  // `scrollLeft`-nya sendiri dan memicu event scroll bertubi-tubi. Bukan hanya
+  // anchor yang sedang ditooltipkan — elemen LAIN yang sedang bergulir kembali
+  // ke awal pun harus diabaikan, sebab animasi pulangnya berlangsung sampai
+  // beberapa detik dan dulu membunuh tooltip sel yang baru saja di-hover.
+  // Guliran seperti itu tak menggeser posisi tooltip, jadi tak ada alasan
+  // menyembunyikannya.
   window.addEventListener("scroll", (e) => {
-    if (sasaran && e.target === sasaran) return;
+    const n = e.target;
+    if (sasaran && n === sasaran) return;
+    if (n && n.nodeType === 1 && n.dataset?.marqueeAktif) return;
     sembunyikanTooltip();
   }, true);
   window.addEventListener("resize", sembunyikanTooltip, { passive: true });

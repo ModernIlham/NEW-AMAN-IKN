@@ -128,12 +128,18 @@ function keUjung(el) {
     status.set(el, { ...status.get(el), judul: el.getAttribute("title") });
     el.removeAttribute("title");
   }
-  tampilkanTooltip(el, teks);
+  // KECUALI elemen sudah berada di dalam pemicu tooltip aplikasi (Radix):
+  // di sana tooltip bertema sudah tampil sendiri, jadi menambah tooltip kedua
+  // justru memunculkan dua kotak berdampingan. Teksnya tetap digulirkan.
+  if (!el.closest("[data-tooltip-radix]")) tampilkanTooltip(el, teks);
   gulirKe(el, el.scrollWidth - el.clientWidth);
 }
 
 function keAwal(el) {
-  sembunyikanTooltip();
+  // Hanya tooltip MILIK elemen ini yang disembunyikan: saat kursor pindah ke
+  // sel tetangga, `mouseout` sel lama datang setelah `mouseover` sel baru —
+  // menyembunyikan tanpa pandang bulu akan membatalkan tooltip sel baru.
+  sembunyikanTooltip(el);
   const st = status.get(el);
   if (st?.judul != null && !el.hasAttribute("title")) {
     el.setAttribute("title", st.judul);   // pulihkan untuk pembaca layar

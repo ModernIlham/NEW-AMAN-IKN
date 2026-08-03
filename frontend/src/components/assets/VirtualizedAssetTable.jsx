@@ -57,17 +57,21 @@ SimanMarker.displayName = "SimanMarker";
 // Helper: truncated cell with optional icon
 const TruncatedCell = memo(({ text, icon: Icon }) => {
   if (!text) return <span className="text-[10px] text-muted-foreground">-</span>;
+  const isi = (
+    <div className="flex items-center gap-0.5 min-w-0">
+      {Icon && <Icon className="w-3 h-3 text-muted-foreground flex-shrink-0" />}
+      <span className="text-[11px] text-muted-foreground truncate">{text}</span>
+    </div>
+  );
+  // Teks pendek TIDAK dibungkus Tooltip sama sekali. Dulu pembungkusnya tetap
+  // dipasang walau isinya tak pernah dirender — pemicu itu kini menandai sel
+  // sebagai "sudah punya tooltip", sehingga tooltip teks-berjalan ikut diam dan
+  // sel sempit berakhir tanpa tooltip apa pun.
+  if (text.length <= 15) return isi;
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <div className="flex items-center gap-0.5 min-w-0">
-          {Icon && <Icon className="w-3 h-3 text-muted-foreground flex-shrink-0" />}
-          <span className="text-[11px] text-muted-foreground truncate">{text}</span>
-        </div>
-      </TooltipTrigger>
-      {text.length > 15 && (
-        <TooltipContent side="bottom" className="max-w-xs"><p className="text-xs">{text}</p></TooltipContent>
-      )}
+      <TooltipTrigger asChild>{isi}</TooltipTrigger>
+      <TooltipContent side="bottom" className="max-w-xs"><p className="text-xs">{text}</p></TooltipContent>
     </Tooltip>
   );
 });

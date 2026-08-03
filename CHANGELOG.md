@@ -67,6 +67,49 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#719] Akar tooltip dobel di tabel: dua sistem tooltip, satu elemen — 2026-08-03
+
+Perbaikan di `[#718]` **tidak menyentuh masalahnya**. Dugaan waktu itu — tooltip
+native (`title`) dari sel/baris induk — keliru: kedua kotak yang muncul adalah
+tooltip **aplikasi**, dari dua sistem berbeda yang kebetulan melayani elemen
+yang sama.
+
+- **Kotak hijau** = tooltip Radix (`TooltipContent`, `bg-primary`) yang dipasang
+  `TruncatedCell` di `VirtualizedAssetTable`.
+- **Kotak hitam** = tooltip teks-berjalan (`lib/tooltipTeks`), dipicu
+  `lib/marqueeEllipsis` karena teks sel itu memang terpotong elipsis.
+
+Keduanya benar menurut logikanya sendiri dan tak saling mengenal, jadi hover
+satu sel menggambar dua kotak berdampingan dengan gaya berbeda.
+
+**Akar ditutup dengan memberi keduanya satu titik kesepakatan.** `TooltipTrigger`
+kini menandai elemen pemicunya (`data-tooltip-radix`), dan tooltip teks-berjalan
+mengalah bila elemennya berada di dalam penanda itu — teksnya tetap digulirkan,
+hanya kotak keduanya yang tak digambar. `TruncatedCell` juga berhenti memasang
+pemicu untuk teks pendek (≤15 huruf) yang memang tak pernah punya isi tooltip;
+kalau tidak, sel sempit justru berakhir tanpa tooltip sama sekali.
+
+**Warnanya kini ikut tema.** Tooltip teks-berjalan mengambil `--primary` /
+`--primary-foreground` dari variabel CSS yang sama dengan tooltip Radix, jadi di
+mana pun ia masih dipakai (di luar tabel) warnanya hijau teal, bukan gelap
+netral seperti dulu.
+
+**Dua cacat lama ikut ketahuan saat pembuktian di peramban** — keduanya membuat
+tooltip "kadang muncul, kadang tidak" pada tabel:
+
+- Guliran yang lahir dari animasi teks berjalan dianggap guliran kontainer.
+  Sel yang ditinggalkan masih bergulir pulang sampai beberapa detik, dan setiap
+  event-nya membunuh tooltip sel yang **baru** di-hover.
+- `mouseout` sel lama tiba SETELAH `mouseover` sel baru, lalu menyembunyikan
+  tooltip tanpa memeriksa tooltip itu milik siapa.
+
+Diverifikasi: 1503 uji unit backend + 367 uji frontend lulus (4 uji regresi baru
+di `lib/tooltipTeks.test.js`), ditambah pembuktian di Chromium memakai komponen
+asli — satu sel bertooltip Radix menghasilkan tepat **satu** kotak sementara
+teksnya tetap bergulir (`scrollLeft=84`), tooltip teks-berjalan di luar tabel
+tetap muncul berwarna `rgb(24, 103, 95)`, dan tooltip ikut berpindah saat kursor
+loncat ke sel tetangga. Lint tanpa regresi, build produksi sukses.
+
 ## [#718] Ubah massal hilang dari pencarian, status inventarisasi berubah sendiri, tooltip dobel — 2026-08-03
 
 Tiga temuan lapangan, dua di antaranya **mengubah/menyembunyikan data**.
