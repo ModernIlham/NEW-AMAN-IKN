@@ -67,6 +67,83 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#733] Judul halaman berhenti tergilas di HP — kepala 26 halaman diseragamkan — 2026-08-03
+
+Setelah popup diseragamkan (`[#730]`–`[#732]`), giliran **halaman**. Kepala
+halaman ditulis berulang di tiap berkas dan pelan-pelan menyimpang; di layar
+360 px hasilnya bukan sekadar tidak rapi, melainkan **judul halaman hilang**.
+
+### Cacat yang diukur, bukan ditebak
+
+Blok header tiap halaman diekstrak dari sumber JSX menjadi HTML statis yang
+setia kelasnya (kelas `<Button>` disuntik dari `buttonVariants`), lalu dirender
+di Chromium 360 px **dengan CSS produksi** (`build/static/css/main.*.css`).
+Lebar `<h1>` terukur:
+
+| Halaman | Sebelum | Sesudah |
+|---|--:|--:|
+| Pengadaan | **32 px** | 188 px |
+| Referensi Akun | **57 px** | 240 px |
+| Pemanfaatan · Pemindahtanganan · Pemusnahan · Penganggaran | **84 px** | 188 px |
+| Wasdal | 94 px | 240 px |
+| TTD Permintaan | 109 px | 240 px |
+| Perencanaan | 112 px | 164 px |
+| Pelacakan Aset | 118 px | 149 px |
+| Pelaporan · Pemeliharaan · Penghapusan | 136 px | 188 px |
+
+Sebelumnya **13 halaman** punya judul di bawah 150 px; kini **nol** (terkecil
+149 px). Tak ada halaman yang meluap menyamping, sebelum maupun sesudah.
+
+### Akarnya: dua aturan yang saling meniadakan
+
+Baris kepala memakai `flex items-center gap-3` dengan blok judul
+`min-w-0 flex-1`. Aturan tap-target 44 px global (lihat catatan teknis di atas)
+membuat SETIAP tombol aksi memakan ≥44 px dan tak bisa mengalah — sedangkan
+blok judul, karena `min-w-0`, boleh menyusut sampai **nol**. Jadi yang selalu
+mengalah adalah satu-satunya penanda "saya sedang di halaman apa".
+
+Perbaikannya **wajib berpasangan**, dan ini yang diuji:
+
+1. `flex-wrap` + `gap-y-2` pada baris → tombol yang tak muat TURUN ke baris kedua;
+2. **lantai lebar** pada blok judul (`min-w-[9rem]`, menggantikan `min-w-0`) →
+   judul berhenti menyusut sehingga baris benar-benar "penuh" dan poin (1)
+   terpicu.
+
+Menambahkan `flex-wrap` saja tidak mengubah apa pun: selama judul masih boleh
+menyusut ke 0, baris tak pernah penuh dan tak pernah membungkus. Empat halaman
+yang sudah memakai `flex-wrap` sejak PR lama (Pengadaan 32 px, Pemanfaatan/
+Pemindahtanganan/Penganggaran 84 px) adalah buktinya.
+
+Ongkosnya: tinggi kepala +52 px **hanya** pada 11 halaman yang aksinya memang
+banyak — ditukar dengan judul yang terbaca.
+
+### Yang berubah
+
+- **BARU `frontend/src/lib/kelasKepala.js`** — satu sumber kelas kepala halaman:
+  `KEPALA_HALAMAN`, `BARIS_KEPALA`, `BLOK_JUDUL`, `JUDUL_KEPALA`,
+  `SUBJUDUL_KEPALA`, `TOMBOL_KEPALA`, `IKON_KEPALA`. Docstring memuat angka
+  hasil ukur di atas supaya alasannya tak hilang.
+- **BARU `kelasKepala.test.js`** (10 uji) — mengunci `flex-wrap`, lantai lebar
+  ≥8rem, ketiadaan `min-w-0`, `truncate` pada judul & keterangan, dan bahwa
+  kotak ikon TIDAK menetapkan warna latar (warna tetap milik tiap halaman).
+- **26 halaman** memakai konstanta itu: Kodefikasi, Beranda Modul, Pegawai,
+  Pejabat, Pelacakan, Pelaporan, Pemanfaatan, Pembukuan, Pemeliharaan,
+  Pemindahtanganan, Pemusnahan, Pengadaan, Pengamanan, Penganggaran,
+  Pengaturan, Penggunaan, Penghapusan, Penilaian, Perencanaan, Persediaan,
+  Persuratan, Referensi Akun, Ruangan, Satker, TTD Permintaan, Wasdal.
+- **Pelacakan Aset** dirombak ke bentuk baku — satu-satunya halaman yang memakai
+  bilah `h-12` tanpa blok judul, kini punya tombol kembali, kotak ikon, judul,
+  dan keterangan seperti halaman lain.
+
+### Yang SENGAJA tidak diubah
+
+`ActivitySelectionPage` memakai kepala **aplikasi**, bukan kepala modul:
+`justify-between` dengan judul besar "AMAN" dan blok akun di kanan. Codemod
+sempat menyeragamkannya, lalu dikembalikan — menyeragamkan yang memang berbeda
+bukan konsistensi, itu regresi.
+
+---
+
 ## [#732] Dua belas temuan sisa audit popup ditutup — penjelasan panjang dilipat — 2026-08-03
 
 Menutup 12 temuan yang di `[#731]` sengaja saya sebut BELUM dikerjakan. Semua

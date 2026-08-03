@@ -15,6 +15,10 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { TENGGAT_BAKA, muatAndal, pesanGalat } from "@/lib/muatAndal";
 
+import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
+  SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
+} from "@/lib/kelasKepala";
+
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 function getApiError(err, fallback) {
@@ -367,31 +371,42 @@ export default function PelacakanPage({ user, onBack }) {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-20 bg-card/95 backdrop-blur border-b border-border">
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 h-12 flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={onBack} className="min-w-0 min-h-0 px-2"
+      {/* Kepala halaman memakai bentuk baku lib/kelasKepala.js — dulu halaman
+          ini satu-satunya yang memakai bilah `h-12` tanpa blok judul, sehingga
+          judulnya paling awal tergilas saat lencana peringatan muncul. */}
+      <header className={KEPALA_HALAMAN}>
+        <div className={`max-w-6xl mx-auto ${BARIS_KEPALA}`}>
+          <button type="button" onClick={onBack} aria-label="Kembali ke Beranda Modul"
+                  title="Kembali ke Beranda Modul" className={TOMBOL_KEPALA}
                   data-testid="pelacakan-back">
             <ArrowLeft className="w-4 h-4" />
-          </Button>
-          <RadioTower className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-          <h1 className="text-sm font-bold truncate">Pelacakan Aset</h1>
+          </button>
+          <span className={`bg-emerald-600 ${IKON_KEPALA}`}>
+            <RadioTower className="w-4 h-4 text-white" />
+          </span>
+          <div className={BLOK_JUDUL}>
+            <h1 className={JUDUL_KEPALA}>Pelacakan Aset</h1>
+            <p className={SUBJUDUL_KEPALA}>
+              Posisi & geofence perangkat pendamping (UU PDP — barang, bukan orang)
+            </p>
+          </div>
           {belumDibaca === null ? (
-            <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-white"
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-white flex-shrink-0"
                   title="Daftar peringatan gagal dimuat" data-testid="pelacakan-badge-tak-diketahui">
               ? peringatan
             </span>
           ) : belumDibaca > 0 && (
-            <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white"
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white flex-shrink-0"
                   data-testid="pelacakan-badge-belum">
               {belumDibaca} baru
             </span>
           )}
-          <Button variant="ghost" size="sm" onClick={muat} disabled={memuat}
-                  className={`min-w-0 min-h-0 px-2 ${belumDibaca === null || belumDibaca > 0 ? "" : "ml-auto"}`}
-                  data-testid="pelacakan-refresh">
+          <button type="button" onClick={muat} disabled={memuat}
+                  aria-label="Muat ulang" title="Muat ulang"
+                  className={TOMBOL_KEPALA} data-testid="pelacakan-refresh">
             {memuat ? <Loader2 className="w-4 h-4 animate-spin" />
                     : <RefreshCw className="w-4 h-4" />}
-          </Button>
+          </button>
         </div>
       </header>
 

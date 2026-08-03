@@ -12,6 +12,10 @@ import {
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 
+import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
+  SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
+} from "@/lib/kelasKepala";
+
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 function apiErr(e, fb) { return e?.response?.data?.detail || fb; }
@@ -364,20 +368,20 @@ export default function SatkerPage({ user, onBack }) {
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
   return (
     <div className="min-h-screen bg-background" data-testid="satker-page">
-      <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
-        <div className="max-w-5xl mx-auto flex items-center gap-3">
+      <header className={KEPALA_HALAMAN}>
+        <div className={`max-w-5xl mx-auto ${BARIS_KEPALA}`}>
           <button type="button" onClick={onBack} aria-label="Kembali"
-            className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
+            className={TOMBOL_KEPALA}
             data-testid="satker-back">
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <span className="w-9 h-9 rounded-lg bg-emerald-700 flex items-center justify-center flex-shrink-0">
+          <span className={`bg-emerald-700 ${IKON_KEPALA}`}>
             <Building2 className="w-4 h-4 text-white" />
           </span>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight truncate"
+          <div className={BLOK_JUDUL}>
+            <h1 className={JUDUL_KEPALA}
               title="Master Satuan Kerja (Satker)">Master Satker</h1>
-            <p className="text-[11px] sm:text-xs text-muted-foreground leading-tight truncate"
+            <p className={SUBJUDUL_KEPALA}
               title="Profil & kop per-satker — menimpa setelan global pada laporan satker yang bersangkutan">
               Profil & kop per-satker — menimpa setelan global pada laporan satker ybs.
             </p>
