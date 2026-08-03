@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import {
   X, Camera, MapPin, Clock, Pencil, SwitchCamera, Loader2, Check, Trash2,
   ChevronLeft, ChevronRight, RotateCcw, AlertTriangle, Zap, ZapOff, Sun, ScanLine,
-  Volume2, VolumeX, Sparkles,
+  Volume2, VolumeX, Sparkles, Settings2, Smartphone, RectangleHorizontal, Wand2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useBackGuard } from "../../hooks/useBackGuard";
@@ -11,6 +11,10 @@ import { extractScannedCode } from "./QrScanButton";
 import { haptic } from "../../lib/haptics";
 import { playShutterSound, shutterSoundEnabled } from "../../lib/shutterSound";
 import { autoInventarisasiEnabled } from "../../lib/inventoryStatus";
+import {
+  PREFERENSI_BAWAAN, hitungBidang, resolusiTersedia,
+} from "../../lib/preferensiKamera";
+import { bacaCache, muatPreferensi, simpanPreferensi } from "../../lib/preferensiKameraApi";
 import {
   STATUS_OPTIONS, CONDITION_OPTIONS, SUB_KLASIFIKASI_OPTIONS,
   PENGGUNA_MELEKAT_OPTIONS, PENGGUNA_NAME_LABELS, OPERASIONAL_JENIS_OPTIONS,
@@ -155,6 +159,34 @@ const FullCameraSheet = memo(function FullCameraSheet({
   const [camError, setCamError] = useState(null); // { name, msg } bila gagal buka kamera
   const [suspended, setSuspended] = useState(false); // track berhenti (background/lock/direbut app lain)
   const [camNonce, setCamNonce] = useState(0); // bump utk coba-sambung-ulang kamera
+
+  // Preferensi kamera milik AKUN (orientasi hasil, resolusi, kualitas).
+  // Cache lokal dibaca serentak agar jepretan pertama sudah memakai setelan
+  // yang benar walau jawaban server belum tiba (atau sedang luring).
+  const [pref, setPref] = useState(() => bacaCache());
+  const prefRef = useRef(pref);
+  useEffect(() => { prefRef.current = pref; }, [pref]);
+  const [panelSetel, setPanelSetel] = useState(false);
+  const [maksSisiKamera, setMaksSisiKamera] = useState(0);   // dari getCapabilities
+  const [menyimpanPref, setMenyimpanPref] = useState(false);
+  useEffect(() => { muatPreferensi().then(setPref).catch(() => {}); }, []);
+
+  const gantiPref = useCallback((ubah) => {
+    setPref((lama) => {
+      const baru = { ...lama, ...ubah };
+      setMenyimpanPref(true);
+      simpanPreferensi(baru)
+        .then(({ pref: tersimpan, tersimpanKeAkun }) => {
+          setPref(tersimpan);
+          if (!tersimpanKeAkun) {
+            toast.info("Setelan dipakai sekarang; tersimpan ke akun saat daring lagi");
+          }
+        })
+        .catch(() => {})
+        .finally(() => setMenyimpanPref(false));
+      return baru;
+    });
+  }, []);
   const [gpsNonce, setGpsNonce] = useState(0); // bump utk coba-lagi GPS
   // Zoom sesuai spek kamera perangkat (mis. 0.5× / 1× / 2× / 5× — tergantung
   // rentang zoom yang diekspos browser; di banyak Android nilai <1 = ultrawide).
@@ -253,12 +285,26 @@ const FullCameraSheet = memo(function FullCameraSheet({
     (async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: facing, width: { ideal: 1920 }, height: { ideal: 1080 } },
+          // Minta bingkai seluas resolusi pilihan. `ideal` (bukan `exact`)
+          // supaya kamera yang tak sanggup tetap menyala dengan yang terdekat —
+          // memotret lebih penting daripada memenuhi angka.
+          video: {
+            facingMode: facing,
+            width: { ideal: pref.resolusi },
+            height: { ideal: Math.round(pref.resolusi * 3 / 4) },
+          },
           audio: false,
         });
         if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
         streamRef.current = stream;
         track = stream.getVideoTracks()[0];
+        // Kemampuan ASLI kamera ini — panel setelan hanya menawarkan resolusi
+        // yang benar-benar sanggup, bukan daftar hafalan.
+        try {
+          const cap = track?.getCapabilities?.();
+          const maks = Math.max(cap?.width?.max || 0, cap?.height?.max || 0);
+          if (maks > 0) setMaksSisiKamera(maks);
+        } catch { /* kamera tak memberitahukan kemampuannya — biarkan */ }
         if (track) {
           // Track berhenti (screen lock / app background / direbut app lain):
           // tandai suspended supaya rana dinonaktifkan & tak memotret frame beku.
@@ -303,7 +349,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
       if (track && onEnded) track.removeEventListener("ended", onEnded);
       if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
     };
-  }, [facing, camNonce, supported]);
+  }, [facing, camNonce, supported, pref.resolusi]);
 
   // Terapkan zoom ke track aktif (perbesaran optik/digital sesuai kemampuan).
   const applyZoom = useCallback(async (z) => {
@@ -503,15 +549,19 @@ const FullCameraSheet = memo(function FullCameraSheet({
     // terambil), tepat di dalam gestur ketuk. Makin dekat ke ketukan makin andal
     // navigator.vibrate dijalankan browser & makin terasa "instan".
     haptic("shutter");
-    const scale = Math.min(1, 1920 / Math.max(vw, vh));
+    // Orientasi & resolusi mengikuti setelan AKUN (lib/preferensiKamera):
+    // `potret`/`lanskap` memotong dari tengah bingkai, `auto` apa adanya.
+    const setel = prefRef.current || PREFERENSI_BAWAAN;
+    const bidang = hitungBidang(vw, vh, setel.orientasi, setel.resolusi);
     const canvas = document.createElement("canvas");
-    canvas.width = Math.round(vw * scale);
-    canvas.height = Math.round(vh * scale);
+    canvas.width = bidang.lebar;
+    canvas.height = bidang.tinggi;
     const ctx = canvas.getContext("2d");
     // Bakar kecerahan gestur ke hasil foto agar sama dengan pratinjau.
     const bright = brightnessRef.current;
     if (bright !== 1 && CANVAS_FILTER_OK) ctx.filter = `brightness(${bright})`;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(video, bidang.sx, bidang.sy, bidang.sw, bidang.sh,
+      0, 0, canvas.width, canvas.height);
     ctx.filter = "none";
     if (bright !== 1 && !CANVAS_FILTER_OK) bakeBrightnessFallback(ctx, canvas.width, canvas.height, bright);
 
@@ -544,7 +594,8 @@ const FullCameraSheet = memo(function FullCameraSheet({
       ctx.fillText(l, pad / 2 + pad * 0.7, canvas.height - boxH - pad / 2 + pad * 0.4 + lh * (i + 1) - fs * 0.25, boxW - pad * 1.4);
     });
 
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+    const dataUrl = canvas.toDataURL("image/jpeg",
+      Math.min(1, Math.max(0.5, (setel.kualitas || 85) / 100)));
     playShutterSound(); // klik rana (best-effort; hormati toggle bunyi)
     // Penanda gerbong dibaca TEPAT saat rana ditekan — bukan saat foto sampai
     // di induk. Watermark di badan foto (kode & NUP di atas) berasal dari
@@ -777,11 +828,89 @@ const FullCameraSheet = memo(function FullCameraSheet({
               className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${soundOn ? "bg-black/50 text-white" : "bg-black/50 text-white/45"}`}>
               {soundOn ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
             </button>
+            {/* Setelan kamera milik AKUN — orientasi hasil, resolusi, kualitas. */}
+            <button type="button" onClick={() => setPanelSetel((v) => !v)}
+              aria-label="Setelan kamera" aria-pressed={panelSetel}
+              data-testid="full-camera-setelan"
+              className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${panelSetel ? "bg-blue-600 text-white" : "bg-black/50 text-white"}`}>
+              <Settings2 className="w-5 h-5" />
+            </button>
             <button type="button" onClick={onClose} aria-label="Tutup kamera" data-testid="full-camera-close"
               className="w-10 h-10 rounded-full bg-black/50 text-white flex items-center justify-center">
               <X className="w-5 h-5" />
             </button>
           </div>
+        {/* ── Panel setelan kamera (melekat pada akun) ───────────────────── */}
+        {panelSetel && (
+          <div className="absolute top-16 right-3 z-[130] w-[17.5rem] max-w-[calc(100vw-1.5rem)] rounded-2xl bg-black/85 backdrop-blur text-white shadow-2xl border border-white/15 overflow-hidden"
+            data-testid="full-camera-panel-setelan">
+            <div className="px-3 py-2 border-b border-white/10 flex items-center gap-2">
+              <Settings2 className="w-4 h-4 text-white/70" />
+              <span className="text-[11px] font-bold uppercase tracking-wide text-white/70 flex-1">Setelan kamera</span>
+              {menyimpanPref && <Loader2 className="w-3.5 h-3.5 animate-spin text-white/60" />}
+            </div>
+            <div className="p-3 space-y-3">
+              <div>
+                <div className="text-[10.5px] font-semibold text-white/60 mb-1.5">Orientasi foto</div>
+                <div className="grid grid-cols-3 gap-1">
+                  {[
+                    { v: "auto", label: "Auto", Ikon: Wand2 },
+                    { v: "potret", label: "Potret", Ikon: Smartphone },
+                    { v: "lanskap", label: "Lanskap", Ikon: RectangleHorizontal },
+                  ].map(({ v, label, Ikon }) => (
+                    <button key={v} type="button" onClick={() => gantiPref({ orientasi: v })}
+                      aria-pressed={pref.orientasi === v} data-testid={`setelan-orientasi-${v}`}
+                      className={`min-h-0 py-2 rounded-lg flex flex-col items-center gap-1 text-[10px] font-semibold transition-colors ${pref.orientasi === v ? "bg-blue-600 text-white" : "bg-white/10 text-white/75 hover:bg-white/20"}`}>
+                      <Ikon className="w-4 h-4" /> {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[9.5px] text-white/45 mt-1 leading-snug">
+                  Potret/Lanskap memotong dari tengah bingkai — pemandangan tidak diputar.
+                </p>
+              </div>
+
+              <div>
+                <div className="text-[10.5px] font-semibold text-white/60 mb-1.5">
+                  Resolusi <span className="text-white/40">(sisi terpanjang)</span>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {resolusiTersedia(maksSisiKamera).map((r) => (
+                    <button key={r} type="button" onClick={() => gantiPref({ resolusi: r })}
+                      aria-pressed={pref.resolusi === r} data-testid={`setelan-resolusi-${r}`}
+                      className={`min-h-0 px-2.5 py-1.5 rounded-lg text-[10.5px] font-semibold transition-colors ${pref.resolusi === r ? "bg-blue-600 text-white" : "bg-white/10 text-white/75 hover:bg-white/20"}`}>
+                      {r} px
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[9.5px] text-white/45 mt-1 leading-snug">
+                  {maksSisiKamera > 0
+                    ? `Kamera ini sanggup sampai ${maksSisiKamera} px.`
+                    : "Kamera tak memberitahukan batasnya — semua pilihan ditawarkan."}
+                </p>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10.5px] font-semibold text-white/60">Kualitas JPEG</span>
+                  <span className="text-[10.5px] font-bold tabular-nums">{pref.kualitas}%</span>
+                </div>
+                <input type="range" min="50" max="100" step="5" value={pref.kualitas}
+                  onChange={(e) => gantiPref({ kualitas: Number(e.target.value) })}
+                  aria-label="Kualitas JPEG" data-testid="setelan-kualitas"
+                  className="w-full accent-blue-500" />
+                <p className="text-[9.5px] text-white/45 leading-snug">
+                  Makin tinggi makin tajam & makin besar berkasnya.
+                </p>
+              </div>
+
+              <p className="text-[9.5px] text-white/50 border-t border-white/10 pt-2 leading-snug">
+                Setelan melekat pada akun Anda — ikut berpindah HP, bertahan sampai diubah lagi.
+              </p>
+            </div>
+          </div>
+        )}
+
         </div>
       </div>
 
