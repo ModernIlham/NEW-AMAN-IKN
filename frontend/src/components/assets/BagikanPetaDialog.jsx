@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   Share2, Copy, Clock, Plus, Loader2, Link2, MessageSquare, MapPin,
-  Trash2, RefreshCcw, Check, RotateCw, ChevronDown,
+  Trash2, RefreshCcw, Check, RotateCw, ChevronDown, Pencil, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,19 @@ const PRESET = [
   { label: "1 hari", jam: 24 }, { label: "3 hari", jam: 72 },
   { label: "7 hari", jam: 168 }, { label: "30 hari", jam: 720 },
 ];
+
+/**
+ * Logo WhatsApp. Digambar sendiri karena lucide sengaja tidak memuat ikon
+ * MEREK — dan di baris aksi yang sempit, gagang telepon generik tidak
+ * memberitahu ke mana tautan akan dikirim, sedangkan logo ini memberitahu.
+ */
+function IkonWhatsApp({ className = "" }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" className={className}>
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.872.118.571-.085 1.758-.719 2.006-1.413.247-.694.247-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884a9.82 9.82 0 0 1 6.988 2.896 9.83 9.83 0 0 1 2.892 6.994c-.003 5.45-4.437 9.886-9.884 9.886m8.413-18.297A11.8 11.8 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.9 11.9 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.8 11.8 0 0 0 20.464 3.488" />
+    </svg>
+  );
+}
 
 function sisa(iso) {
   const ms = new Date(iso).getTime() - Date.now();
@@ -42,19 +55,27 @@ export default function BagikanPetaDialog({ open, onClose, activity }) {
   const [judul, setJudul] = useState("");
   const [izinTitik, setIzinTitik] = useState(true);
   const [izinKomentar, setIzinKomentar] = useState(true);
+  // Judul link yang sudah terbit boleh dikoreksi tanpa menerbitkan tautan baru
+  // (id share yang sedang diedit + nilai yang sedang diketik).
+  const [editJudul, setEditJudul] = useState("");
+  const [nilaiJudul, setNilaiJudul] = useState("");
+  const [menyimpanJudul, setMenyimpanJudul] = useState(false);
   const [tersalin, setTersalin] = useState("");
+  // Link mati > sebulan tidak lagi dikirim server. Jumlahnya ditampilkan agar
+  // daftar yang menyusut tak terbaca sebagai data hilang.
+  const [diarsipkan, setDiarsipkan] = useState(0);
   const { confirm, confirmDialog } = useConfirm();
 
   const muat = useCallback(() => {
     if (!activity?.id) return;
     setLoading(true);
     axios.get(`${API}/peta/share`, { params: { activity_id: activity.id } })
-      .then((r) => setShares(r.data?.items || []))
-      .catch(() => setShares([]))
+      .then((r) => { setShares(r.data?.items || []); setDiarsipkan(r.data?.diarsipkan || 0); })
+      .catch(() => { setShares([]); setDiarsipkan(0); })
       .finally(() => setLoading(false));
   }, [activity?.id]);
 
-  useEffect(() => { if (open) { muat(); setTersalin(""); } }, [open, muat]);
+  useEffect(() => { if (open) { muat(); setTersalin(""); setEditJudul(""); } }, [open, muat]);
 
   const buat = async () => {
     setCreating(true);
@@ -88,6 +109,27 @@ export default function BagikanPetaDialog({ open, onClose, activity }) {
     if (navigator.share) {
       try { await navigator.share({ title: judulShare || "Peta Kolaboratif", url: link }); } catch { /* dibatalkan */ }
     } else { salin(link); }
+  };
+
+  const mulaiEditJudul = (s) => { setEditJudul(s.id); setNilaiJudul(s.judul || ""); };
+
+  /**
+   * Simpan judul baru. Judul ikut tampil di halaman publik & teks ajakan
+   * WhatsApp, jadi salah ketik harus bisa dikoreksi tanpa mematikan tautan
+   * yang sudah tersebar — server hanya mengubah field judul, jti tak dirotasi.
+   */
+  const simpanJudul = async (sid) => {
+    const judul = nilaiJudul.trim().slice(0, 140);
+    setMenyimpanJudul(true);
+    try {
+      await axios.put(`${API}/peta/share/${sid}/judul`, { judul });
+      // Perbarui di tempat: memuat ulang seluruh daftar hanya untuk satu judul
+      // membuat layar berkedip tanpa alasan.
+      setShares((ds) => ds.map((x) => (x.id === sid ? { ...x, judul } : x)));
+      setEditJudul("");
+      toast.success("Judul peta diperbarui");
+    } catch (e) { toast.error(getApiError(e, "Gagal mengubah judul")); }
+    finally { setMenyimpanJudul(false); }
   };
 
   // Laci durasi perpanjang, per share (id share yang sedang terbuka).
@@ -184,10 +226,37 @@ export default function BagikanPetaDialog({ open, onClose, activity }) {
           ) : aktif.map((s) => (
             <div key={s.id} className="rounded-lg border border-border bg-card p-2.5 space-y-2" data-testid={`bagikan-item-${s.id}`}>
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold text-foreground truncate">{s.judul || "Peta Kolaboratif"}</p>
-                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${s.kedaluwarsa ? "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400" : "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400"}`}>
-                  <Clock className="w-2.5 h-2.5 inline mr-0.5" />{s.kedaluwarsa ? "Kedaluwarsa" : sisa(s.berlaku_sampai)}
-                </span>
+                {editJudul === s.id ? (
+                  <form className="flex items-center gap-1 flex-1 min-w-0"
+                    onSubmit={(e) => { e.preventDefault(); simpanJudul(s.id); }}>
+                    <Input autoFocus value={nilaiJudul} onChange={(e) => setNilaiJudul(e.target.value)}
+                      maxLength={140} placeholder="Judul peta" className="h-7 text-xs flex-1 min-w-0 min-h-0"
+                      data-testid={`bagikan-judul-input-${s.id}`} />
+                    <button type="submit" disabled={menyimpanJudul} title="Simpan judul"
+                      className="h-7 w-7 rounded-md border border-emerald-300 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 flex items-center justify-center flex-shrink-0 min-w-0 min-h-0"
+                      data-testid={`bagikan-judul-simpan-${s.id}`}>
+                      {menyimpanJudul ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                    </button>
+                    <button type="button" onClick={() => setEditJudul("")} title="Batal"
+                      className="h-7 w-7 rounded-md border border-border text-muted-foreground flex items-center justify-center flex-shrink-0 min-w-0 min-h-0"
+                      data-testid={`bagikan-judul-batal-${s.id}`}>
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </form>
+                ) : (<>
+                  <div className="flex items-center gap-1 min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-foreground truncate">{s.judul || "Peta Kolaboratif"}</p>
+                    <button onClick={() => mulaiEditJudul(s)} title="Ubah judul peta"
+                      aria-label="Ubah judul peta"
+                      className="h-6 w-6 rounded-md text-muted-foreground hover:bg-muted flex items-center justify-center flex-shrink-0 min-w-0 min-h-0"
+                      data-testid={`bagikan-judul-edit-${s.id}`}>
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${s.kedaluwarsa ? "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400" : "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400"}`}>
+                    <Clock className="w-2.5 h-2.5 inline mr-0.5" />{s.kedaluwarsa ? "Kedaluwarsa" : sisa(s.berlaku_sampai)}
+                  </span>
+                </>)}
               </div>
               {s.link && (
                 <div className="flex items-center gap-1.5">
@@ -205,8 +274,26 @@ export default function BagikanPetaDialog({ open, onClose, activity }) {
               )}
               <p className="text-[10px] text-muted-foreground">{s.jumlah_kontribusi || 0} kontribusi</p>
               <div className="flex flex-wrap items-center gap-1.5">
-                {s.link && <button onClick={() => bagikanWA(s.link, s.judul)} className="h-7 px-2 rounded-md bg-green-600 text-white text-[11px] font-semibold min-w-0 min-h-0">WhatsApp</button>}
-                {s.link && <button onClick={() => bagikanNatif(s.link, s.judul)} className="h-7 px-2 rounded-md border border-border text-[11px] text-muted-foreground min-w-0 min-h-0">Bagikan…</button>}
+                {/* Di HP baris aksi ini sempit — dua tombol berlabel memaksanya
+                    pecah baris. Labelnya disembunyikan di <sm; yang tersisa
+                    logo WhatsApp (bukan ikon telepon generik) & ikon bagikan,
+                    keduanya sudah menyatakan tujuannya sendiri. */}
+                {s.link && (
+                  <button onClick={() => bagikanWA(s.link, s.judul)}
+                    title="Bagikan lewat WhatsApp" aria-label="Bagikan lewat WhatsApp"
+                    className="h-7 w-7 sm:w-auto sm:px-2 rounded-md bg-green-600 text-white text-[11px] font-semibold flex items-center justify-center sm:gap-1 flex-shrink-0 min-w-0 min-h-0"
+                    data-testid={`bagikan-wa-${s.id}`}>
+                    <IkonWhatsApp className="w-3.5 h-3.5" /><span className="hidden sm:inline">WhatsApp</span>
+                  </button>
+                )}
+                {s.link && (
+                  <button onClick={() => bagikanNatif(s.link, s.judul)}
+                    title="Bagikan lewat aplikasi lain" aria-label="Bagikan lewat aplikasi lain"
+                    className="h-7 w-7 sm:w-auto sm:px-2 rounded-md border border-border text-[11px] text-muted-foreground flex items-center justify-center sm:gap-1 flex-shrink-0 min-w-0 min-h-0"
+                    data-testid={`bagikan-natif-${s.id}`}>
+                    <Share2 className="w-3.5 h-3.5" /><span className="hidden sm:inline">Bagikan…</span>
+                  </button>
+                )}
                 {/* Perpanjang: durasinya DIPILIH, bukan dipatok 7 hari. Pilihannya
                     sama persis dengan saat link dibuat (PRESET) supaya operator
                     tak perlu menghafal dua daftar yang berbeda. */}
@@ -260,6 +347,16 @@ export default function BagikanPetaDialog({ open, onClose, activity }) {
               </div>
             ))}
           </div>
+        )}
+
+        {/* Daftar tak dibiarkan menumpuk: link yang sudah mati lebih dari
+            sebulan tak lagi ditampilkan. Jumlahnya disebut supaya daftar yang
+            menyusut tidak terbaca sebagai data yang hilang. */}
+        {diarsipkan > 0 && (
+          <p className="text-[10px] text-muted-foreground leading-snug" data-testid="bagikan-diarsipkan">
+            <b>{diarsipkan}</b> link yang sudah mati lebih dari sebulan tidak lagi ditampilkan.
+            Kontribusi yang telanjur masuk lewat link itu tetap tersimpan.
+          </p>
         )}
         {confirmDialog}
       </DialogContent>

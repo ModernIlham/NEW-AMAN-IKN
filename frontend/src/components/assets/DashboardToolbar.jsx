@@ -61,7 +61,7 @@ const DashboardToolbar = memo(function DashboardToolbar({
   sortBy, setSortBy,
   exporting, handleExport, handleExportExecutivePDF, handlePreviewExecutive,
   perms, openDialog,
-  handlePrintBulkCards, onCetakStiker, assetsCount,
+  handlePrintBulkCards, onCetakStiker, assetsCount, selectedCount = 0,
   filters, filterOptions, handleAdvancedFilterChange,
   resetAdvancedFilters, handleCategoryReset,
   refreshData,
@@ -85,9 +85,16 @@ const DashboardToolbar = memo(function DashboardToolbar({
   // `lebarIkon` 38 px = lebar terukur tombol `size="sm" h-8` bentuk ikon-saja
   // (px-2 + garis + ikon 12 px). Saklar tampilan & dua Select memakai lebar
   // eksplisit karena keduanya menyempit, bukan kehilangan teks.
+  // Seleksi aktif → tombol cetak bekerja pada yang DITANDAI saja; angkanya
+  // ikut berubah supaya tak ada kejutan setelah PDF jadi.
+  const jmlCetak = selectedCount > 0 ? selectedCount : assetsCount;
+  const judulCetak = selectedCount > 0
+    ? `Cetak Kartu ${selectedCount} aset terpilih`
+    : `Cetak Kartu (${assetsCount})`;
+
   const itemLipat = useMemo(() => {
     const daftar = [
-      { kunci: "kartu", lebarIkon: 38, label: `Cetak Kartu (${assetsCount})` },
+      { kunci: "kartu", lebarIkon: 38, label: `Cetak Kartu (${jmlCetak})` },
     ];
     if (perms.canBulkDelete) daftar.push({ kunci: "hapus", lebarIkon: 38, label: "Hapus Semua" });
     daftar.push({ kunci: "stiker", lebarIkon: 38, label: "Stiker" });
@@ -100,7 +107,7 @@ const DashboardToolbar = memo(function DashboardToolbar({
     daftar.push({ kunci: "urut", lebarIkon: 88, lebarPenuh: 128 });
     daftar.push({ kunci: "kategori", lebarIkon: 112, lebarPenuh: 160 });
     return daftar;
-  }, [assetsCount, perms.canBulkDelete, perms.canImport, viewMode, setViewMode]);
+  }, [jmlCetak, perms.canBulkDelete, perms.canImport, viewMode, setViewMode]);
 
   // `lebarTetap` = indikator kuota kompresi, satu-satunya penghuni baris yang
   // tak pernah melipat.
@@ -295,12 +302,12 @@ const DashboardToolbar = memo(function DashboardToolbar({
             )}
             {/* Jumlah aset ikut hilang bersama labelnya — `title` tetap
                 menyebutnya agar informasi itu tak lenyap sama sekali. */}
-            <Button variant="outline" size="sm" className={`h-8 text-xs flex-shrink-0 ${tampil("kartu") ? "" : "px-2"}`} onClick={handlePrintBulkCards} disabled={assetsCount === 0}
-              title={`Cetak Kartu (${assetsCount})`}>
-              <CreditCard className={`w-3 h-3 ${tampil("kartu") ? "mr-1" : ""}`} />{tampil("kartu") && <span>Cetak Kartu ({assetsCount})</span>}
+            <Button variant="outline" size="sm" className={`h-8 text-xs flex-shrink-0 ${tampil("kartu") ? "" : "px-2"}`} onClick={handlePrintBulkCards} disabled={jmlCetak === 0}
+              title={judulCetak} data-testid="toolbar-cetak-kartu">
+              <CreditCard className={`w-3 h-3 ${tampil("kartu") ? "mr-1" : ""}`} />{tampil("kartu") && <span>Cetak Kartu ({jmlCetak})</span>}
             </Button>
-            <Button variant="outline" size="sm" className={`h-8 text-xs flex-shrink-0 ${tampil("stiker") ? "" : "px-2"}`} onClick={onCetakStiker} disabled={assetsCount === 0}
-              title="Cetak Stiker Label BMN" data-testid="toolbar-cetak-stiker">
+            <Button variant="outline" size="sm" className={`h-8 text-xs flex-shrink-0 ${tampil("stiker") ? "" : "px-2"}`} onClick={onCetakStiker} disabled={jmlCetak === 0}
+              title={selectedCount > 0 ? `Cetak Stiker Label BMN — ${selectedCount} aset terpilih` : "Cetak Stiker Label BMN"} data-testid="toolbar-cetak-stiker">
               <Tags className={`w-3 h-3 ${tampil("stiker") ? "mr-1" : ""}`} />{tampil("stiker") && <span>Stiker</span>}
             </Button>
           </div>
@@ -382,11 +389,12 @@ const DashboardToolbar = memo(function DashboardToolbar({
                   <Upload className="w-4 h-4 mr-2" />Import Data
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem onClick={handlePrintBulkCards} disabled={assetsCount === 0}>
-                <CreditCard className="w-4 h-4 mr-2" />Cetak Kartu
+              <DropdownMenuItem onClick={handlePrintBulkCards} disabled={jmlCetak === 0} data-testid="mobile-cetak-kartu">
+                <CreditCard className="w-4 h-4 mr-2" />Cetak Kartu ({jmlCetak})
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={onCetakStiker} disabled={assetsCount === 0} data-testid="mobile-cetak-stiker">
+              <DropdownMenuItem onClick={onCetakStiker} disabled={jmlCetak === 0} data-testid="mobile-cetak-stiker">
                 <Tags className="w-4 h-4 mr-2" />Cetak Stiker Label
+                {selectedCount > 0 && <span className="ml-1 text-muted-foreground">({selectedCount} terpilih)</span>}
               </DropdownMenuItem>
               {perms.canBulkDelete && (
                 <DropdownMenuItem

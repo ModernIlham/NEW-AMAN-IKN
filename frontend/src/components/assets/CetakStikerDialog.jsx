@@ -1,7 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import { Loader2, Tags } from "lucide-react";
+import {
+  CAKUPAN, cakupanAwal, idsCakupanStiker, jumlahCakupanStiker,
+} from "@/lib/cakupanCetak";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -19,40 +22,54 @@ const UKURAN = [
 ];
 
 /**
- * Dialog Cetak Stiker Label BMN — 3 ukuran × kertas A4/A3, cakupan mengikuti
- * FILTER AKTIF daftar aset (semua halaman) atau halaman yang sedang tampil.
+ * Dialog Cetak Stiker Label BMN — 3 ukuran × kertas A4/A3. Cakupan: aset yang
+ * SEDANG DISELEKSI (bila mode seleksi aktif — ini yang dipilih otomatis),
+ * seluruh hasil filter aktif, atau halaman yang sedang tampil.
  * Desain label meniru contoh label resmi satker (logo + nama instansi + kode
  * register + kode/NUP/nama + QR yang dikenali pemindai internal).
  */
-export default function CetakStikerDialog({ open, onOpenChange, buildParams, totalItems, pageAssets }) {
+export default function CetakStikerDialog({ open, onOpenChange, buildParams, totalItems, pageAssets, selectedIds }) {
   const [ukuran, setUkuran] = useState("sedang");
   const [kertas, setKertas] = useState("A4");
-  const [cakupan, setCakupan] = useState("filter"); // filter | halaman
+  const [cakupan, setCakupan] = useState(CAKUPAN.FILTER); // terpilih | filter | halaman
   const [headerInfo, setHeaderInfo] = useState("nama"); // nama | kode (20 digit)
   const [sampelUkuran, setSampelUkuran] = useState(true); // stiker contoh berdimensi
   const [rekap, setRekap] = useState(null); // rincian pilihan ukuran per aset
   const [sibuk, setSibuk] = useState(false);
 
+  const jmlTerpilih = (selectedIds || []).length;
+
+  // Dibuka dengan seleksi aktif → langsung berdiri di cakupan "terpilih".
+  // Tanpa ini, menandai 3 aset lalu menekan Cetak Stiker diam-diam mencetak
+  // seluruh hasil filter.
+  useEffect(() => {
+    if (open) setCakupan(cakupanAwal(jmlTerpilih));
+  }, [open, jmlTerpilih]);
+
+  // Satu sumber parameter untuk rekap & cetak — dua penyusun terpisah pernah
+  // membuat rekap dan hasil PDF menghitung aset yang berbeda.
+  const paramsCakupan = useCallback(() => {
+    if (cakupan === CAKUPAN.FILTER) return buildParams?.() || new URLSearchParams();
+    const ids = idsCakupanStiker(cakupan, selectedIds, pageAssets);
+    return new URLSearchParams({ asset_ids: ids.join(",") });
+  }, [cakupan, selectedIds, pageAssets, buildParams]);
+
   // Rekap pilihan ukuran per aset — dimuat saat mode per_aset dipilih agar
   // pengguna tahu berapa stiker per ukuran & berapa yang BELUM terisi.
   useEffect(() => {
     if (!open || ukuran !== "per_aset") return;
-    const params = cakupan === "halaman"
-      ? new URLSearchParams({ asset_ids: (pageAssets || []).map((a) => a.id).join(",") })
-      : (buildParams?.() || new URLSearchParams());
+    const params = paramsCakupan();
     setRekap(null);
     axios.get(`${API}/stiker/rekap-ukuran?${params.toString()}`)
       .then((r) => setRekap(r.data))
       .catch(() => setRekap(null));
-  }, [open, ukuran, cakupan, pageAssets, buildParams]);
+  }, [open, ukuran, paramsCakupan]);
 
   const cetak = async () => {
     setSibuk(true);
     const progress = makeDownloadProgress("Stiker label BMN (PDF)");
     try {
-      const params = cakupan === "halaman"
-        ? new URLSearchParams({ asset_ids: (pageAssets || []).map((a) => a.id).join(",") })
-        : (buildParams?.() || new URLSearchParams());
+      const params = paramsCakupan();
       params.set("ukuran", ukuran);
       params.set("kertas", kertas);
       params.set("header_info", headerInfo);
@@ -85,7 +102,17 @@ export default function CetakStikerDialog({ open, onOpenChange, buildParams, tot
     }
   };
 
-  const jumlah = cakupan === "halaman" ? (pageAssets || []).length : (totalItems || 0);
+  const jumlah = jumlahCakupanStiker(cakupan, {
+    idsTerpilih: selectedIds, asetHalaman: pageAssets, totalFilter: totalItems,
+  });
+
+  // Pilihan "aset terpilih" hanya ada saat memang ada yang diseleksi.
+  const PILIHAN_CAKUPAN = [
+    ...(jmlTerpilih > 0
+      ? [[CAKUPAN.TERPILIH, `Aset yang sedang diseleksi (${jmlTerpilih} aset)`]] : []),
+    [CAKUPAN.FILTER, `Semua hasil filter aktif (${totalItems || 0} aset)`],
+    [CAKUPAN.HALAMAN, `Halaman yang tampil saja (${(pageAssets || []).length} aset)`],
+  ];
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!sibuk) onOpenChange(o); }}>
@@ -100,8 +127,7 @@ export default function CetakStikerDialog({ open, onOpenChange, buildParams, tot
           <div>
             <p className="text-xs font-semibold text-foreground mb-1.5">Cakupan aset</p>
             <div className="space-y-1">
-              {[["filter", `Semua hasil filter aktif (${totalItems || 0} aset)`],
-                ["halaman", `Halaman yang tampil saja (${(pageAssets || []).length} aset)`]].map(([k, label]) => (
+              {PILIHAN_CAKUPAN.map(([k, label]) => (
                 <label key={k} className="flex items-center gap-2 text-xs text-foreground/90 cursor-pointer">
                   <input type="radio" name="stiker-cakupan" checked={cakupan === k}
                     onChange={() => setCakupan(k)} data-testid={`stiker-cakupan-${k}`} />

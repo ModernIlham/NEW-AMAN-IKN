@@ -37,6 +37,7 @@ peta_kolaborasi_router = APIRouter()
 
 _PROJ = {"_id": 0}
 _DEFAULT_JAM = 72          # masa tayang default 3 hari
+UMUR_ARSIP_HARI = 30       # link mati > sebulan tak lagi didaftar (lihat _share_usang)
 DEFAULT_MAKS_TITIK = 120
 DEFAULT_MAKS_TEKS = 1000
 MAKS_TITIK_ASET_PUBLIK = 5000   # plafon titik aset yang dikirim ke peta publik
@@ -127,6 +128,33 @@ def _parse_iso(s) -> Optional[datetime]:
         return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
     except (ValueError, TypeError):
         return None
+
+
+def _mati_pada(share: dict) -> Optional[datetime]:
+    """Kapan link BERHENTI berguna, atau None bila masih hidup.
+
+    Dibatalkan → saat pembatalan (`updated_at`, sentuhan terakhir). Habis masa
+    tayang → `berlaku_sampai`. Dua-duanya dipakai apa adanya: memakai
+    `updated_at` untuk link kedaluwarsa akan salah (link yang dibuat 30 hari
+    dengan sekali sentuh langsung dianggap tua begitu berakhir)."""
+    if share.get("status") == "batal":
+        return _parse_iso(share.get("updated_at")) or _parse_iso(share.get("created_at"))
+    if _kedaluwarsa(share):
+        return _parse_iso(share.get("berlaku_sampai"))
+    return None
+
+
+def _share_usang(share: dict, sekarang: Optional[datetime] = None) -> bool:
+    """True bila link sudah MATI (dibatalkan / habis masa tayang, termasuk yang
+    pernah diterbitkan ulang lalu mati lagi) DAN matinya lebih dari sebulan
+    lalu. Dipakai untuk MENYINGKIRKAN arsip mati dari daftar kelola supaya
+    daftar tak menumpuk — dokumen share, kontribusi, dan jejak auditnya TIDAK
+    dihapus. Tanpa cap waktu yang bisa dibaca → jangan disingkirkan (lebih baik
+    daftar sedikit panjang daripada link hilang tanpa alasan)."""
+    mati = _mati_pada(share)
+    if mati is None:
+        return False
+    return (sekarang or _now()) - mati > timedelta(days=UMUR_ARSIP_HARI)
 
 
 def _operator_satker(share: dict, ctx: dict) -> bool:
@@ -225,6 +253,10 @@ class PerpanjangIn(BaseModel):
     izinkan_komentar_publik: Optional[bool] = None
 
 
+class JudulIn(BaseModel):
+    judul: Optional[str] = ""
+
+
 class TitikIn(BaseModel):
     lat: float
     lng: float
@@ -295,11 +327,21 @@ async def buat_share(payload: ShareIn, user: dict = Depends(require_writer)):
 async def daftar_share(activity_id: str = Query(...),
                        user: dict = Depends(require_writer)):
     """Daftar link peta untuk sebuah kegiatan (ter-scope satker). Menyertakan
-    link ber-token agar pengelola bisa menyalin/membagikan ulang."""
+    link ber-token agar pengelola bisa menyalin/membagikan ulang.
+
+    Link yang sudah MATI lebih dari sebulan (dibatalkan / habis masa tayang,
+    termasuk yang pernah diterbitkan ulang) tidak ikut didaftar — jumlahnya
+    dilaporkan lewat `diarsipkan` supaya daftar yang menyusut tidak terlihat
+    seperti data hilang. Dokumen & kontribusinya tetap tersimpan."""
     q = scope_query_field_satker(user, {"activity_id": activity_id})
     items = await db.peta_shares.find(q, _PROJ).sort("created_at", -1).to_list(200)
+    sekarang = _now()
+    diarsipkan = 0
     hasil = []
     for sh in items:
+        if _share_usang(sh, sekarang):
+            diarsipkan += 1
+            continue
         d = _share_keluar(sh)
         if sh.get("status") != "batal":
             d["link"] = _link_peta(sh["id"], create_map_token(sh["id"], sh.get("jti", "")))
@@ -307,7 +349,27 @@ async def daftar_share(activity_id: str = Query(...),
         d["jumlah_kontribusi"] = await db.peta_kolaborasi.count_documents(
             {"share_id": sh["id"], "dihapus": {"$ne": True}})
         hasil.append(d)
-    return {"items": hasil, "jumlah": len(hasil)}
+    return {"items": hasil, "jumlah": len(hasil), "diarsipkan": diarsipkan}
+
+
+@peta_kolaborasi_router.put("/peta/share/{share_id}/judul")
+async def ubah_judul_share(share_id: str, payload: JudulIn,
+                           user: dict = Depends(require_writer)):
+    """Ubah judul peta yang SUDAH diterbitkan. Judul dipakai di halaman publik
+    dan pada teks ajakan saat dibagikan, jadi salah ketik harus bisa dikoreksi
+    tanpa menerbitkan tautan baru — tautan yang sudah tersebar tetap hidup
+    (jti tidak dirotasi)."""
+    sh = await _muat_share(share_id)
+    await pastikan_akses_dok_satker(user, sh)
+    judul = str(payload.judul or "").strip()[:140]
+    await db.peta_shares.update_one(
+        {"id": share_id},
+        {"$set": {"judul": judul, "updated_at": _now().isoformat()}})
+    await log_audit("ubah_judul_share_peta", sh.get("activity_id", ""), share_id,
+                    username=user.get("username", "system"),
+                    detail=f"Ubah judul peta kolaboratif → {judul or '(kosong)'}",
+                    kode_satker=str(sh.get("kode_satker") or ""))
+    return {"ok": True, "judul": judul}
 
 
 @peta_kolaborasi_router.put("/peta/share/{share_id}/perpanjang")

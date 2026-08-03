@@ -20,6 +20,7 @@ import { reserveDummyNup, cariKategoriDummy } from "@/lib/dummyNup";
 import { buatTempId, apakahTempId } from "@/lib/idAntrean";
 import { cocokAset } from "@/lib/pencarianLokal";
 import { useDragSelect } from "@/lib/useDragSelect";
+import { idsCetakKartu } from "@/lib/cakupanCetak";
 import { syncSnapshot, getSnapshotAssets, snapshotMeta, isSnapshotExpired, upsertSnapshotAsset, removeSnapshotAsset } from "@/lib/offlineSnapshot";
 
 // Import refactored components
@@ -1551,6 +1552,9 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
 
   // ── Cetak Stiker Label BMN (3 ukuran × A4/A3, ikut filter aktif) ──
   const [stikerOpen, setStikerOpen] = useState(false);
+  // Daftar id terpilih dibekukan sebagai array agar dialog stiker tak
+  // memuat-ulang rekap ukurannya tiap render (Set baru = referensi baru).
+  const idsTerpilih = useMemo(() => Array.from(selectedAssets), [selectedAssets]);
   const buildStikerParams = useCallback(() => {
     const params = new URLSearchParams();
     if (debouncedSearch) params.append("search", debouncedSearch);
@@ -1560,18 +1564,21 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     return params;
   }, [debouncedSearch, filterCategory, activity, buildFilterParams]);
 
+  // Seleksi aktif → cetak HANYA aset yang ditandai (bisa lintas halaman lewat
+  // "Pilih semua N aset"); tanpa seleksi → seisi halaman seperti sebelumnya.
   const handlePrintBulkCards = useCallback(async () => {
-    if (assets.length === 0) { toast.error("Tidak ada aset untuk dicetak"); return; }
-    const progress = makeDownloadProgress(`${assets.length} kartu inventaris`);
+    const ids = idsCetakKartu(selectedAssets, assets);
+    if (ids.length === 0) { toast.error("Tidak ada aset untuk dicetak"); return; }
+    const progress = makeDownloadProgress(`${ids.length} kartu inventaris`);
     try {
-      const r = await axios.post(`${API}/assets/cards/bulk`, assets.map(a => a.id), { responseType: 'blob', onDownloadProgress: progress.onDownloadProgress });
+      const r = await axios.post(`${API}/assets/cards/bulk`, ids, { responseType: 'blob', onDownloadProgress: progress.onDownloadProgress });
       const url = URL.createObjectURL(new Blob([r.data]));
       const newWindow = window.open(url, '_blank');
-      if (!newWindow) { const a = document.createElement('a'); a.href = url; a.download = `kartu_inventaris_massal_${assets.length}.pdf`; document.body.appendChild(a); a.click(); document.body.removeChild(a); progress.success(`${assets.length} kartu inventaris berhasil diunduh`); }
-      else progress.success(`${assets.length} kartu inventaris berhasil dibuat`);
+      if (!newWindow) { const a = document.createElement('a'); a.href = url; a.download = `kartu_inventaris_massal_${ids.length}.pdf`; document.body.appendChild(a); a.click(); document.body.removeChild(a); progress.success(`${ids.length} kartu inventaris berhasil diunduh`); }
+      else progress.success(`${ids.length} kartu inventaris berhasil dibuat`);
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (err) { console.error('Bulk print error:', err); progress.error(getApiError(err, "Gagal cetak kartu massal")); }
-  }, [assets]);
+  }, [assets, selectedAssets]);
 
   const handleExport = useCallback(async fmt => {
     if (!activity?.id) { toast.error("Pilih kegiatan inventarisasi terlebih dahulu"); return; }
@@ -1772,7 +1779,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
               activeFilterCount={activeFilterCount} showAdvancedFilter={showAdvancedFilter} setShowAdvancedFilter={setShowAdvancedFilter}
               sortBy={sortBy} setSortBy={setSortBy} exporting={exporting} handleExport={handleExport} handleExportExecutivePDF={handleExportExecutivePDF}
               handlePreviewExecutive={handlePreviewExecutive} perms={perms} openDialog={openDialog} handlePrintBulkCards={handlePrintBulkCards}
-              onCetakStiker={() => setStikerOpen(true)}
+              onCetakStiker={() => setStikerOpen(true)} selectedCount={selectedAssets.size}
               assetsCount={assets.length} filters={filters} filterOptions={filterOptions} handleAdvancedFilterChange={handleAdvancedFilterChange}
               resetAdvancedFilters={resetAdvancedFilters} handleCategoryReset={() => { handleCategoryReset(); refreshData(1); }}
               refreshData={refreshData} viewMode={viewMode} setViewMode={setViewMode}
@@ -1957,7 +1964,8 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       <BulkDeleteDialog open={dialogs.bulkDelete} onClose={v => setDialog('bulkDelete', v)} activityId={activity?.id} activityName={activity?.nama_kegiatan} totalItems={totalItems} onSuccess={() => refreshData(1)} />
       <CategoryManagerDialog open={dialogs.categoryManager} onClose={v => setDialog('categoryManager', v)} categories={categories} onCategoriesChanged={doFetchCategories} />
       <CetakStikerDialog open={stikerOpen} onOpenChange={setStikerOpen}
-        buildParams={buildStikerParams} totalItems={totalItems} pageAssets={assets} />
+        buildParams={buildStikerParams} totalItems={totalItems} pageAssets={assets}
+        selectedIds={idsTerpilih} />
       <Suspense fallback={null}>
         {dialogs.import && <LazyImportDialog open={dialogs.import} onClose={handleImportClose} onSuccess={() => { clearDropFile(); refreshData(1); doFetchCategories(); }} activityId={activity?.id} preloadFile={dropFile} />}
         {dialogs.userManagement && <LazyUserManagementDialog open={dialogs.userManagement} onClose={() => closeDialog('userManagement')} currentUser={user} />}
