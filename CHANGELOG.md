@@ -67,6 +67,45 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#718] Ubah massal hilang dari pencarian, status inventarisasi berubah sendiri, tooltip dobel — 2026-08-03
+
+Tiga temuan lapangan, dua di antaranya **mengubah/menyembunyikan data**.
+
+**1. Hasil ubah massal tidak ketemu saat dicari — sampai aset itu diedit
+manual.** Akarnya: `routes/batch.py` (ubah massal) memakai `update_many` /
+`bulk_write` sehingga hook sinkron per-dokumen — yang hanya terpasang di jalur
+tulis TUNGGAL — **tidak pernah jalan**. Indeks pencarian tetap memegang nilai
+LAMA, jadi lokasi yang baru diisi massal tak dikenali. Begitu satu aset diedit
+manual (jalur tunggal → sinkron jalan), aset itu saja yang muncul — persis
+gejala membingungkan yang dilaporkan.
+
+- Ubah massal kini menyinkronkan ulang seluruh aset yang disentuhnya
+  (`jadwalkan_sync_id`).
+- **Pagar sistemik**, supaya kelas bug ini tak lahir lagi dari modul mana pun:
+  penyelaras inkremental (`selaraskan_inkremental`) menumpang loop pemeliharaan
+  — tiap putaran ia menyapu dokumen ber-`updated_at` lebih baru dari tanda
+  terakhir dan mengirimkannya ke indeks. Jalur tulis yang lupa memanggil hook
+  kini paling lama tertinggal satu putaran, bukan selamanya.
+
+**2. Status inventarisasi berubah sendiri jadi "Ditemukan" saat tombol Update
+ditekan tanpa mengubah apa pun.** Promosi otomatis (foto + koordinat lengkap →
+"Ditemukan") ternyata ikut berlaku pada aset LAMA yang kebetulan sudah
+ber-foto: membuka form lalu menekan Update sudah cukup untuk menaikkan
+statusnya. Kini promosi hanya sah bila sesi itu **menambah bukti baru** — foto
+baru atau koordinat yang berubah. Tanpa perubahan apa pun, tak ada yang
+dikirim ke server dan status tetap apa adanya.
+
+**3. Tooltip tabel muncul DUA kali dengan warna berbeda.** Tooltip kustom hanya
+mencabut `title` pada elemen yang di-hover; bila sel/baris INDUKNYA juga punya
+`title` (pola umum di tabel), peramban memakai title leluhur itu dan menggambar
+tooltip native-nya berdampingan. Kini seluruh rantai anchor→body dibekukan saat
+tooltip tampil dan dipulihkan persis saat disembunyikan (tetap ramah pembaca
+layar).
+
+Diverifikasi: 1503 uji unit backend + 363 uji frontend lulus (2 uji regresi
+baru mengunci "Update tanpa perubahan tak menaikkan status"), lint tanpa
+regresi, build produksi sukses.
+
 ## [#717] Pencarian halaman barang gelombang 2: kode tanpa titik, nilai numerik, dan paritas luring — 2026-08-03
 
 Laporan lanjutan: "masih ditemukan harusnya ada datanya tapi tidak terdeteksi."

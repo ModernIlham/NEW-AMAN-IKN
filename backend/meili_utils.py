@@ -371,6 +371,48 @@ def jadwalkan_hapus(koleksi: str, doc_id: str) -> None:
     _fire_and_forget(_hapus_dokumen(koleksi, doc_id))
 
 
+async def _sync_dari_mongo(koleksi: str, ids: list) -> None:
+    """Baca ulang dokumen dari Mongo lalu kirim ke Meili (potongan 500)."""
+    cfg = INDEKS.get(koleksi)
+    nama_col = _MONGO_COL.get(koleksi)
+    if not cfg or not nama_col or not ids:
+        return
+    col = getattr(db, nama_col)
+    proyeksi = {"_id": 0, cfg["key"]: 1}
+    for f in list(cfg["searchable"]) + list(cfg["filterable"]):
+        proyeksi[f] = 1
+    for i in range(0, len(ids), 500):
+        potongan = ids[i:i + 500]
+        docs = [d async for d in col.find({cfg["key"]: {"$in": potongan}}, proyeksi)]
+        payload = [p for p in (proyeksi_dokumen(koleksi, d) for d in docs) if p]
+        if not payload:
+            continue
+        try:
+            await _req("PUT", f"/indexes/{cfg['uid']}/documents", json=payload)
+        except Exception as e:                       # noqa: BLE001
+            logger.warning("Meili: sync massal %s gagal (non-fatal): %s",
+                           cfg["uid"], e)
+            return
+
+
+def jadwalkan_sync_id(koleksi: str, ids) -> None:
+    """Sinkron ulang dokumen berdasarkan ID — untuk jalur tulis MASSAL
+    (`update_many`/`bulk_write`) yang tak memegang dokumen hasilnya.
+
+    MENGAPA PENTING: tanpa ini indeks pencarian memegang nilai LAMA setelah
+    ubah massal, sehingga barang yang baru saja diisi lokasinya tidak ketemu
+    saat dicari — padahal datanya ADA di basis data. Gejalanya membingungkan
+    karena aset yang kebetulan pernah diedit manual (jalur tunggal yang sudah
+    sinkron) tetap ketemu. No-op bila Meili nonaktif.
+    """
+    if not meili_aktif():
+        return
+    daftar = [str(i) for i in (ids or []) if i]
+    if not daftar:
+        return
+    _fire_and_forget(_sync_dari_mongo(koleksi, daftar))
+
+
 # ── Reindex massal (dipanggil endpoint admin / skrip CLI) ───────────────────
 _BATCH = 1000
 
@@ -430,3 +472,55 @@ async def status_indeks() -> dict:
         except Exception as e:
             out["indeks"][koleksi] = {"uid": cfg["uid"], "error": str(e)[:200]}
     return out
+
+
+# ── Penyelaras inkremental (pagar sistemik) ─────────────────────────────────
+# Hook sinkron per-dokumen mudah TERLEWAT di jalur tulis massal atau modul
+# baru — dan begitu terlewat, barang yang ada di basis data tidak muncul saat
+# dicari. Alih-alih mengandalkan setiap penulis ingat memanggil hook, penyelaras
+# ini menyapu berkala: ambil dokumen yang `updated_at`-nya lebih baru dari
+# tanda terakhir, kirim ke Meili, simpan tanda baru. Kueri memakai indeks
+# updated_at, jadi murah walau dijalankan tiap beberapa menit.
+_KOL_TANDA = "meili_sync_state"
+# Kolom stempel waktu per koleksi (semua ISO-8601 string, terurut leksikografis).
+_FIELD_WAKTU = {"assets": "updated_at", "surat": "updated_at",
+                "persediaan": "updated_at"}
+_BATAS_SAPUAN = 2000       # dokumen per koleksi per putaran (jaga latensi)
+
+
+async def selaraskan_inkremental() -> dict:
+    """Sinkronkan dokumen yang berubah sejak sapuan terakhir. Aman dipanggil
+    berkala; no-op bila Meili nonaktif. Mengembalikan {koleksi: jumlah}."""
+    hasil = {}
+    if not meili_aktif():
+        return hasil
+    for koleksi, cfg in INDEKS.items():
+        field_waktu = _FIELD_WAKTU.get(koleksi)
+        nama_col = _MONGO_COL.get(koleksi)
+        if not field_waktu or not nama_col:
+            continue
+        try:
+            tanda_doc = await db[_KOL_TANDA].find_one({"_id": koleksi})
+            sejak = (tanda_doc or {}).get("sejak") or ""
+            col = getattr(db, nama_col)
+            proyeksi = {"_id": 0, cfg["key"]: 1, field_waktu: 1}
+            for f in list(cfg["searchable"]) + list(cfg["filterable"]):
+                proyeksi[f] = 1
+            kueri = {field_waktu: {"$gt": sejak}} if sejak else {}
+            docs = [d async for d in col.find(kueri, proyeksi)
+                    .sort(field_waktu, 1).limit(_BATAS_SAPUAN)]
+            if not docs:
+                continue
+            payload = [p for p in (proyeksi_dokumen(koleksi, d) for d in docs) if p]
+            if payload:
+                await _req("PUT", f"/indexes/{cfg['uid']}/documents", json=payload)
+            # Tanda baru = stempel terbesar yang BENAR-BENAR terkirim.
+            terbaru = max((str(d.get(field_waktu) or "") for d in docs), default="")
+            if terbaru:
+                await db[_KOL_TANDA].update_one(
+                    {"_id": koleksi}, {"$set": {"sejak": terbaru}}, upsert=True)
+            hasil[koleksi] = len(payload)
+        except Exception as e:      # noqa: BLE001
+            logger.warning("Meili: selaras inkremental %s gagal (non-fatal): %s",
+                           koleksi, e)
+    return hasil

@@ -74,11 +74,38 @@ function tempatkan(node, anchor) {
   node.style.opacity = "1";
 }
 
+// ── Peredam tooltip NATIVE ──────────────────────────────────────────────────
+// Tooltip kustom tidak cukup mencabut `title` pada elemen yang di-hover: bila
+// SEL atau BARIS induknya juga punya `title` (pola umum di tabel), peramban
+// memakai title leluhur itu dan menggambar tooltip native-nya BERDAMPINGAN
+// dengan tooltip kustom — dua kotak dengan teks sama dan gaya berbeda.
+// Karena itu seluruh rantai anchor→body dibekukan saat tooltip tampil, lalu
+// dipulihkan persis saat tooltip disembunyikan (penting untuk pembaca layar).
+let judulBeku = [];
+
+function bekukanJudulLeluhur(anchor) {
+  pulihkanJudulLeluhur();
+  for (let n = anchor; n && n.nodeType === 1 && n !== document.body; n = n.parentElement) {
+    if (n.hasAttribute && n.hasAttribute("title")) {
+      judulBeku.push([n, n.getAttribute("title")]);
+      n.removeAttribute("title");
+    }
+  }
+}
+
+function pulihkanJudulLeluhur() {
+  for (const [n, judul] of judulBeku) {
+    if (n && n.isConnected && !n.hasAttribute("title")) n.setAttribute("title", judul);
+  }
+  judulBeku = [];
+}
+
 /** Sembunyikan tooltip (dan batalkan yang sedang menunggu tampil). */
 export function sembunyikanTooltip() {
   clearTimeout(timer);
   timer = null;
   sasaran = null;
+  pulihkanJudulLeluhur();
   if (el) {
     el.style.opacity = "0";
     el.style.visibility = "hidden";
@@ -96,6 +123,7 @@ export function tampilkanTooltip(anchor, teks) {
   if (sasaran === anchor) return;          // sudah tampil/menunggu utk elemen ini
   clearTimeout(timer);
   sasaran = anchor;
+  bekukanJudulLeluhur(anchor);
   timer = setTimeout(() => {
     if (sasaran !== anchor || !anchor.isConnected) return;
     const node = buat();

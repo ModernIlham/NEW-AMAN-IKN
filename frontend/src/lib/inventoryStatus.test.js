@@ -69,3 +69,25 @@ describe("autoInventarisasiEnabled", () => {
     expect(autoInventarisasiEnabled()).toBe(true);
   });
 });
+
+// ── Regresi lapangan: "Update" tanpa perubahan tak boleh menaikkan status ──
+// Aset lama yang SUDAH punya foto+koordinat dan berstatus "Belum
+// Diinventarisasi" ikut dipromosikan jadi "Ditemukan" hanya karena form dibuka
+// lalu tombol Update ditekan. Pemanggil (AssetForm) kini mematikan `enabled`
+// bila sesi itu tidak menambah bukti baru — helper ini harus menghormatinya.
+describe("auto-promosi butuh bukti baru", () => {
+  const asetLama = {
+    inventory_status: "Belum Diinventarisasi",
+    hasPhoto: true, lat: "-0.9123", lng: "116.7001",
+  };
+
+  test("tanpa bukti baru: status TIDAK berubah", () => {
+    expect(statusInventarisasiOtomatis({ ...asetLama, enabled: false }))
+      .toBe("Belum Diinventarisasi");
+  });
+
+  test("dengan bukti baru: status naik seperti semula", () => {
+    expect(statusInventarisasiOtomatis({ ...asetLama, enabled: true }))
+      .toBe("Ditemukan");
+  });
+});
