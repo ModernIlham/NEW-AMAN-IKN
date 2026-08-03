@@ -30,6 +30,7 @@ from db import db
 from shared_utils import (log_audit, kode_satker_user,
                           pastikan_akses_dok_satker, scope_query_field_satker)
 from meili_utils import jadwalkan_sync, jadwalkan_hapus, cari_id_surat
+from pencarian_utils import klausa_teks
 from persuratan_utils import (
     FORMAT_NOMOR_DEFAULT, JENIS_NASKAH, KODE_KEAMANAN, MODUL_AMAN,
     STATUS_KELUAR, STATUS_MASUK, TRANSISI_KELUAR, TRANSISI_MASUK,
@@ -495,12 +496,12 @@ async def daftar_surat(jenis: str = "", status: str = "", modul: str = "",
     meili_ids = await cari_id_surat(_user, q) if q.strip() else None
     if meili_ids is not None:
         query["id"] = {"$in": meili_ids}
-    elif q.strip():
-        import re as _re
-        rx = {"$regex": _re.escape(q.strip()), "$options": "i"}
-        query["$or"] = [{"nomor": rx}, {"perihal": rx}, {"tujuan": rx},
-                        {"pengirim": rx}, {"referensi": rx},
-                        {"nama_kegiatan": rx}]
+    else:
+        # Multi-kata: tiap kata wajib ada, boleh di field berbeda (mis.
+        # "undangan rapat" di perihal, "biro umum" di tujuan).
+        query.update(klausa_teks(q, ("nomor", "perihal", "tujuan", "pengirim",
+                                     "referensi", "nama_kegiatan",
+                                     "nomor_eksternal")))
     # ISOLASI SATKER: user terikat hanya melihat surat satkernya (+ era-lama).
     query = scope_query_field_satker(_user, query)
     total = await db.surat.count_documents(query)

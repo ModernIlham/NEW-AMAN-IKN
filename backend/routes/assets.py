@@ -34,6 +34,7 @@ from shared_utils import (
 from routes.websocket import notify_asset_change
 from photo_rotate_utils import normalisasi_derajat, rotate_jpeg_bytes
 from meili_utils import jadwalkan_sync, jadwalkan_hapus, cari_id_aset
+from pencarian_utils import MIN_PANJANG, klausa_teks, pecah_kata, rx_awalan
 
 logger = logging.getLogger(__name__)
 assets_router = APIRouter()
@@ -50,18 +51,56 @@ def _rx(term: str) -> dict:
     return {"$regex": re.escape(term), "$options": "i"}
 
 
-# Panjang minimum kata kunci pencarian teks bebas. Regex infix 16-field TIDAK
-# bisa memakai index (COLLSCAN dalam lingkup satker), jadi kueri 1 huruf yang
-# selektivitasnya sangat rendah (mis. "a") memindai hampir seluruh aset percuma.
-# Di bawah ambang ini, filter pencarian DIABAIKAN (daftar tampil apa adanya) —
-# tak ada perubahan pada semantik 16-field saat kata kunci cukup panjang.
-MIN_SEARCH_LEN = 2
+# Field yang ikut dicari saat pengguna mengetik di kotak pencarian aset.
+# Selain field deskriptif, IDENTITAS yang paling sering diketik petugas WAJIB
+# ada di sini — NUP, nomor kontrak/BAST/bukti perolehan, dan NIP pengguna
+# dulu TIDAK dicari sama sekali, sehingga mengetiknya selalu nihil hasil.
+FIELD_CARI_ASET = (
+    "asset_code", "NUP", "asset_name", "serial_number", "location",
+    "brand", "model", "category", "eselon1", "eselon2", "user",
+    "pengguna_jabatan", "supplier", "perolehan_dari_nama",
+    "condition", "status", "nomor_spm", "kode_register",
+    "nomor_kontrak", "nomor_bast", "nomor_bukti_perolehan", "notes",
+)
+# CATATAN PRIVASI: `pengguna_nip` SENGAJA tidak ikut pencarian teks bebas.
+# NIP adalah data pribadi yang tidak diindeks ke mesin pencari eksternal
+# (lihat test_meili_utils.test_proyeksi_aset_hanya_field_terindeks); bila ia
+# dicari lewat Mongo saja, hasil pencarian akan berbeda tergantung Meili hidup
+# atau mati — persis penyakit yang sedang diperbaiki. Pencarian per-NIP tetap
+# tersedia lewat parameter filter khusus `pengguna_nip`.
+
+# Panjang minimum kata angka sebelum dicocokkan sebagai AWALAN harga. Tanpa
+# batas ini, mengetik "12" (maksudnya NUP) menyeret semua aset berharga
+# 12.000, 120.000, 12.000.000 … — kebisingan yang membuat hasil terasa acak.
+_MIN_DIGIT_AWALAN_HARGA = 4
+
+
+def _klausa_harga(kata: str) -> list:
+    """Klausa tambahan agar harga bisa dicari dengan mengetik angkanya.
+    Format Indonesia (titik/koma pemisah ribuan) dinormalkan lebih dulu."""
+    bersih = kata.replace(".", "").replace(",", "")
+    try:
+        angka = float(bersih)
+    except ValueError:
+        return []
+    cabang = [{"purchase_price": angka}, {"purchase_price": bersih}]
+    if len(bersih) >= _MIN_DIGIT_AWALAN_HARGA:
+        cabang.append({"purchase_price": rx_awalan(bersih)})
+    return cabang
+
+
+# Panjang minimum kata kunci pencarian teks bebas — SATU sumber di
+# pencarian_utils supaya ambangnya tak pernah berbeda antar modul. Regex infix
+# tak bisa memakai index (COLLSCAN dalam lingkup satker), jadi kueri 1 huruf
+# memindai hampir seluruh aset tanpa menyaring apa pun; di bawah ambang ini
+# filter pencarian DIABAIKAN (daftar tampil apa adanya).
+MIN_SEARCH_LEN = MIN_PANJANG
 
 
 def _search_len_ok(search: str) -> bool:
     """True bila kata kunci pencarian layak dijalankan (≥ MIN_SEARCH_LEN setelah
     dipangkas). Kosong/whitespace/1-huruf → False (diperlakukan tanpa pencarian)."""
-    return len((search or "").strip()) >= MIN_SEARCH_LEN
+    return bool(pecah_kata(search))
 
 
 async def _collect_asset_blob_ids(asset: dict) -> dict:
@@ -197,49 +236,11 @@ def build_asset_search_query(
     if ids:
         query["id"] = {"$in": list(ids)}
 
-    # Multi-field search with regex - EXTENDED to cover all important fields.
-    # Diabaikan bila kata kunci < MIN_SEARCH_LEN (cegah COLLSCAN 1-huruf).
-    if _search_len_ok(search):
-        # Try to detect if search is a number (for price search)
-        search_as_number = None
-        search_as_string = None
-        try:
-            # Remove dots and commas for Indonesian number format
-            clean_search = search.replace(".", "").replace(",", "")
-            search_as_number = float(clean_search)
-            search_as_string = clean_search  # Also search as string since prices might be stored as strings
-        except ValueError:
-            pass
-        
-        rx = _rx(search)
-        search_conditions = [
-            {"asset_code": rx},
-            {"asset_name": rx},
-            {"serial_number": rx},
-            {"location": rx},
-            {"brand": rx},
-            {"model": rx},
-            {"category": rx},
-            {"eselon1": rx},
-            {"eselon2": rx},
-            {"user": rx},
-            {"supplier": rx},
-            {"condition": rx},
-            {"status": rx},
-            {"nomor_spm": rx},
-            {"kode_register": rx},
-            {"notes": rx},
-        ]
+    # Pencarian teks bebas MULTI-KATA: setiap kata wajib ada, boleh di field
+    # yang berbeda-beda (lihat pencarian_utils). Diabaikan bila kata kunci
+    # < MIN_SEARCH_LEN (cegah COLLSCAN 1-huruf).
+    query.update(klausa_teks(search, FIELD_CARI_ASET, tambahan=_klausa_harga))
 
-        # Add numeric search for purchase_price if search looks like a number
-        if search_as_number is not None:
-            search_conditions.append({"purchase_price": search_as_number})
-            # Also search as string (prices might be stored as strings)
-            search_conditions.append({"purchase_price": search_as_string})
-            search_conditions.append({"purchase_price": {"$regex": f"^{re.escape(search_as_string)}", "$options": "i"}})
-        
-        query["$or"] = search_conditions
-    
     # Basic category filter
     if category:
         query["category"] = category

@@ -29,6 +29,7 @@ from auth_utils import (
 from db import db, fs_bucket
 from shared_utils import kunci_idem, log_audit
 from meili_utils import jadwalkan_sync, jadwalkan_hapus, cari_id_persediaan
+from pencarian_utils import klausa_teks, pecah_kata
 from pegawai_utils import baris_identitas_ttd
 from persediaan_akun_utils import akun_persediaan
 from persediaan_fields import EDITABLE_FIELD_NAMES
@@ -406,10 +407,9 @@ async def daftar_transaksi_persediaan(
     if sampai:
         # Inklusif sampai akhir hari — '~' > semua karakter timestamp ISO
         query.setdefault("timestamp", {})["$lte"] = sampai + "~"
-    if q.strip():
-        pola = re_module.compile(re_module.escape(q.strip()), re_module.I)
-        query["$or"] = [{"kode_barang": pola}, {"nama_barang": pola},
-                        {"no_bukti": pola}]
+    # Multi-kata: tiap kata wajib ada, boleh tersebar di field berbeda
+    # (mis. "atk januari" = kode/nama barang + nomor bukti).
+    query.update(klausa_teks(q, ("kode_barang", "nama_barang", "no_bukti")))
     total = await db.transaksi_persediaan.count_documents(query)
     rows = [t async for t in db.transaksi_persediaan.find(query, {"_id": 0})
             .sort("timestamp", -1).skip((page - 1) * page_size).limit(page_size)]
@@ -1651,14 +1651,11 @@ async def list_persediaan(
     meili_ids = await cari_id_persediaan(_user, search) if search.strip() else None
     if meili_ids is not None:
         query["id"] = {"$in": meili_ids}
-    elif search:
-        s = search.strip()
-        s_esc = re.escape(s)
-        query["$or"] = [
-            {"kode_barang": {"$regex": f"^{s_esc}" if s.isdigit() else s_esc, "$options": "i"}},
-            {"nama_barang": {"$regex": s_esc, "$options": "i"}},
-            {"merk": {"$regex": s_esc, "$options": "i"}},
-        ]
+    elif pecah_kata(search):
+        # Kode barang dicocokkan dari DEPAN bila katanya angka (kode 16 digit
+        # dibaca dari digit pertama); field lain substring biasa.
+        query.update(klausa_teks(search, ("nama_barang", "merk"),
+                                 fields_awalan=("kode_barang",)))
     # Filter status stok dihitung DI QUERY (bukan pasca-paging) agar total &
     # halaman benar: habis = stok<=0; kritis = 0<stok<=batas (batas>0).
     if status == "habis":

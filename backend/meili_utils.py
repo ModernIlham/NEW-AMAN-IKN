@@ -68,14 +68,28 @@ _TIMEOUT = httpx.Timeout(5.0, connect=2.0)
 # `searchable`: field teks yang dicocokkan (mirror daftar $or regex lama).
 # `filterable`: field untuk scope isolasi satker (WAJIB agar hasil tak bocor).
 # `key`      : primary key dokumen Meili (= field `id` aplikasi).
+# `tanpa_typo`: field IDENTITAS (nomor/kode/NIP). Toleransi typo bawaan Meili
+# menganggap dua kode yang beda satu karakter itu "cocok" — NUP 00012 ikut
+# memunculkan 00013, dan kode barang berbeda satu digit saling tertukar. Untuk
+# identitas, salah satu karakter = barang LAIN, jadi typo dimatikan di sana.
 INDEKS = {
     "assets": {
         "uid": "aman_assets",
         "key": "id",
+        # Mirror FIELD_CARI_ASET di routes/assets.py — bila berbeda, hasil
+        # pencarian akan berubah tergantung Meili hidup atau mati.
         "searchable": [
-            "asset_code", "asset_name", "serial_number", "location", "brand",
-            "model", "category", "eselon1", "eselon2", "user", "supplier",
-            "condition", "status", "nomor_spm", "kode_register", "notes",
+            "asset_code", "NUP", "asset_name", "serial_number", "location",
+            "brand", "model", "category", "eselon1", "eselon2", "user",
+            "pengguna_jabatan", "supplier",
+            "perolehan_dari_nama", "condition", "status", "nomor_spm",
+            "kode_register", "nomor_kontrak", "nomor_bast",
+            "nomor_bukti_perolehan", "notes",
+        ],
+        "tanpa_typo": [
+            "asset_code", "NUP", "serial_number", "nomor_spm",
+            "kode_register", "nomor_kontrak", "nomor_bast",
+            "nomor_bukti_perolehan",
         ],
         "filterable": ["activity_id"],
     },
@@ -86,6 +100,7 @@ INDEKS = {
             "nomor", "perihal", "tujuan", "pengirim", "referensi",
             "nama_kegiatan", "nomor_eksternal", "keterangan",
         ],
+        "tanpa_typo": ["nomor", "nomor_eksternal"],
         "filterable": ["kode_satker"],
     },
     "persediaan": {
@@ -94,6 +109,7 @@ INDEKS = {
         "searchable": [
             "kode_barang", "nama_barang", "merk", "tipe", "lokasi", "keterangan",
         ],
+        "tanpa_typo": ["kode_barang"],
         "filterable": ["kode_satker"],
     },
 }
@@ -202,11 +218,16 @@ async def pastikan_indeks() -> None:
                         pass
                     if kode != "index_already_exists":
                         raise
-            # Terapkan setelan (searchable/filterable + naikkan maxTotalHits).
+            # Terapkan setelan (searchable/filterable + naikkan maxTotalHits
+            # + matikan toleransi typo pada field identitas).
             await _req("PATCH", f"/indexes/{cfg['uid']}/settings", json={
                 "searchableAttributes": cfg["searchable"],
                 "filterableAttributes": cfg["filterable"],
                 "pagination": {"maxTotalHits": MEILI_MAX_HITS},
+                "typoTolerance": {
+                    "enabled": True,
+                    "disableOnAttributes": list(cfg.get("tanpa_typo") or []),
+                },
             })
         except Exception as e:
             logger.warning("Meili: gagal siapkan indeks %s (non-fatal): %s",
@@ -225,6 +246,11 @@ async def _cari_id(koleksi: str, q: str, filter_expr: Optional[str]) -> Optional
         "q": q,
         "limit": MEILI_MAX_HITS,
         "attributesToRetrieve": ["id"],
+        # SEMUA kata wajib ada. Bawaan Meili ("last") membuang kata dari akhir
+        # kueri sampai hasil dianggap cukup — mengetik lebih spesifik justru
+        # memunculkan dokumen yang tak memuat kata terakhir, dan hasilnya
+        # berbeda dari jalur regex Mongo. "all" menyamakan keduanya.
+        "matchingStrategy": "all",
     }
     if filter_expr:
         body["filter"] = filter_expr

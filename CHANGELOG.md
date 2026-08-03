@@ -67,6 +67,63 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#716] Pencarian akurat: multi-kata, NUP & nomor dokumen ikut dicari, hasil sama meski Meili mati — 2026-08-03
+
+Keluhan: "hasil pencarian di berbagai percobaan masih tidak begitu akurat."
+Penelusuran menemukan **tiga akar masalah** yang saling menumpuk. Semuanya
+dibuktikan lebih dulu dengan menjalankan semantik kueri produksi terhadap data
+contoh: **8 dari 11 pencarian realistis salah**; sesudah perbaikan **14/14 benar**.
+
+**1. Kata kunci diperlakukan sebagai SATU FRASA UTUH.** Regex dibangun dari
+seluruh isi kotak pencarian, sehingga harus muncul persis berurutan di SATU
+field. Akibatnya makin spesifik yang diketik, makin sering hasilnya kosong:
+
+- `meja jati` → tidak menemukan "Meja Rapat Kayu **Jati**";
+- `thinkpad lenovo` (terbalik) → nihil, padahal `lenovo thinkpad` ketemu;
+- `lenovo gudang` → **tak pernah** bisa cocok, karena "lenovo" ada di nama
+  barang sedangkan "gudang" ada di lokasi.
+
+Kini (`pencarian_utils.py`, dipakai daftar **aset, persediaan, dan surat**):
+kata kunci dipecah per spasi, **setiap kata wajib ada**, tetapi boleh berada di
+**field mana pun**. Menambah kata selalu mempersempit hasil — tak pernah
+mengosongkannya secara tak terduga.
+
+**2. Identitas yang paling sering diketik tidak ikut dicari sama sekali.**
+Dari 45 field aset, hanya 16 yang dicari — dan **NUP, nomor kontrak, nomor
+BAST, nomor bukti perolehan, jabatan pengguna, dan nama pihak perolehan tidak
+termasuk**. Mengetik NUP `00012` atau nomor kontrak `HK.02.03/123/2025` selalu
+nihil hasil. Keenamnya kini ikut dicari.
+
+**3. Hasil berubah-ubah tergantung Meilisearch hidup atau mati.** Saat Meili
+aktif, jalur pencarian sepenuhnya berpindah ke Meili — dan bawaannya
+`matchingStrategy: "last"` **membuang kata dari akhir kueri** sampai hasil
+dianggap cukup, jadi dokumen yang tak memuat kata terakhir tetap muncul.
+Ditambah toleransi typo bawaan, **NUP `00012` ikut memunculkan `00013`** dan
+kode barang beda satu digit saling tertukar. Perbaikan: `matchingStrategy`
+di-set `"all"` (sama dengan semantik Mongo), toleransi typo **dimatikan pada
+field identitas** (kode barang, NUP, nomor SPM/kontrak/BAST/bukti, serial,
+kode register), dan daftar field terindeks disamakan persis dengan daftar
+Mongo — dikunci uji agar tak pernah menyimpang lagi.
+
+**Kebisingan harga dikurangi.** Angka pendek dulu dicocokkan sebagai AWALAN
+harga: mengetik `12` (maksudnya NUP) menyeret aset berharga 12.000, 120.000,
+12.000.000 … Awalan harga kini baru berlaku untuk angka ≥ 4 digit; pencocokan
+harga persis (termasuk format `12.000.000`) tetap jalan.
+
+**Yang sengaja TIDAK diubah:** `pengguna_nip` tetap di luar pencarian teks
+bebas. NIP adalah data pribadi yang memang tidak diindeks ke mesin pencari;
+memasukkannya ke Mongo saja akan membuat hasil berbeda antara Meili hidup dan
+mati — penyakit yang justru sedang diperbaiki. Penyaringan per-NIP tetap
+tersedia lewat parameter filter khususnya.
+
+> **Tindakan pemilik (hanya bila Meilisearch dipakai):** field baru (NUP,
+> nomor kontrak/BAST/bukti) belum ada di dokumen yang sudah terlanjur
+> terindeks. Jalankan **reindex** sekali dari halaman admin/CLI setelah deploy
+> agar jalur Meili ikut menemukannya. Tanpa Meili, perbaikan langsung berlaku.
+
+17 uji unit baru (`tests/unit/test_pencarian.py`) mengunci seluruh janji di
+atas, termasuk input regex berbahaya tetap diperlakukan literal.
+
 ## [#715] Pusat Unduhan jadi gelembung mengambang yang menempel & menyelinap di dinding layar — 2026-08-03
 
 Log unduhan tidak lagi terpaku di pojok kanan-bawah. Pintu masuknya kini
