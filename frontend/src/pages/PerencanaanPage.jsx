@@ -552,7 +552,7 @@ export default function PerencanaanPage({ user, onBack }) {
           </DialogHeader>
           {formUsulan && (
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="usl-tahun">RKBMN untuk TA</label>
                   <Input id="usl-tahun" inputMode="numeric" maxLength={4} value={formUsulan.data.tahun_rkbmn}
@@ -673,7 +673,7 @@ export default function PerencanaanPage({ user, onBack }) {
               <Input value={formSbsk.peruntukan} placeholder="Peruntukan (mis. Pejabat eselon III)"
                 onChange={(e) => setFormSbsk({ ...formSbsk, peruntukan: e.target.value })}
                 className="h-9" data-testid="sbsk-peruntukan" />
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <Input value={formSbsk.standar} inputMode="decimal" placeholder="Angka standar"
                   onChange={(e) => setFormSbsk({ ...formSbsk, standar: e.target.value })}
                   className="h-9" data-testid="sbsk-standar" />

@@ -325,7 +325,7 @@ export default function PemusnahanPage({ user, onBack }) {
             </DialogDescription>
           </DialogHeader>
           {form && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pms-ba">Nomor BA</label>
                 <Input id="pms-ba" placeholder="BA-01/VII/2026" value={form.data.nomor_ba}

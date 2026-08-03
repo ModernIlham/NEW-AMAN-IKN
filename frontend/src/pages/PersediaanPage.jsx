@@ -1171,7 +1171,7 @@ export default function PersediaanPage({ user, onBack }) {
             </DialogDescription>
           </DialogHeader>
           {form && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {form.mode === "tambah" && (
                 <>
                   <div className="col-span-2 sm:col-span-1">
@@ -1269,7 +1269,7 @@ export default function PersediaanPage({ user, onBack }) {
             </DialogDescription>
           </DialogHeader>
           {masuk && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-in-jenis">Jenis</label>
                 <select
@@ -1391,7 +1391,7 @@ export default function PersediaanPage({ user, onBack }) {
             </DialogDescription>
           </DialogHeader>
           {keluar && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-out-jenis">Jenis</label>
                 <select
@@ -1532,7 +1532,7 @@ export default function PersediaanPage({ user, onBack }) {
             </DialogDescription>
           </DialogHeader>
           {mutasi && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-mut-dari">Dari</label>
                 <Input id="psd-mut-dari" type="date" value={mutasi.dari}
@@ -1576,7 +1576,7 @@ export default function PersediaanPage({ user, onBack }) {
             </DialogDescription>
           </DialogHeader>
           {mutasiSakti && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-mutsak-dari">Dari</label>
                 <Input id="psd-mutsak-dari" type="date" value={mutasiSakti.dari}
@@ -1804,7 +1804,7 @@ export default function PersediaanPage({ user, onBack }) {
           </DialogHeader>
           {massal && (
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-m-arah">Arah</label>
                   <select id="psd-m-arah" value={massal.arah}
@@ -2257,7 +2257,7 @@ export default function PersediaanPage({ user, onBack }) {
                               )}
                             </div>
                             {hapusSk?.entri?.persediaan_id === e.persediaan_id && hapusSk.kategori === kat && (
-                              <div className="mt-2 grid grid-cols-2 gap-2 rounded-lg border border-red-500/30 p-2">
+                              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-lg border border-red-500/30 p-2">
                                 <div>
                                   <label className="text-[10px] font-medium block mb-0.5" htmlFor="hapus-sk-jumlah">Jumlah (maks {e.jumlah})</label>
                                   <Input id="hapus-sk-jumlah" type="number" min="1" max={e.jumlah} className="h-8 text-xs"
@@ -2318,7 +2318,7 @@ export default function PersediaanPage({ user, onBack }) {
             </DialogDescription>
           </DialogHeader>
           {koreksiNilai && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kn-jenis">Jenis</label>
                 <select id="kn-jenis" value={koreksiNilai.jenis}

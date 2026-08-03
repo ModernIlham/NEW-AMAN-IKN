@@ -771,7 +771,7 @@ export default function WasdalPage({ user, onBack }) {
             </DialogDescription>
           </DialogHeader>
           {formInsi && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="insi-pemicu">Pemicu</label>
                 <select id="insi-pemicu" value={formInsi.data.pemicu}
@@ -948,7 +948,7 @@ export default function WasdalPage({ user, onBack }) {
             </DialogDescription>
           </DialogHeader>
           {formPen && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pen-sumber">Sumber</label>
                 <select id="pen-sumber" value={formPen.data.sumber}

@@ -565,7 +565,7 @@ export default function PenganggaranPage({ user, onBack }) {
             </DialogDescription>
           </DialogHeader>
           {formTahapan && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kal-nama">Nama tahapan</label>
                 <Input id="kal-nama" placeholder="cth. Penyampaian RKBMN ke Biro"
@@ -615,7 +615,7 @@ export default function PenganggaranPage({ user, onBack }) {
             </DialogDescription>
           </DialogHeader>
           {form && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="agr-jenis">Jenis</label>
                 <select id="agr-jenis" value={form.data.jenis}

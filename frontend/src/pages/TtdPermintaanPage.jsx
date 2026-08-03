@@ -359,7 +359,7 @@ export default function TtdPermintaanPage({ user, onBack }) {
                   placeholder="mis. BAST Serah Terima Laptop — Subbag Umum" className="h-10 mt-1"
                   data-testid="ttd-form-judul" />
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground">Jenis dokumen</label>
                   <select value={form.doc_type} onChange={(e) => setForm({ ...form, doc_type: e.target.value })}
@@ -442,7 +442,7 @@ export default function TtdPermintaanPage({ user, onBack }) {
                         </button>
                       )}
                     </div>
-                    <div className="grid grid-cols-2 gap-1.5 pl-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pl-6">
                       <Input value={s.nip} onChange={(e) => ubahSigner(i, "nip", e.target.value)}
                         placeholder="NIP (opsional)" className="h-8 text-xs" />
                       <Input value={s.jabatan} onChange={(e) => ubahSigner(i, "jabatan", e.target.value)}

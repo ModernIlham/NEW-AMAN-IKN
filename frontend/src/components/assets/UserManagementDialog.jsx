@@ -169,14 +169,14 @@ const UserRow = ({ user, isSelf, adminId, onRefresh, onUpdateLocalUser, satkerLi
             checked={!inactive} 
             onCheckedChange={toggle}
             disabled={busy}
-            className="data-[state=checked]:bg-emerald-400 h-4 w-7"
+            className="data-[state=checked]:bg-emerald-400 h-4 w-7 min-w-0 min-h-0"
           />
         )}
 
         {/* Expand */}
         <button 
           onClick={() => setExpanded(!expanded)}
-          className={`p-1 rounded transition-colors ${expanded ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+          className={`p-1 rounded transition-colors min-w-0 min-h-0 ${expanded ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
         >
           <ChevronDown className={`w-3.5 h-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
         </button>
@@ -192,7 +192,7 @@ const UserRow = ({ user, isSelf, adminId, onRefresh, onUpdateLocalUser, satkerLi
                 <TooltipTrigger asChild>
                   <button 
                     onClick={() => { setEditName(true); setNameVal(user.name || ''); setExpanded(false); }}
-                    className="flex items-center justify-center h-6 w-6 sm:w-auto sm:px-2 text-[10px] bg-card border border-border rounded text-muted-foreground hover:border-border"
+                    className="flex items-center justify-center h-6 w-6 sm:w-auto sm:px-2 min-w-0 min-h-0 text-[10px] bg-card border border-border rounded text-muted-foreground hover:border-border"
                   >
                     <Edit3 className="w-3 h-3 sm:mr-1" />
                     <span className="hidden sm:inline">Nama</span>

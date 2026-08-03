@@ -302,7 +302,7 @@ export default function ImporDenahDialog({ levels, nodes, labelLevel, onClose, o
 
         {/* Langkah 2: pemetaan */}
         {pratinjau && !selesai && (
-          <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
             <label className="space-y-1">
               <span className="font-medium">Jadikan tingkat</span>
               <select value={tipe} onChange={(e) => { setTipe(e.target.value); setParentId(""); }}

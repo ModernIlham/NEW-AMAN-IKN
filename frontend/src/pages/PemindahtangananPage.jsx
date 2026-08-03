@@ -425,7 +425,7 @@ export default function PemindahtangananPage({ user, onBack }) {
             </DialogDescription>
           </DialogHeader>
           {form && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="ptg-bentuk">Bentuk</label>
                 <select id="ptg-bentuk" value={form.data.bentuk}
@@ -536,7 +536,7 @@ export default function PemindahtangananPage({ user, onBack }) {
             </DialogDescription>
           </DialogHeader>
           {trx?.ke === "disetujui" && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="ptg-setuju">No. Surat Persetujuan</label>
                 <Input id="ptg-setuju" placeholder="S-12/KNL.05/2026" value={trx.fields.nomor_persetujuan}

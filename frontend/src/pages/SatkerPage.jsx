@@ -308,7 +308,7 @@ export function SatkerPanel({ user }) {
           </DialogHeader>
           {form && (
             <div className="space-y-2.5">
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground">Kode satker *</label>
                   <Input value={form.kode_satker} disabled={!form._baru}

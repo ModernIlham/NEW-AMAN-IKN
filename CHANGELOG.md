@@ -67,6 +67,40 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#731] Isi popup diseragamkan — kolom tak lagi terjepit 158 px di HP — 2026-08-03
+
+Lanjutan `[#730]`, kali ini isi popupnya. Enam agen mengaudit 118 popup di
+seluruh aplikasi, lalu tiap temuan diadu dengan verifikator yang tugasnya
+MEMBANTAH: **33 bertahan, 36 gugur**. Satu temuan gagal diverifikasi (agennya
+tak menghasilkan keluaran sah) dan ikut terbuang — dicatat di sini supaya
+angkanya tidak terbaca sebagai "semuanya sudah diperiksa".
+
+**Pola terbesar (45% temuan): grid 2–3 kolom tanpa breakpoint.** Di dialog
+selebar 393 px, dua kolom berarti ~158 px per kolom — `<select>` "Pemeliharaan
+ringan (harian oleh pemakai)" cuma menampilkan 17 karakter pertama, dan input
+tanggal bawaan peramban terpotong ikon kalendernya. **45 grid** di dalam badan
+dialog kini `grid-cols-1 sm:grid-cols-2` (atau `-3`): menumpuk di HP, kembali
+berdampingan sejak 640 px.
+
+Empat grid sengaja DIKEMBALIKAN setelah diperiksa satu per satu — bukan semua
+grid pantas ditumpuk: panduan rule-of-thirds di kanvas krop foto (3×3 itu
+bentuknya, bukan tata letak), chip ukuran stiker (sudah diukur muat di 360 px),
+dan dua ubin angka rekap (angka pendek; menumpuk justru memanjangkan dialog).
+
+**Baris kontrol yang tak boleh melipat** (3 tempat: Lokasi Temuan, tambah Kode
+Klasifikasi di Persuratan, tambah Kategori manual) diberi `flex-wrap`, dan
+lebar tetapnya dibuat mengecil di HP (`w-36` → `w-28 sm:w-36`, `w-32` →
+`w-24 sm:w-32`) supaya barisnya tak meluber lalu tergunting.
+
+**Kontrol yang sengaja mungil tapi dibengkakkan aturan tap-target 44 px**
+diberi `min-w-0 min-h-0` — pola yang memang sudah baku di repo ini. Di baris
+pengguna (Kelola Pengguna), switch 28 px dan panah 22 px dipaksa jadi 44×44,
+memakan 38 px dari kolom nama+email sampai alamat email terpotong padahal itu
+identitas loginnya. Sekalian: tombol navigasi kategori masih berlabel
+"Prev"/"Next" di antarmuka berbahasa Indonesia — jadi "Sebelumnya"/"Berikutnya".
+
+Diverifikasi: 401 uji frontend lulus, lint bersih, build produksi sukses.
+
 ## [#730] Semua popup dapat batas tinggi — akar "penuh satu layar" ditutup — 2026-08-03
 
 Pemeriksaan popup lain di HP menemukan bahwa dialog Cetak Stiker `[#729]` bukan

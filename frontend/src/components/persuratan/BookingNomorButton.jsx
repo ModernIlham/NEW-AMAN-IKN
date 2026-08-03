@@ -119,7 +119,7 @@ export default function BookingNomorButton({
                 <Input value={form.perihal} onChange={(e) => setForm((f) => ({ ...f, perihal: e.target.value }))}
                   placeholder="cth. Penyampaian LHI Semester I 2026" data-testid="booking-nomor-perihal" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-foreground block mb-1">Kepada / Tujuan</label>
                   <Input value={form.tujuan} onChange={(e) => setForm((f) => ({ ...f, tujuan: e.target.value }))} />

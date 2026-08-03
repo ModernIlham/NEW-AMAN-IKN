@@ -686,7 +686,7 @@ export default function SpasialMasterPage({ user, onBack }) {
                 <Input value={form.nama} onChange={(e) => setForm((f) => ({ ...f, nama: e.target.value }))}
                   className="mt-1" data-testid="spasial-form-nama" autoFocus />
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
                   <label className="text-xs font-medium">Kode <span className="text-muted-foreground">(opsional)</span></label>
                   <Input value={form.kode} onChange={(e) => setForm((f) => ({ ...f, kode: e.target.value }))}
@@ -726,7 +726,7 @@ export default function SpasialMasterPage({ user, onBack }) {
                     Ordinal: 0 = lantai akses masuk utama, negatif = basement. "Lantai 1" di Indonesia
                     lazim berarti lantai dasar — pisahkan dari label.
                   </p>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <div>
                       <label className="text-xs font-medium">Ordinal</label>
                       <Input type="number" value={form.lantai_ordinal}
