@@ -762,7 +762,7 @@ export default function WasdalPage({ user, onBack }) {
 
       {/* ── Dialog catat pemantauan insidentil ── */}
       <Dialog open={!!formInsi} onOpenChange={(o) => { if (!o) setFormInsi(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Catat Pemantauan Insidentil</DialogTitle>
             <DialogDescription className="text-xs">
@@ -866,7 +866,7 @@ export default function WasdalPage({ user, onBack }) {
 
       {/* ── Dialog lampiran tiket insidentil (scan BA + foto temuan) ── */}
       <Dialog open={!!lampInsi} onOpenChange={(o) => { if (!o) setLampInsi(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Lampiran Pemantauan Insidentil</DialogTitle>
             <DialogDescription className="text-xs">
@@ -939,7 +939,7 @@ export default function WasdalPage({ user, onBack }) {
 
       {/* ── Dialog catat penertiban ── */}
       <Dialog open={!!formPen} onOpenChange={(o) => { if (!o) setFormPen(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Catat Penertiban</DialogTitle>
             <DialogDescription className="text-xs">

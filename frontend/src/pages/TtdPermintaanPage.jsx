@@ -344,7 +344,7 @@ export default function TtdPermintaanPage({ user, onBack }) {
 
       {/* ── Dialog buat permintaan ── */}
       <Dialog open={!!form} onOpenChange={(o) => !o && setForm(null)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Minta Tanda Tangan</DialogTitle>
             <DialogDescription>
@@ -530,7 +530,7 @@ export default function TtdPermintaanPage({ user, onBack }) {
         {/* overflow-x-hidden + break-words: judul/nama panjang tanpa spasi
             jangan meluber keluar kotak dialog (umpan balik pengguna).
             p-4 di HP (base p-6 terlalu sempit → isi berdesakan/meluber). */}
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto overflow-x-hidden p-4 sm:p-6">
+        <DialogContent className="max-w-lg overflow-x-hidden p-4 sm:p-6">
           {detail && (
             <>
               <DialogHeader>

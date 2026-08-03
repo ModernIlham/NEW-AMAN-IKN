@@ -607,7 +607,7 @@ export default function PenganggaranPage({ user, onBack }) {
 
       {/* ── Dialog usulan baru ── */}
       <Dialog open={!!form} onOpenChange={(o) => { if (!o) setForm(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Catat Usulan Penganggaran</DialogTitle>
             <DialogDescription className="text-xs" title="RKBMN: Rencana Kebutuhan Barang Milik Negara; t-2: dua tahun sebelum TA pelaksanaan">

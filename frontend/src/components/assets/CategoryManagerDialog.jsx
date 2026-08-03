@@ -124,7 +124,7 @@ const CategoryManagerDialog = memo(({ open, onClose, categories, onCategoriesCha
     <>
     {confirmDialog}
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto overflow-x-hidden">
+      <DialogContent className="max-w-lg overflow-x-hidden">
         <DialogHeader><DialogTitle className="flex items-center gap-2"><FolderOpen className="w-5 h-5 text-blue-600" />Kelola Kategori Aset</DialogTitle></DialogHeader>
         <div className="space-y-3">
           <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-2">

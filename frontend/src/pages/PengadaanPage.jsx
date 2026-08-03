@@ -716,7 +716,7 @@ export default function PengadaanPage({ user, onBack }) {
 
       {/* ── Dialog perolehan baru ── */}
       <Dialog open={!!form} onOpenChange={(o) => { if (!o) setForm(null); }}>
-        <DialogContent className="max-w-2xl w-[calc(100%-1.5rem)] max-h-[88vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl w-[calc(100%-1.5rem)]">
           <DialogHeader>
             <DialogTitle>Catat Perolehan</DialogTitle>
             <DialogDescription className="text-xs">
@@ -910,7 +910,7 @@ export default function PengadaanPage({ user, onBack }) {
 
       {/* ── Dialog lampiran berkas perolehan ── */}
       <Dialog open={!!lamp} onOpenChange={(o) => { if (!o) setLamp(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Lampiran Berkas Perolehan</DialogTitle>
             <DialogDescription className="text-xs">
@@ -954,7 +954,7 @@ export default function PengadaanPage({ user, onBack }) {
 
       {/* ── Dialog catat semua barang BAST (aset + persediaan sekaligus) ── */}
       <Dialog open={!!draftAset} onOpenChange={(o) => { if (!o) setDraftAset(null); }}>
-        <DialogContent className="max-w-md max-h-[92vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Catat Semua Barang — BAST {draftAset?.perolehan?.nomor_bast}</DialogTitle>
             <DialogDescription className="text-xs">
@@ -1087,7 +1087,7 @@ export default function PengadaanPage({ user, onBack }) {
 
       {/* ── Tautan TTD LPB yang baru dikirim ── */}
       <Dialog open={!!tautanTtd} onOpenChange={(o) => { if (!o) setTautanTtd(null); }}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Tautan tanda tangan — LPB {tautanTtd?.nomor}</DialogTitle>
             <DialogDescription className="text-xs">
@@ -1128,7 +1128,7 @@ export default function PengadaanPage({ user, onBack }) {
 
       {/* ── Dialog LPB gabungan: pilih BAST PPK→KPB yang dirangkum ── */}
       <Dialog open={!!lpbGab} onOpenChange={(o) => { if (!o) setLpbGab(null); }}>
-        <DialogContent className="max-w-lg max-h-[88vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>LPB Gabungan — seluruh BAST PPK → KPB</DialogTitle>
             <DialogDescription className="text-xs">

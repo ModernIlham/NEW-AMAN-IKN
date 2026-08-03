@@ -417,7 +417,7 @@ export default function PemanfaatanPage({ user, onBack }) {
 
       {/* ── Dialog catat/ubah register ── */}
       <Dialog open={!!form} onOpenChange={(o) => { if (!o) setForm(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{form?.id ? "Ubah" : "Catat"} Perjanjian Pemanfaatan</DialogTitle>
             <DialogDescription className="text-xs">
@@ -577,7 +577,7 @@ export default function PemanfaatanPage({ user, onBack }) {
 
       {/* ── Dialog lampiran (dokumen perjanjian ATAU laporan wasdal) ── */}
       <Dialog open={!!lamp} onOpenChange={(o) => { if (!o) setLamp(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{lamp?.jenis === "wasdal" ? "Lampiran Wasdal" : "Lampiran Dokumen"}</DialogTitle>
             <DialogDescription className="text-xs">

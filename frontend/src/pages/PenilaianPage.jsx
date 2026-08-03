@@ -733,7 +733,7 @@ export default function PenilaianPage({ user, onBack }) {
 
       {/* ── Dialog catat koreksi nilai ── */}
       <Dialog open={!!formKoreksi} onOpenChange={(o) => { if (!o) setFormKoreksi(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Catat Koreksi Nilai / Hasil Penilaian</DialogTitle>
             <DialogDescription className="text-xs">

@@ -468,7 +468,7 @@ export default function PenghapusanPage({ user, onBack }) {
 
       {/* ── Dialog lampiran usulan (arsip SK + dokumen pendukung) ── */}
       <Dialog open={!!lamp} onOpenChange={(o) => { if (!o) setLamp(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Lampiran Usulan Penghapusan</DialogTitle>
             <DialogDescription className="text-xs">

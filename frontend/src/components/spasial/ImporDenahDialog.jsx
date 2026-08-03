@@ -236,8 +236,7 @@ export default function ImporDenahDialog({ levels, nodes, labelLevel, onClose, o
           setelah impor selesai. Membolehkan anak menyusut menutup seluruh kelas
           bug itu sekaligus, bukan hanya satu barisnya. */}
       <DialogContent
-        className="max-w-2xl w-[calc(100vw-2rem)] max-h-[90vh] overflow-y-auto
-                   [&>*]:min-w-0"
+        className="max-w-2xl w-[calc(100vw-2rem)] [&>*]:min-w-0"
         data-testid="impor-denah-dialog">
         <DialogHeader>
           <DialogTitle className="text-sm">Impor Denah dari File GIS</DialogTitle>

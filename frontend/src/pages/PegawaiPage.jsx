@@ -1053,7 +1053,7 @@ export default function PegawaiPage({ user, onBack }) {
 
       {/* ── Dialog tambah / edit ── */}
       <Dialog open={!!form} onOpenChange={(o) => { if (!o) setForm(null); }}>
-        <DialogContent className="max-w-2xl max-h-[88vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{form?.mode === "tambah" ? "Tambah Pegawai" : `Ubah Pegawai — ${form?.nama}`}</DialogTitle>
             <DialogDescription className="text-xs">
@@ -1507,7 +1507,7 @@ export default function PegawaiPage({ user, onBack }) {
           × 5 eselon): lebar dialog dimaksimalkan (sisa 0.5rem per sisi) dan
           padding dihemat agar nama unit kebagian tempat. */}
       <Dialog open={struktur} onOpenChange={setStruktur}>
-        <DialogContent className="max-w-2xl max-h-[88vh] overflow-y-auto w-[calc(100%-1rem)] sm:w-[calc(100%-2rem)] p-3 sm:p-6">
+        <DialogContent className="max-w-2xl w-[calc(100%-1rem)] sm:w-[calc(100%-2rem)] p-3 sm:p-6">
           <DialogHeader>
             <DialogTitle>Struktur Organisasi</DialogTitle>
             <DialogDescription className="text-xs">
@@ -1536,7 +1536,7 @@ export default function PegawaiPage({ user, onBack }) {
 
       {/* ── Dialog kelola master unit kerja (Eselon I–V, hierarkis) ── */}
       <Dialog open={!!kelolaUnit} onOpenChange={(o) => { if (!o && !kelolaUnit?.sibuk) setKelolaUnit(null); }}>
-        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle>Kelola Unit Kerja (Eselon I–V)</DialogTitle>
             <DialogDescription className="text-xs">
@@ -1611,7 +1611,7 @@ export default function PegawaiPage({ user, onBack }) {
 
       {/* ── Dialog aset yang dipegang pegawai berisiko ── */}
       <Dialog open={!!detailAset} onOpenChange={(o) => { if (!o) setDetailAset(null); }}>
-        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle>Aset dipegang — {detailAset?.pegawai?.nama}</DialogTitle>
             <DialogDescription className="text-xs">
@@ -1649,7 +1649,7 @@ export default function PegawaiPage({ user, onBack }) {
 
       {/* ── Dialog hasil impor ── */}
       <Dialog open={!!hasilImpor} onOpenChange={(o) => { if (!o) setHasilImpor(null); }}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Hasil Impor Pegawai</DialogTitle>
             <DialogDescription className="text-xs">

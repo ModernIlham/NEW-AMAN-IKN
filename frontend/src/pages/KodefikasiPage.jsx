@@ -453,7 +453,7 @@ export default function KodefikasiPage({ user, onBack }) {
 
       {/* ── Dialog Detail: hierarki + metadata SIMAN (tak tampil di tabel utama) ── */}
       <Dialog open={!!detail} onOpenChange={(o) => { if (!o) setDetail(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="font-mono text-base">{detail?.item?.kode}</DialogTitle>
             <DialogDescription className="text-xs">

@@ -952,7 +952,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
 
 
       <Dialog open={showCreate} onOpenChange={handleCloseDialog}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto overflow-x-hidden">
+        <DialogContent className="max-w-lg overflow-x-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {editingActivity ? <Edit3 className="w-5 h-5 text-amber-600" /> : <Plus className="w-5 h-5 text-blue-600" />}

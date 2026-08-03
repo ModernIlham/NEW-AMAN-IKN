@@ -367,7 +367,7 @@ export default function PejabatPage({ user, onBack }) {
 
       {/* ── Dialog tambah / edit ── */}
       <Dialog open={!!form} onOpenChange={(o) => { if (!o) { setForm(null); setPegawaiPick(""); } }}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{form?.mode === "tambah" ? "Tambah Pejabat" : `Ubah Pejabat — ${form?.nama}`}</DialogTitle>
             <DialogDescription className="text-xs">
