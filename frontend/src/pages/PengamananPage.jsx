@@ -838,7 +838,7 @@ export default function PengamananPage({ user, onBack }) {
                   onChange={(e) => setFormKasus((f) => ({ ...f, data: { ...f.data, uraian: e.target.value } }))}
                   data-testid="kasus-uraian" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kss-lawan">Pihak lawan</label>
                   <Input id="kss-lawan" value={formKasus.data.pihak_lawan}
@@ -917,7 +917,7 @@ export default function PengamananPage({ user, onBack }) {
                   </Button>
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="dok-jenis">Jenis dokumen</label>
                   <select id="dok-jenis" value={formDok.data.jenis}
@@ -1032,7 +1032,7 @@ export default function PengamananPage({ user, onBack }) {
                   </Button>
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pol-nomor">Nomor polis</label>
                   <Input id="pol-nomor" value={formPolis.data.nomor_polis}

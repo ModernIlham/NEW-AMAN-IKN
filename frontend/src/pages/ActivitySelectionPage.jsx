@@ -980,7 +980,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                 <Label>Penanggung Jawab</Label>
                 {/* Terhubung Master Pegawai: pilih nama dari datalist →
                     jabatan & NIP terisi otomatis (audit W4 #1). */}
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <Input value={form.penanggung_jawab} list="kegiatan-pegawai-list"
                     onChange={e => {
                       const nama = e.target.value;

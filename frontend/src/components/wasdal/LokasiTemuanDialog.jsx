@@ -184,7 +184,7 @@ export default function LokasiTemuanDialog({ judul, submitUrl, lokasiAwal, onClo
           )}
         </div>
 
-        <div className="px-4 py-3 border-t border-border flex items-center gap-2">
+        <div className="px-4 py-3 border-t border-border flex flex-wrap items-center gap-2">
           {lokasiAwal && (
             <Button variant="outline" size="sm" className="text-red-600" disabled={sibuk}
                     onClick={hapus} data-testid="lokasi-temuan-hapus">

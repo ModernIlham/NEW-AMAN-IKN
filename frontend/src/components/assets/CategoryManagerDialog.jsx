@@ -188,13 +188,13 @@ const CategoryManagerDialog = memo(({ open, onClose, categories, onCategoriesCha
           
           <div className="space-y-1.5">
             <p className="text-xs font-semibold text-foreground">Tambah Kategori Manual</p>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Input 
                 placeholder="Kode Aset (10 digit)" 
                 value={newCategoryCode} 
                 onChange={e => setNewCategoryCode(e.target.value)} 
                 onKeyPress={e => e.key === 'Enter' && handleAddCategory()} 
-                className="h-8 text-sm w-32 font-mono" 
+                className="h-8 text-sm w-24 sm:w-32 font-mono" 
                 maxLength={10}
                 data-testid="category-code-input"
               />
@@ -219,14 +219,14 @@ const CategoryManagerDialog = memo(({ open, onClose, categories, onCategoriesCha
                   {Math.min((categoryPage - 1) * CATEGORY_PAGE_SIZE + 1, filteredCategories.length)}-{Math.min(categoryPage * CATEGORY_PAGE_SIZE, filteredCategories.length)} dari {filteredCategories.length}
                 </span>
                 <div className="flex items-center gap-1">
-                  <Button variant="outline" size="sm" className="h-6 px-2 text-xs" onClick={() => setCategoryPage(p => Math.max(1, p - 1))} disabled={categoryPage <= 1}>
-                    <ChevronLeft className="w-3 h-3" /> Prev
+                  <Button variant="outline" size="sm" className="h-6 px-2 text-xs min-w-0 min-h-0" onClick={() => setCategoryPage(p => Math.max(1, p - 1))} disabled={categoryPage <= 1}>
+                    <ChevronLeft className="w-3 h-3" /> Sebelumnya
                   </Button>
                   <span className="px-2 text-muted-foreground font-medium">
                     {categoryPage} / {Math.ceil(filteredCategories.length / CATEGORY_PAGE_SIZE) || 1}
                   </span>
-                  <Button variant="outline" size="sm" className="h-6 px-2 text-xs" onClick={() => setCategoryPage(p => Math.min(Math.ceil(filteredCategories.length / CATEGORY_PAGE_SIZE), p + 1))} disabled={categoryPage >= Math.ceil(filteredCategories.length / CATEGORY_PAGE_SIZE)}>
-                    Next <ChevronRight className="w-3 h-3" />
+                  <Button variant="outline" size="sm" className="h-6 px-2 text-xs min-w-0 min-h-0" onClick={() => setCategoryPage(p => Math.min(Math.ceil(filteredCategories.length / CATEGORY_PAGE_SIZE), p + 1))} disabled={categoryPage >= Math.ceil(filteredCategories.length / CATEGORY_PAGE_SIZE)}>
+                    Berikutnya <ChevronRight className="w-3 h-3" />
                   </Button>
                 </div>
               </div>

@@ -426,7 +426,7 @@ export default function PemanfaatanPage({ user, onBack }) {
             </DialogDescription>
           </DialogHeader>
           {form && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-aset">Objek BMN (opsional)</label>
                 {form.aset ? (
@@ -631,7 +631,7 @@ export default function PemanfaatanPage({ user, onBack }) {
             </DialogDescription>
           </DialogHeader>
           {kontrib && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-k-tahun">Tahun</label>
                 <Input id="pmf-k-tahun" inputMode="numeric" maxLength={4} value={kontrib.fields.tahun}

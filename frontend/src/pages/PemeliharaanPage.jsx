@@ -692,7 +692,7 @@ export default function PemeliharaanPage({ user, onBack }) {
             </DialogDescription>
           </DialogHeader>
           {form && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pml-aset">Aset</label>
                 {form.aset ? (
@@ -817,7 +817,7 @@ export default function PemeliharaanPage({ user, onBack }) {
             </DialogDescription>
           </DialogHeader>
           {formJadwal && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmlj-aset">Aset</label>
                 {formJadwal.aset ? (
@@ -918,7 +918,7 @@ export default function PemeliharaanPage({ user, onBack }) {
                 )}
               </div>
               <div className="space-y-2">
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <label className="text-[11px] text-muted-foreground">Nomor BA (kosong = otomatis)</label>
                     <Input value={kap.nomor_ba} onChange={(e) => setKap((k) => ({ ...k, nomor_ba: e.target.value }))}
@@ -931,7 +931,7 @@ export default function PemeliharaanPage({ user, onBack }) {
                       className="h-9 text-xs" data-testid="kap-tanggal" />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <label className="text-[11px] text-muted-foreground">Pihak yang menyerahkan (pelaksana)</label>
                     <Input value={kap.pihak_pelaksana} onChange={(e) => setKap((k) => ({ ...k, pihak_pelaksana: e.target.value }))}
@@ -943,7 +943,7 @@ export default function PemeliharaanPage({ user, onBack }) {
                       placeholder="cth. Direktur CV Maju" className="h-9 text-xs" />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <label className="text-[11px] text-muted-foreground">Pihak yang menerima</label>
                     <Input value={kap.pihak_penerima} onChange={(e) => setKap((k) => ({ ...k, pihak_penerima: e.target.value }))}

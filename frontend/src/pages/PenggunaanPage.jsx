@@ -1115,7 +1115,7 @@ export default function PenggunaanPage({ user, onBack }) {
           </DialogHeader>
           {formProses && (
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="prs-jenis">Jenis proses</label>
                   <select id="prs-jenis" value={formProses.data.jenis_proses}
@@ -1245,7 +1245,7 @@ export default function PenggunaanPage({ user, onBack }) {
             </DialogDescription>
           </DialogHeader>
           {formPsp && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psp-nomor">Nomor SK</label>
                 <Input id="psp-nomor" placeholder="KEP-1/MK.6/2026" value={formPsp.data.nomor_sk}
@@ -1682,7 +1682,7 @@ export default function PenggunaanPage({ user, onBack }) {
               {formBast.jenis === "mutasi_pengguna" && (
                 <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5 space-y-2">
                   <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">Pemegang lama (PIHAK KESATU) — menyerahkan</p>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {/* Terhubung Master Pegawai (datalist sama dgn Penerima):
                         nama cocok → NIP & jabatan terisi otomatis (audit W4).
                         Tap kartu e-KTP juga bisa (tombol ikon kartu). */}
@@ -1724,7 +1724,7 @@ export default function PenggunaanPage({ user, onBack }) {
                 </label>
               )}
               {formBast.jenis === "penggunaan_sementara" && (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div><label className="text-xs font-medium block mb-1">Jangka: dari *</label>
                     <Input type="date" value={formBast.jangka_dari} onChange={(e) => setFormBast((f) => ({ ...f, jangka_dari: e.target.value }))} /></div>
                   <div><label className="text-xs font-medium block mb-1">sampai *</label>

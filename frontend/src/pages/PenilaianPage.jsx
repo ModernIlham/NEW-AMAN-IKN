@@ -668,7 +668,7 @@ export default function PenilaianPage({ user, onBack }) {
               lampiran KMK 295/2019 jo. 266/2023 jo. 339/2024 — entri satker menimpa bawaan.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pnl-kode">Kode kelompok</label>
               <Input id="pnl-kode" className="font-mono" placeholder="30201" maxLength={5}
@@ -776,7 +776,7 @@ export default function PenilaianPage({ user, onBack }) {
                   </Button>
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kor-jenis">Jenis</label>
                   <select id="kor-jenis" value={formKoreksi.data.jenis}

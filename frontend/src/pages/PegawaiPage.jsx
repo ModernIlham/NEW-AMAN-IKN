@@ -1216,7 +1216,7 @@ export default function PegawaiPage({ user, onBack }) {
                   <Field label="Jenis Kelamin">
                     <Select value={form.jenis_kelamin} onChange={set("jenis_kelamin")} data-testid="pegawai-form-jk" opts={ref.jenis_kelamin} />
                   </Field>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <Field label="Tempat Lahir"><Input value={form.tempat_lahir} onChange={set("tempat_lahir")} /></Field>
                     <Field label="Tgl Lahir"><InputTanggalRoda name="tanggal_lahir" value={form.tanggal_lahir} onChange={set("tanggal_lahir")} minYear={1940} maxYear={new Date().getFullYear()} data-testid="pegawai-form-tgl-lahir" /></Field>
                   </div>

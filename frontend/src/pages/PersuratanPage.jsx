@@ -699,7 +699,7 @@ export default function PersuratanPage({ user, onBack }) {
                     onChange={(e) => setFormAtur((f) => ({ ...f, format_nomor: e.target.value }))}
                     data-testid="atur-format" />
                 </Field>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <Field label="Kode Unit"><Input value={formAtur.kode_unit} onChange={(e) => setFormAtur((f) => ({ ...f, kode_unit: e.target.value }))} placeholder="cth. OIKN" /></Field>
                   <Field label="Kode Klasifikasi Bawaan (fallback)"><Input value={formAtur.kode_klasifikasi_default} onChange={(e) => setFormAtur((f) => ({ ...f, kode_klasifikasi_default: e.target.value }))} placeholder="cth. UM.01" className="font-mono" /></Field>
                 </div>
@@ -730,9 +730,9 @@ export default function PersuratanPage({ user, onBack }) {
                     ))}
                   </div>
                 )}
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Input value={klasBaru.kode} onChange={(e) => setKlasBaru((b) => ({ ...b, kode: e.target.value }))}
-                    placeholder="Kode (cth. PL.02)" className="font-mono h-9 w-36" data-testid="klas-baru-kode" />
+                    placeholder="Kode (cth. PL.02)" className="font-mono h-9 w-28 sm:w-36" data-testid="klas-baru-kode" />
                   <Input value={klasBaru.uraian} onChange={(e) => setKlasBaru((b) => ({ ...b, uraian: e.target.value }))}
                     placeholder="Uraian (cth. Pelaporan BMN)" className="h-9 flex-1" data-testid="klas-baru-uraian" />
                   <Button variant="outline" size="sm" className="h-9 gap-1" onClick={tambahKlas} data-testid="klas-tambah">
