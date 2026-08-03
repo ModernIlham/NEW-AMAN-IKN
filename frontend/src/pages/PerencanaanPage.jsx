@@ -543,7 +543,7 @@ export default function PerencanaanPage({ user, onBack }) {
 
       {/* ── Dialog buat usulan RKBMN ── */}
       <Dialog open={!!formUsulan} onOpenChange={(o) => { if (!o) setFormUsulan(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Buat Usulan RKBMN</DialogTitle>
             <DialogDescription className="text-xs">

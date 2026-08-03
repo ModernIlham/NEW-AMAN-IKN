@@ -299,7 +299,7 @@ export function SatkerPanel({ user }) {
 
       {/* ── Dialog profil satker ── */}
       <Dialog open={!!form} onOpenChange={(o) => !o && setForm(null)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{form?._baru ? "Daftarkan Satker" : `Profil Satker ${form?.kode_satker}`}</DialogTitle>
             <DialogDescription>

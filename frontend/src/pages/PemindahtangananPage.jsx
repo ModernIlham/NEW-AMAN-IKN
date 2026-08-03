@@ -373,7 +373,7 @@ export default function PemindahtangananPage({ user, onBack }) {
 
       {/* ── Dialog lampiran usulan (persetujuan/risalah/BAST/NTPN) ── */}
       <Dialog open={!!lamp} onOpenChange={(o) => { if (!o) setLamp(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Lampiran Usulan Pemindahtanganan</DialogTitle>
             <DialogDescription className="text-xs">
@@ -417,7 +417,7 @@ export default function PemindahtangananPage({ user, onBack }) {
 
       {/* ── Dialog usulan baru ── */}
       <Dialog open={!!form} onOpenChange={(o) => { if (!o) setForm(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Usulan Pemindahtanganan</DialogTitle>
             <DialogDescription className="text-xs">

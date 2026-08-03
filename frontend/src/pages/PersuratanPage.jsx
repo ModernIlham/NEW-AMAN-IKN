@@ -504,7 +504,7 @@ export default function PersuratanPage({ user, onBack }) {
 
       {/* ── Dialog booking / edit surat keluar ── */}
       <Dialog open={!!formKeluar} onOpenChange={(o) => { if (!o) setFormKeluar(null); }}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{formKeluar?.mode === "edit-final" ? `Nomor Eksternal — ${formKeluar?.nomor}` : formKeluar?.mode === "edit" ? `Ubah Draf — ${formKeluar?.nomor}` : "Booking Nomor Surat Keluar"}</DialogTitle>
             <DialogDescription className="text-xs">
@@ -683,7 +683,7 @@ export default function PersuratanPage({ user, onBack }) {
 
       {/* ── Dialog pengaturan format + klasifikasi (admin) ── */}
       <Dialog open={!!formAtur} onOpenChange={(o) => { if (!o) setFormAtur(null); }}>
-        <DialogContent className="max-w-2xl max-h-[88vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Pengaturan Penomoran & Klasifikasi Surat</DialogTitle>
             <DialogDescription className="text-xs">

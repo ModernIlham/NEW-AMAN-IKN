@@ -1159,7 +1159,7 @@ export default function PersediaanPage({ user, onBack }) {
 
       {/* ── Dialog tambah / edit ── */}
       <Dialog open={!!form} onOpenChange={(o) => { if (!o) setForm(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
               {form?.mode === "tambah" ? "Tambah Barang Persediaan" : `Ubah — ${form?.data?.kode_barang} · NUP ${form?.data?.nup}`}
@@ -1260,7 +1260,7 @@ export default function PersediaanPage({ user, onBack }) {
 
       {/* ── Dialog transaksi masuk ── */}
       <Dialog open={!!masuk} onOpenChange={(o) => { if (!o) setMasuk(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Transaksi Masuk — {masuk?.item?.nama_barang}</DialogTitle>
             <DialogDescription className="text-xs">
@@ -1382,7 +1382,7 @@ export default function PersediaanPage({ user, onBack }) {
 
       {/* ── Dialog transaksi keluar ── */}
       <Dialog open={!!keluar} onOpenChange={(o) => { if (!o) setKeluar(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Transaksi Keluar — {keluar?.item?.nama_barang}</DialogTitle>
             <DialogDescription className="text-xs">
@@ -1651,7 +1651,7 @@ export default function PersediaanPage({ user, onBack }) {
       </Dialog>
 
       <Dialog open={!!riwayat} onOpenChange={(o) => { if (!o) setRiwayat(null); }}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Riwayat — {riwayat?.item?.nama_barang}</DialogTitle>
             <DialogDescription className="text-xs">
@@ -1735,7 +1735,7 @@ export default function PersediaanPage({ user, onBack }) {
 
       {/* ── Dialog rincian layer FIFO (read-only) ── */}
       <Dialog open={!!layers} onOpenChange={(o) => { if (!o) setLayers(null); }}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Layer FIFO — {layers?.item?.nama_barang}</DialogTitle>
             <DialogDescription className="text-xs">
@@ -1791,7 +1791,7 @@ export default function PersediaanPage({ user, onBack }) {
 
       {/* ── Dialog transaksi massal per dokumen ── */}
       <Dialog open={!!massal} onOpenChange={(o) => { if (!o) setMassal(null); }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Transaksi Massal — Satu Dokumen</DialogTitle>
             <DialogDescription className="text-xs">
@@ -1983,7 +1983,7 @@ export default function PersediaanPage({ user, onBack }) {
 
       {/* ── Dialog Riwayat LPB (unduh ulang) ── */}
       <Dialog open={!!riwayatLpb} onOpenChange={(o) => { if (!o) setRiwayatLpb(null); }}>
-        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Riwayat Laporan Penerimaan Barang</DialogTitle>
             <DialogDescription className="text-xs">
@@ -2062,7 +2062,7 @@ export default function PersediaanPage({ user, onBack }) {
 
       {/* ── Dialog Daftar Transaksi lintas barang (45 kode SAKTI) ── */}
       <Dialog open={!!daftarTrx} onOpenChange={(o) => { if (!o) setDaftarTrx(null); }}>
-        <DialogContent className="max-w-3xl max-h-[88vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>Daftar Transaksi Persediaan</DialogTitle>
             <DialogDescription className="text-xs">
@@ -2209,7 +2209,7 @@ export default function PersediaanPage({ user, onBack }) {
 
       {/* ── Dialog Daftar Usang / Rusak / Tak Dikuasai (derivasi jurnal) ── */}
       <Dialog open={!!nonaktif} onOpenChange={(o) => { if (!o) { setNonaktif(null); setHapusSk(null); } }}>
-        <DialogContent className="max-w-2xl max-h-[88vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Daftar Persediaan Usang / Rusak / Tidak Dikuasai</DialogTitle>
             <DialogDescription className="text-xs">
@@ -2366,7 +2366,7 @@ export default function PersediaanPage({ user, onBack }) {
 
       {/* ── Dialog tautan TTD LPB yang baru dikirim ── */}
       <Dialog open={!!tautanTtd} onOpenChange={(o) => { if (!o) setTautanTtd(null); }}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Tautan tanda tangan — LPB {tautanTtd?.nomor}</DialogTitle>
             <DialogDescription className="text-xs">
@@ -2407,7 +2407,7 @@ export default function PersediaanPage({ user, onBack }) {
 
       {/* Pratinjau impor referensi SAKTI */}
       <Dialog open={!!sakti} onOpenChange={(o) => { if (!o) setSakti(null); }}>
-        <DialogContent className="max-w-lg w-[calc(100%-1.5rem)] max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-lg w-[calc(100%-1.5rem)]">
           <DialogHeader>
             <DialogTitle>Impor Referensi SAKTI (UC_PER032)</DialogTitle>
             <DialogDescription className="text-xs">

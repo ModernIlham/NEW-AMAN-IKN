@@ -316,7 +316,7 @@ export default function PemusnahanPage({ user, onBack }) {
 
       {/* ── Dialog catat BA ── */}
       <Dialog open={!!form} onOpenChange={(o) => { if (!o) setForm(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Catat BA Pemusnahan</DialogTitle>
             <DialogDescription className="text-xs">
@@ -409,7 +409,7 @@ export default function PemusnahanPage({ user, onBack }) {
 
       {/* ── Dialog lampiran bukti pelaksanaan ── */}
       <Dialog open={!!lamp} onOpenChange={(o) => { if (!o) setLamp(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Lampiran Bukti Pemusnahan</DialogTitle>
             <DialogDescription className="text-xs">

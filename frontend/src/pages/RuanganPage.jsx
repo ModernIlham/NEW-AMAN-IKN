@@ -283,7 +283,7 @@ export default function RuanganPage({ user, onBack }) {
       </main>
 
       <Dialog open={!!form} onOpenChange={(o) => { if (!o) setForm(null); }}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{form?.mode === "tambah" ? "Tambah Ruangan" : `Ubah Ruangan — ${form?.kode_ruangan}`}</DialogTitle>
             <DialogDescription className="text-xs">

@@ -684,7 +684,7 @@ export default function PemeliharaanPage({ user, onBack }) {
 
       {/* ── Dialog catat pemeliharaan ── */}
       <Dialog open={!!form} onOpenChange={(o) => { if (!o) setForm(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Catat Pemeliharaan</DialogTitle>
             <DialogDescription className="text-xs">
@@ -808,7 +808,7 @@ export default function PemeliharaanPage({ user, onBack }) {
 
       {/* ── Dialog jadwal berkala ── */}
       <Dialog open={!!formJadwal} onOpenChange={(o) => { if (!o) setFormJadwal(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{formJadwal?.id ? "Ubah Jadwal Berkala" : "Tambah Jadwal Berkala"}</DialogTitle>
             <DialogDescription className="text-xs">
@@ -887,7 +887,7 @@ export default function PemeliharaanPage({ user, onBack }) {
 
       {/* ── Dialog posting kapitalisasi + Berita Acara perbaikan ── */}
       <Dialog open={!!kap} onOpenChange={(o) => !o && !kap?.saving && setKap(null)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto overflow-x-hidden p-4 sm:p-6">
+        <DialogContent className="max-w-lg overflow-x-hidden p-4 sm:p-6">
           {kap && (
             <>
               <DialogHeader>

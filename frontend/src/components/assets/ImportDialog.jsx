@@ -70,7 +70,7 @@ function ImportDialog({ open, onClose, onSuccess, activityId, preloadFile }) {
   
   return (
     <Dialog open={open} onOpenChange={reset}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto" aria-describedby="import-dialog-desc">
+      <DialogContent className="max-w-lg" aria-describedby="import-dialog-desc">
         <DialogHeader><DialogTitle className="flex items-center gap-2"><Upload className="w-5 h-5 text-blue-600" />Import Data Aset</DialogTitle></DialogHeader>
         <div className="space-y-3" id="import-dialog-desc">
           <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 space-y-2">

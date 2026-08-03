@@ -1106,7 +1106,7 @@ export default function PenggunaanPage({ user, onBack }) {
 
       {/* ── Dialog buka tiket proses ── */}
       <Dialog open={!!formProses} onOpenChange={(o) => { if (!o) setFormProses(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Buka Tiket Proses</DialogTitle>
             <DialogDescription className="text-xs">
@@ -1237,7 +1237,7 @@ export default function PenggunaanPage({ user, onBack }) {
 
       {/* ── Dialog catat SK PSP ── */}
       <Dialog open={!!formPsp} onOpenChange={(o) => { if (!o) setFormPsp(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Catat SK Penetapan Penggunaan</DialogTitle>
             <DialogDescription className="text-xs">
@@ -1335,7 +1335,7 @@ export default function PenggunaanPage({ user, onBack }) {
 
       {/* ── Dialog lampiran SK PSP (arsip scan SK + dokumen pendukung) ── */}
       <Dialog open={!!lampPsp} onOpenChange={(o) => { if (!o) setLampPsp(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Lampiran SK Penetapan Penggunaan</DialogTitle>
             <DialogDescription className="text-xs">
@@ -1418,7 +1418,7 @@ export default function PenggunaanPage({ user, onBack }) {
       <input ref={buktiRef} type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden"
         onChange={(e) => unggahBukti(e.target.files?.[0])} data-testid="bast-bukti-input" />
       <Dialog open={!!riwayatBast} onOpenChange={(o) => { if (!o) setRiwayatBast(null); }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Riwayat BAST — {detail?.pemegang?.nama}</DialogTitle>
             <DialogDescription className="text-xs">
@@ -1501,7 +1501,7 @@ export default function PenggunaanPage({ user, onBack }) {
         onChange={(e) => unggahFotoSerahTerima(e.target.files?.[0])}
         data-testid="bast-foto-st-input" />
       <Dialog open={!!fotoSt} onOpenChange={(o) => { if (!o) setFotoSt(null); }}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Foto Serah Terima Barang</DialogTitle>
             <DialogDescription className="text-xs">
@@ -1638,7 +1638,7 @@ export default function PenggunaanPage({ user, onBack }) {
 
       {/* ── Dialog Buat BAST Serah Terima (multi-aset, per jenis) ── */}
       <Dialog open={!!formBast} onOpenChange={(o) => { if (!o) setFormBast(null); }}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Buat BAST — {detail?.pemegang?.nama}</DialogTitle>
             <DialogDescription className="text-xs">
@@ -1886,7 +1886,7 @@ export default function PenggunaanPage({ user, onBack }) {
       </Dialog>
 
       <Dialog open={!!detail} onOpenChange={(o) => { if (!o) setDetail(null); }}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Aset — {detail?.pemegang?.nama}</DialogTitle>
             <DialogDescription className="text-xs">

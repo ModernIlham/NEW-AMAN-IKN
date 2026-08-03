@@ -778,7 +778,7 @@ export default function PengamananPage({ user, onBack }) {
 
       {/* ── Dialog buka kasus ── */}
       <Dialog open={!!formKasus} onOpenChange={(o) => { if (!o) setFormKasus(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Buka Kasus BMN Bermasalah</DialogTitle>
             <DialogDescription className="text-xs">
@@ -873,7 +873,7 @@ export default function PengamananPage({ user, onBack }) {
 
       {/* ── Dialog catat dokumen kepemilikan ── */}
       <Dialog open={!!formDok} onOpenChange={(o) => { if (!o) setFormDok(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Catat Dokumen Kepemilikan</DialogTitle>
             <DialogDescription className="text-xs">
@@ -988,7 +988,7 @@ export default function PengamananPage({ user, onBack }) {
 
       {/* ── Dialog catat polis asuransi ── */}
       <Dialog open={!!formPolis} onOpenChange={(o) => { if (!o) setFormPolis(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Catat Polis Asuransi BMN</DialogTitle>
             <DialogDescription className="text-xs">
@@ -1109,7 +1109,7 @@ export default function PengamananPage({ user, onBack }) {
 
       {/* ── Dialog isi checklist pengamanan ── */}
       <Dialog open={!!formCek} onOpenChange={(o) => { if (!o) setFormCek(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Checklist Pengamanan Aset</DialogTitle>
             <DialogDescription className="text-xs">
@@ -1243,7 +1243,7 @@ export default function PengamananPage({ user, onBack }) {
 
       {/* ── Dialog daftar aset kurang ── */}
       <Dialog open={!!detail} onOpenChange={(o) => { if (!o) setDetail(null); }}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{detail?.label}</DialogTitle>
             <DialogDescription className="text-xs">

@@ -78,7 +78,7 @@ export default function KartuInventarisasiDialog({ open, identity, onClose }) {
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose?.(); }}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto" data-testid="kartu-inventarisasi-dialog">
+      <DialogContent className="max-w-lg" data-testid="kartu-inventarisasi-dialog">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-blue-600" />

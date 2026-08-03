@@ -152,7 +152,8 @@ export default function CetakStikerDialog({ open, onOpenChange, buildParams, tot
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!sibuk) onOpenChange(o); }}>
-      <DialogContent className="max-w-md max-h-[88vh] overflow-y-auto p-4 sm:p-6">
+      {/* Batas tinggi, guliran, & padding HP kini bawaan DialogContent. */}
+      <DialogContent className="max-w-md">
         <DialogHeader className="space-y-1">
           <DialogTitle className="flex items-center gap-2 text-base">
             <Tags className="w-4 h-4 flex-shrink-0" />Cetak Stiker Label BMN

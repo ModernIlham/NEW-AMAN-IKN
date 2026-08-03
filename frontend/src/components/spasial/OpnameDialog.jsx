@@ -285,7 +285,7 @@ export default function OpnameDialog({ node, labelLevel, isWriter, onClose }) {
       {/* max-h + overflow-y WAJIB: DialogContent bawaan membawa `overflow-hidden`,
           sehingga di layar HP tombol Terapkan & Tutup terpotong di luar viewport
           dan tak ada cara menggulirnya (temuan audit). */}
-      <DialogContent className="max-w-lg max-h-[92vh] overflow-y-auto"
+      <DialogContent className="max-w-lg"
                      data-testid="opname-dialog">
         <DialogHeader>
           <DialogTitle className="text-sm flex items-center gap-1.5">

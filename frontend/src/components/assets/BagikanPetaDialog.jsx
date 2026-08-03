@@ -177,7 +177,7 @@ export default function BagikanPetaDialog({ open, onClose, activity }) {
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-lg w-[calc(100%-1.5rem)] max-h-[90vh] overflow-y-auto overflow-x-hidden p-4 sm:p-6">
+      <DialogContent className="max-w-lg w-[calc(100%-1.5rem)] overflow-x-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Share2 className="w-5 h-5 text-blue-600" />Bagikan Peta Kolaboratif</DialogTitle>
           <DialogDescription className="text-xs">

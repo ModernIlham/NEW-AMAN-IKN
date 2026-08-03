@@ -516,7 +516,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
 
       {/* ── Dialog konsep modul ── */}
       <Dialog open={!!detail} onOpenChange={(o) => { if (!o) setDetail(null); }}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           {detail && (
             <>
               <DialogHeader>

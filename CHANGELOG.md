@@ -67,6 +67,58 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#730] Semua popup dapat batas tinggi — akar "penuh satu layar" ditutup — 2026-08-03
+
+Pemeriksaan popup lain di HP menemukan bahwa dialog Cetak Stiker `[#729]` bukan
+kasus tunggal, melainkan **gejala**. `DialogContent` bersama — dipakai **118
+popup** di seluruh aplikasi — sama sekali tidak punya batas tinggi.
+
+Akibatnya bukan sekadar "penuh". Dialog itu `fixed` dan dipusatkan dengan
+`top-1/2 translate-y-[-50%]`, jadi isi yang lebih panjang dari layar menjulang
+**ke atas DAN ke bawah viewport sekaligus**; karena `fixed`, halaman di
+belakangnya tak bisa digulir untuk menjangkaunya. Judul dan tombol aksinya
+benar-benar tak terjangkau. 52 dari 118 popup sama sekali tanpa penjagaan, dan
+66 sisanya menambal sendiri-sendiri dengan angka yang berbeda-beda
+(80/85/88/90/92vh).
+
+**Yang dipasang di komponen bersama** (`ui/dialog.jsx`):
+
+- `max-h-[var(--tinggi-dialog)]` = `calc(100dvh − 2rem)`, dengan cadangan `vh`
+  untuk peramban lama. `dvh` penting di HP: `100vh` mengabaikan bilah alamat
+  yang menyusut/membesar, sehingga dialog setinggi layar tetap terpotong.
+- `overflow-y-auto overflow-x-hidden` — yang menggulir dialognya, bukan halaman
+  di belakangnya.
+- `p-6` → **`p-4 sm:p-6`**: di layar 360 px, padding 24 px kiri-kanan memakan
+  13% lebar.
+
+**Penyeragaman**: 66 popup yang menambal sendiri kini mengikuti satu bawaan
+(tambalannya dihapus). Tiga dilewati dengan sengaja — AssetTimeline,
+UserManagement, dan DenahEditor memakai pola header/isi-bergulir/footer, dan di
+sana `max-h` menopang perhitungan flex-nya.
+
+Aturannya dipisah ke `lib/kelasDialog.js` + 7 uji, karena satu hal yang mudah
+rusak diam-diam: **bawaan harus bisa ditimpa**. Kalau urutan argumen `cn`
+tertukar, bawaan mengunci semua penimpaan per-dialog — dan kelasnya tetap
+"terlihat ada" di DOM, jadi rusaknya cuma kelihatan di peramban. Tiga mutasi
+(urutan `cn` dibalik, batas tinggi dihapus, padding kembali `p-6`) semuanya
+digagalkan uji.
+
+Dua asumsi keliru sempat masuk lalu dibuang setelah diuji, bukan setelah
+dirasa: (1) batas tinggi mula-mula ditulis sebagai kelas CSS biasa — karena
+letaknya setelah `@tailwind utilities`, ia justru MENGALAHKAN `max-h-*` lokal
+dan membuat penimpaan mustahil; diganti jadi variabel CSS yang dipakai lewat
+utilitas Tailwind. (2) sempat ditambahkan pengecualian manual untuk dialog
+ber-`overflow-hidden` dengan alasan tailwind-merge tak menganggapnya
+bertabrakan — uji mutasi menunjukkan pengecualian itu tak berpengaruh sama
+sekali; ternyata tailwind-merge memang sudah membuang `overflow-x/y` saat ada
+`overflow-hidden` sesudahnya, jadi kodenya disederhanakan.
+
+Diverifikasi: 401 uji frontend lulus, lint bersih, build sukses. Dijalankan di
+Chromium dengan CSS produksi — dialog berisi 40 paragraf kini **819 px** di
+layar 851 (dulu tanpa batas sama sekali) dan **608 px** di layar 640; tak keluar
+layar di kedua ujung, tak ada geser samping, dan tombol paling bawah tetap
+terjangkau serta bisa diklik.
+
 ## [#729] Dialog Cetak Stiker dipadatkan — muat satu layar HP — 2026-08-03
 
 Di HP dialog ini memenuhi satu layar penuh **sebelum sampai ke pilihannya**:

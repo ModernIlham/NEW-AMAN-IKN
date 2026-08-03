@@ -389,6 +389,25 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   white-space: normal !important;
 }
 
+/* ── Batas tinggi dialog — dipakai DialogContent bersama ───────────────────
+   Disimpan sebagai VARIABEL, lalu dipakai lewat `max-h-[var(--tinggi-dialog)]`
+   di DialogContent. Sengaja begitu, bukan sebagai kelas CSS biasa: kelas biasa
+   ditulis SETELAH `@tailwind utilities` sehingga specificity-nya sama tapi
+   urutannya lebih belakang — ia akan diam-diam MENGALAHKAN `max-h-[...]` lokal
+   dan membuat penimpaan per-dialog mustahil. Sebagai utilitas Tailwind,
+   tailwind-merge justru membuang yang bawaan saat sebuah dialog menuliskan
+   batasnya sendiri.
+
+   Dua deklarasi: peramban lama memakai `vh`, peramban modern menimpanya dengan
+   `dvh`. `dvh` penting di HP — `100vh` mengabaikan bilah alamat yang
+   menyusut/membesar saat menggulir, sehingga dialog setinggi `100vh` tetap
+   terpotong di Safari/Chrome Android saat bilahnya tampil. Sisa 2rem = jarak
+   aman dari tepi atas & bawah layar. */
+:root { --tinggi-dialog: calc(100vh - 2rem); }
+@supports (height: 100dvh) {
+  :root { --tinggi-dialog: calc(100dvh - 2rem); }
+}
+
 /* Minimum touch target helper — WCAG 2.5.5 */
 .tap-44 { min-width: 44px; min-height: 44px; }
 .tap-48 { min-width: 48px; min-height: 48px; }

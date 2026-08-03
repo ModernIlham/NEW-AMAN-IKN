@@ -153,7 +153,7 @@ export default function PengesahanDialog({ open, activity, isAdmin, onClose, onS
     <>
     {confirmDialog}
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose?.(); }}>
-      <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto" data-testid="pengesahan-dialog">
+      <DialogContent className="max-w-md" data-testid="pengesahan-dialog">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {disahkan ? <Lock className="w-5 h-5 text-emerald-600" /> : <ShieldCheck className="w-5 h-5 text-blue-600" />}
