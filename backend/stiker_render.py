@@ -238,10 +238,17 @@ def gambar_sampel(c, x, y, w, h, ukuran, lw_mm, lh_mm, mm):
     c.setFont("Helvetica", f["label"])
     c.drawCentredString(x + w / 2, y + pad + f["label"] * 0.3,
                         f"lebar {teks_dim.split(' × ')[0]} mm")
-    _panah_ukur(c, x + pad * 1.4, y + pad, x + pad * 1.4,
+    # Label tinggi diputar 90°: puncak huruf menghadap KIRI (ke arah border).
+    # Dulu baseline dipatok x+pad*0.6 sehingga puncak huruf MENEMBUS garis
+    # putus-putus tepi stiker. Kini koridor dihitung dari metrik Helvetica
+    # (ascent 0.72 / descent 0.21): [border] 0,7mm [teks] 0,8mm [garis ukur].
+    s_lab = f["label"]
+    dasar_x = x + 0.7 * mm + 0.72 * s_lab
+    garis_x = dasar_x + 0.21 * s_lab + 0.8 * mm
+    _panah_ukur(c, garis_x, y + pad, garis_x,
                 min(ty - f["label"] * 0.6, y + h - pad), sirip)
     c.saveState()
-    c.translate(x + pad * 0.6, y + h / 2)
+    c.translate(dasar_x, y + h / 2)
     c.rotate(90)
     c.drawCentredString(0, 0, f"tinggi {teks_dim.split(' × ')[1]}")
     c.restoreState()

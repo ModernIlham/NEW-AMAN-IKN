@@ -67,6 +67,31 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#711] Kartu inventaris: tile terpusat & nilai melipat 2 baris; stiker contoh: label tinggi tak menyentuh garis — 2026-08-02
+
+Dua penyempurnaan lanjutan dari umpan balik pemilik:
+
+- **Kartu Inventaris — tile dirombak** (`routes/cards.py`):
+  - Konten tile (ikon + judul lalu nilai) kini **dipusatkan vertikal sebagai
+    satu blok** di dalam kotaknya — dulu baris judul dipaku ke tepi atas
+    kotak sehingga "judul dan ikonnya berada di atas" dengan rongga kosong
+    di bawah.
+  - **Nilai panjang melipat ke baris kedua**, tidak lagi dipenggal "..":
+    LOKASI, ESELON I/II, SUPPLIER, PEROLEHAN DARI, NO. KONTRAK/BAST/SPM
+    kini tampil utuh hingga 2 baris (pagar pemenggal dilonggarkan menjadi
+    kapasitas 2 baris tile-nya, mis. lokasi 34 → 72 huruf).
+  - Empat tile spesifikasi Panel A (KATEGORI, S/N, MEREK/MODEL, LOKASI)
+    kini **ber-alas kotak** seperti Panel B — gaya seragam — dengan tinggi
+    cukup untuk 2 baris nilai; tinggi baris `info_col` ditata ulang
+    (18,2 + 22,7 + 11,1 mm = 52 mm) agar tetap rata dengan tinggi foto.
+- **Stiker CONTOH — label "tinggi … mm" tak lagi menyentuh garis**
+  (`stiker_render.py`): label tegak itu diputar 90° sehingga puncak huruf
+  menghadap kiri; dulu baseline dipatok terlalu mepet (x+0,96 mm) dan
+  puncak huruf MENEMBUS garis putus-putus tepi stiker. Kini koridor
+  dihitung dari metrik font Helvetica (ascent 0,72 / descent 0,21):
+  [border] 0,7 mm [teks] 0,8 mm [garis ukur] — diverifikasi render ketiga
+  ukuran (besar/sedang/kecil): label bersih dari border maupun garis ukur.
+
 ## [#710] Marquee "..." kini menampilkan teks UTUH sampai huruf terakhir — 2026-08-02
 
 Tindak lanjut marquee global `[#708]`: teks yang terpotong memang bergeser
