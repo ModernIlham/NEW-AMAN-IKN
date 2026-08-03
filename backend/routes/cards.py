@@ -393,25 +393,27 @@ def create_ktp_card_elements(asset, history=None):
     ls = ParagraphStyle
 
     # --- Extract data ---
+    # Pagar panjang teks = kapasitas DUA baris tile-nya (nilai kini boleh
+    # melipat ke baris kedua di field_tile, tidak lagi dipenggal satu baris).
     code = s(asset.get('asset_code'), 18)
     nup = s(asset.get('NUP'), 8)
     name = s(asset.get('asset_name'), 60)
-    cat = s(asset.get('category'), 22)
-    sn = s(asset.get('serial_number'), 22)
-    brand = s(asset.get('brand'), 16)
-    mdl = s(asset.get('model'), 16)
+    cat = s(asset.get('category'), 44)
+    sn = s(asset.get('serial_number'), 40)
+    brand = s(asset.get('brand'), 20)
+    mdl = s(asset.get('model'), 20)
     cond = s(asset.get('condition'), 14)
     stat = s(asset.get('status'), 14)
-    eselon1 = s(asset.get('eselon1'), 40)
-    eselon2 = s(asset.get('eselon2'), 40)
-    loc = s(asset.get('location'), 34)
+    eselon1 = s(asset.get('eselon1'), 72)
+    eselon2 = s(asset.get('eselon2'), 72)
+    loc = s(asset.get('location'), 72)
     usr = s(asset.get('user'), 40)
     pdate = s(asset.get('purchase_date'), 20)
-    spm = s(asset.get('nomor_spm'), 34)
-    kontrak = s(asset.get('nomor_kontrak'), 40)
-    bast = s(asset.get('nomor_bast') or asset.get('nomor_bukti_perolehan'), 40)
-    supplier = s(asset.get('supplier'), 34)
-    perolehan = s(asset.get('perolehan_dari_nama'), 34)
+    spm = s(asset.get('nomor_spm'), 60)
+    kontrak = s(asset.get('nomor_kontrak'), 60)
+    bast = s(asset.get('nomor_bast') or asset.get('nomor_bukti_perolehan'), 60)
+    supplier = s(asset.get('supplier'), 72)
+    perolehan = s(asset.get('perolehan_dari_nama'), 72)
     kreg = s(asset.get('kode_register'), 40)
 
     # --- Penanggung jawab = pengguna (asset.user) + qualifier melekat ---
@@ -460,26 +462,35 @@ def create_ktp_card_elements(asset, history=None):
     # --- Reusable field tile (icon + label + value) ---
     def field_tile(icon, icon_color, label, value, width, boxed=False,
                    min_h=9 * mm, raw=False):
-        # Nilai di-VALIGN MIDDLE pada sisa tinggi tile — dulu TOP, sehingga
-        # nilai menempel tepat di bawah label dan dasar tile menganga kosong
-        # ("mepet ke atas" pada tile ber-alas, keluhan pemilik).
+        # Konten (baris ikon+label lalu baris nilai) DIPUSATKAN vertikal
+        # sebagai SATU blok di dalam kotak tile setinggi `min_h` — dulu baris
+        # label dipaku ke tepi atas kotak sehingga judul & ikon tampak
+        # "menempel di atas" dengan ruang kosong menganga di bawah (keluhan
+        # pemilik). Nilai berupa Paragraph yang BOLEH pecah hingga 2 baris:
+        # lokasi/eselon panjang membuat baris baru di bawahnya, bukan
+        # dipenggal ".." (pemenggal `s()` kini hanya pagar 2-baris terjauh).
         val = value if raw else esc(value)
-        t = Table([
+        isi_w = width - 2.6 * mm
+        inner = Table([
             [card_icon(icon, 3.4 * mm, icon_color), Paragraph(label, lbl_style)],
             [Paragraph(val, val_style)],
-        ], colWidths=[4.6 * mm, max(width - 4.6 * mm, 6 * mm)],
-            rowHeights=[3.9 * mm, max(min_h - 3.9 * mm, 4 * mm)])
-        style = [
+        ], colWidths=[4.6 * mm, max(isi_w - 4.6 * mm, 6 * mm)])
+        inner.setStyle(TableStyle([
             ('SPAN', (0, 1), (1, 1)),
-            ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
-            ('VALIGN', (0, 1), (1, 1), 'MIDDLE'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ('TOPPADDING', (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 0.5 * mm),
+            ('BOTTOMPADDING', (0, 1), (1, 1), 0),
+        ]))
+        t = Table([[inner]], colWidths=[width], rowHeights=[min_h])
+        style = [
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('LEFTPADDING', (0, 0), (-1, -1), 1.6 * mm),
             ('RIGHTPADDING', (0, 0), (-1, -1), 1 * mm),
-            ('TOPPADDING', (0, 0), (-1, -1), 0.3 * mm),
-            ('TOPPADDING', (0, 0), (0, 0), 0.6 * mm),
-            ('BOTTOMPADDING', (0, 0), (0, 0), 0.2 * mm),
-            ('BOTTOMPADDING', (0, 1), (1, 1), 0.8 * mm),
-            ('TOPPADDING', (0, 1), (1, 1), 0),
+            ('TOPPADDING', (0, 0), (-1, -1), 0.4 * mm),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0.4 * mm),
         ]
         if boxed:
             style += [
@@ -578,7 +589,7 @@ def create_ktp_card_elements(asset, history=None):
         ('TOPPADDING', (0, 0), (-1, -1), 0), ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
     ]))
     top_area = Table([[code_block, qr_el]],
-                     colWidths=[code_w, qr_size + 2.5 * mm], rowHeights=[18 * mm])
+                     colWidths=[code_w, qr_size + 2.5 * mm], rowHeights=[17.8 * mm])
     top_area.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
@@ -587,21 +598,21 @@ def create_ktp_card_elements(asset, history=None):
         ('TOPPADDING', (0, 0), (-1, -1), 0), ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
     ]))
 
-    # Spec grid ringkas: nilai dibatasi agar tetap SATU baris (LOKASI lengkap
-    # tetap tampil utuh di Panel B). Cegah wrap yang menabrak baris badges.
-    loc_short = s(asset.get('location'), 26)
+    # Spec grid: tile ber-alas (samakan gaya Panel B) setinggi 2 baris nilai —
+    # LOKASI panjang melipat ke baris kedua, tidak lagi dipenggal "..".
+    loc_short = s(asset.get('location'), 52)
     spec_grid = Table([
-        [field_tile('tag', BLUE, "KATEGORI", cat, half, min_h=9.5 * mm),
-         field_tile('barcode', BLUE, "S/N", sn, half, min_h=9.5 * mm)],
-        [field_tile('tag', BLUE, "MEREK/MODEL", f"{brand} / {mdl}", half, min_h=9.5 * mm),
-         field_tile('pin', ORANGE, "LOKASI", loc_short, half, min_h=9.5 * mm)],
-    ], colWidths=[half + 1 * mm, half + 1 * mm], rowHeights=[10 * mm, 10 * mm])
+        [field_tile('tag', BLUE, "KATEGORI", cat, half, boxed=True, min_h=10.6 * mm),
+         field_tile('barcode', BLUE, "S/N", sn, half, boxed=True, min_h=10.6 * mm)],
+        [field_tile('tag', BLUE, "MEREK/MODEL", f"{brand} / {mdl}", half, boxed=True, min_h=10.6 * mm),
+         field_tile('pin', ORANGE, "LOKASI", loc_short, half, boxed=True, min_h=10.6 * mm)],
+    ], colWidths=[half + 1 * mm, half + 1 * mm], rowHeights=[11.1 * mm, 11.1 * mm])
     spec_grid.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('LEFTPADDING', (0, 0), (-1, -1), 0),
         ('RIGHTPADDING', (0, 0), (-1, -1), 0),
         ('TOPPADDING', (0, 0), (-1, -1), 0),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 1 * mm),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0.5 * mm),
     ]))
 
     cond_baik = cond.lower().startswith('baik')
@@ -643,7 +654,7 @@ def create_ktp_card_elements(asset, history=None):
         [top_area],
         [spec_grid],
         [badges],
-    ], colWidths=[info_w], rowHeights=[19 * mm, 20 * mm, 12 * mm])
+    ], colWidths=[info_w], rowHeights=[18.2 * mm, 22.7 * mm, 11.1 * mm])
     info_col.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('LEFTPADDING', (0, 0), (-1, -1), 0),
