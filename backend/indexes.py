@@ -297,6 +297,14 @@ async def create_indexes() -> None:
         # job > 7 hari (created_at BSON datetime) agar koleksi tak menumpuk.
         await db.background_jobs.create_index("job_id", unique=True)
         await db.background_jobs.create_index("created_at", expireAfterSeconds=7 * 86400)
+        # Pusat Unduhan (routes/unduhan.py): lookup per id, daftar per pemilik
+        # terbaru-dulu, dan TTL PER-DOKUMEN pada `hapus_pada` (dibuat + 30 hari,
+        # expireAfterSeconds=0 = hapus tepat saat nilainya lewat) — hasil unduhan
+        # "terurai jadi nol setelah 1 bulan"; blob GridFS-nya disapu
+        # bersihkan_unduhan_kedaluwarsa() di loop pemeliharaan jobs.py.
+        await db.unduhan.create_index("unduhan_id", unique=True)
+        await db.unduhan.create_index([("dibuat_oleh", 1), ("created_at", -1)])
+        await db.unduhan.create_index("hapus_pada", expireAfterSeconds=0)
         # ── Indeks kunci-sort/filter daftar aset yang belum tertutup (audit perf) ──
         # get_assets menawarkan sort price/condition/eselon1 (dengan tiebreak id)
         # dan filter condition/eselon/stiker_status/inventory_status. Tanpa indeks,
@@ -327,6 +335,14 @@ async def create_indexes() -> None:
         try:
             await db["fs.files"].create_index("metadata.job_id", sparse=True,
                                               name="gridfs_job_artifact")
+        except Exception:
+            pass
+        # Sama untuk artifact Pusat Unduhan (routes/unduhan.py): sapuan retensi
+        # memindai metadata.unduhan_id — tanpa indeks = COLLSCAN koleksi foto.
+        try:
+            await db["fs.files"].create_index("metadata.unduhan_id",
+                                              sparse=True,
+                                              name="gridfs_unduhan_artifact")
         except Exception:
             pass
         # Konverter WebP latar: mencari foto aset JPEG yang belum dikonversi

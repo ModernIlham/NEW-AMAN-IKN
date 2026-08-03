@@ -67,6 +67,53 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#713] Pusat Unduhan: unduhan besar via job latar ber-progres + retensi 30 hari + pembersih disk — 2026-08-03
+
+Keluhan: mengunduh laporan besar (mis. "Laporan Eksekutif per Barang
+Serupa") sering gagal **"Waktu unduh habis"** karena file digenerate SAAT
+request dan timeout klien memutusnya; ditambah disk VPS terus membesar
+pelan.
+
+**Pusat Unduhan** (`routes/unduhan.py`, `components/PusatUnduhan.jsx`):
+laporan berat kini disusun DI SERVER sebagai job latar, hasilnya tersimpan
+di GridFS dan bisa **diunduh ulang kapan saja tanpa proses ulang**.
+
+- **Panel melayang global** (kanan-bawah, hidup lintas halaman) menampilkan
+  tiap unduhan dengan progresnya sendiri; begitu selesai, file terunduh
+  otomatis dan tetap bisa diunduh lagi dari panel.
+- **Fallback otomatis**: `downloadFileWithProgress` yang kehabisan waktu
+  (>2 menit, mis. laporan eksekutif) tidak lagi dibuang — otomatis
+  didaftarkan ke Pusat Unduhan dan dilanjutkan di latar. Tombol laporan
+  terberat (Eksekutif per Barang Serupa, Data Aset) memakai ambang 45 detik.
+- **Antrean berjeda & andal untuk file banyak/besar**: maksimal 1 job per
+  proses uvicorn (jeda 2 dtk antar job), maksimal 1 unduhan berjalan per
+  pengguna, plafon hasil 200 MB, batas 30 menit ditegakkan
+  (`asyncio.timeout`), retry mengikuti `Retry-After` bila server sibuk.
+  Hasil **dialirkan langsung ke GridFS** (tak menampung dua kali di RAM) dan
+  disajikan **streaming** (bukan dimuat penuh ke memori).
+- **Retensi "terurai jadi nol setelah 1 bulan"**: dokumen unduhan ber-TTL
+  per-dokumen 30 hari; blob GridFS-nya disapu `bersihkan_unduhan_kedaluwarsa`
+  di loop pemeliharaan (juga sekali saat startup untuk melepas slot job yang
+  mati saat server dimulai ulang). Indeks `metadata.unduhan_id` ditambahkan
+  agar sapuan terarah, bukan memindai seluruh koleksi foto.
+
+**Pertumbuhan disk VPS — jawaban & perbaikan.** Investigasi menemukan
+penyumbang utama adalah **arsip backup** di `backend/backup_arsip` (tiap ZIP
+memuat seluruh basis data + semua foto; retensi 7 arsip = ±7× ukuran DB, dan
+arsip **manual** tak pernah terhapus otomatis) serta **sisa file kerja
+restore** di `backend/backup_temp` yang dulu hanya disapu saat admin memulai
+backup manual. Perbaikan: penyapu `backup_temp` (>1 jam) kini berjalan
+**tiap 5 menit** oleh scheduler — TETAPI dilewati saat ada job backup/restore
+aktif agar tak menghapus file kerja restore yang masih berjalan. Foto lama
+memang sengaja tak dihapus (data aset); yang dapat dikosongkan pemilik:
+arsip backup lama di halaman Pengaturan (backup manual harus dihapus
+manual).
+
+Diverifikasi review adversarial 3-lensa (keamanan/kebenaran/frontend, 16
+temuan ditutup termasuk bypass validasi path via percent-encoding, penegakan
+timeout, streaming anti-OOM, regresi penyapu backup, tumpang-tindih widget
+melayang) + 11 uji unit baru.
+
 ## [#712] Tooltip hover tak lagi berkedip saat teks bermarquee — 2026-08-03
 
 Lanjutan `[#710]`: di desktop, kolom ber-tooltip (nama barang, lokasi,

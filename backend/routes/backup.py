@@ -964,6 +964,20 @@ async def backup_scheduler_loop():
                                 int(s.get("retensi", 7) or 7))
         except Exception as e:
             logger.warning(f"Scheduler backup otomatis: {e}")
+        # Sapu sisa backup_temp (>1 jam) TIAP tick — dulu hanya saat admin
+        # memulai backup manual, sehingga sisa restore yang crash (restore_*.zip
+        # + safety_*.zip berisi snapshot penuh GridFS) menetap memakan disk.
+        # PENTING: LEWATI bila ada job backup/restore AKTIF — restore DB besar
+        # bisa berjalan > 1 jam dan file kerjanya (restore_*.zip, safety_*.zip)
+        # masih dibutuhkan untuk rollback; menghapusnya di tengah jalan bisa
+        # menggagalkan pemulihan dan meninggalkan DB ter-wipe separuh.
+        try:
+            aktif = await db.backup_jobs.find_one(
+                {"status": {"$in": ["queued", "running"]}}, {"_id": 1})
+            if not aktif:
+                await cleanup_old_files()
+        except Exception as e:
+            logger.warning(f"Sapu backup_temp: {e}")
         await asyncio.sleep(300)
 
 

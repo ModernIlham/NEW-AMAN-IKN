@@ -14,8 +14,15 @@
 import axios from "axios";
 import { toast } from "sonner";
 
+import { mulaiUnduhanPusat, pathDariUrl } from "./pusatUnduhan";
+
 // Interval minimal antar update toast (~4x per detik)
 const PROGRESS_THROTTLE_MS = 250;
+
+// Timeout BAKU unduhan (dulu ikut lantai axios global 20 dtk — laporan besar
+// putus "Waktu unduh habis"). Lewat 2 menit, unduhan GET otomatis dialihkan
+// ke Pusat Unduhan (job latar server) alih-alih dibuang.
+const TIMEOUT_UNDUH_BAKU = 120000;
 
 let downloadSeq = 0;
 
@@ -105,18 +112,62 @@ export function makeDownloadProgress(label) {
  * @param {Object} [opts.params] - Query params tambahan (axios `params`).
  * @param {"get"|"post"} [opts.method="get"] - POST untuk endpoint ber-body (mis. batch ZIP).
  * @param {*} [opts.data] - Body request saat method "post".
- * @param {number} [opts.timeout] - Timeout axios (ms).
+ * @param {number} [opts.timeout] - Timeout axios (ms); baku 120 dtk.
  * @param {string} [opts.timeoutMessage] - Pesan khusus saat timeout.
- * @returns {Promise<import("axios").AxiosResponse>} respons axios (blob).
+ * @param {boolean|"langsung"} [opts.viaPusat] - `"langsung"`: langsung
+ *   daftarkan ke Pusat Unduhan tanpa mencoba unduh sinkron (untuk laporan yang
+ *   SUDAH diketahui berat) — HANYA berlaku untuk method GET dengan URL API
+ *   internal (`.../api/...`); di luar itu tetap unduh sinkron. `false`:
+ *   matikan fallback otomatis. Default: coba sinkron dulu, saat timeout
+ *   dialihkan otomatis (hanya method GET, URL API internal).
+ * @returns {Promise<import("axios").AxiosResponse|{viaPusat: true}>} respons
+ *   axios (blob), atau {viaPusat:true} bila dialihkan ke Pusat Unduhan.
  * @throws error axios asli (setelah toast.error) agar caller bisa finally/cleanup.
  */
 export async function downloadFileWithProgress(url, filename, opts = {}) {
-  const { label = filename, params, method = "get", data, timeout, timeoutMessage } = opts;
+  const { label = filename, params, method = "get", data, timeout,
+          timeoutMessage, viaPusat } = opts;
+
+  // URL final (query params ikut) → path internal /api untuk Pusat Unduhan.
+  // Pakai axios.getUri agar serialisasi query PERSIS sama dengan request
+  // sinkron (array/undefined/null) — kalau tidak, file yang disusun di latar
+  // bisa memakai filter berbeda dari yang diminta user.
+  const urlFinal = params ? axios.getUri({ url, params }) : url;
+  const kePusat = async (toastId) => {
+    const path = pathDariUrl(urlFinal);
+    if (!path) return false;
+    await mulaiUnduhanPusat({ path, namaFile: filename, label });
+    toast.info(
+      `${label}: disusun di latar belakang — pantau di panel Pusat Unduhan `
+      + "(kanan bawah); hasilnya tersimpan 30 hari",
+      { id: toastId, duration: 6000 });
+    return true;
+  };
+
   const { toastId, onDownloadProgress } = makeDownloadProgress(label);
+  if (viaPusat === "langsung") {
+    // "langsung" hanya berlaku untuk GET ke URL API internal (.../api/...).
+    // Di luar itu turun ke unduhan sinkron (dengan peringatan konsol) alih-alih
+    // gagal senyap, agar caller keliru tetap mendapat file.
+    if (method !== "get") {
+      console.warn("[unduh] viaPusat 'langsung' hanya mendukung GET; "
+        + "lanjut unduhan sinkron.");
+    } else {
+      try {
+        if (await kePusat(toastId)) return { viaPusat: true };
+        console.warn("[unduh] URL bukan /api internal; Pusat Unduhan "
+          + "dilewati, lanjut unduhan sinkron.");
+      } catch (err) {
+        const msg = await extractErrorMessage(err, timeoutMessage);
+        toast.error(`Gagal mengunduh ${label}: ${msg}`, { id: toastId });
+        throw err;
+      }
+    }
+  }
   try {
     const config = { responseType: "blob", onDownloadProgress };
     if (params) config.params = params;
-    if (timeout) config.timeout = timeout;
+    config.timeout = timeout || TIMEOUT_UNDUH_BAKU;
     const r = method === "post"
       ? await axios.post(url, data, config)
       : await axios.get(url, config);
@@ -132,6 +183,23 @@ export async function downloadFileWithProgress(url, filename, opts = {}) {
     toast.success(`${label} berhasil diunduh`, { id: toastId });
     return r;
   } catch (err) {
+    // Waktu habis pada GET = server kemungkinan MASIH menyusun file — jangan
+    // dibuang: daftarkan ke Pusat Unduhan agar dilanjutkan di latar dan bisa
+    // diunduh dari sana tanpa request ulang.
+    const habisWaktu = err?.code === "ECONNABORTED"
+      || (typeof err?.message === "string" && err.message.includes("timeout"));
+    if (habisWaktu && method === "get" && viaPusat !== false) {
+      try {
+        if (await kePusat(toastId)) return { viaPusat: true };
+      } catch (errPusat) {
+        // Pendaftaran ke Pusat Unduhan ditolak (409 kuota / 429 limiter /
+        // 400 path) — tampilkan ALASAN NYATA itu, bukan pesan timeout yang
+        // menyesatkan; caller tetap menerima error timeout asli.
+        const msgPusat = await extractErrorMessage(errPusat, timeoutMessage);
+        toast.error(`Gagal mengunduh ${label}: ${msgPusat}`, { id: toastId });
+        throw err;
+      }
+    }
     const msg = await extractErrorMessage(err, timeoutMessage);
     toast.error(`Gagal mengunduh ${label}: ${msg}`, { id: toastId });
     throw err;

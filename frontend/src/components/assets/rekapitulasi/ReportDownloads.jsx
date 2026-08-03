@@ -165,7 +165,8 @@ export default function ReportDownloads({
       await downloadFileWithProgress(
         `${API}/inventory-activities/${activityId}/executive-data-pdf?page=${pageNum}${detailFieldsParam}`,
         `Data_Aset_${startIdx}-${endIdx}_${activityId.substring(0, 8)}.pdf`,
-        { label: `Data Aset ${startIdx}-${endIdx}` }
+        // Laporan berat: lewat 45 dtk otomatis dilanjutkan di Pusat Unduhan.
+        { label: `Data Aset ${startIdx}-${endIdx}`, timeout: 45000 }
       );
     } catch { /* toast error sudah ditangani helper */ } finally {
       setDataDownloading(null);
@@ -178,7 +179,9 @@ export default function ReportDownloads({
       await downloadFileWithProgress(
         `${API}/inventory-activities/${activityId}/executive-grouped-pdf${detailFieldsValue ? `?detail_fields=${detailFieldsValue}` : ""}`,
         "Laporan_Eksekutif_Barang_Serupa.pdf",
-        { label: "Laporan Eksekutif per Barang Serupa" }
+        // Laporan paling berat (agregasi semua aset kegiatan): lewat 45 dtk
+        // otomatis dilanjutkan di Pusat Unduhan alih-alih gagal timeout.
+        { label: "Laporan Eksekutif per Barang Serupa", timeout: 45000 }
       );
     } catch { /* toast error sudah ditangani helper */ } finally {
       setGroupedDownloading(false);
