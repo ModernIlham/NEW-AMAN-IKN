@@ -190,6 +190,11 @@ async def create_indexes() -> None:
         # Register SK penetapan penggunaan: urut tanggal + jalur id
         await db.psp.create_index("tanggal_sk")
         await db.psp.create_index("id", unique=True)
+        # Keterangan PSP per aset di daftar inventarisasi: SETIAP halaman daftar
+        # aset (dan tiap halaman snapshot luring) menanyakan "SK mana yang
+        # mencakup 50 id ini". Tanpa indeks multikey ini pertanyaan itu memindai
+        # seluruh register pada tiap muat halaman.
+        await db.psp.create_index("aset.asset_id")
         # Tiket penertiban wasdal: daftar per status/tenggat + jalur id
         await db.penertiban.create_index([("status", 1), ("tenggat", 1)])
         await db.penertiban.create_index("id", unique=True)

@@ -37,6 +37,7 @@ import { compressImageFile, compressDataUrl, generateThumbnailFromDataUrl, dataU
 import { reserveDummyNup as reserveDummyNupLib } from "../../lib/dummyNup";
 import { statusInventarisasiOtomatis, autoInventarisasiEnabled } from "../../lib/inventoryStatus";
 import { terapkanHeaderSatker } from "../../lib/satkerAktif";
+import { keteranganPsp } from "../../lib/tandaPsp";
 
 // ============================================================================
 // INVENTORY CLASSIFICATION INFO DATA (SE 17/SE/M/2024)
@@ -515,6 +516,8 @@ const AssetForm = memo(({
   // Dokumen BAST tersimpan di server (GridFS): {file_id, filename} — hanya
   // bermakna pada mode edit (unggah butuh asset id).
   const [bastInfo, setBastInfo] = useState(null);
+  // Keterangan PSP baca-saja (dari server) — lihat bagian Pengadaan.
+  const [infoPspAset, setInfoPspAset] = useState(null);
   const [bastUploading, setBastUploading] = useState(false);
 
   const emptyForm = useMemo(() => ({
@@ -739,6 +742,10 @@ const AssetForm = memo(({
         const lightData = buildEditFormData(editAsset, activity?.id);
         setAssetVersion(Number(editAsset.version) || 1);
         setBastInfo(editAsset.bast_file_id ? { file_id: editAsset.bast_file_id, filename: editAsset.bast_filename || "", usang: _bastUsangDari(editAsset) } : null);
+        // Baris cache luring memakai proyeksi daftar yang SAMA dengan daring,
+        // jadi `psp` ikut tersimpan di snapshot dan No. PSP tetap terbaca
+        // saat petugas kehilangan sinyal.
+        setInfoPspAset(editAsset.psp || null);
         setFormData(lightData);
         // Diff baseline = same cached row, so submit PATCHes only what the
         // user actually changed while offline.
@@ -757,6 +764,10 @@ const AssetForm = memo(({
           const a = r.data;
           const lightData = buildEditFormData(a, activity?.id);
           setBastInfo(a.bast_file_id ? { file_id: a.bast_file_id, filename: a.bast_filename || "", usang: _bastUsangDari(a) } : null);
+          // Keterangan PSP turunan dari server — SENGAJA di luar formData:
+          // ia tidak pernah dikirim balik saat simpan (baca-saja), jadi tak
+          // boleh ikut perbandingan "ada perubahan" milik originalDataRef.
+          setInfoPspAset(a.psp || null);
           setFormData(lightData);
           setIsFormLoading(false);
 
@@ -2847,6 +2858,27 @@ const AssetForm = memo(({
             </>)}
             
             {formSection === "procurement" && (<>
+              {/* No. PSP — BACA SAJA, dan memang tidak boleh diketik di sini.
+                  Nomornya bukan milik form aset: ia datang dari register SK PSP
+                  (dicatat di halaman Aset per Pemegang) atau dari referensi
+                  hasil impor SIMAN V2. Kolom yang bisa diketik akan membuat
+                  dua sumber kebenaran untuk satu fakta yang sama. Angkanya
+                  sudah ter-scope per satker oleh server (lengkapi_psp). */}
+              <div className="space-y-1">
+                <Label className="text-xs">No. PSP</Label>
+                <Input
+                  value={infoPspAset?.no_psp || ""}
+                  readOnly
+                  placeholder="Belum ada penetapan status penggunaan"
+                  className="h-8 bg-muted/60 text-muted-foreground cursor-default"
+                  data-testid="asset-no-psp"
+                />
+                <p className="text-[10px] text-muted-foreground leading-snug">
+                  {infoPspAset
+                    ? keteranganPsp({ psp: infoPspAset })
+                    : "Terisi otomatis setelah PSP tercatat di Penggunaan › Aset per Pemegang, atau terbaca dari impor SIMAN V2."}
+                </p>
+              </div>
               <div className="space-y-1"><Label className="text-xs">Nomor SPM</Label><Input name="nomor_spm" value={formData.nomor_spm} onChange={handleInputChange} placeholder="02847T/621001/2024" className="h-8" /></div>
               <div className="space-y-1"><Label className="text-xs">Perolehan Dari</Label><Input name="perolehan_dari_nama" value={formData.perolehan_dari_nama} onChange={handleInputChange} className="h-8" /></div>
               <div className="space-y-1"><Label className="text-xs">Nomor Kontrak</Label><Input name="nomor_kontrak" value={formData.nomor_kontrak} onChange={handleInputChange} className="h-8" /></div>

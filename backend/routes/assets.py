@@ -29,8 +29,9 @@ from shared_utils import (
     ensure_activity_not_sealed,
     get_document_from_gridfs, delete_document_from_gridfs,
     kode_satker_user, pastikan_akses_aset, pastikan_akses_kegiatan_id,
-    scope_query_aset,
+    scope_query_aset, scope_query_field_satker,
 )
+from penggunaan_utils import info_psp_aset, peta_psp_dari_sk
 from routes.websocket import notify_asset_change
 from photo_rotate_utils import normalisasi_derajat, rotate_jpeg_bytes
 from meili_utils import jadwalkan_sync, jadwalkan_hapus, cari_id_aset
@@ -217,6 +218,33 @@ LIST_PROJECTION = {
     }}
     # EXCLUDED: "photos", "document_checklist" - fetched via GET /assets/{id}
 }
+
+
+async def lengkapi_psp(assets, user):
+    """Tempelkan keterangan `psp` per aset — SATU query untuk seluruh halaman.
+
+    Dua sumber digabung oleh `info_psp_aset` (register SK PSP menang atas
+    referensi SIMAN). `siman` sudah ikut LIST_PROJECTION, jadi yang perlu
+    diambil dari DB hanyalah SK register yang mencakup id di halaman ini —
+    bukan N query, dan bukan seluruh register.
+
+    Query di-scope satker via `scope_query_field_satker`: SK milik satker lain
+    tak boleh menerangi aset siapa pun, sekalipun id-nya kebetulan tercantum.
+    """
+    ids = [str(a.get("id")) for a in (assets or []) if a.get("id")]
+    if not ids:
+        return assets
+    sk = await db.psp.find(
+        scope_query_field_satker(user, {"aset.asset_id": {"$in": ids}}),
+        {"_id": 0, "nomor_sk": 1, "tanggal_sk": 1, "jenis": 1,
+         "status_pengajuan": 1, "aset.asset_id": 1},
+    ).to_list(length=None)
+    peta = peta_psp_dari_sk(sk)
+    for a in assets:
+        info = info_psp_aset(a, peta)
+        if info:
+            a["psp"] = info
+    return assets
 
 
 def build_asset_search_query(
@@ -452,7 +480,8 @@ async def get_assets(
         db.assets.count_documents(query),
         db.assets.aggregate(pipeline).to_list(page_size)
     )
-    
+    await lengkapi_psp(assets, _user)
+
     total_pages = max(1, (total + page_size - 1) // page_size)
     
     return {
@@ -538,6 +567,10 @@ async def get_assets_offline_snapshot(
         db.assets.count_documents(base_query),
         db.assets.aggregate(pipeline).to_list(limit),
     )
+    # Snapshot luring memakai bentuk yang SAMA dengan daftar daring — termasuk
+    # `psp`. Tanpa ini penanda ber-PSP lenyap begitu petugas kehilangan sinyal,
+    # dan itu terbaca sebagai bug, bukan sebagai "sedang luring".
+    await lengkapi_psp(assets, _user)
     # Kursor halaman berikut = id item terakhir bila halaman PENUH (mungkin masih
     # ada); halaman tak-penuh → "" (penanda selesai, kembar dgn items<limit).
     next_cursor = assets[-1]["id"] if len(assets) == limit and assets else ""
@@ -1096,6 +1129,7 @@ async def get_asset(asset_id: str, exclude_media: bool = False, _user: dict = De
         # return tanpa guard — IDOR baca metadata aset satker lain by id
         # (dipanggil pada SETIAP buka lightbox/form edit).
         await pastikan_akses_aset(_user, docs[0])
+        await lengkapi_psp(docs, _user)
         return AssetResponse(**docs[0])
     asset = await db.assets.find_one({"id": asset_id}, {"_id": 0})
     if not asset:
@@ -1122,6 +1156,7 @@ async def get_asset(asset_id: str, exclude_media: bool = False, _user: dict = De
         cover = asset.get("thumbnail_index") or 0
         if 0 <= cover < len(hydrated) and hydrated[cover]:
             asset["photo"] = hydrated[cover]
+    await lengkapi_psp([asset], _user)
     return AssetResponse(**asset)
 
 

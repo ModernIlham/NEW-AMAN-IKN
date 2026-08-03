@@ -3,6 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { Camera, Briefcase, MapPin, Tag, CreditCard, Trash2, History, ClipboardCheck, Lock, Cloud, CloudOff, Check, RotateCcw, Clock, Loader2, AlertTriangle, BookOpen, User, RefreshCcw, ShieldCheck } from "lucide-react";
 import { sisaGaransi } from "../../lib/garansi";
 import { useSinkronSiman } from "../../lib/simanSync";
+import { berTitikHijau, keteranganPsp } from "../../lib/tandaPsp";
 import { Button } from "../ui/button";
 import {
   Tooltip,
@@ -53,6 +54,24 @@ const SimanMarker = memo(({ asset }) => {
   );
 });
 SimanMarker.displayName = "SimanMarker";
+
+// Titik hijau "ber-PSP + tersinkron SIMAN V2" di pojok kanan atas FOTO baris.
+// Komponen terpisah dengan alasan yang sama seperti SimanMarker: baris digambar
+// di dalam map virtualizer, sedangkan penanda ini perlu tahu apakah aset baru
+// saja disinkronkan pada sesi ini (hook useSinkronSiman).
+const TitikPsp = memo(({ asset }) => {
+  const { synced } = useSinkronSiman(asset);
+  if (!berTitikHijau(asset, synced)) return null;
+  return (
+    <span
+      className="absolute top-0 right-1 z-10 w-2 h-2 rounded-full bg-emerald-500 ring-1 ring-card shadow"
+      title={keteranganPsp(asset, synced)}
+      aria-label={keteranganPsp(asset, synced)}
+      data-testid={`row-psp-${asset.id}`}
+    />
+  );
+});
+TitikPsp.displayName = "TitikPsp";
 
 // Helper: truncated cell with optional icon
 const TruncatedCell = memo(({ text, icon: Icon }) => {
@@ -298,6 +317,7 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
                       {hasPhoto ? <img src={photo} alt="" className="w-full h-full object-cover" loading="lazy" /> : <Camera className="w-3 h-3 text-muted-foreground" />}
                     </div>
                   )}
+                  <TitikPsp asset={a} />
                 </div>
 
                 {/* Identitas: Code + NUP + sinkron SIMAN + Category */}
