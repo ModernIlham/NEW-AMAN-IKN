@@ -11,11 +11,15 @@ import {
   MapPin, MessageSquarePlus, Plus, X, Loader2, Send, Users, Clock,
   AlertTriangle, RefreshCcw, WifiOff, Layers, Boxes, Trash2, ShieldCheck,
   Eraser, MousePointerClick, MessageSquare, ChevronLeft, ChevronRight, ImageIcon, Ruler,
+  SlidersHorizontal, Check, RotateCcw, Wrench,
 } from "lucide-react";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "../components/ui/select";
+  Popover, PopoverContent, PopoverTrigger,
+} from "../components/ui/popover";
 import { useUkurPeta } from "../hooks/useUkurPeta";
+import {
+  SEMUA, daftarGrup, daftarNilai as nilaiUnik, hitungFilterAktif, saringAset,
+} from "../lib/filterPetaKolaborasi";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -198,9 +202,14 @@ export default function PetaKolaborasiPage() {
   const [kirim, setKirim] = useState(false);
   const [fotoView, setFotoView] = useState(null); // {assetId, jumlah, index} — tampilan foto layar penuh
 
-  // Toolbar (paritas Peta Aset)
+  // Toolbar (paritas Peta Aset) + dua saringan khas peta kolaborasi: KONDISI
+  // dan LOKASI. Keempatnya dikumpulkan di SATU tombol berlaci supaya toolbar
+  // tetap muat di layar sempit (dulu tiap saringan memakan satu dropdown).
   const [statusFilter, setStatusFilter] = useState("__semua__");
   const [groupKey, setGroupKey] = useState("__semua__");
+  const [kondisiFilter, setKondisiFilter] = useState("__semua__");
+  const [lokasiFilter, setLokasiFilter] = useState("__semua__");
+  const [laciFilter, setLaciFilter] = useState(false);
   const [clusterOn, setClusterOn] = useState(true);
   // Gaya marker: "pin" (design 1, bawaan) ↔ "photo" (design 2, sampul foto).
   const [markerStyle, setMarkerStyle] = useState(() => {
@@ -264,29 +273,22 @@ export default function PetaKolaborasiPage() {
   }, [data]);
 
   // Kelompok Barang Serupa (kode+nama, ≥2 unit) — dari titik aset.
-  const groups = useMemo(() => {
-    const byKey = new Map();
-    (data?.titik_aset || []).forEach((a) => {
-      const key = `${a.kode || ""}||${a.nama || ""}`;
-      const g = byKey.get(key) || { key, code: a.kode || "-", name: a.nama || "-", count: 0 };
-      g.count += 1; byKey.set(key, g);
-    });
-    return Array.from(byKey.values()).filter((g) => g.count >= 2).sort((a, b) => b.count - a.count);
-  }, [data]);
+  const groups = useMemo(() => daftarGrup(data?.titik_aset), [data]);
 
-  const statuses = useMemo(() => {
-    const s = new Set();
-    (data?.titik_aset || []).forEach((a) => { if (a.status) s.add(a.status); });
-    return Array.from(s);
-  }, [data]);
 
-  // Titik aset setelah filter status + kelompok.
-  const asetTampil = useMemo(() => {
-    let base = data?.titik_aset || [];
-    if (statusFilter !== "__semua__") base = base.filter((a) => (a.status || "Belum Diinventarisasi") === statusFilter);
-    if (groupKey !== "__semua__") base = base.filter((a) => `${a.kode || ""}||${a.nama || ""}` === groupKey);
-    return base;
-  }, [data, statusFilter, groupKey]);
+  // Pilihan tiap saringan lahir dari data peta ini sendiri (lib/filterPetaKolaborasi).
+  const statusList = useMemo(() => nilaiUnik(data?.titik_aset, "status"), [data]);
+  const kondisiList = useMemo(() => nilaiUnik(data?.titik_aset, "kondisi"), [data]);
+  const lokasiList = useMemo(() => nilaiUnik(data?.titik_aset, "lokasi"), [data]);
+
+  // Titik aset setelah SEMUA saringan (status, kondisi, lokasi, barang serupa).
+  const asetTampil = useMemo(() => saringAset(data?.titik_aset, {
+    status: statusFilter, kondisi: kondisiFilter, lokasi: lokasiFilter, grup: groupKey,
+  }), [data, statusFilter, kondisiFilter, lokasiFilter, groupKey]);
+
+  const jmlFilterAktif = hitungFilterAktif({
+    status: statusFilter, kondisi: kondisiFilter, lokasi: lokasiFilter, grup: groupKey,
+  });
 
   const bukaDetailAset = useCallback((a) => setDipilih({
     jenis: "aset", id: a.id, kode: a.kode, nup: a.nup, nama: a.nama,
@@ -574,6 +576,13 @@ export default function PetaKolaborasiPage() {
   // Ganti filter → pusatkan ulang peta ke subset (reset flag fit).
   const changeStatus = useCallback((v) => { setStatusFilter(v); fitOnceRef.current = false; }, []);
   const changeGroup = useCallback((v) => { setGroupKey(v); fitOnceRef.current = false; }, []);
+  const changeKondisi = useCallback((v) => { setKondisiFilter(v); fitOnceRef.current = false; }, []);
+  const changeLokasi = useCallback((v) => { setLokasiFilter(v); fitOnceRef.current = false; }, []);
+  const resetFilter = useCallback(() => {
+    setStatusFilter(SEMUA); setKondisiFilter(SEMUA);
+    setLokasiFilter(SEMUA); setGroupKey(SEMUA);
+    fitOnceRef.current = false;
+  }, []);
 
   const butuhNama = useCallback((aksi) => {
     if (data && !data.tamu) { aksi(); return; }
@@ -736,38 +745,77 @@ export default function PetaKolaborasiPage() {
           <b className="text-foreground">{asetTampil.length}</b>/{jmlAset} aset · <b className="text-foreground">{jmlKolab}</b> kolaborasi
         </span>
         <div className="flex-1" />
-        {statuses.length > 0 && (
-          <Select value={statusFilter} onValueChange={changeStatus}>
-            <SelectTrigger className="h-8 w-auto px-2 text-[11px] gap-1 flex-shrink-0" aria-label="Filter status" data-testid="peta-kolab-filter-status">
+        {/* SATU laci untuk semua saringan — status, kondisi, lokasi, barang
+            serupa — supaya toolbar tetap muat di layar sempit. Lencana angka
+            memberi tahu berapa saringan sedang aktif tanpa perlu dibuka. */}
+        <Popover open={laciFilter} onOpenChange={setLaciFilter}>
+          <PopoverTrigger asChild>
+            <button
+              type="button" aria-label="Saringan aset"
+              title="Saringan aset — status, kondisi, lokasi, barang serupa"
+              data-testid="peta-kolab-filter"
+              className={`h-8 px-2 rounded-lg border flex items-center gap-1.5 flex-shrink-0 transition-colors ${jmlFilterAktif > 0 ? "border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400" : "border-border text-foreground/80 hover:bg-muted"}`}
+            >
               <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: statusFilter === "__semua__" ? "#94a3b8" : (STATUS_COLORS[statusFilter] || STATUS_DEFAULT) }} />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="z-[900]">
-              <SelectItem value="__semua__">Semua status</SelectItem>
-              {statuses.map((s) => (<SelectItem key={s} value={s}>{s}</SelectItem>))}
-            </SelectContent>
-          </Select>
-        )}
-        {groups.length > 0 && (
-          <Select value={groupKey} onValueChange={changeGroup}>
-            <SelectTrigger className="h-8 w-auto max-w-[200px] px-2 text-[11px] gap-1 flex-shrink-0" aria-label="Filter barang serupa" data-testid="peta-kolab-filter-grup">
-              <Layers className="w-3.5 h-3.5 text-violet-500 flex-shrink-0" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="max-h-80 min-w-[260px] z-[900]">
-              <SelectItem value="__semua__">Semua barang ({groups.length} jenis)</SelectItem>
-              {groups.map((g) => (
-                <SelectItem key={g.key} value={g.key}>
-                  <span className="flex items-center gap-2 w-full">
-                    <span className="font-mono text-[10px] text-muted-foreground shrink-0">{g.code}</span>
-                    <span className="flex-1 truncate">{g.name}</span>
-                    <span className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 shrink-0">{g.count}</span>
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span className="text-[11px] font-medium hidden sm:inline">Saringan</span>
+              {jmlFilterAktif > 0 && (
+                <span className="min-w-[16px] h-4 px-1 rounded-full bg-blue-600 text-white text-[9.5px] font-bold flex items-center justify-center">
+                  {jmlFilterAktif}
+                </span>
+              )}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-[19rem] max-w-[92vw] p-0 z-[900]">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Saringan aset</span>
+              <button
+                type="button" onClick={resetFilter} disabled={jmlFilterAktif === 0}
+                className="h-7 px-2 rounded-md text-[11px] flex items-center gap-1 text-foreground/80 hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent"
+                data-testid="peta-kolab-filter-reset"
+              >
+                <RotateCcw className="w-3 h-3" /> Reset
+              </button>
+            </div>
+            <div className="max-h-[58vh] overflow-y-auto p-2 space-y-2">
+              <BagianFilter judul="Status aset" ikon={ShieldCheck}>
+                <PilihanFilter aktif={statusFilter === "__semua__"} onPilih={() => changeStatus("__semua__")} label="Semua status" jumlah={jmlAset} warna="#94a3b8" />
+                {statusList.map((s) => (
+                  <PilihanFilter key={s.nilai} aktif={statusFilter === s.nilai} onPilih={() => changeStatus(s.nilai)}
+                    label={s.nilai} jumlah={s.jumlah} warna={STATUS_COLORS[s.nilai] || STATUS_DEFAULT} />
+                ))}
+              </BagianFilter>
+
+              {kondisiList.length > 0 && (
+                <BagianFilter judul="Kondisi" ikon={Wrench}>
+                  <PilihanFilter aktif={kondisiFilter === "__semua__"} onPilih={() => changeKondisi("__semua__")} label="Semua kondisi" jumlah={jmlAset} />
+                  {kondisiList.map((k) => (
+                    <PilihanFilter key={k.nilai} aktif={kondisiFilter === k.nilai} onPilih={() => changeKondisi(k.nilai)} label={k.nilai} jumlah={k.jumlah} />
+                  ))}
+                </BagianFilter>
+              )}
+
+              {lokasiList.length > 0 && (
+                <BagianFilter judul="Lokasi" ikon={MapPin}>
+                  <PilihanFilter aktif={lokasiFilter === "__semua__"} onPilih={() => changeLokasi("__semua__")} label="Semua lokasi" jumlah={jmlAset} />
+                  {lokasiList.map((l) => (
+                    <PilihanFilter key={l.nilai} aktif={lokasiFilter === l.nilai} onPilih={() => changeLokasi(l.nilai)} label={l.nilai} jumlah={l.jumlah} />
+                  ))}
+                </BagianFilter>
+              )}
+
+              {groups.length > 0 && (
+                <BagianFilter judul="Barang serupa" ikon={Layers}>
+                  <PilihanFilter aktif={groupKey === "__semua__"} onPilih={() => changeGroup("__semua__")} label={`Semua barang (${groups.length} jenis)`} jumlah={jmlAset} />
+                  {groups.map((g) => (
+                    <PilihanFilter key={g.key} aktif={groupKey === g.key} onPilih={() => changeGroup(g.key)}
+                      label={g.name} kode={g.code} jumlah={g.count} />
+                  ))}
+                </BagianFilter>
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
         <button
           type="button" onClick={toggleCluster} aria-pressed={clusterOn} aria-label={clusterOn ? "Pengelompokan marker: aktif" : "Pengelompokan marker: mati"}
           className={`h-8 w-8 rounded-lg border flex items-center justify-center flex-shrink-0 transition-colors ${clusterOn ? "border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400" : "border-border text-foreground/80 hover:bg-muted"}`}

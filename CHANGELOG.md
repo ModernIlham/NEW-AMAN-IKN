@@ -67,6 +67,38 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#722] Peta kolaborasi: saring Lokasi & Kondisi, semua dalam satu tombol — 2026-08-03
+
+Peta kolaborasi hanya bisa menyaring status inventarisasi dan barang serupa,
+sementara dua pertanyaan yang paling sering muncul di lapangan — *"mana saja
+yang di Gedung A?"* dan *"mana yang rusak?"* — tak terjawab. Menambah dua
+dropdown lagi bukan pilihan: toolbar peta sudah penuh di layar HP.
+
+**Empat saringan dikumpulkan ke SATU tombol berlaci.** Tombolnya menampilkan
+titik warna status yang sedang aktif dan lencana angka berapa saringan menyala,
+jadi keadaan terbaca tanpa perlu dibuka. Di dalamnya empat kelompok berjudul:
+
+- **Status aset** — dengan titik warna yang sama dengan pin di peta
+- **Kondisi** — Baik, Rusak Ringan, Rusak Berat, dst.
+- **Lokasi**
+- **Barang serupa** — kelompok kode+nama yang punya ≥2 unit
+
+Pilihan tiap kelompok lahir dari data peta itu sendiri lengkap dengan jumlah
+asetnya, jadi tak pernah menawarkan saringan yang hasilnya pasti kosong. Semua
+saringan berlaku bersamaan (DAN), dan tombol Reset mengembalikan keempatnya
+sekaligus. Toolbar jadi lebih lega: dua dropdown lebar berganti satu tombol
+yang lebarnya tetap.
+
+Saringan ini khusus peta kolaborasi. Lokasi & kondisi memang sudah ikut dikirim
+ke peta publik sejak awal (untuk verifikasi lapangan), jadi tak ada data baru
+yang dibuka ke pemegang link.
+
+Aturan penyaringannya diangkat ke `lib/filterPetaKolaborasi.js` supaya dapat
+diuji apa adanya, bukan hanya lewat tampilan. Diverifikasi: 376 uji frontend
+lulus (8 uji baru — termasuk "beberapa saringan berlaku bersamaan, bukan salah
+satu saja" dan "aset tanpa status tetap dapat disaring"), lint bersih, build
+produksi sukses.
+
 ## [#721] Setelan tiap link peta kolaborasi akhirnya benar-benar berlaku — 2026-08-03
 
 Link peta dibuat dengan "izinkan tamu menambah titik" / "izinkan komentar"
