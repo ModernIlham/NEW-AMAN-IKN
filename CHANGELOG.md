@@ -67,6 +67,37 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#725] Peta kolaborasi gagal tampil — komponen saringan yang tak pernah ada — 2026-08-03
+
+Halaman peta kolaborasi berhenti tampil sejak `[#722]`. Penyebabnya sederhana
+dan sepenuhnya kesalahan saat menulis kode: laci saringan memakai dua komponen,
+`BagianFilter` dan `PilihanFilter`, yang **tidak pernah terdefinisi**. Di
+peramban React langsung melempar `BagianFilter is not defined` dan seluruh
+halaman gagal dirender.
+
+**Kenapa lolos sampai produksi.** Webpack tidak memeriksa keberadaan komponen
+JSX — `<BagianFilter/>` hanya menjadi pemanggilan fungsi biasa, jadi build
+sukses. Konfigurasi eslint proyek pun hanya menyalakan aturan `react-hooks`,
+sehingga `lint` juga bersih. Uji yang ditulis untuk fitur itu menguji aturan
+penyaringan (`lib/filterPetaKolaborasi`) yang memang murni dan benar — tak ada
+satu pun yang MERENDER halamannya. Tiga gerbang lewat, halaman tetap rusak.
+
+Dua hal diperbaiki:
+
+1. **Komponennya didefinisikan** — laci saringan kembali tampil sebagaimana
+   dirancang di `[#722]`.
+2. **Gerbangnya ditutup**: aturan `react/jsx-no-undef` dinyalakan di
+   `eslint.config.mjs`. Sebelum perbaikan dipasang, aturan ini dijalankan lebih
+   dulu terhadap kode yang rusak dan benar menunjukkan 12 galat pada dua
+   komponen itu — jadi bukan sekadar dinyalakan, tapi terbukti menggigit.
+   Setelah disapu ke seluruh `src/`, tak ada kasus serupa lain yang tersisa.
+
+Sejak kini komponen JSX yang tak ada definisinya menggagalkan CI, bukan
+menggagalkan halaman di tangan pengguna.
+
+Diverifikasi: 386 uji frontend lulus, lint bersih (0 `jsx-no-undef` di seluruh
+`src/`), build produksi sukses.
+
 ## [#724] Kamera lapangan: orientasi foto, resolusi, & kualitas yang melekat pada akun — 2026-08-03
 
 Kamera lapangan memotret dengan angka tetap: sisi terpanjang 1920 px, kualitas
