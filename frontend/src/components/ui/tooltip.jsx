@@ -7,7 +7,16 @@ const TooltipProvider = TooltipPrimitive.Provider
 
 const Tooltip = TooltipPrimitive.Root
 
-const TooltipTrigger = TooltipPrimitive.Trigger
+// Pemicu tooltip DITANDAI `data-tooltip-radix` supaya tooltip marquee global
+// (lib/marqueeEllipsis + lib/tooltipTeks) tahu elemen ini SUDAH punya tooltip
+// sendiri dan tidak ikut menggambar tooltip kedua. Tanpa penanda ini, sel
+// tabel yang teksnya terpotong memunculkan DUA tooltip sekaligus — satu dari
+// Radix (hijau, tema) dan satu dari marquee (gelap). Dengan `asChild`, atribut
+// diteruskan ke elemen anak yang benar-benar dirender.
+const TooltipTrigger = React.forwardRef((props, ref) => (
+  <TooltipPrimitive.Trigger ref={ref} data-tooltip-radix="" {...props} />
+))
+TooltipTrigger.displayName = TooltipPrimitive.Trigger.displayName
 
 const TooltipContent = React.forwardRef(({ className, sideOffset = 4, ...props }, ref) => (
   <TooltipPrimitive.Portal>
