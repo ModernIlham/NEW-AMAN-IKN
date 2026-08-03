@@ -1,12 +1,16 @@
 /**
- * PUSAT UNDUHAN — panel melayang global (kanan-bawah, hidup lintas halaman).
+ * PUSAT UNDUHAN — log unduhan sebagai GELEMBUNG MENGAMBANG global.
  *
  * Log semua unduhan berat yang diproses sebagai job latar server
  * (lib/pusatUnduhan.js): tiap entri tampil dengan progres tersendiri;
  * begitu selesai, hasilnya bisa diunduh KAPAN SAJA dari sini tanpa
  * men-generate ulang (tersimpan 30 hari di server, lalu terhapus otomatis).
  *
- * Pola mengikuti BackgroundTaskBar (widget backup): polling adaptif
+ * Pintu masuknya berupa gelembung bulat yang menempel & menyelinap di dinding
+ * kiri/kanan layar (lihat GelembungMengambang) — bebas digeser, dibuka dengan
+ * ketukan atau swipe ke arah tengah, sama di HP, tablet, maupun desktop.
+ *
+ * Pola muat data mengikuti BackgroundTaskBar (widget backup): polling adaptif
  * (2,5 dtk saat ada job berjalan; 15 dtk saat panel terbuka; berhenti saat
  * tertutup tanpa job), berhenti total setelah 401, unduh via anchor native
  * ber-?token= agar file besar andal melewati ingress.
@@ -20,6 +24,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import GelembungMengambang from "./GelembungMengambang";
 import { authMediaUrl } from "../lib/mediaUrl";
 import { EVENT_UNDUHAN_BARU, mulaiUnduhanPusat } from "../lib/pusatUnduhan";
 
@@ -58,6 +63,13 @@ export default function PusatUnduhan({ aktif = true }) {
   const timerRef = useRef(null);
 
   useEffect(() => { stop401Ref.current = false; }, [aktif]);
+
+  // Identitas stabil: dipakai gelembung sebagai dependensi efek geser —
+  // fungsi baru tiap render akan memasang-lepas pendengar pointer terus-menerus.
+  const ubahTerbuka = useCallback((nilai) => {
+    setOpen(nilai);
+    if (nilai) setVersi((v) => v + 1);   // bangunkan polling saat dibuka
+  }, []);
 
   const muat = useCallback(async () => {
     if (stop401Ref.current) return null;
@@ -142,29 +154,14 @@ export default function PusatUnduhan({ aktif = true }) {
   const jumlahAktif = items.filter(
     (i) => i.status === "queued" || i.status === "running").length;
 
-  if (!open) {
-    if (items.length === 0) return null;
-    return (
-      <button type="button" onClick={() => { setOpen(true); setVersi((v) => v + 1); }}
-        data-testid="pusat-unduhan-pil"
-        title="Pusat Unduhan"
-        className="min-w-0 min-h-0 flex items-center gap-2 px-3 py-2 rounded-full bg-card border border-border shadow-lg hover:shadow-xl transition-shadow text-sm font-medium text-foreground">
-        {jumlahAktif > 0
-          ? <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-          : <FolderDown className="w-4 h-4 text-blue-500" />}
-        Unduhan
-        {jumlahAktif > 0 && (
-          <span className="min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center">
-            {jumlahAktif}
-          </span>
-        )}
-      </button>
-    );
-  }
+  // Belum pernah ada unduhan: layar tetap bersih — gelembung baru muncul
+  // begitu ada entri (log unduhan bertahan 30 hari, jadi sekali dipakai ia
+  // selalu tersedia).
+  if (items.length === 0 && !open) return null;
 
-  return (
+  const panel = (
     <div data-testid="pusat-unduhan-panel"
-      className="w-80 max-w-[calc(100vw-2rem)] bg-card border border-border rounded-xl shadow-2xl overflow-hidden">
+      className="w-80 max-w-[calc(100vw-1.25rem)] bg-card border border-border rounded-xl shadow-2xl overflow-hidden">
       <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border bg-muted/50">
         <FolderDown className="w-4 h-4 text-blue-500 shrink-0" />
         <div className="min-w-0 flex-1">
@@ -233,5 +230,21 @@ export default function PusatUnduhan({ aktif = true }) {
         ))}
       </div>
     </div>
+  );
+
+  return (
+    <GelembungMengambang
+      idPenyimpanan="aman_gelembung_unduhan"
+      terbuka={open}
+      onTerbukaChange={ubahTerbuka}
+      label="Pusat Unduhan"
+      lencana={jumlahAktif}
+      testId="pusat-unduhan"
+      panel={panel}
+    >
+      {jumlahAktif > 0
+        ? <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+        : <FolderDown className="w-6 h-6 text-blue-500" />}
+    </GelembungMengambang>
   );
 }
