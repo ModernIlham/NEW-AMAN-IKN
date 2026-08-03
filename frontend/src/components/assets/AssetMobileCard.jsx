@@ -2,6 +2,7 @@ import React, { memo, useState, useRef } from "react";
 import { Camera, MapPin, Briefcase, Tag, Trash2, Lock, Cloud, Check, RotateCcw, RefreshCcw, MoreVertical, BookOpen, History, CreditCard, AlertTriangle, ShieldCheck, CheckCircle2, XCircle, PlusCircle, Scale, CircleDashed } from "lucide-react";
 import { sisaGaransi } from "../../lib/garansi";
 import { useSinkronSiman } from "../../lib/simanSync";
+import { berTitikHijau, keteranganPsp } from "../../lib/tandaPsp";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger,
@@ -22,6 +23,9 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
   const coverPhoto = asset.thumbnail;
   const hasPhoto = coverPhoto && coverPhoto.length > 10;
   const stikerTerpasang = asset.stiker_status === "Sudah Terpasang";
+  // Penanda ber-PSP + tersinkron SIMAN V2 (aturan bersama lib/tandaPsp.js).
+  const titikHijau = berTitikHijau(asset, simanSynced);
+  const ketPsp = keteranganPsp(asset, simanSynced);
   
   // Format price
   const formatPrice = (price) => {
@@ -208,7 +212,18 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
               />
             </div>
           )}
-          <div className="flex flex-col items-center gap-1 flex-shrink-0">
+          <div className="flex flex-col items-center gap-1 flex-shrink-0 relative">
+            {/* Titik hijau ber-PSP + tersinkron SIMAN V2 di pojok kanan atas
+                foto — posisi yang sama dengan mode list desktop, supaya arti
+                penandanya tak berubah saat pengguna berpindah ukuran layar. */}
+            {titikHijau && (
+              <span
+                className="absolute -top-0.5 right-0 z-10 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-card shadow"
+                title={ketPsp}
+                aria-label={ketPsp}
+                data-testid={`card-psp-${asset.id}`}
+              />
+            )}
             {hasPhoto && onOpenPhoto ? (
               <button
                 type="button"

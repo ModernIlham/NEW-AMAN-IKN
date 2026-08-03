@@ -126,6 +126,73 @@ def rekap_psp(daftar_sk) -> dict:
             "per_status": per_status, "aset_tercakup": len(aset_unik)}
 
 
+def peta_psp_dari_sk(daftar_sk) -> dict:
+    """asset_id → keterangan PSP resmi dari register SK. MURNI.
+
+    HANYA SK berstatus **ditetapkan** yang dihitung: draf/diajukan/ditolak
+    belum menetapkan status penggunaan apa pun, jadi aset di dalamnya belum
+    boleh disebut ber-PSP (aturan yang sama dipakai `rekap_psp`).
+
+    Bila satu aset tercakup beberapa SK ditetapkan (mis. PSP awal lalu alih
+    status), yang menang adalah SK dengan `tanggal_sk` TERBARU — itulah
+    status penggunaan yang berlaku sekarang.
+    """
+    peta = {}
+    for sk in daftar_sk or []:
+        if status_pengajuan_psp(sk) != "ditetapkan":
+            continue
+        nomor = str(sk.get("nomor_sk") or "").strip()
+        if not nomor:
+            continue
+        info = {
+            "no_psp": nomor,
+            "tanggal": str(sk.get("tanggal_sk") or "").strip()[:10],
+            "jenis": str(sk.get("jenis") or ""),
+            "sumber": "register",
+        }
+        for a in sk.get("aset") or []:
+            aid = str(a.get("asset_id") or "")
+            if not aid:
+                continue
+            lama = peta.get(aid)
+            if not lama or info["tanggal"] >= lama["tanggal"]:
+                peta[aid] = info
+    return peta
+
+
+def info_psp_aset(aset: dict, dari_register: dict = None) -> dict:
+    """Satu keterangan PSP untuk SATU aset — {} bila belum ber-PSP. MURNI.
+
+    Dua sumber, dan urutannya disengaja:
+
+    1. **Register SK PSP** (`db.psp`, hasil pencatatan di halaman Aset per
+       Pemegang) menang. Itu keputusan yang dibuat DI DALAM aplikasi ini,
+       lengkap dengan jejak pengajuan dan lampiran SK-nya.
+    2. **Referensi SIMAN V2** (`assets.siman.referensi.no_psp`) jadi cadangan.
+       Ia otoritatif dari sisi Pengelola Barang, tetapi hanya potret impor
+       terakhir — bila keduanya ada, yang tercatat resmi yang ditampilkan.
+
+    `sumber` ikut dikembalikan supaya layar bisa jujur menyebut asal angkanya
+    alih-alih menyamarkan keduanya sebagai satu fakta.
+    """
+    from siman_utils import norm_no_psp
+
+    aid = str((aset or {}).get("id") or "")
+    reg = (dari_register or {}).get(aid)
+    if reg and reg.get("no_psp"):
+        return dict(reg)
+    ref = (((aset or {}).get("siman") or {}).get("referensi") or {})
+    no = norm_no_psp(ref.get("no_psp"))
+    if not no:
+        return {}
+    return {
+        "no_psp": no,
+        "tanggal": str(ref.get("tanggal_psp") or "").strip()[:10],
+        "jenis": str(ref.get("status_penggunaan") or ""),
+        "sumber": "siman",
+    }
+
+
 HEADER_CSV_PSP = [
     "kode_aset", "nup", "nama_aset", "nomor_sk", "tanggal_sk", "jenis",
     "penetap", "status", "jumlah_lampiran", "keterangan", "dibuat_oleh",

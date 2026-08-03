@@ -194,6 +194,11 @@ class AssetResponse(BaseModel):
     updated_at: Optional[str] = ""
     # Optimistic Concurrency Control — incremented on every write
     version: Optional[int] = 1
+    # Keterangan PSP turunan (BUKAN field aset — tak ada di registry): hasil
+    # gabung register SK PSP + referensi SIMAN V2, disusun server per
+    # permintaan. {no_psp, tanggal, jenis, sumber} atau tidak ada sama sekali.
+    # Read-only bagi klien; menulisnya lewat PUT/PATCH tidak berpengaruh apa pun.
+    psp: Optional[dict] = None
 
     @field_validator('purchase_price', mode='before')
     @classmethod

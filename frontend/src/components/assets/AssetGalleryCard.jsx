@@ -1,12 +1,11 @@
 import React, { memo, useState, useCallback } from "react";
 import { Camera, MapPin, Tag, Images, User, QrCode, CreditCard, Trash2, FileCheck, FileX, Calendar, Lock, ClipboardCheck, Building2, ImageIcon, FileText, ShieldCheck, RefreshCcw as RefreshCcwIcon, Check as CheckIcon } from "lucide-react";
-import {
-  Tooltip, TooltipContent, TooltipTrigger,
-} from "../ui/tooltip";
+import TooltipKetuk from "../ui/TooltipKetuk";
 import { authMediaUrl } from "../../lib/mediaUrl";
 import { sisaGaransi } from "../../lib/garansi";
 import { apakahTempId } from "../../lib/idAntrean";
 import { useSinkronSiman } from "../../lib/simanSync";
+import { berTitikHijau, keteranganPsp } from "../../lib/tandaPsp";
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const COND = { "Baik": "bg-emerald-500", "Rusak Ringan": "bg-amber-500", "Rusak Berat": "bg-red-500" };
@@ -63,6 +62,12 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
     const url = authMediaUrl(`${API}/assets/${assetId}/doc-file/${itemIndex}/${fileType}/0`);
     window.open(url, '_blank');
   }, []);
+
+  // Penanda ber-PSP + tersinkron SIMAN V2 (aturan bersama lib/tandaPsp.js).
+  // `simanSynced` ikut diperhitungkan supaya aset yang baru saja disinkronkan
+  // dari kartu ini langsung mendapat titiknya, tanpa menunggu muat ulang.
+  const titikHijau = berTitikHijau(asset, simanSynced);
+  const ketPsp = keteranganPsp(asset, simanSynced);
 
   const docTotal = asset.doc_total || 0;
   const docChecked = asset.doc_checked || 0;
@@ -212,17 +217,32 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
             sedikit agar tetap terbaca di atas garis air (teks putih). */}
         <div className={`absolute bottom-0 left-0 right-0 z-[2] px-2 flex items-end justify-between pointer-events-none ${(asset.siman?.status === "selisih" && !simanSynced) || simanBaruSaja ? "pb-[13px]" : "pb-1.5"}`}>
           <div className="leading-tight pointer-events-auto">
-            <Tooltip delayDuration={150}>
-              <TooltipTrigger asChild>
-                <span className="block text-[10px] font-extrabold text-white tracking-wide font-mono drop-shadow-lg cursor-help" onClick={e => e.stopPropagation()}>
-                  {asset.asset_code}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="text-[10px] max-w-[200px]">
-                {asset.category || asset.asset_code}
-              </TooltipContent>
-            </Tooltip>
-            {asset.NUP && <span className="block text-[9px] font-semibold text-white/90 font-mono drop-shadow">NUP: {asset.NUP}</span>}
+            <TooltipKetuk side="top" kelasKonten="text-[10px] px-2 py-1"
+              konten={asset.category || asset.asset_code}>
+              <span className="block text-[10px] font-extrabold text-white tracking-wide font-mono drop-shadow-lg cursor-help" onClick={e => e.stopPropagation()}>
+                {asset.asset_code}
+              </span>
+            </TooltipKetuk>
+            {asset.NUP && (
+              <span className="flex items-center gap-1 text-[9px] font-semibold text-white/90 font-mono drop-shadow">
+                {/* Titik hijau DI DEPAN "NUP:" (mode galeri) — di mode list ia
+                    duduk di pojok kanan atas foto. Di sini foto sudah penuh
+                    lencana (garansi/kondisi/tahun di kanan atas, air SIMAN di
+                    dasar), jadi barisan kode/NUP-lah tempat yang masih lega. */}
+                {titikHijau && (
+                  <TooltipKetuk konten={ketPsp} side="top">
+                    <button
+                      type="button"
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label={ketPsp}
+                      className="w-2 h-2 min-w-0 min-h-0 rounded-full bg-emerald-400 ring-1 ring-white/70 shadow flex-shrink-0 p-0"
+                      data-testid={`gallery-psp-${asset.id}`}
+                    />
+                  </TooltipKetuk>
+                )}
+                NUP: {asset.NUP}
+              </span>
+            )}
           </div>
           {photoCount > 0 && (
             <span className="flex items-center gap-0.5 text-[9px] text-white/85 bg-black/40 backdrop-blur-sm px-1.5 py-0.5 rounded-full">
@@ -287,38 +307,28 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
           even if a card is squeezed very narrow. */}
       <div className={`flex items-stretch justify-between gap-px overflow-hidden border-t ${isEditing ? 'border-amber-300 dark:border-amber-700' : 'border-border'} flex-shrink-0 px-0.5`}>
         {/* Status Inventarisasi */}
-        <Tooltip delayDuration={150}>
-          <TooltipTrigger asChild>
-            <button className={`flex-1 min-w-0 min-h-0 flex items-center justify-center py-1.5 rounded-md transition-colors ${invInfo.cls}`} onClick={e => e.stopPropagation()} data-testid={`gallery-inv-${asset.id}`}>
-              <ClipboardCheck className="w-3.5 h-3.5 flex-shrink-0" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="text-[10px]">Inventarisasi: {asset.inventory_status || "Belum"}</TooltipContent>
-        </Tooltip>
+        <TooltipKetuk side="top" kelasKonten="text-[10px] px-2 py-1"
+          konten={`Inventarisasi: ${asset.inventory_status || "Belum"}`}>
+          <button className={`flex-1 min-w-0 min-h-0 flex items-center justify-center py-1.5 rounded-md transition-colors ${invInfo.cls}`} onClick={e => e.stopPropagation()} data-testid={`gallery-inv-${asset.id}`}>
+            <ClipboardCheck className="w-3.5 h-3.5 flex-shrink-0" />
+          </button>
+        </TooltipKetuk>
 
         {/* Stiker status */}
-        <Tooltip delayDuration={150}>
-          <TooltipTrigger asChild>
-            <button className={`flex-1 min-w-0 min-h-0 flex items-center justify-center py-1.5 rounded-md transition-colors ${stikerOk ? 'text-emerald-500' : 'text-slate-400'}`} onClick={e => e.stopPropagation()} data-testid={`gallery-stiker-${asset.id}`}>
-              <QrCode className="w-3.5 h-3.5 flex-shrink-0" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="text-[10px]">Stiker: {asset.stiker_status || "Belum dipasang"}</TooltipContent>
-        </Tooltip>
+        <TooltipKetuk side="top" kelasKonten="text-[10px] px-2 py-1"
+          konten={`Stiker: ${asset.stiker_status || "Belum dipasang"}`}>
+          <button className={`flex-1 min-w-0 min-h-0 flex items-center justify-center py-1.5 rounded-md transition-colors ${stikerOk ? 'text-emerald-500' : 'text-slate-400'}`} onClick={e => e.stopPropagation()} data-testid={`gallery-stiker-${asset.id}`}>
+            <QrCode className="w-3.5 h-3.5 flex-shrink-0" />
+          </button>
+        </TooltipKetuk>
 
         {/* DOK - kelengkapan dokumen */}
         {docTotal > 0 ? (
-          <Tooltip delayDuration={200}>
-            <TooltipTrigger asChild>
-              <button
-                className={`flex-1 min-w-0 min-h-0 flex items-center justify-center py-1.5 rounded-md transition-colors ${dokComplete ? 'text-emerald-500' : dokPartial ? 'text-amber-500' : 'text-red-400'}`}
-                onClick={e => e.stopPropagation()}
-                data-testid={`gallery-dok-${asset.id}`}
-              >
-                {dokComplete ? <FileCheck className="w-3.5 h-3.5 flex-shrink-0" /> : <FileX className="w-3.5 h-3.5 flex-shrink-0" />}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="bg-slate-900 text-white max-w-[260px] p-3" onClick={e => e.stopPropagation()}>
+          <TooltipKetuk
+            side="top"
+            kelasKonten="bg-slate-900 text-white max-w-[min(16rem,calc(100vw-1rem))] p-3"
+            konten={(
+              <div onClick={e => e.stopPropagation()}>
               <p className="text-[10px] font-bold mb-1.5">Kelengkapan Dokumen & Peralatan ({docChecked}/{docTotal})</p>
               <div className="space-y-1">
                 {docSummary.map((doc, i) => (
@@ -326,10 +336,10 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
                     {doc.checked
                       ? <FileCheck className="w-3 h-3 text-emerald-400 flex-shrink-0" />
                       : <FileX className="w-3 h-3 text-red-400 flex-shrink-0" />}
-                    <span className={`flex-1 ${doc.checked ? 'text-white font-medium' : 'text-slate-400'}`}>{doc.name || "(tanpa judul)"}</span>
+                    <span className={`flex-1 min-w-0 break-words ${doc.checked ? 'text-white font-medium' : 'text-slate-400'}`}>{doc.name || "(tanpa judul)"}</span>
                     {doc.photo_count > 0 && (
                       <button
-                        className="text-blue-400 hover:text-blue-300 flex-shrink-0 cursor-pointer"
+                        className="text-blue-400 hover:text-blue-300 flex-shrink-0 cursor-pointer min-w-0 min-h-0"
                         onClick={(e) => { e.preventDefault(); e.stopPropagation(); openDocFile(asset.id, i, 'photo'); }}
                         title="Buka foto"
                         data-testid={`dok-photo-${asset.id}-${i}`}
@@ -339,7 +349,7 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
                     )}
                     {doc.doc_count > 0 && (
                       <button
-                        className="text-orange-400 hover:text-orange-300 flex-shrink-0 cursor-pointer"
+                        className="text-orange-400 hover:text-orange-300 flex-shrink-0 cursor-pointer min-w-0 min-h-0"
                         onClick={(e) => { e.preventDefault(); e.stopPropagation(); openDocFile(asset.id, i, 'document'); }}
                         title="Buka dokumen"
                         data-testid={`dok-doc-${asset.id}-${i}`}
@@ -350,8 +360,17 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
                   </div>
                 ))}
               </div>
-            </TooltipContent>
-          </Tooltip>
+              </div>
+            )}
+          >
+            <button
+              className={`flex-1 min-w-0 min-h-0 flex items-center justify-center py-1.5 rounded-md transition-colors ${dokComplete ? 'text-emerald-500' : dokPartial ? 'text-amber-500' : 'text-red-400'}`}
+              onClick={e => e.stopPropagation()}
+              data-testid={`gallery-dok-${asset.id}`}
+            >
+              {dokComplete ? <FileCheck className="w-3.5 h-3.5 flex-shrink-0" /> : <FileX className="w-3.5 h-3.5 flex-shrink-0" />}
+            </button>
+          </TooltipKetuk>
         ) : (
           <div className="flex-1 min-w-0 flex items-center justify-center py-1.5 text-slate-300 dark:text-slate-600">
             <FileX className="w-3.5 h-3.5 flex-shrink-0" />
@@ -361,36 +380,32 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
         {/* Divider */}
         <div className="w-px h-4 self-center bg-border mx-0.5 flex-shrink-0" />
 
-        {/* Cetak Kartu */}
+        {/* Cetak Kartu — tombol beraksi: keterangan cukup lewat title/aria,
+            TooltipKetuk tidak dipakai di sini karena ketukan harus langsung
+            MENJALANKAN aksinya, bukan membuka keterangan. */}
         {onPrintCard && (
-          <Tooltip delayDuration={150}>
-            <TooltipTrigger asChild>
-              <button
-                className="flex-1 min-w-0 min-h-0 flex items-center justify-center py-1.5 rounded-md text-muted-foreground hover:text-purple-600 hover:bg-purple-500/10 transition-colors"
-                onClick={e => { e.stopPropagation(); onPrintCard(asset.id); }}
-                data-testid={`gallery-card-btn-${asset.id}`}
-              >
-                <CreditCard className="w-3.5 h-3.5 flex-shrink-0" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="text-[10px]">Cetak Kartu</TooltipContent>
-          </Tooltip>
+          <button
+            className="flex-1 min-w-0 min-h-0 flex items-center justify-center py-1.5 rounded-md text-muted-foreground hover:text-purple-600 hover:bg-purple-500/10 transition-colors"
+            onClick={e => { e.stopPropagation(); onPrintCard(asset.id); }}
+            title="Cetak Kartu"
+            aria-label="Cetak Kartu"
+            data-testid={`gallery-card-btn-${asset.id}`}
+          >
+            <CreditCard className="w-3.5 h-3.5 flex-shrink-0" />
+          </button>
         )}
 
         {/* Hapus */}
         {onDelete && (
-          <Tooltip delayDuration={150}>
-            <TooltipTrigger asChild>
-              <button
-                className="flex-1 min-w-0 min-h-0 flex items-center justify-center py-1.5 rounded-md text-muted-foreground hover:text-red-600 hover:bg-red-500/10 transition-colors"
-                onClick={e => { e.stopPropagation(); onDelete(asset.id); }}
-                data-testid={`gallery-delete-${asset.id}`}
-              >
-                <Trash2 className="w-3.5 h-3.5 flex-shrink-0" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="text-[10px]">Hapus Aset</TooltipContent>
-          </Tooltip>
+          <button
+            className="flex-1 min-w-0 min-h-0 flex items-center justify-center py-1.5 rounded-md text-muted-foreground hover:text-red-600 hover:bg-red-500/10 transition-colors"
+            onClick={e => { e.stopPropagation(); onDelete(asset.id); }}
+            title="Hapus Aset"
+            aria-label="Hapus Aset"
+            data-testid={`gallery-delete-${asset.id}`}
+          >
+            <Trash2 className="w-3.5 h-3.5 flex-shrink-0" />
+          </button>
         )}
       </div>
     </div>

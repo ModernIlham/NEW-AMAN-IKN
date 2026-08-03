@@ -468,3 +468,103 @@ def test_bast_perlu_perbarui():
     assert bast_perlu_perbarui({"asset_code": "x", "bast_file_id": "B1"}) is False
     # snapshot_bast bentuk benar
     assert snapshot_bast(aset) == {"kode": "3030203001", "nama": "Laptop"}
+
+
+# ── Keterangan PSP per aset (titik hijau + kolom No. PSP baca-saja) ──────────
+from penggunaan_utils import peta_psp_dari_sk, info_psp_aset  # noqa: E402
+
+
+def _sk(nomor, tanggal, ids, status="ditetapkan"):
+    return {"nomor_sk": nomor, "tanggal_sk": tanggal, "jenis": "psp",
+            "status_pengajuan": status,
+            "aset": [{"asset_id": i} for i in ids]}
+
+
+class TestPetaPspDariSk:
+    def test_hanya_sk_ditetapkan_yang_dihitung(self):
+        peta = peta_psp_dari_sk([
+            _sk("SK-1", "2024-01-01", ["a"]),
+            _sk("SK-2", "2024-02-01", ["b"], status="draf"),
+            _sk("SK-3", "2024-03-01", ["c"], status="diajukan"),
+            _sk("SK-4", "2024-04-01", ["d"], status="ditolak"),
+        ])
+        assert set(peta) == {"a"}
+        assert peta["a"]["no_psp"] == "SK-1"
+
+    def test_sk_lama_tanpa_status_dianggap_ditetapkan(self):
+        sk = _sk("SK-9", "2023-05-05", ["x"])
+        del sk["status_pengajuan"]
+        assert peta_psp_dari_sk([sk])["x"]["no_psp"] == "SK-9"
+
+    def test_sk_tanpa_nomor_dilewati(self):
+        assert peta_psp_dari_sk([_sk("", "2024-01-01", ["a"]),
+                                 _sk("   ", "2024-01-01", ["b"])]) == {}
+
+    def test_aset_di_banyak_sk_ambil_tanggal_terbaru(self):
+        peta = peta_psp_dari_sk([
+            _sk("SK-LAMA", "2022-01-01", ["a"]),
+            _sk("SK-BARU", "2024-06-30", ["a"]),
+        ])
+        assert peta["a"]["no_psp"] == "SK-BARU"
+
+    def test_urutan_masukan_tak_mengubah_pemenang(self):
+        maju = peta_psp_dari_sk([_sk("SK-BARU", "2024-06-30", ["a"]),
+                                 _sk("SK-LAMA", "2022-01-01", ["a"])])
+        assert maju["a"]["no_psp"] == "SK-BARU"
+
+    def test_baris_aset_tanpa_id_diabaikan(self):
+        peta = peta_psp_dari_sk([{"nomor_sk": "SK-1", "tanggal_sk": "2024-01-01",
+                                  "status_pengajuan": "ditetapkan",
+                                  "aset": [{"asset_id": ""}, {}]}])
+        assert peta == {}
+
+    def test_masukan_kosong_aman(self):
+        assert peta_psp_dari_sk([]) == {}
+        assert peta_psp_dari_sk(None) == {}
+
+
+class TestInfoPspAset:
+    def test_register_menang_atas_referensi_siman(self):
+        aset = {"id": "a", "siman": {"referensi": {"no_psp": "DARI-SIMAN"}}}
+        info = info_psp_aset(aset, {"a": {"no_psp": "DARI-REGISTER",
+                                          "tanggal": "2024-01-01",
+                                          "jenis": "psp", "sumber": "register"}})
+        assert info["no_psp"] == "DARI-REGISTER"
+        assert info["sumber"] == "register"
+
+    def test_jatuh_ke_referensi_siman_bila_belum_tercatat(self):
+        aset = {"id": "a", "siman": {"referensi": {"no_psp": "SK-SIMAN",
+                                                   "tanggal_psp": "2023-07-08",
+                                                   "status_penggunaan": "Digunakan"}}}
+        info = info_psp_aset(aset, {})
+        assert info == {"no_psp": "SK-SIMAN", "tanggal": "2023-07-08",
+                        "jenis": "Digunakan", "sumber": "siman"}
+
+    # Placeholder SIMAN ("-", "Tidak Ada Inputan") berarti BELUM ber-PSP.
+    # Tanpa penyaringan ini titik hijau muncul pada aset yang justru belum
+    # ditetapkan status penggunaannya — persis kebalikan dari maksudnya.
+    def test_placeholder_siman_bukan_psp(self):
+        for nilai in ("-", "Tidak Ada Inputan", "", "   "):
+            aset = {"id": "a", "siman": {"referensi": {"no_psp": nilai}}}
+            assert info_psp_aset(aset, {}) == {}, nilai
+
+    def test_aset_tanpa_siman_dan_tanpa_register(self):
+        assert info_psp_aset({"id": "a"}, {}) == {}
+        assert info_psp_aset({"id": "a"}, None) == {}
+
+    def test_register_tanpa_nomor_tak_menutupi_siman(self):
+        aset = {"id": "a", "siman": {"referensi": {"no_psp": "SK-SIMAN"}}}
+        info = info_psp_aset(aset, {"a": {"no_psp": "", "sumber": "register"}})
+        assert info["no_psp"] == "SK-SIMAN"
+
+    def test_tanggal_panjang_dipangkas_10_karakter(self):
+        aset = {"id": "a", "siman": {"referensi": {
+            "no_psp": "SK-1", "tanggal_psp": "2023-07-08T00:00:00"}}}
+        assert info_psp_aset(aset, {})["tanggal"] == "2023-07-08"
+
+    def test_hasil_bukan_rujukan_ke_peta(self):
+        peta = {"a": {"no_psp": "SK-1", "tanggal": "2024-01-01",
+                      "jenis": "psp", "sumber": "register"}}
+        info = info_psp_aset({"id": "a"}, peta)
+        info["no_psp"] = "DIUBAH"
+        assert peta["a"]["no_psp"] == "SK-1"

@@ -67,6 +67,96 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#734] PSP terlihat di daftar aset — titik hijau + No. PSP baca-saja + tooltip yang bisa diketuk — 2026-08-03
+
+Penetapan Status Penggunaan (PSP) selama ini hanya hidup di halaman **Aset per
+Pemegang**. Petugas yang sedang menatap daftar inventarisasi tak punya cara tahu
+aset mana yang sudah ditetapkan. Entri ini menyambungkannya, lalu menutup satu
+cacat yang membuat keterangan ikon galeri tak pernah muncul di HP.
+
+### Satu keterangan PSP per aset, dari DUA sumber, dan sumbernya disebut
+
+`penggunaan_utils.info_psp_aset` menggabungkan:
+
+1. **Register SK PSP** (`db.psp`) — hasil pencatatan di Aset per Pemegang.
+   **Menang**, karena itu keputusan yang dibuat di dalam aplikasi ini, lengkap
+   dengan jejak pengajuan dan lampiran SK-nya. Hanya SK berstatus
+   **ditetapkan** yang dihitung — draf/diajukan/ditolak belum menetapkan apa pun
+   (aturan yang sama sudah dipakai `rekap_psp`).
+2. **Referensi SIMAN V2** (`assets.siman.referensi.no_psp`) — cadangan.
+   Placeholder `-` / `Tidak Ada Inputan` diperlakukan sebagai **belum ber-PSP**;
+   tanpa itu titik hijau justru muncul pada aset yang belum ditetapkan.
+
+Aset yang tercakup beberapa SK ditetapkan memakai SK ber-`tanggal_sk` **terbaru**
+— itulah status penggunaan yang berlaku sekarang. Layar selalu menyebut
+sumbernya ("tercatat di register SK PSP" vs "dari referensi SIMAN V2"): angka
+register perlu ditindaklanjuti berbeda dari potret impor.
+
+`routes/assets.lengkapi_psp` menempelkannya per halaman daftar dengan **satu**
+query (bukan N), ter-scope satker lewat `scope_query_field_satker`, dan berlaku
+juga untuk **snapshot luring** — tanpa itu penanda lenyap saat sinyal hilang dan
+terbaca sebagai bug. Indeks baru `db.psp.aset.asset_id` menjaga query itu tak
+memindai seluruh register tiap muat halaman.
+
+### Titik hijau: DUA syarat, bukan salah satu
+
+Titik hijau = **ber-PSP DAN tersinkron SIMAN V2**. `lib/tandaPsp.js` memegang
+aturannya sendirian supaya tak menyimpang di tiga komponen. Yang mudah salah dan
+karena itu dikunci uji: `siman.status === "tidak_di_siman"` berarti impor
+berjalan tetapi aset ini **tidak ada** di SIMAN — itu kebalikan dari tersinkron,
+bukan varian lemahnya. Aset ber-`selisih` baru dihitung setelah tombol sinkron
+di sesi itu menyatakan selisih habis.
+
+Letaknya mengikuti mandat: **pojok kanan atas foto** di mode list (tabel desktop
+dan kartu HP/tablet — segala ukuran layar), dan **di depan teks "NUP:"** di mode
+galeri, tempat yang masih lega karena pojok kanan atas foto sudah penuh lencana
+garansi/kondisi/tahun.
+
+### Kolom No. PSP di halaman edit — sengaja BACA SAJA
+
+Di bagian **Pengadaan**, tepat di atas Nomor SPM. Baca-saja bukan pembatasan
+malas: nomornya bukan milik form aset, ia datang dari register SK PSP atau dari
+impor SIMAN. Kolom yang bisa diketik akan melahirkan dua sumber kebenaran untuk
+satu fakta yang sama. Di bawahnya ada kalimat yang menyebut asal angkanya, atau
+—bila kosong— cara mengisinya.
+
+### Tooltip galeri yang benar-benar bisa diketuk
+
+Radix `Tooltip` hanya terbuka oleh hover dan fokus papan-ketik. Di layar sentuh
+`Tooltip.Trigger` justru **menutup** diri pada `pointerdown`, dan pembukaan lewat
+fokus sengaja dilewati bila fokusnya datang dari penunjuk. Jadi ikon status
+inventarisasi, stiker, dan kelengkapan barang di kartu galeri adalah ikon **tanpa
+keterangan apa pun** di HP/tablet.
+
+Dibuktikan, bukan diklaim — komponen ASLI dibundel dan dijalankan di Chromium
+ber-`hasTouch`:
+
+| | ketuk di layar sentuh | hover tetikus |
+|---|---|---|
+| `Tooltip` lama | **tidak terbuka** | terbuka |
+| `TooltipKetuk` baru | **terbuka** (+ ketuk di luar menutup) | terbuka |
+
+`components/ui/TooltipKetuk.jsx` memakai **satu** primitif (Popover) untuk kedua
+modalitas, bukan menukar Tooltip↔Popover menurut media query. Penukaran itu
+rapi di kertas tapi menukar komponen di tengah interaksi: modalitas baru
+diketahui saat `pointerdown`, React lalu melepas simpul pemicu lama dan memasang
+yang baru, sehingga `click` ketukan PERTAMA jatuh ke simpul yang sudah tiada.
+
+Tombol yang BERAKSI (Cetak Kartu, Hapus) sengaja tidak memakainya — ketukan di
+sana harus menjalankan aksinya, bukan membuka keterangan; keduanya kini cukup
+ber-`title`/`aria-label`.
+
+### Verifikasi
+
+- `pytest tests/unit -q` → **1530 lulus** (14 uji PSP baru)
+- `craco test` → **40 suite, 429 uji** (18 uji `tandaPsp` baru)
+- harness Chromium ber-sentuh: 6/6 pemeriksaan lulus + pembanding lama gagal
+  seperti yang diharapkan
+- `eslint` berkas tersentuh → 0 error, tanpa peringatan baru
+- `CI=false yarn build` → sukses
+
+---
+
 ## [#733] Judul halaman berhenti tergilas di HP — kepala 26 halaman diseragamkan — 2026-08-03
 
 Setelah popup diseragamkan (`[#730]`–`[#732]`), giliran **halaman**. Kepala
