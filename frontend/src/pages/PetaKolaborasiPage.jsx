@@ -165,6 +165,35 @@ function FotoImg({ url, alt = "", className = "", spinner = false, ...rest }) {
     : <div className={`${className} bg-muted animate-pulse`} {...rest} />;
 }
 
+/** Satu kelompok saringan di dalam laci (judul + daftar pilihan). */
+function BagianFilter({ judul, ikon: Ikon, children }) {
+  return (
+    <div className="rounded-lg border border-border overflow-hidden">
+      <div className="flex items-center gap-1.5 px-2 py-1.5 bg-muted/60">
+        {Ikon && <Ikon className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />}
+        <span className="text-[10.5px] font-bold uppercase tracking-wide text-muted-foreground">{judul}</span>
+      </div>
+      <div className="max-h-44 overflow-y-auto p-1 space-y-0.5">{children}</div>
+    </div>
+  );
+}
+
+/** Satu pilihan saringan: penanda terpilih + label + jumlah aset. */
+function PilihanFilter({ aktif, onPilih, label, jumlah, warna, kode }) {
+  return (
+    <button
+      type="button" onClick={onPilih} aria-pressed={aktif}
+      className={`w-full flex items-center gap-1.5 px-2 py-1.5 rounded-md text-left min-h-0 ${aktif ? "bg-blue-500/10 text-blue-700 dark:text-blue-300" : "hover:bg-muted"}`}
+    >
+      <Check className={`w-3 h-3 flex-shrink-0 ${aktif ? "opacity-100" : "opacity-0"}`} />
+      {warna && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: warna }} />}
+      {kode && <span className="font-mono text-[9.5px] text-muted-foreground flex-shrink-0">{kode}</span>}
+      <span className="flex-1 truncate text-[11px]">{label}</span>
+      <span className="text-[10px] font-semibold text-muted-foreground flex-shrink-0">{jumlah}</span>
+    </button>
+  );
+}
+
 /**
  * Halaman PUBLIK peta kolaboratif (link ber-token). Paritas fitur dengan Peta
  * Aset: pin berwarna per status, clustering, filter status + Barang Serupa,
