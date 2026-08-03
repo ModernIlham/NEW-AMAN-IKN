@@ -67,6 +67,24 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#726] Perpanjang link peta bisa memilih durasi + toolbar peta hemat satu baris — 2026-08-03
+
+**Perpanjang tak lagi terpatok 7 hari.** Tombol Perpanjang di dialog Bagikan
+Peta selalu menambah 168 jam, padahal saat MEMBUAT link operator sudah bisa
+memilih 1 / 3 / 7 / 30 hari. Kini tombolnya membuka pilihan yang sama persis —
+daftar yang sama (`PRESET`), supaya tak ada dua daftar berbeda untuk dihafal.
+Perpanjangan tetap dihitung dari SEKARANG seperti sebelumnya.
+
+**Toolbar peta kolaborasi hemat satu baris.** Hitungan aset & kolaborasi dulu
+berdesakan sebaris dengan seluruh tombol; di layar HP tombol "Muat ulang"
+terdorong turun sendirian dan memakan satu baris penuh — ruang paling mahal di
+peta. Sekarang toolbar dua lajur: semua tombol (saringan, cluster, gaya marker,
+moderasi, ukur, muat ulang) rapat di satu baris, dan hitungannya pindah ke baris
+tipis di bawahnya.
+
+Diverifikasi: 1511 uji unit backend + 386 uji frontend lulus, lint bersih, build
+produksi sukses.
+
 ## [#725] Peta kolaborasi gagal tampil — komponen saringan yang tak pernah ada — 2026-08-03
 
 Halaman peta kolaborasi berhenti tampil sejak `[#722]`. Penyebabnya sederhana

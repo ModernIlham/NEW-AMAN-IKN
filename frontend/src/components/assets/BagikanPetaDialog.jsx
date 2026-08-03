@@ -3,13 +3,16 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   Share2, Copy, Clock, Plus, Loader2, Link2, MessageSquare, MapPin,
-  Trash2, RefreshCcw, Check, RotateCw,
+  Trash2, RefreshCcw, Check, RotateCw, ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { getApiError } from "../../lib/utils";
 
@@ -87,12 +90,16 @@ export default function BagikanPetaDialog({ open, onClose, activity }) {
     } else { salin(link); }
   };
 
+  // Laci durasi perpanjang, per share (id share yang sedang terbuka).
+  const [menuPerpanjang, setMenuPerpanjang] = useState("");
+
   const perpanjang = async (sid, jam) => {
     try {
       await axios.put(`${API}/peta/share/${sid}/perpanjang`, { durasi_jam: jam });
       toast.success(`Diperpanjang ${jam >= 24 ? `${Math.round(jam / 24)} hari` : `${jam} jam`}`);
       muat();
     } catch (e) { toast.error(getApiError(e, "Gagal memperpanjang")); }
+    finally { setMenuPerpanjang(""); }
   };
 
   const batal = async (sid) => {
@@ -200,9 +207,32 @@ export default function BagikanPetaDialog({ open, onClose, activity }) {
               <div className="flex flex-wrap items-center gap-1.5">
                 {s.link && <button onClick={() => bagikanWA(s.link, s.judul)} className="h-7 px-2 rounded-md bg-green-600 text-white text-[11px] font-semibold min-w-0 min-h-0">WhatsApp</button>}
                 {s.link && <button onClick={() => bagikanNatif(s.link, s.judul)} className="h-7 px-2 rounded-md border border-border text-[11px] text-muted-foreground min-w-0 min-h-0">Bagikan…</button>}
-                <button onClick={() => perpanjang(s.id, 168)} title="Perpanjang 7 hari" className="h-7 px-2 rounded-md border border-blue-300 dark:border-blue-800 text-blue-600 dark:text-blue-400 text-[11px] font-semibold flex items-center gap-1 min-w-0 min-h-0" data-testid={`bagikan-perpanjang-${s.id}`}>
-                  <RefreshCcw className="w-3 h-3" />Perpanjang
-                </button>
+                {/* Perpanjang: durasinya DIPILIH, bukan dipatok 7 hari. Pilihannya
+                    sama persis dengan saat link dibuat (PRESET) supaya operator
+                    tak perlu menghafal dua daftar yang berbeda. */}
+                <Popover open={menuPerpanjang === s.id}
+                  onOpenChange={(o) => setMenuPerpanjang(o ? s.id : "")}>
+                  <PopoverTrigger asChild>
+                    <button title="Perpanjang masa tayang — pilih durasi" className="h-7 px-2 rounded-md border border-blue-300 dark:border-blue-800 text-blue-600 dark:text-blue-400 text-[11px] font-semibold flex items-center gap-1 min-w-0 min-h-0" data-testid={`bagikan-perpanjang-${s.id}`}>
+                      <RefreshCcw className="w-3 h-3" />Perpanjang
+                      <ChevronDown className="w-3 h-3 opacity-70" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-auto p-1">
+                    <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                      Perpanjang dari sekarang
+                    </p>
+                    <div className="flex flex-col">
+                      {PRESET.map((d) => (
+                        <button key={d.jam} onClick={() => perpanjang(s.id, d.jam)}
+                          className="h-8 px-3 rounded-md text-[12px] font-semibold text-left hover:bg-muted min-w-0 min-h-0"
+                          data-testid={`bagikan-perpanjang-${s.id}-${d.jam}`}>
+                          {d.label}
+                        </button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
                 <button onClick={() => terbitkanUlang(s.id, 168)} title="Ganti tautan — matikan link lama yang bocor, buat link baru" className="h-7 w-7 rounded-md border border-amber-300 dark:border-amber-800 text-amber-600 dark:text-amber-400 flex items-center justify-center min-w-0 min-h-0" data-testid={`bagikan-ganti-${s.id}`}>
                   <RotateCw className="w-3.5 h-3.5" />
                 </button>

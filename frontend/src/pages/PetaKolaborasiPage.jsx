@@ -768,12 +768,12 @@ export default function PetaKolaborasiPage() {
         </div>
       )}
 
-      {/* Toolbar: hitungan + filter + kelompok + cluster + moderasi + muat ulang */}
-      <div className="bg-card border-b border-border px-2 py-1.5 flex items-center gap-1.5 flex-wrap">
-        <span className="text-[11px] text-muted-foreground px-1 flex-shrink-0">
-          <b className="text-foreground">{asetTampil.length}</b>/{jmlAset} aset · <b className="text-foreground">{jmlKolab}</b> kolaborasi
-        </span>
-        <div className="flex-1" />
+      {/* Toolbar DUA LAJUR: seluruh tombol di satu baris, hitungan di bawahnya.
+          Dulu hitungan ikut berdesakan di baris yang sama sehingga tombol
+          "Muat ulang" terdorong turun sendirian dan memakan satu baris penuh —
+          ruang paling mahal di layar HP. */}
+      <div className="bg-card border-b border-border px-2 py-1.5 space-y-1">
+        <div className="flex items-center gap-1.5 justify-end">
         {/* SATU laci untuk semua saringan — status, kondisi, lokasi, barang
             serupa — supaya toolbar tetap muat di layar sempit. Lencana angka
             memberi tahu berapa saringan sedang aktif tanpa perlu dibuka. */}
@@ -899,6 +899,13 @@ export default function PetaKolaborasiPage() {
         >
           {menyegarkan ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCcw className="w-3.5 h-3.5" />}
         </button>
+        </div>
+        {/* Hitungan aset & kolaborasi — sebaris di bawah tombol. */}
+        <p className="text-[11px] text-muted-foreground px-1 leading-tight">
+          <b className="text-foreground">{asetTampil.length}</b>/{jmlAset} aset
+          {" · "}
+          <b className="text-foreground">{jmlKolab}</b> kolaborasi
+        </p>
       </div>
 
       {/* Bilah moderasi terpilih */}
