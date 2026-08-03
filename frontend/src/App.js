@@ -369,10 +369,10 @@ function App() {
   // /ttd/:id (link tanda tangan yang dibagikan) & /ttd/verifikasi/:id (QR)
   // harus bisa dibuka SIAPA PUN TANPA LOGIN — diperiksa SEBELUM gate auth
   // dan seluruh early-return modul, murni dari pathname.
+  // TANPA SatkerAktifBar — alasan sama dengan peta kolaboratif di bawah.
   if (window.location.pathname.startsWith('/ttd/')) {
     return (
       <div className="App">
-      <SatkerAktifBar user={user} />
         <HalamanLazy fallback={<PageLoader />}>
           <TtdPublikPage />
         </HalamanLazy>
@@ -399,10 +399,13 @@ function App() {
   // ── HALAMAN PUBLIK PETA KOLABORATIF ────────────────────────────────────
   // /peta/kolaborasi/:id?token= dibuka SIAPA PUN saat masa tayang aktif; user
   // login satker terkait juga pasca-kedaluwarsa — sama gate publik e-sign.
+  // TANPA SatkerAktifBar: halaman publik bukan tempat memilih satker aktif —
+  // pemilih itu mengatur satker mana yang sedang dikelola di DALAM aplikasi,
+  // sementara peta ini hanya menampilkan satu kegiatan milik satu satker yang
+  // sudah ditetapkan oleh linknya. Bandingkan /lacak yang memang sudah bersih.
   if (window.location.pathname.startsWith('/peta/kolaborasi/')) {
     return (
       <div className="App">
-      <SatkerAktifBar user={user} />
         <HalamanLazy fallback={<PageLoader />}>
           <PetaKolaborasiPage />
         </HalamanLazy>
