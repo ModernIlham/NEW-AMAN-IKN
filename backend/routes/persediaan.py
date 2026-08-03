@@ -1649,6 +1649,13 @@ async def list_persediaan(
     # Pencarian teks bebas via Meilisearch bila aktif → id kandidat ter-scope;
     # fallback → regex Mongo lama. Scope satker tetap ditegakkan query di atas.
     meili_ids = await cari_id_persediaan(_user, search) if search.strip() else None
+    # Hasil KOSONG dari Meili TIDAK dipercaya sebagai "memang tidak ada":
+    # indeks bisa tertinggal (dokumen gagal sinkron saat Meili mati) dan
+    # pencocokan berbasis kata di Meili tak mengenal kode yang diketik tanpa
+    # pemisah. Nihil → jatuh ke regex Mongo yang otoritatif; biaya pindai
+    # hanya muncul pada pencarian yang memang tak berhasil.
+    if meili_ids is not None and not meili_ids:
+        meili_ids = None
     if meili_ids is not None:
         query["id"] = {"$in": meili_ids}
     elif pecah_kata(search):

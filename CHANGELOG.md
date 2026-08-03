@@ -67,6 +67,50 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#717] Pencarian halaman barang gelombang 2: kode tanpa titik, nilai numerik, dan paritas luring — 2026-08-03
+
+Laporan lanjutan: "masih ditemukan harusnya ada datanya tapi tidak terdeteksi."
+Kali ini kueri dijalankan di **mesin query Mongo sungguhan** (mongomock) atas
+data yang sengaja dibuat berantakan seperti aslinya. Hasilnya **5 cacat baru
+yang bisa direproduksi** — semuanya menghasilkan "nihil" padahal datanya ada:
+
+**1. Kode barang diketik tanpa pemisah.** `3100102001` tidak menemukan
+`3.10.01.02.001`; `310.01.02` (kode sebagian) juga nihil. Padahal begitulah
+kode disalin dari SIMAN/SAKTI atau diketik cepat.
+
+**2. Desimal koma vs titik.** Barang bernama "AC Split **1,5** PK" tidak
+ketemu saat diketik `1.5` — dua penulisan yang sama-sama lazim di Indonesia.
+
+**3. Nilai yang tersimpan sebagai ANGKA tak pernah cocok.** `$regex` Mongo
+hanya bekerja pada teks; aset hasil impor/sinkron lama yang menyimpan **NUP
+sebagai angka** (mis. `120`, bukan `"00120"`) **mustahil ditemukan** lewat
+pencarian — inilah "kadang ada, kadang tidak" yang paling membingungkan.
+
+**4. Tahun perolehan tidak ikut dicari** sama sekali (dan tersimpan numerik).
+
+**5. Pencarian LURING memakai aturan lama.** Saat aplikasi membaca snapshot
+(mode luring atau jaringan gagal), kata kunci masih diperlakukan sebagai satu
+frasa utuh pada 16 kolom saja — tanpa NUP, tanpa nomor dokumen. Kata kunci yang
+sama memberi hasil berbeda tergantung daring atau luring.
+
+**Perbaikan.** Kata berangka kini juga dicocokkan sebagai **deret angka bebas
+pemisah** (`3100102001` ≡ `3.10.01.02.001` ≡ `310.01.02…`, `1.5` ≡ `1,5`) pada
+kolom kode/nomor/nama, nilai bertipe angka dibandingkan langsung (NUP, tahun,
+harga), `year` masuk daftar kolom yang dicari, dan jalur luring memakai
+**modul bersama** `lib/pencarianLokal.js` yang mencerminkan persis semantik
+server — dikunci uji paritas di kedua sisi.
+
+**Meilisearch: hasil kosong tidak lagi dipercaya.** Bila mesin pencari
+menjawab "tidak ada", daftar aset/persediaan/surat kini **jatuh kembali ke
+kueri Mongo yang otoritatif**. Indeks bisa tertinggal (dokumen gagal sinkron
+saat Meili mati) dan pencocokan berbasis kata di Meili tak mengenal kode yang
+diketik tanpa pemisah — dua-duanya membuat barang yang ada dilaporkan tidak
+ada. Biaya pindai hanya muncul pada pencarian yang memang nihil.
+
+Diverifikasi: 14/14 kasus "data berantakan" akurat di mesin query Mongo
+(sebelumnya 9/14), 1498 uji unit backend lulus (5 uji baru), dan 7 uji paritas
+pencarian luring di frontend.
+
 ## [#716] Pencarian akurat: multi-kata, NUP & nomor dokumen ikut dicari, hasil sama meski Meili mati — 2026-08-03
 
 Keluhan: "hasil pencarian di berbagai percobaan masih tidak begitu akurat."

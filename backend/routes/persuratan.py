@@ -494,6 +494,13 @@ async def daftar_surat(jenis: str = "", status: str = "", modul: str = "",
     # Pencarian teks bebas via Meilisearch bila aktif → id kandidat ter-scope;
     # fallback → regex Mongo lama. Isolasi satker tetap ditegakkan Mongo di bawah.
     meili_ids = await cari_id_surat(_user, q) if q.strip() else None
+    # Hasil KOSONG dari Meili TIDAK dipercaya sebagai "memang tidak ada":
+    # indeks bisa tertinggal (dokumen gagal sinkron saat Meili mati) dan
+    # pencocokan berbasis kata di Meili tak mengenal kode yang diketik tanpa
+    # pemisah. Nihil → jatuh ke regex Mongo yang otoritatif; biaya pindai
+    # hanya muncul pada pencarian yang memang tak berhasil.
+    if meili_ids is not None and not meili_ids:
+        meili_ids = None
     if meili_ids is not None:
         query["id"] = {"$in": meili_ids}
     else:

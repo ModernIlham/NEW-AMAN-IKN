@@ -84,7 +84,7 @@ INDEKS = {
             "pengguna_jabatan", "supplier",
             "perolehan_dari_nama", "condition", "status", "nomor_spm",
             "kode_register", "nomor_kontrak", "nomor_bast",
-            "nomor_bukti_perolehan", "notes",
+            "nomor_bukti_perolehan", "notes", "year",
         ],
         "tanpa_typo": [
             "asset_code", "NUP", "serial_number", "nomor_spm",
