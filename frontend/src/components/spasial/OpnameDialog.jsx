@@ -25,6 +25,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
+import Lipatan from "@/components/ui/Lipatan";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import QrScanButton, { extractScannedCode } from "@/components/assets/QrScanButton";
@@ -293,18 +294,21 @@ export default function OpnameDialog({ node, labelLevel, isWriter, onClose }) {
             Opname: {node.nama}
           </DialogTitle>
           <DialogDescription className="text-xs">
-            {(labelLevel?.[node.tipe] || node.tipe)} — pindai stiker QR untuk
-            mengukuhkan keberadaan barang. Memindai TIDAK memindahkan catatan
-            lokasi; perpindahan diterapkan terpisah.
+            {(labelLevel?.[node.tipe] || node.tipe)} — pindai stiker QR.
           </DialogDescription>
         </DialogHeader>
+
+        <Lipatan judul="Memindai tak memindahkan lokasi — kenapa?">
+          Pindaian mengukuhkan bahwa barang BERADA di sini; ia tidak mengubah
+          catatan lokasi resminya. Perpindahan diterapkan terpisah supaya
+          pemindaian sekilas di lapangan tak diam-diam menulis ulang data induk.
+        </Lipatan>
 
         {/* Baris pindai — ikon di HP, melebar di layar besar; tak pernah pecah baris. */}
         {!isWriter ? (
           <p className="text-[11px] text-muted-foreground rounded-lg border border-border px-2 py-1.5"
              data-testid="opname-viewer">
-            Akun baca-saja: rekonsiliasi boleh dilihat, tetapi memindai butuh
-            akses tulis — server akan menolak setiap pindaian dari akun ini.
+            Akun baca-saja — memindai butuh akses tulis.
           </p>
         ) : (
         <div className="flex items-center gap-1.5">

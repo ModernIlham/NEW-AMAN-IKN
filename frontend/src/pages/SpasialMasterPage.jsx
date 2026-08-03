@@ -655,7 +655,7 @@ export default function SpasialMasterPage({ user, onBack }) {
                 Tingkat, nama, dan induk. Induk harus tingkat yang lebih luas.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-3 max-h-[60vh] overflow-y-auto px-0.5">
+            <div className="space-y-3 px-0.5">
               <div>
                 <label className="text-xs font-medium">Tingkat</label>
                 <select value={form.tipe}

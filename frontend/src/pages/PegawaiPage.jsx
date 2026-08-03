@@ -1511,7 +1511,8 @@ export default function PegawaiPage({ user, onBack }) {
           <DialogHeader>
             <DialogTitle>Struktur Organisasi</DialogTitle>
             <DialogDescription className="text-xs">
-              Bagan hierarki unit kerja (Eselon I–V) dari master, dengan jumlah pegawai per unit. Klik unit untuk membuka/menutup sub-unitnya; klik jumlah untuk memfilter daftar pegawai.
+              Hierarki unit kerja Eselon I–V beserta jumlah pegawainya.
+              Ketuk <b>angka</b> untuk memfilter daftar pegawai.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1" data-testid="struktur-organisasi-pohon">
@@ -1548,8 +1549,11 @@ export default function PegawaiPage({ user, onBack }) {
               <Button variant="outline" size="sm" className="h-9 text-xs gap-1.5 w-full" disabled={kelolaUnit.sibuk}
                 onClick={bangunDariPegawai} data-testid="unit-bangun-otomatis">
                 {kelolaUnit.sibuk ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
-                Bangun otomatis dari data pegawai (jalur Eselon 1–5 yang sudah terisi)
+                Bangun otomatis dari data pegawai
               </Button>
+              <p className="text-[10px] text-muted-foreground -mt-2 leading-snug">
+                Hanya jalur Eselon 1–5 yang sudah terisi di data pegawai yang dibentuk.
+              </p>
               <div className="flex bg-muted rounded-lg p-0.5 gap-0.5">
                 {["1", "2", "3", "4", "5"].map((es) => (
                   <button key={es} type="button"

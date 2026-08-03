@@ -3,6 +3,7 @@ import { History, Loader2, Landmark } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
+import Lipatan from "@/components/ui/Lipatan";
 import { toast } from "sonner";
 import axios from "axios";
 import { getApiError } from "@/lib/utils";
@@ -183,16 +184,15 @@ export default function AssetTimelineDialog({ open, assetId, onClose }) {
               )}
             </>
           )}
+
+          <Lipatan judul="Kenapa satu aset bisa muncul di beberapa kegiatan?"
+            className="mt-3 pt-3 border-t border-border">
+            Induk datanya adalah identitas aset (register / kode + NUP). Kegiatan
+            inventarisasi hanyalah pemutakhir berkala — aset yang sama di beberapa
+            kegiatan otomatis dikenali sebagai satu barang.
+          </Lipatan>
         </div>
 
-        {/* Catatan arsitektur untuk pengguna */}
-        <div className="px-4 py-2 border-t border-border flex-shrink-0">
-          <p className="text-[10px] text-muted-foreground break-words">
-            Induk data = identitas aset (register/kode+NUP). Kegiatan
-            inventarisasi adalah pemutakhir berkala — aset yang sama di
-            beberapa kegiatan otomatis dikenali satu.
-          </p>
-        </div>
       </DialogContent>
     </Dialog>
   );

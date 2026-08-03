@@ -162,7 +162,7 @@ export default function PengesahanDialog({ open, activity, isAdmin, onClose, onS
           <DialogDescription className="text-xs text-muted-foreground">
             {disahkan
               ? "Kegiatan telah disahkan dan seluruh data aset terkunci."
-              : "Sahkan kegiatan setelah semua aset terinventarisasi, berfoto, berdata lengkap (kode register, eselon, lokasi, pengguna, tanpa kategori dummy), dan dokumen pengesahan bertanda tangan diunggah."}
+              : "Mengunci permanen seluruh data aset kegiatan ini."}
           </DialogDescription>
         </DialogHeader>
 

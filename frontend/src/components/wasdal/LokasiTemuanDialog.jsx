@@ -137,7 +137,7 @@ export default function LokasiTemuanDialog({ judul, submitUrl, lokasiAwal, onClo
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose?.()}>
-      <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden" data-testid="lokasi-temuan-dialog">
+      <DialogContent className="max-w-2xl p-0 gap-0" data-testid="lokasi-temuan-dialog">
         <DialogHeader className="px-4 pt-3 pb-2 border-b border-border">
           <DialogTitle className="text-sm flex items-center gap-1.5">
             <MapPin className="w-4 h-4 text-teal-600" />Lokasi Temuan

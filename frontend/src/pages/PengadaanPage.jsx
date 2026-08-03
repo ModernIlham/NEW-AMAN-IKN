@@ -12,6 +12,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import Lipatan from "@/components/ui/Lipatan";
 import StatKartu from "@/components/ui/StatKartu";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { authMediaUrl } from "@/lib/mediaUrl";
@@ -1130,14 +1131,16 @@ export default function PengadaanPage({ user, onBack }) {
       <Dialog open={!!lpbGab} onOpenChange={(o) => { if (!o) setLpbGab(null); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>LPB Gabungan — seluruh BAST PPK → KPB</DialogTitle>
+            <DialogTitle>LPB Gabungan</DialogTitle>
             <DialogDescription className="text-xs">
-              Satu Laporan Penerimaan Barang merangkum banyak BAST PPK → KPB
-              sekaligus — barang <strong>aset maupun persediaan</strong>. Perolehan
-              yang belum menerbitkan BAST PPK → KPB tidak dapat dipilih:
-              terbitkan dulu lewat tombol di barisnya.
+              Satu LPB untuk banyak BAST PPK → KPB — aset maupun persediaan.
             </DialogDescription>
           </DialogHeader>
+          <Lipatan judul="Kenapa sebagian perolehan tak bisa dipilih?">
+            Perolehan yang belum menerbitkan BAST PPK → KPB tidak dapat ikut.
+            Terbitkan dulu lewat tombol BAST PPK→KPB di baris perolehan tersebut
+            (di layar HP tombolnya berupa ikon saja).
+          </Lipatan>
           {lpbGab && (() => {
             const semua = data?.items || [];
             const siap = semua.filter((p) => p.bast_ppk);
