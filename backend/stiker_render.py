@@ -213,40 +213,55 @@ def gambar_sampel(c, x, y, w, h, ukuran, lw_mm, lh_mm, mm):
     c.rect(x, y, w, h)
     c.setDash()
 
+    # ── Geometri garis ukur dihitung DULU (teks menyesuaikan diri) ──
+    # Kedua sisi memakai margin tepi yang SAMA (`tepi`) dan jarak teks↔garis
+    # yang SAMA (`jarak_label`), sehingga label "tinggi" tidak lagi terasa
+    # lebih mepet ke garis stiker dibanding label "lebar". Panah MEMBENTANG
+    # PENUH dari tepi ke tepi — dulu panah tinggi berhenti di bawah blok teks
+    # sehingga tak sampai ujung dan tak jujur menunjukkan satu satuan stiker.
+    s_lab = f["label"]
+    sirip = 1.2 * mm
+    tepi = 1.4 * mm                     # jarak ujung panah dari garis stiker
+    jarak_label = 1.0 * mm              # jarak teks ↔ garis ukur (sama 2 sisi)
+    # Label tinggi diputar 90°: puncak huruf menghadap KIRI, jadi baseline
+    # berjarak ascent (0,72 em Helvetica) dari tepi; garis ukur di sisi
+    # bawah huruf (descent 0,21 em) + jarak_label.
+    dasar_x = x + tepi + 0.72 * s_lab
+    garis_x = dasar_x + 0.21 * s_lab + jarak_label
+    garis_y = y + tepi + s_lab + jarak_label
+
+    # Blok teks judul digeser ke KANAN garis ukur tegak agar tak tertimpa
+    # panah yang kini membentang penuh; pusatnya = tengah ruang tersisa.
+    teks_kiri = garis_x + 1.2 * mm
+    teks_lebar = max(6 * mm, (x + w - pad) - teks_kiri)
+    teks_tengah = teks_kiri + teks_lebar / 2
+
     judul = "CONTOH UKURAN"
     teks_dim = format_dimensi(lw_mm, lh_mm)
-    f_judul = muat_satu_baris(judul, w - 2 * pad, ukur_tebal,
+    f_judul = muat_satu_baris(judul, teks_lebar, ukur_tebal,
                               f["nama"], f["label"])[1]
-    dim_teks, f_dim = muat_satu_baris(teks_dim, w - 2 * pad, ukur_tebal,
+    dim_teks, f_dim = muat_satu_baris(teks_dim, teks_lebar, ukur_tebal,
                                       f["kode"], f["label"])
     ty = y + h - pad - f_judul
     c.setFont("Helvetica-Bold", f_judul)
-    c.drawCentredString(x + w / 2, ty, judul)
+    c.drawCentredString(teks_tengah, ty, judul)
     ty -= f_dim * 1.35
     c.setFont("Helvetica-Bold", f_dim)
-    c.drawCentredString(x + w / 2, ty, dim_teks)
-    ty -= f["label"] * 1.3
-    c.setFont("Helvetica", f["label"])
-    c.drawCentredString(x + w / 2, ty, f"Ukuran {str(ukuran).capitalize()}"
-                        " — bukan untuk ditempel")
+    c.drawCentredString(teks_tengah, ty, dim_teks)
+    ty -= s_lab * 1.3
+    ket = f"Ukuran {str(ukuran).capitalize()} — bukan untuk ditempel"
+    ket_teks, f_ket = muat_satu_baris(ket, teks_lebar, ukur_biasa,
+                                      s_lab, s_lab * 0.7)
+    c.setFont("Helvetica", f_ket)
+    c.drawCentredString(teks_tengah, ty, ket_teks)
 
-    # Garis ukur: lebar (mendatar, bawah) & tinggi (tegak, kiri).
-    sirip = 1.2 * mm
+    # ── Gambar kedua garis ukur ──
     c.setLineWidth(0.5)
-    _panah_ukur(c, x + pad, y + pad + f["label"] * 1.5,
-                x + w - pad, y + pad + f["label"] * 1.5, sirip)
-    c.setFont("Helvetica", f["label"])
-    c.drawCentredString(x + w / 2, y + pad + f["label"] * 0.3,
+    _panah_ukur(c, x + tepi, garis_y, x + w - tepi, garis_y, sirip)
+    c.setFont("Helvetica", s_lab)
+    c.drawCentredString(x + w / 2, y + tepi + s_lab * 0.25,
                         f"lebar {teks_dim.split(' × ')[0]} mm")
-    # Label tinggi diputar 90°: puncak huruf menghadap KIRI (ke arah border).
-    # Dulu baseline dipatok x+pad*0.6 sehingga puncak huruf MENEMBUS garis
-    # putus-putus tepi stiker. Kini koridor dihitung dari metrik Helvetica
-    # (ascent 0.72 / descent 0.21): [border] 0,7mm [teks] 0,8mm [garis ukur].
-    s_lab = f["label"]
-    dasar_x = x + 0.7 * mm + 0.72 * s_lab
-    garis_x = dasar_x + 0.21 * s_lab + 0.8 * mm
-    _panah_ukur(c, garis_x, y + pad, garis_x,
-                min(ty - f["label"] * 0.6, y + h - pad), sirip)
+    _panah_ukur(c, garis_x, y + tepi, garis_x, y + h - tepi, sirip)
     c.saveState()
     c.translate(dasar_x, y + h / 2)
     c.rotate(90)

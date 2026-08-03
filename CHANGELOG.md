@@ -67,6 +67,56 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#714] Filter layar ikut menyaring Laporan Eksekutif + tooltip tabel berhenti berkedip + panah stiker contoh penuh — 2026-08-03
+
+Tiga keluhan lapangan ditutup sekaligus.
+
+**1. Filter kini memengaruhi hasil unduhan laporan** (`routes/reports.py`).
+Sebelumnya filter di layar Inventarisasi hanya menyaring daftar aset;
+laporan yang diunduh tetap memuat SELURUH kegiatan. Kini **Laporan
+Eksekutif, Barang Serupa, dan Data Aset (Detail Per Aset)** — termasuk
+paket ZIP batch — ikut tersaring.
+
+- Dependency `filter_laporan` (17 parameter: kondisi, status inventarisasi,
+  kategori, lokasi, eselon I/II, rentang harga, rentang tanggal beli,
+  pencarian bebas, dll.) memakai **builder query yang SAMA** dengan daftar
+  aset (`build_asset_search_query`), sehingga hasil laporan tak pernah
+  *drift* dari yang terlihat di layar. Nama parameternya identik dengan
+  `useAssetFilters.buildFilterParams` di frontend.
+- `activity_id` **selalu** diambil dari path kegiatan dan dibuang dari
+  filter — filter tak bisa menyelipkan kegiatan lain (pagar lintas-kegiatan).
+- Laporan tersaring mencetak **pita peringatan oranye** berisi ringkasan
+  filter yang dipakai ("Kondisi: Rusak Berat · Lokasi: Gudang B") plus
+  penegasan bahwa angka & daftar di bawahnya BUKAN seluruh kegiatan —
+  jadi tak ada laporan tersaring yang tersamar sebagai laporan lengkap.
+- Di layar, panel Rekapitulasi menampilkan kotak penjelas saat filter aktif:
+  laporan eksekutif ikut filter, sedangkan **dokumen resmi (LHI, BAHI, DBHI,
+  RHI, Sampul) tetap memuat seluruh kegiatan** — dokumen resmi tidak boleh
+  bergantung pada tampilan layar.
+- 8 uji unit baru (`tests/unit/test_filter_laporan.py`) mengunci janji ini,
+  termasuk regex literal aman, harga bukan angka diabaikan, dan pencarian
+  < 2 huruf tak memicu pindai penuh.
+
+**2. Tooltip tabel inventarisasi berhenti berkedip pada teks sangat panjang**
+(`lib/tooltipTeks.js` — BARU). Perbaikan `[#712]` (mencabut `title` selama
+animasi) belum cukup: pada teks yang sangat panjang, marquee berjalan lama
+sehingga tooltip praktis tak pernah muncul. Kini dipakai **tooltip kustom**
+— satu elemen singleton, jeda 320 ms, menampilkan teks penuh multi-baris,
+mengikuti tema terang/gelap, dijepit ke tepi layar. Tooltip tampil segera
+saat hover dan **bertahan selama teks bergulir**. Bug yang ketahuan saat uji
+dan ikut diperbaiki: animasi `scrollLeft` marquee memicu event `scroll` yang
+menyembunyikan tooltip — event dari elemen anchor sendiri kini diabaikan.
+Diverifikasi harness Playwright (tooltip bertahan 6× pengecekan selama
+guliran; `title` dicabut lalu dipulihkan; elipsis pulih).
+
+**3. Stiker contoh: jarak label seimbang & panah sampai ujung**
+(`stiker_render.py`). Label "tinggi" masih terlalu dekat garis dibanding
+label "lebar", dan panah ukur berhenti sebelum ujung stiker. Geometri kini
+dihitung LEBIH DULU (jarak label 1,0 mm sama untuk kedua sisi, ujung panah
+1,4 mm dari tepi) lalu teks menyesuaikan — bukan sebaliknya. Diverifikasi
+render nyata tiga ukuran (besar/sedang/kecil): panah penuh ujung-ke-ujung,
+jarak label seimbang, teks tak tertimpa garis.
+
 ## [#713] Pusat Unduhan: unduhan besar via job latar ber-progres + retensi 30 hari + pembersih disk — 2026-08-03
 
 Keluhan: mengunduh laporan besar (mis. "Laporan Eksekutif per Barang

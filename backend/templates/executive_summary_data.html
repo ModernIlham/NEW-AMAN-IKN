@@ -83,7 +83,10 @@
            agar justify-content:space-between bekerja: rentang di kiri, "Bagian" di kanan. */
         .data-footer { position: running(footer); width: 100%; padding: 5px 12px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 9px; color: #64748b; }
         .data-footer strong { color: #0f172a; }
-    </style>
+            .filter-banner { margin: 8px 0 10px; padding: 6px 12px; border-left: 4px solid #f59e0b;
+            background: rgba(245,158,11,.12); border-radius: 4px; font-size: 10px; line-height: 1.5; }
+        .filter-banner strong { color: #b45309; }
+</style>
 </head>
 <body>
 
@@ -99,6 +102,13 @@
     <h2>Data Inventarisasi BMN &mdash; Detail Per Aset{% if data_page_num %} (Bagian {{ data_page_num }}{% if total_data_pages %}/{{ total_data_pages }}{% endif %}){% endif %}</h2>
     <div class="data-header-meta"><strong>Satker: {{ satker_name }}</strong></div>
 </div>
+
+{% if filter_aktif %}
+<div class="filter-banner">
+    <strong>Laporan tersaring</strong> &mdash; hanya memuat aset yang lolos filter berikut:
+    {{ filter_ringkas }}. Angka &amp; daftar di bawah BUKAN seluruh kegiatan.
+</div>
+{% endif %}
 
 <div class="data-table-wrapper">
     <table class="data-table">

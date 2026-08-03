@@ -11,7 +11,8 @@ import ReportDownloads from "./rekapitulasi/ReportDownloads";
 
 const API = (process.env.REACT_APP_BACKEND_URL || "http://localhost:8001") + "/api";
 
-function RekapitulasiPanel({ activityId, isOpen, onToggle, embedded = false, onTotal }) {
+function RekapitulasiPanel({ activityId, isOpen, onToggle, embedded = false, onTotal,
+                             filterLaporan = "", filterAktifCount = 0 }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState("");
@@ -54,10 +55,15 @@ function RekapitulasiPanel({ activityId, isOpen, onToggle, embedded = false, onT
       const endpoint = endpoints[type];
       if (!endpoint) return;
       const name = filenames[type] || type;
+      // Laporan EKSEKUTIF mengikuti filter yang aktif di layar; dokumen resmi
+      // lain (RHI/BAHI/DBKP dst.) selalu memuat seluruh kegiatan.
+      const q = type === "executive-summary" && filterLaporan ? `?${filterLaporan}` : "";
       await downloadFileWithProgress(
-        `${API}/inventory-activities/${activityId}/${endpoint}`,
+        `${API}/inventory-activities/${activityId}/${endpoint}${q}`,
         `${name}_${activityId.substring(0, 8)}.pdf`,
-        { label: name }
+        // Laporan eksekutif tergolong berat: lewat 45 dtk dilanjutkan di
+        // Pusat Unduhan alih-alih gagal "Waktu unduh habis".
+        { label: name, ...(type === "executive-summary" ? { timeout: 45000 } : {}) }
       );
     } catch { /* toast error sudah ditangani helper */ } finally {
       setDownloading("");
@@ -142,6 +148,8 @@ function RekapitulasiPanel({ activityId, isOpen, onToggle, embedded = false, onT
           <ReportDownloads
             data={data}
             activityId={activityId}
+            filterLaporan={filterLaporan}
+            filterAktifCount={filterAktifCount}
             downloading={downloading}
             onDownloadPDF={handleDownloadPDF}
             onDownloadDBHI={handleDownloadDBHI}
