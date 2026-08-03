@@ -392,9 +392,12 @@ const DashboardToolbar = memo(function DashboardToolbar({
               <DropdownMenuItem onClick={handlePrintBulkCards} disabled={jmlCetak === 0} data-testid="mobile-cetak-kartu">
                 <CreditCard className="w-4 h-4 mr-2" />Cetak Kartu ({jmlCetak})
               </DropdownMenuItem>
+              {/* Tanpa embel-embel "(n terpilih)": labelnya sudah paling panjang
+                  di menu ini, dan tambahan itu memecahnya jadi tiga baris di HP.
+                  Jumlah yang akan dicetak tetap disebut di dalam dialog stiker,
+                  di baris cakupan "Aset yang sedang diseleksi (n aset)". */}
               <DropdownMenuItem onClick={onCetakStiker} disabled={jmlCetak === 0} data-testid="mobile-cetak-stiker">
                 <Tags className="w-4 h-4 mr-2" />Cetak Stiker Label
-                {selectedCount > 0 && <span className="ml-1 text-muted-foreground">({selectedCount} terpilih)</span>}
               </DropdownMenuItem>
               {perms.canBulkDelete && (
                 <DropdownMenuItem
