@@ -67,6 +67,35 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#729] Dialog Cetak Stiker dipadatkan — muat satu layar HP — 2026-08-03
+
+Di HP dialog ini memenuhi satu layar penuh **sebelum sampai ke pilihannya**:
+paragraf desain label saja delapan baris, tiap ukuran memuat angka A4 DAN A3
+sekaligus, dan kotak "stiker contoh" menghabiskan enam baris untuk satu
+centang. Tinggi isinya 916 px di layar 851 px — harus digulir hanya untuk
+melihat apa yang bisa dipilih.
+
+Yang diubah, tanpa membuang satu pun informasi:
+
+- **Kertas dinaikkan ke atas**, sehingga daftar ukuran hanya menampilkan angka
+  kertas yang sedang aktif (`Besar · 12/hal · ±98×46 mm`) — separuh teks tiap
+  baris memang selalu mubazir karena kertasnya toh sudah dipilih. Judulnya
+  menyebutkan konteksnya: "Ukuran stiker · per lembar A4".
+- **Pilihan jadi chip berdampingan** (radio asli tetap ada, disembunyikan
+  `sr-only`, jadi keyboard & pembaca layar tak kehilangan apa pun): cakupan satu
+  baris, ukuran dua kolom, kertas & header sebaris dengan labelnya.
+- **Penjelasan panjang dilipat** — "Rincian desain label" dan "Untuk apa?" pada
+  stiker contoh kini `<details>` yang tertutup; isinya utuh, tinggal ditekan.
+- **Petunjuk kode 20 digit hanya muncul saat opsi itu dipilih**, bukan
+  menganggur permanen.
+- Tombolnya menyebut jumlah: **"Buat PDF (1.150)"**; angka diformat gaya
+  Indonesia.
+
+Hasil ukur nyata di Chromium (CSS produksi): **916 px → 650 px** pada layar
+393×851 (muat penuh tanpa gulir), 563 px pada 360×640 (menggulir di dalam
+dialog, bukan mendorong halaman), 579 px di desktop. Tak ada galat JS di ketiga
+lebar, tak ada geser samping.
+
 ## [#728] Menu HP: "Cetak Stiker Label" tanpa embel-embel jumlah terpilih — 2026-08-03
 
 Penanda `(n terpilih)` yang ditambahkan di `[#727]` membuat item menu itu pecah
