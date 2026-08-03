@@ -67,6 +67,16 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#728] Menu HP: "Cetak Stiker Label" tanpa embel-embel jumlah terpilih — 2026-08-03
+
+Penanda `(n terpilih)` yang ditambahkan di `[#727]` membuat item menu itu pecah
+jadi TIGA baris di HP — labelnya sudah yang terpanjang di menu, dan angkanya
+terdorong ke kolom sendiri di sebelah kanan. Penandanya dibuang dari item menu;
+jumlah yang akan dicetak tetap disebut di dalam dialog stiker, pada baris
+cakupan "Aset yang sedang diseleksi (n aset)". Perilaku cetaknya tidak berubah —
+seleksi tetap menang. "Cetak Kartu (n)" dibiarkan apa adanya (labelnya pendek,
+angkanya muat sebaris).
+
 ## [#727] Cetak ikut seleksi, bagikan jadi ikon di HP, judul peta bisa dikoreksi — 2026-08-03
 
 **Cetak Kartu & Cetak Stiker kini menuruti seleksi.** Menandai 3 aset lalu
