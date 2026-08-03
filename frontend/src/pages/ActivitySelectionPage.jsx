@@ -1278,6 +1278,18 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
               )}
             </div>
 
+          </div>
+
+          {/* Tombol simpan MELEKAT di dasar dialog, bukan ikut hanyut ke ujung
+              isian. Dialog ini menumpuk tujuh blok yang semuanya terbuka —
+              tingginya ~2.000 px di layar 393 px (plafon dialog 819 px), jadi
+              tombolnya dulu berada ~2,5 layar di bawah; di mode edit pengguna
+              harus menggulir habis hanya untuk menyimpan satu perubahan.
+              WAJIB anak langsung DialogContent: `sticky` di dalam pembungkus
+              ber-`overflow-hidden` di atas tak akan melekat pada guliran
+              dialog. Margin negatif membatalkan padding dialog supaya alasnya
+              selebar penuh. */}
+          <div className="sticky bottom-0 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 px-4 sm:px-6 py-3 bg-background border-t border-border">
             <Button
               onClick={editingActivity ? handleUpdate : handleCreate}
               disabled={saving}

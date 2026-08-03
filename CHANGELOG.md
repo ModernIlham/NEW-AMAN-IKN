@@ -67,6 +67,68 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#732] Dua belas temuan sisa audit popup ditutup — penjelasan panjang dilipat — 2026-08-03
+
+Menutup 12 temuan yang di `[#731]` sengaja saya sebut BELUM dikerjakan. Semua
+usulnya lebih dulu dikoreksi oleh verifikator masing-masing, dan koreksi itu
+diikuti — bukan usul mentahnya.
+
+**Komponen bersama `Lipatan`** (`components/ui/Lipatan.jsx`). Pola yang dipakai
+di dialog stiker ternyata fungsi lokal yang tak diekspor; diangkat jadi
+komponen bersama. Sengaja `<details>` bawaan peramban: bekerja tanpa
+JavaScript, semantik buka/tutup untuk pembaca layar sudah ada, dan `<summary>`
+bukan `<button>` sehingga tak digembungkan aturan tap-target 44 px. Punya
+`nada` agar lipatan di dalam kotak peringatan tetap berwarna amber, bukan
+kelabu yang terlihat asing. Diukur: **15 px tertutup → 64 px terbuka**.
+
+**Delapan teks panjang yang permanen** kini dilipat atau diringkas:
+
+- **Pengesahan Kegiatan** — deskripsi mengurai tujuh syarat yang tabel tepat di
+  bawahnya sudah tampilkan lebih lengkap (centang/silang + jumlah aset gagal).
+  Jadi satu baris: "Mengunci permanen seluruh data aset kegiatan ini."
+- **Timeline Aset** — catatan arsitektur dipasang sebagai KAKI TETAP, memakan
+  ~62 px ruang gulir tiap kali dibuka. Dipindah ke DALAM area gulir lalu
+  dilipat; sengaja bukan `<details>` di kaki, karena kaki yang membuka justru
+  menyusutkan area gulir — pengguna dihukum karena penasaran.
+- **Kelola Kategori** — judul peringatan & "Non-blocking" tetap terlihat (itu
+  yang menentukan perlu-tidaknya bertindak); LANGKAH perbaikannya yang dilipat.
+- **Opname Ruangan** — deskripsi 4 baris → 1; aturan "memindai tak memindahkan
+  lokasi" dilipat. Catatan akun baca-saja 3 baris → 1.
+- **Tambah/Ubah Pejabat** — keterangan tiap peran dilipat. Prefiks nama peran
+  di dalamnya DIPERTAHANKAN: urutannya mengikuti urutan klik, bukan urutan chip,
+  jadi tanpa prefiks pembaca tak bisa memetakan paragraf ke chip mana.
+- **Struktur Organisasi** — deskripsi diringkas, tapi petunjuk "ketuk angka
+  untuk memfilter" DIPERTAHANKAN: di HP tombol itu hanya berupa pil angka,
+  `title` mati di layar sentuh, dan ketukannya menutup dialog sekaligus mengubah
+  kotak pencarian — kejutan yang wajib diberitahukan.
+- **LPB Gabungan** — judul & deskripsi diringkas; kalimat "terbitkan dulu lewat
+  tombol di barisnya" dipindah ke lipatan, bukan dibuang: di HP tombol itu ikon
+  tanpa teks, jadi kalimat ini satu-satunya petunjuk tekstualnya.
+- **Buat BAST** — hint penyerah 4 baris → 1; daftar peran yang boleh menyerahkan
+  dilipat.
+
+**Empat sisanya:**
+
+- **Lokasi Temuan** — `overflow-hidden` mematikan guliran bawaan sementara
+  plafon tinggi tetap berlaku, jadi isi yang melewatinya TERPOTONG tanpa bisa
+  dijangkau — paling terasa saat HP dimiringkan. Cukup dihapus; peta sudah
+  mengklip dirinya sendiri lewat `.leaflet-container`.
+- **Tambah/Ubah Node** — penggulir `max-h-[60vh]` di dalam dialog yang kini
+  sudah menggulir: dua area gulir bersarang sekaligus membuang ~79 px ruang.
+- **Kelola Unit Kerja** — label tombol 391 px pada ruang teks ±246 px (360 px)
+  dengan `whitespace-nowrap`: teksnya TERPOTONG `overflow-x-hidden` dialog.
+  Dipendekkan; kualifikasinya turun jadi baris keterangan.
+- **Buat/Edit Kegiatan** — tujuh blok selalu terbuka, tinggi ~2.000 px di layar
+  393 px, dan tombol simpan ikut hanyut ke ujung: pengguna menggulir ~2,5 layar
+  untuk menyimpan satu perubahan. Tombolnya jadi alas MELEKAT. Wajib anak
+  langsung `DialogContent` — `sticky` di dalam pembungkus ber-`overflow-hidden`
+  tak akan melekat pada guliran dialog.
+
+Diverifikasi di Chromium dengan CSS produksi: alas tetap di tempatnya setelah
+digulir ke ujung dan tombolnya terlihat tanpa menggulir; lipatan menyembunyikan
+isinya saat tertutup dan berwarna amber di dalam kotak peringatan. 401 uji
+frontend lulus, lint bersih, build produksi sukses.
+
 ## [#731] Isi popup diseragamkan — kolom tak lagi terjepit 158 px di HP — 2026-08-03
 
 Lanjutan `[#730]`, kali ini isi popupnya. Enam agen mengaudit 118 popup di

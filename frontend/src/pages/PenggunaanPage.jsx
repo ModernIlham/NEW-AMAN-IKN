@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import Lipatan from "@/components/ui/Lipatan";
 import { useTransitionDialog } from "@/components/ui/TransitionDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
@@ -1748,9 +1749,16 @@ export default function PenggunaanPage({ user, onBack }) {
                   </select>
                   <p className="text-[10px] text-muted-foreground mt-0.5">
                     {pejabatPenyerah.length === 0
-                      ? "Belum ada pejabat berperan penyerah yang berlaku hari ini — tambahkan di halaman Referensi Pejabat (peran KPB / Petugas Penatausahaan / Pengelola BMN Satker); sementara itu otomatis memakai KPB dari pengaturan."
-                      : "Hanya peran pengelolaan BMN (KPB, Petugas Penatausahaan, Pengelola BMN Satker a.n. KPB). Kosong = otomatis memakai KPB aktif."}
+                      ? "Belum ada pejabat penyerah — sementara memakai KPB."
+                      : "Kosong = otomatis memakai KPB aktif."}
                   </p>
+                  <Lipatan judul="Peran apa saja yang boleh menyerahkan?" className="mt-0.5">
+                    Hanya peran pengelolaan BMN: KPB, Petugas Penatausahaan, atau
+                    Pengelola BMN Satker a.n. KPB — berlaku pada tanggal BAST.
+                    {pejabatPenyerah.length === 0
+                      ? " Tambahkan di halaman Referensi Pejabat dengan salah satu peran itu."
+                      : ""}
+                  </Lipatan>
                 </div>
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

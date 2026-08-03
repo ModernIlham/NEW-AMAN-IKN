@@ -10,6 +10,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import Lipatan from "@/components/ui/Lipatan";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { authMediaUrl } from "@/lib/mediaUrl";
 // Lazy: kanvas TTD (react-signature-canvas + signature_pad) hanya dimuat saat
@@ -493,7 +494,8 @@ export default function PejabatPage({ user, onBack }) {
                 {/* Penjelasan peran terpilih — menjawab beda tiap peran &
                     menandai istilah Barang Milik DAERAH agar tak salah pakai. */}
                 {(form.peran || []).length > 0 && (
-                  <ul className="mt-2 space-y-1">
+                  <Lipatan judul={`Apa beda ${(form.peran || []).length} peran ini?`} className="mt-2">
+                  <ul className="space-y-1">
                     {(form.peran || []).map((kode) => {
                       const p = peranRef.find((x) => x.kode === kode);
                       if (!p?.keterangan) return null;
@@ -510,6 +512,7 @@ export default function PejabatPage({ user, onBack }) {
                       );
                     })}
                   </ul>
+                  </Lipatan>
                 )}
               </Field>
 

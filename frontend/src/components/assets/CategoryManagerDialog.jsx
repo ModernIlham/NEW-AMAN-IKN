@@ -3,6 +3,7 @@ import { Plus, Upload, Trash2, ChevronLeft, ChevronRight, XCircle, FolderOpen, F
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
+import Lipatan from "../ui/Lipatan";
 import { toast } from "sonner";
 import axios from "axios";
 import { getApiError } from "../../lib/utils";
@@ -140,8 +141,13 @@ const CategoryManagerDialog = memo(({ open, onClose, categories, onCategoriesCha
                 ⚠ {cekKodefikasi.jumlah_bermasalah} kategori kodenya belum terdaftar di Referensi Kodefikasi
               </p>
               <p className="text-[10px] text-amber-700/80 dark:text-amber-300/80 mt-0.5">
-                Non-blocking — data tetap dipakai. Lengkapi Referensi Kodefikasi Barang (Beranda Modul) atau perbaiki kode kategorinya; baris terdampak bertanda ⚠. Rinciannya juga ada di dasbor Integritas.
+                Non-blocking — data tetap dipakai.
               </p>
+              <Lipatan judul="Cara memperbaiki" nada="amber" className="mt-1">
+                Lengkapi Referensi Kodefikasi Barang (Beranda Modul) atau perbaiki kode
+                kategorinya; baris terdampak bertanda ⚠. Rinciannya juga ada di dasbor
+                Integritas.
+              </Lipatan>
             </div>
           )}
           
