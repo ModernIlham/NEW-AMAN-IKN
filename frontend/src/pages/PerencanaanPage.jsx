@@ -20,6 +20,10 @@ import { downloadFileWithProgress } from "@/lib/downloadFile";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 import TanggalanButton from "@/components/ui/TanggalanButton";
 import StatKartu from "@/components/ui/StatKartu";
+import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
+  SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
+} from "@/lib/kelasKepala";
+
 // Panel SBSK-ruang dimuat LAZY: ia menarik seluruh pohon denah, dan mayoritas
 // kunjungan halaman Perencanaan tak menyentuh perencanaan ruang.
 const SbskRuangPanel = lazy(() => import("@/components/perencanaan/SbskRuangPanel"));
@@ -219,23 +223,23 @@ export default function PerencanaanPage({ user, onBack }) {
   return (
     <div className="min-h-screen bg-background" data-testid="perencanaan-page">
       {/* ── Header ── */}
-      <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
-        <div className="max-w-5xl mx-auto flex flex-wrap items-center gap-2 sm:gap-3 gap-y-2">
+      <header className={KEPALA_HALAMAN}>
+        <div className={`max-w-5xl mx-auto ${BARIS_KEPALA}`}>
           <button
             type="button"
             onClick={onBack}
             aria-label="Kembali ke Beranda Modul"
-            className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
+            className={TOMBOL_KEPALA}
             data-testid="perencanaan-back"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <span className="w-9 h-9 rounded-lg bg-teal-700 flex items-center justify-center flex-shrink-0">
+          <span className={`bg-teal-700 ${IKON_KEPALA}`}>
             <ClipboardList className="w-4 h-4 text-white" />
           </span>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight truncate">Perencanaan — Kandidat RKBMN Pemeliharaan</h1>
-            <p className="text-[11px] sm:text-xs text-muted-foreground truncate">
+          <div className={BLOK_JUDUL}>
+            <h1 className={JUDUL_KEPALA}>Perencanaan — Kandidat RKBMN Pemeliharaan</h1>
+            <p className={SUBJUDUL_KEPALA}>
               Saringan kelayakan usulan (PMK 153/2021) + riwayat biaya per aset
             </p>
           </div>
@@ -250,7 +254,7 @@ export default function PerencanaanPage({ user, onBack }) {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
+                className={TOMBOL_KEPALA}
                 title="Unduhan perencanaan"
                 aria-label="Unduhan perencanaan"
                 data-testid="perencanaan-unduh-menu"

@@ -24,6 +24,10 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { useTripleClick } from "@/hooks/useTripleClick";
+import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
+  SUBJUDUL_KEPALA, TOMBOL_KEPALA,
+} from "@/lib/kelasKepala";
+
 import {
   SIKLUS_MODULES, PENATAUSAHAAN_SUBMODULES, FASE_ROADMAP, STATUS_LABELS,
   ASAS_PENGELOLAAN, DASAR_HUKUM_UMUM, PENATAUSAHAAN_DASAR_HUKUM,
@@ -333,17 +337,17 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
   return (
     <div className="min-h-screen bg-background" data-testid="module-home">
       {/* ── Header ── */}
-      <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto flex flex-wrap items-center gap-2 sm:gap-3 gap-y-2">
+      <header className={KEPALA_HALAMAN}>
+        <div className={`max-w-6xl mx-auto ${BARIS_KEPALA}`}>
           <div
             className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-600 to-teal-700 flex items-center justify-center shadow-sm cursor-pointer flex-shrink-0"
             {...(onShowInfo ? { onClick: activateInfo, title: "" } : {})}
           >
             <Package className="w-5 h-5 text-white" />
           </div>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight truncate">AMAN — Manajemen Aset Negara</h1>
-            <p className="text-[11px] sm:text-xs text-muted-foreground truncate">
+          <div className={BLOK_JUDUL}>
+            <h1 className={JUDUL_KEPALA}>AMAN — Manajemen Aset Negara</h1>
+            <p className={SUBJUDUL_KEPALA}>
               Siklus Pengelolaan BMN · {user?.full_name || user?.username}
             </p>
           </div>
@@ -351,7 +355,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
             type="button"
             onClick={toggleDark}
             aria-label={dark ? "Mode terang" : "Mode gelap"}
-            className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
+            className={TOMBOL_KEPALA}
             data-testid="module-home-theme"
           >
             {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
