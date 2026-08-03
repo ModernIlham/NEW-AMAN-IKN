@@ -174,6 +174,19 @@ async def _job_maintenance_loop():
                     logger.info("Pusat Unduhan: %s blob kedaluwarsa dihapus", n4)
             except Exception as e:      # noqa: BLE001
                 logger.warning("Sapuan unduhan (non-fatal): %s", e)
+            # PAGAR INDEKS PENCARIAN: hook sinkron per-dokumen mudah TERLEWAT
+            # di jalur tulis massal atau modul baru, dan begitu terlewat barang
+            # yang ada di basis data tak muncul saat dicari. Penyelaras ini
+            # menyapu dokumen yang `updated_at`-nya lebih baru dari tanda
+            # terakhir, sehingga penyimpangan indeks paling lama berumur satu
+            # putaran loop — bukan selamanya.
+            try:
+                from meili_utils import selaraskan_inkremental
+                n5 = await selaraskan_inkremental()
+                if n5:
+                    logger.info("Meili: selaras inkremental %s", n5)
+            except Exception as e:      # noqa: BLE001
+                logger.warning("Selaras indeks pencarian (non-fatal): %s", e)
         except asyncio.CancelledError:
             raise
         except Exception as e:

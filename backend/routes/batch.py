@@ -16,6 +16,7 @@ from pymongo import UpdateOne, ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from asset_fields import BATCHABLE_FIELD_NAMES
+from meili_utils import jadwalkan_sync_id
 from spasial_utils import sisip_geo_ke_update
 from auth_utils import require_user, require_writer
 from db import db
@@ -468,6 +469,12 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
         logger.warning(f"Audit log batch error: {e}")
 
     invalidate_asset_cache()
+
+    # INDEKS PENCARIAN: ubah massal memakai update_many/bulk_write sehingga
+    # hook sinkron per-dokumen (jalur tunggal) TIDAK pernah jalan. Tanpa baris
+    # ini indeks memegang nilai LAMA — barang yang baru diisi lokasinya secara
+    # massal tak ketemu saat dicari, padahal datanya ada.
+    jadwalkan_sync_id("assets", data.asset_ids)
 
     # Broadcast WebSocket notification. notify_asset_change's signature is
     # (activity_id, event_type, asset_data, user_name, user_id=None) and it

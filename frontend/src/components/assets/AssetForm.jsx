@@ -1673,12 +1673,25 @@ const AssetForm = memo(({
       // "Belum Diinventarisasi"), auto-promosi DIMATIKAN agar pilihannya menetap
       // — memperbaiki bug "tak bisa di-revert ke Belum" pada aset ber-foto.
       const hasPhoto = ((photoItems?.length || 0) > 0) || (formData.photos || []).some(Boolean);
+
+      // Auto-promosi hanya sah bila sesi INI menambah bukti baru (foto atau
+      // koordinat). Tanpa syarat ini, membuka aset lama yang kebetulan sudah
+      // ber-foto+koordinat lalu menekan "Update" tanpa mengubah apa pun ikut
+      // menaikkan statusnya dari "Belum Diinventarisasi" jadi "Ditemukan" —
+      // data resmi berubah tanpa diminta (temuan lapangan). Pada aset BARU
+      // semua isian memang baru, jadi syaratnya otomatis terpenuhi.
+      const asli = originalDataRef.current;
+      const buktiBaru = !isEditing || !asli
+        || photosModifiedRef.current
+        || String(formData.koordinat_latitude ?? "") !== String(asli.koordinat_latitude ?? "")
+        || String(formData.koordinat_longitude ?? "") !== String(asli.koordinat_longitude ?? "");
+
       const autoStatus = statusInventarisasiOtomatis({
         inventory_status: formData.inventory_status,
         hasPhoto,
         lat: formData.koordinat_latitude,
         lng: formData.koordinat_longitude,
-        enabled: autoInventarisasiEnabled() && !statusDipilihManualRef.current,
+        enabled: autoInventarisasiEnabled() && !statusDipilihManualRef.current && buktiBaru,
       });
 
       if (isEditing && editId && originalDataRef.current) {
