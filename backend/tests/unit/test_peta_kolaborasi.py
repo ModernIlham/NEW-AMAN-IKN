@@ -170,3 +170,50 @@ def test_titik_publik_aset_minim_tak_meledak():
     from routes.peta_kolaborasi import baris_titik_publik
     b = baris_titik_publik({"id": "a1"}, 0.5, 100.0)
     assert b["nama"] == "" and b["jumlah_foto"] == 0
+
+
+def test_izin_kontribusi_berlaku_per_link():
+    """Setelan per-link mengikat SETIAP kunjungan lewat link — termasuk
+    pengunjung yang kebetulan sedang login. Regresi: dulu setiap user login
+    lolos begitu saja, sehingga link 'tanpa komentar/titik' tetap bisa dipakai
+    berkontribusi dan setelan tiap link jadi tak berarti."""
+    from routes.peta_kolaborasi import _izin_kontribusi
+    mati = {"status": "aktif", "kode_satker": "527010",
+            "izinkan_titik_publik": False, "izinkan_komentar_publik": False}
+    tamu = {"guest": True, "role": "tamu"}
+    op = {"role": "operator", "kode_satker": "527010"}
+    luar = {"role": "operator", "kode_satker": "999999"}
+
+    # Lewat link → setelan berlaku untuk SIAPA PUN.
+    assert _izin_kontribusi(mati, tamu, True, "izinkan_titik_publik") is False
+    assert _izin_kontribusi(mati, op, True, "izinkan_titik_publik") is False
+    assert _izin_kontribusi(mati, luar, True, "izinkan_komentar_publik") is False
+    # Operator/admin satker share membuka DARI APLIKASI (tanpa token link) →
+    # mengelola petanya sendiri, tak dibatasi setelan publik.
+    assert _izin_kontribusi(mati, op, False, "izinkan_titik_publik") is True
+    # Satker lain tanpa link tetap tak boleh.
+    assert _izin_kontribusi(mati, luar, False, "izinkan_titik_publik") is False
+
+    # Setelan menyala → semua pengunjung berlink boleh.
+    hidup = dict(mati, izinkan_titik_publik=True, izinkan_komentar_publik=True)
+    assert _izin_kontribusi(hidup, tamu, True, "izinkan_titik_publik") is True
+    assert _izin_kontribusi(hidup, tamu, True, "izinkan_komentar_publik") is True
+
+
+def test_izin_kontribusi_dua_setelan_terpisah():
+    """Titik & komentar berdiri sendiri — mematikan satu tak ikut mematikan
+    yang lain (tiap link punya kombinasinya sendiri)."""
+    from routes.peta_kolaborasi import _izin_kontribusi
+    sh = {"status": "aktif", "kode_satker": "527010",
+          "izinkan_titik_publik": False, "izinkan_komentar_publik": True}
+    tamu = {"guest": True, "role": "tamu"}
+    assert _izin_kontribusi(sh, tamu, True, "izinkan_titik_publik") is False
+    assert _izin_kontribusi(sh, tamu, True, "izinkan_komentar_publik") is True
+
+
+def test_izin_kontribusi_share_lama_tanpa_field():
+    """Share yang dibuat sebelum fitur toggle (field tak ada) tetap terbuka —
+    tak boleh mendadak mengunci peta yang sedang berjalan."""
+    from routes.peta_kolaborasi import _izin_kontribusi
+    lama = {"status": "aktif", "kode_satker": "527010"}
+    assert _izin_kontribusi(lama, {"guest": True}, True, "izinkan_titik_publik") is True

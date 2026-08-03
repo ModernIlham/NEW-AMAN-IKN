@@ -690,8 +690,12 @@ export default function PetaKolaborasiPage() {
   );
 
   const bolehKontribusi = !!data?.boleh_kontribusi;
-  const bolehTitik = bolehKontribusi && (data?.tamu ? data?.izinkan_titik_publik : true);
-  const bolehKomentar = bolehKontribusi && (data?.tamu ? data?.izinkan_komentar_publik : true);
+  // Izin diambil APA ADANYA dari server — ia memakai fungsi yang sama dengan
+  // penjaga tulisnya, jadi tombol yang tampil pasti diterima. Layar dulu
+  // menyimpulkan sendiri ("kalau bukan tamu, boleh") sehingga setelan per-link
+  // seolah tak berlaku bagi pengunjung yang kebetulan sedang login.
+  const bolehTitik = bolehKontribusi && !!data?.boleh_tambah_titik;
+  const bolehKomentar = bolehKontribusi && !!data?.boleh_komentar;
   const jmlAset = (data?.titik_aset || []).length;
   const jmlKolab = (data?.titik_kolaborasi || []).length;
 

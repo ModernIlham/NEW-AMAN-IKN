@@ -67,6 +67,37 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#721] Setelan tiap link peta kolaborasi akhirnya benar-benar berlaku — 2026-08-03
+
+Link peta dibuat dengan "izinkan tamu menambah titik" / "izinkan komentar"
+DIMATIKAN, tetapi pengunjung tetap bisa menambah titik dan berkomentar.
+
+**Akarnya: layar dan server memakai aturan yang berbeda, dan aturan server
+sendiri terlalu longgar.** Server sudah menolak TAMU dengan benar (terbukti
+403), tetapi setiap pengunjung yang kebetulan sedang login di aplikasi lolos
+begitu saja — termasuk pembagi yang membuka linknya sendiri untuk memeriksa,
+yang justru paling sering mencoba. Layar lebih longgar lagi: ia menyimpulkan
+sendiri "kalau bukan tamu, boleh", sehingga tombolnya tetap tampil.
+
+Kini setelan tiap link mengikat **setiap kunjungan lewat link itu** — tamu
+maupun pengguna yang sedang login. Yang lolos hanya operator/admin satker
+pemilik peta yang membukanya DARI APLIKASI (tanpa token link): itu pengelolaan
+petanya sendiri, bukan kontribusi publik.
+
+Sumber kebenarannya disatukan: satu fungsi `_izin_kontribusi()` dipakai baik
+oleh penjaga tulis maupun oleh payload yang menyalakan tombol di layar, dan
+layar sekarang memakai keputusan itu apa adanya alih-alih menghitung ulang.
+Dengan begitu tombol yang tampil = aksi yang benar-benar diterima server, dan
+kedua sisi tak bisa lagi berbeda pendapat. Titik dan komentar tetap dua setelan
+terpisah; link lama yang dibuat sebelum fitur ini ada tetap terbuka (tak
+mendadak terkunci).
+
+Diverifikasi: 1506 uji unit backend lulus (3 uji regresi baru mengunci
+"setelan berlaku lewat link untuk siapa pun", "dua setelan berdiri sendiri",
+"share lama tetap terbuka"), plus reproduksi langsung terhadap penjaga aslinya
+— sebelum perbaikan pengunjung login lolos, sesudahnya ditolak 403. Lint
+bersih, build produksi sukses.
+
 ## [#720] Teks sangat panjang: tooltip yang cuma berkedip 12 milidetik — 2026-08-03
 
 Pada sel dengan teks sangat panjang, tooltipnya **muncul lalu langsung hilang**
