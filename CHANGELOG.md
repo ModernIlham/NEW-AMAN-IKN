@@ -67,6 +67,44 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#715] Pusat Unduhan jadi gelembung mengambang yang menempel & menyelinap di dinding layar — 2026-08-03
+
+Log unduhan tidak lagi terpaku di pojok kanan-bawah. Pintu masuknya kini
+**gelembung bulat mengambang** (`components/GelembungMengambang.jsx`) bergaya
+pintasan "chat head" — sama persis di HP, tablet, maupun desktop karena
+seluruh masukan lewat satu jalur Pointer Events (jari, pena, tetikus).
+
+- **Menempel & menyelinap.** Gelembung selalu menempel di dinding kiri atau
+  kanan layar, lalu **menyelinap ±42% ke balik dinding** setelah 2,2 detik
+  diam (redup, tak menghalangi konten). Menyentuhnya memunculkannya kembali
+  utuh. Saat halaman dimuat ia "mengintip" sebentar supaya mudah ditemukan.
+- **Bebas dipindahkan.** Diseret ke mana saja; begitu dilepas ia **melompat ke
+  dinding terdekat** (kiri/kanan mengikuti posisi terakhir jari) pada
+  ketinggian tempat ia dilepas.
+- **Dibuka dengan ketukan ATAU swipe.** Sentakan pendek ke arah tengah layar
+  membuka panel tanpa perlu ketukan terpisah. Aturan swipe sengaja dibatasi
+  tiga-tiganya — **pendek (48–200 px), mendatar, dan cepat (≤ 500 ms)** —
+  karena tanpa batas itu menarik gelembung dari dinding kanan ke kiri (yang
+  maksudnya MEMINDAHKAN) selalu tertangkap sebagai "swipe buka" sehingga
+  gelembung tak pernah bisa berpindah dinding. Bug ini ketahuan saat uji
+  peramban, bukan setelah dipakai di lapangan.
+- **Menutup mengembalikannya ke dinding.** Tombol tutup, Escape, atau sentuhan
+  di luar panel menutupnya; gelembung muncul lagi di dindingnya lalu
+  menyelinap.
+- **Posisi diingat** di localStorage sebagai **sisi + rasio tinggi** (bukan
+  piksel), jadi tetap benar setelah layar diputar, jendela diubah ukurannya,
+  atau dibuka di perangkat dengan layar berbeda. Panel selalu dijepit ke dalam
+  viewport sehingga tak pernah menggantung di luar layar.
+- Dapat dibuka **dari keyboard** (Tab lalu Enter/Spasi), bukan hanya sentuhan.
+- Widget backup (`BackgroundTaskBar`) tetap di pojok kanan-bawah; Pusat
+  Unduhan keluar dari tumpukan itu dan berposisi sendiri.
+
+Diverifikasi di Chromium nyata dengan komponen asli: **23 pemeriksaan tetikus**
+(menempel, menyelinap melewati tepi, ketukan/swipe/seret, tetap bertahan
+setelah muat ulang, tetap di dalam layar pada 1280×800 / 834×1112 / 390×844)
+dan **8 pemeriksaan sentuhan jari** via CDP (termasuk halaman tidak ikut
+tergulir saat gelembung diseret).
+
 ## [#714] Filter layar ikut menyaring Laporan Eksekutif + tooltip tabel berhenti berkedip + panah stiker contoh penuh — 2026-08-03
 
 Tiga keluhan lapangan ditutup sekaligus.

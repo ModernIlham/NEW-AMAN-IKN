@@ -859,13 +859,13 @@ function App() {
         </HalamanLazy>
       </BrowserRouter>
       <Toaster position="top-right" richColors />
-      {/* Widget latar kanan-bawah DITUMPUK vertikal (bukan saling menimpa):
-          BackgroundTaskBar (backup) + Pusat Unduhan berbagi jangkar & lebar,
-          jadi tanpa kontainer ini yang satu menutupi yang lain. */}
+      {/* Widget latar kanan-bawah (backup). Pusat Unduhan TIDAK lagi ikut
+          tumpukan ini: ia kini gelembung mengambang ber-posisi sendiri yang
+          menempel di dinding kiri/kanan sesuai pilihan pengguna. */}
       <div className="fixed bottom-4 right-4 z-[90] flex flex-col items-end gap-2">
         <BackgroundTaskBar isAdmin={user?.role === "admin"} />
-        <PusatUnduhan aktif={!!user} />
       </div>
+      <PusatUnduhan aktif={!!user} />
     </div>
   );
 }
