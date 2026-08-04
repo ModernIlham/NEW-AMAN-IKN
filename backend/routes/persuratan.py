@@ -45,6 +45,10 @@ from persuratan_utils import (
     urut_tampil, validate_format_reset, validate_peta_klasifikasi,
     validate_surat_keluar, validate_surat_masuk, validate_transisi,
 )
+from surat_relasi_utils import (
+    JENIS_RELASI, STATUS_KEBERLAKUAN, baris_timeline, status_keberlakuan,
+    validate_relasi,
+)
 
 persuratan_router = APIRouter()
 
@@ -118,6 +122,12 @@ class KlasifikasiIn(BaseModel):
     kode: str
     uraian: Optional[str] = ""
     aktif: Optional[bool] = True
+
+
+class RelasiIn(BaseModel):
+    ke_id: str            # surat SASARAN (yang dicabut/diubah/dst.)
+    jenis: str            # kunci JENIS_RELASI (arah selalu aktif→pasif)
+    catatan: Optional[str] = ""
 
 
 async def _pengaturan(kode_satker: str = "") -> dict:
@@ -419,6 +429,8 @@ async def referensi_persuratan(_user: dict = Depends(require_user)):
         "reset_urut": [{"kode": k, "uraian": v} for k, v in RESET_URUT.items()],
         "transisi_keluar": {k: sorted(v) for k, v in TRANSISI_KELUAR.items()},
         "transisi_masuk": {k: sorted(v) for k, v in TRANSISI_MASUK.items()},
+        "jenis_relasi": [{"kode": k, **v} for k, v in JENIS_RELASI.items()],
+        "status_keberlakuan": dict(STATUS_KEBERLAKUAN),
         "pengaturan": await _pengaturan(kode_satker_user(_user)),
         # Daftar klasifikasi EFEKTIF pemanggil: Bersama di-overlay entri
         # satkernya (kode senama → entri satker menang), hanya yang aktif.
@@ -571,7 +583,11 @@ async def ubah_klasifikasi(klas_id: str, payload: KlasifikasiIn,
         {"id": klas_id},
         {"$set": {"kode": kode, "uraian": str(payload.uraian or "").strip(),
                   "aktif": payload.aktif is not False}},
-        projection=_PROJ, return_document=ReturnDocument.AFTER)
+        return_document=ReturnDocument.AFTER)
+    # (tanpa kwarg projection — mongomock_motor mengembalikan None bila diberi
+    # projection padahal update-nya terterap; _id dibuang manual)
+    if res is not None:
+        res.pop("_id", None)
     if res is None:
         raise HTTPException(status_code=404, detail="Kode klasifikasi tidak ditemukan")
     await log_audit("klasifikasi_arsip", "", username=user.get("username", "system"),
@@ -811,6 +827,9 @@ async def daftar_surat(jenis: str = "", status: str = "", modul: str = "",
                    .sort([("tahun", -1), ("no_agenda", -1), ("sisipan", -1)])
                    .skip((page - 1) * page_size).limit(page_size)
                    .to_list(page_size))
+    # Status KEBERLAKUAN terhitung per baris (satu kueri massal halaman ini):
+    # badge "Tidak Berlaku" surat yang dicabut tampil tanpa diketik siapa pun.
+    items = await _stempel_keberlakuan(items)
     ringkas = {
         "keluar_dibooking": await db.surat.count_documents(
             scope_query_field_satker(_user, {"jenis": "keluar", "status": "dibooking"})),
@@ -991,7 +1010,11 @@ async def transisi_surat(surat_id: str, payload: TransisiIn,
          "$push": {"riwayat": {"status": ke, "tanggal": now,
                                "oleh": user.get("username", "system"),
                                "catatan": alasan}}},
-        projection=_PROJ, return_document=ReturnDocument.AFTER)
+        return_document=ReturnDocument.AFTER)
+    # (tanpa kwarg projection — mongomock_motor mengembalikan None bila diberi
+    # projection padahal update-nya terterap; _id dibuang manual)
+    if res is not None:
+        res.pop("_id", None)
     if res is None:
         raise HTTPException(status_code=409,
                             detail="Status surat berubah — muat ulang dulu")
@@ -1039,7 +1062,11 @@ async def ubah_surat(surat_id: str, payload: UbahSuratIn,
     update["updated_at"] = datetime.now(timezone.utc).isoformat()
     res = await db.surat.find_one_and_update(
         {"id": surat_id}, {"$set": update},
-        projection=_PROJ, return_document=ReturnDocument.AFTER)
+        return_document=ReturnDocument.AFTER)
+    # (tanpa kwarg projection — mongomock_motor mengembalikan None bila diberi
+    # projection padahal update-nya terterap; _id dibuang manual)
+    if res is not None:
+        res.pop("_id", None)
     jadwalkan_sync("surat", res)  # sinkron indeks Meili (best-effort)
     await log_audit("ubah_surat", s.get("kegiatan_id", ""),
                     username=user.get("username", "system"),
@@ -1065,12 +1092,161 @@ async def hapus_surat(surat_id: str, user: dict = Depends(require_admin)):
             "Surat keluar yang sudah DISAHKAN tidak dapat dihapus — batalkan "
             "dulu (dengan alasan) agar jejak nomor resmi tetap tercatat"))
     await db.surat.delete_one({"id": surat_id})
+    # Relasi yang menyentuh surat terhapus ikut dibersihkan — panah gantung
+    # membuat surat lain tampak "dicabut oleh" dokumen yang tak ada.
+    await db.surat_relasi.delete_many(
+        {"$or": [{"dari_id": surat_id}, {"ke_id": surat_id}]})
     jadwalkan_hapus("surat", surat_id)  # cabut dari indeks Meili (best-effort)
     await log_audit("hapus_surat", s.get("kegiatan_id", ""),
                     username=user.get("username", "system"),
                     detail=(f"Hapus surat {s.get('jenis')} {s.get('nomor')} "
                             f"(status {s.get('status')}; nomor agenda hangus)"))
     return {"ok": True}
+
+
+# ── Relasi ANTAR SURAT + status keberlakuan (mandat SURAT-3B) ───────────────
+#
+# Satu dokumen db.surat_relasi per panah aktif→pasif (dari MENCABUT ke).
+# Status keberlakuan tidak pernah disimpan — selalu dihitung dari status
+# surat + panah masuk (surat_relasi_utils.status_keberlakuan), sehingga buku
+# agenda tak bisa "lupa diperbarui". Asas yang dipakai: pencabutan TIDAK
+# pulih dengan dicabutnya surat pencabut (non-herleving); panah hanya mati
+# bila surat pencabutnya DIBATALKAN nomornya (dokumen itu tak pernah sah).
+
+
+async def _panah_masuk_hidup(ids: list) -> dict:
+    """{surat_id: [relasi masuk yang panahnya hidup]} untuk sekumpulan surat.
+    Panah mati = surat sumbernya berstatus 'dibatalkan' (nomor hangus)."""
+    if not ids:
+        return {}
+    masuk = await db.surat_relasi.find(
+        {"ke_id": {"$in": list(ids)}}, _PROJ).to_list(4000)
+    dari_ids = sorted({r.get("dari_id") for r in masuk if r.get("dari_id")})
+    status_dari = {}
+    if dari_ids:
+        async for s in db.surat.find({"id": {"$in": dari_ids}},
+                                     {"_id": 0, "id": 1, "status": 1}):
+            status_dari[s["id"]] = s.get("status")
+    out = {}
+    for r in masuk:
+        if status_dari.get(r.get("dari_id")) == "dibatalkan":
+            continue
+        out.setdefault(r.get("ke_id"), []).append(r)
+    return out
+
+
+async def _stempel_keberlakuan(items: list) -> list:
+    """Tambahkan `keberlakuan` + `keberlakuan_label` pada tiap dokumen surat
+    (satu kueri massal — bukan per baris)."""
+    hidup = await _panah_masuk_hidup([s.get("id") for s in items])
+    for s in items:
+        kode = status_keberlakuan(s, hidup.get(s.get("id"), []))
+        s["keberlakuan"] = kode
+        s["keberlakuan_label"] = STATUS_KEBERLAKUAN.get(kode, kode)
+    return items
+
+
+@persuratan_router.post("/persuratan/{surat_id}/relasi")
+async def tambah_relasi_surat(surat_id: str, payload: RelasiIn,
+                              user: dict = Depends(require_writer)):
+    """Catat panah relasi: surat INI (sumber/aktif) → surat sasaran.
+
+    Contoh: SK baru MENCABUT SK lama → panggil di SK baru dengan ke_id SK
+    lama. Buku agenda lalu menampilkan SK lama "Tidak Berlaku (dicabut
+    oleh …)" tanpa ada yang mengetik status itu.
+    """
+    dari = await db.surat.find_one({"id": surat_id}, _PROJ)
+    ke = await db.surat.find_one({"id": str(payload.ke_id or "").strip()},
+                                 _PROJ)
+    if not dari or not ke:
+        raise HTTPException(status_code=404, detail="Surat tidak ditemukan")
+    await pastikan_akses_dok_satker(user, dari)
+    await pastikan_akses_dok_satker(user, ke)
+    sudah = await db.surat_relasi.find(
+        {"$or": [{"dari_id": dari["id"], "ke_id": ke["id"]},
+                 {"dari_id": ke["id"], "ke_id": dari["id"]}]},
+        _PROJ).to_list(200)
+    galat = validate_relasi(dari, ke, payload.jenis, sudah_ada=sudah)
+    if galat:
+        raise HTTPException(status_code=400, detail=galat)
+    now = datetime.now(timezone.utc).isoformat()
+    info = JENIS_RELASI[payload.jenis]
+    r = {"id": str(uuid.uuid4()),
+         # Stempel satker dari DOKUMEN (bukan user) — super-admin lintas
+         # satker tak boleh melahirkan relasi berstempel '' yang bocor.
+         "kode_satker": dari.get("kode_satker") or ke.get("kode_satker") or "",
+         "dari_id": dari["id"], "ke_id": ke["id"], "jenis": payload.jenis,
+         "catatan": str(payload.catatan or "").strip(),
+         "dari_nomor": dari.get("nomor") or "", "dari_perihal": dari.get("perihal") or "",
+         "ke_nomor": ke.get("nomor") or "", "ke_perihal": ke.get("perihal") or "",
+         "oleh": user.get("username", "system"), "created_at": now}
+    await db.surat_relasi.insert_one({**r})
+    # Jejak pada riwayat KEDUA surat — timeline masing-masing bercerita utuh.
+    await db.surat.update_one({"id": dari["id"]}, {"$push": {"riwayat": {
+        "status": dari.get("status"), "tanggal": now,
+        "oleh": r["oleh"],
+        "catatan": f"{info['aktif']} {ke.get('nomor') or ke['id']}"}}})
+    await db.surat.update_one({"id": ke["id"]}, {"$push": {"riwayat": {
+        "status": ke.get("status"), "tanggal": now,
+        "oleh": r["oleh"],
+        "catatan": f"{info['pasif']} {dari.get('nomor') or dari['id']}"}}})
+    await log_audit("relasi_surat", dari.get("kegiatan_id", ""),
+                    username=r["oleh"],
+                    detail=(f"Surat {dari.get('nomor')} {info['aktif']} "
+                            f"{ke.get('nomor')}"
+                            + (f" — {r['catatan']}" if r["catatan"] else "")))
+    ke_baru = (await _stempel_keberlakuan([dict(ke)]))[0]
+    return {"relasi": r, "sasaran": {
+        "id": ke["id"], "keberlakuan": ke_baru["keberlakuan"],
+        "keberlakuan_label": ke_baru["keberlakuan_label"]}}
+
+
+@persuratan_router.delete("/persuratan/relasi/{relasi_id}")
+async def hapus_relasi_surat(relasi_id: str,
+                             user: dict = Depends(require_admin)):
+    """Hapus relasi salah catat (khusus admin — relasi mengubah status
+    keberlakuan dokumen resmi, jejaknya tetap di riwayat surat & log audit)."""
+    r = await db.surat_relasi.find_one({"id": relasi_id}, _PROJ)
+    if not r:
+        raise HTTPException(status_code=404, detail="Relasi tidak ditemukan")
+    await pastikan_akses_dok_satker(user, r)
+    await db.surat_relasi.delete_one({"id": relasi_id})
+    await log_audit("relasi_surat", "", username=user.get("username", "system"),
+                    detail=(f"Hapus relasi: {r.get('dari_nomor')} "
+                            f"{r.get('jenis')} {r.get('ke_nomor')}"))
+    return {"ok": True, "id": relasi_id}
+
+
+@persuratan_router.get("/persuratan/{surat_id}/timeline")
+async def timeline_surat(surat_id: str, _user: dict = Depends(require_user)):
+    """Timeline lengkap satu surat: riwayat status + panah relasi dua arah +
+    status keberlakuan terhitung — bahan dialog Relasi/Timeline di UI."""
+    s = await db.surat.find_one({"id": surat_id}, _PROJ)
+    if not s:
+        raise HTTPException(status_code=404, detail="Surat tidak ditemukan")
+    await pastikan_akses_dok_satker(_user, s)
+    keluar = await db.surat_relasi.find({"dari_id": surat_id},
+                                        _PROJ).to_list(500)
+    masuk = await db.surat_relasi.find({"ke_id": surat_id},
+                                       _PROJ).to_list(500)
+    s = (await _stempel_keberlakuan([s]))[0]
+    # Keberlakuan tiap UJUNG LAIN panah ikut disajikan supaya dialog bisa
+    # menandai "pencabutnya sendiri sudah tidak berlaku" tanpa fetch ulang.
+    ujung_ids = ({r.get("ke_id") for r in keluar}
+                 | {r.get("dari_id") for r in masuk}) - {None, ""}
+    ujung = await db.surat.find({"id": {"$in": sorted(ujung_ids)}},
+                                _PROJ).to_list(1000) if ujung_ids else []
+    ujung = await _stempel_keberlakuan(ujung)
+    peta_ujung = {u["id"]: {"id": u["id"], "nomor": u.get("nomor"),
+                            "perihal": u.get("perihal"),
+                            "status": u.get("status"),
+                            "keberlakuan": u.get("keberlakuan"),
+                            "keberlakuan_label": u.get("keberlakuan_label")}
+                  for u in ujung}
+    return {"surat": s,
+            "relasi_keluar": keluar, "relasi_masuk": masuk,
+            "ujung": peta_ujung,
+            "timeline": baris_timeline(s, keluar, masuk)}
 
 
 @persuratan_router.get("/persuratan/export")
@@ -1086,6 +1262,7 @@ async def export_agenda(jenis: str = "", tahun: str = "",
     items = await (db.surat.find(query, _PROJ)
                    .sort([("tahun", 1), ("no_agenda", 1), ("sisipan", 1)])
                    .to_list(100000))
+    items = await _stempel_keberlakuan(items)
     buf = io.StringIO()
     w = csv_module.writer(buf)
     for row in baris_agenda_csv(items):

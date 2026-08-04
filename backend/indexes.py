@@ -255,6 +255,11 @@ async def create_indexes() -> None:
         # tahun — tanpa indeks ini keduanya memindai seluruh buku agenda.
         await db.surat.create_index([("jenis", 1), ("tahun", 1),
                                      ("tanggal_surat", 1)])
+        # Relasi antar surat: keberlakuan massal per halaman (ke_id $in) +
+        # timeline per surat (dari_id) — keduanya dipanggil di daftar agenda.
+        await db.surat_relasi.create_index("id", unique=True)
+        await db.surat_relasi.create_index("dari_id")
+        await db.surat_relasi.create_index("ke_id")
         # Master Pegawai: cek bentrok NIP saat impor massal + daftar per satker.
         await db.pegawai.create_index("id", unique=True)
         await db.pegawai.create_index("nip")
