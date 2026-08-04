@@ -69,6 +69,14 @@ JENIS_BAST = {
 # (akta kematian) dan SAKSI, pola berita acara "pihak berhalangan tetap".
 _JENIS_PENGEMBALIAN = frozenset({"pengembalian", "pengembalian_almarhum"})
 
+# Celah tanda tangan basah BAST (mm) — dokumen ber-batas 2 halaman sehingga
+# tak bisa memakai default _signature_block yang lebih lega. Ruang tambahan
+# celah diambil dari jarak antar-baris blok TTD (pemisah visual, bukan area
+# pena): pasangan ini yang terbesar yang masih lolos uji batas 2 halaman
+# pada muatan terberat (test_semua_jenis_bast_maksimal_dua_halaman).
+_CELAH_TTD_BAST = 14
+_JARAK_BARIS_TTD_BAST = 3
+
 # Dasar hukum BAST penggunaan BMN — dimutakhirkan (audit resmi): rezim
 # PMK 246/PMK.06/2014 jo. 76/2019 telah DICABUT dan digantikan PMK Nomor 40
 # Tahun 2024 tentang Tata Cara Pelaksanaan Penggunaan BMN.
@@ -1317,7 +1325,8 @@ async def bast_pdf(bast_id: str, nilai: str = "",
          'after': baris_identitas_ttd(
              p1.get("nip"), "NIP. -",
              await status_kepegawaian_by_nip(p1.get("nip")))},
-    ] + signers_mengetahui, doc.width, celah_mm=11))
+    ] + signers_mengetahui, doc.width, celah_mm=_CELAH_TTD_BAST,
+        jarak_baris_mm=_JARAK_BARIS_TTD_BAST))
     # Blok SAKSI — wajib pada pengembalian almarhum (pihak yang seharusnya
     # menyerahkan berhalangan tetap), opsional bila diisi pada jenis lain.
     _saksi_doc = [s for s in (b.get("saksi") or [])
@@ -1338,7 +1347,8 @@ async def bast_pdf(bast_id: str, nilai: str = "",
         # 1–3 penanda tangan dan MEMBUANG sisanya bila diberi ≥4 — memecah
         # sendiri memastikan seluruh saksi benar-benar tercetak.
         for i in range(0, len(kolom_saksi), 2):
-            el.extend(_signature_block(kolom_saksi[i:i + 2], doc.width))
+            el.extend(_signature_block(kolom_saksi[i:i + 2], doc.width,
+                                       celah_mm=_CELAH_TTD_BAST))
     el.extend(_blok_tembusan(
         {"tembusan_laporan": b.get("tembusan") or settings.get("tembusan_laporan", "")}))
 

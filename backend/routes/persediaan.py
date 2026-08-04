@@ -1488,7 +1488,7 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
     def kolom_ttd(judul, nama, nip, status_kepegawaian=""):
         # Non-ASN: baris NIP/NIK tidak dicetak (privasi)
         baris = baris_identitas_ttd(nip, "NIP. ……………………", status_kepegawaian)
-        kolom = [Paragraph(judul, sig), Spacer(1, 15 * rl_mm),
+        kolom = [Paragraph(judul, sig), Spacer(1, 20 * rl_mm),
                  Paragraph(f"<b><u>{nama or '……………………………'}</u></b>", sig)]
         kolom.extend(Paragraph(b, sig) for b in baris)
         return kolom
