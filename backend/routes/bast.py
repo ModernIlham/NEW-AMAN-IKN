@@ -213,28 +213,76 @@ async def daftar_bast(asset_id: str = "", q: str = "", nip: str = "",
             "label_jenis": JENIS_BAST}
 
 
+async def _penanda_tangan_bast(b: dict, user: dict) -> list:
+    """Daftar penanda tangan BAST untuk e-sign — SINKRON dengan blok TTD
+    yang dicetak `bast_pdf`: Pihak Pertama & Kedua, lalu "Mengetahui" KPB
+    (pada mutasi pengguna / penyerah a.n. KPB — kaidah §11B), lalu seluruh
+    saksi. Kondisi & resolver KPB-nya SAMA dengan cetakan; bila blok TTD
+    PDF berubah, fungsi ini wajib ikut — tautan TTD yang lebih sedikit dari
+    kolom di kertasnya membuat dokumen tak pernah bisa lengkap diteken.
+
+    → list[dict {nama, nip, jabatan}] terurut sesuai dokumen.
+    """
+    hasil = []
+    for p, peran in ((b.get("pihak_pertama") or {}, "Pihak Pertama"),
+                     (b.get("pihak_kedua") or {}, "Pihak Kedua")):
+        nama = str((p or {}).get("nama") or "").strip()
+        if not nama:
+            continue
+        hasil.append({"nama": nama,
+                      "nip": str((p or {}).get("nip") or "").strip(),
+                      "jabatan": str((p or {}).get("jabatan") or peran).strip()})
+
+    jenis = str(b.get("jenis") or "")
+    an_kpb = bool(b.get("penyerah_atas_nama_kpb")) and jenis != "mutasi_pengguna"
+    if jenis == "mutasi_pengguna" or an_kpb:
+        from pejabat_utils import jabatan_kapasitas_kpb
+        from shared_utils import (kode_satker_user, pengaturan_kop,
+                                  resolve_penandatangan_kpb)
+        settings = await pengaturan_kop(kode_satker=b.get("kode_satker")) or {}
+        kpb = await resolve_penandatangan_kpb(
+            settings, b.get("tanggal"),
+            str(b.get("kode_satker") or "").strip() or kode_satker_user(user)) or {}
+        nama_kpb = str(kpb.get("nama") or "").strip()
+        nip_kpb = str(kpb.get("nip") or "").strip()
+
+        def _orang_sama(s):
+            # KPB yang juga tercantum sebagai pihak (mis. PIHAK KESATU default
+            # = KPB sendiri) cukup SATU tautan — NIP pembanding utama, nama
+            # fallback saat salah satunya tak ber-NIP.
+            if nip_kpb and s.get("nip"):
+                return s["nip"] == nip_kpb
+            return s["nama"].casefold() == nama_kpb.casefold()
+
+        if nama_kpb and nama_kpb != "-" and not any(map(_orang_sama, hasil)):
+            hasil.append({"nama": nama_kpb, "nip": nip_kpb,
+                          "jabatan": f"Mengetahui — {jabatan_kapasitas_kpb(kpb)}"})
+
+    for i, s in enumerate(
+            [s for s in (b.get("saksi") or [])
+             if str((s or {}).get("nama") or "").strip()], 1):
+        hasil.append({"nama": str(s.get("nama")).strip(),
+                      "nip": str(s.get("nip") or "").strip(),
+                      "jabatan": str(s.get("jabatan") or "").strip()
+                      or f"Saksi {i}"})
+    return hasil
+
+
 @bast_router.post("/bast/{bast_id}/kirim-ttd")
 async def kirim_bast_ke_ttd(bast_id: str, user: dict = Depends(require_writer)):
     """Buat permintaan TTD elektronik untuk sebuah BAST — dengan penaut
-    TERSTRUKTUR (`doc_ref` = id BAST) + penanda tangan otomatis dari Pihak
-    Pertama & Kedua BAST. Ini titik masuk yang menautkan dunia BAST ke dunia
-    e-sign secara terstruktur (fondasi propagasi otomatis: back-link
-    signature_request_id ke BAST saat selesai, lalu cascade saat dibatalkan)."""
+    TERSTRUKTUR (`doc_ref` = id BAST) + penanda tangan otomatis dari SEMUA
+    kolom TTD dokumen (`_penanda_tangan_bast`: pihak, Mengetahui KPB, saksi).
+    Ini titik masuk yang menautkan dunia BAST ke dunia e-sign secara
+    terstruktur (fondasi propagasi otomatis: back-link signature_request_id
+    ke BAST saat selesai, lalu cascade saat dibatalkan)."""
     from shared_utils import scope_query_field_satker
     b = await db.bast_serah_terima.find_one(
         scope_query_field_satker(user, {"id": bast_id}), _PROJ)
     if not b:
         raise HTTPException(status_code=404, detail="BAST tidak ditemukan")
     from routes.ttd import PermintaanIn, SignerIn, buat_permintaan
-    signers = []
-    for p, peran in ((b.get("pihak_pertama") or {}, "Pihak Pertama"),
-                     (b.get("pihak_kedua") or {}, "Pihak Kedua")):
-        nama = str((p or {}).get("nama") or "").strip()
-        if not nama:
-            continue
-        signers.append(SignerIn(
-            nama=nama, nip=str((p or {}).get("nip") or "").strip(),
-            jabatan=str((p or {}).get("jabatan") or peran).strip()))
+    signers = [SignerIn(**s) for s in await _penanda_tangan_bast(b, user)]
     if not signers:
         raise HTTPException(
             status_code=400,
@@ -1276,6 +1324,8 @@ async def bast_pdf(bast_id: str, nilai: str = "",
     el.append(Spacer(1, 1.5 * rl_mm))
     # Baris "Mengetahui, KPB": otomatis pada mutasi; juga pada non-mutasi bila
     # penyerah bertindak a.n. KPB (pendelegasian) — kaidah §11B.
+    # SINKRON dengan _penanda_tangan_bast (daftar tautan e-sign): perubahan
+    # susunan kolom TTD di sini wajib dicerminkan ke sana.
     an_kpb = bool(b.get("penyerah_atas_nama_kpb")) and jenis != "mutasi_pengguna"
     signers_mengetahui = []
     if jenis == "mutasi_pengguna" or an_kpb:

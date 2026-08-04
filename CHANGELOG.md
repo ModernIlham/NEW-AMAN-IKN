@@ -67,6 +67,37 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#748] Tautan TTD elektronik BAST lengkap sesuai kolom TTD dokumennya — 2026-08-04
+
+Laporan pemilik: dialog "Tautan Tanda Tangan Elektronik" hanya menerbitkan
+2 tautan (PIHAK KEDUA & KESATU) padahal BAST yang digenerate memuat kolom
+TTD lain — dokumen tak pernah bisa lengkap diteken elektronik.
+
+### Perbaikan
+
+Helper baru `_penanda_tangan_bast` menurunkan daftar penanda tangan e-sign
+dari dokumen BAST dengan kondisi yang SAMA PERSIS dengan blok TTD cetakan
+`bast_pdf` (dua sisi diberi catatan sinkron silang):
+
+- **Pihak Pertama & Kedua** — seperti sebelumnya.
+- **"Mengetahui" KPB** — tampil pada mutasi pengguna dan saat penyerah
+  bertindak a.n. KPB (kaidah §11B); di-resolve dari Referensi Pejabat
+  satker DOKUMEN pada tanggal BAST (resolver & kapasitas "Kuasa Pengguna
+  Barang" yang sama dengan cetakan). Bila KPB kebetulan sudah tercantum
+  sebagai pihak (PIHAK KESATU default = KPB sendiri), satu orang tetap
+  satu tautan — tidak digandakan.
+- **Seluruh saksi** — masing-masing dapat tautan; saksi tanpa jabatan
+  diberi label "Saksi N" agar tautannya bisa dibedakan.
+
+Urutan tautan mengikuti urutan kolom pada kertasnya. (LPB sudah benar
+sejak awal — Pengurus → Pemeriksa → KPB.)
+
+Uji: 5 uji baru (KPB ikut saat a.n. KPB & mutasi, seluruh saksi ikut +
+label fallback, KPB tak ganda saat merangkap pihak, BAST biasa tetap 2
+tautan). `pytest tests/unit` → 1651 lolos.
+
+---
+
 ## [#747] Perkiraan nomor booking-otomatis tampil & sedertan di semua halaman — 2026-08-04
 
 Mandat pemilik: pemakaian dan PERKIRAAN nomor pada fitur "Pesan nomor
