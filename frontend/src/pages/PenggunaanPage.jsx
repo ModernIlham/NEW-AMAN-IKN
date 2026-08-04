@@ -210,6 +210,12 @@ export default function PenggunaanPage({ user, onBack }) {
         .then((r) => setPegawaiList(r.data?.items || []))
         .catch(() => setPegawaiList([]));
     }
+    // Bawaan saklar nilai = KEBIJAKAN satker, supaya yang terlihat di layar
+    // sama dengan yang nanti tercetak (form tak perlu menebak).
+    axios.get(`${API}/kebijakan-dokumen`)
+      .then((r) => setFormBast((f) => (f
+        ? { ...f, tampilkan_nilai: r.data?.tampilkan_nilai !== false } : f)))
+      .catch(() => {});
     setFormBast({
       jenis: "penggunaan_melekat", nomor: "", tanggal: "",
       jangka_dari: "", jangka_sampai: "", sertakan_foto: false, keterangan: "",
@@ -232,6 +238,9 @@ export default function PenggunaanPage({ user, onBack }) {
               { nama: "", jabatan: "", nip: "" }],
       terapkan_ke_aset: true,
       booking_otomatis: false,
+      // Kolom Nilai Perolehan pada PDF — bawaan mengikuti kebijakan satker
+      // (dimutakhirkan oleh permintaan /kebijakan-dokumen di atas).
+      tampilkan_nilai: true,
       aset: new Set((detail?.rows || []).map((a) => a.id)),
       saving: false,
       // Idempotency-Key sekali per pembukaan form: klik ganda / retry
@@ -291,6 +300,7 @@ export default function PenggunaanPage({ user, onBack }) {
               saksi: (f.saksi || []).filter((x) => (x.nama || "").trim()) }
           : {}),
         sertakan_foto: f.sertakan_foto, keterangan: f.keterangan,
+        tampilkan_nilai: !!f.tampilkan_nilai,
         // pengembalian_almarhum WAJIB ikut di sini — tanpanya checkbox
         // "kosongkan pengguna" dipaksa false dan aset tetap atas nama almarhum
         // (alur pengembalian almarhum gagal senyap di langkah terakhirnya).
@@ -1896,6 +1906,19 @@ export default function PenggunaanPage({ user, onBack }) {
                 <input type="checkbox" checked={formBast.sertakan_foto} className="w-3.5 h-3.5 mt-0.5 shrink-0" data-testid="bast-foto"
                   onChange={(e) => setFormBast((f) => ({ ...f, sertakan_foto: e.target.checked }))} />
                 <span>Sertakan lampiran foto: <b>foto barang</b> (sampul tiap aset) + <b>foto serah terima</b> (dari scan bukti TTD BAST, bila berupa gambar)</span>
+              </label>
+              <label className="flex items-start gap-2 text-xs cursor-pointer">
+                <input type="checkbox" checked={!!formBast.tampilkan_nilai}
+                  className="w-3.5 h-3.5 mt-0.5 shrink-0" data-testid="bast-tampilkan-nilai"
+                  onChange={(e) => setFormBast((f) => ({ ...f, tampilkan_nilai: e.target.checked }))} />
+                <span>
+                  Tampilkan kolom <b>Nilai Perolehan</b> pada PDF
+                  {" "}<span className="text-muted-foreground">
+                    — bawaan mengikuti kebijakan satker (Pengaturan → Satker); banyak satker
+                    menutup nilai pada naskah yang dipegang pegawai. Pilihan ini dibekukan
+                    bersama dokumen.
+                  </span>
+                </span>
               </label>
               <div>
                 <label className="text-xs font-medium block mb-1">Pasal/ketentuan tambahan (opsional)</label>

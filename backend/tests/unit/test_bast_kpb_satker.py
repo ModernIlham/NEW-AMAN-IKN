@@ -271,3 +271,92 @@ def test_pdf_nama_penandatangan_sejajar_meski_kepala_beda_tinggi(dbx):
     assert hal_kiri == hal_kanan, "kedua nama harus di halaman yang sama"
     assert abs(y_kiri - y_kanan) < 2, (
         f"nama tidak sejajar: kiri y={y_kiri:.1f} vs kanan y={y_kanan:.1f}")
+
+
+# ── Kebijakan penyajian NILAI PEROLEHAN (mandat pemilik) ────────────────────
+
+def _payload_nilai(**ganti):
+    return _payload(**ganti)
+
+
+def test_bast_membekukan_pilihan_nilai_dari_kebijakan_satker(dbx):
+    """Satker berkebijakan "sembunyikan" → BAST baru tersimpan dengan pilihan
+    tampilkan_nilai=False (dibekukan bersama dokumen), tanpa user memilih apa
+    pun di form."""
+    async def skenario():
+        await _seed_dasar(dbx)
+        await dbx.satker.insert_one({"kode_satker": SATKER,
+                                     "nama_satker": "Satker Uji",
+                                     "nilai_dokumen": "sembunyikan"})
+        await _unwrap(rb.buat_bast)(_payload_nilai(), request=None, user=USER)
+        return await dbx.bast_serah_terima.find_one({})
+    assert _jalan(skenario())["tampilkan_nilai"] is False
+
+
+def test_pdf_bast_tanpa_kolom_nilai_saat_disembunyikan(dbx):
+    """PDF BAST milik satker ber-kebijakan sembunyikan: kolom "Nilai
+    Perolehan" DAN angka nilainya benar-benar absen dari halaman (bukan
+    sekadar dikosongkan), plus ada catatan jujur mengapa."""
+    async def skenario(sembunyi):
+        await dbx.bast_serah_terima.delete_many({})
+        await dbx.satker.delete_many({})
+        await _seed_dasar(dbx)
+        if sembunyi:
+            await dbx.satker.insert_one({"kode_satker": SATKER,
+                                         "nama_satker": "Satker Uji",
+                                         "nilai_dokumen": "sembunyikan"})
+        await dbx.bast_serah_terima.insert_one({
+            "id": "bast-n", "kode_satker": SATKER,
+            "jenis": "penggunaan_melekat", "nomor": "BAST-09/2026",
+            "tanggal": "2026-08-04",
+            "pihak_pertama": {"nama": "Penyerah", "nip": "", "jabatan": "",
+                              "alamat": ""},
+            "pihak_kedua": {"nama": "Andi Penerima", "nip": "",
+                            "jabatan": "Staf", "alamat": ""},
+            "asset_ids": ["aset-1"],
+            "aset": [{"id": "aset-1", "asset_code": "3100102001", "NUP": "1",
+                      "asset_name": "Laptop Kerja", "brand": "Thinkpad",
+                      "model": "X1", "serial_number": "SN-1",
+                      "condition": "Baik", "purchase_date": "2025-03-01",
+                      "purchase_price": 15_000_000}],
+            "saksi": [], "keterangan": "", "sertakan_foto": False,
+        })
+        return await _unwrap(rb.bast_pdf)("bast-n", _user=USER)
+
+    teks_sembunyi = _teks_pdf(_jalan(skenario(True)))
+    assert "Nilai Perolehan" not in teks_sembunyi
+    assert "15.000.000" not in teks_sembunyi
+    assert "tidak ditampilkan" in teks_sembunyi
+
+    # Kontrol: kebijakan bawaan tetap mencetak nilai seperti sebelumnya.
+    teks_tampil = _teks_pdf(_jalan(skenario(False)))
+    assert "Nilai Perolehan" in teks_tampil
+    assert "15.000.000" in teks_tampil
+
+
+def test_pdf_bast_param_unduhan_menimpa_pilihan_dokumen(dbx):
+    """Satu BAST, dua salinan: `?nilai=0` mencetak versi tanpa nilai walau
+    dokumen dibekukan dengan pilihan tampilkan (arsip tetap utuh)."""
+    async def skenario(param):
+        await dbx.bast_serah_terima.delete_many({})
+        await _seed_dasar(dbx)
+        await dbx.bast_serah_terima.insert_one({
+            "id": "bast-p", "kode_satker": SATKER,
+            "jenis": "penggunaan_melekat", "nomor": "BAST-10/2026",
+            "tanggal": "2026-08-04", "tampilkan_nilai": True,
+            "pihak_pertama": {"nama": "Penyerah", "nip": "", "jabatan": "",
+                              "alamat": ""},
+            "pihak_kedua": {"nama": "Andi Penerima", "nip": "",
+                            "jabatan": "Staf", "alamat": ""},
+            "asset_ids": ["aset-1"],
+            "aset": [{"id": "aset-1", "asset_code": "3100102001", "NUP": "1",
+                      "asset_name": "Laptop Kerja", "brand": "Thinkpad",
+                      "model": "X1", "serial_number": "SN-1",
+                      "condition": "Baik", "purchase_date": "2025-03-01",
+                      "purchase_price": 15_000_000}],
+            "saksi": [], "keterangan": "", "sertakan_foto": False,
+        })
+        return await _unwrap(rb.bast_pdf)("bast-p", nilai=param, _user=USER)
+
+    assert "15.000.000" not in _teks_pdf(_jalan(skenario("0")))
+    assert "15.000.000" in _teks_pdf(_jalan(skenario("")))

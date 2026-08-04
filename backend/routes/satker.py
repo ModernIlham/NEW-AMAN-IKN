@@ -39,6 +39,8 @@ FIELD_KOP_SATKER = (
     # di-overlay di atas default global oleh `gabung_kop`.
     "logo_url", "judul_laporan", "subjudul_laporan", "tahun_anggaran",
     "catatan_kaki",
+    # Kebijakan nilai perolehan pada surat serah terima ("" = ikut global).
+    "nilai_dokumen",
 )
 
 
@@ -78,6 +80,9 @@ class SatkerIn(BaseModel):
     subjudul_laporan: str = ""
     tahun_anggaran: str = ""
     catatan_kaki: str = ""
+    # Kebijakan NILAI PEROLEHAN pada surat serah terima satker ini:
+    # "" = ikut setelan universal · "tampilkan" · "sembunyikan".
+    nilai_dokumen: str = ""
     eselon1: Optional[List[str]] = None
     aktif: bool = True
 
@@ -154,6 +159,16 @@ async def simpan_satker(kode: str, payload: SatkerIn,
     _pastikan_satker_sendiri(admin, k)  # isolasi satker (REVIEW-9 R9)
     if not str(payload.nama_satker or "").strip():
         raise HTTPException(status_code=400, detail="Nama satker wajib diisi")
+    # Kebijakan nilai dokumen: kosong = ikut setelan universal. Nilai asing
+    # ditolak agar tidak diam-diam jatuh ke bawaan "tampilkan" — satker yang
+    # bermaksud menyembunyikan nilai berhak tahu setelannya tak tersimpan.
+    from satker_utils import NILAI_DOKUMEN
+    _nd = str(payload.nilai_dokumen or "").strip().lower()
+    if _nd and _nd not in NILAI_DOKUMEN:
+        raise HTTPException(status_code=400, detail=(
+            "Kebijakan nilai dokumen harus kosong (ikut universal), "
+            "'tampilkan', atau 'sembunyikan'"))
+    payload.nilai_dokumen = _nd
     now = datetime.now(timezone.utc).isoformat()
     doc = {
         "kode_satker": k,

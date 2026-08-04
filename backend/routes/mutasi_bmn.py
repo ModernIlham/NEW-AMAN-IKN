@@ -437,7 +437,8 @@ async def simpan_kib(asset_id: str, payload: KibIn,
 
 
 @mutasi_bmn_router.get("/pembukuan/kib-pdf/{asset_id}")
-async def kib_pdf(asset_id: str, _user: dict = Depends(require_user_or_query_token)):
+async def kib_pdf(asset_id: str, nilai: str = "",
+                  _user: dict = Depends(require_user_or_query_token)):
     """KARTU IDENTITAS BARANG (PDF resmi): identitas aset + field khusus per
     jenis (terisi dari data tersimpan; kosong = garis titik untuk dilengkapi
     manual) + riwayat mutasi Buku Barang + blok tanda tangan KPB."""
@@ -465,6 +466,11 @@ async def kib_pdf(asset_id: str, _user: dict = Depends(require_user_or_query_tok
     activity = await db.inventory_activities.find_one(
         {"id": aset.get("activity_id")}, {"_id": 0}) if aset.get("activity_id") else None
     settings = await pengaturan_kop(activity)
+    # KIB kerap ditempel/dipegang di ruangan — hormati kebijakan satker soal
+    # penyajian nilai (`?nilai=0/1` untuk memaksa satu cetakan).
+    from satker_utils import pilihan_nilai_dari_query, tampilkan_nilai_dokumen
+    tampil_nilai = tampilkan_nilai_dokumen(
+        settings, pilihan_nilai_dari_query(nilai))
     st = _get_report_styles()
     buffer = _io.BytesIO()
     doc = _std_doc(buffer)
@@ -491,9 +497,11 @@ async def kib_pdf(asset_id: str, _user: dict = Depends(require_user_or_query_tok
         ("Asal Perolehan", aset.get("perolehan_dari_nama") or ""),
         ("Tanggal Perolehan", _fmt_tanggal_id(str(aset.get("purchase_date") or "")[:10])
          if aset.get("purchase_date") else ""),
-        ("Nilai Perolehan", f"Rp{harga:,.0f}".replace(",", ".") if harga else ""),
         ("Kondisi", aset.get("condition") or ""),
     ]
+    if tampil_nilai:
+        umum.insert(-1, ("Nilai Perolehan",
+                         f"Rp{harga:,.0f}".replace(",", ".") if harga else ""))
     baris = [[Paragraph("<b>DATA UMUM</b>", st['TableHeader']), Paragraph("", st['TableHeader'])]]
     for label, nilai in umum:
         baris.append([Paragraph(label, st['Cell']), Paragraph(_v(nilai), st['Cell'])])

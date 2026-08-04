@@ -24,6 +24,8 @@ const FORM_KOSONG = {
   kode_satker: "", nama_satker: "", nama_unit_organisasi: "", nama_sub_unit: "",
   kode_satker_lengkap: "",
   alamat: "", tempat_laporan: "", tembusan_laporan: "", telepon: "", email: "",
+  // "" = ikut setelan universal; "tampilkan"/"sembunyikan" = kebijakan satker.
+  nilai_dokumen: "",
 };
 
 /**
@@ -360,6 +362,21 @@ export function SatkerPanel({ user }) {
                     onChange={(e) => setForm({ ...form, tembusan_laporan: e.target.value })}
                     rows={2}
                     className="w-full mt-0.5 rounded-md border border-input bg-background px-3 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Nilai Perolehan pada surat serah terima</label>
+                  <select value={form.nilai_dokumen || ""}
+                    onChange={(e) => setForm({ ...form, nilai_dokumen: e.target.value })}
+                    className="w-full h-9 mt-0.5 rounded-md border border-input bg-background px-2 text-sm"
+                    data-testid="satker-form-nilai_dokumen">
+                    <option value="">Ikut setelan universal</option>
+                    <option value="tampilkan">Tampilkan</option>
+                    <option value="sembunyikan">Sembunyikan</option>
+                  </select>
+                  <p className="text-[10px] text-muted-foreground">
+                    Berlaku pada BAST pengguna, BAST penetapan status penggunaan, dan KIB
+                    satker ini — naskah yang dipegang pegawai. Laporan keuangan tetap ber-nilai.
+                  </p>
                 </div>
               </div>
             </div>

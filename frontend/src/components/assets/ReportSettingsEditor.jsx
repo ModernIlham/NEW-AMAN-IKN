@@ -78,6 +78,10 @@ export default function ReportSettingsEditor({ onClose }) {
     { key: "tanggal_laporan", label: "Tanggal Laporan (baris ttd surat & sampul)", type: "date" },
     { key: "catatan_kaki", label: "Catatan Kaki", placeholder: "Teks tambahan di bagian bawah sampul" },
     { key: "tembusan_laporan", label: "Tembusan surat/BA (satu per baris — kosongkan bila tidak dipakai)", placeholder: "Kepala Biro Umum\nInspektur\nKepala KPKNL Balikpapan", multiline: true },
+    { key: "nilai_dokumen", label: "Nilai Perolehan pada surat serah terima",
+      opsi: [{ value: "tampilkan", label: "Tampilkan (bawaan)" },
+             { value: "sembunyikan", label: "Sembunyikan" }],
+      bantuan: "Berlaku pada BAST pengguna, BAST penetapan status penggunaan, dan KIB — naskah yang dipegang pegawai/ditempel di ruangan. Laporan keuangan (LBP, DBKP, Neraca, penyusutan) tetap menampilkan nilai. Tiap dokumen masih bisa memilih sendiri saat dibuat." },
   ];
 
   return (
@@ -128,10 +132,22 @@ export default function ReportSettingsEditor({ onClose }) {
 
       {/* Text Fields */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {fields.map(({ key, label, placeholder, multiline, type }) => (
+        {fields.map(({ key, label, placeholder, multiline, type, opsi, bantuan }) => (
           <div key={key} className={`space-y-0.5 ${multiline ? "sm:col-span-2" : ""}`}>
             <label className="text-[10px] font-medium text-muted-foreground">{label}</label>
-            {multiline ? (
+            {opsi ? (
+              <>
+                <select
+                  data-testid={`settings-${key}`}
+                  value={settings?.[key] || opsi[0].value}
+                  onChange={e => handleChange(key, e.target.value)}
+                  className="w-full px-2 py-1.5 text-xs border border-border rounded-md focus:ring-1 focus:ring-blue-300 focus:border-blue-400 bg-card"
+                >
+                  {opsi.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+                {bantuan && <p className="text-[9px] text-muted-foreground leading-snug">{bantuan}</p>}
+              </>
+            ) : multiline ? (
               <textarea
                 data-testid={`settings-${key}`}
                 rows={3}
