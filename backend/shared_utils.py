@@ -1058,9 +1058,10 @@ async def blok_ttd_kpb(settings, per_iso=None, kode_satker=""):
     Penandatangan Non-ASN: baris NIP/NIK TIDAK dicetak (privasi).
     `kode_satker` membatasi KPB ke satker penerbit (kosong = semua, lama)."""
     from pegawai_utils import baris_identitas_ttd
+    from pejabat_utils import jabatan_kapasitas_kpb
     kpb = await resolve_penandatangan_kpb(settings, per_iso, kode_satker)
     return {'pre': ['.................., .......................'],
-            'header': 'Kuasa Pengguna Barang,',
+            'header': f"{jabatan_kapasitas_kpb(kpb)},",
             'nama': kpb["nama"],
             'ttd_img': await ambil_ttd_img(kpb.get("ttd_file_id")),
             'after': baris_identitas_ttd(
@@ -1222,8 +1223,10 @@ async def blok_ttd_kpb_titik(settings, per_iso=None, kode_satker=""):
     Penandatangan Non-ASN: baris NIP/NIK TIDAK dicetak (privasi).
     `kode_satker` membatasi KPB ke satker penerbit (kosong = semua, lama)."""
     from pegawai_utils import baris_identitas_ttd
+    from pejabat_utils import jabatan_kapasitas_kpb
     kpb = await resolve_penandatangan_kpb(settings, per_iso, kode_satker)
-    return {'pre': [''], 'header': 'Mengetahui,', 'role': 'Kuasa Pengguna Barang,',
+    return {'pre': [''], 'header': 'Mengetahui,',
+            'role': f"{jabatan_kapasitas_kpb(kpb)},",
             'nama': kpb["nama"] if kpb["nama"] != "-" else '...........................',
             'ttd_img': await ambil_ttd_img(kpb.get("ttd_file_id")),
             'after': baris_identitas_ttd(

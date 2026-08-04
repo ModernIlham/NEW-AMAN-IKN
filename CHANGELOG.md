@@ -67,6 +67,52 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#737] Rangkap jabatan terkelola — KPB tanda tangan sesuai KAPASITAS kop + baris nama blok ttd selalu sejajar — 2026-08-04
+
+Dua permintaan pemilik dari tangkapan layar BAST: (a) blok "Mengetahui" pada
+BAST mencetak jabatan STRUKTURAL penandatangan ("Direktur Pengembangan
+Ekosistem Digital") padahal ia sedang bertindak sebagai KPB; (b) baris nama
+kedua kolom tanda tangan tidak sejajar — kolom berkepala panjang ("Yang
+Menyerahkan a.n. Kuasa Pengguna Barang," yang wrap 2-3 baris) mendorong
+namanya turun sendirian.
+
+### Kapasitas mengikuti KOP SURAT (kaidah rangkap jabatan)
+
+Satu helper murni baru `pejabat_utils.jabatan_kapasitas_kpb`: pada SEMUA
+dokumen ber-kop KPB/satker yang digenerate aplikasi ini, pejabat ber-peran
+KPB menandatangani dalam kapasitas **"Kuasa Pengguna Barang"** (otomatis
+ber-awalan **Plt./Plh.** bila pelaksana) — jabatan strukturalnya tetap
+tersimpan di registry untuk naskah dinas ber-kop unitnya sendiri. Diterapkan
+di titik-titik yang masih mencetak jabatan struktural:
+
+- **PDF BAST** — blok "Mengetahui, KPB" (kasus tangkapan layar);
+- **identitas default PIHAK KESATU** saat membuat BAST (auto-KPB);
+- **BAST PPK→KPB Pengadaan** — snapshot `kpb_jabatan` kini kapasitas
+  (struktural disimpan terpisah di `kpb_jabatan_struktural`); render
+  menormalkan BAST lama yang terlanjur menyimpan jabatan struktural;
+- `blok_ttd_kpb` / `blok_ttd_kpb_titik` (KIR, BAST PSP, Wasdal, Pemusnahan,
+  KIB, dst.) kini ikut ber-awalan Plt./Plh.;
+- kandidat penanda tangan **e-sign LPB** (jalur KPB).
+
+Halaman Referensi Pejabat menjelaskan kaidah ini tepat di bawah pilihan
+peran (muncul saat peran KPB dicentang) dan pada keterangan Plt/Plh.
+
+### Blok tanda tangan: baris nama SEJAJAR di semua surat
+
+`_signature_block` (dipakai SEMUA generator PDF) dirombak dari satu sel per
+kolom menjadi tabel **tiga zona** — kepala (tempat-tanggal/header/role) ·
+ruang ttd · nama+NIP — tinggi tiap zona mengikuti kolom tertingginya,
+sehingga nama & NIP antar kolom selalu duduk sebaris walau kepala kolom
+beda jumlah baris. Spesimen TTD digital menempel di dasar zona tengah
+(persis di atas garis nama).
+
+Uji: `jabatan_kapasitas_kpb` (unit) · BAST tercatat/tercetak "Kuasa
+Pengguna Barang" bukan "Direktur ..." (mongomock + pypdfium2) · varian Plh ·
+uji koordinat nyata: y baris nama kedua kolom selisih < 2 pt — DIBUKTIKAN
+gagal pada layout lama dan lolos pada layout baru.
+
+---
+
 ## [#736] KPB "Mengetahui" ikut Referensi Pejabat per satker dokumen + alamat satker multi-baris ke semua surat — 2026-08-04
 
 Empat permintaan pemilik dari satu tangkapan layar BAST yang blok
