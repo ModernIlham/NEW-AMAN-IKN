@@ -179,3 +179,77 @@ def test_gerbang_meninggal_tetap_menolak_pada_doc_type_bebas(dbx):
         _jalan(skenario())
     assert e.value.status_code == 400
     assert "Meninggal Dunia" in e.value.detail
+
+
+# ── Posisi QR: SEKALI di akhir oleh pemilik, bukan per penanda tangan ───────
+#
+# Mandat pemilik: fitur geser & perbesar QR dicabut dari halaman penanda
+# tangan (tiap orang mengaturnya membingungkan, dan yang terakhir menang),
+# lalu dipasang di langkah unduh dokumen ber-TTD — sekali jalan.
+
+def _sr_dok(**ganti):
+    dasar = {"id": "sr-dok", "judul": "Dokumen", "doc_type": "dokumen_unggahan",
+             "doc_ref": "", "mode": "paralel", "status": "terkirim",
+             "kode_satker": USER_A["kode_satker"], "created_by": USER_A["username"],
+             "dok_file_id": "abc123", "dok_nama": "d.pdf", "dok_halaman": 2,
+             "signers": []}
+    dasar.update(ganti)
+    return dasar
+
+
+def test_spesimen_tak_lagi_menerima_posisi_qr(dbx):
+    """Kontrak payload penanda tangan: field `posisi_qr` DIHAPUS — kiriman
+    lama yang masih menyertakannya tidak boleh menyetel apa pun."""
+    assert "posisi_qr" not in rt.SpesimenIn.model_fields
+    s = rt.SpesimenIn(png_base64="x", posisi=None, posisi_qr={"halaman": 1})
+    assert not hasattr(s, "posisi_qr")
+
+
+def test_pemilik_atur_posisi_qr_tersimpan_terjepit(dbx):
+    """Posisi tersimpan dan DIJEPIT: lebar di luar 0,10–0,40 ditarik ke batas,
+    halaman di luar jumlah halaman dokumen ikut dijepit."""
+    async def skenario():
+        await dbx.signature_requests.insert_one(_sr_dok())
+        r = await rt.atur_posisi_qr(
+            "sr-dok", rt.PosisiQrIn(posisi_qr={"halaman": 9, "x": 0.5,
+                                               "y": 0.5, "lebar": 0.99}),
+            user=USER_A)
+        return r, await dbx.signature_requests.find_one({"id": "sr-dok"})
+    r, doc = _jalan(skenario())
+    assert r["posisi_qr"]["lebar"] == 0.40      # dijepit dari 0,99
+    assert r["posisi_qr"]["halaman"] == 2       # dijepit ke jumlah halaman
+    assert doc["posisi_qr"]["lebar"] == 0.40    # benar-benar tersimpan
+
+
+def test_posisi_qr_null_mengembalikan_ke_otomatis(dbx):
+    async def skenario():
+        await dbx.signature_requests.insert_one(
+            _sr_dok(posisi_qr={"halaman": 1, "x": 0.1, "y": 0.1, "lebar": 0.2}))
+        r = await rt.atur_posisi_qr("sr-dok", rt.PosisiQrIn(posisi_qr=None),
+                                    user=USER_A)
+        return r, await dbx.signature_requests.find_one({"id": "sr-dok"})
+    r, doc = _jalan(skenario())
+    assert r["posisi_qr"] is None and doc["posisi_qr"] is None
+
+
+def test_posisi_qr_satker_lain_ditolak(dbx):
+    """Isolasi satker: dokumen satker A tak bisa diatur QR-nya oleh satker B."""
+    async def skenario():
+        await dbx.signature_requests.insert_one(_sr_dok())
+        return await rt.atur_posisi_qr(
+            "sr-dok", rt.PosisiQrIn(posisi_qr=None), user=USER_B)
+    with pytest.raises(HTTPException) as e:
+        _jalan(skenario())
+    assert e.value.status_code == 403
+
+
+def test_posisi_qr_tanpa_dokumen_ditolak_400(dbx):
+    """Permintaan tanpa lampiran dokumen tak punya halaman untuk menaruh QR."""
+    async def skenario():
+        await dbx.signature_requests.insert_one(_sr_dok(dok_file_id=""))
+        return await rt.atur_posisi_qr(
+            "sr-dok", rt.PosisiQrIn(posisi_qr={"halaman": 1, "x": 0, "y": 0,
+                                               "lebar": 0.2}), user=USER_A)
+    with pytest.raises(HTTPException) as e:
+        _jalan(skenario())
+    assert e.value.status_code == 400
