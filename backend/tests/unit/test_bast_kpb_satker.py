@@ -360,3 +360,74 @@ def test_pdf_bast_param_unduhan_menimpa_pilihan_dokumen(dbx):
 
     assert "15.000.000" not in _teks_pdf(_jalan(skenario("0")))
     assert "15.000.000" in _teks_pdf(_jalan(skenario("")))
+
+
+# ── Pasal khusus per BIDANG kode barang pada PDF nyata (mandat pemilik) ─────
+
+def _bast_dgn_aset(dbx, bast_id, kode, nama, jenis="penggunaan_melekat"):
+    return dbx.bast_serah_terima.insert_one({
+        "id": bast_id, "kode_satker": SATKER, "jenis": jenis,
+        "nomor": f"BAST-{bast_id}/2026", "tanggal": "2026-08-04",
+        "pihak_pertama": {"nama": "Penyerah", "nip": "", "jabatan": "",
+                          "alamat": ""},
+        "pihak_kedua": {"nama": "Andi Penerima", "nip": "", "jabatan": "Staf",
+                        "alamat": ""},
+        "asset_ids": ["aset-x"],
+        "aset": [{"id": "aset-x", "asset_code": kode, "NUP": "1",
+                  "asset_name": nama, "brand": "-", "model": "-",
+                  "serial_number": "-", "condition": "Baik",
+                  "purchase_date": "2025-03-01", "purchase_price": 200_000_000}],
+        "saksi": [], "keterangan": "", "sertakan_foto": False,
+    })
+
+
+def test_pdf_pasal_kendaraan_muncul_hanya_untuk_kendaraan(dbx):
+    """BAST mobil memuat pasal kendaraan (SIM, pajak, larangan pemakaian
+    pribadi di luar jam kerja); BAST laptop TIDAK — justru memuat pasal
+    perangkat kerja. Ini inti "sistem membedakan berdasarkan kode barang"."""
+    async def skenario(kode, nama, bast_id):
+        await dbx.bast_serah_terima.delete_many({})
+        await _seed_dasar(dbx)
+        await _bast_dgn_aset(dbx, bast_id, kode, nama)
+        return await _unwrap(rb.bast_pdf)(bast_id, _user=USER)
+
+    teks_mobil = _teks_pdf(_jalan(skenario("3020104001", "Minibus", "bp-1")))
+    assert "KETENTUAN KHUSUS KENDARAAN DINAS" in teks_mobil
+    assert "Surat Izin Mengemudi" in teks_mobil
+    assert "KETENTUAN KHUSUS KOMPUTER" not in teks_mobil
+
+    teks_laptop = _teks_pdf(_jalan(skenario("3100102003", "Laptop", "bp-2")))
+    assert "KETENTUAN KHUSUS KOMPUTER" in teks_laptop
+    assert "KETENTUAN KHUSUS KENDARAAN DINAS" not in teks_laptop
+    assert "Surat Izin Mengemudi" not in teks_laptop
+
+
+def test_pdf_pasal_waktu_dan_risiko_tercetak(dbx):
+    """Pasal konteks waktu (luar jam kerja / hari libur / perjalanan dinas)
+    dan pasal risiko (lapor 1x24 jam, TGR, kahar) hadir pada BAST penguasaan."""
+    async def skenario():
+        await dbx.bast_serah_terima.delete_many({})
+        await _seed_dasar(dbx)
+        await _bast_dgn_aset(dbx, "bp-3", "3100102003", "Laptop")
+        return await _unwrap(rb.bast_pdf)("bp-3", _user=USER)
+    teks = _teks_pdf(_jalan(skenario()))
+    assert "WAKTU, TEMPAT, DAN KEADAAN PENGGUNAAN" in teks
+    assert "hari libur" in teks
+    assert "perjalanan dinas" in teks
+    assert "KEHILANGAN, KERUSAKAN, DAN KEADAAN KAHAR" in teks
+    assert "1x24 jam" in teks
+
+
+def test_pdf_pengembalian_tanpa_pasal_kewajiban_penggunaan(dbx):
+    """BAST pengembalian: barang kembali ke satker, sehingga pasal kewajiban
+    penggunaan & risiko pemegang TIDAK dibebankan lagi."""
+    async def skenario():
+        await dbx.bast_serah_terima.delete_many({})
+        await _seed_dasar(dbx)
+        await _bast_dgn_aset(dbx, "bp-4", "3100102003", "Laptop",
+                             jenis="pengembalian")
+        return await _unwrap(rb.bast_pdf)("bp-4", _user=USER)
+    teks = _teks_pdf(_jalan(skenario()))
+    assert "WAKTU, TEMPAT, DAN KEADAAN PENGGUNAAN" not in teks
+    assert "KEHILANGAN, KERUSAKAN, DAN KEADAAN KAHAR" not in teks
+    assert "PERNYATAAN DAN PEMERIKSAAN" in teks     # pasal pengembalian tetap

@@ -1014,6 +1014,82 @@ jo. PP 28/2020; Permendagri 7/2024 (rezim BMD); PermenPAN-RB 23/2018 (JFPLB);
 KLC/DJKN/DJPb (DBR, wewenang KPB), Kamus SAKTI (role Operator/Validator/
 Approver). **[Sebagian teks primer perlu verifikasi — akses PDF JDIH 403.]**
 
+## 11C. Pasal BAST: konteks waktu & ketentuan khusus per BIDANG (riset Agt 2026)
+
+> Menjawab mandat pemilik: naskah BAST harus mengantisipasi kejadian **di
+> luar jam kerja, pada hari kerja, saat perjalanan dinas, dan pada hari
+> libur**, serta memuat **pasal khusus yang berbeda per BIDANG kode barang**.
+> Implementasi: `backend/bast_pasal.py` (murni, teruji) yang disisipkan
+> generator BAST `routes/bast.py`.
+
+### 11C.1 Dasar norma yang dipakai
+
+| Norma | Dipakai untuk |
+|---|---|
+| **PP 27/2014 jo. PP 28/2020** | BMN hanya untuk penyelenggaraan tugas & fungsi; Ps. 42 kewajiban pengamanan administrasi/fisik/hukum; Ps. 43 penyimpanan bukti kepemilikan (BPKB di satker) |
+| **PMK 40/2024** (menggantikan PMK 246/2014) | tata cara pelaksanaan penggunaan BMN — penggunaan di luar penyelenggaraan pemerintahan dilarang |
+| **UU 1/2004 Ps. 59-64 jo. PP 38/2016** | tuntutan ganti kerugian negara terhadap pegawai negeri bukan bendahara; kewajiban dapat beralih ke ahli waris |
+| **PP 94/2021** | penyalahgunaan BMN = pelanggaran disiplin (dasar kalimat larangan pemakaian pribadi) |
+| **PMK 97/PMK.06/2019 jo. PMK 43 Tahun 2025** | asuransi BMN bersifat **"dapat"/selektif** → klausul klaim ditulis BERSYARAT ("terhadap BMN yang diasuransikan"), bukan kewajiban umum |
+| **UU 27/2022 (PDP)** | data pada perangkat komputer/komunikasi |
+
+**Batas kejujuran**: tidak ada PMK nasional tunggal yang berbunyi "kendaraan
+dinas hanya boleh dipakai pada hari & jam kerja". Norma itu hidup sebagai
+**aturan internal instansi** di atas prinsip PP 27/2014. Karena itu pasal
+kendaraan ditulis sebagai kaidah internal satker yang dioperasionalkan lewat
+**surat tugas/izin tertulis**, bukan sebagai kutipan pasal — dan tidak ada
+nomor peraturan yang diklaim untuk butir itu.
+
+### 11C.2 Dua pasal konteks (semua BAST yang memindahkan penguasaan)
+
+1. **WAKTU, TEMPAT, DAN KEADAAN PENGGUNAAN** — kedudukan BMN pada jam kerja,
+   di luar jam kerja, hari libur/cuti bersama, lembur/piket, kerja fleksibel,
+   dan perjalanan dinas; pencatatan keluar-masuk barang; larangan pemakaian
+   non-kedinasan kapan pun.
+2. **KEHILANGAN, KERUSAKAN, DAN KEADAAN KAHAR** — pelaporan **1x24 jam**
+   (dengan jalur khusus bila kejadian di luar jam kerja: lisan/elektronik
+   dulu, tertulis pada hari kerja berikutnya), surat keterangan kepolisian,
+   TGR, keadaan kahar, klaim asuransi bersyarat, dan penegasan bahwa keausan
+   pemakaian wajar bukan kelalaian.
+
+Keduanya **tidak dicetak** pada BAST pengembalian — barang kembali ke satker,
+sehingga kewajiban penggunaan tak lagi dibebankan kepada mantan pemegang.
+
+### 11C.3 Pasal khusus per BIDANG (kunci 3 digit, prefix terpanjang menang)
+
+| Bidang | Inti kekhususan |
+|---|---|
+| 2 Tanah | batas/patok, larangan penguasaan pihak lain, dokumen di pemegang berwenang |
+| 301 Alat Besar | operator berlisensi, K3, log jam operasi, izin operasi di luar jam/lokasi |
+| **302 Alat Angkutan** | hari & jam kerja; luar jam/hari libur/luar kota **wajib surat tugas**; SIM; tilang & kecelakaan non-dinas tanggung jawab pribadi; disimpan di pool; STNK/pajak/servis; BPKB di satker; larangan ubah bentuk/warna |
+| 303 Bengkel & Alat Ukur | kalibrasi, APD, penyimpanan kembali |
+| 305 Alat Kantor & RT | ikut DBR, pemindahan antar ruangan dilaporkan, tak dibawa pulang tanpa izin |
+| 306 Studio/Komunikasi | peminjaman terjadwal, frekuensi berizin, dokumentasi milik instansi |
+| 307 Kedokteran | tenaga berwenang, kalibrasi, limbah medis |
+| 308 Laboratorium | SOP + APD, kalibrasi, B3 & pelaporan insiden termasuk di luar jam kerja |
+| 309 Persenjataan | izin & penyimpanan khusus, pengeluaran atas perintah |
+| **310 Komputer** | justru **BOLEH** dibawa keluar/di luar jam kerja untuk dinas; kata sandi, jangan ditinggal di kendaraan, data instansi & PDP, larangan perangkat lunak tak berlisensi, bersih-bersih data saat kembali |
+| 315 Keselamatan Kerja | masa berlaku/kedaluwarsa, penempatan tetap |
+| 4 Gedung & Bangunan | penguncian & pemadaman listrik di luar jam kerja, larangan ubah struktur, pemakaian pihak lain lewat pemanfaatan, lapor kebakaran/kebocoran |
+| 5 Jalan/Irigasi/Jaringan | penguasaan pengelolaan, lapor gangguan termasuk di luar jam kerja (layanan berjalan terus) |
+| 601 Bahan Perpustakaan | kartu pinjam, ganti judul/edisi sama, koleksi khusus tak keluar |
+| 602 Barang Kesenian | kondisi penyimpanan, perawatan tak merusak keaslian |
+| **603/604/605 Hewan/Biota/Tanaman** | **kebalikan kendaraan**: perawatan WAJIB tiap hari **termasuk hari libur**, petugas pengganti bila berhalangan, lapor sakit/mati/hilang |
+| 8 Aset Tak Berwujud | batas lisensi, larangan menggandakan, akun dinonaktifkan saat kembali |
+
+Bidang yang belum punya aturan sendiri turun ke pasal tingkat **golongan**
+(mis. semua Peralatan dan Mesin lain → pasal umum operasional & larangan
+membongkar). Maksimal 5 blok bidang dicetak; bila lebih, naskah menyebut
+sendiri bidang sisanya (pemotongan tidak pernah senyap).
+
+### 11C.4 Yang TIDAK diklaim
+
+Pasal-pasal ini adalah **kaidah internal satker** yang dirancang konsisten
+dengan norma di §11C.1 — bukan kutipan harfiah pasal peraturan, bukan nasihat
+hukum, dan tidak menggantikan SOP/peraturan internal instansi. Nomor
+peraturan hanya disebut pada butir yang memang bersumber langsung dari
+peraturan itu (TGR: UU 1/2004 & PP 38/2016).
+
 ## 12. Kendala Umum Satker → Fitur Penangkal AMAN
 
 | Kendala nyata (temuan artikel DJKN/DJPb/BPK/jurnal) | Penangkal di AMAN |

@@ -991,6 +991,10 @@ async def bast_pdf(bast_id: str, nilai: str = "",
         "bersama atas barang dimaksud sebelum menandatangani Berita Acara ini.",
     ])
     if jenis == "mutasi_pengguna":
+        # Butir kehilangan/ganti rugi TIDAK diulang di sini — sudah dirinci
+        # pada pasal "KEHILANGAN, KERUSAKAN, DAN KEADAAN KAHAR" di bawah
+        # (termasuk kejadian di luar jam kerja); pengulangan hanya membuat
+        # naskah panjang dan berpotensi berbeda bunyi.
         pasal("MUTASI PEMEGANG DAN TANGGUNG JAWAB", [
             "Terhitung sejak ditandatanganinya Berita Acara ini, tanggung "
             "jawab penggunaan, pengamanan, dan pemeliharaan BMN beralih dari "
@@ -998,28 +1002,40 @@ async def bast_pdf(bast_id: str, nilai: str = "",
             "PIHAK KEDUA dilarang memindahtangankan, mengubah bentuk, atau "
             "mengalihkan BMN kepada pihak lain tanpa persetujuan tertulis, "
             "dan wajib mengembalikannya apabila berpindah tugas/berhenti.",
-            "Kehilangan atau kerusakan akibat kelalaian PIHAK KEDUA wajib "
-            "segera dilaporkan dan dapat dikenakan tuntutan ganti rugi "
-            "sesuai ketentuan peraturan perundang-undangan.",
         ])
         pasal("STATUS PENCATATAN", [
             "BMN tetap tercatat sebagai Barang Milik Negara pada satuan "
             "kerja; mutasi ini hanya mengubah pencatatan pemegang pada "
             "daftar barang/Daftar Barang Ruangan/Kartu Identitas Barang.",
         ])
-    if jenis in ("penggunaan_melekat", "operasional_unit", "lainnya"):
+    if jenis in ("penggunaan_melekat", "lainnya"):
         pasal("TANGGUNG JAWAB", [
             "Terhitung sejak ditandatanganinya Berita Acara ini, PIHAK KEDUA "
             "bertanggung jawab penuh atas penggunaan, pengamanan, dan "
             "pemeliharaan BMN untuk kepentingan kedinasan.",
-            "BMN wajib dikembalikan kepada PIHAK KESATU dalam kondisi baik "
-            "apabila PIHAK KEDUA berpindah tugas/berhenti sesuai ketentuan.",
+            "BMN melekat pada PIHAK KEDUA selaku pemegang dan wajib "
+            "dikembalikan kepada PIHAK KESATU dalam kondisi baik apabila "
+            "PIHAK KEDUA berpindah tugas/berhenti sesuai ketentuan.",
             "PIHAK KEDUA dilarang memindahtangankan atau mengalihkan BMN "
             "kepada pihak lain tanpa persetujuan tertulis PIHAK KESATU.",
-            "Kehilangan atau kerusakan akibat kelalaian PIHAK KEDUA wajib "
-            "segera dilaporkan kepada PIHAK KESATU dan dapat dikenakan "
-            "tuntutan ganti rugi sesuai ketentuan peraturan "
-            "perundang-undangan.",
+        ])
+    if jenis == "operasional_unit":
+        # Dibedakan dari penggunaan melekat: barang dipakai BERSAMA pada satu
+        # unit/tempat kerja, sehingga yang diikat adalah penguasaan unit —
+        # bukan penguasaan pribadi — beserta pengaturan pemakaian bergilir.
+        pasal("TANGGUNG JAWAB PENGGUNAAN OPERASIONAL", [
+            "Terhitung sejak ditandatanganinya Berita Acara ini, PIHAK KEDUA "
+            "selaku penanggung jawab unit/tempat kerja bertanggung jawab atas "
+            "penggunaan, pengamanan, dan pemeliharaan BMN yang dipakai "
+            "bersama untuk menunjang tugas unit.",
+            "BMN tetap berada pada unit/tempat kerja sebagaimana tercatat "
+            "dan tidak dibawa untuk keperluan pribadi; pemakaian bergilir "
+            "antar petugas diatur oleh PIHAK KEDUA dengan tetap menjaga "
+            "kejelasan siapa yang menguasai barang pada satu waktu.",
+            "Pergantian penanggung jawab unit dilakukan melalui serah terima "
+            "baru agar rantai penguasaan barang tidak terputus.",
+            "PIHAK KEDUA dilarang memindahtangankan atau mengalihkan BMN "
+            "kepada pihak lain tanpa persetujuan tertulis PIHAK KESATU.",
         ])
     if jenis == "operasional_unit" and b.get("penanggung_jawab_tambahan"):
         baris = [f"{_esc(str(p.get('nama') or '-'))} — "
@@ -1092,6 +1108,37 @@ async def bast_pdf(bast_id: str, nilai: str = "",
             "beralih kepada PIHAK KESATU; pencatatan pemegang pada daftar "
             "barang satuan kerja dimutakhirkan.",
         ])
+    # ── Pasal konteks waktu, pasal khusus per BIDANG, dan pasal risiko ──
+    # Disisipkan SETELAH pasal per jenis supaya urutannya: apa yang
+    # diserahterimakan → tanggung jawab pokok → kapan/di mana boleh dipakai →
+    # aturan khusus jenis barangnya → apa yang dilakukan bila terjadi apa-apa.
+    from bast_pasal import (
+        nama_bidang_terpakai, pasal_khusus_bidang, pasal_khusus_ringkas,
+        pasal_risiko, pasal_waktu_penggunaan,
+    )
+    _kode_aset = [a.get("asset_code") for a in (b.get("aset") or [])]
+    _p_waktu = pasal_waktu_penggunaan(jenis)
+    if _p_waktu:
+        pasal(_p_waktu[0], _p_waktu[1])
+    _MAKS_PASAL_BIDANG = 5
+    for _judul, _butir in pasal_khusus_bidang(_kode_aset,
+                                              maks=_MAKS_PASAL_BIDANG):
+        pasal(_judul, _butir)
+    _dipakai, _sisa = pasal_khusus_ringkas(_kode_aset, maks=_MAKS_PASAL_BIDANG)
+    if _sisa:
+        # Pemotongan TIDAK boleh senyap: naskah menyebut sendiri bahwa masih
+        # ada aturan bidang lain yang berlaku meski tak dicetak di sini.
+        _nama_sisa = ", ".join(nama_bidang_terpakai(_kode_aset)[_dipakai:])
+        pasal("KETENTUAN KHUSUS LAINNYA", [
+            "Terhadap BMN pada Berita Acara ini yang termasuk bidang "
+            f"{_esc(_nama_sisa)} berlaku pula ketentuan teknis pengelolaan "
+            "masing-masing bidang tersebut sebagaimana diatur satuan kerja, "
+            "meskipun tidak dituliskan seluruhnya pada naskah ini.",
+        ])
+    _p_risiko = pasal_risiko(jenis)
+    if _p_risiko:
+        pasal(_p_risiko[0], _p_risiko[1])
+
     if b.get("keterangan"):
         # Isi dari textarea: tiap baris tak-kosong → satu butir pasal
         # (di-escape — teks bebas berkarakter '&'/'<' tak boleh merusak PDF).
