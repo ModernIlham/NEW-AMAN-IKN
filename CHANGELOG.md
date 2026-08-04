@@ -67,6 +67,46 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#752] Atur letak QR bukan tugas admin saja — operator satker ikut — 2026-08-04
+
+Lanjutan [#751]. Penanda **`PERLU ATUR LETAK QR`** memang sudah ada, tetapi ia
+hanya sampai ke layar admin: `GET /ttd/permintaan` memberi cakupan satker
+khusus `role == "admin"`, dan gerbang `_pastikan_pemilik_sr` hanya meloloskan
+**pembuat ATAU admin**. Akibatnya operator cuma bisa mengatur QR untuk
+permintaan buatannya sendiri — padahal langkah itu MENAHAN unduhan semua
+pihak, jadi pekerjaannya menggantung menunggu satu orang.
+
+Sekarang **pengelola satker** (admin **maupun** operator) dapat:
+
+- melihat permintaan TTD satkernya di daftar, lengkap dengan penanda
+  `PERLU ATUR LETAK QR`;
+- membuka detailnya (pintu masuk dialog "Atur QR & Unduh ber-TTD");
+- menempatkan letak QR, memakai pratinjau halaman, dan mengunduh dokumen
+  ber-TTD.
+
+### Yang sengaja TIDAK ikut dilonggarkan
+
+- **Isolasi lintas-satker** tetap berdiri: operator satker lain tetap 403.
+  Yang dilonggarkan hanya sekat PERAN di dalam satker.
+- **Viewer** tetap pembaca murni — bukan pengelola; daftarnya tetap sebatas
+  buatannya sendiri dan ia tak bisa menyetel QR.
+- **Tindakan yang tak bisa ditarik kembali** tetap di gerbang lama
+  (`_pastikan_pemilik_sr` = pembuat/admin): **membatalkan permintaan**
+  (berkaskade menandai BAST/aset "dicabut") dan **menerbitkan ulang link
+  e-sign** (sama dengan membagikan hak menandatangani dokumen resmi).
+  Melonggarkan keduanya bukan bagian dari mandat "operator boleh atur QR".
+
+Gerbangnya kini dua dan bernama sesuai perannya: `_pastikan_pengelola_sr`
+(mengurus & membaca) dan `_pastikan_pemilik_sr` (tak tertarik-kembali), dengan
+pemeriksaan satker dipakai bersama lewat `_cek_satker_sr` supaya tak bisa
+bercabang diam-diam.
+
+Uji: 7 uji baru — operator satker sama boleh menyetel QR & melihat penandanya
+& membaca detailnya, operator satker lain 403, viewer 403, daftar viewer tetap
+sebatas buatannya sendiri, operator bukan pembuat tetap tak boleh membatalkan.
+Tiga di antaranya dibuktikan GAGAL sebelum perubahan. Total 1.675 uji backend,
+434 uji frontend hijau.
+
 ## [#751] TTD paralel saling terlihat + unduhan terbuka setelah QR diatur — 2026-08-04
 
 Tiga permintaan pemilik pada alur tanda tangan elektronik, satu untai.
