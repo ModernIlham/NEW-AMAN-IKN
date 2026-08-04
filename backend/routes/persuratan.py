@@ -40,10 +40,10 @@ from persuratan_utils import (
     FORMAT_NOMOR_DEFAULT, JENIS_NASKAH, KODE_KEAMANAN, MODUL_AMAN,
     RESET_URUT, RESET_URUT_DEFAULT,
     STATUS_KELUAR, STATUS_MASUK, TRANSISI_KELUAR, TRANSISI_MASUK,
-    bangun_nomor, baris_agenda_csv, periode_urut, pilih_klasifikasi,
-    placeholder_tak_dikenal, urut_tampil, validate_format_reset,
-    validate_peta_klasifikasi, validate_surat_keluar, validate_surat_masuk,
-    validate_transisi,
+    bangun_nomor, baris_agenda_csv, gabung_klasifikasi, periode_urut,
+    pilih_klasifikasi, placeholder_tak_dikenal, sumber_pengaturan,
+    urut_tampil, validate_format_reset, validate_peta_klasifikasi,
+    validate_surat_keluar, validate_surat_masuk, validate_transisi,
 )
 
 persuratan_router = APIRouter()
@@ -420,60 +420,149 @@ async def referensi_persuratan(_user: dict = Depends(require_user)):
         "transisi_keluar": {k: sorted(v) for k, v in TRANSISI_KELUAR.items()},
         "transisi_masuk": {k: sorted(v) for k, v in TRANSISI_MASUK.items()},
         "pengaturan": await _pengaturan(kode_satker_user(_user)),
-        "klasifikasi": await db.klasifikasi_arsip.find(
-            {"aktif": {"$ne": False}}, _PROJ).sort("kode", 1).to_list(2000),
+        # Daftar klasifikasi EFEKTIF pemanggil: Bersama di-overlay entri
+        # satkernya (kode senama → entri satker menang), hanya yang aktif.
+        "klasifikasi": [k for k in gabung_klasifikasi(
+            *_pisah_klas(await _klas_terlihat(kode_satker_user(_user)),
+                         kode_satker_user(_user)))
+            if k.get("aktif") is not False],
     }
 
 
 # ── Master kode klasifikasi arsip (dinamis, admin mengelola) ──
+#
+# PER-SATKER (mandat SURAT-3A): tiap satker punya pedoman klasifikasi
+# arsipnya sendiri. Entri ber-kode_satker "" = BERSAMA (warisan/dikelola
+# super-admin, tampil untuk semua); entri ber-kode_satker = milik satker itu
+# dan MENIMPA entri Bersama berkode sama pada daftar efektif (pola overlay
+# yang sama dengan `_pengaturan`). Data lama tanpa kode_satker otomatis
+# terbaca sebagai Bersama — tidak butuh migrasi.
+
+
+def _scope_klas(doc) -> str:
+    return str((doc or {}).get("kode_satker") or "").strip()
+
+
+async def _klas_terlihat(kode_satker: str) -> list:
+    """Entri yang TERLIHAT satu pemanggil: Bersama + milik satkernya.
+    Pemanggil lintas-satker (kode kosong) melihat semuanya (pengelolaan)."""
+    q = ({} if not kode_satker
+         else {"$or": [{"kode_satker": {"$in": ["", None]}},
+                       {"kode_satker": kode_satker}]})
+    return await db.klasifikasi_arsip.find(q, _PROJ).sort("kode", 1).to_list(2000)
+
+
+def _pisah_klas(items: list, kode_satker: str) -> tuple:
+    """(milik_bersama, milik_satker) dari daftar entri terlihat."""
+    bersama = [k for k in items if not _scope_klas(k)]
+    satker = [k for k in items if kode_satker and _scope_klas(k) == kode_satker]
+    return bersama, satker
+
+
+async def _klas_dipakai(kode: str, scope: str) -> int:
+    """Berapa aturan pemetaan yang RESOLUSINYA jatuh ke entri (kode, scope).
+
+    Presisi per-scope supaya satker A tetap boleh menghapus kodenya sendiri
+    meski satker B memakai kode senama (referensi B jatuh ke entri B/Bersama):
+    - entri SATKER hanya dirujuk oleh peta pengaturan satker itu sendiri;
+    - entri BERSAMA dirujuk oleh peta global DAN peta satker mana pun yang
+      TIDAK punya entri sendiri berkode sama (overlay belum menimpanya).
+    """
+    async def _n_rujukan(st_doc) -> int:
+        return sum(1 for a in (st_doc.get("peta_klasifikasi") or [])
+                   if str((a or {}).get("kode") or "").strip() == kode)
+
+    n = 0
+    if scope:
+        st = await db.persuratan_settings.find_one(
+            {"type": "satker", "kode_satker": scope},
+            {"_id": 0, "peta_klasifikasi": 1}) or {}
+        return await _n_rujukan(st)
+    g = await db.persuratan_settings.find_one(
+        {"type": "global"}, {"_id": 0, "peta_klasifikasi": 1}) or {}
+    n += await _n_rujukan(g)
+    async for st in db.persuratan_settings.find(
+            {"type": "satker"},
+            {"_id": 0, "kode_satker": 1, "peta_klasifikasi": 1}):
+        ks = str(st.get("kode_satker") or "").strip()
+        punya_sendiri = ks and await db.klasifikasi_arsip.find_one(
+            {"kode": kode, "kode_satker": ks}, {"_id": 1})
+        if not punya_sendiri:
+            n += await _n_rujukan(st)
+    return n
+
 
 @persuratan_router.get("/persuratan/klasifikasi")
 async def daftar_klasifikasi(_user: dict = Depends(require_user)):
-    """Master kode klasifikasi arsip (semua, termasuk nonaktif)."""
-    items = await db.klasifikasi_arsip.find({}, _PROJ).sort("kode", 1).to_list(2000)
+    """Master kode klasifikasi arsip yang terlihat pemanggil (termasuk
+    nonaktif): entri Bersama + entri satkernya; lintas-satker melihat semua.
+    Tiap entri membawa `kode_satker` ('' = Bersama) untuk badge scope UI."""
+    items = await _klas_terlihat(kode_satker_user(_user))
     return {"items": items, "jumlah": len(items)}
 
 
 @persuratan_router.post("/persuratan/klasifikasi")
 async def tambah_klasifikasi(payload: KlasifikasiIn,
                              user: dict = Depends(require_admin)):
-    """Tambah kode klasifikasi arsip (admin; kode unik)."""
+    """Tambah kode klasifikasi arsip — tersimpan pada scope penulis:
+    admin satker → milik satkernya; super-admin (lintas) → Bersama."""
     kode = payload.kode.strip()
     if not kode:
         raise HTTPException(status_code=400, detail="Kode klasifikasi wajib diisi")
-    if await db.klasifikasi_arsip.find_one({"kode": kode}, _PROJ):
+    _ks = kode_satker_user(user)
+    # Keunikan per SCOPE penulis: Bersama unik antar sesama Bersama, entri
+    # satker unik antar entri satker itu. Kode satker yang senama dengan
+    # entri Bersama justru SAH — itulah override pedoman: daftar efektif
+    # (gabung_klasifikasi) menampilkan versi satker menggantikan Bersama.
+    q_bentrok = {"kode": kode,
+                 "kode_satker": ({"$in": ["", None]} if not _ks else _ks)}
+    if await db.klasifikasi_arsip.find_one(q_bentrok, _PROJ):
         raise HTTPException(status_code=409, detail=f"Kode {kode} sudah terdaftar")
     doc = {"id": str(uuid.uuid4()), "kode": kode,
            "uraian": str(payload.uraian or "").strip(),
            "aktif": payload.aktif is not False,
+           "kode_satker": _ks,
            "created_at": datetime.now(timezone.utc).isoformat()}
     await db.klasifikasi_arsip.insert_one({**doc})
     await log_audit("klasifikasi_arsip", "", username=user.get("username", "system"),
-                    detail=f"Tambah kode klasifikasi {kode}")
+                    detail=f"Tambah kode klasifikasi {kode} ({_ks or 'Bersama'})")
     return doc
+
+
+def _pastikan_milik_scope(user, doc) -> None:
+    """Admin satker hanya mengelola entri satkernya; entri Bersama milik
+    super-admin. (Super-admin lintas boleh menyentuh semuanya.)"""
+    _ks = kode_satker_user(user)
+    if _ks and _scope_klas(doc) != _ks:
+        raise HTTPException(status_code=403, detail=(
+            "Entri ini milik "
+            + (f"satker {_scope_klas(doc)}" if _scope_klas(doc) else "Bersama")
+            + " — hanya dapat dikelola pemiliknya/super-admin"))
 
 
 @persuratan_router.put("/persuratan/klasifikasi/{klas_id}")
 async def ubah_klasifikasi(klas_id: str, payload: KlasifikasiIn,
                            user: dict = Depends(require_admin)):
-    """Ubah kode klasifikasi arsip (admin)."""
+    """Ubah kode klasifikasi arsip (admin — sebatas scope miliknya)."""
     kode = payload.kode.strip()
     if not kode:
         raise HTTPException(status_code=400, detail="Kode klasifikasi wajib diisi")
-    bentrok = await db.klasifikasi_arsip.find_one(
-        {"kode": kode, "id": {"$ne": klas_id}}, _PROJ)
-    if bentrok:
-        raise HTTPException(status_code=409, detail=f"Kode {kode} sudah terdaftar")
-    # Guard "masih dipakai" saat GANTI kode (audit P4 #14) — pintu ubah dulu
-    # tanpa pemeriksaan yang sudah dimiliki pintu hapus: aturan pemetaan
-    # satker lain yang masih merujuk kode LAMA akan kehilangan klasifikasinya.
     lama = await db.klasifikasi_arsip.find_one({"id": klas_id}, _PROJ)
-    if lama and lama.get("kode") != kode:
-        _dipakai_n = 0
-        async for _st in db.persuratan_settings.find(
-                {}, {"_id": 0, "peta_klasifikasi": 1}):
-            _dipakai_n += sum(1 for a in (_st.get("peta_klasifikasi") or [])
-                              if a.get("kode") == lama.get("kode"))
+    if not lama:
+        raise HTTPException(status_code=404, detail="Kode klasifikasi tidak ditemukan")
+    _pastikan_milik_scope(user, lama)
+    scope = _scope_klas(lama)
+    # Keunikan dinilai pada scope ENTRI (bukan scope penulis — super-admin
+    # yang mengubah entri satker tetap diuji terhadap himpunan satker itu).
+    q_bentrok = {"kode": kode, "id": {"$ne": klas_id},
+                 "kode_satker": ({"$in": ["", None]} if not scope else scope)}
+    if await db.klasifikasi_arsip.find_one(q_bentrok, _PROJ):
+        raise HTTPException(status_code=409, detail=f"Kode {kode} sudah terdaftar")
+    # Guard "masih dipakai" saat GANTI kode (audit P4 #14) — presisi per scope
+    # (lihat _klas_dipakai): aturan pemetaan yang resolusinya jatuh ke entri
+    # ini akan kehilangan klasifikasinya bila kodenya berganti.
+    if lama.get("kode") != kode:
+        _dipakai_n = await _klas_dipakai(lama.get("kode"), scope)
         if _dipakai_n:
             raise HTTPException(status_code=409, detail=(
                 f"Kode {lama.get('kode')} masih dipakai {_dipakai_n} aturan "
@@ -486,34 +575,28 @@ async def ubah_klasifikasi(klas_id: str, payload: KlasifikasiIn,
     if res is None:
         raise HTTPException(status_code=404, detail="Kode klasifikasi tidak ditemukan")
     await log_audit("klasifikasi_arsip", "", username=user.get("username", "system"),
-                    detail=f"Ubah kode klasifikasi {kode}")
+                    detail=f"Ubah kode klasifikasi {kode} ({scope or 'Bersama'})")
     return res
 
 
 @persuratan_router.delete("/persuratan/klasifikasi/{klas_id}")
 async def hapus_klasifikasi(klas_id: str, user: dict = Depends(require_admin)):
-    """Hapus kode klasifikasi. Ditolak bila dipakai aturan pemetaan (#34)."""
+    """Hapus kode klasifikasi (sebatas scope miliknya). Ditolak bila masih
+    dipakai aturan pemetaan yang resolusinya jatuh ke entri ini (#34) —
+    presisi per scope: kode senama milik satker LAIN tidak menghalangi."""
     k = await db.klasifikasi_arsip.find_one({"id": klas_id}, _PROJ)
     if not k:
         raise HTTPException(status_code=404, detail="Kode klasifikasi tidak ditemukan")
-    # Guard "masih dipakai" harus melihat SELURUH dokumen pengaturan
-    # (REVIEW-9 R15): peta_klasifikasi kini juga ada per satker (type="satker"),
-    # jadi membaca peta GLOBAL saja bisa menghapus kode yang masih dirujuk
-    # aturan pemetaan satker lain — nomor surat mereka lalu kehilangan
-    # klasifikasinya.
-    _dipakai_n = 0
-    async for _st in db.persuratan_settings.find(
-            {}, {"_id": 0, "peta_klasifikasi": 1}):
-        _dipakai_n += sum(1 for a in (_st.get("peta_klasifikasi") or [])
-                          if a.get("kode") == k["kode"])
-    dipakai = [None] * _dipakai_n
-    if dipakai:
+    _pastikan_milik_scope(user, k)
+    _dipakai_n = await _klas_dipakai(k["kode"], _scope_klas(k))
+    if _dipakai_n:
         raise HTTPException(status_code=409, detail=(
-            f"Kode {k['kode']} masih dipakai {len(dipakai)} aturan pemetaan — "
+            f"Kode {k['kode']} masih dipakai {_dipakai_n} aturan pemetaan — "
             "hapus/ubah aturannya dulu"))
     await db.klasifikasi_arsip.delete_one({"id": klas_id})
     await log_audit("klasifikasi_arsip", "", username=user.get("username", "system"),
-                    detail=f"Hapus kode klasifikasi {k['kode']}")
+                    detail=f"Hapus kode klasifikasi {k['kode']} "
+                           f"({_scope_klas(k) or 'Bersama'})")
     return {"ok": True, "id": klas_id}
 
 
@@ -592,19 +675,37 @@ async def pratinjau_nomor(jenis_naskah: str = "", modul: str = "",
 
 @persuratan_router.get("/persuratan/pengaturan")
 async def get_pengaturan_persuratan(_user: dict = Depends(require_user)):
-    return await _pengaturan(kode_satker_user(_user))
+    """Setelan penomoran EFEKTIF pemanggil + metadata scope untuk UI:
+    `scope` = kode satker yang sedang diatur ('' = Universal), `sumber` =
+    per field dari mana nilai efektifnya berasal (satker/global/bawaan) —
+    admin satker jadi tahu field mana warisan Universal dan mana khusus
+    satkernya."""
+    _ks = kode_satker_user(_user)
+    efektif = await _pengaturan(_ks)
+    g = await db.persuratan_settings.find_one({"type": "global"}, _PROJ) or {}
+    s = ({} if not _ks else await db.persuratan_settings.find_one(
+        {"type": "satker", "kode_satker": _ks}, _PROJ) or {})
+    return {**efektif, "scope": _ks, "sumber": sumber_pengaturan(g, s)}
 
 
 @persuratan_router.post("/persuratan/pengaturan")
 async def set_pengaturan_persuratan(payload: PengaturanIn,
                                     user: dict = Depends(require_admin)):
-    """Atur format nomor & kode unit (admin). Placeholder divalidasi."""
+    """Atur format nomor & kode unit (admin). Placeholder divalidasi.
+
+    Pada scope SATKER, nilai kosong ('') berarti "kembali ikut Universal" —
+    overlay `_pengaturan` melewatkan field kosong sehingga default Universal
+    kembali berlaku. Pada scope Universal, format kosong dikembalikan ke
+    format bawaan (tak ada lapisan lain untuk diikuti)."""
+    _ks = kode_satker_user(user)
     mentah = {k: v for k, v in payload.model_dump().items() if v is not None}
     update = {k: v.strip() for k, v in mentah.items() if isinstance(v, str)}
-    if "reset_urut" in update and update["reset_urut"] not in RESET_URUT:
+    if ("reset_urut" in update and update["reset_urut"] not in RESET_URUT
+            and not (_ks and update["reset_urut"] == "")):
         raise HTTPException(status_code=400, detail=(
             f"Reset nomor tidak dikenal: {update['reset_urut']} "
-            f"(pilihan: {', '.join(RESET_URUT)})"))
+            f"(pilihan: {', '.join(RESET_URUT)}"
+            + ("; kosong = ikut Universal)" if _ks else ")")))
     if "peta_klasifikasi" in mentah:
         peta = [{"modul": str((a or {}).get("modul") or "").strip(),
                  "jenis_naskah": str((a or {}).get("jenis_naskah") or "").strip(),
@@ -615,26 +716,36 @@ async def set_pengaturan_persuratan(payload: PengaturanIn,
             raise HTTPException(status_code=400, detail="; ".join(errors))
         update["peta_klasifikasi"] = peta
     if "format_nomor" in update:
-        if not update["format_nomor"]:
+        if not update["format_nomor"] and not _ks:
             update["format_nomor"] = FORMAT_NOMOR_DEFAULT
-        asing = placeholder_tak_dikenal(update["format_nomor"])
-        if asing:
-            raise HTTPException(status_code=400, detail=(
-                f"Placeholder tidak dikenal: {', '.join(asing)} — yang sah: "
-                "{kode_keamanan} {urut} {kode_klasifikasi} {kode_unit} "
-                "{bulan} {bulan_romawi} {tahun}"))
-        if "{urut}" not in update["format_nomor"]:
-            raise HTTPException(status_code=400,
-                                detail="Format nomor wajib memuat {urut}")
+        if update["format_nomor"]:
+            asing = placeholder_tak_dikenal(update["format_nomor"])
+            if asing:
+                raise HTTPException(status_code=400, detail=(
+                    f"Placeholder tidak dikenal: {', '.join(asing)} — yang sah: "
+                    "{kode_keamanan} {urut} {kode_klasifikasi} {kode_unit} "
+                    "{bulan} {bulan_romawi} {tahun}"))
+            if "{urut}" not in update["format_nomor"]:
+                raise HTTPException(status_code=400,
+                                    detail="Format nomor wajib memuat {urut}")
     if not update:
         raise HTTPException(status_code=400, detail="Tidak ada yang diubah")
     # Keserasian reset × format dinilai atas nilai EFEKTIF setelah perubahan —
-    # menyimpan reset bulanan saja sementara format lama tanpa {bulan} sama
-    # berbahayanya dengan menyimpan format tanpa {bulan} saat sudah bulanan.
-    _ks = kode_satker_user(user)
-    _efektif = {**(await _pengaturan(_ks)), **update}
-    _pesan = validate_format_reset(_efektif.get("reset_urut"),
-                                   _efektif.get("format_nomor"))
+    # disimulasikan lewat jalur overlay yang sama dengan `_pengaturan`
+    # (field kosong TIDAK menimpa), supaya "kembalikan ke Universal" divalidasi
+    # terhadap nilai Universal yang akan benar-benar berlaku, bukan terhadap
+    # string kosongnya.
+    g = await db.persuratan_settings.find_one({"type": "global"}, _PROJ) or {}
+    s = ({} if not _ks else await db.persuratan_settings.find_one(
+        {"type": "satker", "kode_satker": _ks}, _PROJ) or {})
+    if _ks:
+        s = {**s, **update}
+    else:
+        g = {**g, **update}
+    _gabung = {**g, **{k: v for k, v in s.items() if v not in ("", None, [])}}
+    _pesan = validate_format_reset(
+        _gabung.get("reset_urut") or RESET_URUT_DEFAULT,
+        _gabung.get("format_nomor") or FORMAT_NOMOR_DEFAULT)
     if _pesan:
         raise HTTPException(status_code=400, detail=_pesan)
     # ISOLASI SATKER (REVIEW-9 R9): admin SATKER menulis dokumen satkernya

@@ -308,7 +308,24 @@ export default function PersuratanPage({ user, onBack }) {
               onClick={async () => {
                 try {
                   const r = await axios.get(`${API}/persuratan/pengaturan`);
-                  setFormAtur(r.data);
+                  const d = { ...r.data };
+                  // Scope SATKER: field warisan Universal DIKOSONGKAN di form
+                  // (nilai efektifnya jadi placeholder) — kalau nilai warisan
+                  // ikut terkirim, sekali "Simpan" memaku salinannya sebagai
+                  // override dan satker tak lagi mengikuti perubahan Universal.
+                  if (d.scope && d.sumber) {
+                    d.warisan = {
+                      format_nomor: d.format_nomor, kode_unit: d.kode_unit,
+                      kode_klasifikasi_default: d.kode_klasifikasi_default,
+                      reset_urut: d.reset_urut,
+                    };
+                    for (const f of ["format_nomor", "kode_unit",
+                      "kode_klasifikasi_default", "reset_urut"]) {
+                      if (d.sumber[f] !== "satker") d[f] = "";
+                    }
+                    if (d.sumber.peta_klasifikasi !== "satker") d.peta_klasifikasi = [];
+                  }
+                  setFormAtur(d);
                   muatKlasifikasi();
                 } catch { toast.error("Gagal memuat pengaturan"); }
               }} data-testid="persuratan-atur-btn">
@@ -716,29 +733,56 @@ export default function PersuratanPage({ user, onBack }) {
       <Dialog open={!!formAtur} onOpenChange={(o) => { if (!o) setFormAtur(null); }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Pengaturan Penomoran & Klasifikasi Surat</DialogTitle>
+            <DialogTitle>
+              Pengaturan Penomoran & Klasifikasi Surat
+              {formAtur?.scope
+                ? ` — Satker ${formAtur.scope}`
+                : " — Universal (semua satker)"}
+            </DialogTitle>
             <DialogDescription className="text-xs">
               Susunan PerANRI 5/2021 — placeholder: {"{kode_keamanan} {urut} {kode_klasifikasi} {kode_unit} {bulan} {bulan_romawi} {tahun}"}.
+              {formAtur?.scope
+                ? " Perubahan hanya berlaku untuk satker ini; field yang dikosongkan kembali mengikuti Universal."
+                : " Nilai di sini menjadi bawaan bersama — satker yang mengisi pengaturannya sendiri menimpanya."}
             </DialogDescription>
           </DialogHeader>
           {formAtur && (
             <div className="space-y-4">
               <div className="space-y-3">
                 <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground border-b border-border/60 pb-1">Format Nomor</p>
+                {formAtur.scope && formAtur.sumber && (
+                  <p className="text-[10px] text-sky-700 dark:text-sky-300" data-testid="atur-warisan">
+                    {(() => {
+                      const label = { format_nomor: "Format", kode_unit: "Kode Unit",
+                        kode_klasifikasi_default: "Klasifikasi Bawaan", reset_urut: "Reset Urut",
+                        peta_klasifikasi: "Aturan Otomatis" };
+                      const warisan = Object.entries(formAtur.sumber)
+                        .filter(([, v]) => v !== "satker").map(([k]) => label[k]).filter(Boolean);
+                      return warisan.length
+                        ? `Warisan Universal (belum di-override satker ini): ${warisan.join(", ")}`
+                        : "Semua field sudah di-override khusus satker ini";
+                    })()}
+                  </p>
+                )}
                 <Field label="Format Nomor">
                   <Input value={formAtur.format_nomor} className="font-mono"
                     onChange={(e) => setFormAtur((f) => ({ ...f, format_nomor: e.target.value }))}
+                    placeholder={formAtur.warisan?.format_nomor
+                      ? `ikut Universal: ${formAtur.warisan.format_nomor}` : undefined}
                     data-testid="atur-format" />
                 </Field>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Field label="Kode Unit"><Input value={formAtur.kode_unit} onChange={(e) => setFormAtur((f) => ({ ...f, kode_unit: e.target.value }))} placeholder="cth. OIKN" /></Field>
-                  <Field label="Kode Klasifikasi Bawaan (fallback)"><Input value={formAtur.kode_klasifikasi_default} onChange={(e) => setFormAtur((f) => ({ ...f, kode_klasifikasi_default: e.target.value }))} placeholder="cth. UM.01" className="font-mono" /></Field>
+                  <Field label="Kode Unit"><Input value={formAtur.kode_unit} onChange={(e) => setFormAtur((f) => ({ ...f, kode_unit: e.target.value }))} placeholder={formAtur.warisan?.kode_unit ? `ikut Universal: ${formAtur.warisan.kode_unit}` : "cth. OIKN"} /></Field>
+                  <Field label="Kode Klasifikasi Bawaan (fallback)"><Input value={formAtur.kode_klasifikasi_default} onChange={(e) => setFormAtur((f) => ({ ...f, kode_klasifikasi_default: e.target.value }))} placeholder={formAtur.warisan?.kode_klasifikasi_default ? `ikut Universal: ${formAtur.warisan.kode_klasifikasi_default}` : "cth. UM.01"} className="font-mono" /></Field>
                 </div>
-                <Field label="Reset Nomor Urut">
-                  <select value={formAtur.reset_urut || "bulanan"}
+                <Field label="Reset Nomor Urut (metode deret satker ini)">
+                  <select value={formAtur.reset_urut || (formAtur.scope ? "" : "bulanan")}
                     onChange={(e) => setFormAtur((f) => ({ ...f, reset_urut: e.target.value }))}
                     className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
                     data-testid="atur-reset-urut">
+                    {formAtur.scope && (
+                      <option value="">Ikut Universal (tanpa override satker)</option>
+                    )}
                     {(ref?.reset_urut?.length ? ref.reset_urut
                       : [{ kode: "bulanan", uraian: "Bulanan — nomor kembali ke 001 tiap awal bulan" },
                          { kode: "tahunan", uraian: "Tahunan — deret satu tahun takwim (PerANRI 5/2021)" }]
@@ -757,20 +801,35 @@ export default function PersuratanPage({ user, onBack }) {
                 </p>
                 <p className="text-[10px] text-muted-foreground">
                   Isi sesuai pedoman klasifikasi arsip instansi Anda — jadi pilihan di form booking &amp; bahan aturan otomatis.
+                  {formAtur.scope
+                    ? " Entri baru tersimpan milik satker ini; entri Bersama (warisan Universal) hanya dikelola super-admin."
+                    : " Entri baru tersimpan sebagai Bersama — tampil untuk semua satker."}
                 </p>
                 {klasifikasi.length > 0 && (
                   <div className="max-h-36 overflow-y-auto border border-border rounded-lg divide-y divide-border/60">
-                    {klasifikasi.map((k) => (
-                      <div key={k.id} className="flex items-center gap-2 px-2.5 py-1">
-                        <span className="font-mono text-[11px] font-semibold text-foreground w-20 flex-shrink-0">{k.kode}</span>
-                        <span className="text-[11px] text-foreground/80 truncate flex-1">{k.uraian || "—"}</span>
-                        <button type="button" onClick={() => hapusKlas(k)} aria-label={`Hapus ${k.kode}`}
-                          className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0"
-                          data-testid={`klas-hapus-${k.kode}`}>
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
+                    {klasifikasi.map((k) => {
+                      const scopeK = k.kode_satker || "";
+                      const bolehKelola = !formAtur.scope || scopeK === formAtur.scope;
+                      return (
+                        <div key={k.id} className="flex items-center gap-2 px-2.5 py-1">
+                          <span className="font-mono text-[11px] font-semibold text-foreground w-20 flex-shrink-0">{k.kode}</span>
+                          <span className="text-[11px] text-foreground/80 truncate flex-1">{k.uraian || "—"}</span>
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${scopeK
+                            ? "bg-cyan-500/10 text-cyan-700 dark:text-cyan-300"
+                            : "bg-muted text-muted-foreground"}`}>
+                            {scopeK ? (formAtur.scope && scopeK === formAtur.scope
+                              ? "Satker ini" : `Satker ${scopeK}`) : "Bersama"}
+                          </span>
+                          {bolehKelola && (
+                            <button type="button" onClick={() => hapusKlas(k)} aria-label={`Hapus ${k.kode}`}
+                              className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0"
+                              data-testid={`klas-hapus-${k.kode}`}>
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
                 <div className="flex flex-wrap items-center gap-2">

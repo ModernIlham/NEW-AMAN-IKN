@@ -300,3 +300,49 @@ def validate_peta_klasifikasi(peta) -> list:
             errors.append(f"Aturan #{i}: isi minimal modul atau jenis naskah "
                           "(keduanya kosong = aturan tak pernah spesifik)")
     return errors
+
+
+# ── Scoping per-satker: master klasifikasi & asal-usul pengaturan ────────────
+
+# Field pengaturan penomoran yang ikut resolusi overlay satker → global.
+FIELD_PENGATURAN = ("format_nomor", "kode_unit", "kode_klasifikasi_default",
+                    "peta_klasifikasi", "reset_urut")
+
+
+def _terisi(v) -> bool:
+    """Nilai yang dianggap MENGISI pada overlay ('' / None / [] = kosong)."""
+    return v not in ("", None, [])
+
+
+def sumber_pengaturan(dok_global, dok_satker) -> dict:
+    """Peta field → asal nilai efektifnya: 'satker' | 'global' | 'bawaan'.
+
+    Dipakai UI pengaturan untuk menunjukkan field mana yang khusus satker ini
+    dan mana yang warisan Universal — tanpa ini admin satker tak bisa
+    membedakan "kode unit saya OIKN" dari "kode unit semua orang OIKN".
+    """
+    g, s = dict(dok_global or {}), dict(dok_satker or {})
+    out = {}
+    for f in FIELD_PENGATURAN:
+        out[f] = ("satker" if _terisi(s.get(f))
+                  else "global" if _terisi(g.get(f)) else "bawaan")
+    return out
+
+
+def gabung_klasifikasi(milik_bersama, milik_satker) -> list:
+    """Master klasifikasi EFEKTIF satu satker: entri satker menimpa entri
+    Bersama yang berkode sama; sisanya digabung, terurut kode.
+
+    Pola yang sama dengan overlay pengaturan (`_pengaturan`) — satker cukup
+    menambah/menimpa kode yang berbeda, sisanya mewarisi daftar Bersama.
+    """
+    peta = {}
+    for k in (milik_bersama or []):
+        kode = str((k or {}).get("kode") or "").strip()
+        if kode:
+            peta[kode] = k
+    for k in (milik_satker or []):
+        kode = str((k or {}).get("kode") or "").strip()
+        if kode:
+            peta[kode] = k          # entri satker menang
+    return sorted(peta.values(), key=lambda k: str(k.get("kode") or ""))
