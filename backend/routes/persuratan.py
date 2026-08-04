@@ -1169,36 +1169,46 @@ async def tambah_relasi_surat(surat_id: str, payload: RelasiIn,
     galat = validate_relasi(dari, ke, payload.jenis, sudah_ada=sudah)
     if galat:
         raise HTTPException(status_code=400, detail=galat)
-    now = datetime.now(timezone.utc).isoformat()
-    info = JENIS_RELASI[payload.jenis]
-    r = {"id": str(uuid.uuid4()),
-         # Stempel satker dari DOKUMEN (bukan user) — super-admin lintas
-         # satker tak boleh melahirkan relasi berstempel '' yang bocor.
-         "kode_satker": dari.get("kode_satker") or ke.get("kode_satker") or "",
-         "dari_id": dari["id"], "ke_id": ke["id"], "jenis": payload.jenis,
-         "catatan": str(payload.catatan or "").strip(),
-         "dari_nomor": dari.get("nomor") or "", "dari_perihal": dari.get("perihal") or "",
-         "ke_nomor": ke.get("nomor") or "", "ke_perihal": ke.get("perihal") or "",
-         "oleh": user.get("username", "system"), "created_at": now}
-    await db.surat_relasi.insert_one({**r})
-    # Jejak pada riwayat KEDUA surat — timeline masing-masing bercerita utuh.
-    await db.surat.update_one({"id": dari["id"]}, {"$push": {"riwayat": {
-        "status": dari.get("status"), "tanggal": now,
-        "oleh": r["oleh"],
-        "catatan": f"{info['aktif']} {ke.get('nomor') or ke['id']}"}}})
-    await db.surat.update_one({"id": ke["id"]}, {"$push": {"riwayat": {
-        "status": ke.get("status"), "tanggal": now,
-        "oleh": r["oleh"],
-        "catatan": f"{info['pasif']} {dari.get('nomor') or dari['id']}"}}})
-    await log_audit("relasi_surat", dari.get("kegiatan_id", ""),
-                    username=r["oleh"],
-                    detail=(f"Surat {dari.get('nomor')} {info['aktif']} "
-                            f"{ke.get('nomor')}"
-                            + (f" — {r['catatan']}" if r["catatan"] else "")))
+    r = await catat_relasi_surat(dari, ke, payload.jenis,
+                                 str(payload.catatan or "").strip(),
+                                 user.get("username", "system"))
     ke_baru = (await _stempel_keberlakuan([dict(ke)]))[0]
     return {"relasi": r, "sasaran": {
         "id": ke["id"], "keberlakuan": ke_baru["keberlakuan"],
         "keberlakuan_label": ke_baru["keberlakuan_label"]}}
+
+
+async def catat_relasi_surat(dari: dict, ke: dict, jenis: str,
+                             catatan: str, oleh: str) -> dict:
+    """Tanam SATU panah relasi + jejak riwayat kedua surat + log audit —
+    dipakai endpoint relasi DAN modul lain (mis. revisi BAST menautkan nomor
+    baru → nomor lama). Validasi/guard akses adalah tanggung jawab pemanggil.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    info = JENIS_RELASI[jenis]
+    r = {"id": str(uuid.uuid4()),
+         # Stempel satker dari DOKUMEN (bukan user) — super-admin lintas
+         # satker tak boleh melahirkan relasi berstempel '' yang bocor.
+         "kode_satker": dari.get("kode_satker") or ke.get("kode_satker") or "",
+         "dari_id": dari["id"], "ke_id": ke["id"], "jenis": jenis,
+         "catatan": str(catatan or "").strip(),
+         "dari_nomor": dari.get("nomor") or "", "dari_perihal": dari.get("perihal") or "",
+         "ke_nomor": ke.get("nomor") or "", "ke_perihal": ke.get("perihal") or "",
+         "oleh": oleh, "created_at": now}
+    await db.surat_relasi.insert_one({**r})
+    # Jejak pada riwayat KEDUA surat — timeline masing-masing bercerita utuh.
+    await db.surat.update_one({"id": dari["id"]}, {"$push": {"riwayat": {
+        "status": dari.get("status"), "tanggal": now, "oleh": oleh,
+        "catatan": f"{info['aktif']} {ke.get('nomor') or ke['id']}"}}})
+    await db.surat.update_one({"id": ke["id"]}, {"$push": {"riwayat": {
+        "status": ke.get("status"), "tanggal": now, "oleh": oleh,
+        "catatan": f"{info['pasif']} {dari.get('nomor') or dari['id']}"}}})
+    await log_audit("relasi_surat", dari.get("kegiatan_id", ""),
+                    username=oleh,
+                    detail=(f"Surat {dari.get('nomor')} {info['aktif']} "
+                            f"{ke.get('nomor')}"
+                            + (f" — {r['catatan']}" if r["catatan"] else "")))
+    return r
 
 
 @persuratan_router.delete("/persuratan/relasi/{relasi_id}")

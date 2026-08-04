@@ -275,6 +275,9 @@ export default function PenggunaanPage({ user, onBack }) {
     if (!f) return;
     if (f.aset.size === 0) { toast.error("Pilih minimal satu aset"); return; }
     if (!f.pihak_kedua.nama.trim()) { toast.error("Nama penerima wajib diisi"); return; }
+    if (f.revisi && !f.revisi.alasan.trim()) {
+      toast.error("Alasan revisi wajib diisi"); return;
+    }
     setFormBast((x) => ({ ...x, saving: true }));
     try {
       const r = await axios.post(`${API}/bast`, {
@@ -308,6 +311,8 @@ export default function PenggunaanPage({ user, onBack }) {
                            "pengembalian_almarhum"].includes(f.jenis)
           ? f.terapkan_ke_aset : false,
         booking_otomatis: f.booking_otomatis,
+        ...(f.revisi ? { revisi_dari: f.revisi.dari, revisi_mode: f.revisi.mode,
+                         revisi_alasan: f.revisi.alasan } : {}),
       }, { headers: { "Idempotency-Key": f.idem } });
       if (["mutasi_pengguna", "pengembalian",
            "pengembalian_almarhum"].includes(f.jenis) && f.terapkan_ke_aset) {
@@ -332,6 +337,43 @@ export default function PenggunaanPage({ user, onBack }) {
       setFormBast((x) => (x
         ? { ...x, saving: false, idem: crypto.randomUUID() } : x));
     }
+  };
+
+  // REVISI BAST (SURAT-3C): BAST sah tidak diedit — revisi = BAST BARU yang
+  // menggantikan yang lama. Form dibuka terprefill dari BAST lama; pengguna
+  // membetulkan isinya, memilih mode (mengubah/mencabut) dan wajib beralasan.
+  const bukaRevisiBast = (b) => {
+    setRiwayatBast(null);
+    axios.get(`${API}/kebijakan-dokumen`)
+      .then((r) => setFormBast((f) => (f
+        ? { ...f, tampilkan_nilai: r.data?.tampilkan_nilai !== false } : f)))
+      .catch(() => {});
+    setFormBast({
+      jenis: b.jenis, nomor: "", tanggal: "",
+      jangka_dari: b.jangka_dari || "", jangka_sampai: b.jangka_sampai || "",
+      sertakan_foto: !!b.sertakan_foto, keterangan: b.keterangan || "",
+      pihak_kedua: { ...(b.pihak_kedua || { nama: "", nip: "", jabatan: "", alamat: "" }) },
+      pihak_pertama: { ...(b.pihak_pertama || { nama: "", nip: "", jabatan: "", alamat: "" }) },
+      penyerah: b.jenis === "mutasi_pengguna"
+        ? { id: "", nama: "", nip: "", jabatan: "" }
+        : { id: "", nama: b.pihak_pertama?.nama || "", nip: b.pihak_pertama?.nip || "",
+            jabatan: b.pihak_pertama?.jabatan || "",
+            atas_nama_kpb: !!b.penyerah_atas_nama_kpb },
+      alamat_pihak1: b.pihak_pertama?.alamat || "",
+      pj_tambahan: (b.penanggung_jawab_tambahan || []).map((x) => ({ ...x })),
+      almarhum: { ...(b.almarhum || { nama: "", nip: "", tanggal_meninggal: "", nomor_akta_kematian: "" }) },
+      saksi: (b.saksi?.length ? b.saksi.map((x) => ({ ...x }))
+        : [{ nama: "", jabatan: "", nip: "" }, { nama: "", jabatan: "", nip: "" }]),
+      // Revisi = koreksi DOKUMEN; efek data sudah diterapkan BAST aslinya.
+      terapkan_ke_aset: false,
+      booking_otomatis: true,   // nomor BARU untuk dokumen pengganti
+      tampilkan_nilai: b.tampilkan_nilai !== false,
+      aset: new Set(b.asset_ids || []),
+      revisi: { dari: b.id, dari_nomor: b.nomor || "(tanpa nomor)",
+                mode: "mengubah", alasan: "" },
+      saving: false,
+      idem: crypto.randomUUID(),
+    });
   };
 
   const bukaRiwayatBast = async () => {
@@ -1474,6 +1516,17 @@ export default function PenggunaanPage({ user, onBack }) {
                           ⚠ TTD elektronik dibatalkan — tanda tangan tidak berlaku
                         </p>
                       ) : null}
+                      {b.revisi_ke ? (
+                        <p className="text-[10px] text-cyan-700 dark:text-cyan-400" data-testid={`bast-revisi-ke-${b.id}`}>
+                          Revisi ke-{b.revisi_ke} atas {b.revisi_dari_nomor || "BAST sebelumnya"}
+                          {b.revisi_alasan ? ` — ${b.revisi_alasan}` : ""}
+                        </p>
+                      ) : null}
+                      {b.direvisi_oleh ? (
+                        <p className="text-[10px] font-semibold text-red-600 dark:text-red-400" data-testid={`bast-direvisi-${b.id}`}>
+                          ⚠ Telah {b.direvisi_mode === "mencabut" ? "dicabut" : "direvisi"} — digantikan {b.direvisi_oleh_nomor || "BAST pengganti"}
+                        </p>
+                      ) : null}
                     </div>
                     {/* `flex-shrink-0` DIHAPUS (bug tombol meluber kanvas):
                         kontainer jadi menolak menyusut sehingga empat tombol
@@ -1494,7 +1547,7 @@ export default function PenggunaanPage({ user, onBack }) {
                       {b.bukti?.file_id ? (
                         <Button size="sm" variant="outline" className="h-7 text-[11px]"
                           onClick={() => window.open(authMediaUrl(`${API}/bast/${b.id}/bukti`), "_blank")}>Lihat Bukti</Button>
-                      ) : (
+                      ) : b.direvisi_oleh ? null : (
                         <>
                           <Button size="sm" variant="outline" className="h-7 text-[11px]"
                             disabled={kirimTtdId === b.id} onClick={() => kirimKeTtd(b)}
@@ -1505,6 +1558,13 @@ export default function PenggunaanPage({ user, onBack }) {
                             onClick={() => { setBuktiUntuk(b.id); buktiRef.current?.click(); }}
                             data-testid={`bast-unggah-bukti-${b.id}`}>Unggah Bukti TTD</Button>
                         </>
+                      )}
+                      {!b.direvisi_oleh && (
+                        <Button size="sm" variant="outline"
+                          className="h-7 text-[11px] text-amber-700 dark:text-amber-400 border-amber-500/40"
+                          onClick={() => bukaRevisiBast(b)}
+                          title="Terbitkan BAST pengganti (revisi/cabut) — arsip lama tetap utuh"
+                          data-testid={`bast-revisi-${b.id}`}>Revisi</Button>
                       )}
                     </div>
                   </div>
@@ -1663,11 +1723,35 @@ export default function PenggunaanPage({ user, onBack }) {
       <Dialog open={!!formBast} onOpenChange={(o) => { if (!o) setFormBast(null); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Buat BAST — {detail?.pemegang?.nama}</DialogTitle>
+            <DialogTitle>
+              {formBast?.revisi ? "Revisi BAST" : "Buat BAST"} — {detail?.pemegang?.nama}
+            </DialogTitle>
             <DialogDescription className="text-xs">
-              Multi-aset dalam satu BAST; nomor bisa dipesan lewat tombol Booking Nomor lalu ditempel di sini.
+              {formBast?.revisi
+                ? "BAST sah tidak diedit — revisi menerbitkan BAST PENGGANTI bernomor baru; arsip lama utuh dan diberi penanda telah direvisi."
+                : "Multi-aset dalam satu BAST; nomor bisa dipesan lewat tombol Booking Nomor lalu ditempel di sini."}
             </DialogDescription>
           </DialogHeader>
+          {formBast?.revisi && (
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5 space-y-2" data-testid="bast-revisi-banner">
+              <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                Menggantikan <span className="font-mono break-all">{formBast.revisi.dari_nomor}</span>
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <select value={formBast.revisi.mode}
+                  onChange={(e) => setFormBast((f) => ({ ...f, revisi: { ...f.revisi, mode: e.target.value } }))}
+                  className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                  data-testid="bast-revisi-mode">
+                  <option value="mengubah">Mengubah (koreksi isi — serah terima tetap terjadi)</option>
+                  <option value="mencabut">Mencabut (serah terimanya dibatalkan)</option>
+                </select>
+              </div>
+              <Input value={formBast.revisi.alasan}
+                onChange={(e) => setFormBast((f) => ({ ...f, revisi: { ...f.revisi, alasan: e.target.value } }))}
+                placeholder="Alasan revisi * (cth. salah ketik NIP penerima)"
+                className="h-8 text-xs" data-testid="bast-revisi-alasan" />
+            </div>
+          )}
           {formBast && (
             <div className="space-y-3 text-sm">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

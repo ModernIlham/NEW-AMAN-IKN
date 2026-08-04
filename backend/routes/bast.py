@@ -157,6 +157,16 @@ class BastIn(BaseModel):
     # Pesan nomor otomatis dari Registrasi Persuratan (tercatat di buku
     # agenda berstatus dibooking).
     booking_otomatis: Optional[bool] = False
+    # ── REVISI BAST (mandat SURAT-3C) ──────────────────────────────────────
+    # BAST yang sudah sah TIDAK PERNAH diedit: revisi = BAST BARU bernomor
+    # baru yang menggantikan yang lama. `revisi_dari` = id BAST yang
+    # digantikan; mode "mengubah" (koreksi isi, serah terima tetap terjadi)
+    # atau "mencabut" (serah terimanya sendiri dibatalkan). Arsip lama utuh
+    # dan PDF-nya diberi penanda telah direvisi; nomor agenda lama otomatis
+    # ber-status keberlakuan lewat relasi antar surat (SURAT-3B).
+    revisi_dari: Optional[str] = ""
+    revisi_mode: Optional[str] = "mengubah"
+    revisi_alasan: Optional[str] = ""
 
 
 @bast_router.get("/bast/referensi")
@@ -254,6 +264,30 @@ async def buat_bast(payload: BastIn, request: Request = None,
     if payload.jenis not in JENIS_BAST:
         raise HTTPException(status_code=400,
                             detail=f"Jenis BAST tidak dikenal: {payload.jenis}")
+    # ── Validasi REVISI (SURAT-3C): rantai lurus, beralasan, satu pengganti ─
+    sumber_revisi = None
+    if str(payload.revisi_dari or "").strip():
+        sumber_revisi = await db.bast_serah_terima.find_one(
+            {"id": str(payload.revisi_dari).strip()}, _PROJ)
+        if not sumber_revisi:
+            raise HTTPException(status_code=404,
+                                detail="BAST yang direvisi tidak ditemukan")
+        from shared_utils import pastikan_akses_dok_satker
+        await pastikan_akses_dok_satker(user, sumber_revisi)
+        if str(payload.revisi_mode or "") not in ("mengubah", "mencabut"):
+            raise HTTPException(status_code=400, detail=(
+                "Mode revisi tidak dikenal (pilihan: mengubah, mencabut)"))
+        if not str(payload.revisi_alasan or "").strip():
+            raise HTTPException(status_code=400, detail=(
+                "Alasan revisi wajib diisi — tercatat pada dokumen pengganti "
+                "dan jejak audit"))
+        if sumber_revisi.get("direvisi_oleh"):
+            # Rantai revisi harus LURUS: BAST yang sudah punya pengganti tak
+            # boleh direvisi lagi (dua pengganti = dua kebenaran). Revisi
+            # berikutnya dibuat dari pengganti TERBARU.
+            raise HTTPException(status_code=409, detail=(
+                "BAST ini sudah punya pengganti — buat revisi dari BAST "
+                "penggantinya (revisi terbaru), bukan dari arsip lama"))
     if not payload.asset_ids:
         raise HTTPException(status_code=400, detail="Pilih minimal satu aset")
     if not str(payload.pihak_kedua.nama or "").strip():
@@ -459,6 +493,14 @@ async def buat_bast(payload: BastIn, request: Request = None,
         "created_by": user.get("username", "system"),
         "created_at": now.isoformat(),
     }
+    if sumber_revisi:
+        record.update({
+            "revisi_dari": sumber_revisi["id"],
+            "revisi_dari_nomor": sumber_revisi.get("nomor") or "",
+            "revisi_ke": int(sumber_revisi.get("revisi_ke") or 0) + 1,
+            "revisi_mode": str(payload.revisi_mode),
+            "revisi_alasan": str(payload.revisi_alasan).strip(),
+        })
     # Validasi LUNAK penerima ke Master Pegawai (non-blocking): NIP tak
     # terdaftar hanya diberi peringatan — BAST tetap tersimpan.
     peringatan_pegawai = ""
@@ -495,6 +537,35 @@ async def buat_bast(payload: BastIn, request: Request = None,
                                       f"berstatus {st} di Master Pegawai — "
                                       "pastikan serah terima ini memang tepat")
     await db.bast_serah_terima.insert_one({**record})
+
+    if sumber_revisi:
+        # BAST lama ditandai TERGANTIKAN (arsipnya utuh; PDF-nya kelak
+        # mencetak penanda telah direvisi/dicabut) — rantai versi lurus.
+        await db.bast_serah_terima.update_one(
+            {"id": sumber_revisi["id"]},
+            {"$set": {"direvisi_oleh": record["id"],
+                      "direvisi_oleh_nomor": record["nomor"],
+                      "direvisi_pada": now.isoformat(),
+                      "direvisi_mode": record["revisi_mode"]}})
+        # Tautkan NOMOR AGENDA lewat relasi antar surat (SURAT-3B): nomor
+        # lama otomatis ber-status "Berlaku dengan perubahan" (mengubah) atau
+        # "Tidak Berlaku" (mencabut) di buku agenda — tanpa diketik siapa pun.
+        if record.get("surat_id") and sumber_revisi.get("surat_id"):
+            from routes.persuratan import catat_relasi_surat
+            s_baru = await db.surat.find_one({"id": record["surat_id"]}, _PROJ)
+            s_lama = await db.surat.find_one(
+                {"id": sumber_revisi["surat_id"]}, _PROJ)
+            if s_baru and s_lama:
+                await catat_relasi_surat(
+                    s_baru, s_lama, record["revisi_mode"],
+                    f"Revisi BAST ke-{record['revisi_ke']}: "
+                    f"{record['revisi_alasan']}",
+                    user.get("username", "system"))
+        await log_audit(
+            "revisi_bast", "", username=user.get("username", "system"),
+            detail=(f"BAST {sumber_revisi.get('nomor') or sumber_revisi['id']} "
+                    f"di-{record['revisi_mode']} oleh {record['nomor'] or record['id']} "
+                    f"(revisi ke-{record['revisi_ke']}: {record['revisi_alasan']})"))
 
     # Jejak BAST terakhir pada tiap aset (badge riwayat di UI) + efek data
     # handover langsung bila diminta.
@@ -849,6 +920,31 @@ async def bast_pdf(bast_id: str, nilai: str = "",
     el.extend(_title_block("BERITA ACARA SERAH TERIMA\n"
                            + _esc(judul_baris2.upper()),
                            nomor=b.get("nomor") or "......./......./........"))
+
+    # ── Penanda RANTAI REVISI (SURAT-3C) — dokumen bercerita jujur ─────────
+    # BAST tergantikan mencetak peringatan (cetakan lama yang beredar tak
+    # boleh dikira masih berlaku); BAST pengganti menyebut revisi ke-berapa
+    # atas nomor lama beserta alasannya.
+    if b.get("direvisi_oleh"):
+        _mode_lbl = ("DICABUT" if b.get("direvisi_mode") == "mencabut"
+                     else "DIREVISI")
+        el.append(Paragraph(
+            f"<b>DOKUMEN INI TELAH {_mode_lbl}</b> — digantikan oleh BAST "
+            f"Nomor {_esc(b.get('direvisi_oleh_nomor') or '(tanpa nomor)')} "
+            f"tanggal {_esc(_fmt_tanggal_id(str(b.get('direvisi_pada') or '')[:10]) or '-')}. "
+            "Gunakan dokumen penggantinya.",
+            ParagraphStyle('BastRevisiWarn', parent=isi,
+                           textColor=HexColor("#b91c1c"),
+                           alignment=TA_CENTER, spaceAfter=3)))
+    if b.get("revisi_dari"):
+        el.append(Paragraph(
+            f"Revisi ke-{int(b.get('revisi_ke') or 1)} — "
+            f"{'mencabut' if b.get('revisi_mode') == 'mencabut' else 'mengubah'} "
+            f"BAST Nomor {_esc(b.get('revisi_dari_nomor') or '(tanpa nomor)')}"
+            + (f". Alasan: {_esc(b.get('revisi_alasan'))}"
+               if b.get("revisi_alasan") else ""),
+            ParagraphStyle('BastRevisiInfo', parent=ket,
+                           alignment=TA_CENTER, spaceAfter=3)))
 
     jenis_awal = b.get("jenis")
     nar = narasi_hari_tanggal(b.get("tanggal"))
