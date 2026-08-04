@@ -341,6 +341,75 @@ async def _link_verifikasi_pendek(sr_id, kode_satker="", oleh="") -> str:
 MAKS_BARANG_RINGKAS = 3      # sisanya diringkas "(+N barang lainnya)"
 
 
+def _cetak_token_signer(sr_id: str, signer_id: str, jti: str):
+    """Cetak token tanda tangan + kembalikan (token, kedaluwarsa ISO).
+
+    KENAPA KEDALUWARSA DICATAT DI SINI, bukan dihitung dari `created_at`:
+    `exp` token dihitung SAAT TOKEN DICETAK (auth_utils.create_sign_token).
+    Ada TIGA titik pencetakan — saat permintaan dibuat, saat link seseorang
+    DITERBITKAN ULANG, dan saat giliran maju pada mode berurutan — sedangkan
+    `created_at` permintaan hanya ditulis sekali dan tak pernah berubah.
+
+    Menghitung "sisa waktu" dari `created_at + 14 hari` karena itu SALAH: untuk
+    link yang sudah diterbitkan ulang ia terlalu cepat (bisa mengaku
+    "kedaluwarsa" padahal tautannya masih hidup 14 hari lagi), dan untuk mode
+    berurutan penanda tangan ke-2 dst. menerima token yang baru dicetak saat
+    gilirannya tiba. Satu-satunya angka yang benar adalah yang dicatat
+    BERSAMAAN dengan pencetakan tokennya — itulah yang disimpan di
+    `signers[].token_exp`.
+    """
+    from datetime import timedelta
+
+    from auth_utils import SIGN_TOKEN_EXPIRATION_DAYS
+    token = create_sign_token(sr_id, signer_id, jti)
+    exp = (datetime.now(timezone.utc)
+           + timedelta(days=SIGN_TOKEN_EXPIRATION_DAYS)).isoformat()
+    return token, exp
+
+
+def _sisa_kedaluwarsa(sg: dict, sr: dict) -> dict:
+    """{kedaluwarsa, sisa_detik, perkiraan} untuk seorang penanda tangan.
+
+    `sisa_detik` dihitung DI SERVER, bukan diserahkan ke peramban: halaman
+    penanda tangan dibuka orang luar yang jam perangkatnya bisa saja meleset,
+    dan tampilan "kedaluwarsa" yang salah akan membuat orang berhenti meneken
+    dokumen yang sebenarnya masih sah.
+
+    `perkiraan: True` menandai permintaan LAMA yang dibuat sebelum `token_exp`
+    dicatat — angkanya diturunkan dari `created_at` dan bisa meleset bila
+    linknya pernah diterbitkan ulang. UI wajib menampilkannya sebagai kira-kira,
+    bukan sebagai angka pasti.
+    """
+    from datetime import timedelta
+
+    from auth_utils import SIGN_TOKEN_EXPIRATION_DAYS
+    perkiraan = False
+    mentah = str((sg or {}).get("token_exp") or "").strip()
+    if not mentah:
+        # Permintaan era-lama: turunkan dari created_at, tandai sebagai perkiraan.
+        dasar = str((sr or {}).get("created_at") or "").strip()
+        if not dasar:
+            return {"kedaluwarsa": None, "sisa_detik": None, "perkiraan": True}
+        try:
+            t0 = datetime.fromisoformat(dasar.replace("Z", "+00:00"))
+        except (ValueError, TypeError, OverflowError):
+            return {"kedaluwarsa": None, "sisa_detik": None, "perkiraan": True}
+        if t0.tzinfo is None:
+            t0 = t0.replace(tzinfo=timezone.utc)
+        t = t0 + timedelta(days=SIGN_TOKEN_EXPIRATION_DAYS)
+        perkiraan = True
+    else:
+        try:
+            t = datetime.fromisoformat(mentah.replace("Z", "+00:00"))
+        except (ValueError, TypeError, OverflowError):
+            return {"kedaluwarsa": None, "sisa_detik": None, "perkiraan": True}
+        if t.tzinfo is None:
+            t = t.replace(tzinfo=timezone.utc)
+    sisa = int((t - datetime.now(timezone.utc)).total_seconds())
+    return {"kedaluwarsa": t.isoformat(),
+            "sisa_detik": max(0, sisa), "perkiraan": perkiraan}
+
+
 async def _ringkas_dokumen(doc_type: str, doc_ref: str) -> dict:
     """Ringkasan singkat dokumen yang diminta ditandatangani.
 
@@ -483,7 +552,8 @@ async def buat_permintaan(payload: PermintaanIn, user: dict = Depends(require_wr
             "urutan": urut, "status": "aktif" if aktif else "menunggu",
             "jti": jti, "signature_file_id": "", "hash": "",
             "signed_at": "", "ip": ""})
-        token = create_sign_token(sr_id, signer_id, jti)
+        token, exp_tok = _cetak_token_signer(sr_id, signer_id, jti)
+        signers[-1]["token_exp"] = exp_tok
         link = await _link_ttd_pendek(sr_id, token, signer_id=signer_id,
                                       kode_satker=kode_sat,
                                       oleh=user.get("username", ""))
@@ -1187,6 +1257,14 @@ async def daftar_permintaan(_user: dict = Depends(require_user)):
                                and bool(str(it.get("dok_file_id") or "").strip())
                                and _semua_sudah_ttd(it) and not _qr_sudah_diatur(it))
         it["siap_diunduh"] = _siap_diunduh(it)
+        # Sisa waktu kartu = batas TERCEPAT di antara penanda tangan yang BELUM
+        # meneken. Yang sudah meneken tak lagi relevan, dan menampilkan batas
+        # terjauh akan menyembunyikan tautan yang justru hampir mati.
+        _belum = [s for s in sg if s.get("status") != "ditandatangani"]
+        _sisa = [_sisa_kedaluwarsa(s, it) for s in _belum]
+        _sisa = [x for x in _sisa if x.get("sisa_detik") is not None]
+        it["kedaluwarsa_terdekat"] = (
+            min(_sisa, key=lambda x: x["sisa_detik"]) if _sisa else None)
     return {"items": items}
 
 
@@ -1197,6 +1275,11 @@ async def detail_permintaan(sr_id: str, user: dict = Depends(require_user)):
     if not sr:
         raise HTTPException(status_code=404, detail="Permintaan tidak ditemukan")
     _pastikan_pengelola_sr(sr, user)  # isolasi: pembuat/pengelola satker
+    # Sisa waktu PER penanda tangan — inilah "per masing-masing" yang dipakai
+    # layar registrasi untuk memutuskan siapa yang perlu ditagih/diterbitkan
+    # ulang tautannya.
+    for _sg in (sr.get("signers") or []):
+        _sg["kedaluwarsa_info"] = _sisa_kedaluwarsa(_sg, sr)
     return {**sr,
             "perlu_atur_qr": (sr.get("status") != "batal"
                               and bool(str(sr.get("dok_file_id") or "").strip())
@@ -1312,10 +1395,12 @@ async def buat_ulang_link(sr_id: str, signer_id: str,
     if signers[idx].get("status") == "ditandatangani":
         raise HTTPException(status_code=409, detail="Sudah ditandatangani — link tidak diperlukan")
     jti = str(uuid.uuid4())
+    token, exp_tok = _cetak_token_signer(sr_id, signer_id, jti)
+    # token_exp ikut diperbarui: link BARU berlaku 14 hari sejak SEKARANG,
+    # bukan sejak permintaan dibuat.
     await db.signature_requests.update_one(
         {"id": sr_id, "signers.signer_id": signer_id},
-        {"$set": {"signers.$.jti": jti}})
-    token = create_sign_token(sr_id, signer_id, jti)
+        {"$set": {"signers.$.jti": jti, "signers.$.token_exp": exp_tok}})
     # jti BARU sudah mematikan token lama; tautan pendek lama yang menunjuk
     # token itu harus ikut mati, bukan menyisakan alamat yang membuka halaman
     # "link tidak valid" tanpa penjelasan. HANYA milik penanda tangan ini —
@@ -1364,6 +1449,10 @@ async def info_tandatangan(sr_id: str, tok: dict = Depends(require_sign_token)):
             "mode": sr.get("mode"), "status_dokumen": sr.get("status"),
             "penanda_tangan": _publik_signer(sg), "boleh_ttd": bisa,
             "alasan": alasan,
+            # Sisa waktu tautan — dihitung DI SERVER (jam perangkat tamu bisa
+            # meleset; "kedaluwarsa" palsu membuat orang berhenti meneken
+            # dokumen yang masih sah).
+            **_sisa_kedaluwarsa(sg, sr),
             # dokumen terlampir → halaman publik menampilkan tombol baca
             # + pratinjau pembubuhan (jumlah halaman utk navigasi posisi)
             "ada_dokumen": bool(str(sr.get("dok_file_id") or "").strip()),
@@ -1463,6 +1552,15 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
             # Giliran maju → beri tahu penanda tangan berikutnya via email
             # (best-effort; link memakai jti tersimpan — token identik dgn
             # yang dibagikan pembuat, jadi tidak mematikan link lama).
+            #
+            # `token_exp` SENGAJA TIDAK diperbarui di sini. jti tak berubah,
+            # sehingga tautan yang SUDAH dibagikan pembuat tetap sah sampai
+            # exp lamanya, sedangkan token yang baru dicetak untuk email ini
+            # punya exp yang lebih panjang. Penanda tangan bisa memegang salah
+            # satu dari keduanya, jadi yang ditampilkan adalah batas TERCEPAT
+            # (dari pembuatan): mengaku waktunya lebih panjang daripada
+            # kenyataan akan membuat orang melewatkan tenggat, sedangkan
+            # mengaku lebih pendek paling banter membuatnya meneken lebih awal.
             if res_nxt.modified_count and str(nxt_sg.get("email") or "").strip():
                 from shared_utils import send_esign_email
                 tok_nxt = create_sign_token(sr_id, nxt_sg["signer_id"],

@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, BadgeCheck, ChevronDown, Copy, FileDown, FileSignature, FileText, IdCard,
-  Link2, Loader2, Mail, MessageCircle, PenTool, Plus, QrCode, Search, SearchX, ShieldCheck,
+  Clock, Link2, Loader2, Mail, MessageCircle, PenTool, Plus, QrCode, Search, SearchX, ShieldCheck,
   Trash2, Upload, Users, XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import KartuTapDialog from "@/components/pegawai/KartuTapDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import AturPosisiTtd from "@/components/ttd/AturPosisiTtd";
 import { bagikanWa, bagikanEmail } from "@/lib/pesanTtd";
+import { teksSisaWaktu, warnaSisaWaktu, sudahKedaluwarsa } from "@/lib/sisaWaktu";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -356,6 +357,19 @@ export default function TtdPermintaanPage({ user, onBack }) {
                     ditempatkan — unduhan bagi penanda tangan & pemindai QR
                     tertahan sampai pengelola satker (admin MAUPUN operator)
                     mengaturnya. */}
+                {/* Sisa waktu tautan TERCEPAT di antara yang belum meneken —
+                    inilah yang menentukan siapa perlu ditagih/diterbitkan
+                    ulang tautannya. Batas terjauh akan menyembunyikan tautan
+                    yang justru hampir mati. */}
+                {it.status !== "batal" && teksSisaWaktu(it.kedaluwarsa_terdekat) && (
+                  <p className={`mt-1.5 mr-1.5 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold ${warnaSisaWaktu(it.kedaluwarsa_terdekat)}`}
+                    data-testid={`ttd-sisa-${it.id}`}>
+                    <Clock className="w-3 h-3" />
+                    {sudahKedaluwarsa(it.kedaluwarsa_terdekat)
+                      ? "TAUTAN KEDALUWARSA"
+                      : `Tautan ${teksSisaWaktu(it.kedaluwarsa_terdekat)}`}
+                  </p>
+                )}
                 {it.perlu_atur_qr && (
                   <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 px-2 py-0.5 text-[10px] font-bold"
                     data-testid={`ttd-perlu-qr-${it.id}`}>
@@ -594,6 +608,17 @@ export default function TtdPermintaanPage({ user, onBack }) {
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${WARNA_SIGNER[s.status] || "bg-muted text-muted-foreground"}`}>
                         {LABEL_SIGNER[s.status] || s.status}
                       </span>
+                      {/* Sisa waktu tautan ORANG INI — dasar keputusan apakah
+                          tautannya perlu diterbitkan ulang. Tak relevan bagi
+                          yang sudah meneken. */}
+                      {s.status !== "ditandatangani" && detail.status !== "batal"
+                        && teksSisaWaktu(s.kedaluwarsa_info) && (
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${warnaSisaWaktu(s.kedaluwarsa_info)}`}
+                          data-testid={`ttd-sisa-signer-${s.signer_id}`}>
+                          {sudahKedaluwarsa(s.kedaluwarsa_info)
+                            ? "Tautan mati" : teksSisaWaktu(s.kedaluwarsa_info)}
+                        </span>
+                      )}
                     </div>
                     {s.status !== "ditandatangani" && detail.status !== "batal" && (
                       <div className="flex items-center gap-1.5 flex-wrap">

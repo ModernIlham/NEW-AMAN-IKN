@@ -67,6 +67,64 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#756] Sisa waktu tautan TTD tampil — di layar registrasi dan di halaman penanda tangan — 2026-08-04
+
+Keluhan pemilik: "pada penanda tangan tidak ada sisa waktunya yang tampil hingga
+kedaluwarsa tolong berikan info itu baik data di halaman registrasi
+per-masing-masing surat maupun di halaman penanda tangannya".
+
+Tautan e-sign berumur 14 hari, tapi angkanya tak pernah ditampilkan di mana pun.
+Akibatnya penerbit tak tahu tautan siapa yang hampir mati (dan perlu diterbitkan
+ulang), sedangkan penanda tangan tak tahu ia sedang mengejar tenggat.
+
+### Kenapa angkanya DICATAT, bukan dihitung dari tanggal permintaan
+
+Cara "gampang" adalah `created_at + 14 hari`. Itu salah, dan salahnya ke arah
+yang berbahaya. `exp` token dihitung saat token **dicetak**
+(`auth_utils.create_sign_token`), sedangkan `created_at` ditulis sekali dan tak
+pernah berubah — padahal ada **tiga** titik pencetakan: saat permintaan dibuat,
+saat tautan seseorang diterbitkan ulang, dan saat giliran maju pada mode
+berurutan.
+
+Untuk tautan yang sudah diterbitkan ulang, hitungan dari `created_at` akan
+mengaku **"Kedaluwarsa" padahal tautannya masih hidup 14 hari lagi**. Penanda
+tangan berhenti meneken dokumen yang sah, dan penerbit mengejar tautan yang
+sebetulnya baru saja diperpanjang.
+
+Karena itu kedaluwarsa kini disimpan di `signers[].token_exp` **bersamaan**
+dengan pencetakan tokennya (`_cetak_token_signer`). Satu titik cetak sengaja
+TIDAK menyegarkan catatan itu: pada mode berurutan, `jti` tak berubah saat
+giliran maju, jadi penanda tangan bisa memegang tautan lama ATAU tautan baru —
+batas paling awal ditampilkan supaya tak ada yang dijanjikan waktu lebih banyak
+daripada yang benar-benar ia punya.
+
+### Yang tampil
+
+- **Halaman penanda tangan** — badge "Berlaku 3 hari lagi" di bawah judul;
+  merah + "minta tautan baru ke penerbit" bila sudah lewat.
+- **Kartu permintaan (layar registrasi)** — batas **tercepat** di antara penanda
+  tangan yang **belum** meneken. Batas terjauh akan menyembunyikan tautan yang
+  justru hampir mati; batas milik yang sudah selesai tak lagi bermakna.
+- **Dialog detail** — sisa waktu **per penanda tangan**, supaya jelas tautan
+  SIAPA yang perlu diterbitkan ulang.
+
+Warna: netral (longgar) → amber (≤2 hari) → merah (lewat). Jam ikut disebut
+hanya pada sisa pendek — "13 hari 4 jam" tak menambah keputusan apa pun,
+sedangkan "1 hari 3 jam" menentukan hari ini atau besok.
+
+Angkanya dihitung **di server**, bukan dari jam perangkat: halaman penanda
+tangan dibuka orang luar yang jam ponselnya bisa saja meleset, dan tulisan
+"kedaluwarsa" yang keliru menghentikan orang meneken dokumen yang masih sah.
+
+Permintaan LAMA (dibuat sebelum `token_exp` ada) tetap dapat angka, tapi
+berlabel **`±`** — diturunkan dari tanggal permintaan dan bisa meleset bila
+tautannya pernah diterbitkan ulang. Ditampilkan sebagai kira-kira, bukan sebagai
+janji.
+
+Uji: 14 uji backend baru + 10 uji frontend baru. Mutasi yang mengembalikan
+perhitungan ke `created_at` dijatuhkan oleh 10 di antaranya. Total 1715 uji
+backend & 457 uji frontend hijau.
+
 ## [#755] Nama tamu Peta Kolaborasi tak lagi jadi "Tamu" — 2026-08-04
 
 Keluhan pemilik: "pada peta kolaborasi ketika memasukkan nama, nama yang muncul

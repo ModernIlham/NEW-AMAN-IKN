@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import SignatureCapture from "@/components/ttd/SignatureCapture";
 import AturPosisiTtd from "@/components/ttd/AturPosisiTtd";
+import { teksSisaWaktu, warnaSisaWaktu, sudahKedaluwarsa } from "@/lib/sisaWaktu";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -333,6 +334,18 @@ function TandaTangan({ id, token }) {
         <p className="text-xs text-muted-foreground">
           Mode {info.mode === "berurutan" ? "berurutan (sesuai giliran)" : "paralel"} · Status dokumen: {info.status_dokumen}
         </p>
+        {/* Sisa waktu tautan — angkanya dari SERVER (jam perangkat bisa
+            meleset; "kedaluwarsa" palsu membuat orang berhenti meneken
+            dokumen yang masih sah). */}
+        {teksSisaWaktu(info) && (
+          <p className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-bold ${warnaSisaWaktu(info)}`}
+            data-testid="ttd-sisa-waktu">
+            <Clock className="w-3 h-3" />
+            {sudahKedaluwarsa(info)
+              ? "Tautan kedaluwarsa — minta tautan baru ke penerbit"
+              : `Berlaku ${teksSisaWaktu(info)}`}
+          </p>
+        )}
       </div>
       <div className="rounded-xl border border-border p-3 flex items-center justify-between gap-2">
         <div className="min-w-0">
