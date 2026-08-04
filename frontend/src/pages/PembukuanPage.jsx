@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
+import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -187,6 +188,8 @@ export default function PembukuanPage({ user, onBack }) {
               DBKP intra/ekstrakomptabel (PMK 181) · Buku Barang (jurnal mutasi)
             </p>
           </div>
+          <BookingNomorButton modul="pembukuan" jenisNaskah="Laporan"
+            referensi="DBKP / Buku Barang" />
         </div>
       </header>
 

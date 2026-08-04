@@ -67,6 +67,73 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#735] Penomoran surat ala lapangan — reset bulanan ke 001 + nomor sisipan backdate (005.01) — 2026-08-04
+
+Dua permintaan lapangan pada Registrasi Persuratan, ditambah sapu integrasi
+agar SEMUA jalur penerbit nomor memakai mesin deret yang sama.
+
+### Deret nomor kembali ke 001 tiap pergantian bulan
+
+Dulu deret nomor agenda berjalan satu tahun takwim. Kini **kunci deret =
+periode**: setelan baru `Reset Nomor Urut` per satker — **bulanan (bawaan)**
+atau tahunan (PerANRI 5/2021 apa adanya). Counter periode tahunan memakai id
+era-lama sehingga deret lama menyambung tanpa lompatan.
+
+Migrasi tahunan→bulanan dirancang agar dua bahaya klasik tak terjadi:
+
+- **Bulan transisi MENERUSKAN posisi counter tahunan** (bukan maks dokumen) —
+  nomor yang sudah hangus karena dokumennya dihapus tidak terbit ulang;
+- counter tahunan lalu **ditandai `dimigrasi_bulanan`** sehingga bulan-bulan
+  berikutnya tidak ikut dilantai olehnya — tanpa tanda ini deret tak pernah
+  kembali ke 001. Penandaan dilakukan SETELAH counter bulanan tercipta:
+  gagal di jendela sempit itu paling buruk membuat satu bulan tak mulai dari
+  001 (terlihat, pulih sendiri) — bukan duplikat nomor resmi yang senyap.
+
+Surat masuk ikut aturan yang sama (periode menurut tanggal agenda). Menyimpan
+reset bulanan dengan format tanpa `{bulan}`/`{bulan_romawi}` DITOLAK — tanpa
+unsur bulan, nomor yang sama persis terbit ulang tiap bulan.
+
+### Nomor sisipan (backdate) — 005 → 005.01
+
+Surat yang lupa dibooking dan baru dibuat belakangan kini bisa memakai
+**nomor sisipan**: centang "Nomor sisipan (backdate)" + isi tanggal surat
+(mundur), dan nomor menempel di belakang nomor TERAKHIR pada/sebelum tanggal
+itu — `005` → `005.01` (lalu `005.02`, dst.) — sehingga urutan buku agenda
+tetap kronologis tanpa menomori ulang arsip. Rinciannya:
+
+- jangkar dicari per periode + per satker; tanggal di antara dua surat
+  menempel ke nomor sebelumnya; tanpa satu pun nomor pada/sebelum tanggal
+  itu → ditolak dengan arahan "gunakan booking biasa";
+- sub-nomor atomik per jangkar (dua sisipan serentak tak pernah kembar) dan
+  ter-seed dari dokumen (pemulihan backup tanpa koleksi counters aman);
+- sisipan TIDAK menaikkan counter utama — nomor berikutnya tidak melompat;
+- tanggal wajib, tidak boleh masa depan; pratinjau menampilkan perkiraan
+  `005.01` atau menjelaskan kenapa sisipan tak bermakna;
+- tampil sebagai `K-005.01/2026` di buku agenda (HP + desktop + CSV),
+  terurut menempel pada induknya.
+
+### Sapu integrasi: satu mesin nomor untuk semua jalur
+
+Kelima jalur penerbit nomor kini melewati periode yang sama — booking manual
+PersuratanPage, `BookingNomorButton` (15 halaman modul), LPB otomatis
+persediaan & pengadaan, BAST Penggunaan, dan BAST PPK-KPB Pengadaan. Halaman
+**Pembukuan** — satu-satunya modul `MODUL_AMAN` tanpa tombol booking —
+kini punya `BookingNomorButton` (referensi DBKP / Buku Barang). Indeks baru
+`surat(jenis, tahun, tanggal_surat)` menjaga seed bulanan & pencarian jangkar
+tidak memindai seluruh buku agenda.
+
+### Verifikasi
+
+- 13 uji mesin penomoran baru (mongomock): reset antarbulan, setelan tahunan,
+  transisi 76→77 lalu 001, sisipan menempel/atomik/seed-dari-dokumen,
+  pratinjau tanpa mutasi, guard pengaturan;
+- 23 uji logika murni baru (periode, urut tampil, validasi sisipan, guard
+  format, CSV) — total backend **1559 lulus**;
+- frontend **41 suite / 434 uji** (5 uji `nomorAgenda` baru), eslint bersih,
+  `yarn build` sukses.
+
+---
+
 ## [#734] PSP terlihat di daftar aset — titik hijau + No. PSP baca-saja + tooltip yang bisa diketuk — 2026-08-03
 
 Penetapan Status Penggunaan (PSP) selama ini hanya hidup di halaman **Aset per

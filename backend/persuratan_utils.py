@@ -5,9 +5,17 @@ Dinas) — susunan nomor naskah dinas korespondensi eksternal memuat:
 (a) kategori klasifikasi keamanan (B/T/R/SR), (b) nomor naskah (urut dalam
 satu tahun takwim), (c) kode klasifikasi arsip, (d) bulan, (e) tahun.
 Praktik kearsipan: buku agenda KEMBAR (agenda surat keluar & surat masuk
-terpisah, nomor urut masing-masing per tahun); nomor yang sudah dipesan
+terpisah, nomor urut masing-masing per periode); nomor yang sudah dipesan
 (booking) lalu batal TIDAK didaur ulang — dicatat berstatus batal agar
 urutan tetap utuh dan setiap celah nomor dapat dijelaskan.
+
+Dua kelonggaran praktik lapangan (permintaan pemilik):
+- **Reset bulanan** — deret nomor urut kembali ke 001 tiap pergantian bulan
+  (setelan per satker; pilihan tahunan tetap tersedia sesuai PerANRI).
+- **Nomor sisipan (backdate)** — surat yang lupa dibooking dan baru dibuat
+  belakangan diberi nomor menempel di belakang nomor terakhir pada tanggal
+  itu: 005 → 005.01 (lalu 005.02, dst.) sehingga urutan agenda tetap
+  kronologis tanpa menomori ulang arsip.
 
 Fungsi murni tanpa Mongo/IO agar teruji unit.
 """
@@ -62,6 +70,13 @@ TRANSISI_MASUK = {
 ROMAWI_BULAN = ("I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X",
                 "XI", "XII")
 
+# Pola reset nomor urut agenda (setelan per satker).
+RESET_URUT = {
+    "bulanan": "Bulanan — nomor kembali ke 001 tiap awal bulan",
+    "tahunan": "Tahunan — deret satu tahun takwim (PerANRI 5/2021)",
+}
+RESET_URUT_DEFAULT = "bulanan"
+
 # Format nomor bawaan — susunan PerANRI 5/2021 (keamanan-urut/klasifikasi/
 # unit/bulan/tahun). Dapat diubah lewat pengaturan persuratan.
 FORMAT_NOMOR_DEFAULT = "{kode_keamanan}-{urut}/{kode_klasifikasi}/{kode_unit}/{bulan_romawi}/{tahun}"
@@ -87,19 +102,62 @@ def placeholder_tak_dikenal(template) -> list:
             if p not in _PLACEHOLDER_DIKENAL]
 
 
+def periode_urut(reset_urut, tanggal_iso) -> str:
+    """Kunci periode deret nomor: '2026' (tahunan) / '2026-08' (bulanan).
+
+    Nilai reset selain "tahunan" jatuh ke bulanan (bawaan baru). Tanggal yang
+    tak terbaca → '' — fungsi murni tak tahu "sekarang", jadi salah pakai
+    harus TERLIHAT, bukan diam-diam menomori periode yang keliru (route
+    selalu mengisi tanggal default hari ini sebelum memanggil).
+    """
+    bulan, tahun = _bulan_tahun(tanggal_iso)
+    if tahun is None:
+        return ""
+    if str(reset_urut or "").strip() == "tahunan":
+        return str(tahun)
+    return f"{tahun}-{bulan:02d}"
+
+
+def urut_tampil(no_agenda, sisipan=0) -> str:
+    """Tampilan nomor urut agenda: 15 → '015'; sisipan 1 → '015.01'."""
+    dasar = f"{int(no_agenda or 0):03d}"
+    try:
+        s = int(sisipan or 0)
+    except (TypeError, ValueError):
+        s = 0
+    return f"{dasar}.{s:02d}" if s > 0 else dasar
+
+
+def validate_format_reset(reset_urut, format_nomor) -> str:
+    """'' bila serasi; pesan bila reset bulanan tanpa unsur bulan di format.
+
+    Tanpa {bulan}/{bulan_romawi} pada format, deret bulanan menerbitkan
+    nomor yang SAMA PERSIS tiap bulan (B-001/UN/2026 terbit lagi bulan
+    berikutnya) — duplikat nomor resmi yang tak bisa diperbaiki belakangan.
+    """
+    if str(reset_urut or "").strip() == "tahunan":
+        return ""
+    f = str(format_nomor or FORMAT_NOMOR_DEFAULT)
+    if "{bulan}" in f or "{bulan_romawi}" in f:
+        return ""
+    return ("Reset bulanan membutuhkan {bulan} atau {bulan_romawi} pada "
+            "format nomor — tanpa itu nomor yang sama terbit ulang tiap bulan")
+
+
 def bangun_nomor(template, urut, tanggal_iso, kode_klasifikasi="",
                  kode_unit="", kode_keamanan="B") -> str:
     """Rakit nomor surat dari template ber-placeholder.
 
-    {urut} tampil 3 digit ber-nol-depan (015) sesuai praktik agenda; bagian
-    yang kosong dirapikan (dobel '/' dan '-' tepi dibuang) agar template
-    umum tetap menghasilkan nomor sah walau kode unit/klasifikasi belum
-    diisi.
+    {urut} tampil 3 digit ber-nol-depan (015) sesuai praktik agenda; `urut`
+    berupa STRING dipakai apa adanya — jalur nomor sisipan mengirim "005.01"
+    yang sudah dirakit `urut_tampil`. Bagian yang kosong dirapikan (dobel '/'
+    dan '-' tepi dibuang) agar template umum tetap menghasilkan nomor sah
+    walau kode unit/klasifikasi belum diisi.
     """
     bulan, tahun = _bulan_tahun(tanggal_iso)
     nilai = {
         "kode_keamanan": str(kode_keamanan or "B").strip().upper(),
-        "urut": f"{int(urut):03d}",
+        "urut": urut if isinstance(urut, str) else f"{int(urut):03d}",
         "kode_klasifikasi": str(kode_klasifikasi or "").strip(),
         "kode_unit": str(kode_unit or "").strip(),
         "bulan": f"{bulan:02d}" if bulan else "",
@@ -114,8 +172,14 @@ def bangun_nomor(template, urut, tanggal_iso, kode_klasifikasi="",
     return out
 
 
-def validate_surat_keluar(d) -> list:
-    """Validasi payload booking surat keluar → daftar pesan kesalahan."""
+def validate_surat_keluar(d, today_iso="") -> list:
+    """Validasi payload booking surat keluar → daftar pesan kesalahan.
+
+    `today_iso` (opsional, YYYY-MM-DD): mengaktifkan aturan nomor sisipan —
+    sisipan WAJIB bertanggal (itulah tanggal backdate-nya) dan tanggalnya
+    tak boleh di masa depan (sisipan ada justru untuk surat yang telat
+    dibooking, bukan untuk memesan masa depan).
+    """
     errors = []
     if not str((d or {}).get("perihal") or "").strip():
         errors.append("Perihal wajib diisi")
@@ -125,9 +189,15 @@ def validate_surat_keluar(d) -> list:
     modul = str((d or {}).get("modul") or "").strip()
     if modul and modul not in MODUL_AMAN:
         errors.append(f"Modul tidak dikenal: {modul}")
-    tgl = str((d or {}).get("tanggal_surat") or "").strip()
+    tgl = str((d or {}).get("tanggal_surat") or "").strip()[:10]
     if tgl and _bulan_tahun(tgl) == (None, None):
         errors.append("Tanggal surat tidak valid (YYYY-MM-DD)")
+    if (d or {}).get("sisipan"):
+        if not tgl:
+            errors.append("Nomor sisipan membutuhkan Tanggal Surat "
+                          "(tanggal backdate surat yang lupa dibooking)")
+        elif today_iso and tgl > str(today_iso)[:10]:
+            errors.append("Tanggal nomor sisipan tidak boleh di masa depan")
     return errors
 
 
@@ -162,7 +232,10 @@ def baris_agenda_csv(items) -> list:
     for s in items or []:
         keluar = s.get("jenis") == "keluar"
         rows.append([
-            s.get("no_agenda"),
+            # Nomor sisipan tampil "5.01" agar buku agenda ekspor tetap
+            # kronologis; baris biasa memakai angka mentahnya (tak berubah).
+            (urut_tampil(s.get("no_agenda"), s.get("sisipan"))
+             if s.get("sisipan") else s.get("no_agenda")),
             "Keluar" if keluar else "Masuk",
             (STATUS_KELUAR if keluar else STATUS_MASUK).get(
                 s.get("status"), s.get("status")),

@@ -3,12 +3,17 @@
 Mengakomodir SEMUA jenis laporan/naskah yang terbit dari modul mana pun
 (inventarisasi, pelaporan, penggunaan, dst.) dan kegiatan mana pun:
 
-- **Surat keluar**: nomor DIBOOKING saat draf dibuat (atomik per tahun
-  takwim — dua pemanggil tak pernah dapat nomor sama), lalu **disahkan**
-  setelah surat final ditandatangani atau **dibatalkan** (nomor hangus,
-  tidak didaur ulang — celah nomor tetap dapat dijelaskan, kaidah
-  kearsipan). Susunan nomor mengikuti PerANRI 5/2021 dan dapat diatur.
-- **Surat masuk**: agenda kembar — nomor agenda sendiri per tahun,
+- **Surat keluar**: nomor DIBOOKING saat draf dibuat (atomik per PERIODE —
+  dua pemanggil tak pernah dapat nomor sama), lalu **disahkan** setelah
+  surat final ditandatangani atau **dibatalkan** (nomor hangus, tidak
+  didaur ulang — celah nomor tetap dapat dijelaskan, kaidah kearsipan).
+  Susunan nomor mengikuti PerANRI 5/2021 dan dapat diatur. Periode deret
+  mengikuti setelan satker: BULANAN (bawaan — kembali ke 001 tiap awal
+  bulan) atau TAHUNAN (satu tahun takwim).
+- **Nomor sisipan (backdate)**: surat yang lupa dibooking diberi nomor
+  menempel di belakang nomor terakhir pada tanggal backdate-nya
+  (005 → 005.01) — urutan agenda tetap kronologis tanpa menomori ulang.
+- **Surat masuk**: agenda kembar — nomor agenda sendiri per periode,
   status diterima → diproses → selesai.
 
 Logika murni (format nomor, validasi, transisi, baris agenda) di
@@ -33,10 +38,12 @@ from meili_utils import jadwalkan_sync, jadwalkan_hapus, cari_id_surat
 from pencarian_utils import klausa_teks
 from persuratan_utils import (
     FORMAT_NOMOR_DEFAULT, JENIS_NASKAH, KODE_KEAMANAN, MODUL_AMAN,
+    RESET_URUT, RESET_URUT_DEFAULT,
     STATUS_KELUAR, STATUS_MASUK, TRANSISI_KELUAR, TRANSISI_MASUK,
-    bangun_nomor, baris_agenda_csv, pilih_klasifikasi,
-    placeholder_tak_dikenal, validate_peta_klasifikasi,
-    validate_surat_keluar, validate_surat_masuk, validate_transisi,
+    bangun_nomor, baris_agenda_csv, periode_urut, pilih_klasifikasi,
+    placeholder_tak_dikenal, urut_tampil, validate_format_reset,
+    validate_peta_klasifikasi, validate_surat_keluar, validate_surat_masuk,
+    validate_transisi,
 )
 
 persuratan_router = APIRouter()
@@ -59,6 +66,10 @@ class SuratKeluarIn(BaseModel):
     # sebagai nomor agenda, nomor eksternal jadi rujukan silang.
     nomor_eksternal: Optional[str] = ""
     keterangan: Optional[str] = ""
+    # Nomor SISIPAN (backdate): surat yang lupa dibooking — nomor menempel
+    # di belakang nomor terakhir pada `tanggal_surat` (005 → 005.01), bukan
+    # mengambil nomor berikutnya (yang akan membuat agenda mundur tanggal).
+    sisipan: Optional[bool] = False
 
 
 class SuratMasukIn(BaseModel):
@@ -96,6 +107,8 @@ class PengaturanIn(BaseModel):
     format_nomor: Optional[str] = None
     kode_unit: Optional[str] = None
     kode_klasifikasi_default: Optional[str] = None
+    # "bulanan" (bawaan — kembali ke 001 tiap awal bulan) / "tahunan".
+    reset_urut: Optional[str] = None
     # Aturan klasifikasi otomatis: [{modul, jenis_naskah, kode}] — field
     # kosong = wildcard; aturan paling spesifik menang (pilih_klasifikasi).
     peta_klasifikasi: Optional[list] = None
@@ -129,39 +142,91 @@ async def _pengaturan(kode_satker: str = "") -> dict:
         "kode_unit": s.get("kode_unit") or "",
         "kode_klasifikasi_default": s.get("kode_klasifikasi_default") or "",
         "peta_klasifikasi": s.get("peta_klasifikasi") or [],
+        # Bawaan BULANAN (permintaan lapangan): nomor kembali ke 001 tiap
+        # pergantian bulan. Satker yang mengikuti PerANRI apa adanya memilih
+        # "tahunan" di pengaturan.
+        "reset_urut": s.get("reset_urut") or RESET_URUT_DEFAULT,
     }
 
 
-async def _seed_agenda(jenis: str, tahun: int, kode: str) -> int:
-    """Nilai awal counter agenda per-satker saat migrasi dari counter GLOBAL.
+def _periode(atur: dict, tanggal_iso: str) -> str:
+    """Kunci periode deret nomor menurut setelan satker ('2026'/'2026-08')."""
+    return periode_urut((atur or {}).get("reset_urut"), tanggal_iso)
+
+
+def _cid_agenda(jenis: str, periode: str, kode: str) -> str:
+    """Id dokumen counter agenda per PERIODE ('2026' tahunan / '2026-08'
+    bulanan). Untuk periode tahunan id-nya identik dengan id era-lama
+    (`surat_keluar_2026[...]`) sehingga deret lama menyambung tanpa lompatan;
+    `kode` kosong (super-admin / era lama) memakai id tanpa akhiran satker."""
+    base = f"surat_{jenis}_{periode}"
+    return f"{base}:{kode}" if kode else base
+
+
+def _ids_counter_tahunan(jenis: str, tahun: int, kode: str) -> list:
+    """Id counter TAHUNAN yang relevan bagi sebuah satker (global + miliknya)."""
+    ids = [f"surat_{jenis}_{tahun}"]
+    if kode:
+        ids.append(f"surat_{jenis}_{tahun}:{kode}")
+    return ids
+
+
+async def _seed_agenda(jenis: str, periode: str, kode: str) -> int:
+    """Nilai awal counter agenda saat dokumen counternya belum ada.
 
     Dipakai BERSAMA oleh `_no_agenda_berikut` (yang benar-benar memesan nomor)
     dan `pratinjau_nomor` (yang hanya menghitung) — bila hanya salah satu tahu
-    cara seed-nya, pratinjau menampilkan nomor 1 yang sudah terpakai.
+    cara seed-nya, pratinjau menampilkan nomor 1 yang sudah terpakai. Fungsi
+    ini MEMBACA saja (pratinjau tak boleh memutasi apa pun); penandaan
+    migrasi counter tahunan dilakukan `_no_agenda_berikut` SETELAH counter
+    barunya benar-benar tercipta.
 
-    PENTING: jangan hanya membaca surat yang SUDAH berstempel kode_satker.
-    Stempel itu ditambahkan belakangan tanpa backfill, jadi di produksi hampir
-    semua surat lama TIDAK berstempel → query ber-stempel mengembalikan 0 baris
-    → seq mulai 0 → nomor agenda 1,2,3… DIULANG dan bentrok dengan surat yang
-    sudah terbit (tak ada indeks unik pada nomor/no_agenda, tabrakan terjadi
-    diam-diam). Karena itu seed = MAKS dari:
-      (a) posisi counter GLOBAL lama (batas aman lintas satker), dan
-      (b) no_agenda tertinggi milik satker ini (termasuk surat lama tanpa
-          stempel — dianggap miliknya sesuai konvensi era-lama).
-    Konsekuensi: satker kedua mulai dari nomor global terakhir sehingga ada
-    lompatan SEKALI — jauh lebih baik daripada nomor resmi ganda.
+    Dua lapis sumber, keduanya diambil MAKS-nya:
+
+    (a) **Counter lama yang belum dimigrasi** — periode tahunan membaca
+        counter global era-lama (stempel satker ditambahkan belakangan tanpa
+        backfill; tanpa lantai ini nomor 1,2,3… terbit ULANG dan bentrok
+        dengan surat yang sudah beredar). Periode BULANAN membaca counter
+        TAHUNAN (global + milik satker) yang belum bertanda
+        `dimigrasi_bulanan`: bulan transisi meneruskan posisi deret tahunan
+        supaya nomor yang sudah hangus (dokumen terhapus) tidak terbit ulang.
+        Setelah ditandai, bulan-bulan berikutnya TIDAK ikut dilantai — kalau
+        ikut, deret tak pernah kembali ke 001.
+    (b) **no_agenda tertinggi dokumen periode ini** milik satker (termasuk
+        surat era-lama tanpa stempel — konvensi lama menganggapnya miliknya).
+        Periode bulanan menyaring per bulan: surat KELUAR menurut tanggal
+        suratnya (bulan itulah yang tercetak di nomor), surat MASUK menurut
+        tanggal agendanya (created_at — tanggal surat pengirim opsional).
+
+    Konsekuensi seed lintas-era: ada lompatan SEKALI (satker kedua / bulan
+    transisi) — jauh lebih baik daripada nomor resmi ganda.
     """
+    bulanan = "-" in periode
+    tahun = int(periode[:4])
     maks = 0
-    lama = await db.counters.find_one(
-        {"_id": f"surat_{jenis}_{tahun}"}, {"_id": 0, "seq": 1})
-    try:
-        maks = int((lama or {}).get("seq") or 0)
-    except (TypeError, ValueError):
-        maks = 0
-    async for r in db.surat.find(
-            {"jenis": jenis, "tahun": tahun,
-             "kode_satker": {"$in": [kode, "", None]}},
-            {"_id": 0, "no_agenda": 1}):
+
+    async def _baca_seq(cid: str, wajib_belum_migrasi: bool) -> int:
+        c = await db.counters.find_one({"_id": cid})
+        if not c or (wajib_belum_migrasi and c.get("dimigrasi_bulanan")):
+            return 0
+        try:
+            return int(c.get("seq") or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    if bulanan:
+        for cid in _ids_counter_tahunan(jenis, tahun, kode):
+            maks = max(maks, await _baca_seq(cid, wajib_belum_migrasi=True))
+    else:
+        maks = await _baca_seq(f"surat_{jenis}_{tahun}",
+                               wajib_belum_migrasi=False)
+
+    q = {"jenis": jenis, "tahun": tahun,
+         "kode_satker": {"$in": [kode, "", None]}}
+    if bulanan:
+        field_tgl = "tanggal_surat" if jenis == "keluar" else "created_at"
+        q[field_tgl] = {"$regex": f"^{periode}"}
+    async for r in db.surat.find(q, {"_id": 0, "no_agenda": 1}):
         try:
             maks = max(maks, int(r.get("no_agenda") or 0))
         except (TypeError, ValueError):
@@ -169,35 +234,105 @@ async def _seed_agenda(jenis: str, tahun: int, kode: str) -> int:
     return maks
 
 
-async def _cid_agenda(jenis: str, tahun: int, kode: str) -> str:
-    """Id dokumen counter agenda. `kode` kosong (super-admin / era lama) tetap
-    memakai id legacy agar deret lama menyambung tanpa lompatan."""
-    base = f"surat_{jenis}_{tahun}"
-    return f"{base}:{kode}" if kode else base
+async def _tandai_migrasi_tahunan(jenis: str, periode: str, kode: str) -> None:
+    """Tandai counter tahunan sudah dipakai sebagai lantai deret bulanan.
+
+    Dipanggil SETELAH counter bulanan pertama tercipta (bukan di dalam seed):
+    bila urutannya dibalik dan proses mati di antaranya, seed berikutnya
+    kehilangan lantainya → nomor hangus bisa terbit ulang DIAM-DIAM. Dengan
+    urutan ini, kegagalan di jendela sempit itu paling buruk membuat SATU
+    bulan berikutnya tidak mulai dari 001 (terlihat, menjengkelkan, dan
+    pulih sendiri) — bukan duplikat nomor resmi yang tak terdeteksi.
+    """
+    tahun = int(periode[:4])
+    for cid in _ids_counter_tahunan(jenis, tahun, kode):
+        await db.counters.update_one(
+            {"_id": cid, "dimigrasi_bulanan": {"$exists": False}},
+            {"$set": {"dimigrasi_bulanan": periode}})
 
 
-async def _no_agenda_berikut(jenis: str, tahun: int, kode_satker: str = "") -> int:
+async def _no_agenda_berikut(jenis: str, periode: str,
+                             kode_satker: str = "") -> int:
     """Nomor agenda berikutnya (atomik — $inc pada dokumen counter).
 
-    Deret PER SATKER (REVIEW-9 R9), pola sama dengan BA-Perbaikan (R8):
-    sebelumnya SATU deret dipakai bersama, sehingga booking satker B
-    menghabiskan jatah nomor satker A — buku agenda A (yang ter-scope satker)
-    tampak bolong 5, 7, 9… dan besarnya lompatan membocorkan volume surat
-    satker lain.
+    Deret PER SATKER (REVIEW-9 R9) dan PER PERIODE: '2026' saat setelan
+    tahunan, '2026-08' saat bulanan — begitu bulan berganti, dokumen counter
+    baru terbentuk dan deret kembali ke 001. Pola satu-deret-bersama lama
+    membuat booking satker B menghabiskan jatah nomor satker A.
     """
     kode = str(kode_satker or "").strip()
-    cid = await _cid_agenda(jenis, tahun, kode)
-    if kode and await db.counters.find_one({"_id": cid}) is None:
-        maks = await _seed_agenda(jenis, tahun, kode)
+    bulanan = "-" in periode
+    cid = _cid_agenda(jenis, periode, kode)
+    if (kode or bulanan) and await db.counters.find_one({"_id": cid}) is None:
+        maks = await _seed_agenda(jenis, periode, kode)
         # $setOnInsert idempoten: pemanggil kedua yang balapan tak menimpa seed.
         await db.counters.update_one(
             {"_id": cid}, {"$setOnInsert": {"seq": maks}}, upsert=True)
+        if bulanan:
+            await _tandai_migrasi_tahunan(jenis, periode, kode)
     c = await db.counters.find_one_and_update(
         {"_id": cid},
         {"$inc": {"seq": 1}},
         upsert=True,
         return_document=ReturnDocument.AFTER,
     )
+    return int(c["seq"])
+
+
+# ── Nomor sisipan (backdate) ─────────────────────────────────────────────────
+
+def _cid_sisipan(periode: str, kode: str, jangkar: int) -> str:
+    """Id counter sub-nomor sisipan per jangkar (per periode + satker)."""
+    return f"{_cid_agenda('keluar', periode, kode)}:s{int(jangkar)}"
+
+
+async def _jangkar_sisipan(periode: str, kode: str, tanggal: str):
+    """No. agenda TERAKHIR pada/sebelum `tanggal` di periode ini — nomor
+    sisipan menempel di belakangnya (005 → 005.01). None bila belum ada
+    satu pun nomor pada/sebelum tanggal itu (sisipan tak bermakna; booking
+    biasa memang akan menghasilkan nomor pertama periode)."""
+    q = {"jenis": "keluar", "tahun": int(periode[:4]),
+         "kode_satker": {"$in": [str(kode or ""), "", None]},
+         # ISO YYYY-MM-DD urut leksikografis = urut kronologis; "$gt": ""
+         # menyaring dokumen tanpa tanggal (tak bisa jadi jangkar).
+         "tanggal_surat": {"$gt": "", "$lte": str(tanggal)[:10]}}
+    if "-" in periode:
+        q["tanggal_surat"]["$gte"] = periode  # batas awal bulan periode
+    maks = None
+    async for r in db.surat.find(q, {"_id": 0, "no_agenda": 1}):
+        try:
+            v = int(r.get("no_agenda") or 0)
+        except (TypeError, ValueError):
+            continue
+        maks = v if maks is None else max(maks, v)
+    return maks
+
+
+async def _sisipan_berikut(periode: str, kode: str, jangkar: int) -> int:
+    """Sub-nomor sisipan berikutnya untuk satu jangkar (atomik).
+
+    005.01 sudah terpakai → 005.02, dst. Counter di-seed dari dokumen yang
+    ada (pemulihan backup tanpa koleksi counters tak melahirkan duplikat).
+    """
+    kode = str(kode or "").strip()
+    cid = _cid_sisipan(periode, kode, jangkar)
+    if await db.counters.find_one({"_id": cid}) is None:
+        maks = 0
+        q = {"jenis": "keluar", "tahun": int(periode[:4]),
+             "no_agenda": int(jangkar), "sisipan": {"$gte": 1},
+             "kode_satker": {"$in": [kode, "", None]}}
+        if "-" in periode:
+            q["tanggal_surat"] = {"$regex": f"^{periode}"}
+        async for r in db.surat.find(q, {"_id": 0, "sisipan": 1}):
+            try:
+                maks = max(maks, int(r.get("sisipan") or 0))
+            except (TypeError, ValueError):
+                continue
+        await db.counters.update_one(
+            {"_id": cid}, {"$setOnInsert": {"seq": maks}}, upsert=True)
+    c = await db.counters.find_one_and_update(
+        {"_id": cid}, {"$inc": {"seq": 1}}, upsert=True,
+        return_document=ReturnDocument.AFTER)
     return int(c["seq"])
 
 
@@ -231,13 +366,16 @@ async def booking_nomor_lpb(user, tgl_iso: str, perihal: str,
                                   "Laporan",
                                   default=atur["kode_klasifikasi_default"])
     tahun = int(tgl_surat[:4]) if tgl_surat[:4].isdigit() else now0.year
-    no_agenda = await _no_agenda_berikut("keluar", tahun, kode_satker)
+    periode = (_periode(atur, tgl_surat)
+               or _periode(atur, now0.date().isoformat()))
+    no_agenda = await _no_agenda_berikut("keluar", periode, kode_satker)
     nomor = bangun_nomor(atur["format_nomor"], no_agenda, tgl_surat,
                          kode_klasifikasi=kode_klas,
                          kode_unit=atur["kode_unit"])
     surat_id = str(uuid.uuid4())
     await db.surat.insert_one({
         "id": surat_id, "jenis": "keluar", "no_agenda": no_agenda,
+        "sisipan": 0,
         "tahun": tahun, "nomor": nomor, "status": "dibooking",
         # Stempel satker (REVIEW-9 R10): tanpa ini surat booking otomatis
         # muncul di buku agenda & arsip SEMUA satker.
@@ -278,6 +416,7 @@ async def referensi_persuratan(_user: dict = Depends(require_user)):
         "kode_keamanan": [{"kode": k, "uraian": v} for k, v in KODE_KEAMANAN.items()],
         "status_keluar": [{"kode": k, "uraian": v} for k, v in STATUS_KELUAR.items()],
         "status_masuk": [{"kode": k, "uraian": v} for k, v in STATUS_MASUK.items()],
+        "reset_urut": [{"kode": k, "uraian": v} for k, v in RESET_URUT.items()],
         "transisi_keluar": {k: sorted(v) for k, v in TRANSISI_KELUAR.items()},
         "transisi_masuk": {k: sorted(v) for k, v in TRANSISI_MASUK.items()},
         "pengaturan": await _pengaturan(kode_satker_user(_user)),
@@ -381,43 +520,74 @@ async def hapus_klasifikasi(klas_id: str, user: dict = Depends(require_admin)):
 @persuratan_router.get("/persuratan/pratinjau-nomor")
 async def pratinjau_nomor(jenis_naskah: str = "", modul: str = "",
                           kode_klasifikasi: str = "", kode_keamanan: str = "B",
-                          tanggal_surat: str = "",
+                          tanggal_surat: str = "", sisipan: bool = False,
                           _user: dict = Depends(require_user)):
     """Pratinjau nomor yang AKAN terbit (tanpa memesan — counter tidak naik).
 
     Perkiraan: bila ada booking lain sebelum Anda menekan simpan, nomor
     final bisa bergeser maju — keunikan tetap dijamin counter atomik.
+    `sisipan=true` memperkirakan nomor sisipan backdate (005.01) untuk
+    `tanggal_surat`; bila belum ada jangkarnya, `sisipan_galat` menjelaskan.
     """
     _ks = kode_satker_user(_user)
     atur = await _pengaturan(_ks)
-    tanggal = (str(tanggal_surat or "").strip()[:10]
-               or datetime.now(timezone.utc).date().isoformat())
-    tahun = int(tanggal[:4]) if tanggal[:4].isdigit() else datetime.now(timezone.utc).year
+    now = datetime.now(timezone.utc)
+    tanggal = str(tanggal_surat or "").strip()[:10] or now.date().isoformat()
+    periode = _periode(atur, tanggal) or _periode(atur, now.date().isoformat())
+    kode = pilih_klasifikasi(atur["peta_klasifikasi"], modul, jenis_naskah,
+                             eksplisit=kode_klasifikasi,
+                             default=atur["kode_klasifikasi_default"])
+    sumber = ("eksplisit" if str(kode_klasifikasi or "").strip()
+              else ("pemetaan" if kode and kode != atur["kode_klasifikasi_default"]
+                    else ("bawaan" if kode else "kosong")))
+
+    if sisipan:
+        # Perkiraan nomor sisipan: jangkar + sub berikutnya, TANPA memutasi.
+        galat = ""
+        if not str(tanggal_surat or "").strip():
+            galat = "Pilih Tanggal Surat (tanggal backdate) dulu"
+        elif tanggal > now.date().isoformat():
+            galat = "Tanggal nomor sisipan tidak boleh di masa depan"
+        jangkar = (None if galat
+                   else await _jangkar_sisipan(periode, _ks, tanggal))
+        if not galat and jangkar is None:
+            galat = ("Belum ada nomor pada/sebelum tanggal itu di periode "
+                     "ini — gunakan booking biasa")
+        if galat:
+            return {"nomor": "", "urut_berikut": "", "kode_klasifikasi": kode,
+                    "sumber_klasifikasi": sumber, "sisipan_galat": galat}
+        c = await db.counters.find_one(
+            {"_id": _cid_sisipan(periode, _ks, jangkar)})
+        try:
+            sub = int((c or {}).get("seq") or 0) + 1
+        except (TypeError, ValueError):
+            sub = 1
+        urut = urut_tampil(jangkar, sub)
+        nomor = bangun_nomor(atur["format_nomor"], urut, tanggal,
+                             kode_klasifikasi=kode, kode_unit=atur["kode_unit"],
+                             kode_keamanan=kode_keamanan)
+        return {"nomor": nomor, "urut_berikut": urut, "kode_klasifikasi": kode,
+                "sumber_klasifikasi": sumber}
+
     # Pakai jalur seed yang SAMA dengan _no_agenda_berikut (REVIEW-9 R11):
-    # sebelum counter per-satker terbentuk, membaca counter kosong menghasilkan
-    # "1" — nomor yang justru sudah terpakai. Pratinjau harus memperkirakan
-    # nomor yang benar-benar akan terbit.
-    _cid = await _cid_agenda("keluar", tahun, _ks)
+    # sebelum counter per-satker/periode terbentuk, membaca counter kosong
+    # menghasilkan "1" — nomor yang justru sudah terpakai. Pratinjau harus
+    # memperkirakan nomor yang benar-benar akan terbit.
+    _cid = _cid_agenda("keluar", periode, _ks)
     c = await db.counters.find_one({"_id": _cid})
-    if c is None and _ks:
-        posisi = await _seed_agenda("keluar", tahun, _ks)
+    if c is None and (_ks or "-" in periode):
+        posisi = await _seed_agenda("keluar", periode, _ks)
     else:
         try:
             posisi = int((c or {}).get("seq") or 0)
         except (TypeError, ValueError):
             posisi = 0
     urut_berikut = posisi + 1
-    kode = pilih_klasifikasi(atur["peta_klasifikasi"], modul, jenis_naskah,
-                             eksplisit=kode_klasifikasi,
-                             default=atur["kode_klasifikasi_default"])
     nomor = bangun_nomor(atur["format_nomor"], urut_berikut, tanggal,
                          kode_klasifikasi=kode, kode_unit=atur["kode_unit"],
                          kode_keamanan=kode_keamanan)
     return {"nomor": nomor, "urut_berikut": urut_berikut,
-            "kode_klasifikasi": kode,
-            "sumber_klasifikasi": ("eksplisit" if str(kode_klasifikasi or "").strip()
-                                   else ("pemetaan" if kode and kode != atur["kode_klasifikasi_default"]
-                                         else ("bawaan" if kode else "kosong")))}
+            "kode_klasifikasi": kode, "sumber_klasifikasi": sumber}
 
 
 @persuratan_router.get("/persuratan/pengaturan")
@@ -431,6 +601,10 @@ async def set_pengaturan_persuratan(payload: PengaturanIn,
     """Atur format nomor & kode unit (admin). Placeholder divalidasi."""
     mentah = {k: v for k, v in payload.model_dump().items() if v is not None}
     update = {k: v.strip() for k, v in mentah.items() if isinstance(v, str)}
+    if "reset_urut" in update and update["reset_urut"] not in RESET_URUT:
+        raise HTTPException(status_code=400, detail=(
+            f"Reset nomor tidak dikenal: {update['reset_urut']} "
+            f"(pilihan: {', '.join(RESET_URUT)})"))
     if "peta_klasifikasi" in mentah:
         peta = [{"modul": str((a or {}).get("modul") or "").strip(),
                  "jenis_naskah": str((a or {}).get("jenis_naskah") or "").strip(),
@@ -454,11 +628,19 @@ async def set_pengaturan_persuratan(payload: PengaturanIn,
                                 detail="Format nomor wajib memuat {urut}")
     if not update:
         raise HTTPException(status_code=400, detail="Tidak ada yang diubah")
+    # Keserasian reset × format dinilai atas nilai EFEKTIF setelah perubahan —
+    # menyimpan reset bulanan saja sementara format lama tanpa {bulan} sama
+    # berbahayanya dengan menyimpan format tanpa {bulan} saat sudah bulanan.
+    _ks = kode_satker_user(user)
+    _efektif = {**(await _pengaturan(_ks)), **update}
+    _pesan = validate_format_reset(_efektif.get("reset_urut"),
+                                   _efektif.get("format_nomor"))
+    if _pesan:
+        raise HTTPException(status_code=400, detail=_pesan)
     # ISOLASI SATKER (REVIEW-9 R9): admin SATKER menulis dokumen satkernya
     # sendiri; hanya super-admin yang menyentuh dokumen global (default
     # bersama). Dulu semua admin menulis satu dokumen global, sehingga
     # kode_unit/format nomor satu satker mengubah nomor resmi satker lain.
-    _ks = kode_satker_user(user)
     if _ks:
         kunci = {"type": "satker", "kode_satker": _ks}
         update.update(kunci)
@@ -512,8 +694,10 @@ async def daftar_surat(jenis: str = "", status: str = "", modul: str = "",
     # ISOLASI SATKER: user terikat hanya melihat surat satkernya (+ era-lama).
     query = scope_query_field_satker(_user, query)
     total = await db.surat.count_documents(query)
+    # `sisipan` ikut kunci sort: dalam no_agenda yang sama, 005.02 → 005.01 →
+    # 005 (dokumen tanpa/0 sisipan) — nomor sisipan menempel pada induknya.
     items = await (db.surat.find(query, _PROJ)
-                   .sort([("tahun", -1), ("no_agenda", -1)])
+                   .sort([("tahun", -1), ("no_agenda", -1), ("sisipan", -1)])
                    .skip((page - 1) * page_size).limit(page_size)
                    .to_list(page_size))
     ringkas = {
@@ -537,28 +721,43 @@ async def booking_surat_keluar(payload: SuratKeluarIn,
     """BOOKING nomor surat keluar — nomor terbit atomik, status 'dibooking'.
 
     Nomor tetap milik surat ini sampai disahkan/dibatalkan; pembatalan
-    TIDAK mengembalikan nomor ke antrean.
+    TIDAK mengembalikan nomor ke antrean. `sisipan=true` menerbitkan nomor
+    sisipan backdate: menempel di belakang nomor terakhir pada
+    `tanggal_surat` (005 → 005.01) alih-alih mengambil nomor berikutnya.
     """
     data = payload.model_dump()
-    errors = validate_surat_keluar(data)
+    now = datetime.now(timezone.utc)
+    errors = validate_surat_keluar(data, today_iso=now.date().isoformat())
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
     nama_kegiatan = await _nama_kegiatan(data.get("kegiatan_id"))
-    now = datetime.now(timezone.utc)
     tanggal_surat = (str(data.get("tanggal_surat") or "").strip()[:10]
                      or now.date().isoformat())
     tahun = int(tanggal_surat[:4])
     _ks = kode_satker_user(user)
     atur = await _pengaturan(_ks)
+    periode = (_periode(atur, tanggal_surat)
+               or _periode(atur, now.date().isoformat()))
     # Klasifikasi otomatis: eksplisit → aturan pemetaan (modul/jenis naskah,
     # paling spesifik menang) → kode bawaan pengaturan.
     kode_klas = pilih_klasifikasi(
         atur["peta_klasifikasi"], data.get("modul"), data.get("jenis_naskah"),
         eksplisit=data.get("kode_klasifikasi"),
         default=atur["kode_klasifikasi_default"])
-    no_agenda = await _no_agenda_berikut("keluar", tahun, _ks)
+    sisip = 0
+    if data.get("sisipan"):
+        jangkar = await _jangkar_sisipan(periode, _ks, tanggal_surat)
+        if jangkar is None:
+            raise HTTPException(status_code=400, detail=(
+                "Belum ada nomor surat pada/sebelum tanggal itu di periode "
+                "ini — nomor sisipan tidak diperlukan; gunakan booking biasa "
+                "(nomor berikutnya terbit otomatis)"))
+        no_agenda = jangkar
+        sisip = await _sisipan_berikut(periode, _ks, jangkar)
+    else:
+        no_agenda = await _no_agenda_berikut("keluar", periode, _ks)
     nomor = bangun_nomor(
-        atur["format_nomor"], no_agenda, tanggal_surat,
+        atur["format_nomor"], urut_tampil(no_agenda, sisip), tanggal_surat,
         kode_klasifikasi=kode_klas,
         kode_unit=atur["kode_unit"],
         kode_keamanan=data.get("kode_keamanan") or "B")
@@ -567,6 +766,7 @@ async def booking_surat_keluar(payload: SuratKeluarIn,
         "kode_satker": kode_satker_user(user),
         "jenis": "keluar",
         "no_agenda": no_agenda,
+        "sisipan": sisip,
         "tahun": tahun,
         "nomor": nomor,
         "status": "dibooking",
@@ -584,7 +784,9 @@ async def booking_surat_keluar(payload: SuratKeluarIn,
         "keterangan": str(data.get("keterangan") or "").strip(),
         "dibuat_oleh": user.get("username", "system"),
         "riwayat": [{"status": "dibooking", "tanggal": now.isoformat(),
-                     "oleh": user.get("username", "system"), "catatan": ""}],
+                     "oleh": user.get("username", "system"),
+                     "catatan": (f"nomor sisipan (backdate {tanggal_surat})"
+                                 if sisip else "")}],
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
     }
@@ -592,14 +794,19 @@ async def booking_surat_keluar(payload: SuratKeluarIn,
     jadwalkan_sync("surat", record)  # sinkron indeks Meili (best-effort)
     await log_audit("booking_surat", record["kegiatan_id"],
                     username=user.get("username", "system"),
-                    detail=f"Booking nomor surat keluar {nomor} — {record['perihal']}")
+                    detail=(f"Booking nomor surat keluar {nomor} — {record['perihal']}"
+                            + (f" (sisipan backdate {tanggal_surat})" if sisip else "")))
     return record
 
 
 @persuratan_router.post("/persuratan/masuk")
 async def agenda_surat_masuk(payload: SuratMasukIn,
                              user: dict = Depends(require_writer)):
-    """Catat surat masuk pada buku agenda (nomor agenda otomatis per tahun)."""
+    """Catat surat masuk pada buku agenda (nomor agenda otomatis per periode).
+
+    Periode mengikuti TANGGAL AGENDA (hari ini) — tanggal surat pengirim
+    opsional dan bukan tanggal pencatatan kita.
+    """
     data = payload.model_dump()
     errors = validate_surat_masuk(data)
     if errors:
@@ -607,12 +814,16 @@ async def agenda_surat_masuk(payload: SuratMasukIn,
     nama_kegiatan = await _nama_kegiatan(data.get("kegiatan_id"))
     now = datetime.now(timezone.utc)
     tahun = now.year
-    no_agenda = await _no_agenda_berikut("masuk", tahun, kode_satker_user(user))
+    _ks = kode_satker_user(user)
+    atur = await _pengaturan(_ks)
+    periode = _periode(atur, now.date().isoformat())
+    no_agenda = await _no_agenda_berikut("masuk", periode, _ks)
     record = {
         "id": str(uuid.uuid4()),
-        "kode_satker": kode_satker_user(user),
+        "kode_satker": _ks,
         "jenis": "masuk",
         "no_agenda": no_agenda,
+        "sisipan": 0,
         "tahun": tahun,
         "nomor": data["nomor_surat"].strip(),
         "status": "diterima",
@@ -762,7 +973,8 @@ async def export_agenda(jenis: str = "", tahun: str = "",
         query["tahun"] = int(tahun)
     query = scope_query_field_satker(_user, query)
     items = await (db.surat.find(query, _PROJ)
-                   .sort([("tahun", 1), ("no_agenda", 1)]).to_list(100000))
+                   .sort([("tahun", 1), ("no_agenda", 1), ("sisipan", 1)])
+                   .to_list(100000))
     buf = io.StringIO()
     w = csv_module.writer(buf)
     for row in baris_agenda_csv(items):

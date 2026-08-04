@@ -907,21 +907,26 @@ async def terbitkan_bast_ppk_kpb(perolehan_id: str, payload: BastPpkIn,
     nomor, surat_id = "", ""
     if payload.booking_nomor:
         # Deret nomor yang SAMA dengan generator BAST Penggunaan (bast.py):
-        # buku agenda keluar per satker, jenis naskah Berita Acara.
-        from persuratan_utils import bangun_nomor, pilih_klasifikasi
+        # buku agenda keluar per satker + PER PERIODE (bulanan/tahunan sesuai
+        # setelan) — jalur otomatis sedertan dengan booking manual.
+        from persuratan_utils import bangun_nomor, periode_urut, pilih_klasifikasi
         from routes.persuratan import _no_agenda_berikut, _pengaturan
         atur = await _pengaturan(kode)
         kode_klas = pilih_klasifikasi(atur["peta_klasifikasi"], "pengadaan",
                                       "Berita Acara",
                                       default=atur["kode_klasifikasi_default"])
         tahun = int(tgl[:4]) if tgl[:4].isdigit() else now.year
-        no_agenda = await _no_agenda_berikut("keluar", tahun, kode)
+        periode = (periode_urut(atur.get("reset_urut"), tgl)
+                   or periode_urut(atur.get("reset_urut"),
+                                   now.date().isoformat()))
+        no_agenda = await _no_agenda_berikut("keluar", periode, kode)
         nomor = bangun_nomor(atur["format_nomor"], no_agenda, tgl,
                              kode_klasifikasi=kode_klas,
                              kode_unit=atur["kode_unit"])
         surat_id = str(uuid.uuid4())
         await db.surat.insert_one({
             "id": surat_id, "jenis": "keluar", "no_agenda": no_agenda,
+            "sisipan": 0,
             "tahun": tahun, "nomor": nomor, "status": "dibooking",
             "kode_satker": kode,
             "perihal": ("BAST Hasil Pengadaan PPK-KPB — "
