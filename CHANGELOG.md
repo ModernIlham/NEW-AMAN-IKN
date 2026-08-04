@@ -67,6 +67,67 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#751] TTD paralel saling terlihat + unduhan terbuka setelah QR diatur — 2026-08-04
+
+Tiga permintaan pemilik pada alur tanda tangan elektronik, satu untai.
+
+### 1. Mode paralel: yang meneken berikutnya MELIHAT tanda tangan sebelumnya
+
+Dulu setiap penanda tangan selalu melihat dokumen POLOS. Pada mode paralel —
+siapa pun boleh duluan — orang kedua jadi menempatkan tanda tangannya secara
+buta dan bisa menimpa tanda tangan yang sudah ada. Sekarang pratinjau halaman
+dirakit ulang lebih dulu dengan tanda tangan yang SUDAH masuk (tanpa QR), jadi
+yang berikutnya menempatkan miliknya dengan melihat ruang yang tersisa.
+
+Perakitan pratinjau bersifat toleran: bila karena satu dan lain hal gagal
+dirakit, halaman asli tetap ditampilkan — pembubuhan tidak pernah terhalang
+oleh urusan tampilan.
+
+### 2. Unduhan terbuka di kedua tautan — setelah letak QR diatur
+
+Setelah SEMUA meneken, tombol unduh dokumen ber-TTD muncul di dua tempat yang
+dipegang orang: **tautan permintaan TTD** (layar sukses penanda tangan) dan
+**halaman verifikasi TTD** (yang dibuka dari QR). Gerbangnya satu:
+`_siap_diunduh` = semua sudah meneken **dan** letak QR sudah diatur **dan**
+permintaan tidak dibatalkan. Sebelum gerbang terbuka, servernya membalas 409 —
+bukan berkas setengah jadi.
+
+Penantian itu dijadikan **penanda kerja**, bukan tombol yang hilang tanpa
+sebab:
+
+- Daftar permintaan TTD menandai kartunya **`PERLU ATUR LETAK QR`** sehingga
+  admin tahu ada satu langkah yang menahan unduhan semua pihak.
+- Halaman verifikasi menerangkan `menunggu_qr` apa adanya ("menunggu letak QR
+  diatur pemilik dokumen"), tidak diam-diam menyembunyikan tombol.
+- Detail permintaan & info penanda tangan ikut membawa bendera `siap_diunduh`
+  / `perlu_atur_qr` sehingga ketiga layar bicara dari satu sumber kebenaran.
+
+Endpoint baru: `GET /ttd/tandatangan/{id}/dokumen-ttd` (penanda tangan, dengan
+token tanda tangannya) dan `GET /ttd/verifikasi/{id}/dokumen-ttd` (publik,
+ber-rate-limit). Keduanya tunduk pada gerbang yang sama.
+
+### 3. Tombol "Otomatis saja" dicabut dari halaman penanda tangan
+
+Menyesatkan: sejak [#750] letak QR memang baru ditentukan di langkah unduh,
+jadi tombol itu tak menjelaskan apa pun bagi penanda tangan. Kini "Otomatis
+saja" hanya muncul pada pengaturan QR milik pemilik dokumen.
+
+### Perbaikan yang ikut terangkat
+
+Perakitan PDF ber-TTD melempar `IndexError` bila TIDAK ada satu pun tanda
+tangan yang memakai slot otomatis DAN QR tidak digambar otomatis — kanvas slot
+tanpa satu operasi gambar menghasilkan PDF nol halaman, lalu `pages[0]`
+meledak. Ini membuat pratinjau paralel jatuh diam-diam ke dokumen polos, dan
+pada jalur unduhan asli (semua penanda tangan mengatur posisinya sendiri +
+QR sudah diatur manual) membalas 500. Kanvas kosong kini diperlakukan sebagai
+"tidak ada overlay".
+
+Uji: 4 uji baru (gerbang siap-unduh, 409 verifikasi publik sebelum QR,
+penanda `menunggu_qr` & `perlu_atur_qr`) + 3 uji regresi perakitan kosong &
+pratinjau ber-TTD; total 1.668 uji backend, 434 uji frontend hijau. Diuji
+ujung-ke-ujung terhadap MongoDB + GridFS nyata pada mode paralel 3 penanda
+tangan.
+
 ## [#750] TTD BAST setara alur manual + posisi QR diatur SEKALI di akhir — 2026-08-04
 
 Dua keluhan pemilik pada alur tanda tangan elektronik, dijawab sekaligus

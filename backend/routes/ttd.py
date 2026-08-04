@@ -591,6 +591,23 @@ def _render_halaman_png(data: bytes, no: int):
                  "X-Content-Type-Options": "nosniff"})
 
 
+async def _dokumen_dengan_ttd_masuk(sr: dict, sr_id: str, data: bytes) -> bytes:
+    """Dokumen + tanda tangan yang SUDAH masuk (tanpa QR) untuk pratinjau.
+
+    Mode paralel: siapa pun yang meneken berikutnya melihat bubuhan rekan yang
+    lebih dulu, sehingga tak menempatkan tanda tangannya bertumpuk. Bila belum
+    ada yang meneken — atau perakitan gagal — dokumen asli dipakai apa adanya
+    (pratinjau tak boleh gagal hanya karena hiasan)."""
+    if not any(str(s.get("signature_file_id") or "").strip()
+               for s in (sr.get("signers") or [])):
+        return data
+    try:
+        return (await _bangun_pdf_ber_ttd(sr, sr_id, data,
+                                          sertakan_qr=False)).getvalue()
+    except Exception:
+        return data
+
+
 @ttd_router.get("/ttd/tandatangan/{sr_id}/dokumen/halaman/{no}")
 @limiter.limit("60/minute")
 async def halaman_dokumen_penanda_tangan(sr_id: str, no: int, request: Request,
@@ -602,7 +619,7 @@ async def halaman_dokumen_penanda_tangan(sr_id: str, no: int, request: Request,
         raise HTTPException(status_code=401, detail="Token tidak cocok dokumen")
     _sr, data = await _ambil_dokumen_sr(sr_id)
     _pastikan_jti_signer(_sr, tok)
-    return _render_halaman_png(data, no)
+    return _render_halaman_png(await _dokumen_dengan_ttd_masuk(_sr, sr_id, data), no)
 
 
 @ttd_router.get("/ttd/permintaan/{sr_id}/dokumen/halaman/{no}")
@@ -615,7 +632,7 @@ async def halaman_dokumen_pemilik(sr_id: str, no: int, request: Request,
     sr, data = await _ambil_dokumen_sr(sr_id)
     _pastikan_pemilik_sr(sr, user)
     _tolak_bila_batal(sr)
-    return _render_halaman_png(data, no)
+    return _render_halaman_png(await _dokumen_dengan_ttd_masuk(sr, sr_id, data), no)
 
 
 class PosisiQrIn(BaseModel):
@@ -650,30 +667,23 @@ async def atur_posisi_qr(sr_id: str, payload: PosisiQrIn,
     return {"ok": True, "posisi_qr": posisi}
 
 
-@ttd_router.get("/ttd/permintaan/{sr_id}/dokumen-ttd")
-async def dokumen_ber_ttd(sr_id: str,
-                          user: dict = Depends(require_user_or_query_token)):
-    """Dokumen PDF asli DENGAN BUBUHAN tanda tangan elektronik di halaman
-    terakhir: gambar ttd + nama/NIP/jabatan + waktu per penanda tangan yang
-    sudah meneken, plus QR verifikasi & kode. Dibangun on-the-fly sehingga
-    selalu memuat tanda tangan terbaru."""
+async def _bangun_pdf_ber_ttd(sr: dict, sr_id: str, data: bytes,
+                              sertakan_qr: bool = True) -> io.BytesIO:
+    """PDF dokumen + BUBUHAN tanda tangan yang SUDAH masuk → BytesIO.
+
+    `sertakan_qr=False` menghasilkan versi TANPA QR verifikasi — dipakai untuk
+    PRATINJAU: penanda tangan berikutnya (mode paralel, siapa pun yang lebih
+    dulu) melihat tanda tangan rekan yang sudah masuk sehingga tak menimpanya,
+    dan pemilik melihat tata letak sesungguhnya saat menempatkan QR di langkah
+    terakhir. QR sengaja tidak ikut pratinjau karena letaknya baru ditentukan
+    pada tahap unduh."""
     from pypdf import PdfReader, PdfWriter
     from reportlab.lib.units import mm as rl_mm
     from reportlab.lib.utils import ImageReader
     from reportlab.pdfgen import canvas as rl_canvas
 
-    sr, data = await _ambil_dokumen_sr(sr_id)
-    # IDOR (REVIEW-9 R11): dokumen ber-TTD memuat gambar tanda tangan +
-    # NIP + jabatan penanda tangan. Guard pemilik/satker yang sama sudah
-    # dipakai endpoint saudaranya — di sini terlewat.
-    _pastikan_pemilik_sr(sr, user)
-    _tolak_bila_batal(sr)  # dokumen ber-TTD dari permintaan batal → tak berlaku
     penanda = [s for s in (sr.get("signers") or [])
                if str(s.get("signature_file_id") or "").strip()]
-    if not penanda:
-        raise HTTPException(status_code=400,
-                            detail="Belum ada tanda tangan yang masuk")
-
     reader = PdfReader(io.BytesIO(data))
 
     # Pisahkan penanda tangan ber-POSISI PILIHAN (diatur sendiri di halaman
@@ -689,7 +699,8 @@ async def dokumen_ber_ttd(sr_id: str,
 
     # QR verifikasi: posisi/ukuran pilihan (dokumen-level) bila diatur penanda
     # tangan; jika tidak → slot otomatis pojok kanan-bawah halaman terakhir.
-    qr_pos = sr.get("posisi_qr") if isinstance(sr.get("posisi_qr"), dict) else None
+    qr_pos = (sr.get("posisi_qr")
+              if sertakan_qr and isinstance(sr.get("posisi_qr"), dict) else None)
     qr_idx = (min(max(1, int(qr_pos.get("halaman") or 1)), len(reader.pages)) - 1
               if qr_pos else None)
 
@@ -819,7 +830,7 @@ async def dokumen_ber_ttd(sr_id: str,
     verif = (_APP_URL + f"/ttd/verifikasi/{sr_id}") if _APP_URL \
         else f"/ttd/verifikasi/{sr_id}"
     # QR otomatis pojok kanan-bawah HANYA bila QR tak diatur posisinya sendiri.
-    if qr_pos is None:
+    if sertakan_qr and qr_pos is None:
         try:
             from reportlab.graphics import renderPDF
 
@@ -836,7 +847,15 @@ async def dokumen_ber_ttd(sr_id: str,
     c.save()
     buf_ov.seek(0)
 
-    overlay = PdfReader(buf_ov).pages[0]
+    # Kanvas slot otomatis bisa KOSONG — tak ada penanda tangan yang memakai
+    # slot bawaan DAN QR tak digambar otomatis (QR sudah ditempatkan manual,
+    # atau ini pratinjau tanpa QR). Kanvas tanpa gambar apa pun menghasilkan
+    # PDF NOL halaman, dan `pages[0]` melempar IndexError → dokumen gagal
+    # dirakit. Perlakukan sebagai "tidak ada overlay" alih-alih meledak.
+    try:
+        overlay = PdfReader(buf_ov).pages[0]
+    except IndexError:
+        overlay = None
 
     # ── Overlay QR POSISI PILIHAN (dokumen-level): pada halaman & koordinat/
     #    ukuran yang diatur, sisi minimal QR_MIN_MM agar tetap dapat dipindai ──
@@ -880,19 +899,101 @@ async def dokumen_ber_ttd(sr_id: str,
         if overlay_qr is not None and idx == overlay_qr[0]:
             # QR verifikasi di posisi/ukuran pilihan (bisa halaman mana pun).
             page.merge_page(overlay_qr[1])
-        if idx == len(reader.pages) - 1:
+        if overlay is not None and idx == len(reader.pages) - 1:
             # Slot ttd otomatis (+ QR otomatis bila tak diatur) di halaman akhir.
             page.merge_page(overlay)
         writer.add_page(page)
     out = io.BytesIO()
     writer.write(out)
     out.seek(0)
+    return out
+
+
+def _semua_sudah_ttd(sr: dict) -> bool:
+    daftar = sr.get("signers") or []
+    return bool(daftar) and all(
+        str(s.get("signature_file_id") or "").strip() for s in daftar)
+
+
+def _qr_sudah_diatur(sr: dict) -> bool:
+    return isinstance(sr.get("posisi_qr"), dict)
+
+
+def _siap_diunduh(sr: dict) -> bool:
+    """Dokumen ber-TTD boleh dibagikan ke penanda tangan & pemindai QR HANYA
+    setelah (a) semua pihak meneken dan (b) pemilik menempatkan QR verifikasi.
+    Syarat (b) sengaja: tanpa itu QR jatuh di slot otomatis yang bisa menimpa
+    kaki halaman — dan status "belum diatur" itulah yang dipakai layar admin
+    sebagai penanda agar segera mengaturnya."""
+    return (sr.get("status") != "batal" and _semua_sudah_ttd(sr)
+            and _qr_sudah_diatur(sr)
+            and bool(str(sr.get("dok_file_id") or "").strip()))
+
+
+def _respons_pdf_ttd(sr: dict, out: io.BytesIO):
     nama_dok = str(sr.get("dok_nama") or "dokumen.pdf").rsplit(".", 1)[0]
     return StreamingResponse(
         out, media_type="application/pdf",
         headers={"Content-Disposition":
                  f'inline; filename="{nama_dok}_ber-TTD.pdf"',
                  "X-Content-Type-Options": "nosniff"})
+
+
+@ttd_router.get("/ttd/permintaan/{sr_id}/dokumen-ttd")
+async def dokumen_ber_ttd(sr_id: str,
+                          user: dict = Depends(require_user_or_query_token)):
+    """Dokumen PDF asli DENGAN BUBUHAN tanda tangan elektronik: gambar ttd +
+    nama/NIP/jabatan + waktu per penanda tangan yang sudah meneken, plus QR
+    verifikasi & kode. Dibangun on-the-fly sehingga selalu memuat tanda tangan
+    terbaru."""
+    sr, data = await _ambil_dokumen_sr(sr_id)
+    # IDOR (REVIEW-9 R11): dokumen ber-TTD memuat gambar tanda tangan +
+    # NIP + jabatan penanda tangan. Guard pemilik/satker yang sama sudah
+    # dipakai endpoint saudaranya — di sini terlewat.
+    _pastikan_pemilik_sr(sr, user)
+    _tolak_bila_batal(sr)  # dokumen ber-TTD dari permintaan batal → tak berlaku
+    if not any(str(s.get("signature_file_id") or "").strip()
+               for s in (sr.get("signers") or [])):
+        raise HTTPException(status_code=400,
+                            detail="Belum ada tanda tangan yang masuk")
+    return _respons_pdf_ttd(sr, await _bangun_pdf_ber_ttd(sr, sr_id, data))
+
+
+@ttd_router.get("/ttd/tandatangan/{sr_id}/dokumen-ttd")
+async def dokumen_ber_ttd_penanda_tangan(sr_id: str,
+                                         tok: dict = Depends(require_sign_token)):
+    """Unduhan dokumen ber-TTD untuk PENANDA TANGAN lewat link e-sign-nya —
+    tersedia setelah semua pihak meneken DAN pemilik menempatkan QR."""
+    if tok["sr"] != sr_id:
+        raise HTTPException(status_code=401, detail="Token tidak cocok dokumen")
+    sr, data = await _ambil_dokumen_sr(sr_id)
+    _pastikan_jti_signer(sr, tok)
+    _tolak_bila_batal(sr)
+    if not _siap_diunduh(sr):
+        raise HTTPException(status_code=409, detail=(
+            "Dokumen ber-tanda tangan belum siap — menunggu seluruh pihak "
+            "menandatangani dan penempatan QR verifikasi oleh penerbit"))
+    return _respons_pdf_ttd(sr, await _bangun_pdf_ber_ttd(sr, sr_id, data))
+
+
+@ttd_router.get("/ttd/verifikasi/{sr_id}/dokumen-ttd")
+@limiter.limit("30/minute")
+async def dokumen_ber_ttd_verifikasi(sr_id: str, request: Request):
+    """Unduhan dokumen ber-TTD dari halaman VERIFIKASI (dibuka lewat pemindaian
+    QR pada dokumen). Terbuka bagi pemegang tautan verifikasi — id-nya UUID
+    acak dan hanya tercetak pada dokumen itu sendiri — dan HANYA setelah semua
+    pihak meneken serta QR ditempatkan; permintaan yang dibatalkan ditolak."""
+    sr = await db.signature_requests.find_one({"id": sr_id}, _PROJ)
+    if not sr:
+        raise HTTPException(status_code=404, detail="Permintaan tidak ditemukan")
+    _tolak_bila_batal(sr)
+    if not _siap_diunduh(sr):
+        raise HTTPException(status_code=409, detail=(
+            "Dokumen ber-tanda tangan belum siap diunduh"))
+    data = await get_document_from_gridfs(str(sr.get("dok_file_id") or ""))
+    if not data:
+        raise HTTPException(status_code=404, detail="Berkas dokumen tidak ditemukan")
+    return _respons_pdf_ttd(sr, await _bangun_pdf_ber_ttd(sr, sr_id, data))
 
 
 @ttd_router.get("/ttd/permintaan")
@@ -912,6 +1013,13 @@ async def daftar_permintaan(_user: dict = Depends(require_user)):
         sg = it.get("signers") or []
         it["jumlah"] = len(sg)
         it["selesai_jumlah"] = sum(1 for s in sg if s.get("status") == "ditandatangani")
+        # Penanda kerja untuk layar admin: yang SUDAH lengkap diteken tapi QR-nya
+        # belum ditempatkan menahan unduhan bagi penanda tangan & pemindai QR —
+        # tampilkan mencolok supaya segera dibereskan.
+        it["perlu_atur_qr"] = (it.get("status") != "batal"
+                               and bool(str(it.get("dok_file_id") or "").strip())
+                               and _semua_sudah_ttd(it) and not _qr_sudah_diatur(it))
+        it["siap_diunduh"] = _siap_diunduh(it)
     return {"items": items}
 
 
@@ -922,7 +1030,12 @@ async def detail_permintaan(sr_id: str, user: dict = Depends(require_user)):
     if not sr:
         raise HTTPException(status_code=404, detail="Permintaan tidak ditemukan")
     _pastikan_pemilik_sr(sr, user)  # isolasi: hanya pembuat/admin
-    return sr
+    return {**sr,
+            "perlu_atur_qr": (sr.get("status") != "batal"
+                              and bool(str(sr.get("dok_file_id") or "").strip())
+                              and _semua_sudah_ttd(sr)
+                              and not _qr_sudah_diatur(sr)),
+            "siap_diunduh": _siap_diunduh(sr)}
 
 
 @ttd_router.delete("/ttd/permintaan/{sr_id}")
@@ -1073,7 +1186,13 @@ async def info_tandatangan(sr_id: str, tok: dict = Depends(require_sign_token)):
             # + pratinjau pembubuhan (jumlah halaman utk navigasi posisi)
             "ada_dokumen": bool(str(sr.get("dok_file_id") or "").strip()),
             "dok_nama": sr.get("dok_nama", ""),
-            "jumlah_halaman": int(sr.get("dok_halaman") or 0)}
+            "jumlah_halaman": int(sr.get("dok_halaman") or 0),
+            # Hasil akhir bisa diunduh penanda tangan setelah SEMUA meneken dan
+            # penerbit menempatkan QR; `menunggu_qr` menerangkan penantiannya.
+            "siap_diunduh": _siap_diunduh(sr),
+            "menunggu_qr": (sr.get("status") != "batal" and _semua_sudah_ttd(sr)
+                            and not _qr_sudah_diatur(sr)
+                            and bool(str(sr.get("dok_file_id") or "").strip()))}
 
 
 @ttd_router.post("/ttd/tandatangan/{sr_id}/kirim")
@@ -1240,14 +1359,23 @@ async def verifikasi_publik(sr_id: str):
     hanya menampilkan siapa menandatangani & kapan (bukan gambar/hash mentah)."""
     sr = await db.signature_requests.find_one(
         {"id": sr_id}, {"_id": 0, "judul": 1, "doc_type": 1, "status": 1,
-                        "created_at": 1, "signers.nama": 1, "signers.jabatan": 1,
-                        "signers.nip": 1, "signers.status": 1, "signers.signed_at": 1})
+                        "created_at": 1, "dok_file_id": 1, "posisi_qr": 1,
+                        "signers.nama": 1, "signers.jabatan": 1,
+                        "signers.nip": 1, "signers.status": 1,
+                        "signers.signed_at": 1, "signers.signature_file_id": 1})
     if not sr:
         raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
     dibatalkan = sr.get("status") == "batal"
     return {
         "judul": sr.get("judul"), "doc_type": sr.get("doc_type"),
         "status": sr.get("status"), "dibuat": sr.get("created_at"),
+        # Unduhan dokumen ber-TTD dari halaman verifikasi: hanya setelah semua
+        # meneken DAN QR ditempatkan. `menunggu_qr` dipakai layar untuk
+        # menerangkan mengapa tombolnya belum ada (bukan diam-diam hilang).
+        "dapat_unduh": _siap_diunduh(sr),
+        "menunggu_qr": (not dibatalkan and _semua_sudah_ttd(sr)
+                        and not _qr_sudah_diatur(sr)
+                        and bool(str(sr.get("dok_file_id") or "").strip())),
         # Tanda pembatalan eksplisit agar halaman publik menegaskan dokumen
         # TIDAK berlaku, alih-alih tampak sah (celah A2).
         "dibatalkan": dibatalkan,

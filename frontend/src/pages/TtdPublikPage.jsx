@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
-  BadgeCheck, CircleAlert, Clock, FileSignature, Loader2, PenTool,
+  BadgeCheck, CircleAlert, Clock, FileDown, FileSignature, Loader2, PenTool,
   ShieldCheck, Users,
 } from "lucide-react";
 import SignatureCapture from "@/components/ttd/SignatureCapture";
@@ -142,7 +142,26 @@ function Verifikasi({ id }) {
           </div>
         ))}
       </div>
-      <p className="text-[11px] text-muted-foreground leading-relaxed border-t border-border pt-3">{data.catatan}</p>
+      {/* Unduhan dokumen ber-TTD: muncul HANYA setelah semua pihak meneken
+          DAN penerbit menempatkan QR verifikasi. Saat masih menunggu QR,
+          alasannya dinyatakan terus terang — bukan tombol yang hilang
+          tanpa penjelasan. */}
+      {data.dapat_unduh && (
+        <div className="mt-3">
+          <Button className="w-full h-11 text-sm" data-testid="verif-unduh-ttd"
+            onClick={() => window.open(`${API}/ttd/verifikasi/${id}/dokumen-ttd`, "_blank", "noopener")}>
+            <FileDown className="w-4 h-4 mr-1.5" />Unduh Dokumen ber-Tanda Tangan
+          </Button>
+        </div>
+      )}
+      {!data.dapat_unduh && data.menunggu_qr && (
+        <div className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-2.5 text-[11px] text-amber-700 dark:text-amber-300"
+          data-testid="verif-menunggu-qr">
+          Semua pihak sudah menandatangani. Dokumen ber-tanda tangan dapat
+          diunduh setelah penerbit menempatkan kode QR verifikasi pada dokumen.
+        </div>
+      )}
+      <p className="text-[11px] text-muted-foreground leading-relaxed border-t border-border pt-3 mt-3">{data.catatan}</p>
     </Kartu>
   );
 }
@@ -188,6 +207,10 @@ function TandaTangan({ id, token }) {
         { params: { token }, timeout: 60000 });
       setSukses(true);
       setPngSiap(null);
+      // Muat ulang status: bila tanda tangan ini yang MELENGKAPI (mode paralel,
+      // siapa pun terakhir), layar sukses langsung menampilkan tombol unduh /
+      // keterangan menunggu QR — tanpa perlu buka ulang tautan.
+      muat();
       try { sessionStorage.removeItem(drafKey); } catch { /* noop */ }
       toast.success("Tanda tangan berhasil dikirim");
     } catch (e) {
@@ -258,6 +281,16 @@ function TandaTangan({ id, token }) {
           <p className="text-sm text-muted-foreground">
             Tanda tangan Anda untuk <b>{info.judul}</b> sudah tercatat dengan aman.
           </p>
+          {/* Unduhan hasil akhir untuk penanda tangan — hanya bila semua sudah
+              meneken DAN QR sudah ditempatkan penerbit. */}
+          {info.siap_diunduh && (
+            <Button size="sm" className="h-10 text-xs" data-testid="ttd-unduh-hasil"
+              onClick={() => window.open(
+                `${API}/ttd/tandatangan/${id}/dokumen-ttd?token=${encodeURIComponent(token)}`,
+                "_blank", "noopener")}>
+              <FileDown className="w-3.5 h-3.5 mr-1.5" />Unduh Dokumen ber-Tanda Tangan
+            </Button>
+          )}
           <Button variant="outline" size="sm" className="h-9 text-xs"
             onClick={() => { window.location.href = `/ttd/verifikasi/${id}`; }}>
             <ShieldCheck className="w-3.5 h-3.5 mr-1.5" />Lihat status dokumen
