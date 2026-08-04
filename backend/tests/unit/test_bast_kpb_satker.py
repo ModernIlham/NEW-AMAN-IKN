@@ -436,7 +436,7 @@ def test_pdf_pengembalian_tanpa_pasal_kewajiban_penggunaan(dbx):
 
 # ── Batas 2 lembar (mandat pemilik) ─────────────────────────────────────────
 
-_MIN_ASET_DUA_HALAMAN = 6   # jumlah aset yang WAJIB muat pada tiap jenis BAST
+_MIN_ASET_DUA_HALAMAN = 12  # jumlah aset yang WAJIB muat pada tiap jenis BAST
 
 _KODE_UJI = ["3020104001", "3100102003", "3050101001", "3060101001",
              "3080101001"]                       # lima BIDANG berbeda
@@ -476,7 +476,8 @@ def _aset_uji(n):
 @pytest.mark.parametrize("jenis", list(rb.JENIS_BAST))
 def test_semua_jenis_bast_maksimal_dua_halaman(dbx, jenis):
     """Mandat: SELURUH jenis BAST tersaji maksimal 2 lembar TERMASUK tanda
-    tangan, pada muatan wajar (6 aset lintas 5 bidang → 5 pasal khusus).
+    tangan, pada muatan wajar (12 aset lintas 5 bidang → 5 sekat + 4 butir
+    ketentuan khusus, kondisi TERBERAT tiap jenis).
 
     Dijaga di sini karena regresinya senyap: menambah satu pasal atau satu
     butir panjang mendorong blok tanda tangan ke halaman ketiga, dan tidak ada
@@ -523,3 +524,57 @@ def test_semua_jenis_bast_maksimal_dua_halaman(dbx, jenis):
     n = _jumlah_halaman(_jalan(skenario()))
     assert n <= 2, (f"BAST {jenis} memakan {n} halaman pada "
                     f"{_MIN_ASET_DUA_HALAMAN} aset — batas mandat 2 lembar")
+
+
+# ── Sekat pembagi per BIDANG pada tabel objek serah terima (mandat pemilik) ──
+
+def test_pdf_sekat_bidang_dengan_jumlah_unit_dan_urutan_nup(dbx):
+    """Tabel Objek Serah Terima dibagi per BIDANG kode barang, tiap sekat
+    menyebut jumlah unitnya, dan barang berderet menurut kode lalu NUP
+    TERKECIL — sekalipun pengguna memilihnya dengan urutan acak (tangkapan
+    layar pemilik: Camera NUP 1, VR, Camera NUP 2)."""
+    async def skenario():
+        await _seed_dasar(dbx)
+        await dbx.kodefikasi.insert_many([
+            {"kode": "305", "uraian": "Alat Kantor dan Rumah Tangga"},
+            {"kode": "306", "uraian": "Alat Studio, Komunikasi dan Pemancar"},
+        ])
+        acak = [
+            {"id": "k1", "asset_code": "3060102128", "NUP": "1",
+             "asset_name": "Camera Digital", "brand": "Insta360",
+             "model": "X5", "serial_number": "-", "condition": "Baik",
+             "purchase_date": "2026-01-01", "purchase_price": 20_490_000},
+            {"id": "v1", "asset_code": "3050105097", "NUP": "1",
+             "asset_name": "Realitas Virtual Head set", "brand": "Meta",
+             "model": "Quest 3", "serial_number": "-", "condition": "Baik",
+             "purchase_date": "2026-01-01", "purchase_price": 15_990_000},
+            {"id": "k2", "asset_code": "3060102128", "NUP": "2",
+             "asset_name": "Camera Digital", "brand": "Insta360",
+             "model": "X5", "serial_number": "-", "condition": "Baik",
+             "purchase_date": "2026-01-01", "purchase_price": 20_490_000},
+        ]
+        await dbx.bast_serah_terima.insert_one({
+            "id": "bast-sekat", "kode_satker": SATKER,
+            "jenis": "penggunaan_melekat", "nomor": "BAST-11/2026",
+            "tanggal": "2026-08-04",
+            "pihak_pertama": {"nama": "Penyerah", "nip": "", "jabatan": "",
+                              "alamat": ""},
+            "pihak_kedua": {"nama": "Karina Lia Meirita Ulo", "nip": "",
+                            "jabatan": "Perekayasa", "alamat": ""},
+            "asset_ids": [a["id"] for a in acak], "aset": acak,
+            "saksi": [], "keterangan": "", "sertakan_foto": False,
+        })
+        return await _unwrap(rb.bast_pdf)("bast-sekat", _user=USER)
+
+    teks = _teks_pdf(_jalan(skenario()))
+    # Sekat menyebut kode bidang, uraiannya, dan JUMLAH unit kelompok itu
+    assert "BIDANG 305" in teks and "BIDANG 306" in teks
+    assert "Alat Studio, Komunikasi dan Pemancar" in teks
+    assert "1 unit" in teks and "2 unit" in teks
+    # Bidang 305 (VR) mendahului 306 (kamera); dua kamera berdampingan
+    assert teks.index("BIDANG 305") < teks.index("BIDANG 306")
+    i_vr = teks.index("Realitas Virtual")
+    i_kam = teks.index("Camera Digital", teks.index("BIDANG 306"))
+    assert i_vr < i_kam, "kelompok bidang tidak boleh saling menyisip"
+    # Nomor urut tetap menerus 1..3 melintasi sekat (bukan mulai ulang)
+    assert "JUMLAH" in teks and "56.970.000" in teks

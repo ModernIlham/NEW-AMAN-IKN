@@ -1116,30 +1116,59 @@ pengurangan informasi:
 
 - **Dasar hukum** dicetak sebagai satu kalimat mengalir (dulu daftar bernomor
   5 baris); rujukan peraturannya identik.
-- **Uraian Sub-sub Kelompok** pada tabel hanya ditampilkan bila jumlah barang
-  ≤ 4. Uraian itu adalah *lookup* dari kode barang yang tetap tercetak pada
-  setiap baris, jadi tidak ada data yang hilang dari dokumen.
+- **Uraian Sub-sub Kelompok** pada tabel hanya ditampilkan bila TABEL masih
+  pendek — diukur dari jumlah **baris** (barang + sekat bidang, ambang 6),
+  bukan jumlah barang saja. Uraian itu adalah *lookup* dari kode barang yang
+  tetap tercetak pada setiap baris, jadi tidak ada data yang hilang dari
+  dokumen. (Ambang berbasis barang saja pernah membuat BAST 4 barang di 4
+  bidang justru LEBIH tinggi daripada BAST 6 barang di 2 bidang.)
 - Kerapatan naskah & padding baris tabel dirapatkan; **ukuran huruf badan
   naskah tidak dikecilkan** (keterbacaan dokumen resmi dijaga).
-- Celah tanda tangan basah BAST 12 mm (dokumen lain tetap 15 mm).
+- Celah tanda tangan basah BAST 11 mm (dokumen lain tetap 15 mm).
 
 **Kapasitas terukur** (diukur dengan pypdfium2 atas PDF sungguhan; referensi
-kodefikasi terisi, barang tersebar di 5 bidang sehingga pasal khusus penuh):
+kodefikasi terisi, barang tersebar di 5 bidang sehingga ketentuan khusus penuh
+dan sekat pembagi bidang terbanyak — kondisi TERBERAT):
 
 | Jenis BAST | Jumlah aset maksimum agar tetap 2 lembar |
 |---|---|
-| penggunaan_melekat · mutasi_pengguna · lainnya | 15 |
-| pengembalian | 24 |
-| pengembalian_almarhum | 16 |
-| penggunaan_sementara | 7 |
-| operasional_unit | 6 |
+| pengembalian | 22 |
+| pengembalian_almarhum | 14 |
+| penggunaan_melekat · mutasi_pengguna · penggunaan_sementara · lainnya | 13 |
+| operasional_unit | 12 |
+
+Angka di atas berlaku pada sebaran 5 bidang; BAST yang barangnya sebidang
+memuat lebih banyak karena sekatnya hanya satu.
 
 **Batas jujur**: volume tabel aset adalah aritmetika — melebihi angka di atas,
 halaman ketiga tidak terhindarkan (baris barang tidak boleh dibuang dari
-berita acara). Ambang terendah (6) dijaga uji regresi
+berita acara). Ambang terendah (12) dijaga uji regresi
 `test_semua_jenis_bast_maksimal_dua_halaman` untuk **setiap** jenis, sehingga
 penambahan pasal/butir baru yang mendorong naskah ke halaman ketiga langsung
 menggagalkan CI, bukan ketahuan setelah dokumen dicetak.
+
+### 11C.6 Sekat pembagi per BIDANG pada daftar barang
+
+Tabel barang pada **PASAL 1 — Objek Serah Terima** (seluruh jenis BAST) dan
+pada **Daftar Barang yang Digunakan** (lampiran BAST Penggunaan) dibagi per
+**BIDANG kode barang**, dengan susunan yang identik pada keduanya agar
+lampiran dan induknya terbaca sebagai satu dokumen:
+
+- **Baris sekat** melebar penuh: `BIDANG <kode> — <uraian kodefikasi> · N unit`.
+  Uraian bidang diambil dari referensi kodefikasi; bila belum terdaftar, sekat
+  cukup menyebut kodenya — nama bidang tidak dikarang.
+- **Jumlah unit** setiap kelompok tercetak pada sekatnya; nomor urut barang
+  tetap menerus melintasi sekat (bukan mulai ulang) sehingga jumlah baris tetap
+  dapat dicocokkan dengan total dokumen.
+- **Urutan baku**: bidang → kode barang → **NUP terkecil** (dibandingkan
+  sebagai ANGKA, sehingga NUP 2 mendahului NUP 10). Barang tanpa kode/NUP
+  didorong ke belakang, tidak menyelinap ke depan.
+- Pengurutan hanya untuk **tampilan** — daftar aset yang tersimpan pada
+  dokumen tidak diubah.
+
+Logika murninya di `kodefikasi_utils` (`kunci_urut_aset`, `urutkan_aset_bmn`,
+`kelompokkan_per_bidang`), penyajiannya di `routes/reports.py`
+(`_peta_uraian_bidang`, `_baris_sekat_bidang`, `_gaya_sekat_bidang`).
 
 ## 12. Kendala Umum Satker → Fitur Penangkal AMAN
 

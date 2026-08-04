@@ -67,6 +67,54 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#741] Daftar barang bersekat per BIDANG + jumlah unit, terurut NUP terkecil — 2026-08-04
+
+Tabel barang pada **PASAL 1 — Objek Serah Terima** (seluruh jenis BAST) dan
+pada **Daftar Barang yang Digunakan** (lampiran BAST Penggunaan) kini dibagi
+per **BIDANG kode barang**, dengan susunan yang identik pada keduanya.
+
+- **Baris sekat** melebar penuh menyebut kode bidang, uraiannya dari referensi
+  kodefikasi, dan **jumlah unit** kelompok itu — mis. `BIDANG 306 — Alat
+  Studio, Komunikasi dan Pemancar · 2 unit`. Bidang yang belum terdaftar di
+  referensi cukup disebut kodenya; namanya tidak dikarang.
+- **Urutan baku**: bidang → kode barang → **NUP terkecil**. NUP dibandingkan
+  sebagai ANGKA, jadi NUP 2 mendahului NUP 10 (perbandingan teks membalik
+  keduanya). Kasus pada tangkapan layar pemilik — Camera NUP 1, VR, lalu
+  Camera NUP 2 — kini berderet rapi: VR (305) dulu, baru dua kamera (306).
+- Nomor urut tetap menerus melintasi sekat (bukan mulai ulang) sehingga
+  jumlah baris tetap cocok dengan total dokumen; barang tanpa kode/NUP didorong
+  ke belakang, bukan menyelinap ke depan. Pengurutan hanya untuk tampilan —
+  daftar aset yang tersimpan pada dokumen tidak diubah.
+
+### Batas 2 lembar dipertahankan, malah membaik
+
+Uji regresi halaman langsung menangkap bahwa sekat mendorong BAST operasional
+unit & penggunaan sementara ke halaman ketiga. Ruangnya direbut kembali:
+kerapatan antar-pasal dirapatkan, padding baris & sekat ditipiskan, celah tanda
+tangan BAST 12 → 11 mm, dan **ambang tampil uraian Sub-sub Kelompok kini
+diukur dari jumlah BARIS (barang + sekat), bukan jumlah barang**. Ambang lama
+menyimpan keanehan: BAST 4 barang di 4 bidang lebih tinggi daripada BAST 6
+barang di 2 bidang, sehingga dokumen kecil justru bisa 3 halaman.
+
+Kapasitas terukur (pypdfium2, kondisi terberat 5 bidang) naik dari sebelumnya:
+
+| Jenis BAST | Aset maksimum agar tetap 2 lembar |
+|---|---|
+| pengembalian | 22 |
+| pengembalian almarhum | 14 |
+| penggunaan melekat · mutasi pengguna · penggunaan sementara · lainnya | 13 |
+| operasional unit | 12 (sebelumnya 6) |
+
+Ambang uji regresi dinaikkan 6 → **12 aset** untuk setiap jenis.
+
+Uji: 7 uji murni pengurutan/pengelompokan (NUP angka vs teks, satu bidang tak
+pecah dua sekat, jumlah unit menjumlah seluruh baris, kode/NUP kosong,
+daftar asal tak berubah) + 3 uji PDF nyata (sekat & jumlah unit pada BAST,
+pada lampiran, dan lampiran tanpa referensi kodefikasi). `pytest tests/unit` →
+1603 lolos. Rincian di `docs/PUSTAKA-REGULASI-BMN.md` §11C.6.
+
+---
+
 ## [#740] Pasal BAST dikonsolidasi — seluruh jenis BAST kini maksimal 2 lembar termasuk tanda tangan — 2026-08-04
 
 Pasal yang bermakna sama digabung dan kalimatnya dipadatkan **tanpa mengurangi

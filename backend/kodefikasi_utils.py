@@ -88,6 +88,49 @@ def hierarchy_prefixes(kode: str):
     return out
 
 
+def kunci_urut_aset(a) -> tuple:
+    """Kunci urut baku daftar BMN: BIDANG → kode barang → NUP TERKECIL.
+
+    NUP dibandingkan sebagai ANGKA (NUP 2 sebelum NUP 10 — perbandingan teks
+    akan membalik keduanya). Aset tanpa kode/NUP terdorong ke belakang alih-alih
+    menyelinap ke depan karena string kosong lebih kecil.
+    """
+    kode = normalize_kode((a or {}).get("asset_code"))
+    bidang = kode[:LEVEL_LENGTHS[2]]
+    nup = str((a or {}).get("NUP") or "").strip()
+    angka = int(nup) if nup.isdigit() else None
+    return (
+        0 if bidang else 1, bidang,
+        0 if kode else 1, kode,
+        0 if angka is not None else 1, angka or 0, nup,
+        str((a or {}).get("asset_name") or ""),
+    )
+
+
+def urutkan_aset_bmn(aset):
+    """Salinan daftar aset terurut menurut `kunci_urut_aset` (tak mengubah
+    daftar asal — dokumen tersimpan tetap apa adanya)."""
+    return sorted(list(aset or []), key=kunci_urut_aset)
+
+
+def kelompokkan_per_bidang(aset):
+    """[(kode_bidang, [aset...])] terurut — sekat pembagi daftar barang.
+
+    Aset satu bidang selalu berdampingan karena daftar diurutkan lebih dulu,
+    sehingga satu bidang tidak pernah pecah menjadi dua sekat. Aset tanpa kode
+    barang berkumpul pada kunci "" di akhir (dinyatakan apa adanya, bukan
+    disembunyikan).
+    """
+    hasil = []
+    for a in urutkan_aset_bmn(aset):
+        bidang = normalize_kode((a or {}).get("asset_code"))[:LEVEL_LENGTHS[2]]
+        if hasil and hasil[-1][0] == bidang:
+            hasil[-1][1].append(a)
+        else:
+            hasil.append((bidang, [a]))
+    return hasil
+
+
 def level_terdaftar_terdalam(kode, terdaftar) -> int:
     """Level TERDALAM (1-5) yang prefix kode-nya ada di referensi kodefikasi;
     0 bila tak satu pun (bahkan golongan level 1) terdaftar (§5A gap #7 —

@@ -788,10 +788,12 @@ async def bast_pdf(bast_id: str, nilai: str = "",
     from reportlab.platypus import PageBreak, Paragraph, Spacer, Table, Image as RLImage
 
     from pelaporan_utils import narasi_hari_tanggal
+    from kodefikasi_utils import kelompokkan_per_bidang as _kelompokkan_per_bidang
     from routes.reports import (
-        _blok_tembusan, _fit_col_widths, _fmt_tanggal_id, _get_report_styles,
-        _gridfs_photo_data_uri, _identity_table, _kop_surat_flowables,
-        _page_footer_factory, _peta_subsub_kelompok, _sel_identitas_barang,
+        _baris_sekat_bidang, _blok_tembusan, _fit_col_widths, _fmt_tanggal_id,
+        _get_report_styles, _gaya_sekat_bidang, _gridfs_photo_data_uri,
+        _identity_table, _kop_surat_flowables, _page_footer_factory,
+        _peta_subsub_kelompok, _peta_uraian_bidang, _sel_identitas_barang,
         _sel_uraian_barang, _signature_block, _std_doc, _std_table_style,
         _tempat_tanggal_laporan, _title_block,
     )
@@ -835,10 +837,10 @@ async def bast_pdf(bast_id: str, nilai: str = "",
     # 2 halaman termasuk tanda tangan.
     isi = ParagraphStyle('BastIsi', parent=body, fontSize=8.6, leading=11.0,
                          alignment=TA_JUSTIFY, textColor=HexColor("#111827"),
-                         spaceAfter=1.0)
+                         spaceAfter=0.6)
     lbl_pasal = ParagraphStyle('BastPasal', parent=body, fontSize=9,
                                leading=11.0, alignment=TA_CENTER,
-                               spaceBefore=3.5, spaceAfter=1.5,
+                               spaceBefore=2.5, spaceAfter=1.0,
                                textColor=HexColor("#111827"))
     ket = ParagraphStyle('BastKet', parent=isi, fontSize=8.2, leading=10.4)
 
@@ -935,14 +937,20 @@ async def bast_pdf(bast_id: str, nilai: str = "",
                 else "PIHAK KESATU menyerahkan dan PIHAK KEDUA menerima penyerahan")
     el.append(Paragraph(
         f"{kalimat1} Barang Milik Negara dengan rincian sebagai berikut:", isi))
-    # Uraian SUB-SUB KELOMPOK ditampilkan hanya bila jumlah barang sedikit.
-    # Pada BAST ber-banyak barang uraian itu dilepas: maknanya TIDAK hilang —
-    # sub-sub kelompok adalah turunan (lookup) kode barang yang tetap tercetak
-    # pada tiap baris — dan inilah yang menjaga naskah tetap 2 halaman.
-    _AMBANG_SUBSUB = 4
-    _n_aset = len(b.get("aset") or [])
-    subsub = ({} if _n_aset > _AMBANG_SUBSUB else await _peta_subsub_kelompok(
-        [a.get("asset_code") for a in (b.get("aset") or [])]))
+    # Sekat pembagi per BIDANG kode barang; di dalam kelompok barang terurut
+    # menurut kode barang lalu NUP TERKECIL (dulu urutan pilih pengguna).
+    _kelompok = _kelompokkan_per_bidang(b.get("aset") or [])
+    # Uraian SUB-SUB KELOMPOK ditampilkan hanya bila TABEL masih pendek —
+    # diukur dari jumlah BARIS (aset + sekat), bukan jumlah aset saja. Kalau
+    # diukur dari aset saja, BAST 4 barang di 4 bidang (8 baris) justru lebih
+    # tinggi daripada BAST 6 barang di 2 bidang dan menembus halaman ketiga.
+    # Maknanya TIDAK hilang saat dilepas: sub-sub kelompok adalah turunan
+    # (lookup) kode barang yang tetap tercetak pada tiap baris.
+    _AMBANG_BARIS_SUBSUB = 6
+    _n_baris = len(b.get("aset") or []) + len(_kelompok)
+    subsub = ({} if _n_baris > _AMBANG_BARIS_SUBSUB
+              else await _peta_subsub_kelompok(
+                  [a.get("asset_code") for a in (b.get("aset") or [])]))
     from kodefikasi_utils import normalize_kode as _norm
     from pembukuan_utils import parse_harga as _ph
     kepala = ["No", "Identitas Barang<br/>(Sub-sub Kelompok · Kode · NUP)",
@@ -963,26 +971,41 @@ async def bast_pdf(bast_id: str, nilai: str = "",
                                     fontSize=7.8, leading=9.6)
     st['TableHeader'] = ParagraphStyle('BastSelHead', parent=st['TableHeader'],
                                        fontSize=7.8, leading=9.6)
+    # Baris sekat kelompok bidang: satu baris pendek, tak boleh memakan ruang
+    # sebesar baris barang (batas 2 halaman).
+    st['CellSekat'] = ParagraphStyle('BastSekat', parent=st['Cell'],
+                                     fontSize=7.4, leading=8.8)
     data = [[Paragraph(h, st['TableHeader']) for h in kepala]]
     total_nilai = 0.0
-    for i, a in enumerate(b.get("aset") or [], 1):
-        tgl = str(a.get("purchase_date") or "")
-        tahun = tgl[:4] if len(tgl) >= 4 and tgl[:4].isdigit() else (
-            tgl[-4:] if len(tgl) >= 4 and tgl[-4:].isdigit() else "-")
-        nilai = _ph(a.get("purchase_price"))
-        total_nilai += nilai
-        baris = [
-            Paragraph(str(i), st['CellCenter']),
-            _sel_identitas_barang(a, subsub.get(_norm(a.get("asset_code")), ""), st),
-            _sel_uraian_barang(a, st),
-            Paragraph(tahun, st['CellCenter']),
-            Paragraph(a.get("condition") or "-", st['CellCenter']),
-        ]
-        if tampil_nilai:
-            baris.append(Paragraph(
-                f"{nilai:,.0f}".replace(",", ".") if nilai else "-",
-                st['CellRight'] if 'CellRight' in st else st['CellCenter']))
-        data.append(baris)
+    _uraian_bidang = await _peta_uraian_bidang(
+        [a.get("asset_code") for a in (b.get("aset") or [])])
+    _baris_sekat = []
+    i = 0
+    for _kode_bidang, _isi in _kelompok:
+        _baris_sekat.append(len(data))
+        data.append(_baris_sekat_bidang(_kode_bidang,
+                                        _uraian_bidang.get(_kode_bidang, ""),
+                                        len(_isi), len(kepala), st))
+        for a in _isi:
+            i += 1
+            tgl = str(a.get("purchase_date") or "")
+            tahun = tgl[:4] if len(tgl) >= 4 and tgl[:4].isdigit() else (
+                tgl[-4:] if len(tgl) >= 4 and tgl[-4:].isdigit() else "-")
+            nilai = _ph(a.get("purchase_price"))
+            total_nilai += nilai
+            baris = [
+                Paragraph(str(i), st['CellCenter']),
+                _sel_identitas_barang(
+                    a, subsub.get(_norm(a.get("asset_code")), ""), st),
+                _sel_uraian_barang(a, st),
+                Paragraph(tahun, st['CellCenter']),
+                Paragraph(a.get("condition") or "-", st['CellCenter']),
+            ]
+            if tampil_nilai:
+                baris.append(Paragraph(
+                    f"{nilai:,.0f}".replace(",", ".") if nilai else "-",
+                    st['CellRight'] if 'CellRight' in st else st['CellCenter']))
+            data.append(baris)
     if tampil_nilai:
         data.append([Paragraph("", st['Cell']),
                      Paragraph("<b>JUMLAH</b>", st['Cell']), Paragraph("", st['Cell']),
@@ -993,9 +1016,9 @@ async def bast_pdf(bast_id: str, nilai: str = "",
     # Padding baris dirapatkan KHUSUS tabel BAST (3 → 1.5) — tiap baris aset
     # hemat ~1,5 mm sehingga BAST ber-banyak aset tetap muat 2 halaman.
     t.setStyle(_std_table_style(zebra=True, total_row=tampil_nilai, extra=[
-        ('TOPPADDING', (0, 0), (-1, -1), 1.5),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
-    ]))
+        ('TOPPADDING', (0, 0), (-1, -1), 1.2),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1.2),
+    ] + _gaya_sekat_bidang(_baris_sekat, padding=0.3)))
     el.append(t)
     if not tampil_nilai:
         # Nyatakan terus terang MENGAPA kolom nilai absen — pembaca dokumen
@@ -1146,7 +1169,7 @@ async def bast_pdf(bast_id: str, nilai: str = "",
         "mestinya.",
     ])
 
-    el.append(Spacer(1, 2 * rl_mm))
+    el.append(Spacer(1, 1.5 * rl_mm))
     # Baris "Mengetahui, KPB": otomatis pada mutasi; juga pada non-mutasi bila
     # penyerah bertindak a.n. KPB (pendelegasian) — kaidah §11B.
     an_kpb = bool(b.get("penyerah_atas_nama_kpb")) and jenis != "mutasi_pengguna"
@@ -1198,7 +1221,7 @@ async def bast_pdf(bast_id: str, nilai: str = "",
          'after': baris_identitas_ttd(
              p1.get("nip"), "NIP. -",
              await status_kepegawaian_by_nip(p1.get("nip")))},
-    ] + signers_mengetahui, doc.width, celah_mm=12))
+    ] + signers_mengetahui, doc.width, celah_mm=11))
     # Blok SAKSI — wajib pada pengembalian almarhum (pihak yang seharusnya
     # menyerahkan berhalangan tetap), opsional bila diisi pada jenis lain.
     _saksi_doc = [s for s in (b.get("saksi") or [])
