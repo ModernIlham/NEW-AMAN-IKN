@@ -67,6 +67,86 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#753] Tautan yang dibagikan dipendekkan — 396 → 46 karakter — 2026-08-04
+
+Keluhan pemilik: "link yang dibagikan terlalu panjang semua". Memang:
+
+```
+https://amanikn-inventarisasi.com/ttd/812a8c5e-…?token=eyJhbGciOiJIUzI1…
+                                                        └─ 315 karakter ─┘
+total: 396 karakter
+```
+
+Yang panjang **bukan domainnya** (33 karakter) melainkan **token tanda tangan
+315 karakter** yang ikut menempel di URL. Sekarang menjadi:
+
+```
+https://amanikn-inventarisasi.com/s/K7m2QxV9pT      46 karakter
+```
+
+### Kenapa dibangun sendiri, bukan TinyURL/PicSee
+
+Tautan e-sign itu **kredensial**, bukan sekadar alamat: pemegangnya bisa
+menandatangani dokumen BMN resmi atas nama orang yang dituju. Menitipkannya ke
+pemendek pihak ketiga berarti menyimpan kredensial itu di server pihak lain,
+permanen, di luar kendali satker — dan kode pendek layanan publik terbukti bisa
+disapu/ditebak. Aplikasi ini sudah punya domain sendiri dan MongoDB sendiri,
+jadi memendekkan "di rumah sendiri" menghasilkan tautan yang sama pendeknya,
+gratis, tanpa kuota, tanpa langganan, dan tanpa menyerahkan apa pun ke luar.
+
+Efek samping yang justru menguntungkan: **pesan yang beredar tak lagi membawa
+token**. Selama ini token ikut terbawa setiap kali pesan WA diteruskan atau
+di-tangkap layar.
+
+### Cakupan
+
+Ketiga jenis tautan yang dibagikan keluar aplikasi ikut memendek:
+
+- **Tautan e-sign** per penanda tangan (±396 → ±46 karakter).
+- **Tautan verifikasi** yang jadi isi QR di dokumen ber-TTD — bonusnya modul QR
+  jadi lebih renggang sehingga lebih mudah dipindai kamera HP pada cetak ±2 cm.
+- **Tautan berbagi Peta Kolaborasi**.
+
+### Masa berlaku & pencabutan
+
+Tautan pendek tak boleh hidup lebih lama dari tautan panjang yang diwakilinya:
+
+- Masa berlakunya disamakan dengan masa berlaku token di dalamnya.
+- Permintaan TTD **dibatalkan** → seluruh tautan pendeknya (termasuk tautan
+  verifikasi di QR) ikut mati; rute panjang sudah menolak 410, tautan pendek
+  tak boleh jadi pintu belakang yang tampak hidup.
+- Link e-sign **diterbitkan ulang** untuk SEORANG penanda tangan → hanya tautan
+  orang itu yang dicabut. Rekannya yang belum meneken tetap memegang tautan
+  sah — inilah sebabnya pencabutan ber-dua-lapis (`ref` dokumen + `sub_ref`
+  penanda tangan), bukan sapu-rata per permintaan.
+- Rotasi jti pada berbagi peta juga mencabut tautan pendek lamanya.
+
+### Panjang kode — dan kenapa tidak dipendekkan lagi
+
+10 karakter base62 ≈ 8,4 × 10^17 kemungkinan (±2^59,5), dipadu batas laju
+60/menit di endpoint penukaran. Kode ini BERDIRI MENGGANTIKAN tautan
+ber-kredensial, jadi ia harus sama sulitnya ditebak; memangkasnya demi tampilan
+= memperlemah gerbang tanda tangan. Dari 46 karakter, **25 adalah nama
+domainnya sendiri** — tuas yang tersisa hanya menyewa domain lebih pendek, dan
+untuk itu cukup mengganti `APP_PUBLIC_URL` tanpa perubahan kode.
+
+### Catatan teknis
+
+Pengalihan dikerjakan halaman `/s/{kode}` di frontend (menukar lewat
+`GET /api/s/{kode}`), bukan 301 dari nginx — supaya fitur ini hidup lewat
+pipeline deploy biasa tanpa menyentuh konfigurasi VPS, dan tak ada mode gagal
+senyap "tautan pendek 404 karena nginx belum diperbarui". Gagal memendekkan
+tidak pernah menggagalkan penerbitan permintaan TTD maupun berbagi peta —
+pemanggil jatuh ke tautan panjang seperti sebelumnya. Tautan panjang lama tetap
+berfungsi.
+
+Uji: 21 uji baru (panjang & keacakan kode, jatuh ke relatif tanpa basis URL,
+kedaluwarsa, kedaluwarsa tak terbaca tidak mematikan, pencabutan per-penanda
+tangan vs per-permintaan, pemakaian ulang kode QR, kegagalan simpan
+mengembalikan kosong alih-alih melempar, plus integrasi: tautan e-sign yang
+dibagikan berbentuk pendek, menukar balik ke alamat asli, dan mati saat
+permintaan dibatalkan). Total 1.696 uji backend + 434 uji frontend hijau.
+
 ## [#752] Atur letak QR bukan tugas admin saja — operator satker ikut — 2026-08-04
 
 Lanjutan [#751]. Penanda **`PERLU ATUR LETAK QR`** memang sudah ada, tetapi ia

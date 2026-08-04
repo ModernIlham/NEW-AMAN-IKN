@@ -62,6 +62,23 @@ def _link_peta(share_id: str, token: str) -> str:
     return f"{_basis_url_publik()}/peta/kolaborasi/{share_id}?token={token}"
 
 
+async def _link_peta_pendek(share_id: str, token: str, kode_satker: str = "",
+                            oleh: str = "") -> str:
+    """Tautan berbagi peta versi PENDEK — sama pertimbangannya dengan tautan
+    e-sign: token berada di query string, jadi memendekkannya membuat pesan
+    yang beredar (WA/email) tak lagi membawa token itu. Gagal memendekkan
+    jatuh ke tautan panjang; berbagi peta tak boleh batal karenanya."""
+    panjang = _link_peta(share_id, token)
+    try:
+        from tautan_pendek_utils import buat_tautan_pendek, url_pendek
+        kode = await buat_tautan_pendek(
+            panjang, jenis="peta", ref=str(share_id), kode_satker=kode_satker,
+            dibuat_oleh=oleh, pakai_ulang=True)
+        return url_pendek(kode) if kode else panjang
+    except Exception:
+        return panjang
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -318,7 +335,9 @@ async def buat_share(payload: ShareIn, user: dict = Depends(require_writer)):
                     detail=f"Bagikan peta kolaboratif (s.d. {berlaku[:16]})",
                     kode_satker=doc["kode_satker"])
     out = _share_keluar(doc)
-    out["link"] = _link_peta(share_id, token)
+    out["link"] = await _link_peta_pendek(
+        share_id, token, kode_satker=doc["kode_satker"],
+        oleh=user.get("username", ""))
     out["token"] = token
     return out
 
@@ -344,7 +363,9 @@ async def daftar_share(activity_id: str = Query(...),
             continue
         d = _share_keluar(sh)
         if sh.get("status") != "batal":
-            d["link"] = _link_peta(sh["id"], create_map_token(sh["id"], sh.get("jti", "")))
+            d["link"] = await _link_peta_pendek(
+                sh["id"], create_map_token(sh["id"], sh.get("jti", "")),
+                kode_satker=str(sh.get("kode_satker") or ""))
         # jumlah kontribusi (info ringkas)
         d["jumlah_kontribusi"] = await db.peta_kolaborasi.count_documents(
             {"share_id": sh["id"], "dihapus": {"$ne": True}})
@@ -430,8 +451,14 @@ async def terbitkan_ulang_share(share_id: str, payload: PerpanjangIn,
                     username=user.get("username", "system"),
                     detail=f"Terbitkan ulang link peta (rotasi jti) s.d. {berlaku[:16]}",
                     kode_satker=str(sh.get("kode_satker") or ""))
+    # jti dirotasi → tautan pendek lama menunjuk token mati; cabut dulu.
+    from tautan_pendek_utils import cabut_tautan
+    await cabut_tautan("peta", share_id)
+    link = await _link_peta_pendek(share_id, token,
+                                   kode_satker=str(sh.get("kode_satker") or ""),
+                                   oleh=user.get("username", ""))
     return {"ok": True, "berlaku_sampai": berlaku,
-            "link": _link_peta(share_id, token), "token": token}
+            "link": link, "token": token}
 
 
 @peta_kolaborasi_router.post("/peta/share/{share_id}/batal")

@@ -42,7 +42,8 @@ async def _diam(*a, **k):
 def dbx(monkeypatch):
     fake = AsyncMongoMockClient()["uji"]
     import shared_utils as su
-    for mod in (rt, su):
+    import tautan_pendek_utils as tp
+    for mod in (rt, su, tp):
         monkeypatch.setattr(mod, "db", fake, raising=False)
         if hasattr(mod, "log_audit"):
             monkeypatch.setattr(mod, "log_audit", _diam, raising=False)
@@ -497,3 +498,61 @@ def test_operator_boleh_membaca_detail_untuk_membuka_dialog_qr(dbx):
         return await rt.detail_permintaan("sr-dok", user=OPERATOR_A)
     r = _jalan(skenario())
     assert r["perlu_atur_qr"] is True and r["siap_diunduh"] is False
+
+
+# ── Tautan e-sign dipendekkan ──────────────────────────────────────────────
+#
+# Mandat pemilik: "link yang dibagikan terlalu panjang". Tautan lama ±396
+# karakter (315 di antaranya token tanda tangan) — satu pesan WA penuh oleh
+# satu tautan. Kini yang dibagikan berbentuk /s/{kode} ±46 karakter, dan
+# token TIDAK lagi ikut di dalam pesan yang beredar/diteruskan.
+
+def test_link_e_sign_yang_dibagikan_berbentuk_pendek(dbx, monkeypatch):
+    monkeypatch.setenv("APP_PUBLIC_URL", "https://amanikn-inventarisasi.com")
+
+    async def skenario():
+        return await rt.buat_permintaan(
+            payload=rt.PermintaanIn(
+                judul="Dokumen", doc_type="dokumen_unggahan", doc_ref="",
+                mode="paralel", signers=[rt.SignerIn(nama="Budi")]),
+            user=USER_A)
+    hasil = _jalan(skenario())
+    link = hasil["links"][0]["link"]
+    assert "/s/" in link and "token=" not in link
+    assert len(link) < 60          # dari ±396 karakter
+
+
+def test_link_pendek_e_sign_menunjuk_tautan_asli(dbx, monkeypatch):
+    """Pendek TIDAK boleh berarti putus: kodenya harus menukar kembali ke
+    alamat tanda tangan yang sah, lengkap dengan tokennya."""
+    monkeypatch.setenv("APP_PUBLIC_URL", "https://amanikn-inventarisasi.com")
+    import tautan_pendek_utils as tp
+
+    async def skenario():
+        hasil = await rt.buat_permintaan(
+            payload=rt.PermintaanIn(
+                judul="Dokumen", doc_type="dokumen_unggahan", doc_ref="",
+                mode="paralel", signers=[rt.SignerIn(nama="Budi")]),
+            user=USER_A)
+        kode = hasil["links"][0]["link"].rsplit("/s/", 1)[1]
+        return await tp.resolve_tautan(kode)
+    tujuan = _jalan(skenario())
+    assert tujuan and "/ttd/" in tujuan and "token=" in tujuan
+
+
+def test_batal_permintaan_mematikan_tautan_pendeknya(dbx, monkeypatch):
+    """Rute panjang sudah menolak permintaan batal (410); tautan pendek tak
+    boleh jadi pintu belakang yang tampak masih hidup."""
+    monkeypatch.setenv("APP_PUBLIC_URL", "https://amanikn-inventarisasi.com")
+    import tautan_pendek_utils as tp
+
+    async def skenario():
+        hasil = await rt.buat_permintaan(
+            payload=rt.PermintaanIn(
+                judul="Dokumen", doc_type="dokumen_unggahan", doc_ref="",
+                mode="paralel", signers=[rt.SignerIn(nama="Budi")]),
+            user=USER_A)
+        kode = hasil["links"][0]["link"].rsplit("/s/", 1)[1]
+        await rt.batal_permintaan(hasil["id"], user=USER_A)
+        return await tp.resolve_tautan(kode)
+    assert _jalan(skenario()) is None

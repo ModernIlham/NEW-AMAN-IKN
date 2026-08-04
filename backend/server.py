@@ -360,6 +360,7 @@ from routes.lbp import lbp_router
 from routes.email_monitor import email_monitor_router
 from routes.peta_kolaborasi import peta_kolaborasi_router
 from routes.search_admin import search_router
+from routes.tautan_pendek import tautan_pendek_router
 
 api_router.include_router(auth_router)
 api_router.include_router(categories_router)
@@ -421,6 +422,8 @@ api_router.include_router(lbp_router)
 api_router.include_router(email_monitor_router)  # pemantauan kuota email Resend
 api_router.include_router(peta_kolaborasi_router)  # peta kolaboratif via link publik
 api_router.include_router(search_router)  # administrasi Meilisearch (opsional)
+# Penukaran tautan pendek /s/{kode} — publik, ber-batas laju.
+api_router.include_router(tautan_pendek_router)
 
 
 # ============================================================================
