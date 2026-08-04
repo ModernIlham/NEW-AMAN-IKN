@@ -329,7 +329,10 @@ async def buat_bast(payload: BastIn, request: Request = None,
     surat_id = ""
     if payload.booking_otomatis and not nomor_final:
         # Booking nomor otomatis lewat modul Persuratan (buku agenda keluar).
-        from persuratan_utils import bangun_nomor, pilih_klasifikasi
+        # Periode deret mengikuti setelan satker (bulanan/tahunan) — jalur
+        # otomatis WAJIB sedertan dengan booking manual; dua deret yang
+        # diam-diam berbeda tak bisa diperbaiki tanpa menomori ulang arsip.
+        from persuratan_utils import bangun_nomor, periode_urut, pilih_klasifikasi
         from routes.persuratan import _no_agenda_berikut, _pengaturan
         tgl_surat = (str(payload.tanggal or "").strip()[:10]
                      or now.date().isoformat())
@@ -339,13 +342,17 @@ async def buat_bast(payload: BastIn, request: Request = None,
                                       "Berita Acara",
                                       default=atur["kode_klasifikasi_default"])
         tahun = int(tgl_surat[:4]) if tgl_surat[:4].isdigit() else now.year
-        no_agenda = await _no_agenda_berikut("keluar", tahun, _ks)
+        periode = (periode_urut(atur.get("reset_urut"), tgl_surat)
+                   or periode_urut(atur.get("reset_urut"),
+                                   now.date().isoformat()))
+        no_agenda = await _no_agenda_berikut("keluar", periode, _ks)
         nomor_final = bangun_nomor(atur["format_nomor"], no_agenda, tgl_surat,
                                    kode_klasifikasi=kode_klas,
                                    kode_unit=atur["kode_unit"])
         surat_id = str(uuid.uuid4())
         await db.surat.insert_one({
             "id": surat_id, "jenis": "keluar", "no_agenda": no_agenda,
+            "sisipan": 0,
             "tahun": tahun, "nomor": nomor_final, "status": "dibooking",
             # Stempel satker (REVIEW-9 R10): tanpa ini surat booking otomatis
             # muncul di buku agenda & arsip SEMUA satker, dan tak terhitung saat

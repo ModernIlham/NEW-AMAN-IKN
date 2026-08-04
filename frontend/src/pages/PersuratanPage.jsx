@@ -13,6 +13,7 @@ import {
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
+import { labelAgenda, noAgendaTampil } from "@/lib/nomorAgenda";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -35,6 +36,7 @@ const KELUAR_KOSONG = {
   perihal: "", tujuan: "", jenis_naskah: "Laporan", modul: "umum",
   kegiatan_id: "", kode_klasifikasi: "", kode_keamanan: "B",
   tanggal_surat: "", referensi: "", nomor_eksternal: "", keterangan: "",
+  sisipan: false,
 };
 const MASUK_KOSONG = {
   nomor_surat: "", pengirim: "", perihal: "", tanggal_surat: "",
@@ -117,6 +119,7 @@ export default function PersuratanPage({ user, onBack }) {
           kode_keamanan: formKeluar.kode_keamanan || "B",
           tanggal_surat: formKeluar.tanggal_surat || "",
         });
+        if (formKeluar.sisipan) params.append("sisipan", "true");
         const r = await axios.get(`${API}/persuratan/pratinjau-nomor?${params}`);
         setPratinjau(r.data);
       } catch { setPratinjau(null); }
@@ -140,6 +143,9 @@ export default function PersuratanPage({ user, onBack }) {
 
   const booking = () => {
     if (!formKeluar?.perihal?.trim()) { toast.error("Perihal wajib diisi"); return; }
+    if (formKeluar?.sisipan && !formKeluar?.tanggal_surat) {
+      toast.error("Nomor sisipan membutuhkan Tanggal Surat (tanggal backdate)"); return;
+    }
     kirim(async () => {
       const r = await axios.post(`${API}/persuratan/keluar`, formKeluar);
       toast.info(`Nomor dibooking: ${r.data.nomor}`, { duration: 9000 });
@@ -405,7 +411,7 @@ export default function PersuratanPage({ user, onBack }) {
                 <li key={s.id} className="p-3 space-y-1" data-testid={`persuratan-card-${s.id}`}>
                   <div className="flex items-center justify-between gap-2">
                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${s.jenis === "keluar" ? "bg-cyan-500/15 text-cyan-700 dark:text-cyan-400" : "bg-violet-500/15 text-violet-600 dark:text-violet-400"}`}>
-                      {s.jenis === "keluar" ? "K" : "M"}-{String(s.no_agenda).padStart(3, "0")}/{s.tahun}
+                      {labelAgenda(s)}
                     </span>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${WARNA_STATUS[s.status] || "bg-muted text-muted-foreground"}`}>
                       {s.status}
@@ -453,7 +459,7 @@ export default function PersuratanPage({ user, onBack }) {
                     <tr key={s.id} className="border-b border-border/60 last:border-0 hover:bg-muted/50" data-testid={`persuratan-row-${s.id}`}>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${s.jenis === "keluar" ? "bg-cyan-500/15 text-cyan-700 dark:text-cyan-400" : "bg-violet-500/15 text-violet-600 dark:text-violet-400"}`}>
-                          {s.jenis === "keluar" ? "K" : "M"}-{String(s.no_agenda).padStart(3, "0")}/{s.tahun}
+                          {labelAgenda(s)}
                         </span>
                       </td>
                       <td className="px-3 py-2">
@@ -502,6 +508,8 @@ export default function PersuratanPage({ user, onBack }) {
         <p className="text-center text-[10px] text-muted-foreground pb-4">
           Kaidah: nomor dipesan (booking) saat draf → disahkan setelah tanda tangan; nomor batal hangus &
           tercatat beralasan — urutan agenda tetap utuh (PerANRI 5/2021 · buku agenda kembar).
+          Deret nomor kembali ke 001 tiap awal bulan (bisa diubah ke tahunan di Format Nomor);
+          surat telat dibooking memakai nomor sisipan backdate (005 → 005.01).
           Tanda &quot;eks:&quot; pada kolom nomor = nomor sah dari aplikasi eksternal (Srikandi dll.).
         </p>
       </main>
@@ -573,6 +581,25 @@ export default function PersuratanPage({ user, onBack }) {
                 </Field>
               </div>
               <Field label="Keterangan"><Input value={formKeluar.keterangan} onChange={setK("keterangan")} /></Field>
+              {formKeluar.mode !== "edit" && (
+                <label className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 cursor-pointer">
+                  <input type="checkbox" checked={!!formKeluar.sisipan}
+                    onChange={(e) => setFormKeluar((f) => ({ ...f, sisipan: e.target.checked }))}
+                    className="mt-0.5 w-4 h-4 accent-amber-600 min-w-0 min-h-0 flex-shrink-0"
+                    data-testid="keluar-sisipan" />
+                  <span className="text-[11px] leading-snug text-amber-800 dark:text-amber-300">
+                    <b>Nomor sisipan (backdate)</b> — untuk surat yang lupa dibooking dan baru
+                    dibuat sekarang: nomor menempel di belakang nomor terakhir pada tanggal itu
+                    (cth. 005 → <span className="font-mono">005.01</span>) sehingga urutan agenda
+                    tetap kronologis. Wajib mengisi Tanggal Surat; tidak boleh tanggal masa depan.
+                  </span>
+                </label>
+              )}
+              {formKeluar.mode !== "edit" && formKeluar.sisipan && pratinjau?.sisipan_galat && (
+                <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2" data-testid="keluar-sisipan-galat">
+                  <p className="text-[11px] text-red-700 dark:text-red-400">{pratinjau.sisipan_galat}</p>
+                </div>
+              )}
               {formKeluar.mode !== "edit" && pratinjau?.nomor && (
                 <div className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2" data-testid="keluar-pratinjau">
                   <p className="text-[10px] text-muted-foreground">Perkiraan nomor yang akan terbit:</p>
@@ -617,9 +644,9 @@ export default function PersuratanPage({ user, onBack }) {
       <Dialog open={!!formMasuk} onOpenChange={(o) => { if (!o) setFormMasuk(null); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{formMasuk?.mode === "edit" ? `Ubah Surat Masuk — M-${String(formMasuk.no_agenda).padStart(3, "0")}/${formMasuk.tahun}` : "Catat Surat Masuk"}</DialogTitle>
+            <DialogTitle>{formMasuk?.mode === "edit" ? `Ubah Surat Masuk — M-${noAgendaTampil(formMasuk.no_agenda)}/${formMasuk.tahun}` : "Catat Surat Masuk"}</DialogTitle>
             <DialogDescription className="text-xs">
-              {formMasuk?.mode === "edit" ? "Koreksi data surat masuk — nomor agenda tetap." : "Nomor agenda masuk terbit otomatis per tahun."}
+              {formMasuk?.mode === "edit" ? "Koreksi data surat masuk — nomor agenda tetap." : "Nomor agenda masuk terbit otomatis per periode (bulanan/tahunan sesuai pengaturan Format Nomor)."}
             </DialogDescription>
           </DialogHeader>
           {formMasuk && (
@@ -707,8 +734,20 @@ export default function PersuratanPage({ user, onBack }) {
                   <Field label="Kode Unit"><Input value={formAtur.kode_unit} onChange={(e) => setFormAtur((f) => ({ ...f, kode_unit: e.target.value }))} placeholder="cth. OIKN" /></Field>
                   <Field label="Kode Klasifikasi Bawaan (fallback)"><Input value={formAtur.kode_klasifikasi_default} onChange={(e) => setFormAtur((f) => ({ ...f, kode_klasifikasi_default: e.target.value }))} placeholder="cth. UM.01" className="font-mono" /></Field>
                 </div>
+                <Field label="Reset Nomor Urut">
+                  <select value={formAtur.reset_urut || "bulanan"}
+                    onChange={(e) => setFormAtur((f) => ({ ...f, reset_urut: e.target.value }))}
+                    className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                    data-testid="atur-reset-urut">
+                    {(ref?.reset_urut?.length ? ref.reset_urut
+                      : [{ kode: "bulanan", uraian: "Bulanan — nomor kembali ke 001 tiap awal bulan" },
+                         { kode: "tahunan", uraian: "Tahunan — deret satu tahun takwim (PerANRI 5/2021)" }]
+                    ).map((r) => <option key={r.kode} value={r.kode}>{r.uraian}</option>)}
+                  </select>
+                </Field>
                 <p className="text-[10px] text-muted-foreground">
                   Contoh hasil: <span className="font-mono">B-015/PL.02/OIKN/VII/2026</span>. Perubahan hanya memengaruhi booking BERIKUTNYA.
+                  Reset bulanan: bulan berjalan meneruskan deretnya, bulan baru mulai dari 001 — format wajib memuat {"{bulan}"} / {"{bulan_romawi}"} agar nomor antarbulan tak kembar.
                 </p>
               </div>
 

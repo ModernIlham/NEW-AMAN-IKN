@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
+import { noAgendaTampil } from "@/lib/nomorAgenda";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -36,6 +37,7 @@ export default function BookingNomorButton({
       perihal: perihal || "", tujuan: "", jenis_naskah: jenisNaskah,
       modul, kegiatan_id: kegiatanId || "", referensi,
       kode_keamanan: "B", tanggal_surat: "", kode_klasifikasi: "",
+      sisipan: false,
     });
     setBuka(true);
   };
@@ -52,6 +54,7 @@ export default function BookingNomorButton({
           kode_keamanan: form.kode_keamanan || "B",
           tanggal_surat: form.tanggal_surat || "",
         });
+        if (form.sisipan) params.append("sisipan", "true");
         const r = await axios.get(`${API}/persuratan/pratinjau-nomor?${params}`);
         setPratinjau(r.data);
       } catch { setPratinjau(null); }
@@ -61,6 +64,9 @@ export default function BookingNomorButton({
 
   const booking = async () => {
     if (!form?.perihal?.trim()) { toast.error("Perihal wajib diisi"); return; }
+    if (form?.sisipan && !form?.tanggal_surat) {
+      toast.error("Nomor sisipan membutuhkan Tanggal Surat (tanggal backdate)"); return;
+    }
     setSaving(true);
     try {
       const r = await axios.post(`${API}/persuratan/keluar`, form);
@@ -106,7 +112,7 @@ export default function BookingNomorButton({
             <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-3 text-center space-y-2" data-testid="booking-nomor-hasil">
               <p className="font-mono text-base font-bold text-emerald-700 dark:text-emerald-400 break-all">{hasil.nomor}</p>
               <p className="text-[10px] text-muted-foreground">
-                Agenda K-{String(hasil.no_agenda).padStart(3, "0")}/{hasil.tahun} · status: dibooking
+                Agenda K-{noAgendaTampil(hasil.no_agenda, hasil.sisipan)}/{hasil.tahun} · status: dibooking
               </p>
               <Button size="sm" variant="outline" className="gap-1.5" onClick={salin} data-testid="booking-nomor-salin">
                 <Copy className="w-3.5 h-3.5" />Salin Nomor
@@ -130,6 +136,22 @@ export default function BookingNomorButton({
                     onChange={(e) => setForm((f) => ({ ...f, tanggal_surat: e.target.value }))} />
                 </div>
               </div>
+              <label className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 cursor-pointer">
+                <input type="checkbox" checked={!!form.sisipan}
+                  onChange={(e) => setForm((f) => ({ ...f, sisipan: e.target.checked }))}
+                  className="mt-0.5 w-4 h-4 accent-amber-600 min-w-0 min-h-0 flex-shrink-0"
+                  data-testid="booking-nomor-sisipan" />
+                <span className="text-[11px] leading-snug text-amber-800 dark:text-amber-300">
+                  <b>Nomor sisipan (backdate)</b> — surat lupa dibooking: nomor menempel di belakang
+                  nomor terakhir pada tanggal itu (005 → <span className="font-mono">005.01</span>).
+                  Wajib mengisi Tanggal Surat.
+                </span>
+              </label>
+              {form.sisipan && pratinjau?.sisipan_galat && (
+                <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2" data-testid="booking-nomor-sisipan-galat">
+                  <p className="text-[11px] text-red-700 dark:text-red-400">{pratinjau.sisipan_galat}</p>
+                </div>
+              )}
               {pratinjau?.nomor && (
                 <div className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2" data-testid="booking-nomor-pratinjau">
                   <p className="text-[10px] text-muted-foreground">Perkiraan nomor:</p>

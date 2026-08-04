@@ -250,6 +250,11 @@ async def create_indexes() -> None:
         await db.surat.create_index("id", unique=True)
         await db.surat.create_index([("jenis", 1), ("status", 1)])
         await db.surat.create_index([("jenis", 1), ("tahun", -1), ("no_agenda", -1)])
+        # Penomoran per PERIODE + nomor sisipan: seed counter bulanan dan
+        # pencarian jangkar sisipan menyaring per tanggal_surat dalam satu
+        # tahun — tanpa indeks ini keduanya memindai seluruh buku agenda.
+        await db.surat.create_index([("jenis", 1), ("tahun", 1),
+                                     ("tanggal_surat", 1)])
         # Master Pegawai: cek bentrok NIP saat impor massal + daftar per satker.
         await db.pegawai.create_index("id", unique=True)
         await db.pegawai.create_index("nip")
