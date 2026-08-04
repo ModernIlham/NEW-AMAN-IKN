@@ -366,7 +366,8 @@ export default function TtdPermintaanPage({ user, onBack }) {
                 </p>
                 {/* Penanda kerja: sudah lengkap diteken tetapi QR belum
                     ditempatkan — unduhan bagi penanda tangan & pemindai QR
-                    tertahan sampai admin mengaturnya. */}
+                    tertahan sampai pengelola satker (admin MAUPUN operator)
+                    mengaturnya. */}
                 {it.perlu_atur_qr && (
                   <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 px-2 py-0.5 text-[10px] font-bold"
                     data-testid={`ttd-perlu-qr-${it.id}`}>

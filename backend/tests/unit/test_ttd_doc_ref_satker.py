@@ -402,3 +402,98 @@ def test_pratinjau_tanpa_ttd_masuk_mengembalikan_dokumen_apa_adanya(dbx):
     asli = _pdf_dua_halaman()
     hasil = _jalan(rt._dokumen_dengan_ttd_masuk(_sr_dok(), "sr-dok", asli))
     assert hasil == asli
+
+
+# ── Operator ikut mengatur letak QR (bukan admin saja) ─────────────────────
+#
+# Mandat pemilik: langkah "atur letak QR" MENAHAN unduhan semua pihak, jadi ia
+# tak boleh menunggu satu orang ber-role admin. Operator satker yang sama harus
+# bisa membereskannya sendiri — berikut melihat penandanya di daftar.
+#
+# Yang TIDAK ikut dilonggarkan: isolasi lintas-satker (tetap 403), viewer
+# (tetap pembaca murni), dan tindakan tak tertarik-kembali (batal permintaan
+# tetap pembuat/admin).
+
+OPERATOR_A = {"username": "operator-a", "role": "operator",
+              "kode_satker": "111111"}          # satker sama, BUKAN pembuat
+OPERATOR_B = {"username": "operator-b", "role": "operator",
+              "kode_satker": "222222"}          # satker lain
+PEMBACA_A = {"username": "pembaca-a", "role": "viewer",
+             "kode_satker": "111111"}
+
+
+def test_operator_satker_sama_boleh_atur_posisi_qr(dbx):
+    """Inti mandat: operator yang BUKAN pembuat permintaan tetap boleh
+    menempatkan QR — pekerjaan tak menggantung menunggu admin."""
+    async def skenario():
+        await dbx.signature_requests.insert_one(_sr_dok())
+        r = await rt.atur_posisi_qr(
+            "sr-dok", rt.PosisiQrIn(posisi_qr={"halaman": 1, "x": 0.3,
+                                               "y": 0.7, "lebar": 0.2}),
+            user=OPERATOR_A)
+        return r, await dbx.signature_requests.find_one({"id": "sr-dok"})
+    r, doc = _jalan(skenario())
+    assert r["posisi_qr"]["lebar"] == 0.2
+    assert doc["posisi_qr"]["halaman"] == 1     # benar-benar tersimpan
+
+
+def test_operator_satker_lain_tetap_ditolak_atur_qr(dbx):
+    """Yang dilonggarkan hanya sekat PERAN di dalam satker — sekat SATKER
+    tetap berdiri."""
+    async def skenario():
+        await dbx.signature_requests.insert_one(_sr_dok())
+        return await rt.atur_posisi_qr(
+            "sr-dok", rt.PosisiQrIn(posisi_qr=None), user=OPERATOR_B)
+    with pytest.raises(HTTPException) as e:
+        _jalan(skenario())
+    assert e.value.status_code == 403
+
+
+def test_viewer_tak_boleh_atur_posisi_qr(dbx):
+    """Viewer tetap pembaca murni: bukan pengelola, walau satkernya sama."""
+    async def skenario():
+        await dbx.signature_requests.insert_one(_sr_dok())
+        return await rt.atur_posisi_qr(
+            "sr-dok", rt.PosisiQrIn(posisi_qr=None), user=PEMBACA_A)
+    with pytest.raises(HTTPException) as e:
+        _jalan(skenario())
+    assert e.value.status_code == 403
+
+
+def test_operator_melihat_penanda_perlu_atur_qr_milik_orang_lain(dbx):
+    """Penandanya harus SAMPAI ke operator — kalau daftarnya hanya berisi
+    buatannya sendiri, ia tak pernah tahu ada yang perlu dibereskan."""
+    async def skenario():
+        await dbx.signature_requests.insert_one(_sr_lengkap())  # dibuat USER_A
+        return await rt.daftar_permintaan(_user=OPERATOR_A)
+    r = _jalan(skenario())
+    assert len(r["items"]) == 1
+    assert r["items"][0]["perlu_atur_qr"] is True
+
+
+def test_daftar_viewer_tetap_sebatas_buatannya_sendiri(dbx):
+    async def skenario():
+        await dbx.signature_requests.insert_one(_sr_lengkap())  # dibuat USER_A
+        return await rt.daftar_permintaan(_user=PEMBACA_A)
+    assert _jalan(skenario())["items"] == []
+
+
+def test_operator_bukan_pembuat_tetap_tak_boleh_membatalkan(dbx):
+    """Sengaja TIDAK ikut dilonggarkan: pembatalan berkaskade menandai
+    BAST/aset 'dicabut' — tak bisa ditarik kembali, jadi tetap pembuat/admin."""
+    async def skenario():
+        await dbx.signature_requests.insert_one(_sr_dok())
+        return await rt.batal_permintaan("sr-dok", user=OPERATOR_A)
+    with pytest.raises(HTTPException) as e:
+        _jalan(skenario())
+    assert e.value.status_code == 403
+
+
+def test_operator_boleh_membaca_detail_untuk_membuka_dialog_qr(dbx):
+    """Dialog "Atur QR & Unduh" berangkat dari detail — kalau detailnya 403,
+    operator melihat penanda tapi tak bisa menindaklanjutinya."""
+    async def skenario():
+        await dbx.signature_requests.insert_one(_sr_lengkap())
+        return await rt.detail_permintaan("sr-dok", user=OPERATOR_A)
+    r = _jalan(skenario())
+    assert r["perlu_atur_qr"] is True and r["siap_diunduh"] is False

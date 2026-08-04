@@ -471,16 +471,26 @@ def _mask_nip(nip) -> str:
     return "•" * (len(s) - 3) + s[-3:]
 
 
-def _pastikan_pemilik_sr(sr: dict, user: dict) -> None:
-    """403 bila user bukan pembuat permintaan & bukan admin SATKER YANG SAMA
-    (cegah IDOR: dokumen/PII penanda tangan hanya untuk pembuat & admin
-    satkernya). Semantik satker meniru pastikan_akses_dok_satker: dokumen era
-    lama tanpa kode tetap terbuka; user tanpa kode (super-admin) lintas-satker."""
-    if (sr or {}).get("created_by") == (user or {}).get("username"):
-        return
-    if (user or {}).get("role") != "admin":
-        raise HTTPException(status_code=403,
-                            detail="Hanya pembuat permintaan atau admin yang berhak")
+def _peran_pengelola_ttd(user: dict) -> bool:
+    """True bila peran user berhak MENGURUS permintaan TTD satkernya — admin
+    MAUPUN operator.
+
+    Mandat pemilik: langkah "atur letak QR" menahan unduhan SEMUA pihak
+    (penanda tangan & pemindai QR), jadi ia tak boleh menunggu satu orang
+    ber-role admin. Operator satker yang sama harus bisa membereskannya
+    sendiri, berikut melihat penandanya di daftar.
+
+    Viewer tetap pembaca murni: bukan pengelola. Akun lama tanpa field role
+    dan role legacy 'user' diperlakukan sebagai operator (sejalan dengan
+    require_writer)."""
+    peran = str((user or {}).get("role") or "operator").strip().lower()
+    return peran != "viewer"
+
+
+def _cek_satker_sr(sr: dict, user: dict) -> None:
+    """403 bila permintaan milik satker LAIN. Semantik meniru
+    pastikan_akses_dok_satker: permintaan era lama tanpa kode tetap terbuka;
+    user tanpa kode (super-admin) lintas-satker."""
     from shared_utils import kode_satker_user
     kode = kode_satker_user(user)
     milik = str((sr or {}).get("kode_satker") or "").strip()
@@ -489,6 +499,46 @@ def _pastikan_pemilik_sr(sr: dict, user: dict) -> None:
             status_code=403,
             detail=f"Permintaan milik satker {milik} — akun Anda terikat "
                    f"satker {kode}")
+
+
+def _pastikan_pengelola_sr(sr: dict, user: dict) -> None:
+    """403 bila user bukan pembuat permintaan DAN bukan pengelola (admin atau
+    operator) SATKER YANG SAMA.
+
+    Gerbang untuk jalur MENGURUS & MEMBACA: detail, pratinjau halaman, atur
+    letak QR, dan unduh dokumen ber-TTD. Isolasi lintas-satker tetap tegak —
+    yang dilonggarkan hanya sekat peran DI DALAM satker, supaya pekerjaan
+    tidak menggantung menunggu admin (lihat _peran_pengelola_ttd).
+
+    Tindakan yang tak bisa ditarik kembali (batal permintaan, terbitkan ulang
+    link e-sign) TIDAK memakai gerbang ini — lihat _pastikan_pemilik_sr."""
+    if (sr or {}).get("created_by") == (user or {}).get("username"):
+        return
+    if not _peran_pengelola_ttd(user):
+        raise HTTPException(
+            status_code=403,
+            detail="Hanya pembuat permintaan atau pengelola satker "
+                   "(admin/operator) yang berhak")
+    _cek_satker_sr(sr, user)
+
+
+def _pastikan_pemilik_sr(sr: dict, user: dict) -> None:
+    """403 bila user bukan pembuat permintaan & bukan admin SATKER YANG SAMA.
+
+    Lebih ketat dari _pastikan_pengelola_sr dan SENGAJA dipertahankan untuk
+    tindakan yang tak bisa ditarik kembali: membatalkan permintaan (berkaskade
+    menandai BAST/aset 'dicabut') dan menerbitkan ULANG link e-sign (sama
+    dengan membagikan hak menandatangani dokumen resmi). Melonggarkan yang ini
+    ke seluruh operator bukan bagian dari mandat "operator boleh mengatur QR".
+
+    Semantik satker meniru pastikan_akses_dok_satker: dokumen era lama tanpa
+    kode tetap terbuka; user tanpa kode (super-admin) lintas-satker."""
+    if (sr or {}).get("created_by") == (user or {}).get("username"):
+        return
+    if (user or {}).get("role") != "admin":
+        raise HTTPException(status_code=403,
+                            detail="Hanya pembuat permintaan atau admin yang berhak")
+    _cek_satker_sr(sr, user)
 
 
 async def _ambil_dokumen_sr(sr_id: str):
@@ -521,7 +571,7 @@ async def dokumen_asli(sr_id: str,
                        user: dict = Depends(require_user_or_query_token)):
     """Stream dokumen PDF asli (pratinjau dasbor pembuat)."""
     sr, data = await _ambil_dokumen_sr(sr_id)
-    _pastikan_pemilik_sr(sr, user)
+    _pastikan_pengelola_sr(sr, user)
     return StreamingResponse(
         io.BytesIO(data), media_type="application/pdf",
         headers={"Content-Disposition":
@@ -630,7 +680,7 @@ async def halaman_dokumen_pemilik(sr_id: str, no: int, request: Request,
     ukuran QR verifikasi sebelum mengunduh dokumen ber-TTD (langkah terakhir,
     setelah semua pihak meneken)."""
     sr, data = await _ambil_dokumen_sr(sr_id)
-    _pastikan_pemilik_sr(sr, user)
+    _pastikan_pengelola_sr(sr, user)
     _tolak_bila_batal(sr)
     return _render_halaman_png(await _dokumen_dengan_ttd_masuk(sr, sr_id, data), no)
 
@@ -650,7 +700,7 @@ async def atur_posisi_qr(sr_id: str, payload: PosisiQrIn,
     sr = await db.signature_requests.find_one({"id": sr_id}, _PROJ)
     if not sr:
         raise HTTPException(status_code=404, detail="Permintaan tidak ditemukan")
-    _pastikan_pemilik_sr(sr, user)
+    _pastikan_pengelola_sr(sr, user)
     _tolak_bila_batal(sr)
     if not str(sr.get("dok_file_id") or "").strip():
         raise HTTPException(status_code=400, detail=(
@@ -923,8 +973,8 @@ def _siap_diunduh(sr: dict) -> bool:
     """Dokumen ber-TTD boleh dibagikan ke penanda tangan & pemindai QR HANYA
     setelah (a) semua pihak meneken dan (b) pemilik menempatkan QR verifikasi.
     Syarat (b) sengaja: tanpa itu QR jatuh di slot otomatis yang bisa menimpa
-    kaki halaman — dan status "belum diatur" itulah yang dipakai layar admin
-    sebagai penanda agar segera mengaturnya."""
+    kaki halaman — dan status "belum diatur" itulah yang dipakai layar
+    pengelola (admin maupun operator) sebagai penanda agar segera diatur."""
     return (sr.get("status") != "batal" and _semua_sudah_ttd(sr)
             and _qr_sudah_diatur(sr)
             and bool(str(sr.get("dok_file_id") or "").strip()))
@@ -950,7 +1000,7 @@ async def dokumen_ber_ttd(sr_id: str,
     # IDOR (REVIEW-9 R11): dokumen ber-TTD memuat gambar tanda tangan +
     # NIP + jabatan penanda tangan. Guard pemilik/satker yang sama sudah
     # dipakai endpoint saudaranya — di sini terlewat.
-    _pastikan_pemilik_sr(sr, user)
+    _pastikan_pengelola_sr(sr, user)
     _tolak_bila_batal(sr)  # dokumen ber-TTD dari permintaan batal → tak berlaku
     if not any(str(s.get("signature_file_id") or "").strip()
                for s in (sr.get("signers") or [])):
@@ -999,12 +1049,15 @@ async def dokumen_ber_ttd_verifikasi(sr_id: str, request: Request):
 @ttd_router.get("/ttd/permintaan")
 async def daftar_permintaan(_user: dict = Depends(require_user)):
     """Daftar permintaan tanda tangan (terbaru dulu) + ringkas status.
-    Non-admin hanya melihat permintaan buatannya sendiri; IP penanda tangan
+    Viewer hanya melihat permintaan buatannya sendiri; IP penanda tangan
     tidak pernah ikut daftar (data forensik — cukup di audit internal)."""
-    # Admin melihat permintaan SATKERNYA (bukan seluruh DB); non-admin hanya
-    # buatannya sendiri. Super-admin (tanpa kode satker) tetap lintas-satker.
+    # PENGELOLA (admin MAUPUN operator) melihat permintaan SATKERNYA — bukan
+    # seluruh DB. Dulu hanya role=='admin', sehingga penanda "PERLU ATUR LETAK
+    # QR" tak pernah sampai ke operator: pekerjaan yang menahan unduhan semua
+    # pihak jadi menggantung menunggu satu orang. Viewer (pembaca murni) tetap
+    # sebatas buatannya sendiri. Super-admin (tanpa kode satker) lintas-satker.
     from shared_utils import scope_query_field_satker
-    q = (scope_query_field_satker(_user, {}) if _user.get("role") == "admin"
+    q = (scope_query_field_satker(_user, {}) if _peran_pengelola_ttd(_user)
          else {"created_by": _user.get("username", "")})
     items = await (db.signature_requests.find(
         q, {**_PROJ, "signers.jti": 0, "signers.ip": 0})
@@ -1029,7 +1082,7 @@ async def detail_permintaan(sr_id: str, user: dict = Depends(require_user)):
     sr = await db.signature_requests.find_one({"id": sr_id}, {**_PROJ, "signers.jti": 0})
     if not sr:
         raise HTTPException(status_code=404, detail="Permintaan tidak ditemukan")
-    _pastikan_pemilik_sr(sr, user)  # isolasi: hanya pembuat/admin
+    _pastikan_pengelola_sr(sr, user)  # isolasi: pembuat/pengelola satker
     return {**sr,
             "perlu_atur_qr": (sr.get("status") != "batal"
                               and bool(str(sr.get("dok_file_id") or "").strip())
@@ -1338,7 +1391,7 @@ async def gambar_ttd_signer(sr_id: str, signer_id: str,
     sr = await db.signature_requests.find_one({"id": sr_id}, _PROJ)
     if not sr:
         raise HTTPException(status_code=404, detail="Permintaan tidak ditemukan")
-    _pastikan_pemilik_sr(sr, user)
+    _pastikan_pengelola_sr(sr, user)
     _tolak_bila_batal(sr)  # gambar TTD dari permintaan batal → tak berlaku
     sg = next((s for s in (sr or {}).get("signers") or []
                if s.get("signer_id") == signer_id), None)
@@ -1412,7 +1465,7 @@ async def lembar_pdf(sr_id: str, user: dict = Depends(require_user_or_query_toke
         raise HTTPException(status_code=404, detail="Permintaan tidak ditemukan")
     # IDOR (REVIEW-9 R11): lembar pengesahan memuat GAMBAR tanda tangan
     # seluruh penanda tangan + NIP.
-    _pastikan_pemilik_sr(sr, user)
+    _pastikan_pengelola_sr(sr, user)
     _tolak_bila_batal(sr)  # lembar pengesahan dari permintaan batal → tak berlaku
     settings = await db.report_settings.find_one({"type": "global"}, _PROJ) or {}
     st = _get_report_styles()
