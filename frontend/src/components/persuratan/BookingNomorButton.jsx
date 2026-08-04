@@ -8,6 +8,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { noAgendaTampil } from "@/lib/nomorAgenda";
+import { teksSumberKlasifikasi } from "@/lib/klasifikasiNomor";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -29,6 +30,7 @@ export default function BookingNomorButton({
   const [pratinjau, setPratinjau] = useState(null);
   const [hasil, setHasil] = useState(null); // surat yang berhasil dibooking
   const [saving, setSaving] = useState(false);
+  const [klasifikasi, setKlasifikasi] = useState([]); // master kode arsip
   const timer = useRef(null);
 
   const mulai = () => {
@@ -40,6 +42,13 @@ export default function BookingNomorButton({
       sisipan: false,
     });
     setBuka(true);
+    // Master kode klasifikasi arsip ikut dimuat: tanpa ini dialog lintas-modul
+    // ini SATU-SATUNYA jalur booking yang tak pernah bisa menyentuh klasifikasi
+    // — kodenya terkunci "" dan pemakainya tak punya cara melihat, apalagi
+    // mengubah, kode arsip yang tercetak pada nomor suratnya.
+    axios.get(`${API}/persuratan/klasifikasi`)
+      .then((r) => setKlasifikasi(r.data?.items || []))
+      .catch(() => setKlasifikasi([]));
   };
 
   useEffect(() => {
@@ -136,6 +145,22 @@ export default function BookingNomorButton({
                     onChange={(e) => setForm((f) => ({ ...f, tanggal_surat: e.target.value }))} />
                 </div>
               </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1">
+                  Kode Klasifikasi Arsip
+                </label>
+                <Input value={form.kode_klasifikasi} list="booking-klasifikasi-list"
+                  onChange={(e) => setForm((f) => ({ ...f, kode_klasifikasi: e.target.value }))}
+                  placeholder={pratinjau?.kode_klasifikasi
+                    ? `otomatis: ${pratinjau.kode_klasifikasi}`
+                    : "kosongkan = ikut aturan otomatis"}
+                  className="font-mono" data-testid="booking-nomor-klasifikasi" />
+                <datalist id="booking-klasifikasi-list">
+                  {klasifikasi.map((k) => (
+                    <option key={k.id} value={k.kode}>{k.uraian}</option>
+                  ))}
+                </datalist>
+              </div>
               <label className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 cursor-pointer">
                 <input type="checkbox" checked={!!form.sisipan}
                   onChange={(e) => setForm((f) => ({ ...f, sisipan: e.target.checked }))}
@@ -156,6 +181,10 @@ export default function BookingNomorButton({
                 <div className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2" data-testid="booking-nomor-pratinjau">
                   <p className="text-[10px] text-muted-foreground">Perkiraan nomor:</p>
                   <p className="font-mono text-sm font-bold text-cyan-700 dark:text-cyan-400 break-all">{pratinjau.nomor}</p>
+                  <p className="text-[10px] text-muted-foreground mt-1"
+                    data-testid="booking-nomor-sumber-klasifikasi">
+                    Klasifikasi: {teksSumberKlasifikasi(pratinjau)}
+                  </p>
                 </div>
               )}
             </div>

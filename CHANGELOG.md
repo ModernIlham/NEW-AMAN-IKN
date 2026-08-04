@@ -67,6 +67,79 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#757] Master Kode Klasifikasi Arsip akhirnya berpengaruh pada penomoran — 2026-08-04
+
+Keluhan pemilik: "Master Kode Klasifikasi Arsip di setting penomeran ketika
+sudah diisi ditambahkan, efeknya tidak menghasilkan apa apa pada bagian dari
+penomeran. bagaimana implementasinya? apakah sistem sudah mengakomodirnya."
+
+Sistemnya **sudah** mengakomodir — rantainya yang putus, di dua tempat, dan
+keduanya senyap.
+
+### Bagaimana sebenarnya kode klasifikasi masuk ke nomor
+
+Master Kode Klasifikasi Arsip adalah **katalog**. Yang benar-benar mengubah
+nomor ada tiga, berurutan (`persuratan_utils.pilih_klasifikasi`):
+
+1. kode yang **diisi manual** di form booking — selalu menang;
+2. **aturan otomatis** (modul / jenis naskah → kode) di pengaturan penomoran —
+   yang paling spesifik menang, aturan tanpa filter jadi jaring terakhir;
+3. **Kode Klasifikasi Bawaan** pengaturan.
+
+Kode yang cuma didaftarkan di katalog tak menyentuh satu pun dari ketiganya.
+Itu memang rancangannya — tapi layarnya tak pernah mengatakannya.
+
+### Putus #1 — aturan pertama SELALU gagal disimpan
+
+Layar pengaturan menambahkan baris aturan baru dengan **kedua filternya
+kosong**, dan keterangannya sendiri berbunyi "kosong = berlaku untuk semua".
+Tetapi `validate_peta_klasifikasi` menolak baris seperti itu ("tak pernah
+spesifik") — dan penolakan satu baris **menggagalkan seluruh simpanan** dengan
+400. Jadi aturan pertama yang dibuat siapa pun tak pernah tersimpan, dan kode
+yang sudah didaftarkan tak pernah dipakai merakit nomor.
+
+Mesin pemilihnya sendiri **selalu** mendukung aturan itu: tanpa filter berskor
+0, sehingga ia menang hanya bila tak ada aturan yang lebih spesifik. Validator
+yang salah, bukan mesinnya. Aturan "semua" kini sah.
+
+Sebagai gantinya dijaga hal yang benar-benar merugikan: **aturan kembar**.
+Karena pemilihnya memakai `skor > skor_terbaik`, di antara dua aturan
+bercakupan sama hanya yang **pertama** yang pernah terpakai — yang di bawah
+adalah baris mati yang menipu pembacanya. Kini ditolak dengan pesan yang
+menunjuk nomor aturan kembarannya dan menyebut cakupannya.
+
+### Putus #2 — katalog tak pernah mengaku menganggur
+
+Tiap entri master kini membawa penanda dari server (`dipakai_aturan`,
+`bawaan`), dan barisnya memasang badge: **"belum dipakai"** (amber) atau
+"1 aturan" / "kode bawaan" / "kode bawaan + 2 aturan" (hijau). Kode yang
+menganggur tak lagi tampak sama dengan kode yang bekerja.
+
+Penandanya dihitung dari pengaturan **efektif si pemanggil** — aturan satker A
+tak membuat kode Bersama tampak terpakai di satker B, sementara satker yang
+masih mewarisi aturan Universal tetap terhitung.
+
+Tiap baris juga dapat tombol **`+ aturan`**: satu klik memasangkan kode katalog
+itu ke aturan otomatis. Inilah langkah yang dulu tak pernah terlihat.
+
+### Dua kebocoran lain yang ikut ditutup
+
+- **Dialog Booking Nomor lintas-modul** (dipakai dari Pelaporan, Penggunaan,
+  dsb.) dulu satu-satunya jalur booking yang **tak punya field klasifikasi
+  sama sekali** — kodenya terkunci `""`. Kini ada isiannya (ber-datalist master)
+  dan pratinjaunya menyebut kode + asalnya, sama seperti layar Registrasi.
+- **Aturan warisan Universal tak terlihat di layar satker.** Admin satker
+  melihat daftar aturan KOSONG padahal aturan Universal sedang berlaku; lalu
+  menambah satu aturan sendiri diam-diam mematikan seluruhnya (daftar satker
+  menggantikan, bukan menambah). Kini aturan warisan ditampilkan, diberi
+  keterangan status yang jujur, plus tombol **"Salin ke satker ini agar bisa
+  diubah"**.
+
+Uji: 9 uji backend baru (rantai ujung ke ujung: simpan → pratinjau → nomor yang
+benar-benar terbit) + 6 uji validator + 12 uji frontend. Mutasi yang
+mengembalikan penolakan aturan "semua" dijatuhkan 5 uji. Total 1729 uji backend
+& 466 uji frontend hijau.
+
 ## [#756] Sisa waktu tautan TTD tampil — di layar registrasi dan di halaman penanda tangan — 2026-08-04
 
 Keluhan pemilik: "pada penanda tangan tidak ada sisa waktunya yang tampil hingga

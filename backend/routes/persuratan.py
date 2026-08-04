@@ -508,8 +508,32 @@ async def _klas_dipakai(kode: str, scope: str) -> int:
 async def daftar_klasifikasi(_user: dict = Depends(require_user)):
     """Master kode klasifikasi arsip yang terlihat pemanggil (termasuk
     nonaktif): entri Bersama + entri satkernya; lintas-satker melihat semua.
-    Tiap entri membawa `kode_satker` ('' = Bersama) untuk badge scope UI."""
-    items = await _klas_terlihat(kode_satker_user(_user))
+    Tiap entri membawa `kode_satker` ('' = Bersama) untuk badge scope UI.
+
+    Tiap entri JUGA membawa penanda TERPAKAI-atau-TIDAK:
+    `dipakai_aturan` (berapa aturan otomatis EFEKTIF merujuk kode itu) dan
+    `bawaan` (kode itulah fallback pengaturan). Keluhan pemilik: "Master Kode
+    Klasifikasi Arsip … sudah diisi ditambahkan, efeknya tidak menghasilkan
+    apa-apa pada penomoran". Memang begitu — master ini KATALOG, yang
+    mengubah nomor adalah aturan otomatis / kode bawaan / isian manual di
+    form. Tanpa penanda ini layar tak pernah mengatakannya, jadi kode yang
+    menganggur tampak sama persis dengan kode yang bekerja.
+    """
+    _ks = kode_satker_user(_user)
+    items = await _klas_terlihat(_ks)
+    # Satu pembacaan pengaturan untuk SEMUA entri — bukan satu kueri per baris
+    # (`_klas_dipakai` presisi-per-scope dipakai gerbang hapus, bukan daftar).
+    atur = await _pengaturan(_ks)
+    pakai = {}
+    for a in atur.get("peta_klasifikasi") or []:
+        k = str((a or {}).get("kode") or "").strip()
+        if k:
+            pakai[k] = pakai.get(k, 0) + 1
+    bawaan = str(atur.get("kode_klasifikasi_default") or "").strip()
+    for it in items:
+        kode = str(it.get("kode") or "").strip()
+        it["dipakai_aturan"] = pakai.get(kode, 0)
+        it["bawaan"] = bool(kode) and kode == bawaan
     return {"items": items, "jumlah": len(items)}
 
 
