@@ -67,6 +67,39 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#755] Nama tamu Peta Kolaborasi tak lagi jadi "Tamu" — 2026-08-04
+
+Keluhan pemilik: "pada peta kolaborasi ketika memasukkan nama, nama yang muncul
+hanyalah 'Tamu' padahal sudah mengisi nama".
+
+### Akar masalah: closure basi, dan salahnya PERMANEN
+
+Aksi tamu (menambah titik / mengirim komentar) ditahan sebagai closure React,
+lalu dijalankan tepat setelah `setNama(n)` pada tick yang SAMA. Karena setState
+tidak menyegarkan closure yang sudah terbentuk, aksi itu masih membaca `nama`
+versi lama — yaitu string kosong. Payload terkirim `oleh: ""`, lalu backend
+mengubahnya menjadi "Tamu" (`peta_kolaborasi.py:250`) dan **menyimpannya**.
+
+Itu sebabnya memuat ulang halaman tak pernah menyembuhkan: yang tersimpan di
+basis data memang sudah "Tamu", bukan sekadar salah tampil.
+
+### Perbaikan
+
+Nama kini diserahkan sebagai **argumen** ke aksi, bukan dibaca dari state.
+Polanya diangkat ke `lib/penjagaNama.js` supaya bisa diuji — aksi dilarang
+membaca nama dari state, satu-satunya sumber adalah argumen yang diterimanya.
+Helper itu sekalian menutup dua celah lain yang sebelumnya tak terjaga:
+`lanjutkan()` dua kali hanya menjalankan sekali (anti kirim ganda), dan aksi
+tertunda yang lama tidak diwarisi oleh aksi berikutnya.
+
+Catatan jujur: kontribusi LAMA yang sudah terlanjur tersimpan sebagai "Tamu"
+tidak bisa dipulihkan — nama aslinya memang tak pernah sampai ke server (hanya
+tersimpan di localStorage perangkat tamu). Yang diperbaiki adalah kontribusi
+sejak sekarang.
+
+Uji: 7 uji baru; dua di antaranya dibuktikan GAGAL pada perilaku lama. Total
+447 uji frontend hijau.
+
 ## [#754] Pesan permintaan TTD menjelaskan dokumennya + gulir Master Pegawai tak lagi lompat ke atas — 2026-08-04
 
 Dua keluhan pemilik.

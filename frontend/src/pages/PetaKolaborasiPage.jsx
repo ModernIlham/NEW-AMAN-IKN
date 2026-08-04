@@ -7,6 +7,7 @@ import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import axios from "axios";
 import { toast } from "sonner";
+import { buatPenjagaNama } from "@/lib/penjagaNama";
 import {
   MapPin, MessageSquarePlus, Plus, X, Loader2, Send, Users, Clock,
   AlertTriangle, RefreshCcw, WifiOff, Layers, Boxes, Trash2, ShieldCheck,
@@ -222,7 +223,7 @@ export default function PetaKolaborasiPage() {
   const [nama, setNama] = useState(() => { try { return localStorage.getItem("peta_nama") || ""; } catch { return ""; } });
   const [namaDialog, setNamaDialog] = useState(false);
   const [namaDraf, setNamaDraf] = useState("");
-  const aksiSetelahNama = useRef(null);
+  const penjaga = useRef(buatPenjagaNama());   // aksi tertunda sampai nama terisi
 
   const [dipilih, setDipilih] = useState(null); // {jenis:'aset'|'titik', id, ...info}
   const [modeTambah, setModeTambah] = useState(false);
@@ -613,12 +614,22 @@ export default function PetaKolaborasiPage() {
     fitOnceRef.current = false;
   }, []);
 
+  // Nama tamu diteruskan sebagai ARGUMEN ke aksi, bukan dibaca dari state.
+  //
+  // Bug yang diperbaiki: dulu `aksi` adalah closure dari render SEBELUM tamu
+  // mengetik namanya, sehingga variabel `nama` di dalamnya permanen bernilai
+  // "". `simpanNama` memanggil setNama(n) lalu aksi() pada tick yang SAMA —
+  // setState belum menyegarkan closure lama — jadi POST terkirim `oleh: ""`
+  // dan backend mengubahnya jadi "Tamu" LALU MENYIMPANNYA. Akibatnya nama
+  // tamu tak pernah muncul, dan refresh pun tak menyembuhkan karena yang
+  // tersimpan di basis data memang sudah "Tamu".
   const butuhNama = useCallback((aksi) => {
-    if (data && !data.tamu) { aksi(); return; }
-    if (nama.trim()) { aksi(); return; }
-    aksiSetelahNama.current = aksi;
-    setNamaDraf(nama);
-    setNamaDialog(true);
+    // Nama diserahkan sebagai ARGUMEN (lihat lib/penjagaNama.js) — aksi DILARANG
+    // membaca `nama` dari state, sebab ia closure dari render sebelum tamu
+    // mengetik namanya.
+    const perlu = penjaga.current.jalankan(aksi, {
+      perluNama: !(data && !data.tamu), nama });
+    if (perlu) { setNamaDraf(nama); setNamaDialog(true); }
   }, [data, nama]);
 
   const simpanNama = () => {
@@ -626,8 +637,7 @@ export default function PetaKolaborasiPage() {
     if (!n) { toast.error("Isi nama Anda dulu"); return; }
     setNama(n); try { localStorage.setItem("peta_nama", n); } catch { /* noop */ }
     setNamaDialog(false);
-    const aksi = aksiSetelahNama.current; aksiSetelahNama.current = null;
-    if (aksi) aksi();
+    penjaga.current.lanjutkan(n);   // nama BARU diserahkan langsung
   };
 
   const komentarUntuk = useMemo(() => {
@@ -646,13 +656,13 @@ export default function PetaKolaborasiPage() {
   const kirimTitik = async () => {
     if (!formTitik) return;
     if (!formTitik.nama_titik.trim()) { toast.error("Nama titik wajib diisi"); return; }
-    butuhNama(async () => {
+    butuhNama(async (olehNama) => {
       setKirim(true);
       try {
         const r = await axios.post(`${API}/peta/kolaborasi/${id}/titik`, {
           lat: formTitik.lat, lng: formTitik.lng,
           nama_titik: formTitik.nama_titik.trim(), keterangan: (formTitik.keterangan || "").trim(),
-          oleh: nama,
+          oleh: olehNama,
         }, { params: { token }, timeout: 20000 });
         setData((d) => ({ ...d, titik_kolaborasi: [...(d.titik_kolaborasi || []), r.data] }));
         setFormTitik(null); buangPreview();
@@ -664,12 +674,12 @@ export default function PetaKolaborasiPage() {
 
   const kirimKomentar = async () => {
     if (!dipilih || !komentarTeks.trim()) { toast.error("Tulis komentar dulu"); return; }
-    butuhNama(async () => {
+    butuhNama(async (olehNama) => {
       setKirim(true);
       try {
         const r = await axios.post(`${API}/peta/kolaborasi/${id}/komentar`, {
           target_jenis: dipilih.jenis, target_id: dipilih.id,
-          teks: komentarTeks.trim(), oleh: nama,
+          teks: komentarTeks.trim(), oleh: olehNama,
         }, { params: { token }, timeout: 20000 });
         setData((d) => ({ ...d, komentar: [...(d.komentar || []), r.data] }));
         setKomentarTeks("");
@@ -1165,7 +1175,7 @@ export default function PetaKolaborasiPage() {
               data-testid="peta-nama-input"
             />
             <div className="flex flex-wrap gap-2 justify-end">
-              <button onClick={() => { setNamaDialog(false); aksiSetelahNama.current = null; }} className="px-3 h-10 rounded-lg border border-border text-sm text-foreground/80">Batal</button>
+              <button onClick={() => { setNamaDialog(false); penjaga.current.batalkan(); }} className="px-3 h-10 rounded-lg border border-border text-sm text-foreground/80">Batal</button>
               <button onClick={simpanNama} className="px-4 h-10 rounded-lg bg-teal-700 text-white text-sm font-semibold" data-testid="peta-nama-simpan">Lanjut</button>
             </div>
           </div>
