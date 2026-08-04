@@ -11,6 +11,7 @@ memang ber-guard, tetapi `POST /ttd/permintaan` bisa dipanggil langsung dengan
 sendiri yang menulis ke dokumen satker itu.
 """
 import asyncio
+import io
 
 import pytest
 from fastapi import HTTPException
@@ -253,3 +254,151 @@ def test_posisi_qr_tanpa_dokumen_ditolak_400(dbx):
     with pytest.raises(HTTPException) as e:
         _jalan(skenario())
     assert e.value.status_code == 400
+
+
+# ── Gerbang "siap diunduh": semua TTD + QR sudah ditempatkan ────────────────
+#
+# Mandat pemilik: setelah semua meneken, link e-sign & halaman verifikasi
+# memunculkan unduhan dokumen ber-TTD — TAPI hanya bila letak QR sudah
+# diatur. Status "belum diatur" itulah penanda kerja bagi admin.
+
+def _sr_lengkap(**ganti):
+    dasar = _sr_dok(signers=[
+        {"signer_id": "s1", "nama": "A", "status": "ditandatangani",
+         "signature_file_id": "f1", "jti": "j1"},
+        {"signer_id": "s2", "nama": "B", "status": "ditandatangani",
+         "signature_file_id": "f2", "jti": "j2"}])
+    dasar.update(ganti)
+    return dasar
+
+
+def test_siap_diunduh_hanya_setelah_semua_ttd_dan_qr_diatur():
+    belum_qr = _sr_lengkap()
+    assert rt._semua_sudah_ttd(belum_qr) is True
+    assert rt._qr_sudah_diatur(belum_qr) is False
+    assert rt._siap_diunduh(belum_qr) is False          # QR belum → tertahan
+
+    siap = _sr_lengkap(posisi_qr={"halaman": 1, "x": 0.1, "y": 0.1, "lebar": 0.2})
+    assert rt._siap_diunduh(siap) is True
+
+
+def test_belum_semua_ttd_tak_pernah_siap_walau_qr_diatur():
+    sr = _sr_dok(posisi_qr={"halaman": 1, "x": 0.1, "y": 0.1, "lebar": 0.2},
+                 signers=[{"signer_id": "s1", "nama": "A", "signature_file_id": "f1"},
+                          {"signer_id": "s2", "nama": "B", "signature_file_id": ""}])
+    assert rt._semua_sudah_ttd(sr) is False
+    assert rt._siap_diunduh(sr) is False
+
+
+def test_permintaan_batal_tak_pernah_siap_diunduh():
+    sr = _sr_lengkap(status="batal",
+                     posisi_qr={"halaman": 1, "x": 0.1, "y": 0.1, "lebar": 0.2})
+    assert rt._siap_diunduh(sr) is False
+
+
+def test_unduh_verifikasi_publik_ditolak_saat_qr_belum_diatur(dbx):
+    """Halaman verifikasi (dibuka dari QR) tak boleh menyajikan dokumen
+    sebelum QR ditempatkan — 409, bukan berkas setengah jadi."""
+    async def skenario():
+        await dbx.signature_requests.insert_one(_sr_lengkap())
+        return await _unwrap(rt.dokumen_ber_ttd_verifikasi)("sr-dok", request=None)
+    with pytest.raises(HTTPException) as e:
+        _jalan(skenario())
+    assert e.value.status_code == 409
+
+
+def test_verifikasi_publik_menandai_menunggu_qr(dbx):
+    """Halaman verifikasi menerangkan penantiannya (bukan tombol hilang
+    tanpa sebab) — dan TIDAK menawarkan unduhan."""
+    async def skenario():
+        await dbx.signature_requests.insert_one(_sr_lengkap())
+        return await rt.verifikasi_publik("sr-dok")
+    r = _jalan(skenario())
+    assert r["dapat_unduh"] is False and r["menunggu_qr"] is True
+
+
+def test_daftar_permintaan_menandai_perlu_atur_qr(dbx):
+    async def skenario():
+        await dbx.signature_requests.insert_one(_sr_lengkap())
+        return await rt.daftar_permintaan(_user=USER_A)
+    r = _jalan(skenario())
+    assert r["items"][0]["perlu_atur_qr"] is True
+    assert r["items"][0]["siap_diunduh"] is False
+
+
+# ── Pratinjau mode paralel: yang berikutnya melihat TTD yang sudah masuk ────
+#
+# Mandat pemilik: pada mode paralel, siapa pun yang meneken berikutnya harus
+# MELIHAT tanda tangan yang sudah dibubuhkan lebih dulu. Pratinjau halaman
+# karenanya dirakit ulang dengan TTD masuk, tanpa QR.
+#
+# Regresi yang ditangkap uji ini: bila SEMUA penanda tangan yang sudah teken
+# memakai posisi pilihan sendiri DAN QR tidak digambar (pratinjau, atau
+# unduhan dengan QR manual), kanvas "slot otomatis" tak pernah menerima satu
+# operasi gambar pun → reportlab menghasilkan PDF NOL halaman → `pages[0]`
+# melempar IndexError dan MENGGAGALKAN seluruh perakitan. Akibatnya pratinjau
+# diam-diam jatuh ke dokumen asli (tanda tangan pertama tak terlihat) dan
+# unduhan asli membalas 500.
+
+def _pdf_dua_halaman() -> bytes:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas as rl_canvas
+    buf = io.BytesIO()
+    c = rl_canvas.Canvas(buf, pagesize=A4)
+    for h in (1, 2):
+        c.drawString(72, 720, f"Halaman {h}")
+        c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
+def _png_ttd() -> bytes:
+    from PIL import Image, ImageDraw
+    im = Image.new("RGBA", (120, 48), (0, 0, 0, 0))
+    ImageDraw.Draw(im).line([(4, 40), (60, 8), (116, 40)], fill=(0, 0, 0, 255),
+                            width=3)
+    buf = io.BytesIO()
+    im.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _sr_kustom():
+    """Satu penanda tangan sudah teken di posisi PILIHANNYA, satu belum."""
+    return _sr_dok(signers=[
+        {"signer_id": "s1", "nama": "A", "status": "ditandatangani",
+         "signature_file_id": "f1", "jti": "j1", "signed_at": "2026-08-04",
+         "posisi_ttd": {"halaman": 1, "x": 0.2, "y": 0.6, "lebar": 0.25}},
+        {"signer_id": "s2", "nama": "B", "status": "menunggu",
+         "signature_file_id": "", "jti": "j2"}])
+
+
+def test_rakit_pdf_tanpa_slot_otomatis_tak_meledak(dbx, monkeypatch):
+    png = _png_ttd()
+
+    async def _ambil(fid):
+        return png if fid == "f1" else b""
+    monkeypatch.setattr(rt, "get_document_from_gridfs", _ambil, raising=False)
+    out = _jalan(rt._bangun_pdf_ber_ttd(_sr_kustom(), "sr-dok",
+                                        _pdf_dua_halaman(), sertakan_qr=False))
+    assert out.getvalue().startswith(b"%PDF")
+
+
+def test_pratinjau_menyertakan_ttd_yang_sudah_masuk(dbx, monkeypatch):
+    """Bukti perilaku, bukan sekadar "tidak melempar": hasil pratinjau HARUS
+    berbeda dari dokumen asli — di situlah tanda tangan pertama terlihat."""
+    png = _png_ttd()
+
+    async def _ambil(fid):
+        return png if fid == "f1" else b""
+    monkeypatch.setattr(rt, "get_document_from_gridfs", _ambil, raising=False)
+    asli = _pdf_dua_halaman()
+    hasil = _jalan(rt._dokumen_dengan_ttd_masuk(_sr_kustom(), "sr-dok", asli))
+    assert hasil != asli and hasil.startswith(b"%PDF")
+
+
+def test_pratinjau_tanpa_ttd_masuk_mengembalikan_dokumen_apa_adanya(dbx):
+    """Belum ada yang meneken → tak ada yang perlu dirakit; kembalikan berkas
+    asli (hemat, dan tak ada risiko gagal rakit di jalur pratinjau)."""
+    asli = _pdf_dua_halaman()
+    hasil = _jalan(rt._dokumen_dengan_ttd_masuk(_sr_dok(), "sr-dok", asli))
+    assert hasil == asli

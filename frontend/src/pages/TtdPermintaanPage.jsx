@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, BadgeCheck, ChevronDown, Copy, FileDown, FileSignature, FileText, IdCard,
-  Link2, Loader2, Mail, MessageCircle, PenTool, Plus, Search, SearchX, ShieldCheck,
+  Link2, Loader2, Mail, MessageCircle, PenTool, Plus, QrCode, Search, SearchX, ShieldCheck,
   Trash2, Upload, Users, XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -364,6 +364,15 @@ export default function TtdPermintaanPage({ user, onBack }) {
                   <span>{fmtWaktu(it.created_at)}</span>
                   <span className="text-muted-foreground/70">oleh {it.created_by}</span>
                 </p>
+                {/* Penanda kerja: sudah lengkap diteken tetapi QR belum
+                    ditempatkan — unduhan bagi penanda tangan & pemindai QR
+                    tertahan sampai admin mengaturnya. */}
+                {it.perlu_atur_qr && (
+                  <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 px-2 py-0.5 text-[10px] font-bold"
+                    data-testid={`ttd-perlu-qr-${it.id}`}>
+                    <QrCode className="w-3 h-3" />PERLU ATUR LETAK QR
+                  </p>
+                )}
               </button>
             ))}
           </div>

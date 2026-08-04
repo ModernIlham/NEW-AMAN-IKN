@@ -233,13 +233,17 @@ export default function AturPosisiTtd({
           <Button type="button" variant="outline" size="sm" className="h-9 text-xs" disabled={mengirim} onClick={onBatal}>
             Kembali
           </Button>
-          <Button type="button" variant="outline" size="sm" className="h-9 text-xs" disabled={mengirim}
-            onClick={() => onKirim(null)}
-            title={qr ? "QR otomatis di pojok kanan-bawah halaman terakhir"
-                      : "Tanpa memilih posisi — dibubuhkan otomatis di halaman terakhir"}
-            data-testid="posisi-lewati">
-            <SkipForward className="w-3.5 h-3.5 mr-1.5" />{labelOtomatis}
-          </Button>
+          {/* "Otomatis saja" HANYA untuk QR (milik pemilik dokumen). Pada sisi
+              penanda tangan tombol itu menyesatkan — letak ttd memang harus
+              dipilih, dan letak QR bukan urusannya (diatur saat unduh). */}
+          {qr && (
+            <Button type="button" variant="outline" size="sm" className="h-9 text-xs" disabled={mengirim}
+              onClick={() => onKirim(null)}
+              title="QR otomatis di pojok kanan-bawah halaman terakhir"
+              data-testid="posisi-lewati">
+              <SkipForward className="w-3.5 h-3.5 mr-1.5" />{labelOtomatis}
+            </Button>
+          )}
         </div>
         <Button type="button" size="sm" className="h-9 text-xs" disabled={mengirim || gagalHal || muatHal}
           onClick={() => onKirim({ halaman, ...pos })} data-testid="posisi-kirim">
