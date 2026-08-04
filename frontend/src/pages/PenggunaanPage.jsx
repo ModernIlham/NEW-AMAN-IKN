@@ -22,6 +22,7 @@ import { authMediaUrl } from "@/lib/mediaUrl";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 import PerkiraanNomor from "@/components/persuratan/PerkiraanNomor";
 import KartuTapDialog from "@/components/pegawai/KartuTapDialog";
+import { bagikanWa, bagikanEmail } from "@/lib/pesanTtd";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -1709,7 +1710,9 @@ export default function PenggunaanPage({ user, onBack }) {
                   <Button size="sm" variant="outline" className="h-7 text-[10px]"
                     onClick={() => { navigator.clipboard?.writeText(l.link); toast.success("Tautan disalin"); }}>Salin</Button>
                   <Button size="sm" variant="outline" className="h-7 text-[10px]"
-                    onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(`Yth. ${l.nama}, mohon tanda tangani secara elektronik melalui tautan berikut:\n${l.link}`)}`, "_blank", "noopener")}>WhatsApp</Button>
+                    onClick={() => bagikanWa(l.nama, ttdHasil?.judul, l.link, ttdHasil?.ringkas)}>WhatsApp</Button>
+                  <Button size="sm" variant="outline" className="h-7 text-[10px]"
+                    onClick={() => bagikanEmail(l.nama, ttdHasil?.judul, l.link, ttdHasil?.ringkas)}>Email</Button>
                 </div>
               </div>
             ))}

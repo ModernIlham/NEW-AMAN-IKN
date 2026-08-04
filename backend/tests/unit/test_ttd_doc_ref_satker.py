@@ -556,3 +556,83 @@ def test_batal_permintaan_mematikan_tautan_pendeknya(dbx, monkeypatch):
         await rt.batal_permintaan(hasil["id"], user=USER_A)
         return await tp.resolve_tautan(kode)
     assert _jalan(skenario()) is None
+
+
+# ── Ringkasan dokumen untuk pesan WA/email ─────────────────────────────────
+#
+# Mandat pemilik: pesan lama hanya "judul + tautan", sehingga penanda tangan
+# harus MEMBUKA tautan sekadar untuk tahu dokumen apa itu — dan berbulan-bulan
+# kemudian tak ada jejak yang bisa dicari di riwayat percakapannya. Ringkasan
+# DIBEKUKAN saat permintaan dibuat, sejalan dengan PDF-nya.
+
+async def _seed_bast(dbx, **ganti):
+    doc = {"id": "bast-1", "kode_satker": USER_A["kode_satker"],
+           "nomor": "BAST-77/OIKN/2026", "jenis": "mutasi_pengguna",
+           "tanggal": "2026-08-04",
+           "pihak_pertama": {"nama": "Budi Santoso"},
+           "pihak_kedua": {"nama": "Ani Lestari"},
+           "aset": [{"asset_code": "3.05.01.01.001", "NUP": 12,
+                     "asset_name": "Laptop"},
+                    {"asset_code": "3.05.02.01.003", "NUP": 4,
+                     "asset_name": "Printer"}]}
+    doc.update(ganti)
+    await dbx.bast_serah_terima.insert_one(doc)
+
+
+def test_ringkasan_bast_memuat_nomor_pihak_dan_barang(dbx):
+    async def skenario():
+        await _seed_bast(dbx)
+        return await rt._ringkas_dokumen("bast", "bast-1")
+    r = _jalan(skenario())
+    assert r["nomor"] == "BAST-77/OIKN/2026"
+    assert r["perihal"] == "Mutasi/Alih Pemegang Barang Milik Negara"
+    assert r["tanggal"] == "2026-08-04"
+    assert r["pihak"] == ["Budi Santoso (Pihak Pertama)", "Ani Lestari (Pihak Kedua)"]
+    assert r["jumlah_barang"] == 2
+    assert r["barang"][0] == {"kode": "3.05.01.01.001", "nup": "12",
+                              "nama": "Laptop"}
+
+
+def test_ringkasan_membatasi_barang_tapi_jumlah_tetap_jujur(dbx):
+    """Pesan WA tak boleh jadi daftar 200 baris — tapi jumlahnya TIDAK boleh
+    ikut dipotong, karena penerima memakainya untuk mencocokkan dokumen."""
+    async def skenario():
+        await _seed_bast(dbx, aset=[{"asset_code": f"3.05.{i:02d}", "NUP": i,
+                                     "asset_name": f"Barang {i}"}
+                                    for i in range(1, 21)])
+        return await rt._ringkas_dokumen("bast", "bast-1")
+    r = _jalan(skenario())
+    assert len(r["barang"]) == rt.MAKS_BARANG_RINGKAS == 3
+    assert r["jumlah_barang"] == 20
+
+
+def test_ringkasan_pakai_judul_lainnya_bila_diisi(dbx):
+    async def skenario():
+        await _seed_bast(dbx, jenis="lainnya", judul_lainnya="Serah Terima Khusus")
+        return await rt._ringkas_dokumen("bast", "bast-1")
+    assert _jalan(skenario())["perihal"] == "Serah Terima Khusus"
+
+
+def test_ringkasan_kosong_untuk_dokumen_tanpa_rujukan(dbx):
+    """Dokumen unggahan bebas tak punya BAST rujukan — pesannya menyusut
+    sendiri, bukan menampilkan baris kosong yang membingungkan."""
+    assert _jalan(rt._ringkas_dokumen("dokumen_unggahan", "")) == {}
+    assert _jalan(rt._ringkas_dokumen("bast", "tidak-ada")) == {}
+
+
+def test_permintaan_bast_membekukan_ringkasannya(dbx):
+    """Ikut tersimpan di record + dikembalikan ke pemanggil, supaya pesan yang
+    dibagikan cocok dengan dokumen yang benar-benar diteken."""
+    async def skenario():
+        await _seed_bast(dbx)
+        hasil = await rt.buat_permintaan(
+            payload=rt.PermintaanIn(judul="BAST BAST-77/OIKN/2026",
+                                    doc_type="bast", doc_ref="bast-1",
+                                    mode="paralel",
+                                    signers=[rt.SignerIn(nama="Budi Santoso")]),
+            user=USER_A)
+        sr = await dbx.signature_requests.find_one({"id": hasil["id"]})
+        return hasil, sr
+    hasil, sr = _jalan(skenario())
+    assert hasil["ringkas"]["nomor"] == "BAST-77/OIKN/2026"
+    assert sr["ringkas"]["jumlah_barang"] == 2
