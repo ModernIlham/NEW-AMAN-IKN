@@ -62,6 +62,7 @@ const TtdPublikPage = lazy(() => import("./pages/TtdPublikPage"));
 const LacakPage = lazy(() => import("./pages/LacakPage"));
 const PetaKolaborasiPage = lazy(() => import("./pages/PetaKolaborasiPage"));
 const TtdPermintaanPage = lazy(() => import("./pages/TtdPermintaanPage"));
+const TautanPendekPage = lazy(() => import("./pages/TautanPendekPage"));
 const SatkerPage = lazy(() => import("./pages/SatkerPage"));
 const PengaturanPage = lazy(() => import("./pages/PengaturanPage"));
 const PembukuanPage = lazy(() => import("./pages/PembukuanPage"));
@@ -370,6 +371,20 @@ function App() {
   // harus bisa dibuka SIAPA PUN TANPA LOGIN — diperiksa SEBELUM gate auth
   // dan seluruh early-return modul, murni dari pathname.
   // TANPA SatkerAktifBar — alasan sama dengan peta kolaboratif di bawah.
+  // ── TAUTAN PENDEK /s/{kode} ────────────────────────────────────────────
+  // Diperiksa SEBELUM gate auth: yang membukanya tamu tanpa akun (penanda
+  // tangan, pemindai QR). Halaman ini hanya menukar kode lalu mengalihkan.
+  if (window.location.pathname.startsWith('/s/')) {
+    return (
+      <div className="App">
+        <HalamanLazy fallback={<PageLoader />}>
+          <TautanPendekPage />
+        </HalamanLazy>
+        <Toaster position="top-right" richColors />
+      </div>
+    );
+  }
+
   if (window.location.pathname.startsWith('/ttd/')) {
     return (
       <div className="App">

@@ -530,6 +530,18 @@ async def create_indexes() -> None:
                                           name="opname_scan_aset_waktu")
         await db.opname_scan.create_index([("kode_satker", 1), ("pada", -1)],
                                           name="opname_scan_satker_waktu")
+        # TAUTAN PENDEK (/s/{kode}).
+        #
+        # UNIK kode = penegak keunikan yang dipakai buat_tautan_pendek() untuk
+        # mendeteksi tabrakan lalu mencoba kode lain. Tanpa indeks ini dua
+        # tautan bisa memakai kode sama dan salah satunya mengalihkan ke
+        # dokumen ORANG LAIN — bukan sekadar tautan mati.
+        await db.tautan_pendek.create_index("kode", unique=True,
+                                            name="tautan_pendek_kode")
+        # Pencabutan massal saat permintaan TTD dibatalkan / link diterbitkan
+        # ulang: cari semua tautan satu dokumen sekaligus.
+        await db.tautan_pendek.create_index([("jenis", 1), ("ref", 1)],
+                                            name="tautan_pendek_jenis_ref")
         logger.info("Database indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")

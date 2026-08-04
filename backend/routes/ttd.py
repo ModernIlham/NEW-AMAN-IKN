@@ -288,6 +288,56 @@ def _link_ttd(sr_id, token):
     return (_APP_URL + rel) if _APP_URL else rel
 
 
+async def _link_ttd_pendek(sr_id, token, signer_id="", kode_satker="",
+                           oleh="") -> str:
+    """Tautan e-sign PENDEK (±46 karakter, dari ±396).
+
+    Yang dibagikan lewat WA/email jadi satu baris, dan — ini yang penting —
+    token tanda tangan TIDAK IKUT di dalam pesan yang beredar. Selama ini
+    token itu ikut terbawa setiap kali pesan diteruskan atau di-screenshot.
+
+    Masa berlaku tautan pendek disamakan dengan masa berlaku tokennya supaya
+    tak ada tautan yang tampak hidup padahal tokennya sudah mati. Gagal
+    memendekkan TIDAK menggagalkan penerbitan permintaan — jatuh ke tautan
+    panjang seperti sebelumnya.
+    """
+    panjang = _link_ttd(sr_id, token)
+    try:
+        from datetime import timedelta
+
+        from auth_utils import SIGN_TOKEN_EXPIRATION_DAYS
+        from tautan_pendek_utils import buat_tautan_pendek, url_pendek
+        kedaluwarsa = (datetime.now(timezone.utc)
+                       + timedelta(days=SIGN_TOKEN_EXPIRATION_DAYS)).isoformat()
+        kode = await buat_tautan_pendek(
+            panjang, jenis="ttd", ref=str(sr_id), sub_ref=str(signer_id),
+            kode_satker=kode_satker, dibuat_oleh=oleh,
+            kedaluwarsa=kedaluwarsa)
+        return url_pendek(kode) if kode else panjang
+    except Exception:
+        return panjang
+
+
+async def _link_verifikasi_pendek(sr_id, kode_satker="", oleh="") -> str:
+    """Tautan verifikasi PENDEK — dipakai untuk isi QR di dokumen ber-TTD.
+
+    Bonus nyata di sini: isi QR jadi jauh lebih ringkas, sehingga modul QR-nya
+    lebih renggang dan lebih mudah dipindai kamera HP pada ukuran cetak kecil.
+    Tanpa masa berlaku: verifikasi keabsahan dokumen harus tetap bisa dibuka
+    bertahun-tahun kemudian.
+    """
+    panjang = (_APP_URL + f"/ttd/verifikasi/{sr_id}") if _APP_URL \
+        else f"/ttd/verifikasi/{sr_id}"
+    try:
+        from tautan_pendek_utils import buat_tautan_pendek, url_pendek
+        kode = await buat_tautan_pendek(
+            panjang, jenis="verifikasi", ref=str(sr_id),
+            kode_satker=kode_satker, dibuat_oleh=oleh, pakai_ulang=True)
+        return url_pendek(kode) if kode else panjang
+    except Exception:
+        return panjang
+
+
 def _publik_signer(sg):
     """Bidang aman signer untuk halaman publik (tanpa jti/token)."""
     return {k: sg.get(k) for k in ("signer_id", "nama", "nip", "jabatan",
@@ -361,6 +411,10 @@ async def buat_permintaan(payload: PermintaanIn, user: dict = Depends(require_wr
     sr_id = str(uuid.uuid4())
     signers, links = [], []
     urut = 1
+    # Dihitung SEBELUM perulangan: tautan pendek tiap penanda tangan ikut
+    # distempel satkernya, dan nilai ini juga dipakai di record di bawah.
+    from shared_utils import kode_satker_user
+    kode_sat = kode_satker_user(user)
     for s in payload.signers:
         if not str(s.nama or "").strip():
             raise HTTPException(status_code=400, detail="Nama penanda tangan wajib")
@@ -375,7 +429,9 @@ async def buat_permintaan(payload: PermintaanIn, user: dict = Depends(require_wr
             "jti": jti, "signature_file_id": "", "hash": "",
             "signed_at": "", "ip": ""})
         token = create_sign_token(sr_id, signer_id, jti)
-        link = _link_ttd(sr_id, token)
+        link = await _link_ttd_pendek(sr_id, token, signer_id=signer_id,
+                                      kode_satker=kode_sat,
+                                      oleh=user.get("username", ""))
         email_terkirim = False
         if aktif and str(s.email or "").strip():
             from shared_utils import send_esign_email
@@ -385,7 +441,6 @@ async def buat_permintaan(payload: PermintaanIn, user: dict = Depends(require_wr
                       "email": str(s.email or "").strip(),
                       "email_terkirim": email_terkirim})
         urut += 1
-    from shared_utils import kode_satker_user
     record = {
         "id": sr_id, "judul": payload.judul.strip() or "Dokumen",
         "doc_type": str(payload.doc_type or "dokumen"),
@@ -393,7 +448,7 @@ async def buat_permintaan(payload: PermintaanIn, user: dict = Depends(require_wr
         "status": "terkirim", "signers": signers,
         # Isolasi multi-satker: tanpa stempel ini admin satker LAIN dapat
         # melihat & membatalkan permintaan TTD (dokumen + PII penandatangan).
-        "kode_satker": kode_satker_user(user),
+        "kode_satker": kode_sat,
         "created_by": user.get("username", "system"),
         "created_at": now.isoformat(),
     }
@@ -877,8 +932,10 @@ async def _bangun_pdf_ber_ttd(sr: dict, sr_id: str, data: bytes,
         for j, baris in enumerate(info[:3]):
             c.drawCentredString(x + slot_w / 2, nama_y - 8 - j * 7, baris)
     # URL verifikasi publik (dipakai QR otomatis MAUPUN posisi pilihan).
-    verif = (_APP_URL + f"/ttd/verifikasi/{sr_id}") if _APP_URL \
-        else f"/ttd/verifikasi/{sr_id}"
+    # Bentuk PENDEK: isi QR jadi jauh lebih ringkas → modulnya lebih renggang
+    # dan lebih mudah dipindai kamera HP pada ukuran cetak kecil (±2 cm).
+    verif = await _link_verifikasi_pendek(
+        sr_id, kode_satker=str(sr.get("kode_satker") or ""))
     # QR otomatis pojok kanan-bawah HANYA bila QR tak diatur posisinya sendiri.
     if sertakan_qr and qr_pos is None:
         try:
@@ -1101,6 +1158,13 @@ async def batal_permintaan(sr_id: str, user: dict = Depends(require_writer)):
         raise HTTPException(status_code=404, detail="Permintaan tidak ditemukan")
     _pastikan_pemilik_sr(sr, user)  # pembuat / admin SATKER YANG SAMA
     await db.signature_requests.update_one({"id": sr_id}, {"$set": {"status": "batal"}})
+    # Tautan pendek SELURUH permintaan ikut mati — termasuk tautan verifikasi
+    # yang tercetak sebagai QR di dokumen. Rute panjangnya sudah menolak
+    # permintaan batal (410); tautan pendek tak boleh jadi pintu belakang yang
+    # tampak masih hidup.
+    from tautan_pendek_utils import cabut_tautan
+    await cabut_tautan("ttd", sr_id)
+    await cabut_tautan("verifikasi", sr_id)
     # Rekam jejak pembatalan — setara buat/tandatangani/terbit-ulang link yang
     # sudah ber-audit; agar dapat ditelusuri SIAPA & KAPAN membatalkan, dan
     # menjadi fondasi propagasi lintas modul (langkah observability murni —
@@ -1195,7 +1259,15 @@ async def buat_ulang_link(sr_id: str, signer_id: str,
         {"id": sr_id, "signers.signer_id": signer_id},
         {"$set": {"signers.$.jti": jti}})
     token = create_sign_token(sr_id, signer_id, jti)
-    link = _link_ttd(sr_id, token)
+    # jti BARU sudah mematikan token lama; tautan pendek lama yang menunjuk
+    # token itu harus ikut mati, bukan menyisakan alamat yang membuka halaman
+    # "link tidak valid" tanpa penjelasan. HANYA milik penanda tangan ini —
+    # tautan rekan-rekannya masih sah dan mereka belum tentu sudah meneken.
+    from tautan_pendek_utils import cabut_tautan
+    await cabut_tautan("ttd", sr_id, sub_ref=signer_id)
+    link = await _link_ttd_pendek(sr_id, token, signer_id=signer_id,
+                                  kode_satker=str(sr.get("kode_satker") or ""),
+                                  oleh=user.get("username", ""))
     email_terkirim = False
     if str(signers[idx].get("email") or "").strip():
         from shared_utils import send_esign_email
@@ -1520,7 +1592,8 @@ async def lembar_pdf(sr_id: str, user: dict = Depends(require_user_or_query_toke
     # QR verifikasi.
     try:
         from routes.cards import build_qr_flowable
-        verif = (_APP_URL + f"/ttd/verifikasi/{sr_id}") if _APP_URL else f"/ttd/verifikasi/{sr_id}"
+        verif = await _link_verifikasi_pendek(
+            sr_id, kode_satker=str(sr.get("kode_satker") or ""))
         el.append(build_qr_flowable(verif, 28 * rl_mm))
     except Exception:
         pass
