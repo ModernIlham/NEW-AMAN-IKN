@@ -67,6 +67,45 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#744] Manajemen revisi BAST — versi berantai, arsip utuh, nomor lama otomatis ber-status — 2026-08-04
+
+Sistem kini mengakomodir yang selama ini tak terlacak: **BAST yang sudah sah
+lalu direvisi — dan sudah berapa kali**. Prinsipnya: BAST sah TIDAK PERNAH
+diedit; revisi menerbitkan **BAST PENGGANTI bernomor baru**, arsip lama utuh.
+
+### Alur
+
+Riwayat BAST → tombol **Revisi** → form terbuka terprefill dari BAST lama →
+betulkan isinya, pilih mode (**Mengubah** — koreksi isi, serah terima tetap
+terjadi; **Mencabut** — serah terimanya dibatalkan), tulis **alasan (wajib)**
+→ simpan. Nomor baru dipesan otomatis dari Registrasi Persuratan.
+
+### Yang dijaga sistem
+
+- **Rantai lurus**: BAST yang sudah punya pengganti tidak bisa direvisi lagi
+  (409) — revisi berikutnya dibuat dari pengganti terbaru; hitungan
+  `revisi_ke` menaik mengikuti rantai (jawaban "sudah berapa kali revisi").
+- **PDF bercerita jujur**: cetakan BAST lama memuat peringatan merah
+  "DOKUMEN INI TELAH DIREVISI/DICABUT — digantikan BAST <nomor>", cetakan
+  pengganti memuat "Revisi ke-N atas BAST <nomor lama>" + alasannya —
+  cetakan lama yang beredar tak bisa dikira masih berlaku.
+- **Nomor agenda lama otomatis ber-status** lewat relasi antar surat
+  ([#743]): mode mengubah → "Berlaku dengan perubahan", mode mencabut →
+  "Tidak Berlaku" di buku agenda — tanpa diketik siapa pun.
+- Badge di Riwayat BAST: "Revisi ke-N atas <nomor>" (pengganti) dan
+  "⚠ Telah direvisi/dicabut — digantikan <nomor>" (arsip lama); tombol
+  Kirim TTD / Unggah Bukti disembunyikan pada arsip tergantikan (dokumen
+  usang tak boleh dimintakan tanda tangan).
+- Revisi lintas satker ditolak (403); alasan kosong ditolak (400); efek data
+  ke aset TIDAK diulang (revisi = koreksi dokumen, bukan serah terima baru);
+  semua tercatat di log audit.
+
+Uji: 5 uji baru (rantai lurus + penandaan sumber, alasan wajib, lintas
+satker, tautan nomor agenda via relasi surat, PDF dua arah bercerita jujur).
+`pytest tests/unit` → 1642 lolos.
+
+---
+
 ## [#743] Persuratan advanced: relasi antar surat + status keberlakuan terhitung + timeline — 2026-08-04
 
 Buku agenda kini memodelkan hubungan hukum antar naskah sebagaimana jaringan
