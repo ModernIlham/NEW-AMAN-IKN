@@ -371,6 +371,59 @@ async def _peta_subsub_kelompok(codes):
     return out
 
 
+async def _peta_uraian_bidang(codes):
+    """Peta kode BIDANG (3 digit) → uraian kodefikasi. Dipakai baris sekat
+    pembagi daftar barang. Bidang yang belum terdaftar di referensi tidak
+    dikarang — sekatnya cukup menyebut kodenya saja."""
+    from kodefikasi_utils import LEVEL_LENGTHS, normalize_kode
+    n = LEVEL_LENGTHS[2]
+    bidang = {normalize_kode(c)[:n] for c in codes if str(c or "").strip()}
+    bidang = {b for b in bidang if len(b) == n}
+    if not bidang:
+        return {}
+    docs = await db.kodefikasi.find(
+        {"kode": {"$in": list(bidang)}}, {"_id": 0, "kode": 1, "uraian": 1},
+    ).to_list(len(bidang) + 1)
+    return {d["kode"]: str(d.get("uraian") or "").strip() for d in docs}
+
+
+def _baris_sekat_bidang(kode_bidang, nama_bidang, jumlah, n_kolom, st):
+    """Baris SEKAT PEMBAGI satu kelompok BIDANG beserta jumlah unitnya.
+
+    Mengembalikan satu baris tabel (sel pertama berisi label, sisanya kosong
+    karena akan di-SPAN oleh `_gaya_sekat_bidang`). Bidang tanpa kode barang
+    dinyatakan terus terang, bukan disamarkan menjadi bidang lain.
+    """
+    from reportlab.platypus import Paragraph
+    from xml.sax.saxutils import escape as _esc
+    label = (f"BIDANG {_esc(kode_bidang)}" if kode_bidang
+             else "TANPA KODE BARANG")
+    if nama_bidang:
+        label += f" — {_esc(nama_bidang)}"
+    gaya = st.get('CellSekat') or st['Cell']
+    return ([Paragraph(f"<b>{label}</b> · {int(jumlah)} unit", gaya)]
+            + [""] * max(0, n_kolom - 1))
+
+
+def _gaya_sekat_bidang(baris_sekat, warna=None, padding=1.0):
+    """Perintah TableStyle untuk baris sekat: melebar penuh (SPAN) dengan
+    latar sendiri dan padding setipis mungkin — sekat adalah penanda, bukan
+    baris barang, sehingga tak boleh memakan tinggi sebesar baris barang.
+    Diberikan lewat `extra=` agar menang atas zebra."""
+    from reportlab.lib import colors as rl_colors
+    bg = rl_colors.HexColor(warna or _PALETTE["header_bg"])
+    cmds = []
+    for r in baris_sekat:
+        cmds += [
+            ('SPAN', (0, r), (-1, r)),
+            ('BACKGROUND', (0, r), (-1, r), bg),
+            ('ALIGN', (0, r), (-1, r), 'LEFT'),
+            ('TOPPADDING', (0, r), (-1, r), padding),
+            ('BOTTOMPADDING', (0, r), (-1, r), padding),
+        ]
+    return cmds
+
+
 def _sel_identitas_barang(a, subsub_nama, st):
     """Sel gabungan identitas aset (menghemat lebar tabel): Sub-sub Kelompok
     di ATAS, lalu 'kode barang · NUP' di BAWAH — memberi ruang lebar untuk

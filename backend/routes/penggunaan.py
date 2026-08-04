@@ -864,9 +864,11 @@ async def daftar_pemegang_pdf(
     from reportlab.lib.units import mm as rl_mm
     from reportlab.platypus import Paragraph, Spacer, Table
 
+    from kodefikasi_utils import kelompokkan_per_bidang
     from routes.reports import (
-        _fit_col_widths, _get_report_styles, _kop_surat_flowables,
-        _page_footer_factory, _peta_subsub_kelompok, _sel_identitas_barang,
+        _baris_sekat_bidang, _fit_col_widths, _gaya_sekat_bidang,
+        _get_report_styles, _kop_surat_flowables, _page_footer_factory,
+        _peta_subsub_kelompok, _peta_uraian_bidang, _sel_identitas_barang,
         _sel_uraian_barang, _signature_block, _std_doc, _std_table_style,
         _title_block,
     )
@@ -896,7 +898,8 @@ async def daftar_pemegang_pdf(
     if not rows:
         raise HTTPException(status_code=404,
                             detail="Pemegang tidak ditemukan / tanpa aset")
-    rows.sort(key=lambda a: (a.get("asset_name") or "", a.get("asset_code") or ""))
+    # Urutan baris ditetapkan saat pengelompokan bidang di bawah (bidang →
+    # kode barang → NUP terkecil), bukan menurut nama barang seperti dulu.
     # Kop per-satker (bukan report_settings global): dokumen resmi satker ini
     # harus berkop satker ini — selaras bast_psp_pdf di atas.
     from shared_utils import pengaturan_kop
@@ -932,20 +935,35 @@ async def daftar_pemegang_pdf(
                "Uraian Barang\n(Nama · Merk/Tipe/Spesifikasi)",
                "Lokasi", "Kondisi", "BAST"]
     table_data = [[Paragraph(h, st['TableHeader']) for h in headers]]
-    for i, a in enumerate(rows, start=1):
-        table_data.append([
-            Paragraph(str(i), st['CellCenter']),
-            _sel_identitas_barang(a, subsub.get(_norm(a.get("asset_code")), ""), st),
-            _sel_uraian_barang(a, st),
-            Paragraph(a.get("location") or "-", st['Cell']),
-            Paragraph(a.get("condition") or "-", st['CellCenter']),
-            Paragraph("✓" if str(a.get("bast_file_id") or "").strip() else "—",
-                      st['CellCenter']),
-        ])
+    # Sekat pembagi per BIDANG kode barang + jumlah unit tiap kelompok; di
+    # dalam kelompok barang terurut menurut kode barang lalu NUP TERKECIL —
+    # sama persis dengan tabel Objek Serah Terima pada BAST agar lampiran dan
+    # induknya terbaca sebagai satu dokumen.
+    uraian_bidang = await _peta_uraian_bidang([a.get("asset_code") for a in rows])
+    baris_sekat = []
+    i = 0
+    for kode_bidang, isi in kelompokkan_per_bidang(rows):
+        baris_sekat.append(len(table_data))
+        table_data.append(_baris_sekat_bidang(
+            kode_bidang, uraian_bidang.get(kode_bidang, ""), len(isi),
+            len(headers), st))
+        for a in isi:
+            i += 1
+            table_data.append([
+                Paragraph(str(i), st['CellCenter']),
+                _sel_identitas_barang(
+                    a, subsub.get(_norm(a.get("asset_code")), ""), st),
+                _sel_uraian_barang(a, st),
+                Paragraph(a.get("location") or "-", st['Cell']),
+                Paragraph(a.get("condition") or "-", st['CellCenter']),
+                Paragraph("✓" if str(a.get("bast_file_id") or "").strip() else "—",
+                          st['CellCenter']),
+            ])
     table = Table(table_data,
                   colWidths=_fit_col_widths([20, 150, 185, 74, 52, 30], doc.width),
                   repeatRows=1)
-    table.setStyle(_std_table_style(zebra=True))
+    table.setStyle(_std_table_style(zebra=True,
+                                    extra=_gaya_sekat_bidang(baris_sekat)))
     elements.append(table)
 
     elements.append(Spacer(1, 12 * rl_mm))
