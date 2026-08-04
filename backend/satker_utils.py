@@ -25,7 +25,14 @@ PETA_KOP_SATKER = {
     "subjudul_laporan": "subjudul_laporan",
     "tahun_anggaran": "tahun_anggaran",
     "catatan_kaki": "catatan_kaki",
+    # Kebijakan penyajian NILAI PEROLEHAN pada surat serah terima (lihat
+    # `tampilkan_nilai_dokumen`): "" = ikut global, "tampilkan"/"sembunyikan".
+    "nilai_dokumen": "nilai_dokumen",
 }
+
+# Kebijakan penyajian nilai perolehan pada dokumen serah terima.
+NILAI_DOKUMEN = ("tampilkan", "sembunyikan")
+NILAI_DOKUMEN_DEFAULT = "tampilkan"
 
 
 def gabung_kop(settings, satker):
@@ -46,3 +53,45 @@ def gabung_kop(settings, satker):
         if nama:
             out["nama_sub_unit"] = nama
     return out
+
+
+def kebijakan_nilai_dokumen(settings) -> str:
+    """Kebijakan satker atas NILAI PEROLEHAN di surat serah terima:
+    "tampilkan" (bawaan) atau "sembunyikan". Nilai tak dikenal/kosong →
+    bawaan, sehingga data lama & satker yang belum menyetel tetap mencetak
+    nilai seperti sebelumnya. MURNI."""
+    v = str((settings or {}).get("nilai_dokumen") or "").strip().lower()
+    return v if v in NILAI_DOKUMEN else NILAI_DOKUMEN_DEFAULT
+
+
+def tampilkan_nilai_dokumen(settings, pilihan=None) -> bool:
+    """Apakah kolom Nilai Perolehan dicetak pada dokumen ini?
+
+    Banyak instansi/satker berkebijakan MENYEMBUNYIKAN nilai perolehan pada
+    naskah yang dibaca umum atau dipegang pegawai (BAST, KIB yang ditempel di
+    ruangan). Urutan kewenangan:
+
+      1. `pilihan` — keputusan eksplisit per DOKUMEN/unduhan (True/False);
+      2. kebijakan satker/global (`nilai_dokumen`) bila `pilihan` None.
+
+    `pilihan` sengaja tri-state: None berarti "ikut kebijakan", sehingga
+    dokumen lama (tanpa field pilihan) otomatis mengikuti kebijakan berjalan.
+    MURNI (teruji unit)."""
+    if pilihan is not None:
+        return bool(pilihan)
+    return kebijakan_nilai_dokumen(settings) != "sembunyikan"
+
+
+def pilihan_nilai_dari_query(nilai: str = ""):
+    """Terjemahkan parameter unduhan `?nilai=` → tri-state `pilihan`.
+
+    "1"/"true"/"tampilkan" → True · "0"/"false"/"sembunyikan" → False ·
+    kosong/tak dikenal → None (ikut kebijakan). Dipakai agar satu dokumen
+    yang sama bisa dicetak dua versi (arsip ber-nilai, salinan pegawai
+    tanpa nilai) tanpa mengubah data. MURNI."""
+    v = str(nilai or "").strip().lower()
+    if v in ("1", "true", "ya", "tampilkan"):
+        return True
+    if v in ("0", "false", "tidak", "sembunyikan"):
+        return False
+    return None

@@ -30,6 +30,7 @@ from shared_utils import (pastikan_akses_kegiatan_id, ambang_kapitalisasi,
                           kode_satker_user, _q_pejabat_satker)
 from report_filters import active_asset_filter
 from report_utils import hitung_status_stiker, distribusi_pengguna
+from satker_utils import NILAI_DOKUMEN, NILAI_DOKUMEN_DEFAULT
 from markupsafe import Markup
 
 logger = logging.getLogger(__name__)
@@ -4514,6 +4515,11 @@ class ReportSettingsUpdate(BaseModel):
     # Evaluasi #4 (OPT-IN, default OFF): bila True, simpan aset menolak pengguna_nip
     # yang belum terdaftar di Master Pegawai. None = jangan ubah nilai tersimpan.
     wajib_pegawai_terdaftar: Optional[bool] = None
+    # Kebijakan NILAI PEROLEHAN pada surat serah terima (BAST/KIB): "tampilkan"
+    # (bawaan) atau "sembunyikan" — banyak satker menutup nilai pada naskah
+    # yang dibaca umum/dipegang pegawai. Satker dapat menimpanya lewat Master
+    # Satker; tiap dokumen masih bisa memilih sendiri saat dibuat/diunduh.
+    nilai_dokumen: Optional[str] = ""
 
 
 @reports_router.get("/report-settings")
@@ -4536,8 +4542,23 @@ async def get_report_settings(_user: dict = Depends(require_user)):
             "tanggal_laporan": "",
             "tembusan_laporan": "",
             "wajib_pegawai_terdaftar": False,
+            "nilai_dokumen": NILAI_DOKUMEN_DEFAULT,
         }
     return settings
+
+
+@reports_router.get("/kebijakan-dokumen")
+async def kebijakan_dokumen(_user: dict = Depends(require_user)):
+    """Kebijakan penyajian dokumen yang BERLAKU bagi satker pengguna.
+
+    Dipakai form pembuat dokumen (mis. BAST) untuk menyetel nilai awal saklar
+    "Tampilkan Nilai Perolehan" — supaya bawaan layar sama dengan yang nanti
+    tercetak. Resolusi: Master Satker → report_settings global.
+    """
+    from satker_utils import kebijakan_nilai_dokumen, tampilkan_nilai_dokumen
+    settings = await pengaturan_kop(kode_satker=kode_satker_user(_user)) or {}
+    return {"nilai_dokumen": kebijakan_nilai_dokumen(settings),
+            "tampilkan_nilai": tampilkan_nilai_dokumen(settings)}
 
 
 @reports_router.put("/report-settings")
@@ -4553,6 +4574,12 @@ async def update_report_settings(data: ReportSettingsUpdate,
     tetap lewat Master Satker (PUT /satker/{kode}), yang sudah ber-guard.
     """
     update_data = {k: v for k, v in data.dict().items() if v is not None}
+    _nd = str(update_data.get("nilai_dokumen") or "").strip().lower()
+    if _nd and _nd not in NILAI_DOKUMEN:
+        raise HTTPException(status_code=400, detail=(
+            "Kebijakan nilai dokumen harus 'tampilkan' atau 'sembunyikan'"))
+    if "nilai_dokumen" in update_data:
+        update_data["nilai_dokumen"] = _nd
     update_data["type"] = "global"
     await db.report_settings.update_one(
         {"type": "global"},

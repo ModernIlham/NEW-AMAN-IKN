@@ -67,6 +67,45 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#738] Nilai Perolehan bisa disembunyikan pada surat serah terima — kebijakan satker + pilihan per dokumen — 2026-08-04
+
+Banyak instansi/satker berkebijakan menutup nilai perolehan pada naskah yang
+dibaca umum atau dipegang pegawai. Kini penyajian nilai dapat diatur, dengan
+tiga lapis kewenangan (yang lebih spesifik menang):
+
+1. **Kebijakan universal** — Pengaturan → tab Universal, "Nilai Perolehan pada
+   surat serah terima": Tampilkan (bawaan) / Sembunyikan;
+2. **Kebijakan satker** — Master Satker: Ikut setelan universal / Tampilkan /
+   Sembunyikan (satker boleh berbeda dari pusat);
+3. **Pilihan per dokumen** — saklar "Tampilkan kolom Nilai Perolehan" pada
+   form Buat BAST (bawaan layar = kebijakan satker, lewat endpoint baru
+   `GET /api/kebijakan-dokumen`). Pilihan itu **dibekukan bersama BAST**:
+   kebijakan boleh berubah kemudian, cetak ulang dokumen lama tetap sama.
+
+Selain itu tiap unduhan menerima `?nilai=0/1` sehingga **satu dokumen bisa
+dicetak dua versi** — arsip ber-nilai dan salinan pegawai tanpa nilai — tanpa
+mengubah data.
+
+### Cakupan: naskah yang dipegang orang, bukan laporan keuangan
+
+Berlaku pada **BAST pengguna**, **BAST penetapan status penggunaan**, dan
+**KIB** (kartu yang kerap ditempel di ruangan). Saat disembunyikan, kolom
+nilai beserta baris JUMLAH benar-benar HILANG dari tabel (bukan dikosongkan),
+dan dokumen memuat catatan jujur: nilai tidak ditampilkan sesuai kebijakan
+penyajian satker, datanya tetap tercatat di DBKP.
+
+Sengaja TIDAK diberlakukan pada laporan yang nilainya adalah substansi:
+LBP, DBKP, Posisi BMN/Neraca, penyusutan, dan BAST PPK→KPB (harga kontrak
+adalah inti pertanggungjawabannya). Bawaan tetap "tampilkan", jadi satker
+yang belum menyetel tak melihat perubahan apa pun.
+
+Uji: 4 uji murni kebijakan (bawaan aman-mundur, tri-state pilihan dokumen,
+overlay satker↔global, parser parameter) + 3 uji PDF nyata (pypdfium2) —
+kolom & angka nilai benar-benar absen saat disembunyikan, kontrol kebijakan
+bawaan tetap mencetaknya, dan `?nilai=0` menimpa pilihan dokumen.
+
+---
+
 ## [#737] Rangkap jabatan terkelola — KPB tanda tangan sesuai KAPASITAS kop + baris nama blok ttd selalu sejajar — 2026-08-04
 
 Dua permintaan pemilik dari tangkapan layar BAST: (a) blok "Mengetahui" pada

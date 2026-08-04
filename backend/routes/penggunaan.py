@@ -320,7 +320,8 @@ async def transisi_pengajuan_psp(sk_id: str, payload: TransisiPengajuanIn,
 
 
 @penggunaan_router.get("/penggunaan/psp/{sk_id}/bast-pdf")
-async def bast_psp_pdf(sk_id: str, _user: dict = Depends(require_user)):
+async def bast_psp_pdf(sk_id: str, nilai: str = "",
+                       _user: dict = Depends(require_user)):
     """BAST penetapan status penggunaan siap tanda tangan (PMK 40/2024).
 
     Kop surat satker, narasi dasar SK penetapan, tabel aset multi-baris,
@@ -347,7 +348,12 @@ async def bast_psp_pdf(sk_id: str, _user: dict = Depends(require_user)):
         raise HTTPException(status_code=400,
                             detail="BAST hanya untuk usulan yang sudah ditetapkan (SK terbit)")
     from shared_utils import pengaturan_kop
+    from satker_utils import pilihan_nilai_dari_query, tampilkan_nilai_dokumen
     settings = await pengaturan_kop(kode_satker=sk.get("kode_satker"))
+    # Kolom Nilai Perolehan ikut kebijakan satker; `?nilai=0/1` untuk mencetak
+    # salinan tanpa/dengan nilai tanpa mengubah data.
+    tampil_nilai = tampilkan_nilai_dokumen(
+        settings, pilihan_nilai_dari_query(nilai))
     aset = sk.get("aset") or []
     # SK era lama men-snapshot tanpa kondisi/nilai perolehan — lengkapi saat
     # render dari master aset agar kolom Kondisi & Nilai tidak selalu kosong.
@@ -406,33 +412,45 @@ async def bast_psp_pdf(sk_id: str, _user: dict = Depends(require_user)):
 
     from pembukuan_utils import parse_harga as _ph
     elements.append(Paragraph("<b>PASAL 1 — OBJEK SERAH TERIMA</b>", _pasal))
-    headers = ["No", "Kode Barang", "NUP", "Nama Barang", "Kondisi",
-               "Nilai Perolehan (Rp)"]
+    headers = ["No", "Kode Barang", "NUP", "Nama Barang", "Kondisi"]
+    lebar = [24, 112, 42, 172, 52]
+    if tampil_nilai:
+        headers.append("Nilai Perolehan (Rp)")
+        lebar.append(80)
     table_data = [[Paragraph(h, st['TableHeader']) for h in headers]]
     total_nilai = 0.0
     for i, a in enumerate(aset, start=1):
         nilai = _ph(a.get("purchase_price"))
         total_nilai += nilai
-        table_data.append([
+        baris = [
             Paragraph(str(i), st['CellCenter']),
             Paragraph(a.get("asset_code") or "-", st['Cell']),
             Paragraph(str(a.get("NUP") or "-"), st['CellCenter']),
             Paragraph(a.get("asset_name") or "-", st['Cell']),
             Paragraph(a.get("condition") or "-", st['CellCenter']),
-            Paragraph(f"{nilai:,.0f}".replace(",", ".") if nilai else "-",
-                      st.get('CellRight', st['CellCenter'])),
-        ])
-    table_data.append([
-        Paragraph("", st['Cell']), Paragraph("<b>JUMLAH</b>", st['Cell']),
-        Paragraph("", st['Cell']), Paragraph("", st['Cell']),
-        Paragraph("", st['Cell']),
-        Paragraph(f"<b>{total_nilai:,.0f}</b>".replace(",", "."),
-                  st.get('CellRight', st['CellCenter']))])
+        ]
+        if tampil_nilai:
+            baris.append(Paragraph(
+                f"{nilai:,.0f}".replace(",", ".") if nilai else "-",
+                st.get('CellRight', st['CellCenter'])))
+        table_data.append(baris)
+    if tampil_nilai:
+        table_data.append([
+            Paragraph("", st['Cell']), Paragraph("<b>JUMLAH</b>", st['Cell']),
+            Paragraph("", st['Cell']), Paragraph("", st['Cell']),
+            Paragraph("", st['Cell']),
+            Paragraph(f"<b>{total_nilai:,.0f}</b>".replace(",", "."),
+                      st.get('CellRight', st['CellCenter']))])
     table = Table(table_data,
-                  colWidths=_fit_col_widths([24, 112, 42, 172, 52, 80], doc.width),
+                  colWidths=_fit_col_widths(lebar, doc.width),
                   repeatRows=1)
-    table.setStyle(_std_table_style(zebra=True, total_row=True))
+    table.setStyle(_std_table_style(zebra=True, total_row=tampil_nilai))
     elements.append(table)
+    if not tampil_nilai:
+        elements.append(Paragraph(
+            "Nilai perolehan BMN tidak ditampilkan pada salinan ini sesuai "
+            "kebijakan penyajian dokumen satuan kerja; data nilai tetap "
+            "tercatat pada Daftar Barang Kuasa Pengguna.", st['Meta']))
 
     from reportlab.platypus import KeepTogether as _KT
     elements.append(_KT([

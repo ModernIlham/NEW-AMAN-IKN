@@ -56,10 +56,52 @@ def test_peta_kop_konsisten():
                                     # R15b: kop laporan milik satker sendiri
                                     "logo_url", "judul_laporan",
                                     "subjudul_laporan", "tahun_anggaran",
-                                    "catatan_kaki"}
+                                    "catatan_kaki",
+                                    # Kebijakan penyajian nilai perolehan
+                                    "nilai_dokumen"}
     # Setiap field kop per-satker WAJIB juga terdaftar di FIELD_KOP_SATKER
     # (routes/satker.py) — kalau tidak, nilainya tak pernah tersimpan.
     from routes.satker import FIELD_KOP_SATKER
     assert set(PETA_KOP_SATKER) <= set(FIELD_KOP_SATKER)
     # kode satker lengkap (±20 digit) ikut ter-overlay ke kop utk stiker
     assert PETA_KOP_SATKER["kode_satker_lengkap"] == "kode_satker_lengkap"
+
+
+# ── Kebijakan penyajian NILAI PEROLEHAN pada surat serah terima ──────────────
+
+def test_kebijakan_nilai_bawaan_tampilkan():
+    """Tanpa setelan (data lama) dokumen TETAP mencetak nilai — perubahan
+    kebijakan tak boleh diam-diam menyembunyikan data yang selama ini tampil."""
+    from satker_utils import kebijakan_nilai_dokumen, tampilkan_nilai_dokumen
+    assert kebijakan_nilai_dokumen({}) == "tampilkan"
+    assert kebijakan_nilai_dokumen({"nilai_dokumen": "ngawur"}) == "tampilkan"
+    assert tampilkan_nilai_dokumen({}) is True
+    assert tampilkan_nilai_dokumen(None) is True
+
+
+def test_kebijakan_sembunyikan_dan_pilihan_dokumen():
+    """Pilihan per dokumen (tri-state) menang atas kebijakan; None = ikut."""
+    from satker_utils import tampilkan_nilai_dokumen
+    sembunyi = {"nilai_dokumen": "sembunyikan"}
+    assert tampilkan_nilai_dokumen(sembunyi) is False
+    assert tampilkan_nilai_dokumen(sembunyi, True) is True      # dokumen memaksa tampil
+    assert tampilkan_nilai_dokumen({}, False) is False          # dokumen memaksa sembunyi
+    assert tampilkan_nilai_dokumen(sembunyi, None) is False     # ikut kebijakan
+
+
+def test_kebijakan_satker_menimpa_global():
+    """Satker boleh berbeda dari kebijakan universal; kosong = ikut global."""
+    from satker_utils import gabung_kop, tampilkan_nilai_dokumen
+    glob = {**GLOBAL, "nilai_dokumen": "sembunyikan"}
+    ikut = gabung_kop(glob, {"nama_satker": "Satker A"})
+    assert tampilkan_nilai_dokumen(ikut) is False
+    beda = gabung_kop(glob, {"nama_satker": "Satker B",
+                             "nilai_dokumen": "tampilkan"})
+    assert tampilkan_nilai_dokumen(beda) is True
+
+
+def test_pilihan_nilai_dari_query():
+    from satker_utils import pilihan_nilai_dari_query as p
+    assert p("1") is True and p("tampilkan") is True and p("true") is True
+    assert p("0") is False and p("sembunyikan") is False
+    assert p("") is None and p(None) is None and p("entah") is None

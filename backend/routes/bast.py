@@ -135,6 +135,10 @@ class BastIn(BaseModel):
     saksi: Optional[List[SaksiIn]] = None
     tembusan: Optional[str] = ""              # override; default pengaturan
     sertakan_foto: Optional[bool] = False
+    # Tampilkan kolom Nilai Perolehan pada PDF? None = ikut KEBIJAKAN satker
+    # (Pengaturan/Master Satker); True/False = keputusan dokumen ini sendiri —
+    # banyak satker menutup nilai pada naskah yang dipegang pegawai.
+    tampilkan_nilai: Optional[bool] = None
     keterangan: Optional[str] = ""
     # Handover langsung: BAST sekaligus MENERAPKAN perubahan ke master aset
     # (mutasi → pengguna beralih ke PIHAK KEDUA; pengembalian → pengguna
@@ -286,6 +290,7 @@ async def buat_bast(payload: BastIn, request: Request = None,
     # satker (kebocoran yang dilaporkan pemilik).
     from shared_utils import (kode_satker_efektif_dari_aset, pengaturan_kop,
                               resolve_penandatangan_kpb)
+    from satker_utils import tampilkan_nilai_dokumen
     ks_efektif = await kode_satker_efektif_dari_aset(
         user, [a["id"] for a in aset])
     settings = await pengaturan_kop(kode_satker=ks_efektif) or {}
@@ -434,6 +439,11 @@ async def buat_bast(payload: BastIn, request: Request = None,
         "penyerah_atas_nama_kpb": (bool(payload.penyerah_atas_nama_kpb)
                                    and payload.jenis != "mutasi_pengguna"),
         "sertakan_foto": bool(payload.sertakan_foto),
+        # Keputusan penyajian nilai DIBEKUKAN bersama dokumen: kebijakan satker
+        # boleh berubah kemudian, tetapi BAST yang sudah ditandatangani harus
+        # tercetak ulang persis seperti saat diterbitkan.
+        "tampilkan_nilai": tampilkan_nilai_dokumen(settings,
+                                                   payload.tampilkan_nilai),
         "terapkan_ke_aset": bool(payload.terapkan_ke_aset),
         "keterangan": str(payload.keterangan or "").strip(),
         "created_by": user.get("username", "system"),
@@ -756,9 +766,14 @@ async def unduh_bukti_bast(bast_id: str,
 
 
 @bast_router.get("/bast/{bast_id}/pdf")
-async def bast_pdf(bast_id: str,
+async def bast_pdf(bast_id: str, nilai: str = "",
                    _user: dict = Depends(require_user_or_query_token)):
-    """Render BAST 1-2 halaman + lampiran foto opsional."""
+    """Render BAST 1-2 halaman + lampiran foto opsional.
+
+    `?nilai=0/1` mencetak salinan TANPA/DENGAN kolom Nilai Perolehan tanpa
+    mengubah data — satu BAST bisa dicetak dua versi (arsip ber-nilai,
+    salinan pegawai tanpa nilai). Tanpa parameter: ikut pilihan yang
+    dibekukan pada dokumen, lalu kebijakan satker."""
     from reportlab.lib.units import mm as rl_mm
     from reportlab.platypus import PageBreak, Paragraph, Spacer, Table, Image as RLImage
 
@@ -778,6 +793,13 @@ async def bast_pdf(bast_id: str,
     await pastikan_akses_dok_satker(_user, b)
     # Kop mengikuti SATKER pembuat BAST (resolusi satker → global).
     settings = await pengaturan_kop(kode_satker=b.get("kode_satker"))
+    # Nilai perolehan: parameter unduhan → pilihan yang dibekukan pada dokumen
+    # → kebijakan satker.
+    from satker_utils import pilihan_nilai_dari_query, tampilkan_nilai_dokumen
+    _pilihan = pilihan_nilai_dari_query(nilai)
+    if _pilihan is None and b.get("tampilkan_nilai") is not None:
+        _pilihan = bool(b.get("tampilkan_nilai"))
+    tampil_nilai = tampilkan_nilai_dokumen(settings, _pilihan)
 
     from xml.sax.saxutils import escape as _esc
     judul_jenis = (b.get("judul_lainnya") or JENIS_BAST.get(b.get("jenis"), "")
@@ -902,10 +924,14 @@ async def bast_pdf(bast_id: str,
         [a.get("asset_code") for a in (b.get("aset") or [])])
     from kodefikasi_utils import normalize_kode as _norm
     from pembukuan_utils import parse_harga as _ph
-    data = [[Paragraph(h, st['TableHeader']) for h in
-             ("No", "Identitas Barang<br/>(Sub-sub Kelompok · Kode · NUP)",
+    kepala = ["No", "Identitas Barang<br/>(Sub-sub Kelompok · Kode · NUP)",
               "Uraian Barang<br/>(Nama · Merk/Tipe/Spesifikasi)", "Tahun",
-              "Kondisi", "Nilai Perolehan (Rp)")]]
+              "Kondisi"]
+    lebar = [24, 130, 168, 36, 50]
+    if tampil_nilai:
+        kepala.append("Nilai Perolehan (Rp)")
+        lebar.append(78)
+    data = [[Paragraph(h, st['TableHeader']) for h in kepala]]
     total_nilai = 0.0
     for i, a in enumerate(b.get("aset") or [], 1):
         tgl = str(a.get("purchase_date") or "")
@@ -913,24 +939,34 @@ async def bast_pdf(bast_id: str,
             tgl[-4:] if len(tgl) >= 4 and tgl[-4:].isdigit() else "-")
         nilai = _ph(a.get("purchase_price"))
         total_nilai += nilai
-        data.append([
+        baris = [
             Paragraph(str(i), st['CellCenter']),
             _sel_identitas_barang(a, subsub.get(_norm(a.get("asset_code")), ""), st),
             _sel_uraian_barang(a, st),
             Paragraph(tahun, st['CellCenter']),
             Paragraph(a.get("condition") or "-", st['CellCenter']),
-            Paragraph(f"{nilai:,.0f}".replace(",", ".") if nilai else "-",
-                      st['CellRight'] if 'CellRight' in st else st['CellCenter']),
-        ])
-    data.append([Paragraph("", st['Cell']),
-                 Paragraph("<b>JUMLAH</b>", st['Cell']), Paragraph("", st['Cell']),
-                 Paragraph("", st['Cell']), Paragraph("", st['Cell']),
-                 Paragraph(f"<b>{total_nilai:,.0f}</b>".replace(",", "."),
-                           st['CellRight'] if 'CellRight' in st else st['CellCenter'])])
-    t = Table(data, colWidths=_fit_col_widths([24, 130, 168, 36, 50, 78],
-                                              doc.width), repeatRows=1)
-    t.setStyle(_std_table_style(zebra=True, total_row=True))
+        ]
+        if tampil_nilai:
+            baris.append(Paragraph(
+                f"{nilai:,.0f}".replace(",", ".") if nilai else "-",
+                st['CellRight'] if 'CellRight' in st else st['CellCenter']))
+        data.append(baris)
+    if tampil_nilai:
+        data.append([Paragraph("", st['Cell']),
+                     Paragraph("<b>JUMLAH</b>", st['Cell']), Paragraph("", st['Cell']),
+                     Paragraph("", st['Cell']), Paragraph("", st['Cell']),
+                     Paragraph(f"<b>{total_nilai:,.0f}</b>".replace(",", "."),
+                               st['CellRight'] if 'CellRight' in st else st['CellCenter'])])
+    t = Table(data, colWidths=_fit_col_widths(lebar, doc.width), repeatRows=1)
+    t.setStyle(_std_table_style(zebra=True, total_row=tampil_nilai))
     el.append(t)
+    if not tampil_nilai:
+        # Nyatakan terus terang MENGAPA kolom nilai absen — pembaca dokumen
+        # resmi tak boleh menduga-duga apakah nilainya nihil atau disembunyikan.
+        el.append(Paragraph(
+            "Nilai perolehan BMN tidak ditampilkan pada salinan ini sesuai "
+            "kebijakan penyajian dokumen satuan kerja; data nilai tetap "
+            "tercatat pada Daftar Barang Kuasa Pengguna.", ket))
 
     # PASAL 2+ — ketentuan sesuai jenis. Tiap pasal dibungkus KeepTogether
     # agar judul tidak yatim terpisah dari isinya saat pecah halaman.
