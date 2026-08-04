@@ -21,7 +21,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db, fs_bucket
-from shared_utils import kode_satker_user, log_audit, scope_query_field_satker, pastikan_akses_dok_satker, blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs
+from shared_utils import kode_satker_user, log_audit, scope_query_field_satker, pastikan_akses_dok_satker, blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs, pengaturan_kop
 from wasdal_utils import (
     AMBANG_BERLARUT_HARI, JENIS_TEMUAN, OBJEK_WASDAL, PEMICU_INSIDENTIL,
     STATUS_INSIDENTIL, SUMBER_PENERTIBAN, STATUS_PENERTIBAN,
@@ -684,7 +684,11 @@ async def ba_insidentil_pdf(tiket_id: str, _user: dict = Depends(require_user)):
     if not t:
         raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
     await pastikan_akses_dok_satker(_user, t)
-    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    # Kop & KPB ikut SATKER DOKUMEN (bukan report_settings global mentah) —
+    # alamat multi-baris dan KPB Referensi Pejabat satker ybs. ikut tercetak.
+    ks_dok = (str(t.get("kode_satker") or "").strip()
+              or kode_satker_user(_user))
+    settings = await pengaturan_kop(kode_satker=ks_dok) or {}
 
     buffer = BytesIO()
     doc = _std_doc(buffer)
@@ -731,7 +735,7 @@ async def ba_insidentil_pdf(tiket_id: str, _user: dict = Depends(require_user)):
         {'pre': [''], 'header': 'Petugas Pemantauan,',
          'nama': '...........................',
          'after': ['NIP. ....................']},
-        await blok_ttd_kpb_titik(settings, kode_satker=kode_satker_user(_user)),   # KPB dari registry pejabat (temuan #26)
+        await blok_ttd_kpb_titik(settings, kode_satker=ks_dok),   # KPB satker dokumen
     ], doc.width))
     footer = _page_footer_factory("Berita Acara Pemantauan Insidentil BMN")
     await asyncio.to_thread(doc.build, elements, onFirstPage=footer,
@@ -767,7 +771,10 @@ async def laporan_wasdal_pdf(
 
     _MAKS_RINCI = 30
     periode, per_objek, rekap, total_aset = await _data_pemantauan(ambang_hari, _user)
-    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    # Kop per-satker peminta (laporan rekap ter-scope satker user) — bukan
+    # report_settings global mentah, agar alamat/kop satker ikut tercetak.
+    settings = await pengaturan_kop(
+        kode_satker=kode_satker_user(_user)) or {}
 
     buffer = BytesIO()
     doc = _std_doc(buffer)
@@ -936,7 +943,9 @@ async def laporan_tahunan_wasdal_pdf(
         scope_query_field_satker(
             _user, {"created_at": {"$gte": awal, "$lte": akhir + "T~"}}),
         {"_id": 0})]
-    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    # Kop per-satker peminta (laporan tahunan ter-scope satker user).
+    settings = await pengaturan_kop(
+        kode_satker=kode_satker_user(_user)) or {}
 
     buffer = BytesIO()
     doc = _std_doc(buffer)

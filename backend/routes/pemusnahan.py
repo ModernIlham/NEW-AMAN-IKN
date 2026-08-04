@@ -218,9 +218,9 @@ async def ba_pemusnahan_pdf(ba_id: str, _user: dict = Depends(require_user)):
     # mentah. Kode diambil dari BA-nya sendiri agar konsisten walau diunduh
     # super-admin pusat.
     from shared_utils import pengaturan_kop
-    settings = await pengaturan_kop(
-        kode_satker=str(ba.get("kode_satker") or "").strip()
-        or kode_satker_user(_user))
+    ks_dok = (str(ba.get("kode_satker") or "").strip()
+              or kode_satker_user(_user))
+    settings = await pengaturan_kop(kode_satker=ks_dok)
     aset = ba.get("aset") or []
     cara = CARA_PEMUSNAHAN.get(ba.get("cara"), ba.get("cara") or "-")
 
@@ -290,7 +290,8 @@ async def ba_pemusnahan_pdf(ba_id: str, _user: dict = Depends(require_user)):
         {'pre': [''], 'header': 'Saksi,',
          'nama': '...........................',
          'after': ['NIP. ....................']},
-        await blok_ttd_kpb_titik(settings, kode_satker=kode_satker_user(_user)),   # KPB dari registry pejabat (temuan #26)
+        # KPB melekat ke satker DOKUMEN (BA-nya sendiri) — sejalan kop di atas.
+        await blok_ttd_kpb_titik(settings, kode_satker=ks_dok),
     ], doc.width))
     footer = _page_footer_factory("Berita Acara Pemusnahan BMN")
     await asyncio.to_thread(doc.build, elements, onFirstPage=footer,

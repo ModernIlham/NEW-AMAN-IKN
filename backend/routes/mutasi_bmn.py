@@ -540,8 +540,12 @@ async def kib_pdf(asset_id: str, _user: dict = Depends(require_user_or_query_tok
     try:
         from routes.reports import _signature_block
         from shared_utils import blok_ttd_kpb, kode_satker_user
+        # KPB ikut satker DOKUMEN (kegiatan induk aset — sumber kop di atas);
+        # unduhan super-admin lintas-satker tetap KPB satker pemilik aset.
+        ks_dok = (str((activity or {}).get("kode_satker") or "").strip()
+                  or kode_satker_user(_user))
         el.extend(_signature_block(
-            [await blok_ttd_kpb(settings, kode_satker=kode_satker_user(_user))],
+            [await blok_ttd_kpb(settings, kode_satker=ks_dok)],
             doc.width))
     except Exception:
         pass
