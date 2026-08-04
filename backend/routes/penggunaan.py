@@ -142,10 +142,43 @@ class TransisiPengajuanIn(BaseModel):
     catatan: str = ""              # wajib saat ditolak/dikembalikan
 
 
+async def _sembuhkan_stempel_psp() -> int:
+    """PENYEMBUHAN-MANDIRI stempel satker register PSP (kebocoran yang
+    dilaporkan pemilik): SK lama ber-`kode_satker` kosong/None diloloskan
+    `scope_query_field_satker` ke SEMUA satker — daftar SK dan hitungan
+    "Aset ter-PSP" satker lain ikut tercemar. Setiap SK PSP merujuk aset,
+    dan aset bersatker lewat kegiatannya, jadi stempelnya bisa diturunkan
+    dan DISIMPAN permanen di sini (idempoten; hanya dokumen tanpa stempel
+    yang disentuh — SK yang asetnya yatim dibiarkan apa adanya, dirapikan
+    backfill /satker/backfill)."""
+    disembuhkan = 0
+    q_kosong = {"$or": [{"kode_satker": {"$in": ["", None]}},
+                        {"kode_satker": {"$exists": False}}]}
+    async for sk in db.psp.find(q_kosong, {"_id": 0, "id": 1,
+                                           "aset.asset_id": 1}).limit(200):
+        kode = ""
+        for a in sk.get("aset") or []:
+            aset = await db.assets.find_one(
+                {"id": str((a or {}).get("asset_id") or "")},
+                {"_id": 0, "activity_id": 1})
+            act = await db.inventory_activities.find_one(
+                {"id": str((aset or {}).get("activity_id") or "")},
+                {"_id": 0, "kode_satker": 1})
+            kode = str((act or {}).get("kode_satker") or "").strip()
+            if kode:
+                break
+        if kode and sk.get("id"):
+            await db.psp.update_one({"id": sk["id"]},
+                                    {"$set": {"kode_satker": kode}})
+            disembuhkan += 1
+    return disembuhkan
+
+
 @penggunaan_router.get("/penggunaan/psp")
 async def daftar_psp(_user: dict = Depends(require_user)):
     """Register SK penetapan penggunaan + rekap + cakupan aset."""
     from shared_utils import scope_query_aset, scope_query_field_satker
+    await _sembuhkan_stempel_psp()
     items = [s async for s in db.psp.find(
                  scope_query_field_satker(_user), {"_id": 0})
              .sort("tanggal_sk", -1).limit(500)]
@@ -196,6 +229,7 @@ async def psp_dari_siman(_user: dict = Depends(require_user)):
         "siman.referensi.no_psp": 1, "siman.referensi.tanggal_psp": 1,
         "siman.referensi.status_penggunaan": 1}).to_list(2000)
     nomor_tercatat, aset_tercakup = set(), set()
+    await _sembuhkan_stempel_psp()
     async for s in db.psp.find(scope_query_field_satker(_user),
                                {"_id": 0, "nomor_sk": 1, "aset.asset_id": 1}):
         if s.get("nomor_sk"):
@@ -223,6 +257,7 @@ async def export_psp(_user: dict = Depends(require_user)):
 
     from fastapi.responses import Response as HttpResponse
 
+    await _sembuhkan_stempel_psp()
     items = [s async for s in db.psp.find(
         scope_query_field_satker(_user), {"_id": 0}).sort("tanggal_sk", -1)]
     buf = io.StringIO()

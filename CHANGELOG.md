@@ -67,6 +67,36 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#745] Tambal bocor data lintas satker register PSP (PMK 40/2024) — 2026-08-04
+
+Perbaikan kebocoran yang dilaporkan pemilik: SK **Penetapan Status
+Penggunaan** era lama yang belum berstempel `kode_satker` diloloskan filter
+scope ke SEMUA satker — daftar PSP di halaman **Aset per Pemegang** dan
+hitungan **"Aset ter-PSP"** satker lain ikut tercemar (SK satker A tampil
+dan terhitung di satker B).
+
+### Penyembuhan-mandiri stempel satker
+
+- Helper baru `_sembuhkan_stempel_psp()` di `routes/penggunaan.py`:
+  menurunkan stempel satker dari aset cakupan SK (aset → kegiatan →
+  `kode_satker`) lalu **MENYIMPANNYA** ke dokumen — kebocoran tertutup
+  permanen, bukan penyaringan sesaat.
+- Dipanggil di ketiga jalur baca register: daftar PSP, ekspor CSV, dan
+  penarikan SK dari SIMAN — halaman mana pun yang menampilkan register
+  otomatis menambal dirinya saat dibuka.
+- **Jujur pada yang tak terjawab**: SK yang asetnya yatim (tak berkegiatan)
+  TIDAK dikarang stempelnya — dibiarkan era-lama untuk dirapikan
+  `/satker/backfill`, konsisten dengan konvensi backfill repo.
+- Idempoten dan hemat: hanya dokumen tanpa stempel yang disentuh (maks 200
+  per panggilan); dokumen yang sudah berstempel tak pernah ditulis ulang.
+
+Uji: 4 uji baru di `test_psp_isolasi_satker.py` (SK tanpa stempel tak lagi
+bocor + stempel tersimpan permanen, hitungan Aset ter-PSP terisolasi, SK
+yatim tak dikarang, ekspor CSV ikut tersembuhkan). `pytest tests/unit` →
+1646 lolos.
+
+---
+
 ## [#744] Manajemen revisi BAST — versi berantai, arsip utuh, nomor lama otomatis ber-status — 2026-08-04
 
 Sistem kini mengakomodir yang selama ini tak terlacak: **BAST yang sudah sah
