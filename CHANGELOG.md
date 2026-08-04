@@ -67,6 +67,62 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#743] Persuratan advanced: relasi antar surat + status keberlakuan terhitung + timeline — 2026-08-04
+
+Buku agenda kini memodelkan hubungan hukum antar naskah sebagaimana jaringan
+dokumen peraturan (JDIH), sesuai mandat pemilik — dan **status keberlakuan
+tidak pernah diketik siapa pun**: selalu dihitung dari status surat + panah
+relasi yang mengenainya, sehingga buku agenda tak bisa "lupa diperbarui".
+
+### Tujuh jenis relasi berarah (aktif → pasif)
+
+| Aktif | Pasif | Efek pada surat sasaran |
+|---|---|---|
+| Mencabut | Dicabut oleh | **Tidak Berlaku** |
+| Membatalkan (putusan) | Dibatalkan oleh | **Tidak Berlaku** |
+| Mencabut Sebagian | Dicabut sebagian oleh | Berlaku dengan perubahan |
+| Mengubah | Diubah oleh | Berlaku dengan perubahan |
+| Menetapkan | Ditetapkan oleh | — (informatif) |
+| Melaksanakan (aturan turunan) | Dilaksanakan oleh | — (informatif) |
+| Mendelegasikan | Didelegasikan oleh | — (informatif) |
+
+Status keberlakuan: **Berlaku / Berlaku dengan perubahan / Tidak Berlaku /
+Draf** (surat keluar masih dibooking). Asas hukum yang dipatuhi dan dikunci
+uji: **non-herleving** — mencabutnya surat pencabut TIDAK menghidupkan
+kembali surat yang telah dicabut; panah pencabutan hanya mati bila surat
+pencabutnya sendiri **dibatalkan nomornya** (dokumen itu tak pernah sah).
+
+### Validasi panah (semua ditolak dengan pesan jelas)
+
+Relasi ke diri sendiri · duplikat panah · surat sumber yang nomornya sudah
+dibatalkan · dua surat **saling** mencabut/membatalkan (keadaan tak
+terputuskan) · lintas satker (403). Relasi dicatat pada **riwayat kedua
+surat** + log audit; hapus relasi salah catat khusus admin.
+
+### Timeline & UI
+
+- Tombol **Relasi** (ikon cabang) pada tiap baris buku agenda membuka dialog:
+  badge keberlakuan, daftar hubungan dua arah (dengan penanda "surat tersebut
+  kini Tidak Berlaku" pada ujung panah yang mati), **timeline gabungan**
+  (riwayat status + panah relasi terurut waktu), dan form catat relasi baru
+  (pilih peran → cari surat sasaran → catatan).
+- Badge **Tidak Berlaku / Diubah** tampil otomatis di daftar buku agenda
+  (kartu HP + tabel desktop) — dihitung massal per halaman, bukan per baris.
+- Ekspor CSV buku agenda mendapat kolom **Keberlakuan**.
+- Hapus surat ikut membersihkan panah yang menyentuhnya — surat lain tak
+  pernah tampak "dicabut oleh" dokumen yang sudah tak ada.
+
+Fondasi (pustaka murni `surat_relasi_utils`, 11 uji) menyusul dari [#742];
+kini dirangkai penuh: koleksi `surat_relasi` (ikut backup otomatis; indeks
+dari_id/ke_id), endpoint relasi + timeline, stempel keberlakuan di daftar &
+ekspor. Perbaikan teknis ikut: tiga `find_one_and_update` persuratan tak lagi
+memakai kwarg projection (mongomock menerapkan update tapi mengembalikan None
+— rute kini teruji penuh tanpa Mongo). Uji: 11 murni + 9 route (non-herleving,
+pembatalan pencabut, lintas satker 403, panah gantung, CSV). `pytest
+tests/unit` → 1637 lolos.
+
+---
+
 ## [#742] Pengaturan Persuratan benar-benar per satker — master Klasifikasi Surat ber-scope + kejelasan warisan Universal — 2026-08-04
 
 Penomoran (format, kode unit, klasifikasi bawaan, aturan otomatis, metode

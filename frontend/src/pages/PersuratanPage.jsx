@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Search, Loader2, Mail, MailPlus, Inbox, FileDown,
-  CheckCircle2, XCircle, Pencil, Settings2, Plus, Trash2,
+  CheckCircle2, XCircle, Pencil, Settings2, Plus, Trash2, GitBranch,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +30,17 @@ const WARNA_STATUS = {
   diterima: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
   diproses: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400",
   selesai: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+};
+
+const WARNA_KEBERLAKUAN = {
+  berlaku: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+  diubah: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+  tidak_berlaku: "bg-red-500/15 text-red-600 dark:text-red-400",
+  draf: "bg-muted text-muted-foreground",
+};
+const LABEL_KEBERLAKUAN = {
+  berlaku: "Berlaku", diubah: "Diubah", tidak_berlaku: "Tidak Berlaku",
+  draf: "Draf",
 };
 
 const KELUAR_KOSONG = {
@@ -63,6 +74,7 @@ export default function PersuratanPage({ user, onBack }) {
   const [formMasuk, setFormMasuk] = useState(null);
   const [formAtur, setFormAtur] = useState(null);
   const [batal, setBatal] = useState(null); // {surat, alasan}
+  const [relasiSurat, setRelasiSurat] = useState(null); // surat utk dialog relasi/timeline
   const [saving, setSaving] = useState(false);
   const [pratinjau, setPratinjau] = useState(null); // {nomor, sumber_klasifikasi, ...}
   const [klasifikasi, setKlasifikasi] = useState([]); // master kode klasifikasi
@@ -272,6 +284,13 @@ export default function PersuratanPage({ user, onBack }) {
           {s.status === "diterima" ? "Proses" : "Selesai"}
         </Button>
       )}
+      <button type="button" onClick={() => setRelasiSurat(s)}
+        title="Relasi antar surat & timeline (mencabut/mengubah/menetapkan…)"
+        aria-label={`Relasi ${s.nomor}`}
+        className="p-1.5 rounded-md text-muted-foreground hover:text-cyan-700 dark:hover:text-cyan-400 hover:bg-cyan-500/10 min-w-0 min-h-0"
+        data-testid={`persuratan-relasi-${s.id}${sfx}`}>
+        <GitBranch className="w-3.5 h-3.5" />
+      </button>
       {isAdmin && !(s.jenis === "keluar" && s.status === "disahkan") && (
         <button type="button" onClick={() => hapusSurat(s)}
           title="Hapus surat (salah catat / batal dibuat)"
@@ -430,8 +449,16 @@ export default function PersuratanPage({ user, onBack }) {
                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${s.jenis === "keluar" ? "bg-cyan-500/15 text-cyan-700 dark:text-cyan-400" : "bg-violet-500/15 text-violet-600 dark:text-violet-400"}`}>
                       {labelAgenda(s)}
                     </span>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${WARNA_STATUS[s.status] || "bg-muted text-muted-foreground"}`}>
-                      {s.status}
+                    <span className="flex items-center gap-1">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${WARNA_STATUS[s.status] || "bg-muted text-muted-foreground"}`}>
+                        {s.status}
+                      </span>
+                      {s.keberlakuan && s.keberlakuan !== "berlaku" && s.keberlakuan !== "draf" && (
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${WARNA_KEBERLAKUAN[s.keberlakuan] || "bg-muted"}`}
+                          title={s.keberlakuan_label}>
+                          {LABEL_KEBERLAKUAN[s.keberlakuan] || s.keberlakuan}
+                        </span>
+                      )}
                     </span>
                   </div>
                   <p className="font-mono text-[12px] text-foreground break-words leading-snug">{s.nomor}</p>
@@ -501,6 +528,12 @@ export default function PersuratanPage({ user, onBack }) {
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${WARNA_STATUS[s.status] || "bg-muted text-muted-foreground"}`}>
                           {s.status}
                         </span>
+                        {s.keberlakuan && s.keberlakuan !== "berlaku" && s.keberlakuan !== "draf" && (
+                          <p className={`mt-0.5 inline-block px-2 py-0.5 rounded-full text-[9px] font-semibold ${WARNA_KEBERLAKUAN[s.keberlakuan] || "bg-muted"}`}
+                            title={s.keberlakuan_label} data-testid={`keberlakuan-${s.id}`}>
+                            {LABEL_KEBERLAKUAN[s.keberlakuan] || s.keberlakuan}
+                          </p>
+                        )}
                         {s.alasan_batal && <p className="text-[9px] text-red-500/80 mt-0.5 max-w-[140px] truncate" title={s.alasan_batal}>{s.alasan_batal}</p>}
                       </td>
                       <td className="px-3 py-2 text-right whitespace-nowrap sticky right-0 bg-card border-l border-border">
@@ -888,12 +921,219 @@ export default function PersuratanPage({ user, onBack }) {
         </DialogContent>
       </Dialog>
 
+      {relasiSurat && (
+        <RelasiDialog surat={relasiSurat} isAdmin={isAdmin}
+          jenisRelasi={ref?.jenis_relasi || []}
+          onClose={() => setRelasiSurat(null)}
+          onChanged={() => load(page)} />
+      )}
+
       {/* Datalist bersama: dipakai input klasifikasi di dialog booking & pengaturan */}
       <datalist id="klasifikasi-arsip-list">
         {klasifikasi.map((k) => <option key={k.id} value={k.kode}>{k.uraian}</option>)}
       </datalist>
       {confirmDialog}
     </div>
+  );
+}
+
+/**
+ * Dialog Relasi & Timeline satu surat: status keberlakuan terhitung, riwayat
+ * status + panah relasi dua arah, form tambah relasi (surat ini sebagai
+ * pihak AKTIF: Mencabut/Mengubah/… surat sasaran), dan hapus relasi (admin).
+ */
+function RelasiDialog({ surat, isAdmin, jenisRelasi, onClose, onChanged }) {
+  const [data, setData] = useState(null);
+  const [cari, setCari] = useState("");
+  const [kandidat, setKandidat] = useState([]);
+  const [target, setTarget] = useState(null);
+  const [jenis, setJenis] = useState("mencabut");
+  const [catatan, setCatatan] = useState("");
+  const [sibuk, setSibuk] = useState(false);
+  const cariTimer = useRef(null);
+
+  const muat = useCallback(async () => {
+    try {
+      const r = await axios.get(`${API}/persuratan/${surat.id}/timeline`);
+      setData(r.data);
+    } catch (e) { toast.error(apiErr(e, "Gagal memuat timeline")); }
+  }, [surat.id]);
+  useEffect(() => { muat(); }, [muat]);
+
+  // Cari surat sasaran (debounce) — tidak menampilkan surat ini sendiri.
+  useEffect(() => {
+    if (!cari.trim()) { setKandidat([]); return; }
+    if (cariTimer.current) clearTimeout(cariTimer.current);
+    cariTimer.current = setTimeout(async () => {
+      try {
+        const r = await axios.get(
+          `${API}/persuratan?q=${encodeURIComponent(cari.trim())}&page_size=8`);
+        setKandidat((r.data?.items || []).filter((x) => x.id !== surat.id));
+      } catch { setKandidat([]); }
+    }, 300);
+    return () => { if (cariTimer.current) clearTimeout(cariTimer.current); };
+  }, [cari, surat.id]);
+
+  const tambah = async () => {
+    if (!target) { toast.error("Pilih surat sasarannya dulu"); return; }
+    setSibuk(true);
+    try {
+      await axios.post(`${API}/persuratan/${surat.id}/relasi`,
+        { ke_id: target.id, jenis, catatan });
+      toast.success("Relasi tercatat");
+      setTarget(null); setCari(""); setCatatan("");
+      muat(); onChanged?.();
+    } catch (e) { toast.error(apiErr(e, "Gagal mencatat relasi")); }
+    finally { setSibuk(false); }
+  };
+
+  const hapusRelasi = async (r) => {
+    setSibuk(true);
+    try {
+      await axios.delete(`${API}/persuratan/relasi/${r.id}`);
+      toast.success("Relasi dihapus");
+      muat(); onChanged?.();
+    } catch (e) { toast.error(apiErr(e, "Gagal menghapus relasi")); }
+    finally { setSibuk(false); }
+  };
+
+  const kb = data?.surat?.keberlakuan;
+  const infoJenis = (k) => (jenisRelasi.find((j) => j.kode === k) || {});
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 flex-wrap">
+            <GitBranch className="w-4 h-4 text-cyan-700 dark:text-cyan-400" />
+            Relasi & Timeline Surat
+            {kb && (
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${WARNA_KEBERLAKUAN[kb] || "bg-muted"}`}
+                data-testid="relasi-keberlakuan">
+                {data?.surat?.keberlakuan_label || LABEL_KEBERLAKUAN[kb] || kb}
+              </span>
+            )}
+          </DialogTitle>
+          <DialogDescription className="text-xs font-mono break-all">
+            {surat.nomor} — {surat.perihal}
+          </DialogDescription>
+        </DialogHeader>
+
+        {!data ? (
+          <div className="py-6 text-center"><Loader2 className="w-5 h-5 animate-spin inline" /></div>
+        ) : (
+          <div className="space-y-4">
+            {/* Panah relasi dua arah + hapus (admin) */}
+            {(data.relasi_keluar.length > 0 || data.relasi_masuk.length > 0) && (
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground border-b border-border/60 pb-1">Hubungan Antar Surat</p>
+                {[...data.relasi_keluar.map((r) => ({ r, arah: "keluar" })),
+                  ...data.relasi_masuk.map((r) => ({ r, arah: "masuk" }))].map(({ r, arah }) => {
+                  const ujungId = arah === "keluar" ? r.ke_id : r.dari_id;
+                  const u = data.ujung?.[ujungId];
+                  const label = arah === "keluar"
+                    ? (infoJenis(r.jenis).aktif || r.jenis)
+                    : (infoJenis(r.jenis).pasif || r.jenis);
+                  return (
+                    <div key={r.id} className="flex items-start gap-2 text-[12px] bg-muted/40 rounded-lg px-2.5 py-1.5" data-testid={`relasi-baris-${r.id}`}>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-foreground">
+                          <span className="font-semibold">{label}</span>{" "}
+                          <span className="font-mono break-all">{arah === "keluar" ? (r.ke_nomor || r.ke_id) : (r.dari_nomor || r.dari_id)}</span>
+                        </p>
+                        <p className="text-[10px] text-muted-foreground truncate">
+                          {(arah === "keluar" ? r.ke_perihal : r.dari_perihal) || ""}
+                          {r.catatan ? ` — ${r.catatan}` : ""}
+                        </p>
+                        {u && u.keberlakuan === "tidak_berlaku" && (
+                          <p className="text-[10px] text-red-500/90">surat tersebut kini Tidak Berlaku</p>
+                        )}
+                      </div>
+                      {isAdmin && (
+                        <button type="button" onClick={() => hapusRelasi(r)} disabled={sibuk}
+                          title="Hapus relasi (salah catat)" aria-label="Hapus relasi"
+                          className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Timeline gabungan */}
+            <div className="space-y-1.5">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground border-b border-border/60 pb-1">Timeline</p>
+              <ol className="space-y-1 max-h-44 overflow-y-auto pr-1" data-testid="relasi-timeline">
+                {data.timeline.map((b, i) => (
+                  <li key={i} className="flex gap-2 text-[11px]">
+                    <span className="text-muted-foreground whitespace-nowrap font-mono">{(b.tanggal || "").slice(0, 10) || "—"}</span>
+                    <span className={b.jenis === "relasi" ? "text-cyan-800 dark:text-cyan-300" : "text-foreground/80"}>{b.teks}</span>
+                  </li>
+                ))}
+                {data.timeline.length === 0 && (
+                  <li className="text-[11px] text-muted-foreground">Belum ada riwayat.</li>
+                )}
+              </ol>
+            </div>
+
+            {/* Tambah relasi — surat INI pihak aktifnya */}
+            <div className="space-y-2">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground border-b border-border/60 pb-1">Catat Relasi Baru</p>
+              <p className="text-[10px] text-muted-foreground">
+                Surat INI sebagai pelaku — pilih perannya lalu surat sasarannya.
+                Contoh: SK baru <b>Mencabut</b> SK lama → buka dialog ini dari SK baru.
+              </p>
+              <select value={jenis} onChange={(e) => setJenis(e.target.value)}
+                className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
+                data-testid="relasi-jenis">
+                {jenisRelasi.map((j) => (
+                  <option key={j.kode} value={j.kode}>{j.aktif}</option>
+                ))}
+              </select>
+              {target ? (
+                <div className="flex items-center gap-2 text-[12px] bg-cyan-500/10 rounded-lg px-2.5 py-1.5">
+                  <span className="font-mono flex-1 min-w-0 break-all">{target.nomor} — {target.perihal}</span>
+                  <button type="button" onClick={() => setTarget(null)} aria-label="Ganti sasaran"
+                    className="p-1 rounded text-muted-foreground hover:text-red-600 min-w-0 min-h-0">
+                    <XCircle className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <Input value={cari} onChange={(e) => setCari(e.target.value)}
+                    placeholder="Cari surat sasaran (nomor/perihal)…" className="h-9"
+                    data-testid="relasi-cari" />
+                  {kandidat.length > 0 && (
+                    <div className="border border-border rounded-lg divide-y divide-border/60 max-h-36 overflow-y-auto">
+                      {kandidat.map((k) => (
+                        <button type="button" key={k.id} onClick={() => setTarget(k)}
+                          className="w-full text-left px-2.5 py-1.5 hover:bg-muted/60 min-w-0 min-h-0"
+                          data-testid={`relasi-kandidat-${k.id}`}>
+                          <p className="font-mono text-[11px] text-foreground break-all">{k.nomor}</p>
+                          <p className="text-[10px] text-muted-foreground truncate">{k.perihal}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+              <Input value={catatan} onChange={(e) => setCatatan(e.target.value)}
+                placeholder="Catatan (opsional, cth. ralat pasal 2)" className="h-9"
+                data-testid="relasi-catatan" />
+              <Button size="sm" onClick={tambah} disabled={sibuk || !target}
+                className="gap-1.5" data-testid="relasi-simpan">
+                {sibuk ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                Catat Relasi
+              </Button>
+            </div>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Tutup</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
