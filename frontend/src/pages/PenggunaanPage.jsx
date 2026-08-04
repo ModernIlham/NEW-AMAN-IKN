@@ -20,6 +20,7 @@ import { useTransitionDialog } from "@/components/ui/TransitionDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
+import PerkiraanNomor from "@/components/persuratan/PerkiraanNomor";
 import KartuTapDialog from "@/components/pegawai/KartuTapDialog";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
@@ -1785,6 +1786,11 @@ export default function PenggunaanPage({ user, onBack }) {
                     onChange={(e) => setFormBast((f) => ({ ...f, booking_otomatis: e.target.checked, nomor: e.target.checked ? "" : f.nomor }))} />
                   Pesan nomor otomatis dari Registrasi Persuratan (tercatat di buku agenda)
                 </label>
+                {/* Parameter SAMA dengan jalur booking backend (bast.py):
+                    modul penggunaan + Berita Acara + tanggal BAST. */}
+                <PerkiraanNomor aktif={formBast.booking_otomatis} modul="penggunaan"
+                  jenisNaskah="Berita Acara" tanggal={formBast.tanggal}
+                  testId="bast-perkiraan-nomor" />
               </div>
               {formBast.jenis === "mutasi_pengguna" && (
                 <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5 space-y-2">
