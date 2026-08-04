@@ -714,6 +714,12 @@ def _signature_block(signers, doc_width):
     One signer renders right-aligned; two render left/right; THREE render
     two on top (left/right) + the third centered below (pola BA opname:
     penghitung & saksi di atas, mengetahui di bawah).
+
+    Tata letak = tabel TIGA BARIS (zona kepala / zona ttd / zona nama) —
+    tinggi tiap zona mengikuti kolom tertingginya, sehingga baris NAMA & NIP
+    antar kolom SELALU SEJAJAR walau kepala kolom beda jumlah baris (mis.
+    role panjang "Yang Menyerahkan a.n. Kuasa Pengguna Barang," yang wrap
+    2-3 baris — dulu mendorong nama kolom itu turun sendirian).
     """
     from reportlab.platypus import Table, TableStyle, Paragraph, Spacer, KeepTogether
     from reportlab.lib.units import mm as rl_mm
@@ -736,7 +742,7 @@ def _signature_block(signers, doc_width):
         s = _re_sig.sub(r'&(?![a-zA-Z]{2,8};|#\d+;)', '&amp;', s)
         return _re_sig.sub(r'<(?![a-zA-Z/!])', '&lt;', s)
 
-    def _col(s):
+    def _zona_kepala(s):
         flow = []
         pre = list(s.get('pre') or [])
         for _ in range(max_pre - len(pre)):
@@ -747,6 +753,9 @@ def _signature_block(signers, doc_width):
             flow.append(Paragraph(_aman(s.get('header')) or '&nbsp;', sig))
         if has_role:
             flow.append(Paragraph(_aman(s.get('role')) or '&nbsp;', sig))
+        return flow
+
+    def _zona_ttd(s):
         # Gambar TTD digital bila tersedia (bytes PNG transparan) —
         # menggantikan celah tanda tangan basah; fallback ke Spacer 15mm.
         ttd = s.get('ttd_img')
@@ -759,18 +768,24 @@ def _signature_block(signers, doc_width):
                 _im.drawWidth = _im.imageWidth * _skala
                 _im.drawHeight = _im.imageHeight * _skala
                 _im.hAlign = 'CENTER'
-                flow.append(_im)
+                return [_im]
             except Exception:
-                flow.append(Spacer(1, 15 * rl_mm))
-        else:
-            flow.append(Spacer(1, 15 * rl_mm))  # 3-line gap for wet signature
-        flow.append(Paragraph(f"<b><u>{_aman(s.get('nama', ''))}</u></b>", sig))
+                pass
+        return [Spacer(1, 15 * rl_mm)]  # 3-line gap for wet signature
+
+    def _zona_nama(s):
+        flow = [Paragraph(f"<b><u>{_aman(s.get('nama', ''))}</u></b>", sig)]
         after = list(s.get('after') or [])
         for line in after:
             flow.append(Paragraph(_aman(line), sig))
         for _ in range(max_after - len(after)):
             flow.append(Paragraph('&nbsp;', sig))
         return flow
+
+    def _col(s):
+        # Satu kolom utuh (untuk penandatangan tunggal di baris tengah-bawah
+        # pola ≥3 — tanpa pasangan, tak ada yang perlu disejajarkan).
+        return _zona_kepala(s) + _zona_ttd(s) + _zona_nama(s)
 
     if len(signers) >= 3:
         atas = _signature_block(signers[:2], doc_width)
@@ -787,15 +802,23 @@ def _signature_block(signers, doc_width):
         return atas + [Spacer(1, 8 * rl_mm), KeepTogether(bawah_tbl)]
 
     if len(signers) == 1:
-        cells = [["", _col(signers[0])]]
+        cells = [["", _zona_kepala(signers[0])],
+                 ["", _zona_ttd(signers[0])],
+                 ["", _zona_nama(signers[0])]]
         col_widths = [doc_width * 0.55, doc_width * 0.45]
     else:
-        cells = [[_col(signers[0]), "", _col(signers[1])]]
+        cells = [[_zona_kepala(signers[0]), "", _zona_kepala(signers[1])],
+                 [_zona_ttd(signers[0]), "", _zona_ttd(signers[1])],
+                 [_zona_nama(signers[0]), "", _zona_nama(signers[1])]]
         col_widths = [doc_width * 0.42, doc_width * 0.16, doc_width * 0.42]
 
     table = Table(cells, colWidths=col_widths)
     table.setStyle(TableStyle([
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        # Zona kepala & nama menempel ke ATAS barisnya; zona ttd menempel ke
+        # BAWAH (spesimen/celah ttd persis di atas garis nama).
+        ('VALIGN', (0, 0), (-1, 0), 'TOP'),
+        ('VALIGN', (0, 1), (-1, 1), 'BOTTOM'),
+        ('VALIGN', (0, 2), (-1, 2), 'TOP'),
         ('LEFTPADDING', (0, 0), (-1, -1), 0),
         ('RIGHTPADDING', (0, 0), (-1, -1), 0),
         ('TOPPADDING', (0, 0), (-1, -1), 0),

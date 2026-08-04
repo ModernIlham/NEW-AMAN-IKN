@@ -68,11 +68,13 @@ async def _seed_dasar(dbx):
         "serial_number": "SN-1", "condition": "Baik",
         "purchase_date": "2025-03-01", "purchase_price": 15_000_000,
     })
-    # KPB satker dokumen + KPB satker LAIN yang lebih baru — resolver tanpa
-    # scope dokumen akan salah memilih yang lebih baru (satker lain).
+    # KPB satker dokumen (RANGKAP jabatan struktural Direktur — kasus nyata
+    # pemilik) + KPB satker LAIN yang lebih baru — resolver tanpa scope
+    # dokumen akan salah memilih yang lebih baru (satker lain).
     await dbx.pejabat.insert_many([
         {"id": "pj-1", "kode_satker": SATKER, "nama": "Ratna Pemilik Dokumen",
-         "nip": "197001011990032001", "jabatan": "Kepala Satuan Kerja",
+         "nip": "197001011990032001",
+         "jabatan": "Direktur Pengembangan Ekosistem Digital",
          "peran": ["kuasa_pengguna_barang"], "berlaku_mulai": "2026-01-01"},
         {"id": "pj-2", "kode_satker": "999999", "nama": "Bambang Satker Lain",
          "nip": "196501011989031001", "jabatan": "Kepala Satker Lain",
@@ -91,8 +93,10 @@ def _payload(**ganti):
 
 
 def test_pihak_kesatu_default_kpb_registry_dan_alamat_gabung(dbx):
-    """Kosong = KPB aktif dari Referensi Pejabat satker dokumen; alamat default
-    menggabung SEMUA baris alamat kantor (bukan baris pertama saja)."""
+    """Kosong = KPB aktif dari Referensi Pejabat satker dokumen; jabatan yang
+    tercatat = KAPASITAS "Kuasa Pengguna Barang" (dokumen ber-kop KPB), bukan
+    jabatan struktural "Direktur ..."; alamat default menggabung SEMUA baris
+    alamat kantor (bukan baris pertama saja)."""
     async def skenario():
         await _seed_dasar(dbx)
         await _unwrap(rb.buat_bast)(_payload(), request=None, user=USER)
@@ -101,10 +105,22 @@ def test_pihak_kesatu_default_kpb_registry_dan_alamat_gabung(dbx):
     p1 = b["pihak_pertama"]
     assert p1["nama"] == "Ratna Pemilik Dokumen"
     assert p1["nip"] == "197001011990032001"
-    assert p1["jabatan"] == "Kepala Satuan Kerja"
+    assert p1["jabatan"] == "Kuasa Pengguna Barang"
     assert p1["alamat"] == ("Gedung Kantor Otorita IKN, Nusantara; "
                             "Perwakilan I: Menara Mandiri II Lt. 5, Jakarta")
     assert b["kode_satker"] == SATKER
+
+
+def test_pihak_kesatu_default_kpb_plh_berawalan(dbx):
+    """KPB dijabat pelaksana harian → kapasitas "Plh. Kuasa Pengguna Barang"."""
+    async def skenario():
+        await _seed_dasar(dbx)
+        await dbx.pejabat.update_one({"id": "pj-1"},
+                                     {"$set": {"jenis_pelaksana": "plh"}})
+        await _unwrap(rb.buat_bast)(_payload(), request=None, user=USER)
+        return await dbx.bast_serah_terima.find_one({})
+    p1 = _jalan(skenario())["pihak_pertama"]
+    assert p1["jabatan"] == "Plh. Kuasa Pengguna Barang"
 
 
 def test_pihak_kesatu_ketikan_tidak_dicampur_kpb(dbx):
@@ -185,3 +201,73 @@ def test_pdf_mengetahui_kpb_ikut_satker_dokumen(dbx):
     assert "Mengetahui" in teks
     assert "Ratna Pemilik Dokumen" in teks
     assert "Bambang Satker Lain" not in teks
+    # Kapasitas mengikuti kop: pada BAST ber-kop KPB ia "Mengetahui" sebagai
+    # Kuasa Pengguna Barang — jabatan strukturalnya TIDAK dicetak.
+    assert "Kuasa Pengguna Barang" in teks
+    assert "Direktur Pengembangan Ekosistem Digital" not in teks
+
+
+def _y_teks_terbawah(body, potongan):
+    """Koordinat-y kemunculan TERAKHIR `potongan` (halaman terakhir yang
+    memuatnya, posisi paling bawah) — nama pihak juga tampil di tabel
+    identitas di atas dokumen; yang diuji adalah baris NAMA pada blok tanda
+    tangan di bagian bawah. Origin PDF di kiri-bawah → y kecil = lebih bawah."""
+    import pypdfium2 as pdfium
+    pdf = pdfium.PdfDocument(body)
+    try:
+        hasil = None  # (indeks_halaman, y_bawah)
+        for no, hal in enumerate(pdf):
+            tp = hal.get_textpage()
+            teks = tp.get_text_range()
+            i = teks.find(potongan)
+            while i >= 0:
+                _l, bawah, _r, _t = tp.get_charbox(i)
+                if (hasil is None or no > hasil[0]
+                        or (no == hasil[0] and bawah < hasil[1])):
+                    hasil = (no, bawah)
+                i = teks.find(potongan, i + 1)
+        if hasil is None:
+            raise AssertionError(f"teks tidak ditemukan di PDF: {potongan!r}")
+        return hasil
+    finally:
+        pdf.close()
+
+
+def test_pdf_nama_penandatangan_sejajar_meski_kepala_beda_tinggi(dbx):
+    """Kolom PIHAK KESATU berkepala 4 baris (tempat-tanggal + header + role
+    panjang "Yang Menyerahkan a.n. Kuasa Pengguna Barang," yang wrap) sementara
+    PIHAK KEDUA hanya 2 — baris NAMA kedua kolom tetap harus SEJAJAR (dulu
+    nama kolom kanan melorot sendirian; tangkapan layar pemilik)."""
+    async def skenario():
+        await _seed_dasar(dbx)
+        await dbx.bast_serah_terima.insert_one({
+            "id": "bast-2", "kode_satker": SATKER, "jenis": "penggunaan_melekat",
+            "nomor": "BAST-02/2026", "tanggal": "2026-08-04",
+            "penyerah_atas_nama_kpb": True,
+            "pihak_pertama": {"nama": "Karlinus Ignasius Manek",
+                              "nip": "198206022001121003",
+                              "jabatan": "Petugas Penatausahaan",
+                              "alamat": "Gedung A"},
+            "pihak_kedua": {"nama": "Karina Lia Meirita Ulo",
+                            "nip": "199005242025062002",
+                            "jabatan": "Staf", "alamat": "Gedung B Lt. 2"},
+            "asset_ids": ["aset-1"],
+            "aset": [{"id": "aset-1", "asset_code": "3100102001", "NUP": "1",
+                      "asset_name": "Laptop Kerja", "brand": "Thinkpad",
+                      "model": "X1", "serial_number": "SN-1",
+                      "condition": "Baik", "purchase_date": "2025-03-01",
+                      "purchase_price": 15_000_000}],
+            "saksi": [], "keterangan": "", "sertakan_foto": False,
+        })
+        resp = await _unwrap(rb.bast_pdf)("bast-2", _user=SUPER)
+        import io
+        buf = io.BytesIO()
+        async for potong in resp.body_iterator:
+            buf.write(potong if isinstance(potong, bytes) else potong.encode())
+        return buf.getvalue()
+    body = _jalan(skenario())
+    hal_kiri, y_kiri = _y_teks_terbawah(body, "Karina Lia Meirita Ulo")
+    hal_kanan, y_kanan = _y_teks_terbawah(body, "Karlinus Ignasius Manek")
+    assert hal_kiri == hal_kanan, "kedua nama harus di halaman yang sama"
+    assert abs(y_kiri - y_kanan) < 2, (
+        f"nama tidak sejajar: kiri y={y_kiri:.1f} vs kanan y={y_kanan:.1f}")

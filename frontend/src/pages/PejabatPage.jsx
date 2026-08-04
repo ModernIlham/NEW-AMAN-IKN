@@ -518,6 +518,18 @@ export default function PejabatPage({ user, onBack }) {
                   </ul>
                   </Lipatan>
                 )}
+                {/* Kaidah rangkap jabatan: kapasitas mengikuti KOP dokumen. */}
+                {(form.peran || []).includes("kuasa_pengguna_barang") && (
+                  <p className="mt-1.5 text-[10.5px] leading-snug rounded-md px-2 py-1 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300">
+                    <span className="font-semibold">Rangkap jabatan?</span>{" "}
+                    Kapasitas tanda tangan mengikuti kop surat: pada semua dokumen
+                    BMN ber-kop satker/KPB dari aplikasi ini, pejabat ini tercetak
+                    sebagai <span className="font-semibold">"Kuasa Pengguna Barang"</span>{" "}
+                    (ber-awalan Plt./Plh. bila pelaksana) — bukan jabatan
+                    strukturalnya. Jabatan struktural (mis. Direktur) dipakai pada
+                    naskah dinas ber-kop unitnya sendiri di luar dokumen BMN.
+                  </p>
+                )}
               </Field>
 
               <Field label="Rangkap Jabatan Struktural (Plt/Plh)">
@@ -532,7 +544,9 @@ export default function PejabatPage({ user, onBack }) {
                   <p className="mt-1 text-[10.5px] leading-snug rounded-md px-2 py-1 bg-amber-500/10 text-amber-700 dark:text-amber-300">
                     Tanda tangan dokumen memakai awalan{" "}
                     <span className="font-semibold">{form.jenis_pelaksana === "plt" ? "“Plt.”" : "“Plh.”"}</span>{" "}
-                    di depan jabatan ({form.jabatan || "Kuasa Pengguna Barang"}), dengan nama & NIP pejabat pelaksana sendiri.
+                    di depan kapasitas perannya pada dokumen itu (mis.{" "}
+                    “{form.jenis_pelaksana === "plt" ? "Plt." : "Plh."} Kuasa Pengguna Barang”),
+                    dengan nama & NIP pejabat pelaksana sendiri.
                     Isi masa berlaku SK Plt/Plh di bawah agar berakhir otomatis.
                   </p>
                 )}

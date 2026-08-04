@@ -209,3 +209,19 @@ def test_penandatangan_kpb_gelar_toggle():
     pj2 = _pj("Ani", ["kuasa_pengguna_barang"], "2025-01-01", "")
     pj2["pakai_gelar"] = True
     assert penandatangan_kpb({}, [pj2], "2026-07-16")["nama"] == "Ani"
+
+
+def test_jabatan_kapasitas_kpb():
+    """Kapasitas mengikuti KOP dokumen: pada naskah ber-kop KPB penandatangan
+    tercetak "Kuasa Pengguna Barang" (Plt./Plh. sesuai status) — jabatan
+    struktural (mis. Direktur, kasus rangkap jabatan pemilik) tidak bocor."""
+    from pejabat_utils import jabatan_kapasitas_kpb
+    assert jabatan_kapasitas_kpb({}) == "Kuasa Pengguna Barang"
+    assert jabatan_kapasitas_kpb(None) == "Kuasa Pengguna Barang"
+    assert jabatan_kapasitas_kpb(
+        {"jenis_pelaksana": "plt"}) == "Plt. Kuasa Pengguna Barang"
+    assert jabatan_kapasitas_kpb(
+        {"jenis_pelaksana": "plh"}) == "Plh. Kuasa Pengguna Barang"
+    assert "Direktur" not in jabatan_kapasitas_kpb(
+        {"jabatan": "Direktur Pengembangan Ekosistem Digital",
+         "jenis_pelaksana": "plh"})

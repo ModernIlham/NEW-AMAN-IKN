@@ -309,6 +309,7 @@ async def buat_bast(payload: BastIn, request: Request = None,
         # tanggal BAST (fallback setelan kasatker) — bukan setelan mentah yang
         # bisa kosong/kedaluwarsa. Placeholder "-" dinormalkan ke "" agar PDF
         # tetap mencetak garis titik untuk diisi manual.
+        from pejabat_utils import jabatan_kapasitas_kpb
         _kpb_def = await resolve_penandatangan_kpb(
             settings, str(payload.tanggal or "").strip()[:10] or None,
             ks_efektif)
@@ -320,7 +321,10 @@ async def buat_bast(payload: BastIn, request: Request = None,
         pihak_pertama = {
             "nama": _isi(_kpb_def["nama"]),
             "nip": _isi(_kpb_def["nip"]),
-            "jabatan": _kpb_def.get("jabatan") or "Kuasa Pengguna Barang",
+            # Kapasitas mengikuti KOP dokumen: BAST ber-kop KPB → ia bertindak
+            # "(Plt./Plh.) Kuasa Pengguna Barang", bukan jabatan strukturalnya
+            # (mis. "Direktur ...") yang berlaku pada naskah kop unitnya sendiri.
+            "jabatan": jabatan_kapasitas_kpb(_kpb_def),
             "alamat": alamat_p1,
         }
     if payload.jenis == "mutasi_pengguna" and not (
@@ -1085,8 +1089,12 @@ async def bast_pdf(bast_id: str,
         kpb = await resolve_penandatangan_kpb(
             settings, b.get("tanggal"),
             str(b.get("kode_satker") or "").strip() or kode_satker_user(_user))
+        # Ia "Mengetahui" DALAM KAPASITAS KPB (dokumen ber-kop KPB) — jabatan
+        # strukturalnya (mis. "Direktur ...") tidak dicetak di sini; kaidah
+        # rangkap jabatan: kapasitas mengikuti kop surat.
+        from pejabat_utils import jabatan_kapasitas_kpb
         signers_mengetahui = [{'header': 'Mengetahui,',
-                               'role': kpb["jabatan"],
+                               'role': f"{jabatan_kapasitas_kpb(kpb)},",
                                'nama': kpb["nama"],
                                # Non-ASN: baris NIP/NIK tidak dicetak
                                'after': _baris_ttd(

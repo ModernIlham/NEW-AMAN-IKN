@@ -951,8 +951,11 @@ async def terbitkan_bast_ppk_kpb(perolehan_id: str, payload: BastPpkIn,
         # penanda tangan hanya karena registry pejabat berubah kemudian.
         "kpb_nama": str(kpb.get("nama") or "").strip(),
         "kpb_nip": str(kpb.get("nip") or "").strip(),
-        "kpb_jabatan": (str(kpb.get("jabatan") or "").strip()
-                        or "Kuasa Pengguna Barang"),
+        # Kapasitas mengikuti kop dokumen: pada BAST PPK→KPB ia menerima
+        # SEBAGAI Kuasa Pengguna Barang — jabatan strukturalnya disimpan
+        # terpisah untuk arsip, tidak dicetak sebagai jabatan penandatangan.
+        "kpb_jabatan": "Kuasa Pengguna Barang",
+        "kpb_jabatan_struktural": str(kpb.get("jabatan") or "").strip(),
         "kpb_status_kepegawaian": str(kpb.get("status_kepegawaian") or "").strip(),
         "kpb_jenis_pelaksana": str(kpb.get("jenis_pelaksana") or "").strip(),
         "created_by": user.get("username", "system"),
@@ -1057,9 +1060,12 @@ async def bangun_bast_ppk_pdf(perolehan_id: str, _user: dict) -> bytes:
 
     p1 = {"nama": p.get("ppk_nama"), "nip": p.get("ppk_nip"),
           "jabatan": p.get("ppk_jabatan") or "Pejabat Pembuat Komitmen"}
+    # Jabatan dicetak = KAPASITAS dokumen ("Kuasa Pengguna Barang" ber-awalan
+    # Plt./Plh.), bukan snapshot jabatan struktural — BAST lama yang terlanjur
+    # menyimpan "Direktur ..." di kpb_jabatan ikut ternormalkan saat render.
     p2 = {"nama": bp.get("kpb_nama"), "nip": bp.get("kpb_nip"),
           "jabatan": (prefiks_pelaksana(bp.get("kpb_jenis_pelaksana"))
-                      + (bp.get("kpb_jabatan") or "Kuasa Pengguna Barang"))}
+                      + "Kuasa Pengguna Barang")}
 
     def _kolom_pihak(peran, sebutan, ph):
         """Identitas satu pihak (pola bast.py, tanpa alamat): NIK Non-ASN

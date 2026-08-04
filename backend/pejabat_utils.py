@@ -144,6 +144,20 @@ def prefiks_pelaksana(jenis_pelaksana) -> str:
     return f"{pre} " if pre else ""
 
 
+def jabatan_kapasitas_kpb(kpb) -> str:
+    """Jabatan penanda tangan KPB pada DOKUMEN BER-KOP KPB/SATKER (semua
+    naskah BMN aplikasi ini): KAPASITAS fungsional "Kuasa Pengguna Barang"
+    (ber-awalan "Plt./Plh." bila pelaksana) — BUKAN jabatan strukturalnya
+    (mis. "Direktur Pengembangan Ekosistem Digital").
+
+    Kaidah rangkap jabatan: kapasitas mengikuti KOP SURAT — pada naskah
+    dinas ber-kop unit strukturalnya sendiri ia menandatangani dengan
+    jabatan struktural, pada naskah ber-kop KPB ia menandatangani sebagai
+    KPB. Jabatan struktural tetap tersedia di `kpb["jabatan"]` untuk
+    konteks yang memang membutuhkannya. MURNI (teruji unit)."""
+    return f"{prefiks_pelaksana((kpb or {}).get('jenis_pelaksana'))}Kuasa Pengguna Barang"
+
+
 def komposisi_nama_gelar(nama, gelar_depan="", gelar_belakang="") -> str:
     """Susun nama penanda tangan dengan gelar akademik:
     "Gelar Depan Nama, Gelar Belakang". Komponen kosong dilewati; gelar

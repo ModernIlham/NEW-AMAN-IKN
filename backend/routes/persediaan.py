@@ -1562,10 +1562,17 @@ async def kirim_ttd_lpb(lpb_id: str, payload: KirimTtdLpbIn,
         _kode = kode_satker_user(user)
         _tgl = lpb.get("tanggal")
         settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+        _kpb = await resolve_penandatangan_kpb(settings, per_iso=_tgl,
+                                               kode_satker=_kode)
+        # KPB menandatangani LPB dalam KAPASITAS "Kuasa Pengguna Barang"
+        # (dokumen ber-kop KPB) — bukan jabatan strukturalnya bila rangkap.
+        from pejabat_utils import jabatan_kapasitas_kpb
+        if (_kpb or {}).get("nama"):
+            _kpb = {**_kpb, "jabatan": jabatan_kapasitas_kpb(_kpb)}
         kandidat = [
             await resolve_pejabat_peran("pengurus_barang", per_iso=_tgl, kode_satker=_kode),
             await resolve_pejabat_peran("pemeriksa_lpb", per_iso=_tgl, kode_satker=_kode),
-            await resolve_penandatangan_kpb(settings, per_iso=_tgl, kode_satker=_kode),
+            _kpb,
         ]
         daftar = [{"nama": str((k or {}).get("nama") or "").strip(),
                    "nip": str((k or {}).get("nip") or "").strip(),
