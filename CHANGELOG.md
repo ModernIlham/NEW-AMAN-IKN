@@ -67,6 +67,56 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#742] Pengaturan Persuratan benar-benar per satker — master Klasifikasi Surat ber-scope + kejelasan warisan Universal — 2026-08-04
+
+Penomoran (format, kode unit, klasifikasi bawaan, aturan otomatis, metode
+reset bulanan/tahunan) dan deret counter nomor **sudah** per-satker sejak
+REVIEW-9 R9 — tetapi **master Kode Klasifikasi Arsip masih satu daftar untuk
+semua satker**, dan UI pengaturan tidak pernah memberi tahu admin satker
+bahwa nilai yang dilihatnya adalah warisan Universal. Keduanya kini beres.
+
+### Master Klasifikasi Surat per satker
+
+- Entri baru admin satker tersimpan **milik satkernya** dan tidak tampil di
+  satker lain; entri **Bersama** (buatan super-admin / data lama) tampil untuk
+  semua dan hanya dikelola super-admin. Badge scope di daftar: `Bersama` /
+  `Satker ini` / `Satker <kode>`.
+- Kode senama dengan entri Bersama = **override pedoman satker** (sah):
+  dropdown booking menampilkan versi satker menggantikan versi Bersama —
+  pola overlay yang sama dengan pengaturan penomoran.
+- Guard "masih dipakai" kini **presisi per scope**: rujukan aturan pemetaan
+  dinilai menurut entri mana yang benar-benar akan dipakainya — satker A
+  tetap boleh menghapus kodenya sendiri meski satker B memakai kode senama,
+  dan entri Bersama tertahan hanya oleh peta satker yang belum punya entri
+  penggantinya.
+- Data lama tanpa `kode_satker` otomatis terbaca sebagai Bersama — tanpa
+  migrasi.
+
+### Kejelasan scope pengaturan penomoran
+
+- Dialog pengaturan menyebut scope yang sedang diedit: **"Satker <kode>"**
+  atau **"Universal (semua satker)"** (super-admin memakai bar Satker Aktif
+  untuk berpindah).
+- `GET /persuratan/pengaturan` kini membawa `scope` + `sumber` per field
+  (satker / global / bawaan); UI menampilkan daftar field yang masih warisan
+  Universal.
+- **Field warisan dikosongkan di form** dan nilai efektifnya jadi placeholder
+  `ikut Universal: …` — sebelumnya sekali klik Simpan diam-diam memaku
+  salinan nilai Universal sebagai override sehingga satker berhenti mengikuti
+  perubahan Universal.
+- Mengosongkan field = **kembali ikut Universal**; select metode reset nomor
+  urut mendapat opsi "Ikut Universal". Validasi keserasian reset × format
+  dinilai atas nilai Universal yang akan benar-benar berlaku (disimulasikan
+  lewat jalur overlay yang sama), bukan atas string kosongnya.
+
+Uji: 14 uji baru (isolasi antar satker, larangan kelola entri Bersama oleh
+admin satker, kode senama dua satker sah, guard hapus presisi per scope,
+override Bersama, referensi menggabung, sumber/scope, kosongkan-kembali-ikut-
+Universal, reset kosong sah untuk satker & ditolak Universal, validasi atas
+nilai Universal efektif). `pytest tests/unit` → 1617 lolos.
+
+---
+
 ## [#741] Daftar barang bersekat per BIDANG + jumlah unit, terurut NUP terkecil — 2026-08-04
 
 Tabel barang pada **PASAL 1 — Objek Serah Terima** (seluruh jenis BAST) dan
