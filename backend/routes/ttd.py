@@ -324,8 +324,12 @@ async def buat_permintaan(payload: PermintaanIn, user: dict = Depends(require_wr
         "lpb": (db.lpb, "LPB"),
     }
     _dt = str(payload.doc_type or "")
+    # `scope_query_field_satker` SENGAJA dipakai dari impor tingkat modul —
+    # JANGAN meng-import-nya lagi di dalam fungsi ini. Import lokal (walau di
+    # dalam `if`) membuat namanya LOKAL untuk SELURUH badan fungsi, sehingga
+    # pemakaian di cabang lain (gerbang "Meninggal Dunia" di bawah) meledak
+    # UnboundLocalError → 500 pada permintaan TTD tanpa doc_ref BAST/LPB.
     if _dt in _KOLEKSI_BER_BACKLINK and str(payload.doc_ref or "").strip():
-        from shared_utils import scope_query_field_satker
         _koleksi, _label = _KOLEKSI_BER_BACKLINK[_dt]
         pemilik = await _koleksi.find_one(
             scope_query_field_satker(
@@ -902,7 +906,6 @@ async def batal_permintaan(sr_id: str, user: dict = Depends(require_writer)):
     if sr.get("doc_type") == "bast" and str(sr.get("doc_ref") or "").strip():
         doc_ref = str(sr["doc_ref"]).strip()
         try:
-            from shared_utils import scope_query_field_satker
             b = await db.bast_serah_terima.find_one(
                 scope_query_field_satker(
                     user, {"id": doc_ref, "signature_request_id": sr_id}),
@@ -923,7 +926,6 @@ async def batal_permintaan(sr_id: str, user: dict = Depends(require_writer)):
     # permintaan yang BENAR menandatangani LPB ini yang boleh mencabutnya).
     if sr.get("doc_type") == "lpb" and str(sr.get("doc_ref") or "").strip():
         try:
-            from shared_utils import scope_query_field_satker
             milik = await db.lpb.find_one(
                 scope_query_field_satker(
                     user, {"id": str(sr["doc_ref"]).strip(),

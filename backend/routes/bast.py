@@ -237,8 +237,7 @@ async def _penanda_tangan_bast(b: dict, user: dict) -> list:
     an_kpb = bool(b.get("penyerah_atas_nama_kpb")) and jenis != "mutasi_pengguna"
     if jenis == "mutasi_pengguna" or an_kpb:
         from pejabat_utils import jabatan_kapasitas_kpb
-        from shared_utils import (kode_satker_user, pengaturan_kop,
-                                  resolve_penandatangan_kpb)
+        from shared_utils import pengaturan_kop, resolve_penandatangan_kpb
         settings = await pengaturan_kop(kode_satker=b.get("kode_satker")) or {}
         kpb = await resolve_penandatangan_kpb(
             settings, b.get("tanggal"),
@@ -328,7 +327,6 @@ async def buat_bast(payload: BastIn, request: Request = None,
         if not sumber_revisi:
             raise HTTPException(status_code=404,
                                 detail="BAST yang direvisi tidak ditemukan")
-        from shared_utils import pastikan_akses_dok_satker
         await pastikan_akses_dok_satker(user, sumber_revisi)
         if str(payload.revisi_mode or "") not in ("mengubah", "mencabut"):
             raise HTTPException(status_code=400, detail=(
@@ -1333,8 +1331,7 @@ async def bast_pdf(bast_id: str, nilai: str = "",
         # setelan mentah yang bisa kedaluwarsa) — fallback ke setelan kasatker.
         # Spesimen TTD digital KPB ikut tersemat (konsisten laporan lain).
         from pegawai_utils import baris_identitas_ttd as _baris_ttd
-        from shared_utils import (ambil_ttd_img, kode_satker_user,
-                                  resolve_penandatangan_kpb)
+        from shared_utils import ambil_ttd_img, resolve_penandatangan_kpb
         # KPB melekat ke SATKER DOKUMEN (kode_satker BAST-nya sendiri), bukan
         # satker peminta — kop di atas sudah ikut satker dokumen; kalau KPB
         # ikut peminta, unduhan super-admin/lintas-satker mencetak KPB satker

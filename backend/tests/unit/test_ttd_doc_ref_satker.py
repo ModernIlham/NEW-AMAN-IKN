@@ -132,3 +132,50 @@ def test_super_admin_lintas_satker_tetap_boleh(dbx):
             user={"username": "sa", "role": "admin", "kode_satker": ""})
         assert hasil["id"]
     _jalan(skenario())
+
+
+# ── Regresi 500 "membubuhi & minta TTD" (laporan pemilik) ───────────────────
+#
+# `buat_permintaan` meng-import `scope_query_field_satker` DI DALAM cabang
+# `if doc_type in {bast,lpb} ...`. Import lokal membuat namanya LOKAL untuk
+# SELURUH badan fungsi (aturan scoping Python), sehingga pemakaian di gerbang
+# "Meninggal Dunia" — cabang yang berjalan untuk SEMUA doc_type — meledak
+# UnboundLocalError → 500 pada `POST /ttd/permintaan/unggah` maupun
+# `POST /ttd/permintaan` biasa, tiap kali ada penanda tangan ber-NIP.
+
+def test_permintaan_dokumen_unggahan_dengan_nip_tak_meledak(dbx):
+    """doc_type di luar {bast,lpb} + penanda tangan ber-NIP harus SUKSES.
+    Inilah jalur "unggah dokumen lalu minta TTD" yang dilaporkan 500."""
+    async def skenario():
+        return await rt.buat_permintaan(
+            payload=rt.PermintaanIn(
+                judul="Dokumen Unggahan", doc_type="dokumen_unggahan",
+                doc_ref="", mode="paralel",
+                signers=[rt.SignerIn(nama="Budi Penanda",
+                                     nip="198001012005011001",
+                                     jabatan="Kepala")]),
+            user=USER_A)
+    hasil = _jalan(skenario())
+    assert len(hasil["links"]) == 1
+    assert hasil["links"][0]["nama"] == "Budi Penanda"
+
+
+def test_gerbang_meninggal_tetap_menolak_pada_doc_type_bebas(dbx):
+    """Perbaikan tak boleh mematikan gerbangnya: penanda tangan berstatus
+    meninggal tetap ditolak 400 walau doc_type bukan bast/lpb."""
+    async def skenario():
+        await dbx.pegawai.insert_one({
+            "id": "p-1", "kode_satker": USER_A["kode_satker"],
+            "nama": "Almarhum Contoh", "nip": "196001011985031001",
+            "status": "meninggal"})
+        return await rt.buat_permintaan(
+            payload=rt.PermintaanIn(
+                judul="Dokumen", doc_type="dokumen", doc_ref="",
+                mode="paralel",
+                signers=[rt.SignerIn(nama="Almarhum Contoh",
+                                     nip="196001011985031001")]),
+            user=USER_A)
+    with pytest.raises(HTTPException) as e:
+        _jalan(skenario())
+    assert e.value.status_code == 400
+    assert "Meninggal Dunia" in e.value.detail
