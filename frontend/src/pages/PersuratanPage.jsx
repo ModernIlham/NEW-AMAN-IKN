@@ -14,6 +14,9 @@ import { useBackGuard } from "@/hooks/useBackGuard";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { labelAgenda, noAgendaTampil } from "@/lib/nomorAgenda";
+import {
+  sebutCakupan, statusKodeKlasifikasi, teksSumberKlasifikasi,
+} from "@/lib/klasifikasiNomor";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -224,6 +227,31 @@ export default function PersuratanPage({ user, onBack }) {
       j === i ? { ...a, [field]: value } : a),
   }));
 
+  // Pintasan "+ aturan" dari daftar master: satu klik memasangkan kode katalog
+  // ke aturan otomatis. Inilah langkah yang dulu tak pernah terlihat — pemilik
+  // menambah kode di master lalu menunggu efek yang tak mungkin datang.
+  const pakaiKlasSebagaiAturan = (kode) => {
+    setFormAtur((f) => {
+      const peta = f?.peta_klasifikasi || [];
+      const kosong = peta.findIndex((a) => !String(a?.kode || "").trim());
+      const baru = kosong >= 0
+        ? peta.map((a, j) => (j === kosong ? { ...a, kode } : a))
+        : [...peta, { modul: "", jenis_naskah: "", kode }];
+      return { ...f, peta_klasifikasi: baru };
+    });
+    toast.info(`Aturan untuk ${kode} ditambahkan — pilih cakupannya, lalu Simpan`);
+  };
+
+  // Turunkan aturan Universal jadi milik satker supaya bisa diubah TANPA
+  // kehilangan yang sudah berlaku (aturan satker menggantikan seluruh daftar
+  // Universal, bukan menambahnya).
+  const salinAturanUniversal = () => setFormAtur((f) => ({
+    ...f,
+    peta_klasifikasi: [...(f?.warisan?.peta_klasifikasi || [])].map((a) => ({
+      modul: a.modul || "", jenis_naskah: a.jenis_naskah || "", kode: a.kode || "",
+    })),
+  }));
+
   const rk = data?.ringkasan;
   const items = data?.items || [];
   const adaFilter = !!(q.trim() || fJenis || fStatus); // pembeda "belum ada data" vs "hasil filter kosong"
@@ -337,6 +365,11 @@ export default function PersuratanPage({ user, onBack }) {
                       format_nomor: d.format_nomor, kode_unit: d.kode_unit,
                       kode_klasifikasi_default: d.kode_klasifikasi_default,
                       reset_urut: d.reset_urut,
+                      // Aturan warisan DISIMPAN, bukan dibuang: tanpa ini layar
+                      // satker menampilkan daftar aturan KOSONG padahal aturan
+                      // Universal sedang berlaku — lalu satu aturan sendiri
+                      // diam-diam mematikan semuanya. Keduanya tak terlihat.
+                      peta_klasifikasi: d.peta_klasifikasi || [],
                     };
                     for (const f of ["format_nomor", "kode_unit",
                       "kode_klasifikasi_default", "reset_urut"]) {
@@ -654,12 +687,9 @@ export default function PersuratanPage({ user, onBack }) {
                 <div className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2" data-testid="keluar-pratinjau">
                   <p className="text-[10px] text-muted-foreground">Perkiraan nomor yang akan terbit:</p>
                   <p className="font-mono text-sm font-bold text-cyan-700 dark:text-cyan-400 break-all">{pratinjau.nomor}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                    Klasifikasi: {pratinjau.kode_klasifikasi || "(kosong)"} · {
-                      pratinjau.sumber_klasifikasi === "eksplisit" ? "diisi manual"
-                        : pratinjau.sumber_klasifikasi === "pemetaan" ? "otomatis dari aturan pemetaan"
-                          : pratinjau.sumber_klasifikasi === "bawaan" ? "kode bawaan pengaturan"
-                            : "belum ada aturan/bawaan — atur di Format Nomor"}
+                  <p className="text-[10px] text-muted-foreground mt-0.5"
+                    data-testid="keluar-sumber-klasifikasi">
+                    Klasifikasi: {teksSumberKlasifikasi(pratinjau)}
                     {" · "}bisa bergeser bila ada booking lain lebih dulu
                   </p>
                 </div>
@@ -833,7 +863,13 @@ export default function PersuratanPage({ user, onBack }) {
                   Master Kode Klasifikasi Arsip
                 </p>
                 <p className="text-[10px] text-muted-foreground">
-                  Isi sesuai pedoman klasifikasi arsip instansi Anda — jadi pilihan di form booking &amp; bahan aturan otomatis.
+                  Daftar ini <b>katalog kode</b> — mendaftarkan kode di sini
+                  belum mengubah nomor surat apa pun. Yang mengubah nomor:
+                  aturan otomatis di bawah, <b>Kode Klasifikasi Bawaan</b>, atau
+                  isian manual di form booking. Badge tiap baris menyebut kode
+                  itu sudah terpakai atau masih menganggur; tombol{" "}
+                  <span className="font-mono">+ aturan</span> memasangkannya
+                  langsung.
                   {formAtur.scope
                     ? " Entri baru tersimpan milik satker ini; entri Bersama (warisan Universal) hanya dikelola super-admin."
                     : " Entri baru tersimpan sebagai Bersama — tampil untuk semua satker."}
@@ -843,16 +879,31 @@ export default function PersuratanPage({ user, onBack }) {
                     {klasifikasi.map((k) => {
                       const scopeK = k.kode_satker || "";
                       const bolehKelola = !formAtur.scope || scopeK === formAtur.scope;
+                      const st = statusKodeKlasifikasi(k);
                       return (
                         <div key={k.id} className="flex items-center gap-2 px-2.5 py-1">
                           <span className="font-mono text-[11px] font-semibold text-foreground w-20 flex-shrink-0">{k.kode}</span>
                           <span className="text-[11px] text-foreground/80 truncate flex-1">{k.uraian || "—"}</span>
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${st.warna}`}
+                            title={st.aktif
+                              ? "Kode ini benar-benar dipakai saat nomor dirakit"
+                              : "Kode ini belum dipasang ke aturan mana pun — nomor surat tak akan pernah memakainya"}
+                            data-testid={`klas-status-${k.kode}`}>
+                            {st.teks}
+                          </span>
                           <span className={`text-[9px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${scopeK
                             ? "bg-cyan-500/10 text-cyan-700 dark:text-cyan-300"
                             : "bg-muted text-muted-foreground"}`}>
                             {scopeK ? (formAtur.scope && scopeK === formAtur.scope
                               ? "Satker ini" : `Satker ${scopeK}`) : "Bersama"}
                           </span>
+                          <button type="button" onClick={() => pakaiKlasSebagaiAturan(k.kode)}
+                            aria-label={`Buat aturan untuk ${k.kode}`}
+                            title="Buat aturan otomatis memakai kode ini"
+                            className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0 flex-shrink-0"
+                            data-testid={`klas-jadikan-aturan-${k.kode}`}>
+                            + aturan
+                          </button>
                           {bolehKelola && (
                             <button type="button" onClick={() => hapusKlas(k)} aria-label={`Hapus ${k.kode}`}
                               className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0"
@@ -883,6 +934,38 @@ export default function PersuratanPage({ user, onBack }) {
                 <p className="text-[10px] text-muted-foreground">
                   Saat booking, kode klasifikasi terisi otomatis dari aturan yang paling spesifik (modul + jenis naskah &gt; salah satunya); kosong = berlaku untuk semua. Kode manual di form selalu menang.
                 </p>
+                {/* Aturan warisan Universal — DITAMPILKAN, tak lagi disembunyikan.
+                    Selama satker belum punya aturan sendiri, inilah yang benar-
+                    benar berlaku; begitu satker menambah satu aturan, seluruh
+                    daftar di bawah ini berhenti berlaku. */}
+                {formAtur.scope && (formAtur.warisan?.peta_klasifikasi || []).length > 0 && (
+                  <div className="rounded-lg border border-border bg-muted/40 px-2.5 py-2 space-y-1"
+                    data-testid="aturan-warisan">
+                    <p className="text-[10px] text-muted-foreground">
+                      {(formAtur.peta_klasifikasi || []).length > 0 ? (
+                        <><b className="text-amber-700 dark:text-amber-400">Aturan Universal di bawah tidak lagi berlaku</b> untuk
+                          satker ini — daftar aturan satker menggantikannya seluruhnya, bukan menambah.</>
+                      ) : (
+                        <><b>Sedang berlaku (warisan Universal).</b> Menambah satu aturan sendiri akan
+                          menggantikan SELURUH daftar ini — salin dulu bila ingin mempertahankannya.</>
+                      )}
+                    </p>
+                    <ul className="space-y-0.5">
+                      {(formAtur.warisan.peta_klasifikasi || []).map((a, i) => (
+                        <li key={i} className="text-[10px] text-muted-foreground flex items-center gap-1.5">
+                          <span className="font-mono font-semibold text-foreground/80">{a.kode || "—"}</span>
+                          <span className="truncate">{sebutCakupan(a.modul, a.jenis_naskah)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    {(formAtur.peta_klasifikasi || []).length === 0 && (
+                      <Button variant="outline" size="sm" className="h-7 gap-1 text-[10px]"
+                        onClick={salinAturanUniversal} data-testid="aturan-salin-universal">
+                        <Plus className="w-3 h-3" />Salin ke satker ini agar bisa diubah
+                      </Button>
+                    )}
+                  </div>
+                )}
                 {(formAtur.peta_klasifikasi || []).map((a, i) => (
                   <div key={i} className="flex items-center gap-1.5" data-testid={`aturan-${i}`}>
                     <select value={a.modul || ""} onChange={(e) => setAturan(i, "modul", e.target.value)}

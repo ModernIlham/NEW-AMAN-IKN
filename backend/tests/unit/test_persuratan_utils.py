@@ -138,9 +138,61 @@ class TestValidatePeta:
         errs = validate_peta_klasifikasi([
             {"modul": "pelaporan", "jenis_naskah": "Laporan", "kode": ""},
             {"modul": "asing", "jenis_naskah": "", "kode": "A"},
-            {"modul": "", "jenis_naskah": "", "kode": "B"},
         ])
-        assert len(errs) == 3
+        assert len(errs) == 2
+
+    def test_aturan_semua_modul_semua_jenis_SAH(self):
+        """RANTAI YANG DULU PUTUS. Layar pengaturan menambahkan baris baru
+        dengan kedua filter kosong dan keterangannya sendiri berbunyi
+        "kosong = berlaku untuk semua" — tapi validator menolaknya, jadi
+        SELURUH simpanan gagal 400 dan Master Kode Klasifikasi Arsip tak
+        pernah berpengaruh apa pun pada nomor surat.
+
+        Mesin pemilihnya selalu mendukung: aturan tanpa filter berskor 0,
+        menang hanya bila tak ada yang lebih spesifik."""
+        peta = [{"modul": "", "jenis_naskah": "", "kode": "UM.01"}]
+        assert validate_peta_klasifikasi(peta) == []
+        assert pilih_klasifikasi(peta, "pelaporan", "Laporan") == "UM.01"
+
+    def test_aturan_semua_kalah_dari_yang_spesifik(self):
+        """Aturan 'semua' adalah JARING, bukan penimpa — kalau ia menang atas
+        aturan spesifik, mengizinkannya justru merusak pemetaan yang sudah ada."""
+        peta = [{"modul": "", "jenis_naskah": "", "kode": "UM.01"}] + PETA
+        assert pilih_klasifikasi(peta, "pelaporan", "Laporan") == "PL.02"
+        assert pilih_klasifikasi(peta, "penilaian", "Nota Dinas") == "UM.01"
+
+    def test_aturan_kembar_ditolak_karena_baris_mati(self):
+        """`pilih_klasifikasi` memakai `skor > skor_terbaik`, jadi di antara dua
+        aturan bercakupan sama hanya yang PERTAMA yang pernah terpakai. Yang di
+        bawah adalah baris mati yang menipu pembacanya."""
+        errs = validate_peta_klasifikasi([
+            {"modul": "pelaporan", "jenis_naskah": "Laporan", "kode": "PL.02"},
+            {"modul": "pelaporan", "jenis_naskah": "Laporan", "kode": "XX.99"},
+        ])
+        assert len(errs) == 1 and "#1" in errs[0]
+        # ...dan memang benar yang kedua tak pernah menang.
+        assert pilih_klasifikasi([
+            {"modul": "pelaporan", "jenis_naskah": "Laporan", "kode": "PL.02"},
+            {"modul": "pelaporan", "jenis_naskah": "Laporan", "kode": "XX.99"},
+        ], "pelaporan", "Laporan") == "PL.02"
+
+    def test_kembar_tak_peduli_besar_kecil_huruf_jenis(self):
+        """`pilih_klasifikasi` mencocokkan jenis naskah case-insensitive —
+        pemeriksaan kembarnya harus memakai ukuran yang sama, kalau tidak
+        baris mati lolos hanya karena beda kapitalisasi."""
+        errs = validate_peta_klasifikasi([
+            {"modul": "", "jenis_naskah": "Berita Acara", "kode": "HK.06"},
+            {"modul": "", "jenis_naskah": "berita acara", "kode": "XX.99"},
+        ])
+        assert len(errs) == 1
+
+    def test_dua_aturan_semua_juga_kembar(self):
+        errs = validate_peta_klasifikasi([
+            {"modul": "", "jenis_naskah": "", "kode": "UM.01"},
+            {"modul": "", "jenis_naskah": "", "kode": "UM.02"},
+        ])
+        assert len(errs) == 1
+        assert "semua modul & semua jenis naskah" in errs[0]
 
 
 # ── Periode deret nomor + nomor sisipan (reset bulanan & backdate .01) ───────

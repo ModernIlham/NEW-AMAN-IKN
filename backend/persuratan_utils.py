@@ -291,18 +291,58 @@ def pilih_klasifikasi(peta, modul, jenis_naskah, eksplisit="", default="") -> st
     return terbaik or str(default or "").strip()
 
 
+def sebut_cakupan(modul, jenis_naskah) -> str:
+    """Cakupan sebuah aturan dalam bahasa manusia — dipakai pesan galat & UI."""
+    m = str(modul or "").strip()
+    j = str(jenis_naskah or "").strip()
+    if m and j:
+        return f"modul {m} + {j}"
+    if m:
+        return f"modul {m}, semua jenis naskah"
+    if j:
+        return f"{j}, semua modul"
+    return "semua modul & semua jenis naskah"
+
+
 def validate_peta_klasifikasi(peta) -> list:
-    """Validasi aturan pemetaan klasifikasi → daftar pesan kesalahan."""
+    """Validasi aturan pemetaan klasifikasi → daftar pesan kesalahan.
+
+    ATURAN "SEMUA" (modul dan jenis naskah sama-sama kosong) ADALAH SAH.
+    Dulu ia ditolak dengan alasan "tak pernah spesifik" — dan itu memutus
+    rantai Master Kode Klasifikasi Arsip: layar pengaturan menambahkan baris
+    baru dalam keadaan kedua filternya kosong dan keterangannya sendiri
+    berbunyi "kosong = berlaku untuk semua", sehingga aturan pertama yang
+    dibuat siapa pun selalu ditolak 400 — SELURUH simpanan gagal, dan kode
+    klasifikasi yang sudah susah payah didaftarkan tak pernah berpengaruh
+    apa-apa pada nomor surat.
+
+    Mesinnya sendiri (`pilih_klasifikasi`) selalu mendukungnya: aturan tanpa
+    filter berskor 0, jadi ia menang hanya bila tak ada aturan yang lebih
+    spesifik — persis makna "kode bawaan untuk sisanya". Validatorlah yang
+    salah, bukan mesinnya.
+
+    Sebagai gantinya dijaga hal yang benar-benar merugikan: aturan KEMBAR.
+    `pilih_klasifikasi` memakai `skor > skor_terbaik`, sehingga di antara dua
+    aturan bercakupan sama hanya yang PERTAMA yang pernah terpakai — yang di
+    bawah adalah baris mati yang menyesatkan pembacanya.
+    """
     errors = []
+    terlihat = {}                       # cakupan → nomor aturan pertama
     for i, aturan in enumerate(peta or [], 1):
         if not str((aturan or {}).get("kode") or "").strip():
             errors.append(f"Aturan #{i}: kode klasifikasi wajib diisi")
         modul = str((aturan or {}).get("modul") or "").strip()
+        jenis = str((aturan or {}).get("jenis_naskah") or "").strip()
         if modul and modul not in MODUL_AMAN:
             errors.append(f"Aturan #{i}: modul tidak dikenal: {modul}")
-        if not modul and not str((aturan or {}).get("jenis_naskah") or "").strip():
-            errors.append(f"Aturan #{i}: isi minimal modul atau jenis naskah "
-                          "(keduanya kosong = aturan tak pernah spesifik)")
+        kunci = (modul, jenis.casefold())
+        if kunci in terlihat:
+            errors.append(
+                f"Aturan #{i}: cakupannya sama dengan aturan #{terlihat[kunci]} "
+                f"({sebut_cakupan(modul, jenis)}) — yang di bawah tak akan "
+                "pernah dipakai; hapus salah satunya")
+        else:
+            terlihat[kunci] = i
     return errors
 
 
