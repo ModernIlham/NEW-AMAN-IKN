@@ -261,7 +261,6 @@ async def daftarkan_persediaan(perolehan_id: str, user: dict = Depends(require_w
         # spasi berlebih). Tak ada yang cocok → master baru, sebagaimana
         # mestinya. Kode yang lebih pendek dari awalan baku (mis. "1") tak
         # pernah dicocokkan per-awalan — dulu ditolak, dan tetap harus ditolak.
-        from shared_utils import scope_query_field_satker
         nama_row = str(row.get("uraian") or "").strip()
         if len(kode) == KODE_PENUH_LEN:
             q_kode = {"kode_barang": kode}

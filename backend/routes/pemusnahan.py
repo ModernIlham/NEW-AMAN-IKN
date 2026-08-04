@@ -171,7 +171,9 @@ async def usulkan_penghapusan_dari_ba(ba_id: str,
         # BA era lama tanpa kode_satker → pakai satker pembuat usulan agar
         # tiket tak pernah lahir tanpa scope (bocor lintas satker).
         if not record.get("kode_satker"):
-            from shared_utils import kode_satker_user
+            # `kode_satker_user` dari impor tingkat modul — import lokal di sini
+            # membuatnya lokal untuk seluruh fungsi, dan log_audit di bawah
+            # (jalur BA tanpa kode_satker) akan meledak UnboundLocalError.
             record["kode_satker"] = kode_satker_user(user)
         await db.usulan_penghapusan.insert_one({**record})
         dibuat += 1

@@ -324,7 +324,6 @@ async def transisi_pt(usulan_id: str, payload: TransisiPtIn,
         # anti-ganda catat_mutasi_bmn hanya per (asset_id, kode_transaksi,
         # ref_id), dan ref_id usulan ≠ ref_id PT sehingga lolos → saldo CaLBMN
         # dobel. Pola `terproyeksi` yang sama dipakai penggunaan.py/penghapusan.py.
-        from pembukuan_utils import parse_harga
         from shared_utils import catat_mutasi_bmn
         kode_trx = "303" if res.get("bentuk") == "hibah" else "301"
         for a_row in res.get("aset") or []:

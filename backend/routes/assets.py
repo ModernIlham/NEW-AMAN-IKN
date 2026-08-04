@@ -2360,7 +2360,10 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
                 cover_b64 = existing_photos[new_idx]
             elif new_idx < len(existing_gridfs) and existing_gridfs[new_idx]:
                 try:
-                    import base64
+                    # `base64` dari impor tingkat modul — meng-import-nya di
+                    # sini membuatnya LOKAL untuk seluruh patch_asset, sehingga
+                    # pemakaian lebih awal (regen cover photo_ops di atas)
+                    # meledak UnboundLocalError dan diam-diam tertelan except.
                     from bson import ObjectId
                     gid = existing_gridfs[new_idx]
                     stream = await fs_bucket.open_download_stream(ObjectId(gid) if ObjectId.is_valid(str(gid)) else gid)

@@ -381,7 +381,6 @@ async def hapus_unduhan(unduhan_id: str, user: dict = Depends(require_user)):
         raise HTTPException(status_code=403, detail="Bukan unduhan Anda")
     if doc.get("artifact_id"):
         try:
-            from bson import ObjectId
             await fs_bucket.delete(ObjectId(doc["artifact_id"]))
         except Exception:
             pass                      # blob mungkin sudah tersapu — tak fatal

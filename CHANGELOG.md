@@ -67,6 +67,45 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#749] Perbaiki 500 saat unggah dokumen & minta TTD (import lokal membayangi) — 2026-08-04
+
+Laporan pemilik: membubuhkan dokumen lalu meminta tanda tangan gagal —
+`POST /api/ttd/permintaan/unggah` menjawab **500 Internal Server Error**.
+
+### Akar masalah — aturan scoping Python, bukan logika bisnis
+
+`buat_permintaan` meng-import `scope_query_field_satker` **di dalam** cabang
+`if doc_type in {bast, lpb}`. Di Python, sebuah `import` di mana pun dalam
+badan fungsi membuat namanya **LOKAL untuk SELURUH fungsi** — impor tingkat
+modul tak lagi terlihat. Ketika cabang itu tidak diambil (doc_type
+`dokumen_unggahan`/`dokumen`, yakni jalur unggah dokumen dan permintaan TTD
+biasa), gerbang "penanda tangan Meninggal Dunia" di bawahnya memakai nama
+yang sama → `UnboundLocalError` → 500. Karena gerbang itu hanya berjalan bila
+ada penanda tangan **ber-NIP**, kegagalannya muncul persis saat pengguna
+memilih pegawai dari master (NIP terisi otomatis) — sehingga lolos dari uji
+jalur bahagia.
+
+### Perbaikan
+
+- Import lokal yang membayangi dihapus di seluruh backend (namanya sudah
+  tersedia dari impor tingkat modul), termasuk **dua bug sekerabat** yang
+  ditemukan saat penyapuan:
+  - `routes/assets.py::patch_asset` — `import base64` di bawah membuat
+    pemakaian `base64` lebih awal (regen cover foto dari GridFS) meledak dan
+    **tertelan diam-diam** oleh `except` → thumbnail cover tak diperbarui.
+  - `routes/pemusnahan.py` — `kode_satker_user` bisa unbound pada jalur BA
+    tanpa `kode_satker` saat mencatat log audit.
+- Penjaga **anti-drift** baru (`test_import_lokal_membayangi.py`): memindai
+  seluruh backend dengan AST dan menolak setiap import lokal ber-syarat yang
+  membayangi impor tingkat modul — kelas bug ini tak bisa kembali diam-diam.
+
+Uji: 2 uji regresi endpoint (unggah dokumen + penanda tangan ber-NIP sukses;
+gerbang "Meninggal Dunia" tetap menolak 400) + 1 uji anti-drift. Perbaikan
+diverifikasi end-to-end terhadap MongoDB & GridFS sungguhan.
+`pytest tests/unit` → 1654 lolos.
+
+---
+
 ## [#748] Tautan TTD elektronik BAST lengkap sesuai kolom TTD dokumennya — 2026-08-04
 
 Laporan pemilik: dialog "Tautan Tanda Tangan Elektronik" hanya menerbitkan

@@ -517,7 +517,6 @@ async def _konteks_kapitalisasi(catatan_id: str, user=None):
     # kegiatan) — pratinjau biaya & nilai dasar satker lain dulu terbaca.
     q_rec = {"id": catatan_id}
     if user is not None:
-        from shared_utils import scope_query_field_satker
         q_rec = scope_query_field_satker(user, q_rec)
     rec = await db.pemeliharaan.find_one(q_rec, {"_id": 0})
     if not rec:
