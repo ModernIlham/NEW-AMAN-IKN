@@ -66,9 +66,6 @@ class SpesimenIn(BaseModel):
     # {halaman: 1-based, x, y: pojok kiri-atas kotak ttd sebagai FRAKSI
     #  lebar/tinggi halaman, lebar: fraksi lebar halaman}.
     posisi: dict | None = None
-    # Posisi & UKURAN QR verifikasi pilihan (dokumen-level; None = otomatis
-    # pojok kanan-bawah halaman terakhir). {halaman, x, y, lebar} fraksi.
-    posisi_qr: dict | None = None
 
 
 def _posisi_bersih(p, maks_halaman: int = 0):
@@ -561,17 +558,11 @@ async def dokumen_untuk_penanda_tangan(sr_id: str,
                  "X-Content-Type-Options": "nosniff"})
 
 
-@ttd_router.get("/ttd/tandatangan/{sr_id}/dokumen/halaman/{no}")
-@limiter.limit("60/minute")
-async def halaman_dokumen_penanda_tangan(sr_id: str, no: int, request: Request,
-                                         tok: dict = Depends(require_sign_token)):
-    """Render SATU halaman dokumen sebagai PNG untuk PRATINJAU PEMBUBUHAN di
-    halaman publik — penanda tangan memilih letak & ukuran tanda tangannya
-    langsung di atas gambar halaman (tanpa perlu mengunduh PDF penuh)."""
-    if tok["sr"] != sr_id:
-        raise HTTPException(status_code=401, detail="Token tidak cocok dokumen")
-    _sr, data = await _ambil_dokumen_sr(sr_id)
-    _pastikan_jti_signer(_sr, tok)
+def _render_halaman_png(data: bytes, no: int):
+    """(BytesIO PNG, total halaman) — satu halaman PDF dirender untuk PRATINJAU
+    penempatan (tanda tangan MAUPUN QR). Dipakai bersama jalur penanda tangan
+    (token e-sign) dan jalur pemilik dokumen (sesi login) supaya keduanya
+    melihat gambar yang sama persis dengan yang jadi acuan koordinat."""
     import pypdfium2 as pdfium
     try:
         pdf = pdfium.PdfDocument(io.BytesIO(data))
@@ -598,6 +589,65 @@ async def halaman_dokumen_penanda_tangan(sr_id: str, no: int, request: Request,
         headers={"Cache-Control": "private, max-age=600",
                  "X-Jumlah-Halaman": str(total),
                  "X-Content-Type-Options": "nosniff"})
+
+
+@ttd_router.get("/ttd/tandatangan/{sr_id}/dokumen/halaman/{no}")
+@limiter.limit("60/minute")
+async def halaman_dokumen_penanda_tangan(sr_id: str, no: int, request: Request,
+                                         tok: dict = Depends(require_sign_token)):
+    """Render SATU halaman dokumen sebagai PNG untuk PRATINJAU PEMBUBUHAN di
+    halaman publik — penanda tangan memilih letak & ukuran tanda tangannya
+    langsung di atas gambar halaman (tanpa perlu mengunduh PDF penuh)."""
+    if tok["sr"] != sr_id:
+        raise HTTPException(status_code=401, detail="Token tidak cocok dokumen")
+    _sr, data = await _ambil_dokumen_sr(sr_id)
+    _pastikan_jti_signer(_sr, tok)
+    return _render_halaman_png(data, no)
+
+
+@ttd_router.get("/ttd/permintaan/{sr_id}/dokumen/halaman/{no}")
+@limiter.limit("60/minute")
+async def halaman_dokumen_pemilik(sr_id: str, no: int, request: Request,
+                                  user: dict = Depends(require_user_or_query_token)):
+    """Pratinjau halaman untuk PEMILIK dokumen — dipakai saat mengatur letak &
+    ukuran QR verifikasi sebelum mengunduh dokumen ber-TTD (langkah terakhir,
+    setelah semua pihak meneken)."""
+    sr, data = await _ambil_dokumen_sr(sr_id)
+    _pastikan_pemilik_sr(sr, user)
+    _tolak_bila_batal(sr)
+    return _render_halaman_png(data, no)
+
+
+class PosisiQrIn(BaseModel):
+    # None = QR kembali OTOMATIS (pojok kanan-bawah halaman terakhir).
+    posisi_qr: dict | None = None
+
+
+@ttd_router.put("/ttd/permintaan/{sr_id}/posisi-qr")
+async def atur_posisi_qr(sr_id: str, payload: PosisiQrIn,
+                         user: dict = Depends(require_writer)):
+    """Atur letak & ukuran QR verifikasi pada dokumen ber-TTD — SEKALI, oleh
+    pemilik dokumen, sebagai langkah terakhir sebelum mengunduh (mandat
+    pemilik: bukan lagi per penanda tangan). Idempoten; `posisi_qr: null`
+    mengembalikan QR ke slot otomatis."""
+    sr = await db.signature_requests.find_one({"id": sr_id}, _PROJ)
+    if not sr:
+        raise HTTPException(status_code=404, detail="Permintaan tidak ditemukan")
+    _pastikan_pemilik_sr(sr, user)
+    _tolak_bila_batal(sr)
+    if not str(sr.get("dok_file_id") or "").strip():
+        raise HTTPException(status_code=400, detail=(
+            "Permintaan ini tidak melampirkan dokumen — tak ada halaman untuk "
+            "menempatkan QR"))
+    posisi = _posisi_qr_bersih(payload.posisi_qr,
+                               int(sr.get("dok_halaman") or 0))
+    await db.signature_requests.update_one({"id": sr_id},
+                                           {"$set": {"posisi_qr": posisi}})
+    await log_audit("atur_posisi_qr_ttd", "", sr_id,
+                    username=user.get("username", "system"),
+                    detail=("QR verifikasi diatur manual" if posisi
+                            else "QR verifikasi kembali otomatis"))
+    return {"ok": True, "posisi_qr": posisi}
 
 
 @ttd_router.get("/ttd/permintaan/{sr_id}/dokumen-ttd")
@@ -1052,11 +1102,11 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
     # Posisi divalidasi SEBELUM blob diunggah — nilai liar (Infinity dkk.)
     # tidak boleh meninggalkan blob yatim di GridFS lewat jalur exception.
     posisi_ttd = _posisi_bersih(payload.posisi, int(sr.get("dok_halaman") or 0))
-    # QR verifikasi dokumen-level: bila penanda tangan ini memilih posisi/ukuran
-    # QR, simpan di root signature_request (bukan per-signer). None → biarkan
-    # nilai lama (penanda tangan yg tak mengatur QR tak menghapus pilihan orang
-    # lain); pengatur terakhir yang menang.
-    posisi_qr = _posisi_qr_bersih(payload.posisi_qr, int(sr.get("dok_halaman") or 0))
+    # QR verifikasi TIDAK diatur di sini (mandat pemilik): dulu tiap penanda
+    # tangan bisa menggeser/memperbesar QR dan pengatur terakhir menang —
+    # membingungkan dan sering terlewat sehingga QR jatuh menimpa footer.
+    # Sekarang QR diatur SEKALI oleh pemilik dokumen di akhir, saat semua
+    # sudah meneken (PUT /ttd/permintaan/{id}/posisi-qr).
     now = datetime.now(timezone.utc)
     file_id = ObjectId()
     grid_in = fs_bucket.open_upload_stream_with_id(
@@ -1079,10 +1129,6 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
                   # otomatis di halaman terakhir seperti sebelumnya).
                   "signers.$.posisi_ttd": posisi_ttd,
                   "signers.$.ip": (request.client.host if request.client else "")}
-    # Dokumen-level: hanya set bila penanda tangan ini mengatur QR (jangan
-    # timpa jadi None saat tak diatur).
-    if posisi_qr is not None:
-        set_fields["posisi_qr"] = posisi_qr
     res = await db.signature_requests.update_one(
         {"id": sr_id, "status": {"$ne": "batal"},
          "signers": {"$elemMatch": {"signer_id": tok["signer"],

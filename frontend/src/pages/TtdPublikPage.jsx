@@ -178,11 +178,13 @@ function TandaTangan({ id, token }) {
   }, [id, token]);
   useEffect(() => { muat(); }, [muat]);
 
-  const kirimTtd = useCallback(async (png, posisi, posisiQr) => {
+  const kirimTtd = useCallback(async (png, posisi) => {
     setKirim(true);
     try {
+      // QR verifikasi TIDAK lagi diatur di sini — letaknya ditentukan SEKALI
+      // oleh pemilik dokumen saat mengunduh hasil akhir (mandat pemilik).
       await axios.post(`${API}/ttd/tandatangan/${id}/kirim`,
-        { png_base64: png, posisi: posisi || null, posisi_qr: posisiQr || null },
+        { png_base64: png, posisi: posisi || null },
         { params: { token }, timeout: 60000 });
       setSukses(true);
       setPngSiap(null);
@@ -277,13 +279,14 @@ function TandaTangan({ id, token }) {
           <p className="font-extrabold text-base sm:text-lg leading-snug">{info.judul}</p>
         </div>
         <AturPosisiTtd
-          srId={id}
-          token={token}
+          jenis="ttd"
+          bangunUrlHalaman={(hal, c) =>
+            `${API}/ttd/tandatangan/${id}/dokumen/halaman/${hal}?token=${encodeURIComponent(token)}&c=${c}`}
           jumlahHalaman={info.jumlah_halaman || 1}
           pngTtd={pngSiap}
           mengirim={kirim}
           onBatal={() => setPngSiap(null)}
-          onKirim={(posisi, posisiQr) => kirimTtd(pngSiap, posisi, posisiQr)}
+          onKirim={(posisi) => kirimTtd(pngSiap, posisi)}
         />
       </Kartu>
     );

@@ -29,6 +29,7 @@ pengguna terlacak); PDF dirender ulang kapan pun dari register.
 """
 import asyncio
 import io
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -41,12 +42,14 @@ from pydantic import BaseModel
 from auth_utils import (
     require_user, require_user_or_query_token, require_writer,
 )
-from db import db
+from db import db, fs_bucket
 from shared_utils import (
     cek_magic_gambar, get_idempotent_response, kode_satker_user, kunci_idem,
     log_audit, pastikan_akses_aset, pastikan_akses_dok_satker,
     reserve_idempotency_key, scope_query_field_satker, store_idempotent_response,
 )
+
+logger = logging.getLogger(__name__)
 
 bast_router = APIRouter()
 
@@ -290,7 +293,45 @@ async def kirim_bast_ke_ttd(bast_id: str, user: dict = Depends(require_writer)):
     payload = PermintaanIn(judul=judul, doc_type="bast", doc_ref=str(bast_id),
                            mode="paralel", signers=signers)
     # buat_permintaan mengembalikan {id, judul, mode, links:[...]} + mencatat audit.
-    return await buat_permintaan(payload=payload, user=user)
+    hasil = await buat_permintaan(payload=payload, user=user)
+
+    # LAMPIRKAN PDF BAST-nya (pola sama dengan LPB): tanpa ini penanda tangan
+    # hanya melihat kanvas kosong — tak bisa MEMBACA yang ditandatanganinya
+    # dan tak bisa MENGATUR letak pembubuhannya, dan dokumen ber-TTD tak bisa
+    # diunduh sama sekali. PDF DIBEKUKAN sekarang (bukan dibangun ulang saat
+    # diteken) supaya kop/pejabat/nomor tak berubah di antara "dikirim" dan
+    # "diteken" — yang bersangkutan meneken persis dokumen yang ia baca.
+    try:
+        _resp = await bast_pdf(bast_id, _user=user)
+        _buf = io.BytesIO()
+        async for _potong in _resp.body_iterator:
+            _buf.write(_potong if isinstance(_potong, bytes) else _potong.encode())
+        _data = _buf.getvalue()
+        from bson import ObjectId
+        from pypdf import PdfReader
+        _n_hal = len(PdfReader(io.BytesIO(_data)).pages)
+        _nama = f"BAST_{str(b.get('nomor') or bast_id)[:40].replace('/', '_')}.pdf"
+        _fid = ObjectId()
+        _gin = fs_bucket.open_upload_stream_with_id(
+            _fid, filename=_nama,
+            metadata={"content_type": "application/pdf", "size": len(_data),
+                      "kind": "bast", "bast_id": bast_id})
+        await _gin.write(_data)
+        await _gin.close()
+        await db.signature_requests.update_one(
+            {"id": hasil["id"]},
+            {"$set": {"dok_file_id": str(_fid), "dok_nama": _nama,
+                      "dok_halaman": _n_hal}})
+        hasil = {**hasil, "dok_nama": _nama, "dok_halaman": _n_hal}
+    except HTTPException:
+        raise
+    except Exception:
+        # Lampiran gagal (mis. render PDF) TIDAK menggugurkan permintaan yang
+        # sudah terbit + link yang sudah dikirim — penanda tangan tetap bisa
+        # meneken (mode tanpa dokumen, perilaku lama).
+        logger.warning("Lampiran PDF BAST %s ke permintaan TTD gagal", bast_id,
+                       exc_info=True)
+    return hasil
 
 
 @bast_router.post("/bast")

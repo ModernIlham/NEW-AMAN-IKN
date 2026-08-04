@@ -67,6 +67,54 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#750] TTD BAST setara alur manual + posisi QR diatur SEKALI di akhir — 2026-08-04
+
+Dua keluhan pemilik pada alur tanda tangan elektronik, dijawab sekaligus
+karena keduanya satu untai.
+
+### 1. "Minta TTD" dari Riwayat BAST kini melampirkan dokumennya
+
+Permintaan TTD dari halaman Aset per Pemegang dulu terbit TANPA dokumen —
+penanda tangan hanya mendapat kanvas kosong: tak bisa MEMBACA yang ia
+tandatangani, tak bisa mengatur letak pembubuhan (padahal alur manual di
+halaman Tanda Tangan Elektronik bisa), dan dokumen ber-TTD tak bisa diunduh
+sama sekali. Sekarang PDF BAST **dibekukan** ke lampiran saat permintaan
+dibuat (pola sama dengan LPB) — kop/pejabat/nomor tak bisa berubah antara
+"dikirim" dan "diteken", jadi yang bersangkutan meneken persis dokumen yang
+ia baca. Kegagalan melampirkan tidak menggugurkan permintaan & tautan yang
+sudah terbit (jatuh ke mode lama).
+
+### 2. Letak QR verifikasi: dicabut dari penanda tangan, dipasang di akhir
+
+Dulu SETIAP penanda tangan bisa menggeser & memperbesar QR, dan pengatur
+terakhir yang menang — membingungkan dan sering terlewat, sehingga QR jatuh
+menimpa kaki halaman (seperti yang dilaporkan). Sekarang:
+
+- Halaman penanda tangan **hanya** mengatur letak tanda tangannya sendiri;
+  kontrol QR dihapus dari sana (`posisi_qr` juga dihapus dari kontrak
+  payload penanda tangan).
+- Pemilik dokumen mengatur QR **sekali** di langkah unduh: menu Unduh →
+  **"Atur QR & Unduh ber-TTD"** membuka pratinjau halaman, QR digeser/
+  diperbesar di atasnya, lalu tersimpan dan dokumen langsung terunduh —
+  sekali jalan. "Otomatis saja" mengembalikan QR ke pojok kanan-bawah
+  halaman terakhir.
+- Endpoint baru: `PUT /ttd/permintaan/{id}/posisi-qr` (pemilik, ber-scope
+  satker, idempoten) dan `GET /ttd/permintaan/{id}/dokumen/halaman/{no}`
+  (pratinjau halaman untuk pemilik). Batas ukuran QR agar tetap terpindai
+  (±2 cm) tetap ditegakkan server.
+- Komponen `AturPosisiTtd` dipakai bersama untuk kedua peran (`jenis="ttd"`
+  dan `jenis="qr"`) sehingga koordinat, jepitan tepi, dan rasa geser/ubah
+  ukurannya identik — tak ada dua implementasi yang bisa bercabang.
+
+Uji: 5 uji baru (jepit posisi & halaman, kembali otomatis, tolak satker
+lain 403, tolak tanpa dokumen 400, kontrak payload penanda tangan tak lagi
+menerima `posisi_qr`). Alur penuh diverifikasi end-to-end atas MongoDB &
+GridFS sungguhan: kirim-ttd BAST → 3 tautan + PDF terlampir → pratinjau
+halaman → simpan posisi QR → dokumen ber-TTD terbentuk.
+`pytest tests/unit` → 1659 lolos; 434 uji frontend lolos; build sukses.
+
+---
+
 ## [#749] Perbaiki 500 saat unggah dokumen & minta TTD (import lokal membayangi) — 2026-08-04
 
 Laporan pemilik: membubuhkan dokumen lalu meminta tanda tangan gagal —

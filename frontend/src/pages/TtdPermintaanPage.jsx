@@ -18,6 +18,7 @@ import { useBackGuard } from "@/hooks/useBackGuard";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import KartuTapDialog from "@/components/pegawai/KartuTapDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
+import AturPosisiTtd from "@/components/ttd/AturPosisiTtd";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -93,6 +94,9 @@ export default function TtdPermintaanPage({ user, onBack }) {
   const [saving, setSaving] = useState(false);
   const [hasil, setHasil] = useState(null);        // {judul, links:[{nama,link}]} pasca-buat
   const [detail, setDetail] = useState(null);      // record permintaan terpilih
+  // Langkah terakhir "sekali jalan": atur letak QR verifikasi lalu unduh.
+  const [aturQr, setAturQr] = useState(null);      // record yang sedang diatur QR-nya
+  const [simpanQr, setSimpanQr] = useState(false);
   const [pegawai, setPegawai] = useState([]);
   // Tap kartu e-KTP utk mengisi penanda tangan ke-i (null = tertutup)
   const [kartuTapSigner, setKartuTapSigner] = useState(null);
@@ -191,6 +195,26 @@ export default function TtdPermintaanPage({ user, onBack }) {
         { label: berTtd ? "Dokumen ber-TTD" : "Dokumen asli" });
     } catch (e) {
       toast.error(apiErr(e, "Gagal mengunduh dokumen"));
+    }
+  };
+
+  // Unduh dokumen ber-TTD LEWAT langkah "atur QR" (mandat pemilik): letak &
+  // ukuran QR verifikasi ditentukan SEKALI di akhir — saat semua pihak sudah
+  // meneken — bukan diserahkan ke tiap penanda tangan. "Otomatis saja"
+  // mengembalikan QR ke pojok kanan-bawah halaman terakhir.
+  const simpanQrLaluUnduh = async (posisi) => {
+    if (!aturQr) return;
+    setSimpanQr(true);
+    try {
+      await axios.put(`${API}/ttd/permintaan/${aturQr.id}/posisi-qr`,
+        { posisi_qr: posisi || null });
+      const it = aturQr;
+      setAturQr(null);
+      await unduhDokumen(it, true);
+    } catch (e) {
+      toast.error(apiErr(e, "Gagal menyimpan posisi QR"));
+    } finally {
+      setSimpanQr(false);
     }
   };
 
@@ -640,10 +664,10 @@ export default function TtdPermintaanPage({ user, onBack }) {
                           <FileText className="w-4 h-4 mr-2" />Dokumen Asli
                         </DropdownMenuItem>
                         <DropdownMenuItem className="min-h-[42px] text-emerald-700 dark:text-emerald-400"
-                          onClick={() => unduhDokumen(detail, true)}
-                          title="Dokumen dengan bubuhan tanda tangan yang sudah masuk + QR verifikasi"
+                          onClick={() => setAturQr(detail)}
+                          title="Atur letak QR verifikasi lalu unduh dokumen dengan bubuhan tanda tangan"
                           data-testid="ttd-unduh-dokumen-ttd">
-                          <FileSignature className="w-4 h-4 mr-2" />Dokumen ber-TTD
+                          <FileSignature className="w-4 h-4 mr-2" />Atur QR &amp; Unduh ber-TTD
                         </DropdownMenuItem>
                       </>
                     )}
@@ -675,6 +699,38 @@ export default function TtdPermintaanPage({ user, onBack }) {
             };
           });
         }} />
+
+      {/* Langkah TERAKHIR sekali jalan (mandat pemilik): letak & ukuran QR
+          verifikasi ditentukan di sini — setelah semua pihak meneken — lalu
+          dokumen ber-TTD langsung terunduh. Dulu tiap penanda tangan yang
+          mengaturnya, sehingga sering terlewat dan QR jatuh menimpa kaki
+          halaman. */}
+      <Dialog open={!!aturQr} onOpenChange={(o) => { if (!o && !simpanQr) setAturQr(null); }}>
+        <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-base">Atur QR Verifikasi &amp; Unduh</DialogTitle>
+            <DialogDescription className="text-xs">
+              Letakkan kode QR verifikasi pada ruang kosong dokumen — sekali
+              atur untuk seluruh dokumen. Pilih &quot;Otomatis saja&quot; bila
+              ingin QR di pojok kanan-bawah halaman terakhir.
+            </DialogDescription>
+          </DialogHeader>
+          {aturQr && (
+            <AturPosisiTtd
+              jenis="qr"
+              bangunUrlHalaman={(hal, c) =>
+                `${API}/ttd/permintaan/${aturQr.id}/dokumen/halaman/${hal}?c=${c}`}
+              jumlahHalaman={aturQr.dok_halaman || 1}
+              nilaiAwal={aturQr.posisi_qr || null}
+              mengirim={simpanQr}
+              labelKirim="Simpan & Unduh"
+              labelOtomatis="Otomatis saja"
+              onBatal={() => setAturQr(null)}
+              onKirim={simpanQrLaluUnduh}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       {confirmDialog}
     </div>
