@@ -18,6 +18,7 @@ import { useBackGuard } from "@/hooks/useBackGuard";
 import { authMediaUrl } from "@/lib/mediaUrl";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
+import PerkiraanNomor from "@/components/persuratan/PerkiraanNomor";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -344,12 +345,21 @@ export default function PengadaanPage({ user, onBack }) {
       toast.error("Tetapkan PPK dulu (ketuk baris PPK) — PIHAK KESATU dokumen ini adalah PPK.");
       return;
     }
+    // Perkiraan nomor dari tata penomoran Persuratan — parameter SAMA dengan
+    // jalur booking backend (modul pengadaan + Berita Acara, tanggal hari ini).
+    let perkiraan = "";
+    try {
+      const r = await axios.get(`${API}/persuratan/pratinjau-nomor?${new URLSearchParams({
+        jenis_naskah: "Berita Acara", modul: "pengadaan" })}`);
+      perkiraan = r.data?.nomor || "";
+    } catch { /* pratinjau gagal → konfirmasi tetap jalan tanpa perkiraan */ }
     const ok = await confirm({
       title: "Terbitkan BAST PPK → KPB?",
       description: `Hasil pengadaan ${p.nomor_bast} diserahterimakan dari `
         + `${p.ppk_nama} (PPK) kepada Kuasa Pengguna Barang untuk ditatausahakan `
         + "sebagai BMN. Nomor Berita Acara dipesan otomatis dari Persuratan dan "
-        + "identitas kedua pihak dibekukan pada dokumen.",
+        + "identitas kedua pihak dibekukan pada dokumen."
+        + (perkiraan ? ` Perkiraan nomor: ${perkiraan} (final dikunci saat terbit).` : ""),
       confirmLabel: "Terbitkan",
     });
     if (!ok) return;
@@ -1023,6 +1033,12 @@ export default function PengadaanPage({ user, onBack }) {
                     </span>
                   </span>
                 </label>
+                {/* Parameter SAMA dengan booking backend (booking_nomor_lpb):
+                    modul persediaan + Laporan + tanggal BAST perolehan. */}
+                <PerkiraanNomor aktif={draftAset.bookingNomor !== false}
+                  modul="persediaan" jenisNaskah="Laporan"
+                  tanggal={draftAset?.perolehan?.tanggal_bast || ""}
+                  testId="pengadaan-catat-perkiraan-nomor" />
               </div>
             );
           })()}
@@ -1207,6 +1223,12 @@ export default function PengadaanPage({ user, onBack }) {
               </div>
             );
           })()}
+          {/* Nomor LPB gabungan dipesan lewat booking_nomor_lpb (deret yang
+              sama dengan Persediaan): modul persediaan + Laporan, tanggal
+              hari ini — parameter pratinjau harus identik. */}
+          <PerkiraanNomor aktif={!!lpbGab && Object.values(lpbGab?.pilih || {}).some(Boolean)}
+            modul="persediaan" jenisNaskah="Laporan"
+            testId="lpb-gabungan-perkiraan-nomor" />
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setLpbGab(null)}>Batal</Button>
             <Button onClick={buatLpbGabungan}

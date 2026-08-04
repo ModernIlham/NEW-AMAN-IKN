@@ -21,6 +21,7 @@ import StatKartu from "@/components/ui/StatKartu";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
+import PerkiraanNomor from "@/components/persuratan/PerkiraanNomor";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -1851,6 +1852,13 @@ export default function PersediaanPage({ user, onBack }) {
                         data-testid="persediaan-massal-booking" />
                       Nomor LPB otomatis (tercatat di buku agenda Persuratan)
                     </label>
+                  )}
+                  {/* Parameter SAMA dengan booking_nomor_lpb backend:
+                      modul persediaan + Laporan + tanggal dokumen. */}
+                  {massal.arah === "masuk" && (
+                    <PerkiraanNomor aktif={!!massal.booking_otomatis} modul="persediaan"
+                      jenisNaskah="Laporan" tanggal={massal.tgl_dokumen}
+                      testId="persediaan-perkiraan-nomor" />
                   )}
                 </div>
                 {massal.arah === "masuk" ? (

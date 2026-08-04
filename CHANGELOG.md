@@ -67,6 +67,50 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#747] Perkiraan nomor booking-otomatis tampil & sedertan di semua halaman — 2026-08-04
+
+Mandat pemilik: pemakaian dan PERKIRAAN nomor pada fitur "Pesan nomor
+otomatis dari Registrasi Persuratan" harus sama persis dengan tata penomoran
+booking nomor di buku agenda — saling berkaitan di semua halaman.
+
+### Audit deret (backend) — sudah tunggal, dikonfirmasi
+
+Kelima jalur booking otomatis (BAST Penggunaan, LPB transaksi massal
+Persediaan, LPB Catat Perolehan Pengadaan, LPB Gabungan, BAST PPK→KPB)
+semuanya memakai pipeline setelan satker yang sama: `_pengaturan` →
+`pilih_klasifikasi` → periode (bulanan/tahunan) → `_no_agenda_berikut`
+(counter atomik per satker+periode) → `bangun_nomor`. Tidak ada deret
+bercabang — tidak ada perubahan backend.
+
+### Yang baru: perkiraan nomor LIVE di tiap halaman (frontend)
+
+Komponen bersama `PerkiraanNomor` memanggil endpoint pratinjau yang sama
+dengan dialog Booking Nomor (`GET /persuratan/pratinjau-nomor`) dengan
+modul + jenis naskah + tanggal PERSIS seperti jalur booking backend
+halaman itu — sehingga angka yang tampil mengikuti format, klasifikasi
+hasil pemetaan, kode unit, dan reset deret satker (termasuk Satker Aktif
+super-admin):
+
+- **Penggunaan — form BAST** (termasuk dialog revisi): perkiraan tampil di
+  bawah centang booking, mengikuti Tanggal BAST.
+- **Persediaan — transaksi masuk massal**: perkiraan nomor LPB mengikuti
+  Tanggal Dokumen.
+- **Pengadaan — Catat Perolehan**: perkiraan nomor LPB mengikuti tanggal
+  BAST perolehan.
+- **Pengadaan — LPB Gabungan**: perkiraan tampil di dialog begitu ada
+  perolehan terpilih.
+- **Pengadaan — BAST PPK→KPB**: perkiraan nomor Berita Acara disisipkan
+  ke dialog konfirmasi terbit.
+
+Semua berlabel jujur: nomor final tetap dikunci counter atomik saat simpan
+(bisa bergeser bila ada booking lain menyela) — pratinjau tidak pernah
+memutasi counter.
+
+Uji: eslint 0 warning, 434 uji frontend lolos, build produksi sukses
+(tanpa perubahan backend; 1646 uji unit tetap lolos).
+
+---
+
 ## [#746] Area tanda tangan lega di seluruh dokumen generate — 2026-08-04
 
 Mandat pemilik: bagian tanda tangan pada semua PDF/DOCX generate diberi ruang
