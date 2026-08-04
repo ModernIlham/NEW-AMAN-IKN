@@ -803,8 +803,24 @@ export default function PegawaiPage({ user, onBack }) {
         )}
 
 
+        {/* Penanda muat ulang yang TIDAK mengubah tinggi daftar (lihat alasan
+            di bawah) — cukup sebaris tipis di atasnya. */}
+        {loading && items.length > 0 && (
+          <p className="flex items-center gap-1.5 mb-1.5 text-[11px] text-muted-foreground"
+            data-testid="pegawai-memuat-ulang">
+            <Loader2 className="w-3 h-3 animate-spin" />Memperbarui daftar…
+          </p>
+        )}
+
         <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-          {loading ? (
+          {/* Spinner HANYA saat muat PERTAMA (daftar masih kosong).
+              Pada muat ULANG — mis. setelah menyimpan pegawai lalu lanjut
+              input berikutnya — daftar lama SENGAJA dibiarkan terpasang:
+              mengganti seluruh daftar dengan spinner setinggi ±100px membuat
+              tinggi halaman runtuh, peramban menjepit posisi gulir ke atas,
+              dan pengguna harus menggulir dari awal lagi mencari barisnya.
+              Indikator muat ulang ditampilkan tipis di kepala daftar. */}
+          {loading && items.length === 0 ? (
             <div className="flex items-center justify-center py-16">
               <Loader2 className="w-7 h-7 animate-spin text-sky-600" />
             </div>

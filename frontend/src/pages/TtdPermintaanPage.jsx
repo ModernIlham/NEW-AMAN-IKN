@@ -19,6 +19,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import KartuTapDialog from "@/components/pegawai/KartuTapDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import AturPosisiTtd from "@/components/ttd/AturPosisiTtd";
+import { bagikanWa, bagikanEmail } from "@/lib/pesanTtd";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -66,19 +67,6 @@ async function salin(teks) {
   } catch {
     toast.error("Gagal menyalin — salin manual dari kolom link");
   }
-}
-
-function pesanTtd(nama, judul, link) {
-  return `Yth. ${nama},\n\nMohon berkenan menandatangani secara elektronik dokumen "${judul}" melalui tautan berikut (berlaku 14 hari, sekali pakai):\n${link}\n\nTerima kasih.`;
-}
-
-function bagikanWa(nama, judul, link) {
-  window.open(`https://wa.me/?text=${encodeURIComponent(pesanTtd(nama, judul, link))}`,
-    "_blank", "noopener");
-}
-
-function bagikanEmail(nama, judul, link) {
-  window.location.href = `mailto:?subject=${encodeURIComponent(`Permintaan Tanda Tangan Elektronik — ${judul}`)}&body=${encodeURIComponent(pesanTtd(nama, judul, link))}`;
 }
 
 /**
@@ -542,14 +530,14 @@ export default function TtdPermintaanPage({ user, onBack }) {
                     <Button type="button" variant="outline" size="sm"
                       className="h-8 w-8 p-0 min-h-0 min-w-0 flex-shrink-0 text-emerald-600"
                       title="Bagikan via WhatsApp" aria-label="Bagikan via WhatsApp"
-                      onClick={() => bagikanWa(l.nama, hasil?.judul, penuh)}
+                      onClick={() => bagikanWa(l.nama, hasil?.judul, penuh, hasil?.ringkas)}
                       data-testid={`ttd-wa-${i}`}>
                       <MessageCircle className="w-3.5 h-3.5" />
                     </Button>
                     <Button type="button" variant="outline" size="sm"
                       className="h-8 w-8 p-0 min-h-0 min-w-0 flex-shrink-0"
                       title="Bagikan via email" aria-label="Bagikan via email"
-                      onClick={() => bagikanEmail(l.nama, hasil?.judul, penuh)}>
+                      onClick={() => bagikanEmail(l.nama, hasil?.judul, penuh, hasil?.ringkas)}>
                       <Mail className="w-3.5 h-3.5" />
                     </Button>
                   </div>
@@ -619,13 +607,13 @@ export default function TtdPermintaanPage({ user, onBack }) {
                             <Button type="button" variant="outline" size="sm"
                               className="h-7 w-7 p-0 min-h-0 min-w-0 text-emerald-600"
                               title="Bagikan via WhatsApp" aria-label="Bagikan via WhatsApp"
-                              onClick={() => bagikanWa(s.nama, detail.judul, linkUlang[s.signer_id])}>
+                              onClick={() => bagikanWa(s.nama, detail.judul, linkUlang[s.signer_id], detail.ringkas)}>
                               <MessageCircle className="w-3 h-3" />
                             </Button>
                             <Button type="button" variant="outline" size="sm"
                               className="h-7 w-7 p-0 min-h-0 min-w-0"
                               title="Bagikan via email" aria-label="Bagikan via email"
-                              onClick={() => bagikanEmail(s.nama, detail.judul, linkUlang[s.signer_id])}>
+                              onClick={() => bagikanEmail(s.nama, detail.judul, linkUlang[s.signer_id], detail.ringkas)}>
                               <Mail className="w-3 h-3" />
                             </Button>
                             <Button type="button" variant="outline" size="sm" className="h-7 text-[10px] min-h-0 min-w-0"

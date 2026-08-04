@@ -67,6 +67,74 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#754] Pesan permintaan TTD menjelaskan dokumennya + gulir Master Pegawai tak lagi lompat ke atas — 2026-08-04
+
+Dua keluhan pemilik.
+
+### 1. Pesan WA/email tak menjelaskan apa yang ditandatangani
+
+Pesan lama hanya berisi judul + tautan. Akibatnya penerima harus MEMBUKA
+tautan sekadar untuk tahu dokumen apa itu — dan berbulan-bulan kemudian tak
+ada jejak yang bisa dicari di riwayat percakapannya saat ia perlu menemukan
+kembali dokumen mana yang pernah ia tandatangani.
+
+Sekarang pesannya membawa keterangan ringkas:
+
+```
+Yth. Budi Santoso,
+
+Mohon berkenan menandatangani dokumen berikut secara elektronik:
+
+Nomor    : BAST-77/OIKN/2026
+Perihal  : Mutasi/Alih Pemegang Barang Milik Negara
+Tanggal  : 2026-08-04
+Barang   : 3.05.01.01.001 / NUP 12 — Laptop
+           3.05.02.01.003 / NUP 4 — Printer
+           (+5 barang lainnya)
+Pihak    : Budi Santoso (Pihak Pertama)
+           Ani Lestari (Pihak Kedua)
+
+Tautan tanda tangan (berlaku 14 hari, sekali pakai):
+https://amanikn-inventarisasi.com/s/K7m2QxV9pT
+
+Simpan pesan ini sebagai catatan dokumen yang Anda tandatangani.
+```
+
+Catatan desain:
+
+- Ringkasan **dibekukan** saat permintaan dibuat (`signature_requests.ringkas`),
+  sejalan dengan PDF-nya yang juga dibekukan — isi pesan cocok dengan dokumen
+  yang benar-benar diteken, walau dokumen sumber berubah kemudian.
+- Rincian barang dibatasi 3 baris agar pesan WA tak jadi daftar puluhan baris,
+  tetapi **jumlah totalnya tidak ikut dipotong** — justru angka itu yang
+  dipakai penerima untuk mencocokkan dokumen.
+- Penyusun pesan dipakai BERSAMA (`lib/pesanTtd.js`) oleh halaman Tanda Tangan
+  Elektronik dan dialog "Kirim TTD" di Penggunaan, supaya keduanya tak pernah
+  berisi keterangan berbeda untuk permintaan yang sama. Dialog Penggunaan
+  sekalian mendapat tombol **Email** yang selama ini hanya ada WhatsApp.
+- Dokumen tanpa BAST rujukan (unggahan bebas) tak punya ringkasan — bentuk
+  pesannya menyusut sendiri, bukan menampilkan baris kosong.
+
+### 2. Master Pegawai: gulir kembali ke atas setiap kali selesai menyimpan
+
+Akar masalahnya bukan "posisi tidak disimpan", melainkan daftar yang RUNTUH:
+saat memuat ulang seusai menyimpan, SELURUH daftar diganti spinner setinggi
+±100 px. Tinggi halaman anjlok, peramban menjepit posisi gulir ke atas, dan
+begitu data kembali pengguna sudah berada di baris pertama — harus menggulir
+dari awal mencari tempatnya semula.
+
+Kini spinner hanya tampil pada muat **pertama** (daftar masih kosong). Pada
+muat ulang, daftar lama sengaja dibiarkan terpasang sehingga tingginya tak
+pernah runtuh dan posisi gulir bertahan dengan sendirinya; indikator
+"Memperbarui daftar…" ditampilkan tipis di atasnya agar prosesnya tetap
+terlihat. Memperbaiki sebabnya, bukan menyimpan-lalu-mengembalikan posisi
+gulir yang justru rawan berebut dengan peramban.
+
+Uji: 12 uji baru (5 backend untuk ringkasan BAST — nomor/perihal/pihak/barang,
+pembatasan rincian dengan jumlah tetap jujur, `judul_lainnya`, dokumen tanpa
+rujukan, pembekuan ke record; 6 frontend untuk penyusun pesan; plus regresi).
+Total 1.696 uji backend + 440 uji frontend hijau.
+
 ## [#753] Tautan yang dibagikan dipendekkan — 396 → 46 karakter — 2026-08-04
 
 Keluhan pemilik: "link yang dibagikan terlalu panjang semua". Memang:

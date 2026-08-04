@@ -338,6 +338,61 @@ async def _link_verifikasi_pendek(sr_id, kode_satker="", oleh="") -> str:
         return panjang
 
 
+MAKS_BARANG_RINGKAS = 3      # sisanya diringkas "(+N barang lainnya)"
+
+
+async def _ringkas_dokumen(doc_type: str, doc_ref: str) -> dict:
+    """Ringkasan singkat dokumen yang diminta ditandatangani.
+
+    Dipakai untuk mengisi pesan WA/email agar penanda tangan tahu APA yang
+    ia teken sebelum membuka tautan — dan, kemudian hari, bisa MENCARI ulang
+    dokumen mana yang pernah ia tandatangani. Tanpa ini pesannya hanya berisi
+    judul + tautan: penerima harus membuka tautan dulu sekadar untuk tahu
+    dokumen apa itu, dan setelah berbulan-bulan tak ada jejak yang bisa
+    dicari di riwayat percakapannya.
+
+    DIBEKUKAN saat permintaan dibuat (disimpan di `signature_requests.ringkas`),
+    sejalan dengan PDF-nya yang juga dibekukan — supaya isi pesan cocok dengan
+    dokumen yang benar-benar diteken, walau dokumen sumber berubah kemudian.
+
+    Selalu mengembalikan dict (kosong bila tak ada yang bisa diringkas);
+    kegagalan di sini tak boleh menggagalkan penerbitan permintaan.
+    """
+    ref = str(doc_ref or "").strip()
+    if str(doc_type or "") != "bast" or not ref:
+        return {}
+    try:
+        b = await db.bast_serah_terima.find_one(
+            {"id": ref},
+            {"_id": 0, "nomor": 1, "jenis": 1, "judul_lainnya": 1, "tanggal": 1,
+             "pihak_pertama": 1, "pihak_kedua": 1, "aset": 1})
+        if not b:
+            return {}
+        from routes.bast import JENIS_BAST
+        perihal = (str(b.get("judul_lainnya") or "").strip()
+                   or JENIS_BAST.get(str(b.get("jenis") or ""), "")
+                   or "Berita Acara Serah Terima")
+        pihak = []
+        for kunci, peran in (("pihak_pertama", "Pihak Pertama"),
+                             ("pihak_kedua", "Pihak Kedua")):
+            nama = str(((b.get(kunci) or {}).get("nama")) or "").strip()
+            if nama:
+                pihak.append(f"{nama} ({peran})")
+        aset = b.get("aset") or []
+        barang = [{"kode": str(a.get("asset_code") or "").strip(),
+                   "nup": str(a.get("NUP") or "").strip(),
+                   "nama": str(a.get("asset_name") or "").strip()}
+                  for a in aset[:MAKS_BARANG_RINGKAS]]
+        return {"nomor": str(b.get("nomor") or "").strip(),
+                "perihal": perihal,
+                "tanggal": str(b.get("tanggal") or "")[:10],
+                "pihak": pihak,
+                "barang": [x for x in barang if x["kode"] or x["nama"]],
+                "jumlah_barang": len(aset)}
+    except Exception:
+        return {}
+
+
 def _publik_signer(sg):
     """Bidang aman signer untuk halaman publik (tanpa jti/token)."""
     return {k: sg.get(k) for k in ("signer_id", "nama", "nip", "jabatan",
@@ -451,13 +506,15 @@ async def buat_permintaan(payload: PermintaanIn, user: dict = Depends(require_wr
         "kode_satker": kode_sat,
         "created_by": user.get("username", "system"),
         "created_at": now.isoformat(),
+        # Ringkasan DIBEKUKAN untuk isi pesan WA/email (lihat _ringkas_dokumen).
+        "ringkas": await _ringkas_dokumen(payload.doc_type, payload.doc_ref),
     }
     await db.signature_requests.insert_one({**record})
     await log_audit("buat_permintaan_ttd", "", sr_id,
                     username=user.get("username", "system"),
                     detail=f"Permintaan TTD '{record['judul']}' — {len(signers)} penanda tangan")
     return {"id": sr_id, "judul": record["judul"], "mode": record["mode"],
-            "links": links}
+            "links": links, "ringkas": record["ringkas"]}
 
 
 @ttd_router.post("/ttd/permintaan/unggah")
