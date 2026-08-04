@@ -67,6 +67,67 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#740] Pasal BAST dikonsolidasi — seluruh jenis BAST kini maksimal 2 lembar termasuk tanda tangan — 2026-08-04
+
+Pasal yang bermakna sama digabung dan kalimatnya dipadatkan **tanpa mengurangi
+maksud inti**: tidak ada kewajiban, larangan, atau dasar hukum yang dihapus —
+yang dibuang hanya pengulangan. Hasilnya, **seluruh BAST dan semua jenisnya**
+(7 jenis) tersaji maksimal **2 lembar termasuk blok tanda tangan**; sebelumnya
+3 lembar (4 pada BAST ber-banyak barang).
+
+### Sembilan judul pasal menjadi lima
+
+| Pasal sekarang | Menyerap pasal lama |
+|---|---|
+| 1 · Objek Serah Terima | (tetap) tabel BMN + nilai + total |
+| 2 · **Tanggung Jawab dan Penggunaan** | Keadaan Barang & Kelengkapan · Tanggung Jawab per jenis · Status Pencatatan · Status & Jangka Waktu · Biaya & Pengembalian · Penanggung Jawab Penggunaan · Pernyataan & Pemeriksaan · Waktu/Tempat/Keadaan Penggunaan |
+| 3 · **Ketentuan Khusus Sesuai Jenis Barang** | seluruh pasal per BIDANG → **satu butir per bidang** dalam satu pasal |
+| 4 · Dasar Pengembalian (Pemegang Meninggal Dunia) | (khusus jenis pengembalian almarhum) |
+| 5 · **Kehilangan, Kerusakan, dan Ganti Rugi** | pasal risiko + keadaan kahar |
+
+Sistem tetap **membedakan aturan menurut kode barang**: butir kendaraan
+(SIM/pajak/pool) hanya muncul pada BMN bidang 302, butir perangkat kerja
+(kata sandi/PDP) pada bidang 310, perawatan hari libur pada hewan/tanaman.
+Butir konteks waktu diringkas 5 → 2 butir dan butir risiko 6 → 3 butir, dengan
+seluruh konteks mandat tetap tercakup (jam kerja, hari libur, lembur, kerja di
+luar kantor, perjalanan dinas, surat tugas, larangan pemakaian pribadi, lapor
+1x24 jam, TGR UU 1/2004 & PP 38/2016, kahar, asuransi bersyarat).
+
+### Penghematan ruang lain — bukan pengurangan informasi
+
+- Dasar hukum jadi satu kalimat mengalir (dulu daftar bernomor 5 baris);
+  rujukan peraturannya identik.
+- Uraian **Sub-sub Kelompok** pada tabel hanya ditampilkan bila barang ≤ 4 —
+  uraian itu turunan (lookup) dari kode barang yang tetap tercetak di setiap
+  baris, jadi tak ada data yang hilang dari dokumen.
+- Kerapatan naskah, padding baris tabel, dan celah tanda tangan BAST (15 → 12
+  mm) dirapatkan. **Ukuran huruf badan naskah tidak dikecilkan** — keterbacaan
+  dokumen resmi dijaga; dokumen lain tidak tersentuh.
+- Maksimal 4 butir bidang dicetak (dulu 5 blok pasal); bila lebih, naskah
+  **menyebut sendiri** bidang sisanya — pemotongan tidak pernah senyap.
+
+### Kapasitas terukur & batas jujur
+
+Diukur atas PDF sungguhan (pypdfium2), referensi kodefikasi terisi, barang
+tersebar di 5 bidang sehingga ketentuan khusus penuh:
+
+| Jenis BAST | Aset maksimum agar tetap 2 lembar |
+|---|---|
+| penggunaan melekat · mutasi pengguna · lainnya | 15 |
+| pengembalian | 24 |
+| pengembalian almarhum | 16 |
+| penggunaan sementara | 7 |
+| operasional unit | 6 |
+
+Melebihi angka itu, halaman ketiga tidak terhindarkan — baris barang tidak
+boleh dibuang dari berita acara. Uji regresi
+`test_semua_jenis_bast_maksimal_dua_halaman` menghitung halaman PDF **setiap**
+jenis pada ambang terendah, sehingga penambahan pasal/butir yang mendorong
+naskah ke halaman ketiga langsung menggagalkan CI — bukan ketahuan setelah
+dokumen dicetak. Rincian di `docs/PUSTAKA-REGULASI-BMN.md` §11C.5.
+
+---
+
 ## [#739] Pasal BAST ditelaah ulang — konteks luar jam kerja/hari libur/perjalanan dinas + pasal khusus per BIDANG kode barang — 2026-08-04
 
 Naskah BAST kini menjawab pertanyaan lapangan yang selama ini menggantung —

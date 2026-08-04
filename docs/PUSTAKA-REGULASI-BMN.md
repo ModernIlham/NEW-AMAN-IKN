@@ -1040,17 +1040,20 @@ kendaraan ditulis sebagai kaidah internal satker yang dioperasionalkan lewat
 **surat tugas/izin tertulis**, bukan sebagai kutipan pasal — dan tidak ada
 nomor peraturan yang diklaim untuk butir itu.
 
-### 11C.2 Dua pasal konteks (semua BAST yang memindahkan penguasaan)
+### 11C.2 Dua konteks wajib (semua BAST yang memindahkan penguasaan)
 
-1. **WAKTU, TEMPAT, DAN KEADAAN PENGGUNAAN** — kedudukan BMN pada jam kerja,
+1. **Waktu, tempat, dan keadaan penggunaan** — kedudukan BMN pada jam kerja,
    di luar jam kerja, hari libur/cuti bersama, lembur/piket, kerja fleksibel,
    dan perjalanan dinas; pencatatan keluar-masuk barang; larangan pemakaian
-   non-kedinasan kapan pun.
-2. **KEHILANGAN, KERUSAKAN, DAN KEADAAN KAHAR** — pelaporan **1x24 jam**
-   (dengan jalur khusus bila kejadian di luar jam kerja: lisan/elektronik
-   dulu, tertulis pada hari kerja berikutnya), surat keterangan kepolisian,
-   TGR, keadaan kahar, klaim asuransi bersyarat, dan penegasan bahwa keausan
-   pemakaian wajar bukan kelalaian.
+   non-kedinasan kapan pun. Sejak konsolidasi (§11C.5) tersaji sebagai **2
+   butir** di dalam pasal **TANGGUNG JAWAB DAN PENGGUNAAN** (dulu pasal
+   tersendiri berisi 5 butir) — `bast_pasal.butir_waktu()`.
+2. **Kehilangan, kerusakan, dan ganti rugi** — pelaporan **1x24 jam** (dengan
+   jalur khusus bila kejadian di luar jam kerja: lisan/elektronik dulu,
+   tertulis pada hari kerja berikutnya), surat keterangan kepolisian, TGR,
+   keadaan kahar, klaim asuransi bersyarat, dan penegasan bahwa keausan
+   pemakaian wajar bukan kelalaian. Tersaji sebagai **3 butir** dalam pasal
+   sendiri (dulu 6 butir) — `bast_pasal.butir_risiko()`.
 
 Keduanya **tidak dicetak** pada BAST pengembalian — barang kembali ke satker,
 sehingga kewajiban penggunaan tak lagi dibebankan kepada mantan pemegang.
@@ -1077,9 +1080,9 @@ sehingga kewajiban penggunaan tak lagi dibebankan kepada mantan pemegang.
 | **603/604/605 Hewan/Biota/Tanaman** | **kebalikan kendaraan**: perawatan WAJIB tiap hari **termasuk hari libur**, petugas pengganti bila berhalangan, lapor sakit/mati/hilang |
 | 8 Aset Tak Berwujud | batas lisensi, larangan menggandakan, akun dinonaktifkan saat kembali |
 
-Bidang yang belum punya aturan sendiri turun ke pasal tingkat **golongan**
-(mis. semua Peralatan dan Mesin lain → pasal umum operasional & larangan
-membongkar). Maksimal 5 blok bidang dicetak; bila lebih, naskah menyebut
+Bidang yang belum punya aturan sendiri turun ke aturan tingkat **golongan**
+(mis. semua Peralatan dan Mesin lain → butir umum operasional & larangan
+membongkar). Maksimal **4 butir** bidang dicetak; bila lebih, naskah menyebut
 sendiri bidang sisanya (pemotongan tidak pernah senyap).
 
 ### 11C.4 Yang TIDAK diklaim
@@ -1089,6 +1092,54 @@ dengan norma di §11C.1 — bukan kutipan harfiah pasal peraturan, bukan nasihat
 hukum, dan tidak menggantikan SOP/peraturan internal instansi. Nomor
 peraturan hanya disebut pada butir yang memang bersumber langsung dari
 peraturan itu (TGR: UU 1/2004 & PP 38/2016).
+
+### 11C.5 Aturan **maksimal 2 lembar** & konsolidasi pasal
+
+Mandat pemilik: **seluruh BAST dan semua jenisnya tersaji maksimal 2 lembar,
+termasuk tanda tangan**. Pasal yang bermakna sama digabung dan kalimatnya
+dipadatkan — **tanpa mengurangi maksud inti**; tidak ada kewajiban, larangan,
+maupun dasar hukum yang dihapus.
+
+**Susunan pasal sesudah konsolidasi** (dari 9 judul menjadi 5):
+
+| Pasal | Isi (asal pasal lama yang dilebur) |
+|---|---|
+| 1 · **Objek Serah Terima** | tabel BMN + nilai + total (tetap) |
+| 2 · **Tanggung Jawab dan Penggunaan** | Keadaan Barang & Kelengkapan + Tanggung Jawab per jenis + Status Pencatatan + Status & Jangka Waktu + Biaya & Pengembalian + Penanggung Jawab Penggunaan + Pernyataan & Pemeriksaan + Waktu/Tempat/Keadaan Penggunaan |
+| 3 · **Ketentuan Khusus Sesuai Jenis Barang** | seluruh pasal per BIDANG (§11C.3) → **satu butir per bidang** dalam satu pasal |
+| 4 · **Dasar Pengembalian (Pemegang Meninggal Dunia)** | hanya pada jenis `pengembalian_almarhum` |
+| 5 · **Kehilangan, Kerusakan, dan Ganti Rugi** | pasal risiko + keadaan kahar (§11C.2 butir 2) |
+| + **Ketentuan Tambahan** & **Penutup** | isi textarea pengguna; penutup diperpendek |
+
+Penghematan ruang lain yang menopang batas 2 lembar — semuanya **bukan**
+pengurangan informasi:
+
+- **Dasar hukum** dicetak sebagai satu kalimat mengalir (dulu daftar bernomor
+  5 baris); rujukan peraturannya identik.
+- **Uraian Sub-sub Kelompok** pada tabel hanya ditampilkan bila jumlah barang
+  ≤ 4. Uraian itu adalah *lookup* dari kode barang yang tetap tercetak pada
+  setiap baris, jadi tidak ada data yang hilang dari dokumen.
+- Kerapatan naskah & padding baris tabel dirapatkan; **ukuran huruf badan
+  naskah tidak dikecilkan** (keterbacaan dokumen resmi dijaga).
+- Celah tanda tangan basah BAST 12 mm (dokumen lain tetap 15 mm).
+
+**Kapasitas terukur** (diukur dengan pypdfium2 atas PDF sungguhan; referensi
+kodefikasi terisi, barang tersebar di 5 bidang sehingga pasal khusus penuh):
+
+| Jenis BAST | Jumlah aset maksimum agar tetap 2 lembar |
+|---|---|
+| penggunaan_melekat · mutasi_pengguna · lainnya | 15 |
+| pengembalian | 24 |
+| pengembalian_almarhum | 16 |
+| penggunaan_sementara | 7 |
+| operasional_unit | 6 |
+
+**Batas jujur**: volume tabel aset adalah aritmetika — melebihi angka di atas,
+halaman ketiga tidak terhindarkan (baris barang tidak boleh dibuang dari
+berita acara). Ambang terendah (6) dijaga uji regresi
+`test_semua_jenis_bast_maksimal_dua_halaman` untuk **setiap** jenis, sehingga
+penambahan pasal/butir baru yang mendorong naskah ke halaman ketiga langsung
+menggagalkan CI, bukan ketahuan setelah dokumen dicetak.
 
 ## 12. Kendala Umum Satker → Fitur Penangkal AMAN
 

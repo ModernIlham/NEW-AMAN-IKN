@@ -1,16 +1,14 @@
-"""Uji pustaka PASAL BAST (murni) — pemilihan pasal khusus per BIDANG kode
-barang dan pasal konteks waktu/risiko.
+"""Uji pustaka PASAL BAST (murni) — pemilihan butir khusus per BIDANG kode
+barang serta butir konteks waktu & risiko.
 
-Yang dijaga di sini adalah hal-hal yang gagal SENYAP kalau meleset: pasal
-kendaraan menempel pada laptop (aturan yang salah tercetak pada dokumen
-resmi), pasal khusus hilang karena kode barang berbeda panjang, atau daftar
-pasal berubah urutan antar unduhan sehingga dua salinan dokumen yang sama
-tidak identik.
+Yang dijaga di sini gagal SENYAP kalau meleset: aturan kendaraan menempel
+pada laptop (aturan salah pada dokumen resmi), butir khusus hilang karena
+panjang kode berbeda, urutan berubah antar unduhan sehingga dua salinan
+dokumen sama tidak identik, atau pemotongan daftar bidang tak dilaporkan.
 """
 from bast_pasal import (
-    JENIS_PENGUASAAN, PASAL_BIDANG, bidang_kode, nama_bidang_terpakai,
-    pasal_khusus_bidang, pasal_khusus_ringkas, pasal_risiko,
-    pasal_waktu_penggunaan,
+    JENIS_PENGUASAAN, PASAL_BIDANG, bidang_kode, butir_khusus_bidang,
+    butir_risiko, butir_waktu, nama_bidang_terpakai, sisa_bidang,
 )
 
 MOBIL = "3020104001"      # Alat Angkutan
@@ -27,106 +25,86 @@ def test_bidang_kode_tiga_digit():
     assert bidang_kode("") == "" and bidang_kode(None) == ""
 
 
-def test_pasal_kendaraan_hanya_untuk_kendaraan():
-    """Aturan SIM/pajak/pool kendaraan tidak boleh menempel pada laptop."""
-    judul_mobil = [j for j, _ in pasal_khusus_bidang([MOBIL])]
-    judul_laptop = [j for j, _ in pasal_khusus_bidang([LAPTOP])]
-    assert judul_mobil == ["KETENTUAN KHUSUS KENDARAAN DINAS"]
-    assert judul_laptop == ["KETENTUAN KHUSUS KOMPUTER DAN PERANGKAT KERJA"]
-    assert "KENDARAAN" not in " ".join(judul_laptop)
+def test_butir_kendaraan_hanya_untuk_kendaraan():
+    """Aturan SIM/pajak/pool tidak boleh menempel pada laptop, dan
+    sebaliknya."""
+    mobil = " ".join(butir_khusus_bidang([MOBIL]))
+    laptop = " ".join(butir_khusus_bidang([LAPTOP]))
+    assert "Kendaraan Dinas" in mobil and "Surat Izin Mengemudi" in mobil
+    assert "Kendaraan Dinas" not in laptop
+    assert "Komputer" in laptop and "kata sandi" in laptop
 
 
 def test_bidang_mengalahkan_golongan():
     """Prefix TERPANJANG menang: 302 (Alat Angkutan) bukan 3 (Peralatan dan
-    Mesin) — kalau terbalik, semua barang golongan 3 dapat pasal generik."""
-    (judul, _butir), = pasal_khusus_bidang([MOBIL])
-    assert judul == "KETENTUAN KHUSUS KENDARAAN DINAS"
+    Mesin) — kalau terbalik, semua barang golongan 3 dapat butir generik."""
+    assert "Kendaraan Dinas" in butir_khusus_bidang([MOBIL])[0]
     # bidang yang belum punya aturan sendiri turun ke golongan
-    (judul_lain, _), = pasal_khusus_bidang(["3990101001"])
-    assert judul_lain == "KETENTUAN KHUSUS PERALATAN DAN MESIN"
+    assert "Peralatan dan Mesin" in butir_khusus_bidang(["3990101001"])[0]
 
 
 def test_gabungan_unik_dan_terurut():
-    """Banyak aset satu bidang → satu blok; urutan deterministik menurut kode
-    bidang, supaya dua unduhan dokumen yang sama identik."""
+    """Banyak aset satu bidang → satu butir; urutan deterministik menurut
+    kode bidang supaya dua unduhan dokumen sama identik."""
     kode = [LAPTOP, MOBIL, LAPTOP, MEJA, MOBIL]
-    judul = [j for j, _ in pasal_khusus_bidang(kode)]
-    assert judul == [
-        "KETENTUAN KHUSUS KENDARAAN DINAS",            # 302
-        "KETENTUAN KHUSUS ALAT KANTOR DAN RUMAH TANGGA",  # 305
-        "KETENTUAN KHUSUS KOMPUTER DAN PERANGKAT KERJA",  # 310
-    ]
-    assert judul == [j for j, _ in pasal_khusus_bidang(list(reversed(kode)))]
+    nama = nama_bidang_terpakai(kode)
+    assert nama == ["Kendaraan Dinas",              # 302
+                    "Alat Kantor dan Rumah Tangga",  # 305
+                    "Komputer dan Perangkat Kerja"]  # 310
+    assert nama == nama_bidang_terpakai(list(reversed(kode)))
+    assert len(butir_khusus_bidang(kode)) == 3
 
 
 def test_pemotongan_dilaporkan_bukan_disembunyikan():
     kode = [TANAH, "3010101001", MOBIL, MEJA, "3060101001", "3070101001",
             LAPTOP]
-    dipakai, sisa = pasal_khusus_ringkas(kode, maks=5)
-    assert dipakai == 5 and sisa == 2
-    assert len(pasal_khusus_bidang(kode, maks=5)) == 5
-    # nama bidang yang TIDAK tercetak masih bisa disebut pada naskah
-    assert nama_bidang_terpakai(kode)[dipakai:] == ["Alat Kedokteran dan "
-                                                    "Kesehatan", "Komputer"]
+    dipakai, sisa = sisa_bidang(kode, maks=4)
+    assert dipakai == 4
+    assert sisa == ["Alat Studio, Komunikasi dan Pemancar",
+                    "Alat Kedokteran dan Kesehatan",
+                    "Komputer dan Perangkat Kerja"]
+    assert len(butir_khusus_bidang(kode, maks=4)) == 4
 
 
 def test_hewan_diikat_perawatan_hari_libur():
-    """Kebalikan kendaraan: hewan/tanaman justru WAJIB dirawat pada hari
-    libur — pembeda inti mandat 'antisipasi hari libur'."""
-    (_judul, butir), = pasal_khusus_bidang([SAPI])
-    assert any("hari libur" in t.lower() for t in butir)
+    """Kebalikan kendaraan: hewan/tanaman WAJIB dirawat pada hari libur —
+    pembeda inti mandat 'antisipasi hari libur'."""
+    assert "hari libur" in butir_khusus_bidang([SAPI])[0].lower()
 
 
-def test_kendaraan_membatasi_luar_jam_kerja():
-    (_judul, butir), = pasal_khusus_bidang([MOBIL])
-    teks = " ".join(butir).lower()
-    assert "di luar jam kerja" in teks and "hari libur" in teks
-    assert "surat tugas" in teks or "izin tertulis" in teks
-    assert "pribadi" in teks          # larangan pemakaian pribadi
-
-
-def test_komputer_membolehkan_dibawa_dengan_syarat():
-    """Laptop justru DIIZINKAN dibawa keluar/di luar jam kerja untuk dinas —
-    aturan yang berbeda arah dengan kendaraan, itulah gunanya per bidang."""
-    (_judul, butir), = pasal_khusus_bidang([LAPTOP])
-    teks = " ".join(butir).lower()
-    assert "di luar kantor" in teks and "di luar jam kerja" in teks
-    assert "kata sandi" in teks or "pin" in teks
-
-
-def test_pasal_waktu_dan_risiko_hanya_saat_penguasaan_beralih():
+def test_butir_waktu_dan_risiko_hanya_saat_penguasaan_beralih():
     for jenis in JENIS_PENGUASAAN:
-        assert pasal_waktu_penggunaan(jenis) is not None
-        assert pasal_risiko(jenis) is not None
+        assert butir_waktu(jenis) and butir_risiko(jenis)
     # Pengembalian: barang kembali ke satker — kewajiban penggunaan tak lagi
     # dibebankan kepada mantan pemegang.
     for jenis in ("pengembalian", "pengembalian_almarhum"):
-        assert pasal_waktu_penggunaan(jenis) is None
-        assert pasal_risiko(jenis) is None
+        assert butir_waktu(jenis) == [] and butir_risiko(jenis) == []
 
 
-def test_pasal_waktu_meliputi_semua_konteks_mandat():
-    _judul, butir = pasal_waktu_penggunaan("penggunaan_melekat")
+def test_butir_waktu_meliputi_semua_konteks_mandat_dalam_dua_butir():
+    """Diringkas menjadi 2 butir (dulu 5) TANPA kehilangan konteks apa pun."""
+    butir = butir_waktu("penggunaan_melekat")
+    assert len(butir) == 2
     teks = " ".join(butir).lower()
     for kata in ("jam kerja", "hari libur", "lembur", "perjalanan dinas",
-                 "surat tugas"):
-        assert kata in teks, f"konteks '{kata}' tidak tercakup pasal waktu"
+                 "surat tugas", "pribadi"):
+        assert kata in teks, f"konteks '{kata}' hilang dari butir waktu"
 
 
-def test_pasal_risiko_menyebut_dasar_ganti_rugi_dan_kahar():
-    _judul, butir = pasal_risiko("mutasi_pengguna")
+def test_butir_risiko_padat_tapi_lengkap():
+    """Diringkas menjadi 3 butir (dulu 6): pelaporan, ganti rugi, kahar."""
+    butir = butir_risiko("mutasi_pengguna")
+    assert len(butir) == 3
     teks = " ".join(butir)
     assert "1x24 jam" in teks
-    assert "38 Tahun 2016" in teks          # dasar TGR
-    assert "KEADAAN KAHAR" in teks
-    assert "kepolisian" in teks.lower()
-    # kejadian di luar jam kerja punya jalur pelaporan yang jelas
-    assert "hari libur" in teks.lower()
+    assert "hari libur" in teks.lower() and "kepolisian" in teks.lower()
+    assert "38 Tahun 2016" in teks          # dasar ganti rugi
+    assert "kahar" in teks.lower() and "asuransi" in teks.lower()
 
 
 def test_pustaka_bidang_sehat():
-    """Tiap entri: kunci angka, nama & judul terisi, minimal satu butir."""
-    for kunci, (nama, judul, butir) in PASAL_BIDANG.items():
+    """Tiap entri: kunci angka, nama & kalimat kewajiban terisi dan ringkas."""
+    for kunci, (nama, kalimat) in PASAL_BIDANG.items():
         assert kunci.isdigit(), kunci
-        assert nama and judul.startswith("KETENTUAN KHUSUS")
-        assert butir and all(isinstance(t, str) and t.strip() for t in butir)
+        assert nama and kalimat and not kalimat.endswith(".")
+        assert len(kalimat) < 700, f"butir bidang {kunci} terlalu panjang"

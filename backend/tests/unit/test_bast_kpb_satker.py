@@ -392,13 +392,14 @@ def test_pdf_pasal_kendaraan_muncul_hanya_untuk_kendaraan(dbx):
         return await _unwrap(rb.bast_pdf)(bast_id, _user=USER)
 
     teks_mobil = _teks_pdf(_jalan(skenario("3020104001", "Minibus", "bp-1")))
-    assert "KETENTUAN KHUSUS KENDARAAN DINAS" in teks_mobil
+    assert "KETENTUAN KHUSUS SESUAI JENIS BARANG" in teks_mobil
+    assert "Kendaraan Dinas" in teks_mobil
     assert "Surat Izin Mengemudi" in teks_mobil
-    assert "KETENTUAN KHUSUS KOMPUTER" not in teks_mobil
+    assert "Komputer dan Perangkat Kerja" not in teks_mobil
 
     teks_laptop = _teks_pdf(_jalan(skenario("3100102003", "Laptop", "bp-2")))
-    assert "KETENTUAN KHUSUS KOMPUTER" in teks_laptop
-    assert "KETENTUAN KHUSUS KENDARAAN DINAS" not in teks_laptop
+    assert "Komputer dan Perangkat Kerja" in teks_laptop
+    assert "Kendaraan Dinas" not in teks_laptop
     assert "Surat Izin Mengemudi" not in teks_laptop
 
 
@@ -411,10 +412,10 @@ def test_pdf_pasal_waktu_dan_risiko_tercetak(dbx):
         await _bast_dgn_aset(dbx, "bp-3", "3100102003", "Laptop")
         return await _unwrap(rb.bast_pdf)("bp-3", _user=USER)
     teks = _teks_pdf(_jalan(skenario()))
-    assert "WAKTU, TEMPAT, DAN KEADAAN PENGGUNAAN" in teks
+    assert "TANGGUNG JAWAB DAN PENGGUNAAN" in teks
     assert "hari libur" in teks
     assert "perjalanan dinas" in teks
-    assert "KEHILANGAN, KERUSAKAN, DAN KEADAAN KAHAR" in teks
+    assert "KEHILANGAN, KERUSAKAN, DAN GANTI RUGI" in teks
     assert "1x24 jam" in teks
 
 
@@ -428,6 +429,97 @@ def test_pdf_pengembalian_tanpa_pasal_kewajiban_penggunaan(dbx):
                              jenis="pengembalian")
         return await _unwrap(rb.bast_pdf)("bp-4", _user=USER)
     teks = _teks_pdf(_jalan(skenario()))
-    assert "WAKTU, TEMPAT, DAN KEADAAN PENGGUNAAN" not in teks
-    assert "KEHILANGAN, KERUSAKAN, DAN KEADAAN KAHAR" not in teks
-    assert "PERNYATAAN DAN PEMERIKSAAN" in teks     # pasal pengembalian tetap
+    assert "KEHILANGAN, KERUSAKAN, DAN GANTI RUGI" not in teks
+    assert "perjalanan dinas" not in teks           # butir waktu tak dibebankan
+    assert "telah mengembalikan seluruh BMN" in teks  # inti pengembalian tetap
+
+
+# ── Batas 2 lembar (mandat pemilik) ─────────────────────────────────────────
+
+_MIN_ASET_DUA_HALAMAN = 6   # jumlah aset yang WAJIB muat pada tiap jenis BAST
+
+_KODE_UJI = ["3020104001", "3100102003", "3050101001", "3060101001",
+             "3080101001"]                       # lima BIDANG berbeda
+_URAIAN_UJI = {"3020104001": "Mini Bus (Penumpang 14 Orang Kebawah)",
+               "3100102003": "Lap Top",
+               "3050101001": "Mesin Ketik Manual Portable",
+               "3060101001": "Camera Digital",
+               "3080101001": "Alat Kesehatan Umum Lainnya"}
+
+
+def _jumlah_halaman(resp):
+    import io
+    import pypdfium2 as pdfium
+    buf = io.BytesIO()
+
+    async def kumpul():
+        async for potong in resp.body_iterator:
+            buf.write(potong if isinstance(potong, bytes) else potong.encode())
+    _jalan(kumpul())
+    pdf = pdfium.PdfDocument(buf.getvalue())
+    try:
+        return len(pdf)
+    finally:
+        pdf.close()
+
+
+def _aset_uji(n):
+    return [{"id": f"a{i}", "asset_code": _KODE_UJI[i % len(_KODE_UJI)],
+             "NUP": str(i + 1),
+             "asset_name": f"Barang Contoh Nama Agak Panjang {i + 1}",
+             "brand": "Merk Contoh", "model": "Tipe-XYZ-2000",
+             "serial_number": f"SN-{i:05d}", "condition": "Baik",
+             "purchase_date": "2025-03-01", "purchase_price": 15_000_000 + i}
+            for i in range(n)]
+
+
+@pytest.mark.parametrize("jenis", list(rb.JENIS_BAST))
+def test_semua_jenis_bast_maksimal_dua_halaman(dbx, jenis):
+    """Mandat: SELURUH jenis BAST tersaji maksimal 2 lembar TERMASUK tanda
+    tangan, pada muatan wajar (6 aset lintas 5 bidang → 5 pasal khusus).
+
+    Dijaga di sini karena regresinya senyap: menambah satu pasal atau satu
+    butir panjang mendorong blok tanda tangan ke halaman ketiga, dan tidak ada
+    yang mengeluh sampai dokumen sudah dicetak. Skenario memakai kondisi
+    TERBERAT tiap jenis (jangka waktu, penanggung jawab tambahan, ahli waris)
+    dan MENGISI `db.kodefikasi` supaya baris tabel setinggi keadaan nyata.
+    """
+    async def skenario():
+        await _seed_dasar(dbx)
+        await dbx.kodefikasi.insert_many(
+            [{"kode": k, "uraian": u} for k, u in _URAIAN_UJI.items()])
+        aset = _aset_uji(_MIN_ASET_DUA_HALAMAN)
+        doc = {
+            "id": "b-2h", "kode_satker": SATKER, "jenis": jenis,
+            "nomor": "BAST-001/PPTHD/VIII/2026", "tanggal": "2026-08-04",
+            "pihak_pertama": {"nama": "Karlinus Ignasius Manek",
+                              "nip": "198206022001121003",
+                              "jabatan": "Petugas Penatausahaan",
+                              "alamat": "Gedung Kantor Otorita IKN, Nusantara"},
+            "pihak_kedua": {"nama": "Karina Lia Meirita Ulo",
+                            "nip": "199005242025062002", "jabatan": "Analis",
+                            "alamat": "Gedung B Lantai 2"},
+            "asset_ids": [a["id"] for a in aset], "aset": aset,
+            "saksi": [], "keterangan": "", "sertakan_foto": False,
+            "penyerah_atas_nama_kpb": jenis != "mutasi_pengguna",
+            "jangka_dari": "2026-08-05", "jangka_sampai": "2026-12-31",
+        }
+        if jenis == "pengembalian_almarhum":
+            doc["almarhum"] = {"nama": "Almarhum Contoh",
+                               "nip": "196001011985031001",
+                               "tanggal_meninggal": "2026-07-01",
+                               "nomor_akta_kematian": "AK/123/2026"}
+            doc["saksi"] = [{"nama": "Saksi Satu", "jabatan": "Ahli Waris",
+                             "nip": ""},
+                            {"nama": "Saksi Dua", "jabatan": "Atasan",
+                             "nip": ""}]
+        if jenis == "operasional_unit":
+            doc["penanggung_jawab_tambahan"] = [
+                {"nama": "Petugas A", "unit_tempat_tugas": "Ruang Server"},
+                {"nama": "Petugas B", "unit_tempat_tugas": "Ruang Rapat"}]
+        await dbx.bast_serah_terima.insert_one(doc)
+        return await _unwrap(rb.bast_pdf)("b-2h", _user=USER)
+
+    n = _jumlah_halaman(_jalan(skenario()))
+    assert n <= 2, (f"BAST {jenis} memakan {n} halaman pada "
+                    f"{_MIN_ASET_DUA_HALAMAN} aset — batas mandat 2 lembar")

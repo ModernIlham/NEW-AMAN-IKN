@@ -703,7 +703,7 @@ def _identity_table(rows):
     return t
 
 
-def _signature_block(signers, doc_width):
+def _signature_block(signers, doc_width, celah_mm=15):
     """Tidy, uniform signature layout as an invisible-borders table.
 
     signers: list of 1..2 dicts with optional keys:
@@ -772,7 +772,9 @@ def _signature_block(signers, doc_width):
                 return [_im]
             except Exception:
                 pass
-        return [Spacer(1, 15 * rl_mm)]  # 3-line gap for wet signature
+        # Celah tanda tangan basah; dokumen ber-batas 2 halaman (BAST) boleh
+        # meminta celah lebih rapat lewat `celah_mm` tanpa mengubah dokumen lain.
+        return [Spacer(1, celah_mm * rl_mm)]
 
     def _zona_nama(s):
         flow = [Paragraph(f"<b><u>{_aman(s.get('nama', ''))}</u></b>", sig)]
@@ -789,7 +791,7 @@ def _signature_block(signers, doc_width):
         return _zona_kepala(s) + _zona_ttd(s) + _zona_nama(s)
 
     if len(signers) >= 3:
-        atas = _signature_block(signers[:2], doc_width)
+        atas = _signature_block(signers[:2], doc_width, celah_mm)
         bawah_tbl = Table(
             [["", _col(signers[2]), ""]],
             colWidths=[doc_width * 0.30, doc_width * 0.40, doc_width * 0.30])

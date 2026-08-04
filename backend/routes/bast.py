@@ -84,6 +84,16 @@ DASAR_HUKUM = (
     "Barang Milik Negara dan Aset Dalam Penguasaan di Ibu Kota Nusantara.",
 )
 
+# Bentuk RINGKAS dasar hukum untuk badan naskah — satu kalimat mengalir,
+# rujukan hukum yang sama persis dengan DASAR_HUKUM di atas (yang tetap
+# dipertahankan sebagai rujukan lengkap/dokumentasi).
+DASAR_HUKUM_RINGKAS = (
+    "Undang-Undang Nomor 17 Tahun 2003; Peraturan Pemerintah Nomor 27 Tahun "
+    "2014 jo. Peraturan Pemerintah Nomor 28 Tahun 2020; Peraturan Presiden "
+    "Nomor 62 Tahun 2022; Peraturan Menteri Keuangan Nomor 40 Tahun 2024; dan "
+    "Peraturan Menteri Keuangan Nomor 53 Tahun 2023"
+)
+
 
 class PihakIn(BaseModel):
     nama: str = ""
@@ -820,14 +830,17 @@ async def bast_pdf(bast_id: str, nilai: str = "",
     from reportlab.lib.colors import HexColor
     from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
     from reportlab.lib.styles import ParagraphStyle
-    isi = ParagraphStyle('BastIsi', parent=body, fontSize=8.6, leading=11.6,
+    # Kerapatan naskah: jarak antar butir/pasal dipadatkan (bukan ukuran
+    # huruf — keterbacaan dokumen resmi dijaga) agar seluruh jenis BAST muat
+    # 2 halaman termasuk tanda tangan.
+    isi = ParagraphStyle('BastIsi', parent=body, fontSize=8.6, leading=11.0,
                          alignment=TA_JUSTIFY, textColor=HexColor("#111827"),
-                         spaceAfter=1.5)
+                         spaceAfter=1.0)
     lbl_pasal = ParagraphStyle('BastPasal', parent=body, fontSize=9,
-                               leading=11.5, alignment=TA_CENTER,
-                               spaceBefore=5, spaceAfter=2.5,
+                               leading=11.0, alignment=TA_CENTER,
+                               spaceBefore=3.5, spaceAfter=1.5,
                                textColor=HexColor("#111827"))
-    ket = ParagraphStyle('BastKet', parent=isi, fontSize=8.2, leading=10.8)
+    ket = ParagraphStyle('BastKet', parent=isi, fontSize=8.2, leading=10.4)
 
     el = []
     el.extend(_kop_surat_flowables(settings, doc.width))
@@ -907,11 +920,13 @@ async def bast_pdf(bast_id: str, nilai: str = "",
             if jenis_awal in _JENIS_PENGEMBALIAN
             else "PIHAK KESATU dan PIHAK KEDUA — secara bersama-sama disebut "
                  "PARA PIHAK — sepakat melakukan serah terima")
+    # Dasar hukum dirapatkan menjadi SATU paragraf mengalir (dulu daftar
+    # bernomor 5 baris): isi hukumnya sama persis, ruang yang dihemat dipakai
+    # agar seluruh naskah muat 2 halaman.
     el.append(Paragraph(
-        f"{arah} {_esc(judul_jenis)}, berdasarkan:", isi))
-    for i, d in enumerate(DASAR_HUKUM, 1):
-        el.append(Paragraph(f"{i}. {d}", ket))
-    el.append(Spacer(1, 1.5 * rl_mm))
+        f"{arah} {_esc(judul_jenis)}, berdasarkan {DASAR_HUKUM_RINGKAS}.",
+        isi))
+    el.append(Spacer(1, 1.2 * rl_mm))
 
     # PASAL 1 — objek serah terima (tabel multi-aset + nilai + total)
     el.append(Paragraph("<b>PASAL 1 — OBJEK SERAH TERIMA</b>", lbl_pasal))
@@ -920,8 +935,14 @@ async def bast_pdf(bast_id: str, nilai: str = "",
                 else "PIHAK KESATU menyerahkan dan PIHAK KEDUA menerima penyerahan")
     el.append(Paragraph(
         f"{kalimat1} Barang Milik Negara dengan rincian sebagai berikut:", isi))
-    subsub = await _peta_subsub_kelompok(
-        [a.get("asset_code") for a in (b.get("aset") or [])])
+    # Uraian SUB-SUB KELOMPOK ditampilkan hanya bila jumlah barang sedikit.
+    # Pada BAST ber-banyak barang uraian itu dilepas: maknanya TIDAK hilang —
+    # sub-sub kelompok adalah turunan (lookup) kode barang yang tetap tercetak
+    # pada tiap baris — dan inilah yang menjaga naskah tetap 2 halaman.
+    _AMBANG_SUBSUB = 4
+    _n_aset = len(b.get("aset") or [])
+    subsub = ({} if _n_aset > _AMBANG_SUBSUB else await _peta_subsub_kelompok(
+        [a.get("asset_code") for a in (b.get("aset") or [])]))
     from kodefikasi_utils import normalize_kode as _norm
     from pembukuan_utils import parse_harga as _ph
     kepala = ["No", "Identitas Barang<br/>(Sub-sub Kelompok · Kode · NUP)",
@@ -931,6 +952,17 @@ async def bast_pdf(bast_id: str, nilai: str = "",
     if tampil_nilai:
         kepala.append("Nilai Perolehan (Rp)")
         lebar.append(78)
+    # Gaya SEL KHUSUS tabel BAST: sedikit lebih kecil & rapat dari gaya
+    # laporan umum (8.5/11 → 7.8/9.6). Hanya berlaku pada tabel objek serah
+    # terima dokumen ini — laporan lain tak tersentuh — dan inilah yang
+    # membuat BAST ber-banyak aset tetap 2 halaman tanpa membuang kolom.
+    st = dict(st)
+    for _k in ('Cell', 'CellCenter', 'CellRight'):
+        if _k in st:
+            st[_k] = ParagraphStyle(f'BastSel{_k}', parent=st[_k],
+                                    fontSize=7.8, leading=9.6)
+    st['TableHeader'] = ParagraphStyle('BastSelHead', parent=st['TableHeader'],
+                                       fontSize=7.8, leading=9.6)
     data = [[Paragraph(h, st['TableHeader']) for h in kepala]]
     total_nilai = 0.0
     for i, a in enumerate(b.get("aset") or [], 1):
@@ -958,7 +990,12 @@ async def bast_pdf(bast_id: str, nilai: str = "",
                      Paragraph(f"<b>{total_nilai:,.0f}</b>".replace(",", "."),
                                st['CellRight'] if 'CellRight' in st else st['CellCenter'])])
     t = Table(data, colWidths=_fit_col_widths(lebar, doc.width), repeatRows=1)
-    t.setStyle(_std_table_style(zebra=True, total_row=tampil_nilai))
+    # Padding baris dirapatkan KHUSUS tabel BAST (3 → 1.5) — tiap baris aset
+    # hemat ~1,5 mm sehingga BAST ber-banyak aset tetap muat 2 halaman.
+    t.setStyle(_std_table_style(zebra=True, total_row=tampil_nilai, extra=[
+        ('TOPPADDING', (0, 0), (-1, -1), 1.5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
+    ]))
     el.append(t)
     if not tampil_nilai:
         # Nyatakan terus terang MENGAPA kolom nilai absen — pembaca dokumen
@@ -983,161 +1020,118 @@ async def bast_pdf(bast_id: str, nilai: str = "",
         nomor_pasal += 1
 
     jenis = b.get("jenis")
-    # Pasal umum: keadaan barang & kelengkapan — anatomi BAST resmi.
-    pasal("KEADAAN BARANG DAN KELENGKAPAN", [
-        "Serah terima meliputi fisik barang beserta kelengkapan/dokumen "
-        "pendukungnya, dalam keadaan sebagaimana tercantum pada kolom "
-        "Kondisi tabel Pasal 1; PARA PIHAK telah melakukan pengecekan "
-        "bersama atas barang dimaksud sebelum menandatangani Berita Acara ini.",
-    ])
+    # ── PASAL 2 — TANGGUNG JAWAB DAN PENGGUNAAN ────────────────────────────
+    # Gabungan dari lima pasal lama yang bermakna sama/bersambung: keadaan
+    # barang, tanggung jawab per jenis, status pencatatan, jangka waktu, dan
+    # konteks waktu penggunaan. Isi hukumnya utuh; yang dibuang hanya
+    # pengulangan — syarat agar seluruh naskah muat 2 halaman.
+    from bast_pasal import butir_khusus_bidang, butir_risiko, butir_waktu, sisa_bidang
+
+    tj = ["Serah terima meliputi fisik barang beserta kelengkapan/dokumen "
+          "pendukungnya dalam keadaan sebagaimana kolom Kondisi pada Pasal 1, "
+          "yang telah diperiksa bersama oleh PARA PIHAK sebelum Berita Acara "
+          "ini ditandatangani."]
     if jenis == "mutasi_pengguna":
-        # Butir kehilangan/ganti rugi TIDAK diulang di sini — sudah dirinci
-        # pada pasal "KEHILANGAN, KERUSAKAN, DAN KEADAAN KAHAR" di bawah
-        # (termasuk kejadian di luar jam kerja); pengulangan hanya membuat
-        # naskah panjang dan berpotensi berbeda bunyi.
-        pasal("MUTASI PEMEGANG DAN TANGGUNG JAWAB", [
-            "Terhitung sejak ditandatanganinya Berita Acara ini, tanggung "
-            "jawab penggunaan, pengamanan, dan pemeliharaan BMN beralih dari "
-            "PIHAK KESATU kepada PIHAK KEDUA.",
-            "PIHAK KEDUA dilarang memindahtangankan, mengubah bentuk, atau "
-            "mengalihkan BMN kepada pihak lain tanpa persetujuan tertulis, "
-            "dan wajib mengembalikannya apabila berpindah tugas/berhenti.",
-        ])
-        pasal("STATUS PENCATATAN", [
-            "BMN tetap tercatat sebagai Barang Milik Negara pada satuan "
-            "kerja; mutasi ini hanya mengubah pencatatan pemegang pada "
-            "daftar barang/Daftar Barang Ruangan/Kartu Identitas Barang.",
-        ])
-    if jenis in ("penggunaan_melekat", "lainnya"):
-        pasal("TANGGUNG JAWAB", [
-            "Terhitung sejak ditandatanganinya Berita Acara ini, PIHAK KEDUA "
-            "bertanggung jawab penuh atas penggunaan, pengamanan, dan "
-            "pemeliharaan BMN untuk kepentingan kedinasan.",
-            "BMN melekat pada PIHAK KEDUA selaku pemegang dan wajib "
-            "dikembalikan kepada PIHAK KESATU dalam kondisi baik apabila "
-            "PIHAK KEDUA berpindah tugas/berhenti sesuai ketentuan.",
-            "PIHAK KEDUA dilarang memindahtangankan atau mengalihkan BMN "
-            "kepada pihak lain tanpa persetujuan tertulis PIHAK KESATU.",
-        ])
-    if jenis == "operasional_unit":
-        # Dibedakan dari penggunaan melekat: barang dipakai BERSAMA pada satu
-        # unit/tempat kerja, sehingga yang diikat adalah penguasaan unit —
-        # bukan penguasaan pribadi — beserta pengaturan pemakaian bergilir.
-        pasal("TANGGUNG JAWAB PENGGUNAAN OPERASIONAL", [
-            "Terhitung sejak ditandatanganinya Berita Acara ini, PIHAK KEDUA "
-            "selaku penanggung jawab unit/tempat kerja bertanggung jawab atas "
-            "penggunaan, pengamanan, dan pemeliharaan BMN yang dipakai "
-            "bersama untuk menunjang tugas unit.",
-            "BMN tetap berada pada unit/tempat kerja sebagaimana tercatat "
-            "dan tidak dibawa untuk keperluan pribadi; pemakaian bergilir "
-            "antar petugas diatur oleh PIHAK KEDUA dengan tetap menjaga "
-            "kejelasan siapa yang menguasai barang pada satu waktu.",
-            "Pergantian penanggung jawab unit dilakukan melalui serah terima "
-            "baru agar rantai penguasaan barang tidak terputus.",
-            "PIHAK KEDUA dilarang memindahtangankan atau mengalihkan BMN "
-            "kepada pihak lain tanpa persetujuan tertulis PIHAK KESATU.",
-        ])
-    if jenis == "operasional_unit" and b.get("penanggung_jawab_tambahan"):
-        baris = [f"{_esc(str(p.get('nama') or '-'))} — "
-                 f"{_esc(str(p.get('unit_tempat_tugas') or '-'))}"
-                 for p in b["penanggung_jawab_tambahan"]]
-        pasal("PENANGGUNG JAWAB PENGGUNAAN",
-              ["Pembagian penanggung jawab penggunaan pada unit/tempat/tugas:"]
-              + baris)
-    if jenis == "penggunaan_sementara":
-        pasal("STATUS DAN JANGKA WAKTU", [
-            "Penggunaan sementara tidak mengalihkan status penggunaan — BMN "
-            "tetap tercatat pada Daftar Barang Pengguna PIHAK KESATU dan "
-            "berada dalam pengawasannya; PIHAK KEDUA dilarang mengubah "
-            "status, memindahtangankan, atau membebani BMN.",
-            f"Jangka waktu penggunaan sementara terhitung sejak "
-            f"{_fmt_tanggal_id(b.get('jangka_dari')) or '…'} sampai dengan "
+        tj.append(
+            "Terhitung sejak penandatanganan, tanggung jawab penggunaan, "
+            "pengamanan, dan pemeliharaan BMN beralih dari PIHAK KESATU "
+            "kepada PIHAK KEDUA; BMN tetap tercatat sebagai Barang Milik "
+            "Negara pada satuan kerja dan mutasi ini hanya mengubah "
+            "pencatatan pemegang pada daftar barang/DBR/KIB.")
+    elif jenis == "operasional_unit":
+        pj = "; ".join(
+            f"{_esc(str(p.get('nama') or '-'))} ({_esc(str(p.get('unit_tempat_tugas') or '-'))})"
+            for p in (b.get("penanggung_jawab_tambahan") or []))
+        tj.append(
+            "Terhitung sejak penandatanganan, PIHAK KEDUA selaku penanggung "
+            "jawab unit bertanggung jawab atas penggunaan, pengamanan, dan "
+            "pemeliharaan BMN yang dipakai bersama; BMN tetap berada pada "
+            "unit/tempat kerja, pemakaian bergilir diatur PIHAK KEDUA dengan "
+            "kejelasan penguasa barang pada satu waktu, dan pergantian "
+            "penanggung jawab dilakukan melalui serah terima baru."
+            + (f" Penanggung jawab pada unit/tempat tugas: {pj}." if pj else ""))
+    elif jenis == "penggunaan_sementara":
+        tj.append(
+            "Penggunaan sementara TIDAK mengalihkan status penggunaan — BMN "
+            "tetap tercatat pada Daftar Barang Pengguna PIHAK KESATU — "
+            f"berlaku {_fmt_tanggal_id(b.get('jangka_dari')) or '…'} s.d. "
             f"{_fmt_tanggal_id(b.get('jangka_sampai')) or '…'} dan dapat "
-            "diperpanjang sesuai ketentuan dengan persetujuan pejabat yang "
-            "berwenang.",
-        ])
-        pasal("BIAYA DAN PENGEMBALIAN", [
-            "Biaya pemeliharaan dan pengamanan BMN selama jangka waktu "
-            "penggunaan sementara dibebankan kepada PIHAK KEDUA, kecuali "
-            "diperjanjikan lain.",
-            "Pada saat jangka waktu berakhir atau sewaktu-waktu diperlukan, "
-            "PIHAK KEDUA wajib menyerahkan kembali BMN kepada PIHAK KESATU "
-            "dalam keadaan baik yang dituangkan dalam Berita Acara Serah "
-            "Terima pengembalian.",
-        ])
+            "diperpanjang atas persetujuan pejabat berwenang; biaya "
+            "pemeliharaan dan pengamanan selama jangka waktu tersebut "
+            "dibebankan kepada PIHAK KEDUA kecuali diperjanjikan lain, dan "
+            "pada saat berakhir BMN diserahkan kembali dalam keadaan baik "
+            "melalui Berita Acara pengembalian.")
+    elif jenis in _JENIS_PENGEMBALIAN:
+        tj.append(
+            "PIHAK KEDUA menyatakan telah mengembalikan seluruh BMN tersebut "
+            "dan PIHAK KESATU telah memeriksa fisiknya; terhitung sejak "
+            "penandatanganan, tanggung jawab penggunaan, pengamanan, dan "
+            "pemeliharaan beralih kepada PIHAK KESATU dan pencatatan pemegang "
+            "pada daftar barang satuan kerja dimutakhirkan.")
+    else:   # penggunaan_melekat & lainnya
+        tj.append(
+            "Terhitung sejak penandatanganan, PIHAK KEDUA bertanggung jawab "
+            "penuh atas penggunaan, pengamanan, dan pemeliharaan BMN untuk "
+            "kepentingan kedinasan, dan wajib mengembalikannya dalam kondisi "
+            "baik apabila berpindah tugas/berhenti.")
+    if jenis not in _JENIS_PENGEMBALIAN:
+        tj.append(
+            "PIHAK KEDUA dilarang memindahtangankan, mengubah bentuk, "
+            "membebani, atau mengalihkan BMN kepada pihak lain tanpa "
+            "persetujuan tertulis PIHAK KESATU.")
+    tj.extend(butir_waktu(jenis))
+    pasal("TANGGUNG JAWAB DAN PENGGUNAAN", tj)
+
+    # ── PASAL 3 — KETENTUAN KHUSUS SESUAI JENIS BARANG ─────────────────────
+    # SATU pasal berisi satu butir per BIDANG kode barang (dulu satu pasal
+    # per bidang) — sistem tetap membedakan aturan per jenis barang, tetapi
+    # naskahnya jauh lebih ringkas.
+    _MAKS_BIDANG = 4
+    _kode_aset = [a.get("asset_code") for a in (b.get("aset") or [])]
+    _btr_bidang = butir_khusus_bidang(_kode_aset, maks=_MAKS_BIDANG)
+    if _btr_bidang:
+        _dipakai, _sisa_nama = sisa_bidang(_kode_aset, maks=_MAKS_BIDANG)
+        if _sisa_nama:
+            # Pemotongan TIDAK senyap: naskah menyebut bidang yang tak dicetak.
+            _btr_bidang.append(
+                "Terhadap BMN bidang " + _esc(", ".join(_sisa_nama))
+                + " pada Berita Acara ini berlaku pula ketentuan teknis "
+                "pengelolaan masing-masing bidang tersebut.")
+        pasal("KETENTUAN KHUSUS SESUAI JENIS BARANG", _btr_bidang)
+
+    # ── PASAL 4 — dasar pengembalian almarhum (khusus) ─────────────────────
     if jenis == "pengembalian_almarhum":
         alm = b.get("almarhum") or {}
         _nm = _esc(str(alm.get("nama") or "-"))
         _nip = str(alm.get("nip") or "").strip()
         _tgl = str(alm.get("tanggal_meninggal") or "").strip()
         _akta = str(alm.get("nomor_akta_kematian") or "").strip()
-        # Nomor identitas almarhum TUNDUK aturan privasi yang sama dengan blok
-        # tanda tangan (temuan audit): NIK (Non-ASN / 16 digit) TIDAK dicetak;
-        # NIP/NRP dicetak dengan label pintar. Dulu selalu "(NIP …)" mentah —
-        # membocorkan NIK di badan pasal, menembus aturan yang ditegakkan di
-        # semua blok TTD dokumen ini.
+        # Nomor identitas almarhum tunduk aturan privasi blok TTD: NIK Non-ASN
+        # TIDAK dicetak; NIP/NRP dicetak dengan label pintar.
         from pegawai_utils import (
             deteksi_identitas as _dj, label_nomor_identitas as _lni,
         )
         _det_alm = _dj(_nip)
         _frasa_id = ("" if not _nip or _det_alm["jenis"] == "nik"
                      else f" ({_esc(_lni(_nip) or 'NIP')} {_esc(_nip)})")
-        ket_alm = [
-            f"BMN dalam berita acara ini sebelumnya tercatat pada pemegang "
-            f"<b>{_nm}</b>" + _frasa_id
-            + (f" yang telah meninggal dunia pada {_esc(_fmt_tanggal_id(_tgl))}"
-               if _tgl else " yang telah meninggal dunia") + "."
-            + (f" Akta/Surat Keterangan Kematian Nomor {_esc(_akta)}."
-               if _akta else ""),
-            "Karena pemegang tercatat berhalangan tetap, penyerahan dilakukan "
-            "oleh PIHAK KEDUA selaku ahli waris/atasan langsung, disaksikan "
-            "para saksi yang menandatangani berita acara ini.",
+        pasal("DASAR PENGEMBALIAN (PEMEGANG MENINGGAL DUNIA)", [
+            f"BMN ini sebelumnya tercatat pada pemegang <b>{_nm}</b>"
+            + _frasa_id
+            + (f" yang meninggal dunia pada {_esc(_fmt_tanggal_id(_tgl))}"
+               if _tgl else " yang telah meninggal dunia")
+            + (f", Akta/Surat Keterangan Kematian Nomor {_esc(_akta)}" if _akta else "")
+            + ". Karena pemegang tercatat berhalangan tetap, penyerahan "
+            "dilakukan PIHAK KEDUA selaku ahli waris/atasan langsung dan "
+            "disaksikan para saksi yang menandatangani Berita Acara ini.",
             "Berita Acara Serah Terima terdahulu atas nama pemegang tersebut "
             "TETAP SAH sebagai bukti rantai penguasaan barang dan tidak "
-            "dibatalkan oleh berita acara ini.",
-        ]
-        pasal("DASAR PENGEMBALIAN (PEMEGANG MENINGGAL DUNIA)", ket_alm)
-    if jenis in _JENIS_PENGEMBALIAN:
-        pasal("PERNYATAAN DAN PEMERIKSAAN", [
-            "PIHAK KEDUA menyatakan telah mengembalikan seluruh BMN tersebut "
-            "dan PIHAK KESATU telah melakukan pemeriksaan fisik serta "
-            "menerima BMN dalam keadaan sebagaimana tercantum pada tabel "
-            "objek serah terima.",
-            "Terhitung sejak ditandatanganinya Berita Acara ini, tanggung "
-            "jawab penggunaan, pengamanan, dan pemeliharaan BMN kembali "
-            "beralih kepada PIHAK KESATU; pencatatan pemegang pada daftar "
-            "barang satuan kerja dimutakhirkan.",
+            "dibatalkan oleh Berita Acara ini.",
         ])
-    # ── Pasal konteks waktu, pasal khusus per BIDANG, dan pasal risiko ──
-    # Disisipkan SETELAH pasal per jenis supaya urutannya: apa yang
-    # diserahterimakan → tanggung jawab pokok → kapan/di mana boleh dipakai →
-    # aturan khusus jenis barangnya → apa yang dilakukan bila terjadi apa-apa.
-    from bast_pasal import (
-        nama_bidang_terpakai, pasal_khusus_bidang, pasal_khusus_ringkas,
-        pasal_risiko, pasal_waktu_penggunaan,
-    )
-    _kode_aset = [a.get("asset_code") for a in (b.get("aset") or [])]
-    _p_waktu = pasal_waktu_penggunaan(jenis)
-    if _p_waktu:
-        pasal(_p_waktu[0], _p_waktu[1])
-    _MAKS_PASAL_BIDANG = 5
-    for _judul, _butir in pasal_khusus_bidang(_kode_aset,
-                                              maks=_MAKS_PASAL_BIDANG):
-        pasal(_judul, _butir)
-    _dipakai, _sisa = pasal_khusus_ringkas(_kode_aset, maks=_MAKS_PASAL_BIDANG)
-    if _sisa:
-        # Pemotongan TIDAK boleh senyap: naskah menyebut sendiri bahwa masih
-        # ada aturan bidang lain yang berlaku meski tak dicetak di sini.
-        _nama_sisa = ", ".join(nama_bidang_terpakai(_kode_aset)[_dipakai:])
-        pasal("KETENTUAN KHUSUS LAINNYA", [
-            "Terhadap BMN pada Berita Acara ini yang termasuk bidang "
-            f"{_esc(_nama_sisa)} berlaku pula ketentuan teknis pengelolaan "
-            "masing-masing bidang tersebut sebagaimana diatur satuan kerja, "
-            "meskipun tidak dituliskan seluruhnya pada naskah ini.",
-        ])
-    _p_risiko = pasal_risiko(jenis)
-    if _p_risiko:
-        pasal(_p_risiko[0], _p_risiko[1])
+
+    # ── PASAL 5 — KEHILANGAN, KERUSAKAN, DAN GANTI RUGI ────────────────────
+    _btr_risiko = butir_risiko(jenis)
+    if _btr_risiko:
+        pasal("KEHILANGAN, KERUSAKAN, DAN GANTI RUGI", _btr_risiko)
 
     if b.get("keterangan"):
         # Isi dari textarea: tiap baris tak-kosong → satu butir pasal
@@ -1146,14 +1140,13 @@ async def bast_pdf(bast_id: str, nilai: str = "",
                  for ln in str(b["keterangan"]).splitlines() if ln.strip()]
         pasal("KETENTUAN TAMBAHAN", butir or [_esc(str(b["keterangan"]))])
     pasal("PENUTUP", [
-        "Demikian Berita Acara Serah Terima ini dibuat dengan sebenarnya "
-        "dalam rangkap 2 (dua) — 1 (satu) rangkap untuk PIHAK KESATU dan "
-        "1 (satu) rangkap untuk PIHAK KEDUA — yang masing-masing mempunyai "
-        "kekuatan hukum yang sama; apabila di kemudian hari terdapat "
-        "kekeliruan akan diadakan perbaikan sebagaimana mestinya.",
+        "Demikian Berita Acara ini dibuat dengan sebenarnya dalam rangkap "
+        "2 (dua) yang masing-masing mempunyai kekuatan hukum sama; apabila "
+        "di kemudian hari terdapat kekeliruan akan diperbaiki sebagaimana "
+        "mestinya.",
     ])
 
-    el.append(Spacer(1, 3 * rl_mm))
+    el.append(Spacer(1, 2 * rl_mm))
     # Baris "Mengetahui, KPB": otomatis pada mutasi; juga pada non-mutasi bila
     # penyerah bertindak a.n. KPB (pendelegasian) — kaidah §11B.
     an_kpb = bool(b.get("penyerah_atas_nama_kpb")) and jenis != "mutasi_pengguna"
@@ -1205,7 +1198,7 @@ async def bast_pdf(bast_id: str, nilai: str = "",
          'after': baris_identitas_ttd(
              p1.get("nip"), "NIP. -",
              await status_kepegawaian_by_nip(p1.get("nip")))},
-    ] + signers_mengetahui, doc.width))
+    ] + signers_mengetahui, doc.width, celah_mm=12))
     # Blok SAKSI — wajib pada pengembalian almarhum (pihak yang seharusnya
     # menyerahkan berhalangan tetap), opsional bila diisi pada jenis lain.
     _saksi_doc = [s for s in (b.get("saksi") or [])
