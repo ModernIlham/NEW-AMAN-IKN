@@ -686,7 +686,7 @@ def _blok_ttd_tim_kpb(tim, settings, tanggal_iso, ident, doc_width,
     kolom = [
         Paragraph(header_mengetahui, sig),
         Paragraph(escape(str(ident.get("kasatker_jabatan") or "Kuasa Pengguna Barang,")), sig),
-        Spacer(1, 15 * rl_mm),
+        Spacer(1, 20 * rl_mm),
         Paragraph(f"<b><u>{escape(str(ident.get('kasatker_nama') or ''))}</u></b>", sig),
     ]
     if baris_kpb:
@@ -756,7 +756,7 @@ def _identity_table(rows):
     return t
 
 
-def _signature_block(signers, doc_width, celah_mm=15):
+def _signature_block(signers, doc_width, celah_mm=20, jarak_baris_mm=8):
     """Tidy, uniform signature layout as an invisible-borders table.
 
     signers: list of 1..2 dicts with optional keys:
@@ -811,14 +811,14 @@ def _signature_block(signers, doc_width, celah_mm=15):
 
     def _zona_ttd(s):
         # Gambar TTD digital bila tersedia (bytes PNG transparan) —
-        # menggantikan celah tanda tangan basah; fallback ke Spacer 15mm.
+        # menggantikan celah tanda tangan basah; fallback ke Spacer celah_mm.
         ttd = s.get('ttd_img')
         if ttd:
             try:
                 from reportlab.platypus import Image as _RLImage
                 _im = _RLImage(io.BytesIO(ttd), mask='auto')
                 _skala = min((doc_width * 0.30) / _im.imageWidth,
-                             (15 * rl_mm) / _im.imageHeight)
+                             (celah_mm * rl_mm) / _im.imageHeight)
                 _im.drawWidth = _im.imageWidth * _skala
                 _im.drawHeight = _im.imageHeight * _skala
                 _im.hAlign = 'CENTER'
@@ -845,6 +845,9 @@ def _signature_block(signers, doc_width, celah_mm=15):
 
     if len(signers) >= 3:
         atas = _signature_block(signers[:2], doc_width, celah_mm)
+        # jarak_baris_mm = pemisah VISUAL antara pasangan atas dan baris
+        # bawah (bukan area pena) — dokumen ber-batas halaman boleh
+        # merapatkannya demi celah ttd yang lebih lega.
         bawah_tbl = Table(
             [["", _col(signers[2]), ""]],
             colWidths=[doc_width * 0.30, doc_width * 0.40, doc_width * 0.30])
@@ -855,7 +858,7 @@ def _signature_block(signers, doc_width, celah_mm=15):
             ('TOPPADDING', (0, 0), (-1, -1), 0),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
         ]))
-        return atas + [Spacer(1, 8 * rl_mm), KeepTogether(bawah_tbl)]
+        return atas + [Spacer(1, jarak_baris_mm * rl_mm), KeepTogether(bawah_tbl)]
 
     if len(signers) == 1:
         cells = [["", _zona_kepala(signers[0])],

@@ -1124,7 +1124,9 @@ pengurangan informasi:
   bidang justru LEBIH tinggi daripada BAST 6 barang di 2 bidang.)
 - Kerapatan naskah & padding baris tabel dirapatkan; **ukuran huruf badan
   naskah tidak dikecilkan** (keterbacaan dokumen resmi dijaga).
-- Celah tanda tangan basah BAST 11 mm (dokumen lain tetap 15 mm).
+- Celah tanda tangan basah BAST 14 mm (dokumen lain 20 mm); ruangnya diambil
+  dari jarak antar-baris blok TTD pola 3-penandatangan (8 mm → 3 mm) —
+  pemisah visual, bukan area pena — sehingga kapasitas 2 lembar tidak turun.
 
 **Kapasitas terukur** (diukur dengan pypdfium2 atas PDF sungguhan; referensi
 kodefikasi terisi, barang tersebar di 5 bidang sehingga ketentuan khusus penuh

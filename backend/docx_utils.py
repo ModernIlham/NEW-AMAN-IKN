@@ -321,7 +321,8 @@ def _sig_cell(cell, header, role, nama, nomor_baris, pre=None, after_nama=None):
         _ln(header)
     if role:
         _ln(role)
-    _ln("")  # ruang tanda tangan
+    _ln("")  # ruang tanda tangan (4 baris ≈ 18mm — area basah yang lega)
+    _ln("")
     _ln("")
     _ln("")
     _ln(nama or "________________________", bold=True, underline=bool(nama))

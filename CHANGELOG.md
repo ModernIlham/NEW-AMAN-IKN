@@ -67,6 +67,33 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#746] Area tanda tangan lega di seluruh dokumen generate — 2026-08-04
+
+Mandat pemilik: bagian tanda tangan pada semua PDF/DOCX generate diberi ruang
+yang cukup — jangan sempit. Celah tanda tangan basah dilebarkan menyeluruh:
+
+- **Blok TTD bersama (`_signature_block`)**: celah default **15 mm → 20 mm** —
+  otomatis berlaku ke seluruh pemakainya (laporan inventarisasi, BA, LPB
+  gabungan, persediaan, pemeliharaan, pemusnahan, wasdal, mutasi, dsb.).
+  Gambar spesimen TTD digital ikut diberi tinggi maksimum sebesar celah
+  (dulu terpaku 15 mm).
+- **Blok TTD yang dirakit sendiri** ikut dilebarkan 15 → 20 mm: kolom KPB
+  "Mengetahui" laporan BA dan tiga kolom TTD LPB (Pengurus/Pemeriksa/KPB).
+- **Naskah DOCX** (`_sig_cell`): ruang tanda tangan 3 → 4 baris (≈18 mm).
+- **BAST (ber-batas 2 lembar)**: celah **11 mm → 14 mm** (+27%) TANPA
+  menurunkan kapasitas — ruangnya diambil dari jarak antar-baris blok TTD
+  pola 3-penandatangan (8 mm → 3 mm; parameter baru `jarak_baris_mm`),
+  pemisah visual yang bukan area pena. Kapasitas 2 lembar diukur ulang
+  dengan pypdfium2: **identik** dengan sebelumnya (operasional_unit 12,
+  pengembalian 22, almarhum 14, lainnya 13) — dokumentasi §11C tetap
+  berlaku, hanya catatan celahnya dimutakhirkan.
+
+Uji: `test_semua_jenis_bast_maksimal_dua_halaman` tetap mengawal 7 jenis
+BAST ≤2 lembar pada 12 aset lintas 5 bidang; halaman TTD diverifikasi
+visual (render PNG). `pytest tests/unit` → 1646 lolos.
+
+---
+
 ## [#745] Tambal bocor data lintas satker register PSP (PMK 40/2024) — 2026-08-04
 
 Perbaikan kebocoran yang dilaporkan pemilik: SK **Penetapan Status
