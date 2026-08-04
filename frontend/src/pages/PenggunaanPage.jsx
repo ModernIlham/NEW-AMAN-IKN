@@ -220,6 +220,9 @@ export default function PenggunaanPage({ user, onBack }) {
       // Utk non-mutasi: "yang menyerahkan" dipilih dari referensi pejabat
       // (kosong = otomatis memakai KPB dari pengaturan/registry).
       penyerah: { id: "", nama: "", nip: "", jabatan: "" },
+      // Alamat PIHAK KESATU non-mutasi — diisi manual sesuai lokasi pihaknya;
+      // kosong = alamat kantor satker dari pengaturan kop (default server).
+      alamat_pihak1: "",
       pj_tambahan: [],
       // Khusus "pengembalian_almarhum": dasar BA (identitas almarhum) + saksi.
       // Prefill dari pemegang yang sedang dibuka — biasanya memang almarhumnya.
@@ -272,8 +275,13 @@ export default function PenggunaanPage({ user, onBack }) {
         pihak_pertama: f.jenis === "mutasi_pengguna"
           ? f.pihak_pertama
           : (f.penyerah?.nama?.trim()
-            ? { nama: f.penyerah.nama, nip: f.penyerah.nip, jabatan: f.penyerah.jabatan, alamat: "" }
-            : null),
+            ? { nama: f.penyerah.nama, nip: f.penyerah.nip, jabatan: f.penyerah.jabatan,
+                alamat: (f.alamat_pihak1 || "").trim() }
+            // Tanpa penyerah terpilih identitas tetap KPB otomatis (server),
+            // tapi alamat manual yang diketik harus tetap terbawa.
+            : ((f.alamat_pihak1 || "").trim()
+              ? { nama: "", nip: "", jabatan: "", alamat: f.alamat_pihak1.trim() }
+              : null)),
         penyerah_atas_nama_kpb: f.jenis !== "mutasi_pengguna" && !!f.penyerah?.atas_nama_kpb,
         nomor: f.nomor, tanggal: f.tanggal, jangka_dari: f.jangka_dari,
         jangka_sampai: f.jangka_sampai,
@@ -1715,6 +1723,9 @@ export default function PenggunaanPage({ user, onBack }) {
                       onChange={(e) => setFormBast((f) => ({ ...f, pihak_pertama: { ...f.pihak_pertama, nip: e.target.value } }))} />
                     <Input value={formBast.pihak_pertama.jabatan} placeholder="Jabatan" className="col-span-2"
                       onChange={(e) => setFormBast((f) => ({ ...f, pihak_pertama: { ...f.pihak_pertama, jabatan: e.target.value } }))} />
+                    <Input value={formBast.pihak_pertama.alamat} placeholder="Alamat/lokasi pihak kesatu (boleh diisi manual)"
+                      className="col-span-2" data-testid="bast-lama-alamat"
+                      onChange={(e) => setFormBast((f) => ({ ...f, pihak_pertama: { ...f.pihak_pertama, alamat: e.target.value } }))} />
                   </div>
                   <p className="text-[10px] text-amber-700/80 dark:text-amber-300/80">Isian Penerima di bawah = pemegang BARU; KPB ikut menandatangani sebagai Mengetahui.</p>
                 </div>
@@ -1763,6 +1774,13 @@ export default function PenggunaanPage({ user, onBack }) {
                       ? " Tambahkan di halaman Referensi Pejabat dengan salah satu peran itu."
                       : ""}
                   </Lipatan>
+                  <div className="mt-2">
+                    <label className="text-xs font-medium block mb-1">Alamat/Lokasi PIHAK KESATU</label>
+                    <Input value={formBast.alamat_pihak1}
+                      placeholder="kosong = alamat kantor satker (pengaturan kop)"
+                      data-testid="bast-alamat-pihak1"
+                      onChange={(e) => setFormBast((f) => ({ ...f, alamat_pihak1: e.target.value }))} />
+                  </div>
                 </div>
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

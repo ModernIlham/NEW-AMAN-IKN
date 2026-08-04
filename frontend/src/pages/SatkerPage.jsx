@@ -331,13 +331,27 @@ export function SatkerPanel({ user }) {
                 {[["nama_unit_organisasi", "Unit organisasi (baris 2 kop)"],
                   ["nama_sub_unit", "Sub-unit (baris 3 kop — default: nama satker)"],
                   ["kode_satker_lengkap", "Kode satker lengkap ±20 digit (utk stiker label, cth. 126011600691778000KP)"],
-                  ["alamat", "Alamat"],
+                  ["alamat", "Alamat Instansi (boleh beberapa baris — tekan Enter)", true],
                   ["tempat_laporan", "Tempat laporan (kota ttd)"],
-                  ["telepon", "Telepon"], ["email", "Email"]].map(([k, label]) => (
+                  ["telepon", "Telepon"], ["email", "Email"]].map(([k, label, multiline]) => (
                   <div key={k}>
                     <label className="text-xs text-muted-foreground">{label}</label>
-                    <Input value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value })}
-                      className="h-9 mt-0.5" data-testid={`satker-form-${k}`} />
+                    {multiline ? (
+                      <>
+                        <textarea value={form[k]}
+                          onChange={(e) => setForm({ ...form, [k]: e.target.value })}
+                          rows={2}
+                          placeholder={"Gedung Kantor Otorita IKN, Nusantara, Kalimantan\nPerwakilan I: Menara Mandiri II Lantai 5, Jakarta"}
+                          className="w-full mt-0.5 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          data-testid={`satker-form-${k}`} />
+                        <p className="text-[10px] text-muted-foreground">
+                          Tiap baris menjadi satu baris alamat pada kop seluruh surat/laporan satker ini.
+                        </p>
+                      </>
+                    ) : (
+                      <Input value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value })}
+                        className="h-9 mt-0.5" data-testid={`satker-form-${k}`} />
+                    )}
                   </div>
                 ))}
                 <div>

@@ -284,20 +284,45 @@ async def buat_bast(payload: BastIn, request: Request = None,
     # pertama: dokumen buatan super-admin pusat ikut satker aset yang
     # diserahterimakan — stempel "" tampil di riwayat & buku agenda SEMUA
     # satker (kebocoran yang dilaporkan pemilik).
-    from shared_utils import kode_satker_efektif_dari_aset, pengaturan_kop
+    from shared_utils import (kode_satker_efektif_dari_aset, pengaturan_kop,
+                              resolve_penandatangan_kpb)
     ks_efektif = await kode_satker_efektif_dari_aset(
         user, [a["id"] for a in aset])
     settings = await pengaturan_kop(kode_satker=ks_efektif) or {}
     p1 = payload.pihak_pertama
-    pihak_pertama = {
-        "nama": (p1.nama if p1 and p1.nama.strip() else settings.get("kasatker_nama", "")),
-        "nip": (p1.nip if p1 and p1.nip.strip() else settings.get("kasatker_nip", "")),
-        "jabatan": (p1.jabatan if p1 and p1.jabatan.strip()
-                    else settings.get("kasatker_jabatan", "Kuasa Pengguna Barang")),
-        "alamat": (p1.alamat if p1 and p1.alamat.strip()
-                   else str(settings.get("alamat_instansi") or "").splitlines()[0]
-                   if str(settings.get("alamat_instansi") or "").strip() else ""),
-    }
+    # Default alamat pihak = SEMUA baris alamat kantor digabung "; " — setelan
+    # multi-baris (2+ alamat kantor) tidak boleh terpotong ke baris pertama
+    # saja pada identitas pihak; isian manual dari form selalu menang.
+    alamat_p1 = (p1.alamat.strip() if p1 and p1.alamat.strip()
+                 else "; ".join(
+                     ln.strip() for ln in
+                     str(settings.get("alamat_instansi") or "").splitlines()
+                     if ln.strip()))
+    if p1 and p1.nama.strip():
+        # Identitas diketik di form (pemegang lama mutasi / pejabat penyerah)
+        # dipakai APA ADANYA — NIP/jabatan kosong tidak boleh diisi silang
+        # dengan data KPB (identitas campur-aduk pada dokumen resmi).
+        pihak_pertama = {"nama": p1.nama.strip(), "nip": p1.nip.strip(),
+                         "jabatan": p1.jabatan.strip(), "alamat": alamat_p1}
+    else:
+        # Kosong = otomatis KPB aktif dari REFERENSI PEJABAT satker aset pada
+        # tanggal BAST (fallback setelan kasatker) — bukan setelan mentah yang
+        # bisa kosong/kedaluwarsa. Placeholder "-" dinormalkan ke "" agar PDF
+        # tetap mencetak garis titik untuk diisi manual.
+        _kpb_def = await resolve_penandatangan_kpb(
+            settings, str(payload.tanggal or "").strip()[:10] or None,
+            ks_efektif)
+
+        def _isi(v):
+            v = str(v or "").strip()
+            return "" if v == "-" else v
+
+        pihak_pertama = {
+            "nama": _isi(_kpb_def["nama"]),
+            "nip": _isi(_kpb_def["nip"]),
+            "jabatan": _kpb_def.get("jabatan") or "Kuasa Pengguna Barang",
+            "alamat": alamat_p1,
+        }
     if payload.jenis == "mutasi_pengguna" and not (
             payload.pihak_pertama and str(payload.pihak_pertama.nama or "").strip()):
         raise HTTPException(status_code=400, detail=(
@@ -1051,13 +1076,15 @@ async def bast_pdf(bast_id: str,
         # setelan mentah yang bisa kedaluwarsa) — fallback ke setelan kasatker.
         # Spesimen TTD digital KPB ikut tersemat (konsisten laporan lain).
         from pegawai_utils import baris_identitas_ttd as _baris_ttd
-        from pejabat_utils import penandatangan_kpb
-        from shared_utils import ambil_ttd_img, kode_satker_user, _q_pejabat_satker
-        # KPB ter-scope satker penerbit (isolasi M-SCOPE): satker user (BAST
-        # sudah ter-guard per satker) + pejabat era-lama tanpa kode.
-        pj_list = await db.pejabat.find(
-            _q_pejabat_satker(kode_satker_user(_user)), _PROJ).to_list(2000)
-        kpb = penandatangan_kpb(settings, pj_list, b.get("tanggal"))
+        from shared_utils import (ambil_ttd_img, kode_satker_user,
+                                  resolve_penandatangan_kpb)
+        # KPB melekat ke SATKER DOKUMEN (kode_satker BAST-nya sendiri), bukan
+        # satker peminta — kop di atas sudah ikut satker dokumen; kalau KPB
+        # ikut peminta, unduhan super-admin/lintas-satker mencetak KPB satker
+        # lain (atau "-" padahal Referensi Pejabat satker itu punya KPB).
+        kpb = await resolve_penandatangan_kpb(
+            settings, b.get("tanggal"),
+            str(b.get("kode_satker") or "").strip() or kode_satker_user(_user))
         signers_mengetahui = [{'header': 'Mengetahui,',
                                'role': kpb["jabatan"],
                                'nama': kpb["nama"],

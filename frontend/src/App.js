@@ -815,7 +815,6 @@ function App() {
             onOpenPenganggaran={() => setShowPenganggaran(true)}
             onOpenPengadaan={() => setShowPengadaan(true)}
             onOpenTtd={() => setShowTtd(true)}
-            onOpenSatker={() => setShowSatker(true)}
             onOpenPengaturan={() => setShowPengaturan(true)}
             onOpenPembukuan={() => setShowPembukuan(true)}
           />

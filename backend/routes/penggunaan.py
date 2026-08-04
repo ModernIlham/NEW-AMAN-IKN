@@ -467,7 +467,11 @@ async def bast_psp_pdf(sk_id: str, _user: dict = Depends(require_user)):
          'header': 'Pihak yang Menerima,',
          'nama': '................................',
          'after': ['NIP. -']},
-        await blok_ttd_kpb_titik(settings, kode_satker=kode_satker_user(_user)),   # KPB registry + spesimen TTD
+        # KPB melekat ke satker DOKUMEN (SK-nya sendiri) — konsisten dengan kop
+        # di atas; unduhan super-admin lintas-satker tetap KPB satker penerbit.
+        await blok_ttd_kpb_titik(
+            settings, kode_satker=str(sk.get("kode_satker") or "").strip()
+            or kode_satker_user(_user)),
     ], doc.width))
     footer = _page_footer_factory("BAST Penetapan Status Penggunaan BMN")
     await asyncio.to_thread(doc.build, elements, onFirstPage=footer,

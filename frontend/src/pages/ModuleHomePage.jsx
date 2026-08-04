@@ -5,7 +5,7 @@ import {
   ClipboardList, ShoppingCart, UserCheck, Handshake, ShieldCheck, Scale,
   ArrowLeftRight, Flame, FileX, Eye, BookOpen, Boxes, FileText, ClipboardCheck,
   CheckCircle2, Link2, CalendarClock, Banknote, Wrench, Landmark, ListTree,
-  Users, DoorOpen, IdCard, Mail, FileSignature, Building2, Settings, MapPinned, RadioTower,
+  Users, DoorOpen, IdCard, Mail, FileSignature, Settings, MapPinned, RadioTower,
 } from "lucide-react";
 // Build "light" (SVG-only) — hemat ~137 KB raw (~40 kB gzip) di chunk landing
 // pasca-login; kita hanya memakai renderer "svg" (lihat IkonModul di bawah).
@@ -272,7 +272,7 @@ function fmtRpSingkat(v) {
  * pita Wasdal yang melingkupi siklus, dan POROS Penatausahaan di tengah.
  * Seluruh warna memakai token tema + varian dark: (aman light/dark mode).
  */
-export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onShowInfo, onEnterInventarisasi, onOpenKodefikasi, onOpenPejabat, onOpenRuangan, onOpenSpasial, onOpenPelacakan, onOpenReferensiAkun, onOpenPegawai, onOpenPersuratan, onOpenPersediaan, onOpenPelaporan, onOpenPenggunaan, onOpenPengamanan, onOpenPemeliharaan, onOpenPerencanaan, onOpenPenilaian, onOpenPenghapusan, onOpenPemanfaatan, onOpenPemusnahan, onOpenPemindahtanganan, onOpenWasdal, onOpenPenganggaran, onOpenPengadaan, onOpenTtd, onOpenSatker, onOpenPengaturan, onOpenPembukuan }) {
+export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onShowInfo, onEnterInventarisasi, onOpenKodefikasi, onOpenPejabat, onOpenRuangan, onOpenSpasial, onOpenPelacakan, onOpenReferensiAkun, onOpenPegawai, onOpenPersuratan, onOpenPersediaan, onOpenPelaporan, onOpenPenggunaan, onOpenPengamanan, onOpenPemeliharaan, onOpenPerencanaan, onOpenPenilaian, onOpenPenghapusan, onOpenPemanfaatan, onOpenPemusnahan, onOpenPemindahtanganan, onOpenWasdal, onOpenPenganggaran, onOpenPengadaan, onOpenTtd, onOpenPengaturan, onOpenPembukuan }) {
   const [detail, setDetail] = useState(null); // modul yang dibuka konsepnya
   const [stat, setStat] = useState(null);     // statistik hidup dari master
   const activateInfo = useTripleClick(onShowInfo);
@@ -498,7 +498,8 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
               {onOpenPelacakan && <Pintasan onClick={onOpenPelacakan} testid="module-open-pelacakan" icon={RadioTower} warna="text-emerald-500" label="Pelacakan Aset" />}
               {onOpenReferensiAkun && <Pintasan onClick={onOpenReferensiAkun} testid="module-open-referensi-akun" icon={Landmark} warna="text-amber-500" label="Referensi Akun BAS" />}
               {onOpenPegawai && <Pintasan onClick={onOpenPegawai} testid="module-open-pegawai" icon={IdCard} warna="text-sky-500" label="Master Pegawai" />}
-              {onOpenSatker && <Pintasan onClick={onOpenSatker} testid="module-open-satker" icon={Building2} warna="text-emerald-500" label="Master Satker" />}
+              {/* Master Satker sengaja TIDAK dipintaskan di sini — kelolanya
+                  lewat Pengaturan → tab Satker (satu pintu, tidak dobel). */}
             </div>
             {(onOpenPersuratan || onOpenTtd || onOpenPengaturan) && (
               <>

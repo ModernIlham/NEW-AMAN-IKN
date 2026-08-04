@@ -67,6 +67,64 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#736] KPB "Mengetahui" ikut Referensi Pejabat per satker dokumen + alamat satker multi-baris ke semua surat — 2026-08-04
+
+Empat permintaan pemilik dari satu tangkapan layar BAST yang blok
+"Mengetahui, Kuasa Pengguna Barang"-nya kosong ("-" / NIP titik-titik),
+ditambah sapu ke semua surat tergenerate.
+
+### KPB melekat ke satker DOKUMEN, bukan satker peminta
+
+- **PDF BAST (blok Mengetahui)**: dulu KPB di-resolve dari satker PEMINTA
+  (`kode_satker_user`) padahal kop-nya sudah ikut satker dokumen — unduhan
+  super-admin lintas-satker mencetak KPB satker lain yang SK-nya lebih baru,
+  atau "-" padahal Referensi Pejabat satker dokumen punya KPB. Kini resolve
+  memakai `resolve_penandatangan_kpb` ter-scope `kode_satker` BAST-nya
+  sendiri (registry pejabat aktif pada tanggal BAST → fallback setelan
+  kasatker).
+- **Identitas default PIHAK KESATU saat membuat BAST**: dulu membaca setelan
+  kasatker mentah (bisa kosong/kedaluwarsa) dan mem-fallback PER FIELD —
+  nama ketikan bisa tercampur NIP KPB. Kini: kosong = KPB aktif dari
+  Referensi Pejabat satker aset; identitas yang diketik dipakai APA ADANYA.
+- Sapu scoping yang sama: **BAST PSP** (`penggunaan.py`, kode dari SK-nya),
+  **BA Pemusnahan** (kode dari BA-nya), **BA Pemantauan Insidentil Wasdal**
+  (kode dari tiketnya), **KIB** (`mutasi_bmn.py`, kode dari kegiatan induk
+  aset). Wasdal juga berhenti membaca `report_settings` global mentah —
+  ketiga PDF-nya kini lewat `pengaturan_kop` per satker (kop + alamat satker
+  ikut tercetak).
+
+### Alamat satker boleh beberapa baris — mengalir ke semua surat
+
+Form Master Satker (juga tab Satker di Pengaturan): field **Alamat** kini
+textarea multi-baris berlabel sama dengan bagian universal — "Alamat
+Instansi (boleh beberapa baris — tekan Enter)". Tiap baris menjadi satu
+baris alamat kop di seluruh surat/laporan satker itu (renderer kop PDF,
+DOCX, dan laporan eksekutif memang sudah per-baris). Default alamat pihak
+pada BAST kini menggabung SEMUA baris dengan "; " — tidak lagi terpotong ke
+baris pertama saja.
+
+### Kolom alamat BAST per pemegang bisa diisi manual per pihak
+
+Form Buat BAST di halaman aset per pemegang:
+
+- **Pemegang lama (mutasi)** mendapat kolom alamat sendiri
+  (`bast-lama-alamat`) — tetap terprefill dari Master Pegawai, bisa ditimpa;
+- **PIHAK KESATU non-mutasi** mendapat kolom "Alamat/Lokasi PIHAK KESATU"
+  (`bast-alamat-pihak1`) — kosong = alamat kantor satker; terisi = terbawa
+  meski penyerah memakai KPB otomatis;
+- kolom alamat penerima (PIHAK KEDUA) sudah ada dan tetap manual.
+
+### Tombol Master Satker di Beranda Modul dihapus
+
+Pintasan "Master Satker" pada grup Referensi & Master Data dihapus — sudah
+ada di Pengaturan → tab Satker (satu pintu; tautan "Halaman penuh" tetap).
+
+Uji: `test_bast_kpb_satker.py` (4 uji mongomock + render PDF nyata via
+pypdfium2) — termasuk uji diskriminatif dua KPB beda satker: tanpa scoping
+dokumen, KPB satker lain yang SK-nya lebih baru yang tercetak.
+
+---
+
 ## [#735] Penomoran surat ala lapangan — reset bulanan ke 001 + nomor sisipan backdate (005.01) — 2026-08-04
 
 Dua permintaan lapangan pada Registrasi Persuratan, ditambah sapu integrasi
