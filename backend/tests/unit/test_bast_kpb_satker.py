@@ -681,3 +681,86 @@ def test_pdf_bast_tergantikan_dan_pengganti_bercerita_jujur(dbx):
     assert "TELAH DICABUT" in teks_lama and "BAST-GANTI" in teks_lama
     assert "Revisi ke-1" in teks_baru and "BAST-ASLI" in teks_baru
     assert "serah terima batal" in teks_baru
+
+
+# ── Sinkron tautan e-sign dengan kolom TTD dokumen (laporan pemilik) ─────────
+#
+# Dialog "Tautan Tanda Tangan Elektronik" dulu hanya menerbitkan 2 tautan
+# (Pihak Pertama & Kedua) padahal BAST yang digenerate memuat kolom TTD lain
+# (Mengetahui KPB pada mutasi / penyerah a.n. KPB, dan saksi-saksi) — dokumen
+# tak pernah bisa lengkap diteken elektronik.
+
+def _bast_dok(**ganti):
+    dasar = {
+        "id": "b-ttd", "kode_satker": SATKER, "jenis": "penggunaan_melekat",
+        "nomor": "BAST-77", "tanggal": "2026-08-01",
+        "pihak_pertama": {"nama": "Karlinus Ignasius Manek",
+                          "nip": "198206022001121003",
+                          "jabatan": "Petugas Penatausahaan"},
+        "pihak_kedua": {"nama": "Karina Lia Meirita Ulo",
+                        "nip": "199005242025062002", "jabatan": "Analis"},
+        "saksi": [], "penyerah_atas_nama_kpb": False,
+    }
+    dasar.update(ganti)
+    return dasar
+
+
+def test_tautan_ttd_ikut_mengetahui_kpb_saat_an_kpb(dbx):
+    """Penyerah a.n. KPB → dokumen mencetak blok "Mengetahui, KPB" → daftar
+    tautan e-sign WAJIB memuat KPB (3 tautan, bukan 2)."""
+    async def skenario():
+        await _seed_dasar(dbx)
+        return await rb._penanda_tangan_bast(
+            _bast_dok(penyerah_atas_nama_kpb=True), USER)
+    s = _jalan(skenario())
+    assert [x["nama"] for x in s] == [
+        "Karlinus Ignasius Manek", "Karina Lia Meirita Ulo",
+        "Ratna Pemilik Dokumen"]
+    assert s[2]["jabatan"] == "Mengetahui — Kuasa Pengguna Barang"
+
+
+def test_tautan_ttd_ikut_kpb_pada_mutasi_pengguna(dbx):
+    async def skenario():
+        await _seed_dasar(dbx)
+        return await rb._penanda_tangan_bast(
+            _bast_dok(jenis="mutasi_pengguna"), USER)
+    s = _jalan(skenario())
+    assert "Ratna Pemilik Dokumen" in [x["nama"] for x in s]
+
+
+def test_tautan_ttd_ikut_seluruh_saksi(dbx):
+    """Saksi tercetak di blok SAKSI-SAKSI → masing-masing dapat tautan;
+    jabatan kosong diberi label "Saksi N" agar tautannya bisa dibedakan."""
+    async def skenario():
+        await _seed_dasar(dbx)
+        return await rb._penanda_tangan_bast(_bast_dok(
+            jenis="pengembalian_almarhum",
+            saksi=[{"nama": "Saksi Satu", "jabatan": "Ahli Waris", "nip": ""},
+                   {"nama": "Saksi Dua", "jabatan": "", "nip": ""}]), USER)
+    s = _jalan(skenario())
+    assert [x["nama"] for x in s][-2:] == ["Saksi Satu", "Saksi Dua"]
+    assert s[-1]["jabatan"] == "Saksi 2"
+
+
+def test_tautan_ttd_kpb_tak_ganda_bila_kpb_pihak_kesatu(dbx):
+    """PIHAK KESATU default = KPB sendiri (a.n. KPB) → satu orang satu
+    tautan; KPB tidak muncul dua kali."""
+    async def skenario():
+        await _seed_dasar(dbx)
+        return await rb._penanda_tangan_bast(_bast_dok(
+            penyerah_atas_nama_kpb=True,
+            pihak_pertama={"nama": "Ratna Pemilik Dokumen",
+                           "nip": "197001011990032001",
+                           "jabatan": "Kuasa Pengguna Barang"}), USER)
+    s = _jalan(skenario())
+    assert [x["nama"] for x in s].count("Ratna Pemilik Dokumen") == 1
+
+
+def test_tautan_ttd_dua_pihak_saja_tanpa_kpb_saksi(dbx):
+    """Regresi arah sebaliknya: BAST biasa (tanpa a.n. KPB, tanpa saksi)
+    tetap 2 tautan — tidak ada penanda tangan yang dikarang."""
+    async def skenario():
+        await _seed_dasar(dbx)
+        return await rb._penanda_tangan_bast(_bast_dok(), USER)
+    s = _jalan(skenario())
+    assert len(s) == 2
