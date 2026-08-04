@@ -67,6 +67,75 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#739] Pasal BAST ditelaah ulang — konteks luar jam kerja/hari libur/perjalanan dinas + pasal khusus per BIDANG kode barang — 2026-08-04
+
+Naskah BAST kini menjawab pertanyaan lapangan yang selama ini menggantung —
+bagaimana kedudukan BMN **di luar jam kerja, pada hari libur, saat lembur/
+piket, saat kerja di luar kantor, dan saat perjalanan dinas** — dan berhenti
+memakai satu set pasal yang sama untuk semua jenis barang.
+
+### Dua pasal konteks (BAST yang memindahkan penguasaan)
+
+- **WAKTU, TEMPAT, DAN KEADAAN PENGGUNAAN** — BMN hanya untuk kedinasan baik
+  pada maupun di luar jam kerja; pemakaian di luar jam kerja/hari libur/luar
+  kantor berdasarkan surat tugas/izin tertulis; membawa barang keluar kantor
+  dicatat; larangan pemakaian pribadi berlaku kapan pun; kewajiban menjaga
+  barang selama perjalanan dinas.
+- **KEHILANGAN, KERUSAKAN, DAN KEADAAN KAHAR** — lapor **1x24 jam** dengan
+  jalur khusus untuk kejadian di luar jam kerja (lisan/elektronik dulu,
+  tertulis pada hari kerja berikutnya), surat keterangan kepolisian, ganti
+  rugi sesuai UU 1/2004 & PP 38/2016, keadaan kahar, klaim asuransi
+  bersyarat, dan penegasan keausan pemakaian wajar bukan kelalaian.
+
+Keduanya sengaja **tidak** dicetak pada BAST pengembalian — barang kembali ke
+satker, kewajiban penggunaan tak lagi dibebankan kepada mantan pemegang.
+
+### Pasal khusus per BIDANG — sistem membaca kode barang
+
+Pustaka baru `bast_pasal.py` memilih pasal dari **bidang** (3 digit kode
+barang, prefix terpanjang menang), sehingga aturan yang tercetak benar-benar
+sesuai barangnya. Contoh yang paling kontras:
+
+- **302 Alat Angkutan** — hari & jam kerja; di luar jam kerja/hari libur/luar
+  kota wajib surat tugas; SIM; tilang & kecelakaan non-dinas jadi tanggung
+  jawab pribadi; disimpan di pool; STNK/pajak/servis; BPKB tetap di satker.
+- **310 Komputer** — justru **boleh** dibawa keluar kantor dan dipakai di luar
+  jam kerja untuk dinas, dengan syarat kata sandi, tidak ditinggal di
+  kendaraan, kerahasiaan data (termasuk data pribadi), larangan perangkat
+  lunak tak berlisensi, dan pembersihan data saat dikembalikan.
+- **603/604/605 Hewan, Biota, Tanaman** — kebalikan kendaraan: perawatan
+  **wajib setiap hari termasuk hari libur**, dengan petugas pengganti bila
+  pemegang berhalangan.
+
+Bidang lain yang tercakup: 2 Tanah · 301 Alat Besar · 303 Bengkel/Alat Ukur ·
+305 Alat Kantor & RT · 306 Studio/Komunikasi · 307 Kedokteran · 308
+Laboratorium · 309 Persenjataan · 315 Keselamatan Kerja · 4 Gedung &
+Bangunan · 5 Jalan/Irigasi/Jaringan · 601 Perpustakaan · 602 Barang Kesenian ·
+8 Aset Tak Berwujud. Bidang tanpa aturan sendiri turun ke pasal golongan.
+Maksimal 5 blok dicetak; bila lebih, naskah **menyebut sendiri** bidang
+sisanya — pemotongan tidak pernah senyap.
+
+### Pasal per jenis dirapikan sesuai peruntukan
+
+- **Penggunaan operasional unit** dipisah dari penggunaan melekat: yang
+  diikat adalah penguasaan UNIT (pemakaian bergilir, kejelasan penguasa pada
+  satu waktu, serah terima baru saat penanggung jawab berganti) — bukan
+  penguasaan pribadi.
+- Butir kehilangan/ganti rugi yang dulu diulang di dua pasal dihapus dari
+  pasal tanggung jawab karena kini dirinci utuh pada pasal risiko.
+
+Dasar norma & batas kejujuran ("tidak ada PMK nasional tunggal soal jam kerja
+kendaraan — itu aturan internal di atas prinsip PP 27/2014") didokumentasikan
+di `docs/PUSTAKA-REGULASI-BMN.md` §11C.
+
+Uji: 12 uji murni (pemilihan per bidang, prefix terpanjang, urutan
+deterministik, pemotongan dilaporkan, cakupan kata kunci konteks) + 3 uji PDF
+nyata — pasal kendaraan muncul pada BAST mobil dan TIDAK pada BAST laptop
+(beserta kebalikannya), pasal waktu & risiko tercetak, dan BAST pengembalian
+bebas dari keduanya.
+
+---
+
 ## [#738] Nilai Perolehan bisa disembunyikan pada surat serah terima — kebijakan satker + pilihan per dokumen — 2026-08-04
 
 Banyak instansi/satker berkebijakan menutup nilai perolehan pada naskah yang
