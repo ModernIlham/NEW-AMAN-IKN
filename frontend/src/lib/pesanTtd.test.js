@@ -63,3 +63,58 @@ describe("pesanTtd", () => {
       "Permintaan Tanda Tangan Elektronik — Dokumen");
   });
 });
+
+
+// ── hasilTtd: penyalinan respons "kirim-ttd" ───────────────────────────────
+//
+// Keluhan pemilik: "share link lewat WhatsApp di riwayat BAST … tidak sama
+// formatnya dengan yang di TTD elektronik".
+//
+// Akarnya BUKAN pesannya — melainkan penyalinan respons server. Layar Riwayat
+// BAST menyusun sendiri `{judul, links}` sehingga `ringkas` ikut terbuang;
+// pesan WA-nya lalu menyusut jadi perihal + tautan saja. Tak ada galat, tombol
+// tetap jalan, pesannya cuma lebih pendek — kesalahan yang tak terlihat.
+import { hasilTtd } from "./pesanTtd";
+
+const RESPONS = {
+  id: "sr-1",
+  judul: "BAST 123/BMN/2026",
+  links: [{ nama: "Budi", link: "https://x/s/abc" }],
+  ringkas: {
+    nomor: "123/BMN/2026",
+    tanggal: "2026-08-05",
+    barang: [{ kode: "3100102001", nup: "7", nama: "Genset" }],
+    pihak: ["Budi (Penyerah)", "Wati (Penerima)"],
+  },
+};
+
+describe("hasilTtd", () => {
+  test("INTI: `ringkas` IKUT tersalin — bukan terbuang", () => {
+    expect(hasilTtd(RESPONS, "BAST").ringkas).toEqual(RESPONS.ringkas);
+  });
+
+  test("pesan WA hasilnya SAMA dengan jalur TTD Elektronik", () => {
+    // Pembanding: jalur TTD Elektronik meneruskan respons apa adanya.
+    const dariTtdElektronik = pesanTtd(
+      "Budi", RESPONS.judul, RESPONS.links[0].link, RESPONS.ringkas);
+    const h = hasilTtd(RESPONS, "BAST");
+    const dariRiwayatBast = pesanTtd("Budi", h.judul, h.links[0].link, h.ringkas);
+    expect(dariRiwayatBast).toBe(dariTtdElektronik);
+    // …dan memang membawa keterangannya, bukan sekadar dua string yang sama-sama kosong.
+    expect(dariRiwayatBast).toContain("123/BMN/2026");
+    expect(dariRiwayatBast).toContain("Genset");
+    expect(dariRiwayatBast).toContain("Wati (Penerima)");
+  });
+
+  test("judul bawaan hanya dipakai bila server tak mengirimnya", () => {
+    expect(hasilTtd({ links: [] }, "BAST").judul).toBe("BAST");
+    expect(hasilTtd(RESPONS, "BAST").judul).toBe("BAST 123/BMN/2026");
+  });
+
+  test("respons tanpa ringkas / rusak tak meledak", () => {
+    expect(hasilTtd(null).ringkas).toBeNull();
+    expect(hasilTtd({}).links).toEqual([]);
+    // links non-array (server lama/galat) tak boleh membuat `.map` melempar.
+    expect(hasilTtd({ links: "bukan array" }).links).toEqual([]);
+  });
+});

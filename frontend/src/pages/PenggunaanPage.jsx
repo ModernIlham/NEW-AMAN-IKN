@@ -22,7 +22,7 @@ import { authMediaUrl } from "@/lib/mediaUrl";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 import PerkiraanNomor from "@/components/persuratan/PerkiraanNomor";
 import KartuTapDialog from "@/components/pegawai/KartuTapDialog";
-import { bagikanWa, bagikanEmail } from "@/lib/pesanTtd";
+import { bagikanWa, bagikanEmail, hasilTtd } from "@/lib/pesanTtd";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -98,7 +98,9 @@ export default function PenggunaanPage({ user, onBack }) {
   const fotoStRef = useRef(null);
   const [fotoSt, setFotoSt] = useState(null);   // {bast, mode:'per'|'semua', asset_id}
   const [fotoStSibuk, setFotoStSibuk] = useState(false);
-  const [ttdHasil, setTtdHasil] = useState(null); // {judul, links:[{nama,link}]} hasil "Kirim ke TTD"
+  // Hasil "Kirim ke TTD" — bentuknya dari `hasilTtd` (lib/pesanTtd), termasuk
+  // `ringkas` yang mengisi keterangan pesan WA/email.
+  const [ttdHasil, setTtdHasil] = useState(null);
   const [kirimTtdId, setKirimTtdId] = useState(null); // id BAST yang sedang dikirim ke TTD
   // Referensi pejabat yang layak jadi "yang menyerahkan" BAST (peran
   // pengelolaan BMN: KPB / Petugas Penatausahaan / Pengelola BMN Satker),
@@ -462,7 +464,10 @@ export default function PenggunaanPage({ user, onBack }) {
     setKirimTtdId(b.id);
     try {
       const r = await axios.post(`${API}/bast/${b.id}/kirim-ttd`);
-      setTtdHasil({ judul: r.data?.judul || "BAST", links: r.data?.links || [] });
+      // Pakai `hasilTtd` — menyusun objek ini dengan tangan pernah membuang
+      // `ringkas`, sehingga pesan WA dari Riwayat BAST hanya berisi perihal +
+      // tautan sementara pesan dari halaman TTD Elektronik lengkap.
+      setTtdHasil(hasilTtd(r.data, "BAST"));
       toast.success("Permintaan TTD elektronik dibuat — bagikan tautan ke penanda tangan");
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal membuat permintaan TTD");

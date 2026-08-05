@@ -18,6 +18,30 @@
 
 const MAKS_BARIS_BARANG = 3;
 
+/**
+ * Bentuk state "hasil kirim TTD" dari respons server — SATU pintu untuk semua
+ * halaman yang memanggil `.../kirim-ttd`.
+ *
+ * KENAPA HELPER INI ADA. Layar Riwayat BAST dulu menyusun sendiri
+ * `{ judul, links }` dari respons, sehingga `ringkas` (nomor, tanggal, barang,
+ * pihak — yang dibekukan server) IKUT TERBUANG. Akibatnya pesan WA dari sana
+ * hanya berisi perihal + tautan, sementara pesan dari halaman Tanda Tangan
+ * Elektronik lengkap — dua pesan berbeda untuk permintaan yang sama.
+ *
+ * Kesalahannya tak terlihat: tak ada galat, tombolnya jalan, pesannya cuma
+ * lebih pendek. Karena itu penyalinannya dipusatkan di sini dan diuji.
+ */
+export function hasilTtd(data, judulBawaan = "Dokumen") {
+  const d = data || {};
+  return {
+    id: d.id || "",
+    judul: d.judul || judulBawaan,
+    links: Array.isArray(d.links) ? d.links : [],
+    // `ringkas` WAJIB ikut — inilah isi keterangan pesan WA/email.
+    ringkas: d.ringkas || null,
+  };
+}
+
 /** Baris "Kode / NUP — Nama" untuk satu barang. */
 function barisBarang(b) {
   const kiri = [b?.kode, b?.nup ? `NUP ${b.nup}` : ""].filter(Boolean).join(" / ");
