@@ -5,6 +5,12 @@ Pillow + numpy yang SUDAH terpasang (tanpa rembg/opencv/model berat — riset
 Jul 2026): luminance → normalisasi pencahayaan (kurangi latar via blur kuat)
 → ambang adaptif dengan zona transisi (tepi anti-alias, tidak gerigi) →
 auto-crop. Cocok untuk foto TTD pada kertas polos/terang (kasus mayoritas).
+
+DUA JENIS MASUKAN, DUA JALUR. Yang diunggah tak selalu foto kertas: berkas
+.png berlatar transparan (hasil hapus-BG aplikasi lain, atau TTD yang pernah
+diproses di sini lalu diunggah ulang) juga masuk lewat pintu yang sama. Untuk
+berkas seperti itu alpha-nya SUDAH menjadi topeng goresan dan dipakai apa
+adanya; menebaknya ulang lewat luminance justru merusak.
 """
 import io
 
@@ -16,13 +22,20 @@ def foto_ke_png_transparan(img_bytes, warna=(15, 23, 42), ambang=None,
     - `ambang`: 0-255; None = otomatis (Otsu sederhana dari histogram).
     - `kepekaan`: lebar zona transisi tepi (anti-alias); makin besar makin lembut.
     Mengembalikan bytes PNG. MURNI (hanya Pillow/numpy in-memory)."""
-    from PIL import Image, ImageFilter
+    from PIL import Image
     import numpy as np
 
     # Batas piksel global (shared_utils) → tolak decompression-bomb dgn 400 rapi
     # (endpoint olah-foto dapat dicapai penanda tangan TAMU e-sign).
+    #
+    # RGBA, BUKAN RGB. `convert("RGB")` membuang kanal alpha dengan mengomposit
+    # ke HITAM, sehingga PNG berlatar transparan — hasil hapus-BG dari aplikasi
+    # lain, atau berkas .png yang diunggah ulang — berubah jadi bidang hitam
+    # pekat. Pipeline "gelap = tinta" lalu mencap SELURUH bekas latar sebagai
+    # tinta: keluarannya kotak berwarna `warna` dengan goresan aslinya justru
+    # tembus. Tak ada galat yang muncul; hasilnya cuma salah.
     try:
-        im = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+        im = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
     except Image.DecompressionBombError:
         raise ValueError("Gambar terlalu besar (jumlah piksel berlebih) — perkecil dahulu")
     # Batasi dimensi (hemat memori & seragam) — sisi terpanjang <= 1600px.
@@ -32,23 +45,20 @@ def foto_ke_png_transparan(img_bytes, warna=(15, 23, 42), ambang=None,
         im = im.resize((max(1, int(im.width * skala)),
                         max(1, int(im.height * skala))), Image.LANCZOS)
 
-    arr = np.asarray(im, dtype=np.float32)
-    lum = (0.299 * arr[:, :, 0] + 0.587 * arr[:, :, 1] + 0.114 * arr[:, :, 2])
+    rgba_asal = np.asarray(im, dtype=np.uint8)
+    alpha_asal = rgba_asal[:, :, 3]
 
-    # Normalisasi pencahayaan: buang gradasi/bayangan kertas dgn latar blur kuat.
-    radius = max(8, int(min(im.size) * 0.05))
-    latar = np.asarray(
-        Image.fromarray(lum.astype(np.uint8)).filter(
-            ImageFilter.GaussianBlur(radius)), dtype=np.float32)
-    lum_norm = np.clip(lum - latar + 200.0, 0, 255)  # kertas ~200, tinta gelap
-
-    # Ambang otomatis (Otsu) bila tak diberikan.
-    t = float(ambang) if ambang is not None else _otsu(lum_norm)
-    # Alpha: gelap (< t) = tinta (255), terang (> t) = transparan (0), dengan
-    # zona transisi ±kepekaan agar tepi halus.
-    k = max(1.0, float(kepekaan))
-    alpha = np.clip((t + k - lum_norm) / (2.0 * k), 0.0, 1.0) * 255.0
-    alpha = alpha.astype(np.uint8)
+    if (alpha_asal < 250).any():
+        # Sumbernya SUDAH transparan: alpha-nya adalah topeng goresan yang
+        # dibuat pihak lain. Pakai apa adanya — mengambang-ulang lewat
+        # luminance hanya menebak ulang keputusan yang sudah benar, dan gagal
+        # untuk tinta terang (yang akan lenyap bila dianggap "kertas").
+        alpha = alpha_asal
+    else:
+        # Buram penuh: perlakukan sebagai foto TTD di atas kertas.
+        arr = rgba_asal[:, :, :3].astype(np.float32)
+        lum = (0.299 * arr[:, :, 0] + 0.587 * arr[:, :, 1] + 0.114 * arr[:, :, 2])
+        alpha = _alpha_dari_luminance(lum, im.size, ambang, kepekaan)
 
     h, w = alpha.shape
     rgba = np.zeros((h, w, 4), dtype=np.uint8)
@@ -69,6 +79,31 @@ def foto_ke_png_transparan(img_bytes, warna=(15, 23, 42), ambang=None,
     buf = io.BytesIO()
     out.save(buf, format="PNG")
     return buf.getvalue()
+
+
+def _alpha_dari_luminance(lum, ukuran, ambang, kepekaan):
+    """Luminance foto kertas → alpha goresan. MURNI (Pillow/numpy).
+
+    Dipisah agar jalur "foto kertas" tak tercampur dengan jalur "sumber sudah
+    transparan" — keduanya menghasilkan alpha, tapi dari keputusan yang sama
+    sekali berbeda.
+    """
+    from PIL import Image, ImageFilter
+    import numpy as np
+
+    # Normalisasi pencahayaan: buang gradasi/bayangan kertas dgn latar blur kuat.
+    radius = max(8, int(min(ukuran) * 0.05))
+    latar = np.asarray(
+        Image.fromarray(lum.astype(np.uint8)).filter(
+            ImageFilter.GaussianBlur(radius)), dtype=np.float32)
+    lum_norm = np.clip(lum - latar + 200.0, 0, 255)  # kertas ~200, tinta gelap
+
+    # Ambang otomatis (Otsu) bila tak diberikan.
+    t = float(ambang) if ambang is not None else _otsu(lum_norm)
+    # Alpha: gelap (< t) = tinta (255), terang (> t) = transparan (0), dengan
+    # zona transisi ±kepekaan agar tepi halus.
+    k = max(1.0, float(kepekaan))
+    return (np.clip((t + k - lum_norm) / (2.0 * k), 0.0, 1.0) * 255.0).astype(np.uint8)
 
 
 def _otsu(lum):
