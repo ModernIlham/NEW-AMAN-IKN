@@ -486,6 +486,56 @@ def _sisa_kedaluwarsa(sg: dict, sr: dict) -> dict:
             "sisa_detik": max(0, sisa), "perkiraan": perkiraan}
 
 
+def ringkas_lpb(lpb: dict) -> dict:
+    """Dokumen LPB → ringkasan untuk pesan WA/email.
+
+    Dipisah dari pembacaan basis data supaya bentuk pesannya bisa diuji apa
+    adanya — termasuk dokumen era-lama yang bidangnya belum lengkap.
+
+    Kenapa LPB perlu ini sendiri. `_ringkas_dokumen` dulu HANYA melayani
+    `doc_type == "bast"` dan mengembalikan `{}` untuk yang lain, sehingga
+    permintaan TTD LPB terbit dengan `ringkas` kosong. Akibatnya pesan
+    WA/email-nya menyusut jadi "judul + tautan" — persis keluhan yang sudah
+    diperbaiki untuk BAST. Kesalahannya tak terlihat: tak ada galat, tautannya
+    tetap benar, pesannya cuma lebih pendek.
+
+    Para pihak pada LPB adalah PENYEDIA (yang menyerahkan barang) dan PPK
+    (yang berkomitmen atasnya) — bukan pihak pertama/kedua seperti BAST.
+    """
+    d = lpb or {}
+    # Dokumen era-lama tak punya `kategori` sama sekali; ia memang hanya dipakai
+    # persediaan waktu itu (lihat docstring `daftar_lpb`).
+    aset = str(d.get("kategori") or "").strip().lower() == "aset"
+    pihak = []
+    penyedia = str(d.get("penyedia") or "").strip()
+    if penyedia:
+        pihak.append(f"{penyedia} (Penyedia)")
+    ppk = str(d.get("ppk_nama") or "").strip()
+    if ppk:
+        pihak.append(f"{ppk} (PPK)")
+    items = d.get("items") or []
+    barang = [{"kode": str((b or {}).get("kode_barang") or "").strip(),
+               "nup": str((b or {}).get("nup") or "").strip(),
+               "nama": str((b or {}).get("nama_barang") or "").strip()}
+              for b in items[:MAKS_BARANG_RINGKAS]]
+    try:
+        jumlah = int(d.get("jumlah_barang") or 0)
+    except (TypeError, ValueError):
+        jumlah = 0
+    return {
+        "nomor": str(d.get("nomor") or "").strip(),
+        "perihal": ("Laporan Penerimaan Barang (BMN)" if aset
+                    else "Laporan Penerimaan Barang (Persediaan)"),
+        "tanggal": str(d.get("tanggal") or "")[:10],
+        "pihak": pihak,
+        "barang": [x for x in barang if x["kode"] or x["nama"]],
+        # `jumlah_barang` tersimpan lebih dipercaya daripada panjang `items`:
+        # proyeksi pembacaan boleh memotong arraynya, jumlahnya tidak boleh ikut
+        # menyusut — angka di pesan itu "berapa barang yang diterima".
+        "jumlah_barang": jumlah or len(items),
+    }
+
+
 async def _ringkas_dokumen(doc_type: str, doc_ref: str) -> dict:
     """Ringkasan singkat dokumen yang diminta ditandatangani.
 
@@ -504,7 +554,23 @@ async def _ringkas_dokumen(doc_type: str, doc_ref: str) -> dict:
     kegagalan di sini tak boleh menggagalkan penerbitan permintaan.
     """
     ref = str(doc_ref or "").strip()
-    if str(doc_type or "") != "bast" or not ref:
+    jenis = str(doc_type or "")
+    if not ref:
+        return {}
+    if jenis == "lpb":
+        try:
+            # Sub-bidang `items` diproyeksikan (bukan di-`$slice`) supaya
+            # panjang arraynya tetap utuh untuk dokumen lama yang belum
+            # menyimpan `jumlah_barang`.
+            lpb = await db.lpb.find_one(
+                {"id": ref},
+                {"_id": 0, "nomor": 1, "tanggal": 1, "kategori": 1,
+                 "penyedia": 1, "ppk_nama": 1, "jumlah_barang": 1,
+                 "items.kode_barang": 1, "items.nup": 1, "items.nama_barang": 1})
+            return ringkas_lpb(lpb) if lpb else {}
+        except Exception:
+            return {}
+    if jenis != "bast":
         return {}
     try:
         b = await db.bast_serah_terima.find_one(
