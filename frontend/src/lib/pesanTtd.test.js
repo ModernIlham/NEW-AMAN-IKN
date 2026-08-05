@@ -96,9 +96,8 @@ describe("bentuk pesan tahan di WhatsApp maupun email", () => {
     butir.forEach((b) => expect(b.startsWith("• ")).toBe(true));
   });
 
-  test("tanpa penanda tebal/miring yang bisa dimakan atau tercetak mentah", () => {
-    // Pesan yang SAMA dikirim lewat mailto: yang tak mengenal penanda —
-    // "*Barang*" akan terbaca apa adanya di sana.
+  test("jalur EMAIL tetap polos — tanpa penanda yang tercetak mentah", () => {
+    // `mailto:` tak mengenal penanda; "*Barang*" terbaca apa adanya di sana.
     expect(PESAN).not.toMatch(/[*_~]/);
   });
 
@@ -138,6 +137,73 @@ describe("bentuk pesan tahan di WhatsApp maupun email", () => {
     // Baris tautan yang bercampur kata membuat sebagian peramban WA memotong
     // tautannya saat ditekan.
     expect(semuaBaris(PESAN)).toContain("https://x/s/abc");
+  });
+});
+
+
+// ── Penanda WhatsApp ───────────────────────────────────────────────────────
+//
+// Mandat pemilik: label TEBAL (`*Teks*`) dan butir daftar berawalan `* ` supaya
+// WhatsApp merapikannya sebagai daftar ber-indentasi.
+//
+// Penanda ini HANYA untuk WhatsApp. Pesan yang sama juga dikirim lewat
+// `mailto:` yang tak mengenal penanda sama sekali — di sana asterisknya
+// tercetak apa adanya, jadi jalur email wajib tetap polos.
+describe("penanda WhatsApp", () => {
+  const WA = pesanTtd("Budi", "BAST", "https://x/s/abc", RINGKAS,
+                      { penandaWa: true });
+  const barisWa = WA.split("\n");
+
+  test("label ditebalkan", () => {
+    expect(WA).toContain("*Nomor:* BAST-77/OIKN/2026");
+    expect(WA).toContain("*Tanggal:* 2026-08-04");
+    expect(WA).toContain("*Barang (7 unit):*");
+    expect(WA).toContain("*Pihak:*");
+  });
+
+  test("BINTANG PENUTUP MENEMPEL — tanpa spasi ganjal sebelumnya", () => {
+    // Inti kegagalan lama: `*Barang   : *` punya spasi sebelum bintang penutup,
+    // dan WhatsApp hanya menebalkan bila penutupnya menempel pada karakter
+    // bukan-spasi. Akibatnya bintangnya sendiri yang tampil di layar penerima.
+    expect(WA).not.toMatch(/ \*(\s|$)/m);
+    barisWa.filter((b) => b.startsWith("*") && !b.startsWith("* "))
+      .forEach((b) => expect(b).toMatch(/^\*\S.*\S\*/));
+  });
+
+  test("butir daftar berawalan '* ' — perintah daftar WhatsApp", () => {
+    const butir = barisWa.filter((b) => b.includes(" — ") || b.includes("(Pihak "));
+    expect(butir.length).toBeGreaterThanOrEqual(4);
+    butir.forEach((b) => expect(b.startsWith("* ")).toBe(true));
+  });
+
+  test("judul daftar TIDAK ikut jadi butir daftar", () => {
+    // "*Barang...*" diawali bintang tapi TANPA spasi sesudahnya — WhatsApp
+    // membacanya sebagai tebal, bukan butir. Kalau sampai jadi "* Barang",
+    // judulnya melebur ke dalam daftar.
+    expect(WA).not.toContain("* Barang (");
+    expect(WA).not.toContain("* Pihak:");
+  });
+
+  test("sapaan, tautan, dan penutup tak ikut ditandai", () => {
+    expect(WA).toContain("Yth. Budi,");
+    expect(barisWa).toContain("https://x/s/abc");
+    expect(WA).toContain("Terima kasih.");
+  });
+
+  test("isinya sama dengan jalur polos — hanya penandanya yang beda", () => {
+    const polos = pesanTtd("Budi", "BAST", "https://x/s/abc", RINGKAS);
+    const bersih = WA.replace(/\*/g, "").replace(/^ /gm, "");
+    expect(bersih).toBe(polos.replace(/• /g, ""));
+  });
+
+  test("bentuknya tetap rapi: tanpa indentasi & tanpa spasi ganjal", () => {
+    expect(barisWa.filter((b) => /^\s+/.test(b))).toEqual([]);
+    expect(barisWa.filter((b) => /\S {2,}/.test(b))).toEqual([]);
+  });
+
+  test("bawaan pesanTtd TETAP polos — email tak boleh ikut tertandai", () => {
+    expect(pesanTtd("Budi", "BAST", "https://x/s/abc", RINGKAS))
+      .not.toMatch(/[*_~]/);
   });
 });
 

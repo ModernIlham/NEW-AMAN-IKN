@@ -67,6 +67,49 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#769] Pesan WhatsApp memakai penanda tebal & daftar — email tetap polos — 2026-08-05
+
+Ralat pemilik atas [#767]: penanda `*Teks*` (tebal) dan butir berawalan `* `
+(daftar ber-indentasi WhatsApp) memang DIINGINKAN, bukan gangguan. Pada [#767]
+keduanya justru dibuang karena tangkapan layarnya salah saya baca sebagai
+kerusakan.
+
+### Kenapa asterisknya dulu tercetak mentah
+
+WhatsApp hanya menebalkan bila **bintang penutup menempel** pada karakter
+bukan-spasi. Bentuk lama `*Barang   : *` — dengan spasi ganjal perata kolom
+sebelum bintang penutup — karena itu tak pernah tebal; yang muncul di layar
+penerima justru bintangnya sendiri. Jadi penandanya bukan salah pilih,
+melainkan salah pasang.
+
+Semua label kini dirapatkan: `*Nomor:*`, `*Barang (17 unit):*`, `*Pihak:*`.
+
+### Dua kanal, dua gaya
+
+`mailto:` tak mengenal penanda apa pun — asterisk di sana tercetak apa adanya
+dan mengotori pesan. Karena penyusunnya satu fungsi, gayanya jadi pilihan:
+
+| | Label | Butir daftar |
+|---|---|---|
+| **WhatsApp** (`bagikanWa`) | `*Nomor:*` | `* ` (daftar WhatsApp) |
+| **Email** (`bagikanEmail`) | `Nomor:` | `• ` (karakter biasa) |
+
+Bawaannya POLOS; `bagikanWa` menyalakannya secara sadar. Isi kedua bentuk
+identik — hanya penandanya yang berbeda, dan itu dikunci uji.
+
+### Uji
+
+Delapan uji baru: label tebal, bintang penutup menempel (tanpa spasi ganjal),
+butir berawalan `* `, judul daftar TIDAK ikut jadi butir (`*Barang…*` diawali
+bintang tapi tanpa spasi sesudahnya), sapaan/tautan/penutup tak tertandai,
+isi sama dengan jalur polos, bentuk tetap rapi, dan bawaan `pesanTtd` tetap
+polos supaya email tak ikut tertandai.
+
+Uji kebal-mutasi: mengembalikan spasi sebelum bintang penutup → 3 uji gagal;
+membocorkan penanda ke jalur email → 6 uji gagal.
+
+---
+
 ## [#768] Unggah TTD ber-format .png menghasilkan kotak gelap — kanal alpha terbuang — 2026-08-05
 
 Pada Tanda Tangan Elektronik, tab **"Foto (hapus BG)"** yang diberi berkas
