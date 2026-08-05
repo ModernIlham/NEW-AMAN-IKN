@@ -163,6 +163,9 @@ const LazyImportDialog = lazy(() => import("@/components/assets/ImportDialog"));
 const LazyUserManagementDialog = lazy(() => import("@/components/assets/UserManagementDialog"));
 const LazyKartuInventarisasiDialog = lazy(() => import("@/components/assets/KartuInventarisasiDialog"));
 const LazyAssetTimelineDialog = lazy(() => import("@/components/assets/AssetTimelineDialog"));
+// Dialog penanda denah dipakai bersama dengan Wasdal — kontrak PUT-nya sama
+// ({lat, lon, node_id} / {hapus:true}), hanya kata-katanya yang di-parameterkan.
+const LazyLokasiDenahDialog = lazy(() => import("@/components/wasdal/LokasiTemuanDialog"));
 // Pengesahan (finalisasi kegiatan) hanya di halaman Kegiatan
 // (ActivitySelectionPage), tidak di halaman data.
 
@@ -305,6 +308,9 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const [kartuIdentity, setKartuIdentity] = useState(null);
   // Timeline Aset — riwayat perlakuan lintas modul per identitas aset (W5)
   const [timelineAssetId, setTimelineAssetId] = useState(null);
+  // Penempatan aset pada node denah: {id, nama, lokasi}. `lokasi` diambil
+  // lewat GET terpisah karena baris daftar tak membawa `lokasi_spasial`.
+  const [lokasiDenahAset, setLokasiDenahAset] = useState(null);
   const [photoLightboxAsset, setPhotoLightboxAsset] = useState(null); // foto baris list → lightbox
 
   // Dialog visibility - consolidated into single reducer
@@ -1520,6 +1526,23 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     if (assetId) setTimelineAssetId(assetId);
   }, []);
 
+  // Tempatkan aset pada ruangan di denah. Lokasi yang BERLAKU diambil dulu
+  // supaya peta terbuka di posisi sekarang dan tombol "Cabut Penempatan"
+  // hanya muncul bila memang ada penempatan — respons daftar tak memuatnya.
+  const handleOpenLokasiDenah = useCallback(async (assetId, namaAset) => {
+    if (!assetId) return;
+    let lokasi = null;
+    try {
+      const r = await axios.get(`${API}/assets/${assetId}?exclude_media=true`);
+      lokasi = r.data?.lokasi_spasial || null;
+    } catch {
+      // Gagal ambil lokasi berlaku bukan alasan menutup pintu: operator tetap
+      // bisa menancapkan titik baru, hanya tanpa posisi awal.
+      toast.error("Lokasi tersimpan gagal dimuat — peta dibuka tanpa posisi awal");
+    }
+    setLokasiDenahAset({ id: assetId, nama: namaAset || "Aset", lokasi });
+  }, []);
+
   // === UI HANDLERS ===
   const handleAnalyticsToggle = useCallback(() => setAnalyticsOpen(prev => !prev), []);
   const handleAuditToggle = useCallback(() => setAuditOpen(prev => !prev), []);
@@ -1726,12 +1749,12 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         {/* ASSET FORM SIDEBAR - only for admin/operator */}
         {perms.canEdit && (
           <div className={`hidden lg:block ${formPanelVisible ? 'w-[320px] min-w-[320px]' : 'w-0 min-w-0 overflow-hidden'}`} style={{ transition: 'width 0.3s ease, min-width 0.3s ease', willChange: 'width', contain: 'layout style' }}>
-            <AssetForm isOpen={isSidebarOpen || formPanelVisible} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} onCameraReviewSaved={handleCameraReviewSaved} onExitToNewAsset={() => setEditAssetForForm(null)} assetIndex={editAssetIndex} totalAssetsInView={mobileAssets.length} hasMoreToLoad={mobileCurrentPage < totalPages} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} onOpenTimeline={handleOpenTimeline} alwaysExpanded={formPanelVisible} />
+            <AssetForm isOpen={isSidebarOpen || formPanelVisible} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} onCameraReviewSaved={handleCameraReviewSaved} onExitToNewAsset={() => setEditAssetForForm(null)} assetIndex={editAssetIndex} totalAssetsInView={mobileAssets.length} hasMoreToLoad={mobileCurrentPage < totalPages} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} onOpenTimeline={handleOpenTimeline} onOpenLokasiDenah={perms.canEdit ? handleOpenLokasiDenah : undefined} alwaysExpanded={formPanelVisible} />
           </div>
         )}
         {perms.canEdit && (
           <div className="lg:hidden">
-            <AssetForm isOpen={isSidebarOpen} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} onCameraReviewSaved={handleCameraReviewSaved} onExitToNewAsset={() => setEditAssetForForm(null)} assetIndex={editAssetIndex} totalAssetsInView={mobileAssets.length} hasMoreToLoad={mobileCurrentPage < totalPages} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} onOpenTimeline={handleOpenTimeline} />
+            <AssetForm isOpen={isSidebarOpen} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} onCameraReviewSaved={handleCameraReviewSaved} onExitToNewAsset={() => setEditAssetForForm(null)} assetIndex={editAssetIndex} totalAssetsInView={mobileAssets.length} hasMoreToLoad={mobileCurrentPage < totalPages} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} onOpenTimeline={handleOpenTimeline} onOpenLokasiDenah={perms.canEdit ? handleOpenLokasiDenah : undefined} />
           </div>
         )}
 
@@ -1971,6 +1994,19 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         {dialogs.userManagement && <LazyUserManagementDialog open={dialogs.userManagement} onClose={() => closeDialog('userManagement')} currentUser={user} />}
         {kartuIdentity && <LazyKartuInventarisasiDialog open={!!kartuIdentity} identity={kartuIdentity} onClose={() => setKartuIdentity(null)} />}
         {timelineAssetId && <LazyAssetTimelineDialog open={!!timelineAssetId} assetId={timelineAssetId} onClose={() => setTimelineAssetId(null)} />}
+        {lokasiDenahAset && (
+          <LazyLokasiDenahDialog
+            judul={lokasiDenahAset.nama}
+            judulDialog="Lokasi Aset di Denah"
+            petunjuk="klik peta untuk menempatkan aset; ruangan/gedung terdeteksi otomatis."
+            labelHapus="Cabut Penempatan"
+            pesanSimpan="Penempatan aset tersimpan"
+            pesanHapus="Penempatan aset dicabut"
+            submitUrl={`${API}/assets/${lokasiDenahAset.id}/lokasi-spasial`}
+            lokasiAwal={lokasiDenahAset.lokasi}
+            onClose={() => setLokasiDenahAset(null)}
+          />
+        )}
         {/* Lightbox foto dari baris mode list (tabel/kartu HP) — sama seperti galeri & popup peta. */}
         {photoLightboxAsset && <PhotoLightbox asset={photoLightboxAsset} onClose={() => setPhotoLightboxAsset(null)} onEdit={perms.canEdit ? handleEdit : undefined} siblings={mobileAssets?.length ? mobileAssets : assets} onSelectAsset={setPhotoLightboxAsset} />}
       </Suspense>

@@ -67,6 +67,52 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#773] Aset bisa ditempatkan di denah dari layar, bukan hanya lewat pindai stiker — 2026-08-05
+
+`PUT /assets/{id}/lokasi-spasial` sudah ada sejak Spasial Fase 9 — lengkap
+dengan pencatatan riwayat perpindahan — tetapi **tak pernah punya satu pun
+pemanggil di frontend**.
+
+Akibatnya penempatan aset di denah HANYA bisa lahir dari `/opname/terapkan`,
+yang mensyaratkan seseorang berdiri di depan barangnya dan memindai stikernya.
+Aset tanpa stiker tak bisa ditempatkan sama sekali; salah pindai tak bisa
+dikoreksi dari meja; dan penempatan yang keliru tak bisa dicabut.
+
+### Yang berubah
+
+Tombol **Denah** di kepala form aset (sebelah Kartu & Timeline) membuka peta:
+klik lokasinya → ruangan/gedung terdeteksi otomatis (Fase 3) → Simpan. Ada
+juga **Cabut Penempatan** bila aset sudah punya penempatan.
+
+Dialognya **dipakai bersama** dengan Wasdal (`LokasiTemuanDialog`), bukan
+disalin — kontrak PUT-nya memang identik (`{lat, lon, node_id}` /
+`{hapus: true}`), jadi yang perlu diubah hanya KATA-KATANYA. Salinan kedua
+akan menyimpang diam-diam dari yang asli: penanganan Leaflet-di-dalam-modal,
+guard koordinat korup, dan anti-balapan deteksi titik semuanya harus tetap
+satu sumber.
+
+Sertaan kecil: `AssetResponse` kini memuat `lokasi_spasial` (subdoc read-only,
+bukan field registry) supaya layar aset tahu di mana barangnya berada tanpa
+endpoint tambahan. Ia hanya ditulis lewat endpoint di atas — PUT/PATCH aset
+biasa tak menyentuhnya.
+
+### Yang dijaga uji (10 uji)
+
+1. **Endpoint itu benar-benar dipanggil** — kelas cacat yang sedang diperbaiki.
+2. **Dialognya tunggal** — uji menyapu seluruh `.jsx` mencari komponen ber-peta
+   Leaflet + `axios.put(submitUrl)`; harus persis satu berkas.
+3. **Default kata-katanya tetap bunyi wasdal**, dan WasdalPage tak dioper prop
+   kata-kata apa pun — pemakai lama tak boleh berubah perilaku diam-diam.
+4. **Lokasi yang berlaku diambil dulu** sebelum dialog dibuka. Tanpa itu peta
+   terbuka di pusat kawasan (bukan posisi aset) dan tombol Cabut tak pernah
+   muncul — respons daftar aset tak membawa `lokasi_spasial`.
+5. **Tombolnya digerbangi `perms.canEdit`.** Server memang menolak lewat
+   `require_writer`, tetapi tombol yang selalu berakhir 403 adalah janji palsu.
+6. **Prop kata-kata ikut di deps `useCallback`** — toast yang membeku pada
+   render pertama akan menampilkan kalimat milik pemakai lain.
+
+---
+
 ## [#772] Timeline Aset menampilkan bukti lapangan — opname & jejak perpindahan lokasi — 2026-08-05
 
 Dua sumber kejadian sudah lama terekam tetapi tak pernah sampai ke layar

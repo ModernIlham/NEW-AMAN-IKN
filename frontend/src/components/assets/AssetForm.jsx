@@ -485,6 +485,7 @@ const AssetForm = memo(({
   onShowCategoryManager,
   onOpenKartu,
   onOpenTimeline,
+  onOpenLokasiDenah,
   alwaysExpanded = false
 }) => {
   const [formSection, setFormSection] = useState("basic");
@@ -2102,6 +2103,18 @@ const AssetForm = memo(({
               >
                 <History className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Timeline</span>
+              </Button>
+            )}
+            {isEditing && onOpenLokasiDenah && editAsset?.id && (
+              <Button
+                type="button" variant="ghost" size="sm"
+                className="h-7 gap-1 px-2 text-[10px] text-teal-700 dark:text-teal-400 hover:bg-teal-100 hover:text-teal-800 dark:hover:bg-teal-900/40 dark:hover:text-teal-300"
+                onClick={() => onOpenLokasiDenah(editAsset.id, formData.asset_name || editAsset.asset_name)}
+                title="Tempatkan aset ini pada ruangan di denah"
+                data-testid="asset-form-denah-btn"
+              >
+                <MapPin className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Denah</span>
               </Button>
             )}
             {!alwaysExpanded && <Button variant="ghost" size="sm" className="lg:hidden h-7 w-7 p-0" onClick={onClose}><X className="w-4 h-4" /></Button>}
