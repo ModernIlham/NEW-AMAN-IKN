@@ -614,6 +614,17 @@ async def _peta_status_kepegawaian(nips) -> dict:
     return peta
 
 
+# Lebar SATU area tanda tangan sebagai fraksi lebar dokumen. Dipakai SEMUA
+# pola — tunggal, berpasangan, dan "Mengetahui" di tengah-bawah — supaya tak
+# ada kolom yang lebih sempit daripada tetangganya.
+#
+# Keluhan pemilik: area "Mengetahui" di tengah terasa lebih sempit dari yang
+# lain. Memang benar: dulu tiga pola memakai tiga angka berbeda — tunggal
+# 0.45, berpasangan 0.42, dan tengah 0.40 (paling sempit). Kini satu angka,
+# diambil dari yang TERLEBAR agar tak ada area yang menyusut.
+LEBAR_KOLOM_TTD = 0.45
+
+
 def _blok_ttd_tim_kpb(tim, settings, tanggal_iso, ident, doc_width,
                       label_tim="Tim Pelaksana Inventarisasi",
                       header_mengetahui="Mengetahui,",
@@ -692,7 +703,9 @@ def _blok_ttd_tim_kpb(tim, settings, tanggal_iso, ident, doc_width,
     if baris_kpb:
         kolom.append(Paragraph(escape(baris_kpb), sig))
     t = Table([["", kolom, ""]],
-              colWidths=[doc_width * 0.3, doc_width * 0.4, doc_width * 0.3])
+              colWidths=[doc_width * (1 - LEBAR_KOLOM_TTD) / 2,
+                         doc_width * LEBAR_KOLOM_TTD,
+                         doc_width * (1 - LEBAR_KOLOM_TTD) / 2])
     t.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('LEFTPADDING', (0, 0), (-1, -1), 0),
@@ -850,7 +863,9 @@ def _signature_block(signers, doc_width, celah_mm=20, jarak_baris_mm=8):
         # merapatkannya demi celah ttd yang lebih lega.
         bawah_tbl = Table(
             [["", _col(signers[2]), ""]],
-            colWidths=[doc_width * 0.30, doc_width * 0.40, doc_width * 0.30])
+            colWidths=[doc_width * (1 - LEBAR_KOLOM_TTD) / 2,
+                       doc_width * LEBAR_KOLOM_TTD,
+                       doc_width * (1 - LEBAR_KOLOM_TTD) / 2])
         bawah_tbl.setStyle(TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ('LEFTPADDING', (0, 0), (-1, -1), 0),
@@ -864,12 +879,14 @@ def _signature_block(signers, doc_width, celah_mm=20, jarak_baris_mm=8):
         cells = [["", _zona_kepala(signers[0])],
                  ["", _zona_ttd(signers[0])],
                  ["", _zona_nama(signers[0])]]
-        col_widths = [doc_width * 0.55, doc_width * 0.45]
+        col_widths = [doc_width * (1 - LEBAR_KOLOM_TTD), doc_width * LEBAR_KOLOM_TTD]
     else:
         cells = [[_zona_kepala(signers[0]), "", _zona_kepala(signers[1])],
                  [_zona_ttd(signers[0]), "", _zona_ttd(signers[1])],
                  [_zona_nama(signers[0]), "", _zona_nama(signers[1])]]
-        col_widths = [doc_width * 0.42, doc_width * 0.16, doc_width * 0.42]
+        col_widths = [doc_width * LEBAR_KOLOM_TTD,
+                      doc_width * (1 - 2 * LEBAR_KOLOM_TTD),
+                      doc_width * LEBAR_KOLOM_TTD]
 
     table = Table(cells, colWidths=col_widths)
     table.setStyle(TableStyle([
