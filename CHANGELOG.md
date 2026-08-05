@@ -67,6 +67,67 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#775] Impor Master Pegawai MENGGABUNG, bukan menggandakan & menimpa — 2026-08-05
+
+Keluhan pemilik: pegawai yang belum punya identitas jadi **orang baru** tiap
+kali diimpor ("orangnya sama, jabatannya sama, unit kerjanya sama"), dan
+pegawai ber-identitas sama pun **beranak baris** ketika satu baris membawa
+NPWP/bank/rekening dan satunya tidak — padahal berkasnya hasil ekspor sendiri.
+
+Penelusuran menemukan **tiga** cacat di blok yang sama, bukan dua:
+
+| # | Cacat | Akibat |
+|---|---|---|
+| 1 | Baris tanpa NIP selalu jatuh ke `InsertOne` | Impor ulang menggandakan mereka **setiap kali** |
+| 2 | Penjaga `seen_nip`: NIP kembar dalam SATU berkas → baris ke-2 disisipkan | Ekspor→impor memperbanyak, bukan merapikan |
+| 3 | `$set: doc` menulis SELURUH ~54 field | Kolom yang tak ikut di berkas **menghapus** nilai lama: NPWP, bank, rekening, blok ahli waris |
+
+Cacat 3 belum dilaporkan tetapi paling merusak — ia menghapus data secara
+senyap, dan menjelaskan mengapa gejala "satu punya NPWP, satunya tidak"
+berakhir kacau.
+
+### Jebakan yang nyaris ikut terbuat
+
+`baris_impor_ke_pegawai` mengisi `status` = `"aktif"` sebagai **default**,
+bukan sebagai data. Aturan naif "nilai yang tidak kosong menang" akan
+**MENGHIDUPKAN KEMBALI pegawai berstatus meninggal** setiap kali berkas tanpa
+kolom Status diimpor. Karena itu perbaikan ini bertumpu pada *field mana yang
+BENAR-BENAR DIPASOK baris*, bukan *field mana yang tidak kosong*.
+
+### Perbaikan
+
+**Kunci identitas berjenjang** (`kunci_dedup_pegawai`), dari terkuat:
+
+1. NIP
+2. Identitas WNA (KITAS/KITAP)
+3. Nama + tanggal lahir
+4. Nama + unit kerja + jabatan + status kepegawaian
+
+Tingkat 4 sengaja memakai **banyak unsur**: memakai nama saja akan
+menggabungkan dua orang berbeda yang kebetulan senama — dan itu lebih buruk
+daripada duplikat. Tingkat 3–4 juga dipagari `nip: ""` agar baris tanpa NIP
+tak pernah menyambar orang lain yang ber-NIP tetapi senama.
+
+**Satu slot per ORANG, bukan per baris.** Baris dengan kunci sama saling
+melengkapi: satu membawa NPWP, satu membawa bank + rekening → satu pegawai
+utuh, bukan dua baris setengah.
+
+**Hanya field yang dipasok yang ditulis.** Sisanya masuk `$setOnInsert`, jadi
+pegawai baru tetap lengkap 54 field sementara pegawai lama tak kehilangan apa
+pun. *Mengosongkan field tetap bisa lewat form ubah — impor sengaja tidak
+dijadikan alat menghapus data.*
+
+Semua pencocokan nama/unit/jabatan memakai regex `^…$` case-insensitive agar
+selaras dengan normalisasi di sisi Python; tanpa itu "BUDI SANTOSO" di berkas
+tak cocok dengan "Budi Santoso" di master dan duplikat lahir lagi lewat pintu
+belakang.
+
+20 uji baru; empat mutasi (turunan dilumpuhkan, sel kosong dianggap dipasok,
+kunci lemah dipersempit ke nama saja, `$set` dikembalikan menulis seluruh doc)
+semuanya tertangkap.
+
+---
+
 ## [#774] Status kejadian tampil di Timeline Aset — dua dari tujuh field berhenti dibuang — 2026-08-05
 
 Backend mengisi **tujuh** field per event timeline. `AssetTimelineDialog`

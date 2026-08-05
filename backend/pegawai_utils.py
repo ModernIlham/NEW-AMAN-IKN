@@ -837,6 +837,100 @@ _ENUM_IMPOR = {
 }
 
 
+# Field yang DITURUNKAN dari field lain saat impor: bila sumbernya dipasok
+# baris, turunannya ikut terhitung dipasok. Tanpa ini `sub_kategori_non_asn`
+# (dari Status Kepegawaian) dan `unit_kerja` (dari Eselon terdalam) akan
+# dianggap "tak dipasok" lalu tak pernah ikut diperbarui.
+_TURUNAN_IMPOR = {
+    "status_kepegawaian": ("sub_kategori_non_asn",),
+    "eselon1": ("unit_kerja",), "eselon2": ("unit_kerja",),
+    "eselon3": ("unit_kerja",), "eselon4": ("unit_kerja",),
+    "eselon5": ("unit_kerja",),
+}
+
+
+def field_dipasok_baris(raw) -> set:
+    """Field yang BENAR-BENAR dipasok satu baris impor (header dikenal DAN
+    selnya terisi). MURNI.
+
+    Dibutuhkan karena `baris_impor_ke_pegawai` selalu mengembalikan SELURUH
+    ~54 field — yang tak ada di berkas berisi string kosong. Menulis dokumen
+    itu apa adanya dengan `$set` menimpa data yang sudah ada di master dengan
+    kosong: NPWP, rekening, dan blok ahli waris lenyap hanya karena kolomnya
+    tak ikut di berkas impor.
+
+    Bahaya khusus `status`: `baris_impor_ke_pegawai` mengisinya "aktif" sebagai
+    default, bukan sebagai data. Tanpa daftar ini, mengimpor berkas tanpa kolom
+    Status akan MENGHIDUPKAN KEMBALI pegawai yang berstatus meninggal.
+    """
+    dipasok = set()
+    for header, nilai in (raw or {}).items():
+        field = KOLOM_IMPOR.get(str(header or "").strip().lower())
+        if not field:
+            continue
+        if str(nilai if nilai is not None else "").strip() == "":
+            continue
+        dipasok.add(field)
+        dipasok.update(_TURUNAN_IMPOR.get(field, ()))
+    return dipasok
+
+
+def _norm_kunci(v) -> str:
+    """Normalisasi nilai untuk kunci identitas: huruf kecil, spasi tunggal."""
+    return " ".join(str(v or "").strip().lower().split())
+
+
+def kunci_dedup_pegawai(doc) -> tuple:
+    """Kunci identitas untuk mengenali BARIS-BARIS YANG MERUJUK ORANG SAMA.
+
+    Berjenjang, dari yang paling kuat ke yang paling lemah:
+
+      1. ``("nip", nip)`` — identitas resmi, paling dapat dipercaya.
+      2. ``("wna", jenis, nomor)`` — pegawai WNA ber-KITAS/KITAP.
+      3. ``("lahir", nama, tanggal_lahir)`` — tanpa NIP tetapi tanggal lahirnya
+         diketahui; nama + tanggal lahir praktis unik.
+      4. ``("jabatan", nama, unit_kerja, jabatan, status_kepegawaian)`` — jalan
+         terakhir untuk pegawai tanpa identitas apa pun. Sengaja MEMAKAI BANYAK
+         unsur: memakai nama saja akan menggabungkan dua orang berbeda yang
+         kebetulan senama, dan itu lebih buruk daripada duplikat.
+
+    ``None`` bila nama kosong (baris tak dapat dipakai).
+
+    Tanpa kunci ini, baris tanpa NIP SELALU disisipkan sebagai orang baru —
+    mengimpor ulang berkas yang sama menggandakan mereka setiap kali.
+    """
+    d = doc or {}
+    nip = str(d.get("nip") or "").strip()
+    if nip:
+        return ("nip", nip)
+    nomor_wna = str(d.get("nomor_identitas_wna") or "").strip()
+    if nomor_wna:
+        return ("wna", _norm_kunci(d.get("jenis_identitas_wna")), nomor_wna)
+    nama = _norm_kunci(d.get("nama"))
+    if not nama:
+        return None
+    lahir = str(d.get("tanggal_lahir") or "").strip()
+    if lahir:
+        return ("lahir", nama, lahir)
+    return ("jabatan", nama, _norm_kunci(d.get("unit_kerja")),
+            _norm_kunci(d.get("jabatan")), _norm_kunci(d.get("status_kepegawaian")))
+
+
+def gabung_baris_pegawai(dasar, dipasok_dasar, tambahan, dipasok_tambahan):
+    """Gabung DUA baris impor yang merujuk orang yang sama → (doc, dipasok).
+
+    Nilai dari baris berikutnya menang HANYA untuk field yang benar-benar
+    dipasoknya. Ini yang membuat dua baris saling melengkapi: satu membawa
+    NPWP, satu membawa nama bank + nomor rekening, hasilnya satu orang dengan
+    keduanya — bukan dua baris yang masing-masing setengah.
+    """
+    doc = dict(dasar or {})
+    for field in (dipasok_tambahan or set()):
+        if field in (tambahan or {}):
+            doc[field] = tambahan[field]
+    return doc, set(dipasok_dasar or set()) | set(dipasok_tambahan or set())
+
+
 def baris_impor_ke_pegawai(raw):
     """Ubah satu baris impor (dict {header: nilai}) → dokumen pegawai bersih +
     daftar peringatan lunak. MURNI (teruji unit).

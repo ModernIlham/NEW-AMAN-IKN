@@ -25,12 +25,53 @@ from pegawai_utils import (
     PANGKAT_GOLONGAN, PENDIDIKAN, STATUS_PEGAWAI, STATUS_PEGAWAI_SATKER,
     STATUS_PEGAWAI_SATKER_BERINSTANSI,
     STATUS_PERKAWINAN, SUB_KATEGORI_NON_ASN, baris_impor_ke_pegawai,
-    beda_snapshot_pemegang, deteksi_identitas, info_masa_pegawai,
-    kelompok_unit_kerja, pegawai_perlu_serah_terima, rekap_eselon,
+    beda_snapshot_pemegang, deteksi_identitas, field_dipasok_baris,
+    gabung_baris_pegawai, info_masa_pegawai, kelompok_unit_kerja,
+    kunci_dedup_pegawai, pegawai_perlu_serah_terima, rekap_eselon,
     snapshot_pemegang_aset, urai_identitas, validate_pegawai,
 )
 
 pegawai_router = APIRouter()
+
+
+def _filter_dedup(kunci, kode_satker) -> dict:
+    """Filter Mongo yang MENCERMINKAN `kunci_dedup_pegawai` — satu-satunya
+    penentu "pegawai ini sudah ada atau belum" saat impor.
+
+    Selalu di-scope satker (dokumen era lama tanpa kode ikut terjaring lewat
+    `["", None]`) supaya impor satu satker tak pernah menimpa pegawai satker
+    lain yang kebetulan senama.
+
+    Perbandingan nama/unit/jabatan memakai regex case-insensitive agar selaras
+    dengan normalisasi `_norm_kunci` di sisi Python; tanpa itu "Budi Santoso"
+    di master tak akan cocok dengan "BUDI SANTOSO" di berkas impor, dan
+    duplikat lahir lagi lewat pintu belakang.
+    """
+    import re as _re
+    q = {"kode_satker": {"$in": [kode_satker, "", None]}}
+
+    def _persis(nilai):
+        # ^...$ + escape: pencocokan SETARA, bukan "mengandung".
+        return {"$regex": f"^{_re.escape(str(nilai or '').strip())}$",
+                "$options": "i"}
+
+    jenis = kunci[0]
+    if jenis == "nip":
+        q["nip"] = kunci[1]
+    elif jenis == "wna":
+        q["nomor_identitas_wna"] = kunci[2]
+    elif jenis == "lahir":
+        q["nama"] = _persis(kunci[1])
+        q["tanggal_lahir"] = kunci[2]
+        # NIP kosong: baris ber-NIP milik orang lain tak boleh tersambar.
+        q["$or"] = [{"nip": ""}, {"nip": {"$exists": False}}, {"nip": None}]
+    else:                                   # ("jabatan", nama, unit, jab, stat)
+        q["nama"] = _persis(kunci[1])
+        q["unit_kerja"] = _persis(kunci[2])
+        q["jabatan"] = _persis(kunci[3])
+        q["status_kepegawaian"] = _persis(kunci[4])
+        q["$or"] = [{"nip": ""}, {"nip": {"$exists": False}}, {"nip": None}]
+    return q
 
 # kartu_uid_hashes TIDAK pernah dikirim ke klien (cukup kartu_label utk UI) —
 # hash HMAC memang tak bisa dibalik, tapi tak ada alasan membocorkannya.
@@ -644,9 +685,13 @@ async def impor_pegawai(file: UploadFile = File(...),
     now = datetime.now(timezone.utc).isoformat()
     dilewati = 0
     catatan = []
-    seen_nip = set()
-    from pymongo import InsertOne, UpdateOne
-    ops = []
+    # Satu slot per ORANG (bukan per baris): {kunci: (doc, field_dipasok)}.
+    # Baris berikutnya dengan kunci sama MELENGKAPI slotnya, tidak membuat
+    # orang baru — dua baris ekspor yang masing-masing membawa sebagian data
+    # (satu NPWP, satu rekening) menyatu jadi satu pegawai utuh.
+    per_orang = {}
+    urutan = []
+    digabung = 0
     for idx, raw in enumerate(rows, start=2):
         doc, _peringatan = baris_impor_ke_pegawai(raw)
         if not doc["nama"]:
@@ -659,20 +704,39 @@ async def impor_pegawai(file: UploadFile = File(...),
             if len(catatan) < 200:
                 catatan.append(f"Baris {idx} ({doc['nama']}): {'; '.join(errors)}")
             continue
-        doc["kode_satker"] = kode
-        doc["updated_at"] = now
-        nip = doc["nip"]
-        if nip and nip not in seen_nip:
-            seen_nip.add(nip)
-            ops.append(UpdateOne(
-                {"nip": nip, "kode_satker": {"$in": [kode, "", None]}},
-                {"$set": doc,
-                 "$setOnInsert": {"id": str(uuid.uuid4()), "created_at": now}},
-                upsert=True))
+        kunci = kunci_dedup_pegawai(doc)
+        if kunci is None:
+            dilewati += 1
+            continue
+        dipasok = field_dipasok_baris(raw)
+        if kunci in per_orang:
+            lama, dipasok_lama = per_orang[kunci]
+            per_orang[kunci] = gabung_baris_pegawai(lama, dipasok_lama,
+                                                    doc, dipasok)
+            digabung += 1
         else:
-            doc["id"] = str(uuid.uuid4())
-            doc["created_at"] = now
-            ops.append(InsertOne(dict(doc)))
+            per_orang[kunci] = (doc, dipasok)
+            urutan.append(kunci)
+
+    from pymongo import UpdateOne
+    ops = []
+    for kunci in urutan:
+        doc, dipasok = per_orang[kunci]
+        # HANYA field yang dipasok yang ditulis. Sisanya masuk $setOnInsert
+        # supaya pegawai BARU tetap lengkap 54 field, sementara pegawai yang
+        # sudah ada tak kehilangan nilai lamanya hanya karena kolomnya tak
+        # ikut di berkas. (Mengosongkan field tetap bisa lewat form ubah —
+        # impor sengaja tak dijadikan alat menghapus data.)
+        setel = {k: v for k, v in doc.items() if k in dipasok}
+        setel["nama"] = doc["nama"]          # kunci tampil, selalu ditulis
+        setel["kode_satker"] = kode
+        setel["updated_at"] = now
+        saat_baru = {k: v for k, v in doc.items() if k not in setel}
+        saat_baru["id"] = str(uuid.uuid4())
+        saat_baru["created_at"] = now
+        ops.append(UpdateOne(_filter_dedup(kunci, kode),
+                             {"$set": setel, "$setOnInsert": saat_baru},
+                             upsert=True))
 
     dibuat = diperbarui = 0
     if ops:
