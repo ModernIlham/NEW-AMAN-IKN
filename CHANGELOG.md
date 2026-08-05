@@ -67,6 +67,55 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#768] Unggah TTD ber-format .png menghasilkan kotak gelap — kanal alpha terbuang — 2026-08-05
+
+Pada Tanda Tangan Elektronik, tab **"Foto (hapus BG)"** yang diberi berkas
+`.png` berlatar transparan tidak menampilkan tanda tangan melainkan **kotak
+biru dongker** dengan goresan yang justru samar-tembus.
+
+### Akar
+
+`ttd_utils.py` membuka berkas dengan `Image.open(...).convert("RGB")`. Untuk
+gambar ber-kanal alpha, Pillow membuang alpha dengan **mengomposit ke HITAM** —
+latar transparan berubah jadi hitam pekat. Pipeline berikutnya bekerja dengan
+aturan "gelap = tinta", jadi seluruh bekas latar dicap tinta dan diwarnai
+`(15, 23, 42)`, sementara goresan aslinya justru dianggap latar.
+
+Hasil terukurnya bahkan lebih buruk dari sekadar kotak: **alpha 127 rata di
+seluruh bidang, nol piksel tinta sungguhan**, dan keluarannya tetap seukuran
+kanvas penuh karena auto-crop tak menemukan batas apa pun. Karena 127 > 10,
+`png_transparan_valid` meluluskannya — tak ada galat, tak ada penolakan;
+kegagalannya senyap sampai dilihat mata.
+
+### Perbaikan: dua jenis masukan, dua jalur
+
+Yang diunggah tak selalu foto kertas. Berkas `.png` berlatar transparan — hasil
+hapus-BG aplikasi lain, atau TTD yang pernah diproses di sini lalu diunggah
+ulang — masuk lewat pintu yang sama.
+
+- Gambar dibuka sebagai **RGBA**, bukan RGB.
+- Bila sumbernya **sudah punya transparansi**, alpha-nya dipakai apa adanya
+  sebagai topeng goresan. Pihak yang membuatnya sudah memutuskan mana tinta;
+  menebaknya ulang lewat luminance hanya merusak.
+- Bila **buram penuh**, jalur lama (luminance → normalisasi pencahayaan → Otsu)
+  berjalan persis seperti sebelumnya. Jalur itu dipindah ke
+  `_alpha_dari_luminance` supaya dua keputusan yang berbeda tak tercampur.
+
+Efek sampingan yang ikut sembuh: TTD bertinta **terang** di latar transparan.
+Jalur luminance menganggap terang = kertas, sehingga tanda tangan putih akan
+lenyap seluruhnya; alpha sumber tak peduli warna.
+
+### Uji
+
+Tujuh uji baru (`TestSumberSudahTransparan`): goresan bertahan, latar tetap
+transparan, tak ada alpha rata separuh, ter-crop ke goresan (bukan sebesar
+kanvas), tinta terang tak lenyap, hasilnya sebanding dengan foto kertas
+bergoresan sama, dan PNG buram penuh tetap lewat jalur foto.
+
+Uji kebal-mutasi: mencabut cabang "sumber sudah transparan" → 5 uji gagal.
+
+---
+
 ## [#767] Pesan WhatsApp/email permintaan TTD dirapikan — bentuk yang selamat di layar penerima — 2026-08-05
 
 Pemilik mengirim tangkapan pesan yang benar-benar diterima penanda tangan:
