@@ -164,9 +164,24 @@ function photoMarkerIcon(row, { color, complete = false, selected = false } = {}
 
 // Pilih ikon sesuai gaya marker aktif: "photo" + punya foto → marker foto;
 // selain itu (termasuk aset tanpa foto) → pin berwarna seperti biasa.
-function assetMarkerIcon(row, { color, hasPhoto, complete, selected, style }) {
-  if (style === "photo" && hasPhoto) return photoMarkerIcon(row, { color, complete, selected });
-  return markerIcon(color, hasPhoto, complete, false, selected);
+function assetMarkerIcon(row, { color, hasPhoto, complete, selected, style, jmlKomentar = 0 }) {
+  const dasar = (style === "photo" && hasPhoto)
+    ? photoMarkerIcon(row, { color, complete, selected })
+    : markerIcon(color, hasPhoto, complete, false, selected);
+  if (!jmlKomentar) return dasar;
+  // LENCANA KOMENTAR (mandat pemilik: "icon komentar di marker yang
+  // dikomentari"). Ditempel di atas ikon dasar, bukan menggantikannya —
+  // status/kondisi/foto tetap terbaca; komentar adalah lapisan tambahan.
+  const isi = typeof dasar.options.html === "string" ? dasar.options.html : "";
+  return L.divIcon({
+    ...dasar.options,
+    className: dasar.options.className || "",
+    html: `<div style="position:relative">${isi}`
+      + '<span style="position:absolute;top:-7px;right:-9px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:#2563eb;color:#fff;'
+      + 'font:700 9px/15px system-ui,sans-serif;text-align:center;border:1.5px solid #fff;box-shadow:0 1px 3px rgba(15,23,42,.4);display:flex;align-items:center;gap:1px;justify-content:center">'
+      + '<svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>'
+      + `${jmlKomentar}</span></div>`,
+  });
 }
 
 function esc(str) {
@@ -338,7 +353,50 @@ const AssetMapFullView = memo(function AssetMapFullView({
   const deletedIdsRef = useRef(new Set()); // id aset terhapus → pin diberi tanda silang
   const onCloseRef = useRef(onClose);
   const onQuickAddRef = useRef(onQuickAdd);
+  // Komentar lapangan hasil impor usulan kolaborasi, dikelompokkan per aset.
+  // Disimpan di REF (bukan state): popup Leaflet dibangun sebagai DOM di luar
+  // pohon React, jadi ia membaca nilai TERBARU saat dibuka — sementara membuat
+  // ulang seluruh marker hanya karena satu komentar berubah akan mematikan
+  // popup yang sedang terbuka dan drag yang sedang berjalan.
+  const komentarRef = useRef({});
+  const onHapusKomentarRef = useRef(null);
   useEffect(() => { onEditRef.current = onEditAsset; onDeleteRef.current = onDeleteAsset; onSaveRef.current = onSaveCoords; onCloseRef.current = onClose; onQuickAddRef.current = onQuickAdd; });
+
+  // Ambil komentar sekali per kegiatan. Gagal = diam: komentar lapangan itu
+  // tambahan, bukan syarat peta bisa dipakai.
+  const [komentarVersi, setKomentarVersi] = useState(0);
+  useEffect(() => {
+    let batal = false;
+    if (!activityId) { komentarRef.current = {}; return undefined; }
+    (async () => {
+      try {
+        const r = await axios.get(`${API}/aset/komentar`, {
+          params: { activity_id: activityId }, timeout: 15000,
+        });
+        if (batal) return;
+        komentarRef.current = r.data?.per_aset || {};
+        setKomentarVersi((v) => v + 1);   // picu gambar ulang lencana
+      } catch { /* peta tetap jalan tanpa komentar */ }
+    })();
+    return () => { batal = true; };
+  }, [activityId]);
+
+  useEffect(() => {
+    onHapusKomentarRef.current = !canEdit ? null : async (komentarId, assetId) => {
+      try {
+        await axios.delete(`${API}/aset/komentar/${komentarId}`);
+        const sisa = (komentarRef.current[assetId] || [])
+          .filter((k) => k.id !== komentarId);
+        komentarRef.current = { ...komentarRef.current, [assetId]: sisa };
+        setKomentarVersi((v) => v + 1);
+        toast.success("Komentar dihapus");
+        return true;
+      } catch (e) {
+        toast.error(e?.response?.data?.detail || "Gagal menghapus komentar");
+        return false;
+      }
+    };
+  }, [canEdit]);
   onPhotoClickRef.current = (row) => setLightboxRow(row);
 
   // Alat ukur: klik menambah titik, klik-kanan/Backspace membatalkan satu titik,
@@ -987,6 +1045,49 @@ const AssetMapFullView = memo(function AssetMapFullView({
       }
       el.appendChild(aksi);
     }
+
+    // ── Komentar hasil impor usulan kolaborasi ──
+    // Mandat pemilik: "icon komentar di marker yang dikomentari (berikan fitur
+    // hapus perkomentar di peta asli)". Komentar tamu yang sudah DISETUJUI
+    // pengelola menempel di sini, tiap baris punya tombol hapusnya sendiri —
+    // moderasi butuh pisau bedah, bukan kapak.
+    const komentar = (komentarRef.current[entry.row.id] || []);
+    if (komentar.length) {
+      const kotak = document.createElement("div");
+      kotak.style.cssText = "margin-top:8px;padding-top:7px;border-top:1px dashed #cbd5e1";
+      kotak.setAttribute("data-testid", `map-komentar-${entry.row.id}`);
+      const judul = document.createElement("div");
+      judul.style.cssText = "font-size:10.5px;font-weight:700;color:#0f172a;display:flex;align-items:center;gap:4px;margin-bottom:4px";
+      judul.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>${komentar.length} komentar lapangan`;
+      kotak.appendChild(judul);
+      komentar.forEach((k) => {
+        const baris = document.createElement("div");
+        baris.style.cssText = "display:flex;gap:5px;align-items:flex-start;margin-bottom:4px";
+        const teks = document.createElement("div");
+        teks.style.cssText = "flex:1;min-width:0;font-size:10.5px;color:#334155;line-height:1.35";
+        teks.innerHTML = `${esc(k.teks || "")}<span style="color:#94a3b8"> — ${esc(k.oleh || "Tamu")}</span>`;
+        baris.appendChild(teks);
+        if (onHapusKomentarRef.current) {
+          const hapus = document.createElement("button");
+          hapus.type = "button";
+          hapus.title = "Hapus komentar ini";
+          hapus.setAttribute("aria-label", "Hapus komentar");
+          hapus.setAttribute("data-testid", `map-hapus-komentar-${k.id}`);
+          hapus.style.cssText = "flex:0 0 auto;padding:2px;background:none;border:0;color:#dc2626;cursor:pointer;line-height:0";
+          hapus.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`;
+          hapus.addEventListener("click", async () => {
+            if (hapus.disabled) return;
+            hapus.disabled = true;
+            const ok = await onHapusKomentarRef.current?.(k.id, entry.row.id);
+            if (ok) baris.remove();
+            else hapus.disabled = false;
+          });
+          baris.appendChild(hapus);
+        }
+        kotak.appendChild(baris);
+      });
+      el.appendChild(kotak);
+    }
     return el;
   }, []);
 
@@ -1018,9 +1119,12 @@ const AssetMapFullView = memo(function AssetMapFullView({
       // iconKey menentukan kapan ikon dibangun ulang. Untuk gaya "photo" ikut
       // sertakan identitas sampul (thumbnail_index + version) agar marker foto
       // menyegar saat sampul/foto berubah, dan agar ganti gaya memicu rebuild.
-      const iconKey = markerStyle === "photo" && hasPhoto
+      // Jumlah komentar ikut kunci ikon: lencana komentar harus muncul/hilang
+      // begitu komentar diimpor atau dihapus, tanpa memuat ulang peta.
+      const jmlKomentar = (komentarRef.current[row.id] || []).length;
+      const iconKey = (markerStyle === "photo" && hasPhoto
         ? `photo|${color}|${complete}|${selected}|${row.thumbnail_index || 0}|${row.version || 1}`
-        : `pin|${color}|${hasPhoto}|${complete}|${selected}`;
+        : `pin|${color}|${hasPhoto}|${complete}|${selected}`) + `|k${jmlKomentar}`;
       const existing = markersRef.current.get(row.id);
 
       if (existing) {
@@ -1031,7 +1135,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
           layer.refreshClusters?.(existing.marker); // beri tahu cluster posisi berubah
         }
         existing.lat = lat; existing.lng = lng;
-        if (existing.iconKey !== iconKey) { existing.marker.setIcon(assetMarkerIcon(row, { color, hasPhoto, complete, selected, style: markerStyle })); existing.iconKey = iconKey; }
+        if (existing.iconKey !== iconKey) { existing.marker.setIcon(assetMarkerIcon(row, { color, hasPhoto, complete, selected, style: markerStyle, jmlKomentar })); existing.iconKey = iconKey; }
         if (existing.draggable !== canDrag) {
           // options.draggable WAJIB diperbarui: saat marker tersembunyi di dalam
           // cluster lalu ditampilkan ulang, Leaflet membangun ulang handler drag
@@ -1045,7 +1149,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
         continue;
       }
 
-      const marker = L.marker([lat, lng], { icon: assetMarkerIcon(row, { color, hasPhoto, complete, selected, style: markerStyle }), draggable: !!canDrag });
+      const marker = L.marker([lat, lng], { icon: assetMarkerIcon(row, { color, hasPhoto, complete, selected, style: markerStyle, jmlKomentar }), draggable: !!canDrag });
       const entry = { marker, row, lat, lng, iconKey, draggable: !!canDrag };
       // SATU popup per pin (tanpa tooltip hover — dulu tooltip + popup tampil
       // bertumpuk saat pin diketuk di layar sentuh). Dalam Mode Seleksi, klik
@@ -1101,7 +1205,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
       // pengguna dapat memperbesar manual hingga z22 untuk memisahkan pin.
       map.fitBounds(bounds, { padding: [30, 30], maxZoom: 19 });
     }
-  }, [displayRows, canEdit, canDrag, buildPopupEl, refreshRowVersion, selectedIds, markerStyle]);
+  }, [displayRows, canEdit, canDrag, buildPopupEl, refreshRowVersion, selectedIds, markerStyle, komentarVersi]);
 
   // Mode Seleksi mematikan box-zoom bawaan Shift+seret (kita pakai Shift+seret
   // untuk KOTAK SELEKSI). Dipulihkan saat mode dimatikan.

@@ -12,8 +12,12 @@ import {
   MapPin, MessageSquarePlus, Plus, X, Loader2, Send, Users, Clock,
   AlertTriangle, RefreshCcw, WifiOff, Layers, Boxes, Trash2, ShieldCheck,
   Eraser, MousePointerClick, MessageSquare, ChevronLeft, ChevronRight, ImageIcon, Ruler,
-  SlidersHorizontal, Check, RotateCcw, Wrench,
+  SlidersHorizontal, Check, RotateCcw, Wrench, Inbox, ThumbsUp, ThumbsDown,
 } from "lucide-react";
+import {
+  bisaDisetujui, judulUsulan, kalimatYakinSemua, LABEL_STATUS,
+  ringkasHasilImpor, statusUsulan, WARNA_STATUS,
+} from "@/lib/usulanPeta";
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from "../components/ui/popover";
@@ -291,6 +295,76 @@ export default function PetaKolaborasiPage() {
   useEffect(() => { muat(); }, [muat]);
 
   const bolehModerasi = !!data?.boleh_moderasi;
+
+  // ── Tinjau usulan: impor kontribusi tamu ke peta ASLI ──────────────────
+  // Kontribusi tamu adalah USULAN. Pengelola satker meninjau lalu menyetujui
+  // satu per satu atau sekaligus; titik yang disetujui menjadi aset baru.
+  const [usulanBuka, setUsulanBuka] = useState(false);
+  const [usulan, setUsulan] = useState([]);
+  const [usulanMuat, setUsulanMuat] = useState(false);
+  const [usulanSibuk, setUsulanSibuk] = useState("");   // id yang sedang diproses
+
+  const muatUsulan = useCallback(async () => {
+    setUsulanMuat(true);
+    try {
+      const r = await axios.get(`${API}/peta/kolaborasi/${id}/usulan`,
+                                { params: { status: "semua" } });
+      setUsulan(r.data?.items || []);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal memuat usulan");
+    } finally { setUsulanMuat(false); }
+  }, [id]);
+
+  const bukaUsulan = () => { setUsulanBuka(true); muatUsulan(); };
+
+  const setujuiSatu = async (u) => {
+    setUsulanSibuk(u.id);
+    try {
+      await axios.post(`${API}/peta/kolaborasi/${id}/usulan/${u.id}/setujui`);
+      toast.success(u.jenis === "titik"
+        ? "Titik diimpor — aset baru terbentuk di peta asli"
+        : "Komentar diimpor ke peta asli");
+      await muatUsulan();
+      await muat();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menyetujui usulan");
+    } finally { setUsulanSibuk(""); }
+  };
+
+  const tolakSatu = async (u) => {
+    setUsulanSibuk(u.id);
+    try {
+      await axios.post(`${API}/peta/kolaborasi/${id}/usulan/${u.id}/tolak`,
+                       { alasan: "" });
+      toast.success("Usulan ditolak — jejaknya tetap tersimpan");
+      await muatUsulan();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menolak usulan");
+    } finally { setUsulanSibuk(""); }
+  };
+
+  const setujuiSemua = async () => {
+    setUsulanSibuk("semua");
+    try {
+      const r = await axios.post(
+        `${API}/peta/kolaborasi/${id}/usulan/setujui-semua`, { jenis: "" });
+      // Yang dilewati & gagal IKUT disebut — angka yang cuma menampilkan
+      // keberhasilan membuat pemilik mengira semuanya sudah masuk.
+      const ringkas = ringkasHasilImpor(r.data);
+      if ((r.data?.gagal || []).length || (r.data?.dilewati || []).length) {
+        toast.warning(ringkas, { duration: 8000 });
+      } else {
+        toast.success(ringkas);
+      }
+      await muatUsulan();
+      await muat();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mengimpor usulan");
+    } finally { setUsulanSibuk(""); }
+  };
+
+  const usulanTerbuka = useMemo(
+    () => usulan.filter((u) => statusUsulan(u) === "terbuka"), [usulan]);
 
   // Hitung komentar per target (lencana angka pada pin).
   const komentarCount = useMemo(() => {
@@ -873,6 +947,17 @@ export default function PetaKolaborasiPage() {
         </button>
         {bolehModerasi && (
           <button
+            type="button" onClick={bukaUsulan} aria-label="Tinjau usulan kolaborasi"
+            className="h-8 px-2 rounded-lg border border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 flex items-center gap-1 flex-shrink-0 hover:bg-emerald-500/20"
+            title="Tinjau usulan tamu — impor titik & komentar ke peta asli"
+            data-testid="peta-kolab-tinjau-usulan"
+          >
+            <Inbox className="w-4 h-4" />
+            <span className="hidden sm:inline text-[11px] font-semibold">Usulan</span>
+          </button>
+        )}
+        {bolehModerasi && (
+          <button
             type="button" onClick={() => setModerasi((v) => { if (v) setTerpilih(new Set()); return !v; })} aria-pressed={moderasi} aria-label={moderasi ? "Mode moderasi: aktif" : "Mode moderasi"}
             className={`h-8 w-8 rounded-lg border flex items-center justify-center flex-shrink-0 transition-colors ${moderasi ? "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400" : "border-border text-foreground/80 hover:bg-muted"}`}
             title="Moderasi — pilih titik kolaborasi untuk dihapus"
@@ -917,6 +1002,120 @@ export default function PetaKolaborasiPage() {
           <b className="text-foreground">{jmlKolab}</b> kolaborasi
         </p>
       </div>
+
+      {/* ── Dialog TINJAU USULAN — impor kontribusi tamu ke peta ASLI ──
+          Titik yang disetujui menjadi aset baru berkode barang placeholder;
+          komentar menempel pada asetnya. Yang sudah diimpor tetap terdaftar
+          (berlabel) supaya pengelola tahu apa yang sudah masuk. */}
+      {usulanBuka && bolehModerasi && (
+        <div className="fixed inset-0 z-[1200] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          onClick={() => setUsulanBuka(false)} data-testid="peta-kolab-usulan-dialog">
+          <div className="bg-card w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl border border-border max-h-[85vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+              <Inbox className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-foreground leading-tight">Usulan Kolaborasi</p>
+                <p className="text-[11px] text-muted-foreground leading-tight">
+                  {usulanTerbuka.length} menunggu ditinjau · yang disetujui masuk ke peta asli
+                </p>
+              </div>
+              <button type="button" onClick={() => setUsulanBuka(false)} aria-label="Tutup"
+                className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted min-w-0 min-h-0">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="px-3 py-2 border-b border-border bg-muted/40">
+              <p className="text-[10px] text-muted-foreground leading-snug">
+                Titik yang disetujui menjadi <b>aset baru</b> berkode barang
+                sementara <span className="font-mono">0000000000</span> + NUP otomatis,
+                berkategori dummy — sengaja <b>belum</b> ikut laporan resmi sampai
+                petugas melengkapi kode barang sebenarnya.
+              </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto divide-y divide-border/60">
+              {usulanMuat && (
+                <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin inline mr-1.5" />Memuat usulan…
+                </p>
+              )}
+              {!usulanMuat && usulan.length === 0 && (
+                <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+                  Belum ada usulan dari tamu kolaborasi.
+                </p>
+              )}
+              {!usulanMuat && usulan.map((u) => {
+                const st = statusUsulan(u);
+                const izin = bisaDisetujui(u, usulan);
+                const sibuk = usulanSibuk === u.id || usulanSibuk === "semua";
+                return (
+                  <div key={u.id} className="px-3 py-2 flex items-start gap-2"
+                    data-testid={`usulan-${u.id}`}>
+                    <span className="mt-0.5 flex-shrink-0">
+                      {u.jenis === "titik"
+                        ? <MapPin className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                        : <MessageSquare className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium text-foreground leading-snug break-words">
+                        {judulUsulan(u)}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground leading-tight">
+                        {u.oleh || "Tamu"} · {String(u.created_at || "").slice(0, 10)}
+                        {" · "}
+                        <span className={`px-1.5 py-0.5 rounded-full ${WARNA_STATUS[st]}`}>
+                          {LABEL_STATUS[st]}
+                        </span>
+                      </p>
+                      {!izin.bisa && st === "terbuka" && (
+                        <p className="text-[10px] text-amber-700 dark:text-amber-400 leading-tight mt-0.5">
+                          {izin.alasan}
+                        </p>
+                      )}
+                    </div>
+                    {st === "terbuka" && (
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button type="button" onClick={() => setujuiSatu(u)}
+                          disabled={sibuk || !izin.bisa}
+                          aria-label={`Setujui ${judulUsulan(u)}`} title="Impor ke peta asli"
+                          className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-500/10 disabled:opacity-40 min-w-0 min-h-0"
+                          data-testid={`usulan-setujui-${u.id}`}>
+                          {usulanSibuk === u.id
+                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            : <ThumbsUp className="w-3.5 h-3.5" />}
+                        </button>
+                        <button type="button" onClick={() => tolakSatu(u)} disabled={sibuk}
+                          aria-label={`Tolak ${judulUsulan(u)}`} title="Tolak usulan"
+                          className="p-1.5 rounded-lg text-red-500 hover:bg-red-500/10 disabled:opacity-40 min-w-0 min-h-0"
+                          data-testid={`usulan-tolak-${u.id}`}>
+                          <ThumbsDown className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="px-3 py-2.5 border-t border-border flex items-center gap-2">
+              <p className="text-[10px] text-muted-foreground flex-1 leading-tight">
+                {kalimatYakinSemua(usulanTerbuka)}
+              </p>
+              <button type="button" onClick={setujuiSemua}
+                disabled={!usulanTerbuka.length || !!usulanSibuk}
+                className="h-8 px-3 rounded-lg bg-emerald-600 text-white text-[11px] font-bold flex items-center gap-1.5 hover:bg-emerald-700 disabled:opacity-50 flex-shrink-0"
+                data-testid="usulan-setujui-semua">
+                {usulanSibuk === "semua"
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <Check className="w-3.5 h-3.5" />}
+                Yakin, Impor Semua
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bilah moderasi terpilih */}
       {moderasi && bolehModerasi && (

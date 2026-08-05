@@ -43,6 +43,23 @@ DEFAULT_MAKS_TEKS = 1000
 MAKS_TITIK_ASET_PUBLIK = 5000   # plafon titik aset yang dikirim ke peta publik
 MAKS_KONTRIB_SHARE = 3000       # plafon kontribusi (titik+komentar) per share
 
+# ── Impor usulan kolaborasi ke peta ASLI ───────────────────────────────────
+#
+# Kontribusi tamu adalah USULAN, bukan data resmi. Pengelola satker meninjau
+# lalu menyetujui/menolak — satu per satu atau sekaligus ("yakin semua").
+#
+# Titik yang disetujui menjadi ASET nyata dengan KODE BARANG PLACEHOLDER
+# (KODE_BARANG_USULAN) + NUP otomatis. Kode itu memang bukan kodefikasi BMN
+# yang sah: ia penanda "barang ini datang dari lapangan, kodenya belum
+# ditetapkan". Kategorinya memakai kategori DUMMY, dan `report_filters
+# .tanpa_dummy_filter` mengecualikan kategori dummy dari laporan resmi —
+# jadi usulan yang baru masuk TIDAK ikut menghitung neraca sampai petugas
+# melengkapi kode barang & kategori sebenarnya. Itu disengaja.
+KODE_BARANG_USULAN = "0000000000"
+MAKS_SETUJUI_SEKALIGUS = 300    # plafon satu batch "setujui semua"
+
+STATUS_USULAN = ("terbuka", "disetujui", "ditolak")
+
 
 def _basis_url_publik() -> str:
     """URL publik aplikasi (untuk membangun link) — APP_PUBLIC_URL, lalu origin
@@ -242,6 +259,24 @@ def _verifikasi_token_share(share: dict, ctx: dict):
     if str(tok.get("jti") or "") != str(share.get("jti") or ""):
         raise HTTPException(status_code=401,
                             detail="Link ini sudah tidak berlaku (diterbitkan ulang/dibatalkan)")
+
+
+def _stempel_asal(share: dict) -> dict:
+    """Stempel satker + kegiatan pada dokumen kontribusi (lihat tambah_titik)."""
+    return {"kode_satker": str((share or {}).get("kode_satker") or ""),
+            "activity_id": str((share or {}).get("activity_id") or "")}
+
+
+def _status_usulan(k: dict) -> str:
+    """Status usulan sebuah kontribusi; kontribusi ERA-LAMA dianggap TERBUKA.
+
+    Dokumen yang dibuat sebelum alur persetujuan ada tidak punya
+    `status_usulan`. Menganggapnya 'disetujui' akan menyembunyikannya dari
+    layar peninjauan selamanya — usulan lapangan yang sudah terlanjur masuk
+    tak akan pernah bisa diimpor. Karena itu tak-ada = belum ditinjau.
+    """
+    s = str((k or {}).get("status_usulan") or "").strip()
+    return s if s in STATUS_USULAN else "terbuka"
 
 
 def _pengontribusi(ctx: dict, oleh_input: str):
@@ -734,6 +769,12 @@ async def tambah_titik(share_id: str, payload: TitikIn, request: Request,
         "oleh": oleh, "oleh_tipe": tipe, "oleh_user_id": uid,
         "ip": (request.client.host if request.client else ""),
         "created_at": now, "dihapus": False,
+        # Stempel asal (M-SCOPE): kontribusi dulu hanya menyimpan `share_id`,
+        # sehingga setiap kueri lintas-share TERPAKSA menjoin dokumen share
+        # lebih dulu — satu kueri yang lupa menjoin langsung jadi kebocoran
+        # lintas-satker. Distempel di sini supaya penyaringnya berdiri sendiri.
+        **_stempel_asal(sh),
+        "status_usulan": "terbuka",
     }
     await db.peta_kolaborasi.insert_one(dict(doc))
     return {k: v for k, v in doc.items() if k not in ("ip", "oleh_user_id")}
@@ -762,6 +803,402 @@ async def tambah_komentar(share_id: str, payload: KomentarIn, request: Request,
         "oleh": oleh, "oleh_tipe": tipe, "oleh_user_id": uid,
         "ip": (request.client.host if request.client else ""),
         "created_at": now, "dihapus": False,
+        **_stempel_asal(sh),
+        "status_usulan": "terbuka",
     }
     await db.peta_kolaborasi.insert_one(dict(doc))
     return {k: v for k, v in doc.items() if k not in ("ip", "oleh_user_id")}
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# IMPOR USULAN KOLABORASI KE PETA ASLI
+# ══════════════════════════════════════════════════════════════════════════
+#
+# Mandat pemilik: "hasil penambahan titik, dan juga komentarnya dapat
+# ditambahkan import ke dalam peta aslinya satu persatu atau yakin semua
+# import dari tamu kolaborasi massal langsung".
+#
+# Aturan main yang ditegakkan di sini:
+#
+# * MENYETUJUI = MENULIS DATA RESMI. Karena itu penjaganya `require_writer` +
+#   `pastikan_akses_dok_satker` atas dokumen SHARE — pemegang tautan tamu tak
+#   pernah bisa menyentuhnya, dan admin satker lain ditolak 403. Tamu hanya
+#   boleh MENGUSULKAN (endpoint tambah_titik/tambah_komentar di atas).
+#
+# * SEKALI SETUJU = SATU ASET. Persetujuan memakai kunci idempotensi
+#   deterministik dari id usulannya, jadi menekan "Setujui" dua kali (atau
+#   "Setujui Semua" yang diulang karena jaringan putus) TIDAK melahirkan aset
+#   kembar — `create_asset` mengembalikan aset yang sudah ada.
+#
+# * NUP DIALOKASIKAN DI SERVER, PER BATCH. Kalau klien yang menghitung, dua
+#   penyetuju serentak (atau satu batch berisi 50 titik) akan memakai NUP yang
+#   sama berulang. Penghitungnya di sini membaca NUP terbesar SEKALI lalu naik
+#   sendiri, dan `create_asset` masih menegakkan keunikan (kode, NUP,
+#   kegiatan) sebagai jaring terakhir.
+
+
+class TinjauIn(BaseModel):
+    alasan: Optional[str] = ""
+
+
+class SetujuiSemuaIn(BaseModel):
+    """Batas jenis usulan yang ikut disetujui ('' = titik & komentar)."""
+    jenis: Optional[str] = ""
+
+
+async def _pengelola_share(share_id: str, user: dict) -> dict:
+    """Muat share + pastikan pemanggil BOLEH MENGELOLA-nya (403 bila bukan)."""
+    sh = await _muat_share(share_id)
+    await pastikan_akses_dok_satker(user, sh)
+    return sh
+
+
+def _usulan_keluar(k: dict) -> dict:
+    """Bentuk usulan untuk layar peninjauan (tanpa IP & id user kontributor)."""
+    d = {x: y for x, y in (k or {}).items()
+         if x not in ("ip", "oleh_user_id", "_id")}
+    d["status_usulan"] = _status_usulan(k)
+    return d
+
+
+@peta_kolaborasi_router.get("/peta/kolaborasi/{share_id}/usulan")
+async def daftar_usulan(share_id: str, status: str = "terbuka",
+                        user: dict = Depends(require_writer)):
+    """Usulan kolaborasi untuk ditinjau pengelola satker.
+
+    `status` = terbuka (bawaan) | disetujui | ditolak | semua.
+    """
+    sh = await _pengelola_share(share_id, user)
+    semua = await db.peta_kolaborasi.find(
+        {"share_id": share_id, "dihapus": {"$ne": True}},
+        {"_id": 0, "ip": 0, "oleh_user_id": 0}).sort("created_at", 1).to_list(
+            MAKS_KONTRIB_SHARE)
+    # Penyaringan status dilakukan DI PYTHON, bukan di kueri: dokumen era-lama
+    # tak punya field `status_usulan` sama sekali, dan {"status_usulan":
+    # "terbuka"} tak akan pernah cocok dengannya — usulan lama akan hilang
+    # diam-diam dari layar peninjauan.
+    st = str(status or "terbuka").strip().lower()
+    items = [_usulan_keluar(k) for k in semua
+             if st == "semua" or _status_usulan(k) == st]
+    rekap = {"terbuka": 0, "disetujui": 0, "ditolak": 0}
+    for k in semua:
+        rekap[_status_usulan(k)] = rekap.get(_status_usulan(k), 0) + 1
+    return {
+        "items": items,
+        "jumlah": len(items),
+        "rekap": rekap,
+        "judul": sh.get("judul") or "",
+        "nama_kegiatan": sh.get("nama_kegiatan") or "",
+        "activity_id": sh.get("activity_id") or "",
+    }
+
+
+async def _kategori_usulan() -> str:
+    """Label kategori untuk aset hasil usulan — kategori DUMMY bila tersedia.
+
+    Sengaja SAMA dengan jalur "tambah aset di peta": barang yang belum
+    diverifikasi petugas tak boleh langsung ikut menghitung laporan resmi
+    (lihat `report_filters.tanpa_dummy_filter`). Bila master kategori belum
+    punya entri dummy, dipakai label eksplisit yang tetap mengandung kata
+    "Dummy" supaya penyaring laporan tetap mengenalinya.
+    """
+    kat = await db.categories.find_one(
+        {"label": {"$regex": "dummy", "$options": "i"}}, {"_id": 0, "label": 1})
+    return str((kat or {}).get("label") or "Dummy (Usulan Kolaborasi)")
+
+
+async def _nup_awal_usulan(activity_id: str) -> int:
+    """NUP terbesar yang sudah terpakai untuk KODE_BARANG_USULAN di kegiatan.
+
+    Maksimumnya dihitung DI PYTHON, bukan lewat `$max` di server. NUP tersimpan
+    sebagai STRING, jadi `$max` string akan menjawab "9" untuk himpunan
+    {1..10} — batch berikutnya lalu mulai dari 10 dan langsung bentrok dengan
+    NUP 10 yang sudah ada. Mengubahnya lewat `$convert` benar di MongoDB tapi
+    tak tersedia di mongomock, sehingga perilakunya jadi tak teruji. Yang
+    ditarik hanya satu field pendek, dan cakupannya sempit (satu kegiatan,
+    satu kode barang).
+    """
+    nups = await db.assets.find(
+        {"activity_id": activity_id, "asset_code": KODE_BARANG_USULAN},
+        {"_id": 0, "NUP": 1}).to_list(MAKS_KONTRIB_SHARE)
+    maks = 0
+    for a in nups:
+        try:
+            maks = max(maks, int(str(a.get("NUP") or "0").strip() or 0))
+        except (TypeError, ValueError):
+            continue    # NUP non-numerik (data impor) diabaikan, bukan meledak
+    return maks
+
+
+class _PermintaanIdem:
+    """Pengganti Request seadanya untuk memanggil `create_asset` dari dalam.
+
+    `create_asset` hanya membaca satu hal dari Request: header
+    Idempotency-Key. Memberinya kunci turunan id usulan membuat persetujuan
+    ULANG mengembalikan aset yang SAMA alih-alih membuat kembarannya —
+    penting karena "Setujui Semua" bisa diulang setelah jaringan putus.
+    """
+
+    def __init__(self, kunci: str):
+        self.headers = {"Idempotency-Key": kunci}
+
+
+async def _jadikan_aset(usulan: dict, share: dict, user: dict,
+                        nup: int, kategori: str) -> str:
+    """Buat aset dari satu usulan titik → id aset. Melempar HTTPException."""
+    from models import AssetCreate
+    from routes.assets import create_asset
+    ket = str(usulan.get("keterangan") or "").strip()
+    jejak = (f"Usulan peta kolaborasi oleh {usulan.get('oleh') or 'Tamu'} "
+             f"({usulan.get('created_at', '')[:10]}).")
+    payload = AssetCreate(
+        asset_code=KODE_BARANG_USULAN,
+        NUP=str(nup),
+        asset_name=str(usulan.get("nama_titik") or "Titik usulan")[:200],
+        category=kategori,
+        condition="Baik",
+        status="Aktif",
+        inventory_status="Belum Diinventarisasi",
+        koordinat_latitude=f"{float(usulan.get('lat') or 0):.7f}",
+        koordinat_longitude=f"{float(usulan.get('lng') or 0):.7f}",
+        notes=(f"{ket}\n{jejak}".strip() if ket else jejak),
+        activity_id=str(share.get("activity_id") or ""),
+    )
+    hasil = await create_asset(
+        payload, _PermintaanIdem(f"usulan-peta:{usulan.get('id')}"), _user=user)
+    return str(getattr(hasil, "id", "") or "")
+
+
+async def _salin_komentar_ke_aset(usulan: dict, share: dict, user: dict,
+                                  asset_id: str) -> str:
+    """Salin satu komentar usulan menjadi komentar pada aset peta ASLI."""
+    now = _now().isoformat()
+    doc = {
+        "id": str(uuid.uuid4()),
+        "asset_id": asset_id,
+        "activity_id": str(share.get("activity_id") or ""),
+        "kode_satker": str(share.get("kode_satker") or ""),
+        "teks": str(usulan.get("teks") or "")[:DEFAULT_MAKS_TEKS],
+        "oleh": str(usulan.get("oleh") or "Tamu"),
+        "oleh_tipe": str(usulan.get("oleh_tipe") or "tamu"),
+        "share_id": str(share.get("id") or ""),
+        "usulan_id": str(usulan.get("id") or ""),
+        "disetujui_oleh": user.get("username", "system"),
+        "created_at": now,
+        "dihapus": False,
+    }
+    # Idempoten: satu usulan komentar hanya boleh melahirkan SATU komentar aset
+    # walau tombol setujui ditekan berulang.
+    lama = await db.komentar_aset.find_one({"usulan_id": doc["usulan_id"]},
+                                           {"_id": 0, "id": 1})
+    if lama:
+        return str(lama.get("id") or "")
+    await db.komentar_aset.insert_one(dict(doc))
+    return doc["id"]
+
+
+async def _target_aset_komentar(usulan: dict) -> str:
+    """Aset tujuan sebuah komentar usulan ('' bila belum bisa ditentukan).
+
+    Komentar pada TITIK usulan menempel ke aset hasil titik itu — jadi ia baru
+    bisa disalin setelah titiknya disetujui. Tanpa aturan ini komentar pada
+    titik akan jadi yatim: menunjuk id yang tak pernah ada di peta asli.
+    """
+    if str(usulan.get("target_jenis") or "") == "aset":
+        return str(usulan.get("target_id") or "")
+    induk = await db.peta_kolaborasi.find_one(
+        {"id": str(usulan.get("target_id") or "")},
+        {"_id": 0, "aset_id": 1, "status_usulan": 1})
+    return str((induk or {}).get("aset_id") or "")
+
+
+async def _setujui_satu(usulan: dict, share: dict, user: dict,
+                        nup: int, kategori: str) -> dict:
+    """Setujui satu usulan → {id, jenis, aset_id, komentar_id} atau alasan."""
+    now = _now().isoformat()
+    jenis = str(usulan.get("jenis") or "")
+    if jenis == "titik":
+        aset_id = await _jadikan_aset(usulan, share, user, nup, kategori)
+        await db.peta_kolaborasi.update_one(
+            {"id": usulan["id"]},
+            {"$set": {"status_usulan": "disetujui", "aset_id": aset_id,
+                      "ditinjau_oleh": user.get("username", "system"),
+                      "ditinjau_pada": now, "alasan_tolak": ""}})
+        return {"id": usulan["id"], "jenis": "titik", "aset_id": aset_id}
+    aset_id = await _target_aset_komentar(usulan)
+    if not aset_id:
+        return {"id": usulan["id"], "jenis": "komentar", "dilewati": True,
+                "alasan": ("Komentar menempel pada titik usulan yang belum "
+                           "disetujui — setujui titiknya lebih dulu.")}
+    kid = await _salin_komentar_ke_aset(usulan, share, user, aset_id)
+    await db.peta_kolaborasi.update_one(
+        {"id": usulan["id"]},
+        {"$set": {"status_usulan": "disetujui", "komentar_aset_id": kid,
+                  "aset_id": aset_id,
+                  "ditinjau_oleh": user.get("username", "system"),
+                  "ditinjau_pada": now, "alasan_tolak": ""}})
+    return {"id": usulan["id"], "jenis": "komentar", "aset_id": aset_id,
+            "komentar_id": kid}
+
+
+@peta_kolaborasi_router.post("/peta/kolaborasi/{share_id}/usulan/{usulan_id}/setujui")
+@limiter.limit("60/minute")
+async def setujui_usulan(share_id: str, usulan_id: str, request: Request,
+                         user: dict = Depends(require_writer)):
+    """Setujui SATU usulan → jadi aset (titik) / komentar aset (komentar)."""
+    sh = await _pengelola_share(share_id, user)
+    u = await db.peta_kolaborasi.find_one(
+        {"id": usulan_id, "share_id": share_id, "dihapus": {"$ne": True}},
+        {"_id": 0})
+    if not u:
+        raise HTTPException(status_code=404, detail="Usulan tidak ditemukan")
+    if _status_usulan(u) == "disetujui":
+        # Bukan galat: pengelola lain mungkin sudah menyetujuinya lebih dulu.
+        return {"ok": True, "sudah": True, "id": usulan_id,
+                "aset_id": u.get("aset_id") or ""}
+    kategori = await _kategori_usulan()
+    nup = await _nup_awal_usulan(str(sh.get("activity_id") or "")) + 1
+    hasil = await _setujui_satu(u, sh, user, nup, kategori)
+    if hasil.get("dilewati"):
+        raise HTTPException(status_code=409, detail=hasil["alasan"])
+    await log_audit("setujui_usulan_peta", sh.get("activity_id", ""), usulan_id,
+                    username=user.get("username", "system"),
+                    detail=f"Usulan {hasil['jenis']} dari peta kolaborasi disetujui",
+                    kode_satker=str(sh.get("kode_satker") or ""))
+    return {"ok": True, **hasil}
+
+
+@peta_kolaborasi_router.post("/peta/kolaborasi/{share_id}/usulan/setujui-semua")
+@limiter.limit("6/minute")
+async def setujui_semua_usulan(share_id: str, payload: SetujuiSemuaIn,
+                               request: Request,
+                               user: dict = Depends(require_writer)):
+    """"Yakin semua" — setujui seluruh usulan terbuka dalam satu jalan.
+
+    TITIK diproses LEBIH DULU, baru komentar: komentar pada titik usulan baru
+    punya aset tujuan setelah titiknya jadi aset. Urutan alami (`created_at`)
+    BIASANYA sudah benar — orang tak bisa mengomentari titik yang belum ada —
+    tetapi urutan itu bersandar pada perbandingan STRING waktu, yang meleset
+    bila stempel waktunya bercampur format ('...Z' vs '+07:00') atau jam
+    perangkat penyumbangnya meleset. Bila komentar sempat mendahului titiknya,
+    komentar itu dilewati diam-diam padahal pemilik menekan "yakin semua".
+    Pengurutan eksplisit di bawah membuat hasilnya tak bergantung pada itu.
+    """
+    sh = await _pengelola_share(share_id, user)
+    semua = await db.peta_kolaborasi.find(
+        {"share_id": share_id, "dihapus": {"$ne": True}},
+        {"_id": 0}).sort("created_at", 1).to_list(MAKS_KONTRIB_SHARE)
+    terbuka = [k for k in semua if _status_usulan(k) == "terbuka"]
+    jenis_minta = str(payload.jenis or "").strip().lower()
+    if jenis_minta in ("titik", "komentar"):
+        terbuka = [k for k in terbuka if str(k.get("jenis") or "") == jenis_minta]
+    if len(terbuka) > MAKS_SETUJUI_SEKALIGUS:
+        raise HTTPException(
+            status_code=413,
+            detail=(f"Terlalu banyak usulan sekaligus ({len(terbuka)}). "
+                    f"Setujui bertahap maksimal {MAKS_SETUJUI_SEKALIGUS} "
+                    "per sekali jalan."))
+    kategori = await _kategori_usulan()
+    activity_id = str(sh.get("activity_id") or "")
+    # Satu pembacaan NUP untuk SELURUH batch, lalu naik sendiri. Membaca ulang
+    # per titik akan mengembalikan angka yang sama berkali-kali (aset yang baru
+    # dibuat baru terlihat setelah insert-nya selesai) → NUP kembar.
+    nup = await _nup_awal_usulan(activity_id)
+    hasil, gagal, dilewati = [], [], []
+    # Catatan jujur soal keunikan NUP: penghitung di atas menghemat kueri, TAPI
+    # ia bukan yang menjamin tak ada NUP kembar. Dua batch yang berjalan
+    # BERSAMAAN sama-sama membaca angka awal yang sama, dan penghitung lokal
+    # tak bisa melihat batch tetangga. Yang benar-benar menjaga adalah
+    # pemeriksaan keunikan (asset_code, NUP, activity_id) di `create_asset` —
+    # yang kalah ditolak 400 dan muncul di daftar `gagal`, bukan menimpa data.
+    for u in ([k for k in terbuka if str(k.get("jenis")) == "titik"]
+              + [k for k in terbuka if str(k.get("jenis")) != "titik"]):
+        try:
+            if str(u.get("jenis")) == "titik":
+                nup += 1
+            r = await _setujui_satu(u, sh, user, nup, kategori)
+            if r.get("dilewati"):
+                dilewati.append(r)
+                if str(u.get("jenis")) == "titik":
+                    nup -= 1
+            else:
+                hasil.append(r)
+        except HTTPException as e:
+            gagal.append({"id": u.get("id"), "alasan": str(e.detail)})
+            if str(u.get("jenis")) == "titik":
+                nup -= 1
+        except Exception as e:  # noqa: BLE001 — satu usulan rusak tak boleh
+            gagal.append({"id": u.get("id"), "alasan": str(e)})  # menghentikan
+            if str(u.get("jenis")) == "titik":                   # sisa batch
+                nup -= 1
+    await log_audit("setujui_semua_usulan_peta", activity_id, share_id,
+                    username=user.get("username", "system"),
+                    detail=(f"Impor massal usulan peta: {len(hasil)} disetujui, "
+                            f"{len(dilewati)} dilewati, {len(gagal)} gagal"),
+                    kode_satker=str(sh.get("kode_satker") or ""))
+    return {"ok": True, "disetujui": len(hasil), "hasil": hasil,
+            "dilewati": dilewati, "gagal": gagal}
+
+
+@peta_kolaborasi_router.post("/peta/kolaborasi/{share_id}/usulan/{usulan_id}/tolak")
+@limiter.limit("60/minute")
+async def tolak_usulan(share_id: str, usulan_id: str, payload: TinjauIn,
+                       request: Request,
+                       user: dict = Depends(require_writer)):
+    """Tolak satu usulan — usulannya TETAP tersimpan (jejak), tidak dihapus."""
+    sh = await _pengelola_share(share_id, user)
+    res = await db.peta_kolaborasi.update_one(
+        {"id": usulan_id, "share_id": share_id, "dihapus": {"$ne": True},
+         "status_usulan": {"$ne": "disetujui"}},
+        {"$set": {"status_usulan": "ditolak",
+                  "alasan_tolak": str(payload.alasan or "").strip()[:DEFAULT_MAKS_TEKS],
+                  "ditinjau_oleh": user.get("username", "system"),
+                  "ditinjau_pada": _now().isoformat()}})
+    if res.matched_count == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="Usulan tidak ditemukan / sudah disetujui")
+    await log_audit("tolak_usulan_peta", sh.get("activity_id", ""), usulan_id,
+                    username=user.get("username", "system"),
+                    detail="Usulan peta kolaborasi ditolak",
+                    kode_satker=str(sh.get("kode_satker") or ""))
+    return {"ok": True, "id": usulan_id}
+
+
+# ── Komentar pada peta ASLI (hasil impor) ─────────────────────────────────
+#
+# Mandat pemilik: "dengan icon komentar di marker yang dikomentari (berikan
+# fitur hapus perkomentar di peta asli nantinya)".
+
+@peta_kolaborasi_router.get("/aset/komentar")
+async def daftar_komentar_aset(activity_id: str = Query(...),
+                               _user: dict = Depends(require_user)):
+    """Komentar hasil impor untuk peta ASLI satu kegiatan, dikelompokkan per aset."""
+    from shared_utils import pastikan_akses_kegiatan_id
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+    q = scope_query_field_satker(_user, {"activity_id": activity_id,
+                                         "dihapus": {"$ne": True}})
+    items = await db.komentar_aset.find(q, _PROJ).sort("created_at", 1).to_list(5000)
+    per_aset = {}
+    for k in items:
+        per_aset.setdefault(str(k.get("asset_id") or ""), []).append(k)
+    return {"items": items, "per_aset": per_aset, "jumlah": len(items)}
+
+
+@peta_kolaborasi_router.delete("/aset/komentar/{komentar_id}")
+async def hapus_komentar_aset(komentar_id: str,
+                              user: dict = Depends(require_writer)):
+    """Hapus SATU komentar di peta asli (soft delete — jejaknya tetap ada)."""
+    k = await db.komentar_aset.find_one({"id": komentar_id}, _PROJ)
+    if not k:
+        raise HTTPException(status_code=404, detail="Komentar tidak ditemukan")
+    await pastikan_akses_dok_satker(user, k)   # isolasi: satker pemilik saja
+    await db.komentar_aset.update_one(
+        {"id": komentar_id},
+        {"$set": {"dihapus": True, "dihapus_oleh": user.get("username", "system"),
+                  "dihapus_pada": _now().isoformat()}})
+    await log_audit("hapus_komentar_aset", str(k.get("activity_id") or ""),
+                    komentar_id, username=user.get("username", "system"),
+                    detail="Komentar aset (hasil usulan kolaborasi) dihapus",
+                    kode_satker=str(k.get("kode_satker") or ""))
+    return {"ok": True}
