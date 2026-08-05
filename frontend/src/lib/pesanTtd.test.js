@@ -65,6 +65,83 @@ describe("pesanTtd", () => {
 });
 
 
+// ── Bentuk yang selamat di layar penerima ──────────────────────────────────
+//
+// Keluhan pemilik disertai tangkapan pesan yang sudah diterima: labelnya tak
+// sejajar, nilainya terlempar ke baris sendiri, dan baris barang ke-2/ke-3
+// menggantung tanpa keterangan.
+//
+// Akarnya: bentuk lama meratakan label dengan spasi ganjal (`Nomor    : `) dan
+// menyambung daftar dengan indentasi 11 spasi. Keduanya mengandaikan monospace
+// + spasi yang dipertahankan — WhatsApp tak memenuhi keduanya.
+describe("bentuk pesan tahan di WhatsApp maupun email", () => {
+  const semuaBaris = (t) => t.split("\n");
+  const PESAN = pesanTtd("Budi", "BAST", "https://x/s/abc", RINGKAS);
+
+  test("tak ada baris yang diawali spasi", () => {
+    // Indentasi = cara lama menyambung daftar. WhatsApp menciutkannya, dan
+    // barisnya kehilangan induk.
+    expect(semuaBaris(PESAN).filter((b) => /^\s+/.test(b))).toEqual([]);
+  });
+
+  test("tak ada ganjalan spasi ganda untuk meratakan kolom", () => {
+    // `Nomor    : ` hanya lurus di font monospace; di WhatsApp tak pernah.
+    expect(semuaBaris(PESAN).filter((b) => /\S {2,}/.test(b))).toEqual([]);
+  });
+
+  test("tiap butir daftar diawali peluru, bukan spasi", () => {
+    const butir = semuaBaris(PESAN).filter((b) => b.includes(" — ")
+      || b.includes("(Pihak "));
+    expect(butir.length).toBeGreaterThanOrEqual(4);   // 2 barang + 2 pihak
+    butir.forEach((b) => expect(b.startsWith("• ")).toBe(true));
+  });
+
+  test("tanpa penanda tebal/miring yang bisa dimakan atau tercetak mentah", () => {
+    // Pesan yang SAMA dikirim lewat mailto: yang tak mengenal penanda —
+    // "*Barang*" akan terbaca apa adanya di sana.
+    expect(PESAN).not.toMatch(/[*_~]/);
+  });
+
+  test("daftar punya judulnya sendiri, dipisah baris kosong", () => {
+    expect(PESAN).toContain("\n\nBarang (7 unit):\n");
+    expect(PESAN).toContain("\n\nPihak:\n");
+  });
+
+  test("jumlah total tampil di judul daftar barang", () => {
+    // Sebelumnya total hanya tersirat dari "(+N lainnya)" — penerima harus
+    // menjumlah sendiri untuk tahu ia meneken berapa unit.
+    expect(barisKeterangan("BAST", RINGKAS)).toContain("Barang (7 unit):");
+  });
+
+  test("kelompok kosong tak meninggalkan baris kosong menggantung", () => {
+    // Judul dikosongkan agar perihal tak terisi darinya — yang diuji di sini
+    // pemisah antarkelompok, bukan pengisian perihal.
+    const b = barisKeterangan("", { nomor: "X" });
+    expect(b).toEqual(["Nomor: X"]);
+    expect(b.join("\n")).not.toMatch(/\n\s*\n/);
+  });
+
+  test("tanpa identitas, daftar tak diawali baris kosong", () => {
+    const b = barisKeterangan("", { barang: [{ kode: "K1", nama: "Meja" }],
+                                    jumlah_barang: 1 });
+    expect(b[0]).toBe("Barang (1 unit):");
+  });
+
+  test("sapaan tak buntung saat nama kosong", () => {
+    expect(pesanTtd("", "BAST", "https://x/s/abc", RINGKAS))
+      .toContain("Yth. Bapak/Ibu,");
+    expect(pesanTtd(null, "BAST", "https://x/s/abc", null))
+      .not.toContain("Yth. ,");
+  });
+
+  test("tautan tetap berdiri sendiri di barisnya — tak tercampur teks", () => {
+    // Baris tautan yang bercampur kata membuat sebagian peramban WA memotong
+    // tautannya saat ditekan.
+    expect(semuaBaris(PESAN)).toContain("https://x/s/abc");
+  });
+});
+
+
 // ── hasilTtd: penyalinan respons "kirim-ttd" ───────────────────────────────
 //
 // Keluhan pemilik: "share link lewat WhatsApp di riwayat BAST … tidak sama
