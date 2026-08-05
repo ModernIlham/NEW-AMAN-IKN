@@ -67,6 +67,50 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#763] "Atur QR & Unduh ber-TTD" 401 — pratinjau halaman tanpa token — 2026-08-05
+
+Laporan lapangan: membuka **Atur QR & Unduh ber-TTD** di Tanda Tangan Elektronik
+memunculkan `Failed to load resource: the server responded with a status of 401
+(Unauthorized)` dan pratinjau dokumennya tak muncul.
+
+**Akarnya.** Pratinjau halaman dimuat oleh `<img src=...>` biasa — tag itu TAK
+BISA membawa header `Authorization`. Backend sudah menyiapkan jalannya
+(`require_user_or_query_token` menerima bearer **atau** `?token=`), dan repo ini
+sudah punya helper `authMediaUrl()` yang menempelkannya. Tapi layar operator
+membangun URL-nya sendiri:
+
+```js
+`${API}/ttd/permintaan/${aturQr.id}/dokumen/halaman/${hal}?c=${c}`
+```
+
+Tanpa token, tanpa `sa`. Server menjawab **401 "Autentikasi diperlukan"**, dan
+dialognya mati sebelum sempat dipakai. Unduhannya sendiri tak pernah rusak —
+ia lewat axios (yang membawa header); yang gagal adalah gambar pratinjau di
+langkah sebelumnya.
+
+Sekalian: pratinjau gambar TTD per penanda tangan di halaman yang sama menyalin
+logika token secara manual dan **melewatkan `sa`**, sehingga super-admin yang
+sedang act-as satker lain berpeluang ditolak. Keduanya kini memakai
+`authMediaUrl()` — satu pintu, bukan tiga salinan.
+
+**Penjaga.** `lib/mediaUrl.test.js` (baru) menguji `authMediaUrl` sendiri —
+termasuk hal yang mudah salah: query lama dipertahankan (`&`, bukan `?`),
+`media_token` diutamakan atas token sesi, `sa` ikut, dan nilainya di-encode.
+Ditambah satu penjaga statis: setiap `bangunUrlHalaman` di repo wajib memakai
+`authMediaUrl(` atau menyertakan `token=` — prop itulah yang hasilnya masuk
+langsung ke `<img src>`. Jumlah pemanggilnya ikut dijaga supaya penjaganya tak
+diam-diam jadi hampa bila propnya berganti nama. Uji mutasi: bug aslinya
+dikembalikan → penjaga gagal menyebut berkas & barisnya.
+
+**Batas jujur:** penjaga ini sintaktis. Ia menangkap bentuk yang persis ini,
+bukan seluruh kelas "URL media lupa token" — untuk itu perlu uji render
+komponen, yang repo ini belum punya.
+
+- Ubah: `frontend/src/pages/TtdPermintaanPage.jsx` (2 pemanggilan)
+- Baru: `frontend/src/lib/mediaUrl.test.js` (9 uji)
+
+---
+
 ## [#762] Toolbar Peta Kolaborasi muat di HP — usulan, seleksi & ukur jadi satu laci — 2026-08-05
 
 Mandat pemilik: "pada tampilan HP ketika tidak mencukupi di ukuran layar HP
