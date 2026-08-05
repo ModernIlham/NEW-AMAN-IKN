@@ -19,15 +19,24 @@
 const MAKS_BARIS_BARANG = 3;
 
 /**
- * Peluru daftar — KARAKTER sungguhan, bukan sintaks penanda.
+ * DUA KANAL, DUA GAYA — dan itu memang disengaja.
  *
- * Jangan diganti "* " atau "- ": WhatsApp memperlakukan awalan itu sebagai
- * perintah daftar (dan "*teks*" sebagai tebal), sehingga tandanya bisa hilang,
- * berubah, atau justru tercetak mentah. Pesan yang sama juga dikirim lewat
- * `mailto:` yang tak mengenal penanda sama sekali — di sana asterisknya akan
- * terbaca apa adanya. Satu bentuk untuk dua kanal: karakter biasa.
+ * WhatsApp mengenal penanda: `*teks*` jadi tebal, dan baris berawalan `* `
+ * jadi butir daftar ber-indentasi rapi. Pemilik meminta keduanya dipakai.
+ *
+ * Email (`mailto:`) TIDAK mengenal penanda apa pun — asterisk di sana tercetak
+ * apa adanya dan justru mengotori pesan. Karena penyusun pesannya satu, gaya
+ * penandanya dijadikan pilihan: `bagikanWa` menyalakannya, `bagikanEmail`
+ * tidak.
+ *
+ * JEBAKAN YANG SUDAH MENGGIGIT: WhatsApp hanya menebalkan bila bintang penutup
+ * MENEMPEL pada karakter bukan-spasi. Bentuk lama `*Barang   : *` — dengan
+ * spasi ganjal sebelum bintang penutup — karena itu tak pernah tebal; yang
+ * muncul di layar penerima justru bintangnya sendiri. Semua label di bawah
+ * dirapatkan: `*Barang (17 unit):*`.
  */
-const PELURU = "• ";
+const GAYA_POLOS = { tebal: (t) => t, peluru: "• " };
+const GAYA_WA = { tebal: (t) => `*${t}*`, peluru: "* " };
 
 /**
  * Bentuk state "hasil kirim TTD" dari respons server — SATU pintu untuk semua
@@ -74,14 +83,15 @@ function barisBarang(b) {
  * dan tiap butir diawali peluru sungguhan. Bentuk yang sama terbaca benar di
  * WhatsApp maupun email.
  */
-export function barisKeterangan(judul, ringkas) {
+export function barisKeterangan(judul, ringkas, opsi = {}) {
   const r = ringkas || {};
+  const { tebal, peluru } = opsi.penandaWa ? GAYA_WA : GAYA_POLOS;
 
   const identitas = [];
-  if (r.nomor) identitas.push(`Nomor: ${r.nomor}`);
+  if (r.nomor) identitas.push(`${tebal("Nomor:")} ${r.nomor}`);
   const perihal = r.perihal || judul;
-  if (perihal) identitas.push(`Perihal: ${perihal}`);
-  if (r.tanggal) identitas.push(`Tanggal: ${r.tanggal}`);
+  if (perihal) identitas.push(`${tebal("Perihal:")} ${perihal}`);
+  if (r.tanggal) identitas.push(`${tebal("Tanggal:")} ${r.tanggal}`);
 
   const barang = Array.isArray(r.barang) ? r.barang : [];
   const total = Number(r.jumlah_barang || barang.length) || 0;
@@ -90,17 +100,17 @@ export function barisKeterangan(judul, ringkas) {
   if (tampil.length) {
     // Jumlah totalnya di JUDUL daftar, bukan hanya tersirat dari "(+N lainnya)"
     // — penerima langsung tahu ia meneken berapa unit.
-    daftarBarang.push(total ? `Barang (${total} unit):` : "Barang:");
-    tampil.forEach((t) => daftarBarang.push(`${PELURU}${t}`));
+    daftarBarang.push(tebal(total ? `Barang (${total} unit):` : "Barang:"));
+    tampil.forEach((t) => daftarBarang.push(`${peluru}${t}`));
     const sisa = total - tampil.length;
-    if (sisa > 0) daftarBarang.push(`${PELURU}(+${sisa} barang lainnya)`);
+    if (sisa > 0) daftarBarang.push(`${peluru}(+${sisa} barang lainnya)`);
   } else if (total) {
-    daftarBarang.push(`Barang: ${total} unit`);
+    daftarBarang.push(`${tebal("Barang:")} ${total} unit`);
   }
 
   const pihak = Array.isArray(r.pihak) ? r.pihak.filter(Boolean) : [];
   const daftarPihak = pihak.length
-    ? ["Pihak:", ...pihak.map((p) => `${PELURU}${p}`)]
+    ? [tebal("Pihak:"), ...pihak.map((p) => `${peluru}${p}`)]
     : [];
 
   // Kelompok yang ADA dipisah satu baris kosong; kelompok kosong tak
@@ -110,9 +120,15 @@ export function barisKeterangan(judul, ringkas) {
     .reduce((semua, g) => (semua.length ? [...semua, "", ...g] : [...g]), []);
 }
 
-/** Pesan lengkap untuk WA/email. */
-export function pesanTtd(nama, judul, link, ringkas) {
-  const ket = barisKeterangan(judul, ringkas);
+/**
+ * Pesan lengkap untuk WA/email.
+ *
+ * `opsi.penandaWa` menyalakan penanda WhatsApp (label tebal + butir `* `).
+ * Bawaannya MATI supaya jalur email tetap polos — pemanggil yang mengirim ke
+ * WhatsApp harus menyatakannya secara sadar.
+ */
+export function pesanTtd(nama, judul, link, ringkas, opsi = {}) {
+  const ket = barisKeterangan(judul, ringkas, opsi);
   const blokKet = ket.length ? `\n${ket.join("\n")}\n` : "";
   // Nama kosong (data lama / penanda tangan tanpa nama) tak boleh menghasilkan
   // sapaan buntung "Yth. ,".
@@ -134,9 +150,10 @@ export function subjekTtd(judul, ringkas) {
 }
 
 export function bagikanWa(nama, judul, link, ringkas) {
-  window.open(
-    `https://wa.me/?text=${encodeURIComponent(pesanTtd(nama, judul, link, ringkas))}`,
-    "_blank", "noopener");
+  // Penanda DINYALAKAN di sini saja — hanya WhatsApp yang membacanya.
+  const teks = pesanTtd(nama, judul, link, ringkas, { penandaWa: true });
+  window.open(`https://wa.me/?text=${encodeURIComponent(teks)}`,
+              "_blank", "noopener");
 }
 
 export function bagikanEmail(nama, judul, link, ringkas) {
