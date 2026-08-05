@@ -67,6 +67,66 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#766] Dialog tautan TTD LPB: tombol WhatsApp & email yang selama ini hanya dijanjikan — 2026-08-05
+
+Dialog "Tautan tanda tangan — LPB …" di Persediaan dan Pengadaan berbunyi
+**"Bagikan lewat WhatsApp/email bila pengiriman otomatis tak aktif"**, tetapi
+satu-satunya tombol di sana adalah **Salin**. Operator yang membacanya mencari
+tombol yang tak pernah ada.
+
+Tak ada galat yang bisa menandainya — tak ada yang rusak; yang keliru justru
+JANJINYA. Karena tautan e-sign hanya sampai ke penanda tangan lewat jalan ini
+(email otomatis butuh Resend terkonfigurasi), pintu yang setengah jadi itu
+berarti permintaan TTD berhenti di layar operator.
+
+### Yang diperbaiki
+
+- **Tombol WhatsApp & Email** di tiap baris penanda tangan, memakai penyusun
+  pesan bersama `lib/pesanTtd` — jadi bentuk pesannya sama persis dengan
+  halaman Tanda Tangan Elektronik dan Riwayat BAST.
+- **Tautan pindah ke barisnya sendiri**, tombol-tombolnya di baris bawah yang
+  boleh melipat. Aturan tap-target 44px membuat tombol ikut tinggi di HP;
+  berdesakan dengan kotak tautan akan memotong salah satunya.
+
+### Akar yang lebih dalam: ringkasan LPB memang tak pernah dibuat
+
+Menambah tombol saja akan menghasilkan pesan tipis "judul + tautan" — persis
+keluhan yang sudah diperbaiki untuk BAST di [#761]. Sebabnya dua lapis:
+
+1. `_ringkas_dokumen` di `routes/ttd.py` hanya melayani `doc_type == "bast"`
+   dan mengembalikan `{}` untuk yang lain. Permintaan TTD LPB (`doc_type="lpb"`)
+   selalu terbit dengan `ringkas` KOSONG sejak fitur itu ada.
+2. Kedua halaman menyusun sendiri `{nomor, links}` dari respons server,
+   sehingga `ringkas` ikut terbuang — kesalahan yang sama dengan Riwayat BAST
+   dulu, dan sama tak terlihatnya.
+
+Keduanya ditutup: `ringkas_lpb()` (fungsi murni, bisa diuji tanpa Mongo)
+menyusun nomor, perihal, tanggal, barang (kode/NUP/nama), serta para pihak —
+untuk LPB pihaknya **Penyedia** dan **PPK**, bukan pihak pertama/kedua seperti
+BAST. Sisi frontend memakai `hasilTtd()` yang sudah ada.
+
+Satu jebakan angka ikut dijaga: barang ditampilkan maksimal 3 baris, tetapi
+`jumlah_barang` diambil dari bidang tersimpan — memakai `len(items)` yang sudah
+terpotong akan membuat dokumen resmi menyebut barang lebih sedikit daripada
+yang benar-benar diterima.
+
+### Uji
+
+- `backend/tests/unit/test_ringkas_lpb.py` — 22 uji: isi ringkasan, kejujuran
+  jumlah, ketahanan data setengah jadi, kecocokan nama kunci dengan penyusun
+  pesan, plus penyambungan nyata `_ringkas_dokumen("lpb", …)` lewat
+  `mongomock_motor` (fungsi murni yang benar tapi tak pernah dipanggil = tetap
+  kosong).
+- `frontend/src/lib/bagikanTautan.test.js` — penjaga statis: berkas yang
+  MENJANJIKAN berbagi WhatsApp/email wajib memanggil `bagikanWa`/`bagikanEmail`
+  dan memakai `hasilTtd`. Penjaganya sendiri diuji tidak kosong.
+
+Uji kebal-mutasi: ringkasan dikosongkan → 17 uji gagal; `jumlah_barang` diganti
+`len(items)` → 1 gagal; cabang `lpb` dicabut dari dispatcher → 2 gagal; handler
+WhatsApp dilepas dari Persediaan → penjaga frontend gagal.
+
+---
+
 ## [#765] TTD: tombol progres bagi penanda tangan, QR wajib ditempatkan, badge jadi saringan, jejak dipusatkan, giliran ikut `urutan` — 2026-08-05
 
 Lima mandat pemilik pada modul Tanda Tangan Elektronik.

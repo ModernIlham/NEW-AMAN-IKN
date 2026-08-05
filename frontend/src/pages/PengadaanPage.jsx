@@ -19,6 +19,7 @@ import { authMediaUrl } from "@/lib/mediaUrl";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 import PerkiraanNomor from "@/components/persuratan/PerkiraanNomor";
+import { bagikanWa, bagikanEmail, hasilTtd } from "@/lib/pesanTtd";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -321,7 +322,11 @@ export default function PengadaanPage({ user, onBack }) {
       // Tautannya DITAMPILKAN, bukan hanya jumlahnya: tanpa email
       // terkonfigurasi, tautan yang tak pernah muncul di layar berarti
       // permintaan TTD tak sampai ke siapa pun.
-      setTautanTtd({ nomor: hasilCatat.nomor, links: tautan });
+      // `hasilTtd` dipakai supaya `ringkas` (nomor, tanggal, barang, pihak)
+      // IKUT tersalin — menyusun {nomor, links} dengan tangan membuangnya, dan
+      // pesan WA-nya menyusut jadi perihal + tautan saja tanpa galat apa pun.
+      setTautanTtd({ nomor: hasilCatat.nomor,
+                     ...hasilTtd(r.data, `LPB ${hasilCatat.nomor}`) });
       setHasilCatat(null);
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal mengirim permintaan TTD",
@@ -1128,17 +1133,30 @@ export default function PengadaanPage({ user, onBack }) {
                     </span>
                   )}
                 </p>
-                <div className="flex items-center gap-2 mt-1">
-                  <code className="flex-1 min-w-0 truncate text-[10px] bg-muted rounded px-2 py-1">
-                    {t.link}
-                  </code>
-                  <Button size="sm" variant="outline" className="h-7 text-[11px] flex-shrink-0"
+                <code className="block w-full min-w-0 truncate text-[10px] bg-muted rounded px-2 py-1 mt-1">
+                  {t.link}
+                </code>
+                {/* Tautannya di baris sendiri supaya ketiga tombol muat penuh di
+                    layar HP — aturan tap-target 44px membuat tombol ikut tinggi,
+                    dan berdesakan dengan kotak tautan akan memotong salah satunya. */}
+                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                  <Button size="sm" variant="outline" className="h-7 text-[11px]"
                     onClick={() => {
                       navigator.clipboard?.writeText(t.link)
                         .then(() => toast.success("Tautan disalin"))
-                        .catch(() => toast.error("Gagal menyalin — salin manual dari kotak di samping"));
+                        .catch(() => toast.error("Gagal menyalin — salin manual dari kotak di atas"));
                     }}>
                     Salin
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-7 text-[11px] text-emerald-600"
+                    data-testid={`lpb-ttd-wa-${i}`}
+                    onClick={() => bagikanWa(t.nama, tautanTtd?.judul, t.link, tautanTtd?.ringkas)}>
+                    WhatsApp
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-7 text-[11px]"
+                    data-testid={`lpb-ttd-email-${i}`}
+                    onClick={() => bagikanEmail(t.nama, tautanTtd?.judul, t.link, tautanTtd?.ringkas)}>
+                    Email
                   </Button>
                 </div>
               </li>
