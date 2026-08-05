@@ -67,6 +67,57 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#761] Peta Aset mati saat dibuka — dependency array merujuk const di bawahnya — 2026-08-05
+
+Laporan lapangan: membuka Peta Aset langsung memunculkan layar galat.
+
+```
+[BatasGalat] ReferenceError: Cannot access 'Xt' before initialization
+    at AssetMapFullView.jsx:436
+```
+
+**Akarnya.** Efek lapisan bayangan "usulan geser" (dari PR #752) mencantumkan
+`refreshRowVersion` di dependency array-nya, padahal
+`const refreshRowVersion = useCallback(...)` baru dideklarasikan ~500 baris di
+bawah. Isi dependency array **dievaluasi saat badan komponen berjalan**, bukan
+nanti saat efeknya dijalankan — jadi ini kena *Temporal Dead Zone*: komponennya
+melempar sebelum sempat me-render satu piksel pun. Bukan salah nilai, tapi
+halaman mati total.
+
+`refreshRowVersion` sendiri memang tak pernah pantas ada di sana: ia
+`useCallback` ber-deps kosong, identitasnya tak pernah berubah, jadi
+mencantumkannya tak memicu apa pun. Penggantinya `geserVersi` — state pemicu
+yang dideklarasikan di ATAS efeknya dan dinaikkan oleh tombol "Muat ulang peta"
+(baik yang di toolbar maupun di menu). Bayangan usulan sengaja TIDAK ikut filter
+daftar aset: usulan geser bukan hasil pencarian, menyegarkannya tiap ketikan
+filter hanya menambah permintaan tanpa mengubah apa pun yang tampil.
+
+**Kenapa tiga pagar terlewat sekaligus.** `yarn build` sukses — ini galat
+runtime, bukan sintaks. `eslint` diam — konfigurasi CRA menyetel
+`no-use-before-define` dengan `variables: false`. Dan repo ini belum punya uji
+render komponen (47 suite waktu itu semuanya logika murni). Yang menemukannya
+akhirnya pemakai.
+
+**Penjaga baru** `frontend/src/lib/depArrayTdz.test.js` menyapu SELURUH `src`
+(±55 ms) dan menolak setiap dependency array yang merujuk const yang
+dideklarasikan di bawahnya, dalam lingkup yang sama. Pendeteksinya sadar lingkup
+lewat dua penyaring — blok tingkat atas yang sama, dan indentasi deklarasi tak
+lebih menjorok daripada hook-nya — supaya nama kembar milik komponen lain di
+file yang sama (mis. `kataKata` di `HalamanGalat.jsx`, `id`/`token` di
+`TtdPublikPage.jsx`) tidak dilaporkan palsu. Kedua penyaring itu ikut diuji
+sendiri, dan uji mutasi memastikan penjaga ini benar-benar menggigit: bug
+aslinya dikembalikan → uji gagal menyebut berkas dan barisnya.
+
+Catatan untuk pemilik: mengaktifkan `no-use-before-define` (`variables: true`)
+di seluruh repo akan menyalakan 30 temuan LAMA yang semuanya **tidak berbahaya**
+(rujukan di dalam badan callback, yang baru jalan setelah komponen selesai
+dievaluasi). Membersihkannya perlu PR tersendiri — belum dikerjakan di sini.
+
+- Ubah: `frontend/src/components/assets/AssetMapFullView.jsx`
+- Baru: `frontend/src/lib/depArrayTdz.test.js` (8 uji)
+
+---
+
 ## [#760] Pesan WA dari Riwayat BAST kini sama persis dengan TTD Elektronik — 2026-08-05
 
 Keluhan pemilik: "pada informasi share link lewat WhatsApp di riwayat BAST

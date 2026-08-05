@@ -291,6 +291,11 @@ const AssetMapFullView = memo(function AssetMapFullView({
   const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadedOnce, setLoadedOnce] = useState(false);
+  // Pemicu muat ulang bayangan usulan geser. HARUS dideklarasikan di ATAS efek
+  // yang memakainya: isi dependency array dibaca saat badan komponen berjalan,
+  // bukan nanti saat efeknya dijalankan — merujuk const yang dideklarasikan di
+  // bawah membuat komponen mati sebelum render (TDZ), bukan sekadar salah nilai.
+  const [geserVersi, setGeserVersi] = useState(0);
   const [groupKey, setGroupKey] = useState("__semua__"); // filter Barang Serupa
   const [clusterOn, setClusterOn] = useState(true); // kelompokkan pin berdekatan
   const clusterOnRef = useRef(true);
@@ -433,7 +438,10 @@ const AssetMapFullView = memo(function AssetMapFullView({
       });
     })();
     return () => { batal = true; };
-  }, [activityId, refreshRowVersion]);
+    // Sengaja TIDAK ikut filter daftar aset: usulan geser bukan hasil
+    // pencarian, dan menyegarkannya tiap ketikan filter hanya menambah
+    // permintaan tanpa mengubah apa pun yang tampil.
+  }, [activityId, geserVersi]);
 
   useEffect(() => {
     onHapusKomentarRef.current = !canEdit ? null : async (komentarId, assetId) => {
@@ -1494,7 +1502,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
             <DropdownMenuItem className="min-h-[42px]" onClick={() => downloadGeo("kmz")} data-testid="map-menu-kmz">KMZ (terkompresi)</DropdownMenuItem>
             <DropdownMenuItem className="min-h-[42px]" onClick={() => downloadGeo("shp")} data-testid="map-menu-shp">SHP (Shapefile ZIP)</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="min-h-[42px]" onClick={() => { didFitRef.current = false; load(); }} disabled={loading} data-testid="map-menu-refresh">
+            <DropdownMenuItem className="min-h-[42px]" onClick={() => { didFitRef.current = false; load(); setGeserVersi((v) => v + 1); }} disabled={loading} data-testid="map-menu-refresh">
               <RefreshCw className="w-4 h-4 mr-2" />Muat Ulang Peta
             </DropdownMenuItem>
             <DropdownMenuSeparator />
@@ -1716,7 +1724,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
         </button>
         <button
           type="button"
-          onClick={() => { didFitRef.current = false; load(); if (denahOn) denah.muatUlang(); }}
+          onClick={() => { didFitRef.current = false; load(); setGeserVersi((v) => v + 1); if (denahOn) denah.muatUlang(); }}
           disabled={loading}
           className={`h-9 rounded-lg border border-border text-xs font-medium text-foreground/80 hidden sm:flex items-center gap-1 hover:bg-muted disabled:opacity-50 flex-shrink-0 ${
             petaTampil("muatUlang") ? "w-auto px-2.5 justify-start" : "w-9 px-0 justify-center"}`}
