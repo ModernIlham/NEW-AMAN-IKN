@@ -1067,7 +1067,15 @@ export default function PetaKolaborasiPage() {
             (mandat pemilik: "jelaskan dengan pilihan icon saja"). */}
         {bolehGeserAsli && (
           <button
-            type="button" onClick={() => setGembokBuka((v) => !v)}
+            type="button"
+            onClick={() => setGembokBuka((v) => {
+              // Menutup gembok = "saya hanya ingin melihat". Karena itu ia
+              // ikut mematikan mode tambah-titik yang mungkin dinyalakan dari
+              // tombol pilihan di sebelahnya — kalau tidak, ketukan di peta
+              // masih menaruh titik walau gemboknya sudah dikunci.
+              if (v) { setModeGeser(MODE_GESER.ASLI); setModeTambah(false); buangPreview(); }
+              return !v;
+            })}
             aria-pressed={gembokBuka}
             aria-label={gembokBuka ? "Kunci geser marker" : "Buka kunci geser marker"}
             title={gembokBuka
@@ -1085,7 +1093,16 @@ export default function PetaKolaborasiPage() {
           <div className="flex items-center rounded-lg border border-teal-500 overflow-hidden flex-shrink-0"
             role="radiogroup" aria-label="Pilih yang digeser">
             <button
-              type="button" onClick={() => setModeGeser(MODE_GESER.ASLI)}
+              type="button"
+              onClick={() => {
+                // Memilih "titik asli" MEMATIKAN mode tambah-titik: dua mode
+                // yang sama-sama memakai gerakan di peta tak boleh hidup
+                // berbarengan, dan tombolnya harus benar-benar mengubah
+                // keadaan — bukan sekadar menyala.
+                setModeGeser(MODE_GESER.ASLI);
+                setModeTambah(false);
+                buangPreview();
+              }}
               role="radio" aria-checked={modeGeser === MODE_GESER.ASLI}
               aria-label="Geser titik asli (usul koreksi posisi aset)"
               title={KETERANGAN_MODE[MODE_GESER.ASLI]}
@@ -1096,7 +1113,16 @@ export default function PetaKolaborasiPage() {
               <MapPin className="w-4 h-4" />
             </button>
             <button
-              type="button" onClick={() => setModeGeser(MODE_GESER.USULAN)}
+              type="button"
+              onClick={() => {
+                // "Titik usulan" benar-benar MENYALAKAN mode tambah titik —
+                // tanpa ini tombolnya cuma mematikan geser dan tak melakukan
+                // apa pun yang dijanjikan namanya.
+                setModeGeser(MODE_GESER.USULAN);
+                setUkurOn(false);
+                setModeTambah(true);
+                toast.info("Ketuk peta untuk menaruh titik usulan");
+              }}
               role="radio" aria-checked={modeGeser === MODE_GESER.USULAN}
               aria-label="Titik usulan (tambah titik baru)"
               title={KETERANGAN_MODE[MODE_GESER.USULAN]}
