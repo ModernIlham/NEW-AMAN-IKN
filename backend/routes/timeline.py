@@ -17,7 +17,8 @@ from auth_utils import require_user
 from db import db
 from shared_utils import (kode_satker_user, pastikan_akses_aset,
                           scope_query_aset)
-from timeline_utils import (MODUL_LABEL, buat_event, event_dari_riwayat,
+from timeline_utils import (LABEL_STATUS, MODUL_LABEL, buat_event,
+                            event_dari_riwayat,
                             event_pindah_lokasi, event_psp_siman,
                             event_scan_opname, identitas_aset, info_psp_siman,
                             label_transaksi_buku, query_identitas,
@@ -381,6 +382,9 @@ async def get_timeline_aset(asset_id: str, user: dict = Depends(require_user)):
         "events": events,
         "ringkasan": ringkas_per_modul(events),
         "label_modul": MODUL_LABEL,
+        # Peta status→label KURATIF; UI hanya menampilkan badge untuk
+        # status yang ada di sini (lihat catatan di timeline_utils).
+        "label_status": LABEL_STATUS,
     }
 
 

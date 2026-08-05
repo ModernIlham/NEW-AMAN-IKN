@@ -67,6 +67,62 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#774] Status kejadian tampil di Timeline Aset — dua dari tujuh field berhenti dibuang — 2026-08-05
+
+Backend mengisi **tujuh** field per event timeline. `AssetTimelineDialog`
+hanya membaca **lima**:
+
+```
+dipakai   : modul, jenis, judul, detail, tanggal
+diabaikan : status, ref_id
+```
+
+Akibatnya operator melihat "Usulan penghapusan" tanpa tahu apakah ia masih
+**diusulkan**, sudah **disetujui**, atau sudah **selesai** — padahal datanya
+ikut terkirim di setiap baris.
+
+### Yang berubah
+
+Badge status di tiap baris timeline, memakai peta `label_status` yang dikirim
+server (pola yang sama dengan `label_modul` yang sudah ada), sehingga label
+tetap **satu sumber** di backend dan tak menyimpang dari nilai yang dipakai
+register.
+
+Peta itu **sengaja kuratif**, bukan menyapu semua nilai: field `status` juga
+diisi `kode_transaksi` Buku Barang ("100", "101", …). Menampilkannya mentah
+memunculkan badge "100" yang tak berarti; memetakannya lewat
+`KODE_TRANSAKSI_LABEL` justru mengulang judul barisnya persis. Karena itu UI
+hanya menampilkan badge untuk status yang terdaftar; sisanya tetap
+tersampaikan lewat judul/detail.
+
+Ikutan: hasil rekonsiliasi pemindaian (`Hasil: cocok dengan catatan`, dst.)
+**dipindah** dari `detail` ke badge — sebelumnya ia akan berbunyi dua kali
+setelah badge ada.
+
+### Yang dijaga uji (28 uji, 6 baru)
+
+- Setiap status keluaran `klasifikasi_scan` punya label — status tak berlabel
+  **tidak tampil sama sekali** (peta kuratif), jadi hasil pemindaian bisa
+  hilang dari layar tanpa jejak.
+- **Kode transaksi Buku Barang TIDAK boleh masuk peta** — uji menyilangkannya
+  dengan `KODE_TRANSAKSI_LABEL` dan menolak kunci berupa angka.
+- Sembilan status register yang benar-benar dipakai di repo (`draft`,
+  `diusulkan`, `diproses`, `disetujui`, `ditolak`, `selesai`, `dibatalkan`,
+  `aktif`, `berakhir`) terlabeli.
+- UI benar-benar membacanya (`labelStatus[e.status]`) dan endpoint benar-benar
+  mengirim petanya.
+
+### Yang TIDAK dikerjakan, dan alasannya
+
+`ref_id` — field kedua yang diabaikan — **tetap tak terpakai**. Membuat baris
+timeline bisa diklik ke record sumbernya menuntut navigasi lintas-modul yang
+**tidak dimiliki aplikasi ini**: hanya ada 4 route (`/`, `/login`, `/403`,
+`*`), dan pola "Tindak lanjuti" yang ada bekerja karena tetap di halaman yang
+sama. Menambahkannya adalah pekerjaan arsitektur tersendiri, bukan bagian
+dari perbaikan ini.
+
+---
+
 ## [#773] Aset bisa ditempatkan di denah dari layar, bukan hanya lewat pindai stiker — 2026-08-05
 
 `PUT /assets/{id}/lokasi-spasial` sudah ada sejak Spasial Fase 9 — lengkap

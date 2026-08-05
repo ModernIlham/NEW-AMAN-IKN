@@ -75,6 +75,7 @@ export default function AssetTimelineDialog({ open, assetId, onClose }) {
 
   const aset = data?.aset || {};
   const labelModul = data?.label_modul || {};
+  const labelStatus = data?.label_status || {};
   const ringkasan = data?.ringkasan || {};
   const psp = data?.psp_siman || {};
   const events = useMemo(() => {
@@ -171,6 +172,18 @@ export default function AssetTimelineDialog({ open, assetId, onClose }) {
                         <span className={`text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${MODUL_BADGE[e.modul] || MODUL_BADGE.aset}`}>
                           {labelModul[e.modul] || e.modul}
                         </span>
+                        {/* Status kejadian — hanya bila punya label resmi.
+                            Backend sengaja KURATIF (lihat timeline_utils
+                            .LABEL_STATUS): `status` juga diisi kode transaksi
+                            Buku Barang, yang kalau ditampilkan mentah jadi
+                            badge "100" dan kalau dilabeli malah mengulang
+                            judulnya. */}
+                        {labelStatus[e.status] && (
+                          <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-muted text-foreground/80 border border-border"
+                            data-testid={`timeline-status-${e.status}`}>
+                            {labelStatus[e.status]}
+                          </span>
+                        )}
                         <span className="text-[10px] text-muted-foreground">
                           {formatTanggal(e.tanggal)}
                         </span>
