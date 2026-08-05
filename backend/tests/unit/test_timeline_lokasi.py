@@ -20,8 +20,9 @@ per modul ikut menggelembung.
 import os
 import re
 
-from timeline_utils import (LABEL_STATUS_SCAN, MODUL_LABEL, event_pindah_lokasi,
-                            event_scan_opname, ringkas_per_modul)
+from timeline_utils import (LABEL_STATUS, LABEL_STATUS_SCAN, MODUL_LABEL,
+                            event_pindah_lokasi, event_scan_opname,
+                            ringkas_per_modul)
 
 _ROUTE = os.path.join(os.path.dirname(__file__), "..", "..",
                       "routes", "timeline.py")
@@ -43,8 +44,9 @@ class TestEventScanOpname:
         assert e["modul"] == "lokasi"
         assert e["jenis"] == "opname_scan"
         assert e["judul"] == "Dipindai di Gedung A / Lt.1 / R.101"
-        assert "Hasil: cocok dengan catatan" in e["detail"]
         assert "Oleh: petugas1" in e["detail"]
+        # Hasil rekonsiliasi TIDAK di detail — ia jadi badge status di UI.
+        assert "Hasil" not in e["detail"]
         assert e["tanggal"] == "2026-08-01T09:00:00+00:00"
         assert e["status"] == "sesuai"
 
@@ -58,7 +60,7 @@ class TestEventScanOpname:
             "lokasi_sebelum": {"node_id": "n1", "nama": "R.101",
                                "jalur": "Gedung A / Lt.1 / R.101"},
         })
-        assert "Hasil: BEDA dari catatan" in e["detail"]
+        assert e["status"] == "pindah"
         assert "Tercatat sebelumnya di Gedung A / Lt.1 / R.101" in e["detail"]
         assert "BELUM diterapkan ke catatan" in e["detail"]
 
@@ -77,7 +79,8 @@ class TestEventScanOpname:
             "status_rekonsiliasi": "tanpa_lokasi", "oleh": "petugas2",
             "pada": "2026-08-03T08:00:00+00:00", "lokasi_spasial": {}})
         assert e["judul"] == "Dipindai (tanpa lokasi denah)"
-        assert "di luar kawasan terpetakan" in e["detail"]
+        assert e["status"] == "tanpa_lokasi"
+        assert LABEL_STATUS["tanpa_lokasi"]        # badge-nya berlabel
 
     def test_hanya_status_pindah_yang_membahas_penerapan(self):
         """Scan 'sesuai'/'baru' tak pernah perlu diterapkan — menuliskan
@@ -87,11 +90,13 @@ class TestEventScanOpname:
                                    "lokasi_spasial": {"node_nama": "R.1"}})
             assert "diterapkan" not in e["detail"], st
 
-    def test_status_asing_tak_dibuang_diam_diam(self):
+    def test_status_asing_diteruskan_apa_adanya(self):
+        """Status di luar daftar tetap dibawa di field `status` (UI yang
+        memutuskan menampilkan atau tidak), bukan dibuang di backend."""
         e = event_scan_opname({"status_rekonsiliasi": "entah",
                                "lokasi_spasial": {"node_nama": "R.1"}})
-        assert "Hasil: entah" in e["detail"]
         assert e["status"] == "entah"
+        assert "entah" not in LABEL_STATUS
 
     def test_jatuh_ke_diterima_pada_bila_pada_kosong(self):
         """`pada` berasal dari jam PERANGKAT (antrean luring) dan bisa kosong;
@@ -228,3 +233,56 @@ class TestAntiGanda:
         baris = entri_riwayat_lokasi("a1", {"node_id": "n1"},
                                      {"node_id": "n2"}, "u", "2026-01-01")
         assert "kode_satker" not in baris
+
+
+class TestBadgeStatus:
+    """Status tiap kejadian dulu dikirim backend lalu DIBUANG UI: dari 7 field
+    event, dialog hanya membaca 5 (modul, jenis, judul, detail, tanggal).
+    Operator tak pernah tahu sebuah usulan itu masih diusulkan, sudah
+    disetujui, atau sudah selesai."""
+
+    _DIALOG = os.path.join(os.path.dirname(__file__), "..", "..", "..",
+                           "frontend", "src", "components", "assets",
+                           "AssetTimelineDialog.jsx")
+
+    def _dialog(self):
+        with open(os.path.abspath(self._DIALOG), encoding="utf-8") as f:
+            return f.read()
+
+    def test_ui_membaca_status_dan_petanya(self):
+        src = self._dialog()
+        assert "label_status" in src
+        assert "labelStatus[e.status]" in src
+
+    def test_endpoint_mengirim_peta_labelnya(self):
+        src = _sumber_route()
+        assert '"label_status": LABEL_STATUS' in src
+
+    def test_semua_status_scan_punya_label_badge(self):
+        """Sinkron dengan `opname_utils.klasifikasi_scan` — status yang tak
+        berlabel TIDAK akan tampil sama sekali (peta ini kuratif), sehingga
+        hasil pemindaian hilang dari layar tanpa jejak."""
+        from opname_utils import klasifikasi_scan
+        keluar = {klasifikasi_scan("", ""), klasifikasi_scan("", "n1"),
+                  klasifikasi_scan("n1", "n1"), klasifikasi_scan("n1", "n2")}
+        assert keluar <= set(LABEL_STATUS)
+
+    def test_kode_transaksi_buku_TIDAK_dilabeli(self):
+        """`status` event pembukuan diisi `kode_transaksi` ("100", "101", …).
+        Mendaftarkannya di sini membuat badge mengulang judul barisnya persis
+        (judul sudah memakai `label_transaksi_buku`)."""
+        from timeline_utils import KODE_TRANSAKSI_LABEL
+        bentrok = [k for k in KODE_TRANSAKSI_LABEL if k in LABEL_STATUS]
+        assert bentrok == []
+        assert not any(k.isdigit() for k in LABEL_STATUS)
+
+    def test_status_register_umum_terlabeli(self):
+        """Nilai status yang benar-benar dipakai register siklus di repo ini."""
+        for st in ("draft", "diusulkan", "diproses", "disetujui", "ditolak",
+                   "selesai", "dibatalkan", "aktif", "berakhir"):
+            assert LABEL_STATUS.get(st), st
+
+    def test_label_scan_lama_tetap_selaras(self):
+        """`LABEL_STATUS_SCAN` masih dipakai sebagai daftar acuan; kedua peta
+        tak boleh menyimpang soal status MANA yang dikenal."""
+        assert set(LABEL_STATUS_SCAN) <= set(LABEL_STATUS)

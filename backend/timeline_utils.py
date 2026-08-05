@@ -46,6 +46,39 @@ LABEL_STATUS_SCAN = {
     "tanpa_lokasi": "di luar kawasan terpetakan",
 }
 
+# Label badge status event timeline. SENGAJA KURATIF, bukan menyapu semua nilai
+# yang mungkin muncul: `status` event diisi dari bermacam sumber, termasuk
+# `kode_transaksi` Buku Barang ("100", "101", …). Menampilkan nilai mentah apa
+# adanya akan memunculkan badge "100" yang tak berarti — dan bila dipetakan
+# lewat KODE_TRANSAKSI_LABEL justru mengulang judulnya persis.
+#
+# Karena itu UI hanya menampilkan badge untuk status yang ADA di peta ini;
+# selebihnya dibiarkan tersampaikan lewat judul/detail. Status baru yang layak
+# tampil cukup didaftarkan di sini.
+LABEL_STATUS = {
+    # Register siklus (usulan, pemindahtanganan, pemusnahan, penertiban, …)
+    "draft": "Draf",
+    "diusulkan": "Diusulkan",
+    "diproses": "Diproses",
+    "menunggu_persetujuan": "Menunggu persetujuan",
+    "disetujui": "Disetujui",
+    "ditolak": "Ditolak",
+    "selesai": "Selesai",
+    "dibatalkan": "Dibatalkan",
+    "aktif": "Aktif",
+    "berakhir": "Berakhir",
+    # Status inventarisasi aset
+    "ditemukan": "Ditemukan",
+    "tidak_ditemukan": "Tidak ditemukan",
+    "belum_diinventarisasi": "Belum diinventarisasi",
+    "berlebih": "Berlebih",
+    # Opname (dari LABEL_STATUS_SCAN, dikapitalkan agar seragam sebagai badge)
+    "baru": "Penempatan pertama",
+    "sesuai": "Cocok dengan catatan",
+    "pindah": "BEDA dari catatan",
+    "tanpa_lokasi": "Di luar kawasan terpetakan",
+}
+
 # Uraian kode transaksi Buku Barang (mutasi_bmn) yang umum dipakai.
 KODE_TRANSAKSI_LABEL = {
     "100": "Saldo awal / perolehan",
@@ -217,12 +250,10 @@ def event_scan_opname(scan) -> dict:
         or _s((s.get("lokasi_spasial") or {}).get("node_nama"))
     judul = f"Dipindai di {lokasi}" if lokasi else "Dipindai (tanpa lokasi denah)"
 
+    # Hasil rekonsiliasi TIDAK diulang di detail — ia sudah jadi badge status
+    # di UI (lihat LABEL_STATUS). Menulisnya di dua tempat membuat tiap baris
+    # scan berbunyi dua kali.
     bagian = []
-    label = LABEL_STATUS_SCAN.get(status)
-    if label:
-        bagian.append(f"Hasil: {label}")
-    elif status:
-        bagian.append(f"Hasil: {status}")
     if status == "pindah":
         # Titik paling berharga bagi penelusur: dari mana ia berpindah.
         asal = _nama_lokasi(s.get("lokasi_sebelum"))
