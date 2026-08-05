@@ -1,11 +1,16 @@
-// Penanda LOKASI temuan wasdal di denah (Spasial Fase 8).
+// Penanda LOKASI di denah — dipakai temuan wasdal (Spasial Fase 8) DAN
+// penempatan aset pada node denah (`PUT /assets/{id}/lokasi-spasial`).
 //
 // Alur: operator mengklik peta → titik tertancap → deteksi Fase 3
 // (POST /spasial/lokasi-di-titik) menampilkan rantai wilayah (Kawasan → … →
 // Gedung) + pilihan lantai bila titik jatuh di gedung → Simpan mengirim
-// {lat, lon, node_id} ke endpoint tiket; SERVER yang men-snapshot nama/jalur
+// {lat, lon, node_id} ke `submitUrl`; SERVER yang men-snapshot nama/jalur
 // dari DB (string klien tak dipercaya). Titik di luar kawasan terpetakan
 // tetap boleh disimpan sebagai penanda koordinat murni.
+//
+// Kontrak PUT-nya identik untuk kedua pemakai — itulah sebabnya dialog ini
+// hanya perlu di-parameterkan KATA-KATANYA, bukan disalin. Default-nya tetap
+// bunyi wasdal supaya pemanggil lama tak berubah perilaku.
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -21,7 +26,14 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 // Pusat KIPP IKN — pandangan awal saat tiket belum punya penanda.
 const PUSAT_IKN = [-1.4025, 116.711];
 
-export default function LokasiTemuanDialog({ judul, submitUrl, lokasiAwal, onClose, onSaved }) {
+export default function LokasiTemuanDialog({
+  judul, submitUrl, lokasiAwal, onClose, onSaved,
+  judulDialog = "Lokasi Temuan",
+  petunjuk = "klik peta untuk menancapkan titik; wilayah/gedung terdeteksi otomatis.",
+  labelHapus = "Hapus Penanda",
+  pesanSimpan = "Lokasi temuan tersimpan",
+  pesanHapus = "Penanda lokasi dihapus",
+}) {
   const petaRef = useRef(null);
   const wadahRef = useRef(null);
   const markerRef = useRef(null);
@@ -108,7 +120,7 @@ export default function LokasiTemuanDialog({ judul, submitUrl, lokasiAwal, onClo
     setSibuk(true);
     try {
       const r = await axios.put(submitUrl, { lat: titik.lat, lon: titik.lon, node_id: nodeId });
-      toast.success("Lokasi temuan tersimpan");
+      toast.success(pesanSimpan);
       onSaved?.(r.data?.lokasi_spasial || null);
       onClose?.();
     } catch (e) {
@@ -116,13 +128,13 @@ export default function LokasiTemuanDialog({ judul, submitUrl, lokasiAwal, onClo
     } finally {
       setSibuk(false);
     }
-  }, [titik, nodeId, submitUrl, onSaved, onClose]);
+  }, [titik, nodeId, submitUrl, onSaved, onClose, pesanSimpan]);
 
   const hapus = useCallback(async () => {
     setSibuk(true);
     try {
       await axios.put(submitUrl, { hapus: true });
-      toast.success("Penanda lokasi dihapus");
+      toast.success(pesanHapus);
       onSaved?.(null);
       onClose?.();
     } catch (e) {
@@ -130,7 +142,7 @@ export default function LokasiTemuanDialog({ judul, submitUrl, lokasiAwal, onClo
     } finally {
       setSibuk(false);
     }
-  }, [submitUrl, onSaved, onClose]);
+  }, [submitUrl, onSaved, onClose, pesanHapus]);
 
   const rantai = deteksi?.rantai || [];
   const lantai = deteksi?.lantai || [];
@@ -140,17 +152,17 @@ export default function LokasiTemuanDialog({ judul, submitUrl, lokasiAwal, onClo
       <DialogContent className="max-w-2xl p-0 gap-0" data-testid="lokasi-temuan-dialog">
         <DialogHeader className="px-4 pt-3 pb-2 border-b border-border">
           <DialogTitle className="text-sm flex items-center gap-1.5">
-            <MapPin className="w-4 h-4 text-teal-600" />Lokasi Temuan
+            <MapPin className="w-4 h-4 text-teal-600" />{judulDialog}
           </DialogTitle>
           <DialogDescription className="text-xs truncate">
-            {judul} — klik peta untuk menancapkan titik; wilayah/gedung terdeteksi otomatis.
+            {judul} — {petunjuk}
           </DialogDescription>
         </DialogHeader>
 
         <div ref={wadahRef} className="h-[42vh] min-h-[260px] w-full" data-testid="lokasi-temuan-peta" />
 
         <div className="px-4 py-2.5 border-t border-border space-y-1.5 text-xs">
-          {!titik && <p className="text-muted-foreground">Belum ada titik — klik lokasi temuan di peta.</p>}
+          {!titik && <p className="text-muted-foreground">Belum ada titik — klik lokasinya di peta.</p>}
           {titik && (
             <p className="font-mono text-[11px] text-muted-foreground">
               {titik.lat.toFixed(6)}, {titik.lon.toFixed(6)}
@@ -188,7 +200,7 @@ export default function LokasiTemuanDialog({ judul, submitUrl, lokasiAwal, onClo
           {lokasiAwal && (
             <Button variant="outline" size="sm" className="text-red-600" disabled={sibuk}
                     onClick={hapus} data-testid="lokasi-temuan-hapus">
-              <Trash2 className="w-3.5 h-3.5 mr-1" />Hapus Penanda
+              <Trash2 className="w-3.5 h-3.5 mr-1" />{labelHapus}
             </Button>
           )}
           <div className="flex-1" />

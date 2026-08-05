@@ -199,6 +199,13 @@ class AssetResponse(BaseModel):
     # permintaan. {no_psp, tanggal, jenis, sumber} atau tidak ada sama sekali.
     # Read-only bagi klien; menulisnya lewat PUT/PATCH tidak berpengaruh apa pun.
     psp: Optional[dict] = None
+    # Penempatan aset pada node denah (Spasial Fase 9) — subdoc, BUKAN field
+    # registry: {titik:[lon,lat], node_id, node_nama, node_tipe, jalur_nama}.
+    # Ditulis HANYA lewat `PUT /assets/{id}/lokasi-spasial` (yang juga mencatat
+    # riwayat perpindahan); disertakan di sini supaya layar aset tahu di mana
+    # barangnya berada sekarang tanpa endpoint tambahan. Menulisnya lewat
+    # PUT/PATCH aset biasa tidak berpengaruh — jalur itu tak menyentuhnya.
+    lokasi_spasial: Optional[dict] = None
 
     @field_validator('purchase_price', mode='before')
     @classmethod
