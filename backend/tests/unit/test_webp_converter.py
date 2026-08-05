@@ -80,8 +80,12 @@ def test_konstanta_default_aman():
 def test_registry_sumber_prioritas_dan_query():
     import webp_converter as wc
     nama = [s["nama"] for s in wc.SUMBER]
-    # Prioritas: foto ASLI aset dulu, lalu foto pegawai (tampil), lalu asli krop.
-    assert nama == ["aset", "pegawai", "pegawai_asli"]
+    # Prioritas: foto ASLI aset dulu, lalu foto pegawai (tampil), lalu asli krop
+    # — baru setelah SEMUANYA habis, konversi ULANG WebP memakai sisa kuota.
+    # Daftar sengaja diuji PERSIS (bukan sekadar "mengandung"): sumber baru yang
+    # disisipkan di tengah akan menggeser prioritas tanpa ada yang menyadari.
+    assert nama == ["aset", "pegawai", "pegawai_asli",
+                    "aset_ulang", "pegawai_ulang"]
     q_aset = wc.SUMBER[0]["query"]
     # Query aset tak boleh menyeret blob ber-`jenis` (mis. foto pegawai).
     assert q_aset["metadata.jenis"] == {"$exists": False}

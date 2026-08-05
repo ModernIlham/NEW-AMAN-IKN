@@ -67,6 +67,71 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#776] Sisa kuota Tinify dipakai, bukan dibiarkan hangus — plus penjaga disk yang selama ini bolong — 2026-08-05
+
+Permintaan pemilik: kuota Tinify hangus tiap pergantian bulan; kalau masih
+tersisa di H-1, pakai sebaik mungkin — tetapi tetap dicicil di jam sepi
+sepanjang bulan supaya akhir bulan tak kerja keras.
+
+### Yang berubah
+
+**1. Bantalan kuota dilepas di hari terakhir bulan.** Sepanjang bulan
+konverter menjaga sisa `KUOTA_SISA_MIN` (50) agar unggahan user yang butuh
+Tinify tak kehabisan. Pada hari terakhir bantalan itu jadi **0** — besok ia
+hangus, jadi lebih baik terpakai.
+
+`hari_terakhir_bulan` memakai *"besok bulannya berbeda"* alih-alih tabel
+jumlah hari, sehingga otomatis benar untuk Februari **dan** tahun kabisat
+(29 Feb 2024 = hari terakhir; 28 Feb 2024 = bukan). Zona waktu WIB — selaras
+dengan jam sepi yang jadi syarat kerjanya.
+
+**2. Fase baru: konversi ULANG WebP yang sudah ada.** Berjalan HANYA setelah
+semua foto non-WebP habis (urutan `SUMBER` = urutan prioritas), jadi foto yang
+belum WebP selalu didahulukan. Tiap blob yang hematnya **< 1%** ditandai
+`webp_ulang_selesai` dan **tak pernah dicoba lagi** — inilah yang membuat
+konverter berhenti sendiri saat semuanya sudah mentok, lalu diam sampai ada
+aset baru.
+
+**3. Gerbang disk — lubang lama yang tak dilaporkan.** `_proses_satu` dulu
+menukar blob **tanpa membandingkan ukuran sama sekali**: sebuah JPEG bisa
+digantikan WebP yang JUSTRU lebih besar, sehingga penyimpanan bertambah
+padahal tujuannya menyusut. (Fase thumbnail sudah punya penjaga ini sejak
+awal; fase foto asli belum.) Sekarang blob baru hanya menggantikan yang lama
+bila benar-benar lebih kecil — dan gerbangnya dievaluasi **sebelum** blob baru
+ditulis, jadi tak ada sampah yang terlanjur mendarat di disk.
+
+Yang **tidak** berubah: idle-aware (berhenti begitu ada aktivitas), lease
+worker tunggal, verifikasi berlapis sebelum blob lama dihapus. Cicilan di jam
+sepi tetap satu foto per siklus.
+
+### Catatan cakupan
+
+Foto yang tampil di **popup/lightbox** adalah foto asli aset — sudah tercakup
+Fase 1 sejak awal (`filename: ^photo_`, tanpa `metadata.jenis`). Sapuan
+metadata GridFS mengonfirmasi hanya foto pegawai yang memakai `jenis`; tak ada
+jenis foto lain yang terlewat, jadi tak ada sumber baru yang perlu didaftarkan
+selain fase konversi ulang.
+
+### Yang dijaga uji (25 uji)
+
+- Hari terakhir bulan benar untuk bulan 31/30 hari, Februari biasa, **dan
+  kabisat**; bantalan jadi 0 hanya di hari itu.
+- Ukuran **sama persis** ditolak — menukar blob identik hanya membakar kuota
+  dan menulis ulang disk. *(Uji ini menangkap cacat di kode saya sendiri:
+  `0 >= 0` semula lolos.)*
+- Fase konversi ulang ada **di urutan terakhir**, hanya menyasar `image/webp`,
+  dan fase pertama **tidak** menyentuh WebP — kalau tertukar, kuota terbakar
+  tanpa henti.
+- Blob yang sudah mentok disaring dari kandidat; tanpa itu konverter mengulang
+  blob yang sama tiap putaran.
+- Loop tetap menghormati idle & lease — perubahan ini tak boleh membuatnya
+  bekerja di jam sibuk.
+
+Lima mutasi (bantalan tak dilepas, gerbang disk dilumpuhkan, penyaring blob
+mentok dicabut) semuanya tertangkap.
+
+---
+
 ## [#775] Impor Master Pegawai MENGGABUNG, bukan menggandakan & menimpa — 2026-08-05
 
 Keluhan pemilik: pegawai yang belum punya identitas jadi **orang baru** tiap
