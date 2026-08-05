@@ -71,7 +71,70 @@ _task = None
 _worker_id = f"{os.getpid()}-{uuid.uuid4().hex[:6]}"
 
 
+# ── Pemakaian kuota bulanan (permintaan pemilik) ──
+# Kuota Tinify hangus tiap pergantian bulan. Sepanjang bulan konversi dicicil
+# di jam sepi dengan menyisakan bantalan `KUOTA_SISA_MIN` (agar unggahan user
+# yang butuh Tinify tak kehabisan). Pada HARI TERAKHIR bulan, bantalan itu
+# dilepas: sisa kuota lebih baik dipakai daripada hangus.
+AMBANG_HEMAT_ULANG = float(os.environ.get("WEBP_HEMAT_MIN_PERSEN", "1.0"))
+WIB = timezone(timedelta(hours=7))
+
+
 # ───────────────────────── helper murni (mudah diuji) ─────────────────────────
+
+def hari_terakhir_bulan(sekarang) -> bool:
+    """True bila `sekarang` jatuh pada HARI TERAKHIR bulan (zona waktunya
+    sendiri). MURNI.
+
+    Dipakai untuk memutuskan kapan bantalan kuota dilepas. Memakai "besok
+    bulannya berbeda" alih-alih tabel jumlah hari — otomatis benar untuk
+    Februari maupun tahun kabisat.
+    """
+    if sekarang is None:
+        return False
+    return (sekarang + timedelta(days=1)).month != sekarang.month
+
+
+def ambang_kuota_sisa(sekarang, ambang_normal=None) -> int:
+    """Berapa sisa kuota yang HARUS dijaga. MURNI.
+
+    Hari terakhir bulan → 0 (habiskan; besok hangus). Selain itu → bantalan
+    normal, supaya konversi tercicil dan tak memakan jatah unggahan user.
+    """
+    normal = KUOTA_SISA_MIN if ambang_normal is None else int(ambang_normal)
+    return 0 if hari_terakhir_bulan(sekarang) else normal
+
+
+def hemat_persen(ukuran_lama, ukuran_baru) -> float:
+    """Persen penghematan ukuran; negatif bila hasilnya justru membesar.
+    MURNI. Sumber 0/negatif → 0.0 (tak ada yang bisa dihemat)."""
+    try:
+        lama, baru = float(ukuran_lama or 0), float(ukuran_baru or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    if lama <= 0:
+        return 0.0
+    return (lama - baru) / lama * 100.0
+
+
+def layak_ganti(ukuran_lama, ukuran_baru, ambang_persen=0.0) -> bool:
+    """Apakah blob baru LAYAK menggantikan yang lama. MURNI.
+
+    `ambang_persen=0` (konversi pertama JPEG→WebP): cukup lebih kecil. Ini
+    penjaga disk — tanpanya sebuah JPEG bisa digantikan WebP yang JUSTRU lebih
+    besar, dan penyimpanan membengkak alih-alih menyusut.
+
+    `ambang_persen=1` (konversi ULANG WebP→WebP): hemat harus berarti.
+    Menukar blob demi 0,3% hanya membakar kuota dan menulis ulang disk tanpa
+    manfaat — pemilik meminta berhenti di bawah 1%.
+    """
+    if not ukuran_baru or int(ukuran_baru) <= 0:
+        return False
+    hemat = hemat_persen(ukuran_lama, ukuran_baru)
+    # `hemat > 0` WAJIB, bukan hanya `>= ambang`: dengan ambang 0, ukuran yang
+    # SAMA PERSIS akan lolos (0 >= 0) dan blob ditukar tanpa manfaat apa pun —
+    # membakar kuota sekaligus menulis ulang disk untuk hasil identik.
+    return hemat > 0 and hemat >= float(ambang_persen)
 
 def _dimensi(image_bytes):
     """(lebar, tinggi) gambar, atau None bila tak terdekode."""
@@ -307,6 +370,31 @@ SUMBER = [
                   "metadata.webp_skip": {"$ne": True}},
         "pemilik": _pegawai_pemilik("foto_asli_file_id"), "swap": _pegawai_swap("foto_asli_file_id"),
         "meta": lambda m: {"jenis": "foto_pegawai_asli", "pegawai_id": m.get("pegawai_id")}},
+    # ── Fase 3 — KONVERSI ULANG WebP yang sudah ada (permintaan pemilik) ──
+    # Dijalankan HANYA setelah fase 1–2 kehabisan kandidat, karena urutan
+    # SUMBER = urutan prioritas. Gunanya: saat semua foto sudah WebP tetapi
+    # kuota bulan ini masih tersisa, sisa itu dipakai menekan ukuran lebih
+    # jauh alih-alih hangus. Tiap blob yang hematnya < 1% ditandai
+    # `webp_ulang_selesai` dan tak pernah dicoba lagi — sehingga saat SEMUA
+    # sudah mentok, konverter berhenti sendiri sampai ada foto baru.
+    {
+        "nama": "aset_ulang",
+        "query": {"metadata.content_type": "image/webp",
+                  "filename": {"$regex": "^photo_"},
+                  "metadata.jenis": {"$exists": False},
+                  "metadata.webp_skip": {"$ne": True},
+                  "metadata.webp_ulang_selesai": {"$ne": True}},
+        "pemilik": _aset_pemilik, "swap": _aset_swap, "meta": lambda m: {},
+        "ambang_hemat": AMBANG_HEMAT_ULANG, "tanda_selesai": "webp_ulang_selesai"},
+    {
+        "nama": "pegawai_ulang",
+        "query": {"metadata.jenis": "foto_pegawai",
+                  "metadata.content_type": "image/webp",
+                  "metadata.webp_skip": {"$ne": True},
+                  "metadata.webp_ulang_selesai": {"$ne": True}},
+        "pemilik": _pegawai_pemilik("foto_file_id"), "swap": _pegawai_swap("foto_file_id"),
+        "meta": lambda m: {"jenis": "foto_pegawai", "pegawai_id": m.get("pegawai_id")},
+        "ambang_hemat": AMBANG_HEMAT_ULANG, "tanda_selesai": "webp_ulang_selesai"},
 ]
 
 
@@ -346,6 +434,17 @@ async def _proses_satu(sumber) -> str:
     if not verifikasi_webp(webp, dims[0], dims[1]):
         await _tandai_blob(old_id, webp_skip=True)
         return "verifikasi_gagal"
+
+    # Gerbang DISK: blob baru harus benar-benar lebih hemat. Tanpa ini sebuah
+    # foto bisa digantikan hasil yang JUSTRU lebih besar — penyimpanan
+    # membengkak padahal tujuannya menyusutkan. Untuk konversi ULANG, ambangnya
+    # 1%: menukar blob demi hemat sepersekian persen hanya membakar kuota.
+    ambang = float(sumber.get("ambang_hemat", 0.0))
+    if not layak_ganti(len(old_bytes), len(webp), ambang):
+        # Ditandai PERMANEN supaya tak dicoba lagi tiap putaran — inilah yang
+        # membuat konverter berhenti sendiri saat semua sudah mentok.
+        await _tandai_blob(old_id, **{sumber.get("tanda_selesai", "webp_skip"): True})
+        return "hemat_tipis"
 
     # Simpan blob baru (metadata sumber dipertahankan), lalu gerbang keamanan 2:
     # baca ULANG blob baru.
@@ -415,12 +514,18 @@ async def _loop():
 
             kerja = False
 
-            # Fase A: foto ASLI GridFS via Tinify — DIBATASI kuota bulanan.
-            if await sisa_kuota_tinify() > KUOTA_SISA_MIN:
+            # Fase A: foto GridFS via Tinify — dibatasi kuota bulanan, KECUALI
+            # pada hari terakhir bulan: bantalan dilepas agar sisa kuota
+            # terpakai habis alih-alih hangus saat bulan berganti.
+            ambang = ambang_kuota_sisa(datetime.now(WIB))
+            if await sisa_kuota_tinify() > ambang:
                 status = await konversi_satu()
                 if status == "sukses":
                     kerja = True
-                    logger.info("WebP: 1 foto asli dikonversi (sisa kuota dijaga > %s)", KUOTA_SISA_MIN)
+                    logger.info("WebP: 1 foto dikonversi (bantalan kuota %s)", ambang)
+                elif status == "hemat_tipis":
+                    kerja = True
+                    logger.info("WebP: hemat < ambang — blob ditandai selesai, lanjut kandidat lain")
                 elif status != "kosong":
                     kerja = True                                # kandidat bermasalah → lanjut cepat
 
