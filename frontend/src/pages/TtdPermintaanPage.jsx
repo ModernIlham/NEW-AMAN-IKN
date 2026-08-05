@@ -20,6 +20,7 @@ import KartuTapDialog from "@/components/pegawai/KartuTapDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import AturPosisiTtd from "@/components/ttd/AturPosisiTtd";
 import { bagikanWa, bagikanEmail } from "@/lib/pesanTtd";
+import { authMediaUrl } from "@/lib/mediaUrl";
 import { teksSisaWaktu, warnaSisaWaktu, sudahKedaluwarsa } from "@/lib/sisaWaktu";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
@@ -602,7 +603,7 @@ export default function TtdPermintaanPage({ user, onBack }) {
                           <img> jadi ikon rusak; status pill tetap tampil. */}
                       {s.status === "ditandatangani" && s.signature_file_id && detail.status !== "batal" ? (
                         <img alt={`TTD ${s.nama}`}
-                          src={`${API}/ttd/tandatangan/${detail.id}/gambar/${s.signer_id}?token=${localStorage.getItem("media_token") || localStorage.getItem("token") || ""}`}
+                          src={authMediaUrl(`${API}/ttd/tandatangan/${detail.id}/gambar/${s.signer_id}`)}
                           className="h-10 max-w-[90px] object-contain bg-white rounded border border-border p-0.5 flex-shrink-0" />
                       ) : null}
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${WARNA_SIGNER[s.status] || "bg-muted text-muted-foreground"}`}>
@@ -741,8 +742,12 @@ export default function TtdPermintaanPage({ user, onBack }) {
           {aturQr && (
             <AturPosisiTtd
               jenis="qr"
-              bangunUrlHalaman={(hal, c) =>
-                `${API}/ttd/permintaan/${aturQr.id}/dokumen/halaman/${hal}?c=${c}`}
+              // Pratinjau halaman dimuat oleh <img> BIASA — tag itu tak bisa
+              // membawa header Authorization, jadi tokennya WAJIB dititip di
+              // query lewat authMediaUrl (server memang menerima keduanya).
+              // Tanpa ini layarnya mati dengan 401 saat dialog dibuka.
+              bangunUrlHalaman={(hal, c) => authMediaUrl(
+                `${API}/ttd/permintaan/${aturQr.id}/dokumen/halaman/${hal}?c=${c}`)}
               jumlahHalaman={aturQr.dok_halaman || 1}
               nilaiAwal={aturQr.posisi_qr || null}
               mengirim={simpanQr}
