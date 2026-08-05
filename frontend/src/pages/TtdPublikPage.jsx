@@ -380,10 +380,38 @@ function TandaTangan({ id, token }) {
           />
         </>
       ) : (
-        <div className="rounded-xl bg-muted p-3 text-sm text-muted-foreground flex items-start gap-2">
-          <Clock className="w-4 h-4 mt-0.5 flex-shrink-0" />
-          <span>{info.alasan || "Belum dapat menandatangani saat ini."}</span>
-        </div>
+        <>
+          <div className="rounded-xl bg-muted p-3 text-sm text-muted-foreground flex items-start gap-2">
+            <Clock className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <span>{info.alasan || "Belum dapat menandatangani saat ini."}</span>
+          </div>
+          {/* Jalan keluar dari layar buntu. Sebelumnya keadaan ini hanya
+              memberi tahu "Anda sudah menandatangani" lalu berhenti — penanda
+              tangan tak punya cara melihat apakah rekannya sudah meneken,
+              apalagi mengambil hasil akhirnya. Halaman verifikasi memuat
+              progres seluruh pihak dan tersedia di SEMUA status, jadi tombol
+              ini pun tak disembunyikan. */}
+          {info.siap_diunduh && (
+            <Button size="sm" className="h-10 text-xs w-full" data-testid="ttd-unduh-hasil-terkunci"
+              onClick={() => window.open(
+                `${API}/ttd/tandatangan/${id}/dokumen-ttd?token=${encodeURIComponent(token)}`,
+                "_blank", "noopener")}>
+              <FileDown className="w-3.5 h-3.5 mr-1.5" />Unduh Dokumen ber-Tanda Tangan
+            </Button>
+          )}
+          <Button variant="outline" size="sm" className="h-9 text-xs w-full"
+            data-testid="ttd-lihat-status"
+            onClick={() => { window.location.href = `/ttd/verifikasi/${id}`; }}>
+            <ShieldCheck className="w-3.5 h-3.5 mr-1.5" />
+            Lihat progres &amp; unduh dokumen
+          </Button>
+          {info.menunggu_qr && (
+            <p className="text-[11px] text-muted-foreground text-center">
+              Semua pihak sudah meneken. Dokumen final dapat diunduh setelah
+              penerbit menempatkan kode QR verifikasi.
+            </p>
+          )}
+        </>
       )}
     </Kartu>
   );

@@ -114,3 +114,55 @@ class TestJejakIdentitasTtd:
         assert JEJAK_TTD_ABU > 0.35
         # Masih tercetak (bukan putih total) — jejaknya harus ADA, hanya samar.
         assert JEJAK_TTD_ABU < 1.0
+
+
+class TestJejakDipusatkanTegakLurus:
+    """Ralat pemilik: jejak tetap di samping KIRI, tapi tepat di TENGAH.
+
+    Teksnya berjalan ke ATAS, jadi memusatkan berarti menurunkan pangkalnya
+    setengah PANJANG teks dari titik tengah tanda tangan.
+    """
+    # Pengukur palsu: 2 pt per karakter — cukup untuk menguji aritmetikanya
+    # tanpa menyeret ReportLab ke dalam uji.
+    UKUR = staticmethod(lambda t: 2.0 * len(t))
+
+    def test_pangkal_turun_setengah_panjang_dari_titik_tengah(self):
+        # tinggi 100, y dasar 200 → titik tengah 250.
+        # Baris terpanjang "Budi Santoso" (12 huruf) = 24 pt → pangkal 250-12=238.
+        _x, y, _b = jejak_identitas_ttd(
+            "Budi Santoso", "2026-08-05", x_pt=100, y_pt=200,
+            tinggi=100, ukur=self.UKUR)
+        assert y == 238.0
+
+    def test_titik_tengah_teks_berimpit_dengan_titik_tengah_ttd(self):
+        panjang = 2.0 * len("Budi Santoso")
+        _x, y, _b = jejak_identitas_ttd(
+            "Budi Santoso", "2026-08-05", x_pt=100, y_pt=200,
+            tinggi=100, ukur=self.UKUR)
+        assert y + panjang / 2 == 200 + 100 / 2
+
+    def test_panjang_diambil_dari_baris_TERPANJANG(self):
+        """Kalau memakai baris pertama saja, jejak melenceng saat tanggal
+        (10 huruf) lebih pendek daripada namanya."""
+        _x, y_pendek, _b = jejak_identitas_ttd(
+            "Ani", "2026-08-05", x_pt=100, y_pt=0, tinggi=100, ukur=self.UKUR)
+        # terpanjang = "2026-08-05" (10) = 20 pt → 50 - 10 = 40
+        assert y_pendek == 40.0
+
+    def test_tanpa_tinggi_kembali_ke_perilaku_lama(self):
+        """Pemanggil yang belum menyertakan tinggi tak boleh melompat ke
+        tempat yang salah — jatuh kembali ke dasar tanda tangan."""
+        _x, y, _b = jejak_identitas_ttd("Budi", "2026-08-05", x_pt=100,
+                                        y_pt=200, ukur=self.UKUR)
+        assert y == 200.0
+
+    def test_tanpa_pengukur_kembali_ke_perilaku_lama(self):
+        _x, y, _b = jejak_identitas_ttd("Budi", "2026-08-05", x_pt=100,
+                                        y_pt=200, tinggi=100)
+        assert y == 200.0
+
+    def test_ttd_mepet_dasar_halaman_tak_membuat_pangkal_negatif(self):
+        _x, y, _b = jejak_identitas_ttd(
+            "Nama Panjang Sekali Betul", "2026-08-05", x_pt=100, y_pt=0,
+            tinggi=1, ukur=self.UKUR)
+        assert y >= 2.0

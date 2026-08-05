@@ -67,6 +67,78 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#765] TTD: tombol progres bagi penanda tangan, QR wajib ditempatkan, badge jadi saringan, jejak dipusatkan, giliran ikut `urutan` — 2026-08-05
+
+Lima mandat pemilik pada modul Tanda Tangan Elektronik.
+
+### 1. Penanda tangan punya jalan ke halaman progres
+
+Sesudah meneken lalu membuka lagi tautannya, layarnya hanya berbunyi "Anda
+sudah menandatangani dokumen ini." dan berhenti di situ — tak ada cara melihat
+apakah rekannya sudah meneken, apalagi mengambil hasil akhirnya. Tombol itu
+sebenarnya SUDAH ada, tetapi hanya pada layar sesaat-setelah-meneken; begitu
+halaman dibuka ulang, keadaannya berbeda dan tombolnya hilang.
+
+Kini keadaan "belum/tak bisa meneken" — sudah menandatangani MAUPUN masih
+menunggu giliran — memuat **Lihat progres & unduh dokumen** (ke halaman
+verifikasi, yang menampilkan status seluruh pihak dan tersedia di semua
+status), plus tombol unduh langsung bila dokumennya sudah siap.
+
+### 2. QR verifikasi WAJIB ditempatkan admin
+
+Tombol **"Otomatis saja"** dicabut. Penempatan otomatis di pojok kanan-bawah
+halaman terakhir kerap menimpa blok tanda tangan atau kaki halaman — dan
+karena ia jalan tercepat, itulah yang paling sering dipakai. Teks dialog yang
+menjanjikan tombol itu ikut diperbaiki; janji UI tak boleh menggantung setelah
+tombolnya hilang.
+
+### 3. Badge status jadi saringan yang bisa dinyalakan-dimatikan
+
+Badge ringkasan ("3 Terkirim", "5 Selesai", …) kini tombol: diklik → hanya
+status itu yang tampil, diklik lagi → padam. Ada pula "Tampilkan semua", dan
+layar kosong menyebut penyaring MANA yang menyembunyikan datanya (pencarian,
+status, atau keduanya) berikut tombol pelepasnya masing-masing.
+
+### 4. Ralat: jejak nama/tanggal dipusatkan tegak lurus
+
+Tetap di sisi kiri dan menyamping, hanya kini **tepat di tengah** tinggi tanda
+tangan — sebelumnya rata dengan dasarnya. Karena teksnya berjalan ke atas,
+pemusatan butuh PANJANG teks; pengukurnya disuntikkan pemanggil
+(`canvas.stringWidth`) agar fungsinya tetap murni dan teruji. Panjang diambil
+dari baris TERPANJANG — memakai baris pertama saja membuat jejak melenceng
+ketika tanggal lebih pendek daripada nama.
+
+### 5. Audit alur BERURUTAN — satu cacat laten ditemukan & ditutup
+
+Yang paralel tidak disentuh (sudah teruji).
+
+**Temuan.** Giliran berikutnya dipilih dengan `next(s for s in signers if
+status == "menunggu")` — yaitu berdasarkan **posisi elemen di array**, bukan
+`urutan`. Padahal `urutan` justru yang kita simpan sebagai kontrak DAN kirim
+ke layar. Keduanya kebetulan sama saat permintaan dibuat, sehingga hari ini
+tak ada gejala; tetapi begitu array tersusun ulang (restore, perbaikan manual,
+fitur ubah-urutan kelak) sistem akan mengaktifkan **orang yang salah** tanpa
+satu pun galat atau jejak.
+
+Pemilihan kini memakai `urutan`. Ikut diperbaiki: proyeksi query-nya belum
+mengambil `signers.urutan` sama sekali — tanpa itu pengurutannya akan hampa.
+Penanda tangan tanpa `urutan` (data lama/restore) jatuh ke BELAKANG antrean
+alih-alih menyerobot, namun tetap terpilih bila hanya ia yang tersisa, supaya
+dokumen tak menggantung selamanya.
+
+**Yang diperiksa dan ternyata sudah benar:** penolakan meneken di luar giliran
+(409), jti mati saat link diterbitkan ulang, penolakan dokumen batal, aktivasi
+tepat satu orang per giliran, dan berhentinya rantai saat penanda tangan
+terakhir meneken.
+
+- Ubah: `backend/routes/ttd.py`, `frontend/src/pages/TtdPublikPage.jsx`,
+  `frontend/src/pages/TtdPermintaanPage.jsx`,
+  `frontend/src/components/ttd/AturPosisiTtd.jsx`
+- Baru: `backend/tests/unit/test_ttd_urutan_giliran.py` (9 uji);
+  `test_jejak_ttd.py` +6 uji pemusatan
+
+---
+
 ## [#764] Area "Mengetahui" selebar yang lain + jejak nama/tanggal menyamping — 2026-08-05
 
 Dua mandat pemilik pada dokumen ber-tanda tangan.

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  ChevronLeft, ChevronRight, Loader2, MapPin, Maximize2, QrCode, SkipForward,
+  ChevronLeft, ChevronRight, Loader2, MapPin, Maximize2, QrCode,
 } from "lucide-react";
 
 /**
@@ -19,7 +19,7 @@ import {
  * - Geser kotak: drag/sentuh di dalam kotak.
  * - Ubah ukuran: pegangan pojok kanan-bawah (drag) atau penggeser ukuran.
  * - Pindah halaman: tombol ◀ ▶ (default halaman terakhir).
- * - "Otomatis saja" → slot bawaan (ttd: halaman terakhir; QR: pojok
+ * - Penempatan WAJIB — tak ada jalan pintas "otomatis" (dulu: slot bawaan; QR: pojok
  *   kanan-bawah halaman terakhir).
  *
  * Rasio halaman dibaca dari DIMENSI GAMBAR yang termuat (bukan
@@ -33,7 +33,7 @@ import {
 export default function AturPosisiTtd({
   jenis = "ttd", bangunUrlHalaman, jumlahHalaman = 1, pngTtd,
   nilaiAwal = null, onKirim, onBatal, mengirim = false,
-  labelKirim, labelOtomatis = "Otomatis saja",
+  labelKirim,
 }) {
   const qr = jenis === "qr";
   const MIN = qr ? 0.10 : 0.08;
@@ -233,17 +233,12 @@ export default function AturPosisiTtd({
           <Button type="button" variant="outline" size="sm" className="h-9 text-xs" disabled={mengirim} onClick={onBatal}>
             Kembali
           </Button>
-          {/* "Otomatis saja" HANYA untuk QR (milik pemilik dokumen). Pada sisi
-              penanda tangan tombol itu menyesatkan — letak ttd memang harus
-              dipilih, dan letak QR bukan urusannya (diatur saat unduh). */}
-          {qr && (
-            <Button type="button" variant="outline" size="sm" className="h-9 text-xs" disabled={mengirim}
-              onClick={() => onKirim(null)}
-              title="QR otomatis di pojok kanan-bawah halaman terakhir"
-              data-testid="posisi-lewati">
-              <SkipForward className="w-3.5 h-3.5 mr-1.5" />{labelOtomatis}
-            </Button>
-          )}
+          {/* "Otomatis saja" DICABUT (mandat pemilik): admin WAJIB menempatkan
+              QR verifikasi sendiri. Penempatan otomatis di pojok kanan-bawah
+              halaman terakhir kerap menimpa blok tanda tangan atau kaki
+              halaman, dan karena tombolnya adalah jalan tercepat, itulah yang
+              paling sering dipakai. Menghapus jalan pintasnya membuat letak QR
+              selalu ditentukan orang yang melihat dokumennya. */}
         </div>
         <Button type="button" size="sm" className="h-9 text-xs" disabled={mengirim || gagalHal || muatHal}
           onClick={() => onKirim({ halaman, ...pos })} data-testid="posisi-kirim">

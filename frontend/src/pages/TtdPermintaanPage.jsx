@@ -80,6 +80,11 @@ export default function TtdPermintaanPage({ user, onBack }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
+  // Saringan status dari badge ringkasan: null = semua. Diklik = menyala,
+  // diklik lagi = padam (mandat pemilik). Satu status saja — badge-nya
+  // saling meniadakan, jadi memilih yang lain berarti berpindah, bukan
+  // menumpuk.
+  const [fStatus, setFStatus] = useState(null);
   const [form, setForm] = useState(null);          // FORM_KOSONG saat dialog buka
   const [saving, setSaving] = useState(false);
   const [hasil, setHasil] = useState(null);        // {judul, links:[{nama,link}]} pasca-buat
@@ -117,11 +122,12 @@ export default function TtdPermintaanPage({ user, onBack }) {
 
   const tampil = useMemo(() => {
     const s = q.trim().toLowerCase();
-    if (!s) return items;
-    return items.filter((it) =>
+    let hasil = fStatus ? items.filter((it) => it.status === fStatus) : items;
+    if (!s) return hasil;
+    return hasil.filter((it) =>
       (it.judul || "").toLowerCase().includes(s) ||
       (it.signers || []).some((sg) => (sg.nama || "").toLowerCase().includes(s)));
-  }, [items, q]);
+  }, [items, q, fStatus]);
 
   const ubahSigner = (i, k, v) => {
     setForm((f) => {
@@ -190,8 +196,8 @@ export default function TtdPermintaanPage({ user, onBack }) {
 
   // Unduh dokumen ber-TTD LEWAT langkah "atur QR" (mandat pemilik): letak &
   // ukuran QR verifikasi ditentukan SEKALI di akhir — saat semua pihak sudah
-  // meneken — bukan diserahkan ke tiap penanda tangan. "Otomatis saja"
-  // mengembalikan QR ke pojok kanan-bawah halaman terakhir.
+  // meneken — bukan diserahkan ke tiap penanda tangan. Sejak mandat pemilik
+  // berikutnya, penempatan QR WAJIB: jalan pintas "Otomatis saja" dicabut.
   const simpanQrLaluUnduh = async (posisi) => {
     if (!aturQr) return;
     setSimpanQr(true);
@@ -294,12 +300,33 @@ export default function TtdPermintaanPage({ user, onBack }) {
           <div className="flex gap-1.5 flex-wrap" data-testid="ttd-ringkas-status">
             {["terkirim", "sebagian", "selesai", "batal"].map((st) => {
               const n = items.filter((i) => i.status === st).length;
-              return n > 0 ? (
-                <span key={st} className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${WARNA_STATUS[st]}`}>
+              if (!n) return null;
+              const on = fStatus === st;
+              return (
+                <button
+                  key={st} type="button"
+                  onClick={() => setFStatus((p) => (p === st ? null : st))}
+                  aria-pressed={on}
+                  title={on ? `Saringan ${LABEL_STATUS[st]} aktif — ketuk untuk mematikan`
+                            : `Tampilkan hanya yang ${LABEL_STATUS[st]}`}
+                  data-testid={`ttd-filter-${st}`}
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold transition-all min-h-0 min-w-0 ${WARNA_STATUS[st]} ${on
+                    ? "ring-2 ring-offset-1 ring-current dark:ring-offset-background"
+                    : "opacity-80 hover:opacity-100"}`}
+                >
                   {n} {LABEL_STATUS[st]}
-                </span>
-              ) : null;
+                </button>
+              );
             })}
+            {fStatus && (
+              <button
+                type="button" onClick={() => setFStatus(null)}
+                data-testid="ttd-filter-reset"
+                className="px-2 py-0.5 rounded-full text-[10px] font-bold text-muted-foreground hover:bg-muted min-h-0 min-w-0"
+              >
+                Tampilkan semua
+              </button>
+            )}
           </div>
         )}
         <div className="relative">
@@ -325,14 +352,32 @@ export default function TtdPermintaanPage({ user, onBack }) {
               </Button>
             </div>
           ) : (
-            // Data ada, hanya tersaring pencarian — jangan mengaku "belum ada".
+            // Data ada, hanya tersaring — jangan mengaku "belum ada", dan
+            // sebut penyaring MANA yang menyembunyikannya (pencarian, status,
+            // atau keduanya) supaya jalan keluarnya jelas.
             <div className="py-16 text-center space-y-2">
               <SearchX className="w-10 h-10 mx-auto text-muted-foreground/50" />
-              <p className="text-sm text-muted-foreground">Tidak ada hasil untuk &quot;{q}&quot;</p>
-              <Button variant="outline" size="sm" className="mt-1 h-9 text-xs"
-                onClick={() => setQ("")} data-testid="ttd-clear-cari">
-                Hapus pencarian
-              </Button>
+              <p className="text-sm text-muted-foreground">
+                {q.trim() && fStatus
+                  ? <>Tidak ada &quot;{q}&quot; yang berstatus {LABEL_STATUS[fStatus]}</>
+                  : q.trim()
+                    ? <>Tidak ada hasil untuk &quot;{q}&quot;</>
+                    : <>Tidak ada permintaan berstatus {LABEL_STATUS[fStatus]}</>}
+              </p>
+              <div className="flex items-center justify-center gap-2 flex-wrap">
+                {q.trim() && (
+                  <Button variant="outline" size="sm" className="mt-1 h-9 text-xs"
+                    onClick={() => setQ("")} data-testid="ttd-clear-cari">
+                    Hapus pencarian
+                  </Button>
+                )}
+                {fStatus && (
+                  <Button variant="outline" size="sm" className="mt-1 h-9 text-xs"
+                    onClick={() => setFStatus(null)} data-testid="ttd-clear-status">
+                    Tampilkan semua status
+                  </Button>
+                )}
+              </div>
             </div>
           )
         ) : (
@@ -735,8 +780,9 @@ export default function TtdPermintaanPage({ user, onBack }) {
             <DialogTitle className="text-base">Atur QR Verifikasi &amp; Unduh</DialogTitle>
             <DialogDescription className="text-xs">
               Letakkan kode QR verifikasi pada ruang kosong dokumen — sekali
-              atur untuk seluruh dokumen. Pilih &quot;Otomatis saja&quot; bila
-              ingin QR di pojok kanan-bawah halaman terakhir.
+              atur untuk seluruh dokumen, lalu dokumen ber-TTD langsung
+              terunduh. Penempatan ini <b>wajib</b> — QR tak lagi ditaruh
+              otomatis, agar tidak menimpa blok tanda tangan atau kaki halaman.
             </DialogDescription>
           </DialogHeader>
           {aturQr && (
@@ -752,7 +798,6 @@ export default function TtdPermintaanPage({ user, onBack }) {
               nilaiAwal={aturQr.posisi_qr || null}
               mengirim={simpanQr}
               labelKirim="Simpan & Unduh"
-              labelOtomatis="Otomatis saja"
               onBatal={() => setAturQr(null)}
               onKirim={simpanQrLaluUnduh}
             />
