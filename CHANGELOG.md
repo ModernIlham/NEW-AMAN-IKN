@@ -67,6 +67,56 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#777] Jaring pengaman untuk pembuat dokumen Word & dua penjaga keamanan yang senyap — 2026-08-05
+
+Tiga bagian kode ini berjalan sejak lama **tanpa satu pun uji**, padahal
+kegagalannya tidak berisik: dokumen tetap terbentuk, unggahan tetap diterima,
+sandi tetap tersimpan — hanya isinya yang salah.
+
+**1. `docx_utils` (17 fungsi, 86 uji baru).** Ini sistem desain bersama untuk
+seluruh laporan `.docx` resmi (BA inventarisasi, SPTJM, surat koreksi, DBHI).
+Yang paling dijaga:
+
+- **Privasi area tanda tangan.** NIK dan penandatangan Non-ASN tidak boleh
+  tercetak nomornya. Uji membuktikannya sampai ke `word/document.xml` di dalam
+  arsip, bukan sekadar ke objek Python.
+- **Semua anggota tim dapat kolom tanda tangan** — blok TTD disusun
+  berpasangan dua kolom per baris; kesalahan iterasi "menghilangkan" anggota
+  tanpa error apa pun.
+- **Dokumen tetap terbentuk** saat masukan cacat: logo data-URI rusak, alamat
+  satker kosong, `settings=None`.
+- Orientasi kertas (DBHI landscape), fase zebra tabel, nomor halaman berupa
+  field `PAGE` (bukan angka mati), dan `Tembusan:` yang tidak muncul sendirian
+  tanpa isi.
+
+**2. `shared_utils.cek_magic_gambar` (satu-satunya pemeriksa ISI berkas
+unggahan di enam titik).** Uji memakai byte gambar sungguhan dari Pillow, lalu
+menolak yang menyamar: PNG berekstensi `.jpg`, HTML/skrip, PDF, ZIP. Perhatian
+khusus pada **WebP**: kontainer RIFF juga dipakai WAV dan AVI, jadi memeriksa
+`RIFF` saja akan meloloskan berkas audio sebagai gambar — penanda `WEBP` di
+offset 8 wajib ikut diperiksa.
+
+Fungsi ini **sengaja meloloskan ekstensi di luar daftar** (`.pdf` diperiksa
+terpisah oleh pemanggil). Karena itu ada uji yang menagih janji tersebut:
+setiap pemanggil harus menyaring ekstensi lebih dulu, dan jalur penerima PDF
+harus punya pemeriksa `%PDF` sendiri.
+
+**3. `auth_utils.periksa_kekuatan_password` (gerbang pendaftaran + reset).**
+Kembaliannya adalah **pesan galat**, dan string kosong berarti LULUS —
+membaliknya jadi boolean membuat semua sandi lemah diterima, karena pemanggil
+menulis `if _galat_pw:`. Uji mengunci kontrak itu, urutan pesan
+(panjang diperiksa sebelum komposisi), dan batas kelas karakter yang nyata
+(`[A-Z]`/`[a-z]` hanya Latin; `\d` mencakup digit Unicode).
+
+**Verifikasi.** 136 uji baru; tujuh mutasi disuntikkan ke kode produksi
+(kebocoran NIP di blok TTD, fase zebra digeser, paragraf pembawa garis kop
+dihapus, penyaring baris kosong tembusan dicabut, landscape tak menukar sisi
+kertas, cek offset WebP dihilangkan, sandi pendek diloloskan) — **ketujuhnya
+tertangkap**. Seluruh 2.044 uji unit backend hijau. Tidak ada perubahan pada
+kode produksi di PR ini.
+
+---
+
 ## [#776] Sisa kuota Tinify dipakai, bukan dibiarkan hangus — plus penjaga disk yang selama ini bolong — 2026-08-05
 
 Permintaan pemilik: kuota Tinify hangus tiap pergantian bulan; kalau masih
