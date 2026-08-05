@@ -33,7 +33,17 @@ MODUL_LABEL = {
     "bast": "BAST",
     "pembukuan": "Pembukuan",
     "siman": "SIMAN V2",
+    "lokasi": "Lokasi & Opname",
     "aset": "Master Aset",
+}
+
+# Status rekonsiliasi satu scan opname (lihat `opname_utils.klasifikasi_scan`)
+# → kalimat yang dibaca operator di timeline.
+LABEL_STATUS_SCAN = {
+    "baru": "penempatan pertama",
+    "sesuai": "cocok dengan catatan",
+    "pindah": "BEDA dari catatan",
+    "tanpa_lokasi": "di luar kawasan terpetakan",
 }
 
 # Uraian kode transaksi Buku Barang (mutasi_bmn) yang umum dipakai.
@@ -183,6 +193,79 @@ def event_dari_riwayat(doc, modul, judul, ref_id="", kunci_waktu=("tanggal", "wa
 def label_transaksi_buku(kode) -> str:
     k = _s(kode)
     return KODE_TRANSAKSI_LABEL.get(k, f"Transaksi {k}" if k else "Transaksi")
+
+
+def _nama_lokasi(sisi) -> str:
+    """Nama lokasi terbaca dari satu sisi entri riwayat: jalur lengkap bila
+    ada (lebih informatif), jatuh ke nama node, lalu "" bila memang lepas."""
+    s = sisi or {}
+    return _s(s.get("jalur")) or _s(s.get("nama")) or _s(s.get("node_nama"))
+
+
+def event_scan_opname(scan) -> dict:
+    """Satu scan stiker QR (`opname_scan`) → event timeline.
+
+    Selama ini scan HANYA muncul lewat audit log dengan judul "Perubahan data
+    aset (opname_scan)" — menyesatkan (scan tak mengubah data apa pun) dan
+    tanpa satu pun isi yang berguna: node mana, cocok atau tidak, sudah
+    diterapkan atau belum. Padahal inilah satu-satunya bukti bahwa seseorang
+    benar-benar MELIHAT barangnya di lapangan.
+    """
+    s = scan or {}
+    status = _s(s.get("status_rekonsiliasi"))
+    lokasi = _s((s.get("lokasi_spasial") or {}).get("jalur_nama")) \
+        or _s((s.get("lokasi_spasial") or {}).get("node_nama"))
+    judul = f"Dipindai di {lokasi}" if lokasi else "Dipindai (tanpa lokasi denah)"
+
+    bagian = []
+    label = LABEL_STATUS_SCAN.get(status)
+    if label:
+        bagian.append(f"Hasil: {label}")
+    elif status:
+        bagian.append(f"Hasil: {status}")
+    if status == "pindah":
+        # Titik paling berharga bagi penelusur: dari mana ia berpindah.
+        asal = _nama_lokasi(s.get("lokasi_sebelum"))
+        if asal:
+            bagian.append(f"Tercatat sebelumnya di {asal}")
+        bagian.append("Sudah diterapkan" if s.get("diterapkan")
+                      else "BELUM diterapkan ke catatan")
+    if _s(s.get("catatan")):
+        bagian.append(_s(s.get("catatan")))
+    if _s(s.get("oleh")):
+        bagian.append(f"Oleh: {_s(s.get('oleh'))}")
+
+    return buat_event("lokasi", "opname_scan", judul,
+                      tanggal=_s(s.get("pada")) or _s(s.get("diterima_pada")),
+                      detail="; ".join(bagian), ref_id=_s(s.get("id")),
+                      status=status)
+
+
+def event_pindah_lokasi(baris) -> dict:
+    """Satu baris `riwayat_lokasi_aset` → event timeline.
+
+    Koleksi ini menyimpan snapshot NAMA kedua sisi justru agar riwayat custody
+    tetap terbaca bertahun kemudian; sampai kini tak ada satu pun layar yang
+    membacanya. Tiga bentuk perpindahan dibedakan supaya kalimatnya jujur:
+    penempatan pertama, pencabutan, dan perpindahan antar-lokasi.
+    """
+    b = baris or {}
+    dari = _nama_lokasi(b.get("dari"))
+    ke = _nama_lokasi(b.get("ke"))
+    if dari and ke:
+        judul, jenis = f"Dipindahkan: {dari} → {ke}", "pindah"
+    elif ke:
+        judul, jenis = f"Ditempatkan di {ke}", "penempatan"
+    elif dari:
+        judul, jenis = f"Penempatan dicabut (sebelumnya {dari})", "pencabutan"
+    else:
+        # Kedua sisi kosong: baris tanpa makna (data lama/cacat). Tetap
+        # ditampilkan sebagai jejak, bukan dibuang senyap.
+        judul, jenis = "Perubahan penempatan denah", "pindah"
+    oleh = _s(b.get("oleh"))
+    return buat_event("lokasi", jenis, judul, tanggal=_s(b.get("pada")),
+                      detail=f"Oleh: {oleh}" if oleh else "",
+                      ref_id=_s(b.get("asset_id")))
 
 
 def ringkas_perubahan_audit(changes, batas=4) -> str:

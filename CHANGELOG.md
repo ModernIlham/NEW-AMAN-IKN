@@ -67,6 +67,69 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#772] Timeline Aset menampilkan bukti lapangan — opname & jejak perpindahan lokasi — 2026-08-05
+
+Dua sumber kejadian sudah lama terekam tetapi tak pernah sampai ke layar
+Timeline Aset:
+
+| Koleksi | Isinya | Nasibnya selama ini |
+|---|---|---|
+| `opname_scan` | Bukti petugas benar-benar MELIHAT barangnya (pindai stiker QR) | Hanya bocor sebagai baris audit "Perubahan data aset (opname_scan)" |
+| `riwayat_lokasi_aset` | Jejak custody antar ruangan denah | Tak dibaca satu layar pun |
+
+Baris audit itu menyesatkan sekaligus kosong: **pemindaian tak mengubah data
+apa pun**, dan tak satu pun isi yang berguna ikut terbawa — node mana, cocok
+atau tidak dengan catatan, sudah diterapkan atau belum.
+
+### Yang sekarang tampil
+
+Modul baru **Lokasi & Opname** (badge ungu, ikut chip filter):
+
+- **Pemindaian** — "Dipindai di Gedung A / Lt.1 / R.101", dengan hasil
+  rekonsiliasinya dalam bahasa manusia (*cocok dengan catatan*, *penempatan
+  pertama*, *BEDA dari catatan*, *di luar kawasan terpetakan*). Khusus temuan
+  `pindah`: **dari mana** ia berpindah dan apakah catatan sudah menyusul
+  ("Sudah diterapkan" / "BELUM diterapkan ke catatan") — itulah pekerjaan
+  sisa yang selama ini tak terlihat.
+- **Perpindahan lokasi** — dibedakan jujur jadi tiga bentuk: penempatan
+  pertama, perpindahan antar-ruangan (`Gd.A / R.101 → Gd.B / R.205`), dan
+  pencabutan penempatan (tetap menyebut lokasi terakhirnya — justru itu yang
+  dicari saat barang hilang).
+
+Pemindaian tanpa node tetap ditampilkan: ia membuktikan barangnya ADA dan
+siapa yang melihatnya, meski di luar kawasan terpetakan.
+
+### Anti-ganda: tiga aksi audit disaring
+
+Setelah kejadiannya tersaji utuh, `opname_scan`, `aset_lokasi_tandai`, dan
+`aset_lokasi_hapus` **tidak lagi lolos** ke bagian log audit teknis — kalau
+dibiarkan, setiap pemindaian muncul dua kali (sekali berguna, sekali keliru)
+dan cacah chip filter per modul ikut menggelembung.
+
+Yang ikut hilang hanyalah penyimpanan ulang lokasi yang **sama persis** (node
+& titik identik): `pindah_lokasi_berarti` memang tak menganggapnya
+perpindahan, jadi tak ada barisnya di bagian baru. Pertukaran ini disengaja
+dan diuji.
+
+### Jebakan yang dikunci uji
+
+`test_timeline_lokasi.py` (22 uji) menjaga tiga hal yang mudah melenceng:
+
+1. **Daftar aksi penyaring dibaca ulang dari penulisnya** — uji memindai
+   pemanggilan `log_audit` di `routes/opname.py` & `routes/spasial.py`. Nama
+   aksi yang diganti kelak akan membuat daftarnya basi tanpa tanda; kini itu
+   menggagalkan uji.
+2. **`riwayat_lokasi_aset` TIDAK boleh disaring `kode_satker`** — koleksi itu
+   memang tak punya fieldnya (lihat `spasial_utils.entri_riwayat_lokasi`);
+   menyaringnya akan mengosongkan hasilnya diam-diam. Pembatasannya lewat
+   `asset_id`, yang sudah disaring `scope_query_aset`.
+3. **Setiap status `klasifikasi_scan` punya label** — status yang terlewat
+   akan tampil sebagai kode mentah di layar.
+
+Tetap read-only, dan tanpa endpoint baru.
+
+---
+
 ## [#771] Dasbor Integritas bisa ditelusuri — enam endpoint detail akhirnya terpakai — 2026-08-05
 
 Tab **Integritas** di panel Riwayat menampilkan angka temuan per register, lalu
