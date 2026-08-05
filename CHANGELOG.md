@@ -67,6 +67,65 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#758] Usulan peta kolaborasi bisa diimpor ke peta asli — satu per satu atau sekaligus — 2026-08-05
+
+Mandat pemilik: "hasil penambahan titik, dan juga komentarnya dapat ditambahkan
+import ke dalam peta aslinya satu persatu atau yakin semua import dari tamu
+kolaborasi massal langsung, dengan icon komentar di marker yang dikomentari
+(berikan fitur hapus perkomentar di peta asli nantinya) … apabila disetujui
+maka menjadi titik baru aset … dengan kode barang dummy "0000000000" + nup
+otomatisnya."
+
+Sebelumnya kontribusi tamu berhenti di peta kolaborasi: bisa dilihat, bisa
+dihapus, tetapi tak ada jalan masuk ke data yang sebenarnya. Kini ada.
+
+### Alur
+
+Tombol **Usulan** di peta kolaborasi (hanya pengelola satker) membuka daftar
+tinjauan: tiap usulan bisa **disetujui** (👍) atau **ditolak** (👎), atau
+seluruhnya sekaligus lewat **"Yakin, Impor Semua"**.
+
+- **Titik disetujui → aset baru** dengan kode barang sementara
+  `0000000000` + NUP otomatis, koordinat titiknya, status *Belum
+  Diinventarisasi*, dan catatan yang menyebut siapa pengusulnya.
+- **Komentar disetujui → komentar pada aset** di peta asli, dengan **lencana
+  angka + ikon komentar** pada markernya dan **tombol hapus per komentar**.
+- **Usulan ditolak tetap tersimpan** (berlabel), tidak dihapus — jejak
+  peninjauan itu sendiri bagian dari catatan.
+
+### Yang dijaga supaya tak rusak diam-diam
+
+- **Aset kembar.** Persetujuan memakai kunci idempotensi turunan id usulan,
+  jadi tombol ditekan dua kali atau batch yang diulang karena jaringan putus
+  tetap menghasilkan satu aset.
+- **Komentar yatim.** Komentar pada TITIK usulan baru punya aset tujuan setelah
+  titiknya disetujui. Batch massal karena itu memproses **titik lebih dulu**
+  secara eksplisit — bukan mengandalkan urutan waktu, yang bersandar pada
+  perbandingan string dan meleset bila stempel waktunya bercampur format.
+  Di layar, komentar seperti itu tombolnya mati dengan sebab yang tertulis,
+  bukan tombol hidup yang pasti ditolak server.
+- **Isolasi satker.** Menyetujui = menulis data resmi, jadi penjaganya
+  `require_writer` + pemeriksaan satker atas dokumen share. Pemegang tautan
+  tamu tak pernah bisa; admin satker lain ditolak 403 **sebelum** ada aset yang
+  terlanjur lahir. Kontribusi baru kini juga distempel `kode_satker` +
+  `activity_id` sendiri, jadi penyaringnya tak lagi bergantung pada join.
+- **Usulan era-lama tak hilang.** Dokumen sebelum alur ini tak punya
+  `status_usulan`; tak-ada dibaca sebagai **belum ditinjau**, bukan "selesai".
+- **Hasil batch dilaporkan jujur.** Yang dilewati dan yang gagal ikut disebut
+  di layar, bukan hanya angka keberhasilan.
+
+### Konsekuensi yang dinyatakan terus terang
+
+Aset hasil usulan berkategori **dummy**, dan `report_filters.tanpa_dummy_filter`
+mengecualikan kategori dummy dari laporan resmi. Jadi usulan yang baru masuk
+**belum** ikut menghitung neraca sampai petugas melengkapi kode barang &
+kategori sebenarnya. Itu disengaja — data lapangan yang belum diverifikasi
+tidak boleh langsung masuk laporan.
+
+Uji: 21 uji backend baru + 12 uji frontend baru. Mutasi yang menghapus
+pengurutan titik-dahulu dijatuhkan uji urutan-waktu-terbalik. Total 1750 uji
+backend & 478 uji frontend hijau.
+
 ## [#757] Master Kode Klasifikasi Arsip akhirnya berpengaruh pada penomoran — 2026-08-04
 
 Keluhan pemilik: "Master Kode Klasifikasi Arsip di setting penomeran ketika
