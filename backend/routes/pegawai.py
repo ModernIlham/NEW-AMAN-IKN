@@ -470,6 +470,11 @@ async def template_impor_pegawai(_user: dict = Depends(require_user)):
         "Email": "budi@instansi.go.id", "Pendidikan Terakhir": "S1",
         "Nama Bank": "BRI", "No Rekening": "1234567890",
         "Status": "AKTIF",
+        # Kelengkapan SIMPEG — dicontohkan agar pengguna tahu bentuk isiannya
+        # (kolom enum menerima uraian maupun kodenya).
+        "Agama": "Islam", "Status Perkawinan": "Kawin",
+        "Kewarganegaraan": "WNI", "Jenis Jabatan": "Pelaksana",
+        "Eselon (Teks)": "IV.a", "Unit Organisasi": "Sekretariat Jenderal",
     }
     assert set(contoh) <= set(HEADER_IMPOR)
     w.writerow([contoh.get(h, "") for h in HEADER_IMPOR])

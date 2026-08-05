@@ -566,23 +566,71 @@ KOLOM_IMPOR = {
     "unit kerja": "unit_kerja",
     "gelar depan": "gelar_depan",
     "gelar belakang": "gelar_belakang",
+    # ── Kelengkapan diri (SIMPEG) ──
+    "agama": "agama",
+    "status perkawinan": "status_perkawinan",
+    "kewarganegaraan": "kewarganegaraan",
+    "jenis identitas wna": "jenis_identitas_wna",
+    "nomor identitas wna": "nomor_identitas_wna",
+    "no identitas wna": "nomor_identitas_wna",
+    # ── Jabatan & organisasi ──
+    "jenis jabatan": "jenis_jabatan",
+    "eselon (teks)": "eselon", "eselon": "eselon",
+    "unit organisasi": "unit_organisasi",
+    "unit organisasi / satker": "unit_organisasi",
+    "instansi/satker terkait": "status_pegawai_instansi",
+    "instansi terkait": "status_pegawai_instansi",
+    # ── Kelengkapan status Meninggal Dunia & ahli waris ──
+    "tgl meninggal": "tanggal_meninggal",
+    "tanggal meninggal": "tanggal_meninggal",
+    "nomor akta kematian": "nomor_akta_kematian",
+    "no akta kematian": "nomor_akta_kematian",
+    "penyebab meninggal": "penyebab_meninggal",
+    "ahli waris - nama": "ahli_waris_nama", "ahli waris nama": "ahli_waris_nama",
+    "ahli waris - hubungan": "ahli_waris_hubungan",
+    "ahli waris hubungan": "ahli_waris_hubungan",
+    "ahli waris - kontak": "ahli_waris_kontak",
+    "ahli waris kontak": "ahli_waris_kontak",
+    "tgl pemberitahuan ahli waris": "pemberitahuan_ahli_waris_tanggal",
+    "nomor pemberitahuan ahli waris": "pemberitahuan_ahli_waris_nomor",
 }
 
 # Urutan kolom template ekspor/impor (header ramah).
+#
+# CAKUPAN: seluruh field yang dapat diisi lewat form Master Pegawai, dengan DUA
+# pengecualian yang disengaja — keduanya bukan kelalaian:
+#
+#   * `sub_kategori_non_asn` — sudah pulang-pergi lewat kolom "Status
+#     Kepegawaian" (ekspor menulis label subnya, mis. "Satpam"; impor
+#     memulihkannya jadi non_asn + satpam). Kolom terpisah akan menciptakan dua
+#     sumber untuk satu nilai, yang bisa saling bertentangan.
+#   * `kode_satker` — dicap server dari satker pengimpor demi isolasi data
+#     (lihat `impor_pegawai`), jadi kolomnya akan diabaikan diam-diam. Kodenya
+#     sudah tercantum di nama berkas ekspor.
+#
+# Uji `test_pegawai_cakupan_ekspor.py` menagih kesetaraan ini agar field form
+# baru tak lagi bisa lahir tanpa kolomnya.
 HEADER_IMPOR = [
     "NIP/NIK/NRP", "Nama Lengkap", "Gelar Depan", "Gelar Belakang",
     "Jenis Kelamin", "Tempat Lahir", "Tgl Lahir",
-    "Status Kepegawaian", "Pangkat/Golongan", "Jabatan",
+    "Agama", "Status Perkawinan",
+    "Kewarganegaraan", "Jenis Identitas WNA", "Nomor Identitas WNA",
+    "Status Kepegawaian", "Pangkat/Golongan", "Jabatan", "Jenis Jabatan",
     "Jenis Pelaksana (Plt/Plh)", "Jabatan Pelaksana (Rangkap)",
     "Kategori Pegawai",
     "TMT Jabatan", "Tgl Akhir Jabatan",
     "Eselon 1", "Eselon 2", "Eselon 3", "Eselon 4", "Eselon 5",
-    "Unit Kerja",
+    "Eselon (Teks)",
+    "Unit Kerja", "Unit Organisasi",
     "No Telepon", "Email", "NPWP", "Pendidikan Terakhir", "Alamat",
     "Nama Bank", "No Rekening",
     "Nomor Kontrak", "Tgl Mulai Kontrak", "Tgl Selesai Kontrak",
     "Jenis Kontrak Non-ASN", "Perusahaan Penyedia", "Kode Satker Lengkap",
-    "Status Pegawai", "Status", "Keterangan",
+    "Status Pegawai", "Instansi/Satker Terkait", "Status",
+    "Tgl Meninggal", "Nomor Akta Kematian", "Penyebab Meninggal",
+    "Ahli Waris - Nama", "Ahli Waris - Hubungan", "Ahli Waris - Kontak",
+    "Tgl Pemberitahuan Ahli Waris", "Nomor Pemberitahuan Ahli Waris",
+    "Keterangan",
 ]
 
 
@@ -682,6 +730,30 @@ def normalisasi_status_pegawai_satker(nilai):
     return ""
 
 
+def normalisasi_kode_referensi(nilai, peta):
+    """Kode ATAU uraian → kode referensi; kosong/asing → "". MURNI.
+
+    Satu penormal untuk seluruh enum sederhana (agama, status perkawinan,
+    kewarganegaraan, jenis identitas WNA, jenis jabatan) — semuanya berpola
+    sama, dan menyalinnya lima kali hanya menambah tempat untuk melenceng.
+
+    Nilai asing dikosongkan, BUKAN disimpan apa adanya: `validate_pegawai`
+    menolak kode di luar daftar, dan penolakan itu membuang SELURUH baris
+    pegawai saat impor massal. Kehilangan satu sel lebih ringan daripada
+    kehilangan satu orang.
+    """
+    s = str(nilai or "").strip()
+    if not s:
+        return ""
+    low = s.lower()
+    if low in peta:
+        return low
+    for kode, uraian in peta.items():
+        if low == str(uraian).strip().lower():
+            return kode
+    return ""
+
+
 def _norm_jk(nilai):
     s = str(nilai or "").strip().lower()
     if s.startswith("l") or "laki" in s or s == "m":
@@ -755,6 +827,16 @@ def normalisasi_jenis_pelaksana(nilai):
     return ""
 
 
+# Field impor yang cukup dinormalkan lewat peta referensinya sendiri.
+_ENUM_IMPOR = {
+    "agama": AGAMA,
+    "status_perkawinan": STATUS_PERKAWINAN,
+    "kewarganegaraan": KEWARGANEGARAAN,
+    "jenis_identitas_wna": JENIS_IDENTITAS_WNA,
+    "jenis_jabatan": JENIS_JABATAN,
+}
+
+
 def baris_impor_ke_pegawai(raw):
     """Ubah satu baris impor (dict {header: nilai}) → dokumen pegawai bersih +
     daftar peringatan lunak. MURNI (teruji unit).
@@ -772,7 +854,15 @@ def baris_impor_ke_pegawai(raw):
         "sub_kategori_non_asn", "unit_kerja", "gelar_depan", "gelar_belakang",
         "tmt_jabatan", "tanggal_akhir_jabatan", "npwp",
         "pendidikan_terakhir", "alamat", "jenis_kontrak_non_asn",
-        "perusahaan_penyedia", "kode_satker_lengkap", "status_pegawai_satker")}
+        "perusahaan_penyedia", "kode_satker_lengkap", "status_pegawai_satker",
+        "agama", "status_perkawinan", "kewarganegaraan",
+        "jenis_identitas_wna", "nomor_identitas_wna",
+        "jenis_jabatan", "eselon", "unit_organisasi",
+        "status_pegawai_instansi",
+        "tanggal_meninggal", "nomor_akta_kematian", "penyebab_meninggal",
+        "ahli_waris_nama", "ahli_waris_hubungan", "ahli_waris_kontak",
+        "pemberitahuan_ahli_waris_tanggal",
+        "pemberitahuan_ahli_waris_nomor")}
     doc["status"] = "aktif"
     for header, nilai in (raw or {}).items():
         field = KOLOM_IMPOR.get(str(header or "").strip().lower())
@@ -787,8 +877,11 @@ def baris_impor_ke_pegawai(raw):
             doc["jenis_kelamin"] = _norm_jk(val)
         elif field in ("tanggal_lahir", "tgl_mulai_kontrak",
                        "tgl_selesai_kontrak", "tmt_jabatan",
-                       "tanggal_akhir_jabatan"):
+                       "tanggal_akhir_jabatan", "tanggal_meninggal",
+                       "pemberitahuan_ahli_waris_tanggal"):
             doc[field] = _norm_tgl(val)
+        elif field in _ENUM_IMPOR:
+            doc[field] = normalisasi_kode_referensi(val, _ENUM_IMPOR[field])
         elif field == "status_kepegawaian":
             kode, sub = normalisasi_status_kepegawaian(val)
             doc["status_kepegawaian"] = kode
@@ -1140,19 +1233,29 @@ def baris_ekspor_pegawai(doc) -> list:
     def g(k):
         return str(d.get(k) or "").strip()
 
+    def label(k, peta):
+        """Kode → uraian; nilai kosong tetap kosong (bukan uraian pertama)."""
+        return peta.get(g(k).lower(), "")
+
     _pel = {"plt": "Plt.", "plh": "Plh."}.get(g("jenis_pelaksana").lower(), "")
     return [
         g("nip"), g("nama"), g("gelar_depan"), g("gelar_belakang"),
         g("jenis_kelamin"), g("tempat_lahir"),
         g("tanggal_lahir")[:10],
+        label("agama", AGAMA), label("status_perkawinan", STATUS_PERKAWINAN),
+        label("kewarganegaraan", KEWARGANEGARAAN),
+        label("jenis_identitas_wna", JENIS_IDENTITAS_WNA),
+        g("nomor_identitas_wna"),
         label_ekspor_status_kepegawaian(d),
         g("pangkat_golongan"), g("jabatan"),
+        label("jenis_jabatan", JENIS_JABATAN),
         _pel, g("jabatan_pelaksana"),
         KATEGORI_PEGAWAI.get(g("kategori_pegawai").lower(),
                              g("kategori_pegawai")),
         g("tmt_jabatan")[:10], g("tanggal_akhir_jabatan")[:10],
         g("eselon1"), g("eselon2"), g("eselon3"), g("eselon4"), g("eselon5"),
-        g("unit_kerja"),
+        g("eselon"),
+        g("unit_kerja"), g("unit_organisasi"),
         g("no_hp"), g("email"), g("npwp"), g("pendidikan_terakhir"),
         g("alamat"), g("nama_bank"), g("no_rekening"),
         g("nomor_kontrak"), g("tgl_mulai_kontrak")[:10],
@@ -1160,7 +1263,13 @@ def baris_ekspor_pegawai(doc) -> list:
         JENIS_KONTRAK_NON_ASN.get(g("jenis_kontrak_non_asn").lower(), ""),
         g("perusahaan_penyedia"), g("kode_satker_lengkap"),
         STATUS_PEGAWAI_SATKER.get(g("status_pegawai_satker").lower(), ""),
+        g("status_pegawai_instansi"),
         STATUS_PEGAWAI.get(g("status").lower(), g("status") or "Aktif"),
+        g("tanggal_meninggal")[:10], g("nomor_akta_kematian"),
+        g("penyebab_meninggal"),
+        g("ahli_waris_nama"), g("ahli_waris_hubungan"), g("ahli_waris_kontak"),
+        g("pemberitahuan_ahli_waris_tanggal")[:10],
+        g("pemberitahuan_ahli_waris_nomor"),
         g("keterangan"),
     ]
 
@@ -1182,8 +1291,17 @@ OPSI_DROPDOWN_EKSPOR = {
     "Pendidikan Terakhir": list(PENDIDIKAN),
     "Status Pegawai": list(STATUS_PEGAWAI_SATKER.values()),
     "Status": list(STATUS_PEGAWAI.values()),
+    "Agama": list(AGAMA.values()),
+    "Status Perkawinan": list(STATUS_PERKAWINAN.values()),
+    "Kewarganegaraan": list(KEWARGANEGARAAN.values()),
+    "Jenis Identitas WNA": list(JENIS_IDENTITAS_WNA.values()),
+    "Jenis Jabatan": list(JENIS_JABATAN.values()),
 }
 
 # Kolom yang wajib berformat TEKS di Excel (menghindari artefak float NIP).
+# Semua kolom bernomor yang boleh berawalan nol atau melebihi 15 digit —
+# tanpa ini Excel mengubahnya jadi float dan angkanya rusak diam-diam.
 KOLOM_TEKS_EKSPOR = {"NIP/NIK/NRP", "No Telepon", "NPWP", "No Rekening",
-                     "Nomor Kontrak", "Kode Satker Lengkap"}
+                     "Nomor Kontrak", "Kode Satker Lengkap",
+                     "Nomor Identitas WNA", "Ahli Waris - Kontak",
+                     "Nomor Akta Kematian", "Nomor Pemberitahuan Ahli Waris"}
