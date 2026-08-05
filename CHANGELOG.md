@@ -67,6 +67,66 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#771] Dasbor Integritas bisa ditelusuri — enam endpoint detail akhirnya terpakai — 2026-08-05
+
+Tab **Integritas** di panel Riwayat menampilkan angka temuan per register, lalu
+menutupnya dengan kalimat: *"Detail per temuan tersedia via endpoint
+`/integritas/*`"*. Operator membaca "12 temuan" dan berhenti di situ — tak ada
+cara di layar untuk tahu **aset mana** yang bermasalah. Petunjuk itu hanya
+berguna bagi orang yang bisa memanggil API sendiri.
+
+Enam endpoint detailnya sudah ada di backend sejak §5A dan tak satu pun pernah
+punya pemanggil di frontend:
+
+| Register | Endpoint |
+|---|---|
+| Usulan Penghapusan | `/integritas/identitas-penghapusan` |
+| Pemindahtanganan | `/integritas/identitas-pemindahtanganan` |
+| SK PSP Penggunaan | `/integritas/identitas-psp` |
+| Jadwal Pemeliharaan | `/integritas/identitas-jadwal-pemeliharaan` |
+| Kodefikasi Aset | `/integritas/kodefikasi-aset` |
+| Kategori ↔ Kodefikasi | `/integritas/kategori-kodefikasi` |
+
+Ekspor CSV `/integritas/ekspor-ringkasan` juga tak pernah punya tombol.
+
+### Yang berubah
+
+- **Kartu register bertemuan bisa dibuka** (ketuk / Enter / Spasi). Rinciannya
+  dimuat **malas** — tiap endpoint adalah scan lintas-koleksi, jadi hanya
+  register yang benar-benar dibuka yang dipanggil, bukan enam-enamnya sekaligus.
+- **Isi yang bisa ditindaklanjuti**, bukan sekadar cacah: untuk temuan identitas
+  ditampilkan perbandingan `snapshot → master` per field (Kode Barang / NUP /
+  Nama Barang), lengkap dengan konteks record (nomor SK, bentuk, status, jatuh
+  tempo). Temuan kodefikasi menampilkan kode + jumlah aset yang memakainya.
+- **Tombol unduh CSV** ringkasan di kepala dasbor.
+- Kalimat penutup diganti — tak lagi menyuruh operator memanggil endpoint.
+
+### Jebakan yang dikunci uji
+
+Modul murninya (`frontend/src/lib/integritasDetail.js`) memisahkan dua hal yang
+mudah salah, dan `integritasDetail.test.js` (28 uji) menjaganya:
+
+1. **Kunci cacah berbeda per register.** Endpoint identitas memakai `jumlah`,
+   `kodefikasi-aset` memakai `jumlah_kode`, `kategori-kodefikasi` memakai
+   `jumlah_bermasalah` (bukan `jumlah_kategori`, yang menghitung SELURUH
+   kategori termasuk yang sehat). Membaca `jumlah` untuk semuanya menampilkan
+   "0 temuan" padahal daftarnya terisi.
+2. **Peta register ↔ backend tak boleh melenceng.** Uji membaca
+   `_kumpulkan_bagian_integritas` di `backend/routes/audit.py` sebagai sumber
+   kebenaran: register baru tanpa entri peta akan jadi kartu yang tak bisa
+   dibuka — persis keadaan lama — dan itu MEMBUAT UJI GAGAL.
+
+Tambahan halus: pada temuan `snapshot_basi`, backend hanya mengirim field yang
+**berbeda**. Bila yang basi cuma nama barang, `asset_code`/`NUP` tak ada sama
+sekali — judul baris karena itu turun bertahap (kode/NUP → nama → nomor record)
+dan tak pernah kosong. Server juga memangkas `items` kategori di 300 sementara
+cacahnya menghitung semua; selisihnya dinyatakan terus terang sebagai
+"+N temuan lain tak ditampilkan", bukan dibiarkan tampak lengkap.
+
+Tetap **read-only**: tak ada data yang diubah.
+
+---
+
 ## [#770] Ekspor/template/impor Master Pegawai mencakup SELURUH isian form — 2026-08-05
 
 Keluhan pemilik: "hasil eksportnya belum menggambarkan hasil keseluruhan
