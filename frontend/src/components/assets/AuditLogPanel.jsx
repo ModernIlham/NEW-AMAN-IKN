@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useCallback, memo } from "react";
-import { History, X, ChevronLeft, ChevronRight, User, Clock, Plus, Edit3, Trash2, Layers, FileUp, Users, Package, ShieldCheck, ShieldAlert, RefreshCw, Server } from "lucide-react";
+import { History, X, ChevronLeft, ChevronRight, ChevronDown, User, Clock, Plus, Edit3, Trash2, Layers, FileUp, Users, Package, ShieldCheck, ShieldAlert, RefreshCw, Server, Download } from "lucide-react";
 import { Button } from "../ui/button";
 import axios from "axios";
+
+import { downloadFileWithProgress } from "../../lib/downloadFile";
+import { barisTemuan, jalurDetail, jumlahDetail, MAKS_TEMUAN_TAMPIL } from "../../lib/integritasDetail";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -208,7 +211,72 @@ UserSummary.displayName = "UserSummary";
 // ============================================================================
 // Integritas Data (§5A) — dasbor read-only gabungan dari /integritas/ringkasan
 // ============================================================================
-const IntegritasSummary = memo(({ data, loading, error, onRefresh }) => {
+
+// Rincian temuan satu register: dimuat MALAS saat kartunya dibuka (tiap
+// endpoint detail = scan lintas-koleksi; jangan tarik enam-enamnya sekaligus).
+const RincianTemuan = memo(({ register, muat }) => {
+  const status = muat?.status;
+  if (status === "muat") {
+    return (
+      <div className="flex items-center gap-1.5 pt-2 pl-1 text-muted-foreground">
+        <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <span className="text-[10px]">Memuat rincian…</span>
+      </div>
+    );
+  }
+  if (status === "galat") {
+    return <p className="text-[10px] text-rose-500 pt-2 pl-1">Gagal memuat rincian — ketuk lagi untuk mencoba.</p>;
+  }
+  if (status !== "siap") return null;
+
+  const items = Array.isArray(muat.data?.items) ? muat.data.items : [];
+  const total = jumlahDetail(register, muat.data);
+  const tampil = items.slice(0, MAKS_TEMUAN_TAMPIL);
+  // Sisa = yang tak dirender DAN yang sudah dipangkas server (kategori
+  // kodefikasi membatasi `items` di 300). Tanpa ini daftar terlihat lengkap.
+  const sisa = Math.max(0, total - tampil.length);
+
+  if (!tampil.length) {
+    return <p className="text-[10px] text-muted-foreground pt-2 pl-1">Rincian tak tersedia.</p>;
+  }
+  return (
+    <div className="mt-2 space-y-1" data-testid={`integritas-rincian-${register}`}>
+      {tampil.map((it, i) => {
+        const b = barisTemuan(register, it);
+        return (
+          <div key={i} className="rounded border border-border bg-muted/30 px-2 py-1.5">
+            <div className="flex items-start gap-1.5">
+              <span className="text-[10px] font-mono font-semibold text-foreground break-all min-w-0">{b.judul}</span>
+              {b.masalah && (
+                <span className="text-[9px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 px-1 py-0.5 rounded ml-auto flex-shrink-0">
+                  {MASALAH_LABEL[b.masalah] || b.masalah}
+                </span>
+              )}
+            </div>
+            {b.subjudul && <p className="text-[9px] text-muted-foreground mt-0.5">{b.subjudul}</p>}
+            {b.beda.map((d, j) => (
+              <div key={j} className="flex items-center gap-1 mt-0.5 text-[9px]">
+                <span className="text-muted-foreground flex-shrink-0">{d.label}</span>
+                <span className="text-red-400 line-through truncate">{d.dari}</span>
+                <span className="text-muted-foreground flex-shrink-0">&rarr;</span>
+                <span className="text-emerald-600 font-medium truncate">{d.ke}</span>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+      {sisa > 0 && (
+        <p className="text-[9px] text-muted-foreground pl-1">
+          +{sisa} temuan lain tak ditampilkan — unduh CSV untuk daftar penuh.
+        </p>
+      )}
+    </div>
+  );
+});
+RincianTemuan.displayName = "RincianTemuan";
+
+const IntegritasSummary = memo(({ data, loading, error, onRefresh, detail, onMuatDetail, onEkspor }) => {
+  const [buka, setBuka] = useState("");
   if (loading && !data) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -245,22 +313,46 @@ const IntegritasSummary = memo(({ data, loading, error, onRefresh }) => {
             {bersih ? 'Tidak ada masalah integritas terdeteksi' : `${data.jumlah_cek_bermasalah || 0} dari ${data.jumlah_cek || bagian.length} pemeriksaan bermasalah`}
           </p>
         </div>
-        <button onClick={onRefresh} className="ml-auto text-muted-foreground hover:text-foreground flex-shrink-0" title="Muat ulang" data-testid="integritas-refresh">
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+        <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+          <button onClick={onEkspor} className="text-muted-foreground hover:text-foreground" title="Unduh ringkasan (CSV)" data-testid="integritas-ekspor">
+            <Download className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={onRefresh} className="text-muted-foreground hover:text-foreground" title="Muat ulang" data-testid="integritas-refresh">
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
 
-      {/* Per register */}
+      {/* Per register — kartu bertemuan bisa dibuka untuk melihat rinciannya */}
       {bagian.map((b) => {
         const jml = b.jumlah || 0;
         const perMasalah = b.per_masalah || {};
+        const bisaBuka = jml > 0 && !!jalurDetail(b.register);
+        const terbuka = buka === b.register;
+        const bukaTutup = () => {
+          if (!bisaBuka) return;
+          const lanjut = terbuka ? "" : b.register;
+          setBuka(lanjut);
+          // Muat sekali; kegagalan sebelumnya boleh dicoba lagi saat dibuka.
+          if (lanjut && detail?.[lanjut]?.status !== "siap") onMuatDetail(lanjut);
+        };
         return (
           <div key={b.register} className={`rounded-lg p-2 border ${jml > 0 ? 'bg-card border-amber-200 dark:border-amber-900/50' : 'bg-muted/40 border-border'}`} data-testid={`integritas-register-${b.register}`}>
-            <div className="flex items-center gap-1.5">
+            <div
+              className={`flex items-center gap-1.5 ${bisaBuka ? 'cursor-pointer' : ''}`}
+              onClick={bukaTutup}
+              role={bisaBuka ? "button" : undefined}
+              tabIndex={bisaBuka ? 0 : undefined}
+              onKeyDown={bisaBuka ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); bukaTutup(); } } : undefined}
+              data-testid={bisaBuka ? `integritas-buka-${b.register}` : undefined}
+            >
               {jml > 0 ? <ShieldAlert className="w-3 h-3 text-amber-500 flex-shrink-0" />
                        : <ShieldCheck className="w-3 h-3 text-emerald-500 flex-shrink-0" />}
               <span className="text-[11px] font-semibold text-foreground truncate">{b.label || b.register}</span>
               <span className={`text-[10px] ml-auto font-bold px-1.5 py-0.5 rounded ${jml > 0 ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400' : 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400'}`}>{jml}</span>
+              {bisaBuka && (
+                <ChevronDown className={`w-3 h-3 text-muted-foreground flex-shrink-0 transition-transform ${terbuka ? 'rotate-180' : ''}`} />
+              )}
             </div>
             {jml > 0 && (
               <div className="flex flex-wrap gap-1 mt-1.5">
@@ -271,13 +363,15 @@ const IntegritasSummary = memo(({ data, loading, error, onRefresh }) => {
                 ))}
               </div>
             )}
+            {terbuka && <RincianTemuan register={b.register} muat={detail?.[b.register]} />}
           </div>
         );
       })}
 
       <p className="text-[9px] text-muted-foreground px-1 pt-1 leading-relaxed">
         Read-only (§5A): identitas snapshot basi di register hilir + kodefikasi FK aset.
-        Detail per temuan tersedia via endpoint <span className="font-mono">/integritas/*</span>. Tak mengubah data.
+        Ketuk kartu bertemuan untuk melihat rincian per temuan, atau unduh CSV lewat ikon panah.
+        Tak mengubah data.
       </p>
     </div>
   );
@@ -299,10 +393,13 @@ const AuditLogPanel = memo(({ activityId, isOpen, onToggle, selectedAssetId, sel
   const [integritas, setIntegritas] = useState(null);
   const [integritasLoading, setIntegritasLoading] = useState(false);
   const [integritasError, setIntegritasError] = useState(false);
+  // Rincian per register: {register: {status: "muat"|"siap"|"galat", data}}.
+  const [detailIntegritas, setDetailIntegritas] = useState({});
 
   const fetchIntegritas = useCallback(async () => {
     setIntegritasLoading(true);
     setIntegritasError(false);
+    setDetailIntegritas({});  // rincian lama basi terhadap ringkasan baru
     try {
       const r = await axios.get(`${API}/integritas/ringkasan`);
       setIntegritas(r.data);
@@ -312,6 +409,25 @@ const AuditLogPanel = memo(({ activityId, isOpen, onToggle, selectedAssetId, sel
     } finally {
       setIntegritasLoading(false);
     }
+  }, []);
+
+  const muatDetailIntegritas = useCallback(async (register) => {
+    const jalur = jalurDetail(register);
+    if (!jalur) return;
+    setDetailIntegritas((s) => ({ ...s, [register]: { status: "muat" } }));
+    try {
+      const r = await axios.get(`${API}${jalur}`);
+      setDetailIntegritas((s) => ({ ...s, [register]: { status: "siap", data: r.data } }));
+    } catch (err) {
+      console.error("Integritas detail fetch error:", register, err);
+      setDetailIntegritas((s) => ({ ...s, [register]: { status: "galat" } }));
+    }
+  }, []);
+
+  const eksporIntegritas = useCallback(() => {
+    downloadFileWithProgress(`${API}/integritas/ekspor-ringkasan`,
+      "ringkasan_integritas.csv", { label: "ringkasan integritas" })
+      .catch(() => { /* toast galat sudah ditampilkan helper */ });
   }, []);
 
   // Tab "Sistem": log tanpa kegiatan (master/kartu pegawai) — server yang
@@ -435,7 +551,10 @@ const AuditLogPanel = memo(({ activityId, isOpen, onToggle, selectedAssetId, sel
           {/* Content */}
           <div className="flex-1 overflow-y-auto" data-testid="audit-log-list">
             {viewMode === "integritas" && !selectedAssetId ? (
-              <IntegritasSummary data={integritas} loading={integritasLoading} error={integritasError} onRefresh={fetchIntegritas} />
+              <IntegritasSummary
+                data={integritas} loading={integritasLoading} error={integritasError}
+                onRefresh={fetchIntegritas} detail={detailIntegritas}
+                onMuatDetail={muatDetailIntegritas} onEkspor={eksporIntegritas} />
             ) : loading && logs.length === 0 ? (
               <div className="flex items-center justify-center py-12">
                 <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
