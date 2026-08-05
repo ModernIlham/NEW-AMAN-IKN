@@ -36,6 +36,7 @@ const MODUL_BADGE = {
   bast: "bg-lime-100 text-lime-700 dark:bg-lime-900/40 dark:text-lime-300",
   pembukuan: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
   siman: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
+  lokasi: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
   aset: "bg-muted text-muted-foreground",
 };
 

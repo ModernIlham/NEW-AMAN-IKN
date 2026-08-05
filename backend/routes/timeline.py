@@ -18,12 +18,18 @@ from db import db
 from shared_utils import (kode_satker_user, pastikan_akses_aset,
                           scope_query_aset)
 from timeline_utils import (MODUL_LABEL, buat_event, event_dari_riwayat,
-                            event_psp_siman, identitas_aset, info_psp_siman,
+                            event_pindah_lokasi, event_psp_siman,
+                            event_scan_opname, identitas_aset, info_psp_siman,
                             label_transaksi_buku, query_identitas,
                             ringkas_per_modul, ringkas_perubahan_audit,
                             susun_kelompok_lintas_kegiatan, urut_events)
 
 timeline_router = APIRouter()
+
+# Aksi audit yang kejadiannya sudah disajikan utuh oleh bagian 12 (Lokasi &
+# Opname). Tanpa daftar ini tiap pemindaian/penempatan muncul dua kali.
+AKSI_SUDAH_DI_BAGIAN_LOKASI = frozenset(
+    {"opname_scan", "aset_lokasi_tandai", "aset_lokasi_hapus"})
 
 _PROJ_SAUDARA = {"_id": 0, "id": 1, "activity_id": 1, "asset_code": 1,
                  "NUP": 1, "kode_register": 1, "asset_name": 1,
@@ -307,7 +313,25 @@ async def get_timeline_aset(asset_id: str, user: dict = Depends(require_user)):
             tanggal=siman_sub.get("disinkron_pada", "")))
     events.extend(event_psp_siman(siman_sub))
 
-    # ── 12. Audit log (pencatatan teknis) ──
+    # ── 12. Lokasi & Opname: scan stiker QR + jejak perpindahan denah ──
+    # Dua sumber yang selama ini terekam tetapi tak pernah tampil di timeline:
+    # `opname_scan` hanya bocor lewat audit log sebagai "Perubahan data aset
+    # (opname_scan)", dan `riwayat_lokasi_aset` tak terbaca layar mana pun.
+    async for d in db.opname_scan.find(_q_satker_lunak(
+            user, {"asset_id": {"$in": ids}}), {"_id": 0}
+            ).sort("pada", -1).limit(50):
+        events.append(event_scan_opname(d))
+
+    # `riwayat_lokasi_aset` TIDAK membawa kode_satker (lihat
+    # spasial_utils.entri_riwayat_lokasi) — pembatasannya lewat `asset_id`,
+    # yang sudah disaring `scope_query_aset` saat menyusun `ids`. Menambah
+    # filter kode_satker di sini justru akan mengosongkan hasilnya.
+    async for d in db.riwayat_lokasi_aset.find(
+            {"asset_id": {"$in": ids}}, {"_id": 0}
+            ).sort("pada", -1).limit(50):
+        events.append(event_pindah_lokasi(d))
+
+    # ── 13. Audit log (pencatatan teknis) ──
     async for a in db.audit_logs.find(
             _q_satker_lunak(user, {"asset_id": {"$in": ids}}),
             {"_id": 0, "action": 1,
@@ -317,6 +341,17 @@ async def get_timeline_aset(asset_id: str, user: dict = Depends(require_user)):
         ringkas = ringkas_perubahan_audit(a.get("changes"))
         if aksi == "update" and not ringkas:
             continue  # update tanpa perubahan terlacak = derau
+        if aksi in AKSI_SUDAH_DI_BAGIAN_LOKASI:
+            # Bagian 12 sudah menyajikan kejadian ini lengkap dengan node,
+            # hasil rekonsiliasi, dan asal perpindahannya. Membiarkannya lolos
+            # ke sini membuat SETIAP pemindaian tampil dua kali — sekali
+            # berguna, sekali sebagai "Perubahan data aset (opname_scan)" yang
+            # keliru (pemindaian tak mengubah data apa pun) — sekaligus
+            # menggandakan cacah chip filter per modul.
+            # Yang ikut hilang hanyalah penyimpanan ulang lokasi yang SAMA
+            # PERSIS (node & titik identik): `pindah_lokasi_berarti` memang
+            # tak menganggapnya perpindahan, jadi tak ada barisnya di bagian 12.
+            continue
         detail = "; ".join(x for x in (
             ringkas, str(a.get("detail") or "").strip(),
             f"Oleh: {a.get('username')}" if a.get("username") else "") if x)
