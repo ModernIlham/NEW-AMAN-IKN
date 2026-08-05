@@ -67,6 +67,77 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#767] Pesan WhatsApp/email permintaan TTD dirapikan — bentuk yang selamat di layar penerima — 2026-08-05
+
+Pemilik mengirim tangkapan pesan yang benar-benar diterima penanda tangan:
+label tak sejajar, nilainya terlempar ke baris sendiri, dan baris barang ke-2
+serta ke-3 menggantung tanpa keterangan apa pun.
+
+### Kenapa bentuk lama tak pernah bisa rapi di sana
+
+Bentuk lama meratakan label dengan spasi ganjal dan menyambung daftar dengan
+indentasi 11 spasi:
+
+```
+Nomor    : B-024/SATKER-D/OIKN/VIII/2026
+Barang   : 3060201006 / NUP 29 — Walkie Talkie Motorolla APX1000i
+           3060201006 / NUP 31 — Walkie Talkie Motorolla APX1000i
+```
+
+Keduanya mengandaikan dua hal yang **tidak berlaku di WhatsApp**: font
+monospace (agar titik dua sejajar) dan spasi beruntun yang dipertahankan (agar
+indentasi terlihat). WhatsApp memakai font proporsional dan menciutkan spasi,
+sehingga label tak pernah lurus dan baris sambungan kehilangan induknya —
+pembaca melihat kode barang mengambang tanpa tahu itu daftar apa.
+
+Rapi di editor ≠ rapi di layar penerima. Itu asumsi yang tak pernah diuji.
+
+### Bentuk baru
+
+```
+Nomor: B-024/SATKER-D/OIKN/VIII/2026
+Perihal: Operasional Penggunaan Barang Milik Negara pada Unit/Tempat/Tugas
+Tanggal: 2026-08-05
+
+Barang (17 unit):
+• 3060201006 / NUP 29 — Walkie Talkie Motorolla APX1000i
+• 3060201006 / NUP 31 — Walkie Talkie Motorolla APX1000i
+• 3060201006 / NUP 23 — Walkie Talkie Motorolla APX1000i
+• (+14 barang lainnya)
+
+Pihak:
+• Karlinus Ignasius Manek (Pihak Pertama)
+• Anugrah Herda Pratama (Pihak Kedua)
+```
+
+- Tanpa ganjalan spasi dan tanpa indentasi — tak ada yang bergantung pada font.
+- Tiap daftar punya **judulnya sendiri**, dipisah baris kosong.
+- Tiap butir diawali **peluru `•`** — karakter sungguhan, bukan `* ` atau `- `
+  yang oleh WhatsApp diperlakukan sebagai perintah daftar/tebal dan bisa hilang,
+  berubah, atau justru tercetak mentah. Pesan yang sama juga dikirim lewat
+  `mailto:` yang tak mengenal penanda sama sekali; satu bentuk untuk dua kanal.
+- **Jumlah total naik ke judul daftar** ("Barang (17 unit):") — sebelumnya
+  hanya tersirat dari "(+14 lainnya)" dan penerima harus menjumlah sendiri.
+- Sapaan tak lagi buntung jadi "Yth. ," bila nama kosong.
+
+Perbaikan ada di `lib/pesanTtd` yang dipakai bersama, jadi berlaku sekaligus
+untuk **Riwayat BAST** (Penggunaan), **Tanda Tangan Elektronik**, dan tautan
+TTD **LPB** (Persediaan & Pengadaan) — tak ada halaman yang tertinggal dengan
+bentuk lama.
+
+### Uji
+
+Sepuluh uji baru mengunci sifat bentuknya, bukan sekadar isinya: tak ada baris
+berawalan spasi, tak ada spasi ganda perata kolom, tiap butir berpeluru,
+kelompok kosong tak meninggalkan baris kosong menggantung, dan **tak ada
+karakter `*` `_` `~`** di seluruh pesan.
+
+Uji kebal-mutasi: mengembalikan ganjalan `Nomor    : ` + indentasi 11 spasi →
+4 uji gagal; mengganti peluru `•` menjadi `* ` (yang justru menghasilkan
+asterisk seperti pada tangkapan pemilik) → 2 uji gagal.
+
+---
+
 ## [#766] Dialog tautan TTD LPB: tombol WhatsApp & email yang selama ini hanya dijanjikan — 2026-08-05
 
 Dialog "Tautan tanda tangan — LPB …" di Persediaan dan Pengadaan berbunyi
