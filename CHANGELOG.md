@@ -67,6 +67,52 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#760] Pesan WA dari Riwayat BAST kini sama persis dengan TTD Elektronik — 2026-08-05
+
+Keluhan pemilik: "pada informasi share link lewat WhatsApp di riwayat BAST
+halaman aset per pemegang tidak sama dengan format yang di TTD elektronik".
+
+### Akar masalah: bukan pesannya, tapi penyalinan responsnya
+
+Kedua layar memakai penyusun pesan yang SAMA (`lib/pesanTtd`). Bedanya ada di
+data yang disodorkan ke penyusun itu.
+
+Server sudah mengirim `ringkas` — nomor, perihal, tanggal, barang (kode + NUP +
+nama), dan para pihak — yang dibekukan saat permintaan TTD dibuat. Halaman TTD
+Elektronik meneruskan respons itu apa adanya. Layar Riwayat BAST menyusun ulang
+objeknya dengan tangan:
+
+```js
+setTtdHasil({ judul: r.data?.judul || "BAST", links: r.data?.links || [] });
+```
+
+`ringkas` tak ikut disalin, jadi `bagikanWa(..., ttdHasil?.ringkas)` menerima
+`undefined` dan pesannya menyusut menjadi perihal + tautan saja.
+
+Kesalahannya tak terlihat: tak ada galat, tombolnya tetap jalan, pesannya hanya
+lebih pendek — sampai penerima di lapangan membandingkan dua pesan untuk
+dokumen yang sama.
+
+### Perbaikan
+
+Penyalinan respons `kirim-ttd` dipusatkan di `hasilTtd()` (satu pintu untuk
+semua layar yang memanggil endpoint itu) dan diuji. Pesan WA/email dari Riwayat
+BAST kini identik — karakter demi karakter — dengan pesan dari halaman TTD
+Elektronik untuk permintaan yang sama.
+
+Uji: 4 uji baru, salah satunya membandingkan kedua jalur menghasilkan string
+yang PERSIS sama (sekaligus memastikan keduanya benar-benar berisi nomor,
+barang, dan pihak — bukan dua string kosong yang kebetulan cocok). Mutasi yang
+mengembalikan pembuangan `ringkas` dijatuhkan 3 uji. Total 1760 uji backend &
+495 uji frontend hijau.
+
+### Catatan jujur (di luar lingkup, belum dikerjakan)
+
+Dialog tautan TTD untuk **LPB** (Persediaan & Pengadaan) hanya punya tombol
+"Salin" — tak ada tombol WhatsApp/Email sama sekali, padahal keterangannya
+berbunyi "Bagikan lewat WhatsApp/email". Itu kekurangan terpisah dan menunggu
+keputusan pemilik.
+
 ## [#759] Tamu boleh menggeser marker asli — gembok, pilihan ikon, garis putus-putus — 2026-08-05
 
 Mandat pemilik: "bebaskan tamu kolaborasi menggeser marker asli peta (berikan
