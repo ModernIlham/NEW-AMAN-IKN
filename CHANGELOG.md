@@ -67,6 +67,61 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#762] Toolbar Peta Kolaborasi muat di HP — usulan, seleksi & ukur jadi satu laci — 2026-08-05
+
+Mandat pemilik: "pada tampilan HP ketika tidak mencukupi di ukuran layar HP
+tertentu tolong jadikan 1 tombol untuk usulan, seleksi, dan alat ukur dalam satu
+kategori agar menghemat ruang."
+
+**Yang terjadi sebelumnya.** Toolbar memakai `justify-end` tanpa `flex-wrap`,
+jadi isi yang tak muat meluber KE KIRI dan **terpotong tanpa scrollbar** —
+tombol Saringan hilang begitu saja, tak bisa digulir, tak ada tanda apa pun
+bahwa ada yang tersembunyi.
+
+**Kenapa selebar itu.** Aturan tap-target 44px global di `index.css` (lihat
+catatan teknis di kepala berkas ini) membuat SETIAP tombol minimal 44×44px di
+≤1023px — bukan 32px seperti kelas `h-8 w-8`-nya. Delapan tombol × 44px + celah
+sudah melewati lebar layar HP mana pun.
+
+**Diukur, bukan dikira-kira.** Toolbar dirender di Chromium dengan CSS hasil
+build, lalu luberan kirinya diukur di lima lebar layar:
+
+| Layar | Sekarang | + laci | + laci + wrap |
+|---|---|---|---|
+| 320 px | potong 92 px | muat | muat |
+| 360 px | potong 52 px | muat | muat |
+| **375 px** (iPhone SE) | **potong 37 px** | **muat** | **muat** |
+| 390 px | potong 22 px | muat | muat |
+| 414 px | muat | muat | muat |
+
+Angka di atas untuk gembok TERTUTUP — kondisi di layar yang dilaporkan. Saat
+gembok TERBUKA ada 2 tombol mode tambahan, dan di sana laci saja **belum cukup**
+(375 px masih kurang 33 px). Karena itu ditambahkan `flex-wrap` sebagai jaring
+pengaman: yang tak muat turun baris, bukan lenyap. Turun baris jelek; tombol
+yang hilang lebih jelek.
+
+**Bahaya yang dijaga.** Dua dari tiga alat itu SAKLAR yang tetap menyala setelah
+lacinya ditutup. Selama tombolnya berdiri sendiri, warna amber-nya yang memberi
+tahu "mode ini masih hidup"; begitu dilipat, isyarat itu ikut hilang — pemakai
+mengetuk peta, titik ukur bertambah, dan ia tak tahu kenapa. Tombol lacinya
+karena itu berwarna amber + bertitik penanda, dan label/`aria-label`-nya
+menyebut alat mana yang sedang aktif. Kalimat itu disusun di
+`lib/alatPeta.js` supaya bisa diuji.
+
+Laci HANYA muncul bagi operator (yang punya tiga alat). Tamu cuma punya alat
+ukur — melipat satu tombol tak menghemat ruang sekali pun, hanya menambah
+ketukan, jadi tombolnya tetap berdiri sendiri. Di ≥`sm` semua tombol kembali
+terpisah seperti semula.
+
+Saklar moderasi & ukur kini ditulis SEKALI (`toggleModerasi`, `toggleUkur`) dan
+dipakai baik oleh tombol toolbar maupun baris laci — supaya versi laci tak
+pernah lupa mengosongkan seleksi saat moderasi dimatikan.
+
+- Ubah: `frontend/src/pages/PetaKolaborasiPage.jsx`
+- Baru: `frontend/src/lib/alatPeta.js` + `alatPeta.test.js` (9 uji, kebal mutasi)
+
+---
+
 ## [#761] Peta Aset mati saat dibuka — dependency array merujuk const di bawahnya — 2026-08-05
 
 Laporan lapangan: membuka Peta Aset langsung memunculkan layar galat.
