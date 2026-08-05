@@ -67,6 +67,79 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#770] Ekspor/template/impor Master Pegawai mencakup SELURUH isian form — 2026-08-05
+
+Keluhan pemilik: "hasil eksportnya belum menggambarkan hasil keseluruhan
+inputan saat ini". Terukur: **19 dari 56 field** yang dapat diisi lewat form
+sama sekali tak punya kolom — sepertiga isian operator lenyap begitu diekspor,
+tanpa apa pun yang menandainya.
+
+### Yang selama ini hilang
+
+Kelengkapan diri (agama, status perkawinan, kewarganegaraan, jenis & nomor
+identitas WNA), jabatan & organisasi (jenis jabatan, eselon teks, unit
+organisasi, instansi/satker terkait), dan **seluruh blok Meninggal Dunia**
+(tanggal, nomor akta, penyebab, nama/hubungan/kontak ahli waris, tanggal &
+nomor pemberitahuan ahli waris).
+
+`HEADER_IMPOR` tumbuh dari 37 → **54 kolom**, dan karena satu daftar itu
+menyetir template, ekspor, DAN impor sekaligus, ketiganya ikut lengkap dalam
+satu perubahan.
+
+### Cacat lain yang ikut tertutup: almarhum HILANG saat impor ulang
+
+`validate_pegawai` mewajibkan tanggal meninggal bila status "Meninggal Dunia",
+sedangkan kolomnya belum ada. Akibatnya baris almarhum **selalu** gagal
+validasi dan dibuang senyap oleh impor (terhitung "dilewati") — ekspor lalu
+impor ulang MENGHAPUS mereka dari master, padahal justru merekalah yang jam
+3 tahun pemberitahuan ahli warisnya sedang berjalan (UU 1/2004 Ps.66 ayat 2).
+
+### Dua pengecualian yang disengaja
+
+- `sub_kategori_non_asn` — sudah pulang-pergi lewat kolom "Status
+  Kepegawaian" (ekspor menulis label subnya, mis. "Satpam"; impor
+  memulihkannya jadi `non_asn` + `satpam`). Kolom terpisah akan menciptakan
+  dua sumber untuk satu nilai.
+- `kode_satker` — dicap server dari satker pengimpor demi isolasi data, jadi
+  kolomnya akan diabaikan diam-diam. Kodenya sudah ada di nama berkas ekspor.
+
+Keduanya didokumentasikan di `HEADER_IMPOR` dan dikunci uji, bukan dihilangkan
+begitu saja.
+
+### Rinciannya
+
+- **Satu penormal** `normalisasi_kode_referensi(nilai, peta)` untuk lima enum
+  baru — menerima kode maupun uraian. Nilai asing dikosongkan, BUKAN disimpan
+  apa adanya: `validate_pegawai` menolak kode di luar daftar, dan penolakan
+  itu membuang seluruh baris pegawai. Kehilangan satu sel lebih ringan
+  daripada kehilangan satu orang.
+- **5 dropdown baru** di sheet Referensi (Agama, Status Perkawinan,
+  Kewarganegaraan, Jenis Identitas WNA, Jenis Jabatan) — total 14.
+- **4 kolom teks baru** (Nomor Identitas WNA, Ahli Waris - Kontak, Nomor Akta
+  Kematian, Nomor Pemberitahuan Ahli Waris) supaya Excel tak mengubah nomor
+  berawalan nol jadi float.
+- **Alias header** yang lazim ditulis orang ikut dikenali ("Tanggal
+  Meninggal", "Ahli Waris Nama", "Unit Organisasi / Satker", "Instansi
+  Terkait", …).
+- **Baris contoh template** diperkaya agar bentuk isian kolom baru terlihat.
+
+### Uji
+
+`test_pegawai_cakupan_ekspor.py` — 17 uji. Yang terpenting: uji cakupan
+membaca `EMPTY` dari `PegawaiPage.jsx` sebagai sumber kebenaran field form,
+jadi **menambah isian form tanpa kolomnya akan menggagalkan CI** alih-alih
+hilang diam-diam seperti sebelumnya. Ditambah penjaga anti-hampa (bila
+pembacaan form gagal, daftarnya kosong dan uji cakupan lolos tanpa memeriksa
+apa pun), uji kolom yatim, lebar baris ekspor = lebar header, dan pulang-pergi
+54 field bernilai lengkap.
+
+Uji kebal-mutasi: satu kolom dihapus dari `HEADER_IMPOR` → 6 uji gagal; enum
+kosong dibuat jatuh ke uraian pertama (setiap pegawai tanpa agama diekspor
+"Islam") → 2 gagal; `tanggal_meninggal` dicabut dari normalisasi tanggal →
+1 gagal.
+
+---
+
 ## [#769] Pesan WhatsApp memakai penanda tebal & daftar — email tetap polos — 2026-08-05
 
 Ralat pemilik atas [#767]: penanda `*Teks*` (tebal) dan butir berawalan `* `
