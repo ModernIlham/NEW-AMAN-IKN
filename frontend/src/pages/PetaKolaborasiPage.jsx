@@ -23,6 +23,7 @@ import {
   bahanGarisUsulan, GAYA_GARIS_USULAN, jarakMeter, KETERANGAN_MODE,
   MODE_GESER, ringkasGeser, teksJarak,
 } from "@/lib/geserUsulan";
+import { perluLaciAlat, ringkasAlatAktif } from "@/lib/alatPeta";
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from "../components/ui/popover";
@@ -300,6 +301,17 @@ export default function PetaKolaborasiPage() {
   useEffect(() => { muat(); }, [muat]);
 
   const bolehModerasi = !!data?.boleh_moderasi;
+
+  // ── Laci "Alat": usulan + seleksi + alat ukur jadi SATU tombol di HP ────
+  // Mandat pemilik: di layar sempit toolbar tak muat dan tombol paling kiri
+  // terpotong. Melipat tiga alat menghemat ~76px — cukup untuk memuat sisanya
+  // di 375px. Di ≥sm tombolnya kembali berdiri sendiri (ruangnya cukup, dan
+  // satu ketukan lebih cepat daripada dua).
+  const [laciAlat, setLaciAlat] = useState(false);
+  const alatDilipat = perluLaciAlat({ bolehModerasi });
+  const alatAktif = ringkasAlatAktif({ moderasi, ukur: ukurOn });
+  // Kelas tombol alat: disembunyikan di layar sempit HANYA bila memang dilipat.
+  const sembunyiKecil = alatDilipat ? "hidden sm:flex" : "flex";
 
   // ── Tinjau usulan: impor kontribusi tamu ke peta ASLI ──────────────────
   // Kontribusi tamu adalah USULAN. Pengelola satker meninjau lalu menyetujui
@@ -938,6 +950,18 @@ export default function PetaKolaborasiPage() {
   const jmlAset = (data?.titik_aset || []).length;
   const jmlKolab = (data?.titik_kolaborasi || []).length;
 
+  // Saklar alat dipakai DUA tempat: tombol toolbar (≥sm) dan baris laci (HP).
+  // Ditulis sekali di sini supaya keduanya tak pernah berbeda perilaku — mis.
+  // versi laci lupa mengosongkan seleksi saat moderasi dimatikan.
+  const toggleModerasi = () => setModerasi((v) => { if (v) setTerpilih(new Set()); return !v; });
+  const toggleUkur = () => setUkurOn((v) => {
+    const nyala = !v;
+    // Mode tambah-titik & pratinjaunya dilepas saat mulai mengukur — dua mode
+    // yang sama-sama memakan klik peta tak boleh hidup berbarengan.
+    if (nyala) { setModeTambah(false); buangPreview(); }
+    return nyala;
+  });
+
   return (
     <div className="fixed inset-0 flex flex-col bg-background text-foreground">
       {/* Header */}
@@ -974,7 +998,14 @@ export default function PetaKolaborasiPage() {
           "Muat ulang" terdorong turun sendirian dan memakan satu baris penuh —
           ruang paling mahal di layar HP. */}
       <div className="bg-card border-b border-border px-2 py-1.5 space-y-1">
-        <div className="flex items-center gap-1.5 justify-end">
+        {/* `flex-wrap` = jaring pengaman. Tanpa itu, isi yang tak muat meluber
+            KE KIRI (karena `justify-end`) dan terpotong TANPA scrollbar — tombol
+            paling kiri hilang begitu saja, persis keluhan pemilik. Diukur di
+            Chromium: gembok terbuka di 375px masih kurang 33px meski ketiga alat
+            sudah dilebur, karena aturan tap-target 44px global membuat tiap
+            tombol minimal 44px di ≤1023px. Turun baris jelek; tombol yang lenyap
+            lebih jelek. */}
+        <div className="flex flex-wrap items-center gap-1.5 justify-end">
         {/* SATU laci untuk semua saringan — status, kondisi, lokasi, barang
             serupa — supaya toolbar tetap muat di layar sempit. Lencana angka
             memberi tahu berapa saringan sedang aktif tanpa perlu dibuka. */}
@@ -1134,10 +1165,67 @@ export default function PetaKolaborasiPage() {
             </button>
           </div>
         )}
+        {/* LACI ALAT (hanya layar sempit) — usulan + seleksi + ukur jadi satu
+            tombol. Penanda titik di pojok memberi tahu ada saklar yang masih
+            menyala walau lacinya tertutup; tanpa itu pemakainya mengetuk peta
+            dan bingung kenapa titik ukur bertambah. */}
+        {alatDilipat && (
+          <Popover open={laciAlat} onOpenChange={setLaciAlat}>
+            <PopoverTrigger asChild>
+              <button
+                type="button" aria-label={alatAktif.label} title={alatAktif.label}
+                data-testid="peta-kolab-alat"
+                className={`sm:hidden relative h-8 w-8 rounded-lg border flex items-center justify-center flex-shrink-0 transition-colors ${alatAktif.adaAktif
+                  ? "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                  : "border-border text-foreground/80 hover:bg-muted"}`}
+              >
+                <Wrench className="w-4 h-4" />
+                {alatAktif.adaAktif && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-card" />
+                )}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-56 p-1 z-[900]">
+              <button
+                type="button" onClick={() => { setLaciAlat(false); bukaUsulan(); }}
+                className="w-full h-9 px-2 rounded-md flex items-center gap-2 text-[12px] text-foreground hover:bg-muted"
+                data-testid="peta-kolab-alat-usulan"
+              >
+                <Inbox className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                <span className="font-semibold">Usulan</span>
+                <span className="ml-auto text-[10px] text-muted-foreground">tinjau</span>
+              </button>
+              <button
+                type="button" onClick={() => { setLaciAlat(false); toggleModerasi(); }}
+                aria-pressed={moderasi}
+                className="w-full h-9 px-2 rounded-md flex items-center gap-2 text-[12px] text-foreground hover:bg-muted"
+                data-testid="peta-kolab-alat-seleksi"
+              >
+                <MousePointerClick className={`w-4 h-4 flex-shrink-0 ${moderasi ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`} />
+                <span className="font-semibold">Seleksi</span>
+                <span className={`ml-auto text-[10px] ${moderasi ? "text-amber-600 dark:text-amber-400 font-semibold" : "text-muted-foreground"}`}>
+                  {moderasi ? "aktif" : "mati"}
+                </span>
+              </button>
+              <button
+                type="button" onClick={() => { setLaciAlat(false); toggleUkur(); }}
+                aria-pressed={ukurOn}
+                className="w-full h-9 px-2 rounded-md flex items-center gap-2 text-[12px] text-foreground hover:bg-muted"
+                data-testid="peta-kolab-alat-ukur"
+              >
+                <Ruler className={`w-4 h-4 flex-shrink-0 ${ukurOn ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`} />
+                <span className="font-semibold">Alat ukur</span>
+                <span className={`ml-auto text-[10px] ${ukurOn ? "text-amber-600 dark:text-amber-400 font-semibold" : "text-muted-foreground"}`}>
+                  {ukurOn ? "aktif" : "mati"}
+                </span>
+              </button>
+            </PopoverContent>
+          </Popover>
+        )}
         {bolehModerasi && (
           <button
             type="button" onClick={bukaUsulan} aria-label="Tinjau usulan kolaborasi"
-            className="h-8 px-2 rounded-lg border border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 flex items-center gap-1 flex-shrink-0 hover:bg-emerald-500/20"
+            className={`h-8 px-2 rounded-lg border border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 ${sembunyiKecil} items-center gap-1 flex-shrink-0 hover:bg-emerald-500/20`}
             title="Tinjau usulan tamu — impor titik & komentar ke peta asli"
             data-testid="peta-kolab-tinjau-usulan"
           >
@@ -1147,8 +1235,8 @@ export default function PetaKolaborasiPage() {
         )}
         {bolehModerasi && (
           <button
-            type="button" onClick={() => setModerasi((v) => { if (v) setTerpilih(new Set()); return !v; })} aria-pressed={moderasi} aria-label={moderasi ? "Mode moderasi: aktif" : "Mode moderasi"}
-            className={`h-8 w-8 rounded-lg border flex items-center justify-center flex-shrink-0 transition-colors ${moderasi ? "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400" : "border-border text-foreground/80 hover:bg-muted"}`}
+            type="button" onClick={toggleModerasi} aria-pressed={moderasi} aria-label={moderasi ? "Mode moderasi: aktif" : "Mode moderasi"}
+            className={`h-8 w-8 rounded-lg border ${sembunyiKecil} items-center justify-center flex-shrink-0 transition-colors ${moderasi ? "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400" : "border-border text-foreground/80 hover:bg-muted"}`}
             title="Moderasi — pilih titik kolaborasi untuk dihapus"
             data-testid="peta-kolab-moderasi"
           >
@@ -1157,17 +1245,10 @@ export default function PetaKolaborasiPage() {
         )}
         <button
           type="button"
-          onClick={() => setUkurOn((v) => {
-            const nyala = !v;
-            // Mode tambah-titik & pratinjaunya dilepas saat mulai mengukur —
-            // dua mode yang sama-sama memakan klik peta tak boleh hidup
-            // berbarengan.
-            if (nyala) { setModeTambah(false); buangPreview(); }
-            return nyala;
-          })}
+          onClick={toggleUkur}
           aria-pressed={ukurOn}
           aria-label={ukurOn ? "Alat ukur: aktif" : "Alat ukur"}
-          className={`h-8 w-8 rounded-lg border flex items-center justify-center flex-shrink-0 transition-colors ${ukurOn ? "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400" : "border-border text-foreground/80 hover:bg-muted"}`}
+          className={`h-8 w-8 rounded-lg border ${sembunyiKecil} items-center justify-center flex-shrink-0 transition-colors ${ukurOn ? "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400" : "border-border text-foreground/80 hover:bg-muted"}`}
           title="Alat ukur jarak & luas — ketuk peta untuk menandai titik"
           data-testid="peta-kolab-ukur"
         >
