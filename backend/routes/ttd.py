@@ -68,6 +68,53 @@ class SpesimenIn(BaseModel):
     posisi: dict | None = None
 
 
+# ── Jejak identitas pada TTD berposisi bebas ────────────────────────────────
+# Mandat pemilik: nama & tanggal dipindah ke SISI KIRI-BAWAH tanda tangan,
+# tulisannya MENYAMPING keluar, sangat kecil, dan hampir menyatu dengan
+# kertas; tanggal ditaruh DI BAWAH nama (bukan berderet) untuk menghemat
+# tempat.
+#
+# Kenapa begitu: TTD berposisi bebas dijatuhkan DI ATAS isi dokumen yang
+# sudah ada. Keterangan mendatar di bawahnya ikut menimpa teks dokumen.
+# Jejak ini hanya penanda asal-usul — bukan bagian naskah — jadi ia harus
+# ada tapi nyaris tak terlihat.
+JEJAK_TTD_FONT = 3.6      # pt (sebelumnya 6) — "sangat perkecil"
+JEJAK_TTD_ABU = 0.86      # 0=hitam, 1=putih (sebelumnya 0.35) — "hampir transparan"
+JEJAK_TTD_NAMA_MAKS = 28  # potong nama panjang; jejak tak boleh memanjang
+
+
+def jejak_identitas_ttd(nama, signed_at, x_pt, y_pt, tepi_kiri=4.0,
+                        maks_nama=JEJAK_TTD_NAMA_MAKS):
+    """Bahan gambar jejak identitas: titik pangkal + baris-barisnya.
+
+    Teks digambar setelah `rotate(90)`, sehingga berjalan ke ATAS halaman
+    (menyamping) dan tumbuh KE LUAR — menjauh dari tanda tangan, bukan
+    menimpanya.
+
+    ARAH BACA — ini yang mudah keliru. Teks yang diputar 90° dibaca dari
+    bawah ke atas, sehingga "atas" glyph-nya menghadap KIRI halaman. Artinya
+    baris yang digambar lebih ke luar (kiri) tampak di ATAS, dan yang lebih
+    dekat tanda tangan tampak di BAWAH. Mandat pemilik: tanggal DI BAWAH
+    nama — jadi tanggal-lah yang mendapat geser paling kecil, dan nama yang
+    terlempar ke luar. Percobaan pertama justru terbalik.
+
+    @returns (pangkal_x, pangkal_y, [(teks, geser), ...]) — `geser` = jarak
+             tegak lurus dari pangkal, ke arah LUAR (menjauh dari ttd).
+    """
+    urut = []            # dari yang tampak PALING BAWAH ke paling atas
+    tgl = str(signed_at or "")[:10].strip()
+    if tgl:
+        urut.append(tgl)
+    n = str(nama or "").strip()
+    if n:
+        urut.append(n[:maks_nama])
+    langkah = JEJAK_TTD_FONT + 0.6
+    baris = [(t, i * langkah) for i, t in enumerate(urut)]
+    # Pangkal ditarik ke kiri tanda tangan, tapi tak pernah keluar halaman.
+    pangkal_x = max(float(tepi_kiri), float(x_pt) - 2.0)
+    return pangkal_x, max(2.0, float(y_pt)), baris
+
+
 def _posisi_bersih(p, maks_halaman: int = 0):
     """Validasi + jepit posisi pembubuhan dari klien; None bila tak dipakai.
 
@@ -982,13 +1029,23 @@ async def _bangun_pdf_ber_ttd(sr: dict, sr_id: str, data: bytes,
                 y_pt = max(3.0, hh - float(p.get("y") or 0) * hh - h_pt)
                 ck.drawImage(img, x_pt, y_pt, width=w_pt, height=h_pt,
                              mask="auto")
-                # Keterangan identitas kecil di bawah gambar (jejak formal).
-                ck.setFont("Helvetica", 6)
-                ck.setFillGray(0.35)
-                ket = f"{str(s.get('nama') or '')[:34]}"
-                if s.get("signed_at"):
-                    ket += f" · {str(s['signed_at'])[:10]}"
-                ck.drawCentredString(x_pt + w_pt / 2, max(2.0, y_pt - 7), ket)
+                # Jejak identitas: MENYAMPING di sisi kiri-bawah tanda tangan,
+                # sangat kecil & hampir menyatu dengan kertas, tanggal di baris
+                # bawah nama. Digambar setelah rotate(90) sehingga berjalan ke
+                # atas halaman; baris berikutnya bergeser menjauh dari tanda
+                # tangan, jadi jejak ini tak pernah menimpa gambarnya maupun
+                # naskah di sebelah kanannya.
+                pangkal_x, pangkal_y, baris_jejak = jejak_identitas_ttd(
+                    s.get("nama"), s.get("signed_at"), x_pt, y_pt)
+                if baris_jejak:
+                    ck.saveState()
+                    ck.setFont("Helvetica", JEJAK_TTD_FONT)
+                    ck.setFillGray(JEJAK_TTD_ABU)
+                    ck.translate(pangkal_x, pangkal_y)
+                    ck.rotate(90)
+                    for teks, geser in baris_jejak:
+                        ck.drawString(0, geser, teks)
+                    ck.restoreState()
                 ada_isi = True
             except Exception:
                 pass

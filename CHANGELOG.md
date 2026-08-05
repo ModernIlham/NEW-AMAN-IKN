@@ -67,6 +67,60 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#764] Area "Mengetahui" selebar yang lain + jejak nama/tanggal menyamping — 2026-08-05
+
+Dua mandat pemilik pada dokumen ber-tanda tangan.
+
+### 1. Area "Mengetahui" di tengah tak lagi paling sempit
+
+Ternyata memang benar lebih sempit — dan bukan karena satu angka meleset,
+melainkan karena TIGA pola memakai TIGA angka berbeda:
+
+| Pola | Sebelum | Sesudah |
+|---|---|---|
+| Penanda tangan tunggal | 0.45 → 76,5 mm | 76,5 mm |
+| Sepasang (kiri-kanan) | 0.42 → 71,4 mm | 76,5 mm |
+| **"Mengetahui" di tengah** | **0.40 → 68,0 mm** | **76,5 mm** |
+
+Kini satu konstanta `LEBAR_KOLOM_TTD` dipakai keempat tempatnya (termasuk blok
+KPB di `_blok_ttd_tim_kpb`), diambil dari angka TERLEBAR supaya menyeragamkan
+tak berarti mempersempit yang lain. Area tengah naik **+12,5%**.
+
+Diukur, bukan dikira: `_signature_block` dipanggil untuk 1/2/3 penanda tangan
+lalu `colWidths` tabel hasilnya dibaca langsung — ketiganya kini 76,5 mm.
+Celah pemisah antar pasangan menyempit 27→17 mm; masih lega karena teks
+ber-`TA_CENTER` di dalam kolomnya masing-masing.
+
+### 2. Nama & tanggal jadi jejak samar di sisi kiri-bawah
+
+Berlaku untuk tanda tangan **berposisi bebas** — yang dijatuhkan penanda
+tangan di atas isi dokumen. Dulu keterangannya mendatar & di TENGAH-BAWAH
+gambar, sehingga menimpa naskah yang sudah ada di sana.
+
+- Pindah ke **sisi kiri-bawah**, tulisan **menyamping** (diputar 90°) tumbuh
+  KE LUAR menjauhi tanda tangan.
+- Font **6 → 3,6 pt**; abu **0.35 → 0.86** — nyaris menyatu dengan kertas.
+- Nama dan tanggal jadi **dua baris**, bukan satu baris `Nama · Tanggal`.
+
+**Jebakan arah baca.** Teks yang diputar 90° dibaca bawah-ke-atas, sehingga
+"atas" glyph-nya menghadap KIRI halaman — artinya baris yang lebih ke luar
+tampak di ATAS. Percobaan pertama menaruh nama lebih dulu, dan hasil render-nya
+justru tanggal di atas nama — kebalikan mandat. Ketahuan karena PDF-nya
+benar-benar dirender jadi PNG dan dilihat, bukan dibayangkan. Urutannya
+dibalik: tanggal mendapat geser terkecil (paling dekat ttd = tampak di bawah).
+
+Geometrinya dipisah jadi fungsi murni `jejak_identitas_ttd()` dan diuji:
+urutan baris, arah tumbuh ke luar, pangkal di kiri ttd, jepit tepi kiri
+halaman, nama terpotong, dan tanpa nama/tanggal tak menggambar apa pun.
+
+Slot tanda tangan OTOMATIS di halaman terakhir sengaja TIDAK diubah — di sana
+nama bergaris bawah + NIP + tanggal memang bagian resmi naskah, bukan jejak.
+
+- Ubah: `backend/routes/reports.py`, `backend/routes/ttd.py`
+- Baru: `backend/tests/unit/test_jejak_ttd.py` (14 uji)
+
+---
+
 ## [#763] "Atur QR & Unduh ber-TTD" 401 — pratinjau halaman tanpa token — 2026-08-05
 
 Laporan lapangan: membuka **Atur QR & Unduh ber-TTD** di Tanda Tangan Elektronik
