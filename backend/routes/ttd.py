@@ -83,13 +83,21 @@ JEJAK_TTD_ABU = 0.86      # 0=hitam, 1=putih (sebelumnya 0.35) — "hampir trans
 JEJAK_TTD_NAMA_MAKS = 28  # potong nama panjang; jejak tak boleh memanjang
 
 
-def jejak_identitas_ttd(nama, signed_at, x_pt, y_pt, tepi_kiri=4.0,
-                        maks_nama=JEJAK_TTD_NAMA_MAKS):
+def jejak_identitas_ttd(nama, signed_at, x_pt, y_pt, tinggi=0.0, ukur=None,
+                        tepi_kiri=4.0, maks_nama=JEJAK_TTD_NAMA_MAKS):
     """Bahan gambar jejak identitas: titik pangkal + baris-barisnya.
 
     Teks digambar setelah `rotate(90)`, sehingga berjalan ke ATAS halaman
     (menyamping) dan tumbuh KE LUAR — menjauh dari tanda tangan, bukan
     menimpanya.
+
+    TEGAK LURUS: jejak dipusatkan pada TENGAH tinggi tanda tangan (mandat
+    pemilik: "tetap di samping kiri, hanya buat tepat berada di tengah").
+    Karena teksnya berjalan ke atas, pemusatan butuh PANJANG teksnya —
+    `ukur(teks)` disuntikkan pemanggil (mis. `canvas.stringWidth`) supaya
+    fungsi ini tetap murni dan bisa diuji tanpa ReportLab. Tanpa `tinggi`
+    (atau tanpa `ukur`), pangkalnya jatuh kembali ke dasar tanda tangan
+    seperti perilaku lama — bukan melompat ke tempat yang salah.
 
     ARAH BACA — ini yang mudah keliru. Teks yang diputar 90° dibaca dari
     bawah ke atas, sehingga "atas" glyph-nya menghadap KIRI halaman. Artinya
@@ -112,7 +120,28 @@ def jejak_identitas_ttd(nama, signed_at, x_pt, y_pt, tepi_kiri=4.0,
     baris = [(t, i * langkah) for i, t in enumerate(urut)]
     # Pangkal ditarik ke kiri tanda tangan, tapi tak pernah keluar halaman.
     pangkal_x = max(float(tepi_kiri), float(x_pt) - 2.0)
-    return pangkal_x, max(2.0, float(y_pt)), baris
+    # Pusatkan tegak lurus terhadap tinggi tanda tangan. Teks berjalan ke ATAS,
+    # jadi pangkalnya turun setengah panjang teks dari titik tengah.
+    pangkal_y = float(y_pt)
+    if baris and float(tinggi or 0) > 0 and callable(ukur):
+        panjang = max((float(ukur(t) or 0) for t, _g in baris), default=0.0)
+        pangkal_y = float(y_pt) + (float(tinggi) - panjang) / 2.0
+    return pangkal_x, max(2.0, pangkal_y), baris
+
+
+def _nomor_urut(sg) -> float:
+    """Nomor giliran seorang penanda tangan (mode berurutan).
+
+    Data lama / hasil restore bisa saja tak punya `urutan`. Mengembalikan
+    +inf untuk kasus itu membuat mereka jatuh ke BELAKANG antrean alih-alih
+    menyerobot giliran orang lain — dan tetap terpilih bila memang cuma
+    mereka yang tersisa.
+    """
+    try:
+        n = sg.get("urutan")
+        return float(n) if n is not None else float("inf")
+    except (TypeError, ValueError):
+        return float("inf")
 
 
 def _posisi_bersih(p, maks_halaman: int = 0):
@@ -1036,7 +1065,9 @@ async def _bangun_pdf_ber_ttd(sr: dict, sr_id: str, data: bytes,
                 # tangan, jadi jejak ini tak pernah menimpa gambarnya maupun
                 # naskah di sebelah kanannya.
                 pangkal_x, pangkal_y, baris_jejak = jejak_identitas_ttd(
-                    s.get("nama"), s.get("signed_at"), x_pt, y_pt)
+                    s.get("nama"), s.get("signed_at"), x_pt, y_pt,
+                    tinggi=h_pt,
+                    ukur=lambda t: ck.stringWidth(t, "Helvetica", JEJAK_TTD_FONT))
                 if baris_jejak:
                     ck.saveState()
                     ck.setFont("Helvetica", JEJAK_TTD_FONT)
@@ -1595,11 +1626,23 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
     segar = await db.signature_requests.find_one(
         {"id": sr_id}, {"_id": 0, "mode": 1, "status": 1, "judul": 1,
                         "signers.status": 1, "signers.signer_id": 1,
-                        "signers.jti": 1, "signers.email": 1, "signers.nama": 1})
+                        "signers.jti": 1, "signers.email": 1, "signers.nama": 1,
+                        # `urutan` WAJIB ikut diproyeksikan — ia yang menentukan
+                        # giliran berikutnya. Tanpa field ini semua signer
+                        # bernilai sama dan pengurutannya jadi hampa.
+                        "signers.urutan": 1})
     signers_segar = (segar or {}).get("signers") or []
     if (segar or {}).get("mode") == "berurutan":
-        nxt_sg = next((s for s in signers_segar
-                       if s.get("status") == "menunggu"), None)
+        # Giliran berikutnya dipilih dari `urutan` — BUKAN dari posisi elemen
+        # di array. Keduanya kebetulan sama saat permintaan dibuat, tapi
+        # `urutan` adalah kontrak yang kita simpan DAN kirim ke layar; kalau
+        # array-nya pernah tersusun ulang (restore, perbaikan manual, fitur
+        # ubah-urutan kelak), memilih berdasarkan posisi akan mengaktifkan
+        # ORANG YANG SALAH tanpa satu pun galat. Bertumpu pada satu sumber
+        # kebenaran menutup kemungkinan itu sekarang, bukan nanti.
+        nxt_sg = min(
+            (s for s in signers_segar if s.get("status") == "menunggu"),
+            key=lambda s: _nomor_urut(s), default=None)
         if nxt_sg:
             res_nxt = await db.signature_requests.update_one(
                 {"id": sr_id, "status": {"$ne": "batal"},
