@@ -67,6 +67,67 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#759] Tamu boleh menggeser marker asli — gembok, pilihan ikon, garis putus-putus — 2026-08-05
+
+Mandat pemilik: "bebaskan tamu kolaborasi menggeser marker asli peta (berikan
+fitur gembok agar nyaman saat menggeser titik atau hanya lihat, dan pada saat
+gembok dibuka aktif berikan pilihan ingin menggeser titik asli atau titik
+usulan, jelaskan dengan pilihan icon saja pada tombol pilihnya) dan berikan
+garis putus putus tempat marker asli peta dengan titik barunya nanti dengan
+tampilan marker yang transparan dimana nantinya dapat dilihat juga melalui
+peta asli perubahannya dan akan berubah ketika disetujui."
+
+### Yang tampil
+
+- **Gembok** di toolbar peta kolaborasi, **default terkunci** — melihat peta di
+  layar sentuh tak akan menggeser titik apa pun.
+- Saat dibuka, dua tombol **ikon-saja**: 📍 **titik asli** (usul koreksi posisi
+  aset yang ada) dan ➕ **titik usulan** (tambah titik baru). Keterangannya ada
+  di `title`/`aria-label`, bukan di label yang memakan ruang toolbar.
+- Marker asli **kembali ke tempatnya** begitu dilepas, lalu muncul **marker
+  transparan** di posisi usulan, tersambung **garis putus-putus** ke posisi
+  asal. Popup-nya menyebut siapa pengusulnya dan **berapa meter** perpindahan
+  yang diusulkan.
+- Bayangan yang sama digambar di **peta asli** — petugas melihat usulan
+  perpindahan tanpa membuka tautan peta kolaborasi.
+- Usulan geser masuk ke dialog **Usulan** yang sama: setujui satuan atau
+  sekaligus. **Saat disetujui, koordinat aset benar-benar berpindah.**
+
+### Keputusan yang dinyatakan terus terang
+
+Menggeser marker asli **tidak** langsung mengubah data. Pemegang tautan peta
+kolaborasi adalah **siapa saja** yang menerima tautannya; menulis langsung ke
+`assets` berarti siapa pun yang meneruskan tautan itu bisa memindahkan titik
+BMN resmi tanpa jejak persetujuan. Karena itu "geser titik asli" berarti
+**mengusulkan koreksi posisi** — dan posisinya benar-benar berubah saat
+pengelola menyetujuinya, persis bunyi mandatnya.
+
+### Yang dijaga
+
+- **`geo` ikut berpindah**, bukan hanya koordinat teksnya. Tanpa itu aset yang
+  posisinya dikoreksi tetap muncul di kueri area pada titik lamanya — peta
+  terlihat benar sementara pencarian spasial diam-diam salah. Mutasi yang
+  menghapus pemindahan `geo` dijatuhkan uji.
+- **Jejak balik**: posisi lama, id usulan, pengusul, dan penyetujunya tersimpan
+  di `geser_dari` pada aset; `version` naik supaya klien ber-OCC tahu.
+- **Satu penyumbang, satu usulan per aset** — menyeret marker lima kali tak
+  meninggalkan lima garis putus-putus ke titik yang sama. Usul orang lain tak
+  ikut terhapus.
+- **Aset kegiatan lain ditolak 404**, dengan pesan yang tak membedakan "tak
+  ada" dari "bukan milik peta ini" supaya tautan tak jadi alat penebak.
+- **Bayangan hilang setelah disetujui** — kalau tidak, peta menyisakan garis ke
+  posisi lama selamanya.
+- **Aset yang keburu dihapus** dilewati dengan sebab tertulis, dan usulannya
+  TIDAK ditandai selesai.
+
+Catatan cacat yang tertangkap uji sendiri: helper `koordinatSah` semula
+meloloskan koordinat KOSONG sebagai titik nol (`Number(null)` = 0), yang akan
+membentangkan garis putus-putus ke tengah Samudra Atlantik. Kini `null`/`""`
+ditolak eksplisit sementara 0 yang memang diisi tetap sah.
+
+Uji: 10 uji backend baru + 13 uji frontend baru. Total 1760 uji backend & 491
+uji frontend hijau.
+
 ## [#758] Usulan peta kolaborasi bisa diimpor ke peta asli — satu per satu atau sekaligus — 2026-08-05
 
 Mandat pemilik: "hasil penambahan titik, dan juga komentarnya dapat ditambahkan

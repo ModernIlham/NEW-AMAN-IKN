@@ -324,6 +324,15 @@ class KomentarIn(BaseModel):
     oleh: Optional[str] = ""
 
 
+class GeserIn(BaseModel):
+    """Usul PEMINDAHAN posisi sebuah aset yang sudah ada di peta."""
+    asset_id: str
+    lat: float
+    lng: float
+    keterangan: Optional[str] = ""
+    oleh: Optional[str] = ""
+
+
 def _share_keluar(sh: dict) -> dict:
     """Bentuk aman untuk daftar/detail pengelola — tanpa jti (rahasia token)."""
     d = {k: v for k, v in sh.items() if k != "jti"}
@@ -609,6 +618,12 @@ async def lihat_peta(share_id: str, request: Request,
         {"_id": 0, "ip": 0, "oleh_user_id": 0}).sort("created_at", 1).to_list(5000)
     titik_kolaborasi = [k for k in kontrib if k.get("jenis") == "titik"]
     komentar = [k for k in kontrib if k.get("jenis") == "komentar"]
+    # Usulan GESER yang masih menunggu — dipakai layar menggambar garis
+    # putus-putus + marker transparan. Yang sudah disetujui/ditolak TIDAK ikut:
+    # asetnya sudah pindah (atau usulannya gugur), jadi bayangannya harus
+    # hilang. Kalau tidak, peta menyisakan garis ke posisi lama selamanya.
+    usulan_geser = [k for k in kontrib
+                    if k.get("jenis") == "geser" and _status_usulan(k) == "terbuka"]
     return {
         "id": share_id,
         "judul": sh.get("judul") or "",
@@ -632,6 +647,7 @@ async def lihat_peta(share_id: str, request: Request,
         "titik_aset": await _titik_aset(sh),
         "titik_kolaborasi": titik_kolaborasi,
         "komentar": komentar,
+        "usulan_geser": usulan_geser,
     }
 
 
@@ -1012,11 +1028,75 @@ async def _target_aset_komentar(usulan: dict) -> str:
     return str((induk or {}).get("aset_id") or "")
 
 
+async def _terapkan_geser(usulan: dict, share: dict, user: dict,
+                          now: str) -> dict:
+    """Setujui usulan geser → koordinat aset BENAR-BENAR berpindah.
+
+    Posisi LAMA disimpan pada usulannya (`lat_asal`/`lng_asal`) dan
+    `geser_dari` pada aset, jadi perpindahan ini bisa ditelusuri balik — bukan
+    penimpaan senyap. `version` aset dinaikkan supaya klien ber-OCC tahu
+    datanya berubah, dan `updated_at` disegarkan supaya jalur snapshot luring
+    ikut menariknya.
+    """
+    from spasial_utils import operasi_geo_update
+    aset = await db.assets.find_one(
+        {"id": str(usulan.get("asset_id") or ""),
+         "activity_id": str(share.get("activity_id") or "")},
+        {"_id": 0})
+    if not aset:
+        return {"id": usulan["id"], "jenis": "geser", "dilewati": True,
+                "alasan": ("Aset yang diusulkan pindah sudah tidak ada di "
+                           "kegiatan ini.")}
+    lat = f"{float(usulan.get('lat') or 0):.7f}"
+    lng = f"{float(usulan.get('lng') or 0):.7f}"
+    ubah = {
+        "koordinat_latitude": lat, "koordinat_longitude": lng,
+        "updated_at": now,
+        # Jejak balik: dari mana ia dipindah, oleh usulan siapa.
+        "geser_dari": {"lat": aset.get("koordinat_latitude") or "",
+                       "lng": aset.get("koordinat_longitude") or "",
+                       "usulan_id": usulan.get("id"),
+                       "oleh": usulan.get("oleh") or "",
+                       "disetujui_oleh": user.get("username", "system"),
+                       "pada": now},
+    }
+    # `geo` (indeks 2dsphere) WAJIB ikut berpindah. Bila tidak, aset yang
+    # posisinya dikoreksi tetap muncul di kueri area pada titik lamanya —
+    # peta terlihat benar sementara pencarian spasial diam-diam salah.
+    _geo = operasi_geo_update({"koordinat_latitude": lat,
+                               "koordinat_longitude": lng})
+    ubah.update(_geo["set"])
+    operasi = {"$set": ubah, "$inc": {"version": 1}}
+    if _geo["unset"]:
+        operasi["$unset"] = _geo["unset"]
+    await db.assets.update_one({"id": aset["id"]}, operasi)
+    try:
+        from meili_utils import jadwalkan_sync
+        jadwalkan_sync("assets", {**aset, **ubah})
+    except Exception:
+        pass    # indeks pencarian bukan syarat perpindahan berhasil
+    try:
+        from shared_utils import invalidate_asset_cache
+        invalidate_asset_cache()
+    except Exception:
+        pass
+    await db.peta_kolaborasi.update_one(
+        {"id": usulan["id"]},
+        {"$set": {"status_usulan": "disetujui", "aset_id": aset["id"],
+                  "ditinjau_oleh": user.get("username", "system"),
+                  "ditinjau_pada": now, "alasan_tolak": ""}})
+    return {"id": usulan["id"], "jenis": "geser", "aset_id": aset["id"],
+            "lat": lat, "lng": lng}
+
+
 async def _setujui_satu(usulan: dict, share: dict, user: dict,
                         nup: int, kategori: str) -> dict:
     """Setujui satu usulan → {id, jenis, aset_id, komentar_id} atau alasan."""
     now = _now().isoformat()
     jenis = str(usulan.get("jenis") or "")
+    if jenis == "geser":
+        hasil = await _terapkan_geser(usulan, share, user, now)
+        return hasil
     if jenis == "titik":
         aset_id = await _jadikan_aset(usulan, share, user, nup, kategori)
         await db.peta_kolaborasi.update_one(
@@ -1202,3 +1282,106 @@ async def hapus_komentar_aset(komentar_id: str,
                     detail="Komentar aset (hasil usulan kolaborasi) dihapus",
                     kode_satker=str(k.get("kode_satker") or ""))
     return {"ok": True}
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# USULAN GESER — tamu memindahkan marker aset ASLI
+# ══════════════════════════════════════════════════════════════════════════
+#
+# Mandat pemilik: "bebaskan tamu kolaborasi menggeser marker asli peta …
+# berikan garis putus putus tempat marker asli peta dengan titik barunya nanti
+# dengan tampilan marker yang transparan … dapat dilihat juga melalui peta asli
+# perubahannya dan akan berubah ketika disetujui."
+#
+# KEPUTUSAN YANG DINYATAKAN TERUS TERANG: menggeser marker asli TIDAK langsung
+# mengubah koordinat aset. Ia tersimpan sebagai USULAN, sama seperti titik dan
+# komentar. Alasannya bukan kehati-hatian berlebihan: pemegang tautan peta
+# kolaborasi adalah SIAPA SAJA yang menerima tautannya. Menulis langsung ke
+# `assets` berarti siapa pun yang meneruskan tautan itu bisa memindahkan titik
+# BMN resmi tanpa jejak persetujuan. Karena itu "geser titik asli" berarti
+# MENGUSULKAN KOREKSI POSISI — dan posisinya benar-benar berubah saat pengelola
+# menyetujuinya, persis bunyi mandatnya.
+#
+# Selama menunggu, usulan tampil sebagai marker TRANSPARAN di posisi baru yang
+# tersambung GARIS PUTUS-PUTUS ke posisi asal — di peta kolaborasi maupun di
+# peta asli.
+
+@peta_kolaborasi_router.post("/peta/kolaborasi/{share_id}/geser")
+@limiter.limit("30/minute")
+async def usul_geser_titik(share_id: str, payload: GeserIn, request: Request,
+                           ctx: dict = Depends(require_user_or_map_token)):
+    """Usul pemindahan posisi satu aset (marker asli peta)."""
+    sh = await _muat_share(share_id)
+    # Izinnya menumpang saklar "titik publik": pemilik peta yang mematikan
+    # kontribusi titik jelas juga tak ingin posisinya diutak-atik.
+    await _guard_kontribusi(sh, ctx, request, "izinkan_titik_publik",
+                            "usulan geser titik")
+    import math
+    if not (math.isfinite(payload.lat) and math.isfinite(payload.lng)
+            and -90 <= payload.lat <= 90 and -180 <= payload.lng <= 180):
+        raise HTTPException(status_code=400, detail="Koordinat tidak valid")
+    aset = await db.assets.find_one(
+        {"id": str(payload.asset_id or ""),
+         "activity_id": str(sh.get("activity_id") or ""),
+         "dihapus": {"$ne": True}},
+        {"_id": 0, "id": 1, "asset_name": 1, "asset_code": 1, "NUP": 1,
+         "koordinat_latitude": 1, "koordinat_longitude": 1})
+    if not aset:
+        # Aset di LUAR kegiatan share ini tak boleh bisa disentuh lewat tautan
+        # peta mana pun — pesannya sengaja tak membedakan "tak ada" dari "bukan
+        # milik peta ini" supaya tautan tak jadi alat penebak keberadaan aset.
+        raise HTTPException(status_code=404,
+                            detail="Aset tidak ditemukan pada peta ini")
+    lat_asal = _parse_coord(aset.get("koordinat_latitude"))
+    lng_asal = _parse_coord(aset.get("koordinat_longitude"))
+    oleh, tipe, uid = _pengontribusi(ctx, payload.oleh)
+    now = _now().isoformat()
+    # Satu penyumbang, satu usulan geser per aset: usulan LAMA yang masih
+    # terbuka digantikan, bukan menumpuk. Tanpa ini satu orang yang menyeret
+    # marker lima kali meninggalkan lima garis putus-putus ke titik yang sama.
+    await db.peta_kolaborasi.update_many(
+        {"share_id": share_id, "jenis": "geser", "asset_id": aset["id"],
+         "oleh": oleh, "dihapus": {"$ne": True},
+         "status_usulan": {"$ne": "disetujui"}},
+        {"$set": {"dihapus": True, "dihapus_pada": now,
+                  "dihapus_oleh": "diganti-usulan-baru"}})
+    doc = {
+        "id": str(uuid.uuid4()), "share_id": share_id, "jenis": "geser",
+        "asset_id": aset["id"],
+        "nama_titik": str(aset.get("asset_name") or "Aset"),
+        "kode": str(aset.get("asset_code") or ""),
+        "nup": str(aset.get("NUP") or ""),
+        "lat": float(payload.lat), "lng": float(payload.lng),
+        "lat_asal": lat_asal, "lng_asal": lng_asal,
+        "keterangan": str(payload.keterangan or "").strip()[:DEFAULT_MAKS_TEKS],
+        "oleh": oleh, "oleh_tipe": tipe, "oleh_user_id": uid,
+        "ip": (request.client.host if request.client else ""),
+        "created_at": now, "dihapus": False,
+        **_stempel_asal(sh),
+        "status_usulan": "terbuka",
+    }
+    await db.peta_kolaborasi.insert_one(dict(doc))
+    return {k: v for k, v in doc.items() if k not in ("ip", "oleh_user_id")}
+
+
+@peta_kolaborasi_router.get("/aset/usulan-geser")
+async def daftar_usulan_geser(activity_id: str = Query(...),
+                              _user: dict = Depends(require_user)):
+    """Usulan geser yang MASIH menunggu, untuk digambar di peta ASLI.
+
+    Inilah yang membuat "dapat dilihat juga melalui peta asli" benar-benar
+    terjadi: petugas melihat garis putus-putus + marker transparan tanpa harus
+    membuka tautan peta kolaborasi.
+    """
+    from shared_utils import pastikan_akses_kegiatan_id
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+    q = scope_query_field_satker(_user, {
+        "activity_id": activity_id, "jenis": "geser",
+        "dihapus": {"$ne": True}})
+    semua = await db.peta_kolaborasi.find(
+        q, {"_id": 0, "ip": 0, "oleh_user_id": 0}).sort("created_at", 1).to_list(2000)
+    items = [k for k in semua if _status_usulan(k) == "terbuka"]
+    per_aset = {}
+    for k in items:
+        per_aset.setdefault(str(k.get("asset_id") or ""), []).append(k)
+    return {"items": items, "per_aset": per_aset, "jumlah": len(items)}

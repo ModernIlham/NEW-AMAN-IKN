@@ -12,6 +12,9 @@ import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layer
 import { toast } from "sonner";
 import { compressImageFile } from "../../lib/imageCompression";
 import {
+  bahanGarisUsulan, GAYA_GARIS_USULAN, jarakMeter, ringkasGeser, teksJarak,
+} from "../../lib/geserUsulan";
+import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuRadioGroup, DropdownMenuRadioItem,
 } from "../ui/dropdown-menu";
@@ -380,6 +383,57 @@ const AssetMapFullView = memo(function AssetMapFullView({
     })();
     return () => { batal = true; };
   }, [activityId]);
+
+  // ── Bayangan usulan GESER dari peta kolaborasi ────────────────────────
+  // Mandat pemilik: perubahan itu "dapat dilihat juga melalui peta asli".
+  // Petugas melihat garis putus-putus + marker transparan tanpa perlu membuka
+  // tautan peta kolaborasi. Yang digambar HANYA usulan yang masih menunggu —
+  // yang sudah disetujui asetnya memang sudah pindah, jadi bayangannya harus
+  // hilang, bukan menyisakan garis ke posisi lama selamanya.
+  const geserLayerRef = useRef(null);
+  useEffect(() => {
+    let batal = false;
+    const map = mapRef.current;
+    if (!activityId || !map) return undefined;
+    (async () => {
+      let items = [];
+      try {
+        const r = await axios.get(`${API}/aset/usulan-geser`, {
+          params: { activity_id: activityId }, timeout: 15000,
+        });
+        items = r.data?.items || [];
+      } catch { return; }   // peta tetap jalan tanpa bayangan usulan
+      if (batal || !mapRef.current) return;
+      if (!geserLayerRef.current) geserLayerRef.current = L.layerGroup().addTo(mapRef.current);
+      const lapis = geserLayerRef.current;
+      lapis.clearLayers();
+      items.forEach((u) => {
+        const bahan = bahanGarisUsulan(u);
+        if (!bahan) return;
+        if (bahan.garis) lapis.addLayer(L.polyline(bahan.garis, GAYA_GARIS_USULAN));
+        const r2 = ringkasGeser(u);
+        const jarak = teksJarak(jarakMeter(u.lat_asal, u.lng_asal, u.lat, u.lng));
+        const ikon = L.divIcon({
+          className: "",
+          html: '<div style="opacity:.55;width:22px;height:22px">'
+            + '<div style="width:22px;height:22px;border-radius:50% 50% 50% 0;background:#0d9488;'
+            + 'transform:rotate(-45deg);border:2px dashed #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)"></div>'
+            + "</div>",
+          iconSize: [22, 22], iconAnchor: [11, 22], popupAnchor: [0, -20],
+        });
+        const m = L.marker(bahan.bayangan, { icon: ikon });
+        m.bindPopup(
+          `<div style="font:12px system-ui,sans-serif;min-width:180px">`
+          + `<b>Usulan pindah dari lapangan</b><br/>${esc(r2.nama)}`
+          + (r2.identitas ? `<br/><span style="color:#64748b;font-size:10.5px">${esc(r2.identitas)}</span>` : "")
+          + `<br/><span style="color:#64748b;font-size:10.5px">oleh ${esc(r2.oleh)}`
+          + (jarak ? ` · ${jarak}` : "") + `</span>`
+          + `<br/><span style="color:#b45309;font-size:10.5px">Setujui dari peta kolaborasi untuk memindahkannya.</span></div>`);
+        lapis.addLayer(m);
+      });
+    })();
+    return () => { batal = true; };
+  }, [activityId, refreshRowVersion]);
 
   useEffect(() => {
     onHapusKomentarRef.current = !canEdit ? null : async (komentarId, assetId) => {

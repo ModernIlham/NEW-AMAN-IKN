@@ -13,11 +13,16 @@ import {
   AlertTriangle, RefreshCcw, WifiOff, Layers, Boxes, Trash2, ShieldCheck,
   Eraser, MousePointerClick, MessageSquare, ChevronLeft, ChevronRight, ImageIcon, Ruler,
   SlidersHorizontal, Check, RotateCcw, Wrench, Inbox, ThumbsUp, ThumbsDown,
+  Lock, LockOpen,
 } from "lucide-react";
 import {
   bisaDisetujui, judulUsulan, kalimatYakinSemua, LABEL_STATUS,
   ringkasHasilImpor, statusUsulan, WARNA_STATUS,
 } from "@/lib/usulanPeta";
+import {
+  bahanGarisUsulan, GAYA_GARIS_USULAN, jarakMeter, KETERANGAN_MODE,
+  MODE_GESER, ringkasGeser, teksJarak,
+} from "@/lib/geserUsulan";
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from "../components/ui/popover";
@@ -366,6 +371,45 @@ export default function PetaKolaborasiPage() {
   const usulanTerbuka = useMemo(
     () => usulan.filter((u) => statusUsulan(u) === "terbuka"), [usulan]);
 
+  // ── GEMBOK geser marker (mandat pemilik) ──────────────────────────────
+  // Default TERKUNCI: sekadar melihat peta di layar sentuh tak boleh
+  // menggeser titik apa pun. Sengaja tak disimpan antar sesi — pola yang sama
+  // dengan peta aset, supaya tak ada "lupa masih terbuka".
+  const [gembokBuka, setGembokBuka] = useState(false);
+  const [modeGeser, setModeGeser] = useState(MODE_GESER.ASLI);
+  const gembokRef = useRef(false);
+  const modeGeserRef = useRef(MODE_GESER.ASLI);
+  useEffect(() => { gembokRef.current = gembokBuka; }, [gembokBuka]);
+  useEffect(() => { modeGeserRef.current = modeGeser; }, [modeGeser]);
+
+  const bolehGeserAsli = !!data?.boleh_tambah_titik;
+  const geserAktif = gembokBuka && bolehGeserAsli && modeGeser === MODE_GESER.ASLI;
+  const geserAktifRef = useRef(false);
+  useEffect(() => { geserAktifRef.current = geserAktif; }, [geserAktif]);
+
+  // Kirim usulan geser. Marker asli SELALU dikembalikan ke tempatnya — yang
+  // tersimpan hanyalah usulan, dan layar tak boleh berpura-pura posisinya
+  // sudah pindah.
+  // `olehNama` datang sebagai ARGUMEN dari penjagaNama — TIDAK dibaca dari
+  // state. Closure ini terbentuk sebelum tamu sempat mengetik namanya, dan
+  // membaca `nama` dari sini akan mengirim string kosong (bug yang dulu
+  // membuat semua kontributor tercatat sebagai "Tamu" secara permanen).
+  const kirimGeser = useCallback(async (aset, latBaru, lngBaru, olehNama) => {
+    try {
+      await axios.post(`${API}/peta/kolaborasi/${id}/geser`,
+                       { asset_id: aset.id, lat: latBaru, lng: lngBaru,
+                         oleh: olehNama || "" },
+                       { params: { token } });
+      const m = jarakMeter(aset.lat, aset.lng, latBaru, lngBaru);
+      toast.success(
+        `Usulan pindah ${teksJarak(m)} terkirim — posisinya baru berubah `
+        + "setelah pengelola menyetujui");
+      muat();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mengirim usulan geser");
+    }
+  }, [id, token, muat]);
+
   // Hitung komentar per target (lencana angka pada pin).
   const komentarCount = useMemo(() => {
     const m = {};
@@ -613,12 +657,39 @@ export default function PetaKolaborasiPage() {
           existing.color = color; existing.badge = badge; existing.iconKey = iconKey;
           existing.marker.setIcon(buildIcon(existing));
         }
+        // options.draggable WAJIB ikut diperbarui, bukan hanya enable/disable:
+        // marker yang sempat tersembunyi di dalam cluster dibangun ulang
+        // handler drag-nya dari options — tanpa ini pin bisa digeser walau
+        // gembok sudah dikunci lagi.
+        const mauGeser = jenis === "aset" && geserAktifRef.current;
+        if (existing.draggable !== mauGeser) {
+          existing.marker.options.draggable = mauGeser;
+          const d = existing.marker.dragging;
+          if (d) { if (mauGeser) d.enable(); else d.disable(); }
+          existing.draggable = mauGeser;
+        }
         return;
       }
       const entry = { marker: null, point, iconKey, color, badge, selected: false, lat: latlng[0], lng: latlng[1], jenis };
-      const m = L.marker(latlng, { icon: buildIcon(entry) });
+      const bisaGeser = jenis === "aset" && geserAktifRef.current;
+      const m = L.marker(latlng, { icon: buildIcon(entry), draggable: bisaGeser });
       entry.marker = m;
+      entry.draggable = bisaGeser;
       m.on("click", () => klik(entry));
+      if (jenis === "aset") {
+        m.on("dragend", () => {
+          const ll = m.getLatLng();
+          // Marker asli SELALU kembali ke tempatnya: yang tersimpan cuma
+          // USULAN. Membiarkannya di posisi baru membuat layar berbohong —
+          // pemakainya mengira posisinya sudah pindah padahal belum disetujui.
+          const kembalikan = () => m.setLatLng([entry.lat, entry.lng]);
+          const aset = entry.point;
+          butuhNamaRef.current?.((olehNama) => {
+            kirimGeserRef.current?.(aset, ll.lat, ll.lng, olehNama);
+          });
+          kembalikan();
+        });
+      }
       layer.addLayer(m);
       markersRef.current.set(key, entry);
     };
@@ -641,7 +712,48 @@ export default function PetaKolaborasiPage() {
       try { map.fitBounds(L.latLngBounds(bounds), { padding: [40, 40], maxZoom: 18 }); } catch { /* noop */ }
       fitOnceRef.current = true;
     }
-  }, [data, asetTampil, komentarCount, bukaDetailAset, bukaDetailTitik, toggleTerpilih, buildIcon, markerStyle]);
+  }, [data, asetTampil, komentarCount, bukaDetailAset, bukaDetailTitik, toggleTerpilih, buildIcon, markerStyle, geserAktif]);
+
+  // ── Bayangan usulan geser: garis PUTUS-PUTUS + marker TRANSPARAN ──────
+  // Mandat pemilik: "berikan garis putus putus tempat marker asli peta dengan
+  // titik barunya … dengan tampilan marker yang transparan". Lapisannya
+  // terpisah dari lapisan marker supaya bisa digambar ulang sendiri tanpa
+  // mengganggu popup/drag yang sedang berjalan.
+  const bayanganRef = useRef(null);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return undefined;
+    if (!bayanganRef.current) bayanganRef.current = L.layerGroup().addTo(map);
+    const lapis = bayanganRef.current;
+    lapis.clearLayers();
+    (data?.usulan_geser || []).forEach((u) => {
+      const bahan = bahanGarisUsulan(u);
+      if (!bahan) return;
+      if (bahan.garis) lapis.addLayer(L.polyline(bahan.garis, GAYA_GARIS_USULAN));
+      const r = ringkasGeser(u);
+      const jarak = teksJarak(jarakMeter(u.lat_asal, u.lng_asal, u.lat, u.lng));
+      // TRANSPARAN (opacity .55) — sengaja berbeda tegas dari marker nyata
+      // supaya tak seorang pun mengira posisinya sudah berpindah.
+      const ikon = L.divIcon({
+        className: "",
+        html: '<div style="opacity:.55;width:22px;height:22px">'
+          + '<div style="width:22px;height:22px;border-radius:50% 50% 50% 0;background:#0d9488;'
+          + 'transform:rotate(-45deg);border:2px dashed #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)"></div>'
+          + "</div>",
+        iconSize: [22, 22], iconAnchor: [11, 22], popupAnchor: [0, -20],
+      });
+      const m = L.marker(bahan.bayangan, { icon: ikon, interactive: true });
+      m.bindPopup(
+        `<div style="font:12px system-ui,sans-serif;min-width:170px">`
+        + `<b>Usulan pindah</b><br/>${r.nama}`
+        + (r.identitas ? `<br/><span style="color:#64748b;font-size:10.5px">${r.identitas}</span>` : "")
+        + `<br/><span style="color:#64748b;font-size:10.5px">oleh ${r.oleh}`
+        + (jarak ? ` · ${jarak}` : "") + `</span>`
+        + `<br/><span style="color:#b45309;font-size:10.5px">Belum disetujui — posisi resmi belum berubah.</span></div>`);
+      lapis.addLayer(m);
+    });
+    return undefined;
+  }, [data]);
 
   // Sorot cincin seleksi (detail `dipilih` + moderasi `terpilih`) secara
   // INKREMENTAL — hanya setIcon pada marker yang berubah status pilih; `data`
@@ -705,6 +817,11 @@ export default function PetaKolaborasiPage() {
       perluNama: !(data && !data.tamu), nama });
     if (perlu) { setNamaDraf(nama); setNamaDialog(true); }
   }, [data, nama]);
+  // Handler drag marker dibangun di luar pohon React (Leaflet), jadi ia
+  // memanggil `butuhNama` lewat ref agar selalu memakai versi TERBARU —
+  // bukan closure dari render saat marker pertama kali dipasang.
+  const butuhNamaRef = useRef(butuhNama);
+  useEffect(() => { butuhNamaRef.current = butuhNama; }, [butuhNama]);
 
   const simpanNama = () => {
     const n = namaDraf.trim().slice(0, 60);
@@ -945,6 +1062,52 @@ export default function PetaKolaborasiPage() {
         >
           <ImageIcon className="w-4 h-4" />
         </button>
+        {/* GEMBOK geser marker — default terkunci supaya melihat peta nyaman.
+            Saat terbuka, dua tombol IKON-SAJA memilih apa yang digeser
+            (mandat pemilik: "jelaskan dengan pilihan icon saja"). */}
+        {bolehGeserAsli && (
+          <button
+            type="button" onClick={() => setGembokBuka((v) => !v)}
+            aria-pressed={gembokBuka}
+            aria-label={gembokBuka ? "Kunci geser marker" : "Buka kunci geser marker"}
+            title={gembokBuka
+              ? "Geser AKTIF — ketuk untuk mengunci lagi"
+              : "Marker terkunci — ketuk untuk mulai menggeser titik"}
+            className={`h-8 w-8 rounded-lg border flex items-center justify-center flex-shrink-0 transition-colors ${gembokBuka
+              ? "border-teal-500 bg-teal-500/10 text-teal-600 dark:text-teal-400"
+              : "border-border text-foreground/80 hover:bg-muted"}`}
+            data-testid="peta-kolab-gembok"
+          >
+            {gembokBuka ? <LockOpen className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+          </button>
+        )}
+        {bolehGeserAsli && gembokBuka && (
+          <div className="flex items-center rounded-lg border border-teal-500 overflow-hidden flex-shrink-0"
+            role="radiogroup" aria-label="Pilih yang digeser">
+            <button
+              type="button" onClick={() => setModeGeser(MODE_GESER.ASLI)}
+              role="radio" aria-checked={modeGeser === MODE_GESER.ASLI}
+              aria-label="Geser titik asli (usul koreksi posisi aset)"
+              title={KETERANGAN_MODE[MODE_GESER.ASLI]}
+              className={`h-8 w-8 flex items-center justify-center transition-colors ${modeGeser === MODE_GESER.ASLI
+                ? "bg-teal-500 text-white" : "text-teal-700 dark:text-teal-400 hover:bg-teal-500/10"}`}
+              data-testid="peta-kolab-mode-asli"
+            >
+              <MapPin className="w-4 h-4" />
+            </button>
+            <button
+              type="button" onClick={() => setModeGeser(MODE_GESER.USULAN)}
+              role="radio" aria-checked={modeGeser === MODE_GESER.USULAN}
+              aria-label="Titik usulan (tambah titik baru)"
+              title={KETERANGAN_MODE[MODE_GESER.USULAN]}
+              className={`h-8 w-8 flex items-center justify-center transition-colors ${modeGeser === MODE_GESER.USULAN
+                ? "bg-teal-500 text-white" : "text-teal-700 dark:text-teal-400 hover:bg-teal-500/10"}`}
+              data-testid="peta-kolab-mode-usulan"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
+        )}
         {bolehModerasi && (
           <button
             type="button" onClick={bukaUsulan} aria-label="Tinjau usulan kolaborasi"

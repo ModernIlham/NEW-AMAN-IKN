@@ -410,3 +410,217 @@ def test_kontribusi_baru_distempel_satker_dan_kegiatan(dbx):
     assert pk._stempel_asal({"kode_satker": "111111", "activity_id": KEG}) == {
         "kode_satker": "111111", "activity_id": KEG}
     assert pk._stempel_asal({}) == {"kode_satker": "", "activity_id": ""}
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# USULAN GESER — tamu memindahkan marker aset ASLI
+# ══════════════════════════════════════════════════════════════════════════
+#
+# Mandat pemilik: tamu boleh menggeser marker asli; garis putus-putus + marker
+# transparan menandai usulannya; "akan berubah ketika disetujui".
+#
+# KEPUTUSAN YANG DIKUNCI UJI DI SINI: menggeser TIDAK langsung mengubah
+# koordinat aset. Pemegang tautan peta kolaborasi adalah siapa saja yang
+# menerima tautannya — menulis langsung ke `assets` berarti siapa pun yang
+# meneruskan tautan bisa memindahkan titik BMN resmi tanpa jejak persetujuan.
+
+# Konteks TAMU lengkap: penjaga kontribusi memeriksa klaim token (share + jti)
+# dan membaca ?token= dari query. Uji yang memakai ctx setengah jadi hanya akan
+# menguji penolakan tokennya, bukan perilaku yang kita maksud.
+TAMU = {"guest": True, "peta": {"share": SHARE_ID, "jti": "j1"}}
+
+
+class _Req:
+    """Request seadanya: `_punya_link` membaca query_params, `request.client`
+    dipakai mencatat IP penyumbang."""
+
+    def __init__(self, token=None):
+        # Token PETA yang benar-benar sah — `_punya_link` mendekodenya, jadi
+        # string asal-asalan hanya akan menguji penolakan token.
+        from auth_utils import create_map_token
+        self.query_params = {"token": token or create_map_token(SHARE_ID, "j1")}
+        self.client = None
+
+
+async def _aset(dbx, aid="a-1", lat="-0.9000000", lng="116.7000000", **ganti):
+    doc = {"id": aid, "activity_id": KEG, "kode_satker": "111111",
+           "asset_code": "3100102001", "NUP": "7", "asset_name": "Genset",
+           "koordinat_latitude": lat, "koordinat_longitude": lng,
+           "version": 3, "dihapus": False}
+    doc.update(ganti)
+    await dbx.assets.insert_one(doc)
+    return doc
+
+
+def test_geser_oleh_tamu_TIDAK_langsung_mengubah_aset(dbx):
+    """INTI. Yang tersimpan adalah USULAN; koordinat aset belum bergerak."""
+    async def skenario():
+        await _seed(dbx)
+        await _aset(dbx)
+        r = await _unwrap(pk.usul_geser_titik)(
+            SHARE_ID, pk.GeserIn(asset_id="a-1", lat=-0.95, lng=116.75,
+                                 oleh="Budi"),
+            request=_Req(), ctx=TAMU)
+        aset = await dbx.assets.find_one({"id": "a-1"}, {"_id": 0})
+        return r, aset
+    r, aset = _jalan(skenario())
+    assert r["jenis"] == "geser" and r["status_usulan"] == "terbuka"
+    # Posisi ASAL ikut disimpan → garis putus-putus punya pangkal.
+    assert r["lat_asal"] == -0.9 and r["lng_asal"] == 116.7
+    assert aset["koordinat_latitude"] == "-0.9000000", "aset belum boleh pindah"
+    assert aset["version"] == 3
+
+
+def test_geser_disetujui_benar_benar_memindahkan_aset(dbx):
+    """"…akan berubah ketika disetujui" — dibuktikan sampai ke dokumen aset."""
+    async def skenario():
+        await _seed(dbx)
+        await _aset(dbx)
+        u = await _unwrap(pk.usul_geser_titik)(
+            SHARE_ID, pk.GeserIn(asset_id="a-1", lat=-0.95, lng=116.75),
+            request=_Req(), ctx=TAMU)
+        r = await _unwrap(pk.setujui_usulan)(SHARE_ID, u["id"], request=None,
+                                             user=ADMIN_A)
+        return r, await dbx.assets.find_one({"id": "a-1"}, {"_id": 0})
+    r, aset = _jalan(skenario())
+    assert r["jenis"] == "geser" and r["aset_id"] == "a-1"
+    assert aset["koordinat_latitude"].startswith("-0.95")
+    assert aset["koordinat_longitude"].startswith("116.75")
+    assert aset["version"] == 4, "OCC harus naik agar klien tahu data berubah"
+    # Jejak balik: dari mana ia dipindah & atas usulan siapa.
+    assert aset["geser_dari"]["lat"] == "-0.9000000"
+    assert aset["geser_dari"]["disetujui_oleh"] == "a"
+
+
+def test_geser_memindahkan_geo_bukan_hanya_koordinat(dbx):
+    """`geo` (indeks 2dsphere) harus ikut. Kalau tidak, aset tetap muncul di
+    kueri area pada titik LAMANYA — peta benar, pencarian spasial diam-diam
+    salah."""
+    async def skenario():
+        await _seed(dbx)
+        await _aset(dbx)
+        u = await _unwrap(pk.usul_geser_titik)(
+            SHARE_ID, pk.GeserIn(asset_id="a-1", lat=-0.95, lng=116.75),
+            request=_Req(), ctx=TAMU)
+        await _unwrap(pk.setujui_usulan)(SHARE_ID, u["id"], request=None,
+                                         user=ADMIN_A)
+        return await dbx.assets.find_one({"id": "a-1"}, {"_id": 0})
+    aset = _jalan(skenario())
+    koord = (aset.get("geo") or {}).get("coordinates") or []
+    assert len(koord) == 2
+    assert abs(koord[0] - 116.75) < 1e-6 and abs(koord[1] + 0.95) < 1e-6
+
+
+def test_geser_aset_kegiatan_lain_ditolak_404(dbx):
+    """Tautan peta tak boleh jadi pintu menggeser aset kegiatan/satker lain."""
+    async def skenario():
+        await _seed(dbx)
+        await _aset(dbx, "a-lain", activity_id="keg-lain", kode_satker="222222")
+        await _unwrap(pk.usul_geser_titik)(
+            SHARE_ID, pk.GeserIn(asset_id="a-lain", lat=-0.95, lng=116.75),
+            request=_Req(), ctx=TAMU)
+    with pytest.raises(HTTPException) as e:
+        _jalan(skenario())
+    assert e.value.status_code == 404
+
+
+def test_koordinat_ngawur_ditolak(dbx):
+    async def skenario():
+        await _seed(dbx)
+        await _aset(dbx)
+        await _unwrap(pk.usul_geser_titik)(
+            SHARE_ID, pk.GeserIn(asset_id="a-1", lat=999, lng=116.7),
+            request=_Req(), ctx=TAMU)
+    with pytest.raises(HTTPException) as e:
+        _jalan(skenario())
+    assert e.value.status_code == 400
+
+
+def test_menyeret_berkali_kali_tak_menumpuk_garis(dbx):
+    """Satu penyumbang, satu usulan geser per aset. Tanpa ini, orang yang
+    menyeret marker lima kali meninggalkan lima garis putus-putus ke titik
+    yang sama dan pengelola harus meninjau lima usulan identik."""
+    async def skenario():
+        await _seed(dbx)
+        await _aset(dbx)
+        for lat in (-0.91, -0.92, -0.93):
+            await _unwrap(pk.usul_geser_titik)(
+                SHARE_ID, pk.GeserIn(asset_id="a-1", lat=lat, lng=116.75,
+                                     oleh="Budi"),
+                request=_Req(), ctx=TAMU)
+        return await pk.daftar_usulan_geser(activity_id=KEG, _user=ADMIN_A)
+    r = _jalan(skenario())
+    assert r["jumlah"] == 1, "usulan lama harus digantikan, bukan menumpuk"
+    assert abs(r["items"][0]["lat"] + 0.93) < 1e-9, "yang tersisa yang TERBARU"
+
+
+def test_penyumbang_berbeda_boleh_punya_usulan_masing_masing(dbx):
+    """Penggantian di atas hanya berlaku per ORANG — usul Wati tak boleh
+    menghapus usul Budi."""
+    async def skenario():
+        await _seed(dbx)
+        await _aset(dbx)
+        await _unwrap(pk.usul_geser_titik)(
+            SHARE_ID, pk.GeserIn(asset_id="a-1", lat=-0.91, lng=116.7, oleh="Budi"),
+            request=_Req(), ctx=TAMU)
+        await _unwrap(pk.usul_geser_titik)(
+            SHARE_ID, pk.GeserIn(asset_id="a-1", lat=-0.92, lng=116.7, oleh="Wati"),
+            request=_Req(), ctx=TAMU)
+        return await pk.daftar_usulan_geser(activity_id=KEG, _user=ADMIN_A)
+    r = _jalan(skenario())
+    assert r["jumlah"] == 2
+    assert {x["oleh"] for x in r["items"]} == {"Budi", "Wati"}
+
+
+def test_peta_asli_hanya_menampilkan_usulan_yang_masih_menunggu(dbx):
+    """Garis putus-putus harus HILANG setelah usulannya disetujui — kalau
+    tidak, peta asli menyisakan bayangan yang menunjuk posisi lama selamanya."""
+    async def skenario():
+        await _seed(dbx)
+        await _aset(dbx)
+        u = await _unwrap(pk.usul_geser_titik)(
+            SHARE_ID, pk.GeserIn(asset_id="a-1", lat=-0.95, lng=116.75),
+            request=_Req(), ctx=TAMU)
+        sebelum = await pk.daftar_usulan_geser(activity_id=KEG, _user=ADMIN_A)
+        await _unwrap(pk.setujui_usulan)(SHARE_ID, u["id"], request=None,
+                                         user=ADMIN_A)
+        sesudah = await pk.daftar_usulan_geser(activity_id=KEG, _user=ADMIN_A)
+        return sebelum, sesudah
+    sebelum, sesudah = _jalan(skenario())
+    assert sebelum["jumlah"] == 1 and sesudah["jumlah"] == 0
+
+
+def test_usulan_geser_tak_bocor_ke_kegiatan_lain(dbx):
+    async def skenario():
+        await _seed(dbx)
+        await _aset(dbx)
+        await _unwrap(pk.usul_geser_titik)(
+            SHARE_ID, pk.GeserIn(asset_id="a-1", lat=-0.95, lng=116.75),
+            request=_Req(), ctx=TAMU)
+        # Kegiatan LAIN yang benar-benar ada & milik satker yang sama —
+        # kalau tidak, yang teruji cuma penjaga data yatim, bukan penyaringan
+        # per kegiatan yang kita maksud.
+        await dbx.inventory_activities.insert_one(
+            {"id": "keg-2", "kode_satker": "111111", "nama": "Kegiatan lain"})
+        return await pk.daftar_usulan_geser(activity_id="keg-2", _user=ADMIN_A)
+    assert _jalan(skenario())["jumlah"] == 0
+
+
+def test_geser_aset_yang_keburu_hilang_dilewati_dengan_sebab(dbx):
+    """Aset dihapus setelah usulan dibuat: batch tak boleh meledak, dan
+    usulannya tak boleh diam-diam ditandai selesai."""
+    async def skenario():
+        await _seed(dbx)
+        await _aset(dbx)
+        u = await _unwrap(pk.usul_geser_titik)(
+            SHARE_ID, pk.GeserIn(asset_id="a-1", lat=-0.95, lng=116.75),
+            request=_Req(), ctx=TAMU)
+        await dbx.assets.delete_one({"id": "a-1"})
+        r = await _unwrap(pk.setujui_semua_usulan)(
+            SHARE_ID, pk.SetujuiSemuaIn(), request=None, user=ADMIN_A)
+        tetap = await dbx.peta_kolaborasi.find_one({"id": u["id"]}, {"_id": 0})
+        return r, tetap
+    r, tetap = _jalan(skenario())
+    assert r["disetujui"] == 0 and len(r["dilewati"]) == 1
+    assert "tidak ada" in r["dilewati"][0]["alasan"].lower()
+    assert pk._status_usulan(tetap) == "terbuka", "jangan ditandai selesai"
