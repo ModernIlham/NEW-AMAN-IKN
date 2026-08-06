@@ -67,6 +67,53 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#785] Paginasi Kelola Kategori Aset hidup — 12.488 kategori tak lagi terkunci di 50 — 2026-08-06
+
+Laporan: tombol **Sebelumnya**/**Berikutnya** pada dialog *Kelola Kategori Aset*
+tidak bisa diklik.
+
+Layarnya sendiri sudah membocorkan sebabnya: header menulis **"Total: 12488
+kategori"**, sementara barisan paginasi tepat di bawahnya menulis **"1-50 dari
+50"** dan **"1 / 1"**. Tombolnya tidak rusak — keduanya memang dinonaktifkan
+dengan benar, karena daftarnya dikira hanya satu halaman.
+
+**Akar masalahnya satu baris**, di penyaring, bukan di tombol:
+
+```js
+if (!categorySearch || categorySearch.length < 2) return cats.slice(0, 50);
+```
+
+Setiap kali kotak pencarian kosong (atau berisi < 2 huruf), daftar dipotong
+keras jadi 50. Panjangnya selalu 50 → total halaman selalu 1 → kedua tombol mati
+permanen. Dari 12.488 kategori, hanya 50 pertama yang bisa dilihat — dan tak ada
+satu pun petunjuk bahwa sisanya ada.
+
+Potongan itu **penjaga performa dari sebelum paginasi dipasang**, dan sejak
+paginasi ada ia bukan cuma tak berguna melainkan merusak: `<tbody>` sudah
+memotong per halaman sendiri, jadi hanya 50 baris yang benar-benar dirender
+berapa pun panjang daftarnya. Dua mekanisme mengerjakan tugas yang sama, dan
+yang salah menang.
+
+**Dua cacat menyertai yang ikut ditutup:**
+
+- **Angka total halaman dihitung ulang di tiga tempat**, dan hanya salah satunya
+  berekor `|| 1`. Bentuk begitu membuat label halaman dan keadaan tombol bisa
+  berbeda pendapat. Kini satu `totalHalaman` dipakai ketiganya.
+- **Menghapus kategori terakhir di halaman terakhir** meninggalkan tabel kosong
+  dengan kedua tombol mati — pengguna terjebak tanpa jalan kembali. Halaman aktif
+  kini dijepit ke rentang yang masih ada.
+
+**Verifikasi.** 9 uji baru; **644 uji frontend hijau**; eslint bersih; build
+sukses tanpa peringatan baru. Dua mutasi disuntikkan — `cats.slice(0, 50)`
+dikembalikan, dan penjepit halaman dibuang — **keduanya tertangkap**.
+
+> Ujinya membaca sumber, bukan merender. Repo ini belum memasang
+> `@testing-library`, jadi belum ada cara memasang komponen dan mengklik
+> tombolnya. Yang bisa dijaga adalah invariannya di tempat ia hidup — dan justru
+> di sanalah cacatnya berada.
+
+---
+
 ## [#784] Kode Satker Lengkap pegawai jadi Kode Lokasi BMN 20 karakter — 2026-08-06
 
 Field **Kode Satker Lengkap** pada popup pegawai (bagian Jabatan & Unit) dulu
