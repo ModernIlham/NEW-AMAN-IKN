@@ -115,6 +115,35 @@ class TestGerbangMurah:
         assert hasil is None
         assert db.spasial_node.panggilan == 0
 
+    def test_patch_tak_terkait_pada_aset_BERKOORDINAT_tetap_nol_kueri(self):
+        """Inilah kasus yang benar-benar dijaga gerbang murah — dan yang
+        LOLOS dari `test_tanpa_koordinat_tanpa_ditemukan_nol_kueri`.
+
+        Bila asetnya tak punya koordinat, penjaga parse-koordinat toh
+        menghentikan alur sebelum kueri, sehingga mencabut gerbang murah tak
+        ketahuan. Yang membedakan: aset yang SUDAH berkoordinat (mayoritas
+        aset terinventarisasi). Tanpa gerbang murah, tiap PATCH harga/foto/
+        catatan pada aset itu membayar 2 kueri tambahan selamanya."""
+        db = _Db(keg=KEG, node_rows=[GEDUNG])
+        hasil = _panggil(db,
+                         {"activity_id": "k1",
+                          "koordinat_latitude": "-0.975",
+                          "koordinat_longitude": "116.709"},
+                         {"purchase_price": "1000"})
+        assert hasil is None
+        assert db.inventory_activities.panggilan == 0
+        assert db.spasial_node.panggilan == 0
+
+    def test_ditemukan_tanpa_koordinat_di_mana_pun_nol_kueri(self):
+        """Pemicu "status jadi Ditemukan" TIDAK boleh membuka kueri bila
+        asetnya memang tak punya koordinat."""
+        db = _Db(keg=KEG, node_rows=[GEDUNG])
+        hasil = _panggil(db, {"activity_id": "k1"},
+                         {"inventory_status": "Ditemukan"})
+        assert hasil is None
+        assert db.inventory_activities.panggilan == 0
+        assert db.spasial_node.panggilan == 0
+
     def test_koordinat_tak_sah_dilewati(self):
         db = _Db(keg=KEG, node_rows=[GEDUNG])
         hasil = _panggil(db, {"activity_id": "k1"},
@@ -257,8 +286,14 @@ class TestWiringTerpasang:
         assert '_ops["$unset"] = _geo_unset' in fn
         i_hook = fn.index("penempatan_dari_inventarisasi")
         i_cas = fn.index("db.assets.update_one")
-        assert i_hook < i_cas
-        assert "sp.catat_penempatan(" in fn
+        # URUTAN, bukan sekadar kehadiran. Versi pertama uji ini hanya
+        # menegaskan `"sp.catat_penempatan(" in fn`, dan tinjauan
+        # membuktikan mutasinya lolos: memindahkan blok riwayat ke ATAS CAS
+        # (letak yang secara visual paling "rapi") tetap hijau. Akibatnya,
+        # PUT yang KALAH CAS — 409, aset tak berubah — tetap mencetak baris
+        # riwayat custody untuk perpindahan yang tak pernah terjadi.
+        i_riwayat = fn.index("sp.catat_penempatan(")
+        assert i_hook < i_cas < i_riwayat
 
 
 class TestInvarianYangMenopangKeamanannya:
@@ -286,6 +321,33 @@ class TestInvarianYangMenopangKeamanannya:
                     "update_data di update_asset sebelum menambahkannya.")
                 return
         raise AssertionError("kelas AssetCreate tidak ditemukan")
+
+    def test_penempatan_manual_menaikkan_version_agar_terlihat_cas(self):
+        """`PUT /assets/{id}/lokasi-spasial` (dialog Denah) HARUS menaikkan
+        `version`, alasan yang sama sudah ditulis di `/opname/terapkan`:
+        tanpa itu penjaga OCC/If-Match BUTA terhadap penempatan manual.
+
+        Dulu kelalaian itu tidur karena tak ada jalur lain yang menulis
+        `lokasi_spasial`. Sejak penempatan otomatis, PATCH/PUT aset ikut
+        menulisnya — sehingga PATCH yang membaca dokumen SEBELUM operator
+        menempatkan manual tetap lolos CAS dan MENIMPA "Ruang 305" pilihan
+        manusia dengan "Gedung A" derivasi mesin, tanpa 409 dan tanpa jejak
+        (riwayatnya mencatat `dari: kosong`)."""
+        import ast as _ast
+        with open(os.path.join(BACKEND, "routes", "spasial.py"),
+                  encoding="utf-8") as fh:
+            src = fh.read()
+        for simpul in _ast.walk(_ast.parse(src)):
+            if (isinstance(simpul, (_ast.FunctionDef, _ast.AsyncFunctionDef))
+                    and simpul.name == "set_lokasi_aset"):
+                fn = _ast.get_source_segment(src, simpul) or ""
+                # Dua cabang: menempatkan DAN mencabut penempatan.
+                assert fn.count('"$inc": {"version": 1}') == 2, (
+                    "set_lokasi_aset harus menaikkan version di kedua "
+                    "cabangnya; tanpa itu CAS buta terhadap penempatan "
+                    "manual dan penempatan otomatis bisa menimpanya.")
+                return
+        raise AssertionError("fungsi set_lokasi_aset tidak ditemukan")
 
     def test_replay_idempoten_keluar_sebelum_hook_sehingga_riwayat_tak_dobel(self):
         """Antrean luring MENGIRIM ULANG permintaan yang sama (Idempotency-Key).

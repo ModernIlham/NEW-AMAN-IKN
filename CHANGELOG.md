@@ -131,6 +131,28 @@ pencabutnya dipastikan tertangkap.
   suite tetap hijau — hook boleh terpanggil dan urutannya benar, tapi
   fiturnya tak melakukan apa pun tanpa ada yang berteriak.
 
+**Gelombang kedua tinjauan** (7 bertahan dari 16, 9 gugur) menutup tiga sisa:
+
+- **Penempatan manual tak lagi bisa ditimpa diam-diam.**
+  `PUT /assets/{id}/lokasi-spasial` (dialog Denah) dulu menulis
+  `lokasi_spasial` TANPA menaikkan `version` — alasan yang sama sudah
+  ditulis di `/opname/terapkan` ("tanpa ini penjaga OCC/If-Match buta").
+  Kelalaian itu tidur selama tak ada jalur lain yang menulis field itu;
+  penempatan otomatis membangunkannya: PATCH yang membaca dokumen SEBELUM
+  operator menempatkan manual tetap lolos CAS dan menimpa "Ruang 305"
+  pilihan manusia dengan "Gedung A" derivasi mesin — tanpa 409, dan tanpa
+  jejak (riwayatnya mencatat `dari: kosong`). Kedua cabang (menempatkan &
+  mencabut) kini menaikkan `version`.
+- **Urutan riwayat-setelah-CAS kini dijaga di jalur PUT juga**, bukan hanya
+  kehadirannya. Mutasi memindahkan blok riwayat ke atas CAS — letak yang
+  paling "rapi" secara visual — dulu tetap hijau; akibatnya PUT yang KALAH
+  CAS (409, aset tak berubah) tetap mencetak riwayat custody.
+- **Uji gerbang murah diperbaiki karena versi pertamanya lemah.** Ia
+  memakai aset TANPA koordinat, sehingga penjaga parse-koordinat toh
+  menghentikan alur dan pencabutan gerbang tak ketahuan. Versi benarnya
+  memakai aset yang SUDAH berkoordinat — mayoritas aset terinventarisasi —
+  di mana tiap PATCH harga/foto akan membayar 2 kueri tambahan selamanya.
+
 Satu temuan berlabel TINGGI justru **GUGUR setelah diperiksa ke kodenya**:
 "pindai ruangan atas catatan gedung terbaca `pindah`". Itu keputusan desain
 lama yang disengaja dan sudah diuji

@@ -1821,7 +1821,11 @@ async def set_lokasi_aset(asset_id: str, payload: LokasiAsetIn,
                                         username, now))
         await db.assets.update_one({"id": asset_id},
                                    {"$unset": {"lokasi_spasial": ""},
-                                    "$set": {"updated_at": now}})
+                                    "$set": {"updated_at": now},
+                                    # $inc version: lihat alasan di cabang
+                                    # penempatan di bawah — pencabutan pun
+                                    # harus terlihat oleh OCC.
+                                    "$inc": {"version": 1}})
         await log_audit("aset_lokasi_hapus", aset.get("activity_id") or "",
                         asset_id, asset_code=aset.get("asset_code") or "",
                         asset_name=aset.get("asset_name") or "",
@@ -1853,9 +1857,19 @@ async def set_lokasi_aset(asset_id: str, payload: LokasiAsetIn,
         await db.riwayat_lokasi_aset.insert_one(
             su.entri_riwayat_lokasi(asset_id, lokasi_lama, lokasi,
                                     username, now))
+    # $inc version: tanpa ini penjaga OCC/If-Match BUTA terhadap penempatan
+    # manual — persis alasan yang sama sudah ditulis di `/opname/terapkan`
+    # (routes/opname.py). Dulu kelalaian ini tak berbahaya karena TAK ADA
+    # jalur lain yang menulis `lokasi_spasial`. Sejak penempatan otomatis
+    # dari koordinat inventarisasi (spasial_penempatan.py), PATCH/PUT aset
+    # ikut menulis field itu: PATCH yang membaca dokumen SEBELUM operator
+    # menempatkan manual akan tetap lolos CAS dan MENIMPA "Ruang 305" dengan
+    # hasil derivasi mesin "Gedung A" — dan riwayatnya mencatat `dari: kosong`
+    # sehingga hilangnya penempatan sengaja itu tak berjejak.
     await db.assets.update_one({"id": asset_id},
                                {"$set": {"lokasi_spasial": lokasi,
-                                         "updated_at": now}})
+                                         "updated_at": now},
+                                "$inc": {"version": 1}})
     await log_audit("aset_lokasi_tandai", aset.get("activity_id") or "",
                     asset_id, asset_code=aset.get("asset_code") or "",
                     asset_name=aset.get("asset_name") or "",
