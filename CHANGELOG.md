@@ -67,6 +67,59 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#787] Denah yang sudah diimpor akhirnya terdeteksi — gerbang draft diberi pintu — 2026-08-06
+
+Laporan: *"halaman lokasi aset di denah masih tidak memunculkan informasinya …
+agar semua titik dapat terdeteksi, sesuai peta denah yang sudah diinputkan."*
+
+**Tak satu pun bagiannya rusak** — dan justru itu sebabnya gejalanya bertahan.
+Tiga keputusan yang masing-masing benar bertemu jadi satu jalan buntu:
+
+1. Impor SHP/KML/GeoJSON menulis **semua** node dengan `status: "draft"` —
+   gerbang tinjauan yang disengaja sejak Fase 5.
+2. Deteksi titik, lapisan peta, dan ruangan-di-titik semuanya menyaring
+   `status: "aktif"` — draft memang tak boleh ikut menentukan lokasi barang
+   negara.
+3. Satu-satunya cara melepas draft adalah **form ubah satu node**.
+
+Gabungannya: denah kawasan berisi ratusan ruangan yang sudah diimpor lengkap
+tak pernah muncul di mana pun, dan melepasnya berarti membuka form ratusan kali.
+**Gerbang tanpa pintu bukan gerbang — ia tembok.**
+
+**Pintunya dipasang.** `POST /spasial/aktifkan-draft` mengaktifkan draft secara
+massal: ter-scope satker, butuh izin tulis, ber-audit, berlaju, punya mode
+pratinjau (hitung dulu), dan bisa dibatasi ke satu subpohon. Node tanpa geometri
+sengaja ikut — pohon hierarki memang boleh tak bergeometri, dan membiarkannya
+draft memutus rantai `ancestors` yang menyusun "dari wilayah hingga
+mengerucutnya". Di layar Master Spasial muncul spanduk berisi jumlah draft dan
+tombol **Aktifkan semua**.
+
+**Gerbangnya tetap berdiri.** Impor tetap mendarat draft; deteksi dan peta tetap
+menolak draft. Godaan terbesar saat memperbaiki cacat ini adalah mencabut
+`status: "aktif"` dari deteksi — itu membuat poligon setengah jadi ikut
+menentukan lokasi BMN. Tiga uji khusus mengunci ketiga sisi itu.
+
+**Kalimatnya berhenti menyesatkan.** Saat tak ada node aktif yang memuat titik,
+server kini menghitung berapa node **draft** yang justru memuatnya, dan
+menjawab *"Ada N area DRAFT yang memuat titik ini — draft belum ikut deteksi"*
+alih-alih *"Di luar kawasan terpetakan"*. Kalimat lama bukan cuma tak menolong;
+ia **salah** — menuduh datanya tak ada padahal datanya ada dan hanya belum
+dilepas gerbang. Penandanya (`draft_menutupi`) dikirim terpisah dari kalimatnya
+supaya layar bisa menawarkan tindakan tanpa mengurai bahasa manusia.
+
+**Verifikasi.** 12 uji baru; **2.162 uji backend** & **644 uji frontend** hijau.
+Tiga mutasi disuntikkan — gerbang dicabut dari deteksi, isolasi satker dilepas
+dari aktivasi massal, diagnosis draft dihapus — **ketiganya tertangkap**.
+
+> Mutasi kedua awalnya **lolos**. Ujinya memakai `"scope_query_field_satker(_user"
+> in fn`, dan fungsi itu memanggilnya DUA kali — jadi assertion-nya masih
+> menemukan pemanggilan di cabang `dalam` walau pengurungan kueri utama sudah
+> dicabut. Uji yang menemukan pemanggilan yang salah tidak menjaga apa pun.
+> Diperketat ke baris persisnya plus urutannya terhadap `count_documents` dan
+> `update_many`, lalu mutasinya tertangkap.
+
+---
+
 ## [#786] Timeline Aset: pada tanggal yang sama, yang terbaru kini di atas — 2026-08-06
 
 Laporan: satu aset menerima tujuh BAST bertanggal **sama** (B-017 s.d. B-023,

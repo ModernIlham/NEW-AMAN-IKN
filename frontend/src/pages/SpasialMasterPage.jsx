@@ -58,6 +58,7 @@ export default function SpasialMasterPage({ user, onBack }) {
   const [isiNode, setIsiNode] = useState(null);        // node yang dilihat isinya (Fase 9)
   const [opnameNode, setOpnameNode] = useState(null);  // node yang di-opname via scan (Fase 11)
   const [optimasi, setOptimasi] = useState(false);     // tombol optimasi sedang berjalan
+  const [mengaktifkan, setMengaktifkan] = useState(false); // aktivasi draft massal
   // Pemuatan pohon: pesan gagal DISIMPAN (bukan cuma toast) supaya layar bisa
   // membedakan "belum ada data" dari "gagal memuat", plus penjaga urutan.
   const [galatMuat, setGalatMuat] = useState(null);
@@ -236,6 +237,38 @@ export default function SpasialMasterPage({ user, onBack }) {
       toast.error(getApiError(err, "Gagal menyimpan"));
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Jumlah draft dihitung dari pohon yang SUDAH dimuat — tak perlu kueri
+  // tambahan, dan angkanya ikut segar setiap kali pohon dimuat ulang.
+  const jumlahDraft = useMemo(
+    () => nodes.filter((n) => n.status === "draft").length, [nodes]);
+
+  const aktifkanSemuaDraft = async () => {
+    const ok = await confirm({
+      title: `Aktifkan ${jumlahDraft} lokasi draft?`,
+      description:
+        "Setelah aktif, lokasi ikut deteksi otomatis dan tergambar di peta. "
+        + "Pastikan bentuk & penamaannya sudah benar — status masih bisa "
+        + "dikembalikan ke draft satu per satu lewat tombol ubah.",
+      confirmText: "Aktifkan",
+    });
+    if (!ok) return;
+    setMengaktifkan(true);
+    try {
+      const r = await axios.post(`${API}/spasial/aktifkan-draft`, {});
+      const n = r.data?.diaktifkan ?? 0;
+      // Nol BUKAN sukses diam-diam: bila angkanya nol padahal spanduk menyebut
+      // ada draft, yang terjadi adalah draft milik satker lain — katakan, jangan
+      // biarkan pengguna mengira tombolnya rusak.
+      if (n > 0) toast.success(`${n} lokasi diaktifkan`);
+      else toast.info("Tak ada draft yang bisa diaktifkan dari satker Anda");
+      await loadNodes();
+    } catch (err) {
+      toast.error(getApiError(err, "Gagal mengaktifkan draft"));
+    } finally {
+      setMengaktifkan(false);
     }
   };
 
@@ -607,6 +640,33 @@ export default function SpasialMasterPage({ user, onBack }) {
             </Button>
           )}
         </div>
+
+        {/* GERBANG DRAFT PUNYA PINTU.
+            Denah hasil impor seluruhnya mendarat sebagai draft, dan draft tak
+            ikut deteksi lokasi maupun lapisan peta. Itu gerbang yang disengaja
+            dan tetap dipertahankan — tetapi satu-satunya cara melepasnya dulu
+            adalah form ubah SATU node, sehingga denah berisi ratusan ruangan
+            praktis tak pernah aktif. Akibatnya operator melihat "Di luar
+            kawasan terpetakan" sambil menatap poligonnya sendiri. */}
+        {!loading && !galatMuat && jumlahDraft > 0 && (
+          <div className="mb-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5
+                          flex flex-wrap items-center gap-2" data-testid="spasial-spanduk-draft">
+            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <p className="text-xs text-amber-800 dark:text-amber-200 flex-1 min-w-[12rem]">
+              <b>{jumlahDraft}</b> lokasi berstatus <b>draft</b> — belum ikut deteksi
+              lokasi aset maupun lapisan denah di peta. Periksa, lalu aktifkan.
+            </p>
+            {isWriter && (
+              <Button size="sm" variant="outline" onClick={aktifkanSemuaDraft}
+                      disabled={mengaktifkan} className="h-7 px-2 text-xs min-w-0 min-h-0"
+                      data-testid="spasial-aktifkan-draft">
+                {mengaktifkan ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                              : <ClipboardCheck className="w-3.5 h-3.5 mr-1" />}
+                Aktifkan semua
+              </Button>
+            )}
+          </div>
+        )}
 
         {loading ? (
           <div className="flex items-center justify-center py-16 text-muted-foreground">
