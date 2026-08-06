@@ -67,6 +67,50 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#790] Inventarisasi otomatis menempatkan aset ke denah — tanpa pindai terpisah — 2026-08-06
+
+Permintaan pemilik (verbatim): *"kenapa juga halaman hierarki spasial harus
+scan perpindahan sendiri dan tidak melalui inventarisasi aset karena berpusat
+disana semua disetiap jenis kegiatan juga pasti diupdate dan diinventarisasi.
+integrasikan saja."*
+
+Sebelum ini, aset hanya "menempati" ruangan/gedung lewat tindakan TERPISAH
+(tombol Denah per aset, atau pindai stiker QR di Hierarki Spasial) — padahal
+inventarisasi lapangan sudah merekam koordinat GPS tiap aset. Akibatnya panel
+isi lokasi dan angka opname kosong (0/0/0) meski ribuan aset terinventarisasi.
+
+**Integrasi** (`spasial_penempatan.py` baru + wiring `routes/assets.py`):
+jalur inventarisasi yang menulis koordinat aset (PATCH — muara kamera
+lapangan, antrean luring, lembar edit cepat, geser marker peta — plus POST
+buat aset dan PUT edit penuh) kini otomatis menempatkan aset yang **belum
+ber-penempatan** ke node denah aktif terdalam yang memuat titiknya. Pemicu
+kedua: status berubah menjadi "Ditemukan" saat koordinat sudah tersimpan.
+Efek langsung: angka **"Tercatat"** opname, **panel isi lokasi**, dan daftar
+**"Belum terpindai"** hidup dari data inventarisasi; pindai QR tetap ada
+sebagai **pengukuhan fisik** ("Dikukuhkan") — jejak bukti yang memang beda
+dari catatan buku.
+
+Pagar-pagarnya (masing-masing meniru preseden repo):
+
+- **Hanya penempatan pertama** — `lokasi_spasial` yang sudah ada (manual,
+  opname, otomatis sebelumnya) tak pernah disentuh; GPS yang bergetar antar
+  pemotretan tak boleh membanjiri riwayat custody dengan perpindahan palsu.
+- **Satker fail-closed** — kode dari kegiatan induk; tanpa kode → lewati,
+  bukan cari lintas-satker (preseden `iot.py::_node_di_titik`).
+- **Berhenti di GEDUNG** — lantai/ruangan tak terpilih dari koordinat 2D.
+- **Best-effort** — gagal menempatkan dicatat lalu dilewati; simpan aset
+  tak pernah ikut gagal. Penempatan digabung SEBELUM CAS (atomik), riwayat
+  `riwayat_lokasi_aset` + audit `aset_lokasi_otomatis` ditulis SETELAH
+  tulisan sukses.
+- **Bonus tambalan lama**: PUT edit-penuh kini menghitung ulang `geo`
+  (sebelumnya indeks 2dsphere menyimpan titik basi setelah koordinat diedit).
+
+Jalur massal (ubah massal, impor Excel) sengaja belum dihook — bukan jalur
+lapangan; bila perlu, jadikan job latar terpisah. 15 uji baru
+(`test_spasial_penempatan.py`): gerbang murah nol-kueri, fail-closed satker,
+bentuk kueri geo, urutan hook-CAS-riwayat di ketiga jalur — 3 mutasi
+pencabutnya dipastikan tertangkap.
+
 ## [#789] Dialog Denah: denah terlihat, tersimpan terbaca, rantai sampai ruangan, tombol tertata — 2026-08-06
 
 Tindak lanjut laporan berlapis (dengan dua tangkapan layar): *"data informasi

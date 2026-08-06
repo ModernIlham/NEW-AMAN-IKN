@@ -54,7 +54,8 @@ def dbx(monkeypatch):
     fake = AsyncMongoMockClient()["uji"]
     import shared_utils as su
     import routes.assets as ra
-    for mod in (pk, su, ra):
+    import spasial_penempatan as sp_mod
+    for mod in (pk, su, ra, sp_mod):
         monkeypatch.setattr(mod, "db", fake, raising=False)
         if hasattr(mod, "log_audit"):
             monkeypatch.setattr(mod, "log_audit", _diam, raising=False)
