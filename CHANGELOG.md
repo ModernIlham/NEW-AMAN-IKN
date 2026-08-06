@@ -67,6 +67,48 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#789] Dialog Denah: denah terlihat, tersimpan terbaca, rantai sampai ruangan, tombol tertata — 2026-08-06
+
+Tindak lanjut laporan berlapis (dengan dua tangkapan layar): *"data informasi
+dari wilayah hingga ruangan masih tidak muncul padahal sudah saya simpan"* +
+*"perbaiki lagi tata letak tombol cabut dan simpan lokasi, hilangkan tombol
+batal, rapikan judul dan tombol close."* Tangkapan layarnya sendiri memberi
+petunjuk penting: petanya HITAM — ubin OSM tak termuat di jaringan lapangan
+yang tersendat, dan pada kondisi itu deteksi (panggilan jaringan juga) ikut
+gagal senyap. Empat perubahan di `LokasiTemuanDialog.jsx`:
+
+- **Penempatan tersimpan tampil tanpa jaringan** — baris
+  `💾 Tersimpan: <jalur lengkap>` dibaca langsung dari snapshot
+  `lokasi_spasial.jalur_nama` milik dokumen aset (atau "koordinat saja —
+  belum menempel ke denah"). "Sudah saya simpan" kini selalu terlihat,
+  apa pun nasib panggilan deteksi.
+- **Poligon denah aktif digambar di peta dialog** (GET `/spasial/geojson`
+  per-viewport, debounce 300 ms, `interactive: false` supaya klik tetap
+  menembus ke peta) — denah terlihat walau ubin dasar mati, dan operator bisa
+  MELIHAT markernya di dalam/luar poligon, bukan menebak.
+- **Rantai menyempit hingga RUANGAN** — lantai terpilih (otomatis bila gedung
+  berlantai tunggal aktif, memakai `lantai_terpilih` server yang selama ini
+  tak pernah dibaca klien) memicu GET `/spasial/ruangan-di-titik`: ruangan
+  pemuat titik terpilih otomatis, titik di koridor menawarkan daftar ruangan
+  lantai itu. Prapilih tak pernah menggeser node tersimpan/pilihan pengguna.
+- **Deteksi gagal → tombol "Deteksi ulang"**, bukan jalan buntu; dan tata
+  letak: tombol Batal dihapus (tutup lewat × / ketuk luar), footer satu baris
+  Cabut kiri + Simpan kanan, header ber-`pr-10` agar judul/deskripsi tak
+  menabrak ikon tutup.
+
+Uji penjaga dialog 14 → 25. Tinjauan adversarial multi-lensa (34 agen, 14
+temuan terkonfirmasi → 8 masalah unik) menutup sebelum rilis: prapilih
+ruangan yang diam-diam menaikkan penempatan LANTAI tersimpan menjadi ruangan
+(pembanding `nodeAwal` — "buka lalu Simpan" tak boleh mencetak riwayat
+custody palsu); lantai gedung lama menempel pada titik baru saat deteksi
+gagal (klik selalu melepas lantai/ruangan dulu); balapan respons GeoJSON basi
+(penjaga urutan kedua lapisan); respons `terpotong` yang menghamburkan ribuan
+pin Point `titik_wakil` (disaring); LOD viewport dijepit di gedung + ruangan
+dimuat per lantai terpilih lewat `dalam` (lantai bertumpuk di jejak 2D yang
+sama); `pr-10` → `pr-11` (standar 44px tombol tutup dialog); footer kembali
+`flex-wrap` (320px); dan empat uji yang terpuaskan KOMENTAR dijangkarkan ke
+bentuk kodenya.
+
 ## [#788] Dialog Denah tak lagi terbuka bisu — titik yang sudah ada langsung dideteksi — 2026-08-06
 
 Laporan lanjutan pasca-[#787]: *"sudah saya aktifkan tapi belum terdeteksi

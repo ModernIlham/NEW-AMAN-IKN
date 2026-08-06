@@ -3,10 +3,11 @@
 //
 // Alur: operator mengklik peta → titik tertancap → deteksi Fase 3
 // (POST /spasial/lokasi-di-titik) menampilkan rantai wilayah (Kawasan → … →
-// Gedung) + pilihan lantai bila titik jatuh di gedung → Simpan mengirim
-// {lat, lon, node_id} ke `submitUrl`; SERVER yang men-snapshot nama/jalur
-// dari DB (string klien tak dipercaya). Titik di luar kawasan terpetakan
-// tetap boleh disimpan sebagai penanda koordinat murni.
+// Gedung) + pilihan lantai bila titik jatuh di gedung + persempit ke RUANGAN
+// (GET /spasial/ruangan-di-titik) → Simpan mengirim {lat, lon, node_id} ke
+// `submitUrl`; SERVER yang men-snapshot nama/jalur dari DB (string klien tak
+// dipercaya). Titik di luar kawasan terpetakan tetap boleh disimpan sebagai
+// penanda koordinat murni.
 //
 // Titik yang SUDAH ada (penempatan tersimpan, atau umpan `titikAwal` dari
 // koordinat GPS aset) dideteksi OTOMATIS saat dialog terbuka. Tanpa ini
@@ -17,6 +18,16 @@
 // menimpanya membuat "buka lalu Simpan" diam-diam menurunkan penempatan
 // lantai/ruangan menjadi gedung hasil deteksi.
 //
+// Penempatan TERSIMPAN ditampilkan langsung dari snapshot server
+// (`lokasiAwal.jalur_nama`) tanpa menunggu deteksi — deteksi bisa gagal di
+// jaringan lapangan yang buruk, dan "sudah saya simpan tapi tak ada
+// informasinya" adalah keluhan yang benar bila satu-satunya sumber tampilan
+// adalah panggilan jaringan yang barusan gagal.
+//
+// Poligon denah aktif ikut digambar di peta (GET /spasial/geojson per
+// viewport) supaya operator MELIHAT denahnya, bukan menebak — ubin OSM yang
+// lambat/mati di lapangan tak lagi menyisakan peta hitam kosong.
+//
 // Kontrak PUT-nya identik untuk kedua pemakai — itulah sebabnya dialog ini
 // hanya perlu di-parameterkan KATA-KATANYA, bukan disalin. Default-nya tetap
 // bunyi wasdal supaya pemanggil lama tak berubah perilaku.
@@ -25,7 +36,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import axios from "axios";
 import { toast } from "sonner";
-import { Loader2, MapPin, Save, Trash2, X } from "lucide-react";
+import { Loader2, MapPin, RotateCcw, Save, Trash2 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -54,6 +65,11 @@ export default function LokasiTemuanDialog({
   const petaRef = useRef(null);
   const wadahRef = useRef(null);
   const markerRef = useRef(null);
+  const lapisanDenahRef = useRef(null);
+  const lapisanLantaiRef = useRef(null);
+  const jamDenahRef = useRef(null);
+  const seqDenahRef = useRef(0);
+  const seqLantaiRef = useRef(0);
   // Penempatan tersimpan menang; tanpa itu (atau bila korup) pakai umpan
   // `titikAwal` — koordinat GPS aset — supaya peta terbuka TEPAT di posisinya,
   // bukan kosong di pusat kawasan. Keduanya format GeoJSON [lon, lat].
@@ -61,9 +77,18 @@ export default function LokasiTemuanDialog({
   const [titik, setTitik] = useState(seed);
   const [deteksi, setDeteksi] = useState(null);   // hasil lokasi-di-titik terakhir
   const [nodeId, setNodeId] = useState(lokasiAwal?.node_id || "");
+  // Lantai yang sedang "dibuka" untuk persempit ruangan. Node tersimpan
+  // bertipe LANTAI langsung membukanya; bertipe RUANGAN tak bisa (id lantainya
+  // tak ada di snapshot) — jalur tersimpan toh sudah tampil apa adanya.
+  const [lantaiAktif, setLantaiAktif] = useState(
+    lokasiAwal?.node_tipe === "LANTAI" ? (lokasiAwal?.node_id || "") : "");
+  const [ruangan, setRuangan] = useState(null);   // hasil ruangan-di-titik
   const [sibuk, setSibuk] = useState(false);
   const [mendeteksi, setMendeteksi] = useState(false);
   const seqRef = useRef(0);
+  // Cermin nodeId untuk dibaca callback ber-deps kosong tanpa closure basi.
+  const nodeIdRef = useRef(nodeId);
+  useEffect(() => { nodeIdRef.current = nodeId; }, [nodeId]);
 
   const deteksiTitik = useCallback(async (lat, lon, pertahankanNode = false) => {
     const seq = ++seqRef.current;
@@ -72,15 +97,20 @@ export default function LokasiTemuanDialog({
       const r = await axios.post(`${API}/spasial/lokasi-di-titik`, { lat, lon });
       if (seq !== seqRef.current) return;          // klik lebih baru sudah terjadi
       setDeteksi(r.data);
-      // Prapilih node TERDALAM; operator bisa mengganti ke lantai di bawahnya.
+      const rantai = r.data?.rantai || [];
       // `pertahankanNode` (deteksi otomatis saat dialog terbuka): node yang
       // SUDAH tersimpan tidak ditimpa — deteksi berhenti di gedung, jadi
       // menimpanya membuat "buka lalu Simpan" menurunkan penempatan
       // lantai/ruangan menjadi gedung tanpa ada yang memintanya.
-      const rantai = r.data?.rantai || [];
-      setNodeId((sebelumnya) => (pertahankanNode && sebelumnya)
-        ? sebelumnya
-        : (rantai.length ? rantai[rantai.length - 1].id : ""));
+      const adaTersimpan = pertahankanNode && nodeIdRef.current;
+      if (!adaTersimpan) {
+        // Gedung berlantai tunggal aktif → lantainya langsung terpilih;
+        // selain itu prapilih node TERDALAM rantai.
+        const lt = r.data?.lantai_terpilih || "";
+        setLantaiAktif(lt);
+        setRuangan(null);
+        setNodeId(lt || (rantai.length ? rantai[rantai.length - 1].id : ""));
+      }
     } catch {
       if (seq === seqRef.current) {
         setDeteksi(null);
@@ -90,6 +120,42 @@ export default function LokasiTemuanDialog({
     } finally {
       if (seq === seqRef.current) setMendeteksi(false);
     }
+  }, []);
+
+  // Lapisan poligon denah aktif per-viewport. Tiga pagar yang semuanya pernah
+  // terbukti perlu di tempat lain repo ini:
+  //   • `interactive: false` WAJIB — poligon yang menangkap klik menelan event
+  //     sebelum sampai ke peta, dan menancapkan titik DI DALAM denah (kegunaan
+  //     inti dialog ini) jadi mustahil.
+  //   • Penjaga urutan (seq) — respons bbox LAMA yang tiba belakangan tak boleh
+  //     menghapus lapisan viewport TERBARU (pola seqRef deteksiTitik).
+  //   • Saring fitur Point — respons `terpotong` memuat `titik_wakil` (Point),
+  //     dan L.geoJSON merender Point sebagai marker pin bawaan: ribuan pin
+  //     identik dengan penanda titik operator.
+  // level_maks 80 mengikuti desain LOD repo (lib/spasialDenah.js): lantai &
+  // ruangan berbagi jejak 2D yang sama sehingga bertumpuk bila ditarik semua;
+  // ruangan dimuat TERPISAH untuk lantai terpilih saja (efek di bawah).
+  const muatDenah = useCallback(async () => {
+    const map = petaRef.current;
+    if (!map) return;
+    const seq = ++seqDenahRef.current;
+    try {
+      const b = map.getBounds();
+      const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]
+        .map((v) => v.toFixed(6)).join(",");
+      const r = await axios.get(`${API}/spasial/geojson`,
+        { params: { bbox, level_maks: 80 } });
+      if (seq !== seqDenahRef.current || !petaRef.current) return;
+      const fitur = (r.data?.features || [])
+        .filter((f) => f?.geometry && f.geometry.type !== "Point");
+      if (lapisanDenahRef.current) lapisanDenahRef.current.remove();
+      lapisanDenahRef.current = L.geoJSON(
+        { type: "FeatureCollection", features: fitur }, {
+          interactive: false,
+          style: () => ({ color: "#14b8a6", weight: 1.2,
+                          opacity: 0.9, fillOpacity: 0.08 }),
+        }).addTo(map);
+    } catch { /* peta dasar tetap berfungsi tanpa lapisan denah */ }
   }, []);
 
   // ── Peta ──────────────────────────────────────────────────────────────────
@@ -102,6 +168,7 @@ export default function LokasiTemuanDialog({
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(map);
     map.setView(seed ? [seed.lat, seed.lon] : PUSAT_IKN, seed ? 18 : 15);
+    petaRef.current = map;
     if (seed) {
       markerRef.current = L.marker([seed.lat, seed.lon]).addTo(map);
       // Titik yang sudah ada langsung dideteksi — dialog tak boleh terbuka
@@ -109,14 +176,24 @@ export default function LokasiTemuanDialog({
       // tersimpan.
       deteksiTitik(seed.lat, seed.lon, true);
     }
+    muatDenah();
+    map.on("moveend", () => {
+      clearTimeout(jamDenahRef.current);
+      jamDenahRef.current = setTimeout(muatDenah, 300);
+    });
     map.on("click", (e) => {
       const { lat, lng } = e.latlng;
       if (markerRef.current) markerRef.current.setLatLng(e.latlng);
       else markerRef.current = L.marker(e.latlng).addTo(map);
       setTitik({ lat, lon: lng });
+      // Titik baru = konteks baru. Tanpa reset ini, deteksi yang GAGAL
+      // (jaringan lapangan) menyisakan lantai gedung LAMA menempel pada titik
+      // BARU — dropdown ruangan gedung lama tampil untuk titik di gedung
+      // lain, dan memilihnya menyimpan node yang tak memuat koordinatnya.
+      setLantaiAktif("");
+      setRuangan(null);
       deteksiTitik(lat, lng);
     });
-    petaRef.current = map;
     // "Leaflet blank di dalam modal": peta dibuat saat dialog masih beranimasi
     // → kontainer 0 px → peta putih polos. ResizeObserver + beberapa invalidate
     // terjadwal menjamin peta tampil setelah dialog terbuka (lihat DenahEditor).
@@ -129,13 +206,77 @@ export default function LokasiTemuanDialog({
     }
     return () => {
       jamInval.forEach(clearTimeout);
+      clearTimeout(jamDenahRef.current);
       if (ro) ro.disconnect();
       map.remove(); petaRef.current = null; markerRef.current = null;
+      lapisanDenahRef.current = null; lapisanLantaiRef.current = null;
     };
     // `seed` (lokasiAwal/titikAwal) hanya dibaca saat init — dialog di-mount
     // ulang per tiket/aset.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deteksiTitik]);
+  }, [deteksiTitik, muatDenah]);
+
+  // ── Persempit ke ruangan ─────────────────────────────────────────────────
+  // Lantai terpilih + titik ada → tanyakan ruangan mana yang memuat titiknya.
+  // Nol hasil BUKAN galat (titik di koridor): server mengirim daftar ruangan
+  // lantai itu agar operator memilih sendiri.
+  //
+  // `nodeAwal`: node PERSIS seperti tersimpan. Prapilih tak boleh
+  // menggesernya — termasuk saat node tersimpan adalah LANTAI itu sendiri
+  // (kasus yang lolos dari guard `kini === lantaiAktif` semata: saat mount,
+  // nodeId dan lantaiAktif sama-sama berisi lantai tersimpan, dan tanpa
+  // pembanding nodeAwal "buka lalu Simpan" diam-diam menaikkan penempatan
+  // lantai menjadi ruangan + mencetak riwayat custody palsu).
+  const nodeAwal = lokasiAwal?.node_id || "";
+  useEffect(() => {
+    if (!lantaiAktif || !titik) { setRuangan(null); return undefined; }
+    let batal = false;
+    (async () => {
+      try {
+        const r = await axios.get(`${API}/spasial/ruangan-di-titik`, {
+          params: { lon: titik.lon, lat: titik.lat, lantai_id: lantaiAktif },
+        });
+        if (batal) return;
+        setRuangan(r.data);
+        // Prapilih ruangan hasil deteksi HANYA bila pilihan masih di
+        // lantainya DAN lantai itu bukan node tersimpan.
+        if (r.data?.ditemukan && r.data?.ruangan?.id) {
+          setNodeId((kini) => (kini === lantaiAktif && kini !== nodeAwal)
+            ? r.data.ruangan.id : kini);
+        }
+      } catch { if (!batal) setRuangan(null); }
+    })();
+    return () => { batal = true; };
+  }, [lantaiAktif, titik, nodeAwal]);
+
+  // Ruangan-ruangan lantai terpilih digambar sebagai lapisan tersendiri
+  // (parameter `dalam`, mengikuti pola SpasialMaster) — bukan lewat
+  // level_maks viewport, karena semua lantai berbagi jejak 2D yang sama dan
+  // akan bertumpuk. Penjaga seq + saringan Point sama seperti muatDenah.
+  useEffect(() => {
+    const seq = ++seqLantaiRef.current;
+    if (lapisanLantaiRef.current) {
+      lapisanLantaiRef.current.remove();
+      lapisanLantaiRef.current = null;
+    }
+    if (!lantaiAktif || !petaRef.current) return undefined;
+    (async () => {
+      try {
+        const r = await axios.get(`${API}/spasial/geojson`,
+          { params: { dalam: lantaiAktif, level_maks: 100 } });
+        if (seq !== seqLantaiRef.current || !petaRef.current) return;
+        const fitur = (r.data?.features || [])
+          .filter((f) => f?.geometry && f.geometry.type !== "Point");
+        lapisanLantaiRef.current = L.geoJSON(
+          { type: "FeatureCollection", features: fitur }, {
+            interactive: false,
+            style: () => ({ color: "#0d9488", weight: 1,
+                            opacity: 0.8, fillOpacity: 0.04 }),
+          }).addTo(petaRef.current);
+      } catch { /* lapisan ruangan opsional */ }
+    })();
+    return undefined;
+  }, [lantaiAktif]);
 
   const simpan = useCallback(async () => {
     if (!titik) return;
@@ -168,13 +309,25 @@ export default function LokasiTemuanDialog({
 
   const rantai = deteksi?.rantai || [];
   const lantai = deteksi?.lantai || [];
+  // Opsi ruangan: hasil deteksi (+alternatif) atau daftar lantai bila titik
+  // di koridor. Keduanya bentuk {id, nama}.
+  const opsiRuangan = ruangan?.ditemukan
+    ? [ruangan.ruangan, ...(ruangan.alternatif || [])].filter(Boolean)
+    : (ruangan?.daftar_ruangan || []);
+  const nilaiRuangan = opsiRuangan.some((r) => r.id === nodeId) ? nodeId : "";
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose?.()}>
       <DialogContent className="max-w-2xl p-0 gap-0" data-testid="lokasi-temuan-dialog">
-        <DialogHeader className="px-4 pt-3 pb-2 border-b border-border">
-          <DialogTitle className="text-sm flex items-center gap-1.5">
-            <MapPin className="w-4 h-4 text-teal-600" />{judulDialog}
+        {/* pr-11 memberi ruang tombol tutup bawaan dialog (right-4 + w-7 =
+            44px, standar components/ui/dialog.jsx) — tanpa ini judul/deskripsi
+            menabrak ikon × (laporan pemilik: "rapikan judul dan tombol
+            close"), dan px-4 saja akan menimpa pr-11 bawaan lewat
+            tailwind-merge. */}
+        <DialogHeader className="px-4 pt-3 pb-2 pr-11 border-b border-border text-left">
+          <DialogTitle className="text-sm flex items-center gap-1.5 min-w-0">
+            <MapPin className="w-4 h-4 shrink-0 text-teal-600" />
+            <span className="truncate">{judulDialog}</span>
           </DialogTitle>
           <DialogDescription className="text-xs truncate">
             {judul} — {petunjuk}
@@ -191,6 +344,12 @@ export default function LokasiTemuanDialog({
               {mendeteksi && <Loader2 className="inline w-3 h-3 ml-1.5 animate-spin" />}
             </p>
           )}
+          {lokasiAwal && (
+            <p className="text-muted-foreground" data-testid="lokasi-temuan-tersimpan">
+              💾 Tersimpan: {lokasiAwal.jalur_nama
+                || "koordinat saja (belum menempel ke denah)"}
+            </p>
+          )}
           {titik && deteksi && rantai.length > 0 && (
             <p data-testid="lokasi-temuan-rantai">
               📍 {rantai.map((r) => r.nama).filter(Boolean).join(" / ")}
@@ -199,15 +358,28 @@ export default function LokasiTemuanDialog({
           {titik && deteksi && rantai.length === 0 && (
             <p className="text-amber-700 dark:text-amber-300">{deteksi.pesan || "Di luar kawasan terpetakan."}</p>
           )}
+          {titik && !deteksi && !mendeteksi && (
+            // Deteksi gagal (jaringan lapangan) — beri pintu coba lagi, jangan
+            // biarkan operator menutup-buka dialog hanya untuk mengulang.
+            <button type="button" className="text-teal-700 dark:text-teal-300 underline underline-offset-2 min-h-0 min-w-0 inline-flex items-center gap-1"
+                    onClick={() => deteksiTitik(titik.lat, titik.lon, true)}
+                    data-testid="lokasi-temuan-deteksi-ulang">
+              <RotateCcw className="w-3 h-3" />Deteksi ulang
+            </button>
+          )}
           {lantai.length > 0 && (
             <label className="flex items-center gap-2">
               <span className="text-muted-foreground shrink-0">Persempit ke lantai</span>
-              <select value={nodeId} onChange={(e) => setNodeId(e.target.value)}
-                      className="h-8 flex-1 rounded-md border border-border bg-background px-2"
+              <select value={lantaiAktif}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        setLantaiAktif(id);
+                        setRuangan(null);
+                        setNodeId(id || (rantai.length ? rantai[rantai.length - 1].id : ""));
+                      }}
+                      className="h-8 flex-1 min-w-0 rounded-md border border-border bg-background px-2"
                       data-testid="lokasi-temuan-lantai">
-                <option value={rantai.length ? rantai[rantai.length - 1].id : ""}>
-                  (cukup gedung)
-                </option>
+                <option value="">(cukup gedung)</option>
                 {lantai.map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.nama}{l.status !== "aktif" ? ` (${l.status})` : ""}
@@ -216,8 +388,29 @@ export default function LokasiTemuanDialog({
               </select>
             </label>
           )}
+          {lantaiAktif && opsiRuangan.length > 0 && (
+            <label className="flex items-center gap-2">
+              <span className="text-muted-foreground shrink-0">Persempit ke ruangan</span>
+              <select value={nilaiRuangan}
+                      onChange={(e) => setNodeId(e.target.value || lantaiAktif)}
+                      className="h-8 flex-1 min-w-0 rounded-md border border-border bg-background px-2"
+                      data-testid="lokasi-temuan-ruangan">
+                <option value="">(cukup lantai)</option>
+                {opsiRuangan.map((r) => (
+                  <option key={r.id} value={r.id}>{r.nama}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          {lantaiAktif && ruangan && !ruangan.ditemukan && (
+            <p className="text-muted-foreground">{ruangan.pesan}</p>
+          )}
         </div>
 
+        {/* flex-wrap: di ≥360px kedua tombol tetap satu baris; di layar yang
+            lebih sempit label "Cabut Penempatan"+"Simpan Lokasi" turun baris
+            dengan anggun, bukan saling tindih (whitespace-nowrap tombol +
+            overflow-x-hidden dialog memotongnya diam-diam). */}
         <div className="px-4 py-3 border-t border-border flex flex-wrap items-center gap-2">
           {lokasiAwal && (
             <Button variant="outline" size="sm" className="text-red-600" disabled={sibuk}
@@ -226,10 +419,6 @@ export default function LokasiTemuanDialog({
             </Button>
           )}
           <div className="flex-1" />
-          <Button variant="outline" size="sm" onClick={() => onClose?.()} disabled={sibuk}
-                  data-testid="lokasi-temuan-batal">
-            <X className="w-3.5 h-3.5 mr-1" />Batal
-          </Button>
           <Button size="sm" onClick={simpan} disabled={!titik || sibuk || mendeteksi}
                   data-testid="lokasi-temuan-simpan">
             {sibuk ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />

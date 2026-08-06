@@ -135,7 +135,8 @@ describe("titik yang sudah ada dideteksi otomatis saat dialog terbuka", () => {
   test("deteksi otomatis TIDAK menimpa node tersimpan", () => {
     // Deteksi berhenti di gedung; menimpa nodeId membuat "buka lalu Simpan"
     // diam-diam menurunkan penempatan lantai/ruangan menjadi gedung.
-    expect(dialog).toMatch(/pertahankanNode && sebelumnya/);
+    expect(dialog).toMatch(/adaTersimpan = pertahankanNode && nodeIdRef\.current/);
+    expect(dialog).toMatch(/if \(!adaTersimpan\)/);
     // Kegagalan deteksi otomatis pun tak boleh menghapus node tersimpan.
     expect(dialog).toMatch(/if \(!pertahankanNode\) setNodeId\(""\)/);
   });
@@ -150,5 +151,111 @@ describe("titik yang sudah ada dideteksi otomatis saat dialog terbuka", () => {
     expect(potong.slice(0, 1400)).toContain("koordinat_latitude");
     expect(potong.slice(0, 1400)).toContain("koordinat_longitude");
     expect(dasbor).toContain("titikAwal={lokasiDenahAset.titik}");
+  });
+});
+
+describe("informasi tampil tanpa bergantung satu panggilan jaringan", () => {
+  // Laporan pemilik: "data informasi dari wilayah hingga ruangan masih tidak
+  // muncul padahal sudah saya simpan" — dari layar yang petanya pun hitam
+  // (ubin OSM tak termuat, jaringan lapangan buruk). Tiga penjaga di sini
+  // memastikan dialog TETAP informatif dalam kondisi itu.
+  const dialog = baca(DIALOG);
+
+  // CATATAN POLA (temuan tinjauan atas versi pertama berkas ini): asersi
+  // di bawah DIJANGKARKAN ke bentuk kodenya (axios.get + template literal,
+  // ekspresi JSX ber-kurung-kurawal, opsi di dalam pemanggilan L.geoJSON) —
+  // BUKAN substring bebas yang juga muncul di komentar file. Uji yang
+  // terpuaskan komentar tetap hijau saat kodenya dihapus.
+
+  test("penempatan tersimpan tampil dari snapshot server, bukan hasil deteksi", () => {
+    // `jalur_nama` sudah ada di dokumen aset; menampilkannya tak butuh
+    // jaringan. Bila hilang, "sudah saya simpan" kembali tak terlihat.
+    expect(dialog).toContain('data-testid="lokasi-temuan-tersimpan"');
+    expect(dialog).toContain("Tersimpan: {lokasiAwal.jalur_nama");
+  });
+
+  test("poligon denah digambar di peta dialog — dan TIDAK menelan klik", () => {
+    expect(dialog).toContain("axios.get(`${API}/spasial/geojson`");
+    // interactive: false wajib — poligon yang menangkap klik membuat
+    // menancapkan titik DI DALAM denah (kegunaan inti dialog) mustahil.
+    // Kedua pemanggilan L.geoJSON (viewport + lantai) harus memakainya.
+    const geojsonCalls = dialog.split("L.geoJSON(").slice(1);
+    expect(geojsonCalls.length).toBeGreaterThanOrEqual(2);
+    geojsonCalls.forEach((potong) => {
+      expect(potong.slice(0, 200)).toContain("interactive: false");
+    });
+  });
+
+  test("respons basi & respons terpotong tak merusak lapisan denah", () => {
+    // Penjaga urutan: respons bbox LAMA yang tiba belakangan tak boleh
+    // menghapus lapisan viewport terbaru (balapan nyata di jaringan lambat).
+    expect(dialog).toMatch(/seq !== seqDenahRef\.current/);
+    expect(dialog).toMatch(/seq !== seqLantaiRef\.current/);
+    // Respons `terpotong` berisi titik_wakil (Point) — L.geoJSON merender
+    // Point sebagai ribuan pin bawaan yang identik dengan penanda operator.
+    expect(dialog).toMatch(/f\.geometry\.type !== "Point"/);
+  });
+
+  test("LOD viewport berhenti di gedung; ruangan dimuat per lantai terpilih", () => {
+    // Semua lantai berbagi jejak 2D yang sama — level_maks 100 di viewport
+    // menumpuk ruangan seluruh lantai jadi denah campuran (desain
+    // lib/spasialDenah.js). Ruangan ditarik lewat `dalam` lantai terpilih.
+    expect(dialog).toMatch(/level_maks: 80/);
+    expect(dialog).toMatch(/dalam: lantaiAktif/);
+  });
+
+  test("deteksi gagal menyisakan tombol coba lagi, bukan jalan buntu", () => {
+    expect(dialog).toContain('data-testid="lokasi-temuan-deteksi-ulang"');
+  });
+
+  test("klik titik baru melepas lantai/ruangan lama SEBELUM deteksi", () => {
+    // Tanpa reset ini, deteksi yang GAGAL menyisakan lantai gedung lama
+    // menempel pada titik baru — dropdown ruangan gedung lain tampil dan
+    // menyimpannya menghasilkan node yang tak memuat koordinatnya.
+    const klik = dialog.split('map.on("click"')[1] || "";
+    expect(klik.slice(0, 700)).toContain('setLantaiAktif("")');
+    expect(klik.slice(0, 700)).toContain("setRuangan(null)");
+  });
+});
+
+describe("rantai menyempit hingga RUANGAN dan tombol tertata", () => {
+  const dialog = baca(DIALOG);
+
+  test("persempit ke ruangan memakai deteksi ruangan-di-titik", () => {
+    // Tanpa ini rantai berhenti di gedung/lantai — padahal permintaan
+    // pemilik eksplisit: "dari wilayah hingga mengerucutnya (ruangan)".
+    expect(dialog).toContain("axios.get(`${API}/spasial/ruangan-di-titik`");
+    expect(dialog).toContain('data-testid="lokasi-temuan-ruangan"');
+  });
+
+  test("prapilih ruangan tak menggeser node tersimpan/lebih dalam", () => {
+    // Pembanding `nodeAwal` WAJIB: node tersimpan bertipe LANTAI membuat
+    // nodeId === lantaiAktif sejak mount, sehingga guard `kini ===
+    // lantaiAktif` semata justru LOLOS dan "buka lalu Simpan" diam-diam
+    // menaikkan penempatan lantai menjadi ruangan + mencetak riwayat
+    // custody palsu (temuan tinjauan TINGGI atas versi pertama).
+    expect(dialog).toMatch(
+      /kini === lantaiAktif && kini !== nodeAwal\)\s*\n?\s*\? r\.data\.ruangan\.id : kini/);
+  });
+
+  test("tombol Batal dihapus; Simpan & Cabut dalam satu baris footer", () => {
+    // Tiga tombol membuat footer pecah dua baris di HP (tangkapan layar
+    // pemilik); menutup dialog cukup lewat ikon × / ketuk luar.
+    expect(dialog).not.toContain("lokasi-temuan-batal");
+    expect(dialog).toContain('data-testid="lokasi-temuan-hapus"');
+    expect(dialog).toContain('data-testid="lokasi-temuan-simpan"');
+  });
+
+  test("header memberi ruang tombol tutup bawaan dialog", () => {
+    // pr-11 = standar components/ui/dialog.jsx (tombol tutup right-4 + w-7
+    // butuh 44px); pr-10 kurang 4px dan px-4 saja menimpa pr-11 bawaan
+    // lewat tailwind-merge (laporan pemilik: judul menabrak tombol close).
+    expect(dialog).toMatch(/DialogHeader className="[^"]*pr-11/);
+  });
+
+  test("footer membungkus anggun di layar sangat sempit", () => {
+    // Tanpa flex-wrap, "Cabut Penempatan"+"Simpan Lokasi" (whitespace-nowrap)
+    // saling tindih di ~320px dan overflow-x-hidden dialog memotongnya.
+    expect(dialog).toMatch(/border-t border-border flex flex-wrap items-center/);
   });
 });
