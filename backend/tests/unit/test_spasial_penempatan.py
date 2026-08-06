@@ -232,6 +232,45 @@ class TestWiringTerpasang:
         assert "entri_riwayat_lokasi" in fn
 
 
+class TestInvarianYangMenopangKeamanannya:
+    """Dua fakta di luar modul ini yang membuat hook-nya AMAN. Keduanya
+    mudah berubah diam-diam oleh perubahan yang tampak tak berhubungan,
+    dan tak satu pun akan ketahuan dari uji perilaku helper."""
+
+    def test_put_tak_bisa_menghapus_penempatan_karena_model_tak_punya_fieldnya(self):
+        """PUT adalah full-replace: `update_data = {**asset.model_dump(), …}`.
+        Ia aman HANYA karena `AssetCreate` tidak memuat `lokasi_spasial` —
+        seandainya field itu ditambahkan ke model masukan, setiap PUT dari
+        klien yang tak mengirimkannya akan mengirim `lokasi_spasial: None`
+        dan MENGHAPUS penempatan denah yang tersimpan (kehilangan data
+        senyap, termasuk yang dibuat operator lewat dialog Denah)."""
+        import ast as _ast
+        with open(os.path.join(BACKEND, "models.py"), encoding="utf-8") as fh:
+            pohon = _ast.parse(fh.read())
+        for simpul in _ast.walk(pohon):
+            if isinstance(simpul, _ast.ClassDef) and simpul.name == "AssetCreate":
+                medan = [getattr(f.target, "id", "") for f in simpul.body
+                         if isinstance(f, _ast.AnnAssign)]
+                assert "lokasi_spasial" not in medan, (
+                    "AssetCreate kini memuat lokasi_spasial — PUT akan "
+                    "menghapus penempatan denah; kecualikan field itu dari "
+                    "update_data di update_asset sebelum menambahkannya.")
+                return
+        raise AssertionError("kelas AssetCreate tidak ditemukan")
+
+    def test_replay_idempoten_keluar_sebelum_hook_sehingga_riwayat_tak_dobel(self):
+        """Antrean luring MENGIRIM ULANG permintaan yang sama (Idempotency-Key).
+        Bila cabang replay dipindah ke bawah hook, satu penempatan yang sama
+        akan mencetak DUA baris riwayat custody — bukti penatausahaan BMN
+        yang mengaku barang berpindah padahal tidak."""
+        for nama in ("patch_asset", "create_asset"):
+            fn = _fungsi_assets(nama)
+            i_replay = fn.index("get_idempotent_response")
+            i_hook = fn.index("penempatan_dari_inventarisasi")
+            i_riwayat = fn.index("entri_riwayat_lokasi")
+            assert i_replay < i_hook < i_riwayat, nama
+
+
 class TestModulTetapSederhana:
     """Afordansi interaktif TIDAK boleh menyusup ke jalur otomatis."""
 

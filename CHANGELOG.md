@@ -106,10 +106,25 @@ Pagar-pagarnya (masing-masing meniru preseden repo):
   (sebelumnya indeks 2dsphere menyimpan titik basi setelah koordinat diedit).
 
 Jalur massal (ubah massal, impor Excel) sengaja belum dihook — bukan jalur
-lapangan; bila perlu, jadikan job latar terpisah. 15 uji baru
+lapangan; bila perlu, jadikan job latar terpisah. 17 uji baru
 (`test_spasial_penempatan.py`): gerbang murah nol-kueri, fail-closed satker,
-bentuk kueri geo, urutan hook-CAS-riwayat di ketiga jalur — 3 mutasi
+bentuk kueri geo, urutan hook-CAS-riwayat di ketiga jalur — 4 mutasi
 pencabutnya dipastikan tertangkap.
+
+Dua invarian DI LUAR modul ini yang menopang keamanannya ikut dikunci uji,
+karena keduanya bisa berubah diam-diam oleh perubahan yang tampak tak
+berhubungan:
+
+- **`AssetCreate` tidak boleh memuat `lokasi_spasial`.** PUT adalah
+  full-replace; seandainya field itu masuk ke model masukan, setiap PUT dari
+  klien yang tak mengirimkannya akan menulis `lokasi_spasial: None` dan
+  MENGHAPUS penempatan denah tersimpan — termasuk yang dibuat operator lewat
+  dialog Denah. Uji membaca `models.py` lewat AST dan gagal dengan pesan yang
+  menyebutkan jalan keluarnya.
+- **Cabang replay idempoten harus keluar SEBELUM hook.** Antrean luring
+  mengirim ulang permintaan yang sama; bila urutannya terbalik, satu
+  penempatan mencetak DUA baris riwayat custody — bukti penatausahaan BMN
+  yang mengaku barang berpindah padahal tidak.
 
 ## [#789] Dialog Denah: denah terlihat, tersimpan terbaca, rantai sampai ruangan, tombol tertata — 2026-08-06
 
