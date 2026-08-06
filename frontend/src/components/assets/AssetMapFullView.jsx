@@ -867,10 +867,16 @@ const AssetMapFullView = memo(function AssetMapFullView({
           elPratinjau.innerHTML = "";
           fotos.forEach((f, i) => {
             const kotak = document.createElement("div");
-            kotak.style.cssText = "position:relative;width:40px;height:40px";
+            // Ukuran thumbnail & tombol hapus DIATUR DI index.css
+            // (.peta-pratinjau-foto) — bukan inline. Gaya inline tak sanggup
+            // menahan aturan tap-target 44px global karena aturan itu memakai
+            // `min-width`/`min-height`, dan min-* selalu menang atas `width`:
+            // tombol × membengkak jadi 44×44 px dan menutupi fotonya di
+            // HP/tablet.
+            kotak.className = "peta-pratinjau-foto";
             kotak.innerHTML =
-              `<img src="${f}" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:6px;border:1px solid #cbd5e1" />` +
-              '<button type="button" style="position:absolute;top:-6px;right:-6px;width:16px;height:16px;border-radius:50%;background:#dc2626;color:#fff;border:0;font-size:10px;line-height:1;cursor:pointer;padding:0">×</button>';
+              `<img src="${f}" alt="" />` +
+              `<button type="button" data-testid="peta-tambah-hapus-foto" aria-label="Hapus foto ${i + 1}" title="Hapus foto">×</button>`;
             kotak.querySelector("button").addEventListener("click", () => {
               fotos.splice(i, 1);
               gambarUlangPratinjau();

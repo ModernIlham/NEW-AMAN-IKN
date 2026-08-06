@@ -67,6 +67,47 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#778] Tombol hapus foto di popup peta berhenti menutupi fotonya sendiri — 2026-08-06
+
+Laporan lapangan: di HP/tablet, popup **"Aset baru di titik ini"** menampilkan
+lingkaran merah × yang menutupi hampir seluruh thumbnail foto, sehingga foto
+yang baru diambil tak bisa dilihat sebelum disimpan.
+
+**Akar masalah — aturan tap-target 44px, untuk kesekian kalinya.** Tombol ×
+sudah diberi ukuran `width:16px;height:16px` lewat gaya *inline*. Itu tidak
+cukup: aturan global di `index.css` memakai `min-width`/`min-height: 44px`,
+dan dalam CSS **min-\* selalu menang atas `width`/`height`** — sespesifik apa
+pun gaya inline-nya. Di ≤1023px tombol membengkak jadi 44×44 px di atas
+thumbnail 40 px.
+
+**Perbaikan.** Gaya pratinjau dipindah dari inline ke kelas
+`.peta-pratinjau-foto` di `index.css`, dengan `min-width: 0; min-height: 0`
+sebagai penawar. Sekadar mengecilkan tombol tidak dipilih — 16 px terlalu
+kecil untuk jari. Di layar sentuh **thumbnail-nya yang diperbesar** (40 → 56
+px) dan tombolnya dikunci 20 px: cukup nyaman disentuh, dan hanya menutup
+sudut kanan atas. Tombol juga kini ber-`aria-label` ("Hapus foto 1", dst.).
+
+Gaya sengaja ditaruh di CSS, bukan inline, supaya penjaganya tidak ikut lenyap
+saat markup popup disunting lagi nanti.
+
+**Uji (16 baru).** Invariannya diperiksa langsung pada sumber CSS, dan
+daftar properti yang harus dinetralkan **diturunkan dari aturan 44px itu
+sendiri** — bila kelak aturan global menambah properti `min-*` lain, uji ini
+langsung menagihnya.
+
+> **Catatan kenapa bukan uji render:** jsdom TIDAK mengevaluasi `@media`.
+> `getComputedStyle` pada tombol di dalam jsdom mengembalikan `min-width: ""`
+> walaupun aturan 44px terpasang — artinya uji render justru akan **LULUS**
+> meski cacatnya utuh, karena ia tak pernah menerapkan aturan yang jadi biang
+> masalah. Ini sudah dicoba dan diukur sebelum memilih pendekatan lain.
+
+Lima mutasi disuntikkan (penawar `min-*` dicabut di aturan dasar; dicabut di
+blok layar sentuh; tombol dibesarkan jadi 44 px; kembali ke gaya inline;
+thumbnail tak diperbesar) — **kelimanya tertangkap**. Seluruh 598 uji frontend
+hijau.
+
+---
+
 ## [#777] Jaring pengaman untuk pembuat dokumen Word & dua penjaga keamanan yang senyap — 2026-08-05
 
 Tiga bagian kode ini berjalan sejak lama **tanpa satu pun uji**, padahal
