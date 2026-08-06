@@ -67,6 +67,51 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#786] Timeline Aset: pada tanggal yang sama, yang terbaru kini di atas — 2026-08-06
+
+Laporan: satu aset menerima tujuh BAST bertanggal **sama** (B-017 s.d. B-023,
+4 Agustus 2026), dan yang **terbaru justru di paling bawah** — kebalikan dari
+yang dijanjikan timeline "terbaru dulu".
+
+**Sebabnya kestabilan `sort`, bukan tanggal yang salah.** Banyak event
+bertanggal **hari saja** (`"2026-08-04"`), tanpa jam. Ketujuh BAST itu seri
+sempurna. `list.sort` Python stabil: pada nilai yang sama ia **mempertahankan
+urutan masuk** — dan `reverse=True` tidak membalik seri, itu perilaku
+terdokumentasi, bukan kekeliruan. Urutan masuknya menaik (B-017 lebih dulu),
+jadi hasilnya menaik pula.
+
+Tak ada tanggal yang keliru, tak ada data yang rusak. Yang hilang cuma satu:
+**pemecah seri**.
+
+**Perbaikannya** menambahkan `urut` pada bentuk baku event — cap waktu
+terlengkap yang dimiliki dokumen sumber (umumnya `created_at`) — dan menjadikan
+kunci pengurut `(tanggal, urut)`, keduanya menurun. Dipasok di tujuh titik
+penerbit event: BAST, pengesahan inventarisasi, Buku Barang, PSP, Pemanfaatan,
+Pemeliharaan, dan Penilaian. Untuk event yang lahir dari array `riwayat[]`,
+pemecah serinya **posisi dalam array** — array itu selalu ditambah di belakang,
+jadi indeks menaik = kronologis.
+
+Dua rincian yang mudah terlewat, keduanya dikunci uji:
+
+- **Nol di depan wajib** pada indeks riwayat. Tanpa itu langkah ke-10
+  dibandingkan lebih KECIL daripada ke-9 secara leksikal, dan urutannya kacau
+  justru setelah "diperbaiki".
+- **Pemecah seri tak boleh jadi kunci utama.** Bila `urut` mendahului `tanggal`,
+  event lama ber-cap-waktu besar akan melompati event baru — kerusakan yang
+  lebih parah daripada cacat aslinya.
+
+Kueri Mongo BAST ikut dipertegas jadi `[(tanggal, -1), (created_at, -1)]`:
+`tanggal` saja meninggalkan seri dalam urutan tak tentu, dan `.limit(50)`
+memotong dari seri tak tentu itu — BAST terbaru bisa terbuang **sebelum**
+sampai ke pengurut.
+
+**Verifikasi.** 5 uji baru; **2.150 uji backend hijau**. Tiga mutasi disuntikkan
+— pemecah seri dicabut dari pengurut, nol di depan dibuang, dan `urut`
+dijadikan kunci utama — **ketiganya tertangkap**. Sisi layar tak disentuh:
+`AssetTimelineDialog` hanya menyaring, tak pernah mengurut ulang.
+
+---
+
 ## [#785] Paginasi Kelola Kategori Aset hidup — 12.488 kategori tak lagi terkunci di 50 — 2026-08-06
 
 Laporan: tombol **Sebelumnya**/**Berikutnya** pada dialog *Kelola Kategori Aset*

@@ -136,22 +136,37 @@ def query_identitas(identitas) -> dict:
 
 
 def buat_event(modul, jenis, judul, tanggal="", detail="", ref_id="",
-               status="") -> dict:
-    """Bentuk baku satu event timeline."""
+               status="", urut="") -> dict:
+    """Bentuk baku satu event timeline.
+
+    `urut` adalah PEMECAH SERI: dipakai HANYA ketika dua event punya `tanggal`
+    yang sama persis. Isi dengan cap waktu terlengkap yang dimiliki dokumen
+    sumber (umumnya `created_at`). Boleh kosong — event tanpa pemecah seri
+    tetap tersusun, hanya tak punya urutan bermakna di dalam harinya.
+    """
     return {
         "tanggal": _s(tanggal), "modul": _s(modul) or "aset",
         "jenis": _s(jenis), "judul": _s(judul), "detail": _s(detail),
-        "ref_id": _s(ref_id), "status": _s(status),
+        "ref_id": _s(ref_id), "status": _s(status), "urut": _s(urut),
     }
 
 
 def urut_events(events) -> list:
     """Urutkan event terbaru dulu. `tanggal` string ISO (tanggal saja atau
-    timestamp) — perbandingan leksikal cukup; tanggal kosong di paling akhir."""
+    timestamp) — perbandingan leksikal cukup; tanggal kosong di paling akhir.
+
+    PEMECAH SERI (`urut`) wajib ada di kunci, bukan sekadar mengandalkan
+    kestabilan `sort`. Banyak event bertanggal HARI saja ("2026-08-04"), dan
+    beberapa modul menerbitkan puluhan dokumen dalam satu hari — BAST serah
+    terima B-017 s.d. B-023, misalnya. Pada seri, `list.sort` yang stabil
+    mempertahankan urutan MASUK, dan urutan masuk itu menaik; hasilnya yang
+    TERBARU justru mendarat di paling bawah, persis kebalikan dari yang
+    dijanjikan judul kolomnya.
+    """
     ada, kosong = [], []
     for e in events or []:
         (ada if _s(e.get("tanggal")) else kosong).append(e)
-    ada.sort(key=lambda e: e["tanggal"], reverse=True)
+    ada.sort(key=lambda e: (e["tanggal"], _s(e.get("urut"))), reverse=True)
     return ada + kosong
 
 
@@ -206,7 +221,7 @@ def event_dari_riwayat(doc, modul, judul, ref_id="", kunci_waktu=("tanggal", "wa
     """Event dari array `riwayat[]` sebuah dokumen modul (pola umum:
     {status, tanggal|waktu, oleh, catatan}). Judul dipakai sebagai konteks."""
     hasil = []
-    for r in (doc or {}).get("riwayat", []) or []:
+    for i, r in enumerate((doc or {}).get("riwayat", []) or []):
         if not isinstance(r, dict):
             continue
         tanggal = ""
@@ -219,7 +234,12 @@ def event_dari_riwayat(doc, modul, judul, ref_id="", kunci_waktu=("tanggal", "wa
         hasil.append(buat_event(
             modul, "riwayat_status",
             f"{judul}: {st}" if st else judul,
-            tanggal=tanggal, detail=catatan, ref_id=ref_id, status=st))
+            tanggal=tanggal, detail=catatan, ref_id=ref_id, status=st,
+            # Pemecah seri = POSISI dalam array. `riwayat[]` selalu ditambah di
+            # belakang, jadi indeks menaik = kronologis; dibandingkan menurun ia
+            # menaruh langkah terakhir di atas. Nol di depan wajib — tanpa itu
+            # "10" bandingkan sebagai lebih kecil dari "9" secara leksikal.
+            urut=f"{i:06d}"))
     return hasil
 
 
