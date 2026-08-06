@@ -67,6 +67,38 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#788] Dialog Denah tak lagi terbuka bisu — titik yang sudah ada langsung dideteksi — 2026-08-06
+
+Laporan lanjutan pasca-[#787]: *"sudah saya aktifkan tapi belum terdeteksi
+informasi sama sekali."* Node denah sudah aktif, geometrinya sah — tapi dialog
+"Lokasi Aset di Denah" hanya menjalankan deteksi saat **peta diklik**. Dua
+akibatnya, dan keduanya berbunyi persis seperti laporan:
+
+- Aset yang **sudah punya penempatan** terbuka dengan marker terpasang tapi
+  panel info kosong total — tanpa rantai wilayah, tanpa pesan apa pun.
+- Aset ber-**koordinat GPS** yang belum pernah ditempatkan malah terbuka
+  kosong di pusat KIPP — koordinatnya tak pernah diumpankan ke dialog.
+
+Perbaikan (`LokasiTemuanDialog.jsx` + `DashboardPage.jsx`):
+
+- **Deteksi otomatis saat dialog terbuka** untuk titik yang sudah ada — dari
+  penempatan tersimpan, atau dari `koordinat_latitude`/`koordinat_longitude`
+  aset (prop baru `titikAwal`; parse toleran koma desimal). Peta langsung
+  terbuka di posisi aset dan rantai wilayah tampil tanpa klik.
+- Deteksi otomatis **tidak menimpa node tersimpan** (`pertahankanNode`) —
+  deteksi berhenti di gedung, jadi menimpanya membuat "buka lalu Simpan"
+  diam-diam menurunkan penempatan lantai/ruangan menjadi gedung.
+- Berlaku juga untuk dialog Lokasi Temuan wasdal (komponen dipakai bersama).
+
+Uji (4 baru di `lokasiDenahAset.test.js`, total 14) menjaga panggilan deteksi
+di jalur init, mode pertahankan-node (termasuk saat deteksi gagal), urutan
+prioritas titik (tersimpan > GPS), dan umpan `titikAwal` dari dasbor — ketiga
+mutasi pencabutnya dipastikan tertangkap.
+
+Catatan jujur: bila SETELAH ini rantai tetap tak tampil, dialog kini setidaknya
+menampilkan pesan diagnosisnya ("Di luar kawasan terpetakan" / jumlah draft
+yang memuat titik) — bukan diam — sehingga penyebab berikutnya terlihat.
+
 ## [#787] Denah yang sudah diimpor akhirnya terdeteksi — gerbang draft diberi pintu — 2026-08-06
 
 Laporan: *"halaman lokasi aset di denah masih tidak memunculkan informasinya …

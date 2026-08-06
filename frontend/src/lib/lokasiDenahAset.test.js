@@ -116,3 +116,39 @@ describe("kata-kata dialog di-parameterkan tanpa mengubah pemakai lama", () => {
     expect(dialog).toMatch(/onSaved, onClose, pesanHapus\]/);
   });
 });
+
+describe("titik yang sudah ada dideteksi otomatis saat dialog terbuka", () => {
+  // Laporan pemilik: "belum terdeteksi informasi sama sekali" — PADAHAL node
+  // denah sudah aktif dan geometrinya sah. Akarnya bukan di deteksi server:
+  // dialog hanya memicu deteksi pada KLIK peta, jadi aset yang sudah punya
+  // titik terbuka bisu (marker tampak, panel info kosong total — tak ada
+  // rantai, tak ada pesan), dan aset ber-koordinat GPS yang belum pernah
+  // ditempatkan malah terbuka kosong di pusat kawasan.
+  const dialog = baca(DIALOG);
+  const dasbor = baca(DASBOR);
+
+  test("deteksi berjalan pada titik awal tanpa menunggu klik", () => {
+    // Panggilannya harus di jalur init peta dan memakai mode pertahankan-node.
+    expect(dialog).toMatch(/deteksiTitik\(seed\.lat, seed\.lon, true\)/);
+  });
+
+  test("deteksi otomatis TIDAK menimpa node tersimpan", () => {
+    // Deteksi berhenti di gedung; menimpa nodeId membuat "buka lalu Simpan"
+    // diam-diam menurunkan penempatan lantai/ruangan menjadi gedung.
+    expect(dialog).toMatch(/pertahankanNode && sebelumnya/);
+    // Kegagalan deteksi otomatis pun tak boleh menghapus node tersimpan.
+    expect(dialog).toMatch(/if \(!pertahankanNode\) setNodeId\(""\)/);
+  });
+
+  test("penempatan tersimpan menang; koordinat GPS aset jadi cadangan", () => {
+    expect(dialog).toMatch(
+      /titikSah\(lokasiAwal\?\.titik\) \|\| titikSah\(titikAwal\)/);
+  });
+
+  test("dasbor mengumpankan koordinat GPS aset sebagai titikAwal", () => {
+    const potong = dasbor.split("handleOpenLokasiDenah = useCallback")[1] || "";
+    expect(potong.slice(0, 1400)).toContain("koordinat_latitude");
+    expect(potong.slice(0, 1400)).toContain("koordinat_longitude");
+    expect(dasbor).toContain("titikAwal={lokasiDenahAset.titik}");
+  });
+});

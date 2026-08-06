@@ -8,6 +8,15 @@
 // dari DB (string klien tak dipercaya). Titik di luar kawasan terpetakan
 // tetap boleh disimpan sebagai penanda koordinat murni.
 //
+// Titik yang SUDAH ada (penempatan tersimpan, atau umpan `titikAwal` dari
+// koordinat GPS aset) dideteksi OTOMATIS saat dialog terbuka. Tanpa ini
+// dialog terbuka bisu: marker tampak tapi panel info kosong total — tak ada
+// rantai, tak ada pesan — dan operator menyimpulkan deteksinya rusak padahal
+// deteksi belum pernah dijalankan (laporan pemilik: "belum terdeteksi
+// informasi sama sekali"). Deteksi otomatis TIDAK menimpa node tersimpan:
+// menimpanya membuat "buka lalu Simpan" diam-diam menurunkan penempatan
+// lantai/ruangan menjadi gedung hasil deteksi.
+//
 // Kontrak PUT-nya identik untuk kedua pemakai — itulah sebabnya dialog ini
 // hanya perlu di-parameterkan KATA-KATANYA, bukan disalin. Default-nya tetap
 // bunyi wasdal supaya pemanggil lama tak berubah perilaku.
@@ -26,8 +35,16 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 // Pusat KIPP IKN — pandangan awal saat tiket belum punya penanda.
 const PUSAT_IKN = [-1.4025, 116.711];
 
+// [lon, lat] GeoJSON → {lat, lon}, atau null bila korup (string/NaN dari data
+// lama tak boleh meledakkan .toFixed di render — jatuh ke "belum ada").
+function titikSah(t) {
+  const lat = Number(t?.[1]);
+  const lon = Number(t?.[0]);
+  return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null;
+}
+
 export default function LokasiTemuanDialog({
-  judul, submitUrl, lokasiAwal, onClose, onSaved,
+  judul, submitUrl, lokasiAwal, titikAwal, onClose, onSaved,
   judulDialog = "Lokasi Temuan",
   petunjuk = "klik peta untuk menancapkan titik; wilayah/gedung terdeteksi otomatis.",
   labelHapus = "Hapus Penanda",
@@ -37,21 +54,18 @@ export default function LokasiTemuanDialog({
   const petaRef = useRef(null);
   const wadahRef = useRef(null);
   const markerRef = useRef(null);
-  const [titik, setTitik] = useState(() => {
-    // Number() + isFinite: titik tersimpan yang korup (string/NaN dari data
-    // lama) tak boleh meledakkan .toFixed di render — jatuh ke "belum ada".
-    const t = lokasiAwal?.titik;
-    const lat = Number(t?.[1]);
-    const lon = Number(t?.[0]);
-    return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null;
-  });
+  // Penempatan tersimpan menang; tanpa itu (atau bila korup) pakai umpan
+  // `titikAwal` — koordinat GPS aset — supaya peta terbuka TEPAT di posisinya,
+  // bukan kosong di pusat kawasan. Keduanya format GeoJSON [lon, lat].
+  const seed = titikSah(lokasiAwal?.titik) || titikSah(titikAwal);
+  const [titik, setTitik] = useState(seed);
   const [deteksi, setDeteksi] = useState(null);   // hasil lokasi-di-titik terakhir
   const [nodeId, setNodeId] = useState(lokasiAwal?.node_id || "");
   const [sibuk, setSibuk] = useState(false);
   const [mendeteksi, setMendeteksi] = useState(false);
   const seqRef = useRef(0);
 
-  const deteksiTitik = useCallback(async (lat, lon) => {
+  const deteksiTitik = useCallback(async (lat, lon, pertahankanNode = false) => {
     const seq = ++seqRef.current;
     setMendeteksi(true);
     try {
@@ -59,12 +73,18 @@ export default function LokasiTemuanDialog({
       if (seq !== seqRef.current) return;          // klik lebih baru sudah terjadi
       setDeteksi(r.data);
       // Prapilih node TERDALAM; operator bisa mengganti ke lantai di bawahnya.
+      // `pertahankanNode` (deteksi otomatis saat dialog terbuka): node yang
+      // SUDAH tersimpan tidak ditimpa — deteksi berhenti di gedung, jadi
+      // menimpanya membuat "buka lalu Simpan" menurunkan penempatan
+      // lantai/ruangan menjadi gedung tanpa ada yang memintanya.
       const rantai = r.data?.rantai || [];
-      setNodeId(rantai.length ? rantai[rantai.length - 1].id : "");
+      setNodeId((sebelumnya) => (pertahankanNode && sebelumnya)
+        ? sebelumnya
+        : (rantai.length ? rantai[rantai.length - 1].id : ""));
     } catch {
       if (seq === seqRef.current) {
         setDeteksi(null);
-        setNodeId("");
+        if (!pertahankanNode) setNodeId("");
         toast.error("Deteksi lokasi gagal — penanda tetap bisa disimpan");
       }
     } finally {
@@ -81,12 +101,13 @@ export default function LokasiTemuanDialog({
       maxZoom: 22, maxNativeZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(map);
-    const latAwal = Number(lokasiAwal?.titik?.[1]);
-    const lonAwal = Number(lokasiAwal?.titik?.[0]);
-    const adaAwal = Number.isFinite(latAwal) && Number.isFinite(lonAwal);
-    map.setView(adaAwal ? [latAwal, lonAwal] : PUSAT_IKN, adaAwal ? 18 : 15);
-    if (adaAwal) {
-      markerRef.current = L.marker([latAwal, lonAwal]).addTo(map);
+    map.setView(seed ? [seed.lat, seed.lon] : PUSAT_IKN, seed ? 18 : 15);
+    if (seed) {
+      markerRef.current = L.marker([seed.lat, seed.lon]).addTo(map);
+      // Titik yang sudah ada langsung dideteksi — dialog tak boleh terbuka
+      // bisu (marker tampak, panel info kosong). `true` = jangan timpa node
+      // tersimpan.
+      deteksiTitik(seed.lat, seed.lon, true);
     }
     map.on("click", (e) => {
       const { lat, lng } = e.latlng;
@@ -111,7 +132,8 @@ export default function LokasiTemuanDialog({
       if (ro) ro.disconnect();
       map.remove(); petaRef.current = null; markerRef.current = null;
     };
-    // lokasiAwal hanya dibaca saat init — dialog di-mount ulang per tiket.
+    // `seed` (lokasiAwal/titikAwal) hanya dibaca saat init — dialog di-mount
+    // ulang per tiket/aset.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deteksiTitik]);
 
