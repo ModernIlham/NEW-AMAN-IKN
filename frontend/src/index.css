@@ -300,6 +300,63 @@ aside .overflow-x-auto::-webkit-scrollbar-thumb:hover, .category-dropdown-scroll
   [data-peta-panel] button { min-height: 28px; min-width: 28px; }
 }
 
+/* ── Pratinjau foto pada popup "Aset baru di titik ini" (AssetMapFullView) ──
+   Tombol hapus (×) dulu diberi ukuran lewat `style` inline 16×16 px. Itu TIDAK
+   cukup: aturan tap-target 44px di atas memakai `min-width`/`min-height`, dan
+   min-* SELALU menang atas `width`/`height` — seberapa pun spesifik gaya
+   inline-nya. Akibatnya di ≤1023px tombol membengkak jadi 44×44 px di atas
+   thumbnail 40 px, sehingga lingkaran merah menutupi hampir seluruh foto —
+   tepat di HP/tablet, layar tempat fitur "tambah titik dari peta" ini justru
+   paling banyak dipakai di lapangan.
+
+   Menutupnya bukan sekadar mengecilkan tombol: 16 px terlalu kecil untuk jari.
+   Di layar sentuh thumbnail-nya yang diperbesar, dan tombolnya dikunci pada
+   ukuran yang masih nyaman disentuh namun hanya menutup satu sudut foto.
+
+   Gaya ditaruh DI SINI, bukan inline di JS, supaya penjaganya tidak lenyap
+   saat markup popup disunting lagi nanti. */
+.peta-pratinjau-foto { position: relative; width: 40px; height: 40px; }
+.peta-pratinjau-foto img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+}
+.peta-pratinjau-foto button {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  min-width: 0;   /* ← penawar aturan 44px; tanpa dua baris ini foto tertutup */
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #dc2626;
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+@media (max-width: 1023px) {
+  .peta-pratinjau-foto { width: 56px; height: 56px; }
+  .peta-pratinjau-foto button {
+    top: -7px;
+    right: -7px;
+    width: 20px;
+    height: 20px;
+    min-width: 0;
+    min-height: 0;
+    font-size: 13px;
+  }
+}
+
 /* ── Alat ukur peta AKTIF (kelas dipasang useUkurPeta pada kontainer) ──
    Kursor crosshair menandai mode; pane marker & popup dibuat tembus-klik
    supaya ketukan yang jatuh di atas pin aset tetap sampai ke peta (menambah
