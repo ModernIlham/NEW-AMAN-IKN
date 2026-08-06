@@ -128,7 +128,8 @@ async def get_timeline_aset(asset_id: str, user: dict = Depends(require_user)):
                 f"Disahkan dalam {h.get('ticket_number') or h.get('activity_name') or 'kegiatan'}",
                 tanggal=h.get("tanggal_pengesahan", ""), detail=detail,
                 ref_id=h.get("activity_id", ""),
-                status=h.get("inventory_status", "")))
+                status=h.get("inventory_status", ""),
+                urut=h.get("created_at", "")))
 
     # ── 2. Buku Barang (jurnal pembukuan) ──
     async for m in db.mutasi_bmn.find(
@@ -142,7 +143,8 @@ async def get_timeline_aset(asset_id: str, user: dict = Depends(require_user)):
             "pembukuan", "jurnal",
             f"Buku Barang — {label_transaksi_buku(m.get('kode_transaksi'))}",
             tanggal=m.get("tanggal_buku", ""), detail=detail,
-            ref_id=m.get("id", ""), status=m.get("kode_transaksi", "")))
+            ref_id=m.get("id", ""), status=m.get("kode_transaksi", ""),
+            urut=m.get("created_at", "")))
 
     # ── 3. Penggunaan: SK PSP, BMN idle, proses penggunaan ──
     async for p in db.psp.find(_q_satker_lunak(
@@ -155,7 +157,8 @@ async def get_timeline_aset(asset_id: str, user: dict = Depends(require_user)):
             detail="; ".join(x for x in (
                 f"Jenis: {p.get('jenis')}" if p.get("jenis") else "",
                 f"Penetap: {p.get('penetap')}" if p.get("penetap") else "") if x),
-            ref_id=p.get("id", ""), status=p.get("status_pengajuan", "")))
+            ref_id=p.get("id", ""), status=p.get("status_pengajuan", ""),
+            urut=p.get("created_at", "")))
     async for d in db.bmn_idle.find(_q_satker_lunak(
             user, {"asset_id": {"$in": ids}}), {"_id": 0}).limit(50):
         events.extend(event_dari_riwayat(
@@ -180,7 +183,7 @@ async def get_timeline_aset(asset_id: str, user: dict = Depends(require_user)):
             "pemanfaatan", "perjanjian",
             f"Pemanfaatan {d.get('bentuk') or ''} — mitra {d.get('mitra') or '-'}",
             tanggal=d.get("mulai") or d.get("created_at", ""), detail=detail,
-            ref_id=d.get("id", "")))
+            ref_id=d.get("id", ""), urut=d.get("created_at", "")))
 
     # ── 5. Pemeliharaan ──
     async for d in db.pemeliharaan.find(
@@ -198,7 +201,7 @@ async def get_timeline_aset(asset_id: str, user: dict = Depends(require_user)):
             "pemeliharaan", "pelaksanaan",
             f"Pemeliharaan {d.get('jenis') or ''}",
             tanggal=d.get("tanggal", ""), detail=detail,
-            ref_id=d.get("id", "")))
+            ref_id=d.get("id", ""), urut=d.get("created_at", "")))
 
     # ── 6. Pengamanan: kasus + dokumen ──
     async for d in db.pengamanan_kasus.find(_q_satker_lunak(
@@ -226,7 +229,8 @@ async def get_timeline_aset(asset_id: str, user: dict = Depends(require_user)):
             f"Koreksi nilai — {d.get('jenis_dokumen') or ''} "
             f"{d.get('nomor_dokumen') or ''}".strip(),
             tanggal=d.get("tanggal_dokumen", ""), detail=detail,
-            ref_id=d.get("id", ""), status=d.get("status_sakti", "")))
+            ref_id=d.get("id", ""), status=d.get("status_sakti", ""),
+            urut=d.get("created_at", "")))
 
     # ── 8. Penghapusan / Pemindahtanganan / Pemusnahan ──
     async for d in db.usulan_penghapusan.find(_q_satker_lunak(
@@ -274,17 +278,25 @@ async def get_timeline_aset(asset_id: str, user: dict = Depends(require_user)):
                 ref_id=d.get("id", ""), status="selesai"))
 
     # ── 10. BAST serah terima ──
+    # `created_at` DIAMBIL sebagai pemecah seri. Satu aset lazim menerima
+    # banyak BAST bertanggal SAMA (B-017 s.d. B-023 pada 4 Agustus 2026);
+    # tanpa cap waktu ini urutannya jatuh ke urutan masuk yang menaik,
+    # sehingga BAST terbaru mendarat di paling bawah.
+    #
+    # Urutan Mongo pun ikut dipertegas: `tanggal` saja meninggalkan seri
+    # dalam urutan tak tentu, dan `.limit(50)` memotong dari seri yang tak
+    # tentu itu — BAST terbaru bisa terbuang sebelum sampai ke pengurut.
     async for d in db.bast_serah_terima.find(
             _q_satker_lunak(user, {"asset_ids": {"$in": ids}}), {"_id": 0,
-            "id": 1, "jenis": 1, "nomor": 1, "tanggal": 1,
-            "pihak_kedua": 1}).sort("tanggal", -1).limit(50):
+            "id": 1, "jenis": 1, "nomor": 1, "tanggal": 1, "created_at": 1,
+            "pihak_kedua": 1}).sort([("tanggal", -1), ("created_at", -1)]).limit(50):
         penerima = ((d.get("pihak_kedua") or {}).get("nama") or "").strip()
         events.append(buat_event(
             "bast", "serah_terima",
             f"BAST {d.get('jenis') or ''} — {d.get('nomor') or 'tanpa nomor'}",
             tanggal=d.get("tanggal", ""),
             detail=f"Penerima: {penerima}" if penerima else "",
-            ref_id=d.get("id", "")))
+            ref_id=d.get("id", ""), urut=d.get("created_at", "")))
 
     # ── 11. Jejak pada dokumen aset: reklasifikasi + SIMAN V2 ──
     for s in saudara:
