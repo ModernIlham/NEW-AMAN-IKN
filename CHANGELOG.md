@@ -67,6 +67,71 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#782] Gerbang media — satu aturan kompresi untuk satu aplikasi utuh — 2026-08-06
+
+Laporan lapangan: **foto dari kamera yang disimpan dari halaman EDIT aset tidak
+terkompres**. Penelusurannya menemukan sebabnya bukan rantai yang rusak —
+melainkan `routes/assets.py` yang memang **tak pernah memanggil rantai sama
+sekali**. Hanya `routes/activities.py` dan `routes/batch.py` yang memanggilnya.
+Audit atas **113 jalur tulis bita** menemukan 25 jalur lain bernasib sama, dan
+**7 jalur yang justru TIDAK BOLEH** dikompres (restore, artefak job, unduhan).
+
+**`backend/gerbang_media.py`** — satu modul, dua pintu: `olah_media()` (murni,
+untuk jalur tulis INLINE ke dokumen Mongo) dan `tulis_media()` (olah + tulis
+GridFS + metadata jujur). Bukan middleware — middleware hanya melihat RESPONS,
+bukan bita yang ditulis. Bukan pembungkus `fs_bucket` — itu buta terhadap tulis
+inline, buta terhadap `upload_from_stream`, dan akan mengompres ulang blob
+restore yang wajib bita identik.
+
+Aturan tunggalnya, berlaku modul mana pun dan satker mana pun:
+
+1. Jenis berkas dari **magic byte**, bukan ekstensi — ekstensi bisa dipalsukan,
+   dan sebagian modul memang hanya memeriksa ekstensi.
+2. **PDF ber-tanda tangan digital / terenkripsi tak pernah disentuh**, dan
+   penjaganya berjalan **sebelum penyedia mana pun**. Dulu penjaga itu hidup di
+   dalam `kompres_pdf_lokal` sementara iLovePDF dipanggil lebih dulu — dokumen
+   ber-TTE bisa dikirim ke pihak ketiga dan tanda tangannya batal.
+3. Gambar **ber-alfa** hanya lewat Pillow lossless: tiga dari empat mata rantai
+   memaksa JPEG, dan spesimen tanda tangan maupun logo instansi akan jadi kotak
+   buram menimpa naskah.
+4. Gambar opak kecil (≤300 KB) cukup Pillow lokal — membakar kuota berbayar
+   untuk ikon dan avatar itu pemborosan.
+5. Hasil dipakai **hanya bila lebih kecil**; kalau tidak, bita asli kembali.
+6. **Idempoten** — blob yang sudah lewat gerbang (atau sudah WebP, yang berarti
+   kuota Tinify-nya sudah terbakar) dilewati.
+7. **Fail-open** — kegagalan kompresi tak pernah menggagalkan unggahan.
+
+**Tiga cacat rantai yang aktif hari ini, ditemukan audit dan diperiksa
+langsung:**
+
+- `auto_compress_image` selalu melabeli hasilnya `image/jpeg` — padahal cabang
+  alfa mengembalikan **PNG**. Label itulah yang mengisi `metadata.content_type`
+  di puluhan titik tulis, sehingga penyaji mengirim header yang salah.
+  Kini tipe di-sniff dari **bita hasil**.
+- Jaring terakhir `compress_with_pillow` dipanggil **langsung di dalam
+  coroutine** — CPU-bound, membekukan event loop tiap unggahan, padahal jalur
+  Tinify di atasnya sudah dilempar ke thread sejak lama. Gejalanya terbaca
+  sebagai "server lambat", bukan sebagai kompresi yang memblokir.
+- `store_photo_to_gridfs` / `store_document_to_gridfs` di `shared_utils.py`
+  menulis bita apa adanya. Inilah titik cekik **enam jalur tulis sekaligus** —
+  termasuk `PATCH /assets/{id}` yang dipakai halaman edit, jalur persis yang
+  dilaporkan. Keduanya kini lewat gerbang.
+
+**Uji anti-bypass.** Satu uji membaca AST seluruh `backend/` dan menagih setiap
+penulis GridFS: lewat gerbang, atau tercatat sebagai pengecualian sah, atau
+tercatat sebagai utang migrasi. Daftar utangnya berplafon **14 dan hanya boleh
+mengecil** — modul baru yang menulis blob tanpa gerbang menggagalkan CI, jadi
+"universal" tak bisa luntur diam-diam sekali pun tak ada yang mengawasi.
+
+> Daftar itu sempat saya isi 21 nama. Uji diagnostik menunjukkan 7 di antaranya
+> **tak menulis GridFS sama sekali** — utang palsu yang membuat sisa pekerjaan
+> tampak lebih besar dari yang sebenarnya. Plafonnya diturunkan ke 14 dan
+> ditambah `test_daftar_tak_kelebihan_isi` agar padding itu tak bisa terulang.
+
+**Verifikasi.** 36 uji baru; **2.116 uji backend hijau**.
+
+---
+
 ## [#781] Rantai PDF setara rantai gambar — "0/0" jadi ∞, panel kembali ringkas — 2026-08-06
 
 Dua koreksi dari umpan balik layar, keduanya cacat nyata.

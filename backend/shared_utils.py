@@ -95,15 +95,20 @@ async def store_photo_to_gridfs(photo_base64: str) -> str:
     photo_bytes = decode_data_url(photo_base64)
     if not photo_bytes:
         raise ValueError("Foto tidak valid (bukan base64 gambar)")
-    from bson import ObjectId
-    file_id = ObjectId()
-    grid_in = fs_bucket.open_upload_stream_with_id(
-        file_id, filename=f"photo_{uuid.uuid4()}.jpg",
-        metadata={"content_type": "image/jpeg", "size": len(photo_bytes)}
-    )
-    await grid_in.write(photo_bytes)
-    await grid_in.close()
-    return str(file_id)
+    # GERBANG KOMPRESI. Inilah titik cekik enam jalur tulis foto sekaligus —
+    # termasuk PATCH /assets/{id} yang dipakai halaman EDIT aset, jalur yang
+    # dilaporkan pemilik menyimpan foto kamera TANPA terkompres. Dulu bita
+    # ditulis apa adanya dan `content_type` dikeraskan "image/jpeg" walau
+    # isinya PNG.
+    #
+    # `tulis_media` fail-open: kegagalan kompresi menyimpan bita asli, tidak
+    # menggagalkan unggahan. Kontrak "RAISES bila gagal" di atas tetap hanya
+    # berlaku untuk kegagalan decode/tulis, bukan kegagalan kompresi.
+    from gerbang_media import tulis_media
+    file_id, _meta = await tulis_media(
+        photo_bytes, nama=f"photo_{uuid.uuid4()}.jpg",
+        content_type="image/jpeg", kelas="auto")
+    return file_id
 
 
 async def get_photo_from_gridfs(gridfs_id: str) -> Optional[bytes]:
@@ -143,15 +148,14 @@ async def store_document_to_gridfs(doc_base64: str, filename: str = "document.pd
     if not doc_bytes:
         return ""
     try:
-        from bson import ObjectId
-        file_id = ObjectId()
-        grid_in = fs_bucket.open_upload_stream_with_id(
-            file_id, filename=filename or f"document_{uuid.uuid4()}.pdf",
-            metadata={"content_type": "application/pdf", "size": len(doc_bytes)},
-        )
-        await grid_in.write(doc_bytes)
-        await grid_in.close()
-        return str(file_id)
+        # GERBANG KOMPRESI untuk PDF. Penjaga PDF ber-TANDA TANGAN DIGITAL ada
+        # di dalam gerbang dan berjalan SEBELUM penyedia mana pun — dokumen
+        # ber-TTE tak pernah dikirim ke pihak ketiga.
+        from gerbang_media import tulis_media
+        file_id, _meta = await tulis_media(
+            doc_bytes, nama=filename or f"document_{uuid.uuid4()}.pdf",
+            content_type="application/pdf", kelas="auto")
+        return file_id
     except Exception as e:
         logger.error(f"GridFS document store error: {e}")
         return ""
