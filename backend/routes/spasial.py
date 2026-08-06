@@ -642,6 +642,60 @@ class TitikIn(BaseModel):
     akurasi_m: Optional[float] = None
 
 
+class AktifkanDraftIn(BaseModel):
+    """`dalam` = batasi ke satu subpohon (node itu + seluruh keturunannya).
+    Kosong = seluruh satker. `pratinjau` = hitung saja, jangan tulis."""
+    dalam: Optional[str] = ""
+    pratinjau: Optional[bool] = False
+
+
+@spasial_router.post("/spasial/aktifkan-draft")
+@limiter.limit("10/minute")
+async def aktifkan_draft(request: Request, payload: AktifkanDraftIn,
+                         _user: dict = Depends(require_writer)):
+    """Aktifkan node DRAFT secara massal — jalan keluar dari gerbang tinjauan.
+
+    Gerbangnya sendiri benar dan TIDAK dicabut: hasil impor tetap mendarat
+    sebagai draft, dan draft tetap tak ikut deteksi maupun lapisan peta sampai
+    manusia melepasnya. Yang hilang selama ini adalah pintunya. Satu-satunya
+    cara melepas draft adalah form ubah SATU node; mengaktifkan denah kawasan
+    berisi ratusan ruangan berarti membuka form itu ratusan kali. Gerbang yang
+    tak punya pintu bukan gerbang — ia tembok, dan tembok itulah yang membuat
+    denah yang sudah diimpor tak pernah muncul di mana pun.
+
+    Node TANPA geometri sengaja ikut diaktifkan: pohon hierarki (Kawasan →
+    Zona → …) memang boleh tak bergeometri, dan membiarkannya draft memutus
+    rantai `ancestors` yang dipakai menyusun "dari wilayah hingga
+    mengerucutnya".
+    """
+    q = {"status": "draft"}
+    dalam = str(payload.dalam or "").strip()
+    if dalam:
+        induk = await db.spasial_node.find_one(
+            scope_query_field_satker(_user, {"id": dalam}), {"_id": 0, "id": 1})
+        if not induk:
+            raise HTTPException(status_code=404, detail="Node tidak ditemukan")
+        q["$or"] = [{"id": dalam}, {"ancestors": dalam}]
+
+    q = scope_query_field_satker(_user, q)
+    jumlah = await db.spasial_node.count_documents(q)
+    if payload.pratinjau:
+        return {"ok": True, "pratinjau": True, "jumlah": jumlah, "diaktifkan": 0}
+    if not jumlah:
+        return {"ok": True, "pratinjau": False, "jumlah": 0, "diaktifkan": 0}
+
+    now = datetime.now(timezone.utc).isoformat()
+    hasil = await db.spasial_node.update_many(
+        q, {"$set": {"status": "aktif", "updated_at": now,
+                     "updated_by": _user.get("username", "system")}})
+    await log_audit("spasial_aktifkan_draft", "", dalam or "semua",
+                    username=_user.get("username", "system"),
+                    kode_satker=kode_satker_user(_user),
+                    detail=f"Aktifkan {hasil.modified_count} node draft")
+    return {"ok": True, "pratinjau": False, "jumlah": jumlah,
+            "diaktifkan": hasil.modified_count}
+
+
 class GeometriPratinjauIn(BaseModel):
     geometry: dict
     tipe: Optional[str] = ""
@@ -741,7 +795,23 @@ async def lokasi_di_titik(payload: TitikIn, _user: dict = Depends(require_user))
     terdalam = pilih["terdalam"]
 
     if not terdalam:
-        # Di luar semua poligon — BUKAN galat. Tawarkan yang terdekat.
+        # SEBELUM menyimpulkan "di luar kawasan", periksa apakah ada node DRAFT
+        # yang justru memuat titik ini.
+        #
+        # Ini pembeda antara dua keadaan yang sangat berbeda tapi dulu dijawab
+        # dengan kalimat yang SAMA. Denah hasil impor seluruhnya masuk sebagai
+        # draft, dan draft tak ikut deteksi — jadi operator yang baru saja
+        # mengimpor denah lengkap satu kawasan mendapat jawaban "Di luar kawasan
+        # terpetakan" sambil menatap poligonnya sendiri. Kalimat itu bukan cuma
+        # tak menolong; ia MENYESATKAN, karena menuduh datanya tak ada padahal
+        # datanya ada dan hanya belum dilepas gerbang.
+        n_draft = await db.spasial_node.count_documents(
+            scope_query_field_satker(_user, {
+                "status": "draft",
+                "ordinal_level": {"$lte": ORDINAL_GEDUNG},
+                "geometry": {"$geoIntersects": {"$geometry": titik}},
+            }))
+
         terdekat = await db.spasial_node.find_one(
             scope_query_field_satker(_user, {
                 "status": "aktif",
@@ -749,10 +819,21 @@ async def lokasi_di_titik(payload: TitikIn, _user: dict = Depends(require_user))
                 "geometry": {"$near": {"$geometry": titik,
                                        "$maxDistance": RADIUS_TERDEKAT_M}},
             }), _PROJ_RANTAI)
-        return {"ditemukan": False, "rantai": [], "terdekat": _ringkas(terdekat) if terdekat else None,
+
+        if n_draft:
+            pesan = (f"Ada {n_draft} area DRAFT yang memuat titik ini — draft "
+                     "belum ikut deteksi. Buka Master Spasial lalu aktifkan.")
+        else:
+            pesan = ("Di luar kawasan terpetakan."
+                     + (f" Terdekat: {terdekat.get('nama')}." if terdekat else ""))
+
+        return {"ditemukan": False, "rantai": [],
+                "terdekat": _ringkas(terdekat) if terdekat else None,
                 "radius_cari_m": RADIUS_TERDEKAT_M,
-                "pesan": ("Di luar kawasan terpetakan."
-                          + (f" Terdekat: {terdekat.get('nama')}." if terdekat else ""))}
+                # Dipisah dari `pesan` supaya layar bisa memilih tindakannya
+                # sendiri (tombol "Aktifkan draft"), bukan mengurai kalimat.
+                "draft_menutupi": n_draft,
+                "pesan": pesan}
 
     # Rantai SELALU mengikuti pohon (ancestors), bukan gabungan hasil geo —
     # lihat su.pilih_rantai. Ambil nama leluhur dari snapshot bila ada.
