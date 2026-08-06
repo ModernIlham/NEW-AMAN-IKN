@@ -135,7 +135,8 @@ describe("titik yang sudah ada dideteksi otomatis saat dialog terbuka", () => {
   test("deteksi otomatis TIDAK menimpa node tersimpan", () => {
     // Deteksi berhenti di gedung; menimpa nodeId membuat "buka lalu Simpan"
     // diam-diam menurunkan penempatan lantai/ruangan menjadi gedung.
-    expect(dialog).toMatch(/pertahankanNode && sebelumnya/);
+    expect(dialog).toMatch(/adaTersimpan = pertahankanNode && nodeIdRef\.current/);
+    expect(dialog).toMatch(/if \(!adaTersimpan\)/);
     // Kegagalan deteksi otomatis pun tak boleh menghapus node tersimpan.
     expect(dialog).toMatch(/if \(!pertahankanNode\) setNodeId\(""\)/);
   });
@@ -150,5 +151,59 @@ describe("titik yang sudah ada dideteksi otomatis saat dialog terbuka", () => {
     expect(potong.slice(0, 1400)).toContain("koordinat_latitude");
     expect(potong.slice(0, 1400)).toContain("koordinat_longitude");
     expect(dasbor).toContain("titikAwal={lokasiDenahAset.titik}");
+  });
+});
+
+describe("informasi tampil tanpa bergantung satu panggilan jaringan", () => {
+  // Laporan pemilik: "data informasi dari wilayah hingga ruangan masih tidak
+  // muncul padahal sudah saya simpan" — dari layar yang petanya pun hitam
+  // (ubin OSM tak termuat, jaringan lapangan buruk). Tiga penjaga di sini
+  // memastikan dialog TETAP informatif dalam kondisi itu.
+  const dialog = baca(DIALOG);
+
+  test("penempatan tersimpan tampil dari snapshot server, bukan hasil deteksi", () => {
+    // `jalur_nama` sudah ada di dokumen aset; menampilkannya tak butuh
+    // jaringan. Bila hilang, "sudah saya simpan" kembali tak terlihat.
+    expect(dialog).toContain('data-testid="lokasi-temuan-tersimpan"');
+    expect(dialog).toContain("lokasiAwal.jalur_nama");
+  });
+
+  test("poligon denah digambar di peta dialog — dan TIDAK menelan klik", () => {
+    expect(dialog).toContain("/spasial/geojson");
+    // interactive: false wajib — poligon yang menangkap klik membuat
+    // menancapkan titik DI DALAM denah (kegunaan inti dialog) mustahil.
+    expect(dialog).toMatch(/interactive: false/);
+  });
+
+  test("deteksi gagal menyisakan tombol coba lagi, bukan jalan buntu", () => {
+    expect(dialog).toContain('data-testid="lokasi-temuan-deteksi-ulang"');
+  });
+});
+
+describe("rantai menyempit hingga RUANGAN dan tombol tertata", () => {
+  const dialog = baca(DIALOG);
+
+  test("persempit ke ruangan memakai deteksi ruangan-di-titik", () => {
+    // Tanpa ini rantai berhenti di gedung/lantai — padahal permintaan
+    // pemilik eksplisit: "dari wilayah hingga mengerucutnya (ruangan)".
+    expect(dialog).toContain("/spasial/ruangan-di-titik");
+    expect(dialog).toContain('data-testid="lokasi-temuan-ruangan"');
+  });
+
+  test("prapilih ruangan tak menggeser node tersimpan/lebih dalam", () => {
+    expect(dialog).toMatch(/kini === lantaiAktif \? r\.data\.ruangan\.id : kini/);
+  });
+
+  test("tombol Batal dihapus; Simpan & Cabut dalam satu baris footer", () => {
+    // Tiga tombol membuat footer pecah dua baris di HP (tangkapan layar
+    // pemilik); menutup dialog cukup lewat ikon × / ketuk luar.
+    expect(dialog).not.toContain("lokasi-temuan-batal");
+    expect(dialog).toContain('data-testid="lokasi-temuan-hapus"');
+    expect(dialog).toContain('data-testid="lokasi-temuan-simpan"');
+  });
+
+  test("header memberi ruang tombol tutup bawaan dialog", () => {
+    // Tanpa pr-10 judul/deskripsi menabrak ikon × (laporan pemilik).
+    expect(dialog).toMatch(/DialogHeader className="[^"]*pr-10/);
   });
 });
