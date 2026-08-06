@@ -235,13 +235,11 @@ PENGECUALIAN_TETAP = {
 # ini. Mencantumkan berkas yang tak menulis apa pun akan diam-diam MENGIZINKAN
 # berkas itu mulai menulis langsung nanti — daftar yang kelebihan isi membuat
 # ujinya lebih lemah daripada yang terlihat.
-BELUM_BERMIGRASI = {
-    "routes/assets.py", "routes/bast.py", "routes/pegawai.py",
-    "routes/pemanfaatan.py", "routes/pengamanan.py", "routes/penghapusan.py",
-    "routes/pemusnahan.py", "routes/pemindahtanganan.py", "routes/pengadaan.py",
-    "routes/penggunaan.py", "routes/wasdal.py", "routes/pengesahan.py",
-    "routes/persediaan.py", "routes/spasial.py",
-}
+# KOSONG — utangnya lunas. Keempat belas modul yang dulu di sini kini menulis
+# lewat `tulis_media`. Himpunan ini sengaja DIPERTAHANKAN (bukan dihapus)
+# supaya plafon di bawah tetap punya sesuatu untuk dijaga: tak ada modul yang
+# boleh masuk lagi.
+BELUM_BERMIGRASI = set()
 
 _TULIS_GRIDFS = {"open_upload_stream_with_id", "open_upload_stream",
                  "upload_from_stream"}
@@ -294,9 +292,12 @@ class TestAntiPintas:
         assert not palsu, f"terdaftar tapi tak menulis GridFS: {sorted(palsu)}"
 
     def test_daftar_belum_migrasi_hanya_boleh_menyusut(self):
-        """Merekam utangnya secara TERUKUR. Angka ini turun tiap PR sapuan;
-        bila ia naik, ada jalur baru yang menghindari gerbang."""
-        assert len(BELUM_BERMIGRASI) <= 14
+        """Merekam utangnya secara TERUKUR. Plafonnya 14 pada PR gerbang,
+        lalu 0 setelah sapuan — dan 0 adalah angka yang tak bisa turun lagi.
+        Sejak titik ini, SATU modul yang menulis GridFS langsung membuat CI
+        merah tanpa jalan keluar selain lewat gerbang atau menambah
+        pengecualian tetap yang wajib beralasan tertulis."""
+        assert len(BELUM_BERMIGRASI) == 0
 
     def test_pengecualian_tetap_punya_alasan_tertulis(self):
         """Pengecualian tanpa alasan berubah jadi tempat sampah."""
@@ -364,3 +365,85 @@ class TestCacatRantaiTertutup:
                            ("GIF", "image/gif"), ("WEBP", "image/webp")):
             data = _gambar(fmt)
             assert _tipe_hasil(data) == gm._sniff_gambar(data) == harap, fmt
+
+
+class TestSamakanEkstensi:
+    """Rantai gambar mengembalikan JPEG walau masukannya PNG. Modul lampiran
+    menyimpan `filename` SENDIRI di dokumen Mongo — tanpa penyamaan ini
+    pengguna mengunduh berkas bernama `.png` yang isinya JPEG."""
+
+    def test_png_jadi_jpg_saat_isinya_jpeg(self):
+        assert gm.samakan_ekstensi("bukti.png", "image/jpeg") == "bukti.jpg"
+
+    def test_jpeg_dan_jpg_dianggap_sama(self):
+        assert gm.samakan_ekstensi("a.jpeg", "image/jpeg") == "a.jpeg"
+        assert gm.samakan_ekstensi("a.jpg", "image/jpeg") == "a.jpg"
+
+    def test_pdf_tak_disentuh(self):
+        assert gm.samakan_ekstensi("sk.pdf", "application/pdf") == "sk.pdf"
+
+    def test_ekstensi_asing_dibiarkan(self):
+        """Menebak lebih berbahaya daripada tidak menyentuh: berkas `.dwg`
+        atau `.zip` bukan urusan gerbang dan namanya tak boleh dirombak."""
+        assert gm.samakan_ekstensi("denah.dwg", "image/jpeg") == "denah.dwg"
+
+    def test_tanpa_ekstensi_dibiarkan(self):
+        assert gm.samakan_ekstensi("berkas", "image/jpeg") == "berkas"
+
+    def test_tipe_kosong_dibiarkan(self):
+        assert gm.samakan_ekstensi("a.png", "") == "a.png"
+
+    def test_titik_di_nama_folder_tak_mengecoh(self):
+        assert gm.samakan_ekstensi("v1.2/foto.png", "image/jpeg") == "v1.2/foto.jpg"
+
+
+class TestSapuanModulTerpasang:
+    """Empat belas modul yang dulu menulis GridFS langsung kini lewat gerbang.
+    Uji ini membaca sumbernya, bukan mem-patch: mem-patch akan lulus walau
+    pemanggilnya dihapus."""
+
+    @staticmethod
+    def _src(rel):
+        with open(os.path.join(BACKEND, rel), encoding="utf-8") as f:
+            return f.read()
+
+    @pytest.mark.parametrize("rel", [
+        "routes/pemanfaatan.py", "routes/pemindahtanganan.py",
+        "routes/pemusnahan.py", "routes/pengadaan.py", "routes/pengamanan.py",
+        "routes/penggunaan.py", "routes/penghapusan.py", "routes/wasdal.py",
+        "routes/pengesahan.py", "routes/persediaan.py", "routes/bast.py",
+        "routes/assets.py", "routes/spasial.py", "routes/pegawai.py",
+        "routes/activities.py",
+    ])
+    def test_modul_memanggil_gerbang(self, rel):
+        assert "tulis_media(" in self._src(rel), f"{rel} tak memanggil gerbang"
+
+    def test_entri_lampiran_pakai_tipe_dari_gerbang(self):
+        """Bila entri tetap memakai `_LAMPIRAN_MEDIA[ext]`, GridFS jujur tapi
+        dokumen Mongo berbohong — dan yang dibaca layar adalah yang Mongo."""
+        for rel in ("routes/pemanfaatan.py", "routes/wasdal.py",
+                    "routes/pengadaan.py"):
+            src = self._src(rel)
+            blok = src.split('entri = {"file_id"', 1)[1][:200]
+            assert '_meta["content_type"]' in blok, rel
+            assert '_meta["filename"]' in blok, rel
+
+    def test_overlay_denah_pakai_kelas_alfa(self):
+        """Citra ini dihamparkan DI ATAS peta. Diratakan ke JPEG, alfanya jadi
+        putih dan peta di bawahnya tertutup rapat."""
+        src = self._src("routes/spasial.py")
+        blok = src.split("FORMAT_OVERLAY[fmt]", 1)[1][:400]
+        assert 'kelas="alfa"' in blok
+
+    def test_activities_tak_punya_rantai_sendiri_lagi(self):
+        """Rantai tangan sendiri di activities memanggil iLovePDF LANGSUNG —
+        tanpa penjaga tanda tangan digital, karena `pdf_valid` hanya memeriksa
+        ukuran dan magic byte. Sekaligus kompresi ganda sejak gerbang ada."""
+        src = self._src("routes/activities.py")
+        assert "compress_pdf_ilovepdf(pdf_bytes" not in src
+        assert "kompres_pdf_lokal, pdf_bytes" not in src
+
+    def test_tak_ada_lagi_metadata_size_dari_bita_masukan(self):
+        """`len(pdf_bytes)` sebagai `size` berbohong sejak isinya dikompres."""
+        src = self._src("routes/pengesahan.py")
+        assert '"size": len(pdf_bytes)' not in src

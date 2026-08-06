@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field
 from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
-from db import db, fs_bucket
+from db import db
 from shared_utils import kunci_idem, log_audit
 from meili_utils import jadwalkan_sync, jadwalkan_hapus, cari_id_persediaan
 from pencarian_utils import klausa_teks, pecah_kata
@@ -1599,14 +1599,13 @@ async def kirim_ttd_lpb(lpb_id: str, payload: KirimTtdLpbIn,
                      for s in daftar]),
         user=user)
 
-    from bson import ObjectId
-    file_id = ObjectId()
-    grid_in = fs_bucket.open_upload_stream_with_id(
-        file_id, filename=f"LPB_{lpb_id[:8]}.pdf",
-        metadata={"content_type": "application/pdf", "size": len(data),
-                  "kind": "lpb", "lpb_id": lpb_id})
-    await grid_in.write(data)
-    await grid_in.close()
+    # GERBANG KOMPRESI. Dokumen ini ditulis SEBELUM QR dan spesimen tanda
+    # tangan dibubuhkan (pembubuhan ada di routes/ttd.py, yang memang
+    # pengecualian tetap) — jadi yang dikompres masih naskah vektor polos.
+    from gerbang_media import tulis_media
+    file_id, _meta = await tulis_media(
+        data, nama=f"LPB_{lpb_id[:8]}.pdf", content_type="application/pdf",
+        metadata={"kind": "lpb", "lpb_id": lpb_id})
     await db.signature_requests.update_one(
         {"id": hasil["id"]},
         {"$set": {"dok_file_id": str(file_id),

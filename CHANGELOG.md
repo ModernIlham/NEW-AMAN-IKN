@@ -67,6 +67,65 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#783] Sapuan gerbang — utang 14 modul lunas, plafonnya kini nol — 2026-08-06
+
+Lanjutan langsung `[#782]`. PR itu memasang gerbangnya dan mencatat **14 modul**
+yang masih menulis GridFS langsung sebagai utang terukur. PR ini melunasinya:
+**tidak ada lagi** penulis blob di luar gerbang selain lima pengecualian tetap
+yang masing-masing punya alasan tertulis.
+
+Plafon uji anti-bypass turun dari 14 ke **0** — dan nol tak bisa turun lagi.
+Sejak titik ini, satu modul yang menulis GridFS langsung membuat CI merah tanpa
+jalan keluar selain lewat gerbang.
+
+**Yang disapu:** delapan modul lampiran siklus (Pemanfaatan, Pemindahtanganan,
+Pemusnahan, Pengadaan, Pengamanan, Penggunaan, Penghapusan, Wasdal), Pengesahan,
+Persediaan (LPB), BAST (3 titik), dokumen BAST aset, overlay denah Spasial,
+foto Master Pegawai (2 titik), dan dokumen kegiatan.
+
+**Cacat yang ditemukan saat menyapu — bukan sekadar penggantian mekanis:**
+
+1. **Nama berkas akan berbohong.** Tinify, Compresto, dan Uploadcare
+   mengembalikan **JPEG walau masukannya PNG**. Modul lampiran menyimpan
+   `filename` dan `content_type` SENDIRI di dokumen Mongo, di luar metadata
+   GridFS — jadi pemasangan mentah akan membuat pengguna mengunduh berkas
+   bernama `.png` yang isinya JPEG, dan sebagian penampil menolak membukanya.
+   Helper `samakan_ekstensi()` membetulkan nama **sebelum** ditulis, dan entri
+   Mongo kini mengambil kedua nilai dari metadata yang dikembalikan gerbang.
+
+2. **Overlay denah nyaris jadi kotak putih.** Citra ini dihamparkan di ATAS
+   peta; transparansinya yang menentukan apakah peta di bawahnya masih terlihat.
+   Tiga dari empat mata rantai gambar memaksa JPEG. Jalurnya dikunci
+   `kelas="alfa"` — Pillow lossless saja.
+
+3. **Dokumen kegiatan mengirim PDF ber-TTE ke pihak ketiga.**
+   `routes/activities.py` punya salinan rantai sendiri yang memanggil iLovePDF
+   **langsung**, tanpa penjaga tanda tangan digital — karena `pdf_valid()` di
+   atasnya hanya memeriksa ukuran dan magic byte. Cacat ini **aktif hari ini**,
+   dan persis jenis kerusakan yang gerbang dibangun untuk mencegah. Sejak
+   `store_document_to_gridfs` sendiri lewat gerbang, salinan itu juga berarti
+   **kompresi ganda**: satu berkas membakar kuota iLovePDF dua kali. Salinannya
+   dibuang; jalur itu kini memakai gerbang seperti yang lain.
+
+4. **Ukuran yang dicatat berbohong.** `pengesahan.py` menyimpan
+   `"size": len(pdf_bytes)` — panjang bita MASUKAN. Sejak isinya dikompres,
+   daftar dokumen menyebut angka yang tak cocok dengan berkas yang diunduh.
+   Kini diambil dari metadata gerbang.
+
+> Kekhawatiran yang saya periksa dan **gugur**: PDF di jalur e-sign (BAST dan
+> LPB) dikompres sebelum ditandatangani, jadi apakah spesimen dan QR-nya rusak?
+> Tidak — keduanya ditulis **sebelum** QR dan spesimen dibubuhkan; pembubuhannya
+> ada di `routes/ttd.py`, yang memang pengecualian tetap. Yang dikompres masih
+> naskah vektor polos.
+
+**Verifikasi.** 62 uji pada berkas gerbang (naik dari 36); **2.142 uji backend
+hijau**. Empat mutasi disuntikkan — overlay dikembalikan ke `kelas="auto"`,
+entri lampiran kembali memakai `_LAMPIRAN_MEDIA[ext]`, `samakan_ekstensi`
+dijadikan no-op, dan `activities` memanggil iLovePDF langsung lagi —
+**keempatnya tertangkap**.
+
+---
+
 ## [#782] Gerbang media — satu aturan kompresi untuk satu aplikasi utuh — 2026-08-06
 
 Laporan lapangan: **foto dari kamera yang disimpan dari halaman EDIT aset tidak

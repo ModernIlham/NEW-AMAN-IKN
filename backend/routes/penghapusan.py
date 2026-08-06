@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
-from db import db, fs_bucket
+from db import db
 from shared_utils import kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker, delete_document_from_gridfs, get_document_from_gridfs, log_audit
 from penghapusan_utils import (
     JALUR_KANDIDAT, STATUS_USULAN, build_asset_penghapusan_projection,
@@ -313,17 +313,21 @@ async def unggah_lampiran_usulan(usulan_id: str, file: UploadFile = File(...),
     if ext == ".pdf" and not file_bytes[:5].startswith(b"%PDF"):
         raise HTTPException(status_code=400, detail="File bukan PDF yang valid")
 
-    from bson import ObjectId
-    file_id = ObjectId()
-    grid_in = fs_bucket.open_upload_stream_with_id(
-        file_id, filename=filename,
-        metadata={"content_type": _LAMPIRAN_MEDIA[ext], "size": len(file_bytes),
-                  "kind": "penghapusan", "usulan_id": usulan_id})
-    await grid_in.write(file_bytes)
-    await grid_in.close()
+    # GERBANG KOMPRESI — satu aturan untuk satu aplikasi utuh. Lampiran modul
+    # siklus dulu ditulis apa adanya, jadi PDF hasil pindai dan foto bukti
+    # masuk GridFS tanpa pernah menyentuh rantai berjenjang.
+    #
+    # `content_type` DAN `filename` entri diambil dari metadata yang
+    # DIKEMBALIKAN gerbang, bukan dari ekstensi: rantai gambar mengembalikan
+    # JPEG walau masukannya PNG, dan entri yang tetap menyebut `.png` membuat
+    # pengguna mengunduh berkas yang isinya tak sesuai namanya.
+    from gerbang_media import tulis_media
+    file_id, _meta = await tulis_media(
+        file_bytes, nama=filename, content_type=_LAMPIRAN_MEDIA[ext],
+        metadata={"kind": "penghapusan", "usulan_id": usulan_id})
 
-    entri = {"file_id": str(file_id), "filename": filename,
-             "content_type": _LAMPIRAN_MEDIA[ext],
+    entri = {"file_id": file_id, "filename": _meta["filename"],
+             "content_type": _meta["content_type"],
              "oleh": user.get("username"),
              "tanggal": datetime.now(timezone.utc).isoformat()}
     res = await db.usulan_penghapusan.find_one_and_update(

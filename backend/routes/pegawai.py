@@ -933,10 +933,14 @@ async def upload_foto_pegawai(pegawai_id: str, file: UploadFile = File(...),
     if not cek_magic_gambar(data, _ext_ct.get(file.content_type or "", "")):
         raise HTTPException(status_code=400, detail="Isi berkas tidak cocok tipe gambar")
     from bson import ObjectId
-    fid = await fs_bucket.upload_from_stream(
-        f"pegawai_{pegawai_id}.jpg", data,
-        metadata={"jenis": "foto_pegawai", "pegawai_id": pegawai_id,
-                  "content_type": file.content_type})
+    # GERBANG KOMPRESI — foto pegawai ikut rantai berjenjang yang sama.
+    # Nama berkas dikeraskan `.jpg` sementara `content_type` diisi apa pun yang
+    # dikirim peramban (bisa `image/png`) — sudah tak konsisten sebelum
+    # gerbang. Gerbang menentukan tipe dari BITA HASIL, jadi keduanya cocok.
+    from gerbang_media import tulis_media
+    fid, _meta = await tulis_media(
+        data, nama=f"pegawai_{pegawai_id}.jpg", content_type=file.content_type,
+        metadata={"jenis": "foto_pegawai", "pegawai_id": pegawai_id})
     now = datetime.now(timezone.utc).isoformat()
     perubahan = {"foto_file_id": str(fid), "updated_at": now}
 
@@ -946,10 +950,12 @@ async def upload_foto_pegawai(pegawai_id: str, file: UploadFile = File(...),
         if len(asli_raw) > _FOTO_MAX:
             raise HTTPException(status_code=400, detail="Ukuran foto asli maksimal 5MB")
         asli = _kecilkan_foto_asli(asli_raw)
-        aid = await fs_bucket.upload_from_stream(
-            f"pegawai_{pegawai_id}_asli.jpg", asli,
-            metadata={"jenis": "foto_pegawai_asli", "pegawai_id": pegawai_id,
-                      "content_type": "image/jpeg"})
+        # Foto ASLI (sumber krop) juga lewat gerbang: ia yang paling besar di
+        # antara keduanya, jadi justru di sinilah penghematan terbesar.
+        aid, _ = await tulis_media(
+            asli, nama=f"pegawai_{pegawai_id}_asli.jpg",
+            content_type="image/jpeg",
+            metadata={"jenis": "foto_pegawai_asli", "pegawai_id": pegawai_id})
         lama_asli = peg.get("foto_asli_file_id")
         if lama_asli:
             try:

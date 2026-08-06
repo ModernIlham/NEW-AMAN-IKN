@@ -1749,17 +1749,14 @@ async def upload_asset_bast(
             raise HTTPException(status_code=400, detail="Isi berkas tidak cocok tipe gambar")
 
     # Simpan ke GridFS (pola sama dengan pengesahan-dokumen)
-    from bson import ObjectId
-    file_id = ObjectId()
+    # GERBANG KOMPRESI — dokumen BAST aset (PDF hasil pindai atau foto).
+    from gerbang_media import tulis_media
+    file_id = None
     try:
-        grid_in = fs_bucket.open_upload_stream_with_id(
-            file_id,
-            filename=filename,
-            metadata={"content_type": _BAST_MEDIA_TYPES[ext], "size": len(file_bytes),
-                      "kind": "bast", "asset_id": asset_id},
-        )
-        await grid_in.write(file_bytes)
-        await grid_in.close()
+        file_id, _meta = await tulis_media(
+            file_bytes, nama=filename, content_type=_BAST_MEDIA_TYPES[ext],
+            metadata={"kind": "bast", "asset_id": asset_id})
+        filename = _meta["filename"]
     except Exception as e:
         logger.error(f"GridFS store BAST gagal: {e}")
         raise HTTPException(status_code=500, detail="Gagal menyimpan dokumen BAST")

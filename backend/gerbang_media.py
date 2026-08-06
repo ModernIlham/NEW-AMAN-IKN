@@ -53,6 +53,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "AMBANG_JARINGAN", "VERSI_GERBANG", "HasilMedia",
     "jenis_media", "punya_alfa", "sudah_diolah", "olah_media", "tulis_media",
+    "samakan_ekstensi",
 ]
 
 # Penanda versi pada metadata. Naikkan bila aturan berubah dan blob lama perlu
@@ -250,6 +251,38 @@ def _sniff_gambar(data: bytes) -> str:
     return "image/jpeg"
 
 
+_EKSTENSI_TIPE = {
+    "image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif",
+    "image/webp": ".webp", "application/pdf": ".pdf",
+}
+
+
+def samakan_ekstensi(nama: str, content_type: str) -> str:
+    """Betulkan ekstensi nama berkas agar cocok dengan isi yang SEBENARNYA.
+
+    Tinify, Compresto, dan Uploadcare mengembalikan JPEG walau masukannya PNG.
+    Modul-modul lampiran menyimpan `filename` dan `content_type` SENDIRI di
+    dokumen Mongo — di luar metadata GridFS — sehingga tanpa penyamaan ini
+    pengguna mengunduh berkas bernama `.png` yang isinya JPEG, dan sebagian
+    aplikasi penampil menolak membukanya.
+
+    Nama tanpa ekstensi dikenal, atau tipe di luar daftar, dibiarkan apa adanya:
+    menebak lebih berbahaya daripada tidak menyentuh.
+    """
+    ext = _EKSTENSI_TIPE.get(content_type or "")
+    if not ext or not nama:
+        return nama
+    pangkal, titik, lama = nama.rpartition(".")
+    if not titik:
+        return nama
+    lama = "." + lama.lower()
+    if lama == ext or (lama in (".jpeg", ".jpg") and ext == ".jpg"):
+        return nama
+    if lama not in _EKSTENSI_TIPE.values() and lama != ".jpeg":
+        return nama     # ekstensi asing (.dwg, .zip) — bukan urusan gerbang
+    return pangkal + ext
+
+
 async def olah_media(data: bytes, *, kelas: str = "auto",
                      nama: str = "") -> HasilMedia:
     """Olah bita menurut aturan tunggal. TIDAK menyentuh basis data.
@@ -313,9 +346,15 @@ async def tulis_media(data: bytes, *, nama: str, content_type: str = "",
     if hasil.content_type == "application/octet-stream" and content_type:
         meta["content_type"] = content_type
 
+    # Nama berkas disamakan dengan isi SEBELUM ditulis, bukan sesudah: rantai
+    # gambar mengembalikan JPEG walau masukannya PNG, dan nama yang tertinggal
+    # `.png` akan ikut terbawa ke unduhan pengguna.
+    nama_akhir = samakan_ekstensi(nama, meta.get("content_type") or "") or nama
+    meta["filename"] = nama_akhir or f"media_{uuid.uuid4()}"
+
     file_id = ObjectId()
     grid_in = fs_bucket.open_upload_stream_with_id(
-        file_id, filename=nama or f"media_{uuid.uuid4()}", metadata=meta)
+        file_id, filename=meta["filename"], metadata=meta)
     await grid_in.write(hasil.bita)
     await grid_in.close()
     return str(file_id), meta
