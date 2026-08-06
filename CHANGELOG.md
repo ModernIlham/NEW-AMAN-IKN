@@ -67,6 +67,28 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#780] Panel kuota menyebut SEBAB, bukan cuma angka — 2026-08-06
+
+Lanjutan langsung dari `[#779]`. Server sudah menghitung `alasan` per layanan
+sejak `[#251]` — kunci ditolak, host tak terjangkau, kontrak API berubah, kuota
+habis — tetapi panel rincian **tak pernah menampilkannya**. Akibatnya
+satu-satunya cara mengetahui *mengapa* sebuah layanan dilewati adalah membuka
+log server lewat SSH, yang justru tak bisa dilakukan operator satker.
+
+Kini tiap baris membawa kalimat sebabnya (merah bila statusnya `gagal`,
+kelabu bila sekadar keterangan), lengkap dengan kode HTTP bila ada:
+
+- *"Kunci API belum dipasang di .env server"* — untuk layanan yang belum disetel.
+- *"Kunci terpasang, tetapi layanan belum pernah dipanggil sejak server terakhir
+  dijalankan — unggah satu foto untuk mengujinya"*.
+- *"Kunci API ditolak (tidak sah) (HTTP 401)"* — saat kunci salah.
+
+Praktisnya: setelah memasang kunci baru di `.env` server, kebenarannya bisa
+dipastikan **dari layar aplikasi** — unggah satu foto, buka panel kuota, baca
+barisnya. Tidak perlu SSH, dan tidak perlu menebak.
+
+---
+
 ## [#779] Indikator kompresi menunjuk layanan yang benar-benar melayani — 2026-08-06
 
 Laporan pemilik: angka kuota di toolbar menunjukkan **0/500** padahal panel
