@@ -12,7 +12,7 @@
  * yang lolos saringan, dan `|| quotas[0]` menjatuhkannya ke Tinify yang
  * kuotanya nol.
  */
-import { URUTAN, entriAktif, layakPakai, ringkasAktif, sisaKuota } from "./kompresiAktif";
+import { URUTAN, URUTAN_PDF, entriAktif, layakPakai, ringkasAktif, sebabTampil, sisaKuota } from "./kompresiAktif";
 
 const entri = (service, x = {}) => ({
   service, name: service, terpasang: true, limit: 500, used: 0, remaining: 500, ...x,
@@ -162,5 +162,70 @@ describe("tepian", () => {
     // Gabungan: (500+26+0)/(500+500+1000) ≈ 26% → hijau, padahal tangki yang
     // dipakai (Compresto) baru 5% terpakai. Angka gabungan tak berarti apa-apa.
     expect(Math.round(ringkasAktif(LAPANGAN).persen)).toBe(5);
+  });
+});
+
+describe("rantai PDF diperlakukan sama", () => {
+  const pdf = (habis = false, terpasang = true) => [
+    { service: "ilovepdf", name: "iLovePDF", terpasang, limit: 250,
+      used: habis ? 250 : 0, remaining: habis ? 0 : 250 },
+    { service: "pypdf", name: "Lokal (pypdf)", terpasang: true,
+      limit: -1, used: 0, remaining: -1 },
+  ];
+
+  test("URUTAN_PDF sama dengan rantai server", () => {
+    expect(URUTAN_PDF).toEqual(["ilovepdf", "pypdf"]);
+  });
+
+  test("pengolah lokal PDF tak terbatas → ∞, bukan 0/0", () => {
+    // Cacat yang dilaporkan dari layar: baris pengolah lokal tampil "0/0",
+    // terbaca seolah jaring terakhirnya habis — padahal justru itulah yang
+    // TAK PERNAH habis.
+    const r = ringkasAktif(pdf(true), "pypdf");
+    expect(r.takTerbatas).toBe(true);
+    expect(r.teks).toBe("∞");
+  });
+
+  test("lokal PDF selalu layak walau iLovePDF habis", () => {
+    expect(layakPakai(pdf(true)[1])).toBe(true);
+  });
+
+  test("iLovePDF tanpa kunci dilewati", () => {
+    expect(layakPakai(pdf(false, false)[0])).toBe(false);
+  });
+});
+
+describe("sebab hanya tampil bila bisa ditindaklanjuti", () => {
+  test("layanan GAGAL menampilkan sebabnya", () => {
+    expect(sebabTampil({ status: "gagal", alasan: "Kunci API ditolak (tidak sah)" }))
+      .toBe("Kunci API ditolak (tidak sah)");
+  });
+
+  test("kunci belum dipasang menampilkan sebabnya", () => {
+    expect(sebabTampil({ terpasang: false, alasan: "Kunci API belum dipasang di .env server" }))
+      .toBe("Kunci API belum dipasang di .env server");
+  });
+
+  test("BELUM DICOBA diam — inilah yang membuat panel penuh paragraf", () => {
+    // Keluhan pemilik: "perbaiki tampilan pop up seperti design dulu yang
+    // simple". Dua paragraf tiga baris ini muncul untuk keadaan yang bukan
+    // masalah dan hilang sendiri setelah satu unggahan.
+    expect(sebabTampil({
+      status: "belum_dicoba", terpasang: true,
+      alasan: "Kunci terpasang, tetapi layanan belum pernah dipanggil sejak server terakhir dijalankan — unggah satu foto untuk mengujinya",
+    })).toBe("");
+  });
+
+  test("layanan sehat diam", () => {
+    expect(sebabTampil({ status: "berhasil", terpasang: true, alasan: "" })).toBe("");
+  });
+
+  test("entri tanpa alasan diam walau gagal", () => {
+    expect(sebabTampil({ status: "gagal", terpasang: true })).toBe("");
+  });
+
+  test("masukan hampa tidak meledak", () => {
+    expect(sebabTampil(null)).toBe("");
+    expect(sebabTampil(undefined)).toBe("");
   });
 });

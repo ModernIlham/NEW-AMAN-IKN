@@ -25,11 +25,16 @@ Modul ini menjawab pertanyaan KEDUA, dengan aturan yang diturunkan dari rantai
 sungguhan sehingga keduanya tak bisa berpisah diam-diam.
 """
 
-__all__ = ["URUTAN", "layak_pakai", "layanan_aktif", "sisa_layanan"]
+__all__ = ["URUTAN", "URUTAN_PDF", "layak_pakai", "layanan_aktif", "sisa_layanan"]
 
-# Urutan rantai. SATU sumber kebenaran — `routes/media.auto_compress_image`
+# Urutan rantai GAMBAR. SATU sumber kebenaran — `routes/media.auto_compress_image`
 # mengikuti daftar yang sama, dan uji anti-drift menagih keduanya tetap sejalan.
 URUTAN = ("tinify", "compresto", "uploadcare", "pillow")
+
+# Urutan rantai PDF. Aturannya sama persis: layanan berkuota dulu, penutupnya
+# pengolah LOKAL yang tak berkuota — sehingga tak pernah ada keadaan "tak bisa
+# mengompres sama sekali", baik untuk gambar maupun PDF.
+URUTAN_PDF = ("ilovepdf", "pypdf")
 
 
 def _int(nilai, bawaan=None):
@@ -39,7 +44,7 @@ def _int(nilai, bawaan=None):
         return bawaan
 
 
-def _prioritas(nama: str) -> int:
+def _prioritas(nama: str, urutan=URUTAN) -> int:
     """Posisi layanan dalam rantai; yang tak dikenal ditaruh PALING BELAKANG.
 
     Dibuang begitu saja akan menyembunyikan layanan baru yang lupa didaftarkan
@@ -47,9 +52,9 @@ def _prioritas(nama: str) -> int:
     disepakati urutannya.
     """
     try:
-        return URUTAN.index(nama)
+        return urutan.index(nama)
     except ValueError:
-        return len(URUTAN)
+        return len(urutan)
 
 
 def sisa_layanan(entri) -> int:
@@ -84,15 +89,19 @@ def layak_pakai(entri) -> bool:
     return sisa_layanan(e) != 0
 
 
-def layanan_aktif(kuota) -> str:
+def layanan_aktif(kuota, urutan=URUTAN) -> str:
     """Nama layanan yang melayani permintaan berikutnya; "" bila tak ada satu pun.
 
-    Urutan daftar masukan TIDAK dipercaya — prioritasnya dihitung dari `URUTAN`,
+    Urutan daftar masukan TIDAK dipercaya — prioritasnya dihitung dari `urutan`,
     sehingga endpoint yang kelak menyusun ulang daftarnya tak diam-diam
     mengubah rantai.
+
+    `urutan` dapat dioper `URUTAN_PDF` untuk rantai PDF; aturan kelayakannya
+    identik, karena tuntutannya memang satu: apa pun jenis berkasnya, gilirannya
+    ditentukan oleh kunci terpasang + kuota tersisa.
     """
     daftar = [e for e in (kuota or []) if isinstance(e, dict)]
-    daftar.sort(key=lambda e: _prioritas(str(e.get("service") or "")))
+    daftar.sort(key=lambda e: _prioritas(str(e.get("service") or ""), urutan))
     for e in daftar:
         if layak_pakai(e):
             return str(e.get("service") or "")

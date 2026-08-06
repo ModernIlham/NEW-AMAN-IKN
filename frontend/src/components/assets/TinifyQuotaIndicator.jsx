@@ -2,7 +2,7 @@ import React, { useState, useEffect, memo } from "react";
 import { Image, FileDown } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import axios from "axios";
-import { ringkasAktif } from "../../lib/kompresiAktif";
+import { ringkasAktif, sebabTampil } from "../../lib/kompresiAktif";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -20,6 +20,7 @@ function useKuota() {
   const [pdfQuotas, setPdfQuotas] = useState([]);
   // Layanan yang AKAN melayani kompresi berikutnya, dihitung server.
   const [aktifGambar, setAktifGambar] = useState("");
+  const [aktifPdf, setAktifPdf] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -33,7 +34,10 @@ function useKuota() {
           setImageQuotas(imgResp.value.data.quotas || []);
           setAktifGambar(imgResp.value.data.aktif || "");
         }
-        if (pdfResp.status === "fulfilled") setPdfQuotas(pdfResp.value.data.quotas || []);
+        if (pdfResp.status === "fulfilled") {
+          setPdfQuotas(pdfResp.value.data.quotas || []);
+          setAktifPdf(pdfResp.value.data.aktif || "");
+        }
       } catch (e) {
         console.warn("Quota fetch error:", e);
       } finally {
@@ -45,12 +49,66 @@ function useKuota() {
     return () => clearInterval(interval);
   }, []);
 
-  return { imageQuotas, pdfQuotas, aktifGambar, loading };
+  return { imageQuotas, pdfQuotas, aktifGambar, aktifPdf, loading };
+}
+
+/**
+ * Satu baris layanan — dipakai rantai GAMBAR maupun PDF supaya keduanya tampil
+ * dengan aturan yang sama persis (itu memang tuntutannya: satu aturan untuk
+ * satu aplikasi utuh).
+ *
+ * Sebab (`alasan`) HANYA ditampilkan bila BISA DITINDAKLANJUTI — layanan gagal
+ * atau kuncinya belum dipasang. Status "belum pernah dipanggil sejak server
+ * dijalankan" sengaja DIAM: ia bukan masalah, ia hilang sendiri setelah satu
+ * unggahan, dan menampilkannya membuat panel penuh paragraf tiga baris yang
+ * tak menuntut tindakan apa pun.
+ */
+function BarisLayanan({ q, aktif }) {
+  const pct = q.limit > 0 ? (q.used / q.limit) * 100 : 0;
+  const colors = getStatusColors(pct);
+  const iniAktif = q.service === aktif;
+  const belumDisetel = q.terpasang === false;
+  const takTerbatas = Number(q.limit) < 0;
+  const sebab = sebabTampil(q);
+
+  return (
+    <div data-testid={`kuota-baris-${q.service}`}>
+      <div className={`flex items-center gap-2 ${belumDisetel ? "opacity-45" : ""}`}>
+        <span className="text-[11px] text-slate-400 w-24 truncate" title={q.name}>{q.name}</span>
+        <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+          <div className={`h-full ${colors.bar}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+        </div>
+        {iniAktif && (
+          <span className="text-[9px] px-1 py-px rounded bg-emerald-500/20 text-emerald-300 whitespace-nowrap"
+                data-testid="kuota-penanda-aktif">dipakai</span>
+        )}
+        <span className="text-[11px] font-mono w-16 text-right">
+          {belumDisetel ? (
+            <span className="text-slate-500">belum</span>
+          ) : takTerbatas ? (
+            <span className="text-emerald-400" title="Tak terbatas — lokal, tanpa kuota">∞</span>
+          ) : (
+            <span className={q.remaining < 50 ? "text-amber-400" : ""}>{q.remaining}/{q.limit}</span>
+          )}
+        </span>
+      </div>
+      {sebab && (
+        // Satu baris, dipangkas. Kalimat penuhnya ada di `title` — panel tetap
+        // ringkas tetapi sebabnya tak pernah hilang.
+        <p className={`text-[9px] leading-snug mt-0.5 ml-[104px] truncate ${
+              q.status === "gagal" ? "text-rose-300" : "text-slate-500"}`}
+           title={sebab}
+           data-testid={`kuota-alasan-${q.service}`}>
+          {sebab}{q.kode_http ? ` (HTTP ${q.kode_http})` : ""}
+        </p>
+      )}
+    </div>
+  );
 }
 
 // Panel rincian kuota — dipakai popover desktop DAN HP supaya informasinya
 // identik dari pintu mana pun dibuka.
-function PanelKuota({ imageQuotas, pdfQuotas, aktifGambar }) {
+function PanelKuota({ imageQuotas, pdfQuotas, aktifGambar, aktifPdf }) {
   return (
     <div className="p-3 space-y-3">
       <div>
@@ -58,54 +116,15 @@ function PanelKuota({ imageQuotas, pdfQuotas, aktifGambar }) {
           <Image className="w-4 h-4 text-blue-400" />
           <span className="font-medium text-sm">Kompresi Gambar</span>
         </div>
+        {/* SELURUH mata rantai ditampilkan, termasuk yang kuncinya belum
+            dipasang. Dulu daftar ini disaring `available || used > 0`,
+            sehingga Uploadcare lenyap dari layar padahal namanya disebut di
+            baris "Urutan" tepat di bawah — operator melihat rantai yang tak
+            lengkap dan tak tahu MENGAPA satu mata rantai dilewati. */}
         <div className="space-y-1.5">
-          {/* SELURUH mata rantai ditampilkan, termasuk yang kuncinya belum
-              dipasang. Dulu daftar ini disaring `available || used > 0`,
-              sehingga Uploadcare lenyap dari layar padahal namanya disebut
-              di baris "Urutan" tepat di bawah — operator melihat rantai yang
-              tak lengkap dan tak tahu MENGAPA satu mata rantai dilewati. */}
-          {imageQuotas.map(q => {
-            const pct = q.limit > 0 ? (q.used / q.limit) * 100 : 0;
-            const colors = getStatusColors(pct);
-            const iniAktif = q.service === aktifGambar;
-            const belumDisetel = q.terpasang === false;
-            return (
-              <div key={q.service} data-testid={`kuota-baris-${q.service}`}>
-                <div className={`flex items-center gap-2 ${belumDisetel ? "opacity-45" : ""}`}>
-                  <span className="text-[11px] text-slate-400 w-20 truncate" title={q.name}>{q.name}</span>
-                  <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                    <div className={`h-full ${colors.bar}`} style={{ width: `${Math.min(pct, 100)}%` }} />
-                  </div>
-                  {iniAktif && (
-                    <span className="text-[9px] px-1 py-px rounded bg-emerald-500/20 text-emerald-300 whitespace-nowrap"
-                          data-testid="kuota-penanda-aktif">dipakai</span>
-                  )}
-                  <span className="text-[11px] font-mono w-16 text-right">
-                    {belumDisetel ? (
-                      <span className="text-slate-500">belum</span>
-                    ) : q.limit < 0 ? (
-                      <span className="text-emerald-400">∞</span>
-                    ) : (
-                      <span className={q.remaining < 50 ? 'text-amber-400' : ''}>{q.remaining}/{q.limit}</span>
-                    )}
-                  </span>
-                </div>
-                {/* SEBAB, bukan cuma angka. Server sudah menghitung `alasan`
-                    sejak PR #243 (kunci ditolak, host tak terjangkau, kontrak
-                    berubah, kuota habis) tetapi layar tak pernah menampilkannya
-                    — sehingga satu-satunya cara mengetahui kenapa sebuah
-                    layanan dilewati adalah membuka log server lewat SSH, yang
-                    justru tak bisa dilakukan operator satker. */}
-                {q.alasan && (
-                  <p className={`text-[9px] leading-snug mt-0.5 ml-[88px] ${
-                        q.status === "gagal" ? "text-rose-300" : "text-slate-500"}`}
-                     data-testid={`kuota-alasan-${q.service}`}>
-                    {q.alasan}{q.kode_http ? ` (HTTP ${q.kode_http})` : ""}
-                  </p>
-                )}
-              </div>
-            );
-          })}
+          {imageQuotas.map((q) => (
+            <BarisLayanan key={q.service} q={q} aktif={aktifGambar} />
+          ))}
         </div>
       </div>
 
@@ -115,22 +134,15 @@ function PanelKuota({ imageQuotas, pdfQuotas, aktifGambar }) {
             <FileDown className="w-4 h-4 text-purple-400" />
             <span className="font-medium text-sm">Kompresi PDF</span>
           </div>
+          {/* Rantai PDF diperlakukan SAMA PERSIS dengan rantai gambar —
+              termasuk menampilkan seluruh mata rantainya dan menandai yang
+              sedang dipakai. Dulu bagian ini disaring `available || used > 0`,
+              sehingga iLovePDF lenyap saat belum pernah dipanggil dan yang
+              tersisa hanya pengolah lokal. */}
           <div className="space-y-1.5">
-            {pdfQuotas.filter(q => q.available || q.used > 0).map(q => {
-              const pct = q.limit > 0 ? (q.used / q.limit) * 100 : 0;
-              const colors = getStatusColors(pct);
-              return (
-                <div key={q.service} className="flex items-center gap-2">
-                  <span className="text-[11px] text-slate-400 w-20 truncate">{q.name}</span>
-                  <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                    <div className={`h-full ${colors.bar}`} style={{ width: `${Math.min(pct, 100)}%` }} />
-                  </div>
-                  <span className="text-[11px] font-mono w-16 text-right">
-                    <span className={q.remaining < 10 ? 'text-amber-400' : ''}>{q.remaining}/{q.limit}</span>
-                  </span>
-                </div>
-              );
-            })}
+            {pdfQuotas.map((q) => (
+              <BarisLayanan key={q.service} q={q} aktif={aktifPdf} />
+            ))}
           </div>
         </div>
       )}
@@ -161,7 +173,7 @@ function PanelKuota({ imageQuotas, pdfQuotas, aktifGambar }) {
 // mengurusnya (itu memang katup pengaman yang sudah dirancang di sana).
 // ============================================================================
 const TinifyQuotaIndicator = memo(({ className = "" }) => {
-  const { imageQuotas, pdfQuotas, aktifGambar, loading } = useKuota();
+  const { imageQuotas, pdfQuotas, aktifGambar, aktifPdf, loading } = useKuota();
   if (loading) return null;
 
   // Angka yang ditampilkan HARUS milik layanan yang benar-benar melayani
@@ -202,7 +214,7 @@ const TinifyQuotaIndicator = memo(({ className = "" }) => {
         </button>
       </PopoverTrigger>
       <PopoverContent side="bottom" align="end" className="bg-slate-900 text-white border-slate-700 p-0 w-[320px] max-w-[92vw] shadow-xl">
-        <PanelKuota imageQuotas={imageQuotas} pdfQuotas={pdfQuotas} aktifGambar={aktifGambar} />
+        <PanelKuota imageQuotas={imageQuotas} pdfQuotas={pdfQuotas} aktifGambar={aktifGambar} aktifPdf={aktifPdf} />
       </PopoverContent>
     </Popover>
   );
@@ -214,7 +226,7 @@ TinifyQuotaIndicator.displayName = "TinifyQuotaIndicator";
 // pemilik: hemat ruang kiri-kanan pada baris toolbar HP yang sudah sesak.
 // Tetap tombol: ketukan membuka panel rincian yang sama dengan desktop.
 export const TinifyQuotaMobile = memo(({ className = "" }) => {
-  const { imageQuotas, pdfQuotas, aktifGambar, loading } = useKuota();
+  const { imageQuotas, pdfQuotas, aktifGambar, aktifPdf, loading } = useKuota();
   if (loading || imageQuotas.length === 0) return null;
 
   const aktif = ringkasAktif(imageQuotas, aktifGambar);
@@ -239,7 +251,7 @@ export const TinifyQuotaMobile = memo(({ className = "" }) => {
         </button>
       </PopoverTrigger>
       <PopoverContent side="bottom" align="end" className="bg-slate-900 text-white border-slate-700 p-0 w-[320px] max-w-[92vw] shadow-xl">
-        <PanelKuota imageQuotas={imageQuotas} pdfQuotas={pdfQuotas} aktifGambar={aktifGambar} />
+        <PanelKuota imageQuotas={imageQuotas} pdfQuotas={pdfQuotas} aktifGambar={aktifGambar} aktifPdf={aktifPdf} />
       </PopoverContent>
     </Popover>
   );

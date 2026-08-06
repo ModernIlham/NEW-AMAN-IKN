@@ -42,6 +42,7 @@ from fastapi.responses import StreamingResponse
 import pdf_compress_utils as pcu
 from auth_utils import require_user, require_writer
 from db import db
+from kompresi_rantai import URUTAN_PDF, layanan_aktif
 from shared_utils import limiter
 
 logger = logging.getLogger(__name__)
@@ -285,7 +286,7 @@ async def get_pdf_compression_quotas(_user: dict = Depends(require_user)):
     """
     q = await get_pdf_quota("ilovepdf")
     terkonfigurasi = bool(ILOVEPDF_PUBLIC_KEY)
-    return {"quotas": [{
+    kuota = [{
         "service": "ilovepdf",
         "name": "iLovePDF",
         "used": q.get("used", 0),
@@ -293,8 +294,13 @@ async def get_pdf_compression_quotas(_user: dict = Depends(require_user)):
         "remaining": max(0, PDF_SERVICE_LIMITS["ilovepdf"] - q.get("used", 0)),
         "sisa_penyedia": q.get("sisa_penyedia"),
         "terkonfigurasi": terkonfigurasi,
+        # `terpasang` = syarat masuk rantai, sama artinya dengan sisi gambar.
+        # Dibedakan dari `available` yang menuntut BUKTI panggilan berhasil.
+        "terpasang": terkonfigurasi,
         "terakhir_sukses": q.get("terakhir_sukses", ""),
         "galat_terakhir": q.get("galat_terakhir", ""),
+        "alasan": q.get("galat_terakhir", "") or (
+            "" if terkonfigurasi else "Kunci API belum dipasang di .env server"),
         # Hijau HANYA bila terkonfigurasi DAN pernah berhasil DAN tak sedang
         # galat. Kunci terpasang saja tidak membuktikan apa pun.
         "available": bool(terkonfigurasi and q.get("terakhir_sukses")
@@ -302,10 +308,20 @@ async def get_pdf_compression_quotas(_user: dict = Depends(require_user)):
         "month": q.get("month", _bulan_ini()),
     }, {
         "service": "pypdf",
-        "name": "Kompresi lokal (pypdf)",
-        "used": 0, "limit": 0, "remaining": 0, "sisa_penyedia": None,
-        "terkonfigurasi": True, "terakhir_sukses": "", "galat_terakhir": "",
+        "name": "Lokal (pypdf)",
+        # TAK TERBATAS, bukan nol. Dulu dilaporkan `limit: 0, remaining: 0`
+        # sehingga layar menampilkan "0/0" — terbaca seolah jaring terakhirnya
+        # habis, padahal justru inilah satu-satunya yang TAK PERNAH habis:
+        # lokal, tanpa kunci, tanpa jaringan. Konvensi -1 = tak terbatas sama
+        # dengan Pillow di rantai gambar, sehingga layar menampilkan ∞.
+        "used": 0, "limit": -1, "remaining": -1, "sisa_penyedia": None,
+        "terkonfigurasi": True, "terpasang": True,
+        "terakhir_sukses": "", "galat_terakhir": "", "alasan": "",
         # Selalu tersedia: tak butuh kunci maupun jaringan. Inilah alasan ia ada.
         "available": True,
         "month": _bulan_ini(),
-    }], "month": _bulan_ini()}
+    }]
+    # Layanan yang AKAN mengompres PDF berikutnya — dihitung dengan aturan yang
+    # SAMA PERSIS dengan rantai gambar (lihat kompresi_rantai.py).
+    return {"quotas": kuota, "month": _bulan_ini(),
+            "aktif": layanan_aktif(kuota, URUTAN_PDF), "urutan": list(URUTAN_PDF)}

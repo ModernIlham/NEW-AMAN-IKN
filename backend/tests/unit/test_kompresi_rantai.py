@@ -14,7 +14,8 @@ import re
 
 import pytest
 
-from kompresi_rantai import URUTAN, layak_pakai, layanan_aktif, sisa_layanan
+from kompresi_rantai import (URUTAN, URUTAN_PDF, layak_pakai, layanan_aktif,
+                              sisa_layanan)
 
 BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -133,6 +134,70 @@ class TestUrutanRantai:
 
     def test_pillow_selalu_paling_akhir(self):
         assert URUTAN[-1] == "pillow"
+
+
+class TestRantaiPdf:
+    """Tuntutan pemilik: aturannya SATU untuk seluruh aplikasi — foto maupun
+    PDF. Jadi rantai PDF memakai mesin kelayakan yang sama, hanya urutannya
+    yang berbeda."""
+
+    def test_urutan_pdf_persis(self):
+        assert URUTAN_PDF == ("ilovepdf", "pypdf")
+
+    def test_pengolah_lokal_paling_akhir(self):
+        """Sama seperti Pillow di rantai gambar: penutup yang tak berkuota,
+        supaya tak pernah ada keadaan 'tak bisa mengompres sama sekali'."""
+        assert URUTAN_PDF[-1] == "pypdf"
+
+    def test_ilovepdf_sehat_dipakai_lebih_dulu(self):
+        kuota = [_entri("ilovepdf", limit=250, remaining=250),
+                 _entri("pypdf", limit=-1, remaining=-1)]
+        assert layanan_aktif(kuota, URUTAN_PDF) == "ilovepdf"
+
+    def test_ilovepdf_habis_turun_ke_lokal(self):
+        kuota = [_entri("ilovepdf", limit=250, used=250, remaining=0),
+                 _entri("pypdf", limit=-1, remaining=-1)]
+        assert layanan_aktif(kuota, URUTAN_PDF) == "pypdf"
+
+    def test_ilovepdf_tanpa_kunci_turun_ke_lokal(self):
+        kuota = [_entri("ilovepdf", terpasang=False, limit=250, remaining=250),
+                 _entri("pypdf", limit=-1, remaining=-1)]
+        assert layanan_aktif(kuota, URUTAN_PDF) == "pypdf"
+
+    def test_urutan_gambar_tak_dipakai_untuk_pdf(self):
+        """Bila pemanggil lupa mengoper URUTAN_PDF, kedua layanan PDF menjadi
+        'tak dikenal' dan urutannya jatuh ke urutan daftar masukan — diam-diam
+        salah. Uji ini merekam bedanya."""
+        kuota = [_entri("pypdf", limit=-1, remaining=-1),
+                 _entri("ilovepdf", limit=250, remaining=250)]
+        assert layanan_aktif(kuota, URUTAN_PDF) == "ilovepdf"
+        assert layanan_aktif(kuota) == "pypdf"      # tanpa URUTAN_PDF → keliru
+
+
+class TestEndpointKuotaPdf:
+    """Layar menampilkan '0/0' untuk pengolah lokal — terbaca seolah jaring
+    terakhirnya habis, padahal justru itulah yang tak pernah habis."""
+
+    @staticmethod
+    def _src():
+        with open(os.path.join(BACKEND, "routes", "pdf_compress.py"), encoding="utf-8") as f:
+            return f.read()
+
+    def test_pypdf_dilaporkan_tak_terbatas(self):
+        fn = self._src().split("async def get_pdf_compression_quotas", 1)[1]
+        blok = fn.split('"service": "pypdf"', 1)[1].split("}]", 1)[0]
+        assert '"limit": -1' in blok
+        assert '"remaining": -1' in blok
+        # Konvensi -1 harus SAMA dengan Pillow di rantai gambar, kalau tidak
+        # layar butuh dua aturan untuk satu makna.
+        with open(os.path.join(BACKEND, "routes", "media.py"), encoding="utf-8") as f:
+            media = f.read()
+        assert '"limit": -1' in media.split('"service": "pillow"', 1)[1][:400]
+
+    def test_endpoint_mengirim_terpasang_dan_aktif(self):
+        fn = self._src().split("async def get_pdf_compression_quotas", 1)[1]
+        assert fn.count('"terpasang"') >= 2
+        assert "layanan_aktif(kuota, URUTAN_PDF)" in fn
 
 
 # ---------------------------------------------------------------------------
