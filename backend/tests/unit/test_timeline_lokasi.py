@@ -187,22 +187,31 @@ class TestAntiGanda:
     bagian log audit. Repo belum punya uji endpoint timeline, jadi ini membaca
     kodenya — cukup untuk menangkap kelas kesalahan itu saja."""
 
-    def test_daftar_aksi_mencakup_ketiga_penulisnya(self):
+    def test_daftar_aksi_mencakup_keempat_penulisnya(self):
         from routes.timeline import AKSI_SUDAH_DI_BAGIAN_LOKASI
         assert AKSI_SUDAH_DI_BAGIAN_LOKASI == {
-            "opname_scan", "aset_lokasi_tandai", "aset_lokasi_hapus"}
+            "opname_scan", "aset_lokasi_tandai", "aset_lokasi_hapus",
+            # Penempatan otomatis dari koordinat inventarisasi — sama seperti
+            # penempatan manual, barisnya sudah tampil utuh di bagian 12.
+            "aset_lokasi_otomatis"}
 
     def test_aksi_itu_memang_yang_ditulis_backend(self):
         """Dibaca dari pemanggilan `log_audit` di penulisnya — bila nama
-        aksinya diganti kelak, daftar penyaring jadi basi tanpa tanda."""
+        aksinya diganti kelak, daftar penyaring jadi basi tanpa tanda.
+
+        Daftar berkas yang dipindai HARUS mengikuti penulisnya. Penempatan
+        otomatis ditulis dari modul tingkat-atas `spasial_penempatan.py`,
+        bukan dari `routes/` — memindai `routes/` saja membuat penjaga ini
+        gagal mengenali penulis yang sah."""
         from routes.timeline import AKSI_SUDAH_DI_BAGIAN_LOKASI
-        dasar = os.path.join(os.path.dirname(__file__), "..", "..", "routes")
+        backend = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", ".."))
         aksi = set()
-        for nama in ("opname.py", "spasial.py"):
-            with open(os.path.join(os.path.abspath(dasar), nama),
-                      encoding="utf-8") as f:
+        for rel in ("routes/opname.py", "routes/spasial.py",
+                    "spasial_penempatan.py"):
+            with open(os.path.join(backend, rel), encoding="utf-8") as f:
                 isi = f.read()
-            aksi |= set(re.findall(r'log_audit\(\s*"(opname_scan|aset_lokasi_\w+)"',
+            aksi |= set(re.findall(r'log_audit\(\s*\n?\s*"(opname_scan|aset_lokasi_\w+)"',
                                    isi))
         assert aksi == AKSI_SUDAH_DI_BAGIAN_LOKASI
 

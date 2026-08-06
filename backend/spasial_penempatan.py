@@ -86,6 +86,12 @@ async def node_terdalam_di_titik(kode_satker: str, lon: float, lat: float):
     """
     if not kode_satker:
         return None
+    # Null Island (0,0) — penanda de-facto parsing koordinat gagal di suatu
+    # tempat pada rantai data, bukan posisi. Invarian yang sama ditegakkan
+    # `spasial_utils.titik_geojson`; menirunya di sini menjaga hook tak
+    # pernah "menemukan" gedung untuk data rusak.
+    if float(lat) == 0.0 and float(lon) == 0.0:
+        return None
     titik = {"type": "Point", "coordinates": [float(lon), float(lat)]}
     kandidat = await db.spasial_node.find({
         "kode_satker": {"$in": [kode_satker, "", None]},
@@ -148,3 +154,31 @@ async def penempatan_dari_inventarisasi(existing: dict, update_data: dict,
         "sumber": "inventarisasi",
     })
     return lokasi
+
+
+async def catat_penempatan(aset: dict, lokasi: dict, username: str,
+                           now: str) -> None:
+    """Riwayat custody + jejak audit untuk satu penempatan otomatis.
+
+    Dipanggil SETELAH tulisan aset berhasil — riwayat tak boleh mendahului
+    kenyataan (pola `set_lokasi_aset`).
+
+    Pembungkus try/except di sini BUKAN kerapian, melainkan bagian dari
+    kontrak best-effort modul ini: saat fungsi ini berjalan, asetnya SUDAH
+    tersimpan. Membiarkan galat naik berarti membalas 500 atas tulisan yang
+    BERHASIL — dan klien lapangan (termasuk antrean luring yang otomatis
+    mengirim ulang) akan memperlakukannya sebagai kegagalan lalu mengulang
+    permintaan yang sebenarnya sudah sukses.
+    """
+    try:
+        from shared_utils import log_audit
+        await db.riwayat_lokasi_aset.insert_one(su.entri_riwayat_lokasi(
+            str(aset.get("id") or ""), None, lokasi, username, now))
+        await log_audit(
+            "aset_lokasi_otomatis", str(aset.get("activity_id") or ""),
+            str(aset.get("id") or ""), str(aset.get("asset_code") or ""),
+            str(aset.get("asset_name") or ""), username or "system",
+            detail=(lokasi.get("jalur_nama") or "")[:120])
+    except Exception as e:                       # noqa: BLE001 — sengaja luas
+        logger.warning("jejak penempatan otomatis dilewati (%s): %s",
+                       aset.get("id"), e)

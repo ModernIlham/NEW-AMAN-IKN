@@ -111,6 +111,35 @@ lapangan; bila perlu, jadikan job latar terpisah. 17 uji baru
 bentuk kueri geo, urutan hook-CAS-riwayat di ketiga jalur — 4 mutasi
 pencabutnya dipastikan tertangkap.
 
+**Temuan tinjauan adversarial yang ditutup sebelum rilis** (3 lensa × refuter):
+
+- **Jejak pasca-simpan best-effort.** Insert `riwayat_lokasi_aset` + audit
+  dulu telanjang: saat fungsi itu berjalan, asetnya SUDAH tersimpan, sehingga
+  satu galat penulisan jejak membalas **500 atas tulisan yang berhasil** —
+  dan antrean luring akan mengirim ulang permintaan yang sebenarnya sukses.
+  Kini lewat satu helper `catat_penempatan` ber-try/except untuk ketiga jalur.
+- **Aksi audit `aset_lokasi_otomatis` didaftarkan ke
+  `AKSI_SUDAH_DI_BAGIAN_LOKASI`** — tanpa itu tiap penempatan otomatis tampil
+  DUA KALI di Timeline Aset (sekali di bagian Lokasi, sekali sebagai
+  "perubahan data"), persis kelas cacat yang daftar itu dibuat untuk cegah.
+  Uji penjaganya diperluas memindai `spasial_penempatan.py` — penulis aksi
+  yang sah kini ada di luar `routes/`.
+- **Null Island (0,0) ditolak**, meniru invarian `spasial_utils`: itu penanda
+  parsing koordinat gagal, bukan posisi.
+- **Celah uji ditutup**: baris yang BENAR-BENAR menempatkan aset
+  (`update_data["lokasi_spasial"] = …`) dulu bisa dicabut dengan seluruh
+  suite tetap hijau — hook boleh terpanggil dan urutannya benar, tapi
+  fiturnya tak melakukan apa pun tanpa ada yang berteriak.
+
+Satu temuan berlabel TINGGI justru **GUGUR setelah diperiksa ke kodenya**:
+"pindai ruangan atas catatan gedung terbaca `pindah`". Itu keputusan desain
+lama yang disengaja dan sudah diuji
+(`test_scan_di_ruangan_atas_barang_di_gedung_TETAP_pindah` — *"Kebalikannya
+justru MEMPERTAJAM lokasi — layak diusulkan"*): pindai yang lebih dalam
+memang layak jadi usulan penajaman, dan menerapkannya mempersempit catatan
+dari gedung ke ruangan. Mengubahnya akan merusak invarian yang tesnya ada
+untuk menjaganya.
+
 Dua invarian DI LUAR modul ini yang menopang keamanannya ikut dikunci uji,
 karena keduanya bisa berubah diam-diam oleh perubahan yang tampak tak
 berhubungan:

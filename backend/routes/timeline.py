@@ -30,7 +30,11 @@ timeline_router = APIRouter()
 # Aksi audit yang kejadiannya sudah disajikan utuh oleh bagian 12 (Lokasi &
 # Opname). Tanpa daftar ini tiap pemindaian/penempatan muncul dua kali.
 AKSI_SUDAH_DI_BAGIAN_LOKASI = frozenset(
-    {"opname_scan", "aset_lokasi_tandai", "aset_lokasi_hapus"})
+    {"opname_scan", "aset_lokasi_tandai", "aset_lokasi_hapus",
+     # Penempatan otomatis dari koordinat inventarisasi menulis baris
+     # `riwayat_lokasi_aset` yang SUDAH tampil utuh di bagian 12 — persis
+     # seperti penempatan manual (`aset_lokasi_tandai`).
+     "aset_lokasi_otomatis"})
 
 _PROJ_SAUDARA = {"_id": 0, "id": 1, "activity_id": 1, "asset_code": 1,
                  "NUP": 1, "kode_register": 1, "asset_name": 1,

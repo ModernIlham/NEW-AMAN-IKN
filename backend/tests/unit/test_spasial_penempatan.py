@@ -209,16 +209,45 @@ class TestWiringTerpasang:
         fn = _fungsi_assets("patch_asset")
         i_hook = fn.index("penempatan_dari_inventarisasi")
         i_cas = fn.index("db.assets.update_one")
-        i_riwayat = fn.index("entri_riwayat_lokasi")
+        i_riwayat = fn.index("sp.catat_penempatan(")
         assert i_hook < i_cas < i_riwayat
-        assert '"aset_lokasi_otomatis"' in fn
+        # Aksi auditnya kini hidup di helper bersama (satu tempat untuk
+        # ketiga jalur) — dan namanya harus persis yang disaring Timeline
+        # lewat AKSI_SUDAH_DI_BAGIAN_LOKASI, kalau tidak tiap penempatan
+        # otomatis tampil dua kali di riwayat aset.
+        assert '"aset_lokasi_otomatis"' in SRC_MODUL
+        from routes.timeline import AKSI_SUDAH_DI_BAGIAN_LOKASI
+        assert "aset_lokasi_otomatis" in AKSI_SUDAH_DI_BAGIAN_LOKASI
 
     def test_create_menempatkan_sebelum_insert_dan_riwayat_sesudahnya(self):
         fn = _fungsi_assets("create_asset")
         i_hook = fn.index("penempatan_dari_inventarisasi")
         i_insert = fn.index("db.assets.insert_one")
-        i_riwayat = fn.index("entri_riwayat_lokasi")
+        i_riwayat = fn.index("sp.catat_penempatan(")
         assert i_hook < i_insert < i_riwayat
+
+    def test_hasil_hook_benar_benar_ditulis_ke_dokumen(self):
+        """Celah uji yang ditemukan tinjauan: seluruh suite tetap hijau saat
+        baris yang MENEMPATKAN aset dicabut. Hook boleh dipanggil, urutannya
+        boleh benar, tapi bila hasilnya tak pernah masuk ke dokumen/update
+        maka fiturnya tak melakukan apa pun — dan tak ada yang berteriak."""
+        assert 'update_data["lokasi_spasial"] = lokasi_otomatis' in \
+            _fungsi_assets("patch_asset")
+        assert 'asset_doc["lokasi_spasial"] = lokasi_otomatis' in \
+            _fungsi_assets("create_asset")
+        assert 'update_data["lokasi_spasial"] = lokasi_otomatis' in \
+            _fungsi_assets("update_asset")
+
+    def test_jejak_pasca_simpan_lewat_helper_best_effort(self):
+        """Aset SUDAH tersimpan saat jejak ditulis. Insert riwayat telanjang
+        (tanpa try/except) membalas 500 atas tulisan yang BERHASIL — dan
+        antrean luring akan mengirim ulang permintaan yang sudah sukses."""
+        for nama in ("patch_asset", "create_asset", "update_asset"):
+            fn = _fungsi_assets(nama)
+            assert "sp.catat_penempatan(" in fn, nama
+            # Insert riwayat telanjang tak boleh kembali ke jalur ini.
+            assert "db.riwayat_lokasi_aset.insert_one" not in fn, nama
+        assert "except Exception" in SRC_MODUL
 
     def test_put_menutup_celah_geo_dan_ikut_menempatkan(self):
         """Celah lama: PUT full-replace tak pernah menghitung ulang `geo` —
@@ -229,7 +258,7 @@ class TestWiringTerpasang:
         i_hook = fn.index("penempatan_dari_inventarisasi")
         i_cas = fn.index("db.assets.update_one")
         assert i_hook < i_cas
-        assert "entri_riwayat_lokasi" in fn
+        assert "sp.catat_penempatan(" in fn
 
 
 class TestInvarianYangMenopangKeamanannya:
@@ -267,7 +296,7 @@ class TestInvarianYangMenopangKeamanannya:
             fn = _fungsi_assets(nama)
             i_replay = fn.index("get_idempotent_response")
             i_hook = fn.index("penempatan_dari_inventarisasi")
-            i_riwayat = fn.index("entri_riwayat_lokasi")
+            i_riwayat = fn.index("sp.catat_penempatan(")
             assert i_replay < i_hook < i_riwayat, nama
 
 
@@ -286,3 +315,12 @@ class TestModulTetapSederhana:
 
     def test_berhenti_di_gedung(self):
         assert "ORDINAL_GEDUNG = 80" in SRC_MODUL
+
+    def test_null_island_ditolak(self):
+        """(0,0) adalah penanda de-facto parsing koordinat gagal, bukan
+        posisi — invarian yang sama ditegakkan `spasial_utils`."""
+        db = _Db(keg=KEG, node_rows=[GEDUNG])
+        hasil = _panggil(db, {"activity_id": "k1"},
+                         {"koordinat_latitude": "0", "koordinat_longitude": "0"})
+        assert hasil is None
+        assert db.spasial_node.panggilan == 0

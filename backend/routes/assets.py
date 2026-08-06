@@ -1048,15 +1048,8 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
     # mendahului kenyataan (pola set_lokasi_aset). Replay DuplicateKeyError
     # sudah return lebih awal, jadi riwayat tak pernah dobel.
     if lokasi_otomatis:
-        await db.riwayat_lokasi_aset.insert_one(entri_riwayat_lokasi(
-            asset_doc["id"], None, lokasi_otomatis,
-            _user.get("username", ""), now))
-        await log_audit(
-            "aset_lokasi_otomatis", asset_doc.get("activity_id", ""),
-            asset_doc["id"], asset_doc.get("asset_code", ""),
-            asset_doc.get("asset_name", ""),
-            _user.get("username", "") or "system",
-            detail=(lokasi_otomatis.get("jalur_nama") or "")[:120])
+        await sp.catat_penempatan(asset_doc, lokasi_otomatis,
+                                  _user.get("username", ""), now)
     invalidate_asset_cache()
     # Sinkron indeks Meilisearch (best-effort, non-blocking; no-op bila nonaktif).
     jadwalkan_sync("assets", asset_doc)
@@ -2057,16 +2050,14 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
                     pass
 
     logger.info(f"Asset updated: {asset.asset_code}")
-    # Riwayat penempatan otomatis SETELAH CAS sukses (pola set_lokasi_aset).
+    # Riwayat penempatan otomatis SETELAH CAS sukses (pola set_lokasi_aset),
+    # lewat helper best-effort yang sama dengan PATCH/POST.
     if lokasi_otomatis:
-        await db.riwayat_lokasi_aset.insert_one(entri_riwayat_lokasi(
-            asset_id, None, lokasi_otomatis,
-            _user.get("username", ""), update_data["updated_at"]))
-        await log_audit(
-            "aset_lokasi_otomatis", asset.activity_id, asset_id,
-            asset.asset_code, asset.asset_name,
-            _user.get("username", "") or "system",
-            detail=(lokasi_otomatis.get("jalur_nama") or "")[:120])
+        await sp.catat_penempatan(
+            {"id": asset_id, "activity_id": asset.activity_id,
+             "asset_code": asset.asset_code, "asset_name": asset.asset_name},
+            lokasi_otomatis, _user.get("username", ""),
+            update_data["updated_at"])
     invalidate_asset_cache()
     audit_user = _user.get("name") or _user.get("username") or request.headers.get("X-Audit-User", "unknown")
     audit_user_id = _user.get("id") or request.headers.get("X-Audit-User-Id", "")
@@ -2565,15 +2556,12 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
     # Riwayat penempatan otomatis SETELAH CAS sukses — riwayat tak boleh
     # mendahului kenyataan (pola set_lokasi_aset). CAS yang kalah sudah
     # raise 409 di atas, jadi riwayat tak pernah menetes dari tulisan gagal.
+    # Helper-nya best-effort: aset sudah tersimpan, jadi galat jejak tak
+    # boleh membalas 500 atas tulisan yang berhasil.
     if lokasi_otomatis:
-        await db.riwayat_lokasi_aset.insert_one(entri_riwayat_lokasi(
-            asset_id, None, lokasi_otomatis,
-            _user.get("username", ""), update_data["updated_at"]))
-        await log_audit(
-            "aset_lokasi_otomatis", existing.get("activity_id", ""), asset_id,
-            existing.get("asset_code", ""), existing.get("asset_name", ""),
-            _user.get("username", "") or "system",
-            detail=(lokasi_otomatis.get("jalur_nama") or "")[:120])
+        await sp.catat_penempatan({**existing, "id": asset_id},
+                                  lokasi_otomatis, _user.get("username", ""),
+                                  update_data["updated_at"])
 
     logger.info(f"Asset patched: {asset_id} — fields: {list(update_data.keys())}")
     invalidate_asset_cache()
