@@ -302,6 +302,22 @@ async def compress_with_uploadcare(image_bytes: bytes) -> Optional[bytes]:
 # ============================================================================
 # MAIN COMPRESSION FUNCTION (Fallback Chain)
 # ============================================================================
+def _tipe_hasil(data: bytes) -> str:
+    """Content-type dari bita hasil — bukan dari ekstensi, bukan dari label.
+
+    Satu-satunya sumber kebenaran yang tak bisa berbohong. Dipakai bersama
+    `gerbang_media._sniff_gambar`; keduanya diuji agar tak berbeda jawaban.
+    """
+    b = bytes(data[:16])
+    if b.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if b.startswith(b"GIF87a") or b.startswith(b"GIF89a"):
+        return "image/gif"
+    if b.startswith(b"RIFF") and bytes(data[8:12]) == b"WEBP":
+        return "image/webp"
+    return "image/jpeg"
+
+
 # Fungsi kompresi per layanan JARINGAN. `pillow` sengaja TIDAK di sini: ia
 # jaring terakhir yang tak pernah mengembalikan None dan tak berkuota, jadi
 # perlakuannya berbeda (dipanggil setelah seluruh rantai gagal).
@@ -340,12 +356,25 @@ async def auto_compress_image(image_data_b64: str) -> tuple:
             compressed = await compress_fn(image_bytes)
             if compressed and len(compressed) < original_size:
                 compressed_b64 = base64.b64encode(compressed).decode('utf-8')
-                return f"data:image/jpeg;base64,{compressed_b64}", method_name, original_size, len(compressed)
+                # Tipe diambil dari BITA HASIL. Label `image/jpeg` yang
+                # dulu dikeraskan di sini berbohong ketika cabang alfa
+                # `compress_with_pillow` mengembalikan PNG — dan label itulah
+                # yang mengisi `metadata.content_type` di puluhan titik tulis,
+                # sehingga penyaji mengirim header yang salah.
+                return (f"data:{_tipe_hasil(compressed)};base64,{compressed_b64}",
+                        method_name, original_size, len(compressed))
 
-        # Final fallback: Pillow (always works)
-        compressed = compress_with_pillow(image_bytes)
+        # Final fallback: Pillow (always works).
+        #
+        # `asyncio.to_thread` BUKAN kerapian: Pillow itu CPU-bound dan dulu
+        # dipanggil LANGSUNG di dalam coroutine ini — membekukan event loop
+        # selama tiap unggahan foto, sementara jalur Tinify di atas sudah
+        # dilempar ke thread sejak lama. Gejalanya tampak seperti "server
+        # lambat", bukan seperti kompresi yang memblokir.
+        compressed = await asyncio.to_thread(compress_with_pillow, image_bytes)
         compressed_b64 = base64.b64encode(compressed).decode('utf-8')
-        return f"data:image/jpeg;base64,{compressed_b64}", "pillow", original_size, len(compressed)
+        return (f"data:{_tipe_hasil(compressed)};base64,{compressed_b64}",
+                "pillow", original_size, len(compressed))
 
     except Exception as e:
         logger.error(f"Auto-compress failed: {e}, using original")
