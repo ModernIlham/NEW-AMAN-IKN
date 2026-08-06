@@ -184,6 +184,44 @@ _TGL_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # sebelum deteksi jenis nomor agar NIK/NIP berformat tetap terkenali.
 _RE_PEMISAH_NOMOR = re.compile(r"[\s.\-]")
 
+# KODE LOKASI BMN — 20 karakter: 18 digit angka + 2 huruf kewenangan.
+#
+#   126 | 01 | 1600 | 691778 | 000 | KP
+#    ↑     ↑     ↑       ↑       ↑    ↑
+#    │     │     │       │       │    └─ Kewenangan (KP/KD/TP/DK)
+#    │     │     │       │       └────── Sub-satker (000 bila tak ada)
+#    │     │     │       └────────────── Satker (6 digit)
+#    │     │     └────────────────────── Wilayah (4 digit)
+#    │     └──────────────────────────── Eselon I (2 digit)
+#    └────────────────────────────────── Pengguna Barang (3 digit)
+#
+# Huruf kewenangan TIDAK dibatasi ke empat kode di atas: daftar itu bisa
+# bertambah di aturan berikutnya, dan menolak kode sah membuat pengguna
+# terkunci dari data yang benar. Yang dijaga adalah BENTUKNYA.
+RE_KODE_SATKER_LENGKAP = re.compile(r"^\d{18}[A-Z]{2}$")
+
+
+def normalisasi_kode_satker_lengkap(nilai) -> str:
+    """Rapikan tulisan kode lokasi BMN tanpa membuang huruf kewenangannya.
+
+    Pemisah yang lazim ditulis manusia (spasi, titik, strip) dibuang, huruf
+    dinaikkan jadi kapital. TIDAK memaksa hasilnya sah — memaksa di sini
+    menyembunyikan salah ketik yang seharusnya dilaporkan validator.
+    """
+    teks = str(nilai or "").strip().upper()
+    return re.sub(r"[^0-9A-Z]", "", teks)
+
+
+def kode_satker_lengkap_sah(nilai) -> bool:
+    """True bila kode berbentuk 18 digit + 2 huruf.
+
+    Kode 12 digit era-lama SENGAJA tidak lagi diterima: ia bukan kode lokasi
+    BMN yang utuh, dan membiarkannya lolos berarti dua bentuk berbeda hidup
+    berdampingan di kolom yang sama — persis keadaan yang membuat kolom ini
+    tak bisa dipakai untuk mencocokkan data lintas modul.
+    """
+    return bool(RE_KODE_SATKER_LENGKAP.match(str(nilai or "").strip().upper()))
+
 
 def validate_pegawai(doc):
     """Kembalikan daftar pesan error (kosong bila valid). MURNI (teruji unit)."""
@@ -232,8 +270,9 @@ def validate_pegawai(doc):
         errors.append("Tanggal lahir harus format YYYY-MM-DD")
     # Penghubung satker & kontrak Non-ASN (W3)
     ksl = str(d.get("kode_satker_lengkap") or "").strip()
-    if ksl and (not ksl.isdigit() or len(ksl) != 12):
-        errors.append("Kode satker lengkap harus 12 digit angka")
+    if ksl and not kode_satker_lengkap_sah(ksl):
+        errors.append("Kode satker lengkap harus 20 karakter "
+                      "(18 digit + 2 huruf kewenangan, cth. 126011600691778000KP)")
     ks = str(d.get("kode_satker") or "").strip()
     if ks and (not ks.isdigit() or len(ks) != 6):
         errors.append("Kode satker harus 6 digit angka")
@@ -992,7 +1031,12 @@ def baris_impor_ke_pegawai(raw):
         elif field == "jenis_kontrak_non_asn":
             doc["jenis_kontrak_non_asn"] = normalisasi_jenis_kontrak(val)
         elif field == "kode_satker_lengkap":
-            doc["kode_satker_lengkap"] = re.sub(r"\D", "", val)
+            # DULU `re.sub(r"\D", "", val)` — membuang SEMUA non-digit. Sejak
+            # kolom ini memuat kode lokasi BMN 20 karakter, penyaringan itu
+            # memakan huruf kewenangannya: `126011600691778000KP` masuk
+            # sebagai 18 digit, lalu ditolak validator sebagai "bukan 20
+            # karakter". Impor massal gagal karena pembersihnya sendiri.
+            doc["kode_satker_lengkap"] = normalisasi_kode_satker_lengkap(val)
         else:
             doc[field] = val
     # Unit kerja efektif dari Eselon terdalam bila unit_kerja kosong.

@@ -27,7 +27,8 @@ from pegawai_utils import (
     STATUS_PERKAWINAN, SUB_KATEGORI_NON_ASN, baris_impor_ke_pegawai,
     beda_snapshot_pemegang, deteksi_identitas, field_dipasok_baris,
     gabung_baris_pegawai, info_masa_pegawai, kelompok_unit_kerja,
-    kunci_dedup_pegawai, pegawai_perlu_serah_terima, rekap_eselon,
+    kunci_dedup_pegawai, normalisasi_kode_satker_lengkap,
+    pegawai_perlu_serah_terima, rekap_eselon,
     snapshot_pemegang_aset, urai_identitas, validate_pegawai,
 )
 
@@ -127,7 +128,8 @@ class PegawaiIn(BaseModel):
     tmt_jabatan: Optional[str] = ""
     # Akhir periode jabatan (utk hitung sisa masa jabatan di daftar)
     tanggal_akhir_jabatan: Optional[str] = ""
-    # Penghubung lintas modul: kode satker (6 digit) + kode lengkap 12 digit
+    # Penghubung lintas modul: kode satker (6 digit) + KODE LOKASI BMN
+    # 20 karakter (18 digit + 2 huruf kewenangan, cth. 126011600691778000KP)
     kode_satker: Optional[str] = ""
     kode_satker_lengkap: Optional[str] = ""
     status: Optional[str] = "aktif"
@@ -197,7 +199,10 @@ def _bersih(p: PegawaiIn) -> dict:
         "tmt_jabatan": str(p.tmt_jabatan or "").strip()[:10],
         "tanggal_akhir_jabatan": str(p.tanggal_akhir_jabatan or "").strip()[:10],
         "kode_satker": str(p.kode_satker or "").strip(),
-        "kode_satker_lengkap": str(p.kode_satker_lengkap or "").strip(),
+        # Dinormalkan (huruf kapital, pemisah dibuang) SEBELUM divalidasi —
+        # `126 01 1600 691778 000 kp` yang disalin dari dokumen resmi tetap
+        # diterima, bukan ditolak karena spasi dan huruf kecil.
+        "kode_satker_lengkap": normalisasi_kode_satker_lengkap(p.kode_satker_lengkap),
         "status": str(p.status or "aktif").strip() or "aktif",
         "status_pegawai_satker": str(p.status_pegawai_satker or "").strip().lower(),
         "status_pegawai_instansi": str(p.status_pegawai_instansi or "").strip(),
