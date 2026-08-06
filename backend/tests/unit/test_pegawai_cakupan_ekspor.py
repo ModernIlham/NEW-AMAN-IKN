@@ -104,7 +104,7 @@ LENGKAP = {
     "tgl_selesai_kontrak": "2026-12-31",
     "jenis_kontrak_non_asn": "outsourcing",
     "perusahaan_penyedia": "PT Sejahtera",
-    "kode_satker_lengkap": "123456789012",
+    "kode_satker_lengkap": "126011600691778000KP",
     "status_pegawai_satker": "diperbantukan_pada",
     "status_pegawai_instansi": "Kementerian Keuangan",
     "status": "meninggal",

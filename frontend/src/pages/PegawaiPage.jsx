@@ -1420,15 +1420,47 @@ export default function PegawaiPage({ user, onBack }) {
                       <Select value={form.kategori_pegawai} onChange={set("kategori_pegawai")} opts={ref.kategori_pegawai} />
                     </Field>
                     <Field label="Eselon (teks)"><Input value={form.eselon} onChange={set("eselon")} placeholder="cth. IV.a" /></Field>
-                    {/* Penghubung lintas modul: kode satker 6 digit + lengkap
-                        12 digit (selaras field satker aset/laporan). */}
+                    {/* Penghubung lintas modul: kode satker 6 digit + KODE
+                        LOKASI BMN 20 karakter (selaras Master Satker & stiker
+                        label). Kode 20 karakter itu memuat kode satker 6 digit
+                        di dalamnya, jadi keduanya harus konsisten. */}
                     <Field label="Kode Satker (6 digit)">
                       <Input value={form.kode_satker} onChange={set("kode_satker")} className="font-mono"
                         inputMode="numeric" maxLength={6} placeholder="cth. 527010" data-testid="pegawai-form-kode-satker" />
                     </Field>
-                    <Field label="Kode Satker Lengkap (12 digit)">
-                      <Input value={form.kode_satker_lengkap} onChange={set("kode_satker_lengkap")} className="font-mono"
-                        inputMode="numeric" maxLength={12} placeholder="cth. 527010401987" data-testid="pegawai-form-kode-satker-lengkap" />
+                    <Field label="Kode Satker Lengkap (20 karakter)">
+                      {/* `inputMode` BUKAN numeric: dua karakter terakhir adalah
+                          huruf kewenangan (KP/KD/TP/DK). Papan tik angka di HP
+                          akan menyembunyikan huruf yang justru wajib diketik. */}
+                      <Input value={form.kode_satker_lengkap}
+                        onChange={(e) => setForm((f) => ({
+                          ...f,
+                          kode_satker_lengkap: String(e?.target?.value ?? "")
+                            .toUpperCase().replace(/[^0-9A-Z]/g, "").slice(0, 20),
+                        }))}
+                        className="font-mono uppercase" maxLength={20}
+                        placeholder="cth. 126011600691778000KP"
+                        data-testid="pegawai-form-kode-satker-lengkap" />
+                      <p className="mt-1 text-[10.5px] leading-snug text-muted-foreground">
+                        18 digit angka + 2 huruf kewenangan:{" "}
+                        <span className="font-mono">126</span> pengguna barang ·{" "}
+                        <span className="font-mono">01</span> eselon I ·{" "}
+                        <span className="font-mono">1600</span> wilayah ·{" "}
+                        <span className="font-mono">691778</span> satker ·{" "}
+                        <span className="font-mono">000</span> sub-satker ·{" "}
+                        <span className="font-mono">KP</span> kewenangan.
+                      </p>
+                      {/* Data lama berisi kode 12 digit. Tanpa petunjuk ini,
+                          simpan akan ditolak server dan pengguna tak tahu
+                          sebabnya — kolomnya terlihat "sudah terisi". */}
+                      {form.kode_satker_lengkap
+                        && !/^\d{18}[A-Z]{2}$/.test(form.kode_satker_lengkap) && (
+                        <p className="mt-1 text-[10.5px] leading-snug rounded-md px-2 py-1 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                          data-testid="pegawai-form-ksl-peringatan">
+                          Panjang saat ini <span className="font-semibold">{form.kode_satker_lengkap.length}</span> karakter.
+                          Kode lama 12 digit sudah tidak berlaku — lengkapi jadi 20 karakter agar bisa disimpan.
+                        </p>
+                      )}
                     </Field>
                   </div>
                   {/* Unit kerja berjenjang (Eselon I–V) — pilihan BERTINGKAT dari

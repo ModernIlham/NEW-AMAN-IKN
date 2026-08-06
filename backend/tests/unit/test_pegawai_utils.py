@@ -343,17 +343,55 @@ def test_info_masa_pegawai_bup():
 
 
 def test_validate_pegawai_field_baru():
-    """Validasi kode satker 6/12 digit + kontrak Non-ASN outsourcing."""
+    """Validasi kode satker 6 digit + KODE LOKASI BMN 20 karakter + kontrak."""
     from pegawai_utils import validate_pegawai
     ok = validate_pegawai({"nama": "Budi", "kode_satker": "527010",
-                           "kode_satker_lengkap": "527010401987",
+                           "kode_satker_lengkap": "126011600691778000KP",
                            "jenis_kontrak_non_asn": "outsourcing",
                            "perusahaan_penyedia": "PT Aman Jaya"})
     assert ok == []
     err = validate_pegawai({"nama": "Budi", "kode_satker_lengkap": "12345",
                             "jenis_kontrak_non_asn": "outsourcing"})
-    assert any("12 digit" in e for e in err)
+    assert any("20 karakter" in e for e in err)
     assert any("perusahaan penyedia" in e.lower() for e in err)
+
+
+def test_kode_satker_lengkap_20_karakter():
+    """Bentuknya 18 digit + 2 huruf. Kode 12 digit era-lama TIDAK lagi sah —
+    membiarkannya lolos berarti dua bentuk berbeda hidup di kolom yang sama."""
+    from pegawai_utils import kode_satker_lengkap_sah
+    assert kode_satker_lengkap_sah("126011600691778000KP") is True
+    assert kode_satker_lengkap_sah("126011600691778000KD") is True
+    assert kode_satker_lengkap_sah("527010401987") is False      # 12 digit lama
+    assert kode_satker_lengkap_sah("126011600691778000") is False  # huruf hilang
+    assert kode_satker_lengkap_sah("12601160069177800KPX") is False  # 17+3
+    assert kode_satker_lengkap_sah("126011600691778000K") is False   # 19
+    assert kode_satker_lengkap_sah("") is False
+    assert kode_satker_lengkap_sah(None) is False
+
+
+def test_normalisasi_kode_satker_lengkap_tak_memakan_huruf():
+    r"""PENJAGA REGRESI. Importir Excel dulu memakai re.sub(r"\D", "") yang
+    membuang SEMUA non-digit — huruf kewenangan ikut termakan, lalu barisnya
+    ditolak validator sebagai "bukan 20 karakter". Pembersihnya sendiri yang
+    menggagalkan impor."""
+    from pegawai_utils import (normalisasi_kode_satker_lengkap,
+                               kode_satker_lengkap_sah)
+    for tulisan in ("126011600691778000KP", "126011600691778000kp",
+                    "126 01 1600 691778 000 KP", "126.01.1600.691778.000-KP"):
+        hasil = normalisasi_kode_satker_lengkap(tulisan)
+        assert hasil == "126011600691778000KP", tulisan
+        assert kode_satker_lengkap_sah(hasil)
+
+
+def test_impor_excel_pertahankan_huruf_kewenangan():
+    """Uji lewat PINTU IMPOR sungguhan, bukan helper-nya saja: mem-patch
+    helper akan lulus walau pemanggilnya masih memakai penyaring lama."""
+    from pegawai_utils import baris_impor_ke_pegawai, validate_pegawai
+    doc, _ = baris_impor_ke_pegawai(
+        {"Nama": "Budi", "Kode Satker Lengkap": "126011600691778000KP"})
+    assert doc["kode_satker_lengkap"] == "126011600691778000KP"
+    assert validate_pegawai(doc) == []
 
 
 def test_ekspor_pegawai_round_trip_impor():

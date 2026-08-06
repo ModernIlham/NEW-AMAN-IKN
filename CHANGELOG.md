@@ -67,6 +67,53 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#784] Kode Satker Lengkap pegawai jadi Kode Lokasi BMN 20 karakter — 2026-08-06
+
+Field **Kode Satker Lengkap** pada popup pegawai (bagian Jabatan & Unit) dulu
+meminta **12 digit angka**. Itu bukan kode lokasi BMN yang utuh. Kini ia meminta
+bentuk resminya: **20 karakter — 18 digit angka + 2 huruf kewenangan**, sama
+dengan yang dipakai Master Satker dan stiker label.
+
+```
+126 | 01 | 1600 | 691778 | 000 | KP
+ ↑     ↑     ↑       ↑       ↑    ↑
+ │     │     │       │       │    └─ Kewenangan (KP/KD/TP/DK)
+ │     │     │       │       └────── Sub-satker (000 bila tak ada)
+ │     │     │       └────────────── Satker (6 digit)
+ │     │     └────────────────────── Wilayah (4 digit)
+ │     └──────────────────────────── Eselon I (2 digit)
+ └────────────────────────────────── Pengguna Barang (3 digit)
+```
+
+**Satu cacat ditemukan sebelum UI-nya disentuh.** Importir Excel membersihkan
+kolom ini dengan `re.sub(r"\D", "", val)` — membuang **semua** non-digit. Begitu
+kolomnya memuat kode 20 karakter, penyaring itu **memakan huruf kewenangannya**:
+`126011600691778000KP` masuk sebagai 18 digit, lalu ditolak validator sebagai
+"bukan 20 karakter". Impor massal akan gagal karena pembersihnya sendiri, dan
+pesan galatnya menunjuk ke arah yang salah. Kini `normalisasi_kode_satker_lengkap()`
+membuang pemisah (spasi/titik/strip) dan menaikkan huruf jadi kapital, tanpa
+menyentuh hurufnya — sehingga `126.01.1600.691778.000-kp` yang disalin dari
+dokumen resmi pun tetap diterima.
+
+**Kode 12 digit era-lama sengaja TIDAK lagi diterima.** Membiarkannya lolos
+berarti dua bentuk berbeda hidup berdampingan di kolom yang sama — persis
+keadaan yang membuat kolom ini tak bisa dipakai mencocokkan data lintas modul.
+Konsekuensinya jujur: **pegawai lama yang kolomnya berisi 12 digit tak bisa
+disimpan sampai kodenya dilengkapi.** Agar itu tak jadi teka-teki, form kini
+menampilkan peringatan kuning yang menyebut panjang saat ini dan apa yang
+kurang — kolom yang "terlihat sudah terisi" tak lagi menolak simpan tanpa
+penjelasan.
+
+Rincian lain: `inputMode="numeric"` dicabut (papan tik angka di HP menyembunyikan
+huruf yang justru wajib diketik), masukan dinaikkan kapital & dipangkas 20
+karakter saat diketik, dan penjelas struktur enam segmen ditaruh di bawah field.
+
+**Verifikasi.** 4 uji baru; **2.145 uji backend** & **635 uji frontend** hijau.
+Dua mutasi disuntikkan — importir dikembalikan ke `re.sub(r"\D", "")`, dan
+validator dibuat selalu meluluskan — **keduanya tertangkap**.
+
+---
+
 ## [#783] Sapuan gerbang — utang 14 modul lunas, plafonnya kini nol — 2026-08-06
 
 Lanjutan langsung `[#782]`. PR itu memasang gerbangnya dan mencatat **14 modul**
