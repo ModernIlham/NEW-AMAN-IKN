@@ -70,26 +70,39 @@ function PanelKuota({ imageQuotas, pdfQuotas, aktifGambar }) {
             const iniAktif = q.service === aktifGambar;
             const belumDisetel = q.terpasang === false;
             return (
-              <div key={q.service}
-                   className={`flex items-center gap-2 ${belumDisetel ? "opacity-45" : ""}`}
-                   data-testid={`kuota-baris-${q.service}`}>
-                <span className="text-[11px] text-slate-400 w-20 truncate" title={q.name}>{q.name}</span>
-                <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                  <div className={`h-full ${colors.bar}`} style={{ width: `${Math.min(pct, 100)}%` }} />
-                </div>
-                {iniAktif && (
-                  <span className="text-[9px] px-1 py-px rounded bg-emerald-500/20 text-emerald-300 whitespace-nowrap"
-                        data-testid="kuota-penanda-aktif">dipakai</span>
-                )}
-                <span className="text-[11px] font-mono w-16 text-right">
-                  {belumDisetel ? (
-                    <span className="text-slate-500">belum</span>
-                  ) : q.limit < 0 ? (
-                    <span className="text-emerald-400">∞</span>
-                  ) : (
-                    <span className={q.remaining < 50 ? 'text-amber-400' : ''}>{q.remaining}/{q.limit}</span>
+              <div key={q.service} data-testid={`kuota-baris-${q.service}`}>
+                <div className={`flex items-center gap-2 ${belumDisetel ? "opacity-45" : ""}`}>
+                  <span className="text-[11px] text-slate-400 w-20 truncate" title={q.name}>{q.name}</span>
+                  <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                    <div className={`h-full ${colors.bar}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                  </div>
+                  {iniAktif && (
+                    <span className="text-[9px] px-1 py-px rounded bg-emerald-500/20 text-emerald-300 whitespace-nowrap"
+                          data-testid="kuota-penanda-aktif">dipakai</span>
                   )}
-                </span>
+                  <span className="text-[11px] font-mono w-16 text-right">
+                    {belumDisetel ? (
+                      <span className="text-slate-500">belum</span>
+                    ) : q.limit < 0 ? (
+                      <span className="text-emerald-400">∞</span>
+                    ) : (
+                      <span className={q.remaining < 50 ? 'text-amber-400' : ''}>{q.remaining}/{q.limit}</span>
+                    )}
+                  </span>
+                </div>
+                {/* SEBAB, bukan cuma angka. Server sudah menghitung `alasan`
+                    sejak PR #243 (kunci ditolak, host tak terjangkau, kontrak
+                    berubah, kuota habis) tetapi layar tak pernah menampilkannya
+                    — sehingga satu-satunya cara mengetahui kenapa sebuah
+                    layanan dilewati adalah membuka log server lewat SSH, yang
+                    justru tak bisa dilakukan operator satker. */}
+                {q.alasan && (
+                  <p className={`text-[9px] leading-snug mt-0.5 ml-[88px] ${
+                        q.status === "gagal" ? "text-rose-300" : "text-slate-500"}`}
+                     data-testid={`kuota-alasan-${q.service}`}>
+                    {q.alasan}{q.kode_http ? ` (HTTP ${q.kode_http})` : ""}
+                  </p>
+                )}
               </div>
             );
           })}
