@@ -20,7 +20,7 @@ from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Request
 from fastapi.responses import Response
 from pymongo import ReturnDocument
 
-from db import db, fs_bucket
+from db import db
 from auth_utils import require_admin, require_user, require_user_or_query_token
 from shared_utils import pastikan_akses_kegiatan_id, log_audit, delete_document_from_gridfs, get_document_from_gridfs
 
@@ -296,17 +296,14 @@ async def upload_pengesahan_dokumen(
         raise HTTPException(status_code=400, detail="File bukan PDF yang valid")
 
     # Simpan ke GridFS (pola sama dengan foto/dokumen kegiatan)
-    from bson import ObjectId
-    file_id = ObjectId()
+    # GERBANG KOMPRESI. Penjaga PDF ber-tanda tangan digital ada DI DALAM
+    # gerbang dan berjalan sebelum penyedia mana pun.
+    from gerbang_media import tulis_media
+    file_id = None
     try:
-        grid_in = fs_bucket.open_upload_stream_with_id(
-            file_id,
-            filename=filename,
-            metadata={"content_type": "application/pdf", "size": len(pdf_bytes),
-                      "kind": "pengesahan_dokumen", "activity_id": activity_id},
-        )
-        await grid_in.write(pdf_bytes)
-        await grid_in.close()
+        file_id, _meta = await tulis_media(
+            pdf_bytes, nama=filename, content_type="application/pdf",
+            metadata={"kind": "pengesahan_dokumen", "activity_id": activity_id})
     except Exception as e:
         logger.error(f"GridFS store pengesahan dokumen gagal: {e}")
         raise HTTPException(status_code=500, detail="Gagal menyimpan dokumen")
@@ -315,7 +312,11 @@ async def upload_pengesahan_dokumen(
         "id": str(uuid.uuid4()),
         "name": filename,
         "gridfs_id": str(file_id),
-        "size": len(pdf_bytes),
+        # Ukuran diambil dari metadata gerbang, bukan `len(pdf_bytes)`: sejak
+        # dokumen ini lewat rantai kompresi, panjang bita masukan bukan lagi
+        # ukuran yang tersimpan — daftar dokumen akan menyebut angka yang
+        # tidak cocok dengan berkas yang benar-benar diunduh.
+        "size": _meta["size"],
         "uploaded_at": datetime.now(timezone.utc).isoformat(),
         "uploaded_by": admin.get("name") or admin.get("username") or "admin",
     }

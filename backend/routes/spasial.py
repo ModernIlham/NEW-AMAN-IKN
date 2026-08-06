@@ -1559,13 +1559,17 @@ async def unggah_overlay(request: Request, node_id: str,
     opasitas = su.opasitas_overlay_sah(lama.get("opasitas",
                                                 su.OPASITAS_OVERLAY_BAWAAN))
 
-    file_id = ObjectId()
-    grid_in = fs_bucket.open_upload_stream_with_id(
-        file_id, filename=_potong_teks(file.filename) or "denah.png",
-        metadata={"content_type": su.FORMAT_OVERLAY[fmt], "size": len(data),
-                  "overlay_node": node_id})
-    await grid_in.write(data)
-    await grid_in.close()
+    # GERBANG KOMPRESI dengan `kelas="alfa"` — DISENGAJA, bukan kelalaian.
+    # Citra ini dihamparkan di ATAS peta: transparansinya menentukan apakah
+    # peta di bawahnya masih terlihat. Tiga dari empat mata rantai gambar
+    # memaksa JPEG, yang meratakan alfa jadi putih dan menutup peta. Jalur
+    # alfa memakai Pillow lossless saja.
+    from gerbang_media import tulis_media
+    _fid_str, _meta = await tulis_media(
+        data, nama=_potong_teks(file.filename) or "denah.png",
+        content_type=su.FORMAT_OVERLAY[fmt], kelas="alfa",
+        metadata={"overlay_node": node_id})
+    file_id = ObjectId(_fid_str)
 
     now = datetime.now(timezone.utc).isoformat()
     overlay = {"file_id": str(file_id),

@@ -18,10 +18,8 @@ from db import db
 from auth_utils import require_admin, require_user, require_writer
 from routes.media import auto_compress_image
 import pdf_compress_utils as pcu
-from routes.pdf_compress import compress_pdf_ilovepdf
 from shared_utils import (
     decode_data_url,
-    store_document_to_gridfs,
     get_document_from_gridfs,
     delete_document_from_gridfs,
     delete_photo_from_gridfs,
@@ -186,34 +184,38 @@ async def process_activity_documents(documents: List[dict], existing_docs: Optio
             logger.warning("Dokumen kegiatan '%s' ditolak: %s", name, alasan_tolak)
             return None
 
+        # RANTAI KOMPRESI LEWAT GERBANG, bukan salinan rantai sendiri.
+        #
+        # Blok ini dulu memanggil iLovePDF LANGSUNG lalu jatuh ke pypdf —
+        # tanpa satu pun penjaga tanda tangan digital, karena `pdf_valid` di
+        # atas hanya memeriksa ukuran dan magic byte. Akibatnya PDF ber-TTE
+        # yang diunggah sebagai dokumen kegiatan dikirim ke pihak ketiga dan
+        # tanda tangannya batal. Penjaga itu hidup di dalam gerbang dan
+        # berjalan sebelum penyedia mana pun.
+        #
+        # Sejak `store_document_to_gridfs` sendiri lewat gerbang, rantai
+        # tangan sendiri di sini juga berarti kompresi GANDA: satu berkas
+        # membakar kuota iLovePDF dua kali.
+        from gerbang_media import tulis_media
         original_size = len(pdf_bytes)
-        compressed, method, _alasan = await compress_pdf_ilovepdf(pdf_bytes, name)
-        if not compressed:
-            # Jaring pengaman lokal — sama seperti endpoint, supaya kedua pintu
-            # memberi hasil yang sama.
-            lokal = await asyncio.to_thread(pcu.kompres_pdf_lokal, pdf_bytes)
-            if lokal:
-                compressed, method = lokal, "pypdf-lokal"
-
-        if compressed and pcu.layak_dipakai(pdf_bytes, compressed):
-            final_bytes, final_method = compressed, (method or "none")
-            logger.info(
-                f"Activity PDF '{name}' compressed: "
-                f"{original_size//1024}KB → {len(final_bytes)//1024}KB ({final_method})"
-            )
-        else:
-            final_bytes, final_method = pdf_bytes, "none"
-
-        b64 = base64.b64encode(final_bytes).decode("utf-8")
-        new_gid = await store_document_to_gridfs(b64, filename=name)
-        if not new_gid:
-            logger.error(f"Failed to store document '{name}' in GridFS — dropping")
+        try:
+            new_gid, meta = await tulis_media(
+                pdf_bytes, nama=name, content_type="application/pdf")
+        except Exception as e:
+            logger.error(f"Failed to store document '{name}' in GridFS: {e}")
             return None
 
+        final_method = (meta.get("kompresi") or {}).get("metode") or "none"
+        if meta["size"] < original_size:
+            logger.info(
+                f"Activity PDF '{name}' compressed: "
+                f"{original_size//1024}KB → {meta['size']//1024}KB ({final_method})"
+            )
+
         return {
-            "name": name,
+            "name": meta["filename"],
             "gridfs_id": new_gid,
-            "size": len(final_bytes),
+            "size": meta["size"],
             "compression_method": final_method,
         }
 

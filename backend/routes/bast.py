@@ -42,7 +42,7 @@ from pydantic import BaseModel
 from auth_utils import (
     require_user, require_user_or_query_token, require_writer,
 )
-from db import db, fs_bucket
+from db import db
 from shared_utils import (
     cek_magic_gambar, get_idempotent_response, kode_satker_user, kunci_idem,
     log_audit, pastikan_akses_aset, pastikan_akses_dok_satker,
@@ -307,17 +307,14 @@ async def kirim_bast_ke_ttd(bast_id: str, user: dict = Depends(require_writer)):
         async for _potong in _resp.body_iterator:
             _buf.write(_potong if isinstance(_potong, bytes) else _potong.encode())
         _data = _buf.getvalue()
-        from bson import ObjectId
         from pypdf import PdfReader
         _n_hal = len(PdfReader(io.BytesIO(_data)).pages)
         _nama = f"BAST_{str(b.get('nomor') or bast_id)[:40].replace('/', '_')}.pdf"
-        _fid = ObjectId()
-        _gin = fs_bucket.open_upload_stream_with_id(
-            _fid, filename=_nama,
-            metadata={"content_type": "application/pdf", "size": len(_data),
-                      "kind": "bast", "bast_id": bast_id})
-        await _gin.write(_data)
-        await _gin.close()
+        # GERBANG KOMPRESI. Sama seperti LPB: ditulis SEBELUM QR & spesimen
+        # dibubuhkan, jadi yang dikompres masih naskah vektor polos.
+        from gerbang_media import tulis_media as _tulis
+        _fid, _ = await _tulis(_data, nama=_nama, content_type="application/pdf",
+                               metadata={"kind": "bast", "bast_id": bast_id})
         await db.signature_requests.update_one(
             {"id": hasil["id"]},
             {"$set": {"dok_file_id": str(_fid), "dok_nama": _nama,
@@ -716,15 +713,11 @@ async def unggah_bukti_bast(bast_id: str, file: UploadFile = File(...),
     if len(data) > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Maksimal 10MB")
 
-    from bson import ObjectId
-    from db import fs_bucket
     tipe = "application/pdf" if nama.endswith(".pdf") else "image/jpeg"
-    file_id = ObjectId()
-    grid_in = fs_bucket.open_upload_stream_with_id(
-        file_id, filename=file.filename,
-        metadata={"content_type": tipe, "size": len(data)})
-    await grid_in.write(data)
-    await grid_in.close()
+    # GERBANG KOMPRESI — bukti serah terima (pindaian PDF atau foto).
+    from gerbang_media import tulis_media
+    file_id, _meta = await tulis_media(
+        data, nama=file.filename, content_type=tipe)
 
     now = datetime.now(timezone.utc).isoformat()
     bukti_lama = (b.get("bukti") or {}).get("file_id")
@@ -837,19 +830,14 @@ async def unggah_foto_serah_terima(bast_id: str, file: UploadFile = File(...),
         raise HTTPException(status_code=400,
                             detail="Berkas bukan gambar yang sah")
 
-    from bson import ObjectId
-
-    from db import fs_bucket
     tipe = "image/png" if nama.endswith(".png") else (
         "image/webp" if nama.endswith(".webp") else "image/jpeg")
-    file_id = ObjectId()
-    grid_in = fs_bucket.open_upload_stream_with_id(
-        file_id, filename=file.filename,
-        metadata={"content_type": tipe, "size": len(data),
-                  "kind": "foto_serah_terima", "bast_id": bast_id,
+    # GERBANG KOMPRESI — foto serah terima ikut rantai berjenjang.
+    from gerbang_media import tulis_media
+    file_id, _meta = await tulis_media(
+        data, nama=file.filename, content_type=tipe,
+        metadata={"kind": "foto_serah_terima", "bast_id": bast_id,
                   "asset_id": aid})
-    await grid_in.write(data)
-    await grid_in.close()
 
     lama = (str(b.get("foto_serah_terima_bersama") or "") if berlaku_semua
             else str((b.get("foto_serah_terima") or {}).get(aid) or ""))
