@@ -67,6 +67,46 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#781] Rantai PDF setara rantai gambar — "0/0" jadi ∞, panel kembali ringkas — 2026-08-06
+
+Dua koreksi dari umpan balik layar, keduanya cacat nyata.
+
+**1. Pengolah lokal PDF dilaporkan "0/0".** `routes/pdf_compress.py` mengirim
+`pypdf` dengan `limit: 0, remaining: 0`. Di layar itu terbaca seolah jaring
+terakhirnya sudah habis — padahal justru `pypdf` satu-satunya yang **tak
+pernah** habis: lokal, tanpa kunci, tanpa jaringan. Kini `-1`, konvensi yang
+sama dengan Pillow di rantai gambar, sehingga tampil **∞**.
+
+**2. Rantai PDF belum setara.** Tuntutannya satu aturan untuk satu aplikasi
+utuh — foto maupun PDF. Maka `kompresi_rantai.py` kini juga memuat
+`URUTAN_PDF = (iLovePDF → pypdf)`, dan `layanan_aktif()` menerima urutan mana
+yang dipakai. Endpoint kuota PDF mengirim `terpasang` + `aktif` persis seperti
+sisi gambar, jadi panel menandai "dipakai" untuk PDF juga dan iLovePDF tak lagi
+lenyap dari daftar saat belum pernah dipanggil.
+
+> Satu uji sengaja merekam bahaya diam-diamnya: bila pemanggil lupa mengoper
+> `URUTAN_PDF`, kedua layanan PDF menjadi "tak dikenal" dan urutannya jatuh ke
+> urutan daftar masukan — `pypdf` lebih dulu, iLovePDF tak pernah terpakai,
+> tanpa satu pun error.
+
+**3. Panel kembali ringkas.** Sebab yang ditambahkan pada `[#780]` ternyata
+terlalu bersuara: kalimat *"Kunci terpasang, tetapi layanan belum pernah
+dipanggil…"* muncul sebagai paragraf tiga baris untuk keadaan yang **bukan
+masalah** dan hilang sendiri setelah satu unggahan — dua kali dalam satu panel.
+Kini sebab hanya muncul bila benar-benar bisa ditindaklanjuti (`gagal` atau
+kunci belum dipasang), satu baris dipangkas, kalimat penuhnya di tooltip.
+
+Baris layanan juga disatukan jadi satu komponen `BarisLayanan` yang dipakai
+rantai gambar DAN PDF — kalau tidak, "satu aturan untuk satu aplikasi" hanya
+berlaku di separuh layar.
+
+**Verifikasi.** 10 uji baru (backend + frontend). Empat mutasi disuntikkan
+(`pypdf` dikembalikan ke 0/0; endpoint PDF berhenti mengirim `aktif`;
+`URUTAN_PDF` dibalik; sebab ditampilkan lagi untuk semua status) — **keempatnya
+tertangkap**. 2.080 uji backend & 635 uji frontend hijau.
+
+---
+
 ## [#780] Panel kuota menyebut SEBAB, bukan cuma angka — 2026-08-06
 
 Lanjutan langsung dari `[#779]`. Server sudah menghitung `alasan` per layanan

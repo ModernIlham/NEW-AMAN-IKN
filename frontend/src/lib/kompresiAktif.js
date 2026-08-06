@@ -19,8 +19,24 @@
  * peramban masih memegang jawaban lama dari cache).
  */
 
-// Cerminan `backend/kompresi_rantai.URUTAN`.
+// Cerminan `backend/kompresi_rantai.URUTAN` dan `URUTAN_PDF`.
 export const URUTAN = ["tinify", "compresto", "uploadcare", "pillow"];
+export const URUTAN_PDF = ["ilovepdf", "pypdf"];
+
+/**
+ * Sebab yang layak DITAMPILKAN pada satu baris layanan — "" bila tak ada.
+ *
+ * Hanya keadaan yang BISA DITINDAKLANJUTI yang bersuara: layanan gagal, atau
+ * kuncinya belum dipasang. Status `belum_dicoba` sengaja DIAM — ia bukan
+ * masalah (hilang sendiri setelah satu unggahan), dan menampilkannya membuat
+ * panel dipenuhi paragraf tiga baris yang tak menuntut tindakan apa pun.
+ * Itulah keluhan "kembalikan ke desain yang simple".
+ */
+export function sebabTampil(entri) {
+  const e = entri || {};
+  const perluTindakan = e.status === "gagal" || e.terpasang === false;
+  return perluTindakan && e.alasan ? String(e.alasan) : "";
+}
 
 /** Sisa kuota satu entri. Negatif = tak terbatas (Pillow lokal). */
 export function sisaKuota(entri) {
