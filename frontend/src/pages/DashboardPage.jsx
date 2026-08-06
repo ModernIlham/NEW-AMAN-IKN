@@ -1529,18 +1529,29 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   // Tempatkan aset pada ruangan di denah. Lokasi yang BERLAKU diambil dulu
   // supaya peta terbuka di posisi sekarang dan tombol "Cabut Penempatan"
   // hanya muncul bila memang ada penempatan — respons daftar tak memuatnya.
+  // Aset yang BELUM ditempatkan tapi sudah punya koordinat GPS diumpankan
+  // sebagai `titikAwal`: peta terbuka tepat di posisinya dan langsung
+  // terdeteksi, bukan kosong di pusat kawasan menunggu diklik manual.
   const handleOpenLokasiDenah = useCallback(async (assetId, namaAset) => {
     if (!assetId) return;
     let lokasi = null;
+    let titik = null;
     try {
       const r = await axios.get(`${API}/assets/${assetId}?exclude_media=true`);
       lokasi = r.data?.lokasi_spasial || null;
+      // Koordinat aset tersimpan sebagai string — parse toleran (koma desimal).
+      const lat = parseFloat(String(r.data?.koordinat_latitude ?? "").trim().replace(",", "."));
+      const lon = parseFloat(String(r.data?.koordinat_longitude ?? "").trim().replace(",", "."));
+      if (Number.isFinite(lat) && Number.isFinite(lon)
+          && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
+        titik = [lon, lat];                        // format GeoJSON [lon, lat]
+      }
     } catch {
       // Gagal ambil lokasi berlaku bukan alasan menutup pintu: operator tetap
       // bisa menancapkan titik baru, hanya tanpa posisi awal.
       toast.error("Lokasi tersimpan gagal dimuat — peta dibuka tanpa posisi awal");
     }
-    setLokasiDenahAset({ id: assetId, nama: namaAset || "Aset", lokasi });
+    setLokasiDenahAset({ id: assetId, nama: namaAset || "Aset", lokasi, titik });
   }, []);
 
   // === UI HANDLERS ===
@@ -2004,6 +2015,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
             pesanHapus="Penempatan aset dicabut"
             submitUrl={`${API}/assets/${lokasiDenahAset.id}/lokasi-spasial`}
             lokasiAwal={lokasiDenahAset.lokasi}
+            titikAwal={lokasiDenahAset.titik}
             onClose={() => setLokasiDenahAset(null)}
           />
         )}
