@@ -34,12 +34,31 @@ const CategoryManagerDialog = memo(({ open, onClose, categories, onCategoriesCha
 
   useEffect(() => { if (open) muatCekKodefikasi(); }, [open, muatCekKodefikasi]);
 
+  // Daftar HASIL SARING — bukan daftar yang ditampilkan. Pemotongan per
+  // halaman dilakukan saat render (`.slice` di <tbody>), jadi tetap hanya 50
+  // baris yang benar-benar dirender berapa pun panjang daftar ini.
+  //
+  // Dulu baris tanpa-pencarian mengembalikan `cats.slice(0, 50)`. Itu penjaga
+  // performa yang sudah tak berlaku sejak paginasi dipasang — dan ia MEMATIKAN
+  // paginasi itu: panjangnya selalu 50, sehingga total halaman selalu 1 dan
+  // tombol "Sebelumnya"/"Berikutnya" dinonaktifkan permanen. Dari 12.488
+  // kategori, hanya 50 pertama yang bisa dilihat, tanpa satu pun petunjuk
+  // bahwa sisanya ada — layar bahkan menulis "1-50 dari 50".
   const filteredCategories = useMemo(() => {
     const cats = Array.isArray(categories) ? categories : [];
-    if (!categorySearch || categorySearch.length < 2) return cats.slice(0, 50);
+    if (!categorySearch || categorySearch.length < 2) return cats;
     const s = categorySearch.toLowerCase();
     return cats.filter(c => (c.label||'').toLowerCase().includes(s) || (c.kode_aset||'').toLowerCase().includes(s));
   }, [categories, categorySearch]);
+
+  const totalHalaman = Math.max(1, Math.ceil(filteredCategories.length / CATEGORY_PAGE_SIZE));
+
+  // Halaman aktif dijepit ke rentang yang masih ada. Tanpa ini, menghapus
+  // kategori terakhir di halaman terakhir meninggalkan tabel KOSONG dengan
+  // kedua tombol mati — pengguna terjebak tanpa cara kembali.
+  useEffect(() => {
+    setCategoryPage(p => Math.min(p, totalHalaman));
+  }, [totalHalaman]);
 
   const handleAddCategory = useCallback(async () => {
     if (!newCategoryName.trim()) { toast.error("Deskripsi kategori wajib diisi"); return; }
@@ -224,14 +243,22 @@ const CategoryManagerDialog = memo(({ open, onClose, categories, onCategoriesCha
                 <span>
                   {Math.min((categoryPage - 1) * CATEGORY_PAGE_SIZE + 1, filteredCategories.length)}-{Math.min(categoryPage * CATEGORY_PAGE_SIZE, filteredCategories.length)} dari {filteredCategories.length}
                 </span>
+                {/* Ketiga kendali memakai `totalHalaman` yang SAMA. Sebelumnya
+                    angka itu dihitung ulang di tiga tempat dengan ekor `|| 1`
+                    hanya pada salah satunya — bentuk yang membuat label dan
+                    keadaan tombol bisa berbeda pendapat. */}
                 <div className="flex items-center gap-1">
-                  <Button variant="outline" size="sm" className="h-6 px-2 text-xs min-w-0 min-h-0" onClick={() => setCategoryPage(p => Math.max(1, p - 1))} disabled={categoryPage <= 1}>
+                  <Button variant="outline" size="sm" className="h-6 px-2 text-xs min-w-0 min-h-0"
+                    onClick={() => setCategoryPage(p => Math.max(1, p - 1))}
+                    disabled={categoryPage <= 1} data-testid="kategori-prev">
                     <ChevronLeft className="w-3 h-3" /> Sebelumnya
                   </Button>
-                  <span className="px-2 text-muted-foreground font-medium">
-                    {categoryPage} / {Math.ceil(filteredCategories.length / CATEGORY_PAGE_SIZE) || 1}
+                  <span className="px-2 text-muted-foreground font-medium" data-testid="kategori-halaman">
+                    {categoryPage} / {totalHalaman}
                   </span>
-                  <Button variant="outline" size="sm" className="h-6 px-2 text-xs min-w-0 min-h-0" onClick={() => setCategoryPage(p => Math.min(Math.ceil(filteredCategories.length / CATEGORY_PAGE_SIZE), p + 1))} disabled={categoryPage >= Math.ceil(filteredCategories.length / CATEGORY_PAGE_SIZE)}>
+                  <Button variant="outline" size="sm" className="h-6 px-2 text-xs min-w-0 min-h-0"
+                    onClick={() => setCategoryPage(p => Math.min(totalHalaman, p + 1))}
+                    disabled={categoryPage >= totalHalaman} data-testid="kategori-next">
                     Berikutnya <ChevronRight className="w-3 h-3" />
                   </Button>
                 </div>
