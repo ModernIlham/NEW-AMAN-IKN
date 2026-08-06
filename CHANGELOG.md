@@ -96,8 +96,18 @@ gagal senyap. Empat perubahan di `LokasiTemuanDialog.jsx`:
   Cabut kiri + Simpan kanan, header ber-`pr-10` agar judul/deskripsi tak
   menabrak ikon tutup.
 
-Uji penjaga dialog 14 → 21 (lapisan poligon wajib tembus-klik, snapshot
-tersimpan tanpa jaringan, prapilih ruangan tak menggeser, Batal absen).
+Uji penjaga dialog 14 → 25. Tinjauan adversarial multi-lensa (34 agen, 14
+temuan terkonfirmasi → 8 masalah unik) menutup sebelum rilis: prapilih
+ruangan yang diam-diam menaikkan penempatan LANTAI tersimpan menjadi ruangan
+(pembanding `nodeAwal` — "buka lalu Simpan" tak boleh mencetak riwayat
+custody palsu); lantai gedung lama menempel pada titik baru saat deteksi
+gagal (klik selalu melepas lantai/ruangan dulu); balapan respons GeoJSON basi
+(penjaga urutan kedua lapisan); respons `terpotong` yang menghamburkan ribuan
+pin Point `titik_wakil` (disaring); LOD viewport dijepit di gedung + ruangan
+dimuat per lantai terpilih lewat `dalam` (lantai bertumpuk di jejak 2D yang
+sama); `pr-10` → `pr-11` (standar 44px tombol tutup dialog); footer kembali
+`flex-wrap` (320px); dan empat uji yang terpuaskan KOMENTAR dijangkarkan ke
+bentuk kodenya.
 
 ## [#788] Dialog Denah tak lagi terbuka bisu — titik yang sudah ada langsung dideteksi — 2026-08-06
 
