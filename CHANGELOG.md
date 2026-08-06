@@ -67,6 +67,62 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#779] Indikator kompresi menunjuk layanan yang benar-benar melayani — 2026-08-06
+
+Laporan pemilik: angka kuota di toolbar menunjukkan **0/500** padahal panel
+rinciannya sendiri memperlihatkan Compresto masih menyisakan **474/500**.
+
+**Rantainya TIDAK rusak.** Perlu dikatakan terus terang karena dugaan pertama
+justru sebaliknya: `auto_compress_image` memang sudah berjenjang
+Tinify → Compresto → Uploadcare → Pillow, dan tiap `compress_with_*` mundur
+sendiri begitu kuotanya habis. Foto yang diunggah selama ini memang sudah
+dikompres Compresto. Yang berbohong **indikatornya**.
+
+**Akar masalah — dua pertanyaan berbeda yang tercampur.** Indikator memilih
+layanan dengan bendera `available`, dan `available` berarti *"percobaan
+TERAKHIR terbukti berhasil"* — catatan diagnostik di **memori proses** yang
+hangus tiap kali server restart (lihat `kompresi_diagnostik.py`; sifat itu
+memang disengaja dan benar untuk panel diagnostik). Setelah satu deploy,
+layanan yang sehat pun kembali `available: false`, tak ada satu pun yang lolos
+saringan, lalu `|| quotas[0]` menjatuhkannya ke Tinify yang kuotanya nol.
+
+  • *"Sudah TERBUKTI jalan?"* → jujur untuk panel diagnostik.
+  • *"Akan DIPAKAI berikutnya?"* → yang ditanyakan operator saat melihat angka.
+    Penentunya hanya dua: **kuncinya terpasang** dan **kuotanya belum habis** —
+    persis syarat yang dipakai rantai aslinya.
+
+**Perbaikan.** Modul murni baru `kompresi_rantai.py` menjawab pertanyaan kedua,
+dan endpoint `/compression-quotas` kini mengirim `terpasang` per layanan plus
+`aktif` (siapa giliran berikutnya) — dihitung **di server**, supaya rantai dan
+layar tak mungkin menjawab berbeda. Rantai di `auto_compress_image` sekarang
+mengulang `URUTAN` dari modul yang sama, bukan daftar tulisan-tangannya
+sendiri; uji anti-drift menagih keduanya tetap sejalan.
+
+Di layar:
+
+- Angka chip milik layanan yang **benar-benar melayani**, dan labelnya
+  menyebut namanya ("Kompresi aktif: Compresto — sisa 474 dari 500").
+- Saat seluruh kuota habis, Pillow mengambil alih → chip menampilkan **∞**
+  dan **tidak** dicat merah. Merah di situ berbohong: kompresi tetap berjalan,
+  hanya lokal.
+- Persentase warna diambil dari layanan aktif, bukan jumlah gabungan seluruh
+  layanan — gabungan bisa membaca "26% terpakai" (hijau, terlihat sehat) saat
+  tangki yang sedang dipakai sudah kering.
+- Panel rincian menampilkan **seluruh** mata rantai, menandai yang sedang
+  dipakai, dan menyebut "belum" untuk yang kuncinya belum dipasang. Sebelumnya
+  Uploadcare lenyap dari daftar padahal namanya disebut di baris "Urutan" tepat
+  di bawahnya.
+
+**Verifikasi.** 55 uji baru (28 backend + 27 frontend), termasuk satu yang
+merekam perilaku LAMA agar perbaikannya terbukti bukan kebetulan. Enam mutasi
+disuntikkan (syarat `available` dihidupkan lagi; `remaining` 0 jatuh ke
+perhitungan cadangan; prioritas `URUTAN` dibuang; Pillow dianggap berkuota
+habis; rantai memakai daftarnya sendiri lagi; endpoint berhenti mengirim
+`aktif`) — **keenamnya tertangkap**. Seluruh 2.072 uji backend & 625 uji
+frontend hijau.
+
+---
+
 ## [#778] Tombol hapus foto di popup peta berhenti menutupi fotonya sendiri — 2026-08-06
 
 Laporan lapangan: di HP/tablet, popup **"Aset baru di titik ini"** menampilkan

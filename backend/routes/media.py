@@ -27,6 +27,7 @@ media_router = APIRouter()
 
 # API Keys from environment
 from kompresi_diagnostik import catat_percobaan, ringkas_layanan
+from kompresi_rantai import URUTAN, layanan_aktif
 
 COMPRESTO_API_KEY = os.environ.get("COMPRESTO_API_KEY", "")
 UPLOADCARE_PUBLIC_KEY = os.environ.get("UPLOADCARE_PUBLIC_KEY", "")
@@ -301,6 +302,16 @@ async def compress_with_uploadcare(image_bytes: bytes) -> Optional[bytes]:
 # ============================================================================
 # MAIN COMPRESSION FUNCTION (Fallback Chain)
 # ============================================================================
+# Fungsi kompresi per layanan JARINGAN. `pillow` sengaja TIDAK di sini: ia
+# jaring terakhir yang tak pernah mengembalikan None dan tak berkuota, jadi
+# perlakuannya berbeda (dipanggil setelah seluruh rantai gagal).
+_FUNGSI_KOMPRESI = {
+    "tinify": compress_with_tinify,
+    "compresto": compress_with_compresto,
+    "uploadcare": compress_with_uploadcare,
+}
+
+
 async def auto_compress_image(image_data_b64: str) -> tuple:
     """
     Auto-compress image using fallback chain:
@@ -317,13 +328,15 @@ async def auto_compress_image(image_data_b64: str) -> tuple:
         original_size = len(image_bytes)
 
         # CHAIN: Tinify → Compresto → Uploadcare → Pillow
-        methods = [
-            ("tinify", compress_with_tinify),
-            ("compresto", compress_with_compresto),
-            ("uploadcare", compress_with_uploadcare),
-        ]
-
-        for method_name, compress_fn in methods:
+        #
+        # Urutannya diambil dari `kompresi_rantai.URUTAN` — SATU sumber
+        # kebenaran yang dipakai bersama indikator kuota di layar. Dulu daftar
+        # ini ditulis ulang di sini; rantai dan indikatornya lalu bisa berbeda
+        # tanpa ada yang menyadarinya. Uji anti-drift menagih keduanya sejalan.
+        for method_name in URUTAN:
+            compress_fn = _FUNGSI_KOMPRESI.get(method_name)
+            if compress_fn is None:
+                continue    # "pillow" bukan layanan jaringan — ditangani di bawah
             compressed = await compress_fn(image_bytes)
             if compressed and len(compressed) < original_size:
                 compressed_b64 = base64.b64encode(compressed).decode('utf-8')
@@ -421,6 +434,10 @@ async def get_all_compression_quotas(_user: dict = Depends(require_user)):
         "limit": SERVICE_LIMITS["tinify"],
         "remaining": max(0, SERVICE_LIMITS["tinify"] - tinify_used),
         "available": bool(TINIFY_API_KEY),
+        # `terpasang` = syarat masuk rantai, PERSIS seperti yang diperiksa
+        # `compress_with_tinify`: pustaka ada DAN kunci ada. Kunci terisi
+        # tanpa pustaka terpasang berarti layanannya tak pernah dipanggil.
+        "terpasang": bool(TINIFY_API_KEY) and bool(TINIFY_AVAILABLE),
         "month": month,
     })
 
@@ -432,14 +449,16 @@ async def get_all_compression_quotas(_user: dict = Depends(require_user)):
     compresto_quota = await get_quota("compresto")
     r = ringkas_layanan("compresto", bool(COMPRESTO_API_KEY),
                         compresto_quota["used"], SERVICE_LIMITS["compresto"])
-    r.update({"name": "Compresto", "available": r["tersedia"], "month": month})
+    r.update({"name": "Compresto", "available": r["tersedia"],
+              "terpasang": bool(COMPRESTO_API_KEY), "month": month})
     quotas.append(r)
 
     # Uploadcare
     uploadcare_quota = await get_quota("uploadcare")
     r = ringkas_layanan("uploadcare", bool(UPLOADCARE_PUBLIC_KEY),
                         uploadcare_quota["used"], SERVICE_LIMITS["uploadcare"])
-    r.update({"name": "Uploadcare", "available": r["tersedia"], "month": month})
+    r.update({"name": "Uploadcare", "available": r["tersedia"],
+              "terpasang": bool(UPLOADCARE_PUBLIC_KEY), "month": month})
     quotas.append(r)
 
     # Pillow (always available, unlimited)
@@ -450,7 +469,18 @@ async def get_all_compression_quotas(_user: dict = Depends(require_user)):
         "limit": -1,  # Unlimited
         "remaining": -1,
         "available": True,
+        "terpasang": True,   # jaring terakhir — selalu ada, tanpa kuota
         "month": month,
     })
 
-    return {"quotas": quotas, "month": month}
+    # Layanan yang AKAN melayani permintaan berikutnya.
+    #
+    # Dihitung di server, bukan di layar, karena hanya di sinilah syarat
+    # sesungguhnya diketahui — dan supaya jawabannya tak bisa berbeda antara
+    # rantai dan indikatornya. Ini BUKAN `available`: `available` menjawab
+    # "sudah terbukti berhasil sejak proses ini hidup" (catatan diagnostik di
+    # memori, hangus tiap restart). Indikator kuota yang memakainya menampilkan
+    # 0/500 milik Tinify padahal Compresto masih menyisakan ratusan — laporan
+    # lapangan yang memunculkan perubahan ini.
+    return {"quotas": quotas, "month": month,
+            "aktif": layanan_aktif(quotas), "urutan": list(URUTAN)}

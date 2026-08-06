@@ -2,6 +2,7 @@ import React, { useState, useEffect, memo } from "react";
 import { Image, FileDown } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import axios from "axios";
+import { ringkasAktif } from "../../lib/kompresiAktif";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -17,6 +18,8 @@ function getStatusColors(usagePercent) {
 function useKuota() {
   const [imageQuotas, setImageQuotas] = useState([]);
   const [pdfQuotas, setPdfQuotas] = useState([]);
+  // Layanan yang AKAN melayani kompresi berikutnya, dihitung server.
+  const [aktifGambar, setAktifGambar] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -26,7 +29,10 @@ function useKuota() {
           axios.get(`${API}/compression-quotas`),
           axios.get(`${API}/pdf-compression-quotas`),
         ]);
-        if (imgResp.status === "fulfilled") setImageQuotas(imgResp.value.data.quotas || []);
+        if (imgResp.status === "fulfilled") {
+          setImageQuotas(imgResp.value.data.quotas || []);
+          setAktifGambar(imgResp.value.data.aktif || "");
+        }
         if (pdfResp.status === "fulfilled") setPdfQuotas(pdfResp.value.data.quotas || []);
       } catch (e) {
         console.warn("Quota fetch error:", e);
@@ -39,12 +45,12 @@ function useKuota() {
     return () => clearInterval(interval);
   }, []);
 
-  return { imageQuotas, pdfQuotas, loading };
+  return { imageQuotas, pdfQuotas, aktifGambar, loading };
 }
 
 // Panel rincian kuota — dipakai popover desktop DAN HP supaya informasinya
 // identik dari pintu mana pun dibuka.
-function PanelKuota({ imageQuotas, pdfQuotas }) {
+function PanelKuota({ imageQuotas, pdfQuotas, aktifGambar }) {
   return (
     <div className="p-3 space-y-3">
       <div>
@@ -53,17 +59,32 @@ function PanelKuota({ imageQuotas, pdfQuotas }) {
           <span className="font-medium text-sm">Kompresi Gambar</span>
         </div>
         <div className="space-y-1.5">
-          {imageQuotas.filter(q => q.available || q.used > 0).map(q => {
+          {/* SELURUH mata rantai ditampilkan, termasuk yang kuncinya belum
+              dipasang. Dulu daftar ini disaring `available || used > 0`,
+              sehingga Uploadcare lenyap dari layar padahal namanya disebut
+              di baris "Urutan" tepat di bawah — operator melihat rantai yang
+              tak lengkap dan tak tahu MENGAPA satu mata rantai dilewati. */}
+          {imageQuotas.map(q => {
             const pct = q.limit > 0 ? (q.used / q.limit) * 100 : 0;
             const colors = getStatusColors(pct);
+            const iniAktif = q.service === aktifGambar;
+            const belumDisetel = q.terpasang === false;
             return (
-              <div key={q.service} className="flex items-center gap-2">
-                <span className="text-[11px] text-slate-400 w-20 truncate">{q.name}</span>
+              <div key={q.service}
+                   className={`flex items-center gap-2 ${belumDisetel ? "opacity-45" : ""}`}
+                   data-testid={`kuota-baris-${q.service}`}>
+                <span className="text-[11px] text-slate-400 w-20 truncate" title={q.name}>{q.name}</span>
                 <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
                   <div className={`h-full ${colors.bar}`} style={{ width: `${Math.min(pct, 100)}%` }} />
                 </div>
+                {iniAktif && (
+                  <span className="text-[9px] px-1 py-px rounded bg-emerald-500/20 text-emerald-300 whitespace-nowrap"
+                        data-testid="kuota-penanda-aktif">dipakai</span>
+                )}
                 <span className="text-[11px] font-mono w-16 text-right">
-                  {q.limit < 0 ? (
+                  {belumDisetel ? (
+                    <span className="text-slate-500">belum</span>
+                  ) : q.limit < 0 ? (
                     <span className="text-emerald-400">∞</span>
                   ) : (
                     <span className={q.remaining < 50 ? 'text-amber-400' : ''}>{q.remaining}/{q.limit}</span>
@@ -127,40 +148,48 @@ function PanelKuota({ imageQuotas, pdfQuotas }) {
 // mengurusnya (itu memang katup pengaman yang sudah dirancang di sana).
 // ============================================================================
 const TinifyQuotaIndicator = memo(({ className = "" }) => {
-  const { imageQuotas, pdfQuotas, loading } = useKuota();
+  const { imageQuotas, pdfQuotas, aktifGambar, loading } = useKuota();
   if (loading) return null;
 
-  const activeImg = imageQuotas.find(q => q.available && q.limit > 0 && q.remaining > 0) || imageQuotas[0];
-  const totalImgUsed = imageQuotas.filter(q => q.limit > 0).reduce((s, q) => s + q.used, 0);
-  const totalImgLimit = imageQuotas.filter(q => q.limit > 0).reduce((s, q) => s + q.limit, 0);
-  const imgPercent = totalImgLimit > 0 ? (totalImgUsed / totalImgLimit) * 100 : 0;
-  const imgColors = getStatusColors(imgPercent);
+  // Angka yang ditampilkan HARUS milik layanan yang benar-benar melayani
+  // permintaan berikutnya — bukan Tinify yang kebetulan pertama di daftar.
+  // Persentase juga diambil dari layanan itu, bukan dari jumlah SELURUH
+  // layanan: "tangki mana yang sedang kita pakai, dan seberapa penuh" adalah
+  // pertanyaan yang berguna, sedangkan rata-rata gabungan tak berarti apa-apa
+  // (Tinify habis + Uploadcare kosong = "26% terpakai", terlihat sehat).
+  const aktif = ringkasAktif(imageQuotas, aktifGambar);
+  const imgColors = aktif.takTerbatas
+    ? getStatusColors(0)   // Pillow tak berkuota — jangan pernah beralarm merah
+    : getStatusColors(aktif.persen);
+  const judul = aktif.nama
+    ? `Kompresi aktif: ${aktif.nama} — sisa ${aktif.takTerbatas ? "tak terbatas" : aktif.teks}. Ketuk untuk rincian.`
+    : "Kuota kompresi — ketuk untuk rincian";
 
   return (
     <Popover>
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label="Kuota kompresi — ketuk untuk rincian"
-          title="Kuota kompresi — ketuk untuk rincian"
+          aria-label={judul}
+          title={judul}
           className={`flex flex-shrink-0 items-center gap-1.5 px-2 py-1 rounded-md border cursor-pointer transition-all hover:shadow-sm min-h-0 ${imgColors.bg} border-current/10 ${className}`}
           data-testid="kuota-indikator"
         >
           <Image className={`w-3.5 h-3.5 flex-shrink-0 ${imgColors.text}`} />
           <span className={`text-xs font-semibold tabular-nums ${imgColors.text}`}>
-            {activeImg ? `${activeImg.remaining}` : "0"}
+            {aktif.teks}
           </span>
           {/* Bar mini hanya di layar SANGAT lebar (2xl+). Di 1280–1535 label
               semua tombol toolbar menyala serentak dan barisnya jadi sesak;
               32px bar ini justru yang mendorongnya meluap. Angkanya tetap
               terbaca, dan bar lengkap tiap layanan ada di dalam popover. */}
           <div className="hidden 2xl:block w-8 h-1.5 bg-muted rounded-full overflow-hidden">
-            <div className={`h-full ${imgColors.bar} transition-all`} style={{ width: `${Math.min(imgPercent, 100)}%` }} />
+            <div className={`h-full ${imgColors.bar} transition-all`} style={{ width: `${Math.min(aktif.persen, 100)}%` }} />
           </div>
         </button>
       </PopoverTrigger>
       <PopoverContent side="bottom" align="end" className="bg-slate-900 text-white border-slate-700 p-0 w-[320px] max-w-[92vw] shadow-xl">
-        <PanelKuota imageQuotas={imageQuotas} pdfQuotas={pdfQuotas} />
+        <PanelKuota imageQuotas={imageQuotas} pdfQuotas={pdfQuotas} aktifGambar={aktifGambar} />
       </PopoverContent>
     </Popover>
   );
@@ -172,30 +201,32 @@ TinifyQuotaIndicator.displayName = "TinifyQuotaIndicator";
 // pemilik: hemat ruang kiri-kanan pada baris toolbar HP yang sudah sesak.
 // Tetap tombol: ketukan membuka panel rincian yang sama dengan desktop.
 export const TinifyQuotaMobile = memo(({ className = "" }) => {
-  const { imageQuotas, pdfQuotas, loading } = useKuota();
+  const { imageQuotas, pdfQuotas, aktifGambar, loading } = useKuota();
   if (loading || imageQuotas.length === 0) return null;
 
-  const active = imageQuotas.find(q => q.available && q.limit > 0 && q.remaining > 0) || imageQuotas[0];
-  if (!active || !(active.limit > 0)) return null;
+  const aktif = ringkasAktif(imageQuotas, aktifGambar);
+  if (!aktif.entri) return null;
 
-  const pct = (active.used / active.limit) * 100;
-  const colors = getStatusColors(pct);
+  const colors = aktif.takTerbatas ? getStatusColors(0) : getStatusColors(aktif.persen);
+  // Baris bawah = batas layanan aktif. Pillow tak berbatas, jadi yang
+  // ditampilkan namanya ("lokal") — angka "‑1" akan membingungkan.
+  const barisBawah = aktif.takTerbatas ? "lokal" : String(aktif.entri.limit);
 
   return (
     <Popover>
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label="Kuota kompresi — ketuk untuk rincian"
+          aria-label={`Kompresi aktif: ${aktif.nama} — ketuk untuk rincian`}
           className={`flex flex-col items-center justify-center leading-none px-1 rounded-md min-w-0 min-h-0 ${colors.bg} ${className}`}
           data-testid="kuota-indikator-hp"
         >
-          <span className={`text-[10px] font-bold tabular-nums ${colors.text}`}>{active.remaining}</span>
-          <span className="text-[8px] text-muted-foreground tabular-nums border-t border-current/20 w-full text-center">{active.limit}</span>
+          <span className={`text-[10px] font-bold tabular-nums ${colors.text}`}>{aktif.teks}</span>
+          <span className="text-[8px] text-muted-foreground tabular-nums border-t border-current/20 w-full text-center">{barisBawah}</span>
         </button>
       </PopoverTrigger>
       <PopoverContent side="bottom" align="end" className="bg-slate-900 text-white border-slate-700 p-0 w-[320px] max-w-[92vw] shadow-xl">
-        <PanelKuota imageQuotas={imageQuotas} pdfQuotas={pdfQuotas} />
+        <PanelKuota imageQuotas={imageQuotas} pdfQuotas={pdfQuotas} aktifGambar={aktifGambar} />
       </PopoverContent>
     </Popover>
   );
