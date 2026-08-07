@@ -67,6 +67,50 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#796] Riset Penggunaan BMN sisi pemohon — empat rezim, dan pengakuan bahwa nol klaimnya terverifikasi — 2026-08-08
+
+Permintaan pemilik: *"pada penggunaan BMN selain PSP, terdapat juga tipe
+pengelolaan lainnya, seperti dioperasikan pihak lain, alih status penggunaan,
+penggunaan sementara. lakukan riset peraturannya untuk pemohon bagaimana
+surat surat, syarat syarat, dan kebutuhan datanya apa saja … baik yang punya
+bukti kepemilikan maupun yang tidak punya bukti kepemilikan."*
+
+Menambah `docs/PENGGUNAAN-BMN-PEMOHON.md` (1.859 baris, 7 bab): ringkasan
+empat rezim · peta keputusan (jenis aset → rezim → pejabat berwenang) · bab
+per rezim (PSP, penggunaan sementara, dioperasikan pihak lain, alih status)
+dengan kerangka surat, daftar lampiran, dan kebutuhan data · BMN berbukti
+milik vs tanpa bukti milik · rencana unggahan SIMAN V2 · rancangan modul untuk
+AMAN · dan bab terakhir berisi apa yang **belum** terverifikasi.
+
+**Yang penting dari entri ini bukan isinya, melainkan status kepercayaannya.**
+Riset dijalankan 13 agen dengan pemeriksaan skeptis, lalu hasilnya diuji: dari
+seluruh klaim, yang berstatus **[F] (terbaca dari teks resmi) = 0 (nol)**.
+Setiap upaya mengambil PDF peraturan ditolak di gerbang egress lingkungan
+riset — diverifikasi ulang secara manual dengan `curl`: `jdih.kemenkeu.go.id`,
+`peraturan.bpk.go.id`, dan `djkn.kemenkeu.go.id` semuanya `HTTP 000`
+(sambungan gagal), bukan 403 dari situsnya. Jadi seluruh isi bertumpu pada
+**cuplikan mesin pencari**.
+
+Konsekuensi yang sengaja dibuat terlihat di dokumen:
+
+- Label diperluas jadi **[S·1]** (rantai sumber tunggal), **[S·lemah]**
+  (Scribd/blog/judul video), dan **[X]** (nihil data) — karena tiga label
+  ([F]/[S]/[O]) saja menggelembungkan kepercayaan.
+- **Semua nomor pasal dikeluarkan dari badan dokumen** dan dikumpulkan di
+  §7.3 sebagai "daftar angka yang DILARANG dikutip". Kolom pasal yang terisi
+  akan dikutip orang lain sebagai fakta.
+- §7.2 memuat **sepuluh prioritas verifikasi manual** — teratas: membuktikan
+  PMK 40/2024 memang ada dan masih berlaku per Agustus 2026, lalu **rezim
+  khusus IKN** (PMK 53/2023, UU 3/2022 jo. UU 21/2023, kedudukan Otorita IKN
+  sebagai Pengguna Barang) yang sama sekali belum diperiksa.
+
+Dokumen ini **tidak menyalakan validasi apa pun di AMAN**. Ia peta kerja +
+daftar pertanyaan, dan ditulis begitu supaya tak ada yang mengunci ambang
+nilai atau mencetak nomor pasal berdasarkan bahan yang belum dibaca aslinya.
+Tertaut dari `README.md` dan baris "Penggunaan" pada `docs/PUSTAKA-REGULASI-BMN.md`.
+
+---
+
 ## [#795] Dialog di HP berhenti jadi dua kolom sempit — 70 titik, satu kelas cacat — 2026-08-08
 
 Laporan pemilik (dengan tangkapan layar): *"perbaiki posisi tata letak di
