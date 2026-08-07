@@ -899,7 +899,12 @@ export default function PengadaanPage({ user, onBack }) {
                         onChange={(e) => setFormBarang(i, "uraian", e.target.value)}
                         data-testid={`pengadaan-barang-uraian-${i}`} />
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-[1fr_5rem_9rem] gap-2">
+                    {/* Di HP kolomnya TIDAK 50/50: Jumlah hampir selalu 1–3 angka,
+                        sedangkan Harga satuan bisa "1500000000" (10 digit). Membagi
+                        rata membuat rupiah tergulung sementara separuh kotak Jumlah
+                        menganggur. Lebar Jumlah dipatok 5rem — sama dengan patokan
+                        desktop di sebelahnya — dan sisanya milik harga. */}
+                    <div className="grid grid-cols-[5rem_1fr] sm:grid-cols-[1fr_5rem_9rem] gap-2">
                       <div className="col-span-2 sm:col-span-1">
                         <label className="text-[11px] font-medium text-muted-foreground block mb-1">
                           Kode barang <span className="font-normal">(10 digit aset · 16 digit persediaan)</span>
