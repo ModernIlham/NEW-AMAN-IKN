@@ -33,6 +33,10 @@ label BMN**, dan **backup otomatis terjadwal**.
 
 - Rencana induk & prinsip integrasi antar modul: [`docs/MASTERPLAN-SIKLUS-BMN.md`](./docs/MASTERPLAN-SIKLUS-BMN.md)
 - Rujukan regulasi & alur bisnis: [`docs/PUSTAKA-REGULASI-BMN.md`](./docs/PUSTAKA-REGULASI-BMN.md)
+- Penggunaan BMN dari sisi PEMOHON (4 rezim, berkas & ambang kewenangan):
+  [`docs/PENGGUNAAN-BMN-PEMOHON.md`](./docs/PENGGUNAAN-BMN-PEMOHON.md) —
+  **peta kerja, bukan rujukan hukum**: nol klaim di dalamnya terbaca dari teks
+  primer (sumber resmi tak terjangkau dari lingkungan riset)
 - Registry modul (konsep yang tampil di aplikasi): `frontend/src/lib/bmnModules.js`
 - Proses baku pengembangan per fitur: `.claude/skills/aman-dev/SKILL.md`
 
