@@ -54,6 +54,12 @@ PROFIL_PRIVASI = {
 }
 PROFIL_BAWAAN = "personal"        # gagal-tertutup: paling ketat bila tak jelas
 
+# Zona waktu yang dipakai MENGHITUNG jam kerja. IKN memakai WITA (UTC+8).
+# Dijadikan konstanta bernama supaya angka yang DITAMPILKAN `ringkas_kebijakan`
+# ke layar operator adalah angka yang sama dengan yang MENGGERBANGI jalur tulis
+# — bukan salinan yang bisa menyimpang diam-diam.
+ZONA_OFFSET_JAM = 8
+
 # Pembukaan presisi penuh darurat (barang hilang) TIDAK boleh permanen.
 MAKS_JAM_DARURAT = 72
 ALASAN_DARURAT_MIN = 10           # alasan wajib bermakna, bukan "." atau "x"
@@ -73,7 +79,7 @@ def profil_privasi(nama) -> dict:
                               PROFIL_PRIVASI[PROFIL_BAWAAN])
 
 
-def _jam_lokal(ts: datetime, offset_jam: int = 8) -> datetime:
+def _jam_lokal(ts: datetime, offset_jam: int = ZONA_OFFSET_JAM) -> datetime:
     """UTC → waktu lokal. IKN memakai WITA (UTC+8); offset dibuat parameter
     agar satker di zona lain tak memakai jam kerja yang salah."""
     if ts.tzinfo is None:
@@ -81,7 +87,8 @@ def _jam_lokal(ts: datetime, offset_jam: int = 8) -> datetime:
     return ts.astimezone(timezone(timedelta(hours=offset_jam)))
 
 
-def dalam_jam_aktif(ts: datetime, profil: dict, offset_jam: int = 8) -> bool:
+def dalam_jam_aktif(ts: datetime, profil: dict,
+                    offset_jam: int = ZONA_OFFSET_JAM) -> bool:
     """True bila waktu observasi berada dalam jendela yang boleh direkam.
 
     Profil tanpa `jam_aktif` selalu True. Untuk profil personal, observasi di
@@ -99,7 +106,8 @@ def dalam_jam_aktif(ts: datetime, profil: dict, offset_jam: int = 8) -> bool:
 
 
 def saring_observasi(obs: dict, profil_nama, sekarang: Optional[datetime] = None,
-                     offset_jam: int = 8, darurat: bool = False) -> dict:
+                     offset_jam: int = ZONA_OFFSET_JAM,
+                     darurat: bool = False) -> dict:
     """GERBANG WAJIB jalur tulis posisi. Kembalikan:
 
         {"simpan": bool, "alasan": str, "observasi": dict|None}
@@ -203,10 +211,21 @@ def batas_retensi(profil_nama, sekarang: Optional[datetime] = None) -> datetime:
 
 def ringkas_kebijakan() -> list:
     """Ringkasan profil untuk DITAMPILKAN di UI/laporan kepatuhan — kebijakan
-    yang tak terlihat pengguna tak bisa diperiksa siapa pun."""
+    yang tak terlihat pengguna tak bisa diperiksa siapa pun.
+
+    `jam_mulai`/`jam_selesai`/`zona_offset_jam` disertakan MENTAH di samping
+    kalimat `jam_aktif`. Alasannya bukan kelengkapan: layar Pelacakan perlu
+    menjawab "kenapa perangkat ini tak mengirim apa-apa sejak tadi", dan
+    jawaban tersering adalah "sekarang di luar jam aktifnya". Tanpa angka
+    mentah, satu-satunya jalan menghitungnya adalah MENGURAI KEMBALI kalimat
+    tampilan di atas — dan kalimat tampilan boleh berubah kapan saja.
+    """
     return [{"profil": k, "label": v["label"], "presisi": v["presisi"],
              "jam_aktif": (f"{v['jam_aktif'][0]:02d}:00–{v['jam_aktif'][1]:02d}:00"
                            if v["jam_aktif"] else "24 jam"),
+             "jam_mulai": v["jam_aktif"][0] if v["jam_aktif"] else None,
+             "jam_selesai": v["jam_aktif"][1] if v["jam_aktif"] else None,
+             "zona_offset_jam": ZONA_OFFSET_JAM,
              "hari_kerja_saja": v["hari_kerja_saja"],
              "retensi_hari": v["retensi_hari"]}
             for k, v in PROFIL_PRIVASI.items()]

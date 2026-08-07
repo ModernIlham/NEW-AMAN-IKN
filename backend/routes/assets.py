@@ -13,7 +13,8 @@ from pymongo.errors import DuplicateKeyError
 
 from db import db, fs_bucket
 from asset_fields import SCALAR_FIELD_NAMES
-from spasial_utils import terapkan_geo, sisip_geo_ke_update
+from spasial_utils import terapkan_geo, sisip_geo_ke_update, entri_riwayat_lokasi
+import spasial_penempatan as sp
 from models import AssetCreate, AssetResponse
 from auth_utils import (
     require_admin, require_super_admin, require_user,
@@ -1002,6 +1003,15 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
     # SPASIAL: turunkan `geo` untuk indeks 2dsphere (lihat spasial_utils.py).
     terapkan_geo(asset_doc)
 
+    # SPASIAL (integrasi inventarisasi → denah): aset baru ber-koordinat
+    # langsung menempati node denah aktif pemuat titiknya — panel isi lokasi
+    # dan angka "Tercatat" opname hidup dari pencatatan, tanpa langkah
+    # penempatan terpisah. Lihat spasial_penempatan.py.
+    lokasi_otomatis = await sp.penempatan_dari_inventarisasi(
+        {}, asset_doc, _user.get("username", ""), now)
+    if lokasi_otomatis:
+        asset_doc["lokasi_spasial"] = lokasi_otomatis
+
     try:
         await db.assets.insert_one(asset_doc)
     except DuplicateKeyError:
@@ -1034,6 +1044,12 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
         raise HTTPException(status_code=500, detail=f"Gagal menyimpan: {error_msg}")
     
     logger.info(f"Asset created: {asset.asset_code}")
+    # Riwayat penempatan ditulis SETELAH insert sukses — riwayat tak boleh
+    # mendahului kenyataan (pola set_lokasi_aset). Replay DuplicateKeyError
+    # sudah return lebih awal, jadi riwayat tak pernah dobel.
+    if lokasi_otomatis:
+        await sp.catat_penempatan(asset_doc, lokasi_otomatis,
+                                  _user.get("username", ""), now)
     invalidate_asset_cache()
     # Sinkron indeks Meilisearch (best-effort, non-blocking; no-op bila nonaktif).
     jadwalkan_sync("assets", asset_doc)
@@ -1963,16 +1979,27 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
         # (GET /assets/offline-snapshot?since=...) picks this change up.
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    
+
+    # SPASIAL: PUT full-replace juga menyentuh koordinat — hitung ulang `geo`
+    # (celah lama: jalur ini tak pernah memanggilnya sehingga indeks 2dsphere
+    # menyimpan titik basi) + penempatan otomatis inventarisasi (lihat PATCH
+    # di bawah / spasial_penempatan.py).
+    _geo_unset = sisip_geo_ke_update(existing, update_data)
+    lokasi_otomatis = await sp.penempatan_dari_inventarisasi(
+        existing, update_data, _user.get("username", ""),
+        update_data["updated_at"])
+    if lokasi_otomatis:
+        update_data["lokasi_spasial"] = lokasi_otomatis
+
     try:
         # Atomic CAS update: only succeeds if version still matches.
         # Support legacy docs without version field: when current_version==1,
         # also match docs where version is missing ($exists=False).
         cas_filter = _build_cas_filter(asset_id, current_version)
-        result = await db.assets.update_one(
-            cas_filter,
-            {"$set": update_data, "$inc": {"version": 1}}
-        )
+        _ops = {"$set": update_data, "$inc": {"version": 1}}
+        if _geo_unset:
+            _ops["$unset"] = _geo_unset
+        result = await db.assets.update_one(cas_filter, _ops)
         if result.matched_count == 0:
             # Someone else bumped version between our read and write — 409
             fresh = await db.assets.find_one({"id": asset_id}, {"_id": 0, "version": 1, "asset_code": 1, "asset_name": 1})
@@ -2023,6 +2050,14 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
                     pass
 
     logger.info(f"Asset updated: {asset.asset_code}")
+    # Riwayat penempatan otomatis SETELAH CAS sukses (pola set_lokasi_aset),
+    # lewat helper best-effort yang sama dengan PATCH/POST.
+    if lokasi_otomatis:
+        await sp.catat_penempatan(
+            {"id": asset_id, "activity_id": asset.activity_id,
+             "asset_code": asset.asset_code, "asset_name": asset.asset_name},
+            lokasi_otomatis, _user.get("username", ""),
+            update_data["updated_at"])
     invalidate_asset_cache()
     audit_user = _user.get("name") or _user.get("username") or request.headers.get("X-Audit-User", "unknown")
     audit_user_id = _user.get("id") or request.headers.get("X-Audit-User-Id", "")
@@ -2457,6 +2492,18 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
     # Mengembalikan bagian $unset agar `geo` ikut hilang saat koordinat dikosongkan.
     _geo_unset = sisip_geo_ke_update(existing, update_data)
 
+    # SPASIAL (integrasi inventarisasi → denah): koordinat dari jalur
+    # inventarisasi — kamera lapangan, antrean luring, lembar edit cepat,
+    # geser marker peta, semuanya bermuara ke PATCH ini — menempatkan aset
+    # yang BELUM ber-penempatan ke node denah aktif pemuat titiknya.
+    # Digabung SEBELUM CAS agar atomik dengan tulisan utama; riwayat menyusul
+    # setelah tulisan sukses. Lihat spasial_penempatan.py.
+    lokasi_otomatis = await sp.penempatan_dari_inventarisasi(
+        existing, update_data, _user.get("username", ""),
+        update_data["updated_at"])
+    if lokasi_otomatis:
+        update_data["lokasi_spasial"] = lokasi_otomatis
+
     try:
         # Atomic CAS: only succeeds if version is still what client saw.
         # Support legacy docs without version field.
@@ -2505,6 +2552,16 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
             await delete_photo_from_gridfs(gid)
         except Exception:
             pass
+
+    # Riwayat penempatan otomatis SETELAH CAS sukses — riwayat tak boleh
+    # mendahului kenyataan (pola set_lokasi_aset). CAS yang kalah sudah
+    # raise 409 di atas, jadi riwayat tak pernah menetes dari tulisan gagal.
+    # Helper-nya best-effort: aset sudah tersimpan, jadi galat jejak tak
+    # boleh membalas 500 atas tulisan yang berhasil.
+    if lokasi_otomatis:
+        await sp.catat_penempatan({**existing, "id": asset_id},
+                                  lokasi_otomatis, _user.get("username", ""),
+                                  update_data["updated_at"])
 
     logger.info(f"Asset patched: {asset_id} — fields: {list(update_data.keys())}")
     invalidate_asset_cache()

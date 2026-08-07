@@ -67,6 +67,197 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#791] Pelacakan berhenti terasa beku — kadensi bisa dipilih & layar menyegarkan diri — 2026-08-07
+
+Keluhan pemilik (verbatim): *"Pada link yang diberikan di HP maupun laptop tidak
+akurat menampilkan real-time mengambil posisi lat lng secara langsung … dan
+mengirimkan koordinat gpsnya terus menerus."*
+
+Penelusuran menemukan **empat** penyebab, dan hanya SATU yang benar-benar batas
+peramban. Tiga sisanya angka dan perilaku yang kita pilih sendiri:
+
+| # | Penyebab | Bukti | Ditutup di sini? |
+|---|---|---|---|
+| 1 | `/lacak` merekam paling cepat **1×/menit**; geser < 25 m dianggap diam → melambat ke **15 menit**; antrean ditahan **2 menit** sebelum dikirim | konstanta mati di `LacakPage.jsx` | ✅ |
+| 2 | Halaman Pelacakan memuat **sekali** lalu diam — posisi yang sudah mendarat di server tak muncul sampai di-reload manual | `useEffect(() => { muat(); }, [muat])` tanpa timer | ✅ |
+| 3 | Usia "terakhir terdengar" hanya dalam **menit** → perangkat yang baru saja mengirim dan yang sunyi 59 detik sama-sama "0 mnt" | `ringkas_kesehatan` | ✅ |
+| 4 | Peramban membekukan JavaScript saat layar mati / pindah aplikasi | batas peramban | ❌ (tetap dinyatakan terus terang) |
+
+**Kadensi jadi pilihan** (`frontend/src/lib/kadensiLacak.js`) — tiga mode di
+`/lacak`, dapat diganti **saat sedang merekam**:
+
+| Mode | Bergerak | Diam | Ambang diam | Kirim |
+|---|---|---|---|---|
+| Hemat baterai *(bawaan)* | 60 dtk | 15 mnt | 25 m | 2 mnt |
+| Sedang | 30 dtk | 5 mnt | 15 m | 60 dtk |
+| Pemantauan aktif | 10 dtk | 60 dtk | 8 m | 15 dtk |
+
+Angka mode **Hemat sama persis** dengan perilaku sebelum PR ini: menambahkan
+menu tidak boleh diam-diam memboroskan baterai & kuota perangkat lapangan yang
+pemegangnya tak menyentuh apa pun. Mode tercepat = **4 permintaan/menit**, jauh
+di bawah plafon `@limiter.limit("60/minute")` pada `/iot/observasi` — perangkat
+tak boleh kena rate-limit servernya sendiri justru pada mode yang dipilih supaya
+tak kehilangan posisi. Kadensi dibaca dari **ref** di dalam callback
+`watchPosition`; membacanya dari state berarti ganti mode di tengah perjalanan
+tak berpengaruh sampai perekaman dimulai ulang — menu yang tampak bekerja tapi
+tidak. Mode aktif membawa peringatan baterai, dan peringatan batas peramban
+lama diperluas: **kerapatan tercepat sekalipun tidak mengubahnya.**
+
+**Halaman Pelacakan menyegarkan diri** tiap 20 detik, **berhenti saat tab
+tersembunyi** dan memuat sekali lagi begitu tab kembali dilihat (halaman ini
+lazim ditinggal terbuka seharian — tanpa gerbang itu ia menembak permintaan ke
+VPS selamanya untuk layar yang tak dilihat siapa pun). Saklarnya terlihat di
+kepala halaman: operator berhak tahu apakah angkanya hidup atau beku. Muat
+otomatis berjalan **senyap** (tak memutar spinner); karena itu semua pemanggil
+kini `() => muat()` — `onClick={muat}` akan mengoper objek event sebagai
+argumen pertama dan justru membuat klik MANUAL berjalan senyap.
+
+**Jam hidup per perangkat** berdenyut tiap detik di komponennya sendiri
+(`UsiaHidup`), dihitung dari **selisih detik server** + waktu sejak data
+mendarat — bukan dari cap waktu ISO-nya. `ts_server` yang naif akan dibaca
+peramban sebagai waktu LOKAL, dan operator di WIB akan melihat "terakhir 1 jam
+lalu" untuk perangkat yang baru saja mengirim.
+
+**Dua penjelas kesunyian** di kartu perangkat, menjawab pertanyaan yang paling
+sering disalahartikan sebagai kerusakan: *"Koordinat tak disimpan"* (profil
+berpresisi wilayah) dan *"Di luar jam aktif — tak ada yang disimpan"*.
+Keduanya benar: `saring_observasi` membuang observasinya **di jalur tulis**,
+dengan sengaja. Tanpa kalimat ini, satu-satunya cara mengetahuinya adalah
+membaca kode servernya.
+
+Backend: `ringkas_kesehatan` menambah `diam_detik`; `ringkas_kebijakan`
+memancarkan `jam_mulai`/`jam_selesai`/`zona_offset_jam` **mentah** di samping
+kalimat tampilannya, dan offset itu kini konstanta bernama `ZONA_OFFSET_JAM`
+yang **sama dengan default penggerbangnya** — supaya angka yang dilihat
+operator adalah angka yang dijalankan mesin, bukan salinan yang bisa menyimpang.
+Layar menghitung gerbang jam memakai zona SERVER, bukan zona peramban.
+
+Uji: 18 uji `kadensiLacak.test.js` (bawaan tak boleh diam-diam jadi boros, mode
+tercepat vs plafon rate-limit, gerbang jam lintas-zona & lintas-hari) + 14 uji
+penjaga bentuk `pelacakanLangsung.test.js` + 6 uji backend (satuan detik, usia
+tak pernah negatif, jam mentah, zona tampil = zona penggerbang).
+
+Berkas: `backend/iot_utils.py`, `backend/privasi_utils.py`,
+`frontend/src/lib/kadensiLacak.js`, `frontend/src/pages/LacakPage.jsx`,
+`frontend/src/pages/PelacakanPage.jsx` (+3 berkas uji).
+
+> **Yang PR ini sengaja TIDAK janjikan.** Pelacakan tetap berhenti saat layar
+> mati atau pemegang berpindah aplikasi. Untuk berjalan terus tanpa layar
+> menyala diperlukan aplikasi Android khusus (foreground service) atau pelacak
+> GPS khusus — keduanya keputusan tersendiri, bukan efek samping PR ini.
+
+---
+
+## [#790] Inventarisasi otomatis menempatkan aset ke denah — tanpa pindai terpisah — 2026-08-06
+
+Permintaan pemilik (verbatim): *"kenapa juga halaman hierarki spasial harus
+scan perpindahan sendiri dan tidak melalui inventarisasi aset karena berpusat
+disana semua disetiap jenis kegiatan juga pasti diupdate dan diinventarisasi.
+integrasikan saja."*
+
+Sebelum ini, aset hanya "menempati" ruangan/gedung lewat tindakan TERPISAH
+(tombol Denah per aset, atau pindai stiker QR di Hierarki Spasial) — padahal
+inventarisasi lapangan sudah merekam koordinat GPS tiap aset. Akibatnya panel
+isi lokasi dan angka opname kosong (0/0/0) meski ribuan aset terinventarisasi.
+
+**Integrasi** (`spasial_penempatan.py` baru + wiring `routes/assets.py`):
+jalur inventarisasi yang menulis koordinat aset (PATCH — muara kamera
+lapangan, antrean luring, lembar edit cepat, geser marker peta — plus POST
+buat aset dan PUT edit penuh) kini otomatis menempatkan aset yang **belum
+ber-penempatan** ke node denah aktif terdalam yang memuat titiknya. Pemicu
+kedua: status berubah menjadi "Ditemukan" saat koordinat sudah tersimpan.
+Efek langsung: angka **"Tercatat"** opname, **panel isi lokasi**, dan daftar
+**"Belum terpindai"** hidup dari data inventarisasi; pindai QR tetap ada
+sebagai **pengukuhan fisik** ("Dikukuhkan") — jejak bukti yang memang beda
+dari catatan buku.
+
+Pagar-pagarnya (masing-masing meniru preseden repo):
+
+- **Hanya penempatan pertama** — `lokasi_spasial` yang sudah ada (manual,
+  opname, otomatis sebelumnya) tak pernah disentuh; GPS yang bergetar antar
+  pemotretan tak boleh membanjiri riwayat custody dengan perpindahan palsu.
+- **Satker fail-closed** — kode dari kegiatan induk; tanpa kode → lewati,
+  bukan cari lintas-satker (preseden `iot.py::_node_di_titik`).
+- **Berhenti di GEDUNG** — lantai/ruangan tak terpilih dari koordinat 2D.
+- **Best-effort** — gagal menempatkan dicatat lalu dilewati; simpan aset
+  tak pernah ikut gagal. Penempatan digabung SEBELUM CAS (atomik), riwayat
+  `riwayat_lokasi_aset` + audit `aset_lokasi_otomatis` ditulis SETELAH
+  tulisan sukses.
+- **Bonus tambalan lama**: PUT edit-penuh kini menghitung ulang `geo`
+  (sebelumnya indeks 2dsphere menyimpan titik basi setelah koordinat diedit).
+
+Jalur massal (ubah massal, impor Excel) sengaja belum dihook — bukan jalur
+lapangan; bila perlu, jadikan job latar terpisah. 17 uji baru
+(`test_spasial_penempatan.py`): gerbang murah nol-kueri, fail-closed satker,
+bentuk kueri geo, urutan hook-CAS-riwayat di ketiga jalur — 4 mutasi
+pencabutnya dipastikan tertangkap.
+
+**Temuan tinjauan adversarial yang ditutup sebelum rilis** (3 lensa × refuter):
+
+- **Jejak pasca-simpan best-effort.** Insert `riwayat_lokasi_aset` + audit
+  dulu telanjang: saat fungsi itu berjalan, asetnya SUDAH tersimpan, sehingga
+  satu galat penulisan jejak membalas **500 atas tulisan yang berhasil** —
+  dan antrean luring akan mengirim ulang permintaan yang sebenarnya sukses.
+  Kini lewat satu helper `catat_penempatan` ber-try/except untuk ketiga jalur.
+- **Aksi audit `aset_lokasi_otomatis` didaftarkan ke
+  `AKSI_SUDAH_DI_BAGIAN_LOKASI`** — tanpa itu tiap penempatan otomatis tampil
+  DUA KALI di Timeline Aset (sekali di bagian Lokasi, sekali sebagai
+  "perubahan data"), persis kelas cacat yang daftar itu dibuat untuk cegah.
+  Uji penjaganya diperluas memindai `spasial_penempatan.py` — penulis aksi
+  yang sah kini ada di luar `routes/`.
+- **Null Island (0,0) ditolak**, meniru invarian `spasial_utils`: itu penanda
+  parsing koordinat gagal, bukan posisi.
+- **Celah uji ditutup**: baris yang BENAR-BENAR menempatkan aset
+  (`update_data["lokasi_spasial"] = …`) dulu bisa dicabut dengan seluruh
+  suite tetap hijau — hook boleh terpanggil dan urutannya benar, tapi
+  fiturnya tak melakukan apa pun tanpa ada yang berteriak.
+
+**Gelombang kedua tinjauan** (7 bertahan dari 16, 9 gugur) menutup tiga sisa:
+
+- **Penempatan manual tak lagi bisa ditimpa diam-diam.**
+  `PUT /assets/{id}/lokasi-spasial` (dialog Denah) dulu menulis
+  `lokasi_spasial` TANPA menaikkan `version` — alasan yang sama sudah
+  ditulis di `/opname/terapkan` ("tanpa ini penjaga OCC/If-Match buta").
+  Kelalaian itu tidur selama tak ada jalur lain yang menulis field itu;
+  penempatan otomatis membangunkannya: PATCH yang membaca dokumen SEBELUM
+  operator menempatkan manual tetap lolos CAS dan menimpa "Ruang 305"
+  pilihan manusia dengan "Gedung A" derivasi mesin — tanpa 409, dan tanpa
+  jejak (riwayatnya mencatat `dari: kosong`). Kedua cabang (menempatkan &
+  mencabut) kini menaikkan `version`.
+- **Urutan riwayat-setelah-CAS kini dijaga di jalur PUT juga**, bukan hanya
+  kehadirannya. Mutasi memindahkan blok riwayat ke atas CAS — letak yang
+  paling "rapi" secara visual — dulu tetap hijau; akibatnya PUT yang KALAH
+  CAS (409, aset tak berubah) tetap mencetak riwayat custody.
+- **Uji gerbang murah diperbaiki karena versi pertamanya lemah.** Ia
+  memakai aset TANPA koordinat, sehingga penjaga parse-koordinat toh
+  menghentikan alur dan pencabutan gerbang tak ketahuan. Versi benarnya
+  memakai aset yang SUDAH berkoordinat — mayoritas aset terinventarisasi —
+  di mana tiap PATCH harga/foto akan membayar 2 kueri tambahan selamanya.
+
+Satu temuan berlabel TINGGI justru **GUGUR setelah diperiksa ke kodenya**:
+"pindai ruangan atas catatan gedung terbaca `pindah`". Itu keputusan desain
+lama yang disengaja dan sudah diuji
+(`test_scan_di_ruangan_atas_barang_di_gedung_TETAP_pindah` — *"Kebalikannya
+justru MEMPERTAJAM lokasi — layak diusulkan"*): pindai yang lebih dalam
+memang layak jadi usulan penajaman, dan menerapkannya mempersempit catatan
+dari gedung ke ruangan. Mengubahnya akan merusak invarian yang tesnya ada
+untuk menjaganya.
+
+Dua invarian DI LUAR modul ini yang menopang keamanannya ikut dikunci uji,
+karena keduanya bisa berubah diam-diam oleh perubahan yang tampak tak
+berhubungan:
+
+- **`AssetCreate` tidak boleh memuat `lokasi_spasial`.** PUT adalah
+  full-replace; seandainya field itu masuk ke model masukan, setiap PUT dari
+  klien yang tak mengirimkannya akan menulis `lokasi_spasial: None` dan
+  MENGHAPUS penempatan denah tersimpan — termasuk yang dibuat operator lewat
+  dialog Denah. Uji membaca `models.py` lewat AST dan gagal dengan pesan yang
+  menyebutkan jalan keluarnya.
+- **Cabang replay idempoten harus keluar SEBELUM hook.** Antrean luring
+  mengirim ulang permintaan yang sama; bila urutannya terbalik, satu
+  penempatan mencetak DUA baris riwayat custody — bukti penatausahaan BMN
+  yang mengaku barang berpindah padahal tidak.
+
 ## [#789] Dialog Denah: denah terlihat, tersimpan terbaca, rantai sampai ruangan, tombol tertata — 2026-08-06
 
 Tindak lanjut laporan berlapis (dengan dua tangkapan layar): *"data informasi

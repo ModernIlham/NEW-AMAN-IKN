@@ -198,3 +198,37 @@ def test_kesehatan_perangkat_belum_pernah_mengirim():
     """Perangkat baru terdaftar TIDAK boleh membuat daftar perangkat meledak."""
     r = iu.ringkas_kesehatan(None, KINI)
     assert r["diam_menit"] is None and r["terakhir_terdengar"] == ""
+    # Satuan DETIK ikut kosong — layar memakainya sebagai jam hidup, dan 0
+    # detik berarti "baru saja terdengar", kebalikan dari kenyataannya.
+    assert r["diam_detik"] is None
+
+
+def test_kesehatan_dalam_DETIK_bukan_menit():
+    """Jam hidup di layar Pelacakan berdenyut per detik.
+
+    Uji ini sengaja memakai jarak yang HABIS DIBAGI menit (45 menit) supaya
+    satu-satunya pembeda antara satuan yang benar dan yang salah adalah
+    ANGKANYA: 2700 versus 45. Mutasi apa pun yang mengembalikan menit dari
+    field berlabel detik akan gagal di sini, bukan lolos karena kebetulan.
+    """
+    doc = {"ts_server": (KINI - timedelta(minutes=45)).isoformat()}
+    r = iu.ringkas_kesehatan(doc, KINI)
+    assert r["diam_detik"] == 2700
+    assert r["diam_menit"] == 45
+
+
+def test_kesehatan_dibawah_semenit_masih_terbaca():
+    """Justru inilah kasus yang membuat field ini ada: di bawah satu menit,
+    `diam_menit` mendatar di 0 dan operator tak bisa membedakan perangkat yang
+    hidup dari perangkat yang layarnya membeku."""
+    doc = {"ts_server": (KINI - timedelta(seconds=12)).isoformat()}
+    r = iu.ringkas_kesehatan(doc, KINI)
+    assert r["diam_detik"] == 12 and r["diam_menit"] == 0
+
+
+def test_kesehatan_tak_pernah_negatif():
+    """Cap waktu yang MENDAHULUI `sekarang` (mis. terbaca dari replika yang
+    tertinggal) harus mendarat di 0, bukan menjadi "-30 dtk lalu"."""
+    doc = {"ts_server": (KINI + timedelta(seconds=30)).isoformat()}
+    r = iu.ringkas_kesehatan(doc, KINI)
+    assert r["diam_detik"] == 0 and r["diam_menit"] == 0
