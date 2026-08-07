@@ -1184,14 +1184,14 @@ export default function PersediaanPage({ user, onBack }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {form.mode === "tambah" && (
                 <>
-                  <div className="col-span-2 sm:col-span-1">
+                  <div className="sm:col-span-1">
                     <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-kode">Kode Barang (10/16 digit)</label>
                     <Input id="psd-kode" className="font-mono" placeholder="cth. 1010101001"
                       value={form.data.kode_barang}
                       onChange={(e) => setField("kode_barang", e.target.value.replace(/\D/g, "").slice(0, 16))}
                       data-testid="persediaan-form-kode" />
                   </div>
-                  <div className="col-span-2 sm:col-span-1">
+                  <div className="sm:col-span-1">
                     <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-nup">NUP (kosong = otomatis)</label>
                     <Input id="psd-nup" className="font-mono" placeholder="otomatis"
                       value={form.data.nup}
@@ -1199,7 +1199,7 @@ export default function PersediaanPage({ user, onBack }) {
                   </div>
                 </>
               )}
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-nama">Nama Barang</label>
                 <Input id="psd-nama" placeholder="cth. Kertas HVS A4 80gr"
                   value={form.data.nama_barang}
@@ -1253,7 +1253,7 @@ export default function PersediaanPage({ user, onBack }) {
                   value={form.data.tahun_anggaran}
                   onChange={(e) => setField("tahun_anggaran", e.target.value.replace(/\D/g, "").slice(0, 4))} />
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-ket">Keterangan</label>
                 <Input id="psd-ket" value={form.data.keterangan} onChange={(e) => setField("keterangan", e.target.value)} />
               </div>
@@ -1280,7 +1280,7 @@ export default function PersediaanPage({ user, onBack }) {
           </DialogHeader>
           {masuk && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-in-jenis">Jenis</label>
                 <select
                   id="psd-in-jenis"
@@ -1299,12 +1299,12 @@ export default function PersediaanPage({ user, onBack }) {
                 )}
               </div>
               {pengadaanList.length === 0 && (
-                <p className="col-span-2 text-[10px] text-muted-foreground -mt-1">
+                <p className="sm:col-span-2 text-[10px] text-muted-foreground -mt-1">
                   Belum ada BAST/kontrak tercatat di modul Pengadaan — catat di sana bila ingin menautkan dokumen sumber.
                 </p>
               )}
               {pengadaanList.length > 0 && (
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-in-perolehan">Perolehan (Pengadaan) — opsional</label>
                   <select id="psd-in-perolehan"
                     value={masuk.data.perolehan_id || ""}
@@ -1342,7 +1342,7 @@ export default function PersediaanPage({ user, onBack }) {
                   onChange={(e) => setMasuk((m) => ({ ...m, data: { ...m.data, expired: e.target.value } }))} />
               </div>
               {/* Pemisah: field wajib (jumlah/harga/kedaluwarsa) di atas, metadata dokumen di bawah */}
-              <p className="col-span-2 text-[11px] font-semibold text-muted-foreground border-t border-border pt-2 mt-1">Dokumen sumber (opsional)</p>
+              <p className="sm:col-span-2 text-[11px] font-semibold text-muted-foreground border-t border-border pt-2 mt-1">Dokumen sumber (opsional)</p>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-in-bukti">No. Bukti/BAST</label>
                 <Input id="psd-in-bukti" placeholder="cth. BAST-12/2026"
@@ -1373,7 +1373,7 @@ export default function PersediaanPage({ user, onBack }) {
                   value={masuk.data.no_kontrak}
                   onChange={(e) => setMasuk((m) => ({ ...m, data: { ...m.data, no_kontrak: e.target.value } }))} />
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-in-ket">Keterangan</label>
                 <Input id="psd-in-ket"
                   value={masuk.data.keterangan}
@@ -1402,7 +1402,7 @@ export default function PersediaanPage({ user, onBack }) {
           </DialogHeader>
           {keluar && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-out-jenis">Jenis</label>
                 <select
                   id="psd-out-jenis"
@@ -1884,7 +1884,7 @@ export default function PersediaanPage({ user, onBack }) {
                         onChange={(e) => setMField("tgl_dokumen", e.target.value)} />
                     </div>
                     {pengadaanList.length > 0 && (
-                      <div className="col-span-2">
+                      <div className="sm:col-span-2">
                         <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-m-perolehan">Perolehan (Pengadaan) — opsional</label>
                         <select id="psd-m-perolehan" value={massal.perolehan_id}
                           onChange={(e) => {
@@ -1919,7 +1919,7 @@ export default function PersediaanPage({ user, onBack }) {
                     </datalist>
                   </div>
                 )}
-                <div className={massal.arah === "masuk" ? "" : "col-span-1"}>
+                <div className={massal.arah === "masuk" ? "" : "sm:col-span-1"}>
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-m-ket">Keterangan</label>
                   <Input id="psd-m-ket" value={massal.keterangan}
                     onChange={(e) => setMField("keterangan", e.target.value)} />
@@ -2299,7 +2299,7 @@ export default function PersediaanPage({ user, onBack }) {
                                     value={hapusSk.keterangan}
                                     onChange={(ev) => setHapusSk((h) => ({ ...h, keterangan: ev.target.value }))} />
                                 </div>
-                                <div className="col-span-2 flex justify-end gap-1.5">
+                                <div className="sm:col-span-2 flex justify-end gap-1.5">
                                   <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
                                     onClick={() => setHapusSk(null)}>Batal</Button>
                                   <Button size="sm" className="h-7 text-[11px] min-h-0 bg-red-600 hover:bg-red-700"
@@ -2336,7 +2336,7 @@ export default function PersediaanPage({ user, onBack }) {
           </DialogHeader>
           {koreksiNilai && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kn-jenis">Jenis</label>
                 <select id="kn-jenis" value={koreksiNilai.jenis}
                   onChange={(e) => setKoreksiNilai((k) => ({ ...k, jenis: e.target.value }))}
@@ -2360,7 +2360,7 @@ export default function PersediaanPage({ user, onBack }) {
                 <Input id="kn-bukti" value={koreksiNilai.no_bukti}
                   onChange={(e) => setKoreksiNilai((k) => ({ ...k, no_bukti: e.target.value }))} />
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kn-alasan">Alasan (wajib)</label>
                 <Input id="kn-alasan" placeholder="cth. hasil opname fisik/verifikasi harga"
                   value={koreksiNilai.alasan}

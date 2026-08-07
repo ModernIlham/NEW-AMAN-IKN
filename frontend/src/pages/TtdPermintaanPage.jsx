@@ -536,7 +536,7 @@ export default function TtdPermintaanPage({ user, onBack }) {
                       <Input value={s.email} type="email"
                         onChange={(e) => ubahSigner(i, "email", e.target.value)}
                         placeholder="Email — link dikirim otomatis (opsional)"
-                        className="h-8 text-xs col-span-2" data-testid={`ttd-form-email-${i}`} />
+                        className="h-8 text-xs sm:col-span-2" data-testid={`ttd-form-email-${i}`} />
                     </div>
                   </div>
                 ))}

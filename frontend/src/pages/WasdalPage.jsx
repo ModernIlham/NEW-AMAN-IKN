@@ -792,7 +792,7 @@ export default function WasdalPage({ user, onBack }) {
                 <Input id="insi-tgl" type="date" value={formInsi.data.tanggal_mulai}
                   onChange={(e) => setFormInsi((f) => ({ ...f, data: { ...f.data, tanggal_mulai: e.target.value } }))} />
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="insi-objek">Objek pemantauan (opsional)</label>
                 <select id="insi-objek" value={formInsi.data.objek}
                   onChange={(e) => setFormInsi((f) => ({ ...f, data: { ...f.data, objek: e.target.value } }))}
@@ -803,13 +803,13 @@ export default function WasdalPage({ user, onBack }) {
                   ))}
                 </select>
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="insi-uraian">Uraian</label>
                 <Input id="insi-uraian" placeholder="mis. Laporan warga: aset ditempati pihak ketiga" value={formInsi.data.uraian}
                   onChange={(e) => setFormInsi((f) => ({ ...f, data: { ...f.data, uraian: e.target.value } }))}
                   data-testid="wasdal-insidentil-uraian" />
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="insi-lokasi">Lokasi (opsional)</label>
                 <Input id="insi-lokasi" value={formInsi.data.lokasi} list="wasdal-ruangan-list"
                   placeholder="ketik bebas atau pilih dari Master Ruangan"
@@ -969,7 +969,7 @@ export default function WasdalPage({ user, onBack }) {
                 <Input id="pen-tgl" type="date" value={formPen.data.tanggal_dasar}
                   onChange={(e) => setFormPen((f) => ({ ...f, data: { ...f.data, tanggal_dasar: e.target.value } }))} />
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pen-objek">Objek pemantauan (opsional)</label>
                 <select id="pen-objek" value={formPen.data.objek}
                   onChange={(e) => setFormPen((f) => ({ ...f, data: { ...f.data, objek: e.target.value } }))}
@@ -980,7 +980,7 @@ export default function WasdalPage({ user, onBack }) {
                   ))}
                 </select>
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pen-uraian">Uraian</label>
                 <Input id="pen-uraian" placeholder="mis. Aset dikuasai pihak ketiga tanpa hak" value={formPen.data.uraian}
                   onChange={(e) => setFormPen((f) => ({ ...f, data: { ...f.data, uraian: e.target.value } }))}

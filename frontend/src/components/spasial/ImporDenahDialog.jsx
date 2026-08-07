@@ -345,7 +345,7 @@ export default function ImporDenahDialog({ levels, nodes, labelLevel, onClose, o
                 {(pratinjau.fields || []).map((f) => <option key={f} value={f}>{f}</option>)}
               </select>
             </label>
-            <label className="col-span-2 flex items-center gap-2 pt-1">
+            <label className="sm:col-span-2 flex items-center gap-2 pt-1">
               <input type="checkbox" checked={perbaiki} disabled={berjalan}
                      onChange={(e) => setPerbaiki(e.target.checked)}
                      data-testid="impor-perbaiki" />

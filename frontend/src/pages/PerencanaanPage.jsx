@@ -572,7 +572,7 @@ export default function PerencanaanPage({ user, onBack }) {
                     {Object.entries(usulan?.label_jenis || {}).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
                 </div>
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="usl-unit">Unit/KPB pengusul</label>
                   <Input id="usl-unit" placeholder="ketik bebas atau pilih dari Master Satker" value={formUsulan.data.unit_pengusul}
                     list="usulan-satker-list"
@@ -584,7 +584,7 @@ export default function PerencanaanPage({ user, onBack }) {
                     ))}
                   </datalist>
                 </div>
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="usl-uraian">Uraian usulan</label>
                   <Input id="usl-uraian" placeholder="cth. Pemeliharaan berat genset kantor" value={formUsulan.data.uraian}
                     onChange={(e) => setFormUsulan((f) => ({ ...f, data: { ...f.data, uraian: e.target.value } }))}

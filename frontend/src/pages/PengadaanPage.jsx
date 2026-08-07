@@ -829,19 +829,22 @@ export default function PengadaanPage({ user, onBack }) {
                 <Input id="pgd-tgl" type="date" value={form.data.tanggal_bast}
                   onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, tanggal_bast: e.target.value } }))} />
               </div>
-              <p className="col-span-2 -mt-1 text-[11px] text-muted-foreground leading-snug rounded-lg bg-muted/60 px-2.5 py-1.5">
+              {/* Keterangan naik ke sini agar berpasangan dengan Tanggal BAST:
+                  sebelumnya keduanya masing-masing menyisakan sel kosong di
+                  desktop, dan kolom rampingnya memotong tulisan di HP. */}
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-ket">Keterangan</label>
+                <Input id="pgd-ket" value={form.data.keterangan}
+                  onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, keterangan: e.target.value } }))} />
+              </div>
+              <p className="sm:col-span-2 text-[11px] text-muted-foreground leading-snug rounded-lg bg-muted/60 px-2.5 py-1.5">
                 BAST ini adalah serah terima dari <b>Penyedia kepada PPK</b>, dan
                 <b> penomorannya dibuat PPK sendiri</b> — cukup catat nomornya di sini,
                 lalu centang dokumen BAST &amp; unggah berkasnya bila sudah ada.
                 Serah terima lanjutan dari PPK kepada KPB dibuatkan dokumennya
                 lewat tombol <b>BAST PPK → KPB</b> setelah perolehan tersimpan.
               </p>
-              <div>
-                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-ket">Keterangan</label>
-                <Input id="pgd-ket" value={form.data.keterangan}
-                  onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, keterangan: e.target.value } }))} />
-              </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-anggaran">Usulan Penganggaran terkait (opsional)</label>
                 <select id="pgd-anggaran" value={form.data.penganggaran_id}
                   onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, penganggaran_id: e.target.value } }))}
@@ -855,7 +858,7 @@ export default function PengadaanPage({ user, onBack }) {
                   ))}
                 </select>
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-ppk">
                   Pejabat Pembuat Komitmen (PPK)
                 </label>
@@ -876,7 +879,7 @@ export default function PengadaanPage({ user, onBack }) {
                   {opsiPpk.length === 0 && " Belum ada pejabat ber-peran PPK di Referensi Pejabat."}
                 </p>
               </div>
-              <div className="col-span-2 space-y-2">
+              <div className="sm:col-span-2 space-y-2">
                 <p className="text-xs font-medium text-foreground">Daftar barang</p>
                 {/* Tiap barang = KARTU berlabel, bukan sebaris kotak sempit:
                     uraian panjang & kode 10-16 digit butuh ruang baca saat

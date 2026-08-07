@@ -1253,7 +1253,7 @@ export default function PenggunaanPage({ user, onBack }) {
                     </div>
                   </>
                 )}
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="prs-ket">Keterangan (ops.)</label>
                   <Input id="prs-ket" value={formProses.data.keterangan}
                     onChange={(e) => setFormProses((f) => ({ ...f, data: { ...f.data, keterangan: e.target.value } }))}
@@ -1345,18 +1345,18 @@ export default function PenggunaanPage({ user, onBack }) {
                 <Input id="psp-penetap" placeholder="Pengelola/Pengguna Barang" value={formPsp.data.penetap}
                   onChange={(e) => setFormPsp((f) => ({ ...f, data: { ...f.data, penetap: e.target.value } }))} />
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psp-ket">Keterangan</label>
                 <Input id="psp-ket" value={formPsp.data.keterangan}
                   onChange={(e) => setFormPsp((f) => ({ ...f, data: { ...f.data, keterangan: e.target.value } }))} />
               </div>
-              <label className="col-span-2 flex items-center gap-2 text-xs text-foreground cursor-pointer">
+              <label className="sm:col-span-2 flex items-center gap-2 text-xs text-foreground cursor-pointer">
                 <input type="checkbox" checked={!!formPsp.data.sebagai_draf}
                   onChange={(e) => setFormPsp((f) => ({ ...f, data: { ...f.data, sebagai_draf: e.target.checked } }))}
                   data-testid="penggunaan-psp-draf" />
                 Simpan sebagai <b>draf usulan</b> — SK belum terbit (nomor/tanggal SK diisi saat penetapan)
               </label>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psp-cari">Tambah aset</label>
                 <div className="relative">
                   <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
@@ -1377,7 +1377,7 @@ export default function PenggunaanPage({ user, onBack }) {
                 </div>
               </div>
               {formPsp.aset.length > 0 && (
-                <ul className="col-span-2 space-y-1">
+                <ul className="sm:col-span-2 space-y-1">
                   {formPsp.aset.map((a) => (
                     <li key={a.id} className="rounded-lg border border-border p-2 flex items-center gap-2">
                       <span className="min-w-0 flex-1">
@@ -1829,10 +1829,10 @@ export default function PenggunaanPage({ user, onBack }) {
                     </div>
                     <Input value={formBast.pihak_pertama.nip} placeholder="NIP/NIK" className="font-mono"
                       onChange={(e) => setFormBast((f) => ({ ...f, pihak_pertama: { ...f.pihak_pertama, nip: e.target.value } }))} />
-                    <Input value={formBast.pihak_pertama.jabatan} placeholder="Jabatan" className="col-span-2"
+                    <Input value={formBast.pihak_pertama.jabatan} placeholder="Jabatan" className="sm:col-span-2"
                       onChange={(e) => setFormBast((f) => ({ ...f, pihak_pertama: { ...f.pihak_pertama, jabatan: e.target.value } }))} />
                     <Input value={formBast.pihak_pertama.alamat} placeholder="Alamat/lokasi pihak kesatu (boleh diisi manual)"
-                      className="col-span-2" data-testid="bast-lama-alamat"
+                      className="sm:col-span-2" data-testid="bast-lama-alamat"
                       onChange={(e) => setFormBast((f) => ({ ...f, pihak_pertama: { ...f.pihak_pertama, alamat: e.target.value } }))} />
                   </div>
                   <p className="text-[10px] text-amber-700/80 dark:text-amber-300/80">Isian Penerima di bawah = pemegang BARU; KPB ikut menandatangani sebagai Mengetahui.</p>
