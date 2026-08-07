@@ -133,7 +133,30 @@ describe("dialog Catat Perolehan — komposisi yang dilaporkan pemilik", () => {
 
   test("kartu barang tetap 2 kolom di HP — jumlah & harga berdampingan", () => {
     // Grid DALAM ini sengaja 2 kolom di HP; penyapuan tak boleh ikut mengubahnya.
-    expect(dialog).toMatch(/grid grid-cols-2 sm:grid-cols-\[1fr_5rem_9rem\]/);
+    expect(dialog).toMatch(/grid grid-cols-\[5rem_1fr\] sm:grid-cols-\[1fr_5rem_9rem\]/);
     expect(dialog).toMatch(/className="col-span-2 sm:col-span-1"/);
+  });
+
+  test("kolom HP TIDAK 50/50 — harga satuan dapat sisanya", () => {
+    // Laporan pemilik: *"pada ukuran jumlah dan harga satuannya buat agak lebih
+    // banyak diruang harga satuannya untuk panjang kotaknya."*
+    //
+    // `grid-cols-2` membelah rata: Jumlah (hampir selalu 1–3 angka) mendapat
+    // ruang sebanyak Harga satuan yang bisa "1500000000". Uji ini menolak
+    // kembalinya pembagian rata itu — mudah tertulis ulang tanpa sadar oleh
+    // siapa pun yang merapikan kelas di kemudian hari.
+    const baris = dialog.split("\n");
+    const iGrid = baris.findIndex((b) => b.includes("sm:grid-cols-[1fr_5rem_9rem]"));
+    expect(iGrid).toBeGreaterThan(-1);
+    expect(baris[iGrid]).not.toMatch(/\bgrid-cols-2\b/);
+
+    // Urutan trek HP harus sempit-dulu-lebar-kemudian, sejalan urutan render
+    // (Jumlah lalu Harga satuan). Terbalik = harga yang justru tercekik.
+    // `(?<!:)` memilih trek TANPA breakpoint — yang berlaku di HP. Tanpa itu,
+    // pola pertama yang cocok bisa saja trek `sm:` dan uji ini lulus salah.
+    const trek = baris[iGrid].match(/(?<!:)grid-cols-\[([^\]]+)\]/);
+    expect(trek).not.toBeNull();
+    expect(trek[1]).toBe("5rem_1fr");
+    expect(dialog.indexOf(">Jumlah<")).toBeLessThan(dialog.indexOf("Harga satuan (Rp)"));
   });
 });

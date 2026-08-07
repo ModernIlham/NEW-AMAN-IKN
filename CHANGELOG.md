@@ -67,6 +67,40 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#797] Kotak Harga satuan berhenti dijatah separuh — Jumlah cukup 5rem — 2026-08-08
+
+Laporan pemilik (lanjutan tangkapan layar Catat Perolehan): *"pada ukuran jumlah
+dan harga satuannya buat agak lebih banyak diruang harga satuannya untuk panjang
+kotaknya."*
+
+Setelah `[#795]` merapikan dialognya jadi satu kolom di HP, baris terakhir kartu
+barang tetap membelah ruang **rata dua** — `grid-cols-2`. Padahal isi keduanya
+sangat timpang: **Jumlah** hampir selalu 1–3 angka, sedangkan **Harga satuan**
+bisa `1500000000` (10 digit). Separuh kotak Jumlah menganggur sementara rupiah
+di sebelahnya tergulung.
+
+Trek HP kini `grid-cols-[5rem_1fr]`: Jumlah dipatok 5rem — angka yang sama
+dengan patokan desktop di sebelahnya, jadi lebarnya konsisten di kedua ukuran —
+dan **sisa baris menjadi milik Harga satuan**. Susunan desktop
+(`sm:grid-cols-[1fr_5rem_9rem]`) tidak disentuh; di sana harga memang sudah
+lebih lebar sejak awal.
+
+Penyapuan sekaligus memeriksa apakah cacat yang sama hidup di tempat lain.
+**Tidak.** Satu-satunya pasangan angka-kecil-vs-rupiah di grid 2-kolom HP ada di
+sini; pasangan "Tanggal Beli | Harga (Rp)" pada form aset memang layak 50/50
+karena `dd/mm/yyyy` sama lebarnya, dan dialog masuk Persediaan sudah
+`grid-cols-1` di HP sehingga masing-masing dapat baris penuh. Jadi entri ini
+sengaja **tidak** menyapu apa pun — melaporkan nol temuan lebih berguna daripada
+mengarang pekerjaan.
+
+Dua uji baru mengunci bentuknya (`gridHpSatuKolom.test.js`): trek HP tak boleh
+kembali `grid-cols-2`, dan urutannya harus sempit-dulu (`5rem_1fr`) sejalan
+urutan render Jumlah → Harga satuan. Keduanya diuji-mutasi: mengembalikan
+`grid-cols-2` menjatuhkan 2 uji, membalik trek jadi `[1fr_5rem]` juga
+menjatuhkan 2 uji.
+
+---
+
 ## [#796] Riset Penggunaan BMN sisi pemohon — empat rezim, dan pengakuan bahwa nol klaimnya terverifikasi — 2026-08-08
 
 Permintaan pemilik: *"pada penggunaan BMN selain PSP, terdapat juga tipe
