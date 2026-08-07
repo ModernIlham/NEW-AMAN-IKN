@@ -67,6 +67,54 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#793] Kepala Pengadaan tak pecah baris lagi — aksi sekunder jadi satu menu berkategori — 2026-08-07
+
+Laporan pemilik (dengan tangkapan layar): *"dihalaman pengadaan kode booking
+nomor sampai kebawah, buat kumpulkan semua dalam bentuk kategori agar tidak
+banyak tombol kecuali tombol tambah."*
+
+Empat tombol berdampingan (CSV · LPB Gabungan · Catat Perolehan · Booking
+Nomor) tak muat satu baris di HP, jadi Booking Nomor terlempar ke baris kedua
+sendirian. Tiga aksi sekunder kini berkumpul di satu menu **⋮ Menu**:
+
+| Kategori | Butir |
+|---|---|
+| **Dokumen & Nomor** | Booking Nomor Surat · LPB Gabungan |
+| **Ekspor** | Unduh Register (CSV) |
+
+**"Catat Perolehan" tetap berdiri sendiri** — ia alasan utama halaman ini
+dibuka; menyembunyikannya di balik satu ketukan tambahan menukar kerapian
+dengan kerja harian.
+
+**Jebakan Radix yang nyaris menggigit.** `DropdownMenuContent` MELEPAS isinya
+dari DOM begitu menu tertutup. `BookingNomorButton` memiliki dialog bookingnya
+sendiri — menaruh komponen itu di dalam menu berarti dialognya ikut lenyap pada
+detik yang sama butir menunya ditekan; gejalanya "menu menutup, lalu tak
+terjadi apa-apa". Karena itu komponennya dipasang **di luar** menu dengan
+`tanpaTombol`, dan butir menu memanggil `mulai()` lewat ref
+(`useImperativeHandle` — hanya membuka pintu itu, bukan state internalnya).
+
+Alternatifnya adalah MENYALIN dialog booking beserta pratinjau nomor, master
+klasifikasi arsip, dan aturan nomor sisipannya ke halaman ini — salinan kedua
+yang pasti menyimpang dari aslinya.
+
+`tanpaTombol` berdefault `false`, jadi **15 halaman pemakai lain tak tersentuh**
+(dikunci uji: tepat satu pemakai yang melepas tombolnya).
+
+Uji: 7 penjaga bentuk `menuKepalaPengadaan.test.js` — hanya satu tombol aksi di
+luar menu, ketiga aksi ada di dalam menu berikut label kategorinya, tinggi
+sentuh 42px tiap butir, dan larangan eksplisit `<BookingNomorButton` berada di
+dalam `DropdownMenuContent`.
+
+Berkas: `frontend/src/pages/PengadaanPage.jsx`,
+`frontend/src/components/persuratan/BookingNomorButton.jsx` (+1 berkas uji).
+
+> Kepala halaman modul lain memakai pola tombol berjajar yang sama dan berpotensi
+> pecah baris juga. Belum disapu di sini — satu halaman dulu supaya bentuknya
+> bisa dinilai pemilik sebelum diseragamkan.
+
+---
+
 ## [#792] Perbarui PPK pada BAST akhirnya bisa MEMILIH — bukan selalu SK terbaru — 2026-08-07
 
 Laporan pemilik (verbatim): *"pada halaman pengadaan dibagian Perbarui PPK pada
