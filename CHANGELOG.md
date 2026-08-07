@@ -67,6 +67,64 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#794] Menu kepala jadi komponen bersama — lima halaman seragam, pola tak disalin lagi — 2026-08-07
+
+Permintaan pemilik: *"ya tolong teliti ke model lainnya baiknya bagaimana."*
+
+### Hasil penelitian: 26 halaman ber-kepala, satu bentuk yang berulang
+
+| Kelompok | Halaman | Aksi (di luar tombol Kembali) |
+|---|---|---|
+| **Bentuk Pengadaan** | Pengadaan · Penganggaran · Pemusnahan · Pemindahtanganan · Pemanfaatan | Ekspor CSV + tombol utama + Booking Nomor |
+| Sudah ber-menu, bentuk lain | Wasdal · Perencanaan | menu unduh + tanggalan/muat-ulang + Booking |
+| Aman (≤2 aksi) | 19 halaman sisanya | — |
+
+**Temuan yang jujur: tak ada halaman lain yang benar-benar pecah baris hari
+ini.** Pengadaan satu-satunya yang punya EMPAT aksi. Tetapi empat halaman
+berbentuk **persis sama** dan berjarak **tepat satu tombol** dari nasib yang
+sama — dan kelimanya membawa pasangan `Ekspor CSV + Booking Nomor` yang
+disalin apa adanya.
+
+### Yang dikerjakan
+
+**Komponen baru `components/ui/MenuKepala.jsx`** memegang polanya sekali:
+menu ⋮ berkategori (*Dokumen & Nomor* / *Ekspor*), butir ber-tinggi sentuh
+42px, dan — yang paling penting — `BookingNomorButton` dipasang sebagai
+**saudara** `DropdownMenu`, bukan di dalam `DropdownMenuContent`. Radix
+melepas isi menu dari DOM begitu menu tertutup; komponen booking memiliki
+dialognya sendiri, jadi menaruhnya di dalam menu membuat dialog itu lenyap
+pada detik yang sama butir menunya ditekan. **Diselesaikan sekali, bukan lima
+kesempatan untuk keliru.**
+
+Kelima halaman kini berkepala identik: `[←] [ikon] Judul … [⋮ Menu] [+ Utama]`.
+Pengadaan yang sebelumnya memakai menu tertulis-tangan (`[#793]`) ikut
+dipindahkan ke komponen ini, sehingga tak ada dua salinan pola.
+
+**Tombol utama tidak ikut masuk menu** — "Catat Perolehan", "Catat Usulan",
+"Usulkan", dan seterusnya adalah alasan halamannya dibuka. Dikunci uji:
+`MenuKepala` tak boleh menyebut "tambah" maupun merender ikon `Plus`.
+
+### Yang SENGAJA tidak disentuh
+
+- **Wasdal & Perencanaan** sudah punya menu sendiri dengan isi berbeda (unduh
+  laporan / unduhan perencanaan). Memaksanya ke cetakan yang sama berarti dua
+  menu berdampingan atau penggabungan berisiko atas isi yang tak sebentuk.
+  Wasdal bahkan sudah membawa komentar *"tetap 1 baris di HP"* — pernah
+  ditangani, dan tak sedang bermasalah.
+- **19 halaman ≤2 aksi.** Menambahkan menu di sana justru menambah ketukan
+  tanpa memecahkan apa pun.
+
+Uji: 17 penjaga bentuk (naik dari 7) — kelima kepala dijalankan lewat
+`test.each`, larangan `<BookingNomorButton` di dalam `DropdownMenuContent`,
+larangan aksi ekspor HILANG saat dipindahkan (hanya berpindah tempat), dan
+larangan tombol utama ditarik ke dalam menu.
+
+Berkas: `frontend/src/components/ui/MenuKepala.jsx` (baru),
+`PengadaanPage` · `PenganggaranPage` · `PemusnahanPage` ·
+`PemindahtangananPage` · `PemanfaatanPage`, +1 berkas uji diperluas.
+
+---
+
 ## [#793] Kepala Pengadaan tak pecah baris lagi — aksi sekunder jadi satu menu berkategori — 2026-08-07
 
 Laporan pemilik (dengan tangkapan layar): *"dihalaman pengadaan kode booking

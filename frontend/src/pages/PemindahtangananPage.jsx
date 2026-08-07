@@ -15,7 +15,7 @@ import StatKartu from "@/components/ui/StatKartu";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { authMediaUrl } from "@/lib/mediaUrl";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
-import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
+import MenuKepala from "@/components/ui/MenuKepala";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -190,16 +190,19 @@ export default function PemindahtangananPage({ user, onBack }) {
               Penjualan · Tukar Menukar · Hibah · PMPP (PMK 111/2016 jo. 165/2021)
             </p>
           </div>
-          <Button size="sm" variant="outline" className="flex-shrink-0"
-            onClick={() => downloadFileWithProgress(`${API}/pemindahtanganan/export`, "register_pemindahtanganan.csv", { label: "Ekspor Register Pemindahtanganan (CSV)" }).catch(() => {})}
-            data-testid="pemindahtanganan-export">
-            <Download className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">CSV</span>
-          </Button>
+          {/* Aksi sekunder (Ekspor CSV + Booking Nomor) dikumpulkan ke satu
+              menu berkategori — kepala halaman ini sebentuk dengan Pengadaan
+              yang sudah tumpah ke baris kedua di HP. Tombol utama di bawah
+              TETAP berdiri sendiri. */}
+          <MenuKepala
+            modul="pemindahtanganan"
+            ekspor={{ url: `${API}/pemindahtanganan/export`, nama: "register_pemindahtanganan.csv",
+                      label: "Ekspor Register Pemindahtanganan (CSV)" }}
+            booking={{ jenisNaskah: "Berita Acara", referensi: "BAST Pemindahtanganan" }} />
           <Button size="sm" onClick={bukaFormUsulan}
             className="bg-indigo-600 hover:bg-indigo-700 text-white flex-shrink-0" data-testid="pemindahtanganan-tambah">
             <Plus className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Usulkan</span>
           </Button>
-          <BookingNomorButton modul="pemindahtanganan" jenisNaskah="Berita Acara" referensi="BAST Pemindahtanganan" />
         </div>
       </header>
 

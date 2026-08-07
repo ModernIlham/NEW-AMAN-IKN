@@ -14,7 +14,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import StatKartu from "@/components/ui/StatKartu";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
-import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
+import MenuKepala from "@/components/ui/MenuKepala";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -207,16 +207,19 @@ export default function PenganggaranPage({ user, onBack }) {
               RKBMN → RKA-K/L → DIPA → realisasi (PMK 62/2023 + 153/2021)
             </p>
           </div>
-          <Button size="sm" variant="outline" className="flex-shrink-0"
-            onClick={() => downloadFileWithProgress(`${API}/penganggaran/export`, "register_penganggaran.csv", { label: "Ekspor Register Penganggaran (CSV)" }).catch(() => {})}
-            data-testid="penganggaran-export">
-            <Download className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">CSV</span>
-          </Button>
+          {/* Aksi sekunder (Ekspor CSV + Booking Nomor) dikumpulkan ke satu
+              menu berkategori — kepala halaman ini sebentuk dengan Pengadaan
+              yang sudah tumpah ke baris kedua di HP. Tombol utama di bawah
+              TETAP berdiri sendiri. */}
+          <MenuKepala
+            modul="penganggaran"
+            ekspor={{ url: `${API}/penganggaran/export`, nama: "register_penganggaran.csv",
+                      label: "Ekspor Register Penganggaran (CSV)" }}
+            booking={{ jenisNaskah: "Laporan", referensi: "Usulan Anggaran" }} />
           <Button size="sm" onClick={bukaFormUsulan}
             className="bg-teal-600 hover:bg-teal-700 text-white flex-shrink-0" data-testid="penganggaran-tambah">
             <Plus className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Catat Usulan</span>
           </Button>
-          <BookingNomorButton modul="penganggaran" jenisNaskah="Laporan" referensi="Usulan Anggaran" />
         </div>
       </header>
 
