@@ -16,7 +16,7 @@ import StatKartu from "@/components/ui/StatKartu";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { authMediaUrl } from "@/lib/mediaUrl";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
-import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
+import MenuKepala from "@/components/ui/MenuKepala";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -245,15 +245,18 @@ export default function PemanfaatanPage({ user, onBack }) {
               Sewa · Pinjam Pakai · KSP · BGS/BSG · KSPI · KETUPI (PMK 115/2020)
             </p>
           </div>
-          <Button size="sm" variant="outline" className="flex-shrink-0"
-            onClick={() => downloadFileWithProgress(`${API}/pemanfaatan/export`, "register_pemanfaatan.csv", { label: "Ekspor Register Pemanfaatan (CSV)" }).catch(() => {})}
-            data-testid="pemanfaatan-export">
-            <Download className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">CSV</span>
-          </Button>
+          {/* Aksi sekunder (Ekspor CSV + Booking Nomor) dikumpulkan ke satu
+              menu berkategori — kepala halaman ini sebentuk dengan Pengadaan
+              yang sudah tumpah ke baris kedua di HP. Tombol utama di bawah
+              TETAP berdiri sendiri. */}
+          <MenuKepala
+            modul="pemanfaatan"
+            ekspor={{ url: `${API}/pemanfaatan/export`, nama: "register_pemanfaatan.csv",
+                      label: "Ekspor Register Pemanfaatan (CSV)" }}
+            booking={{ jenisNaskah: "Laporan", referensi: "Register Pemanfaatan" }} />
           <Button size="sm" onClick={() => buka()} className="bg-teal-600 hover:bg-teal-700 text-white flex-shrink-0" data-testid="pemanfaatan-tambah">
             <Plus className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Catat</span>
           </Button>
-          <BookingNomorButton modul="pemanfaatan" jenisNaskah="Laporan" referensi="Register Pemanfaatan" />
         </div>
       </header>
 

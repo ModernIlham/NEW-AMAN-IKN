@@ -15,7 +15,7 @@ import StatKartu from "@/components/ui/StatKartu";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
-import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
+import MenuKepala from "@/components/ui/MenuKepala";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   TOMBOL_KEPALA, IKON_KEPALA,
@@ -185,16 +185,19 @@ export default function PemusnahanPage({ user, onBack }) {
               Setelah persetujuan + pelaksanaan · PMK 83/PMK.06/2016
             </p>
           </div>
-          <Button size="sm" variant="outline" className="flex-shrink-0"
-            onClick={() => downloadFileWithProgress(`${API}/pemusnahan/export`, "register_pemusnahan.csv", { label: "Ekspor Register Pemusnahan (CSV)" }).catch(() => {})}
-            data-testid="pemusnahan-export">
-            <Download className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">CSV</span>
-          </Button>
+          {/* Aksi sekunder (Ekspor CSV + Booking Nomor) dikumpulkan ke satu
+              menu berkategori — kepala halaman ini sebentuk dengan Pengadaan
+              yang sudah tumpah ke baris kedua di HP. Tombol utama di bawah
+              TETAP berdiri sendiri. */}
+          <MenuKepala
+            modul="pemusnahan"
+            ekspor={{ url: `${API}/pemusnahan/export`, nama: "register_pemusnahan.csv",
+                      label: "Ekspor Register Pemusnahan (CSV)" }}
+            booking={{ jenisNaskah: "Berita Acara", referensi: "BA Pemusnahan" }} />
           <Button size="sm" onClick={bukaForm}
             className="bg-orange-700 hover:bg-orange-800 text-white flex-shrink-0" data-testid="pemusnahan-tambah">
             <Plus className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Catat BA</span>
           </Button>
-          <BookingNomorButton modul="pemusnahan" jenisNaskah="Berita Acara" referensi="BA Pemusnahan" />
         </div>
       </header>
 
