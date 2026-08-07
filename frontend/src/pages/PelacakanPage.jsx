@@ -5,6 +5,7 @@ import {
   ArrowLeft, Plus, Trash2, Loader2, RadioTower, ShieldAlert, Fence,
   KeyRound, Copy, Check, BellRing, MapPin, BatteryLow, Clock, Pencil,
   ShieldCheck, ArrowUpRight, Info, RefreshCw, Unlock, X, AlertTriangle,
+  Radio, PauseCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,7 @@ import {
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { TENGGAT_BAKA, muatAndal, pesanGalat } from "@/lib/muatAndal";
+import { usiaSingkat, masihHidup, diLuarJamAktif } from "@/lib/kadensiLacak";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -66,12 +68,47 @@ const JENIS_LABEL = {
   dwell_terlampaui: "Tak kunjung kembali",
 };
 
-/** Menit → "5 mnt" / "3 jam" / "2 hari"; null = belum pernah terdengar. */
-function lamaDiam(menit) {
-  if (menit === null || menit === undefined) return "—";
-  if (menit < 60) return `${menit} mnt`;
-  if (menit < 1440) return `${Math.floor(menit / 60)} jam`;
-  return `${Math.floor(menit / 1440)} hari`;
+/** Jeda penyegaran otomatis daftar. 20 detik = lebih rapat dari jeda kirim
+ *  mode `/lacak` mana pun, jadi posisi yang sudah mendarat di server tak
+ *  pernah menunggu lama sebelum terlihat operator. */
+const JEDA_SEGAR_MS = 20_000;
+
+/**
+ * Jam hidup satu perangkat — BERDENYUT SENDIRI tiap detik.
+ *
+ * Dibuat komponen tersendiri, bukan state di halaman, karena timer di halaman
+ * akan merender ulang SELURUH daftar (beserta empat tab, dialog, dan peta
+ * pagar) enam puluh kali per menit. Di sini yang dirender ulang hanya satu
+ * `<span>` per perangkat.
+ *
+ * Usianya dihitung `detikAwal + (sekarang − dimuatPada)`, bukan dari cap waktu
+ * ISO milik server. `ts_server` yang naif (tanpa zona) akan dibaca peramban
+ * sebagai waktu LOKAL, dan operator di WIB akan melihat perangkatnya "terakhir
+ * terdengar 1 jam lalu" padahal baru saja mengirim. Selisih detik dari server
+ * kebal terhadap zona maupun jam perangkat operator.
+ */
+function UsiaHidup({ detikAwal, dimuatPada, testid }) {
+  const [, tik] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => tik((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  if (detikAwal === null || detikAwal === undefined) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5"
+            data-testid={testid}>
+        <Clock className="w-3 h-3" />Belum pernah mengirim
+      </span>
+    );
+  }
+  const detik = detikAwal + Math.max(0, Math.round((Date.now() - dimuatPada) / 1000));
+  const hidup = masihHidup(detik);
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 ${hidup ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-muted"}`}
+          data-testid={testid}>
+      <Clock className="w-3 h-3" />Terakhir {usiaSingkat(detik)} lalu
+    </span>
+  );
 }
 
 function waktuSingkat(iso) {
@@ -98,6 +135,10 @@ export default function PelacakanPage({ user, onBack }) {
   const isWriter = user?.role !== "viewer";
   const [tab, setTab] = useState("perangkat");
   const [memuat, setMemuat] = useState(false);
+  const [autoSegar, setAutoSegar] = useState(true);
+  // Saat data terakhir mendarat. Jam hidup tiap perangkat menghitung usianya
+  // dari sini, bukan dari cap waktu server — lihat `UsiaHidup`.
+  const [dimuatPada, setDimuatPada] = useState(() => Date.now());
   // Kegagalan PER BAGIAN — supaya bagian yang berhasil tetap tampil dan bagian
   // yang gagal tak menyamar sebagai "tidak ada data".
   const [gagalBagian, setGagalBagian] = useState({});
@@ -137,7 +178,16 @@ export default function PelacakanPage({ user, onBack }) {
   //
   // `allSettled` membuat bagian yang berhasil tetap tampil, dan bagian yang
   // gagal mengatakannya sendiri.
-  const muat = useCallback(async () => {
+  //
+  // `senyap` dipakai penyegaran otomatis: ia melewati `setMemuat`, sehingga
+  // spinner di kepala halaman hanya berputar untuk muat yang DIMINTA orang.
+  // Tanpa itu ikon berkedip tiap 20 detik selamanya dan tombol "Coba lagi"
+  // ikut meredup di tengah bacaan operator.
+  //
+  // SEMUA pemanggil harus memakai `() => muat()`, bukan `muat` telanjang:
+  // `onClick={muat}` akan mengoper objek event React sebagai argumen pertama —
+  // objek itu truthy, jadi klik manual justru berjalan senyap.
+  const muat = useCallback(async (senyap = false) => {
     // PENJAGA URUTAN — WAJIB SEJAK `allSettled`.
     //
     // Dengan `Promise.all` yang lama, jalankan yang gagal MELOMPAT ke catch dan
@@ -155,7 +205,7 @@ export default function PelacakanPage({ user, onBack }) {
     // didaftarkan, tanpa toast, tanpa galat. Komit yang sama memasang penjaga
     // ini di SbskRuangPanel untuk kelas bug yang persis sama.
     const seq = ++reqRef.current;
-    setMemuat(true);
+    if (!senyap) setMemuat(true);
     const ambil = (url, params) => muatAndal(
       () => axios.get(`${API}${url}`, { params, timeout: TENGGAT_BAKA }));
     const [rp, ra, re, rz] = await Promise.allSettled([
@@ -193,10 +243,44 @@ export default function PelacakanPage({ user, onBack }) {
       setIzinMinAlasan(rz.value.data?.alasan_min_karakter || 10);
     } else gagal.izin = pesanGalat(rz.reason, "Daftar izin darurat gagal dimuat");
     setGagalBagian(gagal);
+    setDimuatPada(Date.now());
     setMemuat(false);
   }, []);
 
   useEffect(() => { muat(); }, [muat]);
+
+  // PENYEGARAN OTOMATIS — inti keluhan "tidak real-time".
+  //
+  // Sebelum ini halaman memuat SEKALI lalu diam. Perangkat boleh mengirim
+  // posisi tiap sepuluh detik; layar tetap memperlihatkan potret saat dibuka
+  // sampai seseorang menekan muat ulang. Yang terasa seperti pelacakan yang
+  // tak bekerja sebenarnya adalah layar yang tak pernah bertanya lagi.
+  //
+  // BERHENTI SAAT TAB TERSEMBUNYI. Halaman Pelacakan lazim ditinggalkan
+  // terbuka seharian di komputer operator; tanpa gerbang ini ia menembak empat
+  // permintaan per menit ke VPS selamanya, untuk layar yang tak dilihat
+  // siapa pun. `visibilitychange` juga memicu satu muat SEGERA saat tab
+  // kembali dilihat, jadi tak ada jendela basi setelah berpindah aplikasi.
+  useEffect(() => {
+    if (!autoSegar) return undefined;
+    let id = null;
+    const berhenti = () => { if (id) { clearInterval(id); id = null; } };
+    const jalan = () => {
+      berhenti();
+      id = setInterval(() => muat(true), JEDA_SEGAR_MS);
+    };
+    const saatTampil = () => {
+      if (document.hidden) { berhenti(); return; }
+      muat(true);
+      jalan();
+    };
+    if (!document.hidden) jalan();
+    document.addEventListener("visibilitychange", saatTampil);
+    return () => {
+      berhenti();
+      document.removeEventListener("visibilitychange", saatTampil);
+    };
+  }, [autoSegar, muat]);
 
   // Area pagar HANYA boleh POLIGON. Backend menolak titik/garis dengan pesan
   // jelas, tetapi menawarkannya di dropdown berarti pengguna baru tahu setelah
@@ -210,6 +294,17 @@ export default function PelacakanPage({ user, onBack }) {
 
   const eventTampil = useMemo(
     () => (hanyaBelum ? event.filter((e) => !e.dibaca) : event), [event, hanyaBelum]);
+
+  // Profil privasi per nama, supaya kartu perangkat bisa menjawab dua
+  // pertanyaan yang selama ini hanya bisa dijawab dengan membaca kode server:
+  // apakah koordinatnya memang DIBUANG, dan apakah SEKARANG di luar jam
+  // aktifnya. Keduanya membuat perangkat tampak "tak mengirim apa-apa" —
+  // padahal ia mengirim, dan servernya menolak menyimpan, dengan sengaja.
+  const petaProfil = useMemo(() => {
+    const m = {};
+    for (const p of profilTersedia) m[p.profil] = p;
+    return m;
+  }, [profilTersedia]);
 
   // ── Aksi perangkat ────────────────────────────────────────────────────────
 
@@ -401,7 +496,22 @@ export default function PelacakanPage({ user, onBack }) {
               {belumDibaca} baru
             </span>
           )}
-          <button type="button" onClick={muat} disabled={memuat}
+          {/* Saklar penyegaran otomatis. Dibuat TERLIHAT, bukan diam-diam
+              menyala: operator berhak tahu apakah angka di layarnya hidup atau
+              beku, dan berhak mematikannya saat sedang membaca daftar panjang
+              yang tak boleh bergeser di bawah jarinya. */}
+          <button type="button" onClick={() => setAutoSegar((v) => !v)}
+                  aria-pressed={autoSegar}
+                  aria-label={autoSegar ? "Matikan penyegaran otomatis"
+                                        : "Nyalakan penyegaran otomatis"}
+                  title={autoSegar
+                    ? `Penyegaran otomatis nyala (tiap ${JEDA_SEGAR_MS / 1000} detik)`
+                    : "Penyegaran otomatis mati"}
+                  className={`${TOMBOL_KEPALA} ${autoSegar ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}
+                  data-testid="pelacakan-auto-segar">
+            {autoSegar ? <Radio className="w-4 h-4" /> : <PauseCircle className="w-4 h-4" />}
+          </button>
+          <button type="button" onClick={() => muat()} disabled={memuat}
                   aria-label="Muat ulang" title="Muat ulang"
                   className={TOMBOL_KEPALA} data-testid="pelacakan-refresh">
             {memuat ? <Loader2 className="w-4 h-4 animate-spin" />
@@ -468,7 +578,7 @@ export default function PelacakanPage({ user, onBack }) {
               </Button>
             )}
             {gagalBagian.perangkat ? (
-              <BagianGagal pesan={gagalBagian.perangkat} onUlang={muat} sibuk={memuat}
+              <BagianGagal pesan={gagalBagian.perangkat} onUlang={() => muat()} sibuk={memuat}
                            catatan="Daftar perangkat belum tentu kosong — ia belum sempat dibaca."
                            testid="pelacakan-perangkat-galat" />
             ) : !perangkat.length && !memuat && (
@@ -486,12 +596,29 @@ export default function PelacakanPage({ user, onBack }) {
                       {d.asset_name || "Belum ditautkan ke aset"} · {d.kebijakan}
                     </p>
                     <div className="mt-1 flex flex-wrap gap-1.5 text-[10px]">
-                      <span className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5">
-                        <Clock className="w-3 h-3" />
-                        {d.kesehatan?.diam_menit === null || d.kesehatan?.diam_menit === undefined
-                          ? "Belum pernah mengirim"
-                          : `Terakhir ${lamaDiam(d.kesehatan.diam_menit)} lalu`}
-                      </span>
+                      <UsiaHidup detikAwal={d.kesehatan?.diam_detik}
+                                 dimuatPada={dimuatPada}
+                                 testid={`pelacakan-usia-${d.id}`} />
+                      {/* DUA PENJELAS KESUNYIAN. Keduanya menerangkan perangkat
+                          yang tampak "tak mengirim apa-apa" padahal ia mengirim
+                          dan servernya menolak menyimpan — dengan sengaja.
+                          Tanpa kalimat ini, satu-satunya cara mengetahuinya
+                          adalah membaca `privasi_utils.saring_observasi`. */}
+                      {petaProfil[d.profil_privasi]?.presisi === "wilayah" && (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1.5 py-0.5"
+                              title="Profil ini menyimpan nama gedung/kawasan saja; koordinatnya dibuang di server sebelum disimpan"
+                              data-testid={`pelacakan-presisi-wilayah-${d.id}`}>
+                          <ShieldCheck className="w-3 h-3" />Koordinat tak disimpan
+                        </span>
+                      )}
+                      {diLuarJamAktif(petaProfil[d.profil_privasi], new Date()) && (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 px-1.5 py-0.5"
+                              title={`Jam aktif profil: ${petaProfil[d.profil_privasi]?.jam_aktif}`
+                                + (petaProfil[d.profil_privasi]?.hari_kerja_saja ? ", hari kerja saja" : "")}
+                              data-testid={`pelacakan-luar-jam-${d.id}`}>
+                          <Clock className="w-3 h-3" />Di luar jam aktif — tak ada yang disimpan
+                        </span>
+                      )}
                       {typeof d.kesehatan?.baterai_persen === "number" && (
                         <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 ${d.kesehatan.baterai_persen < 20 ? "bg-red-500/10 text-red-600 dark:text-red-400" : "bg-muted"}`}>
                           <BatteryLow className="w-3 h-3" />{d.kesehatan.baterai_persen}%
@@ -574,7 +701,7 @@ export default function PelacakanPage({ user, onBack }) {
               </p>
             )}
             {gagalBagian.aturan && (
-              <BagianGagal pesan={gagalBagian.aturan} onUlang={muat} sibuk={memuat}
+              <BagianGagal pesan={gagalBagian.aturan} onUlang={() => muat()} sibuk={memuat}
                            catatan="Pagar yang terpasang tidak sedang ditampilkan — jangan disimpulkan belum ada."
                            testid="pelacakan-aturan-galat" />
             )}
@@ -632,7 +759,7 @@ export default function PelacakanPage({ user, onBack }) {
                 berhasil dimuat. Saat gagal, layar wajib mengatakan bahwa ia
                 TIDAK TAHU — bukan menjamin aman. */}
             {gagalBagian.event ? (
-              <BagianGagal pesan={gagalBagian.event} onUlang={muat} sibuk={memuat}
+              <BagianGagal pesan={gagalBagian.event} onUlang={() => muat()} sibuk={memuat}
                            catatan="Ada tidaknya peringatan tidak diketahui — jangan disimpulkan aman."
                            testid="pelacakan-event-galat" />
             ) : !eventTampil.length && !memuat && (
@@ -736,7 +863,7 @@ export default function PelacakanPage({ user, onBack }) {
               </p>
             )}
             {gagalBagian.izin ? (
-              <BagianGagal pesan={gagalBagian.izin} onUlang={muat} sibuk={memuat}
+              <BagianGagal pesan={gagalBagian.izin} onUlang={() => muat()} sibuk={memuat}
                            catatan="Izin yang sedang berlaku tidak sedang ditampilkan."
                            testid="pelacakan-izin-galat" />
             ) : !izin.length && !memuat && (

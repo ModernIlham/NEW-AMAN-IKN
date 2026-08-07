@@ -67,6 +67,87 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#791] Pelacakan berhenti terasa beku — kadensi bisa dipilih & layar menyegarkan diri — 2026-08-07
+
+Keluhan pemilik (verbatim): *"Pada link yang diberikan di HP maupun laptop tidak
+akurat menampilkan real-time mengambil posisi lat lng secara langsung … dan
+mengirimkan koordinat gpsnya terus menerus."*
+
+Penelusuran menemukan **empat** penyebab, dan hanya SATU yang benar-benar batas
+peramban. Tiga sisanya angka dan perilaku yang kita pilih sendiri:
+
+| # | Penyebab | Bukti | Ditutup di sini? |
+|---|---|---|---|
+| 1 | `/lacak` merekam paling cepat **1×/menit**; geser < 25 m dianggap diam → melambat ke **15 menit**; antrean ditahan **2 menit** sebelum dikirim | konstanta mati di `LacakPage.jsx` | ✅ |
+| 2 | Halaman Pelacakan memuat **sekali** lalu diam — posisi yang sudah mendarat di server tak muncul sampai di-reload manual | `useEffect(() => { muat(); }, [muat])` tanpa timer | ✅ |
+| 3 | Usia "terakhir terdengar" hanya dalam **menit** → perangkat yang baru saja mengirim dan yang sunyi 59 detik sama-sama "0 mnt" | `ringkas_kesehatan` | ✅ |
+| 4 | Peramban membekukan JavaScript saat layar mati / pindah aplikasi | batas peramban | ❌ (tetap dinyatakan terus terang) |
+
+**Kadensi jadi pilihan** (`frontend/src/lib/kadensiLacak.js`) — tiga mode di
+`/lacak`, dapat diganti **saat sedang merekam**:
+
+| Mode | Bergerak | Diam | Ambang diam | Kirim |
+|---|---|---|---|---|
+| Hemat baterai *(bawaan)* | 60 dtk | 15 mnt | 25 m | 2 mnt |
+| Sedang | 30 dtk | 5 mnt | 15 m | 60 dtk |
+| Pemantauan aktif | 10 dtk | 60 dtk | 8 m | 15 dtk |
+
+Angka mode **Hemat sama persis** dengan perilaku sebelum PR ini: menambahkan
+menu tidak boleh diam-diam memboroskan baterai & kuota perangkat lapangan yang
+pemegangnya tak menyentuh apa pun. Mode tercepat = **4 permintaan/menit**, jauh
+di bawah plafon `@limiter.limit("60/minute")` pada `/iot/observasi` — perangkat
+tak boleh kena rate-limit servernya sendiri justru pada mode yang dipilih supaya
+tak kehilangan posisi. Kadensi dibaca dari **ref** di dalam callback
+`watchPosition`; membacanya dari state berarti ganti mode di tengah perjalanan
+tak berpengaruh sampai perekaman dimulai ulang — menu yang tampak bekerja tapi
+tidak. Mode aktif membawa peringatan baterai, dan peringatan batas peramban
+lama diperluas: **kerapatan tercepat sekalipun tidak mengubahnya.**
+
+**Halaman Pelacakan menyegarkan diri** tiap 20 detik, **berhenti saat tab
+tersembunyi** dan memuat sekali lagi begitu tab kembali dilihat (halaman ini
+lazim ditinggal terbuka seharian — tanpa gerbang itu ia menembak permintaan ke
+VPS selamanya untuk layar yang tak dilihat siapa pun). Saklarnya terlihat di
+kepala halaman: operator berhak tahu apakah angkanya hidup atau beku. Muat
+otomatis berjalan **senyap** (tak memutar spinner); karena itu semua pemanggil
+kini `() => muat()` — `onClick={muat}` akan mengoper objek event sebagai
+argumen pertama dan justru membuat klik MANUAL berjalan senyap.
+
+**Jam hidup per perangkat** berdenyut tiap detik di komponennya sendiri
+(`UsiaHidup`), dihitung dari **selisih detik server** + waktu sejak data
+mendarat — bukan dari cap waktu ISO-nya. `ts_server` yang naif akan dibaca
+peramban sebagai waktu LOKAL, dan operator di WIB akan melihat "terakhir 1 jam
+lalu" untuk perangkat yang baru saja mengirim.
+
+**Dua penjelas kesunyian** di kartu perangkat, menjawab pertanyaan yang paling
+sering disalahartikan sebagai kerusakan: *"Koordinat tak disimpan"* (profil
+berpresisi wilayah) dan *"Di luar jam aktif — tak ada yang disimpan"*.
+Keduanya benar: `saring_observasi` membuang observasinya **di jalur tulis**,
+dengan sengaja. Tanpa kalimat ini, satu-satunya cara mengetahuinya adalah
+membaca kode servernya.
+
+Backend: `ringkas_kesehatan` menambah `diam_detik`; `ringkas_kebijakan`
+memancarkan `jam_mulai`/`jam_selesai`/`zona_offset_jam` **mentah** di samping
+kalimat tampilannya, dan offset itu kini konstanta bernama `ZONA_OFFSET_JAM`
+yang **sama dengan default penggerbangnya** — supaya angka yang dilihat
+operator adalah angka yang dijalankan mesin, bukan salinan yang bisa menyimpang.
+Layar menghitung gerbang jam memakai zona SERVER, bukan zona peramban.
+
+Uji: 18 uji `kadensiLacak.test.js` (bawaan tak boleh diam-diam jadi boros, mode
+tercepat vs plafon rate-limit, gerbang jam lintas-zona & lintas-hari) + 14 uji
+penjaga bentuk `pelacakanLangsung.test.js` + 6 uji backend (satuan detik, usia
+tak pernah negatif, jam mentah, zona tampil = zona penggerbang).
+
+Berkas: `backend/iot_utils.py`, `backend/privasi_utils.py`,
+`frontend/src/lib/kadensiLacak.js`, `frontend/src/pages/LacakPage.jsx`,
+`frontend/src/pages/PelacakanPage.jsx` (+3 berkas uji).
+
+> **Yang PR ini sengaja TIDAK janjikan.** Pelacakan tetap berhenti saat layar
+> mati atau pemegang berpindah aplikasi. Untuk berjalan terus tanpa layar
+> menyala diperlukan aplikasi Android khusus (foreground service) atau pelacak
+> GPS khusus — keduanya keputusan tersendiri, bukan efek samping PR ini.
+
+---
+
 ## [#790] Inventarisasi otomatis menempatkan aset ke denah — tanpa pindai terpisah — 2026-08-06
 
 Permintaan pemilik (verbatim): *"kenapa juga halaman hierarki spasial harus

@@ -147,8 +147,18 @@ def ringkas_kesehatan(doc: dict, sekarang: datetime) -> dict:
     """Ringkasan kesehatan perangkat dari observasi terakhir — dipakai daftar
     perangkat agar operator melihat mana yang diam tanpa membuka satu per satu."""
     ts = _parse_ts((doc or {}).get("ts_server"))
-    diam_menit = None if ts is None else int((sekarang - ts).total_seconds() // 60)
+    # DETIK, bukan hanya menit. Layar Pelacakan memakainya sebagai jam hidup
+    # ("terdengar 12 detik lalu"); dalam satuan menit, perangkat yang BARU SAJA
+    # mengirim dan perangkat yang diam 59 detik sama-sama tampil "0 mnt" —
+    # angka yang tak pernah berubah terbaca sebagai layar yang macet.
+    #
+    # `max(0, …)` menjaga usia tak pernah negatif. `ts_server` dicap server
+    # sehingga mestinya tak bisa mendahului `sekarang`, tetapi pembacaan dari
+    # replika yang tertinggal bisa membalik urutannya sesaat — dan "-3 dtk
+    # lalu" di layar operator adalah cacat yang tak sepadan dengan harganya.
+    diam_detik = None if ts is None else max(0, int((sekarang - ts).total_seconds()))
     return {"terakhir_terdengar": (doc or {}).get("ts_server") or "",
-            "diam_menit": diam_menit,
+            "diam_detik": diam_detik,
+            "diam_menit": None if diam_detik is None else diam_detik // 60,
             "baterai_persen": (doc or {}).get("baterai_persen"),
             "ts_ragu": bool((doc or {}).get("ts_ragu"))}

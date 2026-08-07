@@ -193,6 +193,45 @@ def test_ringkas_kebijakan_bisa_ditampilkan():
     assert personal["presisi"] == "wilayah"
 
 
+def test_ringkas_kebijakan_membawa_jam_MENTAH_bukan_hanya_kalimat():
+    """Layar Pelacakan menjawab "kenapa perangkat ini sunyi?" dengan menghitung
+    apakah SEKARANG di luar jam aktifnya. Perhitungan itu butuh angka, dan
+    satu-satunya alternatif tanpa field ini adalah mengurai kembali kalimat
+    tampilan — yang berarti mengubah kata "24 jam" akan mematahkan layar.
+    """
+    r = pu.ringkas_kebijakan()
+    personal = next(x for x in r if x["profil"] == "personal")
+    assert (personal["jam_mulai"], personal["jam_selesai"]) == (7, 18)
+    assert personal["hari_kerja_saja"] is True
+    # Profil tanpa batas waktu memancarkan None, BUKAN (0, 24): keduanya sama
+    # artinya bagi mesin, tetapi None membuat layar bisa membedakan "tanpa
+    # gerbang jam" dari "gerbangnya kebetulan selebar sehari penuh".
+    kendaraan = next(x for x in r if x["profil"] == "kendaraan")
+    assert kendaraan["jam_mulai"] is None and kendaraan["jam_selesai"] is None
+    assert kendaraan["jam_aktif"] == "24 jam"
+
+
+def test_zona_jam_yang_DITAMPILKAN_adalah_zona_yang_MENGGERBANGI():
+    """Angka yang dilihat operator harus angka yang dijalankan mesin.
+
+    Uji ini menguncinya dari dua sisi: nilai yang dipancarkan `ringkas_kebijakan`
+    sama dengan konstanta modul, DAN konstanta itu benar-benar yang dipakai
+    `dalam_jam_aktif` saat pemanggil tak menyebut offset. Tanpa kalimat kedua,
+    seseorang bisa mengubah default penggerbang tanpa satu pun uji memerah,
+    dan layar akan menerangkan jam kerja yang tak pernah ditegakkan.
+    """
+    for baris in pu.ringkas_kebijakan():
+        assert baris["zona_offset_jam"] == pu.ZONA_OFFSET_JAM
+
+    personal = pu.PROFIL_PRIVASI["personal"]
+    # 23:30 UTC hari Minggu = 07:30 WITA hari SENIN — di dalam jam kerja hanya
+    # bila offsetnya benar-benar +8. Dengan offset 0 ini jatuh di akhir pekan
+    # dan tertolak; jadi satu assert menguji offset sekaligus pergeseran hari.
+    minggu_malam = datetime(2026, 7, 26, 23, 30, tzinfo=timezone.utc)
+    assert pu.dalam_jam_aktif(minggu_malam, personal) is True
+    assert pu.dalam_jam_aktif(minggu_malam, personal, offset_jam=0) is False
+
+
 # ── Izin darurat sebagai ALUR (Fase 14), bukan sekadar validator ────────────
 
 def test_pengajuan_tanpa_penyetuju_belum_sah():

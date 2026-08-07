@@ -3,21 +3,23 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   RadioTower, Play, Square, ShieldCheck, ShieldAlert, Loader2, Wifi, WifiOff,
-  Satellite, Info, LogOut,
+  Satellite, Info, LogOut, Gauge, BatteryWarning,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  KADENSI, bacaKadensi, simpanKadensi, profilKadensi,
+} from "@/lib/kadensiLacak";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const KUNCI_ANTREAN = "aman_lacak_antrean";
 const KUNCI_TOKEN = "aman_lacak_token";
 
-// Kadensi ADAPTIF — perangkat diam tak perlu dilaporkan tiap menit. Angka dari
-// docs/ARSITEKTUR-SPASIAL-IOT.md §8.4 #20 (kuota data mahal di lapangan).
-const JEDA_BERGERAK_MS = 60_000;
-const JEDA_DIAM_MS = 900_000;          // 15 menit
-const AMBANG_DIAM_M = 25;              // pergeseran di bawah ini = masih diam
-const JEDA_KIRIM_MS = 120_000;         // coba kirim antrean tiap 2 menit
+// Kadensi ADAPTIF — perangkat diam tak perlu dilaporkan tiap menit. Angkanya
+// kini hidup di `lib/kadensiLacak` sebagai TIGA pilihan, bukan satu konstanta
+// tersembunyi: "hemat" (bawaan, persis perilaku lama, docs/ARSITEKTUR-SPASIAL-
+// IOT.md §8.4 #20 — kuota data mahal di lapangan) sampai "aktif" untuk
+// perjalanan dinas yang sedang diawasi dan menuntut posisi hampir seketika.
 const MAKS_ANTREAN = 500;              // selaras plafon batch server
 
 function getApiError(err, fallback) {
@@ -77,12 +79,21 @@ export default function LacakPage() {
   const [terakhir, setTerakhir] = useState(null);
   const [online, setOnline] = useState(navigator.onLine);
   const [statistik, setStatistik] = useState({ terkirim: 0, gagal: 0 });
+  const [kadensi, setKadensi] = useState(() => bacaKadensi(window.localStorage));
   const watchRef = useRef(null);
   const wakeRef = useRef(null);
   const acuanRef = useRef(null);      // posisi terakhir yang DIREKAM
   const antreanRef = useRef(antrean); // dibaca timer tanpa memicu render ulang
+  // Kadensi dibaca DARI REF di dalam callback watchPosition. Callback itu
+  // dipasang sekali saat Mulai dan menutup (closure) nilai-nilai saat itu;
+  // membacanya dari state berarti mengganti mode di tengah perjalanan tak
+  // berpengaruh apa pun sampai perekaman dihentikan dan dimulai ulang —
+  // persis kelas cacat "menu yang tampak bekerja tapi tidak".
+  const kadensiRef = useRef(profilKadensi(kadensi));
+  const prof = profilKadensi(kadensi);
 
   useEffect(() => { antreanRef.current = antrean; }, [antrean]);
+  useEffect(() => { kadensiRef.current = profilKadensi(kadensi); }, [kadensi]);
 
   useEffect(() => {
     const naik = () => setOnline(true);
@@ -156,11 +167,13 @@ export default function LacakPage() {
     }
   }, [token, dev]);
 
+  // `prof.jeda_kirim` ikut dalam deps: mengganti kadensi membongkar timer lama
+  // dan memasang yang baru seketika, tanpa menunggu tik berikutnya.
   useEffect(() => {
     if (!jalan) return undefined;
-    const id = setInterval(kirimAntrean, JEDA_KIRIM_MS);
+    const id = setInterval(kirimAntrean, prof.jeda_kirim);
     return () => clearInterval(id);
-  }, [jalan, kirimAntrean]);
+  }, [jalan, kirimAntrean, prof.jeda_kirim]);
 
   // ── Rekam posisi ──────────────────────────────────────────────────────────
 
@@ -173,9 +186,10 @@ export default function LacakPage() {
     watchRef.current = navigator.geolocation.watchPosition(
       (pos) => {
         const c = pos.coords;
+        const k = kadensiRef.current;
         const titik = { lon: c.longitude, lat: c.latitude };
-        const bergerak = jarakM(acuanRef.current, titik) > AMBANG_DIAM_M;
-        const jeda = bergerak ? JEDA_BERGERAK_MS : JEDA_DIAM_MS;
+        const bergerak = jarakM(acuanRef.current, titik) > k.ambang_diam;
+        const jeda = bergerak ? k.jeda_bergerak : k.jeda_diam;
         const kini = Date.now();
         if (acuanRef.current && kini - terakhirRekam < jeda) return;
         terakhirRekam = kini;
@@ -347,6 +361,46 @@ export default function LacakPage() {
               terkirim {statistik.terkirim}
             </span>
           </div>
+          {/* KADENSI — dapat diganti KAPAN SAJA, termasuk saat sedang
+              merekam: perjalanan berubah sifat di tengah jalan (masuk kota,
+              berhenti lama), dan memaksa pemegang menghentikan lalu memulai
+              ulang berarti ada jeda kosong tepat pada momen ia sedang
+              memperhatikan. */}
+          <div className="pt-1 border-t border-border">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Gauge className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-[11px] font-semibold">Kerapatan posisi</span>
+            </div>
+            <div className="flex gap-1" data-testid="lacak-kadensi">
+              {Object.values(KADENSI).map((k) => (
+                <button
+                  key={k.kunci} type="button"
+                  onClick={() => { setKadensi(k.kunci); simpanKadensi(window.localStorage, k.kunci); }}
+                  className={`flex-1 min-w-0 min-h-0 rounded-md border px-1.5 py-1 text-[10px] font-semibold transition-colors ${kadensi === k.kunci ? "border-emerald-500 bg-emerald-500/10 text-foreground" : "border-border bg-card text-muted-foreground"}`}
+                  data-testid={`lacak-kadensi-${k.kunci}`}>
+                  {k.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1"
+               data-testid="lacak-kadensi-ringkas">
+              {prof.ringkas} · kirim tiap{" "}
+              {prof.jeda_kirim < 60_000
+                ? `${prof.jeda_kirim / 1000} detik`
+                : `${prof.jeda_kirim / 60_000} menit`}
+            </p>
+            {prof.boros && (
+              <p className="text-[10px] text-amber-700 dark:text-amber-300 mt-1 flex items-start gap-1"
+                 data-testid="lacak-kadensi-peringatan">
+                <BatteryWarning className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                <span>
+                  Mode ini menguras baterai dan kuota jauh lebih cepat. Pakai
+                  selama perjalanan yang sedang diawasi saja, lalu kembalikan
+                  ke Hemat baterai.
+                </span>
+              </p>
+            )}
+          </div>
           {!jalan ? (
             <Button className="w-full min-h-0" size="sm" onClick={mulai}
                     data-testid="lacak-mulai">
@@ -372,10 +426,11 @@ export default function LacakPage() {
           <p className="text-[10px] text-muted-foreground">
             <b>Halaman ini harus tetap terbuka.</b> Peramban menghentikan
             perekaman saat layar mati atau Anda berpindah aplikasi — itu batasan
-            peramban, bukan setelan yang bisa diubah. Untuk pemantauan 24 jam
-            tanpa layar menyala, diperlukan pelacak GPS khusus. Posisi yang
-            sempat terekam saat luring tetap tersimpan di HP dan terkirim
-            sendiri begitu jaringan kembali.
+            peramban, bukan setelan yang bisa diubah, dan <b>kerapatan tercepat
+            sekalipun tidak mengubahnya</b>. Untuk pemantauan 24 jam tanpa layar
+            menyala, diperlukan pelacak GPS khusus. Posisi yang sempat terekam
+            saat luring tetap tersimpan di HP dan terkirim sendiri begitu
+            jaringan kembali.
           </p>
         </div>
       </main>
