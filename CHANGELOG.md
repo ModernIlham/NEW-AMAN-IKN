@@ -67,6 +67,68 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#798] Kepala Wasdal & Perencanaan jadi satu menu di HP — dua halaman terakhir — 2026-08-08
+
+Permintaan pemilik: *"Kepala halaman Wasdal & Perencanaan lebur menjadi satu
+menu saja pada mode tampilan HP."*
+
+Keduanya adalah sisa terakhir yang belum memakai `MenuKepala` setelah `[#794]`.
+Masing-masing membawa **tiga tombol aksi**; diukur pada 360 px, tiga tombol +
+blok judul ber-lantai 9rem (`LANTAI_JUDUL`) tak muat sebaris, jadi kepalanya
+membungkus — keluhan yang sama persis seperti Pengadaan dulu.
+
+Bentuknya **cangkang ganda**, bukan penghapusan tombol:
+
+| Ukuran | Wasdal | Perencanaan |
+|---|---|---|
+| `<640px` | 1 tombol: **Menu** | 1 tombol: **Menu** |
+| `≥640px` | tetap 3 tombol seperti semula | tetap 3 tombol seperti semula |
+
+Menu HP-nya berkategori: **Tindakan** (Muat ulang · Tanggal acuan) → **Dokumen
+& Nomor** (Booking Nomor Surat) → **Ekspor** (laporan/kertas kerja).
+
+`MenuKepala` diperluas seperlunya: prop `ekspor` kini menerima **satu objek
+MAUPUN larik** (Wasdal & Perencanaan punya dua unduhan; lima halaman lama tetap
+mengirim satu objek, tak perlu disentuh), ditambah kategori ketiga `aksi` untuk
+hal yang bukan dokumen dan bukan ekspor, serta `kelasTombol` supaya pemicunya
+tampak sama dengan tombol ikon kotak tetangganya.
+
+**Tanggal acuan Perencanaan tidak dikorbankan.** Angkanya dinaikkan ke subjudul
+(*"Saringan kelayakan (PMK 153/2021) · acuan 2026-08-08 · TA 2026"*) — ia
+menentukan TA seluruh angka di halaman itu, jadi menyembunyikannya di balik satu
+ketukan berarti pengguna tak lagi tahu tahun berapa yang sedang dibacanya. Yang
+hilang cuma tombolnya, bukan informasinya.
+
+Dua jebakan yang ditutup di jalan:
+
+- **`TanggalanButton` kini `forwardRef` + `buka()`** dengan prop `kelasTombol`.
+  Yang disembunyikan di HP **hanya tombolnya**; `<input type="date">` miliknya
+  tetap terpasang dan tidak masuk subpohon `display:none` — kalau seluruh
+  komponen dibungkus `hidden sm:flex`, butir menunya jadi tombol mati.
+  Serumpun dengan jebakan Radix pada `BookingNomorButton` di `[#794]`.
+- **Butir tanggal ditunda satu frame** (`requestAnimationFrame`). Radix
+  mengembalikan fokus ke pemicu SETELAH menu tertutup; membuka pemilih tanggal
+  native pada detik yang sama berarti ia bisa langsung terusir. Ditambah jalan
+  mundur `el.click()` bila `showPicker()` tak ada atau melempar.
+
+Daftar unduhan ditulis **sekali** (`const UNDUHAN`) dan dipakai kedua cangkang —
+menyalinnya dua kali berarti suatu hari salah satunya ketinggalan saat laporan
+baru ditambahkan, dan yang ketinggalan hampir pasti cangkang yang jarang dibuka
+pengembangnya.
+
+Berkas uji baru `menuKepalaHp.test.js` (16 uji) mengunci semuanya; tiga
+uji-mutasi membuktikan ia menggigit: membungkus TanggalanButton dalam div
+tersembunyi, mengembalikan `onClick={muat}` (jebakan event-sebagai-argumen), dan
+membuang jalan mundur `click()` — ketiganya menjatuhkan uji. Total frontend
+**741 uji / 62 suite**.
+
+> **Perlu diuji di perangkat nyata:** pemilih tanggal native yang dipanggil dari
+> dalam menu tidak bisa diverifikasi di lingkungan tanpa peramban. Mekanismenya
+> berlapis (tunda satu frame + fallback `click()`), tetapi mohon dicoba sekali
+> di HP: buka Perencanaan → Menu → "Tanggal acuan".
+
+---
+
 ## [#797] Kotak Harga satuan berhenti dijatah separuh — Jumlah cukup 5rem — 2026-08-08
 
 Laporan pemilik (lanjutan tangkapan layar Catat Perolehan): *"pada ukuran jumlah

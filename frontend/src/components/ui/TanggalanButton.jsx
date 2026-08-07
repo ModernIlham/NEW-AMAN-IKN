@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useImperativeHandle, useRef } from "react";
 
 /**
  * TanggalanButton — kalender mini seukuran tombol kotak header (persegi,
@@ -10,13 +10,40 @@ import React, { useRef } from "react";
  * - value: string "YYYY-MM-DD" (wajib)
  * - onChange(v): dipanggil dengan tanggal baru "YYYY-MM-DD"
  * - warna: kelas Tailwind strip bulan (default biru)
+ * - kelasTombol: kelas tambahan untuk TOMBOLNYA saja (mis. "hidden sm:flex")
  * - title, testid: aksesibilitas & uji
+ *
+ * DIPAKAI DARI MENU: halaman yang meleburkan kepalanya jadi satu menu di HP
+ * menyembunyikan tombol ini (`kelasTombol="hidden sm:flex"`) lalu memanggil
+ * `buka()` lewat ref dari butir menunya:
+ *
+ *   <TanggalanButton ref={tanggalanRef} kelasTombol="hidden sm:flex" … />
+ *   onSelect={() => tanggalanRef.current?.buka()}
+ *
+ * Yang disembunyikan HANYA tombolnya — `<input type="date">` di bawah tetap
+ * terpasang dan tidak berada di dalam subpohon `display:none`, sehingga
+ * `showPicker()` tetap sah dipanggil. Menyembunyikan seluruh komponen akan
+ * membuat pemilih tanggalnya ikut lenyap dan butir menu itu jadi tombol mati.
  */
-export default function TanggalanButton({
+function TanggalanButton({
   value, onChange, warna = "bg-teal-700", title = "Pilih tanggal",
-  testid = "tanggalan",
-}) {
+  testid = "tanggalan", kelasTombol = "",
+}, refLuar) {
   const ref = useRef(null);
+  const buka = () => {
+    const el = ref.current;
+    if (!el) return;
+    // `showPicker` tak ada di peramban lama dan bisa melempar bila dipanggil
+    // tanpa aktivasi pengguna — `click()` pada input tanggal native adalah
+    // jalan mundur yang selalu bekerja.
+    try {
+      if (typeof el.showPicker === "function") el.showPicker();
+      else el.click();
+    } catch {
+      el.click();
+    }
+  };
+  useImperativeHandle(refLuar, () => ({ buka }));
   const v = String(value || "").slice(0, 10);
   const bulan = (() => {
     try {
@@ -29,13 +56,8 @@ export default function TanggalanButton({
     <>
       <button
         type="button"
-        onClick={() => {
-          const el = ref.current;
-          if (!el) return;
-          if (typeof el.showPicker === "function") el.showPicker();
-          else el.click();
-        }}
-        className="h-9 w-9 rounded-lg border border-border bg-background flex flex-col items-stretch overflow-hidden flex-shrink-0 hover:bg-muted"
+        onClick={buka}
+        className={`h-9 w-9 rounded-lg border border-border bg-background flex flex-col items-stretch overflow-hidden flex-shrink-0 hover:bg-muted ${kelasTombol}`}
         title={title}
         aria-label={title}
         data-testid={testid}
@@ -59,3 +81,5 @@ export default function TanggalanButton({
     </>
   );
 }
+
+export default React.forwardRef(TanggalanButton);
