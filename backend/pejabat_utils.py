@@ -259,20 +259,37 @@ def _berlaku_pada(pj, per_iso):
     return True
 
 
+def pejabat_berlaku_untuk_peran(pejabat_list, peran, per_iso=None):
+    """SEMUA pejabat yang berlaku & memegang `peran` pada tanggal `per_iso`,
+    terurut SK terbaru dahulu. MURNI (teruji unit).
+
+    Kenapa daftar, bukan hanya satu: satker lazim punya lebih dari satu PPK
+    berlaku bersamaan (per paket pekerjaan, per sumber dana). Selama fungsi ini
+    tak ada, satu-satunya jawaban yang bisa diberikan layar adalah "yang
+    SK-nya paling baru" — dan operator yang BAST-nya ditandatangani PPK lain
+    tak punya jalan memperbaikinya selain mencatat ulang registernya.
+
+    Pengurutan dipakai bersama `pejabat_aktif_untuk_peran` di bawah, sehingga
+    "pilihan otomatis" selalu = baris pertama daftar ini. Menjadikannya satu
+    fungsi bukan kerapian: bila keduanya mengurut sendiri-sendiri, dropdown
+    bisa menyorot orang yang berbeda dari yang benar-benar dipakai server.
+    """
+    kandidat = [
+        pj for pj in (pejabat_list or [])
+        if peran in (pj.get("peran") or []) and _berlaku_pada(pj, per_iso)
+    ]
+    kandidat.sort(key=lambda pj: str(pj.get("berlaku_mulai") or ""), reverse=True)
+    return kandidat
+
+
 def pejabat_aktif_untuk_peran(pejabat_list, peran, per_iso=None):
     """Pejabat yang berlaku & memegang `peran` pada tanggal `per_iso`.
 
     Bila banyak yang cocok, pilih yang SK-nya paling baru (berlaku_mulai
     terbesar). Kembalikan dict pejabat atau None. MURNI (teruji unit).
     """
-    kandidat = [
-        pj for pj in (pejabat_list or [])
-        if peran in (pj.get("peran") or []) and _berlaku_pada(pj, per_iso)
-    ]
-    if not kandidat:
-        return None
-    kandidat.sort(key=lambda pj: str(pj.get("berlaku_mulai") or ""), reverse=True)
-    return kandidat[0]
+    kandidat = pejabat_berlaku_untuk_peran(pejabat_list, peran, per_iso)
+    return kandidat[0] if kandidat else None
 
 
 def penandatangan_kpb(settings, pejabat_list, per_iso=None):

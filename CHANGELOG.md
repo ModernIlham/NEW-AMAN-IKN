@@ -67,6 +67,67 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#792] Perbarui PPK pada BAST akhirnya bisa MEMILIH — bukan selalu SK terbaru — 2026-08-07
+
+Laporan pemilik (verbatim): *"pada halaman pengadaan dibagian Perbarui PPK pada
+BAST ini jika ada 2 ppk disaat itu juga ppk yang terpilih malah yang terakhir,
+harusnya bisa memilih hingga 3 atau lebih ppk sesuai yang terdaftar di tanggal
+tersebut."*
+
+Benar, dan penyebabnya **seluruhnya di layar** — bukan di aturan pemilihannya.
+Daftar pilihan PPK sudah pernah disusun di `PengadaanPage.jsx`, lalu **dibuang
+tanpa pernah ditampilkan** (`void pilihan`), dan yang dikirim ke server selalu
+`"auto"`. Dialognya cuma konfirmasi ya/tidak. Sementara itu
+`PUT /pengadaan/{id}/ppk` **sejak awal menerima id eksplisit** — jadi
+kemampuannya ada di server tetapi mustahil dijangkau operator.
+
+Resolusi otomatis memilih SK paling baru (`pejabat_aktif_untuk_peran`).
+Sebagai **bawaan** itu benar. Yang keliru adalah menjadikannya satu-satunya
+jalan: satker lazim punya beberapa PPK sah bersamaan (per paket pekerjaan, per
+sumber dana), dan operator yang BAST-nya ditandatangani PPK lain tak punya cara
+memperbaikinya selain mencatat ulang register — yang berarti register ganda.
+
+**Yang berubah**
+
+- Dialog "Perbarui PPK pada BAST" kini **dropdown**: *Otomatis (menyebut nama
+  yang akan terpilih)* · **tiap PPK yang berlaku pada tanggal itu** (dengan NIP
+  & tanggal SK) · *Kosongkan penetapan*. Pilihannya benar-benar dikirim.
+- Kandidat diambil **per TANGGAL BAST**, bukan seluruh PPK sepanjang masa —
+  menawarkan PPK yang SK-nya sudah berakhir mengundang penetapan yang tak bisa
+  dipertanggungjawabkan. SK kedaluwarsa & pejabat nonaktif tersaring.
+- Bila lebih dari satu PPK berlaku, layar **mengatakannya terus terang** dan
+  menjelaskan bahwa "Otomatis" memilih SK terbaru.
+
+**Backend**
+
+- `pejabat_utils.pejabat_berlaku_untuk_peran()` — SEMUA pemegang peran yang
+  berlaku pada satu tanggal, terurut SK terbaru dahulu.
+  `pejabat_aktif_untuk_peran()` kini memanggilnya dan mengembalikan baris
+  pertama, sehingga **"Otomatis" di dropdown dijamin = yang dipakai server**
+  (dikunci uji; bila keduanya mengurut sendiri-sendiri, label bisa menyorot
+  orang yang berbeda dari yang tersimpan).
+- `GET /pejabat/aktif` menambah `kandidat` + `jumlah_kandidat` (aditif —
+  `pejabat` tetap seperti semula).
+
+**Dialog bersama** `TransitionDialog` menerima tipe field **`select`** (native
+`<select>`, plus baris `petunjuk`). Pilihan bernilai kosong sengaja
+dikecualikan dari cek "wajib diisi" — "Kosongkan penetapan" adalah aksi sah.
+
+Uji: 5 uji backend (tiga PPK serentak terbawa semua, tanggal menyaring bukan
+sekadar mengurutkan, "otomatis == kandidat[0]" di empat tanggal berbeda, daftar
+kosong bukan `None`) + 10 uji penjaga bentuk `pilihPpkBast.test.js` — termasuk
+larangan `void pilihan` dan `ppk_pejabat_id: "auto"` yang dipaku.
+
+Berkas: `backend/pejabat_utils.py`, `backend/routes/pejabat.py`,
+`frontend/src/components/ui/TransitionDialog.jsx`,
+`frontend/src/pages/PengadaanPage.jsx` (+2 berkas uji).
+
+> **Catatan penomoran:** entri ini `[#792]` untuk PR #784 — pergeseran +8
+> (bukan +7) karena PR #783 membawa dua entri sekaligus (`[#790]` & `[#791]`)
+> saat GitHub Actions berhenti menjadwalkan run.
+
+---
+
 ## [#791] Pelacakan berhenti terasa beku — kadensi bisa dipilih & layar menyegarkan diri — 2026-08-07
 
 Keluhan pemilik (verbatim): *"Pada link yang diberikan di HP maupun laptop tidak

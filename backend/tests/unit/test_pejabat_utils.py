@@ -2,6 +2,7 @@
 from pejabat_utils import (
     JENIS_PELAKSANA, PERAN_PEJABAT, PERAN_PEJABAT_META, STATUS_KEPEGAWAIAN,
     UNIT_AKUNTANSI, peran_penyerah_bast, pejabat_aktif_untuk_peran,
+    pejabat_berlaku_untuk_peran,
     penandatangan_kpb, prefiks_jabatan_pelaksana, prefiks_pelaksana,
     validate_pejabat,
 )
@@ -105,6 +106,61 @@ def test_pejabat_aktif_untuk_peran():
     assert pejabat_aktif_untuk_peran(daftar, "ppk", "2026-07-16") is None
     # Rentang kosong = terbuka; input kosong aman
     assert pejabat_aktif_untuk_peran([], "ppk", None) is None
+
+
+# ── Beberapa pemegang peran yang sah BERSAMAAN ──────────────────────────────
+#
+# Laporan pemilik: *"jika ada 2 ppk disaat itu juga ppk yang terpilih malah
+# yang terakhir, harusnya bisa memilih hingga 3 atau lebih ppk sesuai yang
+# terdaftar di tanggal tersebut."* Satker lazim punya lebih dari satu PPK
+# berlaku bersamaan (per paket pekerjaan / sumber dana), dan layar harus bisa
+# menawarkan semuanya — bukan hanya yang SK-nya paling baru.
+
+def _tiga_ppk():
+    return [
+        _pj("PPK Paket A", ["ppk"], "2026-01-01", ""),
+        _pj("PPK Paket B", ["ppk"], "2026-03-01", ""),
+        _pj("PPK Paket C", ["ppk"], "2026-02-01", ""),
+        _pj("PPK Kedaluwarsa", ["ppk"], "2024-01-01", "2025-12-31"),
+        _pj("PPK Nonaktif", ["ppk"], "2026-01-01", "", aktif=False),
+        _pj("Bukan PPK", ["penatausahaan_bmn"], "2026-01-01", ""),
+    ]
+
+
+def test_semua_pemegang_peran_yang_berlaku_dikembalikan():
+    """Tiga PPK sah pada tanggal yang sama harus terbawa SEMUA."""
+    k = pejabat_berlaku_untuk_peran(_tiga_ppk(), "ppk", "2026-07-16")
+    assert [x["nama"] for x in k] == ["PPK Paket B", "PPK Paket C", "PPK Paket A"]
+    # SK yang sudah berakhir & pejabat nonaktif TIDAK ikut ditawarkan —
+    # menetapkannya sebagai PPK dokumen tak bisa dipertanggungjawabkan.
+    assert "PPK Kedaluwarsa" not in [x["nama"] for x in k]
+    assert "PPK Nonaktif" not in [x["nama"] for x in k]
+
+
+def test_pilihan_otomatis_SELALU_baris_pertama_daftar():
+    """Kontrak yang menopang layarnya: dropdown menandai satu baris sebagai
+    "Otomatis", dan baris itu harus benar-benar yang dipakai server saat
+    operator mengirim "auto". Bila keduanya mengurut sendiri-sendiri, label
+    "Otomatis" bisa menyorot orang yang berbeda dari yang tersimpan."""
+    for tgl in ("2026-07-16", "2026-02-15", "2026-01-15", None):
+        daftar = _tiga_ppk()
+        kandidat = pejabat_berlaku_untuk_peran(daftar, "ppk", tgl)
+        otomatis = pejabat_aktif_untuk_peran(daftar, "ppk", tgl)
+        assert otomatis == (kandidat[0] if kandidat else None)
+
+
+def test_tanggal_menyaring_kandidat_bukan_hanya_mengurutkan():
+    """Pada 15 Januari 2026 baru satu PPK yang berlaku — dua lainnya SK-nya
+    belum mulai. Menawarkan mereka berarti mengundang penetapan mundur."""
+    k = pejabat_berlaku_untuk_peran(_tiga_ppk(), "ppk", "2026-01-15")
+    assert [x["nama"] for x in k] == ["PPK Paket A"]
+
+
+def test_tanpa_kandidat_daftar_kosong_bukan_None():
+    """Pemanggil (endpoint & layar) mengindeks hasilnya; None akan meledak."""
+    assert pejabat_berlaku_untuk_peran([], "ppk", "2026-07-16") == []
+    assert pejabat_berlaku_untuk_peran(None, "ppk", None) == []
+    assert pejabat_berlaku_untuk_peran(_tiga_ppk(), "validator_bmn", None) == []
 
 
 def test_penandatangan_kpb_registry_vs_fallback():
