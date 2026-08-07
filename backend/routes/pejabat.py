@@ -18,7 +18,7 @@ from shared_utils import (log_audit, kode_satker_user, scope_query_field_satker,
                           pastikan_akses_dok_satker)
 from pejabat_utils import (
     JENIS_PELAKSANA, PERAN_PEJABAT, PERAN_PEJABAT_META, STATUS_KEPEGAWAIAN,
-    UNIT_AKUNTANSI, peran_penyerah_bast, pejabat_aktif_untuk_peran,
+    UNIT_AKUNTANSI, peran_penyerah_bast, pejabat_berlaku_untuk_peran,
     validate_pejabat,
 )
 
@@ -118,14 +118,24 @@ async def pejabat_aktif(
     user: dict = Depends(require_user),
 ):
     """Pejabat yang berlaku & memegang `peran` pada tanggal tertentu (SK terbaru),
-    ter-scope satker user (+ pejabat era-lama tanpa kode)."""
+    ter-scope satker user (+ pejabat era-lama tanpa kode).
+
+    `kandidat` membawa SEMUA yang berlaku pada tanggal itu, terurut sama dengan
+    aturan pemilihan otomatis — jadi `pejabat` selalu identik dengan
+    `kandidat[0]`. Layar yang menawarkan pilihan (mis. "Perbarui PPK pada BAST")
+    memakainya supaya operator bisa menunjuk yang benar ketika satker punya
+    lebih dari satu pemegang peran yang sah bersamaan, alih-alih terpaksa
+    menerima yang SK-nya paling baru.
+    """
     if peran not in PERAN_PEJABAT:
         raise HTTPException(status_code=400, detail=f"Peran tidak dikenal: {peran}")
     if not per_tanggal:
         per_tanggal = datetime.now(timezone.utc).date().isoformat()
     semua = await db.pejabat.find(scope_query_field_satker(user, {}), _PROJ).to_list(2000)
-    pj = pejabat_aktif_untuk_peran(semua, peran, per_tanggal)
-    return {"peran": peran, "per_tanggal": per_tanggal, "pejabat": pj}
+    kandidat = pejabat_berlaku_untuk_peran(semua, peran, per_tanggal)
+    return {"peran": peran, "per_tanggal": per_tanggal,
+            "pejabat": kandidat[0] if kandidat else None,
+            "kandidat": kandidat, "jumlah_kandidat": len(kandidat)}
 
 
 async def _nip_bentrok_pejabat(nip: str, kecuali_id: str = "", kode: str = "") -> bool:

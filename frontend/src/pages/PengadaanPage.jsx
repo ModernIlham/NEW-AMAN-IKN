@@ -12,6 +12,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { useTransitionDialog } from "@/components/ui/TransitionDialog";
 import Lipatan from "@/components/ui/Lipatan";
 import StatKartu from "@/components/ui/StatKartu";
 import { useBackGuard } from "@/hooks/useBackGuard";
@@ -99,6 +100,9 @@ export default function PengadaanPage({ user, onBack }) {
   const [mencari, setMencari] = useState(false);
   const cariTimer = useRef(null);
   const { confirm, confirmDialog } = useConfirm();
+  // Dialog ber-field bersama — dipakai memilih PPK dari beberapa yang
+  // sama-sama berlaku pada tanggal BAST (lihat `ubahPpk`).
+  const { minta: mintaTransisi, transitionDialog } = useTransitionDialog();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
@@ -409,32 +413,77 @@ export default function PengadaanPage({ user, onBack }) {
   // PPK bisa DIPERBAIKI tanpa mencatat ulang BAST (endpoint PUT sudah ada
   // sejak awal, tetapi tak pernah punya jalan masuk dari layar — operator
   // justru disuruh "catat ulang", yang berarti membuat register ganda).
+  //
+  // Laporan pemilik: *"jika ada 2 ppk disaat itu juga ppk yang terpilih malah
+  // yang terakhir, harusnya bisa memilih hingga 3 atau lebih ppk sesuai yang
+  // terdaftar di tanggal tersebut."*
+  //
+  // Benar, dan penyebabnya ada DI LAYAR INI. Daftar pilihan sudah pernah
+  // disusun di sini tetapi dibuang tanpa pernah ditampilkan (`void pilihan`),
+  // lalu yang dikirim ke server SELALU `"auto"`. Resolusi otomatis memilih SK
+  // paling baru — perilaku yang benar sebagai BAWAAN, tetapi menjadi jebakan
+  // ketika satker punya beberapa PPK sah bersamaan (per paket pekerjaan, per
+  // sumber dana): operator melihat nama yang salah dan tak punya cara
+  // memperbaikinya. Endpoint PUT-nya sendiri sejak dulu menerima id eksplisit.
+  //
+  // Kandidat diambil dari server PER TANGGAL BAST, bukan dari daftar PPK
+  // sepanjang masa: menawarkan PPK yang SK-nya sudah berakhir pada tanggal itu
+  // hanya mengundang penetapan yang tak bisa dipertanggungjawabkan.
   const ubahPpk = async (p) => {
-    const pilihan = [{ id: "auto", label: "Otomatis dari Referensi Pejabat" },
-                     ...opsiPpk.map((pj) => ({
-                       id: pj.id,
-                       label: `${pj.nama}${pj.nip ? ` · ${pj.nip}` : ""}` })),
-                     { id: "", label: "Kosongkan penetapan" }];
-    const ok = await confirm({
-      title: "Perbarui PPK pada BAST ini?",
-      description: `${p.nomor_bast} — PPK saat ini: ${p.ppk_nama || "(belum ditetapkan)"}. `
-        + "Server akan mencari PPK yang berlaku pada tanggal BAST, lalu "
-        + "memperbarui aset-aset yang sudah tercatat dari BAST ini.",
-      confirmLabel: "Perbarui otomatis",
+    const tgl = String(p.tanggal_bast || "").slice(0, 10);
+    let kandidat = [];
+    try {
+      const r = await axios.get(`${API}/pejabat/aktif`,
+        { params: { peran: "ppk", ...(tgl ? { per_tanggal: tgl } : {}) } });
+      kandidat = r.data?.kandidat || [];
+    } catch {
+      // Server tak menjawab → jatuh ke daftar PPK yang sudah dimuat halaman.
+      // Lebih baik menawarkan pilihan yang lebih luas daripada tak sama sekali;
+      // penetapannya tetap divalidasi server.
+      kandidat = opsiPpk;
+    }
+    const otomatis = kandidat[0];   // server memilih ini bila dikirim "auto"
+    const nilai = await mintaTransisi({
+      judul: "Perbarui PPK pada BAST ini?",
+      deskripsi: `${p.nomor_bast} — PPK saat ini: ${p.ppk_nama || "(belum ditetapkan)"}.`
+        + ` Berlaku pada ${tgl || "tanggal BAST"}: ${kandidat.length} PPK.`,
+      fields: [{
+        key: "ppk", label: "Tetapkan sebagai PPK", type: "select",
+        default: "auto",
+        opsi: [
+          { id: "auto",
+            label: otomatis
+              ? `Otomatis — ${otomatis.nama} (SK terbaru)`
+              : "Otomatis dari Referensi Pejabat" },
+          ...kandidat.map((pj) => ({
+            id: pj.id,
+            label: `${pj.nama}${pj.nip ? ` · ${pj.nip}` : ""}`
+              + `${pj.berlaku_mulai ? ` · SK ${String(pj.berlaku_mulai).slice(0, 10)}` : ""}`,
+          })),
+          { id: "", label: "Kosongkan penetapan" },
+        ],
+        petunjuk: kandidat.length > 1
+          ? "Ada lebih dari satu PPK yang berlaku pada tanggal ini. "
+            + "\"Otomatis\" memilih yang SK-nya paling baru — pilih sendiri "
+            + "bila BAST ini ditandatangani PPK yang lain."
+          : "Aset-aset yang sudah tercatat dari BAST ini ikut diperbarui.",
+      }],
+      confirmLabel: "Perbarui PPK",
     });
-    if (!ok) return;
+    if (nilai === null) return;
     try {
       const r = await axios.put(`${API}/pengadaan/${p.id}/ppk`,
-        { ppk_pejabat_id: "auto" });
+        { ppk_pejabat_id: nilai.ppk });
       const nama = r.data?.ppk_nama;
       toast.success(nama ? `PPK diperbarui: ${nama}`
-        : "Tak ada PPK yang berlaku pada tanggal BAST ini — "
-          + "isi Referensi Pejabat lebih dulu.");
+        : nilai.ppk === ""
+          ? "Penetapan PPK dikosongkan"
+          : "Tak ada PPK yang berlaku pada tanggal BAST ini — "
+            + "isi Referensi Pejabat lebih dulu.");
       muat();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal memperbarui PPK");
     }
-    void pilihan;
   };
 
   const hapus = async (p) => {
@@ -1263,6 +1312,7 @@ export default function PengadaanPage({ user, onBack }) {
       </Dialog>
 
       {confirmDialog}
+      {transitionDialog}
     </div>
   );
 }
