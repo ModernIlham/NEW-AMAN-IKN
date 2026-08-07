@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, ShoppingCart, Plus, Search, Trash2, X, Coins,
   ClipboardCheck, Download, Link2, Paperclip, Upload, PackagePlus,
-  Check, Circle, Boxes, FileDown, PenLine, FileSignature,
+  Check, Circle, Boxes, FileDown, PenLine, FileSignature, MoreVertical, Ticket,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,10 @@ import {
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useTransitionDialog } from "@/components/ui/TransitionDialog";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuLabel, DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import Lipatan from "@/components/ui/Lipatan";
 import StatKartu from "@/components/ui/StatKartu";
 import { useBackGuard } from "@/hooks/useBackGuard";
@@ -103,6 +107,9 @@ export default function PengadaanPage({ user, onBack }) {
   // Dialog ber-field bersama — dipakai memilih PPK dari beberapa yang
   // sama-sama berlaku pada tanggal BAST (lihat `ubahPpk`).
   const { minta: mintaTransisi, transitionDialog } = useTransitionDialog();
+  // Pemicu dialog Booking Nomor dari butir menu (komponennya dipasang di
+  // luar menu agar dialognya tak ikut dilepas saat menu tertutup).
+  const bookingRef = useRef(null);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
@@ -531,22 +538,60 @@ export default function PengadaanPage({ user, onBack }) {
               Dokumen sumber per BAST/kontrak (Perpres 16/2018 jo. 46/2025)
             </p>
           </div>
-          <Button size="sm" variant="outline" className="flex-shrink-0"
-            onClick={() => downloadFileWithProgress(`${API}/pengadaan/export`, "register_pengadaan.csv", { label: "Ekspor Register Pengadaan (CSV)" }).catch(() => {})}
-            data-testid="pengadaan-export">
-            <Download className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">CSV</span>
-          </Button>
-          <Button size="sm" variant="outline" className="flex-shrink-0"
-            title="Satu LPB merangkum banyak BAST PPK → KPB (aset & persediaan)"
-            onClick={() => setLpbGab({ pilih: {}, saving: false })}
-            data-testid="pengadaan-lpb-gabungan">
-            <Boxes className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">LPB Gabungan</span>
-          </Button>
+          {/* AKSI SEKUNDER DIKELOMPOKKAN. Empat tombol berdampingan membuat
+              kepala halaman pecah ke baris kedua di HP (laporan pemilik: tombol
+              Booking Nomor "sampai ke bawah"). Yang dikumpulkan hanya aksi yang
+              JARANG dipakai; "Catat Perolehan" tetap berdiri sendiri karena ia
+              alasan utama halaman ini dibuka. Butir menu dikelompokkan
+              berkategori agar daftarnya terbaca sebagai peta, bukan tumpukan. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="outline" className="flex-shrink-0"
+                title="Menu aksi Pengadaan" aria-label="Menu aksi Pengadaan"
+                data-testid="pengadaan-menu">
+                <MoreVertical className="w-4 h-4 sm:mr-1.5" />
+                <span className="hidden sm:inline">Menu</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-60">
+              <DropdownMenuLabel className="text-[11px] text-muted-foreground">
+                Dokumen &amp; Nomor
+              </DropdownMenuLabel>
+              {/* Komponennya dipasang DI LUAR menu (lihat di bawah); butir ini
+                  hanya memanggil `mulai()` lewat ref. Radix melepas isi menu
+                  dari DOM saat menu tertutup — dialog yang tinggal di dalamnya
+                  akan ikut lenyap pada saat yang sama butir ini ditekan. */}
+              <DropdownMenuItem className="min-h-[42px]"
+                onSelect={() => bookingRef.current?.mulai()}
+                data-testid="pengadaan-menu-booking">
+                <Ticket className="w-4 h-4 mr-2" />Booking Nomor Surat
+              </DropdownMenuItem>
+              <DropdownMenuItem className="min-h-[42px]"
+                onSelect={() => setLpbGab({ pilih: {}, saving: false })}
+                data-testid="pengadaan-lpb-gabungan">
+                <Boxes className="w-4 h-4 mr-2" />LPB Gabungan
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-[11px] text-muted-foreground">
+                Ekspor
+              </DropdownMenuLabel>
+              <DropdownMenuItem className="min-h-[42px]"
+                onSelect={() => downloadFileWithProgress(`${API}/pengadaan/export`, "register_pengadaan.csv", { label: "Ekspor Register Pengadaan (CSV)" }).catch(() => {})}
+                data-testid="pengadaan-export">
+                <Download className="w-4 h-4 mr-2" />Unduh Register (CSV)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button size="sm" onClick={bukaFormBaru}
             className="bg-orange-600 hover:bg-orange-700 text-white flex-shrink-0" data-testid="pengadaan-tambah">
             <Plus className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Catat Perolehan</span>
           </Button>
-          <BookingNomorButton modul="pengadaan" jenisNaskah="Berita Acara" referensi="BAST Perolehan" />
+          {/* Tanpa tombol sendiri — pemicunya butir menu di atas. Dipasang di
+              sini, di LUAR DropdownMenuContent, supaya dialognya tetap hidup
+              setelah menu tertutup. */}
+          <BookingNomorButton ref={bookingRef} tanpaTombol
+            modul="pengadaan" jenisNaskah="Berita Acara" referensi="BAST Perolehan" />
         </div>
       </header>
 

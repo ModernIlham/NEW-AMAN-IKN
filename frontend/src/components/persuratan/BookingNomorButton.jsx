@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useImperativeHandle, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import { Copy, Loader2, Ticket } from "lucide-react";
@@ -20,11 +20,25 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
  *
  * Pakai: <BookingNomorButton modul="pelaporan" jenisNaskah="Laporan"
  *          referensi="LHI" kegiatanId={activity?.id} perihal="…" />
+ *
+ * DIPICU DARI MENU: halaman yang kepalanya padat mengelompokkan aksi
+ * sekundernya ke dalam satu menu ⋮. Pasang komponen ini DI LUAR menu dengan
+ * `tanpaTombol`, lalu panggil `mulai()` lewat ref dari butir menunya:
+ *
+ *   const bookingRef = useRef(null);
+ *   <DropdownMenuItem onSelect={() => bookingRef.current?.mulai()}>…</…>
+ *   <BookingNomorButton ref={bookingRef} tanpaTombol modul="pengadaan" … />
+ *
+ * DI LUAR menu, bukan di dalamnya: Radix MELEPAS isi `DropdownMenuContent`
+ * dari DOM begitu menu tertutup. Komponen ini yang memiliki dialog booking,
+ * jadi menaruhnya di dalam menu berarti dialognya ikut lenyap pada saat yang
+ * sama butir menunya ditekan — dan tak ada apa pun yang muncul.
  */
-export default function BookingNomorButton({
+const BookingNomorButton = React.forwardRef(function BookingNomorButton({
   modul = "umum", jenisNaskah = "Laporan", referensi = "",
   kegiatanId = "", perihal = "", size = "sm", className = "",
-}) {
+  tanpaTombol = false,
+}, ref) {
   const [buka, setBuka] = useState(false);
   const [form, setForm] = useState(null);
   const [pratinjau, setPratinjau] = useState(null);
@@ -50,6 +64,11 @@ export default function BookingNomorButton({
       .then((r) => setKlasifikasi(r.data?.items || []))
       .catch(() => setKlasifikasi([]));
   };
+
+  // Satu-satunya pintu imperatif: membuka dialog. Sengaja TIDAK membuka state
+  // internal — pemanggil dari menu hanya perlu "mulai", bukan kuasa mengubah
+  // form, pratinjau, atau hasil booking dari luar.
+  useImperativeHandle(ref, () => ({ mulai }));
 
   useEffect(() => {
     if (!buka || !form) return;
@@ -99,12 +118,19 @@ export default function BookingNomorButton({
 
   return (
     <>
-      <Button variant="outline" size={size} className={`gap-1.5 ${className}`}
-        onClick={mulai} title="Pesan nomor surat keluar untuk dokumen dari halaman ini"
-        data-testid={`booking-nomor-btn-${modul}`}>
-        <Ticket className="w-3.5 h-3.5" />
-        <span className="hidden sm:inline">Booking Nomor</span>
-      </Button>
+      {/* Tombol bawaan bisa DILEPAS (pemicunya pindah ke butir menu), tetapi
+          dialog di bawah ini tetap milik komponen ini — tanpa titik sisip itu,
+          satu-satunya jalan memasukkan booking ke menu adalah MENYALIN dialog
+          beserta pratinjau nomor, master klasifikasi, dan aturan sisipannya;
+          salinan kedua pasti menyimpang dari aslinya. */}
+      {!tanpaTombol && (
+        <Button variant="outline" size={size} className={`gap-1.5 ${className}`}
+          onClick={mulai} title="Pesan nomor surat keluar untuk dokumen dari halaman ini"
+          data-testid={`booking-nomor-btn-${modul}`}>
+          <Ticket className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Booking Nomor</span>
+        </Button>
+      )}
 
       <Dialog open={buka} onOpenChange={(o) => { if (!o) setBuka(false); }}>
         <DialogContent className="max-w-md">
@@ -203,4 +229,6 @@ export default function BookingNomorButton({
       </Dialog>
     </>
   );
-}
+});
+
+export default BookingNomorButton;
