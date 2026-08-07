@@ -959,7 +959,7 @@ export default function PengamananPage({ user, onBack }) {
                     data-testid="dokumen-berlaku" />
                 </div>
                 {formDok.data.jenis === "sertipikat" && (
-                  <div className="col-span-2">
+                  <div className="sm:col-span-2">
                     <label className="text-xs font-medium text-foreground block mb-1" htmlFor="dok-sertipikasi">Status sertipikasi (ops., kategori DJKN-BPN)</label>
                     <select id="dok-sertipikasi" value={formDok.data.kategori_sertipikasi}
                       onChange={(e) => setFormDok((f) => ({ ...f, data: { ...f.data, kategori_sertipikasi: e.target.value } }))}
@@ -1049,7 +1049,7 @@ export default function PengamananPage({ user, onBack }) {
                     onChange={(e) => setFormPolis((f) => ({ ...f, data: { ...f.data, penanggung: e.target.value } }))}
                     data-testid="polis-penanggung" />
                 </div>
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pol-kategori">Kategori objek (PMK 43/2025)</label>
                   <select id="pol-kategori" value={formPolis.data.kategori_objek}
                     onChange={(e) => setFormPolis((f) => ({ ...f, data: { ...f.data, kategori_objek: e.target.value } }))}
@@ -1070,7 +1070,7 @@ export default function PengamananPage({ user, onBack }) {
                     onChange={(e) => setFormPolis((f) => ({ ...f, data: { ...f.data, premi: e.target.value } }))}
                     data-testid="polis-premi" />
                 </div>
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pol-sumber">Sumber dana premi</label>
                   <select id="pol-sumber" value={formPolis.data.sumber_dana}
                     onChange={(e) => setFormPolis((f) => ({ ...f, data: { ...f.data, sumber_dana: e.target.value } }))}
@@ -1091,7 +1091,7 @@ export default function PengamananPage({ user, onBack }) {
                     onChange={(e) => setFormPolis((f) => ({ ...f, data: { ...f.data, berakhir: e.target.value } }))}
                     data-testid="polis-berakhir" />
                 </div>
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pol-ket">Keterangan (ops.)</label>
                   <Input id="pol-ket" value={formPolis.data.keterangan}
                     onChange={(e) => setFormPolis((f) => ({ ...f, data: { ...f.data, keterangan: e.target.value } }))}

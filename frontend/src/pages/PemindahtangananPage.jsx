@@ -433,7 +433,7 @@ export default function PemindahtangananPage({ user, onBack }) {
           </DialogHeader>
           {form && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="ptg-bentuk">Bentuk</label>
                 <select id="ptg-bentuk" value={form.data.bentuk}
                   onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, bentuk: e.target.value } }))}
@@ -444,14 +444,14 @@ export default function PemindahtangananPage({ user, onBack }) {
                     : <option value="hibah">Hibah</option>}
                 </select>
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="ptg-pihak">Pihak (penerima/pembeli/mitra)</label>
                 <Input id="ptg-pihak" placeholder="cth. Pemerintah Desa Sukamaju"
                   value={form.data.pihak}
                   onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, pihak: e.target.value } }))}
                   data-testid="pemindahtanganan-pihak" />
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="ptg-ket">Keterangan</label>
                 <Input id="ptg-ket" value={form.data.keterangan}
                   onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, keterangan: e.target.value } }))} />
@@ -475,14 +475,14 @@ export default function PemindahtangananPage({ user, onBack }) {
                   data-testid="pemindahtanganan-nilai-wajar" />
               </div>
               {form.data.jenis_bmn === "tanah_bangunan" && (
-                <label className="col-span-2 flex items-center gap-2 text-xs text-foreground cursor-pointer">
+                <label className="sm:col-span-2 flex items-center gap-2 text-xs text-foreground cursor-pointer">
                   <input type="checkbox" checked={!!form.data.tb_terkecuali}
                     onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, tb_terkecuali: e.target.checked } }))}
                     data-testid="pemindahtanganan-terkecuali" />
                   Termasuk pengecualian Ps. 55(2) PP 27/2014 (tak sesuai tata ruang / untuk pegawai / kepentingan umum, dsb.)
                 </label>
               )}
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="ptg-cari">Tambah aset</label>
                 <div className="relative">
                   <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
@@ -505,7 +505,7 @@ export default function PemindahtangananPage({ user, onBack }) {
                 </div>
               </div>
               {form.aset.length > 0 && (
-                <ul className="col-span-2 space-y-1">
+                <ul className="sm:col-span-2 space-y-1">
                   {form.aset.map((a) => (
                     <li key={a.id} className="rounded-lg border border-border p-2 flex items-center gap-2">
                       <span className="min-w-0 flex-1">
@@ -544,7 +544,7 @@ export default function PemindahtangananPage({ user, onBack }) {
           </DialogHeader>
           {trx?.ke === "disetujui" && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="ptg-setuju">No. Surat Persetujuan</label>
                 <Input id="ptg-setuju" placeholder="S-12/KNL.05/2026" value={trx.fields.nomor_persetujuan}
                   onChange={(e) => setTrxField("nomor_persetujuan", e.target.value)} data-testid="pemindahtanganan-nomor-setuju" />

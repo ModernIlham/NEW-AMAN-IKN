@@ -687,7 +687,7 @@ export default function PenilaianPage({ user, onBack }) {
                 onChange={(e) => setFormRef((f) => ({ ...f, tahun: e.target.value }))}
                 data-testid="penilaian-ref-tahun" />
             </div>
-            <div className="col-span-2">
+            <div className="sm:col-span-2">
               <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pnl-uraian">Uraian kelompok</label>
               <Input id="pnl-uraian" placeholder="cth. Alat Angkutan Darat Bermotor"
                 value={formRef?.uraian || ""}
@@ -697,7 +697,7 @@ export default function PenilaianPage({ user, onBack }) {
                 dikenal, uraian berjenjangnya (golongan → bidang → kelompok)
                 langsung ditampilkan — kolom Uraian terisi otomatis darinya. */}
             {infoKode && (
-              <div className="col-span-2 rounded-lg border border-violet-500/30 bg-violet-500/5 p-2"
+              <div className="sm:col-span-2 rounded-lg border border-violet-500/30 bg-violet-500/5 p-2"
                 data-testid="penilaian-ref-info-kode">
                 {infoKode === "memuat" ? (
                   <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
@@ -823,7 +823,7 @@ export default function PenilaianPage({ user, onBack }) {
                     onChange={(e) => setFormKoreksi((f) => ({ ...f, data: { ...f.data, nilai_baru: e.target.value } }))}
                     data-testid="koreksi-baru" />
                 </div>
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kor-dampak">Dampak masa manfaat</label>
                   <select id="kor-dampak" value={formKoreksi.data.dampak_masa_manfaat}
                     onChange={(e) => setFormKoreksi((f) => ({ ...f, data: { ...f.data, dampak_masa_manfaat: e.target.value } }))}
@@ -846,7 +846,7 @@ export default function PenilaianPage({ user, onBack }) {
                     onChange={(e) => setFormKoreksi((f) => ({ ...f, data: { ...f.data, penilai_pelaksana: e.target.value } }))}
                     data-testid="koreksi-penilai" />
                 </div>
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kor-catatan">Catatan (ops.)</label>
                   <Input id="kor-catatan" value={formKoreksi.data.catatan}
                     onChange={(e) => setFormKoreksi((f) => ({ ...f, data: { ...f.data, catatan: e.target.value } }))}

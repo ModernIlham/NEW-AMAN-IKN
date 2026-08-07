@@ -67,6 +67,69 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#795] Dialog di HP berhenti jadi dua kolom sempit — 70 titik, satu kelas cacat — 2026-08-08
+
+Laporan pemilik (dengan tangkapan layar): *"perbaiki posisi tata letak di
+halaman pop up catat perolehan karena di mode HP sangat berantakan
+komposisinya."*
+
+### Penyebabnya satu baris kelas yang tampak benar
+
+```jsx
+<div className="grid grid-cols-1 sm:grid-cols-2">   ← niatnya 1 kolom di HP
+  …
+  <div className="col-span-2">…</div>               ← TAPI ini merusaknya
+```
+
+Di CSS Grid, anak yang membentang **2 kolom pada grid 1-kolom** membuat browser
+**menumbuhkan kolom implisit kedua**. Jadi seluruh dialog diam-diam menjadi dua
+kolom sempit di HP: "Pembelian (APB…" terpotong, "07/08/20…" terpotong, tinggi
+antar-kolom tak sejajar, dan sebagian field setengah lebar sementara sisanya
+penuh. **Kelasnya tetap tertulis `grid-cols-1`, jadi membaca kode saja tak
+memperlihatkan cacatnya** — itulah sebabnya ia bertahan lama.
+
+### Bukan satu popup — 70 titik di 14 berkas
+
+Penyapuan menemukan cacat yang sama hidup di seluruh aplikasi:
+
+| Berkas | Titik | | Berkas | Titik |
+|---|--:|---|---|--:|
+| PersediaanPage | 15 | | PemanfaatanPage · PemeliharaanPage | 6 · 6 |
+| PenganggaranPage | 8 | | WasdalPage | 5 |
+| PemindahtangananPage · PenggunaanPage | 7 · 7 | | PengamananPage · PenilaianPage | 4 · 4 |
+| PengadaanPage | 4 | | PemusnahanPage · PerencanaanPage | 3 · 2 |
+| | | | PenghapusanPage · TtdPermintaanPage · ImporDenahDialog | 1 · 1 · 1 |
+
+Semuanya diperbaiki: `col-span-N` → `sm:col-span-N` (di HP otomatis penuh),
+dan dua kasus `col-span-2 sm:col-span-1` → `sm:col-span-1` (bagian "penuh di
+HP" memang perilaku bawaan grid 1-kolom — menuliskannya justru merusak).
+
+**Induk grid ditelusuri lewat INDENTASI, bukan jendela teks.** Lima titik
+sengaja TIDAK disentuh karena induknya memang `grid-cols-2` di HP —
+AdvancedFilter, AssetForm, CetakStikerDialog, FullCameraSheet,
+InventoryFieldSheet. Di dialog Catat Perolehan sendiri, kartu "Daftar barang"
+tetap 2 kolom supaya Jumlah & Harga satuan berdampingan.
+
+### Tambahan pada dialog yang dilaporkan
+
+**Tanggal BAST** dan **Keterangan** kini berpasangan. Sebelumnya keduanya
+dipisah nota penjelas sehingga masing-masing meninggalkan satu sel kosong di
+desktop — sumber kesan "komposisi berantakan" yang tetap terlihat di layar
+lebar.
+
+### Uji
+
+`gridHpSatuKolom.test.js` memindai SELURUH `.jsx` dan menuntut nol pelanggaran
+— menjaga **kelasnya**, bukan satu dialog. Disertai dua uji atas penjaganya
+sendiri: satu memastikan ia benar-benar menangkap contoh yang melanggar (regex
+salah ketik akan lulus selamanya dengan daftar kosong), satu memastikan ia
+TIDAK menuduh grid yang memang 2 kolom di HP — penjaga yang menuduh palsu akan
+dimatikan orang, bukan dipatuhi.
+
+Berkas: 14 halaman/komponen + 1 berkas uji baru. Backend tak tersentuh.
+
+---
+
 ## [#794] Menu kepala jadi komponen bersama — lima halaman seragam, pola tak disalin lagi — 2026-08-07
 
 Permintaan pemilik: *"ya tolong teliti ke model lainnya baiknya bagaimana."*

@@ -358,12 +358,12 @@ export default function PemusnahanPage({ user, onBack }) {
                 <Input id="pms-setuju" placeholder="S-9/KNL.05/2026" value={form.data.nomor_persetujuan}
                   onChange={(e) => setField("nomor_persetujuan", e.target.value)} data-testid="pemusnahan-persetujuan" />
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pms-ket">Keterangan</label>
                 <Input id="pms-ket" value={form.data.keterangan}
                   onChange={(e) => setField("keterangan", e.target.value)} />
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pms-cari">Tambah aset (Rusak Berat)</label>
                 <div className="relative">
                   <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
@@ -386,7 +386,7 @@ export default function PemusnahanPage({ user, onBack }) {
                 </div>
               </div>
               {form.aset.length > 0 && (
-                <ul className="col-span-2 space-y-1">
+                <ul className="sm:col-span-2 space-y-1">
                   {form.aset.map((a) => (
                     <li key={a.id} className="rounded-lg border border-border p-2 flex items-center gap-2">
                       <span className="min-w-0 flex-1">

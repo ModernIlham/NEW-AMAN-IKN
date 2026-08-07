@@ -697,7 +697,7 @@ export default function PemeliharaanPage({ user, onBack }) {
           </DialogHeader>
           {form && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pml-aset">Aset</label>
                 {form.aset ? (
                   <div className="flex items-center justify-between gap-2 rounded-lg border border-border p-2">
@@ -749,7 +749,7 @@ export default function PemeliharaanPage({ user, onBack }) {
                   ))}
                 </select>
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pml-uraian">Uraian pekerjaan</label>
                 <Input id="pml-uraian" placeholder="cth. Servis rutin + ganti filter AC"
                   value={form.data.uraian} onChange={(e) => setField("uraian", e.target.value)}
@@ -789,13 +789,13 @@ export default function PemeliharaanPage({ user, onBack }) {
                   ))}
                 </select>
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pml-ket">Keterangan</label>
                 <Input id="pml-ket" value={form.data.keterangan}
                   onChange={(e) => setField("keterangan", e.target.value)} />
               </div>
               {form.data.kondisi_setelah && (
-                <p className="col-span-2 text-[11px] text-muted-foreground -mt-1">
+                <p className="sm:col-span-2 text-[11px] text-muted-foreground -mt-1">
                   Kondisi aset pada modul Inventarisasi akan diperbarui menjadi “{form.data.kondisi_setelah}”.
                 </p>
               )}
@@ -822,7 +822,7 @@ export default function PemeliharaanPage({ user, onBack }) {
           </DialogHeader>
           {formJadwal && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmlj-aset">Aset</label>
                 {formJadwal.aset ? (
                   <div className="flex items-center justify-between gap-2 rounded-lg border border-border p-2">
@@ -872,7 +872,7 @@ export default function PemeliharaanPage({ user, onBack }) {
                   value={formJadwal.data.mulai}
                   onChange={(e) => setFieldJadwal("mulai", e.target.value)} />
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmlj-ket">Keterangan</label>
                 <Input id="pmlj-ket" placeholder="cth. servis rutin AC / ganti oli genset"
                   value={formJadwal.data.keterangan}

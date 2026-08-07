@@ -434,7 +434,7 @@ export default function PemanfaatanPage({ user, onBack }) {
           </DialogHeader>
           {form && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-aset">Objek BMN (opsional)</label>
                 {form.aset ? (
                   <div className="flex items-center justify-between gap-2 rounded-lg border border-border p-2">
@@ -469,7 +469,7 @@ export default function PemanfaatanPage({ user, onBack }) {
                   </div>
                 )}
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-bentuk">Bentuk</label>
                 <select id="pmf-bentuk" value={form.data.bentuk}
                   onChange={(e) => setField("bentuk", e.target.value)}
@@ -491,7 +491,7 @@ export default function PemanfaatanPage({ user, onBack }) {
                 <Input id="pmf-jmitra" placeholder="BUMN/PT/koperasi/Pemda"
                   value={form.data.jenis_mitra} onChange={(e) => setField("jenis_mitra", e.target.value)} />
               </div>
-              <p className="col-span-2 text-[10px] font-bold uppercase tracking-wide text-muted-foreground border-t border-border pt-2 mt-1">Periode & nilai</p>
+              <p className="sm:col-span-2 text-[10px] font-bold uppercase tracking-wide text-muted-foreground border-t border-border pt-2 mt-1">Periode & nilai</p>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-mulai">Mulai</label>
                 <Input id="pmf-mulai" type="date" value={form.data.mulai}
@@ -507,7 +507,7 @@ export default function PemanfaatanPage({ user, onBack }) {
                 <Input id="pmf-nilai" type="number" min="0" placeholder="0"
                   value={form.data.nilai} onChange={(e) => setField("nilai", e.target.value)} />
               </div>
-              <p className="col-span-2 text-[10px] font-bold uppercase tracking-wide text-muted-foreground border-t border-border pt-2 mt-1">Dokumen & kepatuhan</p>
+              <p className="sm:col-span-2 text-[10px] font-bold uppercase tracking-wide text-muted-foreground border-t border-border pt-2 mt-1">Dokumen & kepatuhan</p>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-setuju">No. Persetujuan Pengelola</label>
                 <Input id="pmf-setuju" placeholder="cth. S-11/KNL.05/2026"
@@ -535,7 +535,7 @@ export default function PemanfaatanPage({ user, onBack }) {
               </div>
               {BENTUK_DAPAT_FASILITAS.includes(form.data.bentuk) && (
                 <>
-                  <div className="col-span-2">
+                  <div className="sm:col-span-2">
                     <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-fasilitas">
                       Fasilitas transaksi (pendampingan — bukan bentuk pemanfaatan)
                     </label>
@@ -565,7 +565,7 @@ export default function PemanfaatanPage({ user, onBack }) {
                   )}
                 </>
               )}
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-ket">Keterangan</label>
                 <Input id="pmf-ket" value={form.data.keterangan}
                   onChange={(e) => setField("keterangan", e.target.value)} />

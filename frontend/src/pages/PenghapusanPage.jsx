@@ -442,7 +442,7 @@ export default function PenghapusanPage({ user, onBack }) {
             </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="col-span-2">
+            <div className="sm:col-span-2">
               <label className="text-xs font-medium text-foreground block mb-1" htmlFor="phx-sk">Nomor SK</label>
               <Input id="phx-sk" placeholder="cth. KEP-12/MK.6/2026"
                 value={formSk?.nomor_sk || ""}

@@ -573,7 +573,7 @@ export default function PenganggaranPage({ user, onBack }) {
           </DialogHeader>
           {formTahapan && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kal-nama">Nama tahapan</label>
                 <Input id="kal-nama" placeholder="cth. Penyampaian RKBMN ke Biro"
                   value={formTahapan.data.nama}
@@ -592,14 +592,14 @@ export default function PenganggaranPage({ user, onBack }) {
                   onChange={(e) => setFormTahapan((f) => ({ ...f, data: { ...f.data, tahun_anggaran: e.target.value.replace(/\D/g, "") } }))}
                   data-testid="kalender-ta" />
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kal-ket">Keterangan (opsional)</label>
                 <Input id="kal-ket" placeholder="cth. lampirkan kertas kerja SBSK"
                   value={formTahapan.data.keterangan}
                   onChange={(e) => setFormTahapan((f) => ({ ...f, data: { ...f.data, keterangan: e.target.value } }))}
                   data-testid="kalender-keterangan" />
               </div>
-              <div className="col-span-2 flex justify-end gap-2">
+              <div className="sm:col-span-2 flex justify-end gap-2">
                 <Button variant="outline" size="sm" onClick={() => setFormTahapan(null)}>Batal</Button>
                 <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white"
                   disabled={formTahapan.saving || !formTahapan.data.nama.trim() || !formTahapan.data.tanggal}
@@ -647,7 +647,7 @@ export default function PenganggaranPage({ user, onBack }) {
                     .map(([k, v]) => <option key={k} value={k}>{k} — {v}</option>)}
                 </select>
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="agr-rkbmn">Usulan RKBMN terkait (opsional — dari modul Perencanaan)</label>
                 <select id="agr-rkbmn" value={form.data.rkbmn_id || ""}
                   className="w-full h-10 rounded-md border border-input bg-background px-2 text-sm"
@@ -669,7 +669,7 @@ export default function PenganggaranPage({ user, onBack }) {
                   ))}
                 </select>
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="agr-uraian">Uraian usulan</label>
                 <Input id="agr-uraian" placeholder="cth. Servis besar genset kantor"
                   value={form.data.uraian}
@@ -688,13 +688,13 @@ export default function PenganggaranPage({ user, onBack }) {
                   onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, nilai_usulan: e.target.value } }))}
                   data-testid="penganggaran-nilai" />
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="agr-sumber">Sumber (opsional)</label>
                 <Input id="agr-sumber" placeholder="cth. Kertas kerja RKBMN pemeliharaan 2027"
                   value={form.data.sumber}
                   onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, sumber: e.target.value } }))} />
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="agr-cari">Tautkan aset (opsional)</label>
                 <div className="relative">
                   <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
@@ -717,7 +717,7 @@ export default function PenganggaranPage({ user, onBack }) {
                 </div>
               </div>
               {form.aset.length > 0 && (
-                <ul className="col-span-2 space-y-1">
+                <ul className="sm:col-span-2 space-y-1">
                   {form.aset.map((a) => (
                     <li key={a.id} className="rounded-lg border border-border p-2 flex items-center gap-2">
                       <span className="min-w-0 flex-1">
