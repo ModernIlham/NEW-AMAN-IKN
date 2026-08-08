@@ -1327,12 +1327,31 @@ async def get_bulk_asset_cards(request: Request, asset_ids: List[str],
             detail=(f"Terlalu banyak aset ({len(asset_ids)}) untuk cetak kartu "
                     f"sekaligus (maks {MAKS_KARTU}). Persempit seleksi, atau "
                     "cetak bertahap per kelompok."))
+    # Duplikat dibuang, urutan kemunculan pertama dipertahankan — $in hanya
+    # mengembalikan satu dokumen per id, jadi tanpa ini seleksi berduplikat
+    # tertolak "hilang" secara keliru di gerbang kejujuran di bawah.
+    ids_unik = list(dict.fromkeys(asset_ids))
     # Isolasi satker: user terikat hanya boleh mencetak aset satkernya —
     # scope via activity_id ∈ kegiatan-satker (cegah IDOR lintas satker).
-    q = await scope_query_aset(user, {"id": {"$in": asset_ids}})
-    assets = await db.assets.find(q, {"_id": 0}).to_list(len(asset_ids))
-    if not assets:
-        raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    q = await scope_query_aset(user, {"id": {"$in": ids_unik}})
+    assets = await db.assets.find(q, {"_id": 0}).to_list(len(ids_unik))
+    # Gerbang kejujuran yang sama wataknya dengan plafon di atas: kartu adalah
+    # dokumen fisik per barang. Aset terpilih yang tak bisa ikut (terhapus,
+    # atau di luar satker) harus MENOLAK — bukan menghasilkan PDF yang
+    # diam-diam lebih tipis sementara frontend menamai berkas dan toast-nya
+    # dengan jumlah seleksi (`ids.length`).
+    if len(assets) < len(ids_unik):
+        hilang = len(ids_unik) - len(assets)
+        raise HTTPException(
+            status_code=404,
+            detail=(f"{hilang} dari {len(ids_unik)} aset terpilih tidak "
+                    "ditemukan atau di luar satker Anda — muat ulang daftar "
+                    "aset lalu coba lagi."))
+    # Kartu dicetak mengikuti URUTAN SELEKSI pengguna — find() mengembalikan
+    # urutan natural koleksi, padahal urutan tumpukan hasil cetak penting
+    # saat ratusan kartu dipotong lalu ditempel per barang.
+    posisi = {aid: i for i, aid in enumerate(ids_unik)}
+    assets.sort(key=lambda a: posisi.get(a.get("id"), len(ids_unik)))
 
     # C25b: riwayat dua kueri (pengganti 2N round-trip), lalu render berblok —
     # hidrasi GridFS (I/O async) tetap di event loop, CPU-nya di thread.
@@ -1352,7 +1371,5 @@ async def get_bulk_asset_cards(request: Request, asset_ids: List[str],
 
     logger.info(f"Generated bulk fold cards for {len(assets)} assets")
 
-    # Catatan perilaku LAMA yang sengaja tidak diubah PR ini: urutan kartu
-    # mengikuti urutan natural find(), bukan urutan seleksi pengguna.
     return StreamingResponse(io.BytesIO(data), media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=kartu_inventaris_massal_{len(assets)}.pdf"})
