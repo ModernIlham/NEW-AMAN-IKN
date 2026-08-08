@@ -153,7 +153,9 @@ server {
         proxy_buffers 4 32k;
     }
 
-    # WebSocket
+    # WebSocket — koneksi long-lived. Tanpa dua baris timeout di bawah, nginx
+    # memakai default 60s: heartbeat 25 dtk (routes/websocket.py) menutupinya,
+    # tapi event loop yang tertahan >60 dtk memutus SEMUA klien worker itu.
     location /api/ws {
         proxy_pass http://127.0.0.1:8001;
         proxy_http_version 1.1;
@@ -161,6 +163,8 @@ server {
         proxy_set_header Connection "upgrade";
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
     }
 
     # Frontend static files

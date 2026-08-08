@@ -163,3 +163,66 @@ class TestCabangTujuan:
         # Tanpa --prune, ref pelacak lama bertahan di klon VPS — itulah varian
         # kegagalan yang berbahaya: reset --hard ke commit beku yang "ada".
         assert "fetch --prune" in _teks(SKRIP / nama)
+
+
+VPS = SKRIP / "vps-deploy.sh"
+PANDUAN = SKRIP.parent / "DEPLOYMENT_GUIDE_HOSTINGER.md"
+
+
+def _blok_lokasi(teks, prefix):
+    """Isi blok `location <prefix> { ... }` PERSIS prefix itu, tanpa komentar.
+
+    Ber-scope per blok itu inti penjaganya: `proxy_read_timeout` memang sudah
+    ada di berkas ini (blok `/api/`), jadi `assert "proxy_read_timeout" in
+    teks` hijau bahkan pada konfigurasi yang cacat. Hanya dipakai untuk
+    `/api/ws` dan `/api/` yang tak punya blok bersarang — `index("}")`
+    pertama memang penutupnya.
+    """
+    m = re.search(r"^\s*location\s+" + re.escape(prefix) + r"\s*\{", teks, re.M)
+    assert m, f"blok location {prefix} hilang"
+    isi = teks[m.end():teks.index("}", m.end())]
+    return "\n".join(b for b in isi.splitlines()
+                     if not b.lstrip().startswith("#"))
+
+
+def _detik(blok, direktif):
+    m = re.search(direktif + r"\s+(\d+)s\s*;", blok)
+    return int(m.group(1)) if m else None
+
+
+class TestTimeoutWebSocket:
+    """U21 — blok nginx `/api/ws` tanpa `proxy_*_timeout` = default 60 dtk.
+
+    Hari ini tak ada yang putus HANYA karena heartbeat 25 dtk (sisi server di
+    routes/websocket.py, sisi klien di useWebSocket.js) me-reset timer nginx
+    terus-menerus. Kedua heartbeat itu hidup di event loop yang sama — satu
+    panggilan sinkron yang menahan loop >60 dtk mematikan keduanya sekaligus,
+    dan dengan `--workers 2` itu berarti ±50% klien WS terputus serentak.
+    §8 panduan Hostinger sudah lama menyuruh 3600s; blok §6.2 yang justru
+    disalin operator saat setup adalah salinan blok cacat ini. Penjaga di
+    sini menagih keduanya sekaligus supaya tak bisa menyimpang lagi.
+    """
+
+    def test_blok_ws_punya_read_timeout_panjang(self):
+        b = _blok_lokasi(_teks(VPS), "/api/ws")
+        assert (_detik(b, "proxy_read_timeout") or 0) >= 3600
+
+    def test_blok_ws_punya_send_timeout_panjang(self):
+        b = _blok_lokasi(_teks(VPS), "/api/ws")
+        assert (_detik(b, "proxy_send_timeout") or 0) >= 3600
+
+    def test_blok_api_biasa_tetap_pendek(self):
+        # Perbaikannya BER-SCOPE: menaikkan seluruh `/api/` ke 3600s berarti
+        # ekspor PDF yang menggantung menahan koneksi satu jam, bukan gagal
+        # dalam dua menit.
+        b = _blok_lokasi(_teks(VPS), "/api/")
+        assert _detik(b, "proxy_read_timeout") == 120
+
+    def test_panduan_setup_sejalan_dengan_skrip(self):
+        # §6.2 adalah blok yang disalin-tempel operator; kalau ia menyimpang
+        # dari skrip, resep yang salah tetap terpasang untuk operator
+        # berikutnya walau skripnya sudah benar.
+        skrip = _blok_lokasi(_teks(VPS), "/api/ws")
+        panduan = _blok_lokasi(_teks(PANDUAN), "/api/ws")
+        for d in ("proxy_read_timeout", "proxy_send_timeout"):
+            assert _detik(panduan, d) == _detik(skrip, d), d
