@@ -165,6 +165,54 @@ class TestCabangTujuan:
         assert "fetch --prune" in _teks(SKRIP / nama)
 
 
+class TestAnggaranGerbangKesehatan:
+    """S6 — gerbang deploy 15×2 dtk ≈ 28 dtk itu pas-pasan bahkan hari ini.
+
+    uvicorn bind() dulu, listen() baru SETELAH lifespan.startup — jadi selama
+    create_indexes + backfill startup berjalan, port memantulkan RST, curl
+    gagal instan, dan hanya `sleep` yang menghitung. Gerbang yang kalah cepat
+    dari boot yang sehat men-503-kan deploy sehat → `pulihkan()` → rollback.
+    Anggaran dinaikkan ke ≈90 dtk SEBELUM penanda migrasi mendarat, karena
+    boot pertama pasca-penanda masih menjalankan ketiga backfill.
+    """
+
+    def _anggaran(self):
+        k = _kode(DEPLOY)
+        m = re.search(r"^PERCOBAAN_KESEHATAN=(\d+)$", k, re.M)
+        assert m, "variabel PERCOBAAN_KESEHATAN hilang"
+        tidur = re.findall(r"^\s*sleep (\d+)$", k, re.M)
+        assert tidur, "sleep di badan gerbang hilang"
+        return int(m.group(1)), min(int(t) for t in tidur)
+
+    def test_anggaran_gerbang_minimal_80_detik(self):
+        # Menghitung ANGGARAN (iterasi × tidur), bukan mencocokkan angka 45 —
+        # supaya uji tetap sah kalau kelak orang memilih 60×2 atau 30×3.
+        iterasi, tidur = self._anggaran()
+        assert iterasi * tidur >= 80, (iterasi, tidur)
+
+    def test_kedua_gerbang_memakai_variabel_yang_sama(self):
+        k = _kode(DEPLOY)
+        assert k.count('seq 1 "$PERCOBAAN_KESEHATAN"') == 2
+        assert not re.search(r"seq 1 \d", k), "masih ada gerbang berangka literal"
+
+    def test_ambang_kegagalan_ikut_variabel(self):
+        # Mutasi paling mungkin lolos tinjauan mata: menaikkan `seq` tapi
+        # lupa pembanding `-eq` — gerbang tampak jalan, diam-diam gagal
+        # LEBIH cepat dari anggarannya.
+        k = _kode(DEPLOY)
+        pembanding = re.findall(r'\[ "\$i" -eq ([^ ]+) \]', k)
+        assert len(pembanding) == 2, pembanding
+        assert all(p == '"$PERCOBAAN_KESEHATAN"' for p in pembanding), pembanding
+
+    def test_komentar_tidak_berbohong_soal_anggaran(self):
+        # Komentar "~30 dtk" adalah satu-satunya dokumentasi anggaran boot
+        # yang dibaca orang jam 2 pagi; angka basi = skrip berbohong tentang
+        # dirinya sendiri.
+        iterasi, _ = self._anggaran()
+        if iterasi > 15:
+            assert "~30 dtk" not in _teks(DEPLOY)
+
+
 VPS = SKRIP / "vps-deploy.sh"
 PANDUAN = SKRIP.parent / "DEPLOYMENT_GUIDE_HOSTINGER.md"
 

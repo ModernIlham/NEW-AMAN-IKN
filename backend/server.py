@@ -107,43 +107,67 @@ from indexes import create_indexes  # noqa: E402  (re-exported for back-compat)
 # STARTUP & SHUTDOWN
 # ============================================================================
 
-@app.on_event("startup")
-async def startup_event():
-    await create_indexes()
-    # Backfill OCC version field for legacy assets (data that was created before
-    # OCC was introduced, or restored from older backups). Without this, the
-    # CAS update query {"id": ..., "version": 1} will never match a document
-    # that has no version field and every edit will produce a false 409.
-    try:
-        res = await db.assets.update_many(
-            {"version": {"$exists": False}},
-            {"$set": {"version": 1}},
-        )
-        if res.modified_count:
-            logger.info(f"OCC backfill: set version=1 on {res.modified_count} legacy asset(s)")
-    except Exception as e:
-        logger.warning(f"OCC version backfill failed (non-fatal): {e}")
+async def jalankan_backfill_startup():
+    """Tiga backfill data lama — SEKALI seumur hidup DB, bukan tiap boot (S6).
+
+    Dua yang pertama dulu collscan penuh `assets` pada setiap boot × jumlah
+    worker (filter `$exists`/nilai-lama tak tertopang indeks). Kini tiap
+    backfill digerbangi penanda `migrasi:*` di `app_runtime` — kunci TERPISAH
+    per migrasi supaya migrasi keempat kelak tak terlewat diam-diam, ditandai
+    HANYA setelah kerjanya sukses supaya kegagalan tetap diulang boot
+    berikutnya. Multi-worker sengaja tak diserialisasi: boot pertama semua
+    worker menjalankan backfill yang sama (idempoten, biaya persis hari ini,
+    sekali saja); boot berikutnya tinggal find_one per kunci.
+    """
+    from shared_utils import sudah_dimigrasi, tandai_migrasi
+
+    # Backfill OCC version untuk aset lama (pra-OCC / arsip lama). Restore
+    # kini menormalkan `version` saat insert dan _build_cas_filter() menerima
+    # dokumen tanpa version pada versi 1, tapi pembaca CAS mentah (mis.
+    # webp_converter._thumb_batch) tetap butuh field-nya ada.
+    if not await sudah_dimigrasi("occ_version_v1"):
+        try:
+            res = await db.assets.update_many(
+                {"version": {"$exists": False}},
+                {"$set": {"version": 1}},
+            )
+            if res.modified_count:
+                logger.info(f"OCC backfill: set version=1 on {res.modified_count} legacy asset(s)")
+            await tandai_migrasi("occ_version_v1")
+        except Exception as e:
+            logger.warning(f"OCC version backfill failed (non-fatal): {e}")
     # Normalisasi status inventarisasi YATIM: nilai lama "Sudah Diinventarisasi"
     # tidak ada di daftar pilihan resmi (Belum/Ditemukan/Tidak Ditemukan/
     # Berlebih/Sengketa) sehingga tak terseleksi di UI & gagal validasi impor.
     # Aset ber-status itu memang ber-foto = ditemukan → ubah ke "Ditemukan".
-    # Idempoten: setelah jalan sekali, filter tak lagi cocok (scan murah).
-    try:
-        res_stat = await db.assets.update_many(
-            {"inventory_status": "Sudah Diinventarisasi"},
-            {"$set": {"inventory_status": "Ditemukan"}},
-        )
-        if res_stat.modified_count:
-            logger.info(f"Status normalize: 'Sudah Diinventarisasi' → 'Ditemukan' pada {res_stat.modified_count} aset")
-    except Exception as e:
-        logger.warning(f"Normalisasi status inventarisasi gagal (non-fatal): {e}")
+    # SATU-SATUNYA dari ketiganya yang tak punya jalur lazy — penandanya
+    # wajib dibersihkan pasca-restore (bersihkan_penanda_migrasi).
+    if not await sudah_dimigrasi("status_inventaris_v1"):
+        try:
+            res_stat = await db.assets.update_many(
+                {"inventory_status": "Sudah Diinventarisasi"},
+                {"$set": {"inventory_status": "Ditemukan"}},
+            )
+            if res_stat.modified_count:
+                logger.info(f"Status normalize: 'Sudah Diinventarisasi' → 'Ditemukan' pada {res_stat.modified_count} aset")
+            await tandai_migrasi("status_inventaris_v1")
+        except Exception as e:
+            logger.warning(f"Normalisasi status inventarisasi gagal (non-fatal): {e}")
     # Backfill nomor tiket kegiatan (INV-{tahun}-{seq}) untuk kegiatan lama.
     # Idempotent & aman multi-worker (guard $exists per dokumen).
-    try:
-        from routes.pengesahan import backfill_ticket_numbers
-        await backfill_ticket_numbers()
-    except Exception as e:
-        logger.warning(f"Ticket number backfill failed (non-fatal, lazy backfill covers it): {e}")
+    if not await sudah_dimigrasi("tiket_kegiatan_v1"):
+        try:
+            from routes.pengesahan import backfill_ticket_numbers
+            await backfill_ticket_numbers()
+            await tandai_migrasi("tiket_kegiatan_v1")
+        except Exception as e:
+            logger.warning(f"Ticket number backfill failed (non-fatal, lazy backfill covers it): {e}")
+
+
+@app.on_event("startup")
+async def startup_event():
+    await create_indexes()
+    await jalankan_backfill_startup()
     # Start cross-worker WebSocket event bus (capped collection + tailable cursor)
     try:
         from routes.websocket import start_event_bus

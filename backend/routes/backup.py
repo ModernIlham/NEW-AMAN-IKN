@@ -610,6 +610,20 @@ async def run_restore_task(job_id: str, zip_path: Path, username: str):
         except Exception as e:
             logger.warning(f"Index rebuild warning: {e}")
 
+        # Penanda migrasi startup (S6): `app_runtime` ada di SKIP_COLLECTIONS
+        # sehingga TIDAK dikosongkan restore — tanpa pembersihan ini, DB hasil
+        # pemulihan arsip lama membawa penanda DB sebelumnya dan backfill
+        # (mis. normalisasi "Sudah Diinventarisasi", yang tak punya jalur
+        # lazy) tak pernah jalan lagi. Backfill jalan ulang pada restart
+        # berikutnya — persis perilaku sebelum penanda ada.
+        try:
+            from shared_utils import bersihkan_penanda_migrasi
+            n_penanda = await bersihkan_penanda_migrasi()
+            if n_penanda:
+                logger.info(f"Restore [{job_id}]: {n_penanda} penanda migrasi dibersihkan (backfill jalan ulang saat restart)")
+        except Exception as e:
+            logger.warning(f"Pembersihan penanda migrasi pasca-restore gagal: {e}")
+
         # Reindex Meilisearch (REVIEW-9 R6): isi DB baru saja diganti total —
         # tanpa ini hasil pencarian menunjuk data pra-restore. Best-effort.
         try:

@@ -67,6 +67,61 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#819] Gelombang 2.13 (S6) — backfill sekali seumur hidup, dan gerbang yang berhenti kalah cepat dari boot — 2026-08-08
+
+Tiga backfill di `startup_event()` berjalan pada **setiap boot × jumlah
+worker** — dua di antaranya collscan penuh `assets` (filter `$exists` tak
+berindeks; `inventory_status` punya indeks tapi tanpa prefix `activity_id`
+tak terpakai). Sementara gerbang deploy hanya menunggu 15×2 dtk ≈ 28 dtk —
+dan uvicorn `bind()` dulu, `listen()` baru SETELAH `lifespan.startup`, jadi
+selama startup port memantulkan RST, curl gagal instan, dan hanya `sleep`
+yang menghitung. Boot yang kalah cepat dari gerbang = deploy sehat
+di-rollback `pulihkan()`.
+
+**Penanda migrasi** (`shared_utils.py`): `sudah_dimigrasi` / `tandai_migrasi`
+/ `bersihkan_penanda_migrasi`, dokumen ber-`_id` `migrasi:*` di `app_runtime`
+(meniru pola kursor WebP & stempel activity-tracker yang sudah ada). Tiga
+blok backfill di `server.py` diekstrak menjadi `jalankan_backfill_startup()`
+dengan kunci TERPISAH (`occ_version_v1`, `status_inventaris_v1`,
+`tiket_kegiatan_v1`) — satu kunci gabungan berarti migrasi keempat kelak
+terlewat diam-diam. Ditandai HANYA setelah kerja sukses; gagal = diulang
+boot berikutnya. Ragu = ulangi (fail-open): ketiganya idempoten, melewatkan
+merusak data. Multi-worker sengaja tak diserialisasi — boot pertama semua
+worker menjalankan backfill idempoten yang sama (biaya persis hari ini,
+sekali), selanjutnya 3 `find_one` per worker.
+
+**Bagian yang laporan investigasi KIRA sudah berlaku, padahal kebalikannya:**
+`app_runtime` ada di SKIP_COLLECTIONS — ia tidak diisi dari arsip DAN tidak
+dikosongkan restore, jadi penanda SELAMAT melewati pemulihan arsip lama.
+Tanpa penanganan: aset ber-status yatim "Sudah Diinventarisasi" hidup
+kembali dan tak pernah dinormalkan lagi (satu-satunya backfill tanpa jalur
+lazy) — kerusakan data senyap yang tidak ada hari ini. Maka
+`bersihkan_penanda_migrasi()` dipanggil pasca-restore di `routes/backup.py`,
+ber-filter prefiks `migrasi:` supaya kursor WebP & stempel tracker di
+koleksi yang sama tak ikut tersapu. `app_runtime` di SKIP_COLLECTIONS kini
+load-bearing dan dikunci uji.
+
+**Gerbang deploy**: empat angka literal (2× `seq 1 15`, 2× `-eq 15`) diganti
+satu variabel `PERCOBAAN_KESEHATAN=45` (≈90 dtk per gerbang) — bentuk lama
+menyimpan angka yang sama di dua tempat per gerbang; menaikkan `seq` tapi
+lupa `-eq` menghasilkan gerbang yang diam-diam gagal LEBIH cepat.
+Pertukaran sadar: kelas "deploy merah padahal sistem sehat" hilang, dengan
+harga rollback kegagalan nyata datang ±60 dtk lebih lambat per gerbang.
+Dinaikkan DI PR YANG SAMA karena boot pertama pasca-penanda masih
+menjalankan ketiga backfill.
+
+**Uji** (12 baru): `test_migrasi_sekali.py` — boot pertama menjalankan
+ketiganya lalu menandai; boot kedua NOL pemindaian; kunci terpisah;
+kegagalan tak menandai lalu diulang; query penanda melempar → backfill
+tetap jalan; pembersihan hanya menyentuh prefiks. `TestAnggaranGerbangKesehatan`
+— anggaran ≥80 dtk dihitung (bukan angka dicocokkan), kedua gerbang satu
+variabel, pembanding `-eq` ikut variabel, komentar tak boleh berbohong.
+Penjaga `app_runtime ∈ SKIP_COLLECTIONS`. **Sembilan mutasi diuji, sembilan
+terbunuh** — termasuk satu kunci gabungan, tandai-sebelum-kerja, sapu-semua
+`delete_many({})`, dan fail-closed.
+
+---
+
 ## [#818] Gelombang 2.12 — `done` bukan berarti berhasil — 2026-08-08
 
 Dialog impor kategori hanya melihat `done` lalu merayakan: *"Import selesai:

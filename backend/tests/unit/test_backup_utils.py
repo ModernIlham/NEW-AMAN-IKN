@@ -181,3 +181,18 @@ def test_saat_jadwal_tiba():
     assert saat_jadwal_tiba("03:00", w, "") is False            # belum jamnya
     assert saat_jadwal_tiba("", w, "") is False                 # tak dikonfigurasi
     assert saat_jadwal_tiba("2:00", w, "") is False             # format salah
+
+
+def test_app_runtime_tetap_di_skip_collections():
+    """LOAD-BEARING sejak penanda migrasi (S6) tinggal di `app_runtime`.
+
+    Karena di-skip, koleksi ini tidak diisi dari arsip DAN tidak dikosongkan
+    restore — itulah dasar kenapa `bersihkan_penanda_migrasi()` dipanggil
+    eksplisit pasca-restore. MENGELUARKANNYA dari SKIP membuat penanda ikut
+    masuk arsip lalu ikut dipulihkan, DAN mengembalikan kursor migrasi WebP +
+    stempel activity-tracker ke posisi lama — persis alasan koleksi ini
+    di-skip sejak awal.
+    """
+    assert "app_runtime" in SKIP_COLLECTIONS
+    assert "app_runtime" not in collections_to_process(
+        ["assets", "app_runtime", "users"])
