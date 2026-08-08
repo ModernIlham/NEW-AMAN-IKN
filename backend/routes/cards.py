@@ -23,10 +23,10 @@ import logging
 from datetime import datetime
 from typing import List
 from xml.sax.saxutils import escape as _xml_escape
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
 from auth_utils import require_user
-from shared_utils import pastikan_akses_aset, scope_query_aset
+from shared_utils import pastikan_akses_aset, scope_query_aset, limiter
 
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib import colors
@@ -53,6 +53,26 @@ from shared_utils import get_photo_from_gridfs
 
 logger = logging.getLogger(__name__)
 cards_router = APIRouter()
+
+# Plafon cetak kartu massal — DIUKUR, bukan ditaksir (temuan C25a).
+#
+#   kartu  :  79   ms/aset  — JPEG 1600×1200 (±150 KB) → decode Pillow + QR +
+#                             ReportLab; linier dari 10 sampai 100 aset
+#   stiker :  13,4 ms/aset  — tanpa foto; plafonnya MAKS_STIKER = 2000
+#
+# Plafon stiker itu berarti proyek ini SUDAH menerima kasus terburuk ±27 detik
+# event loop terkunci. Kartu 5,9× lebih mahal per item, jadi anggaran blokir
+# yang SAMA habis di ±340 aset. Dibulatkan ke bawah: 300 (±24 detik).
+#
+# Dua hal yang perlu jujur disebut:
+#   • Angka ini MENAHAN kasus terburuk, bukan memperbaikinya. 24 detik event
+#     loop terkunci tetap buruk. C25b memindahkan bagian murni-CPU ke thread
+#     dan menghapus N+1 riwayat; sesudah itu plafon ini bisa dinaikkan sadar.
+#   • Anggaran 27 detik milik stiker itu sendiri kemungkinan tak pernah
+#     diukur — 2000 hanyalah angka bulat. Yang dilakukan di sini bukan
+#     mengesahkannya, melainkan menyamakan BIAYA kedua plafon dan menuliskan
+#     angkanya, supaya siapa pun yang ingin menggesernya tahu apa yang digeser.
+MAKS_KARTU = 300
 
 
 async def _hydrate_cover_from_gridfs(asset):
@@ -1137,10 +1157,30 @@ async def get_asset_card_pdf(asset_id: str, user: dict = Depends(require_user)):
 
 
 @cards_router.post("/assets/cards/bulk")
-async def get_bulk_asset_cards(asset_ids: List[str], user: dict = Depends(require_user)):
-    """Kartu Inventarisasi massal: satu halaman A4 landscape (4 panel fold) per aset."""
+@limiter.limit("3/minute")
+async def get_bulk_asset_cards(request: Request, asset_ids: List[str],
+                               user: dict = Depends(require_user)):
+    """Kartu Inventarisasi massal: satu halaman A4 landscape (4 panel fold) per aset.
+
+    Berplafon (temuan C25a). Seluruh badan fungsi ini — decode foto Pillow, QR,
+    dan ReportLab — berjalan di EVENT LOOP, jadi lamanya bukan "permintaan ini
+    lambat" melainkan "seluruh aplikasi berhenti selama itu": setiap petugas
+    lapangan yang sedang menyimpan aset ikut menunggu.
+
+    Menolak, BUKAN memotong diam-diam. Kartu Inventaris adalah dokumen fisik
+    yang ditempel/diarsipkan per barang; memotong 500 permintaan menjadi 300
+    kartu tanpa memberi tahu berarti 200 aset tidak punya kartu dan tak ada
+    apa pun di PDF-nya yang mengatakan begitu. Stiker boleh dipotong karena
+    kurangnya langsung terlihat saat menempel; kartu tidak.
+    """
     if not asset_ids:
         raise HTTPException(status_code=400, detail="Tidak ada aset yang dipilih")
+    if len(asset_ids) > MAKS_KARTU:
+        raise HTTPException(
+            status_code=400,
+            detail=(f"Terlalu banyak aset ({len(asset_ids)}) untuk cetak kartu "
+                    f"sekaligus (maks {MAKS_KARTU}). Persempit seleksi, atau "
+                    "cetak bertahap per kelompok."))
     # Isolasi satker: user terikat hanya boleh mencetak aset satkernya —
     # scope via activity_id ∈ kegiatan-satker (cegah IDOR lintas satker).
     q = await scope_query_aset(user, {"id": {"$in": asset_ids}})

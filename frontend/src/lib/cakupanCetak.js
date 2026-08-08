@@ -11,6 +11,36 @@
  * halaman — cukup dikirim apa adanya ke server.
  */
 
+/**
+ * Plafon Kartu Inventaris per permintaan — CERMIN dari `MAKS_KARTU` di
+ * `backend/routes/cards.py` (temuan C25a).
+ *
+ * Sengaja diduplikasi, bukan diambil dari server: pemberitahuannya harus
+ * muncul SEBELUM permintaan dikirim. Menunggu tolakan server berarti pengguna
+ * mengunggah 800 id, menunggu, lalu ditolak — dan tolakan itu memakan satu
+ * dari tiga jatah rate-limit per menit, sehingga percobaan berikutnya yang
+ * sudah benar pun bisa ikut kena.
+ *
+ * Duplikasi berarti bisa melenceng, jadi ada uji yang membaca sumber backend
+ * dan menagih kedua angka tetap sama.
+ */
+export const MAKS_KARTU_CETAK = 300;
+
+/**
+ * Pesan penolakan bila seleksi melebihi plafon, atau null bila aman.
+ *
+ * Menolak, bukan memotong diam-diam: Kartu Inventaris adalah dokumen fisik
+ * per barang, jadi memotong 800 menjadi 300 akan menghasilkan 500 aset tanpa
+ * kartu tanpa satu pun tanda di PDF-nya.
+ */
+export function galatPlafonKartu(jumlah) {
+  const n = Number(jumlah) || 0;
+  if (n <= MAKS_KARTU_CETAK) return null;
+  return `Terlalu banyak aset (${n}) untuk cetak kartu sekaligus `
+    + `(maks ${MAKS_KARTU_CETAK}). Persempit seleksi, atau cetak bertahap `
+    + `per kelompok.`;
+}
+
 /** Nilai cakupan stiker (dipakai sebagai nilai radio & kunci parameter). */
 export const CAKUPAN = {
   TERPILIH: "terpilih",

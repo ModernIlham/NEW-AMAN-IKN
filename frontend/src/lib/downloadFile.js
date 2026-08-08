@@ -36,13 +36,42 @@ function formatSize(bytes) {
   return `${(kb / 1024).toFixed(1).replace(".", ",")} MB`;
 }
 
-/** Ambil pesan error berguna dari respons axios (termasuk respons blob). */
-async function extractErrorMessage(err, timeoutMessage) {
+/**
+ * Isi Blob sebagai teks, dengan jalur mundur `FileReader`.
+ *
+ * `Blob.prototype.text()` baru ada sejak Chrome 76 / Safari 14 / Firefox 69.
+ * WebView Android bawaan pada perangkat lapangan lama bisa lebih tua dari itu
+ * — di sana `d.text()` melempar TypeError, tertangkap oleh `catch` pemanggil,
+ * dan pesan servernya senyap berubah menjadi "Terjadi kesalahan": tepat
+ * kegagalan yang hendak ditutup fungsi ini. `FileReader` ada di mana pun
+ * `Blob` ada, jadi ia jalur mundur yang benar-benar mundur.
+ */
+function bacaBlobSebagaiTeks(blob) {
+  if (typeof blob.text === "function") return blob.text();
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result || ""));
+    fr.onerror = () => reject(fr.error || new Error("gagal membaca blob"));
+    fr.readAsText(blob);
+  });
+}
+
+/**
+ * Ambil pesan error berguna dari respons axios — TERMASUK respons blob.
+ *
+ * Diekspor karena bukan hanya berkas ini yang meminta `responseType: 'blob'`.
+ * Pada permintaan blob, axios membungkus BADAN GALAT sebagai Blob juga, jadi
+ * `err.response.data.detail` bernilai undefined dan `getApiError` jatuh ke
+ * pesan cadangan. Akibatnya server bisa menolak dengan alasan yang jelas
+ * ("maks 300 kartu — persempit seleksi") sementara layar hanya berkata "Gagal
+ * cetak kartu massal": penggunanya lalu mencoba lagi, dan lagi.
+ */
+export async function pesanGalatRespons(err, timeoutMessage) {
   try {
     const d = err?.response?.data;
     let detail;
     if (d instanceof Blob) {
-      const text = await d.text();
+      const text = await bacaBlobSebagaiTeks(d);
       try {
         detail = JSON.parse(text)?.detail;
       } catch {
@@ -158,7 +187,7 @@ export async function downloadFileWithProgress(url, filename, opts = {}) {
         console.warn("[unduh] URL bukan /api internal; Pusat Unduhan "
           + "dilewati, lanjut unduhan sinkron.");
       } catch (err) {
-        const msg = await extractErrorMessage(err, timeoutMessage);
+        const msg = await pesanGalatRespons(err, timeoutMessage);
         toast.error(`Gagal mengunduh ${label}: ${msg}`, { id: toastId });
         throw err;
       }
@@ -195,12 +224,12 @@ export async function downloadFileWithProgress(url, filename, opts = {}) {
         // Pendaftaran ke Pusat Unduhan ditolak (409 kuota / 429 limiter /
         // 400 path) — tampilkan ALASAN NYATA itu, bukan pesan timeout yang
         // menyesatkan; caller tetap menerima error timeout asli.
-        const msgPusat = await extractErrorMessage(errPusat, timeoutMessage);
+        const msgPusat = await pesanGalatRespons(errPusat, timeoutMessage);
         toast.error(`Gagal mengunduh ${label}: ${msgPusat}`, { id: toastId });
         throw err;
       }
     }
-    const msg = await extractErrorMessage(err, timeoutMessage);
+    const msg = await pesanGalatRespons(err, timeoutMessage);
     toast.error(`Gagal mengunduh ${label}: ${msg}`, { id: toastId });
     throw err;
   }
