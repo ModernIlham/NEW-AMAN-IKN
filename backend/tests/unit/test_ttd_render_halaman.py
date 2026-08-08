@@ -116,3 +116,14 @@ class TestBentukSumber:
         import inspect
         assert not inspect.iscoroutinefunction(rt._render_halaman_bytes)
         assert rt._PDFIUM_EXEC._max_workers == 1
+
+    def test_compress_level_encode_png_dipertahankan(self):
+        """Pin setelan TERUKUR, bukan selera: pada halaman naskah 1100px,
+        compress_level=3 meng-encode 103 → 64 ms sekaligus 652 → 516 KB
+        dibanding bawaan (6). Waktu encode langsung membatasi laju SEMUA
+        pratinjau karena executornya tunggal. Mengembalikannya ke bawaan
+        (menghapus kwarg) memperlambat tanpa memperkecil apa pun; menurunkan
+        ke 0 meledakkan ukuran (terukur 5 MB per halaman)."""
+        import inspect
+        src = inspect.getsource(rt._render_halaman_bytes)
+        assert 'format="PNG", compress_level=3' in src

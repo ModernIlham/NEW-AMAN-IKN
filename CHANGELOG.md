@@ -67,6 +67,33 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#829] Encode PNG pratinjau TTD: compress_level=3 — lebih cepat sekaligus lebih kecil — 2026-08-08
+
+Butir tuning terakhir dari daftar saran S7. Encode PNG Pillow adalah bagian
+termahal render pratinjau halaman (87 dari ±100 ms), dan ia berjalan di
+EXECUTOR TUNGGAL pdfium — waktu encode langsung membatasi laju SEMUA
+pratinjau penempatan ttd/QR, bukan hanya satu permintaan.
+
+Diukur dulu, baru dipilih (halaman naskah 1100px, rata-rata 5 iterasi):
+
+| compress_level | waktu encode | ukuran |
+|---|---|---|
+| 0 | 36 ms | **5.018 KB** — ditolak |
+| 1 | 59 ms | 540 KB |
+| **3 (dipilih)** | **64 ms** | **516 KB** |
+| 6 (bawaan) | 103 ms | 652 KB |
+
+Level 3 menang dua-duanya terhadap bawaan: encode ~38% lebih cepat DAN
+berkas ~21% lebih kecil (zlib level rendah dengan strategi filter Pillow
+kebetulan lebih cocok untuk bitmap dokumen yang didominasi putih). Satu
+baris berubah; pin `test_compress_level_encode_png_dipertahankan`
+(memuat angka ukurannya) menjaga setelan ini dari "dirapikan" kembali ke
+bawaan. Disiplin uji-mutasi tidak berlaku untuk kwarg murni-kinerja —
+kontrak perilaku (PNG sah, lebar 1100, header cache) sudah dijaga uji
+S7 yang ada. Suite backend 2464 → 2465 lulus.
+
+---
+
 ## [#828] Perakitan dokumen ber-TTD pindah ke thread — 2026-08-08
 
 Sisa terakhir temuan S7 yang sengaja ditunda: `_bangun_pdf_ber_ttd` —
