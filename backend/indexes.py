@@ -33,7 +33,14 @@ _KEGAGALAN_INDEKS: list = []
 
 
 async def _idx(coll, *a, **kw):
-    """Buat satu indeks; catat & lanjut bila gagal. TIDAK PERNAH melempar."""
+    """Buat satu indeks; catat & lanjut bila gagal. TIDAK PERNAH melempar.
+
+    KARENA tidak pernah melempar, helper ini HARAM dipakai untuk percobaan
+    `unique=True` yang butuh fallback: kegagalannya tertelan dan koleksi
+    berakhir tanpa indeks sama sekali — sementara pembacanya mengira sudah
+    terlindungi. Percobaan unik ditulis `create_index` mentah di dalam
+    `try:`, dengan `_idx` hanya di cabang fallback (lihat blok satker).
+    """
     nama = kw.get("name") or (a[0] if a else "?")
     try:
         await coll.create_index(*a, **kw)
@@ -45,6 +52,50 @@ async def _idx(coll, *a, **kw):
         })
         logger.error("Indeks GAGAL dibuat: %s.%s — %s",
                      getattr(coll, "name", "?"), nama, e)
+
+
+async def _rapikan_duplikat_satker() -> int:
+    """Gabung dokumen master satker ber-kode sama menjadi SATU. Idempoten.
+
+    MENGGABUNG, bukan sekadar menghapus: field kop yang kosong pada penyintas
+    ditambal dari kembarannya sebelum kembarannya dihapus — dua admin bisa
+    mengisi kop pada dua dokumen berbeda tanpa pernah tahu, dan `delete_many`
+    polos membuang persis data yang determinismenya hendak diselamatkan C32.
+    Penyintas dipilih DETERMINISTIK penuh (kop terlengkap → created_at
+    tertua → _id terkecil); tanpa tie-break penuh, dedupe cuma memindahkan
+    nondeterminisme dari waktu-baca ke waktu-dedupe.
+    """
+    LINDUNGI = {"_id", "id", "kode_satker", "created_at"}
+    n_hapus = 0
+    pipeline = [{"$group": {"_id": "$kode_satker", "n": {"$sum": 1}}},
+                {"$match": {"n": {"$gt": 1}}}]
+    kode_ganda = [g["_id"] async for g in db.satker.aggregate(pipeline)]
+    for kode in kode_ganda:
+        docs = await db.satker.find({"kode_satker": kode}).to_list(1000)
+        docs.sort(key=lambda d: (
+            -sum(1 for k, v in d.items()
+                 if k not in LINDUNGI and isinstance(v, str) and v.strip()),
+            str(d.get("created_at") or "~"), str(d["_id"])))
+        simpan, buang = docs[0], docs[1:]
+        tambal = {}
+        for d in buang:
+            for k, v in d.items():
+                if k in LINDUNGI or k in tambal:
+                    continue
+                if (simpan.get(k) in (None, "", [], {})
+                        and v not in (None, "", [], {})):
+                    tambal[k] = v
+        if tambal:
+            await db.satker.update_one({"_id": simpan["_id"]},
+                                       {"$set": tambal})
+        res = await db.satker.delete_many(
+            {"_id": {"$in": [d["_id"] for d in buang]}})
+        n_hapus += res.deleted_count
+        logger.warning(
+            "Dedupe master satker %s: %d duplikat digabung ke %s "
+            "(field ditambal: %s)", kode, res.deleted_count,
+            simpan.get("id"), sorted(tambal) or "-")
+    return n_hapus
 
 
 def kegagalan_indeks() -> list:
@@ -176,6 +227,52 @@ async def create_indexes() -> None:
         # Pengesahan lock guard: setiap mutasi aset melakukan satu lookup
         # {"id": ..., "status_pengesahan": "disahkan"} — id harus ber-indeks.
         await _idx(db.inventory_activities, "id", unique=True)
+
+        # Master Satker (temuan C32): koleksi ini penjaga keunikan de-facto —
+        # `find_one({"kode_satker": kode})` dipakai shared_utils (kop laporan),
+        # auth_utils (validasi pengikatan akun), dan users.py. Tanpa indeks
+        # unik, dua worker/dua admin bisa melahirkan dua master satu kode dan
+        # kop dokumen resmi jadi tak deterministik. Dedupe DULU, baru unik.
+        try:
+            await _rapikan_duplikat_satker()
+        except Exception as e:
+            logger.error("Dedupe master satker gagal (indeks unik akan "
+                         "jatuh ke fallback): %s", e)
+        # Fallback boot lalu dibuang dulu: MongoDB menolak indeks kunci-sama
+        # bernama-beda (IndexOptionsConflict 85) — tanpa drop ini, satu boot
+        # yang pernah jatuh ke fallback MENGUNCI koleksi di non-unik selamanya.
+        try:
+            await db.satker.drop_index("satker_kode_lookup")
+        except Exception:
+            pass
+        try:
+            await db.satker.create_index("kode_satker", unique=True,
+                                         name="satker_kode_unik")
+        except Exception:
+            # Masih ada duplikat yang tak terapikan otomatis: tetap beri
+            # indeks agar lookup tak COLLSCAN, dan CATAT agar tampil di
+            # /api/health/deep (pelaporannya terbukti hidup — uji perilaku
+            # test_health_deep_perilaku.py).
+            _KEGAGALAN_INDEKS.append({
+                "koleksi": "satker", "indeks": "satker_kode_unik",
+                "galat": "duplikat kode_satker tersisa — indeks unik ditunda"})
+            await _idx(db.satker, "kode_satker", name="satker_kode_lookup")
+
+        # komentar_aset (temuan C32): jalur daftar/hapus keduanya COLLSCAN,
+        # dan `usulan_id` adalah penjaga idempotensi persetujuan usulan peta.
+        await _idx(db.komentar_aset, "id", unique=True,
+                   name="komentar_aset_id")
+        await _idx(db.komentar_aset, [("activity_id", 1), ("created_at", 1)],
+                   name="komentar_aset_kegiatan_waktu")
+        # PARSIAL: `usulan_id` bisa "" untuk komentar non-usulan; unik polos
+        # menolak yang kedua. Pola sama dengan idem_key_unik di bawah.
+        try:
+            await db.komentar_aset.create_index(
+                "usulan_id", unique=True, name="komentar_usulan_unik",
+                partialFilterExpression={"usulan_id": {"$gt": ""}})
+        except Exception:
+            await _idx(db.komentar_aset, "usulan_id",
+                       name="komentar_usulan_lookup")
         # Kartu inventarisasi: riwayat pengesahan dicari per identitas aset
         await _idx(db.inventory_history, "kode_register")
         await _idx(db.inventory_history, [("asset_code", 1), ("NUP", 1)])

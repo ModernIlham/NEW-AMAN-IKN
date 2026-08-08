@@ -67,6 +67,63 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#821] Gelombang 2.15 (C32) — satu kode satker, satu master — 2026-08-08
+
+`db.satker` adalah penjaga keunikan de-facto — `find_one({"kode_satker"})`
+dipakai kop laporan (shared_utils), validasi pengikatan akun (auth_utils),
+dan users.py — tetapi TANPA indeks apa pun. Dua worker/dua admin bisa
+melahirkan dua master satu kode, dan sejak itu kop dokumen resmi ikut
+undian urutan dokumen. `komentar_aset` sama telanjangnya: daftar/hapus
+COLLSCAN, dan `usulan_id` (penjaga idempotensi persetujuan usulan peta)
+dijaga `find_one` yang komentarnya justru mengaku "Idempoten".
+
+**Dedupe DULU, baru unik** (`indexes.py`, jalan tiap boot & pasca-restore):
+
+- `_rapikan_duplikat_satker()` **menggabung**, bukan menghapus: field kop
+  kosong pada penyintas ditambal dari kembarannya — dua admin bisa mengisi
+  kop di dua dokumen tanpa pernah tahu, dan `delete_many` polos membuang
+  persis data yang determinismenya hendak diselamatkan. Penyintas
+  deterministik penuh: kop terlengkap → `created_at` tertua → `_id`
+  terkecil (tanpa tie-break penuh, dedupe cuma memindahkan nondeterminisme
+  ke waktu-dedupe). Setiap penggabungan tercatat `logger.warning` berisi
+  kode + jumlah + field yang ditambal.
+- Percobaan unik memakai `create_index` **mentah** di dalam `try:` — BUKAN
+  `_idx()`, yang tidak pernah melempar sehingga `_idx(unique=True)` menelan
+  kegagalannya dan meninggalkan koleksi TANPA indeks sementara pembacanya
+  mengira terlindungi (jebakan C32×C31). Gagal → fallback non-unik
+  `satker_kode_lookup` **plus entri `_KEGAGALAN_INDEKS`** yang tampil di
+  `/api/health/deep` — pelaporan yang baru dibuktikan hidup di [#815].
+- `drop_index` fallback SEBELUM percobaan unik: MongoDB menolak indeks
+  kunci-sama bernama-beda (IndexOptionsConflict 85) — tanpa drop, satu boot
+  yang pernah jatuh ke fallback mengunci koleksi di non-unik selamanya.
+- `komentar_aset`: indeks `id` unik, `(activity_id, created_at)` untuk
+  daftar, dan `usulan_id` unik **PARSIAL** (`$gt: ""`) — `usulan_id` bisa
+  `""` untuk komentar non-usulan, unik polos menolak yang kedua.
+
+**Check-then-act dihapus/dipagari:** `sinkron_satker` kini satu upsert
+`$setOnInsert` (pola auto-registrasi activities.py; kop isian admin tak
+tersentuh); `simpan_satker` menangkap `DuplicateKeyError` lalu mengulang
+sebagai `$set` murni; jalur GANTI KODE SATKER membatalkan pemindahan master
+saja bila kalah balapan (migrasi koleksi lain tetap jalan). Restore arsip
+pra-C32 menyaring duplikat per kode SEBELUM `insert_many` — tanpa ini
+arsip lama meledak melawan indeks unik dan menggagalkan SELURUH restore
+setelah `delete_many`.
+
+**Uji** (14 baru, `test_satker_unik.py`): dedupe menggabung + deterministik
+tak peduli urutan insert + idempoten; data ganda terbukti beracun bagi unik
+lalu dedupe menyembuhkannya; urutan dedupe→drop→unik di sumber; fallback
+terbentuk DAN dilaporkan; drop mendahului unik (perekam urutan); unik tak
+lewat `_idx`; ranjau `insert_one` di KELAS koleksi (mongomock mengembalikan
+wrapper baru per akses `db.satker` — ranjau di instansi terbukti tak
+menangkap apa-apa); `$setOnInsert` tak menimpa kop; saringan restore.
+Batas kejujuran dicatat di docstring: mongomock tak menegakkan unik saat
+insert dan berbohong soal indeks parsial — keunikan parsial dikunci lewat
+sumber, bukan perilaku. **Delapan mutasi diuji, delapan terbunuh** — satu
+di antaranya (pengembalian check-then-act) SELAMAT dari versi pertama uji
+dan baru mati setelah ranjau dipindah ke kelas.
+
+---
+
 ## [#820] Gelombang 2.14 (S2) — backup berhenti menahan tiga salinan koleksi di RAM — 2026-08-08
 
 Dua tempat di `routes/backup.py` mengumpulkan SELURUH isi satu koleksi ke

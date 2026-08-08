@@ -18,6 +18,8 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from pymongo.errors import DuplicateKeyError
+
 from auth_utils import is_super_admin, require_admin, require_super_admin, require_user
 from db import db
 from shared_utils import kode_satker_user, log_audit
@@ -181,10 +183,16 @@ async def simpan_satker(kode: str, payload: SatkerIn,
         if f in ("nama_satker",):
             continue
         doc[f] = str(getattr(payload, f, "") or "").strip()
-    await db.satker.update_one(
-        {"kode_satker": k},
-        {"$set": doc, "$setOnInsert": {"id": str(uuid.uuid4()), "created_at": now}},
-        upsert=True)
+    try:
+        await db.satker.update_one(
+            {"kode_satker": k},
+            {"$set": doc, "$setOnInsert": {"id": str(uuid.uuid4()), "created_at": now}},
+            upsert=True)
+    except DuplicateKeyError:
+        # C32: dua upsert balapan melawan indeks unik — Mongo mengulang sekali
+        # sendiri, tapi sisa kemungkinannya jatuh sebagai 500 tepat di tombol
+        # Simpan admin. Dokumen kini pasti ada → cukup $set murni.
+        await db.satker.update_one({"kode_satker": k}, {"$set": doc})
     await log_audit("simpan_satker", "", k, username=admin.get("username", "system"),
                     detail=f"Master satker {k} — {doc['nama_satker']}")
     return {"ok": True, "kode_satker": k}
@@ -222,21 +230,27 @@ async def sinkron_satker(admin: dict = Depends(require_super_admin)):
                     "alamat": {"$first": "$alamat_satker"}}},
     ]
     async for g in db.inventory_activities.aggregate(pipeline):
-        ada = await db.satker.find_one({"kode_satker": g["_id"]}, {"_id": 1})
-        if ada:
-            continue
-        await db.satker.insert_one({
-            "id": str(uuid.uuid4()), "kode_satker": g["_id"],
-            "nama_satker": str(g.get("nama") or "").strip(),
-            "nama_unit_organisasi": "", "nama_sub_unit": "",
-            "alamat": str(g.get("alamat") or "").strip(),
-            "tempat_laporan": "", "tembusan_laporan": "",
-            "telepon": "", "email": "",
-            "eselon1": g.get("eselon1") or [], "aktif": True,
-            "created_at": now, "updated_at": now,
-            "updated_by": admin.get("username", "system"),
-        })
-        baru += 1
+        # C32: satu upsert $setOnInsert menggantikan find_one+insert_one —
+        # check-then-act lama bisa melahirkan dua master satu kode saat dua
+        # pemanggil balapan, dan dengan indeks unik menyala insert kalah
+        # balapan berubah jadi 500. Pola sama dengan auto-registrasi di
+        # routes/activities.py. Dokumen yang sudah ada TIDAK ditimpa.
+        res = await db.satker.update_one(
+            {"kode_satker": g["_id"]},
+            {"$setOnInsert": {
+                "id": str(uuid.uuid4()), "kode_satker": g["_id"],
+                "nama_satker": str(g.get("nama") or "").strip(),
+                "nama_unit_organisasi": "", "nama_sub_unit": "",
+                "alamat": str(g.get("alamat") or "").strip(),
+                "tempat_laporan": "", "tembusan_laporan": "",
+                "telepon": "", "email": "",
+                "eselon1": g.get("eselon1") or [], "aktif": True,
+                "created_at": now, "updated_at": now,
+                "updated_by": admin.get("username", "system"),
+            }},
+            upsert=True)
+        if res.upserted_id is not None:
+            baru += 1
     await log_audit("sinkron_satker", "", "master",
                     username=admin.get("username", "system"),
                     detail=f"Sinkron master satker: {baru} satker baru terdaftar")
