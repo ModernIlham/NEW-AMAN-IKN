@@ -67,6 +67,60 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#807] Gelombang 2.1 — 105 indeks berhenti bergantung pada satu baris yang tak boleh gagal — 2026-08-08
+
+Butir pertama Gelombang 2 (*cegah sistem mati*) peta jalan
+`docs/TINJAUAN-SISTEM-2026-08.md`.
+
+**C31 · Seluruh pembuatan indeks dibungkus SATU `try/except`.**
+`create_indexes()` memuat **195** pemanggilan `create_index` di dalam satu blok
+`try`, dan `except`-nya hanya mencatat sebaris log. Satu yang melempar
+melompati **semua** definisi setelahnya — 105 di antaranya berada setelah titik
+rapuh terakhir.
+
+Yang membuatnya sulit terlihat: **sistemnya tetap hidup**. Tetap menjawab,
+tetap menyimpan, tetap mencetak laporan. Yang berubah hanya sebagian kuerinya
+diam-diam menjadi pemindaian koleksi penuh — dan satu-satunya jejaknya sebaris
+log saat boot.
+
+Bahwa ini bukan hipotesis terlihat dari kompensasi di sekitarnya: ada blok yang
+men-drop indeks era lama justru karena data produksi pernah melanggar keunikan.
+`create_index` idempoten, jadi risikonya **tidak** menyala tiap boot — ia
+menyala pada boot **pertama** setelah indeks unik baru ditambahkan. Itu yang
+membuatnya mendesak, sebab C32 (butir Gelombang 2 berikutnya) memang
+mengusulkan indeks unik baru.
+
+Perbaikannya helper `_idx()` yang menangkap per indeks, mencatat koleksi + nama
++ alasan, lalu **melanjutkan**. **182** titik panggil dialihkan secara mekanis;
+sembilan yang sudah punya `try/except` sendiri sengaja **dibiarkan** — fallback
+mereka ("kalau unik gagal, buat non-unik agar lookup tetap cepat") lebih pintar
+daripada penjaga generik, dan penjaga baru tak boleh menghapus penjaga lama.
+**Nol definisi indeks berubah** — diverifikasi mesin: 194 baris spesifikasi
+identik, urutan sama persis.
+
+**C4b · Disk tak pernah diperiksa.** Disk penuh mematikan hampir semua hal
+sekaligus — unggah foto, backup, log, bahkan Mongo — dan gejalanya di layar
+tampak seperti sepuluh bug berbeda. `/api/health/deep` kini melaporkan
+`checks["disk"]` dengan **angka** (persen bebas, MB bebas, MB total), bukan
+sekadar ok/tidak: ini satu-satunya cek di sana yang bisa ditindaki pemilik
+tanpa menyentuh kode. Ambang 15% bebas.
+
+**Dua kegagalan, dua perlakuan berbeda — dan bedanya disengaja.** Disk penuh
+**menjatuhkan** status (503): layanan memang mati, dan deploy di atas disk
+penuh gagal dengan cara yang membingungkan. Indeks gagal **tidak**: aplikasi
+masih melayani, dan menjatuhkan gerbang deploy karena indeks yang butuh
+perbaikan data manual justru melatih tim membiasakan diri melewati gerbangnya.
+Ia dilaporkan sebagai degradasi yang bisa dilihat monitor — bukan sebagai mati.
+
+**Uji.** `test_indeks_tahan_gagal.py` (15): `_idx` tak pernah melempar,
+kegagalan tercatat lengkap, **indeks setelah yang gagal tetap dibuat**, daftar
+dikembalikan sebagai salinan (laporan yang bisa dibersihkan pembacanya bukan
+laporan), daftar di-reset tiap pembuatan ulang (backup.py membangun ulang
+setelah restore), serta sapuan sumber "nol `create_index` telanjang di level
+fungsi". Tiga mutasi diuji — semuanya menjatuhkan uji. **2.255 → 2.270.**
+
+---
+
 ## [#806] Gelombang 1.4 (penutup) — deploy yang bisa pulang, dan layar backup yang berhenti berbohong — 2026-08-08
 
 Butir terakhir Gelombang 1 peta jalan `docs/TINJAUAN-SISTEM-2026-08.md`.
