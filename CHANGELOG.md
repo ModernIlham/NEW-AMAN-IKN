@@ -67,6 +67,79 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#810] Gelombang 2.5 — dua titik terakhir yang membekukan seluruh proses — 2026-08-08
+
+Butir C26 & C27 peta jalan `docs/TINJAUAN-SISTEM-2026-08.md`.
+
+FastAPI melempar handler `def` biasa ke threadpool, tetapi handler `async def`
+dijalankan **langsung di event loop**. Satu panggilan Pillow atau satu
+`workbook.close()` di dalam `async def` karenanya membekukan seluruh proses
+selama ia berjalan — bukan hanya permintaan itu.
+
+**C26 · `batch.py`.** `generate_photo_thumbnail`, `create_thumbnail`, dan
+`create_gallery_thumbnail` dipanggil telanjang di dalam loop foto — sementara
+fungsi yang **sama** sudah dibungkus benar di `assets.py:1199` dst.
+
+Ukurannya disebut apa adanya: JPEG 1600×1200 → `create_thumbnail` ±37 ms,
+`create_gallery_thumbnail` ±36 ms. Delapan foto ±0,3 detik di mesin uji. Dan
+`auto_compress_image` tepat di atasnya sudah memakai `to_thread`, jadi
+blokirnya selama ini terpotong-potong. **Yang dibeli di sini kerapian dan
+jitter yang hilang, bukan penyelamatan darurat** — beda dari C24 dan C25a yang
+memang cacat.
+
+**C27 · `exports.py`.** `workbook.close()` bukan sekadar menutup berkas:
+xlsxwriter merakit dan men-deflate **seluruh** arsip di sana. Yang paling mudah
+salah dipahami: memindahkannya ke "job latar" **tidak menolong**, sebab job itu
+`asyncio.create_task` di event loop yang sama. "Latar" hanya berarti
+pemanggilnya tak menunggu — loopnya tetap berhenti. Diekstrak menjadi helper
+sinkron `_tutup_dan_ambil(workbook, buffer)` lalu dipanggil lewat `to_thread`;
+penyisipan gambar di jalur yang sama sudah begitu sejak lama.
+
+### Penjaganya memakai AST, bukan grep
+
+`backend/tests/unit/test_cpu_sinkron_di_thread.py` — 12 uji.
+
+Ini bukan preferensi gaya. Pola yang **benar** di `assets.py` menaruh `lambda`
+pada baris **berikutnya** setelah `to_thread(`:
+
+```python
+photo_thumbnails = await asyncio.to_thread(
+    lambda pics: [generate_photo_thumbnail(p) or "" for p in pics], photos)
+```
+
+Penjaga per-baris akan melaporkan baris kedua sebagai pelanggaran — empat
+positif palsu atas kode yang justru jadi teladan. Grep tak bisa melihat sarang;
+AST bisa. Penjaganya sendiri diuji pada lima kasus, termasuk bentuk multibaris
+itu dan helper sinkron yang bersarang di dalam coroutine.
+
+Aturannya **kelas, bukan tambalan satu berkas**: C26 hanya menyebut
+`batch.py`, tetapi yang membuatnya terjadi adalah tidak adanya aturan. Berkas
+berikutnya yang menyalin pola itu akan membuat CI merah.
+
+Lima mutasi diuji, lima terbunuh.
+
+### Daftar utang yang diperiksa mesin — dan dua kali salah
+
+Satu kelas uji mencatat sisa C28 (parsing openpyxl di event loop) sebagai utang
+yang boleh **menyusut, tak boleh bertambah**. Daftarnya sudah dua kali salah,
+dan keduanya bermanfaat:
+
+1. Saat disalin dari laporan, `pegawai.py` **terlewat** — ujinya sendiri yang
+   menangkap. Daftar utang yang disusun tangan memang perlu diperiksa mesin.
+2. `persediaan.py` masuk daftar padahal **tidak menyebut `openpyxl` sama
+   sekali**. Ia memanggil `_rows_from_upload` yang di-impor dari `kodefikasi` —
+   parser openpyxl yang sama, lewat pintu belakang.
+
+Temuan kedua mengungkap lubang di **pendeteksinya**, bukan di daftarnya:
+mencari string `openpyxl` hanya melihat pemakaian **langsung**. Berkas yang
+memanggil parsernya secara tak langsung sama-sama memblokir event loop dan
+sama-sama tak terlihat. Pendeteksinya kini juga mengenali pemanggilan parser
+sinkron yang sudah dikenal, dan satu uji terpisah mengunci **alasan**
+`persediaan.py` ada di daftar — supaya ia tak menempel selamanya tanpa ada
+yang tahu mengapa.
+
+---
+
 ## [#809] Gelombang 2.4 — cetak kartu massal berplafon, dan alasan penolakan yang benar-benar sampai ke layar — 2026-08-08
 
 Butir C25a peta jalan `docs/TINJAUAN-SISTEM-2026-08.md`.
