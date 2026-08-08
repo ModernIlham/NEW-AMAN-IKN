@@ -18,6 +18,7 @@ Panel B: detail administratif (grid 2 kolom).
 Panel C/D: riwayat inventarisasi (tabel ringkas, 3 baris per panel).
 """
 import io
+import asyncio
 import base64
 import logging
 from datetime import datetime
@@ -65,14 +66,22 @@ cards_router = APIRouter()
 # yang SAMA habis di ±340 aset. Dibulatkan ke bawah: 300 (±24 detik).
 #
 # Dua hal yang perlu jujur disebut:
-#   • Angka ini MENAHAN kasus terburuk, bukan memperbaikinya. 24 detik event
-#     loop terkunci tetap buruk. C25b memindahkan bagian murni-CPU ke thread
-#     dan menghapus N+1 riwayat; sesudah itu plafon ini bisa dinaikkan sadar.
+#   • C25b SUDAH memindahkan bagian murni-CPU ke thread (per blok 25) dan
+#     menghapus N+1 riwayat — event loop kini tetap berdetak selama cetak
+#     (terukur: jeda detak maks 2664 ms → 88 ms pada 30 kartu). Tapi CPU-nya
+#     tidak hilang: 69 dari 104 ms/kartu adalah ReportLab yang MEMEGANG GIL,
+#     jadi plafon ini menahan total beban mesin, bukan lagi beban loop.
+#     Menaikkannya = keputusan pemilik, serentak dengan cakupanCetak.js.
 #   • Anggaran 27 detik milik stiker itu sendiri kemungkinan tak pernah
 #     diukur — 2000 hanyalah angka bulat. Yang dilakukan di sini bukan
 #     mengesahkannya, melainkan menyamakan BIAYA kedua plafon dan menuliskan
 #     angkanya, supaya siapa pun yang ingin menggesernya tahu apa yang digeser.
 MAKS_KARTU = 300
+
+# Ukuran blok render massal: hidrasi GridFS (I/O async) per blok di event
+# loop, lalu render blok (CPU) di thread — puncak memori foto base64 pun
+# terbatas satu blok, bukan seluruh seleksi.
+BLOK_KARTU = 25
 
 
 async def _hydrate_cover_from_gridfs(asset):
@@ -1089,6 +1098,143 @@ def _draw_card_page(c, elements):
         frame.addFromList(list(elements[key]), c)
 
 
+def _identitas_aset(asset):
+    """('R', kode_register) | ('P', asset_code, NUP) | None bila kosong semua.
+
+    Aset beridentitas kosong WAJIB None: klausa `{"asset_code": "", "NUP": ""}`
+    per-aset dulu tak berbahaya karena dibatasi to_list(8); digabung dalam
+    satu $or massal, klausa itu menyapu koleksi tanpa batas.
+    """
+    kreg = str(asset.get('kode_register') or '').strip()
+    if kreg:
+        return ("R", kreg)
+    code = str(asset.get('asset_code') or '').strip()
+    nup = str(asset.get('NUP') or '').strip()
+    if code or nup:
+        return ("P", code, nup)
+    return None
+
+
+# Plafon dokumen yang dibaca kueri riwayat massal — record di luar plafon
+# terlewati diam-diam, sama sifatnya dengan potongan 8 per aset.
+_BATAS_PINDAI_RIWAYAT = 4000
+
+
+async def _fetch_riwayat_massal(assets):
+    """{asset['id']: [record ≤8 terbaru]} dalam DUA kueri, pengganti N+1.
+
+    Dulu tiap aset = satu find_one kegiatan + satu find riwayat (600 round-trip
+    pada plafon 300). Kini satu $in kegiatan + satu $or identitas; saring
+    satker, urut, dan potong 8 di Python.
+
+    SARINGAN SATKER PINDAH KE PYTHON — ini batas keamanan, bukan kinerja:
+    padanannya harus persis kueri lama. `$or [{==ks}, {in ["", None]},
+    {$exists: False}]` menjadi `rs == ks or rs in ("", None)` dengan `rs =
+    h.get("kode_satker")` (field hilang → None → ikut lolos, persis
+    `$exists: False`). JANGAN menormalkan sisi record (strip/str) — Mongo
+    membandingkan mentah, menyamakannya justru MELONGGARKAN saringan.
+
+    Ember dikunci per-ASET (bukan per-identitas): identitas sama bisa dimiliki
+    banyak aset di kegiatan lintas satker, dan saringan satker milik satu aset
+    tak boleh menentukan isi kartu aset lain.
+
+    Urut di Python, bukan `.sort()` Mongo: $or massal tak punya indeks
+    pendukung tanggal (indexes.py hanya kode_register / asset_code+NUP /
+    activity_id) → blocking sort 32 MB yang gagal sebagai error runtime.
+    Aman untuk data ini: `tanggal_pengesahan` string ISO dan `ticket_number`
+    string, jadi leksikografis == kronologis; record datetime asli (bila
+    kelak ada) dinormalkan `str()` dan urutannya bisa beda dari Mongo.
+
+    Gagal-terbuka seperti pendahulunya: galat apa pun → {} (kartu tanpa
+    panel riwayat, bukan 500 yang membakar jatah rate-limit).
+    """
+    try:
+        per_ident = {}
+        for a in assets:
+            ident = _identitas_aset(a)
+            if ident:
+                per_ident.setdefault(ident, []).append(a)
+        if not per_ident:
+            return {}
+
+        act_ids = sorted({str(a.get("activity_id") or "")
+                          for a in assets if a.get("activity_id")})
+        peta_satker = {}
+        if act_ids:
+            async for act in db.inventory_activities.find(
+                    {"id": {"$in": act_ids}}, {"_id": 0, "id": 1, "kode_satker": 1}):
+                peta_satker[act["id"]] = str(act.get("kode_satker") or "").strip()
+
+        klausa = []
+        for ident in per_ident:
+            if ident[0] == "R":
+                klausa.append({"kode_register": ident[1]})
+            else:
+                klausa.append({"asset_code": ident[1], "NUP": ident[2]})
+        rekaman = await db.inventory_history.find(
+            {"$or": klausa}, {"_id": 0}).to_list(_BATAS_PINDAI_RIWAYAT)
+
+        # Indeks per kunci pencocokan — nilai RECORD dibiarkan mentah.
+        per_reg, per_pasangan = {}, {}
+        for h in rekaman:
+            r = h.get("kode_register")
+            if isinstance(r, str) and r:
+                per_reg.setdefault(r, []).append(h)
+            per_pasangan.setdefault(
+                (h.get("asset_code"), h.get("NUP")), []).append(h)
+
+        hasil = {}
+        for ident, para_aset in per_ident.items():
+            if ident[0] == "R":
+                kandidat = per_reg.get(ident[1], [])
+            else:
+                kandidat = per_pasangan.get((ident[1], ident[2]), [])
+            for a in para_aset:
+                ks = peta_satker.get(str(a.get("activity_id") or ""), "")
+                cocok = kandidat
+                if ks:
+                    cocok = [h for h in kandidat
+                             if h.get("kode_satker") == ks
+                             or h.get("kode_satker") in ("", None)]
+                cocok = sorted(
+                    cocok,
+                    key=lambda h: (str(h.get("tanggal_pengesahan") or ""),
+                                   str(h.get("ticket_number") or "")),
+                    reverse=True)[:8]
+                hasil[a.get("id")] = cocok
+        return hasil
+    except Exception as e:
+        logger.warning(f"[cards] riwayat massal gagal (kartu tanpa riwayat): {e}")
+        return {}
+
+
+def _gambar_kartu_ke_kanvas(c, pasangan, sudah_ada_halaman=False):
+    """(asset, history) → halaman kartu di kanvas. SINKRON — panggil lewat
+    asyncio.to_thread (temuan C25b: decode Pillow + QR + ReportLab dulu
+    membekukan event loop ±104 ms per kartu).
+
+    `sudah_ada_halaman or idx` — bukan `idx` saja: pada render berblok,
+    kartu pertama tiap blok lanjutan harus tetap showPage(); tanpa itu ia
+    menimpa kartu terakhir blok sebelumnya (dua aset satu halaman, PDF tetap
+    sah, baru ketahuan setelah dipotong dan ditempel).
+    """
+    for idx, (asset, history) in enumerate(pasangan):
+        if sudah_ada_halaman or idx:
+            c.showPage()
+        _draw_card_page(c, create_ktp_card_elements(asset, history))
+        # Lepas base64 sumber — puncak memori jadi O(blok). CATATAN: ini
+        # MEMUTASI dict pemanggil; pembacaan foto sesudah loop mendapat None.
+        asset["photo"] = None
+
+
+def _tutup_kanvas(c, buffer):
+    """Rakit & tulis PDF lalu ambil bitanya. SINKRON — c.save() merakit
+    SELURUH dokumen, panggil lewat asyncio.to_thread."""
+    c.save()
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
 async def _fetch_asset_history(asset):
     """Ambil riwayat inventarisasi untuk identitas aset (robust; [] bila gagal).
 
@@ -1144,13 +1290,13 @@ async def get_asset_card_pdf(asset_id: str, user: dict = Depends(require_user)):
 
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=landscape(A4))
-    elements = create_ktp_card_elements(asset, history)
-    _draw_card_page(c, elements)
-    c.save()
-    buffer.seek(0)
+    # C25b: render (CPU) di thread — jalur satu-kartu pun ±104 ms beku bila
+    # dibiarkan di event loop.
+    await asyncio.to_thread(_gambar_kartu_ke_kanvas, c, [(asset, history)])
+    data = await asyncio.to_thread(_tutup_kanvas, c, buffer)
 
     return StreamingResponse(
-        buffer,
+        io.BytesIO(data),
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=kartu_inventaris_{asset_id}.pdf"}
     )
@@ -1188,23 +1334,25 @@ async def get_bulk_asset_cards(request: Request, asset_ids: List[str],
     if not assets:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
 
+    # C25b: riwayat dua kueri (pengganti 2N round-trip), lalu render berblok —
+    # hidrasi GridFS (I/O async) tetap di event loop, CPU-nya di thread.
+    riwayat = await _fetch_riwayat_massal(assets)
+
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=landscape(A4))
-
-    for idx, asset in enumerate(assets):
-        if idx > 0:
-            c.showPage()
-        # Riwayat per aset (find per aset dapat diterima untuk jumlah wajar).
-        history = await _fetch_asset_history(asset)
-        # Aset GridFS-only: suntik foto sampul dari GridFS sebelum kartu dibangun.
-        await _hydrate_cover_from_gridfs(asset)
-        elements = create_ktp_card_elements(asset, history)
-        _draw_card_page(c, elements)
-
-    c.save()
-    buffer.seek(0)
+    for i in range(0, len(assets), BLOK_KARTU):
+        potongan = assets[i:i + BLOK_KARTU]
+        for a in potongan:
+            # Aset GridFS-only: suntik foto sampul sebelum kartu dibangun.
+            await _hydrate_cover_from_gridfs(a)
+        await asyncio.to_thread(
+            _gambar_kartu_ke_kanvas, c,
+            [(a, riwayat.get(a.get("id"), [])) for a in potongan], i > 0)
+    data = await asyncio.to_thread(_tutup_kanvas, c, buffer)
 
     logger.info(f"Generated bulk fold cards for {len(assets)} assets")
 
-    return StreamingResponse(buffer, media_type="application/pdf",
+    # Catatan perilaku LAMA yang sengaja tidak diubah PR ini: urutan kartu
+    # mengikuti urutan natural find(), bukan urutan seleksi pengguna.
+    return StreamingResponse(io.BytesIO(data), media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=kartu_inventaris_massal_{len(assets)}.pdf"})

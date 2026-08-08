@@ -34,7 +34,15 @@ BACKEND = pathlib.Path(__file__).resolve().parents[2]
 ROUTES = BACKEND / "routes"
 
 # Fungsi CPU sinkron yang WAJIB lewat thread bila dipanggil dari `async def`.
-SINKRON = {"generate_photo_thumbnail", "create_thumbnail", "create_gallery_thumbnail"}
+# Empat nama terakhir dari C25b (kartu inventaris): decode Pillow + QR +
+# ReportLab ±104 ms per kartu. HELPER PEMBUNGKUSNYA ikut masuk daftar —
+# mutasi "cabut to_thread dari pemanggil helper" pernah SELAMAT karena
+# penjaga hanya mengenal fungsi-dalamnya, sementara panggilan telanjang di
+# coroutine berbentuk nama helper, bukan nama fungsi dalam.
+SINKRON = {"generate_photo_thumbnail", "create_thumbnail",
+           "create_gallery_thumbnail",
+           "create_ktp_card_elements", "_draw_card_page",
+           "_gambar_kartu_ke_kanvas", "_tutup_kanvas"}
 
 
 def _panggilan_telanjang(sumber: str, nama: set = None):
@@ -149,10 +157,13 @@ class TestSeluruhRoute:
 
     def test_batch_py_benar_benar_memakai_to_thread(self):
         # Penjaga di atas juga hijau bila seluruh panggilannya DIHAPUS.
-        # Ini menagih fungsinya masih ada dan lewat thread.
+        # Ini menagih fungsinya masih ada dan lewat thread. Hanya trio
+        # thumbnail yang milik batch.py — nama kartu (C25b) diuji di
+        # test_kartu_massal.py.
         src = (ROUTES / "batch.py").read_text(encoding="utf-8")
         assert src.count("asyncio.to_thread") >= 3, src.count("asyncio.to_thread")
-        for f in SINKRON:
+        for f in ("generate_photo_thumbnail", "create_thumbnail",
+                  "create_gallery_thumbnail"):
             assert f in src, f
 
 
