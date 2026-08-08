@@ -67,6 +67,66 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#806] Gelombang 1.4 (penutup) — deploy yang bisa pulang, dan layar backup yang berhenti berbohong — 2026-08-08
+
+Butir terakhir Gelombang 1 peta jalan `docs/TINJAUAN-SISTEM-2026-08.md`.
+Ketiganya di lapisan yang paling jarang diuji dan paling mahal saat salah:
+skrip yang berjalan tanpa penonton, jam berapa pun CI selesai, di produksi.
+
+**C6 · Deploy tak punya jalan pulang, dan `yarn build` mengosongkan docroot.**
+Tiga sifat ditambahkan ke `scripts/deploy_vps.sh`, urutannya sesuai besar
+risikonya:
+
+1. **Pagar memori.** `grep -rn NODE_OPTIONS scripts/` dulu menemukannya di
+   `vps-deploy.sh` dan `update-all.sh` **tetapi tidak** di `deploy_vps.sh` —
+   justru skrip yang benar-benar dipakai otomatis yang satu-satunya tanpa
+   pagar, di VPS tanpa swap. Sapuan uji menemukan `vps-fix.sh` juga
+   menginstruksikan build tanpa pagar; petunjuknya ikut dibetulkan.
+2. **Build ke direktori sementara.** react-scripts memanggil `fs.emptyDirSync`
+   di awal build sedangkan docroot nginx menunjuk LANGSUNG ke `frontend/build`.
+   Artinya tiap deploy mengosongkan docroot lalu mengisinya ulang selama
+   puluhan detik — sepanjang itu pengunjung mendapat 404. `BUILD_PATH=build.new`
+   + tukar `mv` memperkecil jendela itu dari "selama build" jadi "dua rename",
+   dan `build.old` menjadi rollback frontend satu perintah.
+3. **Rollback.** Gerbang kesehatan sudah ada dan sudah benar, tetapi saat gagal
+   skrip hanya keluar — meninggalkan produksi menjalankan commit yang baru saja
+   terbukti tidak sehat sampai ada manusia yang bangun. Commit sebelumnya kini
+   disimpan sebelum reset dan dikembalikan otomatis, lengkap dengan restart.
+
+**C7 · Skrip pemulihan darurat menunjuk cabang yang sudah tidak ada.**
+`Deploy_Hostinger_VPS` muncul **8 kali** di `vps-fix.sh` + `update-all.sh`,
+padahal `git ls-remote` hanya mengembalikan `main` dan satu cabang kerja. Dua
+varian kegagalannya berbeda: (a) `rev-parse` gagal → di bawah `set -e` skrip
+berhenti **tanpa pesan**; (b) lebih berbahaya — bila klon VPS masih menyimpan
+ref pelacak lama, `rev-parse` justru **berhasil** dan `git reset --hard`
+memutar mundur produksi ke commit beku. Kedelapannya kini `DEPLOY_BRANCH`
+(default `main`), di-`fetch --prune`, dan diperiksa eksplisit di awal.
+
+**C5 · Layar Pengaturan menampilkan KLAIM sebagai kalau HASIL.**
+Penjadwal menulis `terakhir = hari ini` **sebelum** backup jalan — benar dan
+atomik sebagai penjaga anti-ganda, tetapi layar menampilkan field yang SAMA
+sebagai "Terakhir jalan". Backup gagal karenanya terbaca "sudah jalan hari
+ini", dan satu-satunya jejaknya adalah `logger.warning` yang tak pernah dibaca.
+Kini hasil punya field sendiri (`terakhir_sukses`, `status_terakhir`,
+`galat_terakhir`); layar menampilkan hasil, kegagalan punya lencana merah, dan
+"belum pernah berhasil" dinyatakan terus terang alih-alih dibiarkan kosong.
+Saat gagal, klaim harian **dikosongkan** sehingga siklus 5 menit berikutnya
+mencoba lagi hari itu juga — bukan menyerah sampai besok.
+
+*Peredam yang tetap disebut apa adanya:* retensi **sudah** digerbangi
+keberhasilan, jadi kegagalan tak pernah memangkas arsip lama. Yang diperbaiki
+di sini adalah bagian "tanpa ada yang tahu"-nya.
+
+**Uji.** `test_skrip_deploy.py` (25) + `test_backup_status_jujur.py` (13) —
+termasuk `bash -n` sungguhan atas empat skrip, dan aturan kelas "setiap skrip
+yang memanggil `yarn build` wajib berpagar memori" yang justru menemukan
+`vps-fix.sh`. Dua mutasi diuji; yang kedua **membongkar uji saya sendiri yang
+lemah** (kata "NODE_OPTIONS" lolos dari sebuah komentar), lalu penjaganya
+diperketat agar hanya `export` sungguhan yang dihitung — komentar tak lagi bisa
+memuaskan penjaga. **2.217 → 2.255 uji backend.**
+
+---
+
 ## [#805] Gelombang 1.3 — perekaman layar dicabut, dan satu judul kolom berhenti bisa menolkan master aset — 2026-08-08
 
 **C11 · Perekaman sesi pihak ketiga aktif tanpa syarat di halaman produksi.**
