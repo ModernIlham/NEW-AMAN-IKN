@@ -81,7 +81,19 @@ describe("MenuKepala — komponen bersama", () => {
     // daripada menu tanpa kategori sama sekali.
     expect(k).toMatch(/const adaDokumen = Boolean\(booking\) \|\| ekstra\.length > 0/);
     expect(k).toMatch(/\{adaDokumen && \(/);
-    expect(k).toMatch(/\{adaDokumen && ekspor && <DropdownMenuSeparator \/>\}/);
+    expect(k).toMatch(/\{adaDokumen && daftarEkspor\.length > 0 && <DropdownMenuSeparator \/>\}/);
+    // Bagian "Tindakan" pun bersyarat — sama alasannya.
+    expect(k).toMatch(/\{aksi\.length > 0 && \(/);
+    expect(k).toMatch(/\{\(adaDokumen \|\| daftarEkspor\.length > 0\) && <DropdownMenuSeparator \/>\}/);
+  });
+
+  test("ekspor menerima satu objek MAUPUN larik — satu konsep, satu prop", () => {
+    // Wasdal punya dua unduhan, Perencanaan dua, lima halaman lama satu.
+    // Menambah prop kedua untuk "ekspor jamak" akan membuat pemakainya menebak
+    // mana yang dipakai; jadi bentuknya satu dan jumlahnya bebas.
+    expect(k).toMatch(
+      /const daftarEkspor = ekspor \? \(Array\.isArray\(ekspor\) \? ekspor : \[ekspor\]\) : \[\]/);
+    expect(k).toMatch(/daftarEkspor\.map\(/);
   });
 
   test("tombol utama BUKAN urusan komponen ini", () => {

@@ -44,32 +44,73 @@ import { downloadFileWithProgress } from "@/lib/downloadFile";
  *     booking={{ jenisNaskah: "Laporan", referensi: "Usulan Anggaran" }}
  *     ekstra={[{ id: "lpb", label: "LPB Gabungan", icon: Boxes,
  *                onSelect: () => …, testid: "…" }]} />
+ *
+ * `ekspor` menerima SATU objek atau LARIK objek — halaman seperti Wasdal punya
+ * dua unduhan (periode berjalan & tahunan) dan Perencanaan punya XLSX + CSV.
+ * Menyediakan dua prop terpisah untuk satu konsep hanya akan membuat pemakainya
+ * menebak; jadi bentuknya satu, jumlahnya bebas.
+ *
+ * `aksi` adalah kategori KETIGA ("Tindakan") untuk hal yang bukan dokumen dan
+ * bukan ekspor — mis. "Muat ulang" atau "Ganti tanggal acuan". Ia muncul paling
+ * atas karena biasanya itulah yang paling sering ditekan.
  */
 export default function MenuKepala({
   modul,
   ekspor = null,
   booking = null,
   ekstra = [],
+  aksi = [],
   testid = "",
+  kelasTombol = "",
 }) {
   const bookingRef = useRef(null);
   const idMenu = testid || `${modul}-menu`;
   // Bagian "Dokumen & Nomor" hanya muncul bila ada isinya — menu berlabel
   // kategori kosong lebih membingungkan daripada tanpa kategori sama sekali.
   const adaDokumen = Boolean(booking) || ekstra.length > 0;
+  const daftarEkspor = ekspor ? (Array.isArray(ekspor) ? ekspor : [ekspor]) : [];
 
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button size="sm" variant="outline" className="flex-shrink-0"
-            title={`Menu aksi ${modul}`} aria-label={`Menu aksi ${modul}`}
-            data-testid={idMenu}>
-            <MoreVertical className="w-4 h-4 sm:mr-1.5" />
-            <span className="hidden sm:inline">Menu</span>
-          </Button>
+          {kelasTombol ? (
+            // Halaman yang kepalanya memakai tombol ikon kotak (TOMBOL_KEPALA)
+            // menitipkan kelasnya sendiri, supaya menu ini tak terlihat seperti
+            // tamu di antara tombol-tombol tetangganya.
+            <button type="button" className={kelasTombol}
+              title={`Menu aksi ${modul}`} aria-label={`Menu aksi ${modul}`}
+              data-testid={idMenu}>
+              <MoreVertical className="w-4 h-4" />
+            </button>
+          ) : (
+            <Button size="sm" variant="outline" className="flex-shrink-0"
+              title={`Menu aksi ${modul}`} aria-label={`Menu aksi ${modul}`}
+              data-testid={idMenu}>
+              <MoreVertical className="w-4 h-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">Menu</span>
+            </Button>
+          )}
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-60">
+          {aksi.length > 0 && (
+            <>
+              <DropdownMenuLabel className="text-[11px] text-muted-foreground">
+                Tindakan
+              </DropdownMenuLabel>
+              {aksi.map((a) => {
+                const Ikon = a.icon;
+                return (
+                  <DropdownMenuItem key={a.id} className="min-h-[42px]"
+                    onSelect={a.onSelect} data-testid={a.testid || `${modul}-menu-${a.id}`}>
+                    {Ikon ? <Ikon className="w-4 h-4 mr-2" /> : null}
+                    <span className="truncate">{a.label}</span>
+                  </DropdownMenuItem>
+                );
+              })}
+              {(adaDokumen || daftarEkspor.length > 0) && <DropdownMenuSeparator />}
+            </>
+          )}
           {adaDokumen && (
             <DropdownMenuLabel className="text-[11px] text-muted-foreground">
               Dokumen &amp; Nomor
@@ -92,19 +133,28 @@ export default function MenuKepala({
             );
           })}
 
-          {adaDokumen && ekspor && <DropdownMenuSeparator />}
-          {ekspor && (
+          {adaDokumen && daftarEkspor.length > 0 && <DropdownMenuSeparator />}
+          {daftarEkspor.length > 0 && (
             <>
               <DropdownMenuLabel className="text-[11px] text-muted-foreground">
                 Ekspor
               </DropdownMenuLabel>
-              <DropdownMenuItem className="min-h-[42px]"
-                onSelect={() => downloadFileWithProgress(
-                  ekspor.url, ekspor.nama, { label: ekspor.label }).catch(() => {})}
-                data-testid={ekspor.testid || `${modul}-export`}>
-                <Download className="w-4 h-4 mr-2" />
-                {ekspor.judul || "Unduh Register (CSV)"}
-              </DropdownMenuItem>
+              {daftarEkspor.map((e, i) => (
+                <DropdownMenuItem key={e.testid || e.url || i} className="min-h-[42px]"
+                  onSelect={() => downloadFileWithProgress(
+                    e.url, e.nama, { label: e.label }).catch(() => {})}
+                  data-testid={e.testid || `${modul}-export`}>
+                  <Download className="w-4 h-4 mr-2 flex-shrink-0" />
+                  <span className="min-w-0">
+                    <span className="block truncate">{e.judul || "Unduh Register (CSV)"}</span>
+                    {e.sublabel && (
+                      <span className="block text-[10px] text-muted-foreground truncate">
+                        {e.sublabel}
+                      </span>
+                    )}
+                  </span>
+                </DropdownMenuItem>
+              ))}
             </>
           )}
         </DropdownMenuContent>

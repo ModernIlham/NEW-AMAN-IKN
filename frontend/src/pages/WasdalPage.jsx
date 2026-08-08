@@ -24,6 +24,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
+import MenuKepala from "@/components/ui/MenuKepala";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -280,6 +281,27 @@ export default function WasdalPage({ user, onBack }) {
     return Object.values(grup);
   };
 
+  // SATU sumber daftar unduhan untuk dua bentuk kepala (menu HP & tombol
+  // desktop). Menyalinnya dua kali berarti suatu hari nanti salah satunya
+  // ketinggalan saat laporan baru ditambahkan — dan yang ketinggalan itu
+  // hampir pasti bentuk yang jarang dibuka pengembangnya.
+  const UNDUHAN = [
+    {
+      judul: "Periode berjalan (semesteran)",
+      url: `${API}/wasdal/laporan-pdf`,
+      nama: `Laporan_Wasdal_${(data?.periode?.label || "periode").replace(/\s/g, "_")}.pdf`,
+      label: "Laporan Hasil Pemantauan Wasdal",
+      testid: "wasdal-laporan",
+    },
+    {
+      judul: "Tahunan (Lampiran PMK 207)",
+      url: `${API}/wasdal/laporan-tahunan-pdf`,
+      nama: `Laporan_Tahunan_Wasdal_${new Date().getFullYear()}.pdf`,
+      label: "Laporan Tahunan Wasdal (Lampiran PMK 207)",
+      testid: "wasdal-laporan-tahunan",
+    },
+  ];
+
   return (
     <div className="min-h-screen bg-background" data-testid="wasdal-page">
       {/* ── Header ── */}
@@ -304,9 +326,25 @@ export default function WasdalPage({ user, onBack }) {
               {data ? `${data.periode?.label} · ${data.total_aset} aset dipantau` : "PMK 207/PMK.06/2021"}
             </p>
           </div>
-          {/* Aksi header ikon-only, tetap 1 baris di HP (umpan balik: jangan
-              menumpuk ke baris kedua). */}
-          <div className="flex items-center justify-end gap-1.5 flex-shrink-0">
+          {/* SATU MENU DI HP (permintaan pemilik: "lebur menjadi satu menu saja
+              pada mode tampilan HP"). Di 360px, tiga tombol aksi + judul
+              ber-lantai 9rem tak muat sebaris, jadi kepala pecah ke baris kedua
+              — persis keluhan yang sama seperti di Pengadaan dulu. Di ≥sm
+              ruangnya cukup, jadi tombolnya dibiarkan berdiri sendiri.
+
+              Daftar unduhan ditulis SEKALI di UNDUHAN dan dipakai kedua bentuk,
+              supaya menu HP dan tombol desktop tak pernah berbeda isi. */}
+          <div className="sm:hidden flex items-center justify-end flex-shrink-0">
+            <MenuKepala
+              modul="wasdal"
+              kelasTombol={TOMBOL_KEPALA}
+              aksi={[{ id: "reload", label: "Muat ulang", icon: RefreshCw,
+                onSelect: () => muat(), testid: "wasdal-menu-reload" }]}
+              ekspor={UNDUHAN}
+              booking={{ jenisNaskah: "Laporan", referensi: "Laporan Wasdal" }}
+            />
+          </div>
+          <div className="hidden sm:flex items-center justify-end gap-1.5 flex-shrink-0">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
@@ -320,27 +358,18 @@ export default function WasdalPage({ user, onBack }) {
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-64">
-                <DropdownMenuItem className="min-h-[42px]" data-testid="wasdal-laporan"
-                  onClick={() => downloadFileWithProgress(
-                    `${API}/wasdal/laporan-pdf`,
-                    `Laporan_Wasdal_${(data?.periode?.label || "periode").replace(/\s/g, "_")}.pdf`,
-                    { label: "Laporan Hasil Pemantauan Wasdal" },
-                  ).catch(() => {})}>
-                  <FileDown className="w-4 h-4 mr-2" />Periode berjalan (semesteran)
-                </DropdownMenuItem>
-                <DropdownMenuItem className="min-h-[42px]" data-testid="wasdal-laporan-tahunan"
-                  onClick={() => downloadFileWithProgress(
-                    `${API}/wasdal/laporan-tahunan-pdf`,
-                    `Laporan_Tahunan_Wasdal_${new Date().getFullYear()}.pdf`,
-                    { label: "Laporan Tahunan Wasdal (Lampiran PMK 207)" },
-                  ).catch(() => {})}>
-                  <FileDown className="w-4 h-4 mr-2" />Tahunan (Lampiran PMK 207)
-                </DropdownMenuItem>
+                {UNDUHAN.map((u) => (
+                  <DropdownMenuItem key={u.testid} className="min-h-[42px]" data-testid={u.testid}
+                    onClick={() => downloadFileWithProgress(
+                      u.url, u.nama, { label: u.label }).catch(() => {})}>
+                    <FileDown className="w-4 h-4 mr-2" />{u.judul}
+                  </DropdownMenuItem>
+                ))}
               </DropdownMenuContent>
             </DropdownMenu>
             <button
               type="button"
-              onClick={muat}
+              onClick={() => muat()}
               aria-label="Muat ulang"
               title="Muat ulang data pemantauan"
               className={TOMBOL_KEPALA}

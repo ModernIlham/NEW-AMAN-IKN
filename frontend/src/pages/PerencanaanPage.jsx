@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, ArrowRight, Loader2, ClipboardList, CheckCircle2, XCircle, Coins, FileDown,
-  Plus, Scale, Search, Send, Trash2,
+  Plus, Scale, Search, Send, Trash2, CalendarDays,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
@@ -19,6 +19,7 @@ import { useTransitionDialog } from "@/components/ui/TransitionDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 import TanggalanButton from "@/components/ui/TanggalanButton";
+import MenuKepala from "@/components/ui/MenuKepala";
 import StatKartu from "@/components/ui/StatKartu";
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -64,6 +65,9 @@ export default function PerencanaanPage({ user, onBack }) {
   // tahun dari tanggal yang dipilih (menggantikan select TA polos).
   const [tanggalAcuan, setTanggalAcuan] = useState(
     () => new Date().toISOString().slice(0, 10));
+  // Pintu ke pemilih tanggal native milik TanggalanButton — dipakai butir
+  // menu di HP, tempat tombol tanggalannya sendiri disembunyikan.
+  const tanggalanRef = useRef(null);
   const pilihTanggalAcuan = (v) => {
     if (!v) return;
     setTanggalAcuan(v);
@@ -220,6 +224,28 @@ export default function PerencanaanPage({ user, onBack }) {
   const fmtRp = (n) => `Rp${Number(n || 0).toLocaleString("id-ID")}`;
   const th = new Date().getFullYear();
 
+  // SATU sumber daftar unduhan untuk dua bentuk kepala (menu HP & tombol
+  // desktop) — menyalinnya dua kali berarti suatu hari salah satunya
+  // ketinggalan saat unduhan baru ditambahkan.
+  const UNDUHAN = [
+    {
+      judul: "Kertas Kerja RKBMN (XLSX)",
+      sublabel: `Usulan pemeliharaan TA ${tahun + 1}`,
+      url: `${API}/perencanaan/rkbmn-pemeliharaan-xlsx?tahun=${tahun}`,
+      nama: `Usulan_RKBMN_Pemeliharaan_TA${tahun + 1}.xlsx`,
+      label: "Kertas kerja usulan RKBMN",
+      testid: "perencanaan-xlsx",
+    },
+    {
+      judul: "Register Usulan (CSV)",
+      sublabel: "Seluruh usulan RKBMN tercatat",
+      url: `${API}/perencanaan/usulan/export`,
+      nama: "register_usulan_rkbmn.csv",
+      label: "Register usulan RKBMN (CSV)",
+      testid: "perencanaan-export",
+    },
+  ];
+
   return (
     <div className="min-h-screen bg-background" data-testid="perencanaan-page">
       {/* ── Header ── */}
@@ -240,12 +266,38 @@ export default function PerencanaanPage({ user, onBack }) {
           <div className={BLOK_JUDUL}>
             <h1 className={JUDUL_KEPALA}>Perencanaan — Kandidat RKBMN Pemeliharaan</h1>
             <p className={SUBJUDUL_KEPALA}>
-              Saringan kelayakan usulan (PMK 153/2021) + riwayat biaya per aset
+              Saringan kelayakan (PMK 153/2021) · acuan {tanggalAcuan} · TA {tahun}
             </p>
           </div>
+          {/* SATU MENU DI HP (permintaan pemilik). Tanggal acuan ikut masuk ke
+              menu, TAPI angkanya dinaikkan ke subjudul di atas — ia menentukan
+              TA seluruh angka di halaman ini, jadi menyembunyikannya di balik
+              satu ketukan berarti pengguna tak lagi tahu tahun berapa yang
+              sedang dibacanya. Yang hilang cuma tombolnya, bukan informasinya. */}
+          <div className="sm:hidden flex items-center justify-end flex-shrink-0">
+            <MenuKepala
+              modul="perencanaan"
+              kelasTombol={TOMBOL_KEPALA}
+              aksi={[{ id: "tanggal", label: `Tanggal acuan · ${tanggalAcuan}`,
+                icon: CalendarDays,
+                // DITUNDA satu frame: Radix mengembalikan fokus ke pemicu menu
+                // SETELAH menu tertutup. Membuka pemilih tanggal native pada
+                // detik yang sama berarti ia bisa langsung terusir oleh
+                // perpindahan fokus itu. Menunggu satu frame masih berada di
+                // dalam masa aktivasi pengguna, jadi showPicker() tetap sah.
+                onSelect: () => requestAnimationFrame(() => tanggalanRef.current?.buka()),
+                testid: "perencanaan-menu-tanggalan" }]}
+              ekspor={UNDUHAN}
+              booking={{ jenisNaskah: "Laporan", referensi: "RKBMN" }}
+            />
+          </div>
           {/* Tanggalan kotak seragam (gaya tombol kembali/Booking Nomor) —
-              TA riwayat biaya mengikuti tahun tanggal terpilih. */}
+              TA riwayat biaya mengikuti tahun tanggal terpilih. Tombolnya
+              disembunyikan di HP, tetapi komponennya TETAP terpasang: pemilih
+              tanggal native miliknya yang dipanggil butir menu di atas. */}
           <TanggalanButton
+            ref={tanggalanRef}
+            kelasTombol="hidden sm:flex"
             value={tanggalAcuan} onChange={pilihTanggalAcuan}
             title={`Tanggal acuan ${tanggalAcuan} — TA ${tahun}. Klik untuk mengganti.`}
             testid="perencanaan-tanggalan"
@@ -254,7 +306,7 @@ export default function PerencanaanPage({ user, onBack }) {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className={TOMBOL_KEPALA}
+                className={`${TOMBOL_KEPALA} hidden sm:flex`}
                 title="Unduhan perencanaan"
                 aria-label="Unduhan perencanaan"
                 data-testid="perencanaan-unduh-menu"
@@ -263,30 +315,20 @@ export default function PerencanaanPage({ user, onBack }) {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuItem className="min-h-[42px]" data-testid="perencanaan-xlsx"
-                onClick={() => downloadFileWithProgress(
-                  `${API}/perencanaan/rkbmn-pemeliharaan-xlsx?tahun=${tahun}`,
-                  `Usulan_RKBMN_Pemeliharaan_TA${tahun + 1}.xlsx`,
-                  { label: "Kertas kerja usulan RKBMN" },
-                ).catch(() => {})}>
-                <div>
-                  <p className="text-xs font-semibold">Kertas Kerja RKBMN (XLSX)</p>
-                  <p className="text-[10px] text-muted-foreground">Usulan pemeliharaan TA {tahun + 1}</p>
-                </div>
-              </DropdownMenuItem>
-              <DropdownMenuItem className="min-h-[42px]" data-testid="perencanaan-export"
-                onClick={() => downloadFileWithProgress(
-                  `${API}/perencanaan/usulan/export`, "register_usulan_rkbmn.csv",
-                  { label: "Register usulan RKBMN (CSV)" },
-                ).catch(() => {})}>
-                <div>
-                  <p className="text-xs font-semibold">Register Usulan (CSV)</p>
-                  <p className="text-[10px] text-muted-foreground">Seluruh usulan RKBMN tercatat</p>
-                </div>
-              </DropdownMenuItem>
+              {UNDUHAN.map((u) => (
+                <DropdownMenuItem key={u.testid} className="min-h-[42px]" data-testid={u.testid}
+                  onClick={() => downloadFileWithProgress(
+                    u.url, u.nama, { label: u.label }).catch(() => {})}>
+                  <div>
+                    <p className="text-xs font-semibold">{u.judul}</p>
+                    <p className="text-[10px] text-muted-foreground">{u.sublabel}</p>
+                  </div>
+                </DropdownMenuItem>
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          <BookingNomorButton modul="perencanaan" jenisNaskah="Laporan" referensi="RKBMN" />
+          <BookingNomorButton modul="perencanaan" jenisNaskah="Laporan" referensi="RKBMN"
+            className="hidden sm:inline-flex" />
         </div>
       </header>
 
