@@ -67,6 +67,14 @@ _origins_env = os.environ.get("ALLOWED_ORIGINS") or os.environ.get("CORS_ORIGINS
 ALLOWED_ORIGINS = [o.strip() for o in _origins_env.split(",") if o.strip()] or _default_origins
 logger.info(f"CORS allowed origins: {ALLOWED_ORIGINS}")
 
+# Mode pemeliharaan saat restore (C30). URUTAN INI BAGIAN DARI PERBAIKAN:
+# Starlette membangun tumpukan terbalik (yang ditambahkan TERAKHIR jadi
+# terluar), jadi menambahkannya SEBELUM CORS menempatkannya DI DALAM CORS —
+# respons 503-nya membawa header CORS. Dipindah ke setelah CORS = peramban
+# melaporkan kegagalan JARINGAN, bukan SERVER, dan PWA salah menafsirkannya.
+from pemeliharaan import PemeliharaanMiddleware
+app.add_middleware(PemeliharaanMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -261,8 +269,15 @@ async def root_health_check():
 
 @api_router.get("/health")
 async def api_health_check():
-    """Lightweight reachability probe for the frontend's offline detection
-    (lib/connectivity.js). No auth, no DB — must stay instant and dependency-free."""
+    """Sonde keterjangkauan ringan untuk deteksi luring frontend
+    (lib/connectivity.js). Tanpa auth; satu-satunya dependensinya kini
+    pembacaan status pemeliharaan ber-cache 3 detik di middleware (C30).
+
+    SENGAJA TIDAK dikecualikan dari mode pemeliharaan: connectivity.js
+    hanya melihat `res.ok`, jadi 503 di sinilah satu-satunya cara memberi
+    tahu PWA untuk menahan antrean simpan luringnya selama restore —
+    "memperbaikinya" agar selalu 200 membuat flushPending menembakkan
+    seluruh antrean ke server yang 503."""
     return {"ok": True}
 
 @api_router.get("/")
@@ -348,6 +363,16 @@ async def deep_health_check():
             logger.warning("health/deep: %d indeks gagal dibuat", len(gagal))
     except Exception as e:
         checks["indexes"] = {"ok": False, "error": str(e)[:200]}
+
+    # MODE PEMELIHARAAN (C30): informasional saja — endpoint ini ada di
+    # JALUR_BEBAS supaya gerbang deploy & monitor tetap bisa membacanya
+    # selama restore, dan status pemeliharaan TIDAK menjatuhkan `ok` (yang
+    # menjatuhkan restore bukan Mongo mati).
+    try:
+        from pemeliharaan import pemeliharaan_aktif
+        checks["pemeliharaan"] = {"aktif": await pemeliharaan_aktif()}
+    except Exception as e:
+        checks["pemeliharaan"] = {"aktif": False, "error": str(e)[:200]}
 
     # DISK (temuan C4b): disk penuh mematikan hampir semua hal sekaligus —
     # unggah foto, backup, log, bahkan Mongo — dan gejalanya di layar tampak

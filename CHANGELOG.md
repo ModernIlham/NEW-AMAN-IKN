@@ -67,6 +67,62 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#825] Gelombang 2.19 (C30, PENUTUP) — aplikasi berhenti melayani di atas DB yang sedang setengah terhapus — 2026-08-08
+
+Butir terakhir Gelombang 2. Restore mengosongkan koleksi satu per satu
+(`delete_many({})` lalu isi ulang) sementara aplikasi TETAP melayani penuh —
+dengan `--workers 2`, worker saudara tak tahu apa-apa dan menerima tulisan
+di atas DB setengah terhapus. Tak ada mode pemeliharaan di mana pun.
+
+**`PemeliharaanMiddleware`** (berkas baru `pemeliharaan.py`, ASGI murni pola
+AktivitasMiddleware): 503 + `Retry-After: 60` untuk lalu lintas biasa selama
+restore. Status **DITURUNKAN dari dokumen `active_lock` yang sudah ada** —
+bukan bendera baru, dengan tiga alasan yang masing-masing pernah jadi
+kegagalan di kelasnya: (1) bendera manual + worker OOM di tengah wipe =
+503 SELAMANYA; di sini aturan dievaluasi saat BACA dengan denyut
+`updated_at` < 30 menit (cutoff `cleanup_stale_jobs`) — pemeliharaan padam
+sendiri; (2) dokumen lock sudah atomik dan di-`$unset` `update_job` pada
+setiap status terminal — **nol baris ditambahkan ke backup.py**; (3) kebal
+arsip buatan tangan — `backup_jobs` di SKIP_COLLECTIONS dan tak pernah
+diiterasi restore, jadi ZIP suntingan manual tak bisa mewipe sumber
+kebenaran gerbangnya sendiri (dikunci uji arah-balik).
+
+**Keputusan yang dikodekan sebagai uji, bukan komentar:**
+- `/api/health` **ikut 503** — connectivity.js hanya melihat `res.ok`, jadi
+  503 di sanalah satu-satunya cara memberi tahu PWA menahan antrean simpan
+  luringnya; mengecualikannya membuat `flushPending` menembakkan seluruh
+  antrean ke server 503 dan tiap item gagal beruntun. Docstring endpoint
+  yang dulu menjanjikan "no DB" dikoreksi.
+- Hanya `type=restore` (backup cuma membaca), `queued` ikut (jendela
+  safety-backup), OPTIONS & WebSocket & `/api/backup/` & `/api/health/deep`
+  lolos.
+- **Urutan middleware bagian dari perbaikan**: ditambahkan SEBELUM CORS =
+  DI DALAM CORS (Starlette membangun tumpukan terbalik) — 503-nya membawa
+  header CORS; di luar, peramban melaporkan kegagalan JARINGAN dan PWA
+  salah menafsirkan. Posisi dikunci uji.
+- Pembaca ber-cache TTL 3 detik per worker (≤0,33 kueri/dtk/worker lewat
+  indeks single-flight) dan **gagal-buka** (Mongo mati ≠ pemeliharaan).
+  `checks["pemeliharaan"]` ikut tampil di `/api/health/deep` (informasional,
+  tak menjatuhkan gerbang).
+
+**Batas yang diketahui, dicatat terbuka:** jendela cache 3 detik dua arah;
+WebSocket tetap hidup (memutus massal = badai reconnect — klien bisa
+menerima event tentang data setengah terhapus); sesi admin bisa 401 sesaat
+saat koleksi `users` di-wipe (cacat lama, bukan buatan PR ini); gerbang
+deploy kini merah bila deploy dipaksa saat restore — dan prasyaratnya
+([#824]) memastikan deploy menolak MULAI lebih dulu.
+
+**Uji** (19 baru, `test_mode_pemeliharaan.py`): tabel kebijakan job (7),
+kebijakan jalur dengan `/api/health` sebagai uji terpenting (3), middleware
+ASGI langsung (6), gagal-buka + TTL cache (2), urutan middleware + penjaga
+SKIP_COLLECTIONS arah-balik (2). **Sembilan mutasi diuji, sembilan
+terbunuh** — termasuk memasukkan `/api/health` ke JALUR_BEBAS (persis
+"perbaikan" naluriah), gagal-tutup, TTL dihapus, middleware dipindah keluar
+CORS, dan 200-berbadan-pemeliharaan (mutasi yang paling perlu mati: `res.ok`
+=== true dan seluruh manfaat PR lenyap tanpa satu uji pun memerah).
+
+---
+
 ## [#824] Gelombang 2.18 — deploy berhenti membunuh restore diam-diam — 2026-08-08
 
 Prasyarat C30 (mode pemeliharaan, PR berikutnya): `deploy_vps.sh` memanggil
