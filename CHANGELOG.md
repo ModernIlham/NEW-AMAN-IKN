@@ -67,6 +67,45 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#827] Cetak kartu massal: urutan ikut seleksi, dan yang hilang menolak bersuara — 2026-08-08
+
+Dua cacat lama `POST /assets/cards/bulk` yang ditemukan (dan sengaja tidak
+disentuh) saat pengerjaan C25b, kini diperbaiki di PR-nya sendiri:
+
+- **Urutan kartu mengikuti urutan seleksi pengguna.** `find({"id": {"$in":
+  ...}})` mengembalikan urutan natural koleksi — pengguna yang menyusun
+  seleksinya per ruangan mendapat tumpukan cetak yang acak, dan urutan
+  tumpukan itu penting saat ratusan kartu dipotong lalu ditempel per barang.
+  Kini hasil kueri diurutkan ulang di Python berdasarkan posisi id dalam
+  seleksi.
+- **Aset terpilih yang tak bisa ikut membuat permintaan DITOLAK 404 dengan
+  hitungan** ("N dari M aset terpilih tidak ditemukan atau di luar satker
+  Anda"), bukan PDF yang diam-diam lebih tipis. Ini konsistensi dengan
+  filosofi yang sudah tertulis di endpoint yang sama untuk plafonnya
+  ("Menolak, BUKAN memotong diam-diam" — kartu adalah dokumen fisik per
+  barang): sebelumnya aset terhapus/di-luar-scope hilang tanpa satu pun
+  tanda, sementara frontend menamai berkas dan toast-nya dengan jumlah
+  seleksi (`ids.length`) — angka yang tak lagi benar.
+- **Duplikat id dalam seleksi di-dedupe lebih dulu** (kemunculan pertama
+  menang). Tanpa ini gerbang kejujuran di atas salah menuduh seleksi
+  berduplikat "hilang", karena `$in` memang hanya mengembalikan satu dokumen
+  per id. Nama berkas kini selalu = jumlah kartu yang benar-benar dirender.
+- **Uji di tingkat ENDPOINT, dibaca dari PDF yang jadi**: 3 uji baru di
+  `test_kartu_massal.py` memanggil `get_bulk_asset_cards` (di-unwrap dari
+  limiter, mongomock) lalu memeriksa teks per halaman via pypdfium2 —
+  halaman ke-i memuat register aset seleksi ke-i. Suite backend 2455 →
+  2458 lulus; 3/3 mutasi terbunuh oleh ujinya masing-masing (cabut sort →
+  uji urutan; cabut gerbang → uji menolak; cabut dedupe → uji duplikat).
+  Penjaga lintas-repo `plafonKartu.test.js` (19 uji, membaca sumber
+  cards.py) tetap hijau — string `len(asset_ids) > MAKS_KARTU` yang
+  ditagihnya tidak disentuh.
+
+> Batas yang diketahui: bila seleksi berisi id duplikat, frontend menamai
+> berkas dengan `ids.length` (termasuk duplikat) sedangkan server dengan
+> jumlah unik — kasus yang tak bisa dibuat dari UI (seleksi adalah Set).
+
+---
+
 ## [#826] Impor Excel membaca lewat mode read-only openpyxl — 2026-08-08
 
 Tindak lanjut pertama pasca-Gelombang 2, dari daftar saran investigasi C28

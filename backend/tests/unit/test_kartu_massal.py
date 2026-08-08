@@ -208,3 +208,87 @@ class TestRiwayatMassal:
         monkeypatch.setattr(type(fake_db.inventory_activities), "find", _meledak)
         hasil = _jalan(rc._fetch_riwayat_massal([_aset(1)]))
         assert hasil == {}
+
+
+class _Req:
+    """slowapi butuh objek request; endpoint di-unwrap dari limiter sehingga
+    hanya atribut sepele ini yang tersentuh."""
+    headers: dict = {}
+    method = "POST"
+
+
+def _endpoint_massal():
+    """get_bulk_asset_cards tanpa bungkus rate-limit."""
+    fn = rc.get_bulk_asset_cards
+    while hasattr(fn, "__wrapped__"):
+        fn = fn.__wrapped__
+    return fn
+
+
+async def _badan(resp):
+    potongan = []
+    async for b in resp.body_iterator:
+        potongan.append(b)
+    return b"".join(potongan)
+
+
+USER = {"username": "uji", "role": "super_admin"}
+
+
+class TestEndpointMassal:
+    """Dua cacat lama endpoint massal (TL-2), diuji lewat PDF yang jadi.
+
+    1. Urutan kartu dulu mengikuti urutan natural find(), bukan urutan
+       seleksi — urutan tumpukan hasil cetak fisik penting saat ratusan
+       kartu dipotong lalu ditempel per barang.
+    2. Aset terpilih yang tak ditemukan / di luar satker dulu dipotong
+       DIAM-DIAM: PDF lebih tipis sementara frontend menamai berkas dan
+       toast-nya dengan jumlah seleksi (`ids.length`).
+    """
+
+    def _panggil(self, fake_db, monkeypatch, ids):
+        async def _scope_asis(user, q):
+            return q
+        monkeypatch.setattr(rc, "scope_query_aset", _scope_asis)
+        fn = _endpoint_massal()
+        return _jalan(fn(_Req(), ids, USER))
+
+    def _seed_aset(self, fake_db, n):
+        _jalan(fake_db.assets.insert_many([_aset(i) for i in range(1, n + 1)]))
+        _jalan(fake_db.inventory_activities.insert_one(
+            {"id": "keg-1", "kode_satker": "111111"}))
+
+    def test_urutan_kartu_ikut_urutan_seleksi(self, fake_db, monkeypatch):
+        # Seleksi SENGAJA dibalik dari urutan insert (= urutan natural find).
+        pdfium = pytest.importorskip("pypdfium2")
+        self._seed_aset(fake_db, 3)
+        resp = self._panggil(fake_db, monkeypatch,
+                             ["aset-3", "aset-1", "aset-2"])
+        dok = pdfium.PdfDocument(io.BytesIO(_jalan(_badan(resp))))
+        assert len(dok) == 3
+        for hal, reg in enumerate(["REG0003", "REG0001", "REG0002"]):
+            assert reg in dok[hal].get_textpage().get_text_range(), (hal, reg)
+
+    def test_aset_hilang_MENOLAK_bukan_memotong_diam_diam(self, fake_db,
+                                                         monkeypatch):
+        from fastapi import HTTPException
+        self._seed_aset(fake_db, 2)
+        with pytest.raises(HTTPException) as galat:
+            self._panggil(fake_db, monkeypatch,
+                          ["aset-1", "aset-2", "aset-hantu"])
+        assert galat.value.status_code == 404
+        assert "1 dari 3" in galat.value.detail
+
+    def test_duplikat_id_tidak_ditolak_dan_tidak_digandakan(self, fake_db,
+                                                            monkeypatch):
+        """Tanpa dedupe, gerbang kejujuran salah menuduh seleksi berduplikat
+        "hilang" (find $in hanya mengembalikan satu dokumen per id)."""
+        pdfium = pytest.importorskip("pypdfium2")
+        self._seed_aset(fake_db, 2)
+        resp = self._panggil(fake_db, monkeypatch,
+                             ["aset-1", "aset-1", "aset-2"])
+        data = _jalan(_badan(resp))
+        assert len(pdfium.PdfDocument(io.BytesIO(data))) == 2
+        # Nama berkas ikut jumlah kartu yang BENAR-BENAR dirender.
+        assert "kartu_inventaris_massal_2.pdf" in resp.headers.get(
+            "content-disposition", "")
