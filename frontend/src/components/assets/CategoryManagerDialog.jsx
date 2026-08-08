@@ -112,11 +112,24 @@ const CategoryManagerDialog = memo(({ open, onClose, categories, onCategoriesCha
           setCatImportProgress(pr.data);
           if (pr.data.done) {
             clearInterval(poll);
-            toast.success(`Import selesai: ${pr.data.imported} ditambahkan, ${pr.data.skipped} duplikat`);
+            // `done` bukan berarti berhasil: jalur galat parse DAN sapuan
+            // job macet (jobs.py) sama-sama menyetel done:true dengan
+            // status:"error" — dulu keduanya tetap di-toast "Import selesai".
+            if (pr.data.status === "error") {
+              toast.error(pr.data.error_message || "Import gagal");
+            } else {
+              toast.success(`Import selesai: ${pr.data.imported} ditambahkan, ${pr.data.skipped} duplikat`);
+            }
             onCategoriesChanged();
             setTimeout(() => setCatImportProgress(null), 3000);
           }
-        } catch { clearInterval(poll); }
+        } catch {
+          // Polling putus ≠ import gagal — jobnya jalan terus di server.
+          // Tanpa pembersihan, panel "Mengimport..." menggantung selamanya.
+          clearInterval(poll);
+          toast.warning("Koneksi pemantau progres terputus — periksa hasil import dengan memuat ulang daftar kategori");
+          setCatImportProgress(null);
+        }
       }, 500);
     } catch (err) { toast.error(getApiError(err, "Gagal import")); setCatImportProgress(null); }
     if (categoryImportRef.current) categoryImportRef.current.value = "";
@@ -195,7 +208,7 @@ const CategoryManagerDialog = memo(({ open, onClose, categories, onCategoriesCha
               <div className="space-y-1.5 bg-card rounded-lg p-2 border">
                 <div className="flex justify-between text-[11px]">
                   <span className="font-medium text-foreground">
-                    {catImportProgress.status === 'uploading' ? 'Mengupload...' : catImportProgress.status === 'parsing' ? 'Membaca file...' : catImportProgress.done ? 'Selesai!' : 'Mengimport...'}
+                    {catImportProgress.status === 'uploading' ? 'Mengupload...' : catImportProgress.status === 'parsing' ? 'Membaca file...' : catImportProgress.status === 'error' ? 'Gagal' : catImportProgress.done ? 'Selesai!' : 'Mengimport...'}
                   </span>
                   <span className="text-muted-foreground">{catImportProgress.processed || 0} / {catImportProgress.total || '?'}</span>
                 </div>
