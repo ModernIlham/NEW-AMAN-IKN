@@ -2,26 +2,37 @@
 
 > **Catatan metode — WAJIB DIBACA SEBELUM MEMAKAI DOKUMEN INI**
 >
-> - **Tanggal riset:** 8 Agustus 2026 (pengumpulan bahan 7–8 Agustus 2026).
-> - **Metode:** pencarian web berulang + upaya pengambilan teks primer
->   (WebFetch/curl) ke JDIH Kemenkeu, JDIH BPK, DJKN, PPID DJKN, Halo DJKN,
->   SIPPN/SIPP MenPAN, dan mirror non-pemerintah, **ditambah pemeriksaan
->   skeptis (adversarial review) atas hasil riset itu sendiri**. Seluruh
->   koreksi pemeriksa sudah diterapkan pada dokumen ini.
-> - **Hasil pengambilan teks primer: GAGAL TOTAL.** Setiap percobaan ditolak
->   di tingkat gateway egress (403 pada CONNECT / policy denial), bukan 403
->   dari situsnya. Tidak satu pun PDF/HTML peraturan, manual SIMAN, atau
->   artikel DJKN yang benar-benar terbuka. Yang tersedia hanya **cuplikan
->   (snippet) hasil mesin pencari** atas halaman-halaman tersebut.
-> - **Konsekuensi:** **tidak ada satu pun klaim dalam dokumen ini yang
->   berstatus [F]** (terbaca dari teks resmi). Semua nomor pasal yang sempat
->   beredar dalam riset **sudah dikeluarkan** dari badan dokumen dan
->   dikumpulkan di §7.3 sebagai "daftar angka yang dilarang dikutip".
-> - **Dokumen ini BUKAN pengganti pembacaan peraturan asli.** Ia adalah peta
->   kerja + daftar pertanyaan yang harus dijawab pemilik proyek dengan
->   membuka PDF resmi. Jangan mencetak nomor pasal, jangan mengunci ambang
->   nilai, dan jangan menyalakan validasi keras (hard block) di AMAN
->   berdasarkan dokumen ini saja.
+> - **Tanggal riset awal:** 7–8 Agustus 2026. **Tanggal revisi besar:**
+>   8 Agustus 2026.
+> - **PERUBAHAN MENDASAR — TEKS PRIMER KINI TERBACA.** Pada 8 Agustus 2026
+>   pemilik proyek menyerahkan **PDF resmi kedua PMK** langsung ke ruang
+>   kerja, sehingga hambatan gateway yang melumpuhkan riset awal menjadi
+>   tidak relevan. Kedua berkas **dibaca seluruhnya, halaman demi halaman**:
+>   - **PMK 40 Tahun 2024** tentang Tata Cara Penggunaan Barang Milik Negara
+>     — 50 halaman, 78 pasal, 14 BAB; terbaca lengkap dan berurutan.
+>   - **PMK 53 Tahun 2023** tentang Pengelolaan BMN dan Aset Dalam
+>     Penguasaan di Ibu Kota Nusantara — 28 halaman, 69 pasal, 6 BAB.
+> - **Metode revisi:** setiap klaim dokumen lama diuji ulang terhadap teks
+>   primer, lalu **diperiksa silang oleh lajur verifikasi skeptis** yang
+>   mencocokkan kutipan kata demi kata dengan nomor baris dan penanda
+>   halaman berkas. Klaim yang tidak lolos pencocokan **tidak dinaikkan**.
+> - **Hasil:** **188 klaim kini berstatus [F]** (terbaca dari teks resmi,
+>   kutipan verbatim + nomor pasal + halaman tersedia) — naik dari **nol**.
+>   **1 klaim terbukti KELIRU** dan sudah dikoreksi dengan penanda
+>   "Koreksi:". **24 pertanyaan tetap [X]** (dicari di kedua berkas, tidak
+>   ada). **2 klaim ditahan** karena gugur di pemeriksaan (§7.2).
+> - **Yang TIDAK berubah adalah sikapnya, hanya dasarnya.** Hal yang tidak
+>   terbaca tetap dinyatakan tidak terbaca. Dua PMK **bukan** seluruh rezim:
+>   ketentuan teknis, KMK pelimpahan kewenangan DJKN, format lampiran, dan
+>   spesifikasi SIMAN V2 **tetap di luar jangkauan** kedua berkas ini
+>   (§7.2). Jangan memperlakukan dokumen ini seolah semua sudah pasti.
+> - **Nomor pasal kini boleh dicetak** — tetapi **hanya** yang berlabel
+>   **[F]** beserta rujukan halamannya. Nomor pasal berlabel [S]/[X] tetap
+>   dilarang masuk surat dinas dan template AMAN.
+> - **Cacat OCR.** Berkas hasil ekstraksi PDF memuat cacat khas (spasi
+>   sisipan "perundang -undangan", huruf tertukar "Ibu Kata"/"MENTER!",
+>   "Rpl.000.000.000,00" untuk "Rp1.000.000.000,00"). Kutipan dalam dokumen
+>   ini **disalin apa adanya** dan ditandai bila meragukan.
 > - Dokumen pendamping: `docs/PUSTAKA-REGULASI-BMN.md` (pustaka induk),
 >   `docs/MASTERPLAN-SIKLUS-BMN.md` (peta siklus).
 
@@ -29,124 +40,186 @@
 
 ## Cara membaca penanda status
 
-Instruksi awal meminta tiga label ([F]/[S]/[O]). Pemeriksa skeptis menemukan
-bahwa tiga label saja **menggelembungkan kepercayaan**: label [S] dipakai
-untuk klaim yang sumbernya bahkan bukan artikel yang pernah dibuka, melainkan
-cuplikan mesin pencari atas halaman yang diblokir. Karena itu label dipakai
-dengan sub-penanda:
+Dokumen ini memakai label berjenjang. Setelah PDF resmi terbaca (8 Agustus
+2026), **kolom jumlah berubah drastis**: mayoritas klaim inti kini bertumpu
+pada teks primer, bukan lagi pada cuplikan mesin pencari.
 
 | Penanda | Arti | Jumlah di dokumen ini |
 |---|---|---|
-| **[F]** | Terbaca dari teks resmi peraturan + nomor pasal terkonfirmasi | **0 (nol)** |
-| **[S]** | Sumber sekunder. **Seluruh [S] di dokumen ini bertumpu pada cuplikan mesin pencari**, bukan halaman yang terbuka | mayoritas |
-| **[S·1]** | Sama seperti [S], tetapi **hanya satu rantai sumber** (sering satu artikel yang disalin ulang situs lain) — jangan dianggap dua konfirmasi | banyak |
-| **[S·lemah]** | Sumber berkualitas rendah: unggahan Scribd anonim, judul video YouTube, blog praktisi, repositori kampus | beberapa |
-| **[X]** | **Nihil data** — dicari, tidak ditemukan. Bukan bukti ketiadaan norma | beberapa |
+| **[F]** | **Terbaca dari teks resmi peraturan** + kutipan verbatim + nomor pasal + halaman | **188** (naik dari 0) |
+| **[SALAH]** | Teks primer membuktikan klaim dokumen lama **keliru**; koreksi + kutipan disertakan | **1** |
+| **[S]** | Sumber sekunder (cuplikan mesin pencari). **Tersisa hanya untuk hal di luar kedua PMK** — praktik KPKNL, SIMAN, aturan lain | menyusut banyak |
+| **[S·1]** | Sama seperti [S], tetapi **hanya satu rantai sumber** — jangan dianggap dua konfirmasi | menyusut |
+| **[S·lemah]** | Sumber berkualitas rendah: unggahan Scribd anonim, judul video, blog praktisi | beberapa |
+| **[X]** | **Nihil data** — dicari di kedua berkas primer, **tidak ada**. Bukan bukti ketiadaan norma di aturan lain | **24** |
 | **[O]** | Opini / rekomendasi penulis untuk AMAN. **Bukan aturan** | banyak |
 
-**Kaidah yang dipakai sepanjang dokumen** (hasil koreksi pemeriksa):
+**Kaidah yang dipakai sepanjang dokumen:**
 
-1. Konsistensi antar sumber sekunder Indonesia **bukan** konfirmasi
+1. **[F] hanya diberikan bila ada kutipan verbatim + pasal + halaman.**
+   Parafrase yang benar tetapi tanpa kutipan **tidak** cukup untuk [F].
+2. Klaim yang **gugur** di pemeriksaan skeptis **tidak dinaikkan** ke [F]
+   meskipun terasa benar — ia tetap [S] dan pindah ke §7.2.
+3. Konsistensi antar sumber sekunder Indonesia **bukan** konfirmasi
    independen — artikel KPKNL dan blog satker lazim saling menyalin dari satu
-   template lama, sehingga kesalahan yang sama tampak "konsisten".
-2. Cuplikan mesin pencari yang isinya mirip dihitung **satu** sumber.
-3. Nomor pasal yang tidak dibaca dari teks asli **lebih baik kosong daripada
+   template lama, sehingga kesalahan yang sama tampak "konsisten". Kaidah ini
+   **tetap berlaku** untuk bagian yang belum tersentuh teks primer (§5 SIMAN,
+   praktik KPKNL, SLA).
+4. Nomor pasal yang tidak dibaca dari teks asli **lebih baik kosong daripada
    salah** — kolom pasal yang terisi akan dikutip orang lain sebagai fakta.
-4. Dalam sistem kepatuhan, **false negative lebih berbahaya daripada false
+5. Dalam sistem kepatuhan, **false negative lebih berbahaya daripada false
    positive**: lebih baik menampilkan baris berlebih daripada menyembunyikan
    aset yang ternyata wajib diproses.
+6. **Terbaca ≠ berlaku.** Bahwa sebuah pasal terbaca dari PDF resmi tidak
+   membuktikan pasal itu masih berlaku per Agustus 2026 (§7.2 butir 1).
 
 ---
 
 ## Daftar isi
 
-1. [Ringkasan eksekutif — empat rezim Penggunaan](#1-ringkasan-eksekutif--empat-rezim-penggunaan)
+1. [Ringkasan eksekutif — lima rezim Penggunaan](#1-ringkasan-eksekutif--lima-rezim-penggunaan)
 2. [Peta keputusan — aset saya jenis apa, rezim mana, siapa yang berwenang](#2-peta-keputusan--aset-saya-jenis-apa-rezim-mana-siapa-yang-berwenang)
 3. [Bab per rezim](#3-bab-per-rezim)
    - 3.1 [Penetapan Status Penggunaan (PSP)](#31-penetapan-status-penggunaan-psp)
    - 3.2 [Penggunaan Sementara](#32-penggunaan-sementara)
    - 3.3 [Penggunaan BMN untuk Dioperasikan oleh Pihak Lain](#33-penggunaan-bmn-untuk-dioperasikan-oleh-pihak-lain)
    - 3.4 [Pengalihan (Alih) Status Penggunaan](#34-pengalihan-alih-status-penggunaan)
+   - 3.5 [**Penggunaan Bersama**](#35-penggunaan-bersama--rezim-yang-dulu-dicoret) *(bab baru, seluruhnya [F])*
 4. [BMN berbukti milik vs TANPA bukti milik](#4-bmn-berbukti-milik-vs-tanpa-bukti-milik)
+   - 4A [**Rezim khusus IKN — PMK 53/2023**](#4a-rezim-khusus-ikn--pmk-53-tahun-2023) *(bab baru, seluruhnya [F])*
 5. [Unggahan berkas ke SIMAN V2](#5-unggahan-berkas-ke-siman-v2)
 6. [\[O\] Rancangan untuk AMAN](#6-o-rancangan-untuk-aman)
 7. [Yang BELUM terverifikasi dari teks primer](#7-yang-belum-terverifikasi-dari-teks-primer)
 
 ---
 
-## 1. Ringkasan eksekutif — empat rezim Penggunaan
+## 1. Ringkasan eksekutif — lima rezim Penggunaan
 
 ### 1.1 Lima peringatan yang harus dibaca lebih dulu
 
-1. **Rezim induk kemungkinan besar sudah berganti.** PMK 246/PMK.06/2014
-   (beserta PMK 87/PMK.06/2016 dan PMK 76/PMK.06/2019) **diduga kuat dicabut**
-   dan diganti **PMK 40 Tahun 2024 tentang Tata Cara Penggunaan Barang Milik
-   Negara**. [S] — seluruh bukti berupa cuplikan; klausul pencabutan tidak
-   pernah terbaca. **Turunan penting:** identitas PMK 40/2024 sendiri (nomor,
-   judul persis, tanggal penetapan yang beredar 21 Juni 2024) **belum
-   terverifikasi primer**, dan penopangnya justru sumber lemah (Scribd,
-   SlideShare, situs agregator). Bila premis ini salah, seluruh dokumen ini
-   runtuh — karena itu ia menjadi butir verifikasi **nomor satu**.
-2. **PMK 40/2024 sendiri belum tentu mutakhir per Agustus 2026.** Riset hanya
-   membuktikan PMK 246/2014 usang; ia **tidak** membuktikan PMK 40/2024 masih
-   berlaku utuh pada 2025–2026. Riset yang menemukan "pengganti" kerap
-   berhenti satu lapis terlalu cepat. [O]
-3. **Kekhususan IKN belum diperiksa dan itu celah terbesar.** Ada indikasi
-   rezim khusus: **PMK 53 Tahun 2023** tentang Pengelolaan BMN dan **Aset
-   Dalam Penguasaan (ADP)** di IKN, di atas **UU 3/2022 jo. UU 21/2023**, plus
-   **PMK 139/PMK.08/2022** (khusus IKN, sudah tercatat di pustaka repo).
-   Belum dipastikan: apakah Otorita IKN adalah Pengguna Barang biasa; apakah
-   seluruh aset yang dikelola Otorita berstatus BMN atau sebagian ADP dengan
-   rezim berbeda; dan apakah PMK 53/2023 menyimpangi atau merujuk balik ke
-   PMK 40/2024 pada bab Penggunaan. [S]/[X]
-4. **Tidak ada satu pun angka di dokumen ini yang layak di-hardcode.** Termasuk
-   yang tampak paling mapan (tenggat 6 bulan, ambang Rp100 juta, daftar 9
-   dokumen). Pemeriksa membatalkan kesimpulan riset awal yang menyebut dua
-   butir terakhir "relatif aman dijadikan aturan keras". Semua → **peringatan
-   lunak berlabel "perlu verifikasi"**.
+1. **[F] Rezim induk MEMANG sudah berganti — ini bukan lagi dugaan.** PMK
+   40 Tahun 2024 mencabut tiga peraturan sekaligus (PMK 40/2024 **Pasal 77**,
+   hlm 49):
+
+   > "Pada saat Peraturan Menteri ini mulai berlaku: a. Peraturan Menteri
+   > Nomor 246/PMK.06/2014 …; b. Peraturan Menteri Nomor 87/PMK.06/2016 …;
+   > dan c. Peraturan Menteri Keuangan Nomor 76/PMK.06/2019 …, **dicabut dan
+   > dinyatakan tidak berlaku**."
+
+   Identitasnya juga terbaca: **"PERATURAN MENTERI KEUANGAN REPUBLIK
+   INDONESIA NOMOR 40 TAHUN 2024 TENTANG TATA CARA PENGGUNAAN BARANG MILIK
+   NEGARA"** (hlm 1), **ditetapkan 21 Juni 2024** oleh Sri Mulyani Indrawati
+   (hlm 50). Perhatikan judulnya **"Tata Cara Penggunaan"**, bukan "Tata Cara
+   *Pelaksanaan* Penggunaan" seperti PMK 246/2014.
+2. **PMK 40/2024 tetap belum tentu mutakhir per Agustus 2026.** Peringatan ini
+   **tidak dicabut**. Membaca PDF PMK 40/2024 membuktikan isinya, **bukan**
+   bahwa ia belum diubah atau dicabut aturan 2025–2026. Sebuah berkas tidak
+   dapat membuktikan ketiadaan aturan yang lebih baru. Ini tetap butir
+   verifikasi **nomor satu** (§7.2). [O]
+   > **[X] Tanggal pengundangan dan nomor Berita Negara TIDAK TERBACA.**
+   > Pada hlm 50 posisi tanggal dan nomor BN tergantikan karakter cacat
+   > (`Д`, `Ж`). Karena **Pasal 78** berbunyi *"Peraturan Menteri ini mulai
+   > berlaku pada tanggal diundangkan"* (hlm 49), **tanggal mulai berlaku
+   > persisnya belum diketahui** — 21 Juni 2024 adalah tanggal *penetapan*,
+   > bukan tanggal berlaku. Jangan mencetak "berlaku sejak 21 Juni 2024".
+3. **[F] Kekhususan IKN kini terpetakan — dan hasilnya mengubah desain.**
+   **PMK 53 Tahun 2023** (ditetapkan 10 Mei 2023, diundangkan 11 Mei 2023,
+   BN 2023 No. 383) terbaca lengkap. Tiga temuan yang langsung berakibat:
+   (a) di IKN ada **dua** kategori Pengguna Barang, bukan satu; (b) tanah dan
+   bangunan untuk tugas-fungsi K/L umum di-PSP-kan **kepada Otorita IKN**,
+   bukan kepada K/L pemakainya; (c) **ADP bukan BMN** dan tunduk rezim
+   terpisah. Seluruhnya diuraikan di **bab baru §4A**.
+4. **Angka inti kini boleh dipakai — sebagian besar, dengan satu jebakan.**
+   Ambang **Rp100.000.000,00** dan tenggat **6 bulan** kini [F] lengkap
+   dengan kutipan (§2.3, §3.1.7). **Yang TIDAK boleh dikunci** adalah
+   perilaku di **titik ambang persisnya**: Pasal 6 ayat (3) memakai *"paling
+   sedikit"* dan Pasal 7 ayat (3) memakai *"paling banyak"* atas angka yang
+   sama, sehingga nilai **tepat Rp100 juta masuk kedua rumusan** dan PMK
+   tidak menyediakan kaidah pemutus (§2.3). Tangga nilai kantor DJKN
+   (Rp10 M/50 M/100 M) **tetap [S] dan tetap dilarang** — angka itu tidak ada
+   sama sekali dalam PMK 40/2024.
 5. **Jangan tertukar rezim.** Penggunaan (PMK 40/2024) ≠ Pemanfaatan
    (sewa/pinjam pakai/KSP/BGS-BSG/KSPI — PMK 115/PMK.06/2020, status
    keberlakuan belum dicek) ≠ Pemindahtanganan (PMK 111/PMK.06/2016 jo.
    165/2021) ≠ Penghapusan (PMK 83/PMK.06/2016). Pembeda cepat: **ada
    imbalan/sewa/kontribusi tetap → hampir pasti Pemanfaatan, bukan
    Penggunaan.** [O]
+   > **Nuansa [F] yang harus diketahui:** pembeda itu **tidak mutlak**. PMK
+   > 40/2024 **Pasal 20** (hlm 15–16) mengizinkan Pengguna Barang mengenakan
+   > **"kompensasi"** berupa PNBP pada rezim Dioperasikan Pihak Lain dalam
+   > hal-hal tertentu — jadi adanya uang **tidak otomatis** berarti
+   > Pemanfaatan. Lihat §3.3.3.
 
-### 1.2 Tabel empat rezim
+### 1.2 Tabel lima rezim
+
+**[F] Ruang lingkupnya ternyata LIMA rezim, bukan empat.** PMK 40/2024
+**Pasal 2 ayat (2)** (hlm 3):
+
+> "(2) Pengaturan tata cara Penggunaan BMN sebagaimana dimaksud pada ayat (1)
+> meliputi: a. penetapan status Penggunaan BMN; b. penetapan status
+> Penggunaan BMN untuk dioperasikan oleh Pihak Lain; c. Penggunaan sementara
+> BMN; d. **Penggunaan bersama BMN**; dan e. pengalihan status Penggunaan
+> BMN."
 
 | # | Rezim | Pemohon (siapa bersurat) | Ditujukan kepada | Dokumen hasil | Jangka waktu |
 |---|---|---|---|---|---|
-| 1 | **PSP** (Penetapan Status Penggunaan) | Pengguna Barang (pimpinan K/L; untuk OIKN: Kepala Otorita atau pejabat terdelegasi). Satker/KPB mengusulkan **berjenjang ke dalam**, tidak langsung ke KPKNL [S] | Pengelola Barang (Menkeu c.q. DJKN — KPKNL / Kanwil DJKN / Kantor Pusat sesuai jenjang). Untuk BMN tertentu di bawah ambang: ditetapkan Pengguna Barang sendiri [S, ambang ragu] | **Keputusan (SK) PSP** [S] | Tenggat **pengajuan** diduga 6 bulan sejak BMN diperoleh — subjek & titik-mulai tenggat **belum pasti** (§3.1.6) [S·1] |
-| 2 | **Penggunaan Sementara** | **Pengguna Barang pemilik PSP (pihak A)** — bukan peminjam. Dipicu **Surat Permintaan** dari pihak B [S] | Pengelola Barang. Untuk jangka pendek (≈≤6 bulan) diduga tanpa persetujuan Pengelola — **siapa yang menyetujui pada jalur ini masih bertentangan antar cuplikan** [S, ragu] | **Surat Persetujuan** Pengelola (jalur BMN pada Pengguna Barang) **atau Penetapan** Pengelola (jalur BMN pada Pengelola) → lalu **Perjanjian** + **BAST penyerahan** dan **BAST pengembalian** [S] | Paling lama **5 tahun** (tanah dan/atau bangunan) dan **2 tahun** (selain), **dapat diperpanjang**. Ambang **6 bulan** = batas bebas-persetujuan, **bukan** plafon jangka waktu (koreksi penting, §3.2) [S·1] |
-| 3 | **Dioperasikan Pihak Lain** | Pengguna Barang. Dipicu **surat permintaan pengoperasian** dari calon Pihak Lain [S] | Pengelola Barang | **Keputusan Pengelola Barang** tentang penetapan status penggunaan untuk dioperasikan Pihak Lain → lalu **Perjanjian** Pengguna Barang–Pihak Lain; di akhir: **BAST pengembalian** [S] | Beredar: **5 tahun** dapat diperpanjang (BUMN/koperasi/"badan hukum lainnya"); **99 tahun** (Pemerintah Negara Lain) — **angka 99 ragu berat**; Organisasi Internasional mengikuti perjanjian antarnegara [S·1] |
-| 4 | **Alih Status Penggunaan** | **Pengguna Barang LAMA**. Calon pengguna baru hanya menandatangani **surat pernyataan kesediaan menerima** bermeterai. Ada pula **jalur inisiatif Pengelola** tanpa permohonan [S] | Pengelola Barang | (1) **Surat Persetujuan** Pengelola; (2) **BAST** + daftar BMN + serah terima dokumen kepemilikan asli; (3) **SK Penghapusan** pengguna lama; (4) **dasar pencatatan pada pengguna baru** (SK PSP dari Pengelola **atau** keputusan internal — masih dua versi); (5) **Laporan penghapusan** [S, butir 4 ragu] | Rantai tenggat yang beredar: BAST ≤1 bulan sejak persetujuan; SK penghapusan ≤2 bulan sejak BAST; laporan ≤1 bulan sejak SK penghapusan [S·1, ragu] |
+| 1 | **PSP** (Penetapan Status Penggunaan) — BAB III, **Pasal 9–18** | Pengguna Barang (pimpinan K/L; untuk OIKN: Kepala Otorita atau pejabat terdelegasi). Satker/KPB mengusulkan **berjenjang ke dalam**, tidak langsung ke KPKNL [S] | Pengelola Barang. Untuk BMN selain tanah/bangunan tanpa dokumen kepemilikan ≤Rp100 jt/unit **dan alutsista**: ditetapkan Pengguna Barang sendiri **[F] Pasal 7 ayat (3)** | **Keputusan (SK) PSP** **[F] Pasal 14 ayat (1)** | **[F]** Permohonan diajukan **paling lama 6 (enam) bulan sejak BMN diperoleh** — **Pasal 11 ayat (1)** |
+| 2 | **Penggunaan Sementara** — BAB V, **Pasal 32–39** | **Pengguna Barang pemilik PSP (pihak A)** — bukan peminjam. Dipicu **Surat Permintaan** dari pihak B **[F] Pasal 34 ayat (3) huruf b** | Pengelola Barang. Jalur **≤6 bulan** tidak perlu persetujuan Pengelola, **tetapi tetap wajib dilaporkan** **[F] Pasal 33 ayat (2)–(3)**; yang menyetujui adalah **Pengguna Barang** **[F] Pasal 7 ayat (2) huruf d** | **Surat Persetujuan** Pengelola (BMN pada Pengguna Barang) **atau Penetapan** Pengelola (BMN pada Pengelola) **[F] Pasal 32 ayat (3)** → lalu **Perjanjian** **[F] Pasal 37 ayat (1)** | **[F] Pasal 33 ayat (1)**: **5 tahun** (tanah dan/atau bangunan), **2 tahun** (selain), **dapat diperpanjang**. Ambang **6 bulan** = batas bebas-persetujuan, **bukan** plafon jangka waktu |
+| 3 | **Dioperasikan Pihak Lain** — BAB IV, **Pasal 19–31** | Pengguna Barang. Dipicu **surat permintaan pengoperasian** dari calon Pihak Lain **[F] Pasal 24 ayat (3) huruf b** | Pengelola Barang **[F] Pasal 19 ayat (1)** | **Keputusan Pengelola Barang** **[F] Pasal 26 ayat (1)** → **Perjanjian** Pengguna Barang–Pihak Lain **[F] Pasal 28 ayat (1)**; di akhir **BAST** **[F] Pasal 31 ayat (2)** | **[F] Pasal 23**: **5 th** (BUMN, koperasi, org. internasional, dll.); **30 th** (lembaga/organisasi bentukan UU; badan hukum penyelenggara pendidikan tinggi); **99 th** (pemerintah negara lain, asas resiprositas); **selama** PTN badan hukum menyelenggarakan fungsi pendidikan tinggi |
+| 4 | **Penggunaan Bersama** — BAB VI, **Pasal 40–52** | **Pengguna Barang Eminen**, atas permohonan **Pengguna Barang Kolaborator** **[F] Pasal 46 ayat (1)** | Pengelola Barang. Jalur **≤6 bulan** cukup dilaksanakan Eminen + dilaporkan **[F] Pasal 40 ayat (4)** | **Surat persetujuan** Pengelola **[F] Pasal 48 ayat (1)** → **Perjanjian** Eminen–Kolaborator **[F] Pasal 49 ayat (1)** | **[F] Pasal 44**: **tanpa angka tetap** — sepanjang masih dipakai untuk pelayanan umum/urusan pemerintahan, atau berdasarkan kesepakatan, atau jangka waktu tertentu sesuai persetujuan Pengelola |
+| 5 | **Alih Status Penggunaan** — BAB VII, **Pasal 53–61** | **Pengguna Barang LAMA** **[F] Pasal 53 ayat (2)**. Calon pengguna baru hanya menandatangani **surat pernyataan kesediaan menerima** bermeterai **[F] Pasal 54 ayat (3) huruf b**. Ada pula **jalur inisiatif Pengelola** tanpa permohonan **[F] Pasal 53 ayat (5)** | Pengelola Barang | (1) **Surat Persetujuan** **[F] Pasal 56 ayat (1)**; (2) **BAST**; (3) **SK Penghapusan** pengguna lama; (4) **keputusan PSP kepada Pengguna Barang baru — diterbitkan PENGELOLA Barang** **[F] Pasal 57 huruf e**; (5) **Laporan** | **[F] Pasal 57**: BAST ≤1 bulan sejak persetujuan; SK penghapusan ≤2 bulan sejak **tanggal BAST**; pelaporan ≤1 bulan sejak SK penghapusan ditetapkan |
 
 **Catatan pada tabel:**
 
 - Kolom "dokumen hasil" adalah **inti pembeda rezim**: PSP dan Dioperasikan
-  Pihak Lain menghasilkan **keputusan/penetapan**; Penggunaan Sementara dan
-  Alih Status menghasilkan **persetujuan** yang harus **ditindaklanjuti**
-  dokumen turunan. [S]
-- **Penggunaan Bersama** juga disebut sebagai bagian ruang lingkup PMK
-  40/2024 [S·1], tetapi **tidak dijadikan bab tersendiri** di sini karena
-  bahan yang ada terlalu tipis. Istilah "Pengguna Barang Eminen" dan
-  "Kolaborator" yang sempat muncul di riset **dicoret** — tidak lazim dalam
-  peraturan pengelolaan BMN Indonesia, sumbernya rangkuman Scribd yang tidak
-  pernah terbaca, dan berbau hasil parafrase/halusinasi. Jangan dipakai di
-  teks bantuan AMAN. [O]
+  Pihak Lain menghasilkan **keputusan/penetapan**; Penggunaan Sementara,
+  Penggunaan Bersama, dan Alih Status menghasilkan **persetujuan** yang harus
+  **ditindaklanjuti** dokumen turunan. [F, dari pasal-pasal yang dirujuk di
+  tabel]
+- **[SALAH] Istilah "Pengguna Barang Eminen" dan "Pengguna Barang
+  Kolaborator" adalah istilah RESMI — bukan halusinasi.** Keduanya
+  didefinisikan di **Pasal 1 angka 4 dan angka 5** (hlm 2) dan dipakai
+  puluhan kali sepanjang BAB VI:
+
+  > "4. **Pengguna Barang Eminen** adalah pejabat pemegang kewenangan
+  > Penggunaan BMN yang digunakan secara bersama, yang **melakukan
+  > penatausahaan** BMN yang digunakan bersama.
+  > 5. **Pengguna Barang Kolaborator** adalah pejabat pemegang kewenangan
+  > Penggunaan bersama BMN berdasarkan persetujuan Pengelola Barang, yang
+  > **tidak melakukan penatausahaan** BMN yang digunakan bersama."
+
+  > **Koreksi:** versi lama dokumen ini menulis bahwa kedua istilah tersebut
+  > **"dicoret — tidak lazim dalam peraturan pengelolaan BMN Indonesia,
+  > sumbernya rangkuman Scribd …, dan berbau hasil parafrase/halusinasi.
+  > Jangan dipakai di teks bantuan AMAN."** **Itu keliru.** Riset awal
+  > menolak istilah yang benar karena tampak asing, lalu menyimpulkan
+  > sumbernya mengarang. Pembeda praktis kedua peran: **Eminen yang
+  > menatausahakan** (aset tetap di neracanya), Kolaborator tidak. Bagi AMAN
+  > ini penting — Penggunaan Bersama **tidak** memindahkan pencatatan.
+- **Penggunaan Bersama kini menjadi rezim ke-4 yang setara**, bukan catatan
+  kaki. Ia punya BAB sendiri (BAB VI, 13 pasal), mekanisme penghentian
+  sendiri (**Pasal 50–52**), dan bahkan memungkinkan **Pengelola Barang
+  bertindak sebagai Eminen** atas BMN yang berada padanya (**[F] Pasal 41**).
 
 ### 1.3 Perbedaan akibat pencatatan (yang paling sering salah dipahami)
 
 | Rezim | Kepemilikan | Status penggunaan (PSP) | Pencatatan/neraca | Penanggung pemeliharaan |
 |---|---|---|---|---|
 | PSP | Pemerintah RI | ditetapkan pada Pengguna Barang | pada Pengguna Barang | Pengguna Barang |
-| Penggunaan Sementara | tidak berubah | **tidak berubah** | **tetap pada pihak A** [S + simpulan logis, lihat catatan] | dibebankan pada **pihak B** (pengguna sementara) [S·1] |
-| Dioperasikan Pihak Lain | tidak berubah | tetap pada Pengguna Barang | **tetap pada Pengguna Barang** | **Pihak Lain** [S·1] |
-| Alih Status | tetap Pemerintah RI (yang berubah "c.q."-nya) | **berpindah** ke Pengguna Barang baru | **berpindah** (transfer keluar/masuk) | Pengguna Barang baru |
+| Penggunaan Sementara | tidak berubah | **tidak berubah** — **[F] Pasal 32 ayat (1)**: *"tanpa harus mengubah kepemilikan dan status Penggunaan BMN"* | **tetap pada pihak A** [O — simpulan logis, lihat catatan] | dibebankan pada **K/L yang menggunakan sementara (pihak B)**, ***"kecuali ditentukan lain dalam perjanjian"*** — **[F] Pasal 32 ayat (4)**. Pada jalur ≤6 bulan: **sesuai perjanjian antar Pengguna Barang** — **[F] Pasal 33 ayat (2) huruf b** |
+| Dioperasikan Pihak Lain | tidak berubah | tetap pada Pengguna Barang | **tetap pada Pengguna Barang** [O] | **Pihak Lain** — **[F] Pasal 8 huruf b** dan **Pasal 24 ayat (3) huruf c angka 2**, kecuali BMN dioperasikan karena **penugasan atau kebijakan pemerintah** |
+| **Penggunaan Bersama** | tidak berubah | **tidak berubah** — **[F] Pasal 40 ayat (1)** | **tetap pada Pengguna Barang Eminen** — **[F] Pasal 1 angka 4 & 5** (Eminen *"melakukan penatausahaan"*, Kolaborator *"tidak melakukan penatausahaan"*) | **[F] Pasal 43 ayat (2)**: biaya hanya dibebankan pada **salah satu pihak untuk setiap kegiatan** |
+| Alih Status | tetap Pemerintah RI (yang berubah "c.q."-nya) | **berpindah** ke Pengguna Barang baru | **berpindah** — **[F] Pasal 53 ayat (4)**: *"dilakukan penatausahaan dan pemeliharaan oleh Pengguna Barang baru"* | Pengguna Barang baru — **[F] Pasal 53 ayat (4)** |
 
-> **Peringatan status:** baris "pencatatan/neraca" dan "penyusutan tetap di
-> pihak A" adalah **simpulan logis penulis**, bukan norma yang dikutip.
-> Perlakuan penatausahaan/akuntansi diatur peraturan lain (penatausahaan BMN
-> dan standar akuntansi pemerintahan), **bukan** oleh PMK Penggunaan. [O]
+> **Peringatan status yang TETAP berlaku:** baris "pencatatan/neraca" untuk
+> penggunaan sementara dan dioperasikan pihak lain masih **simpulan logis
+> penulis [O]** — PMK 40/2024 menyatakan status *Penggunaan* tidak berubah,
+> tetapi **tidak** mengatur jurnal/neraca. Perlakuan akuntansinya diatur
+> peraturan lain (penatausahaan BMN dan SAP). **[F] Pasal 62** justru
+> menegaskan pemisahan itu: *"Penatausahaan … dilakukan sesuai dengan
+> ketentuan peraturan perundang-undangan di bidang penatausahaan BMN."*
+> Pengecualiannya adalah baris **Penggunaan Bersama** dan **Alih Status**,
+> yang penatausahaannya memang disebut langsung oleh PMK ini.
 
 ---
 
@@ -154,21 +227,41 @@ dengan sub-penanda:
 
 ### 2.0 Langkah 0 — pertanyaan yang harus dijawab lebih dulu (khusus OIKN)
 
-Sebelum memilih rezim, jawab tiga hal berikut. Ketiganya **belum terjawab**
-oleh riset ini dan menentukan apakah seluruh peta di bawah berlaku:
+Sebelum memilih rezim, jawab tiga hal berikut. **Ketiganya kini TERJAWAB**
+dari teks primer PMK 53/2023 — uraian lengkapnya di **§4A**:
 
-| Pertanyaan | Status | Akibat bila terlewat |
+| Pertanyaan | Jawaban | Akibat bila terlewat |
 |---|---|---|
-| Objeknya **BMN** atau **ADP (Aset Dalam Penguasaan)** menurut PMK 53/2023? | [S] kategori ADP disebut ada: *tanah di wilayah IKN yang tidak terkait penyelenggaraan pemerintahan*; daftar sumber perolehannya belum terverifikasi | Salah rezim sejak awal; ADP diduga punya aturan penatausahaan sendiri |
-| Siapa **Pengguna Barang** dan **Kuasa Pengguna Barang** di struktur OIKN, dan bagaimana pola pendelegasian tanda tangannya? | [X] belum diperiksa | Surat ditandatangani pejabat yang tidak berwenang → berkas dikembalikan / SK cacat kewenangan |
-| Apakah **PMK 53/2023** menyimpangi PMK 40/2024 pada bab Penggunaan, atau merujuk balik? | [X] hubungan kedua PMK tidak berhasil dikonfirmasi | Memakai aturan umum padahal ada lex specialis |
+| Objeknya **BMN** atau **ADP** menurut PMK 53/2023? | **[F]** ADP = **tanah** di wilayah IKN yang **tidak terkait penyelenggaraan pemerintahan** (**Pasal 1 angka 5**). Keduanya **saling eksklusif**: penetapan status ADP justru **menjadi alasan penghapusan BMN** (**Pasal 42**) | Salah rezim sejak awal. **ADP punya pejabat, siklus, dan aturan sendiri** (BAB III) — bukan rezim Penggunaan BMN |
+| Siapa **Pengguna Barang** dan **Kuasa Pengguna Barang** di struktur OIKN? | **[F]** Kepala Otorita IKN adalah Pengguna Barang atas BMN dalam penguasaannya (**Pasal 5 ayat (1)**), **tetapi bukan satu-satunya** — menteri/pimpinan lembaga juga Pengguna Barang (**Pasal 6 ayat (1)**). KPB **ditetapkan Kepala Otorita** (**Pasal 5 ayat (2) huruf b**) | Surat ditandatangani pejabat yang tidak berwenang → berkas dikembalikan / SK cacat kewenangan. **Pola pendelegasian internal OIKN tetap [X]** — lihat §4A.6 |
+| Apakah **PMK 53/2023** menyimpangi PMK 40/2024 pada bab Penggunaan? | **[F] Terbelah dua.** **PSP menyimpangi** (**Pasal 17** — subjek penerima, dasar tanpa usulan, kewenangan). **Penggunaan sementara, dioperasikan pihak lain, dan alih status TIDAK menyimpangi** — **Pasal 18** mengembalikannya ke aturan umum | Memakai aturan umum pada PSP (salah), atau mencari aturan khusus IKN untuk tiga rezim lain (tidak ada) |
+
+**[F] Kunci hubungan kedua PMK — Pasal 18 PMK 53/2023** (hlm 11–12):
+
+> "Penetapan status Penggunaan BMN untuk dioperasikan oleh pihak lain,
+> penggunaan sementara BMN, dan pengalihan status Penggunaan BMN
+> dilaksanakan berdasarkan ketentuan peraturan perundang-undangan mengenai
+> pengelolaan BMN."
+
+Rujukan itu **generik dan dinamis** (tanpa nomor PMK), sehingga otomatis
+mengarah ke rezim yang berlaku — kini PMK 40/2024. **PMK 40/2024 tidak
+mencabut PMK 53/2023** (Pasal 77 hanya mencabut rumpun PMK 246/2014), jadi
+PMK 53/2023 bertahan sebagai *lex specialis* IKN.
+
+> **[F] Catatan yang mengubah cara membaca:** PMK 40/2024 **tidak menyebut
+> kata "Otorita", "Nusantara", atau "Ibu Kota" satu kali pun** di seluruh 50
+> halamannya (diverifikasi dengan pencarian atas berkas yang sudah
+> dinormalkan dari spasi sisipan — nihil). Jadi aturan umum **tidak
+> mengantisipasi IKN sama sekali**; seluruh kekhususan IKN harus dicari di
+> PMK 53/2023, bukan di PMK 40/2024.
 
 **Hierarki aturan yang diusulkan untuk AMAN** (khusus → umum) [O]:
 (1) PMK 53/2023 (BMN & ADP di IKN) → (2) PMK 40/2024 (Tata Cara Penggunaan
 BMN) → (3) PP 27/2014 jo. PP 28/2020 → (4) UU 1/2004 (mis. kewajiban
 sertipikasi tanah) + Peraturan Bersama sertipikasi → (5) PMK 118/2023 & juknis
-SIMAN v2 (lapisan sistem). **Lapisan (1) belum diuji keberlakuannya pasca
-UU 21/2023** — jangan dikunci sebelum diperiksa.
+SIMAN v2 (lapisan sistem). **Lapisan (1) tetap belum diuji keberlakuannya
+pasca UU 21/2023** — PMK 53/2023 tidak dapat membuktikan dirinya sendiri masih
+berlaku; jangan dikunci sebelum diperiksa (§7.2).
 
 ### 2.1 Pohon keputusan rezim
 
@@ -209,75 +302,124 @@ Aset sudah punya SK PSP?
 
 ### 2.2 Tiga kelompok objek dan perlakuannya
 
+**[F] Dasarnya: PMK 40/2024 Pasal 6 ayat (3)** (kewenangan Pengelola Barang,
+hlm 4–5) dan **Pasal 7 ayat (3)** (kewenangan Pengguna Barang, hlm 7).
+
 | Kelompok objek | Ke siapa PSP-nya | Dokumen kepemilikan kunci | Catatan |
 |---|---|---|---|
-| **Tanah** | Selalu ke **Pengelola Barang** [S] | Sertipikat (Hak Pakai atas nama Pemerintah RI c.q. K/L) | Bila belum bersertipikat → jalur substitusi §4 |
-| **Tanah dan/atau bangunan** | Selalu ke **Pengelola Barang** [S]; tidak ada ambang yang membuat Pengguna Barang menetapkan sendiri | Sertipikat + **IMB/PBG** | Namai field **"IMB/PBG"** agar cocok dua rezim (pasca UU Cipta Kerja) [O] |
+| **Tanah** | **Pengelola Barang** — **[F] Pasal 6 ayat (3) huruf a** | Sertipikat (Hak Pakai atas nama Pemerintah RI c.q. K/L) | Bila belum bersertipikat → jalur substitusi §4 (**[F] Pasal 11 ayat (3)**) |
+| **Tanah dan/atau bangunan** | **Pengelola Barang** — **[F] Pasal 6 ayat (3) huruf a**; **tidak ada** ambang yang membuat Pengguna Barang menetapkan sendiri (Pasal 7 ayat (3) hanya menyebut *selain* tanah/bangunan) | Sertipikat + **IMB/PBG** | Namai field **"IMB/PBG"** agar cocok dua rezim (pasca UU Cipta Kerja) [O]. **[F]** PMK menyebut keduanya: *"Izin Mendirikan Bangunan atau Persetujuan Bangunan Gedung"* (Pasal 11 ayat (2) huruf b angka 1) |
 | **Selain tanah dan/atau bangunan** | **Bercabang** | | |
-| ├─ punya dokumen kepemilikan (BPKB kapal/pesawat/kendaraan) | ke **Pengelola Barang** [S] | BPKB/STNK, bukti kepemilikan kapal/pesawat | Riset awal menulis "kendaraan **SELALU** ke Pengelola" — **dikoreksi**: kendaraan baru yang BPKB-nya belum terbit justru masuk kategori "tanpa dokumen kepemilikan". Penentu adalah **ada/tidaknya dokumen pada saat pengajuan**, bukan jenis barangnya [O] |
-| └─ tidak punya dokumen kepemilikan | ≤ ambang → **Pengguna Barang menetapkan sendiri**; > ambang → **Pengelola Barang** [S, ambang ragu] | diganti BAST → SPTJ (§4) | Lihat §2.3 |
+| ├─ punya bukti kepemilikan | **Pengelola Barang, tanpa batas nilai** — **[F] Pasal 6 ayat (3) huruf b angka 1**: *"yang memiliki bukti kepemilikan, **termasuk sepeda motor, mobil, kapal, dan pesawat terbang**"* | BPKB/STNK, bukti kepemilikan kapal/pesawat | Riset awal menulis "kendaraan **SELALU** ke Pengelola" — **tetap dikoreksi**: kendaraan yang BPKB-nya belum terbit masuk kategori "tanpa dokumen kepemilikan". Penentu adalah **ada/tidaknya dokumen saat pengajuan**, bukan jenis barangnya [O] |
+| └─ tidak punya bukti kepemilikan | **≥ Rp100 jt/unit → Pengelola Barang** (**[F] Pasal 6 ayat (3) huruf b angka 2**); **≤ Rp100 jt/unit → Pengguna Barang sendiri** (**[F] Pasal 7 ayat (3) huruf a**) | diganti BAST → SPTJ (§4) | **Titik ambang bertumpang tindih — lihat §2.3** |
+| **Alutsista** | **Pengguna Barang sendiri, tanpa batas nilai** — **[F] Pasal 7 ayat (3) huruf b**: *"alat utama sistem persenjataan"* | — | Tetap **dikeluarkan dari modul AMAN** [O] |
 
-> **Alutsista** (yang dalam sumber disebut dapat ditetapkan Pengguna Barang
-> tanpa batas nilai) **dikeluarkan dari spesifikasi modul AMAN**: OIKN tidak
-> menguasai alutsista, dan mencantumkannya hanya melahirkan cabang logika
-> mati yang tetap harus diuji dan dipelihara. Cukup dicatat sebagai konteks
-> regulasi umum. [O]
+> **Alutsista tetap dikeluarkan dari spesifikasi modul AMAN** meski kini
+> statusnya [F]: OIKN tidak menguasai alutsista, dan mencantumkannya hanya
+> melahirkan cabang logika mati yang tetap harus diuji dan dipelihara. Yang
+> berubah hanya dasarnya — dulu "menurut sumber", kini terbaca dari pasal.
+> Keputusan desainnya sama. [O]
 
 ### 2.3 Ambang nilai — PER UNIT atau AKUMULATIF? (titik paling rawan)
 
-Ada **dua jenis ambang yang berbeda sama sekali** dan sering dicampur:
+Ada **dua jenis ambang yang berbeda sama sekali** dan sering dicampur.
+**Yang pertama kini terbaca; yang kedua tetap tidak ada dalam teks primer.**
 
-| Jenis ambang | Angka yang beredar | Satuan hitung yang beredar | Fungsinya | Status |
+| Jenis ambang | Angka | Satuan hitung | Fungsinya | Status |
 |---|---|---|---|---|
-| **A. Ambang delegasi ke Pengguna Barang** | **Rp100.000.000,00** | **"per unit/satuan"** menurut satu tafsir; **"per usulan/permohonan"** menurut tafsir lain | Menentukan apakah PSP ditetapkan Pengguna Barang sendiri atau harus ke Pengelola | **[S, RAGU BERAT — dua tafsir bersaing]** |
-| **B. Ambang jenjang kantor DJKN** (tanah dan/atau bangunan) | s.d. Rp10 M → KPKNL; >10–50 M → Kanwil DJKN; >50–100 M → Kantor Pusat DJKN; >100 M → Menkeu | **akumulatif "dalam satu paket pengajuan"** | Menentukan kantor tujuan surat | **[S·1, RAGU BERAT]** |
-| **C. Ambang jenjang kantor DJKN** (selain tanah/bangunan tanpa bukti milik) | >Rp100 jt–5 M → KPKNL; >5–25 M → Kanwil DJKN; sisanya Kantor Pusat | akumulatif per paket pengajuan | idem | **[S·1, RAGU SANGAT BERAT — satu jalur sumber]** |
+| **A. Ambang delegasi ke Pengguna Barang** | **Rp100.000.000,00** | **"per unit/satuan"** — **terbukti**, bukan per usulan | Menentukan apakah PSP ditetapkan Pengguna Barang sendiri atau harus ke Pengelola | **[F] Pasal 6 ayat (3) huruf b angka 2 & Pasal 7 ayat (3) huruf a** |
+| **B. Ambang jenjang kantor DJKN** (tanah dan/atau bangunan) | s.d. Rp10 M → KPKNL; >10–50 M → Kanwil; >50–100 M → Pusat; >100 M → Menkeu | akumulatif per paket | Menentukan kantor tujuan surat | **[S·1, TETAP DILARANG]** — **tidak ada** di PMK 40/2024 |
+| **C. Ambang jenjang kantor DJKN** (selain tanah/bangunan) | >Rp100 jt–5 M → KPKNL; >5–25 M → Kanwil; sisanya Pusat | akumulatif per paket | idem | **[S·1, TETAP DILARANG]** — **tidak ada** di PMK 40/2024 |
 
-**Mengapa ini berbahaya.** Riset awal menyatakan **tegas** bahwa Rp100 juta
-bersifat per unit dan "BUKAN akumulatif". Pemeriksa membatalkan ketegasan itu:
-tidak ada satu pun **kutipan verbatim** yang memuat frasa "per unit" atau "per
-satuan" dari teks aturan — hanya parafrase jurnal dan cuplikan. Bila
-sebenarnya rumusannya **per usulan**, aplikasi akan meloloskan paket bernilai
-miliaran ke jalur penetapan mandiri Pengguna Barang → **SK yang terbit cacat
-kewenangan**.
+**[F] Pertanyaan "per unit atau per usulan" kini TERJAWAB: per unit/satuan.**
+Angka Rp100.000.000,00 muncul **tepat lima kali** di seluruh PMK 40/2024
+(Pasal 6 ayat (3), Pasal 6 ayat (4), Pasal 7 ayat (3), Pasal 11 ayat (2), dan
+Pasal 11 ayat (6)), dan **kelimanya** memakai frasa **"per unit/satuan"**.
+Frasa "per usulan" atau "per permohonan" **tidak muncul sama sekali** di
+kedua berkas. Kutipan sisi Pengelola Barang (**Pasal 6 ayat (3) huruf b**,
+hlm 5):
 
-**Aturan konservatif yang direkomendasikan sampai teks asli dibaca** [O]:
+> "b. BMN selain tanah dan/atau bangunan: 1. yang memiliki bukti kepemilikan,
+> termasuk sepeda motor, mobil, kapal, dan pesawat terbang; 2. yang tidak
+> memiliki bukti kepemilikan dengan nilai perolehan **paling sedikit** sebesar
+> Rp100.000.000,00 (seratus juta rupiah) **per unit/satuan**;"
 
-1. Hitung **keduanya**: `nilai_perolehan_per_nup` **dan**
-   `total_nilai_paket`.
-2. Bila **salah satu** melewati ambang → arahkan ke jalur **Pengelola
-   Barang** (jalur paling konservatif).
-3. Nilai yang **tepat berada di ambang** (persis Rp100.000.000,00) →
-   **jangan dirutekan otomatis**; tandai "perlu penentuan manual". Rumusan
-   operator perbandingan (`≤`, `<`, `≥`, `>`) belum diketahui, dan riset awal
-   memakai tiga rumusan berbeda untuk angka yang sama dalam satu paragraf.
-4. Simpan seluruh angka sebagai **parameter konfigurasi** (nilai + tanggal
-   berlaku + dasar hukum + flag "belum diverifikasi"), bukan konstanta kode.
-5. **Jangan** memakai angka jenjang B/C sebagai **hard block**; tampilkan
-   sebagai saran kantor tujuan berlabel "perlu verifikasi".
+Kutipan sisi Pengguna Barang (**Pasal 7 ayat (3)**, hlm 7):
+
+> "a. BMN selain tanah dan/atau bangunan, yang tidak mempunyai dokumen
+> kepemilikan, dengan nilai perolehan **paling banyak** sebesar
+> Rp100.000.000,00 (seratus juta rupiah) **per unit/satuan**; dan
+> b. alat utama sistem persenjataan."
+
+> **[F] JEBAKAN YANG TETAP ADA — dan sekarang terbukti nyata.** Kedua operator
+> **inklusif** pada angka yang sama: *"paling sedikit"* (≥) untuk Pengelola
+> dan *"paling banyak"* (≤) untuk Pengguna. Akibatnya nilai **tepat
+> Rp100.000.000,00 masuk KEDUA rumusan sekaligus**, dan PMK 40/2024 **tidak
+> memuat kalimat pemutus**. Ini bukan kegagalan pembacaan — ini memang
+> demikian di teksnya. **Jangan mengarang operator `>` atau `<`** untuk
+> menutupnya; pertahankan jalur "perlu penentuan manual" pada titik ambang.
+>
+> Catatan kecil yang layak diketahui: kedua pasal bahkan memakai **istilah
+> berbeda** — Pasal 6 menulis *"tidak memiliki **bukti** kepemilikan"*,
+> Pasal 7 menulis *"tidak mempunyai **dokumen** kepemilikan"*.
+
+**Aturan yang direkomendasikan** (sebagian kini berdasar [F]) [O]:
+
+1. Uji ambang **pada `nilai_perolehan_per_nup`** — inilah satuan yang benar
+   menurut teks. **[F]**
+2. `total_nilai_paket` **tetap dihitung dan ditampilkan** sebagai informasi,
+   **tetapi tidak lagi dipakai sebagai penguji ambang A** — dasar "salah satu
+   lewat → Pengelola" gugur karena teks tegas per unit/satuan. Menahannya
+   sebagai penguji akan salah merutekan paket berisi banyak barang murah.
+3. Nilai **tepat Rp100.000.000,00** → **tetap "perlu penentuan manual"**.
+   Alasannya berubah: dulu karena operatornya tidak diketahui, kini karena
+   kedua operator **terbukti bertumpang tindih**. **[F]**
+4. Simpan angka sebagai **parameter konfigurasi** dengan
+   `status_verifikasi = TERVERIFIKASI`, `dasar_hukum = "PMK 40/2024 Pasal 6
+   ayat (3) huruf b angka 2 / Pasal 7 ayat (3) huruf a"`.
+5. Angka jenjang B/C **tetap dilarang jadi hard block** — statusnya justru
+   memburuk, lihat catatan di bawah.
 6. **Pisahkan paket pengajuan** per kategori objek (tanah/bangunan vs selain)
    agar tidak salah alamat kantor. [O]
 
-**Catatan tambahan dari pemeriksa:**
+**Catatan yang statusnya berubah setelah teks primer terbaca:**
 
-- Angka jenjang di atas berasal dari rumpun cuplikan era PMK 246/2014 dan
-  dikaitkan ke **KMK 229/KM.6/2016**. Pelimpahan kewenangan di DJKN lazimnya
-  diatur **KMK pelimpahan wewenang**, bukan PMK tata cara — menautkan angka
-  ini ke "PMK 40/2024" berpotensi menunjuk instrumen yang salah. Prioritas:
-  cari **KMK pelimpahan wewenang DJKN yang berlaku 2024–2026**.
-- Tangga 10/50/100 M juga **bertabrakan** dengan tangga rezim lain yang sudah
-  tercatat di `docs/PUSTAKA-REGULASI-BMN.md` (pemindahtanganan: ≤10 M
-  Pengelola, >10–100 M Presiden, >100 M DPR) — tanda angka ini mengambang
-  antar rezim.
-- **PMK 4/PMK.06/2015** (pendelegasian kewenangan Pengelola→Pengguna) dipakai
-  banyak sumber sebagai dasar ambang Rp100 juta dan dasar penandatanganan SK
-  PSP mandiri. **Status keberlakuannya pasca PMK 40/2024 dan pasca PP 28/2020
-  tidak diketahui.** Aturan yang keberlakuannya tidak diketahui **tidak boleh
-  menjadi dasar rancangan**. Tambahan temuan silang: pustaka repo mencatat
-  PMK 4/2015 dengan **kualifikasi yang identik kata per kata** tetapi untuk
-  kewenangan **penjualan/hibah** (rezim Pemindahtanganan) — jadi entah angka
-  itu berpindah lintas rezim, atau PMK tersebut mendelegasikan keduanya.
-  Harus dibaca butir demi butir. [S/X]
+- **[F] Tangga nilai kantor DJKN TIDAK ADA di PMK 40/2024.** Satu-satunya
+  nominal rupiah dalam seluruh PMK 40/2024 adalah Rp100.000.000,00 — tidak
+  ada Rp5 M, Rp10 M, Rp25 M, Rp50 M, maupun Rp100 M. Ini **memperkuat**
+  dugaan lama bahwa tangga itu milik **KMK pelimpahan wewenang**, bukan PMK
+  tata cara. **[F] Pasal 6 ayat (7)** justru menyerahkannya keluar:
+
+  > "Pelimpahan kewenangan sebagaimana dimaksud pada ayat (5) dilaksanakan
+  > sesuai dengan ketentuan peraturan perundang -undangan yang mengatur
+  > pelimpahan kewenangan Menteri Keuangan dalam bentuk mandat kepada pejabat
+  > struktural di lingkungan Kementerian Keuangan."
+
+  **[X] Nomor peraturan yang dituju tidak disebutkan** — tanpa nomor, tanpa
+  tahun, tanpa judul. Jadi **KMK pelimpahan wewenang DJKN 2024–2026 tetap
+  menjadi prioritas verifikasi** (§7.2).
+- **[F] Yang diatur PMK 40/2024 adalah pelimpahan internal, bukan tangga
+  nilai.** Pasal 6 ayat (5): kewenangan Pengelola Barang dilimpahkan kepada
+  **Direktur Jenderal** (subdelegasi) dan **pejabat struktural di lingkungan
+  Direktorat Jenderal** (mandat). Singkatan **"DJKN" tidak pernah muncul**;
+  yang dipakai istilah berdefinisi "Direktorat Jenderal" (**Pasal 1 angka
+  10–11**).
+- **[F] KPKNL dan Kanwil DJKN hanya muncul di SATU tempat**, yaitu **BAB X**
+  (penyelesaian BMN yang tercatat pada 2 K/L atau lebih, **Pasal 66–72**) —
+  **bukan** pada proses PSP, penggunaan sementara, penggunaan bersama,
+  dioperasikan pihak lain, atau alih status. Jenjang di BAB X pun ditentukan
+  **tingkat keberatan**, bukan nilai: Kepala KPKNL → Kepala Kanwil (keberatan
+  ≤ **60 hari kalender**, Pasal 69 ayat (3)) → Direktur Jenderal (keberatan
+  ≤ **90 hari kalender**, Pasal 70 ayat (4)).
+- **[X] PMK 4/PMK.06/2015 sama sekali tidak disebut** — tidak di konsiderans
+  Mengingat, tidak di batang tubuh, tidak di Ketentuan Peralihan (Pasal 76),
+  dan **tidak di ketentuan pencabutan (Pasal 77)** PMK 40/2024; juga nihil di
+  PMK 53/2023. Angka "2015" tidak muncul sekali pun di kedua berkas
+  (diverifikasi setelah normalisasi spasi). **Artinya PMK 40/2024 tidak
+  mencabutnya, tetapi juga tidak meneguhkannya** — status keberlakuannya
+  **tetap tidak diketahui** dan **tetap tidak boleh menjadi dasar
+  rancangan**. Yang berubah: kini kita tahu ambang Rp100 juta **tidak
+  bergantung** pada PMK 4/2015, karena ia ada langsung di PMK 40/2024.
 
 ### 2.4 Kantor tujuan untuk OIKN
 
@@ -306,19 +448,42 @@ disiapkan → alur & tenggat → dokumen hasil.
 
 | Aturan | Peran | Status |
 |---|---|---|
-| **PMK 40 Tahun 2024** tentang Tata Cara Penggunaan BMN | Aturan inti yang diduga berlaku | [S] — teks asli tidak terbaca; nomor pasal **tidak dicantumkan** (lihat §7.3) |
-| PP 27/2014 jo. PP 28/2020 | Payung; PMK 40/2024 disebut sebagai pelaksanaannya | [S] — nomor pasal delegasi **dihapus** (hipotesis bersaing: Pasal 25 vs Pasal 26) |
-| PMK 246/PMK.06/2014 jo. 87/2016 jo. 76/2019 | **Diduga dicabut** | [S] — hanya relevan sebagai rujukan historis, karena banyak template surat & checklist KPKNL yang beredar masih menyebut "Lampiran I B / II B PMK 246" |
-| PMK 4/PMK.06/2015 | Diduga dasar delegasi PSP mandiri ≤Rp100 juta | [S] — **status keberlakuan tidak diketahui**, jangan dijadikan dasar |
-| PMK 53 Tahun 2023 (BMN & ADP di IKN) | Lex specialis IKN | [S] — hubungan dengan PMK 40/2024 belum dikonfirmasi |
-| KMK 229/KM.6/2016 | Diduga sumber jenjang KPKNL/Kanwil/Pusat | [S·1] — kemungkinan besar sudah diperbarui |
-| KMK 601/KM.1/2020 | Dikutip standar pelayanan sebagai dasar SLA 5 hari kerja | [S·1] — **janji layanan, bukan norma PMK** |
-| PMK 118 Tahun 2023 (SIMAN) | Kanal elektronik | [S] — **waspadai tabrakan nomor** dengan PMK 118/PMK.06/2017 yang sudah dirujuk di `frontend/src/pages/PenilaianPage.jsx` |
+| **PMK 40 Tahun 2024** tentang Tata Cara Penggunaan BMN | **Aturan inti** | **[F]** — 50 hlm, 78 pasal, 14 BAB, dibaca lengkap. PSP diatur **BAB III, Pasal 9–18** (hlm 8–14) |
+| PP 27/2014 jo. PP 28/2020 | Payung | [S] — **teks PP tidak dibaca**; nomor pasal delegasi tetap **dihapus**. PMK 40/2024 menyebut PP 28/2020 di konsiderans Menimbang, tetapi konsiderans bukan pemetaan pasal |
+| PMK 246/PMK.06/2014 jo. 87/2016 jo. 76/2019 | **DICABUT** | **[F] Pasal 77** — ketiganya *"dicabut dan dinyatakan tidak berlaku"*. Tetap relevan historis: **format lampirannya masih berlaku sementara**, lihat baris berikut |
+| Lampiran PMK 246/2014 (format surat keterangan & SPTJ) | **Masih berlaku sementara** | **[F] Pasal 76 huruf e** — berlaku *"sampai dengan ditetapkannya ketentuan teknis sebagaimana dimaksud dalam Pasal 75"*. Jadi batang tubuhnya dicabut, formatnya dipertahankan |
+| PMK 4/PMK.06/2015 | Diduga dasar delegasi PSP mandiri | **[X]** — **tidak disebut sama sekali** di kedua PMK. Tidak dicabut, tidak diteguhkan. **Status keberlakuan tetap tidak diketahui**; jangan dijadikan dasar. Ambang Rp100 juta **tidak lagi bergantung padanya** (§2.3) |
+| PMK 53 Tahun 2023 (BMN & ADP di IKN) | **Lex specialis IKN** | **[F]** — dibaca lengkap (28 hlm, 69 pasal). **Tidak dicabut** PMK 40/2024. PSP di IKN **menyimpangi** (Pasal 17); tata caranya kembali ke aturan umum (Pasal 17 ayat (6)). Lihat **§4A** |
+| Ketentuan teknis oleh **Direktur Jenderal a.n. Menteri Keuangan** | Rincian pelaksana seluruh rezim | **[F] Pasal 75 ayat (1)–(2)** dan **Pasal 12** (format surat). **[X] belum terbit/belum dibaca** — inilah lapisan yang kemungkinan memuat checklist & format resmi |
+| KMK pelimpahan wewenang DJKN | Jenjang KPKNL/Kanwil/Pusat | **[X]** — **[F] Pasal 6 ayat (7)** menunjuknya secara generik **tanpa nomor**. Prioritas verifikasi (§7.2) |
+| KMK 601/KM.1/2020 | Dikutip standar pelayanan sebagai dasar SLA 5 hari kerja | [S·1] — **janji layanan, bukan norma PMK**. PMK 40/2024 **tidak memuat SLA apa pun** bagi Pengelola Barang (§3.1.7) |
+| PMK 118 Tahun 2023 (SIMAN) | Kanal elektronik | [S] — **waspadai tabrakan nomor** dengan PMK 118/PMK.06/2017 yang sudah dirujuk di `frontend/src/pages/PenilaianPage.jsx`. **[F] Pasal 73 ayat (2) huruf a** merujuknya secara generik: *"Peraturan Menteri Keuangan mengenai pedoman pengelolaan BMN dengan menggunakan sistem informasi"* — **tanpa nomor** |
 
-**Ketentuan Peralihan PMK 40/2024 sama sekali belum diperiksa** [X]. PMK
-pengganti hampir selalu memuat pasal peralihan (permohonan yang sudah
-diajukan sebelum PMK baru tetap diproses dengan aturan lama). Untuk AMAN yang
-akan punya tiket berjalan, ini lubang operasional nyata.
+**[F] Ketentuan Peralihan kini terbaca — dan jawabannya berlawanan dengan
+dugaan lama.** Dugaan riset awal adalah "permohonan yang sudah diajukan
+sebelum PMK baru tetap diproses dengan aturan lama". **Yang benar sebaliknya**
+(**Pasal 76 huruf a**, hlm 48):
+
+> "a. permohonan penetapan status Penggunaan BMN, persetujuan Penggunaan
+> sementara, persetujuan pengalihan status Penggunaan, dan penetapan status
+> Penggunaan BMN untuk dioperasikan oleh Pihak Lain yang telah diajukan oleh
+> Pengguna Barang kepada Pengelola Barang dan **belum memperoleh persetujuan**
+> Pengelola Barang, **diproses sesuai dengan  ketentuan dalam Peraturan
+> Menteri ini**;"
+
+*(spasi ganda pada "dengan  ketentuan" adalah cacat ekstraksi, dikutip apa
+adanya)*
+
+Pembagiannya tegas: **proses yang belum selesai → aturan BARU**; **produk
+hukum yang sudah terbit → tetap sah** (huruf b); **pengoperasian oleh Pihak
+Lain yang sudah disetujui → berlaku sampai perjanjiannya berakhir** (huruf d);
+**BMN lama yang belum ber-PSP → wajib dimohonkan menurut aturan baru, tanpa
+batas waktu yang disebut** (huruf c).
+
+> **Akibat untuk AMAN:** tiket yang sedang berjalan **tidak** boleh
+> diperlakukan dengan checklist lama. Bila sebuah tiket diajukan sebelum PMK
+> 40/2024 berlaku dan belum disetujui, **aturan yang mengikatnya adalah PMK
+> 40/2024**. [O]
 
 #### 3.1.2 Pemohon & tujuan surat
 
@@ -359,36 +524,63 @@ akan punya tiket berjalan, ini lubang operasional nyata.
 
 #### 3.1.4 Daftar lampiran — checklist KONDISIONAL (bukan 9 wajib)
 
-Riset awal mengusulkan "9 slot unggah **wajib**" sebagai gate sebelum tombol
-kirim aktif. **Pemeriksa membatalkan usulan itu** karena bertentangan dengan
-temuan lain di riset yang sama:
+**[F] Struktur bercabang kini TERBUKTI — dan pemeriksa terbukti benar.**
+PMK 40/2024 **Pasal 11 ayat (2)** (hlm 9–10) menyusun daftar dokumen
+**per jenis objek** (huruf a–g), bukan sebagai sembilan slot seragam. Riset
+awal mengusulkan "9 slot unggah **wajib**" sebagai gate; pemeriksa
+membatalkannya; teks primer membenarkan pembatalan itu.
 
-- Item **"fotokopi dokumen kepemilikan"** mustahil wajib untuk BMN yang
-  justru **didefinisikan** sebagai "tidak mempunyai dokumen kepemilikan" —
-  itulah seluruh dasar ambang Rp100 juta.
-- Item **KIB** dikecualikan sendiri ("kecuali BMN yang tidak diwajibkan
-  dibuatkan KIB").
-- Sumber daftar 9 butir adalah **dokumen Scribd anonim** — unggahan pengguna,
-  bukan sumber yang layak menjadi gate wajib di aplikasi pemerintah.
-  **[S·lemah]**
+**[F] Daftar resmi menurut Pasal 11 ayat (2)** — perhatikan bahwa PMK memecah
+tanah/bangunan menjadi **tiga** keranjang terpisah, bukan satu:
 
-Karena itu daftar berikut disusun **bercabang**:
+| Huruf | Objek | Dokumen yang diminta |
+|---|---|---|
+| a | **Tanah** | fotokopi dokumen kepemilikan berupa **sertipikat** (satu dokumen saja) |
+| b | **Bangunan** | (1) fotokopi **IMB atau PBG**; (2) fotokopi dokumen perolehan; (3) fotokopi dokumen lain, termasuk BAST perolehan barang |
+| c | **Tanah dan bangunan** | (1) sertipikat; (2) IMB/PBG; (3) dokumen perolehan bangunan; (4) dokumen lain termasuk BAST |
+| d | **Selain tanah/bangunan** | **punya** dokumen kepemilikan → fotokopi dokumen kepemilikan (BPKB, bukti pemilikan pesawat/kapal, atau setara) + dokumen lain (STNK/BAST). **Tidak punya**, nilai ≥Rp100 jt/unit → fotokopi **BAST** perolehan + dokumen lain |
+| e | **BMN untuk PMPP** | 7 dokumen (DIPA/RKA-K/L/KAK/POK; hasil reviu/audit APIP atau BPK; sertipikat; IMB/PBG; dokumen perolehan bangunan; BAST; BAST pengelolaan sementara bila fisik sudah tidak dikuasai) |
+| g | **Semua fotokopi** | wajib disertai **surat keterangan dari pejabat struktural** yang menyatakan kebenaran fotokopi |
 
-| # | Lampiran | Sifat | Pemicu / kondisi |
+> **[F] Catatan penamaan yang penting untuk form AMAN:** PMK **tidak**
+> mengenal keranjang lampiran "tanah dan/atau bangunan". Frasa *"tanah
+> dan/atau bangunan"* hanya dipakai untuk menyebut **objek kewenangan**
+> (Pasal 6, Pasal 7). Untuk **lampiran**, huruf c berbunyi *"tanah **dan**
+> bangunan"* (konjungtif). Form harus punya **tiga cabang terpisah**.
+
+Ketiga keberatan pemeriksa atas "9 slot wajib" **tetap berlaku dan kini
+berdasar teks**:
+
+- Item **"fotokopi dokumen kepemilikan"** memang **tidak** wajib untuk BMN
+  yang tidak punya dokumen kepemilikan — Pasal 11 ayat (2) huruf d angka 2
+  justru menggantinya dengan BAST, dan **Pasal 11 ayat (5)–(6)** menggantinya
+  lagi dengan SPTJ bila BAST pun tidak ada.
+- Item **KIB** **[X] tidak disebut sama sekali** dalam Pasal 11 — kata "KIB"
+  maupun "Kartu Identitas Barang" nihil di seluruh PMK 40/2024. KIB tetap
+  praktik penatausahaan, **bukan** lampiran yang diwajibkan pasal ini.
+- Sumber daftar 9 butir tetap **dokumen Scribd anonim [S·lemah]** dan kini
+  jelas **tidak berpadanan** dengan struktur Pasal 11.
+
+Daftar kerja berikut disusun **bercabang**, memadukan yang wajib menurut
+pasal (**[F]**) dengan yang sekadar anjuran praktik (**[S]/[O]**):
+
+| # | Lampiran | Sifat | Dasar / pemicu |
 |---|---|---|---|
-| 1 | Surat permohonan (asli) | **Wajib inti** | selalu |
-| 2 | Daftar/rincian BMN | **Wajib inti** | selalu |
-| 3 | Surat Pernyataan Tanggung Jawab (bermeterai) | **Wajib inti** | selalu |
-| 4 | Fotokopi dokumen kepemilikan | Wajib-bersyarat | hanya bila objek **punya** dokumen kepemilikan |
-| 5 | Surat Keterangan Kebenaran Fotokopi | Wajib-bersyarat | bila ada lampiran berupa fotokopi |
-| 6 | KIB | Wajib-bersyarat | untuk jenis BMN yang diwajibkan ber-KIB (tanah; gedung & bangunan; alat angkutan bermotor; alat besar — daftar 6 jenis KIB resmi ada di pustaka repo). **Harus ditandatangani Kepala Satker** [S] |
-| 7 | Foto BMN | Wajib-bersyarat/dianjurkan | dianjurkan selalu — Pengelola dapat melakukan **pengecekan lapangan** [S] |
-| 8 | Dasar pendelegasian kewenangan penandatangan | Wajib-bersyarat | bila surat tidak ditandatangani Pengguna Barang sendiri |
-| 9 | Laporan kondisi barang dari SIMAK-BMN/SAKTI | Wajib-bersyarat | bila tersedia dari aplikasi pencatatan |
-| 10 | Surat pernyataan pengganti (bila dokumen tidak ada) | Kondisional | lihat §4 |
-| 11 | Surat laporan kehilangan dari Kepolisian | Kondisional | bila BPKB/STNK **hilang** [S·lemah — satu blog praktisi] |
+| 1 | Surat permohonan (asli) | **Wajib inti** | **[F] Pasal 11 ayat (1)** — *"diajukan secara tertulis oleh Pengguna Barang"* |
+| 2 | Daftar/rincian BMN | **Wajib inti** | [O] — PMK tidak menyebut "daftar BMN" sebagai lampiran terpisah, tetapi datanya diminta pada muatan permohonan |
+| 3 | Surat Pernyataan Tanggung Jawab (bermeterai) | **Wajib-bersyarat**, bukan wajib selalu | **[F] Pasal 11 ayat (3)–(7)** — SPTJ adalah **pengganti** dokumen yang tidak ada, **bukan** lampiran yang selalu wajib. *(koreksi terhadap baris versi lama yang menulis "wajib inti / selalu")* |
+| 4 | Fotokopi dokumen kepemilikan | Wajib-bersyarat | **[F] Pasal 11 ayat (2) huruf a–e** — hanya bila objek **punya** dokumen kepemilikan |
+| 5 | Surat Keterangan Kebenaran Fotokopi | **Wajib bila ada fotokopi** | **[F] Pasal 11 ayat (2) huruf g** |
+| 6 | KIB | Anjuran praktik | **[X]** — kata "KIB"/"Kartu Identitas Barang" **tidak ada** di PMK 40/2024. Tetap berguna, tetapi **bukan** lampiran yang diwajibkan pasal ini [S] |
+| 7 | Foto BMN | Dianjurkan | **[F] Pasal 13** memberi Pengelola wewenang **pengecekan lapangan**, sehingga foto memperlancar — tetapi foto sendiri **tidak** disebut sebagai lampiran wajib |
+| 8 | Dasar pendelegasian kewenangan penandatangan | Wajib-bersyarat | **[F] Pasal 7 ayat (6)–(7)** — pelimpahan ada, dan **penunjukan pejabatnya ditetapkan menteri/pimpinan Lembaga sendiri** |
+| 9 | Laporan kondisi barang dari SIMAK-BMN/SAKTI | Anjuran praktik | **[X]** tidak disebut di PMK 40/2024 [S] |
+| 10 | Surat pernyataan pengganti (bila dokumen tidak ada) | Kondisional | **[F] Pasal 11 ayat (3)–(7)**; lihat §4 |
+| 11 | Surat laporan kehilangan dari Kepolisian | Kondisional | **[X]** tidak disebut di PMK 40/2024 [S·lemah — satu blog praktisi] |
+| 12 | **Surat keterangan kebenaran arsip digital** | Wajib bila mengunggah pindaian | **[F] Pasal 73 ayat (1) huruf a** — lihat §5.4 |
 
-**Dokumen kepemilikan per jenis objek** [S]:
+**Dokumen kepemilikan per jenis objek** — kini **[F] Pasal 11 ayat (2)**,
+dengan catatan praktik yang tetap [S]:
 
 | Objek | Dokumen |
 |---|---|
@@ -409,17 +601,44 @@ Karena itu daftar berikut disusun **bercabang**:
 - Data pada lampiran **identik** dengan data di aplikasi pencatatan (kode
   barang, NUP, nilai, tanggal perolehan) — selisih menghambat persetujuan.
 
-**Substantif** [S]:
+**Substantif** — kini **[F]**:
 
 - BMN benar **dikuasai dan digunakan untuk penyelenggaraan tugas dan fungsi**
-  K/L pemohon.
-- Pengelola Barang berwenang meneliti: meminta keterangan/data tambahan,
-  meminta konfirmasi/klarifikasi ke instansi terkait, dan melakukan
-  **pengecekan lapangan**. Penetapan didasarkan pada hasil penelitian itu.
+  K/L pemohon. Dasarnya **Pasal 3** (hlm 3): *"Penggunaan BMN dibatasi hanya
+  untuk penyelenggaraan tugas dan fungsi Kementerian/Lembaga."* Konsekuensi
+  lanjutannya **Pasal 4**: BMN berupa tanah/bangunan yang **tidak** digunakan
+  untuk tugas & fungsi **wajib diserahkan** kepada Pengelola Barang.
+- **[F] Pasal 13**: Pengelola Barang meneliti kelengkapan & kesesuaian
+  dokumen; bila kurang dapat meminta data tambahan, konfirmasi/klarifikasi,
+  dan melakukan **pengecekan lapangan**.
+- **[F] Pasal 9 ayat (1)**: *"Objek penetapan status Penggunaan BMN meliputi
+  **seluruh BMN**."* Rumusan sapu-jagat — setiap BMN pada dasarnya wajib
+  ber-PSP kecuali masuk daftar pengecualian ayat (2).
+- **[F] Pasal 24 ayat (5)** (dan sejenisnya per rezim): **Pengguna Barang
+  bertanggung jawab penuh atas kebenaran formil dan materiil** permohonan.
+  Dipertegas **Pasal 26 ayat (4)**: penetapan Pengelola Barang **bukan**
+  pengakuan/pengesahan (*endorsement*) atas kebenaran data. → AMAN sebaiknya
+  menyimpan jejak siapa yang menyatakan kebenaran data, karena risikonya
+  tetap di sisi Pengguna Barang. [O]
 
-**Akibat hukum bila belum PSP** [S, atribusi diperbaiki]: PSP adalah gerbang
-bagi tahapan hilir. Rezim hilir **masing-masing punya PMK sendiri** dan tidak
-boleh diatribusikan ke PMK Penggunaan:
+**[F] Akibat hukum bila belum PSP.** PSP adalah gerbang bagi tahapan hilir —
+kini terbaca eksplisit di **Pasal 10** (hlm 8):
+
+> "BMN yang berada dalam penguasaan Pengguna Barang **hanya dapat diusulkan
+> untuk**: a. perencanaan kebutuhan pemeliharaan; b. Penggunaan BMN untuk
+> dioperasikan oleh Pihak Lain; c. Penggunaan sementara; d. Penggunaan
+> bersama; e. pengalihan status Penggunaan; f. pemanfaatan; atau
+> g. pemindahtanganan, **setelah memperoleh penetapan status Penggunaan**,
+> **kecuali ditetapkan lain** dalam Peraturan Menteri ini dan/atau peraturan
+> perundang-undangan."
+
+> **Perhatikan klausul pelepas *"kecuali ditetapkan lain"*.** Pasal 10
+> **bukan** blokir mutlak. Validasi keras "tanpa SK PSP, rezim 2–5 diblokir"
+> (§6.1) tetap boleh dipakai sebagai **default**, tetapi **jalur override
+> bercatat wajib disediakan** — teks sendiri mengakui ada pengecualian. [O]
+
+Rezim hilir **masing-masing punya PMK sendiri** dan tidak boleh
+diatribusikan ke PMK Penggunaan:
 
 | Tahapan hilir | Rezim/aturannya (bukan PMK 40/2024) |
 |---|---|
@@ -488,24 +707,42 @@ BANGUNAN | SELAIN_TB), `punya_dokumen_kepemilikan` (bool),
 
 **Tenggat**:
 
-| Tenggat | Angka yang beredar | Status & catatan |
+| Tenggat | Angka | Status & catatan |
 |---|---|---|
-| Pengajuan permohonan PSP | **paling lama 6 bulan sejak BMN diperoleh** | [S·1]. **Tiga keraguan yang harus diselesaikan:** (a) **subjeknya** — tenggat untuk *mengajukan permohonan* (di bawah kendali satker) atau untuk *terbitnya SK* (di luar kendali satker)? (b) **titik mulai** — "sejak BMN diperoleh" = tanggal BAST, tanggal dokumen perolehan yuridis, atau tanggal pencatatan? Untuk hibah/rampasan/tukar-menukar, tanggal yuridis bisa berbeda dari BAST fisik. (c) apakah berlaku **seragam untuk semua jenis objek** atau khusus tanah/bangunan. Angka "6 bulan" juga muncul di **tiga rezim berbeda** (PSP; penggunaan sementara bebas-persetujuan; permohonan lelang penjualan), sehingga cuplikan mudah tertukar |
-| Penerbitan SK PSP di KPKNL | **5 hari kerja** sejak surat asli diterima **dan** berkas dinyatakan lengkap | [S·1]. **Hanya untuk BMN berupa TANAH DAN/ATAU BANGUNAN**, dan berasal dari **Standar Pelayanan/janji layanan**, **bukan norma PMK**. Jangan disandingkan setara dengan tenggat normatif; jangan dipakai sebagai dasar alarm keterlambatan yang menuduh KPKNL |
-| Pelaporan SK PSP mandiri ke Pengelola | **paling lama 1 bulan** sejak ditetapkan | [S·1] — cek silang minimal satu sumber independen sebelum dijadikan tugas turunan otomatis |
-| Biaya layanan | **Rp0** | [S] |
+| Pengajuan permohonan PSP | **paling lama 6 (enam) bulan sejak BMN diperoleh** | **[F] Pasal 11 ayat (1)** — *"Permohonan penetapan status Penggunaan BMN diajukan secara tertulis oleh **Pengguna Barang** kepada Pengelola Barang dalam jangka waktu  paling lama 6 (enam) bulan **sejak BMN diperoleh**."* **Dua dari tiga keraguan lama terjawab:** (a) **subjeknya = mengajukan permohonan**, bukan terbitnya SK, dan pembebanannya pada **Pengguna Barang** (bukan KPB); (c) berlaku **seragam untuk semua jenis objek** — pasal tidak membedakan. **(b) titik mulai TETAP [X]**: PMK menulis *"sejak BMN diperoleh"* tanpa mendefinisikan "diperoleh" (BAST? dokumen yuridis? pencatatan?) |
+| Pengajuan PSP oleh **Kuasa Pengguna Barang** ke Pengguna Barang (jalur mandiri) | — | **[X] TIDAK ADA TENGGAT.** **Pasal 17 ayat (2) huruf a** hanya mewajibkan permohonan tertulis + lampiran, tanpa batas waktu. **Jangan mengasumsikan 6 bulan berlaku di sini** — tenggat Pasal 11 ayat (1) secara tekstual hanya mengikat permohonan Pengguna Barang ke Pengelola Barang. Celah ini ditutup **Pasal 18**, yang menyerahkan tata caranya kepada Pengguna Barang sendiri |
+| Penerbitan SK PSP di KPKNL | **5 hari kerja** | [S·1] **TETAP bukan norma PMK.** Diperkuat temuan baru: **[F] PMK 40/2024 tidak memuat SATU PUN tenggat bagi Pengelola Barang** — Pasal 13, 14, 25, 26, 35, 36, 47, 48, 51, 52, 55, 56, 67, 68 semuanya tanpa batas waktu. Seluruh tenggat dalam PMK dibebankan kepada Pengguna Barang/KPB/K-L. Jangan dipakai sebagai dasar alarm yang menuduh KPKNL |
+| Pelaporan SK PSP mandiri ke Pengelola | **paling lama 1 (satu) bulan sejak ditetapkan** | **[F] Pasal 17 ayat (4)** — titik hitungnya **sejak keputusan DITETAPKAN**, bukan sejak BMN diperoleh dan bukan sejak didaftarkan. **[X] tidak ada sanksi** atas keterlambatan yang disebut di PMK |
+| Biaya layanan | **Rp0** | [S] — tidak diatur PMK 40/2024 |
 
-**Rekomendasi implementasi tenggat** [O]: jangan hardcode satu basis hitung.
-Sediakan `tanggal_perolehan_yuridis` terpisah dari `tanggal_bast`, tampilkan
-hitung mundur sebagai **estimasi berlabel "indikatif"**, dan **jangan**
-menyalakan penanda "TERLAMBAT" sebelum subjek & titik mulai tenggat
-dikonfirmasi dari teks asli.
+> **[F] Satuan waktu yang dipakai PMK 40/2024 hanya BULAN, TAHUN, dan HARI
+> KALENDER.** Frasa **"hari kerja" nol kemunculan** di seluruh berkas; "hari
+> kalender" hanya dua kali (Pasal 69 ayat (3) dan Pasal 70 ayat (4)).
+> **Sistem yang mengonversi tenggat PMK ke "hari kerja" akan menyimpang dari
+> teks.** [O]
 
-**Objek yang diduga dikecualikan dari PSP** [S, padanan di PMK 40/2024 belum
-terkonfirmasi]: barang persediaan; Konstruksi Dalam Pengerjaan (KDP); barang
-yang sejak awal direncanakan untuk dihibahkan; barang dari dana dekonsentrasi
-& dana penunjang tugas pembantuan yang direncanakan diserahkan; BPYBDS; Aset
-Tetap Renovasi (ATR).
+**Rekomendasi implementasi tenggat** [O]: **tetap** jangan hardcode satu basis
+hitung. Yang berubah: subjek tenggat kini pasti (**pengajuan**, oleh
+**Pengguna Barang**), sehingga penanda "TERLAMBAT" **boleh** dinyalakan untuk
+keterlambatan *pengajuan* — **tetapi** karena definisi "diperoleh" tetap [X],
+sediakan `tanggal_perolehan_yuridis` terpisah dari `tanggal_bast`, tampilkan
+keduanya, dan beri label **"basis hitung belum terverifikasi"**.
+
+**[F] Objek yang DIKECUALIKAN dari PSP — Pasal 9 ayat (2)** (hlm 8), tujuh
+butir, dikutip lengkap:
+
+> "a. barang persediaan; b. konstruksi dalam pengerjaan; c. barang yang dari
+> awal pengadaannya direncanakan untuk dihibahkan; d. barang yang berasal dari
+> dana dekonsentrasi dan dana penunjang tugas pembantuan, yang direncanakan
+> untuk diserahkan; e. **bantuan pemerintah yang belum ditetapkan statusnya**;
+> f. aset tetap renovasi; dan g. **BMN lain sesuai dengan ketentuan peraturan
+> perundang-undangan**."
+
+> **Dua perubahan terhadap daftar lama.** (1) Istilah **"BPYBDS"** yang
+> dipakai versi lama **tidak muncul** di PMK 40/2024; padanan yang benar
+> adalah **"bantuan pemerintah yang belum ditetapkan statusnya"** (huruf e).
+> (2) **Huruf g membuka daftar ini kembali** — daftarnya **tidak tertutup**,
+> sehingga **tidak boleh di-hardcode sebagai enum tertutup** di AMAN. [O]
 
 > **Koreksi arah risiko:** riset awal menyarankan daftar ini dipakai sebagai
 > **filter** agar daftar "BMN belum PSP" tidak menampilkan false positive.
@@ -518,17 +755,25 @@ Tetap Renovasi (ATR).
 
 #### 3.1.8 Dokumen hasil
 
-- **Keputusan (SK) PSP** — memuat set kolom BMN yang sama dengan lampiran
-  permohonan. [S]
-- Penerbit: Kepala KPKNL / Kepala Kanwil DJKN / pejabat Kantor Pusat DJKN
-  sesuai jenjang **atau** Keputusan Pengguna Barang (jalur delegasi). [S,
-  jenjang ragu]
-- **Jalur PSP tanpa didahului permohonan**: Pengelola Barang dapat menetapkan
-  status penggunaan tanpa usulan Pengguna Barang, antara lain untuk
-  melengkapi bukti kepemilikan atas BMN yang menjadi objek sengketa di
-  pengadilan, sengketa pertanahan di BPN, atau penetapan BMN dari perolehan
-  lain yang sah. **[S·1 — dan cuplikan yang sama sempat dipakai untuk tiga
-  norma berbeda, jadi perlakukan sebagai indikasi kasar]**
+- **[F] Keputusan (SK) PSP** — **Pasal 14 ayat (2)**: penetapan dilakukan
+  *"melalui keputusan Pengelola Barang"*, dengan **4 muatan minimal**
+  (ayat (3)): pertimbangan penetapan; BMN yang ditetapkan statusnya;
+  informasi Pengguna Barang; dan tindak lanjut penetapan. Penolakan
+  diberitahukan tertulis disertai alasan.
+- **[F] Kewajiban lanjutan — Pasal 15**: Pengguna Barang **mendaftarkan BMN
+  ke dalam Daftar Barang** berdasarkan keputusan PSP. → AMAN harus melacak
+  langkah ini sebagai tugas turunan, bukan menganggap siklus selesai saat SK
+  terbit. [O]
+- Penerbit: **[F]** Pengelola Barang (Menteri Keuangan, dengan pelimpahan ke
+  Direktur Jenderal/pejabat struktural — Pasal 6 ayat (5)) **atau** Keputusan
+  Pengguna Barang untuk objek Pasal 7 ayat (3). **Jenjang KPKNL/Kanwil/Pusat
+  tetap [S]** — tidak diatur PMK 40/2024 (§2.3).
+- **[F] Jalur PSP tanpa didahului permohonan — Pasal 16 ayat (2)**, tujuh
+  kondisi tertentu: melengkapi bukti kepemilikan atas BMN yang menjadi objek
+  **sengketa di Pengadilan**; sengketa pertanahan di **BPN**; perolehan lain
+  yang sah; hasil alih status; BMN untuk **PMPP**; tindak lanjut rekomendasi
+  penyelesaian BMN yang tercatat ganda; dan **optimalisasi Penggunaan BMN**.
+  Dugaan lama benar arahnya, tetapi daftarnya ternyata **lebih luas**.
 
 ---
 
@@ -536,15 +781,29 @@ Tetap Renovasi (ATR).
 
 #### 3.2.1 Dasar hukum
 
-- **PMK 40 Tahun 2024**, bab Penggunaan Sementara. [S] — **seluruh nomor
-  pasal dihapus** (riset sempat memetakan Pasal 32–40, tetapi pemetaannya
-  tidak konsisten: satu nomor dipakai untuk dua materi berbeda, dan pola
-  "Pasal X/Y" menandakan nomor ditebak dari kedekatan).
-- **PP 27/2014 jo. PP 28/2020**, bagian Penggunaan. [S] — nomor pasal
-  **dihapus** (hipotesis bersaing Pasal 26 vs 27).
-- PP 28/2020 disebut **menambahkan Pengelola Barang** sebagai subjek yang
-  BMN-nya dapat digunakan sementara — inilah dasar adanya jalur "penetapan"
-  (bukan "persetujuan"). [S·1 — halaman sumber tidak pernah terbaca].
+- **[F] PMK 40 Tahun 2024 BAB V, Pasal 32–39** (hlm 26–30). Pemetaan lama
+  "Pasal 32–40" **hampir benar tetapi meleset satu pasal**: BAB V berakhir di
+  **Pasal 39**; Pasal 40 sudah masuk BAB VI (Penggunaan Bersama). Struktur
+  BAB V: Umum (32) → Jangka Waktu (33) → Tata Cara: Permohonan (34),
+  Penelitian (35), Persetujuan (36), Perjanjian (37), Perpanjangan (38),
+  Berakhirnya (39).
+- **PP 27/2014 jo. PP 28/2020**, bagian Penggunaan. [S] — **teks PP tetap
+  tidak dibaca**; nomor pasal tetap **dihapus**.
+- **[F] Jalur "penetapan" (bukan "persetujuan") MEMANG ADA** — dan tidak perlu
+  bersandar pada klaim tentang PP 28/2020. **Pasal 32 ayat (3)** menyebutnya
+  langsung:
+
+  > "Penggunaan sementara BMN dilakukan setelah mendapat: a. **persetujuan**
+  > Pengelola Barang, untuk BMN yang berada pada **Pengguna Barang**; atau
+  > b. **penetapan** Pengelola Barang, untuk BMN yang berada pada **Pengelola
+  > Barang**."
+
+  **[F] Pasal 32 ayat (2)** membatasi jalur kedua pada dua keperluan saja:
+  **optimalisasi Penggunaan BMN**, atau **tindak lanjut rekomendasi
+  penyelesaian** BMN yang tercatat pada 2 K/L atau lebih.
+- **[X] Tidak ada definisi formal "Penggunaan sementara"** di Pasal 1
+  (Ketentuan Umum). Yang didefinisikan hanya "Penggunaan" (angka 9). Definisi
+  operasionalnya ditarik dari norma **Pasal 32 ayat (1)**.
 
 #### 3.2.2 Pemohon & tujuan surat
 
@@ -576,11 +835,18 @@ Tetap Renovasi (ATR).
 
 #### 3.2.4 Daftar lampiran
 
-**Menurut cuplikan teks PMK — hanya 2 dokumen** (jauh lebih ringan daripada
-PSP) [S]:
+**[F] Menurut PMK — hanya 2 dokumen** (jauh lebih ringan daripada PSP).
+**Pasal 34 ayat (3)** (hlm 28), verbatim:
 
-1. **Fotokopi Keputusan PSP** atas BMN bersangkutan;
-2. **Fotokopi Surat Permintaan** penggunaan sementara dari pihak B.
+> "(3) Permohonan sebagaimana dimaksud pada ayat (1) harus dilengkapi
+> dokumen: a. **fotokopi keputusan penetapan status Penggunaan BMN**; dan
+> b. **fotokopi surat permintaan Penggunaan sementara BMN** dari Pengguna
+> Barang yang akan menggunakan sementara BMN kepada Pengguna Barang."
+
+**[F] Muatan minimal permohonannya — Pasal 34 ayat (2)**, empat blok: (a)
+data BMN; (b) informasi Pengguna Barang yang akan menggunakan sementara;
+(c) jangka waktu; (d) penjelasan serta pertimbangan. Permohonan diajukan
+**secara tertulis oleh Pengguna Barang** kepada Pengelola Barang (ayat (1)).
 
 **Menurut praktik lapangan (booklet/checklist KPKNL)** — lebih luas
 [S·lemah, flipbook tidak pernah terbaca; **sebagian checklist itu kemungkinan
@@ -593,44 +859,81 @@ tanah/bangunan/kendaraan.
 > karena kekurangan lampiran memicu surat permintaan kelengkapan — **tetapi
 > tandai mana yang wajib menurut aturan dan mana yang anjuran praktik.** [O]
 
-#### 3.2.5 Ambang 6 bulan — konflik rumusan yang belum selesai
+#### 3.2.5 Ambang 6 bulan — KONFLIK SELESAI
 
-| Sumber | Rumusan | Akibat pada kasus "tepat 6 bulan" |
-|---|---|---|
-| Cuplikan PP 27/2014 | *"kurang dari 6 bulan"* (<6) | tepat 6 bulan → **butuh** persetujuan |
-| Cuplikan PMK 40/2024 | *"paling lama 6 bulan"* (≤6) | tepat 6 bulan → **tidak butuh** persetujuan |
+**[F] Rumusan PMK 40/2024 adalah "paling lama" (≤6), bukan "kurang dari".**
+**Pasal 33 ayat (2)–(3)** (hlm 27), dikutip lengkap:
 
-**Dan siapa yang menyetujui pada jalur pendek pun bertentangan** [S, dua
-cuplikan saling bertolak belakang]: satu menyebut **Pengguna Barang** yang
-memberi persetujuan (kewenangan turun, tanpa ke DJKN); satu lagi menyebut
-**Pengelola Barang**.
+> "(2) Dalam hal Penggunaan sementara BMN yang berada pada Pengguna Barang
+> dilakukan untuk jangka waktu **paling lama 6 (enam) bulan**:
+> a. **tidak memerlukan persetujuan dari Pengelola Barang**; dan
+> b. pembebanan biaya pemeliharaan selama jangka waktu Penggunaan sementara
+> BMN dilakukan **sesuai dengan perjanjian antar Pengguna Barang**.
+> (3) Pelaksanaan Penggunaan sementara BMN sebagaimana dimaksud pada ayat (2)
+> **dilaporkan Pengguna Barang kepada Pengelola Barang**."
 
-**Koreksi penting dari pemeriksa — jangan menghapus kewajiban pemberitahuan.**
-Riset awal merancang jalur pendek sebagai "memotong langkah 4–6" (tanpa
-keterlibatan Pengelola sama sekali) dan menulis "jangan diasumsikan ada
-pemberitahuan". Itu **membalik beban risiko**: rumusan yang dikenal untuk
-penggunaan sementara di bawah 6 bulan adalah **tanpa persetujuan Pengelola
-TETAPI dengan kewajiban memberitahukan** kepada Pengelola Barang. Bila benar
-ada dan AMAN menghapusnya, aplikasi akan **menuntun satker melanggar**.
+Akibatnya: **tepat 6 bulan → TIDAK butuh persetujuan Pengelola.** Rumusan
+"kurang dari 6 bulan" yang beredar dari cuplikan PP **tidak berlaku sebagai
+dasar operasional** selama PMK 40/2024 yang dipakai.
+
+**[F] Siapa yang menyetujui pada jalur pendek: PENGGUNA BARANG.** Bukan
+tafsir — disebut tegas dalam daftar kewenangan **Pasal 7 ayat (2) huruf d**
+(hlm 6):
+
+> "d. memberikan persetujuan atas permohonan Penggunaan sementara BMN yang
+> berada pada Pengguna Barang untuk jangka waktu paling lama 6 (enam) bulan;"
+
+**[F] Pemeriksa terbukti BENAR soal kewajiban pemberitahuan.** Riset awal
+merancang jalur pendek sebagai "memotong langkah 4–6" tanpa keterlibatan
+Pengelola sama sekali; pemeriksa menolak dan menuntut langkah pelaporan
+dipertahankan. **Pasal 33 ayat (3) membenarkan pemeriksa**: bebas persetujuan
+**tidak** berarti bebas lapor. Bila AMAN menghapus langkah ini, aplikasi
+memang akan menuntun satker melanggar.
+
+**Yang masih terbuka:**
+
+- **[X] Tenggat pelaporan Pasal 33 ayat (3) TIDAK ADA.** Pasal mewajibkan
+  pelaporan tetapi **tanpa batas waktu** — kontras mencolok dengan pasal lain
+  yang tenggatnya eksplisit (mis. Pasal 37 ayat (4): 1 bulan sejak
+  penandatanganan perjanjian). **Jangan memindahkan tenggat 1 bulan dari
+  pasal lain ke sini.**
 
 **Rancangan yang benar** [O]:
 
-- Cantumkan langkah **"pemberitahuan tertulis ke Pengelola Barang"** sebagai
-  **langkah bersyarat berlabel "perlu verifikasi"**, bukan dihilangkan.
-- **Jangan hardcode 179 hari.** "6 bulan" dihitung secara **kalender**, bukan
-  180/179 hari (Feb–Agu vs Jul–Jan berbeda panjang). Simpan sebagai parameter
-  (`ambang_bulan = 6`, `mode_penghitungan = kalender`).
-- Kasus **tepat 6 bulan** → tampilkan banner "ambang belum diverifikasi,
-  konsultasikan ke KPKNL", jangan dirutekan otomatis ke salah satu jalur.
+- Langkah **"pelaporan tertulis ke Pengelola Barang"** kini **wajib
+  ditampilkan**, berlabel **[F] Pasal 33 ayat (3)** — bukan lagi "perlu
+  verifikasi". Tenggatnya dikosongkan (tidak ada di teks).
+- **Jangan hardcode 179 hari.** "6 bulan" dihitung secara **kalender**.
+  Simpan sebagai parameter (`ambang_bulan = 6`, `mode_penghitungan =
+  kalender`, `status_verifikasi = TERVERIFIKASI`).
+- Kasus **tepat 6 bulan** → **rutekan ke jalur bebas-persetujuan** (operator
+  "paling lama" bersifat inklusif). Banner "belum diverifikasi" **dicabut**
+  untuk kasus ini. Catatan: ini **berbeda** dari kasus ambang **Rp100 juta**
+  yang tetap "perlu penentuan manual" karena di sana dua operator saling
+  bertumpang tindih (§2.3) — di sini hanya ada satu operator.
+- **[F] Kelonggaran ≤6 bulan hanya untuk BMN yang berada pada PENGGUNA
+  BARANG.** BMN yang berada pada Pengelola Barang tetap memerlukan
+  **penetapan** Pengelola (Pasal 32 ayat (3) huruf b) tanpa pengecualian
+  6 bulan.
 
 #### 3.2.6 Jangka waktu
 
 | Objek | Jangka waktu maksimal | Status |
 |---|---|---|
-| Tanah dan/atau bangunan | **5 tahun**, dapat diperpanjang | [S·1 — satu rantai sumber; angka 5 tahun juga muncul di rezim pinjam pakai/sewa sehingga rawan tertukar] |
-| Selain tanah dan/atau bangunan | **2 tahun**, dapat diperpanjang | [S·1] |
-| Permohonan **perpanjangan** | paling lambat **1 bulan sebelum** berakhir; ketentuan permohonan/penelitian/persetujuan berlaku **mutatis mutandis** (berkas sama dengan permohonan awal) | [S·1] |
-| Jumlah maksimal perpanjangan & panjang tiap perpanjangan | **[X] tidak ada sumber sama sekali** | — |
+| Tanah dan/atau bangunan | **5 (lima) tahun**, dapat diperpanjang | **[F] Pasal 33 ayat (1) huruf a** |
+| Selain tanah dan/atau bangunan | **2 (dua) tahun**, dapat diperpanjang | **[F] Pasal 33 ayat (1) huruf b** |
+| Permohonan **perpanjangan** (jalur Pengelola Barang) | paling lambat **3 (tiga) bulan sebelum** berakhir | **[F] Pasal 38 ayat (1)** — **bukan 1 bulan**. Angka "1 bulan" yang beredar sebenarnya milik jalur Pengguna Barang (baris berikut) |
+| Permohonan perpanjangan (jalur **kewenangan Pengguna Barang**, ≤6 bulan) | paling lambat **1 (satu) bulan sebelum** berakhir, **hanya 1 (satu) kali** | **[F] Pasal 38 ayat (2)** |
+| Perpanjangan berikutnya setelah 1 kali itu | wajib lewat **persetujuan Pengelola Barang**, diajukan paling lambat **1 bulan sebelum** berakhir | **[F] Pasal 38 ayat (3)** — kewenangan **naik jenjang** |
+| Berkas perpanjangan | Pasal 34–36 berlaku **mutatis mutandis** | **[F] Pasal 38 ayat (4)** |
+| Jumlah maksimal perpanjangan (jalur Pengelola) | **[X] tidak disebut** | Hanya jalur Pengguna Barang yang dibatasi "1 kali". Ketiadaan batas pada jalur Pengelola adalah **hasil pembacaan teks, bukan izin tak terbatas** |
+| **Panjang tiap perpanjangan** | **[X] TIDAK ADA** | Pasal 38 hanya mengatur **tenggat pengajuan** dan **jumlah**, tidak satu ayat pun menyebut **durasi** perpanjangan. Jangan mengarang angka |
+
+> **Koreksi angka perpanjangan.** Versi lama menulis perpanjangan diajukan
+> "paling lambat **1 bulan sebelum** berakhir" sebagai aturan tunggal. Teks
+> primer menunjukkan ada **dua tenggat berbeda menurut jalur** — 3 bulan
+> (Pengelola) dan 1 bulan (Pengguna Barang). Memakai 1 bulan untuk jalur
+> Pengelola akan membuat pengajuan **terlambat dua bulan**.
 
 > **KOREKSI PENTING LINTAS-RISET.** Riset rezim Alih Status sempat menulis
 > bahwa penggunaan sementara sebagai jembatan sebelum alih status berjangka
@@ -642,25 +945,41 @@ ada dan AMAN menghapusnya, aplikasi akan **menuntun satker melanggar**.
 
 #### 3.2.7 Perjanjian & biaya
 
-- **Perjanjian Penggunaan Sementara** dibuat antara pihak A dan pihak B,
-  ditandatangani **paling lama 3 bulan** sejak surat persetujuan terbit.
-  **[S·1 — satu cuplikan; jangan dijadikan deadline otomatis yang memicu
-  status "terlambat", cukup pengingat lunak]**
-- **Isi minimal perjanjian** [S]: hak dan kewajiban para pihak, termasuk
-  kewajiban **pengamanan dan pemeliharaan** BMN; kewajiban pihak B
-  **menyerahkan kembali** BMN saat penggunaan sementara berakhir. Materi
-  pembahasan DJKN/Biro BMN menambahkan bahwa perjanjian ini menjadi **dasar
-  penganggaran** pengamanan/pemeliharaan oleh pihak B. [S·1]
-- **Biaya pengamanan & pemeliharaan dibebankan kepada K/L yang menggunakan
-  sementara (pihak B).** [S]
-  **Frasa "kecuali ditentukan lain dalam perjanjian" DIHAPUS** — tidak
-  didukung kutipan mana pun dan tampak ditambahkan sendiri oleh riset awal.
-  Bila norma aslinya imperatif, membuka opsi override di aplikasi bisa
-  melahirkan perjanjian yang bertentangan dengan PMK. **Default AMAN:
-  pembebanan ke pihak B, tanpa opsi override.** [O]
-- **Tidak ada sewa/kompensasi** — penggunaan sementara bukan Pemanfaatan.
-  Konsekuensi "tidak menimbulkan PNBP sewa" adalah **simpulan logis penulis
-  [O]**, bukan norma yang dikutip.
+- **[F] Perjanjian WAJIB** — **Pasal 37 ayat (1)**: *"Penggunaan sementara …
+  **dituangkan dalam perjanjian** antara Pengguna Barang dan Pengguna Barang
+  yang menggunakan sementara BMN."* Ditandatangani **paling lama 3 (tiga)
+  bulan sejak persetujuan diterbitkan** (**Pasal 37 ayat (3)**), dan
+  **dilaporkan paling lama 1 (satu) bulan sejak penandatanganan**
+  (**Pasal 37 ayat (4)**). Kedua tenggat ini kini [F] — boleh dijadikan
+  pengingat tegas, meski PMK tidak menyebut sanksi.
+- **[F] Isi minimal perjanjian — Pasal 37 ayat (2)**, enam butir: dasar
+  perjanjian; identitas para pihak; jangka waktu; rincian data objek BMN; hak
+  dan kewajiban para pihak termasuk **pengamanan dan pemeliharaan**; dan
+  kewajiban **menyerahkan BMN kepada Pengguna Barang** saat penggunaan
+  sementara berakhir.
+- **[SALAH] Frasa "kecuali ditentukan lain dalam perjanjian" TERNYATA ADA
+  dalam teks aturan.** **Pasal 32 ayat (4)** (hlm 27), verbatim:
+
+  > "Biaya pengamanan dan pemeliharaan BMN selama jangka waktu Penggunaan
+  > sementara BMN dibebankan kepada Kementerian/Lembaga yang menggunakan
+  > sementara BMN bersangkutan, **kecuali ditentukan lain dalam perjanjian**."
+
+  > **Koreksi:** versi lama dokumen ini menyatakan frasa itu **"DIHAPUS —
+  > tidak didukung kutipan mana pun dan tampak ditambahkan sendiri oleh riset
+  > awal"**, lalu menetapkan **"Default AMAN: pembebanan ke pihak B, tanpa
+  > opsi override."** **Itu keliru.** Pemeriksa membuang klausul yang benar
+  > karena mengira riset awal mengarangnya. Akibat bila diterapkan: AMAN akan
+  > **menolak perjanjian yang sah** — misalnya kesepakatan bahwa pemilik aset
+  > menanggung pemeliharaan struktural — padahal PMK justru mengizinkannya.
+  > **Rancangan yang benar:** default tetap pembebanan ke pihak B, **tetapi
+  > sediakan opsi override yang mensyaratkan rujukan ke klausul perjanjian**
+  > dan tercatat. Untuk jalur ≤6 bulan, pembebanan bahkan **sepenuhnya**
+  > mengikuti perjanjian (**[F] Pasal 33 ayat (2) huruf b**).
+- **[F] Tidak ada sewa/kompensasi pada penggunaan sementara.** Berbeda dari
+  rezim Dioperasikan Pihak Lain, BAB V **tidak memuat kata "kompensasi"
+  maupun "PNBP"** sama sekali. Simpulan "tidak menimbulkan PNBP sewa" kini
+  didukung ketiadaan norma yang menyebutnya — tetapi tetap tulis sebagai
+  **[O]**, karena ketiadaan bukan penegasan.
 
 #### 3.2.8 Alur & tenggat
 
@@ -684,25 +1003,44 @@ ada dan AMAN menghapusnya, aplikasi akan **menuntun satker melanggar**.
 > Jalur ≤6 bulan **mungkin** memotong langkah 4–6 **tetapi tetap menyisakan
 > kewajiban pemberitahuan** — lihat §3.2.5.
 
-**Isi minimal Surat Persetujuan (6 butir)** [S·lemah — bersumber booklet
-SIMAN v2 yang tidak pernah terbaca]: (a) data BMN yang disetujui; (b)
-Pengguna Barang yang akan menggunakan sementara; (c) kewajiban pihak
-pengguna sementara; (d) jangka waktu; (e) pembebanan biaya pemeliharaan;
-(f) kewajiban menindaklanjuti dengan **perjanjian**.
+**[F] Isi minimal Surat Persetujuan — Pasal 36 ayat (2)**, ternyata **5
+butir**, bukan 6: (a) data BMN; (b) informasi Pengguna Barang yang akan
+menggunakan sementara; (c) kewajiban memelihara dan mengamankan; (d) jangka
+waktu; (e) kewajiban menindaklanjuti persetujuan dengan membuat
+**perjanjian**. Bentuknya **surat persetujuan** (**Pasal 36 ayat (1)**);
+penolakan disampaikan tertulis disertai alasan (**ayat (3)**).
 
-**Tenggat pelaporan pasca-berakhir**: **paling lama 1 bulan** sejak BAST
-ditandatangani, melampirkan fotokopi BAST. **[O + RAGU]** — cuplikan yang
-terbaca secara eksplisit berbicara tentang rezim *"Penggunaan BMN untuk
-dioperasikan Pihak Lain"*, lalu dianalogikan ke penggunaan sementara. Itu
-persis **pencampuran rezim** yang harus dihindari. Tampilkan sebagai
-"pengingat praktik, dasar pasal belum terkonfirmasi", **bukan** validasi
-keras.
+> Butir "pembebanan biaya pemeliharaan" yang disebut versi lama (dari booklet
+> SIMAN) **tidak ada** dalam daftar muatan minimal Pasal 36 ayat (2) — itu
+> diatur terpisah di Pasal 32 ayat (4). Bukan salah besar, tetapi jangan
+> dicetak sebagai muatan wajib surat persetujuan.
 
-**BAST**: ada **dua** dalam satu siklus — penyerahan (awal) dan pengembalian
-(akhir). Pengguna Barang menandatangani BAST pengembalian **setelah lebih
-dahulu melakukan pengecekan** atas kondisi BMN. [S] → AMAN sebaiknya
-mewajibkan unggah foto kondisi + checklist cek fisik sebelum BAST
-pengembalian difinalkan. [O]
+**[F] Berakhirnya penggunaan sementara — Pasal 39 ayat (1)**, dua
+kemungkinan saja:
+
+> "a. **dikembalikan** kepada Pengguna Barang; atau b. **dialihkan status
+> Penggunaannya** kepada Pengguna Barang yang menggunakan sementara BMN,
+> setelah mendapat persetujuan Pengelola Barang."
+
+Ini penting untuk alur AMAN: **penggunaan sementara dapat bermuara pada alih
+status** tanpa mengembalikan barang lebih dulu — persis pola "jembatan
+transisi" yang dibahas §3.2.10, dan kini ada dasarnya.
+
+- **[X] BAST TIDAK diwajibkan pada rezim penggunaan sementara.** Frasa
+  "berita acara serah terima" **nol kemunculan** di seluruh BAB V (Pasal
+  32–39). Bandingkan: BAST eksplisit diwajibkan pada rezim Dioperasikan Pihak
+  Lain (**Pasal 31 ayat (2)**) dan Alih Status (**Pasal 57 huruf a**).
+  Klaim lama "ada **dua** BAST dalam satu siklus" **tidak berdasar teks** —
+  turunkan ke **[O] praktik yang dianjurkan**, jangan validasi keras.
+- **[X] Tenggat pelaporan pasca-berakhir tidak ada** untuk rezim ini. Angka
+  "1 bulan sejak BAST" yang beredar memang milik rezim **Dioperasikan Pihak
+  Lain** (**[F] Pasal 31 ayat (5)**) — pemeriksa benar bahwa ini
+  **pencampuran rezim**. Jangan dipindahkan ke sini.
+
+> **Rekomendasi yang tetap berlaku [O]:** meski BAST tidak diwajibkan pasal,
+> AMAN sebaiknya tetap menyediakan BAST + foto kondisi + checklist cek fisik
+> sebagai **anjuran**, karena serah terima tanpa berita acara adalah sumber
+> sengketa klasik. Yang berubah: label "wajib" → "dianjurkan".
 
 #### 3.2.9 Khusus tanah/bangunan
 
@@ -747,17 +1085,35 @@ internal satu K/L (bukan norma), dan KPKNL setempat bisa berpendapat lain.
   28/2020" sambil menyalin bunyi versi pra-2020 adalah kesalahan tersendiri.
   **Yang boleh ditulis:** *"bab Penggunaan PP 27/2014 jo. PP 28/2020"*.
   **Yang dilarang:** mencetak "Pasal 27" sebagai dasar rezim ini.
-- **PMK 40 Tahun 2024**, bab Penetapan Status Penggunaan BMN untuk
-  Dioperasikan oleh Pihak Lain. [S] — **seluruh nomor pasal dihapus**; riset
-  sempat menyusun daftar "Pasal 11/15/21–23/24/25/26" yang **tumpang tindih
-  secara semantik** (21–23 diklaim mencakup "permohonan/penelitian", lalu 24
-  mengulang "permohonan" dan 25 mengulang "penelitian") — ciri khas nomor
-  yang dikarang lalu diberi label fungsi berurutan.
-- Aturan pendamping yang **nomor dan keberlakuannya belum diverifikasi**, dan
-  karena itu **tidak boleh masuk bagian "Mengingat" surat**: PMK Pemanfaatan
-  (klaim 115/PMK.06/2020), Penatausahaan (klaim 181/PMK.06/2016), Wasdal
-  (klaim 207/PMK.06/2021), Asuransi BMN (klaim 97/PMK.06/2019), juknis SIMAN
-  v2 (klaim KMK 248 Tahun 2024). [S·lemah/X]
+- **[F] PMK 40 Tahun 2024 BAB IV, Pasal 19–31** (hlm 14–26), berjudul
+  *"PENETAPAN STATUS PENGGUNAAN BARANG MILIK NEGARA UNTUK DIOPERASIKAN OLEH
+  PIHAK LAIN"*. Strukturnya: Umum (19–21) → Pihak Lain yang Dapat
+  Mengoperasikan (22) → Jangka Waktu (23) → Tata Cara: Permohonan (24),
+  Penelitian (25), Penetapan (26), Perpanjangan (27) → Perjanjian (28–29) →
+  Berakhirnya (30–31).
+  > Daftar lama "Pasal 11/15/21–23/24/25/26" memang keliru; yang benar
+  > 19–31. Kecurigaan pemeriksa atas tumpang tindih semantik terbukti tepat.
+- **[F] Syarat pokok — Pasal 19 ayat (1)**: BMN harus **sudah ber-PSP**, lalu
+  memerlukan **penetapan dari Pengelola Barang**. Empat tujuan yang
+  dibolehkan (**ayat (2)**): pelayanan umum sesuai tusi K/L; urusan
+  pemerintahan; fungsi pendidikan tinggi / litbang / diklat / religi dan
+  budaya; dan mendukung pelaksanaan **penyertaan modal pemerintah pusat**.
+- Aturan pendamping yang **nomor dan keberlakuannya tetap belum
+  diverifikasi**, dan karena itu **tetap tidak boleh masuk bagian "Mengingat"
+  surat**: PMK Pemanfaatan (klaim 115/PMK.06/2020), Penatausahaan (klaim
+  181/PMK.06/2016), Wasdal (klaim 207/PMK.06/2021), Asuransi BMN (klaim
+  97/PMK.06/2019), juknis SIMAN v2 (klaim KMK 248 Tahun 2024). [S·lemah/X]
+  > **[F] PMK 40/2024 sendiri merujuk aturan-aturan itu secara GENERIK tanpa
+  > nomor** — mis. Pasal 62 (*"peraturan perundang-undangan di bidang
+  > penatausahaan BMN"*), Pasal 63 (wasdal), Pasal 21 ayat (4) (pemanfaatan),
+  > Pasal 73 ayat (2) (sistem informasi). Jadi teks primer **tidak membantu**
+  > memastikan nomor-nomor itu; status [X]-nya bertahan.
+- **[F] Satu cacat rujukan silang dalam naskah asli** yang perlu diketahui
+  agar tidak membingungkan pembaca: **Pasal 22 ayat (1)** berbunyi *"Pihak
+  Lain yang dapat mengoperasikan BMN sebagaimana dimaksud dalam **Pasal 20
+  ayat (1)**…"*, padahal Pasal 20 ayat (1) berisi prinsip non-PNBP; norma
+  pengoperasiannya ada di **Pasal 19 ayat (1)**. Dikutip apa adanya;
+  kemungkinan salah rujuk pada naskah asli.
 
 #### 3.3.2 Pemohon & tujuan surat
 
@@ -779,47 +1135,101 @@ internal satu K/L (bukan norma), dan KPKNL setempat bisa berpendapat lain.
 | Mitra | badan/lembaga tertentu yang dibatasi peraturan | badan usaha/pihak ketiga/Pemda |
 | Dokumen hasil | **Keputusan Pengelola Barang** | persetujuan pemanfaatan + perjanjian sewa/KSP dll. |
 
-> **Kontradiksi yang belum selesai — jangan dijadikan dasar desain PNBP.**
-> Riset menyajikan tiga klaim yang **tidak koheren satu sama lain**: (a)
-> rezim ini "tanpa sewa/kontribusi/pembagian keuntungan"; (b) bila Pihak Lain
-> memperoleh **keuntungan**, keuntungan itu **disetor seluruhnya** ke Rekening
-> Kas Umum Negara sebagai PNBP; (c) muatan keputusan memuat kewajiban
-> "menyetorkan penerimaan/**kompensasi**". Kata "kompensasi" adalah kosakata
-> **Pemanfaatan**. Secara ekonomi, gabungan "menanggung seluruh biaya
-> pemeliharaan + menyetor 100% keuntungan" juga sulit dipercaya. Ini pola
-> khas ringkasan yang menggabungkan potongan aturan dari rezim berbeda.
-> **Yang harus dipastikan dari teks asli:** apakah yang disetor adalah
-> *seluruh keuntungan*, *hasil pungutan*, atau justru pungutan itu memerlukan
-> dasar tarif PNBP tersendiri — tiga hal dengan konsekuensi sangat berbeda.
-> [S, RAGU BERAT]
+> **[F] KONTRADIKSI SELESAI — ketiga klaim ternyata KOHEREN, dan "kompensasi"
+> memang istilah resmi rezim ini.** Yang mendamaikannya adalah struktur
+> aturan–pengecualian pada **Pasal 20**.
+>
+> **Aturan pokok — Pasal 20 ayat (1)** (hlm 15): *"Penetapan status
+> Penggunaan BMN untuk dioperasikan oleh Pihak Lain **tidak dimaksudkan untuk
+> mendapatkan penerimaan negara bukan pajak**."*
+>
+> **Pengecualiannya — Pasal 20 ayat (2)**: Pengguna Barang **dapat mengenakan
+> kompensasi** berupa PNBP sepanjang salah satu terpenuhi: (a) sudah ada
+> mekanisme & tarif PNBP pada K/L yang ditetapkan peraturan
+> perundang-undangan; (b) ada **hasil kajian** aspek finansial/legal/fisik
+> yang menyatakan perlu; atau (c) kegiatannya **bukan** pelayanan
+> umum/urusan pemerintahan oleh pihak-pihak tertentu, dan **bukan**
+> penyelenggaraan pendidikan terjangkau/litbang/diklat/religi-budaya oleh
+> PTN BH atau badan hukum penyelenggara pendidikan tinggi.
+>
+> **Jawaban atas "tiga hal berkonsekuensi berbeda" — ternyata dua-duanya
+> mungkin, tergantung jalur (Pasal 20 ayat (3)–(4)):**
+> - Pihak Lain yang **mitra instansi PNBP** → mekanisme & tarif mengikuti
+>   peraturan PNBP K/L (**dasar tarif tersendiri**).
+> - Pihak Lain **selain itu** → mekanisme & tarif **ditetapkan Pengelola
+>   Barang**, berupa **pengenaan tarif tertentu** *atau* **"penyetoran
+>   seluruh keuntungan ke rekening Kas Umum Negara sebagai penerimaan negara
+>   bukan pajak sesuai perjanjian … setelah dikurangi biaya, kecuali
+>   ditentukan lain oleh peraturan perundang-undangan"**.
+>
+> Jadi **tidak perlu menunggu PP/PMK tarif PNBP tersendiri** dalam segala
+> kasus — **[F] Pasal 6 ayat (2) huruf c** memberi Pengelola Barang wewenang
+> *"menetapkan tarif atas BMN yang dioperasikan oleh Pihak Lain"*.
+> **Koreksi:** kecurigaan lama bahwa kata "kompensasi" adalah kosakata
+> Pemanfaatan yang bocor lintas rezim **tidak terbukti** — ia dipakai
+> sepanjang Pasal 20 sebagai istilah rezim Penggunaan.
+>
+> **Yang tetap harus hati-hati [O]:** baris "Imbalan" pada tabel di atas
+> karena itu **tidak absolut**. Pembeda yang lebih andal dari "ada uang atau
+> tidak" adalah **identitas lawan pihak** dan **tujuan kegiatan** (§2.1).
 
-#### 3.3.4 Daftar "Pihak Lain" — enum yang masih bertabrakan
+#### 3.3.4 Daftar "Pihak Lain" — [F] enum resmi, 13 kategori
 
-Daftar yang beredar [S]: (a) **BUMN** — "termasuk anak perusahaan BUMN yang
-diperlakukan sama dengan BUMN"; (b) **Koperasi**; (c) **Pemerintah Negara
-Lain**; (d) **Organisasi Internasional**; (e) **Lembaga Negara Independen**
-yang bukan Pengguna Anggaran/Pengguna Barang; (f) **Organisasi/Lembaga yang
-dibentuk dengan atau berdasarkan undang-undang** yang bukan Pengguna
-Anggaran/Pengguna Barang.
+**[F] Pasal 22 ayat (1)** (hlm 18) memuat **13 kategori (huruf a–m)** — jauh
+lebih panjang daripada enam butir yang beredar. Daftar lama **tidak salah,
+hanya terpotong**:
 
-**Tiga masalah yang membatalkan implementasi enum ini sekarang:**
+| Huruf | Kategori |
+|---|---|
+| a | badan usaha milik negara **atau anak perusahaan BUMN yang diperlakukan sama dengan BUMN** |
+| b | koperasi |
+| c | pemerintah negara lain |
+| d | organisasi internasional |
+| e | lembaga negara independen yang bukan pengguna anggaran/Pengguna Barang |
+| f | organisasi independen yang dibentuk dengan atau berdasarkan undang-undang |
+| g | lembaga yang dibentuk dengan atau berdasarkan undang-undang, yang bukan pengguna anggaran/Pengguna Barang |
+| h | **perguruan tinggi negeri badan hukum** |
+| i | **unit badan lainnya** |
+| j | **lembaga/badan lainnya yang akan menerima penyertaan modal pemerintah pusat** atas BMN yang dioperasikan |
+| k | organisasi yang dibentuk **tidak** dengan atau berdasarkan undang-undang, yang bukan pengguna anggaran/Pengguna Barang |
+| l | lembaga yang dibentuk **tidak** dengan atau berdasarkan undang-undang, yang bukan pengguna anggaran/Pengguna Barang |
+| m | **badan hukum lain** |
 
-1. **Tabel jangka waktu tidak cocok dengan daftar.** Jangka 5 tahun disebut
-   untuk "BUMN, Koperasi, atau **badan hukum lainnya**" — kategori yang
-   **tidak ada** dalam enam butir di atas; sebaliknya "Lembaga Negara
-   Independen" dan "Organisasi bentukan UU" **tidak kebagian** jangka waktu.
-   Pemetaannya bolong dan bertabrakan.
-2. **"Badan hukum lainnya" berpotensi mencakup swasta**, langsung menabrak
-   klaim tegas "perusahaan swasta murni TIDAK termasuk".
-3. **Anak perusahaan BUMN** adalah klaim hukum kontroversial yang disajikan
-   sebagai fakta datar. Berdasarkan UU BUMN, anak perusahaan BUMN pada
-   umumnya **bukan** BUMN, dan kedudukannya lama diperdebatkan.
+**Ketiga masalah lama — bagaimana teks primer menjawabnya:**
 
-**Rekomendasi** [O]: **jangan bangun enum maupun validasi jangka waktu**
-sebelum daftar pihak lain dan tabel jangka waktu dibaca dari **satu pasal
-yang sama**. Bila terpaksa dibuat lebih dulu, pecah "BUMN" dan "Anak
-perusahaan BUMN" menjadi dua nilai terpisah, dengan yang kedua berstatus
-**ragu — wajib telaah hukum/konfirmasi KPKNL per kasus, tidak auto-approve**.
+1. **[F] Pemetaan jangka waktu ternyata TIDAK bolong.** Pasal 23 menutup
+   seluruh 13 kategori: huruf a mencakup BUMN, koperasi, organisasi
+   internasional, unit badan lainnya, penerima PMPP, organisasi/lembaga
+   non-UU, dan badan hukum lain **yang tidak menyelenggarakan pendidikan
+   tinggi** (5 tahun); huruf b mencakup **lembaga negara independen dan
+   organisasi/lembaga bentukan UU** (30 tahun) — jadi mereka **kebagian**;
+   huruf c badan hukum penyelenggara pendidikan tinggi (30 tahun); huruf d
+   pemerintah negara lain (99 tahun); huruf e PTN BH (tanpa batas tahun).
+2. **[F] "Badan hukum lain" MEMANG kategori resmi (huruf m)** — dan
+   kekhawatiran bahwa ia dapat mencakup swasta **terbukti berdasar**:
+   Pasal 23 huruf c menyebut *"badan hukum lain yang menyelenggarakan
+   pendidikan tinggi, **baik negeri atau swasta**"*. Jadi klaim tegas
+   "perusahaan swasta murni TIDAK termasuk" **tidak dapat dipertahankan**
+   secara mutlak. Pagar yang benar bukan bentuk badan hukumnya, melainkan
+   **tujuan kegiatan** (Pasal 19 ayat (2)) dan **larangan Pasal 19 ayat (5)**.
+3. **[F] "Anak perusahaan BUMN" memang tercantum** — tetapi **dengan
+   kualifikasi**: hanya yang *"diperlakukan sama dengan badan usaha milik
+   negara"*. Jadi **bukan** semua anak perusahaan BUMN otomatis masuk.
+   Kehati-hatian pemeriksa tetap relevan: penentuan "diperlakukan sama"
+   berada di luar PMK ini.
+
+**Rekomendasi yang diperbarui** [O]: **enum kini boleh dibangun** dengan 13
+nilai huruf a–m, `status_verifikasi = TERVERIFIKASI`. Yang **tetap tidak
+boleh auto-approve**: (i) huruf a bila entitasnya **anak perusahaan** BUMN —
+wajib telaah "diperlakukan sama dengan BUMN"; (ii) huruf m "badan hukum lain"
+— wajib telaah tujuan kegiatan. Keduanya ditandai **"perlu telaah hukum per
+kasus"**, bukan diblokir.
+
+> **[F] Pembatasan objek untuk mitra asing — Pasal 22 ayat (4)**: pengoperasian
+> oleh **organisasi internasional dan pemerintah negara lain** hanya dapat
+> atas BMN berupa **tanah dan/atau bangunan**. **[F] Pasal 22 ayat (2)**
+> mendefinisikan organisasi internasional sebagai *"organisasi bilateral atau
+> multilateral yang secara resmi diikuti oleh Indonesia sebagai anggotanya"*.
 
 #### 3.3.5 Daftar surat
 
@@ -834,18 +1244,37 @@ perusahaan BUMN" menjadi dua nilai terpisah, dengan yang kedua berstatus
 
 #### 3.3.6 Daftar lampiran
 
-Yang paling konsisten muncul [S]:
+**[F] Lampiran wajib — Pasal 24 ayat (3)**, hanya **tiga**:
 
-1. Fotokopi **Keputusan PSP** atas objek yang dimohonkan;
-2. Fotokopi **surat permintaan pengoperasian** dari Pihak Lain;
-3. **Surat pernyataan bermeterai cukup dari Pihak Lain** yang akan
-   mengoperasikan BMN;
-4. **Perhitungan estimasi biaya operasional dan besaran pungutan** —
-   **kondisional**, bila Pihak Lain akan memungut dari masyarakat;
-5. **Data/rincian BMN** yang akan dioperasikan;
-6. **Surat keterangan kebenaran fotokopi** dari pejabat struktural berwenang.
+1. Fotokopi **keputusan penetapan status Penggunaan BMN**;
+2. Fotokopi **surat permintaan pengoperasian** dari Pihak Lain kepada
+   Pengguna Barang;
+3. **Surat pernyataan bermeterai cukup dari Pihak Lain**, ditandatangani
+   pimpinan/pejabat berwenang (**ayat (4)**).
 
-Pendukung yang lazim: daftar rincian/KIB, foto BMN, laporan kondisi barang.
+**[F] Isi wajib surat pernyataan itu — Pasal 24 ayat (3) huruf c angka 1–5:**
+(1) tujuan pengoperasian sesuai kategori Pihak Lain; (2) **kesediaan
+menanggung biaya pengamanan dan pemeliharaan**, *kecuali* BMN dioperasikan
+karena **penugasan atau kebijakan pemerintah*; (3) kesediaan **menyetor ke
+rekening kas negara** atas kompensasi yang ditetapkan, jika ada; (4)
+pernyataan **tidak mengalihkan pengoperasian dan/atau memindahtangankan**
+BMN; (5) pernyataan **mengembalikan BMN** saat Penggunaan berakhir.
+
+**[F] Muatan permohonan — Pasal 24 ayat (2)**, enam butir, termasuk huruf f:
+bila Pihak Lain **memungut dari masyarakat**, wajib dilampirkan perhitungan
+**estimasi biaya operasional dan besaran pungutan**, serta perhitungan tarif
+(berdasarkan ketentuan PNBP K/L **atau** tarif yang diusulkan ditetapkan
+Pengelola Barang).
+
+> **Catatan koreksi kecil:** "surat keterangan kebenaran fotokopi" dan
+> "data/rincian BMN" yang versi lama daftarkan sebagai lampiran nomor 5–6
+> **bukan** lampiran mandiri pada Pasal 24 — data BMN adalah **muatan
+> permohonan** (ayat (2) huruf a), dan kewajiban surat keterangan kebenaran
+> fotokopi secara tekstual melekat pada **Pasal 11** (rezim PSP). Tetap
+> dianjurkan menyertakannya, tetapi jangan dicetak sebagai kewajiban Pasal 24.
+
+Pendukung yang lazim tetapi **bukan** norma [S]: daftar rincian/KIB, foto BMN,
+laporan kondisi barang.
 
 > Riset juga menempelkan "checklist 9 butir" milik rezim **PSP** ke rezim ini.
 > Itu **checklist praktik**, bukan norma, dan sumbernya Scribd anonim
@@ -880,11 +1309,40 @@ terima pengoperasian & pencatatan → 8. selama berjalan: pemeliharaan &
 pengamanan oleh Pihak Lain, **wasdal** oleh Pengguna Barang → 9. berakhir →
 **BAST pengembalian** → laporan ke Pengelola.
 
-| Tenggat | Angka beredar | Status |
+| Tenggat | Angka | Status |
 |---|---|---|
-| Permohonan **perpanjangan** | paling lambat **3 bulan sebelum** berakhir (alarm T-90) | [S·1] — bersandar satu artikel yang tidak pernah dibuka |
-| **Pelaporan berakhirnya** penggunaan | paling lama **1 bulan** sejak BAST pengembalian, melampirkan fotokopi BAST (alarm T+30) | [S·1] |
-| Jangka waktu | 5 tahun (BUMN/koperasi/"badan hukum lainnya"), dapat diperpanjang; **99 tahun** (Pemerintah Negara Lain, atas BMN fasilitas pelayanan umum, pertimbangan hubungan antarnegara); Organisasi Internasional mengikuti perjanjian antarnegara | [S·1]. **99 tahun = angka paling mencurigakan di seluruh riset** — tidak berpadanan dengan tenor mana pun dalam rezim BMN yang dikenal (Sewa 5/10 th, Pinjam Pakai 5 th, KSP 30/50 th, BGS-BSG 30 th, KSPI 50 th) dan lebih berbau konsep sewa tanah/HGB. **Dilarang masuk formulir/validasi sebelum dibaca dari PDF** |
+| Permohonan **perpanjangan** | paling lambat **3 (tiga) bulan sebelum** jangka waktu berakhir (alarm T-90) | **[F] Pasal 27 ayat (1)**. Pasal 24–26 berlaku *mutatis mutandis* (ayat (2)) |
+| Penandatanganan **perjanjian** | paling lama **3 (tiga) bulan** setelah keputusan Pengelola Barang | **[F] Pasal 28 ayat (2)** |
+| Pelaporan perjanjian | paling lama **1 (satu) bulan** sejak ditandatangani | **[F] Pasal 28 ayat (3)** |
+| **Pelaporan berakhirnya** penggunaan | paling lama **1 (satu) bulan** sejak BAST ditandatangani, melampirkan fotokopi BAST (alarm T+30) | **[F] Pasal 31 ayat (5)** — inilah pasal yang dulu keliru dianalogikan ke rezim penggunaan sementara (§3.2.8) |
+| Jangka waktu | **5 th** (BUMN/anak BUMN, koperasi, org. internasional, unit badan lainnya, penerima PMPP, organisasi/lembaga non-UU, badan hukum lain non-pendidikan tinggi); **30 th** (lembaga negara independen & organisasi/lembaga bentukan UU — *"atau selama"* melaksanakan tusi urusan pemerintahan/negara); **30 th** (badan hukum penyelenggara pendidikan tinggi, negeri atau swasta); **99 th** (pemerintah negara lain); **selama** PTN BH menyelenggarakan fungsi pendidikan tinggi | **[F] Pasal 23 huruf a–e**. Semuanya *"dapat diperpanjang"* kecuali huruf e |
+
+> **[F] "99 tahun" TERNYATA BENAR — tetapi jauh lebih sempit daripada yang
+> dikhawatirkan.** **Pasal 23 huruf d** (hlm 20), verbatim:
+>
+> > "d. paling lama **99 (sembilan puluh sembilan) tahun** dan dapat
+> > diperpanjang, untuk pengoperasian BMN oleh **pemerintah negara lain**
+> > dengan mempertimbangkan **asas resiprositas**;"
+>
+> **Koreksi:** versi lama menyebut ini *"angka paling mencurigakan di seluruh
+> riset"* dan **"dilarang masuk formulir/validasi"**. Kecurigaan itu masuk
+> akal secara metodologis — 99 tahun memang tidak berpadanan dengan tenor
+> rezim BMN lain — **tetapi kesimpulannya salah**. Pelajarannya: angka yang
+> *tampak* janggal bukan bukti angka itu karangan.
+>
+> **Yang tetap harus dijaga:** 99 tahun **hanya** untuk pemerintah negara
+> lain, **hanya** atas tanah dan/atau bangunan (Pasal 22 ayat (4)), dan
+> dengan asas resiprositas. Menuliskan "jangka waktu maksimal rezim ini 99
+> tahun" tanpa kualifikasi **tetap menyesatkan**. Untuk OIKN, kategori ini
+> praktis tidak relevan kecuali ada kantor perwakilan negara asing di IKN —
+> kemungkinan yang justru **tidak kecil**. [O]
+
+> **[F] Dua catatan tambahan.** (1) Ketentuan pengakhiran terhadap
+> **pemerintah negara lain / organisasi internasional wajib meminta
+> pertimbangan Pengelola Barang** lebih dulu (**Pasal 30**). (2) Frasa
+> huruf b *"paling lama 30 tahun **atau selama** … melaksanakan tugas dan
+> fungsi"* adalah rumusan **alternatif**, bukan tunggal — jangan dikodekan
+> sebagai 30 tahun mati.
 
 #### 3.3.9 Ketentuan khusus & larangan
 
@@ -898,21 +1356,52 @@ pengamanan oleh Pihak Lain, **wasdal** oleh Pengguna Barang → 9. berakhir →
   Internasional dan Pemerintah Negara Lain hanya atas BMN berupa **tanah
   dan/atau bangunan**, untuk melaksanakan kesepakatan dalam perjanjian antara
   Pemerintah RI dan pihak tersebut. [S·1]
-- **Tanah — Pihak Lain mendirikan bangunan.** Beredar klaim bahwa dalam hal
-  objeknya tanah, Pihak Lain **dapat mendirikan bangunan** yang berstatus
-  miliknya selama jangka waktu berjalan; dan lebih jauh, bahwa **pemanfaatan
-  atas bangunan milik Pihak Lain itu tidak memerlukan persetujuan Pengelola
-  Barang karena objeknya bukan BMN**.
+- **[F] Tanah — Pihak Lain mendirikan bangunan: KLAIM LAMA TERNYATA BENAR,
+  dan dasarnya ada di PMK 40/2024 sendiri (bukan PMK 246/2014 yang dicabut).**
 
-  > **PERINGATAN — KLAIM PALING BERISIKO HUKUM DI SELURUH DOKUMEN INI.**
-  > Sumbernya cuplikan atas **PMK 246/2014 yang diduga sudah dicabut**.
-  > Logikanya rapuh: memanfaatkan bangunan di atas tanah BMN tetap merupakan
-  > pemanfaatan tanah BMN — dan justru itulah yang diatur rezim **BGS/BSG**.
-  > Menampilkan "tidak perlu persetujuan" di UI berpotensi mendorong
-  > pemanfaatan komersial tanah negara tanpa izin dan menjadi temuan BPK.
-  > **DILARANG ditampilkan di UI AMAN.** Bila benar-benar dibutuhkan, minta
-  > **konfirmasi tertulis KPKNL**, bukan mengandalkan teks aturan yang sudah
-  > dicabut. [S·1 → dinaikkan ke status "berisiko tinggi, jangan dipakai"]
+  **Pasal 19 ayat (6)** (hlm 15): bila objeknya **tanah**, Pihak Lain *"dapat
+  mendirikan bangunan dan barang lain untuk kebutuhan Pihak Lain bersangkutan
+  dan/atau Kementerian/Lembaga"*. Perhatikan: ayat ini **tidak** mensyaratkan
+  persetujuan tambahan — berbeda dari **ayat (7)** yang untuk *perubahan/
+  pengembangan bangunan* eksplisit menuntut **persetujuan Pengguna Barang**.
+
+  **Pasal 19 ayat (8)**: bangunan dan barang itu *"merupakan BMN **sejak
+  diserahkan** kepada Kementerian/Lembaga"* — jadi selama masa pengoperasian
+  memang **belum** BMN.
+
+  **Pasal 21 ayat (2)** (hlm 17), yang menjadi inti klaim lama:
+
+  > "…tidak memerlukan persetujuan Pengelola Barang sepanjang pemanfaatan
+  > dilakukan terhadap **bangunan milik Pihak Lain** yang b erada di atas BMN
+  > berupa tanah yang dioperasikan oleh Pihak Lain."
+
+  *(spasi sisipan "b erada" adalah cacat ekstraksi, dikutip apa adanya)*
+
+  > **Koreksi:** versi lama menyebut ini **"KLAIM PALING BERISIKO HUKUM DI
+  > SELURUH DOKUMEN INI"** dan **"DILARANG ditampilkan di UI AMAN"**, dengan
+  > alasan sumbernya aturan yang sudah dicabut. **Alasannya gugur** — norma
+  > itu hidup di PMK 40/2024 yang berlaku, bukan warisan PMK 246/2014.
+  >
+  > **Tetapi kehati-hatiannya JANGAN dibuang seluruhnya**, karena
+  > pengecualian ini **sempit dan berpagar**:
+  > - Aturan pokoknya justru **sebaliknya** — **Pasal 21 ayat (1)**:
+  >   pemanfaatan BMN yang sedang dioperasikan Pihak Lain **memerlukan
+  >   persetujuan Pengelola Barang**. Ayat (2) hanya mengecualikan objek
+  >   **bangunan milik Pihak Lain**, bukan tanah BMN di bawahnya.
+  > - **[F] Pasal 21 ayat (3)**: tidak termasuk mekanisme **pinjam pakai**.
+  > - **[F] Pasal 21 ayat (5)**: hasil pemanfaatan tetap **diperhitungkan
+  >   sebagai PNBP** — kecuali pengoperasinya **PTN badan hukum**, yang
+  >   hasilnya menjadi pendapatan PTN BH (**ayat (6)**).
+  > - **[F] Pasal 21 ayat (7)**: lima syarat kumulatif, antara lain **tidak
+  >   melebihi jangka waktu pengoperasian** dan objeknya **tidak dapat
+  >   dijaminkan/dipindahtangankan/dimusnahkan/dihapuskan**.
+  >
+  > **Rancangan yang benar [O]:** UI **boleh** menampilkan jalur ini, tetapi
+  > **bukan** sebagai kalimat telanjang "tidak perlu persetujuan". Tampilkan
+  > sebagai **kondisi berpagar** dengan kelima syarat Pasal 21 ayat (7)
+  > sebagai checklist, dan default tetap "perlu persetujuan Pengelola"
+  > (Pasal 21 ayat (1)). Kekhawatiran lama — orang membaca separuh kalimat
+  > lalu memanfaatkan tanah negara tanpa izin — **tetap risiko nyata**.
 
 #### 3.3.10 Dokumen hasil & kewajiban turunan
 
@@ -933,11 +1422,19 @@ pengamanan oleh Pihak Lain, **wasdal** oleh Pengguna Barang → 9. berakhir →
 - **Wasdal** [S·1]: Pengguna/Kuasa Pengguna Barang tetap wajib memantau,
   menertibkan, dan menyusun **laporan wasdal semesteran & tahunan**. Nomor
   PMK wasdal (klaim 207/PMK.06/2021) **belum diverifikasi**.
-- **Ambang nilai kewenangan** untuk rezim ini: **[X] tidak ditemukan.**
-  Pemeriksa menilai ini **kemungkinan besar kegagalan pencarian, bukan
-  ketiadaan norma** — rezim Penggunaan dikenal punya pendelegasian berbasis
-  nilai. Tulis sebagai *"belum ditemukan — diduga ADA, prioritas verifikasi
-  tinggi"*, jangan sebagai temuan bahwa tidak ada.
+- **[F] Ambang nilai kewenangan untuk rezim ini: TIDAK ADA — dan kini ini
+  temuan, bukan kegagalan pencarian.** Seluruh **BAB IV (Pasal 19–31)**
+  **tidak memuat satu pun angka rupiah**. Kelima kemunculan Rp100.000.000,00
+  di PMK 40/2024 berada di luar rezim ini: Pasal 6 ayat (3) (PSP), Pasal 6
+  ayat (4) (penggunaan sementara), Pasal 7 ayat (3) (PSP mandiri), dan
+  Pasal 11 (kelengkapan dokumen). Artinya **penetapan Pihak Lain menjadi
+  kewenangan Pengelola Barang untuk SEMUA nilai BMN**, tanpa jenjang nilai.
+  > **Koreksi arah:** pemeriksa menduga ini "kemungkinan besar kegagalan
+  > pencarian, bukan ketiadaan norma" dan meminta ditulis *"diduga ADA"*.
+  > Dengan teks lengkap di tangan, dugaan itu **tidak terbukti**. Yang
+  > tersisa: pembagian **internal DJKN** (KPKNL/Kanwil/Pusat) tetap mungkin
+  > diatur **KMK pelimpahan** di luar PMK ini — itu pertanyaan berbeda dan
+  > tetap [X] (§2.3, §7.2).
 
 ---
 
@@ -945,12 +1442,17 @@ pengamanan oleh Pihak Lain, **wasdal** oleh Pengguna Barang → 9. berakhir →
 
 #### 3.4.1 Dasar hukum
 
-- **PMK 40 Tahun 2024**, bab Pengalihan Status Penggunaan BMN. [S] — nomor
-  bab/pasal **dihapus** (riset menyebut "Bab VII, Pasal 10/53/54/55", dengan
-  Pasal 55 diakui sendiri sebagai "perkiraan posisi" alias hasil ekstrapolasi
-  "54+1"; dan pola "ayat (1) pemohon / ayat (2) isi surat / ayat (3) lampiran"
-  adalah pola baku yang justru akan dihasilkan pencocokan pola, bukan
-  pembacaan).
+- **[F] PMK 40 Tahun 2024 BAB VII, Pasal 53–61** (hlm 36–40), berjudul
+  *"PENGALIHAN STATUS PENGGUNAAN BARANG MILIK NEGARA"*. Strukturnya: Umum
+  (53) → Tata Cara: Permohonan (54), Penelitian (55), Persetujuan (56),
+  Tindak Lanjut (57), tanpa permohonan (58), **KSPI** (59–60) → Pengalihan
+  antarKuasa Pengguna Barang dalam Pengguna Barang yang sama (61).
+  > Tebakan lama "Bab VII" **benar**; rentang pasalnya juga hampir tepat.
+  > Bahkan "Pasal 55" yang diakui sendiri sebagai ekstrapolasi "54+1"
+  > kebetulan jatuh di dalam bab yang benar. **Kebetulan ini tidak
+  > membenarkan metodenya** — pola "ayat (1) pemohon / ayat (2) isi surat /
+  > ayat (3) lampiran" memang pola baku, dan pada Pasal 54 kebetulan cocok.
+  > Yang membuatnya sah sekarang adalah pembacaan, bukan tebakan.
 - **PMK 83/PMK.06/2016** (Pemusnahan & Penghapusan) — disebut sebagai dasar
   bahwa penghapusan karena alih status **dikecualikan** dari kewajiban
   persetujuan penghapusan, sekaligus sumber tenggat 2 bulan & 1 bulan.
@@ -987,13 +1489,19 @@ pengamanan oleh Pihak Lain, **wasdal** oleh Pengguna Barang → 9. berakhir →
   pengganti**. Setelahnya BMN ditatausahakan dan dipelihara Pengguna Barang
   baru. [S]
 
-> **Koreksi instrumen — kata "perjanjian" dihapus dari alur alih status.**
-> Riset PSP sempat menulis bahwa alih status "dituangkan dalam perjanjian
-> antar-Pengguna Barang dan diikuti BAST". Instrumen **perjanjian** adalah
-> ciri khas **Penggunaan Sementara** dan **Penggunaan Bersama**. Alih status
-> lazimnya berjalan lewat **persetujuan Pengelola + BAST + penetapan/
-> pencatatan pada Pengguna Barang baru**. Menyalin pola perjanjian ke modul
-> alih status akan menghasilkan **template surat yang salah instrumen**. [O]
+> **Koreksi instrumen — kata "perjanjian" dihapus dari alur alih status.
+> Simpulan ini BERTAHAN, dengan catatan status.** Kata **"perjanjian" nol
+> kemunculan di seluruh BAB VII (Pasal 53–61)** — padahal PMK yang sama
+> mewajibkannya eksplisit pada tiga rezim lain: **Pasal 28 ayat (1)**
+> (Pihak Lain), **Pasal 37 ayat (1)** (sementara), **Pasal 49 ayat (1)**
+> (bersama). Alih status berjalan lewat **persetujuan Pengelola + BAST +
+> keputusan penghapusan + keputusan PSP baru** (Pasal 56–57).
+>
+> **Tetapi statusnya tetap [S]/[O], bukan [F]** — ini **kesenyapan teks**,
+> bukan larangan tertulis. Tidak ada pasal yang berbunyi "alih status
+> dilakukan tanpa perjanjian". Untuk desain AMAN cukup: **jangan sediakan
+> template perjanjian pada modul alih status**; jangan menulis di teks
+> bantuan bahwa perjanjian "dilarang".
 
 > **Alih status ≠ hibah.** Perpindahan BMN antar K/L adalah alih status
 > (tanpa kompensasi, kepemilikan tetap Pemerintah RI), **bukan** hibah
@@ -1015,9 +1523,27 @@ pengamanan oleh Pihak Lain, **wasdal** oleh Pengguna Barang → 9. berakhir →
 
 #### 3.4.4 Daftar lampiran
 
-**Versi minimal menurut peraturan (2 butir)** [S]:
-(1) fotokopi **SK PSP** atas BMN yang akan dialihkan; (2) **surat pernyataan
-bermeterai cukup** dari calon Pengguna Barang baru berisi kesediaan menerima.
+**[F] Versi menurut peraturan — hanya 2 butir. Pasal 54 ayat (3)** (hlm 37):
+
+> "a. **fotokopi keputusan penetapan status Penggunaan BMN**; dan b. **surat
+> pernyataan bermeterai cukup yang ditandatangani oleh calon Pengguna Barang
+> baru** yang memuat kesediaan menerima pengalihan BMN."
+
+> **Titik yang sering tertukar [F]:** surat pernyataan kesediaan ditandatangani
+> oleh **PENERIMA** (calon Pengguna Barang baru), **bukan** oleh pemohon
+> (Pengguna Barang lama).
+
+**[F] Muatan permohonan — Pasal 54 ayat (2)**, tiga butir: (a) data BMN
+meliputi **jenis, nilai perolehan, lokasi, luas, dan tahun perolehan**;
+(b) informasi calon Pengguna Barang baru; (c) pertimbangan dan penjelasan.
+Kata *"minimal memuat"* — **bukan** daftar tertutup.
+
+**[F] Tambahan khusus KSPI — Pasal 59 ayat (2):** untuk alih status dalam
+rangka **Kerja Sama Penyediaan Infrastruktur**, wajib ditambahkan **surat
+pernyataan bermeterai cukup dari Pengguna Barang LAMA** yang memuat kesediaan
+**mengalihkan**. Jadi pada KSPI ada **dua** surat pernyataan berlawanan arah.
+Pemohonnya juga lebih luas (**ayat (1)**): Pengguna Barang, Pengguna Barang
+koordinator, **atau** penanggung jawab proyek kerja sama.
 
 **Versi praktik KPKNL (±11 butir)** [S·lemah — dokumen Scribd tanpa identitas
 penerbit dan tahun; **kekuatan bukti paling lemah di seluruh dokumen ini**;
@@ -1076,24 +1602,66 @@ pengguna baru, dan **pengecekan lapangan**) → **disetujui** (surat
 persetujuan) **atau ditolak** (pemberitahuan tertulis + alasan) → tindak
 lanjut.
 
-**Rantai tenggat yang beredar** [S·1 — satu rumpun cuplikan; **perlakukan
-sebagai pengingat lunak, jangan memblokir input tanggal riil**]:
+**[F] Rantai tenggat — TERBUKTI BENAR seluruhnya**, **Pasal 57 huruf a–c**
+(hlm 38). Rantai 1/2/1 bulan yang beredar ternyata tepat, **termasuk ketiga
+titik nolnya yang berbeda-beda**:
 
-| # | Tenggat | Titik nol |
-|---|---|---|
-| 1 | **BAST ≤ 1 bulan** | sejak **surat persetujuan** Pengelola diterbitkan |
-| 2 | **SK Penghapusan ≤ 2 bulan** | sejak **tanggal BAST** |
-| 3 | **Laporan penghapusan ≤ 1 bulan** | sejak **SK penghapusan** ditetapkan |
+| # | Tenggat | Titik nol | Dasar |
+|---|---|---|---|
+| 1 | **BAST ≤ 1 (satu) bulan** | sejak **surat persetujuan** pengalihan status | **[F] Pasal 57 huruf a** |
+| 2 | **SK Penghapusan ≤ 2 (dua) bulan** | sejak **tanggal berita acara serah terima** | **[F] Pasal 57 huruf b** |
+| 3 | **Laporan ≤ 1 (satu) bulan** | sejak **keputusan penghapusan ditetapkan** | **[F] Pasal 57 huruf c** — dilaporkan ke Pengelola Barang **dengan tembusan Pengguna Barang baru** |
 
-> Versi ringkas yang menyatakan hanya "lapor ≤1 bulan sejak SK penghapusan"
-> dan menghilangkan dua tenggat lain **tidak dipakai** — pustaka repo mencatat
-> rantai tiga tahap ini lebih dahulu. Keduanya tetap harus direkonsiliasi dari
-> teks PMK 40/2024 sebelum pengingat dinyalakan.
+Total lintasan maksimum **4 bulan** sejak persetujuan. Versi ringkas yang
+hanya menyebut "lapor ≤1 bulan" memang **tidak lengkap** — pustaka repo
+benar.
 
-**Pengecualian persetujuan penghapusan** [S·1, warisan]: penghapusan karena
-alih status **dikecualikan** dari kewajiban meminta persetujuan penghapusan
-Pengelola — pengguna lama langsung menetapkan SK penghapusan berdasarkan BAST.
-Artinya **tidak perlu permohonan penghapusan terpisah** ke KPKNL.
+> **[F] Rantai yang sama berlaku pada jalur tanpa permohonan** (**Pasal 58
+> ayat (3) huruf a–c**), dengan **satu perbedaan**: titik nol tahap pertama
+> dihitung sejak **keputusan pengalihan status ditetapkan**, bukan sejak
+> persetujuan.
+
+> **[SALAH] Siapa yang menetapkan status Penggunaan pada Pengguna Barang
+> baru: PENGELOLA BARANG — bukan Pengguna Barang baru.** **Pasal 57 huruf e**
+> (hlm 39), verbatim:
+>
+> > "e. **Pengelola Barang menerbitkan keputusan penetapan status Penggunaan
+> > BMN kepada Pengguna Barang baru**."
+>
+> **Koreksi:** versi lama dokumen ini menyajikan "dasar pencatatan pada
+> pengguna baru" sebagai **dua versi bersaing** — (A) Pengelola menerbitkan
+> keputusan PSP baru, atau (B) pengguna baru cukup merekam "SK Alih Status"
+> sendiri — dan menyarankan **"konfirmasikan ke KPKNL"**. **Ambiguitas itu
+> tidak ada dalam teks:** versi (A) yang benar, dan penerbitnya **Pengelola
+> Barang**. Versi (B) adalah praktik perekaman di SIMAN, **bukan** dasar
+> hukum penetapan status.
+>
+> **Mengapa ini kesalahan yang mahal:** menempatkan kewenangan Pengelola
+> Barang pada Pengguna Barang adalah **cacat kewenangan**. Bila AMAN
+> merancang alur di mana OIKN sebagai penerima "menetapkan sendiri" status
+> penggunaan atas BMN yang dialihkan kepadanya, seluruh SK yang terbit dari
+> alur itu **cacat sejak awal**.
+>
+> **[F] Yang benar dilakukan Pengguna Barang baru hanyalah PEMBUKUAN** —
+> **Pasal 57 huruf d**: pembukuan dalam aplikasi penatausahaan BMN
+> berdasarkan **tiga** dokumen sekaligus: surat persetujuan Pengelola (Pasal
+> 56 ayat (1)), **BAST**, dan **keputusan penghapusan** dari Pengguna Barang
+> lama.
+>
+> **Nuansa pada jalur tanpa permohonan:** di sana pembukuan cukup berdasar
+> **satu** dokumen — keputusan pengalihan status — karena keputusan itu
+> **sudah sekaligus memuat penetapan status** pada Pengguna Barang baru
+> (**[F] Pasal 58 ayat (1) huruf b** jo. **ayat (3) huruf d**).
+
+**[X] Pengecualian persetujuan penghapusan — TIDAK DAPAT DIKONFIRMASI.**
+Frasa "dikecualikan dari persetujuan penghapusan" atau norma sejenis **tidak
+ada** di PMK 40/2024 maupun PMK 53/2023. Yang ada hanyalah rumusan bahwa
+Pengguna Barang lama **"menetapkan keputusan penghapusan BMN"** langsung
+sebagai tindak lanjut persetujuan alih status (Pasal 57 huruf b), tanpa satu
+pun rujukan ke tahap permohonan/persetujuan penghapusan tersendiri. Itu
+**implikasi struktural, bukan pengecualian yang dinyatakan**. PMK 40/2024
+memang bukan peraturan tentang Penghapusan — dasarnya harus dicari di PMK
+Penghapusan/Pemindahtanganan, di luar kedua berkas ini (§7.2).
 
 **SLA layanan** [S·1]: 5 hari kerja sejak berkas lengkap; sebagian KPKNL
 menjanjikan 3 hari kerja. **Inkonsisten**, dan diambil dari KPKNL yang tidak
@@ -1102,14 +1670,24 @@ Biaya Rp0.
 
 **Dokumen hasil (rekonsiliasi jumlah — koreksi kontradiksi internal riset):**
 
-- **3 dokumen yang relatif pasti**: surat persetujuan Pengelola; BAST (+
-  daftar BMN + dokumen kepemilikan asli); SK penghapusan pengguna lama.
-- **1 dokumen bersyarat**: dasar pencatatan pada pengguna baru — **dua versi
-  bersaing**: (A) Pengelola menerbitkan **keputusan PSP baru** untuk pengguna
-  baru; (B) praktik SIMAN: pengguna baru cukup **merekam "SK Alih Status
-  Penggunaan BMN"** sebagai dasar pencatatan. **Jangan diasumsikan satu
-  dokumen cukup**; konfirmasikan ke KPKNL. [S, ragu]
-- **1 dokumen pelaporan**: laporan penghapusan ke Pengelola.
+- **[F] 4 dokumen pasti** pada jalur permohonan: (1) **surat persetujuan**
+  Pengelola (Pasal 56 ayat (1)); (2) **BAST** (Pasal 57 huruf a); (3) **SK
+  penghapusan** pengguna lama (Pasal 57 huruf b); (4) **keputusan penetapan
+  status Penggunaan** kepada Pengguna Barang baru, **diterbitkan Pengelola
+  Barang** (Pasal 57 huruf e).
+- **[F] 1 dokumen pelaporan**: laporan BAST + SK penghapusan ke Pengelola
+  Barang, tembusan Pengguna Barang baru (Pasal 57 huruf c).
+- **[F] Pada jalur tanpa permohonan** dokumennya lebih ringkas: **keputusan
+  pengalihan status** dari Pengelola Barang sudah memuat pengalihan **dan**
+  penetapan status pada Pengguna Barang baru sekaligus (Pasal 58 ayat (1)),
+  sehingga **tidak ada** dokumen setara Pasal 57 huruf e yang terpisah.
+- **[F] Muatan minimal surat persetujuan — Pasal 56 ayat (2)**, 4 butir: data
+  BMN; informasi Pengguna Barang lama dan baru; **kewajiban BAST**; dan
+  **kewajiban menerbitkan keputusan penghapusan**.
+- **[S] Praktik perekaman "SK Alih Status Penggunaan BMN" di SIMAN** tetap
+  ada dan tetap perlu dilakukan, tetapi kedudukannya **langkah penatausahaan
+  di aplikasi**, **bukan** alternatif dari keputusan Pengelola Barang. Kedua
+  hal ini tidak saling menggantikan.
 
 #### 3.4.8 Khusus tanah
 
@@ -1138,25 +1716,126 @@ BAST direkam. [O]
 
 ---
 
+### 3.5 Penggunaan Bersama — rezim yang dulu dicoret
+
+> **Bab ini BARU.** Versi lama sengaja tidak membuat bab tersendiri karena
+> bahannya *"terlalu tipis"* dan istilah kuncinya diduga halusinasi (§1.2).
+> Keduanya keliru: Penggunaan Bersama punya **BAB VI penuh, Pasal 40–52
+> (13 pasal), hlm 30–36** — lebih panjang daripada bab Penggunaan Sementara.
+> Seluruh isi subbab ini **[F]**.
+
+#### 3.5.1 Pemohon, para pihak, dan pembeda pokoknya
+
+**[F] Pasal 40 ayat (1)–(3)**: BMN yang telah ber-PSP dapat digunakan bersama
+dengan satu atau lebih Pengguna Barang lain **tanpa mengubah status
+Penggunaan**, sepanjang **tidak mengganggu tugas dan fungsi Pengguna Barang
+Eminen**; dilakukan berdasarkan **permohonan Eminen kepada Pengelola Barang**
+setelah Eminen mendapat permohonan dari Kolaborator.
+
+| Peran | Definisi [F] Pasal 1 | Menatausahakan? |
+|---|---|---|
+| **Pengguna Barang Eminen** | pemegang kewenangan Penggunaan BMN yang digunakan bersama | **Ya** (angka 4) |
+| **Pengguna Barang Kolaborator** | pemegang kewenangan Penggunaan bersama berdasarkan persetujuan Pengelola | **Tidak** (angka 5) |
+
+> **Pembeda dari Penggunaan Sementara [O]:** pada penggunaan sementara,
+> pemakainya **menggantikan** pemilik PSP untuk sementara; pada penggunaan
+> bersama, keduanya **memakai berdampingan** dan Eminen tetap menatausahakan.
+> **Pemohonnya juga berbeda arah** — sementara: pemilik PSP mengajukan atas
+> permintaan peminjam; bersama: **Eminen** mengajukan atas permohonan
+> **Kolaborator**.
+
+**[F] Pasal 41**: BMN **pada Pengelola Barang** dapat digunakan bersama dalam
+rangka optimalisasi, dan dalam hal itu **Pengelola Barang bertindak sebagai
+Pengguna Barang Eminen**.
+
+**[F] Pasal 40 ayat (4)**: penggunaan bersama **paling lama 6 (enam) bulan**
+cukup dilaksanakan Eminen dan **dilaporkan** kepada Pengelola Barang — pola
+yang sama dengan Pasal 33 ayat (2), termasuk **[X] tanpa tenggat pelaporan**.
+
+**[F] Pasal 40 ayat (5)–(6)**: BMN yang sedang digunakan bersama **tidak
+dapat** dimanfaatkan, dipindahtangankan, dimusnahkan, atau dihapuskan kecuali
+atas usulan Eminen dengan persetujuan Pengelola Barang; namun Eminen **tetap
+dapat** melakukan alih status atau menetapkannya untuk dioperasikan Pihak
+Lain.
+
+#### 3.5.2 Berkas, jangka waktu, dan biaya
+
+- **[F] Permohonan — Pasal 46**: diajukan tertulis oleh **Eminen**, memuat 4
+  hal (data BMN; informasi Kolaborator; jangka waktu; penjelasan &
+  pertimbangan) + **2 dokumen pendukung**.
+- **[F] Penelitian — Pasal 47**: Pengelola Barang dapat meminta keterangan
+  kepada Eminen dan/atau **konfirmasi kepada Kolaborator**.
+- **[F] Persetujuan — Pasal 48**: diberikan **secara tertulis**, memuat 4 hal.
+  Penolakan diberitahukan tertulis kepada Eminen disertai alasan.
+- **[F] Jangka waktu — Pasal 44**: **tidak ada angka tetap** — sepanjang masih
+  dipakai untuk pelayanan umum/urusan pemerintahan, **atau** berdasarkan
+  kesepakatan, **atau** jangka waktu tertentu, sesuai persetujuan Pengelola.
+  → AMAN **tidak boleh** memaksa pengisian tanggal berakhir pada rezim ini.
+- **[F] Perjanjian — Pasal 49**: wajib, memuat **7 butir**, dibuat **paling
+  lama 3 (tiga) bulan sejak persetujuan**, dan disampaikan Eminen kepada
+  Pengelola Barang **paling lama 1 (satu) bulan sejak penandatanganan**.
+- **[F] Biaya — Pasal 43 ayat (2)**: pengamanan dan pemeliharaan *"hanya dapat
+  dibebankan pada **salah satu pihak untuk setiap kegiatan**"* — bukan
+  dibagi rata. Perubahan/pengembangan berdasarkan kesepakatan, dan hasilnya
+  **diserahkan Kolaborator kepada Eminen** (ayat (3)–(4)).
+- **[F] Pasal 42**: Kolaborator dapat mengalihkan Penggunaan **antarKuasa
+  Pengguna Barang di lingkungannya**, sepanjang sudah dituangkan dalam
+  perjanjian **dan** diberitahukan kepada Eminen.
+
+#### 3.5.3 Berakhirnya
+
+**[F] Pasal 50 ayat (1)**: berakhir bila jangka waktunya habis; dilakukan
+**penghentian**; atau terjadi **pengalihan status Penggunaan**. Penghentian
+dimohonkan Eminen, diteliti (**Pasal 51**), dan diberikan dalam bentuk **surat
+persetujuan** Pengelola Barang dengan 3 muatan minimal (**Pasal 52**).
+Pelaporan **paling lama 1 (satu) bulan** sejak berakhir atau sejak adendum
+(**Pasal 50 ayat (10)**).
+
+**[F] Pasal 45**: bila Kolaborator tidak lagi memakai BMN, dilakukan
+**penghentian** *atau* **pengalihan Penggunaan bersama kepada Kolaborator
+lain** berdasarkan persetujuan Pengelola Barang. **Pasal 50 ayat (7)**
+memungkinkan penggunaan bersama **tetap berlangsung lewat adendum** bila masih
+ada Kolaborator lain.
+
+> **[F] Cacat naskah yang ditandai, bukan diperbaiki:** **Pasal 50 ayat (1)
+> huruf c** — di dalam BAB VI tentang Penggunaan **bersama** — berbunyi
+> *"terjadi pengalihan status Penggunaan BMN atas BMN yang digunakan
+> **sementara**."* Kemungkinan salah ketik pada naskah asli (seharusnya
+> "digunakan bersama"), mengingat ayat (8)–(9) membahasnya dalam konteks
+> penggunaan bersama. **Jangan dijadikan dasar logika sistem** tanpa
+> konfirmasi.
+
+---
+
 ## 4. BMN berbukti milik vs TANPA bukti milik
 
 ### 4.1 Jawaban atas pertanyaan pokok
 
-**Ketiadaan bukti kepemilikan diduga kuat TIDAK menghalangi permohonan — ia
-hanya mengubah dan menambah syarat lampiran.** Tidak ditemukan satu pun
-ketentuan yang menyatakan permohonan PSP ditolak semata-mata karena BMN belum
-bersertipikat; sebaliknya, aturan yang beredar justru **menyediakan jalur
-substitusi** agar BMN tanpa dokumen tetap dapat ditetapkan status
-penggunaannya.
+**[F] Ketiadaan bukti kepemilikan TIDAK menghalangi permohonan — ini kini
+pernyataan hukum, bukan lagi hipotesis kerja.** Tiga pasal menopangnya:
 
-> **Derajat keyakinan diturunkan menjadi "hipotesis kerja yang kuat", bukan
-> pernyataan hukum.** Riset awal menuliskannya sebagai "JAWABAN" atas
-> pertanyaan inti, padahal itu **argumentum e silentio** yang ditarik dari
-> sesi yang gagal membaca satu pun sumber primer. Ketiadaan temuan pada
-> pencarian yang tersumbat bukan bukti ketiadaan norma. **Konsekuensi
-> desainnya tetap aman diterapkan** karena bersifat permisif (jangan
-> memblokir), **tetapi jangan ditulis sebagai pernyataan hukum di teks
-> bantuan aplikasi.** [S → O]
+1. **Pasal 9 ayat (1)**: *"Objek penetapan status Penggunaan BMN meliputi
+   seluruh BMN."* Daftar pengecualian **Pasal 9 ayat (2)** memuat tujuh butir
+   dan **tidak satu pun** berdasarkan ketiadaan bukti kepemilikan.
+2. **Pasal 11 ayat (3)–(7)**: jalur substitusi disediakan secara eksplisit —
+   dokumen yang tidak ada **diganti** Surat Pernyataan Tanggung Jawab
+   bermeterai cukup.
+3. **Pasal 11 ayat (8)**: mengandaikan sebagai fakta hukum bahwa PSP **sudah
+   terbit** atas dasar pengecualian itu — *"meskipun telah terdapat penetapan
+   status Penggunaan atas BMN bersangkutan yang persyaratannya didasarkan
+   pada pengecualian sebagaimana dimaksud pada ayat (3) sampai dengan ayat
+   (7)"*. Kalimat itu hanya bermakna bila PSP semacam itu **sah diterbitkan**.
+
+> **Yang berubah dan yang tidak.** Riset awal menuliskan ini sebagai "JAWABAN"
+> berdasarkan **argumentum e silentio** dari sesi yang gagal membaca sumber
+> primer; pemeriksa menurunkannya ke "hipotesis kerja". **Kini kesimpulannya
+> sama tetapi dasarnya berbeda** — bukan lagi dari ketiadaan temuan,
+> melainkan dari tiga pasal yang terbaca. Karena itu **boleh** ditulis
+> sebagai pernyataan hukum di teks bantuan aplikasi, dengan sitasi.
+>
+> **Catatan kejujuran:** butir 3 tetap **kesimpulan struktural** — tidak ada
+> pasal yang berbunyi harfiah *"PSP dapat diterbitkan tanpa bukti
+> kepemilikan"*. Ia ditarik dari Pasal 9 + Pasal 11 yang dibaca bersama.
 
 **Sertipikasi tanah adalah kewajiban PARALEL, bukan prasyarat yang
 memblokir.** Sejumlah SOP satker menulis "sebelum PSP, Pengguna/Kuasa
@@ -1166,15 +1845,36 @@ hard-block di AMAN. [S/O]
 
 ### 4.2 Aturan pengganti berjenjang (tiga lapis)
 
-| Lapis | Dokumen | Kondisi |
-|---|---|---|
-| **1** | Dokumen kepemilikan asli — sertipikat / IMB-PBG / BPKB-STNK / bukti kepemilikan kapal-pesawat | tersedia |
-| **2** | **Berita Acara Serah Terima (BAST)** terkait perolehan barang | dokumen kepemilikan **tidak ada** |
-| **3** | **Surat Pernyataan Tanggung Jawab bermeterai cukup**, ditandatangani **pejabat struktural** pada K/L | BAST pun **tidak ada** |
+| Lapis | Dokumen | Kondisi | Dasar |
+|---|---|---|---|
+| **1** | Dokumen kepemilikan asli — sertipikat / IMB-PBG / BPKB-STNK / bukti kepemilikan kapal-pesawat | tersedia | **[F] Pasal 11 ayat (2) huruf a–e** |
+| **2** | **Berita Acara Serah Terima (BAST)** terkait perolehan barang | dokumen kepemilikan **tidak ada** | **[F] Pasal 11 ayat (2) huruf d angka 2** |
+| **3** | **Surat Pernyataan Tanggung Jawab bermeterai cukup**, ditandatangani **pejabat struktural** pada K/L | BAST pun **tidak ada** | **[F] Pasal 11 ayat (3)–(7)** |
 
-[S] — model tiga lapis ini konsisten muncul di cuplikan, **tetapi nomor
-pasal/ayatnya tidak diketahui**, dan padanan lampiran formatnya di PMK
-40/2024 belum diketahui [X].
+**[F] Model tiga lapis TERBUKTI**, dan rinciannya ternyata **bercabang per
+jenis objek** — bukan satu aturan seragam:
+
+| Ayat | Kasus | Pengganti yang diminta |
+|---|---|---|
+| **(3)** | **Tanah** belum bersertipikat | SPTJ **+ dokumen pelengkap berlapis**: fotokopi dokumen kepemilikan/penguasaan (AJB, girik, letter c, BAST, ledger jalan); **surat keterangan lurah/camat**; surat permohonan pendaftaran hak ke kantor pertanahan; dan/atau dokumen penguasaan lain. Konektornya **"dan/atau"** — tidak semuanya kumulatif wajib |
+| **(4)** | **Bangunan** tanpa IMB/PBG atau tanpa dokumen perolehan | SPTJ saja, **tanpa** dokumen pelengkap tambahan |
+| **(5)** | **Selain tanah/bangunan**, dokumen kepemilikan tidak ada | SPTJ yang menyatakan barang **merupakan BMN** *dan* digunakan untuk tusi |
+| **(6)** | Selain tanah/bangunan, ≥Rp100 jt/unit, **BAST pun tidak ada** | SPTJ (kasus berlapis: tanpa bukti milik **dan** tanpa BAST) |
+| **(7)** | BMN untuk **PMPP** | SPTJ **ditandatangani pejabat struktural pada unit organisasi pimpinan tinggi madya / eselon I** — **jenjang lebih tinggi**, satu-satunya pengecualian semacam ini |
+
+> **[F] Surat keterangan lurah/camat ternyata NORMA, bukan sekadar praktik.**
+> Versi lama menempatkannya sebagai *"praktik penguat di tingkat K/L, bukan
+> dokumen yang disyaratkan PMK"* dan menyarankan slot **opsional**. Ia
+> tercantum langsung di **Pasal 11 ayat (3) huruf b** — *"surat keterangan
+> dari lurah/camat setempat yang memperkuat pernyataan tanggung jawab
+> bermeterai di atas"*. Namun karena konektor daftar itu **"dan/atau"**, ia
+> **tetap tidak mutlak wajib** bila pelengkap lain terpenuhi. Rekomendasi
+> slot opsional **kebetulan tetap benar**, tetapi alasannya berubah.
+
+**[X] Padanan lampiran formatnya di PMK 40/2024 tetap tidak diketahui** —
+**Pasal 12** menyerahkan format ke Direktur Jenderal a.n. Menteri Keuangan,
+dan format lama PMK 246/2014 berlaku sementara (**Pasal 76 huruf e**). Lihat
+§4.3 dan §7.2.
 
 **Tambahan kondisional yang berdiri sendiri:**
 
@@ -1205,13 +1905,24 @@ Satker)** atau pejabat yang menerima pelimpahan. **Wajib bermeterai cukup.**
 5. Rincian BMN yang dimaksud (atau rujukan ke lampiran daftar).
 6. Meterai + tanda tangan + tanggal.
 
-**Nomenklatur — SPTJ vs SPTJM** [O]: teks aturan yang tercuplik konsisten
-memakai frasa **"Surat Pernyataan Tanggung Jawab" (SPTJ)**. Istilah
-**"SPTJM"** (…Tanggung Jawab **Mutlak**) muncul di sumber sekunder/praktik
-dan dipakai repo ini pada modul **RKBMN**. Rekomendasi: pakai label
-**"Surat Pernyataan Tanggung Jawab (SPTJ)"** untuk modul Penggunaan, dan
-pertahankan "SPTJM" hanya di modul RKBMN — sampai nomenklatur final
-dipastikan dari Lampiran PMK 40/2024.
+**[F] Nomenklatur — SPTJ vs SPTJM.** PMK 40/2024 konsisten memakai frasa
+panjang **"Surat Pernyataan Tanggung Jawab"** (Pasal 11 ayat (3)–(7), Pasal
+12). Istilah **"SPTJM"** (…Tanggung Jawab **Mutlak**) **tidak muncul**.
+Menarik: **akronim "SPTJ" pun tidak dipakai** PMK 40/2024 — ia selalu ditulis
+panjang. Akronim itu justru dipakai **PMK 53/2023**, yang menulis *"surat
+pernyataan tanggungjawab (SPTJ)"* (dirangkai tanpa spasi) sebagai dokumen
+wajib pada lima permohonan **ADP** (Pasal 40, 43, 46, 47, 48).
+
+> **Peringatan yang penting untuk AMAN:** SPTJ dalam PMK 53/2023 **bukan**
+> pengganti bukti kepemilikan seperti SPTJ dalam PMK 40/2024 — di sana ia
+> dokumen kelengkapan permohonan yang berdiri sendiri, dan **[X] isi maupun
+> formatnya tidak didefinisikan** PMK 53/2023. Jangan memakai satu template
+> untuk dua rezim.
+
+Rekomendasi **tidak berubah**: pakai label **"Surat Pernyataan Tanggung
+Jawab (SPTJ)"** untuk modul Penggunaan, pertahankan "SPTJM" hanya di modul
+RKBMN. Yang berubah: alasannya kini berdasar teks, bukan dugaan. Bentuk final
+formatnya tetap menunggu ketentuan teknis Direktur Jenderal (**Pasal 12**).
 
 **Dokumen penguat yang bersifat OPSIONAL** [S·1]: **surat keterangan
 Lurah/Camat** dipakai dalam praktik sebuah K/L untuk memperkuat SPTJ atas
@@ -1223,10 +1934,18 @@ wajib.
 
 | Rezim | Apakah aturan substitusi berlaku? |
 |---|---|
-| PSP | **Ya** — inti jalur substitusi ada di sini [S] |
-| Alih Status | **Ya** — dokumen permohonan mencakup fotokopi dokumen kepemilikan **atau** BAST perolehan [S] |
-| Penggunaan Sementara | **Tidak relevan langsung** — lampiran wajibnya hanya SK PSP + surat permintaan; bukti kepemilikan **bukan** lampiran wajib. Artinya tanah yang belum bersertipikat pada prinsipnya tetap bisa diusulkan **asalkan sudah ber-PSP**. **[O — simpulan penulis, bukan norma]**. Tetap siapkan SPTJ sebagai lampiran tambahan sukarela agar penelitian lebih lancar |
-| Dioperasikan Pihak Lain | **Tidak ditemukan ketentuan khusus** [X]. Karena PSP adalah prasyarat mutlak, jalur substitusi sudah terselesaikan di tahap PSP. Perlu konfirmasi langsung ke KPKNL |
+| PSP | **Ya [F]** — inti jalur substitusi ada di sini (**Pasal 11 ayat (3)–(7)**) |
+| Alih Status | **Tidak perlu** — **[F] Pasal 54 ayat (3)** hanya meminta **dua** lampiran: fotokopi **SK PSP** dan **surat pernyataan bermeterai** kesediaan menerima dari calon Pengguna Barang baru. **Dokumen kepemilikan bukan lampiran wajib**, sehingga tidak ada yang perlu disubstitusi. *(koreksi terhadap versi lama yang menulis "dokumen permohonan mencakup fotokopi dokumen kepemilikan atau BAST perolehan")* |
+| Penggunaan Sementara | **Tidak relevan — dan kini [F], bukan simpulan.** **Pasal 34 ayat (3)** hanya mewajibkan **dua** dokumen: fotokopi **SK PSP** dan fotokopi **surat permintaan** dari pihak B. Bukti kepemilikan **bukan** lampiran. Tanah belum bersertipikat tetap bisa diusulkan **asalkan sudah ber-PSP** |
+| Dioperasikan Pihak Lain | **Tidak relevan — [F].** **Pasal 24 ayat (3)** mewajibkan **tiga** dokumen: fotokopi **SK PSP**, fotokopi **surat permintaan pengoperasian**, dan **surat pernyataan bermeterai** dari Pihak Lain. Bukti kepemilikan tidak diminta; substitusi sudah selesai di tahap PSP |
+| Penggunaan Bersama | **Tidak relevan — [F].** **Pasal 46 ayat (3)** meminta 2 dokumen pendukung; bukti kepemilikan bukan salah satunya |
+
+> **Pola yang kini terlihat jelas dan berguna untuk desain AMAN [O]:** hanya
+> **PSP** yang berat dokumen. Keempat rezim turunan cukup bersandar pada
+> **SK PSP + dokumen pemicu**. Checklist unggah untuk rezim 2–5 karena itu
+> **jauh lebih pendek** daripada yang disarankan checklist praktik KPKNL yang
+> beredar (±11 butir) — daftar panjang itu tetap [S·lemah] dan **tidak boleh
+> menjadi gate wajib**.
 
 ### 4.5 Tanah — status kepemilikan bukan boolean
 
@@ -1283,20 +2002,324 @@ sebagai pengganti resmi.
 ### 4.6 Peringatan khusus IKN
 
 Banyak aset di kawasan IKN diduga **belum bersertipikat** dan sebagian
-mungkin bukan BMN melainkan **ADP**. Dua hal yang harus dipastikan sebelum
-modul ini dibangun [X]:
+memang bukan BMN melainkan **ADP** (§4A). Status kedua peringatan lama:
 
-1. Apakah aset OIKN memakai **Hak Pakai** atau **Hak Pengelolaan (HPL)** —
-   HPL adalah instrumen berbeda (pelimpahan kewenangan Hak Menguasai Negara),
-   lazim untuk badan pengelola kawasan. Riset **gagal** memetakan ini, tetapi
-   tetap mengusulkan enum `SERTIPIKAT_HP` dan `SERTIPIKAT_HPL` — enum boleh
-   dibuat, **klaim pemetaannya tidak boleh**.
-2. Daftar sumber perolehan ADP yang beredar (penetapan & pemberian hak
-   pengelolaan lahan; hibah/sumbangan; hasil perjanjian/kontrak; pengalihan
-   BMN/BMD; pelaksanaan peraturan perundang-undangan; putusan pengadilan
-   berkekuatan hukum tetap) **berpola sama dengan daftar "perolehan lain yang
-   sah" BMN pada umumnya** — patut dicurigai sebagai salin-tempel lintas
-   konteks. Baca pasal aslinya di PMK 53/2023.
+1. **[X] Hak Pakai vs Hak Pengelolaan (HPL) TETAP tidak terpetakan.** PMK
+   53/2023 **tidak memuat kata "sertipikat", "sertifikat", "bukti
+   kepemilikan", maupun "dokumen kepemilikan"** — nol kemunculan di seluruh
+   28 halaman. Ia menyebut *"penetapan dan pemberian **hak pengelolaan
+   lahan**"* sebagai salah satu sumber perolehan ADP (Pasal 34 huruf a),
+   tetapi **tidak** memetakan jenis hak atas tanah untuk BMN OIKN. Enum
+   `SERTIPIKAT_HP` / `SERTIPIKAT_HPL` boleh dibuat; **klaim pemetaannya tetap
+   tidak boleh**. Ini pertanyaan untuk regulasi ATR/BPN, bukan untuk PMK ini.
+2. **[F] Daftar sumber perolehan ADP TERBUKTI — kecurigaan salin-tempel tidak
+   terbukti.** **Pasal 34** (hlm 17) memuat persis enam butir yang beredar:
+
+   > "ADP meliputi tanah yang diperoleh dari: a. penetapan dan pemberian hak
+   > pengelolaan lahan; b. hibah/ sumbangan atau yang sejenis; c. hasil
+   > pelaksanaan dari perjanjian/kontrak; d. pengalihan BMN dan/ atau BMD;
+   > e. pelaksanaan peraturan perundang-undangan; dan f. pelaksanaan putusan
+   > pengadilan yang telah berkekuatan hukum tetap."
+
+   Kemiripan dengan daftar "perolehan lain yang sah" BMN memang ada, tetapi
+   itu **kemiripan wajar antar rezim aset**, bukan bukti salin-tempel.
+3. **[F] Peringatan BARU yang lebih penting daripada keduanya:** jangan
+   menerapkan jalur substitusi bukti kepemilikan §4.2 pada **ADP**. Rezim ADP
+   punya dokumen dan tata caranya sendiri (§4A.4), dan PMK 53/2023 **tidak
+   menyediakan** mekanisme pengganti bukti kepemilikan sebagaimana Pasal 11
+   ayat (3) PMK 40/2024.
+
+---
+
+## 4A. Rezim khusus IKN — PMK 53 Tahun 2023
+
+> **Bab ini seluruhnya BARU.** Versi lama dokumen ini nyaris kosong soal IKN:
+> ketiga pertanyaan dasarnya berstatus [X] dan disebut sebagai **"celah
+> terbesar"**. PDF resmi PMK 53/2023 kini terbaca lengkap (28 halaman, 69
+> pasal, 6 BAB), sehingga bab ini dapat ditulis. **Hampir seluruh isinya
+> [F]**; yang tetap gelap ditandai [X] dan dikumpulkan di §4A.6.
+
+**Identitas [F]:** *"PERATURAN MENTER! KEUANGAN REPUBLIK INDONESIA NOMOR 53
+TAHUN 2023 TENTANG PENGELOLAAN BARANG MILIK NEGARA DAN ASET DALAM PENGUASAAN
+DI IBU KOTA NUSANTARA"* (hlm 1 — *"MENTER!"* adalah cacat OCR untuk
+"MENTERI"). **Ditetapkan 10 Mei 2023, diundangkan 11 Mei 2023, Berita Negara
+2023 Nomor 383** (hlm 28). Karena **Pasal 69** berbunyi *"mulai berlaku pada
+tanggal diundangkan"*, tanggal berlaku efektifnya adalah **11 Mei 2023** —
+bukan 10 Mei. Berbeda dari PMK 40/2024, data pengundangan PMK 53/2023
+**terbaca utuh**.
+
+### 4A.1 Dua kategori Pengguna Barang di IKN — bukan satu
+
+Ini temuan yang paling langsung mengubah desain AMAN.
+
+**[F] Pasal 5 ayat (1)** (hlm 6):
+
+> "Kepala Otorita Ibu Kota Nusantara merupakan Pengguna Barang di Ibu Kota
+> Nusantara atas BMN yang berada dalam penguasaannya."
+
+**[F] Pasal 6** (hlm 8):
+
+> "(1) Menteri/pimpinan lembaga adalah Pengguna Barang.
+> (2) Tanggung jawab dan kewenangan menteri/pimpinan lembaga mengikuti
+> ketentuan peraturan perundang-undangan."
+
+> **Karena itu klaim "Pengguna Barang di IKN = Otorita saja" adalah
+> penyederhanaan yang keliru.** K/L yang beroperasi di IKN **tetap** Pengguna
+> Barang atas BMN dalam penguasaannya. AMAN tidak boleh mengasumsikan setiap
+> aset di wilayah IKN bermuara pada OIKN.
+
+**[F] Pembagian objeknya — Pasal 17 ayat (1)** (hlm 10–11), dikutip apa
+adanya termasuk cacat OCR:
+
+> "(1) BMN di Ibu Kota Nusantara ditetapkan status penggunaannya kepada:
+> a. **Otorita Ibu Kota Nusantara** selaku Pengguna Barang, untuk BMN berupa:
+> 1. tanah dan/atau bangunan yang digunakan oleh Otorita Ibu Kota Nusantara;
+> 2. **tanah dan/ atau bangunan untuk kepentingan penyelenggaraan tugas dan
+> fungsi kemen terian / lem baga**; dan 3. selain tanah dan/ atau bangunan
+> yang berada dalam penguasaan Otorita lbu Kata Nusantara;
+> b. **Kementerian/lembaga yang terkait dengan sektor pertahanan dan
+> keamanan, politik luar negeri, kesekretariatan negara, yustisi dan fiskal**
+> selaku Pengguna Barang untuk BMN yang berada dalam penguasaannya;dan
+> c. **Kementerian/lembaga** selaku Pengguna Barang, untuk BMN berupa
+> **selain tanah dan/ atau bangunan** yang berada dalam penguasaannya."
+
+| Objek | Ditetapkan kepada |
+|---|---|
+| Tanah/bangunan dipakai OIKN | **OIKN** |
+| **Tanah/bangunan untuk tusi K/L umum** | **OIKN** — *bukan* K/L pemakainya |
+| Tanah/bangunan K/L sektor **hankam, polugri, kesekretariatan negara, yustisi, fiskal** | **K/L itu sendiri** |
+| Selain tanah/bangunan dalam penguasaan OIKN | **OIKN** |
+| Selain tanah/bangunan dalam penguasaan K/L | **K/L itu sendiri** |
+
+> **Konsekuensi paling berdampak bagi pemohon di lingkungan OIKN [F]:**
+> gedung kantor yang **ditempati** sebuah K/L umum di IKN di-PSP-kan
+> **kepada Otorita IKN**, bukan kepada K/L penghuninya. Artinya OIKN adalah
+> **pemegang PSP atas sebagian besar tanah dan bangunan di IKN**, dan K/L
+> penghuni menempatinya lewat mekanisme lain — yang secara praktis mengarah
+> ke **Penggunaan Bersama** atau **Penggunaan Sementara** menurut PMK
+> 40/2024. Beban administrasi tanah/bangunan di IKN karena itu **terpusat di
+> OIKN**, dan modul Penggunaan AMAN harus dirancang untuk volume itu. [O]
+
+**[F] Kuasa Pengguna Barang** ditetapkan **Kepala Otorita** sendiri —
+**Pasal 5 ayat (2) huruf b**: *"menetapkan Kuasa Pengguna Barang dan menunjuk
+pejabat yang mengurus dan menyimpan BMN"*. Pelimpahan sebagian kewenangan ke
+KPB dimungkinkan (**ayat (3)**), dan **tata caranya diatur Kepala Otorita
+sendiri** dengan berpedoman pada peraturan pengelolaan BMN (**ayat (4)**).
+Kewenangan KPB dirinci **ayat (5) huruf a–k**.
+
+### 4A.2 PSP di IKN menyimpangi aturan umum — tiga titik
+
+**[F] Pasal 3 ayat (3)** menegaskan Penggunaan dilaksanakan *"berdasarkan
+ketentuan dalam Peraturan Menteri ini"* (yakni PMK 53/2023 sendiri). Tiga
+penyimpangan nyata dari PMK 40/2024:
+
+1. **Subjek penerima PSP diubah** — Pasal 17 ayat (1) huruf a angka 2 di
+   atas. Tidak ada padanannya di rezim umum.
+2. **[F] Dasar "PSP tanpa usulan" yang khas IKN — Pasal 17 ayat (3)–(4)**
+   (hlm 11):
+
+   > "(3) Pengelola Barang dapat menetapkan status Penggunaan BMN berupa
+   > tanah dan/ atau bangunan **tanpa didahului usulan** dari
+   > kementerian/lembaga, dengan **memperhatikan pertimbangan Otorita Ibu
+   > Kata Nusantara**. (4) … dilakukan kepada kementerian/lembaga dengan
+   > pertimbangan pelaksanaan tugas dan fungsi **dalam mendukung Ibu Kata
+   > Nusantara**, efektivitas pengelolaan BMN di lbu Kata Nusantara, dan/ atau
+   > melaksanakan peraturan perundang-undangan."
+
+   Bandingkan **PMK 40/2024 Pasal 16 ayat (2)** yang memuat **daftar tertutup
+   tujuh kondisi** dan **tidak** memuat pertimbangan "mendukung Ibu Kota
+   Nusantara". PMK 53/2023 **menambah dasar baru** yang khusus IKN.
+3. **[F] Sebagian kewenangan PSP dialihkan ke Kepala Otorita** — **Pasal 7
+   ayat (2) huruf b**: *"penetapan status Penggunaan BMN pada Otorita Ibu
+   Kota Nusantara berupa **selain tanah dan/atau bangunan, kecuali alat utama
+   sistem persenjataan**"*. **Tidak ada ambang rupiah** pada kewenangan ini.
+
+> **[F] Batas penyimpangannya — Pasal 17 ayat (6)**: *"Tata cara penetapan
+> status Penggunaan BMN dilaksanakan berdasarkan ketentuan peraturan
+> perundang-undangan mengenai pengelolaan BMN."* Jadi **subjek, dasar, dan
+> kewenangan** menyimpang; **tata cara/prosedur teknisnya** tetap tunduk PMK
+> 40/2024 — termasuk daftar dokumen Pasal 11, tenggat 6 bulan, dan jalur
+> substitusi SPTJ.
+
+**[F] Empat rezim lain TIDAK menyimpangi.** Pasal 18 (dikutip di §2.0)
+mengembalikan **dioperasikan pihak lain, penggunaan sementara, dan pengalihan
+status** ke aturan umum. Kata *"sementara"* hanya muncul **satu kali** di
+seluruh PMK 53/2023, yaitu pada Pasal 18 itu. **Penggunaan Bersama bahkan
+tidak disebut sama sekali** — sehingga ia pun tunduk aturan umum, meski lewat
+kesenyapan dan bukan lewat penunjukan.
+
+> **Artinya untuk operator di IKN:** untuk **penggunaan sementara** bacalah
+> §3.2, **dioperasikan pihak lain** §3.3, **alih status** §3.4, dan
+> **Penggunaan bersama** §1.2 (PMK 40/2024 Pasal 40–52) — **apa adanya, tanpa
+> penyesuaian IKN**. Yang menyimpang **hanya PSP** (§4A.2).
+>
+> **Catatan kejujuran:** untuk tiga rezim pertama, ketundukan itu **tersurat**
+> (Pasal 18). Untuk **Penggunaan Bersama**, ia ditarik dari **ketiadaan
+> pengaturan khusus** — kesimpulan yang wajar tetapi berderajat lebih lemah.
+
+**[F] Dua ketentuan tambahan khas IKN pada bab Penggunaan:**
+
+- **Pasal 19**: pengamanan dan pemeliharaan menjadi tanggung jawab **Pengguna
+  Barang yang memperoleh PSP**.
+- **Pasal 20**: rezim **rumah negara dan rumah susun negara** — surat izin
+  penghunian diterbitkan **Otorita IKN berdasarkan rekomendasi K/L**
+  (ayat (3)), dan **ayat (4)**: *"Biaya pengamanan dan pemeliharaan BMN
+  berupa rumah negara … dan rumah susun negara … menjadi **beban Otorita Ibu
+  Kota Nusantara**."* Ini **menyimpangi** pola Pasal 19. Untuk AMAN: rumah
+  negara di IKN perlu penanda biaya tersendiri. [O]
+
+### 4A.3 ADP — aset yang BUKAN BMN
+
+**[F] Definisi — Pasal 1 angka 5** (hlm 2):
+
+> "Aset Dalam Penguasaan Otorita Ibu Kota Nusantara yang selanjutnya
+> disingkat ADP adalah **tanah** di wilayah Ibu Kota Nusantara yang **tidak
+> terkait dengan penyelenggaraan pemerintahan**."
+
+Perhatikan: kepanjangan resminya memuat frasa **"Otorita Ibu Kota
+Nusantara"** — bukan sekadar "Aset Dalam Penguasaan".
+
+**[F] Beda ADP dan BMN** — dua definisi yang berbeda jenis:
+
+| | BMN (Pasal 1 angka 3) | ADP (Pasal 1 angka 5) |
+|---|---|---|
+| Didefinisikan dari | **sumber pendanaan** (beban APBN / perolehan lain yang sah) | **objek + peruntukan** |
+| Jenis barang | **semua** jenis barang | **hanya tanah** |
+| Wilayah | mana pun | **hanya di IKN** |
+| Peruntukan | untuk tusi | justru **tidak terkait penyelenggaraan pemerintahan** |
+
+**[F] Keduanya SALING EKSKLUSIF, dan bertukar lewat penghapusan.**
+**Pasal 42** (hlm 20):
+
+> "Dalam hal tanah yang diajukan penetapan statusnya menjadi ADP merupakan
+> BMN: a. penetapan status menjadi ADP merupakan **alasan dilakukannya
+> penghapusan BMN**. b. keputusan penetapan status ADP … ditindaklanjuti oleh
+> Pengguna ADP dengan **penghapusan BMN dari daftar barang pengguna** pada
+> Otorita Ibu Kota Nusantara…"
+
+Arah sebaliknya juga ada: **Pasal 15** (BMN dapat diperoleh dari pengalihan
+ADP melalui Penghapusan ADP) dan **Pasal 46** (Penghapusan ADP karena
+dialihkan menjadi BMN). **Pasal 45 ayat (1)** membatasi penghapusan ADP pada
+**tiga sebab saja**: dialihkan menjadi BMN, ditetapkan menjadi kawasan hutan,
+atau pelaksanaan undang-undang.
+
+> **Akibat untuk model data AMAN [O]:** `jenis_aset` harus menjadi **enum
+> BMN | ADP**, bukan boolean, dan **perpindahan antar keduanya adalah
+> peristiwa penghapusan yang harus dicatat** — bukan sekadar pengubahan
+> label. Satu bidang tanah **tidak boleh** berstatus BMN dan ADP sekaligus.
+
+### 4A.4 ADP tunduk rezim TERPISAH — bukan rezim Penggunaan BMN
+
+**[F]** PMK 53/2023 memisahkan tegas **BAB II (Pengelolaan BMN)** dan
+**BAB III (Pengelolaan ADP)**. ADP punya siklus sendiri — **Pasal 35
+ayat (1)**: perencanaan; pengalokasian; penggunaan; pemanfaatan; pengamanan
+dan pemeliharaan; Penghapusan; Penatausahaan; Pengawasan dan pengendalian.
+
+**[F] Pejabatnya pun bernama lain dan berbeda kewenangan:**
+
+| Rezim BMN | Rezim ADP |
+|---|---|
+| Pengelola Barang = Menteri (Pasal 4 ayat (1)) | **Pengelola ADP** = Menteri (**Pasal 36 ayat (1)**) |
+| Pengguna Barang = Kepala Otorita / menteri-pimpinan lembaga | **Pengguna ADP** = Kepala Otorita IKN (**Pasal 37 ayat (1)**) |
+| Kuasa Pengguna Barang | **Kuasa Pengguna ADP** (**Pasal 38 ayat (1)**) |
+
+> **Tidak ada satu pasal pun** dalam PMK 53/2023 yang menundukkan penggunaan
+> ADP pada ketentuan Penggunaan BMN. **Jangan menerapkan §3.1–§3.4 pada
+> ADP.** [F]
+
+**[X] Lubang nyata yang harus diketahui:** **Pasal 35 ayat (2)** hanya
+menyatakan **tiga** hal yang tata caranya diatur dalam PMK ini —
+**Penghapusan, Penatausahaan, serta Pengawasan dan pengendalian**. Untuk
+**perencanaan, pengalokasian, penggunaan, pemanfaatan, serta pengamanan dan
+pemeliharaan ADP**, PMK 53/2023 **tidak memuat tata caranya dan juga tidak
+menunjuk peraturan lain** sebagai rujukan — berbeda dari pola Pasal 3 ayat (2)
+di rezim BMN yang eksplisit menunjuk keluar. Ini **kekosongan pengaturan di
+dalam teks**, bukan kegagalan pencarian. **Jangan diisi dengan asumsi bahwa
+PMK Penggunaan BMN berlaku *mutatis mutandis*.**
+
+**[F] Angka penting pada rezim ADP:**
+
+- **Penghapusan ADP:** SK Penghapusan diterbitkan **paling lambat 3 (tiga)
+  bulan** sejak tanggal surat persetujuan (**Pasal 49 ayat (5)**).
+- **Inventarisasi ADP:** sensus barang **paling sedikit sekali dalam 5 (lima)
+  tahun** (**Pasal 52 ayat (1)**).
+- **Pemantauan:** periodik **1 (satu) kali setiap semester** (**Pasal 60
+  ayat (2)**); laporan wasdal disampaikan **tahunan** (**Pasal 65 ayat (3)**).
+- **Laporan PNBP ADP:** **semesteran dan tahunan** (**Pasal 54 ayat (1)**).
+
+### 4A.5 Kewenangan yang didelegasikan kepada Kepala Otorita IKN
+
+**[F] Pasal 7 ayat (2)** — Menteri mendelegasikan **enam** kewenangan
+Pengelola Barang kepada Kepala Otorita IKN:
+
+| Huruf | Kewenangan |
+|---|---|
+| a | penelaahan & persetujuan **RKBMN** yang diusulkan K/L untuk penyelenggaraan pemerintahan di IKN |
+| b | **penetapan status Penggunaan BMN** pada OIKN berupa **selain tanah/bangunan**, kecuali alutsista |
+| c | persetujuan **Pemanfaatan** BMN pada OIKN (sewa, pinjam pakai, KSP, BGS/BSG, KSPI, kerja sama terbatas pembiayaan infrastruktur) |
+| d | persetujuan **peniadaan clawback** dalam KSPI di IKN |
+| e | persetujuan **penjualan** BMN pada OIKN berupa selain tanah/bangunan **s.d. Rp10.000.000.000,00 per unit/satuan** |
+| f | persetujuan **pemusnahan** BMN pada OIKN berupa selain tanah/bangunan |
+
+> **[F] PERINGATAN ANGKA — Rp10 miliar adalah ambang PENJUALAN, bukan PSP.**
+> Teks huruf e (hlm 8, dengan cacat OCR dikutip apa adanya): *"persetujuan
+> pemindahtanganan dalam bentuk penjualan atas BMN pada. Otorita Ibu Kota
+> Nusantara berupa selain tanah dan/ atau bangunan dengan nilai perolehan
+> sampai dengan Rp 10. 000. 000. 000, 00 ( sepuluh miliar) per unit/satuan"*.
+> Angka ini **sering salah dikutip** sebagai ambang PSP atau alih status. PSP
+> (huruf b) **tidak punya ambang rupiah sama sekali**. Perhatikan juga teks
+> menulis *"( sepuluh miliar)"* **tanpa kata "rupiah"**.
+
+**[F] Yang TIDAK didelegasikan:** daftar huruf a–f bersifat tertutup dan
+**tidak memuat pengalihan status Penggunaan BMN**. Jadi **alih status BMN di
+IKN tetap memerlukan persetujuan Pengelola Barang (Menteri Keuangan c.q.
+DJKN)** — bukan Kepala Otorita.
+
+**[F] Pelaksanaan & pelaporan:** kewenangan delegasi dilaksanakan oleh
+**unit kesekretariatan Otorita** (Pasal 7 ayat (3)), dan **dilaporkan kepada
+Pengelola Barang secara semesteran** (Pasal 7 ayat (4)). Untuk rezim ADP,
+kewajiban lapor semesteran yang setara ada di **Pasal 39 ayat (7)**, disertai
+**larangan sublimpah** (**Pasal 39 ayat (6)**).
+
+**[F] Ambang yang menarik kewenangan kembali ke Menteri — Pasal 39 ayat (3)**
+(rezim ADP): persetujuan Penghapusan ADP untuk pemberian **hak milik tanah
+rumah tapak** tetap dilakukan **Pengelola ADP** bila memenuhi **salah satu**
+kriteria (alternatif, bukan kumulatif): **luas di atas 1.000 m²**; **nilai di
+atas Rp1.000.000.000,00**; atau berada **di dalam kawasan inti pusat
+pemerintahan**.
+
+**[F] Yang tetap harus diajukan Kepala Otorita kepada Menteri** (Pasal 5
+ayat (2)): menetapkan standar barang & standar kebutuhan BMN di IKN
+**setelah persetujuan Menteri** (huruf c); mengajukan usul **Pemanfaatan**
+(huruf j); usul **pemindahtanganan** (huruf k); **menyerahkan BMN idle**
+(huruf l); usul **pemusnahan dan penghapusan** (huruf m); serta menyampaikan
+**laporan barang pengguna semesteran dan tahunan** (huruf p).
+
+### 4A.6 Yang MASIH gelap tentang IKN
+
+| # | Pertanyaan | Status |
+|---|---|---|
+| 1 | Apakah PMK 53/2023 masih berlaku utuh per Agustus 2026, dan adakah penyesuaian pasca **UU 21/2023**? | **[X]** — sebuah berkas tidak dapat membuktikan dirinya belum diubah. PMK 40/2024 tidak menyebut PMK 53/2023 sama sekali, jadi **tidak mencabutnya** — tetapi itu bukan bukti PMK 53/2023 masih utuh |
+| 2 | **Peraturan/Keputusan Kepala Otorita IKN** tentang pendelegasian kewenangan & pola tanda tangan | **[X]** — **Pasal 5 ayat (4)** menyerahkannya ke Kepala Otorita, tanpa menyebut nomor. Inilah dokumen yang menentukan **siapa yang sah menandatangani surat** di OIKN |
+| 3 | Tata cara **perencanaan, pengalokasian, penggunaan, pemanfaatan, pengamanan-pemeliharaan ADP** | **[X]** — kekosongan di dalam teks (§4A.4) |
+| 4 | Jenis hak atas tanah untuk BMN OIKN (**Hak Pakai vs HPL**) | **[X]** — PMK 53/2023 tidak menyebut sertipikat sama sekali; ini ranah ATR/BPN |
+| 5 | Isi & format **SPTJ versi ADP** | **[X]** — diwajibkan lima kali, tidak pernah didefinisikan |
+| 6 | Bagaimana K/L umum **menempati** tanah/bangunan yang di-PSP-kan kepada OIKN | **[X]/[O]** — secara logis mengarah ke Penggunaan Bersama atau Penggunaan Sementara (PMK 40/2024), tetapi **PMK 53/2023 tidak menyatakannya**. Perlu konfirmasi DJKN |
+| 7 | **PMK 139/PMK.08/2022** (khusus IKN) dan hubungannya dengan PMK 53/2023 | **[X]** — tidak dibaca; tidak disebut dalam PMK 53/2023 |
+
+> **[F] Satu penundaan yang mudah terlewat — Pasal 67:** ketentuan penyusunan
+> dan penelaahan **RKBMN (Pasal 8–13) baru dilaksanakan mulai tahun 2027**,
+> untuk RKBMN **tahun anggaran 2029**. Jadi meski PMK berlaku sejak 11 Mei
+> 2023, blok perencanaan kebutuhannya **ditangguhkan hampir empat tahun**.
+> Untuk AMAN per Agustus 2026: modul RKBMN OIKN **belum** tunduk Pasal 8–13,
+> dan akan mulai tunduk **tahun depan**. Ini tenggat riil yang layak masuk
+> peta jalan produk. [O]
+
+> **[F] Ketentuan peralihan PMK 53/2023 hanya satu pasal — Pasal 68:**
+> keputusan pengelolaan BMN dan ADP yang **telah ditetapkan sebelum PMK ini
+> ditetapkan** dinyatakan **tetap berlaku**. Patokannya *"sebelum
+> ditetapkannya"* (10 Mei 2023), bukan sebelum diundangkan. **PMK 53/2023
+> tidak memuat pasal pencabutan apa pun.**
 
 ---
 
@@ -1388,21 +2411,56 @@ seperti V1), modular, ada log transaksi, interkoneksi antarmodul, dan
 > OIKN — surat permohonan kemungkinan tetap diunggah sebagai PDF
 > bertanda tangan. [O]
 
-**Klaim "pengajuan & penerbitan persetujuan dapat dilakukan secara
-elektronik" yang diatribusikan ke PMK 40/2024**: sumber yang dicantumkan
-riset justru artikel tentang SIMAN, **bukan** cuplikan PMK. Pisahkan: klaim
-tentang SIMAN [S·lemah] vs klaim tentang klausul elektronik dalam PMK
-[X — belum ada sumber].
+**[F] Klausul elektronik dalam PMK 40/2024 TERNYATA ADA** — status [X] lama
+dicabut. **BAB XI, Pasal 73 ayat (1)** (hlm 47):
+
+> "(1) Pengajuan permohonan dan penerbitan penetapan atau persetujuan
+> Penggunaan BMN **dapat dilakukan secara elektronik**, dengan ketentuan
+> sebagai berikut: a. dokumen pendukung … **dapat berbentuk arsip digital**,
+> yang disertai **surat keterangan dari pejabat struktural yang berwenang …
+> yang menyatakan kebenaran arsip digital tersebut**; dan b. penetapan atau
+> persetujuan Penggunaan sebagaimana dimaksud dalam Pasal 14 ayat (1), Pasal
+> 26 ayat (1), Pasal 36 ayat (1), Pasal 48 ayat (1), dan Pasal 56 ayat (1)
+> **dapat dilakukan melalui media elektronik** sesuai dengan ketentuan
+> peraturan perundang-undangan."
+
+Perhatikan huruf b menyebut **kelima** produk hukum kelima rezim sekaligus —
+konsisten dengan pemetaan §1.2.
+
+> **[F] Judul BAB XI tertulis "SISTEM INFOMASI"** (hlm 47) — kemungkinan
+> salah ketik pada naskah asli atau cacat OCR untuk "SISTEM INFORMASI".
+> Ditandai, tidak diperbaiki diam-diam.
+
+**[X] Yang TETAP tidak terjawab:** Pasal 73 ayat (2) menunjuk pedomannya ke
+*"Peraturan Menteri Keuangan mengenai pedoman pengelolaan BMN dengan
+menggunakan sistem informasi"* — **tanpa nomor**. Jadi PMK 40/2024
+**mengizinkan** jalur elektronik tetapi **tidak** menetapkan format, ukuran,
+penamaan berkas, atau apakah TTE diterima. Seluruh §5.2 tetap [X].
+
+Pemisahan yang diminta pemeriksa tetap berlaku, hanya salah satu sisinya
+berubah: klaim tentang **SIMAN** tetap [S·lemah]; klaim tentang **klausul
+elektronik dalam PMK** kini **[F] Pasal 73**.
 
 ### 5.4 Dokumen khas era elektronik
 
-**Surat Keterangan Kebenaran Arsip Digital** — surat yang menyatakan berkas
-pindaian yang diunggah benar sesuai aslinya; berbeda dari surat keterangan
-kebenaran fotokopi. [S·lemah]
-> **Nama persisnya belum pasti** (bisa "surat pernyataan kebenaran dokumen
-> digital", "surat keterangan kesesuaian arsip digital dengan aslinya", dst.).
-> Template dengan judul yang salah adalah penyebab klasik berkas
-> dikembalikan → konfirmasi judul ke KPKNL sebelum template dibekukan. [O]
+**[F] Dokumen ini MEMANG ADA — keberadaannya kini pasti, namanya belum.**
+**Pasal 73 ayat (1) huruf a** mewajibkan arsip digital *"disertai **surat
+keterangan** dari pejabat struktural yang berwenang pada Kementerian/Lembaga
+bersangkutan yang menyatakan **kebenaran arsip digital** tersebut"*. Ia
+memang **berbeda** dari surat keterangan kebenaran **fotokopi** (**Pasal 11
+ayat (2) huruf g**) — keduanya ada, untuk keperluan berbeda.
+
+> **[X] Nama bakunya tetap belum pasti.** PMK **tidak memberi judul** kepada
+> dokumen ini; ia hanya menguraikan fungsinya. Sama seperti "surat keterangan
+> kebenaran fotokopi", yang di **Pasal 12** disebut cukup sebagai *"surat
+> keterangan"*. **Formatnya ditetapkan Direktur Jenderal a.n. Menteri
+> Keuangan** — dan Pasal 12 hanya menyebut format untuk Pasal 11, **tidak**
+> untuk Pasal 73. Jadi:
+> - **Boleh ditulis** di teks bantuan: dokumen ini wajib bila mengunggah
+>   pindaian, dengan sitasi Pasal 73 ayat (1) huruf a.
+> - **Jangan** mencetak judul dokumen sebagai nomenklatur resmi. Template
+>   dengan judul yang salah tetap penyebab klasik berkas dikembalikan →
+>   konfirmasi judul ke KPKNL sebelum template dibekukan. [O]
 
 ### 5.5 Hubungan SIMAN ↔ SAKTI (sumber kebenaran terbagi)
 
@@ -1450,22 +2508,35 @@ melengkapi detail barang tanpa input ulang nilai.
 
 ### 6.1 Prinsip rancangan (turunan langsung dari keterbatasan bukti)
 
-1. **Aturan sebagai data, bukan kode.** Setiap ambang nilai, tenggat, dan
-   daftar lampiran disimpan di tabel konfigurasi bersama: `nilai`,
-   `satuan_hitung`, `dasar_hukum`, `tanggal_berlaku`, `status_verifikasi`
-   (BELUM_VERIFIKASI | TERVERIFIKASI | DIRAGUKAN), `catatan`. UI menampilkan
-   badge "perlu verifikasi" untuk yang belum terverifikasi.
-2. **Peringatan lunak, bukan hard block.** Satu-satunya validasi keras yang
-   relatif aman: **tidak boleh mengajukan rezim 2/3/4 tanpa SK PSP aktif**
-   pada NUP terkait — dan itu pun beri jalur override bercatat untuk kasus
-   yang dikecualikan.
-3. **Jangan menyembunyikan baris.** Aset yang diduga dikecualikan dari PSP
-   tetap tampil dengan penanda + tombol dismiss bercatat (siapa, kapan,
-   alasan).
-4. **Jangan mencetak nomor pasal.** Generator surat tidak boleh punya slot
-   "Pasal …" sampai §7.3 tuntas. Bagian "Mengingat" cukup menyebut nama
-   peraturan tanpa nomor pasal, dan hanya peraturan yang statusnya sudah
-   diverifikasi.
+1. **Aturan sebagai data, bukan kode.** Prinsip ini **makin penting**, bukan
+   berkurang: kini banyak baris berpindah ke `status_verifikasi =
+   TERVERIFIKASI` dengan `dasar_hukum` terisi nomor pasal — persis yang
+   dirancang tabel konfigurasi. Kolomnya tetap: `nilai`, `satuan_hitung`,
+   `dasar_hukum`, `tanggal_berlaku`, `status_verifikasi` (BELUM_VERIFIKASI |
+   TERVERIFIKASI | DIRAGUKAN), `catatan`. **Jangan** memindahkan angka yang
+   sudah [F] menjadi konstanta kode — status berlakunya masih bisa berubah
+   (§7.2 butir 1).
+2. **Peringatan lunak, bukan hard block.** **Tetap berlaku, dengan satu
+   penajaman [F]:** validasi keras "tidak boleh mengajukan rezim 2–5 tanpa
+   SK PSP aktif" kini berdasar **Pasal 10** — tetapi pasal itu sendiri
+   memuat klausul *"kecuali ditetapkan lain"*, sehingga **jalur override
+   bercatat wajib disediakan**, bukan opsional.
+3. **Jangan menyembunyikan baris.** Tetap berlaku. Diperkuat **[F] Pasal 9
+   ayat (2) huruf g** (*"BMN lain sesuai dengan ketentuan peraturan
+   perundang-undangan"*) yang membuat daftar pengecualian PSP **tidak
+   tertutup** — enum tertutup akan salah dengan sendirinya.
+4. **Nomor pasal kini BOLEH dicetak — dengan syarat.** Prinsip lama ("jangan
+   mencetak nomor pasal sama sekali") **dilonggarkan**, karena §7.3 sudah
+   sebagian tuntas. Aturannya sekarang:
+   - Slot "Pasal …" **boleh** diisi **hanya** dari klaim berlabel **[F]** di
+     dokumen ini, dan disimpan sebagai **data konfigurasi** (bukan literal di
+     template), agar dapat dikoreksi serentak bila rezim berubah.
+   - Bagian **"Mengingat"** surat: cukup menyebut **nama dan nomor
+     peraturan** (PMK 40/2024; PMK 53/2023 untuk IKN) — **tanpa** nomor
+     pasal, sesuai kelaziman legal drafting.
+   - Peraturan yang statusnya masih [S]/[X] (PMK 115/2020, 181/2016,
+     207/2021, 97/2019, 4/2015, juknis SIMAN) **tetap dilarang** masuk
+     "Mengingat".
 5. **Rute paling konservatif saat ragu** (ke Pengelola Barang), dan **"perlu
    penentuan manual"** untuk kasus tepat di ambang.
 6. **Perluas struktur yang sudah ada, jangan bikin entitas baru.** Repo sudah
@@ -1568,38 +2639,80 @@ hari kerja (itu janji layanan, dan hanya untuk tanah/bangunan).
 
 ### 6.6 Validasi ambang nilai
 
+**Diperbarui menurut [F].** Perubahan terpenting: `total_paket` **tidak lagi
+dipakai sebagai penguji ambang** (teks tegas "per unit/satuan"), dan alutsista
+mendapat cabangnya sendiri.
+
 ```
-uji_ambang(objek, nilai_per_nup, total_paket):
+uji_ambang(objek, nilai_per_nup, punya_dokumen_kepemilikan, is_alutsista):
+  # [F] Pasal 7 ayat (3) huruf b — tanpa batas nilai
+  jika is_alutsista:
+      -> PENGGUNA_SENDIRI                      # di luar lingkup AMAN, §6.7
+
+  # [F] Pasal 6 ayat (3) huruf a — tidak ada jalur mandiri
   jika objek in (TANAH, TANAH_DAN_BANGUNAN, BANGUNAN):
-      -> PENGELOLA  (tidak ada jalur mandiri)  [dugaan]
+      -> PENGELOLA
+
   jika objek == SELAIN_TB:
+      # [F] Pasal 6 ayat (3) huruf b angka 1 — tanpa batas nilai
       jika punya_dokumen_kepemilikan:
-          -> PENGELOLA  [dugaan]
+          -> PENGELOLA
       selain itu:
-          jika nilai_per_nup == AMBANG or total_paket == AMBANG:
+          # [F] tumpang tindih "paling sedikit" vs "paling banyak"
+          jika nilai_per_nup == AMBANG:          # AMBANG = 100_000_000
               -> PERLU_PENENTUAN_MANUAL
-          jika nilai_per_nup > AMBANG or total_paket > AMBANG:
-              -> PENGELOLA          # konservatif: cukup salah satu lewat
+          jika nilai_per_nup > AMBANG:
+              -> PENGELOLA                       # Pasal 6 ayat (3) b.2
           selain itu:
-              -> PENGGUNA_SENDIRI (badge "perlu verifikasi")
+              -> PENGGUNA_SENDIRI                # Pasal 7 ayat (3) a
 ```
 
-Saran kantor tujuan (KPKNL/Kanwil/Pusat) dari tangga nilai ditampilkan
-sebagai **teks saran** dengan badge "angka belum diverifikasi" — **tidak**
-mengunci pilihan operator.
+> **`total_nilai_paket` tetap dihitung dan ditampilkan** sebagai informasi
+> pendukung, **tetapi tidak memengaruhi perutean**. Mempertahankannya sebagai
+> penguji akan salah merutekan paket berisi banyak barang murah ke Pengelola
+> Barang — kesalahan yang justru lahir dari kehati-hatian versi lama, ketika
+> satuan hitungnya belum diketahui.
+
+> **Badge "perlu verifikasi" dicabut** dari cabang PENGGUNA_SENDIRI dan
+> PENGELOLA (kini [F]), **tetapi dipertahankan** pada
+> PERLU_PENENTUAN_MANUAL — di sana ketidakpastiannya nyata dan ada di
+> teksnya sendiri.
+
+Saran kantor tujuan (KPKNL/Kanwil/Pusat) dari tangga nilai **tetap**
+ditampilkan sebagai **teks saran** dengan badge "angka belum diverifikasi" —
+**tidak** mengunci pilihan operator. Statusnya tidak membaik: tangga itu
+**terbukti tidak ada** di PMK 40/2024 (§2.3).
+
+**Cabang khusus IKN yang perlu ditambahkan [F]:**
+
+```
+# [F] PMK 53/2023 Pasal 7 ayat (2) huruf b
+jika lokasi == IKN dan pemegang == OTORITA_IKN dan objek == SELAIN_TB
+   dan bukan alutsista:
+      -> KEPALA_OTORITA_IKN        # delegasi, TANPA ambang rupiah
+
+# [F] PMK 53/2023 Pasal 17 ayat (1) huruf a angka 2
+jika lokasi == IKN dan objek in (TANAH, TANAH_DAN_BANGUNAN, BANGUNAN)
+   dan peruntukan == TUSI_KL_UMUM:
+      -> PSP kepada OTORITA_IKN, bukan kepada K/L pemakai
+```
 
 ### 6.7 Hal yang sengaja TIDAK dibangun
 
-| Tidak dibangun | Alasan |
-|---|---|
-| Cabang logika **alutsista** | OIKN tidak menguasai alutsista; hanya menambah cabang mati |
-| **Filter** yang menyembunyikan objek yang diduga dikecualikan dari PSP | menukar false positive murah dengan false negative mahal |
-| Teks bantuan "pemanfaatan bangunan milik pihak lain di atas tanah BMN tidak perlu persetujuan Pengelola" | klaim berisiko hukum tertinggi, sumbernya aturan yang diduga dicabut |
-| Enum kategori Pihak Lain + validasi jangka waktu turunannya | daftar dan tabel jangka waktunya saling bertabrakan |
-| Slot "nomor pasal" pada template surat | surat dinas dengan nomor pasal salah lebih berbahaya daripada surat tanpa nomor pasal |
-| Hard block "belum bersertipikat" | ketiadaan bukti milik diduga **tidak** menghalangi permohonan |
-| Istilah "Pengguna Barang Eminen"/"Kolaborator" | tidak lazim; diduga hasil parafrase/halusinasi |
-| Konstanta 179 hari untuk ambang 6 bulan | "6 bulan" adalah satuan **kalender**; konversi ke hari memperkenalkan galat sendiri |
+| Tidak dibangun | Alasan | Status setelah teks primer |
+|---|---|---|
+| Cabang logika **alutsista** | OIKN tidak menguasai alutsista; hanya menambah cabang mati | **Tetap tidak dibangun.** Kini [F] Pasal 7 ayat (3) huruf b — alasannya operasional, bukan keraguan |
+| **Filter** yang menyembunyikan objek yang diduga dikecualikan dari PSP | menukar false positive murah dengan false negative mahal | **Tetap.** Diperkuat [F] Pasal 9 ayat (2) huruf g (daftar tidak tertutup) |
+| Slot "nomor pasal" **bebas ketik** pada template surat | surat dinas dengan nomor pasal salah lebih berbahaya daripada tanpa nomor pasal | **Dilonggarkan.** Nomor pasal [F] boleh dipakai, tetapi **dari data konfigurasi**, bukan diketik bebas (§6.1 butir 4) |
+| Hard block "belum bersertipikat" | ketiadaan bukti milik **tidak** menghalangi permohonan | **Tetap tidak dibangun.** Kini [F] Pasal 9 + Pasal 11 ayat (3)–(8) |
+| Konstanta 179 hari untuk ambang 6 bulan | "6 bulan" adalah satuan **kalender** | **Tetap.** Diperkuat [F]: PMK tidak pernah memakai satuan "hari kerja" |
+| ~~Enum kategori Pihak Lain + validasi jangka waktu~~ | ~~daftar dan tabel jangka waktu saling bertabrakan~~ | **DICABUT — sekarang dibangun.** Enum 13 nilai [F] Pasal 22 ayat (1); jangka waktu [F] Pasal 23 menutup seluruh kategori. Pengecualian: huruf a (anak perusahaan BUMN) dan huruf m (badan hukum lain) **tidak auto-approve** (§3.3.4) |
+| ~~Istilah "Pengguna Barang Eminen"/"Kolaborator"~~ | ~~tidak lazim; diduga halusinasi~~ | **DICABUT — istilah RESMI**, [F] Pasal 1 angka 4 & 5. **Wajib dipakai** di modul Penggunaan Bersama; memakai istilah lain justru akan menyimpang dari surat resmi |
+| ~~Teks bantuan "pemanfaatan bangunan milik pihak lain … tidak perlu persetujuan"~~ | ~~sumbernya aturan yang diduga dicabut~~ | **DICABUT sebagian.** Norma itu hidup di [F] Pasal 21 ayat (2). **Tetap tidak dibangun sebagai kalimat telanjang**; dibangun sebagai **kondisi berpagar** dengan checklist lima syarat Pasal 21 ayat (7) (§3.3.9) |
+| **BARU:** perutean ambang berbasis `total_nilai_paket` | [F] teks tegas **"per unit/satuan"**; memakai total akan salah merutekan paket berisi banyak barang murah | Tidak dibangun |
+| **BARU:** template **perjanjian** pada modul alih status | kata "perjanjian" nol kemunculan di BAB VII; instrumen yang benar persetujuan + BAST + keputusan | Tidak dibangun |
+| **BARU:** alur di mana **Pengguna Barang baru menetapkan sendiri** status penggunaan atas BMN yang dialihkan | [F] Pasal 57 huruf e — itu kewenangan **Pengelola Barang**; alur semacam itu melahirkan SK cacat kewenangan | Tidak dibangun |
+| **BARU:** penerapan jalur substitusi bukti kepemilikan (§4.2) pada **ADP** | ADP rezim terpisah; PMK 53/2023 tidak menyediakan mekanisme itu | Tidak dibangun |
 
 ### 6.8 Keluaran yang diharapkan dari modul
 
@@ -1621,103 +2734,185 @@ mengunci pilihan operator.
 > tepat apa yang tidak diketahui, sehingga sisa dokumen bisa dipercaya
 > sebatas yang memang layak dipercaya.
 
-### 7.1 Sebab: seluruh sumber primer diblokir
+### 7.1 Apa yang sekarang terbaca, dan apa yang tetap tidak
 
-Setiap percobaan pengambilan halaman ditolak **di tingkat gateway egress**
-(403 pada CONNECT / policy denial), bukan 403 dari situsnya. Kuota pencarian
-web pada sesi riset dan sesi pemeriksaan juga habis. Karena itu:
+**Dua sumber primer sudah terbaca penuh** (8 Agustus 2026, PDF resmi
+diserahkan pemilik proyek):
 
-- **Tidak satu pun** peraturan, manual, checklist, atau artikel di bawah ini
-  yang pernah dibaca isinya.
-- Seluruh isi dokumen ini berasal dari **cuplikan mesin pencari** +
-  **pemeriksaan konsistensi internal** + **silang ke pustaka repo**.
-- **Pemeriksaan skeptis pun tidak memverifikasi apa pun secara independen** —
-  koreksi-koreksinya adalah **daftar hal yang harus dicurigai**, bukan
-  koreksi yang sudah terbukti.
-
-### 7.2 Sepuluh prioritas verifikasi manual
-
-| # | Yang harus dibuka/dilakukan | Yang harus dicatat |
+| Berkas | Cakupan | Hasil |
 |---|---|---|
-| 1 | **PDF PMK 40 Tahun 2024** (JDIH Kemenkeu / PPID DJKN) | Benarkah ada; judul persis; tanggal penetapan & pengundangan; **Ketentuan Penutup** (daftar yang dicabut) dan **Ketentuan Peralihan** (nasib permohonan berjalan) |
-| 2 | **Perubahan/pencabutan atas PMK 40/2024 sampai 2026** | Apakah masih rezim terkini per Agustus 2026 |
-| 3 | **PMK 53 Tahun 2023** (BMN & ADP di IKN) + **UU 3/2022 jo. UU 21/2023** + **PMK 139/PMK.08/2022** | Status OIKN sebagai Pengguna Barang; definisi & sumber perolehan ADP; apakah menyimpangi PMK 40/2024; adakah PMK penyesuaian pasca-UU 21/2023 |
-| 4 | **Rumusan ambang Rp100 juta — kutip VERBATIM** | "per unit/satuan" **atau** "per usulan/permohonan"; operator perbandingan (≤/<) |
-| 5 | **KMK pelimpahan wewenang DJKN yang berlaku 2024–2026** | Tangga nilai KPKNL/Kanwil/Pusat yang sebenarnya (bukan KMK 229/KM.6/2016 era lama) |
-| 6 | **Ambang 6 bulan penggunaan sementara** | "kurang dari" vs "paling lama"; **siapa yang menyetujui** pada jalur pendek; **apakah tetap wajib pemberitahuan** ke Pengelola |
-| 7 | **PMK 4/PMK.06/2015** | Masih berlaku atau sudah diserap PMK 40/2024; daftar kewenangan yang didelegasikan butir demi butir (PSP saja / pemindahtanganan saja / keduanya) |
-| 8 | **Checklist resmi KPKNL Balikpapan** + Standar Pelayanannya | Daftar lampiran otoritatif per rezim; SLA yang benar; konfirmasi wilayah kerja atas IKN/PPU |
-| 9 | **Juknis & user manual SIMAN v2** (nomor belum dipastikan) | Struktur menu; slot unggah; format/ukuran/penamaan berkas; peran & rantai persetujuan; apakah TTE diterima |
-| 10 | **Login SIMAN V2 dan potret alur sebenarnya** | Satu-satunya butir yang bisa diverifikasi **tanpa** akses JDIH |
+| **PMK 40 Tahun 2024** | 50 hlm, 78 pasal, 14 BAB, 24 Bagian, 30 Paragraf | Dibaca seluruhnya; pasal berurutan tanpa lompatan |
+| **PMK 53 Tahun 2023** | 28 hlm, 69 pasal, 6 BAB | Dibaca seluruhnya |
+
+**Yang TETAP tidak terbaca — dan karenanya tetap [S]/[X]:**
+
+- **Seluruh lapisan di bawah PMK**: ketentuan teknis Direktur Jenderal
+  (Pasal 12, Pasal 75), **KMK pelimpahan wewenang DJKN**, juknis & user
+  manual SIMAN v2, checklist resmi KPKNL, Standar Pelayanan.
+- **Seluruh peraturan lain**: PP 27/2014 jo. PP 28/2020, PMK Pemanfaatan,
+  Penatausahaan, Wasdal, Asuransi, Penghapusan, PMK 4/PMK.06/2015, PMK
+  139/PMK.08/2022, UU 21/2023, PP 18/2021, regulasi ATR/BPN.
+- **Status keberlakuan kedua PMK per Agustus 2026.** Sebuah berkas
+  membuktikan isinya, **bukan** bahwa ia belum diubah.
+- **Kemungkinan lampiran yang tidak ikut terekstraksi.** Lihat §7.2 butir 3.
+- **Seluruh isi §5 (SIMAN V2)** — tidak satu pun sumbernya primer.
+
+**Cara membaca ulang koreksi pemeriksa lama.** Pada versi sebelumnya,
+pemeriksaan skeptis **tidak memverifikasi apa pun secara independen**;
+koreksinya adalah *daftar hal yang harus dicurigai*. Setelah diuji ke teks
+primer, hasilnya campur — dan itu justru pelajarannya:
+
+| Koreksi pemeriksa | Terbukti? |
+|---|---|
+| "9 slot wajib" harus dibatalkan | **Benar** — Pasal 11 memang bercabang per objek |
+| Kewajiban pemberitahuan pada jalur ≤6 bulan jangan dihapus | **Benar** — Pasal 33 ayat (3) |
+| Ambang Rp100 juta jangan dinyatakan pasti "per unit" | **Terlalu hati-hati** — teks tegas "per unit/satuan"; tetapi kehati-hatian di **titik ambang** justru terbukti perlu |
+| "99 tahun" adalah angka karangan | **Salah** — Pasal 23 huruf d |
+| "Eminen/Kolaborator" adalah halusinasi | **Salah** — Pasal 1 angka 4 & 5 |
+| Frasa "kecuali ditentukan lain dalam perjanjian" adalah tambahan riset awal | **Salah** — Pasal 32 ayat (4) |
+| Klaim bangunan Pihak Lain "berisiko tinggi, jangan dipakai" | **Sebagian salah** — normanya ada (Pasal 21 ayat (2)), tetapi berpagar |
+| Ambang untuk rezim Pihak Lain "diduga ADA" | **Salah** — memang tidak ada |
+
+> **Pelajaran metodologis yang layak dibawa ke riset berikutnya:** skeptisisme
+> menyelamatkan dokumen ini dari beberapa kesalahan nyata, **tetapi juga
+> menghasilkan kesalahan jenis kedua** — menolak fakta yang benar karena
+> tampak janggal. Menandai sesuatu "meragukan" aman; **menyatakan sesuatu
+> "halusinasi" lalu melarangnya dipakai** ternyata tidak.
+
+### 7.2 Prioritas verifikasi manual — daftar yang sudah menyusut
+
+#### Sudah terjawab (dicoret dari daftar prioritas)
+
+| Butir lama | Jawaban |
+|---|---|
+| ~~PDF PMK 40/2024: benarkah ada, judul, tanggal, Penutup & Peralihan~~ | **Terjawab** — §1.1, §3.1.1. *Kecuali* tanggal pengundangan & nomor BN, yang **tetap [X]** (lihat prioritas baru #2) |
+| ~~PMK 53/2023: status OIKN, definisi & sumber ADP, hubungan dengan PMK 40/2024~~ | **Terjawab** — seluruh **§4A** |
+| ~~Rumusan ambang Rp100 juta: "per unit" atau "per usulan"~~ | **Terjawab** — "per unit/satuan", lima kali, tanpa kekecualian (§2.3) |
+| ~~Ambang 6 bulan: "kurang dari" vs "paling lama"; siapa menyetujui; wajib lapor?~~ | **Terjawab** — "paling lama"; Pengguna Barang; ya tetap wajib lapor (§3.2.5) |
+| ~~Subjek & keseragaman tenggat 6 bulan PSP~~ | **Terjawab sebagian** — subjek = pengajuan oleh Pengguna Barang, berlaku seragam. **Titik mulai tetap [X]** (prioritas baru #4) |
+| ~~Jumlah & tenggat perpanjangan penggunaan sementara~~ | **Terjawab** — 3 bln/1 bln menurut jalur; 1 kali pada jalur Pengguna Barang. **Durasi tiap perpanjangan tetap [X]** |
+| ~~Tenggat perjanjian 3 bulan; lapor 1 bulan pasca-SK PSP mandiri~~ | **Terjawab** — Pasal 37 ayat (3), Pasal 17 ayat (4) |
+| ~~Rantai tenggat alih status 1/2/1 bulan~~ | **Terjawab, benar seluruhnya** — Pasal 57 (§3.4.7) |
+| ~~Dasar pencatatan pada Pengguna Barang baru~~ | **Terjawab** — keputusan PSP dari **Pengelola Barang**; ambiguitas dua versi tidak ada (§3.4.7) |
+| ~~Daftar kategori "Pihak Lain" + tabel jangka waktu dalam satu pasal~~ | **Terjawab** — Pasal 22 (13 kategori) & Pasal 23 (§3.3.4) |
+| ~~Kebenaran angka 99 tahun~~ | **Terjawab — benar**, khusus pemerintah negara lain (§3.3.8) |
+| ~~Perlakuan uang pada rezim Pihak Lain; apakah "kompensasi" dipakai~~ | **Terjawab** — Pasal 20; "kompensasi" istilah resmi (§3.3.3) |
+| ~~Bangunan Pihak Lain di atas tanah BMN~~ | **Terjawab** — Pasal 19 ayat (6)–(8), Pasal 21 (§3.3.9) |
+| ~~Ambang nilai untuk penggunaan sementara & dioperasikan pihak lain~~ | **Terjawab** — sementara: ada (Pasal 6 ayat (4)); Pihak Lain: **tidak ada** |
+| ~~Daftar pengecualian PSP~~ | **Terjawab** — Pasal 9 ayat (2), tujuh butir, tidak tertutup (§3.1.7) |
+| ~~Status PMK 87/2016 & PMK 76/2019~~ | **Terjawab** — keduanya perubahan atas PMK 246/2014, keduanya **dicabut** (Pasal 77) |
+| ~~Adakah klausul elektronik dalam PMK~~ | **Terjawab** — Pasal 73 (§5.3) |
+
+#### Prioritas yang TERSISA
+
+| # | Yang harus dibuka/dilakukan | Yang harus dicatat | Mengapa penting |
+|---|---|---|---|
+| **1** | **Perubahan/pencabutan atas PMK 40/2024 dan PMK 53/2023 sampai Agustus 2026** | Apakah keduanya masih rezim terkini | **Prioritas nomor satu, tidak berubah.** Membaca PDF membuktikan isi, bukan keberlakuan. Bila salah satu sudah diubah, sebagian besar label [F] dokumen ini turun kembali |
+| **2** | **Tanggal pengundangan & nomor Berita Negara PMK 40/2024** | Angka pada hlm 50 yang tergantikan karakter cacat `Д` dan `Ж` | **Pasal 78: berlaku pada tanggal diundangkan.** Tanpa tanggal itu, **tanggal mulai berlaku tidak diketahui** — padahal itu yang menentukan tiket mana tunduk Pasal 76. Cukup OCR ulang hlm 50 atau buka salinan JDIH |
+| **3** | **Apakah PMK 40/2024 punya LAMPIRAN yang tidak ikut dalam berkas** | Ada/tidaknya lampiran; bila ada, format baku Surat Permohonan / Persetujuan / Perjanjian / BAST / SPTJ | Berkas berakhir di hlm 50 dengan blok tanda tangan, dan kata "lampiran" hanya muncul **sekali** (Pasal 76 huruf e, merujuk lampiran PMK 246/2014). **Indikasinya kuat bahwa PMK 40/2024 memang tanpa lampiran** — desainnya mendelegasikan format ke Dirjen (Pasal 12, Pasal 75). **Tetapi ketiadaan halaman dalam ekstraksi bukan bukti ketiadaan lampiran.** Bila ternyata ada, seluruh kerangka surat [O] di dokumen ini harus diganti |
+| **4** | **Definisi "sejak BMN diperoleh"** (Pasal 11 ayat (1)) | BAST? dokumen perolehan yuridis? tanggal pencatatan? | Menentukan basis hitung tenggat 6 bulan. Untuk hibah/rampasan/tukar-menukar ketiganya bisa berbeda. Kemungkinan dijawab ketentuan teknis Dirjen |
+| **5** | **Ketentuan teknis Direktur Jenderal a.n. Menteri Keuangan** (Pasal 12 & Pasal 75) | Sudah terbit atau belum; format surat keterangan & SPTJ; checklist per rezim | Inilah lapisan yang memuat **format resmi**. Selama belum terbit, **format lampiran PMK 246/2014 masih berlaku** (Pasal 76 huruf e) — dan isi format itu **belum pernah dibaca** |
+| **6** | **KMK pelimpahan wewenang DJKN yang berlaku 2024–2026** | Tangga nilai KPKNL/Kanwil/Pusat yang sebenarnya | **[F] Pasal 6 ayat (7)** menunjuknya tanpa nomor. Tangga 10/50/100 M **terbukti tidak ada** di PMK 40/2024, jadi bila tangga itu nyata, di sinilah tempatnya |
+| **7** | **Peraturan/Keputusan Kepala Otorita IKN** tentang pendelegasian kewenangan & tanda tangan | Siapa yang sah menandatangani surat di OIKN | **[F] PMK 53/2023 Pasal 5 ayat (4)** menyerahkannya ke Kepala Otorita. Tanpa ini, surat berisiko ditandatangani pejabat tak berwenang |
+| **8** | **Checklist resmi KPKNL Balikpapan** + Standar Pelayanannya | Daftar lampiran otoritatif; SLA; **konfirmasi wilayah kerja atas IKN/PPU** | PMK **tidak memuat SLA apa pun** bagi Pengelola Barang, jadi SLA hanya bisa datang dari sini. Wilayah kerja tetap [S] |
+| **9** | **Spesifikasi unggahan SIMAN V2** — juknis & user manual (nomor belum dipastikan) | Format/MIME, batas ukuran, pola penamaan, apakah **TTE diterima**, struktur menu, rantai peran | **TETAP NIHIL — [X] seluruhnya.** Kedua PMK tidak menyentuhnya sama sekali; Pasal 73 ayat (2) menunjuk keluar tanpa nomor. §5.2 masih **asumsi kerja**, bukan spesifikasi |
+| **10** | **Login SIMAN V2 dan potret alur sebenarnya** | Struktur menu & slot unggah yang nyata | Satu-satunya butir yang dapat diverifikasi **tanpa** akses JDIH maupun dokumen tambahan |
 
 **Pertanyaan lain yang masih terbuka** (tidak berurut prioritas):
 
-- Subjek dan titik-mulai tenggat 6 bulan PSP; apakah seragam untuk semua
-  jenis objek.
-- Jumlah maksimal & panjang perpanjangan penggunaan sementara **[X]**.
-- Tenggat penandatanganan perjanjian (3 bulan?) — satu cuplikan.
-- Kewajiban lapor 1 bulan pasca-SK PSP mandiri — satu jalur sumber.
-- Rantai tenggat alih status (1/2/1 bulan) — satu rumpun cuplikan; dan
-  apakah pengecualian persetujuan penghapusan benar ada.
-- Dasar pencatatan pada Pengguna Barang baru: SK PSP dari Pengelola atau
-  keputusan internal.
-- Instrumen alih status: benarkah **tanpa** perjanjian (cukup persetujuan +
-  BAST + penetapan).
-- Daftar resmi kategori "Pihak Lain" dan tabel jangka waktunya **dalam satu
-  pasal**; kebenaran angka **99 tahun**; status anak perusahaan BUMN.
-- Perlakuan uang pada rezim dioperasikan pihak lain (seluruh keuntungan /
-  hasil pungutan / perlu dasar tarif PNBP tersendiri); apakah istilah
-  "kompensasi" memang dipakai.
-- Benarkah Pihak Lain boleh mendirikan bangunan miliknya di atas tanah BMN,
-  dan benarkah pemanfaatan bangunan itu bebas persetujuan Pengelola.
-- Ambang nilai kewenangan untuk **penggunaan sementara** dan **dioperasikan
-  pihak lain** — **[X] nihil, diduga ADA**.
-- Apakah **Lampiran** PMK 40/2024 memuat **format baku** Surat Permohonan /
-  Persetujuan / Perjanjian / BAST / SPTJ / Surat Keterangan Kebenaran
-  Fotokopi. Bila ada, seluruh kerangka surat [O] di dokumen ini **harus
-  diganti** format resminya.
-- Padanan "Lampiran I B / II B PMK 246/2014" di PMK 40/2024.
-- Daftar pengecualian PSP: bertahan identik atau berubah.
-- Identitas & status PMK 87/PMK.06/2016 dan PMK 76/PMK.06/2019 (benarkah
-  keduanya perubahan atas PMK 246/2014, benarkah keduanya dicabut).
+- **Durasi tiap perpanjangan** penggunaan sementara **[X]** — Pasal 38 hanya
+  mengatur tenggat pengajuan dan jumlah.
+- **Tenggat pelaporan** pada Pasal 33 ayat (3) dan Pasal 40 ayat (4) **[X]** —
+  kewajiban lapor ada, tenggatnya tidak.
+- Benarkah penghapusan karena alih status **dikecualikan** dari persetujuan
+  penghapusan **[X]** — cari di PMK Penghapusan, bukan PMK 40/2024.
+- **Tata cara perencanaan, pengalokasian, penggunaan, pemanfaatan, serta
+  pengamanan-pemeliharaan ADP** **[X]** — kekosongan di dalam PMK 53/2023
+  sendiri (§4A.4).
+- Isi & format **SPTJ versi ADP** **[X]** (§4A.6).
+- Bagaimana K/L umum **menempati** tanah/bangunan yang di-PSP-kan kepada
+  OIKN **[X]/[O]** (§4A.6) — pertanyaan operasional terbesar yang tersisa.
+- **PP 27/2014 jo. PP 28/2020** — teks PP belum dibaca; seluruh nomor pasal
+  PP tetap dilarang (§7.3).
 - Nomor & keberlakuan peraturan pendamping: PMK Pemanfaatan (klaim
   115/PMK.06/2020), Penatausahaan (181/PMK.06/2016), Wasdal (klaim
   207/PMK.06/2021), Asuransi BMN (klaim 97/PMK.06/2019), Penghapusan
-  (83/PMK.06/2016), **PMK 120 Tahun 2024** tentang BMN idle (yang sama sekali
-  tidak dibahas riset padahal "BMN terindikasi idle" muncul di enumerasi tab
-  Penggunaan), **PMK 90 Tahun 2024** (masa transisi K/L).
-- **PMK 118 Tahun 2023 vs PMK 118/PMK.06/2017** — pastikan nomor yang benar
-  sebelum dikutip (tabrakan dengan rujukan di `PenilaianPage.jsx`).
-- Peraturan ATR/BPN yang mengatur **perubahan pencatatan instansi c.q.** pada
-  sertipikat Hak Pakai; dan pemetaan **Hak Pakai vs HPL** untuk aset OIKN.
+  (83/PMK.06/2016), **PMK 120 Tahun 2024** (BMN idle), **PMK 90 Tahun 2024**
+  (masa transisi K/L), **PMK 139/PMK.08/2022** (IKN).
+  > **[F] PMK 40/2024 merujuk semuanya secara generik tanpa nomor**, jadi
+  > teks primer **tidak membantu** memastikan nomor-nomor ini.
+- **PMK 118 Tahun 2023 vs PMK 118/PMK.06/2017** — tabrakan nomor dengan
+  rujukan di `PenilaianPage.jsx`.
+- **PMK 120 Tahun 2024 tentang BMN idle** — relevansinya naik: **[F] Pasal
+  74** PMK 40/2024 mengatur penetapan kembali PSP atas BMN idle yang telah
+  diserahkan, dan menunjuk *"peraturan tentang BMN idle"* tanpa nomor.
+- Peraturan **ATR/BPN** tentang perubahan pencatatan instansi c.q. pada
+  sertipikat Hak Pakai; pemetaan **Hak Pakai vs HPL** untuk aset OIKN.
 - **PP 18/2021** dan aturan susulannya terkait alat bukti hak lama.
-- Peraturan/Keputusan **Kepala Otorita IKN** tentang pendelegasian kewenangan
-  pengelolaan BMN & penandatanganan.
+- **UU 21/2023** dan dampaknya pada PMK 53/2023.
 
-### 7.3 Daftar angka & nomor yang DILARANG dikutip
+#### Dua klaim yang GUGUR di pemeriksaan — tetap [S], jangan dinaikkan
 
-Nomor-nomor berikut sempat beredar dalam riset. **Semua sudah dikeluarkan
-dari badan dokumen** dan dicatat di sini **hanya sebagai jejak**, agar tidak
-tanpa sengaja masuk kembali:
-
-| Yang beredar | Mengapa dilarang |
+| Klaim | Mengapa tidak dinaikkan |
 |---|---|
-| "Pasal 11 PMK 40/2024" | dipakai untuk **enam klaim berbeda** (dokumen per jenis objek, substitusi berjenjang, penandatangan SPTJ, kebenaran fotokopi, ambang Rp100 juta, tenggat 6 bulan) — mustahil satu pasal memuat semuanya; ciri khas satu cuplikan yang direplikasi |
-| "Pasal 32–40 PMK 40/2024" (penggunaan sementara) | pemetaan tidak konsisten: Pasal 33 & 37 masing-masing dipakai untuk dua materi; Pasal 39 dipakai ganda; pola "X/Y" = nomor ditebak dari kedekatan |
-| "Pasal 11/15/21–23/24/25/26 PMK 40/2024" (dioperasikan pihak lain) | tumpang tindih semantik (21–23 "permohonan/penelitian", lalu 24 "permohonan", 25 "penelitian") |
-| "Bab VII / Pasal 10 / 52 / 53 / 54 / 55 PMK 40/2024" (alih status) | Pasal 55 diakui sendiri sebagai "perkiraan posisi" (54+1); Pasal 52 dipakai secara analogi lalu tampil seolah sitasi |
-| "Pasal 25 PP 27/2014" (delegasi) & "Pasal 26/27 PP 27/2014" | hipotesis bersaing; dan "Pasal 25" dipakai untuk dua rezim berbeda dalam satu dokumen |
-| "Pasal 18 PP 27/2014" (dioperasikan pihak lain) | arah koreksinya diduga benar, tetapi bunyinya dikutip dari artikel lama **tanpa** memeriksa perubahan PP 28/2020 |
-| "Pasal 16 ayat (3) PMK 83/2016" | satu pasal memikul dua norma berbeda; sumber sekunder yang kemungkinan saling menyalin |
-| "Pasal 3 & 4 PMK 246/2014", "Pasal 9 PMK 246/2014", "Lampiran I B / II B" | rezim yang diduga sudah dicabut |
-| "KMK 248 Tahun 2024" | keberadaannya hanya dari judul unggahan Scribd |
-| Tangga nilai Rp5 M / Rp25 M / Rp10 M / Rp50 M / Rp100 M | satu jalur sumber; instrumen (PMK vs KMK) kemungkinan salah; bertabrakan dengan tangga rezim pemindahtanganan |
-| "99 tahun" | tidak berpadanan dengan tenor mana pun dalam rezim BMN yang dikenal |
+| Rentang halaman BAB VII alih status ditulis "hlm 36–41" | Halaman 41 sudah memuat BAB VIII (Penatausahaan). **Yang benar hlm 36–40.** Substansi Pasal 53–61 tidak berubah; hanya rujukan halamannya yang dikoreksi di badan dokumen |
+| Rekapitulasi "29 titik pengaturan waktu" di PMK 40/2024 | Angka agregatnya tidak dapat direkonstruksi dari daftarnya sendiri (menghasilkan 30, dan bergeser lagi bila Pasal 23 dipecah per satuan). **Daftar tenggatnya sendiri akurat**; yang gugur hanya jumlah totalnya. Karena itu dokumen ini **tidak mencantumkan jumlah total tenggat** di mana pun |
+
+### 7.3 Daftar angka & nomor yang DILARANG dikutip — kini menyusut
+
+> **Mengapa daftar ini memendek.** Versi lama mengumpulkan **semua** nomor
+> yang beredar, karena tidak satu pun dapat diperiksa. Setelah kedua PDF
+> terbaca, sebagian besar nomor terkait **PMK 40/2024 dan PMK 53/2023 sudah
+> naik ke badan dokumen berlabel [F]** dengan nomor pasal dan halaman — dan
+> karena itu **dikeluarkan dari daftar larangan ini**.
+>
+> **Yang tersisa di bawah adalah nomor yang sumbernya BELUM pernah dibaca** —
+> terutama PP 27/2014 jo. PP 28/2020, PMK-PMK lain, dan KMK. Larangan atas
+> mereka **tidak melemah sedikit pun**.
+
+#### Sudah bebas — kini terbaca dan boleh dikutip sebagai [F]
+
+| Dulu dilarang | Kini |
+|---|---|
+| ~~"Pasal 11 PMK 40/2024" dipakai untuk enam klaim berbeda~~ | **Terbaca.** Ironisnya Pasal 11 **memang** memuat banyak materi: dokumen per jenis objek (ayat (2)), substitusi berjenjang (ayat (3)–(7)), penandatangan SPTJ, dan kebenaran fotokopi (ayat (2) huruf g). Yang **tidak** ada di Pasal 11: ambang kewenangan (itu Pasal 6–7). Tenggat 6 bulan **memang** ayat (1). Kecurigaan "mustahil satu pasal memuat semuanya" **sebagian tidak terbukti** |
+| ~~"Pasal 32–40" (penggunaan sementara)~~ | **Yang benar Pasal 32–39** (BAB V); Pasal 40 sudah BAB VI |
+| ~~"Pasal 11/15/21–23/24/25/26" (dioperasikan pihak lain)~~ | **Yang benar Pasal 19–31** (BAB IV) |
+| ~~"Bab VII / Pasal 52–55" (alih status)~~ | **Bab VII benar; yang benar Pasal 53–61** |
+| ~~Tangga nilai Rp100 juta~~ | **Terbaca** — Pasal 6 ayat (3)–(4), Pasal 7 ayat (3), "per unit/satuan" |
+| ~~"99 tahun"~~ | **Terbaca** — Pasal 23 huruf d, khusus pemerintah negara lain |
+| ~~Tanggal "21 Juni 2024"~~ | **Terbaca** — tanggal **penetapan** PMK 40/2024 (hlm 50). **Bukan** tanggal berlaku |
+| ~~"BN 2016 No. 791"~~ | **Terbaca** — dikonfirmasi Pasal 77 huruf b. Demikian pula BN 2014 No. 1977 dan BN 2019 No. 549 |
+
+#### TETAP DILARANG
+
+| Yang beredar | Mengapa tetap dilarang |
+|---|---|
+| **Seluruh nomor pasal PP 27/2014 dan PP 28/2020** — "Pasal 18", "Pasal 25", "Pasal 26", "Pasal 27" | **Teks PP tidak pernah dibaca.** PMK 40/2024 menyebut PP 28/2020 di konsiderans, tetapi konsiderans bukan pemetaan pasal. Hipotesis bersaing belum terselesaikan, dan bunyi yang beredar dikutip dari artikel pra-2020 |
+| "Pasal 16 ayat (3) PMK 83/2016" | satu pasal memikul dua norma berbeda; sumber sekunder yang kemungkinan saling menyalin; **PMK 83/2016 belum dibaca** |
+| "Pasal 3 & 4 PMK 246/2014", "Pasal 9 PMK 246/2014" | rezim yang **sudah pasti dicabut** (Pasal 77) — kini larangannya lebih kuat, bukan lebih lemah |
+| **"Lampiran I B / II B PMK 246/2014"** | **Nuansa penting:** lampiran PMK 246/2014 **masih berlaku sementara** (Pasal 76 huruf e), sehingga rujukannya **tidak lagi salah secara hukum**. Tetapi **isi dan penomoran lampirannya belum pernah dibaca**, jadi menyebut "Lampiran I B" atau "II B" tetap **presisi palsu**. Tulis: *"format lampiran PMK 246/PMK.06/2014 s.t.d.t.d. PMK 76/PMK.06/2019"* tanpa nomor lampiran |
+| "KMK 248 Tahun 2024" | keberadaannya hanya dari judul unggahan Scribd; dua format penomoran berbeda untuk tahun yang sama |
+| **Tangga nilai kantor DJKN: Rp5 M / Rp10 M / Rp25 M / Rp50 M / Rp100 M** | **Larangan diperkuat.** Kini terbukti angka-angka itu **tidak ada** di PMK 40/2024 — satu-satunya nominal di sana adalah Rp100 juta. Instrumen yang benar (KMK pelimpahan) belum dibaca |
+| "KMK 229/KM.6/2016" sebagai dasar tangga nilai | belum dibaca; kemungkinan besar sudah diperbarui |
 | "KPKNL Penajam" | kantor yang kemungkinan besar tidak ada |
 | Angka rupiah presisi pada contoh kasus (mis. nilai tanah pada berita penggunaan sementara) | dari halaman yang tidak pernah terbaca; tidak punya nilai normatif |
-| Tanggal & data bibliografis presisi (21 Juni 2024; BN 2016 No. 791, 18 halaman; 6 Januari 2015 berlaku 1 Juli 2015; 14 Mei 2019; 24 Desember 2014; 4 November 2024 berlaku 5 November 2024) | **presisi palsu** — semua dari cuplikan, disajikan setingkat kutipan primer sehingga pembaca berikutnya akan mengira sudah diverifikasi |
+| Data bibliografis presisi yang **belum** terkonfirmasi: "6 Januari 2015 berlaku 1 Juli 2015"; "14 Mei 2019"; "24 Desember 2014"; "4 November 2024 berlaku 5 November 2024"; "18 halaman" | **presisi palsu** — semua dari cuplikan. Perhatikan yang **sudah** terkonfirmasi hanya nomor Berita Negara ketiga PMK yang dicabut dan tanggal penetapan kedua PMK |
+| **Tanggal pengundangan & nomor Berita Negara PMK 40/2024** | **BARU dalam daftar ini.** Posisinya terbaca tetapi **angkanya rusak** (`Д`, `Ж`). Jangan mengisi dari ingatan atau dari agregator — §7.2 butir 2 |
+| **"Berlaku sejak 21 Juni 2024"** | **BARU.** 21 Juni 2024 adalah tanggal **penetapan**; Pasal 78 menyatakan berlaku **pada tanggal diundangkan**, yang tidak terbaca |
+| **Nomor Lampiran / format baku PMK 40/2024** | **BARU.** Berkas tidak memuat lampiran, tetapi itu belum tentu berarti PMK-nya tanpa lampiran (§7.2 butir 3). Jangan menyebut "Lampiran I", "Format 1a", dsb. |
 
 ### 7.4 Daftar URL yang diblokir (untuk dibuka manual dari jaringan biasa)
+
+> **Status per 8 Agustus 2026.** Dua sumber inti **tidak lagi diperlukan
+> lewat jalur ini** — PDF resminya sudah diserahkan pemilik proyek dan
+> dibaca: **PMK 40 Tahun 2024** dan **PMK 53 Tahun 2023**. URL-nya
+> dipertahankan di bawah untuk **penelusuran balik dan pengecekan versi**
+> (mis. memastikan tidak ada perubahan pasca-2024 — §7.2 butir 1, dan
+> membaca ulang hlm 50 yang karakternya rusak — §7.2 butir 2).
+>
+> **Seluruh URL lain di bawah TETAP belum terbuka.** Prioritaskan kelompok
+> "Payung & aturan pendamping" (untuk PP 27/2014 jo. PP 28/2020) dan
+> "SIMAN v2, juknis, manual" (satu-satunya sumber spesifikasi unggahan).
 
 **Peraturan inti**
 
@@ -1849,11 +3044,26 @@ rujukan**
 ### 7.5 Cara memperlakukan dokumen ini setelah verifikasi
 
 1. Setelah sebuah butir diverifikasi dari teks asli, **ubah labelnya menjadi
-   [F]** dan tulis nomor pasalnya.
+   [F]** dan tulis **nomor pasal + halaman + kutipan verbatim pendek**.
+   Parafrase yang benar tetapi tanpa kutipan **belum** cukup untuk [F].
 2. Perbarui `status_verifikasi` pada tabel konfigurasi AMAN yang bersangkutan;
    badge "perlu verifikasi" akan hilang dengan sendirinya di UI.
-3. Bila sebuah butir ternyata **salah**, catat koreksinya di sini — jangan
-   dihapus diam-diam; jejak kesalahan mencegah kesalahan yang sama masuk lagi
-   lewat riset berikutnya.
+3. Bila sebuah butir ternyata **salah**, catat koreksinya di tempatnya dengan
+   baris **"Koreksi:"** yang menyebut **apa yang semula tertulis** dan
+   **mengapa keliru** — jangan dihapus diam-diam. Pembaca yang sudah terlanjur
+   memakai versi lama harus bisa melihat apa yang berubah. Putaran revisi
+   8 Agustus 2026 menghasilkan **empat** koreksi semacam itu: Eminen/
+   Kolaborator (§1.2), klausul *"kecuali ditentukan lain dalam perjanjian"*
+   (§3.2.7), bangunan Pihak Lain (§3.3.9), dan penerbit keputusan PSP bagi
+   Pengguna Barang baru (§3.4.7).
 4. Tambahkan hasil verifikasi ke `docs/PUSTAKA-REGULASI-BMN.md` agar menjadi
    rujukan lintas modul.
+5. **Jangan menaikkan klaim yang gugur di pemeriksaan** hanya karena terasa
+   benar. Dua klaim pada revisi ini ditahan di [S] meski substansinya
+   sebagian benar — lihat akhir §7.2.
+6. **Ingat batas dokumen ini.** Ia kini bersandar pada **dua** peraturan yang
+   terbaca. Seluruh lapisan pelaksana — ketentuan teknis Dirjen, KMK
+   pelimpahan, juknis SIMAN, checklist KPKNL — **masih di luar jangkauan**.
+   Dokumen yang sebagian besar berlabel [F] lebih mudah dipercaya berlebihan
+   daripada dokumen yang seluruhnya [S]; **§7.2 justru menjadi lebih penting,
+   bukan kurang.**

@@ -21,7 +21,7 @@
 | Penggolongan & kodefikasi barang | **PMK 29/PMK.06/2010** (sebelumnya 97/2007), lampiran diubah berkali-kali (terakhir KMK 532/KM.6/2015+) | Kode 10 digit: Golongan·Bidang·Kelompok·Sub·Sub-sub + NUP; golongan 1=Persediaan … 8=Aset Lainnya [urutan perlu verifikasi lampiran] |
 | Kebijakan akuntansi pemerintah pusat | PMK 225/2019 → **PMK 234/2020 (FIFO mulai TA 2021)** → 231/2022 jo. 57/2023 → **PMK 100/2025** (LK TA 2025) | Bab VI = Kebijakan Akuntansi Persediaan [redaksi FIFO di PMK 100/2025 perlu verifikasi] |
 | Standar akuntansi persediaan | **PSAP 05** (PP 71/2010) | Perpetual/periodik; FIFO/rata-rata; harga terakhir hanya bila tidak material |
-| Penggunaan | PMK 40/2024; BMN idle PMK 120/2024 | Lihat diagram siklus resmi. Riset sisi PEMOHON (4 rezim: PSP · penggunaan sementara · dioperasikan pihak lain · alih status) ada di [`docs/PENGGUNAAN-BMN-PEMOHON.md`](./PENGGUNAAN-BMN-PEMOHON.md) — **peringatan: nol klaim di dokumen itu terbaca dari teks primer** |
+| Penggunaan | PMK 40/2024; BMN idle PMK 120/2024 | Lihat diagram siklus resmi. Riset sisi PEMOHON ada di [`docs/PENGGUNAAN-BMN-PEMOHON.md`](./PENGGUNAAN-BMN-PEMOHON.md) — **PMK 40/2024 sudah dibaca utuh dari PDF resmi** (50 hlm, 78 pasal, 14 BAB): 5 rezim Penggunaan + rezim khusus IKN (PMK 53/2023), 188 klaim ber-[F] dengan kutipan verbatim + pasal + halaman. Pasal 77 mencabut PMK 246/2014, 87/2016, dan 76/2019 |
 | Pemanfaatan | PMK 115/PMK.06/2020; fasilitas transaksi PMK 18/2024 (+ PMK 139/PMK.08/2022 khusus IKN) | — |
 | Pemindahtanganan | PMK 111/PMK.06/2016 jo. 165/PMK.06/2021 | — |
 | Pemusnahan & Penghapusan | PMK 83/PMK.06/2016 | — |
