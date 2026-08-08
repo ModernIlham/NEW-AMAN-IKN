@@ -67,6 +67,69 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#801] Riset Penggunaan BMN naik dari NOL ke 188 klaim terverifikasi — teks primer akhirnya terbaca — 2026-08-08
+
+Pemilik proyek menyerahkan **PDF resmi kedua PMK** langsung ke ruang kerja,
+sehingga hambatan gateway yang melumpuhkan riset awal (`[#796]`) menjadi tidak
+relevan. Kedua berkas dibaca **seluruhnya, halaman demi halaman**:
+
+| Peraturan | Ukuran | Status |
+|---|---|---|
+| **PMK 40 Tahun 2024** — Tata Cara Penggunaan BMN | 50 hlm, 78 pasal, 14 BAB | terbaca lengkap |
+| **PMK 53 Tahun 2023** — BMN & ADP di Ibu Kota Nusantara | 28 hlm, 69 pasal, 6 BAB | terbaca lengkap |
+
+### Perubahan status yang menentukan
+
+| Penanda | Sebelum (`[#796]`) | Sesudah |
+|---|---|---|
+| **[F]** terbaca dari teks resmi | **0** | **188** |
+| **[SALAH]** terbukti keliru & dikoreksi | — | **1** |
+| **[X]** nihil data (dicari, tak ada) | 16 | **24** |
+| ditahan karena gugur di pemeriksaan | — | **2** |
+
+215 klaim diuji satu per satu terhadap teks, lalu **diperiksa silang oleh lajur
+skeptis** yang mencocokkan tiap kutipan kata demi kata dengan nomor baris dan
+penanda halaman. Dua klaim **gugur dan tidak dinaikkan** — rentang halaman BAB
+VII (hlm 36–41 → **36–40**, karena halaman 41 sudah memuat BAB VIII) dan
+sebuah angka agregat "29 titik pengaturan waktu" yang tak dapat direkonstruksi
+dari daftarnya sendiri. Keduanya dicatat terbuka di §7.2; **dokumen kini tidak
+mencantumkan jumlah total tenggat di mana pun**.
+
+### Yang paling menentukan bagi pemohon
+
+- **PMK 40/2024 nyata**, ditetapkan **21 Juni 2024**. **Pasal 77** mencabut
+  PMK 246/PMK.06/2014 **+** PMK 87/PMK.06/2016 **+** PMK 76/PMK.06/2019.
+- **Ambang Rp100 juta** = **"per unit/satuan"**, operator **"paling sedikit"**
+  (Pasal 6 ayat (3)) — dugaan riset awal soal "per usulan" **gugur**.
+- **Tenggat PSP 6 bulan** dihitung **sejak BMN DIPEROLEH**, operator "paling
+  lama" (Pasal 11 ayat (1)).
+- **Tanah tanpa sertipikat** → diganti **SPTJB bermeterai**; dan **kewajiban
+  mengurus dokumen kepemilikan TIDAK gugur** meski PSP sudah terbit
+  (Pasal 11 ayat (3) & (8)).
+- **Penggunaan sementara** 5 tahun (tanah/bangunan) / 2 tahun (selain itu);
+  **≤6 bulan bebas persetujuan** Pengelola — **tetapi tetap wajib lapor**
+  (Pasal 33). Dokumen lama menyebut 6 bulan sebagai plafon; **itu keliru**.
+- **Bab baru 4A — rezim khusus IKN.** PMK 53/2023 **tidak** membuat rezim
+  Penggunaan tersendiri; ia menunjuk aturan umum. Yang khusus adalah
+  **delegasi kewenangan Menteri Keuangan kepada Kepala Otorita IKN**
+  (PMK 40/2024 Pasal 7 ayat (2) huruf b). Celah terbesar riset awal — yang
+  dulu sama sekali belum diperiksa — kini terisi.
+
+Dokumen tumbuh **1.859 → 3.069 baris**; rezim bertambah dari empat jadi lima
+plus bab IKN. §7.3 "daftar angka yang DILARANG dikutip" **menyusut** karena
+sebagian besar sudah naik ke badan dokumen dengan pasal & halamannya.
+
+### Sikapnya tidak berubah, hanya dasarnya
+
+Nomor pasal kini **boleh dicetak** — tetapi **hanya** yang berlabel [F] beserta
+rujukan halamannya. Yang tetap di luar jangkauan kedua PMK dinyatakan terbuka
+di §7.2: **KMK pelimpahan kewenangan DJKN**, isi **lampiran format surat**, dan
+**spesifikasi unggahan SIMAN V2** (masih nihil sama sekali). Tautan silang di
+`README.md` dan `docs/PUSTAKA-REGULASI-BMN.md` diperbarui — peringatan lama
+"nol klaim terbaca dari teks primer" sudah tidak benar dan dicabut.
+
+---
+
 ## [#800] Uji RENDER pertama — 741 uji selama ini tak pernah menjalankan satu komponen pun — 2026-08-08
 
 Utang teknis `#320`, dan alasannya baru saja terbukti mahal dua kali.
