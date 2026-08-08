@@ -367,6 +367,13 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       if (editAssetRef.current) {
         wsNeedsRefreshRef.current = true; // editing started during the debounce window
       } else {
+        // SIMPUL MELINGKAR — dibiarkan sadar, bukan kelalaian. `useWebSocket`
+        // (b.375) butuh `setRowLocks` yang lahir dari `useRowLocking` (b.529),
+        // sedangkan `useRowLocking` butuh `wsSend` yang lahir dari
+        // `useWebSocket`. Tak satu pun bisa berada di atas yang lain; memutusnya
+        // menuntut indireksi ref dan uji render (backlog #320), bukan penataan
+        // urutan. Ditandai satu per satu agar jumlahnya terlihat & terhitung.
+        // eslint-disable-next-line no-use-before-define
         refreshData();
       }
     }, 2000);
@@ -375,7 +382,9 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const { onlineUsers, connected: wsConnected, sendMessage: wsSend } = useWebSocket({
     activityId: activity?.id, userId: user?.id,
     userName: user?.name || user?.username,
-    onAssetChange: onWsAssetChange, onLocksUpdate: (locks) => setRowLocks(locks),
+    onAssetChange: onWsAssetChange,
+    // eslint-disable-next-line no-use-before-define
+    onLocksUpdate: (locks) => setRowLocks(locks),
   });
   const { isOnline } = useOfflineSync();
 
@@ -390,6 +399,12 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   isOnlineRef.current = isOnline;
   const offlineServedRef = useRef(false);
   offlineServedRef.current = offlineServed;
+
+  // Kegiatan yang SEDANG tampil — dibaca callback antrean yang hidup lebih
+  // lama daripada render (handleRowSynced ber-deps []), jadi lewat ref.
+  // Harus tetap DI ATAS handleRowSynced: dipakai di dalam badannya.
+  const activityIdRef = useRef(null);
+  activityIdRef.current = activity?.id || null;
 
   // Targeted row update after save (no full refresh while editing!)
   const handleRowSynced = useCallback((assetKey, serverData, isEdit) => {
@@ -436,10 +451,6 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   // saves must send the freshest If-Match, not the version captured at submit.
   const assetsStateRef = useRef([]);
   assetsStateRef.current = assets;
-  // Kegiatan yang SEDANG tampil — dibaca callback antrean yang hidup lebih
-  // lama daripada render (handleRowSynced ber-deps []), jadi lewat ref.
-  const activityIdRef = useRef(null);
-  activityIdRef.current = activity?.id || null;
   const getLatestVersion = useCallback((assetId) => assetsStateRef.current.find(a => a.id === assetId)?.version ?? null, []);
 
   // Throttle toast konflik per-aset: tanpa ini, flush berulang / beberapa antrian
@@ -461,7 +472,9 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     syncStatuses, enqueue: enqueueOptimistic, retry: retrySync, dismiss: dismissSync,
     queueLength, consumeRefreshFlag, pendingCount, isSyncing, actionCount, flushPending, getPendingItems,
   } = useOptimisticQueue({
+    // eslint-disable-next-line no-use-before-define
     onItemSaved: (assetId) => unlockAsset(assetId),
+    // eslint-disable-next-line no-use-before-define
     onItemFailed: (assetId) => unlockAsset(assetId),
     onRowSynced: handleRowSynced,
     onConflict: (assetId, conflictDetail) => {
@@ -686,6 +699,12 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       // pengguna bisa lanjut aksi lain atau memverifikasi hasil tanpa memilih
       // ulang. Kosongkan manual lewat tombol "Batal pilih" bila perlu.
       setShowBatchPanel(false);
+      // Bukan simpul melingkar, tetapi memperbaikinya menuntut memindahkan
+      // ±254 baris blok pengambilan data (berisi 4 useRef) ke atas sini, atau
+      // menurunkan handler ini menjauh dari dua handler batch sekerabatnya.
+      // Keduanya menggeser urutan hook tanpa uji render sebagai jaring —
+      // ditunda ke backlog #320, bukan dipaksakan sekarang.
+      // eslint-disable-next-line no-use-before-define
       refreshData();
     } catch (err) {
       console.error("Batch update error:", err?.response?.status, err?.response?.data, err?.message);

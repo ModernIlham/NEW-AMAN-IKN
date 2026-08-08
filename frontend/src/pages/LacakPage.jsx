@@ -106,20 +106,6 @@ export default function LacakPage() {
     };
   }, []);
 
-  // Token boleh datang lewat ?token= (link/QR dari admin) — tetapi SEGERA
-  // dibersihkan dari address bar. URL tersimpan di riwayat peramban, ikut
-  // terkirim sebagai Referer, dan gampang ter-screenshot; token yang menetap di
-  // sana sama saja dengan token yang ditempel di badan barang.
-  useEffect(() => {
-    const q = new URLSearchParams(window.location.search);
-    const t = q.get("token") || localStorage.getItem(KUNCI_TOKEN) || "";
-    if (q.get("token")) {
-      window.history.replaceState({}, "", window.location.pathname);
-    }
-    if (t) { setToken(t); masuk(t); }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const masuk = useCallback(async (t) => {
     const tok = (t || token || "").trim();
     if (!tok) { toast.error("Tempelkan token perangkat"); return; }
@@ -136,11 +122,24 @@ export default function LacakPage() {
     } finally { setMemuat(false); }
   }, [token]);
 
-  const keluar = () => {
-    hentikan();
-    localStorage.removeItem(KUNCI_TOKEN);
-    setDev(null); setToken("");
-  };
+  // Token boleh datang lewat ?token= (link/QR dari admin) — tetapi SEGERA
+  // dibersihkan dari address bar. URL tersimpan di riwayat peramban, ikut
+  // terkirim sebagai Referer, dan gampang ter-screenshot; token yang menetap di
+  // sana sama saja dengan token yang ditempel di badan barang.
+  //
+  // Efek ini SENGAJA diletakkan SESUDAH `masuk`: ia memanggilnya, dan sebuah
+  // `const` yang dipakai sebelum barisnya dieksekusi adalah TDZ yang menunggu
+  // giliran. Hari ini aman karena efek baru berjalan setelah render selesai —
+  // tetapi urutan itu tak dijamin apa pun selain kebetulan.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const t = q.get("token") || localStorage.getItem(KUNCI_TOKEN) || "";
+    if (q.get("token")) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    if (t) { setToken(t); masuk(t); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Kirim antrean ─────────────────────────────────────────────────────────
 
@@ -236,6 +235,12 @@ export default function LacakPage() {
     try { wakeRef.current?.release?.(); } catch { /* sudah lepas */ }
     wakeRef.current = null;
     setJalan(false);
+  };
+
+  const keluar = () => {
+    hentikan();
+    localStorage.removeItem(KUNCI_TOKEN);
+    setDev(null); setToken("");
   };
 
   useEffect(() => () => {

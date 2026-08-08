@@ -67,6 +67,64 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#799] Dua aturan lint dinyalakan — 30 TDZ tersembunyi & satu fitur yang diam-diam mati — 2026-08-08
+
+Utang teknis `#322`: menyalakan `no-use-before-define` se-repo. Aturan itu
+selama ini **mati**, dan ternyata menyembunyikan **30 pelanggaran nyata di 13
+berkas** — kelas cacat yang **sudah pernah** menjatuhkan halaman Peta Aset ke
+layar kosong (`[#762]`, *"Cannot access '<x>' before initialization"*).
+
+Contoh terburuknya di `PersediaanPage`: `refreshRingkasan()` dipanggil di baris
+**304**, deklarasinya di baris **623**. Aman hari ini hanya karena pemanggilnya
+berjalan setelah tombol ditekan; satu pemindahan ke `useEffect` sudah cukup
+mengulang kejadian layar kosong itu.
+
+**22 dari 30 diselesaikan dengan menata ulang urutan deklarasi** — murni
+pemindahan baris, diverifikasi mesin: himpunan baris kode (tanpa komentar)
+sebelum dan sesudah **identik** untuk `LacakPage`, `PenggunaanPage`,
+`SpasialMasterPage`, `TtdPermintaanPage`, dan enam berkas lain.
+
+**6 sisanya adalah simpul melingkar sungguhan** di `DashboardPage`, ditandai
+satu per satu dengan `eslint-disable-next-line` **beserta alasannya** — bukan
+disapu diam-diam:
+
+> `useWebSocket` (b.375) butuh `setRowLocks` yang lahir dari `useRowLocking`
+> (b.529), sedangkan `useRowLocking` butuh `wsSend` yang lahir dari
+> `useWebSocket`. Tak satu pun bisa berada di atas yang lain.
+
+Memutusnya menuntut indireksi ref **dan uji render sebagai jaring pengaman** —
+yaitu backlog `#320` yang belum dikerjakan. Memaksakannya sekarang berarti
+menukar cacat laten dengan risiko regresi nyata pada halaman tersibuk aplikasi.
+
+### Dan aturan kedua menemukan fitur yang sudah mati
+
+`no-undef` juga dinyalakan — saudara kandung `react/jsx-no-undef` untuk kode
+non-JSX. Ia langsung menemukan **satu** pelanggaran di seluruh basis kode:
+
+```js
+// PetaKolaborasiPage.jsx — `kirimGeserRef` dipakai, tak pernah dideklarasikan
+butuhNamaRef.current?.((olehNama) => {
+  kirimGeserRef.current?.(aset, ll.lat, ll.lng, olehNama);   // ReferenceError
+});
+```
+
+Akibatnya fitur **"tamu menggeser marker"** (`[#786]`) **mati tepat di langkah
+terakhir**: tamu menyeret pin, mengetikkan namanya, lalu `ReferenceError` — dan
+usulannya tak pernah terkirim ke server. Lint bersih, build sukses, 741 uji
+hijau; semuanya diam karena tak ada satu pun yang memeriksa identifier yang
+tak pernah ada. Ref-nya kini dibuat dengan pola yang sama seperti
+`butuhNamaRef` di sebelahnya.
+
+Blok konfigurasi kedua ditambahkan untuk berkas uji (`globals.jest` +
+`globals.node`) — tanpa itu `no-undef` menyalak **2.388 kali** pada `describe`,
+`expect`, dan `require` yang runtime-nya memang menyediakannya. Penjaga yang
+menyalak palsu sebanyak itu pasti dimatikan orang, bukan dipatuhi.
+
+Verifikasi: `eslint src` → **0 error** (15 peringatan `exhaustive-deps` lama,
+tak bertambah) · 741 uji / 62 suite hijau · `yarn build` sukses.
+
+---
+
 ## [#798] Kepala Wasdal & Perencanaan jadi satu menu di HP — dua halaman terakhir — 2026-08-08
 
 Permintaan pemilik: *"Kepala halaman Wasdal & Perencanaan lebur menjadi satu
