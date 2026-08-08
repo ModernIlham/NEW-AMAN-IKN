@@ -528,6 +528,18 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     },
     onRehydrate: handleQueueRehydrate,
     getLatestVersion,
+    // Penyimpanan perangkat penuh saat MENULIS antrean simpan. Bedakan dari
+    // toast cache luring di bawah: yang itu soal data BACA yang selalu bisa
+    // ditarik ulang; ini soal pekerjaan lapangan yang BELUM terkirim dan
+    // hanya ada di perangkat ini. Karena itu `duration: 0` — menetap sampai
+    // ditutup sendiri, bukan berkedip lalu hilang di saku.
+    onKuotaPenuh: () => {
+      haptic("error");
+      toast.error(
+        "Penyimpanan perangkat PENUH — simpanan yang belum tersinkron tidak bisa dicadangkan ke perangkat. Jangan tutup aplikasi: sambungkan internet dan sinkronkan sekarang, atau kosongkan ruang penyimpanan.",
+        { duration: 0 }
+      );
+    },
   });
 
   // Muat-ulang ramah tapi aman: bila masih ada antrian & ONLINE → otomatis

@@ -705,6 +705,24 @@ const AssetForm = memo(({
 
   // Photo items: tracks each photo as {type: 'existing'|'new', thumbnail, originalIndex?, newData?}
   const [photoItems, setPhotoItems] = useState([]);
+  // Cermin ref dari photoItems — WAJIB dibaca oleh handleSubmit, bukan state-nya.
+  //
+  // handleSubmit adalah useCallback yang larik dep-nya TIDAK memuat photoItems
+  // (dan sengaja dibiarkan begitu: memasukkannya membuat identitas handler
+  // berubah tiap jepretan, dan handler itu dipegang oleh alur beruntun Mode
+  // Kamera Penuh). Akibatnya closure-nya bisa BASI. Asimetrinya yang menggigit:
+  // jalur galeri cabang edit memanggil setPhotoItems DAN setFormData, sehingga
+  // closure kebetulan ikut segar; jalur kamera cabang edit hanya setPhotoItems
+  // lalu return — closure tetap memegang larik LAMA. Patch terkirim dengan
+  // photo_ops.add kosong, chip barisnya berakhir "saved", dan byte fotonya
+  // sudah tak ada di perangkat karena snapshot luring memang membuang foto.
+  // Foto surveyor hilang tanpa satu pesan pun.
+  //
+  // Ref ini hanya untuk DUA bacaan di handleSubmit (hasPhoto & pembangun
+  // photo_ops). Bacaan di JSX dan currentPhotoCount tetap memakai state, karena
+  // di sanalah re-render memang dibutuhkan.
+  const photoItemsRef = useRef(photoItems);
+  photoItemsRef.current = photoItems;
 
   // Load edit data when editAsset changes — two-phase: light data first, then media separately.
   // Keyed by editAsset?.id (not object identity) + an initialized-id guard, so
@@ -1684,7 +1702,9 @@ const AssetForm = memo(({
       // Jika pengguna MEMILIH status secara manual (termasuk mengembalikan ke
       // "Belum Diinventarisasi"), auto-promosi DIMATIKAN agar pilihannya menetap
       // — memperbaiki bug "tak bisa di-revert ke Belum" pada aset ber-foto.
-      const hasPhoto = ((photoItems?.length || 0) > 0) || (formData.photos || []).some(Boolean);
+      // Lewat ref, BUKAN state: closure handleSubmit bisa basi — lihat photoItemsRef.
+      const fotoSaatIni = photoItemsRef.current;
+      const hasPhoto = ((fotoSaatIni?.length || 0) > 0) || (formData.photos || []).some(Boolean);
 
       // Auto-promosi hanya sah bila sesi INI menambah bukti baru (foto atau
       // koordinat). Tanpa syarat ini, membuka aset lama yang kebetulan sudah
@@ -1755,7 +1775,10 @@ const AssetForm = memo(({
             const known = Number(originalDataRef.current?._photoCount) || 0;
             for (let i = 0; i < known; i++) keepIndices.push(i);
           }
-          for (const item of photoItems) {
+          // Ref, BUKAN state: inilah bacaan yang benar-benar membangun
+          // photo_ops.add. Dengan state, jalur kamera cabang edit mengirim
+          // add: [] dan foto jepretan terakhir hilang tanpa jejak.
+          for (const item of photoItemsRef.current) {
             if (item.type === 'existing') {
               keepIndices.push(item.originalIndex);
             } else if (item.type === 'new' && item.newData) {

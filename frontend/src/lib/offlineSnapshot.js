@@ -100,8 +100,16 @@ function toSnapshotRow(row) {
 }
 
 function isExpired(meta) {
-  if (!meta?.lastSync) return true;
-  const age = Date.now() - new Date(meta.lastSync).getTime();
+  // Kesegaran dibaca dari `disegarkanPada` — stempel "kapan terakhir kali kita
+  // benar-benar menarik data", yang SELALU ditulis. Ia sengaja DIPISAH dari
+  // `lastSync`, yang kini murni kursor delta dan berhenti maju saat kuota
+  // penuh (lihat _syncSnapshot). Tanpa pemisahan ini, sinkron parsial di
+  // perangkat penuh akan membuat cache-nya langsung dianggap kedaluwarsa —
+  // persis cache sebagian yang tadi susah payah kita pertahankan.
+  // Rekaman lama (sebelum PR ini) tak punya stempelnya → jatuh ke lastSync.
+  const stempel = meta?.disegarkanPada || meta?.lastSync;
+  if (!stempel) return true;
+  const age = Date.now() - new Date(stempel).getTime();
   return !Number.isFinite(age) || age > SNAPSHOT_TTL_MS;
 }
 
@@ -258,7 +266,26 @@ async function _syncSnapshot(activityId, userId, onProgress, { forceFull = false
   }
 
   const count = (await db.getAllKeysFromIndex(ASSET_STORE, "by-activity", activityId)).length;
-  const newMeta = { activityId, userId, lastSync: lastSyncCursor, count };
+  // KURSOR DELTA hanya boleh maju bila SELURUH halaman berhasil ditulis.
+  //
+  // `lastSyncCursor` diisi dari `server_time` halaman PERTAMA. Bila kuota
+  // perangkat penuh di halaman ke-7, loop berhenti (`quotaHit`) — tetapi
+  // menuliskan kursor itu tetap berarti "kami sudah menarik semuanya sampai
+  // detik ini". Sinkron berikutnya berangkat sebagai delta `since=kursor`,
+  // sehingga baris yang belum sempat ditarik punya `updated_at < since` dan
+  // TIDAK PERNAH ikut lagi. Lubangnya permanen sampai TTL 7 hari habis —
+  // dan toast "kosongkan ruang lalu sinkron ulang" menyuruh pengguna
+  // melakukan hal yang justru tidak menyembuhkannya.
+  //
+  // Karena itu saat quotaHit kursornya DIPERTAHANKAN apa adanya. Bila belum
+  // pernah ada kursor (sinkron penuh pertama yang kandas), ia tetap kosong →
+  // sinkron berikutnya otomatis full, bukan delta.
+  const newMeta = {
+    activityId, userId, count,
+    lastSync: quotaHit ? (meta?.lastSync || "") : lastSyncCursor,
+    disegarkanPada: new Date().toISOString(),
+  };
+  let metaTersimpan = newMeta;
   try {
     await db.put(META_STORE, newMeta);
   } catch (e) {
@@ -267,8 +294,11 @@ async function _syncSnapshot(activityId, userId, onProgress, { forceFull = false
     // dianggap absen (full) — tetap konsisten, tak rusak.
     if (!isQuotaExceeded(e)) throw e;
     quotaHit = true;
+    metaTersimpan = meta || null; // yang benar-benar ada di disk: rekaman LAMA
   }
-  return { count, lastSync: lastSyncCursor, partial: quotaHit };
+  // Kembalikan kursor yang BENAR-BENAR tersimpan, bukan yang sempat dihitung —
+  // bar "Tersinkron pukul …" tidak boleh mengklaim kesegaran yang tak ada.
+  return { count, lastSync: metaTersimpan?.lastSync || "", partial: quotaHit };
 }
 
 /**
