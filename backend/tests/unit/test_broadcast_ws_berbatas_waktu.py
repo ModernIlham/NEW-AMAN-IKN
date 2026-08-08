@@ -67,12 +67,13 @@ class SoketPalsu:
     """Soket yang bisa disuruh berperilaku persis seperti klien bermasalah."""
 
     def __init__(self, nama, gantung=False, meledak=False,
-                 tutup_meledak=False, tunda=0.0):
+                 tutup_meledak=False, tunda=0.0, tutup_gantung=False):
         self.nama = nama
         self.gantung = gantung
         self.meledak = meledak
         self.tutup_meledak = tutup_meledak
         self.tunda = tunda
+        self.tutup_gantung = tutup_gantung
         self.terkirim = []
         self.ditutup = []
 
@@ -89,6 +90,15 @@ class SoketPalsu:
     async def close(self, code=1000):
         if self.tutup_meledak:
             raise RuntimeError(f"close {self.nama} gagal")
+        if self.tutup_gantung:
+            # Penutupan yang menggantung BUKAN karangan. `WebSocket.close()`
+            # di uvicorn diteruskan ke protokol `websockets`, yang menunggu
+            # handshake penutupan lalu teardown TCP — kelasnya sendiri
+            # mendokumentasikan "close() completes in at most 4 * close_timeout
+            # for servers", dan uvicorn tak meneruskan close_timeout sehingga
+            # berlaku default 10 detik. Soket yang ditutup di sini justru soket
+            # yang buffernya TIDAK terkuras: keadaan terburuknya.
+            await asyncio.sleep(3600)
         self.ditutup.append(code)
 
     def __repr__(self):
@@ -186,6 +196,53 @@ class TestSoketMenggantung:
         await siarkan(m, KEG, {"type": "kedua"})
         assert time.monotonic() - mulai < BATAS_UJI, "masih menunggu soket mati"
         assert len(sehat.terkirim) == 2
+
+
+@pytest.mark.asyncio
+class TestPenutupanJugaBerbatasWaktu:
+    """Cacat yang PINDAH BARIS, bukan tertutup.
+
+    Versi pertama C24 membatasi waktu KIRIM tetapi menutup soket mati secara
+    BERURUTAN tanpa `wait_for`. Batas kirimnya dihormati — lalu `broadcast_local`
+    menggantung di `close()`, berlipat dengan jumlah soket mati.
+
+    Titik buta ujinya: `SoketPalsu.close()` dulu kembali seketika, jadi seluruh
+    uji "soket ditutup" lolos tanpa pernah menguji LAMANYA. Diukur dengan close
+    2 detik × 3 soket: `broadcast_local` memakan 6,06 detik meski
+    BATAS_KIRIM_DETIK = 0,05.
+    """
+
+    async def test_penutupan_yang_menggantung_TIDAK_menahan_siaran(self):
+        mati = [SoketPalsu(f"mati-{i}", gantung=True, tutup_gantung=True)
+                for i in range(3)]
+        m = bikin(*mati)
+        mulai = time.monotonic()
+        await siarkan(m, KEG, PESAN)
+        lewat = time.monotonic() - mulai
+        assert lewat < 1.0, f"tertahan di penutupan ({lewat:.2f} dtk)"
+
+    async def test_soket_sehat_tetap_menerima_walau_penutupan_menggantung(self):
+        sehat = SoketPalsu("sehat")
+        mati = SoketPalsu("mati", gantung=True, tutup_gantung=True)
+        m = bikin(sehat, mati)
+        await siarkan(m, KEG, PESAN)
+        assert sehat.terkirim == [PESAN]
+        assert mati not in m.active[KEG]
+
+    async def test_penutupan_TIDAK_berurutan(self):
+        """Tiga penutupan @0,12 dtk: sejajar ≈0,12 dtk, berurutan ≈0,36 dtk."""
+        class _Lambat(SoketPalsu):
+            async def close(self, code=1000):
+                await asyncio.sleep(0.12)
+                self.ditutup.append(code)
+
+        mati = [_Lambat(f"lambat-{i}", meledak=True) for i in range(3)]
+        m = bikin(*mati, batas=5)
+        mulai = time.monotonic()
+        await siarkan(m, KEG, PESAN)
+        lewat = time.monotonic() - mulai
+        assert lewat < 0.30, f"penutupan tampak berurutan ({lewat:.2f} dtk)"
+        assert all(s.ditutup == [1011] for s in mati)
 
 
 @pytest.mark.asyncio
@@ -291,6 +348,12 @@ class TestSumberBroadcast:
 
     def test_soket_gagal_ditutup_di_dalam_fungsi_ini(self):
         assert ".close(" in self.SRC
+
+    def test_penutupan_juga_berpagar_waktu_dan_sejajar(self):
+        # Membatasi kirim tanpa membatasi tutup memindahkan cacatnya, tak
+        # menutupnya — dan `close()` bisa jauh LEBIH lama daripada `send`.
+        assert self.SRC.count("asyncio.wait_for") >= 2, self.SRC.count("asyncio.wait_for")
+        assert self.SRC.count("asyncio.gather") >= 2, self.SRC.count("asyncio.gather")
 
     def test_batasnya_dari_KONSTANTA_bukan_angka_telanjang(self):
         # Angka telanjang di badan fungsi tak bisa dibaca uji maupun disetel

@@ -338,17 +338,41 @@ async def deep_health_check():
         from pathlib import Path as _Path
         du = _shutil.disk_usage(str(_Path(__file__).parent))
         persen_bebas = round(du.free / du.total * 100, 1) if du.total else 0.0
+        bebas_mb = du.free // (1024 * 1024)
+        # PERINGATAN (dilaporkan, TIDAK menjatuhkan gerbang) vs KRITIS (503).
+        #
+        # Versi pertama menjatuhkan `ok` pada 15% dan itu KELIRU — bukan karena
+        # ambangnya salah, melainkan karena tak memperhitungkan siapa pembaca
+        # 503-nya. `scripts/deploy_vps.sh` mem-poll endpoint ini sebagai gerbang
+        # deploy; 503 memanggil `pulihkan`, yang `git reset --hard` ke commit
+        # sebelumnya. Jadi VPS berisi 86% — bukan penuh, aplikasi melayani
+        # normal, Mongo & GridFS sehat — akan me-ROLLBACK setiap merge ke main,
+        # berulang selamanya, termasuk merge yang membawa perbaikannya sendiri.
+        #
+        # Ambang kritisnya kini ABSOLUT, bukan rasio, karena yang sebenarnya
+        # rusak juga absolut: `yarn build` dan `pip install` butuh sekian ratus
+        # MB untuk selesai, dan Mongo butuh ruang untuk menulis. Persentase
+        # salah di kedua ujung — 3% dari 1 TB masih 30 GB (sehat), 15% dari
+        # 20 GB hanya 3 GB (mepet). Peringatan 15% tetap dilaporkan sebagai
+        # sinyal yang dipantau, persis perlakuan `checks["indexes"]`.
+        KRITIS_MB = 1024
         disk_ok = persen_bebas >= 15.0
+        disk_kritis = bebas_mb < KRITIS_MB
         checks["disk"] = {
             "ok": disk_ok,
+            "kritis": disk_kritis,
             "bebas_persen": persen_bebas,
-            "bebas_mb": du.free // (1024 * 1024),
+            "bebas_mb": bebas_mb,
             "total_mb": du.total // (1024 * 1024),
         }
-        if not disk_ok:
+        if disk_kritis:
             ok = False
-            logger.error("health/deep: disk tinggal %.1f%% bebas (%d MB)",
-                         persen_bebas, du.free // (1024 * 1024))
+            logger.error("health/deep: disk KRITIS, tinggal %d MB (%.1f%%)",
+                         bebas_mb, persen_bebas)
+        elif not disk_ok:
+            logger.warning("health/deep: disk tinggal %.1f%% bebas (%d MB) — "
+                           "belum kritis, deploy TIDAK diblokir",
+                           persen_bebas, bebas_mb)
     except Exception as e:
         checks["disk"] = {"ok": False, "error": str(e)[:200]}
 
