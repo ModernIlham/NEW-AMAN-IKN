@@ -67,6 +67,74 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#812] Gelombang 2.7 — sapuan job macet saat startup, dan denyut yang membuatnya sah — 2026-08-08
+
+Butir C29 peta jalan `docs/TINJAUAN-SISTEM-2026-08.md`.
+
+**Klaim laporannya benar.** `_job_maintenance_loop` menyapu Pusat Unduhan saat
+startup, lalu masuk `while True:` → `sleep(3600)` → baru menyapu
+`db.background_jobs`. Job yang mati saat restart menahan slot
+`running`/`queued` **satu jam penuh** — padahal komentar di blok yang sama sudah
+menuliskan persis alasan mengapa itu buruk, untuk koleksi yang lain.
+
+**Tetapi memasang sapuan itu apa adanya akan menukar satu bug dengan bug yang
+lebih buruk.**
+
+`bersihkan_job_basi` menyimpulkan "mati" dari `updated_at` yang tua. Kesimpulan
+itu hanya sah bila `updated_at` benar-benar berarti "masih hidup" — dan ia
+tidak. Dua celah panjang tanpa satu pun pembaruan:
+
+- **Menunggu semaphore.** `_EKSPOR_SEM` / `_IMPOR_SEM` membatasi konkurensi
+  build berat. Job kedua duduk di antrean, bisa bermenit-menit, dengan
+  `updated_at` yang masih dari saat ia dibuat.
+- **Selama kerjanya sendiri.** Ekspor XLSX melompat dari progres **10 langsung
+  ke 90**; di antaranya `bangun_xlsx_bytes` berjalan tanpa satu pun
+  `update_job`. Justru ekspor besar — yang paling lama — yang paling rentan.
+
+Dan korbannya nyata, bukan teoretis: `scripts/vps-deploy.sh:203` menjalankan
+**`uvicorn --workers 2`**. Satu worker mati — OOM saat ekspor besar adalah
+penyebab paling masuk akal — lalu di-respawn uvicorn, menjalankan startup, dan
+menyapu job milik worker saudaranya yang **masih sehat**. Korban yang paling
+mungkin: ekspor besar yang lain. Pengguna melihat ekspornya gagal padahal ia
+masih berjalan dan sebentar lagi menulis hasilnya.
+
+### Karena itu: denyut dulu, baru sapuan
+
+`denyut_job(job_id)` — context manager di `jobs.py` yang menyentuh `updated_at`
+tiap **30 detik**, dipasang di tiga worker job (`exports.py`, `spasial.py`,
+`categories.py`). Rasionya yang membuat sapuan masuk akal: 30 detik vs ambang
+5 menit = **sepuluh denyut hilang berturut-turut** sebelum sebuah job dinyatakan
+mati.
+
+Denyut membungkus **semaphore-nya juga**, bukan hanya kerjanya — job yang
+mengantre adalah kasus paling rentan, bukan paling aman.
+
+### Uji
+
+`backend/tests/unit/test_denyut_job_dan_sapuan.py` — 17 uji, termasuk satu
+kelas khusus (`TestSapuanDanDenyutTAKBOLEHDipisah`) yang menagih **setiap**
+worker job memakai denyut. Worker job baru tanpa denyut mengembalikan cacatnya
+dalam bentuk yang lebih halus.
+
+Sembilan mutasi diuji. **Tujuh terbunuh; dua lolos** — dan keduanya menemukan
+kesalahan saya, bukan kesalahan kode:
+
+1. **Uji yang menguji hal yang salah.** `test_denyut_gagal_TIDAK_menggagalkan_job`
+   hanya menagih "job tetap selesai". Itu uji kosong: galat di dalam `_loop()`
+   terjadi di **task terpisah**, jadi ia memang tak pernah merambat ke badan
+   `async with` — dengan atau tanpa `try/except`. Kerusakan sebenarnya lebih
+   halus: satu galat sesaat **membunuh task denyutnya** diam-diam, job berhenti
+   berdetak sampai selesai, dan sapuan lalu menandainya mati. Ujinya ditulis
+   ulang untuk menagih denyut **terus berdetak setelah gagal sekali**.
+2. **Harness mutasinya sendiri yang cacat.** Mutasi "hapus sapuan startup"
+   memotong berdasarkan `"    while True:"` — yang ternyata cocok lebih dulu di
+   dalam `denyut_job._loop`. Mutasinya tak pernah terpasang, dan "17 passed"
+   dibaca sebagai uji yang lemah. Setelah dipasang dengan benar: **3 uji
+   gagal.** Mutasi yang tak terpasang bukan mutasi yang selamat — dan bedanya
+   hanya terlihat kalau pemasangannya ikut diverifikasi.
+
+---
+
 ## [#811] Gelombang 2.6 — parser Excel pindah ke thread, termasuk pemanggil yang tak menyebut namanya — 2026-08-08
 
 Butir C28 peta jalan `docs/TINJAUAN-SISTEM-2026-08.md`.

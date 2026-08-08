@@ -1211,12 +1211,13 @@ async def _jalankan_impor(job_id, data, nama_file, tipe, deriv,
     Kerja CPU (parse + shapely) di thread; penulisan batch insert_many.
     Laporan disimpan langsung di dokumen job (kecil), bukan artifact.
     """
-    from jobs import update_job
+    from jobs import update_job, denyut_job
     from log_setup import set_job_id
     import impor_geo_utils as ig
     set_job_id(job_id)
     try:
-        async with _IMPOR_SEM:
+        # Denyut membungkus semaphore + parse (temuan C29) — lihat exports.py.
+        async with denyut_job(job_id), _IMPOR_SEM:
             await update_job(job_id, status="running", progress=5,
                              message="Membaca file…")
             hasil = await asyncio.to_thread(ig.parse_file, nama_file, data)

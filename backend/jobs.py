@@ -12,6 +12,7 @@ Dokumen job auto-hapus via TTL index pada `created_at` (lihat indexes.py) sehing
 tak menumpuk. Artifact besar (hasil ekspor) disimpan di GridFS (menyusul).
 """
 import asyncio
+import contextlib
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -108,6 +109,54 @@ async def bersihkan_job_basi(menit: int = 60) -> int:
     return res.modified_count
 
 
+# Selang denyut job. 30 detik = sepersepuluh ambang sapuan startup (5 menit),
+# jadi butuh SEPULUH denyut berturut-turut hilang sebelum sebuah job dianggap
+# mati. Cukup longgar untuk hiccup, cukup ketat untuk berguna.
+DENYUT_DETIK = 30
+
+
+@contextlib.asynccontextmanager
+async def denyut_job(job_id: str, detik: int = DENYUT_DETIK):
+    """Sentuh `updated_at` berkala selama blok berjalan.
+
+    PRASYARAT bagi sapuan job macet, bukan hiasan. `bersihkan_job_basi`
+    menyimpulkan "mati" dari `updated_at` yang tua — dan kesimpulan itu hanya
+    sah bila `updated_at` benar-benar berarti "masih hidup".
+
+    Sebelum ini ia TIDAK berarti begitu. Dua celah panjang tanpa satu pun
+    pembaruan:
+
+      • **Menunggu semaphore.** `_EKSPOR_SEM` dan `_IMPOR_SEM` membatasi
+        konkurensi build berat. Job kedua duduk di antrean — bisa
+        bermenit-menit — dengan `updated_at` yang masih dari saat dibuat.
+      • **Selama kerjanya sendiri.** Ekspor XLSX melompat dari progres 10
+        langsung ke 90; di antaranya `bangun_xlsx_bytes` berjalan tanpa satu
+        pun `update_job`. Justru ekspor besar — yang paling lama — yang paling
+        rentan.
+
+    Tanpa denyut, menyapu pada ambang 5 menit akan menandai job SEHAT sebagai
+    "Timeout (job macet)". Dan itu bukan skenario teoretis: deploy ini jalan
+    dengan `uvicorn --workers 2`. Satu worker mati (OOM saat ekspor besar
+    adalah penyebab paling masuk akal) lalu di-respawn uvicorn → ia menjalankan
+    startup → menyapu job milik worker saudaranya yang masih sehat. Ironisnya
+    korban yang paling mungkin adalah ekspor besar lain.
+    """
+    async def _loop():
+        while True:
+            await asyncio.sleep(detik)
+            try:
+                await update_job(job_id)     # hanya menyentuh updated_at
+            except Exception:                # noqa: BLE001
+                pass                         # denyut gagal ≠ job gagal
+    t = asyncio.create_task(_loop())
+    try:
+        yield
+    finally:
+        t.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await t
+
+
 async def bersihkan_artifact_yatim(hari: int = 7) -> int:
     """Hapus blob artifact ekspor di GridFS yang lebih tua dari `hari`. Dokumen
     job auto-hapus via TTL (7 hari) tetapi blob GridFS TIDAK ikut terhapus (koleksi
@@ -144,6 +193,20 @@ async def _job_maintenance_loop():
         await bersihkan_unduhan_kedaluwarsa(ambang_macet_menit=5)
     except Exception as e:      # noqa: BLE001
         logger.warning("Sapuan unduhan awal (non-fatal): %s", e)
+    # ...dan db.background_jobs, yang selama ini TERLEWAT (temuan C29). Sapuan
+    # pertamanya baru tiba setelah `sleep(3600)` di bawah, jadi job yang mati
+    # saat restart menahan slot 'running'/'queued' sampai satu jam penuh —
+    # padahal komentar di atas sudah menyebut persis alasan mengapa itu buruk.
+    #
+    # Ambang 5 menit ini AMAN hanya karena `denyut_job` membuat `updated_at`
+    # benar-benar berarti "masih hidup". Menambah sapuan ini TANPA denyut akan
+    # menukar satu bug dengan bug yang lebih buruk: job sehat ditandai macet.
+    try:
+        n = await bersihkan_job_basi(5)
+        if n:
+            logger.info("Sapuan job awal: %s job macet di-relabel", n)
+    except Exception as e:      # noqa: BLE001
+        logger.warning("Sapuan job awal (non-fatal): %s", e)
     while True:
         try:
             await asyncio.sleep(3600)   # tiap jam

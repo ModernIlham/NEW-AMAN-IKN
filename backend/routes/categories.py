@@ -204,7 +204,16 @@ async def import_categories_bulk(request: Request, file: UploadFile = File(...),
 async def _do_bulk_import(job_id: str, rows: list):
     """Background task for bulk category import — progres persisten via jobs.py."""
     from log_setup import set_job_id
+    from jobs import denyut_job
     set_job_id(job_id)   # korelasi log ke JOB, bukan request pemicu (task latar)
+    async with denyut_job(job_id):
+        await _do_bulk_import_inti(job_id, rows)
+
+
+async def _do_bulk_import_inti(job_id: str, rows: list):
+    """Badan impor. Dipisah agar `denyut_job` membungkus SELURUHNYA — termasuk
+    pemindaian `existing_codes` di awal, satu-satunya fase panjang di sini yang
+    tak menyentuh `updated_at` (temuan C29)."""
     batch_size = 500
     imported = 0
     skipped = 0
