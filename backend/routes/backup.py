@@ -532,6 +532,16 @@ async def run_restore_task(job_id: str, zip_path: Path, username: str):
                         for d in docs:
                             if not d.get("version"):
                                 d["version"] = 1
+                    if col_name == "satker":
+                        # C32: arsip pra-indeks-unik bisa memuat dua master
+                        # satu kode; insert_many ordered akan meledak melawan
+                        # indeks unik dan menggagalkan SELURUH restore. Ambil
+                        # yang pertama per kode; create_indexes() di akhir
+                        # restore merapikan sisanya (dedupe merge).
+                        _lihat = set()
+                        docs = [d for d in docs
+                                if not (d.get("kode_satker") in _lihat
+                                        or _lihat.add(d.get("kode_satker")))]
                     # KEAMANAN (temuan tinjauan): jangan pernah tulis field
                     # efemeral "Satker Aktif" ke dokumen user. Backup dari pihak
                     # luar bisa menyelundupkan `_super_admin_asli` yang lalu

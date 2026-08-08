@@ -11,6 +11,7 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from pymongo.errors import DuplicateKeyError
 from PIL import Image as PILImage
 from bson import ObjectId  # noqa: F401  (kept for downstream import use)
 
@@ -486,10 +487,17 @@ async def _cek_atau_perbarui_satker(activity, exclude_id=None, user=None):
             {"nama_satker": nama, "kode_satker": kode_lama},
             {"$set": {"kode_satker": kode}})
         # Master Satker ikut pindah kode HANYA bila kode baru belum terdaftar
-        # (hindari dua doc master berebut satu kode).
-        if not await db.satker.find_one({"kode_satker": kode}, {"_id": 1}):
-            await db.satker.update_one(
-                {"kode_satker": kode_lama}, {"$set": {"kode_satker": kode}})
+        # (hindari dua doc master berebut satu kode). C32: dengan indeks unik
+        # menyala, kalah balapan pada check-then-act ini berubah dari "dua
+        # master" menjadi DuplicateKeyError di TENGAH migrasi lintas-koleksi —
+        # tangkap dan batalkan pemindahan masternya saja (dokumen lain tetap
+        # bermigrasi, sama seperti bila kode target memang sudah terdaftar).
+        try:
+            if not await db.satker.find_one({"kode_satker": kode}, {"_id": 1}):
+                await db.satker.update_one(
+                    {"kode_satker": kode_lama}, {"$set": {"kode_satker": kode}})
+        except DuplicateKeyError:
+            pass
         # Migrasi serentak seluruh dokumen ber-stempel kode lama (termasuk
         # users terikat — kalau tidak, mereka kehilangan akses datanya).
         rincian = {}
