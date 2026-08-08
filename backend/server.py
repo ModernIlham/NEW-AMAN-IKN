@@ -286,6 +286,53 @@ async def deep_health_check():
     except Exception as e:
         checks["redis"] = {"ok": False, "error": str(e)[:200]}
 
+    # INDEKS (temuan C31): pembuatan indeks kini per-indeks berpenjaga, jadi
+    # satu kegagalan tidak lagi membatalkan sisanya — tetapi kegagalan yang
+    # SELAMAT itu harus TERLIHAT. Tanpa ini, sistem tetap hidup dan tetap
+    # menjawab sementara sebagian kuerinya diam-diam berubah jadi pemindaian
+    # koleksi penuh, dan satu-satunya jejaknya baris log saat boot.
+    #
+    # SENGAJA tidak menjatuhkan `ok` (503): aplikasi memang masih melayani, dan
+    # menjatuhkan gerbang deploy karena indeks yang butuh perbaikan data manual
+    # justru membuat tim membiasakan diri melewati gerbangnya. Ia dilaporkan
+    # sebagai degradasi yang bisa dilihat monitor, bukan sebagai mati.
+    try:
+        from indexes import kegagalan_indeks
+        gagal = kegagalan_indeks()
+        checks["indexes"] = {"ok": not gagal, "gagal": len(gagal)}
+        if gagal:
+            checks["indexes"]["detail"] = gagal[:10]
+            logger.warning("health/deep: %d indeks gagal dibuat", len(gagal))
+    except Exception as e:
+        checks["indexes"] = {"ok": False, "error": str(e)[:200]}
+
+    # DISK (temuan C4b): disk penuh mematikan hampir semua hal sekaligus —
+    # unggah foto, backup, log, bahkan Mongo — dan gejalanya di layar tampak
+    # seperti sepuluh bug berbeda. Ambangnya diletakkan di 15% bebas: cukup
+    # longgar untuk tidak berisik, cukup awal untuk masih sempat ditindaki.
+    # Memakai pola yang sudah ada di backup.py.
+    #
+    # Ini SATU-SATUNYA cek di sini yang bisa dijawab pemilik tanpa menyentuh
+    # kode — karena itu ia dilaporkan dengan angka, bukan sekadar ok/tidak.
+    try:
+        import shutil as _shutil
+        from pathlib import Path as _Path
+        du = _shutil.disk_usage(str(_Path(__file__).parent))
+        persen_bebas = round(du.free / du.total * 100, 1) if du.total else 0.0
+        disk_ok = persen_bebas >= 15.0
+        checks["disk"] = {
+            "ok": disk_ok,
+            "bebas_persen": persen_bebas,
+            "bebas_mb": du.free // (1024 * 1024),
+            "total_mb": du.total // (1024 * 1024),
+        }
+        if not disk_ok:
+            ok = False
+            logger.error("health/deep: disk tinggal %.1f%% bebas (%d MB)",
+                         persen_bebas, du.free // (1024 * 1024))
+    except Exception as e:
+        checks["disk"] = {"ok": False, "error": str(e)[:200]}
+
     try:
         from routes.backup import APP_VERSION as _ver
     except Exception:
