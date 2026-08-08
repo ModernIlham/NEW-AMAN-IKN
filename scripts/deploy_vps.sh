@@ -34,6 +34,44 @@ cd "$APP_DIR"
 PREV="$(git rev-parse HEAD)"
 echo "Commit saat ini (titik pulang bila gagal): $(git rev-parse --short HEAD)"
 
+# ── Gerbang restore (prasyarat C30): deploy tak boleh menimpa pemulihan ──
+# data yang sedang berjalan. `restart_backend` di bawah membunuh task restore
+# di TENGAH wipe — sampai kini itu terjadi DIAM-DIAM dan meninggalkan DB
+# separuh terisi. Periksa job restore aktif (active_lock GLOBAL, denyut
+# < 30 menit — cutoff yang sama dengan cleanup_stale_jobs backend) langsung
+# ke Mongo SEBELUM menyentuh apa pun; bila ada, batalkan deploy.
+#
+# GAGAL-BUKA disengaja: pemeriksa yang rusak (mongosh hilang, URI tak
+# terbaca) tidak boleh memblokir semua deploy selamanya — ia memperingatkan
+# lalu melanjutkan, persis perilaku hari ini.
+periksa_restore_aktif() {
+  command -v mongosh >/dev/null 2>&1 || {
+    echo "PERINGATAN: mongosh tidak ditemukan — gerbang restore dilewati." >&2
+    return 0
+  }
+  local uri dbn batas n
+  uri="$(grep -E '^MONGO_URL=' backend/.env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"' || true)"
+  dbn="$(grep -E '^DB_NAME=' backend/.env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"' || true)"
+  if [ -z "$uri" ]; then
+    echo "PERINGATAN: MONGO_URL tak terbaca dari backend/.env — gerbang restore dilewati." >&2
+    return 0
+  fi
+  batas="$(date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%S 2>/dev/null || true)"
+  n="$(mongosh "$uri" --quiet --eval "
+    db = db.getSiblingDB('${dbn:-inventaris_bmn}');
+    db.backup_jobs.countDocuments({type: 'restore', active_lock: 'GLOBAL',
+      status: {\$in: ['queued', 'running']},
+      updated_at: {\$gt: '${batas}'}})" 2>/dev/null || true)"
+  if [ "${n:-0}" -ge 1 ] 2>/dev/null; then
+    echo "DEPLOY DIBATALKAN: ada pemulihan data (restore) sedang berjalan." >&2
+    echo "restart_backend akan membunuh restore di tengah wipe dan meninggalkan DB separuh terisi." >&2
+    echo "Tunggu restore selesai (pantau layar Pengaturan) lalu jalankan deploy ulang." >&2
+    exit 1
+  fi
+  return 0
+}
+periksa_restore_aktif
+
 # .env berisi kredensial produksi dan TIDAK ikut repo — amankan dulu.
 cp backend/.env /tmp/backend_env_backup
 cp frontend/.env /tmp/frontend_env_backup

@@ -67,6 +67,36 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#824] Gelombang 2.18 — deploy berhenti membunuh restore diam-diam — 2026-08-08
+
+Prasyarat C30 (mode pemeliharaan, PR berikutnya): `deploy_vps.sh` memanggil
+`restart_backend` tanpa memeriksa apa pun — deploy yang kebetulan berjalan
+saat pemulihan data membunuh task restore di TENGAH wipe dan meninggalkan
+DB separuh terisi, dengan log deploy yang hijau. Setelah C30 mendarat nanti
+kombinasi itu bahkan lebih mahal: gerbang kesehatan ikut 503 → `pulihkan()`
+→ restart ganda di atas DB separuh.
+
+**Gerbang `periksa_restore_aktif`** — berjalan SEBELUM skrip menyentuh apa
+pun (sebelum `git fetch`/`reset`): tanya Mongo langsung apakah ada job
+restore aktif (`active_lock: GLOBAL`, status queued/running, denyut
+`updated_at` < 30 menit — cutoff yang sama dengan `cleanup_stale_jobs`
+backend, jadi job macet yang tak pernah dibersihkan TIDAK memblokir deploy
+selamanya). Ada → deploy DIBATALKAN dengan pesan yang menjelaskan kenapa
+dan apa yang harus ditunggu.
+
+**Gagal-buka disengaja** dan dikunci uji: mongosh hilang atau `MONGO_URL`
+tak terbaca → peringatkan lalu lanjutkan (persis perilaku hari ini) —
+pemeriksa yang rusak tak boleh memblokir semua deploy selamanya. Hanya
+temuan restore aktif yang boleh `exit 1`.
+
+**Uji** (4 baru di `TestGerbangRestoreDeploy`): fungsi ada DAN dipanggil
+telanjang; dipanggil SEBELUM `git fetch`/`reset`; kueri menyaring
+type+lock+status+kesegaran; gagal-buka bukan gagal-tutup (dua `return 0`,
+tepat satu `exit 1`). **Empat mutasi diuji, empat terbunuh** — termasuk
+"gerbang dipindah ke setelah restart" (terlambat = sia-sia) dan gagal-tutup.
+
+---
+
 ## [#823] Gelombang 2.17 (C25b) — cetak kartu berhenti membekukan aplikasi, dan riwayatnya berhenti bertanya 600 kali — 2026-08-08
 
 Penutup pasangan C25a (plafon 300 + rate limit, [#809]): seluruh badan
