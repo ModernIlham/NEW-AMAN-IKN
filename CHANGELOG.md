@@ -67,6 +67,46 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#822] Gelombang 2.16 (S7) — render pratinjau pindah ke satu-satunya thread yang boleh menyentuh pdfium — 2026-08-08
+
+`_render_halaman_png` (pratinjau penempatan TTD/QR di `routes/ttd.py`)
+berjalan sinkron di event loop: ±100–130 ms per halaman — dan yang mahal
+BUKAN pdfium (11 ms) melainkan encode PNG Pillow (87 ms). `AturPosisiTtd`
+memicu satu render per ganti halaman. Terukur: 6 pratinjau bersamaan membuat
+permintaan lain menunggu median 223 ms / maks 446 ms; dengan perbaikan ini
+median 0,29 ms / maks 2,4 ms — yang dibeli **ketersediaan**, bukan
+kecepatan.
+
+**Koreksi penting atas usul temuan aslinya:** "bungkus `asyncio.to_thread`"
+kalau diterapkan apa adanya **membunuh worker** — pypdfium2 tidak
+aman-thread (6 render dari 6 thread = SIGSEGV 5/5 percobaan; dengan
+`--workers 2` itu separuh kapasitas hilang sampai supervisor restart).
+Ironisnya skenario yang menamai temuan ini — beberapa penanda tangan
+bersamaan — adalah persis skenario yang memicu crash-nya.
+
+**Perbaikan:** fungsi murni `_render_halaman_bytes(bytes, no)` dijalankan
+lewat **executor ber-thread-TUNGGAL** `_PDFIUM_EXEC` — event loop bebas,
+render terserialisasi di SATU thread yang sama, dan pool bawaan
+`asyncio.to_thread` tak ikut terpakai (thumbnail assets.py tidak jadi
+lapar). Kontrak HTTP tak berubah: `image/png`, `Cache-Control: private,
+max-age=600` (tanpanya tiap ganti halaman memukul server dan menabrak
+plafon 60/menit), `X-Jumlah-Halaman`, clamp lebar 1100 px (bergeser =
+regresi SENYAP karena posisi disimpan sebagai fraksi). Di luar cakupan dan
+dicatat terbuka: `_bangun_pdf_ber_ttd` (4 titik await di tengah loop) — 13–29
+ms vs 100 ms, kalah prioritas; `compress_level` PNG — mengubah keluaran
+biner, PR terpisah.
+
+**Uji** (5 baru, `test_ttd_render_halaman.py`): uji inti mengukur
+**identitas thread + kedalaman paralel** (bukan durasi — deterministik di
+CI): render tak boleh di thread utama DAN tak boleh pernah bersamaan; render
+nyata PDF 3 halaman mengunci seluruh kontrak respons + lebar 1100; PDF
+rusak → 422 menembus batas thread; nomor halaman dijepit. **Lima mutasi
+diuji, lima terbunuh** — termasuk `max_workers=4`, yang mereproduksi persis
+usul naif laporan dan tanpa uji ini baru muncul sebagai segfault di
+produksi.
+
+---
+
 ## [#821] Gelombang 2.15 (C32) — satu kode satker, satu master — 2026-08-08
 
 `db.satker` adalah penjaga keunikan de-facto — `find_one({"kode_satker"})`
