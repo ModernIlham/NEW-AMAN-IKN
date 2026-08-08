@@ -67,6 +67,57 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#803] Gelombang 1.1 — tiga jalur di mana pekerjaan lapangan hilang diam-diam — 2026-08-08
+
+Tiga temuan pertama peta jalan `docs/TINJAUAN-SISTEM-2026-08.md` (Gelombang 1:
+*cegah kehilangan data*). Ketiganya berbagi satu pola: **kerugiannya senyap**.
+Tak ada crash, tak ada pesan galat, dan layarnya justru menampilkan keberhasilan.
+
+**C1 · Foto Mode Kamera Penuh bisa lenyap tanpa pesan.**
+Larik dep `handleSubmit` di `AssetForm.jsx` tidak memuat `photoItems` — disengaja,
+karena memasukkannya membuat identitas handler berubah tiap jepretan padahal
+handler itu dipegang alur beruntun kamera. Konsekuensinya closure-nya bisa basi.
+Asimetri dua jalur foto yang membuatnya berbahaya: jalur **galeri** cabang edit
+memanggil `setPhotoItems` **dan** `setFormData` sehingga closure kebetulan ikut
+segar; jalur **kamera** cabang edit hanya `setPhotoItems` lalu `return`. Patch
+terkirim dengan `photo_ops.add` KOSONG, chip barisnya berakhir "saved", dan byte
+fotonya sudah tak ada di perangkat karena snapshot luring memang membuang foto.
+Perbaikannya cermin ref `photoItemsRef`, dibaca **hanya** di dua tempat di dalam
+`handleSubmit`; bacaan JSX & `currentPhotoCount` tetap lewat state agar render
+tetap ikut berubah. Larik dep tidak diubah — nol risiko render tambahan.
+
+**C20 · Sinkron luring memajukan kursor walau berhenti separuh jalan.**
+`offlineSnapshot.js` menyetel `quotaHit = true; break;` saat IndexedDB penuh,
+tetapi tetap menulis `lastSync` dari `server_time` **halaman pertama**. Sinkron
+berikutnya berangkat sebagai delta dari titik itu, sehingga baris yang belum
+sempat ditarik punya `updated_at` lebih tua dan **tidak pernah ikut lagi** —
+lubang permanen sampai TTL 7 hari. Peringatannya sudah ada; yang cacat adalah
+**obat yang disarankannya tidak bekerja**. Kini kursor delta hanya maju bila
+seluruh halaman berhasil ditulis, dan kesegaran cache dipindah ke stempel
+terpisah `disegarkanPada` — tanpa pemisahan itu, cache sebagian yang tadi susah
+payah dipertahankan justru langsung dianggap kedaluwarsa.
+
+**C21 · Kuota ditangani anggun di cache BACA, ditelan diam di antrean TULIS.**
+`persistQueueItem` punya cabang catch yang di produksi benar-benar kosong.
+Prioritasnya terbalik: cache baca yang selalu bisa disinkron ulang diberi
+peringatan, sedangkan **kerja belum terkirim** — 900 KB per foto sampai 6 foto —
+diam sepenuhnya. Chip barisnya tetap "queued", lalu begitu tab ditutup atau
+di-swap keluar Android, seluruh muatan itu hilang. Kini keputusannya jadi fungsi
+murni `keputusanGagalTulisAntrean` di `lib/idbErrors.js`, dipanggil dari keempat
+titik simpan, dan DashboardPage menampilkannya sebagai `toast.error` **menetap**
+(`duration: 0`) — sekali per sesi, karena sepuluh toast berkedip hanya melatih
+pengguna mengabaikannya.
+
+**Uji.** `lib/sinkronKuotaPenuh.test.js` (5) menjalankan sinkron sungguhan di
+atas penyimpan in-memory yang disuruh kehabisan kuota di tengah jalan;
+`lib/fotoRefSimpan.test.js` (4) mengurung aturan "nol bacaan state di dalam
+`handleSubmit`, tetap dipakai di luar"; `lib/idbErrors.test.js` +6 termasuk
+penjaga sambungan (catch memanggil keputusannya, keempat titik panggil membawa
+pelapornya, toast-nya menetap). Seluruhnya diadu ke enam mutasi — tiap mutasi
+menjatuhkan uji, tak satu pun lolos. **752 → 767 uji, 63 → 65 berkas.**
+
+---
+
 ## [#802] Tinjauan sistem menyeluruh — 102 temuan, 5 gugur, dan peta jalan berurut — 2026-08-08
 
 Permintaan pemilik: tinjau keseluruhan aplikasi, beri saran/kritik, dan usulkan

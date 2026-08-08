@@ -10,6 +10,7 @@ import { terapkanHeaderSatker, getSatkerAktif } from "../lib/satkerAktif";
 import { gabungPatch } from "../lib/gabungPatch";
 import { tertundaUntukEnqueue, tertundaUntukKegagalan } from "../lib/gabungAntrean";
 import { idPenggunaAktif, bolehReplay } from "../lib/pemilikAntrean";
+import { keputusanGagalTulisAntrean } from "../lib/idbErrors";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -117,12 +118,17 @@ function toPlainItem(item, statusKey) {
   };
 }
 
-async function persistQueueItem(item, statusKey) {
+async function persistQueueItem(item, statusKey, onKuotaPenuh) {
   try {
     const db = await getQueueDB();
     await db.put(QUEUE_STORE, toPlainItem(item, statusKey));
   } catch (e) {
     // Best-effort: the in-memory queue keeps working without persistence.
+    // TAPI kuota penuh BUKAN "best-effort yang wajar" — antrean lalu hanya
+    // hidup di memori dan lenyap begitu tab ditutup, padahal chip barisnya
+    // tetap menampilkan "queued". Naikkan ke pemanggil agar pengguna diberi
+    // tahu; klasifikasinya ada di lib/idbErrors (diuji terpisah).
+    if (keputusanGagalTulisAntrean(e) === "beri_tahu_pengguna") onKuotaPenuh?.();
     if (process.env.NODE_ENV !== "production") {
       console.warn("[useOptimisticQueue] Failed to persist queue item:", e?.message);
     }
@@ -162,7 +168,7 @@ function genIdempotencyKey() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onConflict, onItemDismissed, onRehydrate, getLatestVersion }) {
+export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onConflict, onItemDismissed, onRehydrate, getLatestVersion, onKuotaPenuh }) {
   const [syncStatuses, setSyncStatuses] = useState({});
   const [queueLength, setQueueLength] = useState(0);
   const queueRef = useRef([]);
@@ -185,10 +191,24 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
   // Parent callbacks that may be recreated each render — read via refs
   const getLatestVersionRef = useRef(getLatestVersion);
   const onRehydrateRef = useRef(onRehydrate);
+  const onKuotaPenuhRef = useRef(onKuotaPenuh);
   useEffect(() => {
     getLatestVersionRef.current = getLatestVersion;
     onRehydrateRef.current = onRehydrate;
+    onKuotaPenuhRef.current = onKuotaPenuh;
   });
+
+  // Kuota IndexedDB penuh: dilaporkan SEKALI per sesi. Sekali penuh, setiap
+  // simpanan berikutnya juga gagal — tanpa penjaga ini setiap ketukan Simpan
+  // memunculkan toast baru, dan yang terjadi justru pengguna belajar
+  // mengabaikannya. Satu peringatan yang menetap (duration: 0) lebih efektif
+  // daripada sepuluh yang berkedip.
+  const kuotaDilaporkanRef = useRef(false);
+  const laporKuotaPenuh = useCallback(() => {
+    if (kuotaDilaporkanRef.current) return;
+    kuotaDilaporkanRef.current = true;
+    onKuotaPenuhRef.current?.();
+  }, []);
 
   const updateStatus = useCallback((id, status, error, extra) => {
     // `extra` menempelkan penanda tambahan (mis. { locked: true } untuk 423)
@@ -344,7 +364,7 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
         // `hadConflict` makes retry() refresh the base version + mint a new key.
         const stored = toPlainItem({ ...item, hadConflict: true }, statusKey);
         failedItemsRef.current[statusKey] = stored;
-        persistQueueItem(stored, statusKey);
+        persistQueueItem(stored, statusKey, laporKuotaPenuh);
         if (failTimersRef.current[statusKey]) clearTimeout(failTimersRef.current[statusKey]);
         failTimersRef.current[statusKey] = setTimeout(() => {
           delete failTimersRef.current[statusKey];
@@ -379,7 +399,7 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
             // me-replay NUP lama → aset KEMBAR. Sekarang yang di-replay adalah
             // item ber-NUP baru + key barunya (server bisa dedup lewat idempotensi).
             failedItemsRef.current[statusKey] = toPlainItem(newItem, statusKey);
-            persistQueueItem(newItem, statusKey);
+            persistQueueItem(newItem, statusKey, laporKuotaPenuh);
             updateStatus(statusKey, "queued");
             queueRef.current.push(newItem);
             setQueueLength(queueRef.current.length);
@@ -456,7 +476,7 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
       }
       const stored = toPlainItem(itemSimpan, statusKey);
       failedItemsRef.current[statusKey] = stored;
-      persistQueueItem(stored, statusKey);
+      persistQueueItem(stored, statusKey, laporKuotaPenuh);
 
       if (item.isEdit && item.editId) {
         if (failTimersRef.current[statusKey]) clearTimeout(failTimersRef.current[statusKey]);
@@ -472,7 +492,7 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
       activeCountRef.current--;
       processNext();
     }
-  }, [updateStatus, clearStatus, onItemSaved, onItemFailed, onRowSynced, onConflict]);
+  }, [updateStatus, clearStatus, onItemSaved, onItemFailed, onRowSynced, onConflict, laporKuotaPenuh]);
 
   const enqueue = useCallback(({ tempId, payload, isEdit, editId, usePatch, baseVersion, idempotencyKey, nama_kegiatan, satkerAktif }) => {
     const statusKey = isEdit ? editId : tempId;
@@ -556,7 +576,7 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
     };
 
     failedItemsRef.current[statusKey] = toPlainItem(item, statusKey);
-    persistQueueItem(item, statusKey); // write-through: survives reload/crash
+    persistQueueItem(item, statusKey, laporKuotaPenuh); // write-through: survives reload/crash
     updateStatus(statusKey, "queued");
 
     return new Promise((resolve, reject) => {
@@ -564,7 +584,7 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
       setQueueLength(queueRef.current.length);
       processNext();
     });
-  }, [processNext, updateStatus]);
+  }, [processNext, updateStatus, laporKuotaPenuh]);
 
   const retry = useCallback((id) => {
     const item = failedItemsRef.current[id];
