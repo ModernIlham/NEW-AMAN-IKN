@@ -1071,7 +1071,51 @@ async def _bangun_pdf_ber_ttd(sr: dict, sr_id: str, data: bytes,
     dulu) melihat tanda tangan rekan yang sudah masuk sehingga tak menimpanya,
     dan pemilik melihat tata letak sesungguhnya saat menempatkan QR di langkah
     terakhir. QR sengaja tidak ikut pratinjau karena letaknya baru ditentukan
-    pada tahap unduh."""
+    pada tahap unduh.
+
+    Fungsi ini hanya MENGUMPULKAN data async (blob ttd GridFS, status
+    kepegawaian, link verifikasi pendek); perakitan pypdf + ReportLab — bagian
+    yang benar-benar makan CPU pada dokumen berhalaman banyak — ada di
+    `_rakit_pdf_ber_ttd` dan dijalankan lewat thread. Dulu keduanya menyatu
+    dan 4 await di tengah badan membuatnya tak bisa sekadar dibungkus
+    to_thread (sisa temuan S7 yang sengaja ditunda ke PR-nya sendiri).
+    Bukan `_PDFIUM_EXEC`: perakitan tidak menyentuh pypdfium2 sama sekali,
+    dan menaruhnya di executor tunggal itu justru mengantre di belakang
+    render pratinjau tanpa alasan."""
+    from shared_utils import status_kepegawaian_by_nip
+
+    penanda = [s for s in (sr.get("signers") or [])
+               if str(s.get("signature_file_id") or "").strip()]
+    gambar = {}
+    for s in penanda:
+        fid = s["signature_file_id"]
+        if fid not in gambar:
+            gambar[fid] = await get_document_from_gridfs(fid)
+    # Status kepegawaian hanya dipakai baris NIP slot OTOMATIS (aturan privasi
+    # Non-ASN/NIK) — penanda posisi-pilihan tak mencetak baris NIP.
+    status_nip = {}
+    for s in penanda:
+        if (not isinstance(s.get("posisi_ttd"), dict) and s.get("nip")
+                and s["nip"] not in status_nip):
+            status_nip[s["nip"]] = await status_kepegawaian_by_nip(s["nip"])
+    # URL verifikasi publik (dipakai QR otomatis MAUPUN posisi pilihan).
+    # Bentuk PENDEK: isi QR jadi jauh lebih ringkas → modulnya lebih renggang
+    # dan lebih mudah dipindai kamera HP pada ukuran cetak kecil (±2 cm).
+    verif = await _link_verifikasi_pendek(
+        sr_id, kode_satker=str(sr.get("kode_satker") or ""))
+    return await asyncio.to_thread(_rakit_pdf_ber_ttd, sr, sr_id, data,
+                                   gambar, status_nip, verif, sertakan_qr)
+
+
+def _rakit_pdf_ber_ttd(sr: dict, sr_id: str, data: bytes, gambar: dict,
+                       status_nip: dict, verif: str,
+                       sertakan_qr: bool = True) -> io.BytesIO:
+    """SINKRON murni (pypdf + ReportLab) — panggil lewat asyncio.to_thread.
+
+    `gambar`: {signature_file_id: bytes|None}; `status_nip`: {nip: status}.
+    Blob yang hilang (None) berperilaku sama dengan sebelum pemisahan:
+    posisi-pilihan dilewati utuh, slot otomatis tetap mencetak nama tanpa
+    gambar."""
     from pypdf import PdfReader, PdfWriter
     from reportlab.lib.units import mm as rl_mm
     from reportlab.lib.utils import ImageReader
@@ -1127,7 +1171,7 @@ async def _bangun_pdf_ber_ttd(sr: dict, sr_id: str, data: bytes,
         ada_isi = False
         for s in daftar:
             p = s["posisi_ttd"]
-            img_data = await get_document_from_gridfs(s["signature_file_id"])
+            img_data = gambar.get(s["signature_file_id"])
             if not img_data:
                 continue
             try:
@@ -1194,7 +1238,7 @@ async def _bangun_pdf_ber_ttd(sr: dict, sr_id: str, data: bytes,
         c.drawCentredString(x + slot_w / 2, y + slot_h - 8,
                             "Ditandatangani secara elektronik")
         c.setFillGray(0)
-        img_data = await get_document_from_gridfs(s["signature_file_id"])
+        img_data = gambar.get(s["signature_file_id"])
         if img_data:
             try:
                 img = ImageReader(io.BytesIO(img_data))
@@ -1224,20 +1268,14 @@ async def _bangun_pdf_ber_ttd(sr: dict, sr_id: str, data: bytes,
             # pejabat/Master Pegawai per NIP) atau nomor berformat NIK →
             # baris NIP/NIK tidak dicetak di stempel dokumen.
             from pegawai_utils import baris_identitas_laporan
-            from shared_utils import status_kepegawaian_by_nip
             b_nip = baris_identitas_laporan(
-                s["nip"], await status_kepegawaian_by_nip(s["nip"]))
+                s["nip"], status_nip.get(s["nip"], ""))
             if b_nip:
                 info.append(b_nip)
         if s.get("signed_at"):
             info.append(str(s["signed_at"])[:10])
         for j, baris in enumerate(info[:3]):
             c.drawCentredString(x + slot_w / 2, nama_y - 8 - j * 7, baris)
-    # URL verifikasi publik (dipakai QR otomatis MAUPUN posisi pilihan).
-    # Bentuk PENDEK: isi QR jadi jauh lebih ringkas → modulnya lebih renggang
-    # dan lebih mudah dipindai kamera HP pada ukuran cetak kecil (±2 cm).
-    verif = await _link_verifikasi_pendek(
-        sr_id, kode_satker=str(sr.get("kode_satker") or ""))
     # QR otomatis pojok kanan-bawah HANYA bila QR tak diatur posisinya sendiri.
     if sertakan_qr and qr_pos is None:
         try:

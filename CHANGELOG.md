@@ -67,6 +67,48 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#828] Perakitan dokumen ber-TTD pindah ke thread — 2026-08-08
+
+Sisa terakhir temuan S7 yang sengaja ditunda: `_bangun_pdf_ber_ttd` —
+perakit pypdf + ReportLab di balik unduhan dokumen ber-TTD, pratinjau
+penanda tangan, dan halaman verifikasi publik — masih berjalan penuh di
+event loop. Tak bisa sekadar dibungkus `to_thread` karena 4 `await` duduk
+di tengah badannya (blob ttd GridFS per penanda, status kepegawaian per
+NIP, link verifikasi pendek). Restrukturisasinya:
+
+- **`_bangun_pdf_ber_ttd` (async) kini hanya MENGUMPULKAN data**: blob
+  tanda tangan per `signature_file_id` (di-dedupe), status kepegawaian per
+  NIP slot-otomatis, dan link verifikasi — lalu menyerahkan seluruhnya ke
+  fungsi baru.
+- **`_rakit_pdf_ber_ttd` (sinkron murni)** memegang seluruh pypdf +
+  ReportLab dan dipanggil lewat `asyncio.to_thread`. SENGAJA bukan
+  `_PDFIUM_EXEC`: perakitan tidak menyentuh pypdfium2 sama sekali, dan
+  menaruhnya di executor tunggal justru mengantre di belakang render
+  pratinjau tanpa alasan.
+- **Bahayanya paritas, bukan kinerja** — prefetch yang salah kawat berarti
+  dokumen resmi yang salah tanpa galat. Enam uji baru
+  (`test_ttd_rakit_thread.py`) membaca PDF yang jadi: kedua gaya ttd
+  (posisi-pilihan + slot otomatis) tertanam sebagai gambar nyata di halaman
+  yang benar, baris NIP mengikuti aturan privasi non_asn lewat prefetch,
+  pratinjau tanpa QR, blob hilang tak meledak, dan perakitan terbukti
+  TIDAK di thread utama.
+- `_rakit_pdf_ber_ttd` masuk himpunan penjaga AST SINKRON
+  (`test_cpu_sinkron_di_thread.py`) — panggilan telanjang di coroutine
+  mana pun langsung memerahkan CI.
+- **Verifikasi:** suite backend 2458 → 2464 lulus; 3/3 mutasi terbunuh —
+  cabut `to_thread` → terbunuh GANDA (uji thread + penjaga AST); cabut
+  prefetch blob → uji gambar-tertanam; cabut prefetch status → uji privasi
+  non_asn. Satu galat uji dikoreksi jujur saat menulisnya: token status
+  yang dikenali `label_nomor_identitas` adalah `"non_asn"`, bukan
+  "Non-ASN" — uji pertama saya hijau karena salah token, bukan karena
+  perilakunya benar.
+
+> Dengan ini seluruh saran tindak lanjut kelas-CPU dari investigasi
+> Gelombang 2 lunas: kartu (C25b), render pratinjau (S7), perakitan
+> ber-TTD (TL-3). Yang tersisa murni keputusan pemilik (MAKS_KARTU).
+
+---
+
 ## [#827] Cetak kartu massal: urutan ikut seleksi, dan yang hilang menolak bersuara — 2026-08-08
 
 Dua cacat lama `POST /assets/cards/bulk` yang ditemukan (dan sengaja tidak

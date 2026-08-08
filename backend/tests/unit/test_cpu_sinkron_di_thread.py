@@ -34,15 +34,17 @@ BACKEND = pathlib.Path(__file__).resolve().parents[2]
 ROUTES = BACKEND / "routes"
 
 # Fungsi CPU sinkron yang WAJIB lewat thread bila dipanggil dari `async def`.
-# Empat nama terakhir dari C25b (kartu inventaris): decode Pillow + QR +
-# ReportLab ±104 ms per kartu. HELPER PEMBUNGKUSNYA ikut masuk daftar —
-# mutasi "cabut to_thread dari pemanggil helper" pernah SELAMAT karena
-# penjaga hanya mengenal fungsi-dalamnya, sementara panggilan telanjang di
-# coroutine berbentuk nama helper, bukan nama fungsi dalam.
+# Nama kartu dari C25b (decode Pillow + QR + ReportLab ±104 ms per kartu);
+# `_rakit_pdf_ber_ttd` dari TL-3 (perakitan pypdf + ReportLab dokumen
+# ber-TTD). HELPER PEMBUNGKUSNYA ikut masuk daftar — mutasi "cabut
+# to_thread dari pemanggil helper" pernah SELAMAT karena penjaga hanya
+# mengenal fungsi-dalamnya, sementara panggilan telanjang di coroutine
+# berbentuk nama helper, bukan nama fungsi dalam.
 SINKRON = {"generate_photo_thumbnail", "create_thumbnail",
            "create_gallery_thumbnail",
            "create_ktp_card_elements", "_draw_card_page",
-           "_gambar_kartu_ke_kanvas", "_tutup_kanvas"}
+           "_gambar_kartu_ke_kanvas", "_tutup_kanvas",
+           "_rakit_pdf_ber_ttd"}
 
 
 def _panggilan_telanjang(sumber: str, nama: set = None):
