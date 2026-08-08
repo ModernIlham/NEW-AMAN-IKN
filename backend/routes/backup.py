@@ -88,6 +88,44 @@ def serialize_doc(doc, keep_id: bool = False):
     return result
 
 
+async def _tulis_koleksi_json(zf: zipfile.ZipFile, col_name: str,
+                              keep_id: bool) -> int:
+    """Tulis `<col_name>.json` ke dalam `zf` BERTAHAP (satu dokumen per baris).
+
+    Pengganti pola `list penuh → json.dumps penuh → writestr` yang menahan
+    TIGA salinan koleksi di RAM sekaligus — terukur 1,1 GB puncak pada
+    200.000 dokumen aset vs 0,3 MB versi bertahap, dengan berkas ZIP yang
+    identik. Hasilnya tetap SATU array JSON sah, jadi pembaca lama
+    (`json.loads(zf.read(...))`) tak berubah. Satu dokumen per baris
+    disengaja: membuka jalan membaca bertahap kelak tanpa mengubah format.
+
+    Tiga pagar yang gampang hilang saat refactor (masing-masing ditagih uji):
+    ZipInfo TIDAK mewarisi kompresi dari ZipFile (tanpa `compress_type`
+    entri jadi STORED — arsip 9x lebih besar dan guard disk bisa jebol);
+    ZipInfo eksplisit dipakai justru agar stempel waktu entri benar (via
+    `zf.open(nama_str)` entri bertanggal 1980 — arsip cadangan punya nilai
+    forensik); `force_zip64` wajib karena ukuran entri tak diketahui di muka
+    dan tepat pada DB terbesar-lah batas 2 GiB terlampaui.
+    """
+    now = datetime.now(timezone.utc)
+    zi = zipfile.ZipInfo(f"{col_name}.json",
+                         date_time=(now.year, now.month, now.day,
+                                    now.hour, now.minute, now.second))
+    zi.compress_type = zf.compression
+    n = 0
+    with zf.open(zi, "w", force_zip64=True) as fp:
+        fp.write(b"[")
+        async for doc in db[col_name].find({}):
+            fp.write(b",\n" if n else b"\n")
+            fp.write(json.dumps(serialize_doc(doc, keep_id=keep_id),
+                                ensure_ascii=False, default=str).encode("utf-8"))
+            n += 1
+            if n % 500 == 0:
+                await asyncio.sleep(0)
+        fp.write(b"\n]" if n else b"]")
+    return n
+
+
 async def require_super_admin(authorization: str):
     """Backup/restore/reset = operasi SELURUH-DB (mencakup data SEMUA satker) →
     KHUSUS super-admin pusat (role 'admin' + kode_satker kosong). Admin yang
@@ -339,13 +377,9 @@ async def run_backup_task(job_id: str, username: str, arsipkan: str = ""):
                 pct = int((current_step / total_steps) * 85)
                 await update_job(job_id, progress=pct, message=f"Backup koleksi: {col_name}...")
 
-                collection = db[col_name]
-                docs = []
-                async for doc in collection.find({}):
-                    docs.append(serialize_doc(doc, keep_id=col_name in KEEP_ID_COLLECTIONS))
-                stats[col_name] = len(docs)
-                zf.writestr(f"{col_name}.json", json.dumps(docs, ensure_ascii=False, default=str))
-                logger.info(f"Backup [{job_id}]: {col_name} = {len(docs)} docs")
+                stats[col_name] = await _tulis_koleksi_json(
+                    zf, col_name, col_name in KEEP_ID_COLLECTIONS)
+                logger.info(f"Backup [{job_id}]: {col_name} = {stats[col_name]} docs")
                 await asyncio.sleep(0)
 
             # Export GridFS photos (fs.files + fs.chunks reconstructed as binaries)
@@ -461,12 +495,10 @@ async def run_restore_task(job_id: str, zip_path: Path, username: str):
         safety_data_zip = BACKUP_TEMP_DIR / f"safety_data_{job_id}.zip"
         with zipfile.ZipFile(str(safety_data_zip), 'w', zipfile.ZIP_DEFLATED) as sz:
             for i, col_name in enumerate(safety_cols):
-                docs = []
-                async for doc in db[col_name].find({}):
-                    docs.append(serialize_doc(doc, keep_id=col_name in KEEP_ID_COLLECTIONS))
-                sz.writestr(f"{col_name}.json",
-                            json.dumps(docs, ensure_ascii=False, default=str))
-                del docs   # hanya satu koleksi yang pernah berada di memori
+                # Bertahap (S2): pola lama tetap menahan puncak PER-koleksi
+                # penuh di RAM walau antar-koleksi sudah dibersihkan.
+                await _tulis_koleksi_json(
+                    sz, col_name, col_name in KEEP_ID_COLLECTIONS)
                 pct = 10 + int(((i + 1) / max(1, len(safety_cols))) * 15)
                 await update_job(job_id, progress=pct, message=f"Safety backup: {col_name}...")
                 await asyncio.sleep(0)

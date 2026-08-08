@@ -67,6 +67,53 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#820] Gelombang 2.14 (S2) — backup berhenti menahan tiga salinan koleksi di RAM — 2026-08-08
+
+Dua tempat di `routes/backup.py` mengumpulkan SELURUH isi satu koleksi ke
+`list`, membangun SATU string JSON penuh, lalu `writestr` meng-encode-nya
+lagi — **tiga salinan hidup berbarengan**: jalur backup `run_backup_task`
+dan safety-snapshot `run_restore_task`. Terukur `tracemalloc` (dokumen aset
+±470 byte): 200.000 dokumen → puncak **1,1 GB**; versi bertahap → **0,3 MB**,
+dengan berkas ZIP identik. Komentar lama `del docs` benar mencegah akumulasi
+ANTAR-koleksi, tapi puncak PER-koleksi tetap utuh.
+
+**Perbaikan:** helper `_tulis_koleksi_json(zf, col, keep_id)` — tulis entri
+lewat `zf.open(zi, "w")` satu dokumen per baris, hasil tetap SATU array JSON
+sah (pembaca lama `json.loads` tak berubah; arsip lama tetap terbaca; ukuran
+identik). Dipakai KEDUA jalur. Tiga pagar yang gampang hilang, semuanya
+ditagih uji:
+
+- **ZipInfo tidak mewarisi kompresi** — tanpa `compress_type` eksplisit
+  entri jadi STORED, arsip 9,3× lebih besar, dan guard disk (`gridfs +
+  200 MB`) bisa jebol diam-diam pada DB besar.
+- **ZipInfo eksplisit demi stempel waktu** — `zf.open(nama_str)` memberi
+  tanggal entri 1980-01-01; untuk arsip cadangan tanggal punya nilai
+  forensik.
+- **`force_zip64=True`** — entri berukuran tak-diketahui yang melewati
+  2 GiB membuat `close()` melempar; tepat pada DB terbesar, satu-satunya
+  kasus di mana perbaikan ini penting.
+
+**Semantik kegagalan di tengah** dicatat terbuka: dulu kursor putus = entri
+tak pernah ditulis; kini entri bisa ada dengan JSON terpotong. Peredam yang
+SUDAH ada dipertahankan: blok `except` menghapus ZIP parsial (arsip cacat
+tak pernah bisa diunduh) dan kegagalan safety-snapshot terjadi SEBELUM wipe
+pertama.
+
+**Cakupan yang SENGAJA belum:** sisi BACA restore masih `json.loads`
+seluruh koleksi + salinan BSON `insert_many` (puncak terukur 688 MB pada
+200.000 dokumen) — dicatat di docstring uji supaya tak dikira selesai.
+
+**Uji** (11 baru, `test_backup_json_bertahap.py`, mongomock tanpa infra):
+roundtrip isi+urutan identik; koleksi kosong = `b"[]"` persis; `keep_id`
+counters; mata-mata `json.dumps` tak pernah menerima `list`; puncak memori
+bertahap < ⅕ pola lama (ambang RELATIF diukur di proses yang sama — kebal
+overhead CI); kedua jalur ditagih; tiga pagar ZipInfo; ujung-ke-ujung
+`run_backup_task` → arsip lolos `testzip()` dan `total_records` jujur.
+**Tujuh mutasi diuji, tujuh terbunuh** — termasuk setengah-perbaikan
+(safety-snapshot ditinggal pola lama) dan nilai balik helper diabaikan.
+
+---
+
 ## [#819] Gelombang 2.13 (S6) — backfill sekali seumur hidup, dan gerbang yang berhenti kalah cepat dari boot — 2026-08-08
 
 Tiga backfill di `startup_event()` berjalan pada **setiap boot × jumlah
