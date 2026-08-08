@@ -213,6 +213,54 @@ class TestAnggaranGerbangKesehatan:
             assert "~30 dtk" not in _teks(DEPLOY)
 
 
+class TestGerbangRestoreDeploy:
+    """Prasyarat C30 — deploy tak boleh menimpa pemulihan data yang berjalan.
+
+    `restart_backend` membunuh task restore di TENGAH wipe; sampai gerbang
+    ini ada, itu terjadi DIAM-DIAM dan meninggalkan DB separuh terisi.
+    Gerbang memeriksa job restore aktif (active_lock GLOBAL, denyut < 30
+    menit) langsung ke Mongo SEBELUM skrip menyentuh apa pun. GAGAL-BUKA
+    disengaja: pemeriksa yang rusak (mongosh hilang, URI tak terbaca) tak
+    boleh memblokir semua deploy selamanya.
+    """
+
+    def test_fungsinya_ada_dan_dipanggil(self):
+        k = _kode(DEPLOY)
+        assert "periksa_restore_aktif() {" in k
+        # Pemanggilan telanjang (bukan hanya definisi).
+        assert re.search(r"^periksa_restore_aktif$", k, re.M)
+
+    def test_dipanggil_SEBELUM_kode_disentuh(self):
+        # Gerbang yang jalan setelah `git reset --hard` sudah terlambat:
+        # dependensi bisa berubah dan restart menyusul pasti.
+        t = _teks(DEPLOY)
+        i_panggil = t.index("\nperiksa_restore_aktif\n")
+        assert i_panggil < t.index('git fetch origin "$DEPLOY_BRANCH"')
+        assert i_panggil < t.index('git reset --hard "origin/')
+
+    def test_kueri_menyaring_job_restore_aktif_dan_segar(self):
+        k = _kode(DEPLOY)
+        i = k.index("periksa_restore_aktif() {")
+        badan = k[i:k.index("\n}", i)]
+        assert "'restore'" in badan
+        assert "'GLOBAL'" in badan
+        assert "'queued'" in badan and "'running'" in badan
+        # Kesegaran denyut: tanpa filter updated_at, job macet yang tak
+        # pernah dibersihkan memblokir deploy SELAMANYA.
+        assert "updated_at" in badan
+        assert "30 minutes ago" in badan
+
+    def test_gagal_buka_bukan_gagal_tutup(self):
+        k = _kode(DEPLOY)
+        i = k.index("periksa_restore_aktif() {")
+        badan = k[i:k.index("\n}", i)]
+        # Dua jalur lewat (mongosh hilang; URI tak terbaca) harus return 0,
+        # dan HANYA temuan restore aktif yang boleh exit 1.
+        assert badan.count("return 0") >= 2
+        assert badan.count("exit 1") == 1
+        assert "DIBATALKAN" in _teks(DEPLOY)
+
+
 VPS = SKRIP / "vps-deploy.sh"
 PANDUAN = SKRIP.parent / "DEPLOYMENT_GUIDE_HOSTINGER.md"
 
