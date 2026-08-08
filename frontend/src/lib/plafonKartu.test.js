@@ -120,6 +120,33 @@ describe("pesanGalatRespons membaca badan galat blob", () => {
     expect(await pesanGalatRespons({ response: { status: 429 } }, "x")).toBe("HTTP 429");
   });
 
+  test("badan 429 slowapi (kunci `error`, bukan `detail`) terbaca", async () => {
+    // Bentuk PERSIS yang dikirim server: handler 429 bawaan slowapi
+    // (terdaftar di backend/server.py) membalas {"error": "Rate limit
+    // exceeded: ..."}. Versi pertama uji ini memakai Blob teks polos —
+    // bentuk yang tak pernah dikirim server — sehingga justru mengunci
+    // asumsi yang salah dan menyembunyikan celahnya: JSON.parse berhasil,
+    // ?.detail = undefined, layar cuma berbunyi "HTTP 429". Padahal pesan
+    // plafon baru saja menyuruh pengguna "cetak bertahap per kelompok" —
+    // yang menurut aturan malah yang paling cepat menabrak limit 3/menit.
+    const badan429 = JSON.stringify({ error: "Rate limit exceeded: 3 per 1 minute" });
+    expect(await pesanGalatRespons(
+      { response: { status: 429, data: new Blob([badan429]) } }, "c"))
+      .toContain("Rate limit exceeded: 3 per 1 minute");
+    // Varian non-blob (pemanggil tanpa responseType blob).
+    expect(await pesanGalatRespons(
+      { response: { status: 429, data: { error: "Rate limit exceeded: 3 per 1 minute" } } }, "c"))
+      .toContain("Rate limit");
+  });
+
+  test("`detail` tetap MENANG atas `error` bila keduanya ada", async () => {
+    // Pusat Unduhan memakai `detail` untuk 409/429-nya; ?? tak boleh terbalik.
+    expect(await pesanGalatRespons(
+      { response: { data: { detail: "X", error: "Y" } } }, "c")).toBe("X");
+    const blob = new Blob([JSON.stringify({ detail: "X", error: "Y" })]);
+    expect(await pesanGalatRespons({ response: { data: blob } }, "c")).toBe("X");
+  });
+
   test("blob tetap terbaca tanpa Blob.prototype.text (WebView lama)", async () => {
     // Justru KONDISI BAWAAN di jsdom — dan pada WebView Android lama.
     // Tanpa jalur mundur FileReader, cabang blob melempar diam-diam dan

@@ -73,12 +73,21 @@ export async function pesanGalatRespons(err, timeoutMessage) {
     if (d instanceof Blob) {
       const text = await bacaBlobSebagaiTeks(d);
       try {
-        detail = JSON.parse(text)?.detail;
+        const obj = JSON.parse(text);
+        // `detail` (FastAPI) ?? `error` (slowapi). Handler 429 bawaan slowapi
+        // — terdaftar di server.py — membalas {"error": "Rate limit exceeded:
+        // 3 per 1 minute"}, BUKAN {"detail": ...}. Tanpa cabang kedua ini,
+        // JSON.parse berhasil, ?.detail = undefined, dan fungsi jatuh ke
+        // "HTTP 429" — pengguna tak pernah diberi tahu bahwa ia hanya perlu
+        // MENUNGGU semenit. Itu tajam justru karena pesan plafon kartu
+        // menyuruhnya "cetak bertahap per kelompok": yang menurut aturan
+        // malah yang paling cepat menabrak limitnya.
+        detail = obj?.detail ?? obj?.error;
       } catch {
         detail = text;
       }
     } else if (d && typeof d === "object") {
-      detail = d.detail;
+      detail = d.detail ?? d.error;
     } else if (typeof d === "string") {
       detail = d;
     }
