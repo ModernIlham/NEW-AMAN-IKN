@@ -10,6 +10,7 @@ import asyncio
 import base64
 import hashlib
 import io
+from concurrent.futures import ThreadPoolExecutor
 import os
 import uuid
 from datetime import datetime, timezone
@@ -932,11 +933,20 @@ async def dokumen_untuk_penanda_tangan(sr_id: str,
                  "X-Content-Type-Options": "nosniff"})
 
 
-def _render_halaman_png(data: bytes, no: int):
-    """(BytesIO PNG, total halaman) — satu halaman PDF dirender untuk PRATINJAU
-    penempatan (tanda tangan MAUPUN QR). Dipakai bersama jalur penanda tangan
-    (token e-sign) dan jalur pemilik dokumen (sesi login) supaya keduanya
-    melihat gambar yang sama persis dengan yang jadi acuan koordinat."""
+# pdfium BUKAN pustaka aman-thread: dua render bersamaan meng-SIGSEGV seluruh
+# proses (terukur 5/5 pada 6 thread; dengan --workers 2 itu separuh kapasitas
+# hilang sampai supervisor restart). Executor 1-thread memberi tiga hal
+# sekaligus — event loop bebas, render terserialisasi di SATU thread yang
+# sama, dan pool bawaan asyncio.to_thread tak ikut terpakai (thumbnail
+# assets.py dan to_thread lain tidak jadi lapar). `to_thread` telanjang di
+# sini menukar "lambat" dengan "mati".
+_PDFIUM_EXEC = ThreadPoolExecutor(max_workers=1, thread_name_prefix="pdfium")
+
+
+def _render_halaman_bytes(data: bytes, no: int) -> tuple:
+    """(bytes PNG, total halaman) — MURNI + SINKRON. WAJIB dipanggil lewat
+    `_render_halaman_png` (executor tunggal di atas); memanggilnya dari dua
+    thread bersamaan meng-crash proses."""
     import pypdfium2 as pdfium
     try:
         pdf = pdfium.PdfDocument(io.BytesIO(data))
@@ -955,11 +965,22 @@ def _render_halaman_png(data: bytes, no: int):
         pil = page.render(scale=skala).to_pil()
         buf = io.BytesIO()
         pil.save(buf, format="PNG")
-        buf.seek(0)
     finally:
         pdf.close()
+    return buf.getvalue(), total
+
+
+async def _render_halaman_png(data: bytes, no: int):
+    """Satu halaman PDF dirender PNG untuk PRATINJAU penempatan (tanda tangan
+    MAUPUN QR). Dipakai bersama jalur penanda tangan (token e-sign) dan jalur
+    pemilik dokumen (sesi login) supaya keduanya melihat gambar yang sama
+    persis dengan yang jadi acuan koordinat. Render ±100–130 ms per halaman
+    (pdfium 11 ms + encode PNG Pillow 87 ms) kini di executor, bukan di event
+    loop — temuan S7."""
+    png, total = await asyncio.get_running_loop().run_in_executor(
+        _PDFIUM_EXEC, _render_halaman_bytes, data, no)
     return StreamingResponse(
-        buf, media_type="image/png",
+        io.BytesIO(png), media_type="image/png",
         headers={"Cache-Control": "private, max-age=600",
                  "X-Jumlah-Halaman": str(total),
                  "X-Content-Type-Options": "nosniff"})
@@ -993,7 +1014,7 @@ async def halaman_dokumen_penanda_tangan(sr_id: str, no: int, request: Request,
         raise HTTPException(status_code=401, detail="Token tidak cocok dokumen")
     _sr, data = await _ambil_dokumen_sr(sr_id)
     _pastikan_jti_signer(_sr, tok)
-    return _render_halaman_png(await _dokumen_dengan_ttd_masuk(_sr, sr_id, data), no)
+    return await _render_halaman_png(await _dokumen_dengan_ttd_masuk(_sr, sr_id, data), no)
 
 
 @ttd_router.get("/ttd/permintaan/{sr_id}/dokumen/halaman/{no}")
@@ -1006,7 +1027,7 @@ async def halaman_dokumen_pemilik(sr_id: str, no: int, request: Request,
     sr, data = await _ambil_dokumen_sr(sr_id)
     _pastikan_pengelola_sr(sr, user)
     _tolak_bila_batal(sr)
-    return _render_halaman_png(await _dokumen_dengan_ttd_masuk(sr, sr_id, data), no)
+    return await _render_halaman_png(await _dokumen_dengan_ttd_masuk(sr, sr_id, data), no)
 
 
 class PosisiQrIn(BaseModel):
