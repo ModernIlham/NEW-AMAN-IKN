@@ -23,6 +23,8 @@ from shared_utils import (
     get_document_from_gridfs,
     delete_document_from_gridfs,
     delete_photo_from_gridfs,
+    cascade_hapus_blob_aset,
+    log_audit,
     kode_satker_user,
     scope_query_aset,
     scope_query_field_satker,
@@ -985,33 +987,10 @@ async def delete_inventory_activity(activity_id: str, _admin: dict = Depends(req
             if gid:
                 await delete_document_from_gridfs(gid)
 
-    # Cascade: gather + delete the GridFS blobs of every asset in this activity
-    # BEFORE delete_many wipes the docs (afterwards their blob ids are lost →
-    # orphans). Best-effort per blob; failures are logged, never fatal.
-    photo_gids, doc_gids = [], []
-    async for a in db.assets.find(
-        {"activity_id": activity_id},
-        {"_id": 0, "photo_gridfs_ids": 1, "bast_file_id": 1, "document_checklist": 1},
-    ):
-        photo_gids.extend([g for g in (a.get("photo_gridfs_ids") or []) if g])
-        if a.get("bast_file_id"):
-            doc_gids.append(a["bast_file_id"])
-        for item in (a.get("document_checklist") or []):
-            if isinstance(item, dict):
-                for d in (item.get("documents") or []):
-                    gid = d.get("gridfs_id") if isinstance(d, dict) else None
-                    if gid:
-                        doc_gids.append(gid)
-    for gid in photo_gids:
-        try:
-            await delete_photo_from_gridfs(gid)
-        except Exception as e:
-            logger.warning(f"delete_activity cascade: gagal hapus foto GridFS {gid}: {e}")
-    for gid in doc_gids:
-        try:
-            await delete_document_from_gridfs(gid)
-        except Exception as e:
-            logger.warning(f"delete_activity cascade: gagal hapus dokumen GridFS {gid}: {e}")
+    # Cascade blob GridFS aset — WAJIB sebelum delete_many. Blok ini dulu
+    # ditulis inline di sini saja; kini helper bersama, karena jalur hapus
+    # massal di routes/exports.py ternyata melewatkannya sama sekali (C18).
+    n_foto, n_dok = await cascade_hapus_blob_aset(activity_id)
 
     result = await db.inventory_activities.delete_one({"id": activity_id})
     if result.deleted_count == 0:
@@ -1026,9 +1005,34 @@ async def delete_inventory_activity(activity_id: str, _admin: dict = Depends(req
                 jadwalkan_hapus("assets", _a["id"])
     except Exception:
         pass
+    # JEJAK AUDIT — dulu handler ini tidak menulis satu baris pun (C19).
+    # Dua pembaca bergantung padanya dan keduanya buta tanpa ini:
+    #   • routes/assets.py — `deleted_ids` & `requires_full_refresh` untuk feed
+    #     delta luring diturunkan DARI audit. Tanpanya klien lapangan yang
+    #     sedang berada di kegiatan ini tak mendapat sinyal apa pun, dan
+    #     antrean simpannya berakhir 404 tanpa penjelasan.
+    #   • routes/lbp.py — tombstone LBKP dibaca dari audit. Tanpanya nilai aset
+    #     yang lenyap tak pernah muncul sebagai baris "mutasi kurang": saldo
+    #     periode turun tanpa baris penjelas, dan pemeriksa tak punya cara
+    #     merekonstruksinya.
+    # Pelaku diambil dari identitas TERAUTENTIKASI, bukan header X-Audit-User
+    # yang bisa dipalsukan (konvensi hardening repo). Ditulis SEBELUM
+    # delete_many agar jejaknya ada walau proses mati di tengah penghapusan.
+    #
+    # SENGAJA satu baris per KEGIATAN, bukan per aset: pada kegiatan 5.000 aset
+    # itu berarti 5.000 dokumen audit dalam satu request. Ukur dulu (§5
+    # Gelombang 3) sebelum memperhalusnya.
+    pelaku = _admin.get("name") or _admin.get("username") or "admin"
+    jumlah_aset = await db.assets.count_documents({"activity_id": activity_id})
+    await log_audit(
+        "bulk_delete", activity_id, "", "", "", pelaku,
+        detail=(f"Hapus kegiatan beserta {jumlah_aset} aset "
+                f"({n_foto} foto + {n_dok} dokumen GridFS dibebaskan)"),
+    )
+
     asset_result = await db.assets.delete_many({"activity_id": activity_id})
     logger.info(f"Deleted activity {activity_id} and {asset_result.deleted_count} associated assets "
-                f"(freed {len(photo_gids)} photo + {len(doc_gids)} doc GridFS blobs)")
+                f"(freed {n_foto} photo + {n_dok} doc GridFS blobs)")
     return {"message": f"Kegiatan berhasil dihapus beserta {asset_result.deleted_count} data aset"}
 
 
