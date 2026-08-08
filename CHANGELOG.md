@@ -67,6 +67,47 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#816] Gelombang 2.10 (U21) — satu garis patah pada lapisan yang kita kendalikan — 2026-08-08
+
+Blok nginx `location /api/ws` di `scripts/vps-deploy.sh` tak menyetel
+`proxy_*_timeout` sama sekali → default **60 detik**. Blok `/api/` persis di
+atasnya menyetel 120s eksplisit, jadi ini kelalaian, bukan pilihan. Dan karena
+nginx memilih prefix terpanjang, semua koneksi `/api/ws/{activity_id}` memang
+dilayani blok tanpa timeout itu.
+
+Hari ini tak ada yang putus **hanya karena** dua heartbeat 25 detik (sisi
+server di `routes/websocket.py`, sisi klien di `useWebSocket.js`) me-reset
+timer nginx terus-menerus. Keduanya hidup di event loop yang sama — satu
+panggilan sinkron yang menahan loop >60 detik mematikan keduanya sekaligus,
+dan dengan `--workers 2` itu berarti ±50% klien WS terputus serentak. Bukan
+hipotesis kosong: persis kelas kejadian yang C24–C28 di gelombang ini baru
+selesai tambal.
+
+**Perbaikan:** `proxy_read_timeout 3600s; proxy_send_timeout 3600s;` di blok
+`/api/ws` — di skrip **dan** di `DEPLOYMENT_GUIDE_HOSTINGER.md` §6.2 sekaligus,
+karena panduan itu bertentangan dengan dirinya sendiri: §8 checklist sudah lama
+menyuruh 3600s, sementara blok §6.2 yang justru disalin-tempel operator saat
+setup adalah salinan blok yang cacat. Heartbeat 25 detik **tidak dicabut**:
+nginx satu-satunya lapisan yang kita kendalikan; idle timeout Cloudflare/NAT di
+depannya tetap butuh denyut.
+
+**Penjaga** (4 uji di `test_skrip_deploy.py`, semuanya merah pada kode lama):
+`_blok_lokasi()` mengurai **per blok location** — sebab `proxy_read_timeout`
+memang sudah ada di berkas itu (blok `/api/`), penjaga naif `in teks` hijau
+bahkan pada konfigurasi cacat. Ditagih: blok ws ≥ 3600s (read & send), blok
+`/api/` **tetap 120s** (ekspor PDF menggantung harus gagal dalam dua menit,
+bukan menahan koneksi sejam), dan panduan §6.2 == skrip supaya tak bisa
+menyimpang lagi. Lima mutasi diuji — hapus, turunkan ke 65s, komentari,
+perbaiki skrip saja, naikkan `/api/` ikut 3600s — semuanya terbunuh.
+
+> Catatan operasional: skrip ini menulis ulang config nginx **saat dijalankan**
+> — perbaikan ini belum berlaku di produksi sampai `vps-deploy.sh` dieksekusi
+> lagi (atau dua barisnya disisipkan manual ke config aktif + `nginx -t &&
+> systemctl reload nginx`). Verifikasi:
+> `sudo nginx -T | sed -n '/location \/api\/ws/,/}/p'`.
+
+---
+
 ## [#815] Tiga temuan sedang/rendah tinjauan — pesan 429, endpoint yang akhirnya diuji perilakunya, penjaga yang berhenti menghukum perbaikan benar — 2026-08-08
 
 Lanjutan `[#814]`: tiga temuan tersisa dari tinjauan adversarial atas PR
