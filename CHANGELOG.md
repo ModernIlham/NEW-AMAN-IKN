@@ -67,6 +67,39 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#818] Gelombang 2.12 — `done` bukan berarti berhasil — 2026-08-08
+
+Dialog impor kategori hanya melihat `done` lalu merayakan: *"Import selesai:
+0 ditambahkan, 0 duplikat"*. Padahal dua jalur menyetel `done: true` bersama
+`status: "error"` — galat parse di endpoint, dan **sapuan job macet**
+(`bersihkan_job_basi` di jobs.py me-relabel job tanpa denyut >5 menit menjadi
+`error` + `done`, pesan "Timeout (job macet)"). Sejak sapuan itu hidup di
+`[#812]`, job impor yang mati di tengah justru di-toast SUKSES — temuan
+lintas-butir investigasi yang sengaja tidak dititipkan ke PR mana pun supaya
+tak tertulis sebagai regresi.
+
+**Perbaikan di `CategoryManagerDialog.jsx`:**
+
+- `done` + `status: "error"` → `toast.error` dengan `error_message` dari
+  server apa adanya ("Timeout (job macet)" harus sampai ke layar, bukan
+  diganti pesan generik yang menyembunyikan penyebab).
+- Label panel progres: cabang `error` dievaluasi SEBELUM cabang `done`
+  (keduanya benar bersamaan pada job gagal; urutan ternary menentukan yang
+  menang) → "Gagal", bukan "Selesai!".
+- Polling putus tak lagi senyap: catch lama hanya `clearInterval` —
+  panel "Mengimport..." menggantung selamanya. Kini panel dibersihkan +
+  `toast.warning` bahwa pemantauan terputus (jobnya sendiri jalan terus di
+  server).
+
+**Uji** (`CategoryManagerDialog.test.js`, 5 uji): struktural mengikuti pola
+plafonKartu — komentar dikupas, keberadaan diperiksa sebelum urutan. Tiga
+mutasi diuji, tiga terbunuh — termasuk satu mutasi yang awalnya SALAH PASANG
+(anchor `onCategoriesChanged();` pertama milik handler lain sehingga slice
+kosong) dan baru membunuh setelah dipasang benar: verifikasi pemasangan
+mutasi tetap wajib.
+
+---
+
 ## [#817] Gelombang 2.11 — utang parser Excel lunas, dan pintu impor yang semuanya berpalang — 2026-08-08
 
 Penutup C28: tiga berkas terakhir yang masih mem-parse Excel di event loop —
