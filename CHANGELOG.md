@@ -67,6 +67,40 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#826] Impor Excel membaca lewat mode read-only openpyxl — 2026-08-08
+
+Tindak lanjut pertama pasca-Gelombang 2, dari daftar saran investigasi C28
+yang sengaja ditunda. Dua parser impor terakhir yang masih membuka workbook
+di mode biasa — `parse_excel_content` (impor aset, `imports.py`) dan
+`_rows_from_upload` (impor kodefikasi, dipakai juga `persediaan.py`) — kini
+`read_only=True`. Mode biasa membangun objek sel penuh untuk SELURUH sheet
+(~10x memori nilai mentahnya) padahal kedua fungsi hanya membaca nilai lewat
+`iter_rows(values_only=True)`; pada berkas mendekati batas unggah 15MB itu
+selisih ratusan MB per permintaan — di VPS 4GB yang sama dengan Mongo,
+selisih sebesar itu adalah jarak antara "impor lambat" dan OOM killer.
+
+- **`reset_dimensions()` wajib menyertai, dan diuji dengan file yang benar-benar
+  berbohong.** Mode read-only MEMPERCAYAI metadata dimensi di dalam file, dan
+  metadata itu bisa salah ("mengaku 1 baris" — terbukti pada ekspor SIMAN asli
+  saat siman.py dikerjakan). Tanpa reset, file seperti itu diimpor "sukses"
+  dengan 0 baris tanpa galat apa pun. Ujinya tidak memindai sumber: ia
+  MEMALSUKAN `<dimension>` di XML sheet menjadi `A1:A1` lalu menuntut kedua
+  parser tetap membaca semua baris.
+- **Perubahan perilaku kecil yang dikunci uji:** di mode read-only sel kosong di
+  ekor baris tidak dikembalikan (baris lebih pendek dari header, bukan `None`).
+  Seluruh konsumen membaca lewat `.get(..., default)` sehingga setara — uji
+  `test_baris_ragged_tidak_meledak` mengunci asumsi itu.
+- **Verifikasi:** suite backend 2449 → 2455 lulus; 4/4 mutasi terbunuh
+  (cabut `read_only` per berkas → tertangkap sadapan kwargs `load_workbook`;
+  cabut `reset_dimensions` per berkas → tertangkap uji dimensi-bohong,
+  masing-masing oleh uji yang memang dirancang untuknya).
+
+> Titik `read_only` lain sudah lunas sejak C28 (siman/categories/pegawai);
+> ekspor memakai `write_only` yang setara. Dengan ini SEMUA jalur openpyxl
+> di backend hemat memori — penjaga utangnya tetap `test_cpu_sinkron_di_thread`.
+
+---
+
 ## [#825] Gelombang 2.19 (C30, PENUTUP) — aplikasi berhenti melayani di atas DB yang sedang setengah terhapus — 2026-08-08
 
 Butir terakhir Gelombang 2. Restore mengosongkan koleksi satu per satu

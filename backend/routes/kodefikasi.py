@@ -264,9 +264,14 @@ def _rows_from_upload(filename: str, content: bytes):
         return list(csv_module.DictReader(io.StringIO(text)))
     if name.endswith(".xlsx") or name.endswith(".xls"):
         import openpyxl
-        wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+        # read_only + reset_dimensions: pola yang sama dengan imports.py —
+        # hemat memori, dan dimensi file yang berbohong tidak memotong baris.
+        wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True,
+                                    data_only=True)
         ws = wb.active
+        ws.reset_dimensions()
         rows = list(ws.iter_rows(values_only=True))
+        wb.close()
         if not rows:
             return []
         headers = [str(h or "").strip().lower() for h in rows[0]]

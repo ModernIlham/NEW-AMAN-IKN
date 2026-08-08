@@ -164,13 +164,21 @@ def parse_csv_content(content: bytes) -> list:
 def parse_excel_content(content: bytes) -> tuple:
     """Parse Excel content and return (list of dicts, header_row_number)"""
     import openpyxl
-    wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+    # read_only: mode biasa membangun objek sel penuh untuk SELURUH sheet
+    # (~10x memori nilai mentahnya) padahal fungsi ini hanya butuh nilai.
+    wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True,
+                                data_only=True)
     ws = wb.active
-    
+    # Metadata dimensi file bisa berbohong ("mengaku 1 baris") dan mode
+    # read-only MEMPERCAYAINYA — pelajaran nyata dari ekspor SIMAN di
+    # siman.py. Reset memaksa openpyxl menghitung ulang dari isi nyata.
+    ws.reset_dimensions()
+
     # Find the header row by looking for 'asset_code' in any cell
     header_row_idx = None
     headers = []
     all_rows = list(ws.iter_rows(values_only=True))
+    wb.close()
     
     for row_idx, row in enumerate(all_rows):
         row_strs = [str(cell or '').strip().lower().replace('*', '').strip() for cell in row]
