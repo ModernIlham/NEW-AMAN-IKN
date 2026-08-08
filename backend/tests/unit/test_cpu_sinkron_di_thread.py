@@ -37,13 +37,18 @@ ROUTES = BACKEND / "routes"
 SINKRON = {"generate_photo_thumbnail", "create_thumbnail", "create_gallery_thumbnail"}
 
 
-def _panggilan_telanjang(sumber: str):
+def _panggilan_telanjang(sumber: str, nama: set = None):
     """Nama fungsi SINKRON yang dipanggil di dalam `async def` tanpa to_thread.
 
     Mengembalikan [(nama, baris)]. Panggilan di dalam `def` biasa diabaikan:
     fungsi sinkron memanggil fungsi sinkron itu wajar — yang menentukan adalah
     siapa yang memanggil fungsi sinkron itu, dan itu urusan penjaga lain.
+
+    `nama` bawaannya SINKRON (fungsi Pillow); penjaga C28 memakainya ulang
+    dengan himpunan parser Excel — satu pendeteksi untuk dua kelas aturan,
+    supaya perbaikan pada pendeteksinya menular ke keduanya.
     """
+    nama = SINKRON if nama is None else nama
     pohon = ast.parse(sumber)
 
     # Petakan setiap simpul ke induknya sekali saja.
@@ -79,9 +84,9 @@ def _panggilan_telanjang(sumber: str):
     for n in ast.walk(pohon):
         if not isinstance(n, ast.Call):
             continue
-        nama = n.func.id if isinstance(n.func, ast.Name) else None
-        if nama in SINKRON and _dalam_async(n) and not _dibungkus_to_thread(n):
-            temuan.append((nama, n.lineno))
+        f = n.func.id if isinstance(n.func, ast.Name) else None
+        if f in nama and _dalam_async(n) and not _dibungkus_to_thread(n):
+            temuan.append((f, n.lineno))
     return temuan
 
 
@@ -278,18 +283,27 @@ class TestC28:
         Membungkusnya di `kodefikasi.py` saja meninggalkan `persediaan.py`
         tetap memblokir event loop — dan berkas itu tak pernah menyebut
         "openpyxl", jadi tak akan muncul di pencarian mana pun yang lazim.
+
+        Memakai penjaga AST `_panggilan_telanjang` — BUKAN pemindaian
+        per-baris. Versi pertama uji ini memindai per baris, dan itu kambuh
+        ke persis pola yang dikritik docstring modul ini sendiri: bentuk
+        yang SEMANTIKNYA BENAR seperti
+
+            await asyncio.to_thread(
+                lambda: parse_excel_content(content))
+
+        akan DITOLAK karena `to_thread` dan nama parsernya jatuh di baris
+        berbeda. Orang berikutnya yang membungkus siman.py dengan lambda
+        multibaris akan membuat CI merah tanpa sebab — penjaga yang
+        menghukum perbaikan yang benar lebih buruk daripada tak ada penjaga.
         """
-        bocor = []
-        for berkas in sorted(ROUTES.glob("*.py")):
-            src = berkas.read_text(encoding="utf-8")
-            for baris_no, baris in enumerate(src.splitlines(), 1):
-                b = baris.strip()
-                if b.startswith("#") or b.startswith("def ") or b.startswith("async def "):
-                    continue
-                for fn in self.PARSER_TETAP_SINKRON:
-                    if f"{fn}(" in b and "to_thread" not in b:
-                        bocor.append(f"{berkas.name}:{baris_no} {b}")
-        assert bocor == [], bocor
+        pelanggar = {}
+        for p in sorted(ROUTES.glob("*.py")):
+            t = _panggilan_telanjang(p.read_text(encoding="utf-8"),
+                                     nama=set(self.PARSER_TETAP_SINKRON))
+            if t:
+                pelanggar[p.name] = t
+        assert pelanggar == {}, pelanggar
 
     def test_kedua_pemanggil_rows_from_upload_masih_ada(self):
         # Penjaga di atas juga hijau bila pemanggilnya DIHAPUS seluruhnya.

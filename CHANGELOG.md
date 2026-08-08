@@ -67,6 +67,68 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#815] Tiga temuan sedang/rendah tinjauan — pesan 429, endpoint yang akhirnya diuji perilakunya, penjaga yang berhenti menghukum perbaikan benar — 2026-08-08
+
+Lanjutan `[#814]`: tiga temuan tersisa dari tinjauan adversarial atas PR
+#799–#805, semuanya cacat pada pekerjaan saya sendiri di gelombang ini.
+
+### 1. Pesan rate-limit tak pernah sampai (`error` vs `detail`)
+
+Handler 429 bawaan slowapi — terdaftar di `server.py` — membalas
+`{"error": "Rate limit exceeded: 3 per 1 minute"}`, **bukan** `{"detail": ...}`
+(diverifikasi dari sumber pustakanya, bukan dari laporan agen). `pesanGalatRespons`
+hanya mengenal `detail`: `JSON.parse` berhasil, `?.detail` = `undefined`, layar
+cuma berbunyi **"HTTP 429"**.
+
+Yang membuatnya tajam adalah interaksi dua pembatas dari PR yang sama: pesan
+plafon menyuruh pengguna *"cetak bertahap per kelompok"*, lalu rate-limit
+3/menit menghukum yang menurut — kegiatan 1.000 aset = 4 permintaan, dan yang
+keempat pasti 429 tanpa satu kata pun soal menunggu.
+
+**Perbaikan:** `detail ?? error` di kedua cabang (blob & objek). `detail` tetap
+menang — Pusat Unduhan memakainya — dan itu dikunci uji tersendiri.
+
+**Uji lama yang menyembunyikan celahnya diganti:** ia memakai
+`new Blob(["Rate limit exceeded"])` — teks polos, bentuk yang **tak pernah
+dikirim server** — sehingga justru mengunci asumsi yang salah. Uji baru memakai
+badan JSON persis seperti kiriman slowapi.
+
+### 2. `/api/health/deep` akhirnya diuji PERILAKUNYA
+
+Seluruh penjaga endpoint itu sebelumnya pencarian substring, dan **tak satu pun
+uji di repo pernah memanggil `deep_health_check()`**. Dua mutasi terbukti lolos
+15/15: mengosongkan blok indeks (asal string-nya tersisa di komentar) dan
+membalik logika `ok`. Endpoint bisa berbohong sepenuhnya tanpa satu uji merah —
+genting karena dua pembacanya bukan manusia: gerbang deploy (503 = rollback)
+dan C32 yang akan segera membuat kegagalan indeks nyata.
+
+`test_health_deep_perilaku.py` — 9 uji yang **memanggil endpointnya sungguhan**
+(`server.db` diganti tiruan; ping tak menunggu server-selection timeout).
+Kegagalan indeks yang disemai → tampil di respons dengan status tetap 200;
+disk 14% → 200 + peringatan; disk < 1 GB → 503; 30 GB bebas dari 1 TB (3%) →
+tetap sehat; Mongo mati → tetap 503. Empat mutasi diuji, empat terbunuh —
+**termasuk kedua mutasi yang dulu lolos.**
+
+### 3. Penjaga C28 berhenti menghukum perbaikan yang benar
+
+`test_SEMUA_titik_panggil_lewat_thread` memindai **per baris** — kambuh ke
+persis pola yang dikritik docstring modulnya sendiri. Bentuk yang semantiknya
+benar:
+
+```python
+await asyncio.to_thread(
+    lambda: parse_excel_content(content))
+```
+
+**ditolaknya**, karena `to_thread` dan nama parsernya jatuh di baris berbeda.
+Penjaga yang menghukum perbaikan benar lebih buruk daripada tak ada penjaga.
+
+Diganti dengan `_panggilan_telanjang` (AST) yang sudah ada di berkas yang sama,
+kini berparameter himpunan nama. Dibuktikan dua arah: bentuk lambda multibaris
+di atas **diterima**, dan mencabut bungkusnya **tetap membunuh 4 uji**.
+
+---
+
 ## [#814] Tinjauan atas Gelombang 2 sendiri — dua cacat yang saya kirim, ditemukan dan ditutup — 2026-08-08
 
 Tinjauan adversarial berlapis atas PR #799–#805 (empat berkas kode, tiga lensa,
