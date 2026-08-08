@@ -83,15 +83,24 @@ restart_backend
 # Verifikasi backend BENAR-BENAR hidup setelah restart. `supervisorctl restart`
 # bisa mengembalikan 0 walau proses gagal start (mis. import error) → deploy
 # "sukses" padahal situs mati (false-green). Poll /api/health (no-auth, instan)
-# sampai ~30 dtk; gagal → rollback lalu exit non-zero agar job deploy jelas GAGAL.
+# sampai ~90 dtk; gagal → rollback lalu exit non-zero agar job deploy jelas GAGAL.
+#
+# 45 × sleep 2 ≈ 90 dtk per gerbang. Angka ini ANGGARAN BOOT, bukan angka
+# keramat: create_indexes + backfill startup berjalan SEBELUM port masuk
+# state listen (uvicorn bind() dulu, listen() setelah lifespan.startup),
+# jadi selama startup curl gagal instan dan hanya sleep yang menghitung.
+# Terlalu ketat = rollback commit yang sebenarnya sehat. Satu variabel untuk
+# EMPAT angka yang dulu literal — mengubah `seq` tapi lupa pembanding `-eq`
+# menghasilkan gerbang yang diam-diam gagal LEBIH cepat.
+PERCOBAAN_KESEHATAN=45
 HEALTH_URL="${BACKEND_HEALTH_URL:-http://127.0.0.1:8001/api/health}"
 echo "Cek kesehatan backend di ${HEALTH_URL} ..."
-for i in $(seq 1 15); do
+for i in $(seq 1 "$PERCOBAAN_KESEHATAN"); do
   if curl -fsS --max-time 3 "$HEALTH_URL" >/dev/null 2>&1; then
     echo "Backend sehat."
     break
   fi
-  if [ "$i" -eq 15 ]; then
+  if [ "$i" -eq "$PERCOBAAN_KESEHATAN" ]; then
     echo "GAGAL: backend tidak sehat setelah restart (health-check timeout)." >&2
     sudo -n supervisorctl status inventarisasi-backend 2>/dev/null \
       || supervisorctl status inventarisasi-backend 2>/dev/null || true
@@ -105,15 +114,16 @@ done
 # terjangkau (kredensial DB salah, disk penuh, Mongo mati) → aplikasi "hidup"
 # padahal setiap operasi data gagal. Verifikasi DEEP: /api/health/deep membalas
 # 200 hanya bila Mongo ping + GridFS terbaca; 503 bila degraded → curl -f gagal.
-# Beri jendela retry sendiri (~30 dtk) untuk pemanasan pool koneksi Mongo.
+# Beri jendela retry sendiri (~90 dtk, anggaran yang sama) untuk pemanasan
+# pool koneksi Mongo.
 DEEP_HEALTH_URL="${BACKEND_DEEP_HEALTH_URL:-http://127.0.0.1:8001/api/health/deep}"
 echo "Cek kesehatan mendalam (Mongo+GridFS) di ${DEEP_HEALTH_URL} ..."
-for i in $(seq 1 15); do
+for i in $(seq 1 "$PERCOBAAN_KESEHATAN"); do
   if curl -fsS --max-time 5 "$DEEP_HEALTH_URL" >/dev/null 2>&1; then
     echo "Dependensi backend (MongoDB + GridFS) sehat."
     break
   fi
-  if [ "$i" -eq 15 ]; then
+  if [ "$i" -eq "$PERCOBAAN_KESEHATAN" ]; then
     echo "GAGAL: dependensi backend tak sehat setelah restart (deep health 503/timeout)." >&2
     echo "Respons terakhir /api/health/deep:" >&2
     curl -sS --max-time 5 "$DEEP_HEALTH_URL" 2>/dev/null | head -c 500 >&2 || true

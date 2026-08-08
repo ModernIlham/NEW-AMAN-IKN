@@ -1358,3 +1358,57 @@ async def filter_aset_perhitungan(query=None) -> dict:
     else:
         q["activity_id"] = {"$in": sorted(layak)}
     return q
+
+
+# ── Penanda migrasi startup (S6) ────────────────────────────────────────────
+# Tiga backfill di server.py dulu berjalan pada SETIAP boot × jumlah worker —
+# dua di antaranya collscan penuh atas `assets`. Penanda di `app_runtime`
+# membuatnya sekali seumur hidup. Koleksi itu dipilih karena polanya sudah
+# ada (kursor WebP, stempel activity-tracker: dokumen ber-_id bermakna +
+# upsert) DAN karena ia di SKIP_COLLECTIONS backup — konsekuensinya penanda
+# TIDAK dikosongkan restore, sehingga `bersihkan_penanda_migrasi()` wajib
+# dipanggil pasca-restore (lihat routes/backup.py).
+
+PREFIKS_MIGRASI = "migrasi:"
+
+
+async def sudah_dimigrasi(nama: str) -> bool:
+    """True bila migrasi `nama` sudah pernah TUNTAS.
+
+    Ragu (query melempar) → False: ketiga backfill idempoten, jadi mengulang
+    selalu lebih aman daripada melewatkan — fail-open yang disengaja.
+    """
+    try:
+        return await db.app_runtime.find_one(
+            {"_id": f"{PREFIKS_MIGRASI}{nama}"}, {"_id": 1}) is not None
+    except Exception:
+        return False
+
+
+async def tandai_migrasi(nama: str) -> None:
+    """Tandai migrasi `nama` tuntas. Panggil HANYA setelah kerjanya sukses —
+    menandai sebelum/di jalur gagal mengubah 'non-fatal, akan diulang'
+    menjadi 'gagal permanen dan senyap'."""
+    try:
+        await db.app_runtime.update_one(
+            {"_id": f"{PREFIKS_MIGRASI}{nama}"},
+            {"$set": {"selesai_pada": datetime.now(timezone.utc).isoformat()}},
+            upsert=True)
+    except Exception as e:
+        logger.warning(
+            f"Gagal menandai migrasi {nama} (akan diulang boot berikutnya): {e}")
+
+
+async def bersihkan_penanda_migrasi() -> int:
+    """Hapus SEMUA penanda migrasi — dipanggil PASCA-RESTORE.
+
+    `app_runtime` ada di SKIP_COLLECTIONS sehingga tidak diisi dari arsip
+    DAN tidak dikosongkan restore: tanpa pembersihan ini, DB hasil pemulihan
+    arsip lama membawa penanda dari DB sebelumnya dan backfill (mis.
+    normalisasi "Sudah Diinventarisasi") tak pernah jalan lagi — kerusakan
+    data senyap. Filter ber-prefiks: kursor migrasi WebP dan stempel
+    activity-tracker di koleksi yang sama TIDAK boleh ikut tersapu.
+    """
+    res = await db.app_runtime.delete_many(
+        {"_id": {"$regex": f"^{PREFIKS_MIGRASI}"}})
+    return res.deleted_count
