@@ -67,6 +67,77 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#802] Tinjauan sistem menyeluruh — 102 temuan, 5 gugur, dan peta jalan berurut — 2026-08-08
+
+Permintaan pemilik: tinjau keseluruhan aplikasi, beri saran/kritik, dan usulkan
+langkah agar semuanya tetap berfungsi **dan** skalabel ke depan.
+
+Menambah **`docs/TINJAUAN-SISTEM-2026-08.md`** (1.156 baris): tinjauan baca-saja
+atas 9 dimensi — arsitektur, model data MongoDB, runtime/async, keamanan &
+isolasi multi-satker, integritas data, frontend, operasional, kualitas/uji, dan
+ketahanan model domain BMN terhadap perubahan aturan. Tiap temuan berjangkar
+berkas + nomor baris. **Tak satu pun berkas kode diubah** dalam penyusunannya.
+
+| | Jumlah |
+|---|---|
+| Temuan | **102** |
+| CACAT (salah sekarang) | 45 |
+| RISIKO SKALA (patah pada ukuran tertentu) | 23 |
+| UTANG (memperlambat perubahan) | 28 |
+| Diadu ke pemeriksa skeptis | 75 |
+| **GUGUR** setelah diperiksa ulang | **5** |
+
+### Yang gugur — dan kenapa bagian ini penting
+
+Lima klaim **tidak bertahan** dan dicatat di §4 agar tidak dipakai sebagai dasar
+mengubah apa pun. Dua yang paling menentukan:
+
+- **"`doc_ref` TTD bocor lintas satker" — GUGUR TOTAL.** Gerbangnya ada tepat di
+  awal handler yang sama (`routes/ttd.py:635-655`), memakai
+  `scope_query_field_satker` lalu menolak 403; komentar `:611-634` bahkan menyebut
+  dirinya "GERBANG TUNGGAL". Penelaah membacanya terlalu jauh ke bawah.
+- **"29.808 baris handler tak pernah diuji CI" — GUGUR.** Pengukurannya benar,
+  diagnosisnya salah: **23 berkas uji menjalankan handler sungguhan** in-process
+  lewat `mongomock_motor`. Cakupannya **tidak nol, tetapi tidak merata** —
+  sehingga rekomendasinya berubah dari "bedah handler" jadi "perluas pola yang
+  sudah terbukti".
+
+Tiga sisanya: biaya tail-cursor `event_bus` yang sepele (bukan risiko skala),
+plafon unggah yang sudah dijaga `client_max_body_size 50M` di nginx, dan penjaga
+anti-jurnal-ganda yang ternyata berdiri di belakang CAS status + kunci idempotensi.
+
+### Temuan paling menentukan yang BERTAHAN
+
+- **Tidak ada yang memantau.** Probe `/api/health/deep` yang bagus hanya dipanggil
+  skrip deploy; backup menandai dirinya "berhasil" **sebelum** berhasil; deploy
+  tak punya jalan pulang. Cara pertama tahu ada masalah tetap: pengguna menelepon.
+- **Urutan "Harga Tertinggi" salah** — `purchase_price` disimpan sebagai string.
+- **Berkas rekonsiliasi SAKTI menjumlahkan persediaan seluruh satker.**
+- **Periode "TERKUNCI/FINAL" tidak membekukan angka.**
+- Hapus massal aset **tidak meng-cascade blob GridFS**.
+- Seluruh pembuatan indeks dalam **satu** `try/except` — satu kegagalan
+  membatalkan sisanya, senyap.
+
+### Peta jalan
+
+Enam gelombang, berurut: **cegah kehilangan data → cegah sistem mati → kebenaran
+angka & tata kelola → murahkan perubahan berikutnya → kenyamanan**. Gelombang 0
+berisi lima aksi **nol/hampir-nol kode** (pasang swap, daftarkan health-check ke
+monitor eksternal, verifikasi cron backup, ukur disk arsip) yang menutup separuh
+risiko operasional dan sekaligus **mengukur**, supaya gelombang berikutnya
+diputuskan dari angka nyata.
+
+§6 memuat tabel **ambang & tanda bahaya** dengan perintah yang bisa disalin apa
+adanya — termasuk tiga plafon keras yang memotong data **tanpa peringatan**:
+`to_list(500000)` pada laporan, `to_list(100000)` pada Rincian Mutasi CaLBMN,
+dan `$limit: 100` pada daftar kegiatan.
+
+§7 menyebut yang **TIDAK** disarankan: jangan pecah jadi microservice, jangan
+ganti MongoDB, jangan tulis ulang frontend. Menyebut apa yang tak perlu
+dikerjakan sama berharganya dengan menyebut apa yang perlu.
+
+---
+
 ## [#801] Riset Penggunaan BMN naik dari NOL ke 188 klaim terverifikasi — teks primer akhirnya terbaca — 2026-08-08
 
 Pemilik proyek menyerahkan **PDF resmi kedua PMK** langsung ke ruang kerja,
