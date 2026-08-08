@@ -1,5 +1,6 @@
 """Asset import from CSV/Excel with validation."""
 import io
+import asyncio
 import uuid
 import logging
 from datetime import datetime, timezone
@@ -233,7 +234,10 @@ async def import_assets(request: Request, file: UploadFile = File(...), force_up
             rows = parse_csv_content(content)
             data_start_row = 2  # CSV: row 1 is header, data starts at row 2
         else:
-            rows, data_start_row = parse_excel_content(content)
+            # Parsing openpyxl SINKRON -> thread (temuan C28). `iter_rows` di
+            # dalamnya memateralisasi seluruh sheet; pada berkas 15 MB (batas
+            # yang ditegakkan tepat di atas) itu bukan sepersekian detik.
+            rows, data_start_row = await asyncio.to_thread(parse_excel_content, content)
         
         if not rows:
             raise HTTPException(status_code=400, detail="File kosong atau tidak ada data valid")

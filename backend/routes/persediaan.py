@@ -618,7 +618,12 @@ async def import_persediaan(file: UploadFile = File(...), _user: dict = Depends(
     content = await file.read()
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File maksimal 10MB")
-    rows = _rows_from_upload(file.filename, content)
+    # Titik panggil KEDUA parser yang sama (temuan C28). Membungkusnya di
+    # kodefikasi.py TIDAK menutup yang ini: `_rows_from_upload` tetap fungsi
+    # sinkron, jadi setiap pemanggil harus memasang thread-nya sendiri.
+    # Inilah pemanggil "pintu belakang" yang tak terlihat oleh pencarian
+    # string "openpyxl" — berkas ini tak pernah menyebutnya.
+    rows = await asyncio.to_thread(_rows_from_upload, file.filename, content)
     entries, errors, dupes = parse_import_persediaan_rows(rows)
 
     inserted = updated = 0

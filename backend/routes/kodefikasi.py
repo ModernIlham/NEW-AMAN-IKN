@@ -10,6 +10,7 @@ Seed 8 golongan standar dilakukan idempoten saat koleksi masih kosong.
 """
 import csv as csv_module
 import io
+import asyncio
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
@@ -282,7 +283,11 @@ async def import_kodefikasi(file: UploadFile = File(...), _admin: dict = Depends
     content = await file.read()
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File maksimal 10MB")
-    rows = _rows_from_upload(file.filename, content)
+    # Temuan C28. `_rows_from_upload` sengaja DIBIARKAN sinkron: ia parser
+    # murni tanpa I/O, dan menjadikannya async akan memaksa setiap pemanggil
+    # ikut berubah. Yang dibungkus adalah TITIK PANGGILNYA — pola yang sama
+    # dengan `_tutup_dan_ambil` di exports.py.
+    rows = await asyncio.to_thread(_rows_from_upload, file.filename, content)
     entries, errors, dupes = parse_import_rows(rows)
     inserted = updated = meta_count = 0
     for e in entries:
