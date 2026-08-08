@@ -132,6 +132,43 @@ pemegangnya** berada di luar seluruh poligon → tak ada node → **tidak ada sa
 baris pun yang tersimpan**. Rumah, klinik, dan tempat ibadah tak perlu
 di-blacklist satu per satu; bentuk sistemnya yang membuat mereka tak terekam.
 
+## 8A. Analitik & perekaman sesi pihak ketiga — KEPUTUSAN: TIDAK ADA
+
+Ditetapkan 2026-08-08 setelah temuan C11 tinjauan sistem.
+
+**Keadaan yang ditemukan.** `frontend/public/index.html` memuat
+`posthog.init(...)` dengan `session_recording` aktif **tanpa syarat** — bukan
+di balik gerbang env, bukan hanya di iframe pratinjau. Terkonfirmasi ikut ke
+bundel produksi (`grep -o "us.i.posthog.com" frontend/build/index.html` → 1),
+dan dokumen ini sebelumnya **tidak menyebutnya sama sekali**.
+
+**Kenapa itu berat, bukan sepele.** Perekaman sesi tidak merekam "peristiwa"
+melainkan **apa yang tampil di layar**: NIK dan NIP pegawai pada Master
+Pegawai, dan data BMN lintas satker pada layar pengguna yang berwenang
+melihatnya. Semuanya dikirim ke penyedia di Amerika Serikat — di luar seluruh
+jaminan dokumen ini. Ia juga **membatalkan** pekerjaan redaksi PII di sisi
+server: `docs/LOGGING.md` menyensor NIK di log, sementara layar berisi NIK yang
+sama direkam utuh. Perlindungan yang bisa dilewati dari sisi lain bukan
+perlindungan.
+
+**Keputusan.** Blok itu **dihapus**. Per tanggal di atas, AMAN IKN **tidak
+mengirim data perilaku pengguna ke pihak ketiga mana pun**.
+
+**Syarat bila kelak analitik memang diperlukan** — tiga, dan tidak boleh
+kurang satu pun:
+
+1. di balik `process.env.REACT_APP_POSTHOG_KEY` (atau setara), sehingga
+   pemasangan tanpa kunci tidak mengirim apa pun;
+2. `session_recording` **mati** dan `mask_all_text: true`;
+3. keputusannya dicatat **di dokumen ini lebih dulu**, bukan sesudah dipasang.
+
+**Catatan untuk pemeriksa.** Kunci `phc_…` yang dulu ada di berkas itu adalah
+*project API key publik* PostHog — memang dirancang untuk dikirim ke browser
+dan ada di setiap bundel PostHog di dunia. Ia **bukan** kredensial yang bocor,
+dan polanya **tidak boleh** ditambahkan ke `scripts/cek_rahasia.py`: itu hanya
+akan melatih tim mengabaikan pemeriksa rahasia. Yang bermasalah adalah
+perekaman sesinya, bukan kuncinya.
+
 ## 9. Yang BELUM dikerjakan (jujur, agar tak dianggap selesai)
 
 - Runbook notifikasi insiden kebocoran (butuh keputusan pejabat, bukan kode).

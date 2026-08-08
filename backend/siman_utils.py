@@ -166,6 +166,21 @@ def petakan_header(header_row):
     return peta, hilang
 
 
+def kolom_banding_hilang(peta_header):
+    """Label kolom PERBANDINGAN yang tidak ditemukan di header file.
+
+    Pendamping `harga_atau_none`: yang itu mencegah kerusakan diam-diam,
+    yang ini membuat penyebabnya TERLIHAT. Hanya `kode_barang` + `nup` yang
+    berstatus wajib (kunci pencocokan), jadi kolom lain yang hilang selama ini
+    lolos tanpa sepatah kata pun — padahal hilangnya kolom "Nilai Perolehan"
+    berarti seluruh perbandingan nilai pada impor itu tidak ada artinya.
+
+    Operator berhak tahu impor mana yang sebenarnya membandingkan apa.
+    """
+    ada = set(peta_header or {})
+    return [label for _f, kunci, label, _j in PERBANDINGAN if kunci not in ada]
+
+
 def deteksi_header(rows, maks_baris=25):
     """Cari baris header di antara `rows` (iterable of tuple) → (idx, peta)|None.
 
@@ -228,6 +243,38 @@ def ringkas_baris_belum_tercatat(b):
     }
 
 
+def harga_atau_none(nilai):
+    """Angka SIMAN, atau None bila SIMAN memang TIDAK MENYEBUT angkanya.
+
+    Ini pembeda yang menyelamatkan data (temuan C9 tinjauan 2026-08).
+
+    `parse_harga` mengembalikan **0.0** untuk `None` maupun sel kosong — masuk
+    akal di pembukuan ("barang tanpa harga dibukukan nol"), tetapi menjadi
+    racun di jalur pembanding SIMAN. Sebab di sini 0.0 tidak berarti "nol", ia
+    berarti "kami tidak tahu" — dan pembandingnya membaca 0.0 sebagai angka sah.
+
+    Skenarionya nyata, bukan hipotesis: ekspor SIMAN berikutnya mengganti judul
+    kolom "Nilai Perolehan" (peta header repo ini sudah memuat DUA ejaan
+    "tanggal pengapusan"/"tanggal penghapusan" — bukti header SIMAN memang
+    pernah bergeser). Kolomnya lalu tak dikenali, setiap baris jadi 0.0,
+    SELURUH aset dilaporkan berselisih, dan operator yang menuruti panduan
+    aplikasi menekan "terapkan nilai SIMAN" — menulis nilai perolehan **0** ke
+    master aset secara massal. DBKP, LBKP, penyusutan, dan klasifikasi
+    intra/ekstra semuanya ikut nol.
+
+    `None` membuat cabang "angka" di `banding_aset` melewatinya, persis seperti
+    yang sudah dijanjikan docstring-nya: "Nilai SIMAN yang kosong/placeholder
+    TIDAK dianggap selisih (AMAN boleh lebih kaya)". Janji itu selama ini tak
+    pernah bisa ditepati untuk angka, karena 0.0 menghapus jejak kekosongannya
+    sebelum sampai ke sana.
+    """
+    if nilai is None:
+        return None
+    if isinstance(nilai, str) and not nilai.strip():
+        return None
+    return parse_harga(nilai)
+
+
 def parse_baris(row, peta_header):
     """Satu baris data XLSX → dict SIMAN ternormalisasi; None bila kosong.
 
@@ -263,11 +310,11 @@ def parse_baris(row, peta_header):
         "tanggal_perolehan": norm_tanggal(d.get("tanggal_perolehan")),
         "tanggal_penghapusan": norm_tanggal(d.get("tanggal_penghapusan")),
         "tanggal_psp": norm_tanggal(d.get("tanggal_psp")),
-        "nilai_perolehan": parse_harga(d.get("nilai_perolehan")),
-        "nilai_perolehan_pertama": parse_harga(d.get("nilai_perolehan_pertama")),
-        "nilai_mutasi": parse_harga(d.get("nilai_mutasi")),
-        "nilai_penyusutan": parse_harga(d.get("nilai_penyusutan")),
-        "nilai_buku": parse_harga(d.get("nilai_buku")),
+        "nilai_perolehan": harga_atau_none(d.get("nilai_perolehan")),
+        "nilai_perolehan_pertama": harga_atau_none(d.get("nilai_perolehan_pertama")),
+        "nilai_mutasi": harga_atau_none(d.get("nilai_mutasi")),
+        "nilai_penyusutan": harga_atau_none(d.get("nilai_penyusutan")),
+        "nilai_buku": harga_atau_none(d.get("nilai_buku")),
     }
     return out
 

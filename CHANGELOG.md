@@ -67,6 +67,59 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#805] Gelombang 1.3 — perekaman layar dicabut, dan satu judul kolom berhenti bisa menolkan master aset — 2026-08-08
+
+**C11 · Perekaman sesi pihak ketiga aktif tanpa syarat di halaman produksi.**
+`frontend/public/index.html` memuat `posthog.init(...)` dengan `session_recording`
+aktif **tanpa syarat** — bukan di balik gerbang env, bukan hanya di iframe
+pratinjau. Terkonfirmasi ikut ke bundel (`grep -o "us.i.posthog.com"
+frontend/build/index.html` → 1), sementara `grep -in posthog
+docs/DPIA-PELACAKAN-ASET.md` → nihil.
+
+Perekaman sesi tidak merekam "peristiwa", melainkan **apa yang tampil di
+layar**: NIK dan NIP pegawai di Master Pegawai, dan data BMN lintas satker pada
+layar pengguna yang berwenang melihatnya — lalu mengirimnya ke penyedia di
+Amerika Serikat. Ia juga **membatalkan** redaksi PII sisi server: `LOGGING.md`
+menyensor NIK di log sementara layar berisi NIK yang sama direkam utuh.
+Perlindungan yang bisa dilewati dari sisi lain bukan perlindungan.
+
+Blok itu **dihapus**; di tempatnya tertinggal catatan alasannya beserta tiga
+syarat bila analitik kelak diperlukan (gerbang env, recording mati +
+`mask_all_text`, dicatat di DPIA lebih dulu). `docs/DPIA-PELACAKAN-ASET.md`
+mendapat **§8A** yang menetapkan: per hari ini AMAN IKN tidak mengirim data
+perilaku pengguna ke pihak ketiga mana pun. Bagian itu juga mencatat bahwa
+kunci `phc_…` adalah *project API key publik* — **bukan** kredensial bocor, dan
+polanya **tidak boleh** ditambahkan ke `scripts/cek_rahasia.py`.
+
+**C9 · Satu judul kolom SIMAN bergeser → nilai perolehan nol massal.**
+`petakan_header` hanya mewajibkan kode barang + NUP; kolom lain yang tak
+dikenali diabaikan diam-diam. `parse_baris` tetap mengisi kuncinya lewat
+`parse_harga(None)` → **0.0**, dan pembanding hanya menyaring `(None, "")` —
+sehingga 0.0 lolos sebagai angka sah, **seluruh** aset dilaporkan berselisih,
+dan operator yang menuruti panduan aplikasi menekan "terapkan nilai SIMAN":
+`nilai_terapkan` mengembalikan `"0"`. DBKP, LBKP, penyusutan, dan klasifikasi
+intra/ekstra semuanya ikut nol.
+
+Bukan hipotesis: peta kolom repo ini sudah memuat DUA ejaan
+`"tanggal pengapusan"`/`"tanggal penghapusan"` — header SIMAN memang pernah
+bergeser.
+
+Dua lapis perbaikan. `harga_atau_none` membedakan **"SIMAN tidak menyebut
+angkanya"** (`None`) dari **"SIMAN bilang nol"** (`0.0`) — cabang "angka"
+otomatis melewatinya, menepati janji yang sudah tertulis di docstring
+`banding_aset` tapi tak pernah bisa ditepati untuk angka. Dan
+`kolom_banding_hilang` melaporkan kolom perbandingan yang tak ditemukan sebagai
+peringatan impor, supaya penyebabnya **terlihat** — diamnya selama ini yang
+membuat kelasnya berbahaya.
+
+**Uji.** `test_siman_kolom_hilang.py` (12): nol eksplisit tetap nol, selisih
+nilai asli tetap tertangkap, kolom bergeser tidak jadi selisih palsu, rantai
+sampai `nilai_terapkan`, dan penjaga sambungan bahwa peringatannya benar-benar
+ditampilkan. Dua mutasi diuji (kembali ke `parse_harga`, peringatan dicabut);
+keduanya menjatuhkan uji. **2.205 → 2.217 uji backend.**
+
+---
+
 ## [#804] Gelombang 1.2 — dua lubang simetris pada hapus massal, dan satu berkas resmi yang tak bisa di-tie-out — 2026-08-08
 
 Lanjutan Gelombang 1 peta jalan `docs/TINJAUAN-SISTEM-2026-08.md`, sisi backend.

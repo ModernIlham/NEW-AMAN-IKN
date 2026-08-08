@@ -25,7 +25,8 @@ from shared_utils import (limiter, log_audit, kode_satker_user,
                           pastikan_akses_kegiatan_id, scope_query_aset,
                           scope_query_field_satker)
 from siman_utils import (
-    FIELD_TERAPKAN, banding_aset, deteksi_header, kunci_aset, nilai_terapkan,
+    FIELD_TERAPKAN, banding_aset, deteksi_header, kolom_banding_hilang,
+    kunci_aset, nilai_terapkan,
     parse_baris, referensi_siman, ringkas_baris_belum_tercatat, ringkas_import,
     validasi_satker,
 )
@@ -266,6 +267,18 @@ async def import_siman(request: Request, file: UploadFile = File(...),
         peringatan.append(
             f"{duplikat_kunci} baris duplikat kode+NUP pada file dilewati "
             "(baris pertama yang dipakai)")
+    # Kolom perbandingan yang TIDAK ADA di header file (C9). Hanya kode barang
+    # + NUP yang berstatus wajib, jadi kolom lain yang hilang selama ini lolos
+    # tanpa sepatah kata — padahal hilangnya "Nilai Perolehan" berarti seluruh
+    # perbandingan nilai pada impor itu tak ada artinya. Angka-angkanya kini
+    # aman (None, bukan 0), tetapi diamnya bukan hal yang wajar: operator
+    # berhak tahu impor ini sebenarnya membandingkan apa.
+    kolom_hilang = kolom_banding_hilang(peta_header)
+    if kolom_hilang:
+        peringatan.append(
+            "Kolom berikut tidak ditemukan di file sehingga TIDAK dibandingkan: "
+            + ", ".join(kolom_hilang)
+            + " — periksa apakah judul kolom pada ekspor SIMAN berubah")
 
     ringkasan = ringkas_import(
         [{"selisih": r["selisih"]} for r in hasil], siman_tanpa_aset, aman_tanpa_siman)
