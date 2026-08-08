@@ -67,6 +67,67 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#800] Uji RENDER pertama — 741 uji selama ini tak pernah menjalankan satu komponen pun — 2026-08-08
+
+Utang teknis `#320`, dan alasannya baru saja terbukti mahal dua kali.
+
+Seluruh **741** uji frontend sebelum ini bersifat **statis**: ia membaca berkas
+`.jsx` sebagai **teks** lalu mencocokkan pola. Penjaga semacam itu berharga —
+ia menangkap kelas cacat yang tak terlihat saat membaca kode, seperti grid
+satu-kolom yang ditumbuhi kolom implisit. Tetapi ia **buta** pada hal yang
+paling sering menjatuhkan halaman: **komponennya gagal dirender**.
+
+Dua kejadian nyata membuktikannya:
+
+| Kejadian | Yang diam |
+|---|---|
+| Peta Aset tayang layar kosong (`[#762]`) | lint bersih, build sukses |
+| `kirimGeserRef` mematikan fitur geser marker (`[#799]`) | 741 uji hijau |
+
+### Fondasinya
+
+`@testing-library/react` + `jest-dom` + `user-event`, `src/setupTests.js`, dan
+`moduleNameMapper` di `package.json` untuk **dua** hal yang jadi penghalang:
+alias `@/*` (jest tak membaca `paths` dari `jsconfig.json`, hanya `baseUrl`) dan
+`axios` (v1 mengekspor ESM yang tak bisa diurai jest — dipetakan ke build CJS-nya).
+
+### Sebelas uji pertama
+
+`menuKepalaRender.test.jsx` menguji komponen yang dipakai **tujuh halaman**
+modul siklus, dan — yang paling penting — **membuktikan klaim yang di PR
+`[#798]` hanya bisa saya tulis sebagai "perlu dicoba di perangkat nyata"**:
+
+- Larik `ekspor` benar-benar **dipetakan jadi dua butir** yang terlihat, bukan
+  sekadar ada `.map(` di sumbernya.
+- Menekan butir memanggil `downloadFileWithProgress` dengan **URL & nama berkas
+  yang benar**.
+- Kategori kosong **tak menyisakan label menggantung**.
+- `TanggalanButton` dengan `kelasTombol="hidden sm:flex"`: **tombolnya**
+  tersembunyi, **input tanggalnya tidak** — inilah inti perbaikannya.
+- `buka()` lewat ref **benar-benar memanggil `showPicker()`**; dan ketika
+  `showPicker` melempar **atau tak ada sama sekali**, ia **jatuh ke `click()`**.
+
+Tiga jebakan lingkungan yang ditemukan & dicatat di berkasnya supaya uji
+berikutnya tak tersandung hal sama:
+
+1. `jest.mock()` menolak variabel luar kecuali bernama `mock*`.
+2. CRA menyetel **`resetMocks: true`** — implementasi yang dipasang di
+   `jest.fn(() => …)` **dibuang** sebelum tiap uji, sehingga mock mengembalikan
+   `undefined` dan `.catch()` di kode produksi meledak. Implementasinya harus
+   dipasang ulang di `beforeEach`.
+3. Radix membuka menunya lewat pointer event yang tak lengkap di jsdom —
+   `userEvent.click` bekerja, `fireEvent.pointerDown` tidak.
+
+Total frontend **752 uji / 63 suite**.
+
+> **Yang BELUM tercakup:** mock Leaflet untuk halaman berpeta (Peta Aset, Peta
+> Kolaborasi, Denah). Fondasinya kini ada, tetapi halaman-halaman itu menarik
+> Leaflet, WebSocket, dan IndexedDB sekaligus — butuh pemalsuan tersendiri.
+> Itulah tepatnya jaring yang dibutuhkan untuk memutus simpul melingkar
+> `useWebSocket ↔ useRowLocking` yang masih ditandai di `DashboardPage`.
+
+---
+
 ## [#799] Dua aturan lint dinyalakan — 30 TDZ tersembunyi & satu fitur yang diam-diam mati — 2026-08-08
 
 Utang teknis `#322`: menyalakan `no-use-before-define` se-repo. Aturan itu
