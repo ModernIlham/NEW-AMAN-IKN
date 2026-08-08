@@ -1,0 +1,165 @@
+"""Skrip deploy — temuan C6 & C7 tinjauan sistem 2026-08.
+
+Skrip shell adalah bagian sistem yang paling jarang diuji dan paling mahal
+saat salah: ia berjalan tanpa penonton, jam berapa pun CI selesai, langsung di
+produksi. Uji ini tidak menjalankan deploy (mustahil di CI) — ia mengurung
+SIFAT-SIFAT yang membedakan deploy yang aman dari yang tidak, dibaca dari
+sumbernya, plus pemeriksaan sintaks `bash -n` yang sungguhan.
+
+C6 — tiga sifat yang hilang:
+  (a) pagar memori. `grep -rn NODE_OPTIONS scripts/` dulu menemukannya di
+      vps-deploy.sh dan update-all.sh TETAPI TIDAK di deploy_vps.sh — justru
+      skrip yang benar-benar dipakai otomatis yang tanpa pagar, di VPS tanpa
+      swap. `yarn build` adalah kandidat OOM terbesar di seluruh sistem.
+  (b) react-scripts memanggil `fs.emptyDirSync` di awal build, dan docroot
+      nginx menunjuk LANGSUNG ke frontend/build. Setiap deploy karenanya
+      mengosongkan docroot lalu mengisinya ulang selama puluhan detik:
+      sepanjang itu pengunjung mendapat 404.
+  (c) gerbang kesehatan sudah ada dan benar, tetapi saat gagal skrip hanya
+      keluar — meninggalkan produksi menjalankan commit yang baru saja terbukti
+      TIDAK SEHAT, sampai ada manusia yang bangun.
+
+C7 — `Deploy_Hostinger_VPS` muncul 8 kali di dua skrip pemulihan darurat,
+padahal cabang itu sudah tidak ada. Yang lebih berbahaya dari "skrip berhenti"
+adalah: bila klon di VPS masih menyimpan ref pelacak lama, `rev-parse` justru
+BERHASIL dan `git reset --hard` memutar mundur produksi ke commit beku.
+"""
+import pathlib
+import re
+import subprocess
+
+import pytest
+
+SKRIP = pathlib.Path(__file__).resolve().parents[3] / "scripts"
+DEPLOY = SKRIP / "deploy_vps.sh"
+
+
+def _teks(p):
+    return p.read_text(encoding="utf-8")
+
+
+def _kode(p):
+    """Isi skrip TANPA baris komentar.
+
+    Berkas-berkas ini penuh penjelasan panjang yang MENYEBUT nama variabel
+    (mis. komentar "grep -rn NODE_OPTIONS scripts/" yang menerangkan asal
+    temuan). Mencocokkan teks mentah membuat penjaga di bawah lolos hanya
+    karena prosanya menyebut hal yang tepat — dan penjaga yang bisa dipuaskan
+    oleh komentar tidak menjaga apa pun.
+    """
+    return "\n".join(b for b in _teks(p).splitlines()
+                     if not b.lstrip().startswith("#"))
+
+
+@pytest.mark.parametrize("nama", [
+    "deploy_vps.sh", "vps-fix.sh", "update-all.sh", "vps-deploy.sh",
+])
+def test_sintaks_bash_sah(nama):
+    """`bash -n` — skrip yang tak bisa diparse tak akan ketahuan sampai jam 2 pagi."""
+    r = subprocess.run(["bash", "-n", str(SKRIP / nama)],
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+
+
+class TestPagarMemori:
+    def test_deploy_otomatis_benar_benar_meng_export_NODE_OPTIONS(self):
+        # `export`, bukan sekadar kata "NODE_OPTIONS" di suatu tempat.
+        assert re.search(r"^\s*export NODE_OPTIONS=", _kode(DEPLOY), re.M)
+
+    def test_batasnya_disebut_eksplisit(self):
+        assert "max-old-space-size" in _kode(DEPLOY)
+
+    def test_semua_skrip_yang_membangun_frontend_berpagar(self):
+        """Aturan kelas: yang memanggil `yarn build` wajib punya pagarnya."""
+        for p in SKRIP.glob("*.sh"):
+            k = _kode(p)
+            if "yarn build" in k:
+                assert "NODE_OPTIONS" in k, f"{p.name} membangun tanpa pagar memori"
+
+
+class TestDocrootTidakDikosongkan:
+    def test_membangun_ke_direktori_sementara(self):
+        t = _teks(DEPLOY)
+        assert "BUILD_PATH=build.new" in t
+
+    def test_ditukar_dengan_rename_bukan_dibangun_di_tempat(self):
+        t = _teks(DEPLOY)
+        assert "mv build.new build" in t
+
+    def test_salinan_sebelumnya_disimpan_sebagai_rollback(self):
+        t = _teks(DEPLOY)
+        assert "build.old" in t
+
+    def test_bundel_diverifikasi_SEBELUM_ditukar(self):
+        """Menukar bundel kosong lebih buruk daripada tidak menukar sama sekali."""
+        t = _teks(DEPLOY)
+        i_cek = t.index("build.new/index.html")
+        i_tukar = t.index("mv build.new build")
+        assert i_cek < i_tukar
+
+    def test_pemeriksaan_direktori_pakai_if_bukan_rantai_and(self):
+        # Di bawah `set -e`, `[ -d build ] && mv ...` yang berakhir false
+        # menghentikan SELURUH skrip — pada VPS baru yang belum punya build/,
+        # deploy pertamanya akan mati tepat di langkah terakhir.
+        t = _teks(DEPLOY)
+        assert not re.search(r"^\s*\[ -d build \] &&", t, re.M)
+        assert "if [ -d build ]; then" in t
+
+
+class TestRollback:
+    def test_commit_sebelumnya_disimpan(self):
+        assert re.search(r"PREV=.*git rev-parse HEAD", _teks(DEPLOY))
+
+    def test_disimpan_SEBELUM_reset(self):
+        t = _teks(DEPLOY)
+        assert t.index("PREV=") < t.index('git reset --hard "origin/')
+
+    def test_kedua_gerbang_kesehatan_memanggil_pulihkan(self):
+        """Dangkal DAN mendalam — melewatkan satu berarti separuh perlindungan."""
+        t = _teks(DEPLOY)
+        assert t.count("pulihkan") >= 3   # 1 definisi + 2 pemanggilan
+        for penanda in ("health-check timeout", "deep health 503/timeout"):
+            i = t.index(penanda)
+            assert "pulihkan" in t[i:i + 500], penanda
+
+    def test_pulihkan_kembali_ke_PREV(self):
+        t = _teks(DEPLOY)
+        i = t.index("pulihkan() {")
+        assert 'git reset --hard "$PREV"' in t[i:i + 900]
+
+    def test_pulihkan_menghidupkan_kembali_backend(self):
+        # Mengembalikan kode tanpa restart = produksi tetap menjalankan proses
+        # dari commit yang sudah terbukti tidak sehat.
+        t = _teks(DEPLOY)
+        i = t.index("pulihkan() {")
+        assert "restart_backend" in t[i:i + 900]
+
+
+class TestCabangTujuan:
+    BERGANTUNG = ("vps-fix.sh", "update-all.sh", "deploy_vps.sh")
+
+    def test_NOL_rujukan_cabang_yang_sudah_tiada(self):
+        """Sapuan seluruh scripts/ — komentar sejarah dikecualikan."""
+        pelanggar = []
+        for p in SKRIP.glob("*.sh"):
+            for n, baris in enumerate(_teks(p).splitlines(), 1):
+                if "Deploy_Hostinger_VPS" in baris and not baris.lstrip().startswith("#"):
+                    pelanggar.append(f"{p.name}:{n}")
+        assert pelanggar == [], pelanggar
+
+    @pytest.mark.parametrize("nama", BERGANTUNG)
+    def test_cabang_jadi_variabel_berdefault_main(self, nama):
+        assert 'DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"' in _teks(SKRIP / nama)
+
+    @pytest.mark.parametrize("nama", ("vps-fix.sh", "update-all.sh"))
+    def test_skrip_darurat_memeriksa_cabangnya_dulu(self, nama):
+        """Berhenti dengan alasan > berhenti diam-diam > memulihkan yang salah."""
+        t = _teks(SKRIP / nama)
+        assert "rev-parse --verify --quiet" in t
+        assert "tidak ada di remote" in t
+
+    @pytest.mark.parametrize("nama", ("vps-fix.sh", "update-all.sh"))
+    def test_fetch_memakai_prune(self, nama):
+        # Tanpa --prune, ref pelacak lama bertahan di klon VPS — itulah varian
+        # kegagalan yang berbahaya: reset --hard ke commit beku yang "ada".
+        assert "fetch --prune" in _teks(SKRIP / nama)

@@ -876,13 +876,27 @@ async def dismiss_job(job_id: str, authorization: str = Header(None)):
 # ============================================================================
 # Setelan tersimpan di report_settings {"type": "backup_otomatis"}:
 #   aktif (bool) · jam ("HH:MM" WIB) · retensi (jumlah arsip dipertahankan)
-#   · terakhir ("YYYY-MM-DD" — tanggal WIB backup otomatis terakhir jalan).
 # Scheduler dipanggil dari startup server; klaim tanggal via find_one_and_update
 # ATOMIK sehingga aman multi-worker (hanya satu worker yang menjalankan).
+#
+# KLAIM vs HASIL — dua hal berbeda, dan membedakannya adalah inti temuan C5:
+#   terakhir              KLAIM penjadwalan ("YYYY-MM-DD" WIB), ditulis SEBELUM
+#                         backup berjalan sebagai penjaga anti-jalan-ganda.
+#                         BUKAN bukti keberhasilan. JANGAN ditampilkan ke
+#                         pengguna sebagai "Terakhir jalan".
+#   terakhir_sukses       HASIL: ISO-8601 backup yang benar-benar `completed`.
+#                         INI yang ditampilkan layar Pengaturan.
+#   status_terakhir       "sukses" | "gagal"
+#   galat_terakhir        pesan job saat gagal (dipotong 500 char)
+#   waktu_hasil_terakhir  ISO-8601 kapan hasil terakhir dicatat
+# Saat gagal, `terakhir` dikosongkan agar siklus 5 menit berikutnya mencoba
+# lagi hari itu juga — bukan menyerah sampai besok.
 
 WIB = timezone(timedelta(hours=7))
 _SETELAN_OTOMATIS_DEFAULT = {"aktif": False, "jam": "02:00", "retensi": 7,
-                             "terakhir": ""}
+                             "terakhir": "", "terakhir_sukses": "",
+                             "status_terakhir": "", "galat_terakhir": "",
+                             "waktu_hasil_terakhir": ""}
 
 
 def _daftar_arsip():
@@ -930,12 +944,45 @@ async def _jalankan_backup_otomatis(retensi: int):
     # Terapkan retensi HANYA bila backup SUKSES — kalau gagal, JANGAN pangkas
     # arsip lama (menghindari kehilangan cadangan yang masih valid saat backup
     # baru gagal, mis. disk penuh).
-    job = await db.backup_jobs.find_one({"job_id": job_id}, {"_id": 0, "status": 1})
-    if job and job.get("status") == "completed":
+    job = await db.backup_jobs.find_one(
+        {"job_id": job_id}, {"_id": 0, "status": 1, "message": 1}) or {}
+    berhasil = job.get("status") == "completed"
+
+    # ── HASIL, terpisah dari KLAIM (temuan C5 tinjauan 2026-08) ─────────────
+    #
+    # Penjadwal menulis `terakhir = hari ini` SEBELUM backup dijalankan — itu
+    # memang klaim penjadwalan yang atomik dan benar sebagai penjaga anti-ganda.
+    # Masalahnya, layar Pengaturan menampilkan field yang SAMA sebagai
+    # "Terakhir jalan", sehingga backup yang GAGAL tetap terbaca "sudah jalan
+    # hari ini". Satu-satunya jejak kegagalan adalah satu baris logger.warning
+    # yang tak pernah dibaca siapa pun.
+    #
+    # Karena itu hasilnya dicatat di field sendiri. `terakhir_sukses` yang
+    # ditampilkan UI, `status_terakhir` + `galat_terakhir` yang menjelaskan.
+    #
+    # Dan saat GAGAL, klaim `terakhir` DIKOSONGKAN: siklus 5 menit berikutnya
+    # akan mencoba lagi hari itu juga alih-alih menyerah sampai besok. Aman
+    # dari backup ganda — percobaan berikutnya tetap melewati klaim atomik yang
+    # sama, dan tetap dilewati bila ada job aktif.
+    sekarang = datetime.now(timezone.utc).isoformat()
+    hasil = {"status_terakhir": "sukses" if berhasil else "gagal",
+             "waktu_hasil_terakhir": sekarang}
+    if berhasil:
+        hasil["terakhir_sukses"] = sekarang
+        hasil["galat_terakhir"] = ""
+    else:
+        hasil["galat_terakhir"] = str(job.get("message") or "")[:500] \
+            or "Backup gagal tanpa pesan — periksa log server"
+        hasil["terakhir"] = ""   # buka kunci: coba lagi pada siklus berikutnya
+    await db.report_settings.update_one(
+        {"type": "backup_otomatis"}, {"$set": hasil}, upsert=True)
+
+    if berhasil:
         _terapkan_retensi(retensi)
     else:
         logger.warning("Backup otomatis GAGAL — retensi arsip TIDAK diterapkan "
-                       "(arsip lama dipertahankan)")
+                       "(arsip lama dipertahankan); klaim harian dikosongkan "
+                       "agar siklus berikutnya mencoba lagi")
 
 
 async def backup_scheduler_loop():

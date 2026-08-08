@@ -63,6 +63,26 @@ echo -e "  ${CYAN}Backup disimpan di: ${BACKUP_DIR}${NC}"
 echo ""
 echo -e "${YELLOW}[2/8] Sinkronisasi Git (force reset ke remote)...${NC}"
 
+# ── CABANG TUJUAN (temuan C7 tinjauan 2026-08) ──────────────────────────────
+# Skrip ini dulu menyebut `Deploy_Hostinger_VPS` — cabang yang SUDAH TIDAK ADA
+# di remote (`git ls-remote --heads origin` hanya mengembalikan `main` dan satu
+# cabang kerja). Dua varian kegagalannya berbeda dan keduanya buruk:
+#   (a) `git rev-parse` gagal → di bawah `set -e` skrip berhenti TANPA pesan;
+#   (b) lebih berbahaya — bila klon di VPS masih menyimpan ref pelacak lama
+#       (fetch tanpa --prune), rev-parse justru BERHASIL dan `git reset --hard`
+#       memutar mundur produksi ke commit beku entah dari kapan.
+# Karena itu cabangnya kini satu variabel, diperiksa eksplisit di awal, dan
+# skrip menolak jalan bila cabangnya tak ada — berhenti dengan alasan yang
+# terbaca jauh lebih baik daripada berhenti diam-diam atau salah memulihkan.
+DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
+git -C "${APP_DIR}" fetch --prune origin "${DEPLOY_BRANCH}" 2>/dev/null || true
+if ! git -C "${APP_DIR}" rev-parse --verify --quiet "origin/${DEPLOY_BRANCH}" >/dev/null; then
+    echo "GAGAL: cabang 'origin/${DEPLOY_BRANCH}' tidak ada di remote." >&2
+    echo "Setel DEPLOY_BRANCH ke cabang yang benar, mis.:" >&2
+    echo "  DEPLOY_BRANCH=main bash \$0" >&2
+    exit 1
+fi
+
 cd "${APP_DIR}"
 
 # Fetch semua perubahan terbaru dari remote
@@ -71,7 +91,7 @@ git fetch origin
 
 # Cek status sebelum reset
 LOCAL_COMMIT=$(git rev-parse HEAD 2>/dev/null)
-REMOTE_COMMIT=$(git rev-parse origin/Deploy_Hostinger_VPS 2>/dev/null)
+REMOTE_COMMIT=$(git rev-parse "origin/${DEPLOY_BRANCH}" 2>/dev/null)
 
 echo -e "  Commit lokal  : ${LOCAL_COMMIT:0:7}"
 echo -e "  Commit remote : ${REMOTE_COMMIT:0:7}"
@@ -80,7 +100,7 @@ if [ "$LOCAL_COMMIT" = "$REMOTE_COMMIT" ]; then
     echo -e "  ${GREEN}✅ Sudah sinkron!${NC}"
 else
     echo -e "  ${YELLOW}⚠️  Diverged - melakukan force reset...${NC}"
-    git reset --hard origin/Deploy_Hostinger_VPS
+    git reset --hard "origin/${DEPLOY_BRANCH}"
     echo -e "  ${GREEN}✅ Git berhasil di-reset ke versi terbaru${NC}"
 fi
 
@@ -612,19 +632,23 @@ if [ $MISSING_FILES -eq 0 ]; then
 else
     echo ""
     echo -e "  ${RED}⚠️  Ada ${MISSING_FILES} file yang hilang.${NC}"
-    echo -e "  ${YELLOW}Coba: git checkout origin/Deploy_Hostinger_VPS -- <file_path>${NC}"
+    echo -e "  ${YELLOW}Coba: git checkout origin/${DEPLOY_BRANCH} -- <file_path>${NC}"
 fi
 
 echo ""
 echo -e "${YELLOW}LANGKAH SELANJUTNYA:${NC}"
 echo -e "  1. Jika backend sudah RUNNING, rebuild frontend:"
-echo -e "     cd ${APP_DIR}/frontend && yarn install && yarn build"
+echo -e "     cd ${APP_DIR}/frontend && yarn install \\"
+echo -e "       && NODE_OPTIONS=--max-old-space-size=2048 BUILD_PATH=build.new yarn build \\"
+echo -e "       && rm -rf build.old && mv build build.old && mv build.new build"
+echo -e "     ${YELLOW}(pagar memori + tukar atomik — VPS ini tanpa swap; build tanpa"
+echo -e "      NODE_OPTIONS adalah penyebab OOM paling sering di sini)${NC}"
 echo -e ""
 echo -e "  2. Jika ada error, cek log:"
 echo -e "     sudo tail -50 /var/log/supervisor/inventarisasi-backend.out.log"
 echo -e "     sudo tail -50 /var/log/supervisor/inventarisasi-backend.err.log"
 echo -e ""
 echo -e "  3. Untuk update berikutnya, gunakan:"
-echo -e "     cd ${APP_DIR} && git fetch origin && git reset --hard origin/Deploy_Hostinger_VPS"
+echo -e "     cd ${APP_DIR} && git fetch origin && git reset --hard "origin/${DEPLOY_BRANCH}""
 echo -e "     sudo supervisorctl restart inventarisasi-backend"
 echo ""

@@ -469,8 +469,28 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
                       onClick={simpanOto} data-testid="pengaturan-oto-simpan">
                       {otoSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Simpan"}
                     </Button>
-                    {oto.terakhir && (
-                      <span className="text-[10px] text-muted-foreground">Terakhir jalan: {oto.terakhir}</span>
+                    {/* Yang ditampilkan adalah HASIL, bukan KLAIM (temuan C5).
+                        `oto.terakhir` adalah stempel penjadwalan yang ditulis
+                        SEBELUM backup berjalan — menampilkannya sebagai
+                        "Terakhir jalan" membuat backup yang gagal terbaca
+                        seolah sudah beres. Kini yang tampil `terakhir_sukses`,
+                        dan kegagalan punya lencana merahnya sendiri. */}
+                    {oto.terakhir_sukses && (
+                      <span className="text-[10px] text-muted-foreground" data-testid="oto-sukses-terakhir">
+                        Sukses terakhir: {String(oto.terakhir_sukses).slice(0, 16).replace("T", " ")}
+                      </span>
+                    )}
+                    {oto.status_terakhir === "gagal" && (
+                      <span
+                        className="px-2 py-0.5 rounded-full bg-red-500/15 text-red-600 dark:text-red-400 text-[10px] font-semibold"
+                        title={oto.galat_terakhir || "Backup otomatis terakhir gagal"}
+                        data-testid="oto-gagal-badge"
+                      >
+                        Backup terakhir GAGAL
+                      </span>
+                    )}
+                    {!oto.terakhir_sukses && oto.status_terakhir !== "gagal" && (
+                      <span className="text-[10px] text-muted-foreground">Belum pernah berhasil</span>
                     )}
                   </div>
                 )}

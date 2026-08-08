@@ -14,6 +14,26 @@ NC='\033[0m'
 
 APP_DIR="/var/www/inventarisasi"
 
+# ── CABANG TUJUAN (temuan C7 tinjauan 2026-08) ──────────────────────────────
+# Skrip ini dulu menyebut `Deploy_Hostinger_VPS` — cabang yang SUDAH TIDAK ADA
+# di remote (`git ls-remote --heads origin` hanya mengembalikan `main` dan satu
+# cabang kerja). Dua varian kegagalannya berbeda dan keduanya buruk:
+#   (a) `git rev-parse` gagal → di bawah `set -e` skrip berhenti TANPA pesan;
+#   (b) lebih berbahaya — bila klon di VPS masih menyimpan ref pelacak lama
+#       (fetch tanpa --prune), rev-parse justru BERHASIL dan `git reset --hard`
+#       memutar mundur produksi ke commit beku entah dari kapan.
+# Karena itu cabangnya kini satu variabel, diperiksa eksplisit di awal, dan
+# skrip menolak jalan bila cabangnya tak ada — berhenti dengan alasan yang
+# terbaca jauh lebih baik daripada berhenti diam-diam atau salah memulihkan.
+DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
+git -C "${APP_DIR}" fetch --prune origin "${DEPLOY_BRANCH}" 2>/dev/null || true
+if ! git -C "${APP_DIR}" rev-parse --verify --quiet "origin/${DEPLOY_BRANCH}" >/dev/null; then
+    echo "GAGAL: cabang 'origin/${DEPLOY_BRANCH}' tidak ada di remote." >&2
+    echo "Setel DEPLOY_BRANCH ke cabang yang benar, mis.:" >&2
+    echo "  DEPLOY_BRANCH=main bash \$0" >&2
+    exit 1
+fi
+
 echo -e "${YELLOW}============================================${NC}"
 echo -e "${YELLOW}  UPDATE APLIKASI - Batch 1-6 Optimasi     ${NC}"
 echo -e "${YELLOW}============================================${NC}"
@@ -32,21 +52,21 @@ cp ${APP_DIR}/frontend/.env /tmp/frontend_env_backup 2>/dev/null || true
 # Check if branches have diverged
 git fetch origin
 LOCAL=$(git rev-parse HEAD 2>/dev/null)
-REMOTE=$(git rev-parse origin/Deploy_Hostinger_VPS 2>/dev/null)
+REMOTE=$(git rev-parse "origin/${DEPLOY_BRANCH}" 2>/dev/null)
 
 if [ "$LOCAL" = "$REMOTE" ]; then
     echo -e "${GREEN}  ✅ Already up to date${NC}"
 else
     # Check if branches diverged
-    MERGE_BASE=$(git merge-base HEAD origin/Deploy_Hostinger_VPS 2>/dev/null || echo "none")
+    MERGE_BASE=$(git merge-base HEAD "origin/${DEPLOY_BRANCH}" 2>/dev/null || echo "none")
     if [ "$MERGE_BASE" = "$LOCAL" ]; then
         # Simple fast-forward
-        git pull origin Deploy_Hostinger_VPS
+        git pull origin "${DEPLOY_BRANCH}"
         echo -e "${GREEN}  ✅ Code updated (fast-forward)${NC}"
     else
         # Branches diverged - force reset
         echo -e "${YELLOW}  ⚠️  Branches diverged - force resetting to remote...${NC}"
-        git reset --hard origin/Deploy_Hostinger_VPS
+        git reset --hard "origin/${DEPLOY_BRANCH}"
         echo -e "${GREEN}  ✅ Code force-updated to latest remote${NC}"
     fi
 fi
