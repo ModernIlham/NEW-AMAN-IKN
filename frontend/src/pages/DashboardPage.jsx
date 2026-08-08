@@ -13,14 +13,14 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import axios from "axios";
 import { getApiError } from "@/lib/utils";
-import { downloadFileWithProgress, makeDownloadProgress } from "@/lib/downloadFile";
+import { downloadFileWithProgress, makeDownloadProgress, pesanGalatRespons } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
 import { exportViaJob } from "@/lib/jobExport";
 import { reserveDummyNup, cariKategoriDummy } from "@/lib/dummyNup";
 import { buatTempId, apakahTempId } from "@/lib/idAntrean";
 import { cocokAset } from "@/lib/pencarianLokal";
 import { useDragSelect } from "@/lib/useDragSelect";
-import { idsCetakKartu } from "@/lib/cakupanCetak";
+import { idsCetakKartu, galatPlafonKartu } from "@/lib/cakupanCetak";
 import { syncSnapshot, getSnapshotAssets, snapshotMeta, isSnapshotExpired, upsertSnapshotAsset, removeSnapshotAsset } from "@/lib/offlineSnapshot";
 
 // Import refactored components
@@ -1634,6 +1634,11 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const handlePrintBulkCards = useCallback(async () => {
     const ids = idsCetakKartu(selectedAssets, assets);
     if (ids.length === 0) { toast.error("Tidak ada aset untuk dicetak"); return; }
+    // Plafon dicek DI SINI, sebelum permintaan dikirim — server juga menolak,
+    // tetapi tolakannya memakan satu jatah rate-limit (3/menit) yang lalu
+    // menghalangi percobaan berikutnya yang sudah dipersempit dengan benar.
+    const galatPlafon = galatPlafonKartu(ids.length);
+    if (galatPlafon) { toast.error(galatPlafon); return; }
     const progress = makeDownloadProgress(`${ids.length} kartu inventaris`);
     try {
       const r = await axios.post(`${API}/assets/cards/bulk`, ids, { responseType: 'blob', onDownloadProgress: progress.onDownloadProgress });
@@ -1642,7 +1647,13 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       if (!newWindow) { const a = document.createElement('a'); a.href = url; a.download = `kartu_inventaris_massal_${ids.length}.pdf`; document.body.appendChild(a); a.click(); document.body.removeChild(a); progress.success(`${ids.length} kartu inventaris berhasil diunduh`); }
       else progress.success(`${ids.length} kartu inventaris berhasil dibuat`);
       setTimeout(() => URL.revokeObjectURL(url), 60000);
-    } catch (err) { console.error('Bulk print error:', err); progress.error(getApiError(err, "Gagal cetak kartu massal")); }
+    } catch (err) {
+      console.error('Bulk print error:', err);
+      // BUKAN getApiError: permintaan ini `responseType: 'blob'`, jadi badan
+      // galatnya pun Blob dan `.detail` selalu undefined — alasan penolakan
+      // server (plafon, rate-limit) tak akan pernah sampai ke layar.
+      progress.error(await pesanGalatRespons(err, "Gagal cetak kartu massal"));
+    }
   }, [assets, selectedAssets]);
 
   const handleExport = useCallback(async fmt => {

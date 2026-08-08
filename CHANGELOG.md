@@ -67,6 +67,95 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#809] Gelombang 2.4 — cetak kartu massal berplafon, dan alasan penolakan yang benar-benar sampai ke layar — 2026-08-08
+
+Butir C25a peta jalan `docs/TINJAUAN-SISTEM-2026-08.md`.
+
+**Angkanya diukur dulu, sesuai permintaan temuannya.**
+
+| Jalur | Biaya CPU/item | Plafon | Kasus terburuk |
+|---|---|---|---|
+| Kartu Inventaris | **79 ms** (JPEG 1600×1200 → Pillow + QR + ReportLab) | *(tidak ada)* | tak terbatas |
+| Stiker Label | **13,4 ms** (tanpa foto) | 2000 | ±27 dtk |
+
+Linier dari 10 sampai 100 aset. Jadi 1000 aset ≈ **79 detik**, dan karena
+seluruh badan endpoint berjalan di event loop, itu bukan "permintaan ini
+lambat" melainkan **seluruh aplikasi berhenti selama itu** — setiap petugas
+lapangan yang sedang menyimpan aset ikut menunggu.
+
+**Plafon 300, dan dari mana angkanya.** Plafon stiker 2000 berarti proyek ini
+sudah menerima kasus terburuk ±27 detik. Kartu 5,9× lebih mahal per item, jadi
+anggaran blokir yang sama habis di ±340 — dibulatkan ke bawah menjadi **300**
+(±24 detik). Dua hal disebut apa adanya di komentar kodenya: angka ini
+*menahan* kasus terburuk dan tidak memperbaikinya (C25b memindahkan bagian
+murni-CPU ke thread; sesudah itu plafonnya bisa dinaikkan dengan sadar), dan
+anggaran 27 detik milik stiker itu sendiri kemungkinan tak pernah diukur.
+
+**Menolak, bukan memotong.** Stiker boleh dipotong diam-diam — kurangnya
+langsung terlihat saat menempel. Kartu Inventaris tidak: ia dokumen fisik per
+barang, jadi memotong 800 menjadi 300 berarti 500 aset tanpa kartu dan tak ada
+satu pun tanda di PDF-nya yang mengatakan begitu.
+
+Ditambah `@limiter.limit("3/minute")`.
+
+### Pesan yang tak pernah sampai
+
+Perbaikan plafon hampir tidak berbekas, karena permintaannya memakai
+`responseType: 'blob'` — dan pada permintaan blob, axios membungkus **badan
+galat** sebagai Blob juga. `getApiError` membaca `err.response.data.detail`,
+yang selalu `undefined` di sana. Server akan menolak dengan alasan yang jelas
+sementara layar hanya berkata "Gagal cetak kartu massal"; pengguna lalu mencoba
+lagi, dan lagi — membakar jatah rate-limit tanpa pernah tahu sebabnya.
+
+Pembaca yang sadar-blob sudah ada di `downloadFile.js`, tetapi privat modul.
+Kini diekspor sebagai `pesanGalatRespons` dan dipakai di jalur cetak kartu.
+
+**Dan pembaca itu sendiri punya lubang.** `Blob.prototype.text()` baru ada sejak
+Chrome 76 / Safari 14 / Firefox 69 — pada WebView Android lama ia melempar,
+tertangkap `catch`, dan pesannya senyap jatuh ke "Terjadi kesalahan". Ditambah
+jalur mundur `FileReader`, yang ada di mana pun `Blob` ada. Ini ketahuan karena
+jsdom **juga** tak punya `Blob.prototype.text()` — lingkungan ujinya kebetulan
+persis seperti perangkat tertua di lapangan.
+
+Plafon juga dicek di klien **sebelum** permintaan dikirim: tolakan server tetap
+memakan satu dari tiga jatah per menit, sehingga percobaan berikutnya yang sudah
+dipersempit dengan benar bisa ikut kena.
+
+### Uji
+
+`frontend/src/lib/plafonKartu.test.js` — 17 uji. Termasuk penjaga
+**anti-melenceng**: uji membaca `backend/routes/cards.py` dan menagih
+`MAKS_KARTU` sama persis dengan `MAKS_KARTU_CETAK` di klien. Plafon klien yang
+lebih longgar berarti pengguna tetap ditolak tapi baru setelah mengunggah
+seluruh seleksi; yang lebih ketat berarti fitur dipangkas diam-diam.
+
+Sembilan mutasi diuji. **Delapan terbunuh pada putaran pertama; satu lolos** —
+dan yang lolos itu mengungkap uji saya sendiri yang kosong:
+
+> `expect(fn.indexOf("galatPlafonKartu")).toBeLessThan(fn.indexOf("axios.post"))`
+>
+> Saat ceknya dihapus seluruhnya, `indexOf` mengembalikan **−1** — yang lebih
+> kecil dari posisi mana pun. Uji "urutan" tetap hijau atas kode yang tak punya
+> urutan sama sekali. **Asersi urutan tanpa asersi keberadaan bukan asersi.**
+> Setelah keberadaan diperiksa lebih dulu, mutasi itu terbunuh.
+
+Dua uji lain juga keliru di percobaan pertama dan uji itu sendiri yang
+menangkap: argumen kedua `pesanGalatRespons` adalah pesan **khusus timeout**,
+bukan cadangan umum.
+
+> **Pola yang berlaku umum:** penjaga struktural harus **mengupas komentar**
+> dulu. Asersi `not.toContain("getApiError")` gagal atas kode yang benar —
+> karena komentar yang menjelaskan *"BUKAN getApiError"* mengandung kata yang
+> sedang dilarang. Prosa bisa memuaskan **dan** menjatuhkan penjaga semacam ini.
+
+### Catatan untuk pemilik
+
+Pengukuran ini memunculkan hal yang bukan lingkup PR ini dan **tidak** diubah:
+plafon stiker 2000 berarti ±27 detik event loop terkunci pada satu permintaan
+cetak stiker penuh. Sama sekali tidak baru, tetapi kini ada angkanya.
+
+---
+
 ## [#808] Gelombang 2.3 — satu ponsel di sinyal buruk berhenti bisa menahan seluruh bus — 2026-08-08
 
 Butir C24 peta jalan `docs/TINJAUAN-SISTEM-2026-08.md`.
