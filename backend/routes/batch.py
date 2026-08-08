@@ -7,6 +7,7 @@ import io
 import re
 import uuid
 import base64
+import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import List
@@ -283,11 +284,18 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
             compressed_photo, compress_method, orig_size, comp_size = await auto_compress_image(p)
             if compress_method != "none":
                 logger.info(f"Batch photo compressed via {compress_method}: {orig_size/1024:.0f}KB → {comp_size/1024:.0f}KB ({(1-comp_size/orig_size)*100:.0f}% reduction)")
-            prepared.append({"data": compressed_photo, "thumb": generate_photo_thumbnail(compressed_photo) or ""})
+            # Pillow SINKRON → thread (temuan C26). `auto_compress_image` tepat di
+            # atas sudah memakai to_thread, jadi blokirnya selama ini
+            # terpotong-potong — tetapi tetap ada. Diukur pada JPEG 1600×1200:
+            # create_thumbnail ±37 ms, create_gallery_thumbnail ±36 ms; delapan
+            # foto ±0,3 dtk di mesin uji. Yang dibeli adalah jitter yang hilang
+            # dan keseragaman dengan assets.py:1199 — bukan penyelamatan darurat.
+            thumb = await asyncio.to_thread(generate_photo_thumbnail, compressed_photo)
+            prepared.append({"data": compressed_photo, "thumb": thumb or ""})
 
         # Cover (thumbnail/gallery) dari foto PERTAMA — dipakai bila aset semula 0 foto.
-        cover_thumbnail = create_thumbnail(prepared[0]["data"])
-        cover_gallery = create_gallery_thumbnail(prepared[0]["data"])
+        cover_thumbnail = await asyncio.to_thread(create_thumbnail, prepared[0]["data"])
+        cover_gallery = await asyncio.to_thread(create_gallery_thumbnail, prepared[0]["data"])
         MAX_PHOTOS = 6
         CHUNK = 50
 

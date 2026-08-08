@@ -937,6 +937,27 @@ async def export_pdf(request: Request, activity_id: Optional[str] = None,
         headers={"Content-Disposition": "attachment; filename=laporan_inventaris.pdf"}
     )
 
+def _tutup_dan_ambil(workbook, buffer):
+    """Tutup workbook lalu ambil bitanya — SINKRON, panggil lewat `to_thread`.
+
+    `close()` bukan sekadar tutup berkas: xlsxwriter merakit dan men-deflate
+    SELURUH arsip di sini. `in_memory=False` (lihat pemanggil) memindahkan
+    lembar sementara ke disk, tetapi `close()` tetap harus membacanya kembali
+    dan mengompres semuanya — sinkron, di event loop.
+
+    Yang membuat ini layak diperbaiki meski ekspor sudah berjalan sebagai job
+    latar (temuan C27): job itu `asyncio.create_task` di event loop yang SAMA.
+    "Dipindahkan ke latar" hanya berarti pemanggilnya tak menunggu — event
+    loopnya tetap berhenti selama `close()` berjalan.
+
+    Penyisipan gambar di jalur yang sama sudah `await asyncio.to_thread`
+    sejak lama; ini menutup satu-satunya titik sinkron yang tersisa.
+    """
+    workbook.close()
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
 async def bangun_xlsx_bytes(query, activity_id="", base_url="", token=""):
     """Rakit workbook XLSX aset (Data Aset + foto + Kelengkapan Dokumen +
     Data Kegiatan + Tim) menjadi bytes. Diekstrak dari endpoint /export/xlsx
@@ -1353,9 +1374,7 @@ async def bangun_xlsx_bytes(query, activity_id="", base_url="", token=""):
             tr = write_tim_section(tim_sheet, tr, 'TIM PENDUKUNG (EKSTERNAL)', act_data.get('tim_pendukung', []),
                                    ['nama', 'jabatan', 'nip', 'dari_pihak'], has_dari_pihak=True)
     
-    workbook.close()
-    buffer.seek(0)
-    return buffer.getvalue()
+    return await asyncio.to_thread(_tutup_dan_ambil, workbook, buffer)
 
 
 @exports_router.get("/export/xlsx")
