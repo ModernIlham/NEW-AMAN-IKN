@@ -1028,9 +1028,38 @@ async def backup_scheduler_loop():
         await asyncio.sleep(300)
 
 
+_scheduler_task = None
+
+
 def start_backup_scheduler():
     """Dipanggil dari startup server — jalankan loop di background."""
-    _track_bg(asyncio.create_task(backup_scheduler_loop()))
+    global _scheduler_task
+    _scheduler_task = _track_bg(asyncio.create_task(backup_scheduler_loop()))
+
+
+async def stop_backup_scheduler() -> None:
+    """Hentikan HANYA loop penjadwal (temuan U22).
+
+    Sengaja TIDAK membatalkan seluruh isi `_BG_TASKS`. Himpunan itu juga
+    menampung `run_backup_task` dan `run_restore_task` yang sedang berjalan,
+    dan membatalkan RESTORE di tengah jalan adalah keputusan integritas data —
+    bukan kebersihan shutdown. Restore punya jalur rollback sendiri; memicunya
+    dari shutdown berarti memulai pemulihan yang detik berikutnya ikut mati
+    bersama prosesnya, dan itu lebih buruk daripada membiarkan supervisor
+    menunggu atau membunuhnya.
+
+    Yang dihentikan di sini hanya loop periodik: ia tak memegang keadaan
+    setengah-jadi, jadi membatalkannya selalu aman.
+    """
+    global _scheduler_task
+    t, _scheduler_task = _scheduler_task, None
+    if t is None:
+        return
+    t.cancel()
+    try:
+        await t
+    except (asyncio.CancelledError, Exception):    # noqa: BLE001
+        pass
 
 
 @backup_router.get("/otomatis")

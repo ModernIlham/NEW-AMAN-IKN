@@ -203,6 +203,25 @@ async def shutdown_event():
         await tutup_redis()
     except Exception:
         pass
+    # Hentikan penjadwal latar SEBELUM koneksi Mongo ditutup (temuan U22).
+    #
+    # Tanpa ini, `client.close()` di bawah mencabut koneksi dari bawah loop
+    # yang mungkin sedang di tengah kuerinya: hasilnya traceback menakutkan di
+    # log tiap kali shutdown, dan — lebih buruk — sebuah loop bisa terpotong di
+    # antara dua tulisan tanpa sempat menjalankan blok `except`-nya sendiri.
+    #
+    # Hanya LOOP PERIODIK yang dihentikan. Job backup/restore yang sedang
+    # berjalan sengaja dibiarkan: membatalkannya di tengah jalan adalah
+    # keputusan integritas data, bukan kebersihan shutdown (lihat
+    # `stop_backup_scheduler`).
+    for _modul, _fn in (("jobs", "stop_job_maintenance"),
+                        ("webp_converter", "stop_webp_converter"),
+                        ("routes.backup", "stop_backup_scheduler")):
+        try:
+            _m = __import__(_modul, fromlist=[_fn])
+            await getattr(_m, _fn)()
+        except Exception as e:      # noqa: BLE001
+            logger.warning("Hentikan %s.%s (non-fatal): %s", _modul, _fn, e)
     client.close()
     logger.info("Application shutdown complete")
 

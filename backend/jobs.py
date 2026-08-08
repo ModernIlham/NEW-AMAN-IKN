@@ -262,3 +262,14 @@ def start_job_maintenance() -> None:
     if _maintenance_task is not None:
         return
     _maintenance_task = asyncio.create_task(_job_maintenance_loop())
+
+
+async def stop_job_maintenance() -> None:
+    """Hentikan loop pemeliharaan (dipanggil saat shutdown — temuan U22)."""
+    global _maintenance_task
+    t, _maintenance_task = _maintenance_task, None
+    if t is None:
+        return
+    t.cancel()
+    with contextlib.suppress(asyncio.CancelledError, Exception):
+        await t

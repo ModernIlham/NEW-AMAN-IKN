@@ -67,6 +67,57 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#813] Gelombang 2.9 — penjadwal latar berhenti sebelum koneksinya dicabut — 2026-08-08
+
+Butir U22 peta jalan `docs/TINJAUAN-SISTEM-2026-08.md`.
+
+`shutdown_event` menghentikan event bus, Meilisearch, dan Redis — lalu langsung
+`client.close()`. Tiga loop periodik yang dijadwalkan saat startup **tidak
+pernah dibatalkan**:
+
+```
+start_backup_scheduler()   → backup_scheduler_loop()
+start_job_maintenance()    → _job_maintenance_loop()
+start_webp_converter()     → _loop()
+```
+
+`client.close()` lalu mencabut koneksi dari bawah loop yang mungkin sedang di
+tengah kuerinya. Akibatnya dua, dan yang kedua lebih buruk:
+
+- **Traceback menakutkan di log setiap kali shutdown** — yang lama-lama
+  diabaikan orang, sehingga traceback **sungguhan** ikut terabaikan.
+- **Loop bisa terpotong di antara dua tulisan** tanpa sempat menjalankan blok
+  `except`-nya sendiri.
+
+Ditambah `stop_job_maintenance()`, `stop_webp_converter()`, dan
+`stop_backup_scheduler()`, dipanggil **sebelum** `client.close()`. Urutannya
+yang jadi soal, bukan sekadar keberadaannya.
+
+### Batas lingkup yang disengaja, dan dikunci uji
+
+`stop_backup_scheduler` **tidak** membatalkan seluruh isi `_BG_TASKS`.
+Himpunan itu juga menampung `run_backup_task` dan `run_restore_task` yang
+sedang berjalan.
+
+Membatalkan **restore di tengah jalan adalah keputusan integritas data**, bukan
+kebersihan shutdown: restore punya jalur rollback sendiri, dan memicunya dari
+shutdown berarti memulai pemulihan yang detik berikutnya ikut mati bersama
+prosesnya — lebih buruk daripada membiarkannya. Yang dihentikan hanya loop
+periodik, yang tak memegang keadaan setengah-jadi.
+
+Alasan itu ditulis di docstring-nya **dan** ditagih oleh uji. Batas lingkup
+yang tak dijelaskan akan dibaca sebagai kelalaian dan "diperbaiki" oleh orang
+berikutnya — justru merusak restore.
+
+### Uji
+
+`backend/tests/unit/test_shutdown_hentikan_penjadwal.py` — 11 uji. Enam mutasi
+diuji, enam terbunuh, termasuk **`client.close()` dipindah ke depan
+penghentian** (perubahan yang tak mengubah satu pun baris, hanya urutannya) dan
+**stop membatalkan seluruh `_BG_TASKS`** (yang akan membunuh restore berjalan).
+
+---
+
 ## [#812] Gelombang 2.7 — sapuan job macet saat startup, dan denyut yang membuatnya sah — 2026-08-08
 
 Butir C29 peta jalan `docs/TINJAUAN-SISTEM-2026-08.md`.

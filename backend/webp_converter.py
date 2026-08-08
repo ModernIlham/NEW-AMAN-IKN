@@ -550,3 +550,16 @@ def start_webp_converter() -> None:
     _task = asyncio.create_task(_loop())
     logger.info("Konverter WebP latar aktif=%s (idle=%ss, jeda=%ss, stop sisa kuota<=%s)",
                 AKTIF, IDLE_DETIK, JEDA_ANTAR_FOTO, KUOTA_SISA_MIN)
+
+
+async def stop_webp_converter() -> None:
+    """Hentikan loop konverter (dipanggil saat shutdown — temuan U22)."""
+    global _task
+    t, _task = _task, None
+    if t is None:
+        return
+    t.cancel()
+    try:
+        await t
+    except (asyncio.CancelledError, Exception):    # noqa: BLE001
+        pass
