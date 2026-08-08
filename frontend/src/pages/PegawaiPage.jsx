@@ -153,10 +153,6 @@ export default function PegawaiPage({ user, onBack }) {
       .catch(() => setUnits([]));
   }, []);
 
-  const bukaForm = (data) => {
-    setTabForm("identitas"); setForm(data);
-    setFotoPending(null); setKropAsli(null); setKropInitial(null);
-  };
   // ── Foto pegawai: krop persegi (geser + zoom) → GridFS; avatar di row ──
   const [kropSrc, setKropSrc] = useState(null);       // dataURL sumber krop
   const [kropAsli, setKropAsli] = useState(null);     // File asli (unggah baru); null saat reposisi
@@ -165,6 +161,13 @@ export default function PegawaiPage({ user, onBack }) {
   const [previewFoto, setPreviewFoto] = useState(null); // {id,nama} atau {url,nama} — pratinjau ukuran penuh
   const [kartuTapOpen, setKartuTapOpen] = useState(false); // dialog tap kartu e-KTP
   const fotoInputRef = useRef(null);
+
+  // Diletakkan setelah state foto di atas karena mereset ketiganya.
+  const bukaForm = (data) => {
+    setTabForm("identitas"); setForm(data);
+    setFotoPending(null); setKropAsli(null); setKropInitial(null);
+  };
+
   // Bebaskan URL objek pratinjau saat foto pending berganti / komponen lepas.
   useEffect(() => () => { if (fotoPending?.url) URL.revokeObjectURL(fotoPending.url); },
     [fotoPending]);
@@ -208,16 +211,6 @@ export default function PegawaiPage({ user, onBack }) {
     setKropSrc(null); setKropAsli(null); setKropInitial(null);
     toast.success("Foto siap — akan disimpan saat klik Simpan");
   };
-  const hapusFoto = async () => {
-    if (!form?.id) return;
-    try {
-      await axios.delete(`${API}/pegawai/${form.id}/foto`);
-      toast.success("Foto dihapus");
-      setForm((f) => ({ ...f, foto_file_id: "", foto_asli_file_id: "", foto_krop: null }));
-      load();
-    } catch (err) { toast.error(getApiError(err, "Gagal menghapus foto")); }
-  };
-
   // Opsi bertingkat: opsi Eselon N mengikuti induk Eselon N-1 yang dipilih
   // (dicocokkan via nama — data pegawai menyimpan nama unit). Induk tak
   // dipilih/tak dikenal → semua unit level itu.
@@ -249,6 +242,17 @@ export default function PegawaiPage({ user, onBack }) {
       .then((r) => setSerahTerima(r.data?.items || []))
       .catch(() => setSerahTerima([]));
   }, []);
+
+  // Bagian "Foto pegawai"; diletakkan di sini karena memakai `load` di atas.
+  const hapusFoto = async () => {
+    if (!form?.id) return;
+    try {
+      await axios.delete(`${API}/pegawai/${form.id}/foto`);
+      toast.success("Foto dihapus");
+      setForm((f) => ({ ...f, foto_file_id: "", foto_asli_file_id: "", foto_krop: null }));
+      load();
+    } catch (err) { toast.error(getApiError(err, "Gagal menghapus foto")); }
+  };
 
   useEffect(() => { muatUnits(); }, [muatUnits]);
 
@@ -432,6 +436,23 @@ export default function PegawaiPage({ user, onBack }) {
     } catch (err) { toast.error(getApiError(err, "Gagal melepas kartu")); }
   };
 
+  // Tawarkan penyegaran snapshot pemegang pada aset (setelah identitas berubah).
+  // BAST yang sudah terbit TIDAK diubah — hanya data pemegang untuk dokumen
+  // berikutnya (DBR/KIR/BAST). Idempoten di sisi server.
+  const sinkronPemegang = async (id, nama, info) => {
+    const ok = await confirm({
+      title: "Segarkan data pemegang pada aset?",
+      description: `${info.perlu_sinkron} dari ${info.jumlah_aset} aset yang dipegang ${nama} masih memakai data lama (jabatan/nama/unit). Perbarui agar DBR/KIR/BAST berikutnya memakai data terkini? BAST yang sudah terbit tidak berubah.`,
+      confirmLabel: "Sinkronkan",
+    });
+    if (!ok) return;
+    try {
+      const r = await axios.post(`${API}/pegawai/${id}/sinkron-aset`);
+      toast.success(`${r.data?.diperbarui || 0} aset diperbarui dengan data pemegang terkini`);
+      load();
+    } catch (err) { toast.error(getApiError(err, "Gagal menyinkronkan aset")); }
+  };
+
   const submitForm = async () => {
     if (!form) return;
     if (!(form.nama || "").trim()) { toast.error("Nama pegawai wajib diisi"); return; }
@@ -474,23 +495,6 @@ export default function PegawaiPage({ user, onBack }) {
     } finally {
       setSaving(false);
     }
-  };
-
-  // Tawarkan penyegaran snapshot pemegang pada aset (setelah identitas berubah).
-  // BAST yang sudah terbit TIDAK diubah — hanya data pemegang untuk dokumen
-  // berikutnya (DBR/KIR/BAST). Idempoten di sisi server.
-  const sinkronPemegang = async (id, nama, info) => {
-    const ok = await confirm({
-      title: "Segarkan data pemegang pada aset?",
-      description: `${info.perlu_sinkron} dari ${info.jumlah_aset} aset yang dipegang ${nama} masih memakai data lama (jabatan/nama/unit). Perbarui agar DBR/KIR/BAST berikutnya memakai data terkini? BAST yang sudah terbit tidak berubah.`,
-      confirmLabel: "Sinkronkan",
-    });
-    if (!ok) return;
-    try {
-      const r = await axios.post(`${API}/pegawai/${id}/sinkron-aset`);
-      toast.success(`${r.data?.diperbarui || 0} aset diperbarui dengan data pemegang terkini`);
-      load();
-    } catch (err) { toast.error(getApiError(err, "Gagal menyinkronkan aset")); }
   };
 
   // Tombol manual di form (edit): periksa dulu (pratinjau) lalu tawarkan sinkron.

@@ -21,6 +21,8 @@ const FormField = (
   );
 }
 
+const FormItemContext = React.createContext({})
+
 const useFormField = () => {
   const fieldContext = React.useContext(FormFieldContext)
   const itemContext = React.useContext(FormItemContext)
@@ -43,8 +45,6 @@ const useFormField = () => {
     ...fieldState,
   }
 }
-
-const FormItemContext = React.createContext({})
 
 const FormItem = React.forwardRef(({ className, ...props }, ref) => {
   const id = React.useId()
