@@ -1451,16 +1451,21 @@ async def export_xlsx_async(request: Request, activity_id: Optional[str] = None,
 async def _jalankan_ekspor_xlsx(job_id, query, activity_id, base_url, nama, token=""):
     """Worker job latar: rakit XLSX (reuse bangun_xlsx_bytes) → GridFS."""
     from log_setup import set_job_id
-    from jobs import update_job, simpan_artifact
+    from jobs import update_job, simpan_artifact, denyut_job
     set_job_id(job_id)   # korelasi log ke JOB (task latar mewarisi konteks request)
     try:
-        # Batasi konkurensi build berat (workbook penuh di RAM per build).
-        async with _EKSPOR_SEM:
-            await update_job(job_id, status="running", progress=10,
-                             message="Merakit workbook Excel...")
-            data = await bangun_xlsx_bytes(query, activity_id, base_url, token)
-            await update_job(job_id, progress=90, message="Menyimpan hasil...")
-            await simpan_artifact(job_id, data, nama, _XLSX_MIME)
+        # Denyut membungkus SEMAPHORE-nya juga, bukan hanya build-nya: job yang
+        # mengantre di belakang build lain bisa duduk bermenit-menit tanpa satu
+        # pun pembaruan, dan sapuan job macet akan membunuhnya justru karena ia
+        # sabar menunggu giliran.
+        async with denyut_job(job_id):
+            # Batasi konkurensi build berat (workbook penuh di RAM per build).
+            async with _EKSPOR_SEM:
+                await update_job(job_id, status="running", progress=10,
+                                 message="Merakit workbook Excel...")
+                data = await bangun_xlsx_bytes(query, activity_id, base_url, token)
+                await update_job(job_id, progress=90, message="Menyimpan hasil...")
+                await simpan_artifact(job_id, data, nama, _XLSX_MIME)
         await update_job(job_id, status="done", done=True, progress=100,
                          message="Ekspor Excel selesai.")
         logger.info(f"📤 Ekspor XLSX job {job_id} selesai ({len(data)} bytes)")
