@@ -27,7 +27,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db
-from shared_utils import kunci_idem, log_audit
+from shared_utils import kunci_idem, limiter, log_audit
 from meili_utils import jadwalkan_sync, jadwalkan_hapus, cari_id_persediaan
 from pencarian_utils import klausa_teks, pecah_kata
 from pegawai_utils import baris_identitas_ttd
@@ -609,7 +609,9 @@ async def koreksi_nilai_persediaan(item_id: str, data: KoreksiNilaiPersediaanIn,
 
 
 @persediaan_router.post("/persediaan/import")
-async def import_persediaan(file: UploadFile = File(...), _user: dict = Depends(require_writer)):
+@limiter.limit("6/minute")
+async def import_persediaan(request: Request, file: UploadFile = File(...),
+                            _user: dict = Depends(require_writer)):
     """Impor massal master (CSV/XLSX): kode 16+NUP sudah ada → perbarui field
     non-identitas; selain itu buat baru (kode 10 digit → nomor urut otomatis,
     NUP kosong → otomatis). Stok/layer TIDAK tersentuh impor."""

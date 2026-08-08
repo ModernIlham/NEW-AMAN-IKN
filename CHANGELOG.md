@@ -67,6 +67,49 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#817] Gelombang 2.11 — utang parser Excel lunas, dan pintu impor yang semuanya berpalang — 2026-08-08
+
+Penutup C28: tiga berkas terakhir yang masih mem-parse Excel di event loop —
+`siman.py` (25MB ekspor SIMAN, parsing terukur **puluhan detik**),
+`categories.py`, dan `pegawai.py` (kasus nyata 1369 baris × 54 kolom) —
+kini mem-parse di thread. Daftar `UTANG` di penjaga menjadi **kosong** dan
+dikunci begitu: berkas baru yang menyentuh parser tanpa `to_thread` menabrak
+uji.
+
+Polanya sama dengan tiga berkas pertama: **ekstraksi helper sinkron murni**
+(bytes → baris), lalu `await asyncio.to_thread(...)` di titik panggil.
+Ketiganya dulu menyatu dengan validasi/job di badan endpoint — itulah kenapa
+tertinggal dari gelombang XS. Satu keputusan desain yang ditagih uji:
+helper `categories.py` **melempar ke pemanggil**, tidak menulis job — hanya
+pemanggil yang memegang `job_id`, dan parser yang ikut menulis job tak bisa
+lagi diuji sebagai fungsi murni.
+
+**Mitigasi ikutan:** setelah offload, blokirnya pindah dari event loop ke
+threadpool default (8 thread di VPS 4 vCPU) yang dipakai bersama render PDF &
+thumbnail. Tiga endpoint impor yang selama ini TANPA rate limit —
+`/kodefikasi/import`, `/persediaan/import`, `/pegawai/impor` — kini
+`6/minute` (setara `/siman/import`). Penjaga baru menagih **keenam** endpoint
+impor massal berplafon, ditagih di antara dekorator rute dan `async def`.
+
+**Penjaganya sendiri diperkuat dua arah:**
+
+- `_panggilan_telanjang` (AST) kini melihat panggilan **atribut**
+  (`openpyxl.load_workbook(...)`) selain nama polos — dan `load_workbook`
+  masuk himpunan yang dijaga, jadi endpoint impor BARU yang tak memakai
+  parser lama pun tertangkap.
+- Verifikasi mutasi menegaskan pelajaran lama: saat bungkus `siman.py`
+  dicabut, pendeteksi tingkat-berkas **tetap hijau** (kata `to_thread`
+  tersisa di komentar) — penjaga AST-lah yang menangkap. Lima mutasi diuji
+  (cabut bungkus siman & categories, helper di-async-kan, limiter dicabut,
+  endpoint baru ber-load_workbook telanjang), lima terbunuh.
+
+**Uji perilaku** (`TestPerilakuParserEkstraksi`): xlsx kecil dibangun di
+memori lalu diparse lewat ketiga helper hasil ekstraksi — baris harus keluar
+utuh, header SIMAN dikenali (fixture uji siman_utils dipakai ulang), galat
+format tetap 400. Ekstraksi tidak boleh mengubah keluaran, hanya tempatnya.
+
+---
+
 ## [#816] Gelombang 2.10 (U21) — satu garis patah pada lapisan yang kita kendalikan — 2026-08-08
 
 Blok nginx `location /api/ws` di `scripts/vps-deploy.sh` tak menyetel

@@ -12,12 +12,14 @@ import csv as csv_module
 import io
 import asyncio
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import (APIRouter, Depends, File, HTTPException, Query, Request,
+                     UploadFile)
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from auth_utils import require_admin, require_user
 from db import db
+from shared_utils import limiter
 from kodefikasi_utils import (
     GOLONGAN_DEFAULTS, LEVEL_LABELS, META_FIELDS, derive_level,
     hierarchy_prefixes, is_persediaan_kode, normalize_kode, parent_of,
@@ -273,7 +275,9 @@ def _rows_from_upload(filename: str, content: bytes):
 
 
 @kodefikasi_router.post("/kodefikasi/import")
-async def import_kodefikasi(file: UploadFile = File(...), _admin: dict = Depends(require_admin)):
+@limiter.limit("6/minute")
+async def import_kodefikasi(request: Request, file: UploadFile = File(...),
+                            _admin: dict = Depends(require_admin)):
     """Impor massal CSV/XLSX aplikasi ATAU keluaran SIMAN V2 per level.
 
     Kode penuh & uraian dikenali dari header SIMAN (`Kode Barang`,

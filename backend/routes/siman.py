@@ -9,6 +9,7 @@ Riwayat impor tersimpan di register `siman_imports`.
 
 Logika banding murni di siman_utils.py (teruji unit).
 """
+import asyncio
 import io
 import uuid
 from datetime import datetime, timezone
@@ -49,35 +50,18 @@ class TerapkanIn(BaseModel):
     fields: Optional[List[str]] = None  # None = terapkan semua selisih
 
 
-@siman_router.post("/siman/import")
-@limiter.limit("6/minute")
-async def import_siman(request: Request, file: UploadFile = File(...),
-                       tandai_tidak_ditemukan: bool = False,
-                       user: dict = Depends(require_admin)):
-    """Impor ekspor SIMAN V2 (XLSX "Master Aset") dan tandai selisih per aset.
+def _parse_siman_xlsx(isi: bytes) -> list:
+    """Parser murni ekspor SIMAN (bytes → baris) — SENGAJA sinkron.
 
-    `tandai_tidak_ditemukan=true` juga menandai aset AMAN yang TIDAK ada di
-    file (pakai hanya bila file memuat SELURUH aset satker — ekspor penuh,
-    bukan potongan).
+    Seluruh kerja openpyxl (deteksi header lintas sheet + iterasi seluruh
+    baris) berkumpul di sini; titik panggilnya dibungkus `asyncio.to_thread`
+    (temuan C28 — file 25MB terukur puluhan detik dan sebelumnya membekukan
+    seluruh event loop, bukan hanya permintaan ini). HTTPException 400 yang
+    dilempar dari sini merambat utuh lewat to_thread — pesan galat parsing
+    memang bagian dari kontrak parser.
     """
-    nama_file = file.filename or ""
-    if nama_file.lower().endswith(".xls") and not nama_file.lower().endswith(".xlsx"):
-        raise HTTPException(status_code=400, detail=(
-            "Format .xls lama tidak didukung — buka file lalu simpan ulang "
-            "sebagai .xlsx (Excel Workbook), atau unduh ulang ekspor dari SIMAN V2"))
-    if not nama_file.lower().endswith(".xlsx"):
-        raise HTTPException(status_code=400, detail="File harus Excel (.xlsx) hasil ekspor SIMAN V2")
-    isi = await file.read()
-    if len(isi) > _MAKS_UKURAN_FILE:
-        raise HTTPException(status_code=400, detail=(
-            f"File terlalu besar ({len(isi) // (1024 * 1024)}MB — maks 25MB). "
-            "Ekspor per jenis BMN dari SIMAN lalu unggah bertahap"))
-    if not isi:
-        raise HTTPException(status_code=400, detail=(
-            "File kosong terkirim — koneksi kemungkinan terputus saat mengunggah; coba lagi"))
-
+    import openpyxl
     try:
-        import openpyxl
         wb = openpyxl.load_workbook(io.BytesIO(isi), read_only=True, data_only=True)
     except Exception:
         raise HTTPException(status_code=400, detail=(
@@ -122,6 +106,40 @@ async def import_siman(request: Request, file: UploadFile = File(...),
         raise HTTPException(status_code=400, detail=(
             f"Tidak ada baris aset pada sheet '{sheet_dipakai}' — file mungkin "
             "ekspor kosong; periksa filter saat mengekspor dari SIMAN V2"))
+    return baris_data
+
+
+@siman_router.post("/siman/import")
+@limiter.limit("6/minute")
+async def import_siman(request: Request, file: UploadFile = File(...),
+                       tandai_tidak_ditemukan: bool = False,
+                       user: dict = Depends(require_admin)):
+    """Impor ekspor SIMAN V2 (XLSX "Master Aset") dan tandai selisih per aset.
+
+    `tandai_tidak_ditemukan=true` juga menandai aset AMAN yang TIDAK ada di
+    file (pakai hanya bila file memuat SELURUH aset satker — ekspor penuh,
+    bukan potongan).
+    """
+    nama_file = file.filename or ""
+    if nama_file.lower().endswith(".xls") and not nama_file.lower().endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail=(
+            "Format .xls lama tidak didukung — buka file lalu simpan ulang "
+            "sebagai .xlsx (Excel Workbook), atau unduh ulang ekspor dari SIMAN V2"))
+    if not nama_file.lower().endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail="File harus Excel (.xlsx) hasil ekspor SIMAN V2")
+    isi = await file.read()
+    if len(isi) > _MAKS_UKURAN_FILE:
+        raise HTTPException(status_code=400, detail=(
+            f"File terlalu besar ({len(isi) // (1024 * 1024)}MB — maks 25MB). "
+            "Ekspor per jenis BMN dari SIMAN lalu unggah bertahap"))
+    if not isi:
+        raise HTTPException(status_code=400, detail=(
+            "File kosong terkirim — koneksi kemungkinan terputus saat mengunggah; coba lagi"))
+
+    # Temuan C28: seluruh parsing (openpyxl + deteksi header + iterasi baris)
+    # berjalan di thread, bukan di event loop. Parsernya sendiri dibiarkan
+    # sinkron — yang dibungkus TITIK PANGGILNYA (pola _tutup_dan_ambil).
+    baris_data = await asyncio.to_thread(_parse_siman_xlsx, isi)
 
     # Peta pencocokan: kode register (paling stabil) & kode+NUP.
     per_register, per_kunci, duplikat_kunci = {}, {}, 0

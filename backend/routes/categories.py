@@ -125,6 +125,60 @@ async def delete_all_categories(_admin: dict = Depends(require_admin)):
     logger.info(f"Deleted all categories: {result.deleted_count}")
     return {"message": f"Berhasil menghapus {result.deleted_count} kategori", "deleted": result.deleted_count}
 
+def _parse_baris_impor_kategori(filename: str, content: bytes) -> list:
+    """Parser murni CSV/XLSX impor kategori (bytes → baris dict) — SINKRON.
+
+    Titik panggilnya dibungkus `asyncio.to_thread` (temuan C28). Galat parsing
+    DILEMPAR ke pemanggil apa adanya — hanya pemanggil yang memegang job_id,
+    dan parser yang ikut menulis job tak bisa lagi diuji sebagai fungsi murni.
+    """
+    rows = []
+    if filename.endswith('.csv'):
+        try:
+            text = content.decode('utf-8-sig')
+        except UnicodeDecodeError:
+            text = content.decode('latin-1')
+        reader = csv_module.DictReader(io.StringIO(text))
+        for row in reader:
+            cleaned = {}
+            for k, v in row.items():
+                if k:
+                    cleaned[k.strip().replace('"', '').lower()] = str(v or '').strip().replace('"', '')
+            if any(v for v in cleaned.values()):
+                rows.append(cleaned)
+    else:
+        import openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True)
+        ws = wb.active
+        headers = []
+        header_found = False
+        for row_data in ws.iter_rows(values_only=True):
+            row_strs = [str(c or '').strip().lower() for c in row_data]
+            if not header_found:
+                if 'kode aset' in row_strs or 'kode_aset' in row_strs:
+                    headers = [str(c or '').strip() for c in row_data]
+                    header_found = True
+                    continue
+                elif row_strs[0] and any(c.isdigit() for c in row_strs[0]):
+                    headers = ['Kode Aset', 'Deskripsi Barang']
+                else:
+                    headers = [str(c or '').strip() for c in row_data]
+                    header_found = True
+                    continue
+
+            if not any(c for c in row_data):
+                continue
+            row_dict = {}
+            for ci, cell in enumerate(row_data):
+                if ci < len(headers):
+                    key = headers[ci].lower().replace(' ', '_')
+                    row_dict[key] = str(cell or '').strip() if cell is not None else ''
+            if any(v for v in row_dict.values()):
+                rows.append(row_dict)
+        wb.close()
+    return rows
+
+
 @categories_router.post("/categories/import-bulk")
 @limiter.limit("3/minute")
 async def import_categories_bulk(request: Request, file: UploadFile = File(...), _user: dict = Depends(require_writer)):
@@ -141,52 +195,12 @@ async def import_categories_bulk(request: Request, file: UploadFile = File(...),
         status="parsing", total=0, processed=0, imported=0,
         skipped=0, errors=0, done=False)
     
-    # Parse file
-    rows = []
+    # Temuan C28: parsing pindah ke thread. Helper MELEMPAR ke sini — hanya
+    # pemanggil (yang memegang job_id) yang boleh menulis job; parser tetap
+    # murni bytes → baris dan bisa diuji tanpa job sama sekali.
     try:
-        if filename.endswith('.csv'):
-            try:
-                text = content.decode('utf-8-sig')
-            except UnicodeDecodeError:
-                text = content.decode('latin-1')
-            reader = csv_module.DictReader(io.StringIO(text))
-            for row in reader:
-                cleaned = {}
-                for k, v in row.items():
-                    if k:
-                        cleaned[k.strip().replace('"', '').lower()] = str(v or '').strip().replace('"', '')
-                if any(v for v in cleaned.values()):
-                    rows.append(cleaned)
-        else:
-            import openpyxl
-            wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True)
-            ws = wb.active
-            headers = []
-            header_found = False
-            for row_data in ws.iter_rows(values_only=True):
-                row_strs = [str(c or '').strip().lower() for c in row_data]
-                if not header_found:
-                    if 'kode aset' in row_strs or 'kode_aset' in row_strs:
-                        headers = [str(c or '').strip() for c in row_data]
-                        header_found = True
-                        continue
-                    elif row_strs[0] and any(c.isdigit() for c in row_strs[0]):
-                        headers = ['Kode Aset', 'Deskripsi Barang']
-                    else:
-                        headers = [str(c or '').strip() for c in row_data]
-                        header_found = True
-                        continue
-                
-                if not any(c for c in row_data):
-                    continue
-                row_dict = {}
-                for ci, cell in enumerate(row_data):
-                    if ci < len(headers):
-                        key = headers[ci].lower().replace(' ', '_')
-                        row_dict[key] = str(cell or '').strip() if cell is not None else ''
-                if any(v for v in row_dict.values()):
-                    rows.append(row_dict)
-            wb.close()
+        rows = await asyncio.to_thread(_parse_baris_impor_kategori,
+                                       filename, content)
     except Exception as e:
         await update_job(job_id, status="error", done=True, error_message=str(e))
         raise HTTPException(status_code=400, detail=f"Gagal parse file: {str(e)}")

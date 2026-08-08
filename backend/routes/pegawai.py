@@ -643,20 +643,13 @@ async def export_pegawai_xlsx(_user: dict = Depends(require_user)):
                  f'attachment; filename="{nama_file}"'})
 
 
-@pegawai_router.post("/pegawai/impor")
-async def impor_pegawai(file: UploadFile = File(...),
-                        user: dict = Depends(require_admin)):
-    """Impor massal pegawai dari Excel (.xlsx) / CSV. Tiap baris dinormalkan
-    (status kepegawaian & status keberadaan yang beragam dipetakan, NIP
-    dibersihkan dari artefak, unit kerja diambil dari Eselon terdalam). Upsert
-    per NIP dalam satker; baris tanpa NIP disisipkan baru. Data lapangan yang
-    tak baku hanya diberi catatan (best-effort), tidak menggagalkan seluruh
-    impor."""
-    nama = str(file.filename or "").lower()
-    data = await file.read()
-    if len(data) > 15 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="Berkas maksimal 15MB")
+def _baris_dari_unggahan_pegawai(nama: str, data: bytes) -> list:
+    """Parser murni unggahan impor pegawai (bytes → baris dict) — SINKRON.
 
+    Titik panggilnya dibungkus `asyncio.to_thread` (temuan C28 — 1369 baris
+    × 54 kolom pernah jadi kasus nyata impor massal). HTTPException 400
+    merambat utuh lewat to_thread; pesan galat format bagian dari kontrak.
+    """
     rows = []
     if nama.endswith((".xlsx", ".xlsm")):
         import io
@@ -685,6 +678,26 @@ async def impor_pegawai(file: UploadFile = File(...),
     else:
         raise HTTPException(status_code=400,
                             detail="Format harus .xlsx atau .csv")
+    return rows
+
+
+@pegawai_router.post("/pegawai/impor")
+@limiter.limit("6/minute")
+async def impor_pegawai(request: Request, file: UploadFile = File(...),
+                        user: dict = Depends(require_admin)):
+    """Impor massal pegawai dari Excel (.xlsx) / CSV. Tiap baris dinormalkan
+    (status kepegawaian & status keberadaan yang beragam dipetakan, NIP
+    dibersihkan dari artefak, unit kerja diambil dari Eselon terdalam). Upsert
+    per NIP dalam satker; baris tanpa NIP disisipkan baru. Data lapangan yang
+    tak baku hanya diberi catatan (best-effort), tidak menggagalkan seluruh
+    impor."""
+    nama = str(file.filename or "").lower()
+    data = await file.read()
+    if len(data) > 15 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Berkas maksimal 15MB")
+
+    # Temuan C28: parsing di thread, bukan di event loop.
+    rows = await asyncio.to_thread(_baris_dari_unggahan_pegawai, nama, data)
 
     kode = kode_satker_user(user)
     now = datetime.now(timezone.utc).isoformat()

@@ -84,7 +84,15 @@ def _panggilan_telanjang(sumber: str, nama: set = None):
     for n in ast.walk(pohon):
         if not isinstance(n, ast.Call):
             continue
-        f = n.func.id if isinstance(n.func, ast.Name) else None
+        # Nama polos (`load_workbook(...)`) DAN atribut (`openpyxl
+        # .load_workbook(...)`) — parser yang sama dipanggil dua gaya di
+        # repo ini, dan pendeteksi yang hanya melihat satu gaya setengah buta.
+        if isinstance(n.func, ast.Name):
+            f = n.func.id
+        elif isinstance(n.func, ast.Attribute):
+            f = n.func.attr
+        else:
+            f = None
         if f in nama and _dalam_async(n) and not _dibungkus_to_thread(n):
             temuan.append((f, n.lineno))
     return temuan
@@ -226,15 +234,22 @@ class TestCatatanUtang:
     sinkron yang dikenal — dan justru itulah yang membuat `persediaan.py`
     ikut diperbaiki di C28, bukan tertinggal diam-diam.
 
-    C28 menutup tiga berkas; tersisa tiga yang butuh ekstraksi lebih dulu.
-    Daftar boleh menyusut, tak boleh bertambah — jadi ia SENGAJA diperketat
-    tiap kali menyusut. Daftar longgar adalah penjaga longgar.
+    C28 menutup tiga berkas; tiga sisanya (siman, categories, pegawai —
+    parsing menyatu dengan validasi/job sehingga butuh ekstraksi helper)
+    ditutup di gelombang berikutnya, dan daftar ini KOSONG. Ia tetap ada
+    sebagai penegak nol-utang: berkas baru yang menyentuh parser tanpa
+    to_thread akan menabraknya. Daftar boleh menyusut, tak boleh bertambah —
+    jadi ia SENGAJA diperketat tiap kali menyusut.
     """
 
-    UTANG = ["siman.py", "categories.py", "pegawai.py"]
+    UTANG = []
 
-    # Parser Excel sinkron yang dipakai lintas modul.
-    PARSER = ("openpyxl", "_rows_from_upload", "parse_excel_content")
+    # Parser Excel sinkron yang dipakai lintas modul. Tiga nama terakhir
+    # lahir dari ekstraksi C28: hadir di berkas mana pun tanpa to_thread =
+    # utang baru.
+    PARSER = ("openpyxl", "_rows_from_upload", "parse_excel_content",
+              "_parse_siman_xlsx", "_parse_baris_impor_kategori",
+              "_baris_dari_unggahan_pegawai")
 
     def _tanpa_thread(self):
         return [p.name for p in sorted(ROUTES.glob("*.py"))
@@ -259,22 +274,33 @@ class TestCatatanUtang:
 class TestC28:
     """Parser Excel sinkron dipanggil lewat thread di SEMUA titik panggil."""
 
-    PARSER_TETAP_SINKRON = ["_rows_from_upload", "parse_excel_content"]
+    PARSER_TETAP_SINKRON = ["_rows_from_upload", "parse_excel_content",
+                            "_parse_siman_xlsx", "_parse_baris_impor_kategori",
+                            "_baris_dari_unggahan_pegawai",
+                            # openpyxl langsung juga: endpoint impor BARU yang
+                            # tak memakai parser di atas tetap tertangkap.
+                            "load_workbook"]
 
-    def test_parsernya_TETAP_sinkron(self):
+    # (berkas, nama helper) hasil ekstraksi C28 — parsing yang dulu menyatu
+    # dengan validasi/penulisan job di badan endpoint.
+    HELPER = [("kodefikasi.py", "_rows_from_upload"),
+              ("imports.py", "parse_excel_content"),
+              ("siman.py", "_parse_siman_xlsx"),
+              ("categories.py", "_parse_baris_impor_kategori"),
+              ("pegawai.py", "_baris_dari_unggahan_pegawai")]
+
+    @pytest.mark.parametrize("berkas,helper", HELPER)
+    def test_parsernya_TETAP_sinkron(self, berkas, helper):
         """Sengaja tidak dijadikan `async def`.
 
-        Keduanya parser murni tanpa I/O. Menjadikannya async memaksa setiap
-        pemanggil ikut berubah dan menyembunyikan biayanya di balik `await`
-        yang tampak murah — padahal kerjanya tetap di event loop kecuali ada
-        yang benar-benar memindahkannya ke thread.
+        Semuanya parser murni tanpa I/O async. Menjadikannya async memaksa
+        setiap pemanggil ikut berubah dan menyembunyikan biayanya di balik
+        `await` yang tampak murah — padahal kerjanya tetap di event loop
+        kecuali ada yang benar-benar memindahkannya ke thread.
         """
-        k = (ROUTES / "kodefikasi.py").read_text(encoding="utf-8")
-        i = (ROUTES / "imports.py").read_text(encoding="utf-8")
-        assert "def _rows_from_upload(" in k
-        assert "async def _rows_from_upload(" not in k
-        assert "def parse_excel_content(" in i
-        assert "async def parse_excel_content(" not in i
+        s = (ROUTES / berkas).read_text(encoding="utf-8")
+        assert f"def {helper}(" in s
+        assert f"async def {helper}(" not in s
 
     def test_SEMUA_titik_panggil_lewat_thread(self):
         """Inti C28, dan bagian yang paling mudah setengah jalan.
@@ -314,3 +340,109 @@ class TestC28:
     def test_imports_py_lewat_thread(self):
         src = (ROUTES / "imports.py").read_text(encoding="utf-8")
         assert "await asyncio.to_thread(parse_excel_content, content)" in src
+
+    @pytest.mark.parametrize("berkas,helper", [
+        ("siman.py", "_parse_siman_xlsx"),
+        ("categories.py", "_parse_baris_impor_kategori"),
+        ("pegawai.py", "_baris_dari_unggahan_pegawai"),
+    ])
+    def test_titik_panggil_tiga_berkas_terakhir_ada(self, berkas, helper):
+        # Pasangan penjaga AST di atas: AST menjamin TIDAK ADA panggilan
+        # telanjang, uji ini menjamin panggilan ber-thread-nya MASIH ADA —
+        # tanpanya, menghapus fitur impornya sekalian juga lolos.
+        s = (ROUTES / berkas).read_text(encoding="utf-8")
+        assert f"to_thread({helper}" in s, berkas
+
+
+class TestRateLimitImpor:
+    """Semua endpoint impor massal ber-rate-limit — mitigasi ikutan C28.
+
+    Setelah parsing pindah ke thread, blokirnya berpindah dari event loop ke
+    threadpool default (min(32, cpu+4) = 8 di VPS 4 vCPU) yang DIPAKAI
+    BERSAMA render PDF & thumbnail. Tanpa plafon, unggahan 10MB berulang
+    menukar "membekukan semua" menjadi "menghabiskan threadpool" — lebih
+    baik, tapi tetap penolakan layanan. Tiga endpoint pertama sudah lama
+    berplafon; tiga terakhir baru dipasang bersama offload-nya.
+    """
+
+    ENDPOINT = [("imports.py", '.post("/import")'),
+                ("siman.py", '.post("/siman/import")'),
+                ("categories.py", '.post("/categories/import-bulk")'),
+                ("kodefikasi.py", '.post("/kodefikasi/import")'),
+                ("persediaan.py", '.post("/persediaan/import")'),
+                ("pegawai.py", '.post("/pegawai/impor")')]
+
+    @pytest.mark.parametrize("berkas,rute", ENDPOINT)
+    def test_endpoint_impor_berplafon(self, berkas, rute):
+        s = (ROUTES / berkas).read_text(encoding="utf-8")
+        i = s.index(rute)
+        # Dekorator limiter harus menempel di antara dekorator rute dan
+        # `async def` — bukan sekadar hadir di suatu tempat dalam berkas.
+        blok = s[i:s.index("async def", i)]
+        assert "@limiter.limit(" in blok, f"{berkas} {rute} tanpa rate limit"
+
+
+class TestPerilakuParserEkstraksi:
+    """Ekstraksi C28 tidak boleh mengubah KELUARAN parser — hanya tempatnya.
+
+    Penjaga struktural di atas menjamin bentuknya (sinkron + ber-thread);
+    uji di sini menjamin isinya: xlsx kecil dibangun di memori, diparse lewat
+    helper hasil ekstraksi, dan barisnya harus keluar utuh. Kalau ekstraksi
+    diulang dan hasilnya berubah, berarti yang dipindah bukan parser murni.
+    """
+
+    @staticmethod
+    def _xlsx(baris):
+        import io as _io
+
+        import openpyxl
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        for r in baris:
+            ws.append(r)
+        buf = _io.BytesIO()
+        wb.save(buf)
+        return buf.getvalue()
+
+    def test_parse_siman_xlsx(self):
+        import sys
+        sys.path.insert(0, str(BACKEND))
+        from routes.siman import _parse_siman_xlsx
+        from tests.unit.test_siman_utils import HEADER_SIMAN, _baris
+
+        isi = self._xlsx([["Kop Laporan"], HEADER_SIMAN,
+                          _baris(), _baris(NUP="2")])
+        hasil = _parse_siman_xlsx(isi)
+        assert [b["nup"] for b in hasil] == ["1", "2"]
+        assert hasil[0]["kode_barang"] == "3030203001"
+
+    def test_parse_siman_header_tak_dikenal_400(self):
+        from fastapi import HTTPException
+
+        from routes.siman import _parse_siman_xlsx
+        with pytest.raises(HTTPException) as e:
+            _parse_siman_xlsx(self._xlsx([["bukan", "header"]]))
+        assert e.value.status_code == 400
+
+    def test_parse_kategori_xlsx_dan_csv(self):
+        from routes.categories import _parse_baris_impor_kategori
+
+        rows = _parse_baris_impor_kategori("k.xlsx", self._xlsx(
+            [["Kode Aset", "Deskripsi Barang"], ["3.01", "Alat Besar"]]))
+        assert rows == [{"kode_aset": "3.01", "deskripsi_barang": "Alat Besar"}]
+
+        rows = _parse_baris_impor_kategori(
+            "k.csv", "Kode Aset,Deskripsi Barang\n3.02,Alat Angkut\n".encode())
+        assert rows == [{"kode aset": "3.02", "deskripsi barang": "Alat Angkut"}]
+
+    def test_parse_pegawai_xlsx_dan_format_salah(self):
+        from fastapi import HTTPException
+
+        from routes.pegawai import _baris_dari_unggahan_pegawai
+
+        rows = _baris_dari_unggahan_pegawai("p.xlsx", self._xlsx(
+            [["NIP", "Nama"], ["197001011990031001", "Budi"]]))
+        assert rows == [{"NIP": "197001011990031001", "Nama": "Budi"}]
+        with pytest.raises(HTTPException) as e:
+            _baris_dari_unggahan_pegawai("p.pdf", b"x")
+        assert e.value.status_code == 400
