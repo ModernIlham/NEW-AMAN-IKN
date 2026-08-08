@@ -67,6 +67,65 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#811] Gelombang 2.6 — parser Excel pindah ke thread, termasuk pemanggil yang tak menyebut namanya — 2026-08-08
+
+Butir C28 peta jalan `docs/TINJAUAN-SISTEM-2026-08.md`.
+
+`openpyxl.load_workbook` + `iter_rows(values_only=True)` memateralisasi seluruh
+sheet, dan ketiganya dipanggil dari handler `async def` — artinya langsung di
+event loop. Ukuran terburuknya memang terbatas (nginx `client_max_body_size`
+50 MB; impor aset 15 MB; persediaan 10 MB), tetapi 15 MB XLSX bukan
+sepersekian detik, dan selama itu seluruh aplikasi berhenti.
+
+**Parser sengaja DIBIARKAN sinkron.** Keduanya parser murni tanpa I/O.
+Menjadikannya `async def` memaksa setiap pemanggil ikut berubah **dan**
+menyembunyikan biayanya di balik `await` yang tampak murah — padahal kerjanya
+tetap di event loop kecuali ada yang benar-benar memindahkannya ke thread.
+Yang dibungkus adalah **titik panggilnya**, pola yang sama dengan
+`_tutup_dan_ambil` di `exports.py`.
+
+### Pemanggil yang tak menyebut namanya
+
+Bagian yang paling mudah dikerjakan setengah jalan. `_rows_from_upload` punya
+**dua** pemanggil di dua berkas berbeda:
+
+```
+kodefikasi.py:285   rows = _rows_from_upload(file.filename, content)
+persediaan.py:621   rows = _rows_from_upload(file.filename, content)   ← impor dari kodefikasi
+```
+
+Membungkusnya di `kodefikasi.py` saja meninggalkan `persediaan.py` tetap
+memblokir event loop — dan berkas itu **tidak pernah menyebut `openpyxl`**,
+jadi ia tak muncul di pencarian mana pun yang lazim. Ia hanya terlihat karena
+pendeteksi utang di PR sebelumnya sudah diperlebar untuk mengenali pemanggilan
+parser, bukan hanya impor pustakanya.
+
+### Daftar utang diperketat, bukan dibiarkan menempel
+
+`UTANG` menyusut **6 → 3** (`siman.py`, `categories.py`, `pegawai.py` —
+ketiganya butuh ekstraksi fungsi lebih dulu). Ditambah uji baru:
+`test_daftarnya_juga_tidak_boleh_KENDUR`, yang menagih daftar itu **sama
+persis** dengan kenyataan.
+
+Tanpa itu, daftar utang cuma tumbuh longgar: berkas yang sudah diperbaiki tetap
+terdaftar, dan penjaganya diam-diam mengizinkan berkas itu **kembali rusak**.
+Daftar longgar adalah penjaga longgar.
+
+### Uji
+
+17 uji (13 → 17). Lima mutasi diuji, lima terbunuh — termasuk yang paling
+mungkin terjadi nyata:
+
+| Mutasi | Uji gagal |
+|---|---|
+| **hanya `persediaan.py` dilewatkan (setengah jalan)** | **2** |
+| hanya `kodefikasi.py` dilewatkan | 4 |
+| `imports.py` dilewatkan | 4 |
+| parser dijadikan `async` (menyembunyikan biaya) | 1 |
+| pemanggil `persediaan.py` dihapus, bukan diperbaiki | 1 |
+
+---
+
 ## [#810] Gelombang 2.5 — dua titik terakhir yang membekukan seluruh proses — 2026-08-08
 
 Butir C26 & C27 peta jalan `docs/TINJAUAN-SISTEM-2026-08.md`.

@@ -204,44 +204,99 @@ class TestTutupWorkbook:
 
 
 class TestCatatanUtang:
-    """C28 (butir berikutnya) menyisakan parsing openpyxl di event loop.
+    """Sisa parsing openpyxl di event loop — utang yang MENYUSUT.
 
-    Sengaja DICATAT, bukan diperbaiki di sini — satu butir satu PR. Yang
-    dijaga: daftarnya boleh MENYUSUT, tak boleh bertambah.
+    Sejarah daftar ini bagian dari nilainya. Ia sudah dua kali salah:
+
+      1. `pegawai.py` terlewat saat disalin dari laporan — uji ini yang
+         menangkapnya.
+      2. `persediaan.py` masuk daftar padahal TIDAK menyebut openpyxl sama
+         sekali. Ia memanggil `_rows_from_upload` yang di-impor dari
+         `kodefikasi` — parser openpyxl yang sama, lewat pintu belakang.
+
+    Temuan kedua mengungkap lubang di PENDETEKSINYA, bukan di daftarnya:
+    mencari string "openpyxl" hanya melihat pemakaian LANGSUNG, sehingga
+    pemanggil tak langsung sama-sama memblokir event loop dan sama-sama tak
+    terlihat. Pendeteksi di bawah kini juga mengenali pemanggilan parser
+    sinkron yang dikenal — dan justru itulah yang membuat `persediaan.py`
+    ikut diperbaiki di C28, bukan tertinggal diam-diam.
+
+    C28 menutup tiga berkas; tersisa tiga yang butuh ekstraksi lebih dulu.
+    Daftar boleh menyusut, tak boleh bertambah — jadi ia SENGAJA diperketat
+    tiap kali menyusut. Daftar longgar adalah penjaga longgar.
     """
 
-    # Enam berkas. Daftar ini sudah dua kali salah, dan keduanya bermanfaat:
-    #
-    #   1. `pegawai.py` terlewat saat disalin dari laporan — uji ini yang
-    #      menangkapnya.
-    #   2. `persediaan.py` masuk daftar padahal TIDAK menyebut openpyxl sama
-    #      sekali. Ia memanggil `_rows_from_upload` yang di-impor dari
-    #      `kodefikasi` — parser openpyxl yang sama, lewat pintu belakang.
-    #
-    # Temuan kedua itu mengungkap lubang di pendeteksinya, bukan di daftarnya:
-    # mencari string "openpyxl" hanya melihat pemakaian LANGSUNG. Berkas yang
-    # memanggil parsernya secara tak langsung sama-sama memblokir event loop
-    # dan sama-sama tak terlihat. Pendeteksi di bawah kini juga mengenali
-    # pemanggilan parser sinkron yang sudah dikenal.
-    UTANG = ["imports.py", "kodefikasi.py", "persediaan.py",
-             "siman.py", "categories.py", "pegawai.py"]
+    UTANG = ["siman.py", "categories.py", "pegawai.py"]
 
     # Parser Excel sinkron yang dipakai lintas modul.
     PARSER = ("openpyxl", "_rows_from_upload", "parse_excel_content")
 
-    def test_daftar_utang_openpyxl_tidak_bertambah(self):
-        tanpa_thread = [p.name for p in sorted(ROUTES.glob("*.py"))
-                        if any(k in (s := p.read_text(encoding="utf-8")) for k in self.PARSER)
-                        and "to_thread" not in s]
-        assert set(tanpa_thread) <= set(self.UTANG), sorted(set(tanpa_thread) - set(self.UTANG))
+    def _tanpa_thread(self):
+        return [p.name for p in sorted(ROUTES.glob("*.py"))
+                if any(k in (s := p.read_text(encoding="utf-8")) for k in self.PARSER)
+                and "to_thread" not in s]
 
-    def test_persediaan_memang_pemanggil_TAK_LANGSUNG(self):
-        """Mengunci alasan `persediaan.py` ada di daftar.
+    def test_daftar_utang_tidak_bertambah(self):
+        sisa = self._tanpa_thread()
+        assert set(sisa) <= set(self.UTANG), sorted(set(sisa) - set(self.UTANG))
 
-        Kalau suatu saat ia berhenti memanggil parser bersama itu, uji ini
-        yang memberi tahu — bukan dibiarkan menempel di daftar selamanya
-        tanpa ada yang tahu mengapa.
+    def test_daftarnya_juga_tidak_boleh_KENDUR(self):
+        """Entri yang sudah lunas harus DIKELUARKAN, bukan ditinggal menempel.
+
+        Tanpa uji ini, daftar utang cuma tumbuh longgar: berkas yang sudah
+        diperbaiki tetap terdaftar, dan penjaganya diam-diam mengizinkan
+        berkas itu kembali rusak.
         """
-        src = (ROUTES / "persediaan.py").read_text(encoding="utf-8")
-        assert "openpyxl" not in src
-        assert "_rows_from_upload" in src
+        assert set(self.UTANG) == set(self._tanpa_thread()), (
+            "daftar UTANG tak lagi cocok dengan kenyataan; perketat")
+
+
+class TestC28:
+    """Parser Excel sinkron dipanggil lewat thread di SEMUA titik panggil."""
+
+    PARSER_TETAP_SINKRON = ["_rows_from_upload", "parse_excel_content"]
+
+    def test_parsernya_TETAP_sinkron(self):
+        """Sengaja tidak dijadikan `async def`.
+
+        Keduanya parser murni tanpa I/O. Menjadikannya async memaksa setiap
+        pemanggil ikut berubah dan menyembunyikan biayanya di balik `await`
+        yang tampak murah — padahal kerjanya tetap di event loop kecuali ada
+        yang benar-benar memindahkannya ke thread.
+        """
+        k = (ROUTES / "kodefikasi.py").read_text(encoding="utf-8")
+        i = (ROUTES / "imports.py").read_text(encoding="utf-8")
+        assert "def _rows_from_upload(" in k
+        assert "async def _rows_from_upload(" not in k
+        assert "def parse_excel_content(" in i
+        assert "async def parse_excel_content(" not in i
+
+    def test_SEMUA_titik_panggil_lewat_thread(self):
+        """Inti C28, dan bagian yang paling mudah setengah jalan.
+
+        `_rows_from_upload` punya DUA pemanggil di dua berkas berbeda.
+        Membungkusnya di `kodefikasi.py` saja meninggalkan `persediaan.py`
+        tetap memblokir event loop — dan berkas itu tak pernah menyebut
+        "openpyxl", jadi tak akan muncul di pencarian mana pun yang lazim.
+        """
+        bocor = []
+        for berkas in sorted(ROUTES.glob("*.py")):
+            src = berkas.read_text(encoding="utf-8")
+            for baris_no, baris in enumerate(src.splitlines(), 1):
+                b = baris.strip()
+                if b.startswith("#") or b.startswith("def ") or b.startswith("async def "):
+                    continue
+                for fn in self.PARSER_TETAP_SINKRON:
+                    if f"{fn}(" in b and "to_thread" not in b:
+                        bocor.append(f"{berkas.name}:{baris_no} {b}")
+        assert bocor == [], bocor
+
+    def test_kedua_pemanggil_rows_from_upload_masih_ada(self):
+        # Penjaga di atas juga hijau bila pemanggilnya DIHAPUS seluruhnya.
+        pemanggil = [p.name for p in sorted(ROUTES.glob("*.py"))
+                     if "to_thread(_rows_from_upload" in p.read_text(encoding="utf-8")]
+        assert set(pemanggil) == {"kodefikasi.py", "persediaan.py"}, pemanggil
+
+    def test_imports_py_lewat_thread(self):
+        src = (ROUTES / "imports.py").read_text(encoding="utf-8")
+        assert "await asyncio.to_thread(parse_excel_content, content)" in src
