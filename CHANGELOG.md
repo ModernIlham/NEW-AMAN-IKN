@@ -67,6 +67,59 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#823] Gelombang 2.17 (C25b) — cetak kartu berhenti membekukan aplikasi, dan riwayatnya berhenti bertanya 600 kali — 2026-08-08
+
+Penutup pasangan C25a (plafon 300 + rate limit, [#809]): seluruh badan
+`get_bulk_asset_cards` — decode Pillow + QR + ReportLab, terukur **104
+ms/kartu** (69 ms di antaranya ReportLab yang MEMEGANG GIL) — berjalan di
+event loop, plus **2N round-trip** riwayat (find_one kegiatan + find riwayat
+per aset; 600 kueri pada plafon penuh). Terukur: 30 kartu = event loop beku
+2,66 detik (5 detak); lewat thread waktu dinding nyaris sama (+6%) tapi jeda
+detak maksimum **0,088 detik**. Yang dibeli keadilan antar-permintaan, bukan
+kapasitas — CPU-nya tidak hilang, dan itu dicatat jujur di komentar plafon.
+
+**Render berblok** (25 kartu/blok): hidrasi GridFS (I/O async) tetap di
+event loop, CPU blok di `asyncio.to_thread`, puncak memori foto base64
+terbatas satu blok (`asset["photo"] = None` setelah tergambar). Batas blok
+ditulis `sudah_ada_halaman or idx` — mutasi `if idx:` saja membuat kartu
+pertama tiap blok menimpa kartu terakhir blok sebelumnya: dua aset satu
+halaman, PDF tetap sah, baru ketahuan setelah dipotong dan ditempel. Jalur
+satu-kartu ikut (104 ms beku juga).
+
+**Riwayat dua kueri** (`_fetch_riwayat_massal`): satu `$in` kegiatan + satu
+`$or` identitas, lalu saring-urut-potong di Python. Tiga keputusan yang
+masing-masing dikunci uji:
+
+- **Saringan satker pindah ke Python = batas keamanan**, bukan kinerja.
+  Padanan persis kueri lama termasuk kelonggaran legacy: `rs == ks or rs in
+  ("", None)` dengan nilai record dibiarkan MENTAH (menormalkan sisi record
+  justru melonggarkan saringan). Ember dikunci per-ASET — identitas sama
+  bisa dimiliki aset lintas satker, dan saringan milik satu aset tak boleh
+  menentukan isi kartu aset lain.
+- **Aset beridentitas kosong dilewati** — klausa `{"asset_code": "",
+  "NUP": ""}` yang dulu jinak (dibatasi 8/aset) menyapu koleksi tanpa batas
+  di dalam `$or` massal.
+- **Urut di Python, bukan `.sort()` Mongo** — `$or` massal tak punya indeks
+  tanggal → blocking sort 32 MB yang gagal sebagai error runtime. String
+  ISO leksikografis == kronologis.
+
+Gagal-terbuka dipertahankan: galat riwayat → kartu tanpa panel riwayat,
+bukan 500 yang membakar jatah 3/menit. `MAKS_KARTU` TIDAK dinaikkan
+(keputusan pemilik, serentak dengan `cakupanCetak.js`); urutan kartu tetap
+urutan natural `find()` (perilaku lama, bukan regresi PR ini).
+
+**Uji** (12 baru + penjaga kelas): halaman == aset dengan BLOK=2 (batas blok
+benar-benar terlewati), aset-i di halaman-i, tanpa foto tetap terbit, dua
+kueri untuk 50 aset (ranjau `find_one` kegiatan), tak bocor lintas satker,
+identitas sama lingkup beda, identitas cadangan, potong-8-terbaru-dulu,
+identitas kosong tak menyapu, gagal Mongo → kosong. **Delapan mutasi diuji,
+delapan terbunuh** — satu di antaranya (cabut `to_thread` dari pemanggil
+helper) SELAMAT dari penjaga versi pertama: himpunan SINKRON hanya mengenal
+fungsi-dalam, sementara panggilan telanjang berbentuk nama helper — kini
+kedua helper ikut masuk daftar.
+
+---
+
 ## [#822] Gelombang 2.16 (S7) — render pratinjau pindah ke satu-satunya thread yang boleh menyentuh pdfium — 2026-08-08
 
 `_render_halaman_png` (pratinjau penempatan TTD/QR di `routes/ttd.py`)
