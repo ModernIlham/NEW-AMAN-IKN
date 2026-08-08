@@ -77,6 +77,14 @@ export default function BagikanPetaDialog({ open, onClose, activity }) {
 
   useEffect(() => { if (open) { muat(); setTersalin(""); setEditJudul(""); } }, [open, muat]);
 
+  const salin = async (link, sid) => {
+    try {
+      await navigator.clipboard.writeText(link);
+      setTersalin(sid); setTimeout(() => setTersalin(""), 2000);
+      toast.success("Link disalin");
+    } catch { toast.error("Tak bisa menyalin — salin manual dari kotak link"); }
+  };
+
   const buat = async () => {
     setCreating(true);
     try {
@@ -90,14 +98,6 @@ export default function BagikanPetaDialog({ open, onClose, activity }) {
       if (r.data?.link) salin(r.data.link, r.data.id);
     } catch (e) { toast.error(getApiError(e, "Gagal membuat link")); }
     finally { setCreating(false); }
-  };
-
-  const salin = async (link, sid) => {
-    try {
-      await navigator.clipboard.writeText(link);
-      setTersalin(sid); setTimeout(() => setTersalin(""), 2000);
-      toast.success("Link disalin");
-    } catch { toast.error("Tak bisa menyalin — salin manual dari kotak link"); }
   };
 
   const bagikanWA = (link, judulShare) => {

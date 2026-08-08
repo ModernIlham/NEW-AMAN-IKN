@@ -382,6 +382,10 @@ function UserManagementDialog({ open, onClose, currentUser }) {
     setOtpLoading(false);
   };
 
+  const resetForm = () => {
+    setShowAdd(false); setEmail(''); setName(''); setPw(''); setOtpSent(false); setOtp(''); setDebugOtp(null);
+  };
+
   const verifyOtp = async () => {
     if (otp.length < 6) { toast.error("6 digit OTP"); return; }
     setOtpLoading(true);
@@ -392,10 +396,6 @@ function UserManagementDialog({ open, onClose, currentUser }) {
       fetchUsers();
     } catch (e) { toast.error(getApiError(e, "OTP salah")); }
     setOtpLoading(false);
-  };
-
-  const resetForm = () => {
-    setShowAdd(false); setEmail(''); setName(''); setPw(''); setOtpSent(false); setOtp(''); setDebugOtp(null);
   };
 
   return (

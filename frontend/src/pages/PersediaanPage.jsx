@@ -288,6 +288,14 @@ export default function PersediaanPage({ user, onBack }) {
     return { ...m, data: d };
   });
 
+  const fmtRp = (n) => `Rp${Number(n || 0).toLocaleString("id-ID")}`;
+
+  // Segarkan banner peringatan stok & status opname setelah transaksi (temuan #20).
+  const refreshRingkasan = () => {
+    axios.get(`${API}/persediaan/peringatan`).then((r) => setPeringatan(r.data)).catch(() => {});
+    axios.get(`${API}/persediaan/opname/status`).then((r) => setOpnameStatus(r.data)).catch(() => {});
+  };
+
   const submitMasuk = async () => {
     if (!masuk) return;
     const d = masuk.data;
@@ -619,12 +627,6 @@ export default function PersediaanPage({ user, onBack }) {
     }
   };
 
-  // Segarkan banner peringatan stok & status opname setelah transaksi (temuan #20).
-  const refreshRingkasan = () => {
-    axios.get(`${API}/persediaan/peringatan`).then((r) => setPeringatan(r.data)).catch(() => {});
-    axios.get(`${API}/persediaan/opname/status`).then((r) => setOpnameStatus(r.data)).catch(() => {});
-  };
-
   const openRiwayat = async (item) => {
     setRiwayat({ item, rows: [], loading: true, page: 1, total: 0 });
     try {
@@ -653,8 +655,6 @@ export default function PersediaanPage({ user, onBack }) {
       setRiwayat((r) => (r ? { ...r, loading: false } : r));
     }
   };
-
-  const fmtRp = (n) => `Rp${Number(n || 0).toLocaleString("id-ID")}`;
 
   // Rincian layer FIFO (read-only) dari detail item — list sengaja tak memuat batches.
   const openLayers = async (item) => {

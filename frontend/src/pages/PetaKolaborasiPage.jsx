@@ -274,6 +274,15 @@ export default function PetaKolaborasiPage() {
   const clusterOnRef = useRef(true);
   const bolehModerasiRef = useRef(false);
   const roRef = useRef(null);
+  // Handler drag marker dibangun di luar pohon React (Leaflet), jadi ia
+  // memanggil `butuhNama` & `kirimGeser` lewat ref agar selalu memakai versi
+  // TERBARU — bukan closure dari render saat marker pertama kali dipasang.
+  // Deklarasinya sengaja di RUMPUN REF ini, bukan di dekat `butuhNama` yang
+  // ada 500 baris di bawah: efek sinkron-marker memakainya lebih dulu, dan
+  // sebuah `const` yang dipakai sebelum barisnya dieksekusi adalah TDZ yang
+  // menunggu giliran. Nilai awalnya `null` — pemanggilnya sudah ber-`?.`, dan
+  // efek penyelaras di bawah mengisinya sebelum tamu sempat menyeret apa pun.
+  const butuhNamaRef = useRef(null);
   // Alat ukur dipakai bersama dengan Peta Aset — satu perilaku, satu rumus.
   const ukur = useUkurPeta(mapRef, { aktif: ukurOn });
   // Ref kembar utk penangan klik mode "tambah titik" (dipasang di efek [data]):
@@ -421,6 +430,18 @@ export default function PetaKolaborasiPage() {
       toast.error(e?.response?.data?.detail || "Gagal mengirim usulan geser");
     }
   }, [id, token, muat]);
+  // Handler `dragend` dibangun di luar pohon React (Leaflet), jadi ia memanggil
+  // `kirimGeser` lewat ref agar selalu memakai versi TERBARU — pola yang sama
+  // dengan `butuhNamaRef` di bawah.
+  //
+  // Ref ini SEBELUMNYA TIDAK ADA: handler di `dragend` sudah memanggil
+  // `kirimGeserRef.current?.(…)`, tetapi tak seorang pun pernah membuatnya.
+  // Akibatnya fitur "tamu menggeser marker" mati tepat di langkah terakhir —
+  // tamu mengetikkan namanya, lalu ReferenceError, dan usulannya tak pernah
+  // terkirim. Ditemukan saat aturan `no-undef` dinyalakan; sebelum itu lint
+  // bersih, build sukses, dan uji hijau — semua diam.
+  const kirimGeserRef = useRef(kirimGeser);
+  useEffect(() => { kirimGeserRef.current = kirimGeser; }, [kirimGeser]);
 
   // Hitung komentar per target (lencana angka pada pin).
   const komentarCount = useMemo(() => {
@@ -829,10 +850,6 @@ export default function PetaKolaborasiPage() {
       perluNama: !(data && !data.tamu), nama });
     if (perlu) { setNamaDraf(nama); setNamaDialog(true); }
   }, [data, nama]);
-  // Handler drag marker dibangun di luar pohon React (Leaflet), jadi ia
-  // memanggil `butuhNama` lewat ref agar selalu memakai versi TERBARU —
-  // bukan closure dari render saat marker pertama kali dipasang.
-  const butuhNamaRef = useRef(butuhNama);
   useEffect(() => { butuhNamaRef.current = butuhNama; }, [butuhNama]);
 
   const simpanNama = () => {

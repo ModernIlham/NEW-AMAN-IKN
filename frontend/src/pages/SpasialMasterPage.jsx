@@ -288,6 +288,13 @@ export default function SpasialMasterPage({ user, onBack }) {
     }
   };
 
+  // Tipe anak yang paling mungkin: tingkat tepat setelah induk (ordinal berikut).
+  const tipeAnakDefault = (parent) => {
+    const urut = [...levels].sort((a, b) => a.ordinal_level - b.ordinal_level);
+    const next = urut.find((l) => l.ordinal_level > ordinalLevel[parent.tipe]);
+    return next?.kode_baku || parent.tipe;
+  };
+
   const bukaTambah = (parent) => setForm({
     mode: "tambah", id: null,
     tipe: parent ? tipeAnakDefault(parent) : (levels[0]?.kode_baku || "KAWASAN"),
@@ -308,13 +315,6 @@ export default function SpasialMasterPage({ user, onBack }) {
     lantai_ordinal: n.lantai?.ordinal ?? "", lantai_label: n.lantai?.label || "",
     lantai_pendek: n.lantai?.label_pendek || "", lantai_kategori: n.lantai?.kategori || "reguler",
   });
-
-  // Tipe anak yang paling mungkin: tingkat tepat setelah induk (ordinal berikut).
-  const tipeAnakDefault = (parent) => {
-    const urut = [...levels].sort((a, b) => a.ordinal_level - b.ordinal_level);
-    const next = urut.find((l) => l.ordinal_level > ordinalLevel[parent.tipe]);
-    return next?.kode_baku || parent.tipe;
-  };
 
   const toggle = (id) => setBuka((b) => ({ ...b, [id]: !b[id] }));
 

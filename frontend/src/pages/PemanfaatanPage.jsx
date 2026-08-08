@@ -104,6 +104,9 @@ export default function PemanfaatanPage({ user, onBack }) {
 
   const fmtRp = (n) => `Rp${Math.round(Number(n || 0)).toLocaleString("id-ID")}`;
   const setField = (k, v) => setForm((f) => ({ ...f, data: { ...f.data, [k]: v } }));
+  // Dideklarasikan di sini — bukan bersama labelStatus di bawah — karena
+  // sudah dipakai hapus(); jangan turunkan kembali.
+  const labelBentuk = data?.label_bentuk || {};
 
   const buka = (p = null) => {
     setCari(""); setHasilCari([]);
@@ -223,7 +226,6 @@ export default function PemanfaatanPage({ user, onBack }) {
   };
 
   const labelStatus = data?.label_status || {};
-  const labelBentuk = data?.label_bentuk || {};
   const r = data?.ringkasan;
 
   return (

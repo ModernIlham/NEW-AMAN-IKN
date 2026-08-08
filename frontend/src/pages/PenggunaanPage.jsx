@@ -146,6 +146,15 @@ export default function PenggunaanPage({ user, onBack }) {
       .catch(() => toast.error("Gagal memuat register PSP"));
   }, []);
 
+  // Dikumpulkan bersama loader lain, bukan 350 baris di bawah: efek mount di
+  // bawah memanggilnya, dan sebuah `const` yang dipakai sebelum barisnya
+  // dieksekusi adalah TDZ yang menunggu giliran.
+  const loadProses = useCallback(() => {
+    axios.get(`${API}/penggunaan/proses`)
+      .then((r) => setProses(r.data))
+      .catch(() => {});
+  }, []);
+
   // Referensi Master Satker — saran pihak asal/tujuan proses penggunaan (W7)
   const [satkerList, setSatkerList] = useState([]);
   useEffect(() => {
@@ -273,6 +282,19 @@ export default function PenggunaanPage({ user, onBack }) {
       ? { id, nama: pj.nama || "", nip: pj.nip || "", jabatan: pj.jabatan || "", atas_nama_kpb: anKpb }
       : { id: "", nama: "", nip: "", jabatan: "", atas_nama_kpb: false } };
   });
+
+  const openDetail = async (p) => {
+    setDetail({ pemegang: p, rows: [], loading: true });
+    try {
+      const r = await axios.get(`${API}/penggunaan/pemegang/aset`, {
+        params: { nama: p.nama, nip: p.nip || "" },
+      });
+      setDetail({ pemegang: p, rows: r.data?.items || [], loading: false });
+    } catch {
+      toast.error("Gagal memuat aset pemegang");
+      setDetail(null);
+    }
+  };
 
   const kirimBast = async () => {
     const f = formBast;
@@ -495,25 +517,6 @@ export default function PenggunaanPage({ user, onBack }) {
     searchTimer.current = setTimeout(() => load(1, v), 350);
   };
   useEffect(() => () => { if (searchTimer.current) clearTimeout(searchTimer.current); }, []);
-
-  const openDetail = async (p) => {
-    setDetail({ pemegang: p, rows: [], loading: true });
-    try {
-      const r = await axios.get(`${API}/penggunaan/pemegang/aset`, {
-        params: { nama: p.nama, nip: p.nip || "" },
-      });
-      setDetail({ pemegang: p, rows: r.data?.items || [], loading: false });
-    } catch {
-      toast.error("Gagal memuat aset pemegang");
-      setDetail(null);
-    }
-  };
-
-  const loadProses = useCallback(() => {
-    axios.get(`${API}/penggunaan/proses`)
-      .then((r) => setProses(r.data))
-      .catch(() => {});
-  }, []);
 
   const simpanProses = async () => {
     if (!formProses) return;

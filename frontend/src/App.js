@@ -238,6 +238,25 @@ function App() {
     setLoading(false);
   }, []);
 
+  const [showInfo, setShowInfo] = useState(false);
+  // "Rumah modul" Siklus BMN: login mendarat di Beranda Modul; masuk ke
+  // Inventarisasi menandai pilihan per-tab (sessionStorage) sehingga reload
+  // kembali ke modul yang sama, tab/login baru kembali ke beranda.
+  const [moduleChosen, setModuleChosen] = useState(() => sessionStorage.getItem('aman_module') === 'inventarisasi');
+  const enterInventarisasi = useCallback(() => {
+    sessionStorage.setItem('aman_module', 'inventarisasi');
+    setModuleChosen(true);
+  }, []);
+  const showModuleHome = useCallback(() => {
+    sessionStorage.removeItem('aman_module');
+    setModuleChosen(false);
+  }, []);
+
+  // handleLogin & handleLogout DIDEKLARASIKAN SETELAH `moduleChosen` karena
+  // keduanya memanggil `setModuleChosen`. Jangan pindahkan ke atas: `const`
+  // punya temporal dead zone, jadi begitu pemanggilannya bergeser ke badan
+  // render atau ke larik dependensi sebuah hook, ia langsung melempar
+  // "Cannot access 'setModuleChosen' before initialization" di peramban.
   const handleLogin = (userData, token, mediaToken) => {
     // A DIFFERENT account logging in on this device must never see the
     // previous user's cached offline snapshot — wipe it before the new
@@ -289,19 +308,6 @@ function App() {
     forceLogout();
   };
 
-  const [showInfo, setShowInfo] = useState(false);
-  // "Rumah modul" Siklus BMN: login mendarat di Beranda Modul; masuk ke
-  // Inventarisasi menandai pilihan per-tab (sessionStorage) sehingga reload
-  // kembali ke modul yang sama, tab/login baru kembali ke beranda.
-  const [moduleChosen, setModuleChosen] = useState(() => sessionStorage.getItem('aman_module') === 'inventarisasi');
-  const enterInventarisasi = useCallback(() => {
-    sessionStorage.setItem('aman_module', 'inventarisasi');
-    setModuleChosen(true);
-  }, []);
-  const showModuleHome = useCallback(() => {
-    sessionStorage.removeItem('aman_module');
-    setModuleChosen(false);
-  }, []);
   // Halaman Referensi Kodefikasi (perkakas Penatausahaan dari Beranda Modul)
   const [showKodefikasi, setShowKodefikasi] = useState(false);
   const [showPejabat, setShowPejabat] = useState(false);

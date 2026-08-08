@@ -233,6 +233,8 @@ export default function TtdPermintaanPage({ user, onBack }) {
     }
   };
 
+  const [linkUlang, setLinkUlang] = useState({}); // {signer_id: link penuh}
+
   const bukaDetail = async (it) => {
     setLinkUlang({});
     try {
@@ -244,7 +246,6 @@ export default function TtdPermintaanPage({ user, onBack }) {
   };
 
   // Terbitkan ULANG link seorang penanda tangan (link lama otomatis mati).
-  const [linkUlang, setLinkUlang] = useState({}); // {signer_id: link penuh}
   const terbitkanLink = async (s) => {
     try {
       const r = await axios.post(`${API}/ttd/permintaan/${detail.id}/link/${s.signer_id}`);
