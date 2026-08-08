@@ -67,6 +67,89 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#808] Gelombang 2.3 — satu ponsel di sinyal buruk berhenti bisa menahan seluruh bus — 2026-08-08
+
+Butir C24 peta jalan `docs/TINJAUAN-SISTEM-2026-08.md`.
+
+**Gejalanya.** `broadcast_local` mengirim **serial tanpa batas waktu**:
+
+```python
+for ws in list(self.active[activity_id].keys()):
+    await ws.send_json(message)
+```
+
+Klien dengan koneksi **setengah mati** — soketnya belum terputus, tetapi buffer
+kirimnya tak lagi terkuras — membuat satu `await` itu menggantung tanpa batas.
+Bukan hipotesis: itu profil normal ponsel lapangan yang masuk basement atau
+kehilangan sinyal di tengah kegiatan.
+
+**Kenapa ini cacat, bukan risiko skala.** Yang menentukan bukan berapa lama
+satu klien lambat, melainkan **siapa yang ikut menunggu**:
+
+- `_on_remote_event` dipanggil dari **satu** loop tail `event_bus`. Loop itu
+  berhenti mengonsumsi, jadi **seluruh** notifikasi lintas-worker di worker ini
+  berhenti — termasuk untuk kegiatan yang tak ada hubungannya.
+- `notify_asset_change` di-`await` inline pada enam jalur tulis aset. Penyimpan
+  lain di kegiatan yang sama ikut menunggu ponsel itu.
+
+Satu klien lambat sudah cukup. Tidak perlu beban, tidak perlu banyak petugas.
+
+**Perbaikannya.** Kirim paralel, masing-masing berpagar waktu:
+
+```python
+BATAS_KIRIM_DETIK = 5
+
+async def _kirim(ws):
+    await asyncio.wait_for(ws.send_json(message), timeout=self.BATAS_KIRIM_DETIK)
+
+hasil = await asyncio.gather(*(_kirim(ws) for ws in sasaran), return_exceptions=True)
+mati = [ws for ws, r in zip(sasaran, hasil) if isinstance(r, Exception)]
+```
+
+Lima detik jauh di atas latensi WS yang wajar (bahkan pada EDGE), jadi klien
+yang sebenarnya sehat hampir mustahil terputus — tetapi cukup pendek untuk
+mencegah satu soket setengah-mati menahan bus.
+
+**Soket mati DITUTUP, bukan sekadar di-`pop`.** Ini bagian yang mudah
+terlewat. Mengeluarkannya dari `self.active` saja meninggalkan koneksi tetap
+hidup beserta buffernya yang penuh: memorinya tertahan di proses, dan klien tak
+pernah menerima sinyal untuk menyambung ulang — ia diam mengira masih
+tersambung. `await ws.close(code=1011)` dijalankan di dalam `try/except` sendiri,
+sebab soket yang transport-nya sudah lenyap bisa membuat `close()` ikut melempar
+— dan kalau itu merambat, satu soket mati kembali menjatuhkan seluruh siaran,
+persis cacat yang sedang ditutup, cuma pindah baris.
+
+**Yang TIDAK diubah.** Dua `send_json` lain di berkas ini (`server_ping` dan
+balasan `pong`) sengaja dibiarkan: keduanya milik satu koneksi di task-nya
+sendiri, jadi hang di sana hanya menyangkut klien itu — bukan fan-out.
+
+### Uji
+
+`backend/tests/unit/test_broadcast_ws_berbatas_waktu.py` — 20 uji dengan soket
+tiruan yang bisa disuruh menggantung 3600 detik, melempar seketika, atau membuat
+`close()`-nya sendiri gagal.
+
+Empat sifat dikunci terpisah karena masing-masing bisa hilang sendiri-sendiri:
+**ada batas waktu**, **kirimnya paralel** (empat klien @0,12 dtk harus selesai
+≈0,12 dtk, bukan ≈0,48 dtk), **soket sehat tetap menerima**, dan **soket mati
+ditutup**. Satu uji lagi menagih bahwa pembersihannya **permanen** — bila soket
+mati dibiarkan di `active`, siaran berikutnya membayar timeout yang sama lagi,
+selamanya.
+
+Delapan mutasi diuji, delapan terbunuh (loop serial, tanpa `wait_for`, tanpa
+`return_exceptions=True`, tanpa `close()`, tanpa `pop`, `close` tanpa pelindung,
+timeout di-hardcode, `exclude_ws`/`exclude_user_id` diabaikan).
+
+> **Catatan uji yang berlaku umum.** Setiap pemanggilan dibungkus
+> `asyncio.wait_for(..., timeout=5)` **di sisi uji**. Tanpa itu, regresi
+> "batas waktunya hilang" tidak membuat uji **gagal** — ia membuat uji
+> **menggantung**, dan job CI mati kehabisan waktu berjam-jam kemudian tanpa
+> menyebut penyebabnya. Terbukti saat mutasi: dua mutasi selesai dalam 36 dtk
+> sebagai kegagalan yang berbunyi, bukan sebagai hang. Uji yang menaruh
+> perilaku "menggantung" di dalamnya wajib memasang pagarnya sendiri.
+
+---
+
 ## [#807] Gelombang 2.1 — 105 indeks berhenti bergantung pada satu baris yang tak boleh gagal — 2026-08-08
 
 Butir pertama Gelombang 2 (*cegah sistem mati*) peta jalan

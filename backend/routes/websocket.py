@@ -131,23 +131,62 @@ class ConnectionManager:
             "count": len(users)
         })
 
+    # Batas kirim per soket. 5 detik jauh di atas latensi WS yang wajar (bahkan
+    # pada EDGE), sehingga hampir mustahil memutus klien yang sebenarnya sehat —
+    # tetapi cukup pendek untuk mencegah satu soket setengah-mati menahan
+    # seluruh bus. Angkanya sengaja dijadikan konstanta agar bisa dibaca uji.
+    BATAS_KIRIM_DETIK = 5
+
     async def broadcast_local(self, activity_id: str, message: dict, exclude_ws: WebSocket = None, exclude_user_id: str = None):
-        """Broadcast to LOCAL WebSocket connections only (this worker)."""
+        """Broadcast to LOCAL WebSocket connections only (this worker).
+
+        PARALEL + BERBATAS WAKTU (temuan C24). Sebelumnya loop ini `await
+        ws.send_json(...)` satu per satu tanpa `wait_for`. Satu klien dengan
+        koneksi SETENGAH MATI — ponsel lapangan di area sinyal buruk, yang
+        soketnya belum terputus tetapi buffernya tak lagi terkuras — cukup untuk
+        menggantung seluruh loop.
+
+        Akibatnya berbeda tergantung pemanggilnya, dan keduanya buruk:
+          • `_on_remote_event` dijalankan dari SATU loop tail `event_bus`. Loop
+            itu berhenti mengonsumsi, sehingga SELURUH notifikasi lintas-worker
+            tertahan di worker ini — bukan hanya untuk kegiatan yang bermasalah.
+          • `notify_asset_change` di-await inline pada enam jalur tulis aset.
+            Penyimpan lain di kegiatan yang sama ikut menunggu ponsel itu.
+
+        Ini cacat, bukan risiko skala: satu klien lambat sudah cukup.
+
+        Soket yang gagal/kehabisan waktu DITUTUP, bukan sekadar di-`pop`.
+        Mengeluarkannya dari `self.active` saja meninggalkan koneksi hidup
+        beserta buffernya yang penuh — memori tertahan dan klien tak pernah
+        tahu ia harus menyambung ulang.
+        """
         if activity_id not in self.active:
             return
-        dead = []
-        items = list(self.active[activity_id].items())
-        for ws, info in items:
-            if ws == exclude_ws:
-                continue
-            if exclude_user_id and info.get("user_id") == exclude_user_id:
-                continue
+        sasaran = [
+            ws for ws, info in list(self.active[activity_id].items())
+            if ws != exclude_ws
+            and not (exclude_user_id and info.get("user_id") == exclude_user_id)
+        ]
+        if not sasaran:
+            return
+
+        async def _kirim(ws):
+            await asyncio.wait_for(ws.send_json(message),
+                                   timeout=self.BATAS_KIRIM_DETIK)
+
+        hasil = await asyncio.gather(*(_kirim(ws) for ws in sasaran),
+                                     return_exceptions=True)
+        mati = [ws for ws, r in zip(sasaran, hasil) if isinstance(r, Exception)]
+        for ws in mati:
+            if activity_id in self.active:
+                self.active[activity_id].pop(ws, None)
             try:
-                await ws.send_json(message)
+                await ws.close(code=1011)
             except Exception:
-                dead.append(ws)
-        for ws in dead:
-            self.active[activity_id].pop(ws, None)
+                pass   # sudah tertutup / transport hilang — tak ada yang perlu dibereskan
+        if mati:
+            logger.info("broadcast_local: %d soket ditutup (gagal/timeout %ds)",
+                        len(mati), self.BATAS_KIRIM_DETIK)
 
 
 manager = ConnectionManager()
