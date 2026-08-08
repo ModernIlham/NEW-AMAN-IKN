@@ -3890,9 +3890,17 @@ async def generate_rekonsiliasi_xlsx(request: Request, _user: dict = Depends(req
             uraian_map[k["kode"]] = k["uraian"]
     amb = await ambang_kapitalisasi()
     rows, total_aset = build_dbkp_rows(assets, uraian_map, ambang=amb)
+    # SCOPE SATKER (C3 tinjauan 2026-08). Filternya dulu KOSONG — padahal
+    # aset empat baris di atas sudah di-scope, dan tiga kueri persediaan lain
+    # di repo ini (reports.py:2691, :3591, lbp.py:222) memang memakai
+    # scope_query_field_satker. Akibatnya berkas rekonsiliasi SAKTI resmi
+    # menjumlahkan persediaan SELURUH satker: nilainya lebih saji dan tak akan
+    # pernah tie-out dengan SAKTI satker itu, sekaligus data satker lain
+    # terbaca oleh yang tak berhak — endpoint ini menerima token kueri.
     persediaan = await db.persediaan.find(
-        {}, {"_id": 0, "kode_barang": 1, "nup": 1, "nama_barang": 1,
-             "satuan": 1, "stok": 1, "batches": 1},
+        scope_query_field_satker(_user),
+        {"_id": 0, "kode_barang": 1, "nup": 1, "nama_barang": 1,
+         "satuan": 1, "stok": 1, "batches": 1},
     ).to_list(100000)
     p_nilai = sum(nilai_persediaan_dari_batches(it.get("batches")) for it in persediaan)
     posisi = posisi_neraca(rows, total_aset, len(persediaan), p_nilai)

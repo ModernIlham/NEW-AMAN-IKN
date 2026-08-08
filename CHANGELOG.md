@@ -67,6 +67,61 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#804] Gelombang 1.2 — dua lubang simetris pada hapus massal, dan satu berkas resmi yang tak bisa di-tie-out — 2026-08-08
+
+Lanjutan Gelombang 1 peta jalan `docs/TINJAUAN-SISTEM-2026-08.md`, sisi backend.
+
+**C18 + C19 · Dua pintu, masing-masing separuh benar.**
+Repo ini punya DUA jalur yang menghapus seluruh aset sebuah kegiatan, dan
+tiap-tiap jalur mengerjakan separuh dari pekerjaan yang benar:
+
+| | cascade blob GridFS | jejak audit |
+|---|---|---|
+| `exports.py` hapus massal aset | ❌ tak ada sama sekali | ✅ ada |
+| `activities.py` hapus kegiatan | ✅ benar | ❌ `grep log_audit` → nol hasil |
+
+Blob yatim itu **permanen**, bukan sekadar boros: id blob hanya hidup di dokumen
+asetnya, jadi begitu dokumennya terhapus id-nya ikut lenyap — menghapus
+kegiatannya belakangan pun tak menolong karena cascade di sana beriterasi atas
+kumpulan aset yang sudah kosong. Byte-nya tetap memakan disk VPS selamanya
+tanpa ada cara menemukannya lagi.
+
+Jejak audit yang absen membutakan **dua** pembaca yang menurunkan datanya dari
+sana: feed delta luring `routes/assets.py` (klien lapangan tak diberi sinyal
+apa pun, antrean simpannya berakhir 404) dan tombstone LBKP `routes/lbp.py`
+(nilai aset yang lenyap tak pernah muncul sebagai baris "mutasi kurang" —
+saldo periode turun tanpa penjelas, pemeriksa tak bisa merekonstruksinya).
+
+Perbaikannya: blok cascade diangkat jadi helper bersama
+`shared_utils.cascade_hapus_blob_aset()` dan dipanggil dari **kedua** jalur;
+satu `log_audit("bulk_delete", …)` ditambahkan di `activities.py`, ditulis
+**sebelum** `delete_many` dengan jumlah aset yang dihitung sebelum itu (kalau
+sesudah, isinya 0 dan jejaknya berbohong). Sengaja satu baris per kegiatan,
+bukan per aset — pada kegiatan 5.000 aset itu berarti 5.000 dokumen audit
+dalam satu request; ukur dulu.
+
+**C3 · Berkas rekonsiliasi SAKTI menjumlahkan persediaan seluruh satker.**
+`generate_rekonsiliasi_xlsx` memanggil `db.persediaan.find({}, …)` dengan
+filter kosong — padahal aset **empat baris di atasnya** sudah di-scope, dan
+tiga kueri persediaan lain di repo (`reports.py:2691`, `:3591`, `lbp.py:222`)
+semuanya memakai `scope_query_field_satker`. Nilai persediaan pada berkas
+resmi jadi lebih saji dan tak akan pernah tie-out dengan SAKTI satker itu;
+sekaligus data satker lain terbaca oleh yang tak berhak — endpoint ini
+menerima token kueri.
+
+**Uji.** `test_hapus_massal_cascade.py` (6) menghitung `fs.files`
+sebelum/sesudah di kedua pintu, memastikan cascade berpagar `activity_id`
+(kegiatan tetangga tak ikut tersapu), dan mengunci urutan hitung → audit →
+hapus. `test_rekonsiliasi_persediaan_satker.py` (5) menguji dua satker + jalur
+super-admin, lalu **menyapu seluruh backend**: tidak boleh ada lagi
+`db.persediaan.find/aggregate/count_documents` berfilter kosong di mana pun —
+yang membuat C3 bertahan lama justru karena ia terlihat persis seperti
+tetangganya yang benar. Tiga mutasi diuji (filter kosong dikembalikan, cascade
+dicabut dari `exports.py`, audit dipindah ke bawah `delete_many`); semuanya
+menjatuhkan uji. **2.194 → 2.205 uji backend.**
+
+---
+
 ## [#803] Gelombang 1.1 — tiga jalur di mana pekerjaan lapangan hilang diam-diam — 2026-08-08
 
 Tiga temuan pertama peta jalan `docs/TINJAUAN-SISTEM-2026-08.md` (Gelombang 1:

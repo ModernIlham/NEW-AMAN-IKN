@@ -31,6 +31,7 @@ from routes.assets import build_asset_search_query
 from db import db
 from shared_utils import (limiter, invalidate_asset_cache, log_audit,
                           get_photo_from_gridfs, kode_satker_user,
+                          cascade_hapus_blob_aset,
                           pastikan_akses_aset,
                           pastikan_akses_kegiatan_id, scope_query_aset)
 
@@ -311,14 +312,28 @@ async def bulk_delete_assets(request: Request, activity_id: str, _admin: dict = 
                 jadwalkan_hapus("assets", _a["id"])
     except Exception:
         pass
+
+    # Cascade blob GridFS — SEBELUM delete_many (C18 tinjauan 2026-08).
+    #
+    # Jalur ini dulu melewatkannya sama sekali: hanya Meili yang dibersihkan,
+    # sedangkan foto lapangan, berkas BAST, dan lampiran checklist ditinggal
+    # yatim PERMANEN. Permanen karena id blob-nya hanya hidup di dokumen aset;
+    # begitu dokumennya terhapus, menghapus kegiatannya pun tak menolong —
+    # cascade di sana beriterasi atas kumpulan aset yang sudah kosong.
+    # Penyapu berkala hanya menyasar artefak ekspor, bukan blob ini.
+    n_foto, n_dok = await cascade_hapus_blob_aset(activity_id)
+
     result = await db.assets.delete_many({"activity_id": activity_id})
 
-    logger.info(f"Bulk deleted {result.deleted_count} assets for activity {activity_id}")
+    logger.info(f"Bulk deleted {result.deleted_count} assets for activity {activity_id} "
+                f"(freed {n_foto} photo + {n_dok} doc GridFS blobs)")
     invalidate_asset_cache()
     # Pelaku dari identitas TERAUTENTIKASI (bukan header X-Audit-User yang
     # bisa dipalsukan) — selaras konvensi hardening repo.
     audit_user = _admin.get("name") or _admin.get("username") or "admin"
-    await log_audit("bulk_delete", activity_id, "", "", "", audit_user, detail=f"Hapus massal {result.deleted_count} aset")
+    await log_audit("bulk_delete", activity_id, "", "", "", audit_user,
+                    detail=(f"Hapus massal {result.deleted_count} aset "
+                            f"({n_foto} foto + {n_dok} dokumen GridFS dibebaskan)"))
     
     return {
         "message": f"Berhasil menghapus {result.deleted_count} aset dari kegiatan ini",
