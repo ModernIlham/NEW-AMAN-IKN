@@ -163,3 +163,35 @@ class TestHealthDeep:
 
     def test_ambangnya_disebut_eksplisit(self):
         assert "15.0" in self.SRC or "15%" in self.SRC
+
+    def test_disk_PERINGATAN_tidak_menjatuhkan_status(self):
+        """Koreksi atas versi pertama C4b.
+
+        Disk 15% dulu menjatuhkan `ok` menjadi 503 — dan itu keliru bukan
+        karena ambangnya salah, melainkan karena tak memperhitungkan SIAPA
+        pembaca 503-nya. `scripts/deploy_vps.sh` memakai endpoint ini sebagai
+        gerbang deploy; 503 memanggil `pulihkan`, yang `git reset --hard` ke
+        commit sebelumnya. VPS berisi 86% — bukan penuh, aplikasi melayani
+        normal — akan me-ROLLBACK setiap merge ke main, berulang selamanya,
+        termasuk merge yang membawa perbaikannya sendiri.
+        """
+        i = self.SRC.index('checks["disk"]')
+        blok = self.SRC[i:i + 900]
+        assert "if disk_kritis:" in blok, blok
+        # `disk_ok` (ambang peringatan 15%) TIDAK boleh menjatuhkan gerbang.
+        assert "if not disk_ok:\n            ok = False" not in self.SRC
+
+    def test_ambang_kritis_ABSOLUT_bukan_rasio(self):
+        # Yang sebenarnya rusak juga absolut: `yarn build` dan `pip install`
+        # butuh sekian ratus MB untuk selesai. Persentase salah di kedua ujung
+        # — 3% dari 1 TB masih 30 GB (sehat), 15% dari 20 GB hanya 3 GB (mepet).
+        assert "KRITIS_MB" in self.SRC
+        assert "bebas_mb < KRITIS_MB" in self.SRC
+
+    def test_dua_ambang_dilaporkan_terpisah(self):
+        # Monitor tetap melihat peringatan 15%; gerbang deploy hanya melihat
+        # yang kritis. Perlakuan yang sama dengan checks["indexes"].
+        i = self.SRC.index('checks["disk"] = {')
+        blok = self.SRC[i:i + 400]
+        assert '"ok": disk_ok' in blok
+        assert '"kritis": disk_kritis' in blok

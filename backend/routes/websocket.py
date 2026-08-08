@@ -177,13 +177,41 @@ class ConnectionManager:
         hasil = await asyncio.gather(*(_kirim(ws) for ws in sasaran),
                                      return_exceptions=True)
         mati = [ws for ws, r in zip(sasaran, hasil) if isinstance(r, Exception)]
+
+        # Penutupannya JUGA sejajar dan berbatas waktu. Versi pertama menutup
+        # berurutan tanpa `wait_for`, dan itu memindahkan cacatnya, bukan
+        # menutupnya: `WebSocket.close()` di uvicorn diteruskan ke protokol
+        # `websockets`, yang MENUNGGU handshake penutupan lalu teardown TCP —
+        # kelasnya sendiri mendokumentasikan "close() completes in at most
+        # 4 * close_timeout for servers", dan uvicorn tak meneruskan
+        # close_timeout sehingga berlaku default 10 detik.
+        #
+        # Yang menentukan: soket yang ditutup di sini persis soket yang
+        # `send_json`-nya baru saja kehabisan waktu — artinya buffer
+        # transportnya memang TIDAK terkuras, keadaan terburuk bagi penutupan
+        # yang harus `drain()` lebih dulu. Diukur dengan soket tiruan: 3 soket
+        # gantung-kirim + tutup 2 dtk membuat `broadcast_local` memakan 6,06
+        # detik meski batas KIRIM-nya dihormati. Di produksi: 5 dtk lalu
+        # 3 × (10–40 dtk), berlipat dengan jumlah soket mati.
         for ws in mati:
             if activity_id in self.active:
                 self.active[activity_id].pop(ws, None)
+
+        async def _tutup(ws):
+            # `websockets` menyarankan tak membatalkan close(), dan di sini itu
+            # aman: uvicorn sudah mengantre {'type':'websocket.disconnect'}
+            # untuk aplikasi SEBELUM menunggu handshake, jadi handler soketnya
+            # tetap keluar lewat WebSocketDisconnect dan `finally`-nya
+            # membereskan heartbeat; transportnya ditutup di latar.
             try:
-                await ws.close(code=1011)
+                await asyncio.wait_for(ws.close(code=1011),
+                                       timeout=self.BATAS_KIRIM_DETIK)
             except Exception:
-                pass   # sudah tertutup / transport hilang — tak ada yang perlu dibereskan
+                pass   # sudah tertutup / transport hilang — tak perlu dibereskan
+
+        if mati:
+            await asyncio.gather(*(_tutup(ws) for ws in mati),
+                                 return_exceptions=True)
         if mati:
             logger.info("broadcast_local: %d soket ditutup (gagal/timeout %ds)",
                         len(mati), self.BATAS_KIRIM_DETIK)

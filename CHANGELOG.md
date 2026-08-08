@@ -67,6 +67,76 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#814] Tinjauan atas Gelombang 2 sendiri — dua cacat yang saya kirim, ditemukan dan ditutup — 2026-08-08
+
+Tinjauan adversarial berlapis atas PR #799–#805 (empat berkas kode, tiga lensa,
+setiap dugaan diverifikasi ulang oleh pemeriksa yang tugasnya **membantah**).
+Sebelas dugaan diperiksa; dua yang berkeparahan tinggi bertahan, dan keduanya
+ada di kode yang baru saja saya kirim sendiri.
+
+### 1. Gerbang deploy me-rollback setiap merge saat disk 86% (dari #799)
+
+C4b membuat disk < 15% bebas menjatuhkan `/api/health/deep` ke **503**.
+Ambangnya masuk akal. Yang tidak diperhitungkan adalah **siapa pembaca 503-nya**:
+
+```
+scripts/deploy_vps.sh  →  poll /api/health/deep  →  503  →  pulihkan()
+                                                            └→ git reset --hard $PREV
+```
+
+Jadi VPS berisi 86% — **bukan penuh**, aplikasi melayani normal, Mongo & GridFS
+sehat — akan me-**rollback setiap merge ke main**, berulang selamanya, termasuk
+merge yang membawa perbaikannya sendiri.
+
+**Perbaikan:** dua ambang, bukan satu. Peringatan 15% tetap **dilaporkan**
+(itu bagian yang berharga, dan itulah yang dipantau) tetapi tidak menjatuhkan
+gerbang — perlakuan yang sama dengan `checks["indexes"]` yang sudah dipilih di
+PR yang sama. Yang menjatuhkan gerbang kini ambang **absolut**: `< 1024 MB`.
+
+Absolut, bukan rasio, karena yang sebenarnya rusak juga absolut: `yarn build`
+dan `pip install` butuh sekian ratus MB untuk selesai. Persentase salah di
+kedua ujung — 3% dari 1 TB masih 30 GB (sehat), 15% dari 20 GB hanya 3 GB
+(mepet).
+
+### 2. Cacat C24 pindah baris, tidak tertutup (dari #800)
+
+Batas waktu **kirim** dipasang; penutupan soket mati tetap **berurutan tanpa
+batas waktu**. Dan `close()` bisa jauh lebih lama daripada `send`:
+`WebSocket.close()` di uvicorn diteruskan ke protokol `websockets`, yang
+menunggu handshake penutupan lalu teardown TCP. Kelasnya sendiri
+mendokumentasikan *"close() completes in at most 4 × close_timeout for
+servers"*, dan uvicorn **tidak** meneruskan `close_timeout` → berlaku default
+10 detik.
+
+Yang menentukan: soket yang ditutup di sini **persis** soket yang `send_json`-nya
+baru saja kehabisan waktu — artinya buffernya memang tidak terkuras, keadaan
+terburuk bagi penutupan yang harus `drain()` lebih dulu.
+
+**Terukur:** 3 soket gantung-kirim + tutup 2 detik → `broadcast_local` memakan
+**6,06 detik** meski `BATAS_KIRIM_DETIK = 0,05`. Di produksi: 5 detik lalu
+3 × (10–40 detik).
+
+**Perbaikan:** penutupan juga `gather` + `wait_for`, memakai konstanta yang sudah
+ada.
+
+### Titik buta ujinya sendiri
+
+`SoketPalsu.close()` kembali **seketika**, jadi seluruh uji "soket ditutup"
+lolos tanpa pernah menguji **lamanya**. Sebelas uji hijau atas cacat yang nyata.
+
+Ditambah `tutup_gantung=True` dan tiga uji baru — termasuk satu yang
+membedakan penutupan sejajar dari berurutan (tiga close @0,12 dtk: sejajar
+≈0,12 dtk, berurutan ≈0,36 dtk).
+
+Empat mutasi diuji, empat terbunuh.
+
+> **Pelajaran yang berlaku umum:** memasang batas waktu di satu `await` tidak
+> membatasi sebuah fungsi. Kalau ada `await` kedua di jalur pembersihannya, ia
+> mewarisi seluruh masalah yang baru saja diperbaiki — dan uji yang memakai
+> tiruan seketika tak akan pernah melihatnya.
+
+---
+
 ## [#813] Gelombang 2.9 — penjadwal latar berhenti sebelum koneksinya dicabut — 2026-08-08
 
 Butir U22 peta jalan `docs/TINJAUAN-SISTEM-2026-08.md`.
