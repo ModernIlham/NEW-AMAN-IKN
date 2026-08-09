@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, ArrowLeftRight, Plus, Search, Trash2, X, Coins,
-  TicketCheck, AlertTriangle, Paperclip, Upload, Download,
+  TicketCheck, AlertTriangle, Paperclip, Upload, Download, FileDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -277,6 +277,17 @@ export default function PemindahtangananPage({ user, onBack }) {
                           className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted min-h-0 min-w-0"
                           data-testid={`pemindahtanganan-lampiran-${u.id}`}>
                           <Paperclip className="w-3 h-3" />
+                        </button>
+                        <button type="button"
+                          aria-label="Nota Dinas Usulan (PDF ber-nomor)"
+                          title="Nota Dinas Usulan + Daftar Barang yang Diusulkan (PDF, nomor booking otomatis sekali)"
+                          onClick={() => downloadFileWithProgress(
+                            `${API}/pemindahtanganan/${u.id}/nota-dinas-pdf`,
+                            `Nota_Dinas_Usulan_${u.id.slice(0, 8)}.pdf`,
+                            { label: "Nota Dinas Usulan Pemindahtanganan" }).catch(() => {})}
+                          className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted min-h-0 min-w-0"
+                          data-testid={`pemindahtanganan-nota-${u.id}`}>
+                          <FileDown className="w-3 h-3" />
                         </button>
                       </div>
                       {(u.nomor_persetujuan || u.nomor_dokumen || u.ntpn || u.nomor_sk_penghapusan) && (

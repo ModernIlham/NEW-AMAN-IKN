@@ -187,6 +187,15 @@ export default function PenghapusanPage({ user, onBack }) {
             data-testid="penghapusan-export">
             <Download className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">CSV</span>
           </Button>
+          <Button size="sm" variant="outline" className="flex-shrink-0"
+            title="Nota Dinas Usulan Penghapusan — semua tiket berstatus diusulkan, nomor booking otomatis"
+            onClick={() => downloadFileWithProgress(
+              `${API}/penghapusan/nota-dinas-pdf?booking=1`,
+              "Nota_Dinas_Usulan_Penghapusan.pdf",
+              { label: "Nota Dinas Usulan Penghapusan" }).catch(() => {})}
+            data-testid="penghapusan-nota-dinas">
+            <Download className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Nota Dinas</span>
+          </Button>
           <BookingNomorButton modul="penghapusan" jenisNaskah="Surat Keputusan" referensi="SK Penghapusan" />
         </div>
       </header>

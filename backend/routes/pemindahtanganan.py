@@ -4,6 +4,7 @@ PMK 111/PMK.06/2016 jo. 165/PMK.06/2021 (pustaka §7): usulan multi-aset →
 disetujui → dilaksanakan → selesai (SK Penghapusan). Dokumen wajib per
 tahap mengunci transisi; peringatan tenggat lelang 6 bulan.
 """
+import asyncio
 import uuid
 from datetime import datetime, timezone
 
@@ -480,3 +481,114 @@ async def hapus_lampiran_pt(usulan_id: str, file_id: str,
     if res.modified_count:
         await delete_document_from_gridfs(file_id)
     return {"ok": True, "file_id": file_id}
+
+
+@pemindahtanganan_router.get("/pemindahtanganan/{usulan_id}/nota-dinas-pdf")
+async def nota_dinas_pt(usulan_id: str, _user: dict = Depends(require_user)):
+    """Nota Dinas Usulan Pemindahtanganan (ASET-DOK-1) — dokumen resmi yang
+    selama ini tidak ada: usulan ke Pengelola/KPKNL mensyaratkan daftar
+    barang (PMK 165/PMK.06/2021), tetapi register hanya keluar sebagai CSV.
+
+    Nomor dibooking otomatis ke buku agenda Persuratan SEKALI lalu disimpan
+    di register (`nomor_nota`) — unduh ulang memakai nomor yang sama, tidak
+    memboroskan deret. Gagal booking → nomor titik-titik (pola BAST).
+    """
+    from io import BytesIO
+
+    from fastapi.responses import StreamingResponse
+    from reportlab.lib.units import mm as rl_mm
+    from reportlab.platypus import Paragraph, Spacer, Table
+
+    from routes.reports import (
+        _fit_col_widths, _fmt_tanggal_id, _get_report_styles,
+        _kop_surat_flowables, _page_footer_factory, _signature_block,
+        _std_doc, _std_table_style, _title_block,
+    )
+    from shared_utils import blok_ttd_kpb, pengaturan_kop
+
+    u = await db.pemindahtanganan.find_one({"id": usulan_id}, {"_id": 0})
+    if not u:
+        raise HTTPException(status_code=404, detail="Usulan tidak ditemukan")
+    await pastikan_akses_dok_satker(_user, u)
+
+    now = datetime.now(timezone.utc).isoformat()
+    nomor = str(u.get("nomor_nota") or "")
+    if not nomor:
+        try:
+            from routes.persuratan import booking_nomor_otomatis
+            nomor, surat_id = await booking_nomor_otomatis(
+                _user, now[:10],
+                perihal=(f"Nota Dinas Usulan "
+                         f"{BENTUK_PEMINDAHTANGANAN.get(u.get('bentuk'), u.get('bentuk'))}"
+                         f" BMN — {u.get('pihak') or '-'}"),
+                tujuan="Pengelola Barang",
+                keterangan="booking otomatis dari nota dinas pemindahtanganan",
+                kode_satker=str(u.get("kode_satker") or ""),
+                jenis_naskah="Nota Dinas", referensi="USULAN-PEMINDAHTANGANAN")
+            await db.pemindahtanganan.update_one(
+                {"id": usulan_id},
+                {"$set": {"nomor_nota": nomor, "surat_id_nota": surat_id,
+                          "updated_at": now}})
+        except Exception:
+            nomor = ""
+
+    settings = await pengaturan_kop(kode_satker=u.get("kode_satker") or "")
+    buffer = BytesIO()
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    el = []
+    el.extend(_kop_surat_flowables(settings, doc.width))
+    label_bentuk = BENTUK_PEMINDAHTANGANAN.get(u.get("bentuk"), u.get("bentuk"))
+    el.extend(_title_block(
+        f"NOTA DINAS\nUSULAN {str(label_bentuk).upper()} BMN",
+        nomor=nomor or "......./......./........"))
+    aset = u.get("aset") or []
+    total = sum(parse_harga(a.get("harga")) for a in aset)
+    saran = _saran_untuk(u)
+    el.append(Paragraph(
+        (f"Bersama ini diusulkan {label_bentuk} Barang Milik Negara kepada "
+         f"<b>{u.get('pihak') or '-'}</b> sebanyak {len(aset)} unit dengan total "
+         f"nilai perolehan Rp{int(total):,} ".replace(",", ".")
+         + "sebagaimana Daftar Barang yang Diusulkan berikut, untuk dapat "
+           "diproses sesuai PP 27/2014 jo. PP 28/2020 dan PMK 165/PMK.06/2021. "
+         + (f"Jenjang persetujuan indikatif: {saran.get('jenjang', '-')}."
+            if saran.get("jenjang") else "")), st['Body']))
+    el.append(Spacer(1, 4 * rl_mm))
+    headers = ["No", "Kode Barang / NUP", "Nama Barang", "Kondisi",
+               "Nilai Perolehan (Rp)"]
+    widths = [26, 118, 190, 70, 92]
+    table_data = [[Paragraph(h, st['TableHeader']) for h in headers]]
+    for i, a in enumerate(aset):
+        table_data.append([
+            Paragraph(str(i + 1), st['Cell']),
+            Paragraph(f"{a.get('asset_code') or '-'} / {a.get('NUP') or '-'}", st['Cell']),
+            Paragraph(str(a.get("asset_name") or "-"), st['Cell']),
+            Paragraph(str(a.get("kondisi") or "-"), st['Cell']),
+            Paragraph(f"{int(parse_harga(a.get('harga'))):,}".replace(",", "."), st['Cell']),
+        ])
+    table_data.append([
+        Paragraph("", st['Cell']), Paragraph("", st['Cell']),
+        Paragraph("<b>TOTAL</b>", st['Cell']), Paragraph("", st['Cell']),
+        Paragraph(f"<b>{int(total):,}</b>".replace(",", "."), st['Cell'])])
+    tabel = Table(table_data, colWidths=_fit_col_widths(widths, doc.width),
+                  repeatRows=1)
+    tabel.setStyle(_std_table_style(zebra=True))
+    el.append(tabel)
+    if str(u.get("keterangan") or "").strip():
+        el.append(Spacer(1, 3 * rl_mm))
+        el.append(Paragraph(f"Keterangan: {u.get('keterangan')}", st['Meta']))
+    el.append(Paragraph(
+        f"Tanggal usulan: {_fmt_tanggal_id(str(u.get('created_at') or '')[:10]) or '-'}",
+        st['Meta']))
+    el.append(Spacer(1, 12 * rl_mm))
+    kpb = await blok_ttd_kpb(settings, per_iso=now[:10],
+                             kode_satker=u.get("kode_satker") or "")
+    el.extend(_signature_block([kpb], doc.width))
+    footer = _page_footer_factory("Nota Dinas Usulan Pemindahtanganan")
+    await asyncio.to_thread(doc.build, el, onFirstPage=footer,
+                            onLaterPages=footer)
+    buffer.seek(0)
+    return StreamingResponse(
+        buffer, media_type="application/pdf",
+        headers={"Content-Disposition":
+                 f'attachment; filename="Nota_Dinas_Usulan_{usulan_id[:8]}.pdf"'})
