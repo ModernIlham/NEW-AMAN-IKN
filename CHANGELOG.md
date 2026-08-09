@@ -67,6 +67,41 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#846] Usulan pemanfaatan berstatus + perpanjangan perjanjian (PMK 115/2020) — 2026-08-09
+
+Butir kedua defisit "permohonan yang belum ada register" (audit `[#841]`):
+modul Pemanfaatan selama ini hanya merekam perjanjian **jadi** — proses
+pengajuan ke Pengelola Barang (keputusan pemanfaatan ADA di Pengelola,
+PMK 115/PMK.06/2020) dan perpanjangan tidak pernah terekam; nomor
+persetujuan cukup diketik langsung tanpa jejak proses.
+
+- **Register usulan** (`pemanfaatan_utils.py` + `routes/pemanfaatan.py`,
+  koleksi `pemanfaatan_usulan`): tiket jenis **baru** / **perpanjangan**
+  dengan alur **draf → diajukan → disetujui → perjanjian**, ditolak/
+  dibatalkan terminal, diajukan boleh mundur ke draf (koreksi). Dokumen
+  wajib per tahap: nomor surat usulan (diajukan), nomor persetujuan
+  Pengelola (disetujui), nomor perjanjian (perjanjian); transisi ber-CAS
+  anti-balapan; ekspor CSV; hapus hanya draf; scope satker + log audit.
+- **Status `perjanjian` BEREFEK data**: jenis baru → dokumen register
+  perjanjian lahir otomatis (nomor persetujuan + perjanjian terbawa,
+  tertaut balik `usulan_id`); jenis perpanjangan → tanggal berakhir induk
+  maju + riwayat `perpanjangan[]` (berakhir lama/baru + nomor dokumen).
+- **Aturan perpanjangan PMK 115/2020** ditegakkan saat buka usulan:
+  **BGS/BSG ditolak** (tidak dapat diperpanjang — wasdal selama ini sudah
+  menandai tapi tak ada yang menegakkan); perjanjian **kedaluwarsa
+  ditolak** (harus pemanfaatan baru); **Pinjam Pakai wajib diajukan ≥60
+  hari (2 bulan) sebelum berakhir**; jangka tambahan ≤ maksimum bentuk;
+  satu induk satu usulan berjalan (409).
+- **UI PemanfaatanPage**: panel "Usulan Pemanfaatan & Perpanjangan"
+  (form usulan baru ber-pencarian objek BMN + daftar tiket ber-chip
+  status + tombol transisi admin lewat dialog transisi bersama + CSV);
+  tombol **Perpanjang** di tiap baris register (disembunyikan untuk
+  BGS/BSG); daftar fitur modul di `bmnModules.js` diperbarui.
+- Uji: 3 uji baru (`test_pemanfaatan_usulan.py`) — alur usulan baru
+  sampai perjanjian lahir, empat aturan perpanjangan, efek perpanjangan
+  pada induk. Disiplin uji-mutasi: larangan BGS/BSG dibisukan → merah;
+  efek `berakhir` dicabut → merah.
+
 ## [#845] Register TGR aset hilang + gerbang SK penghapusan jalur Tidak Ditemukan — 2026-08-09
 
 Butir pertama dari defisit "permohonan yang belum ada register sama sekali"

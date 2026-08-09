@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, Handshake, Plus, Search, Trash2, X, Pencil,
   CalendarClock, Coins, AlertTriangle, Paperclip, Upload, Download,
-  Recycle, ChevronUp, ChevronDown,
+  Recycle, ChevronUp, ChevronDown, FileSignature, CalendarPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { useTransitionDialog } from "@/components/ui/TransitionDialog";
 import StatKartu from "@/components/ui/StatKartu";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { authMediaUrl } from "@/lib/mediaUrl";
@@ -41,6 +42,27 @@ const FORM_KOSONG = {
 // Fasilitas transaksi (PMK 18/2024 / PMK 139/2022) hanya untuk KSP/BGS-BSG
 const BENTUK_DAPAT_FASILITAS = ["ksp", "bgs_bsg"];
 
+const WARNA_USULAN = {
+  draf: "bg-muted text-muted-foreground",
+  diajukan: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
+  disetujui: "bg-violet-500/15 text-violet-600 dark:text-violet-400",
+  ditolak: "bg-red-500/15 text-red-600 dark:text-red-400",
+  perjanjian: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  dibatalkan: "bg-muted text-muted-foreground",
+};
+
+// Label dokumen wajib per transisi usulan (selaras pemanfaatan_utils backend)
+const DOK_USULAN = {
+  diajukan: "Nomor surat usulan ke Pengelola Barang",
+  disetujui: "Nomor surat persetujuan Pengelola Barang",
+  perjanjian: "Nomor perjanjian",
+};
+
+const FORM_USULAN_KOSONG = {
+  bentuk: "sewa", mitra: "", jenis_mitra: "", mulai: "", berakhir: "",
+  nilai: "", kontribusi_tahunan: "", keterangan: "",
+};
+
 /**
  * Pemanfaatan — Fase 5 tahap awal: register perjanjian pemanfaatan BMN
  * (PMK 115/2020). Satker = pengusul & penatausaha; status Aktif menuntut
@@ -68,7 +90,15 @@ export default function PemanfaatanPage({ user, onBack }) {
   // Integrasi Penggunaan → Pemanfaatan: kandidat dari BMN idle
   const [idle, setIdle] = useState(null); // {kandidat, jumlah}
   const [idleBuka, setIdleBuka] = useState(false);
+  // Usulan pemanfaatan & perpanjangan (PMK 115/2020)
+  const [usulanData, setUsulanData] = useState(null);
+  const [formU, setFormU] = useState(null); // {data, aset, saving}
+  const [cariU, setCariU] = useState("");
+  const [hasilCariU, setHasilCariU] = useState([]);
+  const [mencariU, setMencariU] = useState(false);
+  const cariUTimer = useRef(null);
   const { confirm, confirmDialog } = useConfirm();
+  const { minta, transitionDialog } = useTransitionDialog();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
@@ -80,6 +110,9 @@ export default function PemanfaatanPage({ user, onBack }) {
     axios.get(`${API}/pemanfaatan/kandidat-idle`)
       .then((r) => setIdle(r.data))
       .catch(() => setIdle(null));
+    axios.get(`${API}/pemanfaatan/usulan`)
+      .then((r) => setUsulanData(r.data))
+      .catch(() => setUsulanData(null));
   }, []);
   useEffect(() => { muat(); }, [muat]);
   useEffect(() => {
@@ -101,6 +134,21 @@ export default function PemanfaatanPage({ user, onBack }) {
     }, 300);
     return () => clearTimeout(cariTimer.current);
   }, [cari, form]);
+
+  // Pencarian aset (debounce) untuk dialog usulan baru — kembaran efek di
+  // atas; state dipisah agar dua dialog tidak saling menimpa hasil.
+  useEffect(() => {
+    if (!formU || formU.aset || cariU.trim().length < 2) { setHasilCariU([]); return undefined; }
+    clearTimeout(cariUTimer.current);
+    cariUTimer.current = setTimeout(async () => {
+      setMencariU(true);
+      try {
+        const r = await axios.get(`${API}/assets`, { params: { search: cariU.trim(), page_size: 8 } });
+        setHasilCariU(r.data?.items || []);
+      } catch { setHasilCariU([]); } finally { setMencariU(false); }
+    }, 300);
+    return () => clearTimeout(cariUTimer.current);
+  }, [cariU, formU]);
 
   const fmtRp = (n) => `Rp${Math.round(Number(n || 0)).toLocaleString("id-ID")}`;
   const setField = (k, v) => setForm((f) => ({ ...f, data: { ...f.data, [k]: v } }));
@@ -225,6 +273,98 @@ export default function PemanfaatanPage({ user, onBack }) {
     }
   };
 
+  // ── Usulan pemanfaatan & perpanjangan ──
+  const labelStatusUsulan = usulanData?.label_status || {};
+  const labelJenisUsulan = usulanData?.label_jenis || {};
+
+  const simpanUsulan = async () => {
+    if (!formU) return;
+    setFormU((f) => ({ ...f, saving: true }));
+    try {
+      await axios.post(`${API}/pemanfaatan/usulan`, {
+        jenis: "baru",
+        ...formU.data,
+        nilai: parseFloat(formU.data.nilai) || 0,
+        kontribusi_tahunan: parseFloat(formU.data.kontribusi_tahunan) || 0,
+        asset_id: formU.aset?.id || "",
+      });
+      toast.success("Usulan pemanfaatan dibuka — status Draf");
+      setFormU(null);
+      muat();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal membuka usulan");
+      setFormU((f) => (f ? { ...f, saving: false } : f));
+    }
+  };
+
+  const perpanjang = async (p) => {
+    const v = await minta({
+      judul: "Usulkan Perpanjangan",
+      deskripsi: `${labelBentuk[p.bentuk] || p.bentuk} — ${p.mitra}, berakhir ${p.berakhir}. `
+        + "BGS/BSG tidak dapat diperpanjang; Pinjam Pakai diajukan ≥60 hari "
+        + "sebelum berakhir (PMK 115/2020).",
+      fields: [
+        { key: "berakhir", label: "Tanggal berakhir baru", type: "date", wajib: true },
+        { key: "nilai", label: "Nilai perpanjangan (Rp, opsional)", type: "text" },
+        { key: "keterangan", label: "Keterangan", type: "textarea" },
+      ],
+      confirmLabel: "Buka Usulan",
+    });
+    if (v === null) return;
+    try {
+      await axios.post(`${API}/pemanfaatan/usulan`, {
+        jenis: "perpanjangan", pemanfaatan_id: p.id, berakhir: v.berakhir,
+        nilai: parseFloat(v.nilai) || 0, keterangan: v.keterangan || "",
+      });
+      toast.success("Usulan perpanjangan dibuka — status Draf");
+      muat();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal membuka usulan perpanjangan");
+    }
+  };
+
+  const transisiUsulan = async (u, ke) => {
+    const dok = DOK_USULAN[ke];
+    const fields = dok
+      ? [{ key: "nomor_dokumen", label: dok, type: "text", wajib: true },
+         { key: "tanggal_dokumen", label: "Tanggal dokumen", type: "date",
+           default: new Date().toISOString().slice(0, 10) }]
+      : [{ key: "catatan", label: "Catatan", type: "textarea" }];
+    const v = await minta({
+      judul: labelStatusUsulan[ke] || ke,
+      deskripsi: `${labelJenisUsulan[u.jenis] || u.jenis}: ${labelBentuk[u.bentuk] || u.bentuk} — ${u.mitra}`,
+      fields, confirmLabel: "Simpan",
+    });
+    if (v === null) return;
+    try {
+      await axios.post(`${API}/pemanfaatan/usulan/${u.id}/status`, { status: ke, ...v });
+      toast.success(`Status usulan: ${labelStatusUsulan[ke] || ke}`);
+      muat();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mengubah status usulan");
+    }
+  };
+
+  const hapusUsulan = async (u) => {
+    const ok = await confirm({
+      title: "Hapus usulan draf?",
+      description: `${labelBentuk[u.bentuk] || u.bentuk} — ${u.mitra}.`,
+      confirmLabel: "Hapus", variant: "danger",
+    });
+    if (!ok) return;
+    try {
+      await axios.delete(`${API}/pemanfaatan/usulan/${u.id}`);
+      toast.success("Usulan dihapus");
+      muat();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menghapus usulan");
+    }
+  };
+
+  // Bentuk yang dapat diperpanjang (dari referensi server; BGS/BSG tidak)
+  const dapatPerpanjang = (bentuk) =>
+    bentukList.find((b) => b.key === bentuk)?.dapat_perpanjang !== false;
+
   const labelStatus = data?.label_status || {};
   const r = data?.ringkasan;
 
@@ -320,6 +460,86 @@ export default function PemanfaatanPage({ user, onBack }) {
               </div>
             )}
 
+            {/* ── Usulan pemanfaatan & perpanjangan (PMK 115/2020) ── */}
+            <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden"
+              data-testid="pemanfaatan-usulan-panel">
+              <div className="px-3 py-2 border-b border-border flex items-center gap-2 flex-wrap">
+                <FileSignature className="w-4 h-4 text-teal-600 flex-shrink-0" />
+                <div className="flex-1 min-w-[160px]">
+                  <p className="text-xs font-bold text-foreground">Usulan Pemanfaatan & Perpanjangan</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Jejak keputusan Pengelola Barang: surat usulan → persetujuan → perjanjian
+                  </p>
+                </div>
+                {(usulanData?.items || []).length > 0 && (
+                  <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                    onClick={() => downloadFileWithProgress(`${API}/pemanfaatan/usulan/export`,
+                      "register_usulan_pemanfaatan.csv",
+                      { label: "Ekspor Usulan Pemanfaatan (CSV)" }).catch(() => {})}
+                    data-testid="pemanfaatan-usulan-export">
+                    <Download className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">CSV</span>
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                  onClick={() => { setCariU(""); setHasilCariU([]); setFormU({ aset: null, saving: false, data: { ...FORM_USULAN_KOSONG } }); }}
+                  data-testid="pemanfaatan-usulan-baru">
+                  <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Usulan Baru</span>
+                </Button>
+              </div>
+              {(usulanData?.items || []).length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-3 px-3">
+                  Belum ada usulan — perjanjian sebaiknya lahir dari usulan yang disetujui
+                  Pengelola Barang, bukan dicatat langsung.
+                </p>
+              ) : (
+                <ul className="divide-y divide-border/60">
+                  {usulanData.items.map((u) => (
+                    <li key={u.id} className="p-3 space-y-1" data-testid={`pemanfaatan-usulan-${u.id}`}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${WARNA_USULAN[u.status] || "bg-muted"}`}>
+                          {labelStatusUsulan[u.status] || u.status}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded bg-teal-500/15 text-teal-600 dark:text-teal-400 text-[10px] font-semibold">
+                          {labelJenisUsulan[u.jenis] || u.jenis} · {labelBentuk[u.bentuk] || u.bentuk}
+                        </span>
+                        <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate" title={u.mitra}>{u.mitra}</p>
+                        {Number(u.nilai) > 0 && (
+                          <span className="text-xs font-bold text-foreground whitespace-nowrap tabular-nums">{fmtRp(u.nilai)}</span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {[u.jenis === "perpanjangan" && u.berakhir_lama
+                            ? `Berakhir ${u.berakhir_lama} → ${u.berakhir}`
+                            : `${u.mulai || "?"} s.d. ${u.berakhir || "?"}`,
+                          u.asset_name && `${u.asset_name} (${u.asset_code} · ${u.NUP})`,
+                          u.nomor_usulan && `Usulan ${u.nomor_usulan}`,
+                          u.nomor_persetujuan && `Persetujuan ${u.nomor_persetujuan}`,
+                          u.nomor_perjanjian && `Perjanjian ${u.nomor_perjanjian}`,
+                          u.keterangan].filter(Boolean).join(" · ")}
+                      </p>
+                      {isAdmin && (usulanData.transisi?.[u.status] || []).length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 items-center">
+                          {(usulanData.transisi[u.status] || []).map((ke) => (
+                            <Button key={ke} size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                              onClick={() => transisiUsulan(u, ke)}
+                              data-testid={`pemanfaatan-usulan-ke-${u.id}-${ke}`}>
+                              {labelStatusUsulan[ke] || ke}
+                            </Button>
+                          ))}
+                          {u.status === "draf" && (
+                            <button type="button" onClick={() => hapusUsulan(u)} aria-label="Hapus usulan"
+                              className="h-7 w-7 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 min-h-0 min-w-0">
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
             {/* ── Daftar register ── */}
             <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
               {data.items.length === 0 ? (
@@ -395,6 +615,14 @@ export default function PemanfaatanPage({ user, onBack }) {
                           data-testid={`pemanfaatan-wasdal-${p.id}`}>
                           <Paperclip className="w-3 h-3 mr-1" />Wasdal{(p.lampiran_wasdal || []).length > 0 && ` (${p.lampiran_wasdal.length})`}
                         </Button>
+                        {p.status !== "berakhir" && dapatPerpanjang(p.bentuk) && (
+                          <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                            title="Buka usulan perpanjangan perjanjian (PMK 115/2020)"
+                            onClick={() => perpanjang(p)}
+                            data-testid={`pemanfaatan-perpanjang-${p.id}`}>
+                            <CalendarPlus className="w-3 h-3 mr-1" />Perpanjang
+                          </Button>
+                        )}
                         {Number(p.kontribusi_tahunan) > 0 && p.status !== "berakhir" && (
                           <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
                             onClick={() => setKontrib({ perjanjian: p, saving: false, fields: { tahun: String(new Date().getFullYear()), ntpn: "", tanggal: new Date().toISOString().slice(0, 10), jumlah: String(p.kontribusi_tahunan) } })}
@@ -584,6 +812,114 @@ export default function PemanfaatanPage({ user, onBack }) {
         </DialogContent>
       </Dialog>
 
+      {/* ── Dialog usulan pemanfaatan baru ── */}
+      <Dialog open={!!formU} onOpenChange={(o) => { if (!o) setFormU(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Usulan Pemanfaatan Baru</DialogTitle>
+            <DialogDescription className="text-xs">
+              Usulan diajukan KPB ke Pengelola Barang; perjanjian lahir otomatis
+              saat usulan mencapai status Perjanjian Ditandatangani.
+            </DialogDescription>
+          </DialogHeader>
+          {formU && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="sm:col-span-2">
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-u-aset">Objek BMN (opsional)</label>
+                {formU.aset ? (
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-border p-2">
+                    <span className="min-w-0">
+                      <span className="block text-xs font-semibold text-foreground truncate">{formU.aset.asset_name}</span>
+                      <span className="block text-[10px] text-muted-foreground font-mono">{formU.aset.asset_code} · {formU.aset.NUP}</span>
+                    </span>
+                    <button type="button" onClick={() => setFormU((f) => ({ ...f, aset: null }))} aria-label="Lepas aset"
+                      className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted flex-shrink-0 min-h-0 min-w-0">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <Input id="pmf-u-aset" className="pl-8" placeholder="Cari nama/kode aset (min. 2 huruf)"
+                      value={cariU} onChange={(e) => setCariU(e.target.value)} />
+                    {(mencariU || hasilCariU.length > 0) && cariU.trim().length >= 2 && (
+                      <div className="absolute z-50 mt-1 w-full max-h-44 overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
+                        {mencariU ? (
+                          <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-teal-600" /></div>
+                        ) : hasilCariU.map((a) => (
+                          <button key={a.id} type="button"
+                            onClick={() => { setFormU((f) => ({ ...f, aset: a })); setCariU(""); setHasilCariU([]); }}
+                            className="w-full px-2.5 py-1.5 text-left hover:bg-muted">
+                            <span className="block text-xs font-semibold text-foreground truncate">{a.asset_name}</span>
+                            <span className="block text-[10px] text-muted-foreground font-mono">{a.asset_code} · {a.NUP}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="sm:col-span-2">
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-u-bentuk">Bentuk</label>
+                <select id="pmf-u-bentuk" value={formU.data.bentuk}
+                  onChange={(e) => setFormU((f) => ({ ...f, data: { ...f.data, bentuk: e.target.value } }))}
+                  className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
+                  data-testid="pemanfaatan-usulan-bentuk">
+                  {(bentukList.length ? bentukList : [{ key: "sewa", label: "Sewa", maks_tahun: 5 }]).map((b) => (
+                    <option key={b.key} value={b.key}>{b.label} (maks {b.maks_tahun} th)</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-u-mitra">Calon mitra</label>
+                <Input id="pmf-u-mitra" placeholder="cth. PT Maju Bersama" value={formU.data.mitra}
+                  onChange={(e) => setFormU((f) => ({ ...f, data: { ...f.data, mitra: e.target.value } }))}
+                  data-testid="pemanfaatan-usulan-mitra" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-u-jmitra">Jenis mitra</label>
+                <Input id="pmf-u-jmitra" placeholder="BUMN/PT/koperasi/Pemda" value={formU.data.jenis_mitra}
+                  onChange={(e) => setFormU((f) => ({ ...f, data: { ...f.data, jenis_mitra: e.target.value } }))} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-u-mulai">Mulai (rencana)</label>
+                <Input id="pmf-u-mulai" type="date" value={formU.data.mulai}
+                  onChange={(e) => setFormU((f) => ({ ...f, data: { ...f.data, mulai: e.target.value } }))}
+                  data-testid="pemanfaatan-usulan-mulai" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-u-akhir">Berakhir (rencana)</label>
+                <Input id="pmf-u-akhir" type="date" value={formU.data.berakhir}
+                  onChange={(e) => setFormU((f) => ({ ...f, data: { ...f.data, berakhir: e.target.value } }))}
+                  data-testid="pemanfaatan-usulan-berakhir" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-u-nilai">Perkiraan nilai (Rp)</label>
+                <Input id="pmf-u-nilai" type="number" min="0" placeholder="0" value={formU.data.nilai}
+                  onChange={(e) => setFormU((f) => ({ ...f, data: { ...f.data, nilai: e.target.value } }))} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-u-kontrib">Kontribusi tahunan (Rp)</label>
+                <Input id="pmf-u-kontrib" type="number" min="0" placeholder="0" value={formU.data.kontribusi_tahunan}
+                  onChange={(e) => setFormU((f) => ({ ...f, data: { ...f.data, kontribusi_tahunan: e.target.value } }))} />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-u-ket">Keterangan</label>
+                <Input id="pmf-u-ket" value={formU.data.keterangan}
+                  onChange={(e) => setFormU((f) => ({ ...f, data: { ...f.data, keterangan: e.target.value } }))} />
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setFormU(null)}>Batal</Button>
+            <Button onClick={simpanUsulan} disabled={formU?.saving}
+              className="bg-teal-600 hover:bg-teal-700 text-white" data-testid="pemanfaatan-usulan-simpan">
+              {formU?.saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <FileSignature className="w-4 h-4 mr-1.5" />}Buka Usulan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Dialog lampiran (dokumen perjanjian ATAU laporan wasdal) ── */}
       <Dialog open={!!lamp} onOpenChange={(o) => { if (!o) setLamp(null); }}>
         <DialogContent className="max-w-md">
@@ -676,6 +1012,7 @@ export default function PemanfaatanPage({ user, onBack }) {
       </Dialog>
 
       {confirmDialog}
+      {transitionDialog}
     </div>
   );
 }
