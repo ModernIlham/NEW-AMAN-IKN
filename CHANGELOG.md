@@ -94,6 +94,53 @@ S7 yang ada. Suite backend 2464 → 2465 lulus.
 
 ---
 
+## [#832] Persediaan ber-persetujuan KPB (backend) — permohonan, eksekusi-saat-setuju, Surat Persetujuan — 2026-08-09
+
+Fondasi backend keputusan pemilik (2026-08-09): SEMUA transaksi persediaan
+lewat permohonan → persetujuan admin satker yang BUKAN pengajunya → terbit
+Surat Persetujuan Transaksi Persediaan ber-kop, ber-nomor, ber-ttd KPB.
+Rangka meniru tiga preseden repo sekaligus: pemisahan peran + transisi
+status bersyarat (izin darurat IoT), eksekusi-di-dalam-setujui (usulan peta
+kolaborasi), dan builder-bytes + pembekuan GridFS saat e-sign (LPB).
+
+- **Modul baru** `persediaan_permohonan_utils.py` (aturan murni: 7 jalur,
+  pemisahan pemohon/penyetuju, ringkasan) + `routes/persediaan_permohonan.py`
+  (ajukan ber-Idempotency-Key / daftar ber-scope satker / setujui / tolak
+  beralasan / batal oleh pengaju / dokumen PDF / kirim-ttd KPB).
+- **Setujui = eksekusi, dengan tiga pagar**: (1) pengaju tak bisa menyetujui
+  atau menolak permohonannya sendiri — 403 dari kode, bukan kebiasaan;
+  (2) klaim atomik `diusulkan → diproses` — dua admin menekan Setujui
+  bersamaan: satu jalan, satu 409, stok TIDAK pernah ganda; (3) eksekusi
+  gagal mengembalikan status ke `diusulkan` dengan galat tercatat —
+  permohonan tidak pernah hilang karena barangnya sedang bermasalah.
+  Eksekusi memanggil fungsi endpoint transaksi YANG SUDAH ADA dengan model
+  Pydantic aslinya — permohonan tidak melahirkan jalur tulis kedua.
+- **Gerbang wajib-persetujuan** di 7 endpoint transaksi: setelan
+  `persediaan_wajib_persetujuan` aktif → HTTP langsung ditolak 403
+  terarah; pemanggil internal (`request=None`: jalur persetujuan, massal
+  per-baris, Pengadaan) tetap lolos. **Default MATI** — perilaku lama utuh
+  sampai UI permohonan siap (PR berikutnya) dan pemilik menyalakannya.
+- **Surat Persetujuan**: nomor dipesan otomatis di deret buku agenda yang
+  SAMA dengan LPB/BAST (`booking_nomor_otomatis` — generalisasi
+  `booking_nomor_lpb`, yang kini delegator; deret tunggal dipertahankan);
+  PDF ber-kop satker, identitas lengkap (pengaju, penyetuju, ringkasan,
+  hasil eksekusi), blok ttd Pengaju + KPB ber-spesimen; hanya terbit untuk
+  permohonan `disetujui`; kirim-ttd membekukan PDF ke GridFS lalu membuat
+  link e-sign KPB (pola LPB persis).
+- **Verifikasi:** suite backend 2470 → 2482 lulus (12 uji baru, termasuk
+  membaca teks PDF yang jadi); **5/5 mutasi terbunuh** oleh ujinya
+  masing-masing: cabut pemisahan peran → uji setujui-diri; klaim tanpa
+  syarat status → uji anti-ganda (stok 20 ≠ 10); cabut pengembalian saat
+  gagal → uji gagal-tak-hilang; gerbang tak melewatkan internal → uji
+  eksekusi-internal; gerbang tak pernah menolak → uji tolak-HTTP-langsung.
+
+> Batas yang dinyatakan: `petugas` pada jurnal = PENYETUJU (yang
+> mengeksekusi); pengaju tercatat di permohonan & Surat Persetujuan. Jalur
+> "Daftarkan ke Persediaan" dari Pengadaan masih eksekusi internal — akan
+> diarahkan lewat permohonan pada PR UI, sebelum gerbang dinyalakan.
+
+---
+
 ## [#831] Audit 45 kode transaksi persediaan: dua celah integritas ditutup — 2026-08-09
 
 Menjawab pertanyaan pemilik "apakah sistem persediaan sudah menangani semua

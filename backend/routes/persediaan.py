@@ -465,11 +465,13 @@ class HapusDefinitifIn(BaseModel):
 
 @persediaan_router.post("/persediaan/{item_id}/hapus-definitif")
 async def hapus_definitif_persediaan(item_id: str, data: HapusDefinitifIn,
+                                     request: Request = None,
                                      user: dict = Depends(require_writer)):
     """Penghapusan DEFINITIF ber-SK dari daftar usang/rusak/tak dikuasai
     (H01/H02/H03) — TIDAK menggeser stok (barangnya sudah keluar saldo saat
     K04/K05/K09); hanya menutup baris daftar + jejak SK di jurnal.
     """
+    await _gerbang_wajib_persetujuan(request)
     item = await db.persediaan.find_one({"id": item_id}, {"_id": 0})
     if not item:
         raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
@@ -534,11 +536,13 @@ class KoreksiNilaiPersediaanIn(BaseModel):
 
 @persediaan_router.post("/persediaan/{item_id}/koreksi-nilai")
 async def koreksi_nilai_persediaan(item_id: str, data: KoreksiNilaiPersediaanIn,
+                                   request: Request = None,
                                    user: dict = Depends(require_writer)):
     """KOREKSI NILAI persediaan (M97/M98 tambah, K97/K98 kurang) — kuantitas
     TETAP, nilai layer disebar proporsional (`koreksi_nilai_layers`). Alasan
     wajib (bahan pengungkapan). Pola OCC retry 3× seperti opname.
     """
+    await _gerbang_wajib_persetujuan(request)
     from persediaan_transaksi_ref import (
         JENIS_KE_KODE, KODE_TRANSAKSI_PERSEDIAAN,
     )
@@ -1143,7 +1147,9 @@ class TransaksiMassalIn(BaseModel):
 
 
 @persediaan_router.post("/persediaan/transaksi-massal")
-async def transaksi_massal(payload: TransaksiMassalIn, user: dict = Depends(require_writer)):
+async def transaksi_massal(payload: TransaksiMassalIn,
+                           request: Request = None,
+                           user: dict = Depends(require_writer)):
     """Satu dokumen (BAST/kuitansi/nota) untuk BANYAK barang sekaligus.
 
     Tiap barang diproses lewat jalur transaksi tunggal yang sudah atomik +
@@ -1152,6 +1158,7 @@ async def transaksi_massal(payload: TransaksiMassalIn, user: dict = Depends(requ
     (Mongo standalone tanpa transaksi multi-dokumen); hasil per barang
     dilaporkan apa adanya agar operator tahu persis mana yang gagal.
     """
+    await _gerbang_wajib_persetujuan(request)
     if payload.arah not in ("masuk", "keluar"):
         raise HTTPException(status_code=400, detail="Arah harus 'masuk' atau 'keluar'")
     peta_jenis = JENIS_MASUK if payload.arah == "masuk" else JENIS_KELUAR
@@ -1883,6 +1890,28 @@ async def _ambil_snapshot_perolehan(perolehan_id: str, user=None) -> dict:
     return snapshot_perolehan(p)
 
 
+async def _gerbang_wajib_persetujuan(request):
+    """Gerbang SEDIA-KPB: bila setelan `persediaan_wajib_persetujuan` aktif,
+    permintaan HTTP LANGSUNG ke endpoint transaksi ditolak — transaksi hanya
+    boleh lahir dari persetujuan permohonan (routes/persediaan_permohonan.py),
+    yang mengeksekusi lewat pemanggilan internal `request=None`.
+
+    Default MATI: perilaku lama utuh sampai UI permohonan siap dan pemilik
+    menyalakannya dari Pengaturan. `request is None` = pemanggil internal
+    (jalur persetujuan, transaksi massal per-baris, Pengadaan) — dilewatkan,
+    karena gerbangnya sudah dibayar di pintu masuknya masing-masing.
+    """
+    if request is None:
+        return
+    s = await db.report_settings.find_one(
+        {"type": "global"}, {"persediaan_wajib_persetujuan": 1}) or {}
+    if s.get("persediaan_wajib_persetujuan"):
+        raise HTTPException(
+            status_code=403,
+            detail=("Transaksi persediaan wajib melalui permohonan dan "
+                    "persetujuan KPB — ajukan lewat menu Permohonan"))
+
+
 @persediaan_router.post("/persediaan/{item_id}/masuk")
 async def transaksi_masuk(item_id: str, data: TransaksiMasukIn,
                           request: Request = None,
@@ -1898,6 +1927,7 @@ async def transaksi_masuk(item_id: str, data: TransaksiMasukIn,
     menggandakan stok — respons pertama disimpan & diputar ulang. Pemanggil
     internal (impor massal / Pengadaan) tak mengoper `request` → dilewati.
     """
+    await _gerbang_wajib_persetujuan(request)
     from shared_utils import kunci_idem
     idem_key = kunci_idem(
         request.headers.get("Idempotency-Key", "") if request is not None else "",
@@ -2039,6 +2069,7 @@ async def transaksi_keluar(item_id: str, data: TransaksiKeluarIn,
     kunci sama tak boleh menggandakan pengeluaran — respons pertama disimpan
     & diputar ulang. Pemanggil internal (massal) tak mengoper `request`.
     """
+    await _gerbang_wajib_persetujuan(request)
     idem_key = kunci_idem(
         request.headers.get("Idempotency-Key", "") if request is not None else "",
         user)
@@ -2141,6 +2172,7 @@ class PindahGudangIn(BaseModel):
 
 @persediaan_router.post("/persediaan/{item_id}/pindah-gudang")
 async def pindah_gudang_persediaan(item_id: str, data: PindahGudangIn,
+                                   request: Request = None,
                                    user: dict = Depends(require_writer)):
     """Pindahkan barang ke Lokasi/Gudang lain — ber-jurnal.
 
@@ -2149,6 +2181,7 @@ async def pindah_gudang_persediaan(item_id: str, data: PindahGudangIn,
     (kode SAKTI kosong — mutasi internal satker). Bila penulisan jurnal
     gagal, lokasi dikembalikan (pola kompensasi transaksi masuk).
     """
+    await _gerbang_wajib_persetujuan(request)
     item = await db.persediaan.find_one({"id": item_id}, {"_id": 0})
     if not item:
         raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
@@ -2214,7 +2247,9 @@ class OpnameIn(BaseModel):
 
 
 @persediaan_router.post("/persediaan/{item_id}/opname")
-async def opname_persediaan(item_id: str, data: OpnameIn, user: dict = Depends(require_writer)):
+async def opname_persediaan(item_id: str, data: OpnameIn,
+                            request: Request = None,
+                            user: dict = Depends(require_writer)):
     """Rekam hasil opname SATU barang (pustaka §3.3 — hanya yang selisih).
 
     fisik < buku → kekurangan dikonsumsi FIFO; fisik > buku → layer
@@ -2222,6 +2257,7 @@ async def opname_persediaan(item_id: str, data: OpnameIn, user: dict = Depends(r
     jurnal jenis "opname" dengan ALASAN WAJIB (bahan pengungkapan CaLK).
     Update bersyarat versi + retry 3× seperti transaksi keluar.
     """
+    await _gerbang_wajib_persetujuan(request)
     now = datetime.now(timezone.utc)
     for _attempt in range(3):
         item = await db.persediaan.find_one({"id": item_id}, {"_id": 0})
