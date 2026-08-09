@@ -67,6 +67,40 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#848] Sisi penerimaan alih status penggunaan — barang masuk dibukukan + jurnal 102 Transfer Masuk — 2026-08-09
+
+Butir keempat defisit "permohonan yang belum ada register" (audit `[#841]`):
+tiket alih status penggunaan arah KELUAR sudah berefek penuh (aset keluar
+pembukuan + jurnal 302 Transfer Keluar), tetapi arah MASUK pincang dua
+kali: tiket mewajibkan aset sudah ada di `db.assets` (padahal barang
+kiriman Pengguna Barang lain belum tercatat di penerima) dan status
+terminalnya tidak berefek data sama sekali — barang diterima tanpa pernah
+masuk pembukuan dan tanpa jurnal.
+
+- **Tiket masuk memakai daftar barang manual**
+  (`routes/penggunaan.py` + `penggunaan_utils.py`): untuk jenis
+  `alih_status` arah `masuk`, `asset_ids` diganti `barang_masuk[]`
+  (kode barang + NUP + nama + nilai perolehan) — divalidasi wajib minimal
+  satu, kode & nama terisi, nilai tak negatif; arah keluar tetap wajib
+  `asset_ids` ber-cek akses satker seperti semula.
+- **Terminal `dihapus_dibukukan` arah masuk BEREFEK data**: tiap barang
+  ber-`asset_id` kosong **dibukukan sebagai aset baru** lewat helper
+  murni `build_asset_transfer_masuk` (field inti: kode/NUP/nama, kategori
+  bawaan Peralatan dan Mesin, harga perolehan, kondisi Baik, jejak
+  `perolehan_transfer` berisi tiket + BAST + pihak asal) + **jurnal 102
+  Transfer Masuk** ke Buku Barang (nilai perolehan, ref_id tiket —
+  kembaran jurnal 302 sisi keluar) + log audit; `asset_id` aset baru
+  ditautkan balik ke snapshot tiket (retry aman — baris ber-id terisi
+  dilewati).
+- **UI PenggunaanPage**: dialog Buka Tiket bercabang — saat alih status
+  masuk, pemilih aset diganti editor barang masuk (kode/NUP/nama/nilai +
+  tombol Tambah Barang + daftar bisa dihapus); validasi tombol simpan
+  menyesuaikan.
+- Uji: 3 uji baru (`test_transfer_masuk.py`) — tiket masuk barang manual
+  (+ keluar tetap wajib aset), efek pembukuan + jurnal 102 + taut balik,
+  field inti helper murni. Disiplin uji-mutasi: efek masuk dibisukan →
+  merah; kode jurnal ditukar 302 → merah.
+
 ## [#847] Usulan pemusnahan berstatus (PMK 83/2016) — BA lahir dari usulan yang disetujui — 2026-08-09
 
 Butir ketiga defisit "permohonan yang belum ada register" (audit `[#841]`):

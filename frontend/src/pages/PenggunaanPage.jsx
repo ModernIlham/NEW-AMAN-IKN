@@ -518,12 +518,25 @@ export default function PenggunaanPage({ user, onBack }) {
   };
   useEffect(() => () => { if (searchTimer.current) clearTimeout(searchTimer.current); }, []);
 
+  // Alih status ARAH MASUK: barang dari Pengguna Barang lain belum tercatat
+  // di pembukuan kita — tiket memakai daftar barang manual, bukan pencarian
+  // aset; aset lahir otomatis (+jurnal 102) saat terminal dibukukan.
+  const alihMasuk = (f) => f?.data?.jenis_proses === "alih_status" && f?.data?.arah === "masuk";
+
   const simpanProses = async () => {
     if (!formProses) return;
-    if (formProses.aset.length === 0) { toast.error("Tambahkan minimal satu aset"); return; }
+    if (alihMasuk(formProses)) {
+      if ((formProses.barang || []).length === 0) { toast.error("Tambahkan minimal satu barang masuk"); return; }
+    } else if (formProses.aset.length === 0) { toast.error("Tambahkan minimal satu aset"); return; }
     setFormProses((f) => ({ ...f, saving: true }));
     try {
-      await axios.post(`${API}/penggunaan/proses`, {
+      await axios.post(`${API}/penggunaan/proses`, alihMasuk(formProses) ? {
+        ...formProses.data, asset_ids: [],
+        barang_masuk: (formProses.barang || []).map((b) => ({
+          asset_code: b.asset_code, nup: b.nup, asset_name: b.asset_name,
+          nilai: parseFloat(b.nilai) || 0,
+        })),
+      } : {
         ...formProses.data, asset_ids: formProses.aset.map((a) => a.id),
       });
       toast.success("Tiket proses dibuka (draf)");
@@ -983,7 +996,7 @@ export default function PenggunaanPage({ user, onBack }) {
               </Button>
             )}
             <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
-              onClick={() => { setCariPsp(""); setHasilCariPsp([]); setFormProses({ data: { jenis_proses: "alih_status", arah: "keluar", pihak_asal: "", pihak_tujuan: "", nomor_permohonan: "", tanggal_permohonan: "", tanggal_mulai: "", tanggal_berakhir: "", keterangan: "" }, aset: [], saving: false }); }}
+              onClick={() => { setCariPsp(""); setHasilCariPsp([]); setFormProses({ data: { jenis_proses: "alih_status", arah: "keluar", pihak_asal: "", pihak_tujuan: "", nomor_permohonan: "", tanggal_permohonan: "", tanggal_mulai: "", tanggal_berakhir: "", keterangan: "" }, aset: [], barang: [], barangBaru: { asset_code: "", nup: "", asset_name: "", nilai: "" }, saving: false }); }}
               data-testid="penggunaan-proses-tambah">
               <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Buka Tiket</span>
             </Button>
@@ -1282,6 +1295,47 @@ export default function PenggunaanPage({ user, onBack }) {
                     data-testid="proses-ket" />
                 </div>
               </div>
+              {alihMasuk(formProses) ? (
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1">
+                  Barang masuk (belum tercatat — dibukukan otomatis saat terminal + jurnal 102)
+                </label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <Input placeholder="Kode barang *" value={formProses.barangBaru?.asset_code || ""}
+                    onChange={(e) => setFormProses((f) => ({ ...f, barangBaru: { ...f.barangBaru, asset_code: e.target.value } }))}
+                    data-testid="proses-bm-kode" />
+                  <Input placeholder="NUP" value={formProses.barangBaru?.nup || ""}
+                    onChange={(e) => setFormProses((f) => ({ ...f, barangBaru: { ...f.barangBaru, nup: e.target.value } }))} />
+                  <Input placeholder="Nama barang *" value={formProses.barangBaru?.asset_name || ""}
+                    onChange={(e) => setFormProses((f) => ({ ...f, barangBaru: { ...f.barangBaru, asset_name: e.target.value } }))}
+                    data-testid="proses-bm-nama" />
+                  <Input type="number" min="0" placeholder="Nilai (Rp)" value={formProses.barangBaru?.nilai || ""}
+                    onChange={(e) => setFormProses((f) => ({ ...f, barangBaru: { ...f.barangBaru, nilai: e.target.value } }))}
+                    data-testid="proses-bm-nilai" />
+                </div>
+                <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 mt-1.5"
+                  disabled={!formProses.barangBaru?.asset_code?.trim() || !formProses.barangBaru?.asset_name?.trim()}
+                  onClick={() => setFormProses((f) => ({ ...f,
+                    barang: [...(f.barang || []), { ...f.barangBaru }],
+                    barangBaru: { asset_code: "", nup: "", asset_name: "", nilai: "" } }))}
+                  data-testid="proses-bm-tambah">
+                  <Plus className="w-3 h-3 mr-1" />Tambah Barang
+                </Button>
+                {(formProses.barang || []).length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {formProses.barang.map((b, i) => (
+                      <li key={`${b.asset_code}-${i}`} className="rounded-lg border border-border p-1.5 text-xs flex items-center justify-between gap-2">
+                        <span className="min-w-0 truncate text-foreground/90">{b.asset_name} <span className="font-mono text-[10px] text-muted-foreground">({b.asset_code}{b.nup ? ` · ${b.nup}` : ""})</span></span>
+                        <button type="button" onClick={() => setFormProses((f) => ({ ...f, barang: f.barang.filter((_, j) => j !== i) }))}
+                          className="h-6 w-6 min-h-0 min-w-0 rounded flex items-center justify-center text-muted-foreground hover:text-red-500 flex-shrink-0" aria-label="Hapus barang">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              ) : (
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="prs-cari">Tambah aset</label>
                 <div className="relative">
@@ -1316,10 +1370,12 @@ export default function PenggunaanPage({ user, onBack }) {
                   </ul>
                 )}
               </div>
+              )}
               <div className="flex flex-wrap justify-end gap-2">
                 <Button variant="outline" size="sm" onClick={() => setFormProses(null)}>Batal</Button>
                 <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white"
-                  disabled={formProses.saving || !formProses.data.pihak_asal.trim() || !formProses.data.pihak_tujuan.trim() || formProses.aset.length === 0}
+                  disabled={formProses.saving || !formProses.data.pihak_asal.trim() || !formProses.data.pihak_tujuan.trim()
+                    || (alihMasuk(formProses) ? (formProses.barang || []).length === 0 : formProses.aset.length === 0)}
                   onClick={simpanProses} data-testid="proses-simpan">
                   {formProses.saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Buka Tiket (Draf)"}
                 </Button>
