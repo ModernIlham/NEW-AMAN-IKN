@@ -85,6 +85,23 @@ async def daftar_mutasi(asset_id: str = "", kode_transaksi: str = "",
             "label_kode": {k: v[0] for k, v in KODE_TRANSAKSI_BMN.items()}}
 
 
+@mutasi_bmn_router.get("/pembukuan/jenis-transaksi")
+async def referensi_kode_mutasi(_user: dict = Depends(require_user)):
+    """Referensi lengkap kode mutasi aset tetap SIMAK (mandat pemilik
+    2026-08-09): 53 bertambah + 46 berkurang, terkelompok — bahan layar
+    "Referensi Kode" di Buku Barang. Kode warisan AMAN (203/205) dikirim
+    terpisah supaya daftar resmi tetap bersih 99 kode."""
+    from aset_transaksi_ref import (KODE_WARISAN_AMAN, LABEL_KELOMPOK_ASET,
+                                    daftar_kode_mutasi_aset)
+    warisan = [
+        {"kode": k, "uraian": u, "arah": a, "kelompok": kel,
+         "label_kelompok": LABEL_KELOMPOK_ASET.get(kel, kel)}
+        for k, (u, a, kel) in sorted(KODE_WARISAN_AMAN.items())
+    ]
+    return {"referensi": daftar_kode_mutasi_aset(), "warisan": warisan,
+            "label_kelompok": LABEL_KELOMPOK_ASET}
+
+
 @mutasi_bmn_router.post("/pembukuan/mutasi/backfill")
 async def backfill_saldo_awal(admin: dict = Depends(require_admin)):
     """Backfill sekali (idempoten): aset aktif TANPA entri jurnal apa pun

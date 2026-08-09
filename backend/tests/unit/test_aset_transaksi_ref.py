@@ -38,6 +38,62 @@ def test_kode_jangkar_tiap_keluarga():
     assert info_kode_aset("ZZZ") == {}
 
 
+def test_registry_lama_diturunkan_dari_registry_resmi():
+    """mutasi_bmn_utils.KODE_TRANSAKSI_BMN (dulu subset 17 kode) kini
+    diturunkan dari registry 99 kode + warisan — validasi jurnal harus
+    menerima seluruh kode resmi, dan koreksi makna 305/401 mengikuti
+    arah resmi SIMAK (aman: keduanya belum pernah ditulis)."""
+    from mutasi_bmn_utils import (KODE_TRANSAKSI_BMN, arah_transaksi,
+                                  validate_entri_mutasi)
+    assert validate_entri_mutasi({
+        "kode_transaksi": "502", "asset_id": "a",
+        "tanggal_buku": "2026-08-09", "nilai": 1}) == []   # kode KDP diterima
+    assert arah_transaksi("931") == "kurang"   # penyusutan
+    assert arah_transaksi("305") == "tambah"   # resmi SIMAK: mutasi bertambah
+    assert arah_transaksi("401") == "kurang"   # henti guna = berkurang
+    assert arah_transaksi("205") == "kurang"   # warisan AMAN tetap sah
+    assert arah_transaksi("203") == "netral"
+    assert len(KODE_TRANSAKSI_BMN) == 101      # 99 resmi + 2 warisan
+
+
+def test_lbp_menegatifkan_berdasar_arah_registry_bukan_prefiks():
+    """Tabel 17 CaLBMN dulu menegatifkan SEMUA 3xx/4xx — salah untuk 305
+    (Koreksi Pencatatan, bertambah) dan 402 (penggunaan kembali). Kini arah
+    dibaca dari registry; prefiks hanya fallback kode tak dikenal."""
+    from lbp_utils import susun_mutasi_per_transaksi
+    hasil = susun_mutasi_per_transaksi([
+        {"kode_transaksi": "305", "jumlah": 1, "nilai": 100},
+        {"kode_transaksi": "402", "jumlah": 1, "nilai": 70},
+        {"kode_transaksi": "931", "jumlah": 0, "nilai": 40},
+        {"kode_transaksi": "205", "jumlah": 0, "nilai": 30},
+        {"kode_transaksi": "302", "jumlah": 1, "nilai": 50},
+    ], saldo_awal_qty=5, saldo_awal_nilai=1000)
+    per = {b[0]: b for b in hasil["baris"]}
+    assert per["305"][3] == 100    # bertambah — tak boleh dinegatifkan
+    assert per["402"][3] == 70
+    assert per["931"][3] == -40
+    assert per["205"][3] == -30
+    assert per["302"][3] == -50
+
+
+def test_endpoint_referensi_mengirim_registry_lengkap():
+    import asyncio
+
+    import routes.mutasi_bmn as rmb
+
+    fn = rmb.referensi_kode_mutasi
+    while hasattr(fn, "__wrapped__"):
+        fn = fn.__wrapped__
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    try:
+        r = loop.run_until_complete(fn(_user={"role": "operator"}))
+    finally:
+        loop.close()
+    assert len(r["referensi"]) == 99
+    assert [w["kode"] for w in r["warisan"]] == ["203", "205"]
+    assert "kdp" in r["label_kelompok"]
+
+
 def test_semua_kelompok_berlabel_dan_daftar_terurut():
     kel = {v[2] for v in KODE_MUTASI_ASET.values()}
     assert kel <= set(LABEL_KELOMPOK_ASET)

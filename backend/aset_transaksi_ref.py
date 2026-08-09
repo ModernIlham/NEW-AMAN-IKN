@@ -151,6 +151,26 @@ KODE_MUTASI_ASET = {
     "Q34": ("Koreksi Penyusutan Minus", "berkurang", "penyusutan"),
 }
 
+# Kode WARISAN AMAN di luar daftar resmi 99 — dipertahankan supaya baris
+# jurnal lama tetap terbaca dan penulis yang ada tidak berubah makna:
+#   205 — "Koreksi Nilai Berkurang": dipakai luas sejak Gelombang 7 (edit
+#         harga turun, revaluasi turun, terapan selisih SIMAN); padanan
+#         resminya 264, tetapi baris tersimpan memakai 205 sehingga kode
+#         ini tetap sah (jangan migrasi data historis diam-diam).
+#   203 — "Perubahan Kondisi" (netral): tak pernah ditulis modul mana pun,
+#         dipertahankan hanya agar kontrak validasi lama tidak menyempit.
+KODE_WARISAN_AMAN = {
+    "203": ("Perubahan Kondisi", "netral", "koreksi"),
+    "205": ("Koreksi Nilai Berkurang", "berkurang", "koreksi"),
+}
+
+
+def semua_kode_bmn() -> dict:
+    """Registry resmi 99 kode + warisan AMAN — dasar VALIDASI & pengayaan
+    jurnal (layar referensi memakai daftar resmi saja + bagian warisan)."""
+    return {**KODE_WARISAN_AMAN, **KODE_MUTASI_ASET}
+
+
 LABEL_KELOMPOK_ASET = {
     "perolehan": "Perolehan",
     "pengembangan": "Pengembangan & Kapitalisasi",

@@ -10,26 +10,23 @@ nilai bruto keluar = masuk; aset TIDAK dibuat ulang — kode+NUP dimutakhirkan
 in-place dengan riwayat, sehingga id internal & kode register SIMAN tetap.
 """
 
-# Kode transaksi barang selaras SIMAK/SAKTI (pustaka §2.3a) — subset yang
-# dipakai AMAN; uraian resmi utuh.
+# Kode transaksi barang selaras SIMAK/SAKTI — DITURUNKAN dari registry
+# lengkap 99 kode `aset_transaksi_ref.KODE_MUTASI_ASET` (mandat pemilik
+# 2026-08-09: mutasi bertambah + berkurang lengkap) plus kode warisan AMAN
+# (203 netral, 205 koreksi kurang lama). Dulunya subset 17 kode di sini;
+# kini registry ref adalah satu-satunya sumber kebenaran. Arah diterjemahkan
+# ke token lama tambah/kurang/netral yang dipakai `efek` badge frontend,
+# rekap, dan LBP. Catatan koreksi makna: 305 "Koreksi Pencatatan" dan 401
+# "Penghentian Aset Dari Penggunaan" kini mengikuti arah resmi SIMAK
+# (bertambah/berkurang) — keduanya belum pernah ditulis modul mana pun,
+# jadi tidak ada baris historis yang berubah makna.
+from aset_transaksi_ref import semua_kode_bmn
+
+_ARAH_KE_TOKEN = {"bertambah": "tambah", "berkurang": "kurang",
+                  "netral": "netral"}
 KODE_TRANSAKSI_BMN = {
-    "100": ("Saldo Awal", "tambah"),
-    "101": ("Pembelian", "tambah"),
-    "102": ("Transfer Masuk", "tambah"),
-    "103": ("Hibah Masuk", "tambah"),
-    "105": ("Penyelesaian Pembangunan Dengan KDP", "tambah"),
-    "107": ("Reklasifikasi Masuk", "tambah"),
-    "112": ("Perolehan Lainnya", "tambah"),
-    "202": ("Pengembangan Nilai Aset", "tambah"),
-    "203": ("Perubahan Kondisi", "netral"),
-    "204": ("Koreksi Nilai Bertambah", "tambah"),
-    "205": ("Koreksi Nilai Berkurang", "kurang"),
-    "301": ("Penghapusan", "kurang"),
-    "302": ("Transfer Keluar", "kurang"),
-    "303": ("Hibah Keluar", "kurang"),
-    "304": ("Reklasifikasi Keluar", "kurang"),
-    "305": ("Koreksi Pencatatan", "kurang"),
-    "401": ("Penghentian BMN dari Penggunaan", "netral"),
+    kode: (uraian, _ARAH_KE_TOKEN[arah])
+    for kode, (uraian, arah, _kel) in semua_kode_bmn().items()
 }
 
 
