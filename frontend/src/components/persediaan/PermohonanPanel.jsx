@@ -24,6 +24,11 @@ const WARNA_STATUS = {
   dibatalkan: "bg-muted text-muted-foreground",
 };
 
+const LABEL_STATUS = {
+  diusulkan: "Diusulkan", diproses: "Diproses", disetujui: "Disetujui",
+  ditolak: "Ditolak", dibatalkan: "Dibatalkan",
+};
+
 // Konfigurasi bawaan = persediaan (SEDIA-KPB). Halaman lain memakai panel
 // yang SAMA dengan konfig berbeda — ASET-GERBANG-1 (PembukuanPage) mengoper
 // jalur /pembukuan/permohonan; logika persetujuan/penolakan/batal/surat/ttd
@@ -226,8 +231,8 @@ export default function PermohonanPanel({ user, onSelesai, konfig }) {
                   <li key={p.id} className="py-2.5 flex flex-col gap-1.5"
                     data-testid={`permohonan-${p.id}`}>
                     <div className="flex items-start gap-2">
-                      <span className={`px-2 py-0.5 rounded-full text-[11px] flex-shrink-0 ${WARNA_STATUS[p.status] || "bg-muted"}`}>
-                        {p.status}
+                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold flex-shrink-0 ${WARNA_STATUS[p.status] || "bg-muted"}`}>
+                        {LABEL_STATUS[p.status] || p.status}
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm text-foreground">{p.ringkasan}</p>

@@ -92,3 +92,13 @@ test("permohonan disetujui menyediakan unduhan Surat Persetujuan", async () => {
   expect(String(mockUnduh.mock.calls[0][0]))
     .toMatch(/\/persediaan\/permohonan\/p-3\/dokumen$/);
 });
+
+test("chip status menampilkan LABEL terbaca, bukan kode mentah", async () => {
+  await bukaPanel();
+  // Kode status huruf kecil tak lagi tampil apa adanya — pembaca melihat
+  // label berkapital dari LABEL_STATUS.
+  expect(screen.getAllByText("Diusulkan").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("Disetujui").length).toBeGreaterThan(0);
+  expect(screen.queryByText("diusulkan")).not.toBeInTheDocument();
+  expect(screen.queryByText("disetujui")).not.toBeInTheDocument();
+});
