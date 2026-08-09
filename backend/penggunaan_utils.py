@@ -515,11 +515,19 @@ def validate_proses_penggunaan(data: dict) -> list:
                 errors.append(f"Barang #{i}: kode barang wajib diisi")
             if not str(b.get("asset_name") or "").strip():
                 errors.append(f"Barang #{i}: nama barang wajib diisi")
+            import math
             try:
-                if float(b.get("nilai") or 0) < 0:
-                    errors.append(f"Barang #{i}: nilai tidak boleh negatif")
+                nb = float(b.get("nilai") or 0)
             except (TypeError, ValueError):
+                nb = None
+            if nb is None:
                 errors.append(f"Barang #{i}: nilai harus angka")
+            elif not math.isfinite(nb):
+                # inf lolos cek `< 0` lalu meledakkan int(nilai) saat
+                # barang dibukukan; NaN meracuni pembukuan.
+                errors.append(f"Barang #{i}: nilai harus angka terhingga")
+            elif nb < 0:
+                errors.append(f"Barang #{i}: nilai tidak boleh negatif")
     elif not data.get("asset_ids"):
         errors.append("Minimal satu aset dipilih")
     mulai = str(data.get("tanggal_mulai") or "").strip()[:10]
@@ -720,11 +728,16 @@ def build_asset_transfer_masuk(tiket, barang, now_iso, new_id):
     inti diisi agar aset langsung sah di daftar/laporan; rincian lain
     dilengkapi lewat form aset setelah dibukukan. MURNI (id dari pemanggil).
     """
+    import math
     t = tiket or {}
     b = barang or {}
     try:
         nilai = float(b.get("nilai") or 0)
     except (TypeError, ValueError):
+        nilai = 0
+    if not math.isfinite(nilai):
+        # Jaring terakhir untuk tiket lama yang tercatat sebelum validasi:
+        # int(inf/NaN) meledak dan membatalkan pembukuan di tengah loop.
         nilai = 0
     return {
         "id": new_id,

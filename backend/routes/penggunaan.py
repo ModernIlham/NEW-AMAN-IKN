@@ -15,7 +15,9 @@ from fastapi import (
     APIRouter, Depends, File, HTTPException, Query, Request, UploadFile,
 )
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+import math
+
+from pydantic import BaseModel, Field, field_validator
 
 from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
@@ -1255,6 +1257,15 @@ class BarangMasukIn(BaseModel):
     asset_name: str = ""
     kategori: str = ""
     nilai: float = Field(default=0, ge=0)
+
+    @field_validator("nilai")
+    @classmethod
+    def _terhingga(cls, v: float) -> float:
+        # Token JSON Infinity LOLOS ge=0 (inf >= 0 True) lalu meledakkan
+        # str(int(nilai)) saat barang dibukukan di status terminal.
+        if not math.isfinite(v):
+            raise ValueError("nilai harus angka terhingga")
+        return v
 
 
 class ProsesIn(BaseModel):

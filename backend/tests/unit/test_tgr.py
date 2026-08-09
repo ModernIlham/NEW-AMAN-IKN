@@ -161,3 +161,24 @@ def test_gerbang_sk_penghapusan_aset_hilang(dbx):
             admin=ADMIN)
         assert r["status"] == "sk_terbit"
     _jalan(skenario())
+
+
+def test_nilai_ganti_rugi_tolak_tak_terhingga():
+    """Infinity/NaN lolos cek `<= 0` (perbandingannya False) — bila tembus,
+    register teracuni dan GET /tgr 500 permanen (json allow_nan=False)."""
+    import pydantic
+    from tgr_utils import validate_transisi_tgr
+
+    for aneh in (float("inf"), float("nan")):
+        errors = validate_transisi_tgr(
+            "telaah", "tgr_ditetapkan",
+            {"nomor_dokumen": "SKTJM-1/2026", "nilai_ganti_rugi": aneh})
+        assert any("terhingga" in e for e in errors), aneh
+        with pytest.raises(pydantic.ValidationError):
+            rt.TransisiTgrIn(status="tgr_ditetapkan",
+                             nomor_dokumen="SKTJM-1/2026",
+                             nilai_ganti_rugi=aneh)
+    # Nilai wajar tetap lolos.
+    assert not validate_transisi_tgr(
+        "telaah", "tgr_ditetapkan",
+        {"nomor_dokumen": "SKTJM-1/2026", "nilai_ganti_rugi": 2_500_000})
