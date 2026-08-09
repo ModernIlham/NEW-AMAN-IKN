@@ -77,6 +77,30 @@ async def ajukan_permohonan_aset(data: PermohonanAsetIn, request: Request = None
     if not ok:
         raise HTTPException(status_code=400, detail=err)
 
+    if data.jalur == "revaluasi_final":
+        # Sumber kebenaran = register koreksi penilaian: asset_id DIPAKSA
+        # dari register (payload tak bisa membelokkan persetujuan ke aset
+        # lain), status harus masih belum_dicatat, dan ringkasan disalin
+        # supaya surat informatif.
+        koreksi = await db.penilaian_koreksi.find_one(
+            scope_query_field_satker(
+                user, {"id": str(data.payload.get("koreksi_id") or "")}),
+            {"_id": 0})
+        if not koreksi:
+            raise HTTPException(status_code=404,
+                                detail="Register koreksi nilai tidak ditemukan")
+        if koreksi.get("status_sakti") != "belum_dicatat":
+            raise HTTPException(
+                status_code=409,
+                detail="Koreksi sudah ditandai tercatat SAKTI — tidak perlu "
+                       "permohonan lagi")
+        data.asset_id = str(koreksi.get("asset_id") or "")
+        data.payload = {**data.payload,
+                        "jenis": koreksi.get("jenis"),
+                        "nomor_dokumen": koreksi.get("nomor_dokumen"),
+                        "nilai_lama": koreksi.get("nilai_lama"),
+                        "nilai_baru": koreksi.get("nilai_baru")}
+
     aset = await db.assets.find_one(
         {"id": data.asset_id, "dihapus": {"$ne": True}},
         {"_id": 0, "id": 1, "asset_name": 1, "asset_code": 1, "NUP": 1,
@@ -161,6 +185,10 @@ async def _eksekusi_permohonan_aset(p: dict, penyetuju: dict):
             raise HTTPException(status_code=400,
                                 detail=f"Payload permohonan tidak valid — {e}")
         return await rmb.reklasifikasi_aset(model, user=penyetuju)
+    if jalur == "revaluasi_final":
+        import routes.penilaian as rp
+        return await rp.tandai_tercatat_sakti(
+            str(payload.get("koreksi_id") or ""), user=penyetuju)
     peta = {
         "kdp_pengembangan": (rmb.pengembangan_kdp, rmb.KdpPengembanganIn),
         "kdp_selesai": (rmb.selesaikan_kdp, rmb.KdpSelesaiIn),

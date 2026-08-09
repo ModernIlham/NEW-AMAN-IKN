@@ -67,6 +67,36 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#842] Finalisasi revaluasi ikut gerbang KPB — jalur permohonan `revaluasi_final` — 2026-08-09
+
+Pelengkap `[#841]`: finalisasi koreksi/revaluasi nilai
+(`POST /penilaian/koreksi/{id}/sakti` — menulis jurnal 204/205 + proyeksi
+`nilai_wajar_terakhir` ke master) adalah alur berjurnal besar terakhir yang
+masih dieksekusi `require_writer` langsung; temuan audit juga mencatat
+pencatat dan pem-final boleh orang yang sama.
+
+- Jalur baru **`revaluasi_final`** di mesin permohonan aset: saat ajukan,
+  register koreksi diverifikasi (scope satker + status masih
+  `belum_dicatat`), `asset_id` DIPAKSA dari register (payload tak bisa
+  membelokkan persetujuan ke aset lain), dan ringkasan nilai lama→baru
+  disalin ke dokumen permohonan supaya Surat Persetujuan informatif.
+- Persetujuan mengeksekusi `tandai_tercatat_sakti` asli (`request=None`) —
+  CAS status + kompensasi gagal-di-tengah tetap milik implementasi tunggal.
+- Gerbang `aset_wajib_persetujuan` kini juga dipasang di endpoint
+  finalisasi penilaian: HTTP langsung ditolak 403 saat saklar aktif.
+- Belokan UI di halaman Penilaian (tombol "Tandai tercatat SAKTI") lewat
+  helper `lib/permohonanAset` yang sama; label saklar di panel Permohonan
+  Pembukuan diperbarui menyebut finalisasi revaluasi.
+
+Uji bertambah 3 (total 9 di `test_aset_permohonan.py`): persetujuan menulis
+204 + status register berubah; ajukan ditolak 409 bila koreksi sudah
+tercatat; gerbang menolak HTTP langsung tetapi melewatkan pemanggil
+internal. Dua mutasi kunci tertangkap (eksekusi di-skip, gerbang dicabut).
+Harness memakai patch kelas find_one_and_update mongomock (kwarg projection
+→ None) yang sama dengan uji henti guna.
+
+---
+
 ## [#841] Gerbang persetujuan KPB untuk transaksi aset — reklasifikasi & KDP lewat permohonan — 2026-08-09
 
 Butir pertama lanjutan audit permohonan aset: pola SEDIA-KPB persediaan

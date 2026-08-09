@@ -20,10 +20,11 @@ const KONFIG_PERMOHONAN_ASET = {
   dasar: "/pembukuan/permohonan",
   pengaturan: "/pembukuan/permohonan-pengaturan",
   judul: "Permohonan Transaksi Aset",
-  labelGerbang: ("reklasifikasi dan transaksi KDP diajukan sebagai "
-    + "permohonan dan baru tereksekusi setelah disetujui admin lain."),
-  toastNyala: ("Wajib persetujuan DINYALAKAN — reklasifikasi & KDP kini "
-    + "lewat permohonan"),
+  labelGerbang: ("reklasifikasi, transaksi KDP, dan finalisasi revaluasi "
+    + "diajukan sebagai permohonan dan baru tereksekusi setelah disetujui "
+    + "admin lain."),
+  toastNyala: ("Wajib persetujuan DINYALAKAN — reklasifikasi, KDP & "
+    + "finalisasi revaluasi kini lewat permohonan"),
   prefix: "pembukuan-permohonan",
   namaBerkas: "Persetujuan_Aset",
   labelSurat: "Surat Persetujuan Transaksi Aset",

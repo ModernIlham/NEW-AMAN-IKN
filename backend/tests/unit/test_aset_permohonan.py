@@ -18,6 +18,7 @@ from mongomock_motor import AsyncMongoMockClient
 
 import routes.aset_permohonan as rap
 import routes.mutasi_bmn as rmb
+import routes.penilaian as rp
 
 PENGAJU = {"username": "op1", "role": "operator", "kode_satker": ""}
 PENYETUJU = {"username": "adm2", "role": "admin", "kode_satker": ""}
@@ -50,13 +51,26 @@ class _Req:
 def dbx(monkeypatch):
     fake = AsyncMongoMockClient()["uji"]
     import shared_utils as su
-    for mod in (rap, rmb, su):
+    for mod in (rap, rmb, rp, su):
         monkeypatch.setattr(mod, "db", fake, raising=False)
         if hasattr(mod, "log_audit"):
             monkeypatch.setattr(mod, "log_audit", _diam, raising=False)
     monkeypatch.setattr(su, "ensure_activity_not_sealed", _diam)
-    # mongomock: find_one_and_update + kwarg projection → None (lihat
-    # test_penggunaan_henti_guna); di sini tak ada projection, aman.
+    # mongomock: find_one_and_update mengembalikan None bila diberi kwarg
+    # projection (lihat test_penggunaan_henti_guna) — jalur revaluasi_final
+    # (tandai_tercatat_sakti + proyeksi master) memakainya, jadi emulasikan
+    # dengan patch kelas yang membuang projection lalu mencabut _id.
+    from mongomock_motor import AsyncMongoMockCollection
+    asli_fau = AsyncMongoMockCollection.find_one_and_update
+
+    async def _fau(self, filter, update, **kw):
+        kw.pop("projection", None)
+        doc = await asli_fau(self, filter, update, **kw)
+        if doc:
+            doc.pop("_id", None)
+        return doc
+
+    monkeypatch.setattr(AsyncMongoMockCollection, "find_one_and_update", _fau)
     return fake
 
 
@@ -179,4 +193,62 @@ def test_eksekusi_gagal_mengembalikan_status_diusulkan(dbx):
         p = await dbx.aset_permohonan.find_one({"id": pid})
         assert p["status"] == "diusulkan"
         assert "persediaan" in p["galat_terakhir"]
+    _jalan(skenario())
+
+
+async def _seed_koreksi(dbx):
+    await dbx.penilaian_koreksi.insert_one({
+        "id": "kor-1", "kode_satker": "", "asset_id": "as-1",
+        "asset_code": "3050104001", "NUP": "1", "asset_name": "PC Unit",
+        "jenis": "revaluasi", "jenis_dokumen": "LHIP",
+        "nomor_dokumen": "LHIP-7/2026", "tanggal_dokumen": "2026-08-01",
+        "nilai_lama": 9_000_000.0, "nilai_baru": 12_000_000.0,
+        "selisih": 3_000_000.0, "dampak_masa_manfaat": "tetap",
+        "status_sakti": "belum_dicatat"})
+
+
+def test_setujui_revaluasi_final_menulis_204(dbx):
+    async def skenario():
+        await _seed(dbx)
+        await _seed_koreksi(dbx)
+        pid = await _ajukan("revaluasi_final", "as-1", {"koreksi_id": "kor-1"})
+        # Ringkasan disalin dari register (nilai lama → baru).
+        d = await dbx.aset_permohonan.find_one({"id": pid})
+        assert "LHIP-7/2026" in d["ringkasan"]
+        assert await dbx.mutasi_bmn.count_documents({}) == 0
+        await _unwrap(rap.setujui_permohonan_aset)(pid, user=PENYETUJU)
+        kor = await dbx.penilaian_koreksi.find_one({"id": "kor-1"})
+        assert kor["status_sakti"] == "tercatat_sakti"
+        j = await dbx.mutasi_bmn.find_one({"kode_transaksi": "204"})
+        assert j and j["nilai"] == 3_000_000 and j["jumlah"] == 0
+    _jalan(skenario())
+
+
+def test_revaluasi_final_menolak_koreksi_sudah_tercatat(dbx):
+    async def skenario():
+        await _seed(dbx)
+        await _seed_koreksi(dbx)
+        await dbx.penilaian_koreksi.update_one(
+            {"id": "kor-1"}, {"$set": {"status_sakti": "tercatat_sakti"}})
+        with pytest.raises(HTTPException) as e:
+            await _ajukan("revaluasi_final", "as-1", {"koreksi_id": "kor-1"})
+        assert e.value.status_code == 409
+    _jalan(skenario())
+
+
+def test_gerbang_menolak_finalisasi_langsung_saat_aktif(dbx):
+    async def skenario():
+        await _seed(dbx)
+        await _seed_koreksi(dbx)
+        await dbx.report_settings.insert_one(
+            {"type": "global", "aset_wajib_persetujuan": True})
+        with pytest.raises(HTTPException) as e:
+            await _unwrap(rp.tandai_tercatat_sakti)(
+                "kor-1", request=_Req(), user=PENGAJU)
+        assert e.value.status_code == 403
+        kor = await dbx.penilaian_koreksi.find_one({"id": "kor-1"})
+        assert kor["status_sakti"] == "belum_dicatat"
+        # Pemanggil internal (jalur persetujuan) tetap boleh.
+        r = await _unwrap(rp.tandai_tercatat_sakti)("kor-1", user=PENYETUJU)
+        assert r["status_sakti"] == "tercatat_sakti"
     _jalan(skenario())

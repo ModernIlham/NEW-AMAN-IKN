@@ -10,7 +10,7 @@ import math
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 
 from auth_utils import require_admin, require_user, require_writer
@@ -380,13 +380,21 @@ async def _proyeksi_master_revaluasi(koreksi: dict, oleh: str) -> bool:
 
 @penilaian_router.post("/penilaian/koreksi/{koreksi_id}/sakti")
 async def tandai_tercatat_sakti(koreksi_id: str,
+                                request: Request = None,
                                 user: dict = Depends(require_writer)):
     """Tandai koreksi sudah divalidasi & di-approve di SAKTI (anti-race).
 
     Saat transisi BERHASIL, PROYEKSIKAN nilai wajar ke master aset
     (`nilai_wajar_terakhir` + jejak revaluasi, #254) — best-effort, tak
     menggagalkan transisi bila aset sudah tak ada.
+
+    ASET-GERBANG-2: finalisasi menulis jurnal 204/205 + proyeksi master —
+    saat gerbang wajib-persetujuan aktif, HTTP langsung ditolak dan jalur
+    sahnya lewat permohonan `revaluasi_final` (routes/aset_permohonan.py,
+    pemanggilan internal request=None).
     """
+    from routes.mutasi_bmn import _gerbang_wajib_persetujuan_aset
+    await _gerbang_wajib_persetujuan_aset(request)
     now = datetime.now(timezone.utc).isoformat()
     res = await db.penilaian_koreksi.find_one_and_update(
         scope_query_field_satker(
