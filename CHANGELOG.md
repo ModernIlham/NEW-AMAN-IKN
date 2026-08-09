@@ -67,30 +67,41 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
-## [#829] Encode PNG pratinjau TTD: compress_level=3 — lebih cepat sekaligus lebih kecil — 2026-08-08
+## [#833] Persediaan ber-persetujuan KPB (UI) — panel permohonan, belokan 7 dialog, saklar gerbang — 2026-08-09
 
-Butir tuning terakhir dari daftar saran S7. Encode PNG Pillow adalah bagian
-termahal render pratinjau halaman (87 dari ±100 ms), dan ia berjalan di
-EXECUTOR TUNGGAL pdfium — waktu encode langsung membatasi laju SEMUA
-pratinjau penempatan ttd/QR, bukan hanya satu permintaan.
+Paruh kedua SEDIA-KPB (paruh backend: `[#832]`): alurnya kini bisa DIPAKAI
+dari layar. Fitur lengkap end-to-end — tetapi **default MATI**: sampai admin
+menyalakan saklarnya, semua dialog transaksi berperilaku persis seperti
+sebelumnya.
 
-Diukur dulu, baru dipilih (halaman naskah 1100px, rata-rata 5 iterasi):
-
-| compress_level | waktu encode | ukuran |
-|---|---|---|
-| 0 | 36 ms | **5.018 KB** — ditolak |
-| 1 | 59 ms | 540 KB |
-| **3 (dipilih)** | **64 ms** | **516 KB** |
-| 6 (bawaan) | 103 ms | 652 KB |
-
-Level 3 menang dua-duanya terhadap bawaan: encode ~38% lebih cepat DAN
-berkas ~21% lebih kecil (zlib level rendah dengan strategi filter Pillow
-kebetulan lebih cocok untuk bitmap dokumen yang didominasi putih). Satu
-baris berubah; pin `test_compress_level_encode_png_dipertahankan`
-(memuat angka ukurannya) menjaga setelan ini dari "dirapikan" kembali ke
-bawaan. Disiplin uji-mutasi tidak berlaku untuk kwarg murni-kinerja —
-kontrak perilaku (PNG sah, lebar 1100, header cache) sudah dijaga uji
-S7 yang ada. Suite backend 2464 → 2465 lulus.
+- **Panel Permohonan** (`PermohonanPanel.jsx`) di toolbar halaman
+  Persediaan: tombol berlencana jumlah "menunggu" (hidup tanpa membuka
+  panel), filter status, dan per permohonan — Setujui / Tolak (wajib
+  alasan) / Batalkan / unduh Surat Persetujuan / Kirim TTD KPB.
+  **Pemisahan peran terlihat di layar**: tombol Setujui/Tolak hanya
+  ditawarkan pada admin yang BUKAN pengajunya — 403 server tidak perlu
+  ditemukan lewat klik; pengaju hanya diberi Batalkan.
+- **Saklar "Wajib persetujuan KPB"** di dalam panel (khusus admin,
+  berjejak audit): GET/POST `/persediaan/permohonan-pengaturan` baru,
+  dan `/persediaan/jenis-transaksi` kini menyertakan `wajib_persetujuan`
+  supaya dialog tahu mode-nya tanpa fetch tambahan.
+- **Belokan di 7 dialog transaksi** PersediaanPage (masuk, keluar, massal,
+  opname, koreksi nilai, hapus ber-SK, pindah gudang): saat saklar
+  menyala, submit mengajukan permohonan (Idempotency-Key ikut pindah ke
+  permohonan pada jalur yang memakainya) alih-alih menulis stok; panel
+  menyegarkan daftar + ringkasan begitu permohonan diputus.
+- **Jalur Pengadaan "Daftarkan ke Persediaan" SENGAJA tetap internal**
+  (menuntaskan catatan batas di PR #824): barang dari Pengadaan sudah
+  melewati persetujuannya sendiri — BAST/LPB ber-ttd adalah dokumen sumber
+  persetujuannya — sehingga tidak diantrekan ulang ke permohonan; aturan
+  bisnis ini yang berlaku, bukan pekerjaan tertunda.
+- **Verifikasi:** 5 uji render PermohonanPanel (lencana, pemisahan peran,
+  endpoint setujui, tolak wajib alasan, unduh surat) + 3 uji pin
+  pengkabelan + 1 uji backend saklar dua-arah; suite frontend 798 → 806,
+  backend 2482 → 2483 lulus; **4/4 mutasi terbunuh** (cabut `!milikku` →
+  uji pemisahan peran; saklar menulis `False` paksa → uji dua-arah; cabut
+  `wajib_persetujuan` dari jenis-transaksi → asersi referensi; cabut satu
+  belokan jalur → uji pin). `CI=false yarn build` sukses.
 
 ---
 
@@ -226,6 +237,33 @@ pernah dideklarasikan — dua-duanya dengan lint bersih, build sukses, dan
 > + jalur data/galat — bukan interaksi kartografis. Cacat kelas
 > `kirimGeserRef` (hanya meledak di handler) tetap ditangkap penjaga
 > `no-undef` eslint, bukan oleh uji render ini.
+
+---
+
+## [#829] Encode PNG pratinjau TTD: compress_level=3 — lebih cepat sekaligus lebih kecil — 2026-08-08
+
+Butir tuning terakhir dari daftar saran S7. Encode PNG Pillow adalah bagian
+termahal render pratinjau halaman (87 dari ±100 ms), dan ia berjalan di
+EXECUTOR TUNGGAL pdfium — waktu encode langsung membatasi laju SEMUA
+pratinjau penempatan ttd/QR, bukan hanya satu permintaan.
+
+Diukur dulu, baru dipilih (halaman naskah 1100px, rata-rata 5 iterasi):
+
+| compress_level | waktu encode | ukuran |
+|---|---|---|
+| 0 | 36 ms | **5.018 KB** — ditolak |
+| 1 | 59 ms | 540 KB |
+| **3 (dipilih)** | **64 ms** | **516 KB** |
+| 6 (bawaan) | 103 ms | 652 KB |
+
+Level 3 menang dua-duanya terhadap bawaan: encode ~38% lebih cepat DAN
+berkas ~21% lebih kecil (zlib level rendah dengan strategi filter Pillow
+kebetulan lebih cocok untuk bitmap dokumen yang didominasi putih). Satu
+baris berubah; pin `test_compress_level_encode_png_dipertahankan`
+(memuat angka ukurannya) menjaga setelan ini dari "dirapikan" kembali ke
+bawaan. Disiplin uji-mutasi tidak berlaku untuk kwarg murni-kinerja —
+kontrak perilaku (PNG sah, lebar 1100, header cache) sudah dijaga uji
+S7 yang ada. Suite backend 2464 → 2465 lulus.
 
 ---
 

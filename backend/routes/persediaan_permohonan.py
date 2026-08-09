@@ -379,6 +379,35 @@ async def dokumen_persetujuan(pid: str,
                  "X-Content-Type-Options": "nosniff"})
 
 
+class PengaturanPermohonanIn(BaseModel):
+    aktif: bool
+
+
+@persediaan_permohonan_router.get("/persediaan/permohonan-pengaturan")
+async def baca_pengaturan_permohonan(_user: dict = Depends(require_user)):
+    s = await db.report_settings.find_one(
+        {"type": "global"}, {"persediaan_wajib_persetujuan": 1}) or {}
+    return {"aktif": bool(s.get("persediaan_wajib_persetujuan"))}
+
+
+@persediaan_permohonan_router.post("/persediaan/permohonan-pengaturan")
+async def ubah_pengaturan_permohonan(data: PengaturanPermohonanIn,
+                                     user: dict = Depends(require_admin)):
+    """Saklar gerbang wajib-persetujuan — keputusan kebijakan satuan kerja,
+    maka khusus admin dan berjejak audit. Menyalakannya membuat SEMUA
+    dialog transaksi mengajukan permohonan alih-alih menulis langsung."""
+    await db.report_settings.update_one(
+        {"type": "global"},
+        {"$set": {"persediaan_wajib_persetujuan": bool(data.aktif)},
+         "$setOnInsert": {"type": "global"}},
+        upsert=True)
+    await log_audit("persediaan_permohonan_pengaturan", "",
+                    username=user.get("username", "system"),
+                    detail=("wajib persetujuan DINYALAKAN" if data.aktif
+                            else "wajib persetujuan DIMATIKAN"))
+    return {"aktif": bool(data.aktif)}
+
+
 class KirimTtdPersetujuanIn(BaseModel):
     signers: list = []
     mode: str = "berurutan"
