@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, Flame, Plus, Search, Trash2, X, Coins, Download,
-  Check, FileDown, FileText, Paperclip, Upload,
+  Check, FileDown, FileText, Paperclip, Upload, FileSignature,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { useTransitionDialog } from "@/components/ui/TransitionDialog";
 import StatKartu from "@/components/ui/StatKartu";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
@@ -26,6 +27,22 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const FORM_KOSONG = {
   nomor_ba: "", tanggal_ba: new Date().toISOString().slice(0, 10),
   cara: "dihancurkan", nomor_persetujuan: "", keterangan: "",
+};
+
+const WARNA_USULAN = {
+  draf: "bg-muted text-muted-foreground",
+  diajukan: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
+  disetujui: "bg-violet-500/15 text-violet-600 dark:text-violet-400",
+  ditolak: "bg-red-500/15 text-red-600 dark:text-red-400",
+  dilaksanakan: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  dibatalkan: "bg-muted text-muted-foreground",
+};
+
+// Label dokumen wajib per transisi usulan (selaras pemusnahan_utils backend)
+const DOK_USULAN = {
+  diajukan: "Nomor surat usulan ke Pengelola Barang",
+  disetujui: "Nomor persetujuan Pengelola/Pengguna Barang",
+  dilaksanakan: "Nomor Berita Acara Pemusnahan",
 };
 
 /**
@@ -47,7 +64,12 @@ export default function PemusnahanPage({ user, onBack }) {
   // Dialog lampiran bukti: {ba, uploading}
   const [lamp, setLamp] = useState(null);
   const lampInputRef = useRef(null);
+  // Usulan pemusnahan berstatus (PMK 83/2016)
+  const [usulanData, setUsulanData] = useState(null);
+  // Dialog usulan baru: {data: {cara, keterangan}, aset: [], saving}
+  const [formU, setFormU] = useState(null);
   const { confirm, confirmDialog } = useConfirm();
+  const { minta, transitionDialog } = useTransitionDialog();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
@@ -56,13 +78,18 @@ export default function PemusnahanPage({ user, onBack }) {
       .then((r) => setData(r.data))
       .catch(() => toast.error("Gagal memuat register pemusnahan"))
       .finally(() => setLoading(false));
+    axios.get(`${API}/pemusnahan/usulan`)
+      .then((r) => setUsulanData(r.data))
+      .catch(() => setUsulanData(null));
   }, []);
   useEffect(() => { muat(); }, [muat]);
 
   // Cari aset Rusak Berat untuk daftar BA — query KOSONG menampilkan
   // kandidat Rusak Berat langsung (1-klik, selaras kandidat Penghapusan).
+  // Dipakai bersama dialog BA (form) DAN dialog usulan (formU) — dua
+  // dialog tak pernah terbuka bersamaan.
   useEffect(() => {
-    if (!form) { setHasilCari([]); return undefined; }
+    if (!form && !formU) { setHasilCari([]); return undefined; }
     clearTimeout(cariTimer.current);
     cariTimer.current = setTimeout(async () => {
       setMencari(true);
@@ -74,7 +101,7 @@ export default function PemusnahanPage({ user, onBack }) {
       } catch { setHasilCari([]); } finally { setMencari(false); }
     }, 300);
     return () => clearTimeout(cariTimer.current);
-  }, [cari, form]);
+  }, [cari, form, formU]);
 
   const fmtRp = (n) => `Rp${Math.round(Number(n || 0)).toLocaleString("id-ID")}`;
   const bukaForm = () => { setCari(""); setHasilCari([]); setForm({ data: { ...FORM_KOSONG }, aset: [], saving: false }); };
@@ -166,6 +193,74 @@ export default function PemusnahanPage({ user, onBack }) {
 
   const labelCara = data?.label_cara || {};
 
+  // ── Usulan pemusnahan berstatus ──
+  const labelStatusUsulan = usulanData?.label_status || {};
+
+  const bukaUsulanForm = () => {
+    setCari(""); setHasilCari([]);
+    setFormU({ data: { cara: "dihancurkan", keterangan: "" }, aset: [], saving: false });
+  };
+  const tambahAsetU = (a) => setFormU((f) => (
+    f.aset.some((x) => x.id === a.id) ? { ...f } : { ...f, aset: [...f.aset, a] }
+  ));
+
+  const simpanUsulan = async () => {
+    if (!formU) return;
+    if (formU.aset.length === 0) { toast.error("Tambahkan minimal satu aset"); return; }
+    setFormU((f) => ({ ...f, saving: true }));
+    try {
+      await axios.post(`${API}/pemusnahan/usulan`, {
+        ...formU.data, asset_ids: formU.aset.map((a) => a.id),
+      });
+      toast.success("Usulan pemusnahan dibuka — status Draf");
+      setFormU(null);
+      muat();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal membuka usulan");
+      setFormU((f) => (f ? { ...f, saving: false } : f));
+    }
+  };
+
+  const transisiUsulan = async (u, ke) => {
+    const dok = DOK_USULAN[ke];
+    const fields = dok
+      ? [{ key: "nomor_dokumen", label: dok, type: "text", wajib: true },
+         { key: "tanggal_dokumen",
+           label: ke === "dilaksanakan" ? "Tanggal BA" : "Tanggal dokumen",
+           type: "date", default: new Date().toISOString().slice(0, 10) }]
+      : [{ key: "catatan", label: "Catatan", type: "textarea" }];
+    const v = await minta({
+      judul: labelStatusUsulan[ke] || ke,
+      deskripsi: `${(u.aset || []).length} aset — ${labelCara[u.cara] || u.cara}`
+        + (ke === "dilaksanakan" ? ". BA pemusnahan lahir otomatis dari usulan ini." : ""),
+      fields, confirmLabel: "Simpan",
+    });
+    if (v === null) return;
+    try {
+      await axios.post(`${API}/pemusnahan/usulan/${u.id}/status`, { status: ke, ...v });
+      toast.success(`Status usulan: ${labelStatusUsulan[ke] || ke}`);
+      muat();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mengubah status usulan");
+    }
+  };
+
+  const hapusUsulan = async (u) => {
+    const ok = await confirm({
+      title: "Hapus usulan draf?",
+      description: `${(u.aset || []).length} aset — ${labelCara[u.cara] || u.cara}.`,
+      confirmLabel: "Hapus", variant: "danger",
+    });
+    if (!ok) return;
+    try {
+      await axios.delete(`${API}/pemusnahan/usulan/${u.id}`);
+      toast.success("Usulan dihapus");
+      muat();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menghapus usulan");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background" data-testid="pemusnahan-page">
       {/* ── Header ── */}
@@ -236,6 +331,88 @@ export default function PemusnahanPage({ user, onBack }) {
                 testid="pemusnahan-stat-nilai"
                 className="col-span-2 sm:col-span-1"
               />
+            </div>
+
+            {/* ── Usulan pemusnahan berstatus (PMK 83/2016) ── */}
+            <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden"
+              data-testid="pemusnahan-usulan-panel">
+              <div className="px-3 py-2 border-b border-border flex items-center gap-2 flex-wrap">
+                <FileSignature className="w-4 h-4 text-orange-600 flex-shrink-0" />
+                <div className="flex-1 min-w-[160px]">
+                  <p className="text-xs font-bold text-foreground">Usulan Pemusnahan</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Jejak proses: surat usulan → persetujuan Pengelola → BA lahir otomatis
+                  </p>
+                </div>
+                {(usulanData?.items || []).length > 0 && (
+                  <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                    onClick={() => downloadFileWithProgress(`${API}/pemusnahan/usulan/export`,
+                      "register_usulan_pemusnahan.csv",
+                      { label: "Ekspor Usulan Pemusnahan (CSV)" }).catch(() => {})}
+                    data-testid="pemusnahan-usulan-export">
+                    <Download className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">CSV</span>
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                  onClick={bukaUsulanForm} data-testid="pemusnahan-usulan-baru">
+                  <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Usulan Baru</span>
+                </Button>
+              </div>
+              {(usulanData?.items || []).length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-3 px-3">
+                  Belum ada usulan — BA sebaiknya lahir dari usulan yang disetujui
+                  Pengelola Barang, bukan dicatat langsung.
+                </p>
+              ) : (
+                <ul className="divide-y divide-border/60">
+                  {usulanData.items.map((u) => (
+                    <li key={u.id} className="p-3 space-y-1" data-testid={`pemusnahan-usulan-${u.id}`}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${WARNA_USULAN[u.status] || "bg-muted"}`}>
+                          {labelStatusUsulan[u.status] || u.status}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-600 dark:text-orange-400 text-[10px] font-semibold">
+                          {labelCara[u.cara] || u.cara}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">{(u.aset || []).length} aset</span>
+                        <p className="text-[11px] text-muted-foreground flex-1 min-w-[140px] truncate">
+                          {[u.nomor_usulan && `Usulan ${u.nomor_usulan}`,
+                            u.nomor_persetujuan && `Persetujuan ${u.nomor_persetujuan}`,
+                            u.nomor_ba && `BA ${u.nomor_ba}`,
+                            u.keterangan].filter(Boolean).join(" · ")}
+                        </p>
+                      </div>
+                      <ul className="space-y-0.5">
+                        {(u.aset || []).slice(0, 3).map((a) => (
+                          <li key={a.asset_id} className="text-[11px] text-foreground/80 truncate">
+                            {a.asset_name} <span className="font-mono text-muted-foreground">({a.asset_code} · {a.NUP})</span>
+                          </li>
+                        ))}
+                        {(u.aset || []).length > 3 && (
+                          <li className="text-[11px] text-muted-foreground">+{(u.aset || []).length - 3} aset lainnya</li>
+                        )}
+                      </ul>
+                      {isAdmin && (usulanData.transisi?.[u.status] || []).length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 items-center">
+                          {(usulanData.transisi[u.status] || []).map((ke) => (
+                            <Button key={ke} size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                              onClick={() => transisiUsulan(u, ke)}
+                              data-testid={`pemusnahan-usulan-ke-${u.id}-${ke}`}>
+                              {labelStatusUsulan[ke] || ke}
+                            </Button>
+                          ))}
+                          {u.status === "draf" && (
+                            <button type="button" onClick={() => hapusUsulan(u)} aria-label="Hapus usulan"
+                              className="h-7 w-7 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 min-h-0 min-w-0">
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             {/* ── Daftar BA ── */}
@@ -414,6 +591,85 @@ export default function PemusnahanPage({ user, onBack }) {
         </DialogContent>
       </Dialog>
 
+      {/* ── Dialog usulan pemusnahan baru ── */}
+      <Dialog open={!!formU} onOpenChange={(o) => { if (!o) setFormU(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Usulan Pemusnahan Baru</DialogTitle>
+            <DialogDescription className="text-xs">
+              Hanya aset Rusak Berat. BA pemusnahan lahir otomatis saat usulan
+              mencapai status Dilaksanakan (setelah persetujuan Pengelola).
+            </DialogDescription>
+          </DialogHeader>
+          {formU && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pms-u-cara">Cara pemusnahan</label>
+                <select id="pms-u-cara" value={formU.data.cara}
+                  onChange={(e) => setFormU((f) => ({ ...f, data: { ...f.data, cara: e.target.value } }))}
+                  className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
+                  data-testid="pemusnahan-usulan-cara">
+                  {Object.entries(labelCara).length
+                    ? Object.entries(labelCara).map(([k, v]) => <option key={k} value={k}>{v}</option>)
+                    : <option value="dihancurkan">Dihancurkan</option>}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pms-u-ket">Keterangan</label>
+                <Input id="pms-u-ket" value={formU.data.keterangan}
+                  onChange={(e) => setFormU((f) => ({ ...f, data: { ...f.data, keterangan: e.target.value } }))} />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pms-u-cari">Tambah aset (Rusak Berat)</label>
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <Input id="pms-u-cari" className="pl-8" placeholder="Ketik untuk menyaring — kosongkan untuk melihat kandidat Rusak Berat"
+                    value={cari} onChange={(e) => setCari(e.target.value)} data-testid="pemusnahan-usulan-cari" />
+                  {(mencari || hasilCari.length > 0) && (
+                    <div className="absolute z-50 mt-1 w-full max-h-44 overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
+                      {mencari ? (
+                        <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-orange-700" /></div>
+                      ) : hasilCari.map((a) => (
+                        <button key={a.id} type="button"
+                          onClick={() => { tambahAsetU(a); setHasilCari((h) => h.filter((x) => x.id !== a.id)); }}
+                          className="w-full px-2.5 py-1.5 text-left hover:bg-muted">
+                          <span className="block text-xs font-semibold text-foreground truncate">{a.asset_name}</span>
+                          <span className="block text-[10px] text-muted-foreground font-mono">{a.asset_code} · {a.NUP} · {a.condition}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              {formU.aset.length > 0 && (
+                <ul className="sm:col-span-2 space-y-1">
+                  {formU.aset.map((a) => (
+                    <li key={a.id} className="rounded-lg border border-border p-2 flex items-center gap-2">
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-xs font-semibold text-foreground truncate">{a.asset_name}</span>
+                        <span className="block text-[10px] text-muted-foreground font-mono">{a.asset_code} · {a.NUP}</span>
+                      </span>
+                      <button type="button" aria-label="Keluarkan aset"
+                        onClick={() => setFormU((f) => ({ ...f, aset: f.aset.filter((x) => x.id !== a.id) }))}
+                        className="h-7 w-7 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 flex-shrink-0 min-h-0 min-w-0">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setFormU(null)}>Batal</Button>
+            <Button onClick={simpanUsulan} disabled={formU?.saving || (formU?.aset?.length || 0) === 0}
+              className="bg-orange-700 hover:bg-orange-800 text-white" data-testid="pemusnahan-usulan-simpan">
+              {formU?.saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <FileSignature className="w-4 h-4 mr-1.5" />}Buka Usulan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Dialog lampiran bukti pelaksanaan ── */}
       <Dialog open={!!lamp} onOpenChange={(o) => { if (!o) setLamp(null); }}>
         <DialogContent className="max-w-md">
@@ -459,6 +715,7 @@ export default function PemusnahanPage({ user, onBack }) {
       </Dialog>
 
       {confirmDialog}
+      {transitionDialog}
     </div>
   );
 }

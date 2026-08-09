@@ -113,6 +113,102 @@ def usulan_penghapusan_dari_ba(ba: dict, aset: dict, now_iso: str, oleh, new_id:
     }
 
 
+# ---------------------------------------------------------------------------
+# Usulan pemusnahan berstatus (ASET-MUSNAH).
+# Register BA di atas hanya merekam BA JADI (setelah persetujuan +
+# pelaksanaan) — proses usulan KPB ke Pengelola/Pengguna Barang yang
+# diwajibkan PMK 83/2016 tidak pernah terekam; nomor persetujuan cukup
+# diketik. Tiket usulan merekam jejaknya: surat usulan → persetujuan →
+# pelaksanaan (BA lahir otomatis dari usulan).
+# ---------------------------------------------------------------------------
+STATUS_USULAN_PEMUSNAHAN = {
+    "draf": "Draf",
+    "diajukan": "Diajukan ke Pengelola Barang",
+    "disetujui": "Disetujui (persetujuan terbit)",
+    "ditolak": "Ditolak",
+    "dilaksanakan": "Dilaksanakan (BA terbit)",
+    "dibatalkan": "Dibatalkan",
+}
+
+# diajukan boleh MUNDUR ke draf (koreksi salah klik — pola register TGR);
+# ditolak/dilaksanakan/dibatalkan terminal.
+TRANSISI_USULAN_PEMUSNAHAN = {
+    "draf": {"diajukan", "dibatalkan"},
+    "diajukan": {"disetujui", "ditolak", "draf"},
+    "disetujui": {"dilaksanakan", "dibatalkan"},
+    "ditolak": set(),
+    "dilaksanakan": set(),
+    "dibatalkan": set(),
+}
+
+STATUS_USULAN_MUSNAH_TERMINAL = {"ditolak", "dilaksanakan", "dibatalkan"}
+
+# status tujuan → (field nomor, field tanggal, label dokumen wajib)
+DOK_USULAN_PEMUSNAHAN = {
+    "diajukan": ("nomor_usulan", "tanggal_usulan",
+                 "Nomor surat usulan pemusnahan ke Pengelola Barang"),
+    "disetujui": ("nomor_persetujuan", "tanggal_persetujuan",
+                  "Nomor surat persetujuan Pengelola/Pengguna Barang"),
+    "dilaksanakan": ("nomor_ba", "tanggal_ba",
+                     "Nomor Berita Acara Pemusnahan"),
+}
+
+
+def validate_usulan_pemusnahan(data: dict) -> list:
+    """Validasi payload usulan pemusnahan baru → daftar galat."""
+    errors = []
+    if data.get("cara") not in CARA_PEMUSNAHAN:
+        valid = ", ".join(CARA_PEMUSNAHAN)
+        errors.append(f"Cara pemusnahan tidak dikenal (pilihan: {valid})")
+    if not data.get("asset_ids"):
+        errors.append("Minimal satu aset yang diusulkan musnah")
+    return errors
+
+
+def validate_transisi_usulan_pemusnahan(dari: str, ke: str, payload: dict,
+                                        today_iso: str) -> list:
+    """Daftar galat transisi usulan — dokumen wajib per tahap; BA
+    (dilaksanakan) tidak boleh bertanggal masa depan."""
+    p = payload or {}
+    if ke not in STATUS_USULAN_PEMUSNAHAN:
+        return [f"Status tujuan tidak dikenal: {ke}"]
+    if ke not in TRANSISI_USULAN_PEMUSNAHAN.get(dari, set()):
+        return [f"Transisi {STATUS_USULAN_PEMUSNAHAN.get(dari, dari)} → "
+                f"{STATUS_USULAN_PEMUSNAHAN.get(ke, ke)} tidak diizinkan"]
+    errors = []
+    dok = DOK_USULAN_PEMUSNAHAN.get(ke)
+    if dok and not str(p.get("nomor_dokumen") or "").strip():
+        errors.append(f"{dok[2]} wajib diisi")
+    if ke == "dilaksanakan":
+        t = _tgl(p.get("tanggal_dokumen"))
+        hari_ini = _tgl(today_iso)
+        if t and hari_ini and t > hari_ini:
+            errors.append("Tanggal BA tidak boleh di masa depan")
+    return errors
+
+
+def ba_dari_usulan(usulan: dict, now_iso: str, oleh, new_id: str,
+                   nomor_ba: str, tanggal_ba: str) -> dict:
+    """Record BA pemusnahan (db.pemusnahan) yang LAHIR dari usulan
+    dilaksanakan — nomor persetujuan & aset tersnapshot dari usulan,
+    ber-taut balik `usulan_id`. Fungsi murni supaya teruji unit."""
+    return {
+        "id": new_id,
+        "kode_satker": str(usulan.get("kode_satker") or "").strip(),
+        "nomor_ba": str(nomor_ba or "").strip(),
+        "tanggal_ba": str(tanggal_ba or now_iso).strip()[:10],
+        "cara": usulan.get("cara"),
+        "nomor_persetujuan": str(usulan.get("nomor_persetujuan") or "").strip(),
+        "keterangan": str(usulan.get("keterangan") or "").strip(),
+        "aset": list(usulan.get("aset") or []),
+        "lampiran": [],
+        "usulan_id": usulan.get("id"),
+        "created_by": oleh,
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+
+
 def rekap_pemusnahan(records):
     """Ringkasan register BA: jumlah BA, aset, nilai perolehan musnah."""
     jumlah_aset = 0

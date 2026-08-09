@@ -321,6 +321,9 @@ async def create_indexes() -> None:
         # Register BA pemusnahan: urut tanggal + jalur id
         await _idx(db.pemusnahan, "tanggal_ba")
         await _idx(db.pemusnahan, "id", unique=True)
+        # Usulan pemusnahan: cek duplikat aset dalam usulan berjalan + id
+        await _idx(db.pemusnahan_usulan, [("aset.asset_id", 1), ("status", 1)])
+        await _idx(db.pemusnahan_usulan, "id", unique=True)
         # Register pemindahtanganan: daftar per status + jalur id
         await _idx(db.pemindahtanganan, "status")
         await _idx(db.pemindahtanganan, "id", unique=True)
