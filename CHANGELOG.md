@@ -67,6 +67,41 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#845] Register TGR aset hilang + gerbang SK penghapusan jalur Tidak Ditemukan — 2026-08-09
+
+Butir pertama dari defisit "permohonan yang belum ada register sama sekali"
+(audit `[#841]`): penghapusan BMN karena **hilang** mensyaratkan proses
+Tuntutan Ganti Rugi (PP 38/2016; PMK 83/PMK.06/2016) — SKTJM/SK Pembebanan
+atau surat keterangan bebas TGR — tetapi aplikasi tidak punya register TGR
+sama sekali, sehingga SK penghapusan aset hilang bisa terbit tanpa satu pun
+bukti proses TGR terekam (temuan auditor hampir pasti).
+
+- **Register TGR** (`backend/tgr_utils.py` + `backend/routes/tgr.py`,
+  koleksi `tgr_register`): tiket per aset berstatus *Tidak Ditemukan* dengan
+  alur **penelusuran → telaah TPKN → { TGR ditetapkan | bebas TGR }**, lalu
+  **TGR ditetapkan → lunas**; telaah boleh mundur ke penelusuran (koreksi
+  salah klik), keputusan terminal. Dokumen wajib per keputusan: nomor
+  SKTJM/SK Pembebanan **+ nilai ganti rugi > 0** untuk TGR ditetapkan; nomor
+  surat keterangan untuk bebas TGR; nomor bukti setor untuk lunas. Buka
+  tiket wajib kronologi (≥10 karakter) + penanggung jawab; satu aset satu
+  tiket aktif (409); transisi ber-CAS anti-balapan; hapus hanya boleh saat
+  masih penelusuran; ekspor CSV; semua ber-scope satker + log audit.
+- **GERBANG SK** (`backend/routes/penghapusan.py`): transisi usulan
+  penghapusan jalur `tidak_ditemukan` menuju `sk_terbit` **DITOLAK 400**
+  selama aset belum punya tiket TGR berkeputusan (ditetapkan/bebas/lunas) —
+  SK aset hilang tidak lagi bisa terbit tanpa bukti proses TGR.
+- **Kartu "TGR Aset Hilang"** di halaman Penghapusan
+  (`frontend/src/components/penghapusan/KartuTgr.jsx`): daftar usulan
+  penghapusan aset hilang yang BELUM ber-TGR + tombol *Buka tiket TGR*
+  (form penanggung jawab/NIP/kronologi); daftar tiket ber-chip status +
+  tombol transisi admin dengan field dokumen/nilai sesuai keputusan; ekspor
+  CSV. Kartu menyembunyikan diri bila tidak ada tiket maupun kandidat.
+- Uji: 3 uji baru (`backend/tests/unit/test_tgr.py`) — tiket hanya untuk
+  aset Tidak Ditemukan, keputusan wajib dokumen+nilai, gerbang SK ditolak
+  tanpa TGR & lolos dengan bebas TGR. Disiplin uji-mutasi: gerbang dibisukan
+  → uji merah; validasi nilai dicabut → semula lolos, uji diperkuat
+  (nomor terisi + nilai 0 → 400) hingga mutasi tertangkap.
+
 ## [#844] Surat resmi register Penggunaan — usulan BMN idle & permohonan proses berhenti bernomor manual — 2026-08-09
 
 Pelengkap `[#843]` untuk dua register berjurnal di modul Penggunaan yang

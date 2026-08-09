@@ -214,6 +214,18 @@ async def transisi_usulan(usulan_id: str, payload: TransisiIn,
     errors = validate_transisi(u["status"], payload.status, payload.nomor_sk)
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
+    # Gerbang TGR (ASET-TGR, PP 38/2016 + PMK 83/2016): SK penghapusan aset
+    # HILANG tidak boleh terbit tanpa bukti proses TGR terekam — wajib ada
+    # tiket TGR berkeputusan (ditetapkan/bebas/lunas) untuk aset itu.
+    if payload.status == "sk_terbit" and u.get("jalur") == "tidak_ditemukan":
+        from routes.tgr import tgr_berkeputusan_untuk
+        if not await tgr_berkeputusan_untuk(u.get("asset_id")):
+            raise HTTPException(
+                status_code=400,
+                detail="SK penghapusan aset hilang ditolak: belum ada tiket "
+                       "TGR berkeputusan (TGR ditetapkan / bebas TGR) untuk "
+                       "aset ini — buka & selesaikan telaah TGR dulu di "
+                       "kartu TGR Aset Hilang")
     now = datetime.now(timezone.utc).isoformat()
     update = {
         "status": payload.status,
