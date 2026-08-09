@@ -12,6 +12,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 import ReferensiKodeMutasiDialog from "@/components/pembukuan/ReferensiKodeMutasiDialog";
+import PanelKdp from "@/components/pembukuan/PanelKdp";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -198,6 +199,7 @@ export default function PembukuanPage({ user, onBack }) {
         <div className="flex bg-muted rounded-lg p-0.5 gap-0.5">
           {[["dbkp", "DBKP", "DBKP per Golongan", Table2],
             ["jurnal", "Jurnal", "Buku Barang (Jurnal)", ScrollText],
+            ["kdp", "KDP", "KDP (Konstruksi)", Table2],
             ["kib", "KIB", "KIB (Kartu Identitas)", IdCard]].map(([k, pendek, panjang, Icon]) => (
             <button key={k} type="button" onClick={() => setTab(k)} title={panjang}
               className={`flex-1 text-[11px] sm:text-xs font-semibold py-1.5 rounded-md transition-colors flex items-center justify-center gap-1.5 min-w-0 min-h-0 whitespace-nowrap ${tab === k ? "bg-card text-indigo-700 dark:text-indigo-400 shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
@@ -401,6 +403,8 @@ export default function PembukuanPage({ user, onBack }) {
             )}
           </div>
         )}
+
+        {tab === "kdp" && <PanelKdp />}
 
         {tab === "kib" && (
           <div className="space-y-3">

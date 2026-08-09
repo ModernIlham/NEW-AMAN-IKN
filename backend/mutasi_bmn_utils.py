@@ -55,11 +55,24 @@ def validate_entri_mutasi(e) -> list:
     return errors
 
 
-def buat_pasangan_reklasifikasi(asset, kode_baru, nup_baru, tanggal_buku,
-                                alasan, oleh):
-    """Pasangan entri 304 (keluar dari kode lama) + 107 (masuk ke kode baru)
-    — nilai bruto sama (nilai perolehan aset), periode sama. MURNI: pemanggil
-    menyediakan nup_baru & menyimpan; id/created_at diisi pemanggil."""
+def kode_jurnal_aset_baru(asset_code, asal) -> str:
+    """Kode transaksi perolehan untuk ASET BARU: golongan 7 = KDP →
+    502 Perolehan/Penambahan KDP; asal perolehan menyebut beli/pengadaan →
+    101 Pembelian; selain itu 100 Saldo Awal (pencatatan pertama). MURNI."""
+    if str(asset_code or "").strip().startswith("7"):
+        return "502"
+    a = str(asal or "").lower()
+    return "101" if any(w in a for w in ("beli", "pengadaan", "pembelian")) else "100"
+
+
+def buat_pasangan_transisi(asset, kode_baru, nup_baru, tanggal_buku,
+                           alasan, oleh, kode_keluar="304", kode_masuk="107",
+                           label="Reklasifikasi"):
+    """Pasangan entri keluar-dari-kode-lama + masuk-ke-kode-baru — nilai
+    bruto sama (nilai perolehan aset), periode sama. Dipakai reklasifikasi
+    (304/107) dan penyelesaian KDP → aset definitif (505/105). MURNI:
+    pemanggil menyediakan nup_baru & menyimpan; id/created_at diisi
+    pemanggil."""
     from pembukuan_utils import parse_harga
     nilai = parse_harga(asset.get("purchase_price"))
     dasar = {
@@ -68,17 +81,24 @@ def buat_pasangan_reklasifikasi(asset, kode_baru, nup_baru, tanggal_buku,
         "jumlah": 1,
         "nilai": nilai,
         "sumber_modul": "pembukuan",
-        "keterangan": (f"Reklasifikasi {asset.get('asset_code')}/{asset.get('NUP')} "
+        "keterangan": (f"{label} {asset.get('asset_code')}/{asset.get('NUP')} "
                        f"→ {kode_baru}/{nup_baru}"
                        + (f" — {alasan}" if str(alasan or "").strip() else "")),
         "oleh": oleh,
     }
-    keluar = {**dasar, "kode_transaksi": "304",
+    keluar = {**dasar, "kode_transaksi": kode_keluar,
               "kode_barang": str(asset.get("asset_code") or ""),
               "nup": str(asset.get("NUP") or "")}
-    masuk = {**dasar, "kode_transaksi": "107",
+    masuk = {**dasar, "kode_transaksi": kode_masuk,
              "kode_barang": str(kode_baru or ""), "nup": str(nup_baru or "")}
     return keluar, masuk
+
+
+def buat_pasangan_reklasifikasi(asset, kode_baru, nup_baru, tanggal_buku,
+                                alasan, oleh):
+    """Pasangan 304/107 — lihat buat_pasangan_transisi."""
+    return buat_pasangan_transisi(asset, kode_baru, nup_baru, tanggal_buku,
+                                  alasan, oleh)
 
 
 def rekap_mutasi_periode(entries, dari, sampai):
