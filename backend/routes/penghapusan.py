@@ -5,6 +5,7 @@ Tidak Ditemukan → penelusuran + telaah TGR; Rusak Berat → pemusnahan/
 pemindahtanganan. Tiket usulan: diusulkan → diproses → SK terbit/ditolak
 (transisi tervalidasi, riwayat tercatat, arsip nomor SK).
 """
+import asyncio
 import uuid
 from datetime import datetime, timezone
 
@@ -395,3 +396,121 @@ async def hapus_usulan(usulan_id: str, _admin: dict = Depends(require_admin)):
         if lamp.get("file_id"):
             await delete_document_from_gridfs(lamp["file_id"])
     return {"ok": True, "id": usulan_id}
+
+
+@penghapusan_router.get("/penghapusan/nota-dinas-pdf")
+async def nota_dinas_penghapusan(ids: str = "", booking: int = 0,
+                                 _user: dict = Depends(require_user)):
+    """Nota Dinas Usulan Penghapusan (ASET-DOK-1) — daftar tiket berstatus
+    `diusulkan` dalam satu dokumen resmi ke Pengelola (PMK 83/PMK.06/2016).
+
+    `ids` (dipisah koma) menyaring ke tiket TERPILIH; id di luar kandidat
+    diabaikan (pola nota dinas persediaan — bukan pintu belakang). `booking=1`
+    membooking nomor Persuratan untuk cetakan INI; tanpa itu nomor
+    titik-titik — setiap cetakan ber-nomor adalah surat baru di buku agenda.
+    """
+    from io import BytesIO
+
+    from fastapi.responses import StreamingResponse
+    from reportlab.lib.units import mm as rl_mm
+    from reportlab.platypus import Paragraph, Spacer, Table
+
+    from pembukuan_utils import parse_harga
+    from routes.reports import (
+        _fit_col_widths, _fmt_tanggal_id, _get_report_styles,
+        _kop_surat_flowables, _page_footer_factory, _signature_block,
+        _std_doc, _std_table_style, _title_block,
+    )
+    from shared_utils import blok_ttd_kpb, pengaturan_kop
+
+    q = scope_query_field_satker(_user, {"status": "diusulkan"})
+    rows = await (db.usulan_penghapusan.find(q, {"_id": 0})
+                  .sort("created_at", 1).to_list(500))
+    terpilih = {s for s in (x.strip() for x in ids.split(",")) if s}
+    if terpilih:
+        rows = [r for r in rows if r.get("id") in terpilih]
+
+    # Nilai perolehan dari master aset (tiket tak menyimpan harga).
+    harga = {}
+    aids = [r.get("asset_id") for r in rows if r.get("asset_id")]
+    if aids:
+        async for a in db.assets.find({"id": {"$in": aids}},
+                                      {"_id": 0, "id": 1, "purchase_price": 1}):
+            harga[a["id"]] = parse_harga(a.get("purchase_price"))
+
+    now = datetime.now(timezone.utc).isoformat()
+    ks = kode_satker_user(_user)
+    nomor = ""
+    if booking and rows:
+        try:
+            from routes.persuratan import booking_nomor_otomatis
+            nomor, _sid = await booking_nomor_otomatis(
+                _user, now[:10],
+                perihal=f"Nota Dinas Usulan Penghapusan BMN ({len(rows)} unit)",
+                tujuan="Pengelola Barang",
+                keterangan="booking otomatis dari nota dinas penghapusan",
+                kode_satker=ks,
+                jenis_naskah="Nota Dinas", referensi="USULAN-PENGHAPUSAN")
+        except Exception:
+            nomor = ""
+
+    settings = await pengaturan_kop(kode_satker=ks)
+    buffer = BytesIO()
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    el = []
+    el.extend(_kop_surat_flowables(settings, doc.width))
+    el.extend(_title_block("NOTA DINAS\nUSULAN PENGHAPUSAN BMN",
+                           nomor=nomor or "......./......./........"))
+    total = sum(harga.get(r.get("asset_id"), 0) for r in rows)
+    pengantar = (
+        f"Bersama ini diusulkan penghapusan {len(rows)} unit Barang Milik "
+        f"Negara dengan total nilai perolehan Rp{int(total):,} ".replace(",", ".")
+        + "sebagaimana daftar berikut, untuk dapat diproses sesuai "
+          "PMK 83/PMK.06/2016.")
+    if terpilih:
+        pengantar += (" Daftar ini memuat tiket yang DIPILIH untuk diusulkan; "
+                      "tiket lain sengaja tidak disertakan.")
+    el.append(Paragraph(pengantar, st['Body']))
+    el.append(Spacer(1, 4 * rl_mm))
+    if not rows:
+        el.append(Paragraph(
+            "Tidak ada tiket usulan penghapusan berstatus diusulkan.",
+            st['Cell']))
+    else:
+        headers = ["No", "Kode Barang / NUP", "Nama Barang", "Jalur",
+                   "Nilai Perolehan (Rp)"]
+        widths = [26, 118, 180, 80, 92]
+        table_data = [[Paragraph(h, st['TableHeader']) for h in headers]]
+        for i, r in enumerate(rows):
+            label_jalur = JALUR_KANDIDAT.get(r.get("jalur"),
+                                             (r.get("jalur") or "-",))[0]
+            table_data.append([
+                Paragraph(str(i + 1), st['Cell']),
+                Paragraph(f"{r.get('asset_code') or '-'} / {r.get('NUP') or '-'}",
+                          st['Cell']),
+                Paragraph(str(r.get("asset_name") or "-"), st['Cell']),
+                Paragraph(str(label_jalur), st['Cell']),
+                Paragraph(f"{int(harga.get(r.get('asset_id'), 0)):,}".replace(",", "."),
+                          st['Cell']),
+            ])
+        table_data.append([
+            Paragraph("", st['Cell']), Paragraph("", st['Cell']),
+            Paragraph("<b>TOTAL</b>", st['Cell']), Paragraph("", st['Cell']),
+            Paragraph(f"<b>{int(total):,}</b>".replace(",", "."), st['Cell'])])
+        tabel = Table(table_data, colWidths=_fit_col_widths(widths, doc.width),
+                      repeatRows=1)
+        tabel.setStyle(_std_table_style(zebra=True))
+        el.append(tabel)
+    el.append(Paragraph(f"Tanggal data: {_fmt_tanggal_id(now[:10])}", st['Meta']))
+    el.append(Spacer(1, 12 * rl_mm))
+    kpb = await blok_ttd_kpb(settings, per_iso=now[:10], kode_satker=ks)
+    el.extend(_signature_block([kpb], doc.width))
+    footer = _page_footer_factory("Nota Dinas Usulan Penghapusan")
+    await asyncio.to_thread(doc.build, el, onFirstPage=footer,
+                            onLaterPages=footer)
+    buffer.seek(0)
+    return StreamingResponse(
+        buffer, media_type="application/pdf",
+        headers={"Content-Disposition":
+                 'attachment; filename="Nota_Dinas_Usulan_Penghapusan.pdf"'})

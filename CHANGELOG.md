@@ -67,6 +67,35 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#843] Nota Dinas Usulan PDF ber-nomor — register Pemindahtanganan & Penghapusan berhenti hanya CSV — 2026-08-09
+
+Butir 2 lanjutan audit permohonan aset: usulan pemindahtanganan/penghapusan
+ke Pengelola/KPKNL mensyaratkan surat usulan + Daftar Barang yang Diusulkan
+(PMK 165/PMK.06/2021; PMK 83/PMK.06/2016), tetapi kedua register selama ini
+hanya menghasilkan CSV dengan nomor teks bebas — satker menyusun ulang
+lampiran manual di luar aplikasi untuk tiap usulan.
+
+- **Pemindahtanganan** — `GET /pemindahtanganan/{id}/nota-dinas-pdf`: Nota
+  Dinas per USULAN ber-kop satker, memuat pihak tujuan, dasar hukum,
+  jenjang persetujuan indikatif, tabel Daftar Barang yang Diusulkan
+  (kode/NUP, nama, kondisi, nilai perolehan + TOTAL), dan TTD KPB. Nomor
+  dibooking otomatis ke buku agenda Persuratan **sekali** lalu disimpan di
+  register (`nomor_nota`) — unduh ulang memakai nomor yang sama, deret
+  tidak boros. Tombol ikon unduh di tiap baris register.
+- **Penghapusan** — `GET /penghapusan/nota-dinas-pdf?ids=&booking=1`: Nota
+  Dinas gabungan semua tiket berstatus `diusulkan` (tiket ber-SK/selesai
+  tidak ikut), nilai perolehan diambil dari master aset, `ids` menyaring ke
+  tiket terpilih (id status lain diabaikan — bukan pintu belakang, pola
+  nota dinas persediaan) dengan pengantar jujur "DIPILIH"; `booking=1`
+  membooking nomor untuk cetakan itu. Tombol "Nota Dinas" di kepala
+  halaman.
+
+Uji 3 skenario baca-isi-PDF (pypdfium): daftar tercetak + booking sekali +
+nomor tersimpan; hanya status diusulkan; ids menyaring. Dua mutasi
+tertangkap (filter status dicabut; nomor tak disimpan).
+
+---
+
 ## [#842] Finalisasi revaluasi ikut gerbang KPB — jalur permohonan `revaluasi_final` — 2026-08-09
 
 Pelengkap `[#841]`: finalisasi koreksi/revaluasi nilai
