@@ -274,6 +274,224 @@ async def reklasifikasi_aset(payload: ReklasifikasiIn,
 
 
 # ============================================================================
+# KONSTRUKSI DALAM PENGERJAAN (KDP) — mandat aset tetap 2026-08-09.
+# KDP = aset golongan 7 (kode barang berawalan '7'). Perolehannya berjurnal
+# 502 otomatis saat aset dicatat (assets.py via kode_jurnal_aset_baru);
+# di sini: daftar KDP, pengembangan bertahap (503, pola kapitalisasi
+# pemeliharaan), dan penyelesaian menjadi aset definitif (pasangan 505/105,
+# pola reklasifikasi in-place — id internal & register SIMAN tetap).
+# ============================================================================
+
+
+class KdpPengembanganIn(BaseModel):
+    nilai: float
+    tanggal_buku: Optional[str] = ""
+    keterangan: Optional[str] = ""
+
+
+class KdpSelesaiIn(BaseModel):
+    kode_baru: str
+    tanggal_buku: Optional[str] = ""
+    alasan: Optional[str] = ""
+
+
+async def _kdp_aktif(asset_id, user):
+    """Aset KDP (golongan 7, belum dihapus) milik satker user — 404/400."""
+    aset = await db.assets.find_one(
+        {"id": asset_id, "dihapus": {"$ne": True}}, _PROJ)
+    if not aset:
+        raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    from shared_utils import pastikan_akses_aset
+    await pastikan_akses_aset(user, aset)
+    if not str(aset.get("asset_code") or "").startswith("7"):
+        raise HTTPException(status_code=400, detail=(
+            "Bukan KDP — hanya aset golongan 7 (Konstruksi Dalam "
+            "Pengerjaan) yang bisa dikembangkan/diselesaikan di sini"))
+    return aset
+
+
+@mutasi_bmn_router.get("/pembukuan/kdp")
+async def daftar_kdp(_user: dict = Depends(require_user)):
+    """Daftar KDP aktif ter-scope satker + total nilai berjalan."""
+    from pembukuan_utils import parse_harga
+    from shared_utils import scope_query_aset
+    q = await scope_query_aset(_user, {
+        "dihapus": {"$ne": True}, "asset_code": {"$regex": "^7"}})
+    items = await db.assets.find(q, {
+        "_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+        "purchase_price": 1, "purchase_date": 1, "location": 1,
+        "riwayat_reklasifikasi": 1}).sort("created_at", -1).to_list(2000)
+    for it in items:
+        it["nilai"] = parse_harga(it.pop("purchase_price", 0))
+    return {"items": items,
+            "total_nilai": sum(it["nilai"] for it in items)}
+
+
+@mutasi_bmn_router.post("/pembukuan/kdp/{asset_id}/pengembangan")
+async def pengembangan_kdp(asset_id: str, payload: KdpPengembanganIn,
+                           request: Request = None,
+                           user: dict = Depends(require_writer)):
+    """Pengembangan KDP (503): nilai berjalan bertambah per termin.
+
+    `purchase_price` disimpan STRING di seluruh jalur create — baca lama,
+    jumlahkan, tulis balik string (pelajaran kapitalisasi pemeliharaan:
+    `$inc` pada string ditolak Mongo setelah efek lain terlanjur jalan)."""
+    idem_key = kunci_idem(
+        request.headers.get("Idempotency-Key", "") if request is not None else "",
+        user)
+    if idem_key:
+        from shared_utils import (get_idempotent_response,
+                                  reserve_idempotency_key)
+        cached = await get_idempotent_response(idem_key)
+        if cached and cached.get("response"):
+            return cached["response"]
+        _idem = await reserve_idempotency_key(idem_key)
+        if _idem == "done":
+            cached = await get_idempotent_response(idem_key)
+            if cached and cached.get("response"):
+                return cached["response"]
+        elif _idem == "pending":
+            raise HTTPException(
+                status_code=409,
+                detail="Permintaan dengan kunci idempotensi ini sedang diproses")
+
+    nilai = float(payload.nilai or 0)
+    if nilai <= 0:
+        raise HTTPException(status_code=400,
+                            detail="Nilai pengembangan harus lebih dari 0")
+    aset = await _kdp_aktif(asset_id, user)
+    from shared_utils import ensure_activity_not_sealed
+    await ensure_activity_not_sealed(aset.get("activity_id"))
+
+    from pembukuan_utils import parse_harga
+    now = datetime.now(timezone.utc)
+    tgl = (str(payload.tanggal_buku or "").strip()[:10]
+           or now.date().isoformat())
+    harga_baru = parse_harga(aset.get("purchase_price")) + nilai
+    await db.assets.update_one(
+        {"id": asset_id},
+        {"$set": {"purchase_price": str(int(round(harga_baru))),
+                  "updated_at": now.isoformat()},
+         "$inc": {"version": 1}})
+    from shared_utils import catat_mutasi_bmn
+    await catat_mutasi_bmn({
+        "asset_id": asset_id, "kode_transaksi": "503",
+        "kode_barang": str(aset.get("asset_code") or ""),
+        "nup": str(aset.get("NUP") or ""),
+        # jumlah 0: murni transaksi NILAI — unit KDP-nya tetap satu.
+        "tanggal_buku": tgl, "jumlah": 0, "nilai": nilai,
+        "sumber_modul": "pembukuan", "ref_id": str(uuid.uuid4()),
+        "keterangan": ("Pengembangan KDP"
+                       + (f": {payload.keterangan.strip()}"
+                          if str(payload.keterangan or "").strip() else ""))[:200],
+        "oleh": user.get("username", "system")})
+    await log_audit("kdp_pengembangan", "", asset_id,
+                    username=user.get("username", "system"),
+                    detail=f"Jurnal 503 Rp{int(nilai):,} — nilai KDP "
+                           f"menjadi Rp{int(harga_baru):,}")
+    resp = {"ok": True, "nilai_ditambahkan": nilai,
+            "nilai_berjalan": harga_baru, "kode_transaksi": "503"}
+    if idem_key:
+        from shared_utils import store_idempotent_response
+        await store_idempotent_response(idem_key, resp, 200)
+    return resp
+
+
+@mutasi_bmn_router.post("/pembukuan/kdp/{asset_id}/selesaikan")
+async def selesaikan_kdp(asset_id: str, payload: KdpSelesaiIn,
+                         request: Request = None,
+                         user: dict = Depends(require_writer)):
+    """Penyelesaian pembangunan: KDP menjadi aset definitif — pasangan
+    jurnal 505 (keluar dari kode 7) + 105 (masuk ke kode definitif) senilai
+    akumulasi KDP, aset dimutakhirkan IN-PLACE (pola reklasifikasi)."""
+    idem_key = kunci_idem(
+        request.headers.get("Idempotency-Key", "") if request is not None else "",
+        user)
+    if idem_key:
+        from shared_utils import (get_idempotent_response,
+                                  reserve_idempotency_key)
+        cached = await get_idempotent_response(idem_key)
+        if cached and cached.get("response"):
+            return cached["response"]
+        _idem = await reserve_idempotency_key(idem_key)
+        if _idem == "done":
+            cached = await get_idempotent_response(idem_key)
+            if cached and cached.get("response"):
+                return cached["response"]
+        elif _idem == "pending":
+            raise HTTPException(
+                status_code=409,
+                detail="Permintaan dengan kunci idempotensi ini sedang diproses")
+
+    kode_baru = normalize_kode(payload.kode_baru)
+    ok, err = validate_kode(kode_baru)
+    if not ok:
+        raise HTTPException(status_code=400, detail=err)
+    if len(kode_baru) != 10:
+        raise HTTPException(status_code=400,
+                            detail="Kode tujuan harus kode barang penuh 10 digit")
+    if kode_baru.startswith("1"):
+        raise HTTPException(status_code=400,
+                            detail="Kode berawalan '1' = persediaan — bukan tujuan penyelesaian KDP")
+    if kode_baru.startswith("7"):
+        raise HTTPException(status_code=400, detail=(
+            "Kode tujuan masih golongan 7 (KDP) — penyelesaian harus "
+            "menuju kode aset definitif (gedung/jalan/dll.)"))
+
+    aset = await _kdp_aktif(asset_id, user)
+    from shared_utils import ensure_activity_not_sealed
+    await ensure_activity_not_sealed(aset.get("activity_id"))
+
+    now = datetime.now(timezone.utc)
+    tgl_buku = (str(payload.tanggal_buku or "").strip()[:10]
+                or now.date().isoformat())
+    _act = await db.inventory_activities.find_one(
+        {"id": aset.get("activity_id")}, {"_id": 0, "kode_satker": 1})
+    _kode_aset = str((_act or {}).get("kode_satker") or "").strip()
+    _ids = None
+    if _kode_aset:
+        from shared_utils import id_kegiatan_satker
+        _ids = await id_kegiatan_satker(_kode_aset)
+    nup_baru = await _nup_berikut_kode(kode_baru, _ids)
+    oleh = user.get("username", "system")
+
+    from mutasi_bmn_utils import buat_pasangan_transisi
+    keluar, masuk = buat_pasangan_transisi(
+        aset, kode_baru, nup_baru, tgl_buku, payload.alasan, oleh,
+        kode_keluar="505", kode_masuk="105", label="Penyelesaian KDP")
+    for e in (keluar, masuk):
+        errs = validate_entri_mutasi(e)
+        if errs:
+            raise HTTPException(status_code=400, detail="; ".join(errs))
+        e.update({"id": str(uuid.uuid4()), "created_at": now.isoformat()})
+    await db.mutasi_bmn.insert_one({**keluar})
+    await db.mutasi_bmn.insert_one({**masuk})
+
+    riwayat = {
+        "kode_lama": aset.get("asset_code"), "nup_lama": aset.get("NUP"),
+        "kode_baru": kode_baru, "nup_baru": nup_baru,
+        "tanggal": tgl_buku, "alasan": str(payload.alasan or "").strip(),
+        "jenis": "penyelesaian_kdp", "oleh": oleh,
+    }
+    await db.assets.update_one(
+        {"id": asset_id},
+        {"$set": {"asset_code": kode_baru, "NUP": nup_baru,
+                  "updated_at": now.isoformat()},
+         "$push": {"riwayat_reklasifikasi": riwayat},
+         "$inc": {"version": 1}})
+    await log_audit("kdp_selesai", "", asset_id, username=oleh,
+                    detail=(f"Penyelesaian KDP {riwayat['kode_lama']}/"
+                            f"{riwayat['nup_lama']} → {kode_baru}/{nup_baru} "
+                            f"(jurnal 505+105)"))
+    resp = {"ok": True, "kode_baru": kode_baru, "nup_baru": nup_baru,
+            "riwayat": riwayat}
+    if idem_key:
+        from shared_utils import store_idempotent_response
+        await store_idempotent_response(idem_key, resp, 200)
+    return resp
+
+
+# ============================================================================
 # SETELAN AMBANG KAPITALISASI (PMK 181 → dapat diatur admin, Mandat-2)
 # ============================================================================
 

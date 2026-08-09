@@ -67,6 +67,40 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#837] Modul KDP hidup — perolehan 502, pengembangan 503, penyelesaian 505+105 — 2026-08-09
+
+Lanjutan audit 5 klasifikasi `[#835]`: KDP (Konstruksi Dalam Pengerjaan,
+golongan 7) dulu hanya "menumpang" tabel golongan tanpa siklus — kode
+5xx murni referensi mati. Kini siklus penuhnya bisa dijalankan:
+
+- **Perolehan otomatis 502**: aset baru berkode golongan 7 kini
+  berjurnal `502 Perolehan/Penambahan KDP` (bukan 100/101) — helper
+  murni `kode_jurnal_aset_baru` dipakai jalur pencatatan aset.
+- **Pengembangan (503)** — `POST /pembukuan/kdp/{id}/pengembangan`:
+  nilai berjalan KDP bertambah per termin (pola kapitalisasi
+  pemeliharaan: harga string dibaca-jumlah-tulis, jurnal nilai-murni
+  jumlah 0, ber-Idempotency-Key, kunci kegiatan disegel dihormati).
+- **Penyelesaian (505+105)** — `POST /pembukuan/kdp/{id}/selesaikan`:
+  KDP menjadi aset definitif lewat pasangan jurnal `505` (keluar dari
+  kode 7) + `105 Penyelesaian Pembangunan Dengan KDP` (masuk kode
+  definitif) senilai akumulasi; aset dimutakhirkan IN-PLACE (pola
+  reklasifikasi — id internal & register SIMAN tetap, NUP baru berurut
+  per satker, riwayat berjenis `penyelesaian_kdp`). Tujuan golongan 7
+  atau 1 ditolak. `buat_pasangan_reklasifikasi` digeneralisasi jadi
+  `buat_pasangan_transisi` (304/107 tetap lewat delegator).
+- **Tab "KDP" baru di Pembukuan** (`PanelKdp.jsx`): daftar KDP ter-scope
+  satker + total nilai berjalan; aksi Pengembangan (nilai + keterangan)
+  dan Selesaikan (kode barang definitif 10 digit, tombol terkunci
+  sampai kodenya lengkap); layar kosong menjelaskan cara memulai KDP.
+
+Verifikasi: 6 uji endpoint mongomock (kode 502 murni; pengembangan
+menambah nilai + jurnal 503; non-KDP ditolak; pasangan 505/105 senilai
+sama + in-place + riwayat; tujuan 7/1 ditolak; daftar hanya golongan 7)
++ 3 uji render panel; **3/3 mutasi terbunuh** (cabut cabang 502; buang
+insert jurnal 105; buang `kode_baru` dari body kirim).
+
+---
+
 ## [#836] Barang Bersejarah hidup — penanda di aset + seksi h LBP dari data nyata — 2026-08-09
 
 Menutup celah terbesar audit 5 klasifikasi `[#835]`: seksi "h. Laporan

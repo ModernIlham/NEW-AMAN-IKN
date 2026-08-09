@@ -1055,13 +1055,15 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
     jadwalkan_sync("assets", asset_doc)
 
     # Jurnal Buku Barang otomatis (M-MODUL): aset baru → entri perolehan.
-    # 101 Pembelian bila asal perolehan menyebut beli/pengadaan; selain itu
-    # 100 Saldo Awal (pencatatan pertama). Best-effort — tidak menggagalkan.
+    # Kode dari helper kode_jurnal_aset_baru: golongan 7 → 502 KDP,
+    # asal beli/pengadaan → 101, selain itu 100. Best-effort — tidak
+    # menggagalkan pencatatan asetnya.
     try:
+        from mutasi_bmn_utils import kode_jurnal_aset_baru as _kj
         from pembukuan_utils import parse_harga as _ph
         from shared_utils import catat_mutasi_bmn as _cm
-        _asal = str(getattr(asset, "perolehan_dari_nama", "") or "").lower()
-        _kode_trx = "101" if any(w in _asal for w in ("beli", "pengadaan", "pembelian")) else "100"
+        _kode_trx = _kj(asset.asset_code,
+                        getattr(asset, "perolehan_dari_nama", ""))
         _tgl = str(asset.purchase_date or "")[:10]
         if not (len(_tgl) == 10 and _tgl[4] == "-" and _tgl[7] == "-"):
             _tgl = str(now)[:10]
