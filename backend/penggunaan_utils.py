@@ -501,7 +501,26 @@ def validate_proses_penggunaan(data: dict) -> list:
         errors.append("Pihak asal wajib diisi")
     if not str(data.get("pihak_tujuan") or "").strip():
         errors.append("Pihak tujuan wajib diisi")
-    if not data.get("asset_ids"):
+    # ALIH STATUS ARAH MASUK (ASET-TRANSFER-MASUK): barang datang dari
+    # Pengguna Barang lain — belum ada di db.assets, jadi tiket memakai
+    # daftar barang manual, bukan asset_ids. Kasus lain tetap asset_ids.
+    if (data.get("jenis_proses") == "alih_status"
+            and data.get("arah") == "masuk"):
+        barang = data.get("barang_masuk") or []
+        if not barang:
+            errors.append("Minimal satu barang masuk (kode + nama) — barang "
+                          "belum tercatat di pembukuan penerima")
+        for i, b in enumerate(barang, start=1):
+            if not str(b.get("asset_code") or "").strip():
+                errors.append(f"Barang #{i}: kode barang wajib diisi")
+            if not str(b.get("asset_name") or "").strip():
+                errors.append(f"Barang #{i}: nama barang wajib diisi")
+            try:
+                if float(b.get("nilai") or 0) < 0:
+                    errors.append(f"Barang #{i}: nilai tidak boleh negatif")
+            except (TypeError, ValueError):
+                errors.append(f"Barang #{i}: nilai harus angka")
+    elif not data.get("asset_ids"):
         errors.append("Minimal satu aset dipilih")
     mulai = str(data.get("tanggal_mulai") or "").strip()[:10]
     akhir = str(data.get("tanggal_berakhir") or "").strip()[:10]
@@ -658,6 +677,52 @@ def build_asset_alih_keluar_projection(tiket, now_iso):
             "tanggal_sk": str(t.get("tanggal_sk_penghapusan") or "").strip()[:10],
             "diproyeksikan_pada": now_iso,
         },
+    }
+
+
+def build_asset_transfer_masuk(tiket, barang, now_iso, new_id):
+    """Dokumen aset BARU yang DIBUKUKAN saat tiket ALIH STATUS arah MASUK
+    mencapai status terminal `dihapus_dibukukan` (ASET-TRANSFER-MASUK).
+
+    Kebalikan build_asset_alih_keluar_projection: sisi keluar menandai aset
+    keluar buku + jurnal 302; sisi masuk selama ini TIDAK berefek apa pun —
+    barang kiriman Pengguna Barang lain tak pernah masuk pembukuan. Field
+    inti diisi agar aset langsung sah di daftar/laporan; rincian lain
+    dilengkapi lewat form aset setelah dibukukan. MURNI (id dari pemanggil).
+    """
+    t = tiket or {}
+    b = barang or {}
+    try:
+        nilai = float(b.get("nilai") or 0)
+    except (TypeError, ValueError):
+        nilai = 0
+    return {
+        "id": new_id,
+        "asset_code": str(b.get("asset_code") or "").strip(),
+        "NUP": str(b.get("NUP") or b.get("nup") or "").strip(),
+        "asset_name": str(b.get("asset_name") or "").strip(),
+        "category": (str(b.get("kategori") or "").strip()
+                     or "Peralatan dan Mesin"),
+        "purchase_price": str(int(nilai)),
+        "condition": "Baik",
+        "status": "Aktif",
+        "inventory_status": "Belum Diinventarisasi",
+        "location": "", "user": "",
+        "activity_id": "",
+        "kode_satker": str(t.get("kode_satker") or "").strip(),
+        "dihapus": False,
+        # Jejak perolehan (masterplan Bab 5: dokumen sumber = simpul).
+        "perolehan_transfer": {
+            "tiket_id": str(t.get("id") or ""),
+            "pihak_asal": str(t.get("pihak_asal") or "").strip(),
+            "nomor_bast": str(t.get("nomor_bast") or "").strip(),
+            "nomor_sk": str(t.get("nomor_sk_penghapusan") or "").strip(),
+            "dicatat_pada": now_iso,
+        },
+        "version": 1,
+        "created_by": str(t.get("created_by") or ""),
+        "created_at": now_iso,
+        "updated_at": now_iso,
     }
 
 

@@ -31,7 +31,7 @@ from penggunaan_utils import (
     STATUS_PENGAJUAN_PSP, STATUS_PROSES, TRANSISI_PROSES, baris_csv_idle,
     baris_csv_proses, baris_csv_psp,
     build_asset_alih_keluar_projection, build_asset_idle_serah_projection,
-    indikasi_idle,
+    build_asset_transfer_masuk, indikasi_idle,
     info_proses_sementara, kelompokkan_psp_siman, kunci_pemegang,
     rekap_idle, rekap_pemegang,
     rekap_proses_penggunaan, rekap_psp, status_pengajuan_psp,
@@ -1056,12 +1056,25 @@ async def daftar_pemegang_pdf(
                              headers={"Content-Disposition": f'attachment; filename="Daftar_Barang_{nama_file}.pdf"'})
 
 
+class BarangMasukIn(BaseModel):
+    """Barang alih status ARAH MASUK — belum ada di db.assets penerima."""
+    asset_code: str = ""
+    nup: str = ""
+    asset_name: str = ""
+    kategori: str = ""
+    nilai: float = Field(default=0, ge=0)
+
+
 class ProsesIn(BaseModel):
     jenis_proses: str
     arah: str
     pihak_asal: str = Field(min_length=1)
     pihak_tujuan: str = Field(min_length=1)
-    asset_ids: list[str] = Field(min_length=1, max_length=100)
+    # Opsional untuk alih status arah masuk (barang belum tercatat —
+    # pakai barang_masuk); kasus lain divalidasi wajib di utils.
+    asset_ids: list[str] = Field(default_factory=list, max_length=100)
+    barang_masuk: list[BarangMasukIn] = Field(default_factory=list,
+                                              max_length=100)
     nomor_permohonan: str = ""
     tanggal_permohonan: str = ""
     tanggal_mulai: str = ""            # wajib utk penggunaan sementara
@@ -1137,26 +1150,42 @@ async def buat_proses(payload: ProsesIn, user: dict = Depends(require_writer)):
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
     from shared_utils import kode_satker_efektif_dari_aset, pastikan_akses_aset
+    masuk_manual = (data["jenis_proses"] == "alih_status"
+                    and data["arah"] == "masuk")
     aset_rows = []
-    for aid in dict.fromkeys(data["asset_ids"]):
-        a = await db.assets.find_one(
-            {"id": aid},
-            {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
-             "activity_id": 1})
-        if not a:
-            raise HTTPException(status_code=404,
-                                detail=f"Aset {aid} tidak ditemukan")
-        # Isolasi satker (REVIEW-9 R8): tanpa guard ini satker lain dapat
-        # membuka tiket atas aset kita, lalu transisi terminalnya menandai
-        # aset kita KELUAR pembukuan (proyeksi dihapus=True + jurnal 302).
-        await pastikan_akses_aset(user, a)
-        aset_rows.append({"asset_id": a["id"], "asset_code": a.get("asset_code"),
-                          "NUP": a.get("NUP"), "asset_name": a.get("asset_name")})
+    if masuk_manual:
+        # Barang datang dari Pengguna Barang lain — belum ada di db.assets;
+        # snapshot dari input manual dengan asset_id KOSONG (diisi saat
+        # terminal dihapus_dibukukan membukukan aset baru + jurnal 102).
+        for b in data.get("barang_masuk") or []:
+            aset_rows.append({
+                "asset_id": "",
+                "asset_code": str(b.get("asset_code") or "").strip(),
+                "NUP": str(b.get("nup") or "").strip(),
+                "asset_name": str(b.get("asset_name") or "").strip(),
+                "kategori": str(b.get("kategori") or "").strip(),
+                "nilai": float(b.get("nilai") or 0)})
+    else:
+        for aid in dict.fromkeys(data["asset_ids"]):
+            a = await db.assets.find_one(
+                {"id": aid},
+                {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+                 "activity_id": 1})
+            if not a:
+                raise HTTPException(status_code=404,
+                                    detail=f"Aset {aid} tidak ditemukan")
+            # Isolasi satker (REVIEW-9 R8): tanpa guard ini satker lain dapat
+            # membuka tiket atas aset kita, lalu transisi terminalnya menandai
+            # aset kita KELUAR pembukuan (proyeksi dihapus=True + jurnal 302).
+            await pastikan_akses_aset(user, a)
+            aset_rows.append({"asset_id": a["id"], "asset_code": a.get("asset_code"),
+                              "NUP": a.get("NUP"), "asset_name": a.get("asset_name")})
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
-        "kode_satker": await kode_satker_efektif_dari_aset(
-            user, data["asset_ids"]),
+        "kode_satker": (kode_satker_user(user) if masuk_manual
+                        else await kode_satker_efektif_dari_aset(
+                            user, data["asset_ids"])),
         "jenis_proses": data["jenis_proses"],
         "arah": data["arah"],
         "pihak_asal": data["pihak_asal"].strip(),
@@ -1241,6 +1270,45 @@ async def transisi_proses(tiket_id: str, payload: TransisiProsesIn,
                 "keterangan": (f"Alih status penggunaan ke {res.get('pihak_tujuan') or '-'}"
                                f" — SK {res.get('nomor_sk_penghapusan') or '-'}"),
                 "oleh": user.get("username", "system")})
+    # Terminal alih status ARAH MASUK (ASET-TRANSFER-MASUK): barang dari
+    # Pengguna Barang lain DIBUKUKAN sebagai aset baru + jurnal 102
+    # Transfer Masuk — kebalikan blok keluar di atas; selama ini sisi
+    # penerimaan tidak berefek data sama sekali.
+    if (res.get("jenis_proses") == "alih_status" and res.get("arah") == "masuk"
+            and res.get("status") == "dihapus_dibukukan"):
+        from pembukuan_utils import parse_harga
+        from shared_utils import catat_mutasi_bmn
+        baris_aset = list(res.get("aset") or [])
+        ada_baru = False
+        for i, b in enumerate(baris_aset):
+            if str(b.get("asset_id") or "").strip():
+                continue  # sudah pernah dibukukan (retry aman)
+            doc = build_asset_transfer_masuk(res, b, now, str(uuid.uuid4()))
+            await db.assets.insert_one({**doc})
+            baris_aset[i] = {**b, "asset_id": doc["id"]}
+            ada_baru = True
+            await catat_mutasi_bmn({
+                "asset_id": doc["id"], "kode_transaksi": "102",
+                "kode_barang": doc["asset_code"], "nup": doc["NUP"],
+                "tanggal_buku": (str(res.get("tanggal_sk_penghapusan") or "")
+                                 .strip()[:10] or now[:10]),
+                "jumlah": 1,
+                "nilai": parse_harga(doc.get("purchase_price")),
+                "sumber_modul": "penggunaan", "ref_id": res.get("id"),
+                "keterangan": (f"Transfer masuk dari {res.get('pihak_asal') or '-'}"
+                               f" — BAST {res.get('nomor_bast') or '-'}"),
+                "oleh": user.get("username", "system")})
+            await log_audit(
+                "penggunaan_transfer_masuk", "", doc["id"],
+                username=user.get("username", "system"),
+                detail=(f"Bukukan {doc['asset_name']} ({doc['asset_code']}) "
+                        f"dari {res.get('pihak_asal') or '-'}"),
+                kode_satker=str(res.get("kode_satker") or ""))
+        if ada_baru:
+            await db.penggunaan_proses.update_one(
+                {"id": tiket_id},
+                {"$set": {"aset": baris_aset, "updated_at": now}})
+            res["aset"] = baris_aset
     return res
 
 
