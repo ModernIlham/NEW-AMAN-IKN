@@ -67,6 +67,59 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#835] Mutasi aset tetap selaras SIMAK — registry 99 kode + layar referensi + koreksi arah LBP — 2026-08-09
+
+Jawaban dua pertanyaan pemilik (2026-08-09) atas ASET TETAP, plus
+implementasinya:
+
+**(1) "Apakah jenis mutasi sudah mencakup bertambah dan berkurang?"**
+Sebelum PR ini: registry hanya 17 kode subset (`mutasi_bmn_utils`),
+terpecah jadi TIGA peta label (mutasi_bmn_utils / timeline_utils /
+lbp_utils) dengan arah yang di-hardcode ulang di LBP; 13 kode benar-benar
+ditulis modul (100/101/102/103/105/107/202/204/205/301/302/303/304). Kini:
+
+- **Registry lengkap 99 kode** `aset_transaksi_ref.py` verbatim daftar
+  resmi pemilik — **53 mutasi bertambah** (100 Saldo Awal … 955 Perolehan
+  Lainnya ATR) + **46 mutasi berkurang** (158 … Q34 Koreksi Penyusutan
+  Minus), ber-uraian/arah/kelompok (perolehan, reklasifikasi, koreksi,
+  likuidasi, KDP, bersejarah, pihak ketiga, BPYBDS, henti guna,
+  penyusutan, ATR, …) — kembaran registry 45 kode persediaan.
+- `KODE_TRANSAKSI_BMN` kini DITURUNKAN dari registry itu (+ kode warisan
+  203/205; 205 = padanan lama 264, dipertahankan agar jurnal historis
+  tak berubah makna) — validasi jurnal menerima seluruh kode resmi.
+  Koreksi makna ikut resmi SIMAK: 305 Koreksi Pencatatan = bertambah,
+  401 Penghentian dari Penggunaan = berkurang (keduanya belum pernah
+  ditulis, tak ada baris historis yang bergeser).
+- **Tabel 17 CaLBMN berhenti menebak arah dari prefiks**: dulu semua
+  3xx/4xx dinegatifkan — salah untuk 305/402/412 yang resminya
+  bertambah; kini arah dibaca dari registry, prefiks tinggal fallback
+  kode tak dikenal.
+- **Layar "Referensi Kode"** di Buku Barang (Pembukuan → tab Jurnal):
+  endpoint `GET /pembukuan/jenis-transaksi` + dialog 99 kode terbelah
+  Bertambah/Berkurang per kelompok + bagian kode warisan.
+
+**(2) "Apakah laporan sudah meliputi 5 jenis?"** (catatan verifikasi):
+- **Intrakomptabel & Ekstrakomptabel: SUDAH PENUH** — ambang PMK 181
+  dapat diatur admin; seksi terpisah di LBKP (I/II/III), DBKP, Posisi
+  BMN, Rekonsiliasi XLSX, dan LBP .docx.
+- **KDP: parsial** — golongan 7 punya seksi sendiri di LBP + akun 136111
+  + kode jurnal 105/5xx kini terdaftar; modul pencatatan KDP
+  (perolehan → pengembangan → penyelesaian ke aset definitif) belum ada.
+- **Aset Tak Berwujud: parsial** — golongan 8 ber-seksi di LBP + akun
+  162151/169315; amortisasi belum dihitung.
+- **Barang Bersejarah: BELUM ADA** — seksi LBP masih statis "Nihil"
+  tanpa sumber data. KDP + Bersejarah + amortisasi ATB = pekerjaan
+  lanjutan bertahap (PR terpisah).
+
+Verifikasi: 6 uji registry/integrasi (pemaku 53/46/99, kode jangkar per
+keluarga, validasi menerima kode KDP, arah LBP dari registry, endpoint
+referensi) + 1 uji render dialog; **3/3 mutasi terbunuh** (registry
+turunan disempitkan → uji validasi merah; hardcode prefiks LBP
+dikembalikan → uji arah merah; bagian Berkurang dicabut dari dialog →
+uji render merah).
+
+---
+
 ## [#834] Nota Dinas stok kritis ber-pilihan + kolom cari Persediaan satu baris di HP — 2026-08-09
 
 Dua permintaan pemilik pada halaman Persediaan:

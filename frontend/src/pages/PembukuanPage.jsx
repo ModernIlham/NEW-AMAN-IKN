@@ -11,6 +11,7 @@ import { useBackGuard } from "@/hooks/useBackGuard";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
+import ReferensiKodeMutasiDialog from "@/components/pembukuan/ReferensiKodeMutasiDialog";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -305,6 +306,7 @@ export default function PembukuanPage({ user, onBack }) {
             <div className="px-3 py-2 border-b border-border flex items-center gap-2 flex-wrap">
               <ScrollText className="w-4 h-4 text-muted-foreground" />
               <p className="text-xs font-bold flex-1 min-w-[180px]">Buku Barang — jurnal mutasi ber-kode (append-only, pola SIMAK/SAKTI)</p>
+              <ReferensiKodeMutasiDialog />
               {user?.role === "admin" && (
                 <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 min-w-0 gap-1"
                   disabled={backfilling}

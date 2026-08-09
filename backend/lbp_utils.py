@@ -318,14 +318,18 @@ def susun_mutasi_per_transaksi(jurnal, saldo_awal_qty=0,
 
     Kembalian {"baris": [(kode, uraian, qty, nilai)], "total": (qty,
     nilai)} — baris terurut: 000, lalu kode naik. MURNI."""
+    from mutasi_bmn_utils import arah_transaksi
     agg = {}
     for j in jurnal or []:
         k = str(j.get("kode_transaksi") or "").strip() or "?"
         q = float(j.get("jumlah") or 0)
         n = float(j.get("nilai") or 0)
-        # 205 (Koreksi Nilai Berkurang) satu-satunya kode 2xx berarah KURANG
-        # — jurnal menyimpan magnitudo positif, dinegatifkan di sini.
-        if k[:1] in ("3", "4") or k == "205":
+        # Arah dari registry 99 kode (jurnal menyimpan magnitudo positif;
+        # yang berarah KURANG dinegatifkan di sini). Aturan prefiks 3xx/4xx
+        # lama hanya fallback untuk kode di luar registry — ia SALAH untuk
+        # 305/402/412 yang resminya bertambah meski berprefiks 3xx/4xx.
+        arah = arah_transaksi(k)
+        if arah == "kurang" or (not arah and k[:1] in ("3", "4")):
             q, n = -abs(q), -abs(n)
         a = agg.setdefault(k, [0.0, 0.0])
         a[0] += q
