@@ -21,6 +21,7 @@ import StatKartu from "@/components/ui/StatKartu";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
+import PermohonanPanel from "@/components/persediaan/PermohonanPanel";
 import PerkiraanNomor from "@/components/persuratan/PerkiraanNomor";
 import { bagikanWa, bagikanEmail, hasilTtd } from "@/lib/pesanTtd";
 
@@ -73,6 +74,10 @@ export default function PersediaanPage({ user, onBack }) {
   // menyembunyikan tombolnya dari viewer mencegah 403 yang baru ketahuan
   // setelah dialog konfirmasi dijawab.
   const isWriter = user?.role !== "viewer";
+  // SEDIA-KPB: saat aktif, SEMUA dialog transaksi mengajukan permohonan
+  // (dieksekusi setelah disetujui admin lain), bukan menulis langsung.
+  const [wajibSetuju, setWajibSetuju] = useState(false);
+  const [permohonanVersi, setPermohonanVersi] = useState(0);
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -164,6 +169,7 @@ export default function PersediaanPage({ user, onBack }) {
         setJenisKeluar(r.data?.keluar || []);
         setTrxRef({ referensi: r.data?.referensi || [],
                     label_kelompok: r.data?.label_kelompok || {} });
+        setWajibSetuju(!!r.data?.wajib_persetujuan);
       })
       .catch(() => { setJenisMasuk([]); setJenisKeluar([]); });
     // Unit penerima terhubung Master Unit Kerja (audit W4 #6)
@@ -222,10 +228,26 @@ export default function PersediaanPage({ user, onBack }) {
     load(1, search, status, g);
   };
 
+  const ajukanPermohonan = async (jalur, itemId, payload, idem) => {
+    await axios.post(`${API}/persediaan/permohonan`,
+      { jalur, item_id: itemId || "", payload },
+      idem ? { headers: { "Idempotency-Key": idem } } : undefined);
+    toast.success("Permohonan diajukan — menunggu persetujuan KPB");
+    setPermohonanVersi((v) => v + 1);   // segarkan lencana panel
+  };
+
   const kirimPindahGudang = async () => {
     if (!pindah) return;
     setPindah((p) => ({ ...p, saving: true }));
     try {
+      if (wajibSetuju) {
+        await ajukanPermohonan("pindah_gudang", pindah.item.id, {
+          lokasi_baru: pindah.lokasi_baru, no_bukti: pindah.no_bukti,
+          keterangan: pindah.keterangan,
+        });
+        setPindah(null);
+        return;
+      }
       const r = await axios.post(`${API}/persediaan/${pindah.item.id}/pindah-gudang`, {
         lokasi_baru: pindah.lokasi_baru,
         no_bukti: pindah.no_bukti,
@@ -303,6 +325,13 @@ export default function PersediaanPage({ user, onBack }) {
     if (!jumlah || jumlah <= 0) { toast.error("Jumlah harus lebih dari 0"); return; }
     setSaving(true);
     try {
+      if (wajibSetuju) {
+        await ajukanPermohonan("masuk", masuk.item.id,
+          { ...d, jumlah, harga_satuan: Number(d.harga_satuan) || 0 },
+          masuk.idem);
+        setMasuk(null);
+        return;
+      }
       const r = await axios.post(`${API}/persediaan/${masuk.item.id}/masuk`, {
         ...d, jumlah, harga_satuan: Number(d.harga_satuan) || 0,
       }, { headers: { "Idempotency-Key": masuk.idem } });
@@ -324,6 +353,12 @@ export default function PersediaanPage({ user, onBack }) {
     if (!jumlah || jumlah <= 0) { toast.error("Jumlah harus lebih dari 0"); return; }
     setSaving(true);
     try {
+      if (wajibSetuju) {
+        await ajukanPermohonan("keluar", keluar.item.id, { ...d, jumlah },
+          keluar.idem);
+        setKeluar(null);
+        return;
+      }
       const r = await axios.post(`${API}/persediaan/${keluar.item.id}/keluar`, { ...d, jumlah },
         { headers: { "Idempotency-Key": keluar.idem } });
       toast.success(`${r.data?.message} — nilai keluar ${fmtRp(r.data?.nilai_keluar)}, stok kini ${r.data?.stok}`);
@@ -401,6 +436,12 @@ export default function PersediaanPage({ user, onBack }) {
     if ((opname.alasan || "").trim().length < 3) { toast.error("Alasan selisih wajib diisi (bahan CaLK)"); return; }
     setSaving(true);
     try {
+      if (wajibSetuju) {
+        await ajukanPermohonan("opname", opname.item.id,
+          { stok_fisik: fisik, alasan: opname.alasan.trim() });
+        setOpname(null);
+        return;
+      }
       const r = await axios.post(`${API}/persediaan/${opname.item.id}/opname`, {
         stok_fisik: fisik, alasan: opname.alasan.trim(),
       });
@@ -453,6 +494,15 @@ export default function PersediaanPage({ user, onBack }) {
     const jenis = { usang: "hapus_usang", rusak: "hapus_rusak",
                     tidak_dikuasai: "hapus_tak_dikuasai" }[hapusSk.kategori];
     try {
+      if (wajibSetuju) {
+        await ajukanPermohonan("hapus_definitif", hapusSk.entri.persediaan_id, {
+          jenis, jumlah: parseInt(hapusSk.jumlah, 10) || 0,
+          sk_nomor: hapusSk.sk_nomor, sk_tanggal: hapusSk.sk_tanggal,
+          keterangan: hapusSk.keterangan,
+        });
+        setHapusSk(null);
+        return;
+      }
       const r = await axios.post(
         `${API}/persediaan/${hapusSk.entri.persediaan_id}/hapus-definitif`, {
           jenis, jumlah: parseInt(hapusSk.jumlah, 10) || 0,
@@ -472,6 +522,14 @@ export default function PersediaanPage({ user, onBack }) {
     if (!koreksiNilai) return;
     setKoreksiNilai((k) => ({ ...k, saving: true }));
     try {
+      if (wajibSetuju) {
+        await ajukanPermohonan("koreksi_nilai", koreksiNilai.item.id, {
+          jenis: koreksiNilai.jenis, nilai: Number(koreksiNilai.nilai) || 0,
+          alasan: koreksiNilai.alasan, no_bukti: koreksiNilai.no_bukti,
+        });
+        setKoreksiNilai(null);
+        return;
+      }
       const r = await axios.post(
         `${API}/persediaan/${koreksiNilai.item.id}/koreksi-nilai`, {
           jenis: koreksiNilai.jenis,
@@ -590,6 +648,22 @@ export default function PersediaanPage({ user, onBack }) {
     }
     setMassal((m) => ({ ...m, saving: true }));
     try {
+      if (wajibSetuju) {
+        await ajukanPermohonan("massal", "", {
+          arah: massal.arah, jenis: massal.jenis, no_bukti: massal.no_bukti,
+          booking_otomatis: !!massal.booking_otomatis,
+          jenis_dokumen: massal.jenis_dokumen, penyedia: massal.penyedia,
+          tgl_dokumen: massal.tgl_dokumen, perolehan_id: massal.perolehan_id,
+          unit_penerima: massal.unit_penerima, keterangan: massal.keterangan,
+          items: massal.items.map((it) => ({
+            persediaan_id: it.id, jumlah: parseInt(it.jumlah, 10),
+            harga_satuan: massal.arah === "masuk" ? parseFloat(it.harga_satuan) : 0,
+            expired: it.expired || "",
+          })),
+        });
+        setMassal(null);
+        return;
+      }
       const r = await axios.post(`${API}/persediaan/transaksi-massal`, {
         arah: massal.arah, jenis: massal.jenis, no_bukti: massal.no_bukti,
         booking_otomatis: !!massal.booking_otomatis,
@@ -828,6 +902,8 @@ export default function PersediaanPage({ user, onBack }) {
               aria-label="Transaksi massal — satu dokumen banyak barang" title="Transaksi massal — satu dokumen banyak barang" data-testid="persediaan-massal">
               <ListPlus className="w-4 h-4" /><span className="hidden sm:inline">Massal</span>
             </Button>
+            <PermohonanPanel key={permohonanVersi} user={user}
+              onSelesai={() => { load(page, search, status); refreshRingkasan(); }} />
             {/* Menu Dokumen: laporan & berita acara dalam satu tombol */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

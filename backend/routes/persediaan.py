@@ -1112,6 +1112,11 @@ async def list_jenis_transaksi(_user: dict = Depends(require_user)):
                         **({"info": info_per_key[k]} if k in info_per_key else {})})
         return out
 
+    # Mode SEDIA-KPB ikut di sini (bukan fetch terpisah): dialog transaksi
+    # perlu tahu apakah submit-nya menulis langsung atau mengajukan
+    # permohonan, dan halaman sudah memuat referensi ini saat dibuka.
+    s = await db.report_settings.find_one(
+        {"type": "global"}, {"persediaan_wajib_persetujuan": 1}) or {}
     return {
         "masuk": _baris(JENIS_MASUK),
         "keluar": _baris(JENIS_KELUAR),
@@ -1120,6 +1125,7 @@ async def list_jenis_transaksi(_user: dict = Depends(require_user)):
         # "Referensi Kode Transaksi" membacanya dari sini.
         "referensi": daftar_kode_transaksi(),
         "label_kelompok": LABEL_KELOMPOK,
+        "wajib_persetujuan": bool(s.get("persediaan_wajib_persetujuan")),
     }
 
 

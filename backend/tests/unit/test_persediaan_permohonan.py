@@ -267,3 +267,22 @@ class TestDokumenPersetujuan:
         assert "SP-001/UJI/2026" in teks
         assert "Kertas HVS A4" in teks
         assert "op1" in teks and "adm1" in teks
+
+
+class TestPengaturanGerbang:
+    def test_saklar_menulis_dan_terbaca_dua_arah(self, dbx):
+        async def skenario():
+            r = await _unwrap(rpp.ubah_pengaturan_permohonan)(
+                rpp.PengaturanPermohonanIn(aktif=True), user=PENYETUJU)
+            assert r["aktif"] is True
+            baca = await _unwrap(rpp.baca_pengaturan_permohonan)(_user=PENGAJU)
+            assert baca["aktif"] is True
+            # Dialog transaksi membaca mode dari referensi yang SUDAH dimuat —
+            # field wajib_persetujuan harus ikut di /jenis-transaksi.
+            ref = await _unwrap(rps.list_jenis_transaksi)(_user=PENGAJU)
+            assert ref["wajib_persetujuan"] is True
+            await _unwrap(rpp.ubah_pengaturan_permohonan)(
+                rpp.PengaturanPermohonanIn(aktif=False), user=PENYETUJU)
+            ref2 = await _unwrap(rps.list_jenis_transaksi)(_user=PENGAJU)
+            assert ref2["wajib_persetujuan"] is False
+        _jalan(skenario())
