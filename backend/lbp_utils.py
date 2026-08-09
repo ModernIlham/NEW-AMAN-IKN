@@ -343,6 +343,35 @@ def susun_mutasi_per_transaksi(jurnal, saldo_awal_qty=0,
     return {"baris": baris, "total": (total_q, total_n)}
 
 
+def aset_barang_bersejarah(a) -> bool:
+    """Penanda eksplisit field `barang_bersejarah` pada aset ("Ya"/"ya"/
+    "true"/"1"). PSAP 07: heritage asset diungkapkan dalam kuantitas —
+    nilainya (bila tercatat) hanya informasi tambahan. MURNI."""
+    nilai = str((a or {}).get("barang_bersejarah") or "").strip().lower()
+    return nilai in ("ya", "y", "true", "1")
+
+
+def susun_barang_bersejarah(assets) -> dict:
+    """Seksi "h. Laporan Barang Bersejarah" — agregasi aset ber-penanda
+    bersejarah per kode barang: {"baris": [(kode, nama, qty, nilai)],
+    "total": (qty, nilai)}. Baris terurut kode; nama memakai nama aset
+    pertama yang dijumpai per kode. MURNI."""
+    agg = {}
+    for a in assets or []:
+        if not aset_barang_bersejarah(a):
+            continue
+        kode = str(a.get("asset_code") or "").strip() or "-"
+        r = agg.setdefault(kode, [str(a.get("asset_name") or ""), 0, 0.0])
+        r[1] += 1
+        try:
+            r[2] += float(a.get("purchase_price") or 0)
+        except (TypeError, ValueError):
+            pass
+    baris = [(k, agg[k][0], agg[k][1], agg[k][2]) for k in sorted(agg)]
+    return {"baris": baris,
+            "total": (sum(b[2] for b in baris), sum(b[3] for b in baris))}
+
+
 def kebijakan_akuntansi_lbp(ambang=None) -> list:
     """Sub-bab Kebijakan Akuntansi yang Signifikan (lengkap mengikuti
     contoh). Kembalian list {judul, isi: [paragraf], daftar: [butir]}."""

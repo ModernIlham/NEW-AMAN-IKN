@@ -27,7 +27,8 @@ from lbp_utils import (DASAR_HUKUM_LBP, UPAYA_PERBAIKAN_LBP,
                        baris_perbandingan_lb_lk, baris_posisi_per_akun,
                        fmt_rp, kebijakan_akuntansi_lbp, label_periode_lbp,
                        rupiah_terbilang, struktur_daftar_isi_lengkap,
-                       susun_mutasi_per_transaksi, tanggal_akhir_periode)
+                       susun_barang_bersejarah, susun_mutasi_per_transaksi,
+                       tanggal_akhir_periode)
 from shared_utils import (ambang_kapitalisasi, filter_aset_perhitungan,
                           kode_satker_user,
                           pengaturan_kop, resolve_penandatangan_kpb,
@@ -200,7 +201,8 @@ async def generate_lbp_docx(tahun: int, semester: int = 0,
         "dihapus": 1, "penghapusan": 1, "nilai_wajar_terakhir": 1,
         "revaluasi": 1, "location": 1,
         "masa_manfaat_tambah_tahun": 1,
-         "masa_manfaat_override_semester": 1}).to_list(500000)
+        "masa_manfaat_override_semester": 1,
+        "barang_bersejarah": 1}).to_list(500000)
     aktif = [a for a in assets if not a.get("dihapus")]
 
     uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
@@ -548,8 +550,25 @@ async def generate_lbp_docx(tahun: int, semester: int = 0,
     else:
         _p(d, "Nihil — tidak terdapat Aset Tak Berwujud pada periode ini.")
 
-    for judul_n in ("h. Laporan Barang Bersejarah",
-                    "i. Laporan Barang BPYDS",
+    _h(d, "h. Laporan Barang Bersejarah", 2)
+    bersejarah = susun_barang_bersejarah(aktif)
+    if bersejarah["baris"]:
+        _p(d, "Sesuai PSAP 07, aset bersejarah diungkapkan dalam kuantitas "
+              "tanpa nilai; nilai perolehan yang tercatat disajikan sebagai "
+              "informasi tambahan.")
+        _tabel(d, ["Kode Barang", "Uraian", "Kuantitas",
+                   "Nilai Tercatat (Rp)"],
+               [[b[0], b[1], fmt_rp(b[2]), fmt_rp(b[3])]
+                for b in bersejarah["baris"]] +
+               [["", "TOTAL", fmt_rp(bersejarah["total"][0]),
+                 fmt_rp(bersejarah["total"][1])]],
+               align_kanan={2, 3})
+    else:
+        _p(d, "Nihil — tidak terdapat barang bersejarah pada periode ini. "
+              "(Tandai aset lewat kolom \"Barang Bersejarah\" pada form/"
+              "impor aset bila satker memilikinya.)")
+
+    for judul_n in ("i. Laporan Barang BPYDS",
                     "j. Laporan Barang Hibah DK/TP"):
         _h(d, judul_n, 2)
         _p(d, "Nihil — tidak terdapat data pada kategori ini di periode "

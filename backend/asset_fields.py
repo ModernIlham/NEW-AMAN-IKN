@@ -83,6 +83,10 @@ ASSET_SCALAR_FIELDS = (
     # auto-isi dari riwayat inventarisasi sebelumnya (kode+NUP/register).
     AssetField("garansi_hingga", "Garansi Hingga", batchable=True),
     AssetField("garansi_jenis", "Jenis Garansi", batchable=True),
+    # Penanda Barang Bersejarah (PSAP 07: heritage asset — diungkapkan
+    # dalam kuantitas tanpa nilai). Nilai "Ya" = bersejarah, kosong = bukan;
+    # menghidupkan seksi "h. Laporan Barang Bersejarah" pada LBP.
+    AssetField("barang_bersejarah", "Barang Bersejarah", batchable=True),
 )
 
 SCALAR_FIELD_NAMES = tuple(f.name for f in ASSET_SCALAR_FIELDS)

@@ -235,6 +235,10 @@ FIELD_STRATEGIES = {
     "garansi_jenis": _s("teks", lambda r, c: (
         r.choice(["Resmi Distributor", "Toko", "Internasional"])
         if r.random() < 0.4 else "")),
+    # Barang bersejarah langka di satker biasa — ~2% ber-"Ya" cukup untuk
+    # menguji seksi h LBP tanpa mendistorsi profil data.
+    "barang_bersejarah": _s("teks", lambda r, c: (
+        "Ya" if r.random() < 0.02 else "")),
 }
 
 

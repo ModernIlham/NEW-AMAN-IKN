@@ -194,6 +194,10 @@ ASSET_TEMPLATE_SCHEMA = [
              "Purna Jual).",
      "sample1": "Pabrikan", "sample2": "",
      "dropdown": ["Pabrikan", "Distributor", "Toko", "Purna Jual", "Lainnya"]},
+    {"field": "barang_bersejarah", "required": False, "width": 16,
+     "rule": "Isi \"Ya\" bila barang bersejarah (PSAP 07) — masuk seksi "
+             "Laporan Barang Bersejarah pada LBP; kosongkan bila bukan.",
+     "sample1": "", "sample2": "", "dropdown": ["Ya"]},
 ]
 
 
