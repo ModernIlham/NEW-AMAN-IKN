@@ -879,9 +879,9 @@ export default function PersediaanPage({ user, onBack }) {
         {/* ── Toolbar ── */}
         <div className="bg-card rounded-xl border border-border shadow-sm p-2 sm:p-3 space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
-            {/* w-full di HP: kolom cari mengambil satu baris utuh, tombol
-                aksi turun ke baris berikutnya (flex-wrap) — tak terpotong. */}
-            <div className="relative w-full sm:w-auto sm:flex-1 sm:min-w-[180px]">
+            {/* Baris 1: kolom cari (flex-1) + tombol Tambah di sampingnya.
+                Tombol aksi lain hidup di sub-baris tersendiri di bawah. */}
+            <div className="relative flex-1 min-w-[140px] sm:min-w-[180px]">
               <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
               <Input
                 value={search}
@@ -895,6 +895,12 @@ export default function PersediaanPage({ user, onBack }) {
               aria-label="Tambah barang persediaan" title="Tambah barang persediaan" data-testid="persediaan-add">
               <Plus className="w-4 h-4" /><span className="hidden sm:inline">Tambah Barang</span>
             </Button>
+            {/* Sub-baris aksi: SELALU satu baris (flex-nowrap) — di HP mengambil
+                baris sendiri (basis-full) dan menggulir menyamping bila sempit,
+                tombol TIDAK diperkecil (aturan tap-target 44px). Di layar lebar
+                (basis auto) menempel di baris yang sama bila muat. Dropdown
+                aman dari clipping overflow karena Radix me-render via portal. */}
+            <div className="flex items-center gap-2 flex-nowrap overflow-x-auto basis-full sm:basis-auto min-w-0">
             {/* Ikon ListPlus (bukan Layers) — Layers eksklusif bermakna layer FIFO */}
             <Button variant="outline" className="h-10 gap-1.5" onClick={bukaMassal}
               aria-label="Transaksi massal — satu dokumen banyak barang" title="Transaksi massal — satu dokumen banyak barang" data-testid="persediaan-massal">
@@ -1013,6 +1019,7 @@ export default function PersediaanPage({ user, onBack }) {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            </div>
             <input ref={fileImporRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={onImportFile} />
             <input ref={fileSaktiRef} type="file" accept=".pdf" className="hidden" onChange={onSaktiFile} />
           </div>
