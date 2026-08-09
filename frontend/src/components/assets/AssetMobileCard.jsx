@@ -1,6 +1,7 @@
 import React, { memo, useState, useRef } from "react";
 import { Camera, MapPin, Briefcase, Tag, Trash2, Lock, Cloud, Check, RotateCcw, RefreshCcw, MoreVertical, BookOpen, History, CreditCard, AlertTriangle, ShieldCheck, CheckCircle2, XCircle, PlusCircle, Scale, CircleDashed } from "lucide-react";
 import { sisaGaransi } from "../../lib/garansi";
+import { kelasStatusInventarisasi } from "../../lib/warnaAset";
 import { useSinkronSiman } from "../../lib/simanSync";
 import { berTitikHijau, keteranganPsp } from "../../lib/tandaPsp";
 import {
@@ -374,12 +375,13 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
                   tooltip/aria; label teks dihapus demi hemat ruang. */}
               {(() => {
                 const PETA = {
-                  "Ditemukan": { Icon: CheckCircle2, cls: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400', label: 'Ditemukan' },
-                  "Tidak Ditemukan": { Icon: XCircle, cls: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400', label: 'Tidak Ditemukan' },
-                  "Berlebih": { Icon: PlusCircle, cls: 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400', label: 'Berlebih' },
-                  "Sengketa": { Icon: Scale, cls: 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400', label: 'Sengketa' },
+                  "Ditemukan": { Icon: CheckCircle2, label: 'Ditemukan' },
+                  "Tidak Ditemukan": { Icon: XCircle, label: 'Tidak Ditemukan' },
+                  "Berlebih": { Icon: PlusCircle, label: 'Berlebih' },
+                  "Sengketa": { Icon: Scale, label: 'Sengketa' },
                 };
-                const m = PETA[asset.inventory_status] || { Icon: CircleDashed, cls: 'bg-muted text-muted-foreground', label: 'Belum Diinventarisasi' };
+                const m = PETA[asset.inventory_status] || { Icon: CircleDashed, label: 'Belum Diinventarisasi' };
+                m.cls = kelasStatusInventarisasi(asset.inventory_status);
                 const M = m.Icon;
                 return (
                   <span

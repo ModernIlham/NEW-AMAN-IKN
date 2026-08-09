@@ -8,6 +8,7 @@ import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import axios from "axios";
 import { toast } from "sonner";
 import { buatPenjagaNama } from "@/lib/penjagaNama";
+import { CONDITION_COLORS, STATUS_COLORS, STATUS_DEFAULT } from "@/lib/warnaAset";
 import {
   MapPin, MessageSquarePlus, Plus, X, Loader2, Send, Users, Clock,
   AlertTriangle, RefreshCcw, WifiOff, Layers, Boxes, Trash2, ShieldCheck,
@@ -34,16 +35,6 @@ import {
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
-// Warna pin per status inventarisasi — SAMA dengan Peta Aset agar konsisten.
-const STATUS_COLORS = {
-  "Ditemukan": "#2563eb",
-  "Tidak Ditemukan": "#dc2626",
-  "Berlebih": "#d97706",
-  "Sengketa": "#7c3aed",
-  "Belum Diinventarisasi": "#64748b",
-};
-const STATUS_DEFAULT = "#64748b";
-const CONDITION_COLORS = { "Baik": "#059669", "Rusak Ringan": "#d97706", "Rusak Berat": "#dc2626" };
 const COLLAB_COLOR = "#0d9488"; // teal — titik kolaborasi (dibedakan dari aset)
 
 // Pin teardrop berwarna via divIcon — gaya sama dengan Peta Aset; cincin oranye

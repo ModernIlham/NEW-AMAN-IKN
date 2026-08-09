@@ -8,6 +8,7 @@ import {
 import { toast } from "sonner";
 import axios from "axios";
 import { getApiError } from "@/lib/utils";
+import { kelasStatusInventarisasi } from "@/lib/warnaAset";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -22,13 +23,9 @@ const formatTanggal = (iso) => {
   }
 };
 
-const statusBadgeClass = (status) => (
-  status === "Ditemukan" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
-  : status === "Tidak Ditemukan" ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
-  : status === "Berlebih" ? "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300"
-  : status === "Sengketa" ? "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300"
-  : "bg-muted text-muted-foreground"
-);
+// Salinan lokal lama sempat menyimpang (dark:text-*-300) — kini ikut
+// satu sumber warnaAset.
+const statusBadgeClass = kelasStatusInventarisasi;
 
 /**
  * Kartu Inventarisasi — riwayat pengesahan sebuah aset LINTAS kegiatan.

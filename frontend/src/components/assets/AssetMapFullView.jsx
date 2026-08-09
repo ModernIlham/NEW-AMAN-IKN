@@ -24,6 +24,7 @@ import {
 import { getSnapshotAssets } from "../../lib/offlineSnapshot";
 import { downloadFileWithProgress } from "../../lib/downloadFile";
 import { authMediaUrl } from "../../lib/mediaUrl";
+import { CONDITION_COLORS, STATUS_COLORS } from "../../lib/warnaAset";
 import { useBackGuard } from "../../hooks/useBackGuard";
 import { useUkurPeta } from "../../hooks/useUkurPeta";
 import { useDenahSpasial } from "../../hooks/useDenahSpasial";
@@ -44,20 +45,6 @@ function parseCoord(v) {
   const n = parseFloat(String(v).trim().replace(",", "."));
   return Number.isFinite(n) && Math.abs(n) <= 180 ? n : null;
 }
-
-const STATUS_COLORS = {
-  "Ditemukan": "#2563eb",
-  "Tidak Ditemukan": "#dc2626",
-  "Berlebih": "#d97706",
-  "Sengketa": "#7c3aed",
-  "Belum Diinventarisasi": "#64748b",
-};
-
-const CONDITION_COLORS = {
-  "Baik": "#059669",
-  "Rusak Ringan": "#d97706",
-  "Rusak Berat": "#dc2626",
-};
 
 // Data pengguna barang LENGKAP = nama pengguna + NIP/NIK terisi + BAST
 // sudah terunggah → pin diberi border hijau.
