@@ -526,7 +526,7 @@ git fetch origin && git reset --hard origin/main
 cp /tmp/backend_env_backup /var/www/inventarisasi/backend/.env
 cp /tmp/frontend_env_backup /var/www/inventarisasi/frontend/.env
 sudo supervisorctl restart inventarisasi-backend
-cd frontend && yarn install && yarn build
+cd frontend && yarn install --frozen-lockfile --ignore-engines && yarn build
 ```
 
 ---

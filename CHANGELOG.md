@@ -67,6 +67,53 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#839] Deploy VPS pulih — yarn tak lagi menolak engines Node di paket uji — 2026-08-09
+
+Setiap deploy sejak `[#800]` (PR #792, fondasi uji render) gagal di
+`yarn install --frozen-lockfile` pada VPS dengan:
+
+```
+error @testing-library/jest-dom@6.10.0: The engine "node" is incompatible
+with this module. Expected version ">=22". Got "20.20.2"
+```
+
+`package.json` meminta `@testing-library/jest-dom` dengan rentang `^6`;
+regenerasi lockfile di PR #792 menambat 6.10.0 yang baru saja menaikkan
+syarat engines ke Node ≥22. Runner CI memakai Node 22 sehingga CI tetap
+hijau — hanya VPS (Node 20.20.2) yang menolak. Ironinya paket itu murni
+dependensi UJI: tidak pernah ikut bundel produksi, tetapi pemeriksaan
+engines yarn menggagalkan seluruh install sebelum build sempat berjalan.
+
+Efek yang senyap: skrip deploy me-restart backend SEBELUM tahap frontend,
+jadi backend produksi terus termutakhirkan sementara bundel frontend macet
+di versi lama — status campuran yang bertahan berminggu tanpa alarm selain
+badge merah di tab Actions.
+
+Perbaikan: `--ignore-engines` pada `yarn install` di `scripts/deploy_vps.sh`
+(dengan komentar panjang alasannya). Pemeriksaan engines hanya nasihat
+metadata; bila kelak ada dependensi jalur build yang sungguh tak jalan di
+Node VPS, `yarn build` keluar non-zero dan `set -e` menghentikan skrip
+sebelum penukaran build — docroot lama utuh (gerbang `build.new/index.html`
+menangkap kasus lain: build exit 0 tanpa bundel). Skrip dipipe dari commit
+ter-checkout di runner, jadi perbaikan berlaku pada deploy pertama setelah
+merge tanpa menyentuh VPS.
+
+Verifikasi (workflow 3 agen): sapuan 1.663 `package.json` di pohon
+dependensi — HANYA jest-dom yang engines-nya tak terpenuhi Node 20.20.2,
+nol paket jalur build; uji empiris yarn 1.22.22 membuktikan `yarn run`
+tidak memeriksa ulang engines dependensi (flag di install saja cukup) dan
+cek engines dilewati bila node_modules sudah mutakhir — itulah kenapa
+deploy baru gagal ketika lockfile berubah, bukan sejak dulu. Skrip manual
+seiras ikut disamakan: `update-all.sh` (fallback `|| yarn install` yang
+bisa menulis ulang yarn.lock di VPS dibuang sekalian), `vps-deploy.sh`,
+instruksi `vps-fix.sh`, dan langkah update manual README.
+
+> Saran infrastruktur (tindakan pemilik di VPS, di luar repo): Node 20 sudah
+> melewati akhir dukungan (EOL April 2026) — naikkan ke Node 22 LTS agar
+> pemeriksaan engines bisa diketatkan kembali dan patch keamanan mengalir.
+
+---
+
 ## [#838] Amortisasi ATB golongan 8 + jurnal henti guna 401/402 — 2026-08-09
 
 Dua butir penutup audit 5 klasifikasi `[#835]`:

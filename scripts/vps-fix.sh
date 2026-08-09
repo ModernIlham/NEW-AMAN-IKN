@@ -638,7 +638,7 @@ fi
 echo ""
 echo -e "${YELLOW}LANGKAH SELANJUTNYA:${NC}"
 echo -e "  1. Jika backend sudah RUNNING, rebuild frontend:"
-echo -e "     cd ${APP_DIR}/frontend && yarn install \\"
+echo -e "     cd ${APP_DIR}/frontend && yarn install --frozen-lockfile --ignore-engines \\"
 echo -e "       && NODE_OPTIONS=--max-old-space-size=2048 BUILD_PATH=build.new yarn build \\"
 echo -e "       && rm -rf build.old && mv build build.old && mv build.new build"
 echo -e "     ${YELLOW}(pagar memori + tukar atomik — VPS ini tanpa swap; build tanpa"

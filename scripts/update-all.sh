@@ -225,7 +225,8 @@ sed -i 's/A product of emergent.sh/AMAN - Aplikasi Manajemen Aset Negara | Inven
 sed -i 's/Made with Emergent/Inventory Master/' public/index.html 2>/dev/null || true
 
 # Install deps & build
-yarn install --frozen-lockfile 2>/dev/null || yarn install
+# --ignore-engines: Node VPS lebih tua dari syarat paket uji (lihat scripts/deploy_vps.sh)
+yarn install --frozen-lockfile --ignore-engines
 export NODE_OPTIONS="--max-old-space-size=4096"
 yarn build
 
