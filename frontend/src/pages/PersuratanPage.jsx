@@ -35,6 +35,11 @@ const WARNA_STATUS = {
   selesai: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
 };
 
+const LABEL_STATUS = {
+  dibooking: "Dibooking", disahkan: "Disahkan", dibatalkan: "Dibatalkan",
+  diterima: "Diterima", diproses: "Diproses", selesai: "Selesai",
+};
+
 const WARNA_KEBERLAKUAN = {
   berlaku: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
   diubah: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
@@ -484,7 +489,7 @@ export default function PersuratanPage({ user, onBack }) {
                     </span>
                     <span className="flex items-center gap-1">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${WARNA_STATUS[s.status] || "bg-muted text-muted-foreground"}`}>
-                        {s.status}
+                        {LABEL_STATUS[s.status] || s.status}
                       </span>
                       {s.keberlakuan && s.keberlakuan !== "berlaku" && s.keberlakuan !== "draf" && (
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${WARNA_KEBERLAKUAN[s.keberlakuan] || "bg-muted"}`}
@@ -559,10 +564,10 @@ export default function PersuratanPage({ user, onBack }) {
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${WARNA_STATUS[s.status] || "bg-muted text-muted-foreground"}`}>
-                          {s.status}
+                          {LABEL_STATUS[s.status] || s.status}
                         </span>
                         {s.keberlakuan && s.keberlakuan !== "berlaku" && s.keberlakuan !== "draf" && (
-                          <p className={`mt-0.5 inline-block px-2 py-0.5 rounded-full text-[9px] font-semibold ${WARNA_KEBERLAKUAN[s.keberlakuan] || "bg-muted"}`}
+                          <p className={`mt-0.5 inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${WARNA_KEBERLAKUAN[s.keberlakuan] || "bg-muted"}`}
                             title={s.keberlakuan_label} data-testid={`keberlakuan-${s.id}`}>
                             {LABEL_KEBERLAKUAN[s.keberlakuan] || s.keberlakuan}
                           </p>

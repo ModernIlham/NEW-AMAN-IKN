@@ -67,6 +67,25 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#855] Chip status Persuratan & panel permohonan berbahasa label, bukan kode mentah — 2026-08-09
+
+Sisa temuan investigasi chip `[#853]`: dua tempat masih menampilkan KODE
+status mentah huruf kecil apa adanya, dan satu chip menyusut ke 9px.
+
+- **Persuratan** (kartu HP + tabel): chip status kini menampilkan label
+  berkapital lewat `LABEL_STATUS` (Dibooking/Disahkan/Dibatalkan/Diterima/
+  Diproses/Selesai) — sebelumnya `{s.status}` mentah, padahal chip
+  keberlakuan di sebelahnya sudah lama ber-label; chip keberlakuan versi
+  tabel dinaikkan `text-[9px]` → `text-[10px]` (sama dengan versi kartu).
+- **Panel Permohonan bersama** (register permohonan Persediaan + Permohonan
+  Transaksi Aset di Pembukuan): chip status ber-label
+  (Diusulkan/Diproses/Disetujui/Ditolak/Dibatalkan) + `font-semibold`
+  (satu-satunya chip status yang belum semibold).
+- Uji render baru di `PermohonanPanelRender.test.jsx` mengunci label
+  terbaca DAN memastikan kode mentah tak lagi tampil. Disiplin uji-mutasi:
+  lookup label dibisukan → merah; entri `disetujui` dihapus dari peta →
+  merah. Eslint bersih; `CI=false yarn build` sukses.
+
 ## [#854] Warna status & kondisi aset satu sumber — duplikat hex peta & chip inventarisasi diangkat ke lib — 2026-08-09
 
 Lanjutan temuan investigasi `[#853]`: peta warna aset tersalin (dan mulai
