@@ -580,3 +580,26 @@ def test_masa_manfaat_override_dari_koreksi_final():
                    "masa_manfaat_override_semester": 7}
     _s, _a, masa2 = status_susut(tanpa_reval)
     assert masa2 == 5                                  # masa kelompok 30501
+
+
+def test_amortisasi_atb_golongan_8_dihitung():
+    """Golongan 8 (ATB) tidak lagi dikecualikan — Software (80101, 4 tahun
+    sesuai KMK 620/KM.6/2015) diamortisasi garis lurus semesteran dengan
+    mesin yang sama; kelompok ATB tanpa referensi ditagih 'tanpa_referensi'
+    (tidak menebak angka); golongan tanpa-susut lain tetap dikecualikan."""
+    from penilaian_utils import (GOLONGAN_TANPA_SUSUT, hitung_penyusutan,
+                                 status_susut, validate_masa_manfaat)
+    assert "8" not in GOLONGAN_TANPA_SUSUT
+    st, _alasan, masa = status_susut({
+        "asset_code": "8010101001", "purchase_date": "2024-01-15",
+        "purchase_price": "8000000"})
+    assert (st, masa) == ("susut", 4)
+    # 2024-S1 .. 2026-S1 berakhir 30 Jun 2026 → 5 dari 8 semester terpakai
+    h = hitung_penyusutan("8000000", masa, "2024-01-15", "2026-06-30")
+    assert h["semester_terpakai"] == 5
+    assert h["akumulasi"] == 5_000_000
+    st2, _a2, _m2 = status_susut({
+        "asset_code": "8020101001", "purchase_date": "2024-01-15"})
+    assert st2 == "tanpa_referensi"       # kelompok ATB lain wajib referensi
+    assert validate_masa_manfaat("80101", 4) == []   # admin boleh isi gol 8
+    assert status_susut({"asset_code": "7010101001"})[0] == "tidak"  # KDP tetap
