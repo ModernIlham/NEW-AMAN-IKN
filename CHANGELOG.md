@@ -67,6 +67,36 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#851] Dokumentasi mengejar gelombang permohonan aset — README v2.7, PRD, masterplan, registry modul — 2026-08-09
+
+Dokumen produk tertinggal satu gelombang penuh: README masih v2.6, halaman
+PRD (InfoPage) masih menyapa dengan rilis v2.6/v2.5, tabel status modul
+masterplan masih menulis Pemusnahan/Penghapusan/Pemindahtanganan "Sebagian",
+dan Beranda Modul belum mencantumkan register-register baru. PR ini murni
+dokumentasi — tidak ada perubahan perilaku backend/frontend.
+
+- **README**: versi → **2.7 (Agustus 2026)** + seksi "Highlight Rilis v2.7"
+  merangkum gelombang permohonan & register aset (`[#841]`–`[#850]`): gerbang
+  persetujuan KPB, surat usulan resmi ber-nomor, lima register yang dulu
+  hilang total (TGR, usulan pemanfaatan + perpanjangan, usulan pemusnahan,
+  transfer masuk, henti guna mandiri), plus fondasi SIMAK
+  (`[#831]`–`[#838]`).
+- **InfoPage (PRD)**: badge header → v2.7 · Agustus 2026; seksi "Apa yang
+  Baru" dipimpin dua kartu rilis baru (Gerbang & Surat Resmi; 5 Register
+  Baru); footer → v2.7.
+- **MASTERPLAN**: tabel status modul dimutakhirkan — Penggunaan (+ transfer
+  masuk #848, henti guna #849, surat #844), Pemanfaatan (+ usulan &
+  perpanjangan #846), Pemindahtanganan/Pemusnahan/Penghapusan naik dari
+  "Sebagian" ke "Lengkap tahap awal" (+ #843/#845/#847).
+- **bmnModules.js** (Beranda Modul): Penggunaan +2 baris fitur (transfer
+  masuk, henti guna mandiri); Penghapusan +2 baris (register TGR, gerbang SK
+  jalur Tidak Ditemukan).
+
+Verifikasi: eslint bersih pada kedua berkas frontend + `CI=false yarn build`
+sukses; backend tidak disentuh. (Catatan disiplin uji-mutasi: PR ini
+prosa/konten tanpa permukaan eksekusi yang diuji — tidak ada mutasi yang
+dapat dibunuh oleh suite.)
+
 ## [#850] Nama mitra terbawa ke temuan Wasdal pemanfaatan — 2026-08-09
 
 Perbaikan temuan investigasi gelombang ASET-MANFAAT: dasbor Wasdal membaca

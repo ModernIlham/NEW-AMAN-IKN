@@ -326,7 +326,7 @@ export default function InfoPage({ onBack }) {
         <div className="relative text-center mb-16">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-full text-blue-400 text-xs mb-6">
             <Zap className="w-3.5 h-3.5" />
-            Product Requirements Document — v2.5 · Juli 2026
+            Product Requirements Document — v2.7 · Agustus 2026
           </div>
           <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 leading-tight">
             AMAN<br />
@@ -405,16 +405,38 @@ export default function InfoPage({ onBack }) {
         </div>
 
         {/* ── SECTIONS ── */}
-        <CollapsibleSection id="rilis" title="Apa yang Baru — Rilis v2.6" icon={Sparkles} defaultOpen={true}>
+        <CollapsibleSection id="rilis" title="Apa yang Baru — Rilis v2.7" icon={Sparkles} defaultOpen={true}>
           <p className="text-sm text-slate-400 mb-5">
-            Rilis v2.6 (Agustus 2026) menstandarkan persediaan ke SAKTI (45 kode
-            transaksi + 7 laporan persis format resmi), menghadirkan Riwayat Nilai
-            per aset sampai nilai buku, dan merombak keterbacaan stiker label.
-            Rilis v2.5 sebelumnya adalah hasil audit menyeluruh 6 dimensi (isolasi
-            multi-satker, jurnal lengkap, offload render, backup kokoh, Meilisearch
-            &amp; Redis opsional). Detail per perubahan di CHANGELOG.
+            Rilis v2.7 (Agustus 2026) menutup gelombang &quot;permohonan &amp;
+            register aset&quot;: setiap permohonan yang dulu terjadi di luar
+            aplikasi kini punya register, gerbang persetujuan KPB, dan surat
+            usulan resmi — termasuk lima register yang dulu hilang total (TGR,
+            usulan pemanfaatan + perpanjangan, usulan pemusnahan, transfer
+            masuk, henti guna mandiri). Rilis v2.6 sebelumnya menstandarkan
+            persediaan ke SAKTI dan menyelaraskan penyusutan dengan SIMAN V2.
+            Detail per perubahan di CHANGELOG.
           </p>
           <div className="grid md:grid-cols-2 gap-4">
+            <ReleaseCard
+              tag="GERBANG & SURAT RESMI" date="Agustus 2026" color="teal"
+              title="Permohonan aset ber-gerbang KPB + surat usulan PDF ber-nomor"
+              points={[
+                "Reklasifikasi, siklus KDP, dan finalisasi revaluasi (204/205) lewat permohonan operator → persetujuan KPB + Surat Persetujuan PDF",
+                "Persediaan ber-persetujuan KPB: perubahan transaksi menunggu setuju, eksekusi saat disetujui",
+                "Nota Dinas Usulan PDF ber-nomor untuk Pemindahtanganan & Penghapusan",
+                "Surat Usulan Penyerahan BMN Idle + Surat Permohonan Proses Penggunaan — booking nomor Persuratan",
+              ]}
+            />
+            <ReleaseCard
+              tag="5 REGISTER BARU" date="Agustus 2026" color="orange"
+              title="Register yang dulu hilang total kini terekam & berefek data"
+              points={[
+                "TGR aset hilang (PP 38/2016): penelusuran → telaah TPKN → ditetapkan/bebas → lunas; SK penghapusan aset hilang ditolak tanpa TGR berkeputusan",
+                "Usulan pemanfaatan + perpanjangan (PMK 115/2020): perjanjian lahir otomatis; BGS/BSG tak dapat diperpanjang ditegakkan",
+                "Usulan pemusnahan (PMK 83/2016): BA lahir otomatis dari usulan disetujui, objek dibatasi Rusak Berat",
+                "Transfer masuk (aset lahir + jurnal 102) & henti guna mandiri SK/BA (jurnal 401/402) — pembukuan tak lagi bolong",
+              ]}
+            />
             <ReleaseCard
               tag="PERSEDIAAN SAKTI" date="Agustus 2026" color="teal"
               title="45 kode transaksi resmi + 7 laporan persis format SAKTI"
@@ -815,7 +837,7 @@ export default function InfoPage({ onBack }) {
             Sistem Inventarisasi Barang Milik Negara (BMN) — sebelumnya InventoryMaster Pro
           </p>
           <p className="text-xs text-slate-600 mt-2">
-            &copy; {new Date().getFullYear()} AMAN v2.6 | Product Requirements Document
+            &copy; {new Date().getFullYear()} AMAN v2.7 | Product Requirements Document
           </p>
           <p className="text-xs text-slate-600 mt-2">
             Ikon animasi pada Peta Siklus oleh{" "}

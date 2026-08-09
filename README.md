@@ -2,7 +2,7 @@
 
 > Sistem Inventarisasi Barang Milik Negara (BMN) berbasis web, standar pemerintah Indonesia (SE 17/SE/M/2024 & LKPP 85/2025)
 
-**Versi:** 2.6 (Agustus 2026) — Selaras SIMAN V2 & tahan-banting operasional: mesin penyusutan terbukti cocok 175/175 baris ekspor SIMAN nyata (kolom "Umur Aset" = sisa SEMESTER — racun referensi masa manfaat dipulihkan), basis mutasi LBKP = tanggal perolehan, jurnal otomatis jalur impor SIMAN (100/204/205), isolasi satker aset pemegang/PSP (stempel efektif + backfill), 14 temuan audit modul jarang tersentuh ditutup (escape PDF Wasdal + anti-SSRF, Infinity/NaN, referensi nasional super-admin, injeksi formula XLSX), indeks komposit `assets`, aturan main logging (JSON default + redaksi rahasia/NIK), dan dokumen optimalisasi VPS
+**Versi:** 2.7 (Agustus 2026) — Setiap permohonan aset kini punya register & gerbangnya: gerbang persetujuan KPB untuk transaksi aset (reklasifikasi/KDP/revaluasi final) + persediaan, surat usulan resmi PDF ber-nomor (Nota Dinas Pemindahtanganan/Penghapusan, surat register Penggunaan), dan LIMA register yang dulu hilang total — TGR aset hilang (gerbang SK jalur Tidak Ditemukan), usulan pemanfaatan + perpanjangan (PMK 115/2020), usulan pemusnahan (PMK 83/2016, BA lahir dari usulan), transfer masuk alih status (aset lahir otomatis + jurnal 102), dan henti guna mandiri ber-SK/BA (jurnal 401/402). Ditambah fondasi SIMAK: registry 99 kode mutasi, barang bersejarah, modul KDP (502/503/505+105), amortisasi ATB, dan Persediaan ber-persetujuan KPB (45 kode transaksi + 7 laporan format SAKTI)
 
 ---
 
@@ -147,6 +147,49 @@ lampiran per tiket insidentil** (#156).
 **Seluruh kartu modul siklus kini bisa dimasuki dari Beranda Modul.**
 
 ---
+
+## 🆕 Highlight Rilis v2.7 (Agustus 2026)
+
+Gelombang **"permohonan & register aset"** — audit menyeluruh (`CHANGELOG [#841]`)
+memetakan permohonan/persetujuan yang selama ini terjadi di luar aplikasi, lalu
+sembilan PR menutup SELURUH peta defisitnya (entri `[#841]`–`[#849]` + perbaikan
+`[#850]`):
+
+- 🔐 **Gerbang persetujuan KPB untuk transaksi aset** — mesin permohonan generik:
+  reklasifikasi, siklus KDP, dan **finalisasi revaluasi/koreksi nilai (204/205)**
+  kini harus lewat permohonan operator → persetujuan KPB (bukan langsung jadi),
+  dengan Surat Persetujuan PDF; menyusul Persediaan ber-persetujuan KPB untuk
+  perubahan transaksi (`[#832]`–`[#833]`, `[#841]`–`[#842]`).
+- 📄 **Surat usulan resmi ber-nomor** — Nota Dinas Usulan PDF untuk register
+  Pemindahtanganan & Penghapusan, Surat Usulan Penyerahan BMN Idle, dan Surat
+  Permohonan Proses Penggunaan — semua ber-booking nomor Persuratan (`[#843]`–`[#844]`).
+- 🕵️ **Register TGR aset hilang** (PP 38/2016) — penelusuran → telaah TPKN →
+  TGR ditetapkan (SKTJM/SK Pembebanan + nilai) / bebas TGR → lunas; **gerbang SK**:
+  SK penghapusan jalur Tidak Ditemukan DITOLAK selama TGR belum berkeputusan (`[#845]`).
+- 🤝 **Usulan pemanfaatan berstatus + perpanjangan** (PMK 115/2020) — draf →
+  diajukan → disetujui Pengelola → perjanjian lahir otomatis; aturan perpanjangan
+  ditegakkan: BGS/BSG ditolak, Pinjam Pakai wajib ≥60 hari sebelum berakhir,
+  induk kedaluwarsa harus usulan baru (`[#846]`).
+- 🔥 **Usulan pemusnahan berstatus** (PMK 83/2016) — jejak usulan → persetujuan →
+  dilaksanakan; register BA pemusnahan lahir otomatis dari usulan yang disetujui,
+  kelayakan Rusak Berat divalidasi per aset (`[#847]`).
+- 📦 **Transfer masuk alih status** — barang kiriman Pengguna Barang lain
+  dibukukan lewat daftar barang manual; saat tiket selesai, **aset lahir otomatis**
+  (jejak `perolehan_transfer`) + **jurnal 102 Transfer Masuk** — kembaran jurnal
+  302 sisi keluar (`[#848]`).
+- ⏸️ **Henti guna mandiri ber-SK/BA** — penghentian penggunaan di luar jalur BMN
+  idle kini ber-register: Dihentikan (jurnal 401) → Digunakan Kembali (jurnal
+  402), dengan pagar anti-jurnal-ganda terhadap jalur idle (`[#849]`).
+- 🔎 **Perbaikan temuan investigasi** — nama mitra kini terbawa ke temuan Wasdal
+  pemanfaatan (proyeksi & pembaca diselaraskan ke field `mitra`, bentuk API
+  stabil) (`[#850]`).
+
+Fondasi pembukuan SIMAK di gelombang yang sama: registry **99 kode mutasi aset
+tetap** + layar referensi (`[#835]`), penanda **barang bersejarah** hidup sampai
+seksi h LBP (`[#836]`), **modul KDP** — perolehan 502, pengembangan 503,
+penyelesaian 505+105 (`[#837]`), **amortisasi ATB golongan 8** + jurnal henti
+guna (`[#838]`), dan **Persediaan ber-persetujuan KPB** di atas 45 kode
+transaksi + 7 laporan format SAKTI (`[#831]`–`[#834]`).
 
 ## 🆕 Highlight Rilis v2.6 (Agustus 2026)
 
