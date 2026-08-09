@@ -18,8 +18,11 @@ from auth_utils import (
 from db import db
 from shared_utils import kode_satker_user, log_audit, scope_query_field_satker, pastikan_akses_dok_satker, pastikan_akses_aset, blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs
 from pemusnahan_utils import (
-    CARA_PEMUSNAHAN, kelayakan_musnah, rekap_pemusnahan,
-    usulan_penghapusan_dari_ba, validate_pemusnahan,
+    CARA_PEMUSNAHAN, DOK_USULAN_PEMUSNAHAN, STATUS_USULAN_MUSNAH_TERMINAL,
+    STATUS_USULAN_PEMUSNAHAN, TRANSISI_USULAN_PEMUSNAHAN, ba_dari_usulan,
+    kelayakan_musnah, rekap_pemusnahan, usulan_penghapusan_dari_ba,
+    validate_pemusnahan, validate_transisi_usulan_pemusnahan,
+    validate_usulan_pemusnahan,
 )
 
 pemusnahan_router = APIRouter()
@@ -86,6 +89,204 @@ async def export_pemusnahan(_user: dict = Depends(require_user)):
         ])
     return Response(content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
                     headers={"Content-Disposition": 'attachment; filename="register_pemusnahan.csv"'})
+
+
+class UsulanPemusnahanIn(BaseModel):
+    asset_ids: list[str] = Field(min_length=1, max_length=100)
+    cara: str
+    keterangan: str = ""
+
+
+class TransisiUsulanPemusnahanIn(BaseModel):
+    status: str
+    nomor_dokumen: str = ""
+    tanggal_dokumen: str = ""
+    catatan: str = ""
+
+
+@pemusnahan_router.get("/pemusnahan/usulan")
+async def daftar_usulan_pemusnahan(_user: dict = Depends(require_user)):
+    """Register usulan pemusnahan + peta transisi."""
+    items = await (db.pemusnahan_usulan
+                   .find(scope_query_field_satker(_user), {"_id": 0})
+                   .sort("created_at", -1).to_list(500))
+    berjalan = sum(1 for u in items
+                   if u.get("status") not in STATUS_USULAN_MUSNAH_TERMINAL)
+    return {"items": items,
+            "label_status": STATUS_USULAN_PEMUSNAHAN,
+            "label_cara": CARA_PEMUSNAHAN,
+            "transisi": {k: sorted(v)
+                         for k, v in TRANSISI_USULAN_PEMUSNAHAN.items()},
+            "ringkasan": {"total": len(items), "berjalan": berjalan},
+            "catatan": (
+                "Pemusnahan wajib berawal dari usulan KPB dan persetujuan "
+                "Pengelola/Pengguna Barang (PMK 83/2016) — BA lahir otomatis "
+                "saat usulan mencapai status Dilaksanakan.")}
+
+
+@pemusnahan_router.post("/pemusnahan/usulan")
+async def buat_usulan_pemusnahan(payload: UsulanPemusnahanIn,
+                                 user: dict = Depends(require_writer)):
+    """Buka usulan pemusnahan multi-aset (aset harus Rusak Berat)."""
+    data = payload.model_dump()
+    errors = validate_usulan_pemusnahan(data)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    asset_ids = list(dict.fromkeys(data["asset_ids"]))  # dedup, jaga urutan
+    # Anti-duplikat: aset yang sudah dalam usulan pemusnahan berjalan.
+    ganda = await db.pemusnahan_usulan.find_one(
+        {"aset.asset_id": {"$in": asset_ids},
+         "status": {"$nin": sorted(STATUS_USULAN_MUSNAH_TERMINAL)}},
+        {"_id": 0, "aset": 1})
+    if ganda:
+        sudah = {a.get("asset_id") for a in ganda.get("aset") or []}
+        nama = next((a.get("asset_name") for a in ganda.get("aset") or []
+                     if a.get("asset_id") in set(asset_ids) & sudah), "aset")
+        raise HTTPException(
+            status_code=409,
+            detail=f"{nama} sudah ada di usulan pemusnahan yang sedang berjalan")
+    aset_rows = []
+    for aid in asset_ids:
+        a = await db.assets.find_one({"id": aid}, _PROJ_ASET)
+        if not a:
+            raise HTTPException(status_code=404,
+                                detail=f"Aset {aid} tidak ditemukan")
+        await pastikan_akses_aset(user, a)
+        layak, alasan = kelayakan_musnah(a)
+        if not layak:
+            raise HTTPException(status_code=400,
+                                detail=f"{a.get('asset_name') or aid}: {alasan}")
+        aset_rows.append({"asset_id": a["id"], "asset_code": a.get("asset_code"),
+                          "NUP": a.get("NUP"), "asset_name": a.get("asset_name"),
+                          "harga": a.get("purchase_price")})
+    now = datetime.now(timezone.utc).isoformat()
+    record = {
+        "id": str(uuid.uuid4()),
+        "kode_satker": kode_satker_user(user),
+        "cara": data["cara"],
+        "aset": aset_rows,
+        "status": "draf",
+        "nomor_usulan": "", "tanggal_usulan": "",
+        "nomor_persetujuan": "", "tanggal_persetujuan": "",
+        "nomor_ba": "", "tanggal_ba": "",
+        "ba_id": "",
+        "keterangan": str(data.get("keterangan") or "").strip(),
+        "riwayat": [{"status": "draf", "tanggal": now,
+                     "oleh": user.get("username"), "catatan": ""}],
+        "created_by": user.get("username"),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.pemusnahan_usulan.insert_one({**record})
+    await log_audit("pemusnahan_usulan_buat", "", record["id"],
+                    username=user.get("username", "system"),
+                    detail=(f"Usulan pemusnahan {len(aset_rows)} aset "
+                            f"(cara {record['cara']})"),
+                    kode_satker=record["kode_satker"])
+    return record
+
+
+@pemusnahan_router.post("/pemusnahan/usulan/{usulan_id}/status")
+async def transisi_usulan_pemusnahan(usulan_id: str,
+                                     payload: TransisiUsulanPemusnahanIn,
+                                     admin: dict = Depends(require_admin)):
+    """Pindahkan status usulan; status `dilaksanakan` BEREFEK: BA
+    pemusnahan lahir otomatis dari usulan (ber-taut usulan_id)."""
+    u = await db.pemusnahan_usulan.find_one({"id": usulan_id}, {"_id": 0})
+    if not u:
+        raise HTTPException(status_code=404, detail="Usulan tidak ditemukan")
+    await pastikan_akses_dok_satker(admin, u)
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    errors = validate_transisi_usulan_pemusnahan(
+        u["status"], payload.status, payload.model_dump(), today_iso)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    now = datetime.now(timezone.utc).isoformat()
+    update = {"status": payload.status, "updated_at": now}
+    dok = DOK_USULAN_PEMUSNAHAN.get(payload.status)
+    if dok:
+        update[dok[0]] = payload.nomor_dokumen.strip()
+        update[dok[1]] = (str(payload.tanggal_dokumen or "").strip()[:10]
+                          or today_iso)
+    res = await db.pemusnahan_usulan.find_one_and_update(
+        # Anti-balapan: status lama diikutkan di filter.
+        {"id": usulan_id, "status": u["status"]},
+        {"$set": update,
+         "$push": {"riwayat": {"status": payload.status, "tanggal": now,
+                               "oleh": admin.get("username"),
+                               "catatan": str(payload.catatan or "").strip()}}},
+        projection={"_id": 0}, return_document=True)
+    if res is None:
+        raise HTTPException(status_code=409,
+                            detail="Status usulan berubah oleh proses lain — muat ulang")
+    if payload.status == "dilaksanakan":
+        ba = ba_dari_usulan(res, now, admin.get("username"), str(uuid.uuid4()),
+                            res.get("nomor_ba"), res.get("tanggal_ba"))
+        await db.pemusnahan.insert_one({**ba})
+        res = await db.pemusnahan_usulan.find_one_and_update(
+            {"id": usulan_id},
+            {"$set": {"ba_id": ba["id"], "updated_at": now}},
+            projection={"_id": 0}, return_document=True) or res
+    await log_audit("pemusnahan_usulan_transisi", "", usulan_id,
+                    username=admin.get("username", "system"),
+                    detail=(f"{STATUS_USULAN_PEMUSNAHAN.get(u['status'], u['status'])} → "
+                            f"{STATUS_USULAN_PEMUSNAHAN.get(payload.status, payload.status)}"
+                            + (f" ({payload.nomor_dokumen})"
+                               if payload.nomor_dokumen else "")),
+                    kode_satker=str(u.get("kode_satker") or ""))
+    return res
+
+
+@pemusnahan_router.get("/pemusnahan/usulan/export")
+async def export_usulan_pemusnahan(_user: dict = Depends(require_user)):
+    """Ekspor CSV register usulan pemusnahan (satu baris per usulan)."""
+    import csv as csv_module
+    import io
+
+    from pembukuan_utils import parse_harga
+
+    buf = io.StringIO()
+    w = csv_module.writer(buf)
+    w.writerow(["status", "cara", "jumlah_aset", "nilai_perolehan",
+                "nomor_usulan", "nomor_persetujuan", "nomor_ba", "tanggal_ba",
+                "keterangan", "dibuat_oleh", "tanggal_buka"])
+    async for u in db.pemusnahan_usulan.find(
+            scope_query_field_satker(_user), {"_id": 0}).sort("created_at", -1):
+        aset = u.get("aset") or []
+        w.writerow([
+            STATUS_USULAN_PEMUSNAHAN.get(u.get("status"), u.get("status")),
+            CARA_PEMUSNAHAN.get(u.get("cara"), u.get("cara")),
+            len(aset), int(sum(parse_harga(a.get("harga")) for a in aset)),
+            u.get("nomor_usulan"), u.get("nomor_persetujuan"),
+            u.get("nomor_ba"), u.get("tanggal_ba"),
+            u.get("keterangan"), u.get("created_by"),
+            str(u.get("created_at") or "")[:10],
+        ])
+    return Response(content=buf.getvalue().encode("utf-8-sig"),
+                    media_type="text/csv",
+                    headers={"Content-Disposition":
+                             'attachment; filename="register_usulan_pemusnahan.csv"'})
+
+
+@pemusnahan_router.delete("/pemusnahan/usulan/{usulan_id}")
+async def hapus_usulan_pemusnahan(usulan_id: str,
+                                  admin: dict = Depends(require_admin)):
+    """Hapus usulan — hanya status draf (belum jadi jejak proses)."""
+    u = await db.pemusnahan_usulan.find_one({"id": usulan_id}, {"_id": 0})
+    if not u:
+        raise HTTPException(status_code=404, detail="Usulan tidak ditemukan")
+    await pastikan_akses_dok_satker(admin, u)
+    if u.get("status") != "draf":
+        raise HTTPException(
+            status_code=400,
+            detail="Hanya usulan berstatus Draf yang boleh dihapus — usulan "
+                   "yang sudah diajukan adalah arsip proses")
+    await db.pemusnahan_usulan.delete_one({"id": usulan_id})
+    await log_audit("pemusnahan_usulan_hapus", "", usulan_id,
+                    username=admin.get("username", "system"),
+                    detail=f"Hapus usulan pemusnahan ({len(u.get('aset') or [])} aset)",
+                    kode_satker=str(u.get("kode_satker") or ""))
+    return {"message": "Usulan dihapus"}
 
 
 @pemusnahan_router.post("/pemusnahan")

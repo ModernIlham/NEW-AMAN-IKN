@@ -67,6 +67,37 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#847] Usulan pemusnahan berstatus (PMK 83/2016) — BA lahir dari usulan yang disetujui — 2026-08-09
+
+Butir ketiga defisit "permohonan yang belum ada register" (audit `[#841]`):
+modul Pemusnahan hanya merekam **BA jadi** (setelah persetujuan +
+pelaksanaan) — proses usulan KPB ke Pengelola/Pengguna Barang yang
+diwajibkan PMK 83/PMK.06/2016 tidak pernah terekam; nomor persetujuan
+cukup diketik saat mencatat BA.
+
+- **Register usulan** (`pemusnahan_utils.py` + `routes/pemusnahan.py`,
+  koleksi `pemusnahan_usulan`): tiket multi-aset dengan alur **draf →
+  diajukan → disetujui → dilaksanakan**, ditolak/dibatalkan terminal,
+  diajukan boleh mundur ke draf. Dokumen wajib per tahap: nomor surat
+  usulan (diajukan), nomor persetujuan Pengelola/Pengguna (disetujui),
+  nomor BA + tanggal tidak boleh masa depan (dilaksanakan). Kelayakan
+  Rusak Berat divalidasi per aset saat buka; aset dalam usulan berjalan
+  ditolak ganda (409); transisi ber-CAS; ekspor CSV; hapus hanya draf;
+  scope satker + log audit + indeks.
+- **Status `dilaksanakan` BEREFEK data**: dokumen register BA pemusnahan
+  **lahir otomatis** dari usulan — nomor BA/tanggal dari transisi, cara +
+  nomor persetujuan + snapshot aset dari usulan, ber-taut balik
+  `usulan_id`. Dari BA itu tindak lanjut lama tetap berjalan (PDF BA,
+  lampiran bukti, usulkan penghapusan per aset).
+- **UI PemusnahanPage**: panel "Usulan Pemusnahan" (form usulan baru
+  dengan pemilih aset Rusak Berat 1-klik yang sama dengan form BA +
+  daftar tiket ber-chip status + transisi admin lewat dialog transisi
+  bersama + CSV); daftar fitur modul di `bmnModules.js` diperbarui.
+- Uji: 3 uji baru (`test_pemusnahan_usulan.py`) — kelayakan Rusak Berat +
+  anti-ganda, dokumen wajib per tahap + tanggal BA masa depan ditolak,
+  efek BA lahir dari usulan. Disiplin uji-mutasi: cek kelayakan dibisukan
+  → merah; penyalinan nomor persetujuan ke BA dicabut → merah.
+
 ## [#846] Usulan pemanfaatan berstatus + perpanjangan perjanjian (PMK 115/2020) — 2026-08-09
 
 Butir kedua defisit "permohonan yang belum ada register" (audit `[#841]`):

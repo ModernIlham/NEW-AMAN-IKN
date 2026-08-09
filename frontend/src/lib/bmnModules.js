@@ -414,6 +414,7 @@ export const SIKLUS_MODULES = [
       "✅ Lampiran bukti per BA: foto pelaksanaan + scan BA bertanda tangan (PDF/gambar)",
       "✅ Ekspor CSV register BA (cara, nilai perolehan, lampiran)",
       "✅ Kandidat pemusnahan otomatis dari kondisi Rusak Berat (pemilih aset 1-klik dibatasi Rusak Berat) + tindak lanjut inventarisasi",
+      "✅ Usulan pemusnahan berstatus (draf → diajukan → disetujui Pengelola → dilaksanakan; BA lahir otomatis dari usulan)",
     ],
     integrasi: ["Kondisi & tindak lanjut dari modul inventarisasi menjadi pintu masuk"],
   },
