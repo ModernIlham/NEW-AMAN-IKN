@@ -174,7 +174,18 @@ done
 
 # ── Frontend: dependensi bisa bertambah (mis. leaflet) + build produksi ──
 cd frontend
-yarn install --frozen-lockfile
+# --ignore-engines: Node VPS (20.x) lebih tua dari runner CI (22). Paket uji
+# seperti @testing-library/jest-dom 6.10 mensyaratkan Node >=22 dan membuat
+# yarn MENOLAK install padahal paket itu tak pernah ikut bundel produksi.
+# Pemeriksaan engines hanya nasihat metadata; bila ada dependensi jalur build
+# yang sungguh tak jalan di Node VPS, `yarn build` keluar non-zero dan
+# `set -e` di atas menghentikan skrip SEBELUM penukaran build — docroot lama
+# utuh. (Gerbang build.new/index.html di bawah menangkap kasus berbeda:
+# build exit 0 tapi tak menghasilkan bundel.) Cek engines yarn juga DILEWATI
+# bila node_modules sudah mutakhir — itulah kenapa kegagalan ini baru muncul
+# saat lockfile berubah, bukan di setiap deploy. Obat akarnya: upgrade Node
+# VPS ke 22 LTS, lalu flag ini boleh dicabut.
+yarn install --frozen-lockfile --ignore-engines
 
 # Pagar memori Node — lihat catatan (1) di kepala berkas.
 export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=2048}"

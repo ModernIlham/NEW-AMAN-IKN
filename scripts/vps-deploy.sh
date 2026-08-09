@@ -98,8 +98,9 @@ cat > .env << ENVEOF
 REACT_APP_BACKEND_URL=https://${DOMAIN}
 ENVEOF
 
-# Install dependencies
-yarn install
+# Install dependencies (--ignore-engines: Node VPS lebih tua dari syarat paket uji,
+# lihat scripts/deploy_vps.sh)
+yarn install --frozen-lockfile --ignore-engines
 
 # Build for production
 export NODE_OPTIONS="--max-old-space-size=4096"
