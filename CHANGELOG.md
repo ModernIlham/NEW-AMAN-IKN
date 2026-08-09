@@ -67,6 +67,27 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#854] Warna status & kondisi aset satu sumber — duplikat hex peta & chip inventarisasi diangkat ke lib — 2026-08-09
+
+Lanjutan temuan investigasi `[#853]`: peta warna aset tersalin (dan mulai
+menyimpang) di lima berkas — `STATUS_COLORS`/`CONDITION_COLORS` hex identik
+100% ganda di PetaKolaborasiPage & AssetMapFullView (dua peta yang justru
+WAJIB konsisten), dan kelas chip status inventarisasi triplikat di
+AssetMobileCard, VirtualizedAssetTable, dan KartuInventarisasiDialog —
+salinan ketiga sudah menyimpang diam-diam (teks gelap `-300` vs `-400`).
+
+- **Modul bersama baru** `frontend/src/lib/warnaAset.js`: `STATUS_COLORS`
+  (5 hex marker peta) + `STATUS_DEFAULT`, `CONDITION_COLORS` (3 hex
+  kondisi), `KELAS_STATUS_INVENTARISASI` + `kelasStatusInventarisasi()`
+  (chip Tailwind, fallback muted). Diuji unit (`warnaAset.test.js`,
+  ikut jalan di CI).
+- **Lima berkas beralih ke satu sumber**; salinan lokal dihapus (43 baris
+  duplikat hilang, bersih 15 baris pengganti). KartuInventarisasiDialog
+  yang sempat menyimpang kini kembali seragam (`dark:text-*-400`).
+- Verifikasi: uji jest 4/4 (dua mutasi terbukti terbunuh: hex Tidak
+  Ditemukan diubah → merah; fallback muted dicabut → merah), eslint
+  bersih 7 berkas, `CI=false yarn build` sukses.
+
 ## [#853] Chip status register satu kanon — helper bersama + lima titik menyimpang diseragamkan — 2026-08-09
 
 Investigasi lintas-halaman memetakan seluruh cara register menampilkan

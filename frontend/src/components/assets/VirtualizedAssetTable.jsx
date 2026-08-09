@@ -2,6 +2,7 @@ import React, { useRef, memo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Camera, Briefcase, MapPin, Tag, CreditCard, Trash2, History, ClipboardCheck, Lock, Cloud, CloudOff, Check, RotateCcw, Clock, Loader2, AlertTriangle, BookOpen, User, RefreshCcw, ShieldCheck } from "lucide-react";
 import { sisaGaransi } from "../../lib/garansi";
+import { kelasStatusInventarisasi } from "../../lib/warnaAset";
 import { useSinkronSiman } from "../../lib/simanSync";
 import { berTitikHijau, keteranganPsp } from "../../lib/tandaPsp";
 import { Button } from "../ui/button";
@@ -421,13 +422,7 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
                     role="img"
                     title={a.inventory_status || 'Belum Diinventarisasi'}
                     aria-label={`Status inventarisasi: ${a.inventory_status || 'Belum Diinventarisasi'}`}
-                    className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold ${
-                    a.inventory_status === "Ditemukan" ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400' :
-                    a.inventory_status === "Tidak Ditemukan" ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400' :
-                    a.inventory_status === "Berlebih" ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400' :
-                    a.inventory_status === "Sengketa" ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400' :
-                    'bg-muted text-muted-foreground'
-                  }`}>{a.inventory_status === "Ditemukan" ? '✓' : a.inventory_status === "Tidak Ditemukan" ? '✗' : a.inventory_status === "Berlebih" ? '+' : a.inventory_status === "Sengketa" ? '!' : '-'}</span>
+                    className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold ${kelasStatusInventarisasi(a.inventory_status)}`}>{a.inventory_status === "Ditemukan" ? '✓' : a.inventory_status === "Tidak Ditemukan" ? '✗' : a.inventory_status === "Berlebih" ? '+' : a.inventory_status === "Sengketa" ? '!' : '-'}</span>
                 </div>
 
                 {/* Actions — hit targets bumped to 28px (h-7 w-7). min-h-0/min-w-0
