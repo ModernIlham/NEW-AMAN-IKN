@@ -67,6 +67,47 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#841] Gerbang persetujuan KPB untuk transaksi aset — reklasifikasi & KDP lewat permohonan — 2026-08-09
+
+Butir pertama lanjutan audit permohonan aset: pola SEDIA-KPB persediaan
+(`[#831]`–`[#834]`) digeneralisasi ke transaksi pembukuan aset yang selama
+ini dieksekusi `require_writer` LANGSUNG padahal menulis jurnal paling
+berdampak — reklasifikasi (pasangan 304/107, kode+NUP berganti), pengembangan
+KDP (503), dan penyelesaian KDP (505/105).
+
+**Mesin permohonan aset** (`aset_permohonan_utils.py` +
+`routes/aset_permohonan.py`, koleksi `aset_permohonan`):
+
+- Writer MENGAJUKAN (`POST /pembukuan/permohonan`, ber-Idempotency-Key,
+  guard `pastikan_akses_aset` di pintu masuk) — aset & jurnal belum tersentuh.
+- Admin satker yang BUKAN pengaju MENYETUJUI → eksekusi memanggil fungsi
+  endpoint mutasi_bmn yang SUDAH ADA dengan model Pydantic aslinya
+  (`request=None`) — tidak ada jalur tulis kedua; `boleh_putuskan` diimpor
+  dari persediaan (satu aturan pemisahan peran untuk dua domain). Klaim
+  atomik diusulkan→diproses anti-double-approve; eksekusi gagal
+  mengembalikan status ke diusulkan dengan galat tercatat.
+- Terbit **Surat Persetujuan Transaksi Aset** ber-kop + nomor booking
+  Persuratan otomatis + jalur kirim TTD elektronik KPB (PDF dibekukan ke
+  GridFS saat dikirim).
+- Gerbang `aset_wajib_persetujuan` (default MATI, saklar admin di panel):
+  saat aktif, panggilan HTTP langsung ke reklasifikasi/KDP ditolak 403 —
+  transaksi hanya lahir dari persetujuan.
+
+**Frontend**: `PermohonanPanel` persediaan digeneralisasi lewat prop
+`konfig` (bawaan tetap persediaan — nol perubahan perilaku) dan dipasang di
+kepala halaman Pembukuan; tiga pintu transaksi membelok otomatis saat
+gerbang aktif (PanelKdp, dialog reklasifikasi Pelaporan, reklas dari
+sinkron SIMAN) lewat helper bersama `lib/permohonanAset.js` yang membaca
+setelan SAAT submit (saklar baru langsung berlaku; gagal baca setelan =
+perilaku lama, tidak mengunci transaksi).
+
+Uji: 6 skenario endpoint (`test_aset_permohonan.py`) + 4 uji helper
+frontend; tiga mutasi kunci terbukti tertangkap (cabut `boleh_putuskan`,
+gerbang selalu lolos, setujui tanpa eksekusi — semuanya merah lalu
+dipulihkan). Suite: backend 2510, frontend 819.
+
+---
+
 ## [#840] Toolbar Persediaan dua baris rapi — cari + Tambah sebaris, aksi lain satu baris — 2026-08-09
 
 Umpan balik layar HP: setelah kolom cari dibuat satu baris penuh (`[#834]`),

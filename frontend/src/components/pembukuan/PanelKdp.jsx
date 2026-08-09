@@ -42,14 +42,29 @@ export default function PanelKdp() {
     if (!aksi) return;
     setSibuk(true);
     try {
+      // Gerbang ASET-GERBANG-1: bila wajib-persetujuan aktif, transaksi
+      // diajukan sebagai permohonan (eksekusi menunggu persetujuan KPB).
+      const { ajukanPermohonanAset, gerbangPermohonanAsetAktif,
+              pesanPermohonanTerkirim } = await import("@/lib/permohonanAset");
+      const lewatPermohonan = await gerbangPermohonanAsetAktif();
       if (aksi.jenis === "kembang") {
-        const r = await axios.post(`${API}/pembukuan/kdp/${aksi.id}/pengembangan`,
-          { nilai: Number(nilai || 0), keterangan: ket });
-        toast.success(`Pengembangan tercatat (503) — nilai berjalan ${fmtRp(r.data?.nilai_berjalan)}`);
+        const payload = { nilai: Number(nilai || 0), keterangan: ket };
+        if (lewatPermohonan) {
+          await ajukanPermohonanAset("kdp_pengembangan", aksi.id, payload);
+          toast.success(pesanPermohonanTerkirim("Pengembangan KDP"));
+        } else {
+          const r = await axios.post(`${API}/pembukuan/kdp/${aksi.id}/pengembangan`, payload);
+          toast.success(`Pengembangan tercatat (503) — nilai berjalan ${fmtRp(r.data?.nilai_berjalan)}`);
+        }
       } else {
-        const r = await axios.post(`${API}/pembukuan/kdp/${aksi.id}/selesaikan`,
-          { kode_baru: kodeBaru, alasan: ket });
-        toast.success(`KDP selesai → ${r.data?.kode_baru}/${r.data?.nup_baru} (jurnal 505+105)`);
+        const payload = { kode_baru: kodeBaru, alasan: ket };
+        if (lewatPermohonan) {
+          await ajukanPermohonanAset("kdp_selesai", aksi.id, payload);
+          toast.success(pesanPermohonanTerkirim("Penyelesaian KDP"));
+        } else {
+          const r = await axios.post(`${API}/pembukuan/kdp/${aksi.id}/selesaikan`, payload);
+          toast.success(`KDP selesai → ${r.data?.kode_baru}/${r.data?.nup_baru} (jurnal 505+105)`);
+        }
       }
       setAksi(null);
       muat();

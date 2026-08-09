@@ -13,6 +13,21 @@ import { downloadFileWithProgress } from "@/lib/downloadFile";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 import ReferensiKodeMutasiDialog from "@/components/pembukuan/ReferensiKodeMutasiDialog";
 import PanelKdp from "@/components/pembukuan/PanelKdp";
+// Panel bersama SEDIA-KPB / ASET-GERBANG-1 — konfig menunjuk mesin aset.
+import PermohonanPanel from "@/components/persediaan/PermohonanPanel";
+
+const KONFIG_PERMOHONAN_ASET = {
+  dasar: "/pembukuan/permohonan",
+  pengaturan: "/pembukuan/permohonan-pengaturan",
+  judul: "Permohonan Transaksi Aset",
+  labelGerbang: ("reklasifikasi dan transaksi KDP diajukan sebagai "
+    + "permohonan dan baru tereksekusi setelah disetujui admin lain."),
+  toastNyala: ("Wajib persetujuan DINYALAKAN — reklasifikasi & KDP kini "
+    + "lewat permohonan"),
+  prefix: "pembukuan-permohonan",
+  namaBerkas: "Persetujuan_Aset",
+  labelSurat: "Surat Persetujuan Transaksi Aset",
+};
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -190,6 +205,7 @@ export default function PembukuanPage({ user, onBack }) {
               DBKP intra/ekstrakomptabel (PMK 181) · Buku Barang (jurnal mutasi)
             </p>
           </div>
+          <PermohonanPanel user={user} konfig={KONFIG_PERMOHONAN_ASET} />
           <BookingNomorButton modul="pembukuan" jenisNaskah="Laporan"
             referensi="DBKP / Buku Barang" />
         </div>
