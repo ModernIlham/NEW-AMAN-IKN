@@ -346,21 +346,25 @@ async def _sisipan_berikut(periode: str, kode: str, jangkar: int) -> int:
     return int(c["seq"])
 
 
-async def booking_nomor_lpb(user, tgl_iso: str, perihal: str,
-                            tujuan: str = "", keterangan: str = "",
-                            kode_satker: str = "") -> tuple:
-    """Pesan satu nomor surat keluar untuk Laporan Penerimaan Barang.
+async def booking_nomor_otomatis(user, tgl_iso: str, perihal: str,
+                                 tujuan: str = "", keterangan: str = "",
+                                 kode_satker: str = "",
+                                 jenis_naskah: str = "Laporan",
+                                 referensi: str = "LPB") -> tuple:
+    """Pesan satu nomor surat keluar otomatis untuk dokumen modul persediaan.
 
     → `(nomor, surat_id)`; keduanya "" bila gagal dipesan.
 
-    DIEKSTRAK dari `transaksi_massal` persediaan supaya jalur ASET memakai
-    deret nomor yang SAMA PERSIS. Dua salinan logika penomoran adalah cara
-    paling pasti melahirkan dua deret yang diam-diam berbeda — dan nomor surat
-    yang bercabang tak bisa diperbaiki belakangan tanpa menomori ulang arsip.
+    DIEKSTRAK dari `transaksi_massal` persediaan (mulanya khusus LPB, lalu
+    digenerikkan untuk Surat Persetujuan Transaksi Persediaan) supaya SEMUA
+    dokumen otomatis memakai deret nomor yang SAMA PERSIS. Dua salinan logika
+    penomoran adalah cara paling pasti melahirkan dua deret yang diam-diam
+    berbeda — dan nomor surat yang bercabang tak bisa diperbaiki belakangan
+    tanpa menomori ulang arsip.
 
     Surat tercatat berstatus `dibooking` di buku agenda satker penerbit
     dokumen, sehingga nomor yang sudah terpakai tak pernah dipakai ulang meski
-    dokumen LPB-nya nanti batal.
+    dokumennya nanti batal.
 
     `kode_satker` (opsional): satker DOKUMEN — dipakai saat pemanggil bisa
     lintas-satker (super-admin) agar nomor terbit di buku agenda satker yang
@@ -373,7 +377,7 @@ async def booking_nomor_lpb(user, tgl_iso: str, perihal: str,
     kode_satker = str(kode_satker or "").strip() or kode_satker_user(user)
     atur = await _pengaturan(kode_satker)
     kode_klas = pilih_klasifikasi(atur["peta_klasifikasi"], "persediaan",
-                                  "Laporan",
+                                  jenis_naskah,
                                   default=atur["kode_klasifikasi_default"])
     tahun = int(tgl_surat[:4]) if tgl_surat[:4].isdigit() else now0.year
     periode = (_periode(atur, tgl_surat)
@@ -390,21 +394,32 @@ async def booking_nomor_lpb(user, tgl_iso: str, perihal: str,
         # Stempel satker (REVIEW-9 R10): tanpa ini surat booking otomatis
         # muncul di buku agenda & arsip SEMUA satker.
         "kode_satker": kode_satker,
-        "perihal": str(perihal or "Laporan Penerimaan Barang (LPB)")[:300],
+        "perihal": str(perihal or "Dokumen otomatis persediaan")[:300],
         "tujuan": str(tujuan or "").strip(),
-        "jenis_naskah": "Laporan", "modul": "persediaan",
+        "jenis_naskah": jenis_naskah, "modul": "persediaan",
         "kegiatan_id": "", "nama_kegiatan": "",
         "kode_klasifikasi": kode_klas, "kode_keamanan": "B",
-        "tanggal_surat": tgl_surat, "referensi": "LPB",
+        "tanggal_surat": tgl_surat, "referensi": referensi,
         "nomor_eksternal": "",
-        "keterangan": str(keterangan or "booking otomatis dari LPB")[:300],
+        "keterangan": str(keterangan or "booking otomatis")[:300],
         "dibuat_oleh": user.get("username", "system"),
         "riwayat": [{"status": "dibooking", "tanggal": now0.isoformat(),
                      "oleh": user.get("username", "system"),
-                     "catatan": "booking otomatis dari LPB"}],
+                     "catatan": str(keterangan or "booking otomatis")[:300]}],
         "created_at": now0.isoformat(), "updated_at": now0.isoformat(),
     })
     return nomor, surat_id
+
+
+async def booking_nomor_lpb(user, tgl_iso: str, perihal: str,
+                            tujuan: str = "", keterangan: str = "",
+                            kode_satker: str = "") -> tuple:
+    """Delegator kontrak lama — deret nomor tetap tunggal lewat
+    `booking_nomor_otomatis` (jangan menyalin logikanya ke tempat lain)."""
+    return await booking_nomor_otomatis(
+        user, tgl_iso, perihal or "Laporan Penerimaan Barang (LPB)",
+        tujuan=tujuan, keterangan=keterangan or "booking otomatis dari LPB",
+        kode_satker=kode_satker, jenis_naskah="Laporan", referensi="LPB")
 
 
 async def _nama_kegiatan(kegiatan_id: str) -> str:
