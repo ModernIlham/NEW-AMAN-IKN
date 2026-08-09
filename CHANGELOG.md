@@ -67,6 +67,42 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#849] Henti guna mandiri — SK/BA penghentian penggunaan di luar jalur idle + jurnal 401/402 — 2026-08-09
+
+Butir TERAKHIR defisit "permohonan yang belum ada register" (audit
+`[#841]`): jurnal 401 (Penghentian Aset Dari Penggunaan) dan 402
+(Penggunaan Kembali) selama ini hanya terbit lewat jalur BMN idle —
+penghentian penggunaan aktif ber-SK/BA di luar jalur idle (mis. rusak
+menunggu proses, dihentikan sementara) tidak punya register dan tidak
+berjurnal.
+
+- **Register henti guna** (`penggunaan_utils.py` + `routes/penggunaan.py`,
+  koleksi `henti_guna`): catat penghentian per aset ber-SK/BA (nomor +
+  alasan ≥5 karakter wajib — penghentian tanpa dasar dokumen adalah
+  temuan) → status **Dihentikan** + **jurnal 401** langsung terbit
+  (nilai perolehan, ref_id tiket); aksi **Gunakan Kembali** (admin,
+  SK/BA wajib, anti-balapan CAS) → status Digunakan Kembali + **jurnal
+  402**; ekspor CSV; scope satker + log audit + indeks.
+- **Pagar anti-jurnal-ganda**: aset dengan tiket BMN idle berjalan
+  DITOLAK 400 dan diarahkan ke jalur idle (yang sudah menjurnal 401/402
+  sendiri sejak `[#838]`); aset yang sudah keluar pembukuan ditolak;
+  satu aset satu tiket dihentikan aktif (409).
+- **UI PenggunaanPage**: panel "Henti Guna Mandiri (SK/BA)" di bawah
+  panel BMN Idle — tombol Catat Penghentian (pencarian aset + nomor
+  SK/BA + tanggal + alasan), daftar tiket ber-chip status, tombol
+  Gunakan Kembali lewat dialog transisi bersama, dan ekspor CSV.
+- Uji: 3 uji baru (`test_henti_mandiri.py`) — dokumen wajib + jurnal
+  401 + anti-ganda, pengalihan ke jalur idle, gunakan kembali + jurnal
+  402 + klik ulang 409. Disiplin uji-mutasi: kode jurnal ditukar 301 →
+  merah; pagar tiket idle dicabut → merah.
+
+Dengan ini SELURUH peta defisit audit permohonan aset `[#841]` tertutup:
+gerbang persetujuan KPB (`[#841]`–`[#842]`), dokumen resmi register
+(`[#843]`–`[#844]`), dan lima register yang hilang total — TGR
+(`[#845]`), usulan pemanfaatan + perpanjangan (`[#846]`), usulan
+pemusnahan (`[#847]`), transfer masuk (`[#848]`), henti guna mandiri
+(entri ini).
+
 ## [#848] Sisi penerimaan alih status penggunaan — barang masuk dibukukan + jurnal 102 Transfer Masuk — 2026-08-09
 
 Butir keempat defisit "permohonan yang belum ada register" (audit `[#841]`):

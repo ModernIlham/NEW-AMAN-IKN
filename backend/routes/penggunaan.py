@@ -30,8 +30,10 @@ from penggunaan_utils import (
     ARAH_PROSES, JENIS_PROSES_PENGGUNAAN, JENIS_PSP, STATUS_IDLE,
     STATUS_PENGAJUAN_PSP, STATUS_PROSES, TRANSISI_PROSES, baris_csv_idle,
     baris_csv_proses, baris_csv_psp,
+    STATUS_HENTI_GUNA,
     build_asset_alih_keluar_projection, build_asset_idle_serah_projection,
     build_asset_transfer_masuk, indikasi_idle,
+    validate_gunakan_kembali, validate_henti_guna_baru,
     info_proses_sementara, kelompokkan_psp_siman, kunci_pemegang,
     rekap_idle, rekap_pemegang,
     rekap_proses_penggunaan, rekap_psp, status_pengajuan_psp,
@@ -912,6 +914,196 @@ async def hapus_tiket_idle(tiket_id: str, _admin: dict = Depends(require_admin))
             status_code=409,
             detail="Tiket tidak ditemukan atau sudah diproses (tidak boleh dihapus)")
     return {"ok": True, "id": tiket_id}
+
+
+class HentiGunaIn(BaseModel):
+    """Catat penghentian penggunaan aktif MANDIRI (di luar jalur idle)."""
+    asset_id: str = Field(min_length=1)
+    nomor_dokumen: str = ""            # SK/BA penghentian penggunaan
+    tanggal_dokumen: str = ""
+    alasan: str = ""
+
+
+class GunakanKembaliIn(BaseModel):
+    nomor_dokumen: str = ""            # SK/BA penggunaan kembali
+    tanggal_dokumen: str = ""
+    catatan: str = ""
+
+
+@penggunaan_router.get("/penggunaan/henti")
+async def daftar_henti_guna(_user: dict = Depends(require_user)):
+    """Register henti guna mandiri (SK/BA di luar jalur BMN idle)."""
+    items = await (db.henti_guna
+                   .find(scope_query_field_satker(_user), {"_id": 0})
+                   .sort("created_at", -1).to_list(500))
+    aktif = sum(1 for it in items if it.get("status") == "dihentikan")
+    return {"items": items, "label_status": STATUS_HENTI_GUNA,
+            "ringkasan": {"total": len(items), "dihentikan": aktif},
+            "catatan": (
+                "Penghentian penggunaan aktif ber-SK/BA di luar jalur BMN "
+                "idle — berjurnal 401 saat dihentikan dan 402 saat digunakan "
+                "kembali (administratif; nilai buku tidak bergeser). Aset "
+                "yang menganggur permanen tetap lewat jalur BMN idle.")}
+
+
+@penggunaan_router.post("/penggunaan/henti")
+async def catat_henti_guna(payload: HentiGunaIn,
+                           user: dict = Depends(require_writer)):
+    """Catat penghentian penggunaan MANDIRI satu aset + jurnal 401."""
+    data = payload.model_dump()
+    errors = validate_henti_guna_baru(data)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    from shared_utils import kode_satker_efektif_dari_aset, pastikan_akses_aset
+    a = await db.assets.find_one(
+        {"id": data["asset_id"]},
+        {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+         "purchase_price": 1, "dihapus": 1, "activity_id": 1})
+    if not a:
+        raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(user, a)
+    if a.get("dihapus"):
+        raise HTTPException(status_code=400,
+                            detail="Aset sudah keluar pembukuan — tidak bisa "
+                                   "dihentikan dari penggunaan")
+    aktif = await db.henti_guna.find_one(
+        {"asset_id": a["id"], "status": "dihentikan"}, {"_id": 0, "id": 1})
+    if aktif:
+        raise HTTPException(status_code=409,
+                            detail="Aset ini sudah berstatus dihentikan dari "
+                                   "penggunaan (tiket masih aktif)")
+    # Aset dalam tiket BMN idle berjalan diarahkan ke jalur idle — jalur
+    # itu sudah menjurnal 401/402 sendiri; register ganda = jurnal ganda.
+    idle_aktif = await db.bmn_idle.find_one(
+        {"asset_id": a["id"],
+         "status": {"$nin": ["diserahkan", "digunakan_kembali", "ditolak"]}},
+        {"_id": 0, "id": 1, "status": 1})
+    if idle_aktif:
+        raise HTTPException(
+            status_code=400,
+            detail="Aset ini sedang dalam tiket BMN idle — kelola penghentian "
+                   "lewat jalur idle (jurnal 401/402 sudah tercatat di sana)")
+    now = datetime.now(timezone.utc).isoformat()
+    record = {
+        "id": str(uuid.uuid4()),
+        "kode_satker": await kode_satker_efektif_dari_aset(user, [a["id"]]),
+        "asset_id": a["id"],
+        "asset_code": a.get("asset_code"),
+        "NUP": a.get("NUP"),
+        "asset_name": a.get("asset_name"),
+        "status": "dihentikan",
+        "nomor_dokumen": data["nomor_dokumen"].strip(),
+        "tanggal_dokumen": str(data.get("tanggal_dokumen") or "").strip()[:10],
+        "alasan": data["alasan"].strip(),
+        "nomor_dokumen_kembali": "",
+        "tanggal_dokumen_kembali": "",
+        "riwayat": [{"status": "dihentikan", "tanggal": now,
+                     "oleh": user.get("username"), "catatan": ""}],
+        "created_by": user.get("username"),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.henti_guna.insert_one({**record})
+    from pembukuan_utils import parse_harga
+    from shared_utils import catat_mutasi_bmn
+    await catat_mutasi_bmn({
+        "asset_id": a["id"], "kode_transaksi": "401",
+        "kode_barang": str(a.get("asset_code") or ""),
+        "nup": str(a.get("NUP") or ""),
+        "tanggal_buku": (record["tanggal_dokumen"] or now[:10]),
+        "jumlah": 1, "nilai": parse_harga(a.get("purchase_price")),
+        "sumber_modul": "penggunaan", "ref_id": record["id"],
+        "keterangan": (f"Henti guna mandiri — SK/BA "
+                       f"{record['nomor_dokumen']} ({record['alasan']})"),
+        "oleh": user.get("username", "system")})
+    await log_audit("henti_guna_catat", "", record["id"],
+                    username=user.get("username", "system"),
+                    detail=(f"Hentikan {a.get('asset_name')} "
+                            f"({a.get('asset_code')}) — {record['nomor_dokumen']}"),
+                    kode_satker=record["kode_satker"])
+    return record
+
+
+@penggunaan_router.post("/penggunaan/henti/{tiket_id}/gunakan-kembali")
+async def gunakan_kembali_henti(tiket_id: str, payload: GunakanKembaliIn,
+                                admin: dict = Depends(require_admin)):
+    """Aset yang dihentikan kembali digunakan aktif + jurnal 402."""
+    t = await db.henti_guna.find_one({"id": tiket_id}, {"_id": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    await pastikan_akses_dok_satker(admin, t)
+    data = payload.model_dump()
+    errors = validate_gunakan_kembali(data)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    now = datetime.now(timezone.utc).isoformat()
+    res = await db.henti_guna.find_one_and_update(
+        # Anti-balapan: hanya tiket yang masih dihentikan.
+        {"id": tiket_id, "status": "dihentikan"},
+        {"$set": {"status": "digunakan_kembali",
+                  "nomor_dokumen_kembali": data["nomor_dokumen"].strip(),
+                  "tanggal_dokumen_kembali":
+                      str(data.get("tanggal_dokumen") or "").strip()[:10],
+                  "updated_at": now},
+         "$push": {"riwayat": {"status": "digunakan_kembali", "tanggal": now,
+                               "oleh": admin.get("username"),
+                               "catatan": str(data.get("catatan") or "").strip()}}},
+        projection={"_id": 0}, return_document=True)
+    if res is None:
+        raise HTTPException(status_code=409,
+                            detail="Tiket sudah bukan berstatus dihentikan — muat ulang")
+    from pembukuan_utils import parse_harga
+    from shared_utils import catat_mutasi_bmn
+    aset = await db.assets.find_one(
+        {"id": res.get("asset_id")},
+        {"_id": 0, "asset_code": 1, "NUP": 1, "purchase_price": 1})
+    await catat_mutasi_bmn({
+        "asset_id": res.get("asset_id"), "kode_transaksi": "402",
+        "kode_barang": str((aset or {}).get("asset_code") or ""),
+        "nup": str((aset or {}).get("NUP") or ""),
+        "tanggal_buku": (res.get("tanggal_dokumen_kembali") or now[:10]),
+        "jumlah": 1,
+        "nilai": parse_harga((aset or {}).get("purchase_price")),
+        "sumber_modul": "penggunaan", "ref_id": res.get("id"),
+        "keterangan": (f"Penggunaan kembali setelah henti guna — SK/BA "
+                       f"{res.get('nomor_dokumen_kembali')}"),
+        "oleh": admin.get("username", "system")})
+    await log_audit("henti_guna_kembali", "", tiket_id,
+                    username=admin.get("username", "system"),
+                    detail=(f"Gunakan kembali {res.get('asset_name')} "
+                            f"({res.get('asset_code')})"),
+                    kode_satker=str(res.get("kode_satker") or ""))
+    return res
+
+
+@penggunaan_router.get("/penggunaan/henti/export")
+async def export_henti_guna(_user: dict = Depends(require_user)):
+    """Ekspor CSV register henti guna mandiri."""
+    import csv as csv_module
+    import io
+
+    from fastapi.responses import Response as HttpResponse
+
+    buf = io.StringIO()
+    w = csv_module.writer(buf)
+    w.writerow(["kode_barang", "nup", "nama_aset", "status",
+                "nomor_dokumen_henti", "tanggal_henti", "alasan",
+                "nomor_dokumen_kembali", "tanggal_kembali",
+                "dibuat_oleh", "tanggal_catat"])
+    async for t in db.henti_guna.find(
+            scope_query_field_satker(_user), {"_id": 0}).sort("created_at", -1):
+        w.writerow([
+            t.get("asset_code"), t.get("NUP"), t.get("asset_name"),
+            STATUS_HENTI_GUNA.get(t.get("status"), t.get("status")),
+            t.get("nomor_dokumen"), t.get("tanggal_dokumen"),
+            t.get("alasan"), t.get("nomor_dokumen_kembali"),
+            t.get("tanggal_dokumen_kembali"), t.get("created_by"),
+            str(t.get("created_at") or "")[:10],
+        ])
+    return HttpResponse(
+        content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
+        headers={"Content-Disposition":
+                 'attachment; filename="register_henti_guna.csv"'})
 
 
 @penggunaan_router.get("/penggunaan/pemegang/daftar-pdf")

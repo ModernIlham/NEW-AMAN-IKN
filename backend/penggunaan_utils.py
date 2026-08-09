@@ -680,6 +680,36 @@ def build_asset_alih_keluar_projection(tiket, now_iso):
     }
 
 
+# ---------------------------------------------------------------------------
+# Henti guna MANDIRI (ASET-HENTI-MANDIRI). Jurnal 401/402 selama ini hanya
+# terbit lewat jalur BMN idle (usul_serah / digunakan_kembali) — penghentian
+# penggunaan aktif ber-SK/BA di LUAR jalur idle (mis. menunggu proses lain,
+# dihentikan sementara) tidak punya register dan tidak berjurnal.
+# ---------------------------------------------------------------------------
+STATUS_HENTI_GUNA = {
+    "dihentikan": "Dihentikan dari Penggunaan (401)",
+    "digunakan_kembali": "Digunakan Kembali (402)",
+}
+
+
+def validate_henti_guna_baru(data: dict) -> list:
+    """Pencatatan penghentian: SK/BA + alasan wajib — penghentian tanpa
+    dasar dokumen adalah temuan."""
+    errors = []
+    if not str(data.get("nomor_dokumen") or "").strip():
+        errors.append("Nomor SK/BA penghentian penggunaan wajib diisi")
+    if len(str(data.get("alasan") or "").strip()) < 5:
+        errors.append("Alasan penghentian wajib diisi (minimal 5 karakter)")
+    return errors
+
+
+def validate_gunakan_kembali(data: dict) -> list:
+    """Penggunaan kembali juga berdokumen (SK/BA)."""
+    if not str(data.get("nomor_dokumen") or "").strip():
+        return ["Nomor SK/BA penggunaan kembali wajib diisi"]
+    return []
+
+
 def build_asset_transfer_masuk(tiket, barang, now_iso, new_id):
     """Dokumen aset BARU yang DIBUKUKAN saat tiket ALIH STATUS arah MASUK
     mencapai status terminal `dihapus_dibukukan` (ASET-TRANSFER-MASUK).
