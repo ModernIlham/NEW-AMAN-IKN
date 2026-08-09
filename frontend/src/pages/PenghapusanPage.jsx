@@ -16,6 +16,7 @@ import { useBackGuard } from "@/hooks/useBackGuard";
 import { authMediaUrl } from "@/lib/mediaUrl";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
+import KartuTgr from "@/components/penghapusan/KartuTgr";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -236,6 +237,9 @@ export default function PenghapusanPage({ user, onBack }) {
                 testid="penghapusan-stat-usulan"
               />
             </div>
+
+            {/* ── TGR aset hilang (PP 38/2016) ── */}
+            <KartuTgr isAdmin={isAdmin} />
 
             {/* ── Usulan berjalan ── */}
             <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
