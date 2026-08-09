@@ -52,7 +52,11 @@ export default [
     // Tanpa blok ini `no-undef` akan menyalak 2.300+ kali pada global yang
     // memang disediakan runtime-nya — dan penjaga yang menyalak palsu sebanyak
     // itu pasti dimatikan orang, bukan dipatuhi.
-    files: ["src/**/*.test.{js,jsx}", "src/**/__tests__/**/*.{js,jsx}", "src/setupTests.js"],
+    // `src/uji/` = perkakas khusus uji (tiruan Leaflet, pemasang WS/IDB) —
+    // dimuat lewat `jest.mock(...)`/import dari berkas uji, tak pernah masuk
+    // bundle produksi, dan memakai `module`/`global` gaya runtime Jest.
+    files: ["src/**/*.test.{js,jsx}", "src/**/__tests__/**/*.{js,jsx}",
+            "src/setupTests.js", "src/uji/**/*.{js,jsx}"],
     languageOptions: {
       globals: { ...globals.jest, ...globals.node },
     },
