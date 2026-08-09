@@ -421,6 +421,7 @@ function buildEditFormData(a, activityId) {
     keterangan_sengketa: a.keterangan_sengketa || "",
     garansi_hingga: a.garansi_hingga || "",
     garansi_jenis: a.garansi_jenis || "",
+    barang_bersejarah: a.barang_bersejarah || "",
     document_checklist: mergedChecklist,
     activity_id: activityId || null
   };
@@ -534,7 +535,7 @@ const AssetForm = memo(({
     inventory_status: "Belum Diinventarisasi", klasifikasi_tidak_ditemukan: "", sub_klasifikasi: "", uraian_tidak_ditemukan: "", tindak_lanjut: "",
     koordinat_latitude: "", koordinat_longitude: "", kronologis: "",
     keterangan_berlebih: "", asal_usul_berlebih: "", nomor_perkara: "", pihak_bersengketa: "", keterangan_sengketa: "",
-    garansi_hingga: "", garansi_jenis: "",
+    garansi_hingga: "", garansi_jenis: "", barang_bersejarah: "",
     // KOSONG (0/0), bukan lima baris bawaan. Daftar lama ("Buku Manual,
     // Charger/Adapter, Kabel USB, Kartu Garansi, CD Driver") masuk akal untuk
     // laptop dan tidak untuk apa pun yang lain — sebidang tanah tak punya
@@ -1745,7 +1746,7 @@ const AssetForm = memo(({
           "koordinat_latitude", "koordinat_longitude", "kronologis",
           "keterangan_berlebih", "asal_usul_berlebih",
           "nomor_perkara", "pihak_bersengketa", "keterangan_sengketa",
-          "garansi_hingga", "garansi_jenis",
+          "garansi_hingga", "garansi_jenis", "barang_bersejarah",
           "activity_id",
         ];
         for (const key of TEXT_FIELDS) {
@@ -2440,6 +2441,13 @@ const AssetForm = memo(({
                 </div>
                 <p className="text-[10px] text-muted-foreground col-span-2 -mt-1">Tanggal berakhir garansi (rentang lazim sejak tanggal perolehan) + jenis/tipenya. Kosongkan bila tidak ada.</p>
               </div>
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <input type="checkbox" className="min-w-0 min-h-0"
+                  checked={(formData.barang_bersejarah || "").toLowerCase() === "ya"}
+                  onChange={(e) => handleInputChange({ target: { name: "barang_bersejarah", value: e.target.checked ? "Ya" : "" } })}
+                  data-testid="asset-barang-bersejarah" />
+                <span><b>Barang Bersejarah</b> — masuk seksi Laporan Barang Bersejarah pada LBP (PSAP 07: diungkapkan dalam kuantitas).</span>
+              </label>
               <div className="space-y-1"><Label className="text-xs">Lokasi</Label><Input name="location" value={formData.location} onChange={handleInputChange} className="h-8" list="daftar-ruangan-master" placeholder="pilih ruangan / ketik bebas" /><datalist id="daftar-ruangan-master">{ruanganNames.map((n) => <option key={n} value={n} />)}</datalist></div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1"><Label className="text-xs">Eselon I</Label>

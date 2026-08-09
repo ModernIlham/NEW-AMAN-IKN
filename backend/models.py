@@ -117,6 +117,7 @@ class AssetCreate(BaseModel):
     keterangan_sengketa: Optional[str] = ""
     garansi_hingga: Optional[str] = ""
     garansi_jenis: Optional[str] = ""
+    barang_bersejarah: Optional[str] = ""
 
 class DocumentCheckItemResponse(BaseModel):
     """Response model for document checklist items - includes photo/doc counts for exclude_media mode"""
@@ -189,6 +190,7 @@ class AssetResponse(BaseModel):
     keterangan_sengketa: Optional[str] = ""
     garansi_hingga: Optional[str] = ""
     garansi_jenis: Optional[str] = ""
+    barang_bersejarah: Optional[str] = ""
     created_at: str
     # Stamped on every write — delta cursor for /assets/offline-snapshot
     updated_at: Optional[str] = ""

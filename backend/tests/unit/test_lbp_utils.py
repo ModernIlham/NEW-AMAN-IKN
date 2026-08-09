@@ -144,3 +144,41 @@ def test_kebijakan_akuntansi_dan_daftar_isi_lengkap():
                   "3.6 Tindak Lanjut Temuan Pemeriksaan",
                   "h. Laporan Barang Bersejarah"):
         assert any(wajib in j for _, j in isi), wajib
+
+
+def test_susun_barang_bersejarah_hanya_yang_bertanda():
+    """Seksi h LBP hidup dari penanda `barang_bersejarah` (mandat pemilik
+    2026-08-09) — aset tanpa penanda TIDAK boleh ikut, penanda toleran
+    kapitalisasi, dan agregasi per kode barang menjumlahkan kuantitas +
+    nilai tercatat (PSAP 07: nilai hanya informasi)."""
+    from lbp_utils import aset_barang_bersejarah, susun_barang_bersejarah
+    assert aset_barang_bersejarah({"barang_bersejarah": "Ya"})
+    assert aset_barang_bersejarah({"barang_bersejarah": " ya "})
+    assert not aset_barang_bersejarah({"barang_bersejarah": ""})
+    assert not aset_barang_bersejarah({})
+
+    hasil = susun_barang_bersejarah([
+        {"asset_code": "6020199999", "asset_name": "Prasasti Pendirian",
+         "purchase_price": 0, "barang_bersejarah": "Ya"},
+        {"asset_code": "6020199999", "asset_name": "Prasasti Pendirian",
+         "purchase_price": 5_000_000, "barang_bersejarah": "ya"},
+        {"asset_code": "3050104001", "asset_name": "PC Biasa",
+         "purchase_price": 9_000_000},                       # tanpa penanda
+    ])
+    assert len(hasil["baris"]) == 1
+    kode, nama, qty, nilai = hasil["baris"][0]
+    assert (kode, nama, qty, nilai) == ("6020199999", "Prasasti Pendirian",
+                                        2, 5_000_000.0)
+    assert hasil["total"] == (2, 5_000_000.0)
+
+
+def test_routes_lbp_memakai_susun_barang_bersejarah():
+    """Pin sumber: seksi h tidak lagi hard-coded "Nihil" — routes/lbp.py
+    harus memanggil builder-nya (uji perilaku docx penuh terlalu berat
+    untuk unit; helper-nya sendiri diuji di atas)."""
+    import os
+    src = open(os.path.join(os.path.dirname(__file__), "..", "..",
+                            "routes", "lbp.py")).read()
+    assert "susun_barang_bersejarah(aktif)" in src
+    # judul h tidak lagi anggota loop Nihil bersama i/j
+    assert 'for judul_n in ("h.' not in src

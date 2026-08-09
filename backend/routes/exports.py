@@ -90,7 +90,7 @@ ASSET_SHEET_HEADERS = ['Foto', 'Foto Stiker', 'Kode Aset', 'NUP', 'Nama Aset', '
                        'Status Inventarisasi', 'Klasifikasi', 'Sub Klasifikasi', 'Uraian Tidak Ditemukan', 'Tindak Lanjut',
                        'Latitude', 'Longitude', 'Kronologis',
                        'Keterangan Berlebih', 'Asal Usul Berlebih', 'Nomor Perkara', 'Pihak Bersengketa', 'Keterangan Sengketa',
-                       'Garansi Hingga', 'Jenis Garansi', 'Cara Bayar Kontrak',
+                       'Garansi Hingga', 'Jenis Garansi', 'Cara Bayar Kontrak', 'Barang Bersejarah',
                        'Jumlah Foto', 'Tanggal Input']
 
 
@@ -1139,12 +1139,13 @@ async def bangun_xlsx_bytes(query, activity_id="", base_url="", token=""):
         worksheet.write(row, 44, asset.get('garansi_hingga', ''), cell_format)
         worksheet.write(row, 45, asset.get('garansi_jenis', ''), cell_format)
         worksheet.write(row, 46, asset.get('cara_bayar_kontrak', ''), cell_format)
+        worksheet.write(row, 47, asset.get('barang_bersejarah', ''), cell_format)
 
         # Jumlah Foto
         photo_count = len(asset.get('photo_gridfs_ids', []) or asset.get('photos', []))
-        worksheet.write(row, 47, photo_count, cell_format)
+        worksheet.write(row, 48, photo_count, cell_format)
         # Tanggal Input
-        worksheet.write(row, 48, asset.get('created_at', ''), cell_format)
+        worksheet.write(row, 49, asset.get('created_at', ''), cell_format)
         
         # Write document checklist to separate sheet - ONLY items with checked=True (✓ Ada)
         checklist = asset.get('document_checklist', [])

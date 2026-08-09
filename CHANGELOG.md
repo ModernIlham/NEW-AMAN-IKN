@@ -67,6 +67,33 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#836] Barang Bersejarah hidup — penanda di aset + seksi h LBP dari data nyata — 2026-08-09
+
+Menutup celah terbesar audit 5 klasifikasi `[#835]`: seksi "h. Laporan
+Barang Bersejarah" pada LBP dulu statis "Nihil" tanpa sumber data — kini
+dihidupkan dari penanda eksplisit pada aset.
+
+- **Field registry baru `barang_bersejarah`** ("Ya" = bersejarah) lewat
+  jalur resmi `asset_fields.py` — otomatis ikut PATCH, ubah massal,
+  audit trail, proyeksi list, ekspor XLSX (kolom "Barang Bersejarah"),
+  template impor (dropdown "Ya"), dan snapshot luring; checkbox di form
+  aset (dekat garansi) menulis "Ya"/kosong.
+- **Seksi h LBP membaca data**: `susun_barang_bersejarah` (murni)
+  mengagregasi aset ber-penanda per kode barang → tabel Kode/Uraian/
+  Kuantitas/Nilai Tercatat + TOTAL, dengan kalimat PSAP 07 (aset
+  bersejarah diungkapkan dalam kuantitas; nilai hanya informasi).
+  Tanpa data, teks "Nihil" kini menunjuk cara menandainya.
+- Aset bersejarah lazim golongan 6 — mesin penyusutan AMAN memang tak
+  menyusutkan golongan 6, jadi tak ada perubahan penyusutan.
+
+Verifikasi: uji murni penyaring penanda + agregasi, pin sumber routes
+(seksi h keluar dari loop Nihil), pin frontend (snapshot + checkbox +
+daftar patch); anti-drift registry existing menagih seluruh turunan
+field; **2/2 mutasi terbunuh** (cabut penyaring penanda → uji agregasi
+merah; cabut field dari snapshot luring → uji pin merah).
+
+---
+
 ## [#835] Mutasi aset tetap selaras SIMAK — registry 99 kode + layar referensi + koreksi arah LBP — 2026-08-09
 
 Jawaban dua pertanyaan pemilik (2026-08-09) atas ASET TETAP, plus
