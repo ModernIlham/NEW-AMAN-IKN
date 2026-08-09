@@ -27,6 +27,7 @@ JALUR_PERMOHONAN_ASET = {
     "reklasifikasi": "Reklasifikasi Kodefikasi (304/107)",
     "kdp_pengembangan": "Pengembangan KDP (503)",
     "kdp_selesai": "Penyelesaian KDP (505/105)",
+    "revaluasi_final": "Finalisasi Revaluasi/Koreksi Nilai (204/205)",
 }
 
 
@@ -38,6 +39,8 @@ def validate_permohonan_aset(jalur: str, payload, asset_id: str = ""):
         return False, f"Jalur permohonan tidak dikenal (pilihan: {valid})"
     if not isinstance(payload, dict) or not payload:
         return False, "Payload transaksi wajib diisi"
+    if jalur == "revaluasi_final" and not str(payload.get("koreksi_id") or "").strip():
+        return False, "koreksi_id register penilaian wajib diisi"
     if not str(asset_id or "").strip():
         return False, "asset_id wajib diisi"
     return True, ""
@@ -58,4 +61,11 @@ def ringkasan_permohonan_aset(jalur: str, payload: dict, aset: dict):
                 + f" ({p.get('keterangan') or 'termin'})")
     if jalur == "kdp_selesai":
         return f"{label}: {inti} → aset definitif kode {p.get('kode_baru', '-')}"
+    if jalur == "revaluasi_final":
+        # nilai_lama/nilai_baru disalin dari register koreksi saat ajukan
+        # supaya daftar & surat informatif tanpa membaca register lagi.
+        lama = int(parse_harga(p.get("nilai_lama")))
+        baru = int(parse_harga(p.get("nilai_baru")))
+        return (f"{label}: {inti} — dok {p.get('nomor_dokumen') or '-'} "
+                + f"(Rp{lama:,} → Rp{baru:,})".replace(",", "."))
     return f"{label}: {inti}"

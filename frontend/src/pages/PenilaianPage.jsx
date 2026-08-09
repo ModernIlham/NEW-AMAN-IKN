@@ -145,8 +145,18 @@ export default function PenilaianPage({ user, onBack }) {
     });
     if (!ok) return;
     try {
-      await axios.post(`${API}/penilaian/koreksi/${k.id}/sakti`);
-      toast.success("Ditandai tercatat di SAKTI");
+      // Gerbang ASET-GERBANG-2: wajib-persetujuan aktif → finalisasi
+      // (jurnal 204/205 + proyeksi master) diajukan sebagai permohonan.
+      const { ajukanPermohonanAset, gerbangPermohonanAsetAktif,
+              pesanPermohonanTerkirim } = await import("@/lib/permohonanAset");
+      if (await gerbangPermohonanAsetAktif()) {
+        await ajukanPermohonanAset("revaluasi_final", k.asset_id,
+          { koreksi_id: k.id });
+        toast.success(pesanPermohonanTerkirim("Finalisasi revaluasi"));
+      } else {
+        await axios.post(`${API}/penilaian/koreksi/${k.id}/sakti`);
+        toast.success("Ditandai tercatat di SAKTI");
+      }
       muatKoreksi();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal menandai");
