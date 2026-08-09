@@ -24,8 +24,24 @@ const WARNA_STATUS = {
   dibatalkan: "bg-muted text-muted-foreground",
 };
 
+// Konfigurasi bawaan = persediaan (SEDIA-KPB). Halaman lain memakai panel
+// yang SAMA dengan konfig berbeda — ASET-GERBANG-1 (PembukuanPage) mengoper
+// jalur /pembukuan/permohonan; logika persetujuan/penolakan/batal/surat/ttd
+// identik karena mesin backend-nya memang satu pola.
+const KONFIG_BAWAAN = {
+  dasar: "/persediaan/permohonan",
+  pengaturan: "/persediaan/permohonan-pengaturan",
+  judul: "Permohonan Transaksi Persediaan",
+  labelGerbang: ("semua transaksi persediaan diajukan sebagai permohonan "
+    + "dan baru tereksekusi setelah disetujui admin lain."),
+  toastNyala: "Wajib persetujuan DINYALAKAN — semua transaksi kini lewat permohonan",
+  prefix: "persediaan-permohonan",
+  namaBerkas: "Persetujuan_Persediaan",
+  labelSurat: "Surat Persetujuan Transaksi Persediaan",
+};
+
 /**
- * Panel Permohonan Transaksi Persediaan — SEDIA-KPB (PR UI).
+ * Panel Permohonan ber-persetujuan KPB — SEDIA-KPB / ASET-GERBANG-1.
  *
  * Tombol berlencana jumlah "menunggu" + dialog daftar permohonan: admin
  * yang BUKAN pengaju menyetujui/menolak (server menegakkan pemisahan peran;
@@ -33,7 +49,8 @@ const WARNA_STATUS = {
  * perlu ditemukan lewat klik), pengaju membatalkan miliknya, dan permohonan
  * yang disetujui menyediakan unduhan Surat Persetujuan + kirim e-sign KPB.
  */
-export default function PermohonanPanel({ user, onSelesai }) {
+export default function PermohonanPanel({ user, onSelesai, konfig }) {
+  const k = { ...KONFIG_BAWAAN, ...(konfig || {}) };
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState([]);
   const [menunggu, setMenunggu] = useState(0);
@@ -48,7 +65,7 @@ export default function PermohonanPanel({ user, onSelesai }) {
   const muat = useCallback(async (status = statusFilter) => {
     setLoading(true);
     try {
-      const r = await axios.get(`${API}/persediaan/permohonan`,
+      const r = await axios.get(`${API}${k.dasar}`,
         { params: { status, page_size: 50 } });
       setRows(r.data?.items || []);
       setMenunggu(r.data?.menunggu || 0);
@@ -57,14 +74,14 @@ export default function PermohonanPanel({ user, onSelesai }) {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, k.dasar]);
 
   const muatGerbang = useCallback(async () => {
     try {
-      const r = await axios.get(`${API}/persediaan/permohonan-pengaturan`);
+      const r = await axios.get(`${API}${k.pengaturan}`);
       setGerbang(!!r.data?.aktif);
     } catch { /* indikator saja — biarkan nilai lama */ }
-  }, []);
+  }, [k.pengaturan]);
 
   // Lencana "menunggu" harus hidup tanpa membuka dialog — sekali saat mount.
   useEffect(() => { muat(""); muatGerbang(); }, [muat, muatGerbang]);
@@ -73,7 +90,7 @@ export default function PermohonanPanel({ user, onSelesai }) {
   const setujui = async (p) => {
     setAksiId(p.id);
     try {
-      const r = await axios.post(`${API}/persediaan/permohonan/${p.id}/setujui`);
+      const r = await axios.post(`${API}${k.dasar}/${p.id}/setujui`);
       toast.success(r.data?.nomor
         ? `Disetujui — Surat Persetujuan ${r.data.nomor}`
         : "Permohonan disetujui dan transaksi tereksekusi");
@@ -94,7 +111,7 @@ export default function PermohonanPanel({ user, onSelesai }) {
     }
     setAksiId(tolak.id);
     try {
-      await axios.post(`${API}/persediaan/permohonan/${tolak.id}/tolak`,
+      await axios.post(`${API}${k.dasar}/${tolak.id}/tolak`,
         { alasan: tolak.alasan.trim() });
       toast.success("Permohonan ditolak");
       setTolak(null);
@@ -109,7 +126,7 @@ export default function PermohonanPanel({ user, onSelesai }) {
   const batal = async (p) => {
     setAksiId(p.id);
     try {
-      await axios.post(`${API}/persediaan/permohonan/${p.id}/batal`);
+      await axios.post(`${API}${k.dasar}/${p.id}/batal`);
       toast.success("Permohonan dibatalkan");
       muat();
     } catch (err) {
@@ -120,14 +137,14 @@ export default function PermohonanPanel({ user, onSelesai }) {
   };
 
   const unduhSurat = (p) => downloadFileWithProgress(
-    `/api/persediaan/permohonan/${p.id}/dokumen`,
-    `Persetujuan_Persediaan_${(p.nomor || p.id.slice(0, 8)).replace(/\//g, "-")}.pdf`,
-    { label: "Surat Persetujuan Transaksi Persediaan" });
+    `/api${k.dasar}/${p.id}/dokumen`,
+    `${k.namaBerkas}_${(p.nomor || p.id.slice(0, 8)).replace(/\//g, "-")}.pdf`,
+    { label: k.labelSurat });
 
   const kirimTtd = async (p) => {
     setAksiId(p.id);
     try {
-      await axios.post(`${API}/persediaan/permohonan/${p.id}/kirim-ttd`, {});
+      await axios.post(`${API}${k.dasar}/${p.id}/kirim-ttd`, {});
       toast.success("Surat Persetujuan dikirim ke KPB untuk ditandatangani");
       muat();
     } catch (err) {
@@ -139,11 +156,10 @@ export default function PermohonanPanel({ user, onSelesai }) {
 
   const ubahGerbang = async (aktif) => {
     try {
-      const r = await axios.post(`${API}/persediaan/permohonan-pengaturan`,
-        { aktif });
+      const r = await axios.post(`${API}${k.pengaturan}`, { aktif });
       setGerbang(!!r.data?.aktif);
       toast.success(r.data?.aktif
-        ? "Wajib persetujuan DINYALAKAN — semua transaksi kini lewat permohonan"
+        ? k.toastNyala
         : "Wajib persetujuan dimatikan — transaksi kembali langsung");
       onSelesai?.();
     } catch (err) {
@@ -154,30 +170,28 @@ export default function PermohonanPanel({ user, onSelesai }) {
   return (
     <>
       <Button variant="outline" onClick={() => setOpen(true)}
-        data-testid="persediaan-permohonan-buka">
+        data-testid={`${k.prefix}-buka`}>
         <ClipboardList className="w-4 h-4 mr-2" />
         Permohonan
         {menunggu > 0 && (
           <span className="ml-2 min-w-5 h-5 px-1 rounded-full bg-amber-500 text-white text-[11px] leading-5 text-center"
-            data-testid="persediaan-permohonan-badge">{menunggu}</span>
+            data-testid={`${k.prefix}-badge`}>{menunggu}</span>
         )}
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Permohonan Transaksi Persediaan</DialogTitle>
+            <DialogTitle>{k.judul}</DialogTitle>
           </DialogHeader>
 
           {isAdmin && (
             <label className="flex items-center gap-2 text-xs rounded-lg border border-border p-2 cursor-pointer">
               <input type="checkbox" checked={gerbang}
                 onChange={(e) => ubahGerbang(e.target.checked)}
-                data-testid="persediaan-permohonan-gerbang" />
+                data-testid={`${k.prefix}-gerbang`} />
               <span>
-                <b>Wajib persetujuan KPB</b> — semua transaksi persediaan
-                diajukan sebagai permohonan dan baru tereksekusi setelah
-                disetujui admin lain.
+                <b>Wajib persetujuan KPB</b> — {k.labelGerbang}
               </span>
             </label>
           )}
@@ -200,7 +214,7 @@ export default function PermohonanPanel({ user, onSelesai }) {
             <p className="text-sm text-muted-foreground py-6 text-center">Memuat…</p>
           ) : rows.length === 0 ? (
             <p className="text-sm text-muted-foreground py-6 text-center"
-              data-testid="persediaan-permohonan-kosong">
+              data-testid={`${k.prefix}-kosong`}>
               Belum ada permohonan.
             </p>
           ) : (

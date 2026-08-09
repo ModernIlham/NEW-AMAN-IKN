@@ -168,6 +168,29 @@ async def _nup_berikut_kode(kode_baru: str, activity_ids=None) -> str:
     return str(int((res[0].get("max_nup") if res else None) or 0) + 1)
 
 
+async def _gerbang_wajib_persetujuan_aset(request):
+    """Gerbang ASET-GERBANG-1: bila setelan `aset_wajib_persetujuan` aktif,
+    permintaan HTTP LANGSUNG ke endpoint reklasifikasi/KDP ditolak —
+    transaksi hanya boleh lahir dari persetujuan permohonan
+    (routes/aset_permohonan.py), yang mengeksekusi lewat pemanggilan
+    internal `request=None`.
+
+    Default MATI: perilaku lama utuh sampai pemilik menyalakannya dari panel
+    Permohonan halaman Pembukuan (pola _gerbang_wajib_persetujuan
+    persediaan). `request is None` = pemanggil internal — dilewatkan.
+    """
+    if request is None:
+        return
+    s = await db.report_settings.find_one(
+        {"type": "global"}, {"aset_wajib_persetujuan": 1}) or {}
+    if s.get("aset_wajib_persetujuan"):
+        raise HTTPException(
+            status_code=403,
+            detail=("Transaksi pembukuan aset wajib melalui permohonan dan "
+                    "persetujuan KPB — ajukan lewat panel Permohonan di "
+                    "halaman Pembukuan"))
+
+
 @mutasi_bmn_router.post("/pembukuan/reklasifikasi")
 async def reklasifikasi_aset(payload: ReklasifikasiIn,
                              request: Request = None,
@@ -182,6 +205,7 @@ async def reklasifikasi_aset(payload: ReklasifikasiIn,
     aset — double-submit tanpa kunci bisa menghasilkan jurnal ganda & NUP
     meloncat. Kunci sama → respons pertama diputar ulang (klaim atomik).
     """
+    await _gerbang_wajib_persetujuan_aset(request)
     idem_key = kunci_idem(
         request.headers.get("Idempotency-Key", "") if request is not None else "",
         user)
@@ -336,6 +360,7 @@ async def pengembangan_kdp(asset_id: str, payload: KdpPengembanganIn,
     `purchase_price` disimpan STRING di seluruh jalur create — baca lama,
     jumlahkan, tulis balik string (pelajaran kapitalisasi pemeliharaan:
     `$inc` pada string ditolak Mongo setelah efek lain terlanjur jalan)."""
+    await _gerbang_wajib_persetujuan_aset(request)
     idem_key = kunci_idem(
         request.headers.get("Idempotency-Key", "") if request is not None else "",
         user)
@@ -404,6 +429,7 @@ async def selesaikan_kdp(asset_id: str, payload: KdpSelesaiIn,
     """Penyelesaian pembangunan: KDP menjadi aset definitif — pasangan
     jurnal 505 (keluar dari kode 7) + 105 (masuk ke kode definitif) senilai
     akumulasi KDP, aset dimutakhirkan IN-PLACE (pola reklasifikasi)."""
+    await _gerbang_wajib_persetujuan_aset(request)
     idem_key = kunci_idem(
         request.headers.get("Idempotency-Key", "") if request is not None else "",
         user)

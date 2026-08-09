@@ -724,9 +724,19 @@ export default function PelaporanPage({ user, onBack }) {
                       onClick={async () => {
                         setReklas((r) => ({ ...r, saving: true }));
                         try {
-                          const rr = await axios.post(`${API}/pembukuan/reklasifikasi`, {
-                            asset_id: reklas.aset.id, kode_baru: reklas.kode_baru, alasan: reklas.alasan });
-                          toast.success(`Reklasifikasi tercatat — kode baru ${rr.data.kode_baru} · NUP ${rr.data.nup_baru}`);
+                          // Gerbang ASET-GERBANG-1: wajib-persetujuan aktif →
+                          // reklasifikasi diajukan sebagai permohonan KPB.
+                          const { ajukanPermohonanAset, gerbangPermohonanAsetAktif,
+                                  pesanPermohonanTerkirim } = await import("@/lib/permohonanAset");
+                          if (await gerbangPermohonanAsetAktif()) {
+                            await ajukanPermohonanAset("reklasifikasi", reklas.aset.id,
+                              { kode_baru: reklas.kode_baru, alasan: reklas.alasan });
+                            toast.success(pesanPermohonanTerkirim("Reklasifikasi"));
+                          } else {
+                            const rr = await axios.post(`${API}/pembukuan/reklasifikasi`, {
+                              asset_id: reklas.aset.id, kode_baru: reklas.kode_baru, alasan: reklas.alasan });
+                            toast.success(`Reklasifikasi tercatat — kode baru ${rr.data.kode_baru} · NUP ${rr.data.nup_baru}`);
+                          }
                           setReklas(null);
                         } catch (e2) {
                           toast.error(e2?.response?.data?.detail || "Gagal reklasifikasi");

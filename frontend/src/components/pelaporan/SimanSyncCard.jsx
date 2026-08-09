@@ -205,10 +205,21 @@ export default function SimanSyncCard({ isAdmin }) {
     if (!ok) return;
     setMereklas(aset.id);
     try {
-      const r = await axios.post(`${API}/pembukuan/reklasifikasi`, {
-        asset_id: aset.id, kode_baru: kodeBaru,
-        alasan: "Reklasifikasi terdeteksi dari sinkron SIMAN V2" });
-      toast.success(`Reklasifikasi tercatat — kode baru ${r.data.kode_baru} · NUP ${r.data.nup_baru}`);
+      // Gerbang ASET-GERBANG-1: wajib-persetujuan aktif → reklasifikasi
+      // dari sinkron SIMAN pun lewat permohonan (tetap tercatat sumbernya).
+      const { ajukanPermohonanAset, gerbangPermohonanAsetAktif,
+              pesanPermohonanTerkirim } = await import("@/lib/permohonanAset");
+      if (await gerbangPermohonanAsetAktif()) {
+        await ajukanPermohonanAset("reklasifikasi", aset.id,
+          { kode_baru: kodeBaru,
+            alasan: "Reklasifikasi terdeteksi dari sinkron SIMAN V2" });
+        toast.success(pesanPermohonanTerkirim("Reklasifikasi"));
+      } else {
+        const r = await axios.post(`${API}/pembukuan/reklasifikasi`, {
+          asset_id: aset.id, kode_baru: kodeBaru,
+          alasan: "Reklasifikasi terdeteksi dari sinkron SIMAN V2" });
+        toast.success(`Reklasifikasi tercatat — kode baru ${r.data.kode_baru} · NUP ${r.data.nup_baru}`);
+      }
       muatRingkasan();
       ambilSelisih(selisih?.page || 1);
     } catch (e) {
