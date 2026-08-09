@@ -67,6 +67,25 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#840] Toolbar Persediaan dua baris rapi — cari + Tambah sebaris, aksi lain satu baris — 2026-08-09
+
+Umpan balik layar HP: setelah kolom cari dibuat satu baris penuh (`[#834]`),
+empat tombol aksi membungkus jadi DUA baris (Data jatuh sendirian) dan tombol
+Tambah ikut turun — toolbar memakan empat baris sebelum filter status.
+
+Tata ulang (`PersediaanPage.jsx`):
+
+- **Baris 1**: kolom cari (`flex-1`) + tombol **Tambah** menempel di
+  sampingnya — aksi paling sering tetap di jangkauan ibu jari.
+- **Baris 2**: Massal · Permohonan · Dokumen · Data dalam SATU sub-baris
+  `flex-nowrap` (`basis-full` di HP). Bila layar sangat sempit sub-baris
+  menggulir menyamping — tombol TIDAK diperkecil (aturan tap-target 44px).
+  Dropdown tetap aman dari clipping karena Radix me-render lewat portal.
+- Layar lebar tak berubah rasa: sub-baris `basis-auto` menempel di baris
+  yang sama bila muat, seperti sebelumnya.
+
+---
+
 ## [#839] Deploy VPS pulih — yarn tak lagi menolak engines Node di paket uji — 2026-08-09
 
 Setiap deploy sejak `[#800]` (PR #792, fondasi uji render) gagal di
