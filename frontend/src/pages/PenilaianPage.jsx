@@ -14,6 +14,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import StatKartu from "@/components/ui/StatKartu";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
+import { WARNA_CHIP, kelasChipStatus } from "@/lib/chipStatus";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 import TanggalanButton from "@/components/ui/TanggalanButton";
 
@@ -22,6 +23,11 @@ import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
 } from "@/lib/kelasKepala";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+const WARNA_SAKTI = {
+  belum_dicatat: WARNA_CHIP.amber,
+  tercatat_sakti: WARNA_CHIP.emerald,
+};
 
 /**
  * Penilaian — Fase 5 tahap awal: posisi penyusutan aset tetap
@@ -436,7 +442,7 @@ export default function PenilaianPage({ user, onBack }) {
                         <span className="px-1.5 py-0.5 rounded bg-teal-500/15 text-teal-600 dark:text-teal-400 text-[10px] font-semibold">
                           {koreksi.label_jenis?.[k.jenis] || k.jenis}
                         </span>
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${k.status_sakti === "tercatat_sakti" ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-amber-500/15 text-amber-600 dark:text-amber-400"}`}>
+                        <span className={kelasChipStatus(WARNA_SAKTI, k.status_sakti)}>
                           {koreksi.label_sakti?.[k.status_sakti] || k.status_sakti}
                         </span>
                         <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate">{k.asset_name || "-"}</p>
@@ -586,7 +592,7 @@ export default function PenilaianPage({ user, onBack }) {
                               <span className="px-1.5 py-0.5 rounded bg-slate-500/15 text-slate-600 dark:text-slate-300 text-[10px] font-semibold">informasional</span>
                             )}
                             {p.status_sakti && riwayat.label_sakti?.[p.status_sakti] && (
-                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${p.status_sakti === "tercatat_sakti" ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-amber-500/15 text-amber-600 dark:text-amber-400"}`}>
+                              <span className={kelasChipStatus(WARNA_SAKTI, p.status_sakti)}>
                                 {riwayat.label_sakti[p.status_sakti]}
                               </span>
                             )}

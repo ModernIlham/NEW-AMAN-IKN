@@ -23,6 +23,7 @@ import { useBackGuard } from "@/hooks/useBackGuard";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
+import { WARNA_CHIP, kelasChipStatus } from "@/lib/chipStatus";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 import MenuKepala from "@/components/ui/MenuKepala";
 
@@ -43,6 +44,17 @@ const IKON_OBJEK = {
 // Eskalasi tenggat 3 tahun pemberitahuan ahli waris (temuan "pemegang
 // meninggal") — UU 1/2004 Ps. 66 ayat (2) jo. PP 38/2016. Lewat batas, hak
 // tagih negara HAPUS demi hukum, jadi kemendesakannya ditandai warna & label.
+const WARNA_STATUS_PENERTIBAN = {
+  berjalan: WARNA_CHIP.amber,
+  selesai: WARNA_CHIP.emerald,
+};
+
+const WARNA_STATUS_INSIDENTIL = {
+  berjalan: WARNA_CHIP.violet,
+  ba_terbit: WARNA_CHIP.sky,
+  dilaporkan: WARNA_CHIP.emerald,
+};
+
 const WARNA_TENGGAT = {
   kritis: "text-red-600 dark:text-red-400",
   lewat: "text-red-700 dark:text-red-300",
@@ -603,10 +615,7 @@ export default function WasdalPage({ user, onBack }) {
                     {pen.items.map((t) => (
                       <li key={t.id} className="p-3" data-testid={`wasdal-penertiban-${t.id}`}>
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                            t.status === "selesai"
-                              ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                              : "bg-amber-500/15 text-amber-600 dark:text-amber-400"}`}>
+                          <span className={kelasChipStatus(WARNA_STATUS_PENERTIBAN, t.status)}>
                             {pen.label_status?.[t.status] || t.status}
                           </span>
                           <p className="text-xs font-semibold text-foreground flex-1 min-w-[140px] truncate">{t.uraian}</p>
@@ -701,12 +710,7 @@ export default function WasdalPage({ user, onBack }) {
                     {insi.items.map((t) => (
                       <li key={t.id} className="p-3" data-testid={`wasdal-insidentil-${t.id}`}>
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                            t.status === "dilaporkan"
-                              ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                              : t.status === "ba_terbit"
-                                ? "bg-sky-500/15 text-sky-600 dark:text-sky-400"
-                                : "bg-violet-500/15 text-violet-600 dark:text-violet-400"}`}>
+                          <span className={kelasChipStatus(WARNA_STATUS_INSIDENTIL, t.status)}>
                             {insi.label_status?.[t.status] || t.status}
                           </span>
                           <p className="text-xs font-semibold text-foreground flex-1 min-w-[140px] truncate">{t.uraian}</p>
