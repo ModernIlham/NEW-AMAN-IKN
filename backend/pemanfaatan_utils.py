@@ -183,6 +183,110 @@ def validate_fasilitas(data: dict) -> list:
     return errors
 
 
+# ---------------------------------------------------------------------------
+# Usulan pemanfaatan berstatus + perpanjangan (ASET-MANFAAT).
+# Register perjanjian di atas hanya merekam perjanjian JADI — proses
+# pengajuan ke Pengelola Barang (usulan KPB → persetujuan → tanda tangan
+# perjanjian) dan perpanjangan tidak pernah terekam, padahal PMK 115/2020
+# menaruh keputusan di Pengelola dan BGS/BSG tegas TIDAK dapat
+# diperpanjang. Tiket usulan menutup dua lubang itu.
+# ---------------------------------------------------------------------------
+JENIS_USULAN_PEMANFAATAN = {
+    "baru": "Pemanfaatan baru",
+    "perpanjangan": "Perpanjangan perjanjian",
+}
+
+STATUS_USULAN_PEMANFAATAN = {
+    "draf": "Draf",
+    "diajukan": "Diajukan ke Pengelola Barang",
+    "disetujui": "Disetujui Pengelola",
+    "ditolak": "Ditolak",
+    "perjanjian": "Perjanjian Ditandatangani",
+    "dibatalkan": "Dibatalkan",
+}
+
+# diajukan boleh MUNDUR ke draf (koreksi salah klik — pola register TGR);
+# ditolak/perjanjian/dibatalkan terminal.
+TRANSISI_USULAN_PEMANFAATAN = {
+    "draf": {"diajukan", "dibatalkan"},
+    "diajukan": {"disetujui", "ditolak", "draf"},
+    "disetujui": {"perjanjian", "dibatalkan"},
+    "ditolak": set(),
+    "perjanjian": set(),
+    "dibatalkan": set(),
+}
+
+STATUS_USULAN_TERMINAL = {"ditolak", "perjanjian", "dibatalkan"}
+
+# status tujuan → (field nomor, field tanggal, label dokumen wajib)
+DOK_USULAN_PEMANFAATAN = {
+    "diajukan": ("nomor_usulan", "tanggal_usulan",
+                 "Nomor surat usulan ke Pengelola Barang"),
+    "disetujui": ("nomor_persetujuan", "tanggal_persetujuan",
+                  "Nomor surat persetujuan Pengelola Barang"),
+    "perjanjian": ("nomor_perjanjian", "tanggal_perjanjian",
+                   "Nomor perjanjian"),
+}
+
+
+def validate_usulan_perpanjangan(data: dict, induk: dict, today_iso: str) -> list:
+    """Validasi usulan perpanjangan atas perjanjian induk (PMK 115/2020):
+    bentuk harus dapat diperpanjang (BGS/BSG tidak), induk belum berakhir,
+    pinjam pakai wajib diajukan ≥60 hari (2 bulan) sebelum berakhir,
+    berakhir baru setelah berakhir lama dan jangka tambahan ≤ maksimal."""
+    errors = []
+    if not induk:
+        return ["Perjanjian induk tidak ditemukan"]
+    bentuk = induk.get("bentuk")
+    info = BENTUK_PEMANFAATAN.get(bentuk)
+    if not info:
+        return [f"Bentuk perjanjian induk tidak dikenal: {bentuk}"]
+    if not info[2]:
+        errors.append(f"{info[0]} tidak dapat diperpanjang (PMK 115/2020) — "
+                      "ajukan pemanfaatan baru")
+    lama = _tgl(induk.get("berakhir"))
+    baru = _tgl(data.get("berakhir"))
+    hari_ini = _tgl(today_iso)
+    if not lama:
+        errors.append("Tanggal berakhir perjanjian induk tidak valid")
+    elif hari_ini and lama < hari_ini:
+        errors.append("Perjanjian sudah berakhir — tidak dapat diperpanjang, "
+                      "ajukan pemanfaatan baru")
+    elif (bentuk == "pinjam_pakai" and hari_ini
+          and (lama - hari_ini).days < AMBANG_JATUH_TEMPO_HARI):
+        errors.append("Usulan perpanjangan Pinjam Pakai wajib diajukan "
+                      "minimal 60 hari (2 bulan) sebelum perjanjian berakhir")
+    if not baru:
+        errors.append("Tanggal berakhir baru wajib (format YYYY-MM-DD)")
+    elif lama and baru <= lama:
+        errors.append("Tanggal berakhir baru harus setelah tanggal berakhir "
+                      "perjanjian induk")
+    elif lama and (baru - lama).days > info[1] * 366:
+        errors.append(f"Jangka perpanjangan melebihi maksimal {info[1]} tahun "
+                      f"untuk {info[0]} (PMK 115/2020)")
+    try:
+        if float(data.get("nilai") or 0) < 0:
+            errors.append("Nilai tidak boleh negatif")
+    except (TypeError, ValueError):
+        errors.append("Nilai harus angka")
+    return errors
+
+
+def validate_transisi_usulan_pemanfaatan(dari: str, ke: str,
+                                         payload: dict) -> list:
+    """Daftar galat transisi usulan — dokumen wajib per tahap."""
+    p = payload or {}
+    if ke not in STATUS_USULAN_PEMANFAATAN:
+        return [f"Status tujuan tidak dikenal: {ke}"]
+    if ke not in TRANSISI_USULAN_PEMANFAATAN.get(dari, set()):
+        return [f"Transisi {STATUS_USULAN_PEMANFAATAN.get(dari, dari)} → "
+                f"{STATUS_USULAN_PEMANFAATAN.get(ke, ke)} tidak diizinkan"]
+    dok = DOK_USULAN_PEMANFAATAN.get(ke)
+    if dok and not str(p.get("nomor_dokumen") or "").strip():
+        return [f"{dok[2]} wajib diisi"]
+    return []
+
+
 def rekap_pemanfaatan(items, today_iso: str):
     """Ringkasan register: hitung per status & bentuk + total nilai."""
     per_status = {k: 0 for k in LABEL_STATUS_PERJANJIAN}

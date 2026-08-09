@@ -20,10 +20,13 @@ from auth_utils import (
 from db import db
 from shared_utils import kode_satker_user, log_audit, scope_query_field_satker, pastikan_akses_dok_satker, delete_document_from_gridfs, get_document_from_gridfs
 from pemanfaatan_utils import (
-    BENTUK_PEMANFAATAN, DASAR_FASILITAS, LABEL_STATUS_PERJANJIAN,
-    dokumen_kurang, peringatan_kontribusi, rekap_pemanfaatan,
-    status_perjanjian, validate_fasilitas, validate_kontribusi,
-    validate_pemanfaatan,
+    BENTUK_PEMANFAATAN, DASAR_FASILITAS, DOK_USULAN_PEMANFAATAN,
+    JENIS_USULAN_PEMANFAATAN, LABEL_STATUS_PERJANJIAN,
+    STATUS_USULAN_PEMANFAATAN, STATUS_USULAN_TERMINAL,
+    TRANSISI_USULAN_PEMANFAATAN, dokumen_kurang, peringatan_kontribusi,
+    rekap_pemanfaatan, status_perjanjian, validate_fasilitas,
+    validate_kontribusi, validate_pemanfaatan,
+    validate_transisi_usulan_pemanfaatan, validate_usulan_perpanjangan,
 )
 
 pemanfaatan_router = APIRouter()
@@ -71,6 +74,309 @@ class KontribusiIn(BaseModel):
         if not math.isfinite(v):
             raise ValueError("jumlah harus angka terhingga")
         return v
+
+
+class UsulanPemanfaatanIn(BaseModel):
+    jenis: str = "baru"           # baru | perpanjangan
+    pemanfaatan_id: str = ""      # wajib untuk perpanjangan (perjanjian induk)
+    asset_id: str = ""            # opsional: tautan objek BMN (jenis baru)
+    bentuk: str = ""              # wajib untuk baru; perpanjangan ikut induk
+    mitra: str = ""
+    jenis_mitra: str = ""
+    mulai: str = ""
+    berakhir: str = ""            # perpanjangan: tanggal berakhir BARU
+    nilai: float = Field(default=0, ge=0)
+    kontribusi_tahunan: float = Field(default=0, ge=0)
+    keterangan: str = ""
+
+    @field_validator("nilai", "kontribusi_tahunan")
+    @classmethod
+    def _terhingga(cls, v: float) -> float:
+        if not math.isfinite(v):
+            raise ValueError("nilai harus angka terhingga")
+        return v
+
+
+class TransisiUsulanPemanfaatanIn(BaseModel):
+    status: str
+    nomor_dokumen: str = ""
+    tanggal_dokumen: str = ""
+    catatan: str = ""
+
+
+@pemanfaatan_router.get("/pemanfaatan/usulan")
+async def daftar_usulan_pemanfaatan(_user: dict = Depends(require_user)):
+    """Register usulan pemanfaatan & perpanjangan + peta transisi."""
+    items = await (db.pemanfaatan_usulan
+                   .find(scope_query_field_satker(_user), _PROJ)
+                   .sort("created_at", -1).to_list(500))
+    berjalan = sum(1 for u in items
+                   if u.get("status") not in STATUS_USULAN_TERMINAL)
+    return {"items": items,
+            "label_status": STATUS_USULAN_PEMANFAATAN,
+            "label_jenis": JENIS_USULAN_PEMANFAATAN,
+            "transisi": {k: sorted(v)
+                         for k, v in TRANSISI_USULAN_PEMANFAATAN.items()},
+            "ringkasan": {"total": len(items), "berjalan": berjalan},
+            "catatan": (
+                "Keputusan pemanfaatan ada di Pengelola Barang (PMK 115/2020) "
+                "— usulan merekam jejaknya: surat usulan KPB → persetujuan "
+                "Pengelola → perjanjian. BGS/BSG tidak dapat diperpanjang; "
+                "perpanjangan Pinjam Pakai diajukan ≥60 hari sebelum "
+                "berakhir.")}
+
+
+@pemanfaatan_router.post("/pemanfaatan/usulan")
+async def buat_usulan_pemanfaatan(payload: UsulanPemanfaatanIn,
+                                  user: dict = Depends(require_writer)):
+    """Buka usulan pemanfaatan baru ATAU perpanjangan perjanjian."""
+    data = payload.model_dump()
+    jenis = str(data.get("jenis") or "").strip()
+    if jenis not in JENIS_USULAN_PEMANFAATAN:
+        pilihan = ", ".join(JENIS_USULAN_PEMANFAATAN)
+        raise HTTPException(status_code=400,
+                            detail=f"Jenis usulan tidak dikenal (pilihan: {pilihan})")
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    induk, objek = None, None
+    if jenis == "perpanjangan":
+        induk = await db.pemanfaatan.find_one(
+            {"id": str(data.get("pemanfaatan_id") or "").strip()}, _PROJ)
+        if not induk:
+            raise HTTPException(status_code=404,
+                                detail="Perjanjian induk tidak ditemukan")
+        await pastikan_akses_dok_satker(user, induk)
+        errors = validate_usulan_perpanjangan(data, induk, today_iso)
+        if errors:
+            raise HTTPException(status_code=400, detail="; ".join(errors))
+        aktif = await db.pemanfaatan_usulan.find_one(
+            {"pemanfaatan_id": induk["id"],
+             "status": {"$nin": sorted(STATUS_USULAN_TERMINAL)}},
+            {"_id": 0, "id": 1})
+        if aktif:
+            raise HTTPException(
+                status_code=409,
+                detail="Perjanjian ini sudah punya usulan perpanjangan yang "
+                       "sedang berjalan")
+    else:
+        errors = validate_pemanfaatan(data)
+        if errors:
+            raise HTTPException(status_code=400, detail="; ".join(errors))
+        if data.get("asset_id"):
+            objek = await db.assets.find_one(
+                {"id": data["asset_id"]},
+                {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1,
+                 "asset_name": 1, "activity_id": 1})
+            if not objek:
+                raise HTTPException(status_code=404,
+                                    detail="Aset tidak ditemukan")
+            from shared_utils import pastikan_akses_aset
+            await pastikan_akses_aset(user, objek)
+    now = datetime.now(timezone.utc).isoformat()
+    record = {
+        "id": str(uuid.uuid4()),
+        "jenis": jenis,
+        "pemanfaatan_id": induk["id"] if induk else "",
+        "kode_satker": (str(induk.get("kode_satker") or "") if induk
+                        else kode_satker_user(user)),
+        "asset_id": (induk.get("asset_id") if induk
+                     else (objek["id"] if objek else "")) or "",
+        "asset_code": (induk.get("asset_code") if induk
+                       else (objek.get("asset_code") if objek else "")) or "",
+        "NUP": (induk.get("NUP") if induk
+                else (objek.get("NUP") if objek else "")) or "",
+        "asset_name": (induk.get("asset_name") if induk
+                       else (objek.get("asset_name") if objek else "")) or "",
+        "bentuk": induk["bentuk"] if induk else data["bentuk"],
+        "mitra": (str(induk.get("mitra") or "") if induk
+                  else str(data.get("mitra") or "")).strip(),
+        "jenis_mitra": (str(induk.get("jenis_mitra") or "") if induk
+                        else str(data.get("jenis_mitra") or "")).strip(),
+        "mulai": (str(induk.get("mulai") or "") if induk
+                  else str(data.get("mulai") or "")).strip()[:10],
+        # perpanjangan: `berakhir` = tanggal berakhir BARU yang diusulkan;
+        # tanggal lama disimpan terpisah agar efeknya bisa diaudit.
+        "berakhir": str(data.get("berakhir") or "").strip()[:10],
+        "berakhir_lama": (str(induk.get("berakhir") or "").strip()[:10]
+                          if induk else ""),
+        "nilai": float(data.get("nilai") or 0),
+        "kontribusi_tahunan": (float(data.get("kontribusi_tahunan") or 0)
+                               or (float(induk.get("kontribusi_tahunan") or 0)
+                                   if induk else 0)),
+        "status": "draf",
+        "nomor_usulan": "", "tanggal_usulan": "",
+        "nomor_persetujuan": "", "tanggal_persetujuan": "",
+        "nomor_perjanjian": "", "tanggal_perjanjian": "",
+        "keterangan": str(data.get("keterangan") or "").strip(),
+        "riwayat": [{"status": "draf", "tanggal": now,
+                     "oleh": user.get("username"), "catatan": ""}],
+        "created_by": user.get("username"),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.pemanfaatan_usulan.insert_one({**record})
+    await log_audit("pemanfaatan_usulan_buat", "", record["id"],
+                    username=user.get("username", "system"),
+                    detail=(f"Usulan {JENIS_USULAN_PEMANFAATAN[jenis]} "
+                            f"{record['bentuk']} — mitra {record['mitra']}"),
+                    kode_satker=record["kode_satker"])
+    return record
+
+
+@pemanfaatan_router.post("/pemanfaatan/usulan/{usulan_id}/status")
+async def transisi_usulan_pemanfaatan(usulan_id: str,
+                                      payload: TransisiUsulanPemanfaatanIn,
+                                      admin: dict = Depends(require_admin)):
+    """Pindahkan status usulan; status `perjanjian` BEREFEK data:
+    jenis baru → lahir dokumen register perjanjian; jenis perpanjangan →
+    tanggal berakhir perjanjian induk maju + riwayat perpanjangan."""
+    u = await db.pemanfaatan_usulan.find_one({"id": usulan_id}, _PROJ)
+    if not u:
+        raise HTTPException(status_code=404,
+                            detail="Usulan tidak ditemukan")
+    await pastikan_akses_dok_satker(admin, u)
+    errors = validate_transisi_usulan_pemanfaatan(
+        u["status"], payload.status, payload.model_dump())
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    # Efek perjanjian butuh induk hidup — pastikan SEBELUM status diklaim
+    # supaya usulan tidak terjebak berstatus perjanjian tanpa efek.
+    induk = None
+    if payload.status == "perjanjian" and u.get("jenis") == "perpanjangan":
+        induk = await db.pemanfaatan.find_one(
+            {"id": u.get("pemanfaatan_id")}, _PROJ)
+        if not induk:
+            raise HTTPException(
+                status_code=409,
+                detail="Perjanjian induk sudah tidak ada — usulan "
+                       "perpanjangan tidak bisa dieksekusi")
+    now = datetime.now(timezone.utc).isoformat()
+    update = {"status": payload.status, "updated_at": now}
+    dok = DOK_USULAN_PEMANFAATAN.get(payload.status)
+    if dok:
+        update[dok[0]] = payload.nomor_dokumen.strip()
+        update[dok[1]] = str(payload.tanggal_dokumen or "").strip()[:10]
+    res = await db.pemanfaatan_usulan.find_one_and_update(
+        # Anti-balapan: status lama diikutkan di filter.
+        {"id": usulan_id, "status": u["status"]},
+        {"$set": update,
+         "$push": {"riwayat": {"status": payload.status, "tanggal": now,
+                               "oleh": admin.get("username"),
+                               "catatan": str(payload.catatan or "").strip()}}},
+        projection=_PROJ, return_document=True)
+    if res is None:
+        raise HTTPException(status_code=409,
+                            detail="Status usulan berubah oleh proses lain — muat ulang")
+    if payload.status == "perjanjian":
+        if u.get("jenis") == "perpanjangan":
+            await db.pemanfaatan.find_one_and_update(
+                {"id": induk["id"]},
+                {"$set": {"berakhir": res.get("berakhir"),
+                          "nomor_persetujuan": res.get("nomor_persetujuan")
+                          or induk.get("nomor_persetujuan"),
+                          "nomor_perjanjian": res.get("nomor_perjanjian")
+                          or induk.get("nomor_perjanjian"),
+                          "updated_at": now},
+                 "$push": {"perpanjangan": {
+                     "usulan_id": res["id"],
+                     "berakhir_lama": res.get("berakhir_lama"),
+                     "berakhir_baru": res.get("berakhir"),
+                     "nomor_persetujuan": res.get("nomor_persetujuan"),
+                     "nomor_perjanjian": res.get("nomor_perjanjian"),
+                     "tanggal": now, "oleh": admin.get("username")}}})
+        else:
+            perjanjian = {
+                "id": str(uuid.uuid4()),
+                "kode_satker": str(res.get("kode_satker") or ""),
+                "asset_id": res.get("asset_id") or "",
+                "asset_code": res.get("asset_code") or "",
+                "NUP": res.get("NUP") or "",
+                "asset_name": res.get("asset_name") or "",
+                "bentuk": res.get("bentuk"),
+                "mitra": res.get("mitra"),
+                "jenis_mitra": res.get("jenis_mitra") or "",
+                "mulai": res.get("mulai"),
+                "berakhir": res.get("berakhir"),
+                "nilai": float(res.get("nilai") or 0),
+                "nomor_persetujuan": res.get("nomor_persetujuan") or "",
+                "nomor_perjanjian": res.get("nomor_perjanjian") or "",
+                "ntpn": "",
+                "kontribusi_tahunan": float(res.get("kontribusi_tahunan") or 0),
+                "dasar_fasilitas": "tanpa_fasilitas",
+                "nomor_penetapan_fasilitas": "",
+                "pelaksana_fasilitas": "",
+                "kontribusi": [], "lampiran": [], "lampiran_wasdal": [],
+                "keterangan": res.get("keterangan") or "",
+                "usulan_id": res["id"],
+                "created_by": admin.get("username"),
+                "created_at": now, "updated_at": now,
+            }
+            await db.pemanfaatan.insert_one({**perjanjian})
+            res = await db.pemanfaatan_usulan.find_one_and_update(
+                {"id": usulan_id},
+                {"$set": {"pemanfaatan_id": perjanjian["id"],
+                          "updated_at": now}},
+                projection=_PROJ, return_document=True) or res
+    await log_audit("pemanfaatan_usulan_transisi", "", usulan_id,
+                    username=admin.get("username", "system"),
+                    detail=(f"{STATUS_USULAN_PEMANFAATAN.get(u['status'], u['status'])} → "
+                            f"{STATUS_USULAN_PEMANFAATAN.get(payload.status, payload.status)}"
+                            + (f" ({payload.nomor_dokumen})"
+                               if payload.nomor_dokumen else "")),
+                    kode_satker=str(u.get("kode_satker") or ""))
+    return res
+
+
+@pemanfaatan_router.get("/pemanfaatan/usulan/export")
+async def export_usulan_pemanfaatan(_user: dict = Depends(require_user)):
+    """Ekspor CSV register usulan pemanfaatan & perpanjangan."""
+    import csv as csv_module
+    import io
+
+    buf = io.StringIO()
+    w = csv_module.writer(buf)
+    w.writerow(["jenis", "bentuk", "mitra", "kode_aset", "nup", "nama_aset",
+                "mulai", "berakhir", "berakhir_lama", "status",
+                "nomor_usulan", "nomor_persetujuan", "nomor_perjanjian",
+                "nilai", "keterangan", "dibuat_oleh", "tanggal_buka"])
+    async for u in db.pemanfaatan_usulan.find(
+            scope_query_field_satker(_user), _PROJ).sort("created_at", -1):
+        w.writerow([
+            JENIS_USULAN_PEMANFAATAN.get(u.get("jenis"), u.get("jenis")),
+            BENTUK_PEMANFAATAN.get(u.get("bentuk"), (u.get("bentuk"),))[0],
+            u.get("mitra"), u.get("asset_code"), u.get("NUP"),
+            u.get("asset_name"), u.get("mulai"), u.get("berakhir"),
+            u.get("berakhir_lama"),
+            STATUS_USULAN_PEMANFAATAN.get(u.get("status"), u.get("status")),
+            u.get("nomor_usulan"), u.get("nomor_persetujuan"),
+            u.get("nomor_perjanjian"), u.get("nilai", 0),
+            u.get("keterangan"), u.get("created_by"),
+            str(u.get("created_at") or "")[:10],
+        ])
+    return Response(content=buf.getvalue().encode("utf-8-sig"),
+                    media_type="text/csv",
+                    headers={"Content-Disposition":
+                             'attachment; filename="register_usulan_pemanfaatan.csv"'})
+
+
+@pemanfaatan_router.delete("/pemanfaatan/usulan/{usulan_id}")
+async def hapus_usulan_pemanfaatan(usulan_id: str,
+                                   admin: dict = Depends(require_admin)):
+    """Hapus usulan — hanya status draf (belum jadi jejak proses)."""
+    u = await db.pemanfaatan_usulan.find_one({"id": usulan_id}, _PROJ)
+    if not u:
+        raise HTTPException(status_code=404, detail="Usulan tidak ditemukan")
+    await pastikan_akses_dok_satker(admin, u)
+    if u.get("status") != "draf":
+        raise HTTPException(
+            status_code=400,
+            detail="Hanya usulan berstatus Draf yang boleh dihapus — usulan "
+                   "yang sudah diajukan adalah arsip proses")
+    await db.pemanfaatan_usulan.delete_one({"id": usulan_id})
+    await log_audit("pemanfaatan_usulan_hapus", "", usulan_id,
+                    username=admin.get("username", "system"),
+                    detail=f"Hapus usulan {u.get('bentuk')} — {u.get('mitra')}",
+                    kode_satker=str(u.get("kode_satker") or ""))
+    return {"message": "Usulan dihapus"}
 
 
 @pemanfaatan_router.get("/pemanfaatan/bentuk")

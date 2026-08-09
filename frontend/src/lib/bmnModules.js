@@ -288,6 +288,8 @@ export const SIKLUS_MODULES = [
       "✅ Arsip scan dokumen per perjanjian (persetujuan/perjanjian/bukti setor — PDF/gambar)",
       "✅ Lampiran wasdal per perjanjian (laporan monitoring/BA peninjauan lapangan — arsip terpisah)",
       "✅ Atribut fasilitas transaksi (PMK 18/2024 / PMK 139/2022 IKN) pada perjanjian KSP/BGS-BSG",
+      "✅ Usulan pemanfaatan berstatus (draf → diajukan → disetujui Pengelola → perjanjian lahir otomatis)",
+      "✅ Perpanjangan perjanjian lewat usulan — BGS/BSG ditolak; Pinjam Pakai wajib ≥60 hari sebelum berakhir",
     ],
     integrasi: ["Status pemanfaatan tampil di detail aset & laporan"],
   },

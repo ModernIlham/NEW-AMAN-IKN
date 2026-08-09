@@ -315,6 +315,9 @@ async def create_indexes() -> None:
         # Register pemanfaatan: urut jatuh tempo + jalur id
         await _idx(db.pemanfaatan, "berakhir")
         await _idx(db.pemanfaatan, "id", unique=True)
+        # Usulan pemanfaatan/perpanjangan: cek usulan aktif per induk + id
+        await _idx(db.pemanfaatan_usulan, [("pemanfaatan_id", 1), ("status", 1)])
+        await _idx(db.pemanfaatan_usulan, "id", unique=True)
         # Register BA pemusnahan: urut tanggal + jalur id
         await _idx(db.pemusnahan, "tanggal_ba")
         await _idx(db.pemusnahan, "id", unique=True)
