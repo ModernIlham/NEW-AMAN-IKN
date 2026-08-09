@@ -94,6 +94,48 @@ S7 yang ada. Suite backend 2464 → 2465 lulus.
 
 ---
 
+## [#831] Audit 45 kode transaksi persediaan: dua celah integritas ditutup — 2026-08-09
+
+Menjawab pertanyaan pemilik "apakah sistem persediaan sudah menangani semua
+jenis transaksi ini?" — audit 4-dimensi (registry+backend, UI, preseden
+persetujuan, preseden dokumen) menyimpulkan: **ya, seluruh 45 kode SAKTI
+terdaftar dan punya jalur pencatatan nyata** — 20 kode masuk lewat dialog
+Transaksi Masuk, 17 keluar lewat Transaksi Keluar, 4 koreksi nilai lewat
+menu Koreksi Nilai, P01 lewat Opname, H01–H03 lewat Hapus ber-SK; jurnal
+append-only (koreksi = transaksi lawan, bukan edit baris). Audit yang sama
+menemukan dua celah integritas, ditutup di PR ini:
+
+- **M94 (Batal Catat Tak Dikuasai) kini dipagari sisa daftar.** Dulu M94
+  lewat jalur /masuk generik tanpa validasi: bisa dicatat tanpa pernah ada
+  K09, dengan qty & harga bebas — stok dan nilai naik sewenang — dan
+  over-pembatalan tak terlihat di layar mana pun karena rekap_nonaktif
+  membuang baris ber-sisa <= 0. Kini `jumlah <= sisa` daftar Tak Dikuasai,
+  paritas persis dengan H03 yang sejak lama divalidasi; pesan galat
+  menyebut angka sisanya.
+- **Transaksi massal yang gagal total tidak lagi meninggalkan booking
+  menggantung.** Nomor LPB harus lahir SEBELUM loop (nomornya distempel ke
+  tiap jurnal), jadi saat semua baris gagal, surat 'dibooking' menggantung
+  di buku agenda tanpa LPB selamanya. Kini surat itu ditransisikan ke
+  'dibatalkan' beralasan ("Semua baris transaksi massal gagal — LPB tidak
+  terbit") lengkap dengan jejak riwayat; nomornya tetap hangus (by design —
+  nomor terpakai tak pernah dipakai ulang). Sukses sebagian TIDAK
+  membatalkan (dikunci uji).
+- **Teks basi tab Referensi Kode dikoreksi**: paragraf "alur pencatatannya
+  menyusul bertahap" untuk M97/M98/K97/K98, H01–H03, dan K09/M94 sudah
+  lama tidak benar — semua alurnya terpasang; kini teksnya menunjukkan
+  letak masing-masing alur.
+- **Verifikasi:** suite backend 2465 → 2470 lulus; 2/2 mutasi terbunuh
+  (cabut pagar M94 → 2 uji; cabut pembatalan booking → 1 uji); eslint +
+  build frontend bersih.
+
+> Temuan audit selebihnya (alur persetujuan KPB untuk SEMUA transaksi +
+> Surat Persetujuan PDF — keputusan pemilik 2026-08-09) menyusul sebagai
+> PR terpisah berikutnya; celah idempotensi transaksi-massal akan tertutup
+> oleh gerbang persetujuan itu (eksekusi hanya lewat setujui, anti-ganda
+> lewat transisi status bersyarat).
+
+---
+
 ## [#830] Halaman berpeta akhirnya bisa diuji render — tiruan Leaflet + WS + IndexedDB — 2026-08-09
 
 Penutup backlog #346, bagian yang sengaja ditinggal saat fondasi uji render

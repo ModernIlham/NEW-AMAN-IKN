@@ -1204,6 +1204,22 @@ async def transaksi_massal(payload: TransaksiMassalIn, user: dict = Depends(requ
                           "error": str(e.detail)})
     sukses = sum(1 for h in hasil if h["ok"])
 
+    # Booking nomor terjadi SEBELUM loop (nomornya distempel ke tiap jurnal),
+    # jadi saat SEMUA baris gagal surat 'dibooking' menggantung tanpa LPB
+    # selamanya. Nomornya tetap hangus (by design — nomor terpakai tak pernah
+    # dipakai ulang), tapi buku agenda harus jujur menyebutnya dibatalkan.
+    if surat_id and sukses == 0:
+        _now_batal = datetime.now(timezone.utc).isoformat()
+        _alasan = "Semua baris transaksi massal gagal — LPB tidak terbit"
+        await db.surat.update_one(
+            {"id": surat_id, "status": "dibooking"},
+            {"$set": {"status": "dibatalkan", "updated_at": _now_batal,
+                      "alasan_batal": _alasan},
+             "$push": {"riwayat": {"status": "dibatalkan",
+                                   "tanggal": _now_batal,
+                                   "oleh": user.get("username", "system"),
+                                   "catatan": _alasan}}})
+
     # Register LPB (Laporan Penerimaan Barang) — hanya arah MASUK dengan
     # minimal satu barang sukses; snapshot barang dibekukan utk dokumen.
     lpb_id = ""
@@ -1921,6 +1937,22 @@ async def transaksi_masuk(item_id: str, data: TransaksiMasukIn,
         raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
     from shared_utils import pastikan_akses_dok_satker
     await pastikan_akses_dok_satker(user, item)
+
+    # M94 membatalkan pencatatan K09 — jumlahnya WAJIB <= sisa di daftar Tak
+    # Dikuasai, paritas dengan H03 yang sudah lama divalidasi. Tanpa pagar
+    # ini M94 bisa dicatat tanpa pernah ada K09 (stok+nilai naik sewenang
+    # dengan harga bebas), dan over-pembatalan tak terlihat di mana pun
+    # karena rekap_nonaktif membuang baris ber-sisa <= 0.
+    if data.jenis == "batal_catat_tak_dikuasai":
+        rows = [t async for t in db.transaksi_persediaan.find(
+            {"persediaan_id": item_id}, {"_id": 0}).sort("timestamp", 1)]
+        sisa_td = (rekap_nonaktif(rows).get("tidak_dikuasai", {})
+                   .get(item_id) or {"jumlah": 0})
+        if int(data.jumlah) > int(sisa_td["jumlah"]):
+            raise HTTPException(
+                status_code=400,
+                detail=(f"Jumlah pembatalan melebihi sisa tercatat di daftar "
+                        f"Tak Dikuasai ({int(sisa_td['jumlah'])})"))
 
     expired = (data.expired or item.get("expired_default") or "").strip()
     layer = buat_layer(batch_id, now.isoformat(), data.jumlah, data.harga_satuan, expired, ref)
