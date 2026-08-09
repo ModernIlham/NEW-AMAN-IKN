@@ -67,6 +67,32 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#844] Surat resmi register Penggunaan — usulan BMN idle & permohonan proses berhenti bernomor manual — 2026-08-09
+
+Pelengkap `[#843]` untuk dua register berjurnal di modul Penggunaan yang
+surat-suratnya selama ini dokumen eksternal bernomor teks bebas:
+
+- **Surat Usulan Penyerahan BMN Idle**
+  (`GET /penggunaan/idle/surat-usulan-pdf?ids=&booking=1`): gabungan tiket
+  berstatus klarifikasi/usul_serah (tiket yang sudah diserahkan tidak
+  ikut), kolom alasan idle + status + nilai perolehan dari master aset,
+  dasar PMK 120/PMK.06/2024, TTD KPB. Nomor booking dari surat inilah yang
+  kemudian diisikan sebagai `nomor_usulan` saat transisi usul_serah —
+  rantai dokumen jurnal 401 tersambung. Tombol "Surat Usulan" di panel
+  BMN Idle.
+- **Surat Permohonan proses penggunaan**
+  (`GET /penggunaan/proses/{id}/surat-permohonan-pdf`): per tiket (alih
+  status/penggunaan sementara/dioperasikan pihak lain/penggunaan bersama)
+  — identitas jenis+arah+pihak+jangka waktu, tabel aset + nilai perolehan.
+  Nomor dibooking SEKALI lalu disimpan di tiket
+  (`nomor_surat_permohonan`); unduh ulang memakai nomor yang sama. Tombol
+  "Surat" di tiap baris tiket.
+
+Uji 2 skenario baca-isi-PDF; dua mutasi tertangkap (filter status idle
+dicabut; nomor tak disimpan).
+
+---
+
 ## [#843] Nota Dinas Usulan PDF ber-nomor — register Pemindahtanganan & Penghapusan berhenti hanya CSV — 2026-08-09
 
 Butir 2 lanjutan audit permohonan aset: usulan pemindahtanganan/penghapusan

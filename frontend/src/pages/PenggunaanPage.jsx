@@ -865,6 +865,15 @@ export default function PenggunaanPage({ user, onBack }) {
                   <FileDown className="w-3.5 h-3.5" /><span className="hidden sm:inline">CSV</span>
                 </button>
               )}
+              {(idle.tiket || []).length > 0 && (
+                <button type="button"
+                  title="Surat Usulan Penyerahan BMN Idle — tiket klarifikasi/usul serah, nomor booking otomatis"
+                  onClick={() => downloadFileWithProgress(`${API}/penggunaan/idle/surat-usulan-pdf?booking=1`, "Surat_Usulan_BMN_Idle.pdf", { label: "Surat Usulan Penyerahan BMN Idle" }).catch(() => {})}
+                  className="h-7 px-2 rounded-lg border border-border text-[11px] font-semibold text-foreground/80 flex items-center gap-1 hover:bg-muted min-h-0 flex-shrink-0"
+                  data-testid="penggunaan-idle-surat-usulan">
+                  <FileDown className="w-3.5 h-3.5" /><span className="hidden sm:inline">Surat Usulan</span>
+                </button>
+              )}
             </div>
             {(idle.kandidat || []).length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-5 px-4">
@@ -1017,6 +1026,16 @@ export default function PenggunaanPage({ user, onBack }) {
                       t.keterangan, `oleh ${t.created_by}`].filter(Boolean).join(" · ")}
                   </p>
                   <div className="flex gap-1.5 mt-1.5 flex-wrap items-center">
+                    <button type="button"
+                      title="Surat Permohonan (PDF) — nomor booking otomatis sekali, tersimpan di tiket"
+                      onClick={() => downloadFileWithProgress(
+                        `${API}/penggunaan/proses/${t.id}/surat-permohonan-pdf`,
+                        `Surat_Permohonan_${t.id.slice(0, 8)}.pdf`,
+                        { label: "Surat Permohonan Proses Penggunaan" }).catch(() => {})}
+                      className="h-7 px-2 rounded-lg border border-border text-[11px] font-semibold text-foreground/80 flex items-center gap-1 hover:bg-muted min-h-0 flex-shrink-0"
+                      data-testid={`penggunaan-proses-surat-${t.id}`}>
+                      <FileDown className="w-3.5 h-3.5" />Surat
+                    </button>
                     {((proses.transisi?.[t.jenis_proses] || {})[t.status] || []).map((ke) => (
                       <Button key={ke} size="sm" variant="outline"
                         className={`h-7 text-[11px] min-h-0 ${ke === "ditolak"

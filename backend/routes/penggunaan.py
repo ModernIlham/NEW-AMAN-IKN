@@ -1263,3 +1263,239 @@ async def hapus_proses(tiket_id: str, _admin: dict = Depends(require_admin)):
     if not res.deleted_count:
         raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
     return {"ok": True}
+
+
+# ============================================================================
+# ASET-DOK-2: dokumen resmi register idle & proses penggunaan — dua register
+# berjurnal (401/302) yang surat usulannya selama ini dokumen eksternal
+# bernomor teks bebas (temuan audit permohonan aset).
+# ============================================================================
+
+
+@penggunaan_router.get("/penggunaan/idle/surat-usulan-pdf")
+async def surat_usulan_idle(ids: str = "", booking: int = 0,
+                            _user: dict = Depends(require_user)):
+    """Surat Usulan Penyerahan BMN Idle kepada Pengelola (PMK 120/2024) —
+    gabungan tiket berstatus klarifikasi/usul_serah. `ids` menyaring ke
+    tiket TERPILIH (id status lain diabaikan — pola nota dinas penghapusan);
+    `booking=1` membooking nomor Persuratan untuk cetakan ini, dan nomor itu
+    pula yang diisikan sebagai `nomor_usulan` saat transisi usul_serah.
+    """
+    from io import BytesIO
+
+    from fastapi.responses import StreamingResponse
+    from reportlab.lib.units import mm as rl_mm
+    from reportlab.platypus import Paragraph, Spacer, Table
+
+    from pembukuan_utils import parse_harga
+    from routes.reports import (
+        _fit_col_widths, _fmt_tanggal_id, _get_report_styles,
+        _kop_surat_flowables, _page_footer_factory, _signature_block,
+        _std_doc, _std_table_style, _title_block,
+    )
+    from shared_utils import (blok_ttd_kpb, pengaturan_kop,
+                              scope_query_field_satker)
+
+    q = scope_query_field_satker(
+        _user, {"status": {"$in": ["klarifikasi", "usul_serah"]}})
+    rows = await (db.bmn_idle.find(q, {"_id": 0})
+                  .sort("created_at", 1).to_list(500))
+    terpilih = {x for x in (s.strip() for s in ids.split(",")) if x}
+    if terpilih:
+        rows = [r for r in rows if r.get("id") in terpilih]
+
+    harga = {}
+    aids = [r.get("asset_id") for r in rows if r.get("asset_id")]
+    if aids:
+        async for a in db.assets.find({"id": {"$in": aids}},
+                                      {"_id": 0, "id": 1, "purchase_price": 1}):
+            harga[a["id"]] = parse_harga(a.get("purchase_price"))
+
+    now = datetime.now(timezone.utc).isoformat()
+    ks = kode_satker_user(_user)
+    nomor = ""
+    if booking and rows:
+        try:
+            from routes.persuratan import booking_nomor_otomatis
+            nomor, _sid = await booking_nomor_otomatis(
+                _user, now[:10],
+                perihal=f"Usulan Penyerahan BMN Idle ({len(rows)} unit)",
+                tujuan="Pengelola Barang",
+                keterangan="booking otomatis dari surat usulan BMN idle",
+                kode_satker=ks,
+                jenis_naskah="Surat Usulan", referensi="USULAN-BMN-IDLE")
+        except Exception:
+            nomor = ""
+
+    settings = await pengaturan_kop(kode_satker=ks)
+    buffer = BytesIO()
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    el = []
+    el.extend(_kop_surat_flowables(settings, doc.width))
+    el.extend(_title_block("SURAT USULAN\nPENYERAHAN BMN IDLE",
+                           nomor=nomor or "......./......./........"))
+    total = sum(harga.get(r.get("asset_id"), 0) for r in rows)
+    pengantar = (
+        f"Bersama ini diusulkan penyerahan {len(rows)} unit Barang Milik "
+        f"Negara yang tidak digunakan (idle) kepada Pengelola Barang dengan "
+        f"total nilai perolehan Rp{int(total):,} ".replace(",", ".")
+        + "sebagaimana daftar berikut, sesuai PMK 120/PMK.06/2024.")
+    if terpilih:
+        pengantar += (" Daftar ini memuat tiket yang DIPILIH untuk diusulkan; "
+                      "tiket lain sengaja tidak disertakan.")
+    el.append(Paragraph(pengantar, st['Body']))
+    el.append(Spacer(1, 4 * rl_mm))
+    if not rows:
+        el.append(Paragraph(
+            "Tidak ada tiket BMN idle berstatus klarifikasi/usul serah.",
+            st['Cell']))
+    else:
+        headers = ["No", "Kode Barang / NUP", "Nama Barang", "Alasan Idle",
+                   "Status", "Nilai Perolehan (Rp)"]
+        widths = [24, 106, 150, 90, 60, 86]
+        table_data = [[Paragraph(h, st['TableHeader']) for h in headers]]
+        for i, r in enumerate(rows):
+            table_data.append([
+                Paragraph(str(i + 1), st['Cell']),
+                Paragraph(f"{r.get('asset_code') or '-'} / {r.get('NUP') or '-'}",
+                          st['Cell']),
+                Paragraph(str(r.get("asset_name") or "-"), st['Cell']),
+                Paragraph(str(r.get("alasan") or "-"), st['Cell']),
+                Paragraph(str(STATUS_IDLE.get(r.get("status"), r.get("status"))),
+                          st['Cell']),
+                Paragraph(f"{int(harga.get(r.get('asset_id'), 0)):,}".replace(",", "."),
+                          st['Cell']),
+            ])
+        table_data.append([
+            Paragraph("", st['Cell']), Paragraph("", st['Cell']),
+            Paragraph("<b>TOTAL</b>", st['Cell']), Paragraph("", st['Cell']),
+            Paragraph("", st['Cell']),
+            Paragraph(f"<b>{int(total):,}</b>".replace(",", "."), st['Cell'])])
+        tabel = Table(table_data, colWidths=_fit_col_widths(widths, doc.width),
+                      repeatRows=1)
+        tabel.setStyle(_std_table_style(zebra=True))
+        el.append(tabel)
+    el.append(Paragraph(f"Tanggal data: {_fmt_tanggal_id(now[:10])}", st['Meta']))
+    el.append(Spacer(1, 12 * rl_mm))
+    kpb = await blok_ttd_kpb(settings, per_iso=now[:10], kode_satker=ks)
+    el.extend(_signature_block([kpb], doc.width))
+    footer = _page_footer_factory("Surat Usulan Penyerahan BMN Idle")
+    await asyncio.to_thread(doc.build, el, onFirstPage=footer,
+                            onLaterPages=footer)
+    buffer.seek(0)
+    return StreamingResponse(
+        buffer, media_type="application/pdf",
+        headers={"Content-Disposition":
+                 'attachment; filename="Surat_Usulan_BMN_Idle.pdf"'})
+
+
+@penggunaan_router.get("/penggunaan/proses/{tiket_id}/surat-permohonan-pdf")
+async def surat_permohonan_proses(tiket_id: str,
+                                  _user: dict = Depends(require_user)):
+    """Surat Permohonan proses penggunaan per TIKET (alih status/penggunaan
+    sementara/dioperasikan pihak lain/penggunaan bersama) — nomor dibooking
+    otomatis SEKALI lalu disimpan di tiket (`nomor_surat_permohonan`); unduh
+    ulang memakai nomor yang sama (pola nota dinas pemindahtanganan).
+    """
+    from io import BytesIO
+
+    from fastapi.responses import StreamingResponse
+    from reportlab.lib.units import mm as rl_mm
+    from reportlab.platypus import Paragraph, Spacer, Table
+
+    from pembukuan_utils import parse_harga
+    from routes.reports import (
+        _fit_col_widths, _fmt_tanggal_id, _get_report_styles, _identity_table,
+        _kop_surat_flowables, _page_footer_factory, _signature_block,
+        _std_doc, _std_table_style, _title_block,
+    )
+    from shared_utils import blok_ttd_kpb, pengaturan_kop
+
+    t = await db.penggunaan_proses.find_one({"id": tiket_id}, {"_id": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    await pastikan_akses_dok_satker(_user, t)
+
+    now = datetime.now(timezone.utc).isoformat()
+    nomor = str(t.get("nomor_surat_permohonan") or "")
+    label_jenis = JENIS_PROSES_PENGGUNAAN.get(t.get("jenis_proses"),
+                                              t.get("jenis_proses"))
+    if not nomor:
+        try:
+            from routes.persuratan import booking_nomor_otomatis
+            nomor, surat_id = await booking_nomor_otomatis(
+                _user, now[:10],
+                perihal=f"Permohonan {label_jenis} BMN — {t.get('pihak_tujuan') or '-'}",
+                tujuan=str(t.get("pihak_tujuan") or "Pengelola Barang"),
+                keterangan="booking otomatis dari surat permohonan proses penggunaan",
+                kode_satker=str(t.get("kode_satker") or ""),
+                jenis_naskah="Surat Permohonan", referensi="PROSES-PENGGUNAAN")
+            await db.penggunaan_proses.update_one(
+                {"id": tiket_id},
+                {"$set": {"nomor_surat_permohonan": nomor,
+                          "surat_id_permohonan": surat_id, "updated_at": now}})
+        except Exception:
+            nomor = ""
+
+    harga = {}
+    aids = [a.get("asset_id") for a in t.get("aset") or []]
+    if aids:
+        async for a in db.assets.find({"id": {"$in": aids}},
+                                      {"_id": 0, "id": 1, "purchase_price": 1}):
+            harga[a["id"]] = parse_harga(a.get("purchase_price"))
+    total = sum(harga.values())
+
+    settings = await pengaturan_kop(kode_satker=t.get("kode_satker") or "")
+    buffer = BytesIO()
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    el = []
+    el.extend(_kop_surat_flowables(settings, doc.width))
+    el.extend(_title_block(
+        f"SURAT PERMOHONAN\n{str(label_jenis).upper()} BMN",
+        nomor=nomor or "......./......./........"))
+    baris = [
+        ("Jenis Proses", str(label_jenis)),
+        ("Arah", str(ARAH_PROSES.get(t.get("arah"), t.get("arah") or "-"))),
+        ("Pihak Asal", str(t.get("pihak_asal") or "-")),
+        ("Pihak Tujuan", str(t.get("pihak_tujuan") or "-")),
+    ]
+    if t.get("tanggal_mulai") or t.get("tanggal_berakhir"):
+        baris.append(("Jangka Waktu",
+                      f"{_fmt_tanggal_id(t.get('tanggal_mulai')) or '-'} s.d. "
+                      f"{_fmt_tanggal_id(t.get('tanggal_berakhir')) or '-'}"))
+    baris.append(("Jumlah Aset", f"{len(t.get('aset') or [])} unit — total "
+                  + f"Rp{int(total):,}".replace(",", ".")))
+    if str(t.get("keterangan") or "").strip():
+        baris.append(("Keterangan", str(t.get("keterangan"))))
+    el.append(_identity_table(baris))
+    el.append(Spacer(1, 4 * rl_mm))
+    headers = ["No", "Kode Barang / NUP", "Nama Barang", "Nilai Perolehan (Rp)"]
+    widths = [26, 130, 220, 96]
+    table_data = [[Paragraph(h, st['TableHeader']) for h in headers]]
+    for i, a in enumerate(t.get("aset") or []):
+        table_data.append([
+            Paragraph(str(i + 1), st['Cell']),
+            Paragraph(f"{a.get('asset_code') or '-'} / {a.get('NUP') or '-'}",
+                      st['Cell']),
+            Paragraph(str(a.get("asset_name") or "-"), st['Cell']),
+            Paragraph(f"{int(harga.get(a.get('asset_id'), 0)):,}".replace(",", "."),
+                      st['Cell']),
+        ])
+    tabel = Table(table_data, colWidths=_fit_col_widths(widths, doc.width),
+                  repeatRows=1)
+    tabel.setStyle(_std_table_style(zebra=True))
+    el.append(tabel)
+    el.append(Spacer(1, 12 * rl_mm))
+    kpb = await blok_ttd_kpb(settings, per_iso=now[:10],
+                             kode_satker=t.get("kode_satker") or "")
+    el.extend(_signature_block([kpb], doc.width))
+    footer = _page_footer_factory("Surat Permohonan Proses Penggunaan")
+    await asyncio.to_thread(doc.build, el, onFirstPage=footer,
+                            onLaterPages=footer)
+    buffer.seek(0)
+    return StreamingResponse(
+        buffer, media_type="application/pdf",
+        headers={"Content-Disposition":
+                 f'attachment; filename="Surat_Permohonan_{tiket_id[:8]}.pdf"'})
