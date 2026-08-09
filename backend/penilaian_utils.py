@@ -29,8 +29,12 @@ from pembukuan_utils import golongan_of, parse_harga
 # Kelompok (5 digit) → masa manfaat TAHUN. LENGKAP sesuai Lampiran Tabel
 # Masa Manfaat I KMK 295/KM.6/2019 jo. 266/KM.6/2023 jo. 339/KM.6/2024
 # (dokumen resmi diunggah pemilik, ditranskrip halaman-per-halaman —
-# menuntaskan butir verifikasi #11). Hanya golongan 3/4/5 yang disusutkan
-# aplikasi; golongan lain lihat GOLONGAN_TANPA_SUSUT.
+# menuntaskan butir verifikasi #11). Golongan 3/4/5 disusutkan; golongan 8
+# (Aset Tak Berwujud) DIAMORTISASI dengan mesin garis lurus yang sama —
+# default hanya Software (80101, 4 tahun sesuai KMK 620/KM.6/2015);
+# kelompok ATB lain wajib dilengkapi lewat referensi masa manfaat admin
+# (status "tanpa_referensi" menagihnya, tidak menebak angka).
+# Golongan lain lihat GOLONGAN_TANPA_SUSUT.
 MASA_MANFAAT_DEFAULT = {
     # Golongan 3 — Peralatan dan Mesin
     "30101": 10, "30102": 8, "30103": 7,
@@ -64,6 +68,8 @@ MASA_MANFAAT_DEFAULT = {
     "50301": 30, "50302": 30, "50303": 10, "50304": 10, "50305": 40,
     "50306": 40, "50307": 30, "50308": 30, "50309": 20, "50310": 5,
     "50401": 30, "50402": 40, "50403": 20, "50404": 30,
+    # Golongan 8 — Aset Tak Berwujud (amortisasi, KMK 620/KM.6/2015)
+    "80101": 4,     # Software komputer
 }
 
 GOLONGAN_TANPA_SUSUT = {
@@ -71,7 +77,6 @@ GOLONGAN_TANPA_SUSUT = {
     "2": "Tanah tidak disusutkan (PMK 65/2017)",
     "6": "Aset Tetap Lainnya tidak disusutkan (pengecualian alat musik modern menyusul)",
     "7": "Konstruksi Dalam Pengerjaan tidak disusutkan",
-    "8": "Aset Lainnya/Tak Berwujud — amortisasi terpisah (menyusul)",
 }
 
 
@@ -85,8 +90,8 @@ def validate_masa_manfaat(kode, tahun) -> list:
     k = str(kode or "").strip()
     if len(k) != 5 or not k.isdigit():
         errors.append("Kode kelompok harus 5 digit angka (mis. 30201)")
-    elif k[0] not in ("3", "4", "5"):
-        errors.append("Golongan di luar objek penyusutan (hanya 3/4/5)")
+    elif k[0] not in ("3", "4", "5", "8"):
+        errors.append("Golongan di luar objek penyusutan/amortisasi (hanya 3/4/5/8)")
     try:
         t = int(tahun)
     except (TypeError, ValueError):

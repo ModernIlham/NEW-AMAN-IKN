@@ -67,6 +67,45 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#838] Amortisasi ATB golongan 8 + jurnal henti guna 401/402 — 2026-08-09
+
+Dua butir penutup audit 5 klasifikasi `[#835]`:
+
+**Amortisasi Aset Tak Berwujud.** Golongan 8 dikeluarkan dari
+`GOLONGAN_TANPA_SUSUT` sehingga masuk mesin penyusutan garis lurus semesteran
+(`penilaian_utils.py`) sebagai amortisasi. Kelompok `80101` (Software
+Komputer) mendapat masa manfaat bawaan 4 tahun sesuai KMK 620/KM.6/2015;
+kelompok ATB lain (lisensi, hasil kajian, dst.) sengaja TIDAK ditebak —
+status `tanpa_referensi` menagih admin mengisi referensi masa manfaat, sama
+seperti kelompok golongan 3/4/5 yang tak berbawaan. Efek ikutan: akun
+akumulasi amortisasi (169315) pada LBP kini terisi otomatis dari perhitungan,
+bukan selalu nol. `validate_masa_manfaat` menerima golongan 8.
+
+**Jalur henti guna (kode 401/402 hidup).** Dua kode SIMAK yang selama ini
+referensi mati kini ditulis modul Penggunaan (`transisi_idle`):
+- `usul_serah` → jurnal **401 Penghentian Aset Dari Penggunaan** (aset keluar
+  dari penggunaan aktif menunggu serah ke Pengelola);
+- `digunakan_kembali` → jurnal **402 Penggunaan Kembali BMN Yang Sudah
+  Dihentikan** — HANYA bila tiket pernah `usul_serah` (riwayat diperiksa);
+  digunakan kembali langsung dari klarifikasi tetap tanpa jurnal karena aset
+  belum pernah dihentikan.
+- Transisi baru `usul_serah → digunakan_kembali` (Pengelola menolak / satker
+  batal serah) di `TRANSISI_IDLE`.
+
+Jurnal memakai `catat_mutasi_bmn` (anti-ganda per ref_id
+`{tiket}:{kode}`, nilai dari harga perolehan aset). Uji baru
+`test_penggunaan_henti_guna.py` (3 skenario) + `test_penilaian_utils.py`
+bertambah skenario amortisasi; ketiganya lulus uji-mutasi (golongan 8
+dikembalikan ke tanpa-susut, cabang 401 dikosongkan, guard riwayat dicabut —
+semuanya tertangkap merah).
+
+> Catatan harness: `find_one_and_update` mongomock_motor mengembalikan `None`
+> bila diberi kwarg `projection` bersama `return_document` — kode produksi
+> benar di Mongo asli; uji mengemulasi dengan patch kelas yang membuang
+> `projection` lalu mencabut `_id`.
+
+---
+
 ## [#837] Modul KDP hidup — perolehan 502, pengembangan 503, penyelesaian 505+105 — 2026-08-09
 
 Lanjutan audit 5 klasifikasi `[#835]`: KDP (Konstruksi Dalam Pengerjaan,

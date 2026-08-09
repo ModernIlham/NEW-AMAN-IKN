@@ -869,6 +869,35 @@ async def transisi_idle(tiket_id: str, payload: TransisiIdleIn,
             "keterangan": (f"Serah BMN idle ke Pengelola — BAST "
                            f"{res.get('nomor_bast_serah') or '-'}"),
             "oleh": admin.get("username", "system")})
+    # Jalur HENTI GUNA (mandat aset tetap 2026-08-09): usul serah = aset
+    # DIHENTIKAN dari penggunaan aktif → 401; digunakan kembali SETELAH
+    # sempat dihentikan → 402. Best-effort + anti-ganda per
+    # (asset_id, kode, ref_id=tiket) dari catat_mutasi_bmn; pencatatan
+    # administratif — nilai buku tidak bergeser di jalur ini.
+    kode_henti = ""
+    if payload.status == "usul_serah":
+        kode_henti = "401"
+    elif payload.status == "digunakan_kembali" and any(
+            r.get("status") == "usul_serah" for r in (res.get("riwayat") or [])):
+        kode_henti = "402"
+    if kode_henti:
+        from pembukuan_utils import parse_harga
+        from shared_utils import catat_mutasi_bmn
+        aset = await db.assets.find_one(
+            {"id": res.get("asset_id")},
+            {"_id": 0, "asset_code": 1, "NUP": 1, "purchase_price": 1})
+        await catat_mutasi_bmn({
+            "asset_id": res.get("asset_id"), "kode_transaksi": kode_henti,
+            "kode_barang": str((aset or {}).get("asset_code") or ""),
+            "nup": str((aset or {}).get("NUP") or ""),
+            "tanggal_buku": now[:10], "jumlah": 1,
+            "nilai": parse_harga((aset or {}).get("purchase_price")),
+            "sumber_modul": "penggunaan", "ref_id": f"{res.get('id')}:{kode_henti}",
+            "keterangan": ("Penghentian dari penggunaan aktif (usul serah "
+                           f"{res.get('nomor_usulan') or '-'})"
+                           if kode_henti == "401"
+                           else "Penggunaan kembali BMN yang sempat dihentikan"),
+            "oleh": admin.get("username", "system")})
     return res
 
 

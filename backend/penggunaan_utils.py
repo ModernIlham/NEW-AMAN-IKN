@@ -240,7 +240,10 @@ STATUS_IDLE = {
 
 TRANSISI_IDLE = {
     "klarifikasi": {"digunakan_kembali", "usul_serah"},
-    "usul_serah": {"diserahkan"},
+    # usul_serah boleh mundur ke digunakan_kembali: Pengelola menolak /
+    # satker batal menyerahkan → BMN dipakai lagi (jurnal 402 Penggunaan
+    # kembali; usul_serah sendiri berjurnal 401 Penghentian dari Penggunaan).
+    "usul_serah": {"diserahkan", "digunakan_kembali"},
     "digunakan_kembali": set(),
     "diserahkan": set(),
 }
