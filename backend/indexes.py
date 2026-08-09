@@ -336,6 +336,9 @@ async def create_indexes() -> None:
         # Tiket BMN idle: cek duplikat aktif per aset + jalur id
         await _idx(db.bmn_idle, [("asset_id", 1), ("status", 1)])
         await _idx(db.bmn_idle, "id", unique=True)
+        # Henti guna mandiri: cek tiket dihentikan aktif per aset + id
+        await _idx(db.henti_guna, [("asset_id", 1), ("status", 1)])
+        await _idx(db.henti_guna, "id", unique=True)
         # Register SK penetapan penggunaan: urut tanggal + jalur id
         await _idx(db.psp, "tanggal_sk")
         await _idx(db.psp, "id", unique=True)

@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Search, Loader2, UserCheck, ChevronLeft, ChevronRight,
   BadgeCheck, FileWarning, FileText, Plus, X, Trash2, ScrollText,
-  Paperclip, Upload, FileDown, ArrowLeftRight, IdCard,
+  Paperclip, Upload, FileDown, ArrowLeftRight, IdCard, Download,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -84,6 +84,9 @@ export default function PenggunaanPage({ user, onBack }) {
   // Tiket proses alih status/penggunaan sementara: data GET + dialog baru
   const [proses, setProses] = useState(null);
   const [formProses, setFormProses] = useState(null);
+  // Henti guna mandiri (SK/BA di luar jalur idle): data GET + dialog catat
+  const [henti, setHenti] = useState(null);
+  const [formHenti, setFormHenti] = useState(null); // {aset, data, saving}
   const lampPspInputRef = useRef(null);
   const searchTimer = useRef(null);
   // Dialog BAST serah terima pengguna: {form, aset:Set(id), saving}
@@ -155,6 +158,12 @@ export default function PenggunaanPage({ user, onBack }) {
       .catch(() => {});
   }, []);
 
+  const loadHenti = useCallback(() => {
+    axios.get(`${API}/penggunaan/henti`)
+      .then((r) => setHenti(r.data))
+      .catch(() => {});
+  }, []);
+
   // Referensi Master Satker — saran pihak asal/tujuan proses penggunaan (W7)
   const [satkerList, setSatkerList] = useState([]);
   useEffect(() => {
@@ -191,7 +200,7 @@ export default function PenggunaanPage({ user, onBack }) {
     });
   };
 
-  useEffect(() => { load(1, ""); loadIdle(); loadPsp(); loadProses(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(1, ""); loadIdle(); loadPsp(); loadProses(); loadHenti(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     axios.get(`${API}/bast/referensi`).then((r) => setJenisBast(r.data?.jenis || [])).catch(() => {});
@@ -500,7 +509,7 @@ export default function PenggunaanPage({ user, onBack }) {
 
   // Pencarian aset (debounce) untuk dialog catat SK PSP
   useEffect(() => {
-    if ((!formPsp && !formProses) || cariPsp.trim().length < 2) { setHasilCariPsp([]); return undefined; }
+    if ((!formPsp && !formProses && !formHenti) || cariPsp.trim().length < 2) { setHasilCariPsp([]); return undefined; }
     clearTimeout(cariPspTimer.current);
     cariPspTimer.current = setTimeout(async () => {
       try {
@@ -509,7 +518,46 @@ export default function PenggunaanPage({ user, onBack }) {
       } catch { setHasilCariPsp([]); }
     }, 300);
     return () => clearTimeout(cariPspTimer.current);
-  }, [cariPsp, formPsp, formProses]);
+  }, [cariPsp, formPsp, formProses, formHenti]);
+
+  // ── Henti guna mandiri (SK/BA di luar jalur idle; jurnal 401/402) ──
+  const catatHenti = async () => {
+    if (!formHenti?.aset) { toast.error("Pilih aset yang dihentikan"); return; }
+    setFormHenti((f) => ({ ...f, saving: true }));
+    try {
+      await axios.post(`${API}/penggunaan/henti`, {
+        asset_id: formHenti.aset.id, ...formHenti.data,
+      });
+      toast.success("Penghentian penggunaan tercatat (jurnal 401)");
+      setFormHenti(null);
+      loadHenti();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mencatat penghentian");
+      setFormHenti((f) => (f ? { ...f, saving: false } : f));
+    }
+  };
+
+  const gunakanKembaliHenti = async (t) => {
+    const v = await minta({
+      judul: "Gunakan Kembali",
+      deskripsi: `${t.asset_name} (${t.asset_code} · ${t.NUP}). Jurnal 402 dicatat.`,
+      fields: [
+        { key: "nomor_dokumen", label: "Nomor SK/BA penggunaan kembali", type: "text", wajib: true },
+        { key: "tanggal_dokumen", label: "Tanggal dokumen", type: "date",
+          default: new Date().toISOString().slice(0, 10) },
+        { key: "catatan", label: "Catatan", type: "textarea" },
+      ],
+      confirmLabel: "Simpan",
+    });
+    if (v === null) return;
+    try {
+      await axios.post(`${API}/penggunaan/henti/${t.id}/gunakan-kembali`, v);
+      toast.success("Aset digunakan kembali (jurnal 402)");
+      loadHenti();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mencatat penggunaan kembali");
+    }
+  };
 
   const onSearchChange = (v) => {
     setSearch(v);
@@ -973,6 +1021,68 @@ export default function PenggunaanPage({ user, onBack }) {
           </div>
         )}
 
+        {/* ── Henti guna mandiri (SK/BA di luar jalur idle; jurnal 401/402) ── */}
+        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="penggunaan-henti">
+          <div className="px-3 py-2 border-b border-border flex items-center gap-2 flex-wrap">
+            <p className="text-xs font-bold text-foreground flex-1 min-w-[160px]">Henti Guna Mandiri (SK/BA)</p>
+            {(henti?.ringkasan?.dihentikan || 0) > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-semibold">
+                {henti.ringkasan.dihentikan} dihentikan
+              </span>
+            )}
+            {(henti?.items || []).length > 0 && (
+              <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                onClick={() => downloadFileWithProgress(`${API}/penggunaan/henti/export`, "register_henti_guna.csv", { label: "Ekspor Register Henti Guna (CSV)" }).catch(() => {})}
+                data-testid="penggunaan-henti-export">
+                <Download className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">CSV</span>
+              </Button>
+            )}
+            <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+              onClick={() => { setCariPsp(""); setHasilCariPsp([]); setFormHenti({ aset: null, saving: false, data: { nomor_dokumen: "", tanggal_dokumen: new Date().toISOString().slice(0, 10), alasan: "" } }); }}
+              data-testid="penggunaan-henti-catat">
+              <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Catat Penghentian</span>
+            </Button>
+          </div>
+          {(henti?.items || []).length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-3 px-3">
+              Belum ada pencatatan — penghentian penggunaan aktif ber-SK/BA di luar
+              jalur BMN idle dicatat di sini (jurnal 401/402 otomatis).
+            </p>
+          ) : (
+            <ul className="divide-y divide-border/60">
+              {henti.items.map((t) => (
+                <li key={t.id} className="p-3 space-y-1" data-testid={`penggunaan-henti-${t.id}`}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${t.status === "dihentikan"
+                      ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                      : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"}`}>
+                      {henti.label_status?.[t.status] || t.status}
+                    </span>
+                    <span className="font-mono text-[11px]">{t.asset_code} · {t.NUP}</span>
+                    <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate">{t.asset_name}</p>
+                    {isAdmin && t.status === "dihentikan" && (
+                      <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                        onClick={() => gunakanKembaliHenti(t)}
+                        data-testid={`penggunaan-henti-kembali-${t.id}`}>
+                        Gunakan Kembali
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground truncate">
+                    {[`SK/BA ${t.nomor_dokumen}${t.tanggal_dokumen ? ` (${t.tanggal_dokumen})` : ""}`,
+                      t.alasan,
+                      t.nomor_dokumen_kembali && `Kembali: ${t.nomor_dokumen_kembali}`,
+                    ].filter(Boolean).join(" · ")}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+          {henti?.catatan && (
+            <p className="px-3 py-2 text-[11px] text-muted-foreground border-t border-border">{henti.catatan}</p>
+          )}
+        </div>
+
         {/* ── Tiket proses alih status & penggunaan sementara (PMK 40/2024) ── */}
         <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="penggunaan-proses">
           <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
@@ -1210,6 +1320,88 @@ export default function PenggunaanPage({ user, onBack }) {
           Pengajuan resmi alih status/PSP tetap melalui SIMAN/DJKN — halaman ini register pendamping satker.
         </p>
       </main>
+
+      {/* ── Dialog catat henti guna mandiri ── */}
+      <Dialog open={!!formHenti} onOpenChange={(o) => { if (!o) setFormHenti(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Catat Penghentian Penggunaan</DialogTitle>
+            <DialogDescription className="text-xs">
+              Penghentian ber-SK/BA di luar jalur BMN idle — jurnal 401 dicatat
+              otomatis. Aset menganggur permanen tetap lewat jalur idle.
+            </DialogDescription>
+          </DialogHeader>
+          {formHenti && (
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="hg-cari">Aset yang dihentikan</label>
+                {formHenti.aset ? (
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-border p-2">
+                    <span className="min-w-0">
+                      <span className="block text-xs font-semibold text-foreground truncate">{formHenti.aset.asset_name}</span>
+                      <span className="block text-[10px] text-muted-foreground font-mono">{formHenti.aset.asset_code} · {formHenti.aset.NUP}</span>
+                    </span>
+                    <button type="button" onClick={() => setFormHenti((f) => ({ ...f, aset: null }))} aria-label="Lepas aset"
+                      className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted flex-shrink-0 min-h-0 min-w-0">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="relative">
+                      <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
+                      <Input id="hg-cari" className="pl-8" placeholder="nama / kode / NUP…"
+                        value={cariPsp} onChange={(e) => setCariPsp(e.target.value)} data-testid="penggunaan-henti-cari" />
+                    </div>
+                    <ul className="mt-2 space-y-1.5 max-h-32 overflow-y-auto">
+                      {hasilCariPsp.map((a) => (
+                        <li key={a.id}>
+                          <button type="button"
+                            onClick={() => { setFormHenti((f) => ({ ...f, aset: a })); setCariPsp(""); setHasilCariPsp([]); }}
+                            className="w-full text-left rounded-lg border border-border p-2 text-xs hover:bg-muted min-h-0"
+                            data-testid={`penggunaan-henti-pilih-${a.id}`}>
+                            <span className="text-foreground/90">{a.asset_name || "-"}</span>{" "}
+                            <span className="font-mono text-[10px] text-muted-foreground">({a.asset_code} · {a.NUP})</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="hg-nomor">Nomor SK/BA penghentian</label>
+                  <Input id="hg-nomor" placeholder="cth. SK-4/KPB/2026" value={formHenti.data.nomor_dokumen}
+                    onChange={(e) => setFormHenti((f) => ({ ...f, data: { ...f.data, nomor_dokumen: e.target.value } }))}
+                    data-testid="penggunaan-henti-nomor" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="hg-tgl">Tanggal dokumen</label>
+                  <Input id="hg-tgl" type="date" value={formHenti.data.tanggal_dokumen}
+                    onChange={(e) => setFormHenti((f) => ({ ...f, data: { ...f.data, tanggal_dokumen: e.target.value } }))} />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="hg-alasan">Alasan penghentian</label>
+                  <Input id="hg-alasan" placeholder="cth. Rusak menunggu perbaikan besar / tidak digunakan sementara"
+                    value={formHenti.data.alasan}
+                    onChange={(e) => setFormHenti((f) => ({ ...f, data: { ...f.data, alasan: e.target.value } }))}
+                    data-testid="penggunaan-henti-alasan" />
+                </div>
+              </div>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setFormHenti(null)}>Batal</Button>
+                <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                  disabled={formHenti.saving || !formHenti.aset || !formHenti.data.nomor_dokumen.trim()
+                    || formHenti.data.alasan.trim().length < 5}
+                  onClick={catatHenti} data-testid="penggunaan-henti-simpan">
+                  {formHenti.saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Catat (Jurnal 401)"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* ── Dialog buka tiket proses ── */}
       <Dialog open={!!formProses} onOpenChange={(o) => { if (!o) setFormProses(null); }}>
