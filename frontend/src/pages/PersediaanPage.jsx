@@ -2122,9 +2122,11 @@ export default function PersediaanPage({ user, onBack }) {
                     );
                   })}
                   <p className="text-[10px] text-muted-foreground">
-                    Kode koreksi nilai (M97/M98/K97/K98) serta penghapusan definitif
-                    ber-SK (H01–H03) dan pencatatan tak dikuasai (K09/M94) tercantum
-                    sebagai referensi — alur pencatatannya menyusul bertahap.
+                    Seluruh 45 kode memiliki alur pencatatan: koreksi nilai
+                    (M97/M98/K97/K98) lewat menu Koreksi Nilai, penghapusan
+                    definitif ber-SK (H01–H03) lewat tombol Hapus ber-SK di
+                    Daftar Usang/Rusak/Tak Dikuasai, opname (P01) lewat dialog
+                    Opname, dan sisanya lewat dialog Transaksi Masuk/Keluar.
                   </p>
                 </div>
               ) : (
