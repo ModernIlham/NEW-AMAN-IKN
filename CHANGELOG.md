@@ -94,6 +94,52 @@ S7 yang ada. Suite backend 2464 → 2465 lulus.
 
 ---
 
+## [#830] Halaman berpeta akhirnya bisa diuji render — tiruan Leaflet + WS + IndexedDB — 2026-08-09
+
+Penutup backlog #346, bagian yang sengaja ditinggal saat fondasi uji render
+jsdom dibangun (PR #792): halaman berpeta tak tersentuh karena Leaflet
+menuntut ukuran elemen nyata (getBoundingClientRect jsdom selalu 0×0).
+Padahal justru DUA insiden yang melahirkan seluruh program uji render
+terjadi di halaman berpeta — Peta Aset tayang layar kosong ("Cannot access
+before initialization") dan `kirimGeserRef` Peta Kolaborasi dipakai tanpa
+pernah dideklarasikan — dua-duanya dengan lint bersih, build sukses, dan
+700+ uji statis hijau.
+
+- **`src/uji/lefletPalsu.js`** — tiruan Leaflet: inti berantai berbasis
+  Proxy (properti/panggilan tak dikenal → stub berantai lain) + kembalian
+  KONKRET untuk metode yang hasilnya dihitung pemanggil (getZoom,
+  getBounds().contains(), destrukturisasi {lat, lng}). Dua bagian dibuat
+  nyata: `DomUtil.create` membuat elemen DOM sungguhan dan
+  `Control.extend` mengembalikan konstruktor yang menjalankan `onAdd` —
+  cacat di badan kontrol kustom ikut terdeteksi.
+- **`src/uji/lingkunganPeta.js`** — pemasang API yang tak disediakan jsdom:
+  WebSocket tiruan (instans tercatat, tak pernah konek) dan IndexedDB
+  GAGAL-CEPAT (open → onerror async). IDB sengaja bukan tiruan sukses:
+  seluruh pemakai `idb` di repo menjaga galatnya, jadi jalur gagal adalah
+  jalur deterministik — halaman harus tetap berdiri saat penyimpanan
+  luring tak tersedia, persis mode penyamaran Safari/Firefox di lapangan.
+- **7 uji render baru**: `PetaKolaborasiRender.test.jsx` (4 — halaman
+  berdiri dari URL publik + nama kegiatan tampil, endpoint & token benar,
+  galat server jadi pesan bukan layar putih, tanpa id → berhenti tanpa
+  satu pun permintaan) dan `AssetMapFullViewRender.test.jsx` (3 — wadah/
+  kanvas/toolbar berdiri + data termuat, kontrol edit hanya saat `canEdit`,
+  gagal muat tidak merobohkan peta).
+- **`eslint.config.mjs`**: `src/uji/**` masuk blok globals Jest/Node —
+  perkakas khusus uji yang tak pernah masuk bundle produksi.
+- **Verifikasi:** suite frontend 791 → **798 lulus** (69 suite); eslint
+  bersih; build produksi sukses. Mutasi 3/3 terbunuh: crash kelas-TDZ
+  disuntik ke badan PetaKolaborasiPage → 4/4 ujinya merah; crash yang sama
+  di AssetMapFullView → 3/3 merah; jalur galat dibisukan (`setGalat("")`)
+  → tepat uji "galat tampil sebagai pesan" yang merah.
+
+> Batas yang dinyatakan terus terang: tiruan ini tidak menembakkan event
+> peta (klik marker, dragend), jadi uji di atasnya menguji MOUNT + toolbar
+> + jalur data/galat — bukan interaksi kartografis. Cacat kelas
+> `kirimGeserRef` (hanya meledak di handler) tetap ditangkap penjaga
+> `no-undef` eslint, bukan oleh uji render ini.
+
+---
+
 ## [#828] Perakitan dokumen ber-TTD pindah ke thread — 2026-08-08
 
 Sisa terakhir temuan S7 yang sengaja ditunda: `_bangun_pdf_ber_ttd` —
