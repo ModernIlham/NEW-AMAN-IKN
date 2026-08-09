@@ -142,7 +142,9 @@ def temuan_pemanfaatan(items, today_iso: str):
         status = status_perjanjian(p, today_iso)
         ident = {"pemanfaatan_id": p.get("id"),
                  "bentuk": p.get("bentuk"),
-                 "pihak": p.get("pihak"),
+                 # Register pemanfaatan menyimpan nama mitra di field `mitra`;
+                 # kunci keluaran tetap `pihak` (bentuk API/frontend stabil).
+                 "pihak": p.get("mitra"),
                  "asset_name": p.get("asset_name")}
         if status == "berakhir":
             out.append({"jenis": "perjanjian_berakhir", **ident,

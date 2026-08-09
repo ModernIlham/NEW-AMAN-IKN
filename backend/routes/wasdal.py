@@ -62,7 +62,7 @@ async def _data_pemantauan(ambang_hari: int, user=None):
     assets = [a async for a in db.assets.find(q_aset, _PROJ_ASET)]
     _sq = (lambda q: scope_query_field_satker(user, q)) if user is not None else (lambda q: q)
     pemanfaatan = [p async for p in db.pemanfaatan.find(
-        _sq({}), {"_id": 0, "id": 1, "bentuk": 1, "pihak": 1, "asset_name": 1,
+        _sq({}), {"_id": 0, "id": 1, "bentuk": 1, "mitra": 1, "asset_name": 1,
              "berakhir": 1, "mulai": 1, "nomor_persetujuan": 1,
              "nomor_perjanjian": 1, "ntpn": 1,
              # field kontribusi utk deteksi tunggakan PNBP (integrasi Wasdal)

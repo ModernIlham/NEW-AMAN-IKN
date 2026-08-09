@@ -116,7 +116,9 @@ class TestPemegangMeninggal:
 
 
 def test_pemanfaatan():
-    lengkap = {"id": "p1", "bentuk": "sewa", "pihak": "PT X",
+    # Register pemanfaatan menyimpan nama mitra di field `mitra` — temuan
+    # wasdal harus membawanya keluar sebagai kunci API `pihak`.
+    lengkap = {"id": "p1", "bentuk": "sewa", "mitra": "PT X",
                "berakhir": "2027-01-01", "nomor_persetujuan": "S-1",
                "nomor_perjanjian": "PJ-1", "ntpn": "N1"}
     berakhir = dict(lengkap, id="p2", berakhir="2026-01-01")
@@ -126,11 +128,12 @@ def test_pemanfaatan():
     assert jenis == {"p2": "perjanjian_berakhir",
                      "p3": "dokumen_pemanfaatan_kurang"}
     assert "persetujuan" in hasil[1]["detail"]
+    assert all(t["pihak"] == "PT X" for t in hasil)
 
 
 def test_pemanfaatan_kontribusi_tertunggak():
     # KSP kontribusi tahunan 10jt, mulai 2024, belum bayar → tunggak 2024-2026.
-    ksp = {"id": "p9", "bentuk": "ksp", "pihak": "PT Y",
+    ksp = {"id": "p9", "bentuk": "ksp", "mitra": "PT Y",
            "berakhir": "2030-01-01", "mulai": "2024-01-01",
            "nomor_persetujuan": "S-9", "nomor_perjanjian": "PJ-9",
            "ntpn": "N9", "kontribusi_tahunan": 10_000_000, "kontribusi": []}
@@ -161,6 +164,48 @@ def test_polis_asuransi_lewat():
     per_objek = susun_temuan([], [], [], [], [], HARI_INI, polis=[lewat])
     assert any(t["jenis"] == "polis_asuransi_lewat"
                for t in per_objek["pengamanan_pemeliharaan"])
+
+
+def test_data_pemantauan_proyeksi_membawa_mitra(monkeypatch):
+    """Proyeksi db.pemanfaatan di _data_pemantauan harus memuat `mitra` —
+    tanpa itu nama mitra selalu kosong di temuan wasdal pemanfaatan."""
+    import asyncio
+
+    from mongomock_motor import AsyncMongoMockClient
+
+    import routes.pegawai as rp
+    import routes.wasdal as rw
+    import shared_utils as su
+
+    fake = AsyncMongoMockClient()["uji"]
+    for mod in (rw, rp, su):
+        monkeypatch.setattr(mod, "db", fake, raising=False)
+
+    async def _tanpa_peta(user):
+        return {}
+
+    async def _apa_adanya(q=None):
+        return q or {}
+
+    monkeypatch.setattr(rp, "_jumlah_aset_per_nip", _tanpa_peta)
+    monkeypatch.setattr(su, "filter_aset_perhitungan", _apa_adanya)
+
+    async def skenario():
+        await fake.pemanfaatan.insert_one({
+            "id": "p1", "bentuk": "sewa", "mitra": "PT Mitra Jaya",
+            "asset_name": "Gudang A", "mulai": "2019-01-01",
+            "berakhir": "2020-01-01", "nomor_persetujuan": "S-1",
+            "nomor_perjanjian": "PJ-1", "ntpn": "N1"})
+        _, per_objek, _, _ = await rw._data_pemantauan(60, user=None)
+        temuan = [t for t in per_objek["pemanfaatan"]
+                  if t["jenis"] == "perjanjian_berakhir"]
+        assert temuan and temuan[0]["pihak"] == "PT Mitra Jaya"
+
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    try:
+        loop.run_until_complete(skenario())
+    finally:
+        loop.close()
 
 
 def test_pemegang_berisiko_keluar():

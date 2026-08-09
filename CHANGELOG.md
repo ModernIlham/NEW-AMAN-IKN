@@ -67,6 +67,29 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#850] Nama mitra terbawa ke temuan Wasdal pemanfaatan — 2026-08-09
+
+Perbaikan temuan investigasi gelombang ASET-MANFAAT: dasbor Wasdal membaca
+field `pihak` dari register `db.pemanfaatan`, padahal register menyimpan
+nama mitra di field `mitra` — akibatnya kolom pihak/mitra pada temuan objek
+Pemanfaatan (perjanjian berakhir, dokumen kurang, jatuh tempo, kontribusi
+tertunggak) selalu kosong.
+
+- **Proyeksi diselaraskan** (`routes/wasdal.py`): kueri `db.pemanfaatan` di
+  `_data_pemantauan` kini memproyeksikan `mitra` (bukan `pihak` yang tidak
+  pernah ada di register itu).
+- **Pembaca diselaraskan** (`wasdal_utils.py` — `temuan_pemanfaatan`): nilai
+  diambil dari `p["mitra"]`, tetapi **kunci keluaran API tetap `pihak`**
+  supaya bentuk respons stabil (WasdalPage memakai `t.asset_name || t.pihak`
+  di dua tempat; field `pihak` pada register pemindahtanganan & pengadaan
+  memang sah milik register masing-masing — tidak disentuh).
+- **Uji dikunci dua lapis**: fixture uji murni `temuan_pemanfaatan` kini
+  memakai data `mitra` + asersi nilai terbawa, dan uji baru tingkat route
+  (`test_data_pemantauan_proyeksi_membawa_mitra`, mongomock) memastikan
+  proyeksi `_data_pemantauan` benar-benar memuat `mitra` — mutasi pada
+  proyeksi maupun pembaca kini tertangkap merah. Suite unit backend:
+  **2.534 lulus** (+1).
+
 ## [#849] Henti guna mandiri — SK/BA penghentian penggunaan di luar jalur idle + jurnal 401/402 — 2026-08-09
 
 Butir TERAKHIR defisit "permohonan yang belum ada register" (audit
