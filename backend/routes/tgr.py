@@ -10,7 +10,9 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+import math
+
+from pydantic import BaseModel, Field, field_validator
 
 from auth_utils import require_admin, require_user, require_writer
 from db import db
@@ -41,6 +43,15 @@ class TransisiTgrIn(BaseModel):
     tanggal_dokumen: str = ""
     nilai_ganti_rugi: float = 0
     catatan: str = ""
+
+    @field_validator("nilai_ganti_rugi")
+    @classmethod
+    def _terhingga(cls, v: float) -> float:
+        # Token JSON Infinity/NaN lolos cek `<= 0` di validate murni bila
+        # tidak ditolak di sini (pola audit P4 #2 pada Pemanfaatan).
+        if not math.isfinite(v):
+            raise ValueError("nilai harus angka terhingga")
+        return v
 
 
 @tgr_router.post("/tgr")

@@ -67,6 +67,36 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#852] Audit register baru: Infinity/NaN ditolak di nilai TGR & barang transfer masuk — 2026-08-09
+
+Sapu adversarial atas lima register gelombang permohonan aset
+(`[#845]`–`[#849]`) — kombinasi transisi, kasus tepi tanggal/angka, scope,
+dan efek terminal. Gerbang SK TGR, guard jalur idle, aturan perpanjangan,
+dan CAS semua register terverifikasi sehat; DUA lubang angka tak terhingga
+ditemukan dan ditutup (kelas bug yang sama dengan audit P4 #2 di
+Pemanfaatan — token JSON `Infinity`/`NaN` diterima `json.loads` Python):
+
+- **TGR — `nilai_ganti_rugi`** (`tgr_utils.py` + `routes/tgr.py`): field
+  tanpa `ge` dan cek murni hanya `nilai <= 0` — perbandingan `inf <= 0`
+  dan `NaN <= 0` sama-sama False, sehingga nilai tak terhingga dianggap
+  SAH, tersimpan di register, dan membuat **GET /tgr 500 permanen**
+  (`json.dumps allow_nan=False`). Kini: validator model menolak +
+  `math.isfinite` di validasi murni ("wajib angka terhingga > 0").
+- **Transfer masuk — `BarangMasukIn.nilai`** (`routes/penggunaan.py` +
+  `penggunaan_utils.py`): `Infinity` LOLOS `ge=0` (`inf >= 0` True) lalu
+  `str(int(nilai))` meledak `OverflowError` saat barang dibukukan di
+  status terminal — pembukuan gagal DI TENGAH loop (aset sebagian
+  terlanjur lahir). Kini: validator model menolak + `math.isfinite` di
+  `validate_proses_penggunaan` + jaring terakhir `build_asset_transfer_masuk`
+  (nilai aneh jatuh ke 0, pembukuan tak pernah meledak).
+- Kedua register belum pernah terdeploy (produksi masih menunggu VPS) —
+  tidak ada data teracuni di lapangan; validasi masukan cukup, tanpa
+  skrip pembersih.
+- Uji: 2 uji baru (inf + NaN ditolak di validasi murni & model Pydantic;
+  jaring helper menghasilkan `purchase_price "0"`). Disiplin uji-mutasi:
+  isfinite TGR dicabut → merah; validator barang masuk dibisukan → merah.
+  Suite unit backend: **2.536 lulus** (+2).
+
 ## [#851] Dokumentasi mengejar gelombang permohonan aset — README v2.7, PRD, masterplan, registry modul — 2026-08-09
 
 Dokumen produk tertinggal satu gelombang penuh: README masih v2.6, halaman

@@ -153,3 +153,28 @@ def test_build_asset_transfer_masuk_field_inti():
     assert doc["kode_satker"] == "527xxx"
     assert doc["perolehan_transfer"]["pihak_asal"] == "PUPR"
     assert doc["version"] == 1
+
+
+def test_nilai_barang_masuk_tolak_tak_terhingga():
+    """Infinity lolos ge=0 (inf >= 0 True) lalu meledakkan str(int(nilai))
+    saat barang dibukukan di status terminal — harus ditolak di gerbang."""
+    import pydantic
+    from penggunaan_utils import validate_proses_penggunaan
+
+    with pytest.raises(pydantic.ValidationError):
+        rg.BarangMasukIn(asset_code="3050101001", asset_name="Mesin",
+                         nilai=float("inf"))
+    errors = validate_proses_penggunaan({
+        "jenis_proses": "alih_status", "arah": "masuk",
+        "pihak_asal": "PUPR", "pihak_tujuan": "OIKN",
+        "barang_masuk": [{"asset_code": "3050101001",
+                          "asset_name": "Mesin", "nilai": float("inf")}]})
+    assert any("terhingga" in e for e in errors)
+    # Jaring terakhir helper: tiket lama ber-nilai aneh tak meledakkan
+    # pembukuan — nilai jatuh ke 0, aset tetap lahir.
+    doc = build_asset_transfer_masuk(
+        {"id": "t1", "kode_satker": "527xxx"},
+        {"asset_code": "3050101001", "asset_name": "Mesin",
+         "nilai": float("nan")},
+        "2026-08-09T00:00:00", "as-x")
+    assert doc["purchase_price"] == "0"

@@ -53,12 +53,15 @@ def validate_transisi_tgr(dari: str, ke: str, payload: dict) -> list:
     if ke == "tgr_ditetapkan":
         if not str(p.get("nomor_dokumen") or "").strip():
             errors.append("Nomor SKTJM/SK Pembebanan wajib diisi")
+        import math
         try:
             nilai = float(p.get("nilai_ganti_rugi") or 0)
         except (TypeError, ValueError):
             nilai = 0
-        if nilai <= 0:
-            errors.append("Nilai ganti rugi wajib > 0")
+        # Infinity/NaN LOLOS cek `<= 0` (perbandingannya False) lalu meracuni
+        # register → GET /tgr 500 permanen (json.dumps allow_nan=False).
+        if not math.isfinite(nilai) or nilai <= 0:
+            errors.append("Nilai ganti rugi wajib angka terhingga > 0")
     if ke == "bebas_tgr" and not str(p.get("nomor_dokumen") or "").strip():
         errors.append("Nomor surat keterangan bebas TGR wajib diisi")
     if ke == "lunas" and not str(p.get("nomor_dokumen") or "").strip():
