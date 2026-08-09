@@ -201,10 +201,17 @@ async def peringatan_persediaan(
 async def nota_dinas_persediaan(
     jenis: str = Query(..., pattern="^(kritis|kedaluwarsa)$"),
     horizon_hari: int = Query(30, ge=1, le=365),
+    ids: str = Query("", max_length=8000),
     _user: dict = Depends(require_user),
 ):
     """Nota dinas PDF otomatis (pustaka §3): stok kritis/habis ATAU layer
-    kedaluwarsa — kop surat + tabel + tanda tangan Kuasa Pengguna Barang."""
+    kedaluwarsa — kop surat + tabel + tanda tangan Kuasa Pengguna Barang.
+
+    `ids` (id barang dipisah koma) menyaring ke barang TERPILIH saja —
+    tidak semua yang habis/kritis otomatis diusulkan pengadaan ulang;
+    kandidatnya tetap dihitung ulang dari peringatan (id di luar daftar
+    peringatan diabaikan, bukan disisipkan). Kosong = semua (perilaku lama).
+    """
     from io import BytesIO
 
     from reportlab.lib.units import mm as rl_mm
@@ -225,9 +232,12 @@ async def nota_dinas_persediaan(
     elements = []
     elements.extend(_kop_surat_flowables(settings, doc.width))
 
+    terpilih = {s for s in (x.strip() for x in ids.split(",")) if s}
     if jenis == "kritis":
         judul = "NOTA DINAS\nUSULAN PENGADAAN PERSEDIAAN (STOK KRITIS/HABIS)"
         rows = data["habis"] + data["kritis"]
+        if terpilih:
+            rows = [r for r in rows if r.get("id") in terpilih]
         headers = ["No", "Kode Barang", "Nama Barang", "Satuan", "Stok", "Batas Kritis"]
         widths = [28, 120, 190, 60, 45, 65]
         body = [[str(i + 1), r["kode_barang"], r["nama_barang"], r.get("satuan") or "-",
@@ -235,9 +245,14 @@ async def nota_dinas_persediaan(
         pengantar = ("Bersama ini disampaikan daftar barang persediaan yang stoknya telah "
                      "HABIS atau mencapai batas kritis, untuk menjadi pertimbangan dalam "
                      "pengadaan berikutnya.")
+        if terpilih:
+            pengantar += (" Daftar ini memuat barang yang DIPILIH untuk diusulkan; "
+                          "barang kritis/habis lain sengaja tidak disertakan.")
     else:
         judul = "NOTA DINAS\nPERSEDIAAN KEDALUWARSA / SEGERA KEDALUWARSA"
         rows = data["kedaluwarsa"] + data["segera_kedaluwarsa"]
+        if terpilih:
+            rows = [r for r in rows if r.get("id") in terpilih]
         headers = ["No", "Kode Barang", "Nama Barang", "Jumlah", "Kedaluwarsa"]
         widths = [28, 130, 200, 55, 85]
         body = [[str(i + 1), r["kode_barang"], r["nama_barang"], str(r["qty"]),

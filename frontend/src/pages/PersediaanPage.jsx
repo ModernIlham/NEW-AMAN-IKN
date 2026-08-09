@@ -22,6 +22,7 @@ import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 import PermohonanPanel from "@/components/persediaan/PermohonanPanel";
+import NotaDinasKritisDialog from "@/components/persediaan/NotaDinasKritisDialog";
 import PerkiraanNomor from "@/components/persuratan/PerkiraanNomor";
 import { bagikanWa, bagikanEmail, hasilTtd } from "@/lib/pesanTtd";
 
@@ -812,14 +813,9 @@ export default function PersediaanPage({ user, onBack }) {
               ].filter(Boolean).join(" · ")}
             </p>
             {(peringatan.habis.length > 0 || peringatan.kritis.length > 0) && (
-              <button
-                type="button"
-                onClick={() => downloadFileWithProgress(`${API}/persediaan/nota-dinas?jenis=kritis`, "Nota_Dinas_Stok_Kritis.pdf", { label: "Nota Dinas Stok Kritis" }).catch(() => {})}
-                className="h-8 px-2.5 rounded-lg border border-amber-400 dark:border-amber-600 text-[11px] font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1 hover:bg-amber-100 dark:hover:bg-amber-900/40 min-w-0 min-h-0"
-                data-testid="persediaan-nota-kritis"
-              >
-                <FileDown className="w-3.5 h-3.5" />Nota Dinas Kritis
-              </button>
+              <NotaDinasKritisDialog
+                items={[...peringatan.habis, ...peringatan.kritis]}
+              />
             )}
             {(peringatan.kedaluwarsa.length > 0 || peringatan.segera_kedaluwarsa.length > 0) && (
               <button
@@ -883,7 +879,9 @@ export default function PersediaanPage({ user, onBack }) {
         {/* ── Toolbar ── */}
         <div className="bg-card rounded-xl border border-border shadow-sm p-2 sm:p-3 space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="relative flex-1 min-w-[180px]">
+            {/* w-full di HP: kolom cari mengambil satu baris utuh, tombol
+                aksi turun ke baris berikutnya (flex-wrap) — tak terpotong. */}
+            <div className="relative w-full sm:w-auto sm:flex-1 sm:min-w-[180px]">
               <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
               <Input
                 value={search}

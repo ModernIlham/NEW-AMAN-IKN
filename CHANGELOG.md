@@ -67,6 +67,41 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#834] Nota Dinas stok kritis ber-pilihan + kolom cari Persediaan satu baris di HP — 2026-08-09
+
+Dua permintaan pemilik pada halaman Persediaan:
+
+- **Nota Dinas Usulan Pengadaan kini MEMILIH barang** — tidak semua yang
+  habis/kritis harus diusulkan pengadaan ulang. Tombol "Nota Dinas
+  Kritis" di banner peringatan membuka dialog daftar kandidat ber-centang
+  (default semua terpilih; ada "Pilih semua"/"Kosongkan"; badge
+  habis/kritis per barang) — barang yang tidak dicentang tidak masuk
+  nota. Backend `GET /persediaan/nota-dinas` menerima `ids` (dipisah
+  koma) dan menyaring barang TERPILIH; `ids` bukan pintu belakang —
+  kandidat tetap dihitung ulang dari daftar peringatan, id barang
+  berstok aman diabaikan. Saat menyaring, pengantar nota menyebut jujur
+  bahwa daftarnya hasil seleksi. Semua terpilih → URL tanpa `ids`
+  (perilaku lama utuh).
+- **Kolom pencarian satu baris utuh di HP** — `w-full` di bawah `sm`,
+  tombol aksi turun ke baris berikutnya lewat `flex-wrap`; di ≥`sm`
+  kembali `flex-1` sebaris tombol (tak ada perubahan desktop/tablet).
+
+Verifikasi: 3 uji backend (isi PDF dibaca pypdfium: tanpa `ids` semua
+kandidat tercetak; `ids` menyaring; id barang aman tak bisa diseludupkan)
++ 3 uji render dialog (semua tercentang → tanpa `ids`; yang tak dicentang
+tak ikut; nol pilihan → tombol mati); **2/2 mutasi terbunuh** (cabut
+filter `ids` backend → uji penyaringan merah; buang `ids` dari URL unduh
+→ uji render merah). Suite backend 2483 → 2486, frontend 806 → 809 lulus;
+eslint bersih; `CI=false yarn build` sukses.
+
+Catatan verifikasi (pertanyaan pemilik): bagian **usang/rusak sudah ada**
+sejak `[#786]`/`[#831]` — dialog "Daftar Usang / Rusak / Tak Dikuasai"
+(derivasi jurnal K04→H01, K05→H02, K09/M94) + laporan PDF "Daftar
+Persediaan Usang" dan "Daftar Persediaan Rusak" di menu Dokumen; jalur
+resminya penghapusan definitif ber-SK, bukan nota dinas pengadaan.
+
+---
+
 ## [#833] Persediaan ber-persetujuan KPB (UI) — panel permohonan, belokan 7 dialog, saklar gerbang — 2026-08-09
 
 Paruh kedua SEDIA-KPB (paruh backend: `[#832]`): alurnya kini bisa DIPAKAI
