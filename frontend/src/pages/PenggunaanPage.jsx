@@ -19,6 +19,7 @@ import Lipatan from "@/components/ui/Lipatan";
 import { useTransitionDialog } from "@/components/ui/TransitionDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
+import { WARNA_CHIP, kelasChipStatus } from "@/lib/chipStatus";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 import PerkiraanNomor from "@/components/persuratan/PerkiraanNomor";
 import KartuTapDialog from "@/components/pegawai/KartuTapDialog";
@@ -55,6 +56,18 @@ const WARNA_PENGAJUAN_PSP = {
   diajukan: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
   ditetapkan: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
   ditolak: "bg-red-500/15 text-red-600 dark:text-red-400",
+};
+
+const WARNA_STATUS_IDLE = {
+  klarifikasi: WARNA_CHIP.amber,
+  usul_serah: WARNA_CHIP.sky,
+  diserahkan: WARNA_CHIP.emerald,
+  digunakan_kembali: WARNA_CHIP.emerald,
+};
+
+const WARNA_STATUS_HENTI = {
+  dihentikan: WARNA_CHIP.amber,
+  digunakan_kembali: WARNA_CHIP.emerald,
 };
 
 export default function PenggunaanPage({ user, onBack }) {
@@ -951,7 +964,7 @@ export default function PenggunaanPage({ user, onBack }) {
                       <span className="block text-[11px] text-muted-foreground truncate">{k.alasan}{k.location && ` · ${k.location}`}</span>
                     </span>
                     {k.tiket ? (
-                      <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[10px] font-semibold">
+                      <span className={kelasChipStatus(WARNA_STATUS_IDLE, k.tiket.status)}>
                         {idle.label_status?.[k.tiket.status] || k.tiket.status}
                       </span>
                     ) : (
@@ -974,7 +987,7 @@ export default function PenggunaanPage({ user, onBack }) {
                   {idle.tiket.map((t) => (
                     <li key={t.id} className="p-3" data-testid={`penggunaan-tiket-${t.id}`}>
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[10px] font-semibold">
+                        <span className={kelasChipStatus(WARNA_STATUS_IDLE, t.status)}>
                           {idle.label_status?.[t.status] || t.status}
                         </span>
                         <p className="text-xs font-semibold text-foreground flex-1 min-w-[120px] truncate">
@@ -1053,9 +1066,7 @@ export default function PenggunaanPage({ user, onBack }) {
               {henti.items.map((t) => (
                 <li key={t.id} className="p-3 space-y-1" data-testid={`penggunaan-henti-${t.id}`}>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${t.status === "dihentikan"
-                      ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                      : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"}`}>
+                    <span className={kelasChipStatus(WARNA_STATUS_HENTI, t.status)}>
                       {henti.label_status?.[t.status] || t.status}
                     </span>
                     <span className="font-mono text-[11px]">{t.asset_code} · {t.NUP}</span>

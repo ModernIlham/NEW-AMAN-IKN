@@ -67,6 +67,36 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#853] Chip status register satu kanon — helper bersama + lima titik menyimpang diseragamkan — 2026-08-09
+
+Investigasi lintas-halaman memetakan seluruh cara register menampilkan
+status: pola dominan (dipakai ±10 register) adalah span `rounded text-[10px]
+font-semibold` + peta warna per status dengan fallback `bg-muted`, tetapi
+TIDAK ada helper bersama — tiap halaman menulis ulang string kelasnya, dan
+lima titik malah tanpa peta warna sama sekali.
+
+- **Helper bersama baru** `frontend/src/lib/chipStatus.js`: `KELAS_CHIP`
+  (geometri kanon), `WARNA_CHIP` (8 token warna `bg-*-500/15` + teks
+  terang/gelap), dan `kelasChipStatus(peta, status)` dengan fallback
+  `muted` — status baru dari backend tidak pernah membuat chip tak
+  terbaca. Diuji unit (`chipStatus.test.js`, ikut jalan di CI).
+- **Lima titik menyimpang diseragamkan** memakai helper + peta warna
+  bernama:
+  - **BMN idle** (PenggunaanPage, 2 tempat): dulu SATU warna sky untuk
+    semua status → kini `WARNA_STATUS_IDLE` (klarifikasi amber, usul
+    serah sky, diserahkan/digunakan kembali emerald);
+  - **Henti guna mandiri** (PenggunaanPage): ternary inline →
+    `WARNA_STATUS_HENTI`;
+  - **Wasdal penertiban & insidentil** (2 chip): ternary berantai →
+    `WARNA_STATUS_PENERTIBAN` / `WARNA_STATUS_INSIDENTIL`;
+  - **Status SAKTI koreksi nilai** (PenilaianPage, 2 tempat): ternary →
+    `WARNA_SAKTI` (belum dicatat amber, tercatat emerald).
+- Sepuluh register yang sudah konsisten TIDAK disentuh (nol churn);
+  helper siap dipakai register berikutnya.
+- Verifikasi: uji jest 4/4 (dua mutasi terbukti terbunuh: fallback muted
+  dicabut → merah; `font-semibold` dicabut → merah), eslint bersih,
+  `CI=false yarn build` sukses.
+
 ## [#852] Audit register baru: Infinity/NaN ditolak di nilai TGR & barang transfer masuk — 2026-08-09
 
 Sapu adversarial atas lima register gelombang permohonan aset
