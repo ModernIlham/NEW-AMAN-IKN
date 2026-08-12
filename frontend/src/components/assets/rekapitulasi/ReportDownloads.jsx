@@ -8,6 +8,7 @@ import {
   Package, Check, FileType2
 } from "lucide-react";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
+import { objekFilter } from "@/hooks/useAssetFilters";
 
 const API = (process.env.REACT_APP_BACKEND_URL || "http://localhost:8001") + "/api";
 
@@ -215,7 +216,7 @@ export default function ReportDownloads({
           // memuat kolom tambahan yang sama dgn unduhan tunggal.
           data: { types: Array.from(selected), detail_fields: detailFieldsValue,
                   // Laporan eksekutif di dalam ZIP ikut filter yang sama.
-                  filter: Object.fromEntries(new URLSearchParams(filterLaporan)) } }
+                  filter: objekFilter(filterLaporan) } }
       );
       setBatchMode(false);
       setSelected(new Set());

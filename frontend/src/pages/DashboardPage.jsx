@@ -1676,16 +1676,25 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     setExporting(true);
     try {
       const base = encodeURIComponent(process.env.REACT_APP_BACKEND_URL || '');
+      // Berkas ekspor mengikuti filter yang sedang aktif di layar. Sebelumnya
+      // hanya activity_id yang dikirim: menyaring daftar ke "Rusak Berat di
+      // Gedung A" lalu menekan Ekspor tetap menghasilkan berkas berisi SELURUH
+      // aset kegiatan — berkasnya sah, hanya jauh lebih luas dari yang diminta.
+      const q = new URLSearchParams();
+      if (debouncedSearch) q.append("search", debouncedSearch);
+      if (filterCategory && filterCategory !== "Semua") q.append("category", filterCategory);
+      buildFilterParams(q);
+      const qs = q.toString() ? `&${q.toString()}` : "";
       if (fmt === 'xlsx') {
         // Excel berfoto berat → JOB LATAR (submit→poll→unduh otomatis) agar tak
         // kena timeout ~120s pada dataset besar. CSV tetap sinkron (ringan/stream).
         await exportViaJob(
-          `${API}/export/xlsx/async?activity_id=${activity.id}&base_url=${base}`,
+          `${API}/export/xlsx/async?activity_id=${activity.id}&base_url=${base}${qs}`,
           { label: "Export Excel" }
         );
       } else {
         await downloadFileWithProgress(
-          `${API}/export/${fmt}?activity_id=${activity.id}&base_url=${base}`,
+          `${API}/export/${fmt}?activity_id=${activity.id}&base_url=${base}${qs}`,
           `inventory_${activity.nama_kegiatan || 'export'}.${fmt}`,
           {
             label: `Export ${fmt.toUpperCase()}`,
@@ -1697,7 +1706,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     } catch (err) {
       console.error('Export error:', err); // toast error sudah ditangani helper
     } finally { setExporting(false); }
-  }, [activity, totalItems]);
+  }, [activity, totalItems, debouncedSearch, filterCategory, buildFilterParams]);
 
   const handleExportExecutivePDF = useCallback(async () => {
     if (!activity?.id) { toast.error("Pilih kegiatan inventarisasi terlebih dahulu"); return; }
