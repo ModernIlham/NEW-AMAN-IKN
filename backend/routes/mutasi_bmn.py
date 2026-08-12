@@ -285,10 +285,18 @@ async def reklasifikasi_aset(payload: ReklasifikasiIn,
                   "updated_at": now.isoformat()},
          "$push": {"riwayat_reklasifikasi": riwayat},
          "$inc": {"version": 1}})
+    # Prinsip 1 Bab 5: identitas berubah in-place → snapshot di register
+    # siklus (pemanfaatan, TGR, PSP, dst.) harus ikut disegarkan, kalau tidak
+    # dokumen resmi yang lahir dari register itu memuat kode/NUP usang.
+    from snapshot_aset import segarkan_snapshot_aset
+    tersegar = await segarkan_snapshot_aset(
+        db, payload.asset_id, asset_code=kode_baru, NUP=nup_baru)
     await log_audit("reklasifikasi_aset", "", payload.asset_id,
                     username=oleh,
                     detail=(f"Reklasifikasi {riwayat['kode_lama']}/"
-                            f"{riwayat['nup_lama']} → {kode_baru}/{nup_baru}"))
+                            f"{riwayat['nup_lama']} → {kode_baru}/{nup_baru}"
+                            + (f"; snapshot register tersegar: {tersegar}"
+                               if tersegar else "")))
     resp = {"ok": True, "kode_baru": kode_baru, "nup_baru": nup_baru,
             "riwayat": riwayat}
     if idem_key:
@@ -505,10 +513,17 @@ async def selesaikan_kdp(asset_id: str, payload: KdpSelesaiIn,
                   "updated_at": now.isoformat()},
          "$push": {"riwayat_reklasifikasi": riwayat},
          "$inc": {"version": 1}})
+    # Identitas berubah in-place (pola reklasifikasi) → segarkan snapshot
+    # register siklus, lihat snapshot_aset.py.
+    from snapshot_aset import segarkan_snapshot_aset
+    tersegar = await segarkan_snapshot_aset(
+        db, asset_id, asset_code=kode_baru, NUP=nup_baru)
     await log_audit("kdp_selesai", "", asset_id, username=oleh,
                     detail=(f"Penyelesaian KDP {riwayat['kode_lama']}/"
                             f"{riwayat['nup_lama']} → {kode_baru}/{nup_baru} "
-                            f"(jurnal 505+105)"))
+                            f"(jurnal 505+105)"
+                            + (f"; snapshot register tersegar: {tersegar}"
+                               if tersegar else "")))
     resp = {"ok": True, "kode_baru": kode_baru, "nup_baru": nup_baru,
             "riwayat": riwayat}
     if idem_key:

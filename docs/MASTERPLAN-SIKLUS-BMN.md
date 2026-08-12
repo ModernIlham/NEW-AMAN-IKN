@@ -192,11 +192,11 @@ Audit lintas-modul terhadap 5 prinsip Bab 5. Kepatuhan saat ini:
 
 | Prinsip | Status | Ringkas bukti |
 |---|---|---|
-| 1. Satu identitas aset | ✅ Patuh (risiko drift) | Semua modul merujuk `asset_id` + snapshot `asset_code/NUP`; snapshot **tak disegarkan** bila master berubah |
+| 1. Satu identitas aset | ✅ Patuh | Semua modul merujuk `asset_id` + snapshot `asset_code/NUP/asset_name`; snapshot kini **ikut disegarkan** di 17 register saat identitas berubah — reklasifikasi, penyelesaian KDP, dan edit form aset (`snapshot_aset.py`, [#856]) |
 | 2. Satu kodefikasi | ⚠️ Sebagian | Golongan **diturunkan** dari prefix di mana-mana; tapi kodefikasi **bukan FK tervalidasi** saat create aset/persediaan |
 | 3. Transaksi = jurnal, master = proyeksi | ⚠️ Sebagian (Persediaan + **Penghapusan** + **Revaluasi** + **Pemindahtanganan** + Pemeliharaan) | **Penghapusan** proyeksi master saat SK terbit (#234); **Revaluasi** proyeksi `nilai_wajar_terakhir` (#254) & laporan posisi memakainya (#255); **Pemindahtanganan** *selesai* proyeksi `dihapus` (#256); Persediaan penuh; Pemeliharaan proyeksi kondisi. *Tersisa:* BA Pemusnahan final belum proyeksi langsung |
-| 4. Dokumen sumber = simpul | ❌ Belum ada | `dokumen_sumber_id` 0 kecocokan; dokumen diketik ulang per modul |
-| 5. Approval = gerbang, OCC fondasi | ❌ Melanggar | `pending_changes` 0; OCC penuh hanya di `assets.py`; modul lain cek peran saja |
+| 4. Dokumen sumber = simpul | ✅ Patuh (tahap awal) | Rantai FK perolehan hidup: Perencanaan→Penganggaran `rkbmn_id` (#257), Pengadaan→Penganggaran `penganggaran_id` (#199), Pengadaan↔Aset `perolehan_id` (#258), Persediaan masuk→Perolehan (#259). *Tersisa:* nomor SK/BA register siklus masih diketik per modul, belum jadi simpul Persuratan |
+| 5. Approval = gerbang, OCC fondasi | ✅ Patuh (tahap awal) | Mesin permohonan + gerbang persetujuan KPB hidup untuk Persediaan (`[#832]`–`[#833]`) dan transaksi aset — reklasifikasi/KDP (`[#841]`) serta finalisasi revaluasi 204/205 (`[#842]`); saklar `aset_wajib_persetujuan` menolak jalur HTTP langsung. *Tersisa:* OCC penuh masih hanya di `assets.py`; register siklus memakai CAS per-transisi (bukan version) |
 
 **Ringkasan status integrasi (per 2026-07):** rangkaian PR kecil menutup gap
 berdampak-tertinggi lebih dulu.

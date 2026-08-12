@@ -67,6 +67,41 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#856] Identitas aset tersegar di 17 register siklus — snapshot berhenti menua — 2026-08-12
+
+Gap nyata Prinsip 1 Bab 5 masterplan ("satu identitas aset"): register siklus
+merujuk `asset_id` sebagai kunci tetapi ikut menyimpan salinan terbaca
+(`asset_code`/`NUP`/`asset_name`) supaya daftar & dokumen tak perlu join.
+Salinan itu **tidak pernah disegarkan**, padahal identitas aset memang
+berubah lewat tiga jalur sah — akibatnya register lama menampilkan kode/NUP
+usang, dan Nota Dinas / BA / surat usulan yang lahir darinya ikut salah.
+
+- **Modul baru `snapshot_aset.py`**: registry 17 koleksi register (12 bentuk
+  datar + 5 ber-array `aset[]`), perakit operasi MURNI `operasi_segar()`
+  (teruji tanpa Mongo), dan penyebar `segarkan_snapshot_aset()` yang
+  BEST-EFFORT — satu koleksi gagal tidak menggagalkan koleksi lain maupun
+  transaksi pembukuan pemicunya (snapshot = turunan, bukan sumber kebenaran).
+- **Tiga jalur pemicu disambungkan**: reklasifikasi kodefikasi (SAKTI
+  304/107), penyelesaian KDP (505/105), dan penyuntingan lewat form aset —
+  yang terakhir hanya menyebar field identitas yang BENAR-BENAR berubah
+  (ganti nama tak menimpa kode). Jumlah dokumen tersegar ikut tercatat di
+  log audit transaksinya.
+- Field yang tak disebut tak pernah ditulis, dan pada bentuk array hanya
+  baris milik aset itu yang berubah — aset lain dalam satu dokumen register
+  (mis. BA pemusnahan multi-aset) tetap utuh.
+- **Tabel prinsip integrasi masterplan dikoreksi**: Prinsip 4 (dokumen
+  sumber = simpul) dan Prinsip 5 (approval = gerbang) masih tertulis ❌
+  padahal rantai FK perolehan (`[#199]`/#257/#258/#259) dan gerbang
+  persetujuan KPB (`[#832]`–`[#833]`, `[#841]`–`[#842]`) sudah dibangun —
+  acuan yang keliru bisa menyesatkan keputusan fitur berikutnya. Sisa yang
+  benar-benar kurang dinyatakan terus terang di kolom bukti.
+- Uji: 5 uji baru (`test_snapshot_aset.py`) — perakit murni dua bentuk,
+  field tak disebut tak ditulis, cakupan registry, penyebaran datar+array
+  tanpa menyentuh aset lain, dan jalur nyata reklasifikasi. Disiplin
+  uji-mutasi: penyegaran di reklasifikasi dibisukan → merah; filter bentuk
+  array ditukar ke bentuk datar → merah. Suite unit backend: **2.541 lulus**
+  (+5).
+
 ## [#855] Chip status Persuratan & panel permohonan berbahasa label, bukan kode mentah — 2026-08-09
 
 Sisa temuan investigasi chip `[#853]`: dua tempat masih menampilkan KODE
