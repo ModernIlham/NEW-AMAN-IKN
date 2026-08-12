@@ -2066,6 +2066,16 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
     changes = compute_changes(existing, asset.model_dump())
     if changes:
         await log_audit("update", asset.activity_id, asset_id, asset.asset_code, asset.asset_name, audit_user, changes=changes, nup=asset.NUP or "")
+    # Prinsip 1 Bab 5: identitas terbaca yang berubah lewat form ikut
+    # disegarkan di register siklus — kalau tidak, Nota Dinas/BA/surat usulan
+    # yang lahir dari register itu memuat kode/NUP/nama usang.
+    _berubah = {c.get("field") for c in (changes or [])}
+    _identitas_baru = {k: v for k, v in (
+        ("asset_code", asset.asset_code), ("NUP", asset.NUP),
+        ("asset_name", asset.asset_name)) if k in _berubah}
+    if _identitas_baru:
+        from snapshot_aset import segarkan_snapshot_aset
+        await segarkan_snapshot_aset(db, asset_id, **_identitas_baru)
     # Jurnal Buku Barang 204/205 bila nilai perolehan berubah lewat edit —
     # jalur SIMAN/pemeliharaan/penilaian sudah berjurnal, edit manual dulu
     # SENYAP (temuan audit rantai nilai). Best-effort, tak menahan respons.
