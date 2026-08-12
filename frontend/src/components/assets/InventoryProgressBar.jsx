@@ -32,7 +32,7 @@ const QUICK_CHIPS = [
  * Lanjutan) — hemat ruang untuk baris data.
  * Tablet/desktop (sm+): satu baris ramping + chip filter (saklar mode di StatsBar).
  */
-const InventoryProgressBar = memo(({ activityId, inventoryStatusFilter, onFilterChange, isOnline, pendingCount, rowLocks, sessionId, refreshKey, snapshotState }) => {
+const InventoryProgressBar = memo(({ activityId, inventoryStatusFilter, onFilterChange, onToggleFilter, isOnline, pendingCount, rowLocks, sessionId, refreshKey, snapshotState }) => {
   const [rekap, setRekap] = useState(null);
 
   // Refetch saat activity berubah, saat refreshKey di-bump (save selesai),
@@ -156,12 +156,19 @@ const InventoryProgressBar = memo(({ activityId, inventoryStatusFilter, onFilter
 
         <div className="flex items-center gap-1 flex-shrink-0" data-testid="inventory-quick-chips-lg">
           {QUICK_CHIPS.map(c => {
-            const active = (inventoryStatusFilter || "") === c.value;
+            // Filter inventarisasi kini MULTI-NILAI: chip menyala bila
+            // nilainya termasuk yang dipilih, dan mengkliknya menambah/
+            // melepas nilai itu (bukan menimpa pilihan yang sudah ada) —
+            // sehingga "Tidak Ditemukan + Sengketa" bisa dilihat sekaligus.
+            const dipilih = Array.isArray(inventoryStatusFilter)
+              ? inventoryStatusFilter
+              : (inventoryStatusFilter ? [inventoryStatusFilter] : []);
+            const active = dipilih.includes(c.value);
             return (
               <button
                 key={c.label}
                 type="button"
-                onClick={() => onFilterChange("inventoryStatus", c.value)}
+                onClick={() => (onToggleFilter || onFilterChange)("inventoryStatus", c.value)}
                 aria-pressed={active}
                 className={`min-h-0 min-w-0 h-6 px-2.5 rounded-full text-[10px] font-semibold border transition-colors ${
                   active ? "bg-teal-700 border-teal-700 text-white" : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-teal-400"

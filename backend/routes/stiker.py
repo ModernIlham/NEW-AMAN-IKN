@@ -22,7 +22,9 @@ untuk mematikannya) — bahan ukur saat memesan bahan stiker.
 """
 import io
 
-from fastapi import APIRouter, Depends, HTTPException
+from typing import List
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from auth_utils import require_user
@@ -56,13 +58,13 @@ async def rekap_ukuran_stiker(
     search: str = "",
     category: str = "",
     activity_id: str = "",
-    condition: str = "",
-    status: str = "",
-    location: str = "",
-    eselon1_filter: str = "",
-    eselon2_filter: str = "",
-    stiker_status: str = "",
-    inventory_status: str = "",
+    condition: List[str] = Query(default=[]),
+    status: List[str] = Query(default=[]),
+    location: List[str] = Query(default=[]),
+    eselon1_filter: List[str] = Query(default=[]),
+    eselon2_filter: List[str] = Query(default=[]),
+    stiker_status: List[str] = Query(default=[]),
+    inventory_status: List[str] = Query(default=[]),
     price_min: float = None,
     price_max: float = None,
     nomor_spm: str = "",
@@ -114,13 +116,13 @@ async def cetak_stiker_label(
     search: str = "",
     category: str = "",
     activity_id: str = "",
-    condition: str = "",
-    status: str = "",
-    location: str = "",
-    eselon1_filter: str = "",
-    eselon2_filter: str = "",
-    stiker_status: str = "",
-    inventory_status: str = "",
+    condition: List[str] = Query(default=[]),
+    status: List[str] = Query(default=[]),
+    location: List[str] = Query(default=[]),
+    eselon1_filter: List[str] = Query(default=[]),
+    eselon2_filter: List[str] = Query(default=[]),
+    stiker_status: List[str] = Query(default=[]),
+    inventory_status: List[str] = Query(default=[]),
     price_min: float = None,
     price_max: float = None,
     nomor_spm: str = "",

@@ -11,7 +11,8 @@ import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import List
-from fastapi import APIRouter, HTTPException, Request, Header, Depends
+from fastapi import (APIRouter, HTTPException, Query, Request, Header,
+                     Depends)
 from pydantic import BaseModel
 from pymongo import UpdateOne, ReturnDocument
 from pymongo.errors import DuplicateKeyError
@@ -597,44 +598,43 @@ async def get_all_asset_ids(
     activity_id: str = "",
     search: str = "",
     category: str = "",
-    condition: str = "",
-    status: str = "",
-    location: str = "",
-    eselon1_filter: str = "",
-    eselon2_filter: str = "",
-    stiker_status: str = "",
-    inventory_status: str = "",
+    condition: List[str] = Query(default=[]),
+    status: List[str] = Query(default=[]),
+    location: List[str] = Query(default=[]),
+    eselon1_filter: List[str] = Query(default=[]),
+    eselon2_filter: List[str] = Query(default=[]),
+    stiker_status: List[str] = Query(default=[]),
+    inventory_status: List[str] = Query(default=[]),
+    price_min: float = None,
+    price_max: float = None,
+    nomor_spm: str = "",
+    perolehan_dari: str = "",
+    user_filter: str = "",
+    pengguna_nip: str = "",
+    beli_dari: str = "",
+    beli_sampai: str = "",
     _user: dict = Depends(require_user),
 ):
-    """Get all asset IDs matching current filters (for select-all-pages)."""
-    query = {}
-    if activity_id:
-        query["activity_id"] = activity_id
-    if search:
-        # re.escape: samakan dengan GET /assets — regex mentah dari input user
-        # rawan ReDoS/injeksi pola.
-        rx = {"$regex": re.escape(search), "$options": "i"}
-        query["$or"] = [
-            {"asset_code": rx},
-            {"asset_name": rx},
-            {"serial_number": rx},
-        ]
-    if category:
-        query["category"] = category
-    if condition:
-        query["condition"] = condition
-    if status:
-        query["status"] = status
-    if location:
-        query["location"] = {"$regex": re.escape(location), "$options": "i"}
-    if eselon1_filter:
-        query["eselon1"] = eselon1_filter
-    if eselon2_filter:
-        query["eselon2"] = eselon2_filter
-    if stiker_status:
-        query["stiker_status"] = stiker_status
-    if inventory_status:
-        query["inventory_status"] = inventory_status
+    """Id seluruh aset yang cocok filter aktif — untuk "pilih semua halaman".
+
+    Memakai build_asset_search_query yang SAMA dengan GET /assets. Sebelumnya
+    endpoint ini menyusun query-nya sendiri dan sudah drift: `eselon1_filter`
+    dicocokkan persis (di daftar: substring), pencarian teks hanya menyentuh 3
+    field (di daftar: 16 field multi-kata), dan filter harga/tanggal/SPM/
+    perolehan/pengguna TIDAK ADA sama sekali. Akibatnya "Pilih semua N aset"
+    menandai himpunan yang BERBEDA dari yang sedang dilihat pengguna — lalu
+    aksi massal (ubah/hapus/cetak) mengenai aset yang tak pernah tampil.
+    """
+    from routes.assets import build_asset_search_query
+    query = build_asset_search_query(
+        search=search, category=category, activity_id=activity_id,
+        condition=condition, status=status, location=location,
+        eselon1_filter=eselon1_filter, eselon2_filter=eselon2_filter,
+        stiker_status=stiker_status, inventory_status=inventory_status,
+        price_min=price_min, price_max=price_max, nomor_spm=nomor_spm,
+        perolehan_dari=perolehan_dari, user_filter=user_filter,
+        pengguna_nip=pengguna_nip, beli_dari=beli_dari,
+        beli_sampai=beli_sampai)
 
     # Isolasi satker (REVIEW-9 R8): "pilih semua halaman" SEBELUMNYA
     # mengenumerasi id aset SELURUH satker.

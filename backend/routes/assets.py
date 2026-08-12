@@ -6,7 +6,9 @@ import logging
 import asyncio
 from collections import deque
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, HTTPException, Request, Depends, UploadFile, File
+from typing import List
+from fastapi import (APIRouter, HTTPException, Query, Request, Depends,
+                     UploadFile, File)
 from fastapi.responses import Response
 
 from pymongo.errors import DuplicateKeyError
@@ -51,6 +53,73 @@ def _rx(term: str) -> dict:
     (re.escape). Prevents ReDoS + invalid-regex 500s from crafted input like
     "(a+)+$" or "[" while preserving plain substring search semantics."""
     return {"$regex": re.escape(term), "$options": "i"}
+
+
+# ============================================================================
+# FILTER MULTI-NILAI — satu filter boleh memilih BEBERAPA nilai sekaligus
+# ============================================================================
+# Kontrak kawat: parameter BERULANG (?status=Aktif&status=Rusak), bukan
+# dipisah koma — nilai nyata memang mengandung koma ("Gedung A, Lantai 2"),
+# sehingga pemisah koma akan memecah satu nilai jadi dua filter yang salah.
+#
+# Nilai TUNGGAL menghasilkan klausa yang PERSIS SAMA dengan sebelumnya
+# (bukan `$in` beranggota satu), sehingga permintaan lama — bookmark, klien
+# luring yang belum diperbarui, laporan yang dipanggil dari modul lain —
+# menghasilkan query yang identik dan rencana indeks yang sama.
+
+def nilai_filter(v) -> list:
+    """Normalkan nilai filter jadi DAFTAR bersih, apa pun bentuk masukannya.
+
+    Menerima str tunggal (jalur lama), daftar/tuple (jalur multi-pilih), atau
+    None. Nilai kosong/spasi dibuang, urutan dipertahankan, dan duplikat
+    dihapus supaya `$in` tak berisi nilai kembar.
+
+    Hanya nilai SKALAR TEKS/ANGKA yang diterima. Ini penting: dependency
+    `filter_laporan` juga dipanggil langsung sebagai fungsi Python biasa (uji
+    & jalur batch), dan di jalur itu parameter yang tak diisi bernilai objek
+    sentinel `Query(default=[])` milik FastAPI — bukan daftar kosong.
+    Tanpa penyaringan ini sentinel itu ikut di-`str()` dan berubah jadi
+    "filter" berisi teks sampah yang tak pernah cocok apa pun.
+    """
+    if v is None:
+        return []
+    mentah = v if isinstance(v, (list, tuple, set)) else [v]
+    keluar, terlihat = [], set()
+    for x in mentah:
+        # `None` di dalam daftar (jalur dict body batch ZIP) → kosong, bukan
+        # teks "None"; objek non-skalar diabaikan sama sekali.
+        if x is None or not isinstance(x, (str, int, float)):
+            continue
+        s = str(x).strip()
+        if s and s not in terlihat:
+            terlihat.add(s)
+            keluar.append(s)
+    return keluar
+
+
+def klausa_persis(v):
+    """Klausa pencocokan PERSIS: `None` (tanpa filter), nilai tunggal, `$in`."""
+    nilai = nilai_filter(v)
+    if not nilai:
+        return None
+    return nilai[0] if len(nilai) == 1 else {"$in": nilai}
+
+
+def klausa_substring(v):
+    """Klausa pencocokan SUBSTRING (case-insensitive, input literal).
+
+    Untuk banyak nilai dipakai `$in` berisi regex TERKOMPILASI — bentuk dict
+    `{"$regex": ...}` TIDAK boleh dimasukkan ke `$in` (Mongo memperlakukannya
+    sebagai dokumen literal, sehingga tak pernah cocok). Memakai `$in` di satu
+    field, bukan `$or` di tingkat atas, supaya tak pernah bertabrakan dengan
+    `$and`/`$or` milik pencarian teks bebas maupun `$expr` rentang harga.
+    """
+    nilai = nilai_filter(v)
+    if not nilai:
+        return None
+    if len(nilai) == 1:
+        return _rx(nilai[0])
+    return {"$in": [re.compile(re.escape(s), re.IGNORECASE) for s in nilai]}
 
 
 # Field yang ikut dicari saat pengguna mengetik di kotak pencarian aset.
@@ -270,7 +339,14 @@ def build_asset_search_query(
     ids: list = None,
 ) -> dict:
     """Query pencarian + filter aset — SATU builder untuk GET /assets dan
-    ekspor geo (KML/KMZ/SHP) supaya filter tidak pernah drift antar-endpoint."""
+    ekspor geo (KML/KMZ/SHP) supaya filter tidak pernah drift antar-endpoint.
+
+    Filter berbasis PILIHAN (condition/status/location/eselon1/eselon2/
+    stiker_status/inventory_status) menerima str tunggal ATAU daftar nilai —
+    lihat `nilai_filter`. Filter teks bebas, harga, dan tanggal tetap tunggal:
+    harga & tanggal adalah RENTANG (dua batas sudah mewakili banyak nilai),
+    dan teks bebas dicocokkan sebagai satu frasa substring.
+    """
     query = {}
 
     # Filter by activity_id if provided
@@ -293,27 +369,18 @@ def build_asset_search_query(
     if category:
         query["category"] = category
     
-    # Advanced filters
-    if condition:
-        query["condition"] = condition
-    
-    if status:
-        query["status"] = status
-    
-    if location:
-        query["location"] = _rx(location)
-
-    if eselon1_filter:
-        query["eselon1"] = _rx(eselon1_filter)
-
-    if eselon2_filter:
-        query["eselon2"] = _rx(eselon2_filter)
-
-    if stiker_status:
-        query["stiker_status"] = stiker_status
-
-    if inventory_status:
-        query["inventory_status"] = inventory_status
+    # Advanced filters — semuanya boleh BANYAK NILAI (lihat klausa_* di atas).
+    for field, klausa in (
+        ("condition", klausa_persis(condition)),
+        ("status", klausa_persis(status)),
+        ("stiker_status", klausa_persis(stiker_status)),
+        ("inventory_status", klausa_persis(inventory_status)),
+        ("location", klausa_substring(location)),
+        ("eselon1", klausa_substring(eselon1_filter)),
+        ("eselon2", klausa_substring(eselon2_filter)),
+    ):
+        if klausa is not None:
+            query[field] = klausa
 
     if nomor_spm:
         query["nomor_spm"] = _rx(nomor_spm)
@@ -392,14 +459,15 @@ async def get_assets(
     page: int = 1,
     page_size: int = 50,
     activity_id: str = "",
-    # Advanced filters
-    condition: str = "",
-    status: str = "",
-    location: str = "",
-    eselon1_filter: str = "",
-    eselon2_filter: str = "",
-    stiker_status: str = "",
-    inventory_status: str = "",
+    # Filter lanjutan — tujuh yang pertama MULTI-NILAI (parameter berulang,
+    # mis. ?status=Aktif&status=Rusak Berat); satu nilai tetap sah.
+    condition: List[str] = Query(default=[]),
+    status: List[str] = Query(default=[]),
+    location: List[str] = Query(default=[]),
+    eselon1_filter: List[str] = Query(default=[]),
+    eselon2_filter: List[str] = Query(default=[]),
+    stiker_status: List[str] = Query(default=[]),
+    inventory_status: List[str] = Query(default=[]),
     price_min: float = None,
     price_max: float = None,
     nomor_spm: str = "",
