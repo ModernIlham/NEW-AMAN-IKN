@@ -67,6 +67,56 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#857] Filter aset boleh memilih lebih dari satu nilai — dan seluruh turunan filter ikut — 2026-08-12
+
+Filter lanjutan di Inventarisasi Aset dulu satu-nilai per filter: melihat
+"Rusak Berat" DAN "Rusak Ringan" sekaligus mustahil, padahal itu justru
+pertanyaan yang paling sering diajukan saat menyiapkan usulan penghapusan.
+Tujuh filter berbasis PILIHAN kini multi-nilai (Kondisi, Status, Lokasi,
+Eselon I, Eselon II, Stiker, Inventarisasi). Nilai dalam satu filter berarti
+ATAU; antar-filter tetap DAN seperti sebelumnya.
+
+- **Kontrak kawat: parameter BERULANG** (`?status=Aktif&status=Rusak`), bukan
+  dipisah koma. Nilai nyata memang mengandung koma ("Gedung A, Lantai 2") dan
+  pemisah koma akan memecahnya jadi dua filter yang salah — dikunci uji.
+  Permintaan lama bernilai tunggal menghasilkan URL yang IDENTIK, sehingga
+  bookmark, klien luring lama, dan pemanggil lintas modul tetap sah.
+- **Terjemahan Mongo di tingkat FIELD** (`$in`), bukan `$or` tingkat atas —
+  jadi tak pernah bertabrakan dengan `$and`/`$or` pencarian teks bebas
+  multi-kata maupun `$expr` rentang harga. Untuk filter substring dipakai
+  `$in` berisi regex TERKOMPILASI; bentuk dict `{"$regex": …}` di dalam `$in`
+  diperlakukan Mongo sebagai dokumen literal dan tak pernah cocok — jebakan
+  senyap yang kini dijaga uji jalur-Mongo nyata.
+- **Seluruh konsumen filter ikut**, bukan hanya daftar di layar: ekspor CSV &
+  Excel, ekspor geo (KML/KMZ/SHP), cetak stiker (2 endpoint), kartu
+  inventarisasi, laporan PDF berfilter, dan "pilih semua halaman".
+- **Ringkasan filter di laporan menyebut SEMUA nilai** (`Kondisi: Rusak
+  Berat, Rusak Ringan`). Kalau hanya nilai pertama tercetak, pembaca dokumen
+  resmi menyimpulkan cakupannya lebih sempit daripada isinya.
+- **Penyaring LURING disamakan**: `filterSnapshotRows` memakai semantik yang
+  sama (gabungan dalam satu filter, irisan antar-filter), sehingga daftar tak
+  berubah isi saat sinyal hilang.
+- **UI**: kontrol `FilterMultiSelect` bersama (Popover + centang) menggantikan
+  tujuh `Select`; daftar panjang otomatis mendapat kotak cari (Lokasi/Eselon
+  bisa ratusan nilai). Pemicu menampilkan "Baik +2" dan lencana jumlah; chip
+  filter aktif menampilkan satu chip per FILTER berisi seluruh nilainya —
+  satu chip per nilai akan meledak jadi belasan pil di layar HP. Chip cepat
+  di bilah progres inventarisasi kini menambah/melepas nilai, bukan menimpa.
+
+**Cacat lama yang ikut tertutup**: `/assets/all-ids` ("Pilih semua N aset")
+punya pembangun query DUPLIKAT yang sudah drift dari daftar — `eselon1`
+dicocokkan persis (di daftar: substring), pencarian teks hanya 3 field (di
+daftar: 16 field multi-kata), dan filter harga/tanggal/SPM/perolehan/pengguna
+TIDAK ADA sama sekali. Akibatnya "Pilih semua" menandai himpunan yang berbeda
+dari yang tampak di layar, lalu aksi massal mengenai aset yang tak pernah
+terlihat. Endpoint itu kini memakai `build_asset_search_query` yang sama.
+
+Verifikasi: 32 uji backend baru + 19 uji frontend baru; suite unit backend
+2.573 lulus, jest 846 lulus. Uji-mutasi dua sisi: bentuk regex `$in` ditukar
+ke dict (3 uji merah), kontrak kawat ditukar ke pemisah koma (2 uji merah).
+
+---
+
 ## [#856] Identitas aset tersegar di 17 register siklus — snapshot berhenti menua — 2026-08-12
 
 Gap nyata Prinsip 1 Bab 5 masterplan ("satu identitas aset"): register siklus

@@ -8,9 +8,9 @@ import os
 import base64
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import List, Optional
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi import APIRouter, HTTPException, Query, Request, Depends
 from auth_utils import (create_docfile_token, require_admin, require_user,
                         require_user_docfile)
 from fastapi.responses import StreamingResponse
@@ -489,13 +489,15 @@ async def export_geo(
     search: str = "",
     category: str = "",
     activity_id: str = "",
-    condition: str = "",
-    status: str = "",
-    location: str = "",
-    eselon1_filter: str = "",
-    eselon2_filter: str = "",
-    stiker_status: str = "",
-    inventory_status: str = "",
+    # Multi-nilai (parameter berulang) — SAMA dengan GET /assets supaya ekspor
+    # peta tak pernah berbeda isi dari daftar yang sedang dilihat pengguna.
+    condition: List[str] = Query(default=[]),
+    status: List[str] = Query(default=[]),
+    location: List[str] = Query(default=[]),
+    eselon1_filter: List[str] = Query(default=[]),
+    eselon2_filter: List[str] = Query(default=[]),
+    stiker_status: List[str] = Query(default=[]),
+    inventory_status: List[str] = Query(default=[]),
     price_min: float = None,
     price_max: float = None,
     nomor_spm: str = "",

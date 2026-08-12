@@ -4920,6 +4920,10 @@ _LABEL_FILTER = [
     ("beli_sampai", "Tgl beli ≤"),
 ]
 
+# Filter yang boleh dipilih LEBIH DARI SATU nilai (lihat routes/assets.py).
+_FILTER_MULTI = {"condition", "status", "location", "eselon1_filter",
+                 "eselon2_filter", "stiker_status", "inventory_status"}
+
 
 class FilterLaporan:
     """Filter aset untuk laporan: `query` (potongan query Mongo) + `ringkasan`
@@ -4935,11 +4939,19 @@ class FilterLaporan:
 
 def filter_laporan_dari_map(m) -> FilterLaporan:
     """Bangun FilterLaporan dari mapping nama→nilai (query params ATAU dict
-    yang dikirim di body batch ZIP)."""
-    from routes.assets import build_asset_search_query
+    yang dikirim di body batch ZIP).
+
+    Tujuh filter berbasis pilihan boleh BANYAK NILAI — nilainya bisa datang
+    sebagai daftar (parameter berulang) maupun str tunggal (jalur lama & body
+    batch), jadi keduanya dinormalkan lewat `nilai_filter`."""
+    from routes.assets import build_asset_search_query, nilai_filter
 
     def s(k):
         return str((m or {}).get(k) or "").strip()
+
+    def d(k):
+        """Nilai filter multi-pilih — selalu daftar bersih."""
+        return nilai_filter((m or {}).get(k))
 
     def f(k):
         v = s(k)
@@ -4949,26 +4961,38 @@ def filter_laporan_dari_map(m) -> FilterLaporan:
             return None
 
     q = build_asset_search_query(
-        search=s("search"), category=s("category"), condition=s("condition"),
-        status=s("status"), location=s("location"),
-        eselon1_filter=s("eselon1_filter"), eselon2_filter=s("eselon2_filter"),
-        stiker_status=s("stiker_status"),
-        inventory_status=s("inventory_status"),
+        search=s("search"), category=s("category"), condition=d("condition"),
+        status=d("status"), location=d("location"),
+        eselon1_filter=d("eselon1_filter"), eselon2_filter=d("eselon2_filter"),
+        stiker_status=d("stiker_status"),
+        inventory_status=d("inventory_status"),
         price_min=f("price_min"), price_max=f("price_max"),
         nomor_spm=s("nomor_spm"), perolehan_dari=s("perolehan_dari"),
         user_filter=s("user_filter"), pengguna_nip=s("pengguna_nip"),
         beli_dari=s("beli_dari"), beli_sampai=s("beli_sampai"))
     # `activity_id` diterapkan pemanggil (laporan selalu per kegiatan).
     q.pop("activity_id", None)
-    bagian = [f"{label}: {s(nama)}" for nama, label in _LABEL_FILTER if s(nama)]
+    # Ringkasan yang dicetak di laporan HARUS menyebut SEMUA nilai terpilih —
+    # kalau hanya nilai pertama yang tampil, pembaca menyimpulkan dokumennya
+    # lebih sempit daripada isinya yang sebenarnya.
+    bagian = []
+    for nama, label in _LABEL_FILTER:
+        nilai = d(nama) if nama in _FILTER_MULTI else ([s(nama)] if s(nama) else [])
+        if nilai:
+            bagian.append(f"{label}: {', '.join(nilai)}")
     return FilterLaporan(q, " · ".join(bagian))
 
 
 def filter_laporan(
-    search: str = "", category: str = "", condition: str = "",
-    status: str = "", location: str = "", eselon1_filter: str = "",
-    eselon2_filter: str = "", stiker_status: str = "",
-    inventory_status: str = "", price_min: str = "", price_max: str = "",
+    search: str = "", category: str = "",
+    condition: List[str] = Query(default=[]),
+    status: List[str] = Query(default=[]),
+    location: List[str] = Query(default=[]),
+    eselon1_filter: List[str] = Query(default=[]),
+    eselon2_filter: List[str] = Query(default=[]),
+    stiker_status: List[str] = Query(default=[]),
+    inventory_status: List[str] = Query(default=[]),
+    price_min: str = "", price_max: str = "",
     nomor_spm: str = "", perolehan_dari: str = "", user_filter: str = "",
     pengguna_nip: str = "", beli_dari: str = "", beli_sampai: str = "",
 ) -> FilterLaporan:

@@ -1,15 +1,26 @@
 import React, { memo } from "react";
-import { Filter, X, Check, RotateCcw } from "lucide-react";
+import { X, Check } from "lucide-react";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
 import { OptimizedInput } from "../ui/optimized-input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../ui/select";
+import FilterMultiSelect from "./FilterMultiSelect";
+
+// Pilihan tetap status inventarisasi — daftar kuratif (bukan nilai distinct
+// dari data) supaya status yang belum pernah dipakai tetap bisa disaring.
+const OPSI_INVENTARISASI = [
+  "Belum Diinventarisasi", "Ditemukan", "Tidak Ditemukan", "Berlebih", "Sengketa",
+];
+
+// Chip filter aktif untuk filter multi-pilih — urutan sama dengan panelnya.
+const CHIP_MULTI = [
+  { field: "condition", prefix: "Kondisi", testid: "badge-remove-condition" },
+  { field: "status", prefix: "Status", testid: "badge-remove-status" },
+  { field: "location", prefix: "Lokasi", testid: "badge-remove-location" },
+  { field: "eselon1", prefix: "Es.I", tone: "violet", testid: "badge-remove-eselon1" },
+  { field: "eselon2", prefix: "Es.II", tone: "violet", testid: "badge-remove-eselon2" },
+  { field: "stiker", prefix: "Stiker", testid: "badge-remove-stiker" },
+  { field: "inventoryStatus", prefix: "Inventarisasi", tone: "amber", testid: "badge-remove-inventory" },
+];
 
 // Chip filter aktif — kompak & theme-aware. Tombol X memakai min-h-0/min-w-0
 // agar tidak digelembungkan aturan tap-target 44px global (≤1023px), dan warna
@@ -56,95 +67,31 @@ const AdvancedFilter = memo(({
       {/* Advanced Filter Panel */}
       {isOpen && (
         <div className="border-t pt-2 mt-1 space-y-2" data-testid="advanced-filter-panel">
+          {/* Tujuh filter berbasis pilihan: masing-masing boleh memuat LEBIH
+              DARI SATU nilai (mis. Kondisi = Rusak Berat + Rusak Ringan).
+              Nilai dalam satu filter berarti ATAU; antar-filter tetap DAN. */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2">
-            {/* Kondisi */}
-            <div>
-              <Label className="text-[10px] text-muted-foreground mb-1 block">Kondisi</Label>
-              <Select value={filters.condition || "all"} onValueChange={v => onFilterChange("condition", v === "all" ? "" : v)}>
-                <SelectTrigger className="h-7 text-xs" data-testid="filter-condition"><SelectValue placeholder="Semua" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua</SelectItem>
-                  {filterOptions.conditions.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            {/* Status */}
-            <div>
-              <Label className="text-[10px] text-muted-foreground mb-1 block">Status</Label>
-              <Select value={filters.status || "all"} onValueChange={v => onFilterChange("status", v === "all" ? "" : v)}>
-                <SelectTrigger className="h-7 text-xs" data-testid="filter-status"><SelectValue placeholder="Semua" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua</SelectItem>
-                  {filterOptions.statuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            {/* Lokasi */}
-            <div>
-              <Label className="text-[10px] text-muted-foreground mb-1 block">Lokasi</Label>
-              <Select value={filters.location || "all"} onValueChange={v => onFilterChange("location", v === "all" ? "" : v)}>
-                <SelectTrigger className="h-7 text-xs" data-testid="filter-location"><SelectValue placeholder="Semua" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua</SelectItem>
-                  {filterOptions.locations.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            {/* Eselon I */}
-            <div>
-              <Label className="text-[10px] text-muted-foreground mb-1 block">Eselon I</Label>
-              <Select value={filters.eselon1 || "all"} onValueChange={v => onFilterChange("eselon1", v === "all" ? "" : v)}>
-                <SelectTrigger className="h-7 text-xs" data-testid="filter-eselon1"><SelectValue placeholder="Semua" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua</SelectItem>
-                  {(filterOptions.eselon1s || []).map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            {/* Eselon II */}
-            <div>
-              <Label className="text-[10px] text-muted-foreground mb-1 block">Eselon II</Label>
-              <Select value={filters.eselon2 || "all"} onValueChange={v => onFilterChange("eselon2", v === "all" ? "" : v)}>
-                <SelectTrigger className="h-7 text-xs" data-testid="filter-eselon2"><SelectValue placeholder="Semua" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua</SelectItem>
-                  {(filterOptions.eselon2s || []).map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            {/* Stiker */}
-            <div>
-              <Label className="text-[10px] text-muted-foreground mb-1 block">Stiker</Label>
-              <Select value={filters.stiker || "all"} onValueChange={v => onFilterChange("stiker", v === "all" ? "" : v)}>
-                <SelectTrigger className="h-7 text-xs" data-testid="filter-stiker"><SelectValue placeholder="Semua" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua</SelectItem>
-                  {filterOptions.stiker_statuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            {/* Inventarisasi */}
-            <div>
-              <Label className="text-[10px] text-muted-foreground mb-1 block">Inventarisasi</Label>
-              <Select value={filters.inventoryStatus || "all"} onValueChange={v => onFilterChange("inventoryStatus", v === "all" ? "" : v)}>
-                <SelectTrigger className="h-7 text-xs" data-testid="filter-inventory-status"><SelectValue placeholder="Semua" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua</SelectItem>
-                  <SelectItem value="Belum Diinventarisasi">Belum Diinventarisasi</SelectItem>
-                  <SelectItem value="Ditemukan">Ditemukan</SelectItem>
-                  <SelectItem value="Tidak Ditemukan">Tidak Ditemukan</SelectItem>
-                  <SelectItem value="Berlebih">Berlebih</SelectItem>
-                  <SelectItem value="Sengketa">Sengketa</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
+            {[
+              { field: "condition", label: "Kondisi", opsi: filterOptions.conditions, testid: "filter-condition" },
+              { field: "status", label: "Status", opsi: filterOptions.statuses, testid: "filter-status" },
+              { field: "location", label: "Lokasi", opsi: filterOptions.locations, testid: "filter-location" },
+              { field: "eselon1", label: "Eselon I", opsi: filterOptions.eselon1s, testid: "filter-eselon1" },
+              { field: "eselon2", label: "Eselon II", opsi: filterOptions.eselon2s, testid: "filter-eselon2" },
+              { field: "stiker", label: "Stiker", opsi: filterOptions.stiker_statuses, testid: "filter-stiker" },
+              { field: "inventoryStatus", label: "Inventarisasi", opsi: OPSI_INVENTARISASI, testid: "filter-inventory-status" },
+            ].map(f => (
+              <div key={f.field}>
+                <Label className="text-[10px] text-muted-foreground mb-1 block">{f.label}</Label>
+                <FilterMultiSelect
+                  label={f.label}
+                  opsi={f.opsi || []}
+                  terpilih={filters[f.field] || []}
+                  onChange={nilai => onFilterChange(f.field, nilai)}
+                  testid={f.testid}
+                />
+              </div>
+            ))}
+
             {/* Price Range */}
             <div>
               <Label className="text-[10px] text-muted-foreground mb-1 block">Harga (Rp)</Label>
@@ -276,27 +223,20 @@ const AdvancedFilter = memo(({
           {filterCategory !== "Semua" && filterCategory && (
             <FilterBadge onRemove={onCategoryReset} testid="badge-remove-category">Kategori: {filterCategory}</FilterBadge>
           )}
-          {filters.condition && (
-            <FilterBadge onRemove={() => onFilterChange("condition", "")} testid="badge-remove-condition">Kondisi: {filters.condition}</FilterBadge>
-          )}
-          {filters.status && (
-            <FilterBadge onRemove={() => onFilterChange("status", "")} testid="badge-remove-status">Status: {filters.status}</FilterBadge>
-          )}
-          {filters.location && (
-            <FilterBadge onRemove={() => onFilterChange("location", "")} testid="badge-remove-location">Lokasi: {filters.location}</FilterBadge>
-          )}
-          {filters.eselon1 && (
-            <FilterBadge tone="violet" onRemove={() => onFilterChange("eselon1", "")} testid="badge-remove-eselon1">Es.I: {filters.eselon1}</FilterBadge>
-          )}
-          {filters.eselon2 && (
-            <FilterBadge tone="violet" onRemove={() => onFilterChange("eselon2", "")} testid="badge-remove-eselon2">Es.II: {filters.eselon2}</FilterBadge>
-          )}
-          {filters.stiker && (
-            <FilterBadge onRemove={() => onFilterChange("stiker", "")} testid="badge-remove-stiker">Stiker: {filters.stiker}</FilterBadge>
-          )}
-          {filters.inventoryStatus && (
-            <FilterBadge tone="amber" onRemove={() => onFilterChange("inventoryStatus", "")} testid="badge-remove-inventory">Inventarisasi: {filters.inventoryStatus}</FilterBadge>
-          )}
+          {/* Filter multi-pilih: SATU chip per filter yang menyebut seluruh
+              nilainya. Satu chip per NILAI akan meledak jadi belasan pil
+              ketika enam lokasi dicentang — barisnya lebih panjang daripada
+              daftar asetnya sendiri di layar HP. Tombol × melepas seluruh
+              filter itu; melepas satu nilai dilakukan di panelnya. */}
+          {CHIP_MULTI.map(({ field, prefix, tone, testid }) => {
+            const nilai = filters[field] || [];
+            if (!nilai.length) return null;
+            return (
+              <FilterBadge key={field} tone={tone} onRemove={() => onFilterChange(field, [])} testid={testid}>
+                {prefix}: {nilai.join(", ")}
+              </FilterBadge>
+            );
+          })}
           {(filters.priceMin || filters.priceMax) && (
             <FilterBadge onRemove={() => { onFilterChange("priceMin", ""); onFilterChange("priceMax", ""); }} testid="badge-remove-price">Harga: {filters.priceMin || '0'} - {filters.priceMax || '\u221e'}</FilterBadge>
           )}

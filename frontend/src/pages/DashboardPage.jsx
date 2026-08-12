@@ -60,7 +60,7 @@ import { useOptimisticQueue } from "@/hooks/useOptimisticQueue";
 import { haptic } from "@/lib/haptics";
 import { useUnsyncedGuard } from "@/hooks/useUnsyncedGuard";
 import { useRowLocking } from "@/hooks/useRowLocking";
-import { useAssetFilters } from "@/hooks/useAssetFilters";
+import { useAssetFilters, normalkanMulti } from "@/hooks/useAssetFilters";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useDragDropImport } from "@/hooks/useDragDropImport";
 import { useBackGuard } from "@/hooks/useBackGuard";
@@ -111,15 +111,29 @@ function filterSnapshotRows(rows, { search, category, filters }) {
   if (search) out = out.filter(r => cocokAset(r, search));
   if (category && category !== "Semua") out = out.filter(r => r.category === category);
   if (filters) {
-    const eq = (field, val) => { if (val) out = out.filter(r => String(r[field] ?? "") === val); };
+    // Tujuh filter berbasis pilihan bernilai BANYAK: nilai dalam satu filter
+    // berarti ATAU (cermin `$in` di server), antar-filter tetap DAN. Daftar
+    // kosong = tanpa filter, BUKAN "tak cocok apa pun". String tunggal tetap
+    // diterima supaya snapshot/pemanggil lama tak pecah.
+    const eqMulti = (field, val) => {
+      const v = normalkanMulti(val);
+      if (v.length) out = out.filter(r => v.includes(String(r[field] ?? "")));
+    };
+    const subMulti = (field, val) => {
+      const v = normalkanMulti(val).map(s => s.toLowerCase());
+      if (v.length) out = out.filter(r => {
+        const isi = String(r[field] ?? "").toLowerCase();
+        return v.some(s => isi.includes(s));
+      });
+    };
     const sub = (field, val) => { if (val) { const v = val.toLowerCase(); out = out.filter(r => String(r[field] ?? "").toLowerCase().includes(v)); } };
-    eq("condition", filters.condition);
-    eq("status", filters.status);
-    sub("location", filters.location);
-    sub("eselon1", filters.eselon1);
-    sub("eselon2", filters.eselon2);
-    eq("stiker_status", filters.stiker);
-    eq("inventory_status", filters.inventoryStatus);
+    eqMulti("condition", filters.condition);
+    eqMulti("status", filters.status);
+    subMulti("location", filters.location);
+    subMulti("eselon1", filters.eselon1);
+    subMulti("eselon2", filters.eselon2);
+    eqMulti("stiker_status", filters.stiker);
+    eqMulti("inventory_status", filters.inventoryStatus);
     sub("nomor_spm", filters.nomorSpm);
     sub("supplier", filters.perolehanDari);
     sub("user", filters.user);
@@ -255,8 +269,8 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     searchInput, setSearchInput, filterCategory, setFilterCategory,
     sortBy, setSortBy, debouncedSearch, showAdvancedFilter, setShowAdvancedFilter,
     filters, filterOptions, fetchFilterOptions, buildFilterParams,
-    activeFilterCount, handleAdvancedFilterChange, handleCategoryReset,
-    resetAdvancedFilters,
+    activeFilterCount, handleAdvancedFilterChange, toggleFilterValue,
+    handleCategoryReset, resetAdvancedFilters,
   } = filterHook;
 
   // Query filter aktif untuk LAPORAN EKSEKUTIF (nama param = GET /assets).
@@ -1844,6 +1858,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                 activityId={activity?.id}
                 inventoryStatusFilter={filters.inventoryStatus}
                 onFilterChange={handleAdvancedFilterChange}
+                onToggleFilter={toggleFilterValue}
                 isOnline={isOnline} pendingCount={pendingCount}
                 rowLocks={rowLocks} sessionId={sessionId}
                 refreshKey={progressRefreshKey}
