@@ -229,3 +229,48 @@ class TestPilihSemuaHalamanSatuBuilder:
 
         import routes.batch as rb
         assert param in inspect.signature(rb.get_all_asset_ids).parameters
+
+
+class TestEksporBerkasIkutFilter:
+    """Empat ekspor BERKAS (CSV, PDF, XLSX sinkron, XLSX job latar) dulu hanya
+    menerima `activity_id`: menyaring layar lalu menekan Ekspor tetap
+    menghasilkan berkas berisi SELURUH aset kegiatan. Berkasnya sah, hanya
+    isinya jauh lebih luas dari yang diminta — kegagalan senyap."""
+
+    @pytest.mark.parametrize("nama", [
+        "export_csv", "export_pdf", "export_xlsx", "export_xlsx_async"])
+    def test_keempat_ekspor_menerima_filter(self, nama):
+        import inspect
+
+        import routes.exports as re_
+        params = inspect.signature(getattr(re_, nama)).parameters
+        assert "filter_aset" in params, f"{nama} tak menerima filter"
+
+    def test_dependency_memakai_builder_bersama(self):
+        import inspect
+
+        import routes.exports as re_
+        sumber = inspect.getsource(re_.filter_aset_ekspor)
+        assert "build_asset_search_query" in sumber
+
+    def test_dependency_multi_nilai_jadi_in(self):
+        from routes.exports import filter_aset_ekspor
+        q = filter_aset_ekspor(condition=["Baik", "Rusak Berat"])
+        assert q["condition"] == {"$in": ["Baik", "Rusak Berat"]}
+
+    def test_dependency_tanpa_filter_kosong(self):
+        from routes.exports import filter_aset_ekspor
+        assert filter_aset_ekspor() == {}
+
+    def test_kegiatan_disisipkan_di_atas_filter(self):
+        from routes.exports import _query_ekspor
+        q = _query_ekspor({"condition": "Baik"}, "keg-1")
+        assert q == {"condition": "Baik", "activity_id": "keg-1"}
+        # Tanpa kegiatan (ekspor lintas-kegiatan) kuncinya tak muncul.
+        assert _query_ekspor({"condition": "Baik"}, None) == {"condition": "Baik"}
+
+    def test_filter_asal_tak_dimutasi(self):
+        from routes.exports import _query_ekspor
+        asal = {"condition": "Baik"}
+        _query_ekspor(asal, "keg-1")
+        assert asal == {"condition": "Baik"}

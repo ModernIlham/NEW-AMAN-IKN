@@ -56,6 +56,27 @@ export function normalkanMulti(v) {
   return keluar;
 }
 
+/**
+ * Querystring filter → objek untuk body JSON (mis. batch PDF ZIP).
+ *
+ * `Object.fromEntries(new URLSearchParams(qs))` TIDAK boleh dipakai di sini:
+ * untuk parameter berulang ia hanya menyimpan kemunculan TERAKHIR, sehingga
+ * "condition=Rusak Berat&condition=Rusak Ringan" diam-diam menyusut jadi satu
+ * nilai. Kegagalannya konsisten-internal — banner di dalam PDF ikut menulis
+ * satu nilai dan datanya memang cocok — jadi pembaca tak punya petunjuk bahwa
+ * separuh filternya hilang. Kunci multi-nilai dikirim sebagai ARRAY; backend
+ * (`nilai_filter`) menerima keduanya.
+ */
+export function objekFilter(qs) {
+  const u = new URLSearchParams(qs || "");
+  const keluar = {};
+  for (const kunci of new Set(u.keys())) {
+    const nilai = u.getAll(kunci);
+    keluar[kunci] = nilai.length > 1 ? nilai : nilai[0];
+  }
+  return keluar;
+}
+
 export function useAssetFilters({ activityId }) {
   const [searchInput, setSearchInput] = useState("");
   const [filterCategory, setFilterCategory] = useState("Semua");

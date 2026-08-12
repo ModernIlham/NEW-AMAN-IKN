@@ -9,7 +9,7 @@
  */
 import { renderHook, act } from "@testing-library/react";
 
-import { useAssetFilters, normalkanMulti, FILTER_MULTI }
+import { useAssetFilters, normalkanMulti, objekFilter, FILTER_MULTI }
   from "../useAssetFilters";
 
 jest.mock("axios", () => ({ get: jest.fn(() => Promise.resolve({ data: {} })) }));
@@ -128,5 +128,26 @@ describe("kontrak kawat buildFilterParams", () => {
   test("filter kosong tak mengirim parameter apa pun", () => {
     const { result } = pakai();
     expect(params(result).toString()).toBe("");
+  });
+});
+
+describe("objekFilter — body JSON batch PDF ZIP", () => {
+  test("parameter berulang jadi ARRAY, bukan nilai terakhir saja", () => {
+    // Object.fromEntries akan menyisakan "Rusak Ringan" saja — separuh filter
+    // hilang tanpa error, dan banner di dalam PDF ikut menulis satu nilai
+    // sehingga pembaca tak punya petunjuk apa pun.
+    const o = objekFilter("condition=Rusak+Berat&condition=Rusak+Ringan&status=Aktif");
+    expect(o.condition).toEqual(["Rusak Berat", "Rusak Ringan"]);
+    expect(o.status).toBe("Aktif");
+  });
+
+  test("nilai bermuatan koma tetap utuh", () => {
+    const o = objekFilter("location=Gedung+A%2C+Lantai+2&location=Gudang");
+    expect(o.location).toEqual(["Gedung A, Lantai 2", "Gudang"]);
+  });
+
+  test("querystring kosong menghasilkan objek kosong", () => {
+    expect(objekFilter("")).toEqual({});
+    expect(objekFilter(undefined)).toEqual({});
   });
 });

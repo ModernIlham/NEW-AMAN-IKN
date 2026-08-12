@@ -67,6 +67,34 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#858] Ekspor berkas akhirnya ikut filter — dan batch ZIP berhenti membuang nilai — 2026-08-12
+
+Dua celah yang tersisa setelah `[#857]`, ditemukan lewat pemeriksaan silang
+adversarial atas PR-nya sendiri. Keduanya gagal **senyap**: berkasnya sah,
+tak ada galat, hanya isinya berbeda dari yang diminta.
+
+- **Ekspor berkas tak pernah mengenal filter.** `export_csv`, `export_pdf`,
+  `export_xlsx`, dan `export_xlsx/async` hanya menerima `activity_id`.
+  Menyaring layar ke "Rusak Berat di Gedung A" lalu menekan Ekspor tetap
+  menghasilkan berkas berisi SELURUH aset kegiatan — cacat lama, jauh
+  mendahului fitur multi-pilih. Keempatnya kini memakai dependency bersama
+  `filter_aset_ekspor` di atas `build_asset_search_query` yang sama dengan
+  daftar, dan tombol Ekspor di dashboard mengirimkan filter aktifnya.
+  Entri `[#857]` yang menyatakan CSV & Excel sudah ikut **dikoreksi**.
+- **Batch PDF ZIP membuang nilai duplikat.** Body permintaannya dirakit
+  dengan `Object.fromEntries(new URLSearchParams(...))` — untuk parameter
+  berulang itu hanya menyimpan kemunculan TERAKHIR, jadi "Rusak Berat +
+  Rusak Ringan" menyusut jadi "Rusak Ringan" saja. Kegagalannya
+  konsisten-internal: banner di dalam PDF ikut menulis satu nilai dan
+  datanya memang cocok, sehingga pembaca tak punya petunjuk apa pun bahwa
+  separuh filternya hilang. Diganti helper `objekFilter` yang memakai
+  `getAll` per kunci dan mengirim kunci multi-nilai sebagai array.
+
+Verifikasi: 9 uji backend + 3 uji frontend baru; suite backend 2.582 lulus,
+jest 850 lulus.
+
+---
+
 ## [#857] Filter aset boleh memilih lebih dari satu nilai — dan seluruh turunan filter ikut — 2026-08-12
 
 Filter lanjutan di Inventarisasi Aset dulu satu-nilai per filter: melihat
@@ -87,9 +115,11 @@ ATAU; antar-filter tetap DAN seperti sebelumnya.
   `$in` berisi regex TERKOMPILASI; bentuk dict `{"$regex": …}` di dalam `$in`
   diperlakukan Mongo sebagai dokumen literal dan tak pernah cocok — jebakan
   senyap yang kini dijaga uji jalur-Mongo nyata.
-- **Seluruh konsumen filter ikut**, bukan hanya daftar di layar: ekspor CSV &
-  Excel, ekspor geo (KML/KMZ/SHP), cetak stiker (2 endpoint), kartu
-  inventarisasi, laporan PDF berfilter, dan "pilih semua halaman".
+- **Konsumen filter ikut**, bukan hanya daftar di layar: ekspor geo
+  (KML/KMZ/SHP), cetak stiker (2 endpoint), kartu inventarisasi, laporan PDF
+  berfilter, dan "pilih semua halaman". (Ekspor **berkas** CSV/Excel/PDF
+  menyusul di `[#858]` — entri ini semula mengklaim keduanya sudah ikut,
+  padahal keempat endpoint itu belum menerima parameter filter sama sekali.)
 - **Ringkasan filter di laporan menyebut SEMUA nilai** (`Kondisi: Rusak
   Berat, Rusak Ringan`). Kalau hanya nilai pertama tercetak, pembaca dokumen
   resmi menyimpulkan cakupannya lebih sempit daripada isinya.

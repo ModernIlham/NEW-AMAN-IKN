@@ -587,14 +587,67 @@ async def export_geo(
                              headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 
+def filter_aset_ekspor(
+    search: str = "",
+    category: str = "",
+    condition: List[str] = Query(default=[]),
+    status: List[str] = Query(default=[]),
+    location: List[str] = Query(default=[]),
+    eselon1_filter: List[str] = Query(default=[]),
+    eselon2_filter: List[str] = Query(default=[]),
+    stiker_status: List[str] = Query(default=[]),
+    inventory_status: List[str] = Query(default=[]),
+    price_min: float = None,
+    price_max: float = None,
+    nomor_spm: str = "",
+    perolehan_dari: str = "",
+    user_filter: str = "",
+    pengguna_nip: str = "",
+    beli_dari: str = "",
+    beli_sampai: str = "",
+) -> dict:
+    """Dependency: potongan query filter aset untuk endpoint EKSPOR BERKAS.
+
+    Nama parameternya SAMA persis dengan GET /assets, dan pembangunnya pun
+    sama (`build_asset_search_query`) — ekspor tak bisa drift dari daftar.
+
+    Sebelum ini keempat ekspor berkas (CSV, PDF, XLSX sinkron, XLSX job
+    latar) HANYA menerima `activity_id`: menyaring layar ke "Rusak Berat di
+    Gedung A" lalu menekan Ekspor tetap menghasilkan berkas berisi SELURUH
+    aset kegiatan. Kegagalannya senyap — berkasnya sah, hanya isinya jauh
+    lebih luas daripada yang diminta.
+
+    `activity_id` sengaja TIDAK di sini: pemanggil sudah memilikinya untuk
+    `pastikan_akses_kegiatan_id` dan menyisipkannya sendiri.
+    """
+    return build_asset_search_query(
+        search=search, category=category, condition=condition, status=status,
+        location=location, eselon1_filter=eselon1_filter,
+        eselon2_filter=eselon2_filter, stiker_status=stiker_status,
+        inventory_status=inventory_status, price_min=price_min,
+        price_max=price_max, nomor_spm=nomor_spm,
+        perolehan_dari=perolehan_dari, user_filter=user_filter,
+        pengguna_nip=pengguna_nip, beli_dari=beli_dari,
+        beli_sampai=beli_sampai)
+
+
+def _query_ekspor(filter_aset: dict, activity_id) -> dict:
+    """Gabungkan filter aktif dengan lingkup kegiatan (sebelum scope satker)."""
+    query = dict(filter_aset or {})
+    if activity_id:
+        query["activity_id"] = activity_id
+    return query
+
+
 @exports_router.get("/export/csv")
 @limiter.limit("5/minute")
 async def export_csv(request: Request, activity_id: Optional[str] = None, base_url: str = "",
+                     filter_aset: dict = Depends(filter_aset_ekspor),
                      _user: dict = Depends(require_user)):
     """Export assets to CSV format - streaming for large datasets with document checklist"""
     _tok = _token_media(_user)   # tautan doc-file di CSV berjalan tanpa header
     await pastikan_akses_kegiatan_id(_user, activity_id)
-    query = await scope_query_aset(_user, {"activity_id": activity_id} if activity_id else {})
+    query = await scope_query_aset(_user, _query_ekspor(filter_aset, activity_id))
     total = await db.assets.count_documents(query)
     if total == 0:
         raise HTTPException(status_code=404, detail="Tidak ada data untuk diexport")
@@ -678,10 +731,11 @@ async def export_csv(request: Request, activity_id: Optional[str] = None, base_u
 @exports_router.get("/export/pdf")
 @limiter.limit("3/minute")
 async def export_pdf(request: Request, activity_id: Optional[str] = None,
+                     filter_aset: dict = Depends(filter_aset_ekspor),
                      _user: dict = Depends(require_user)):
     """Export assets to professional PDF report with HD photos"""
     await pastikan_akses_kegiatan_id(_user, activity_id)
-    query = await scope_query_aset(_user, {"activity_id": activity_id} if activity_id else {})
+    query = await scope_query_aset(_user, _query_ekspor(filter_aset, activity_id))
     total = await db.assets.count_documents(query)
     if total == 0:
         raise HTTPException(status_code=404, detail="Tidak ada data untuk diexport")
@@ -1383,10 +1437,11 @@ async def bangun_xlsx_bytes(query, activity_id="", base_url="", token=""):
 @exports_router.get("/export/xlsx")
 @limiter.limit("3/minute")
 async def export_xlsx(request: Request, activity_id: Optional[str] = None, base_url: str = "",
+                      filter_aset: dict = Depends(filter_aset_ekspor),
                       _user: dict = Depends(require_user)):
     """Export assets to Excel format with thumbnails and document checklist - optimized for large datasets"""
     await pastikan_akses_kegiatan_id(_user, activity_id)
-    query = await scope_query_aset(_user, {"activity_id": activity_id} if activity_id else {})
+    query = await scope_query_aset(_user, _query_ekspor(filter_aset, activity_id))
     total = await db.assets.count_documents(query)
     if total == 0:
         raise HTTPException(status_code=404, detail="Tidak ada data untuk diexport")
@@ -1419,12 +1474,14 @@ _EKSPOR_SEM = asyncio.Semaphore(2)
 @exports_router.post("/export/xlsx/async")
 @limiter.limit("6/minute")
 async def export_xlsx_async(request: Request, activity_id: Optional[str] = None,
-                            base_url: str = "", _user: dict = Depends(require_user)):
+                            base_url: str = "",
+                            filter_aset: dict = Depends(filter_aset_ekspor),
+                            _user: dict = Depends(require_user)):
     """Ekspor XLSX sebagai JOB LATAR (submit→poll→unduh) — untuk dataset berfoto
     besar yang bisa melewati batas timeout ~120s pada ekspor sinkron. Kembalikan
     job_id; klien polling GET /api/jobs/{id} lalu unduh /api/jobs/{id}/download."""
     await pastikan_akses_kegiatan_id(_user, activity_id)
-    query = await scope_query_aset(_user, {"activity_id": activity_id} if activity_id else {})
+    query = await scope_query_aset(_user, _query_ekspor(filter_aset, activity_id))
     total = await db.assets.count_documents(query)
     if total == 0:
         raise HTTPException(status_code=404, detail="Tidak ada data untuk diexport")
