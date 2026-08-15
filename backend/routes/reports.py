@@ -1199,7 +1199,7 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
     elements.extend(_title_block(
         "BERITA ACARA HASIL PENELITIAN\nBARANG MILIK NEGARA (BMN) TIDAK DITEMUKAN",
         nomor=D["nomor_ba"]))
-    elements.append(Paragraph(D["intro"], normal_style))
+    elements.append(Paragraph(_esc_ba(D["intro"]), normal_style))
     elements.append(Spacer(1, 4*rl_mm))
 
     # Penomoran bagian dinamis (angka romawi berurutan; sebagian bersyarat).
@@ -1308,10 +1308,10 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
                 uraian_tl.append(f"Tindak lanjut: {a['tindak_lanjut']}")
             detail_data.append([
                 str(i+1), a.get('asset_code', '-'), str(a.get('NUP', '-')),
-                Paragraph(a.get('asset_name', '-') or '-', cell_style),
-                Paragraph(a.get('klasifikasi_tidak_ditemukan', '-') or '-', cell_style),
-                Paragraph(a.get('sub_klasifikasi', '-') or '-', cell_style),
-                Paragraph("<br/>".join(uraian_tl) or '-', cell_style),
+                Paragraph(_esc_ba(a.get('asset_name', '-') or '-'), cell_style),
+                Paragraph(_esc_ba(a.get('klasifikasi_tidak_ditemukan', '-') or '-'), cell_style),
+                Paragraph(_esc_ba(a.get('sub_klasifikasi', '-') or '-'), cell_style),
+                Paragraph("<br/>".join(_esc_ba(x) for x in uraian_tl) or '-', cell_style),
                 fmt_rp(safe_price(a))])
         detail_table = Table(detail_data, colWidths=_fit_col_widths([22, 62, 26, 80, 62, 66, 120, 60], doc.width), repeatRows=1)
         detail_table.setStyle(_std_table_style(zebra=True, extra=[
@@ -1497,6 +1497,7 @@ async def generate_sptjm_pdf(activity_id: str, _user: dict = Depends(require_use
     """Generate SPTJM (Surat Pernyataan Tanggung Jawab Mutlak) PDF"""
     from reportlab.platypus import Table, Paragraph, Spacer
     from reportlab.lib.units import mm as rl_mm
+    from xml.sax.saxutils import escape as _esc
 
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
@@ -1576,7 +1577,7 @@ async def generate_sptjm_pdf(activity_id: str, _user: dict = Depends(require_use
         for i, a in enumerate(tidak_ditemukan):
             detail_data.append([
                 str(i+1), a.get('asset_code', '-'), str(a.get('NUP', '-')),
-                Paragraph(a.get('asset_name', '-'), cell_style), fmt_rp(safe_price(a))
+                Paragraph(_esc(a.get('asset_name', '-') or '-'), cell_style), fmt_rp(safe_price(a))
             ])
         detail_data.append(['', '', '', Paragraph('<b>TOTAL</b>', cell_style), fmt_rp(total_val_notfound)])
         dt = Table(detail_data, colWidths=_fit_col_widths([30, 80, 35, 190, 90], doc.width), repeatRows=1)
@@ -1623,6 +1624,7 @@ async def generate_surat_koreksi_pdf(activity_id: str, _user: dict = Depends(req
     """Generate Surat Pernyataan Koreksi Pencatatan PDF"""
     from reportlab.platypus import Table, Paragraph, Spacer
     from reportlab.lib.units import mm as rl_mm
+    from xml.sax.saxutils import escape as _esc
 
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
@@ -1700,10 +1702,10 @@ async def generate_surat_koreksi_pdf(activity_id: str, _user: dict = Depends(req
         for i, a in enumerate(koreksi_assets):
             detail_data.append([
                 str(i+1), a.get('asset_code', '-'), str(a.get('NUP', '-')),
-                Paragraph(a.get('asset_name', '-'), cell_style),
-                Paragraph(a.get('sub_klasifikasi', '-'), cell_style),
-                Paragraph(a.get('uraian_tidak_ditemukan', '-'), cell_style),
-                Paragraph(a.get('tindak_lanjut', '-') or '-', cell_style),
+                Paragraph(_esc(a.get('asset_name', '-') or '-'), cell_style),
+                Paragraph(_esc(a.get('sub_klasifikasi', '-') or '-'), cell_style),
+                Paragraph(_esc(a.get('uraian_tidak_ditemukan', '-') or '-'), cell_style),
+                Paragraph(_esc(a.get('tindak_lanjut', '-') or '-'), cell_style),
                 fmt_rp(safe_price(a))
             ])
         detail_data.append(['', '', '', '', '', '', Paragraph('<b>TOTAL</b>', cell_style), fmt_rp(total_val)])
