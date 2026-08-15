@@ -38,6 +38,32 @@ logger = logging.getLogger(__name__)
 reports_router = APIRouter()
 
 
+def kunci_urut_bmn(a) -> tuple:
+    """Kunci urut baku daftar BMN: KODE BARANG menaik, lalu NUP menaik.
+
+    NUP diurut sebagai ANGKA, bukan teks. Ini bukan kehalusan: NUP tersimpan
+    sebagai string, dan urutan teks menaruh "10" sebelum "2" — daftar resmi
+    jadi terlihat acak di mata pemeriksa yang membaca per kode barang. NUP
+    yang bukan angka (kosong, "-", atau isian aneh dari impor) sengaja jatuh
+    ke BELAKANG kelompok kodenya supaya tak menyela deret angka; nilai
+    mentahnya jadi kunci ketiga agar urutan tetap deterministik (dua baris
+    tanpa NUP tak boleh bertukar tempat antar-cetakan).
+    """
+    from kodefikasi_utils import normalize_kode as _nk
+    kode = _nk(a.get("asset_code"))
+    mentah = str(a.get("NUP") if a.get("NUP") is not None else "").strip()
+    try:
+        nup = (0, int(mentah))
+    except (TypeError, ValueError):
+        nup = (1, 0)
+    return (kode, nup, mentah)
+
+
+def urut_bmn(daftar):
+    """Salinan daftar aset terurut kode barang → NUP (lihat `kunci_urut_bmn`)."""
+    return sorted(daftar or [], key=kunci_urut_bmn)
+
+
 def _tahun_perolehan(v):
     """Tahun 4-digit dari tanggal perolehan aneka format (temuan #43).
 
@@ -1951,7 +1977,10 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str, _user: dict = Depe
         {"activity_id": activity_id},
         {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
     ).to_list(100000)
-    filtered = [a for a in all_assets if dbhi_config["filter"](a)]
+    # Urut baku daftar resmi: kode barang menaik, lalu NUP menaik. Sebelumnya
+    # baris keluar dalam urutan penyimpanan Mongo — pemeriksa yang menelusuri
+    # per kode barang melihat daftar yang tampak acak.
+    filtered = urut_bmn([a for a in all_assets if dbhi_config["filter"](a)])
 
     # Peta kode barang → nama Sub-sub Kelompok (uraian kodefikasi terdalam)
     # untuk ditampilkan di bawah kode pada kolom "Kode Barang".
@@ -2000,17 +2029,17 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str, _user: dict = Depe
     # Build table headers based on type
     extra = dbhi_config["extra_cols"]
     if extra == "berlebih":
-        headers = ["No", "Kode Barang", "NUP", "Nama Barang", "Tahun\nPerolehan", "Kondisi", "Nilai (Rp)", "Lokasi", "Keterangan\nBerlebih", "Asal Usul", "Tindak Lanjut"]
-        col_widths = [22, 104, 28, 92, 42, 48, 62, 80, 90, 80, 80]
+        headers = ["No", "Kode Barang", "NUP", "Nama Barang", "Tahun\nPerolehan", "Kondisi", "Nilai Perolehan\n(Rp)", "Lokasi", "Keterangan\nBerlebih", "Asal Usul", "Tindak Lanjut"]
+        col_widths = [22, 104, 28, 80, 54, 48, 62, 80, 90, 80, 80]
     elif extra == "tidak_ditemukan":
-        headers = ["No", "Kode Barang", "NUP", "Nama Barang", "Tahun\nPerolehan", "Nilai (Rp)", "Lokasi", "Klasifikasi", "Sub Klasifikasi", "Uraian", "Tindak Lanjut"]
-        col_widths = [22, 104, 28, 88, 42, 62, 70, 70, 80, 80, 80]
+        headers = ["No", "Kode Barang", "NUP", "Nama Barang", "Tahun\nPerolehan", "Nilai Perolehan\n(Rp)", "Lokasi", "Klasifikasi", "Sub Klasifikasi", "Uraian", "Tindak Lanjut"]
+        col_widths = [22, 104, 28, 76, 54, 62, 70, 70, 80, 80, 80]
     elif extra == "sengketa":
-        headers = ["No", "Kode Barang", "NUP", "Nama Barang", "Tahun\nPerolehan", "Kondisi", "Nilai (Rp)", "Lokasi", "No. Perkara", "Pihak\nBersengketa", "Keterangan\nSengketa"]
-        col_widths = [22, 104, 28, 88, 42, 48, 62, 70, 70, 80, 80]
+        headers = ["No", "Kode Barang", "NUP", "Nama Barang", "Tahun\nPerolehan", "Kondisi", "Nilai Perolehan\n(Rp)", "Lokasi", "No. Perkara", "Pihak\nBersengketa", "Keterangan\nSengketa"]
+        col_widths = [22, 104, 28, 76, 54, 48, 62, 70, 70, 80, 80]
     else:
-        headers = ["No", "Kode Barang", "NUP", "Nama Barang", "Merk/Tipe", "Tahun\nPerolehan", "Nilai (Rp)", "Lokasi", "Keterangan"]
-        col_widths = [25, 112, 30, 118, 80, 45, 72, 104, 104]
+        headers = ["No", "Kode Barang", "NUP", "Nama Barang", "Merk/Tipe", "Tahun\nPerolehan", "Nilai Perolehan\n(Rp)", "Lokasi", "Keterangan"]
+        col_widths = [25, 112, 30, 111, 80, 52, 72, 104, 104]
 
     header_row = [Paragraph(h.replace("\n", "<br/>"), header_style) for h in headers]
     table_data = [header_row]
@@ -2141,7 +2170,9 @@ async def generate_dbhi_docx(activity_id: str, dbhi_type: str,
         {"activity_id": activity_id},
         {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
     ).to_list(100000)
-    filtered = [a for a in all_assets if cfg["filter"](a)]
+    # Urut baku sama dengan versi PDF (kode barang → NUP): dua format dari satu
+    # daftar tak boleh berbeda urutannya.
+    filtered = urut_bmn([a for a in all_assets if cfg["filter"](a)])
     subsub_map = await _peta_subsub_kelompok([a.get("asset_code") for a in filtered])
     peta_kpb = await _peta_status_kepegawaian([ident.get("kasatker_nip")])
 
@@ -2154,7 +2185,7 @@ async def generate_dbhi_docx(activity_id: str, dbhi_type: str,
         return _tahun_perolehan(a.get("purchase_date"))
 
     def rpx(v):
-        # DBHI: nilai TANPA prefiks "Rp" (header sudah "Nilai (Rp)") — samakan PDF.
+        # DBHI: nilai TANPA prefiks "Rp" (header sudah "Nilai Perolehan (Rp)") — samakan PDF.
         try:
             return f"{int(v):,}".replace(",", ".")
         except (ValueError, TypeError, OverflowError):
@@ -2164,14 +2195,14 @@ async def generate_dbhi_docx(activity_id: str, dbhi_type: str,
     total_nilai = sum(_safe_price(a) for a in filtered)
     if extra == "berlebih":
         header = ["No", "Kode Barang", "NUP", "Nama Barang", "Tahun Perolehan", "Kondisi",
-                  "Nilai (Rp)", "Lokasi", "Keterangan Berlebih", "Asal Usul", "Tindak Lanjut"]
+                  "Nilai Perolehan (Rp)", "Lokasi", "Keterangan Berlebih", "Asal Usul", "Tindak Lanjut"]
         rows = [[str(i), kode_sel(a), str(a.get("NUP", "-")), a.get("asset_name", "-") or "-", yr(a),
                  a.get("condition", "-") or "-", rpx(_safe_price(a)), a.get("location", "-") or "-",
                  a.get("keterangan_berlebih", "-") or "-", a.get("asal_usul_berlebih", "-") or "-",
                  a.get("tindak_lanjut", "-") or "-"] for i, a in enumerate(filtered, 1)]
         ar = {6}
     elif extra == "tidak_ditemukan":
-        header = ["No", "Kode Barang", "NUP", "Nama Barang", "Tahun Perolehan", "Nilai (Rp)",
+        header = ["No", "Kode Barang", "NUP", "Nama Barang", "Tahun Perolehan", "Nilai Perolehan (Rp)",
                   "Lokasi", "Klasifikasi", "Sub Klasifikasi", "Uraian", "Tindak Lanjut"]
         rows = [[str(i), kode_sel(a), str(a.get("NUP", "-")), a.get("asset_name", "-") or "-", yr(a),
                  rpx(_safe_price(a)), a.get("location", "-") or "-",
@@ -2181,7 +2212,7 @@ async def generate_dbhi_docx(activity_id: str, dbhi_type: str,
         ar = {5}
     elif extra == "sengketa":
         header = ["No", "Kode Barang", "NUP", "Nama Barang", "Tahun Perolehan", "Kondisi",
-                  "Nilai (Rp)", "Lokasi", "No. Perkara", "Pihak Bersengketa", "Keterangan Sengketa"]
+                  "Nilai Perolehan (Rp)", "Lokasi", "No. Perkara", "Pihak Bersengketa", "Keterangan Sengketa"]
         rows = [[str(i), kode_sel(a), str(a.get("NUP", "-")), a.get("asset_name", "-") or "-", yr(a),
                  a.get("condition", "-") or "-", rpx(_safe_price(a)), a.get("location", "-") or "-",
                  a.get("nomor_perkara", "-") or "-", a.get("pihak_bersengketa", "-") or "-",
@@ -2189,7 +2220,7 @@ async def generate_dbhi_docx(activity_id: str, dbhi_type: str,
         ar = {6}
     else:
         header = ["No", "Kode Barang", "NUP", "Nama Barang", "Merk/Tipe", "Tahun Perolehan",
-                  "Nilai (Rp)", "Lokasi", "Keterangan"]
+                  "Nilai Perolehan (Rp)", "Lokasi", "Keterangan"]
         rows = [[str(i), kode_sel(a), str(a.get("NUP", "-")), a.get("asset_name", "-") or "-",
                  f"{a.get('brand', '')} {a.get('model', '')}".strip() or "-", yr(a),
                  rpx(_safe_price(a)), a.get("location", "-") or "-", a.get("notes", "-") or "-"]
@@ -2269,7 +2300,12 @@ async def generate_rhi_pdf(activity_id: str, _user: dict = Depends(require_user_
                 not in ("Kesalahan Pencatatan", "Tidak Ditemukan Lainnya")]
 
     buffer = io.BytesIO()
-    doc = _std_doc(buffer, landscape_mode=True)
+    # RHI POTRET. Tabelnya hanya 5 kolom & ±12 baris — landscape melebarkannya
+    # tanpa menambah isi, dan justru mendorong blok tanda tangan turun sehingga
+    # lembar kedua muncul. Lebar kolom di bawah bersifat RELATIF
+    # (`_fit_col_widths` menskalakannya ke lebar halaman), jadi potret tidak
+    # merusak proporsi antar-kolom.
+    doc = _std_doc(buffer)
     st = _get_report_styles()
     info_style = st['Meta']
     cell_style = st['Cell']
