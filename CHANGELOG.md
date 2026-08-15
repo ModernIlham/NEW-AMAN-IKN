@@ -67,6 +67,38 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#859] DBHI terurut kode barang → NUP, header nilai diperjelas, RHI jadi potret — 2026-08-12
+
+Tiga koreksi tampilan dokumen resmi, semuanya diverifikasi dari BERKAS YANG
+DIRENDER (PDF dibaca ulang dengan pypdf, Word dengan python-docx) — bukan
+sekadar dari bentuk data di memori. Yang dipegang pemeriksa adalah berkasnya.
+
+- **DBHI terurut baku: kode barang menaik, lalu NUP menaik** — PDF dan Word,
+  kedelapan tipe kondisi. Sebelumnya baris keluar dalam urutan penyimpanan
+  Mongo, sehingga daftar yang ditelusuri per kode barang tampak acak. NUP
+  diurut sebagai **angka**: tersimpan sebagai teks, dan urutan teks menaruh
+  "10" sebelum "2". Helper bersama `urut_bmn`/`kunci_urut_bmn` dipakai kedua
+  format agar keduanya tak bisa berbeda urutan; NUP non-angka (kosong, "-",
+  artefak impor) jatuh ke belakang kelompok kodenya tanpa menyela deret angka,
+  dan urutannya deterministik antar-cetakan.
+- **Header kolom nilai: "Nilai (Rp)" → "Nilai Perolehan (Rp)"** di seluruh
+  DBHI (4 varian kolom × PDF & Word). Sekalian kolom "Tahun Perolehan"
+  dilebarkan — pada lebar lama kata "Perolehan" patah jadi "Peroleha"+"n",
+  yang makin mencolok bersebelahan dengan header baru. Lebar kolom DBHI
+  bersifat relatif (`_fit_col_widths`), jadi penyesuaian ini hanya menggeser
+  proporsi, bukan menambah total.
+- **RHI jadi POTRET.** Tabelnya hanya 5 kolom & ±12 baris; lanskap
+  melebarkannya tanpa menambah isi dan mendorong blok tanda tangan turun
+  sehingga lembar kedua muncul. Kini terbukti satu halaman. Versi Word RHI
+  **sudah** potret sejak awal (`doc_baru()` memang berdefault potret) — tak
+  ada perubahan di sana, hanya dikunci uji agar tak berubah diam-diam.
+
+Verifikasi: 12 uji baru (`test_urutan_laporan.py`) yang MERENDER DBHI PDF,
+DBHI Word, RHI PDF, dan RHI Word lalu membaca isinya kembali — urutan baris,
+bunyi header, orientasi halaman, dan jumlah halaman. Suite backend 2.594 lulus.
+
+---
+
 ## [#858] Ekspor berkas akhirnya ikut filter — dan batch ZIP berhenti membuang nilai — 2026-08-12
 
 Dua celah yang tersisa setelah `[#857]`, ditemukan lewat pemeriksaan silang
