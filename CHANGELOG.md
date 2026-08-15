@@ -67,6 +67,31 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#860] Nama barang bertanda kurung siku berhenti hilang dari dokumen resmi — 2026-08-15
+
+ReportLab memperlakukan isi `Paragraph` sebagai markup mini. Teks pengguna yang
+memuat `<` `>` — "PC <Dell>", "Kabel <3m>", "Monitor 24<inci>" — dianggap TAG
+yang tidak dikenal lalu **dibuang diam-diam**. Terbukti: `PC <Dell> & Monitor`
+tercetak menjadi `PC & Monitor`; kata "Dell" lenyap. Tanpa galat, tanpa
+peringatan, di Berita Acara / SPTJM / Surat Koreksi yang sudah ditandatangani
+Kuasa Pengguna Barang.
+
+- Teks pengguna kini di-`escape()` di tiga dokumen yang belum melakukannya:
+  Berita Acara Tidak Ditemukan (kalimat pembuka yang memuat nama kegiatan,
+  serta nama barang/klasifikasi/uraian/tindak lanjut di tabel), SPTJM (nama
+  BMN), dan Surat Koreksi (nama BMN + tiga kolom teks bebas). Daftar Pemegang
+  Aset sudah benar sejak awal dan tidak disentuh.
+- Ironi yang ikut ditutup: Berita Acara SUDAH mengimpor `escape` dan memakainya
+  untuk dasar/metode/kesimpulan, tetapi melewatkan kalimat pembuka — justru
+  bagian yang memuat nama kegiatan yang diketik bebas.
+
+Verifikasi: 4 uji baru yang MERENDER ketiga PDF lalu membaca teksnya kembali,
+memastikan setiap kata dari "PC <Dell> & Monitor 24<inci>" benar-benar sampai
+ke kertas. Uji-mutasi dua sisi: escaping SPTJM dilepas → merah; escaping
+kalimat pembuka BA dilepas → merah. Suite backend 2.598 lulus.
+
+---
+
 ## [#859] DBHI terurut kode barang → NUP, header nilai diperjelas, RHI jadi potret — 2026-08-12
 
 Tiga koreksi tampilan dokumen resmi, semuanya diverifikasi dari BERKAS YANG
