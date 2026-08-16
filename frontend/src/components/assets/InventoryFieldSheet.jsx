@@ -55,10 +55,19 @@ export const SUB_KLASIFIKASI_OPTIONS = {
     { value: "Penggabungan BMN Satu Kesatuan Fungsi", label: "Penggabungan BMN Satu Kesatuan Fungsi" },
     { value: "Kesalahan Pencatatan Pihak Ketiga", label: "Kesalahan Pencatatan Pihak Ketiga" },
   ],
+  // Tiga pertama menjawab BAGAIMANA pencarian gagal; sisanya menjawab SEBAB
+  // barangnya lenyap (termasuk keadaan kahar). Urutan & isinya wajib sama
+  // persis dengan shared_utils.py — dijaga test_sub_klasifikasi_selaras.py.
   "Tidak Ditemukan Lainnya": [
     { value: "Tidak Ditemukan Fisiknya", label: "Tidak Ditemukan Fisiknya" },
     { value: "Tidak Dapat Ditelusuri", label: "Tidak Dapat Ditelusuri" },
     { value: "Tertimpa Bangunan Lain/Beralih Fungsi", label: "Tertimpa Bangunan Lain/Beralih Fungsi" },
+    { value: "Hilang / Dicuri", label: "Hilang / Dicuri" },
+    { value: "Kebakaran", label: "Kebakaran" },
+    { value: "Bencana Alam", label: "Bencana Alam" },
+    { value: "Kerusuhan / Huru-hara", label: "Kerusuhan / Huru-hara" },
+    { value: "Rusak Total / Hancur", label: "Rusak Total / Hancur" },
+    { value: "Sebab Lain (Diuraikan)", label: "Sebab Lain (Diuraikan)" },
   ],
 };
 

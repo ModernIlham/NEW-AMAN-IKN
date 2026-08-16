@@ -878,9 +878,25 @@ VALID_SUB_KLASIFIKASI_PENCATATAN = [
     "Kesalahan Pencatatan Pihak Ketiga",
 ]
 VALID_SUB_KLASIFIKASI_LAINNYA = [
+    # Tiga pertama: BAGAIMANA pencarian gagal.
     "Tidak Ditemukan Fisiknya",
     "Tidak Dapat Ditelusuri",
     "Tertimpa Bangunan Lain/Beralih Fungsi",
+    # Sisanya: SEBAB barangnya lenyap — termasuk keadaan kahar. Ditambahkan
+    # atas keputusan pemilik agar kejadian tak terduga (kebakaran, bencana,
+    # pencurian) punya kategorinya sendiri, bukan menumpuk di satu ember.
+    #
+    # Catatan jujur: dua kelompok ini memang DUA SUMBU yang berbeda — satu
+    # menjawab "bagaimana kami gagal menemukannya", satu menjawab "kenapa ia
+    # tidak ada". Meleburnya ke satu daftar adalah keputusan pemilik yang
+    # diambil sadar; konsekuensinya operator memilih salah satu sudut pandang,
+    # tidak keduanya sekaligus.
+    "Hilang / Dicuri",
+    "Kebakaran",
+    "Bencana Alam",
+    "Kerusuhan / Huru-hara",
+    "Rusak Total / Hancur",
+    "Sebab Lain (Diuraikan)",
 ]
 
 # Nilai yang DITAWARKAN aplikasi hari ini (UI + dropdown template Excel).
@@ -900,9 +916,9 @@ SUB_KLASIFIKASI_LAWAS = [
     "Pencatatan Ganda (Double Counting)",
     "Pemecahan/Penggabungan Belum Dicatat",
     "Transfer Masuk/Keluar Belum Diproses",
-    "Hilang / Dicuri",
-    "Rusak Total / Hancur",
-    "Bencana Alam",
+    # "Hilang / Dicuri", "Bencana Alam", dan "Rusak Total / Hancur" DIPROMOSIKAN
+    # kembali ke daftar yang ditawarkan (lihat VALID_SUB_KLASIFIKASI_LAINNYA),
+    # jadi tak lagi tercantum di sini — keduanya wajib saling lepas.
     "Lainnya",
 ]
 
