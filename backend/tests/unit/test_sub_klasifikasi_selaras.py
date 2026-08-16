@@ -263,3 +263,72 @@ class TestTidakAdaNilaiKembar:
         """Satu nilai di dua klasifikasi membuat pilihan operator ambigu."""
         assert set(VALID_SUB_KLASIFIKASI_PENCATATAN).isdisjoint(
             VALID_SUB_KLASIFIKASI_LAINNYA)
+
+
+class TestSebelasKlasifikasiDjknLengkap:
+    """Setelah penambahan dua nilai terakhir, pemetaan ke 11 klasifikasi resmi
+    DJKN menjadi 11/11. Uji ini menjaga keduanya tak hilang lagi."""
+
+    def test_dua_klasifikasi_djkn_terakhir_ada(self):
+        for n in ("Kegiatan Renovasi Dicatat Sebagai BMN Tersendiri",
+                  "Kesalahan Kodefikasi/Klasifikasi (Bukan Objek Revaluasi)"):
+            assert n in VALID_SUB_KLASIFIKASI_PENCATATAN
+
+    def test_kesalahan_pencatatan_kini_sembilan_nilai(self):
+        assert len(VALID_SUB_KLASIFIKASI_PENCATATAN) == 9
+
+
+class TestTemuanPencatatanLapangan:
+    """Penanda cacat pencatatan yang BERDIRI SENDIRI.
+
+    Permintaan pemilik: "di lapangan bisa terjadi kesalahan pencatatan
+    kodifikasi yang nantinya membantu dalam proses reklasifikasi, salah
+    penempelan stiker, dll ... agar terdapat tandanya saat diinventarisasi."
+
+    Intinya: cacat pencatatan paling sering ditemukan pada barang yang JUSTRU
+    KETEMU. Kalau penanda ini ikut digantungkan pada status "Tidak Ditemukan"
+    seperti sub-klasifikasi, seluruh gunanya hilang."""
+
+    def test_terpisah_dari_klasifikasi_tidak_ditemukan(self):
+        from shared_utils import VALID_TEMUAN_PENCATATAN as T
+        assert set(T).isdisjoint(VALID_SUB_KLASIFIKASI_ALL)
+
+    def test_memuat_dua_kasus_yang_disebut_pemilik(self):
+        from shared_utils import VALID_TEMUAN_PENCATATAN as T
+        assert "Kodefikasi Tidak Sesuai Fisik" in T   # → usul reklasifikasi
+        assert "Stiker Tertempel di Barang Lain" in T
+
+    def test_terdaftar_di_registry_field(self):
+        from asset_fields import SCALAR_FIELD_NAMES, BATCHABLE_FIELD_NAMES
+        assert "temuan_pencatatan" in SCALAR_FIELD_NAMES
+        # Satu rak salah tempel stiker biasanya kena banyak NUP sekaligus.
+        assert "temuan_pencatatan" in BATCHABLE_FIELD_NAMES
+
+    def test_frontend_selaras_dengan_server(self):
+        from shared_utils import VALID_TEMUAN_PENCATATAN as T
+        src = open(os.path.abspath(_SHEET), encoding="utf-8").read()
+        blok = src.split("export const TEMUAN_PENCATATAN_OPTIONS = [", 1)[1] \
+                  .split("];", 1)[0]
+        fe = re.findall(r'"([^"]+)"', blok)
+        assert fe == T
+
+    def test_dropdown_template_impor_memakai_daftar_yang_sama(self):
+        from routes.templates import ASSET_TEMPLATE_SCHEMA
+        from shared_utils import VALID_TEMUAN_PENCATATAN as T
+        kolom = [c for c in ASSET_TEMPLATE_SCHEMA
+                 if c["field"] == "temuan_pencatatan"]
+        assert kolom, "kolom temuan_pencatatan tak ada di template impor"
+        assert kolom[0]["dropdown"] == T
+        assert kolom[0]["sample2"] in T
+
+    def test_kolom_ekspor_sejajar_dengan_headernya(self):
+        """Kolom XLSX ditulis dengan indeks manual. Header di posisi berbeda
+        dari nilainya = seluruh berkas ekspor bergeser satu kolom — dan tak
+        ada yang menyadarinya sampai ada yang membaca angkanya."""
+        from routes.exports import ASSET_SHEET_HEADERS
+        src = open(os.path.join(os.path.dirname(__file__), "..", "..",
+                                "routes", "exports.py"), encoding="utf-8").read()
+        m = re.search(r"worksheet\.write\(row, (\d+), asset\.get\('temuan_pencatatan'",
+                      src)
+        assert m, "kolom temuan_pencatatan tak ditulis ke sheet"
+        assert ASSET_SHEET_HEADERS.index("Temuan Pencatatan") == int(m.group(1))

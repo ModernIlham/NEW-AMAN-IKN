@@ -66,6 +66,11 @@ ASSET_SCALAR_FIELDS = (
     AssetField("stiker_ukuran", "Ukuran Stiker", batchable=True),
     AssetField("inventory_status", "Status Inventarisasi", batchable=True,
                import_default="Belum Diinventarisasi", import_force_default=True),
+    # Penanda cacat pencatatan yang ditemukan saat inventarisasi — berlaku
+    # untuk aset yang DITEMUKAN sekalipun, jadi sengaja terpisah dari
+    # klasifikasi_tidak_ditemukan di bawahnya. Batchable: satu rak salah
+    # tempel stiker biasanya kena banyak NUP sekaligus.
+    AssetField("temuan_pencatatan", "Temuan Pencatatan", batchable=True),
     AssetField("klasifikasi_tidak_ditemukan", "Klasifikasi"),
     AssetField("sub_klasifikasi", "Sub Klasifikasi"),
     AssetField("uraian_tidak_ditemukan", "Uraian Tidak Ditemukan"),

@@ -103,6 +103,7 @@ class AssetCreate(BaseModel):
     stiker_ukuran: Optional[str] = ""
     stiker_photo_index: Optional[int] = None
     inventory_status: Optional[str] = "Belum Diinventarisasi"
+    temuan_pencatatan: Optional[str] = ""
     klasifikasi_tidak_ditemukan: Optional[str] = ""
     sub_klasifikasi: Optional[str] = ""
     uraian_tidak_ditemukan: Optional[str] = ""
@@ -176,6 +177,7 @@ class AssetResponse(BaseModel):
     stiker_ukuran: Optional[str] = ""
     stiker_photo_index: Optional[int] = None
     inventory_status: Optional[str] = "Belum Diinventarisasi"
+    temuan_pencatatan: Optional[str] = ""
     klasifikasi_tidak_ditemukan: Optional[str] = ""
     sub_klasifikasi: Optional[str] = ""
     uraian_tidak_ditemukan: Optional[str] = ""

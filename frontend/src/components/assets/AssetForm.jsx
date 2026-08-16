@@ -19,7 +19,7 @@ import {
 import { DocumentChecklist } from "./DocumentChecklist";
 import { InputTanggal } from "@/components/ui/input-tanggal";
 import { bangunChecklist, rekomendasiKelengkapan } from "@/lib/kelengkapanBmn";
-import InventoryFieldSheet, { PENGGUNA_MELEKAT_OPTIONS, PENGGUNA_NAME_LABELS, OPERASIONAL_JENIS_OPTIONS, CONDITION_OPTIONS, SUB_KLASIFIKASI_OPTIONS } from "./InventoryFieldSheet";
+import InventoryFieldSheet, { PENGGUNA_MELEKAT_OPTIONS, PENGGUNA_NAME_LABELS, OPERASIONAL_JENIS_OPTIONS, CONDITION_OPTIONS, SUB_KLASIFIKASI_OPTIONS, TEMUAN_PENCATATAN_OPTIONS } from "./InventoryFieldSheet";
 import FullCameraSheet from "./FullCameraSheet";
 import KartuTapDialog from "../pegawai/KartuTapDialog";
 import { useBackGuard } from "../../hooks/useBackGuard";
@@ -154,6 +154,18 @@ const SUB_KLASIFIKASI_INFO = {
     contoh: "Bangunan gudang lama yang sudah dibongkar dan di atasnya dibangun gedung baru, namun pencatatan gudang lama belum dihapus.",
     penanganan: "Dokumentasikan kondisi saat ini, kumpulkan bukti perubahan fisik, dan proses sesuai ketentuan penghapusan BMN.",
     alur: "1. Dokumentasi kondisi saat ini (foto, koordinat) → 2. Kumpulkan bukti perubahan → 3. Buat Berita Acara → 4. Proses SPTJM → 5. Ajukan penghapusan dan pencatatan aset baru"
+  },
+  "Kegiatan Renovasi Dicatat Sebagai BMN Tersendiri": {
+    maksud: "Biaya renovasi/rehabilitasi yang seharusnya menambah nilai BMN induk justru dicatat sebagai BMN baru tersendiri, sehingga fisiknya tak pernah ditemukan sebagai barang terpisah.",
+    contoh: "Renovasi atap gedung dicatat sebagai satu NUP 'Renovasi Gedung', padahal yang ada di lapangan hanya gedungnya.",
+    penanganan: "Gabungkan nilai renovasi ke BMN induknya, lalu hapus NUP renovasi yang berdiri sendiri melalui Surat Koreksi.",
+    alur: "1. Identifikasi BMN induk yang direnovasi → 2. Pastikan renovasi menambah masa manfaat/nilai → 3. Kapitalisasi ke NUP induk → 4. Buat Surat Koreksi → 5. Hapus NUP renovasi terpisah"
+  },
+  "Kesalahan Kodefikasi/Klasifikasi (Bukan Objek Revaluasi)": {
+    maksud: "BMN tercatat dengan kode/klasifikasi golongan yang keliru sehingga masuk daftar yang seharusnya bukan haknya — misalnya tercatat sebagai aset tetap padahal persediaan.",
+    contoh: "Barang habis pakai tercatat dengan kode Peralatan dan Mesin, lalu ikut terdaftar sebagai objek yang dicari saat inventarisasi aset tetap.",
+    penanganan: "Tetapkan kode dan golongan yang benar sesuai penggolongan BMN, lalu ajukan koreksi pencatatan. Barangnya sendiri tidak hilang.",
+    alur: "1. Tentukan kode & golongan yang benar → 2. Kumpulkan dokumen perolehan → 3. Buat Surat Koreksi → 4. Perbaiki kode di pencatatan → 5. Pastikan tak lagi masuk daftar objek yang keliru"
   },
   // ── Sebab kedaruratan & keadaan kahar ──────────────────────────────────
   // Panduan di bawah adalah KAIDAH INTERNAL SATKER, bukan kutipan pasal:
@@ -448,6 +460,7 @@ function buildEditFormData(a, activityId) {
     stiker_photo_index: a.stiker_photo_index != null ? a.stiker_photo_index : null,
     inventory_status: a.inventory_status || "Belum Diinventarisasi",
     klasifikasi_tidak_ditemukan: a.klasifikasi_tidak_ditemukan || "",
+    temuan_pencatatan: a.temuan_pencatatan || "",
     sub_klasifikasi: a.sub_klasifikasi || "",
     uraian_tidak_ditemukan: a.uraian_tidak_ditemukan || "",
     tindak_lanjut: a.tindak_lanjut || "",
@@ -572,7 +585,7 @@ const AssetForm = memo(({
     nomor_bukti_perolehan: "", supplier: "", notes: "", photos: [],
     thumbnail_index: 0,
     stiker_status: "Belum Terpasang", stiker_ukuran: "", stiker_photo_index: null,
-    inventory_status: "Belum Diinventarisasi", klasifikasi_tidak_ditemukan: "", sub_klasifikasi: "", uraian_tidak_ditemukan: "", tindak_lanjut: "",
+    inventory_status: "Belum Diinventarisasi", temuan_pencatatan: "", klasifikasi_tidak_ditemukan: "", sub_klasifikasi: "", uraian_tidak_ditemukan: "", tindak_lanjut: "",
     koordinat_latitude: "", koordinat_longitude: "", kronologis: "",
     keterangan_berlebih: "", asal_usul_berlebih: "", nomor_perkara: "", pihak_bersengketa: "", keterangan_sengketa: "",
     garansi_hingga: "", garansi_jenis: "", barang_bersejarah: "",
@@ -1781,7 +1794,7 @@ const AssetForm = memo(({
           "nomor_spm", "perolehan_dari_nama", "nomor_kontrak", "cara_bayar_kontrak",
           "nomor_bukti_perolehan", "supplier", "notes",
           "stiker_status", "stiker_ukuran",
-          "inventory_status", "klasifikasi_tidak_ditemukan", "sub_klasifikasi",
+          "inventory_status", "temuan_pencatatan", "klasifikasi_tidak_ditemukan", "sub_klasifikasi",
           "uraian_tidak_ditemukan", "tindak_lanjut",
           "koordinat_latitude", "koordinat_longitude", "kronologis",
           "keterangan_berlebih", "asal_usul_berlebih",
@@ -2800,6 +2813,29 @@ const AssetForm = memo(({
                     </div>
                   </div>
                 )}
+
+                {/* Temuan pencatatan lapangan — SENGAJA di luar blok "Tidak
+                    Ditemukan": cacat pencatatan paling sering ditemukan pada
+                    barang yang JUSTRU KETEMU (kode tak sesuai fisik, stiker
+                    tertempel di barang lain). Inilah penanda yang kelak
+                    menyuplai usul reklasifikasi. */}
+                <div className="space-y-1 pt-1 border-t border-border">
+                  <Label className="text-[10px] text-sky-700 dark:text-sky-400">
+                    Temuan Pencatatan <span className="text-muted-foreground font-normal">(opsional — berlaku juga bila barang ditemukan)</span>
+                  </Label>
+                  <Select value={formData.temuan_pencatatan || "__none__"}
+                    onValueChange={v => handleSelectChange("temuan_pencatatan", v === "__none__" ? "" : v)}>
+                    <SelectTrigger className="h-7 text-xs" data-testid="select-temuan-pencatatan">
+                      <SelectValue placeholder="Tidak ada temuan" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Tidak ada temuan</SelectItem>
+                      {TEMUAN_PENCATATAN_OPTIONS.map(o => (
+                        <SelectItem key={o} value={o}>{o}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
                 {formData.inventory_status === "Tidak Ditemukan" && (
                   <div className="space-y-2 pt-1 border-t border-amber-200 dark:border-amber-700">

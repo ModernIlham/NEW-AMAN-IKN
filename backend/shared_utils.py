@@ -876,6 +876,10 @@ VALID_SUB_KLASIFIKASI_PENCATATAN = [
     "BMN Objek Alih Status/Pemindahtanganan/Penghapusan",
     "Penggabungan BMN Satu Kesatuan Fungsi",
     "Kesalahan Pencatatan Pihak Ketiga",
+    # Dua di bawah melengkapi pemetaan ke 11 klasifikasi resmi DJKN menjadi
+    # 11/11 (lihat docs/SITASI-DOKUMEN-RESMI.md).
+    "Kegiatan Renovasi Dicatat Sebagai BMN Tersendiri",
+    "Kesalahan Kodefikasi/Klasifikasi (Bukan Objek Revaluasi)",
 ]
 VALID_SUB_KLASIFIKASI_LAINNYA = [
     # Tiga pertama: BAGAIMANA pencarian gagal.
@@ -923,6 +927,30 @@ SUB_KLASIFIKASI_LAWAS = [
 ]
 
 VALID_SUB_KLASIFIKASI_ALL = SUB_KLASIFIKASI_DITAWARKAN + SUB_KLASIFIKASI_LAWAS
+
+
+# ── Temuan pencatatan lapangan ──────────────────────────────────────────────
+# Klasifikasi yang BERDIRI SENDIRI, sengaja lepas dari `klasifikasi_tidak_
+# ditemukan`. Alasannya sederhana dan datang dari lapangan: cacat pencatatan
+# paling sering ditemukan pada barang yang JUSTRU KETEMU — kodenya tak sesuai
+# fisik, stikernya tertempel di barang lain, namanya beda dengan barangnya.
+#
+# Sebelum ini tak ada tempat menandainya. Sub-klasifikasi hanya hidup ketika
+# aset berstatus "Tidak Ditemukan", sehingga temuan pada aset yang ditemukan
+# hanya bisa dititipkan ke kolom Catatan — tidak terhitung, tidak tersaring,
+# dan hilang dari rekapitulasi.
+#
+# Penanda ini yang kelak menyuplai usul REKLASIFIKASI: kode barang yang salah
+# baru bisa diusulkan diperbaiki kalau ada yang mencatatnya saat inventarisasi.
+VALID_TEMUAN_PENCATATAN = [
+    "Kodefikasi Tidak Sesuai Fisik",
+    "Stiker Tertempel di Barang Lain",
+    "Stiker Rusak/Tidak Terbaca",
+    "NUP Ganda pada Fisik Berbeda",
+    "Nama/Spesifikasi Tidak Sesuai Fisik",
+    "Lokasi Tercatat Tidak Sesuai",
+    "Temuan Lain (Diuraikan)",
+]
 
 
 # ── Penanda tangan dokumen resmi (temuan review #26 — satu resolver lintas modul) ──
