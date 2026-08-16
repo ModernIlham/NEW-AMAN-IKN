@@ -67,6 +67,44 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#863] Skill `llm-council` ikut disimpan di repo — 2026-08-16
+
+Permintaan pemilik: pasang skill pihak ketiga
+[claude-skills-llm-council](https://github.com/aiwithremy/claude-skills-llm-council)
+(Ole Lehmann / Remy Gaskell, metodologi Andrej Karpathy). Skill ini
+menjalankan satu pertanyaan melalui 5 penasihat dengan sudut pandang berbeda,
+mereka saling menilai secara anonim, lalu seorang "ketua" menyintesis
+putusannya.
+
+**Tanpa perubahan kode aplikasi.** Yang bertambah hanya satu berkas
+instruksi: `.claude/skills/llm-council/SKILL.md` — mengikuti pola yang sudah
+ada di repo ini (`aman-dev`, `aman-testdata` juga tersimpan di sana).
+Alasannya kontainer sesi bersifat sementara: skill yang dipasang di direktori
+sesi hilang begitu sesi berakhir, sedangkan yang di repo tersedia lagi di
+sesi berikutnya.
+
+Yang diperiksa sebelum disalin:
+
+- Isinya **murni Markdown** — tanpa skrip, tanpa panggilan jaringan, tanpa
+  akses kredensial. Yang dibacanya hanya berkas konteks proyek
+  (`CLAUDE.md`, folder `memory/`) dan itu pun hanya baca.
+- Repo sumber **tidak mencantumkan lisensi**; disalin karena repo itu memang
+  diterbitkan untuk dibagikan. Asal-usul, penulis, commit sumber (`55ee36e`),
+  dan tanggal pengambilan dicatat di kepala berkas agar tak hilang.
+
+Dua penyesuaian lokal, keduanya tercatat di berkasnya: frontmatter dirapikan
+ke bentuk baku (nilai tidak diubah), dan satu kontradiksi naskah aslinya
+diselaraskan — catatan penutupnya menyuruh "buat keluaran HTML yang rapi"
+padahal langkah 5 memerintahkan menampilkan hasil di chat tanpa berkas.
+
+Catatan pemakaian: sekali jalan memanggil **11 sub-agen** (5 penasihat + 5
+peninjau + 1 ketua). Untuk keputusan bertaruh tinggi, bukan pertanyaan biasa.
+Pemicunya antara lain "council this", "pressure-test this", "war room this".
+
+Tanpa uji-mutasi: PR ini tidak menambah kode yang bisa dimutasi.
+
+---
+
 ## [#862] Panel Riwayat berhenti menyebut satu pencatatan sebagai dua suntingan — 2026-08-16
 
 Laporan pemilik: mencatat **satu** aset memunculkan **dua** baris "Edit" —
