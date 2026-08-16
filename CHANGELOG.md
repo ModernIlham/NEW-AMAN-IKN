@@ -67,6 +67,60 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#867] Riset sitasi: 6 dari 7 pertanyaan terjawab, 1 koreksi atas audit sendiri — 2026-08-16
+
+Permintaan pemilik: riset sumber hukum untuk sitasi yang belum terverifikasi
+di `docs/SITASI-DOKUMEN-RESMI.md`, "hingga ketemu".
+
+**Batas yang harus dinyatakan lebih dulu:** seluruh sumber primer tetap
+terblokir — `jdih.kemenkeu.go.id`, `peraturan.bpk.go.id`,
+`djkn.kemenkeu.go.id`, bahkan salinan resmi di mirror universitas dan Scribd.
+Yang tembus hanya pencarian web. Jadi yang dipastikan **nomor dan judul**,
+bukan isi pasal, dan bukan status berlaku.
+
+**Terkonfirmasi — pemakaian di kode cocok (5):**
+
+- `PMK 214/PMK.05/2013` = **Bagan Akun Standar**, menggantikan PMK 91/PMK.05/2007
+- `KMK 620/KM.6/2015` = **Masa Manfaat Amortisasi BMN berupa Aset Tak Berwujud**
+- `KMK 81/KM.6/2018` = perubahan atas 620 — rantai "620 jo. 81" di kode benar
+- `KMK 334/2021` = **Hibah BMN** selain tanah/bangunan tanpa bukti kepemilikan
+  ≤ Rp100 juta — klaim di kode cocok persis
+- `PMK 118/PMK.06/2018` = **Tata Cara Rekonsiliasi BMN**, mencabut PMK 69/2016
+
+**Terkonfirmasi dengan catatan (2)** — judulnya benar, pemakaiannya perlu
+ditegaskan pemilik:
+
+- `KMK 403/KMK.06/2013` = Pedoman Tindak Lanjut Hasil Penertiban BMN. Tetapi
+  klaim SPTJM soal tanggung jawab "formil dan materiil" **belum terbaca dari
+  teks aslinya**.
+- `S-115/KN/2017` = surat Dirjen KN soal Barang Tidak Ditemukan hasil
+  **Penilaian Kembali (revaluasi)**. Berita Acara menuliskannya sebagai dasar
+  "tindak lanjut hasil **inventarisasi**" — beda konteks yang material.
+
+**Belum ketemu (1):** `KMK 339/KM.6/2024`. Empat sudut pencarian berbeda.
+Perubahan keduanya memang ada dan KMK 266/KM.6/2023 adalah perubahan pertama,
+sehingga perubahan kedua bertahun 2024 masuk akal — tetapi nomornya tak dapat
+dipastikan. Statusnya sengaja **tetap** belum-diriset.
+
+**Koreksi atas audit saya sendiri:** `PMK 118/PMK.06/2018` semula saya tandai
+"perlu-koreksi" karena mengira tahunnya keliru. **Salah.** Nomor 118 dipakai
+dua peraturan berbeda di dua tahun berbeda — 118/PMK.06/2017 (revaluasi) dan
+118/PMK.06/2018 (rekonsiliasi). Kodenya benar sejak awal; penalaran saya yang
+keliru.
+
+Sekaligus, riset menguatkan bahwa ejaan baku KMK 295 adalah **`KM.6`** (bukan
+`KMK.06`) — Hukumonline mengindeksnya demikian.
+
+Gerbang baru: status `terverifikasi` tak boleh jadi klaim kosong. Tiap sitasi
+berstatus itu **wajib punya jejaknya di laporan audit**, dijaga uji — kalau
+tidak, registry cuma memindahkan tebakan dari satu kolom ke kolom lain.
+
+Verifikasi: 20 uji (3 baru). Uji-mutasi dua sisi: yang belum ketemu diklaim
+terverifikasi → 1 uji merah; bukti riset dihapus dari laporan → 1 uji merah.
+Suite backend 2.662 lulus.
+
+---
+
 ## [#866] Kejadian tak terduga punya kategorinya sendiri — 2026-08-16
 
 Keputusan pemilik atas poin 3: sebab kedaruratan menjadi **nilai
