@@ -1011,6 +1011,29 @@ async def get_rekapitulasi(activity_id: str, _user: dict = Depends(require_user_
     kesalahan_pencatatan, tidak_ditemukan_lainnya, belum_klasifikasi = \
         ba_utils.klasifikasikan_tidak_ditemukan(tidak_ditemukan)
 
+    # Rekap temuan pencatatan lapangan. Urutannya mengikuti daftar baku supaya
+    # susunan kartu di layar tidak berubah-ubah antar kegiatan; jenis yang nol
+    # tetap dibawa agar operator melihat kategori yang ADA tapi belum terpakai,
+    # bukan mengira kategorinya hilang.
+    from shared_utils import VALID_TEMUAN_PENCATATAN
+    _bertemuan = [a for a in assets if str(a.get("temuan_pencatatan") or "").strip()]
+    _per_jenis = {}
+    for jenis in VALID_TEMUAN_PENCATATAN:
+        cocok = [a for a in _bertemuan if a.get("temuan_pencatatan") == jenis]
+        _per_jenis[jenis] = {"count": len(cocok),
+                             "value": sum(safe_price(a) for a in cocok)}
+    # Nilai di luar daftar baku (data lama / impor) tak boleh raib dari rekap.
+    _lain = [a for a in _bertemuan
+             if a.get("temuan_pencatatan") not in VALID_TEMUAN_PENCATATAN]
+    if _lain:
+        _per_jenis["(di luar daftar baku)"] = {
+            "count": len(_lain), "value": sum(safe_price(a) for a in _lain)}
+    temuan_rekap = {
+        "count": len(_bertemuan),
+        "value": sum(safe_price(a) for a in _bertemuan),
+        "per_jenis": _per_jenis,
+    }
+
     sub_breakdown = {}
     for a in tidak_ditemukan:
         sub = a.get("sub_klasifikasi", "Belum Dikategorikan") or "Belum Dikategorikan"
@@ -1073,7 +1096,12 @@ async def get_rekapitulasi(activity_id: str, _user: dict = Depends(require_user_
             "count": len(sengketa),
             "value": sum(safe_price(a) for a in sengketa)
         },
-        "sub_breakdown": sub_breakdown
+        "sub_breakdown": sub_breakdown,
+        # Temuan pencatatan lapangan — dihitung dari SELURUH aset, bukan hanya
+        # yang tidak ditemukan. Itu inti field ini: cacat pencatatan justru
+        # paling sering dijumpai pada barang yang KETEMU, dan sebelum ada rekap
+        # ini satu-satunya cara melihatnya adalah membuka ekspor Excel.
+        "temuan_pencatatan": temuan_rekap,
     }
 
 
