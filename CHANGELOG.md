@@ -67,6 +67,56 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#864] Setiap nomor peraturan di dokumen bermeterai kini tertagih — 2026-08-16
+
+Dokumen keluaran AMAN memuat nomor peraturan, lalu ditandatangani Kuasa
+Pengguna Barang di atas meterai dan dibaca pemeriksa. Nomor-nomor itu tersebar
+sebagai teks biasa; **tak seorang pun tahu ada berapa**. Hasil pemindaian:
+**57 sitasi berbeda di 28 berkas**.
+
+Temuan yang bisa dipastikan **tanpa akses hukum sama sekali**:
+
+- **7 sitasi tak pernah diriset** — tercetak ke dokumen tetapi tidak ada
+  jejaknya di `docs/PUSTAKA-REGULASI-BMN.md`. Dua di antaranya masuk dokumen
+  **bertanda tangan**: `KMK 403/KMK.06/2013` (dasar "formil dan materiil" di
+  SPTJM) dan `S-115/KN/2017` (Dasar Hukum Berita Acara).
+- **3 sitasi membantah pustaka repo sendiri.** `KMK 29/PMK.6/2010` keliru pada
+  dua hal sekaligus — jenisnya (KMK, padahal pustaka menulis PMK) dan
+  sub-kodenya (`PMK.6`, padahal `PMK.06`); nomor KMK dengan sub-kode PMK tidak
+  koheren. `PMK 118/PMK.06/2018` menyebut tahun yang berbeda dari
+  118/PMK.06/2017 yang dipakai seluruh repo. `KMK 295/KMK.06/2019` adalah
+  ejaan ketiga untuk peraturan yang sama.
+
+Yang dibangun:
+
+- `backend/sitasi_regulasi.py` — registry + pemindai. Membaca **string
+  literal** saja dan sengaja melewati docstring/komentar: menyebut peraturan di
+  sana justru dianjurkan dan tak pernah sampai ke kertas. `kunci_peraturan()`
+  menyamakan bentuk panjang & pendek ("PMK 181/2016" = "PMK 181/PMK.06/2016")
+  sehingga ejaan yang berbeda bisa dibandingkan.
+- Gerbang anti-drift: sitasi baru yang belum didaftarkan → **uji merah**. Tak
+  ada nomor peraturan yang bisa menyelinap ke dokumen bermeterai tanpa
+  seseorang menuliskan asal-usulnya.
+- Detektor repo-membantah-diri-sendiri (`bentrokan_jenis`, `bentrokan_sub_kode`).
+- `docs/SITASI-DOKUMEN-RESMI.md` — laporan audit + **7 pertanyaan siap kirim**
+  untuk Biro Hukum/Inspektorat. Inilah yang mengubah "tolong sediakan rujukan
+  resmi" yang mustahil dijawab menjadi permintaan konkret.
+
+**Yang sengaja TIDAK dikerjakan:** mencabut nomor peraturan dari dasar hukum
+Berita Acara. Landasan saran itu sendiri tak terverifikasi — klaim "dasar hukum
+naskah dinas tidak wajib menyebut nomor" tak bisa dipastikan dari lingkungan
+ini, dan mencabut dasar hukum dari dokumen yang diperiksa BPK bisa memperburuk
+keadaan. Menukar satu tebakan dengan tebakan lain bukan perbaikan.
+
+Catatan jujur: versi pertama registry ini **salah pada lima entri** — semuanya
+ketahuan oleh uji pemeriksa-silang terhadap pustaka, bukan oleh penulisnya.
+Itu justru alasan pemeriksaan itu ada di uji dan bukan di kepala siapa pun.
+
+Verifikasi: 19 uji baru. Uji-mutasi dua sisi: docstring ikut dipindai → 2 uji
+merah; detektor sub-kode dibutakan → 2 uji merah. Suite backend 2.641 lulus.
+
+---
+
 ## [#863] Skill `llm-council` ikut disimpan di repo — 2026-08-16
 
 Permintaan pemilik: pasang skill pihak ketiga
