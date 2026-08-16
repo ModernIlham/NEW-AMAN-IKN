@@ -67,6 +67,49 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#865] Sub-klasifikasi UI dan server berhenti berjalan sendiri-sendiri — 2026-08-16
+
+Layar dan server sama-sama punya daftar sub-klasifikasi sebab BMN tidak
+ditemukan — dan **irisannya NOL**. Bukan satu-dua nilai meleset: tidak ada
+satu pun yang sama.
+
+Akibatnya nyata, bukan teoretis. Diuji langsung terhadap validator impor:
+**10 dari 10** nilai yang bisa dihasilkan UI aplikasi **DITOLAK** saat
+berkasnya diimpor ulang lewat Excel. Operator mengekspor datanya sendiri lalu
+tidak bisa memasukkannya kembali. Sebaliknya, template Excel menyodorkan
+"Bencana Alam" dan "Hilang / Dicuri" yang UI-nya tak pernah bisa hasilkan —
+dan **baris contoh di template itu sendiri** ("Pencatatan Ganda") ditolak oleh
+validator milik template itu juga.
+
+Tak satu pun uji menangkapnya, karena masing-masing sisi konsisten dengan
+dirinya sendiri. Yang hilang adalah uji yang membandingkan **keduanya**.
+
+Yang diperbaiki:
+
+- Daftar di `shared_utils.py` disamakan dengan yang ditawarkan UI — itulah
+  kosakata yang selama ini benar-benar dipakai operator dan sudah tertanam di
+  data produksi.
+- Kaidahnya **longgar saat menerima, ketat saat menawarkan**: 12 nilai lawas
+  (termasuk "Bencana Alam", "Hilang / Dicuri") tetap **diterima** impor supaya
+  berkas & data lama tak mendadak ditolak, tetapi tak lagi disodorkan. Dropdown
+  template kini memakai `SUB_KLASIFIKASI_DITAWARKAN`.
+- Uji anti-drift baru **membaca berkas frontend apa adanya** dan membandingkan
+  isi *beserta urutannya*. Menyalin daftarnya ke dalam uji akan menua diam-diam
+  dan mengulang persis cacat yang hendak dicegah.
+- Penjaga anti-hampa ikut dipasang: bila pembacaan JSX gagal, daftar jadi
+  kosong dan seluruh uji kesamaan akan lolos tanpa memeriksa apa pun.
+
+Cacat ini ditemukan lewat sesi `llm-council` pada pertanyaan poin 3 — bukan
+oleh penasihatnya, melainkan saat memverifikasi klaim salah satu penasihat ke
+kode. Nilai "Bencana Alam" yang dikiranya siap pakai untuk kebutuhan force
+majeure ternyata mati dari sisi operator: tak pernah bisa dipilih di layar.
+
+Verifikasi: 12 uji baru. Uji-mutasi dua sisi: satu nilai frontend diubah →
+3 uji merah (termasuk uji pulang-pergi); validasi impor dikembalikan ke daftar
+lawas → 2 uji merah. Suite backend 2.653 & frontend 855 lulus, build sukses.
+
+---
+
 ## [#864] Setiap nomor peraturan di dokumen bermeterai kini tertagih — 2026-08-16
 
 Dokumen keluaran AMAN memuat nomor peraturan, lalu ditandatangani Kuasa
