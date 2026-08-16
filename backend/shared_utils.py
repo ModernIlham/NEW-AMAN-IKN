@@ -857,7 +857,41 @@ VALID_STATUSES = ["Aktif", "Idle", "Maintenance", "Nonaktif"]
 VALID_STIKER_STATUSES = ["Belum Terpasang", "Sudah Terpasang"]
 VALID_STIKER_SIZES = ["Kecil", "Sedang", "Besar"]
 VALID_KLASIFIKASI = ["Kesalahan Pencatatan", "Tidak Ditemukan Lainnya"]
+# Sub-klasifikasi sebab BMN tidak ditemukan.
+#
+# Daftar di bawah adalah SATU sumber kebenaran, dan harus persis sama dengan
+# `SUB_KLASIFIKASI_OPTIONS` di frontend `InventoryFieldSheet.jsx` — dijaga uji
+# `tests/unit/test_sub_klasifikasi_selaras.py`.
+#
+# Kenapa dijaga: sebelumnya kedua sisi punya daftarnya sendiri dan IRISANNYA
+# NOL. Akibatnya seluruh 10 nilai yang bisa dihasilkan UI aplikasi DITOLAK saat
+# berkasnya diimpor ulang lewat Excel, sementara template Excel menawarkan
+# nilai yang UI-nya tak pernah bisa hasilkan — bahkan baris contoh di template
+# itu sendiri ("Pencatatan Ganda") ditolak validatornya sendiri.
 VALID_SUB_KLASIFIKASI_PENCATATAN = [
+    "Kesalahan Kodefikasi",
+    "Pencatatan Ganda",
+    "BMN Tercatat di Satker Lain",
+    "Kegiatan Perencanaan/Pengembangan Dicatat Sebagai BMN Tersendiri",
+    "BMN Objek Alih Status/Pemindahtanganan/Penghapusan",
+    "Penggabungan BMN Satu Kesatuan Fungsi",
+    "Kesalahan Pencatatan Pihak Ketiga",
+]
+VALID_SUB_KLASIFIKASI_LAINNYA = [
+    "Tidak Ditemukan Fisiknya",
+    "Tidak Dapat Ditelusuri",
+    "Tertimpa Bangunan Lain/Beralih Fungsi",
+]
+
+# Nilai yang DITAWARKAN aplikasi hari ini (UI + dropdown template Excel).
+SUB_KLASIFIKASI_DITAWARKAN = (VALID_SUB_KLASIFIKASI_PENCATATAN
+                              + VALID_SUB_KLASIFIKASI_LAINNYA)
+
+# Nilai LAMA yang dulu divalidasi impor & ditawarkan template. Tidak lagi
+# ditawarkan, tetapi tetap DITERIMA: berkas Excel dan data yang sudah terlanjur
+# memakainya tak boleh mendadak ditolak hanya karena daftarnya dirapikan.
+# Longgar saat menerima, ketat saat menawarkan.
+SUB_KLASIFIKASI_LAWAS = [
     "Salah Kode Barang/NUP",
     "Salah Pembukuan (SIMAK-BMN Error)",
     "Perubahan Kondisi Belum Dicatat",
@@ -865,15 +899,14 @@ VALID_SUB_KLASIFIKASI_PENCATATAN = [
     "Aset Sudah Dihapuskan",
     "Pencatatan Ganda (Double Counting)",
     "Pemecahan/Penggabungan Belum Dicatat",
-    "Transfer Masuk/Keluar Belum Diproses"
-]
-VALID_SUB_KLASIFIKASI_LAINNYA = [
+    "Transfer Masuk/Keluar Belum Diproses",
     "Hilang / Dicuri",
     "Rusak Total / Hancur",
     "Bencana Alam",
-    "Lainnya"
+    "Lainnya",
 ]
-VALID_SUB_KLASIFIKASI_ALL = VALID_SUB_KLASIFIKASI_PENCATATAN + VALID_SUB_KLASIFIKASI_LAINNYA
+
+VALID_SUB_KLASIFIKASI_ALL = SUB_KLASIFIKASI_DITAWARKAN + SUB_KLASIFIKASI_LAWAS
 
 
 # ── Penanda tangan dokumen resmi (temuan review #26 — satu resolver lintas modul) ──

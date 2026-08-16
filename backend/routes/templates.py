@@ -15,6 +15,7 @@ from auth_utils import require_user
 from db import db
 from shared_utils import (
     VALID_INVENTORY_STATUSES, VALID_KLASIFIKASI, VALID_SUB_KLASIFIKASI_ALL,
+    SUB_KLASIFIKASI_DITAWARKAN,
     VALID_CONDITIONS, VALID_STATUSES, VALID_STIKER_STATUSES, VALID_STIKER_SIZES
 )
 
@@ -151,10 +152,13 @@ ASSET_TEMPLATE_SCHEMA = [
      "rule": "Jika Tidak Ditemukan: Kesalahan Pencatatan / Tidak Ditemukan Lainnya.",
      "sample1": "", "sample2": "Kesalahan Pencatatan",
      "dropdown": VALID_KLASIFIKASI},
+    # Dropdown menawarkan nilai yang DIPAKAI aplikasi hari ini; nilai lawas
+    # tetap diterima impor (VALID_SUB_KLASIFIKASI_ALL) tetapi tak lagi
+    # disodorkan agar operator tidak menambah data berkosakata usang.
     {"field": "sub_klasifikasi", "required": False, "width": 30,
      "rule": "Sub-kategori tidak ditemukan (sesuai daftar).",
      "sample1": "", "sample2": "Pencatatan Ganda",
-     "dropdown": VALID_SUB_KLASIFIKASI_ALL},
+     "dropdown": SUB_KLASIFIKASI_DITAWARKAN},
     {"field": "uraian_tidak_ditemukan", "required": False, "width": 30,
      "rule": "Uraian detail mengapa BMN tidak ditemukan.",
      "sample1": "", "sample2": "BMN tercatat dua kali di sistem", "dropdown": None},
