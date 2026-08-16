@@ -7,6 +7,7 @@ import SummaryCards from "./rekapitulasi/SummaryCards";
 import ConditionBreakdown from "./rekapitulasi/ConditionBreakdown";
 import InventoryProgress from "./rekapitulasi/InventoryProgress";
 import TidakDitemukanBreakdown from "./rekapitulasi/TidakDitemukanBreakdown";
+import TemuanPencatatanBreakdown from "./rekapitulasi/TemuanPencatatanBreakdown";
 import ReportDownloads from "./rekapitulasi/ReportDownloads";
 
 const API = (process.env.REACT_APP_BACKEND_URL || "http://localhost:8001") + "/api";
@@ -145,6 +146,7 @@ function RekapitulasiPanel({ activityId, isOpen, onToggle, embedded = false, onT
           <ConditionBreakdown ditemukan={data.ditemukan} />
           <InventoryProgress data={data} total={total} />
           <TidakDitemukanBreakdown tidakDitemukan={data.tidak_ditemukan} subBreakdown={data.sub_breakdown} />
+          <TemuanPencatatanBreakdown temuan={data.temuan_pencatatan} />
           <ReportDownloads
             data={data}
             activityId={activityId}

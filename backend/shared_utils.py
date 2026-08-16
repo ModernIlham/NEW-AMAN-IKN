@@ -942,13 +942,34 @@ VALID_SUB_KLASIFIKASI_ALL = SUB_KLASIFIKASI_DITAWARKAN + SUB_KLASIFIKASI_LAWAS
 #
 # Penanda ini yang kelak menyuplai usul REKLASIFIKASI: kode barang yang salah
 # baru bisa diusulkan diperbaiki kalau ada yang mencatatnya saat inventarisasi.
+# Daftar ini memuat DUA macam kejadian, dan itu disengaja:
+#
+#   (a) CACAT CATATAN — catatan tak sesuai fisik (kode, stiker, nama, jumlah);
+#   (b) HAMBATAN PEMERIKSAAN — barangnya tidak bisa diperiksa saat itu, tetapi
+#       BUKAN berarti hilang (ruangan terkunci, sedang dipinjam, di bengkel).
+#
+# Meleburnya aman di sini, berbeda dengan `sub_klasifikasi`. Alasannya: penanda
+# ini NETRAL — tidak ada satu pun naskah resmi yang berubah isinya karena nilai
+# di field ini. Sub-klasifikasi menggerakkan Berita Acara, SPTJM, dan usul
+# penghapusan; kalau dua sumbu dilebur di sana, dokumen bermeterai ikut salah
+# bicara. Di sini paling jauh akibatnya adalah satu baris di rekapitulasi.
+#
+# Golongan (b) penting justru karena tanpanya operator terpaksa memilih antara
+# dua-duanya salah: menandai "Ditemukan" padahal tak diperiksa, atau "Tidak
+# Ditemukan" padahal barangnya jelas ada di tangan seseorang.
 VALID_TEMUAN_PENCATATAN = [
+    # (a) cacat catatan
     "Kodefikasi Tidak Sesuai Fisik",
     "Stiker Tertempel di Barang Lain",
     "Stiker Rusak/Tidak Terbaca",
     "NUP Ganda pada Fisik Berbeda",
     "Nama/Spesifikasi Tidak Sesuai Fisik",
     "Lokasi Tercatat Tidak Sesuai",
+    "Fisik Ada, Jumlah Tidak Sesuai Catatan",
+    # (b) hambatan pemeriksaan — barang belum tentu hilang
+    "Tidak Dapat Diakses (Ruangan Terkunci)",
+    "Sedang Dipinjam/Dibawa Pemegang",
+    "Sedang Diperbaiki/Di Luar Kantor",
     "Temuan Lain (Diuraikan)",
 ]
 

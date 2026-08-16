@@ -67,6 +67,51 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#870] Rekap temuan lapangan — dan empat kejadian yang selama ini tak punya tempat — 2026-08-16
+
+Dua hal sekaligus, sesuai permintaan pemilik: rekap temuan pencatatan, dan
+kejadian lapangan lain yang ikut dipikirkan.
+
+**Rekapnya.** Endpoint `/rekapitulasi` menambah blok `temuan_pencatatan`
+(total + pecahan per jenis), dan panel Rekapitulasi menampilkan kartunya.
+Dihitung dari **seluruh aset kegiatan**, bukan hanya yang tidak ditemukan —
+itu inti fieldnya, dan justru bagian yang paling mudah dibuat salah. Jenis
+yang bernilai nol tetap dibawa supaya operator melihat kategori yang ADA tapi
+belum terpakai; nilai di luar daftar baku (data lama/impor) dibawa terpisah
+sebagai "(di luar daftar baku)" supaya jumlah per-jenis selalu genap dengan
+totalnya.
+
+**Empat kejadian lapangan yang ditambahkan** — dan tiga di antaranya jenis
+yang berbeda sama sekali:
+
+- `Fisik Ada, Jumlah Tidak Sesuai Catatan` — cacat catatan, satu golongan
+  dengan yang sudah ada.
+- `Tidak Dapat Diakses (Ruangan Terkunci)`
+- `Sedang Dipinjam/Dibawa Pemegang`
+- `Sedang Diperbaiki/Di Luar Kantor`
+
+Tiga terakhir bukan cacat catatan melainkan **hambatan pemeriksaan**: barang
+tak bisa diperiksa saat itu, tetapi **belum tentu hilang**. Tanpa penanda ini
+operator dipaksa memilih antara dua-duanya salah — menandai "Ditemukan"
+padahal tak diperiksa, atau "Tidak Ditemukan" padahal barangnya jelas ada di
+tangan seseorang. Pilihan kedua lebih berbahaya: ia menyeret aset ke jalur
+Berita Acara dan usul penghapusan.
+
+**Kenapa dua sumbu boleh dilebur di sini** padahal pada `[#866]` justru
+dicatat sebagai kelemahan? Karena `temuan_pencatatan` **netral** — tak ada
+satu pun naskah resmi yang berubah isinya karena nilai di field ini.
+`sub_klasifikasi` menggerakkan Berita Acara, SPTJM, dan usul penghapusan;
+meleburkan sumbu di sana membuat dokumen bermeterai salah bicara. Di sini
+akibat terjauhnya satu baris di rekapitulasi. Pembedaan itu dikunci uji
+(`test_tidak_menyentuh_jalur_naskah_resmi`).
+
+Verifikasi: 7 uji baru. Uji-mutasi dua sisi: rekap dibatasi ke aset tidak
+ditemukan saja → 3 uji merah; nilai di luar daftar baku dibuang diam-diam →
+1 uji merah. Suite backend 2.679 & frontend 855 lulus, eslint bersih, build
+sukses.
+
+---
+
 ## [#869] Penanda temuan pencatatan lapangan + 11/11 klasifikasi DJKN — 2026-08-16
 
 Permintaan pemilik: lengkapi dua klasifikasi DJKN yang kurang, **dan** beri

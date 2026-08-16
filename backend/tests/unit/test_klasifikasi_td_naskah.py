@@ -235,3 +235,92 @@ class TestRekapitulasiApi:
             assert td["belum_diklasifikasi"]["count"] == 1
             assert td["belum_diklasifikasi"]["value"] == 9000000
         _jalan(skenario())
+
+
+class TestRekapTemuanPencatatan:
+    """Rekap temuan pencatatan lapangan.
+
+    Yang paling mudah salah di sini: menghitungnya hanya dari aset yang TIDAK
+    DITEMUKAN. Itu justru membalik gunanya — cacat pencatatan paling sering
+    dijumpai pada barang yang KETEMU (kode tak sesuai fisik, stiker tertempel
+    di barang lain), dan rekap yang melewatkannya akan selalu menampilkan nol
+    pada kegiatan yang sebenarnya penuh temuan.
+    """
+
+    async def _siapkan_temuan(self, monkeypatch):
+        import routes.reports as R
+        import shared_utils as su
+        fake = AsyncMongoMockClient()["uji"]
+        monkeypatch.setattr(R, "db", fake, raising=False)
+        monkeypatch.setattr(su, "db", fake, raising=False)
+
+        async def _diam(*a, **k):
+            return None
+        monkeypatch.setattr(su, "pastikan_akses_kegiatan_id", _diam, raising=False)
+        monkeypatch.setattr(R, "pastikan_akses_kegiatan_id", _diam, raising=False)
+        await fake.inventory_activities.insert_one(
+            {"id": "k1", "nama_kegiatan": "Uji", "kode_satker": "123456"})
+        baris = [
+            # (status inventarisasi, temuan, harga)
+            ("Ditemukan", "Kodefikasi Tidak Sesuai Fisik", 1000000),
+            ("Ditemukan", "Stiker Tertempel di Barang Lain", 2000000),
+            ("Ditemukan", "Stiker Tertempel di Barang Lain", 3000000),
+            ("Tidak Ditemukan", "Kodefikasi Tidak Sesuai Fisik", 4000000),
+            ("Ditemukan", "", 9000000),        # tanpa temuan
+            ("Ditemukan", "Nilai Lawas Entah", 5000000),  # di luar daftar baku
+        ]
+        for i, (inv, temuan, harga) in enumerate(baris):
+            await fake.assets.insert_one({
+                "id": f"a{i}", "activity_id": "k1", "asset_code": f"30501040{i:02d}",
+                "NUP": str(i + 1), "asset_name": f"Barang{i}",
+                "inventory_status": inv, "temuan_pencatatan": temuan,
+                "condition": "Baik", "purchase_price": str(harga),
+                "purchase_date": "2020-01-01", "location": "Gudang A"})
+        return fake
+
+    def test_menghitung_juga_aset_yang_ditemukan(self, monkeypatch):
+        async def skenario():
+            import routes.reports as R
+            await self._siapkan_temuan(monkeypatch)
+            t = (await _telanjangi(R.get_rekapitulasi)("k1", _user=_USER))["temuan_pencatatan"]
+            # 5 dari 6 aset punya temuan; satu di antaranya berstatus Ditemukan
+            # dan satu lagi Tidak Ditemukan — keduanya wajib ikut terhitung.
+            assert t["count"] == 5
+            assert t["value"] == 15000000
+        _jalan(skenario())
+
+    def test_pecahan_per_jenis_benar(self, monkeypatch):
+        async def skenario():
+            import routes.reports as R
+            await self._siapkan_temuan(monkeypatch)
+            per = (await _telanjangi(R.get_rekapitulasi)(
+                "k1", _user=_USER))["temuan_pencatatan"]["per_jenis"]
+            assert per["Stiker Tertempel di Barang Lain"]["count"] == 2
+            assert per["Stiker Tertempel di Barang Lain"]["value"] == 5000000
+            assert per["Kodefikasi Tidak Sesuai Fisik"]["count"] == 2
+        _jalan(skenario())
+
+    def test_jenis_tanpa_temuan_tetap_dibawa(self, monkeypatch):
+        """Kategori yang ada tapi belum terpakai harus tetap terlihat, supaya
+        operator tahu pilihannya ada — bukan mengira kategorinya hilang."""
+        async def skenario():
+            import routes.reports as R
+            from shared_utils import VALID_TEMUAN_PENCATATAN
+            await self._siapkan_temuan(monkeypatch)
+            per = (await _telanjangi(R.get_rekapitulasi)(
+                "k1", _user=_USER))["temuan_pencatatan"]["per_jenis"]
+            for jenis in VALID_TEMUAN_PENCATATAN:
+                assert jenis in per
+            assert per["NUP Ganda pada Fisik Berbeda"]["count"] == 0
+        _jalan(skenario())
+
+    def test_nilai_di_luar_daftar_baku_tak_raib(self, monkeypatch):
+        """Data lama / hasil impor bisa memuat nilai di luar daftar. Kalau
+        dibuang diam-diam, jumlah per-jenis tak lagi genap dengan totalnya."""
+        async def skenario():
+            import routes.reports as R
+            await self._siapkan_temuan(monkeypatch)
+            t = (await _telanjangi(R.get_rekapitulasi)("k1", _user=_USER))["temuan_pencatatan"]
+            assert t["per_jenis"]["(di luar daftar baku)"]["count"] == 1
+            assert sum(v["count"] for v in t["per_jenis"].values()) == t["count"]
+        _jalan(skenario())

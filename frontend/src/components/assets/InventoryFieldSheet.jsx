@@ -50,12 +50,18 @@ export const OPERASIONAL_JENIS_OPTIONS = ["Kegiatan/Acara/Kebutuhan", "Ruangan"]
 // stiker yang tertempel di barang lain justru ditemukan pada barang yang ada.
 // Wajib sama persis dengan VALID_TEMUAN_PENCATATAN di shared_utils.py.
 export const TEMUAN_PENCATATAN_OPTIONS = [
+  // (a) cacat catatan — catatan tak sesuai fisik
   "Kodefikasi Tidak Sesuai Fisik",
   "Stiker Tertempel di Barang Lain",
   "Stiker Rusak/Tidak Terbaca",
   "NUP Ganda pada Fisik Berbeda",
   "Nama/Spesifikasi Tidak Sesuai Fisik",
   "Lokasi Tercatat Tidak Sesuai",
+  "Fisik Ada, Jumlah Tidak Sesuai Catatan",
+  // (b) hambatan pemeriksaan — barang belum tentu hilang
+  "Tidak Dapat Diakses (Ruangan Terkunci)",
+  "Sedang Dipinjam/Dibawa Pemegang",
+  "Sedang Diperbaiki/Di Luar Kantor",
   "Temuan Lain (Diuraikan)",
 ];
 

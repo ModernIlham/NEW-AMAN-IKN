@@ -332,3 +332,34 @@ class TestTemuanPencatatanLapangan:
                       src)
         assert m, "kolom temuan_pencatatan tak ditulis ke sheet"
         assert ASSET_SHEET_HEADERS.index("Temuan Pencatatan") == int(m.group(1))
+
+
+class TestHambatanPemeriksaanLapangan:
+    """Golongan kedua `temuan_pencatatan`: barang TIDAK BISA DIPERIKSA saat itu,
+    tetapi bukan berarti hilang.
+
+    Tanpa penanda ini operator dipaksa memilih antara dua-duanya salah —
+    menandai "Ditemukan" padahal tak diperiksa, atau "Tidak Ditemukan" padahal
+    barangnya jelas ada di tangan seseorang. Yang kedua lebih berbahaya: ia
+    menyeret aset ke jalur Berita Acara dan usul penghapusan.
+    """
+
+    HAMBATAN = ("Tidak Dapat Diakses (Ruangan Terkunci)",
+                "Sedang Dipinjam/Dibawa Pemegang",
+                "Sedang Diperbaiki/Di Luar Kantor")
+
+    def test_ketiga_hambatan_tersedia(self):
+        from shared_utils import VALID_TEMUAN_PENCATATAN as T
+        for n in self.HAMBATAN:
+            assert n in T
+
+    def test_tidak_menyentuh_jalur_naskah_resmi(self):
+        """Justifikasi meleburnya dua sumbu di satu field: nilai temuan TIDAK
+        BOLEH ikut menjadi sub-klasifikasi, karena sub-klasifikasi-lah yang
+        menggerakkan Berita Acara, SPTJM, dan usul penghapusan."""
+        from shared_utils import VALID_TEMUAN_PENCATATAN as T
+        assert set(T).isdisjoint(VALID_SUB_KLASIFIKASI_ALL)
+
+    def test_jumlah_fisik_tak_sesuai_ikut_tercatat(self):
+        from shared_utils import VALID_TEMUAN_PENCATATAN as T
+        assert "Fisik Ada, Jumlah Tidak Sesuai Catatan" in T
