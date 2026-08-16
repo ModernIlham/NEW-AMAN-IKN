@@ -1004,8 +1004,12 @@ async def get_rekapitulasi(activity_id: str, _user: dict = Depends(require_user_
         try: return float(a.get("purchase_price", 0) or 0)
         except: return 0
 
-    kesalahan_pencatatan = [a for a in tidak_ditemukan if a.get("klasifikasi_tidak_ditemukan") == "Kesalahan Pencatatan"]
-    tidak_ditemukan_lainnya = [a for a in tidak_ditemukan if a.get("klasifikasi_tidak_ditemukan") == "Tidak Ditemukan Lainnya"]
+    # Tiga ember yang JUMLAHNYA GENAP dengan total tidak-ditemukan. Sebelumnya
+    # hanya dua yang dilaporkan, sehingga aset yang sebabnya belum ditetapkan
+    # raib dari rincian dan angka di layar tak pernah menjelaskan selisihnya.
+    import ba_utils
+    kesalahan_pencatatan, tidak_ditemukan_lainnya, belum_klasifikasi = \
+        ba_utils.klasifikasikan_tidak_ditemukan(tidak_ditemukan)
 
     sub_breakdown = {}
     for a in tidak_ditemukan:
@@ -1051,6 +1055,10 @@ async def get_rekapitulasi(activity_id: str, _user: dict = Depends(require_user_
             "tidak_ditemukan_lainnya": {
                 "count": len(tidak_ditemukan_lainnya),
                 "value": sum(safe_price(a) for a in tidak_ditemukan_lainnya)
+            },
+            "belum_diklasifikasi": {
+                "count": len(belum_klasifikasi),
+                "value": sum(safe_price(a) for a in belum_klasifikasi)
             }
         },
         "belum_diinventarisasi": {
@@ -1073,6 +1081,17 @@ async def get_rekapitulasi(activity_id: str, _user: dict = Depends(require_user_
 # BERITA ACARA PDF
 # ============================================================================
 
+def _label_klasifikasi_td(a):
+    """Label kolom "Klasifikasi" pada rincian BMN tidak ditemukan.
+
+    Field yang masih kosong ditulis apa adanya "Belum Diklasifikasi" — bukan
+    "-" yang bisa dibaca sebagai "tidak ada keterangan". Dengan begitu baris
+    rekapitulasi "c. Belum Diklasifikasi" bisa ditelusuri ke barisnya."""
+    import ba_utils
+    return (str((a or {}).get("klasifikasi_tidak_ditemukan") or "").strip()
+            or ba_utils.KLAS_BELUM)
+
+
 async def _data_ba_tidak_ditemukan(activity, settings):
     """SATU sumber data Berita Acara Hasil Penelitian BMN Tidak Ditemukan —
     dikonsumsi bersama oleh generator PDF & Word/.docx. Mengembalikan dict
@@ -1091,7 +1110,7 @@ async def _data_ba_tidak_ditemukan(activity, settings):
     ).to_list(100000)
     tidak_ditemukan = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan"]
     ditemukan = [a for a in assets if a.get("inventory_status") == "Ditemukan"]
-    kesalahan, lainnya = ba_utils.klasifikasikan_tidak_ditemukan(tidak_ditemukan)
+    kesalahan, lainnya, belum_klas = ba_utils.klasifikasikan_tidak_ditemukan(tidak_ditemukan)
 
     def safe_price(a):
         try:
@@ -1145,13 +1164,16 @@ async def _data_ba_tidak_ditemukan(activity, settings):
 
     return {
         "assets": assets, "ditemukan": ditemukan, "tidak_ditemukan": tidak_ditemukan,
-        "kesalahan": kesalahan, "lainnya": lainnya, "safe_price": safe_price,
+        "kesalahan": kesalahan, "lainnya": lainnya, "belum_klas": belum_klas,
+        "safe_price": safe_price,
         "ident": ident, "tanggal_ba": tanggal_ba, "nomor_ba": nomor_ba,
         "intro": intro, "tempat": tempat,
         "dasar": list(ba_utils.DASAR_HUKUM_BA),
         "metode": list(ba_utils.METODE_PENELITIAN_BA),
-        "rekomendasi": ba_utils.rekomendasi_tindak_lanjut(len(kesalahan), len(lainnya)),
-        "dokumen_pendukung": ba_utils.dokumen_pendukung_ba(bool(lainnya)),
+        "rekomendasi": ba_utils.rekomendasi_tindak_lanjut(
+            len(kesalahan), len(lainnya), len(belum_klas)),
+        "dokumen_pendukung": ba_utils.dokumen_pendukung_ba(
+            bool(lainnya), bool(belum_klas)),
         "penutup": ba_utils.PENUTUP_BA,
         "tim_inti": tim_inti, "tim_pembantu": tim_pembantu,
         "tim_peneliti": tim_peneliti, "tim_pendukung": tim_pendukung,
@@ -1279,6 +1301,7 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
     notfound_val = sum(safe_price(a) for a in tidak_ditemukan)
     kesalahan = D["kesalahan"]
     lainnya = D["lainnya"]
+    belum_klas = D["belum_klas"]
     rekap_data = [
         ['No', 'Uraian', 'Jumlah NUP', 'Nilai (Rp)'],
         ['1', 'BMN yang Diteliti', str(total), fmt_rp(total_val)],
@@ -1287,6 +1310,12 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
         ['', '  a. Kesalahan Pencatatan', str(len(kesalahan)), fmt_rp(sum(safe_price(a) for a in kesalahan))],
         ['', '  b. Tidak Ditemukan Lainnya (hilang)', str(len(lainnya)), fmt_rp(sum(safe_price(a) for a in lainnya))],
     ]
+    # Baris c hanya muncul bila memang ada — supaya a+b selalu genap dengan
+    # total baris 3, tak pernah ada selisih yang tak dijelaskan di halaman.
+    if belum_klas:
+        rekap_data.append(['', '  c. Belum Diklasifikasi (masih diteliti)',
+                           str(len(belum_klas)),
+                           fmt_rp(sum(safe_price(a) for a in belum_klas))])
     rekap_table = Table(rekap_data, colWidths=_fit_col_widths([30, 220, 70, 110], doc.width), repeatRows=1)
     rekap_table.setStyle(_std_table_style(extra=[
         ('ALIGN', (0, 0), (0, -1), 'CENTER'),
@@ -1309,7 +1338,7 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
             detail_data.append([
                 str(i+1), a.get('asset_code', '-'), str(a.get('NUP', '-')),
                 Paragraph(_esc_ba(a.get('asset_name', '-') or '-'), cell_style),
-                Paragraph(_esc_ba(a.get('klasifikasi_tidak_ditemukan', '-') or '-'), cell_style),
+                Paragraph(_esc_ba(_label_klasifikasi_td(a)), cell_style),
                 Paragraph(_esc_ba(a.get('sub_klasifikasi', '-') or '-'), cell_style),
                 Paragraph("<br/>".join(_esc_ba(x) for x in uraian_tl) or '-', cell_style),
                 fmt_rp(safe_price(a))])
@@ -1437,13 +1466,20 @@ async def generate_berita_acara_docx(activity_id: str, _user: dict = Depends(req
     tidak_ditemukan = D["tidak_ditemukan"]
     kesalahan = D["kesalahan"]
     lainnya = D["lainnya"]
-    DX.data_table(d, ['No', 'Uraian', 'Jumlah NUP', 'Nilai (Rp)'], [
+    belum_klas = D["belum_klas"]
+    baris_rekap = [
         ['1', 'BMN yang Diteliti', str(len(assets)), fmt_rp(sum(safe_price(a) for a in assets))],
         ['2', 'BMN Ditemukan', str(len(ditemukan)), fmt_rp(sum(safe_price(a) for a in ditemukan))],
         ['3', 'BMN Tidak Ditemukan', str(len(tidak_ditemukan)), fmt_rp(sum(safe_price(a) for a in tidak_ditemukan))],
         ['', 'a. Kesalahan Pencatatan', str(len(kesalahan)), fmt_rp(sum(safe_price(a) for a in kesalahan))],
         ['', 'b. Tidak Ditemukan Lainnya (hilang)', str(len(lainnya)), fmt_rp(sum(safe_price(a) for a in lainnya))],
-    ], align_center={0, 2}, align_right={3}, widths_cm=[1.0, 9.5, 2.5, 3.5])
+    ]
+    if belum_klas:
+        baris_rekap.append(['', 'c. Belum Diklasifikasi (masih diteliti)',
+                            str(len(belum_klas)),
+                            fmt_rp(sum(safe_price(a) for a in belum_klas))])
+    DX.data_table(d, ['No', 'Uraian', 'Jumlah NUP', 'Nilai (Rp)'], baris_rekap,
+                  align_center={0, 2}, align_right={3}, widths_cm=[1.0, 9.5, 2.5, 3.5])
 
     if tidak_ditemukan:
         DX.section(d, "RINCIAN BMN TIDAK DITEMUKAN", next(_rom))
@@ -1456,7 +1492,7 @@ async def generate_berita_acara_docx(activity_id: str, _user: dict = Depends(req
                 uraian_tl.append(f"Tindak lanjut: {a['tindak_lanjut']}")
             rows.append([str(i+1), a.get('asset_code', '-') or '-', str(a.get('NUP', '-')),
                          a.get('asset_name', '-') or '-',
-                         a.get('klasifikasi_tidak_ditemukan', '-') or '-',
+                         _label_klasifikasi_td(a),
                          a.get('sub_klasifikasi', '-') or '-',
                          "\n".join(uraian_tl) or '-', fmt_rp(safe_price(a))])
         DX.data_table(d, ['No', 'Kode Barang', 'NUP', 'Nama BMN', 'Klasifikasi',
@@ -1511,6 +1547,14 @@ async def generate_sptjm_pdf(activity_id: str, _user: dict = Depends(require_use
         {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
     ).to_list(100000)
     tidak_ditemukan = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan"]
+    # SPTJM adalah syarat usul PENGHAPUSAN BMN yang benar-benar hilang, jadi
+    # cakupannya hanya "Tidak Ditemukan Lainnya". Aset "Kesalahan Pencatatan"
+    # ditangani Surat Koreksi (barangnya ada, catatannya yang salah) dan aset
+    # yang belum diklasifikasi belum selesai diteliti — memasukkan keduanya
+    # membuat KPB bermeterai menyatakan hal yang dibantah surat di berkas yang
+    # sama.
+    import ba_utils
+    _kes, hilang, belum_klas = ba_utils.klasifikasikan_tidak_ditemukan(tidak_ditemukan)
 
     def safe_price(a):
         try: return float(a.get("purchase_price", 0) or 0)
@@ -1535,8 +1579,8 @@ async def generate_sptjm_pdf(activity_id: str, _user: dict = Depends(require_use
     jabatan = ident["kasatker_jabatan"]
     alamat = ident["alamat"]
     alamat_singkat = alamat.splitlines()[0] if alamat.splitlines() else alamat
-    total_notfound = len(tidak_ditemukan)
-    total_val_notfound = sum(safe_price(a) for a in tidak_ditemukan)
+    total_notfound = len(hilang)
+    total_val_notfound = sum(safe_price(a) for a in hilang)
 
     # Header
     elements.extend(_title_block("SURAT PERNYATAAN TANGGUNG JAWAB MUTLAK"))
@@ -1551,6 +1595,18 @@ async def generate_sptjm_pdf(activity_id: str, _user: dict = Depends(require_use
         ("Alamat", alamat),
     ]))
     elements.append(Spacer(1, 3*rl_mm))
+    # Sebut terus terang apa yang TIDAK dicakup, supaya selisih angka dengan
+    # "BMN Tidak Ditemukan" di RHI/BAHI tidak terbaca sebagai kekeliruan.
+    luar = []
+    if _kes:
+        luar.append(f"{len(_kes)} NUP berklasifikasi Kesalahan Pencatatan "
+                    "(ditindaklanjuti melalui Surat Pernyataan Koreksi Pencatatan)")
+    if belum_klas:
+        luar.append(f"{len(belum_klas)} NUP yang klasifikasi sebabnya belum "
+                    "ditetapkan (penelitian masih berlangsung)")
+    catatan_lingkup = (f" Tidak termasuk dalam pernyataan ini: {' dan '.join(luar)}."
+                       if luar else "")
+
     # Unsur minimum KMK 403/KMK.06/2013 & SE PUPR 10/2023: identitas,
     # pernyataan telah verifikasi & penelitian, tanggung jawab penuh atas
     # kebenaran usulan secara FORMIL dan MATERIIL, bermeterai.
@@ -1559,8 +1615,9 @@ async def generate_sptjm_pdf(activity_id: str, _user: dict = Depends(require_use
     dalam penguasaan Satuan Kerja yang saya pimpin.<br/><br/>
     2. Berdasarkan hasil inventarisasi pada kegiatan "<b>{activity.get('nama_kegiatan', '-')}</b>"
     (Nomor Surat: {activity.get('nomor_surat', '-')}), terdapat <b>{total_notfound}</b> NUP BMN
-    dengan total nilai <b>{fmt_rp(total_val_notfound)}</b> yang tidak ditemukan, dan atas BMN
-    tersebut telah dilakukan verifikasi dan penelitian oleh tim internal Satuan Kerja.<br/><br/>
+    dengan total nilai <b>{fmt_rp(total_val_notfound)}</b> yang dinyatakan <b>TIDAK DITEMUKAN</b>
+    dengan klasifikasi <b>Tidak Ditemukan Lainnya</b>, dan atas BMN tersebut telah dilakukan
+    verifikasi dan penelitian oleh tim internal Satuan Kerja.{catatan_lingkup}<br/><br/>
     3. Saya bertanggung jawab penuh atas kebenaran usulan/pernyataan yang diajukan,
     baik secara <b>materiil maupun formil</b> (KMK 403/KMK.06/2013).<br/><br/>
     4. Saya bersedia menerima sanksi sesuai ketentuan peraturan perundang-undangan yang berlaku
@@ -1571,10 +1628,12 @@ async def generate_sptjm_pdf(activity_id: str, _user: dict = Depends(require_use
     elements.append(Spacer(1, 6*rl_mm))
 
     # Lampiran rincian
-    if tidak_ditemukan:
-        elements.append(Paragraph("<b>Lampiran: Rincian BMN Tidak Ditemukan</b>", st['Heading']))
+    if hilang:
+        elements.append(Paragraph(
+            "<b>Lampiran: Rincian BMN Tidak Ditemukan (Klasifikasi: Tidak "
+            "Ditemukan Lainnya)</b>", st['Heading']))
         detail_data = [['No', 'Kode Barang', 'NUP', 'Nama BMN', 'Nilai (Rp)']]
-        for i, a in enumerate(tidak_ditemukan):
+        for i, a in enumerate(hilang):
             detail_data.append([
                 str(i+1), a.get('asset_code', '-'), str(a.get('NUP', '-')),
                 Paragraph(_esc(a.get('asset_name', '-') or '-'), cell_style), fmt_rp(safe_price(a))
@@ -1757,14 +1816,19 @@ _DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.doc
 
 async def _konten_surat_pernyataan(activity, settings):
     """Data bersama SPTJM & Surat Koreksi: identitas KPB, tempat/tanggal, aset
-    tidak-ditemukan (+ subset kesalahan pencatatan), status kepegawaian KPB."""
+    tidak-ditemukan terpilah per klasifikasi, status kepegawaian KPB.
+
+    Pemilahannya memakai `ba_utils.klasifikasikan_tidak_ditemukan` yang sama
+    dengan Berita Acara, supaya ketiga naskah dalam satu berkas unduhan tidak
+    saling membantah: `koreksi` untuk Surat Koreksi, `hilang` untuk SPTJM, dan
+    `belum_klas` tidak masuk keduanya."""
+    import ba_utils
     assets = await db.assets.find(
         {"activity_id": activity["id"]},
         {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
     ).to_list(100000)
     tidak_ditemukan = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan"]
-    koreksi = [a for a in tidak_ditemukan
-               if a.get("klasifikasi_tidak_ditemukan") == "Kesalahan Pencatatan"]
+    koreksi, hilang, belum_klas = ba_utils.klasifikasikan_tidak_ditemukan(tidak_ditemukan)
     ident = _activity_identity(activity, settings)
     alamat = ident["alamat"]
     alamat_singkat = alamat.splitlines()[0] if alamat.splitlines() else alamat
@@ -1775,6 +1839,7 @@ async def _konten_surat_pernyataan(activity, settings):
            or ".......................")
     peta = await _peta_status_kepegawaian([ident.get("kasatker_nip")])
     return {"assets": assets, "tidak_ditemukan": tidak_ditemukan, "koreksi": koreksi,
+            "hilang": hilang, "belum_klas": belum_klas,
             "ident": ident, "alamat": alamat, "tempat": tempat, "tgl": tgl,
             "status_kpb": peta.get(str(ident.get("kasatker_nip") or "").strip(), "")}
 
@@ -1804,8 +1869,18 @@ async def generate_sptjm_docx(activity_id: str, _user: dict = Depends(require_us
     settings = await pengaturan_kop(activity)
     K = await _konten_surat_pernyataan(activity, settings)
     ident = K["ident"]
-    td = K["tidak_ditemukan"]
+    # Cakupan SPTJM = BMN yang benar-benar hilang saja (lihat versi PDF).
+    td = K["hilang"]
     total_val = sum(_safe_price(a) for a in td)
+    luar = []
+    if K["koreksi"]:
+        luar.append(f"{len(K['koreksi'])} NUP berklasifikasi Kesalahan Pencatatan "
+                    "(ditindaklanjuti melalui Surat Pernyataan Koreksi Pencatatan)")
+    if K["belum_klas"]:
+        luar.append(f"{len(K['belum_klas'])} NUP yang klasifikasi sebabnya belum "
+                    "ditetapkan (penelitian masih berlangsung)")
+    catatan_lingkup = (f" Tidak termasuk dalam pernyataan ini: {' dan '.join(luar)}."
+                       if luar else "")
 
     d = DX.doc_baru()
     DX.page_footer(d, "Surat Pernyataan Tanggung Jawab Mutlak (SPTJM)")
@@ -1819,8 +1894,9 @@ async def generate_sptjm_docx(activity_id: str, _user: dict = Depends(require_us
     DX.para(d, f"2. Berdasarkan hasil inventarisasi pada kegiatan "
                f"“{activity.get('nama_kegiatan', '-')}” (Nomor Surat: "
                f"{activity.get('nomor_surat', '-')}), terdapat {len(td)} NUP BMN dengan total "
-               f"nilai {_fmt_rp_id(total_val)} yang tidak ditemukan, dan atas BMN tersebut "
-               f"telah dilakukan verifikasi dan penelitian oleh tim internal Satuan Kerja.")
+               f"nilai {_fmt_rp_id(total_val)} yang dinyatakan TIDAK DITEMUKAN dengan "
+               f"klasifikasi Tidak Ditemukan Lainnya, dan atas BMN tersebut telah dilakukan "
+               f"verifikasi dan penelitian oleh tim internal Satuan Kerja.{catatan_lingkup}")
     DX.para(d, "3. Saya bertanggung jawab penuh atas kebenaran usulan/pernyataan yang "
                "diajukan, baik secara materiil maupun formil (KMK 403/KMK.06/2013).")
     DX.para(d, "4. Saya bersedia menerima sanksi sesuai ketentuan peraturan "
@@ -1830,7 +1906,8 @@ async def generate_sptjm_docx(activity_id: str, _user: dict = Depends(require_us
                "yang cukup untuk dipergunakan sebagaimana mestinya.", space_after=8)
 
     if td:
-        DX.para(d, "Lampiran: Rincian BMN Tidak Ditemukan", bold=True, justify=False, space_after=2)
+        DX.para(d, "Lampiran: Rincian BMN Tidak Ditemukan (Klasifikasi: Tidak Ditemukan Lainnya)",
+                bold=True, justify=False, space_after=2)
         rows = [[str(i+1), a.get('asset_code', '-') or '-', str(a.get('NUP', '-')),
                  a.get('asset_name', '-') or '-', _fmt_rp_id(_safe_price(a))]
                 for i, a in enumerate(td)]

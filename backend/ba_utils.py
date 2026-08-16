@@ -20,6 +20,10 @@ Landasan format & tindak lanjut (riset praktik penatausahaan BMN DJKN/Kemenkeu
 # Klasifikasi sebab (selaras field klasifikasi_tidak_ditemukan pada aset).
 KLAS_KESALAHAN = "Kesalahan Pencatatan"
 KLAS_LAINNYA = "Tidak Ditemukan Lainnya"
+# Label tampilan untuk aset yang field klasifikasinya masih kosong/di luar dua
+# nilai baku di atas. BUKAN nilai yang disimpan di basis data — di data, sebab
+# yang belum ditetapkan memang bernilai kosong.
+KLAS_BELUM = "Belum Diklasifikasi"
 
 
 DASAR_HUKUM_BA = (
@@ -52,16 +56,19 @@ METODE_PENELITIAN_BA = (
 )
 
 
-def rekomendasi_tindak_lanjut(n_kesalahan, n_lainnya):
+def rekomendasi_tindak_lanjut(n_kesalahan, n_lainnya, n_belum=0):
     """Daftar paragraf rekomendasi tindak lanjut per klasifikasi.
 
     - Kesalahan Pencatatan → koreksi pencatatan (Surat Pernyataan Koreksi).
     - Tidak Ditemukan Lainnya (benar hilang) → usul penghapusan disertai SPTJM
       & Surat Keterangan Kepolisian/Inspektorat; bila lalai → TGR.
-    Mengembalikan minimal satu paragraf; bila keduanya nol → pernyataan bersih.
+    - Belum Diklasifikasi → penelitian DILANJUTKAN; belum boleh diusulkan
+      penghapusan maupun koreksi karena sebabnya belum ditetapkan.
+    Mengembalikan minimal satu paragraf; bila ketiganya nol → pernyataan bersih.
     """
     n_k = int(n_kesalahan or 0)
     n_l = int(n_lainnya or 0)
+    n_b = int(n_belum or 0)
     out = []
     if n_k:
         out.append(
@@ -79,6 +86,16 @@ def rekomendasi_tindak_lanjut(n_kesalahan, n_lainnya):
             "Aparat Pengawas Intern Pemerintah (Inspektorat). Apabila di "
             "kemudian hari ditemukan unsur kelalaian dan/atau kesengajaan, "
             "diproses melalui Tuntutan Ganti Rugi (TGR) sesuai ketentuan.")
+    if n_b:
+        out.append(
+            f"Terhadap {n_b} NUP BMN yang BELUM DITETAPKAN klasifikasi sebab "
+            "tidak ditemukannya, direkomendasikan agar Tim Internal Penelitian "
+            "MELANJUTKAN penelitian dokumen dan peninjauan lapangan sampai "
+            "sebabnya dapat disimpulkan. Selama klasifikasi belum ditetapkan, "
+            "BMN dimaksud BELUM dapat diusulkan penghapusan maupun koreksi "
+            "pencatatan, dan karenanya TIDAK dicakup dalam Surat Pernyataan "
+            "Tanggung Jawab Mutlak (SPTJM) maupun Surat Pernyataan Koreksi "
+            "Pencatatan yang menyertai Berita Acara ini.")
     if not out:
         out.append(
             "Tidak terdapat BMN yang tidak ditemukan pada kegiatan ini "
@@ -87,11 +104,13 @@ def rekomendasi_tindak_lanjut(n_kesalahan, n_lainnya):
     return out
 
 
-def dokumen_pendukung_ba(ada_hilang):
+def dokumen_pendukung_ba(ada_hilang, ada_belum=False):
     """Daftar dokumen pendukung yang menyertai Berita Acara.
 
     `ada_hilang` True → sertakan SPTJM & Surat Keterangan Kepolisian/Inspektorat
-    (syarat usul penghapusan BMN hilang)."""
+    (syarat usul penghapusan BMN hilang). `ada_belum` True → sertakan kertas
+    kerja penelitian lanjutan; SPTJM TIDAK ikut dipicu oleh keadaan ini, sebab
+    BMN yang sebabnya belum ditetapkan belum boleh dinyatakan hilang."""
     docs = [
         "Rekapitulasi Hasil Inventarisasi (RHI);",
         "Daftar Barang Hasil Inventarisasi BMN Tidak Ditemukan;",
@@ -104,6 +123,10 @@ def dokumen_pendukung_ba(ada_hilang):
             "Surat Keterangan dari Kepolisian dan/atau Laporan Hasil "
             "Pemeriksaan Inspektorat (untuk BMN yang benar-benar hilang).",
         ]
+    if ada_belum:
+        docs.append(
+            "Kertas kerja penelitian lanjutan atas BMN yang belum ditetapkan "
+            "klasifikasi sebab tidak ditemukannya.")
     return docs
 
 
@@ -114,15 +137,26 @@ PENUTUP_BA = (
 
 
 def klasifikasikan_tidak_ditemukan(tidak_ditemukan):
-    """Pisah aset tidak ditemukan → (kesalahan, lainnya) berdasar field
-    `klasifikasi_tidak_ditemukan`. Nilai selain 'Kesalahan Pencatatan' &
-    'Tidak Ditemukan Lainnya' (mis. kosong) dihitung sebagai 'lainnya' agar
-    tidak hilang dari rekomendasi penghapusan."""
-    kes, lain = [], []
+    """Pisah aset tidak ditemukan → (kesalahan, lainnya, belum) berdasar field
+    `klasifikasi_tidak_ditemukan`.
+
+    Nilai di luar dua klasifikasi baku — termasuk KOSONG, yaitu keadaan aset
+    yang baru ditandai "Tidak Ditemukan" dan sebabnya belum diteliti — masuk ke
+    ember KETIGA, bukan ke 'lainnya'.
+
+    Ini disengaja. 'Tidak Ditemukan Lainnya' berarti barangnya BENAR-BENAR
+    hilang, dan konsekuensinya berat: Berita Acara merekomendasikan
+    penghapusan, Kuasa Pengguna Barang menandatangani SPTJM, dan diperlukan
+    Surat Keterangan Kepolisian. Menaruh aset yang belum diteliti ke sana
+    membuat dokumen resmi menyatakan sesuatu yang belum dibuktikan. RHI sudah
+    memisahkan ember ini; sekarang Berita Acara mengikutinya."""
+    kes, lain, belum = [], [], []
     for a in tidak_ditemukan or []:
         k = str((a or {}).get("klasifikasi_tidak_ditemukan") or "").strip()
         if k == KLAS_KESALAHAN:
             kes.append(a)
-        else:
+        elif k == KLAS_LAINNYA:
             lain.append(a)
-    return kes, lain
+        else:
+            belum.append(a)
+    return kes, lain, belum
