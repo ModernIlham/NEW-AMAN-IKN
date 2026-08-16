@@ -218,6 +218,43 @@ class TestSebabKedaruratanTersedia:
         assert "" not in VALID_SUB_KLASIFIKASI_LAINNYA
 
 
+class TestLandasanKlasifikasiDjkn:
+    """Sembilan dari sebelas klasifikasi resmi DJKN untuk Barang Tidak
+    Ditemukan (tindak lanjut revaluasi BMN 2017–2018) terpetakan ke daftar
+    aplikasi ini — rinciannya di docs/SITASI-DOKUMEN-RESMI.md.
+
+    Uji ini menjaga padanannya tetap ada. Menghapus salah satunya berarti
+    memutus daftar aplikasi dari landasan resminya, dan itu tak boleh terjadi
+    diam-diam hanya karena seseorang merapikan kata-katanya."""
+
+    PADANAN_DJKN = [
+        "Kesalahan Kodefikasi",                     # 1
+        "BMN Tercatat di Satker Lain",              # 2
+        "Kegiatan Perencanaan/Pengembangan Dicatat Sebagai BMN Tersendiri",  # 3
+        "Pencatatan Ganda",                         # 5
+        "BMN Objek Alih Status/Pemindahtanganan/Penghapusan",               # 6
+        "Penggabungan BMN Satu Kesatuan Fungsi",    # 7
+        "Kesalahan Pencatatan Pihak Ketiga",        # 9
+        "Tidak Ditemukan Fisiknya",                 # 10
+        "Tidak Dapat Ditelusuri",                   # 11
+    ]
+
+    def test_sembilan_padanan_djkn_masih_ditawarkan(self):
+        hilang = [n for n in self.PADANAN_DJKN
+                  if n not in SUB_KLASIFIKASI_DITAWARKAN]
+        assert hilang == [], f"padanan klasifikasi resmi DJKN hilang: {hilang}"
+
+    def test_sebab_kedaruratan_diakui_sebagai_perluasan(self):
+        """Enam sebab kedaruratan BUKAN bagian 11 klasifikasi DJKN. Uji ini
+        merekam fakta itu supaya tak pernah diklaim sebagai klasifikasi
+        resmi di naskah mana pun."""
+        perluasan = {"Kebakaran", "Bencana Alam", "Hilang / Dicuri",
+                     "Kerusuhan / Huru-hara", "Rusak Total / Hancur",
+                     "Sebab Lain (Diuraikan)"}
+        assert perluasan.isdisjoint(self.PADANAN_DJKN)
+        assert perluasan <= set(SUB_KLASIFIKASI_DITAWARKAN)
+
+
 class TestTidakAdaNilaiKembar:
     def test_tanpa_duplikat(self):
         assert len(VALID_SUB_KLASIFIKASI_ALL) == len(set(VALID_SUB_KLASIFIKASI_ALL))

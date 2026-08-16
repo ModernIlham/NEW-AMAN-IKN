@@ -67,6 +67,57 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#868] Ketemu landasan resminya: 11 klasifikasi DJKN — 2026-08-16
+
+Riset lanjutan atas permintaan pemilik. **Temuan terpentingnya bukan soal
+sitasi, melainkan soal asal-usul taksonomi aplikasi ini.**
+
+Tindak lanjut Barang Tidak Ditemukan hasil revaluasi BMN 2017–2018
+mengklasifikasikan sebabnya ke dalam **11 klasifikasi resmi DJKN**. Dipetakan
+ke daftar aplikasi: **9 dari 11 terpetakan persis** — kesalahan kodefikasi,
+tercatat di satker lain, kegiatan perencanaan dicatat tersendiri, pencatatan
+ganda, aset sudah dihibahkan/dialihstatuskan/dihapuskan, penggabungan NUP,
+kesalahan pencatatan pihak ketiga, tidak ditemukan fisiknya, tidak dapat
+ditelusuri.
+
+Artinya daftar sub-klasifikasi aplikasi ini **bukan karangan** — ia turunan
+dari klasifikasi resmi. Sekaligus membenarkan keputusan `[#865]` memenangkan
+daftar sisi layar atas daftar lawas di server: daftar layar itulah yang punya
+landasan resmi.
+
+**Dua yang belum ada** (calon penambahan, menunggu keputusan pemilik):
+kegiatan **renovasi** dicatat sebagai BMN tersendiri, dan kesalahan
+kodefikasi/klasifikasi yang bukan objek revaluasi.
+
+**Enam sebab kedaruratan dari `[#866]` BUKAN bagian dari 11 klasifikasi itu.**
+Itu perluasan atas keputusan pemilik — dan sekarang ada uji yang memastikan ia
+tak pernah diklaim sebagai klasifikasi resmi.
+
+Temuan lain:
+
+- **"Formil dan materiil" pada SPTJM kemungkinan salah rujuk.** Unsur itu
+  muncul sebagai syarat isi SPTJM dalam prosedur pemusnahan/penghapusan BMN —
+  ranah **PMK 83/PMK.06/2016**, yang sudah dirujuk repo ini di tempat lain.
+  `routes/reports.py` melekatkannya pada KMK 403/KMK.06/2013. Belum diubah:
+  perlu konfirmasi pasal, karena ini dokumen bermeterai.
+- **`PMK 181/PMK.06/2016` masih dipakai resmi.** Ditemukan Laporan Barang
+  Pengguna Semester I TA 2025 yang masih menyandarkan penyajian BMN di Neraca
+  padanya. Bukan bukti non-pencabutan, tetapi meredakan kekhawatiran `[#864]`.
+- Praktik DJKN mengarahkan pelibatan **APIP/Inspektorat** untuk barang yang tak
+  dapat ditelusuri — sejalan dengan naskah Berita Acara aplikasi.
+
+Catatan batas: WebFetch terblokir **total** di lingkungan ini (bahkan
+Wikipedia); hanya pencarian web yang tembus. Temuan bertumpu pada kecocokan
+beberapa sumber yang saling bebas, bukan pembacaan teks asli.
+
+Verifikasi: 2 uji baru. Uji-mutasi dua sisi: padanan klasifikasi DJKN dicabut
+dari kode → 4 uji merah; sebab kedaruratan diklaim sebagai klasifikasi resmi →
+1 uji merah. (Percobaan mutasi pertama salah sasaran — memutasi ujinya sendiri,
+bukan kodenya, sehingga tak membuktikan apa pun; diulang dengan benar.) Suite
+backend 2.664 lulus.
+
+---
+
 ## [#867] Riset sitasi: 6 dari 7 pertanyaan terjawab, 1 koreksi atas audit sendiri — 2026-08-16
 
 Permintaan pemilik: riset sumber hukum untuk sitasi yang belum terverifikasi
