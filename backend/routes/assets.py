@@ -25,7 +25,7 @@ from auth_utils import (
 from shared_utils import (
     kunci_idem,
     invalidate_asset_cache, cache_get, cache_set,
-    log_audit, compute_changes, create_thumbnail, create_gallery_thumbnail,
+    log_audit, nama_pelaku, compute_changes, create_thumbnail, create_gallery_thumbnail,
     store_photo_to_gridfs, get_photo_from_gridfs, delete_photo_from_gridfs,
     generate_photo_thumbnail,
     get_idempotent_response, store_idempotent_response, reserve_idempotency_key,
@@ -1117,7 +1117,8 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
     # sudah return lebih awal, jadi riwayat tak pernah dobel.
     if lokasi_otomatis:
         await sp.catat_penempatan(asset_doc, lokasi_otomatis,
-                                  _user.get("username", ""), now)
+                                  _user.get("username", ""), now,
+                                  nama_audit=nama_pelaku(_user))
     invalidate_asset_cache()
     # Sinkron indeks Meilisearch (best-effort, non-blocking; no-op bila nonaktif).
     jadwalkan_sync("assets", asset_doc)
@@ -2127,7 +2128,7 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
             {"id": asset_id, "activity_id": asset.activity_id,
              "asset_code": asset.asset_code, "asset_name": asset.asset_name},
             lokasi_otomatis, _user.get("username", ""),
-            update_data["updated_at"])
+            update_data["updated_at"], nama_audit=nama_pelaku(_user))
     invalidate_asset_cache()
     audit_user = _user.get("name") or _user.get("username") or request.headers.get("X-Audit-User", "unknown")
     audit_user_id = _user.get("id") or request.headers.get("X-Audit-User-Id", "")
@@ -2641,7 +2642,8 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
     if lokasi_otomatis:
         await sp.catat_penempatan({**existing, "id": asset_id},
                                   lokasi_otomatis, _user.get("username", ""),
-                                  update_data["updated_at"])
+                                  update_data["updated_at"],
+                                  nama_audit=nama_pelaku(_user))
 
     logger.info(f"Asset patched: {asset_id} — fields: {list(update_data.keys())}")
     invalidate_asset_cache()

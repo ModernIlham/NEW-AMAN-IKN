@@ -27,6 +27,12 @@ const ACTION_MAP = {
   sahkan: { label: "Pengesahan", color: "text-amber-600", bg: "bg-amber-500", dot: "bg-amber-500" },
   pengesahan_dokumen: { label: "Dokumen Pengesahan", color: "text-amber-600", bg: "bg-amber-500", dot: "bg-amber-500" },
   penghapusan: { label: "Penghapusan (SK)", color: "text-rose-600", bg: "bg-rose-500", dot: "bg-rose-500" },
+  // Penempatan denah. Tanpa entri ini ketiganya jatuh ke label cadangan
+  // "Edit" (lihat TimelineEntry) — sehingga penempatan lokasi otomatis yang
+  // menyertai satu simpanan aset terbaca sebagai suntingan kedua.
+  aset_lokasi_otomatis: { label: "Lokasi Otomatis", color: "text-cyan-600", bg: "bg-cyan-500", dot: "bg-cyan-500" },
+  aset_lokasi_tandai: { label: "Tandai Lokasi", color: "text-cyan-600", bg: "bg-cyan-500", dot: "bg-cyan-500" },
+  aset_lokasi_hapus: { label: "Cabut Lokasi", color: "text-amber-600", bg: "bg-amber-500", dot: "bg-amber-500" },
   // Log SISTEM (tanpa kegiatan): master pegawai & kartu pegawai UID.
   buat_pegawai: { label: "Pegawai Baru", color: "text-emerald-600", bg: "bg-emerald-500", dot: "bg-emerald-500" },
   ubah_pegawai: { label: "Ubah Pegawai", color: "text-blue-600", bg: "bg-blue-500", dot: "bg-blue-500" },
@@ -37,6 +43,19 @@ const ACTION_MAP = {
   lepas_kartu: { label: "Lepas Kartu", color: "text-amber-600", bg: "bg-amber-500", dot: "bg-amber-500" },
   kartu_tak_dikenal: { label: "Kartu Tak Dikenal", color: "text-rose-600", bg: "bg-rose-500", dot: "bg-rose-500" },
 };
+
+// Backend menulis ±150 jenis aksi; ACTION_MAP di atas hanya menamai sebagian.
+// Sisanya dulu jatuh ke gaya `update` — sehingga panel MENGKLAIM "Edit" atas
+// hal yang jelas bukan suntingan: penempatan denah otomatis, buka tiket TGR,
+// booking nomor surat. Itulah yang membuat satu simpanan aset terbaca sebagai
+// dua kali edit. Aksi tak dikenal kini dieja dari namanya sendiri dengan gaya
+// netral — jujur, dan kebetulan jauh lebih informatif.
+export const konfigAksi = (action) =>
+  ACTION_MAP[action] || {
+    label: String(action || "aktivitas").replace(/_/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase()),
+    color: "text-slate-600", bg: "bg-slate-400", dot: "bg-slate-400",
+  };
 
 const FIELD_LABELS = {
   asset_name: "Nama", category: "Kategori", brand: "Brand", model: "Model",
@@ -77,8 +96,8 @@ const fullDate = (ts) => {
 // ============================================================================
 // Timeline Entry - Clean design with timeline line
 // ============================================================================
-const TimelineEntry = memo(({ log, showAssetInfo }) => {
-  const config = ACTION_MAP[log.action] || ACTION_MAP.update;
+export const TimelineEntry = memo(({ log, showAssetInfo }) => {
+  const config = konfigAksi(log.action);
   const [showDetail, setShowDetail] = useState(false);
   const hasChanges = log.changes && log.changes.length > 0;
 
@@ -107,8 +126,11 @@ const TimelineEntry = memo(({ log, showAssetInfo }) => {
           </p>
         )}
         
-        {/* Detail text for non-asset actions */}
-        {log.detail && !log.asset_code && (
+        {/* Keterangan. Dulu hanya tampil bila log TIDAK punya asset_code —
+            akibatnya keterangan yang justru paling menjelaskan ("Gedung A /
+            Lantai 2 / Ruang 305", "Putar foto #1 sebesar 90°", "Dokumen BAST
+            diunggah") tak pernah terbaca, dan barisnya tampak kosong. */}
+        {log.detail && (
           <p className="text-[11px] text-muted-foreground mt-0.5">{log.detail}</p>
         )}
         

@@ -157,11 +157,18 @@ async def penempatan_dari_inventarisasi(existing: dict, update_data: dict,
 
 
 async def catat_penempatan(aset: dict, lokasi: dict, username: str,
-                           now: str) -> None:
+                           now: str, nama_audit: str = "") -> None:
     """Riwayat custody + jejak audit untuk satu penempatan otomatis.
 
     Dipanggil SETELAH tulisan aset berhasil — riwayat tak boleh mendahului
     kenyataan (pola `set_lokasi_aset`).
+
+    Dua identitas, sengaja berbeda perannya: `username` (alamat login) menjadi
+    identitas tetap di riwayat custody, sedangkan `nama_audit` adalah nama
+    tampilan untuk panel Riwayat. Tanpa pemisahan ini, satu simpanan aset
+    menghasilkan dua baris jejak yang menyebut orang yang sama dengan dua
+    ejaan — satu bernama, satu beralamat surel — dan terbaca seperti dua
+    pelaku. Kosong → jatuh ke `username` seperti perilaku lama.
 
     Pembungkus try/except di sini BUKAN kerapian, melainkan bagian dari
     kontrak best-effort modul ini: saat fungsi ini berjalan, asetnya SUDAH
@@ -177,7 +184,12 @@ async def catat_penempatan(aset: dict, lokasi: dict, username: str,
         await log_audit(
             "aset_lokasi_otomatis", str(aset.get("activity_id") or ""),
             str(aset.get("id") or ""), str(aset.get("asset_code") or ""),
-            str(aset.get("asset_name") or ""), username or "system",
+            str(aset.get("asset_name") or ""),
+            nama_audit or username or "system",
+            # NUP ikut supaya barisnya menunjuk NUP yang sama dengan baris
+            # "Edit" dari simpanan yang memicunya — tanpa ini keduanya tampak
+            # membicarakan barang yang berbeda.
+            nup=str(aset.get("NUP") or ""),
             detail=(lokasi.get("jalur_nama") or "")[:120])
     except Exception as e:                       # noqa: BLE001 — sengaja luas
         logger.warning("jejak penempatan otomatis dilewati (%s): %s",

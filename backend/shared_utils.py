@@ -745,6 +745,20 @@ async def send_esign_email(email: str, nama: str, judul: str, link: str,
 TRACKED_FIELDS = [*SCALAR_FIELD_NAMES, "stiker_photo_index"]
 TRACKED_COUNT_FIELDS = ["photos", "document_checklist"]
 
+def nama_pelaku(user: dict) -> str:
+    """Identitas pelaku untuk kolom `username` di jejak audit.
+
+    SELALU nama tampilan bila ada, alamat login hanya sebagai cadangan. Ini
+    penting karena satu permintaan bisa menulis lebih dari satu baris jejak
+    (mis. simpan aset + penempatan denah otomatis): kalau jalur yang satu
+    memakai `name` dan jalur yang lain memakai `username`, satu orang muncul
+    dengan dua ejaan berbeda di panel Riwayat dan terbaca seolah dua pelaku.
+    Custody (`oleh`/`ditandai_oleh` pada riwayat lokasi) TIDAK memakai ini —
+    di sana alamat login memang sengaja disimpan sebagai identitas tetap."""
+    u = user or {}
+    return str(u.get("name") or u.get("username") or "").strip()
+
+
 async def log_audit(action: str, activity_id: str, asset_id: str = "", asset_code: str = "", asset_name: str = "", username: str = "system", changes: list = None, detail: str = "", nup: str = "", kode_satker: str = ""):
     # kode_satker (opsional): log SISTEM tanpa activity_id (mis. kejadian
     # kartu pegawai) tetap bisa dibatasi & dilihat per satker di halaman
