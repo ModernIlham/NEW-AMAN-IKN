@@ -14,7 +14,7 @@
  *     justru disembunyikan tepat pada baris yang paling butuh penjelasan.
  */
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { render } from "@testing-library/react";
 
 import { konfigAksi, TimelineEntry } from "../AuditLogPanel";
 
@@ -55,13 +55,23 @@ describe("baris timeline", () => {
     detail: "Gedung A / Lantai 3 / Ruang 305",
   };
 
+  // Ditegaskan lewat `container.textContent`, BUKAN getByText. Plugin
+  // `visual-edits` membungkus tiap ekspresi JSX dinamis dalam <span>
+  // tambahan saat aktif, dan getByText hanya mencocokkan anak teks LANGSUNG
+  // sebuah elemen — sehingga label rakitan seperti " / {nup}" terbelah dan
+  // ujinya merah hanya di lingkungan yang mengaktifkan plugin itu. Yang
+  // hendak dijamin memang teks yang sampai ke mata pembaca, apa pun
+  // pembungkusnya.
   test("keterangan tampil walau baris punya kode barang", () => {
-    render(<TimelineEntry log={LOG_PENEMPATAN} showAssetInfo />);
-    expect(screen.getByText("Gedung A / Lantai 3 / Ruang 305")).toBeInTheDocument();
-    expect(screen.getByText("Lokasi Otomatis")).toBeInTheDocument();
+    const { container } = render(
+      <TimelineEntry log={LOG_PENEMPATAN} showAssetInfo />);
+    const teks = container.textContent;
+    expect(teks).toContain("Gedung A / Lantai 3 / Ruang 305");
+    expect(teks).toContain("Lokasi Otomatis");
     // Satu pelaku, satu ejaan — bukan alamat surel.
-    expect(screen.getByText("Arif Fahmirridho")).toBeInTheDocument();
+    expect(teks).toContain("Arif Fahmirridho");
+    expect(teks).not.toContain("@");
     // NUP ikut, sehingga jelas menunjuk barang yang sama dengan baris Edit.
-    expect(screen.getByText("/ 16")).toBeInTheDocument();
+    expect(teks).toContain("3100204023 / 16");
   });
 });
