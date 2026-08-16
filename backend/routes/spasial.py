@@ -26,7 +26,7 @@ from pydantic import BaseModel
 
 from auth_utils import require_user, require_user_or_query_token, require_writer
 from db import db
-from shared_utils import (kode_satker_user, limiter, log_audit,
+from shared_utils import (kode_satker_user, limiter, log_audit, nama_pelaku,
                           pastikan_akses_dok_satker, scope_query_field_satker)
 import spasial_optimize as so
 import spasial_utils as su
@@ -1830,7 +1830,10 @@ async def set_lokasi_aset(asset_id: str, payload: LokasiAsetIn,
         await log_audit("aset_lokasi_hapus", aset.get("activity_id") or "",
                         asset_id, asset_code=aset.get("asset_code") or "",
                         asset_name=aset.get("asset_name") or "",
-                        username=username or "system",
+                        # Nama tampilan untuk jejak; `username` (alamat login)
+                        # tetap dipakai custody di riwayat lokasi di atas.
+                        username=nama_pelaku(_user) or "system",
+                        nup=str(aset.get("NUP") or ""),
                         kode_satker=kode_satker_user(_user),
                         detail="Penempatan denah dicabut")
         return {"ok": True, "lokasi_spasial": None}
@@ -1874,7 +1877,8 @@ async def set_lokasi_aset(asset_id: str, payload: LokasiAsetIn,
     await log_audit("aset_lokasi_tandai", aset.get("activity_id") or "",
                     asset_id, asset_code=aset.get("asset_code") or "",
                     asset_name=aset.get("asset_name") or "",
-                    username=username or "system",
+                    username=nama_pelaku(_user) or "system",
+                    nup=str(aset.get("NUP") or ""),
                     kode_satker=kode_satker_user(_user),
                     detail=(lokasi.get("jalur_nama")
                             or f"{lat:.6f}, {lon:.6f}")[:120])

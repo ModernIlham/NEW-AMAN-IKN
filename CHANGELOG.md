@@ -67,6 +67,51 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#862] Panel Riwayat berhenti menyebut satu pencatatan sebagai dua suntingan — 2026-08-16
+
+Laporan pemilik: mencatat **satu** aset memunculkan **dua** baris "Edit" —
+satu menyebut nama pengguna, satu menyebut alamat surelnya. Datanya tidak
+ganda; asetnya ditulis sekali. Yang ganda adalah barisnya, dan ketiga
+sebabnya ada di lapisan tampilan/jejak:
+
+1. **Baris kedua sebenarnya bukan suntingan.** Itu penempatan denah
+   **otomatis** (`aset_lokasi_otomatis`) yang lahir dari koordinat GPS pada
+   simpanan yang sama. Aksinya tak terdaftar di `ACTION_MAP`, sehingga jatuh
+   ke label cadangan — yang kebetulan berbunyi "Edit".
+2. **Satu orang, dua ejaan.** Jalur audit aset memakai nama tampilan
+   (`name`), sedangkan `catat_penempatan` menerima `username` (alamat login).
+3. **NUP tak ikut**, jadi baris itu tampak membicarakan barang lain — dan
+   keterangannya ("Gedung A / Lantai 3 / Ruang 305") justru disembunyikan
+   karena panel hanya menampilkan `detail` saat log TIDAK punya kode barang.
+
+Perbaikannya:
+
+- Helper baru `shared_utils.nama_pelaku(user)` — satu tempat untuk memutuskan
+  identitas pelaku di jejak audit. Dipakai ketiga jalur tulis aset dan kedua
+  jalur penempatan manual. **Custody sengaja tidak ikut**: `oleh` dan
+  `ditandai_oleh` pada riwayat lokasi tetap alamat login sebagai identitas
+  tetap, sama seperti sebelumnya.
+- `catat_penempatan` menerima `nama_audit` terpisah dan mengirim `nup`.
+- Label cadangan panel diperbaiki di akarnya. Backend menulis **±150** jenis
+  aksi sementara `ACTION_MAP` hanya menamai 17 — sisanya semua mengaku
+  "Edit", termasuk hal yang jelas bukan suntingan (buka tiket TGR, booking
+  nomor surat, pemusnahan). Aksi tak dikenal kini dieja dari namanya sendiri
+  dengan gaya netral; tiga aksi penempatan denah dapat labelnya sendiri
+  ("Lokasi Otomatis", "Tandai Lokasi", "Cabut Lokasi").
+- Keterangan (`detail`) tampil walau baris punya kode barang.
+
+Catatan: pemicunya **bukan** role operator atau mode semua satker, melainkan
+koordinat — penempatan otomatis hanya berjalan bila simpanan membawa lat/lon
+dan titiknya jatuh di dalam node denah aktif.
+
+Verifikasi: 12 uji backend baru (termasuk peniruan gejala aslinya — dua baris
+jejak dari satu simpanan wajib menyebut satu ejaan pelaku dan satu NUP) + 5
+uji frontend. Uji-mutasi dua sisi: audit dikembalikan memakai alamat login →
+2 uji merah; label cadangan dikembalikan ke "Edit" → 2 uji merah. Suite
+backend 2.622 lulus, eslint bersih, build produksi sukses.
+
+---
+
 ## [#861] BMN yang belum diteliti sebabnya berhenti dinyatakan hilang — 2026-08-16
 
 Aset yang baru ditandai **Tidak Ditemukan** — sebabnya belum disimpulkan tim —
