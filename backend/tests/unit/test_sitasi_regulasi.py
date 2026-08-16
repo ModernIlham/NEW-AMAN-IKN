@@ -124,9 +124,9 @@ class TestRegistryTidakBolehMelenceng:
                 salah.append(f"{sitasi}: diklaim '{S.BELUM_RISET}' padahal ada di pustaka")
         assert not salah, salah
 
-    def test_status_hanya_dari_tiga_nilai_baku(self):
+    def test_status_hanya_dari_nilai_baku(self):
         assert set(S.SITASI_TERDAFTAR.values()) <= {
-            S.PUSTAKA, S.BELUM_RISET, S.PERLU_KOREKSI}
+            S.PUSTAKA, S.BELUM_RISET, S.PERLU_KOREKSI, S.TERVERIFIKASI}
 
 
 class TestRepoTidakMembantahDirinya:
@@ -156,14 +156,30 @@ class TestRepoTidakMembantahDirinya:
         assert S.bentrokan_jenis({"PMK 181/PMK.06/2016", "PMK 181/2016"}) == {}
 
 
-class TestDaftarPertanyaanBiroHukum:
-    def test_dua_sitasi_paling_mendesak_tercatat(self):
-        """Keduanya sampai ke dokumen yang DITANDATANGANI KPB di atas meterai
-        dan tak ada jejaknya di pustaka riset: KMK 403 di SPTJM, S-115 di
-        Berita Acara."""
-        assert S.SITASI_TERDAFTAR["KMK 403/KMK.06/2013"] == S.BELUM_RISET
-        assert S.SITASI_TERDAFTAR["S-115/KN/2017"] == S.BELUM_RISET
+class TestBuktiRisetTercatat:
+    """Status `terverifikasi` tak boleh jadi klaim kosong. Tiap sitasi yang
+    diberi status itu wajib punya jejaknya di laporan audit — kalau tidak,
+    registry ini cuma memindahkan tebakan dari satu kolom ke kolom lain."""
 
-    def test_daftar_pertanyaan_tidak_kosong(self):
-        belum = [s for s, st in S.SITASI_TERDAFTAR.items() if st == S.BELUM_RISET]
-        assert belum, "daftar pertanyaan untuk Biro Hukum tidak boleh kosong diam-diam"
+    @pytest.fixture(scope="class")
+    def laporan(self):
+        p = os.path.join(BACKEND, "..", "docs", "SITASI-DOKUMEN-RESMI.md")
+        with open(p, encoding="utf-8") as f:
+            return f.read()
+
+    def test_setiap_terverifikasi_ada_di_laporan(self, laporan):
+        tanpa = [s for s, st in S.SITASI_TERDAFTAR.items()
+                 if st == S.TERVERIFIKASI and s not in laporan]
+        assert tanpa == [], f"diklaim terverifikasi tetapi tak ada buktinya: {tanpa}"
+
+    def test_laporan_menyebut_batas_riset(self, laporan):
+        """Yang dipastikan NOMOR & JUDUL, bukan isi pasal — sumber primer
+        tetap terblokir. Batas itu harus tertulis, bukan tersirat."""
+        assert "belum terbaca dari teks aslinya" in laporan.lower() \
+            or "bukan pembacaan teks asli" in laporan.lower()
+
+    def test_yang_belum_ketemu_tetap_tercatat(self):
+        """KMK 339/KM.6/2024 tak ditemukan setelah empat sudut pencarian.
+        Ia harus tetap berstatus belum-diriset, bukan diam-diam dianggap
+        beres karena sisanya sudah ketemu."""
+        assert S.SITASI_TERDAFTAR["KMK 339/KM.6/2024"] == S.BELUM_RISET

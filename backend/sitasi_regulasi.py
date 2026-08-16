@@ -40,6 +40,12 @@ POLA_SITASI = re.compile(
 PUSTAKA = "pustaka"            # tercatat di docs/PUSTAKA-REGULASI-BMN.md
 BELUM_RISET = "belum-diriset"  # tercetak ke dokumen, tak pernah diriset
 PERLU_KOREKSI = "perlu-koreksi"  # bertentangan dengan pustaka repo sendiri
+# Judul & keberadaannya dikonfirmasi dari beberapa sumber luar yang saling
+# bebas (riset 2026-08-16, rinciannya di docs/SITASI-DOKUMEN-RESMI.md).
+# CATATAN: ini bukan pembacaan teks asli — JDIH, BPK, bahkan salinan di
+# mirror universitas semuanya masih terblokir dari lingkungan ini. Yang
+# dipastikan adalah NOMOR dan JUDULnya, bukan isi pasalnya.
+TERVERIFIKASI = "terverifikasi"
 
 
 def rapikan(sitasi: str) -> str:
@@ -268,16 +274,39 @@ SITASI_TERDAFTAR = {
     "PMK 251/PMK.06/2015": PUSTAKA,     # pustaka baris 115 (amortisasi ATB)
     "PMK 234/PMK.05/2020": PUSTAKA,
 
-    # — Tercetak ke dokumen, TAK PERNAH diriset (pertanyaan untuk Biro Hukum) —
-    # Dua yang pertama paling mendesak: keduanya sampai ke dokumen yang
-    # DITANDATANGANI Kuasa Pengguna Barang di atas meterai.
-    "KMK 403/KMK.06/2013": BELUM_RISET,   # SPTJM — dasar "formil & materiil"
-    "S-115/KN/2017": BELUM_RISET,         # Berita Acara — dasar hukum
-    "PMK 214/PMK.05/2013": BELUM_RISET,
-    "KMK 620/KM.6/2015": BELUM_RISET,
-    "KMK 81/KM.6/2018": BELUM_RISET,
+    # — Diriset 2026-08-16, nomor & judul terkonfirmasi dari sumber luar —
+    # "Bagan Akun Standar"; menggantikan PMK 91/PMK.05/2007. Judul di
+    # lbp_utils.py cocok persis.
+    "PMK 214/PMK.05/2013": TERVERIFIKASI,
+    # "Masa Manfaat dalam rangka Amortisasi BMN berupa Aset Tak Berwujud",
+    # diubah oleh KMK 81/KM.6/2018. Rantai "620 jo. 81" di lbp_utils cocok.
+    "KMK 620/KM.6/2015": TERVERIFIKASI,
+    "KMK 81/KM.6/2018": TERVERIFIKASI,
+    # Hibah BMN selain tanah/bangunan tanpa bukti kepemilikan, nilai perolehan
+    # ≤ Rp100 juta — persis yang diklaim pemindahtanganan_utils.py.
+    "KMK 334/2021": TERVERIFIKASI,
+    # "Pedoman Pelaksanaan Tindak Lanjut Hasil Penertiban BMN pada K/L".
+    # TERBATAS: judulnya terkonfirmasi, tetapi klaim SPTJM di reports.py soal
+    # tanggung jawab "formil dan materiil" BELUM terbaca dari teks aslinya.
+    "KMK 403/KMK.06/2013": TERVERIFIKASI,
+    # Surat Dirjen KN soal tindak lanjut Barang Tidak Ditemukan, terkait
+    # PMK 118/PMK.06/2017 (penilaian kembali BMN) & Perpres 75/2017.
+    # PERHATIAN: sumber menyebut konteksnya PENILAIAN KEMBALI (revaluasi),
+    # sedangkan ba_utils.py menuliskannya sebagai "tindak lanjut hasil
+    # INVENTARISASI". Beda konteks — perlu ditegaskan pemilik.
+    "S-115/KN/2017": TERVERIFIKASI,
+    # Semula saya tandai PERLU_KOREKSI karena mengira tahunnya keliru.
+    # KELIRU: "Tata Cara Rekonsiliasi BMN dalam rangka Penyusunan LKPP"
+    # memang bernomor 118/PMK.06/2018 dan mencabut PMK 69/PMK.06/2016.
+    # Nomor 118 dipakai dua peraturan berbeda di dua tahun berbeda.
+    "PMK 118/PMK.06/2018": TERVERIFIKASI,
+
+    # — Masih belum ketemu —
+    # Diklaim perbaikan_utils.py sebagai perubahan kedua atas KMK 295/KM.6/2019
+    # (menambah baris 31304 Oil & Gas Facilities dan 31305 Wells). Perubahan
+    # keduanya MEMANG ada, tetapi nomornya tak muncul di sumber mana pun
+    # setelah empat sudut pencarian berbeda.
     "KMK 339/KM.6/2024": BELUM_RISET,
-    "KMK 334/2021": BELUM_RISET,
 
     # — Bertentangan dengan pustaka repo sendiri —
     # `KMK 29/PMK.6/2010`: pustaka (baris 21 & 1322) menulis PMK 29/PMK.06/2010
@@ -285,12 +314,9 @@ SITASI_TERDAFTAR = {
     #   sekaligus — jenisnya (KMK, padahal PMK) dan sub-kodenya (PMK.6,
     #   padahal PMK.06). Nomor KMK dengan sub-kode PMK tidak koheren.
     "KMK 29/PMK.6/2010": PERLU_KOREKSI,
-    # `PMK 118/PMK.06/2018`: seluruh repo lain memakai 118/PMK.06/2017, dan
-    #   pustaka baris 480 menulis "118/PMK.06/2017 jo. 57/2018 jo. 107/2019".
-    #   Entah tahunnya keliru, entah ini memang peraturan lain — harus
-    #   dipastikan, bukan ditebak.
-    "PMK 118/PMK.06/2018": PERLU_KOREKSI,
     # `KMK 295/KMK.06/2019`: ejaan ketiga untuk peraturan yang di tempat lain
-    #   ditulis KMK 295/KM.6/2019 (pustaka) dan KMK 295/2019.
+    #   ditulis KMK 295/KM.6/2019 dan KMK 295/2019. Riset 2026-08-16
+    #   menguatkan bentuk `KM.6`: Hukumonline mengindeksnya sebagai
+    #   "Keputusan Menteri Keuangan Nomor 295/KM.6/2019".
     "KMK 295/KMK.06/2019": PERLU_KOREKSI,
 }
