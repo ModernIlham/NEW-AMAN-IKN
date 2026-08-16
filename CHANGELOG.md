@@ -67,6 +67,51 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#861] BMN yang belum diteliti sebabnya berhenti dinyatakan hilang — 2026-08-16
+
+Aset yang baru ditandai **Tidak Ditemukan** — sebabnya belum disimpulkan tim —
+dulu langsung dihitung sebagai *"Tidak Ditemukan Lainnya"*, yaitu **benar-benar
+hilang**. Akibatnya berat dan diam-diam: Berita Acara merekomendasikan
+**PENGHAPUSAN** atas barang yang belum diteliti, menagih Surat Keterangan
+Kepolisian, dan menyeret SPTJM bermeterai ke dalam daftar dokumen pendukung.
+RHI sejak dulu sudah memisahkan ember "Belum Diklasifikasi"; Berita Acara
+tidak. Dua laporan dari kegiatan yang sama saling membantah.
+
+Cacat kedua di berkas unduhan yang sama: **SPTJM memuat SELURUH** aset tidak
+ditemukan, termasuk yang berklasifikasi *Kesalahan Pencatatan*. Untuk aset yang
+sama, Surat Koreksi menyatakan "barangnya ada, catatannya yang keliru"
+sementara SPTJM menyatakan Kuasa Pengguna Barang bertanggung jawab penuh atas
+kehilangannya — dua pernyataan bertentangan, keduanya ditandatangani.
+
+- `klasifikasikan_tidak_ditemukan` kini memulangkan **tiga** ember. Hanya nilai
+  yang eksplisit *"Tidak Ditemukan Lainnya"* yang dianggap hilang; kosong atau
+  nilai di luar dua klasifikasi baku masuk ember ketiga.
+- Berita Acara (PDF & Word): baris rekap **"c. Belum Diklasifikasi (masih
+  diteliti)"** — muncul hanya bila ada, sehingga a+b+c selalu genap dengan
+  total. Kolom Klasifikasi pada rincian menulis "Belum Diklasifikasi", bukan
+  "-" yang ambigu. Rekomendasinya: **lanjutkan penelitian**, dan dinyatakan
+  tegas bahwa BMN itu belum dapat diusulkan penghapusan maupun koreksi.
+  Dokumen pendukung menambah kertas kerja penelitian lanjutan — **tanpa**
+  menarik SPTJM dan surat kepolisian ikut masuk.
+- SPTJM (PDF & Word): cakupannya kini **hanya BMN yang benar-benar hilang**.
+  Suratnya menyebut sendiri apa yang dikecualikan ("Tidak termasuk dalam
+  pernyataan ini: N NUP berklasifikasi Kesalahan Pencatatan … dan M NUP yang
+  klasifikasi sebabnya belum ditetapkan"), supaya selisih angka dengan
+  RHI/BAHI tidak menjadi teka-teki bagi pemeriksa.
+- Rekapitulasi di layar: kartu ketiga "Belum Diklasifikasi — perlu ditetapkan
+  sebabnya", lengkap dengan keterangan bahwa aset itu belum masuk SPTJM maupun
+  Surat Koreksi. Endpoint `/rekapitulasi` menambah `belum_diklasifikasi`
+  (aditif; dua ember lama tidak berubah bentuk).
+
+Verifikasi: 10 uji baru yang **merender** BA/SPTJM/Surat Koreksi (PDF & Word)
+lalu membaca teksnya kembali — termasuk uji penjaga bahwa kasus yang memang
+harus dihapus **tetap** diusulkan penghapusan. Uji-mutasi dua sisi: ember
+ketiga digabung kembali ke "lainnya" → 8 uji merah; cakupan SPTJM dikembalikan
+ke seluruh tidak-ditemukan → 2 uji merah (uji diperkuat lebih dulu setelah
+mutasi pertama hanya menjatuhkan 1). Suite backend 2.610 lulus.
+
+---
+
 ## [#860] Nama barang bertanda kurung siku berhenti hilang dari dokumen resmi — 2026-08-15
 
 ReportLab memperlakukan isi `Paragraph` sebagai markup mini. Teks pengguna yang

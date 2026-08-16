@@ -25,6 +25,17 @@ export default function TidakDitemukanBreakdown({ tidakDitemukan, subBreakdown }
           <p className="text-sm font-bold text-red-800 dark:text-red-200">{tidakDitemukan.tidak_ditemukan_lainnya?.count || 0} NUP</p>
           <p className="text-[10px] text-red-500 dark:text-red-400">{fmtRp(tidakDitemukan.tidak_ditemukan_lainnya?.value || 0)}</p>
         </div>
+        {/* Muncul hanya bila ada — supaya dua kartu di atas selalu genap
+            dengan total, dan aset yang sebabnya belum diteliti tidak raib.
+            Aset di kartu ini BELUM masuk SPTJM maupun Surat Koreksi. */}
+        {(tidakDitemukan.belum_diklasifikasi?.count || 0) > 0 && (
+          <div className="bg-card rounded p-2 border border-amber-200 dark:border-amber-700 col-span-2"
+            data-testid="td-belum-diklasifikasi">
+            <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">Belum Diklasifikasi — perlu ditetapkan sebabnya</p>
+            <p className="text-sm font-bold text-amber-800 dark:text-amber-200">{tidakDitemukan.belum_diklasifikasi.count} NUP</p>
+            <p className="text-[10px] text-amber-500 dark:text-amber-400">{fmtRp(tidakDitemukan.belum_diklasifikasi.value || 0)} · belum masuk SPTJM maupun Surat Koreksi</p>
+          </div>
+        )}
       </div>
       {Object.keys(subBreakdown || {}).length > 0 && (
         <div className="space-y-1">
