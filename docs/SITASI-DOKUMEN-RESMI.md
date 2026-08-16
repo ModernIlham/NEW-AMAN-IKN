@@ -55,6 +55,68 @@ sudah dibaca, dan **tidak** berarti peraturannya dipastikan masih berlaku.
 |---|---|---|
 | `KMK 339/KM.6/2024` | Perubahan **kedua** atas KMK 295/KM.6/2019 — menambah baris 31304 (*Oil & Gas Facilities*) dan 31305 (*Wells*) pada Tabel I & II (`perbaikan_utils.py`) | **Tidak ditemukan** setelah empat sudut pencarian berbeda. Perubahan keduanya **memang ada** (terindeks sebagai dokumen "Perubahan Kedua atas KMK 295/KM.6/2019"), dan KMK 266/KM.6/2023 adalah perubahan **pertama** — sehingga perubahan kedua bertahun 2024 masuk akal. Tetapi **nomornya tidak dapat dipastikan** dari sumber mana pun yang terjangkau. |
 
+## Riset lanjutan 2026-08-16 (putaran kedua)
+
+### Temuan terpenting: 11 klasifikasi resmi DJKN — dan dari mana daftar aplikasi ini berasal
+
+Tindak lanjut Barang Tidak Ditemukan hasil revaluasi BMN 2017–2018
+mengklasifikasikan sebabnya ke dalam **11 klasifikasi**:
+
+| # | Klasifikasi DJKN | Padanan di AMAN |
+|---|---|---|
+| 1 | Kesalahan kodefikasi | `Kesalahan Kodefikasi` |
+| 2 | Tercatat di satker lain | `BMN Tercatat di Satker Lain` |
+| 3 | Kegiatan **perencanaan** dicatat sebagai BMN tersendiri | `Kegiatan Perencanaan/Pengembangan Dicatat Sebagai BMN Tersendiri` |
+| 4 | Kegiatan **renovasi** dicatat sebagai BMN tersendiri | **TIDAK ADA** |
+| 5 | Kesalahan pencatatan ganda | `Pencatatan Ganda` |
+| 6 | Aset sudah dihibahkan, dialihstatuskan, atau dihapuskan | `BMN Objek Alih Status/Pemindahtanganan/Penghapusan` |
+| 7 | Penggabungan NUP BMN | `Penggabungan BMN Satu Kesatuan Fungsi` |
+| 8 | Kesalahan kodefikasi/klasifikasi (bukan objek revaluasi) | **TIDAK ADA** |
+| 9 | Kesalahan pencatatan barang pihak ketiga | `Kesalahan Pencatatan Pihak Ketiga` |
+| 10 | Tidak ditemukan fisiknya | `Tidak Ditemukan Fisiknya` |
+| 11 | Tidak dapat ditelusuri | `Tidak Dapat Ditelusuri` |
+
+**Artinya:** daftar sub-klasifikasi aplikasi ini **bukan karangan** — ia
+turunan dari 11 klasifikasi resmi DJKN, dengan **9 dari 11 terpetakan**.
+Ini sekaligus membenarkan keputusan pada PR #857 untuk memenangkan daftar
+sisi layar atas daftar lawas di server: daftar layar itulah yang punya
+landasan resmi.
+
+Dua yang **belum ada** — nomor 4 (renovasi dicatat sebagai BMN tersendiri)
+dan nomor 8 (kesalahan kodefikasi/klasifikasi bukan objek revaluasi) —
+adalah calon penambahan, menunggu keputusan pemilik.
+
+Sebaliknya, enam sebab kedaruratan yang ditambahkan pada PR #858
+(Kebakaran, Bencana Alam, Hilang/Dicuri, Kerusuhan, Rusak Total, Sebab Lain)
+**bukan** bagian dari 11 klasifikasi DJKN. Itu perluasan atas keputusan
+pemilik, dan sebaiknya tetap dicatat sebagai perluasan — bukan diklaim
+sebagai klasifikasi resmi.
+
+Dicatat pula: untuk barang yang tak dapat ditelusuri, praktik DJKN
+mengarahkan pelibatan **APIP/Inspektorat** untuk membuat laporan resmi dan
+menentukan apakah dihapuskan, ditelusuri lebih lanjut, atau dinyatakan
+sebagai dugaan kerugian negara. Ini sejalan dengan naskah Berita Acara
+aplikasi yang sudah menyebut Inspektorat.
+
+### "Formil dan materiil" pada SPTJM — kemungkinan salah rujuk
+
+Unsur SPTJM yang berbunyi *"pernyataan tanggung jawab penuh atas kebenaran
+permohonan yang diajukan, baik materiil maupun formil"* muncul sebagai
+**syarat isi SPTJM dalam prosedur pemusnahan/penghapusan BMN** — ranah
+**PMK 83/PMK.06/2016**, yang **sudah dirujuk repo ini** di tempat lain.
+
+`routes/reports.py` melekatkan frasa itu pada `KMK 403/KMK.06/2013`. Dugaan
+kuat: rujukannya **tertukar**, dan yang tepat adalah PMK 83/PMK.06/2016.
+Belum diubah — perlu konfirmasi pasal, karena ini dokumen bermeterai.
+
+### `PMK 181/PMK.06/2016` — indikasi masih dipakai
+
+Ditemukan dokumen resmi **Laporan Barang Pengguna Semester I TA 2025** yang
+masih menyandarkan penyajian BMN di Neraca pada PMK 181/PMK.06/2016. Ini
+bukan bukti non-pencabutan, tetapi bukti **pemakaian resmi yang masih
+berjalan** pada 2025 — cukup untuk meredakan kekhawatiran pada `[#864]`,
+belum cukup untuk menutup pertanyaannya.
+
 ## Bertentangan dengan pustaka repo sendiri
 
 Kedua temuan ini **tidak butuh akses hukum** untuk disimpulkan — cukup repo
