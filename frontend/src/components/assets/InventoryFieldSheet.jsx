@@ -45,6 +45,20 @@ export const PENGGUNA_NAME_LABELS = {
 export const OPERASIONAL_JENIS_OPTIONS = ["Kegiatan/Acara/Kebutuhan", "Ruangan"];
 
 // Nilai HARUS sama persis dengan opsi Select pada form penuh (AssetForm).
+// Temuan cacat pencatatan yang dijumpai saat inventarisasi. Berdiri sendiri —
+// TIDAK bergantung pada status ditemukan/tidak — karena kode yang salah dan
+// stiker yang tertempel di barang lain justru ditemukan pada barang yang ada.
+// Wajib sama persis dengan VALID_TEMUAN_PENCATATAN di shared_utils.py.
+export const TEMUAN_PENCATATAN_OPTIONS = [
+  "Kodefikasi Tidak Sesuai Fisik",
+  "Stiker Tertempel di Barang Lain",
+  "Stiker Rusak/Tidak Terbaca",
+  "NUP Ganda pada Fisik Berbeda",
+  "Nama/Spesifikasi Tidak Sesuai Fisik",
+  "Lokasi Tercatat Tidak Sesuai",
+  "Temuan Lain (Diuraikan)",
+];
+
 export const SUB_KLASIFIKASI_OPTIONS = {
   "Kesalahan Pencatatan": [
     { value: "Kesalahan Kodefikasi", label: "Kesalahan Kodefikasi" },
@@ -54,6 +68,8 @@ export const SUB_KLASIFIKASI_OPTIONS = {
     { value: "BMN Objek Alih Status/Pemindahtanganan/Penghapusan", label: "Objek Alih Status/Pemindahtanganan/Penghapusan" },
     { value: "Penggabungan BMN Satu Kesatuan Fungsi", label: "Penggabungan BMN Satu Kesatuan Fungsi" },
     { value: "Kesalahan Pencatatan Pihak Ketiga", label: "Kesalahan Pencatatan Pihak Ketiga" },
+    { value: "Kegiatan Renovasi Dicatat Sebagai BMN Tersendiri", label: "Renovasi Dicatat Sebagai BMN Tersendiri" },
+    { value: "Kesalahan Kodefikasi/Klasifikasi (Bukan Objek Revaluasi)", label: "Kodefikasi/Klasifikasi (Bukan Objek Revaluasi)" },
   ],
   // Tiga pertama menjawab BAGAIMANA pencarian gagal; sisanya menjawab SEBAB
   // barangnya lenyap (termasuk keadaan kahar). Urutan & isinya wajib sama

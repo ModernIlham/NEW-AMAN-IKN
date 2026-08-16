@@ -48,7 +48,7 @@ const SNAPSHOT_FIELDS = [
   "supplier", "notes", "thumbnail", "thumbnail_index", "gallery_thumbnail",
   "created_at", "updated_at", "activity_id", "version",
   "stiker_status", "stiker_ukuran", "stiker_photo_index",
-  "inventory_status", "klasifikasi_tidak_ditemukan", "sub_klasifikasi",
+  "inventory_status", "temuan_pencatatan", "klasifikasi_tidak_ditemukan", "sub_klasifikasi",
   "uraian_tidak_ditemukan", "tindak_lanjut",
   "koordinat_latitude", "koordinat_longitude", "kronologis",
   "keterangan_berlebih", "asal_usul_berlebih",

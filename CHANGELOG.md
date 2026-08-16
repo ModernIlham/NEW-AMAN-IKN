@@ -67,6 +67,52 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#869] Penanda temuan pencatatan lapangan + 11/11 klasifikasi DJKN — 2026-08-16
+
+Permintaan pemilik: lengkapi dua klasifikasi DJKN yang kurang, **dan** beri
+klasifikasi tersendiri untuk cacat pencatatan yang biasa terjadi di lapangan
+— kodefikasi keliru (yang nantinya menyuplai proses reklasifikasi), salah
+tempel stiker, dan sejenisnya — *"agar terdapat tandanya saat diinventarisasi"*.
+
+**Bagian pertama — 11/11.** Ditambahkan `Kegiatan Renovasi Dicatat Sebagai BMN
+Tersendiri` dan `Kesalahan Kodefikasi/Klasifikasi (Bukan Objek Revaluasi)`.
+Pemetaan ke 11 klasifikasi resmi DJKN kini **lengkap**, dari 9/11 pada
+`[#868]`. Keduanya datang dengan kartu panduan operator.
+
+**Bagian kedua — field baru `temuan_pencatatan`.** Dan ini yang penting:
+penanda ini **berdiri sendiri**, sengaja lepas dari `klasifikasi_tidak_
+ditemukan`.
+
+Alasannya datang dari lapangan dan sebelumnya tak tertangani: cacat pencatatan
+paling sering ditemukan pada barang yang **justru ketemu** — kodenya tak sesuai
+fisik, stikernya tertempel di barang lain, namanya beda dengan barangnya.
+Sub-klasifikasi hanya hidup ketika aset berstatus "Tidak Ditemukan", sehingga
+temuan semacam itu **hanya bisa dititipkan ke kolom Catatan** — tidak
+terhitung, tidak tersaring, hilang dari rekapitulasi.
+
+Tujuh nilai: Kodefikasi Tidak Sesuai Fisik · Stiker Tertempel di Barang Lain ·
+Stiker Rusak/Tidak Terbaca · NUP Ganda pada Fisik Berbeda · Nama/Spesifikasi
+Tidak Sesuai Fisik · Lokasi Tercatat Tidak Sesuai · Temuan Lain (Diuraikan).
+`batchable` — satu rak salah tempel stiker biasanya kena banyak NUP sekaligus.
+
+Field baru menempuh jalur registry penuh (`asset_fields.py` → models →
+ekspor XLSX → template impor → frontend → snapshot luring → generator data
+uji). Uji registry anti-drift menagih **empat** titik yang terlewat, satu per
+satu, sampai lengkap — persis fungsinya.
+
+Satu kesalahan yang tertangkap sendiri saat pengerjaan: header kolom ekspor
+sempat disisipkan di tengah sementara nilainya ditulis di kolom terakhir —
+seluruh berkas ekspor akan bergeser satu kolom tanpa ada yang menyadarinya.
+Diperbaiki, lalu **dikunci uji** yang membandingkan indeks header dengan
+indeks penulisan nilainya.
+
+Verifikasi: 8 uji baru (30 di berkasnya). Uji-mutasi dua sisi: header ekspor
+digeser dari nilainya → 1 uji merah; kasus "salah tempel stiker" dihapus →
+2 uji merah. Suite backend 2.672 & frontend 855 lulus, eslint bersih, build
+sukses.
+
+---
+
 ## [#868] Ketemu landasan resminya: 11 klasifikasi DJKN — 2026-08-16
 
 Riset lanjutan atas permintaan pemilik. **Temuan terpentingnya bukan soal

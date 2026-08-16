@@ -15,6 +15,7 @@ from auth_utils import require_user
 from db import db
 from shared_utils import (
     VALID_INVENTORY_STATUSES, VALID_KLASIFIKASI, VALID_SUB_KLASIFIKASI_ALL,
+    VALID_TEMUAN_PENCATATAN,
     SUB_KLASIFIKASI_DITAWARKAN,
     VALID_CONDITIONS, VALID_STATUSES, VALID_STIKER_STATUSES, VALID_STIKER_SIZES
 )
@@ -148,6 +149,11 @@ ASSET_TEMPLATE_SCHEMA = [
      "rule": "Pilih: Belum Diinventarisasi / Ditemukan / Tidak Ditemukan / Berlebih / Sengketa.",
      "sample1": "Ditemukan", "sample2": "Tidak Ditemukan",
      "dropdown": VALID_INVENTORY_STATUSES},
+    {"field": "temuan_pencatatan", "required": False, "width": 30,
+     "rule": "Cacat pencatatan yang ditemukan di lapangan — berlaku juga untuk "
+             "BMN yang DITEMUKAN (mis. stiker tertempel di barang lain).",
+     "sample1": "", "sample2": "Kodefikasi Tidak Sesuai Fisik",
+     "dropdown": VALID_TEMUAN_PENCATATAN},
     {"field": "klasifikasi_tidak_ditemukan", "required": False, "width": 25,
      "rule": "Jika Tidak Ditemukan: Kesalahan Pencatatan / Tidak Ditemukan Lainnya.",
      "sample1": "", "sample2": "Kesalahan Pencatatan",

@@ -41,6 +41,7 @@ try:
         VALID_CONDITIONS, VALID_INVENTORY_STATUSES, VALID_KLASIFIKASI,
         VALID_STATUSES, VALID_STIKER_SIZES, VALID_STIKER_STATUSES,
         VALID_SUB_KLASIFIKASI_ALL,
+        VALID_TEMUAN_PENCATATAN,
     )
 except Exception:  # pragma: no cover - fallback pertahanan
     VALID_CONDITIONS = ["Baik", "Rusak Ringan", "Rusak Berat"]
@@ -51,6 +52,8 @@ except Exception:  # pragma: no cover - fallback pertahanan
                                 "Tidak Ditemukan", "Berlebih", "Sengketa"]
     VALID_KLASIFIKASI = ["Kesalahan Pencatatan", "Tidak Ditemukan Lainnya"]
     VALID_SUB_KLASIFIKASI_ALL = ["Hilang / Dicuri", "Lainnya"]
+    VALID_TEMUAN_PENCATATAN = ["Kodefikasi Tidak Sesuai Fisik",
+                               "Stiker Tertempel di Barang Lain"]
 
 
 # ─────────────────────────── helper penghasil nilai ───────────────────────────
@@ -195,6 +198,11 @@ FIELD_STRATEGIES = {
     "stiker_ukuran": _s("teks", lambda r, c: (
         r.choice(VALID_STIKER_SIZES) if r.random() < 0.5 else "")),
     "inventory_status": _s("teks", lambda r, c: c["inv"]),
+    # Temuan pencatatan lapangan: sengaja TIDAK bergantung pada status
+    # inventarisasi — cacat pencatatan justru paling sering ditemukan
+    # pada barang yang KETEMU. Jarang (10%) supaya data uji tetap wajar.
+    "temuan_pencatatan": _s("teks", lambda r, c: (
+        r.choice(VALID_TEMUAN_PENCATATAN) if r.random() < 0.10 else "")),
     "klasifikasi_tidak_ditemukan": _s("teks", lambda r, c: (
         r.choice(VALID_KLASIFIKASI) if c["inv"] == "Tidak Ditemukan" else "")),
     "sub_klasifikasi": _s("teks", lambda r, c: (
