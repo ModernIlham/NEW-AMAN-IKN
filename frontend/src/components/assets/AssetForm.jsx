@@ -19,7 +19,7 @@ import {
 import { DocumentChecklist } from "./DocumentChecklist";
 import { InputTanggal } from "@/components/ui/input-tanggal";
 import { bangunChecklist, rekomendasiKelengkapan } from "@/lib/kelengkapanBmn";
-import InventoryFieldSheet, { PENGGUNA_MELEKAT_OPTIONS, PENGGUNA_NAME_LABELS, OPERASIONAL_JENIS_OPTIONS, CONDITION_OPTIONS } from "./InventoryFieldSheet";
+import InventoryFieldSheet, { PENGGUNA_MELEKAT_OPTIONS, PENGGUNA_NAME_LABELS, OPERASIONAL_JENIS_OPTIONS, CONDITION_OPTIONS, SUB_KLASIFIKASI_OPTIONS } from "./InventoryFieldSheet";
 import FullCameraSheet from "./FullCameraSheet";
 import KartuTapDialog from "../pegawai/KartuTapDialog";
 import { useBackGuard } from "../../hooks/useBackGuard";
@@ -154,6 +154,46 @@ const SUB_KLASIFIKASI_INFO = {
     contoh: "Bangunan gudang lama yang sudah dibongkar dan di atasnya dibangun gedung baru, namun pencatatan gudang lama belum dihapus.",
     penanganan: "Dokumentasikan kondisi saat ini, kumpulkan bukti perubahan fisik, dan proses sesuai ketentuan penghapusan BMN.",
     alur: "1. Dokumentasi kondisi saat ini (foto, koordinat) → 2. Kumpulkan bukti perubahan → 3. Buat Berita Acara → 4. Proses SPTJM → 5. Ajukan penghapusan dan pencatatan aset baru"
+  },
+  // ── Sebab kedaruratan & keadaan kahar ──────────────────────────────────
+  // Panduan di bawah adalah KAIDAH INTERNAL SATKER, bukan kutipan pasal:
+  // tidak ada nomor peraturan yang diklaim di sini. Rujukan formalnya
+  // menyusul setelah pertanyaan di docs/SITASI-DOKUMEN-RESMI.md terjawab.
+  "Hilang / Dicuri": {
+    maksud: "BMN yang hilang karena diduga dicuri atau diambil pihak yang tidak berhak, bukan sekadar tidak ditemukan saat pencarian.",
+    contoh: "Proyektor ruang rapat hilang setelah gedung dimasuki orang tak dikenal pada malam hari; pintu ditemukan rusak.",
+    penanganan: "Laporkan ke kepolisian secepatnya dan simpan tanda bukti laporannya. Buat kronologis lengkap dengan waktu, tempat, dan saksi. Nilai apakah ada unsur kelalaian penyimpanan.",
+    alur: "1. Amankan lokasi & dokumentasikan → 2. Lapor ke pimpinan → 3. Lapor polisi, simpan bukti lapor → 4. Buat kronologis & kumpulkan keterangan saksi → 5. Proses SPTJM → 6. Nilai TGR bila ada kelalaian → 7. Usul penghapusan"
+  },
+  "Kebakaran": {
+    maksud: "BMN musnah atau rusak tak terpulihkan akibat kebakaran, baik di dalam gedung satker maupun di lokasi penyimpanan lain.",
+    contoh: "Perangkat komputer di ruang arsip terbakar akibat korsleting listrik; sisa fisiknya tidak dapat diidentifikasi lagi.",
+    penanganan: "Kumpulkan keterangan resmi instansi pemadam kebakaran dan dokumentasi lokasi. Daftar BMN terdampak dibuat per NUP, bukan digabung, agar nilainya dapat dipertanggungjawabkan.",
+    alur: "1. Utamakan keselamatan orang → 2. Dokumentasikan lokasi & sisa fisik (foto/video) → 3. Minta keterangan pemadam kebakaran → 4. Daftar BMN terdampak per NUP → 5. Buat Berita Acara kejadian → 6. Proses SPTJM → 7. Usul penghapusan"
+  },
+  "Bencana Alam": {
+    maksud: "BMN hilang atau musnah akibat peristiwa alam di luar kendali satker — banjir, gempa, tanah longsor, angin puting beliung, dan sejenisnya.",
+    contoh: "Meubelair dan arsip di lantai dasar hanyut terbawa banjir; sebagian tidak ditemukan kembali.",
+    penanganan: "Kumpulkan keterangan kejadian dari instansi berwenang setempat (mis. badan penanggulangan bencana atau kelurahan). Dokumentasikan kondisi lokasi sesegera mungkin karena buktinya cepat hilang.",
+    alur: "1. Dokumentasikan kondisi lokasi sebelum dibersihkan → 2. Lapor ke pimpinan → 3. Minta keterangan kejadian dari instansi berwenang → 4. Daftar BMN terdampak per NUP → 5. Buat Berita Acara kejadian → 6. Proses SPTJM → 7. Usul penghapusan"
+  },
+  "Kerusuhan / Huru-hara": {
+    maksud: "BMN hilang atau rusak akibat kerusuhan, penjarahan, atau gangguan keamanan massal yang berada di luar kendali satker.",
+    contoh: "Kendaraan dinas dirusak dan sebagian komponennya hilang saat terjadi kerusuhan di sekitar kantor.",
+    penanganan: "Kumpulkan keterangan kepolisian dan dokumentasi kejadian. Bedakan BMN yang hilang dari yang rusak namun masih ada fisiknya — keduanya jalur tindak lanjutnya berbeda.",
+    alur: "1. Utamakan keselamatan orang → 2. Dokumentasikan kerusakan → 3. Lapor polisi & simpan bukti lapor → 4. Pisahkan daftar hilang vs rusak → 5. Buat Berita Acara kejadian → 6. Proses SPTJM → 7. Usul penghapusan"
+  },
+  "Rusak Total / Hancur": {
+    maksud: "BMN yang fisiknya masih dapat ditunjukkan tetapi sudah hancur sama sekali sehingga tidak dapat diidentifikasi maupun difungsikan lagi.",
+    contoh: "Genset tertimpa reruntuhan bangunan; badannya remuk dan nomor serinya tidak terbaca.",
+    penanganan: "Dokumentasikan sisa fisiknya sebagai bukti. Karena barangnya masih ada, tindak lanjutnya condong ke pemusnahan/penghapusan, bukan pelaporan kehilangan.",
+    alur: "1. Dokumentasikan sisa fisik & lokasi → 2. Buat Berita Acara kondisi → 3. Nilai apakah masih ada nilai sisa → 4. Proses SPTJM → 5. Usul pemusnahan/penghapusan"
+  },
+  "Sebab Lain (Diuraikan)": {
+    maksud: "Sebab yang sudah DITELITI dan disimpulkan, tetapi tidak cocok dengan pilihan mana pun di atas. Bukan untuk sebab yang belum diteliti — biarkan sub-klasifikasi kosong bila penelitian belum selesai.",
+    contoh: "BMN terbawa pihak ketiga saat pemindahan kantor dan belum dapat ditarik kembali meski sudah ditelusuri.",
+    penanganan: "Uraikan sebabnya selengkap mungkin di kolom Uraian — kolom itulah yang akan dibaca pemeriksa, karena kategorinya sendiri tidak menjelaskan apa pun.",
+    alur: "1. Selesaikan penelusuran → 2. Tulis uraian sebab selengkapnya → 3. Kumpulkan bukti pendukung → 4. Buat Berita Acara → 5. Proses SPTJM → 6. Usul penghapusan"
   }
 };
 
@@ -2783,19 +2823,13 @@ const AssetForm = memo(({
                         <Select value={formData.sub_klasifikasi || ""} onValueChange={v => setFormData(p => ({...p, sub_klasifikasi: v}))}>
                           <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Pilih sub-kategori" /></SelectTrigger>
                           <SelectContent>
-                            {formData.klasifikasi_tidak_ditemukan === "Kesalahan Pencatatan" ? (<>
-                              <SelectItem value="Kesalahan Kodefikasi">Kesalahan Kodefikasi</SelectItem>
-                              <SelectItem value="Pencatatan Ganda">Pencatatan Ganda</SelectItem>
-                              <SelectItem value="BMN Tercatat di Satker Lain">BMN Tercatat di Satker Lain</SelectItem>
-                              <SelectItem value="Kegiatan Perencanaan/Pengembangan Dicatat Sebagai BMN Tersendiri">Perencanaan/Pengembangan Dicatat Sebagai BMN</SelectItem>
-                              <SelectItem value="BMN Objek Alih Status/Pemindahtanganan/Penghapusan">Objek Alih Status/Pemindahtanganan/Penghapusan</SelectItem>
-                              <SelectItem value="Penggabungan BMN Satu Kesatuan Fungsi">Penggabungan BMN Satu Kesatuan Fungsi</SelectItem>
-                              <SelectItem value="Kesalahan Pencatatan Pihak Ketiga">Kesalahan Pencatatan Pihak Ketiga</SelectItem>
-                            </>) : (<>
-                              <SelectItem value="Tidak Ditemukan Fisiknya">Tidak Ditemukan Fisiknya</SelectItem>
-                              <SelectItem value="Tidak Dapat Ditelusuri">Tidak Dapat Ditelusuri</SelectItem>
-                              <SelectItem value="Tertimpa Bangunan Lain/Beralih Fungsi">Tertimpa Bangunan Lain/Beralih Fungsi</SelectItem>
-                            </>)}
+                            {/* Salinan ketiga daftar ini dulu ditulis tangan di sini
+                                dan bisa menua sendiri tanpa ada yang menagih. Kini
+                                memakai konstanta bersama — satu sumber kebenaran,
+                                selaras dengan server lewat uji anti-drift. */}
+                            {(SUB_KLASIFIKASI_OPTIONS[formData.klasifikasi_tidak_ditemukan] || []).map(o => (
+                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                         {/* Info card for sub-klasifikasi - shows detailed guidance */}

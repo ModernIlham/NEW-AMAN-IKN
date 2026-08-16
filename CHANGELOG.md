@@ -67,6 +67,48 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#866] Kejadian tak terduga punya kategorinya sendiri — 2026-08-16
+
+Keputusan pemilik atas poin 3: sebab kedaruratan menjadi **nilai
+sub-klasifikasi baru**, bukan sumbu terpisah. Enam pilihan ditambahkan di
+bawah "Tidak Ditemukan Lainnya":
+
+**Hilang / Dicuri · Kebakaran · Bencana Alam · Kerusuhan / Huru-hara ·
+Rusak Total / Hancur · Sebab Lain (Diuraikan)**
+
+Tiga di antaranya "dipulangkan" dari daftar lawas — kosakata yang dulu ada di
+server tetapi tak pernah bisa dipilih operator (lihat `[#865]`).
+
+Tiap pilihan baru datang dengan **kartu panduan lengkap** (maksud, contoh,
+penanganan, alur langkah) — karena pilihan tanpa panduan akan kosong justru
+saat operator paling tertekan. Panduannya ditulis sebagai **kaidah internal
+satker**: tak ada satu pun nomor peraturan yang diklaim, dan itu dijaga uji.
+Rujukan formalnya menyusul setelah pertanyaan di
+`docs/SITASI-DOKUMEN-RESMI.md` terjawab.
+
+**Salinan ketiga yang baru ketahuan.** Saat menambahkan nilai, ternyata
+`AssetForm.jsx` menulis ulang seluruh daftar sebagai `<SelectItem>` hardcoded —
+sumber KETIGA di luar server dan `InventoryFieldSheet.jsx`, yang bisa menua
+sendiri tanpa ada yang menagih. Konvensi repo justru melarangnya ("ekspor
+konstanta opsi — jangan duplikasi daftar opsi di tempat lain"). Kini
+`AssetForm` memakai konstanta bersama, dan ada uji yang menagih bila daftar
+itu ditulis tangan lagi.
+
+Catatan jujur soal desainnya: dua kelompok nilai ini memang **dua sumbu yang
+berbeda** — tiga nilai lama menjawab "bagaimana pencarian gagal", enam nilai
+baru menjawab "kenapa barangnya tidak ada". Meleburnya ke satu daftar adalah
+keputusan pemilik yang diambil sadar; konsekuensinya operator memilih salah
+satu sudut pandang, tidak keduanya sekaligus. Ini dicatat di kode agar tidak
+terbaca sebagai kekeliruan di kemudian hari.
+
+Verifikasi: 8 uji baru (total 20 di berkasnya). **Tiga** uji-mutasi, semuanya
+dibuktikan mati: kartu panduan dihapus → 1 uji merah; kartu ada tapi satu
+bagiannya dikosongkan → 1 uji merah (properti berbeda: ada ≠ berguna); server
+kehilangan satu nilai → 4 uji merah. Suite backend 2.661 & frontend 855 lulus,
+eslint bersih, build sukses.
+
+---
+
 ## [#865] Sub-klasifikasi UI dan server berhenti berjalan sendiri-sendiri — 2026-08-16
 
 Layar dan server sama-sama punya daftar sub-klasifikasi sebab BMN tidak

@@ -125,6 +125,99 @@ class TestPulangPergiEksporImpor:
         pytest.fail("field sub_klasifikasi tak ada di template")
 
 
+_FORM = os.path.join(
+    os.path.dirname(__file__), "..", "..", "..",
+    "frontend", "src", "components", "assets", "AssetForm.jsx")
+
+
+def _sumber_form():
+    with open(os.path.abspath(_FORM), encoding="utf-8") as f:
+        return f.read()
+
+
+class TestSalinanKetigaSudahHilang:
+    """AssetForm.jsx dulu menulis ulang daftar yang sama sebagai <SelectItem>
+    hardcoded — salinan KETIGA, di luar server dan InventoryFieldSheet. Ia bisa
+    menua sendiri tanpa ada yang menagih, dan konvensi repo justru melarangnya
+    ("ekspor konstanta opsi — jangan duplikasi daftar opsi di tempat lain")."""
+
+    def test_form_memakai_konstanta_bersama(self):
+        src = _sumber_form()
+        assert "SUB_KLASIFIKASI_OPTIONS" in src, \
+            "AssetForm harus memakai konstanta bersama, bukan daftar sendiri"
+
+    def test_tak_ada_selectitem_sub_klasifikasi_hardcoded(self):
+        """Penjaga sesungguhnya: nilai apa pun dari daftar tak boleh muncul
+        lagi sebagai <SelectItem value="..."> yang ditulis tangan."""
+        src = _sumber_form()
+        hardcoded = [n for n in SUB_KLASIFIKASI_DITAWARKAN
+                     if f'<SelectItem value="{n}"' in src]
+        assert hardcoded == [], (
+            "nilai sub-klasifikasi masih ditulis tangan di AssetForm.jsx "
+            f"(salinan ketiga hidup lagi): {hardcoded}")
+
+
+class TestPanduanOperatorLengkap:
+    """Tiap pilihan punya kartu panduan (maksud/contoh/penanganan/alur) di
+    `SUB_KLASIFIKASI_INFO`. Menambah pilihan tanpa panduannya membuat kartu itu
+    kosong justru pada keadaan operator paling tertekan — kebakaran, bencana,
+    pencurian."""
+
+    def kunci_info(self):
+        src = _sumber_form()
+        blok = src.split("const SUB_KLASIFIKASI_INFO = {", 1)[1].split("\n};", 1)[0]
+        return {m.group(1) for m in re.finditer(r'^\s{2}"([^"]+)":\s*\{', blok, re.M)}
+
+    def test_pembacaan_tidak_hampa(self):
+        assert len(self.kunci_info()) >= 10
+
+    def test_setiap_pilihan_punya_panduan(self):
+        tanpa = [n for n in SUB_KLASIFIKASI_DITAWARKAN if n not in self.kunci_info()]
+        assert tanpa == [], f"pilihan tanpa kartu panduan: {tanpa}"
+
+    def test_panduan_terisi_keempat_bagiannya(self):
+        """Ada ≠ berguna. Entri yang hanya terisi separuh tetap lolos uji
+        keberadaan tetapi menampilkan kartu setengah kosong — dan justru
+        `alur` yang paling dicari orang saat kejadiannya sedang berlangsung."""
+        src = _sumber_form()
+        blok = src.split("const SUB_KLASIFIKASI_INFO = {", 1)[1].split("\n};", 1)[0]
+        # Pecah per entri: dari satu kunci sampai kunci berikutnya.
+        posisi = [(m.group(1), m.start())
+                  for m in re.finditer(r'^\s{2}"([^"]+)":\s*\{', blok, re.M)]
+        kurang = []
+        for i, (nama, awal) in enumerate(posisi):
+            akhir = posisi[i + 1][1] if i + 1 < len(posisi) else len(blok)
+            isi = blok[awal:akhir]
+            for bagian in ("maksud", "contoh", "penanganan", "alur"):
+                m = re.search(rf'{bagian}:\s*"([^"]*)"', isi)
+                if not m or len(m.group(1).strip()) < 30:
+                    kurang.append(f"{nama}.{bagian}")
+        assert kurang == [], f"bagian panduan kosong/terlalu pendek: {kurang}"
+
+    def test_panduan_kedaruratan_tak_mengklaim_pasal(self):
+        """Naskah panduan adalah kaidah internal satker. Nomor peraturan di
+        sini akan lolos gerbang sitasi (berkas frontend tak dipindai) padahal
+        tampil ke operator — jadi dijaga di sini."""
+        import sitasi_regulasi as SR
+        src = _sumber_form()
+        blok = src.split("const SUB_KLASIFIKASI_INFO = {", 1)[1].split("\n};", 1)[0]
+        assert SR.sitasi_dalam(blok) == set()
+
+
+class TestSebabKedaruratanTersedia:
+    def test_kejadian_tak_terduga_punya_kategorinya(self):
+        """Permintaan pemilik: kejadian force majeure harus terakomodasi."""
+        for sebab in ("Kebakaran", "Bencana Alam", "Hilang / Dicuri",
+                      "Kerusuhan / Huru-hara"):
+            assert sebab in VALID_SUB_KLASIFIKASI_LAINNYA
+
+    def test_sebab_lain_bukan_pengganti_belum_diteliti(self):
+        """"Sebab Lain" berarti SUDAH diteliti tetapi tak masuk kategori —
+        berbeda dari sub-klasifikasi kosong yang berarti belum diteliti."""
+        assert "Sebab Lain (Diuraikan)" in VALID_SUB_KLASIFIKASI_LAINNYA
+        assert "" not in VALID_SUB_KLASIFIKASI_LAINNYA
+
+
 class TestTidakAdaNilaiKembar:
     def test_tanpa_duplikat(self):
         assert len(VALID_SUB_KLASIFIKASI_ALL) == len(set(VALID_SUB_KLASIFIKASI_ALL))
