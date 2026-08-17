@@ -67,6 +67,56 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#871] Tiga kebocoran isolasi antar-satker ditutup + penjaga anti-drift — 2026-08-16
+
+Hasil tinjauan keamanan seluruh sistem (council 9 dimensi + verifikasi
+adversarial). Tiga temuan **saya verifikasi sendiri dengan membaca kodenya**
+sebelum diperbaiki:
+
+**1. Statistik PDF ekspor bocor lintas satker** — `routes/exports.py`. Blok
+statistik bercabang pada `activity_id` dan memakai matcher KOSONG bila kegiatan
+tidak dipilih, membuang penyaringan satker yang sudah dibangun tepat di atasnya.
+Kotak ringkasan PDF mencetak **total nilai BMN seluruh satker** sementara
+tabelnya hanya berisi aset satker sendiri — dan dokumen itu rutin dikirim ke
+KPKNL. Filter layar juga terabaikan, jadi angkanya salah sekaligus bocor.
+
+**2. IDOR pada `/assets/groups` dan `/assets/all-ids`** — `routes/batch.py`.
+`scope_query_aset` SENGAJA berhenti menyaring begitu `activity_id` ada di kueri;
+pemeriksaan kepemilikan diserahkan ke guard terpisah. Kedua endpoint ini tidak
+memanggilnya, sehingga operator satker A cukup mengirim `activity_id` milik
+satker B untuk memperoleh rincian anggota kelompok (lokasi, pemegang, kondisi)
+atau seluruh id asetnya — bahan untuk ubah/hapus massal.
+
+**3. Kunci baris bocor lintas satker** — `routes/batch.py`. `row_locks`
+menyimpan `asset_id` beserta **nama dan id pengguna** yang sedang menyunting;
+kuerinya tanpa penyaringan satker sama sekali.
+
+**Penjaga anti-drift baru** (`test_isolasi_activity_id_klien.py`): menyisir
+seluruh `routes/*.py`, mengumpulkan endpoint yang menerima `activity_id` dari
+klien, dan menagih pemanggilan guard kepemilikan. Ia langsung menemukan 7
+kandidat lagi — **6 di antaranya positif palsu** (penjaganya ada di helper
+bersama `_docx_surat_pernyataan_inv`, `_batas_activity_satker`,
+`scope_query_field_satker`, atau urutannya memang sudah benar), masing-masing
+kini terdaftar beserta alasannya. Yang ketujuh nyata dan ikut diperbaiki di
+atas.
+
+Catatan jujur dua kali:
+
+- Angka hasil council pertama **menyesatkan karena skrip saya**: verifikator
+  yang mati kehabisan kuota menghasilkan daftar vonis kosong, yang dihitung
+  sebagai "kedua skeptik membantah". Tidak ada temuan yang benar-benar
+  terbantah; 14 di antaranya sekadar tak pernah diverifikasi.
+- Uji-mutasi menangkap **kelemahan uji saya sendiri**: mencabut panggilan guard
+  tetapi membiarkan namanya di baris `import` membuat pencarian substring tetap
+  ketemu, sehingga mutasi lolos hijau. Uji diperkuat agar menuntut pemanggilan,
+  bukan sekadar nama.
+
+Verifikasi: 9 uji baru. Uji-mutasi dua sisi: kebocoran statistik dikembalikan →
+2 uji merah; guard IDOR dicabut → 2 uji merah (setelah uji diperkuat). Suite
+backend 2.687 lulus.
+
+---
+
 ## [#870] Rekap temuan lapangan — dan empat kejadian yang selama ini tak punya tempat — 2026-08-16
 
 Dua hal sekaligus, sesuai permintaan pemilik: rekap temuan pencatatan, dan
