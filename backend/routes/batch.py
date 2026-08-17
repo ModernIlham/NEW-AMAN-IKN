@@ -131,6 +131,15 @@ async def get_all_locks(request: Request, activity_id: str = "", _user: dict = D
     now = datetime.now(timezone.utc)
     locks = {}
     query = {"expires_at": {"$gt": now}}
+    # Isolasi satker: `row_locks` menyimpan asset_id BESERTA nama & id pengguna
+    # yang sedang menyunting. Tanpa penyaringan, operator satker A melihat aset
+    # mana saja yang sedang dikerjakan satker B lengkap dengan nama petugasnya.
+    from shared_utils import pastikan_akses_kegiatan_id, kode_satker_user, id_kegiatan_satker
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+    if not activity_id:
+        _kode = kode_satker_user(_user)
+        if _kode:
+            query["activity_id"] = {"$in": await id_kegiatan_satker(_kode)}
     if activity_id:
         # activity_id tersimpan di dokumen lock (didenormalisasi saat akuisisi)
         # → cukup baca row_locks langsung, tanpa mengambil id aset dari db.assets
@@ -526,7 +535,13 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
 async def get_asset_groups(activity_id: str = "", request: Request = None, _user: dict = Depends(require_user)):
     """Group assets by same asset_code, asset_name, purchase_date, brand/model, price.
     Returns groups with count >= 2, including detailed member info."""
-    from shared_utils import scope_query_aset
+    from shared_utils import scope_query_aset, pastikan_akses_kegiatan_id
+    # `scope_query_aset` SENGAJA tidak menyaring bila activity_id sudah ada di
+    # query — pemeriksaan kepemilikan kegiatan diserahkan ke guard terpisah.
+    # Endpoint ini dulu tak memanggilnya, sehingga operator satker A cukup
+    # mengirim activity_id milik satker B untuk memperoleh rincian anggota
+    # kelompok: lokasi, pemegang, dan kondisi tiap NUP.
+    await pastikan_akses_kegiatan_id(_user, activity_id)
     match = {}
     if activity_id:
         match["activity_id"] = activity_id
@@ -638,7 +653,13 @@ async def get_all_asset_ids(
 
     # Isolasi satker (REVIEW-9 R8): "pilih semua halaman" SEBELUMNYA
     # mengenumerasi id aset SELURUH satker.
-    from shared_utils import scope_query_aset
+    #
+    # Guard kegiatan wajib menyertainya: `scope_query_aset` melepas penyaringan
+    # begitu activity_id ada di query, dan activity_id di sini datang dari
+    # KLIEN. Tanpa guard, "pilih semua" pada activity_id satker lain
+    # mengembalikan seluruh id asetnya — bahan untuk ubah/hapus massal.
+    from shared_utils import scope_query_aset, pastikan_akses_kegiatan_id
+    await pastikan_akses_kegiatan_id(_user, activity_id)
     query = await scope_query_aset(_user, query)
     ids = []
     async for doc in db.assets.find(query, {"_id": 0, "id": 1}):

@@ -747,9 +747,16 @@ async def export_pdf(request: Request, activity_id: Optional[str] = None,
                     f"(maks {MAX_FOTO_EXPORT_ASSETS}). Persempit filter/kegiatan, "
                     "atau gunakan Ekspor CSV (ringan, tanpa foto)."))
 
-    # Get stats via aggregation
-    match_stage = {"$match": query} if activity_id else {"$match": {}}
-    stats_pipeline = [match_stage, {"$group": {
+    # Statistik WAJIB memakai `query` yang sama dengan count_documents di atas.
+    #
+    # Dulu baris ini bercabang pada activity_id dan memakai matcher KOSONG bila
+    # kegiatan tidak dipilih — seluruh penyaringan satker DIBUANG dan
+    # agregasi menjumlahkan purchase_price SELURUH koleksi. Akibatnya kotak
+    # ringkasan PDF mencetak nilai BMN seluruh satker sementara tabel di
+    # bawahnya hanya berisi aset satker sendiri — dan dokumen itu rutin dikirim
+    # ke KPKNL. Filter layar (kondisi/lokasi/harga) pun ikut terabaikan,
+    # sehingga angkanya salah sekaligus bocor.
+    stats_pipeline = [{"$match": query}, {"$group": {
         "_id": None,
         "total_value": {"$sum": {"$convert": {"input": "$purchase_price", "to": "double", "onError": 0, "onNull": 0}}},
         "active": {"$sum": {"$cond": [{"$eq": ["$status", "Aktif"]}, 1, 0]}},
