@@ -67,6 +67,45 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#872] Bom dekompresi di unggah foto TTD ditutup — dan dekodenya lepas dari event loop — 2026-08-17
+
+Temuan tinjauan keamanan yang **sudah lolos verifikasi adversarial**, dan
+dibuktikan ulang sendiri sebelum diperbaiki.
+
+`/ttd/olah-foto` dapat dicapai **penanda tangan TAMU** — cukup berbekal tautan
+e-sign yang dikirim lewat WhatsApp, tanpa akun satker sama sekali.
+
+Kodenya sudah menangkap `DecompressionBombError`, tetapi itu **tidak cukup**:
+Pillow hanya melempar galat di atas **DUA KALI** `MAX_IMAGE_PIXELS`. Di pita
+1x-2x ia sekadar mengeluarkan peringatan lalu **tetap mendekode penuh**.
+Dibuktikan langsung di repo ini dengan ambang kecil: 1,44x ambang → dekode
+penuh tanpa galat; 4x ambang → baru melempar.
+
+Dengan ambang proyek 50 MP (`shared_utils.py:28`), PNG 9000x9000 = **81 MP**
+jatuh tepat di pita itu. Berkasnya hanya ~1 MB terkompres sehingga lolos batas
+12 MB di endpoint, tetapi RGBA-nya **~324 MB**.
+
+Dua perbaikan:
+
+- **Penolakan sebelum dekode.** `Image.open` hanya membaca header; pikselnya
+  baru dibaca saat `.convert()`. Dimensi kini diperiksa di antara keduanya —
+  satu-satunya celah untuk menolak tanpa terlanjur mengalokasikan memorinya.
+  Pesannya menyebut ukuran sebenarnya, supaya operator tahu harus memperkecil
+  ke berapa.
+- **Dekode keluar dari event loop.** Pipeline Pillow/numpy ini sinkron dan
+  memakan ratusan milidetik sampai beberapa detik untuk foto 12 MB. Dijalankan
+  langsung di event loop, seluruh permintaan lain — simpan aset lapangan,
+  login, heartbeat lock — berhenti dilayani selama itu. Kini lewat
+  `asyncio.to_thread`, pola yang sudah dipakai `process_photos_for_storage`.
+
+Verifikasi: 5 uji baru, termasuk penjaga bahwa `convert()` **tidak pernah
+dipanggil** untuk gambar kelewat besar — bukti bahwa penolakannya benar-benar
+mendahului dekode, bukan menangkap galat sesudahnya. Uji-mutasi dua sisi:
+gerbang pra-dekode dicabut → 3 uji merah; dekode dikembalikan ke event loop →
+1 uji merah. Suite backend 2.692 lulus.
+
+---
+
 ## [#871] Tiga kebocoran isolasi antar-satker ditutup + penjaga anti-drift — 2026-08-16
 
 Hasil tinjauan keamanan seluruh sistem (council 9 dimensi + verifikasi

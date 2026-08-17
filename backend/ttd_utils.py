@@ -34,8 +34,32 @@ def foto_ke_png_transparan(img_bytes, warna=(15, 23, 42), ambang=None,
     # pekat. Pipeline "gelap = tinta" lalu mencap SELURUH bekas latar sebagai
     # tinta: keluarannya kotak berwarna `warna` dengan goresan aslinya justru
     # tembus. Tak ada galat yang muncul; hasilnya cuma salah.
+    # PERIKSA DIMENSI SEBELUM DEKODE. `Image.open` hanya membaca header —
+    # pikselnya baru dibaca saat `.convert()`. Itulah satu-satunya celah untuk
+    # menolak gambar raksasa tanpa terlanjur mengalokasikan memorinya.
+    #
+    # Menangkap DecompressionBombError saja TIDAK CUKUP: Pillow hanya melempar
+    # galat di atas DUA KALI MAX_IMAGE_PIXELS. Di pita 1x-2x ia cuma
+    # mengeluarkan DecompressionBombWarning lalu tetap mendekode penuh. Dengan
+    # ambang proyek 50 MP (shared_utils.py), PNG 9000x9000 = 81 MP jatuh tepat
+    # di pita itu: berkasnya hanya ~1 MB terkompres sehingga lolos batas 12 MB
+    # di endpoint, tetapi RGBA-nya ~324 MB. Endpoint /ttd/olah-foto dapat
+    # dicapai penanda tangan TAMU yang cukup berbekal tautan e-sign — tanpa
+    # akun satker sama sekali.
     try:
-        im = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+        im = Image.open(io.BytesIO(img_bytes))
+    except Image.DecompressionBombError:
+        raise ValueError("Gambar terlalu besar (jumlah piksel berlebih) — perkecil dahulu")
+    except Exception:
+        raise ValueError("Berkas gambar tidak dapat dibaca")
+    lebar, tinggi = im.size
+    batas = Image.MAX_IMAGE_PIXELS or 50_000_000
+    if lebar * tinggi > batas:
+        raise ValueError(
+            f"Gambar terlalu besar ({lebar}x{tinggi} piksel, maksimal "
+            f"{batas:,} piksel) — perkecil dahulu")
+    try:
+        im = im.convert("RGBA")
     except Image.DecompressionBombError:
         raise ValueError("Gambar terlalu besar (jumlah piksel berlebih) — perkecil dahulu")
     # Batasi dimensi (hemat memori & seragam) — sisi terpanjang <= 1600px.

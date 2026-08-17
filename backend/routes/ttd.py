@@ -244,7 +244,13 @@ async def olah_foto(request: Request, file: UploadFile = File(...),
     if not cek_magic_gambar(data, ext):
         raise HTTPException(status_code=400, detail="Isi berkas tidak cocok ekstensi")
     try:
-        png = foto_ke_png_transparan(data)
+        # DI LUAR event loop. Pipeline ini murni Pillow/numpy dan sinkron —
+        # dekode + LANCZOS + Otsu atas foto 12 MB memakan ratusan milidetik
+        # sampai beberapa detik. Dijalankan langsung di event loop, SELURUH
+        # permintaan lain (simpan aset lapangan, login, heartbeat lock)
+        # berhenti dilayani selama itu. Pola yang sama sudah dipakai
+        # `process_photos_for_storage` di routes/assets.py.
+        png = await asyncio.to_thread(foto_ke_png_transparan, data)
     except Exception:
         raise HTTPException(status_code=400,
                             detail="Gagal memproses foto — coba foto lebih terang/kontras")

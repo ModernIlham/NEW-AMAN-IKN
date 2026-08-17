@@ -1,4 +1,5 @@
 """Uji pemrosesan foto TTD → PNG transparan (Mandat-2, murni Pillow/numpy)."""
+import pytest
 import io
 
 from PIL import Image, ImageDraw
@@ -132,3 +133,86 @@ def test_otsu_di_rentang_valid():
                      dtype=np.float32)
     t = _otsu(lum)
     assert 0 <= t <= 255
+
+
+class TestBomDekompresi:
+    """`/ttd/olah-foto` dapat dicapai penanda tangan TAMU — cukup berbekal
+    tautan e-sign, tanpa akun satker. Karena itu penolakan gambar raksasa harus
+    terjadi SEBELUM dekode, bukan setelahnya.
+
+    Menangkap `DecompressionBombError` saja TIDAK cukup: Pillow hanya melempar
+    galat di atas DUA KALI `MAX_IMAGE_PIXELS`. Di pita 1x-2x ia sekadar
+    memperingatkan lalu tetap mendekode penuh — dan pita itulah yang berbahaya,
+    karena berkasnya kecil saat terkompres tetapi raksasa saat jadi RGBA.
+    """
+
+    def test_pita_satu_sampai_dua_kali_ambang_ditolak(self, monkeypatch):
+        """Inti temuannya. Sebelum perbaikan, ukuran di pita ini lolos diam-diam."""
+        import io as _io
+        from PIL import Image
+        import ttd_utils
+
+        monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 100, raising=False)
+        buf = _io.BytesIO()
+        Image.new("RGB", (12, 12), (255, 255, 255)).save(buf, "PNG")  # 144 px = 1,44x
+        with pytest.raises(ValueError, match="terlalu besar"):
+            ttd_utils.foto_ke_png_transparan(buf.getvalue())
+
+    def test_di_bawah_ambang_tetap_diproses(self, monkeypatch):
+        """Penjaga arah sebaliknya: perbaikan tak boleh menolak foto wajar."""
+        import io as _io
+        from PIL import Image
+        import ttd_utils
+
+        monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 100_000, raising=False)
+        png = ttd_utils.foto_ke_png_transparan(_foto_ttd())
+        assert png[:8] == b"\x89PNG\r\n\x1a\n"
+
+    def test_pesan_menyebut_ukuran_sebenarnya(self, monkeypatch):
+        """Operator lapangan perlu tahu harus memperkecil ke berapa."""
+        import io as _io
+        from PIL import Image
+        import ttd_utils
+
+        monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 100, raising=False)
+        buf = _io.BytesIO()
+        Image.new("RGB", (12, 12), (255, 255, 255)).save(buf, "PNG")
+        with pytest.raises(ValueError) as e:
+            ttd_utils.foto_ke_png_transparan(buf.getvalue())
+        assert "12x12" in str(e.value)
+
+    def test_penolakan_terjadi_sebelum_dekode(self, monkeypatch):
+        """Bukti bahwa penolakannya BUKAN sekadar menangkap galat sesudah
+        dekode: `convert` tidak boleh pernah dipanggil untuk gambar kelewat
+        besar. Bila ia dipanggil, memorinya sudah terlanjur dialokasikan."""
+        import io as _io
+        from PIL import Image
+        import ttd_utils
+
+        monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 100, raising=False)
+        buf = _io.BytesIO()
+        Image.new("RGB", (12, 12), (255, 255, 255)).save(buf, "PNG")
+
+        dipanggil = []
+        asli = Image.Image.convert
+
+        def _rekam(self, *a, **k):
+            dipanggil.append(self.size)
+            return asli(self, *a, **k)
+
+        monkeypatch.setattr(Image.Image, "convert", _rekam, raising=False)
+        with pytest.raises(ValueError):
+            ttd_utils.foto_ke_png_transparan(buf.getvalue())
+        assert dipanggil == [], f"convert() terlanjur dipanggil: {dipanggil}"
+
+
+def test_olah_foto_tidak_memblokir_event_loop():
+    """Pipeline Pillow/numpy sinkron ini wajib dijalankan lewat
+    `asyncio.to_thread`. Tanpa itu, satu unggahan foto 12 MB menghentikan
+    SELURUH permintaan lain selama pemrosesan."""
+    import os as _os
+    p = _os.path.join(_os.path.dirname(__file__), "..", "..", "routes", "ttd.py")
+    with open(_os.path.abspath(p), encoding="utf-8") as f:
+        src = f.read()
+    assert "await asyncio.to_thread(foto_ke_png_transparan, data)" in src, (
+        "foto_ke_png_transparan dipanggil langsung di event loop")
