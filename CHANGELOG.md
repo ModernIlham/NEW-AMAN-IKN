@@ -67,6 +67,50 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#875] Barang Serupa tak lagi berhenti di 100 kelompok — dan justru jadi lebih ringan — 2026-08-18
+
+Pertanyaan pemilik: benarkah Barang Serupa hanya menampilkan 100 kelompok?
+Benar — dan cara ia berhenti adalah bagian terburuknya.
+
+`{"$limit": 100}` memotong hasil, lalu `total_groups` melaporkan jumlah yang
+**dikembalikan**, bukan jumlah sebenarnya. Kegiatan dengan 400 kelompok tampak
+**persis** seperti kegiatan dengan 100 — tak ada satu pun tanda bahwa sisanya
+ada. Pemotongan yang tak terlihat adalah bentuk paling berbahaya.
+
+**Kenapa batas itu ada, dan kenapa menaikkannya saja tidak cukup.** Daftar
+kelompok mem-`$push` rincian anggota — 12 field per aset — untuk SETIAP
+kelompok pada SETIAP permintaan, padahal panel hanya memakainya ketika satu
+kelompok dibuka. Biaya seluruh kegiatan dibayar demi kelompok yang mungkin tak
+pernah diklik. Menaikkan 100 jadi 1.000 hanya melipatgandakan biaya itu.
+
+Tiga perubahan:
+
+- **`$facet`** memberi total sebenarnya DAN satu halaman dalam satu perjalanan
+  ke basis data. Layar kini menyebut "Menampilkan 100 dari 437 kelompok".
+- **Paginasi** `page`/`page_size` (batas atas 500 per halaman) dengan tombol
+  **"Muat lebih banyak"**. Tidak ada lagi langit-langit.
+- **Rincian anggota pindah** ke `POST /assets/group-members`, dipanggil saat
+  kelompok dibuka. Daftar kini hanya membawa dua array skalar (`asset_ids`,
+  `NUPs`) yang memang dibutuhkan baris ringkas untuk ubah-massal dan rentang
+  NUP. Endpoint barunya ber-`scope_query_aset`, jadi id satker lain yang
+  diselipkan tidak mengembalikan apa pun.
+
+Hasilnya: batasnya hilang, dan permintaan daftarnya justru **lebih murah**
+daripada sebelumnya.
+
+Verifikasi: 14 uji baru. Uji-mutasi dua sisi: total dikembalikan ke panjang
+halaman → 1 uji merah; isolasi satker dicabut dari endpoint anggota →
+**lolos**, lalu uji diperkuat dan mutasinya mati.
+
+Catatan: mutasi kedua itu lolos karena ujinya mencari NAMA guard, dan baris
+`import` di dalam fungsi memuat nama yang sama. **Jebakan yang sama persis
+sudah pernah menggigit pada `[#871]`** — dan saya mengulanginya. Kini ujinya
+menuntut pemanggilan (`await scope_query_aset(`), bukan sekadar nama.
+
+Suite backend 2.740 & frontend 855 lulus.
+
+---
+
 ## [#874] Injeksi formula ekspor ditutup — risikonya berpindah ke komputer auditor — 2026-08-18
 
 Berkas ekspor AMAN dikirim ke KPKNL, ke auditor, ke satker lain. Yang

@@ -43,15 +43,57 @@ const AssetGroupsPanel = memo(({ activityId, isOpen, onToggle, onBatchEdit, embe
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(false);
   const [expandedGroup, setExpandedGroup] = useState(null);
+  // Paginasi: dulu backend memotong di 100 kelompok DIAM-DIAM dan melaporkan
+  // jumlah yang terkirim sebagai "total". Kegiatan dengan 400 kelompok tampak
+  // seperti punya 100, tanpa satu pun tanda bahwa sisanya ada.
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [halamanBerikut, setHalamanBerikut] = useState(2);
+  const [memuatLagi, setMemuatLagi] = useState(false);
+  // Rincian anggota diambil SAAT kelompok dibuka, bukan diborong di daftar.
+  const [anggota, setAnggota] = useState({});
+  const [anggotaMemuat, setAnggotaMemuat] = useState(null);
 
   useEffect(() => {
     if (!activityId || !isOpen) return;
     setLoading(true);
-    axios.get(`${API}/assets/groups`, { params: { activity_id: activityId } })
-      .then(res => { const g = res.data.groups || []; setGroups(g); onCount?.(g.length); })
-      .catch(() => setGroups([]))
+    setAnggota({});
+    axios.get(`${API}/assets/groups`, { params: { activity_id: activityId, page: 1 } })
+      .then(res => {
+        const g = res.data.groups || [];
+        setGroups(g);
+        setTotal(res.data.total_groups ?? g.length);
+        setHasMore(!!res.data.has_more);
+        setHalamanBerikut(2);
+        onCount?.(res.data.total_groups ?? g.length);
+      })
+      .catch(() => { setGroups([]); setTotal(0); setHasMore(false); })
       .finally(() => setLoading(false));
   }, [activityId, isOpen, onCount]);
+
+  const muatLagi = useCallback(() => {
+    setMemuatLagi(true);
+    axios.get(`${API}/assets/groups`, { params: { activity_id: activityId, page: halamanBerikut } })
+      .then(res => {
+        const g = res.data.groups || [];
+        setGroups(prev => [...prev, ...g]);
+        setHasMore(!!res.data.has_more);
+        setHalamanBerikut(h => h + 1);
+      })
+      .catch(() => setHasMore(false))
+      .finally(() => setMemuatLagi(false));
+  }, [activityId, halamanBerikut]);
+
+  const bukaKelompok = useCallback((idx, group) => {
+    const menutup = expandedGroup === idx;
+    setExpandedGroup(menutup ? null : idx);
+    if (menutup || anggota[idx] || !group?.asset_ids?.length) return;
+    setAnggotaMemuat(idx);
+    axios.post(`${API}/assets/group-members`, { asset_ids: group.asset_ids })
+      .then(res => setAnggota(prev => ({ ...prev, [idx]: res.data.members || [] })))
+      .catch(() => setAnggota(prev => ({ ...prev, [idx]: [] })))
+      .finally(() => setAnggotaMemuat(null));
+  }, [expandedGroup, anggota]);
 
   const formatPrice = (price) => {
     if (!price) return '-';
@@ -78,7 +120,7 @@ const AssetGroupsPanel = memo(({ activityId, isOpen, onToggle, onBatchEdit, embe
                 return (
                   <div key={idx} className="hover:bg-muted/50">
                     <button
-                      onClick={() => setExpandedGroup(expandedGroup === idx ? null : idx)}
+                      onClick={() => bukaKelompok(idx, group)}
                       className="w-full text-left px-2 sm:px-4 py-2 flex items-center gap-2 sm:gap-3"
                       data-testid={`group-row-${idx}`}
                     >
@@ -101,8 +143,11 @@ const AssetGroupsPanel = memo(({ activityId, isOpen, onToggle, onBatchEdit, embe
                     {expandedGroup === idx && (
                       <div className="px-2 sm:px-4 pb-3 pl-4 sm:pl-14 space-y-2">
                         {/* Member details */}
+                        {anggotaMemuat === idx && (
+                          <div className="text-[11px] text-muted-foreground py-1">Memuat rincian anggota…</div>
+                        )}
                         <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
-                          {(group.members || []).map((m, mi) => {
+                          {(anggota[idx] || []).map((m, mi) => {
                             const year = extractYear(m.purchase_date);
                             const perolehan = m.perolehan_dari_nama || m.supplier;
                             return (
@@ -190,6 +235,26 @@ const AssetGroupsPanel = memo(({ activityId, isOpen, onToggle, onBatchEdit, embe
                   </div>
                 );
               })}
+            </div>
+          )}
+          {/* Jumlah SEBENARNYA + lanjutan. Pemotongan tak boleh senyap: kalau
+              masih ada sisa, katakan berapa dan sediakan jalan melihatnya. */}
+          {!loading && total > 0 && (
+            <div className="p-2 flex items-center justify-between gap-2 border-t border-border">
+              <span className="text-[11px] text-muted-foreground" data-testid="grup-jumlah">
+                Menampilkan {groups.length} dari {total} kelompok
+              </span>
+              {hasMore && (
+                <button
+                  type="button"
+                  onClick={muatLagi}
+                  disabled={memuatLagi}
+                  data-testid="grup-muat-lagi"
+                  className="px-2 py-1 rounded-md text-[11px] font-semibold bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white transition-colors min-w-0 min-h-0"
+                >
+                  {memuatLagi ? "Memuat…" : "Muat lebih banyak"}
+                </button>
+              )}
             </div>
           )}
         </div>
