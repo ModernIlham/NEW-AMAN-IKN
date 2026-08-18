@@ -4060,7 +4060,9 @@ async def generate_rekonsiliasi_xlsx(request: Request, _user: dict = Depends(req
         return (akun_untuk_golongan(g, peta_akun) or {}).get("akun") or "-"
 
     buffer = io.BytesIO()
-    wb = xlsxwriter.Workbook(buffer, {"in_memory": True})
+    wb = xlsxwriter.Workbook(buffer, {"in_memory": True,
+                                     "strings_to_formulas": False,
+                                     "strings_to_urls": False})
     f_judul = wb.add_format({"bold": True})
     f_kepala = wb.add_format({"bold": True, "bg_color": "#DDE6F2", "border": 1})
     f_sel = wb.add_format({"border": 1})

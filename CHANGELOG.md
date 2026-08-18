@@ -67,6 +67,49 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#874] Injeksi formula ekspor ditutup — risikonya berpindah ke komputer auditor — 2026-08-18
+
+Berkas ekspor AMAN dikirim ke KPKNL, ke auditor, ke satker lain. Yang
+membukanya adalah Excel/LibreOffice di komputer **mereka**, jadi cacat ini
+tidak berhenti di server kita.
+
+**XLSX.** `xlsxwriter` secara bawaan mengubah string berawalan `=` menjadi
+RUMUS AKTIF. Dibuktikan langsung terhadap pustaka yang terpasang: sel berisi
+`=WEBSERVICE(...)` tertulis sebagai elemen `<f>`, bukan teks. Kini seluruh
+workbook memasang `strings_to_formulas: False` (plus `strings_to_urls: False`).
+
+**Survei menemukan EMPAT pembuat workbook**, bukan satu seperti laporan awal:
+`exports.py`, `reports.py`, `templates.py`, dan `perencanaan.py`. Yang terakhir
+ternyata **sudah benar sejak awal** — ia sudah memasang kedua opsi itu, dan
+justru menjadi preseden yang diikuti tiga lainnya.
+
+**CSV.** Mengutip sel tidak menolong: Excel tetap mem-parsing isi field
+terkutip sebagai rumus. Helper baru `netralkan_sel_csv` menyisipkan kutip
+tunggal — penanda "perlakukan sebagai teks" milik Excel sendiri, yang tidak
+ikut tampil di sel.
+
+Angka negatif **dikecualikan**. Tanpa itu, koreksi nilai perolehan seperti
+`-1500000` ikut berubah jadi teks dan kolom yang seharusnya bisa dijumlahkan
+auditor jadi rusak. Yang berbahaya `-1+1+cmd|...`, bukan `-1500000`.
+
+**Bonus yang ikut ketahuan:** ekspor CSV dulu MENUKAR kutip ganda di dalam
+nilai menjadi apostrof. Aset bernama `Meja "Jati"` terekspor sebagai
+`Meja 'Jati'` — data pengguna berubah diam-diam, dan tak bisa dikembalikan
+saat diimpor ulang. Kini kutipnya digandakan sesuai aturan CSV.
+
+Verifikasi: 26 uji baru, termasuk yang **membuka berkas XLSX sungguhan** lalu
+memeriksa apakah selnya berisi elemen rumus — bukan sekadar membaca opsi di
+sumber. Ada pula uji yang menegaskan bawaan xlsxwriter memang berbahaya,
+supaya alasan perbaikan ini ditinjau ulang bila pustakanya berubah.
+Uji-mutasi dua sisi: netralisasi CSV dilucuti → 7 uji merah; satu workbook
+lupa mematikan rumus → 1 uji merah. Suite backend 2.726 lulus.
+
+Catatan: versi pertama uji ini **memuat dua kasus yang saling bertentangan**
+(`+1` dituntut dinetralkan sekaligus dituntut tetap angka). Kodenya benar,
+ujinya yang keliru.
+
+---
+
 ## [#873] Laporan Barang Serupa berhenti membekukan aplikasi — 2026-08-17
 
 Temuan berkeparahan tinggi terakhir dari tinjauan keamanan. Satu klik tombol
