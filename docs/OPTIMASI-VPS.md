@@ -7,6 +7,23 @@
 > `assets` (filter `activity_id`, `location`, `eselon1`, `eselon2`,
 > `condition`, `status`, `stiker_status`), swap belum dikonfigurasi.
 
+> **Status terverifikasi 18 Agustus 2026** (dibaca langsung dari mesin, bukan
+> laporan): swap **4 GB SUDAH terpasang** (terpakai 17%) — rekomendasi §3a di
+> bawah sudah dikerjakan. Memori terpakai **36%**, tersedia 4,8 GiB dari 7,8
+> GiB. Beban sistem 1,19 — bukan lagi "CPU ±51% konstan". Disk **29% dari
+> 95,82 GB (±27,8 GB)**, tumbuh ±12 GB dari catatan awal 15,7 GB; kemungkinan
+> besar foto di GridFS, belum mendesak tetapi perlu dipantau.
+>
+> `dmesg | grep -i 'oom\|killed process'` **tidak menghasilkan apa pun** —
+> tidak ada satu pun kejadian OOM-killer. Kekhawatiran §2 butir 3 tidak
+> terbukti pada beban saat ini.
+>
+> Catatan cara kerja: angka-angka di atas menggantikan bagian "kondisi acuan"
+> yang berasal dari laporan lisan. Dokumen ini pernah MENYESATKAN diagnosis —
+> pada 17-18 Agustus 2026 tiga deploy gagal dan "tanpa swap" di dokumen ini
+> dijadikan dasar dugaan tekanan memori, padahal swap sudah ada dan memori
+> lapang. Penyebab sebenarnya ada di jalur jaringan penyedia (lihat §5).
+
 ---
 
 ## 1. Ringkasan kondisi VPS
@@ -28,13 +45,17 @@
 
 1. **Sumber CPU 51% belum teridentifikasi.** Jalankan (§ perintah A) `pidstat` + `top -H` + `mongotop` selama 60 detik: bila pemakan CPU adalah `python` dengan thread yang sama terus → job latar aplikasi (cek antrean WebP di halaman admin); bila `mongod` → query tak berindeks; bila proses asing → insiden keamanan.
 2. **Indeks komposit `assets` kurang.** Filter berat yang dilaporkan (`activity_id` + `location`/`eselon1`/`eselon2`/`condition`/`status`) selama ini hanya tertutup indeks tunggal — planner memilih indeks `activity_id` lalu menyaring sisanya baris-per-baris. **Sudah diperbaiki di aplikasi** (`backend/indexes.py`): lima indeks komposit baru dibuat otomatis saat backend restart pasca-deploy — tanpa tindakan manual.
-3. **Tanpa swap.** 8 GB dipakai bersama mongod+python+Meili+Redis; lonjakan ekspor XLSX berfoto/restore backup bisa memicu OOM-killer membunuh mongod (terburuk) — swap adalah sabuk pengaman murah.
+3. **~~Tanpa swap~~ — SUDAH DIPASANG (verifikasi 18 Agu 2026: 4 GB, terpakai 17%).** Alasan aslinya tetap dicatat: 8 GB dipakai bersama mongod+python+Meili+Redis; lonjakan ekspor XLSX berfoto/restore backup bisa memicu OOM-killer membunuh mongod (terburuk) — swap adalah sabuk pengaman murah.
 4. **WiredTiger cache default terlalu rakus untuk mesin bersama.** Default ≈ 50% × (RAM − 1 GB) ≈ 3,5 GB; untuk dataset belasan ribu dokumen, 1,5–2 GB lebih dari cukup dan menyisakan ruang untuk Python/Meili.
 5. **Log & journal tanpa plafon** lama-lama menggerus disk dan I/O.
 
 ## 3. Rekomendasi optimalisasi
 
-### a. Swap — PERLU, 4 GB
+### a. Swap — PERLU, 4 GB — ✅ SUDAH DIKERJAKAN
+
+> Terverifikasi 18 Agustus 2026: `free -h` menunjukkan swap 4,0 GiB (710 MiB
+> terpakai). Bagian ini disimpan sebagai catatan alasan, bukan pekerjaan
+> tertunda.
 
 Aturan praktis RAM 8 GB tanpa hibernasi: swap 2–4 GB. Ambil **4 GB** (ruang disk longgar) dengan `vm.swappiness=10` (swap hanya saat benar-benar terdesak — mongod tidak boleh rutin ter-swap) — perintah blok B.
 
@@ -77,7 +98,7 @@ Aturan praktis RAM 8 GB tanpa hibernasi: swap 2–4 GB. Ambil **4 GB** (ruang di
 
 1. **Identifikasi sumber CPU 51%** (blok A) — semua langkah lain menunggu diagnosis ini; jangan restart-restart sebelum tahu penyebab.
 2. **Deploy aplikasi terbaru** → indeks komposit `assets` terpasang otomatis (menghilangkan tersangka #2 secara permanen).
-3. **Pasang swap 4 GB + swappiness 10** (blok B) — 5 menit, mencegah insiden OOM terburuk.
+3. ~~**Pasang swap 4 GB + swappiness 10** (blok B)~~ — ✅ **selesai** (verifikasi 18 Agu 2026).
 4. **Batasi WiredTiger 2 GB + profiler slowms** (blok C).
 5. **Pemeriksaan keamanan dasar** (blok F).
 6. **Plafon log/journal + verifikasi logrotate + backup cron** (blok D/E).
@@ -178,3 +199,40 @@ menit, ATAU `system.profile` menunjukkan query laporan mendominasi jam kerja.
 
 *Dokumen ini bagian dari PR optimalisasi; indeks komposit `assets` yang
 disebut di §2 dibuat otomatis oleh `backend/indexes.py` saat deploy.*
+
+---
+
+## 5. Insiden jaringan penyedia — 17-18 Agustus 2026
+
+Tiga deploy gagal dengan galat yang sama: `ssh-keyscan` tidak dapat menjangkau
+VPS setelah lima percobaan. Yang menentukan justru apa yang **tidak** ada di
+log VPS.
+
+| Waktu (UTC) | Kejadian |
+|---|---|
+| 17 Agu 23:45:57 | sshd menerima koneksi runner — deploy 842 berhasil |
+| 18 Agu 00:03:02 | deploy 843 berhasil |
+| 18 Agu 00:20:30 | deploy 844 berhasil |
+| **18 Agu 00:38:32-00:40:52** | **deploy 845 gagal — sshd TIDAK mencatat apa pun** |
+| 18 Agu 00:51:17 | deploy 845 dijalankan ulang — berhasil |
+
+Pada jendela yang gagal, `journalctl -u ssh` tidak memuat satu pun baris:
+bukan koneksi ditolak, bukan negosiasi gagal, melainkan **paketnya tidak
+pernah sampai**. Tidak ada pula `Stopped/Started` sshd, sehingga
+`unattended-upgrades` yang me-restart layanan juga bukan penyebabnya.
+
+Kesimpulan: gangguan berada di **jalur jaringan sebelum mesin** — firewall
+atau proteksi edge di sisi penyedia VPS. Di luar kendali repo ini.
+
+**Yang dikerjakan di repo:** jendela retry `deploy.yml` diperpanjang dari
+5x(15s+20s) ≈ 2,9 menit menjadi 8x(15s+30s) ≈ 6 menit, supaya deploy bertahan
+melewati blip beberapa menit. Itu **bantalan**, bukan perbaikan.
+
+**Yang perlu ditanyakan ke penyedia:** mengapa pada 18 Agustus 2026
+00:38-00:41 UTC koneksi masuk ke port 22 tidak sampai ke server, padahal
+sebelum dan sesudahnya normal.
+
+Catatan untuk pembaca berikutnya: baris `Unable to negotiate ... Their offer:
+sk-ecdsa-sha2-nistp256@openssh.com` di log sshd adalah perilaku **normal**
+`ssh-keyscan` yang mencoba beberapa tipe kunci host. Kehadirannya justru
+menandakan koneksi sampai — bukan gejala masalah.

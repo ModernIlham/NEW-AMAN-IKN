@@ -67,6 +67,49 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#876] Deploy bertahan melewati blip jaringan — dan dokumen VPS berhenti menyesatkan — 2026-08-18
+
+Tiga deploy gagal pada 17–18 Agustus 2026. Log sshd VPS menentukan
+jawabannya, justru lewat apa yang **tidak** ada di sana: pada jendela yang
+gagal (18 Agu 00:38–00:41 UTC) sshd **tidak mencatat satu pun baris** — bukan
+koneksi ditolak, bukan negosiasi gagal, melainkan **paketnya tidak pernah
+sampai**. Deploy pada 00:20 dan 00:51 normal.
+
+`dmesg` tidak menunjukkan satu pun OOM, dan tidak ada `Stopped/Started` sshd.
+Jadi bukan tekanan memori, bukan pula `unattended-upgrades` me-restart
+layanan. Gangguannya ada di **jalur jaringan sebelum mesin** — sisi penyedia
+VPS, di luar kendali repo ini.
+
+**Yang dikerjakan:**
+
+- Jendela retry `deploy.yml` diperpanjang dari 5×(15s+20s) ≈ 2,9 menit menjadi
+  8×(15s+30s) ≈ 6 menit. Jendela lama habis **tepat di dalam** gangguan itu.
+  Ini **bantalan**, bukan perbaikan — dan pesan galatnya kini mengarahkan ke
+  firewall penyedia, bukan lagi menyuruh memeriksa "apakah VPS hidup" yang
+  justru menyesatkan (VPS-nya memang hidup).
+- `docs/OPTIMASI-VPS.md` diperbarui dengan keadaan yang **dibaca langsung dari
+  mesin**: swap 4 GB **sudah terpasang** (dokumen masih menulis "belum
+  dikonfigurasi" dan menaruhnya sebagai rekomendasi), memori terpakai 36%
+  dengan 4,8 GiB tersedia, disk 29% (±27,8 GB, tumbuh ±12 GB dari catatan
+  15,7 GB). Ditambah §5 yang mendokumentasikan insidennya beserta bukti.
+
+**Kenapa dokumennya penting.** Dokumen itu **menyesatkan diagnosis saya**:
+saya menyatakan "VPS tanpa swap" dan menduga tekanan memori, semata karena
+mengutip dokumen tanpa memverifikasi ke mesin. Keduanya salah. Kejadian itu
+kini tercatat di dokumennya sendiri agar tidak terulang pada pembaca
+berikutnya.
+
+Dicatat pula bahwa baris `Unable to negotiate ... sk-ecdsa-sha2-nistp256` di
+log sshd adalah perilaku **normal** `ssh-keyscan` — kehadirannya justru
+menandakan koneksi sampai, bukan gejala masalah.
+
+Verifikasi: 5 uji baru yang menjaga anggaran waktu retry (angka semacam ini
+gampang "dirapikan" kembali ke nilai kecil oleh orang yang tidak tahu
+insidennya). Uji-mutasi dua sisi: percobaan dikembalikan ke 5 → 2 uji merah;
+jeda dipendekkan jadi 10 detik → 1 uji merah. Suite backend 2.745 lulus.
+
+---
+
 ## [#875] Barang Serupa tak lagi berhenti di 100 kelompok — dan justru jadi lebih ringan — 2026-08-18
 
 Pertanyaan pemilik: benarkah Barang Serupa hanya menampilkan 100 kelompok?
