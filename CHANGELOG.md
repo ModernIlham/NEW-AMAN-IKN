@@ -92,6 +92,14 @@ VPS, di luar kendali repo ini.
   dikonfigurasi" dan menaruhnya sebagai rekomendasi), memori terpakai 36%
   dengan 4,8 GiB tersedia, disk 29% (±27,8 GB, tumbuh ±12 GB dari catatan
   15,7 GB). Ditambah §5 yang mendokumentasikan insidennya beserta bukti.
+- `ci.yml` tidak lagi bisa menggantung. Saat PR ini sendiri diuji, job Backend
+  tersangkut **61 menit** di `apt-get` pemasangan dependensi WeasyPrint — tidak
+  gagal, menggantung, sementara dua job lain hijau dalam 2 menit. Batas bawaan
+  GitHub 6 jam berarti PR macet setengah hari tanpa pernah menghasilkan kabar.
+  Sekarang setiap job punya `timeout-minutes` (10/20/20) dan `apt-get` dibungkus
+  `sudo timeout 240` + diulang 3 kali. `sudo timeout`, bukan `timeout sudo`:
+  sinyalnya harus sampai ke apt-get sendiri, kalau berhenti di sudo prosesnya
+  bisa selamat sambil memegang kunci dpkg dan retry-nya jadi teater.
 
 **Kenapa dokumennya penting.** Dokumen itu **menyesatkan diagnosis saya**:
 saya menyatakan "VPS tanpa swap" dan menduga tekanan memori, semata karena
