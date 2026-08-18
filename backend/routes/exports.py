@@ -33,7 +33,7 @@ from shared_utils import (limiter, invalidate_asset_cache, log_audit,
                           get_photo_from_gridfs, kode_satker_user,
                           cascade_hapus_blob_aset,
                           pastikan_akses_aset,
-                          pastikan_akses_kegiatan_id, scope_query_aset)
+                          pastikan_akses_kegiatan_id, scope_query_aset, sel_csv)
 
 
 def _token_media(user: dict) -> str:
@@ -719,7 +719,7 @@ async def export_csv(request: Request, activity_id: Optional[str] = None, base_u
                 doc_data.get('kelengkapan_foto_links', ''),
                 doc_data.get('kelengkapan_pdf_links', '')
             ]
-            yield ','.join([f'"{str(item).replace(chr(34), chr(39))}"' for item in row]) + '\n'
+            yield ','.join(sel_csv(item) for item in row) + '\n'
     
     logger.info(f"📤 Streaming CSV export ({total} assets, activity_id={activity_id})")
     
@@ -1030,7 +1030,9 @@ async def bangun_xlsx_bytes(query, activity_id="", base_url="", token=""):
     buffer = io.BytesIO()
     # in_memory=False → xlsxwriter merakit arsip di berkas temp disk (bukan RAM),
     # menekan puncak memori saat menyisipkan banyak gambar.
-    workbook = xlsxwriter.Workbook(buffer, {'in_memory': False, 'constant_memory': False})
+    workbook = xlsxwriter.Workbook(buffer, {'in_memory': False, 'constant_memory': False,
+                                     'strings_to_formulas': False,
+                                     'strings_to_urls': False})
     
     # === SHEET 1: Data Aset ===
     worksheet = workbook.add_worksheet('Data Aset')

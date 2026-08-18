@@ -306,7 +306,9 @@ async def download_xlsx_template(_user: dict = Depends(require_user)):
     n_cols = len(ASSET_TEMPLATE_SCHEMA)
 
     buffer = io.BytesIO()
-    workbook = xlsxwriter.Workbook(buffer, {"in_memory": True})
+    workbook = xlsxwriter.Workbook(buffer, {"in_memory": True,
+                                     "strings_to_formulas": False,
+                                     "strings_to_urls": False})
 
     # === Formats ===
     title_fmt = workbook.add_format({

