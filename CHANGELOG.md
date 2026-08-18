@@ -67,6 +67,54 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#877] Register perolehan akhirnya bisa diperbaiki — sejauh dokumen turunannya mengizinkan — 2026-08-18
+
+Halaman Pengadaan tidak punya tombol ubah sama sekali. Satu salah ketik nomor
+BAST atau harga satuan hanya bisa dibereskan dengan **menghapus lalu mencatat
+ulang** — dan penjaga hapus justru menolak begitu barangnya sudah tercatat ke
+stok/aset. Akibatnya register yang salah **terkunci salah selamanya**.
+
+Menambah tombol ubah tanpa penjaga akan menukarnya dengan masalah yang lebih
+buruk. Register perolehan adalah dokumen sumber: aset menyimpan snapshot-nya,
+stok persediaan lahir darinya, dan PDF BAST PPK→KPB **disusun ulang dari data
+ini setiap kali diunduh** — jadi mengubahnya bebas berarti diam-diam mengubah
+isi dokumen resmi yang sudah bernomor, termasuk yang sudah dicetak dan
+ditandatangani.
+
+**Tiga tingkat izin**, sejalan dengan penjaga hapus yang sudah ada:
+
+| Keadaan register | Yang boleh diubah |
+|---|---|
+| Belum melahirkan apa pun | semua — jenis, penyedia, nomor kontrak/BAST, tanggal, keterangan, daftar barang |
+| Barangnya sudah tercatat ke stok/aset | identitas dokumen; **daftar barang dikunci** |
+| BAST PPK→KPB terbit **atau** ada LPB yang menunjuknya | **hanya keterangan** |
+
+**Yang dikerjakan:**
+
+- `PUT /pengadaan/{id}` baru, dengan penjaga di atas. Yang terkunci ditolak
+  **409 beserta alasan dan nama field-nya** — bukan diterima lalu diabaikan
+  diam-diam, karena operator berhak tahu ketikannya tidak tersimpan.
+- Snapshot perolehan yang menempel di aset tertaut **ikut disegarkan** setelah
+  identitas berubah. Tanpa itu register benar tapi kartu asetnya tetap menyebut
+  nomor BAST lama, dan tak ada yang tahu mana yang benar.
+- `penganggaran_id`/`ppk_pejabat_id` sengaja **tidak diterima** endpoint ini.
+  Keduanya menulis snapshot beku lewat jalurnya sendiri; menerimanya di form
+  ubah membuat tiap perbaikan salah ketik menimpa PPK yang sudah ditetapkan.
+- Menekan Simpan tanpa mengubah apa pun **tidak menulis apa-apa** — jejak audit
+  yang seharusnya menjawab "siapa mengubah apa" tidak boleh berubah jadi daftar
+  orang yang pernah membuka form.
+- Tombol pensil di tiap baris membuka dialog yang sama dengan dialog pencatatan.
+  Isian yang terkunci **dinonaktifkan berikut alasannya**, jadi kuncinya
+  terbaca sebelum diketik, bukan sesudah ditolak.
+- Status kunci dihitung server dan ikut di daftar (`ubah` per baris) — satu
+  query LPB untuk seluruh halaman, bukan satu per baris.
+
+**Uji:** 13 uji endpoint (mongomock) + 6 uji bentuk payload. Tiga mutasi
+diuji dan semuanya mati: LPB tak lagi membekukan, penjaga identitas dihapus,
+dan proyeksi snapshot ke aset dihapus.
+
+---
+
 ## [#876] Deploy bertahan melewati blip jaringan — dan dokumen VPS berhenti menyesatkan — 2026-08-18
 
 Tiga deploy gagal pada 17–18 Agustus 2026. Log sshd VPS menentukan
