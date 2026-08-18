@@ -39,6 +39,11 @@ batch_router = APIRouter()
 # client frees the row in <=1 minute (was 5 minutes).
 LOCK_TTL_SECONDS = 60
 
+# Batas anggota yang dikembalikan sekali buka. Kelompok "barang serupa" yang
+# sah jarang melebihi ratusan; angka ini mencegah satu klik menarik puluhan
+# ribu dokumen sekaligus.
+MAKS_ANGGOTA_KELOMPOK = 2000
+
 class LockRequest(BaseModel):
     asset_id: str
 
@@ -532,9 +537,21 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
 
 
 @batch_router.get("/assets/groups")
-async def get_asset_groups(activity_id: str = "", request: Request = None, _user: dict = Depends(require_user)):
-    """Group assets by same asset_code, asset_name, purchase_date, brand/model, price.
-    Returns groups with count >= 2, including detailed member info."""
+async def get_asset_groups(activity_id: str = "", page: int = 1, page_size: int = 100,
+                           request: Request = None, _user: dict = Depends(require_user)):
+    """Kelompok aset serupa (kode+nama+tanggal+merek/model+harga), count >= 2.
+
+    BERPAGINASI dan melaporkan TOTAL SEBENARNYA. Sebelumnya endpoint ini
+    memotong di 100 kelompok lalu melaporkan `total_groups` = jumlah yang
+    DIKEMBALIKAN — sehingga kegiatan dengan 400 kelompok tampak seperti punya
+    100, dan tidak ada satu pun tanda bahwa sisanya terpotong.
+
+    RINCIAN ANGGOTA TIDAK LAGI DIBAWA DI SINI. Dulu `$push` menumpuk 12 field
+    per aset untuk SETIAP kelompok pada SETIAP permintaan, padahal panel hanya
+    memakainya ketika satu kelompok dibuka. Itu biaya yang dibayar seluruh
+    kegiatan demi satu kelompok yang mungkin tak pernah diklik. Kini rinciannya
+    diambil saat dibuka lewat POST /assets/group-members.
+    """
     from shared_utils import scope_query_aset, pastikan_akses_kegiatan_id
     # `scope_query_aset` SENGAJA tidak menyaring bila activity_id sudah ada di
     # query — pemeriksaan kepemilikan kegiatan diserahkan ke guard terpisah.
@@ -542,6 +559,12 @@ async def get_asset_groups(activity_id: str = "", request: Request = None, _user
     # mengirim activity_id milik satker B untuk memperoleh rincian anggota
     # kelompok: lokasi, pemegang, dan kondisi tiap NUP.
     await pastikan_akses_kegiatan_id(_user, activity_id)
+    # Batas atas ukuran halaman menjaga agar satu permintaan tetap ringan
+    # sekalipun klien memintanya besar. Klien yang butuh lebih memanggil
+    # halaman berikutnya, bukan menaikkan angka ini.
+    halaman = max(1, int(page or 1))
+    ukuran = min(500, max(1, int(page_size or 100)))
+    lewati = (halaman - 1) * ukuran
     match = {}
     if activity_id:
         match["activity_id"] = activity_id
@@ -558,54 +581,86 @@ async def get_asset_groups(activity_id: str = "", request: Request = None, _user
                 "purchase_date": {"$ifNull": ["$purchase_date", ""]},
                 "brand": {"$ifNull": ["$brand", ""]},
                 "model": {"$ifNull": ["$model", ""]},
-                "purchase_price": {"$ifNull": ["$purchase_price", 0]}
+                "purchase_price": {"$ifNull": ["$purchase_price", 0]},
             },
             "count": {"$sum": 1},
+            # Hanya dua array skalar. Rincian anggota (12 field per aset)
+            # sengaja TIDAK dibawa di sini — lihat docstring.
             "asset_ids": {"$push": "$id"},
             "NUPs": {"$push": "$NUP"},
-            "members": {"$push": {
-                "id": "$id",
-                "NUP": "$NUP",
-                "location": "$location",
-                "eselon1": "$eselon1",
-                "eselon2": "$eselon2",
-                "user": "$user",
-                "condition": "$condition",
-                "inventory_status": "$inventory_status",
-                "stiker_status": "$stiker_status",
-                "nomor_spm": "$nomor_spm",
-                "serial_number": "$serial_number",
-                "kode_register": "$kode_register",
-                "supplier": "$supplier",
-                "perolehan_dari_nama": "$perolehan_dari_nama",
-                "purchase_date": "$purchase_date",
-                "purchase_price": "$purchase_price",
-                "category": "$category",
-            }}
         }},
         {"$match": {"count": {"$gte": 2}}},
         {"$sort": {"count": -1}},
-        {"$limit": 100},
-        {"$project": {
-            "_id": 0,
-            "asset_code": "$_id.asset_code",
-            "asset_name": "$_id.asset_name",
-            "purchase_date": "$_id.purchase_date",
-            "brand": "$_id.brand",
-            "model": "$_id.model",
-            "purchase_price": "$_id.purchase_price",
-            "count": 1,
-            "asset_ids": 1,
-            "NUPs": 1,
-            "members": 1
-        }}
+        # $facet: total sebenarnya DAN satu halaman dalam satu perjalanan ke
+        # basis data. Tanpa cabang `total`, jumlah yang dilaporkan hanyalah
+        # jumlah yang muat di halaman — persis cacat lama yang membuat 400
+        # kelompok tampak seperti 100.
+        {"$facet": {
+            "total": [{"$count": "n"}],
+            "data": [
+                {"$skip": lewati},
+                {"$limit": ukuran},
+                {"$project": {
+                    "_id": 0,
+                    "asset_code": "$_id.asset_code",
+                    "asset_name": "$_id.asset_name",
+                    "purchase_date": "$_id.purchase_date",
+                    "brand": "$_id.brand",
+                    "model": "$_id.model",
+                    "purchase_price": "$_id.purchase_price",
+                    "count": 1,
+                    "asset_ids": 1,
+                    "NUPs": 1,
+                }},
+            ],
+        }},
     ]
+
+    hasil = await db.assets.aggregate(pipeline).to_list(1)
+    kotak = hasil[0] if hasil else {}
+    groups = kotak.get("data", []) or []
+    total = ((kotak.get("total") or [{}])[0] or {}).get("n", 0)
     
-    groups = []
-    async for doc in db.assets.aggregate(pipeline):
-        groups.append(doc)
-    
-    return {"groups": groups, "total_groups": len(groups)}
+    return {
+        "groups": groups,
+        "total_groups": total,          # SEBENARNYA, bukan sekadar yang terkirim
+        "page": halaman,
+        "page_size": ukuran,
+        "has_more": lewati + len(groups) < total,
+    }
+
+
+class GroupMembersRequest(BaseModel):
+    asset_ids: List[str]
+
+
+@batch_router.post("/assets/group-members")
+async def get_group_members(payload: GroupMembersRequest,
+                            _user: dict = Depends(require_user)):
+    """Rincian anggota SATU kelompok barang serupa — dipanggil saat dibuka.
+
+    Dipisah dari daftar kelompok dengan sengaja. Membawa rincian ini di daftar
+    berarti membangun 12 field per aset untuk SELURUH kegiatan pada setiap
+    permintaan, demi kelompok yang mungkin tak pernah diklik satu pun.
+
+    Isolasi satker ditegakkan lewat `scope_query_aset`, jadi id milik satker
+    lain yang diselipkan ke dalam daftar tidak akan mengembalikan apa pun —
+    bukan 403, melainkan sekadar tak ikut terbaca.
+    """
+    from shared_utils import scope_query_aset
+    ids = [str(i) for i in (payload.asset_ids or []) if i][:MAKS_ANGGOTA_KELOMPOK]
+    if not ids:
+        return {"members": []}
+    proyeksi = {"_id": 0, "id": 1, "NUP": 1, "condition": 1, "inventory_status": 1,
+                "category": 1, "purchase_price": 1, "purchase_date": 1,
+                "kode_register": 1, "nomor_spm": 1, "perolehan_dari_nama": 1,
+                "nomor_kontrak": 1, "nomor_bukti_perolehan": 1, "supplier": 1,
+                "serial_number": 1}
+    q = await scope_query_aset(_user, {"id": {"$in": ids}})
+    members = await db.assets.find(q, proyeksi).to_list(len(ids))
+    urut = {v: i for i, v in enumerate(ids)}
+    members.sort(key=lambda m: urut.get(m.get("id"), 10**9))
+    return {"members": members}
 
 
 @batch_router.get("/assets/all-ids")
