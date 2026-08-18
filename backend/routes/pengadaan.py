@@ -28,7 +28,7 @@ from shared_utils import kode_satker_user, scope_query_field_satker, pastikan_ak
 from pengadaan_utils import (
     DOKUMEN_PEROLEHAN, JENIS_PEROLEHAN, LABEL_DOKUMEN_SUMBER,
     build_asset_perolehan_projection, dokumen_kurang_perolehan,
-    is_ekstrakomptabel, nilai_perolehan, rekap_perolehan,
+    is_ekstrakomptabel, kunci_ubah_perolehan, nilai_perolehan, rekap_perolehan,
     snapshot_penganggaran, snapshot_ppk, validate_perolehan,
 )
 
@@ -69,6 +69,47 @@ class PerolehanIn(BaseModel):
     # Pejabat menurut tanggal BAST (lihat `_ambil_snapshot_ppk`).
     ppk_pejabat_id: str = ""
     barang: list[BarangIn] = Field(min_length=1, max_length=100)
+
+
+class BarangUbahIn(BaseModel):
+    """Baris barang saat register DIUBAH — tanpa `asset_id`, sengaja.
+
+    Penautan ke aset master punya jalurnya sendiri (`POST .../tautkan`) yang
+    memeriksa hak akses aset, dan daftar barang hanya boleh diubah selagi belum
+    ada satu pun baris tertaut. Menerima `asset_id` di sini hanya akan menjadi
+    pintu belakang yang melewati pemeriksaan itu.
+    """
+    uraian: str = Field(min_length=1)
+    kode: str = ""
+    jumlah: float = Field(gt=0)
+    harga_satuan: float = Field(ge=0)
+
+    @field_validator("jumlah", "harga_satuan")
+    @classmethod
+    def _terhingga(cls, v):
+        import math
+        if not math.isfinite(v):
+            raise ValueError("harus angka terhingga (Infinity/NaN ditolak)")
+        return v
+
+
+class PerolehanUbahIn(BaseModel):
+    """Perbaikan register perolehan.
+
+    `penganggaran_id`/`ppk_pejabat_id` sengaja TIDAK di sini: keduanya punya
+    endpoint sendiri yang menulis snapshot beku, dan menerimanya di sini
+    membuat form ubah tanpa sadar mengosongkan PPK yang sudah ditetapkan.
+
+    `barang = null` berarti "jangan sentuh daftar barang" — itulah yang dikirim
+    klien saat daftarnya terkunci.
+    """
+    jenis: str
+    pihak: str = Field(min_length=1)
+    nomor_kontrak: str = ""
+    nomor_bast: str = Field(min_length=1)
+    tanggal_bast: str = Field(min_length=10, max_length=10)
+    keterangan: str = ""
+    barang: list[BarangUbahIn] | None = Field(default=None, max_length=100)
 
 
 class TautkanPenganggaranIn(BaseModel):
@@ -178,6 +219,22 @@ async def list_pengadaan(_user: dict = Depends(require_user)):
     """Register perolehan (BAST terbaru dulu) + ringkasan + label."""
     items = [_enrich(p) async for p in db.pengadaan.find(scope_query_field_satker(_user), {"_id": 0})
              .sort("tanggal_bast", -1).limit(500)]
+    # Status "sejauh mana masih boleh diubah" dihitung SEKALI untuk seluruh
+    # halaman: satu query LPB untuk semua id, bukan satu query per baris.
+    # Tanpa ini, register 500 baris = 500 round-trip hanya untuk menentukan
+    # tombol ubah aktif atau tidak.
+    ids = [p["id"] for p in items]
+    tertunjuk_lpb = set()
+    if ids:
+        async for l in db.lpb.find(
+                {"$or": [{"perolehan_id": {"$in": ids}},
+                         {"perolehan_ids": {"$in": ids}}]},
+                {"_id": 0, "perolehan_id": 1, "perolehan_ids": 1}):
+            if l.get("perolehan_id"):
+                tertunjuk_lpb.add(l["perolehan_id"])
+            tertunjuk_lpb.update(l.get("perolehan_ids") or [])
+    for p in items:
+        p["ubah"] = kunci_ubah_perolehan(p, p["id"] in tertunjuk_lpb)
     return {"items": items, "ringkasan": rekap_perolehan(items),
             "label_jenis": {k: v[0] for k, v in JENIS_PEROLEHAN.items()},
             "kode_jenis": {k: v[1] for k, v in JENIS_PEROLEHAN.items()},
@@ -415,6 +472,108 @@ async def buat_perolehan(payload: PerolehanIn, user: dict = Depends(require_writ
     # Back-link dokumen sumber (§5A gap #6): stamp perolehan_id ke aset tertaut.
     await _proyeksi_perolehan_ke_aset(record)
     return _enrich(record)
+
+
+async def _ada_lpb_menunjuk(perolehan_id: str) -> bool:
+    """Adakah LPB yang menunjuk register ini (tunggal maupun gabungan)?"""
+    return bool(await db.lpb.find_one(
+        {"$or": [{"perolehan_id": perolehan_id},
+                 {"perolehan_ids": perolehan_id}]}, {"_id": 0, "id": 1}))
+
+
+@pengadaan_router.put("/pengadaan/{perolehan_id}")
+async def ubah_perolehan(perolehan_id: str, payload: PerolehanUbahIn,
+                         user: dict = Depends(require_writer)):
+    """Perbaiki register perolehan yang salah input.
+
+    Sebelum ini satu-satunya jalan memperbaiki salah ketik nomor BAST atau
+    harga satuan adalah **menghapus lalu mencatat ulang** — dan penjaga hapus
+    justru menolak begitu barangnya sudah tercatat, sehingga registernya
+    terkunci salah selamanya.
+
+    Seberapa jauh boleh diubah ditentukan `kunci_ubah_perolehan` (lihat
+    docstring-nya). Yang terkunci ditolak **dengan 409 dan alasannya**, bukan
+    diterima lalu diabaikan diam-diam: klien harus tahu bahwa yang diketiknya
+    tidak tersimpan.
+    """
+    from persediaan_utils import today_wib
+    p = await db.pengadaan.find_one({"id": perolehan_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
+    await pastikan_akses_dok_satker(user, p)  # isolasi satker (REVIEW-9 R8)
+
+    kunci = kunci_ubah_perolehan(p, await _ada_lpb_menunjuk(perolehan_id))
+    data = payload.model_dump()
+
+    # 1. Daftar barang — null berarti "biarkan apa adanya".
+    if data.get("barang") is None:
+        barang_rows = p.get("barang") or []
+    elif not kunci["barang"]:
+        raise HTTPException(status_code=409, detail=kunci["alasan"])
+    else:
+        # Semua baris masih bebas (kunci["barang"] True berarti tak satu pun
+        # tertaut aset/persediaan), jadi daftarnya disusun ulang utuh — tak ada
+        # tautan yang bisa hilang karenanya.
+        barang_rows = [{"uraian": b["uraian"].strip(),
+                        "kode": str(b.get("kode") or "").strip(),
+                        "jumlah": float(b["jumlah"]),
+                        "harga_satuan": float(b["harga_satuan"]),
+                        "asset_id": "", "asset_code": "", "NUP": "",
+                        "asset_name": ""}
+                       for b in data["barang"]]
+
+    # 2. Identitas dokumen — dibandingkan, bukan dipercaya. Klien lama yang
+    #    tidak tahu kunci ini tetap tak bisa menembusnya.
+    if not kunci["identitas"]:
+        berubah = [f for f in ("jenis", "pihak", "nomor_kontrak", "nomor_bast",
+                               "tanggal_bast")
+                   if str(data.get(f) or "").strip() != str(p.get(f) or "").strip()]
+        if berubah:
+            raise HTTPException(status_code=409, detail=(
+                f"{kunci['alasan']} (yang ditolak: {', '.join(berubah)})"))
+
+    errors = validate_perolehan({**data, "barang": barang_rows}, today_wib())
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+
+    now = datetime.now(timezone.utc).isoformat()
+    ubah = {
+        "jenis": data["jenis"],
+        "pihak": data["pihak"].strip(),
+        "nomor_kontrak": str(data.get("nomor_kontrak") or "").strip(),
+        "nomor_bast": data["nomor_bast"].strip(),
+        "tanggal_bast": data["tanggal_bast"].strip()[:10],
+        "keterangan": str(data.get("keterangan") or "").strip(),
+        "barang": barang_rows,
+        "updated_at": now,
+        "updated_by": user.get("username"),
+    }
+    # Checklist dokumen sengaja TIDAK ikut disentuh: ia menyatakan "berkasnya
+    # ada di tangan", dan itu tidak berubah hanya karena nomornya diperbaiki.
+    perubahan = [{"field": f, "from": str(p.get(f) or ""), "to": str(ubah[f] or "")}
+                 for f in ("jenis", "pihak", "nomor_kontrak", "nomor_bast",
+                           "tanggal_bast", "keterangan")
+                 if str(p.get(f) or "") != str(ubah[f] or "")]
+    nilai_lama, nilai_baru = nilai_perolehan(p), nilai_perolehan(ubah)
+    if nilai_lama != nilai_baru or len(p.get("barang") or []) != len(barang_rows):
+        perubahan.append({"field": "barang",
+                          "from": f"{len(p.get('barang') or [])} baris · {nilai_lama:.0f}",
+                          "to": f"{len(barang_rows)} baris · {nilai_baru:.0f}"})
+    if not perubahan:
+        return _enrich({**p, "ubah": kunci})   # tak ada yang berubah — jangan mengotori jejak audit
+
+    await db.pengadaan.update_one({"id": perolehan_id}, {"$set": ubah})
+    p.update(ubah)
+    # Snapshot perolehan yang menempel di aset tertaut ikut disegarkan, kalau
+    # tidak identitas dokumen di kartu aset tetap menyebut nomor BAST lama.
+    await _proyeksi_perolehan_ke_aset(p)
+    await log_audit("pengadaan_ubah", "", perolehan_id,
+                    username=user.get("username", "system"),
+                    changes=perubahan,
+                    detail=(f"Register perolehan {p.get('nomor_bast') or perolehan_id[:8]} "
+                            f"diubah ({len(perubahan)} field)"))
+    p["ubah"] = kunci_ubah_perolehan(p, await _ada_lpb_menunjuk(perolehan_id))
+    return _enrich(p)
 
 
 @pengadaan_router.put("/pengadaan/{perolehan_id}/dokumen")

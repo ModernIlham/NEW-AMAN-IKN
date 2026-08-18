@@ -253,3 +253,51 @@ def snapshot_perolehan(perolehan) -> dict:
         "perolehan_ppk_nama": str(perolehan.get("ppk_nama") or "").strip(),
         "perolehan_ppk_nip": str(perolehan.get("ppk_nip") or "").strip(),
     }
+
+
+def kunci_ubah_perolehan(p: dict, ada_lpb: bool = False) -> dict:
+    """Sejauh mana satu register perolehan masih boleh diubah.
+
+    Register perolehan adalah **jurnal dokumen sumber**, bukan catatan bebas:
+    begitu isinya melahirkan sesuatu, mengubahnya diam-diam membuat anak-anak
+    itu berbohong. Tiga tingkat, dari longgar ke ketat:
+
+    1. **Belum melahirkan apa pun** — semua boleh diubah. Salah ketik nomor
+       BAST atau harga satuan pada menit pertama adalah kejadian yang paling
+       sering, dan tanpa jalan perbaikan operator terpaksa menghapus lalu
+       mencatat ulang.
+    2. **Barangnya sudah tercatat** ke stok persediaan / aset ber-NUP — daftar
+       barang dikunci, identitas dokumen masih boleh dirapikan. Mengubah
+       jumlah/harga baris yang sudah jadi stok membuat register dan Buku
+       Barang berselisih tanpa satu pun jejak yang menjelaskan.
+    3. **BAST PPK→KPB sudah terbit, atau ada LPB yang menunjuknya** — hanya
+       keterangan. PDF-nya disusun ulang dari data ini setiap kali diunduh,
+       jadi mengubah pihak/nomor/tanggal berarti **mengubah isi dokumen resmi
+       yang sudah bernomor** — termasuk yang sudah dicetak dan ditandatangani.
+
+    Penjaganya sengaja sejalan dengan penjaga hapus register: yang tak boleh
+    dihapus karena sudah "hidup" juga tak boleh diam-diam berganti isi.
+    """
+    tercatat = [b for b in (p.get("barang") or [])
+                if str(b.get("psd_item_id") or "").strip()
+                or str(b.get("asset_id") or "").strip()]
+    beku = bool(p.get("bast_ppk")) or bool(ada_lpb)
+    if beku:
+        sebab = ("BAST PPK→KPB sudah diterbitkan"
+                 if p.get("bast_ppk") else
+                 "ada Laporan Penerimaan Barang (LPB) yang menunjuk register ini")
+        alasan = (f"{sebab} — isi dokumen resminya disusun ulang dari data ini "
+                  "setiap kali diunduh, jadi hanya keterangan yang dapat diubah.")
+    elif tercatat:
+        alasan = (f"{len(tercatat)} barang sudah tercatat ke stok/aset — daftar "
+                  "barangnya dikunci agar register dan Buku Barang tidak "
+                  "berselisih. Batalkan pencatatannya dulu bila memang salah.")
+    else:
+        alasan = ""
+    return {
+        "identitas": not beku,
+        "barang": not beku and not tercatat,
+        "keterangan": True,
+        "n_tercatat": len(tercatat),
+        "alasan": alasan,
+    }

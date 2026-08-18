@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, ShoppingCart, Plus, Search, Trash2, X, Coins,
   ClipboardCheck, Download, Link2, Paperclip, Upload, PackagePlus,
-  Check, Circle, Boxes, FileDown, PenLine, FileSignature,
+  Check, Circle, Boxes, FileDown, PenLine, FileSignature, Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ import { downloadFileWithProgress } from "@/lib/downloadFile";
 import MenuKepala from "@/components/ui/MenuKepala";
 import PerkiraanNomor from "@/components/persuratan/PerkiraanNomor";
 import { bagikanWa, bagikanEmail, hasilTtd } from "@/lib/pesanTtd";
+import { formDariPerolehan, payloadUbahPerolehan } from "@/lib/perolehanUbah";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -165,19 +166,24 @@ export default function PengadaanPage({ user, onBack }) {
 
   const simpanPerolehan = async () => {
     if (!form) return;
+    const ubah = form.mode === "ubah";
     setForm((f) => ({ ...f, saving: true }));
+    const barang = form.barang.map((b) => ({
+      uraian: b.uraian, kode: b.kode,
+      jumlah: Number(b.jumlah || 0), harga_satuan: Number(b.harga_satuan || 0),
+    }));
     try {
-      await axios.post(`${API}/pengadaan`, {
-        ...form.data,
-        barang: form.barang.map((b) => ({
-          ...b, jumlah: Number(b.jumlah || 0), harga_satuan: Number(b.harga_satuan || 0),
-        })),
-      });
-      toast.success("Perolehan dicatat");
+      if (ubah) {
+        await axios.put(`${API}/pengadaan/${form.id}`, payloadUbahPerolehan(form));
+      } else {
+        await axios.post(`${API}/pengadaan`, { ...form.data, barang });
+      }
+      toast.success(ubah ? "Perolehan diperbarui" : "Perolehan dicatat");
       setForm(null);
       muat();
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Gagal mencatat perolehan");
+      toast.error(e?.response?.data?.detail
+        || (ubah ? "Gagal memperbarui perolehan" : "Gagal mencatat perolehan"));
       setForm((f) => (f ? { ...f, saving: false } : f));
     }
   };
@@ -507,10 +513,19 @@ export default function PengadaanPage({ user, onBack }) {
   }));
   // Buka dialog catat perolehan baru — dipakai tombol header & empty-state
   const bukaFormBaru = () => setForm({
+    mode: "baru",
     data: { jenis: "pembelian", pihak: "", nomor_kontrak: "", nomor_bast: "", tanggal_bast: new Date().toISOString().slice(0, 10), keterangan: "", penganggaran_id: "", ppk_pejabat_id: "" },
     barang: [{ ...BARANG_KOSONG }], saving: false,
   });
+  // Buka dialog yang SAMA dalam mode ubah. Bentuk datanya dipisah ke
+  // `lib/perolehanUbah` supaya dapat diuji tanpa merender halaman.
+  const bukaFormUbah = (p) => setForm(formDariPerolehan(p));
   const r = data?.ringkasan;
+  // Dua kunci ini menonaktifkan isian di dialog. Bukan pengganti
+  // penjagaan server — server tetap menolak dengan 409 — melainkan agar
+  // operator tidak mengetik sesuatu yang sudah pasti ditolak.
+  const kunciIdentitas = form?.mode === "ubah" && form?.kunci?.identitas === false;
+  const kunciBarang = form?.mode === "ubah" && form?.kunci?.barang === false;
 
   return (
     <div className="min-h-screen bg-background" data-testid="pengadaan-page">
@@ -670,6 +685,21 @@ export default function PengadaanPage({ user, onBack }) {
                           <FileSignature className="w-3.5 h-3.5" />
                           <span className="hidden sm:inline">BAST PPK→KPB</span>
                         </button>
+                        {/* Ubah register. Sebelum ini satu-satunya jalan
+                            memperbaiki salah ketik adalah menghapus lalu
+                            mencatat ulang — dan penjaga hapus menolak begitu
+                            barangnya sudah tercatat, jadi salahnya terkunci
+                            selamanya. Tombol tetap ada meski sebagian terkunci:
+                            keterangan selalu boleh diperbaiki. */}
+                        <button type="button" aria-label="Ubah perolehan"
+                          title={p.ubah?.alasan
+                            ? `Ubah perolehan — sebagian terkunci: ${p.ubah.alasan}`
+                            : "Ubah perolehan"}
+                          onClick={() => bukaFormUbah(p)}
+                          className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted min-h-0 min-w-0"
+                          data-testid={`pengadaan-ubah-${p.id}`}>
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
                         <button type="button" aria-label="Lampiran berkas"
                           onClick={() => setLamp({ perolehan: p, uploading: false })}
                           className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted min-h-0 min-w-0"
@@ -789,18 +819,26 @@ export default function PengadaanPage({ user, onBack }) {
       <Dialog open={!!form} onOpenChange={(o) => { if (!o) setForm(null); }}>
         <DialogContent className="max-w-2xl w-[calc(100%-1.5rem)]">
           <DialogHeader>
-            <DialogTitle>Catat Perolehan</DialogTitle>
+            <DialogTitle>{form?.mode === "ubah" ? "Ubah Perolehan" : "Catat Perolehan"}</DialogTitle>
             <DialogDescription className="text-xs">
-              Satu entri per dokumen BAST/kontrak — BAST adalah pemicu pencatatan BMN.
+              {form?.mode === "ubah"
+                ? "Perbaiki isian register. PPK dan usulan penganggaran diubah lewat barisnya sendiri di daftar."
+                : "Satu entri per dokumen BAST/kontrak — BAST adalah pemicu pencatatan BMN."}
             </DialogDescription>
           </DialogHeader>
+          {form?.mode === "ubah" && form?.kunci?.alasan && (
+            <p className="text-[11px] leading-snug rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-amber-700 dark:text-amber-400"
+              data-testid="pengadaan-ubah-alasan-kunci">
+              <b>Sebagian terkunci.</b> {form.kunci.alasan}
+            </p>
+          )}
           {form && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-jenis">Jenis perolehan</label>
-                <select id="pgd-jenis" value={form.data.jenis}
+                <select id="pgd-jenis" value={form.data.jenis} disabled={kunciIdentitas}
                   onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, jenis: e.target.value } }))}
-                  className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
+                  className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground disabled:opacity-60"
                   data-testid="pengadaan-jenis">
                   {Object.entries(labelJenis).length
                     ? Object.entries(labelJenis).map(([k, v]) => <option key={k} value={k}>{v}</option>)
@@ -809,24 +847,24 @@ export default function PengadaanPage({ user, onBack }) {
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-pihak">Penyedia/pemberi</label>
-                <Input id="pgd-pihak" placeholder="cth. CV Sumber Rejeki" value={form.data.pihak}
+                <Input id="pgd-pihak" placeholder="cth. CV Sumber Rejeki" value={form.data.pihak} disabled={kunciIdentitas}
                   onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, pihak: e.target.value } }))}
                   data-testid="pengadaan-pihak" />
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-kontrak">No. Kontrak/SPK (opsional)</label>
-                <Input id="pgd-kontrak" value={form.data.nomor_kontrak}
+                <Input id="pgd-kontrak" value={form.data.nomor_kontrak} disabled={kunciIdentitas}
                   onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, nomor_kontrak: e.target.value } }))} />
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-bast">No. BAST (Penyedia → PPK)</label>
-                <Input id="pgd-bast" placeholder="BAST-01/PPK/2026" value={form.data.nomor_bast}
+                <Input id="pgd-bast" placeholder="BAST-01/PPK/2026" value={form.data.nomor_bast} disabled={kunciIdentitas}
                   onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, nomor_bast: e.target.value } }))}
                   data-testid="pengadaan-nomor-bast" />
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-tgl">Tanggal BAST</label>
-                <Input id="pgd-tgl" type="date" value={form.data.tanggal_bast}
+                <Input id="pgd-tgl" type="date" value={form.data.tanggal_bast} disabled={kunciIdentitas}
                   onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, tanggal_bast: e.target.value } }))} />
               </div>
               {/* Keterangan naik ke sini agar berpasangan dengan Tanggal BAST:
@@ -844,6 +882,13 @@ export default function PengadaanPage({ user, onBack }) {
                 Serah terima lanjutan dari PPK kepada KPB dibuatkan dokumennya
                 lewat tombol <b>BAST PPK → KPB</b> setelah perolehan tersimpan.
               </p>
+              {/* Penganggaran & PPK punya jalurnya sendiri di daftar
+                  (baris PPK yang bisa diketuk, menu tautkan anggaran) dan
+                  keduanya menulis SNAPSHOT BEKU. Menampilkannya di form ubah
+                  berarti setiap penyuntingan diam-diam menimpa snapshot itu
+                  dengan isi select yang kebetulan sedang tampil. */}
+              {form.mode !== "ubah" && (
+                <>
               <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-anggaran">Usulan Penganggaran terkait (opsional)</label>
                 <select id="pgd-anggaran" value={form.data.penganggaran_id}
@@ -879,14 +924,23 @@ export default function PengadaanPage({ user, onBack }) {
                   {opsiPpk.length === 0 && " Belum ada pejabat ber-peran PPK di Referensi Pejabat."}
                 </p>
               </div>
+                </>
+              )}
               <div className="sm:col-span-2 space-y-2">
                 <p className="text-xs font-medium text-foreground">Daftar barang</p>
+                {kunciBarang && (
+                  <p className="text-[11px] text-muted-foreground leading-snug rounded-lg bg-muted/60 px-2.5 py-1.5"
+                    data-testid="pengadaan-ubah-barang-terkunci">
+                    Baris di bawah <b>hanya ditampilkan</b> — sudah tercatat ke stok/aset,
+                    jadi tidak lagi dapat disunting dari sini.
+                  </p>
+                )}
                 {/* Tiap barang = KARTU berlabel, bukan sebaris kotak sempit:
                     uraian panjang & kode 10-16 digit butuh ruang baca saat
                     diketik — laporan lapangan "agar lega". */}
                 {form.barang.map((b, i) => (
                   <div key={i} className="rounded-lg border border-border p-3 space-y-2 relative">
-                    {form.barang.length > 1 && (
+                    {form.barang.length > 1 && !kunciBarang && (
                       <button type="button" aria-label="Hapus baris barang"
                         onClick={() => setForm((f) => ({ ...f, barang: f.barang.filter((_, idx) => idx !== i) }))}
                         className="absolute right-2 top-2 h-7 w-7 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 min-h-0 min-w-0">
@@ -895,7 +949,7 @@ export default function PengadaanPage({ user, onBack }) {
                     )}
                     <div>
                       <label className="text-[11px] font-medium text-muted-foreground block mb-1">Uraian barang</label>
-                      <Input placeholder="cth. Laptop Dell Latitude 5440" value={b.uraian} className="pr-9"
+                      <Input placeholder="cth. Laptop Dell Latitude 5440" value={b.uraian} className="pr-9" disabled={kunciBarang}
                         onChange={(e) => setFormBarang(i, "uraian", e.target.value)}
                         data-testid={`pengadaan-barang-uraian-${i}`} />
                     </div>
@@ -909,32 +963,38 @@ export default function PengadaanPage({ user, onBack }) {
                         <label className="text-[11px] font-medium text-muted-foreground block mb-1">
                           Kode barang <span className="font-normal">(10 digit aset · 16 digit persediaan)</span>
                         </label>
-                        <KodeBarangPicker value={b.kode}
-                          onChange={(v) => setFormBarang(i, "kode", v)}
-                          onPick={(k) => {
-                            setFormBarang(i, "kode", k.kode);
-                            if (!b.uraian) setFormBarang(i, "uraian", k.uraian);
-                          }}
-                          testid={`pengadaan-barang-kode-${i}`} />
+                        {kunciBarang ? (
+                          <Input value={b.kode} disabled data-testid={`pengadaan-barang-kode-${i}`} />
+                        ) : (
+                          <KodeBarangPicker value={b.kode}
+                            onChange={(v) => setFormBarang(i, "kode", v)}
+                            onPick={(k) => {
+                              setFormBarang(i, "kode", k.kode);
+                              if (!b.uraian) setFormBarang(i, "uraian", k.uraian);
+                            }}
+                            testid={`pengadaan-barang-kode-${i}`} />
+                        )}
                       </div>
                       <div>
                         <label className="text-[11px] font-medium text-muted-foreground block mb-1">Jumlah</label>
-                        <Input type="number" min="1" placeholder="1" value={b.jumlah}
+                        <Input type="number" min="1" placeholder="1" value={b.jumlah} disabled={kunciBarang}
                           onChange={(e) => setFormBarang(i, "jumlah", e.target.value)} />
                       </div>
                       <div>
                         <label className="text-[11px] font-medium text-muted-foreground block mb-1">Harga satuan (Rp)</label>
-                        <Input type="number" min="0" placeholder="0" value={b.harga_satuan}
+                        <Input type="number" min="0" placeholder="0" value={b.harga_satuan} disabled={kunciBarang}
                           onChange={(e) => setFormBarang(i, "harga_satuan", e.target.value)}
                           data-testid={`pengadaan-barang-harga-${i}`} />
                       </div>
                     </div>
                   </div>
                 ))}
-                <Button size="sm" variant="outline" className="h-8 text-xs min-h-0"
-                  onClick={() => setForm((f) => ({ ...f, barang: [...f.barang, { ...BARANG_KOSONG }] }))}>
-                  <Plus className="w-3.5 h-3.5 mr-1" />Tambah baris
-                </Button>
+                {!kunciBarang && (
+                  <Button size="sm" variant="outline" className="h-8 text-xs min-h-0"
+                    onClick={() => setForm((f) => ({ ...f, barang: [...f.barang, { ...BARANG_KOSONG }] }))}>
+                    <Plus className="w-3.5 h-3.5 mr-1" />Tambah baris
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -942,7 +1002,12 @@ export default function PengadaanPage({ user, onBack }) {
             <Button variant="outline" onClick={() => setForm(null)}>Batal</Button>
             <Button onClick={simpanPerolehan} disabled={form?.saving}
               className="bg-orange-600 hover:bg-orange-700 text-white" data-testid="pengadaan-simpan">
-              {form?.saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <ShoppingCart className="w-4 h-4 mr-1.5" />}Catat
+              {form?.saving
+                ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
+                : form?.mode === "ubah"
+                  ? <Pencil className="w-4 h-4 mr-1.5" />
+                  : <ShoppingCart className="w-4 h-4 mr-1.5" />}
+              {form?.mode === "ubah" ? "Simpan Perubahan" : "Catat"}
             </Button>
           </DialogFooter>
         </DialogContent>
