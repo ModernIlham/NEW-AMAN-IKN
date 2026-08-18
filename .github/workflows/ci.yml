@@ -18,6 +18,10 @@ jobs:
   rahasia:
     name: Pemeriksa rahasia (kredensial ter-commit)
     runs-on: ubuntu-latest
+    # Batas bawaan GitHub 6 JAM. Langkah yang menggantung karena jaringan
+    # runner (lihat langkah apt di job backend) membuat PR macet setengah hari
+    # tanpa pernah gagal sendiri. Semua job ini normalnya selesai <5 menit.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -34,6 +38,7 @@ jobs:
   backend:
     name: Backend (compileall + pytest unit)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -42,7 +47,23 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
       - name: Dependensi sistem WeasyPrint (pango)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0
+        # 18 Agu 2026: langkah ini menggantung 61 menit di cermin paket runner
+        # tanpa pernah gagal sendiri, sementara dua job lain hijau dalam 2
+        # menit. `timeout` dijalankan SEBAGAI ROOT (sudo timeout, bukan timeout
+        # sudo) supaya apt benar-benar mati dan kunci /var/lib/dpkg terlepas
+        # sebelum percobaan berikutnya.
+        run: |
+          for percobaan in 1 2 3; do
+            if sudo timeout 240 apt-get update -o Acquire::Retries=3 \
+               && sudo timeout 240 apt-get install -y --no-install-recommends \
+                    -o Acquire::Retries=3 libpango-1.0-0 libpangoft2-1.0-0; then
+              exit 0
+            fi
+            echo "Percobaan $percobaan/3 apt-get gagal atau menggantung — ulangi 15 detik…"
+            sleep 15
+          done
+          echo "apt-get tetap gagal setelah 3 percobaan — cermin paket runner bermasalah."
+          exit 1
       - name: Install dependensi Python
         run: pip install -r backend/requirements.txt
       - name: Cek sintaks + bytecode seluruh backend
@@ -53,6 +74,7 @@ jobs:
   frontend:
     name: Frontend (eslint + build)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: frontend

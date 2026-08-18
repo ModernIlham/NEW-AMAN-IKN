@@ -66,24 +66,36 @@ jobs:
             echo "::error::Isi secret VPS_SSH_KEY bukan private key OpenSSH yang valid. Cara paling mudah: di VPS jalankan  base64 -w0 ~/deploy_key; echo  lalu salin SATU baris hasilnya ke secret VPS_SSH_KEY. (Atau salin utuh semua baris file kunci dari -----BEGIN sampai -----END.)"
             exit 1
           fi
-          # Uji jangkauan host lebih dulu — dengan RETRY: gangguan jaringan
-          # sesaat (VPS sibuk / blip runner) pernah menggagalkan deploy
-          # padahal konfigurasi benar. 5x percobaan berjarak 20 detik.
+          # Uji jangkauan host lebih dulu — dengan RETRY.
+          #
+          # Jendelanya diperpanjang setelah insiden 18 Agu 2026 00:38-00:41 UTC:
+          # deploy gagal, dan log sshd VPS TIDAK MENCATAT APA PUN di rentang itu
+          # — bukan koneksi ditolak, melainkan paketnya tak pernah sampai. Deploy
+          # sebelum (00:20) dan sesudahnya (00:51) normal, dan `dmesg` tidak
+          # menunjukkan satu pun OOM. Jadi penyebabnya di jalur jaringan sebelum
+          # mesin (firewall/edge penyedia), bukan di VPS maupun aplikasi.
+          #
+          # Jendela lama 5x(15s timeout + 20s jeda) ~= 2,9 menit habis tepat di
+          # dalam gangguan itu. Kini 8x(15s + 30s) ~= 6 menit: cukup untuk
+          # melewati blip beberapa menit, masih jauh di bawah timeout job.
+          #
+          # Ini BANTALAN, bukan perbaikan. Gangguan jaringannya sendiri di luar
+          # kendali repo dan perlu ditanyakan ke penyedia VPS.
           reachable=0
-          for attempt in 1 2 3 4 5; do
+          for attempt in 1 2 3 4 5 6 7 8; do
             if ssh-keyscan -T 15 -p "${VPS_PORT:-22}" -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null; then
               reachable=1; break
             fi
-            echo "Percobaan $attempt/5 gagal menjangkau VPS — coba lagi 20 detik…"
-            sleep 20
+            echo "Percobaan $attempt/8 gagal menjangkau VPS — coba lagi 30 detik…"
+            sleep 30
           done
           if [ "$reachable" -ne 1 ]; then
-            echo "::error::Tidak bisa terhubung ke VPS di port ${VPS_PORT:-22} setelah 5 percobaan. Pastikan secret VPS_HOST HANYA berisi IP/hostname (contoh: 123.45.67.89 — tanpa http://, tanpa port, tanpa spasi), port SSH terbuka, dan VPS hidup."
+            echo "::error::Tidak bisa terhubung ke VPS di port ${VPS_PORT:-22} setelah 8 percobaan (~6 menit). Bila secret VPS_HOST/VPS_PORT sudah benar dan VPS hidup, periksa firewall/proteksi DDoS di sisi PENYEDIA: pada insiden serupa, log sshd VPS tidak mencatat percobaan koneksi sama sekali."
             exit 1
           fi
           # SSH juga di-retry (2x) — koneksi bisa putus sesaat setelah keyscan
           if ! ssh -i ~/.ssh/deploy_key -p "${VPS_PORT:-22}" -o ConnectTimeout=20 "$VPS_USER@$VPS_HOST" 'bash -s' < scripts/deploy_vps.sh; then
-            echo "Deploy percobaan pertama gagal — ulang sekali dalam 20 detik…"
-            sleep 20
+            echo "Deploy percobaan pertama gagal — ulang sekali dalam 30 detik…"
+            sleep 30
             ssh -i ~/.ssh/deploy_key -p "${VPS_PORT:-22}" -o ConnectTimeout=20 "$VPS_USER@$VPS_HOST" 'bash -s' < scripts/deploy_vps.sh
           fi
