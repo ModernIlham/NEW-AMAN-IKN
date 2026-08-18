@@ -5008,6 +5008,13 @@ def _downscale_to_data_uri(raw: bytes, max_w: int = 640, quality: int = 80) -> s
         return ""
 
 
+# Batas kelompok pada Laporan Eksekutif per Barang Serupa. 2.000 kelompok
+# sudah jauh di atas kebutuhan nyata satker (kelompok = kombinasi kode+nama+
+# tahun+merek+harga), sementara di atas itu perakitan HTML + rasterisasi
+# WeasyPrint mulai membahayakan VPS satu mesin.
+MAKS_KELOMPOK_LAPORAN = 2000
+
+
 async def _gridfs_photo_data_uri(gid: str, max_w: int = 640) -> str:
     """Ambil foto dari GridFS lalu downscale ke data-URI; '' bila gagal.
 
@@ -5018,7 +5025,11 @@ async def _gridfs_photo_data_uri(gid: str, max_w: int = 640) -> str:
         raw = await get_photo_from_gridfs(gid)
         if not raw:
             return ""
-        return _downscale_to_data_uri(raw, max_w)
+        # DI LUAR event loop: Pillow open + LANCZOS + WEBP(method=6) murni
+        # sinkron dan terukur ~0,2-0,4 detik per foto. Dipanggil dalam LOOP
+        # (satu per kelompok laporan), ia menahan seluruh permintaan lain —
+        # simpan aset lapangan, login, heartbeat — selama total durasinya.
+        return await asyncio.to_thread(_downscale_to_data_uri, raw, max_w)
     except Exception as e:
         logger.debug(f"[reports] GridFS foto {gid} gagal diambil: {e}")
         return ""
@@ -5820,9 +5831,24 @@ async def _build_executive_grouped_data(activity_id: str, detail_fields=None,
         }},
         {"$sort": {"_id.asset_code": 1, "_id.asset_name": 1, "_id.purchase_date": 1}},
     ]
+    # Gerbang jumlah kelompok. Tanpa ini satu kegiatan besar merender ribuan
+    # baris + foto dalam satu permintaan; pola yang sama sudah dipakai
+    # exports.py (MAX_FOTO_EXPORT_ASSETS) dan saudara kandung laporan ini
+    # (`executive-data-pdf`) yang dipaginasi 499 aset per halaman.
+    #
+    # Pemotongan TIDAK boleh senyap: melebihi ambang berarti DITOLAK dengan
+    # saran yang bisa ditindaklanjuti, bukan diam-diam dipangkas sehingga
+    # laporan resmi memuat sebagian data tanpa ada yang menyadarinya.
     raw_groups = []
     async for doc in db.assets.aggregate(pipeline):
         raw_groups.append(doc)
+        if len(raw_groups) > MAKS_KELOMPOK_LAPORAN:
+            raise HTTPException(
+                status_code=400,
+                detail=(f"Terlalu banyak kelompok barang serupa "
+                        f"(>{MAKS_KELOMPOK_LAPORAN}) untuk dirender sekaligus. "
+                        "Persempit ke satu kegiatan yang lebih kecil, atau "
+                        "gunakan Ekspor CSV/Excel yang ringan."))
 
     def nup_key(m):
         """Sort key: NUP numerik terkecil dulu, non-numerik di akhir"""
@@ -5843,10 +5869,20 @@ async def _build_executive_grouped_data(activity_id: str, detail_fields=None,
     # Batch-fetch foto sampul representative (satu query, hanya 1 foto per aset)
     photo_map = {}
     gid_map = {}  # Fallback GridFS: id blob sampul per aset (aset hasil migrasi)
+    # Thumbnail tersimpan — jalur MURAH dan jalur NORMAL. `create_asset` selalu
+    # menulis `photos: []`, jadi cover_photo inline hampir selalu kosong dan
+    # dulu setiap kelompok jatuh ke dekode GridFS. Itu bukan kasus migrasi
+    # langka seperti yang tertulis di komentar lama, melainkan jalur biasa.
+    thumb_map = {}
     if rep_ids:
         photo_pipeline = [
             {"$match": {"id": {"$in": rep_ids}}},
-            {"$project": {"_id": 0, "id": 1, "cover_photo": {"$let": {
+            {"$project": {"_id": 0, "id": 1,
+             # Thumbnail yang SUDAH tersimpan (gallery 256px WebP). Template
+             # menampilkan foto pada 26-46px, jadi ini lebih dari cukup — dan
+             # memakainya berarti NOL dekode Pillow dan NOL baca GridFS.
+             "gallery_thumbnail": 1, "thumbnail": 1,
+             "cover_photo": {"$let": {
                 "vars": {"ph": {"$ifNull": ["$photos", []]}, "ti": {"$ifNull": ["$thumbnail_index", 0]}},
                 "in": {"$cond": [
                     {"$and": [{"$gte": ["$$ti", 0]}, {"$lt": ["$$ti", {"$size": "$$ph"}]}]},
@@ -5868,6 +5904,7 @@ async def _build_executive_grouped_data(activity_id: str, detail_fields=None,
         async for d in db.assets.aggregate(photo_pipeline):
             photo_map[d["id"]] = d.get("cover_photo")
             gid_map[d["id"]] = d.get("cover_gid")
+            thumb_map[d["id"]] = d.get("gallery_thumbnail") or d.get("thumbnail")
 
     cond_abbr = [("Baik", "Baik"), ("Rusak Ringan", "RR"), ("Rusak Berat", "RB")]
     stat_abbr = [("Ditemukan", "Ditemukan"), ("Tidak Ditemukan", "Tdk Ditemukan"),
@@ -5922,7 +5959,7 @@ async def _build_executive_grouped_data(activity_id: str, detail_fields=None,
         # dipakai lebih dulu; bila kosong tapi ada cover_gid (aset migrasi
         # GridFS-only) → ambil blob dari GridFS + downscale 640px ke data-URI.
         rep_id = g.get("rep_id")
-        cover_url = photo_map.get(rep_id)
+        cover_url = photo_map.get(rep_id) or thumb_map.get(rep_id)
         if not cover_url and gid_map.get(rep_id):
             cover_url = await _gridfs_photo_data_uri(gid_map[rep_id]) or None
 

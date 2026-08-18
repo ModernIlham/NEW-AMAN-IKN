@@ -67,6 +67,42 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#873] Laporan Barang Serupa berhenti membekukan aplikasi — 2026-08-17
+
+Temuan berkeparahan tinggi terakhir dari tinjauan keamanan. Satu klik tombol
+unduh oleh pengguna biasa bisa menghentikan **seluruh** layanan.
+
+Tiga masalah menumpuk di satu endpoint:
+
+1. Foto sampul tiap kelompok diambil ulang dari GridFS lalu didekode Pillow +
+   LANCZOS + WEBP — terukur ~0,2–0,4 detik per foto.
+2. Dekode itu berjalan **langsung di event loop**, jadi selama total
+   durasinya simpan aset lapangan, login, dan heartbeat lock berhenti
+   dilayani. Bukan sekadar lambat: coroutine lain tak pernah dijadwalkan.
+3. Tidak ada batas jumlah kelompok sama sekali.
+
+**Yang paling menipu:** komentar lama menyebut jalur GridFS itu "fallback
+untuk aset hasil migrasi". Padahal `create_asset` **selalu** menulis
+`photos: []` — jadi cabang itu justru jalur NORMAL setiap aset modern, bukan
+pengecualian langka. Verifikator adversarial yang menemukan koreksi ini.
+
+Perbaikannya memakai barang yang sudah ada di database: `gallery_thumbnail`
+256px WebP tersimpan per aset, sementara template hanya menampilkannya pada
+**26–46 piksel**. Memakainya berarti **nol dekode Pillow dan nol baca
+GridFS** untuk aset normal. GridFS tetap ada sebagai jalan terakhir bagi aset
+era lama, kini lewat `asyncio.to_thread`.
+
+Ditambah gerbang jumlah kelompok (2.000). Melebihi ambang → **ditolak** dengan
+saran yang bisa ditindaklanjuti, bukan dipangkas diam-diam: laporan resmi yang
+memuat sebagian data tanpa ada yang menyadarinya lebih berbahaya daripada
+laporan yang gagal terbit.
+
+Verifikasi: 8 uji baru. Uji-mutasi dua sisi: thumbnail diabaikan sehingga
+kembali mendekode GridFS → 1 uji merah; gerbang diganti pemangkasan senyap →
+2 uji merah. Suite backend 2.700 lulus.
+
+---
+
 ## [#872] Bom dekompresi di unggah foto TTD ditutup — dan dekodenya lepas dari event loop — 2026-08-17
 
 Temuan tinjauan keamanan yang **sudah lolos verifikasi adversarial**, dan
