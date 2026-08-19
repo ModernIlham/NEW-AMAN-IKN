@@ -260,6 +260,14 @@ async def nota_dinas_persediaan(
         pengantar = (f"Bersama ini disampaikan daftar persediaan yang telah/akan kedaluwarsa "
                      f"dalam {data['horizon_hari']} hari ke depan, untuk ditindaklanjuti "
                      f"(pemakaian prioritas, pemindahan, atau usulan penghapusan).")
+        if terpilih:
+            # Sama seperti nota stok kritis: dokumen resmi harus menyebut bahwa
+            # daftarnya SELEKSI, bukan seluruh temuan. Tanpa kalimat ini pembaca
+            # menyimpulkan tak ada barang kedaluwarsa lain — kesimpulan yang
+            # dibawa ke tindak lanjut.
+            pengantar += (" Daftar ini memuat barang yang DIPILIH untuk "
+                          "ditindaklanjuti; barang kedaluwarsa lain sengaja "
+                          "tidak disertakan.")
 
     elements.extend(_title_block(judul))
     elements.append(Paragraph(f"Tanggal data: {_fmt_tanggal_id(data['tanggal'])}", st['Meta']))
