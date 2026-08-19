@@ -67,6 +67,51 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#890] Retry deploy: sabar tanpa menghantam — dan dugaan yang menunjuk diri sendiri — 2026-08-19
+
+Delapan deploy sukses pada 19 Agustus (01:58–06:22), lalu **dua kegagalan
+beruntun** (07:15 dan 07:45). Keduanya menghabiskan jendela 6 menit penuh dan
+berhenti di tahap `ssh-keyscan` — port 22 tak pernah menjawab, belum sampai
+autentikasi.
+
+**Yang menuntut kejujuran:** kegagalan pertama terjadi tepat pada run PERTAMA
+yang memakai jendela retry lebar (8 percobaan) yang dipasang sehari sebelumnya
+sebagai jawaban atas insiden 18 Agustus.
+
+Cerita yang konsisten dengan seluruh fakta: blip sesaat → 8 percobaan beruntun
+→ fail2ban/proteksi penyedia membaca polanya sebagai percobaan penyusupan → IP
+runner diblokir → deploy berikutnya gagal, 8 percobaannya memicu blokir baru,
+dan seterusnya. **Kemungkinan besar pelebaran retry kemarin ikut menciptakan
+kegagalan yang hendak dicegahnya.**
+
+Waktunya cocok dengan `bantime` 10 menit yang lazim: gagal 07:15 → gagal 07:45
+(memicu ulang) → **sukses** sekitar 07:55, kira-kira sepuluh menit setelah
+gelombang percobaan terakhir berhenti.
+
+**Yang dikerjakan** — diubah walau belum terbukti, sebab lebih baik pada KEDUA
+kemungkinan:
+
+- **Kesabaran dipertahankan (~6 menit), tekanan dikurangi separuh**: 4 percobaan
+  berjeda 75 detik, bukan 8 berjeda 30 detik.
+- **Probe `ssh-keyscan` dihapus.** `StrictHostKeyChecking=accept-new` melakukan
+  hal yang sama pada koneksi yang memang dipakai — model kepercayaannya
+  identik (keduanya trust-on-first-use), tetapi tiap percobaan kini **satu**
+  koneksi, bukan dua. Jumlah koneksi per deploy gagal turun dari 8 jadi 4.
+- **Hanya kegagalan tingkat koneksi (ssh exit 255) yang diulang.** Skrip deploy
+  yang benar-benar berjalan lalu gagal kini berhenti seketika dengan pesannya
+  sendiri: mengulangnya hanya menjalankan ulang kegagalan yang sama sambil
+  menyamarkan sebabnya sebagai "masalah jaringan".
+
+**Pelajaran yang ditulis ke dalam ujinya.** Anggaran retry tak boleh disusun
+seolah ujung sana pasif. **Kesabaran dan tekanan adalah dua hal berbeda** — uji
+lama hanya menjaga yang pertama (`percobaan >= 8`), dan justru itulah yang
+mendorong ke arah yang salah. Uji sekarang menjaga keduanya: jendela ≥ 5 menit
+**dan** percobaan ≤ 5.
+
+**Uji:** 8 uji (5 baru). Empat mutasi diuji dan semuanya mati.
+
+---
+
 ## [#889] CI di main tidak lagi saling membatalkan — commit yang lolos diam-diam — 2026-08-19
 
 Ditemukan saat menelusuri kenapa perbaikan 500 impor SIMAN belum sampai ke
