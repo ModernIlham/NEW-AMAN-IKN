@@ -189,6 +189,7 @@ const DashboardToolbar = memo(function DashboardToolbar({
           <div className="flex flex-nowrap items-center gap-1.5">
             <CategorySelect
               categories={categories}
+              kategoriTerpakai={filterOptions?.categories}
               value={filterCategory}
               onValueChange={setFilterCategory}   /* efek perubahan filter yang memuat ulang — lihat DashboardPage */
               placeholder="Semua Kategori"
@@ -318,6 +319,7 @@ const DashboardToolbar = memo(function DashboardToolbar({
         <div className="lg:hidden flex items-center gap-1.5">
           <CategorySelect
             categories={categories}
+            kategoriTerpakai={filterOptions?.categories}
             value={filterCategory}
             onValueChange={setFilterCategory}   /* efek perubahan filter yang memuat ulang — lihat DashboardPage */
             placeholder="Semua Kategori"

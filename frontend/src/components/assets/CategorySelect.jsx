@@ -26,13 +26,20 @@ const CONTAINER_HEIGHT = ITEM_HEIGHT * VISIBLE_COUNT;
 const RENDER_LIMIT = 200; // Only render up to 200 items, search narrows the rest
 
 const CategorySelect = ({
-  categories = [],
+  categories = [],             // master kodefikasi (objek {id,label,kode_aset})
+  kategoriTerpakai,            // label kategori yang ADA di kegiatan ini
   value,                       // array label kategori; [] = semua
   onValueChange,               // (arrayLabelBaru) => void
   placeholder = "Semua Kategori",
   className = "",
   size = "default"
 }) => {
+  // Bawaan: hanya kategori yang benar-benar dipakai dalam kegiatan. Master
+  // berisi belasan ribu entri; menawarkan semuanya membuat kotak ini nyaris
+  // tak berguna di lapangan. Seluruh master tetap SATU KETUKAN jauhnya lewat
+  // sakelar di bawah — dibutuhkan saat operator mencari kategori yang memang
+  // belum dipakai satu aset pun.
+  const [semuaKategori, setSemuaKategori] = useState(false);
   // Toleran terhadap nilai lama (string / sentinel "Semua") supaya pemanggil
   // yang belum diperbarui — dan snapshot state yang tersimpan — tidak pecah.
   const terpilih = useMemo(() => {
@@ -53,15 +60,45 @@ const CategorySelect = ({
     }
   }, [open]);
 
+  /**
+   * Kategori dalam kegiatan → objek master yang cocok, ditambah label yang
+   * ada di data tapi TIDAK ada di master (itu aset nyata; membuangnya membuat
+   * barisnya mustahil disaring). `null` = tak ada informasi pemakaian.
+   */
+  const daftarTerpakai = useMemo(() => {
+    const pakai = (kategoriTerpakai || []).filter(Boolean);
+    if (!pakai.length) return null;
+    const set = new Set(pakai);
+    const dariMaster = categories.filter(c => set.has(c.label));
+    const adaDiMaster = new Set(dariMaster.map(c => c.label));
+    const asing = pakai.filter(l => !adaDiMaster.has(l))
+      .map(l => ({ id: `luar-master:${l}`, label: l, kode_aset: "" }));
+    return [...dariMaster, ...asing];
+  }, [categories, kategoriTerpakai]);
+
+  const sumberKategori = useMemo(() => {
+    // Jatuh ke master bila kegiatan belum punya aset, permintaan opsi gagal,
+    // atau sakelarnya dinyalakan. Kotak filter tak boleh pernah tampil kosong.
+    const dasar = (semuaKategori || !daftarTerpakai) ? categories : daftarTerpakai;
+    // Kategori yang SEDANG TERPILIH selalu ikut ditampilkan meski di luar
+    // daftar terpakai — kalau tidak, ia tetap menyaring tetapi barisnya lenyap
+    // dari daftar dan tak ada cara melepasnya selain menghapus semuanya.
+    const terlihat = new Set(dasar.map(c => c.label));
+    const hilang = (Array.isArray(value) ? value : [])
+      .filter(l => l && !terlihat.has(l))
+      .map(l => ({ id: `terpilih:${l}`, label: l, kode_aset: "" }));
+    return hilang.length ? [...dasar, ...hilang] : dasar;
+  }, [semuaKategori, daftarTerpakai, categories, value]);
+
   const filteredCategories = useMemo(() => {
-    if (!searchQuery.trim()) return categories;
+    if (!searchQuery.trim()) return sumberKategori;
     const query = searchQuery.toLowerCase();
-    return categories.filter(c => {
+    return sumberKategori.filter(c => {
       const label = c.label?.toLowerCase() || "";
       const kode = c.kode_aset?.toLowerCase() || "";
       return label.includes(query) || kode.includes(query);
     });
-  }, [categories, searchQuery]);
+  }, [sumberKategori, searchQuery]);
 
   // Limit rendered items for performance
   const limitedCategories = useMemo(() => {
@@ -176,7 +213,7 @@ const CategorySelect = ({
           >
             <Check className={`w-4 h-4 flex-shrink-0 ${terpilih.length === 0 ? "opacity-100" : "opacity-0"}`} />
             <span>Semua Kategori</span>
-            <span className="ml-auto text-xs text-muted-foreground">{categories.length}</span>
+            <span className="ml-auto text-xs text-muted-foreground">{sumberKategori.length}</span>
           </button>
           <div className="border-t my-1" />
         </div>
@@ -251,19 +288,36 @@ const CategorySelect = ({
           </span>
         </div>
 
+        {/* Sakelar lingkup daftar. Tidak mengubah pilihan dan tidak memicu
+            pemuatan ulang data — ia hanya mengganti sumber opsinya. */}
+        {daftarTerpakai && (
+          <div className="border-t px-2 py-1">
+            <button
+              type="button"
+              onClick={() => setSemuaKategori(v => !v)}
+              className="min-h-0 min-w-0 w-full text-left text-[11px] text-primary hover:underline"
+              data-testid="category-select-lingkup"
+            >
+              {semuaKategori
+                ? `← Hanya kategori dalam kegiatan ini (${daftarTerpakai.length})`
+                : `Tampilkan semua kategori (${categories.length}) →`}
+            </button>
+          </div>
+        )}
+
         {/* Footer */}
         <div className="p-1.5 border-t bg-muted/50 text-[11px] text-muted-foreground text-center">
           {searchQuery ? (
             <span>
               {filteredCategories.length > RENDER_LIMIT
                 ? `Menampilkan ${RENDER_LIMIT} dari ${filteredCategories.length} hasil (ketik lebih spesifik)`
-                : `${filteredCategories.length} dari ${categories.length} kategori`}
+                : `${filteredCategories.length} dari ${sumberKategori.length} kategori`}
             </span>
           ) : (
             <span>
               {categories.length > RENDER_LIMIT
-                ? `Menampilkan ${RENDER_LIMIT} dari ${categories.length} kategori — ketik untuk filter`
-                : `Total ${categories.length} kategori`}
+                ? `Menampilkan ${RENDER_LIMIT} dari ${sumberKategori.length} kategori — ketik untuk filter`
+                : `Total ${sumberKategori.length} kategori`}
             </span>
           )}
         </div>
