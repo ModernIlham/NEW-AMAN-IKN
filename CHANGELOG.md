@@ -67,6 +67,49 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#891] Format nomor: pilihan yang langsung terlihat, dan bagian yang menyebut namanya sendiri — 2026-08-19
+
+Dua keluhan pemilik, satu akar:
+
+1. *"pada saat komposisi Nomor dipilih, Format Nomor tidak berubah"* — memang.
+   Penyisipan placeholder dikerjakan server saat **Simpan**, dan itu ditulis
+   sebagai catatan kecil di layar. Tetapi catatan bukan jawaban: **pilihan yang
+   tak memberi umpan balik terbaca sebagai pilihan yang rusak.**
+2. *"pada format nomor kita tidak tahu nama header kepalanya untuk memanggil
+   datanya"* — kolomnya menerima template mentah, sementara nama bagiannya
+   hanya tertulis sebagai deretan `{...}` di keterangan dialog: tanpa arti,
+   tanpa contoh.
+
+**Yang dikerjakan:**
+
+- Endpoint `pratinjau-nomor` kini menerima **template rancangan** dan/atau
+  **komposisi**, lalu mengembalikan template hasil penyisipannya beserta contoh
+  nomornya. Memilih komposisi karena itu langsung mengubah kolom Format Nomor.
+- **Chip penyisip placeholder** beserta arti dan contoh isinya — `Kode Keamanan
+  B`, `Nomor Urut 001`, `Kode Klasifikasi Arsip PL.02`, dan seterusnya. Satu
+  ketukan menyisipkan; yang sudah dipakai berwarna hijau. Urutan chip mengikuti
+  susunan PerANRI 5/2021, jadi menyisipkannya berurutan langsung menghasilkan
+  bentuk yang benar.
+- **Contoh nomor hidup** di bawah kolomnya: `B-001/PL.02/OIKN/VIII/2026`.
+
+**Keputusan rancangan yang menahan godaan.** Semuanya dihitung SERVER. Yang
+menggoda adalah menyalin aturan penyisipan placeholder dan perakitan nomor ke
+JavaScript supaya tak perlu bolak-balik — dan itu berarti dua aturan yang wajib
+tetap sama selamanya. Yang pertama kali berbeda **tak akan terlihat siapa pun**,
+sebab keduanya sama-sama menghasilkan nomor yang "kelihatan benar".
+
+Ada pula uji yang mengunci bahwa daftar chip untuk manusia dan daftar
+placeholder yang diterima validator **selalu sama persis** — kalau berbeda,
+layar menawarkan bagian yang ditolak saat disimpan, atau menyembunyikan bagian
+yang sebenarnya boleh dipakai.
+
+**Uji:** 11 uji baru, termasuk penjagaan bahwa pratinjau tak menyimpan apa pun
+dan **tak menaikkan counter** (ia dipanggil tiap ketikan; kalau ia memesan
+nomor, satu sesi mengetik menghabiskan puluhan nomor agenda). Tiga mutasi
+diuji dan semuanya mati.
+
+---
+
 ## [#890] Retry deploy: sabar tanpa menghantam — dan dugaan yang menunjuk diri sendiri — 2026-08-19
 
 Delapan deploy sukses pada 19 Agustus (01:58–06:22), lalu **dua kegagalan

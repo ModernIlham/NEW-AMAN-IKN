@@ -42,7 +42,8 @@ from persuratan_utils import (
     STATUS_KELUAR, STATUS_MASUK, TRANSISI_KELUAR, TRANSISI_MASUK,
     bangun_nomor, baris_agenda_csv, gabung_klasifikasi, label_agenda,
     periode_urut,
-    KOMPOSISI_NOMOR, dimensi_deret, komposisi_format, kunci_deret,
+    KOMPOSISI_NOMOR, PLACEHOLDER_NOMOR, dimensi_deret, komposisi_format,
+    kunci_deret,
     peringatan_klasifikasi,
     pilih_klasifikasi, placeholder_tak_dikenal, sumber_pengaturan,
     terapkan_komposisi,
@@ -722,6 +723,7 @@ async def hapus_klasifikasi(klas_id: str, user: dict = Depends(require_admin)):
 async def pratinjau_nomor(jenis_naskah: str = "", modul: str = "",
                           kode_klasifikasi: str = "", kode_keamanan: str = "B",
                           tanggal_surat: str = "", sisipan: bool = False,
+                          format_nomor: str = "", komposisi: str = "",
                           _user: dict = Depends(require_user)):
     """Pratinjau nomor yang AKAN terbit (tanpa memesan — counter tidak naik).
 
@@ -729,9 +731,26 @@ async def pratinjau_nomor(jenis_naskah: str = "", modul: str = "",
     final bisa bergeser maju — keunikan tetap dijamin counter atomik.
     `sisipan=true` memperkirakan nomor sisipan backdate (005.01) untuk
     `tanggal_surat`; bila belum ada jangkarnya, `sisipan_galat` menjelaskan.
+
+    `format_nomor`/`komposisi` (opsional) memakai template RANCANGAN alih-alih
+    yang tersimpan — dipakai layar Pengaturan supaya susunan yang sedang
+    diketik langsung terlihat hasilnya SEBELUM disimpan. Ia hanya membaca;
+    tak ada yang tertulis.
+
+    Menaruhnya di sini, bukan menghitungnya di klien, adalah keputusan sadar:
+    aturan penyisipan placeholder dan perakitan nomor hanya boleh ada di SATU
+    tempat. Menyalinnya ke JavaScript berarti dua aturan yang harus tetap
+    sama selamanya — dan yang pertama kali berbeda tak akan terlihat siapa pun,
+    sebab keduanya sama-sama menghasilkan nomor yang "kelihatan benar".
     """
     _ks = kode_satker_user(_user)
     atur = await _pengaturan(_ks)
+    rancangan = str(format_nomor or "").strip()
+    if rancangan or komposisi:
+        dasar = rancangan or atur["format_nomor"]
+        if komposisi:
+            dasar = terapkan_komposisi(dasar, komposisi)
+        atur = {**atur, "format_nomor": dasar}
     now = datetime.now(timezone.utc)
     tanggal = str(tanggal_surat or "").strip()[:10] or now.date().isoformat()
     periode = _periode(atur, tanggal) or _periode(atur, now.date().isoformat())
@@ -792,7 +811,13 @@ async def pratinjau_nomor(jenis_naskah: str = "", modul: str = "",
                          kode_klasifikasi=kode, kode_unit=atur["kode_unit"],
                          kode_keamanan=kode_keamanan)
     return {"nomor": nomor, "urut_berikut": urut_berikut,
-            "kode_klasifikasi": kode, "sumber_klasifikasi": sumber}
+            "kode_klasifikasi": kode, "sumber_klasifikasi": sumber,
+            # Template yang BENAR-BENAR dipakai merakit nomor di atas. Saat
+            # `komposisi` dikirim, inilah hasil penyisipannya — layar memakainya
+            # untuk memperbarui kolom Format Nomor seketika, tanpa menyalin
+            # aturan penyisipannya ke klien.
+            "format_nomor": atur["format_nomor"],
+            "placeholder": PLACEHOLDER_NOMOR}
 
 
 async def _respons_pengaturan(_ks: str) -> dict:
@@ -810,6 +835,9 @@ async def _respons_pengaturan(_ks: str) -> dict:
     return {**efektif, "scope": _ks, "sumber": sumber_pengaturan(g, s),
             "komposisi_nomor": komposisi_format(efektif["format_nomor"]),
             "pilihan_komposisi": KOMPOSISI_NOMOR,
+            # Daftar bagian yang bisa dipanggil di Format Nomor, beserta arti
+            # dan contoh isinya — layar memakainya sebagai chip penyisip.
+            "placeholder": PLACEHOLDER_NOMOR,
             # Sumbu deret yang BENAR-BENAR berlaku ('' = satu deret) — layar
             # memakainya untuk menonaktifkan saklar saat komposisi tak
             # menyediakan kode pembeda.

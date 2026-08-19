@@ -81,6 +81,11 @@ export default function PersuratanPage({ user, onBack }) {
   const [formKeluar, setFormKeluar] = useState(null);
   const [formMasuk, setFormMasuk] = useState(null);
   const [formAtur, setFormAtur] = useState(null);
+  // Pratinjau format nomor di dialog pengaturan: {nomor, format_nomor,
+  // placeholder}. Dihitung SERVER supaya aturan penyisipan placeholder dan
+  // perakitan nomor tetap hanya ada di satu tempat.
+  const [praFormat, setPraFormat] = useState(null);
+  const praFormatTimer = useRef(null);
   const [batal, setBatal] = useState(null); // {surat, alasan}
   const [relasiSurat, setRelasiSurat] = useState(null); // surat utk dialog relasi/timeline
   const [saving, setSaving] = useState(false);
@@ -197,6 +202,30 @@ export default function PersuratanPage({ user, onBack }) {
     if (!ok) return;
     kirim(() => axios.delete(`${API}/persuratan/${s.id}`), `Surat ${s.nomor} dihapus`);
   };
+
+  /**
+   * Minta server merakit ulang template + contoh nomornya.
+   *
+   * `komposisi` dikirim saat pilihan komposisi berubah — server mengembalikan
+   * `format_nomor` hasil penyisipannya, dan kolom Format Nomor diperbarui
+   * SEKETIKA. Sebelumnya kolom itu baru berubah setelah Simpan, sehingga
+   * pilihan komposisi tampak tidak berpengaruh apa-apa.
+   */
+  const mintaPraFormat = useCallback((formatNomor, komposisi) => {
+    if (praFormatTimer.current) clearTimeout(praFormatTimer.current);
+    praFormatTimer.current = setTimeout(async () => {
+      try {
+        const q = new URLSearchParams();
+        if (formatNomor) q.append("format_nomor", formatNomor);
+        if (komposisi) q.append("komposisi", komposisi);
+        const r = await axios.get(`${API}/persuratan/pratinjau-nomor?${q}`);
+        setPraFormat(r.data);
+        if (komposisi && r.data?.format_nomor) {
+          setFormAtur((f) => (f ? { ...f, format_nomor: r.data.format_nomor } : f));
+        }
+      } catch { /* pratinjau bersifat bantuan — diam bila gagal */ }
+    }, 250);
+  }, []);
 
   const simpanAtur = async () => {
     // Respons POST berbentuk sama dengan GET, jadi form disegarkan dari
@@ -412,6 +441,10 @@ export default function PersuratanPage({ user, onBack }) {
                     if (d.sumber.peta_klasifikasi !== "satker") d.peta_klasifikasi = [];
                   }
                   setFormAtur(d);
+                  setPraFormat(null);
+                  // Contoh nomor untuk susunan yang BERLAKU, tampil begitu
+                  // dialog dibuka — bukan hanya setelah sesuatu diubah.
+                  mintaPraFormat(d.format_nomor || r.data.format_nomor, "");
                   muatKlasifikasi();
                 } catch { toast.error("Gagal memuat pengaturan"); }
               }} data-testid="persuratan-atur-btn">
@@ -884,7 +917,13 @@ export default function PersuratanPage({ user, onBack }) {
                 <Field label="Komposisi Nomor">
                   <select
                     value={formAtur.komposisi_nomor || "keduanya"}
-                    onChange={(e) => setFormAtur((f) => ({ ...f, komposisi_nomor: e.target.value }))}
+                    onChange={(e) => {
+                      const pilih = e.target.value;
+                      setFormAtur((f) => ({ ...f, komposisi_nomor: pilih }));
+                      // Kolom Format Nomor diperbarui dari jawaban server —
+                      // aturan penyisipannya tidak disalin ke klien.
+                      mintaPraFormat(formAtur.format_nomor, pilih);
+                    }}
                     className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
                     data-testid="atur-komposisi">
                     {Object.entries(formAtur.pilihan_komposisi || {
@@ -895,9 +934,9 @@ export default function PersuratanPage({ user, onBack }) {
                     }).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
                   <p className="text-[10px] text-muted-foreground mt-1">
-                    Susunan pada <b>Format Nomor</b> di bawah disesuaikan saat
-                    Simpan — bagian lain (kode unit, bulan, tahun, pemisah) tidak
-                    disentuh.
+                    Susunan pada <b>Format Nomor</b> di bawah langsung
+                    menyesuaikan — bagian lain (kode unit, bulan, tahun,
+                    pemisah) tidak disentuh.
                   </p>
                 </Field>
                 {/* Saklar deret per kode. Dinonaktifkan — bukan disembunyikan
@@ -934,10 +973,50 @@ export default function PersuratanPage({ user, onBack }) {
                 )}
                 <Field label="Format Nomor">
                   <Input value={formAtur.format_nomor} className="font-mono"
-                    onChange={(e) => setFormAtur((f) => ({ ...f, format_nomor: e.target.value }))}
+                    onChange={(e) => {
+                      setFormAtur((f) => ({ ...f, format_nomor: e.target.value }));
+                      mintaPraFormat(e.target.value, "");
+                    }}
                     placeholder={formAtur.warisan?.format_nomor
                       ? `ikut Universal: ${formAtur.warisan.format_nomor}` : undefined}
                     data-testid="atur-format" />
+                  {/* Daftar bagian yang bisa dipanggil, berikut ARTINYA.
+                      Keluhan pemilik: kolom di atas menerima template mentah
+                      sementara nama bagiannya hanya tertulis sebagai deretan
+                      {...} di keterangan dialog — tak ada yang menyebutkan apa
+                      artinya atau apa isinya nanti. Satu ketukan menyisipkan
+                      di ujung template; urutan chip = susunan PerANRI 5/2021,
+                      jadi menyisipkannya berurutan sudah menghasilkan bentuk
+                      yang benar. */}
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {(praFormat?.placeholder || formAtur.placeholder || []).map((ph) => {
+                      const token = `{${ph.kunci}}`;
+                      const dipakai = (formAtur.format_nomor || "").includes(token);
+                      return (
+                        <button
+                          key={ph.kunci}
+                          type="button"
+                          title={`${ph.arti} — contoh: ${ph.contoh}`}
+                          onClick={() => {
+                            const baru = `${formAtur.format_nomor || ""}${token}`;
+                            setFormAtur((f) => ({ ...f, format_nomor: baru }));
+                            mintaPraFormat(baru, "");
+                          }}
+                          className={`min-h-0 min-w-0 px-1.5 py-0.5 rounded border text-[10px] ${
+                            dipakai
+                              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                              : "border-border text-muted-foreground hover:bg-muted"}`}
+                          data-testid={`atur-ph-${ph.kunci}`}>
+                          {ph.label} <span className="font-mono opacity-70">{ph.contoh}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {praFormat?.nomor && (
+                    <p className="text-[11px] mt-1.5 rounded-lg bg-muted/60 px-2.5 py-1.5">
+                      Contoh nomor: <span className="font-mono font-semibold text-foreground">{praFormat.nomor}</span>
+                    </p>
+                  )}
                 </Field>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <Field label="Kode Unit"><Input value={formAtur.kode_unit} onChange={(e) => setFormAtur((f) => ({ ...f, kode_unit: e.target.value }))} placeholder={formAtur.warisan?.kode_unit ? `ikut Universal: ${formAtur.warisan.kode_unit}` : "cth. OIKN"} /></Field>
