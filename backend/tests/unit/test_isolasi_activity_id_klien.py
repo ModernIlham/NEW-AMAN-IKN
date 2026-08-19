@@ -93,9 +93,22 @@ def _tanpa_baris_impor(sumber):
                       if not b.strip().startswith(("from ", "import ")))
 
 
+# Helper yang MEMBAWA guard di dalamnya. Endpoint yang mendelegasikan
+# perakitan kueri ke salah satunya dianggap terjaga — TETAPI hanya karena
+# `TestHelperPembawaGuardBenarBenarMenjaga` di bawah membuktikan helper itu
+# sendiri memanggil guard. Ini berbeda dengan mengecualikan endpoint: di sini
+# rantainya tetap terbukti, dan mencabut guard dari helper akan menjatuhkan
+# seluruh endpoint yang bergantung padanya sekaligus.
+HELPER_PEMBAWA_GUARD = {
+    "kueri_aset_terlihat": "assets.py",
+}
+
+
 def _memanggil_guard(sumber):
     bersih = _tanpa_baris_impor(sumber)
-    return any(f"{g}(" in bersih for g in GUARD)
+    if any(f"{g}(" in bersih for g in GUARD):
+        return True
+    return any(f"await {h}(" in bersih for h in HELPER_PEMBAWA_GUARD)
 
 
 def kandidat():
@@ -137,6 +150,44 @@ class TestGuardTerpasang:
             "memanggil guard kepemilikan kegiatan. `scope_query_aset` TIDAK "
             "menyaring bila activity_id sudah ada di kueri, jadi isolasi "
             f"antar-satker mati untuk endpoint ini: {lalai}")
+
+
+class TestHelperPembawaGuardBenarBenarMenjaga:
+    """Delegasi hanya sah selama yang didelegasikan memang menjaga.
+
+    Tanpa uji ini, `HELPER_PEMBAWA_GUARD` berubah dari jalan pintas yang aman
+    menjadi daftar pemutih: cukup menamai satu fungsi di situ, dan setiap
+    endpoint yang memanggilnya lolos pemeriksaan tanpa satu pun guard nyata.
+    """
+
+    def test_setiap_helper_memanggil_guard_sendiri(self):
+        lalai = []
+        for nama_helper, berkas in HELPER_PEMBAWA_GUARD.items():
+            with open(os.path.join(ROUTES, berkas), encoding="utf-8") as f:
+                pohon = ast.parse(f.read())
+                f.seek(0)
+                sumber_berkas = f.read()
+            fn = next((n for n in ast.walk(pohon)
+                       if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+                       and n.name == nama_helper), None)
+            if fn is None:
+                lalai.append(f"{berkas}::{nama_helper} (fungsi tak ditemukan)")
+                continue
+            badan = _tanpa_baris_impor(ast.get_source_segment(sumber_berkas, fn) or "")
+            if not any(f"{g}(" in badan for g in GUARD):
+                lalai.append(f"{berkas}::{nama_helper}")
+        assert lalai == [], (
+            "Helper berikut terdaftar sebagai pembawa guard tetapi tidak "
+            f"memanggil guard apa pun: {lalai}")
+
+    def test_endpoint_yang_mendelegasikan_memang_ada(self):
+        """Penjaga anti-hampa: bila tak ada satu pun endpoint yang memakai
+        jalur delegasi, mekanisme di atas hanya menambah kerumitan."""
+        pemakai = [f"{b}::{f}" for b, f, s in kandidat()
+                   if any(f"await {h}(" in _tanpa_baris_impor(s)
+                          for h in HELPER_PEMBAWA_GUARD)]
+        assert "assets.py::get_assets" in pemakai, pemakai
+        assert "assets.py::get_assets_stats" in pemakai, pemakai
 
 
 class TestCabangFailOpenMasihSepertiYangDiasumsikan:

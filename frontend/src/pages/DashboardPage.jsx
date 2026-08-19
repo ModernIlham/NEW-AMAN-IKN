@@ -61,6 +61,7 @@ import { haptic } from "@/lib/haptics";
 import { useUnsyncedGuard } from "@/hooks/useUnsyncedGuard";
 import { useRowLocking } from "@/hooks/useRowLocking";
 import { useAssetFilters, normalkanMulti } from "@/hooks/useAssetFilters";
+import { statistikUntukKartu } from "@/lib/statistikAset";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useDragDropImport } from "@/hooks/useDragDropImport";
 import { useBackGuard } from "@/hooks/useBackGuard";
@@ -786,6 +787,11 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       setTotalItems(totalFiltered);
       setTotalPages(totalPg);
       setCurrentPage(pg);
+      // Kartu ringkasan dihitung dari BARIS TERSARING yang sama dengan daftar
+      // ini, bukan ditinggal memakai angka daring terakhir. Dihitung atas
+      // `filtered` (bukan `merged`) supaya Total Aset selalu sama dengan
+      // `totalFiltered` yang baru saja dipasang di atas.
+      setStats(statistikUntukKartu(filtered));
       if (prependMobile) {
         setMobileAssets(prev => [...pageItems, ...prev]);   // PREPEND (scroll-atas dua arah)
         setMobileFirstPage(pg);
@@ -962,6 +968,12 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       if (search) params.append("search", search);
       if (category && category !== "Semua") params.append("category", category);
       if (activity?.id) params.append("activity_id", activity.id);
+      // Filter lanjutan ikut dikirim — perakit yang SAMA dengan daftar
+      // (`buildFilterParams`). Sebelum ini kartu ringkasan hanya menerima
+      // cari/kategori/kegiatan, sehingga memilih "Kondisi: Rusak Berat"
+      // menyusutkan daftarnya tetapi Total Aset di atasnya tetap menyebut
+      // angka seluruh kegiatan.
+      buildFilterParams(params);
       const r = await axios.get(`${API}/assets/stats?${params.toString()}`);
       setStats({ totalAssets: r.data.total_assets||0, totalValue: (r.data.total_value||0).toLocaleString('id-ID'), activeCount: r.data.active_count||0, maintenanceCount: r.data.maintenance_count||0 });
     } catch {}
