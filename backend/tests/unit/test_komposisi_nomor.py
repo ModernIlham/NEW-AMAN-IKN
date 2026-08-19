@@ -61,11 +61,11 @@ def dbx(monkeypatch):
 
 class TestMembacaKomposisi:
     def test_format_bawaan_memuat_keduanya(self):
-        assert komposisi_format(FORMAT_NOMOR_DEFAULT) == "keduanya"
+        assert komposisi_format(FORMAT_NOMOR_DEFAULT) == "keamanan_klasifikasi"
 
     @pytest.mark.parametrize("template,harap", [
-        ("{kode_keamanan}-{urut}/{tahun}", "keamanan"),
-        ("{urut}/{kode_klasifikasi}/{tahun}", "klasifikasi"),
+        ("{kode_keamanan}-{urut}/{tahun}", "keamanan_saja"),
+        ("{urut}/{kode_klasifikasi}/{tahun}", "klasifikasi_saja"),
         ("{urut}/{kode_unit}/{tahun}", "tanpa"),
     ])
     def test_dibaca_dari_template_bukan_disimpan_terpisah(self, template, harap):
@@ -80,13 +80,13 @@ class TestMenerapkanKomposisi:
     def test_bagian_lain_template_tidak_disentuh(self):
         """Kode unit & pemisah khas satker sudah dipakai bertahun — mengubah
         komposisi tak boleh membuangnya."""
-        t = terapkan_komposisi(FORMAT_NOMOR_DEFAULT, "klasifikasi")
+        t = terapkan_komposisi(FORMAT_NOMOR_DEFAULT, "klasifikasi_saja")
         for bagian in ("{urut}", "{kode_unit}", "{bulan_romawi}", "{tahun}"):
             assert bagian in t, t
 
     def test_bolak_balik_kembali_utuh(self):
         tanpa = terapkan_komposisi(FORMAT_NOMOR_DEFAULT, "tanpa")
-        assert terapkan_komposisi(tanpa, "keduanya") == FORMAT_NOMOR_DEFAULT
+        assert terapkan_komposisi(tanpa, "keamanan_klasifikasi") == FORMAT_NOMOR_DEFAULT
 
     def test_tak_meninggalkan_pemisah_menggantung(self):
         for pilih in KOMPOSISI_NOMOR:
@@ -104,17 +104,67 @@ class TestMenerapkanKomposisi:
 
     def test_nomor_jadi_yang_benar_benar_berubah(self):
         """Bukti akhirnya ada pada nomor yang terbit, bukan pada templatenya."""
-        t = terapkan_komposisi(FORMAT_NOMOR_DEFAULT, "klasifikasi")
+        t = terapkan_komposisi(FORMAT_NOMOR_DEFAULT, "klasifikasi_saja")
         nomor = bangun_nomor(t, 1, "2026-08-19", kode_klasifikasi="PL.02",
                              kode_unit="OIKN", kode_keamanan="B")
         assert nomor == "001/PL.02/OIKN/VIII/2026", nomor
         assert not nomor.startswith("B-"), "kode keamanan masih ikut"
 
     def test_keamanan_saja_menghapus_klasifikasi_dari_nomor(self):
-        t = terapkan_komposisi(FORMAT_NOMOR_DEFAULT, "keamanan")
+        t = terapkan_komposisi(FORMAT_NOMOR_DEFAULT, "keamanan_saja")
         nomor = bangun_nomor(t, 1, "2026-08-19", kode_klasifikasi="PL.02",
                              kode_unit="OIKN", kode_keamanan="B")
         assert nomor == "B-001/OIKN/VIII/2026", nomor
+
+
+class TestKlasifikasiDiDepan:
+    """Maksud sesungguhnya Komposisi Nomor, menurut pemilik: apakah kode
+    klasifikasi arsip IKUT, dan apakah ia MENGGANTIKAN POSISI kode keamanan
+    yang berada di depan nomor.
+
+    Bentuk lama hanya bisa menaruh klasifikasi SETELAH nomor urut
+    (001/PL.02/…), sehingga satker yang menomori surat dengan klasifikasi di
+    depan (PL.02-001/…) tak punya cara menyatakannya selain mengetik template
+    ber-placeholder dengan benar.
+    """
+
+    def test_menempati_posisi_depan(self):
+        t = terapkan_komposisi(FORMAT_NOMOR_DEFAULT, "klasifikasi_depan")
+        assert t.startswith("{kode_klasifikasi}-{urut}"), t
+        assert "{kode_keamanan}" not in t
+
+    def test_nomor_yang_terbit_berbentuk_klasifikasi_di_depan(self):
+        t = terapkan_komposisi(FORMAT_NOMOR_DEFAULT, "klasifikasi_depan")
+        nomor = bangun_nomor(t, 1, "2026-08-19", kode_klasifikasi="PL.02",
+                             kode_unit="OIKN", kode_keamanan="B")
+        assert nomor == "PL.02-001/OIKN/VIII/2026", nomor
+
+    def test_berpindah_dari_belakang_ke_depan_tanpa_menyisakan_salinan(self):
+        """Perpindahan posisi paling gampang meninggalkan placeholder kembar —
+        dan nomor yang terbit akan memuat kode klasifikasi DUA KALI."""
+        belakang = terapkan_komposisi(FORMAT_NOMOR_DEFAULT, "klasifikasi_saja")
+        depan = terapkan_komposisi(belakang, "klasifikasi_depan")
+        assert depan.count("{kode_klasifikasi}") == 1, depan
+        assert depan.startswith("{kode_klasifikasi}-{urut}"), depan
+
+    def test_kembali_ke_bentuk_baku_utuh(self):
+        depan = terapkan_komposisi(FORMAT_NOMOR_DEFAULT, "klasifikasi_depan")
+        assert terapkan_komposisi(depan, "keamanan_klasifikasi") == FORMAT_NOMOR_DEFAULT
+
+    def test_unsur_lain_tetap_di_tempatnya(self):
+        """Unsur tulisan milik satker tak boleh ikut tergeser saat posisi
+        klasifikasi berubah."""
+        khas = "{kode_keamanan}-{urut}/{kode_klasifikasi}/SETJEN/{kode_unit}/{bulan_romawi}/{tahun}"
+        t = terapkan_komposisi(khas, "klasifikasi_depan")
+        assert "/SETJEN/" in t, t
+        assert "{kode_unit}" in t and "{bulan_romawi}" in t and "{tahun}" in t
+
+    def test_contoh_tersedia_untuk_tiap_pilihan(self):
+        """Layar menampilkan CONTOH tiap komposisi — pilihan terbaca dari
+        bentuknya, bukan dari namanya."""
+        from persuratan_utils import CONTOH_KOMPOSISI
+        assert set(CONTOH_KOMPOSISI) == set(KOMPOSISI_NOMOR)
+        assert CONTOH_KOMPOSISI["klasifikasi_depan"].startswith("PL.02-001")
 
 
 class TestPeringatanKodeMenganggur:
@@ -136,7 +186,7 @@ class TestPeringatanKodeMenganggur:
         assert peringatan_klasifikasi(FORMAT_NOMOR_DEFAULT, "", peta) != ""
 
     def test_diam_saat_nomor_memang_tak_meminta_klasifikasi(self):
-        t = terapkan_komposisi(FORMAT_NOMOR_DEFAULT, "keamanan")
+        t = terapkan_komposisi(FORMAT_NOMOR_DEFAULT, "keamanan_saja")
         assert peringatan_klasifikasi(t, "", []) == ""
 
 
@@ -144,10 +194,10 @@ class TestEndpointPengaturan:
     def test_menyimpan_komposisi_menulis_ulang_format(self, dbx):
         async def skenario():
             hasil = await _unwrap(rp.set_pengaturan_persuratan)(
-                rp.PengaturanIn(komposisi_nomor="klasifikasi"), user=ADMIN)
+                rp.PengaturanIn(komposisi_nomor="klasifikasi_saja"), user=ADMIN)
             assert "{kode_keamanan}" not in hasil["format_nomor"]
             assert "{kode_klasifikasi}" in hasil["format_nomor"]
-            assert hasil["komposisi_nomor"] == "klasifikasi"
+            assert hasil["komposisi_nomor"] == "klasifikasi_saja"
             tersimpan = await dbx.persuratan_settings.find_one({"type": "global"})
             assert "komposisi_nomor" not in tersimpan, (
                 "komposisi ikut tersimpan sebagai field — ia harus hanya "
@@ -175,7 +225,7 @@ class TestEndpointPengaturan:
         async def skenario():
             hasil = await _unwrap(rp.set_pengaturan_persuratan)(
                 rp.PengaturanIn(format_nomor="{urut}/{kode_unit}/{bulan_romawi}/{tahun}",
-                                komposisi_nomor="keamanan"), user=ADMIN)
+                                komposisi_nomor="keamanan_saja"), user=ADMIN)
             assert hasil["format_nomor"] == (
                 "{kode_keamanan}-{urut}/{kode_unit}/{bulan_romawi}/{tahun}")
         _jalan(skenario())
@@ -188,7 +238,7 @@ class TestEndpointPengaturan:
             with pytest.raises(HTTPException) as e:
                 await _unwrap(rp.set_pengaturan_persuratan)(
                     rp.PengaturanIn(format_nomor="{urut}/{kode_unit}/{tahun}",
-                                    komposisi_nomor="keduanya"), user=ADMIN)
+                                    komposisi_nomor="keamanan_klasifikasi"), user=ADMIN)
             assert e.value.status_code == 400
             assert "bulan" in str(e.value.detail)
         _jalan(skenario())
