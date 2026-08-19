@@ -42,7 +42,8 @@ from persuratan_utils import (
     STATUS_KELUAR, STATUS_MASUK, TRANSISI_KELUAR, TRANSISI_MASUK,
     bangun_nomor, baris_agenda_csv, gabung_klasifikasi, label_agenda,
     periode_urut,
-    KOMPOSISI_NOMOR, komposisi_format, peringatan_klasifikasi,
+    KOMPOSISI_NOMOR, dimensi_deret, komposisi_format, kunci_deret,
+    peringatan_klasifikasi,
     pilih_klasifikasi, placeholder_tak_dikenal, sumber_pengaturan,
     terapkan_komposisi,
     urut_tampil, validate_format_reset, validate_peta_klasifikasi,
@@ -125,6 +126,11 @@ class PengaturanIn(BaseModel):
     # kebenaran. Dikerjakan di server supaya aturan penyisipannya hanya ada
     # di satu tempat, bukan diduplikasi di klien.
     komposisi_nomor: Optional[str] = None
+    # Deret nomor terpisah per kode keamanan / klasifikasi (lihat
+    # `dimensi_deret`). Dipaksa MATI bila komposisi memuat kedua kode atau
+    # tak memuat keduanya — tanpa kode pembeda di nomor, deret terpisah
+    # melahirkan nomor resmi yang kembar.
+    deret_per_kode: Optional[bool] = None
 
 
 class KlasifikasiIn(BaseModel):
@@ -165,7 +171,22 @@ async def _pengaturan(kode_satker: str = "") -> dict:
         # pergantian bulan. Satker yang mengikuti PerANRI apa adanya memilih
         # "tahunan" di pengaturan.
         "reset_urut": s.get("reset_urut") or RESET_URUT_DEFAULT,
+        # Deret nomor terpisah per kode (keamanan/klasifikasi). MATI secara
+        # bawaan: memisahkan deret mengubah nomor yang akan terbit, jadi ia
+        # harus dinyalakan dengan sadar, bukan diwarisi diam-diam.
+        "deret_per_kode": bool(s.get("deret_per_kode")),
     }
+
+
+# Sumbu deret → field dokumen surat yang menyimpan kodenya.
+_FIELD_DIMENSI = {"keamanan": "kode_keamanan", "klasifikasi": "kode_klasifikasi"}
+
+
+def _dimensi_kunci(atur: dict, kode_keamanan: str = "", kode_klas: str = "") -> tuple:
+    """(dimensi, kunci) deret untuk satu surat menurut setelan yang berlaku."""
+    dim = dimensi_deret(komposisi_format(atur.get("format_nomor")),
+                        atur.get("deret_per_kode"))
+    return dim, kunci_deret(dim, kode_keamanan, kode_klas)
 
 
 def _periode(atur: dict, tanggal_iso: str) -> str:
@@ -173,13 +194,20 @@ def _periode(atur: dict, tanggal_iso: str) -> str:
     return periode_urut((atur or {}).get("reset_urut"), tanggal_iso)
 
 
-def _cid_agenda(jenis: str, periode: str, kode: str) -> str:
+def _cid_agenda(jenis: str, periode: str, kode: str, kunci: str = "") -> str:
     """Id dokumen counter agenda per PERIODE ('2026' tahunan / '2026-08'
     bulanan). Untuk periode tahunan id-nya identik dengan id era-lama
     (`surat_keluar_2026[...]`) sehingga deret lama menyambung tanpa lompatan;
-    `kode` kosong (super-admin / era lama) memakai id tanpa akhiran satker."""
+    `kode` kosong (super-admin / era lama) memakai id tanpa akhiran satker.
+
+    `kunci` (kode keamanan/klasifikasi) memisahkan deret saat fitur deret
+    per kode aktif. Kunci KOSONG menghasilkan id yang sama persis dengan
+    sebelum fitur ini ada — deret berjalan tak boleh bergeser hanya karena
+    ada parameter baru."""
     base = f"surat_{jenis}_{periode}"
-    return f"{base}:{kode}" if kode else base
+    if kode:
+        base = f"{base}:{kode}"
+    return f"{base}:d={kunci}" if kunci else base
 
 
 def _ids_counter_tahunan(jenis: str, tahun: int, kode: str) -> list:
@@ -190,7 +218,8 @@ def _ids_counter_tahunan(jenis: str, tahun: int, kode: str) -> list:
     return ids
 
 
-async def _seed_agenda(jenis: str, periode: str, kode: str) -> int:
+async def _seed_agenda(jenis: str, periode: str, kode: str,
+                       dimensi: str = "", kunci: str = "") -> int:
     """Nilai awal counter agenda saat dokumen counternya belum ada.
 
     Dipakai BERSAMA oleh `_no_agenda_berikut` (yang benar-benar memesan nomor)
@@ -233,7 +262,13 @@ async def _seed_agenda(jenis: str, periode: str, kode: str) -> int:
         except (TypeError, ValueError):
             return 0
 
-    if bulanan:
+    # Lantai dari counter lama HANYA berlaku bagi deret gabungan. Deret per
+    # kode adalah deret BARU: melantainya dengan posisi deret gabungan membuat
+    # kode "T" mulai dari 8 alih-alih 1, padahal 001 miliknya belum pernah
+    # terbit — dan tak akan bentrok, sebab kodenya ikut tercetak di nomor.
+    if kunci:
+        pass
+    elif bulanan:
         for cid in _ids_counter_tahunan(jenis, tahun, kode):
             maks = max(maks, await _baca_seq(cid, wajib_belum_migrasi=True))
     else:
@@ -242,6 +277,9 @@ async def _seed_agenda(jenis: str, periode: str, kode: str) -> int:
 
     q = {"jenis": jenis, "tahun": tahun,
          "kode_satker": {"$in": [kode, "", None]}}
+    if kunci and _FIELD_DIMENSI.get(dimensi):
+        # Hanya surat berkode SAMA yang menentukan posisi deret ini.
+        q[_FIELD_DIMENSI[dimensi]] = kunci
     if bulanan:
         field_tgl = "tanggal_surat" if jenis == "keluar" else "created_at"
         q[field_tgl] = {"$regex": f"^{periode}"}
@@ -271,7 +309,8 @@ async def _tandai_migrasi_tahunan(jenis: str, periode: str, kode: str) -> None:
 
 
 async def _no_agenda_berikut(jenis: str, periode: str,
-                             kode_satker: str = "") -> int:
+                             kode_satker: str = "",
+                             dimensi: str = "", kunci: str = "") -> int:
     """Nomor agenda berikutnya (atomik — $inc pada dokumen counter).
 
     Deret PER SATKER (REVIEW-9 R9) dan PER PERIODE: '2026' saat setelan
@@ -281,13 +320,15 @@ async def _no_agenda_berikut(jenis: str, periode: str,
     """
     kode = str(kode_satker or "").strip()
     bulanan = "-" in periode
-    cid = _cid_agenda(jenis, periode, kode)
-    if (kode or bulanan) and await db.counters.find_one({"_id": cid}) is None:
-        maks = await _seed_agenda(jenis, periode, kode)
+    cid = _cid_agenda(jenis, periode, kode, kunci)
+    if (kode or bulanan or kunci) and await db.counters.find_one({"_id": cid}) is None:
+        maks = await _seed_agenda(jenis, periode, kode, dimensi, kunci)
         # $setOnInsert idempoten: pemanggil kedua yang balapan tak menimpa seed.
         await db.counters.update_one(
             {"_id": cid}, {"$setOnInsert": {"seq": maks}}, upsert=True)
-        if bulanan:
+        # Penandaan migrasi hanya untuk deret GABUNGAN — deret per kode tak
+        # pernah mewarisi counter tahunan, jadi tak ada yang perlu ditandai.
+        if bulanan and not kunci:
             await _tandai_migrasi_tahunan(jenis, periode, kode)
     c = await db.counters.find_one_and_update(
         {"_id": cid},
@@ -300,12 +341,13 @@ async def _no_agenda_berikut(jenis: str, periode: str,
 
 # ── Nomor sisipan (backdate) ─────────────────────────────────────────────────
 
-def _cid_sisipan(periode: str, kode: str, jangkar: int) -> str:
-    """Id counter sub-nomor sisipan per jangkar (per periode + satker)."""
-    return f"{_cid_agenda('keluar', periode, kode)}:s{int(jangkar)}"
+def _cid_sisipan(periode: str, kode: str, jangkar: int, kunci: str = "") -> str:
+    """Id counter sub-nomor sisipan per jangkar (per periode + satker + deret)."""
+    return f"{_cid_agenda('keluar', periode, kode, kunci)}:s{int(jangkar)}"
 
 
-async def _jangkar_sisipan(periode: str, kode: str, tanggal: str):
+async def _jangkar_sisipan(periode: str, kode: str, tanggal: str,
+                           dimensi: str = "", kunci: str = ""):
     """No. agenda TERAKHIR pada/sebelum `tanggal` di periode ini — nomor
     sisipan menempel di belakangnya (005 → 005.01). None bila belum ada
     satu pun nomor pada/sebelum tanggal itu (sisipan tak bermakna; booking
@@ -315,6 +357,11 @@ async def _jangkar_sisipan(periode: str, kode: str, tanggal: str):
          # ISO YYYY-MM-DD urut leksikografis = urut kronologis; "$gt": ""
          # menyaring dokumen tanpa tanggal (tak bisa jadi jangkar).
          "tanggal_surat": {"$gt": "", "$lte": str(tanggal)[:10]}}
+    if kunci and _FIELD_DIMENSI.get(dimensi):
+        # Sisipan menempel pada nomor terakhir DI DERETNYA SENDIRI. Tanpa
+        # penyaring ini, surat "T" bisa menyisip di belakang nomor milik
+        # deret "B" — dan nomor hasilnya menunjuk induk yang bukan miliknya.
+        q[_FIELD_DIMENSI[dimensi]] = kunci
     if "-" in periode:
         q["tanggal_surat"]["$gte"] = periode  # batas awal bulan periode
     maks = None
@@ -327,19 +374,22 @@ async def _jangkar_sisipan(periode: str, kode: str, tanggal: str):
     return maks
 
 
-async def _sisipan_berikut(periode: str, kode: str, jangkar: int) -> int:
+async def _sisipan_berikut(periode: str, kode: str, jangkar: int,
+                           dimensi: str = "", kunci: str = "") -> int:
     """Sub-nomor sisipan berikutnya untuk satu jangkar (atomik).
 
     005.01 sudah terpakai → 005.02, dst. Counter di-seed dari dokumen yang
     ada (pemulihan backup tanpa koleksi counters tak melahirkan duplikat).
     """
     kode = str(kode or "").strip()
-    cid = _cid_sisipan(periode, kode, jangkar)
+    cid = _cid_sisipan(periode, kode, jangkar, kunci)
     if await db.counters.find_one({"_id": cid}) is None:
         maks = 0
         q = {"jenis": "keluar", "tahun": int(periode[:4]),
              "no_agenda": int(jangkar), "sisipan": {"$gte": 1},
              "kode_satker": {"$in": [kode, "", None]}}
+        if kunci and _FIELD_DIMENSI.get(dimensi):
+            q[_FIELD_DIMENSI[dimensi]] = kunci
         if "-" in periode:
             q["tanggal_surat"] = {"$regex": f"^{periode}"}
         async for r in db.surat.find(q, {"_id": 0, "sisipan": 1}):
@@ -391,7 +441,11 @@ async def booking_nomor_otomatis(user, tgl_iso: str, perihal: str,
     tahun = int(tgl_surat[:4]) if tgl_surat[:4].isdigit() else now0.year
     periode = (_periode(atur, tgl_surat)
                or _periode(atur, now0.date().isoformat()))
-    no_agenda = await _no_agenda_berikut("keluar", periode, kode_satker)
+    # Deret yang SAMA dengan booking manual — jalur ini juga menerbitkan nomor
+    # surat keluar, jadi memakai deret berbeda akan melahirkan nomor kembar.
+    _dim, _kunci = _dimensi_kunci(atur, "B", kode_klas)
+    no_agenda = await _no_agenda_berikut("keluar", periode, kode_satker,
+                                         _dim, _kunci)
     nomor = bangun_nomor(atur["format_nomor"], no_agenda, tgl_surat,
                          kode_klasifikasi=kode_klas,
                          kode_unit=atur["kode_unit"])
@@ -688,6 +742,10 @@ async def pratinjau_nomor(jenis_naskah: str = "", modul: str = "",
               else ("pemetaan" if kode and kode != atur["kode_klasifikasi_default"]
                     else ("bawaan" if kode else "kosong")))
 
+    # Pratinjau WAJIB memakai deret yang sama dengan penerbitan sesungguhnya —
+    # kalau tidak, angka yang ditawarkan layar bukan angka yang akan terbit.
+    dim, kunci = _dimensi_kunci(atur, kode_keamanan, kode)
+
     if sisipan:
         # Perkiraan nomor sisipan: jangkar + sub berikutnya, TANPA memutasi.
         galat = ""
@@ -696,7 +754,7 @@ async def pratinjau_nomor(jenis_naskah: str = "", modul: str = "",
         elif tanggal > now.date().isoformat():
             galat = "Tanggal nomor sisipan tidak boleh di masa depan"
         jangkar = (None if galat
-                   else await _jangkar_sisipan(periode, _ks, tanggal))
+                   else await _jangkar_sisipan(periode, _ks, tanggal, dim, kunci))
         if not galat and jangkar is None:
             galat = ("Belum ada nomor pada/sebelum tanggal itu di periode "
                      "ini — gunakan booking biasa")
@@ -704,7 +762,7 @@ async def pratinjau_nomor(jenis_naskah: str = "", modul: str = "",
             return {"nomor": "", "urut_berikut": "", "kode_klasifikasi": kode,
                     "sumber_klasifikasi": sumber, "sisipan_galat": galat}
         c = await db.counters.find_one(
-            {"_id": _cid_sisipan(periode, _ks, jangkar)})
+            {"_id": _cid_sisipan(periode, _ks, jangkar, kunci)})
         try:
             sub = int((c or {}).get("seq") or 0) + 1
         except (TypeError, ValueError):
@@ -720,10 +778,10 @@ async def pratinjau_nomor(jenis_naskah: str = "", modul: str = "",
     # sebelum counter per-satker/periode terbentuk, membaca counter kosong
     # menghasilkan "1" — nomor yang justru sudah terpakai. Pratinjau harus
     # memperkirakan nomor yang benar-benar akan terbit.
-    _cid = _cid_agenda("keluar", periode, _ks)
+    _cid = _cid_agenda("keluar", periode, _ks, kunci)
     c = await db.counters.find_one({"_id": _cid})
-    if c is None and (_ks or "-" in periode):
-        posisi = await _seed_agenda("keluar", periode, _ks)
+    if c is None and (_ks or "-" in periode or kunci):
+        posisi = await _seed_agenda("keluar", periode, _ks, dim, kunci)
     else:
         try:
             posisi = int((c or {}).get("seq") or 0)
@@ -752,6 +810,14 @@ async def _respons_pengaturan(_ks: str) -> dict:
     return {**efektif, "scope": _ks, "sumber": sumber_pengaturan(g, s),
             "komposisi_nomor": komposisi_format(efektif["format_nomor"]),
             "pilihan_komposisi": KOMPOSISI_NOMOR,
+            # Sumbu deret yang BENAR-BENAR berlaku ('' = satu deret) — layar
+            # memakainya untuk menonaktifkan saklar saat komposisi tak
+            # menyediakan kode pembeda.
+            "dimensi_deret": dimensi_deret(
+                komposisi_format(efektif["format_nomor"]),
+                efektif["deret_per_kode"]),
+            "deret_per_kode_boleh": bool(dimensi_deret(
+                komposisi_format(efektif["format_nomor"]), True)),
             # Peringatan ini menjawab keluhan "kode klasifikasi tak pernah
             # masuk ke nomor": template memintanya, katalog terisi, tetapi tak
             # ada aturan maupun kode bawaan yang menunjuk salah satunya.
@@ -783,6 +849,8 @@ async def set_pengaturan_persuratan(payload: PengaturanIn,
     mentah = {k: v for k, v in payload.model_dump().items() if v is not None}
     update = {k: v.strip() for k, v in mentah.items() if isinstance(v, str)}
     # `komposisi_nomor` bukan field tersimpan — ia menulis ulang `format_nomor`.
+    if "deret_per_kode" in mentah:
+        update["deret_per_kode"] = bool(mentah["deret_per_kode"])
     komposisi = update.pop("komposisi_nomor", "")
     if komposisi and komposisi not in KOMPOSISI_NOMOR:
         raise HTTPException(status_code=400, detail=(
@@ -842,6 +910,15 @@ async def set_pengaturan_persuratan(payload: PengaturanIn,
         _gabung.get("format_nomor") or FORMAT_NOMOR_DEFAULT)
     if _pesan:
         raise HTTPException(status_code=400, detail=_pesan)
+    # Deret per kode dimatikan SENDIRI bila komposisi efektifnya tak menyediakan
+    # kode pembeda — bukan ditolak dengan galat. Pemilik memintanya begitu, dan
+    # itu memang lebih aman: mengubah komposisi jadi "keduanya" tak boleh
+    # meninggalkan setelan yang diam-diam menerbitkan nomor kembar.
+    if not dimensi_deret(
+            komposisi_format(_gabung.get("format_nomor") or FORMAT_NOMOR_DEFAULT),
+            True):
+        if _gabung.get("deret_per_kode"):
+            update["deret_per_kode"] = False
     # ISOLASI SATKER (REVIEW-9 R9): admin SATKER menulis dokumen satkernya
     # sendiri; hanya super-admin yang menyentuh dokumen global (default
     # bersama). Dulu semua admin menulis satu dokumen global, sehingga
@@ -910,8 +987,10 @@ async def daftar_surat(jenis: str = "", status: str = "", modul: str = "",
     items = await _stempel_keberlakuan(items)
     # Lencana agenda dirakit SERVER supaya layar, dialog, dan ekspor CSV tak
     # bisa menampilkan tiga bentuk berbeda untuk satu nomor yang sama.
+    _dim = dimensi_deret(komposisi_format(atur["format_nomor"]),
+                         atur["deret_per_kode"])
     for it in items:
-        it["label_agenda"] = label_agenda(it, atur["reset_urut"])
+        it["label_agenda"] = label_agenda(it, atur["reset_urut"], _dim)
     ringkas = {
         "keluar_dibooking": await db.surat.count_documents(
             scope_query_field_satker(_user, {"jenis": "keluar", "status": "dibooking"})),
@@ -957,18 +1036,19 @@ async def booking_surat_keluar(payload: SuratKeluarIn,
         atur["peta_klasifikasi"], data.get("modul"), data.get("jenis_naskah"),
         eksplisit=data.get("kode_klasifikasi"),
         default=atur["kode_klasifikasi_default"])
+    dim, kunci = _dimensi_kunci(atur, data.get("kode_keamanan") or "B", kode_klas)
     sisip = 0
     if data.get("sisipan"):
-        jangkar = await _jangkar_sisipan(periode, _ks, tanggal_surat)
+        jangkar = await _jangkar_sisipan(periode, _ks, tanggal_surat, dim, kunci)
         if jangkar is None:
             raise HTTPException(status_code=400, detail=(
                 "Belum ada nomor surat pada/sebelum tanggal itu di periode "
                 "ini — nomor sisipan tidak diperlukan; gunakan booking biasa "
                 "(nomor berikutnya terbit otomatis)"))
         no_agenda = jangkar
-        sisip = await _sisipan_berikut(periode, _ks, jangkar)
+        sisip = await _sisipan_berikut(periode, _ks, jangkar, dim, kunci)
     else:
-        no_agenda = await _no_agenda_berikut("keluar", periode, _ks)
+        no_agenda = await _no_agenda_berikut("keluar", periode, _ks, dim, kunci)
     nomor = bangun_nomor(
         atur["format_nomor"], urut_tampil(no_agenda, sisip), tanggal_surat,
         kode_klasifikasi=kode_klas,
@@ -1012,7 +1092,10 @@ async def booking_surat_keluar(payload: SuratKeluarIn,
     # Lencana ikut dikirim supaya panel hasil booking menyebut nomor agenda
     # dalam bentuk yang SAMA dengan daftar — pada deret bulanan bentuknya
     # menyertakan bulan, dan klien tak boleh menebaknya sendiri.
-    return {**record, "label_agenda": label_agenda(record, atur["reset_urut"])}
+    return {**record, "label_agenda": label_agenda(
+        record, atur["reset_urut"],
+        dimensi_deret(komposisi_format(atur["format_nomor"]),
+                      atur["deret_per_kode"]))}
 
 
 @persuratan_router.post("/persuratan/masuk")
@@ -1033,6 +1116,9 @@ async def agenda_surat_masuk(payload: SuratMasukIn,
     _ks = kode_satker_user(user)
     atur = await _pengaturan(_ks)
     periode = _periode(atur, now.date().isoformat())
+    # Surat MASUK tetap satu deret. Kode keamanan & klasifikasi milik nomor
+    # yang KITA terbitkan; nomor surat masuk datang dari pengirim, jadi tak ada
+    # kode kita yang tercetak di sana untuk membedakan dua deret.
     no_agenda = await _no_agenda_berikut("masuk", periode, _ks)
     record = {
         "id": str(uuid.uuid4()),
@@ -1064,7 +1150,10 @@ async def agenda_surat_masuk(payload: SuratMasukIn,
     # Lencana ikut dikirim supaya panel hasil booking menyebut nomor agenda
     # dalam bentuk yang SAMA dengan daftar — pada deret bulanan bentuknya
     # menyertakan bulan, dan klien tak boleh menebaknya sendiri.
-    return {**record, "label_agenda": label_agenda(record, atur["reset_urut"])}
+    return {**record, "label_agenda": label_agenda(
+        record, atur["reset_urut"],
+        dimensi_deret(komposisi_format(atur["format_nomor"]),
+                      atur["deret_per_kode"]))}
 
 
 @persuratan_router.post("/persuratan/{surat_id}/status")
@@ -1406,8 +1495,10 @@ async def export_agenda(jenis: str = "", tahun: str = "",
     bulanan = str(atur["reset_urut"] or "").strip() != "tahunan"
     items = await _agenda_terurut(query, bulanan, 1)
     items = await _stempel_keberlakuan(items)
+    _dim = dimensi_deret(komposisi_format(atur["format_nomor"]),
+                         atur["deret_per_kode"])
     for it in items:
-        it["label_agenda"] = label_agenda(it, atur["reset_urut"])
+        it["label_agenda"] = label_agenda(it, atur["reset_urut"], _dim)
     buf = io.StringIO()
     w = csv_module.writer(buf)
     for row in baris_agenda_csv(items):

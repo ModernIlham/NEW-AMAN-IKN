@@ -67,6 +67,52 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#886] Deret nomor boleh dipisah per kode — tapi hanya bila kodenya tercetak — 2026-08-19
+
+Permintaan pemilik: nomor urut diberi saklar aktif/non-aktif; saat aktif, deret
+berjalan sendiri-sendiri **per kode keamanan atau per kode klasifikasi arsip**
+sesuai komposisi yang dipilih; dan bila komposisi memuat **kedua** kode, fitur
+ini kembali mati.
+
+Aturan terakhir itu ternyata punya dasar teknis yang kuat, dan karenanya
+diperluas: deret terpisah hanya aman bila kode pembedanya **ikut tercetak pada
+nomor**. Kalau tidak, dua surat berbeda memikul nomor yang sama persis — dan
+nomor surat resmi yang kembar tak bisa diperbaiki belakangan. Maka fitur ini
+juga mati sendiri pada komposisi **"tanpa keduanya"**, dengan alasan yang sama.
+
+**Yang dikerjakan:**
+
+- Saklar **Deret Nomor Urut** di Pengaturan Penomoran. Mati secara bawaan:
+  memisahkan deret mengubah nomor yang akan terbit, jadi ia harus dinyalakan
+  dengan sadar, bukan diwarisi diam-diam.
+- Counter agenda, nomor sisipan (backdate), pratinjau nomor, dan jalur booking
+  otomatis modul persediaan — semuanya memakai deret yang sama. Pratinjau yang
+  memakai deret lain akan menawarkan angka yang bukan angka sebenarnya, dan
+  operator memesan nomor berdasarkan angka itu.
+- **Lencana agenda ikut menyebut kodenya** saat deret dipisah:
+  `K-T-001/VIII/2026`. Dengan deret terpisah, 001 milik B dan 001 milik T
+  memang ada bersamaan dalam satu bulan — lencana tanpa kode akan mengulang
+  persis keambiguan yang ditutup [#883].
+- Saklar dipaksa mati oleh server bila komposisinya tak menyediakan kode
+  pembeda — dimatikan sendiri, bukan ditolak dengan galat, supaya tak ada
+  setelan tertinggal yang diam-diam menerbitkan nomor kembar.
+
+**Dua keputusan yang perlu diketahui:**
+
+- **Surat masuk tetap satu deret.** Kode keamanan & klasifikasi milik nomor yang
+  KITA terbitkan; nomor surat masuk datang dari pengirim, jadi tak ada kode kita
+  di sana untuk membedakan dua deret.
+- **Deret per kode tidak mewarisi posisi deret gabungan.** Ia deret baru: kode
+  "T" mulai dari 001 walau deret gabungan sudah sampai 007, sebab 001 miliknya
+  memang belum pernah terbit — dan tak akan bentrok karena kodenya tercetak.
+
+**Uji:** 25 uji baru. Lima mutasi diuji. Satu di antaranya — mencabut penjaga
+"deret baru tidak mewarisi lantai deret lama" — **lolos** pada percobaan
+pertama, karena basis data uji kosong membuat lantainya kebetulan nol. Skenario
+counter-lama ditambahkan, dan mutasi itu kini mati.
+
+---
+
 ## [#885] Impor SIMAN V2 berhenti 500 — beserta dua cacat sejenis yang belum sempat dilaporkan — 2026-08-19
 
 Laporan pemilik: `POST /api/siman/import` menjawab **500 untuk setiap file**.
