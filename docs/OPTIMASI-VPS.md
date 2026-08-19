@@ -104,6 +104,38 @@ Aturan praktis RAM 8 GB tanpa hibernasi: swap 2–4 GB. Ambil **4 GB** (ruang di
 6. **Plafon log/journal + verifikasi logrotate + backup cron** (blok D/E).
 7. Peninjauan bulanan: `$indexStats`, `ncdu`, `system.profile`.
 
+### 19 Agustus 2026 — dua kegagalan beruntun, dan dugaan yang menunjuk diri sendiri
+
+Delapan deploy sukses pada hari itu (01:58–06:22). Lalu:
+
+| Waktu (UTC) | Hasil |
+|---|---|
+| 07:15 | gagal — 8 percobaan, jendela 6 menit habis |
+| 07:45 | gagal — 8 percobaan, jendela 6 menit habis |
+
+Keduanya berhenti di tahap `ssh-keyscan`: port 22 tidak pernah menjawab, belum
+sampai autentikasi.
+
+**Yang menuntut kejujuran:** kegagalan pertama terjadi tepat pada run PERTAMA
+yang memakai jendela retry lebar (8 percobaan) yang dipasang sehari sebelumnya
+sebagai jawaban atas insiden 18 Agustus. Cerita yang konsisten dengan seluruh
+fakta: blip sesaat → 8 percobaan beruntun → fail2ban/proteksi penyedia membaca
+polanya sebagai percobaan penyusupan → IP runner diblokir → semua deploy
+sesudahnya gagal.
+
+Belum terbukti — memastikannya butuh `fail2ban-client status sshd` di VPS. Tapi
+rancangan retry sudah diubah karena perubahannya lebih baik pada KEDUA
+kemungkinan: kesabaran dipertahankan (~6 menit) sementara tekanan dikurangi
+separuh (4 percobaan berjeda 75 detik), probe `ssh-keyscan` dihapus sehingga
+tiap percobaan hanya satu koneksi, dan hanya kegagalan tingkat koneksi (ssh
+exit 255) yang diulang.
+
+**Pelajaran yang layak diingat:** anggaran retry tak boleh disusun seolah ujung
+sana pasif. Kesabaran dan tekanan adalah dua hal berbeda — memperpanjang yang
+pertama dengan menambah yang kedua bisa menciptakan kegagalan yang hendak
+dicegah.
+
+
 ## 5. Perintah terminal siap jalan
 
 ```bash

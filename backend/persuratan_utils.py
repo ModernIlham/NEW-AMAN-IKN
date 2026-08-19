@@ -84,6 +84,34 @@ FORMAT_NOMOR_DEFAULT = "{kode_keamanan}-{urut}/{kode_klasifikasi}/{kode_unit}/{b
 _PLACEHOLDER_DIKENAL = {"kode_keamanan", "urut", "kode_klasifikasi",
                         "kode_unit", "bulan", "bulan_romawi", "tahun"}
 
+# Placeholder format nomor, BESERTA nama manusianya dan contoh isinya.
+#
+# Keluhan pemilik: "pada format nomor kita tidak tahu nama header kepalanya
+# untuk memanggil datanya". Memang: kolomnya menerima template mentah, dan
+# daftar placeholder-nya hanya tertulis sebagai deretan `{...}` di keterangan
+# dialog — tak ada yang menyebutkan apa artinya atau apa isinya nanti.
+#
+# Daftar ini dikirim ke layar supaya tiap placeholder bisa disisipkan dengan
+# satu ketukan, lengkap dengan artinya. Urutannya = susunan PerANRI 5/2021,
+# jadi menyisipkannya berurutan menghasilkan nomor yang sudah benar bentuknya.
+PLACEHOLDER_NOMOR = [
+    {"kunci": "kode_keamanan", "label": "Kode Keamanan", "contoh": "B",
+     "arti": "Biasa/Terbatas/Rahasia/Sangat Rahasia — dipilih saat membooking"},
+    {"kunci": "urut", "label": "Nomor Urut", "contoh": "001",
+     "arti": "Nomor agenda berjalan, otomatis dari buku agenda"},
+    {"kunci": "kode_klasifikasi", "label": "Kode Klasifikasi Arsip",
+     "contoh": "PL.02",
+     "arti": "Dari aturan otomatis atau kode bawaan; bisa diisi manual"},
+    {"kunci": "kode_unit", "label": "Kode Unit", "contoh": "OIKN",
+     "arti": "Kode unit kerja penerbit — diisi di pengaturan ini"},
+    {"kunci": "bulan", "label": "Bulan (angka)", "contoh": "08",
+     "arti": "Dua digit dari tanggal surat"},
+    {"kunci": "bulan_romawi", "label": "Bulan (Romawi)", "contoh": "VIII",
+     "arti": "Lazim pada naskah dinas; dari tanggal surat"},
+    {"kunci": "tahun", "label": "Tahun", "contoh": "2026",
+     "arti": "Empat digit dari tanggal surat"},
+]
+
 # Komposisi nomor yang lazim diminta di lapangan. Ini BUKAN konsep baru yang
 # disimpan tersendiri — ia hanya cara ramah membaca & menulis dua placeholder
 # pada `format_nomor`, yang tetap menjadi satu-satunya sumber kebenaran.

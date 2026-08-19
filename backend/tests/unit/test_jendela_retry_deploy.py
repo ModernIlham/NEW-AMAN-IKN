@@ -1,15 +1,27 @@
-"""Jendela retry deploy tidak boleh menyusut diam-diam.
+"""Anggaran retry deploy: sabar tanpa menghantam.
 
-Latar: 17-18 Agustus 2026 tiga deploy gagal karena VPS tak terjangkau. Log
-sshd VPS membuktikan paketnya TIDAK PERNAH SAMPAI pada jendela yang gagal —
-gangguan ada di jalur jaringan penyedia, bukan di mesin atau aplikasi.
+Dua insiden membentuk aturan di berkas ini.
 
-Jendela retry lama, 5x(timeout 15s + jeda 20s) ~= 2,9 menit, habis tepat di
-dalam gangguan itu. Diperpanjang jadi ~6 menit sebagai BANTALAN.
+**18 Agu 2026** — deploy gagal karena blip jaringan penyedia. Log sshd VPS
+membuktikan paketnya TIDAK PERNAH SAMPAI. Jendela lama 5x(15s+20s) ~= 2,9 menit
+habis tepat di dalam gangguan itu, jadi diperlebar menjadi ~6 menit.
 
-Uji ini menjaga anggaran waktunya. Angka retry adalah hal yang gampang
-"dirapikan" kembali ke nilai kecil oleh orang yang tidak tahu insiden ini —
-dan akibatnya baru terasa berbulan-bulan kemudian saat blip berikutnya.
+**19 Agu 2026** — deploy gagal DUA KALI berturut-turut, keduanya menghabiskan
+jendela 6 menit penuh, padahal delapan deploy sebelumnya hari itu sukses. Yang
+menarik: kegagalan pertama terjadi tepat pada run PERTAMA yang memakai jendela
+lebar itu. Dugaan yang konsisten dengan seluruh fakta — blip sesaat, lalu 8
+percobaan beruntun terbaca sebagai percobaan penyusupan oleh fail2ban/proteksi
+penyedia, lalu IP runner diblokir.
+
+Pelajarannya: anggaran retry tak boleh disusun seolah ujung sana pasif.
+KESABARAN dan TEKANAN adalah dua hal berbeda, dan yang kedua punya batas.
+
+Maka berkas ini menjaga TIGA hal sekaligus, bukan satu:
+  1. jendela tetap panjang (blip beberapa menit terlewati),
+  2. jumlah percobaan tetap sedikit (tak terbaca sebagai serangan),
+  3. hanya kegagalan tingkat KONEKSI yang diulang — skrip deploy yang benar
+     benar berjalan lalu gagal tidak boleh diulang, sebab itu hanya mengulang
+     kegagalan yang sama sambil menyamarkannya sebagai masalah jaringan.
 """
 import os
 import re
@@ -19,9 +31,12 @@ import pytest
 DEPLOY = os.path.abspath(os.path.join(
     os.path.dirname(__file__), "..", "..", "..", ".github", "workflows", "deploy.yml"))
 
-# Serendah-rendahnya yang masih masuk akal: gangguan terakhir menutupi
-# sekurangnya 2,5 menit dan jendela 2,9 menit terbukti tak cukup.
+# Serendah-rendahnya yang masih masuk akal: gangguan 18 Agu menutupi sekurangnya
+# 2,5 menit dan jendela 2,9 menit terbukti tak cukup.
 MINIMAL_DETIK = 300
+# Setinggi-tingginya sebelum polanya menyerupai serangan. Angka ini yang naik
+# ke 8 pada 18 Agu, dan dua kegagalan beruntun mengikutinya.
+MAKS_PERCOBAAN = 5
 
 
 def _sumber():
@@ -29,14 +44,23 @@ def _sumber():
         return f.read()
 
 
+def _tanpa_komentar(src):
+    """Baris perintah saja — komentar boleh menyebut apa pun, termasuk nama
+    perkakas yang justru sedang dilarang dipakai."""
+    return "\n".join(b for b in src.splitlines()
+                      if not b.strip().startswith("#"))
+
+
 def _anggaran_detik(src):
-    """Perkiraan total jendela: jumlah percobaan x (timeout keyscan + jeda)."""
-    percobaan = re.search(r"for attempt in ([\d ]+); do", src)
-    timeout = re.search(r"ssh-keyscan -T (\d+)", src)
-    jeda = re.search(r"gagal menjangkau VPS.*?\n\s*sleep (\d+)", src, re.S)
-    assert percobaan and timeout and jeda, "pola retry tak terbaca — perbarui uji ini"
+    """(total_detik, jumlah_percobaan) dari perulangan retry koneksi."""
+    bersih = _tanpa_komentar(src)
+    percobaan = re.search(r"for attempt in ([\d ]+); do", bersih)
+    jeda = re.search(r"gagal menjangkau VPS.*?\n\s*sleep (\d+)", bersih, re.S)
+    timeout = re.search(r"ConnectTimeout=(\d+)", bersih)
+    assert percobaan and jeda and timeout, "pola retry tak terbaca — perbarui uji ini"
     n = len(percobaan.group(1).split())
-    return n * (int(timeout.group(1)) + int(jeda.group(1))), n
+    # Jeda hanya terjadi di ANTARA percobaan (n-1 kali), timeout tiap percobaan.
+    return n * int(timeout.group(1)) + (n - 1) * int(jeda.group(1)), n
 
 
 class TestAnggaranRetry:
@@ -46,15 +70,45 @@ class TestAnggaranRetry:
             f"jendela retry hanya ~{total} detik ({n} percobaan) — gangguan "
             f"jaringan penyedia pada 18 Agu 2026 melampaui {MINIMAL_DETIK} detik")
 
-    def test_percobaan_tidak_kembali_ke_lima(self):
+    def test_percobaan_tidak_terlalu_banyak(self):
+        """Sisi yang baru dipelajari: memperbanyak percobaan bukan cuma
+        mubazir, ia bisa memicu pemblokiran yang membuat SEMUA deploy
+        berikutnya gagal."""
         _, n = _anggaran_detik(_sumber())
-        assert n >= 8, f"jumlah percobaan turun ke {n} — lihat docs/OPTIMASI-VPS.md §5"
+        assert n <= MAKS_PERCOBAAN, (
+            f"{n} percobaan beruntun — pola ini yang diduga memicu pemblokiran "
+            "pada 19 Agu 2026; perpanjang JEDA-nya, bukan jumlahnya")
 
     def test_pesan_galat_mengarahkan_ke_penyedia(self):
-        """Pesan lama hanya menyuruh memeriksa secret dan 'VPS hidup' — dan
-        itu justru menyesatkan pada insiden kemarin, karena VPS memang hidup."""
+        """Pesan lama hanya menyuruh memeriksa secret dan 'VPS hidup' — dan itu
+        justru menyesatkan, karena VPS-nya memang hidup."""
         src = _sumber()
-        assert "penyedia" in src.lower() or "PENYEDIA" in src
+        assert "penyedia" in src.lower()
+        assert "fail2ban" in src.lower(), (
+            "pesan galat tak menyebut pemeriksaan yang paling menentukan")
+
+
+class TestTekananKoneksi:
+    def test_tanpa_probe_terpisah(self):
+        """`ssh-keyscan` menggandakan jumlah koneksi tiap deploy tanpa
+        menambah keamanan: ia sama-sama trust-on-first-use dengan
+        `StrictHostKeyChecking=accept-new` pada koneksi yang memang dipakai."""
+        bersih = _tanpa_komentar(_sumber())
+        assert "ssh-keyscan" not in bersih
+        assert "StrictHostKeyChecking=accept-new" in bersih
+
+    def test_hanya_kegagalan_koneksi_yang_diulang(self):
+        """255 adalah kode keluar ssh untuk kegagalan tingkat koneksi. Tanpa
+        pembedaan ini, skrip deploy yang gagal akan dijalankan ulang berkali
+        kali dan sebabnya tersamar sebagai 'masalah jaringan'."""
+        bersih = _tanpa_komentar(_sumber())
+        assert re.search(r'"\$rc" -ne 255', bersih), (
+            "tak ada pembedaan kegagalan koneksi vs kegagalan skrip")
+
+    def test_kegagalan_skrip_berhenti_seketika(self):
+        bersih = _tanpa_komentar(_sumber())
+        assert re.search(r'exit "\$rc"', bersih), (
+            "kegagalan skrip tidak diteruskan sebagai kegagalan job")
 
 
 class TestDokumenTidakLagiMenyesatkan:
