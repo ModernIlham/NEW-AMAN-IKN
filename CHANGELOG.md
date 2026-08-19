@@ -67,6 +67,48 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#895] Gejala deploy akhirnya bernama — dan jendela retry melewati masa blokir — 2026-08-19
+
+Deploy gagal lagi pada 13:32 UTC. Kali ini pesannya **spesifik**, dan itu buah
+dari [#890] yang mengganti probe `ssh-keyscan` dengan koneksi `ssh` langsung:
+
+```
+ssh: connect to host *** port 22: Connection timed out
+```
+
+**Timed out**, bukan *refused*. Bedanya menentukan segalanya:
+
+| Gejala | Artinya |
+|---|---|
+| `Connection refused` | sshd mati / port tertutup — mesin **menjawab** |
+| `No route to host` | jaringan tak menemukan mesinnya |
+| **`Connection timed out`** | **paket SYN dijatuhkan diam-diam** — persis aturan `iptables DROP` milik fail2ban |
+
+**Konsekuensinya untuk anggaran retry**, dan inilah yang selama ini terlewat:
+*jendela yang lebih pendek daripada masa blokir tak pernah berhasil, seberapa
+pun banyak percobaannya.* Ia hanya menunggu di dalam blokir lalu menyerah tepat
+sebelum blokirnya berakhir. `bantime` bawaan fail2ban **10 menit**, sementara
+jendela sebelumnya **6 menit** — mustahil lolos.
+
+**Yang dikerjakan:** jendela diperpanjang jadi **~14 menit** (5 percobaan
+berjeda 180 detik). Percobaannya tetap sedikit supaya tak menambah tekanan —
+pelajaran dari [#890] tetap berlaku — tetapi cukup sabar untuk melewati blokir
+10 menit.
+
+Ambang uji ikut naik dari 300 ke **660 detik**, beserta alasannya: batas
+terendah yang masih melampaui `bantime` bawaan.
+
+**Catatan tentang perbaikan yang menghasilkan diagnosis.** Penggantian
+`ssh-keyscan` di [#890] dilakukan untuk mengurangi jumlah koneksi. Manfaat yang
+tak direncanakan ternyata lebih besar: pesan galat ssh yang sesungguhnya
+akhirnya sampai ke log, dan gejalanya bisa dinamai. Probe yang lama hanya
+sanggup berkata "gagal menjangkau".
+
+**Uji:** ambang diperbarui; satu mutasi diuji (jendela dikembalikan ke 75 detik)
+dan ia mati.
+
+---
+
 ## [#894] Sifat urgensi naskah dinas — sumbu tersendiri, bukan bagian kode keamanan — 2026-08-19
 
 Permintaan pemilik, dengan contoh dari halaman Legend aplikasi lain: naskah

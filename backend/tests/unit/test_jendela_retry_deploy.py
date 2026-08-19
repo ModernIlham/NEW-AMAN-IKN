@@ -31,9 +31,13 @@ import pytest
 DEPLOY = os.path.abspath(os.path.join(
     os.path.dirname(__file__), "..", "..", "..", ".github", "workflows", "deploy.yml"))
 
-# Serendah-rendahnya yang masih masuk akal: gangguan 18 Agu menutupi sekurangnya
-# 2,5 menit dan jendela 2,9 menit terbukti tak cukup.
-MINIMAL_DETIK = 300
+# Serendah-rendahnya yang masih masuk akal. Angka ini NAIK setelah 19 Agu 13:32
+# UTC: pesan ssh-nya "Connection timed out" — paket dijatuhkan diam-diam,
+# persis aturan iptables DROP milik fail2ban (sshd mati akan menjawab
+# "Connection refused"). Bantime bawaan fail2ban 10 menit, jadi jendela 6 menit
+# tak pernah bisa melewatinya seberapa pun sabarnya. 11 menit adalah batas
+# terendah yang masih melampaui bantime itu.
+MINIMAL_DETIK = 660
 # Setinggi-tingginya sebelum polanya menyerupai serangan. Angka ini yang naik
 # ke 8 pada 18 Agu, dan dua kegagalan beruntun mengikutinya.
 MAKS_PERCOBAAN = 5
@@ -64,11 +68,15 @@ def _anggaran_detik(src):
 
 
 class TestAnggaranRetry:
-    def test_jendela_cukup_panjang(self):
+    def test_jendela_melampaui_bantime_lazim(self):
+        """Jendela yang lebih pendek daripada masa blokir tak pernah berhasil,
+        seberapa pun banyak percobaannya — ia hanya menunggu di dalam blokir
+        lalu menyerah tepat sebelum blokirnya berakhir."""
         total, n = _anggaran_detik(_sumber())
         assert total >= MINIMAL_DETIK, (
-            f"jendela retry hanya ~{total} detik ({n} percobaan) — gangguan "
-            f"jaringan penyedia pada 18 Agu 2026 melampaui {MINIMAL_DETIK} detik")
+            f"jendela retry hanya ~{total} detik ({n} percobaan) — lebih pendek "
+            f"daripada bantime fail2ban bawaan (10 menit); butuh ≥ "
+            f"{MINIMAL_DETIK} detik")
 
     def test_percobaan_tidak_terlalu_banyak(self):
         """Sisi yang baru dipelajari: memperbanyak percobaan bukan cuma
