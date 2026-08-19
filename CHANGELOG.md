@@ -67,6 +67,48 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#883] Buku agenda terurut & berlencana sesuai metode deret yang dipilih — 2026-08-19
+
+Laporan pemilik beserta tangkapan layarnya: daftar surat tampak tak beraturan,
+dan ada **dua baris berlencana `K-001/2026`**.
+
+Keduanya lahir dari satu sebab. Nomor agenda dipesan dari counter **per-periode**
+(`surat_keluar_2026-08`), jadi pada deret **bulanan** `no_agenda` memang kembali
+ke 001 tiap awal bulan — itu benar dan sesuai setelan. Yang salah ada di dua
+tempat lain:
+
+1. **Lencana agenda hanya menampilkan tahun**, sehingga 001 bulan Juli dan 001
+   bulan Agustus tampil identik. Buku agenda kehilangan sifat paling
+   mendasarnya: satu nomor menunjuk satu surat.
+2. **Daftar diurutkan `(tahun, no_agenda)` tanpa bulan**, sehingga bulan
+   menyelang-nyeling — 001 bulan Agustus jatuh di bawah 008 bulan Juli.
+
+**Yang dikerjakan:**
+
+- Lencana agenda dirakit **server** menurut metode deret: `K-001/VIII/2026`
+  (bulanan) · `K-001/2026` (tahunan). Dirakit di server karena bentuknya
+  bergantung pada setelan satker — klien yang menebak setelan akan menghasilkan
+  lencana yang percaya diri tapi keliru.
+- Urutan daftar **dan** ekspor CSV mengikuti metode deret yang berlaku. Bulan
+  hanya ikut jadi kunci pada deret **bulanan**: pada deret tahunan nomor agenda
+  sudah unik sepanjang tahun, dan menyisipkan bulan justru mengacak surat yang
+  dibooking dengan tanggal mundur.
+- Kolom "No Agenda" pada CSV memakai lencana yang sama dengan layar. Tanpa itu
+  buku agenda cetak dan buku agenda layar menyebut nomor berbeda untuk surat
+  yang sama — dan angka mentahnya memang tak lagi unik pada deret bulanan.
+- Hasil booking ikut membawa lencananya, supaya panel setelah memesan nomor
+  menyebut bentuk yang sama dengan daftarnya.
+
+**Catatan teknis.** Tanggal acuan periode berbeda menurut jenis surat, dan itu
+bukan kelalaian: nomor surat **keluar** dipesan menurut `tanggal_surat` (boleh
+backdate), sedangkan surat **masuk** dicatat menurut tanggal agenda kita —
+tanggal surat pengirim bukan tanggal pencatatan kita. Memakai tanggal yang
+keliru membuat urutan menyimpang dari nomor yang sudah tercetak.
+
+**Uji:** 12 uji backend + 3 uji frontend. Empat mutasi diuji dan semuanya mati.
+
+---
+
 ## [#882] Lencana "Tidak Berlaku" berhenti terpotong di baris surat — 2026-08-19
 
 Laporan pemilik beserta tangkapan layarnya: pada baris surat yang dibatalkan,

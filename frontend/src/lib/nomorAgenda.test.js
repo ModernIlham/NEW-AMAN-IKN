@@ -1,3 +1,16 @@
+/**
+ * Lencana agenda: klien mengikuti server, tidak menebak sendiri.
+ *
+ * Bentuk lencana bergantung pada METODE DERET satker — deret bulanan
+ * menyertakan bulan ("K-005/VIII/2026") karena tanpa itu nomor 001 bulan Juli
+ * dan 001 bulan Agustus tampil identik di layar.
+ *
+ * Setelan itu ada di server. Klien yang merakit sendiri harus menebak
+ * setelannya, dan tebakan yang salah menghasilkan lencana yang PERCAYA DIRI
+ * tapi keliru — lebih menyesatkan daripada bentuk ringkas yang jujur. Karena
+ * itu blok "rakitan lokal" di bawah tetap menguji bentuk tahunan: itulah
+ * jaring pengaman untuk data yang datang tanpa lencana.
+ */
 import { labelAgenda, noAgendaTampil } from "./nomorAgenda";
 
 describe("noAgendaTampil", () => {
@@ -27,5 +40,29 @@ describe("labelAgenda", () => {
   test("sisipan ikut di lencana", () => {
     expect(labelAgenda({ jenis: "keluar", no_agenda: 5, sisipan: 1, tahun: 2026 }))
       .toBe("K-005.01/2026");
+  });
+});
+
+describe("lencana dari server", () => {
+  test("dipakai apa adanya", () => {
+    expect(labelAgenda({
+      jenis: "keluar", no_agenda: 1, tahun: 2026,
+      label_agenda: "K-001/VIII/2026",
+    })).toBe("K-001/VIII/2026");
+  });
+
+  test("menang atas rakitan lokal", () => {
+    // Kalau rakitan lokal yang menang, deret bulanan kembali menampilkan dua
+    // baris "K-001/2026" persis seperti keluhan awal pemilik.
+    expect(labelAgenda({
+      jenis: "keluar", no_agenda: 1, sisipan: 0, tahun: 2026,
+      label_agenda: "K-001/VII/2026",
+    })).not.toBe("K-001/2026");
+  });
+
+  test("lencana kosong/spasi tidak dianggap ada", () => {
+    expect(labelAgenda({
+      jenis: "keluar", no_agenda: 7, tahun: 2026, label_agenda: "   ",
+    })).toBe("K-007/2026");
   });
 });
