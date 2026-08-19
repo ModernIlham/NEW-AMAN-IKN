@@ -22,12 +22,39 @@ import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 const AMBANG_CARI = 8;   // daftar sepanjang ini ke atas mendapat kotak cari
 const MAKS_RINGKAS = 2;  // nilai yang disebut namanya di pemicu sebelum "+N"
 
+// Batas "Pilih semua". Nilai filter dikirim sebagai PARAMETER BERULANG di URL
+// GET (daftar, statistik, peta, stiker, ekspor), jadi mencentang 2.000 lokasi
+// sekaligus menghasilkan querystring puluhan kilobyte — ditolak server/proxy
+// sebagai 414 sebelum sempat menyaring apa pun.
+//
+// Saat daftar melampaui batas ini tombolnya DIMATIKAN, bukan memilih 200 yang
+// pertama: memilih sebagian diam-diam menghasilkan filter yang salah tanpa satu
+// pun tanda di layar. Jalan keluarnya diarahkan ke kotak cari — dan itu justru
+// pemakaian yang paling sering: ketik "Gedung A", lalu pilih semua yang cocok.
+export const MAKS_PILIH_SEMUA = 200;
+
 /** Ringkasan isi pemicu: "Semua" · "Baik" · "Baik, Rusak" · "Baik +3". */
 export function ringkasTerpilih(terpilih, placeholder = "Semua") {
   const v = Array.isArray(terpilih) ? terpilih : [];
   if (v.length === 0) return placeholder;
   if (v.length <= MAKS_RINGKAS) return v.join(", ");
   return `${v[0]} +${v.length - 1}`;
+}
+
+/**
+ * Gabungkan pilihan yang sudah ada dengan seluruh nilai yang SEDANG TAMPIL.
+ *
+ * Menggabung, bukan mengganti: saat kotak cari aktif, nilai yang dipilih lebih
+ * dulu di luar hasil pencarian tidak boleh hilang hanya karena "Pilih semua"
+ * ditekan pada daftar yang sedang tersaring.
+ */
+export function gabungPilihan(terpilih, tampil) {
+  const awal = Array.isArray(terpilih) ? terpilih : [];
+  const keluar = [...awal];
+  for (const o of tampil || []) {
+    if (!keluar.includes(o)) keluar.push(o);
+  }
+  return keluar;
 }
 
 /** Centang/lepas satu nilai — mengembalikan array BARU (state tak dimutasi). */
@@ -58,6 +85,13 @@ const FilterMultiSelect = memo(({
   }, [daftar, cari]);
 
   const jumlah = (terpilih || []).length;
+  // Dimatikan bila daftar terlalu panjang (lihat MAKS_PILIH_SEMUA) atau bila
+  // seluruh yang tampil memang sudah tercentang — menekannya tak akan mengubah
+  // apa pun, dan tombol hidup yang tak melakukan apa-apa membuat orang menekan
+  // dua kali lalu mengira filternya rusak.
+  const bolehPilihSemua = tampil.length > 0
+    && tampil.length <= MAKS_PILIH_SEMUA
+    && tampil.some(o => !(terpilih || []).includes(o));
 
   return (
     <Popover open={buka} onOpenChange={(o) => { setBuka(o); if (!o) setCari(""); }}>
@@ -139,19 +173,33 @@ const FilterMultiSelect = memo(({
           })}
         </div>
 
-        <div className="flex items-center justify-between border-t px-2 py-1">
-          <span className="text-[10px] text-muted-foreground">
+        <div className="flex items-center justify-between gap-2 border-t px-2 py-1">
+          <span className="text-[10px] text-muted-foreground truncate">
             {jumlah ? `${jumlah} dipilih` : "Semua nilai"}
           </span>
-          <button
-            type="button"
-            onClick={() => onChange([])}
-            disabled={!jumlah}
-            className="min-h-0 min-w-0 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-40"
-            data-testid={testid ? `${testid}-kosongkan` : undefined}
-          >
-            Kosongkan
-          </button>
+          <span className="flex items-center gap-2 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => onChange(gabungPilihan(terpilih, tampil))}
+              disabled={!bolehPilihSemua}
+              title={tampil.length > MAKS_PILIH_SEMUA
+                ? `Terlalu banyak (${tampil.length}) untuk dipilih sekaligus — persempit dengan kotak cari dulu`
+                : undefined}
+              className="min-h-0 min-w-0 text-[10px] text-primary hover:underline disabled:opacity-40 disabled:no-underline"
+              data-testid={testid ? `${testid}-pilih-semua` : undefined}
+            >
+              {cari.trim() ? `Pilih ${tampil.length} hasil` : "Pilih semua"}
+            </button>
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              disabled={!jumlah}
+              className="min-h-0 min-w-0 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-40"
+              data-testid={testid ? `${testid}-kosongkan` : undefined}
+            >
+              Kosongkan
+            </button>
+          </span>
         </div>
       </PopoverContent>
     </Popover>

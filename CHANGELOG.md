@@ -67,6 +67,34 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#879] Filter multi-pilih dapat "Pilih semua" — dan tahu kapan harus menolaknya — 2026-08-19
+
+Permintaan pemilik: filter dengan nilai banyak melelahkan dicentang satu per
+satu. Ditambahkan tombol **Pilih semua** di panel tiap filter multi-pilih
+(Kondisi, Status, Lokasi, Eselon I/II, Stiker, Inventarisasi).
+
+Tiga keputusan yang menentukan apakah tombol ini menolong atau menipu:
+
+- **Menggabung, bukan mengganti.** Saat kotak cari aktif, nilai yang sudah
+  dipilih di luar hasil pencarian tidak boleh hilang hanya karena tombolnya
+  ditekan. Labelnya pun ikut berubah jadi "Pilih 12 hasil" supaya jelas ia
+  bekerja pada yang sedang tampil.
+- **Mati bila daftarnya terlalu panjang** (>200 nilai) — bukan memilih 200 yang
+  pertama. Memilih sebagian diam-diam menghasilkan filter yang **salah tanpa
+  satu pun tanda di layar**; dan nilai filter dikirim sebagai parameter berulang
+  di URL GET (daftar, statistik, peta, stiker, ekspor), jadi 2.000 lokasi
+  sekaligus berubah jadi querystring puluhan kilobyte yang ditolak sebagai 414
+  sebelum sempat menyaring apa pun. Jalan keluarnya diarahkan ke kotak cari —
+  dan itu memang pemakaian tersering: ketik "Gedung A", pilih semua yang cocok.
+- **Mati bila semua yang tampil sudah tercentang.** Tombol hidup yang tak
+  melakukan apa-apa membuat orang menekannya dua kali lalu mengira filternya
+  rusak.
+
+**Uji:** 7 uji baru. Dua mutasi diuji dan keduanya mati — "Pilih semua"
+mengganti alih-alih menggabung, dan batas 200 dilanggar.
+
+---
+
 ## [#878] Kartu ringkasan akhirnya menjawab pertanyaan yang sama dengan daftarnya — 2026-08-18
 
 Laporan pemilik: memasang filter lanjutan menyaring daftar asetnya, tetapi
