@@ -487,13 +487,16 @@ export default function PersuratanPage({ user, onBack }) {
                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${s.jenis === "keluar" ? "bg-cyan-500/15 text-cyan-700 dark:text-cyan-400" : "bg-violet-500/15 text-violet-600 dark:text-violet-400"}`}>
                       {labelAgenda(s)}
                     </span>
-                    <span className="flex items-center gap-1">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${WARNA_STATUS[s.status] || "bg-muted text-muted-foreground"}`}>
+                    {/* `flex-wrap` + `justify-end`: dua lencana pada nomor
+                        agenda panjang boleh turun baris alih-alih menggencet
+                        lencana agenda di sebelah kiri. */}
+                    <span className="flex flex-wrap items-center justify-end gap-1">
+                      <span className={`whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-semibold ${WARNA_STATUS[s.status] || "bg-muted text-muted-foreground"}`}>
                         {LABEL_STATUS[s.status] || s.status}
                       </span>
                       {s.keberlakuan && s.keberlakuan !== "berlaku" && s.keberlakuan !== "draf" && (
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${WARNA_KEBERLAKUAN[s.keberlakuan] || "bg-muted"}`}
-                          title={s.keberlakuan_label}>
+                        <span className={`whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-semibold ${WARNA_KEBERLAKUAN[s.keberlakuan] || "bg-muted"}`}
+                          title={s.keberlakuan_label} data-testid={`keberlakuan-hp-${s.id}`}>
                           {LABEL_KEBERLAKUAN[s.keberlakuan] || s.keberlakuan}
                         </span>
                       )}
@@ -562,17 +565,27 @@ export default function PersuratanPage({ user, onBack }) {
                         <p className="text-[11px] text-foreground/80">{s.jenis_naskah || "—"}</p>
                         <p className="text-[10px] text-muted-foreground">{s.modul}</p>
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${WARNA_STATUS[s.status] || "bg-muted text-muted-foreground"}`}>
-                          {LABEL_STATUS[s.status] || s.status}
-                        </span>
-                        {s.keberlakuan && s.keberlakuan !== "berlaku" && s.keberlakuan !== "draf" && (
-                          <p className={`mt-0.5 inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${WARNA_KEBERLAKUAN[s.keberlakuan] || "bg-muted"}`}
-                            title={s.keberlakuan_label} data-testid={`keberlakuan-${s.id}`}>
-                            {LABEL_KEBERLAKUAN[s.keberlakuan] || s.keberlakuan}
-                          </p>
-                        )}
-                        {s.alasan_batal && <p className="text-[9px] text-red-500/80 mt-0.5 max-w-[140px] truncate" title={s.alasan_batal}>{s.alasan_batal}</p>}
+                      {/* Status + keberlakuan DITUMPUK, bukan berjajar.
+                          Sebelumnya sel ini `whitespace-nowrap` sementara kedua
+                          lencana berupa elemen inline: keduanya terpaksa satu
+                          baris, tak boleh turun, sehingga lencana kedua
+                          ("Tidak Berlaku") terpotong di tepi kolom. `nowrap`
+                          kini melekat pada tiap lencana — yang memang perlu,
+                          supaya "Tidak Berlaku" tak patah jadi dua baris —
+                          bukan pada selnya. */}
+                      <td className="px-3 py-2">
+                        <div className="flex flex-col items-start gap-0.5 max-w-[128px]">
+                          <span className={`whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-semibold ${WARNA_STATUS[s.status] || "bg-muted text-muted-foreground"}`}>
+                            {LABEL_STATUS[s.status] || s.status}
+                          </span>
+                          {s.keberlakuan && s.keberlakuan !== "berlaku" && s.keberlakuan !== "draf" && (
+                            <span className={`whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-semibold ${WARNA_KEBERLAKUAN[s.keberlakuan] || "bg-muted"}`}
+                              title={s.keberlakuan_label} data-testid={`keberlakuan-${s.id}`}>
+                              {LABEL_KEBERLAKUAN[s.keberlakuan] || s.keberlakuan}
+                            </span>
+                          )}
+                          {s.alasan_batal && <span className="text-[9px] text-red-500/80 max-w-full truncate" title={s.alasan_batal}>{s.alasan_batal}</span>}
+                        </div>
                       </td>
                       <td className="px-3 py-2 text-right whitespace-nowrap sticky right-0 bg-card border-l border-border">
                         {renderAksi(s)}
