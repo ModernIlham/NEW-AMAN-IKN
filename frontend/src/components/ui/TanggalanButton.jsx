@@ -24,7 +24,64 @@ import React, { useImperativeHandle, useRef } from "react";
  * terpasang dan tidak berada di dalam subpohon `display:none`, sehingga
  * `showPicker()` tetap sah dipanggil. Menyembunyikan seluruh komponen akan
  * membuat pemilih tanggalnya ikut lenyap dan butir menu itu jadi tombol mati.
+ *
+ * KENAPA INPUTNYA DITUMPUK TEPAT DI ATAS TOMBOL (bukan `sr-only`):
+ * peramban menambatkan kalender native ke KOTAK inputnya. Semula input itu
+ * memakai `sr-only`, yang artinya `position:absolute` + ukuran 1x1 + `clip`.
+ * Dua akibatnya, keduanya terlihat di tablet/desktop:
+ *
+ *   1. Elemen absolut di dalam wadah flex (semua kepala halaman memakai
+ *      BARIS_KEPALA = `flex …`) mengambil posisi statiknya di SUDUT AWAL
+ *      wadah itu — pojok kiri baris kepala — bukan di tempat tombolnya
+ *      berdiri. Kalendernya pun terbit jauh di kiri layar.
+ *   2. Kotak 1x1 yang ter-clip bukan tambatan yang masuk akal bagi popup
+ *      selebar ~300px, jadi peramban makin bebas menaruhnya sekehendaknya.
+ *
+ * Perbaikannya: tombol dan input dibungkus satu span `relative`, lalu input
+ * ditumpuk persis di atas tombol (`absolute left-0 top-0 h-9 w-9`) dengan
+ * `opacity-0 pointer-events-none` — kasatmata tak berubah sedikit pun, tetapi
+ * kotak tambatannya kini BERIMPIT dengan tombol yang diklik pengguna.
  */
+
+/** Ukuran tombol; input ditumpuk dengan ukuran yang sama persis. */
+const UKURAN = "h-9 w-9";
+
+/**
+ * Bungkus untuk ukuran layar yang MENYEMBUNYIKAN tombolnya.
+ *
+ * Bungkusnya wajib tetap dirender di semua ukuran (lihat catatan di atas —
+ * input di dalam subpohon `display:none` membuat `showPicker()` mati), tapi
+ * bungkus yang selalu hadir juga menyisakan satu jarak `gap` flex kosong di
+ * baris kepala HP. Jalan tengahnya: pada ukuran yang menyembunyikan tombol,
+ * bungkusnya DIKELUARKAN DARI ALIRAN (`absolute`) — tetap dirender, tidak
+ * memakan tempat — lalu kembali `relative` mulai breakpoint tombolnya muncul.
+ *
+ * Ditulis sebagai kelas LITERAL, bukan `${bp}:relative`: pemindai Tailwind
+ * membaca berkas sumber sebagai teks, jadi kelas yang dirakit lewat template
+ * tidak pernah ikut tergenerate dan diam-diam hilang dari CSS.
+ */
+const BUNGKUS_TERSEMBUNYI = {
+  sm: "absolute sm:relative inline-flex flex-shrink-0",
+  md: "absolute md:relative inline-flex flex-shrink-0",
+  lg: "absolute lg:relative inline-flex flex-shrink-0",
+  xl: "absolute xl:relative inline-flex flex-shrink-0",
+  "2xl": "absolute 2xl:relative inline-flex flex-shrink-0",
+};
+
+/** Bungkus baku: tombolnya tampak di semua ukuran. */
+export const BUNGKUS_TAMPAK = "relative inline-flex flex-shrink-0";
+
+/**
+ * Kelas pembungkus, diturunkan dari `kelasTombol`.
+ * "" → selalu tampak; "hidden sm:flex" → keluar aliran di bawah `sm`.
+ */
+export function kelasBungkus(kelasTombol = "") {
+  const k = String(kelasTombol || "");
+  if (!/(^|\s)hidden(\s|$)/.test(k)) return BUNGKUS_TAMPAK;
+  const bp = (k.match(/(?:^|\s)(sm|md|lg|xl|2xl):(?:inline-)?flex(?:\s|$)/) || [])[1];
+  return BUNGKUS_TERSEMBUNYI[bp] || "absolute inline-flex flex-shrink-0";
+}
+
 function TanggalanButton({
   value, onChange, warna = "bg-teal-700", title = "Pilih tanggal",
   testid = "tanggalan", kelasTombol = "",
@@ -53,11 +110,11 @@ function TanggalanButton({
     }
   })();
   return (
-    <>
+    <span className={kelasBungkus(kelasTombol)} data-testid={`${testid}-bungkus`}>
       <button
         type="button"
         onClick={buka}
-        className={`h-9 w-9 rounded-lg border border-border bg-background flex flex-col items-stretch overflow-hidden flex-shrink-0 hover:bg-muted ${kelasTombol}`}
+        className={`${UKURAN} rounded-lg border border-border bg-background flex flex-col items-stretch overflow-hidden flex-shrink-0 hover:bg-muted ${kelasTombol}`}
         title={title}
         aria-label={title}
         data-testid={testid}
@@ -75,10 +132,11 @@ function TanggalanButton({
       <input
         ref={ref} type="date" value={v}
         onChange={(e) => e.target.value && onChange?.(e.target.value)}
-        className="sr-only" tabIndex={-1} aria-hidden="true"
+        className={`absolute left-0 top-0 ${UKURAN} opacity-0 pointer-events-none`}
+        tabIndex={-1} aria-hidden="true"
         data-testid={`${testid}-input`}
       />
-    </>
+    </span>
   );
 }
 
