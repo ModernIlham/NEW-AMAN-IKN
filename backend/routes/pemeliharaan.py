@@ -576,6 +576,10 @@ async def posting_kapitalisasi(catatan_id: str,
     agar tidak dobel-posting (CAS idempoten).
     """
     from shared_utils import catat_mutasi_bmn, log_audit
+    # `parse_harga` sebelumnya hanya diimpor di fungsi LAIN pada berkas ini —
+    # dibaca di sini tanpa pernah terikat, jadi kapitalisasi berakhir NameError
+    # tepat saat menghitung harga barunya.
+    from pembukuan_utils import parse_harga
 
     ba = payload or KapitalisasiIn()
     rec, aset, biaya, nilai_dasar, hitung = await _konteks_kapitalisasi(
