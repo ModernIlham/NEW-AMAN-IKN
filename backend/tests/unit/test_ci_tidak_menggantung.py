@@ -63,6 +63,47 @@ class TestBatasWaktuJob:
             f"batas terlalu longgar: {longgar} menit — maksimal {BATAS_MAKS_MENIT}")
 
 
+class TestCiMainTidakSalingMembatalkan:
+    """CI di `main` tak boleh dibatalkan oleh merge berikutnya.
+
+    `deploy.yml` hanya berjalan bila CI SELESAI SUKSES. Maka CI `main` yang
+    dibatalkan berarti commit itu **tidak pernah ter-deploy** — dan diamnya
+    sempurna: tak ada job merah, tak ada notifikasi, hanya satu run berstatus
+    "cancelled" yang tampak seperti kebersihan.
+
+    Terjadi nyata 19 Agustus 2026: CI commit 7828ff4 (perbaikan 500 impor
+    SIMAN) dibatalkan oleh merge empat menit sesudahnya, lalu deploy commit
+    berikutnya gagal karena VPS tak terjangkau. Hasilnya perbaikan itu hilang
+    dari produksi tanpa satu pun tanda kegagalan.
+
+    Di cabang PR pembatalan tetap sah dan diinginkan — push beruntun tak perlu
+    menghabiskan runner. Yang dijaga di sini adalah pembedaannya.
+    """
+
+    def _concurrency(self):
+        import yaml
+        with open(CI, encoding="utf-8") as f:
+            return (yaml.safe_load(f) or {}).get("concurrency") or {}
+
+    def test_pembatalan_tidak_berlaku_di_main(self):
+        nilai = str(self._concurrency().get("cancel-in-progress", ""))
+        assert "refs/heads/main" in nilai, (
+            "cancel-in-progress tak lagi mengecualikan main — commit yang "
+            "CI-nya dibatalkan tidak akan pernah ter-deploy")
+        assert nilai.strip() != "true", nilai
+
+    def test_pembatalan_masih_berlaku_di_cabang_lain(self):
+        """Sisi sebaliknya: mematikannya di mana-mana membuat tiap push PR
+        menumpuk run yang tak ada gunanya."""
+        nilai = str(self._concurrency().get("cancel-in-progress", ""))
+        assert "!=" in nilai, (
+            f"ekspresinya bukan pengecualian melainkan {nilai!r} — periksa "
+            "apakah pembatalan justru dimatikan untuk SEMUA cabang")
+
+    def test_grup_concurrency_masih_per_ref(self):
+        assert "github.ref" in str(self._concurrency().get("group", ""))
+
+
 class TestAptTahanGantung:
     def test_apt_dibungkus_timeout(self):
         run = _langkah_apt(_jobs())
