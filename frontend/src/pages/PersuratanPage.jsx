@@ -46,6 +46,12 @@ const WARNA_KEBERLAKUAN = {
   tidak_berlaku: "bg-red-500/15 text-red-600 dark:text-red-400",
   draf: "bg-muted text-muted-foreground",
 };
+// Label sifat urgensi untuk baris agenda. Sumbu ini terpisah dari kode
+// keamanan — lihat SIFAT_URGENSI di backend.
+const LABEL_URGENSI = {
+  biasa: "Biasa", segera: "Segera", sangat_segera: "Sangat Segera",
+};
+
 const LABEL_KEBERLAKUAN = {
   berlaku: "Berlaku", diubah: "Diubah", tidak_berlaku: "Tidak Berlaku",
   draf: "Draf",
@@ -54,12 +60,16 @@ const LABEL_KEBERLAKUAN = {
 const KELUAR_KOSONG = {
   perihal: "", tujuan: "", jenis_naskah: "Laporan", modul: "umum",
   kegiatan_id: "", kode_klasifikasi: "", kode_keamanan: "B",
+  sifat_urgensi: "biasa",
   tanggal_surat: "", referensi: "", nomor_eksternal: "", keterangan: "",
   sisipan: false,
 };
 const MASUK_KOSONG = {
   nomor_surat: "", pengirim: "", perihal: "", tanggal_surat: "",
   modul: "umum", kegiatan_id: "", keterangan: "",
+  // Sifat urgensi yang DITULIS PENGIRIM pada suratnya — dicatat apa adanya di
+  // buku agenda, bukan penilaian kita.
+  sifat_urgensi: "biasa",
 };
 
 /**
@@ -143,6 +153,7 @@ export default function PersuratanPage({ user, onBack }) {
           modul: formKeluar.modul || "",
           kode_klasifikasi: formKeluar.kode_klasifikasi || "",
           kode_keamanan: formKeluar.kode_keamanan || "B",
+          sifat_urgensi: formKeluar.sifat_urgensi || "biasa",
           tanggal_surat: formKeluar.tanggal_surat || "",
         });
         if (formKeluar.sisipan) params.append("sisipan", "true");
@@ -621,7 +632,15 @@ export default function PersuratanPage({ user, onBack }) {
                       <td className="px-3 py-2 text-[12px] text-foreground/80">{s.jenis === "keluar" ? (s.tujuan || "—") : (s.pengirim || "—")}</td>
                       <td className="px-3 py-2 hidden md:table-cell">
                         <p className="text-[11px] text-foreground/80">{s.jenis_naskah || "—"}</p>
-                        <p className="text-[10px] text-muted-foreground">{s.modul}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {s.modul}
+                          {/* Urgensi hanya disebut bila BUKAN biasa: menandai
+                              setiap surat "Biasa" membuat penanda kehilangan
+                              artinya justru pada surat yang mendesak. */}
+                          {s.sifat_urgensi && s.sifat_urgensi !== "biasa"
+                            ? ` · ${LABEL_URGENSI[s.sifat_urgensi] || s.sifat_urgensi}`
+                            : ""}
+                        </p>
                       </td>
                       {/* Status + keberlakuan DITUMPUK, bukan berjajar.
                           Sebelumnya sel ini `whitespace-nowrap` sementara kedua
@@ -726,6 +745,21 @@ export default function PersuratanPage({ user, onBack }) {
                     {(ref?.kode_keamanan || []).map((k) => <option key={k.kode} value={k.kode}>{k.kode} — {k.uraian}</option>)}
                   </select>
                 </Field>
+                {/* Sumbu TERSENDIRI, bukan bagian kode keamanan: yang satu
+                    menjawab siapa boleh membaca, yang lain seberapa cepat harus
+                    ditindaklanjuti. Satu surat bisa Biasa sekaligus Sangat
+                    Segera — menggabungkannya jadi satu daftar akan memaksa
+                    operator memilih salah satu. */}
+                <Field label="Sifat Urgensi">
+                  <select value={formKeluar.sifat_urgensi || "biasa"}
+                    onChange={setK("sifat_urgensi")}
+                    className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                    data-testid="keluar-sifat-urgensi">
+                    {(ref?.sifat_urgensi || []).map((u) => (
+                      <option key={u.kode} value={u.kode}>{u.uraian}</option>
+                    ))}
+                  </select>
+                </Field>
                 <Field label="Kode Klasifikasi Arsip">
                   <Input value={formKeluar.kode_klasifikasi} onChange={setK("kode_klasifikasi")}
                     list="klasifikasi-arsip-list"
@@ -817,6 +851,18 @@ export default function PersuratanPage({ user, onBack }) {
                     {(ref?.modul || ["umum"]).map((m) => <option key={m} value={m}>{m}</option>)}
                   </select>
                 </Field>
+                {/* Sifat urgensi yang DITULIS PENGIRIM — dicatat apa adanya,
+                    bukan penilaian kita. */}
+                <Field label="Sifat Urgensi (dari pengirim)">
+                  <select value={formMasuk.sifat_urgensi || "biasa"}
+                    onChange={setM("sifat_urgensi")}
+                    className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                    data-testid="masuk-sifat-urgensi">
+                    {(ref?.sifat_urgensi || []).map((u) => (
+                      <option key={u.kode} value={u.kode}>{u.uraian}</option>
+                    ))}
+                  </select>
+                </Field>
               </div>
               <Field label="Perihal *"><Input value={formMasuk.perihal} onChange={setM("perihal")} data-testid="masuk-perihal" /></Field>
               <Field label="Keterangan / disposisi"><Input value={formMasuk.keterangan} onChange={setM("keterangan")} /></Field>
@@ -835,6 +881,7 @@ export default function PersuratanPage({ user, onBack }) {
                       nomor_surat: f.nomor_surat, pengirim: f.pengirim,
                       perihal: f.perihal, tanggal_surat: f.tanggal_surat,
                       modul: f.modul, keterangan: f.keterangan,
+                      sifat_urgensi: f.sifat_urgensi || "biasa",
                     }), "Surat masuk diperbarui");
                   }
                 : catatMasuk}>

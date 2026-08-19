@@ -67,6 +67,51 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#894] Sifat urgensi naskah dinas — sumbu tersendiri, bukan bagian kode keamanan — 2026-08-19
+
+Permintaan pemilik, dengan contoh dari halaman Legend aplikasi lain: naskah
+dinas perlu penanda **Biasa / Segera / Sangat Segera**.
+
+Ia dibuat sebagai **sumbu tersendiri**, dan itu bukan sekadar kerapian —
+keduanya menjawab pertanyaan yang berbeda:
+
+| Sumbu | Menjawab | Nilai |
+|---|---|---|
+| Kode keamanan | **siapa boleh membaca** | Biasa · Terbatas · Rahasia · Sangat Rahasia |
+| Sifat urgensi | **seberapa cepat ditindaklanjuti** | Biasa · Segera · Sangat Segera |
+
+Satu surat bisa **Biasa sekaligus Sangat Segera**. Menggabungkan keduanya jadi
+satu daftar pilihan memaksa operator memilih salah satu — dan yang dikorbankan
+biasanya urgensi, sebab kode keamanan ikut tercetak di nomor.
+
+Bukti paling gamblang bahwa keduanya tak boleh disatukan: kata **"Biasa" ada di
+kedua daftar dengan arti yang sama sekali berbeda**. Itu dijadikan uji
+tersendiri, ditambah penjaga silang yang memerah bila kode keamanan suatu saat
+mulai menerima nilai urgensi.
+
+**Yang dikerjakan:**
+
+- Sifat urgensi pada **surat keluar** (kita yang menetapkan) dan **surat masuk**
+  (dicatat apa adanya dari yang ditulis pengirim — bukan penilaian kita).
+- Kolom **Sifat Urgensi** di ekspor buku agenda. Baris lama yang tak pernah
+  mencatatnya tampil **kosong**, bukan dikarang "Biasa": buku agenda tak boleh
+  menyatakan sesuatu yang tak pernah dicatat.
+- Di baris daftar, urgensi hanya disebut bila **bukan** "Biasa" — menandai
+  setiap surat "Biasa" membuat penandanya kehilangan arti justru pada surat
+  yang mendesak.
+- Nilai kosong jatuh ke "Biasa" tanpa galat, sehingga surat lama dan pemanggil
+  yang belum diperbarui tak ditolak.
+
+**Catatan uji.** Penambahan kolom CSV memecahkan uji buku agenda yang memeriksa
+**posisi** kolom — dan komentarnya menunjukkan ia sudah pernah pecah sekali
+oleh sebab yang sama. Uji itu ditulis ulang agar mencari kolom lewat
+**namanya**: yang layak dijaga adalah pemetaan nilai ke kolomnya, bukan nomor
+urut kolom.
+
+**Uji:** 14 uji baru. Tiga mutasi diuji dan semuanya mati.
+
+---
+
 ## [#893] Unsur tulisan milik satker: tersimpan, disisipkan, bisa dihapus — 2026-08-19
 
 Permintaan pemilik: *"pada bagian 'Perkiraan nomor yang akan terbit' kita dapat
