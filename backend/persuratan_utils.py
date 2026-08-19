@@ -213,6 +213,41 @@ def urut_tampil(no_agenda, sisipan=0) -> str:
     return f"{dasar}.{s:02d}" if s > 0 else dasar
 
 
+def dimensi_deret(komposisi, deret_per_kode) -> str:
+    """Sumbu pemisah deret nomor: '' (satu deret) / 'keamanan' / 'klasifikasi'.
+
+    Deret terpisah HANYA sah bila kode pembedanya benar-benar tercetak pada
+    nomor. Kalau tidak, dua surat berbeda bisa memikul nomor yang sama persis
+    — dan nomor surat resmi yang kembar tak bisa diperbaiki belakangan.
+
+    Karena itu:
+    - komposisi "keamanan"    → deret per kode keamanan (B/T/R/SR);
+    - komposisi "klasifikasi" → deret per kode klasifikasi arsip;
+    - komposisi "keduanya"    → MATI (permintaan pemilik: kembali ke bawaan);
+    - komposisi "tanpa"       → MATI, dan ini keharusan, bukan pilihan: tak ada
+      kode apa pun di nomor, jadi tak ada yang membedakan 001 milik B dari 001
+      milik T.
+    """
+    if not deret_per_kode:
+        return ""
+    k = str(komposisi or "").strip()
+    return k if k in ("keamanan", "klasifikasi") else ""
+
+
+def kunci_deret(dimensi, kode_keamanan="", kode_klasifikasi="") -> str:
+    """Nilai kode yang memisahkan deret ('' = ikut deret tunggal).
+
+    Klasifikasi kosong sengaja jatuh ke deret tunggal: memisahkan deret
+    berdasarkan kode yang tak ada sama saja dengan tidak memisahkan, dan
+    membuat kunci counter bernama '' hanya menyamarkan itu.
+    """
+    if dimensi == "keamanan":
+        return str(kode_keamanan or "B").strip().upper()
+    if dimensi == "klasifikasi":
+        return str(kode_klasifikasi or "").strip()
+    return ""
+
+
 def periode_surat(s, reset_urut) -> str:
     """Kunci periode agenda SATU surat — '2026-08' (bulanan) / '2026' (tahunan).
 
@@ -235,17 +270,27 @@ def periode_surat(s, reset_urut) -> str:
     return str(tahun) if tahun else ""
 
 
-def label_agenda(s, reset_urut) -> str:
+def label_agenda(s, reset_urut, dimensi="") -> str:
     """Lencana buku agenda: 'K-005/2026' (tahunan) · 'K-005/VIII/2026' (bulanan).
 
     Bulan WAJIB tampil pada deret bulanan. Tanpa itu nomor agenda bulan Juli
     dan bulan Agustus sama-sama tampil 'K-001/2026' — dua baris berlencana
     identik di satu layar, dan buku agenda kehilangan sifat yang paling
     mendasar: satu nomor menunjuk satu surat.
+
+    `dimensi` (lihat `dimensi_deret`) menambahkan kode pembeda saat deret
+    dipisah per kode: 'K-B-001/VIII/2026'. Itu bukan hiasan — dengan deret
+    terpisah, 001 milik B dan 001 milik T memang ada bersamaan dalam satu
+    bulan, dan lencana tanpa kode akan mengulang persis keambiguan yang baru
+    saja ditutup. Bentuknya mencerminkan nomor suratnya sendiri (B-001/…),
+    supaya keduanya terbaca sebagai hal yang sama.
     """
     d = s or {}
     awalan = "K" if d.get("jenis") == "keluar" else "M"
     urut = urut_tampil(d.get("no_agenda"), d.get("sisipan"))
+    kode = kunci_deret(dimensi, d.get("kode_keamanan"), d.get("kode_klasifikasi"))
+    if kode:
+        awalan = f"{awalan}-{kode}"
     p = periode_surat(d, reset_urut)
     if "-" in p:
         bulan = int(p[5:7])

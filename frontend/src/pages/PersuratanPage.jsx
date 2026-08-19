@@ -900,6 +900,32 @@ export default function PersuratanPage({ user, onBack }) {
                     disentuh.
                   </p>
                 </Field>
+                {/* Saklar deret per kode. Dinonaktifkan — bukan disembunyikan
+                    — saat komposisi tak menyediakan kode pembeda: pengguna
+                    berhak tahu fiturnya ada beserta syaratnya. Server tetap
+                    memaksanya mati kalau setelan lama tertinggal menyala. */}
+                <Field label="Deret Nomor Urut">
+                  <label className="flex items-start gap-2 text-xs text-foreground">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 min-h-0 min-w-0"
+                      checked={!!formAtur.deret_per_kode && formAtur.deret_per_kode_boleh !== false}
+                      disabled={formAtur.deret_per_kode_boleh === false}
+                      onChange={(e) => setFormAtur((f) => ({ ...f, deret_per_kode: e.target.checked }))}
+                      data-testid="atur-deret-per-kode" />
+                    <span>
+                      Nomor urut berjalan <b>sendiri-sendiri per kode</b>
+                      {formAtur.komposisi_nomor === "klasifikasi"
+                        ? " klasifikasi arsip" : " keamanan"}
+                      {" "}— tiap kode punya deret 001, 002, … miliknya.
+                    </span>
+                  </label>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    {formAtur.deret_per_kode_boleh === false
+                      ? "Tidak tersedia untuk komposisi yang dipilih: deret terpisah hanya aman bila SATU kode pembeda tercetak pada nomor. Bila keduanya (atau tak satu pun) dipakai, deret kembali menjadi satu."
+                      : "Akibatnya nomor 001 bisa ada pada beberapa kode sekaligus — itu memang tujuannya, dan lencana agenda akan menyebut kodenya (mis. K-T-001/VIII/2026) supaya tetap dapat dibedakan."}
+                  </p>
+                </Field>
                 {formAtur.peringatan_klasifikasi && (
                   <p className="text-[11px] leading-snug rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-amber-700 dark:text-amber-400"
                     data-testid="atur-peringatan-klasifikasi">
