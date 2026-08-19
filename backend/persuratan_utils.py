@@ -128,6 +128,46 @@ def urut_tampil(no_agenda, sisipan=0) -> str:
     return f"{dasar}.{s:02d}" if s > 0 else dasar
 
 
+def periode_surat(s, reset_urut) -> str:
+    """Kunci periode agenda SATU surat — '2026-08' (bulanan) / '2026' (tahunan).
+
+    Tanggal acuannya berbeda menurut jenis, dan itu bukan kelalaian: nomor
+    agenda surat KELUAR dipesan menurut `tanggal_surat` (boleh backdate),
+    sedangkan surat MASUK dicatat menurut tanggal AGENDA kita — tanggal surat
+    pengirim bukan tanggal pencatatan kita. Fungsi ini harus memakai tanggal
+    yang sama dengan yang dipakai saat nomornya diterbitkan, kalau tidak
+    urutan agenda akan menyimpang dari nomor yang sudah tercetak.
+
+    Jatuh ke `tahun` tersimpan bila tanggalnya tak terbaca — supaya baris lama
+    tetap punya tempat dalam urutan, bukan terlempar ke ujung daftar.
+    """
+    d = s or {}
+    tgl = d.get("tanggal_surat") if d.get("jenis") == "keluar" else d.get("created_at")
+    hasil = periode_urut(reset_urut, str(tgl or "")[:10])
+    if hasil:
+        return hasil
+    tahun = d.get("tahun")
+    return str(tahun) if tahun else ""
+
+
+def label_agenda(s, reset_urut) -> str:
+    """Lencana buku agenda: 'K-005/2026' (tahunan) · 'K-005/VIII/2026' (bulanan).
+
+    Bulan WAJIB tampil pada deret bulanan. Tanpa itu nomor agenda bulan Juli
+    dan bulan Agustus sama-sama tampil 'K-001/2026' — dua baris berlencana
+    identik di satu layar, dan buku agenda kehilangan sifat yang paling
+    mendasar: satu nomor menunjuk satu surat.
+    """
+    d = s or {}
+    awalan = "K" if d.get("jenis") == "keluar" else "M"
+    urut = urut_tampil(d.get("no_agenda"), d.get("sisipan"))
+    p = periode_surat(d, reset_urut)
+    if "-" in p:
+        bulan = int(p[5:7])
+        return f"{awalan}-{urut}/{ROMAWI_BULAN[bulan - 1]}/{p[:4]}"
+    return f"{awalan}-{urut}/{p}" if p else f"{awalan}-{urut}"
+
+
 def validate_format_reset(reset_urut, format_nomor) -> str:
     """'' bila serasi; pesan bila reset bulanan tanpa unsur bulan di format.
 
@@ -232,10 +272,14 @@ def baris_agenda_csv(items) -> list:
     for s in items or []:
         keluar = s.get("jenis") == "keluar"
         rows.append([
-            # Nomor sisipan tampil "5.01" agar buku agenda ekspor tetap
-            # kronologis; baris biasa memakai angka mentahnya (tak berubah).
-            (urut_tampil(s.get("no_agenda"), s.get("sisipan"))
-             if s.get("sisipan") else s.get("no_agenda")),
+            # Lencana agenda yang SAMA dengan layar (mis. "K-001/VIII/2026")
+            # bila pemanggil menyediakannya. Tanpa itu buku agenda cetak dan
+            # buku agenda layar menyebut nomor berbeda untuk surat yang sama —
+            # dan pada deret bulanan angka mentahnya tidak unik: 001 bulan Juli
+            # dan 001 bulan Agustus tak bisa dibedakan lagi di atas kertas.
+            s.get("label_agenda")
+            or (urut_tampil(s.get("no_agenda"), s.get("sisipan"))
+                if s.get("sisipan") else s.get("no_agenda")),
             "Keluar" if keluar else "Masuk",
             (STATUS_KELUAR if keluar else STATUS_MASUK).get(
                 s.get("status"), s.get("status")),

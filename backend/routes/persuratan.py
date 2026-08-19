@@ -40,7 +40,8 @@ from persuratan_utils import (
     FORMAT_NOMOR_DEFAULT, JENIS_NASKAH, KODE_KEAMANAN, MODUL_AMAN,
     RESET_URUT, RESET_URUT_DEFAULT,
     STATUS_KELUAR, STATUS_MASUK, TRANSISI_KELUAR, TRANSISI_MASUK,
-    bangun_nomor, baris_agenda_csv, gabung_klasifikasi, periode_urut,
+    bangun_nomor, baris_agenda_csv, gabung_klasifikasi, label_agenda,
+    periode_urut,
     pilih_klasifikasi, placeholder_tak_dikenal, sumber_pengaturan,
     urut_tampil, validate_format_reset, validate_peta_klasifikasi,
     validate_surat_keluar, validate_surat_masuk, validate_transisi,
@@ -860,15 +861,19 @@ async def daftar_surat(jenis: str = "", status: str = "", modul: str = "",
     # ISOLASI SATKER: user terikat hanya melihat surat satkernya (+ era-lama).
     query = scope_query_field_satker(_user, query)
     total = await db.surat.count_documents(query)
+    atur = await _pengaturan(kode_satker_user(_user))
+    bulanan = str(atur["reset_urut"] or "").strip() != "tahunan"
     # `sisipan` ikut kunci sort: dalam no_agenda yang sama, 005.02 → 005.01 →
     # 005 (dokumen tanpa/0 sisipan) — nomor sisipan menempel pada induknya.
-    items = await (db.surat.find(query, _PROJ)
-                   .sort([("tahun", -1), ("no_agenda", -1), ("sisipan", -1)])
-                   .skip((page - 1) * page_size).limit(page_size)
-                   .to_list(page_size))
+    items = await _agenda_terurut(query, bulanan, -1,
+                                  lewati=(page - 1) * page_size, ambil=page_size)
     # Status KEBERLAKUAN terhitung per baris (satu kueri massal halaman ini):
     # badge "Tidak Berlaku" surat yang dicabut tampil tanpa diketik siapa pun.
     items = await _stempel_keberlakuan(items)
+    # Lencana agenda dirakit SERVER supaya layar, dialog, dan ekspor CSV tak
+    # bisa menampilkan tiga bentuk berbeda untuk satu nomor yang sama.
+    for it in items:
+        it["label_agenda"] = label_agenda(it, atur["reset_urut"])
     ringkas = {
         "keluar_dibooking": await db.surat.count_documents(
             scope_query_field_satker(_user, {"jenis": "keluar", "status": "dibooking"})),
@@ -881,6 +886,7 @@ async def daftar_surat(jenis: str = "", status: str = "", modul: str = "",
     }
     return {"items": items, "total": total, "page": page,
             "total_pages": max(1, -(-total // page_size)),
+            "reset_urut": atur["reset_urut"],
             "ringkasan": ringkas}
 
 
@@ -965,7 +971,10 @@ async def booking_surat_keluar(payload: SuratKeluarIn,
                     username=user.get("username", "system"),
                     detail=(f"Booking nomor surat keluar {nomor} — {record['perihal']}"
                             + (f" (sisipan backdate {tanggal_surat})" if sisip else "")))
-    return record
+    # Lencana ikut dikirim supaya panel hasil booking menyebut nomor agenda
+    # dalam bentuk yang SAMA dengan daftar — pada deret bulanan bentuknya
+    # menyertakan bulan, dan klien tak boleh menebaknya sendiri.
+    return {**record, "label_agenda": label_agenda(record, atur["reset_urut"])}
 
 
 @persuratan_router.post("/persuratan/masuk")
@@ -1014,7 +1023,10 @@ async def agenda_surat_masuk(payload: SuratMasukIn,
     await log_audit("agenda_surat_masuk", record["kegiatan_id"],
                     username=user.get("username", "system"),
                     detail=f"Agenda surat masuk #{no_agenda}/{tahun}: {record['nomor']}")
-    return record
+    # Lencana ikut dikirim supaya panel hasil booking menyebut nomor agenda
+    # dalam bentuk yang SAMA dengan daftar — pada deret bulanan bentuknya
+    # menyertakan bulan, dan klien tak boleh menebaknya sendiri.
+    return {**record, "label_agenda": label_agenda(record, atur["reset_urut"])}
 
 
 @persuratan_router.post("/persuratan/{surat_id}/status")
@@ -1174,6 +1186,50 @@ async def _panah_masuk_hidup(ids: list) -> dict:
     return out
 
 
+# Kunci urut buku agenda. Deret BULANAN membuat `no_agenda` kembali ke 001
+# tiap awal bulan, sehingga mengurutkan (tahun, no_agenda) saja MENYELANG-NYELING
+# bulan: 001 bulan Agustus jatuh di bawah 008 bulan Juli. Bulannya harus ikut
+# jadi kunci — dan hanya pada deret bulanan, sebab pada deret tahunan nomor
+# agenda sudah unik sepanjang tahun dan menyisipkan bulan justru mengacak
+# urutan surat yang dibooking dengan tanggal mundur.
+# `$substr` (bukan `$substrCP`) disengaja: tanggal ISO seluruhnya ASCII
+# sehingga keduanya identik di sini, sementara hanya `$substr` yang dikenali
+# mongomock — artinya urutan agenda benar-benar TERUJI, bukan sekadar
+# diyakini. Bila suatu saat operator ini ditiadakan MongoDB, penggantinya
+# `$substrBytes` dengan argumen yang sama persis.
+_EKSPRESI_PERIODE = {"$substr": [
+    {"$ifNull": [
+        {"$cond": [{"$eq": ["$jenis", "keluar"]}, "$tanggal_surat", "$created_at"]},
+        ""]},
+    0, 7]}
+
+
+async def _agenda_terurut(query: dict, bulanan: bool, arah: int,
+                          lewati: int = 0, ambil: int = 0) -> list:
+    """Baris agenda menurut urutan deret yang berlaku (arah 1 naik / -1 turun)."""
+    if not bulanan:
+        kursor = (db.surat.find(query, _PROJ)
+                  .sort([("tahun", arah), ("no_agenda", arah), ("sisipan", arah)]))
+        if lewati:
+            kursor = kursor.skip(lewati)
+        if ambil:
+            kursor = kursor.limit(ambil)
+        return await kursor.to_list(ambil or 100000)
+    tahap = [
+        {"$match": query},
+        {"$addFields": {"_periode": _EKSPRESI_PERIODE}},
+        {"$sort": {"tahun": arah, "_periode": arah,
+                   "no_agenda": arah, "sisipan": arah}},
+    ]
+    if lewati:
+        tahap.append({"$skip": lewati})
+    if ambil:
+        tahap.append({"$limit": ambil})
+    # `_periode` hanya kunci urut — jangan ikut bocor ke respons/CSV.
+    tahap.append({"$project": {"_id": 0, "_periode": 0}})
+    return await db.surat.aggregate(tahap).to_list(ambil or 100000)
+
+
 async def _stempel_keberlakuan(items: list) -> list:
     """Tambahkan `keberlakuan` + `keberlakuan_label` pada tiap dokumen surat
     (satu kueri massal — bukan per baris)."""
@@ -1308,10 +1364,12 @@ async def export_agenda(jenis: str = "", tahun: str = "",
     if tahun.strip().isdigit():
         query["tahun"] = int(tahun)
     query = scope_query_field_satker(_user, query)
-    items = await (db.surat.find(query, _PROJ)
-                   .sort([("tahun", 1), ("no_agenda", 1), ("sisipan", 1)])
-                   .to_list(100000))
+    atur = await _pengaturan(kode_satker_user(_user))
+    bulanan = str(atur["reset_urut"] or "").strip() != "tahunan"
+    items = await _agenda_terurut(query, bulanan, 1)
     items = await _stempel_keberlakuan(items)
+    for it in items:
+        it["label_agenda"] = label_agenda(it, atur["reset_urut"])
     buf = io.StringIO()
     w = csv_module.writer(buf)
     for row in baris_agenda_csv(items):
