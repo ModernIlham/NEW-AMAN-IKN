@@ -926,7 +926,10 @@ export default function PersuratanPage({ user, onBack }) {
                 : " — Universal (semua satker)"}
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Susunan PerANRI 5/2021 — placeholder: {"{kode_keamanan} {urut} {kode_klasifikasi} {kode_unit} {bulan} {bulan_romawi} {tahun}"}.
+              Susunan PerANRI 5/2021 — placeholder:{" "}
+              <span className="font-mono">
+                {(formAtur?.placeholder || []).map((p) => `{${p.kunci}}`).join(" ")}
+              </span>.
               {formAtur?.scope
                 ? " Perubahan hanya berlaku untuk satker ini; field yang dikosongkan kembali mengikuti Universal."
                 : " Nilai di sini menjadi bawaan bersama — satker yang mengisi pengaturannya sendiri menimpanya."}
@@ -1115,7 +1118,20 @@ export default function PersuratanPage({ user, onBack }) {
                 </Field>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <Field label="Kode Unit"><Input value={formAtur.kode_unit} onChange={(e) => setFormAtur((f) => ({ ...f, kode_unit: e.target.value }))} placeholder={formAtur.warisan?.kode_unit ? `ikut Universal: ${formAtur.warisan.kode_unit}` : "cth. OIKN"} /></Field>
-                  <Field label="Kode Klasifikasi Bawaan (fallback) — berdiri sendiri"><Input value={formAtur.kode_klasifikasi_default} onChange={(e) => setFormAtur((f) => ({ ...f, kode_klasifikasi_default: e.target.value }))} placeholder={formAtur.warisan?.kode_klasifikasi_default ? `ikut Universal: ${formAtur.warisan.kode_klasifikasi_default}` : "cth. UM.01"} className="font-mono" /></Field>
+                  <Field label="Kode Klasifikasi Bawaan — berdiri sendiri">
+                    <Input value={formAtur.kode_klasifikasi_default} onChange={(e) => setFormAtur((f) => ({ ...f, kode_klasifikasi_default: e.target.value }))} placeholder={formAtur.warisan?.kode_klasifikasi_default ? `ikut Universal: ${formAtur.warisan.kode_klasifikasi_default}` : "cth. UM.01"} className="font-mono" data-testid="atur-kode-bawaan" />
+                    {/* Dulu kolom ini diam-diam mengisi slot Kode Klasifikasi
+                        Arsip pada nomor, sehingga nomor terbit membawa kode
+                        bawaan sementara layar menyebutnya "klasifikasi arsip
+                        surat ini". Keduanya kini terpisah, dan kalimat di
+                        bawah ini yang mengatakannya. */}
+                    <p className="text-[10px] text-muted-foreground mt-1" data-testid="atur-kode-bawaan-catatan">
+                      Kode ini <b>tidak</b> mengisi Kode Klasifikasi Arsip surat, dan
+                      tidak ikut ke nomor dengan sendirinya. Ia punya slotnya sendiri:
+                      pasang <span className="font-mono">{"{kode_bawaan}"}</span> pada Format
+                      Nomor bila memang ingin memakainya.
+                    </p>
+                  </Field>
                 </div>
                 <Field label="Reset Nomor Urut (metode deret satker ini)">
                   <select value={formAtur.reset_urut || (formAtur.scope ? "" : "bulanan")}
@@ -1143,9 +1159,11 @@ export default function PersuratanPage({ user, onBack }) {
                 </p>
                 <p className="text-[10px] text-muted-foreground">
                   Daftar ini <b>katalog kode</b> — mendaftarkan kode di sini
-                  belum mengubah nomor surat apa pun. Yang mengubah nomor:
-                  aturan otomatis di bawah, <b>Kode Klasifikasi Bawaan</b>, atau
-                  isian manual di form booking. Badge tiap baris menyebut kode
+                  belum mengubah nomor surat apa pun. Yang mengisi Kode
+                  Klasifikasi Arsip sebuah surat cuma dua: <b>aturan otomatis</b>{" "}
+                  di bawah, atau <b>isian manual</b> di form booking. Kode
+                  Klasifikasi Bawaan berdiri sendiri dan tidak termasuk di
+                  antaranya. Badge tiap baris menyebut kode
                   itu sudah terpakai atau masih menganggur; tombol{" "}
                   <span className="font-mono">+ aturan</span> memasangkannya
                   langsung.

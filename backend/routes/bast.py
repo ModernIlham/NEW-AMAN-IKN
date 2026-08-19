@@ -509,16 +509,16 @@ async def buat_bast(payload: BastIn, request: Request = None,
         _ks = ks_efektif
         atur = await _pengaturan(_ks)
         kode_klas = pilih_klasifikasi(atur["peta_klasifikasi"], "penggunaan",
-                                      "Berita Acara",
-                                      default=atur["kode_klasifikasi_default"])
+                                      "Berita Acara")
         tahun = int(tgl_surat[:4]) if tgl_surat[:4].isdigit() else now.year
         periode = (periode_urut(atur.get("reset_urut"), tgl_surat)
                    or periode_urut(atur.get("reset_urut"),
                                    now.date().isoformat()))
         no_agenda = await _no_agenda_berikut("keluar", periode, _ks)
-        nomor_final = bangun_nomor(atur["format_nomor"], no_agenda, tgl_surat,
-                                   kode_klasifikasi=kode_klas,
-                                   kode_unit=atur["kode_unit"])
+        nomor_final = bangun_nomor(
+            atur["format_nomor"], no_agenda, tgl_surat,
+            kode_klasifikasi=kode_klas, kode_unit=atur["kode_unit"],
+            kode_bawaan=atur["kode_klasifikasi_default"])
         surat_id = str(uuid.uuid4())
         await db.surat.insert_one({
             "id": surat_id, "jenis": "keluar", "no_agenda": no_agenda,

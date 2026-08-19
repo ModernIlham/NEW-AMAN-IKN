@@ -95,9 +95,6 @@ RESET_URUT_DEFAULT = "bulanan"
 # unit/bulan/tahun). Dapat diubah lewat pengaturan persuratan.
 FORMAT_NOMOR_DEFAULT = "{kode_keamanan}-{urut}/{kode_klasifikasi}/{kode_unit}/{bulan_romawi}/{tahun}"
 
-_PLACEHOLDER_DIKENAL = {"kode_keamanan", "urut", "kode_klasifikasi",
-                        "kode_unit", "bulan", "bulan_romawi", "tahun"}
-
 # Placeholder format nomor, BESERTA nama manusianya dan contoh isinya.
 #
 # Keluhan pemilik: "pada format nomor kita tidak tahu nama header kepalanya
@@ -124,7 +121,24 @@ PLACEHOLDER_NOMOR = [
      "arti": "Lazim pada naskah dinas; dari tanggal surat"},
     {"kunci": "tahun", "label": "Tahun", "contoh": "2026",
      "arti": "Empat digit dari tanggal surat"},
+    # DI LUAR deret PerANRI, dan itu disengaja. Menyisipkan seluruh chip
+    # berurutan harus langsung menghasilkan bentuk nomor yang benar; slot ini
+    # bukan bagian dari bentuk itu, ia tambahan yang dipasang bila memang
+    # diinginkan. Menaruhnya di tengah deret akan menyelipkan kode bawaan ke
+    # dalam nomor setiap orang yang memakai chip berurutan — persis kekacauan
+    # yang sedang dibereskan.
+    {"kunci": "kode_bawaan", "label": "Kode Klasifikasi Bawaan",
+     "contoh": "UM.01",
+     "arti": "Kode tetap milik satker — BERDIRI SENDIRI; tidak mengisi dan "
+             "tidak digantikan oleh Kode Klasifikasi Arsip"},
 ]
+
+# Diturunkan dari daftar di atas, bukan ditulis ulang. Dulu keduanya berdiri
+# sendiri, dan itu satu drift menunggu terjadi: placeholder baru yang lupa
+# didaftarkan di sini akan disisipkan layar dengan satu ketukan lalu DITOLAK
+# validator sebagai "placeholder tak dikenal" — layar dan validator saling
+# membantah, dan yang salah bukan penggunanya.
+_PLACEHOLDER_DIKENAL = {p["kunci"] for p in PLACEHOLDER_NOMOR}
 
 # Komposisi nomor yang lazim diminta di lapangan. Ini BUKAN konsep baru yang
 # disimpan tersendiri — ia hanya cara ramah membaca & menulis dua placeholder
@@ -261,24 +275,33 @@ def terapkan_komposisi(template, komposisi) -> str:
     return _rapikan_pemisah(f)
 
 
-def peringatan_klasifikasi(format_nomor, kode_default, peta) -> str:
-    """'' bila aman; pesan bila nomor MEMINTA kode klasifikasi yang tak akan
-    pernah terisi.
+def peringatan_klasifikasi(format_nomor, kode_bawaan, peta) -> str:
+    """'' bila aman; pesan bila nomor MEMINTA slot yang tak akan pernah terisi.
 
-    Inilah keadaan yang membuat kode klasifikasi tampak "tidak berpengaruh":
-    template memuat {kode_klasifikasi}, katalog kodenya sudah diisi, tetapi tak
-    satu pun aturan otomatis maupun kode bawaan yang menunjuk salah satunya —
-    sehingga setiap nomor terbit tanpa kode itu, tanpa satu pun galat.
+    Dua slot, dua sebab, dan sejak keduanya dipisah keduanya harus diperiksa
+    SENDIRI-SENDIRI:
+
+    - `{kode_klasifikasi}` tanpa satu pun aturan pemetaan. Inilah keadaan yang
+      membuat kode klasifikasi tampak "tidak berpengaruh": template memintanya,
+      katalog kodenya sudah diisi, tetapi tak satu pun aturan menunjuk salah
+      satunya — nomor terbit tanpa kode itu, tanpa satu pun galat. Kode bawaan
+      TIDAK lagi meredam peringatan ini; ia bukan lagi jaring pengaman slot
+      ini, jadi meredamnya berarti berbohong.
+    - `{kode_bawaan}` sementara kode bawaannya sendiri kosong.
     """
-    if "{kode_klasifikasi}" not in str(format_nomor or ""):
-        return ""
-    if str(kode_default or "").strip():
-        return ""
-    if any(str((a or {}).get("kode") or "").strip() for a in peta or []):
-        return ""
-    return ("Format nomor memuat {kode_klasifikasi}, tetapi belum ada aturan "
-            "otomatis maupun kode bawaan — nomor akan terbit TANPA kode "
-            "klasifikasi kecuali diisi manual tiap kali membooking")
+    f = str(format_nomor or "")
+    pesan = []
+    if "{kode_klasifikasi}" in f and not any(
+            str((a or {}).get("kode") or "").strip() for a in peta or []):
+        pesan.append(
+            "Format nomor memuat {kode_klasifikasi}, tetapi belum ada aturan "
+            "otomatis satu pun — nomor akan terbit TANPA kode klasifikasi "
+            "kecuali diisi manual tiap kali membooking")
+    if "{kode_bawaan}" in f and not str(kode_bawaan or "").strip():
+        pesan.append(
+            "Format nomor memuat {kode_bawaan}, tetapi Kode Klasifikasi "
+            "Bawaan masih kosong — slot itu akan terbit kosong")
+    return " · ".join(pesan)
 
 
 def _bulan_tahun(tanggal_iso):
@@ -431,7 +454,7 @@ def validate_format_reset(reset_urut, format_nomor) -> str:
 
 
 def bangun_nomor(template, urut, tanggal_iso, kode_klasifikasi="",
-                 kode_unit="", kode_keamanan="B") -> str:
+                 kode_unit="", kode_keamanan="B", kode_bawaan="") -> str:
     """Rakit nomor surat dari template ber-placeholder.
 
     {urut} tampil 3 digit ber-nol-depan (015) sesuai praktik agenda; `urut`
@@ -445,6 +468,10 @@ def bangun_nomor(template, urut, tanggal_iso, kode_klasifikasi="",
         "kode_keamanan": str(kode_keamanan or "B").strip().upper(),
         "urut": urut if isinstance(urut, str) else f"{int(urut):03d}",
         "kode_klasifikasi": str(kode_klasifikasi or "").strip(),
+        # SLOT TERSENDIRI. Kode bawaan tidak lagi menyelinap ke slot
+        # klasifikasi arsip: yang ingin memakainya menuliskan {kode_bawaan}
+        # pada formatnya, dan itu keputusan yang terlihat.
+        "kode_bawaan": str(kode_bawaan or "").strip(),
         "kode_unit": str(kode_unit or "").strip(),
         "bulan": f"{bulan:02d}" if bulan else "",
         "bulan_romawi": ROMAWI_BULAN[bulan - 1] if bulan else "",
@@ -558,13 +585,21 @@ def baris_agenda_csv(items) -> list:
     return rows
 
 
-def pilih_klasifikasi(peta, modul, jenis_naskah, eksplisit="", default="") -> str:
+def pilih_klasifikasi(peta, modul, jenis_naskah, eksplisit="") -> str:
     """Kode klasifikasi arsip untuk sebuah surat — otomatis dari pemetaan.
 
     Prioritas: (1) kode yang DIISI EKSPLISIT oleh pengguna; (2) aturan
     pemetaan paling SPESIFIK yang cocok — modul+jenis (skor 2) > salah
     satunya (skor 1); aturan dengan field kosong = wildcard; seri pertama
-    menang saat skor sama; (3) kode klasifikasi bawaan pengaturan. MURNI.
+    menang saat skor sama. Tak cocok satu pun → KOSONG. MURNI.
+
+    TIDAK ADA jaring "kode bawaan" di sini, dan itu disengaja. Permintaan
+    pemilik: *"tolong bedakan Kode Klasifikasi Bawaan (fallback) berdiri
+    sendiri dan Kode Klasifikasi Arsip berdiri sendiri, independent masing
+    masing"*. Dulu keduanya satu nilai: kode bawaan diam-diam menempati slot
+    klasifikasi arsip, sehingga nomor terbit membawa kode bawaan sambil
+    layar menyebutnya "klasifikasi arsip surat ini". Dua hal berbeda dengan
+    satu nama — dan yang membaca nomornya tak punya cara membedakannya.
 
     peta: list {modul, jenis_naskah, kode} dari pengaturan persuratan.
     """
@@ -587,7 +622,7 @@ def pilih_klasifikasi(peta, modul, jenis_naskah, eksplisit="", default="") -> st
         skor = (1 if a_modul else 0) + (1 if a_jenis else 0)
         if skor > skor_terbaik:
             terbaik, skor_terbaik = kode, skor
-    return terbaik or str(default or "").strip()
+    return terbaik
 
 
 def sebut_cakupan(modul, jenis_naskah) -> str:

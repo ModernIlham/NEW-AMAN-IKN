@@ -8,13 +8,20 @@ describe("teksSumberKlasifikasi", () => {
       .toBe("XX.99 · diisi manual");
     expect(teksSumberKlasifikasi({ kode_klasifikasi: "PL.02", sumber_klasifikasi: "pemetaan" }))
       .toBe("PL.02 · otomatis dari aturan pemetaan");
-    expect(teksSumberKlasifikasi({ kode_klasifikasi: "UM.01", sumber_klasifikasi: "bawaan" }))
-      .toBe("UM.01 · kode bawaan pengaturan");
+  });
+
+  test("TAK PERNAH menamai kode bawaan sebagai klasifikasi arsip", () => {
+    // Kalimat "Klasifikasi: SATKER-D · kode bawaan pengaturan" itulah yang
+    // dikeluhkan pemilik: dua hal berbeda dipanggil dengan satu nama.
+    for (const sumber of ["bawaan", "", "entah"]) {
+      const t = teksSumberKlasifikasi({ kode_klasifikasi: "", sumber_klasifikasi: sumber });
+      expect(t).not.toMatch(/kode bawaan/);
+    }
   });
 
   test("kosong dinyatakan terus terang, bukan dibiarkan kosong senyap", () => {
     expect(teksSumberKlasifikasi({ kode_klasifikasi: "", sumber_klasifikasi: "kosong" }))
-      .toBe("(kosong) · belum ada aturan maupun kode bawaan");
+      .toBe("(kosong) · belum ada aturan otomatis — isi manual bila surat ini perlu kode");
   });
 
   test("tanpa data → string kosong (pemanggil menyembunyikan barisnya)", () => {
@@ -38,17 +45,35 @@ describe("statusKodeKlasifikasi", () => {
     expect(statusKodeKlasifikasi({ dipakai_aturan: 2 }).warna).toContain("emerald");
   });
 
-  test("kode bawaan dihitung terpakai walau tanpa aturan", () => {
-    // Bawaan memengaruhi SETIAP nomor yang tak kena aturan — menyebutnya
-    // "belum dipakai" akan menyesatkan ke arah sebaliknya.
-    const st = statusKodeKlasifikasi({ dipakai_aturan: 0, bawaan: true });
+  test("kode bawaan yang DIMINTA format nomor dihitung terpakai", () => {
+    const st = statusKodeKlasifikasi({
+      dipakai_aturan: 0, bawaan: true, bawaan_di_nomor: true });
     expect(st.teks).toBe("kode bawaan");
     expect(st.aktif).toBe(true);
+    expect(st.warna).toContain("emerald");
   });
 
-  test("bawaan + aturan disebut keduanya", () => {
-    expect(statusKodeKlasifikasi({ dipakai_aturan: 2, bawaan: true }).teks)
+  test("kode bawaan yang TAK diminta format nomor mengaku tak di nomor", () => {
+    // Sejak kedua kode berdiri sendiri, jadi "kode bawaan" bukan lagi jaminan
+    // ikut ke nomor. Badge hijau tanpa syarat akan mengulang persis kesalahan
+    // yang melahirkan badge ini: mengatakan sebuah kode bekerja, padahal tidak.
+    const st = statusKodeKlasifikasi({
+      dipakai_aturan: 0, bawaan: true, bawaan_di_nomor: false });
+    expect(st.teks).toBe("kode bawaan (tak di nomor)");
+    expect(st.aktif).toBe(false);
+    expect(st.warna).toContain("amber");
+  });
+
+  test("bawaan + aturan disebut keduanya, dengan catatan bila tak di nomor", () => {
+    expect(statusKodeKlasifikasi({
+      dipakai_aturan: 2, bawaan: true, bawaan_di_nomor: true }).teks)
       .toBe("kode bawaan + 2 aturan");
+    // Aturannya tetap bekerja, jadi statusnya tetap aktif — yang tak bekerja
+    // cuma sisi bawaannya, dan itu disebutkan apa adanya.
+    const st = statusKodeKlasifikasi({
+      dipakai_aturan: 2, bawaan: true, bawaan_di_nomor: false });
+    expect(st.teks).toBe("kode bawaan (tak di nomor) + 2 aturan");
+    expect(st.aktif).toBe(true);
   });
 
   test("entri tanpa penanda (server lama) tak meledak", () => {
