@@ -67,6 +67,41 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#887] Panel Permohonan Persediaan berhenti 404 — rutenya tertelan pola — 2026-08-19
+
+Laporan pemilik: membuka Master Persediaan memunculkan
+`GET /api/persediaan/permohonan` → **404**.
+
+Endpoint-nya ada dan benar. Yang salah adalah **urutan pendaftaran router**:
+`persediaan_router` memuat `/persediaan/{item_id}` yang cocok dengan segmen apa
+pun, dan ia didaftarkan **sebelum** router permohonan. Permintaan itu karena
+itu ditangkap sebagai *"ambil item ber-id 'permohonan'"*, lalu menjawab 404
+karena memang tak ada item dengan id tersebut.
+
+**Kenapa sulit dicurigai.** `POST /persediaan/permohonan` tetap **bekerja** —
+`/persediaan/{item_id}` hanya punya GET/PUT/DELETE. Jadi permohonan bisa
+**dibuat** tetapi tak bisa **ditampilkan**, dan 404-nya terbaca seperti
+"datanya tidak ada", bukan seperti "rutenya salah alamat".
+
+**Yang dikerjakan:**
+
+- Router permohonan didaftarkan **sebelum** `persediaan_router`.
+- **Pemindai rute tertutup** untuk seluruh aplikasi: ia mengurutkan
+  `include_router`, membaca jalur tiap router menurut urutan deklarasinya, lalu
+  memeriksa apakah sebuah jalur literal akan lebih dulu tertangkap pola
+  sebelumnya. Statis — bukan dengan mengimpor aplikasinya, sebab impor `server`
+  menyalakan koneksi rate-limiter dan menggantung di lingkungan uji bebas-infra.
+
+**Satu rute lagi yang ikut ketahuan.** `GET /persediaan/permohonan-pengaturan`
+tertutup oleh pola yang sama dan selama ini juga selalu 404 — belum pernah
+dilaporkan karena layar yang memakainya jarang dibuka. Ikut pulih oleh
+perbaikan urutan yang sama.
+
+**Uji:** 4 uji pemindai. Satu mutasi diuji — mengembalikan urutan lama —
+dan ia memerah dengan menyebut kedua rute itu.
+
+---
+
 ## [#886] Deret nomor boleh dipisah per kode — tapi hanya bila kodenya tercetak — 2026-08-19
 
 Permintaan pemilik: nomor urut diberi saklar aktif/non-aktif; saat aktif, deret

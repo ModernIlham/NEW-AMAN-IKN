@@ -526,9 +526,17 @@ api_router.include_router(media_router)
 api_router.include_router(pdf_compress_router)
 api_router.include_router(documents_router)
 api_router.include_router(kodefikasi_router)
+# URUTAN PENTING: router yang punya jalur LITERAL di bawah "/persediaan/..."
+# harus didaftarkan SEBELUM `persediaan_router`, sebab router itu memuat
+# `/persediaan/{item_id}` yang cocok dengan segmen apa pun. Tanpa urutan ini,
+# `GET /persediaan/permohonan` ditangkap sebagai "ambil item ber-id
+# 'permohonan'" dan menjawab 404 — panel Permohonan tampak rusak padahal
+# endpoint-nya ada. (POST tidak terpengaruh karena `/persediaan/{item_id}`
+# hanya punya GET/PUT/DELETE — itulah kenapa permohonan bisa DIBUAT tetapi
+# tak bisa DITAMPILKAN.)
+api_router.include_router(persediaan_permohonan_router)
 api_router.include_router(persediaan_router)
 api_router.include_router(persediaan_laporan_router)
-api_router.include_router(persediaan_permohonan_router)
 api_router.include_router(aset_permohonan_router)
 api_router.include_router(tgr_router)
 api_router.include_router(penggunaan_router)
