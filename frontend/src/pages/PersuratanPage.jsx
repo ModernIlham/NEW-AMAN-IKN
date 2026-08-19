@@ -198,8 +198,37 @@ export default function PersuratanPage({ user, onBack }) {
     kirim(() => axios.delete(`${API}/persuratan/${s.id}`), `Surat ${s.nomor} dihapus`);
   };
 
-  const simpanAtur = () =>
-    kirim(() => axios.post(`${API}/persuratan/pengaturan`, formAtur), "Pengaturan tersimpan");
+  const simpanAtur = async () => {
+    // Respons POST berbentuk sama dengan GET, jadi form disegarkan dari
+    // hasilnya: setelah komposisi nomor diubah, susunan `format_nomor` yang
+    // BARU langsung terlihat alih-alih harus ditebak dari pilihan yang baru
+    // ditekan. Scope satker tetap mengosongkan field warisan (lihat pemuat
+    // pengaturan) supaya menyimpan tidak memaku salinan nilai Universal.
+    await kirim(() => axios.post(`${API}/persuratan/pengaturan`, formAtur)
+      .then((r) => {
+        const d = { ...r.data };
+        if (d.scope && d.sumber) {
+          d.warisan = {
+            format_nomor: d.format_nomor, kode_unit: d.kode_unit,
+            kode_klasifikasi_default: d.kode_klasifikasi_default,
+            reset_urut: d.reset_urut, peta_klasifikasi: d.peta_klasifikasi || [],
+          };
+          for (const f of ["format_nomor", "kode_unit",
+            "kode_klasifikasi_default", "reset_urut"]) {
+            if (d.sumber[f] !== "satker") d[f] = "";
+          }
+          if (d.sumber.peta_klasifikasi !== "satker") d.peta_klasifikasi = [];
+        }
+        setFormAtur((f) => (f ? d : f));
+        return r;
+      }), "Pengaturan tersimpan");
+  };
+
+  /** Jadikan satu kode katalog sebagai KODE BAWAAN semua surat. */
+  const pakaiKlasSebagaiBawaan = (kode) => {
+    setFormAtur((f) => ({ ...f, kode_klasifikasi_default: kode }));
+    toast.info(`${kode} dijadikan kode bawaan — tekan Simpan untuk memberlakukan`);
+  };
 
   const muatKlasifikasi = useCallback(async () => {
     try {
@@ -845,6 +874,38 @@ export default function PersuratanPage({ user, onBack }) {
                     })()}
                   </p>
                 )}
+                {/* Komposisi nomor — jalan ramah untuk dua placeholder yang
+                    paling sering diminta. Ia BUKAN setelan tersendiri: server
+                    menulis ulang `format_nomor` dari pilihan ini, dan template
+                    tetap satu-satunya sumber kebenaran. Tanpa ini, memakai kode
+                    klasifikasi berarti mengetik template ber-placeholder dengan
+                    benar — dan salah satu kurung membuat kodenya diam-diam tak
+                    pernah muncul di nomor mana pun. */}
+                <Field label="Komposisi Nomor">
+                  <select
+                    value={formAtur.komposisi_nomor || "keduanya"}
+                    onChange={(e) => setFormAtur((f) => ({ ...f, komposisi_nomor: e.target.value }))}
+                    className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                    data-testid="atur-komposisi">
+                    {Object.entries(formAtur.pilihan_komposisi || {
+                      keduanya: "Kode keamanan + kode klasifikasi arsip",
+                      keamanan: "Kode keamanan saja",
+                      klasifikasi: "Kode klasifikasi arsip saja",
+                      tanpa: "Tanpa keamanan maupun klasifikasi",
+                    }).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Susunan pada <b>Format Nomor</b> di bawah disesuaikan saat
+                    Simpan — bagian lain (kode unit, bulan, tahun, pemisah) tidak
+                    disentuh.
+                  </p>
+                </Field>
+                {formAtur.peringatan_klasifikasi && (
+                  <p className="text-[11px] leading-snug rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-amber-700 dark:text-amber-400"
+                    data-testid="atur-peringatan-klasifikasi">
+                    <b>Perhatian.</b> {formAtur.peringatan_klasifikasi}
+                  </p>
+                )}
                 <Field label="Format Nomor">
                   <Input value={formAtur.format_nomor} className="font-mono"
                     onChange={(e) => setFormAtur((f) => ({ ...f, format_nomor: e.target.value }))}
@@ -915,6 +976,20 @@ export default function PersuratanPage({ user, onBack }) {
                             {scopeK ? (formAtur.scope && scopeK === formAtur.scope
                               ? "Satker ini" : `Satker ${scopeK}`) : "Bersama"}
                           </span>
+                          {/* Jalan TERCEPAT membuat sebuah kode benar-benar
+                              masuk ke nomor: jadikan bawaan, berlaku untuk
+                              semua surat. Tombol "+ aturan" di sebelahnya
+                              untuk cakupan yang lebih sempit (per modul/jenis
+                              naskah). Tanpa salah satunya, kode di katalog
+                              hanya katalog — dan itulah yang membuat fiturnya
+                              tampak tak berpengaruh. */}
+                          <button type="button" onClick={() => pakaiKlasSebagaiBawaan(k.kode)}
+                            aria-label={`Jadikan ${k.kode} kode bawaan`}
+                            title="Jadikan kode bawaan — dipakai semua surat yang tak punya aturan lebih spesifik"
+                            className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0 flex-shrink-0"
+                            data-testid={`klas-jadikan-bawaan-${k.kode}`}>
+                            bawaan
+                          </button>
                           <button type="button" onClick={() => pakaiKlasSebagaiAturan(k.kode)}
                             aria-label={`Buat aturan untuk ${k.kode}`}
                             title="Buat aturan otomatis memakai kode ini"

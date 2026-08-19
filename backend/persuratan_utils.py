@@ -84,6 +84,91 @@ FORMAT_NOMOR_DEFAULT = "{kode_keamanan}-{urut}/{kode_klasifikasi}/{kode_unit}/{b
 _PLACEHOLDER_DIKENAL = {"kode_keamanan", "urut", "kode_klasifikasi",
                         "kode_unit", "bulan", "bulan_romawi", "tahun"}
 
+# Komposisi nomor yang lazim diminta di lapangan. Ini BUKAN konsep baru yang
+# disimpan tersendiri — ia hanya cara ramah membaca & menulis dua placeholder
+# pada `format_nomor`, yang tetap menjadi satu-satunya sumber kebenaran.
+# Tanpa ini, memakai kode klasifikasi berarti mengetik template ber-placeholder
+# dengan benar; dan salah ketik satu kurung membuat kodenya diam-diam tak
+# pernah muncul di nomor mana pun.
+KOMPOSISI_NOMOR = {
+    "keduanya": "Kode keamanan + kode klasifikasi arsip",
+    "keamanan": "Kode keamanan saja",
+    "klasifikasi": "Kode klasifikasi arsip saja",
+    "tanpa": "Tanpa keamanan maupun klasifikasi",
+}
+
+
+def _rapikan_pemisah(teks) -> str:
+    """Buang pemisah kembar & pemisah menggantung di tepi."""
+    out = re.sub(r"/{2,}", "/", str(teks or ""))
+    out = re.sub(r"-{2,}", "-", out)
+    out = re.sub(r"-/", "/", out)
+    return re.sub(r"^[-/]+|[-/]+$", "", out)
+
+
+def komposisi_format(template) -> str:
+    """Komposisi yang SEDANG berlaku, dibaca dari template."""
+    f = str(template or "")
+    ada_keamanan = "{kode_keamanan}" in f
+    ada_klas = "{kode_klasifikasi}" in f
+    if ada_keamanan and ada_klas:
+        return "keduanya"
+    if ada_keamanan:
+        return "keamanan"
+    if ada_klas:
+        return "klasifikasi"
+    return "tanpa"
+
+
+def terapkan_komposisi(template, komposisi) -> str:
+    """Template dengan placeholder keamanan/klasifikasi disesuaikan pilihan.
+
+    Bagian lain template TIDAK disentuh — kode unit, bulan, tahun, dan pemisah
+    khas satker tetap apa adanya. Yang ditambahkan disisipkan pada posisi
+    PerANRI 5/2021: keamanan mendahului nomor urut, klasifikasi mengikutinya.
+
+    Template tanpa `{urut}` dikembalikan apa adanya: ia tak sah dan sudah
+    ditolak validasi route — menyisipkan sesuatu ke dalamnya hanya akan
+    menyamarkan kesalahan yang seharusnya terlihat.
+    """
+    f = str(template or FORMAT_NOMOR_DEFAULT)
+    pilih = str(komposisi or "").strip()
+    if pilih not in KOMPOSISI_NOMOR or "{urut}" not in f:
+        return f
+    perlu_keamanan = pilih in ("keduanya", "keamanan")
+    perlu_klas = pilih in ("keduanya", "klasifikasi")
+
+    if perlu_keamanan and "{kode_keamanan}" not in f:
+        f = f.replace("{urut}", "{kode_keamanan}-{urut}", 1)
+    elif not perlu_keamanan and "{kode_keamanan}" in f:
+        f = f.replace("{kode_keamanan}", "", 1)
+
+    if perlu_klas and "{kode_klasifikasi}" not in f:
+        f = f.replace("{urut}", "{urut}/{kode_klasifikasi}", 1)
+    elif not perlu_klas and "{kode_klasifikasi}" in f:
+        f = f.replace("{kode_klasifikasi}", "", 1)
+    return _rapikan_pemisah(f)
+
+
+def peringatan_klasifikasi(format_nomor, kode_default, peta) -> str:
+    """'' bila aman; pesan bila nomor MEMINTA kode klasifikasi yang tak akan
+    pernah terisi.
+
+    Inilah keadaan yang membuat kode klasifikasi tampak "tidak berpengaruh":
+    template memuat {kode_klasifikasi}, katalog kodenya sudah diisi, tetapi tak
+    satu pun aturan otomatis maupun kode bawaan yang menunjuk salah satunya —
+    sehingga setiap nomor terbit tanpa kode itu, tanpa satu pun galat.
+    """
+    if "{kode_klasifikasi}" not in str(format_nomor or ""):
+        return ""
+    if str(kode_default or "").strip():
+        return ""
+    if any(str((a or {}).get("kode") or "").strip() for a in peta or []):
+        return ""
+    return ("Format nomor memuat {kode_klasifikasi}, tetapi belum ada aturan "
+            "otomatis maupun kode bawaan — nomor akan terbit TANPA kode "
+            "klasifikasi kecuali diisi manual tiap kali membooking")
+
 
 def _bulan_tahun(tanggal_iso):
     s = str(tanggal_iso or "").strip()[:10]

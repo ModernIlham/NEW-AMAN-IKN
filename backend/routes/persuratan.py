@@ -42,7 +42,9 @@ from persuratan_utils import (
     STATUS_KELUAR, STATUS_MASUK, TRANSISI_KELUAR, TRANSISI_MASUK,
     bangun_nomor, baris_agenda_csv, gabung_klasifikasi, label_agenda,
     periode_urut,
+    KOMPOSISI_NOMOR, komposisi_format, peringatan_klasifikasi,
     pilih_klasifikasi, placeholder_tak_dikenal, sumber_pengaturan,
+    terapkan_komposisi,
     urut_tampil, validate_format_reset, validate_peta_klasifikasi,
     validate_surat_keluar, validate_surat_masuk, validate_transisi,
 )
@@ -117,6 +119,12 @@ class PengaturanIn(BaseModel):
     # Aturan klasifikasi otomatis: [{modul, jenis_naskah, kode}] — field
     # kosong = wildcard; aturan paling spesifik menang (pilih_klasifikasi).
     peta_klasifikasi: Optional[list] = None
+    # Jalan pintas ramah untuk dua placeholder pada `format_nomor`
+    # ("keduanya"/"keamanan"/"klasifikasi"/"tanpa"). BUKAN field tersimpan:
+    # ia menulis ulang `format_nomor`, yang tetap satu-satunya sumber
+    # kebenaran. Dikerjakan di server supaya aturan penyisipannya hanya ada
+    # di satu tempat, bukan diduplikasi di klien.
+    komposisi_nomor: Optional[str] = None
 
 
 class KlasifikasiIn(BaseModel):
@@ -729,6 +737,29 @@ async def pratinjau_nomor(jenis_naskah: str = "", modul: str = "",
             "kode_klasifikasi": kode, "sumber_klasifikasi": sumber}
 
 
+async def _respons_pengaturan(_ks: str) -> dict:
+    """Bentuk respons pengaturan — dipakai GET maupun POST.
+
+    Disamakan supaya layar dapat menyegarkan dirinya dari hasil simpan: setelah
+    komposisi nomor diubah, `format_nomor` yang BARU ikut kembali dalam respons,
+    jadi pengguna melihat susunan yang benar-benar tersimpan alih-alih menebak
+    dari pilihan yang baru saja ditekannya.
+    """
+    efektif = await _pengaturan(_ks)
+    g = await db.persuratan_settings.find_one({"type": "global"}, _PROJ) or {}
+    s = ({} if not _ks else await db.persuratan_settings.find_one(
+        {"type": "satker", "kode_satker": _ks}, _PROJ) or {})
+    return {**efektif, "scope": _ks, "sumber": sumber_pengaturan(g, s),
+            "komposisi_nomor": komposisi_format(efektif["format_nomor"]),
+            "pilihan_komposisi": KOMPOSISI_NOMOR,
+            # Peringatan ini menjawab keluhan "kode klasifikasi tak pernah
+            # masuk ke nomor": template memintanya, katalog terisi, tetapi tak
+            # ada aturan maupun kode bawaan yang menunjuk salah satunya.
+            "peringatan_klasifikasi": peringatan_klasifikasi(
+                efektif["format_nomor"], efektif["kode_klasifikasi_default"],
+                efektif["peta_klasifikasi"])}
+
+
 @persuratan_router.get("/persuratan/pengaturan")
 async def get_pengaturan_persuratan(_user: dict = Depends(require_user)):
     """Setelan penomoran EFEKTIF pemanggil + metadata scope untuk UI:
@@ -736,12 +767,7 @@ async def get_pengaturan_persuratan(_user: dict = Depends(require_user)):
     per field dari mana nilai efektifnya berasal (satker/global/bawaan) —
     admin satker jadi tahu field mana warisan Universal dan mana khusus
     satkernya."""
-    _ks = kode_satker_user(_user)
-    efektif = await _pengaturan(_ks)
-    g = await db.persuratan_settings.find_one({"type": "global"}, _PROJ) or {}
-    s = ({} if not _ks else await db.persuratan_settings.find_one(
-        {"type": "satker", "kode_satker": _ks}, _PROJ) or {})
-    return {**efektif, "scope": _ks, "sumber": sumber_pengaturan(g, s)}
+    return await _respons_pengaturan(kode_satker_user(_user))
 
 
 @persuratan_router.post("/persuratan/pengaturan")
@@ -756,6 +782,12 @@ async def set_pengaturan_persuratan(payload: PengaturanIn,
     _ks = kode_satker_user(user)
     mentah = {k: v for k, v in payload.model_dump().items() if v is not None}
     update = {k: v.strip() for k, v in mentah.items() if isinstance(v, str)}
+    # `komposisi_nomor` bukan field tersimpan — ia menulis ulang `format_nomor`.
+    komposisi = update.pop("komposisi_nomor", "")
+    if komposisi and komposisi not in KOMPOSISI_NOMOR:
+        raise HTTPException(status_code=400, detail=(
+            f"Komposisi nomor tidak dikenal: {komposisi} "
+            f"(pilihan: {', '.join(KOMPOSISI_NOMOR)})"))
     if ("reset_urut" in update and update["reset_urut"] not in RESET_URUT
             and not (_ks and update["reset_urut"] == "")):
         raise HTTPException(status_code=400, detail=(
@@ -771,6 +803,12 @@ async def set_pengaturan_persuratan(payload: PengaturanIn,
         if errors:
             raise HTTPException(status_code=400, detail="; ".join(errors))
         update["peta_klasifikasi"] = peta
+    if komposisi:
+        # Basis = format yang DIKIRIM bila ada, selain itu format efektif yang
+        # sedang berlaku. Urutannya penting: mengubah komposisi tak boleh
+        # membuang kode unit / pemisah khas satker yang sudah dipakai bertahun.
+        basis = update.get("format_nomor") or (await _pengaturan(_ks))["format_nomor"]
+        update["format_nomor"] = terapkan_komposisi(basis, komposisi)
     if "format_nomor" in update:
         if not update["format_nomor"] and not _ks:
             update["format_nomor"] = FORMAT_NOMOR_DEFAULT
@@ -820,7 +858,7 @@ async def set_pengaturan_persuratan(payload: PengaturanIn,
                     detail=(f"Ubah pengaturan persuratan "
                             f"({_ks or 'global'}): "
                             f"{sorted(set(update) - {'type', 'kode_satker'})}"))
-    return await _pengaturan(_ks)
+    return await _respons_pengaturan(_ks)
 
 
 @persuratan_router.get("/persuratan")
