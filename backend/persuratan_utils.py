@@ -138,6 +138,51 @@ CONTOH_KOMPOSISI = {
 }
 
 
+# Unsur tulisan milik satker sendiri — potongan teks tetap yang sering muncul
+# di nomor surat (mis. "SETJEN", "UND", "/B/"). Disimpan supaya bentuk
+# penulisannya konsisten: sekali ditetapkan, ia disisipkan dengan satu ketukan
+# alih-alih diketik ulang — dan salah ketik satu huruf pada satu surat tidak
+# lagi mungkin.
+MAKS_UNSUR_KUSTOM = 20
+MAKS_PANJANG_UNSUR = 24
+
+
+def bersihkan_unsur_kustom(daftar) -> list:
+    """Normalkan daftar unsur: dipangkas, tanpa kosong, tanpa kembar, urutan
+    dipertahankan."""
+    keluar, terlihat = [], set()
+    for x in daftar or []:
+        t = str(x if x is not None else "").strip()
+        if t and t not in terlihat:
+            terlihat.add(t)
+            keluar.append(t)
+    return keluar
+
+
+def validate_unsur_kustom(daftar) -> list:
+    """Daftar pesan kesalahan untuk unsur tulisan kustom.
+
+    Kurung kurawal DITOLAK, dan itu bukan kerewelan: `{...}` adalah bahasa
+    placeholder. Unsur bernama `{apa saja}` akan lolos ke `format_nomor` lalu
+    ditolak validator placeholder dengan pesan yang menunjuk ke tempat yang
+    SALAH — pengguna diberi tahu formatnya rusak, padahal yang perlu diperbaiki
+    daftar unsurnya.
+    """
+    bersih = bersihkan_unsur_kustom(daftar)
+    errors = []
+    if len(bersih) > MAKS_UNSUR_KUSTOM:
+        errors.append(f"Unsur tulisan maksimal {MAKS_UNSUR_KUSTOM}; "
+                      f"terkirim {len(bersih)}")
+    for u in bersih:
+        if "{" in u or "}" in u:
+            errors.append(f"Unsur '{u}' memuat kurung kurawal — itu penanda "
+                          "placeholder, bukan tulisan biasa")
+        if len(u) > MAKS_PANJANG_UNSUR:
+            errors.append(f"Unsur '{u[:12]}…' terlalu panjang "
+                          f"(maksimal {MAKS_PANJANG_UNSUR} karakter)")
+    return errors
+
+
 def _rapikan_pemisah(teks) -> str:
     """Buang pemisah kembar & pemisah menggantung di tepi."""
     out = re.sub(r"/{2,}", "/", str(teks or ""))

@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Search, Loader2, Mail, MailPlus, Inbox, FileDown,
-  CheckCircle2, XCircle, Pencil, Settings2, Plus, Trash2, GitBranch,
+  CheckCircle2, XCircle, Pencil, Settings2, Plus, Trash2, GitBranch, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -86,6 +86,7 @@ export default function PersuratanPage({ user, onBack }) {
   // perakitan nomor tetap hanya ada di satu tempat.
   const [praFormat, setPraFormat] = useState(null);
   const praFormatTimer = useRef(null);
+  const [unsurBaru, setUnsurBaru] = useState("");
   const [batal, setBatal] = useState(null); // {surat, alasan}
   const [relasiSurat, setRelasiSurat] = useState(null); // surat utk dialog relasi/timeline
   const [saving, setSaving] = useState(false);
@@ -1008,6 +1009,56 @@ export default function PersuratanPage({ user, onBack }) {
                         </button>
                       );
                     })}
+                  </div>
+                  {/* Unsur tulisan milik satker sendiri — potongan tetap yang
+                      sering muncul di nomor (mis. "SETJEN"). Disimpan supaya
+                      bentuk penulisannya konsisten: sekali ditetapkan, ia
+                      disisipkan dengan satu ketukan alih-alih diketik ulang,
+                      dan salah ketik satu huruf pada satu surat tak lagi
+                      mungkin. Tersimpan bersama pengaturan, bisa dihapus. */}
+                  <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                    {(formAtur.unsur_kustom || []).map((u) => (
+                      <span key={u}
+                        className="inline-flex items-center gap-1 pl-1.5 pr-0.5 py-0.5 rounded border border-sky-500/40 bg-sky-500/10 text-[10px] text-sky-700 dark:text-sky-300">
+                        <button type="button"
+                          title={`Sisipkan "${u}" ke format nomor`}
+                          onClick={() => {
+                            const baru = `${formAtur.format_nomor || ""}/${u}`;
+                            setFormAtur((f) => ({ ...f, format_nomor: baru }));
+                            mintaPraFormat(baru, "");
+                          }}
+                          className="min-h-0 min-w-0 font-mono"
+                          data-testid={`atur-unsur-${u}`}>{u}</button>
+                        <button type="button"
+                          aria-label={`Hapus unsur ${u}`}
+                          title="Hapus dari daftar unsur (tidak mengubah format yang sudah diketik)"
+                          onClick={() => setFormAtur((f) => ({
+                            ...f,
+                            unsur_kustom: (f.unsur_kustom || []).filter((x) => x !== u),
+                          }))}
+                          className="min-h-0 min-w-0 w-3.5 h-3.5 inline-flex items-center justify-center rounded-full hover:bg-black/10 dark:hover:bg-white/15"
+                          data-testid={`atur-unsur-hapus-${u}`}>
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                    <Input
+                      value={unsurBaru}
+                      onChange={(e) => setUnsurBaru(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter") return;
+                        e.preventDefault();
+                        const t = unsurBaru.trim();
+                        if (!t) return;
+                        setFormAtur((f) => ({
+                          ...f,
+                          unsur_kustom: [...(f.unsur_kustom || []).filter((x) => x !== t), t],
+                        }));
+                        setUnsurBaru("");
+                      }}
+                      placeholder="Tambah unsur tulisan (Enter)"
+                      className="h-7 w-52 text-[11px] font-mono"
+                      data-testid="atur-unsur-baru" />
                   </div>
                   {praFormat?.nomor && (
                     <p className="text-[11px] mt-1.5 rounded-lg bg-muted/60 px-2.5 py-1.5">

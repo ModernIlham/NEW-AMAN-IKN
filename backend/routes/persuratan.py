@@ -42,8 +42,9 @@ from persuratan_utils import (
     STATUS_KELUAR, STATUS_MASUK, TRANSISI_KELUAR, TRANSISI_MASUK,
     bangun_nomor, baris_agenda_csv, gabung_klasifikasi, label_agenda,
     periode_urut,
-    CONTOH_KOMPOSISI, KOMPOSISI_NOMOR, PLACEHOLDER_NOMOR, dimensi_deret,
-    komposisi_format, kunci_deret,
+    CONTOH_KOMPOSISI, KOMPOSISI_NOMOR, PLACEHOLDER_NOMOR,
+    bersihkan_unsur_kustom, dimensi_deret, komposisi_format, kunci_deret,
+    validate_unsur_kustom,
     peringatan_klasifikasi,
     pilih_klasifikasi, placeholder_tak_dikenal, sumber_pengaturan,
     terapkan_komposisi,
@@ -132,6 +133,8 @@ class PengaturanIn(BaseModel):
     # tak memuat keduanya — tanpa kode pembeda di nomor, deret terpisah
     # melahirkan nomor resmi yang kembar.
     deret_per_kode: Optional[bool] = None
+    # Potongan tulisan tetap milik satker untuk disisipkan ke format nomor.
+    unsur_kustom: Optional[list] = None
 
 
 class KlasifikasiIn(BaseModel):
@@ -176,6 +179,9 @@ async def _pengaturan(kode_satker: str = "") -> dict:
         # bawaan: memisahkan deret mengubah nomor yang akan terbit, jadi ia
         # harus dinyalakan dengan sadar, bukan diwarisi diam-diam.
         "deret_per_kode": bool(s.get("deret_per_kode")),
+        # Potongan tulisan tetap milik satker (mis. "SETJEN") — disisipkan ke
+        # format nomor dengan satu ketukan supaya bentuknya konsisten.
+        "unsur_kustom": bersihkan_unsur_kustom(s.get("unsur_kustom")),
     }
 
 
@@ -893,6 +899,11 @@ async def set_pengaturan_persuratan(payload: PengaturanIn,
             f"Reset nomor tidak dikenal: {update['reset_urut']} "
             f"(pilihan: {', '.join(RESET_URUT)}"
             + ("; kosong = ikut Universal)" if _ks else ")")))
+    if "unsur_kustom" in mentah:
+        errors = validate_unsur_kustom(mentah["unsur_kustom"])
+        if errors:
+            raise HTTPException(status_code=400, detail="; ".join(errors))
+        update["unsur_kustom"] = bersihkan_unsur_kustom(mentah["unsur_kustom"])
     if "peta_klasifikasi" in mentah:
         peta = [{"modul": str((a or {}).get("modul") or "").strip(),
                  "jenis_naskah": str((a or {}).get("jenis_naskah") or "").strip(),
