@@ -67,6 +67,52 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#878] Kartu ringkasan akhirnya menjawab pertanyaan yang sama dengan daftarnya — 2026-08-18
+
+Laporan pemilik: memasang filter lanjutan menyaring daftar asetnya, tetapi
+**Total Aset / Total Nilai / Aktif / Maintenance** di atasnya tidak bergerak
+sedikit pun.
+
+Penyebabnya bukan efek yang lupa dipicu — statistiknya memang dimuat ulang
+setiap filter berubah. Yang salah lebih dalam: `GET /assets/stats` hanya
+**menerima tiga parameter** (cari, kategori, kegiatan) dan merakit kuerinya
+sendiri, terpisah dari builder yang dipakai daftar. Lima belas filter lanjutan
+lainnya tak pernah punya jalan untuk sampai ke sana.
+
+Itu jenis kegagalan yang paling sulit dicurigai: dua angka untuk satu layar,
+dan yang lebih besar tampak lebih meyakinkan.
+
+**Yang dikerjakan:**
+
+- `kueri_aset_terlihat()` — satu perakit kueri (pencarian bebas + filter +
+  isolasi satker) yang kini dipakai **daftar dan statistik**. Menyalin daftar
+  parameter ke endpoint kedua hanya akan mengulang cacat yang sama pada filter
+  ke-19; yang menutup pintunya adalah tempat perakitan yang hanya satu.
+- Kunci cache statistik diturunkan dari **kueri final**, bukan dari daftar
+  parameter yang harus diingat seseorang. Kunci lama (`satker|kegiatan|cari|
+  kategori`) akan membuat dua filter berbeda berbagi satu entri — dan selama
+  satu menit angka filter sebelumnya disajikan sebagai angka filter yang baru.
+  Salah, tapi tampak wajar; lebih berbahaya daripada cacat yang sedang ditutup.
+- Klien mengirim filter lanjutan ke statistik lewat `buildFilterParams` — jalur
+  yang sama persis dengan daftar.
+- **Jalur luring ikut dibereskan.** Saat daftar disajikan dari snapshot,
+  kartunya dulu tetap memakai angka daring terakhir. Sekarang dihitung dari
+  baris tersaring yang sama (`lib/statistikAset.js`), memakai `filtered` —
+  bukan `merged` — supaya Total Aset selalu sama dengan total yang ditampilkan
+  daftar.
+
+**Catatan penjagaan.** Guard isolasi satker ikut pindah ke helper baru, dan
+uji pemindai sumber yang menagihnya langsung memerah. Ia tidak dilonggarkan
+dengan pengecualian: ditambahkan konsep *helper pembawa guard* beserta uji yang
+membuktikan helper itu sendiri memanggil guard — sehingga rantainya tetap
+terbukti ujung ke ujung, dan mencabut guard dari helper akan menjatuhkan semua
+endpoint yang bergantung padanya sekaligus.
+
+**Uji:** 25 uji backend (termasuk kesamaan cakupan statistik vs daftar untuk 14
+kombinasi filter) + 9 uji frontend. Empat mutasi diuji dan semuanya mati.
+
+---
+
 ## [#877] Register perolehan akhirnya bisa diperbaiki — sejauh dokumen turunannya mengizinkan — 2026-08-18
 
 Halaman Pengadaan tidak punya tombol ubah sama sekali. Satu salah ketik nomor

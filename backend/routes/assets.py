@@ -451,6 +451,87 @@ def build_asset_search_query(
     return query
 
 
+async def kueri_aset_terlihat(
+    _user: dict,
+    *,
+    search: str = "",
+    category=None,
+    activity_id: str = "",
+    condition=None,
+    status=None,
+    location=None,
+    eselon1_filter=None,
+    eselon2_filter=None,
+    stiker_status=None,
+    inventory_status=None,
+    price_min: float = None,
+    price_max: float = None,
+    nomor_spm: str = "",
+    perolehan_dari: str = "",
+    user_filter: str = "",
+    pengguna_nip: str = "",
+    beli_dari: str = "",
+    beli_sampai: str = "",
+) -> dict:
+    """Query final "aset mana yang sedang dilihat" — filter + pencarian bebas +
+    isolasi satker, siap dipakai `$match`.
+
+    SATU jalur untuk daftar (`GET /assets`) dan statistik (`GET /assets/stats`).
+    Sebelumnya keduanya merakit query sendiri-sendiri, dan hasilnya persis
+    seperti yang dilaporkan pemilik: memilih Kondisi = Rusak Berat memang
+    menyaring daftarnya, tetapi kartu "Total Aset / Total Nilai / Aktif /
+    Maintenance" di atasnya tetap menyebut angka SELURUH kegiatan. Dua angka
+    untuk satu layar, dan yang besar tampak lebih meyakinkan.
+
+    Menyalin daftar parameternya ke endpoint kedua akan mengulang cacat yang
+    sama pada filter ke-19. Yang menutup pintunya adalah tempat perakitan yang
+    hanya satu ini.
+    """
+    # PENCARIAN TEKS BEBAS via Meilisearch (bila aktif) — lihat catatan panjang
+    # di `get_assets`. Hasil KOSONG dari Meili tidak dipercaya sebagai "memang
+    # tak ada": indeks bisa tertinggal, jadi jatuh ke regex Mongo yang otoritatif.
+    meili_ids = await cari_id_aset(_user, activity_id, search) if _search_len_ok(search) else None
+    if meili_ids is not None and not meili_ids:
+        meili_ids = None
+    query = build_asset_search_query(
+        search=("" if meili_ids is not None else search),
+        category=category, activity_id=activity_id,
+        condition=condition, status=status, location=location,
+        eselon1_filter=eselon1_filter, eselon2_filter=eselon2_filter,
+        stiker_status=stiker_status, inventory_status=inventory_status,
+        price_min=price_min, price_max=price_max, nomor_spm=nomor_spm,
+        perolehan_dari=perolehan_dari, user_filter=user_filter,
+        pengguna_nip=pengguna_nip, beli_dari=beli_dari, beli_sampai=beli_sampai,
+    )
+    if meili_ids is not None:
+        query["id"] = {"$in": meili_ids}
+    # ISOLASI SATKER (M-SCOPE): activity_id spesifik → wajib milik satker user;
+    # tanpa activity_id → batasi ke seluruh kegiatan satkernya.
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+    return await scope_query_aset(_user, query)
+
+
+def kunci_cache_kueri(_user, query: dict) -> str:
+    """Kunci cache yang MENGIKUTI seluruh isi query, bukan sebagian parameter.
+
+    Kunci lama hanya menyusun `satker|kegiatan|cari|kategori`. Begitu statistik
+    ikut menerima filter lanjutan, kunci seperti itu menjadi lebih berbahaya
+    daripada tidak ada cache sama sekali: dua filter yang berbeda menghasilkan
+    kunci yang sama, dan selama satu menit angka milik filter sebelumnya
+    disajikan sebagai angka filter yang baru. Salah, tapi tampak wajar.
+
+    Karena itu kuncinya diturunkan dari query FINAL — setelah pencarian dan
+    isolasi satker ikut terbentuk — bukan dari daftar parameter yang harus
+    diingat seseorang untuk diperbarui setiap kali ada filter baru.
+    """
+    import hashlib
+    # Diurutkan per kunci supaya urutan penyisipan tak mengubah hasil; `repr`
+    # dipakai karena nilai query memuat regex terkompilasi yang tak bisa
+    # di-JSON-kan.
+    sidik = repr(sorted((k, repr(v)) for k, v in query.items()))
+    return f"{kode_satker_user(_user)}|{hashlib.sha1(sidik.encode()).hexdigest()}"
+
+
 @assets_router.get("/assets")
 async def get_assets(
     search: str = "",
@@ -479,35 +560,19 @@ async def get_assets(
     _user: dict = Depends(require_user),
 ):
     """Get paginated assets with advanced filters - optimized for millions of records"""
-    # PENCARIAN TEKS BEBAS via Meilisearch (bila aktif): resolve kata kunci →
-    # daftar id kandidat ter-scope, lalu batasi kueri Mongo ke id itu. SEMUA
-    # filter lanjutan/sort/paginasi/isolasi tetap dijalankan Mongo (otoritatif).
-    # `meili_ids is None` → Meili nonaktif/gagal → pakai regex Mongo 16-field lama.
-    meili_ids = await cari_id_aset(_user, activity_id, search) if _search_len_ok(search) else None
-    # Hasil KOSONG dari Meili TIDAK dipercaya sebagai "memang tidak ada":
-    # indeks bisa tertinggal (dokumen gagal sinkron saat Meili mati) dan
-    # pencocokan berbasis kata di Meili tak mengenal kode yang diketik tanpa
-    # pemisah. Nihil → jatuh ke regex Mongo yang otoritatif; biaya pindai
-    # hanya muncul pada pencarian yang memang tak berhasil.
-    if meili_ids is not None and not meili_ids:
-        meili_ids = None
-    query = build_asset_search_query(
-        search=("" if meili_ids is not None else search),
-        category=category, activity_id=activity_id,
+    # Perakitan query (pencarian bebas, filter lanjutan, isolasi satker) ada di
+    # `kueri_aset_terlihat` — dipakai bersama dengan GET /assets/stats supaya
+    # daftar dan angka ringkasannya tak pernah lagi menjawab pertanyaan yang
+    # berbeda.
+    query = await kueri_aset_terlihat(
+        _user, search=search, category=category, activity_id=activity_id,
         condition=condition, status=status, location=location,
         eselon1_filter=eselon1_filter, eselon2_filter=eselon2_filter,
         stiker_status=stiker_status, inventory_status=inventory_status,
         price_min=price_min, price_max=price_max, nomor_spm=nomor_spm,
-        perolehan_dari=perolehan_dari, user_filter=user_filter, pengguna_nip=pengguna_nip,
-        beli_dari=beli_dari, beli_sampai=beli_sampai,
+        perolehan_dari=perolehan_dari, user_filter=user_filter,
+        pengguna_nip=pengguna_nip, beli_dari=beli_dari, beli_sampai=beli_sampai,
     )
-    if meili_ids is not None:
-        # Daftar kosong = tak ada kecocokan → hasil nihil (bukan "semua").
-        query["id"] = {"$in": meili_ids}
-    # ISOLASI SATKER (M-SCOPE): activity_id spesifik → wajib milik satker
-    # user; tanpa activity_id → batasi ke seluruh kegiatan satkernya.
-    await pastikan_akses_kegiatan_id(_user, activity_id)
-    query = await scope_query_aset(_user, query)
 
     # Extended sort options
     # Tiebreaker `id` di setiap opsi: sort Mongo tidak stabil antar-query
@@ -712,36 +777,54 @@ async def get_filter_options(activity_id: str = "", _user: dict = Depends(requir
     return result
 
 @assets_router.get("/assets/stats")
-async def get_assets_stats(search: str = "", category: str = "", activity_id: str = "",
-                           _user: dict = Depends(require_user)):
-    """Get aggregate stats (cached 1 min per unique query)"""
-    await pastikan_akses_kegiatan_id(_user, activity_id)
-    cache_key = f"{kode_satker_user(_user)}|{activity_id}|{search}|{category}"
+async def get_assets_stats(
+    search: str = "",
+    # Tetap TUNGGAL, persis seperti GET /assets. Kategori multi-nilai adalah
+    # perubahan tersendiri yang harus mengenai keduanya sekaligus — kalau hanya
+    # salah satu yang menerima daftar, dua endpoint ini kembali menjawab
+    # pertanyaan yang berbeda dan cacat yang sedang ditutup ini lahir lagi.
+    category: str = "",
+    activity_id: str = "",
+    # Filter lanjutan — DAFTAR PARAMETER YANG SAMA PERSIS dengan GET /assets.
+    # Tanpa ini kartu ringkasan menjawab pertanyaan lain daripada daftar di
+    # bawahnya: menyaring Kondisi = Rusak Berat menyusutkan daftarnya, tetapi
+    # "Total Aset" tetap menyebut angka seluruh kegiatan.
+    condition: List[str] = Query(default=[]),
+    status: List[str] = Query(default=[]),
+    location: List[str] = Query(default=[]),
+    eselon1_filter: List[str] = Query(default=[]),
+    eselon2_filter: List[str] = Query(default=[]),
+    stiker_status: List[str] = Query(default=[]),
+    inventory_status: List[str] = Query(default=[]),
+    price_min: float = None,
+    price_max: float = None,
+    nomor_spm: str = "",
+    perolehan_dari: str = "",
+    user_filter: str = "",
+    pengguna_nip: str = "",
+    beli_dari: str = "",
+    beli_sampai: str = "",
+    _user: dict = Depends(require_user),
+):
+    """Angka ringkasan untuk kumpulan aset yang SEDANG DILIHAT (cache 1 menit).
+
+    Query-nya dirakit `kueri_aset_terlihat` — jalur yang sama dengan daftar —
+    sehingga "Total Aset" di kartu selalu sama dengan total daftar di bawahnya.
+    """
+    query = await kueri_aset_terlihat(
+        _user, search=search, category=category, activity_id=activity_id,
+        condition=condition, status=status, location=location,
+        eselon1_filter=eselon1_filter, eselon2_filter=eselon2_filter,
+        stiker_status=stiker_status, inventory_status=inventory_status,
+        price_min=price_min, price_max=price_max, nomor_spm=nomor_spm,
+        perolehan_dari=perolehan_dari, user_filter=user_filter,
+        pengguna_nip=pengguna_nip, beli_dari=beli_dari, beli_sampai=beli_sampai,
+    )
+    cache_key = kunci_cache_kueri(_user, query)
     _cached = await cache_get("stats", cache_key)
     if _cached is not None:
         return _cached
 
-    query = {}
-    if activity_id:
-        query["activity_id"] = activity_id
-    query = await scope_query_aset(_user, query)
-    # Pencarian teks bebas via Meilisearch bila aktif (konsisten dgn GET /assets
-    # sehingga total statistik = total daftar). Fallback → regex 5-field lama.
-    meili_ids = await cari_id_aset(_user, activity_id, search) if _search_len_ok(search) else None
-    if meili_ids is not None:
-        query["id"] = {"$in": meili_ids}
-    elif _search_len_ok(search):
-        rx = _rx(search)
-        query["$or"] = [
-            {"asset_code": rx},
-            {"asset_name": rx},
-            {"serial_number": rx},
-            {"location": rx},
-            {"brand": rx},
-        ]
-    if category:
-        query["category"] = category
-    
     pipeline = [
         {"$match": query},
         {"$group": {
