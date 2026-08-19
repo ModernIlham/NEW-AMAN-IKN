@@ -67,6 +67,51 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#884] Kode klasifikasi arsip akhirnya bisa benar-benar masuk ke nomor — 2026-08-19
+
+Keluhan pemilik: *"pada Format Nomor, Kode Klasifikasi Arsip masih belum masuk
+ke dalam surat"* — dan *"biasanya mau pakai kode keamanan atau kode klasifikasi
+arsip (atau bisa keduanya)"*.
+
+Rantainya sebenarnya **sudah tersambung**: `pilih_klasifikasi` → `bangun_nomor`
+di semua jalur penerbitan nomor. Yang membuatnya tampak mati ada dua, dan
+keduanya senyap:
+
+1. Nomor hanya memuat kode klasifikasi bila templatenya memuat
+   `{kode_klasifikasi}` — dan mengubahnya berarti mengetik placeholder dengan
+   benar. Satu kurung salah, kodenya diam-diam tak pernah muncul.
+2. Kode di **katalog** tak menyentuh nomor apa pun sampai dipasang sebagai
+   aturan otomatis atau kode bawaan. Nomor lalu terbit tanpa kode klasifikasi
+   **tanpa satu pun galat**.
+
+**Yang dikerjakan:**
+
+- **Komposisi Nomor** dapat dipilih: kode keamanan saja · kode klasifikasi saja
+  · keduanya · tanpa keduanya. Ia **bukan setelan tersendiri** — server menulis
+  ulang `format_nomor` dari pilihan itu, sehingga template tetap satu-satunya
+  sumber kebenaran dan tak ada sumber kedua yang bisa berselisih dengannya.
+  Bagian lain template (kode unit, bulan, tahun, pemisah khas satker) tidak
+  disentuh: susunan yang sudah dipakai bertahun tak boleh hilang karena satu
+  pilihan.
+- **Peringatan** saat nomor MEMINTA kode klasifikasi yang tak akan pernah
+  terisi — template memuat placeholder-nya, katalog sudah diisi, tetapi tak ada
+  aturan maupun kode bawaan yang menunjuk salah satunya.
+- Tombol **"bawaan"** di tiap baris katalog: jalan tercepat membuat sebuah kode
+  benar-benar masuk ke nomor, berlaku untuk semua surat. Melengkapi tombol
+  "+ aturan" yang sudah ada untuk cakupan lebih sempit.
+- Respons simpan pengaturan kini sebentuk dengan respons baca, sehingga susunan
+  `format_nomor` yang **baru** langsung terlihat setelah Simpan — bukan ditebak
+  dari pilihan yang baru ditekan.
+
+**Penjaga yang sengaja dipertahankan.** Deret bulanan tetap mewajibkan unsur
+bulan pada format; komposisi **bukan pintu belakang** yang melewatinya. Tanpa
+penjaga itu nomor yang sama terbit ulang tiap bulan — duplikat nomor resmi yang
+tak bisa diperbaiki belakangan. Uji khusus mengunci hal ini.
+
+**Uji:** 26 uji baru. Tiga mutasi diuji dan semuanya mati.
+
+---
+
 ## [#883] Buku agenda terurut & berlencana sesuai metode deret yang dipilih — 2026-08-19
 
 Laporan pemilik beserta tangkapan layarnya: daftar surat tampak tak beraturan,
