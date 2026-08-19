@@ -1071,8 +1071,7 @@ async def terbitkan_bast_ppk_kpb(perolehan_id: str, payload: BastPpkIn,
         from routes.persuratan import _no_agenda_berikut, _pengaturan
         atur = await _pengaturan(kode)
         kode_klas = pilih_klasifikasi(atur["peta_klasifikasi"], "pengadaan",
-                                      "Berita Acara",
-                                      default=atur["kode_klasifikasi_default"])
+                                      "Berita Acara")
         tahun = int(tgl[:4]) if tgl[:4].isdigit() else now.year
         periode = (periode_urut(atur.get("reset_urut"), tgl)
                    or periode_urut(atur.get("reset_urut"),
@@ -1080,7 +1079,8 @@ async def terbitkan_bast_ppk_kpb(perolehan_id: str, payload: BastPpkIn,
         no_agenda = await _no_agenda_berikut("keluar", periode, kode)
         nomor = bangun_nomor(atur["format_nomor"], no_agenda, tgl,
                              kode_klasifikasi=kode_klas,
-                             kode_unit=atur["kode_unit"])
+                             kode_unit=atur["kode_unit"],
+                             kode_bawaan=atur["kode_klasifikasi_default"])
         surat_id = str(uuid.uuid4())
         await db.surat.insert_one({
             "id": surat_id, "jenis": "keluar", "no_agenda": no_agenda,

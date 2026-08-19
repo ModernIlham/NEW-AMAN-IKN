@@ -67,6 +67,82 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#897] Kode Klasifikasi Bawaan dan Kode Klasifikasi Arsip berdiri sendiri-sendiri — 2026-08-19
+
+Pemilik mengirim satu tangkapan layar, dan tangkapan itu sudah memuat cacatnya
+lengkap dengan kalimat pengakuannya:
+
+```
+Perkiraan nomor yang akan terbit:
+B-003/SATKER-D/OIKN/VIII/2026
+Klasifikasi: SATKER-D · kode bawaan pengaturan
+```
+
+Baris ketiga menyebut **SATKER-D sebagai klasifikasi arsip surat ini**, padahal
+SATKER-D adalah **Kode Klasifikasi Bawaan**. Dua hal berbeda memakai satu
+nilai, satu nama, dan satu slot pada nomor. Permintaannya: *"tolong bedakan
+Kode Klasifikasi Bawaan (fallback) berdiri sendiri dan Kode Klasifikasi Arsip
+berdiri sendiri, independent masing masing"*.
+
+Memang begitu rancangan lamanya. `pilih_klasifikasi` punya jaring terakhir:
+kode eksplisit → aturan pemetaan → **kode bawaan**. Jaring itulah yang
+menggabungkan keduanya. Akibatnya berlapis, dan semuanya senyap:
+
+- Nomor resmi terbit membawa kode bawaan, tak terbedakan dari nomor yang
+  benar-benar berklasifikasi arsip.
+- Surat tercatat berklasifikasi arsip `SATKER-D` di buku agenda, padahal
+  klasifikasinya sebenarnya belum ditentukan.
+- Peringatan "{kode_klasifikasi} tak akan pernah terisi" **dibungkam** oleh
+  kode bawaan — jadi keadaan yang perlu diperbaiki justru tampak beres.
+- Badge katalog menghijau untuk kode bawaan, mengaku "dipakai".
+
+**Yang berubah:**
+
+| Sebelum | Sesudah |
+|---|---|
+| `pilih_klasifikasi(..., default=kode_bawaan)` | `pilih_klasifikasi(...)` — tak cocok = **KOSONG** |
+| Kode bawaan mengisi `{kode_klasifikasi}` | Kode bawaan punya slotnya sendiri: **`{kode_bawaan}`** |
+| `sumber_klasifikasi` bisa bernilai `"bawaan"` | hanya `eksplisit` / `pemetaan` / `kosong` |
+| Kode bawaan meredam peringatan klasifikasi | dua slot, dua peringatan, diperiksa sendiri-sendiri |
+| Badge "kode bawaan" selalu hijau | hijau hanya bila format memang memuat `{kode_bawaan}` |
+
+Slot barunya sengaja ditaruh **di luar deret PerANRI** pada daftar placeholder.
+Menyisipkan seluruh chip berurutan harus langsung menghasilkan bentuk nomor
+yang benar; kalau slot bawaan diselipkan ke tengah deret, setiap orang yang
+memakai chip berurutan akan diam-diam mendapat kode bawaan di nomornya —
+persis penggabungan yang sedang dibereskan.
+
+**Akibat yang perlu diketahui**: satker yang selama ini mengandalkan kode
+bawaan muncul di nomor akan melihat slot itu kosong (`B-003/OIKN/VIII/2026`).
+Yang menginginkannya kembali memasang `{kode_bawaan}` pada Format Nomor — dan
+kini itu keputusan yang terlihat, bukan efek samping sebuah isian.
+
+**Dua drift ikut ditutup di jalan:**
+
+- `_PLACEHOLDER_DIKENAL` sekarang **diturunkan** dari `PLACEHOLDER_NOMOR`, bukan
+  ditulis ulang. Dulu keduanya berdiri sendiri: placeholder baru yang lupa
+  didaftarkan akan disisipkan layar dengan satu ketukan lalu ditolak validator
+  sebagai "placeholder tak dikenal" — layar dan validator saling membantah, dan
+  yang disalahkan penggunanya.
+- Kalimat "Susunan PerANRI 5/2021 — placeholder: …" tak lagi **menyalin**
+  daftarnya. Salinan tak ikut bertambah: begitu `{kode_bawaan}` lahir, kalimat
+  yang mengaku menyebutkan seluruh placeholder justru menyembunyikan
+  satu-satunya slot baru yang perlu diketahui pengguna.
+
+**Penjaga baru** — `backend/tests/unit/test_klasifikasi_berdiri_sendiri.py`
+(24 uji) dan `frontend/src/lib/kodeBawaanTerpisah.test.js` (6 uji): dua slot
+tak saling mengisi, komposisi nomor tak menyentuh slot bawaan, setiap chip
+diterima validator, dan **pemindai AST** yang menagih (a) tak ada pemanggil
+menitipkan `default=` lagi, (b) setiap jalur penerbitan nomor menyalurkan
+`kode_bawaan` — jalur BAST dan Pengadaan berjalan di balik centang opsional,
+jadi tanpa pemindaian ia baru ketahuan dari nomor surat yang sudah resmi.
+
+Tujuh mutasi dipasang lalu dibunuh. Satu di antaranya **lolos lebih dulu**:
+menghapus `kode_bawaan` dari jalur BAST tak menjatuhkan uji apa pun, karena
+pemindainya menyapu direktori yang salah (`backend/backend/routes`) dan
+mengembalikan nol berkas. Pemindai buta selalu melaporkan bersih. Jalurnya
+diperbaiki dan jumlah temuannya kini ikut ditagih, lalu mutasinya mati.
+
 ## [#896] Popup tanggal terbit di bawah tombolnya, bukan di pojok kiri layar — 2026-08-19
 
 Laporan pemilik: di tablet dan desktop, halaman **Penilaian** dan

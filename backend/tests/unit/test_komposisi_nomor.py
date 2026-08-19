@@ -172,8 +172,25 @@ class TestPeringatanKodeMenganggur:
         pesan = peringatan_klasifikasi(FORMAT_NOMOR_DEFAULT, "", [])
         assert "TANPA kode" in pesan
 
-    def test_diam_saat_ada_kode_bawaan(self):
-        assert peringatan_klasifikasi(FORMAT_NOMOR_DEFAULT, "UM.01", []) == ""
+    def test_kode_bawaan_TIDAK_LAGI_meredam_peringatan(self):
+        """Dulu kode bawaan membungkam peringatan ini, karena ia memang jaring
+        pengaman slot klasifikasi. Sejak keduanya dipisah ia bukan lagi jaring
+        itu — membungkam peringatan dengan kode bawaan berarti menjanjikan
+        sesuatu yang tak akan terjadi."""
+        pesan = peringatan_klasifikasi(FORMAT_NOMOR_DEFAULT, "UM.01", [])
+        assert "{kode_klasifikasi}" in pesan
+
+    def test_menagih_kode_bawaan_yang_diminta_format_tapi_kosong(self):
+        pesan = peringatan_klasifikasi("{urut}/{kode_bawaan}/{tahun}", "", [])
+        assert "{kode_bawaan}" in pesan
+        assert peringatan_klasifikasi("{urut}/{kode_bawaan}/{tahun}",
+                                      "UM.01", []) == ""
+
+    def test_dua_slot_bermasalah_dilaporkan_dua_duanya(self):
+        """Melaporkan satu lalu diam membuat perbaikan pertama tampak gagal."""
+        pesan = peringatan_klasifikasi(
+            "{kode_klasifikasi}-{urut}/{kode_bawaan}/{tahun}", "", [])
+        assert "{kode_klasifikasi}" in pesan and "{kode_bawaan}" in pesan
 
     def test_diam_saat_ada_aturan_berkode(self):
         peta = [{"modul": "pengadaan", "jenis_naskah": "", "kode": "PL.02"}]
@@ -251,10 +268,22 @@ class TestEndpointPengaturan:
             assert set(hasil["pilihan_komposisi"]) == set(KOMPOSISI_NOMOR)
         _jalan(skenario())
 
-    def test_kode_bawaan_mematikan_peringatan(self, dbx):
+    def test_kode_bawaan_TIDAK_mematikan_peringatan(self, dbx):
+        """Lewat endpoint pun ceritanya sama: mengisi Kode Klasifikasi Bawaan
+        tidak menjawab keluhan "{kode_klasifikasi} tak pernah terisi", karena
+        kode bawaan tak lagi mengisi slot itu."""
         async def skenario():
             await _unwrap(rp.set_pengaturan_persuratan)(
                 rp.PengaturanIn(kode_klasifikasi_default="UM.01"), user=ADMIN)
+            hasil = await _unwrap(rp.get_pengaturan_persuratan)(_user=ADMIN)
+            assert "{kode_klasifikasi}" in hasil["peringatan_klasifikasi"]
+        _jalan(skenario())
+
+    def test_peringatan_padam_bila_ada_aturan_pemetaan(self, dbx):
+        async def skenario():
+            await _unwrap(rp.set_pengaturan_persuratan)(rp.PengaturanIn(
+                peta_klasifikasi=[{"modul": "", "jenis_naskah": "",
+                                   "kode": "PL.02"}]), user=ADMIN)
             hasil = await _unwrap(rp.get_pengaturan_persuratan)(_user=ADMIN)
             assert hasil["peringatan_klasifikasi"] == ""
         _jalan(skenario())

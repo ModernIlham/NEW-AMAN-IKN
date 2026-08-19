@@ -450,8 +450,7 @@ async def booking_nomor_otomatis(user, tgl_iso: str, perihal: str,
     kode_satker = str(kode_satker or "").strip() or kode_satker_user(user)
     atur = await _pengaturan(kode_satker)
     kode_klas = pilih_klasifikasi(atur["peta_klasifikasi"], "persediaan",
-                                  jenis_naskah,
-                                  default=atur["kode_klasifikasi_default"])
+                                  jenis_naskah)
     tahun = int(tgl_surat[:4]) if tgl_surat[:4].isdigit() else now0.year
     periode = (_periode(atur, tgl_surat)
                or _periode(atur, now0.date().isoformat()))
@@ -462,7 +461,8 @@ async def booking_nomor_otomatis(user, tgl_iso: str, perihal: str,
                                          _dim, _kunci)
     nomor = bangun_nomor(atur["format_nomor"], no_agenda, tgl_surat,
                          kode_klasifikasi=kode_klas,
-                         kode_unit=atur["kode_unit"])
+                         kode_unit=atur["kode_unit"],
+                         kode_bawaan=atur["kode_klasifikasi_default"])
     surat_id = str(uuid.uuid4())
     await db.surat.insert_one({
         "id": surat_id, "jenis": "keluar", "no_agenda": no_agenda,
@@ -624,10 +624,17 @@ async def daftar_klasifikasi(_user: dict = Depends(require_user)):
         if k:
             pakai[k] = pakai.get(k, 0) + 1
     bawaan = str(atur.get("kode_klasifikasi_default") or "").strip()
+    # Sejak Kode Klasifikasi Bawaan berdiri sendiri, menjadi "kode bawaan"
+    # TIDAK lagi otomatis berarti kode itu ikut ke nomor: ia hanya ikut bila
+    # format nomornya memang memuat {kode_bawaan}. Badge yang mengatakan
+    # "dipakai" tanpa syarat itu akan berbohong, dan justru itulah keluhan
+    # yang melahirkan badge ini.
+    bawaan_di_nomor = "{kode_bawaan}" in str(atur.get("format_nomor") or "")
     for it in items:
         kode = str(it.get("kode") or "").strip()
         it["dipakai_aturan"] = pakai.get(kode, 0)
         it["bawaan"] = bool(kode) and kode == bawaan
+        it["bawaan_di_nomor"] = bawaan_di_nomor
     return {"items": items, "jumlah": len(items)}
 
 
@@ -770,11 +777,12 @@ async def pratinjau_nomor(jenis_naskah: str = "", modul: str = "",
     tanggal = str(tanggal_surat or "").strip()[:10] or now.date().isoformat()
     periode = _periode(atur, tanggal) or _periode(atur, now.date().isoformat())
     kode = pilih_klasifikasi(atur["peta_klasifikasi"], modul, jenis_naskah,
-                             eksplisit=kode_klasifikasi,
-                             default=atur["kode_klasifikasi_default"])
+                             eksplisit=kode_klasifikasi)
+    # Dua sumber saja sekarang, dan itulah intinya: kode bawaan bukan lagi
+    # salah satunya. Dulu ada cabang ketiga ("bawaan") yang membuat layar
+    # menyebut kode bawaan sebagai klasifikasi arsip surat ini.
     sumber = ("eksplisit" if str(kode_klasifikasi or "").strip()
-              else ("pemetaan" if kode and kode != atur["kode_klasifikasi_default"]
-                    else ("bawaan" if kode else "kosong")))
+              else ("pemetaan" if kode else "kosong"))
 
     # Pratinjau WAJIB memakai deret yang sama dengan penerbitan sesungguhnya —
     # kalau tidak, angka yang ditawarkan layar bukan angka yang akan terbit.
@@ -804,7 +812,8 @@ async def pratinjau_nomor(jenis_naskah: str = "", modul: str = "",
         urut = urut_tampil(jangkar, sub)
         nomor = bangun_nomor(atur["format_nomor"], urut, tanggal,
                              kode_klasifikasi=kode, kode_unit=atur["kode_unit"],
-                             kode_keamanan=kode_keamanan)
+                             kode_keamanan=kode_keamanan,
+                             kode_bawaan=atur["kode_klasifikasi_default"])
         return {"nomor": nomor, "urut_berikut": urut, "kode_klasifikasi": kode,
                 "sumber_klasifikasi": sumber}
 
@@ -824,7 +833,8 @@ async def pratinjau_nomor(jenis_naskah: str = "", modul: str = "",
     urut_berikut = posisi + 1
     nomor = bangun_nomor(atur["format_nomor"], urut_berikut, tanggal,
                          kode_klasifikasi=kode, kode_unit=atur["kode_unit"],
-                         kode_keamanan=kode_keamanan)
+                         kode_keamanan=kode_keamanan,
+                         kode_bawaan=atur["kode_klasifikasi_default"])
     return {"nomor": nomor, "urut_berikut": urut_berikut,
             "kode_klasifikasi": kode, "sumber_klasifikasi": sumber,
             # Template yang BENAR-BENAR dipakai merakit nomor di atas. Saat
@@ -866,7 +876,8 @@ async def _respons_pengaturan(_ks: str) -> dict:
                 komposisi_format(efektif["format_nomor"]), True)),
             # Peringatan ini menjawab keluhan "kode klasifikasi tak pernah
             # masuk ke nomor": template memintanya, katalog terisi, tetapi tak
-            # ada aturan maupun kode bawaan yang menunjuk salah satunya.
+            # ada satu pun aturan yang menunjuk salah satunya. Sejak kedua kode
+            # dipisah, ia juga menagih {kode_bawaan} yang isinya kosong.
             "peringatan_klasifikasi": peringatan_klasifikasi(
                 efektif["format_nomor"], efektif["kode_klasifikasi_default"],
                 efektif["peta_klasifikasi"])}
@@ -1085,8 +1096,7 @@ async def booking_surat_keluar(payload: SuratKeluarIn,
     # paling spesifik menang) → kode bawaan pengaturan.
     kode_klas = pilih_klasifikasi(
         atur["peta_klasifikasi"], data.get("modul"), data.get("jenis_naskah"),
-        eksplisit=data.get("kode_klasifikasi"),
-        default=atur["kode_klasifikasi_default"])
+        eksplisit=data.get("kode_klasifikasi"))
     dim, kunci = _dimensi_kunci(atur, data.get("kode_keamanan") or "B", kode_klas)
     sisip = 0
     if data.get("sisipan"):
@@ -1104,7 +1114,8 @@ async def booking_surat_keluar(payload: SuratKeluarIn,
         atur["format_nomor"], urut_tampil(no_agenda, sisip), tanggal_surat,
         kode_klasifikasi=kode_klas,
         kode_unit=atur["kode_unit"],
-        kode_keamanan=data.get("kode_keamanan") or "B")
+        kode_keamanan=data.get("kode_keamanan") or "B",
+        kode_bawaan=atur["kode_klasifikasi_default"])
     record = {
         "id": str(uuid.uuid4()),
         "kode_satker": kode_satker_user(user),

@@ -141,9 +141,19 @@ class TestPilihKlasifikasi:
     def test_wildcard_modul_dan_case_insensitive_jenis(self):
         assert pilih_klasifikasi(PETA, "wasdal", "berita acara") == "HK.06"
 
-    def test_fallback_default(self):
-        assert pilih_klasifikasi(PETA, "umum", "Nota Dinas", default="UM.00") == "UM.00"
+    def test_tanpa_aturan_yang_cocok_hasilnya_KOSONG(self):
+        """Tak ada jaring "kode bawaan" di sini — itu kode yang berdiri
+        sendiri, bukan pengisi diam-diam slot klasifikasi arsip."""
+        assert pilih_klasifikasi(PETA, "umum", "Nota Dinas") == ""
         assert pilih_klasifikasi([], "umum", "Nota Dinas") == ""
+
+    def test_menolak_dititipi_kode_bawaan(self):
+        """Pemanggil lama mengirim `default=`; sekarang itu galat, bukan
+        diam-diam diabaikan. Parameter yang diterima tapi tak berpengaruh
+        adalah cara paling halus menghidupkan kembali penggabungannya."""
+        import pytest as _pt
+        with _pt.raises(TypeError):
+            pilih_klasifikasi(PETA, "umum", "Nota Dinas", default="UM.00")
 
 
 class TestValidatePeta:
