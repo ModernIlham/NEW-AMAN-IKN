@@ -67,6 +67,37 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#893] Unsur tulisan milik satker: tersimpan, disisipkan, bisa dihapus — 2026-08-19
+
+Permintaan pemilik: *"pada bagian 'Perkiraan nomor yang akan terbit' kita dapat
+menyisipkan kata/unsur baru sesuai ketikan, dan tersimpan dan dapat terhapus
+juga agar konsisten bentuk penulisannya"*.
+
+Potongan teks tetap yang sering muncul di nomor surat satker — `SETJEN`, `UND`,
+`/B/` — kini disimpan sebagai daftar. Sekali ditetapkan, ia disisipkan dengan
+**satu ketukan** alih-alih diketik ulang tiap kali. Itulah arti "konsisten" di
+sini: salah ketik satu huruf pada satu surat tidak lagi mungkin.
+
+Di layar ia tampil sebagai chip di bawah chip placeholder — ketuk namanya untuk
+menyisipkan, ketuk × untuk menghapusnya dari daftar.
+
+**Dua aturan yang menentukan.**
+
+- **Kurung kurawal ditolak di gerbang.** `{...}` adalah bahasa placeholder;
+  unsur bernama `{apa saja}` akan lolos ke `format_nomor` lalu ditolak
+  validator placeholder dengan pesan yang menunjuk ke **tempat yang salah** —
+  pengguna diberi tahu formatnya rusak, padahal yang perlu diperbaiki daftar
+  unsurnya.
+- **Urutan tidak diurutkan ulang.** Itu urutan yang ditetapkan operator;
+  mengubahnya diam-diam membuat susunan yang sudah dihafal bergeser.
+
+Garis miring dan strip tetap boleh — keduanya bagian sah bentuk nomor, dan
+melarangnya akan memaksa operator kembali mengetik manual.
+
+**Uji:** 13 uji. Tiga mutasi diuji dan semuanya mati.
+
+---
+
 ## [#892] Komposisi Nomor akhirnya menanyakan hal yang benar — 2026-08-19
 
 Koreksi atas [#884]. Yang saya bangun menanyakan *"kode mana yang ikut"*;
