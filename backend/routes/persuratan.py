@@ -43,6 +43,7 @@ from persuratan_utils import (
     bangun_nomor, baris_agenda_csv, gabung_klasifikasi, label_agenda,
     periode_urut,
     CONTOH_KOMPOSISI, KOMPOSISI_NOMOR, PLACEHOLDER_NOMOR,
+    SIFAT_URGENSI, SIFAT_URGENSI_DEFAULT,
     bersihkan_unsur_kustom, dimensi_deret, komposisi_format, kunci_deret,
     validate_unsur_kustom,
     peringatan_klasifikasi,
@@ -69,6 +70,9 @@ class SuratKeluarIn(BaseModel):
     kegiatan_id: Optional[str] = ""
     kode_klasifikasi: Optional[str] = ""
     kode_keamanan: Optional[str] = "B"
+    # Sumbu TERSENDIRI, bukan bagian kode keamanan: yang satu menjawab siapa
+    # boleh membaca, yang lain seberapa cepat harus ditindaklanjuti.
+    sifat_urgensi: Optional[str] = SIFAT_URGENSI_DEFAULT
     tanggal_surat: Optional[str] = ""   # default: hari ini (UTC date)
     referensi: Optional[str] = ""       # mis. "BAHI", "LHI", "LBKP S1 2026"
     # Anchor nomor SAH dari sistem lain (Srikandi/e-office instansi dsb.)
@@ -90,6 +94,9 @@ class SuratMasukIn(BaseModel):
     modul: Optional[str] = "umum"
     kegiatan_id: Optional[str] = ""
     keterangan: Optional[str] = ""
+    # Sifat urgensi yang DITULIS PENGIRIM pada suratnya — dicatat apa adanya
+    # di buku agenda, bukan penilaian kita.
+    sifat_urgensi: Optional[str] = SIFAT_URGENSI_DEFAULT
 
 
 class TransisiIn(BaseModel):
@@ -509,6 +516,8 @@ async def referensi_persuratan(_user: dict = Depends(require_user)):
         "jenis_naskah": list(JENIS_NASKAH),
         "modul": list(MODUL_AMAN),
         "kode_keamanan": [{"kode": k, "uraian": v} for k, v in KODE_KEAMANAN.items()],
+        # Sumbu terpisah dari kode keamanan — lihat SIFAT_URGENSI.
+        "sifat_urgensi": [{"kode": k, "uraian": v} for k, v in SIFAT_URGENSI.items()],
         "status_keluar": [{"kode": k, "uraian": v} for k, v in STATUS_KELUAR.items()],
         "status_masuk": [{"kode": k, "uraian": v} for k, v in STATUS_MASUK.items()],
         "reset_urut": [{"kode": k, "uraian": v} for k, v in RESET_URUT.items()],
@@ -1113,6 +1122,8 @@ async def booking_surat_keluar(payload: SuratKeluarIn,
         "nama_kegiatan": nama_kegiatan,
         "kode_klasifikasi": kode_klas,
         "kode_keamanan": str(data.get("kode_keamanan") or "B").strip().upper(),
+        "sifat_urgensi": (str(data.get("sifat_urgensi") or "").strip()
+                          or SIFAT_URGENSI_DEFAULT),
         "tanggal_surat": tanggal_surat,
         "referensi": str(data.get("referensi") or "").strip(),
         "nomor_eksternal": str(data.get("nomor_eksternal") or "").strip(),
@@ -1178,6 +1189,9 @@ async def agenda_surat_masuk(payload: SuratMasukIn,
         "kegiatan_id": str(data.get("kegiatan_id") or "").strip(),
         "nama_kegiatan": nama_kegiatan,
         "keterangan": str(data.get("keterangan") or "").strip(),
+        # Sifat urgensi yang ditulis PENGIRIM — dicatat apa adanya.
+        "sifat_urgensi": (str(data.get("sifat_urgensi") or "").strip()
+                          or SIFAT_URGENSI_DEFAULT),
         "dibuat_oleh": user.get("username", "system"),
         "riwayat": [{"status": "diterima", "tanggal": now.isoformat(),
                      "oleh": user.get("username", "system"), "catatan": ""}],

@@ -82,21 +82,37 @@ class TestAgendaCsv:
             {"jenis": "keluar", "no_agenda": 15, "status": "disahkan",
              "nomor": "B-015/PL/VII/2026", "tanggal_surat": "2026-07-17",
              "perihal": "LHI", "tujuan": "KPKNL", "jenis_naskah": "Laporan",
-             "modul": "pelaporan", "disahkan_pada": "2026-07-18T01:00:00Z"},
+             "modul": "pelaporan", "sifat_urgensi": "segera",
+             "disahkan_pada": "2026-07-18T01:00:00Z"},
             {"jenis": "masuk", "no_agenda": 4, "status": "diterima",
              "nomor": "S-9/KPKNL/2026", "tanggal_surat": "2026-07-10",
              "perihal": "Undangan rekon", "pengirim": "KPKNL",
              "jenis_naskah": "Surat Biasa", "modul": "pelaporan",
              "created_at": "2026-07-11T02:00:00Z"},
         ])
-        assert rows[0][0] == "No Agenda"
-        # Kolom Keberlakuan (SURAT-3B) menyisip setelah Status — posisi
-        # kolom lama bergeser satu.
-        assert rows[0][3] == "Keberlakuan"
-        assert rows[0][5] == "Nomor Eksternal"
-        assert rows[1][1] == "Keluar" and rows[1][8] == "KPKNL"
-        assert rows[1][13] == "2026-07-18"
-        assert rows[2][1] == "Masuk" and rows[2][13] == "2026-07-11"
+        # Kolom dicari lewat NAMANYA, bukan posisinya. Uji ini sudah pernah
+        # pecah sekali saat kolom Keberlakuan menyisip (lihat komentar lama),
+        # dan pecah lagi saat kolom Sifat Urgensi ditambahkan — padahal
+        # keduanya penambahan yang benar. Yang layak dijaga adalah PEMETAAN
+        # nilai ke kolomnya, bukan nomor urut kolom.
+        kolom = {nama: i for i, nama in enumerate(rows[0])}
+        for wajib in ("No Agenda", "Keberlakuan", "Nomor Eksternal",
+                      "Jenis Naskah", "Sifat Urgensi"):
+            assert wajib in kolom, f"kolom '{wajib}' hilang dari buku agenda"
+
+        def sel(baris, nama):
+            return rows[baris][kolom[nama]]
+
+        assert sel(1, "Jenis") == "Keluar"
+        assert sel(1, "Dari/Kepada") == "KPKNL"
+        assert sel(1, "Disahkan/Diterima Pada") == "2026-07-18"
+        assert sel(2, "Jenis") == "Masuk"
+        assert sel(2, "Disahkan/Diterima Pada") == "2026-07-11"
+        # Sifat urgensi tercetak sebagai LABEL manusia, bukan kunci mesinnya.
+        assert sel(1, "Sifat Urgensi") == "Segera"
+        # Baris tanpa sifat urgensi tampil kosong, bukan mengarang "Biasa" —
+        # buku agenda tak boleh menyatakan sesuatu yang tak pernah dicatat.
+        assert sel(2, "Sifat Urgensi") == ""
 
 
 # ── Klasifikasi otomatis (persuratan smart) ──

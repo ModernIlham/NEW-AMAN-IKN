@@ -29,6 +29,20 @@ KODE_KEAMANAN = {
     "SR": "Sangat Rahasia",
 }
 
+# Sifat urgensi naskah dinas — SUMBU TERSENDIRI, bukan bagian kode keamanan.
+#
+# Keduanya sering tertukar karena sama-sama "sifat surat", padahal menjawab
+# pertanyaan berbeda: kode keamanan menjawab SIAPA BOLEH MEMBACA (Biasa/
+# Terbatas/Rahasia/Sangat Rahasia), sifat urgensi menjawab SEBERAPA CEPAT
+# HARUS DITINDAKLANJUTI. Satu surat bisa Biasa sekaligus Sangat Segera, dan
+# menggabungkannya jadi satu daftar memaksa operator memilih salah satu.
+SIFAT_URGENSI = {
+    "biasa": "Biasa",
+    "segera": "Segera",
+    "sangat_segera": "Sangat Segera",
+}
+SIFAT_URGENSI_DEFAULT = "biasa"
+
 # Jenis naskah yang lazim terbit dari modul-modul AMAN (referensi dropdown;
 # nilai lain tetap diterima sebagai teks bebas).
 JENIS_NASKAH = (
@@ -458,6 +472,10 @@ def validate_surat_keluar(d, today_iso="") -> list:
     keamanan = str((d or {}).get("kode_keamanan") or "B").strip().upper()
     if keamanan not in KODE_KEAMANAN:
         errors.append(f"Kode keamanan tidak dikenal: {keamanan} (pilih {'/'.join(KODE_KEAMANAN)})")
+    urgensi = str((d or {}).get("sifat_urgensi") or SIFAT_URGENSI_DEFAULT).strip()
+    if urgensi not in SIFAT_URGENSI:
+        errors.append(f"Sifat urgensi tidak dikenal: {urgensi} "
+                      f"(pilih {'/'.join(SIFAT_URGENSI)})")
     modul = str((d or {}).get("modul") or "").strip()
     if modul and modul not in MODUL_AMAN:
         errors.append(f"Modul tidak dikenal: {modul}")
@@ -482,6 +500,10 @@ def validate_surat_masuk(d) -> list:
         errors.append("Pengirim wajib diisi")
     if not str((d or {}).get("perihal") or "").strip():
         errors.append("Perihal wajib diisi")
+    urgensi = str((d or {}).get("sifat_urgensi") or SIFAT_URGENSI_DEFAULT).strip()
+    if urgensi not in SIFAT_URGENSI:
+        errors.append(f"Sifat urgensi tidak dikenal: {urgensi} "
+                      f"(pilih {'/'.join(SIFAT_URGENSI)})")
     return errors
 
 
@@ -499,7 +521,7 @@ def baris_agenda_csv(items) -> list:
     buku agenda kembar."""
     rows = [["No Agenda", "Jenis", "Status", "Keberlakuan", "Nomor Surat",
              "Nomor Eksternal", "Tanggal Surat", "Perihal", "Dari/Kepada",
-             "Jenis Naskah", "Modul", "Kegiatan", "Kode Klasifikasi",
+             "Jenis Naskah", "Sifat Urgensi", "Modul", "Kegiatan", "Kode Klasifikasi",
              "Disahkan/Diterima Pada", "Keterangan"]]
     for s in items or []:
         keluar = s.get("jenis") == "keluar"
@@ -525,6 +547,7 @@ def baris_agenda_csv(items) -> list:
             s.get("perihal"),
             s.get("tujuan") if keluar else s.get("pengirim"),
             s.get("jenis_naskah"),
+            SIFAT_URGENSI.get(s.get("sifat_urgensi"), s.get("sifat_urgensi") or ""),
             s.get("modul"),
             s.get("nama_kegiatan") or "",
             s.get("kode_klasifikasi") or "",
