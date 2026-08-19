@@ -755,20 +755,29 @@ async def get_filter_options(activity_id: str = "", _user: dict = Depends(requir
     query = await scope_query_aset(_user, query)
 
     # Get distinct values for each filterable field
-    locations, eselon1s, eselon2s, conditions, statuses, stiker_statuses, inventory_statuses = await asyncio.gather(
+    #
+    # `categories` = kategori yang BENAR-BENAR dipakai aset dalam lingkup ini.
+    # Master kodefikasi berisi belasan ribu entri, sementara satu kegiatan
+    # lazimnya memakai puluhan; menawarkan seluruh master di kotak filter
+    # berarti menyuruh operator mencari puluhan jarum di tumpukan yang 300 kali
+    # lebih besar. Sumbernya `db.assets` yang SUDAH ter-scope satker+kegiatan —
+    # bukan `db.categories`, yang memang master global tanpa kode satker.
+    locations, eselon1s, eselon2s, conditions, statuses, stiker_statuses, inventory_statuses, categories = await asyncio.gather(
         db.assets.distinct("location", query),
         db.assets.distinct("eselon1", query),
         db.assets.distinct("eselon2", query),
         db.assets.distinct("condition", query),
         db.assets.distinct("status", query),
         db.assets.distinct("stiker_status", query),
-        db.assets.distinct("inventory_status", query)
+        db.assets.distinct("inventory_status", query),
+        db.assets.distinct("category", query),
     )
     
     # Filter out None/empty values and sort
     clean_sort = lambda lst: sorted([x for x in lst if x and str(x).strip()])
     
     result = {
+        "categories": clean_sort(categories),
         "locations": clean_sort(locations),
         "eselon1s": clean_sort(eselon1s),
         "eselon2s": clean_sort(eselon2s),

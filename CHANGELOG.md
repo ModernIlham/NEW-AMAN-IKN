@@ -67,6 +67,44 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#881] Filter kategori menawarkan yang ada di kegiatan — bukan 12 ribu entri — 2026-08-19
+
+Master kodefikasi BMN berisi **12.488 entri**, sementara satu kegiatan
+inventarisasi lazimnya memakai puluhan. Kotak filter kategori menawarkan
+seluruh master — menyuruh operator mencari puluhan jarum di tumpukan yang
+ratusan kali lebih besar.
+
+**Yang dikerjakan:**
+
+- `GET /assets/filter-options` menambah kunci `categories`: kategori yang
+  **benar-benar dipakai aset** dalam lingkup yang sedang dilihat. Diambil dari
+  `db.assets` yang sudah ter-scope satker+kegiatan — bukan dari `db.categories`
+  yang memang master global tanpa kode satker. Endpoint ini sudah ber-cache 3
+  menit per satker+kegiatan dan sudah dipanggil bersamaan pada muat awal, jadi
+  tak ada permintaan tambahan.
+- Dropdown kategori memakai daftar itu sebagai bawaan, dengan sakelar
+  **"Tampilkan semua kategori (12.488)"** di dalam panelnya untuk kasus mencari
+  kategori yang memang belum dipakai satu aset pun. Sakelarnya tidak mengubah
+  pilihan dan tidak memicu pemuatan ulang data.
+
+**Tiga jatuh-balik yang menentukan apakah ini menolong atau merepotkan:**
+
+- Kegiatan belum punya aset, permintaan opsi gagal, atau tanpa kegiatan →
+  tampilkan master penuh. **Kotak filter yang kosong jauh lebih buruk** daripada
+  yang menawarkan terlalu banyak.
+- Label yang ada di data tapi **tidak ada di master** tetap ditawarkan. Itu aset
+  nyata; membuangnya membuat barisnya mustahil disaring.
+- Kategori yang **sedang terpilih** selalu terlihat meski di luar lingkup —
+  kalau tidak, ia tetap menyaring sementara barisnya lenyap dari daftar, dan
+  tak ada cara melepasnya selain menghapus semua pilihan.
+
+**Uji:** 8 uji backend (termasuk isolasi satker — daftar kategori yang dipakai
+satu satker menyingkapkan jenis barang yang mereka kelola) + 10 uji frontend,
+ditambah satu uji anti-drift lintas bahasa yang memastikan nama kunci di server
+dan yang dibaca klien sama persis. Tiga mutasi diuji dan semuanya mati.
+
+---
+
 ## [#880] Kategori boleh dipilih lebih dari satu — di semua pintu sekaligus — 2026-08-19
 
 Enam filter lain sudah multi-nilai sejak lama; kategori tertinggal sebagai

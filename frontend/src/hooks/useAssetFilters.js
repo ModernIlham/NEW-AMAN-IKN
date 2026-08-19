@@ -129,6 +129,9 @@ export function useAssetFilters({ activityId }) {
   }, initialFilterState);
 
   const [filterOptions, setFilterOptions] = useState({
+    // `categories` = kategori yang BENAR-BENAR dipakai aset di kegiatan ini
+    // (bukan master 12 ribu entri) — lihat GET /assets/filter-options.
+    categories: [],
     locations: [], eselon1s: [], eselon2s: [], conditions: [],
     statuses: [], stiker_statuses: [], inventory_statuses: []
   });
