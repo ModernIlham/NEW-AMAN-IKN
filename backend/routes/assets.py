@@ -319,7 +319,7 @@ async def lengkapi_psp(assets, user):
 
 def build_asset_search_query(
     search: str = "",
-    category: str = "",
+    category="",
     activity_id: str = "",
     condition: str = "",
     status: str = "",
@@ -365,12 +365,13 @@ def build_asset_search_query(
         search, FIELD_CARI_ASET, tambahan=_klausa_harga,
         fields_kode=FIELD_KODE_ASET, fields_angka=FIELD_ANGKA_ASET))
 
-    # Basic category filter
-    if category:
-        query["category"] = category
-    
     # Advanced filters — semuanya boleh BANYAK NILAI (lihat klausa_* di atas).
+    # Kategori ikut di sini sejak kategori boleh dipilih lebih dari satu; ia
+    # dulu berdiri sendiri sebagai kesetaraan tunggal. Satu nilai tetap
+    # menghasilkan `{"category": "X"}` — bukan `$in` beranggota satu — sehingga
+    # permintaan lama & rencana indeksnya tak berubah sama sekali.
     for field, klausa in (
+        ("category", klausa_persis(category)),
         ("condition", klausa_persis(condition)),
         ("status", klausa_persis(status)),
         ("stiker_status", klausa_persis(stiker_status)),
@@ -535,7 +536,10 @@ def kunci_cache_kueri(_user, query: dict) -> str:
 @assets_router.get("/assets")
 async def get_assets(
     search: str = "",
-    category: str = "",
+    # Kategori MULTI-NILAI (parameter berulang, mis. ?category=A&category=B).
+    # Satu nilai tetap sah dan menghasilkan kueri yang identik dengan versi
+    # lama — bookmark & klien luring yang belum diperbarui tak pecah.
+    category: List[str] = Query(default=[]),
     sort_by: str = "newest",
     page: int = 1,
     page_size: int = 50,
@@ -779,11 +783,7 @@ async def get_filter_options(activity_id: str = "", _user: dict = Depends(requir
 @assets_router.get("/assets/stats")
 async def get_assets_stats(
     search: str = "",
-    # Tetap TUNGGAL, persis seperti GET /assets. Kategori multi-nilai adalah
-    # perubahan tersendiri yang harus mengenai keduanya sekaligus — kalau hanya
-    # salah satu yang menerima daftar, dua endpoint ini kembali menjawab
-    # pertanyaan yang berbeda dan cacat yang sedang ditutup ini lahir lagi.
-    category: str = "",
+    category: List[str] = Query(default=[]),
     activity_id: str = "",
     # Filter lanjutan — DAFTAR PARAMETER YANG SAMA PERSIS dengan GET /assets.
     # Tanpa ini kartu ringkasan menjawab pertanyaan lain daripada daftar di

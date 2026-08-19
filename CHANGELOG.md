@@ -67,6 +67,53 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#880] Kategori boleh dipilih lebih dari satu — di semua pintu sekaligus — 2026-08-19
+
+Enam filter lain sudah multi-nilai sejak lama; kategori tertinggal sebagai
+kesetaraan tunggal dengan sentinel `"Semua"`.
+
+Membuatnya multi bukan pekerjaan satu endpoint. Perakit kuerinya dipakai
+bersama oleh **delapan pintu**: daftar aset, statistik, ekspor geo, dependency
+filter ekspor, laporan, dua endpoint stiker, dan pengambilan seluruh id. Kalau
+hanya sebagian yang menerima daftar, yang terjadi bukan galat melainkan sesuatu
+yang jauh lebih sulit dilihat: **layar menyaring tiga kategori, berkas ekspornya
+menyaring satu** — dan keduanya tampak wajar.
+
+**Yang dikerjakan:**
+
+- `category` jadi parameter berulang di kedelapan pintu. Satu nilai tetap
+  menghasilkan `{"category": "X"}` — bukan `$in` beranggota satu — sehingga
+  bookmark, klien luring lama, dan rencana indeksnya tak berubah sama sekali.
+- Perakitan parameter kategori dipindahkan ke `buildFilterParams`. Sebelumnya
+  **sembilan tempat** di halaman menyusunnya sendiri-sendiri; satu saja yang
+  terlewat berarti peta/stiker/ekspor menyaring beda dari layar.
+- Dropdown kategori jadi multi-pilih: popover tidak menutup tiap kali satu
+  kategori dipilih, punya "Pilih semua"/"Kosongkan", dan lencana jumlah.
+  Sentinel `"Semua"` dipensiunkan menjadi daftar kosong — nilai lama (string
+  maupun `"Semua"`) tetap dipahami supaya state tersimpan tak pecah.
+- Penyaring snapshot luring ikut jalur multi yang sama, sehingga hasil luring
+  identik dengan hasil daring.
+- Ringkasan filter yang **tercetak di kepala laporan** kini menyebut seluruh
+  kategori. Kalau ia hanya menyebut satu padahal tiga yang disaring, pembaca
+  menyimpulkan dokumennya lebih sempit daripada isinya — dan kesimpulan itu
+  dibawa ke berkas resmi.
+
+**Dua cacat yang ikut ketahuan dan diperbaiki:**
+
+- Mengubah kategori memicu **dua permintaan**: satu dari efek filter, satu lagi
+  dipanggil langsung handler-nya. Yang langsung itu membaca ref yang masih
+  memuat kategori lama, jadi hasilnya bisa mendarat belakangan dan menimpa
+  hasil yang benar. Dengan multi-pilih, lima centang menjadi sepuluh permintaan.
+- Batas "Pilih semua" pada dropdown kategori semula dihitung dari daftar yang
+  **sudah dipotong** `RENDER_LIMIT`, sehingga penjaganya tak pernah menyala —
+  menekannya akan memilih 200 pertama dari 250 kecocokan tanpa tanda apa pun.
+  Ditemukan oleh ujinya sendiri, bukan oleh pembacaan ulang.
+
+**Uji:** 12 uji backend (termasuk pemindai transitif yang menagih kedelapan
+pintu) + 22 uji frontend. Lima mutasi diuji dan semuanya mati.
+
+---
+
 ## [#879] Filter multi-pilih dapat "Pilih semua" — dan tahu kapan harus menolaknya — 2026-08-19
 
 Permintaan pemilik: filter dengan nilai banyak melelahkan dicentang satu per

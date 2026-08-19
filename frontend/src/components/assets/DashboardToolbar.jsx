@@ -190,7 +190,7 @@ const DashboardToolbar = memo(function DashboardToolbar({
             <CategorySelect
               categories={categories}
               value={filterCategory}
-              onValueChange={v => { setFilterCategory(v); refreshData(1); }}
+              onValueChange={setFilterCategory}   /* efek perubahan filter yang memuat ulang — lihat DashboardPage */
               placeholder="Semua Kategori"
               // TANPA `flex-shrink-0`, dan itu disengaja: setelah semua label
               // dilepas pun ada lebar kontainer ekstrem (panel form di layar
@@ -319,7 +319,7 @@ const DashboardToolbar = memo(function DashboardToolbar({
           <CategorySelect
             categories={categories}
             value={filterCategory}
-            onValueChange={v => { setFilterCategory(v); refreshData(1); }}
+            onValueChange={setFilterCategory}   /* efek perubahan filter yang memuat ulang — lihat DashboardPage */
             placeholder="Semua Kategori"
             className="flex-1 min-w-0 h-9 min-h-0"
             size="compact"

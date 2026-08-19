@@ -7,24 +7,38 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../ui/popover";
+import { gabungPilihan, MAKS_PILIH_SEMUA } from "./FilterMultiSelect";
 
 // ============================================================================
-// CATEGORY SELECT - Virtualized + searchable dropdown for 12k+ categories
+// CATEGORY SELECT — dropdown kategori: virtual, bisa dicari, MULTI-PILIH
 // ============================================================================
+// Master kodefikasi berisi belasan ribu entri, jadi daftarnya divirtualkan dan
+// dipotong `RENDER_LIMIT`; pencarian yang menyempitkan sisanya.
+//
+// `value` adalah ARRAY label kategori (daftar kosong = semua). Popover TIDAK
+// menutup saat satu kategori dipilih — memilih lima kategori tak boleh berarti
+// membuka daftar lima kali. Pola & batasnya disamakan dengan FilterMultiSelect
+// yang dipakai tujuh filter lain, termasuk batas "Pilih semua".
 
 const ITEM_HEIGHT = 32;
 const VISIBLE_COUNT = 10;
 const CONTAINER_HEIGHT = ITEM_HEIGHT * VISIBLE_COUNT;
 const RENDER_LIMIT = 200; // Only render up to 200 items, search narrows the rest
 
-const CategorySelect = ({ 
-  categories = [], 
-  value, 
-  onValueChange, 
+const CategorySelect = ({
+  categories = [],
+  value,                       // array label kategori; [] = semua
+  onValueChange,               // (arrayLabelBaru) => void
   placeholder = "Semua Kategori",
   className = "",
   size = "default"
 }) => {
+  // Toleran terhadap nilai lama (string / sentinel "Semua") supaya pemanggil
+  // yang belum diperbarui — dan snapshot state yang tersimpan — tidak pecah.
+  const terpilih = useMemo(() => {
+    if (Array.isArray(value)) return value;
+    return value && value !== "Semua" ? [value] : [];
+  }, [value]);
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const inputRef = useRef(null);
@@ -60,25 +74,38 @@ const CategorySelect = ({
   const visibleItems = limitedCategories.slice(startIndex, endIndex);
 
   const displayLabel = useMemo(() => {
-    if (!value || value === "Semua") return placeholder;
-    const found = categories.find(c => c.label === value);
+    if (terpilih.length === 0) return placeholder;
+    if (terpilih.length > 1) return `${terpilih[0]} +${terpilih.length - 1}`;
+    const found = categories.find(c => c.label === terpilih[0]);
     if (found && found.kode_aset) return `${found.kode_aset} - ${found.label}`;
-    return value;
-  }, [value, categories, placeholder]);
+    return terpilih[0];
+  }, [terpilih, categories, placeholder]);
 
+  /** Centang/lepas satu kategori — popover TETAP terbuka. */
   const handleSelect = useCallback((categoryLabel) => {
-    onValueChange(categoryLabel);
-    setOpen(false);
-  }, [onValueChange]);
+    onValueChange(terpilih.includes(categoryLabel)
+      ? terpilih.filter(x => x !== categoryLabel)
+      : [...terpilih, categoryLabel]);
+  }, [onValueChange, terpilih]);
 
   const handleClear = (e) => {
     e.stopPropagation();
-    onValueChange("Semua");
+    onValueChange([]);
   };
 
   const handleScroll = useCallback((e) => {
     setScrollTop(e.currentTarget.scrollTop);
   }, []);
+
+  // Dihitung dari JUMLAH KECOCOKAN SEBENARNYA (`filteredCategories`), bukan
+  // dari potongan yang dirender. `limitedCategories` sudah dipotong
+  // RENDER_LIMIT, jadi panjangnya tak pernah melampaui batas — memakainya di
+  // sini membuat penjaganya tak pernah menyala, dan menekan tombol akan
+  // memilih 200 pertama dari 250 kecocokan tanpa satu pun tanda di layar.
+  // Itu persis kegagalan yang hendak dicegah.
+  const bolehPilihSemua = filteredCategories.length > 0
+    && filteredCategories.length <= MAKS_PILIH_SEMUA
+    && filteredCategories.some(c => !terpilih.includes(c.label));
 
   const isCompact = size === "compact";
 
@@ -97,8 +124,17 @@ const CategorySelect = ({
             <span className="truncate max-w-[140px] lg:max-w-[200px]">{displayLabel}</span>
           </span>
           <div className="flex items-center gap-0.5 ml-1">
-            {value && value !== "Semua" && (
-              <span onClick={handleClear} className="hover:bg-muted rounded p-0.5 cursor-pointer">
+            {terpilih.length > 1 && (
+              <span
+                className="px-1 rounded bg-blue-500/15 text-blue-600 dark:text-blue-400 text-[9px] font-semibold tabular-nums"
+                data-testid="category-select-jumlah"
+              >
+                {terpilih.length}
+              </span>
+            )}
+            {terpilih.length > 0 && (
+              <span onClick={handleClear} className="hover:bg-muted rounded p-0.5 cursor-pointer"
+                data-testid="category-select-clear">
                 <X className="w-3 h-3 text-muted-foreground" />
               </span>
             )}
@@ -127,16 +163,18 @@ const CategorySelect = ({
           </div>
         </div>
 
-        {/* "Semua Kategori" fixed at top */}
+        {/* Baris "Semua Kategori" = kembali ke tanpa filter. Ia BUKAN salah
+            satu pilihan yang bisa dicentang bersama kategori lain: memilih
+            "semua" sekaligus "Meja" tak punya arti. */}
         <div className="px-1 pt-1">
           <button
-            onClick={() => handleSelect("Semua")}
+            onClick={() => onValueChange([])}
             className={`w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors ${
-              value === "Semua" || !value ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300" : "text-foreground"
+              terpilih.length === 0 ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300" : "text-foreground"
             }`}
             data-testid="category-option-all"
           >
-            <Check className={`w-4 h-4 flex-shrink-0 ${value === "Semua" || !value ? "opacity-100" : "opacity-0"}`} />
+            <Check className={`w-4 h-4 flex-shrink-0 ${terpilih.length === 0 ? "opacity-100" : "opacity-0"}`} />
             <span>Semua Kategori</span>
             <span className="ml-auto text-xs text-muted-foreground">{categories.length}</span>
           </button>
@@ -158,7 +196,7 @@ const CategorySelect = ({
             <div style={{ height: totalHeight, position: "relative" }}>
               {visibleItems.map((category, i) => {
                 const idx = startIndex + i;
-                const isSelected = value === category.label;
+                const isSelected = terpilih.includes(category.label);
                 const label = category.kode_aset ? `${category.kode_aset} - ${category.label}` : category.label;
                 return (
                   <button
@@ -179,6 +217,39 @@ const CategorySelect = ({
             </div>
           </div>
         )}
+
+        {/* Aksi massal — batas & alasannya sama dengan FilterMultiSelect:
+            memilih ribuan kategori berubah jadi querystring puluhan kilobyte
+            yang ditolak 414, dan memilih sebagian diam-diam menghasilkan
+            filter yang salah tanpa tanda di layar. */}
+        <div className="flex items-center justify-between gap-2 border-t px-2 py-1">
+          <span className="text-[11px] text-muted-foreground truncate">
+            {terpilih.length ? `${terpilih.length} dipilih` : "Semua kategori"}
+          </span>
+          <span className="flex items-center gap-2 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => onValueChange(gabungPilihan(terpilih, filteredCategories.map(c => c.label)))}
+              disabled={!bolehPilihSemua}
+              title={filteredCategories.length > MAKS_PILIH_SEMUA
+                ? `Terlalu banyak (${filteredCategories.length}) untuk dipilih sekaligus — persempit dengan pencarian dulu`
+                : undefined}
+              className="min-h-0 min-w-0 text-[11px] text-primary hover:underline disabled:opacity-40 disabled:no-underline"
+              data-testid="category-select-pilih-semua"
+            >
+              {searchQuery.trim() ? `Pilih ${filteredCategories.length} hasil` : "Pilih semua"}
+            </button>
+            <button
+              type="button"
+              onClick={() => onValueChange([])}
+              disabled={terpilih.length === 0}
+              className="min-h-0 min-w-0 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-40"
+              data-testid="category-select-kosongkan"
+            >
+              Kosongkan
+            </button>
+          </span>
+        </div>
 
         {/* Footer */}
         <div className="p-1.5 border-t bg-muted/50 text-[11px] text-muted-foreground text-center">

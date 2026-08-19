@@ -5077,7 +5077,11 @@ _LABEL_FILTER = [
 ]
 
 # Filter yang boleh dipilih LEBIH DARI SATU nilai (lihat routes/assets.py).
-_FILTER_MULTI = {"condition", "status", "location", "eselon1_filter",
+# `category` ikut sejak kategori boleh dipilih lebih dari satu — kalau ia
+# tertinggal di sini, kuerinya menyaring tiga kategori tetapi ringkasan yang
+# TERCETAK di kepala laporan hanya menyebut satu, dan pembaca menyimpulkan
+# dokumennya lebih sempit daripada isinya yang sebenarnya.
+_FILTER_MULTI = {"category", "condition", "status", "location", "eselon1_filter",
                  "eselon2_filter", "stiker_status", "inventory_status"}
 
 
@@ -5117,7 +5121,7 @@ def filter_laporan_dari_map(m) -> FilterLaporan:
             return None
 
     q = build_asset_search_query(
-        search=s("search"), category=s("category"), condition=d("condition"),
+        search=s("search"), category=d("category"), condition=d("condition"),
         status=d("status"), location=d("location"),
         eselon1_filter=d("eselon1_filter"), eselon2_filter=d("eselon2_filter"),
         stiker_status=d("stiker_status"),
@@ -5140,7 +5144,8 @@ def filter_laporan_dari_map(m) -> FilterLaporan:
 
 
 def filter_laporan(
-    search: str = "", category: str = "",
+    search: str = "",
+    category: List[str] = Query(default=[]),
     condition: List[str] = Query(default=[]),
     status: List[str] = Query(default=[]),
     location: List[str] = Query(default=[]),
