@@ -67,6 +67,33 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#882] Lencana "Tidak Berlaku" berhenti terpotong di baris surat — 2026-08-19
+
+Laporan pemilik beserta tangkapan layarnya: pada baris surat yang dibatalkan,
+lencana **"Tidak Berlaku"** di sebelah "Dibatalkan" terpotong separuh di tepi
+kolom.
+
+Sebabnya bukan ukuran lencananya. Sel status ditulis `whitespace-nowrap`
+sementara kedua lencana adalah elemen **inline** — keduanya terpaksa berada di
+satu baris yang tak boleh patah, jadi yang kedua meluber keluar kolom.
+`mt-0.5` pada lencana kedua justru memperlihatkan bahwa penulisnya membayangkan
+keduanya bertumpuk; margin itu tak pernah terlihat karena elemennya tak pernah
+turun baris.
+
+**Yang dikerjakan:**
+
+- Sel status jadi tumpukan (`flex flex-col`) dengan lebar maksimum, dan
+  `whitespace-nowrap` dipindahkan dari SEL ke masing-masing lencana — yang
+  memang perlu, supaya "Tidak Berlaku" tidak patah jadi dua baris.
+- Kartu HP diberi `flex-wrap`: dua lencana pada nomor agenda panjang boleh
+  turun baris alih-alih menggencet lencana agenda di sebelah kiri.
+
+**Uji:** 4 uji baru (pemindai sumber — jsdom tak menghitung tata letak, jadi
+uji render pun tak bisa membuktikan "terpotong"). Dua mutasi diuji dan keduanya
+mati.
+
+---
+
 ## [#881] Filter kategori menawarkan yang ada di kegiatan — bukan 12 ribu entri — 2026-08-19
 
 Master kodefikasi BMN berisi **12.488 entri**, sementara satu kegiatan
