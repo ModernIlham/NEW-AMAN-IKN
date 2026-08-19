@@ -22,7 +22,7 @@ import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 import PermohonanPanel from "@/components/persediaan/PermohonanPanel";
-import NotaDinasKritisDialog from "@/components/persediaan/NotaDinasKritisDialog";
+import NotaDinasDialog from "@/components/persediaan/NotaDinasDialog";
 import PerkiraanNomor from "@/components/persuratan/PerkiraanNomor";
 import { bagikanWa, bagikanEmail, hasilTtd } from "@/lib/pesanTtd";
 
@@ -813,19 +813,22 @@ export default function PersediaanPage({ user, onBack }) {
               ].filter(Boolean).join(" · ")}
             </p>
             {(peringatan.habis.length > 0 || peringatan.kritis.length > 0) && (
-              <NotaDinasKritisDialog
+              <NotaDinasDialog
+                jenis="kritis"
                 items={[...peringatan.habis, ...peringatan.kritis]}
               />
             )}
             {(peringatan.kedaluwarsa.length > 0 || peringatan.segera_kedaluwarsa.length > 0) && (
-              <button
-                type="button"
-                onClick={() => downloadFileWithProgress(`${API}/persediaan/nota-dinas?jenis=kedaluwarsa`, "Nota_Dinas_Kedaluwarsa.pdf", { label: "Nota Dinas Kedaluwarsa" }).catch(() => {})}
-                className="h-8 px-2.5 rounded-lg border border-amber-400 dark:border-amber-600 text-[11px] font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1 hover:bg-amber-100 dark:hover:bg-amber-900/40 min-w-0 min-h-0"
-                data-testid="persediaan-nota-kedaluwarsa"
-              >
-                <FileDown className="w-3.5 h-3.5" />Nota Dinas Kedaluwarsa
-              </button>
+              /* `lewat` ditandai DI SINI, bukan dihitung ulang di komponen:
+                 server yang tahu batas hari ini & horizonnya, dan menebaknya
+                 lagi di klien membuka celah beda zona waktu. */
+              <NotaDinasDialog
+                jenis="kedaluwarsa"
+                items={[
+                  ...peringatan.kedaluwarsa.map((r) => ({ ...r, lewat: true })),
+                  ...peringatan.segera_kedaluwarsa,
+                ]}
+              />
             )}
           </div>
         )}

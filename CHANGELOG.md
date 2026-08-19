@@ -67,6 +67,43 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#888] Setiap nota dinas persediaan memilih barangnya sendiri — 2026-08-19
+
+Permintaan pemilik: *"berikan pilihan barang apa saja yang akan dibuat nota
+dinas kritisnya agar SETIAP nota dinas dapat memilih barangnya sesuai seleksi"*.
+
+Untuk nota **stok kritis/habis**, pemilihannya ternyata **sudah ada** — dialog
+bercentang per barang, "Pilih semua"/"Kosongkan", dan server sudah menyaring
+lewat parameter `ids`. Yang belum punya pemilihan adalah nota **kedaluwarsa**:
+tombolnya langsung mengunduh seluruh temuan.
+
+**Detail yang menentukan rancangannya.** Pada nota kedaluwarsa, satu barang
+bisa punya **beberapa layer** dengan tanggal kedaluwarsa berbeda — sedangkan
+penyaring server bekerja per **id barang**. Maka pilihannya disajikan **per
+barang**, bukan per layer, dan hal itu dikatakan di layarnya. Menyajikan per
+layer akan menipu: melepas satu layer diam-diam melepas layer lain milik
+barang yang sama.
+
+**Yang dikerjakan:**
+
+- `NotaDinasKritisDialog` digeneralkan jadi `NotaDinasDialog` ber-`jenis`;
+  dipakai kritis maupun kedaluwarsa. Testid diturunkan dari `jenis` sehingga
+  seluruh uji lama tetap berlaku tanpa satu pun perubahan perilaku.
+- Baris kedaluwarsa diringkas per barang: `M001 · 8 Box · 2 layer · terdekat
+  2026-08-20`. Tanggal yang ditampilkan sengaja yang **terdekat** — menampilkan
+  yang terjauh justru menenangkan pembaca pada barang yang paling mendesak.
+- Penanda `lewat` (sudah vs segera kedaluwarsa) ditetapkan di sisi pemanggil
+  dari data server, bukan dihitung ulang di klien: server yang tahu batas hari
+  ini dan horizonnya, dan menebaknya lagi membuka celah beda zona waktu.
+- PDF kedaluwarsa kini menyebut bahwa daftarnya **seleksi** — sama seperti nota
+  kritis. Tanpa kalimat itu pembaca menyimpulkan tak ada barang kedaluwarsa
+  lain, dan kesimpulan itu dibawa ke tindak lanjut.
+
+**Uji:** 3 uji lama dipertahankan utuh + 7 uji baru. Tiga mutasi diuji dan
+semuanya mati.
+
+---
+
 ## [#887] Panel Permohonan Persediaan berhenti 404 — rutenya tertelan pola — 2026-08-19
 
 Laporan pemilik: membuka Master Persediaan memunculkan
