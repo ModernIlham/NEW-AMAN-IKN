@@ -67,6 +67,51 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#885] Impor SIMAN V2 berhenti 500 — beserta dua cacat sejenis yang belum sempat dilaporkan — 2026-08-19
+
+Laporan pemilik: `POST /api/siman/import` menjawab **500 untuk setiap file**.
+
+Penyebabnya bukan isi file. Ketika parsing dipindahkan ke `_parse_siman_xlsx`
+supaya bisa berjalan di thread, dua variabelnya — `peta_header` dan
+`sheet_dipakai` — ikut pindah, sementara handler masih membaca keduanya.
+Python baru mengeluh saat baris itu dijalankan, jadi **setiap** impor berakhir
+`NameError` sebelum sempat menulis apa pun.
+
+**Kenapa lolos sampai lapangan.** Seluruh uji SIMAN yang ada menguji fungsi
+murni — `petakan_header`, `parse_baris`, `banding_aset`. Semuanya lulus. Yang
+putus justru **sambungan di antaranya**, dan itu tak terlihat oleh uji potongan.
+
+**Yang dikerjakan:**
+
+- Parser mengembalikan `(peta_header, baris, sheet)`; handler memakai ketiganya.
+- **Uji endpoint utuh** untuk impor SIMAN — celah yang membuat cacat ini lolos.
+  Termasuk pembuktian bahwa kedua nilai yang dulu menggantung benar-benar
+  sampai ke respons (nama sheet) dan ke peringatan (kolom hilang).
+- **Pemindai nama menggantung untuk SELURUH route.** Kelas cacat ini — kode
+  dipindah, pembacanya tertinggal — tak bisa dilihat uji fungsi murni, tetapi
+  terlihat jelas oleh analisis statis.
+
+**Dua cacat sejenis yang ikut ketahuan**, keduanya belum pernah dilaporkan
+karena jalurnya jarang dipakai:
+
+| Berkas | Cacat |
+|---|---|
+| `routes/pegawai.py::impor_pegawai` | memanggil `asyncio.to_thread` sementara `asyncio` tak pernah diimpor di berkas itu |
+| `routes/pemeliharaan.py::posting_kapitalisasi` | memakai `parse_harga` yang hanya diimpor di dalam fungsi **lain** pada berkas yang sama |
+
+Keduanya akan 500 begitu barisnya dijalankan — persis seperti impor SIMAN.
+
+**Catatan pemindai.** Versi pertama melaporkan 17 temuan; semuanya positif palsu
+dari fungsi bersarang yang membaca variabel induknya (closure). Pemindainya
+diperbaiki agar hanya menganalisis fungsi tingkat modul — uji yang banjir
+positif palsu akan segera diabaikan orang, dan itu lebih buruk daripada tak ada
+uji sama sekali. Ada uji tersendiri yang mengunci bahwa closure tidak dilaporkan.
+
+**Uji:** 8 uji endpoint SIMAN + 5 uji pemindai. Dua mutasi diuji dan keduanya
+mati.
+
+---
+
 ## [#884] Kode klasifikasi arsip akhirnya bisa benar-benar masuk ke nomor — 2026-08-19
 
 Keluhan pemilik: *"pada Format Nomor, Kode Klasifikasi Arsip masih belum masuk

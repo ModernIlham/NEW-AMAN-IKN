@@ -50,8 +50,19 @@ class TerapkanIn(BaseModel):
     fields: Optional[List[str]] = None  # None = terapkan semua selisih
 
 
-def _parse_siman_xlsx(isi: bytes) -> list:
-    """Parser murni ekspor SIMAN (bytes → baris) — SENGAJA sinkron.
+def _parse_siman_xlsx(isi: bytes) -> tuple:
+    """Parser murni ekspor SIMAN (bytes → (peta_header, baris)) — SENGAJA sinkron.
+
+    Mengembalikan `(peta_header, baris_data, sheet_dipakai)` — bukan barisnya
+    saja. Ini bukan kenyamanan: saat parsing dipindahkan ke fungsi ini agar
+    bisa dijalankan di thread, `peta_header` dan `sheet_dipakai` berhenti ada
+    di lingkup pemanggil, sementara pemanggil masih memakai keduanya (untuk
+    melaporkan kolom yang hilang dan mencatat sheet mana yang dibaca).
+    Akibatnya SETIAP impor berakhir NameError → 500, apa pun isi filenya.
+
+    Kegagalan seperti ini tak bisa dilihat uji fungsi murni: parser dan
+    utilitasnya semua lulus, yang putus justru sambungan di antara keduanya.
+    Karena itu ada uji yang memanggil ENDPOINT-nya utuh.
 
     Seluruh kerja openpyxl (deteksi header lintas sheet + iterasi seluruh
     baris) berkumpul di sini; titik panggilnya dibungkus `asyncio.to_thread`
@@ -106,7 +117,7 @@ def _parse_siman_xlsx(isi: bytes) -> list:
         raise HTTPException(status_code=400, detail=(
             f"Tidak ada baris aset pada sheet '{sheet_dipakai}' — file mungkin "
             "ekspor kosong; periksa filter saat mengekspor dari SIMAN V2"))
-    return baris_data
+    return peta_header, baris_data, sheet_dipakai
 
 
 @siman_router.post("/siman/import")
@@ -139,7 +150,8 @@ async def import_siman(request: Request, file: UploadFile = File(...),
     # Temuan C28: seluruh parsing (openpyxl + deteksi header + iterasi baris)
     # berjalan di thread, bukan di event loop. Parsernya sendiri dibiarkan
     # sinkron — yang dibungkus TITIK PANGGILNYA (pola _tutup_dan_ambil).
-    baris_data = await asyncio.to_thread(_parse_siman_xlsx, isi)
+    hasil_parse = await asyncio.to_thread(_parse_siman_xlsx, isi)
+    peta_header, baris_data, sheet_dipakai = hasil_parse
 
     # Peta pencocokan: kode register (paling stabil) & kode+NUP.
     per_register, per_kunci, duplikat_kunci = {}, {}, 0

@@ -5,6 +5,7 @@ master ini menampung SELURUH pegawai + unit kerjanya, sebagai rujukan lintas
 modul. Semua user login dapat melihat; admin mengelola (CRUD). NIP unik bila
 diisi. Pola sama dengan referensi pejabat/ruangan.
 """
+import asyncio
 import uuid
 from datetime import datetime, timezone
 from typing import Optional

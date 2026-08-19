@@ -425,9 +425,15 @@ class TestPerilakuParserEkstraksi:
 
         isi = self._xlsx([["Kop Laporan"], HEADER_SIMAN,
                           _baris(), _baris(NUP="2")])
-        hasil = _parse_siman_xlsx(isi)
+        # Parser mengembalikan (peta_header, baris, sheet) — peta & nama sheet
+        # ikut dikembalikan karena pemanggilnya memakai keduanya. Sebelumnya
+        # keduanya hanya variabel lokal di sini, dan handler yang membacanya
+        # berakhir NameError → SETIAP impor SIMAN 500 (lihat
+        # test_siman_import_endpoint.py).
+        peta, hasil, sheet = _parse_siman_xlsx(isi)
         assert [b["nup"] for b in hasil] == ["1", "2"]
         assert hasil[0]["kode_barang"] == "3030203001"
+        assert peta and sheet, "peta header / nama sheet tak ikut dikembalikan"
 
     def test_parse_siman_header_tak_dikenal_400(self):
         from fastapi import HTTPException
