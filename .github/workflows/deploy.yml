@@ -87,8 +87,19 @@ jobs:
           # status sshd` di VPS), tetapi rancangan di bawah lebih baik pada
           # KEDUA kemungkinan, jadi tak perlu menunggu kepastian:
           #
-          # - Kesabaran DIPERTAHANKAN (~6 menit), tekanan DIKURANGI SEPARUH:
-          #   4 percobaan berjeda 75 detik, bukan 8 berjeda 30 detik.
+          # - Kesabaran DIPERPANJANG melewati bantime lazim, tekanan tetap
+          #   rendah: 5 percobaan berjeda 180 detik (~14 menit), bukan 8
+          #   berjeda 30 detik (~6 menit).
+          #
+          #   Angka 14 menit itu punya alasan. Pada 19 Agu 13:32 UTC deploy
+          #   gagal lagi, dan pesan ssh-nya kini spesifik: "connect to host
+          #   port 22: Connection timed out". TIMED OUT, bukan "refused" —
+          #   paket SYN-nya dijatuhkan diam-diam, persis yang dilakukan aturan
+          #   iptables DROP milik fail2ban. sshd yang mati akan menjawab
+          #   "Connection refused"; host yang hilang menjawab "No route to
+          #   host". Jendela 6 menit lebih pendek daripada bantime bawaan
+          #   fail2ban (10 menit), jadi seberapa pun sabarnya ia tetap habis
+          #   di dalam masa blokir. 14 menit melewatinya.
           # - Probe `ssh-keyscan` DIHAPUS; `StrictHostKeyChecking=accept-new`
           #   melakukan hal yang sama pada koneksi yang memang dipakai. Model
           #   kepercayaannya identik - keduanya trust-on-first-use - tetapi tiap
@@ -101,7 +112,7 @@ jobs:
           # Ini tetap BANTALAN, bukan perbaikan. Gangguan di sisi penyedia
           # perlu diselesaikan di sana.
           rc=0
-          for attempt in 1 2 3 4; do
+          for attempt in 1 2 3 4 5; do
             rc=0
             ssh -i ~/.ssh/deploy_key -p "${VPS_PORT:-22}" \
                 -o StrictHostKeyChecking=accept-new \
@@ -114,12 +125,12 @@ jobs:
               echo "::error::Koneksi ke VPS BERHASIL tetapi skrip deploy gagal (exit $rc). Ini bukan masalah jaringan - periksa keluaran skrip di atas."
               exit "$rc"
             fi
-            if [ "$attempt" -lt 4 ]; then
-              echo "Percobaan $attempt/4 gagal menjangkau VPS (exit 255) - coba lagi 75 detik…"
-              sleep 75
+            if [ "$attempt" -lt 5 ]; then
+              echo "Percobaan $attempt/5 gagal menjangkau VPS (exit 255) - coba lagi 180 detik…"
+              sleep 180
             fi
           done
           if [ "$rc" -ne 0 ]; then
-            echo "::error::Tidak bisa terhubung ke VPS di port ${VPS_PORT:-22} setelah 4 percobaan (~6 menit). VPS-nya sendiri mungkin hidup - periksa firewall/proteksi DDoS di sisi PENYEDIA, dan di VPS jalankan 'fail2ban-client status sshd' untuk memastikan IP runner GitHub tidak sedang terblokir."
+            echo "::error::Tidak bisa terhubung ke VPS di port ${VPS_PORT:-22} setelah 5 percobaan (~14 menit). Gejalanya 'Connection timed out' - paket dijatuhkan diam-diam, bukan ditolak; sshd yang mati akan menjawab 'Connection refused'. Di VPS jalankan 'fail2ban-client status sshd' untuk melihat IP yang sedang terblokir, dan periksa firewall/proteksi DDoS penyedia."
             exit 1
           fi

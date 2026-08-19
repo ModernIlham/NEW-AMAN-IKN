@@ -104,6 +104,42 @@ Aturan praktis RAM 8 GB tanpa hibernasi: swap 2–4 GB. Ambil **4 GB** (ruang di
 6. **Plafon log/journal + verifikasi logrotate + backup cron** (blok D/E).
 7. Peninjauan bulanan: `$indexStats`, `ncdu`, `system.profile`.
 
+### 19 Agustus 2026 sore — gejalanya akhirnya bernama
+
+Setelah probe `ssh-keyscan` diganti koneksi `ssh` langsung, pesan galatnya
+menjadi spesifik:
+
+```
+ssh: connect to host *** port 22: Connection timed out
+```
+
+**Timed out**, bukan *refused*. Bedanya menentukan:
+
+| Gejala | Artinya |
+|---|---|
+| `Connection refused` | sshd mati / port tertutup — mesin menjawab |
+| `No route to host` | jaringan tak menemukan mesinnya |
+| **`Connection timed out`** | **paket SYN dijatuhkan diam-diam** — persis aturan `iptables DROP` milik fail2ban |
+
+Konsekuensinya untuk anggaran retry: **jendela yang lebih pendek daripada masa
+blokir tak pernah berhasil**, seberapa pun banyak percobaannya — ia hanya
+menunggu di dalam blokir lalu menyerah tepat sebelum blokirnya berakhir.
+`bantime` bawaan fail2ban 10 menit, sementara jendela saat itu 6 menit.
+
+Jendela karena itu diperpanjang jadi ~14 menit (5 percobaan berjeda 180 detik)
+— tetap sedikit percobaan supaya tak menambah tekanan, tetapi cukup sabar untuk
+melewati blokir 10 menit.
+
+Perintah yang memastikannya, dijalankan di VPS:
+
+```
+fail2ban-client status sshd     # daftar IP yang sedang terblokir
+fail2ban-client set sshd unbanip <IP>
+```
+
+Bila IP runner GitHub memang muncul di sana, penyelesaian di akarnya adalah
+menaikkan `maxretry` atau memasukkan rentang IP GitHub ke `ignoreip`.
+
 ### 19 Agustus 2026 — dua kegagalan beruntun, dan dugaan yang menunjuk diri sendiri
 
 Delapan deploy sukses pada hari itu (01:58–06:22). Lalu:
