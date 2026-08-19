@@ -667,7 +667,7 @@ async def get_group_members(payload: GroupMembersRequest,
 async def get_all_asset_ids(
     activity_id: str = "",
     search: str = "",
-    category: str = "",
+    category: List[str] = Query(default=[]),
     condition: List[str] = Query(default=[]),
     status: List[str] = Query(default=[]),
     location: List[str] = Query(default=[]),

@@ -110,7 +110,6 @@ function filterSnapshotRows(rows, { search, category, filters }) {
   // diperlakukan sebagai satu frasa utuh pada 16 field saja, sehingga hasil
   // luring berbeda dari hasil daring untuk kata kunci yang sama.
   if (search) out = out.filter(r => cocokAset(r, search));
-  if (category && category !== "Semua") out = out.filter(r => r.category === category);
   if (filters) {
     // Tujuh filter berbasis pilihan bernilai BANYAK: nilai dalam satu filter
     // berarti ATAU (cermin `$in` di server), antar-filter tetap DAN. Daftar
@@ -128,6 +127,9 @@ function filterSnapshotRows(rows, { search, category, filters }) {
       });
     };
     const sub = (field, val) => { if (val) { const v = val.toLowerCase(); out = out.filter(r => String(r[field] ?? "").toLowerCase().includes(v)); } };
+    // Kategori ikut jalur multi yang sama dengan tujuh filter lain — hasil
+    // luring harus identik dengan hasil daring untuk filter yang sama.
+    eqMulti("category", category);
     eqMulti("condition", filters.condition);
     eqMulti("status", filters.status);
     subMulti("location", filters.location);
@@ -280,10 +282,9 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const filterLaporan = useMemo(() => {
     const p = new URLSearchParams();
     if (debouncedSearch) p.append("search", debouncedSearch);
-    if (filterCategory && filterCategory !== "Semua") p.append("category", filterCategory);
     buildFilterParams(p);
     return p.toString();
-  }, [debouncedSearch, filterCategory, buildFilterParams]);
+  }, [debouncedSearch, buildFilterParams]);
 
   // === FORM / EDIT STATE ===
   const [editAssetForForm, setEditAssetForForm] = useState(null);
@@ -615,14 +616,13 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       const params = new URLSearchParams();
       params.append("activity_id", activity?.id || "");
       if (debouncedSearch) params.append("search", debouncedSearch);
-      if (filterCategory) params.append("category", filterCategory);
       buildFilterParams(params);
       const r = await axios.get(`${API}/assets/all-ids?${params.toString()}`);
       const allIds = r.data.ids || [];
       setSelectedAssets(new Set(allIds));
       toast.success(`${allIds.length} aset dipilih dari semua halaman`);
     } catch { toast.error("Gagal memilih semua aset"); }
-  }, [activity?.id, debouncedSearch, filterCategory, buildFilterParams]);
+  }, [activity?.id, debouncedSearch, buildFilterParams]);
 
   const clearSelection = useCallback(() => { setSelectedAssets(new Set()); setShowBatchPanel(false); }, []);
 
@@ -827,7 +827,6 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       setLoadingMessage(`Memuat halaman ${page}...`);
       const params = new URLSearchParams();
       if (search) params.append("search", search);
-      if (category && category !== "Semua") params.append("category", category);
       params.append("sort_by", sort || "newest");
       params.append("page", String(page));
       params.append("page_size", String(size));
@@ -905,7 +904,6 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     try {
       const params = new URLSearchParams();
       if (debouncedSearch) params.append("search", debouncedSearch);
-      if (filterCategory && filterCategory !== "Semua") params.append("category", filterCategory);
       params.append("sort_by", sortBy || "newest");
       params.append("page", String(nextPage));
       params.append("page_size", String(pageSize));
@@ -941,7 +939,6 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     try {
       const params = new URLSearchParams();
       if (debouncedSearch) params.append("search", debouncedSearch);
-      if (filterCategory && filterCategory !== "Semua") params.append("category", filterCategory);
       params.append("sort_by", sortBy || "newest");
       params.append("page", String(prevPage));
       params.append("page_size", String(pageSize));
@@ -962,11 +959,10 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const loadPrevMobileRef = useRef(loadPrevMobile);
   loadPrevMobileRef.current = loadPrevMobile;
 
-  const doFetchStats = async (search, category) => {
+  const doFetchStats = async (search) => {
     try {
       const params = new URLSearchParams();
       if (search) params.append("search", search);
-      if (category && category !== "Semua") params.append("category", category);
       if (activity?.id) params.append("activity_id", activity.id);
       // Filter lanjutan ikut dikirim — perakit yang SAMA dengan daftar
       // (`buildFilterParams`). Sebelum ini kartu ringkasan hanya menerima
@@ -1011,7 +1007,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       // ulang jendela infinite-scroll HP (mencegah lompatan posisi scroll saat
       // menutup form setelah simpan; baris tersimpan sudah diperbarui optimis).
       doFetch(pg, p.pageSize, p.debouncedSearch, p.filterCategory, p.sortBy, false, preserveMobile),
-      doFetchStats(p.debouncedSearch, p.filterCategory),
+      doFetchStats(p.debouncedSearch),
     ]);
     if (showLoading) {
       setPageLoading(true);
@@ -1067,7 +1063,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   useEffect(() => {
     setLoading(true);
     setLoadingMessage("Memuat data aset...");
-    Promise.all([doFetch(1,50,"","Semua","newest"), doFetchStats("","Semua"), doFetchCategories(), fetchFilterOptions()])
+    Promise.all([doFetch(1,50,"",[],"newest"), doFetchStats(""), doFetchCategories(), fetchFilterOptions()])
       .finally(() => { setLoading(false); setLoadingMessage(""); });
   }, [activity?.id]);
 
@@ -1093,7 +1089,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     setPageLoading(true);
     Promise.all([
       doFetch(1, pageSize, debouncedSearch, filterCategory, sortBy),
-      doFetchStats(debouncedSearch, filterCategory),
+      doFetchStats(debouncedSearch),
     ]).finally(() => setPageLoading(false));
     setShowAdvancedFilter(false);
   };
@@ -1103,7 +1099,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     onRefresh: async () => {
       await Promise.all([
         doFetch(1, pageSize, debouncedSearch, filterCategory, sortBy),
-        doFetchStats(debouncedSearch, filterCategory)
+        doFetchStats(debouncedSearch)
       ]);
       toast.success("Data berhasil diperbarui");
     },
@@ -1276,11 +1272,10 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const buildMapParams = useCallback(() => {
     const params = new URLSearchParams();
     if (debouncedSearch) params.append("search", debouncedSearch);
-    if (filterCategory && filterCategory !== "Semua") params.append("category", filterCategory);
     if (activity?.id) params.append("activity_id", activity.id);
     buildFilterParams(params);
     return params;
-  }, [debouncedSearch, filterCategory, activity?.id, buildFilterParams]);
+  }, [debouncedSearch, activity?.id, buildFilterParams]);
 
   // Filter yang sama untuk data snapshot saat offline.
   const mapClientFilter = useCallback(
@@ -1649,11 +1644,10 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const buildStikerParams = useCallback(() => {
     const params = new URLSearchParams();
     if (debouncedSearch) params.append("search", debouncedSearch);
-    if (filterCategory && filterCategory !== "Semua") params.append("category", filterCategory);
     if (activity?.id) params.append("activity_id", activity.id);
     buildFilterParams(params);
     return params;
-  }, [debouncedSearch, filterCategory, activity, buildFilterParams]);
+  }, [debouncedSearch, activity, buildFilterParams]);
 
   // Seleksi aktif → cetak HANYA aset yang ditandai (bisa lintas halaman lewat
   // "Pilih semua N aset"); tanpa seleksi → seisi halaman seperti sebelumnya.
@@ -1694,7 +1688,6 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       // aset kegiatan — berkasnya sah, hanya jauh lebih luas dari yang diminta.
       const q = new URLSearchParams();
       if (debouncedSearch) q.append("search", debouncedSearch);
-      if (filterCategory && filterCategory !== "Semua") q.append("category", filterCategory);
       buildFilterParams(q);
       const qs = q.toString() ? `&${q.toString()}` : "";
       if (fmt === 'xlsx') {
@@ -1718,7 +1711,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     } catch (err) {
       console.error('Export error:', err); // toast error sudah ditangani helper
     } finally { setExporting(false); }
-  }, [activity, totalItems, debouncedSearch, filterCategory, buildFilterParams]);
+  }, [activity, totalItems, debouncedSearch, buildFilterParams]);
 
   const handleExportExecutivePDF = useCallback(async () => {
     if (!activity?.id) { toast.error("Pilih kegiatan inventarisasi terlebih dahulu"); return; }
@@ -1893,7 +1886,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
               handlePreviewExecutive={handlePreviewExecutive} perms={perms} openDialog={openDialog} handlePrintBulkCards={handlePrintBulkCards}
               onCetakStiker={() => setStikerOpen(true)} selectedCount={selectedAssets.size}
               assetsCount={assets.length} filters={filters} filterOptions={filterOptions} handleAdvancedFilterChange={handleAdvancedFilterChange}
-              resetAdvancedFilters={resetAdvancedFilters} handleCategoryReset={() => { handleCategoryReset(); refreshData(1); }}
+              resetAdvancedFilters={resetAdvancedFilters} handleCategoryReset={handleCategoryReset}
               refreshData={refreshData} viewMode={viewMode} setViewMode={setViewMode}
               inventoryMode={inventoryMode} setInventoryMode={setInventoryMode}
             />

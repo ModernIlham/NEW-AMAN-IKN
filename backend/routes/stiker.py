@@ -56,7 +56,7 @@ def _bangun_query_stiker(asset_ids, **f):
 async def rekap_ukuran_stiker(
     asset_ids: str = "",
     search: str = "",
-    category: str = "",
+    category: List[str] = Query(default=[]),
     activity_id: str = "",
     condition: List[str] = Query(default=[]),
     status: List[str] = Query(default=[]),
@@ -114,7 +114,7 @@ async def cetak_stiker_label(
     asset_ids: str = "",
     # ── filter identik GET /assets (mengikuti filter aktif daftar) ──
     search: str = "",
-    category: str = "",
+    category: List[str] = Query(default=[]),
     activity_id: str = "",
     condition: List[str] = Query(default=[]),
     status: List[str] = Query(default=[]),

@@ -151,3 +151,64 @@ describe("objekFilter — body JSON batch PDF ZIP", () => {
     expect(objekFilter(undefined)).toEqual({});
   });
 });
+
+
+describe("kategori multi-nilai", () => {
+  const params = (result) => {
+    const p = new URLSearchParams();
+    result.current.buildFilterParams(p);
+    return p;
+  };
+
+  test("berawal sebagai daftar kosong, bukan sentinel \"Semua\"", () => {
+    const { result } = pakai();
+    expect(result.current.filterCategory).toEqual([]);
+    expect(result.current.activeFilterCount).toBe(0);
+  });
+
+  test("dirakit buildFilterParams — bukan oleh tiap pemanggil sendiri", () => {
+    // Ini inti perubahannya. Sembilan tempat dulu menyusun
+    // `params.append("category", ...)` masing-masing; satu saja yang terlewat
+    // berarti ekspor/peta/stiker menyaring beda dari layar.
+    const { result } = pakai();
+    act(() => result.current.setFilterCategory(["Meja", "Kursi"]));
+    expect(params(result).getAll("category")).toEqual(["Meja", "Kursi"]);
+  });
+
+  test("satu kategori menghasilkan URL yang identik dengan versi lama", () => {
+    const { result } = pakai();
+    act(() => result.current.setFilterCategory(["Meja"]));
+    expect(params(result).toString()).toBe("category=Meja");
+  });
+
+  test("nama kategori bermuatan koma tetap SATU nilai", () => {
+    // Label kodefikasi BMN panjang dan bertanda baca — risikonya lebih besar
+    // di sini daripada di filter mana pun.
+    const { result } = pakai();
+    act(() => result.current.setFilterCategory(
+      ["Meja Kerja Kayu, Tipe A", "Kursi"]));
+    expect(params(result).getAll("category"))
+      .toEqual(["Meja Kerja Kayu, Tipe A", "Kursi"]);
+  });
+
+  test("ikut dihitung sebagai SATU filter aktif meski banyak nilai", () => {
+    const { result } = pakai();
+    act(() => result.current.setFilterCategory(["Meja", "Kursi", "Lemari"]));
+    expect(result.current.activeFilterCount).toBe(1);
+  });
+
+  test("reset kategori mengosongkan daftarnya", () => {
+    const { result } = pakai();
+    act(() => result.current.setFilterCategory(["Meja"]));
+    act(() => result.current.handleCategoryReset());
+    expect(result.current.filterCategory).toEqual([]);
+    expect(params(result).toString()).toBe("");
+  });
+
+  test("reset semua filter ikut mengosongkan kategori", () => {
+    const { result } = pakai();
+    act(() => result.current.setFilterCategory(["Meja"]));
+    act(() => result.current.resetAdvancedFilters());
+    expect(result.current.filterCategory).toEqual([]);
+  });
+});

@@ -488,7 +488,7 @@ async def export_geo(
     request: Request,
     format: str = "kml",
     search: str = "",
-    category: str = "",
+    category: List[str] = Query(default=[]),
     activity_id: str = "",
     # Multi-nilai (parameter berulang) — SAMA dengan GET /assets supaya ekspor
     # peta tak pernah berbeda isi dari daftar yang sedang dilihat pengguna.
@@ -590,7 +590,7 @@ async def export_geo(
 
 def filter_aset_ekspor(
     search: str = "",
-    category: str = "",
+    category: List[str] = Query(default=[]),
     condition: List[str] = Query(default=[]),
     status: List[str] = Query(default=[]),
     location: List[str] = Query(default=[]),

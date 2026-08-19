@@ -79,7 +79,12 @@ export function objekFilter(qs) {
 
 export function useAssetFilters({ activityId }) {
   const [searchInput, setSearchInput] = useState("");
-  const [filterCategory, setFilterCategory] = useState("Semua");
+  // Kategori kini MULTI-NILAI. Daftar kosong = tanpa filter; sentinel lama
+  // `"Semua"` dipensiunkan. Disimpan terpisah dari reducer `filters` karena
+  // kontrolnya berdiri di toolbar (bukan di panel filter lanjutan) dan
+  // dipakai puluhan tempat — memindahkannya ke reducer hanya menambah
+  // perubahan tanpa menambah kebenaran.
+  const [filterCategory, setFilterCategory] = useState([]);
   const [sortBy, setSortBy] = useState("newest");
   const rawDebouncedSearch = useDebounce(searchInput, 300);
   // Kata kunci EFEKTIF: < MIN_SEARCH_LEN (setelah dipangkas) → "" (tanpa cari).
@@ -150,6 +155,11 @@ export function useAssetFilters({ activityId }) {
     for (const [field, nama] of Object.entries(PARAM_MULTI)) {
       for (const v of normalkanMulti(filters[field])) params.append(nama, v);
     }
+    // Kategori dirakit DI SINI, bukan di tiap pemanggil. Sebelumnya sembilan
+    // tempat menyusun `params.append("category", ...)` sendiri-sendiri — dan
+    // satu saja yang terlewat berarti ekspor, peta, atau stiker menyaring
+    // berbeda dari yang terlihat di layar.
+    for (const v of normalkanMulti(filterCategory)) params.append("category", v);
     if (filters.priceMin) params.append("price_min", filters.priceMin);
     if (filters.priceMax) params.append("price_max", filters.priceMax);
     if (filters.nomorSpm) params.append("nomor_spm", filters.nomorSpm);
@@ -159,14 +169,14 @@ export function useAssetFilters({ activityId }) {
     if (filters.dateFrom) params.append("beli_dari", filters.dateFrom);
     if (filters.dateTo) params.append("beli_sampai", filters.dateTo);
     return params;
-  }, [filters]);
+  }, [filters, filterCategory]);
 
   // Jumlah filter aktif — satu filter dihitung SEKALI meski memuat banyak
   // nilai (angka ini menjawab "berapa penyempitan yang sedang berlaku",
   // bukan "berapa nilai yang dicentang"; jumlah nilai per filter tampil di
   // pemicunya masing-masing).
   const activeFilterCount = useMemo(() => [
-    filterCategory !== "Semua" && filterCategory,
+    filterCategory?.length,
     filters.condition?.length, filters.status?.length, filters.location?.length,
     filters.eselon1?.length, filters.eselon2?.length, filters.stiker?.length,
     filters.inventoryStatus?.length, filters.priceMin, filters.priceMax,
@@ -184,11 +194,11 @@ export function useAssetFilters({ activityId }) {
   }, []);
 
   const handleCategoryReset = useCallback(() => {
-    setFilterCategory("Semua");
+    setFilterCategory([]);
   }, []);
 
   const resetAdvancedFilters = useCallback(() => {
-    setFilterCategory("Semua");
+    setFilterCategory([]);
     dispatchFilter({ type: 'RESET' });
     setShowAdvancedFilter(false);
   }, []);

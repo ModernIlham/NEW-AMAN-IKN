@@ -3,7 +3,7 @@ import { X, Check } from "lucide-react";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
 import { OptimizedInput } from "../ui/optimized-input";
-import FilterMultiSelect from "./FilterMultiSelect";
+import FilterMultiSelect, { ringkasTerpilih } from "./FilterMultiSelect";
 
 // Pilihan tetap status inventarisasi — daftar kuratif (bukan nilai distinct
 // dari data) supaya status yang belum pernah dipakai tetap bisa disaring.
@@ -220,8 +220,14 @@ const AdvancedFilter = memo(({
       {activeFilterCount > 0 && !isOpen && (
         <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t" data-testid="active-filter-badges">
           <span className="text-[10px] text-muted-foreground flex-shrink-0">Filter aktif:</span>
-          {filterCategory !== "Semua" && filterCategory && (
-            <FilterBadge onRemove={onCategoryReset} testid="badge-remove-category">Kategori: {filterCategory}</FilterBadge>
+          {/* Kategori kini boleh lebih dari satu — SATU chip yang menyebut
+              seluruh nilainya, sama seperti chip filter multi lainnya. Tombol
+              × melepas seluruh filter kategori; melepas satu nilai dilakukan
+              di dropdown-nya. */}
+          {(filterCategory || []).length > 0 && (
+            <FilterBadge onRemove={onCategoryReset} testid="badge-remove-category">
+              Kategori: {ringkasTerpilih(filterCategory, "")}
+            </FilterBadge>
           )}
           {/* Filter multi-pilih: SATU chip per filter yang menyebut seluruh
               nilainya. Satu chip per NILAI akan meledak jadi belasan pil
