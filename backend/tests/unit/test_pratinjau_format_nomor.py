@@ -91,7 +91,7 @@ class TestPratinjauRancangan:
     def test_komposisi_mengembalikan_template_hasil_penyisipan(self, dbx):
         """Inilah yang membuat kolom Format Nomor berubah seketika."""
         async def skenario():
-            hasil = await _pra(komposisi="klasifikasi", tanggal_surat="2026-08-19")
+            hasil = await _pra(komposisi="klasifikasi_saja", tanggal_surat="2026-08-19")
             assert "{kode_klasifikasi}" in hasil["format_nomor"]
             assert "{kode_keamanan}" not in hasil["format_nomor"]
         _jalan(skenario())
@@ -107,7 +107,7 @@ class TestPratinjauRancangan:
     def test_komposisi_diterapkan_di_atas_rancangan(self, dbx):
         async def skenario():
             hasil = await _pra(format_nomor="{urut}/{bulan_romawi}/{tahun}",
-                               komposisi="keamanan", tanggal_surat="2026-08-19")
+                               komposisi="keamanan_saja", tanggal_surat="2026-08-19")
             assert hasil["format_nomor"] == "{kode_keamanan}-{urut}/{bulan_romawi}/{tahun}"
             assert hasil["nomor"].startswith("B-001/VIII/")
         _jalan(skenario())
@@ -142,7 +142,7 @@ class TestPratinjauRancangan:
 
     def test_contoh_nomor_ikut_kembali(self, dbx):
         async def skenario():
-            hasil = await _pra(komposisi="keduanya", kode_klasifikasi="PL.02",
+            hasil = await _pra(komposisi="keamanan_klasifikasi", kode_klasifikasi="PL.02",
                                kode_keamanan="T", tanggal_surat="2026-08-19")
             assert hasil["nomor"].startswith("T-001/PL.02/"), hasil["nomor"]
         _jalan(skenario())

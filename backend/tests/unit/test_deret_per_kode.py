@@ -58,7 +58,7 @@ def dbx(monkeypatch):
     return fake
 
 
-async def _atur(dbx, komposisi="keamanan", deret_per_kode=True):
+async def _atur(dbx, komposisi="keamanan_saja", deret_per_kode=True):
     await _unwrap(rp.set_pengaturan_persuratan)(
         rp.PengaturanIn(komposisi_nomor=komposisi,
                         deret_per_kode=deret_per_kode), user=ADMIN)
@@ -75,16 +75,19 @@ class TestSyaratAman:
     """Deret terpisah hanya sah bila kodenya ada di nomor."""
 
     @pytest.mark.parametrize("komposisi,harap", [
-        ("keamanan", "keamanan"),
-        ("klasifikasi", "klasifikasi"),
-        ("keduanya", ""),
+        ("keamanan_saja", "keamanan"),
+        ("klasifikasi_saja", "klasifikasi"),
+        # Klasifikasi DI DEPAN tetap deret per klasifikasi — yang menentukan
+        # keamanannya adalah kode itu tercetak, bukan letaknya.
+        ("klasifikasi_depan", "klasifikasi"),
+        ("keamanan_klasifikasi", ""),
         ("tanpa", ""),
     ])
     def test_dimensi_mengikuti_komposisi(self, komposisi, harap):
         assert dimensi_deret(komposisi, True) == harap
 
     def test_saklar_mati_berarti_satu_deret(self):
-        assert dimensi_deret("keamanan", False) == ""
+        assert dimensi_deret("keamanan_saja", False) == ""
 
     def test_klasifikasi_kosong_jatuh_ke_deret_tunggal(self):
         """Memisahkan deret berdasarkan kode yang tak ada sama saja dengan
@@ -120,7 +123,7 @@ class TestLencanaIkutKode:
 class TestDeretTerpisahSungguhan:
     def test_tiap_kode_keamanan_mulai_dari_satu(self, dbx):
         async def skenario():
-            await _atur(dbx, "keamanan", True)
+            await _atur(dbx, "keamanan_saja", True)
             b1 = await _booking("B")
             b2 = await _booking("B")
             t1 = await _booking("T")
@@ -136,7 +139,7 @@ class TestDeretTerpisahSungguhan:
         """Bukti keamanannya: nomor 001 muncul dua kali, tetapi STRING nomornya
         berbeda karena kodenya ikut tercetak."""
         async def skenario():
-            await _atur(dbx, "keamanan", True)
+            await _atur(dbx, "keamanan_saja", True)
             b = await _booking("B")
             t = await _booking("T")
             assert b["no_agenda"] == t["no_agenda"] == 1
@@ -145,7 +148,7 @@ class TestDeretTerpisahSungguhan:
 
     def test_per_klasifikasi(self, dbx):
         async def skenario():
-            await _atur(dbx, "klasifikasi", True)
+            await _atur(dbx, "klasifikasi_saja", True)
             a1 = await _booking(klas="PL.02")
             a2 = await _booking(klas="PL.02")
             b1 = await _booking(klas="UM.01")
@@ -154,7 +157,7 @@ class TestDeretTerpisahSungguhan:
 
     def test_saklar_mati_tetap_satu_deret(self, dbx):
         async def skenario():
-            await _atur(dbx, "keamanan", False)
+            await _atur(dbx, "keamanan_saja", False)
             b = await _booking("B")
             t = await _booking("T")
             assert (b["no_agenda"], t["no_agenda"]) == (1, 2)
@@ -162,7 +165,7 @@ class TestDeretTerpisahSungguhan:
 
     def test_lencana_hasil_booking_menyebut_kode(self, dbx):
         async def skenario():
-            await _atur(dbx, "keamanan", True)
+            await _atur(dbx, "keamanan_saja", True)
             t = await _booking("T")
             assert t["label_agenda"] == "K-T-001/VIII/2026", t["label_agenda"]
         _jalan(skenario())
@@ -174,9 +177,9 @@ class TestDipaksaMatiSaatKeduanya:
         ditolak — supaya tak ada setelan tertinggal yang diam-diam
         menerbitkan nomor kembar."""
         async def skenario():
-            await _atur(dbx, "keamanan", True)
+            await _atur(dbx, "keamanan_saja", True)
             hasil = await _unwrap(rp.set_pengaturan_persuratan)(
-                rp.PengaturanIn(komposisi_nomor="keduanya"), user=ADMIN)
+                rp.PengaturanIn(komposisi_nomor="keamanan_klasifikasi"), user=ADMIN)
             assert hasil["deret_per_kode"] is False
             assert hasil["dimensi_deret"] == ""
             assert hasil["deret_per_kode_boleh"] is False
@@ -184,7 +187,7 @@ class TestDipaksaMatiSaatKeduanya:
 
     def test_komposisi_tanpa_kode_juga_mematikan(self, dbx):
         async def skenario():
-            await _atur(dbx, "keamanan", True)
+            await _atur(dbx, "keamanan_saja", True)
             hasil = await _unwrap(rp.set_pengaturan_persuratan)(
                 rp.PengaturanIn(komposisi_nomor="tanpa"), user=ADMIN)
             assert hasil["deret_per_kode"] is False
@@ -192,10 +195,10 @@ class TestDipaksaMatiSaatKeduanya:
 
     def test_setelah_dipaksa_mati_deret_kembali_gabungan(self, dbx):
         async def skenario():
-            await _atur(dbx, "keamanan", True)
+            await _atur(dbx, "keamanan_saja", True)
             await _booking("B")
             await _unwrap(rp.set_pengaturan_persuratan)(
-                rp.PengaturanIn(komposisi_nomor="keduanya"), user=ADMIN)
+                rp.PengaturanIn(komposisi_nomor="keamanan_klasifikasi"), user=ADMIN)
             t = await _booking("T")
             # Deret gabungan di-seed dari nomor tertinggi periode ini (1),
             # jadi nomor berikutnya 2 — bukan 1 yang sudah terpakai.
@@ -205,7 +208,7 @@ class TestDipaksaMatiSaatKeduanya:
     def test_menyalakan_saat_komposisi_keduanya_tak_berpengaruh(self, dbx):
         async def skenario():
             hasil = await _unwrap(rp.set_pengaturan_persuratan)(
-                rp.PengaturanIn(komposisi_nomor="keduanya",
+                rp.PengaturanIn(komposisi_nomor="keamanan_klasifikasi",
                                 deret_per_kode=True), user=ADMIN)
             assert hasil["deret_per_kode"] is False
         _jalan(skenario())
@@ -216,7 +219,7 @@ class TestPratinjauSelarasDenganPenerbitan:
         """Pratinjau yang memakai deret lain akan menawarkan angka yang bukan
         angka sebenarnya — dan operator memesan nomor berdasarkan angka itu."""
         async def skenario():
-            await _atur(dbx, "keamanan", True)
+            await _atur(dbx, "keamanan_saja", True)
             await _booking("B")
             await _booking("B")
             pra = await _unwrap(rp.pratinjau_nomor)(
@@ -232,7 +235,7 @@ class TestSisipanTetapDiDeretnya:
         """Tanpa penyaring deret, surat 'T' bisa menyisip di belakang nomor
         milik deret 'B' — nomor hasilnya menunjuk induk yang bukan miliknya."""
         async def skenario():
-            await _atur(dbx, "keamanan", True)
+            await _atur(dbx, "keamanan_saja", True)
             await _booking("B", tgl="2026-08-01")
             await _booking("B", tgl="2026-08-02")
             await _booking("T", tgl="2026-08-03")
@@ -265,7 +268,7 @@ class TestDeretBaruTidakMewarisiPosisiDeretLama:
         async def skenario():
             # Counter tahunan era-lama, belum dimigrasi ke bulanan.
             await dbx.counters.insert_one({"_id": "surat_keluar_2026", "seq": 7})
-            await _atur(dbx, "keamanan", True)
+            await _atur(dbx, "keamanan_saja", True)
             t = await _booking("T")
             assert t["no_agenda"] == 1, (
                 f"deret 'T' mewarisi posisi deret gabungan ({t['no_agenda']}) "
@@ -278,7 +281,7 @@ class TestDeretBaruTidakMewarisiPosisiDeretLama:
         nomor 1..7 yang sudah beredar terbit ulang."""
         async def skenario():
             await dbx.counters.insert_one({"_id": "surat_keluar_2026", "seq": 7})
-            await _atur(dbx, "keamanan", False)
+            await _atur(dbx, "keamanan_saja", False)
             b = await _booking("B")
             assert b["no_agenda"] == 8, b["no_agenda"]
         _jalan(skenario())

@@ -42,8 +42,8 @@ from persuratan_utils import (
     STATUS_KELUAR, STATUS_MASUK, TRANSISI_KELUAR, TRANSISI_MASUK,
     bangun_nomor, baris_agenda_csv, gabung_klasifikasi, label_agenda,
     periode_urut,
-    KOMPOSISI_NOMOR, PLACEHOLDER_NOMOR, dimensi_deret, komposisi_format,
-    kunci_deret,
+    CONTOH_KOMPOSISI, KOMPOSISI_NOMOR, PLACEHOLDER_NOMOR, dimensi_deret,
+    komposisi_format, kunci_deret,
     peringatan_klasifikasi,
     pilih_klasifikasi, placeholder_tak_dikenal, sumber_pengaturan,
     terapkan_komposisi,
@@ -835,6 +835,9 @@ async def _respons_pengaturan(_ks: str) -> dict:
     return {**efektif, "scope": _ks, "sumber": sumber_pengaturan(g, s),
             "komposisi_nomor": komposisi_format(efektif["format_nomor"]),
             "pilihan_komposisi": KOMPOSISI_NOMOR,
+            # Contoh hasil tiap komposisi — pilihan terbaca dari BENTUKNYA,
+            # bukan dari namanya.
+            "contoh_komposisi": CONTOH_KOMPOSISI,
             # Daftar bagian yang bisa dipanggil di Format Nomor, beserta arti
             # dan contoh isinya — layar memakainya sebagai chip penyisip.
             "placeholder": PLACEHOLDER_NOMOR,

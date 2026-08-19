@@ -67,6 +67,49 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#892] Komposisi Nomor akhirnya menanyakan hal yang benar — 2026-08-19
+
+Koreksi atas [#884]. Yang saya bangun menanyakan *"kode mana yang ikut"*;
+yang pemilik maksudkan adalah **dua hal**:
+
+1. apakah **kode klasifikasi arsip ikut** disisipkan, dan
+2. apakah ia **menempati posisi depan** — tempat yang biasanya diisi kode
+   keamanan.
+
+Bentuk lama hanya bisa menaruh klasifikasi SETELAH nomor urut
+(`001/PL.02/…`). Satker yang menomori suratnya dengan klasifikasi di depan
+(`PL.02-001/…`) tak punya cara menyatakannya selain mengetik template
+ber-placeholder dengan benar — persis kesulitan yang fitur ini seharusnya
+hapus.
+
+**Pilihan sekarang, beserta contohnya** (contoh ikut tampil di layar, sebab
+pilihan terbaca dari BENTUKNYA, bukan dari namanya):
+
+| Pilihan | Hasil |
+|---|---|
+| Kode keamanan di depan + klasifikasi setelah nomor | `B-001/PL.02/OIKN/VIII/2026` |
+| **Kode klasifikasi arsip DI DEPAN** (menggantikan kode keamanan) | `PL.02-001/OIKN/VIII/2026` |
+| Kode keamanan saja | `B-001/OIKN/VIII/2026` |
+| Klasifikasi setelah nomor, tanpa kode keamanan | `001/PL.02/OIKN/VIII/2026` |
+| Tanpa keduanya | `001/OIKN/VIII/2026` |
+
+**Yang menentukan kebenarannya.** Penerapan komposisi kini **membersihkan
+kedua placeholder lebih dulu**, baru memasang menurut pilihan. Tanpa itu,
+memindahkan klasifikasi dari belakang ke depan meninggalkan salinan di tempat
+lamanya — dan nomor yang terbit memuat kode klasifikasi **dua kali**.
+
+**Kode Klasifikasi Bawaan (fallback) berdiri sendiri.** Tombol "bawaan" yang
+saya tambahkan di katalog [#884] dihapus: ia menimpa kolom itu, padahal kolom
+tersebut milik operator sepenuhnya. Membuat sebuah kode katalog berlaku tetap
+lewat tombol "+ aturan" di sebelahnya.
+
+**Uji:** 6 uji baru untuk penempatan depan, termasuk perpindahan posisi yang
+tak boleh menyisakan salinan. Tiga mutasi diuji dan semuanya mati — salah
+satunya (melewatkan pembersihan) menjatuhkan **20 uji**, sebab template kembar
+merusak deret nomor juga.
+
+---
+
 ## [#891] Format nomor: pilihan yang langsung terlihat, dan bagian yang menyebut namanya sendiri — 2026-08-19
 
 Dua keluhan pemilik, satu akar:

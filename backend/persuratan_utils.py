@@ -119,10 +119,22 @@ PLACEHOLDER_NOMOR = [
 # dengan benar; dan salah ketik satu kurung membuat kodenya diam-diam tak
 # pernah muncul di nomor mana pun.
 KOMPOSISI_NOMOR = {
-    "keduanya": "Kode keamanan + kode klasifikasi arsip",
-    "keamanan": "Kode keamanan saja",
-    "klasifikasi": "Kode klasifikasi arsip saja",
+    "keamanan_klasifikasi": "Kode keamanan di depan + klasifikasi setelah nomor",
+    "klasifikasi_depan": "Kode klasifikasi arsip DI DEPAN (menggantikan kode keamanan)",
+    "keamanan_saja": "Kode keamanan saja, tanpa klasifikasi",
+    "klasifikasi_saja": "Klasifikasi setelah nomor, tanpa kode keamanan",
     "tanpa": "Tanpa keamanan maupun klasifikasi",
+}
+
+# Contoh hasil tiap komposisi — dipakai layar supaya pilihannya terbaca dari
+# BENTUKNYA, bukan dari namanya. Nama pilihan selalu kalah jelas dibanding
+# melihat "PL.02-001/OIKN/VIII/2026" langsung.
+CONTOH_KOMPOSISI = {
+    "keamanan_klasifikasi": "B-001/PL.02/OIKN/VIII/2026",
+    "klasifikasi_depan": "PL.02-001/OIKN/VIII/2026",
+    "keamanan_saja": "B-001/OIKN/VIII/2026",
+    "klasifikasi_saja": "001/PL.02/OIKN/VIII/2026",
+    "tanpa": "001/OIKN/VIII/2026",
 }
 
 
@@ -135,25 +147,34 @@ def _rapikan_pemisah(teks) -> str:
 
 
 def komposisi_format(template) -> str:
-    """Komposisi yang SEDANG berlaku, dibaca dari template."""
+    """Komposisi yang SEDANG berlaku, dibaca dari template.
+
+    Dua hal dibedakan, sesuai maksud pemilik: apakah kode klasifikasi arsip
+    IKUT, dan apakah ia menempati POSISI DEPAN — tempat yang biasanya diisi
+    kode keamanan. Posisi depan berarti berada sebelum {urut}.
+    """
     f = str(template or "")
     ada_keamanan = "{kode_keamanan}" in f
     ada_klas = "{kode_klasifikasi}" in f
     if ada_keamanan and ada_klas:
-        return "keduanya"
+        return "keamanan_klasifikasi"
     if ada_keamanan:
-        return "keamanan"
+        return "keamanan_saja"
     if ada_klas:
-        return "klasifikasi"
+        i_klas, i_urut = f.find("{kode_klasifikasi}"), f.find("{urut}")
+        if i_urut < 0 or i_klas < i_urut:
+            return "klasifikasi_depan"
+        return "klasifikasi_saja"
     return "tanpa"
 
 
 def terapkan_komposisi(template, komposisi) -> str:
-    """Template dengan placeholder keamanan/klasifikasi disesuaikan pilihan.
+    """Template dengan penempatan keamanan/klasifikasi disesuaikan pilihan.
 
-    Bagian lain template TIDAK disentuh — kode unit, bulan, tahun, dan pemisah
-    khas satker tetap apa adanya. Yang ditambahkan disisipkan pada posisi
-    PerANRI 5/2021: keamanan mendahului nomor urut, klasifikasi mengikutinya.
+    Bagian lain template TIDAK disentuh — kode unit, bulan, tahun, pemisah, dan
+    unsur tulisan tetap milik satker apa adanya. Yang diatur hanya dua hal yang
+    memang ditanyakan pemilik: apakah kode klasifikasi arsip ikut, dan apakah
+    ia menempati POSISI DEPAN menggantikan kode keamanan.
 
     Template tanpa `{urut}` dikembalikan apa adanya: ia tak sah dan sudah
     ditolak validasi route — menyisipkan sesuatu ke dalamnya hanya akan
@@ -163,18 +184,21 @@ def terapkan_komposisi(template, komposisi) -> str:
     pilih = str(komposisi or "").strip()
     if pilih not in KOMPOSISI_NOMOR or "{urut}" not in f:
         return f
-    perlu_keamanan = pilih in ("keduanya", "keamanan")
-    perlu_klas = pilih in ("keduanya", "klasifikasi")
 
-    if perlu_keamanan and "{kode_keamanan}" not in f:
+    # Bersihkan dulu keduanya, lalu pasang menurut pilihan. Membersihkan lebih
+    # dulu membuat perpindahan posisi (mis. klasifikasi dari belakang ke depan)
+    # tak meninggalkan salinan di tempat lamanya.
+    f = f.replace("{kode_keamanan}", "").replace("{kode_klasifikasi}", "")
+    f = _rapikan_pemisah(f)
+
+    if pilih == "keamanan_klasifikasi":
+        f = f.replace("{urut}", "{kode_keamanan}-{urut}/{kode_klasifikasi}", 1)
+    elif pilih == "klasifikasi_depan":
+        f = f.replace("{urut}", "{kode_klasifikasi}-{urut}", 1)
+    elif pilih == "keamanan_saja":
         f = f.replace("{urut}", "{kode_keamanan}-{urut}", 1)
-    elif not perlu_keamanan and "{kode_keamanan}" in f:
-        f = f.replace("{kode_keamanan}", "", 1)
-
-    if perlu_klas and "{kode_klasifikasi}" not in f:
+    elif pilih == "klasifikasi_saja":
         f = f.replace("{urut}", "{urut}/{kode_klasifikasi}", 1)
-    elif not perlu_klas and "{kode_klasifikasi}" in f:
-        f = f.replace("{kode_klasifikasi}", "", 1)
     return _rapikan_pemisah(f)
 
 
@@ -259,7 +283,12 @@ def dimensi_deret(komposisi, deret_per_kode) -> str:
     if not deret_per_kode:
         return ""
     k = str(komposisi or "").strip()
-    return k if k in ("keamanan", "klasifikasi") else ""
+    if k == "keamanan_saja":
+        return "keamanan"
+    if k in ("klasifikasi_depan", "klasifikasi_saja"):
+        return "klasifikasi"
+    # "keamanan_klasifikasi" (dua kode) dan "tanpa" (tanpa kode) sama-sama MATI.
+    return ""
 
 
 def kunci_deret(dimensi, kode_keamanan="", kode_klasifikasi="") -> str:
