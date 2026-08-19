@@ -67,6 +67,74 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#896] Popup tanggal terbit di bawah tombolnya, bukan di pojok kiri layar — 2026-08-19
+
+Laporan pemilik: di tablet dan desktop, halaman **Penilaian** dan
+**Perencanaan Kebutuhan** membuka pemilih tanggal **jauh di kiri layar**, bukan
+menempel di bawah tombol tanggal yang baru saja ditekan.
+
+Yang menarik: JavaScript-nya tidak salah sedikit pun. `buka()` benar-benar
+memanggil `showPicker()` — 16 uji sudah membuktikannya, dan semuanya hijau.
+Cacatnya ada pada **kotak yang dipakai peramban sebagai tambatan** popup itu.
+
+`<input type="date">` di dalam `TanggalanButton` memakai kelas `sr-only`, yang
+sebenarnya berarti tiga hal sekaligus:
+
+```css
+position: absolute;  width: 1px;  height: 1px;  clip: rect(0,0,0,0);
+```
+
+Dua akibatnya bersambung:
+
+1. **Elemen absolut di dalam wadah flex mengambil posisi statiknya di sudut
+   awal wadah itu** — dan setiap kepala halaman modul memakai `BARIS_KEPALA`
+   yang `flex`. Jadi titik tambat popupnya bukan di tempat tombolnya berdiri,
+   melainkan di **pojok kiri baris kepala**.
+2. Kotak 1×1 piksel yang ter-`clip` bukan tambatan yang masuk akal bagi popup
+   selebar ±300 px, jadi peramban makin bebas menaruhnya sekehendaknya.
+
+Persis itulah yang terlihat di tangkapan layar pemilik.
+
+**Perbaikannya**: tombol dan inputnya kini dibungkus satu `span` `relative`,
+lalu inputnya ditumpuk **tepat di atas tombol** — `absolute left-0 top-0 h-9
+w-9` dengan `opacity-0 pointer-events-none`. Kasatmata tak ada yang berubah
+sedikit pun; yang berubah adalah kotak tambatannya, yang kini **berimpit
+dengan tombol yang diklik pengguna**.
+
+Satu hal yang tidak boleh ikut rusak: di HP, tombol ini disembunyikan
+(`kelasTombol="hidden sm:flex"`) dan pemilihnya dipanggil dari butir menu.
+Inputnya karena itu **tidak boleh** masuk subpohon `display:none`. Tetapi
+bungkus yang selalu hadir juga menyisakan satu jarak `gap` flex kosong di baris
+kepala HP. Jalan tengahnya: pada ukuran yang menyembunyikan tombolnya,
+bungkusnya **dikeluarkan dari aliran** (`absolute`) — tetap dirender, tidak
+memakan tempat — lalu kembali `relative` mulai breakpoint tombolnya muncul.
+Breakpoint-nya dibaca dari `kelasTombol` itu sendiri, bukan diasumsikan `sm`.
+
+Kelas-kelas variannya ditulis **literal** (`absolute sm:relative …`), bukan
+dirakit `` `absolute ${bp}:relative …` ``. Pemindai Tailwind membaca berkas
+sumber sebagai teks: kelas yang dirakit lewat template lolos semua uji perilaku
+namun **tak pernah ikut tergenerate ke CSS**, dan cacat ini akan kembali persis
+seperti semula. Ada uji yang menagihnya.
+
+**Penjaga baru** (`src/lib/__tests__/tanggalanTambatan.test.jsx`, 15 uji):
+
+- Uji render yang menanyakan hal yang selama ini tak pernah ditanyakan: input
+  tanggalnya **bertambat ke mana** — dan tambatannya wajib elemen yang memuat
+  tombolnya.
+- Ukuran input wajib **sama persis** dengan ukuran tombolnya.
+- Di HP: bungkusnya tak boleh ikut `hidden`, tetapi juga tak boleh memakan
+  tempat.
+- **Pemindai seluruh `src/`**: tak boleh ada pemilih native (`date`, `time`,
+  `month`, `datetime-local`) yang disembunyikan dengan `sr-only` — itulah kelas
+  cacatnya, dan trik `sr-only` ini terlalu menggoda untuk tidak diulang.
+  Pemindainya sendiri diuji pada contoh palsu, supaya "nol pelanggar" tidak
+  berarti "regexnya buta".
+
+Empat mutasi dipasang lalu dibunuh: kembalikan `sr-only` (2 uji jatuh),
+hilangkan `relative` dari bungkusnya (2 jatuh), lenyapkan bungkusnya di HP
+dengan `hidden` (5 jatuh), dan rakit kelas responsifnya lewat template (2
+jatuh).
+
 ## [#895] Gejala deploy akhirnya bernama — dan jendela retry melewati masa blokir — 2026-08-19
 
 Deploy gagal lagi pada 13:32 UTC. Kali ini pesannya **spesifik**, dan itu buah
