@@ -12,7 +12,15 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Membatalkan CI lama hanya SAH di cabang PR (push beruntun, hemat runner).
+  # Di `main` setiap commit adalah kandidat deploy: deploy.yml hanya berjalan
+  # bila CI-nya SELESAI SUKSES, jadi CI yang dibatalkan berarti commit itu
+  # TIDAK PERNAH ter-deploy. Biasanya tertutupi deploy commit berikutnya —
+  # tetapi bila deploy berikutnya gagal, commit itu hilang dari produksi tanpa
+  # satu pun tanda kegagalan. Terjadi nyata 19 Agu 2026: CI 7828ff4 (perbaikan
+  # 500 impor SIMAN) dibatalkan oleh merge empat menit sesudahnya, lalu deploy
+  # berikutnya gagal karena VPS tak terjangkau.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   rahasia:

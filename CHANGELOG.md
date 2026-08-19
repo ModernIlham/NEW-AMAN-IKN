@@ -67,6 +67,41 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#889] CI di main tidak lagi saling membatalkan — commit yang lolos diam-diam — 2026-08-19
+
+Ditemukan saat menelusuri kenapa perbaikan 500 impor SIMAN belum sampai ke
+produksi. Riwayat CI `main`:
+
+```
+07:12  success    89984d7  (#878)
+07:07  cancelled  7828ff4  (#877 — perbaikan impor SIMAN)
+```
+
+`deploy.yml` hanya berjalan bila CI **selesai sukses**. CI yang dibatalkan
+karena itu berarti commit tersebut **tidak pernah ter-deploy** — dan diamnya
+sempurna: tak ada job merah, tak ada notifikasi, hanya satu run berstatus
+"cancelled" yang justru tampak seperti kebersihan.
+
+Biasanya tertutupi deploy commit berikutnya. Tetapi pada 19 Agustus deploy
+berikutnya **gagal** (VPS tak terjangkau), sehingga perbaikan itu hilang dari
+produksi tanpa satu pun tanda kegagalan.
+
+**Yang dikerjakan:** `cancel-in-progress` kini dikecualikan untuk `main`
+(`${{ github.ref != 'refs/heads/main' }}`). Di cabang PR pembatalan tetap
+berlaku dan memang diinginkan — push beruntun tak perlu menghabiskan runner.
+Yang berubah hanya pembedaannya.
+
+**Catatan jujur:** cacat ini saya picu lagi sendiri beberapa menit setelah
+menemukannya — merge #880 saat CI #879 masih berjalan, membatalkannya persis
+dengan cara yang sama. Itu justru menegaskan bahwa jawabannya bukan "lebih
+hati-hati saat merge", melainkan menghapus kemungkinannya.
+
+**Uji:** 3 uji baru, termasuk sisi sebaliknya (pembatalan harus TETAP berlaku
+di cabang PR — mematikannya di mana-mana membuat tiap push menumpuk run yang
+tak berguna). Dua mutasi diuji dan keduanya mati.
+
+---
+
 ## [#888] Setiap nota dinas persediaan memilih barangnya sendiri — 2026-08-19
 
 Permintaan pemilik: *"berikan pilihan barang apa saja yang akan dibuat nota
