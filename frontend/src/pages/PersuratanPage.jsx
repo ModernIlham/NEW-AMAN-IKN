@@ -14,6 +14,7 @@ import { useBackGuard } from "@/hooks/useBackGuard";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { labelAgenda, noAgendaTampil } from "@/lib/nomorAgenda";
+import NomorSuntingan from "@/components/persuratan/NomorSuntingan";
 import {
   sebutCakupan, statusKodeKlasifikasi, teksSumberKlasifikasi,
 } from "@/lib/klasifikasiNomor";
@@ -63,6 +64,8 @@ const KELUAR_KOSONG = {
   sifat_urgensi: "biasa",
   tanggal_surat: "", referensi: "", nomor_eksternal: "", keterangan: "",
   sisipan: false,
+  // Nomor tulisan tangan operator; "" = pakai nomor rakitan tata penomoran.
+  nomor_manual: "",
 };
 const MASUK_KOSONG = {
   nomor_surat: "", pengirim: "", perihal: "", tanggal_surat: "",
@@ -572,6 +575,16 @@ export default function PersuratanPage({ user, onBack }) {
                     </span>
                   </div>
                   <p className="font-mono text-[12px] text-foreground break-words leading-snug">{s.nomor}</p>
+                  {/* Nomor tulisan tangan tak boleh terlihat sama persis
+                      dengan nomor terbitan sistem — pemeriksa yang membaca
+                      daftar ini berhak tahu mana yang menyimpang dari tata
+                      penomoran, tanpa harus membuka riwayat satu per satu. */}
+                  {s.nomor_disunting && (
+                    <p className="text-[10px] text-amber-700 dark:text-amber-400" title={`Nomor ditulis manual; otomatisnya ${s.nomor_otomatis || "—"}`}
+                      data-testid={`nomor-disunting-hp-${s.id}`}>
+                      nomor ditulis manual{s.nomor_otomatis ? ` · otomatis: ${s.nomor_otomatis}` : ""}
+                    </p>
+                  )}
                   {s.nomor_eksternal && (
                     <p className="font-mono text-[10px] text-teal-700 dark:text-teal-400 break-words" title="Nomor sah dari aplikasi eksternal">eks: {s.nomor_eksternal}</p>
                   )}
@@ -618,6 +631,12 @@ export default function PersuratanPage({ user, onBack }) {
                       </td>
                       <td className="px-3 py-2">
                         <p className="font-mono text-[12px] text-foreground break-all">{s.nomor}</p>
+                        {s.nomor_disunting && (
+                          <p className="text-[10px] text-amber-700 dark:text-amber-400" title={`Nomor ditulis manual; otomatisnya ${s.nomor_otomatis || "—"}`}
+                            data-testid={`nomor-disunting-${s.id}`}>
+                            nomor ditulis manual{s.nomor_otomatis ? ` · otomatis: ${s.nomor_otomatis}` : ""}
+                          </p>
+                        )}
                         {s.nomor_eksternal && (
                           <p className="font-mono text-[10px] text-teal-700 dark:text-teal-400 break-all" title="Nomor sah dari aplikasi eksternal">eks: {s.nomor_eksternal}</p>
                         )}
@@ -794,15 +813,19 @@ export default function PersuratanPage({ user, onBack }) {
                 </div>
               )}
               {formKeluar.mode !== "edit" && pratinjau?.nomor && (
-                <div className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2" data-testid="keluar-pratinjau">
-                  <p className="text-[10px] text-muted-foreground">Perkiraan nomor yang akan terbit:</p>
-                  <p className="font-mono text-sm font-bold text-cyan-700 dark:text-cyan-400 break-all">{pratinjau.nomor}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5"
-                    data-testid="keluar-sumber-klasifikasi">
-                    Klasifikasi: {teksSumberKlasifikasi(pratinjau)}
-                    {" · "}bisa bergeser bila ada booking lain lebih dulu
-                  </p>
-                </div>
+                <NomorSuntingan
+                  nomor={pratinjau.nomor}
+                  nilai={formKeluar.nomor_manual || ""}
+                  onChange={(v) => setFormKeluar((f) => ({ ...f, nomor_manual: v }))}
+                  unsur={pratinjau.unsur_kustom || []}
+                  testid="keluar-pratinjau"
+                  keterangan={(
+                    <p className="text-[10px] text-muted-foreground mt-0.5"
+                      data-testid="keluar-sumber-klasifikasi">
+                      Klasifikasi: {teksSumberKlasifikasi(pratinjau)}
+                      {" · "}bisa bergeser bila ada booking lain lebih dulu
+                    </p>
+                  )} />
               )}
             </div>
           )}

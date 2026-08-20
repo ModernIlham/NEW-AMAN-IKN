@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { noAgendaTampil } from "@/lib/nomorAgenda";
 import { teksSumberKlasifikasi } from "@/lib/klasifikasiNomor";
+import NomorSuntingan from "@/components/persuratan/NomorSuntingan";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -53,7 +54,7 @@ const BookingNomorButton = React.forwardRef(function BookingNomorButton({
       perihal: perihal || "", tujuan: "", jenis_naskah: jenisNaskah,
       modul, kegiatan_id: kegiatanId || "", referensi,
       kode_keamanan: "B", tanggal_surat: "", kode_klasifikasi: "",
-      sisipan: false,
+      sisipan: false, nomor_manual: "",
     });
     setBuka(true);
     // Master kode klasifikasi arsip ikut dimuat: tanpa ini dialog lintas-modul
@@ -204,14 +205,19 @@ const BookingNomorButton = React.forwardRef(function BookingNomorButton({
                 </div>
               )}
               {pratinjau?.nomor && (
-                <div className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2" data-testid="booking-nomor-pratinjau">
-                  <p className="text-[10px] text-muted-foreground">Perkiraan nomor:</p>
-                  <p className="font-mono text-sm font-bold text-cyan-700 dark:text-cyan-400 break-all">{pratinjau.nomor}</p>
-                  <p className="text-[10px] text-muted-foreground mt-1"
-                    data-testid="booking-nomor-sumber-klasifikasi">
-                    Klasifikasi: {teksSumberKlasifikasi(pratinjau)}
-                  </p>
-                </div>
+                <NomorSuntingan
+                  nomor={pratinjau.nomor}
+                  nilai={form.nomor_manual || ""}
+                  onChange={(v) => setForm((f) => ({ ...f, nomor_manual: v }))}
+                  unsur={pratinjau.unsur_kustom || []}
+                  judul="Perkiraan nomor:"
+                  testid="booking-nomor-pratinjau"
+                  keterangan={(
+                    <p className="text-[10px] text-muted-foreground mt-1"
+                      data-testid="booking-nomor-sumber-klasifikasi">
+                      Klasifikasi: {teksSumberKlasifikasi(pratinjau)}
+                    </p>
+                  )} />
               )}
             </div>
           )}

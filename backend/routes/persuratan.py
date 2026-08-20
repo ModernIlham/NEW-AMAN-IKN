@@ -44,7 +44,8 @@ from persuratan_utils import (
     periode_urut,
     CONTOH_KOMPOSISI, KOMPOSISI_NOMOR, PLACEHOLDER_NOMOR,
     SIFAT_URGENSI, SIFAT_URGENSI_DEFAULT,
-    bersihkan_unsur_kustom, dimensi_deret, komposisi_format, kunci_deret,
+    bersihkan_nomor_manual, bersihkan_unsur_kustom, dimensi_deret,
+    komposisi_format, kunci_deret, validate_nomor_manual,
     validate_unsur_kustom,
     peringatan_klasifikasi,
     pilih_klasifikasi, placeholder_tak_dikenal, sumber_pengaturan,
@@ -84,6 +85,14 @@ class SuratKeluarIn(BaseModel):
     # di belakang nomor terakhir pada `tanggal_surat` (005 → 005.01), bukan
     # mengambil nomor berikutnya (yang akan membuat agenda mundur tanggal).
     sisipan: Optional[bool] = False
+    # Nomor yang DITULIS TANGAN operator pada kotak perkiraan nomor —
+    # "ibaratnya menulis nomer manual". Kosong = pakai nomor rakitan template.
+    #
+    # Yang TIDAK ikut disunting: nomor agendanya. Deret agenda tetap dikunci
+    # counter atomik seperti biasa, apa pun yang ditulis di sini. Membiarkan
+    # tulisan tangan menggeser deret akan melahirkan nomor kembar pada surat
+    # berikutnya — dan kembarnya baru ketahuan setelah dua-duanya resmi.
+    nomor_manual: Optional[str] = ""
 
 
 class SuratMasukIn(BaseModel):
@@ -815,7 +824,8 @@ async def pratinjau_nomor(jenis_naskah: str = "", modul: str = "",
                              kode_keamanan=kode_keamanan,
                              kode_bawaan=atur["kode_klasifikasi_default"])
         return {"nomor": nomor, "urut_berikut": urut, "kode_klasifikasi": kode,
-                "sumber_klasifikasi": sumber}
+                "sumber_klasifikasi": sumber,
+                "unsur_kustom": atur.get("unsur_kustom") or []}
 
     # Pakai jalur seed yang SAMA dengan _no_agenda_berikut (REVIEW-9 R11):
     # sebelum counter per-satker/periode terbentuk, membaca counter kosong
@@ -837,6 +847,11 @@ async def pratinjau_nomor(jenis_naskah: str = "", modul: str = "",
                          kode_bawaan=atur["kode_klasifikasi_default"])
     return {"nomor": nomor, "urut_berikut": urut_berikut,
             "kode_klasifikasi": kode, "sumber_klasifikasi": sumber,
+            # Potongan tulisan milik satker, ikut di sini supaya KEDUA dialog
+            # booking (Registrasi Persuratan dan tombol Booking Nomor lintas
+            # modul) mendapatkannya tanpa satu pun permintaan tambahan —
+            # keduanya sudah memanggil endpoint ini.
+            "unsur_kustom": atur.get("unsur_kustom") or [],
             # Template yang BENAR-BENAR dipakai merakit nomor di atas. Saat
             # `komposisi` dikirim, inilah hasil penyisipannya — layar memakainya
             # untuk memperbarui kolom Format Nomor seketika, tanpa menyalin
@@ -1081,7 +1096,8 @@ async def booking_surat_keluar(payload: SuratKeluarIn,
     """
     data = payload.model_dump()
     now = datetime.now(timezone.utc)
-    errors = validate_surat_keluar(data, today_iso=now.date().isoformat())
+    errors = (validate_surat_keluar(data, today_iso=now.date().isoformat())
+              + validate_nomor_manual(data.get("nomor_manual")))
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
     nama_kegiatan = await _nama_kegiatan(data.get("kegiatan_id"))
@@ -1110,12 +1126,29 @@ async def booking_surat_keluar(payload: SuratKeluarIn,
         sisip = await _sisipan_berikut(periode, _ks, jangkar, dim, kunci)
     else:
         no_agenda = await _no_agenda_berikut("keluar", periode, _ks, dim, kunci)
-    nomor = bangun_nomor(
+    nomor_otomatis = bangun_nomor(
         atur["format_nomor"], urut_tampil(no_agenda, sisip), tanggal_surat,
         kode_klasifikasi=kode_klas,
         kode_unit=atur["kode_unit"],
         kode_keamanan=data.get("kode_keamanan") or "B",
         kode_bawaan=atur["kode_klasifikasi_default"])
+    # Nomor tulisan tangan menang atas nomor rakitan template — tetapi hanya
+    # bila ia benar-benar BERBEDA. Layar mengirim isi kotaknya apa adanya, dan
+    # operator yang membuka penyuntingan lalu tidak mengubah apa pun akan
+    # mengirim persis nomor perkiraan tadi. Nomor perkiraan itu bisa sudah
+    # basi: deretnya bergeser bila ada booking lain menyela sedetik sebelumnya.
+    # Menyamakan keduanya berarti menyimpan nomor basi sebagai "tulisan
+    # tangan" — jadi yang sama dianggap tidak disunting.
+    nomor_manual = bersihkan_nomor_manual(data.get("nomor_manual"))
+    disunting = bool(nomor_manual) and nomor_manual != nomor_otomatis
+    nomor = nomor_manual if disunting else nomor_otomatis
+    if disunting:
+        bentrok = await db.surat.find_one(
+            {"kode_satker": _ks, "nomor": nomor}, {"_id": 0, "id": 1})
+        if bentrok:
+            raise HTTPException(status_code=400, detail=(
+                f"Nomor '{nomor}' sudah dipakai surat lain di satker ini — "
+                "nomor resmi tidak boleh kembar"))
     record = {
         "id": str(uuid.uuid4()),
         "kode_satker": kode_satker_user(user),
@@ -1124,6 +1157,12 @@ async def booking_surat_keluar(payload: SuratKeluarIn,
         "sisipan": sisip,
         "tahun": tahun,
         "nomor": nomor,
+        # Nomor yang SEHARUSNYA terbit menurut tata penomoran, disimpan
+        # apa pun yang terjadi. Tanpa ini, nomor tulisan tangan tak
+        # terbedakan dari nomor terbitan sistem — dan pemeriksa yang
+        # bertanya "kenapa nomor ini menyimpang" tak punya pembandingnya.
+        "nomor_otomatis": nomor_otomatis,
+        "nomor_disunting": disunting,
         "status": "dibooking",
         "perihal": data["perihal"].strip(),
         "tujuan": str(data.get("tujuan") or "").strip(),
@@ -1142,8 +1181,11 @@ async def booking_surat_keluar(payload: SuratKeluarIn,
         "dibuat_oleh": user.get("username", "system"),
         "riwayat": [{"status": "dibooking", "tanggal": now.isoformat(),
                      "oleh": user.get("username", "system"),
-                     "catatan": (f"nomor sisipan (backdate {tanggal_surat})"
-                                 if sisip else "")}],
+                     "catatan": "; ".join(x for x in (
+                         (f"nomor sisipan (backdate {tanggal_surat})"
+                          if sisip else ""),
+                         (f"nomor ditulis manual (otomatis: {nomor_otomatis})"
+                          if disunting else "")) if x)}],
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
     }

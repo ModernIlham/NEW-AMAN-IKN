@@ -485,6 +485,51 @@ def bangun_nomor(template, urut, tanggal_iso, kode_klasifikasi="",
     return out
 
 
+# Nomor yang DITULIS TANGAN operator pada kotak "Perkiraan nomor yang akan
+# terbit". Permintaan pemilik: *"setiap contoh booking perkiraan nomornya bisa
+# diedit dan di tambahkan unsur baru sesuai keinginan… ibaratnya menulis nomer
+# manual"*.
+#
+# Batasnya sengaja sedikit. Nomor naskah dinas punya bentuk yang berbeda-beda
+# antarinstansi, dan menolak bentuk yang tak kita duga sama saja mengembalikan
+# kekakuan yang justru sedang dilepas. Yang ditolak hanya dua hal yang
+# benar-benar merusak:
+#
+#   - kurung kurawal: `{...}` adalah bahasa placeholder. Nomor bertuliskan
+#     `{urut}` akan terbit apa adanya ke surat resmi, dan pembacanya melihat
+#     kode program di kepala surat.
+#   - panjang tak wajar: nomor bukan tempat menulis kalimat, dan kolom nomor di
+#     daftar, ekspor, serta kop surat punya ruang terbatas.
+MAKS_PANJANG_NOMOR = 120
+
+
+def bersihkan_nomor_manual(teks) -> str:
+    """Rapikan nomor tulisan tangan: spasi tepi dibuang, spasi/baris baru
+    beruntun diratakan jadi satu spasi.
+
+    Baris baru dibuang bukan demi kerapian: nomor bermuatan '\n' akan
+    memecah baris di kop surat, CSV, dan judul PDF — tiga tempat yang
+    kerusakannya baru terlihat setelah dokumennya jadi.
+    """
+    return re.sub(r"\s+", " ", str(teks or "")).strip()
+
+
+def validate_nomor_manual(teks) -> list:
+    """Daftar pesan kesalahan untuk nomor tulisan tangan. Kosong = tak
+    disunting, dan itu bukan kesalahan."""
+    n = bersihkan_nomor_manual(teks)
+    if not n:
+        return []
+    errors = []
+    if len(n) > MAKS_PANJANG_NOMOR:
+        errors.append(f"Nomor surat maksimal {MAKS_PANJANG_NOMOR} karakter; "
+                      f"terkirim {len(n)}")
+    if "{" in n or "}" in n:
+        errors.append("Nomor memuat kurung kurawal — itu penanda placeholder, "
+                      "bukan tulisan yang akan terbaca di kepala surat")
+    return errors
+
+
 def validate_surat_keluar(d, today_iso="") -> list:
     """Validasi payload booking surat keluar → daftar pesan kesalahan.
 

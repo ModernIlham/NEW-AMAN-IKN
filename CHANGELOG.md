@@ -67,6 +67,72 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#898] Perkiraan nomor bisa ditulis tangan — "ibaratnya menulis nomer manual" — 2026-08-19
+
+Permintaan pemilik, lengkap dengan tempatnya: *"maksud menyisipkan atau
+menambahkan unsur baru yang terserah letaknya itu adalah dibagian ini, jadi
+setiap contoh booking perkiraan nomornya bisa diedit dan di tambahkan unsur
+baru sesuai keinginan. ibaratnya menulis nomer manual kurang lebihnya jadinya
+seperti dimodifikasi."*
+
+Fitur unsur tulisan dari [#893] memang sudah ada, tetapi dipasang di tempat
+yang salah: di **pengaturan**, sebagai penyunting template untuk SEMUA surat.
+Yang diminta di **kotak perkiraan nomor**, per surat, saat membooking.
+
+Kotak "Perkiraan nomor yang akan terbit" kini punya tombol **Ubah nomor**.
+Menekannya mengubah barisnya jadi kotak isian yang **sudah terisi nomor
+perkiraannya** — yang diminta "dimodifikasi", bukan ditulis dari nol. Di
+bawahnya berderet chip unsur tulisan milik satker; menekannya menyisipkan
+teks itu **tepat di posisi kursor**, bukan di ujung. "Terserah letaknya" itu
+justru inti permintaannya. Tombol **Kembali otomatis** mengembalikannya.
+
+Satu komponen untuk **kedua** dialog booking — Registrasi Persuratan dan tombol
+Booking Nomor lintas modul. Keduanya menampilkan kotak yang sama dan mengirim
+ke endpoint yang sama; menulisnya dua kali berarti dua tempat yang harus
+diingat setiap kali kotak ini berubah.
+
+**Yang tidak ikut disunting: nomor agendanya.** Deret tetap dikunci counter
+atomik di server, apa pun yang diketik. Ini bukan detail — membiarkan tulisan
+tangan menggeser deret akan melahirkan nomor kembar pada surat BERIKUTNYA, dan
+kembarnya baru ketahuan setelah dua-duanya resmi terbit. Layar mengatakannya
+terang-terangan begitu operator mulai mengetik, dan ada uji yang menagihnya.
+
+**Tiga penjagaan yang tidak kelihatan tapi menentukan:**
+
+1. **Teks yang PERSIS SAMA dengan perkiraan dianggap tidak disunting.** Layar
+   mengirim isi kotaknya apa adanya, jadi operator yang membuka penyuntingan
+   lalu tak mengubah apa pun tetap mengirim teks. Teks itu bisa sudah basi —
+   deretnya bergeser bila ada booking lain menyela sedetik sebelumnya.
+   Menyimpannya sebagai "tulisan tangan" berarti membekukan nomor basi menjadi
+   nomor resmi.
+2. **Nomor resmi tak boleh kembar.** Nomor tulisan tangan yang sudah dipakai
+   surat lain di satker yang sama ditolak sebelum apa pun tersimpan.
+3. **Nomor otomatisnya tetap disimpan** (`nomor_otomatis`) beserta penanda
+   `nomor_disunting`, dan baris daftar menampilkannya. Tanpa itu, nomor tulisan
+   tangan tak terbedakan dari nomor terbitan sistem — dan pemeriksa yang
+   bertanya "kenapa nomor ini menyimpang" tak punya pembandingnya. Riwayat
+   surat juga mencatatnya.
+
+Yang ditolak hanya dua: **kurung kurawal** (`{urut}` akan terbit apa adanya ke
+kepala surat — pembacanya melihat kode program) dan **panjang di atas 120
+karakter**. Selebihnya bebas: bentuk nomor naskah dinas berbeda-beda
+antarinstansi, dan menolak bentuk yang tak kita duga sama saja mengembalikan
+kekakuan yang justru sedang dilepas. Baris baru dan spasi beruntun diratakan —
+nomor bermuatan `\n` memecah kop surat, CSV, dan judul PDF, tiga tempat yang
+kerusakannya baru terlihat setelah dokumennya jadi.
+
+**Penjaga baru**: `backend/tests/unit/test_nomor_manual.py` (18 uji) dan
+`frontend/src/lib/__tests__/nomorSuntingan.test.jsx` (14 uji) — termasuk uji
+render yang menagih chip menyisip **di kursor**, dan yang menagih chip **tidak
+mencuri fokus** dari kotak nomor (tanpa itu posisi kursor hilang sebelum klik
+sempat membacanya, dan setiap unsur menempel di ujung — kodenya tetap "jalan",
+fiturnya yang hilang).
+
+Enam mutasi dipasang lalu dibunuh: hapus pembedaan teks-yang-sama, lewati
+gerbang nomor kembar, lewati pembersihan spasi, kursor tak dikenal jatuh ke
+awal alih-alih akhir, chip berhenti mempertahankan fokus, dan tombol Ubah
+membuka kotak kosong.
+
 ## [#897] Kode Klasifikasi Bawaan dan Kode Klasifikasi Arsip berdiri sendiri-sendiri — 2026-08-19
 
 Pemilik mengirim satu tangkapan layar, dan tangkapan itu sudah memuat cacatnya
