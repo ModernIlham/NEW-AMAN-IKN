@@ -31,6 +31,7 @@ from pengadaan_utils import (
     is_ekstrakomptabel, kunci_ubah_perolehan, nilai_perolehan, rekap_perolehan,
     snapshot_penganggaran, snapshot_ppk, validate_perolehan,
 )
+from pegawai_utils import PLACEHOLDER_IDENTITAS
 
 pengadaan_router = APIRouter()
 
@@ -1387,12 +1388,12 @@ async def bangun_bast_ppk_pdf(perolehan_id: str, _user: dict) -> bytes:
         {'header': 'PIHAK KEDUA,', 'role': 'Yang Menerima,',
          'nama': p2.get("nama") or "................................",
          'after': baris_identitas_ttd(
-             p2.get("nip"), "NIP. -", bp.get("kpb_status_kepegawaian"))},
+             p2.get("nip"), PLACEHOLDER_IDENTITAS, bp.get("kpb_status_kepegawaian"))},
         {'pre': [_tempat_tanggal_laporan(settings, bp.get("tanggal"))],
          'header': 'PIHAK KESATU,', 'role': 'Yang Menyerahkan,',
          'nama': p1.get("nama") or "................................",
          'after': baris_identitas_ttd(
-             p1.get("nip"), "NIP. -",
+             p1.get("nip"), PLACEHOLDER_IDENTITAS,
              str(p.get("ppk_status_kepegawaian") or "").strip()
              or await status_kepegawaian_by_nip(p1.get("nip")))},
     ], doc.width))

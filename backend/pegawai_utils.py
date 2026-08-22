@@ -1327,6 +1327,22 @@ def info_masa_pegawai(pegawai, hari_ini_iso) -> dict:
     return out
 
 
+# Label baris identitas pada garis tanda tangan yang MASIH KOSONG.
+#
+# Permintaan pemilik: *"pastikan di semua generate PDF bagian NIP/NIK/NRP dapat
+# otomatis terdeteksi."* Untuk nomor yang ADA, deteksinya sudah berjalan lewat
+# `label_nomor_identitas` (NIP / NI PPPK / NRP, dan NIK ditahan demi privasi).
+# Yang belum: garis tanda tangan KOSONG — yang diisi tangan setelah dicetak —
+# memakai label "NIP." yang dipatok. Penanda tangan Non-ASN (NIK) atau
+# TNI/POLRI (NRP) jadi diminta menuliskan nomornya di bawah label yang salah,
+# dan tak ada satu pun jalur kode yang bisa mendeteksinya: nomornya memang
+# belum ada saat PDF dicetak.
+#
+# Jalan keluarnya bukan menebak, melainkan tidak menebak: satu label netral
+# yang benar untuk ketiganya.
+PLACEHOLDER_IDENTITAS = "NIP/NIK/NRP. ................"
+
+
 def baris_identitas_ttd(nomor, placeholder="", status_kepegawaian="") -> list:
     """Baris identitas utk blok tanda tangan PDF (list utk 'after').
 
