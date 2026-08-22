@@ -28,6 +28,7 @@ from pegawai_utils import (
     STATUS_PERKAWINAN, SUB_KATEGORI_NON_ASN, baris_impor_ke_pegawai,
     beda_snapshot_pemegang, deteksi_identitas, field_dipasok_baris,
     gabung_baris_pegawai, info_masa_pegawai, kelompok_unit_kerja,
+    unit_kerja_terdalam,
     kunci_dedup_pegawai, normalisasi_kode_satker_lengkap,
     pegawai_perlu_serah_terima, rekap_eselon,
     snapshot_pemegang_aset, urai_identitas, validate_pegawai,
@@ -234,7 +235,6 @@ def _bersih(p: PegawaiIn) -> dict:
     # Unit kerja efektif = Eselon terdalam bila field unit_kerja kosong (agar
     # rekap & tampilan tetap punya satu label unit meski data berjenjang).
     if not doc["unit_kerja"]:
-        from pegawai_utils import unit_kerja_terdalam
         doc["unit_kerja"] = unit_kerja_terdalam(doc)
     return doc
 
@@ -308,6 +308,12 @@ async def list_pegawai(_user: dict = Depends(require_user)):
     hari_ini = datetime.now(timezone.utc).date().isoformat()
     for it in items:
         it["info_masa"] = info_masa_pegawai(it, hari_ini)
+        # Aturan yang SAMA dengan endpoint detail (lihat `_bersih`): unit
+        # kerja efektif = eselon terdalam bila `unit_kerja` kosong. Dulu hanya
+        # detail yang menerapkannya, jadi satu pegawai bisa tampil ber-unit di
+        # satu layar dan tanpa unit di layar lain — tanpa satu pun galat.
+        if not str(it.get("unit_kerja") or "").strip():
+            it["unit_kerja"] = unit_kerja_terdalam(it)
     return {"items": items, "jumlah": len(items)}
 
 

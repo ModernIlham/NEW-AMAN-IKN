@@ -60,9 +60,10 @@ async def _diam(*a, **k):
 @pytest.fixture()
 def dbx(monkeypatch):
     fake = AsyncMongoMockClient()["uji"]
+    import routes.pegawai as rpg
     import routes.reports as rr
     import shared_utils as su
-    for mod in (rb, su, rr):
+    for mod in (rb, su, rr, rpg):
         monkeypatch.setattr(mod, "db", fake, raising=False)
         if hasattr(mod, "log_audit"):
             monkeypatch.setattr(mod, "log_audit", _diam, raising=False)
@@ -152,6 +153,35 @@ class TestBarisPjTambahan:
         assert r[0]["aset"] == ["a3", "a1"]
 
 
+class TestLabelUnit:
+    """Tempat tugas dan unit eselon berbagi SATU kolom.
+
+    Kolom keenam pada tabel yang sudah berisi lima akan menyempitkan semuanya
+    sampai nama orang patah jadi dua baris — dan naskah dua halaman membayar
+    tiap baris yang patah dengan jatah penanggung jawab berikutnya.
+    """
+
+    def test_keduanya_terisi_digabung(self):
+        from bast_pasal import label_unit
+        assert label_unit({"unit": "Ruang Server", "eselon": "Direktorat BMN"}) \
+            == "Ruang Server · Direktorat BMN"
+
+    def test_salah_satu_kosong_tak_menyisakan_pemisah_menggantung(self):
+        from bast_pasal import label_unit
+        assert label_unit({"unit": "Ruang Server", "eselon": "-"}) == "Ruang Server"
+        assert label_unit({"unit": "-", "eselon": "Direktorat BMN"}) == "Direktorat BMN"
+
+    def test_dua_duanya_kosong_jadi_tanda_hubung(self):
+        from bast_pasal import label_unit
+        assert label_unit({"unit": "-", "eselon": "-"}) == "-"
+        assert label_unit({}) == "-" and label_unit(None) == "-"
+
+    def test_baris_membawa_eselon_dari_payload(self):
+        r = baris_pj_tambahan(
+            [{"nama": "Budi", "unit_eselon": "Direktorat BMN"}], [])
+        assert r[0]["eselon"] == "Direktorat BMN"
+
+
 class TestRujukanPasal1:
     def test_nomor_urut_terurut_dan_tanpa_kembar(self):
         assert rujukan_pasal1(["a3", "a1", "a3"], {"a1": 4, "a3": 1}) == "1, 4"
@@ -239,7 +269,7 @@ class TestTabelDiPdf:
                 {"nama": "Petugas A", "nip": "1", "unit_tempat_tugas": "R1",
                  "asset_ids": ["a0", "a1"]}])
         teks = " ".join(_halaman_teks(_jalan(skenario())))
-        assert "BMN (No. Pasal 1)" in teks
+        assert "No. BMN" in teks
 
     def test_kolom_bmn_TIDAK_dipasang_bila_tak_ada_yang_dilekatkan(self, dbx):
         """Kolom berisi tanda hubung dari atas ke bawah hanya memakan lebar
@@ -250,7 +280,7 @@ class TestTabelDiPdf:
                 {"nama": "Petugas A", "nip": "1", "unit_tempat_tugas": "R1",
                  "asset_ids": []}])
         teks = " ".join(_halaman_teks(_jalan(skenario())))
-        assert "BMN (No. Pasal 1)" not in teks
+        assert "No. BMN" not in teks
 
     def test_sisa_bmn_dinyatakan_bukan_didiamkan(self, dbx):
         """Pembaca yang melihat 2 dari 12 barang di tabel berhak tahu ke mana
@@ -278,18 +308,64 @@ class TestBatasDuaHalamanTetapBerlaku:
     butir panjang yang ditambahkan nanti mendorong tanda tangan ke halaman
     ketiga, dan tak ada yang mengeluh sampai dokumennya dicetak."""
 
+    # Kapasitas TERUKUR pada muatan wajib 12 aset dengan isi terberat (unit
+    # tempat tugas panjang + unit eselon panjang + NIP 18 digit): 6 penanggung
+    # jawab bila tak ada BMN yang dilekatkan, 3 bila kolom BMN ikut tercetak
+    # (kolom keenam menyempitkan kolom unit sampai barisnya patah dua).
+    # Angkanya dikunci di sini supaya penambahan berikutnya ketahuan SEBELUM
+    # dokumennya dicetak, bukan sesudah.
     @pytest.mark.parametrize("n_pj,n_bmn", [(1, 0), (3, 0), (6, 0),
-                                            (2, 2), (4, 2), (6, 2)])
+                                            (1, 2), (2, 2), (3, 2),
+                                            (3, 3), (3, 4)])
     def test_masih_dua_halaman(self, dbx, n_pj, n_bmn):
         async def skenario():
             await _seed(dbx)
             aset_id = [f"a{i}" for i in range(12)]
+            # Kondisi TERBERAT: unit eselon panjang ikut terisi, karena
+            # itulah yang benar-benar dituliskan Master Pegawai.
             pj = [{"nama": f"Petugas Contoh {i}",
                    "nip": f"19900101202101{i}001",
                    "unit_tempat_tugas": f"Ruang Contoh Agak Panjang {i}",
+                   "unit_eselon": "Direktorat Barang Milik Negara",
                    "asset_ids": aset_id[i * n_bmn:(i + 1) * n_bmn]}
                   for i in range(n_pj)]
             return await _pdf(dbx, pj)
         n = len(_halaman_teks(_jalan(skenario())))
         assert n <= 2, (f"{n_pj} penanggung jawab × {n_bmn} BMN memakan "
                         f"{n} halaman — batas mandat 2 lembar")
+
+
+class TestDaftarPegawaiMembawaUnitTerdalam:
+    """`GET /pegawai` mengisi `unit_kerja` dengan eselon TERDALAM, sama
+    seperti endpoint detail.
+
+    Dulu hanya detail yang menerapkannya, jadi satu pegawai bisa tampil
+    ber-unit di satu layar dan tanpa unit di layar lain — tanpa satu pun
+    galat. Sejak pemilih penanggung jawab BAST mengambil unit eselon dari
+    daftar ini, ketidaksesuaian itu berhenti jadi soal tampilan: unit yang
+    hilang akan tertulis KOSONG ke dokumen resmi.
+    """
+
+    def test_unit_kerja_kosong_diisi_eselon_terdalam(self, dbx):
+        import routes.pegawai as rpg
+
+        async def skenario():
+            await dbx.pegawai.insert_one({
+                "id": "p1", "kode_satker": "", "nama": "Budi Santoso",
+                "nip": "199001012021011001", "unit_kerja": "",
+                "eselon1": "Sekretariat Jenderal",
+                "eselon3": "Direktorat Barang Milik Negara"})
+            return await _unwrap(rpg.list_pegawai)(_user=USER)
+        hasil = _jalan(skenario())
+        assert hasil["items"][0]["unit_kerja"] == "Direktorat Barang Milik Negara"
+
+    def test_unit_kerja_yang_SUDAH_terisi_tidak_ditimpa(self, dbx):
+        import routes.pegawai as rpg
+
+        async def skenario():
+            await dbx.pegawai.insert_one({
+                "id": "p1", "kode_satker": "", "nama": "Budi",
+                "unit_kerja": "Ditulis Manual", "eselon5": "Subbag Umum"})
+            return await _unwrap(rpg.list_pegawai)(_user=USER)
+        hasil = _jalan(skenario())
+        assert hasil["items"][0]["unit_kerja"] == "Ditulis Manual"

@@ -14,8 +14,8 @@
  *      penanggung jawabnya bermasalah, padahal yang ia ubah daftar asetnya.
  */
 import {
-  asetTerpakai, asetTersedia, labelAset, lepasAset, payloadPj, pjKosong,
-  selaraskanAset,
+  asetTerpakai, asetTersedia, dariPegawai, labelAset, lepasAset, payloadPj,
+  pjKosong, selaraskanAset,
 } from "./pjTambahan";
 
 const ROWS = [
@@ -44,11 +44,44 @@ describe("labelAset", () => {
 });
 
 describe("pjKosong", () => {
-  test("membawa keempat kolomnya sejak awal", () => {
+  test("membawa seluruh kolomnya sejak awal", () => {
     // `asset_ids` yang undefined akan lolos ke payload sebagai undefined dan
     // ditolak server dengan pesan yang tak menyebut sebab sebenarnya.
     expect(pjKosong()).toEqual({
-      nama: "", nip: "", unit_tempat_tugas: "", asset_ids: [] });
+      nama: "", nip: "", unit_tempat_tugas: "", unit_eselon: "",
+      asset_ids: [] });
+  });
+});
+
+describe("dariPegawai — tautan ke Master Pegawai", () => {
+  const PEG = { nama: "Budi Santoso", nip: "199001012021011001",
+    unit_kerja: "Direktorat Barang Milik Negara", eselon5: "Subbag Umum" };
+
+  test("nama, NIP, dan unit eselon terdalam ikut terisi", () => {
+    expect(dariPegawai(PEG)).toEqual({
+      nama: "Budi Santoso", nip: "199001012021011001",
+      unit_eselon: "Direktorat Barang Milik Negara" });
+  });
+
+  test("aturan eselon terdalam TIDAK dihitung ulang di sini", () => {
+    // Server yang menghitungnya. Dua salinan aturan yang sama akan berujung
+    // pada salinan yang tertinggal — dan unit yang SALAH tertulis di dokumen
+    // resmi tanpa satu pun galat. `eselon5` di atas sengaja berbeda dari
+    // `unit_kerja`; yang dipakai tetap `unit_kerja`.
+    expect(dariPegawai(PEG).unit_eselon).not.toBe("Subbag Umum");
+  });
+
+  test("kolom yang KOSONG di Master Pegawai tidak ikut dikembalikan", () => {
+    // Pemanggil menimpa isian lama dengan hasil ini; nilai kosong yang ikut
+    // terkirim akan MENGHAPUS apa yang sudah diketik operator.
+    expect(dariPegawai({ nama: "Budi" })).toEqual({ nama: "Budi" });
+    expect(dariPegawai({})).toEqual({});
+    expect(dariPegawai(null)).toEqual({});
+  });
+
+  test("unit_organisasi dipakai bila unit_kerja kosong", () => {
+    expect(dariPegawai({ unit_organisasi: "Biro Umum" }).unit_eselon)
+      .toBe("Biro Umum");
   });
 });
 
@@ -125,7 +158,13 @@ describe("payloadPj", () => {
 
   test("spasi tepi dipangkas dan kolom hilang diisi kosong", () => {
     expect(payloadPj([{ nama: " Budi " }])).toEqual([
-      { nama: "Budi", nip: "", unit_tempat_tugas: "", asset_ids: [] }]);
+      { nama: "Budi", nip: "", unit_tempat_tugas: "", unit_eselon: "",
+        asset_ids: [] }]);
+  });
+
+  test("unit eselon ikut terkirim", () => {
+    expect(payloadPj([{ nama: "Budi", unit_eselon: " Direktorat BMN " }])[0]
+      .unit_eselon).toBe("Direktorat BMN");
   });
 
   test("aset kembar dirapikan", () => {
