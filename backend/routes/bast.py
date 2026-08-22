@@ -49,6 +49,7 @@ from shared_utils import (
     log_audit, pastikan_akses_aset, pastikan_akses_dok_satker,
     reserve_idempotency_key, scope_query_field_satker, store_idempotent_response,
 )
+from pegawai_utils import PLACEHOLDER_IDENTITAS
 
 logger = logging.getLogger(__name__)
 
@@ -1554,7 +1555,7 @@ async def bast_pdf(bast_id: str, nilai: str = "",
                                'nama': kpb["nama"],
                                # Non-ASN: baris NIP/NIK tidak dicetak
                                'after': _baris_ttd(
-                                   kpb['nip'], "NIP. ....................",
+                                   kpb['nip'], PLACEHOLDER_IDENTITAS,
                                    kpb.get("status_kepegawaian")),
                                'ttd_img': await ambil_ttd_img(kpb.get("ttd_file_id"))}]
     peran_kesatu = ('Yang Menyerahkan,' if jenis not in _JENIS_PENGEMBALIAN
@@ -1576,7 +1577,7 @@ async def bast_pdf(bast_id: str, nilai: str = "",
          'header': 'PIHAK KESATU,', 'role': peran_kesatu,
          'nama': p1.get("nama") or "................................",
          'after': baris_identitas_ttd(
-             p1.get("nip"), "NIP. -",
+             p1.get("nip"), PLACEHOLDER_IDENTITAS,
              await status_kepegawaian_by_nip(p1.get("nip")))},
     ] + signers_mengetahui, doc.width, celah_mm=_CELAH_TTD_BAST,
         jarak_baris_mm=_JARAK_BARIS_TTD_BAST))

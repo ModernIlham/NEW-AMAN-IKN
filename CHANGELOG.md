@@ -67,6 +67,57 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#905] Label NIP/NIK/NRP berhenti menebak pada garis tanda tangan kosong — 2026-08-22
+
+Permintaan pemilik: *"pastikan di semua generate PDF bagian NIP/NIK/NRP dapat
+otomatis terdeteksi."*
+
+Untuk nomor yang **ada**, deteksinya sudah berjalan sejak lama:
+`label_nomor_identitas` memilih NIP / NI PPPK / NRP dari bentuk nomornya, dan
+menahan NIK demi privasi. Yang belum tertangani **garis tanda tangan yang masih
+kosong** — yang diisi tangan setelah dokumen dicetak. Di situ tak ada nomor
+untuk dideteksi, dan **30 tempat** di seluruh backend memakai label
+`"NIP. ...................."` yang dipatok.
+
+Akibatnya bukan soal kerapian. Penanda tangan Non-ASN diminta menuliskan
+**NIK**-nya di bawah label "NIP.", dan anggota TNI/POLRI menuliskan **NRP**-nya
+di sana. Dokumen resmi jadi menamai nomor orang dengan nama yang bukan namanya.
+
+Jalan keluarnya bukan menebak lebih pintar, melainkan **tidak menebak**: satu
+label netral yang benar untuk ketiganya —
+`PLACEHOLDER_IDENTITAS = "NIP/NIK/NRP. ................"` — dipakai di sembilan
+berkas keluaran (`bast`, `pemusnahan`, `pengadaan`, `penggunaan`, `persediaan`,
+`reports`, `wasdal`, `docx_utils`, `shared_utils`).
+
+Yang **tidak** berubah: nomor yang ada tetap dideteksi seperti biasa. Label
+netral hanya untuk yang kosong — memakainya di mana-mana justru membuang
+deteksi yang sudah bekerja, dan ada uji yang menagihnya.
+
+**Pemindai baru** (`backend/tests/unit/test_label_identitas_pdf.py`, 21 uji):
+tak boleh ada lagi konstanta string yang diawali `"NIP."` di seluruh
+`backend/routes/*.py` dan `backend/*.py` — kecuali `pegawai_utils.py`, satu-
+satunya berkas yang memang merakit `"NIP. <nomor>"` dari hasil deteksi. Kelas
+cacatnya mudah kembali: menambah satu blok tanda tangan baru lalu menyalin
+`'after': ['NIP. ....................']` dari tetangganya adalah gerakan paling
+wajar di dunia. Pemindaian menagihnya sebelum dokumennya dicetak.
+
+Tiga uji lama diperbarui — bukan dilonggarkan: ketiganya mengunci label "NIP."
+untuk kasus kosong, yang justru perilaku yang sedang diperbaiki. Kini ketiganya
+mengunci label netralnya, plus menagih bahwa "NIP. ." tak muncul lagi.
+
+Empat mutasi dipasang lalu dibunuh: label netral dikembalikan jadi "NIP." yang
+dipatok, satu berkas kembali menuliskan labelnya sendiri, label netral dipakai
+walau nomornya ada, dan NRP dilabeli NIP.
+
+### Sisa permintaan yang BELUM dikerjakan
+
+Pesan yang sama memuat tiga permintaan besar lain, masing-masing satu PR
+tersendiri: (a) tabel LPB Pengadaan yang membundel rekanan/penyedia, PPK, dan
+dokumen (SP/SPK, SPP/SPM, UP/TUP, SPBY, No Dokumen, sifat kontrak/non-kontrak)
+per baris barang dan mengelompokkannya per bidang; (b) kode barang pada LPB
+membawa sub-sub kelompok dan rentang NUP; (c) blok tanda tangan berarea seragam
+dengan pemilihan penanda tangan dari Referensi Pejabat.
+
 ## [#904] Nama sub-sub kelompok kembali tercetak, dan perkiraan nomor berhenti membeku — 2026-08-22
 
 Dua laporan pemilik, dua cacat yang berbeda sifatnya.

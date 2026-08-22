@@ -32,6 +32,7 @@ from report_filters import active_asset_filter
 from report_utils import hitung_status_stiker, distribusi_pengguna
 from satker_utils import NILAI_DOKUMEN, NILAI_DOKUMEN_DEFAULT
 from markupsafe import Markup
+from pegawai_utils import PLACEHOLDER_IDENTITAS
 
 logger = logging.getLogger(__name__)
 
@@ -611,7 +612,7 @@ def _info_kegiatan_2kolom(activity, settings, doc_width):
     return t
 
 
-async def _baris_nip_ttd(nip, placeholder="NIP. ...................."):
+async def _baris_nip_ttd(nip, placeholder=PLACEHOLDER_IDENTITAS):
     """Baris identitas di bawah nama blok TTD dengan aturan privasi: bila
     penandatangan ber-status Non-ASN (dicari dari registry pejabat lalu
     Master Pegawai per NIP) atau nomornya berformat NIK, baris NIP/NIK
@@ -690,7 +691,7 @@ def _blok_ttd_tim_kpb(tim, settings, tanggal_iso, ident, doc_width,
                  "nama": m.get("nama") or "________________________",
                  # Anggota Non-ASN: baris NIP/NIK tidak dicetak (privasi)
                  "after": baris_identitas_ttd(
-                     nip_m, "NIP. ........................",
+                     nip_m, PLACEHOLDER_IDENTITAS,
                      peta_status.get(nip_m, ""))}
             if i == 0 and j == len(pasangan) - 1:
                 # tempat/tanggal sekali, di kanan atas area tanda tangan
@@ -719,7 +720,7 @@ def _blok_ttd_tim_kpb(tim, settings, tanggal_iso, ident, doc_width,
     # Penanggung jawab UAKPB (KPB) mengesahkan — tengah bawah.
     nip_kpb = str(ident.get('kasatker_nip') or '').strip()
     baris_kpb = (baris_identitas_laporan(nip_kpb, peta_status.get(nip_kpb, ""))
-                 if nip_kpb else "NIP. ")
+                 if nip_kpb else PLACEHOLDER_IDENTITAS)
     kolom = [
         Paragraph(header_mengetahui, sig),
         Paragraph(escape(str(ident.get("kasatker_jabatan") or "Kuasa Pengguna Barang,")), sig),
