@@ -67,6 +67,68 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#908] Tabel LPB: bundel sumber per barang, berkelompok per bidang — 2026-08-22
+
+Permintaan pemilik: *"keterangan rekanan/penyedia, PPK dll yang menempel pada
+setiap barang pengadaannya masing-masing dijadikan satu bundle informasi di
+dalam tabel, bertempat di row barang di bawahnya yang sudah dikategorikan…
+dan pada setiap row barang tolong kategorikan dengan per bidang barangnya
+masing-masing agar menambah kerapian. Dan juga kode barang ditambahkan
+informasi mengenai sub-sub kelompok kode barangnya dan NUP informasi dari no
+berapa sampai berapa."*
+
+**Kenapa bundelnya per baris, bukan di kepala surat.** LPB gabungan merangkum
+BANYAK BAST PPK-KPB sekaligus — satu kepala surat hanya bisa menyebut SATU
+penyedia. Pembaca yang ingin tahu barang ini datang dari rekanan mana harus
+bisa membacanya di **barisnya sendiri**, bukan menebak dari nomor BAST di kolom
+keterangan.
+
+**Kenapa baris tersendiri, bukan kolom-kolom baru.** Tabel ini sudah berisi
+tujuh kolom; menambah enam kolom dokumen akan menyempitkan nama barang sampai
+tak terbaca, dan sebagian besarnya kosong karena tiap register hanya menempuh
+satu jalur pembayaran. Bundelnya karena itu satu baris membentang di bawah
+barangnya, berisi: penyedia · PPK · sifat · dokumen · BAST asalnya. Yang kosong
+tidak ikut.
+
+**Bentuk barunya:**
+
+```
+BIDANG 310 — KOMPUTER · 2 unit
+ 1 │ Lap Top                    │ PC All In One │ 2 │ Unit │ … │ …
+   │ 3100102001 · NUP 1–3       │
+   │ Penyedia: CV Sumber Rejeki · PPK: Budi Komitmen · Kontrak ·
+     No. SP/SPK: SPK-014/PPK/VIII/2026 · BAST PPK-KPB BA-07/PPK/2026
+```
+
+**Kolom NUP tersendiri DILEBUR** ke kolom identitas sebagai **rentang**.
+Pemilik meminta ia menyebut "dari nomor berapa sampai berapa"; nomor pertama
+saja membuat dokumen berkata "5 printer diterima" tanpa bisa membuktikan
+printer YANG MANA. Rentangnya menjaga celah tetap terlihat — `1, 4–6`, bukan
+`1–6` — karena menyatukannya berarti menyatakan kepemilikan NUP 2 dan 3 yang
+tak pernah diterima. Baris persediaan yang memang tak ber-NUP cukup tak
+menampilkannya, lebih bersih daripada satu kolom penuh tanda hubung.
+
+**Snapshot sumber DIBEKUKAN** ke dalam baris LPB saat surat terbit — dokumen
+yang sudah keluar tak berubah isinya ketika registernya kelak disunting.
+
+**LPB persediaan lama tetap terbit**: rekaman lama tak punya kolom `sumber`
+sama sekali, dan keterangan lamanya ("BAST-9/2026") tetap tercetak sebagai
+bundel. Tak ada yang hilang.
+
+**Penjaga baru**: `backend/tests/unit/test_lpb_bundel_sumber.py` (18 uji),
+termasuk uji PDF sungguhan yang menagih sekat bidang, nama sub-sub kelompok,
+rentang NUP, dan bundel yang benar-benar tercetak.
+
+Empat mutasi dipasang lalu dibunuh: baris tak lagi membawa snapshot sumbernya,
+rentang NUP menyatukan celah, bundel ikut mencetak kolom kosong, dan tabel
+berhenti berkelompok per bidang.
+
+### Sisa permintaan
+
+Tinggal satu: blok tanda tangan berarea seragam dengan pemilihan penanda tangan
+dari Referensi Pejabat — **setelan satker yang bisa ditimpa per dokumen**,
+sesuai pilihan pemilik.
+
 ## [#907] Dokumen pengadaan: SP/SPK, SPP/SPM, UP/TUP, SPBy — dan sifatnya — 2026-08-22
 
 Permintaan pemilik: *"tambahan informasi mengenai no SP/SPK, SPP/SPM (validasi
