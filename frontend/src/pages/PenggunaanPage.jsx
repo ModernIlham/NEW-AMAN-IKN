@@ -273,6 +273,8 @@ export default function PenggunaanPage({ user, onBack }) {
               { nama: "", jabatan: "", nip: "" }],
       terapkan_ke_aset: true,
       booking_otomatis: false,
+      // Kosong = ikut aturan pemetaan klasifikasi di Pengaturan Penomoran.
+      kode_klasifikasi: "",
       // Kolom Nilai Perolehan pada PDF — bawaan mengikuti kebijakan satker
       // (dimutakhirkan oleh permintaan /kebijakan-dokumen di atas).
       tampilkan_nilai: true,
@@ -359,6 +361,7 @@ export default function PenggunaanPage({ user, onBack }) {
                            "pengembalian_almarhum"].includes(f.jenis)
           ? f.terapkan_ke_aset : false,
         booking_otomatis: f.booking_otomatis,
+        kode_klasifikasi: f.kode_klasifikasi || "",
         ...(f.revisi ? { revisi_dari: f.revisi.dari, revisi_mode: f.revisi.mode,
                          revisi_alasan: f.revisi.alasan } : {}),
       }, { headers: { "Idempotency-Key": f.idem } });
@@ -415,6 +418,7 @@ export default function PenggunaanPage({ user, onBack }) {
       // Revisi = koreksi DOKUMEN; efek data sudah diterapkan BAST aslinya.
       terapkan_ke_aset: false,
       booking_otomatis: true,   // nomor BARU untuk dokumen pengganti
+      kode_klasifikasi: b.kode_klasifikasi || "",
       tampilkan_nilai: b.tampilkan_nilai !== false,
       aset: new Set(b.asset_ids || []),
       revisi: { dari: b.id, dari_nomor: b.nomor || "(tanpa nomor)",
@@ -2079,6 +2083,8 @@ export default function PenggunaanPage({ user, onBack }) {
                     modul penggunaan + Berita Acara + tanggal BAST. */}
                 <PerkiraanNomor aktif={formBast.booking_otomatis} modul="penggunaan"
                   jenisNaskah="Berita Acara" tanggal={formBast.tanggal}
+                  klasifikasi={formBast.kode_klasifikasi}
+                  onKlasifikasi={(v) => setFormBast((f) => ({ ...f, kode_klasifikasi: v }))}
                   testId="bast-perkiraan-nomor" />
               </div>
               {formBast.jenis === "mutasi_pengguna" && (

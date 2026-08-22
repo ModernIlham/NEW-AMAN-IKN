@@ -134,8 +134,12 @@ class TestBookingLpbGagalTotal:
     def booking_palsu(self, dbx, monkeypatch):
         import routes.persuratan as rsu
 
+        # Tanda tangan DITULIS LENGKAP, bukan `**kwargs`: kalau yang asli
+        # bertambah parameter, tiruan ini harus ikut gagal supaya
+        # perbedaannya terlihat. `**kwargs` akan menelan perbedaan itu diam-
+        # diam, dan uji ini berhenti menguji jalur yang sebenarnya.
         async def _booking(user, tgl_iso, perihal, tujuan="", keterangan="",
-                           kode_satker=""):
+                           kode_satker="", kode_klasifikasi=""):
             await dbx.surat.insert_one({
                 "id": "surat-1", "status": "dibooking",
                 "nomor": "LPB-UJI-1", "riwayat": []})

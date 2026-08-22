@@ -432,7 +432,8 @@ async def booking_nomor_otomatis(user, tgl_iso: str, perihal: str,
                                  tujuan: str = "", keterangan: str = "",
                                  kode_satker: str = "",
                                  jenis_naskah: str = "Laporan",
-                                 referensi: str = "LPB") -> tuple:
+                                 referensi: str = "LPB",
+                                 kode_klasifikasi: str = "") -> tuple:
     """Pesan satu nomor surat keluar otomatis untuk dokumen modul persediaan.
 
     → `(nomor, surat_id)`; keduanya "" bila gagal dipesan.
@@ -458,8 +459,12 @@ async def booking_nomor_otomatis(user, tgl_iso: str, perihal: str,
     tgl_surat = str(tgl_iso or "").strip()[:10] or now0.date().isoformat()
     kode_satker = str(kode_satker or "").strip() or kode_satker_user(user)
     atur = await _pengaturan(kode_satker)
+    # `kode_klasifikasi` (pilihan operator) MENANG atas aturan pemetaan —
+    # urutan yang sama persis dengan booking manual di Registrasi Persuratan.
+    # Dua jalur penerbitan dengan urutan prioritas berbeda akan melahirkan
+    # dua kebiasaan yang saling membantah pada arsip yang sama.
     kode_klas = pilih_klasifikasi(atur["peta_klasifikasi"], "persediaan",
-                                  jenis_naskah)
+                                  jenis_naskah, eksplisit=kode_klasifikasi)
     tahun = int(tgl_surat[:4]) if tgl_surat[:4].isdigit() else now0.year
     periode = (_periode(atur, tgl_surat)
                or _periode(atur, now0.date().isoformat()))
@@ -499,13 +504,15 @@ async def booking_nomor_otomatis(user, tgl_iso: str, perihal: str,
 
 async def booking_nomor_lpb(user, tgl_iso: str, perihal: str,
                             tujuan: str = "", keterangan: str = "",
-                            kode_satker: str = "") -> tuple:
+                            kode_satker: str = "",
+                            kode_klasifikasi: str = "") -> tuple:
     """Delegator kontrak lama — deret nomor tetap tunggal lewat
     `booking_nomor_otomatis` (jangan menyalin logikanya ke tempat lain)."""
     return await booking_nomor_otomatis(
         user, tgl_iso, perihal or "Laporan Penerimaan Barang (LPB)",
         tujuan=tujuan, keterangan=keterangan or "booking otomatis dari LPB",
-        kode_satker=kode_satker, jenis_naskah="Laporan", referensi="LPB")
+        kode_satker=kode_satker, jenis_naskah="Laporan", referensi="LPB",
+        kode_klasifikasi=kode_klasifikasi)
 
 
 async def _nama_kegiatan(kegiatan_id: str) -> str:

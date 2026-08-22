@@ -67,6 +67,69 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#899] Klasifikasi arsip bisa dipilih saat memesan nomor otomatis lintas modul — 2026-08-20
+
+Keluhan pemilik: *"pada setiap penomeran yang dilakukan di modul lain yang akan
+menggenerate output PDF, kode klasifikasi arsip tidak sesuai dengan apa yang
+sudah disetting di format nomor… ketika buat BAST dan klik nomor otomatis dari
+registrasi persuratan, bagian klasifikasi arsip tidak ada dan tidak ada pilihan
+memilih klasifikasi arsip yang ada."*
+
+Persis begitu keadaannya, dan penyebabnya asimetri yang sudah lama ada:
+
+| Jalur | Sumber kode klasifikasi |
+|---|---|
+| Booking manual (Registrasi Persuratan) | isian manual → aturan pemetaan → kosong |
+| Booking otomatis (BAST, LPB, transaksi massal) | **aturan pemetaan saja** |
+
+Tak ada aturan yang cocok berarti slot `{kode_klasifikasi}` pada nomor terbit
+**kosong** — tanpa satu pun galat, dan tanpa cara memperbaikinya dari layar
+tempat dokumennya dibuat. Selama Kode Klasifikasi Bawaan masih jadi jaring
+terakhir, kekosongan itu tertutup; sejak [#897] memisahkan keduanya, ia
+terlihat. Yang tampak sekarang memang keadaan yang sebenarnya sejak lama.
+
+**Yang berubah**: kotak "Perkiraan nomor" pada layar-layar itu kini punya kolom
+**Kode Klasifikasi Arsip** sendiri, lengkap dengan daftar pilihan dari katalog
+dan keterangan asal kodenya ("otomatis dari aturan pemetaan" / "diisi manual").
+Urutan prioritasnya **sama persis** dengan booking manual: isian di kolom itu
+menang atas aturan pemetaan. Dua jalur penerbitan dengan urutan berbeda akan
+melahirkan dua kebiasaan yang saling membantah pada arsip yang sama.
+
+Terpasang di empat layar yang memang memesan nomor otomatis: **BAST
+Penggunaan**, **Transaksi Massal Persediaan**, **Catat Semua Barang
+(Pengadaan)**, dan **LPB Gabungan**. Halaman yang tidak mengirim
+`onKlasifikasi` tetap seperti sebelumnya — termasuk tidak ikut meminta katalog
+kode, supaya layar yang tak membutuhkannya tak membayar satu permintaan
+tambahan.
+
+Kode otomatis ditampilkan sebagai **placeholder**, bukan sebagai isian. Kalau
+ia dituliskan sebagai nilai, kode hasil aturan ikut terpaku ke dalam dokumen;
+begitu aturannya diubah, dokumen itu diam-diam tak ikut berubah.
+
+**Penjaga baru** — `backend/tests/unit/test_klasifikasi_booking_otomatis.py`
+(10 uji) dan `frontend/src/components/persuratan/__tests__/PerkiraanNomorKlasifikasi.test.jsx`
+(10 uji). Yang paling menentukan dua:
+
+- **Pemindai AST**: setiap pemanggil `pilih_klasifikasi` di `routes/` wajib
+  menyalurkan `eksplisit`. Inilah bentuk cacat yang paling mungkin berulang —
+  generator baru yang menyalin pola lama akan memanggilnya tanpa itu, dan
+  dokumennya jadi satu-satunya yang klasifikasinya tak bisa dipilih. Jalur itu
+  berjalan di balik centang opsional, jadi tak ada uji perilaku yang
+  menyentuhnya sampai ada yang memakainya.
+- **Uji bahwa kode terpilih benar-benar ikut ke permintaan pratinjau.** Kolom
+  yang terlihat tapi tak menyetir apa pun adalah bentuk kegagalan paling
+  menyesatkan: layarnya tampak sudah diperbaiki.
+
+Satu tiruan uji ikut diperbaiki: `_booking` pada uji pembatalan LPB menuliskan
+tanda tangannya LENGKAP, bukan `**kwargs`. Ia memang gagal saat parameter baru
+ditambahkan — dan itu yang diinginkan; `**kwargs` akan menelan perbedaannya
+diam-diam dan uji itu berhenti menguji jalur yang sebenarnya.
+
+Enam mutasi dipasang lalu dibunuh: hentikan penyaluran pilihan di
+`booking_nomor_otomatis`, di delegator LPB, dan di jalur BAST; hentikan
+pengiriman kode ke permintaan pratinjau; paksa kolomnya muncul di semua
+halaman; dan tulis kode otomatis sebagai nilai alih-alih placeholder.
+
 ## [#898] Perkiraan nomor bisa ditulis tangan — "ibaratnya menulis nomer manual" — 2026-08-19
 
 Permintaan pemilik, lengkap dengan tempatnya: *"maksud menyisipkan atau

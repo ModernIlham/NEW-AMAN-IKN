@@ -458,7 +458,8 @@ export default function PersediaanPage({ user, onBack }) {
   };
 
   const bukaMassal = () => setMassal({
-    arah: "masuk", jenis: "pembelian", no_bukti: "", booking_otomatis: false, jenis_dokumen: "",
+    arah: "masuk", jenis: "pembelian", no_bukti: "", booking_otomatis: false,
+    kode_klasifikasi: "", jenis_dokumen: "",
     tgl_dokumen: "", perolehan_id: "",
     penyedia: "", unit_penerima: "", keterangan: "",
     items: [], cari: "", hasil: [], mencari: false, saving: false, laporan: null,
@@ -653,6 +654,7 @@ export default function PersediaanPage({ user, onBack }) {
         await ajukanPermohonan("massal", "", {
           arah: massal.arah, jenis: massal.jenis, no_bukti: massal.no_bukti,
           booking_otomatis: !!massal.booking_otomatis,
+          kode_klasifikasi: massal.kode_klasifikasi || "",
           jenis_dokumen: massal.jenis_dokumen, penyedia: massal.penyedia,
           tgl_dokumen: massal.tgl_dokumen, perolehan_id: massal.perolehan_id,
           unit_penerima: massal.unit_penerima, keterangan: massal.keterangan,
@@ -668,6 +670,7 @@ export default function PersediaanPage({ user, onBack }) {
       const r = await axios.post(`${API}/persediaan/transaksi-massal`, {
         arah: massal.arah, jenis: massal.jenis, no_bukti: massal.no_bukti,
         booking_otomatis: !!massal.booking_otomatis,
+        kode_klasifikasi: massal.kode_klasifikasi || "",
         jenis_dokumen: massal.jenis_dokumen, penyedia: massal.penyedia,
         tgl_dokumen: massal.tgl_dokumen, perolehan_id: massal.perolehan_id,
         unit_penerima: massal.unit_penerima, keterangan: massal.keterangan,
@@ -1947,6 +1950,8 @@ export default function PersediaanPage({ user, onBack }) {
                   {massal.arah === "masuk" && (
                     <PerkiraanNomor aktif={!!massal.booking_otomatis} modul="persediaan"
                       jenisNaskah="Laporan" tanggal={massal.tgl_dokumen}
+                      klasifikasi={massal.kode_klasifikasi}
+                      onKlasifikasi={(v) => setMassal((m) => ({ ...m, kode_klasifikasi: v }))}
                       testId="persediaan-perkiraan-nomor" />
                   )}
                 </div>
