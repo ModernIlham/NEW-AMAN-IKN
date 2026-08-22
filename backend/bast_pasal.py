@@ -416,3 +416,149 @@ def validate_pj_tambahan(pj_list, asset_ids) -> list:
         for x in ids:
             pemilik.setdefault(x, nama)
     return errors
+
+
+# ── SURAT PERNYATAAN TANGGUNG JAWAB (lampiran OPSIONAL Berita Acara) ─────────
+#
+# Saran pemilik, dan saran itu memang yang paling aman secara administratif:
+# *"buat Surat Pernyataan Tanggung Jawab untuk setiap penanggung jawab
+# individual di semua BAST, dan khusus untuk operasional buat surat
+# pernyataannya per masing-masing penanggung jawab jika ada, lengkap dengan
+# barang seperti di BAST yang sudah terkategori berdasarkan bidang."*
+#
+# Kenapa terpisah dari Berita Acara, bukan satu pasal tambahan di dalamnya:
+# Berita Acara ditandatangani DUA PIHAK dan membuktikan bahwa serah terima
+# terjadi. Pernyataan tanggung jawab ditandatangani SATU ORANG dan mengikat
+# dirinya sendiri. Menggabungkan keduanya membuat satu tanda tangan memikul dua
+# makna hukum yang berbeda — dan pada BAST operasional dengan lima penanggung
+# jawab, empat di antaranya tak pernah membubuhkan tanda tangan apa pun pada
+# dokumen yang membebani mereka.
+#
+# Dasar butir pernyataannya sama dengan pasal Berita Acara (lihat kepala berkas
+# ini): PP 27/2014 jo. PP 28/2020 · UU 1/2004 Ps. 59-64 jo. PP 38/2016 (ganti
+# rugi) · PP 94/2021 (disiplin). Tidak ada norma baru yang diciptakan di sini;
+# yang dilakukan hanya menuliskannya sebagai pernyataan orang pertama.
+
+# Peran penanda tangan pernyataan — menentukan bunyi butirnya.
+PERAN_PEMEGANG = "pemegang"                # menerima & memakai BMN
+PERAN_PJ_UNIT = "penanggung_jawab_unit"    # penanggung jawab per unit/tempat
+PERAN_PENERIMA_KEMBALI = "penerima_kembali"  # menerima pengembalian ke satker
+
+
+def butir_pernyataan(peran, unit="") -> list:
+    """Butir Surat Pernyataan Tanggung Jawab menurut peran penanda tangan.
+
+    MURNI. Bunyinya orang pertama ("saya") karena inilah dokumen yang mengikat
+    dirinya sendiri — berbeda dari pasal Berita Acara yang menyebut PARA PIHAK.
+    """
+    if peran == PERAN_PENERIMA_KEMBALI:
+        return [
+            "Barang Milik Negara sebagaimana tercantum dalam daftar pada surat "
+            "pernyataan ini telah saya terima kembali dalam keadaan sebagaimana "
+            "kolom Kondisi, terhitung sejak tanggal Berita Acara Serah Terima "
+            "dimaksud.",
+            "Saya menatausahakan, menyimpan, dan mengamankan BMN tersebut pada "
+            "satuan kerja sampai ditetapkan penggunaan berikutnya oleh pejabat "
+            "yang berwenang.",
+            "Saya melaporkan kepada Kuasa Pengguna Barang setiap kehilangan, "
+            "kerusakan, perpindahan tempat, atau perubahan kondisi BMN tersebut "
+            "pada kesempatan pertama.",
+            "Apabila BMN tersebut hilang atau rusak akibat kelalaian saya, saya "
+            "bersedia menanggung penggantian sesuai ketentuan tuntutan ganti "
+            "kerugian negara (Undang-Undang Nomor 1 Tahun 2004 juncto Peraturan "
+            "Pemerintah Nomor 38 Tahun 2016) dan menerima sanksi disiplin sesuai "
+            "Peraturan Pemerintah Nomor 94 Tahun 2021.",
+        ]
+    butir = []
+    if peran == PERAN_PJ_UNIT:
+        butir.append(
+            "Saya ditunjuk sebagai penanggung jawab Barang Milik Negara pada "
+            + (f"unit/tempat tugas {unit}" if str(unit or "").strip()
+               else "unit/tempat tugas sebagaimana Berita Acara Serah Terima "
+                    "dimaksud")
+            + ", dengan rincian BMN sebagaimana daftar pada surat pernyataan "
+              "ini.")
+    butir.append(
+        "Barang Milik Negara sebagaimana tercantum dalam daftar pada surat "
+        "pernyataan ini telah saya terima dalam keadaan sebagaimana kolom "
+        "Kondisi dan menjadi tanggung jawab saya terhitung sejak tanggal "
+        "Berita Acara Serah Terima dimaksud.")
+    butir.extend([
+        "Saya menggunakan BMN tersebut semata-mata untuk kepentingan "
+        "kedinasan, dan tidak menggunakannya untuk kepentingan pribadi, usaha, "
+        "politik praktis, atau kepentingan pihak lain di luar kedinasan.",
+        "Saya menyimpan, memelihara, dan mengamankan BMN tersebut dengan "
+        "sebaik-baiknya, termasuk kelengkapan dan dokumen pendukungnya.",
+        "Saya tidak memindahtangankan, meminjamkan, mengubah bentuk, "
+        "membebani, atau mengalihkan BMN tersebut kepada pihak lain tanpa "
+        "persetujuan tertulis pejabat yang berwenang.",
+        "Saya melaporkan kepada Kuasa Pengguna Barang setiap kehilangan, "
+        "kerusakan, perpindahan tempat, atau perubahan kondisi BMN tersebut "
+        "pada kesempatan pertama.",
+        "Apabila BMN tersebut hilang atau rusak akibat kelalaian saya, saya "
+        "bersedia menanggung penggantian sesuai ketentuan tuntutan ganti "
+        "kerugian negara (Undang-Undang Nomor 1 Tahun 2004 juncto Peraturan "
+        "Pemerintah Nomor 38 Tahun 2016) dan menerima sanksi disiplin sesuai "
+        "Peraturan Pemerintah Nomor 94 Tahun 2021.",
+        "Saya mengembalikan BMN tersebut dalam keadaan baik kepada satuan "
+        "kerja apabila berpindah tugas, berhenti, atau apabila diminta oleh "
+        "pejabat yang berwenang.",
+    ])
+    return butir
+
+
+def daftar_penyata(jenis, pihak_kedua, pihak_pertama, pj_list, aset) -> list:
+    """Siapa saja yang menandatangani Surat Pernyataan Tanggung Jawab.
+
+    → [{nama, nip, jabatan, unit, peran, aset: [dict aset]}] — satu entri satu
+    lembar pernyataan. MURNI.
+
+    Aturannya mengikuti SIAPA YANG MEMEGANG BMN setelah serah terima:
+
+    - BAST pengembalian: yang memegang adalah satuan kerja lewat PIHAK
+      KESATU, jadi dialah yang menyatakan — dan bunyinya penatausahaan, bukan
+      pemakaian. Membuat PIHAK KEDUA menyatakan tanggung jawab atas barang
+      yang baru saja ia kembalikan adalah kebalikan dari kenyataannya.
+    - BAST operasional dengan penanggung jawab tambahan: satu lembar untuk
+      TIAP orang, memuat BMN yang melekat padanya; ditambah satu lembar untuk
+      PIHAK KEDUA bila masih ada BMN yang tak melekat pada siapa pun.
+    - Selebihnya: satu lembar untuk PIHAK KEDUA, memuat seluruh BMN.
+
+    Penanggung jawab yang TAK dilekati BMN tetap mendapat lembarnya sendiri —
+    ia memang ditunjuk, dan daftar kosong pada lembarnya justru menyatakan
+    keadaan sebenarnya alih-alih menyembunyikannya.
+    """
+    p2, p1 = pihak_kedua or {}, pihak_pertama or {}
+    semua = list(aset or [])
+
+    def _entri(sumber, peran, unit="", daftar=None):
+        return {
+            "nama": str((sumber or {}).get("nama") or "").strip(),
+            "nip": str((sumber or {}).get("nip") or "").strip(),
+            "jabatan": str((sumber or {}).get("jabatan") or "").strip(),
+            "unit": str(unit or "").strip(),
+            "peran": peran,
+            "aset": list(daftar if daftar is not None else semua),
+        }
+
+    if jenis not in JENIS_PENGUASAAN:
+        return [_entri(p1, PERAN_PENERIMA_KEMBALI)]
+
+    baris = baris_pj_tambahan(pj_list, semua) if jenis == "operasional_unit" else []
+    if not baris:
+        return [_entri(p2, PERAN_PEMEGANG,
+                       unit=str(p2.get("alamat") or "").strip())]
+
+    peta = _peta_aset(semua)
+    keluar = [_entri({"nama": r["nama"],
+                      "nip": "" if r["nip"] == "-" else r["nip"],
+                      "jabatan": ""},
+                     PERAN_PJ_UNIT, unit=label_unit(r),
+                     daftar=[peta[x] for x in r["aset"] if x in peta])
+              for r in baris]
+    sisa = bmn_tanpa_pj(pj_list, semua)
+    if sisa:
+        keluar.append(_entri(p2, PERAN_PEMEGANG,
+                             unit=str(p2.get("alamat") or "").strip(),
+                             daftar=sisa))
+    return keluar

@@ -256,7 +256,8 @@ export default function PenggunaanPage({ user, onBack }) {
       .catch(() => {});
     setFormBast({
       jenis: "penggunaan_melekat", nomor: "", tanggal: "",
-      jangka_dari: "", jangka_sampai: "", sertakan_foto: false, keterangan: "",
+      jangka_dari: "", jangka_sampai: "", sertakan_foto: false,
+      surat_pernyataan: false, keterangan: "",
       pihak_kedua: { nama: p.nama || "", nip: p.nip || "", jabatan: p.jabatan || p.pegawai_master_jabatan || "", alamat: "" },
       // Utk mutasi/handover: PIHAK KESATU = pemegang lama (prefill dari
       // pemegang yang sedang dibuka); PIHAK KEDUA = pemegang baru.
@@ -355,7 +356,8 @@ export default function PenggunaanPage({ user, onBack }) {
           ? { almarhum: f.almarhum,
               saksi: (f.saksi || []).filter((x) => (x.nama || "").trim()) }
           : {}),
-        sertakan_foto: f.sertakan_foto, keterangan: f.keterangan,
+        sertakan_foto: f.sertakan_foto,
+        surat_pernyataan: !!f.surat_pernyataan, keterangan: f.keterangan,
         tampilkan_nilai: !!f.tampilkan_nilai,
         // pengembalian_almarhum WAJIB ikut di sini — tanpanya checkbox
         // "kosongkan pengguna" dipaksa false dan aset tetap atas nama almarhum
@@ -405,7 +407,8 @@ export default function PenggunaanPage({ user, onBack }) {
     setFormBast({
       jenis: b.jenis, nomor: "", tanggal: "",
       jangka_dari: b.jangka_dari || "", jangka_sampai: b.jangka_sampai || "",
-      sertakan_foto: !!b.sertakan_foto, keterangan: b.keterangan || "",
+      sertakan_foto: !!b.sertakan_foto,
+      surat_pernyataan: !!b.surat_pernyataan, keterangan: b.keterangan || "",
       pihak_kedua: { ...(b.pihak_kedua || { nama: "", nip: "", jabatan: "", alamat: "" }) },
       pihak_pertama: { ...(b.pihak_pertama || { nama: "", nip: "", jabatan: "", alamat: "" }) },
       penyerah: b.jenis === "mutasi_pengguna"
@@ -2376,6 +2379,23 @@ export default function PenggunaanPage({ user, onBack }) {
                 <input type="checkbox" checked={formBast.sertakan_foto} className="w-3.5 h-3.5 mt-0.5 shrink-0" data-testid="bast-foto"
                   onChange={(e) => setFormBast((f) => ({ ...f, sertakan_foto: e.target.checked }))} />
                 <span>Sertakan lampiran foto: <b>foto barang</b> (sampul tiap aset) + <b>foto serah terima</b> (dari scan bukti TTD BAST, bila berupa gambar)</span>
+              </label>
+              <label className="flex items-start gap-2 text-xs cursor-pointer">
+                <input type="checkbox" checked={!!formBast.surat_pernyataan}
+                  className="w-3.5 h-3.5 mt-0.5 shrink-0" data-testid="bast-surat-pernyataan"
+                  onChange={(e) => setFormBast((f) => ({ ...f, surat_pernyataan: e.target.checked }))} />
+                <span>
+                  Sertakan <b>Surat Pernyataan Tanggung Jawab</b>
+                  {" "}<span className="text-muted-foreground">
+                    — satu lembar untuk tiap penanggung jawab, ditandatangani orangnya
+                    sendiri, memuat daftar BMN yang menjadi tanggung jawabnya
+                    (berkelompok per bidang) dan menjadi bagian tidak terpisahkan dari
+                    Berita Acara ini.
+                    {formBast.jenis === "operasional_unit"
+                      ? " Pada BAST operasional: satu lembar per penanggung jawab tambahan, plus satu lembar untuk PIHAK KEDUA bila masih ada BMN yang tak melekat pada siapa pun."
+                      : ""}
+                  </span>
+                </span>
               </label>
               <label className="flex items-start gap-2 text-xs cursor-pointer">
                 <input type="checkbox" checked={!!formBast.tampilkan_nilai}
