@@ -127,6 +127,10 @@ class PjTambahanIn(BaseModel):
     # keduanya dan memisahkannya hanya melahirkan kolom yang selalu kosong.
     nip: str = ""
     unit_tempat_tugas: str = ""
+    # Unit eselon TERDALAM tempat orang ini bekerja — terisi otomatis saat
+    # namanya dipilih dari Master Pegawai. Tetap bisa diketik manual: tidak
+    # semua penanggung jawab terdaftar di sana (tenaga alih daya, mitra).
+    unit_eselon: str = ""
     # Bagian dari `asset_ids` BAST yang melekat pada orang ini. Bukan daftar
     # bebas: divalidasi harus termasuk aset yang diserahterimakan, dan satu
     # aset hanya boleh melekat pada satu orang.
@@ -1293,10 +1297,10 @@ async def bast_pdf(bast_id: str, nilai: str = "",
     # konteks waktu penggunaan. Isi hukumnya utuh; yang dibuang hanya
     # pengulangan — syarat agar seluruh naskah muat 2 halaman.
     from bast_pasal import (baris_pj_tambahan, bmn_tanpa_pj, butir_khusus_bidang,
-                            butir_risiko, butir_waktu, rujukan_pasal1,
-                            sisa_bidang)
+                            butir_risiko, butir_waktu, label_unit,
+                            rujukan_pasal1, sisa_bidang)
 
-    _pj_baris = []
+    _pj_baris, _ada_bmn = [], False
     tj = ["Serah terima meliputi fisik barang beserta kelengkapan/dokumen "
           "pendukungnya dalam keadaan sebagaimana kolom Kondisi pada Pasal 1, "
           "yang telah diperiksa bersama oleh PARA PIHAK sebelum Berita Acara "
@@ -1314,6 +1318,7 @@ async def bast_pdf(bast_id: str, nilai: str = "",
         # tabel tersendiri (dirakit di bawah, ikut ke dalam pasal yang sama).
         _pj_baris = baris_pj_tambahan(b.get("penanggung_jawab_tambahan"),
                                       b.get("aset"))
+        _ada_bmn = any(r["aset"] for r in _pj_baris)
         tj.append(
             "Terhitung sejak penandatanganan, PIHAK KEDUA selaku penanggung "
             "jawab unit bertanggung jawab atas penggunaan, pengamanan, dan "
@@ -1321,9 +1326,10 @@ async def bast_pdf(bast_id: str, nilai: str = "",
             "unit/tempat kerja, pemakaian bergilir diatur PIHAK KEDUA dengan "
             "kejelasan penguasa barang pada satu waktu, dan pergantian "
             "penanggung jawab dilakukan melalui serah terima baru."
-            + (" Penanggung jawab pada unit/tempat tugas beserta BMN yang "
-               "melekat padanya tercantum dalam tabel berikut."
-               if _pj_baris else ""))
+            + ("" if not _pj_baris else
+               " Penanggung jawab pada unit/tempat tugas tercantum dalam "
+               "tabel berikut" + ("; kolom No. BMN merujuk nomor urut BMN "
+                                  "pada Pasal 1." if _ada_bmn else ".")))
     elif jenis == "penggunaan_sementara":
         tj.append(
             "Penggunaan sementara TIDAK mengalihkan status penggunaan — BMN "
@@ -1375,19 +1381,18 @@ async def bast_pdf(bast_id: str, nilai: str = "",
         # Kolom BMN hanya dipasang bila memang ADA yang dilekatkan. Kolom
         # berisi tanda hubung dari atas ke bawah cuma memakan lebar yang bisa
         # dipakai nama dan unit — inilah "memaksimalkan kekosongan yang ada".
-        _ada_bmn = any(r["aset"] for r in _pj_baris)
         _kepala_pj = ["No.", "Nama", "NIP/NIK", "Unit/Tempat/Tugas"]
-        _lebar_pj = [20, 120, 90, 130]
+        _lebar_pj = [16, 92, 70, 222]
         if _ada_bmn:
-            _kepala_pj.append("BMN (No. Pasal 1)")
-            _lebar_pj = [20, 108, 84, 110, 78]
+            _kepala_pj.append("No. BMN")
+            _lebar_pj = [16, 80, 66, 190, 48]
         _data_pj = [[Paragraph(h, st_pj_h) for h in _kepala_pj]]
         for r in _pj_baris:
             baris_pj = [
                 Paragraph(str(r["no"]), st_pj_c),
                 Paragraph(_esc(r["nama"]), st_pj),
                 Paragraph(_esc(r["nip"]), st_pj_c),
-                Paragraph(_esc(r["unit"]), st_pj),
+                Paragraph(_esc(label_unit(r)), st_pj),
             ]
             if _ada_bmn:
                 baris_pj.append(Paragraph(

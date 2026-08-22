@@ -309,10 +309,31 @@ def baris_pj_tambahan(pj_list, aset) -> list:
             "nama": nama,
             "nip": str(p.get("nip") or "").strip() or "-",
             "unit": str(p.get("unit_tempat_tugas") or "").strip() or "-",
+            # Unit eselon TERDALAM tempat orang ini bekerja, diambil dari
+            # Master Pegawai saat namanya dipilih. Bukan pengganti
+            # `unit_tempat_tugas`: yang satu menyebut DI MANA barangnya
+            # dipakai (Ruang Server), yang lain menyebut DI UNIT MANA orangnya
+            # bertugas (Direktorat BMN). Keduanya bisa berbeda, dan pembaca
+            # BAST setahun kemudian butuh keduanya untuk menemukan orangnya.
+            "eselon": str(p.get("unit_eselon") or "").strip() or "-",
             "aset": [str(x) for x in (p.get("asset_ids") or [])
                      if str(x or "") in peta],
         })
     return keluar
+
+
+def label_unit(baris) -> str:
+    """Isi kolom "Unit/Tempat/Tugas": tempat tugas dan unit eselonnya.
+
+    Digabung dalam SATU kolom, bukan dua. Kolom keenam pada tabel yang sudah
+    berisi lima akan menyempitkan semuanya sampai nama orang patah jadi dua
+    baris — dan naskah yang dibatasi dua halaman membayar setiap baris yang
+    patah dengan jatah penanggung jawab berikutnya.
+    """
+    b = baris or {}
+    bagian = [str(b.get(k) or "").strip() for k in ("unit", "eselon")]
+    bagian = [x for x in bagian if x and x != "-"]
+    return " · ".join(bagian) or "-"
 
 
 def rujukan_pasal1(ids, urutan) -> str:

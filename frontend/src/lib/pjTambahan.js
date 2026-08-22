@@ -31,7 +31,32 @@ export function labelAset(a) {
 
 /** Baris penanggung jawab kosong. */
 export function pjKosong() {
-  return { nama: "", nip: "", unit_tempat_tugas: "", asset_ids: [] };
+  return { nama: "", nip: "", unit_tempat_tugas: "", unit_eselon: "",
+    asset_ids: [] };
+}
+
+/**
+ * Isian yang diambil dari satu entri Master Pegawai saat namanya dipilih.
+ *
+ * `unit_kerja` sudah berisi **unit eselon TERDALAM** — server yang
+ * menghitungnya (`unit_kerja_terdalam`), sengaja tidak dihitung ulang di sini.
+ * Menghitung ulang aturan "eselon5 → eselon4 → … → unit_kerja" di sisi klien
+ * berarti dua salinan aturan yang sama, dan salinan yang tertinggal akan
+ * menuliskan unit yang SALAH ke dokumen resmi tanpa satu pun galat.
+ *
+ * Mengembalikan hanya kolom yang memang ada isinya: pemanggil menimpa isian
+ * lama dengan hasil ini, dan nilai kosong dari Master Pegawai tak boleh
+ * menghapus apa yang sudah diketik operator.
+ */
+export function dariPegawai(p) {
+  const out = {};
+  const nama = String(p?.nama || "").trim();
+  const nip = String(p?.nip || "").trim();
+  const unit = String(p?.unit_kerja || p?.unit_organisasi || "").trim();
+  if (nama) out.nama = nama;
+  if (nip) out.nip = nip;
+  if (unit) out.unit_eselon = unit;
+  return out;
 }
 
 /** Semua id aset yang sudah melekat pada penanggung jawab MANA PUN. */
@@ -81,6 +106,7 @@ export function payloadPj(pjList) {
       nama: String(p.nama).trim(),
       nip: String(p.nip || "").trim(),
       unit_tempat_tugas: String(p.unit_tempat_tugas || "").trim(),
+      unit_eselon: String(p.unit_eselon || "").trim(),
       asset_ids: [...new Set((p.asset_ids || []).map(String))],
     }));
 }

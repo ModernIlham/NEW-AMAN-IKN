@@ -23,7 +23,7 @@ import { WARNA_CHIP, kelasChipStatus } from "@/lib/chipStatus";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 import PerkiraanNomor from "@/components/persuratan/PerkiraanNomor";
 import {
-  asetTersedia, labelAset, payloadPj, pjKosong, selaraskanAset,
+  asetTersedia, dariPegawai, labelAset, payloadPj, pjKosong, selaraskanAset,
 } from "@/lib/pjTambahan";
 import KartuTapDialog from "@/components/pegawai/KartuTapDialog";
 import { bagikanWa, bagikanEmail, hasilTtd } from "@/lib/pesanTtd";
@@ -2274,8 +2274,21 @@ export default function PenggunaanPage({ user, onBack }) {
                       <div key={i} className="rounded-lg border border-border p-2 space-y-1.5"
                         data-testid={`bast-pj-${i}`}>
                         <div className="flex gap-2">
-                          <Input value={pj.nama} placeholder="Nama" data-testid={`bast-pj-nama-${i}`}
-                            onChange={(e) => ubah("nama", e.target.value)} />
+                          {/* Nama TERHUBUNG ke Master Pegawai: begitu namanya
+                              persis cocok, NIP/NIK dan unit eselon terdalamnya
+                              ikut terisi. Tetap boleh diketik bebas — tak semua
+                              penanggung jawab terdaftar di sana (tenaga alih
+                              daya, mitra). */}
+                          <Input value={pj.nama} placeholder="Nama — saran dari Master Pegawai"
+                            list="bast-pj-pegawai-list" data-testid={`bast-pj-nama-${i}`}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              const m = (pegawaiList || []).find((x) => (x.nama || "") === v);
+                              setFormBast((f) => ({ ...f, pj_tambahan: f.pj_tambahan.map(
+                                (x, j) => (j === i
+                                  ? { ...x, nama: v, ...(m ? dariPegawai(m) : {}) }
+                                  : x)) }));
+                            }} />
                           <Input value={pj.nip || ""} placeholder="NIP/NIK" className="font-mono w-40"
                             data-testid={`bast-pj-nip-${i}`}
                             onChange={(e) => ubah("nip", e.target.value)} />
@@ -2283,9 +2296,14 @@ export default function PenggunaanPage({ user, onBack }) {
                             data-testid={`bast-pj-hapus-${i}`}
                             onClick={() => setFormBast((f) => ({ ...f, pj_tambahan: f.pj_tambahan.filter((_, j) => j !== i) }))}><X className="w-3.5 h-3.5" /></button>
                         </div>
-                        <Input value={pj.unit_tempat_tugas} placeholder="Unit/tempat/tugas"
-                          data-testid={`bast-pj-unit-${i}`}
-                          onChange={(e) => ubah("unit_tempat_tugas", e.target.value)} />
+                        <div className="flex gap-2">
+                          <Input value={pj.unit_tempat_tugas} placeholder="Unit/tempat/tugas"
+                            data-testid={`bast-pj-unit-${i}`}
+                            onChange={(e) => ubah("unit_tempat_tugas", e.target.value)} />
+                          <Input value={pj.unit_eselon || ""} placeholder="Eselon terakhir tempat bekerja"
+                            data-testid={`bast-pj-eselon-${i}`}
+                            onChange={(e) => ubah("unit_eselon", e.target.value)} />
+                        </div>
                         {/* BMN yang melekat — hanya dari aset yang SUDAH
                             dicentang di bawah, dan yang belum diambil
                             penanggung jawab lain. Satu barang satu orang. */}
@@ -2319,6 +2337,13 @@ export default function PenggunaanPage({ user, onBack }) {
                       </div>
                     );
                   })}
+                  <datalist id="bast-pj-pegawai-list">
+                    {(pegawaiList || []).filter((x) => String(x?.status || "") !== "meninggal").map((x) => (
+                      <option key={x.id || x.nip || x.nama} value={x.nama}>
+                        {[x.nip ? `NIP ${x.nip}` : "", x.unit_kerja || ""].filter(Boolean).join(" · ")}
+                      </option>
+                    ))}
+                  </datalist>
                   <Button size="sm" variant="outline" className="h-7 text-[11px]"
                     data-testid="bast-pj-tambah"
                     onClick={() => setFormBast((f) => ({ ...f, pj_tambahan: [...f.pj_tambahan, pjKosong()] }))}>

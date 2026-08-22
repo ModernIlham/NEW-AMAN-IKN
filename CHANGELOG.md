@@ -67,6 +67,61 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#901] Penanggung jawab tambahan terhubung ke Master Pegawai — 2026-08-22
+
+Permintaan pemilik: *"Nama, NIP/NIK dan eselon terakhir tempat dia bekerja,
+lekatkan agar dapat terhubung ke pegawai sehingga memudahkan penginputan."*
+
+Kolom nama pada penanggung jawab tambahan kini **terhubung ke Master Pegawai**
+dengan pola yang sama seperti kolom PIHAK KEDUA di dialog yang sama: mengetik
+nama memunculkan saran, dan begitu namanya persis cocok, **NIP/NIK** dan **unit
+eselon terdalam** tempat orang itu bekerja ikut terisi sendiri. Tetap boleh
+diketik bebas — tidak semua penanggung jawab terdaftar di sana (tenaga alih
+daya, mitra).
+
+Unit eselon disimpan pada field baru `unit_eselon`, dan itu **bukan pengganti**
+`unit_tempat_tugas`. Keduanya menjawab pertanyaan berbeda: yang satu menyebut
+DI MANA barangnya dipakai (Ruang Server), yang lain menyebut DI UNIT MANA
+orangnya bertugas (Direktorat Barang Milik Negara). Keduanya bisa berbeda, dan
+pembaca BAST setahun kemudian butuh keduanya untuk menemukan orangnya.
+
+Di PDF keduanya berbagi **satu kolom** ("Ruang Server · Direktorat Barang Milik
+Negara"). Kolom keenam pada tabel yang sudah berisi lima akan menyempitkan
+semuanya sampai nama orang patah jadi dua baris — dan naskah dua halaman
+membayar tiap baris yang patah dengan jatah penanggung jawab berikutnya.
+
+**Satu ketidaksesuaian lama ikut ditutup.** `GET /pegawai` (daftar) tidak pernah
+menerapkan aturan "unit kerja efektif = eselon terdalam" yang sudah dipakai
+endpoint detail. Akibatnya satu pegawai bisa tampil ber-unit di satu layar dan
+tanpa unit di layar lain, tanpa satu pun galat. Selama itu hanya soal tampilan
+ia lolos; sejak pemilih ini mengambil unit dari daftar, unit yang hilang akan
+tertulis **kosong ke dokumen resmi**. Aturannya kini sama di kedua endpoint.
+
+Aturan eselon terdalam **tidak dihitung ulang di klien** — server yang
+memiliknya. Dua salinan aturan yang sama akan berujung pada salinan yang
+tertinggal, dan salinan yang tertinggal menuliskan unit yang SALAH ke dokumen
+resmi tanpa satu pun galat. Ada uji yang menagihnya: entri pegawai uji sengaja
+punya `eselon5` yang berbeda dari `unit_kerja`, dan yang dipakai harus tetap
+`unit_kerja`.
+
+`dariPegawai()` hanya mengembalikan kolom yang **memang ada isinya**. Pemanggil
+menimpa isian lama dengan hasilnya, jadi nilai kosong dari Master Pegawai yang
+ikut terkirim akan MENGHAPUS apa yang sudah diketik operator.
+
+**Kapasitas dua halaman diukur ulang** (isi terberat: unit tempat tugas panjang
++ unit eselon panjang + NIP 18 digit, 12 aset): **6 penanggung jawab** bila tak
+ada BMN yang dilekatkan, **3** bila kolom No. BMN ikut tercetak. Sebelum kolom
+eselon ada, angkanya 6 dan 4 — jadi tambahan ini memang berbiaya, dan biayanya
+disebutkan apa adanya, bukan disembunyikan. Judul kolom BMN diperpendek jadi
+"No. BMN" (judul panjang PATAH di kolom sempit, dan judul yang patah lebih
+sulit dibaca daripada satu kata); keterangan rujukannya pindah ke kalimat
+pasal — tempat yang memang untuk instruksi membaca.
+
+Enam mutasi dipasang lalu dibunuh: `label_unit` membuang unit eselon, pemisah
+menggantung dibiarkan, daftar pegawai berhenti mengisi unit terdalam,
+`dariPegawai` mengirim kolom kosong, aturan eselon dihitung ulang di klien, dan
+`payloadPj` tak mengirim unit eselon.
+
 ## [#900] Penanggung jawab tambahan BAST: NIP/NIK, BMN yang melekat, dan sebuah tabel — 2026-08-22
 
 Permintaan pemilik: *"ketika memiliki penanggung jawab tambahan per
