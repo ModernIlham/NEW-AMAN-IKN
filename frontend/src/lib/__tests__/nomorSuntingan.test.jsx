@@ -141,3 +141,65 @@ describe("Chip unsur tulisan milik satker", () => {
     expect(dicegah).toBe(true);
   });
 });
+
+describe("Kotak yang belum disunting MENGIKUTI perkiraan terbaru", () => {
+  /**
+   * Laporan pemilik: *"pada perkiraan nomor, nomernya selalu 003, begitu pun
+   * yang backdate — jangan buat statis."*
+   *
+   * Sekali "Ubah nomor" ditekan, kotaknya membeku pada angka saat itu. Deret
+   * agenda terus maju, tanggal surat berganti, sisipan dicentang — semuanya
+   * mengubah nomor yang AKAN terbit, sementara kotak itu tetap menunjukkan
+   * yang lama. Dan yang lama itulah yang terkirim.
+   */
+  function Hidup({ awal = "", mula = NOMOR }) {
+    const [nilai, setNilai] = useState(awal);
+    const [nomor, setNomor] = useState(mula);
+    return (
+      <>
+        <NomorSuntingan nomor={nomor} nilai={nilai} onChange={setNilai}
+          testid="pra" />
+        <span data-testid="nilai">{nilai}</span>
+        <button type="button" data-testid="geser"
+          onClick={() => setNomor("B-009/OIKN/VIII/2026")}>geser</button>
+      </>
+    );
+  }
+
+  test("perkiraan bergeser → kotak yang belum diketik ikut bergeser", () => {
+    render(<Hidup />);
+    fireEvent.click(screen.getByTestId("pra-ubah"));
+    expect(screen.getByTestId("pra-input")).toHaveValue(NOMOR);
+    fireEvent.click(screen.getByTestId("geser"));
+    expect(screen.getByTestId("pra-input")).toHaveValue("B-009/OIKN/VIII/2026");
+  });
+
+  test("sekali BENAR-BENAR diketik, ia berhenti mengikuti", () => {
+    // Suntingan operator itu miliknya — perkiraan yang bergeser tak boleh
+    // menghapusnya.
+    render(<Hidup />);
+    fireEvent.click(screen.getByTestId("pra-ubah"));
+    fireEvent.change(screen.getByTestId("pra-input"),
+      { target: { value: "B-003/UND/OIKN/VIII/2026" } });
+    fireEvent.click(screen.getByTestId("geser"));
+    expect(screen.getByTestId("pra-input"))
+      .toHaveValue("B-003/UND/OIKN/VIII/2026");
+  });
+
+  test("kotak tertutup tak menyimpan benih apa pun", () => {
+    render(<Hidup />);
+    fireEvent.click(screen.getByTestId("geser"));
+    expect(screen.queryByTestId("pra-input")).not.toBeInTheDocument();
+    expect(screen.getByTestId("pra-nomor"))
+      .toHaveTextContent("B-009/OIKN/VIII/2026");
+  });
+
+  test("kembali otomatis lalu ubah lagi memakai perkiraan TERBARU", () => {
+    render(<Hidup />);
+    fireEvent.click(screen.getByTestId("pra-ubah"));
+    fireEvent.click(screen.getByTestId("geser"));
+    fireEvent.click(screen.getByTestId("pra-otomatis"));
+    fireEvent.click(screen.getByTestId("pra-ubah"));
+    expect(screen.getByTestId("pra-input")).toHaveValue("B-009/OIKN/VIII/2026");
+  });
+});

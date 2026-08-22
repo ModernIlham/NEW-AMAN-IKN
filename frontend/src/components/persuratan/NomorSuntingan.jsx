@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { Pencil, RotateCcw } from "lucide-react";
 
 /**
@@ -52,6 +52,26 @@ export default function NomorSuntingan({
   const ref = useRef(null);
   const menyunting = String(nilai || "") !== "";
 
+  // BENIH: nomor perkiraan yang terakhir DITUANGKAN ke kotak isian. Selama isi
+  // kotak masih sama persis dengan benihnya, berarti operator belum benar-benar
+  // mengetik apa pun — dan kotaknya harus IKUT perkiraan terbaru.
+  //
+  // Laporan pemilik: *"pada perkiraan nomor, nomernya selalu 003, begitu pun
+  // yang backdate — jangan buat statis."* Memang: sekali tombol "Ubah nomor"
+  // ditekan, kotaknya membeku pada angka saat itu. Deret agenda terus maju,
+  // tanggal surat berganti, sisipan dicentang — semuanya mengubah nomor yang
+  // AKAN terbit, sementara kotak itu tetap menunjukkan yang lama. Dan yang
+  // lama itulah yang terkirim: dibooking sebagai "nomor tulisan tangan" pada
+  // angka yang sudah kedaluwarsa.
+  const benih = useRef("");
+  useEffect(() => {
+    if (!menyunting) { benih.current = ""; return; }
+    if (nilai === benih.current && nomor && nomor !== nilai) {
+      benih.current = nomor;
+      onChange?.(nomor);
+    }
+  }, [nomor, nilai, menyunting, onChange]);
+
   const sisip = (u) => {
     const el = ref.current;
     const { teks, kursor } = sisipUnsur(
@@ -78,7 +98,8 @@ export default function NomorSuntingan({
             <RotateCcw className="w-3 h-3" />Kembali otomatis
           </button>
         ) : (
-          <button type="button" onClick={() => onChange?.(nomor)}
+          <button type="button"
+            onClick={() => { benih.current = nomor; onChange?.(nomor); }}
             className="text-[10px] inline-flex items-center gap-1 text-cyan-700 dark:text-cyan-400 hover:underline flex-shrink-0 min-w-0 min-h-0"
             data-testid={`${testid}-ubah`}>
             <Pencil className="w-3 h-3" />Ubah nomor
