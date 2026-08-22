@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import PemilihPenandatangan from "@/components/pejabat/PemilihPenandatangan";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -45,6 +46,11 @@ export function SatkerPanel({ user }) {
   const [form, setForm] = useState(null);      // profil satker saat dialog edit
   const [saving, setSaving] = useState(false);
   const [q, setQ] = useState("");              // pencarian client-side kode/nama
+  // Referensi pejabat + daftar slot tanda tangan untuk pemilih di dialog
+  // profil. Slot DIAMBIL dari server (bukan disalin ke sini) agar penambahan
+  // slot baru tidak meninggalkan layar ini dengan daftar lama.
+  const [pejabat, setPejabat] = useState([]);
+  const [slotTtd, setSlotTtd] = useState([]);
   const { confirm, confirmDialog } = useConfirm();
 
   const load = useCallback(async () => {
@@ -59,6 +65,28 @@ export function SatkerPanel({ user }) {
     }
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // Gagal memuat referensi pejabat TIDAK menggagalkan halaman: profil satker
+  // tetap bisa disunting, hanya bagian penanda tangannya yang menerangkan
+  // dirinya kosong.
+  useEffect(() => {
+    if (!isAdmin) return;
+    let batal = false;
+    (async () => {
+      try {
+        const [rp, rr] = await Promise.all([
+          axios.get(`${API}/pejabat`),
+          axios.get(`${API}/pejabat/referensi`),
+        ]);
+        if (batal) return;
+        setPejabat(rp.data?.items || []);
+        setSlotTtd(rr.data?.slot_tanda_tangan || []);
+      } catch {
+        if (!batal) { setPejabat([]); setSlotTtd([]); }
+      }
+    })();
+    return () => { batal = true; };
+  }, [isAdmin]);
 
   const jalankanSinkron = async () => {
     setSinkron(true);
@@ -89,6 +117,9 @@ export function SatkerPanel({ user }) {
   const bukaEdit = (it) => setForm({
     ...FORM_KOSONG,
     ...Object.fromEntries(Object.keys(FORM_KOSONG).map((k) => [k, it[k] || ""])),
+    // Peta slot→pejabat ikut dibaca; tanpa ini menyimpan profil akan
+    // MENGHAPUS pilihan yang sudah ada (server menulis apa yang dikirim).
+    penandatangan: it.penandatangan || {},
     _baru: !it.terdaftar,
   });
 
@@ -150,7 +181,7 @@ export function SatkerPanel({ user }) {
             <span className="hidden sm:inline">Backfill Data Lama</span>
             <span className="sm:hidden">Backfill</span>
           </Button>
-          <Button size="sm" className="h-9 text-xs" onClick={() => setForm({ ...FORM_KOSONG, _baru: true })}
+          <Button size="sm" className="h-9 text-xs" onClick={() => setForm({ ...FORM_KOSONG, penandatangan: {}, _baru: true })}
             data-testid="satker-tambah">
             <Plus className="w-3.5 h-3.5 mr-1" />Tambah
           </Button>
@@ -379,6 +410,16 @@ export function SatkerPanel({ user }) {
                   </p>
                 </div>
               </div>
+              <PemilihPenandatangan
+                slot={slotTtd} pejabat={pejabat}
+                kodeSatker={form.kode_satker}
+                nilai={form.penandatangan || {}}
+                onUbah={(v) => setForm({ ...form, penandatangan: v })}
+                judul="Penanda tangan dokumen (setelan satker)"
+                keterangan={"Dipakai seluruh dokumen satker ini yang terbit setelahnya. "
+                  + "Dokumen yang sudah terbit tidak ikut berubah — nama penanda "
+                  + "tangannya dibekukan saat penerbitan."}
+                testIdPrefix="satker-ttd" />
             </div>
           )}
           <DialogFooter>

@@ -20,6 +20,9 @@ import { authMediaUrl } from "@/lib/mediaUrl";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import MenuKepala from "@/components/ui/MenuKepala";
 import PerkiraanNomor from "@/components/persuratan/PerkiraanNomor";
+import PemilihPenandatangan from "@/components/pejabat/PemilihPenandatangan";
+import { getSatkerAktif } from "@/lib/satkerAktif";
+import { idTerpilih, payloadLpbGabungan } from "@/lib/lpbGabungan";
 import { bagikanWa, bagikanEmail, hasilTtd } from "@/lib/pesanTtd";
 import {
   dokumenSetelahGantiSifat, formDariPerolehan, payloadUbahPerolehan,
@@ -118,9 +121,44 @@ export default function PengadaanPage({ user, onBack }) {
   // memaksa operator berpindah ke modul Persediaan hanya untuk mencetaknya.
   const [hasilCatat, setHasilCatat] = useState(null);
   const [tautanTtd, setTautanTtd] = useState(null);
+
   // Dialog LPB gabungan: {pilih: {id: bool}, saving} — merangkum banyak
   // BAST PPK → KPB (aset & persediaan) dalam SATU surat laporan.
   const [lpbGab, setLpbGab] = useState(null);
+  // Penanda tangan LPB: daftar pejabat + slot (dari server) + setelan satker
+  // sebagai lapis bawaan. Dimuat MALAS — hanya saat dialog LPB gabungan
+  // dibuka, supaya halaman pengadaan tidak menarik tiga request tambahan
+  // untuk operator yang tak pernah menerbitkan LPB.
+  const [ttdRef, setTtdRef] = useState({ pejabat: [], slot: [], bawaan: {} });
+  // Kode satker efektif = satker user, atau Satker Aktif bila super-admin
+  // pusat sedang ber-"act-as". Dipakai menyaring daftar pejabat yang boleh
+  // menandatangani dan membaca setelan satker yang benar.
+  const kodeSatkerEfektif = String(user?.kode_satker || "").trim() || getSatkerAktif();
+
+  useEffect(() => {
+    if (!lpbGab) return undefined;
+    let batal = false;
+    (async () => {
+      try {
+        const [rp, rr, rs] = await Promise.all([
+          axios.get(`${API}/pejabat`),
+          axios.get(`${API}/pejabat/referensi`),
+          axios.get(`${API}/satker`),
+        ]);
+        if (batal) return;
+        const sat = (rs.data?.items || []).find(
+          (x) => String(x.kode_satker || "") === kodeSatkerEfektif);
+        setTtdRef({
+          pejabat: rp.data?.items || [],
+          slot: rr.data?.slot_tanda_tangan || [],
+          bawaan: sat?.penandatangan || {},
+        });
+      } catch {
+        if (!batal) setTtdRef({ pejabat: [], slot: [], bawaan: {} });
+      }
+    })();
+    return () => { batal = true; };
+  }, [lpbGab, kodeSatkerEfektif]);
 
   const muat = useCallback(() => {
     axios.get(`${API}/pengadaan`)
@@ -398,12 +436,12 @@ export default function PengadaanPage({ user, onBack }) {
   // PPK → KPB yang bisa dipilih (server menolak sisanya juga).
   const buatLpbGabungan = async () => {
     if (!lpbGab) return;
-    const ids = Object.keys(lpbGab.pilih).filter((k) => lpbGab.pilih[k]);
+    const ids = idTerpilih(lpbGab.pilih);
     if (!ids.length) { toast.error("Pilih minimal satu perolehan"); return; }
     setLpbGab((g) => ({ ...g, saving: true }));
     try {
-      const r = await axios.post(`${API}/pengadaan/lpb-gabungan`, {
-        perolehan_ids: ids, kode_klasifikasi: lpbGab?.kodeKlasifikasi || "" });
+      const r = await axios.post(`${API}/pengadaan/lpb-gabungan`,
+        payloadLpbGabungan(lpbGab));
       const d = r.data || {};
       toast.success(`LPB gabungan terbit${d.nomor ? `: ${d.nomor}` : ""}`);
       setLpbGab(null);
@@ -1440,6 +1478,18 @@ export default function PengadaanPage({ user, onBack }) {
           {/* Nomor LPB gabungan dipesan lewat booking_nomor_lpb (deret yang
               sama dengan Persediaan): modul persediaan + Laporan, tanggal
               hari ini — parameter pratinjau harus identik. */}
+          {lpbGab && (
+            <PemilihPenandatangan
+              slot={ttdRef.slot} pejabat={ttdRef.pejabat} bawaan={ttdRef.bawaan}
+              kodeSatker={kodeSatkerEfektif}
+              nilai={lpbGab.penandatangan || {}}
+              onUbah={(v) => setLpbGab((g) => (g ? { ...g, penandatangan: v } : g))}
+              judul="Penanda tangan LPB ini"
+              keterangan={"Biarkan kosong untuk mengikuti setelan satker. Pilihan di "
+                + "sini hanya berlaku untuk LPB yang akan terbit dan dibekukan "
+                + "bersamanya."}
+              testIdPrefix="lpb-gabungan-ttd" />
+          )}
           <PerkiraanNomor aktif={!!lpbGab && Object.values(lpbGab?.pilih || {}).some(Boolean)}
             modul="persediaan" jenisNaskah="Laporan"
             klasifikasi={lpbGab?.kodeKlasifikasi || ""}

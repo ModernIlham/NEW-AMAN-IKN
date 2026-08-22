@@ -16,6 +16,7 @@ from auth_utils import require_admin, require_user
 from db import db
 from shared_utils import (log_audit, kode_satker_user, scope_query_field_satker,
                           pastikan_akses_dok_satker)
+from penandatangan_dokumen import SLOT_TTD
 from pejabat_utils import (
     JENIS_PELAKSANA, PERAN_PEJABAT, PERAN_PEJABAT_META, STATUS_KEPEGAWAIAN,
     UNIT_AKUNTANSI, peran_penyerah_bast, pejabat_berlaku_untuk_peran,
@@ -97,6 +98,14 @@ async def referensi_pejabat(_user: dict = Depends(require_user)):
         "peran": [{"kode": k, "uraian": v, **PERAN_PEJABAT_META.get(k, {})}
                   for k, v in PERAN_PEJABAT.items()],
         "peran_penyerah_bast": peran_penyerah_bast(),
+        # Slot tanda tangan per dokumen DILAYANI dari sini, tidak disalin ke
+        # frontend: label/peran cadangan hanya boleh punya satu sumber. Kalau
+        # layar menyimpan daftarnya sendiri, menambah slot di backend akan
+        # diam-diam meninggalkan layar dengan daftar lama.
+        "slot_tanda_tangan": [
+            {"kunci": k, **v, "peran_uraian": PERAN_PEJABAT.get(v.get("peran", ""), "")}
+            for k, v in SLOT_TTD.items()
+        ],
         "status_kepegawaian": [{"kode": k, "uraian": v} for k, v in STATUS_KEPEGAWAIAN.items()],
         "jenis_pelaksana": [{"kode": k, "uraian": v} for k, v in JENIS_PELAKSANA.items()],
         "unit_akuntansi": [{"kode": k, **v} for k, v in UNIT_AKUNTANSI.items()],
