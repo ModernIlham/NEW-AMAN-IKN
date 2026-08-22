@@ -6,7 +6,9 @@
  * menimpa snapshot beku pada dokumen. Keduanya baru ketahuan berbulan kemudian
  * saat ada yang membandingkan register dengan BAST cetaknya.
  */
-import { formDariPerolehan, payloadUbahPerolehan } from "./perolehanUbah";
+import {
+  dokumenSetelahGantiSifat, formDariPerolehan, payloadUbahPerolehan,
+} from "./perolehanUbah";
 
 const PEROLEHAN = {
   id: "p1",
@@ -63,9 +65,56 @@ describe("payloadUbahPerolehan", () => {
     const p = payloadUbahPerolehan(form);
     expect(p).not.toHaveProperty("ppk_pejabat_id");
     expect(p).not.toHaveProperty("penganggaran_id");
+    // Daftar kunci DIKUNCI: yang dijaga uji ini bukan sekadar dua id di
+    // atas, melainkan bahwa payload tak pernah membawa kunci yang tak
+    // sengaja. Menambah kolom berarti sengaja memperbarui daftar ini.
     expect(Object.keys(p).sort()).toEqual([
-      "barang", "jenis", "keterangan", "nomor_bast", "nomor_kontrak",
-      "pihak", "tanggal_bast",
+      "barang", "jenis", "jenis_up", "keterangan", "no_dokumen", "no_sp_spk",
+      "no_spby", "no_spm", "no_spp", "nomor_bast", "nomor_kontrak", "pihak",
+      "sifat", "tanggal_bast",
     ]);
+  });
+
+  test("dokumen pengadaan IKUT terkirim, bukan terjatuh", () => {
+    // Server menulis ulang seluruh kolomnya; kolom yang tak terkirim akan
+    // MENGOSONGKAN dokumen yang sudah tercatat.
+    const form = formDariPerolehan({ ...PEROLEHAN, sifat: "non_kontrak",
+      jenis_up: "tup", no_spby: " SPBy-1 ", no_spm: "02847T/621001/2024" });
+    const p = payloadUbahPerolehan(form);
+    expect(p.sifat).toBe("non_kontrak");
+    expect(p.jenis_up).toBe("tup");
+    expect(p.no_spby).toBe("SPBy-1");
+    expect(p.no_spm).toBe("02847T/621001/2024");
+  });
+});
+
+describe("dokumenSetelahGantiSifat", () => {
+  const ISI = { sifat: "", no_sp_spk: "SPK-1", jenis_up: "up",
+    no_spby: "SPBy-1", no_spp: "SPP-1", no_spm: "SPM-1", no_dokumen: "ND-1" };
+
+  test("berpindah ke kontrak membuang UP/TUP dan SPBy", () => {
+    const d = dokumenSetelahGantiSifat(ISI, "kontrak");
+    expect(d.jenis_up).toBe("");
+    expect(d.no_spby).toBe("");
+    expect(d.no_sp_spk).toBe("SPK-1");
+  });
+
+  test("berpindah ke non-kontrak membuang SP/SPK", () => {
+    const d = dokumenSetelahGantiSifat(ISI, "non_kontrak");
+    expect(d.no_sp_spk).toBe("");
+    expect(d.jenis_up).toBe("up");
+  });
+
+  test("kolom yang berlaku di KEDUA jalur tak pernah dibuang", () => {
+    for (const s of ["kontrak", "non_kontrak", ""]) {
+      const d = dokumenSetelahGantiSifat(ISI, s);
+      expect([d.no_spp, d.no_spm, d.no_dokumen]).toEqual(["SPP-1", "SPM-1", "ND-1"]);
+    }
+  });
+
+  test("kembali ke 'belum ditetapkan' tak membuang apa pun", () => {
+    // Operator yang ragu lalu mengosongkan pilihannya tak boleh kehilangan
+    // apa yang sudah diketiknya.
+    expect(dokumenSetelahGantiSifat(ISI, "")).toEqual({ ...ISI, sifat: "" });
   });
 });

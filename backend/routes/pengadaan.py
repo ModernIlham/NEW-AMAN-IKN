@@ -32,6 +32,9 @@ from pengadaan_utils import (
     snapshot_penganggaran, snapshot_ppk, validate_perolehan,
 )
 from pegawai_utils import PLACEHOLDER_IDENTITAS
+from pengadaan_dokumen import (
+    baris_dokumen, bersihkan_dokumen, validate_dokumen,
+)
 
 pengadaan_router = APIRouter()
 
@@ -69,6 +72,18 @@ class PerolehanIn(BaseModel):
     # PPK penanggung jawab komitmen. Kosong = resolusi otomatis dari Referensi
     # Pejabat menurut tanggal BAST (lihat `_ambil_snapshot_ppk`).
     ppk_pejabat_id: str = ""
+    # Dokumen pengadaan yang melekat pada register ini. `sifat` menentukan
+    # kolom mana yang berlaku — SP/SPK milik jalur kontrak, UP/TUP & SPBy
+    # milik jalur uang persediaan, dan keduanya TIDAK bertukar (lihat
+    # pengadaan_dokumen.py). Kosong = belum ditetapkan; register lama tak
+    # pernah dianggap bertentangan.
+    sifat: str = ""
+    no_sp_spk: str = ""
+    jenis_up: str = ""
+    no_spby: str = ""
+    no_spp: str = ""
+    no_spm: str = ""
+    no_dokumen: str = ""
     barang: list[BarangIn] = Field(min_length=1, max_length=100)
 
 
@@ -110,6 +125,18 @@ class PerolehanUbahIn(BaseModel):
     nomor_bast: str = Field(min_length=1)
     tanggal_bast: str = Field(min_length=10, max_length=10)
     keterangan: str = ""
+    # Dokumen pengadaan yang melekat pada register ini. `sifat` menentukan
+    # kolom mana yang berlaku — SP/SPK milik jalur kontrak, UP/TUP & SPBy
+    # milik jalur uang persediaan, dan keduanya TIDAK bertukar (lihat
+    # pengadaan_dokumen.py). Kosong = belum ditetapkan; register lama tak
+    # pernah dianggap bertentangan.
+    sifat: str = ""
+    no_sp_spk: str = ""
+    jenis_up: str = ""
+    no_spby: str = ""
+    no_spp: str = ""
+    no_spm: str = ""
+    no_dokumen: str = ""
     barang: list[BarangUbahIn] | None = Field(default=None, max_length=100)
 
 
@@ -418,7 +445,8 @@ async def buat_perolehan(payload: PerolehanIn, user: dict = Depends(require_writ
     from persediaan_utils import today_wib
     today_iso = today_wib()
     data = payload.model_dump()
-    errors = validate_perolehan(data, today_iso)
+    errors = (validate_perolehan(data, today_iso)
+              + validate_dokumen(data.get("sifat"), data))
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
     barang_rows = []
@@ -457,6 +485,8 @@ async def buat_perolehan(payload: PerolehanIn, user: dict = Depends(require_writ
         "nomor_bast": data["nomor_bast"].strip(),
         "tanggal_bast": data["tanggal_bast"].strip()[:10],
         "keterangan": str(data.get("keterangan") or "").strip(),
+        "sifat": str(data.get("sifat") or "").strip(),
+        **bersihkan_dokumen(data),
         **snap,
         **snap_ppk,
         # Checklist mulai kosong; BAST & kontrak otomatis tercentang bila
@@ -533,7 +563,8 @@ async def ubah_perolehan(perolehan_id: str, payload: PerolehanUbahIn,
             raise HTTPException(status_code=409, detail=(
                 f"{kunci['alasan']} (yang ditolak: {', '.join(berubah)})"))
 
-    errors = validate_perolehan({**data, "barang": barang_rows}, today_wib())
+    errors = (validate_perolehan({**data, "barang": barang_rows}, today_wib())
+              + validate_dokumen(data.get("sifat"), data))
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
 
@@ -542,6 +573,8 @@ async def ubah_perolehan(perolehan_id: str, payload: PerolehanUbahIn,
         "jenis": data["jenis"],
         "pihak": data["pihak"].strip(),
         "nomor_kontrak": str(data.get("nomor_kontrak") or "").strip(),
+        "sifat": str(data.get("sifat") or "").strip(),
+        **bersihkan_dokumen(data),
         "nomor_bast": data["nomor_bast"].strip(),
         "tanggal_bast": data["tanggal_bast"].strip()[:10],
         "keterangan": str(data.get("keterangan") or "").strip(),
@@ -1306,6 +1339,29 @@ async def bangun_bast_ppk_pdf(perolehan_id: str, _user: dict) -> bytes:
     for i, d in enumerate(dasar, 1):
         el.append(Paragraph(f"{i}. {d}", ket))
     el.append(Spacer(1, 1.5 * rl_mm))
+
+    # ── Dokumen pengadaan yang melekat pada register ini ──────────────────
+    # Dicetak SEBELUM Pasal 1 karena ia menerangkan dasar perolehannya —
+    # pembaca perlu tahu ini kontrak atau uang persediaan sebelum membaca
+    # barang apa yang diserahkan. Kolom kosong tidak dicetak: blok yang
+    # separuhnya bertanda hubung membuat pembaca menghitung apa yang tak ada
+    # alih-alih membaca apa yang ada.
+    _brs_dok = baris_dokumen(p.get("sifat"), p)
+    if _brs_dok:
+        el.append(Paragraph("<b>DASAR DAN DOKUMEN PENGADAAN</b>", lbl_pasal))
+        _t_dok = Table(
+            [[Paragraph(_esc(lbl), ket),
+              Paragraph(f": <b>{_esc(str(val))}</b>", ket)]
+             for lbl, val in _brs_dok],
+            colWidths=[110, doc.width - 110])
+        _t_dok.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+            ('TOPPADDING', (0, 0), (-1, -1), 0.5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0.5)]))
+        el.append(_t_dok)
+        el.append(Spacer(1, 1.5 * rl_mm))
 
     # PASAL 1 — objek serah terima: seluruh baris barang perolehan apa adanya
     # (aset maupun persediaan — pemilahan buku terjadi di pencatatan, bukan
