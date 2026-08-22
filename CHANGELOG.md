@@ -67,6 +67,48 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#909] Area tanda tangan sama tinggi di semua kolom — 2026-08-22
+
+Permintaan pemilik: *"benahi kolom tanda tangan agar mendapatkan area tanda
+tangan yang sama."*
+
+Blok tanda tangan sudah lama disusun sebagai tabel **tiga zona** (kepala /
+tanda tangan / nama) supaya baris nama dan NIP antar kolom selalu sejajar. Yang
+belum seragam **zona tengahnya sendiri**: bila kolom itu membawa spesimen tanda
+tangan digital, zona itu hanya berisi gambarnya — dan tinggi gambar mengikuti
+**rasio** tiap spesimen.
+
+Akibatnya kolom bertanda tangan lebar-pendek punya area pena jauh lebih tipis
+daripada kolom di sebelahnya yang tinggi, atau yang masih kosong dan memakai
+celah penuh. Baris namanya tetap sejajar — tabel tiga zona menjaganya — jadi
+cacat ini **tak terlihat dari mana pun kecuali dari dokumen tercetak**.
+
+Kini zona itu **selalu** setinggi `celah_mm`: gambar diperkecil agar muat
+dengan rasio terjaga, lalu sisa ruang di bawahnya diisi. Perhitungannya
+dipisah jadi `ukuran_zona_ttd(...)` yang murni dan teruji — satu invarian
+menjawab seluruh permintaannya: **tinggi gambar + sisa selalu setinggi zona**,
+apa pun rasio spesimennya.
+
+Gambar kecil **tidak** diperbesar (`min(..., 1.0)`): spesimen beresolusi kecil
+yang dipaksa melar akan tercetak pecah pada dokumen resmi.
+
+**Penjaga baru** (`backend/tests/unit/test_zona_ttd_seragam.py`, 13 uji),
+termasuk penjaga bahwa `_signature_block` benar-benar MEMAKAI helper itu dan
+benar-benar MENGISI sisanya — hitungan yang disalin ke dalam badan fungsi akan
+luput dari uji murninya, dan zona yang tak seragam tak terlihat dari mana pun
+kecuali dari kertas.
+
+Tiga mutasi dipasang lalu dibunuh: sisa ruang tak diisi, gambar kecil ikut
+diperbesar, dan sisa dihitung nol.
+
+### Sisa permintaan
+
+Setengah lagi dari permintaan yang sama — *"sudah aktif semua bisa memilih
+siapa saja yang menandatangani sesuai referensi pejabat yang sudah
+ditetapkan"* — menyusul sebagai PR tersendiri: pemilihan penanda tangan dari
+Referensi Pejabat sebagai **setelan satker yang bisa ditimpa per dokumen**,
+sesuai pilihan pemilik.
+
 ## [#908] Tabel LPB: bundel sumber per barang, berkelompok per bidang — 2026-08-22
 
 Permintaan pemilik: *"keterangan rekanan/penyedia, PPK dll yang menempel pada
