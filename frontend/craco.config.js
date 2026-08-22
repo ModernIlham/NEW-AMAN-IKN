@@ -4,7 +4,15 @@ require("dotenv").config();
 
 // Check if we're in development/preview mode (not production build)
 // Craco sets NODE_ENV=development for start, NODE_ENV=production for build
-const isDevServer = process.env.NODE_ENV !== "production";
+//
+// JEST DIKECUALIKAN. Instrumentasi visual-edits membungkus anak dinamis JSX
+// dalam <span>; di dalam <select> itu membuat <option> hasil map berhenti
+// menjadi anak langsung, sehingga (terukur di jsdom) `select.options` kosong
+// dan `select.value` tak bisa disetel. Build produksi tak pernah memuat plugin
+// ini — jadi uji yang memakainya menguji DOM yang tidak pernah ada, dan setiap
+// <select> berdaftar dinamis tampak gagal padahal benar (atau sebaliknya).
+const isDevServer = process.env.NODE_ENV !== "production"
+  && process.env.NODE_ENV !== "test";
 
 // Environment variable overrides
 const config = {

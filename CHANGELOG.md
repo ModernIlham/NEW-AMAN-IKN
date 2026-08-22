@@ -67,6 +67,39 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#911] Layar pemilih penanda tangan — Master Satker & saat menerbitkan LPB — 2026-08-22
+
+Pelunasan [#910]. Aturan tiga lapisnya sudah jalan, tetapi pilihannya hanya
+dapat disetel lewat API — sehingga permintaan pemilik *"sudah aktif semua bisa
+memilih siapa saja yang menandatagani sesuai referensi pejabat yang sudah
+ditetapkan"* belum benar-benar terpenuhi dari tombol mana pun.
+
+- **Master Satker → dialog profil** kini punya bagian *Penanda tangan dokumen*:
+  satu pemilih per slot, isinya pejabat satker itu (pejabat satker lain tidak
+  ditawarkan — cermin `_q_pejabat_satker` di server).
+- **Dialog "Terbitkan LPB Gabungan"** punya penimpa sekali pakai; kosong =
+  ikut setelan satker. Pilihannya dibekukan bersama LPB.
+- **Opsi kosong menerangkan akibatnya**, bukan berbunyi "— pilih —": ia
+  menyebut nama dari setelan satker bila ada, atau peran cadangannya di
+  Referensi Pejabat. Tanpa itu operator tak punya cara tahu siapa yang akan
+  menandatangani bila ia tak memilih apa-apa.
+- **Daftar slot dilayani `GET /pejabat/referensi`**, tidak disalin ke layar —
+  menambah slot di server tak akan meninggalkan layar dengan daftar lama.
+
+> **Jebakan yang ikut ditutup:** plugin *visual edits* (fitur dev-server) ternyata
+> ikut aktif saat `NODE_ENV=test` dan membungkus anak dinamis JSX dalam `<span>`.
+> Di dalam `<select>`, `<option>` hasil `map` berhenti menjadi anak langsung —
+> `select.options` kosong dan `select.value` tak bisa disetel. Artinya SETIAP uji
+> `<select>` berdaftar dinamis selama ini menguji DOM yang tak pernah ada di
+> build produksi. `craco.config.js` kini mengecualikan `test`; 98 suite / 1041
+> uji tetap hijau tanpa perubahan lain.
+
+> Menyimpan profil satker TANPA menyentuh pemilih tidak boleh menghapus pilihan
+> lama — dialognya harus ikut MEMBACA `penandatangan` yang tersimpan. Gejalanya
+> nihil bila terlewat: toast tetap berbunyi "tersimpan".
+
+---
+
 ## [#910] Penanda tangan dipilih dari Referensi Pejabat — tiga lapis — 2026-08-22
 
 Setengah kedua dari [#909]. Permintaan pemilik: *"…sudah aktif semua bisa
@@ -22707,7 +22740,7 @@ backlog di sesi pengembangan). Batch 1 = temuan prioritas TINGGI usaha kecil:
 
 - **Cegah kehilangan/kerusakan data offline saat muat ulang atau berpindah ke
   versi aplikasi yang lebih baru.** Selama masih ada antrian yang perlu
-  disinkronkan (pending atau macet), penutupan/​reload halaman kini ditahan
+  disinkronkan (pending atau macet), penutupan/reload halaman kini ditahan
   dengan dialog konfirmasi bawaan peramban (`beforeunload`) — pengguna tak lagi
   bisa tanpa sadar menutup aplikasi di tengah proses sinkron.
 - Antrian tulis offline sendiri **sudah aman**: persist di IndexedDB +
