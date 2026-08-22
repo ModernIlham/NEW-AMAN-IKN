@@ -1166,16 +1166,18 @@ async def bast_pdf(bast_id: str, nilai: str = "",
     # tinggi daripada BAST 6 barang di 2 bidang dan menembus halaman ketiga.
     # Maknanya TIDAK hilang saat dilepas: sub-sub kelompok adalah turunan
     # (lookup) kode barang yang tetap tercetak pada tiap baris.
-    _AMBANG_BARIS_SUBSUB = 6
+    # Ambang ini DIUKUR, bukan dikira-kira: dengan sub-sub kelompok tercetak
+    # pada tiap baris, BAST 13 aset lintas 5 bidang (18 baris) masih dua
+    # halaman; 14 aset (19 baris) menembus halaman ketiga. Muatan wajib mandat
+    # 12 aset karena itu SELALU membawa sub-sub kelompoknya.
+    #
+    # Sebelumnya ambangnya 6 baris — jauh lebih ketat daripada yang sebenarnya
+    # muat, sehingga BAST 6 aset satu bidang (7 baris) sudah kehilangan nama
+    # sub-sub kelompoknya sementara JUDUL KOLOMNYA tetap menjanjikannya.
+    # Itulah yang dilaporkan pemilik.
+    _AMBANG_BARIS_SUBSUB = 18
     from kodefikasi_utils import normalize_kode as _norm
     from pembukuan_utils import parse_harga as _ph
-    kepala = ["No", "Identitas Barang<br/>(Sub-sub Kelompok · Kode · NUP)",
-              "Uraian Barang<br/>(Nama · Merk/Tipe/Spesifikasi)", "Tahun",
-              "Kondisi"]
-    lebar = [24, 130, 168, 36, 50]
-    if tampil_nilai:
-        kepala.append("Nilai Perolehan (Rp)")
-        lebar.append(78)
     # Gaya SEL KHUSUS tabel BAST: sedikit lebih kecil & rapat dari gaya
     # laporan umum (8.5/11 → 7.8/9.6). Hanya berlaku pada tabel objek serah
     # terima dokumen ini — laporan lain tak tersentuh — dan inilah yang
@@ -1229,6 +1231,22 @@ async def bast_pdf(bast_id: str, nilai: str = "",
         _subsub = ({} if len(daftar) + len(_klp) > _AMBANG_BARIS_SUBSUB
                    else await _peta_subsub_kelompok(_kode))
         _uraian_bidang = await _peta_uraian_bidang(_kode)
+        # JUDUL kolom mengikuti isi tabel INI, bukan janji tetap. Judul yang
+        # menyebut "Sub-sub Kelompok" di atas kolom yang tak memuatnya membuat
+        # pembaca mengira datanya hilang — dan pada dokumen resmi, mengira
+        # data hilang sama buruknya dengan data yang benar-benar hilang.
+        # Dihitung di DALAM sini karena lampiran Surat Pernyataan memakai
+        # pembangun yang sama dengan daftar yang lebih pendek: satu tabel bisa
+        # memuat sub-sub sementara tabel lain di dokumen yang sama tidak.
+        kepala = ["No",
+                  ("Identitas Barang<br/>(Sub-sub Kelompok · Kode · NUP)"
+                   if _subsub else "Identitas Barang<br/>(Kode · NUP)"),
+                  "Uraian Barang<br/>(Nama · Merk/Tipe/Spesifikasi)", "Tahun",
+                  "Kondisi"]
+        lebar = [24, 130, 168, 36, 50]
+        if tampil_nilai:
+            kepala.append("Nilai Perolehan (Rp)")
+            lebar.append(78)
         data = [[Paragraph(h, st['TableHeader']) for h in kepala]]
         total_nilai = 0.0
         _baris_sekat, urut, i = [], {}, 0

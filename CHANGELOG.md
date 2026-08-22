@@ -67,6 +67,69 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#904] Nama sub-sub kelompok kembali tercetak, dan perkiraan nomor berhenti membeku — 2026-08-22
+
+Dua laporan pemilik, dua cacat yang berbeda sifatnya.
+
+### 1. Nama Sub-sub Kelompok tak ada di tabel objek BAST
+
+Tangkapan layar pemilik: judul kolomnya berbunyi **"Identitas Barang (Sub-sub
+Kelompok · Kode · NUP)"** tetapi selnya hanya memuat `3100102001 · NUP 1`.
+
+Sebabnya ambang. Nama sub-sub kelompok hanya dicetak bila tabel masih pendek —
+dulu **6 baris** — demi batas dua halaman. BAST pemilik berisi 6 aset dalam satu
+bidang = **7 baris**: lewat satu baris saja, dan namanya lenyap. Judul kolomnya
+tetap menjanjikannya, jadi pembaca mengira datanya hilang. Pada dokumen resmi,
+**mengira data hilang sama buruknya dengan data yang benar-benar hilang.**
+
+Ambangnya diukur ulang, bukan dikira-kira. Dengan sub-sub tercetak pada tiap
+baris:
+
+| Muatan | Halaman |
+|---|---|
+| 12 aset / 5 bidang (17 baris) | 2 |
+| 13 aset / 5 bidang (18 baris) | 2 |
+| 14 aset / 5 bidang (19 baris) | 3 |
+
+Ambang baru **18 baris**. Muatan wajib mandat 12 aset karena itu **selalu**
+membawa sub-sub kelompoknya. Ambang lama tiga kali lebih ketat daripada yang
+sebenarnya muat.
+
+Dan **judul kolom kini mengikuti isi tabelnya**: bila memang dilepas pada tabel
+yang sangat panjang, judulnya berhenti menjanjikan dan berbunyi
+"(Kode · NUP)". Judulnya dihitung **di dalam** pembangun tabel, bukan sekali di
+luar — lampiran Surat Pernyataan memakai pembangun yang sama dengan daftar yang
+lebih pendek, jadi satu tabel bisa memuat sub-sub sementara tabel lain di
+dokumen yang sama tidak.
+
+### 2. "Perkiraan nomor selalu 003, begitu pun yang backdate"
+
+Backend-nya tidak salah — diperiksa langsung: perkiraan maju 001 → 002 → 003 →
+004 mengikuti booking, dan sisipan maju .01 → .02 → .03. Yang membeku
+**kotaknya di layar**.
+
+Sekali tombol "Ubah nomor" ([#898]) ditekan, kotak isian terisi angka saat itu
+dan **berhenti mengikuti**. Deret agenda terus maju, tanggal surat berganti,
+sisipan dicentang — semuanya mengubah nomor yang AKAN terbit, sementara kotak
+itu tetap menunjukkan yang lama. Dan yang lama itulah yang terkirim: dibooking
+sebagai "nomor tulisan tangan" pada angka yang **sudah kedaluwarsa**.
+
+Kini kotak itu menyimpan **benih** — nomor perkiraan yang terakhir dituangkan ke
+dalamnya. Selama isinya masih sama persis dengan benihnya, berarti operator
+belum benar-benar mengetik apa pun, dan kotaknya **ikut perkiraan terbaru**.
+Begitu ia mengetik, isinya menyimpang dari benih dan kotak berhenti mengikuti —
+suntingan operator itu miliknya, perkiraan yang bergeser tak boleh
+menghapusnya.
+
+**Penjaga baru**: `backend/tests/unit/test_subsub_kelompok_bast.py` (7 uji,
+termasuk muatan persis dari tangkapan layar pemilik: 6 aset satu bidang) dan 4
+uji tambahan pada `nomorSuntingan.test.jsx` yang menggerakkan perkiraan di
+tengah penyuntingan.
+
+Lima mutasi dipasang lalu dibunuh: ambang dikembalikan ke 6, judul kolom selalu
+menjanjikan sub-sub, kotak berhenti mengikuti perkiraan (cacat aslinya), kotak
+mengikuti terus bahkan setelah diketik, dan tombol Ubah tak menanam benih.
+
 ## [#903] Satu penanda tangan, banyak pembubuhan — 2026-08-22
 
 Permintaan pemilik, langsung menunjuk akibat [#902]: *"pastikan TTD elektronik
