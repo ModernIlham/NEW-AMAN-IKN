@@ -67,6 +67,86 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#900] Penanggung jawab tambahan BAST: NIP/NIK, BMN yang melekat, dan sebuah tabel — 2026-08-22
+
+Permintaan pemilik: *"ketika memiliki penanggung jawab tambahan per
+unit/tempat/tugas, tambahkan informasi aset yang terceklist di aset yang
+diserahterimakan dan juga informasi di output PDF-nya di Pasal 2 …
+tambahkan informasi NIP/NIK penanggung jawabnya dan informasi barang apa saja
+yang melekat ke masing-masing penanggung jawabnya, buat dalam bentuk tabel agar
+lebih mudah dibaca dan dipahami, dan dibuat ser[api] dan seringkas mungkin
+hingga memaksimalkan kekosongan yang ada."*
+
+Sebelumnya seluruh daftar itu dirangkai menjadi **satu kalimat** di ekor Pasal 2:
+
+> Penanggung jawab pada unit/tempat tugas: Budi (Lantai 3); Sari (Gudang).
+
+Tanpa NIP/NIK — dokumen resmi menamai orang tanpa pengenal yang bisa
+diverifikasi — dan tanpa menyebut barang siapa yang mana. Padahal justru itu
+yang dicari orang saat membuka BAST setahun kemudian: **siapa memegang apa**.
+
+**Sekarang**: tiap penanggung jawab membawa NIP/NIK dan daftar BMN yang
+dipilih dari aset yang **sudah dicentang** untuk BAST itu, dan Pasal 2
+mencetaknya sebagai tabel:
+
+| No. | Nama | NIP/NIK | Unit/Tempat/Tugas | BMN (No. Pasal 1) |
+|---|---|---|---|---|
+
+Kolom BMN merujuk **nomor urut pada tabel Pasal 1** ("1, 4, 7"), bukan
+mengulang `kode·NUP — nama`. Bukan sekadar ringkas: satu penanggung jawab
+bermuatan lima barang akan memakan lima baris, dan naskah yang dibatasi dua
+halaman kehabisan ruang pada penanggung jawab kedua. Nomornya sudah tercetak di
+halaman yang sama, jadi rujukan sependek ini tak kehilangan satu pun informasi.
+Nomor itu diambil dari peta yang **direkam saat tabel Pasal 1 dicetak**, bukan
+dihitung ulang — menghitung ulang urutan pengelompokan bidang di tempat kedua
+adalah cara paling pasti melahirkan rujukan yang menunjuk barang yang salah
+tanpa satu pun galat.
+
+**Ruangnya tidak muncul dengan sendirinya.** Diukur dulu: pada muatan wajib 12
+aset, sisa ruang di kaki halaman kedua hanya **±25 pt** — tak cukup bahkan
+untuk kepala tabel plus satu baris, dan menambahkan tabel apa pun langsung
+menjadikannya tiga halaman. Ruangnya dibeli dengan dua hal:
+
+1. `KeepTogether` pasal dipersempit: yang wajib menyatu hanya **judul dengan
+   butir pertamanya**. Mengunci seluruh pasal justru mahal — satu pasal
+   berbutir panjang yang tak muat di sisa halaman melompat utuh ke halaman
+   berikutnya dan meninggalkan ruang kosong sebesar apa pun sisa itu.
+2. Tabel aset Pasal 1 dirapatkan **satu takik** (7,8 → 7,2 pt; padding 1,2 →
+   0,4) **hanya ketika** tabel penanggung jawab akan tercetak. Itu mendorong
+   satu butir Pasal 2 naik ke halaman pertama, dan ruang yang ditinggalkannya
+   di halaman kedua itulah tempat tabel penanggung jawab berdiri.
+
+Hasil terukur: **hingga 6 penanggung jawab** (dengan atau tanpa BMN) tetap muat
+dua halaman pada 12 aset. Angka itu dikunci uji, bukan diklaim.
+
+**Tiga aturan yang dijaga**, semuanya tentang dokumen yang dibaca orang lain:
+
+- Satu BMN hanya boleh melekat pada **satu** orang. Dua nama pada satu barang
+  membuat pertanyaan "siapa yang memegang ini" — pertanyaan yang justru dijawab
+  BAST — kembali tak terjawab. Daftar pilihan di layar tak menawarkan barang
+  yang sudah diambil orang lain, dan server menolaknya juga.
+- BMN yang **dicabut centangnya** ikut lepas dari penanggung jawabnya. Kalau
+  tidak, payload membawa aset di luar daftar dan server menolaknya dengan pesan
+  yang menunjuk tempat yang salah: operator diberi tahu penanggung jawabnya
+  bermasalah, padahal yang ia ubah daftar asetnya.
+- Baris **tanpa nama** tak pernah sampai ke kertas — formulir menyisakan baris
+  kosong tiap kali operator menekan "tambah" lalu berpindah pikiran.
+
+Kolom "BMN (No. Pasal 1)" hanya dipasang bila memang ada yang dilekatkan:
+kolom berisi tanda hubung dari atas ke bawah cuma memakan lebar yang bisa
+dipakai nama dan unit. BMN yang tak melekat pada siapa pun dinyatakan satu
+baris di bawah tabel — pembaca yang melihat 2 dari 12 barang berhak tahu ke
+mana 10 sisanya.
+
+**Penjaga baru**: `backend/tests/unit/test_pj_tambahan_tabel.py` (27 uji,
+termasuk enam kombinasi jumlah penanggung jawab × BMN yang menagih batas dua
+halaman) dan `frontend/src/lib/pjTambahan.test.js` (17 uji).
+
+Delapan mutasi dipasang lalu dibunuh — di antaranya: baris tanpa nama ikut
+tercetak, aturan satu-aset-satu-orang dicabut, rujukan nomor tak diurutkan,
+tabel aset tak jadi dirapatkan, dan daftar pilihan berhenti mengecualikan
+barang milik orang lain.
+
 ## [#899] Klasifikasi arsip bisa dipilih saat memesan nomor otomatis lintas modul — 2026-08-20
 
 Keluhan pemilik: *"pada setiap penomeran yang dilakukan di modul lain yang akan

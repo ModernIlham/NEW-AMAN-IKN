@@ -39,6 +39,7 @@ from fastapi import (APIRouter, Depends, File, Form, HTTPException, Request,
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from bast_pasal import validate_pj_tambahan
 from auth_utils import (
     require_user, require_user_or_query_token, require_writer,
 )
@@ -114,8 +115,22 @@ class PihakIn(BaseModel):
 
 
 class PjTambahanIn(BaseModel):
+    """Penanggung jawab tambahan pada BAST Operasional Unit/Tempat/Tugas.
+
+    `nip` dan `asset_ids` ditambahkan atas permintaan pemilik: tanpa keduanya,
+    Pasal 2 menamai orang tanpa pengenal yang bisa diverifikasi, dan tak
+    pernah menyebut barang mana yang menjadi tanggung jawab siapa — padahal
+    justru itu yang dicari orang saat membuka BAST setahun kemudian.
+    """
     nama: str = ""
+    # NIP (ASN) atau NIK (non-ASN) — satu kolom, karena dokumen ini dipakai
+    # keduanya dan memisahkannya hanya melahirkan kolom yang selalu kosong.
+    nip: str = ""
     unit_tempat_tugas: str = ""
+    # Bagian dari `asset_ids` BAST yang melekat pada orang ini. Bukan daftar
+    # bebas: divalidasi harus termasuk aset yang diserahterimakan, dan satu
+    # aset hanya boleh melekat pada satu orang.
+    asset_ids: List[str] = []
 
 
 class AlmarhumIn(BaseModel):
@@ -424,6 +439,11 @@ async def buat_bast(payload: BastIn, request: Request = None,
          "purchase_date": 1, "purchase_price": 1, "activity_id": 1,
          "photos": 1, "photo_gridfs_ids": 1, "thumbnail_index": 1},
     ).to_list(500)
+    _galat_pj = validate_pj_tambahan(
+        [p.model_dump() for p in (payload.penanggung_jawab_tambahan or [])],
+        payload.asset_ids)
+    if _galat_pj:
+        raise HTTPException(status_code=400, detail="; ".join(_galat_pj))
     if len(aset) != len(set(payload.asset_ids)):
         raise HTTPException(status_code=404,
                             detail="Sebagian aset tidak ditemukan/terhapus")
@@ -1155,12 +1175,23 @@ async def bast_pdf(bast_id: str, nilai: str = "",
     # terima dokumen ini — laporan lain tak tersentuh — dan inilah yang
     # membuat BAST ber-banyak aset tetap 2 halaman tanpa membuang kolom.
     st = dict(st)
+    # BAST yang membawa tabel penanggung jawab tambahan (Pasal 2) merapatkan
+    # tabel asetnya SATU TAKIK lagi. Alasannya diukur, bukan dikira-kira: pada
+    # muatan wajib 12 aset, sisa ruang di kaki halaman kedua hanya ~25 pt —
+    # tak cukup bahkan untuk kepala tabel plus satu baris. Merapatkan tabel
+    # aset mendorong satu butir Pasal 2 naik ke halaman pertama, dan ruang
+    # yang ditinggalkannya di halaman kedua itulah tempat tabel penanggung
+    # jawab berdiri. Inilah "memaksimalkan kekosongan yang ada" yang diminta.
+    _rapat_pj = bool(b.get("penanggung_jawab_tambahan"))
+    _ukuran_sel = 7.2 if _rapat_pj else 7.8
+    _leading_sel = 8.7 if _rapat_pj else 9.6
     for _k in ('Cell', 'CellCenter', 'CellRight'):
         if _k in st:
             st[_k] = ParagraphStyle(f'BastSel{_k}', parent=st[_k],
-                                    fontSize=7.8, leading=9.6)
+                                    fontSize=_ukuran_sel, leading=_leading_sel)
     st['TableHeader'] = ParagraphStyle('BastSelHead', parent=st['TableHeader'],
-                                       fontSize=7.8, leading=9.6)
+                                       fontSize=_ukuran_sel,
+                                       leading=_leading_sel)
     # Baris sekat kelompok bidang: satu baris pendek, tak boleh memakan ruang
     # sebesar baris barang (batas 2 halaman).
     st['CellSekat'] = ParagraphStyle('BastSekat', parent=st['Cell'],
@@ -1170,6 +1201,13 @@ async def bast_pdf(bast_id: str, nilai: str = "",
     _uraian_bidang = await _peta_uraian_bidang(
         [a.get("asset_code") for a in (b.get("aset") or [])])
     _baris_sekat = []
+    # Nomor urut SEBAGAIMANA TERCETAK, dipetakan dari id aset. Dipakai kolom
+    # "BMN yang melekat" pada tabel penanggung jawab (Pasal 2) supaya ia cukup
+    # menulis "1, 4, 7" alih-alih mengulang identitas barang. Direkam di sini,
+    # di dalam loop yang benar-benar mencetak nomornya — menghitung ulang
+    # urutan pengelompokan bidang di tempat kedua adalah cara paling pasti
+    # melahirkan rujukan yang menunjuk barang yang salah tanpa satu pun galat.
+    _urut_cetak = {}
     i = 0
     for _kode_bidang, _isi in _kelompok:
         _baris_sekat.append(len(data))
@@ -1178,6 +1216,7 @@ async def bast_pdf(bast_id: str, nilai: str = "",
                                         len(_isi), len(kepala), st))
         for a in _isi:
             i += 1
+            _urut_cetak[str(a.get("id") or "")] = i
             tgl = str(a.get("purchase_date") or "")
             tahun = tgl[:4] if len(tgl) >= 4 and tgl[:4].isdigit() else (
                 tgl[-4:] if len(tgl) >= 4 and tgl[-4:].isdigit() else "-")
@@ -1205,9 +1244,10 @@ async def bast_pdf(bast_id: str, nilai: str = "",
     t = Table(data, colWidths=_fit_col_widths(lebar, doc.width), repeatRows=1)
     # Padding baris dirapatkan KHUSUS tabel BAST (3 → 1.5) — tiap baris aset
     # hemat ~1,5 mm sehingga BAST ber-banyak aset tetap muat 2 halaman.
+    _pad_sel = 0.4 if _rapat_pj else 1.2
     t.setStyle(_std_table_style(zebra=True, total_row=tampil_nilai, extra=[
-        ('TOPPADDING', (0, 0), (-1, -1), 1.2),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 1.2),
+        ('TOPPADDING', (0, 0), (-1, -1), _pad_sel),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), _pad_sel),
     ] + _gaya_sekat_bidang(_baris_sekat, padding=0.3)))
     el.append(t)
     if not tampil_nilai:
@@ -1223,13 +1263,27 @@ async def bast_pdf(bast_id: str, nilai: str = "",
     from reportlab.platypus import KeepTogether
     nomor_pasal = 2
 
-    def pasal(judul, isi_list):
+    def pasal(judul, isi_list, tambahan=None):
+        """`tambahan`: flowable yang IKUT ke dalam KeepTogether pasal ini.
+
+        Ikut, bukan ditempel sesudahnya — tabel yang terpisah dari pasalnya
+        saat pecah halaman akan berdiri sendiri tanpa judul, dan pembaca
+        dokumen resmi tak punya cara tahu tabel itu milik pasal mana.
+        """
         nonlocal nomor_pasal
-        blok = [Paragraph(f"<b>PASAL {nomor_pasal} — {judul}</b>", lbl_pasal)]
-        for i, teks in enumerate(isi_list, 1):
-            blok.append(Paragraph(
-                (f"({i}) {teks}" if len(isi_list) > 1 else teks), isi))
-        el.append(KeepTogether(blok))
+        butir = [Paragraph((f"({i}) {teks}" if len(isi_list) > 1 else teks), isi)
+                 for i, teks in enumerate(isi_list, 1)]
+        # Yang WAJIB menyatu hanya judul dengan butir PERTAMANYA — judul pasal
+        # yang yatim di kaki halaman memang tak boleh terjadi. Mengunci
+        # SELURUH pasal justru mahal: satu pasal berbutir panjang yang tak
+        # muat di sisa halaman melompat utuh ke halaman berikutnya dan
+        # meninggalkan ruang kosong sebesar apa pun sisa itu. Pada naskah yang
+        # dibatasi dua halaman, ruang terbuang itulah yang lebih dulu habis.
+        el.append(KeepTogether(
+            [Paragraph(f"<b>PASAL {nomor_pasal} — {judul}</b>", lbl_pasal)]
+            + butir[:1]))
+        el.extend(butir[1:])
+        el.extend(tambahan or [])
         nomor_pasal += 1
 
     jenis = b.get("jenis")
@@ -1238,8 +1292,11 @@ async def bast_pdf(bast_id: str, nilai: str = "",
     # barang, tanggung jawab per jenis, status pencatatan, jangka waktu, dan
     # konteks waktu penggunaan. Isi hukumnya utuh; yang dibuang hanya
     # pengulangan — syarat agar seluruh naskah muat 2 halaman.
-    from bast_pasal import butir_khusus_bidang, butir_risiko, butir_waktu, sisa_bidang
+    from bast_pasal import (baris_pj_tambahan, bmn_tanpa_pj, butir_khusus_bidang,
+                            butir_risiko, butir_waktu, rujukan_pasal1,
+                            sisa_bidang)
 
+    _pj_baris = []
     tj = ["Serah terima meliputi fisik barang beserta kelengkapan/dokumen "
           "pendukungnya dalam keadaan sebagaimana kolom Kondisi pada Pasal 1, "
           "yang telah diperiksa bersama oleh PARA PIHAK sebelum Berita Acara "
@@ -1252,9 +1309,11 @@ async def bast_pdf(bast_id: str, nilai: str = "",
             "Negara pada satuan kerja dan mutasi ini hanya mengubah "
             "pencatatan pemegang pada daftar barang/DBR/KIB.")
     elif jenis == "operasional_unit":
-        pj = "; ".join(
-            f"{_esc(str(p.get('nama') or '-'))} ({_esc(str(p.get('unit_tempat_tugas') or '-'))})"
-            for p in (b.get("penanggung_jawab_tambahan") or []))
+        # Dulu daftar penanggung jawab dirangkai jadi ekor kalimat ini —
+        # tanpa NIP/NIK dan tanpa menyebut barang siapa yang mana. Kini ia
+        # tabel tersendiri (dirakit di bawah, ikut ke dalam pasal yang sama).
+        _pj_baris = baris_pj_tambahan(b.get("penanggung_jawab_tambahan"),
+                                      b.get("aset"))
         tj.append(
             "Terhitung sejak penandatanganan, PIHAK KEDUA selaku penanggung "
             "jawab unit bertanggung jawab atas penggunaan, pengamanan, dan "
@@ -1262,7 +1321,9 @@ async def bast_pdf(bast_id: str, nilai: str = "",
             "unit/tempat kerja, pemakaian bergilir diatur PIHAK KEDUA dengan "
             "kejelasan penguasa barang pada satu waktu, dan pergantian "
             "penanggung jawab dilakukan melalui serah terima baru."
-            + (f" Penanggung jawab pada unit/tempat tugas: {pj}." if pj else ""))
+            + (" Penanggung jawab pada unit/tempat tugas beserta BMN yang "
+               "melekat padanya tercantum dalam tabel berikut."
+               if _pj_baris else ""))
     elif jenis == "penggunaan_sementara":
         tj.append(
             "Penggunaan sementara TIDAK mengalihkan status penggunaan — BMN "
@@ -1293,7 +1354,67 @@ async def bast_pdf(bast_id: str, nilai: str = "",
             "membebani, atau mengalihkan BMN kepada pihak lain tanpa "
             "persetujuan tertulis PIHAK KESATU.")
     tj.extend(butir_waktu(jenis))
+
+    # ── Tabel penanggung jawab tambahan (khusus operasional unit) ──────────
+    # Dirakit di sini supaya ikut MASUK ke dalam KeepTogether pasalnya. Gaya
+    # selnya meminjam gaya sel BAST yang sudah dirapatkan untuk Pasal 1 —
+    # naskah ini dibatasi dua halaman, dan tabel kedua dengan gaya laporan
+    # umum akan memakan jatah baris tabel asetnya.
+    _tabel_pj = []
+    if jenis == "operasional_unit" and _pj_baris:
+        # Sel tabel ini LEBIH RAPAT lagi daripada tabel aset (7,8 → 7,2).
+        # Isinya nama, nomor, dan lokasi — pendek-pendek — sementara jatah
+        # halamannya sisa dari tabel aset yang mana pun besarnya. Merapatkan
+        # di sini jauh lebih murah daripada memotong barisnya.
+        st_pj = ParagraphStyle('BastPjSel', parent=st['Cell'],
+                               fontSize=7.2, leading=8.6)
+        st_pj_c = ParagraphStyle('BastPjSelC', parent=st['CellCenter'],
+                                 fontSize=7.2, leading=8.6)
+        st_pj_h = ParagraphStyle('BastPjHead', parent=st['TableHeader'],
+                                 fontSize=7.2, leading=8.6)
+        # Kolom BMN hanya dipasang bila memang ADA yang dilekatkan. Kolom
+        # berisi tanda hubung dari atas ke bawah cuma memakan lebar yang bisa
+        # dipakai nama dan unit — inilah "memaksimalkan kekosongan yang ada".
+        _ada_bmn = any(r["aset"] for r in _pj_baris)
+        _kepala_pj = ["No.", "Nama", "NIP/NIK", "Unit/Tempat/Tugas"]
+        _lebar_pj = [20, 120, 90, 130]
+        if _ada_bmn:
+            _kepala_pj.append("BMN (No. Pasal 1)")
+            _lebar_pj = [20, 108, 84, 110, 78]
+        _data_pj = [[Paragraph(h, st_pj_h) for h in _kepala_pj]]
+        for r in _pj_baris:
+            baris_pj = [
+                Paragraph(str(r["no"]), st_pj_c),
+                Paragraph(_esc(r["nama"]), st_pj),
+                Paragraph(_esc(r["nip"]), st_pj_c),
+                Paragraph(_esc(r["unit"]), st_pj),
+            ]
+            if _ada_bmn:
+                baris_pj.append(Paragraph(
+                    _esc(rujukan_pasal1(r["aset"], _urut_cetak)) or "—",
+                    st_pj_c))
+            _data_pj.append(baris_pj)
+        _t_pj = Table(_data_pj, colWidths=_fit_col_widths(_lebar_pj, doc.width),
+                      repeatRows=1)
+        _t_pj.setStyle(_std_table_style(zebra=True, extra=[
+            ('TOPPADDING', (0, 0), (-1, -1), 1),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+        ]))
+        _tabel_pj.append(_t_pj)
+        _sisa_bmn = (bmn_tanpa_pj(b.get("penanggung_jawab_tambahan"),
+                                  b.get("aset")) if _ada_bmn else [])
+        if _sisa_bmn:
+            # Hanya bermakna bila SEBAGIAN barang memang dilekatkan: pembaca
+            # yang melihat 3 dari 10 barang di tabel akan menduga-duga ke mana
+            # 7 sisanya. Bila tak satu pun dilekatkan, kalimat ini hanya
+            # mengulang isi pasal di atasnya — dan mengulang berarti membuang
+            # baris pada naskah yang dibatasi dua halaman.
+            _tabel_pj.append(Paragraph(
+                f"{len(_sisa_bmn)} BMN Pasal 1 lainnya: tanggung jawab PIHAK "
+                "KEDUA.", ket))
     pasal("TANGGUNG JAWAB DAN PENGGUNAAN", tj)
+    if _tabel_pj:
+        el.append(KeepTogether(_tabel_pj))
 
     # ── PASAL 3 — KETENTUAN KHUSUS SESUAI JENIS BARANG ─────────────────────
     # SATU pasal berisi satu butir per BIDANG kode barang (dulu satu pasal

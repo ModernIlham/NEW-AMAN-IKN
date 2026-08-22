@@ -22,6 +22,9 @@ import { authMediaUrl } from "@/lib/mediaUrl";
 import { WARNA_CHIP, kelasChipStatus } from "@/lib/chipStatus";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 import PerkiraanNomor from "@/components/persuratan/PerkiraanNomor";
+import {
+  asetTersedia, labelAset, payloadPj, pjKosong, selaraskanAset,
+} from "@/lib/pjTambahan";
 import KartuTapDialog from "@/components/pegawai/KartuTapDialog";
 import { bagikanWa, bagikanEmail, hasilTtd } from "@/lib/pesanTtd";
 
@@ -347,7 +350,7 @@ export default function PenggunaanPage({ user, onBack }) {
         penyerah_atas_nama_kpb: f.jenis !== "mutasi_pengguna" && !!f.penyerah?.atas_nama_kpb,
         nomor: f.nomor, tanggal: f.tanggal, jangka_dari: f.jangka_dari,
         jangka_sampai: f.jangka_sampai,
-        penanggung_jawab_tambahan: f.pj_tambahan.filter((x) => x.nama.trim()),
+        penanggung_jawab_tambahan: payloadPj(f.pj_tambahan),
         ...(f.jenis === "pengembalian_almarhum"
           ? { almarhum: f.almarhum,
               saksi: (f.saksi || []).filter((x) => (x.nama || "").trim()) }
@@ -411,7 +414,8 @@ export default function PenggunaanPage({ user, onBack }) {
             jabatan: b.pihak_pertama?.jabatan || "",
             atas_nama_kpb: !!b.penyerah_atas_nama_kpb },
       alamat_pihak1: b.pihak_pertama?.alamat || "",
-      pj_tambahan: (b.penanggung_jawab_tambahan || []).map((x) => ({ ...x })),
+      pj_tambahan: (b.penanggung_jawab_tambahan || []).map(
+        (x) => ({ ...pjKosong(), ...x })),
       almarhum: { ...(b.almarhum || { nama: "", nip: "", tanggal_meninggal: "", nomor_akta_kematian: "" }) },
       saksi: (b.saksi?.length ? b.saksi.map((x) => ({ ...x }))
         : [{ nama: "", jabatan: "", nip: "" }, { nama: "", jabatan: "", nip: "" }]),
@@ -2260,16 +2264,64 @@ export default function PenggunaanPage({ user, onBack }) {
               {formBast.jenis === "operasional_unit" && (
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium block">Penanggung jawab tambahan per unit/tempat/tugas (opsional)</label>
-                  {formBast.pj_tambahan.map((pj, i) => (
-                    <div key={i} className="flex gap-2">
-                      <Input value={pj.nama} placeholder="Nama" onChange={(e) => setFormBast((f) => ({ ...f, pj_tambahan: f.pj_tambahan.map((x, j) => j === i ? { ...x, nama: e.target.value } : x) }))} />
-                      <Input value={pj.unit_tempat_tugas} placeholder="Unit/tempat/tugas" onChange={(e) => setFormBast((f) => ({ ...f, pj_tambahan: f.pj_tambahan.map((x, j) => j === i ? { ...x, unit_tempat_tugas: e.target.value } : x) }))} />
-                      <button type="button" className="p-1.5 rounded text-red-500 hover:bg-red-500/10 min-w-0 min-h-0" aria-label="Hapus baris"
-                        onClick={() => setFormBast((f) => ({ ...f, pj_tambahan: f.pj_tambahan.filter((_, j) => j !== i) }))}><X className="w-3.5 h-3.5" /></button>
-                    </div>
-                  ))}
+                  {formBast.pj_tambahan.map((pj, i) => {
+                    const ubah = (k, v) => setFormBast((f) => ({ ...f, pj_tambahan: f.pj_tambahan.map((x, j) => j === i ? { ...x, [k]: v } : x) }));
+                    const melekat = (pj.asset_ids || [])
+                      .map((id) => (detail?.rows || []).find((a) => a.id === id))
+                      .filter(Boolean);
+                    const tersedia = asetTersedia(detail?.rows, formBast.aset, formBast.pj_tambahan, i);
+                    return (
+                      <div key={i} className="rounded-lg border border-border p-2 space-y-1.5"
+                        data-testid={`bast-pj-${i}`}>
+                        <div className="flex gap-2">
+                          <Input value={pj.nama} placeholder="Nama" data-testid={`bast-pj-nama-${i}`}
+                            onChange={(e) => ubah("nama", e.target.value)} />
+                          <Input value={pj.nip || ""} placeholder="NIP/NIK" className="font-mono w-40"
+                            data-testid={`bast-pj-nip-${i}`}
+                            onChange={(e) => ubah("nip", e.target.value)} />
+                          <button type="button" className="p-1.5 rounded text-red-500 hover:bg-red-500/10 min-w-0 min-h-0" aria-label={`Hapus penanggung jawab ${i + 1}`}
+                            data-testid={`bast-pj-hapus-${i}`}
+                            onClick={() => setFormBast((f) => ({ ...f, pj_tambahan: f.pj_tambahan.filter((_, j) => j !== i) }))}><X className="w-3.5 h-3.5" /></button>
+                        </div>
+                        <Input value={pj.unit_tempat_tugas} placeholder="Unit/tempat/tugas"
+                          data-testid={`bast-pj-unit-${i}`}
+                          onChange={(e) => ubah("unit_tempat_tugas", e.target.value)} />
+                        {/* BMN yang melekat — hanya dari aset yang SUDAH
+                            dicentang di bawah, dan yang belum diambil
+                            penanggung jawab lain. Satu barang satu orang. */}
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="text-[10px] text-muted-foreground">BMN yang melekat:</span>
+                          {melekat.map((a) => (
+                            <span key={a.id} className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded border border-border bg-muted/50"
+                              data-testid={`bast-pj-${i}-aset-${a.id}`}>
+                              {labelAset(a)}
+                              <button type="button" aria-label={`Lepas ${a.asset_name || a.id}`}
+                                className="text-red-500 min-w-0 min-h-0"
+                                onClick={() => ubah("asset_ids", (pj.asset_ids || []).filter((x) => x !== a.id))}>
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                          {melekat.length === 0 && (
+                            <span className="text-[10px] text-muted-foreground">— belum ada</span>
+                          )}
+                          {tersedia.length > 0 && (
+                            <select value="" data-testid={`bast-pj-pilih-aset-${i}`}
+                              className="h-6 rounded border border-input bg-background px-1 text-[10px] min-h-0"
+                              onChange={(e) => { if (e.target.value) ubah("asset_ids", [...(pj.asset_ids || []), e.target.value]); }}>
+                              <option value="">+ lekatkan BMN…</option>
+                              {tersedia.map((a) => (
+                                <option key={a.id} value={a.id}>{labelAset(a)}</option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                   <Button size="sm" variant="outline" className="h-7 text-[11px]"
-                    onClick={() => setFormBast((f) => ({ ...f, pj_tambahan: [...f.pj_tambahan, { nama: "", unit_tempat_tugas: "" }] }))}>
+                    data-testid="bast-pj-tambah"
+                    onClick={() => setFormBast((f) => ({ ...f, pj_tambahan: [...f.pj_tambahan, pjKosong()] }))}>
                     <Plus className="w-3 h-3 mr-1" />Tambah penanggung jawab
                   </Button>
                 </div>
@@ -2280,7 +2332,15 @@ export default function PenggunaanPage({ user, onBack }) {
                   {(detail?.rows || []).map((a) => (
                     <label key={a.id} className="flex items-center gap-2 px-2.5 py-1.5 text-xs cursor-pointer hover:bg-muted">
                       <input type="checkbox" checked={formBast.aset.has(a.id)} className="w-3.5 h-3.5"
-                        onChange={(e) => setFormBast((f) => { const s = new Set(f.aset); if (e.target.checked) s.add(a.id); else s.delete(a.id); return { ...f, aset: s }; })} />
+                        onChange={(e) => setFormBast((f) => {
+                          const s = new Set(f.aset);
+                          if (e.target.checked) s.add(a.id); else s.delete(a.id);
+                          // Aset yang dicabut harus ikut lepas dari penanggung
+                          // jawabnya — kalau tidak, payload membawa aset di luar
+                          // daftar dan server menolaknya dengan pesan yang
+                          // menunjuk tempat yang salah.
+                          return { ...f, aset: s, pj_tambahan: selaraskanAset(f.pj_tambahan, s) };
+                        })} />
                       <span className="font-mono">{a.asset_code}·{a.NUP}</span>
                       <span className="truncate flex-1">{a.asset_name}</span>
                     </label>
