@@ -167,6 +167,16 @@ class BastIn(BaseModel):
     terapkan_ke_aset: Optional[bool] = False
     # Pesan nomor otomatis dari Registrasi Persuratan (tercatat di buku
     # agenda berstatus dibooking).
+    # Kode klasifikasi arsip PILIHAN OPERATOR untuk dokumen ini.
+    #
+    # Keluhan pemilik: *"ketika buat BAST dan klik nomor otomatis dari
+    # registrasi persuratan, bagian klasifikasi arsip tidak ada dan tidak ada
+    # pilihan memilih klasifikasi arsip yang ada"*. Memang: jalur otomatis
+    # lintas modul hanya pernah punya SATU sumber kode — aturan pemetaan
+    # (modul + jenis naskah). Tak ada aturan yang cocok berarti slot
+    # {kode_klasifikasi} pada nomor terbit KOSONG, tanpa satu pun galat, dan
+    # tanpa cara memperbaikinya dari layar tempat dokumennya dibuat.
+    kode_klasifikasi: str = ""
     booking_otomatis: Optional[bool] = False
     # ── REVISI BAST (mandat SURAT-3C) ──────────────────────────────────────
     # BAST yang sudah sah TIDAK PERNAH diedit: revisi = BAST BARU bernomor
@@ -508,8 +518,9 @@ async def buat_bast(payload: BastIn, request: Request = None,
                      or now.date().isoformat())
         _ks = ks_efektif
         atur = await _pengaturan(_ks)
-        kode_klas = pilih_klasifikasi(atur["peta_klasifikasi"], "penggunaan",
-                                      "Berita Acara")
+        kode_klas = pilih_klasifikasi(
+            atur["peta_klasifikasi"], "penggunaan", "Berita Acara",
+            eksplisit=payload.kode_klasifikasi)
         tahun = int(tgl_surat[:4]) if tgl_surat[:4].isdigit() else now.year
         periode = (periode_urut(atur.get("reset_urut"), tgl_surat)
                    or periode_urut(atur.get("reset_urut"),

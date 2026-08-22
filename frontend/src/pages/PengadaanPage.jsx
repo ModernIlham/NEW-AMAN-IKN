@@ -263,6 +263,7 @@ export default function PengadaanPage({ user, onBack }) {
       const r = await axios.post(`${API}/pengadaan/${draftAset.perolehan.id}/catat-semua`, {
         activity_id: draftAset.activityId,
         booking_nomor: draftAset.bookingNomor !== false,
+        kode_klasifikasi: draftAset.kodeKlasifikasi || "",
       });
       const d = r.data || {};
       const bagian = [];
@@ -399,7 +400,8 @@ export default function PengadaanPage({ user, onBack }) {
     if (!ids.length) { toast.error("Pilih minimal satu perolehan"); return; }
     setLpbGab((g) => ({ ...g, saving: true }));
     try {
-      const r = await axios.post(`${API}/pengadaan/lpb-gabungan`, { perolehan_ids: ids });
+      const r = await axios.post(`${API}/pengadaan/lpb-gabungan`, {
+        perolehan_ids: ids, kode_klasifikasi: lpbGab?.kodeKlasifikasi || "" });
       const d = r.data || {};
       toast.success(`LPB gabungan terbit${d.nomor ? `: ${d.nomor}` : ""}`);
       setLpbGab(null);
@@ -1167,6 +1169,8 @@ export default function PengadaanPage({ user, onBack }) {
                 <PerkiraanNomor aktif={draftAset.bookingNomor !== false}
                   modul="persediaan" jenisNaskah="Laporan"
                   tanggal={draftAset?.perolehan?.tanggal_bast || ""}
+                  klasifikasi={draftAset.kodeKlasifikasi || ""}
+                  onKlasifikasi={(v) => setDraftAset((d) => ({ ...d, kodeKlasifikasi: v }))}
                   testId="pengadaan-catat-perkiraan-nomor" />
               </div>
             );
@@ -1370,6 +1374,8 @@ export default function PengadaanPage({ user, onBack }) {
               hari ini — parameter pratinjau harus identik. */}
           <PerkiraanNomor aktif={!!lpbGab && Object.values(lpbGab?.pilih || {}).some(Boolean)}
             modul="persediaan" jenisNaskah="Laporan"
+            klasifikasi={lpbGab?.kodeKlasifikasi || ""}
+            onKlasifikasi={(v) => setLpbGab((g) => ({ ...g, kodeKlasifikasi: v }))}
             testId="lpb-gabungan-perkiraan-nomor" />
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setLpbGab(null)}>Batal</Button>

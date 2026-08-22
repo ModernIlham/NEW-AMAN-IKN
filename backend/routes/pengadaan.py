@@ -825,6 +825,17 @@ class CatatSemuaIn(BaseModel):
     # karena baru diketahui setelah barangnya dipilah).
     activity_id: str = ""
     booking_nomor: bool = True               # terbitkan nomor LPB dari Persuratan
+    # Kode klasifikasi arsip PILIHAN OPERATOR untuk dokumen ini.
+    #
+    # Keluhan pemilik: *"ketika buat BAST dan klik nomor otomatis dari
+    # registrasi persuratan, bagian klasifikasi arsip tidak ada dan tidak ada
+    # pilihan memilih klasifikasi arsip yang ada"*. Memang: jalur otomatis
+    # lintas modul hanya pernah punya SATU sumber kode — aturan pemetaan
+    # (modul + jenis naskah). Tak ada aturan yang cocok berarti slot
+    # {kode_klasifikasi} pada nomor terbit KOSONG, tanpa satu pun galat, dan
+    # tanpa cara memperbaikinya dari layar tempat dokumennya dibuat.
+    kode_klasifikasi: str = ""
+
 
 
 @pengadaan_router.post("/pengadaan/{perolehan_id}/catat-semua")
@@ -890,7 +901,8 @@ async def catat_semua_barang(perolehan_id: str, payload: CatatSemuaIn,
                          f"{p.get('nomor_bast') or ''}".strip()),
                 tujuan=str(p.get("pihak") or "").strip(),
                 keterangan=f"booking otomatis dari pencatatan BAST {p.get('nomor_bast') or '-'}",
-                kode_satker=ks_dok)
+                kode_satker=ks_dok,
+                kode_klasifikasi=payload.kode_klasifikasi)
         lpb_id = str(uuid.uuid4())
         await db.lpb.insert_one({
             "id": lpb_id, "nomor": nomor_lpb, "surat_id": surat_id,
@@ -1023,6 +1035,17 @@ def _tgl_iso_atau_hari_ini(v: str) -> str:
 class BastPpkIn(BaseModel):
     tanggal: str = ""                  # default hari ini (YYYY-MM-DD)
     booking_nomor: bool = True         # pesan nomor Berita Acara (Persuratan)
+    # Kode klasifikasi arsip PILIHAN OPERATOR untuk dokumen ini.
+    #
+    # Keluhan pemilik: *"ketika buat BAST dan klik nomor otomatis dari
+    # registrasi persuratan, bagian klasifikasi arsip tidak ada dan tidak ada
+    # pilihan memilih klasifikasi arsip yang ada"*. Memang: jalur otomatis
+    # lintas modul hanya pernah punya SATU sumber kode — aturan pemetaan
+    # (modul + jenis naskah). Tak ada aturan yang cocok berarti slot
+    # {kode_klasifikasi} pada nomor terbit KOSONG, tanpa satu pun galat, dan
+    # tanpa cara memperbaikinya dari layar tempat dokumennya dibuat.
+    kode_klasifikasi: str = ""
+
 
 
 @pengadaan_router.post("/pengadaan/{perolehan_id}/bast-ppk-kpb")
@@ -1070,8 +1093,9 @@ async def terbitkan_bast_ppk_kpb(perolehan_id: str, payload: BastPpkIn,
         from persuratan_utils import bangun_nomor, periode_urut, pilih_klasifikasi
         from routes.persuratan import _no_agenda_berikut, _pengaturan
         atur = await _pengaturan(kode)
-        kode_klas = pilih_klasifikasi(atur["peta_klasifikasi"], "pengadaan",
-                                      "Berita Acara")
+        kode_klas = pilih_klasifikasi(
+            atur["peta_klasifikasi"], "pengadaan", "Berita Acara",
+            eksplisit=payload.kode_klasifikasi)
         tahun = int(tgl[:4]) if tgl[:4].isdigit() else now.year
         periode = (periode_urut(atur.get("reset_urut"), tgl)
                    or periode_urut(atur.get("reset_urut"),
@@ -1398,6 +1422,17 @@ class LpbGabunganIn(BaseModel):
     perolehan_ids: list[str] = Field(min_length=1, max_length=100)
     tanggal: str = ""                  # default hari ini
     booking_nomor: bool = True
+    # Kode klasifikasi arsip PILIHAN OPERATOR untuk dokumen ini.
+    #
+    # Keluhan pemilik: *"ketika buat BAST dan klik nomor otomatis dari
+    # registrasi persuratan, bagian klasifikasi arsip tidak ada dan tidak ada
+    # pilihan memilih klasifikasi arsip yang ada"*. Memang: jalur otomatis
+    # lintas modul hanya pernah punya SATU sumber kode — aturan pemetaan
+    # (modul + jenis naskah). Tak ada aturan yang cocok berarti slot
+    # {kode_klasifikasi} pada nomor terbit KOSONG, tanpa satu pun galat, dan
+    # tanpa cara memperbaikinya dari layar tempat dokumennya dibuat.
+    kode_klasifikasi: str = ""
+
 
 
 @pengadaan_router.post("/pengadaan/lpb-gabungan")
@@ -1463,7 +1498,8 @@ async def buat_lpb_gabungan(payload: LpbGabunganIn,
                      f"{len(rows)} BAST PPK-KPB"),
             tujuan="",
             keterangan="booking otomatis dari LPB gabungan Pengadaan",
-            kode_satker=ks_dok)
+            kode_satker=ks_dok,
+            kode_klasifikasi=payload.kode_klasifikasi)
 
     # PPK di header LPB: satu nama bila seragam; beberapa nama digabung tanpa
     # NIP (baris NIP hanya bermakna untuk satu orang).

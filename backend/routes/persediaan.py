@@ -1171,6 +1171,16 @@ class TransaksiMassalIn(BaseModel):
     keterangan: str = ""
     # Nomor LPB otomatis dari Registrasi Persuratan bila no_bukti kosong
     # (arah masuk; tercatat di buku agenda berstatus dibooking).
+    # Kode klasifikasi arsip PILIHAN OPERATOR untuk dokumen ini.
+    #
+    # Keluhan pemilik: *"ketika buat BAST dan klik nomor otomatis dari
+    # registrasi persuratan, bagian klasifikasi arsip tidak ada dan tidak ada
+    # pilihan memilih klasifikasi arsip yang ada"*. Memang: jalur otomatis
+    # lintas modul hanya pernah punya SATU sumber kode — aturan pemetaan
+    # (modul + jenis naskah). Tak ada aturan yang cocok berarti slot
+    # {kode_klasifikasi} pada nomor terbit KOSONG, tanpa satu pun galat, dan
+    # tanpa cara memperbaikinya dari layar tempat dokumennya dibuat.
+    kode_klasifikasi: str = ""
     booking_otomatis: bool = False
     items: list[ItemMassalIn] = Field(min_length=1, max_length=100)
 
@@ -1212,7 +1222,8 @@ async def transaksi_massal(payload: TransaksiMassalIn,
             user, payload.tgl_dokumen,
             perihal=f"Laporan Penerimaan Barang (LPB) — {payload.jenis}",
             tujuan=str(payload.penyedia or "").strip(),
-            keterangan="booking otomatis dari transaksi massal")
+            keterangan="booking otomatis dari transaksi massal",
+            kode_klasifikasi=payload.kode_klasifikasi)
 
     hasil = []
     for it in payload.items:
