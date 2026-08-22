@@ -245,3 +245,153 @@ def sisa_bidang(kode_list, maks: int = 4):
 def nama_bidang_terpakai(kode_list):
     """Nama bidang (manusiawi) yang aturannya terpakai — terurut, unik."""
     return [nama for nama, _ in _terpilih(kode_list).values()]
+
+
+# ── PENANGGUNG JAWAB TAMBAHAN (BAST Operasional Unit/Tempat/Tugas) ───────────
+#
+# Permintaan pemilik: *"ketika memiliki penanggung jawab tambahan per
+# unit/tempat/tugas, tambahkan informasi aset yang terceklist di aset yang
+# diserahterimakan dan juga informasi di output PDF-nya di Pasal 2… tambahkan
+# informasi NIP/NIK penanggung jawabnya dan informasi barang apa saja yang
+# melekat ke masing-masing penanggung jawabnya, buat dalam bentuk tabel agar
+# lebih mudah dibaca dan dipahami."*
+#
+# Sebelumnya keduanya dirangkai menjadi SATU KALIMAT di dalam pasal:
+#
+#   "Penanggung jawab pada unit/tempat tugas: Budi (Lantai 3); Sari (Gudang)."
+#
+# Kalimat itu tak menyebut NIP/NIK sama sekali — jadi dokumen resmi menamai
+# orang tanpa pengenal yang bisa diverifikasi — dan tak menyebut barang mana
+# yang menjadi tanggung jawab siapa. Padahal justru itu yang dicari orang saat
+# membuka BAST setahun kemudian: siapa memegang apa.
+MAKS_PJ_TAMBAHAN = 30
+
+
+def label_bmn(a) -> str:
+    """`kode·NUP — nama` untuk kolom BMN pada tabel penanggung jawab.
+
+    Kode dan NUP dirapatkan dengan '·' (bukan spasi) supaya satu identitas
+    barang tak pernah patah menjadi dua baris di kolom sempit — BAST dibatasi
+    dua halaman, dan tiap baris yang patah memakan jatah baris berikutnya.
+    """
+    a = a or {}
+    kode = str(a.get("asset_code") or "").strip()
+    nup = str(a.get("NUP") or "").strip()
+    nama = str(a.get("asset_name") or "").strip()
+    kiri = "·".join(x for x in (kode, nup) if x)
+    return " — ".join(x for x in (kiri, nama) if x) or "-"
+
+
+def _peta_aset(aset) -> dict:
+    return {str((a or {}).get("id") or ""): (a or {})
+            for a in (aset or []) if str((a or {}).get("id") or "")}
+
+
+def baris_pj_tambahan(pj_list, aset) -> list:
+    """Baris tabel penanggung jawab tambahan beserta BMN yang melekat padanya.
+
+    → [{no, nama, nip, unit, aset: [id, …]}]
+
+    Baris tanpa nama DIBUANG dan penomorannya rapat — formulir menyisakan
+    baris kosong setiap kali operator menekan "tambah" lalu berpindah pikiran,
+    dan baris kosong yang ikut tercetak membuat dokumen resmi tampak salah
+    isi. MURNI.
+    """
+    peta = _peta_aset(aset)
+    keluar = []
+    for p in (pj_list or []):
+        p = p or {}
+        nama = str(p.get("nama") or "").strip()
+        if not nama:
+            continue
+        keluar.append({
+            "no": len(keluar) + 1,
+            "nama": nama,
+            "nip": str(p.get("nip") or "").strip() or "-",
+            "unit": str(p.get("unit_tempat_tugas") or "").strip() or "-",
+            "aset": [str(x) for x in (p.get("asset_ids") or [])
+                     if str(x or "") in peta],
+        })
+    return keluar
+
+
+def rujukan_pasal1(ids, urutan) -> str:
+    """Rujukan BMN sebagai NOMOR URUT pada tabel Pasal 1 — "1, 4, 7".
+
+    Mengulang `kode·NUP — nama` di kolom ini akan membuat satu penanggung
+    jawab bermuatan lima barang memakan lima baris, dan naskah yang dibatasi
+    dua halaman kehabisan ruang pada penanggung jawab kedua. Nomor urutnya
+    sudah tercetak di halaman yang sama, jadi rujukan sependek ini tak
+    kehilangan satu pun informasi.
+
+    `urutan`: peta {id aset → nomor urut SEBAGAIMANA TERCETAK}. Sengaja
+    diterima dari pemanggil, bukan dihitung ulang di sini: tabel Pasal 1
+    menomori barang menurut pengelompokan bidang, dan menghitung ulang
+    urutannya di tempat kedua adalah cara paling pasti melahirkan rujukan
+    yang menunjuk barang yang salah tanpa satu pun galat.
+    """
+    nomor = sorted({urutan[str(x)] for x in (ids or []) if str(x) in (urutan or {})})
+    return ", ".join(str(n) for n in nomor)
+
+
+def bmn_tanpa_pj(pj_list, aset) -> list:
+    """BMN yang tak melekat pada penanggung jawab tambahan mana pun.
+
+    Dinyatakan terus terang di bawah tabel, bukan didiamkan: pembaca yang
+    melihat tabel berisi 3 dari 10 barang berhak tahu ke mana 7 sisanya —
+    jawabannya PIHAK KEDUA selaku penanggung jawab unit.
+    """
+    diambil = set()
+    for p in (pj_list or []):
+        if not str((p or {}).get("nama") or "").strip():
+            continue
+        for x in ((p or {}).get("asset_ids") or []):
+            diambil.add(str(x or ""))
+    return [a for a in (aset or [])
+            if str((a or {}).get("id") or "") not in diambil]
+
+
+def validate_pj_tambahan(pj_list, asset_ids) -> list:
+    """Daftar pesan kesalahan untuk penanggung jawab tambahan. MURNI.
+
+    Tiga aturan, semuanya tentang dokumen yang akan dibaca orang lain:
+
+    1. Baris yang MENGAKU berisi (NIP/unit/aset terisi) tapi tanpa nama akan
+       hilang senyap dari cetakan — operator mengira sudah mencatatnya.
+    2. BMN yang dilekatkan harus termasuk yang diserahterimakan. Melekatkan
+       barang di luar daftar berarti BAST menyatakan tanggung jawab atas
+       barang yang tak pernah diserahkan.
+    3. Satu BMN hanya boleh melekat pada SATU penanggung jawab. Dua nama pada
+       satu barang membuat pertanyaan "siapa yang memegang ini" — pertanyaan
+       yang justru dijawab dokumen ini — kembali tak terjawab.
+    """
+    errors = []
+    daftar = list(pj_list or [])
+    if len(daftar) > MAKS_PJ_TAMBAHAN:
+        errors.append(f"Penanggung jawab tambahan maksimal {MAKS_PJ_TAMBAHAN}; "
+                      f"terkirim {len(daftar)}")
+    sah = {str(x or "") for x in (asset_ids or [])}
+    pemilik = {}
+    for i, p in enumerate(daftar, 1):
+        p = p or {}
+        nama = str(p.get("nama") or "").strip()
+        ids = [str(x or "") for x in (p.get("asset_ids") or [])]
+        if not nama:
+            if str(p.get("nip") or "").strip() or \
+                    str(p.get("unit_tempat_tugas") or "").strip() or ids:
+                errors.append(f"Penanggung jawab tambahan baris {i} belum "
+                              "bernama — isi namanya atau hapus barisnya")
+            continue
+        for x in ids:
+            if x not in sah:
+                errors.append(f"BMN yang dilekatkan pada {nama} tidak termasuk "
+                              "aset yang diserahterimakan")
+                break
+        for x in ids:
+            if x in pemilik and pemilik[x] != nama:
+                errors.append(f"Satu BMN dilekatkan pada dua penanggung jawab "
+                              f"({pemilik[x]} dan {nama})")
+                break
+        for x in ids:
+            pemilik.setdefault(x, nama)
+    return errors
