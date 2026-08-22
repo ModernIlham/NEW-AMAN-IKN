@@ -11,6 +11,7 @@ Master diregistrasi otomatis dari kegiatan (sinkron) dan dirawat admin.
 Koleksi ini KONFIGURASI: masuk RESET_KEEP (selamat reset), tetap ikut backup.
 """
 import re
+from penandatangan_dokumen import bersihkan_penandatangan, validate_penandatangan
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -85,6 +86,12 @@ class SatkerIn(BaseModel):
     # Kebijakan NILAI PEROLEHAN pada surat serah terima satker ini:
     # "" = ikut setelan universal · "tampilkan" · "sembunyikan".
     nilai_dokumen: str = ""
+    # Penanda tangan pilihan SATKER per slot dokumen (slot → id pejabat).
+    # Lapis KEDUA dari tiga: pilihan dokumen menang di atasnya, resolusi peran
+    # pada Referensi Pejabat tetap jadi jaring terakhir. Rumahnya di sini —
+    # bukan di setelan global — karena penanda tangan memang milik satker, dan
+    # setelan global hanya boleh disentuh super-admin pusat.
+    penandatangan: Optional[dict] = None
     eselon1: Optional[List[str]] = None
     aktif: bool = True
 
@@ -171,6 +178,11 @@ async def simpan_satker(kode: str, payload: SatkerIn,
             "Kebijakan nilai dokumen harus kosong (ikut universal), "
             "'tampilkan', atau 'sembunyikan'"))
     payload.nilai_dokumen = _nd
+    # Peta penanda tangan: slot asing ditolak, bukan diam-diam dibuang. Admin
+    # yang salah ketik nama slot berhak tahu setelannya tak akan berlaku.
+    _galat_ttd = validate_penandatangan(payload.penandatangan)
+    if _galat_ttd:
+        raise HTTPException(status_code=400, detail="; ".join(_galat_ttd))
     now = datetime.now(timezone.utc).isoformat()
     doc = {
         "kode_satker": k,
@@ -183,6 +195,10 @@ async def simpan_satker(kode: str, payload: SatkerIn,
         if f in ("nama_satker",):
             continue
         doc[f] = str(getattr(payload, f, "") or "").strip()
+    # `None` berarti "jangan sentuh"; peta kosong berarti "kembalikan ke
+    # resolusi peran". Keduanya beda maksud, jadi dibedakan di sini.
+    if payload.penandatangan is not None:
+        doc["penandatangan"] = bersihkan_penandatangan(payload.penandatangan)
     try:
         await db.satker.update_one(
             {"kode_satker": k},
