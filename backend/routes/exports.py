@@ -3,6 +3,7 @@ Export routes (CSV, PDF, XLSX), document file serving, bulk delete.
 Extracted from assets.py for clean separation of concerns.
 """
 import io
+from pegawai_utils import label_identitas_cetak
 import asyncio
 import os
 import base64
@@ -1346,7 +1347,8 @@ async def bangun_xlsx_bytes(query, activity_id="", base_url="", token=""):
             pj_rows = [
                 ("Nama", act_data.get('penanggung_jawab', '')),
                 ("Jabatan", act_data.get('penanggung_jawab_jabatan', '')),
-                ("NIP", act_data.get('penanggung_jawab_nip', '')),
+                (label_identitas_cetak(act_data.get("penanggung_jawab_nip", "")),
+                 act_data.get("penanggung_jawab_nip", "")),
             ]
             for lbl, val in pj_rows:
                 act_sheet.write(ar, 0, lbl, label_fmt)

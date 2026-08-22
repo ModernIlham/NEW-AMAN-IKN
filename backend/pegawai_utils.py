@@ -1192,6 +1192,19 @@ def label_nomor_identitas(nomor, status_kepegawaian="") -> str:
     return det["label"] if det["jenis"] else ("NIP" if str(nomor or "").strip() else "")
 
 
+def label_identitas_cetak(nomor) -> str:
+    """Label untuk BLOK IDENTITAS ('Nama / <label> / Jabatan') pada dokumen.
+
+    Berbeda dari `label_nomor_identitas`, yang mengembalikan "" untuk NIK
+    supaya baris tanda tangan MELEWATKANNYA demi privasi. Di blok identitas
+    nomornya sudah tercetak — yang dibutuhkan namanya yang BENAR, bukan
+    penyembunyian setengah jalan yang justru menamai NIK sebagai "NIP".
+
+    Format tak dikenal → "No. Identitas", bukan tebakan.
+    """
+    return deteksi_identitas(nomor)["label"]
+
+
 def baris_identitas_laporan(nomor, status_kepegawaian="") -> str:
     """Baris 'NIP. xxx' utk blok ttd laporan — label mengikuti jenis nomor;
     kosong bila tidak layak dicetak (Non-ASN/NIK/kosong)."""

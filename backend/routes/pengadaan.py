@@ -1257,7 +1257,8 @@ async def bangun_bast_ppk_pdf(perolehan_id: str, _user: dict) -> bytes:
         det = deteksi_identitas(nomor_id)
         pasangan = [("Nama", ph.get("nama"))]
         if det["jenis"] != "nik" and nomor_id:
-            pasangan.append((label_nomor_identitas(nomor_id) or "NIP",
+            # Label netral bila formatnya tak dikenal — bukan tebakan "NIP".
+            pasangan.append((label_nomor_identitas(nomor_id) or det["label"],
                              nomor_id))
         pasangan.append(("Jabatan", ph.get("jabatan")))
         rows = [[Paragraph(lbl, ket),
