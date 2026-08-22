@@ -164,6 +164,86 @@ def baris_lpb_dari_aset(aset_dibuat) -> list:
     return baris
 
 
+def snapshot_sumber(perolehan) -> dict:
+    """Penyedia, PPK, dan dokumen pengadaan satu register → dict datar.
+
+    MURNI. Dibekukan ke dalam baris LPB supaya dokumen yang sudah terbit tak
+    berubah isinya ketika registernya kelak disunting.
+    """
+    from pengadaan_dokumen import bersihkan_dokumen
+
+    d = perolehan or {}
+    return {
+        "penyedia": str(d.get("pihak") or "").strip(),
+        "ppk_nama": str(d.get("ppk_nama") or "").strip(),
+        "ppk_nip": str(d.get("ppk_nip") or "").strip(),
+        "nomor_bast_ppk": str(((d.get("bast_ppk") or {}).get("nomor")) or "").strip(),
+        "nomor_bast": str(d.get("nomor_bast") or "").strip(),
+        "sifat": str(d.get("sifat") or "").strip(),
+        **bersihkan_dokumen(d),
+    }
+
+
+def bundel_sumber(sumber) -> str:
+    """Satu baris ringkas: penyedia · PPK · sifat · dokumen · BAST asalnya.
+
+    Digabung menjadi SATU untai, bukan kolom-kolom tersendiri. Tabel LPB sudah
+    berisi delapan kolom; menambah enam kolom dokumen akan menyempitkan nama
+    barang sampai tak terbaca, dan sebagian besar barisnya akan kosong karena
+    tiap register hanya memakai satu jalur pembayaran. Yang kosong tidak ikut
+    dicetak. MURNI.
+    """
+    from pengadaan_dokumen import (
+        DOKUMEN_PENGADAAN, JENIS_UP, SIFAT_PENGADAAN,
+    )
+
+    s = sumber or {}
+    bagian = []
+    if s.get("penyedia"):
+        bagian.append(f"Penyedia: {s['penyedia']}")
+    if s.get("ppk_nama"):
+        ppk = f"PPK: {s['ppk_nama']}"
+        bagian.append(ppk)
+    sifat = str(s.get("sifat") or "").strip()
+    if sifat in SIFAT_PENGADAAN:
+        bagian.append(SIFAT_PENGADAAN[sifat].split(" (")[0])
+    for d in DOKUMEN_PENGADAAN:
+        v = str(s.get(d["kunci"]) or "").strip()
+        if not v:
+            continue
+        bagian.append(f"{d['label']}: "
+                      + (JENIS_UP.get(v, v) if d["kunci"] == "jenis_up" else v))
+    asal = (f"BAST PPK-KPB {s['nomor_bast_ppk']}" if s.get("nomor_bast_ppk")
+            else (f"BAST {s['nomor_bast']}" if s.get("nomor_bast") else ""))
+    if asal:
+        bagian.append(asal)
+    return " · ".join(bagian)
+
+
+def rentang_nup(nups) -> str:
+    """Rentang NUP dari sekumpulan nomor: "1", "1–3", atau "1, 4–6". MURNI.
+
+    Pemilik meminta kolom NUP menyebut "dari nomor berapa sampai berapa".
+    Mencetak seluruh nomor satu per satu membuat kolomnya melar pada perolehan
+    berisi puluhan unit; mencetak nomor PERTAMA saja — perilaku lama — membuat
+    dokumen berkata "5 printer diterima" tanpa bisa membuktikan printer YANG
+    MANA. Rentang menjawab keduanya, dan celah di tengahnya tetap terlihat.
+    """
+    angka = sorted({int(x) for x in (nups or [])
+                    if str(x).strip().lstrip("-").isdigit()})
+    if not angka:
+        return ""
+    potong, mulai, akhir = [], angka[0], angka[0]
+    for n in angka[1:]:
+        if n == akhir + 1:
+            akhir = n
+            continue
+        potong.append((mulai, akhir))
+        mulai = akhir = n
+    potong.append((mulai, akhir))
+    return ", ".join(str(a) if a == b else f"{a}\u2013{b}" for a, b in potong)
+
+
 def baris_lpb_gabungan(perolehan_list) -> list:
     """Seluruh baris barang dari BANYAK perolehan → baris tabel LPB gabungan.
 
@@ -198,6 +278,14 @@ def baris_lpb_gabungan(perolehan_list) -> list:
                 "jumlah": jml, "satuan": "",
                 "harga_satuan": harga, "total": round(harga * float(jml), 2),
                 "keterangan": sumber,
+                # Keterangan SUMBER yang melekat pada baris ini — penyedia,
+                # PPK, dan dokumen pengadaannya. Dilekatkan PER BARIS, bukan
+                # sekali di kepala surat: LPB gabungan merangkum banyak BAST
+                # sekaligus, dan satu kepala surat hanya bisa menyebut satu
+                # penyedia. Pembaca yang ingin tahu barang ini datang dari
+                # rekanan mana harus bisa membacanya di barisnya sendiri.
+                "sumber": snapshot_sumber(d),
+                "perolehan_id": str(d.get("id") or ""),
             })
     return baris
 

@@ -1399,10 +1399,15 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
     from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
 
     from shared_utils import resolve_pejabat_peran, resolve_penandatangan_kpb
+    from reportlab.lib.styles import ParagraphStyle
+    from kodefikasi_utils import kelompokkan_per_bidang as _kelompokkan_per_bidang
+    from kodefikasi_utils import normalize_kode as _norm_kode
+    from lpb_utils import bundel_sumber
     from routes.reports import (
-        _fit_col_widths, _fmt_tanggal_id, _get_report_styles,
-        _kop_surat_flowables, _page_footer_factory, _std_doc,
-        _std_table_style, _title_block,
+        _baris_sekat_bidang, _fit_col_widths, _fmt_tanggal_id,
+        _gaya_sekat_bidang, _get_report_styles, _kop_surat_flowables,
+        _page_footer_factory, _peta_subsub_kelompok, _peta_uraian_bidang,
+        _std_doc, _std_table_style, _title_block,
     )
 
     lpb = await db.lpb.find_one({"id": lpb_id}, {"_id": 0})
@@ -1432,14 +1437,15 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
 
     # Kategori menentukan judul, label jenis, dan ADA-TIDAKNYA kolom NUP.
     # Dokumen era-lama tanpa field ini seluruhnya persediaan (hanya jalur itu
-    # yang dulu menerbitkan LPB), jadi default-nya aman-mundur. `gabungan`
-    # (rekap banyak BAST PPK-KPB, aset + persediaan sekaligus) ikut memakai
-    # kolom NUP — baris asetnya ber-NUP, baris persediaan cukup "-".
+    # yang dulu menerbitkan LPB), jadi default-nya aman-mundur.
+    #
+    # Kolom NUP tersendiri sudah TIDAK ADA: NUP kini melebur ke kolom identitas
+    # sebagai rentang, dan baris persediaan yang memang tak ber-NUP cukup tak
+    # menampilkannya — lebih bersih daripada satu kolom penuh tanda hubung.
     from lpb_utils import KATEGORI_LPB
     kategori = str(lpb.get("kategori") or "persediaan").strip().lower()
     is_aset = kategori == "aset"
     is_gabungan = kategori == "gabungan"
-    pakai_nup = is_aset or is_gabungan
 
     el = []
     el.extend(_kop_surat_flowables(settings, doc.width))
@@ -1494,43 +1500,91 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
     el.append(info)
     el.append(Spacer(1, 2.5 * rl_mm))
 
-    # LPB aset menambah kolom NUP: tanpa NUP, dokumen ini hanya berkata
-    # "5 printer diterima" dan tak bisa dipakai membuktikan printer YANG MANA —
-    # padahal itulah satu-satunya alasan BMN dinomori satu per satu.
-    if pakai_nup:
-        data = [["No", "Kode Barang", "NUP", "Nama Barang", "Qty", "Satuan",
-                 "Harga (Rp)", "Total (Rp)", "Keterangan"]]
-        for i, b in enumerate(lpb.get("items") or [], 1):
-            data.append([str(i), b.get("kode_barang") or "-",
-                         b.get("nup") or "-",
-                         Paragraph(_esc(str(b.get("nama_barang") or "-")), cell),
-                         str(b.get("jumlah")), b.get("satuan") or "-",
-                         fmt_rp(b.get("harga_satuan")), fmt_rp(b.get("total")),
-                         Paragraph(_esc(str(b.get("keterangan") or "")), cell)])
-        data.append(["", "", "", Paragraph("<b>JUMLAH</b>", cell), "", "", "",
-                     Paragraph(f"<b>{fmt_rp(lpb.get('total_nilai'))}</b>", cellr), ""])
-        lebar = [24, 100, 46, 150, 34, 44, 68, 78, 96]
-        rata = [('ALIGN', (0, 0), (0, -1), 'CENTER'),
-                ('ALIGN', (2, 1), (2, -1), 'CENTER'),
-                ('ALIGN', (4, 1), (5, -1), 'CENTER'),
-                ('ALIGN', (6, 1), (7, -1), 'RIGHT')]
-    else:
-        data = [["No", "Kode Barang", "Nama Barang", "Qty", "Satuan",
-                 "Harga (Rp)", "Total (Rp)", "Keterangan"]]
-        for i, b in enumerate(lpb.get("items") or [], 1):
-            data.append([str(i), b.get("kode_barang") or "-",
-                         Paragraph(_esc(str(b.get("nama_barang") or "-")), cell),
-                         str(b.get("jumlah")), b.get("satuan") or "-",
-                         fmt_rp(b.get("harga_satuan")), fmt_rp(b.get("total")),
-                         Paragraph(_esc(str(b.get("keterangan") or "")), cell)])
-        data.append(["", "", Paragraph("<b>JUMLAH</b>", cell), "", "", "",
-                     Paragraph(f"<b>{fmt_rp(lpb.get('total_nilai'))}</b>", cellr), ""])
-        lebar = [24, 105, 170, 34, 48, 70, 80, 110]
-        rata = [('ALIGN', (0, 0), (0, -1), 'CENTER'),
-                ('ALIGN', (3, 1), (4, -1), 'CENTER'),
-                ('ALIGN', (5, 1), (6, -1), 'RIGHT')]
+    # ── Tabel objek: BERKELOMPOK per BIDANG, dan tiap barang membawa
+    #    keterangan sumbernya sendiri ──────────────────────────────────────
+    #
+    # Permintaan pemilik: *"keterangan rekanan/penyedia, PPK dll yang menempel
+    # pada setiap barang pengadaannya masing-masing dijadikan satu bundle
+    # informasi di dalam tabel, bertempat di row barang di bawahnya yang sudah
+    # dikategorikan… dan pada setiap row barang tolong kategorikan dengan per
+    # bidang barangnya masing-masing agar menambah kerapian."*
+    #
+    # Dua hal yang membuat rancangan ini bukan sekadar kerapian:
+    #
+    # 1. LPB GABUNGAN merangkum BANYAK BAST PPK-KPB sekaligus. Satu kepala
+    #    surat hanya bisa menyebut SATU penyedia — pembaca yang ingin tahu
+    #    barang ini datang dari rekanan mana harus bisa membacanya di barisnya
+    #    sendiri, bukan menebak dari nomor BAST di kolom keterangan.
+    # 2. Bundel itu ditaruh sebagai BARIS TERSENDIRI di bawah barangnya, bukan
+    #    sebagai kolom-kolom baru. Tabel ini sudah berisi tujuh kolom; menambah
+    #    enam kolom dokumen akan menyempitkan nama barang sampai tak terbaca,
+    #    dan sebagian besarnya kosong karena tiap register hanya menempuh satu
+    #    jalur pembayaran.
+    #
+    # Kolom NUP tersendiri DILEBUR ke kolom identitas sebagai RENTANG ("NUP
+    # 1–3"): pemilik memintanya menyebut "dari nomor berapa sampai berapa", dan
+    # nomor pertama saja membuat dokumen berkata "5 printer diterima" tanpa
+    # bisa membuktikan printer YANG MANA.
+    _items = list(lpb.get("items") or [])
+    _kode_semua = [str(b.get("kode_barang") or "") for b in _items]
+    _subsub = await _peta_subsub_kelompok(_kode_semua)
+    _uraian_bidang = await _peta_uraian_bidang(_kode_semua)
+    _kelompok = _kelompokkan_per_bidang(
+        [{**b, "asset_code": b.get("kode_barang") or ""} for b in _items])
+
+    _kepala = ["No", "Identitas Barang<br/>(Sub-sub Kelompok · Kode · NUP)",
+               "Nama Barang", "Qty", "Satuan", "Harga (Rp)", "Total (Rp)"]
+    lebar = [24, 150, 150, 34, 44, 78, 88]
+    data = [[Paragraph(h, st['TableHeader']) for h in _kepala]]
+    _kecil = ParagraphStyle('LpbKecil', parent=cell, fontSize=7.0, leading=8.6)
+    _baris_sekat, _baris_bundel = [], []
+    i = 0
+    for _kode_bidang, _isi in _kelompok:
+        _baris_sekat.append(len(data))
+        data.append(_baris_sekat_bidang(_kode_bidang,
+                                        _uraian_bidang.get(_kode_bidang, ""),
+                                        len(_isi), len(_kepala), st))
+        for b in _isi:
+            i += 1
+            _kode = str(b.get("kode_barang") or "-").strip()
+            _nup = str(b.get("nup") or "").strip()
+            _nm_subsub = _subsub.get(_norm_kode(_kode), "")
+            _identitas = "".join([
+                f"<font size=7>{_esc(_nm_subsub)}</font><br/>" if _nm_subsub else "",
+                f"<b>{_esc(_kode)}</b>",
+                f" · NUP {_esc(_nup)}" if _nup else "",
+            ])
+            data.append([
+                Paragraph(str(i), cellc),
+                Paragraph(_identitas, cell),
+                Paragraph(_esc(str(b.get("nama_barang") or "-")), cell),
+                Paragraph(str(b.get("jumlah")), cellc),
+                Paragraph(_esc(str(b.get("satuan") or "-")), cellc),
+                Paragraph(fmt_rp(b.get("harga_satuan")), cellr),
+                Paragraph(fmt_rp(b.get("total")), cellr),
+            ])
+            _bundel = bundel_sumber(b.get("sumber")) or str(b.get("keterangan") or "")
+            if _bundel:
+                _baris_bundel.append(len(data))
+                data.append([Paragraph("", _kecil),
+                             Paragraph(f"<i>{_esc(_bundel)}</i>", _kecil)]
+                            + [Paragraph("", _kecil)] * (len(_kepala) - 2))
+    data.append([Paragraph("", cell), Paragraph("", cell),
+                 Paragraph("<b>JUMLAH</b>", cell), Paragraph("", cell),
+                 Paragraph("", cell), Paragraph("", cell),
+                 Paragraph(f"<b>{fmt_rp(lpb.get('total_nilai'))}</b>", cellr)])
+
     t = Table(data, colWidths=_fit_col_widths(lebar, doc.width), repeatRows=1)
-    t.setStyle(_std_table_style(zebra=True, total_row=True, extra=rata))
+    # Baris bundel membentang dari kolom identitas sampai ujung kanan: ia satu
+    # kalimat, bukan tujuh sel kosong.
+    _gaya_bundel = []
+    for r in _baris_bundel:
+        _gaya_bundel += [('SPAN', (1, r), (-1, r)),
+                         ('TOPPADDING', (0, r), (-1, r), 0),
+                         ('BOTTOMPADDING', (0, r), (-1, r), 2)]
+    t.setStyle(_std_table_style(zebra=True, total_row=True, extra=[
+        ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+    ] + _gaya_sekat_bidang(_baris_sekat, padding=0.5) + _gaya_bundel))
     el.append(t)
     el.append(Spacer(1, 6 * rl_mm))
 
