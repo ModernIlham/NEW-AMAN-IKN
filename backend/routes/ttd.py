@@ -67,6 +67,13 @@ class SpesimenIn(BaseModel):
     # {halaman: 1-based, x, y: pojok kiri-atas kotak ttd sebagai FRAKSI
     #  lebar/tinggi halaman, lebar: fraksi lebar halaman}.
     posisi: dict | None = None
+    # PEMBUBUHAN TAMBAHAN — satu orang kerap harus meneken LEBIH DARI SEKALI
+    # pada dokumen yang sama. Contoh nyatanya BAST operasional: selain blok
+    # tanda tangan Berita Acara, ada lembar Surat Pernyataan Tanggung Jawab di
+    # halaman berikutnya yang juga harus ia teken. Tanpa daftar ini, orang itu
+    # hanya bisa membubuhkan SATU tanda tangan dan lembar sisanya terbit
+    # kosong — dokumen resmi yang tampak lengkap padahal belum diteken.
+    posisi_lain: list | None = None
 
 
 # ── Jejak identitas pada TTD berposisi bebas ────────────────────────────────
@@ -143,6 +150,32 @@ def _nomor_urut(sg) -> float:
         return float(n) if n is not None else float("inf")
     except (TypeError, ValueError):
         return float("inf")
+
+
+# Batas pembubuhan tambahan per penanda tangan. Angkanya lapang — dokumen
+# berlampiran banyak memang bisa menuntut belasan tanda tangan dari satu orang
+# — tetapi tetap berbatas: daftar tanpa batas berarti satu permintaan bisa
+# memaksa server menggambar ribuan overlay.
+MAKS_PEMBUBUHAN = 20
+
+
+def _posisi_bersih_banyak(daftar, maks_halaman: int = 0) -> list:
+    """Bersihkan DAFTAR posisi pembubuhan tambahan; entri tak sah dibuang.
+
+    Dibuang, bukan menggagalkan seluruh kiriman: tanda tangannya sendiri sudah
+    sah dan sudah digambar orangnya. Menolak semuanya karena satu entri rusak
+    berarti memaksa orang menggambar ulang tanda tangannya — dan kegagalan
+    yang menyuruh pengguna mengulang pekerjaan yang benar adalah kegagalan
+    yang salah tempat.
+    """
+    if not isinstance(daftar, list):
+        return []
+    keluar = []
+    for p in daftar[:MAKS_PEMBUBUHAN]:
+        bersih = _posisi_bersih(p, maks_halaman)
+        if bersih:
+            keluar.append(bersih)
+    return keluar
 
 
 def _posisi_bersih(p, maks_halaman: int = 0):
@@ -1137,14 +1170,24 @@ def _rakit_pdf_ber_ttd(sr: dict, sr_id: str, data: bytes, gambar: dict,
 
     # Pisahkan penanda tangan ber-POSISI PILIHAN (diatur sendiri di halaman
     # publik: halaman + x/y/lebar fraksi) dari yang memakai slot otomatis.
-    kustom = [s for s in penanda if isinstance(s.get("posisi_ttd"), dict)]
     otomatis = [s for s in penanda if not isinstance(s.get("posisi_ttd"), dict)]
 
+    # SATU penanda tangan bisa punya BANYAK pembubuhan: posisi utamanya plus
+    # tiap entri `posisi_ttd_lain` (lembar lanjutan / lampiran pernyataan).
+    # Peta ini karena itu berisi PASANGAN (penanda tangan, posisi), bukan
+    # penanda tangannya saja — dulu satu orang hanya bisa muncul sekali, dan
+    # lembar keduanya terbit kosong.
     per_halaman = {}
-    for s in kustom:
-        p = s["posisi_ttd"]
-        idx = min(max(1, int(p.get("halaman") or 1)), len(reader.pages)) - 1
-        per_halaman.setdefault(idx, []).append(s)
+    for s in penanda:
+        semua_pos = []
+        if isinstance(s.get("posisi_ttd"), dict):
+            semua_pos.append(s["posisi_ttd"])
+        for p in (s.get("posisi_ttd_lain") or []):
+            if isinstance(p, dict):
+                semua_pos.append(p)
+        for p in semua_pos:
+            idx = min(max(1, int(p.get("halaman") or 1)), len(reader.pages)) - 1
+            per_halaman.setdefault(idx, []).append((s, p))
 
     # QR verifikasi: posisi/ukuran pilihan (dokumen-level) bila diatur penanda
     # tangan; jika tidak → slot otomatis pojok kanan-bawah halaman terakhir.
@@ -1179,8 +1222,7 @@ def _rakit_pdf_ber_ttd(sr: dict, sr_id: str, data: bytes, gambar: dict,
         buf_k = io.BytesIO()
         ck = rl_canvas.Canvas(buf_k, pagesize=(hw, hh))
         ada_isi = False
-        for s in daftar:
-            p = s["posisi_ttd"]
+        for s, p in daftar:
             img_data = gambar.get(s["signature_file_id"])
             if not img_data:
                 continue
@@ -1714,7 +1756,9 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
         raise HTTPException(status_code=400, detail="Tanda tangan tidak valid / kosong")
     # Posisi divalidasi SEBELUM blob diunggah — nilai liar (Infinity dkk.)
     # tidak boleh meninggalkan blob yatim di GridFS lewat jalur exception.
-    posisi_ttd = _posisi_bersih(payload.posisi, int(sr.get("dok_halaman") or 0))
+    _maks_hal = int(sr.get("dok_halaman") or 0)
+    posisi_ttd = _posisi_bersih(payload.posisi, _maks_hal)
+    posisi_lain = _posisi_bersih_banyak(payload.posisi_lain, _maks_hal)
     # QR verifikasi TIDAK diatur di sini (mandat pemilik): dulu tiap penanda
     # tangan bisa menggeser/memperbesar QR dan pengatur terakhir menang —
     # membingungkan dan sering terlewat sehingga QR jatuh menimpa footer.
@@ -1741,6 +1785,8 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
                   # Posisi pembubuhan pilihan penanda tangan (None = slot
                   # otomatis di halaman terakhir seperti sebelumnya).
                   "signers.$.posisi_ttd": posisi_ttd,
+                  # Pembubuhan tambahan (lembar lanjutan, lampiran pernyataan).
+                  "signers.$.posisi_ttd_lain": posisi_lain,
                   "signers.$.ip": (request.client.host if request.client else "")}
     res = await db.signature_requests.update_one(
         {"id": sr_id, "status": {"$ne": "batal"},

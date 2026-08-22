@@ -198,13 +198,14 @@ function TandaTangan({ id, token }) {
   }, [id, token]);
   useEffect(() => { muat(); }, [muat]);
 
-  const kirimTtd = useCallback(async (png, posisi) => {
+  const kirimTtd = useCallback(async (png, posisi, posisiLain) => {
     setKirim(true);
     try {
       // QR verifikasi TIDAK lagi diatur di sini — letaknya ditentukan SEKALI
       // oleh pemilik dokumen saat mengunduh hasil akhir (mandat pemilik).
       await axios.post(`${API}/ttd/tandatangan/${id}/kirim`,
-        { png_base64: png, posisi: posisi || null },
+        { png_base64: png, posisi: posisi || null,
+          posisi_lain: posisiLain || [] },
         { params: { token }, timeout: 60000 });
       setSukses(true);
       setPngSiap(null);
@@ -320,7 +321,8 @@ function TandaTangan({ id, token }) {
           pngTtd={pngSiap}
           mengirim={kirim}
           onBatal={() => setPngSiap(null)}
-          onKirim={(posisi) => kirimTtd(pngSiap, posisi)}
+          banyak
+          onKirim={(posisi, posisiLain) => kirimTtd(pngSiap, posisi, posisiLain)}
         />
       </Kartu>
     );

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  ChevronLeft, ChevronRight, Loader2, MapPin, Maximize2, QrCode,
+  ChevronLeft, ChevronRight, Loader2, MapPin, Maximize2, Plus, QrCode, X,
 } from "lucide-react";
 
 /**
@@ -27,13 +27,21 @@ import {
  * posisi DIJEPIT ULANG tiap rasio kotak/halaman berubah sehingga kotak tidak
  * pernah keluar halaman (termasuk halaman landscape / ttd tinggi).
  *
- * onKirim(posisi|null): {halaman 1-based, x, y, lebar} — fraksi terhadap
- * lebar/tinggi halaman, (x,y) pojok kiri-atas kotak. null = otomatis.
+ * onKirim(posisi, posisiLain): {halaman 1-based, x, y, lebar} — fraksi
+ * terhadap lebar/tinggi halaman, (x,y) pojok kiri-atas kotak.
+ *
+ * `banyak` (khusus peran ttd): satu orang kerap harus meneken LEBIH DARI
+ * SEKALI pada dokumen yang sama — BAST operasional punya blok tanda tangan
+ * Berita Acara DAN lembar Surat Pernyataan Tanggung Jawab di halaman
+ * berikutnya. Tombol "Tanda tangan lagi" menyimpan letak yang sedang diatur
+ * lalu membiarkan orangnya berpindah halaman dan mengatur letak berikutnya;
+ * `posisiLain` membawa yang sudah tersimpan itu. Tanpanya lembar kedua terbit
+ * KOSONG — dokumen resmi yang tampak lengkap padahal belum diteken.
  */
 export default function AturPosisiTtd({
   jenis = "ttd", bangunUrlHalaman, jumlahHalaman = 1, pngTtd,
   nilaiAwal = null, onKirim, onBatal, mengirim = false,
-  labelKirim,
+  labelKirim, banyak = false,
 }) {
   const qr = jenis === "qr";
   const MIN = qr ? 0.10 : 0.08;
@@ -51,6 +59,11 @@ export default function AturPosisiTtd({
     lebar: nilaiAwal?.lebar ?? (qr ? 0.14 : 0.28),
   }));
   // rasio = tinggi/lebar ISI kotak. QR selalu persegi (1); ttd ikut gambarnya.
+  // Pembubuhan yang SUDAH ditetapkan pada halaman lain — satu orang kerap
+  // harus meneken lebih dari sekali pada dokumen yang sama (mis. BAST
+  // operasional: blok tanda tangan Berita Acara + lembar Surat Pernyataan
+  // Tanggung Jawab di halaman berikutnya).
+  const [tetap, setTetap] = useState([]);
   const [rasio, setRasio] = useState(qr ? 1 : 0.45);
   const [rasioHal, setRasioHal] = useState(1.414); // tinggi/lebar halaman
   const wadahRef = useRef(null);
@@ -228,6 +241,31 @@ export default function AturPosisiTtd({
           : "Geser kotak biru ke tempat tanda tangan; tarik pegangan untuk mengubah ukuran."}
       </p>
 
+      {banyak && tetap.length > 0 && (
+        <div className="rounded-lg border border-border bg-muted/40 px-2.5 py-1.5 space-y-1"
+          data-testid="posisi-daftar">
+          <p className="text-[11px] font-semibold">
+            {tetap.length + 1} tanda tangan akan dibubuhkan
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {tetap.map((t, i) => (
+              <span key={i} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-border bg-background">
+                Halaman {t.halaman}
+                <button type="button" aria-label={`Batalkan pembubuhan halaman ${t.halaman}`}
+                  className="text-red-500 min-w-0 min-h-0"
+                  data-testid={`posisi-hapus-${i}`}
+                  onClick={() => setTetap((d) => d.filter((_, j) => j !== i))}>
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+            <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded border border-blue-500/50 bg-blue-500/10">
+              Halaman {halaman} (sedang diatur)
+            </span>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Button type="button" variant="outline" size="sm" className="h-9 text-xs" disabled={mengirim} onClick={onBatal}>
@@ -240,11 +278,23 @@ export default function AturPosisiTtd({
               paling sering dipakai. Menghapus jalan pintasnya membuat letak QR
               selalu ditentukan orang yang melihat dokumennya. */}
         </div>
-        <Button type="button" size="sm" className="h-9 text-xs" disabled={mengirim || gagalHal || muatHal}
-          onClick={() => onKirim({ halaman, ...pos })} data-testid="posisi-kirim">
-          {mengirim ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
-          {labelKirim || (qr ? "Simpan & Unduh" : "Bubuhkan di Posisi Ini")}
-        </Button>
+        <div className="flex items-center gap-2">
+          {banyak && (
+            <Button type="button" variant="outline" size="sm" className="h-9 text-xs"
+              disabled={mengirim || gagalHal || muatHal}
+              onClick={() => setTetap((d) => [...d, { halaman, ...pos }])}
+              data-testid="posisi-tambah">
+              <Plus className="w-3.5 h-3.5 mr-1" />Tanda tangan lagi
+            </Button>
+          )}
+          <Button type="button" size="sm" className="h-9 text-xs" disabled={mengirim || gagalHal || muatHal}
+            onClick={() => onKirim({ halaman, ...pos }, tetap)} data-testid="posisi-kirim">
+            {mengirim ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+            {labelKirim || (qr ? "Simpan & Unduh"
+              : tetap.length ? `Bubuhkan ${tetap.length + 1} Tanda Tangan`
+                : "Bubuhkan di Posisi Ini")}
+          </Button>
+        </div>
       </div>
     </div>
   );

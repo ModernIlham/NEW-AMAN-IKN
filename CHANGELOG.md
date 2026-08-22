@@ -67,6 +67,66 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#903] Satu penanda tangan, banyak pembubuhan — 2026-08-22
+
+Permintaan pemilik, langsung menunjuk akibat [#902]: *"pastikan TTD elektronik
+dapat melakukan penandatanganan lebih sesuai jumlah yang harus dia
+tandatangani — sebagai contoh BAST operasional ini, di mana terdapat tanda
+tangan lagi di lembar berikutnya di surat pernyataan."*
+
+Memang begitu keadaannya. Tiap penanda tangan hanya punya **satu**
+`posisi_ttd`. Sejak BAST membawa lampiran Surat Pernyataan Tanggung Jawab,
+orang yang sama harus meneken dua kali — blok tanda tangan Berita Acara dan
+lembar pernyataannya sendiri. Dengan satu posisi, **lembar kedua terbit
+kosong**: dokumen resmi yang tampak lengkap padahal belum diteken, dan tak ada
+galat apa pun yang memberitahunya.
+
+**Yang berubah:**
+
+- Halaman publik e-sign punya tombol **"Tanda tangan lagi"**. Ia menyimpan
+  letak yang sedang diatur, lalu penanda tangan berpindah halaman dan mengatur
+  letak berikutnya. Daftar yang tersimpan tampil beserta nomor halamannya dan
+  bisa dibatalkan satu per satu; tombol kirim menyebutkan berapa yang akan
+  dibubuhkan ("Bubuhkan 3 Tanda Tangan").
+- Kiriman membawa `posisi_lain: []`, disimpan sebagai
+  `signers.$.posisi_ttd_lain`.
+- Perakitan PDF kini memetakan **pasangan (penanda tangan, posisi)**, bukan
+  penanda tangannya saja — dulu satu orang hanya bisa muncul sekali di peta
+  per-halaman, dan itulah kenapa lembar kedua kosong.
+
+**Yang dijaga:**
+
+- **Slot otomatis tetap bekerja bersama pembubuhan tambahan.** Orang yang
+  memakai slot otomatis di blok tanda tangan tetap boleh menambahkan pembubuhan
+  di lembar pernyataannya.
+- **Halaman di luar jangkauan dijepit, bukan dijatuhkan.** Dokumen bisa saja
+  lebih pendek daripada saat posisinya dikirim; menjatuhkan pembubuhannya
+  berarti tanda tangan yang hilang tanpa jejak.
+- **Entri tak sah dibuang, bukan menggagalkan seluruh kiriman.** Tanda
+  tangannya sendiri sudah sah dan sudah digambar orangnya — menolak semuanya
+  karena satu entri rusak memaksa ia menggambar ulang pekerjaan yang benar.
+- **Berbatas** (`MAKS_PEMBUBUHAN = 20`): lapang untuk dokumen berlampiran
+  banyak, tetapi daftar tanpa batas berarti satu kiriman bisa memaksa server
+  menggambar ribuan overlay.
+- **Dokumen lama** yang ditandatangani sebelum fitur ini tak punya kolomnya
+  sama sekali; perakitannya tetap jalan.
+
+**Penjaga baru**: `backend/tests/unit/test_ttd_pembubuhan_banyak.py` (11 uji)
+dan `frontend/src/components/ttd/__tests__/AturPosisiBanyak.test.jsx` (7 uji).
+Uji backend membaca **PDF yang jadi**, bukan niat kodenya: jejak identitas
+(nama + tanggal) digambar di samping tiap pembubuhan, jadi kehadiran nama pada
+sebuah halaman adalah bukti tanda tangannya benar-benar membekas di sana.
+
+**Penjaga repo `mediaUrl.test.js` menangkap fixture uji saya sendiri**: ia
+memindai SELURUH `.jsx` — termasuk berkas uji — dan menuntut tiap pembangun URL
+pratinjau halaman membawa kredensial di query, karena `<img>` tak bisa
+mengirim header Authorization. Fixture saya memakai URL tanpa token. Fixture-nya
+yang diperbaiki, bukan penjaganya yang dilonggarkan.
+
+Enam mutasi dipasang lalu dibunuh: perakitan mengabaikan pembubuhan tambahan,
+daftar posisi selalu kosong, batas jumlah dicabut, entri tak sah ikut disimpan,
+kirim tak membawa daftar tersimpan, dan tombol tambah muncul di semua mode.
+
 ## [#902] Surat Pernyataan Tanggung Jawab — lampiran opsional, satu lembar per orang — 2026-08-22
 
 Saran pemilik, dan saran itu memang yang paling aman secara administratif:
