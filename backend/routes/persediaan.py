@@ -1607,6 +1607,33 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
                                             kode_satker=_kode)
     kpb = await resolve_penandatangan_kpb(settings, per_iso=lpb.get("tanggal"),
                                           kode_satker=_kode)
+
+    # ── Penanda tangan pilihan: dokumen → satker → peran ───────────────────
+    # Permintaan pemilik: *"sudah aktif semua bisa memilih siapa saja yang
+    # menandatangani sesuai referensi pejabat yang sudah ditetapkan"*.
+    #
+    # Slot "Diperiksa oleh" adalah yang paling sering kosong — perannya
+    # (`pemeriksa_lpb`) jarang ditetapkan di Referensi Pejabat, sehingga
+    # kolomnya terbit sebagai titik-titik tanpa ada yang bisa dilakukan dari
+    # layar mana pun. Sekarang satker bisa menunjuk siapa pun dari Referensi
+    # Pejabat, dan dokumen tertentu masih bisa menimpanya.
+    #
+    # Resolusi peran di atas TETAP dihitung dan tetap menjadi jaring terakhir:
+    # satker yang belum pernah menyentuh setelan ini tak berubah apa pun.
+    from penandatangan_dokumen import pilih_pejabat as _pilih_ttd
+    from shared_utils import _q_pejabat_satker
+    _daftar_pejabat = await db.pejabat.find(
+        _q_pejabat_satker(_kode), {"_id": 0}).to_list(2000)
+    _satker_doc = await db.satker.find_one({"kode_satker": _kode},
+                                           {"_id": 0}) or {}
+    _set_ttd = _satker_doc.get("penandatangan") or {}
+    _dok_ttd = lpb.get("penandatangan") or {}
+    pengurus = _pilih_ttd("lpb_dibuat", _dok_ttd, _set_ttd,
+                          _daftar_pejabat, pengurus)
+    pemeriksa = _pilih_ttd("lpb_diperiksa", _dok_ttd, _set_ttd,
+                           _daftar_pejabat, pemeriksa)
+    kpb = _pilih_ttd("lpb_disetujui", _dok_ttd, _set_ttd,
+                     _daftar_pejabat, kpb)
     sig = st['Signature']
 
     def kolom_ttd(judul, nama, nip, status_kepegawaian=""):

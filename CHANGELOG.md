@@ -67,6 +67,55 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#910] Penanda tangan dipilih dari Referensi Pejabat — tiga lapis — 2026-08-22
+
+Setengah kedua dari [#909]. Permintaan pemilik: *"…sudah aktif semua bisa
+memilih siapa saja yang menandatangani sesuai referensi pejabat yang sudah
+ditetapkan"*, dengan pilihannya: **setelan satker yang bisa ditimpa per
+dokumen**.
+
+**Slot "Diperiksa oleh" pada LPB adalah yang paling sering kosong.** Perannya
+(`pemeriksa_lpb`) jarang ditetapkan di Referensi Pejabat, sehingga kolomnya
+terbit sebagai titik-titik — dan **tak ada yang bisa dilakukan dari layar mana
+pun** untuk mengisinya.
+
+**Tiga lapis, dan urutannya punya alasan:**
+
+| Lapis | Kapan dipakai | Kenapa di urutan itu |
+|---|---|---|
+| 1. Pilihan dokumen | dibekukan saat dokumen terbit | dokumen yang sudah ditandatangani tak boleh berganti nama penanda tangan hanya karena setelan satker kelak diubah |
+| 2. Setelan satker | ditetapkan sekali di Master Satker | sekali atur, dipakai seluruh dokumen berikutnya |
+| 3. Peran Referensi Pejabat | jaring terakhir | satker yang belum pernah menyentuh setelan ini **tak berubah apa pun** |
+
+**Id yang basi TIDAK mengosongkan tanda tangan.** Pejabat bisa dihapus atau
+berpindah satker setelah setelan dibuat. Bila slotnya lalu dibiarkan kosong,
+dokumen resmi terbit tanpa penanda tangan — dan yang mencetaknya tak diberi
+tahu apa pun. Id yang tak lagi ditemukan karena itu **jatuh ke lapis
+berikutnya**.
+
+**Rumahnya Master Satker, bukan setelan global.** Penanda tangan memang milik
+satker, dan dokumen setelan global (`report_settings`) hanya boleh disentuh
+super-admin pusat — memakainya berarti admin satker A bisa mengubah penanda
+tangan satker B. Sempat saya taruh di sana dan langsung dipindah begitu
+docstring endpoint-nya sendiri menjelaskan batas wewenang itu.
+
+**Slot asing DITOLAK**, bukan dibuang diam-diam: admin yang salah ketik nama
+slot berhak tahu setelannya tak akan berlaku.
+
+**Penjaga baru**: `backend/tests/unit/test_penandatangan_pilihan.py` (19 uji),
+termasuk uji PDF sungguhan bahwa setelan satker benar-benar mengisi slot
+pemeriksa, bahwa pilihan dokumen menimpanya, dan bahwa id basi tak
+mengosongkan kolomnya.
+
+Empat mutasi dipasang lalu dibunuh: id basi mengosongkan slot, setelan satker
+menang atas pilihan dokumen, slot asing diterima diam-diam, dan LPB berhenti
+memakai pilihan.
+
+**Yang BELUM ada UI-nya**: pemilihan ini kini tersedia lewat API (Master Satker
+`PUT /satker/{kode}` dan payload LPB gabungan). Layar pemilihnya menyusul —
+disebut apa adanya supaya tak ada yang mengira fiturnya sudah bisa dipakai dari
+tombol.
+
 ## [#909] Area tanda tangan sama tinggi di semua kolom — 2026-08-22
 
 Permintaan pemilik: *"benahi kolom tanda tangan agar mendapatkan area tanda

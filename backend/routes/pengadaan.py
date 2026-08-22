@@ -35,6 +35,9 @@ from pegawai_utils import PLACEHOLDER_IDENTITAS
 from pengadaan_dokumen import (
     baris_dokumen, bersihkan_dokumen, validate_dokumen,
 )
+from penandatangan_dokumen import (
+    bersihkan_penandatangan, validate_penandatangan,
+)
 
 pengadaan_router = APIRouter()
 
@@ -1480,6 +1483,10 @@ class LpbGabunganIn(BaseModel):
     perolehan_ids: list[str] = Field(min_length=1, max_length=100)
     tanggal: str = ""                  # default hari ini
     booking_nomor: bool = True
+    # Penanda tangan KHUSUS dokumen ini (slot → id pejabat) — menimpa setelan
+    # satker. Dibekukan pada rekamannya: dokumen yang sudah terbit tak boleh
+    # berganti nama penanda tangan hanya karena setelan satker kelak diubah.
+    penandatangan: dict | None = None
     # Kode klasifikasi arsip PILIHAN OPERATOR untuk dokumen ini.
     #
     # Keluhan pemilik: *"ketika buat BAST dan klik nomor otomatis dari
@@ -1543,6 +1550,9 @@ async def buat_lpb_gabungan(payload: LpbGabunganIn,
         raise HTTPException(status_code=400, detail=(
             "Perolehan terpilih tidak memuat baris barang sama sekali"))
 
+    _galat_ttd = validate_penandatangan(payload.penandatangan)
+    if _galat_ttd:
+        raise HTTPException(status_code=400, detail="; ".join(_galat_ttd))
     tgl = _tgl_iso_atau_hari_ini(payload.tanggal)
     nomor_ppk = [str((r.get("bast_ppk") or {}).get("nomor") or "").strip()
                  or f"(tanpa nomor — BAST {r.get('nomor_bast') or '-'})"
@@ -1592,6 +1602,9 @@ async def buat_lpb_gabungan(payload: LpbGabunganIn,
                        + "; ".join(nomor_ppk))[:500],
         "items": items, "total_nilai": total_nilai_lpb(items),
         "jumlah_barang": len(items),
+        # Penanda tangan khusus dokumen ini — DIBEKUKAN di sini. Kosong =
+        # ikut setelan satker, lalu resolusi peran.
+        "penandatangan": bersihkan_penandatangan(payload.penandatangan),
         "kode_satker": ks_dok,
         "created_by": user.get("username", "system"),
         "created_at": datetime.now(timezone.utc).isoformat(),
