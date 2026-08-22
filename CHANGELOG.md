@@ -67,6 +67,66 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#907] Dokumen pengadaan: SP/SPK, SPP/SPM, UP/TUP, SPBy — dan sifatnya — 2026-08-22
+
+Permintaan pemilik: *"tambahan informasi mengenai no SP/SPK, SPP/SPM (validasi
+agar sesuai pengertiannya, lihat penginputan no SPM di modul inventarisasi aset
+bagian SPM), UP/TUP, SPBY, No Dokumen. Dan tak lupa sifatnya apakah
+kontrak/non kontrak."*
+
+**Kenapa sifatnya menentukan kolom mana yang berlaku.** Pembayaran belanja
+negara punya dua jalur, dan dokumennya tidak saling bertukar:
+
+| Jalur | Untai dokumennya |
+|---|---|
+| **Kontrak** (pembayaran langsung) | SP/SPK → SPP-LS → SPM-LS |
+| **Non-Kontrak** (uang persediaan) | UP/TUP → SPBy → (GUP: SPP-GUP → SPM-GUP) |
+
+SP/SPK pada register non-kontrak, atau UP/TUP dan SPBy pada register kontrak,
+bukan sekadar tak lazim — ia menyatakan **dua hal yang tak mungkin terjadi
+bersamaan**. Pemilik memilih agar kombinasi itu **ditolak**, bukan sekadar
+diperingatkan, dan itulah yang dikerjakan.
+
+SPP, SPM, dan No Dokumen berlaku pada **kedua** jalur (LS maupun GUP), jadi
+ketiganya tak pernah menjadi pertentangan.
+
+**Nomor SPM** mengikuti pengertian dan bentuk kolom `nomor_spm` pada modul
+Inventarisasi Aset — Surat Perintah Membayar, contoh `02847T/621001/2024`.
+Bentuknya **tidak** dipaksakan dengan regex: modul aset pun tak
+memaksakannya, dan memaksa di satu tempat saja akan menolak nomor yang di
+tempat lain diterima.
+
+**Register lama tak pernah dianggap bertentangan.** Sifat yang belum
+ditetapkan ("") melewati seluruh pemeriksaan silang — menuduh data lama
+bertentangan hanya akan mengunci operator dari register yang sudah lama benar.
+
+**Di layar**, kolom yang tak berlaku **disembunyikan**, bukan sekadar ditolak
+saat menyimpan: menampilkan kolom yang pasti ditolak hanya mengundang operator
+mengisinya. Dan berpindah sifat **membersihkan** kolom yang ikut gugur —
+operator yang mengisi SP/SPK lalu berpindah ke Non-Kontrak akan ditolak
+menyimpan tanpa tahu kolom mana penyebabnya, karena kolomnya sendiri sudah tak
+terlihat lagi.
+
+**Di PDF**, blok "DASAR DAN DOKUMEN PENGADAAN" tercetak pada BAST PPK→KPB
+sebelum Pasal 1 — pembaca perlu tahu ini kontrak atau uang persediaan sebelum
+membaca barang apa yang diserahkan. Kolom kosong tidak dicetak: blok yang
+separuhnya bertanda hubung membuat pembaca menghitung apa yang tak ada
+alih-alih membaca apa yang ada.
+
+**Satu penjaga lama menagih perubahan ini**, dan itu memang gunanya: uji
+`payloadUbahPerolehan` mengunci daftar kunci payload supaya tak ada kunci yang
+ikut terkirim tanpa sengaja. Daftarnya diperbarui dengan sengaja — dan
+ditambahi uji bahwa dokumen memang IKUT terkirim, karena server menulis ulang
+seluruh kolomnya dan kolom yang tak terkirim akan MENGOSONGKAN dokumen yang
+sudah tercatat.
+
+**Penjaga baru**: `backend/tests/unit/test_pengadaan_dokumen.py` (22 uji) dan 5
+uji tambahan pada `perolehanUbah.test.js`.
+
+Lima mutasi dipasang lalu dibunuh: pertentangan tak lagi ditolak, sifat kosong
+ikut dipertentangkan, kolom umum diklaim milik satu jalur saja, endpoint
+berhenti memvalidasi dokumen, dan kolom kosong ikut dicetak.
+
 ## [#906] Blok identitas dokumen ikut berhenti menebak "NIP" — 2026-08-22
 
 Lanjutan [#905], dan cacatnya sama persis meski tempatnya berbeda. [#905]

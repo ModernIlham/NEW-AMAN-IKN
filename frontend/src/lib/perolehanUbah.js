@@ -15,6 +15,42 @@
  */
 
 /** Isi awal form dari satu baris register. */
+/**
+ * Kolom dokumen pengadaan — CERMIN `pengadaan_dokumen.py` di server.
+ *
+ * Daftar ini sengaja pendek dan datar: yang menentukan kolom mana BERLAKU
+ * tetap server (`validate_dokumen`), dan menyalin aturannya ke sini hanya
+ * akan melahirkan dua aturan yang perlahan berbeda. Yang disalin cuma NAMA
+ * kolomnya, supaya payload tak menjatuhkan kolom yang sudah tercatat.
+ */
+export const KUNCI_DOKUMEN = [
+  "no_sp_spk", "jenis_up", "no_spby", "no_spp", "no_spm", "no_dokumen",
+];
+
+/** Kolom dokumen dari sebuah form/record, dipangkas spasi tepinya. */
+export function bersihkanDokumen(d) {
+  const out = {};
+  for (const k of KUNCI_DOKUMEN) out[k] = String(d?.[k] || "").trim();
+  return out;
+}
+
+/**
+ * Kolom yang IKUT TERHAPUS saat sifat pengadaan berganti.
+ *
+ * Dibersihkan di layar, bukan sekadar ditolak server: operator yang mengisi
+ * SP/SPK lalu berpindah ke Non-Kontrak akan ditolak menyimpan tanpa tahu
+ * kolom mana penyebabnya — kolomnya sendiri sudah tak terlihat lagi.
+ */
+export function dokumenSetelahGantiSifat(d, sifat) {
+  const hapus = sifat === "kontrak" ? ["jenis_up", "no_spby"]
+    : sifat === "non_kontrak" ? ["no_sp_spk"]
+      : [];
+  const out = { ...d, sifat };
+  for (const k of hapus) out[k] = "";
+  return out;
+}
+
+
 export function formDariPerolehan(p) {
   return {
     mode: "ubah",
@@ -31,6 +67,16 @@ export function formDariPerolehan(p) {
       keterangan: p.keterangan || "",
       penganggaran_id: "",
       ppk_pejabat_id: "",
+      // Dokumen pengadaan — dimuat apa adanya supaya form ubah tak
+      // MENGOSONGKAN kolom yang sudah terisi. Register lama tak punya
+      // kunci-kunci ini sama sekali; "" adalah keadaan sebenarnya.
+      sifat: p.sifat || "",
+      no_sp_spk: p.no_sp_spk || "",
+      jenis_up: p.jenis_up || "",
+      no_spby: p.no_spby || "",
+      no_spp: p.no_spp || "",
+      no_spm: p.no_spm || "",
+      no_dokumen: p.no_dokumen || "",
     },
     barang: (p.barang || []).map((b) => ({
       uraian: b.uraian || "",
@@ -52,6 +98,11 @@ export function payloadUbahPerolehan(form) {
     nomor_bast: d.nomor_bast,
     tanggal_bast: d.tanggal_bast,
     keterangan: d.keterangan,
+    // Dokumen pengadaan ikut terkirim — tanpa ini, menyimpan perubahan
+    // apa pun akan MENGOSONGKAN dokumen yang sudah tercatat, karena server
+    // menulis ulang seluruh kolomnya.
+    sifat: d.sifat || "",
+    ...bersihkanDokumen(d),
     barang: form?.kunci?.barang === false ? null : (form?.barang || []).map((b) => ({
       uraian: b.uraian,
       kode: b.kode,

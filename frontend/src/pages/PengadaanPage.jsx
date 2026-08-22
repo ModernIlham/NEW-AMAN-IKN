@@ -21,7 +21,9 @@ import { downloadFileWithProgress } from "@/lib/downloadFile";
 import MenuKepala from "@/components/ui/MenuKepala";
 import PerkiraanNomor from "@/components/persuratan/PerkiraanNomor";
 import { bagikanWa, bagikanEmail, hasilTtd } from "@/lib/pesanTtd";
-import { formDariPerolehan, payloadUbahPerolehan } from "@/lib/perolehanUbah";
+import {
+  dokumenSetelahGantiSifat, formDariPerolehan, payloadUbahPerolehan,
+} from "@/lib/perolehanUbah";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -516,7 +518,9 @@ export default function PengadaanPage({ user, onBack }) {
   // Buka dialog catat perolehan baru — dipakai tombol header & empty-state
   const bukaFormBaru = () => setForm({
     mode: "baru",
-    data: { jenis: "pembelian", pihak: "", nomor_kontrak: "", nomor_bast: "", tanggal_bast: new Date().toISOString().slice(0, 10), keterangan: "", penganggaran_id: "", ppk_pejabat_id: "" },
+    data: { jenis: "pembelian", pihak: "", nomor_kontrak: "", nomor_bast: "", tanggal_bast: new Date().toISOString().slice(0, 10), keterangan: "", penganggaran_id: "", ppk_pejabat_id: "",
+      // Dokumen pengadaan; `sifat` menentukan kolom mana yang berlaku.
+      sifat: "", no_sp_spk: "", jenis_up: "", no_spby: "", no_spp: "", no_spm: "", no_dokumen: "" },
     barang: [{ ...BARANG_KOSONG }], saving: false,
   });
   // Buka dialog yang SAMA dalam mode ubah. Bentuk datanya dipisah ke
@@ -868,6 +872,70 @@ export default function PengadaanPage({ user, onBack }) {
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-tgl">Tanggal BAST</label>
                 <Input id="pgd-tgl" type="date" value={form.data.tanggal_bast} disabled={kunciIdentitas}
                   onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, tanggal_bast: e.target.value } }))} />
+              </div>
+              {/* ── Dokumen pengadaan ────────────────────────────────────
+                  Sifatnya menentukan kolom mana yang berlaku: SP/SPK milik
+                  jalur kontrak, UP/TUP & SPBy milik jalur uang persediaan.
+                  Kolom yang tak berlaku DISEMBUNYIKAN, bukan sekadar
+                  ditolak saat menyimpan — menampilkan kolom yang pasti
+                  ditolak hanya mengundang operator mengisinya. */}
+              <div className="sm:col-span-2">
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-sifat">Sifat Pengadaan</label>
+                <select id="pgd-sifat" value={form.data.sifat}
+                  className="w-full h-10 rounded-md border border-input bg-background px-2 text-sm"
+                  data-testid="pengadaan-sifat"
+                  onChange={(e) => setForm((f) => ({ ...f, data: dokumenSetelahGantiSifat(f.data, e.target.value) }))}>
+                  <option value="">— belum ditetapkan —</option>
+                  <option value="kontrak">Kontrak (SP/SPK · SPP-LS · SPM-LS)</option>
+                  <option value="non_kontrak">Non-Kontrak (UP/TUP · SPBy)</option>
+                </select>
+              </div>
+              {form.data.sifat === "kontrak" && (
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-spspk">No. SP/SPK</label>
+                  <Input id="pgd-spspk" placeholder="SPK-014/PPK/VIII/2026" value={form.data.no_sp_spk}
+                    data-testid="pengadaan-no-sp-spk"
+                    onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, no_sp_spk: e.target.value } }))} />
+                </div>
+              )}
+              {form.data.sifat === "non_kontrak" && (
+                <>
+                  <div>
+                    <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-up">UP/TUP</label>
+                    <select id="pgd-up" value={form.data.jenis_up}
+                      className="w-full h-10 rounded-md border border-input bg-background px-2 text-sm"
+                      data-testid="pengadaan-jenis-up"
+                      onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, jenis_up: e.target.value } }))}>
+                      <option value="">— pilih —</option>
+                      <option value="up">UP (Uang Persediaan)</option>
+                      <option value="tup">TUP (Tambahan UP)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-spby">No. SPBy</label>
+                    <Input id="pgd-spby" placeholder="SPBy-021/BP/VIII/2026" value={form.data.no_spby}
+                      data-testid="pengadaan-no-spby"
+                      onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, no_spby: e.target.value } }))} />
+                  </div>
+                </>
+              )}
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-spp">No. SPP (opsional)</label>
+                <Input id="pgd-spp" placeholder="SPP-105/LS/2026" value={form.data.no_spp}
+                  data-testid="pengadaan-no-spp"
+                  onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, no_spp: e.target.value } }))} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-spm">No. SPM (opsional)</label>
+                <Input id="pgd-spm" placeholder="02847T/621001/2024" className="font-mono" value={form.data.no_spm}
+                  data-testid="pengadaan-no-spm"
+                  onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, no_spm: e.target.value } }))} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-nodok">No. Dokumen (opsional)</label>
+                <Input id="pgd-nodok" placeholder="ND-77/PBJ/2026" value={form.data.no_dokumen}
+                  data-testid="pengadaan-no-dokumen"
+                  onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, no_dokumen: e.target.value } }))} />
               </div>
               {/* Keterangan naik ke sini agar berpasangan dengan Tanggal BAST:
                   sebelumnya keduanya masing-masing menyisakan sel kosong di
