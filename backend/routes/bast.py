@@ -197,6 +197,9 @@ class BastIn(BaseModel):
     # tanpa cara memperbaikinya dari layar tempat dokumennya dibuat.
     kode_klasifikasi: str = ""
     booking_otomatis: Optional[bool] = False
+    # Lampiran Surat Pernyataan Tanggung Jawab (opsional) — satu lembar per
+    # penanggung jawab individual, ditandatangani orangnya sendiri.
+    surat_pernyataan: Optional[bool] = False
     # ── REVISI BAST (mandat SURAT-3C) ──────────────────────────────────────
     # BAST yang sudah sah TIDAK PERNAH diedit: revisi = BAST BARU bernomor
     # baru yang menggantikan yang lama. `revisi_dari` = id BAST yang
@@ -599,6 +602,10 @@ async def buat_bast(payload: BastIn, request: Request = None,
         "penanggung_jawab_tambahan": [
             p.model_dump() for p in (payload.penanggung_jawab_tambahan or [])
             if str(p.nama or "").strip()],
+        # Pilihan lampiran DIBEKUKAN pada dokumen, bukan dibaca dari kebijakan
+        # saat mencetak: BAST yang sudah ditandatangani harus tercetak sama
+        # persis kapan pun diunduh ulang.
+        "surat_pernyataan": bool(payload.surat_pernyataan),
         # Dasar & saksi (khusus pengembalian almarhum; kosong utk jenis lain)
         "almarhum": (payload.almarhum.model_dump()
                      if payload.jenis == "pengembalian_almarhum" and payload.almarhum
@@ -1153,7 +1160,6 @@ async def bast_pdf(bast_id: str, nilai: str = "",
         f"{kalimat1} Barang Milik Negara dengan rincian sebagai berikut:", isi))
     # Sekat pembagi per BIDANG kode barang; di dalam kelompok barang terurut
     # menurut kode barang lalu NUP TERKECIL (dulu urutan pilih pengguna).
-    _kelompok = _kelompokkan_per_bidang(b.get("aset") or [])
     # Uraian SUB-SUB KELOMPOK ditampilkan hanya bila TABEL masih pendek —
     # diukur dari jumlah BARIS (aset + sekat), bukan jumlah aset saja. Kalau
     # diukur dari aset saja, BAST 4 barang di 4 bidang (8 baris) justru lebih
@@ -1161,10 +1167,6 @@ async def bast_pdf(bast_id: str, nilai: str = "",
     # Maknanya TIDAK hilang saat dilepas: sub-sub kelompok adalah turunan
     # (lookup) kode barang yang tetap tercetak pada tiap baris.
     _AMBANG_BARIS_SUBSUB = 6
-    _n_baris = len(b.get("aset") or []) + len(_kelompok)
-    subsub = ({} if _n_baris > _AMBANG_BARIS_SUBSUB
-              else await _peta_subsub_kelompok(
-                  [a.get("asset_code") for a in (b.get("aset") or [])]))
     from kodefikasi_utils import normalize_kode as _norm
     from pembukuan_utils import parse_harga as _ph
     kepala = ["No", "Identitas Barang<br/>(Sub-sub Kelompok · Kode · NUP)",
@@ -1200,60 +1202,80 @@ async def bast_pdf(bast_id: str, nilai: str = "",
     # sebesar baris barang (batas 2 halaman).
     st['CellSekat'] = ParagraphStyle('BastSekat', parent=st['Cell'],
                                      fontSize=7.4, leading=8.8)
-    data = [[Paragraph(h, st['TableHeader']) for h in kepala]]
-    total_nilai = 0.0
-    _uraian_bidang = await _peta_uraian_bidang(
-        [a.get("asset_code") for a in (b.get("aset") or [])])
-    _baris_sekat = []
-    # Nomor urut SEBAGAIMANA TERCETAK, dipetakan dari id aset. Dipakai kolom
-    # "BMN yang melekat" pada tabel penanggung jawab (Pasal 2) supaya ia cukup
-    # menulis "1, 4, 7" alih-alih mengulang identitas barang. Direkam di sini,
-    # di dalam loop yang benar-benar mencetak nomornya — menghitung ulang
-    # urutan pengelompokan bidang di tempat kedua adalah cara paling pasti
-    # melahirkan rujukan yang menunjuk barang yang salah tanpa satu pun galat.
-    _urut_cetak = {}
-    i = 0
-    for _kode_bidang, _isi in _kelompok:
-        _baris_sekat.append(len(data))
-        data.append(_baris_sekat_bidang(_kode_bidang,
-                                        _uraian_bidang.get(_kode_bidang, ""),
-                                        len(_isi), len(kepala), st))
-        for a in _isi:
-            i += 1
-            _urut_cetak[str(a.get("id") or "")] = i
-            tgl = str(a.get("purchase_date") or "")
-            tahun = tgl[:4] if len(tgl) >= 4 and tgl[:4].isdigit() else (
-                tgl[-4:] if len(tgl) >= 4 and tgl[-4:].isdigit() else "-")
-            nilai = _ph(a.get("purchase_price"))
-            total_nilai += nilai
-            baris = [
-                Paragraph(str(i), st['CellCenter']),
-                _sel_identitas_barang(
-                    a, subsub.get(_norm(a.get("asset_code")), ""), st),
-                _sel_uraian_barang(a, st),
-                Paragraph(tahun, st['CellCenter']),
-                Paragraph(a.get("condition") or "-", st['CellCenter']),
-            ]
-            if tampil_nilai:
-                baris.append(Paragraph(
-                    f"{nilai:,.0f}".replace(",", ".") if nilai else "-",
-                    st['CellRight'] if 'CellRight' in st else st['CellCenter']))
-            data.append(baris)
-    if tampil_nilai:
-        data.append([Paragraph("", st['Cell']),
-                     Paragraph("<b>JUMLAH</b>", st['Cell']), Paragraph("", st['Cell']),
-                     Paragraph("", st['Cell']), Paragraph("", st['Cell']),
-                     Paragraph(f"<b>{total_nilai:,.0f}</b>".replace(",", "."),
-                               st['CellRight'] if 'CellRight' in st else st['CellCenter'])])
-    t = Table(data, colWidths=_fit_col_widths(lebar, doc.width), repeatRows=1)
-    # Padding baris dirapatkan KHUSUS tabel BAST (3 → 1.5) — tiap baris aset
-    # hemat ~1,5 mm sehingga BAST ber-banyak aset tetap muat 2 halaman.
-    _pad_sel = 0.4 if _rapat_pj else 1.2
-    t.setStyle(_std_table_style(zebra=True, total_row=tampil_nilai, extra=[
-        ('TOPPADDING', (0, 0), (-1, -1), _pad_sel),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), _pad_sel),
-    ] + _gaya_sekat_bidang(_baris_sekat, padding=0.3)))
-    el.append(t)
+    async def _tabel_objek(daftar):
+        """Tabel objek BMN berkelompok per BIDANG → (flowable, peta_urut).
+
+        SATU pembangun untuk dua tempat: tabel Pasal 1 dan daftar BMN pada
+        lampiran Surat Pernyataan Tanggung Jawab. Menyalinnya berarti dua
+        tabel yang menyusut berbeda saat kolom berubah — dan yang membaca
+        pernyataan tak punya cara tahu tabel mana yang benar.
+
+        `peta_urut` memetakan id aset → nomor urut SEBAGAIMANA TERCETAK pada
+        tabel itu; kolom "No. BMN" tabel penanggung jawab memakainya supaya
+        cukup menulis "1, 4, 7". Direkam di dalam loop yang benar-benar
+        mencetak nomornya — menghitung ulang urutan pengelompokan bidang di
+        tempat kedua adalah cara paling pasti melahirkan rujukan yang menunjuk
+        barang yang SALAH tanpa satu pun galat.
+        """
+        daftar = list(daftar or [])
+        _klp = _kelompokkan_per_bidang(daftar)
+        # Uraian SUB-SUB KELOMPOK hanya bila TABEL masih pendek — diukur dari
+        # jumlah BARIS (aset + sekat), bukan jumlah aset saja. Kalau diukur
+        # dari aset saja, BAST 4 barang di 4 bidang (8 baris) justru lebih
+        # tinggi daripada BAST 6 barang di 2 bidang dan menembus halaman
+        # ketiga. Maknanya TIDAK hilang saat dilepas: sub-sub kelompok adalah
+        # turunan (lookup) kode barang yang tetap tercetak pada tiap baris.
+        _kode = [x.get("asset_code") for x in daftar]
+        _subsub = ({} if len(daftar) + len(_klp) > _AMBANG_BARIS_SUBSUB
+                   else await _peta_subsub_kelompok(_kode))
+        _uraian_bidang = await _peta_uraian_bidang(_kode)
+        data = [[Paragraph(h, st['TableHeader']) for h in kepala]]
+        total_nilai = 0.0
+        _baris_sekat, urut, i = [], {}, 0
+        for _kode_bidang, _isi in _klp:
+            _baris_sekat.append(len(data))
+            data.append(_baris_sekat_bidang(_kode_bidang,
+                                            _uraian_bidang.get(_kode_bidang, ""),
+                                            len(_isi), len(kepala), st))
+            for a in _isi:
+                i += 1
+                urut[str(a.get("id") or "")] = i
+                tgl = str(a.get("purchase_date") or "")
+                tahun = tgl[:4] if len(tgl) >= 4 and tgl[:4].isdigit() else (
+                    tgl[-4:] if len(tgl) >= 4 and tgl[-4:].isdigit() else "-")
+                nilai = _ph(a.get("purchase_price"))
+                total_nilai += nilai
+                baris = [
+                    Paragraph(str(i), st['CellCenter']),
+                    _sel_identitas_barang(
+                        a, _subsub.get(_norm(a.get("asset_code")), ""), st),
+                    _sel_uraian_barang(a, st),
+                    Paragraph(tahun, st['CellCenter']),
+                    Paragraph(a.get("condition") or "-", st['CellCenter']),
+                ]
+                if tampil_nilai:
+                    baris.append(Paragraph(
+                        f"{nilai:,.0f}".replace(",", ".") if nilai else "-",
+                        st['CellRight'] if 'CellRight' in st else st['CellCenter']))
+                data.append(baris)
+        if tampil_nilai:
+            data.append([Paragraph("", st['Cell']),
+                         Paragraph("<b>JUMLAH</b>", st['Cell']), Paragraph("", st['Cell']),
+                         Paragraph("", st['Cell']), Paragraph("", st['Cell']),
+                         Paragraph(f"<b>{total_nilai:,.0f}</b>".replace(",", "."),
+                                   st['CellRight'] if 'CellRight' in st else st['CellCenter'])])
+        t = Table(data, colWidths=_fit_col_widths(lebar, doc.width), repeatRows=1)
+        # Padding baris dirapatkan KHUSUS tabel BAST (3 → 1.5) — tiap baris
+        # aset hemat ~1,5 mm sehingga BAST ber-banyak aset tetap muat 2 halaman.
+        _pad_sel = 0.4 if _rapat_pj else 1.2
+        t.setStyle(_std_table_style(zebra=True, total_row=tampil_nilai, extra=[
+            ('TOPPADDING', (0, 0), (-1, -1), _pad_sel),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), _pad_sel),
+        ] + _gaya_sekat_bidang(_baris_sekat, padding=0.3)))
+        return t, urut
+
+    _t_objek, _urut_cetak = await _tabel_objek(b.get("aset") or [])
+    el.append(_t_objek)
     if not tampil_nilai:
         # Nyatakan terus terang MENGAPA kolom nilai absen — pembaca dokumen
         # resmi tak boleh menduga-duga apakah nilainya nihil atau disembunyikan.
@@ -1564,6 +1586,78 @@ async def bast_pdf(bast_id: str, nilai: str = "",
                                        celah_mm=_CELAH_TTD_BAST))
     el.extend(_blok_tembusan(
         {"tembusan_laporan": b.get("tembusan") or settings.get("tembusan_laporan", "")}))
+
+    # ── LAMPIRAN: SURAT PERNYATAAN TANGGUNG JAWAB (opsional) ───────────────
+    #
+    # Terpisah dari Berita Acara dan ditandatangani SATU ORANG. Berita Acara
+    # membuktikan serah terima terjadi dan ditandatangani dua pihak;
+    # pernyataan ini mengikat orangnya sendiri. Pada BAST operasional dengan
+    # lima penanggung jawab, tanpa lembar tersendiri empat di antaranya tak
+    # pernah membubuhkan tanda tangan apa pun pada dokumen yang membebani
+    # mereka.
+    if b.get("surat_pernyataan"):
+        from bast_pasal import butir_pernyataan, daftar_penyata
+        _nomor_ba = str(b.get("nomor") or "").strip() or "…………"
+        _tgl_ba = _fmt_tanggal_id(b.get("tanggal")) or "…………"
+        for _pen in daftar_penyata(jenis, p2, p1,
+                                   b.get("penanggung_jawab_tambahan"),
+                                   b.get("aset")):
+            el.append(PageBreak())
+            el.extend(_title_block("SURAT PERNYATAAN TANGGUNG JAWAB\n"
+                                   "BARANG MILIK NEGARA"))
+            el.append(Paragraph("Yang bertanda tangan di bawah ini:", isi))
+            _baris_id = [("Nama", _pen["nama"] or "…………………………")]
+            if _pen["nip"]:
+                _baris_id.append(("NIP/NIK", _pen["nip"]))
+            if _pen["jabatan"]:
+                _baris_id.append(("Jabatan", _pen["jabatan"]))
+            if _pen["unit"]:
+                _baris_id.append(("Unit/Tempat Tugas", _pen["unit"]))
+            el.append(_identity_table(_baris_id))
+            el.append(Spacer(1, 2 * rl_mm))
+            el.append(Paragraph(
+                "dengan ini menyatakan dengan sesungguhnya bahwa:", isi))
+            for _i, _t in enumerate(butir_pernyataan(_pen["peran"],
+                                                     _pen["unit"]), 1):
+                el.append(Paragraph(f"({_i}) {_esc(_t)}", isi))
+            el.append(Spacer(1, 2 * rl_mm))
+            # Daftar BMN dibangun pembangun YANG SAMA dengan tabel Pasal 1 —
+            # berkelompok per bidang, kolom identik. Yang menandatangani
+            # pernyataan ini harus melihat barang yang sama persis dengan yang
+            # tercantum pada Berita Acaranya.
+            if _pen["aset"]:
+                el.append(Paragraph(
+                    "<b>Daftar Barang Milik Negara yang menjadi tanggung "
+                    "jawab saya:</b>", isi))
+                _t_pen, _ = await _tabel_objek(_pen["aset"])
+                el.append(_t_pen)
+            else:
+                # Daftar kosong DINYATAKAN, bukan didiamkan: lembar tanpa
+                # daftar dan lembar yang daftarnya lupa diisi terlihat sama.
+                el.append(Paragraph(
+                    "<i>Tidak ada BMN yang dilekatkan secara khusus kepada "
+                    "saya; tanggung jawab saya mengikuti BMN pada unit/tempat "
+                    "tugas tersebut sebagaimana Pasal 1 Berita Acara.</i>",
+                    isi))
+            el.append(Spacer(1, 2 * rl_mm))
+            el.append(Paragraph(
+                "Surat pernyataan ini saya buat dengan sebenar-benarnya tanpa "
+                "paksaan dari pihak mana pun, dan merupakan bagian yang "
+                "<b>TIDAK TERPISAHKAN</b> dari Berita Acara Serah Terima "
+                f"Nomor {_esc(_nomor_ba)} tanggal {_esc(_tgl_ba)}.", isi))
+            el.append(Spacer(1, 2 * rl_mm))
+            el.extend(_signature_block([
+                {'pre': [_tempat_tanggal_laporan(settings, b.get("tanggal"))],
+                 'header': 'Yang Menyatakan,', 'role': ' ',
+                 'nama': _pen["nama"] or "................................",
+                 'after': baris_identitas_ttd(
+                     _pen["nip"], "NIP/NIK. -",
+                     await status_kepegawaian_by_nip(_pen["nip"]))},
+            ], doc.width, celah_mm=_CELAH_TTD_BAST,
+                jarak_baris_mm=_JARAK_BARIS_TTD_BAST))
+            el.append(Paragraph(
+                "<i>Ditandatangani di atas meterai sesuai ketentuan peraturan "
+                "perundang-undangan apabila dipersyaratkan.</i>", ket))
 
     # Lampiran foto (opsional): (A) foto BARANG (sampul tiap aset) + (B) foto
     # SERAH TERIMA (scan bukti ttd BAST). Sebelumnya hanya foto barang yang

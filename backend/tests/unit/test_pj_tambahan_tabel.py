@@ -369,3 +369,194 @@ class TestDaftarPegawaiMembawaUnitTerdalam:
             return await _unwrap(rpg.list_pegawai)(_user=USER)
         hasil = _jalan(skenario())
         assert hasil["items"][0]["unit_kerja"] == "Ditulis Manual"
+
+
+# ── Lampiran Surat Pernyataan Tanggung Jawab (opsional) ─────────────────────
+
+async def _pdf_sptj(dbx, jenis, pj, n_aset=6, p2=None, p1=None):
+    aset = _aset(n_aset)
+    await dbx.bast_serah_terima.insert_one({
+        "id": "b-sptj", "kode_satker": SATKER, "jenis": jenis,
+        "nomor": "BAST-007/PPTHD/VIII/2026", "tanggal": "2026-08-04",
+        "pihak_pertama": p1 or {"nama": "Andi Penyerah",
+                                "nip": "198206022001121003",
+                                "jabatan": "Petugas Penatausahaan",
+                                "alamat": "Gedung Kantor OIKN"},
+        "pihak_kedua": p2 or {"nama": "Sari Penerima",
+                              "nip": "199005242025062002",
+                              "jabatan": "Analis", "alamat": "Gedung B Lt 2"},
+        "asset_ids": [a["id"] for a in aset], "aset": aset,
+        "saksi": [], "keterangan": "", "sertakan_foto": False,
+        "penyerah_atas_nama_kpb": True, "surat_pernyataan": True,
+        "penanggung_jawab_tambahan": pj})
+    resp = await _unwrap(rb.bast_pdf)("b-sptj", _user=USER)
+    buf = io.BytesIO()
+    async for potong in resp.body_iterator:
+        buf.write(potong if isinstance(potong, bytes) else potong.encode())
+    return buf.getvalue()
+
+
+class TestSuratPernyataanPembagian:
+    """Siapa menandatangani lembar mana — logika murni."""
+
+    ASET = [{"id": "a1"}, {"id": "a2"}, {"id": "a3"}]
+    P2 = {"nama": "Sari", "nip": "2", "jabatan": "Analis", "alamat": "Gd B"}
+    P1 = {"nama": "Andi", "nip": "1", "jabatan": "PPTHD"}
+
+    def test_bast_biasa_satu_lembar_untuk_pihak_kedua(self):
+        from bast_pasal import PERAN_PEMEGANG, daftar_penyata
+        r = daftar_penyata("penggunaan_melekat", self.P2, self.P1, [], self.ASET)
+        assert len(r) == 1
+        assert r[0]["nama"] == "Sari" and r[0]["peran"] == PERAN_PEMEGANG
+        assert len(r[0]["aset"]) == 3
+
+    def test_pengembalian_yang_menyatakan_PIHAK_KESATU(self):
+        """Membuat PIHAK KEDUA menyatakan tanggung jawab atas barang yang baru
+        saja ia kembalikan adalah kebalikan dari kenyataannya."""
+        from bast_pasal import PERAN_PENERIMA_KEMBALI, daftar_penyata
+        r = daftar_penyata("pengembalian", self.P2, self.P1, [], self.ASET)
+        assert len(r) == 1
+        assert r[0]["nama"] == "Andi"
+        assert r[0]["peran"] == PERAN_PENERIMA_KEMBALI
+
+    def test_operasional_satu_lembar_per_penanggung_jawab(self):
+        from bast_pasal import PERAN_PJ_UNIT, daftar_penyata
+        pj = [{"nama": "Budi", "nip": "9", "unit_tempat_tugas": "Lt 3",
+               "asset_ids": ["a1"]},
+              {"nama": "Cici", "unit_tempat_tugas": "Gudang",
+               "asset_ids": ["a2"]}]
+        r = daftar_penyata("operasional_unit", self.P2, self.P1, pj, self.ASET)
+        assert [x["nama"] for x in r] == ["Budi", "Cici", "Sari"]
+        assert r[0]["peran"] == PERAN_PJ_UNIT
+        assert [a["id"] for a in r[0]["aset"]] == ["a1"]
+        # Lembar terakhir memuat SISA yang tak melekat pada siapa pun.
+        assert [a["id"] for a in r[2]["aset"]] == ["a3"]
+
+    def test_tanpa_sisa_tak_ada_lembar_tambahan(self):
+        pj = [{"nama": "Budi", "asset_ids": ["a1", "a2", "a3"]}]
+        from bast_pasal import daftar_penyata
+        r = daftar_penyata("operasional_unit", self.P2, self.P1, pj, self.ASET)
+        assert [x["nama"] for x in r] == ["Budi"]
+
+    def test_penanggung_jawab_tanpa_BMN_tetap_dapat_lembarnya(self):
+        """Ia memang ditunjuk; daftar kosong pada lembarnya menyatakan keadaan
+        sebenarnya alih-alih menyembunyikannya."""
+        from bast_pasal import daftar_penyata
+        pj = [{"nama": "Budi", "asset_ids": []}]
+        r = daftar_penyata("operasional_unit", self.P2, self.P1, pj, self.ASET)
+        assert r[0]["nama"] == "Budi" and r[0]["aset"] == []
+        assert r[1]["nama"] == "Sari" and len(r[1]["aset"]) == 3
+
+    def test_operasional_tanpa_penanggung_jawab_jatuh_ke_pihak_kedua(self):
+        from bast_pasal import PERAN_PEMEGANG, daftar_penyata
+        r = daftar_penyata("operasional_unit", self.P2, self.P1, [], self.ASET)
+        assert len(r) == 1 and r[0]["peran"] == PERAN_PEMEGANG
+
+
+class TestButirPernyataan:
+    def test_pemegang_menyebut_ganti_rugi_dan_larangan_pindah_tangan(self):
+        from bast_pasal import PERAN_PEMEGANG, butir_pernyataan
+        teks = " ".join(butir_pernyataan(PERAN_PEMEGANG))
+        assert "Nomor 1 Tahun 2004" in teks and "Nomor 38 Tahun 2016" in teks
+        assert "memindahtangankan" in teks
+
+    def test_penanggung_jawab_unit_menyebut_unitnya(self):
+        from bast_pasal import PERAN_PJ_UNIT, butir_pernyataan
+        assert "Ruang Server" in butir_pernyataan(PERAN_PJ_UNIT, "Ruang Server")[0]
+
+    def test_unit_kosong_tak_melahirkan_kalimat_menggantung(self):
+        from bast_pasal import PERAN_PJ_UNIT, butir_pernyataan
+        b0 = butir_pernyataan(PERAN_PJ_UNIT, "")[0]
+        assert "unit/tempat tugas sebagaimana" in b0 and "  " not in b0
+
+    def test_penerima_kembali_TIDAK_menyatakan_pemakaian(self):
+        from bast_pasal import PERAN_PENERIMA_KEMBALI, butir_pernyataan
+        teks = " ".join(butir_pernyataan(PERAN_PENERIMA_KEMBALI))
+        assert "menatausahakan" in teks
+        assert "kepentingan kedinasan" not in teks
+
+
+class TestSuratPernyataanDiPdf:
+    def test_lembar_terbit_dengan_identitas_dan_daftar_barang(self, dbx):
+        async def skenario():
+            await _seed(dbx)
+            return await _pdf_sptj(dbx, "penggunaan_melekat", [])
+        hal = _halaman_teks(_jalan(skenario()))
+        teks = " ".join(hal)
+        assert "SURAT PERNYATAAN TANGGUNG JAWAB" in teks
+        assert "Sari Penerima" in teks
+        assert "TIDAK TERPISAHKAN" in teks
+        assert "BAST-007/PPTHD/VIII/2026" in teks
+
+    def test_TIDAK_terbit_bila_tak_dipilih(self, dbx):
+        async def skenario():
+            await _seed(dbx)
+            return await _pdf(dbx, [])
+        teks = " ".join(_halaman_teks(_jalan(skenario())))
+        assert "SURAT PERNYATAAN TANGGUNG JAWAB" not in teks
+
+    def test_operasional_terbit_satu_lembar_per_orang(self, dbx):
+        async def skenario():
+            await _seed(dbx)
+            return await _pdf_sptj(dbx, "operasional_unit", [
+                {"nama": "Budi Penjaga", "nip": "199001012021011001",
+                 "unit_tempat_tugas": "Ruang Server",
+                 "unit_eselon": "Direktorat BMN", "asset_ids": ["a0", "a1"]},
+                {"nama": "Cici Penjaga", "nip": "199101012021012002",
+                 "unit_tempat_tugas": "Gudang", "asset_ids": ["a2"]}])
+        hal = _halaman_teks(_jalan(skenario()))
+        lembar = [t for t in hal if "SURAT PERNYATAAN TANGGUNG JAWAB" in t]
+        # Dua penanggung jawab + satu lembar sisa untuk PIHAK KEDUA.
+        assert len(lembar) == 3
+        assert any("Budi Penjaga" in t for t in lembar)
+        assert any("Cici Penjaga" in t for t in lembar)
+        assert any("Sari Penerima" in t for t in lembar)
+
+    def test_daftar_barang_tiap_lembar_hanya_miliknya(self, dbx):
+        """Lembar yang memuat barang orang lain membuat orang menandatangani
+        tanggung jawab yang bukan miliknya."""
+        async def skenario():
+            await _seed(dbx)
+            return await _pdf_sptj(dbx, "operasional_unit", [
+                {"nama": "Budi Penjaga", "nip": "1",
+                 "unit_tempat_tugas": "Ruang Server", "asset_ids": ["a0"]}])
+        hal = _halaman_teks(_jalan(skenario()))
+        lembar_budi = next(t for t in hal if "Budi Penjaga" in t
+                           and "SURAT PERNYATAAN" in t)
+        assert "Barang Contoh Nama Agak Panjang 1" in lembar_budi   # aset a0
+        assert "Barang Contoh Nama Agak Panjang 2" not in lembar_budi
+
+    def test_daftar_barang_tetap_berkelompok_per_bidang(self, dbx):
+        async def skenario():
+            await _seed(dbx)
+            return await _pdf_sptj(dbx, "penggunaan_melekat", [])
+        hal = _halaman_teks(_jalan(skenario()))
+        lembar = next(t for t in hal if "SURAT PERNYATAAN" in t)
+        assert "BIDANG" in lembar
+
+    def test_penanggung_jawab_tanpa_BMN_menyatakan_keadaannya(self, dbx):
+        async def skenario():
+            await _seed(dbx)
+            return await _pdf_sptj(dbx, "operasional_unit", [
+                {"nama": "Budi Penjaga", "nip": "1",
+                 "unit_tempat_tugas": "Ruang Server", "asset_ids": []}])
+        hal = _halaman_teks(_jalan(skenario()))
+        lembar = next(t for t in hal if "Budi Penjaga" in t
+                      and "SURAT PERNYATAAN" in t)
+        assert "Tidak ada BMN yang dilekatkan" in lembar
+
+    def test_berita_acara_TETAP_dua_halaman(self, dbx):
+        """Lampiran pernyataan menambah lembar SESUDAH tanda tangan — ia tak
+        boleh mendorong Berita Acaranya sendiri jadi tiga halaman."""
+        async def skenario():
+            await _seed(dbx)
+            return await _pdf_sptj(dbx, "operasional_unit", [
+                {"nama": "Budi Penjaga", "nip": "1",
+                 "unit_tempat_tugas": "Ruang Server", "asset_ids": ["a0"]}],
+                n_aset=12)
+        hal = _halaman_teks(_jalan(skenario()))
+        # Berita Acara = SEMUA halaman SEBELUM lembar pernyataan pertama.
+        # Menyaring "halaman yang tak memuat judul pernyataan" salah: lembar
+        # pernyataan yang tumpah ke halaman kedua tak membawa judulnya.
+        awal = next(i for i, t in enumerate(hal) if "SURAT PERNYATAAN" in t)
+        assert awal <= 2, f"Berita Acara memakan {awal} halaman"

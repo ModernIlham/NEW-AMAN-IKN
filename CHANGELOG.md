@@ -67,6 +67,78 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#902] Surat Pernyataan Tanggung Jawab — lampiran opsional, satu lembar per orang — 2026-08-22
+
+Saran pemilik, dan saran itu memang yang paling aman secara administratif:
+*"buat Surat Pernyataan Tanggung Jawab untuk setiap penanggung jawab individual
+di semua BAST, dan khusus untuk operasional buat surat pernyataannya per
+masing-masing penanggung jawab jika ada, lengkap dengan barang seperti di BAST
+yang sudah terkategori berdasarkan bidang, dan tidak terpisahkan dari BAST."*
+
+**Kenapa lembar terpisah, bukan satu pasal tambahan.** Berita Acara
+ditandatangani DUA PIHAK dan membuktikan bahwa serah terima terjadi. Pernyataan
+tanggung jawab ditandatangani SATU ORANG dan mengikat dirinya sendiri.
+Menggabungkannya membuat satu tanda tangan memikul dua makna hukum yang
+berbeda — dan pada BAST operasional dengan lima penanggung jawab, **empat di
+antaranya tak pernah membubuhkan tanda tangan apa pun** pada dokumen yang
+membebani mereka.
+
+**Siapa menandatangani lembar mana** — mengikuti siapa yang memegang BMN
+setelah serah terima:
+
+| BAST | Lembar pernyataan |
+|---|---|
+| Pengembalian | satu lembar untuk **PIHAK KESATU** — bunyinya penatausahaan, bukan pemakaian |
+| Operasional + penanggung jawab tambahan | satu lembar **per orang** (BMN yang melekat padanya) + satu lembar untuk PIHAK KEDUA bila masih ada BMN yang tak melekat pada siapa pun |
+| Selebihnya | satu lembar untuk **PIHAK KEDUA**, memuat seluruh BMN |
+
+Baris pengembalian itu bukan detail: membuat PIHAK KEDUA menyatakan tanggung
+jawab atas barang yang **baru saja ia kembalikan** adalah kebalikan dari
+kenyataannya.
+
+Penanggung jawab yang **tak dilekati BMN tetap mendapat lembarnya sendiri** —
+ia memang ditunjuk, dan daftar kosong pada lembarnya menyatakan keadaan
+sebenarnya alih-alih menyembunyikannya. Lembar itu berbunyi terus terang:
+"Tidak ada BMN yang dilekatkan secara khusus kepada saya."
+
+**Isi butirnya** orang pertama ("saya"), berbeda dari pasal Berita Acara yang
+menyebut PARA PIHAK. Dasarnya sama dan tidak ada norma baru yang diciptakan:
+PP 27/2014 jo. PP 28/2020 · UU 1/2004 Ps. 59-64 jo. PP 38/2016 (ganti rugi) ·
+PP 94/2021 (disiplin). Penutupnya menyatakan lembar itu **bagian yang tidak
+terpisahkan** dari Berita Acara bernomor dan bertanggal, dan ada catatan
+meterai yang dihedge ("apabila dipersyaratkan") — bukan klaim bahwa meterai
+selalu wajib.
+
+**Satu pembangun tabel untuk dua tempat.** Daftar BMN pada lembar pernyataan
+dibangun fungsi yang SAMA dengan tabel Pasal 1 — berkelompok per bidang, kolom
+identik, sekat bidang sama. Menyalinnya berarti dua tabel yang menyusut berbeda
+saat kolom berubah, dan yang menandatangani pernyataan tak punya cara tahu
+tabel mana yang benar. Kode tabel Pasal 1 diekstrak jadi `_tabel_objek(daftar)`
+yang mengembalikan `(flowable, peta_urut)`; Pasal 1 memanggilnya dengan seluruh
+aset, tiap lembar pernyataan dengan aset miliknya sendiri.
+
+Pilihan lampiran **dibekukan pada dokumen** (`surat_pernyataan` disimpan di
+rekaman), bukan dibaca dari kebijakan saat mencetak: BAST yang sudah
+ditandatangani harus tercetak sama persis kapan pun diunduh ulang.
+
+**Satu cacat tertangkap saat menulisnya**: paragraf catatan meterai memakai
+gaya `kecil`, yang baru didefinisikan JAUH di bawah, di dalam blok lampiran
+foto. `NameError` — dan hanya pada dokumen yang mengaktifkan lampiran ini,
+tak pernah pada jalur bawaan. Diganti `ket`.
+
+**Penjaga baru** (17 uji, total berkas jadi 52): pembagian lembar untuk tiap
+jenis BAST, bunyi butir per peran, dan uji PDF sungguhan yang menagih tiap
+lembar hanya memuat barang MILIKNYA — lembar yang memuat barang orang lain
+membuat orang menandatangani tanggung jawab yang bukan miliknya. Ditambah
+penjaga bahwa **Berita Acaranya sendiri tetap dua halaman**: lampiran ini
+menambah lembar SESUDAH tanda tangan, ia tak boleh mendorong Berita Acara jadi
+tiga halaman.
+
+Enam mutasi dipasang lalu dibunuh: pengembalian dinyatakan PIHAK KEDUA, lembar
+sisa dihapus, butir penerima-kembali diganti butir pemegang, tiap lembar memuat
+seluruh aset alih-alih miliknya, lampiran selalu tercetak walau tak dipilih,
+dan penanggung jawab tanpa BMN dibuang dari daftar.
+
 ## [#901] Penanggung jawab tambahan terhubung ke Master Pegawai — 2026-08-22
 
 Permintaan pemilik: *"Nama, NIP/NIK dan eselon terakhir tempat dia bekerja,
