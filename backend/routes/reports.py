@@ -797,6 +797,27 @@ def _identity_table(rows):
     return t
 
 
+def ukuran_zona_ttd(lebar_gambar, tinggi_gambar, lebar_maks, tinggi_zona):
+    """Ukuran gambar spesimen di dalam zona tanda tangan → (lebar, tinggi, sisa).
+
+    MURNI. Gambar diperkecil agar muat di dalam kotak (lebar_maks × tinggi_zona)
+    dengan rasio terjaga, TIDAK pernah diperbesar — spesimen beresolusi kecil
+    yang dipaksa melar akan tercetak pecah pada dokumen resmi.
+
+    `sisa` adalah tinggi yang harus DIISI pemanggil supaya zona itu setinggi
+    `tinggi_zona` apa pun rasio gambarnya. Tanpa itu, kolom bertanda tangan
+    lebar-pendek punya area pena jauh lebih tipis daripada kolom di sebelahnya.
+    """
+    lw = float(lebar_gambar or 0)
+    lh = float(tinggi_gambar or 0)
+    zona = max(0.0, float(tinggi_zona or 0))
+    if lw <= 0 or lh <= 0 or zona <= 0:
+        return 0.0, 0.0, zona
+    skala = min(float(lebar_maks or 0) / lw, zona / lh, 1.0)
+    tinggi = lh * skala
+    return lw * skala, tinggi, max(0.0, zona - tinggi)
+
+
 def _signature_block(signers, doc_width, celah_mm=20, jarak_baris_mm=8):
     """Tidy, uniform signature layout as an invisible-borders table.
 
@@ -853,22 +874,33 @@ def _signature_block(signers, doc_width, celah_mm=20, jarak_baris_mm=8):
     def _zona_ttd(s):
         # Gambar TTD digital bila tersedia (bytes PNG transparan) —
         # menggantikan celah tanda tangan basah; fallback ke Spacer celah_mm.
+        #
+        # Zona ini SELALU setinggi `celah_mm`, bertanda tangan digital maupun
+        # tidak. Dulu ia mengembalikan gambarnya saja: tinggi gambar bergantung
+        # RASIO tiap spesimen, jadi kolom bertanda tangan lebar-pendek punya
+        # area jauh lebih tipis daripada kolom di sebelahnya yang tinggi atau
+        # yang masih kosong. Permintaan pemilik — *"benahi kolom tanda tangan
+        # agar mendapatkan area tanda tangan yang sama"* — persis itu.
+        tinggi = celah_mm * rl_mm
         ttd = s.get('ttd_img')
         if ttd:
             try:
                 from reportlab.platypus import Image as _RLImage
                 _im = _RLImage(io.BytesIO(ttd), mask='auto')
-                _skala = min((doc_width * 0.30) / _im.imageWidth,
-                             (celah_mm * rl_mm) / _im.imageHeight)
-                _im.drawWidth = _im.imageWidth * _skala
-                _im.drawHeight = _im.imageHeight * _skala
+                lebar_g, tinggi_g, sisa = ukuran_zona_ttd(
+                    _im.imageWidth, _im.imageHeight, doc_width * 0.30, tinggi)
+                _im.drawWidth = lebar_g
+                _im.drawHeight = tinggi_g
                 _im.hAlign = 'CENTER'
-                return [_im]
+                # Sisa ruang DIISI supaya tinggi zonanya sama dengan kolom
+                # lain — tanpa ini, baris nama antar kolom tetap sejajar
+                # (tabel tiga zona menjaganya) tetapi AREA PENA-nya tidak.
+                return [_im] + ([Spacer(1, sisa)] if sisa > 0.5 else [])
             except Exception:
                 pass
         # Celah tanda tangan basah; dokumen ber-batas 2 halaman (BAST) boleh
         # meminta celah lebih rapat lewat `celah_mm` tanpa mengubah dokumen lain.
-        return [Spacer(1, celah_mm * rl_mm)]
+        return [Spacer(1, tinggi)]
 
     def _zona_nama(s):
         flow = [Paragraph(f"<b><u>{_aman(s.get('nama', ''))}</u></b>", sig)]
