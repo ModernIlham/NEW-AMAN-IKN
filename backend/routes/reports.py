@@ -5,6 +5,7 @@ Contains: Rekapitulasi, DBHI, RHI, BAHI, SP, LHI, Executive Summary,
           Berita Acara, SPTJM, Surat Koreksi, and Report Settings.
 """
 import asyncio
+from pegawai_utils import label_identitas_cetak
 import io
 import os
 import logging
@@ -1619,7 +1620,7 @@ async def generate_sptjm_pdf(activity_id: str, _user: dict = Depends(require_use
     elements.append(Spacer(1, 2*rl_mm))
     elements.append(_identity_table([
         ("Nama", kasatker),
-        ("NIP", nip),
+        (label_identitas_cetak(nip), nip),
         ("Jabatan", jabatan),
         ("Alamat", alamat),
     ]))
@@ -1761,7 +1762,7 @@ async def generate_surat_koreksi_pdf(activity_id: str, _user: dict = Depends(req
     elements.append(Spacer(1, 2*rl_mm))
     elements.append(_identity_table([
         ("Nama", kasatker),
-        ("NIP", nip),
+        (label_identitas_cetak(nip), nip),
         ("Jabatan", jabatan),
         ("Alamat", alamat),
     ]))
@@ -1915,7 +1916,7 @@ async def generate_sptjm_docx(activity_id: str, _user: dict = Depends(require_us
     DX.page_footer(d, "Surat Pernyataan Tanggung Jawab Mutlak (SPTJM)")
     DX.kop_surat(d, settings)
     DX.title_block(d, "SURAT PERNYATAAN TANGGUNG JAWAB MUTLAK")
-    DX.identity_block(d, [("Nama", ident["kasatker_nama"]), ("NIP", ident["kasatker_nip"]),
+    DX.identity_block(d, [("Nama", ident["kasatker_nama"]), (label_identitas_cetak(ident["kasatker_nip"]), ident["kasatker_nip"]),
                           ("Jabatan", ident["kasatker_jabatan"]), ("Alamat", K["alamat"])])
     DX.para(d, "Menyatakan dengan sesungguhnya bahwa:", space_after=4)
     DX.para(d, "1. Saya bertanggung jawab penuh atas pengelolaan Barang Milik Negara (BMN) "
@@ -1971,7 +1972,7 @@ async def generate_surat_koreksi_docx(activity_id: str, _user: dict = Depends(re
     DX.page_footer(d, "Surat Pernyataan Koreksi Pencatatan Barang Milik Negara")
     DX.kop_surat(d, settings)
     DX.title_block(d, "SURAT PERNYATAAN\nKOREKSI PENCATATAN BARANG MILIK NEGARA")
-    DX.identity_block(d, [("Nama", ident["kasatker_nama"]), ("NIP", ident["kasatker_nip"]),
+    DX.identity_block(d, [("Nama", ident["kasatker_nama"]), (label_identitas_cetak(ident["kasatker_nip"]), ident["kasatker_nip"]),
                           ("Jabatan", ident["kasatker_jabatan"]), ("Alamat", K["alamat"])])
     DX.para(d, f"Menindaklanjuti Berita Acara Tim Internal Penelitian BMN Tidak Ditemukan "
                f"pada kegiatan “{activity.get('nama_kegiatan', '-')}” (Nomor: {no_ba}), dengan "
@@ -4256,7 +4257,7 @@ async def generate_bahi_pdf(activity_id: str, _user: dict = Depends(require_user
 
     elements.append(_identity_table([
         ("Nama", kasatker_nama),
-        ("NIP", kasatker_nip),
+        (label_identitas_cetak(kasatker_nip), kasatker_nip),
         ("Jabatan", kasatker_jabatan),
         ("Unit Organisasi", satker_name),
     ]))
@@ -4401,7 +4402,7 @@ async def generate_bahi_docx(activity_id: str, _user: dict = Depends(require_use
     DX.kop_surat(d, settings)
     DX.title_block(d, "BERITA ACARA\nHASIL INVENTARISASI BARANG MILIK NEGARA", nomor=ba_nomor)
     DX.para(d, kalimat_ba)
-    DX.meta_table(d, [("Nama", ident["kasatker_nama"]), ("NIP", ident["kasatker_nip"]),
+    DX.meta_table(d, [("Nama", ident["kasatker_nama"]), (label_identitas_cetak(ident["kasatker_nip"]), ident["kasatker_nip"]),
                       ("Jabatan", ident["kasatker_jabatan"]), ("Unit Organisasi", satker_name)])
     DX.para(d, f"Berdasarkan Surat Keputusan Nomor {nomor_sk}, telah dilaksanakan kegiatan "
                f"inventarisasi Barang Milik Negara (BMN) “{activity.get('nama_kegiatan') or '-'}” "
@@ -4496,7 +4497,7 @@ async def generate_sp_hasil_pdf(activity_id: str, _user: dict = Depends(require_
 
     elements.append(_identity_table([
         ("Nama", kasatker_nama),
-        ("NIP", kasatker_nip),
+        (label_identitas_cetak(kasatker_nip), kasatker_nip),
         ("Jabatan", kasatker_jabatan),
         ("Unit Organisasi", satker_name),
     ]))
@@ -4584,7 +4585,7 @@ async def generate_sp_pelaksanaan_pdf(activity_id: str, _user: dict = Depends(re
 
     elements.append(_identity_table([
         ("Nama", kasatker_nama),
-        ("NIP", kasatker_nip),
+        (label_identitas_cetak(kasatker_nip), kasatker_nip),
         ("Jabatan", kasatker_jabatan),
         ("Unit Organisasi", satker_name),
     ]))
@@ -4651,7 +4652,7 @@ async def _docx_surat_pernyataan_inv(activity_id, _user, *, judul, footer_label,
     DX.page_footer(d, footer_label)
     DX.kop_surat(d, settings)
     DX.title_block(d, judul)
-    DX.identity_block(d, [("Nama", ident["kasatker_nama"]), ("NIP", ident["kasatker_nip"]),
+    DX.identity_block(d, [("Nama", ident["kasatker_nama"]), (label_identitas_cetak(ident["kasatker_nip"]), ident["kasatker_nip"]),
                           ("Jabatan", ident["kasatker_jabatan"]),
                           ("Unit Organisasi", ident["satker_name"])])
     DX.para(d, "Menyatakan dengan sesungguhnya bahwa:", bold=True, justify=False, space_before=4, space_after=2)

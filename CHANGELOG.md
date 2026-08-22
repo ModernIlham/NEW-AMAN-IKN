@@ -67,6 +67,45 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#906] Blok identitas dokumen ikut berhenti menebak "NIP" — 2026-08-22
+
+Lanjutan [#905], dan cacatnya sama persis meski tempatnya berbeda. [#905]
+membereskan **garis tanda tangan kosong**. Yang tersisa: **blok identitas**
+("Nama / NIP / Jabatan") di kepala belasan dokumen, yang menuliskan label
+`"NIP"` apa pun nomor yang dibawanya.
+
+Ditemukan bukan dengan menebak, melainkan dengan **memperluas pemindai**
+[#905] menjadi juga melarang konstanta `"NIP"` polos. Ia langsung menunjuk 12
+tempat:
+
+- `reports.py` — 9 blok identitas (Surat Pernyataan Tanggung Jawab Mutlak,
+  Berita Acara Hasil Inventarisasi, dan lainnya)
+- `exports.py` — identitas penanggung jawab kegiatan
+- `bast.py` — dua tempat: identitas PARA PIHAK dan dasar pengembalian almarhum
+- `pegawai.py` — **bukan** pelanggar: `if "NIP" not in e` menyaring pesan
+  galat, bukan menamai nilai. Pemindainya diperhalus agar melewati konstanta
+  yang berada di dalam PERBANDINGAN; menagihnya di situ hanya memaksa
+  penulisan berbelit tanpa menambah satu pun kebenaran pada dokumen tercetak.
+
+**Helper baru** `label_identitas_cetak(nomor)` — label dari deteksi, dan
+`"No. Identitas"` bila formatnya tak dikenal. Ia sengaja **berbeda** dari
+`label_nomor_identitas`:
+
+| | NIP | NIK | NRP | asing |
+|---|---|---|---|---|
+| `label_nomor_identitas` (baris ttd) | NIP | **""** (dilewati, privasi) | NRP | "" |
+| `label_identitas_cetak` (blok identitas) | NIP | **NIK** | NRP | No. Identitas |
+
+Bedanya bukan kelalaian. Pada baris tanda tangan, melewatkan NIK berarti
+nomornya TIDAK tercetak. Pada blok identitas nomornya memang sudah tercetak —
+yang dibutuhkan namanya yang benar, dan menyembunyikan setengah jalan justru
+menghasilkan NIK yang dinamai "NIP". Dua aturan untuk dua tempat, dan
+menyamakannya akan merusak salah satunya. Ada uji yang mengunci perbedaan itu.
+
+29 uji (naik 8 dari [#905]). Tiga mutasi dipasang lalu dibunuh: format asing
+kembali ditebak "NIP", blok identitas laporan kembali memakai label dipatok,
+dan aturan NIK disamakan dengan baris tanda tangan.
+
 ## [#905] Label NIP/NIK/NRP berhenti menebak pada garis tanda tangan kosong — 2026-08-22
 
 Permintaan pemilik: *"pastikan di semua generate PDF bagian NIP/NIK/NRP dapat

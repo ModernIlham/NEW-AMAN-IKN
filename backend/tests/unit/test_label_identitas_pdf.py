@@ -109,6 +109,56 @@ class TestPemindaiLabelDipatok:
                     pelanggar.append(f"{f.name}:{n.lineno} {n.value[:30]!r}")
         assert pelanggar == []
 
+    def test_nol_tebakan_NIP_polos(self):
+        """Varian kedua dari cacat yang sama: nomor berformat TAK DIKENAL
+        dilabeli `label_nomor_identitas(n) or "NIP"`. Deteksinya sendiri
+        menyediakan label netral ("No. Identitas") — menebak di sini
+        menghasilkan dokumen resmi yang menamai nomor orang dengan nama yang
+        bukan namanya, persis seperti garis tanda tangan kosong.
+
+        Judul KOLOM tabel boleh berbunyi "NIP/NIK" (itu memang nama kolom);
+        yang dilarang konstanta "NIP" polos sebagai label sebuah nilai.
+        """
+        pelanggar = []
+        for f in self._berkas():
+            try:
+                pohon = ast.parse(f.read_text(encoding="utf-8"), filename=str(f))
+            except SyntaxError:                     # pragma: no cover
+                continue
+            # "NIP" di dalam PERBANDINGAN bukan label — mis. menyaring pesan
+            # galat dengan `if "NIP" not in e`. Menagihnya di situ memaksa
+            # penulisan berbelit tanpa menambah satu pun kebenaran pada
+            # dokumen yang tercetak.
+            dibanding = set()
+            for n in ast.walk(pohon):
+                if isinstance(n, ast.Compare):
+                    for x in [n.left, *n.comparators]:
+                        dibanding.add(id(x))
+            for n in ast.walk(pohon):
+                if (isinstance(n, ast.Constant) and isinstance(n.value, str)
+                        and n.value == "NIP" and id(n) not in dibanding):
+                    pelanggar.append(f"{f.name}:{n.lineno}")
+        assert pelanggar == []
+
+    def test_pengecualian_perbandingan_memang_sempit(self):
+        """Pengecualiannya HANYA untuk perbandingan — label yang dioper
+        sebagai nilai tetap tertangkap."""
+        pohon = ast.parse('x = [("NIP", nip)]\nif "NIP" in e: pass')
+        dibanding = set()
+        for n in ast.walk(pohon):
+            if isinstance(n, ast.Compare):
+                for y in [n.left, *n.comparators]:
+                    dibanding.add(id(y))
+        kena = [n.lineno for n in ast.walk(pohon)
+                if isinstance(n, ast.Constant) and n.value == "NIP"
+                and id(n) not in dibanding]
+        assert kena == [1]
+
+    def test_deteksi_menyediakan_label_netral_untuk_format_asing(self):
+        from pegawai_utils import deteksi_identitas
+        assert deteksi_identitas("XYZ-123")["label"] == "No. Identitas"
+        assert deteksi_identitas("")["label"] == "No. Identitas"
+
     def test_pemindainya_benar_benar_bisa_melihat(self):
         """Pemindai yang polanya salah akan selalu melaporkan nol."""
         pohon = ast.parse("x = 'NIP. ....................'")
@@ -135,3 +185,38 @@ class TestSemuaBerkasKeluaranMemakaiLabelNetral:
         teks = (AKAR / nama).read_text(encoding="utf-8")
         assert "PLACEHOLDER_IDENTITAS" in teks, nama
         assert "from pegawai_utils import" in teks, nama
+
+
+class TestLabelBlokIdentitas:
+    """Blok identitas ('Nama / <label> / Jabatan') menamai nomornya dari
+    DETEKSI, bukan dari tebakan.
+
+    Berbeda dari baris tanda tangan: di blok identitas nomornya memang sudah
+    tercetak, jadi yang dibutuhkan namanya yang BENAR — bukan penyembunyian
+    setengah jalan yang justru menamai NIK sebagai "NIP".
+    """
+
+    def test_nip_pns(self):
+        from pegawai_utils import label_identitas_cetak
+        assert label_identitas_cetak(NIP) == "NIP"
+
+    def test_nik_dinamai_NIK_bukan_NIP(self):
+        from pegawai_utils import label_identitas_cetak
+        assert label_identitas_cetak(NIK) == "NIK"
+
+    def test_nrp_dinamai_NRP(self):
+        from pegawai_utils import label_identitas_cetak
+        assert label_identitas_cetak(NRP) == "NRP"
+
+    def test_format_asing_dan_kosong_dapat_label_netral(self):
+        from pegawai_utils import label_identitas_cetak
+        assert label_identitas_cetak("XYZ-9") == "No. Identitas"
+        assert label_identitas_cetak("") == "No. Identitas"
+
+    def test_BERBEDA_dari_aturan_baris_tanda_tangan(self):
+        """`label_nomor_identitas` menahan NIK (baris ttd dilewati demi
+        privasi); `label_identitas_cetak` tidak — dua aturan untuk dua tempat
+        yang berbeda, dan menyamakannya akan merusak salah satunya."""
+        from pegawai_utils import label_identitas_cetak, label_nomor_identitas
+        assert label_nomor_identitas(NIK) == ""
+        assert label_identitas_cetak(NIK) == "NIK"

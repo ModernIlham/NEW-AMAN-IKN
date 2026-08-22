@@ -1088,7 +1088,7 @@ async def bast_pdf(bast_id: str, nilai: str = "",
     from reportlab.platypus import TableStyle as _TS
     _garis = HexColor("#9aa5b1")
 
-    def _kolom_pihak(peran, sebutan, ph, label_nip):
+    def _kolom_pihak(peran, sebutan, ph):
         """Identitas satu pihak: label SEJAJAR (tabel label:nilai) + baris
         'selanjutnya disebut ...' — mengikuti anatomi BAST resmi.
 
@@ -1101,7 +1101,11 @@ async def bast_pdf(bast_id: str, nilai: str = "",
             baris_nomor = None  # NIK tidak dicetak di BAST
         else:
             lbl_pintar = label_nomor_identitas(nomor) if nomor else ""
-            baris_nomor = (lbl_pintar or label_nip, ph.get("nip"))
+            # Nomor berformat TAK DIKENAL tak lagi ditebak "NIP": deteksinya
+            # sendiri menyediakan label netral ("No. Identitas"). Menebak di
+            # sini berarti dokumen resmi menamai nomor orang dengan nama yang
+            # bukan namanya — cacat yang sama dengan garis tanda tangan kosong.
+            baris_nomor = (lbl_pintar or det["label"], ph.get("nip"))
         rows = []
         pasangan = [("Nama", ph.get("nama"))]
         if baris_nomor:
@@ -1123,10 +1127,10 @@ async def bast_pdf(bast_id: str, nilai: str = "",
     tp = Table([[
         _kolom_pihak("PIHAK KESATU (yang menyerahkan)"
                      if jenis_awal not in _JENIS_PENGEMBALIAN
-                     else "PIHAK KESATU (yang menerima)", "PIHAK KESATU", p1, "NIP"),
+                     else "PIHAK KESATU (yang menerima)", "PIHAK KESATU", p1),
         _kolom_pihak("PIHAK KEDUA (yang menerima)"
                      if jenis_awal not in _JENIS_PENGEMBALIAN
-                     else "PIHAK KEDUA (yang menyerahkan)", "PIHAK KEDUA", p2, "NIP/NIK"),
+                     else "PIHAK KEDUA (yang menyerahkan)", "PIHAK KEDUA", p2),
     ]], colWidths=[doc.width * 0.5, doc.width * 0.5])
     tp.setStyle(_TS([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
@@ -1493,7 +1497,10 @@ async def bast_pdf(bast_id: str, nilai: str = "",
         )
         _det_alm = _dj(_nip)
         _frasa_id = ("" if not _nip or _det_alm["jenis"] == "nik"
-                     else f" ({_esc(_lni(_nip) or 'NIP')} {_esc(_nip)})")
+                     # Format tak dikenal → label netral dari deteksinya
+                     # sendiri, bukan tebakan "NIP".
+                     else f" ({_esc(_lni(_nip) or _det_alm['label'])} "
+                          f"{_esc(_nip)})")
         pasal("DASAR PENGEMBALIAN (PEMEGANG MENINGGAL DUNIA)", [
             f"BMN ini sebelumnya tercatat pada pemegang <b>{_nm}</b>"
             + _frasa_id
