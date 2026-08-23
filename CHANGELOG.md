@@ -67,6 +67,29 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#920] BAST PPK→KPB: akronim tetap kapital di tengah kalimat — 2026-08-23
+
+Laporan pemilik: *"ubah apbn menjadi kapital semua APBN."*
+
+Pasal Dasar Serah Terima memakai `str(label_jenis).lower()` pada label
+`"Pembelian (APBN)"`, sehingga tercetak *"diperoleh melalui pembelian
+(apbn)"* — akronim resmi berubah jadi kata biasa pada dokumen yang
+ditandatangani Kuasa Pengguna Barang.
+
+- **`pelaporan_utils.label_dalam_kalimat`** (MURNI) — mengecilkan kata biasa,
+  membiarkan kata yang seluruh huruf berkasusnya kapital: APBN, SP2D,
+  MPHL-BJS, angka Romawi.
+- Pemindai AST menagih agar `.lower()` tak dipakai lagi pada label jenis.
+
+> Seluruh backend disapu lebih dulu: **hanya satu tempat** yang meratakan
+> label tampilan ke huruf kecil di dalam kalimat cetak. Sisa pemakaian
+> `.lower()` adalah normalisasi kunci/berkas/email — memang seharusnya begitu.
+
+> Yang dijaga bukan satu label melainkan SELURUH `JENIS_PEROLEHAN`: jenis
+> perolehan baru yang membawa akronim ikut terlindungi sejak hari pertama.
+
+---
+
 ## [#919] Perkecualian tertulis: garis NIP pada lembar isian tangan — 2026-08-23
 
 Permintaan pemilik, menutup pertanyaan yang saya ajukan pada [#912]: garis NIP
