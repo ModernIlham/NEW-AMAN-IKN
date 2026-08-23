@@ -248,11 +248,8 @@ async def daftar_bast(asset_id: str = "", q: str = "", nip: str = "",
     # dan tombol "Kirim ke TTD" tampak seperti satu-satunya jalan, sehingga
     # ditekan lagi dan lagi sementara permintaan yang lama menua sampai
     # tautannya mati.
-    from ttd_penautan import status_ttd_dokumen
-    peta_ttd = await status_ttd_dokumen(
-        db, "bast", [str(b.get("id") or "") for b in items])
-    for b in items:
-        b["ttd"] = peta_ttd.get(str(b.get("id") or "")) or None
+    from ttd_penautan import lampirkan_status_ttd
+    await lampirkan_status_ttd(db, "bast", items)
     return {"items": items, "total": total, "page": page,
             "total_pages": max(1, -(-total // page_size)),
             "label_jenis": JENIS_BAST}

@@ -102,3 +102,57 @@ test("chip status menampilkan LABEL terbaca, bukan kode mentah", async () => {
   expect(screen.queryByText("diusulkan")).not.toBeInTheDocument();
   expect(screen.queryByText("disetujui")).not.toBeInTheDocument();
 });
+
+// ── Status & tautan TTD elektronik ────────────────────────────────────────
+// Pola yang sama dengan Riwayat BAST & Riwayat LPB: tautan permintaan yang
+// sudah dikirim harus bisa dibuka LAGI. Tanpa itu ia hilang bersama dialog
+// pembuatan, dan yang tersisa berminggu-minggu kemudian hanya "tautan mati".
+
+const ROWS_TTD = [
+  { ...ROWS[2],
+    ttd: { id: "sr-9", judul: "Surat Persetujuan SP-007", jumlah: 2,
+           selesai_jumlah: 1, kedaluwarsa_terdekat: { sisa_detik: 9 * 86400 } },
+    signature_request_id: "sr-9" },
+];
+
+function pakaiRowsTtd() {
+  axios.get.mockImplementation((url) => {
+    if (String(url).includes("permohonan-pengaturan")) {
+      return Promise.resolve({ data: { aktif: true } });
+    }
+    if (String(url).includes("/ttd/permintaan/")) {
+      return Promise.resolve({ data: {
+        id: "sr-9", judul: "Surat Persetujuan SP-007",
+        signers: [{ signer_id: "s1", nama: "Sari", status: "aktif",
+                    kedaluwarsa_info: { sisa_detik: 0 } }] } });
+    }
+    return Promise.resolve({ data: { items: ROWS_TTD, menunggu: 0 } });
+  });
+}
+
+test("status TTD tampil di barisnya, bukan hanya 'sudah dikirim'", async () => {
+  pakaiRowsTtd();
+  render(<PermohonanPanel user={ADMIN} onSelesai={jest.fn()} />);
+  await userEvent.click(await screen.findByTestId("persediaan-permohonan-buka"));
+  const badge = await screen.findByTestId("permohonan-status-ttd-p-3");
+  expect(badge).toHaveTextContent("1/2");
+  expect(badge).toHaveTextContent(/9 hari lagi/);
+});
+
+test("tombol Tautan TTD membuka permintaan yang SUDAH ada", async () => {
+  pakaiRowsTtd();
+  render(<PermohonanPanel user={ADMIN} onSelesai={jest.fn()} />);
+  await userEvent.click(await screen.findByTestId("persediaan-permohonan-buka"));
+  await userEvent.click(await screen.findByTestId("permohonan-tautan-ttd-p-3"));
+  // Dialog memuat DETAIL permintaan — bukan membuat permintaan baru.
+  await waitFor(() => expect(
+    axios.get.mock.calls.some(([u]) => String(u).includes("/ttd/permintaan/sr-9"))
+  ).toBe(true));
+  expect(await screen.findByTestId("ttd-signer-s1")).toBeInTheDocument();
+});
+
+test("permohonan yang belum pernah dikirim tidak menawarkan Tautan TTD", async () => {
+  await bukaPanel();
+  expect(screen.queryByTestId("permohonan-tautan-ttd-p-3")).not.toBeInTheDocument();
+  expect(screen.queryByTestId("permohonan-status-ttd-p-3")).not.toBeInTheDocument();
+});

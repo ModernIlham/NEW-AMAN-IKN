@@ -138,6 +138,8 @@ async def daftar_permohonan(status: str = "", page: int = Query(1, ge=1),
                    .sort("created_at", -1)
                    .skip((page - 1) * page_size).limit(page_size)
                    .to_list(page_size))
+    from ttd_penautan import lampirkan_status_ttd
+    await lampirkan_status_ttd(db, "persetujuan_persediaan", items)
     menunggu = await db.persediaan_permohonan.count_documents(
         {**scope_query_field_satker(_user), "status": "diusulkan"})
     return {"items": items, "total": total, "menunggu": menunggu,

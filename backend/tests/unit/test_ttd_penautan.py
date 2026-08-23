@@ -60,8 +60,8 @@ def _bast(bid="bast-1"):
 
 
 def _sr(sr_id="sr-1", doc_ref="bast-1", signers=None, status="terkirim",
-        created="2026-08-01T00:00:00+00:00"):
-    return {"id": sr_id, "doc_type": "bast", "doc_ref": doc_ref,
+        created="2026-08-01T00:00:00+00:00", doc_type="bast"):
+    return {"id": sr_id, "doc_type": doc_type, "doc_ref": doc_ref,
             "judul": "BAST bast-1/2026", "status": status,
             "created_at": created, "signers": signers or []}
 
@@ -207,4 +207,68 @@ class TestRiwayatBastMembawaStatus:
             await dbx.bast_serah_terima.insert_one(_bast("bast-2"))
             hasil = await _buka(rb.daftar_bast)(_user=USER)
             assert hasil["items"][0]["ttd"] is None
+        _jalan(skenario())
+
+
+class TestEmpatDaftarMembawaStatusYangSAMA:
+    """Empat daftar dokumen memakai potongan yang sama persis. Ditulis sekali
+    di `lampirkan_status_ttd` supaya daftar KELIMA tak perlu menyalinnya — dan
+    supaya tak ada yang diam-diam memakai kunci atau nama field berbeda, yang
+    membuat layarnya sunyi tanpa satu pun galat.
+    """
+
+    def test_menempelkan_ringkasan_ke_tiap_item(self, dbx):
+        async def skenario():
+            await dbx.signature_requests.insert_one(
+                _sr("sr-1", "dok-1", [_signer("aktif")]))
+            items = [{"id": "dok-1"}, {"id": "dok-2"}]
+            await tpn.lampirkan_status_ttd(dbx, "bast", items)
+            assert items[0]["ttd"]["id"] == "sr-1"
+            assert items[1]["ttd"] is None
+        _jalan(skenario())
+
+    def test_daftar_kosong_aman(self, dbx):
+        async def skenario():
+            assert await tpn.lampirkan_status_ttd(dbx, "bast", []) == []
+            assert await tpn.lampirkan_status_ttd(dbx, "bast", None) == []
+        _jalan(skenario())
+
+    def test_riwayat_LPB_membawa_status(self, dbx):
+        async def skenario():
+            import routes.persediaan as rps
+            rps.db = dbx
+            await dbx.lpb.insert_one({"id": "lpb-1", "kode_satker": "111111",
+                                      "nomor": "LPB-1", "kategori": "gabungan"})
+            await dbx.signature_requests.insert_one(
+                _sr("sr-lpb", "lpb-1", [_signer("aktif")], doc_type="lpb"))
+            hasil = await _buka(rps.daftar_lpb)(_user=USER)
+            assert hasil["items"][0]["ttd"]["id"] == "sr-lpb"
+        _jalan(skenario())
+
+    def test_daftar_permohonan_aset_membawa_status(self, dbx):
+        async def skenario():
+            import routes.aset_permohonan as rap
+            rap.db = dbx
+            await dbx.aset_permohonan.insert_one(
+                {"id": "pm-1", "kode_satker": "111111", "status": "disetujui"})
+            await dbx.signature_requests.insert_one(
+                _sr("sr-pm", "pm-1", [_signer("aktif")],
+                    doc_type="persetujuan_aset"))
+            hasil = await _buka(rap.daftar_permohonan_aset)(
+                page=1, page_size=30, _user=USER)
+            assert hasil["items"][0]["ttd"]["id"] == "sr-pm"
+        _jalan(skenario())
+
+    def test_daftar_permohonan_persediaan_membawa_status(self, dbx):
+        async def skenario():
+            import routes.persediaan_permohonan as rpp
+            rpp.db = dbx
+            await dbx.persediaan_permohonan.insert_one(
+                {"id": "pp-1", "kode_satker": "111111", "status": "disetujui"})
+            await dbx.signature_requests.insert_one(
+                _sr("sr-pp", "pp-1", [_signer("aktif")],
+                    doc_type="persetujuan_persediaan"))
+            hasil = await _buka(rpp.daftar_permohonan)(
+                page=1, page_size=30, _user=USER)
+            assert hasil["items"][0]["ttd"]["id"] == "sr-pp"
         _jalan(skenario())
