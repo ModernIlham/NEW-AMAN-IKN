@@ -67,6 +67,70 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#928] Neraca berhenti kurang catat baris BAST di luar 2–50 unit — 2026-08-23
+
+Defek yang diukur, bukan diduga. Satu baris BAST **100 kursi @ Rp1 juta**
+menghasilkan:
+
+| | Sebelum | Seharusnya |
+|---|---|---|
+| Σ nilai jurnal Buku Barang | Rp1.000.000 | Rp100.000.000 |
+| `purchase_price` aset | `"1000000"` | `"100000000"` |
+| Register Pengadaan (`nilai_perolehan`) | Rp100.000.000 | Rp100.000.000 |
+
+Dua laporan atas dokumen yang sama saling bertentangan **tanpa satu pun
+galat**. Baris 3 unit sudah benar sejak dulu — cacatnya hanya mengenai baris
+di luar 2–50 unit.
+
+**Sebabnya.** Pemecahan per-NUP hanya berlaku untuk jumlah bulat 2–50
+(`unit_per_baris`). Di luar itu SATU draft berdiri untuk SELURUH baris —
+karena register aset tak punya field kuantitas sama sekali: satu record = satu
+NUP = satu barang. Tetapi nilai perolehan dan nilai jurnalnya tetap ditulis
+harga **satuan**, sehingga kurang catat sebesar (jumlah − 1) × harga satuan.
+LPB sudah benar, karena ia satu-satunya yang menghitung `jumlah_bast`.
+
+**Yang berubah**
+
+- **`porsi_baris(jumlah, n_unit)`** (baru, murni) — satu sumber untuk tiga
+  hal yang dulu dihitung sendiri-sendiri: `jumlah_bast` LPB, nilai perolehan
+  draft, dan nilai entri jurnal. Nilai cacat (0, negatif, NaN, tak-hingga)
+  tak pernah menjadi pengali rupiah: satu baris cacat tak boleh meracuni
+  seluruh Neraca.
+- Nilai perolehan draft dan nilai jurnal = harga satuan × porsi.
+- **Kuantitas jurnal tetap 1 per record** (keputusan pemilik), sejalan dengan
+  `buat_pasangan_transisi` di modul pembukuan. Kuantitas fisiknya hidup di LPB
+  dan di `jumlah_bast`; memaksakannya ke jurnal akan terpotong `int()` pada
+  agregasinya (2,5 → 2, diam-diam).
+- **`jumlah_bast` distempel ke aset** hanya bila record berdiri untuk lebih
+  dari satu barang. Ia field **terkelola sistem di luar registry field
+  skalar** — pola yang sama dengan `nilai_wajar_terakhir`: bukan isian
+  operator, tak muncul di form/ekspor/impor.
+- **Ambang kapitalisasi PMK 181 kini membaca harga PER BARANG**
+  (`harga_satuan_aset`), bukan nilai record. Tanpa ini, 100 kursi @ Rp750rb
+  akan digolongkan **intrakomptabel** semata-mata karena dibeli banyak
+  sekaligus — efek samping yang lahir dari perbaikan nilai di atas, dan
+  ditambal bersamanya. Kolom **nilai** tetap memakai nilai record. Berlaku di
+  DBKP, LBKP, tombstone penghapusan, dan ekspor XLSX pembukuan.
+
+Aset lama tanpa `jumlah_bast` berperilaku persis seperti sebelumnya — dijaga
+uji tersendiri.
+
+**Berkas**: `backend/lpb_utils.py`, `backend/pembukuan_utils.py`,
+`backend/routes/pengadaan.py`, `backend/routes/reports.py`.
+
+**Uji**: `TestPorsiBaris` (6), `TestHargaSatuanAset` + `TestKlasifikasiPakai
+HargaPerBarang` (7), `TestNilaiJurnalTidakKurangCatat` (7 uji ujung ke ujung
+yang mengukur ulang angka di tabel atas). Backend 3467 uji hijau, frontend
+1103 hijau. Empat mutasi dipasang lalu terbukti mati: (1) nilai draft kembali
+harga satuan → 3 uji; (2) kuantitas tak distempel → 2 uji; (3) ambang kembali
+membaca nilai record → 1 uji; (4) kuantitas cacat membagi nol → 1 uji.
+
+**Jebakan uji yang sempat menggigit.** Fixture `dbx` mengganti
+`catat_mutasi_bmn` dengan no-op, jadi uji nilai jurnal awalnya membaca koleksi
+yang SELALU kosong — dan seluruh assert-nya lulus tanpa menguji apa pun.
+Fixture pemulihnya kini bergantung pada `dbx` dengan sengaja, karena fixture
+autouse berjalan lebih dulu dan akan ditimpa balik.
+
 ## [#927] Pintu ketiga ke pencatatan ganda ditutup — 2026-08-23
 
 Ditemukan saat menelusuri ulang diff `[#925]`, bukan dari laporan pengguna —

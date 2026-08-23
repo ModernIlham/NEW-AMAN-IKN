@@ -333,3 +333,76 @@ class TestBuildLkbRows:
     def test_kosong(self):
         rows, total = build_lkb_rows([])
         assert rows == [] and total["jumlah"] == 0 and total["nilai"] == 0
+
+
+# ── Ambang kapitalisasi berlaku PER BARANG, bukan per record ───────────────
+
+class TestHargaSatuanAset:
+    """Register aset tak punya kuantitas: satu record = satu NUP = satu
+    barang. Satu-satunya pengecualian lahir di Pengadaan — baris BAST di luar
+    2..50 unit tak dipecah per NUP, sehingga SATU record berdiri untuk seluruh
+    baris dan nilai perolehannya adalah nilai baris.
+
+    Tanpa pembagian ini, record semacam itu digolongkan intrakomptabel
+    semata-mata karena dibeli banyak sekaligus.
+    """
+
+    def test_record_biasa_harga_satuannya_sama_dengan_nilai_bukunya(self):
+        from pembukuan_utils import harga_satuan_aset
+        assert harga_satuan_aset({"purchase_price": "750000"}) == 750_000
+
+    def test_record_yang_berdiri_untuk_banyak_barang_dibagi(self):
+        from pembukuan_utils import harga_satuan_aset
+        a = {"purchase_price": "75000000", "jumlah_bast": 100}
+        assert harga_satuan_aset(a) == 750_000
+
+    def test_kuantitas_cacat_tak_pernah_membagi_nol(self):
+        from pembukuan_utils import harga_satuan_aset, kuantitas_aset
+        for q in (0, -3, float("nan"), float("inf"), "x", None, []):
+            assert kuantitas_aset({"jumlah_bast": q}) == 1.0, q
+            assert harga_satuan_aset({"purchase_price": "500", "jumlah_bast": q}) == 500
+
+    def test_nilai_wajar_revaluasi_tetap_dihormati(self):
+        """Harga satuan diturunkan dari NILAI BUKU, bukan nilai perolehan —
+        aset yang sudah direvaluasi tak boleh kembali memakai harga belinya."""
+        from pembukuan_utils import harga_satuan_aset
+        a = {"purchase_price": "75000000", "nilai_wajar_terakhir": 50_000_000,
+             "jumlah_bast": 100}
+        assert harga_satuan_aset(a) == 500_000
+
+
+class TestKlasifikasiPakaiHargaPerBarang:
+    AMBANG = {"3": 1_000_000}
+
+    def _aset(self, **ubah):
+        a = {"asset_code": "3050102001", "purchase_price": "75000000",
+             "jumlah_bast": 100}
+        a.update(ubah)
+        return a
+
+    def test_seratus_barang_murah_TETAP_ekstrakomptabel(self):
+        """Rp750rb per kursi ada di bawah ambang Rp1 jt. Membeli 100 sekaligus
+        tidak mengubah sifat barangnya."""
+        from pembukuan_utils import build_dbkp_rows
+        rows, _ = build_dbkp_rows([self._aset()], ambang=self.AMBANG)
+        baris = next(r for r in rows if r["golongan"] == "3")
+        assert baris["nilai_ekstra"] == 75_000_000, "nilai record tak utuh"
+        assert baris["nilai_intra"] == 0, "digolongkan intra karena dibeli banyak"
+
+    def test_satu_barang_mahal_tetap_intrakomptabel(self):
+        from pembukuan_utils import build_dbkp_rows
+        rows, _ = build_dbkp_rows(
+            [self._aset(purchase_price="15000000", jumlah_bast=1)],
+            ambang=self.AMBANG)
+        baris = next(r for r in rows if r["golongan"] == "3")
+        assert baris["nilai_intra"] == 15_000_000
+
+    def test_record_tanpa_jumlah_bast_tak_berubah_perilakunya(self):
+        """Seluruh aset lama tak punya field ini — tak satu pun boleh
+        berpindah kelas karena perubahan ini."""
+        from pembukuan_utils import build_dbkp_rows
+        rows, _ = build_dbkp_rows(
+            [{"asset_code": "3050102001", "purchase_price": "750000"}],
+            ambang=self.AMBANG)
+        baris = next(r for r in rows if r["golongan"] == "3")
+        assert baris["nilai_ekstra"] == 750_000

@@ -4149,7 +4149,8 @@ async def generate_rekonsiliasi_xlsx(request: Request, _user: dict = Depends(req
     import xlsxwriter
     from kodefikasi_utils import GOLONGAN_DEFAULTS
     from pembukuan_utils import (
-        build_dbkp_rows, golongan_of, klasifikasi_komptabel, nilai_buku_aset,
+        build_dbkp_rows, golongan_of, harga_satuan_aset, klasifikasi_komptabel,
+        nilai_buku_aset,
         posisi_neraca,
     )
     from persediaan_utils import nilai_persediaan_dari_batches
@@ -4263,7 +4264,10 @@ async def generate_rekonsiliasi_xlsx(request: Request, _user: dict = Depends(req
         s2.write(i, 3, gol, f_sel)
         s2.write(i, 4, _akun(gol), f_sel)
         s2.write_number(i, 5, harga, f_angka)
-        s2.write(i, 6, klasifikasi_komptabel(a.get("asset_code"), harga), f_sel)
+        # Kelas komptabel dari harga PER BARANG (ambang PMK 181 berlaku per
+        # barang); kolom nilai di sebelahnya tetap nilai record.
+        s2.write(i, 6, klasifikasi_komptabel(
+            a.get("asset_code"), harga_satuan_aset(a)), f_sel)
         s2.write(i, 7, str(a.get("condition") or ""), f_sel)
         s2.write(i, 8, str(a.get("location") or ""), f_sel)
     s2.set_column(0, 0, 14)

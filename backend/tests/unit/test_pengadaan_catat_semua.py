@@ -1115,3 +1115,130 @@ class TestPintuKetigaPencatatanGanda:
             assert rec["barang"][0]["kode"] == "1010301001"
             assert rec["barang"][0]["asset_id"] == ""
         _jalan(skenario())
+
+
+# Fungsi jurnal ASLI, direbut sebelum fixture `dbx` menggantinya dengan no-op.
+# Uji nilai jurnal harus memanggil yang sungguhan — kalau tidak, koleksi
+# `mutasi_bmn` selalu kosong dan seluruh assert-nya lulus tanpa arti.
+import shared_utils as _su_asli                            # noqa: E402
+_CATAT_MUTASI_ASLI = _su_asli.catat_mutasi_bmn
+
+
+class TestNilaiJurnalTidakKurangCatat:
+    """Baris BAST di luar 2..50 unit melahirkan SATU draft untuk SELURUH baris.
+
+    Sebelum perbaikan, nilai perolehan draft DAN entri jurnalnya tetap harga
+    SATUAN: satu record yang berdiri untuk 100 kursi @ Rp1 juta tercatat
+    Rp1 juta di register aset maupun di Buku Barang, sementara register
+    Pengadaan menghitung Rp100 juta — dua laporan saling bertentangan tanpa
+    satu pun galat. Diukur langsung sebelum ditambal: Σ nilai jurnal
+    Rp1.000.000 dari Rp100.000.000, kurang 99×.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _jurnal_asli(self, dbx, monkeypatch):
+        """Kembalikan fungsi jurnal yang SUNGGUHAN.
+
+        Bergantung pada `dbx` DENGAN SENGAJA: fixture autouse dijalankan lebih
+        dulu, jadi tanpa ketergantungan ini `dbx` akan menimpanya kembali
+        dengan no-op — dan koleksi `mutasi_bmn` selalu kosong, sehingga
+        seluruh assert di kelas ini lulus tanpa menguji apa pun.
+        """
+        import shared_utils as su
+        monkeypatch.setattr(su, "catat_mutasi_bmn", _CATAT_MUTASI_ASLI)
+
+    async def _catat(self, dbx, jumlah, harga=1_000_000):
+        await dbx.inventory_activities.insert_one(
+            {"id": f"keg-{jumlah}", "nama_kegiatan": "Inv", "kode_satker": "",
+             "status": "berjalan"})
+        rec = await _unwrap(rp.buat_perolehan)(rp.PerolehanIn(
+            jenis="pembelian", pihak="PT X", nomor_bast=f"B-{jumlah}/2026",
+            tanggal_bast="2026-03-12",
+            barang=[rp.BarangIn(uraian="Kursi", kode="3050102001",
+                                jumlah=jumlah, harga_satuan=harga)]), user=USER)
+        await _unwrap(rp.buat_draft_aset_dari_perolehan)(
+            rec["id"], rp.BuatDraftAsetIn(activity_id=f"keg-{jumlah}"),
+            user=USER)
+        jurnal = [x async for x in dbx.mutasi_bmn.find({"ref_id": rec["id"]},
+                                                       {"_id": 0})]
+        aset = [a async for a in dbx.assets.find(
+            {"id": {"$in": list({x["asset_id"] for x in jurnal})}}, {"_id": 0})]
+        return rec, jurnal, aset
+
+    def test_baris_100_unit_menjurnal_nilai_PENUH(self, dbx):
+        async def skenario():
+            _rec, jurnal, aset = await self._catat(dbx, 100)
+            assert len(jurnal) == 1, "baris di luar 2..50 seharusnya 1 draft"
+            assert sum(x["nilai"] for x in jurnal) == 100_000_000, (
+                "Buku Barang kurang catat — inilah cacatnya")
+            assert aset[0]["purchase_price"] == "100000000"
+            assert aset[0]["jumlah_bast"] == 100
+        _jalan(skenario())
+
+    def test_kuantitas_jurnal_tetap_SATU_per_record(self, dbx):
+        """Satu entri jurnal = satu record BMN, sejalan modul pembukuan.
+        Kuantitas fisiknya hidup di LPB dan `jumlah_bast`."""
+        async def skenario():
+            _rec, jurnal, _aset = await self._catat(dbx, 100)
+            assert [x["jumlah"] for x in jurnal] == [1]
+        _jalan(skenario())
+
+    def test_baris_yang_DIPECAH_tidak_berubah_sama_sekali(self, dbx):
+        """Pembanding yang membuat uji di atas bermakna: jalur 2..50 sudah
+        benar sejak dulu dan tak boleh ikut berubah — kalau ikut, nilainya
+        akan tercatat berlipat."""
+        async def skenario():
+            _rec, jurnal, aset = await self._catat(dbx, 3)
+            assert len(jurnal) == 3
+            assert sum(x["nilai"] for x in jurnal) == 3_000_000
+            assert {a["purchase_price"] for a in aset} == {"1000000"}
+            assert all("jumlah_bast" not in a for a in aset), (
+                "record yang mewakili satu barang tak perlu distempel")
+        _jalan(skenario())
+
+    def test_baris_satu_unit_tak_distempel_dan_bernilai_satuan(self, dbx):
+        async def skenario():
+            _rec, jurnal, aset = await self._catat(dbx, 1)
+            assert sum(x["nilai"] for x in jurnal) == 1_000_000
+            assert "jumlah_bast" not in aset[0]
+        _jalan(skenario())
+
+    def test_jumlah_pecahan_bernilai_penuh_tanpa_dibulatkan(self, dbx):
+        """2,5 ton besi: nilainya 2,5 × harga, dan kuantitas jurnalnya tetap 1
+        karena agregasi jurnal memakai int() — memaksakan 2,5 akan terpotong
+        jadi 2 diam-diam."""
+        async def skenario():
+            _rec, jurnal, aset = await self._catat(dbx, 2.5, harga=4_000_000)
+            assert sum(x["nilai"] for x in jurnal) == 10_000_000
+            assert [x["jumlah"] for x in jurnal] == [1]
+            assert aset[0]["jumlah_bast"] == 2.5
+        _jalan(skenario())
+
+    def test_register_dan_jurnal_sepakat(self, dbx):
+        """Inti cacatnya: dua laporan atas dokumen yang sama saling
+        bertentangan tanpa galat apa pun."""
+        from pengadaan_utils import nilai_perolehan
+
+        async def skenario():
+            rec, jurnal, _aset = await self._catat(dbx, 100)
+            assert nilai_perolehan(rec) == sum(x["nilai"] for x in jurnal)
+        _jalan(skenario())
+
+    def test_LPB_tetap_mencetak_jumlah_dan_total_yang_benar(self, dbx):
+        """Sisi LPB sudah benar sejak dulu lewat `jumlah_bast`; perbaikan
+        nilai tak boleh membuatnya berlipat menjadi 100 × Rp100 juta."""
+        async def skenario():
+            await _seed(dbx)
+            rec = await _unwrap(rp.buat_perolehan)(rp.PerolehanIn(
+                jenis="pembelian", pihak="PT X", nomor_bast="B-LPB100/2026",
+                tanggal_bast="2026-03-12",
+                barang=[rp.BarangIn(uraian="Kursi", kode="3050102001",
+                                    jumlah=100, harga_satuan=1_000_000)]),
+                user=USER)
+            hasil = await _unwrap(rp.catat_semua_barang)(
+                rec["id"], rp.CatatSemuaIn(activity_id="keg1",
+                                           booking_nomor=False), user=USER)
+            lpb = await dbx.lpb.find_one({"id": hasil["lpb_id"]})
+            assert lpb["items"][0]["jumlah"] == 100
+            assert lpb["total_nilai"] == 100_000_000
+        _jalan(skenario())

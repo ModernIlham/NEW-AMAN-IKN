@@ -20,7 +20,7 @@ from auth_utils import (
 )
 from lpb_utils import (
     baris_lpb_dari_aset, baris_lpb_gabungan, is_persediaan, label_golongan,
-    peringatan_nup, pilah_barang_perolehan, ringkas_pencatatan,
+    peringatan_nup, pilah_barang_perolehan, porsi_baris, ringkas_pencatatan,
     snapshot_sumber, total_nilai_lpb, unit_per_baris,
 )
 from persediaan_pengadaan import (
@@ -988,6 +988,21 @@ async def buat_draft_aset_dari_perolehan(perolehan_id: str,
         # Aturannya hidup di `lpb_utils.unit_per_baris` — satu sumber, supaya
         # peringatan NUP dan pelaksanaannya tak pernah berselisih.
         n_unit = unit_per_baris(jumlah)
+        # Berapa bagian baris ini yang diwakili SATU draft — satu sumber untuk
+        # LPB, nilai perolehan aset, dan nilai jurnal (lihat `porsi_baris`).
+        porsi = porsi_baris(jumlah, n_unit)
+        harga_satuan = float(row.get("harga_satuan") or 0)
+        # NILAI PEROLEHAN DRAFT = harga satuan × porsi yang diwakilinya.
+        #
+        # Dulu selalu harga satuan saja. Untuk baris yang dipecah per unit itu
+        # benar (N draft × harga satuan = nilai baris). Untuk baris DI LUAR
+        # 2..50 — yang hanya melahirkan SATU draft untuk seluruh baris — itu
+        # kurang catat sebesar (jumlah − 1) × harga satuan: satu record yang
+        # berdiri untuk 100 kursi tercatat seharga satu kursi, di register
+        # aset MAUPUN di jurnal Buku Barang. Register Pengadaan sendiri sudah
+        # menghitung nilai baris dengan benar (`nilai_perolehan`), jadi kedua
+        # laporan itu saling bertentangan tanpa satu pun galat.
+        nilai_draft = harga_satuan * porsi
         catatan_jumlah = (f" — jumlah pada BAST: {jumlah:g} unit"
                           if jumlah != 1 and n_unit == 1 else "")
         gagal_baris = False
@@ -999,7 +1014,7 @@ async def buat_draft_aset_dari_perolehan(perolehan_id: str,
                 asset_name=str(row.get("uraian") or "").strip(),
                 category=kategori_by_kode.get(kode, ""),
                 purchase_date=str(p.get("tanggal_bast") or "").strip()[:10],
-                purchase_price=str(int(round(float(row.get("harga_satuan") or 0)))),
+                purchase_price=str(int(round(nilai_draft))),
                 nomor_bast=str(p.get("nomor_bast") or "").strip(),
                 nomor_kontrak=str(p.get("nomor_kontrak") or "").strip(),
                 perolehan_dari_nama=str(p.get("pihak") or "").strip(),
@@ -1019,8 +1034,18 @@ async def buat_draft_aset_dari_perolehan(perolehan_id: str,
                 row.update({"asset_id": doc["id"], "asset_code": doc["asset_code"],
                             "NUP": doc["NUP"], "asset_name": doc["asset_name"]})
             # Back-link dokumen sumber (§5A gap #6) ke aset draft yang baru dibuat.
-            await db.assets.update_one(
-                {"id": doc["id"]}, {"$set": build_asset_perolehan_projection(p, now)})
+            #
+            # `jumlah_bast` ikut distempel HANYA bila record ini berdiri untuk
+            # lebih dari satu barang. Ia field TERKELOLA SISTEM di luar registry
+            # field skalar — pola yang sama dengan `nilai_wajar_terakhir`:
+            # bukan isian operator, tak muncul di form/ekspor, dan satu-satunya
+            # pembacanya adalah ambang kapitalisasi PMK 181, yang berlaku PER
+            # BARANG. Tanpa ini, record ber-nilai total akan salah digolongkan
+            # intrakomptabel padahal harga satuannya di bawah ambang.
+            _proyeksi = dict(build_asset_perolehan_projection(p, now))
+            if porsi != 1.0:
+                _proyeksi["jumlah_bast"] = porsi
+            await db.assets.update_one({"id": doc["id"]}, {"$set": _proyeksi})
             # Jurnal Buku Barang (G7): perolehan → kode 101/102/103/105.
             from shared_utils import catat_mutasi_bmn
             kode_trx = str(JENIS_PEROLEHAN.get(p.get("jenis"), ("", "101"))[1]).split("/")[0]
@@ -1029,7 +1054,12 @@ async def buat_draft_aset_dari_perolehan(perolehan_id: str,
                 "kode_barang": doc["asset_code"], "nup": str(doc["NUP"]),
                 "tanggal_buku": (str(p.get("tanggal_bast") or "").strip()[:10]
                                  or now[:10]),
-                "jumlah": 1, "nilai": float(row.get("harga_satuan") or 0),
+                # `jumlah` tetap 1 PER RECORD — jurnal ini mencatat satu
+                # record BMN, sejalan dengan `buat_pasangan_transisi` di modul
+                # pembukuan. Kuantitas fisik baris hidup di LPB dan di
+                # `jumlah_bast`; memaksakannya ke sini akan terpotong `int()`
+                # pada agregasi jurnal (2,5 → 2).
+                "jumlah": 1, "nilai": nilai_draft,
                 "sumber_modul": "pengadaan", "ref_id": perolehan_id,
                 "keterangan": f"Draft aset dari BAST {p.get('nomor_bast') or '-'}",
                 "oleh": user.get("username", "system")})
@@ -1049,8 +1079,8 @@ async def buat_draft_aset_dari_perolehan(perolehan_id: str,
                 "asset_code": doc.get("asset_code"),
                 "NUP": doc.get("NUP"),
                 "asset_name": doc.get("asset_name"),
-                "harga_satuan": float(row.get("harga_satuan") or 0),
-                "jumlah_bast": 1 if n_unit > 1 else jumlah,
+                "harga_satuan": harga_satuan,
+                "jumlah_bast": porsi,
             })
             dibuat += 1
         if gagal_baris:
