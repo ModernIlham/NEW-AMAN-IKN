@@ -131,6 +131,34 @@ def kelompokkan_per_bidang(aset):
     return hasil
 
 
+def kelompokkan_per_golongan_bidang(aset):
+    """[(kode_golongan, [(kode_bidang, [aset...]), ...]), ...] terurut.
+
+    Dua tingkat sekat untuk daftar barang: GOLONGAN membagi paling kasar
+    (Peralatan dan Mesin vs Persediaan vs Gedung), BIDANG membaginya lagi di
+    dalamnya. Permintaan pemilik pada BAST PPK→KPB: golongan barang berhenti
+    menjadi KOLOM — ia menjadi baris pembagi.
+
+    Kenapa golongan tidak layak jadi kolom: nilainya berulang identik pada
+    setiap baris satu kelompok, memakan lebar yang dibutuhkan uraian barang,
+    dan tetap tak menjawab pertanyaan yang orang bawa ke dokumen ini —
+    "barang golongan apa saja yang diserahkan, dan berapa banyak."
+
+    Sekat berjenjang, jadi urutannya menumpang `kelompokkan_per_bidang` yang
+    sudah terurut: bidang selalu berawalan digit golongannya, sehingga
+    golongan yang sama pasti berdampingan dan tak pernah pecah dua sekat.
+    Aset tanpa kode barang berkumpul di akhir, dinyatakan apa adanya.
+    """
+    hasil = []
+    for bidang, isi in kelompokkan_per_bidang(aset):
+        gol = bidang[:LEVEL_LENGTHS[1]] if bidang else ""
+        if hasil and hasil[-1][0] == gol:
+            hasil[-1][1].append((bidang, isi))
+        else:
+            hasil.append((gol, [(bidang, isi)]))
+    return hasil
+
+
 def level_terdaftar_terdalam(kode, terdaftar) -> int:
     """Level TERDALAM (1-5) yang prefix kode-nya ada di referensi kodefikasi;
     0 bila tak satu pun (bahkan golongan level 1) terdaftar (§5A gap #7 —

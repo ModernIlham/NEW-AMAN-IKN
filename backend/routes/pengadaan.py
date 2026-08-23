@@ -1219,9 +1219,14 @@ async def bangun_bast_ppk_pdf(perolehan_id: str, _user: dict) -> bytes:
     from pejabat_utils import prefiks_pelaksana
     from pelaporan_utils import narasi_hari_tanggal
     from routes.reports import (
-        _fit_col_widths, _fmt_tanggal_id, _get_report_styles,
-        _kop_surat_flowables, _page_footer_factory, _signature_block,
-        _std_doc, _std_table_style, _tempat_tanggal_laporan, _title_block,
+        _baris_sekat_bidang, _baris_sekat_golongan, _fit_col_widths,
+        _fmt_tanggal_id, _gaya_sekat_bidang, _get_report_styles,
+        _kop_surat_flowables, _page_footer_factory, _peta_uraian_bidang,
+        _signature_block, _std_doc, _std_table_style, _tempat_tanggal_laporan,
+        _title_block,
+    )
+    from kodefikasi_utils import (
+        kelompokkan_per_golongan_bidang as _kelompokkan_per_golongan_bidang,
     )
     from shared_utils import pengaturan_kop
 
@@ -1348,21 +1353,41 @@ async def bangun_bast_ppk_pdf(perolehan_id: str, _user: dict) -> bytes:
     # barang apa yang diserahkan. Kolom kosong tidak dicetak: blok yang
     # separuhnya bertanda hubung membuat pembaca menghitung apa yang tak ada
     # alih-alih membaca apa yang ada.
-    _brs_dok = baris_dokumen(p.get("sifat"), p)
-    if _brs_dok:
+    from pengadaan_dokumen import kelompok_dokumen, label_sifat
+    _sifat_teks = label_sifat(p.get("sifat"))
+    _klp_dok = kelompok_dokumen(p.get("sifat"), p)
+    if _sifat_teks or _klp_dok:
         el.append(Paragraph("<b>DASAR DAN DOKUMEN PENGADAAN</b>", lbl_pasal))
-        _t_dok = Table(
-            [[Paragraph(_esc(lbl), ket),
-              Paragraph(f": <b>{_esc(str(val))}</b>", ket)]
-             for lbl, val in _brs_dok],
-            colWidths=[110, doc.width - 110])
-        _t_dok.setStyle(TableStyle([
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('LEFTPADDING', (0, 0), (-1, -1), 0),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 2),
-            ('TOPPADDING', (0, 0), (-1, -1), 0.5),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 0.5)]))
-        el.append(_t_dok)
+        if _sifat_teks:
+            # Sifatnya KEPALA blok, bukan salah satu barisnya: ia menentukan
+            # dokumen mana yang seharusnya ada, jadi pembaca perlu tahu lebih
+            # dulu sebelum menilai kelengkapan yang di bawahnya.
+            el.append(Paragraph(
+                f"Sifat pengadaan: <b>{_esc(_sifat_teks)}</b>", ket))
+        _brs_dok = []
+        for _judul, _isi in _klp_dok:
+            # Judul kelompok memakai baris sendiri yang di-SPAN — "Perikatan"
+            # dan "Pembayaran" menjawab pertanyaan berbeda dan diperiksa orang
+            # berbeda; berderet rata enam baris memaksa pembaca memilahnya
+            # sendiri setiap kali.
+            _brs_dok.append([Paragraph(f"<b>{_esc(_judul)}</b>", ket), ""])
+            for _lbl, _val in _isi:
+                _brs_dok.append([Paragraph(f"    {_esc(_lbl)}", ket),
+                                 Paragraph(f": <b>{_esc(str(_val))}</b>", ket)])
+        if _brs_dok:
+            _t_dok = Table(_brs_dok, colWidths=[110, doc.width - 110])
+            _gaya_dok = [
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+                ('TOPPADDING', (0, 0), (-1, -1), 0.5),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 0.5)]
+            _r = 0
+            for _judul, _isi in _klp_dok:
+                _gaya_dok.append(('SPAN', (0, _r), (-1, _r)))
+                _r += 1 + len(_isi)
+            _t_dok.setStyle(TableStyle(_gaya_dok))
+            el.append(_t_dok)
         el.append(Spacer(1, 1.5 * rl_mm))
 
     # PASAL 1 — objek serah terima: seluruh baris barang perolehan apa adanya
@@ -1372,34 +1397,66 @@ async def bangun_bast_ppk_pdf(perolehan_id: str, _user: dict) -> bytes:
     el.append(Paragraph(
         "PIHAK KESATU menyerahkan dan PIHAK KEDUA menerima hasil pengadaan "
         "dengan rincian sebagai berikut:", isi))
+    # GOLONGAN BUKAN KOLOM (permintaan pemilik). Nilainya berulang identik
+    # pada setiap baris satu kelompok, memakan lebar yang dibutuhkan uraian
+    # barang, dan tetap tak menjawab pertanyaan yang orang bawa ke dokumen
+    # ini: "golongan apa saja yang diserahkan, berapa banyak, berapa nilainya".
+    # Ia menjadi baris SEKAT, dengan sekat BIDANG bersarang di dalamnya.
+    _KOL = 6
     data = [[Paragraph(h, st['TableHeader']) for h in
-             ("No", "Kode Barang", "Uraian Barang", "Golongan", "Jumlah",
+             ("No", "Kode Barang", "Uraian Barang", "Jumlah",
               "Harga Satuan (Rp)", "Jumlah Harga (Rp)")]]
+    _barang = [dict(b or {}, asset_code=(b or {}).get("kode"))
+               for b in (p.get("barang") or [])]
+    _uraian_bidang = await _peta_uraian_bidang(
+        [b.get("asset_code") for b in _barang])
+    _sekat_gol, _sekat_bid = [], []
     total = 0.0
-    for i, b in enumerate(p.get("barang") or [], 1):
-        row = b or {}
-        harga = float(row.get("harga_satuan") or 0)
-        jml = float(row.get("jumlah") or 0)
-        tot = harga * jml
-        total += tot
-        jml_txt = str(int(jml)) if float(jml).is_integer() else f"{jml:g}"
-        data.append([
-            Paragraph(str(i), st['CellCenter']),
-            Paragraph(_esc(str(row.get("kode") or "-").strip()), st['CellCenter']),
-            Paragraph(_esc(str(row.get("uraian") or "-").strip()), st['Cell']),
-            Paragraph(label_golongan(row.get("kode")) or "-", st['CellCenter']),
-            Paragraph(jml_txt, st['CellCenter']),
-            Paragraph(fmt_rp(harga), st['CellRight']),
-            Paragraph(fmt_rp(tot), st['CellRight']),
-        ])
+    _no = 0
+    for _kode_gol, _bidang_list in _kelompokkan_per_golongan_bidang(_barang):
+        _isi_gol = [x for _, isi in _bidang_list for x in isi]
+        _n_gol = sum(float(x.get("jumlah") or 0) for x in _isi_gol)
+        _rp_gol = sum(float(x.get("harga_satuan") or 0)
+                      * float(x.get("jumlah") or 0) for x in _isi_gol)
+        _sekat_gol.append(len(data))
+        data.append(_baris_sekat_golongan(
+            _kode_gol, label_golongan(_kode_gol), _n_gol, _KOL, st,
+            keterangan=fmt_rp(_rp_gol)))
+        for _kode_bid, _isi in _bidang_list:
+            _n_bid = sum(float(x.get("jumlah") or 0) for x in _isi)
+            _sekat_bid.append(len(data))
+            data.append(_baris_sekat_bidang(
+                _kode_bid, _uraian_bidang.get(_kode_bid, ""), _n_bid, _KOL, st))
+            for row in _isi:
+                _no += 1
+                harga = float(row.get("harga_satuan") or 0)
+                jml = float(row.get("jumlah") or 0)
+                tot = harga * jml
+                total += tot
+                jml_txt = str(int(jml)) if float(jml).is_integer() else f"{jml:g}"
+                data.append([
+                    Paragraph(str(_no), st['CellCenter']),
+                    Paragraph(_esc(str(row.get("kode") or "-").strip()),
+                              st['CellCenter']),
+                    Paragraph(_esc(str(row.get("uraian") or "-").strip()),
+                              st['Cell']),
+                    Paragraph(jml_txt, st['CellCenter']),
+                    Paragraph(fmt_rp(harga), st['CellRight']),
+                    Paragraph(fmt_rp(tot), st['CellRight']),
+                ])
     data.append([Paragraph("", st['Cell']),
                  Paragraph("<b>JUMLAH</b>", st['Cell']),
                  Paragraph("", st['Cell']), Paragraph("", st['Cell']),
-                 Paragraph("", st['Cell']), Paragraph("", st['Cell']),
+                 Paragraph("", st['Cell']),
                  Paragraph(f"<b>{fmt_rp(total)}</b>", st['CellRight'])])
-    t = Table(data, colWidths=_fit_col_widths([24, 84, 148, 86, 40, 80, 84],
+    t = Table(data, colWidths=_fit_col_widths([24, 92, 214, 44, 84, 88],
                                               doc.width), repeatRows=1)
-    t.setStyle(_std_table_style(zebra=True, total_row=True))
+    # Dua tingkat sekat dibedakan warnanya, bukan indentasi: sekat mengisi
+    # lebar penuh sehingga indentasi tak terbaca sebagai jenjang.
+    t.setStyle(_std_table_style(
+        zebra=True, total_row=True,
+        extra=(_gaya_sekat_bidang(_sekat_gol, warna="#e2e8f0", padding=1.5)
+               + _gaya_sekat_bidang(_sekat_bid, warna="#f1f5f9"))))
     el.append(t)
 
     nomor_pasal = 2
