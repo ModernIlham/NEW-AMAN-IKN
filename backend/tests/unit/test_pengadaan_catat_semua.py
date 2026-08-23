@@ -1021,3 +1021,97 @@ def test_kepala_LPB_satu_bast_berhenti_mengulang_isi_tabel(dbx, monkeypatch):
         assert "10 Maret 2026" in teks
         assert "BAST-001/2026" in teks
     _jalan(skenario())
+
+
+class TestPintuKetigaPencatatanGanda:
+    """`buat_perolehan` menerima `asset_id` LANGSUNG saat register dicatat.
+
+    Dua pintu lain sudah dijaga — jalur otomatis melewati golongan 1, dan
+    `tautkan_barang` menolaknya terang-terangan. Pintu ini tidak, sehingga
+    satu rim kertas HVS bisa berdiri di kartu stok DAN sebagai BMN ber-NUP
+    sekaligus, keduanya berjurnal ke Neraca.
+    """
+
+    async def _aset(self, dbx, kode="1010301001000001"):
+        await dbx.assets.insert_one(
+            {"id": "aset-1", "asset_code": kode, "NUP": "1",
+             "asset_name": "Kertas?", "kode_satker": ""})
+
+    def _payload(self, kode, asset_id="aset-1", **ubah):
+        b = {"uraian": "Kertas HVS", "kode": kode, "jumlah": 1,
+             "harga_satuan": 60_000, "asset_id": asset_id}
+        b.update(ubah)
+        return rp.PerolehanIn(
+            jenis="pembelian", pihak="PT X", nomor_bast="B-PINTU/2026",
+            tanggal_bast="2026-03-12", barang=[rp.BarangIn(**b)])
+
+    def test_baris_golongan_1_dengan_asset_id_DITOLAK_400(self, dbx):
+        async def skenario():
+            await _seed(dbx)
+            await self._aset(dbx)
+            with pytest.raises(rp.HTTPException) as e:
+                await _unwrap(rp.buat_perolehan)(
+                    self._payload("1010301001"), user=USER)
+            assert e.value.status_code == 400
+            assert "golongan 1" in str(e.value.detail)
+        _jalan(skenario())
+
+    def test_penolakannya_menunjuk_jalan_yang_benar(self, dbx):
+        """Penolakan yang tak menyebut jalan keluarnya membuat operator
+        mengulang kesalahan yang sama lewat pintu lain."""
+        async def skenario():
+            await _seed(dbx)
+            await self._aset(dbx)
+            with pytest.raises(rp.HTTPException) as e:
+                await _unwrap(rp.buat_perolehan)(
+                    self._payload("1010301001"), user=USER)
+            assert "Catat Semua Barang" in str(e.value.detail)
+        _jalan(skenario())
+
+    def test_tautan_persediaan_TAK_PERNAH_mengubah_golongan_baris(self, dbx):
+        """Pengganti uji yang sempat ditulis lalu DIBUANG karena tak
+        membedakan apa pun.
+
+        Uji itu mengaku menjaga "kode yang dinaikkan lewat tautan ikut
+        terjaring", padahal kode yang dipakainya sudah golongan 1 sejak
+        diketik — jadi ia lulus baik penjaga membaca kode tersimpan maupun
+        kode mentah. Yang sebenarnya menjaga adalah
+        `validate_taut_persediaan`: ia menolak kode non-golongan-1 lebih dulu,
+        sehingga tautan tak pernah bisa MENGUBAH golongan sebuah baris. Itulah
+        yang diuji di sini — sifat yang membuat urutan pemeriksaan di
+        `buat_perolehan` aman, bukan klaim yang tak bisa dibuktikan.
+        """
+        async def skenario():
+            await _seed(dbx)
+            await dbx.persediaan.insert_one(
+                {"id": "psd-a4", "kode_satker": "",
+                 "kode_barang": "1010301001000001", "nup": "1",
+                 "nama_barang": "Kertas HVS A4", "satuan": "Rim",
+                 "stok": 0, "batches": []})
+            with pytest.raises(rp.HTTPException) as e:
+                await _unwrap(rp.buat_perolehan)(
+                    self._payload("3050102001", asset_id="",
+                                  psd_master_id="psd-a4"), user=USER)
+            assert e.value.status_code == 400
+            assert "golongan 1" in str(e.value.detail)
+        _jalan(skenario())
+
+    def test_baris_ASET_TETAP_dengan_asset_id_tetap_boleh(self, dbx):
+        """Penjaga tak boleh menutup jalur yang memang sah."""
+        async def skenario():
+            await _seed(dbx)
+            await self._aset(dbx, kode="3050102001")
+            rec = await _unwrap(rp.buat_perolehan)(
+                self._payload("3050102001"), user=USER)
+            assert rec["barang"][0]["asset_id"] == "aset-1"
+        _jalan(skenario())
+
+    def test_baris_persediaan_TANPA_asset_id_tetap_boleh(self, dbx):
+        """Yang ditolak adalah TAUTANNYA, bukan barang persediaannya."""
+        async def skenario():
+            await _seed(dbx)
+            rec = await _unwrap(rp.buat_perolehan)(
+                self._payload("1010301001", asset_id=""), user=USER)
+            assert rec["barang"][0]["kode"] == "1010301001"
+            assert rec["barang"][0]["asset_id"] == ""
+        _jalan(skenario())
