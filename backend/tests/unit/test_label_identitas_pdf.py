@@ -1,31 +1,40 @@
-"""Label NIP/NIK/NRP pada SEMUA keluaran PDF/DOCX terdeteksi, tak ditebak.
+"""Label NIP/NIK/NRP pada SEMUA keluaran PDF/DOCX terdeteksi, tak ditebak —
+dan pada BLOK TANDA TANGAN, tidak dicetak sama sekali bila bukan NIP/NRP.
 
-Permintaan pemilik: *"pastikan di semua generate PDF bagian NIP/NIK/NRP dapat
-otomatis terdeteksi."*
+Permintaan pemilik, dua tahap. Mula-mula: *"pastikan di semua generate PDF
+bagian NIP/NIK/NRP dapat otomatis terdeteksi."* Deteksinya dibangun, dan garis
+tanda tangan yang masih kosong diberi satu label netral berupa titik-titik.
 
-Untuk nomor yang ADA, deteksinya memang sudah berjalan: `label_nomor_identitas`
-memilih NIP / NI PPPK / NRP dari bentuk nomornya, dan menahan NIK demi privasi.
-Yang belum tertangani adalah **garis tanda tangan yang masih kosong** — yang
-diisi tangan setelah dokumen dicetak. Di situ tak ada nomor untuk dideteksi,
-dan 30 tempat di seluruh backend memakai label `"NIP. ...................."`
-yang dipatok.
+Lalu pemilik menyempitkannya: *"apabila pegawai tersebut tidak memiliki
+informasi mengenai NIP dan/atau tergolong sebagai Non-ASN maka di bagian tanda
+tangan tidak perlu dituliskan, jadi hanya tuliskan jika NIP/NRP saja … jadikan
+ini aturan sistem … diterapkan saat generate PDF/Word ke depannya TANPA
+KECUALI, khusus di bagian tanda tangan saja."*
 
-Akibatnya bukan soal kerapian: penanda tangan Non-ASN diminta menuliskan NIK-nya
-di bawah label "NIP.", dan anggota TNI/POLRI menuliskan NRP-nya di sana. Dokumen
-resmi jadi menamai nomor orang dengan nama yang bukan namanya.
+Label netral titik-titik itu karena itu DIHAPUS — beserta konstantanya, supaya
+tak ada jalan memakainya lagi. Aturan lengkapnya:
+`docs/ATURAN-BLOK-TANDA-TANGAN.md`.
 
-Jalan keluarnya bukan menebak lebih pintar, melainkan **tidak menebak**: satu
-label netral yang benar untuk ketiganya.
+Perhatikan batas ruang lingkupnya: yang dikosongkan hanya BLOK TANDA TANGAN.
+Kolom tabel, blok identitas, dan ekspor tetap mencetak nomor apa adanya —
+di sana nomornya memang informasi yang diminta, bukan tanda pengesahan.
 """
 import ast
 import pathlib
+import re
 
 import pytest
 
 from pegawai_utils import (
-    PLACEHOLDER_IDENTITAS, baris_identitas_laporan, baris_identitas_ttd,
-    label_nomor_identitas,
+    baris_identitas_laporan, baris_identitas_ttd, label_nomor_identitas,
 )
+
+# Bentuk label yang DILARANG berdiri sendiri sebagai konstanta: "NIP.",
+# "NIP/NIK/NRP. ............", "NIP/NIK. -" — label identitas tanpa nomor.
+# Sengaja berjangkar di awal & akhir baris supaya kalimat penjelas yang
+# kebetulan menyebut "NIP/NIK" di tengahnya tidak ikut tertangkap.
+POLA_PLACEHOLDER = re.compile(
+    r"^(NIP|NIK|NRP|NI PPPK)(/(NIK|NRP|NIP))*\s*[.:]\s*(\.{3,}|-)?\s*$")
 
 AKAR = pathlib.Path(__file__).resolve().parents[2]
 # Satu-satunya berkas yang BOLEH merakit "NIP. <nomor>" — di sinilah labelnya
@@ -37,23 +46,37 @@ NIK = "3506042503900001"
 NRP = "80123456"
 
 
-class TestLabelNetral:
-    def test_menyebut_ketiganya(self):
-        for bagian in ("NIP", "NIK", "NRP"):
-            assert bagian in PLACEHOLDER_IDENTITAS
+class TestBlokTtdHanyaNipAtauNrp:
+    """ATURAN SISTEM: di area tanda tangan, hanya NIP/NI PPPK/NRP yang
+    dicetak. Selain itu blok tanda tangan berisi NAMA SAJA."""
 
-    def test_masih_berupa_garis_titik_untuk_ditulis_tangan(self):
-        assert "." * 8 in PLACEHOLDER_IDENTITAS
+    def test_nomor_kosong_tidak_menghasilkan_baris(self):
+        assert baris_identitas_ttd("") == []
+        assert baris_identitas_ttd(None) == []
 
-    def test_dipakai_saat_nomornya_memang_kosong(self):
-        assert baris_identitas_ttd("", PLACEHOLDER_IDENTITAS) == [PLACEHOLDER_IDENTITAS]
-        assert baris_identitas_ttd("-", PLACEHOLDER_IDENTITAS) == [PLACEHOLDER_IDENTITAS]
+    def test_garis_titik_juga_bukan_baris(self):
+        """Nomor yang "ada" tetapi isinya hanya tanda baca adalah cara lain
+        menuliskan 'belum ada NIP' — ia tak boleh lolos jadi baris."""
+        for kosong in ("-", "--", "...", ". . .", "___", "  "):
+            assert baris_identitas_ttd(kosong) == [], kosong
 
-    def test_TIDAK_dipakai_saat_nomornya_ada(self):
-        """Nomor yang ada tetap dideteksi — label netral hanya untuk yang
-        kosong. Memakainya di mana-mana justru membuang deteksi yang sudah
-        bekerja."""
-        assert baris_identitas_ttd(NIP, PLACEHOLDER_IDENTITAS) == [f"NIP. {NIP}"]
+    def test_nomor_yang_ADA_tetap_dicetak(self):
+        assert baris_identitas_ttd(NIP) == [f"NIP. {NIP}"]
+        assert baris_identitas_ttd(NRP) == [f"NRP. {NRP}"]
+
+    def test_konstanta_placeholder_sudah_TIDAK_ADA_lagi(self):
+        """Dihapus, bukan sekadar tak dipakai: selama konstantanya ada, blok
+        tanda tangan berikutnya akan memakainya lagi tanpa ada yang menahan."""
+        import pegawai_utils
+        assert not hasattr(pegawai_utils, "PLACEHOLDER_IDENTITAS")
+
+    def test_parameter_placeholder_sudah_TIDAK_ADA_lagi(self):
+        """Argumen ketiga dihapus, bukan dibiarkan bernilai bawaan kosong —
+        pemanggil lama yang masih mengirim status kepegawaian di posisi
+        ketiga harus GAGAL, bukan diam-diam salah slot."""
+        import inspect
+        param = list(inspect.signature(baris_identitas_ttd).parameters)
+        assert param == ["nomor", "status_kepegawaian"]
 
 
 class TestDeteksiJenisNomorTetapBekerja:
@@ -167,24 +190,67 @@ class TestPemindaiLabelDipatok:
                   and n.value.startswith("NIP.")]
         assert temuan == ["NIP. ...................."]
 
-    def test_label_netral_LOLOS_pemindaian(self):
-        assert not PLACEHOLDER_IDENTITAS.startswith("NIP.")
+    def test_tak_ada_lagi_label_yang_dikecualikan(self):
+        """Dulu ada satu label yang sengaja diloloskan pemindaian (label
+        netral titik-titik). Sekarang tidak ada pengecualian sama sekali."""
+        assert POLA_PLACEHOLDER.search("NIP/NIK/NRP. ................")
+        assert POLA_PLACEHOLDER.search("NIP/NIK. -")
 
 
-class TestSemuaBerkasKeluaranMemakaiLabelNetral:
-    """Berkas yang mencetak garis tanda tangan kosong WAJIB memakai konstanta
-    bersama, bukan menuliskan labelnya sendiri."""
+class TestNolPlaceholderIdentitasDiSeluruhBackend:
+    """ATURAN SISTEM berlaku "tanpa kecuali" — jadi yang menjaganya pun harus
+    menyapu SELURUH backend, bukan daftar berkas yang harus diingat orang.
 
-    BERKAS = ["routes/bast.py", "routes/pemusnahan.py", "routes/pengadaan.py",
-              "routes/penggunaan.py", "routes/persediaan.py",
-              "routes/reports.py", "routes/wasdal.py", "docx_utils.py",
-              "shared_utils.py"]
+    Daftar berkas yang ditulis tangan gagal pada kasus yang justru paling
+    mungkin terjadi: modul PDF/Word BARU. Ia lahir di luar daftar, jadi
+    pemindaiannya hijau sejak hari pertama sementara dokumennya mencetak
+    "NIP. ............" untuk penanda tangan Non-ASN.
+    """
 
-    @pytest.mark.parametrize("nama", BERKAS)
-    def test_mengimpor_dan_memakai_konstanta(self, nama):
-        teks = (AKAR / nama).read_text(encoding="utf-8")
-        assert "PLACEHOLDER_IDENTITAS" in teks, nama
-        assert "from pegawai_utils import" in teks, nama
+    def _berkas(self):
+        for f in sorted(AKAR.glob("**/*.py")):
+            bagian = set(f.parts)
+            if "tests" in bagian or "__pycache__" in bagian or "node_modules" in bagian:
+                continue
+            yield f
+
+    def test_pemindaiannya_menyapu_berkas_sungguhan(self):
+        """Pemindai yang jalurnya salah menyapu nol berkas dan selalu hijau."""
+        nama = {f.name for f in self._berkas()}
+        assert {"bast.py", "persediaan.py", "reports.py", "docx_utils.py",
+                "shared_utils.py", "penggunaan.py", "pengadaan.py",
+                "wasdal.py", "pemusnahan.py"} <= nama
+        assert len(nama) >= 50
+
+    def test_polanya_benar_benar_menangkap(self):
+        """Pola yang tak pernah cocok membuat pemindaian di bawah tak berarti."""
+        assert POLA_PLACEHOLDER.search("NIP. ....................")
+        assert POLA_PLACEHOLDER.search("NIP.")
+        # …dan TIDAK menangkap yang sah:
+        assert not POLA_PLACEHOLDER.search(f"NIP. {NIP}")
+        assert not POLA_PLACEHOLDER.search("NIP/NIK Pegawai")
+        assert not POLA_PLACEHOLDER.search("Non-ASN/NIK: baris NIP/NIK tidak dicetak.")
+
+    def test_nol_placeholder_identitas(self):
+        pelanggar = []
+        for f in self._berkas():
+            try:
+                pohon = ast.parse(f.read_text(encoding="utf-8"), filename=str(f))
+            except SyntaxError:                     # pragma: no cover
+                continue
+            for n in ast.walk(pohon):
+                if not isinstance(n, ast.Constant) or not isinstance(n.value, str):
+                    continue
+                for baris in n.value.split("\n"):
+                    if POLA_PLACEHOLDER.search(baris.strip()):
+                        pelanggar.append(f"{f.name}:{n.lineno} {baris.strip()!r}")
+        assert pelanggar == [], (
+            "Blok tanda tangan tidak boleh mencetak label identitas tanpa "
+            "nomor — lihat docs/ATURAN-BLOK-TANDA-TANGAN.md: " + "; ".join(pelanggar))
+
+    def test_konstanta_lama_tidak_diimpor_di_mana_pun(self):
+        for f in self._berkas():
+            assert "PLACEHOLDER_IDENTITAS" not in f.read_text(encoding="utf-8"), f.name
 
 
 class TestLabelBlokIdentitas:
@@ -220,3 +286,76 @@ class TestLabelBlokIdentitas:
         from pegawai_utils import label_identitas_cetak, label_nomor_identitas
         assert label_nomor_identitas(NIK) == ""
         assert label_identitas_cetak(NIK) == "NIK"
+
+
+class TestPdfSungguhanMematuhiAturan:
+    """Bukti terakhir bukan pemindaian kode, melainkan **teks PDF-nya**.
+
+    Pemindai statis menjaga agar labelnya tak ditulis ulang; ia tidak bisa
+    membuktikan bahwa yang sampai ke kertas memang bersih. Uji ini merender
+    blok tanda tangan sungguhan lalu membacanya kembali.
+    """
+
+    def _teks(self, penanda_tangan):
+        import io
+        import pypdfium2 as pdfium
+        from reportlab.lib.pagesizes import A4
+        from reportlab.platypus import SimpleDocTemplate
+        import routes.reports as rrep
+        buf = io.BytesIO()
+        doc = SimpleDocTemplate(buf, pagesize=A4)
+        doc.build(list(rrep._signature_block(penanda_tangan, doc.width)))
+        return pdfium.PdfDocument(buf.getvalue())[0].get_textpage().get_text_range()
+
+    def test_penanda_tangan_ber_nip_tetap_tercetak(self):
+        teks = self._teks([{"header": "Yang Menerima,", "nama": "Sari",
+                            "after": baris_identitas_ttd(NIP)}])
+        assert "Sari" in teks
+        assert f"NIP. {NIP}" in teks
+
+    def test_nrp_tercetak_sebagai_NRP(self):
+        teks = self._teks([{"header": "Yang Menerima,", "nama": "Rudi",
+                            "after": baris_identitas_ttd(NRP)}])
+        assert f"NRP. {NRP}" in teks
+
+    @pytest.mark.parametrize("nomor,status", [
+        ("", ""),                 # tak punya NIP
+        ("-", ""),                # penanda "belum ada" era lama
+        (NIK, ""),                # NIK
+        (NIP, "non_asn"),         # Non-ASN meski nomornya berformat NIP
+    ])
+    def test_tanpa_nip_yang_sah_HANYA_nama_yang_tercetak(self, nomor, status):
+        teks = self._teks([{"header": "Yang Menyerahkan,", "nama": "Budi",
+                            "after": baris_identitas_ttd(nomor, status)}])
+        assert "Budi" in teks
+        for jejak in ("NIP", "NIK", "NRP"):
+            assert jejak not in teks, teks
+
+
+class TestAturannyaTertulisDiDokumentasi:
+    """Pemilik meminta aturan ini *"ditulis di dalam dokumentasi agar
+    diterapkan … ke depannya tanpa terkecuali"*. Dokumentasi yang hilang
+    membuat aturannya hanya hidup di kepala orang yang menulisnya.
+    """
+
+    DOK = AKAR.parent / "docs" / "ATURAN-BLOK-TANDA-TANGAN.md"
+
+    def test_dokumennya_ada(self):
+        assert self.DOK.is_file(), self.DOK
+
+    def test_menyebut_fungsi_yang_harus_dipakai(self):
+        isi = self.DOK.read_text(encoding="utf-8")
+        assert "baris_identitas_ttd" in isi
+        assert "baris_identitas_laporan" in isi
+
+    def test_menyebut_batas_ruang_lingkupnya(self):
+        """Tanpa batas yang tertulis, aturan ini gampang melebar ke kolom
+        tabel dan ekspor — tempat nomornya justru memang diminta."""
+        isi = self.DOK.read_text(encoding="utf-8").lower()
+        assert "kolom tabel" in isi
+        assert "ekspor" in isi
+
+    def test_kode_menunjuk_balik_ke_dokumennya(self):
+        """Rujukan dua arah: yang membaca kodenya menemukan aturannya."""
+        import pegawai_utils
+        assert "ATURAN-BLOK-TANDA-TANGAN.md" in pegawai_utils.baris_identitas_ttd.__doc__

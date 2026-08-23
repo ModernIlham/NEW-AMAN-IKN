@@ -32,6 +32,9 @@ Referensi Akun BAS, Satker). Aplikasi berjalan **multi-satker terisolasi**
 label BMN**, dan **backup otomatis terjadwal**.
 
 - Rencana induk & prinsip integrasi antar modul: [`docs/MASTERPLAN-SIKLUS-BMN.md`](./docs/MASTERPLAN-SIKLUS-BMN.md)
+- **ATURAN SISTEM** — baris identitas pada blok tanda tangan seluruh dokumen
+  PDF/Word (hanya NIP/NRP yang dicetak; kosong & Non-ASN & NIK → nama saja):
+  [`docs/ATURAN-BLOK-TANDA-TANGAN.md`](./docs/ATURAN-BLOK-TANDA-TANGAN.md)
 - Rujukan regulasi & alur bisnis: [`docs/PUSTAKA-REGULASI-BMN.md`](./docs/PUSTAKA-REGULASI-BMN.md)
 - Penggunaan BMN dari sisi PEMOHON (5 rezim + rezim khusus IKN, berkas &
   ambang kewenangan): [`docs/PENGGUNAAN-BMN-PEMOHON.md`](./docs/PENGGUNAAN-BMN-PEMOHON.md)

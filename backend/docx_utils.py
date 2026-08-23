@@ -17,7 +17,6 @@ Fungsi murni terhadap Mongo: peta status kepegawaian per-NIP disiapkan pemanggil
 """
 import base64
 import io
-from pegawai_utils import PLACEHOLDER_IDENTITAS
 
 _NAVY = "1F4E79"          # biru tua kop/heading (samakan dgn LBP)
 _HEADER_BG = "1F4E79"     # latar header tabel
@@ -384,8 +383,7 @@ def signature_block(d, tim, ident, tempat_tanggal, *, label_tim="Tim",
                 idx = i + j
                 ketua = m.get("is_ketua") if punya_ketua else (idx == 0)
                 nip_m = str(m.get("nip") or "").strip()
-                baris = baris_identitas_ttd(nip_m, PLACEHOLDER_IDENTITAS,
-                                            peta.get(nip_m, ""))
+                baris = baris_identitas_ttd(nip_m, peta.get(nip_m, ""))
                 _sig_cell(cells[j], "Ketua Tim," if ketua else "Anggota,", None,
                           m.get("nama"), baris[0] if baris else "")
             else:
@@ -399,7 +397,7 @@ def signature_block(d, tim, ident, tempat_tanggal, *, label_tim="Tim",
     for s in (saksi or []):
         sm = _member(s)
         nip_s = str(sm.get("nip") or "").strip()
-        baris = baris_identitas_ttd(nip_s, "", peta.get(nip_s, ""))
+        baris = baris_identitas_ttd(nip_s, peta.get(nip_s, ""))
         t = d.add_table(rows=1, cols=2)
         cells = t.rows[0].cells
         cells[1].text = ""
@@ -412,7 +410,7 @@ def signature_block(d, tim, ident, tempat_tanggal, *, label_tim="Tim",
     # Kuasa Pengguna Barang — Mengetahui, tengah bawah
     nip_kpb = str(ident.get("kasatker_nip") or "").strip()
     baris_kpb = (baris_identitas_laporan(nip_kpb, peta.get(nip_kpb, ""))
-                 if nip_kpb else PLACEHOLDER_IDENTITAS)
+                 if nip_kpb else "")
     t = d.add_table(rows=1, cols=3)
     t.alignment = WD_ALIGN_PARAGRAPH.CENTER
     cells = t.rows[0].cells
@@ -436,7 +434,7 @@ def signature_single(d, *, nama, header="Yang membuat pernyataan,", jabatan=None
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.shared import Emu
     from pegawai_utils import baris_identitas_laporan
-    nomor_baris = baris_identitas_laporan(str(nip or "").strip(), status) if str(nip or "").strip() else PLACEHOLDER_IDENTITAS
+    nomor_baris = baris_identitas_laporan(str(nip or "").strip(), status)
     role = None if jabatan_bawah else jabatan
     after_nama = [jabatan] if (jabatan_bawah and jabatan) else None
     usable = int(d.sections[0].page_width - d.sections[0].left_margin - d.sections[0].right_margin)

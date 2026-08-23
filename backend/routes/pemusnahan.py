@@ -24,7 +24,6 @@ from pemusnahan_utils import (
     validate_pemusnahan, validate_transisi_usulan_pemusnahan,
     validate_usulan_pemusnahan,
 )
-from pegawai_utils import PLACEHOLDER_IDENTITAS
 
 pemusnahan_router = APIRouter()
 
@@ -490,10 +489,10 @@ async def ba_pemusnahan_pdf(ba_id: str, _user: dict = Depends(require_user)):
     elements.extend(_signature_block([
         {'pre': [''], 'header': 'Petugas Pelaksana,',
          'nama': '...........................',
-         'after': [PLACEHOLDER_IDENTITAS]},
+         'after': []},
         {'pre': [''], 'header': 'Saksi,',
          'nama': '...........................',
-         'after': [PLACEHOLDER_IDENTITAS]},
+         'after': []},
         # KPB melekat ke satker DOKUMEN (BA-nya sendiri) — sejalan kop di atas.
         await blok_ttd_kpb_titik(settings, kode_satker=ks_dok),
     ], doc.width))

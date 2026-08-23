@@ -8,7 +8,6 @@ Wasdal SIMAN v2. Pemantauan insidentil ber-BA (isi + PDF + lampiran)
 dikelola lewat register tersendiri di modul ini.
 """
 import asyncio
-from pegawai_utils import PLACEHOLDER_IDENTITAS
 import uuid
 from datetime import datetime, timezone
 
@@ -739,7 +738,7 @@ async def ba_insidentil_pdf(tiket_id: str, _user: dict = Depends(require_user)):
     elements.extend(_signature_block([
         {'pre': [''], 'header': 'Petugas Pemantauan,',
          'nama': '...........................',
-         'after': [PLACEHOLDER_IDENTITAS]},
+         'after': []},
         await blok_ttd_kpb_titik(settings, kode_satker=ks_dok),   # KPB satker dokumen
     ], doc.width))
     footer = _page_footer_factory("Berita Acara Pemantauan Insidentil BMN")
@@ -857,7 +856,7 @@ async def laporan_wasdal_pdf(
     elements.extend(_signature_block([
         {'pre': [''], 'header': 'Petugas Pemantauan,',
          'nama': '...........................',
-         'after': [PLACEHOLDER_IDENTITAS]},
+         'after': []},
         await blok_ttd_kpb_titik(settings, kode_satker=kode_satker_user(_user)),   # KPB dari registry pejabat (temuan #26)
     ], doc.width))
     footer = _page_footer_factory("Laporan Hasil Pemantauan Wasdal BMN")

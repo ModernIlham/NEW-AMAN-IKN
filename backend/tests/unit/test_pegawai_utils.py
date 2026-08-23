@@ -268,12 +268,12 @@ def test_urai_identitas_auto_isi():
 
 
 def test_baris_identitas_ttd_dan_label_laporan():
-    """Laporan: NRP berlabel NRP; NIK Non-ASN TIDAK dicetak; kosong →
-    placeholder garis titik."""
+    """Laporan: NRP berlabel NRP; NIK Non-ASN TIDAK dicetak; kosong → tanpa
+    baris sama sekali (ATURAN SISTEM — docs/ATURAN-BLOK-TANDA-TANGAN.md)."""
     from pegawai_utils import baris_identitas_laporan, baris_identitas_ttd
     assert baris_identitas_ttd("80101234") == ["NRP. 80101234"]
     assert baris_identitas_ttd("3506042503900001") == []
-    assert baris_identitas_ttd("", "NIP. ....") == ["NIP. ...."]
+    assert baris_identitas_ttd("") == []
     assert baris_identitas_laporan("195808181984041001") == "NIP. 195808181984041001"
     assert baris_identitas_laporan("80101234", "polri") == "NRP. 80101234"
     assert baris_identitas_laporan("195808181984041001", "non_asn") == ""
@@ -281,17 +281,17 @@ def test_baris_identitas_ttd_dan_label_laporan():
 
 def test_baris_identitas_ttd_status_non_asn():
     """Aturan blok TTD: penandatangan Non-ASN TIDAK dicetak NIP/NIK-nya
-    apa pun format nomornya; placeholder "-" diperlakukan kosong."""
+    apa pun format nomornya; "-" era lama tetap diperlakukan kosong."""
     from pegawai_utils import baris_identitas_ttd
     # Non-ASN dengan nomor apa pun (NIP-like, NIK, bebas) → tanpa baris
-    assert baris_identitas_ttd("195808181984041001", "NIP. ....", "non_asn") == []
-    assert baris_identitas_ttd("3506042503900001", "NIP. ....", "non_asn") == []
-    assert baris_identitas_ttd("K-00123", "NIP. ....", "non_asn") == []
+    assert baris_identitas_ttd("195808181984041001", "non_asn") == []
+    assert baris_identitas_ttd("3506042503900001", "non_asn") == []
+    assert baris_identitas_ttd("K-00123", "non_asn") == []
     # Status ASN → tetap dicetak dengan label yang tepat
-    assert baris_identitas_ttd("195808181984041001", "", "pns") == ["NIP. 195808181984041001"]
-    assert baris_identitas_ttd("80101234", "", "tni") == ["NRP. 80101234"]
-    # "-" (placeholder era lama) = kosong → placeholder titik-titik
-    assert baris_identitas_ttd("-", "NIP. ....") == ["NIP. ...."]
+    assert baris_identitas_ttd("195808181984041001", "pns") == ["NIP. 195808181984041001"]
+    assert baris_identitas_ttd("80101234", "tni") == ["NRP. 80101234"]
+    # "-" (penanda era lama untuk "belum ada") = kosong → tanpa baris
+    assert baris_identitas_ttd("-") == []
 
 
 def test_baris_identitas_ttd_nik_tertahan_semua_status():
@@ -300,14 +300,14 @@ def test_baris_identitas_ttd_nik_tertahan_semua_status():
     Pemisah umum (spasi/titik/strip) tidak meloloskan NIK dari deteksi."""
     from pegawai_utils import baris_identitas_laporan, baris_identitas_ttd
     # ASN dengan NIK (NIP belum tercatat di master) → tanpa baris nomor
-    assert baris_identitas_ttd("3506042503900001", "NIP. ....", "pns") == []
-    assert baris_identitas_ttd("3506042503900001", "", "pppk") == []
+    assert baris_identitas_ttd("3506042503900001", "pns") == []
+    assert baris_identitas_ttd("3506042503900001", "pppk") == []
     # TNI/POLRI dengan NIK (dulu bocor sebagai "NRP. <NIK>") → tertahan
-    assert baris_identitas_ttd("3506042503900001", "", "tni") == []
-    assert baris_identitas_ttd("3506042503900001", "", "polri") == []
+    assert baris_identitas_ttd("3506042503900001", "tni") == []
+    assert baris_identitas_ttd("3506042503900001", "polri") == []
     # NIK ditulis berpemisah → tetap terdeteksi & tertahan
     assert baris_identitas_ttd("3506 0425 0390 0001") == []
-    assert baris_identitas_ttd("3506.0425.0390.0001", "NIP. ....", "pns") == []
+    assert baris_identitas_ttd("3506.0425.0390.0001", "pns") == []
     # NIP berpemisah tetap dicetak apa adanya dengan label NIP
     assert baris_identitas_laporan("19580818 198404 1 001") == "NIP. 19580818 198404 1 001"
 
