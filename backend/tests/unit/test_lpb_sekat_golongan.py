@@ -174,3 +174,34 @@ class TestSumberTidakBerulang:
         teks = _teks(_jalan(_pdf(dbx, [
             _it("1010301001", "Kertas HVS", 5, 50_000)])))
         assert "Kertas HVS" in teks
+
+
+class TestKelengkapanBerkasDiLpb:
+    """LPB adalah dokumen yang DIPEGANG pengurus barang — di sinilah daftar
+    berkasnya paling sering dibuka kembali."""
+
+    def test_blok_kelengkapan_terbit(self, dbx):
+        teks = _teks(_jalan(_pdf(dbx, CAMPUR)))
+        assert "KELENGKAPAN BERKAS YANG MENYERTAI BARANG" in teks
+
+    def test_kendaraan_diminta_BPKB(self, dbx):
+        teks = _teks(_jalan(_pdf(dbx, CAMPUR)))
+        assert "BPKB" in teks
+
+    def test_persediaan_TIDAK_diminta_BPKB(self, dbx):
+        teks = _teks(_jalan(_pdf(dbx, [
+            _it("1010301001", "Kertas HVS", 5, 50_000)])))
+        assert "KELENGKAPAN BERKAS YANG MENYERTAI BARANG" in teks
+        assert "BPKB" not in teks
+
+    def test_nilai_diambil_dari_total_baris_LPB(self, dbx):
+        """Baris LPB membawa `total`, bukan hanya `harga_satuan` — ambangnya
+        harus tetap kena."""
+        teks = _teks(_jalan(_pdf(dbx, [
+            _it("3050104001", "Server", 1, 250_000_000)])))
+        assert "Rp100.000.000 atau lebih" in teks
+
+    def test_barang_kecil_tidak_memunculkan_catatan_ambang(self, dbx):
+        teks = _teks(_jalan(_pdf(dbx, [
+            _it("1010301001", "Kertas HVS", 5, 50_000)])))
+        assert "atau lebih" not in teks

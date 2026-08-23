@@ -67,6 +67,48 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#916] Kelengkapan berkas serah terima — per golongan & sifat barang — 2026-08-23
+
+Permintaan pemilik: *"biasanya apa saja yang diserahterimakan yang menyangkut
+barang tersebut, mulai dari memiliki bukti kepemilikan dan yang tidak memiliki
+bukti kepemilikan, dan sifat selain tanah dan bangunan dan yang tanah dan
+bangunan, dll-nya baik yang di atas dan di bawah 100 juta dll. Juga perhatikan
+agar PPK menyerahkan lengkap berkasnya saat serah terima barang, tidak hanya
+pengadaannya saja. Begitupun yang ada di LPB."*
+
+- **`backend/berkas_serah_terima.py`** (MURNI) — menggolongkan tiap barang dari
+  kode barang & nilai per unit, lalu menyusun daftar berkas yang lazim
+  menyertainya.
+- **BAST PPK→KPB: Pasal 2 baru** "KELENGKAPAN BERKAS YANG DISERAHKAN";
+  pasal-pasal berikutnya bergeser.
+- **LPB: blok "Kelengkapan berkas yang menyertai barang"** di bawah tabel.
+- Dikelompokkan **per golongan**, dengan sifatnya disebut pada tiap kelompok:
+  *"Selain tanah dan bangunan, ber-bukti kepemilikan"*.
+- **Bidang yang aturannya berbeda berdiri sendiri.** Kendaraan (Bidang 302) ada
+  di dalam golongan yang umumnya TANPA bukti kepemilikan — meleburnya membuat
+  BPKB ikut menempel pada laptop yang kebetulan segolongan.
+- Barang bernilai **≥ Rp100 juta per unit** memunculkan catatan perhatian.
+
+> **Apa yang modul ini TIDAK lakukan: menyatakan akibat hukum.** Ia tidak
+> memutuskan siapa berwenang menyetujui apa, dan **tidak mencetak satu pun
+> nomor peraturan baru** ke dokumen. Tiga sumbu yang dipakai memang sumbu yang
+> berulang di aturan BMN, tetapi di sini ia hanya MENGELOMPOKKAN dan
+> MENGINGATKAN. Dokumen bermeterai tak boleh memuat klaim hukum yang teks
+> aslinya belum dibaca — lihat `docs/SITASI-DOKUMEN-RESMI.md`: sumber primer
+> masih terblokir dari lingkungan pengembangan. Ada uji yang menagihnya.
+
+> **Berkas yang tidak ikut saat serah terima hampir tak pernah menyusul.** Ia
+> baru dicari bertahun-tahun kemudian — saat penghapusan, pemindahtanganan,
+> atau pemeriksaan — ketika PPK-nya sudah berpindah dan penyedianya sudah tak
+> terhubung. Mencetaknya PADA dokumen yang keduanya tanda tangani membuat
+> kekurangannya terlihat di detik yang tepat.
+
+> Penanda centang memakai `[   ]`, BUKAN `☐` (U+2610): Helvetica tak memuat
+> glif itu dan ReportLab menggantinya dengan **kotak hitam pekat** — terbaca
+> sebagai kotak yang sudah dicoret, kebalikan dari maksudnya.
+
+---
+
 ## [#915] LPB: sekat golongan, bidang bernama & bernilai, sumber tak berulang — 2026-08-23
 
 Laporan pemilik atas keluaran LPB yang sudah terbit: *"pada per bidangnya masih

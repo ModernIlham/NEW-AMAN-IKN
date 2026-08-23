@@ -209,3 +209,41 @@ class TestBlokDokumenTerorganisasi:
     def test_tanpa_dokumen_sama_sekali_bloknya_tak_muncul(self, dbx):
         teks = _jalan(_teks(dbx))
         assert "DASAR DAN DOKUMEN PENGADAAN" not in teks
+
+
+class TestPasalKelengkapanBerkas:
+    """PPK menyerahkan BERKASNYA, bukan hanya barang dan dokumen pengadaan."""
+
+    def test_pasal_kelengkapan_terbit_dan_pasal_lain_bergeser(self, dbx):
+        teks = _jalan(_teks(dbx))
+        assert "PASAL 2 — KELENGKAPAN BERKAS YANG DISERAHKAN" in teks
+        assert "PASAL 3 — DASAR SERAH TERIMA" in teks
+        assert "PASAL 5 — PENUTUP" in teks
+
+    def test_berkas_dasar_muncul_untuk_tiap_kelompok(self, dbx):
+        teks = _jalan(_teks(dbx))
+        assert teks.count("Berita Acara Serah Terima dari penyedia kepada PPK") >= 2
+
+    def test_kendaraan_diminta_BPKB_laptop_tidak(self, dbx):
+        teks = _jalan(_teks(dbx))
+        blok = teks.split("KELENGKAPAN BERKAS")[1].split("PASAL 3")[0]
+        kendaraan = blok.split("Bidang 302")[1]
+        laptop = blok.split("Bidang 302")[0]
+        assert "BPKB" in kendaraan
+        assert "BPKB" not in laptop
+
+    def test_sifat_barang_disebut_pada_tiap_kelompok(self, dbx):
+        teks = _jalan(_teks(dbx))
+        assert "Selain tanah dan bangunan, ber-bukti kepemilikan" in teks
+        assert "Selain tanah dan bangunan, tanpa bukti kepemilikan" in teks
+
+    def test_catatan_ambang_muncul_saat_ada_barang_besar(self, dbx):
+        teks = _jalan(_teks(dbx))
+        assert "Rp100.000.000 atau lebih" in teks
+
+    def test_penanda_centang_memakai_kurung_siku_bukan_glif_yang_tak_ada(self, dbx):
+        """U+2610 tak ada di Helvetica; ReportLab menggantinya dengan kotak
+        HITAM PEKAT — terbaca sebagai kotak yang sudah dicoret."""
+        teks = _jalan(_teks(dbx))
+        assert "[]" in _rapat(teks)
+        assert "\u2610" not in teks
