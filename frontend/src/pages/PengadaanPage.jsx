@@ -324,6 +324,11 @@ export default function PengadaanPage({ user, onBack }) {
             lpbId: d.lpb_id, nomor: d.nomor_lpb || d.lpb_id.slice(0, 8),
             asetDibuat: d.aset_dibuat || 0,
             persediaanMasuk: d.persediaan_masuk || 0,
+            // Selisih NUP versus kuantitas BAST — ditampilkan DI SINI, saat
+            // dokumennya baru terbit dan masih bisa diperbaiki. Server
+            // tetap menerbitkan LPB-nya; yang hilang tanpa ini hanya
+            // pengetahuan bahwa ada yang tak terwakili.
+            peringatanNup: d.peringatan_nup || [],
             nomorBast: draftAset.perolehan.nomor_bast, mengirim: false,
           });
         }
@@ -1336,6 +1341,19 @@ export default function PengadaanPage({ user, onBack }) {
                   ].filter(Boolean).join(" · ") || "—"}
             </p>
           </div>
+          {(hasilCatat?.peringatanNup || []).length > 0 && (
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 space-y-1"
+              data-testid="pengadaan-peringatan-nup">
+              <p className="text-[11px] font-bold text-amber-700 dark:text-amber-300">
+                Periksa NUP — jumlah pada BAST belum seluruhnya terwakili
+              </p>
+              {hasilCatat.peringatanNup.map((w, i) => (
+                <p key={i} className="text-[11px] text-amber-800 dark:text-amber-200">
+                  • {w.pesan}
+                </p>
+              ))}
+            </div>
+          )}
           <DialogFooter className="gap-2 sm:gap-2">
             <Button variant="outline" onClick={() => setHasilCatat(null)}>Nanti saja</Button>
             <Button variant="outline"
