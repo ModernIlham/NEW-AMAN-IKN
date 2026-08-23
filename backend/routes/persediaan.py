@@ -1757,12 +1757,9 @@ async def kirim_ttd_lpb(lpb_id: str, payload: KirimTtdLpbIn,
         {"id": hasil["id"]},
         {"$set": {"dok_file_id": str(file_id),
                   "dok_nama": f"LPB_{lpb_id[:8]}.pdf", "dok_halaman": 1}})
-    # Tautan MAJU (LPB → permintaan). Tautan BALIK ditulis routes/ttd.py saat
-    # semua pihak selesai meneken — dua-arah, seperti pola BAST.
-    await db.lpb.update_one(
-        {"id": lpb_id},
-        {"$set": {"signature_request_id": hasil["id"],
-                  "tt_dikirim_pada": datetime.now(timezone.utc).isoformat()}})
+    # Tautan MAJU (LPB → permintaan) sudah ditulis `buat_permintaan` lewat
+    # `ttd_penautan.catat_pengiriman_ttd` — satu pintu untuk semua modul.
+    # Tautan BALIK ditulis routes/ttd.py saat semua pihak selesai meneken.
     await log_audit("lpb_kirim_ttd", "", lpb_id,
                     username=user.get("username", "system"),
                     detail=(f"LPB {lpb.get('nomor') or lpb_id[:8]} dikirim ke "

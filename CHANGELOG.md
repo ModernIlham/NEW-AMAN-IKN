@@ -67,6 +67,52 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#913] Dokumen ↔ TTD elektronik saling tertaut — satu pintu — 2026-08-23
+
+Laporan pemilik: *"Riwayat BAST di bagian kirim tanda tangan selalu berakhir
+dengan TTD sudah kedaluwarsa dan seperti tidak terhubung dengan modul TTD
+elektronik … agar semua tanda tangan dapat saling terhubung ke TTD elektronik
+dan memudahkan pengembangan ke depannya."*
+
+**Sebabnya terukur.** BAST adalah SATU-SATUNYA pintu "Kirim ke TTD" yang tidak
+menuliskan tautan **maju** (`signature_request_id`) saat permintaan dibuat.
+LPB menulisnya, kedua permohonan persetujuan menulisnya; BAST hanya menerima
+tautan **balik**, dan itu pun baru setelah SEMUA pihak selesai meneken.
+Rantainya: Riwayat BAST tak pernah tahu permintaan sudah dikirim → dialog
+berisi tautan hanya hidup di layar → satu-satunya jalan kembali adalah modul
+TTD, dan ketika orang akhirnya ke sana jendela 14 harinya sudah lewat.
+
+- **`backend/ttd_penautan.py`** — registry `TAUT_TTD` + penulis tautan maju +
+  ringkasan status. Mendaftarkan `doc_type` baru SEKALI kini menyalakan
+  seluruh rantainya: gerbang kepemilikan, tautan maju, dan status di layar.
+- **Tautan maju ditulis di pintu tunggal** `buat_permintaan`. Tiga penulisan
+  per-modul yang dulu tersebar dihapus.
+- **Riwayat BAST membawa status TTD** (satu kueri sehalaman): berapa yang
+  sudah meneken, sisa waktu tautan terdekat, dan apakah perlu diterbitkan ulang.
+- **Dialog "Tautan TTD"** dapat dibuka kapan saja dari tiap baris BAST —
+  status per penanda tangan + terbitkan ulang + Salin/WhatsApp/Email.
+
+> **"Kedaluwarsa" adalah keadaan, bukan akhir cerita.** Tautan yang mati bisa
+> diterbitkan ulang kapan saja — dan selama layar tak pernah mengatakannya,
+> orang membacanya sebagai jalan buntu. Karena itu status yang masih bisa
+> ditindaklanjuti selalu menyebut TINDAKANNYA: "Tautan mati — terbitkan ulang
+> (1/2 diteken)".
+
+> **Dialog TIDAK menerbitkan tautan otomatis saat dibuka.** Terasa membantu,
+> tetapi menerbitkan ulang mematikan tautan lama (jti baru): sekadar
+> melihat-lihat akan membatalkan tautan yang sudah telanjur dikirim ke orang
+> yang belum sempat meneken.
+
+> **Dokumen yang dikirim dua kali** punya dua permintaan. Yang diambil selalu
+> yang TERBARU — menampilkan yang lama membuat layar berkata "kedaluwarsa"
+> padahal permintaan barunya masih hidup, persis gejala yang dilaporkan.
+
+> Perhitungan sisa waktu tautan ikut pindah ke modul bersama. Dua perhitungan
+> berdampingan pasti akan berselisih, dan yang membacanya tak punya cara tahu
+> mana yang benar.
+
+---
+
 ## [#912] ATURAN SISTEM: blok tanda tangan hanya mencetak NIP/NRP — 2026-08-23
 
 Permintaan pemilik: *"apabila pegawai tersebut tidak memiliki informasi

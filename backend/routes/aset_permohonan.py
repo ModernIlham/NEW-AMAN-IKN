@@ -490,10 +490,7 @@ async def kirim_ttd_persetujuan_aset(pid: str, payload: KirimTtdPersetujuanAsetI
         {"$set": {"dok_file_id": str(file_id),
                   "dok_nama": f"Persetujuan_Aset_{pid[:8]}.pdf",
                   "dok_halaman": 1}})
-    await db.aset_permohonan.update_one(
-        {"id": pid},
-        {"$set": {"signature_request_id": hasil["id"],
-                  "tt_dikirim_pada": datetime.now(timezone.utc).isoformat()}})
+    # Tautan MAJU ditulis `buat_permintaan` (ttd_penautan.catat_pengiriman_ttd).
     await log_audit("aset_permohonan_kirim_ttd", "", pid,
                     username=user.get("username", "system"),
                     detail=f"dikirim ke {len(daftar)} penanda tangan")

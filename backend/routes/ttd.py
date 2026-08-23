@@ -27,6 +27,8 @@ from auth_utils import (
     require_user_or_query_token, require_user_or_sign_token, require_writer,
 )
 from db import db, fs_bucket
+from ttd_penautan import (TAUT_TTD, kedaluwarsa_terdekat,
+                          ringkas_status_ttd, sisa_kedaluwarsa)
 from shared_utils import (
     scope_query_field_satker,
     cek_magic_gambar, delete_document_from_gridfs, get_document_from_gridfs,
@@ -483,47 +485,10 @@ def _cetak_token_signer(sr_id: str, signer_id: str, jti: str):
     return token, exp
 
 
-def _sisa_kedaluwarsa(sg: dict, sr: dict) -> dict:
-    """{kedaluwarsa, sisa_detik, perkiraan} untuk seorang penanda tangan.
-
-    `sisa_detik` dihitung DI SERVER, bukan diserahkan ke peramban: halaman
-    penanda tangan dibuka orang luar yang jam perangkatnya bisa saja meleset,
-    dan tampilan "kedaluwarsa" yang salah akan membuat orang berhenti meneken
-    dokumen yang sebenarnya masih sah.
-
-    `perkiraan: True` menandai permintaan LAMA yang dibuat sebelum `token_exp`
-    dicatat — angkanya diturunkan dari `created_at` dan bisa meleset bila
-    linknya pernah diterbitkan ulang. UI wajib menampilkannya sebagai kira-kira,
-    bukan sebagai angka pasti.
-    """
-    from datetime import timedelta
-
-    from auth_utils import SIGN_TOKEN_EXPIRATION_DAYS
-    perkiraan = False
-    mentah = str((sg or {}).get("token_exp") or "").strip()
-    if not mentah:
-        # Permintaan era-lama: turunkan dari created_at, tandai sebagai perkiraan.
-        dasar = str((sr or {}).get("created_at") or "").strip()
-        if not dasar:
-            return {"kedaluwarsa": None, "sisa_detik": None, "perkiraan": True}
-        try:
-            t0 = datetime.fromisoformat(dasar.replace("Z", "+00:00"))
-        except (ValueError, TypeError, OverflowError):
-            return {"kedaluwarsa": None, "sisa_detik": None, "perkiraan": True}
-        if t0.tzinfo is None:
-            t0 = t0.replace(tzinfo=timezone.utc)
-        t = t0 + timedelta(days=SIGN_TOKEN_EXPIRATION_DAYS)
-        perkiraan = True
-    else:
-        try:
-            t = datetime.fromisoformat(mentah.replace("Z", "+00:00"))
-        except (ValueError, TypeError, OverflowError):
-            return {"kedaluwarsa": None, "sisa_detik": None, "perkiraan": True}
-        if t.tzinfo is None:
-            t = t.replace(tzinfo=timezone.utc)
-    sisa = int((t - datetime.now(timezone.utc)).total_seconds())
-    return {"kedaluwarsa": t.isoformat(),
-            "sisa_detik": max(0, sisa), "perkiraan": perkiraan}
+# Perhitungan sisa waktu tautan PINDAH ke `ttd_penautan` supaya layar dokumen
+# (Riwayat BAST/LPB) memakai angka yang sama persis dengan modul TTD. Alias ini
+# menjaga pemanggil lama di berkas ini tetap terbaca apa adanya.
+_sisa_kedaluwarsa = sisa_kedaluwarsa
 
 
 def ringkas_lpb(lpb: dict) -> dict:
@@ -672,26 +637,26 @@ async def buat_permintaan(payload: PermintaanIn, user: dict = Depends(require_wr
     #
     # doc_ref bagi doc_type lain (surat/register/dokumen unggahan) adalah teks
     # bebas tanpa back-link → tak divalidasi.
-    _KOLEKSI_BER_BACKLINK = {
-        "bast": (db.bast_serah_terima, "BAST"),
-        "lpb": (db.lpb, "LPB"),
-    }
+    # Diturunkan dari registry `TAUT_TTD` — dulu daftarnya ditulis ulang di
+    # sini, sehingga `doc_type` yang menulis tautan maju tetapi lupa didaftar
+    # di sini kehilangan gerbang kepemilikannya tanpa gejala apa pun.
     _dt = str(payload.doc_type or "")
     # `scope_query_field_satker` SENGAJA dipakai dari impor tingkat modul —
     # JANGAN meng-import-nya lagi di dalam fungsi ini. Import lokal (walau di
     # dalam `if`) membuat namanya LOKAL untuk SELURUH badan fungsi, sehingga
     # pemakaian di cabang lain (gerbang "Meninggal Dunia" di bawah) meledak
     # UnboundLocalError → 500 pada permintaan TTD tanpa doc_ref BAST/LPB.
-    if _dt in _KOLEKSI_BER_BACKLINK and str(payload.doc_ref or "").strip():
-        _koleksi, _label = _KOLEKSI_BER_BACKLINK[_dt]
-        pemilik = await _koleksi.find_one(
+    if _dt in TAUT_TTD and str(payload.doc_ref or "").strip():
+        from ttd_penautan import koleksi_taut, label_taut
+        pemilik = await koleksi_taut(db, _dt).find_one(
             scope_query_field_satker(
                 user, {"id": str(payload.doc_ref).strip()}),
             {"_id": 0, "id": 1})
         if not pemilik:
             raise HTTPException(
                 status_code=403,
-                detail=f"{_label} rujukan tidak ditemukan pada satker Anda")
+                detail=f"{label_taut(_dt)} rujukan tidak ditemukan "
+                       "pada satker Anda")
     # Penanda tangan yang sudah MENINGGAL DUNIA → tolak sejak awal. Mengirim
     # link TTD ke almarhum mustahil dipenuhi dan hanya menggantung dokumen di
     # status "menunggu". Satu query untuk semua NIP (hindari N kueri).
@@ -762,6 +727,13 @@ async def buat_permintaan(payload: PermintaanIn, user: dict = Depends(require_wr
         "ringkas": await _ringkas_dokumen(payload.doc_type, payload.doc_ref),
     }
     await db.signature_requests.insert_one({**record})
+    # TAUTAN MAJU dokumen → permintaan, ditulis DI SINI — satu pintu untuk
+    # semua modul. Sebelumnya tiap modul menuliskannya sendiri, dan BAST
+    # (satu-satunya yang tidak) membuat Riwayat BAST tak pernah tahu bahwa
+    # permintaan sudah dikirim: tautannya hilang bersama dialog, dan yang
+    # tersisa di modul TTD berminggu-minggu kemudian hanya "tautan mati".
+    from ttd_penautan import catat_pengiriman_ttd
+    await catat_pengiriman_ttd(db, record["doc_type"], record["doc_ref"], sr_id)
     await log_audit("buat_permintaan_ttd", "", sr_id,
                     username=user.get("username", "system"),
                     detail=f"Permintaan TTD '{record['judul']}' — {len(signers)} penanda tangan")
@@ -1525,11 +1497,7 @@ async def daftar_permintaan(_user: dict = Depends(require_user)):
         # Sisa waktu kartu = batas TERCEPAT di antara penanda tangan yang BELUM
         # meneken. Yang sudah meneken tak lagi relevan, dan menampilkan batas
         # terjauh akan menyembunyikan tautan yang justru hampir mati.
-        _belum = [s for s in sg if s.get("status") != "ditandatangani"]
-        _sisa = [_sisa_kedaluwarsa(s, it) for s in _belum]
-        _sisa = [x for x in _sisa if x.get("sisa_detik") is not None]
-        it["kedaluwarsa_terdekat"] = (
-            min(_sisa, key=lambda x: x["sisa_detik"]) if _sisa else None)
+        it["kedaluwarsa_terdekat"] = kedaluwarsa_terdekat(it)
     return {"items": items}
 
 
