@@ -315,3 +315,14 @@ class TestSusunanTabelKelengkapan:
         from routes.reports import _get_report_styles, _tabel_kelengkapan
         assert _tabel_kelengkapan([], A4[0], _get_report_styles()) == []
         assert _tabel_kelengkapan(None, A4[0], _get_report_styles()) == []
+
+
+class TestAkronimPadaPasalDasar:
+    """Bukti di TEKS PDF-nya: akronim resmi tetap kapital."""
+
+    def test_APBN_kapital_di_pasal_dasar(self, dbx):
+        teks = _jalan(_teks(dbx))
+        assert "pembelian (APBN)" in teks, teks[:0] or "tak ditemukan"
+
+    def test_tidak_ada_lagi_apbn_huruf_kecil(self, dbx):
+        assert "apbn" not in _jalan(_teks(dbx))

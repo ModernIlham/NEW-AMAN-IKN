@@ -133,6 +133,27 @@ _SATUAN_ID = ("nol", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh",
               "delapan", "sembilan", "sepuluh", "sebelas")
 
 
+def label_dalam_kalimat(teks) -> str:
+    """Label yang disisipkan ke TENGAH kalimat — huruf kecil, AKRONIM UTUH.
+
+    Laporan pemilik atas BAST PPK→KPB: *"ubah apbn menjadi kapital semua
+    APBN."* Kalimatnya dulu memakai `str(label).lower()` pada label
+    `"Pembelian (APBN)"`, sehingga tercetak *"diperoleh melalui pembelian
+    (apbn)"* — akronim resmi berubah jadi kata biasa di dokumen yang
+    ditandatangani.
+
+    Yang dijaga: kata yang SELURUH huruf berkasusnya kapital tetap apa adanya
+    (APBN, SP2D, MPHL-BJS, TKDD, angka Romawi I/II), sisanya dikecilkan.
+    Tanda baca di sekitarnya tidak mengganggu penilaian — `"(APBN)".isupper()`
+    tetap True.
+
+    MURNI. Dipakai setiap kali label bergaya Judul disisipkan ke tengah
+    kalimat; jangan memanggil `.lower()` langsung pada label.
+    """
+    return " ".join(k if k.isupper() else k.lower()
+                    for k in str(teks or "").split())
+
+
 def terbilang_id(n) -> str:
     """Bilangan bulat 0..999999 → kata bahasa Indonesia (huruf kecil).
 

@@ -1217,7 +1217,7 @@ async def bangun_bast_ppk_pdf(perolehan_id: str, _user: dict) -> bytes:
         baris_identitas_ttd, deteksi_identitas, label_nomor_identitas,
     )
     from pejabat_utils import prefiks_pelaksana
-    from pelaporan_utils import narasi_hari_tanggal
+    from pelaporan_utils import label_dalam_kalimat, narasi_hari_tanggal
     from routes.reports import (
         _baris_sekat_bidang, _baris_sekat_golongan, _fit_col_widths,
         _tabel_kelengkapan,
@@ -1510,7 +1510,11 @@ async def bangun_bast_ppk_pdf(perolehan_id: str, _user: dict) -> bytes:
     label_jenis = JENIS_PEROLEHAN.get(p.get("jenis"),
                                       (p.get("jenis") or "perolehan",))[0]
     pasal("DASAR SERAH TERIMA", [
-        f"Barang pada Pasal 1 diperoleh melalui {_esc(str(label_jenis).lower())} "
+        # `label_dalam_kalimat`, BUKAN `.lower()`: label "Pembelian (APBN)"
+        # yang diratakan huruf kecil mencetak "(apbn)" — akronim resmi berubah
+        # jadi kata biasa di dokumen yang ditandatangani.
+        f"Barang pada Pasal 1 diperoleh melalui "
+        f"{_esc(label_dalam_kalimat(label_jenis))} "
         f"dari {_esc(str(p.get('pihak') or '-').strip())} dan telah diterima "
         "PIHAK KESATU dari penyedia/pemberi berdasarkan Berita Acara Serah "
         f"Terima Nomor {_esc(str(p.get('nomor_bast') or '-').strip())} "
