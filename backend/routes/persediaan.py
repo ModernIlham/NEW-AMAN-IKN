@@ -1360,6 +1360,10 @@ async def daftar_lpb(page: int = 1, page_size: int = 30, kategori: str = "",
                    .sort("created_at", -1)
                    .skip((page - 1) * page_size).limit(page_size)
                    .to_list(page_size))
+    # Status TTD elektronik ikut — layar Riwayat LPB memakai potongan yang
+    # SAMA dengan Riwayat BAST (lihat `ttd_penautan`).
+    from ttd_penautan import lampirkan_status_ttd
+    await lampirkan_status_ttd(db, "lpb", items)
     return {"items": items, "total": total, "page": page,
             "total_pages": max(1, -(-total // page_size))}
 

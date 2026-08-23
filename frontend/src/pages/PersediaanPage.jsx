@@ -25,6 +25,8 @@ import PermohonanPanel from "@/components/persediaan/PermohonanPanel";
 import NotaDinasDialog from "@/components/persediaan/NotaDinasDialog";
 import PerkiraanNomor from "@/components/persuratan/PerkiraanNomor";
 import { bagikanWa, bagikanEmail, hasilTtd } from "@/lib/pesanTtd";
+import { ringkasTtdDokumen, kelasNada } from "@/lib/statusTtd";
+import TautanTtdDialog from "@/components/ttd/TautanTtdDialog";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -137,6 +139,9 @@ export default function PersediaanPage({ user, onBack }) {
   // Tautan TTD yang baru terbit: {nomor, links[]} — ditampilkan agar bisa
   // disalin/dibagikan manual saat email tak terkonfigurasi.
   const [tautanTtd, setTautanTtd] = useState(null);
+  // Dialog tautan TTD sebuah LPB — jalan kembali ke permintaan yang sudah
+  // dikirim (pola yang sama dengan Riwayat BAST).
+  const [tautanTtdLpb, setTautanTtdLpb] = useState(null);
   const searchTimer = useRef(null);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
@@ -2122,21 +2127,29 @@ export default function PersediaanPage({ user, onBack }) {
                             ? `gabungan${l.jumlah_bast ? ` · ${l.jumlah_bast} BAST` : ""}`
                             : isAset ? "aset/BMN" : "persediaan"}
                         </span>
-                        {/* Status TTD dibaca dari tautan balik yang ditulis
-                            routes/ttd.py saat semua pihak selesai meneken. */}
+                        {/* Status TTD LANGSUNG dari modul e-sign (ringkasan
+                            `ttd` yang ikut daftar) — bukan hanya tautan balik
+                            yang baru ada setelah SEMUA pihak meneken. Tanpa
+                            ini "menunggu TTD" tak pernah bisa menjawab
+                            berapa yang sudah meneken dan berapa sisa waktunya. */}
                         {l.tt_dicabut ? (
                           <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-700 dark:text-rose-300">
                             TTD dicabut
                           </span>
-                        ) : l.tt_esign_selesai_pada ? (
-                          <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
-                            ber-TTD
-                          </span>
-                        ) : l.signature_request_id ? (
-                          <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300">
-                            menunggu TTD
-                          </span>
-                        ) : null}
+                        ) : (() => {
+                          const r = ringkasTtdDokumen(l.ttd);
+                          if (r) {
+                            return (
+                              <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${kelasNada(r.nada)}`}
+                                data-testid={`lpb-status-ttd-${l.id}`}>{r.teks}</span>
+                            );
+                          }
+                          return l.tt_esign_selesai_pada ? (
+                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                              ber-TTD
+                            </span>
+                          ) : null;
+                        })()}
                       </div>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
                         {[String(l.tanggal || "").slice(0, 10), l.penyedia,
@@ -2150,6 +2163,16 @@ export default function PersediaanPage({ user, onBack }) {
                           { label: "Laporan Penerimaan Barang" }).catch(() => {})}>
                         Unduh
                       </Button>
+                      {isWriter && l.ttd?.id && (
+                        <Button size="sm" variant="outline" className="h-7 text-[11px]"
+                          onClick={() => setTautanTtdLpb({
+                            srId: l.ttd.id,
+                            judul: l.ttd.judul || `LPB ${l.nomor || ""}`.trim(),
+                          })}
+                          data-testid={`lpb-tautan-ttd-${l.id}`}>
+                          Tautan TTD
+                        </Button>
+                      )}
                       {isWriter && !l.signature_request_id && (
                         <Button size="sm" variant="outline" className="h-7 text-[11px]"
                           onClick={() => kirimTtdLpb(l)}
@@ -2473,6 +2496,12 @@ export default function PersediaanPage({ user, onBack }) {
       </Dialog>
 
       {/* ── Dialog tautan TTD LPB yang baru dikirim ── */}
+      {tautanTtdLpb && (
+        <TautanTtdDialog srId={tautanTtdLpb.srId} judul={tautanTtdLpb.judul}
+          onTutup={() => setTautanTtdLpb(null)}
+          onBerubah={() => bukaRiwayatLpb?.()} />
+      )}
+
       <Dialog open={!!tautanTtd} onOpenChange={(o) => { if (!o) setTautanTtd(null); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>

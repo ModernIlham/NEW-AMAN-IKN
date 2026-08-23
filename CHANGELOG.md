@@ -67,6 +67,29 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#917] Status & tautan TTD di Riwayat LPB dan dua daftar permohonan — 2026-08-23
+
+Melanjutkan [#913]. Riwayat BAST sudah punya status TTD dan tombol "Tautan
+TTD"; tiga daftar dokumen lain belum — padahal datanya sudah tersedia di
+server sejak tautan majunya ditulis di pintu tunggal.
+
+- **`ttd_penautan.lampirkan_status_ttd`** — potongan yang dipakai KEEMPAT
+  daftar (Riwayat BAST, Riwayat LPB, permohonan aset, permohonan persediaan).
+- **Riwayat LPB**: badge status hidup + tombol **Tautan TTD**.
+- **Panel Permohonan** (dipakai persediaan MAUPUN aset): badge + tombol yang
+  sama.
+
+> Daftar KELIMA tak perlu menyalin apa pun. Yang lebih penting: tak ada lagi
+> yang bisa diam-diam memakai kunci atau nama field berbeda — kesalahan yang
+> membuat layarnya sunyi tanpa satu pun galat.
+
+> Badge lama di Riwayat LPB hanya berbunyi *"menunggu TTD"*, dibaca dari
+> tautan balik yang baru ditulis setelah SEMUA pihak meneken. Ia tak pernah
+> bisa menjawab berapa yang sudah meneken dan berapa sisa waktunya —
+> dua hal yang justru menentukan apakah perlu ditagih.
+
+---
+
 ## [#916] Kelengkapan berkas serah terima — per golongan & sifat barang — 2026-08-23
 
 Permintaan pemilik: *"biasanya apa saja yang diserahterimakan yang menyangkut

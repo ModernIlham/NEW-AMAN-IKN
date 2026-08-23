@@ -191,3 +191,22 @@ async def status_ttd_dokumen(db, doc_type, doc_refs) -> dict:
         # Terurut menaik → yang terbaru menimpa yang lama.
         keluar[str(sr.get("doc_ref"))] = ringkas_status_ttd(sr)
     return keluar
+
+
+async def lampirkan_status_ttd(db, doc_type, items, kunci="id", field="ttd"):
+    """Tempelkan ringkasan status TTD ke tiap item daftar — SATU kueri.
+
+    Empat daftar dokumen memerlukan potongan yang sama persis (Riwayat BAST,
+    Riwayat LPB, dua daftar permohonan persetujuan). Ditulis sekali di sini
+    supaya daftar KELIMA tak perlu menyalinnya — dan supaya tak ada yang
+    diam-diam memakai kunci atau nama field yang berbeda, yang membuat
+    layarnya sunyi tanpa satu pun galat.
+
+    Mengembalikan `items` yang sama (diubah di tempat) agar dapat dirangkai.
+    """
+    daftar = list(items or [])
+    peta = await status_ttd_dokumen(
+        db, doc_type, [str((it or {}).get(kunci) or "") for it in daftar])
+    for it in daftar:
+        it[field] = peta.get(str((it or {}).get(kunci) or "")) or None
+    return daftar

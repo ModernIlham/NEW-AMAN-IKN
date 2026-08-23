@@ -6,6 +6,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
+import { ringkasTtdDokumen, kelasNada } from "@/lib/statusTtd";
+import TautanTtdDialog from "@/components/ttd/TautanTtdDialog";
 import {
   CheckCircle2, ClipboardList, FileDown, PenLine, XCircle,
 } from "lucide-react";
@@ -146,6 +148,11 @@ export default function PermohonanPanel({ user, onSelesai, konfig }) {
     `${k.namaBerkas}_${(p.nomor || p.id.slice(0, 8)).replace(/\//g, "-")}.pdf`,
     { label: k.labelSurat });
 
+  // Jalan KEMBALI ke tautan permintaan yang sudah dikirim — pola yang sama
+  // dengan Riwayat BAST & Riwayat LPB. Tanpa ini, tautannya hilang bersama
+  // dialog dan yang tersisa berminggu-minggu kemudian hanya "tautan mati".
+  const [tautanTtd, setTautanTtd] = useState(null);
+
   const kirimTtd = async (p) => {
     setAksiId(p.id);
     try {
@@ -242,6 +249,13 @@ export default function PermohonanPanel({ user, onSelesai, konfig }) {
                           {p.alasan_tolak ? <> · Alasan: {p.alasan_tolak}</> : null}
                           {p.galat_terakhir ? <> · Galat terakhir: {p.galat_terakhir}</> : null}
                         </p>
+                        {(() => {
+                          const r = ringkasTtdDokumen(p.ttd);
+                          return r ? (
+                            <p className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${kelasNada(r.nada)}`}
+                              data-testid={`permohonan-status-ttd-${p.id}`}>{r.teks}</p>
+                          ) : null;
+                        })()}
                       </div>
                     </div>
                     <div className="flex gap-1.5 flex-wrap">
@@ -271,6 +285,16 @@ export default function PermohonanPanel({ user, onSelesai, konfig }) {
                             data-testid={`permohonan-surat-${p.id}`}>
                             <FileDown className="w-3.5 h-3.5 mr-1" />Surat Persetujuan
                           </Button>
+                          {p.ttd?.id && (
+                            <Button size="sm" variant="outline"
+                              onClick={() => setTautanTtd({
+                                srId: p.ttd.id,
+                                judul: p.ttd.judul || `${k.labelSurat} ${p.nomor || ""}`.trim(),
+                              })}
+                              data-testid={`permohonan-tautan-ttd-${p.id}`}>
+                              <PenLine className="w-3.5 h-3.5 mr-1" />Tautan TTD
+                            </Button>
+                          )}
                           {!p.signature_request_id && user?.role !== "viewer" && (
                             <Button size="sm" variant="outline" disabled={sibuk}
                               onClick={() => kirimTtd(p)}
@@ -299,6 +323,10 @@ export default function PermohonanPanel({ user, onSelesai, konfig }) {
           )}
         </DialogContent>
       </Dialog>
+      {tautanTtd && (
+        <TautanTtdDialog srId={tautanTtd.srId} judul={tautanTtd.judul}
+          onTutup={() => setTautanTtd(null)} onBerubah={muat} />
+      )}
     </>
   );
 }
