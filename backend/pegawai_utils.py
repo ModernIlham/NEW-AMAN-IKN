@@ -1340,6 +1340,39 @@ def info_masa_pegawai(pegawai, hari_ini_iso) -> dict:
     return out
 
 
+# PERKECUALIAN TUNGGAL atas aturan blok tanda tangan — dan satu-satunya
+# tempat literalnya boleh ditulis. Lihat `docs/ATURAN-BLOK-TANDA-TANGAN.md`.
+#
+# Aturan pokoknya: tanpa NIP/NRP yang sah, blok tanda tangan berisi NAMA SAJA.
+# Itu benar untuk penanda tangan yang SUDAH DIKETAHUI — mencetak label bagi
+# orang yang nomornya memang tak layak cetak adalah tebakan atau pelanggaran
+# privasi.
+#
+# Tetapi lembar yang memang DIISI TANGAN — berita acara opname, pemantauan,
+# pemusnahan — mencetak garis titik-titik untuk NAMANYA juga: belum ada
+# siapa pun di situ. Menghapus baris identitasnya membuat penandatangan tak
+# punya tempat menuliskan nomornya, dan ia menuliskannya menyilang di ruang
+# kosong atau tidak sama sekali.
+#
+# Labelnya menyebut PERSIS dua yang boleh dicetak — NIP/NRP, tanpa NIK —
+# sehingga perkecualian ini tidak melonggarkan aturannya, melainkan
+# menerapkannya pada lembar kosong.
+BARIS_ISIAN_TANGAN = "NIP/NRP. ................"
+
+
+def baris_identitas_isian(nama) -> list:
+    """Baris identitas untuk garis tanda tangan yang MASIH KOSONG.
+
+    Mengembalikan `[BARIS_ISIAN_TANGAN]` HANYA bila `nama` juga belum terisi
+    (kosong, atau sekadar garis titik-titik). Begitu ada nama sungguhan,
+    aturan pokok berlaku kembali dan pemanggil wajib memakai
+    `baris_identitas_ttd` — penjagaannya ditaruh di sini, bukan pada
+    kedisiplinan pemanggil.
+    """
+    n = str(nama or "").strip()
+    return [] if n and not set(n) <= set(".-_ ") else [BARIS_ISIAN_TANGAN]
+
+
 def baris_identitas_ttd(nomor, status_kepegawaian="") -> list:
     """ATURAN SISTEM — baris identitas pada BLOK TANDA TANGAN dokumen.
 

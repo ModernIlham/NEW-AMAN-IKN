@@ -16,6 +16,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db
+from pegawai_utils import baris_identitas_isian
 from shared_utils import kode_satker_user, log_audit, scope_query_field_satker, pastikan_akses_dok_satker, pastikan_akses_aset, blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs
 from pemusnahan_utils import (
     CARA_PEMUSNAHAN, DOK_USULAN_PEMUSNAHAN, STATUS_USULAN_MUSNAH_TERMINAL,
@@ -489,10 +490,10 @@ async def ba_pemusnahan_pdf(ba_id: str, _user: dict = Depends(require_user)):
     elements.extend(_signature_block([
         {'pre': [''], 'header': 'Petugas Pelaksana,',
          'nama': '...........................',
-         'after': []},
+         'after': baris_identitas_isian(None)},
         {'pre': [''], 'header': 'Saksi,',
          'nama': '...........................',
-         'after': []},
+         'after': baris_identitas_isian(None)},
         # KPB melekat ke satker DOKUMEN (BA-nya sendiri) — sejalan kop di atas.
         await blok_ttd_kpb_titik(settings, kode_satker=ks_dok),
     ], doc.width))

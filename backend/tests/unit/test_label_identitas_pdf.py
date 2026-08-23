@@ -232,8 +232,14 @@ class TestNolPlaceholderIdentitasDiSeluruhBackend:
         assert not POLA_PLACEHOLDER.search("Non-ASN/NIK: baris NIP/NIK tidak dicetak.")
 
     def test_nol_placeholder_identitas(self):
+        """PERKECUALIAN TUNGGAL: `pegawai_utils.py` boleh memuat literalnya —
+        di situlah `BARIS_ISIAN_TANGAN` didefinisikan, satu-satunya baris
+        identitas yang boleh dicetak pada garis tanda tangan KOSONG (lembar
+        yang diisi tangan). Berkas lain tetap nol."""
         pelanggar = []
         for f in self._berkas():
+            if f.name == BERKAS_PERAKIT:
+                continue
             try:
                 pohon = ast.parse(f.read_text(encoding="utf-8"), filename=str(f))
             except SyntaxError:                     # pragma: no cover
@@ -251,6 +257,16 @@ class TestNolPlaceholderIdentitasDiSeluruhBackend:
     def test_konstanta_lama_tidak_diimpor_di_mana_pun(self):
         for f in self._berkas():
             assert "PLACEHOLDER_IDENTITAS" not in f.read_text(encoding="utf-8"), f.name
+
+    def test_literal_isian_HANYA_ada_di_berkas_perakitnya(self):
+        """Perkecualiannya sempit karena literalnya berumah SATU. Menyalinnya
+        ke modul lain mengembalikan kelas cacat yang sama: label dipatok yang
+        tak seorang pun menagih kebenarannya."""
+        from pegawai_utils import BARIS_ISIAN_TANGAN
+        for f in self._berkas():
+            if f.name == BERKAS_PERAKIT:
+                continue
+            assert BARIS_ISIAN_TANGAN not in f.read_text(encoding="utf-8"), f.name
 
 
 class TestLabelBlokIdentitas:
@@ -359,3 +375,68 @@ class TestAturannyaTertulisDiDokumentasi:
         """Rujukan dua arah: yang membaca kodenya menemukan aturannya."""
         import pegawai_utils
         assert "ATURAN-BLOK-TANDA-TANGAN.md" in pegawai_utils.baris_identitas_ttd.__doc__
+
+
+class TestPerkecualianLembarIsianTangan:
+    """Lembar yang memang DIISI TANGAN — BA opname, pemantauan, pemusnahan —
+    mencetak garis titik untuk NAMANYA juga: belum ada siapa pun di situ.
+
+    Menghapus baris identitasnya (akibat aturan "tanpa kecuali") membuat
+    penandatangan tak punya tempat menuliskan nomornya, dan ia menuliskannya
+    menyilang di ruang kosong atau tidak sama sekali.
+    """
+
+    def test_labelnya_menyebut_PERSIS_dua_yang_boleh_dicetak(self):
+        """Perkecualian ini tidak melonggarkan aturannya — ia menerapkannya
+        pada lembar kosong. Karena itu NIK TIDAK boleh ikut disebut."""
+        from pegawai_utils import BARIS_ISIAN_TANGAN
+        assert "NIP" in BARIS_ISIAN_TANGAN and "NRP" in BARIS_ISIAN_TANGAN
+        assert "NIK" not in BARIS_ISIAN_TANGAN
+
+    def test_masih_berupa_garis_titik_untuk_ditulis_tangan(self):
+        from pegawai_utils import BARIS_ISIAN_TANGAN
+        assert "." * 8 in BARIS_ISIAN_TANGAN
+
+    def test_muncul_saat_namanya_juga_kosong(self):
+        from pegawai_utils import BARIS_ISIAN_TANGAN, baris_identitas_isian
+        for kosong in (None, "", "   ", "..........................."):
+            assert baris_identitas_isian(kosong) == [BARIS_ISIAN_TANGAN], kosong
+
+    def test_HILANG_begitu_ada_nama_sungguhan(self):
+        """Penjagaannya di dalam fungsi, bukan pada kedisiplinan pemanggil:
+        begitu penanda tangannya diketahui, aturan pokok berlaku lagi."""
+        from pegawai_utils import baris_identitas_isian
+        assert baris_identitas_isian("Budi") == []
+        assert baris_identitas_isian("  Sari  ") == []
+
+    def test_berlaku_di_seluruh_lembar_isian_tangan(self):
+        """Empat modul mencetak lembar semacam itu. Yang terlewat akan tampak
+        benar — hanya kehilangan satu baris yang tak seorang pun sadari.
+
+        DIHITUNG PEMANGGILANNYA, bukan kemunculan namanya. Versi pertama uji
+        ini hanya mencari teks "baris_identitas_isian" di berkasnya — dan
+        BARIS IMPORNYA saja sudah membuatnya hijau, sehingga modul yang
+        berhenti memanggilnya tetap lolos.
+        """
+        for nama in ("routes/persediaan.py", "routes/pemusnahan.py",
+                     "routes/wasdal.py", "routes/penggunaan.py"):
+            pohon = ast.parse((AKAR / nama).read_text(encoding="utf-8"))
+            panggil = [n for n in ast.walk(pohon)
+                       if isinstance(n, ast.Call)
+                       and getattr(n.func, "id", "") == "baris_identitas_isian"]
+            assert panggil, nama
+
+    def test_penghitung_panggilannya_benar_benar_membedakan(self):
+        """Penjaga bagi penjaganya: pola yang hanya cocok pada impor akan
+        membuat uji di atas selalu hijau."""
+        pohon = ast.parse("from x import baris_identitas_isian\n")
+        panggil = [n for n in ast.walk(pohon)
+                   if isinstance(n, ast.Call)
+                   and getattr(n.func, "id", "") == "baris_identitas_isian"]
+        assert panggil == []
+
+    def test_aturannya_menyebut_perkecualian_ini(self):
+        dok = (AKAR.parent / "docs" / "ATURAN-BLOK-TANDA-TANGAN.md").read_text(
+            encoding="utf-8")
+        assert "BARIS_ISIAN_TANGAN" in dok
+        assert "isian tangan" in dok.lower()

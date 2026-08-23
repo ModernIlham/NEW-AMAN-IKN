@@ -67,6 +67,37 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#919] Perkecualian tertulis: garis NIP pada lembar isian tangan — 2026-08-23
+
+Permintaan pemilik, menutup pertanyaan yang saya ajukan pada [#912]: garis NIP
+pada lembar isian tangan (BA opname/pemantauan/pemusnahan) dikembalikan.
+
+> Bila **nama** penanda tangan juga masih kosong, baris identitas dicetak
+> sebagai `NIP/NRP. ................` — tempat menuliskannya dengan tangan.
+
+- `pegawai_utils.BARIS_ISIAN_TANGAN` + `baris_identitas_isian(nama)` —
+  satu-satunya literal dan satu-satunya jalan memakainya.
+- Dipasang pada 11 blok tanda tangan isian di 4 modul (persediaan,
+  pemusnahan, wasdal, penggunaan).
+- Perkecualiannya **tertulis** di `docs/ATURAN-BLOK-TANDA-TANGAN.md` §1b, dan
+  pemindainya mengecualikan TEPAT SATU berkas — tempat konstantanya berumah.
+
+> **Perkecualian ini tidak melonggarkan aturan pokok, ia menerapkannya pada
+> lembar kosong.** Labelnya menyebut persis dua yang boleh dicetak — NIP dan
+> NRP, **tanpa NIK**. Dan begitu ada nama sungguhan, aturan pokok berlaku
+> kembali: penanda tangan yang diketahui tetapi nomornya tak layak cetak tetap
+> tampil dengan nama saja. Penjagaannya di DALAM fungsi, bukan pada
+> kedisiplinan pemanggil.
+
+> **Dua uji sempat lolos padahal salah.** (1) "Berlaku di seluruh modul" hanya
+> mencari teks nama fungsinya — baris IMPORNYA saja sudah membuatnya hijau,
+> sehingga modul yang berhenti memanggilnya tetap lolos. Diganti penghitungan
+> pemanggilan lewat AST, plus penjaga bagi penghitungnya. (2) Pada [#918],
+> uji "judul tak terdampar di kaki halaman" tetap hijau meski penjagaan
+> keutuhannya dicabut.
+
+---
+
 ## [#918] Kelengkapan berkas: berkolom, satu kesatuan, tak terpecah — 2026-08-23
 
 Permintaan pemilik: *"pada kelengkapan berkasnya lebih ditingkatkan,

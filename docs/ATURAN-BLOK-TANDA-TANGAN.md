@@ -25,6 +25,41 @@ Permintaan pemilik yang menetapkannya:
 > dalam dokumentasi agar diterapkan saat pembuatan generate PDF/Word dokumen ke
 > depannya tanpa terkecuali, khusus di bagian tanda tangan saja."*
 
+## 1b. Satu perkecualian: garis tanda tangan yang MASIH KOSONG
+
+Lembar isian tangan — berita acara opname, pemantauan,
+pemusnahan — mencetak garis titik-titik untuk **namanya juga**: belum ada
+siapa pun di situ saat dokumen dicetak.
+
+> Bila **nama** penanda tangan juga masih kosong, baris identitas dicetak
+> sebagai `NIP/NRP. ................` — tempat menuliskannya dengan tangan.
+
+Labelnya menyebut **persis dua** yang boleh dicetak: NIP dan NRP, **tanpa
+NIK**. Perkecualian ini karena itu tidak melonggarkan aturannya — ia
+menerapkannya pada lembar kosong.
+
+**Begitu ada nama sungguhan, aturan pokok berlaku kembali**: penanda tangan
+yang diketahui tetapi nomornya tak layak cetak tetap tampil dengan nama saja.
+
+Satu-satunya literalnya adalah `pegawai_utils.BARIS_ISIAN_TANGAN`, dan
+satu-satunya jalan memakainya adalah `baris_identitas_isian(nama)` — yang
+mengembalikan `[]` sendiri begitu namanya terisi. Penjagaannya ada di dalam
+fungsi, bukan pada kedisiplinan pemanggil.
+
+```python
+from pegawai_utils import baris_identitas_isian
+
+{'header': 'Petugas Penghitung,',
+ 'nama': '...........................',
+ 'after': baris_identitas_isian(None)}
+```
+
+Pemindai pada `test_label_identitas_pdf.py` mengecualikan **satu berkas**
+(`pegawai_utils.py`) — tempat konstantanya berumah — dan menagih agar
+literalnya tak muncul di berkas mana pun yang lain.
+
+---
+
 ## 2. Batas ruang lingkupnya
 
 Aturan ini **hanya** mengenai blok tanda tangan — area nama + garis
