@@ -67,6 +67,43 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#923] Peringatan NUP versus kuantitas BAST saat pencatatan — 2026-08-23
+
+Permintaan pemilik: *"pada saat LPB akan dibuat pastikan untuk dapat
+mengingatkan tentang NUP dan pastikan sesuai dengan jumlahnya."*
+
+BMN ber-jumlah N seharusnya menjadi N aset ber-NUP masing-masing. Jalur
+pencatatan memecahnya **hanya** bila jumlahnya bilangan bulat 2..50; di luar
+itu — pecahan, atau lebih dari 50 — SELURUH baris menjadi satu NUP dan sisanya
+cuma jadi catatan teks pada `notes` aset.
+
+- **`lpb_utils.unit_per_baris`** — aturan pecah NUP kini punya SATU rumah dan
+  dipakai jalur pencatatan itu sendiri, bukan disalin sebagai ekspresi inline.
+- **`lpb_utils.peringatan_nup`** — dua jenis selisih: `melebihi_batas` /
+  `pecahan` (kuantitas tak terwakili) dan `nup_kurang` (pemecahan gagal di
+  tengah).
+- Diteruskan `buat-draft-aset` dan `catat-semua`, lalu tampil sebagai panel
+  kuning pada dialog "LPB terbit".
+
+> **Selisih ini bergejala nihil.** LPB tetap terbit, jurnal tetap tertulis,
+> dan yang membacanya berbulan kemudian melihat "1 unit" untuk 100 rim yang
+> benar-benar datang. Peringatannya karena itu muncul di detik pencatatan —
+> saat masih bisa diperbaiki.
+
+> **Dua cacat ketahuan saat merakit.** (1) `unit_per_baris(nan)` meledak:
+> `int(nan)` melempar `ValueError` sebelum perbandingannya sempat dinilai —
+> jalur API menolak NaN lewat validator, tetapi helper murni ini juga dibaca
+> atas data yang SUDAH tersimpan. (2) Peringatannya semula dihitung dari
+> `barang` SETELAH perulangan, dan selalu kosong: tiap baris yang berhasil
+> sudah ber-`asset_id`, dan aturannya melewati baris tertaut. Kini dihitung
+> dari salinan baris yang diambil SEBELUM penandaan.
+
+> Uji endpoint ditambahkan tersendiri: peringatan yang dihitung benar lalu
+> tak diteruskan ke respons juga tidak menghasilkan galat apa pun — mutasi
+> yang mengosongkannya sempat LOLOS sebelum uji itu ada.
+
+---
+
 ## [#922] LPB: kelengkapan berkas opsional; tanggal, NIP PPK & No. Bukti menempel per baris — 2026-08-23
 
 Permintaan pemilik: *"hilangkan bagian KELENGKAPAN BERKAS YANG MENYERTAI

@@ -20,7 +20,8 @@ from auth_utils import (
 )
 from lpb_utils import (
     baris_lpb_dari_aset, baris_lpb_gabungan, is_persediaan, label_golongan,
-    pilah_barang_perolehan, ringkas_pencatatan, total_nilai_lpb,
+    peringatan_nup, pilah_barang_perolehan, ringkas_pencatatan,
+    total_nilai_lpb, unit_per_baris,
 )
 from persediaan_utils import KODE_PENUH_LEN, KODE_PREFIX_LEN
 from db import db
@@ -738,6 +739,12 @@ async def buat_draft_aset_dari_perolehan(perolehan_id: str,
     dibuat, dilewati_tertaut, dilewati_tanpa_kode = 0, 0, 0
     dilewati_persediaan = 0
     aset_dibuat = []      # bahan baris LPB (satu entri = satu NUP nyata)
+    # Salinan baris yang BENAR-BENAR diproses run ini, DIAMBIL SEBELUM
+    # `row.update()` menandainya tertaut. Menghitung peringatan NUP dari
+    # `barang` setelah perulangan selalu menghasilkan daftar kosong: setiap
+    # baris yang berhasil sudah ber-`asset_id`, dan aturannya melewati baris
+    # tertaut (yang memang benar untuk baris yang tertaut SEBELUM run ini).
+    barang_diproses = []
     gagal = []
     next_nup = {}   # kode → NUP numerik terakhir dalam kegiatan tujuan
 
@@ -770,10 +777,15 @@ async def buat_draft_aset_dari_perolehan(perolehan_id: str,
             dilewati_persediaan += 1
             continue
         jumlah = float(row.get("jumlah") or 1)
+        barang_diproses.append({"kode": kode,
+                                "uraian": str(row.get("uraian") or ""),
+                                "jumlah": jumlah})
         # BMN ber-jumlah N = N unit ber-NUP masing-masing (audit G4 #10):
         # pecah jadi N draft ber-NUP berurut bila jumlah bulat 2..50; di luar
         # itu (pecahan/ekstrem) tetap 1 draft + catatan jumlah.
-        n_unit = int(jumlah) if jumlah == int(jumlah) and 2 <= jumlah <= 50 else 1
+        # Aturannya hidup di `lpb_utils.unit_per_baris` — satu sumber, supaya
+        # peringatan NUP dan pelaksanaannya tak pernah berselisih.
+        n_unit = unit_per_baris(jumlah)
         catatan_jumlah = (f" — jumlah pada BAST: {jumlah:g} unit"
                           if jumlah != 1 and n_unit == 1 else "")
         gagal_baris = False
@@ -852,6 +864,10 @@ async def buat_draft_aset_dari_perolehan(perolehan_id: str,
             "dilewati_tanpa_kode": dilewati_tanpa_kode,
             "dilewati_persediaan": dilewati_persediaan,
             "aset_dibuat": aset_dibuat, "gagal": gagal[:20],
+            # Selisih NUP versus kuantitas BAST — bergejala NIHIL tanpa ini:
+            # LPB tetap terbit, jurnal tetap tertulis, dan yang membacanya
+            # berbulan kemudian melihat "1 unit" untuk 100 yang benar datang.
+            "peringatan_nup": peringatan_nup(barang_diproses, aset_dibuat),
             "kegiatan": act.get("nama_kegiatan") or act.get("id"),
             "perolehan": _enrich(p)}
 
@@ -975,6 +991,7 @@ async def catat_semua_barang(perolehan_id: str, payload: CatatSemuaIn,
     segar = await db.pengadaan.find_one({"id": perolehan_id}, {"_id": 0})
     return {**ringkas, "lpb_id": lpb_id, "nomor_lpb": nomor_lpb,
             "baris_tanpa_kode": [i + 1 for i, _ in pilah["tanpa_kode"]],
+            "peringatan_nup": hasil_aset.get("peringatan_nup") or [],
             "kegiatan": hasil_aset.get("kegiatan", ""),
             "perolehan": _enrich(segar or p)}
 

@@ -560,3 +560,62 @@ def test_melepas_tautan_tetap_boleh_pada_baris_persediaan(dbx):
             rec["id"], rp.TautkanIn(index=1, asset_id=""), _user=USER)
         assert hasil["barang"][1]["asset_id"] == ""
     _jalan(skenario())
+
+
+class TestPeringatanNupSampaiKeEndpoint:
+    """Peringatan NUP harus benar-benar SAMPAI ke pemanggil.
+
+    Helper murninya sudah diuji tersendiri, tetapi peringatan yang dihitung
+    dengan benar lalu tak diteruskan ke respons TIDAK menghasilkan galat apa
+    pun — layarnya sekadar tak menampilkannya, persis seperti keadaan sebelum
+    fitur ini ada. Justru itu yang harus dibuktikan di sini.
+    """
+
+    def _perolehan_besar(self):
+        return rp.PerolehanIn(
+            jenis="pembelian", pihak="PT Sumber Rejeki",
+            nomor_kontrak="KTR-002/PPK/2026", nomor_bast="BAST-002/2026",
+            tanggal_bast="2026-03-10",
+            barang=[
+                # 100 unit: DI ATAS batas pecah — hanya 1 NUP yang terbentuk.
+                rp.BarangIn(uraian="Kursi Rapat", kode="3050102001",
+                            jumlah=100, harga_satuan=750_000),
+            ])
+
+    def test_catat_semua_meneruskan_peringatannya(self, dbx):
+        async def skenario():
+            await _seed(dbx)
+            rec = await _unwrap(rp.buat_perolehan)(self._perolehan_besar(),
+                                                   user=USER)
+            hasil = await _unwrap(rp.catat_semua_barang)(
+                rec["id"],
+                rp.CatatSemuaIn(activity_id="keg1", booking_nomor=False),
+                user=USER)
+            w = hasil.get("peringatan_nup")
+            assert w, hasil.keys()
+            assert w[0]["sebab"] == "melebihi_batas"
+            assert "100 unit" in w[0]["pesan"]
+        _jalan(skenario())
+
+    def test_buat_draft_aset_juga_meneruskannya(self, dbx):
+        async def skenario():
+            await _seed(dbx)
+            rec = await _unwrap(rp.buat_perolehan)(self._perolehan_besar(),
+                                                   user=USER)
+            hasil = await _unwrap(rp.buat_draft_aset_dari_perolehan)(
+                rec["id"], rp.BuatDraftAsetIn(activity_id="keg1"), user=USER)
+            assert hasil.get("peringatan_nup"), hasil.keys()
+        _jalan(skenario())
+
+    def test_jumlah_yang_PAS_tak_memunculkan_peringatan(self, dbx):
+        """Peringatan yang muncul untuk keadaan normal akan dilatih diabaikan,
+        dan yang sungguhan ikut terlewat."""
+        async def skenario():
+            await _seed(dbx)
+            rec = await _unwrap(rp.buat_perolehan)(_perolehan_baru(), user=USER)
+            hasil = await _unwrap(rp.catat_semua_barang)(
+                rec["id"],
+                rp.CatatSemuaIn(activity_id="keg1", booking_nomor=False),
+                user=USER)
+            assert hasil.get("peringatan_nup") == []
+        _jalan(skenario())

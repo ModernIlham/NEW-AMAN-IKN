@@ -395,3 +395,112 @@ def keterangan_berulang(keterangan, teks_tabel) -> bool:
     nomor = [n.strip() for n in sisa.split(";") if n.strip()]
     teks = str(teks_tabel or "")
     return bool(nomor) and all(n in teks for n in nomor)
+
+
+# ── NUP versus kuantitas BAST ───────────────────────────────────────────────
+#
+# Permintaan pemilik: *"pada saat LPB akan dibuat pastikan untuk dapat
+# mengingatkan tentang NUP dan pastikan sesuai dengan jumlahnya."*
+#
+# BMN ber-jumlah N seharusnya menjadi N aset ber-NUP masing-masing. Jalur
+# pencatatan memecahnya HANYA bila jumlahnya bilangan bulat 2..50; di luar itu
+# — pecahan, atau lebih dari 50 — seluruh baris menjadi SATU NUP dan sisanya
+# cuma jadi catatan teks pada `notes`.
+#
+# Selisih itu tidak pernah menghasilkan galat: LPB tetap terbit, jurnalnya
+# tetap tertulis, dan yang membacanya berbulan kemudian melihat "1 unit"
+# untuk 100 rim yang benar-benar datang. Modul ini membuatnya TERLIHAT di
+# detik pencatatan, saat masih bisa diperbaiki.
+
+BATAS_PECAH_NUP = 50
+
+
+def unit_per_baris(jumlah) -> int:
+    """Berapa aset ber-NUP yang dibentuk dari SATU baris BAST. MURNI.
+
+    Inilah aturan yang benar-benar dipakai jalur pencatatan — didefinisikan
+    di sini supaya peringatan dan pelaksanaannya tak pernah berselisih.
+    Sebelumnya aturan ini hanya hidup sebagai satu baris di dalam
+    `buat_draft_aset_dari_perolehan`, sehingga tak ada cara memperingatkan
+    tanpa menyalinnya.
+    """
+    import math
+    try:
+        j = float(jumlah if jumlah is not None else 1)
+    except (TypeError, ValueError):
+        return 1
+    # NaN/Infinity DIPERIKSA lebih dulu: `int(nan)` melempar ValueError, dan
+    # `nan != int(nan)` sudah meledak sebelum sempat dinilai. Jalur API
+    # menolaknya lewat validator, tetapi helper murni ini juga dipanggil atas
+    # data yang SUDAH tersimpan — termasuk data era lama.
+    if not math.isfinite(j):
+        return 1
+    if j != int(j) or not (2 <= j <= BATAS_PECAH_NUP):
+        return 1
+    return int(j)
+
+
+def _angka_aman(v, bawaan=0.0) -> float:
+    try:
+        return float(v if v is not None else bawaan)
+    except (TypeError, ValueError):
+        return bawaan
+
+
+def peringatan_nup(barang, aset_dibuat) -> list:
+    """Peringatan NUP untuk baris jalur ASET. MURNI.
+
+    → [{kode, uraian, jumlah_bast, nup_terbentuk, sebab, pesan}]
+
+    Dua jenis selisih yang keduanya bergejala nihil:
+
+    `kuantitas_tak_terwakili` — barisnya utuh diproses, tetapi kuantitasnya
+    tak bisa dipecah menjadi NUP (pecahan, atau di atas batas). Satu NUP
+    berdiri mewakili banyak unit.
+
+    `nup_kurang` — pemecahan berhenti di tengah (mis. kode kembar ditolak),
+    sehingga NUP yang terbentuk lebih sedikit daripada yang direncanakan.
+
+    Baris yang MEMANG tak diproses — sudah tertaut, tanpa kode, atau
+    bergolongan persediaan — bukan selisih dan tidak dilaporkan di sini.
+    """
+    dibuat = aset_dibuat or []
+    per_kode = {}
+    for a in dibuat:
+        k = str((a or {}).get("asset_code") or "").strip()
+        per_kode[k] = per_kode.get(k, 0) + 1
+
+    keluar = []
+    for b in barang or []:
+        row = b or {}
+        kode = str(row.get("kode") or "").strip()
+        if not kode or is_persediaan(kode) or str(row.get("asset_id") or "").strip():
+            continue
+        jumlah = _angka_aman(row.get("jumlah"), 1.0)
+        rencana = unit_per_baris(jumlah)
+        terbentuk = min(per_kode.get(kode, 0), rencana)
+        per_kode[kode] = max(0, per_kode.get(kode, 0) - terbentuk)
+        uraian = str(row.get("uraian") or "").strip() or "(tanpa uraian)"
+        jml_teks = f"{jumlah:g}"
+        if terbentuk < rencana:
+            keluar.append({
+                "kode": kode, "uraian": uraian, "jumlah_bast": jumlah,
+                "nup_terbentuk": terbentuk, "sebab": "nup_kurang",
+                "pesan": (f"{uraian} ({kode}): {terbentuk} dari {rencana} NUP "
+                          "terbentuk — sisanya gagal dan TIDAK masuk LPB."),
+            })
+            continue
+        if rencana == 1 and jumlah != 1:
+            sebab = ("pecahan" if jumlah != int(jumlah)
+                     else "melebihi_batas")
+            alasan = ("jumlahnya pecahan"
+                      if sebab == "pecahan"
+                      else f"jumlahnya melebihi {BATAS_PECAH_NUP} unit")
+            keluar.append({
+                "kode": kode, "uraian": uraian, "jumlah_bast": jumlah,
+                "nup_terbentuk": 1, "sebab": sebab,
+                "pesan": (f"{uraian} ({kode}): BAST menyebut {jml_teks} unit "
+                          f"tetapi hanya 1 NUP terbentuk karena {alasan}. "
+                          "Pecah barisnya bila tiap unit perlu NUP sendiri."),
+            })
+    return keluar
