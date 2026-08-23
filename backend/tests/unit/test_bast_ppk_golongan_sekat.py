@@ -247,3 +247,71 @@ class TestPasalKelengkapanBerkas:
         teks = _jalan(_teks(dbx))
         assert "[]" in _rapat(teks)
         assert "\u2610" not in teks
+
+    def test_butir_disusun_DUA_KOLOM_bukan_satu_per_baris(self, dbx):
+        """Permintaan pemilik: *"mengisi ruang yang ada agar maksimal."*
+        Daftar tegak satu butir per baris membuang lebih dari separuh lebar
+        halaman — tiap butir hanya beberapa kata."""
+        teks = _jalan(_teks(dbx))
+        ganda = [b for b in teks.splitlines() if b.count("[ ]") >= 2]
+        assert len(ganda) >= 3, [b for b in teks.splitlines() if "[ ]" in b]
+
+    def test_seluruh_butir_tetap_tercetak_setelah_dipadatkan(self, dbx):
+        """Memadatkan tata letak tak boleh mengurangi isinya."""
+        teks = _rapat(_jalan(_teks(dbx)))
+        for butir in ("BeritaAcaraSerahTerimadaripenyediakepadaPPK",
+                      "BPKBatasnamaPemerintahRIc.q.K/L",
+                      "Daftarnomorseri/identitasunit",
+                      "Kartu/beritaacarapenerimaangudang"):
+            assert butir in teks, butir
+
+
+class TestSusunanTabelKelengkapan:
+    """Diuji pada FLOWABLE-nya, bukan pada halaman jadi.
+
+    Uji tingkat halaman untuk "judul tak terdampar di kaki halaman" pernah
+    saya tulis dan ternyata TIDAK MEMBEDAKAN apa pun: letak pemenggalan
+    kebetulan sudah benar pada data ujinya, sehingga ia tetap hijau meski
+    penjagaan keutuhannya dicabut. Yang menentukan bukan kebetulan tata
+    letak, melainkan bentuk flowable-nya.
+    """
+
+    def _susun(self, n_butir=6, n_kelompok=2):
+        from reportlab.lib.pagesizes import A4
+        from routes.reports import _get_report_styles, _tabel_kelengkapan
+        kelompok = [
+            (f"Golongan {i}", "Selain tanah dan bangunan, tanpa bukti kepemilikan",
+             [f"Berkas {j}" for j in range(n_butir)], [f"Barang {i}"], False)
+            for i in range(n_kelompok)
+        ]
+        return _tabel_kelengkapan(kelompok, A4[0] - 80, _get_report_styles())
+
+    def test_satu_flowable_per_kelompok(self):
+        assert len(self._susun(n_kelompok=3)) == 3
+
+    def test_tiap_kelompok_DIJAGA_UTUH(self):
+        """Tanpa ini ReportLab boleh memecahnya di batas baris mana pun, dan
+        judul kelompok bisa terdampar sendirian di kaki halaman."""
+        from reportlab.platypus import KeepTogether
+        for f in self._susun():
+            assert isinstance(f, KeepTogether), type(f)
+
+    def _tabel(self, **kw):
+        f = self._susun(**kw)[0]
+        return f._content[0] if hasattr(f, "_content") else f
+
+    def test_butir_dipasangkan_dua_per_baris(self):
+        tabel = self._tabel(n_butir=6)
+        # 1 baris judul + 3 baris isi (6 butir ÷ 2 kolom)
+        assert len(tabel._cellvalues) == 4
+        assert len(tabel._cellvalues[0]) == 2
+
+    def test_butir_ganjil_tidak_membuang_yang_terakhir(self):
+        tabel = self._tabel(n_butir=5)
+        assert len(tabel._cellvalues) == 4      # judul + 3 baris (2+2+1)
+
+    def test_kelompok_kosong_menghasilkan_daftar_kosong(self):
+        from reportlab.lib.pagesizes import A4
+        from routes.reports import _get_report_styles, _tabel_kelengkapan
+        assert _tabel_kelengkapan([], A4[0], _get_report_styles()) == []
+        assert _tabel_kelengkapan(None, A4[0], _get_report_styles()) == []

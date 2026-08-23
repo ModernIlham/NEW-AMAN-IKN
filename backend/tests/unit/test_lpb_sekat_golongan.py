@@ -205,3 +205,15 @@ class TestKelengkapanBerkasDiLpb:
         teks = _teks(_jalan(_pdf(dbx, [
             _it("1010301001", "Kertas HVS", 5, 50_000)])))
         assert "atau lebih" not in teks
+
+    def test_butir_disusun_dua_kolom_di_LPB_juga(self, dbx):
+        teks = _teks(_jalan(_pdf(dbx, CAMPUR)))
+        ganda = [b for b in teks.splitlines() if b.count("[ ]") >= 2]
+        assert len(ganda) >= 2, [b for b in teks.splitlines() if "[ ]" in b]
+
+    def test_isi_daftar_tidak_berkurang_setelah_dipadatkan(self, dbx):
+        teks = _rapat(_teks(_jalan(_pdf(dbx, CAMPUR))))
+        for butir in ("BPKBatasnamaPemerintahRIc.q.K/L",
+                      "Kartu/beritaacarapenerimaangudang",
+                      "BeritaAcaraPemeriksaan/Penerimaanbarang"):
+            assert butir in teks, butir
