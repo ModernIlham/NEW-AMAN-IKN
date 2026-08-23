@@ -948,3 +948,76 @@ class TestTautPersediaanTerdaftar:
                         psd_master_id="psd-a4")]), user=USER)
             assert segar["barang"][0]["psd_master_id"] == "psd-a4"
         _jalan(skenario())
+
+
+def test_lpb_satu_bast_membawa_snapshot_sumber_di_tiap_baris(dbx):
+    """Tanggal kedatangan, PPK, dan No. Bukti/Faktur harus berdiri di AREA
+    TABEL bersama barangnya — barulah kepala surat boleh berhenti mengulang.
+
+    Sebelum ini `baris_lpb_dari_aset` tak menerima snapshot apa pun, jadi LPB
+    dari satu BAST — bentuk yang lahir langsung dari "Catat Semua Barang" —
+    tak punya keterangan sumber sama sekali di barisnya.
+    """
+    async def skenario():
+        await _seed(dbx)
+        rec = await _unwrap(rp.buat_perolehan)(_perolehan_baru(), user=USER)
+        hasil = await _unwrap(rp.catat_semua_barang)(
+            rec["id"], rp.CatatSemuaIn(activity_id="keg1", booking_nomor=False),
+            user=USER)
+        lpb = await dbx.lpb.find_one({"id": hasil["lpb_id"]})
+        items = lpb["items"]
+        assert items, "LPB terbit tanpa satu pun baris"
+        for b in items:
+            s = b.get("sumber") or {}
+            assert s.get("ppk_nama") == "Budi Santoso"
+            assert s.get("ppk_nip") == "199001012015011001"
+            assert s.get("tanggal_bast") == "2026-03-10"
+            assert s.get("nomor_bast") == "BAST-001/2026"
+    _jalan(skenario())
+
+
+def _teks_pdf(raw):
+    pdfium = pytest.importorskip("pypdfium2")
+    pdf = pdfium.PdfDocument(raw)
+    try:
+        return " ".join(pdf[i].get_textpage().get_text_range()
+                        for i in range(len(pdf)))
+    finally:
+        pdf.close()
+
+
+def test_kepala_LPB_satu_bast_berhenti_mengulang_isi_tabel(dbx, monkeypatch):
+    """UJUNG KE UJUNG atas keluhan pemilik: *"pada header informasi mengenai
+    tanggal kedatangan, PPK, dan No. Bukti/Faktur masih ada, tolong hapus
+    karena sudah ada di informasi setiap row bagian BAST yang ada."*
+
+    Dokumen inilah yang dilihat pemilik: LPB yang terbit langsung dari tombol
+    "Catat Semua Barang". Diuji lewat PDF-nya yang sungguhan — bukan lewat
+    dokumen di basis data — karena yang dikeluhkan adalah yang TERCETAK.
+    """
+    import routes.persediaan as rps
+    import routes.reports as rrep
+    # Penyusun PDF meminjam helper kodefikasi milik `routes/reports.py`, yang
+    # memegang `db` sendiri. Tanpa ditambal, ia menembak Mongo sungguhan lewat
+    # event loop lain — gejalanya "attached to a different loop", bukan galat
+    # koneksi, jadi mudah disalahartikan sebagai cacat kode.
+    monkeypatch.setattr(rrep, "db", dbx, raising=False)
+
+    async def skenario():
+        await _seed(dbx)
+        rec = await _unwrap(rp.buat_perolehan)(_perolehan_baru(), user=USER)
+        hasil = await _unwrap(rp.catat_semua_barang)(
+            rec["id"], rp.CatatSemuaIn(activity_id="keg1", booking_nomor=False),
+            user=USER)
+        teks = _teks_pdf(await rps.bangun_lpb_pdf(hasil["lpb_id"], USER))
+
+        assert "No. Bukti/Faktur:" not in teks, "label kepala surat yang menyesatkan masih tercetak"
+        assert "Tgl Kedatangan:" not in teks, "tanggal kepala surat masih mengulang baris"
+        # PPK & penyedia cukup SEKALI — di area tabel, bersama barangnya.
+        assert teks.count("Budi Santoso") == 1, teks.count("Budi Santoso")
+        assert teks.count("PT Sumber Rejeki") == 1, teks.count("PT Sumber Rejeki")
+        # Dan TIDAK ada yang hilang: keterangannya pindah, bukan lenyap.
+        assert "199001012015011001" in teks
+        assert "10 Maret 2026" in teks
+        assert "BAST-001/2026" in teks
+    _jalan(skenario())
