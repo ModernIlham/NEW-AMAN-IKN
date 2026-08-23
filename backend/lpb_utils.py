@@ -333,3 +333,40 @@ def pesan_ringkas(r) -> str:
     if r.get("total_gagal"):
         ekor.append(f"{r['total_gagal']} gagal")
     return f"Tercatat: {inti}" + (f" ({'; '.join(ekor)})" if ekor else "")
+
+
+# Awalan keterangan yang DIBANGKITKAN SENDIRI saat LPB gabungan terbit
+# (routes/pengadaan.py). Nomor-nomor sesudahnya sudah tercetak pula pada
+# bundel sumber di area tabel.
+AWALAN_KETERANGAN_GABUNGAN = "Gabungan seluruh BAST PPK-KPB:"
+
+
+def nilai_berulang(nilai, teks_tabel) -> bool:
+    """True bila `nilai` sudah tercetak apa adanya di area tabel. MURNI.
+
+    Dipakai kepala surat LPB untuk MENJATUHKAN barisnya sendiri. Penyedia,
+    PPK, dan NIP-nya kini muncul pada bundel sumber di dalam/di bawah tabel;
+    mencetaknya lagi di kepala membuat pembaca membandingkan dua tempat yang
+    selalu sama — dan yang selalu sama berhenti dibaca.
+    """
+    v = str(nilai or "").strip()
+    return bool(v) and v in str(teks_tabel or "")
+
+
+def keterangan_berulang(keterangan, teks_tabel) -> bool:
+    """True HANYA bila keterangan sekadar mengulang nomor BAST yang sudah
+    tercetak. MURNI.
+
+    Sengaja SEMPIT: hanya keterangan berbentuk bangkitan sendiri
+    ("Gabungan seluruh BAST PPK-KPB: A; B") yang seluruh nomornya sudah ada
+    di area tabel. Keterangan yang DITULIS OPERATOR selalu bertahan — membuang
+    kalimat orang karena kebetulan memuat nomor yang sama adalah kehilangan
+    informasi, bukan pemangkasan pengulangan.
+    """
+    k = str(keterangan or "").strip()
+    if not k.startswith(AWALAN_KETERANGAN_GABUNGAN):
+        return False
+    sisa = k[len(AWALAN_KETERANGAN_GABUNGAN):]
+    nomor = [n.strip() for n in sisa.split(";") if n.strip()]
+    teks = str(teks_tabel or "")
+    return bool(nomor) and all(n in teks for n in nomor)

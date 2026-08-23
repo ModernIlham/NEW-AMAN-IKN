@@ -217,3 +217,82 @@ class TestKelengkapanBerkasDiLpb:
                       "Kartu/beritaacarapenerimaangudang",
                       "BeritaAcaraPemeriksaan/Penerimaanbarang"):
             assert butir in teks, butir
+
+
+class TestKepalaSuratTidakMengulangTabel:
+    """Laporan pemilik: *"hilangkan informasi yang berulang di bagian header
+    karena sudah terjabarkan di setiap pembagian row per kategori BAST."*
+
+    Sejak bundel sumber menempel pada barisnya (atau tercetak sekali di bawah
+    tabel), penyedia/PPK dan keterangan nomor BAST muncul DUA KALI dalam satu
+    halaman. Yang selalu sama berhenti dibaca — dan ketika salah satunya kelak
+    berbeda, perbedaan itu ikut terlewat.
+    """
+
+    async def _pdf_lengkap(self, dbx, **ubah):
+        await dbx.kodefikasi.insert_many([
+            {"kode": "305", "uraian": "Alat Kantor dan Rumah Tangga"}])
+        dok = {
+            "id": "lpb-1", "kode_satker": SATKER, "kategori": "gabungan",
+            "nomor": "LPB-01/2026", "tanggal": "2026-08-23",
+            "jenis_dokumen": "BAST PPK-KPB",
+            "penyedia": "CV Sumber Rejeki", "ppk_nama": "Bimo",
+            "ppk_nip": "198910282014021004", "ppk_status_kepegawaian": "pns",
+            "keterangan": "Gabungan seluruh BAST PPK-KPB: B-001/2026",
+            "items": [_it("3050104001", "Laptop", 1, 15_000_000, SUMBER_A, "1")],
+            "total_nilai": 15_000_000,
+        }
+        dok.update(ubah)
+        await dbx.lpb.insert_one(dok)
+        return await rps.bangun_lpb_pdf("lpb-1", USER)
+
+    def test_penyedia_tak_dicetak_dua_kali(self, dbx):
+        teks = _teks(_jalan(self._pdf_lengkap(dbx)))
+        assert teks.count("CV Sumber Rejeki") == 1, teks.count("CV Sumber Rejeki")
+
+    def test_ppk_tak_dicetak_dua_kali(self, dbx):
+        teks = _teks(_jalan(self._pdf_lengkap(dbx)))
+        assert teks.count("Bimo") == 1, teks.count("Bimo")
+
+    def test_keterangan_bangkitan_sendiri_dijatuhkan(self, dbx):
+        teks = _teks(_jalan(self._pdf_lengkap(dbx)))
+        assert "Gabungan seluruh BAST PPK-KPB" not in teks
+        # Nomornya TETAP ada — lewat bundel sumber.
+        assert "B-001/2026" in teks
+
+    def test_NIP_PPK_TIDAK_ikut_hilang(self, dbx):
+        """Bundel sumber hanya membawa NAMA PPK. Menjatuhkan barisnya
+        sekalian akan MEMBUANG nomornya — pemangkasan pengulangan tak boleh
+        menghilangkan informasi."""
+        teks = _teks(_jalan(self._pdf_lengkap(dbx)))
+        assert "198910282014021004" in teks
+        assert "PPK — NIP." in teks
+
+    def test_keterangan_TULISAN_OPERATOR_tetap_bertahan(self, dbx):
+        """Membuang kalimat orang karena kebetulan memuat nomor yang sama
+        adalah kehilangan informasi, bukan pemangkasan pengulangan."""
+        teks = _teks(_jalan(self._pdf_lengkap(
+            dbx, keterangan="Barang datang terlambat 2 hari, kardus penyok")))
+        assert "kardus penyok" in teks
+
+    def test_penyedia_BERBEDA_dari_bundel_tetap_dicetak(self, dbx):
+        """Dijatuhkan berdasarkan NILAI, bukan berdasarkan jenis LPB."""
+        teks = _teks(_jalan(self._pdf_lengkap(dbx, penyedia="PT Beda Sendiri")))
+        assert "PT Beda Sendiri" in teks
+
+    def test_lpb_tanpa_bundel_apa_pun_tetap_berkepala_lengkap(self, dbx):
+        """LPB persediaan lama tak punya `sumber` sama sekali — kepalanya
+        satu-satunya tempat keterangan itu ada."""
+        teks = _teks(_jalan(self._pdf_lengkap(dbx, items=[
+            _it("1010301001", "Kertas HVS", 5, 50_000)])))
+        assert "CV Sumber Rejeki" in teks
+        assert "Bimo" in teks
+        assert "Gabungan seluruh BAST PPK-KPB" in teks
+
+    def test_kepala_surat_tak_meninggalkan_lubang(self, dbx):
+        """Baris yang dijatuhkan tak boleh menyisakan sel kosong di tengah —
+        kolom kanan harus tetap terisi selama masih ada isian berikutnya."""
+        teks = _teks(_jalan(self._pdf_lengkap(dbx)))
+        for wajib in ("Instansi:", "Jenis:", "Kantor/Satker:", "No. Bukti/Faktur:",
+                      "Tgl Kedatangan:", "Tautan BAST Pengadaan:"):
+            assert wajib in teks, wajib
