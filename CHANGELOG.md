@@ -67,6 +67,51 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#924] Peleburan pengadaan ke NUP yang sudah ada — pengembangan nilai — 2026-08-23
+
+Permintaan pemilik: *"pastikan sistem pengadaan sekarang juga sudah dapat
+melebur pengadaan jika kode asetnya sama … melalui fitur pengembangan aset
+sehingga tidak merubah kuantitas barang tersebut karena tetap 1 kesatuan akan
+tetapi dengan pengembangan nilai sesuai NUP yang ditunjuk (berikan peringatan
+… 1 NUP 1 barang …). Dan juga pastikan fitur KDP … dipisahkan fitur
+pengembangannya dengan kode barang definitif karena masih berupa termin."*
+
+- **`backend/peleburan_aset.py`** (MURNI) + `POST /pengadaan/{id}/leburkan`.
+- Nilai aset tujuan **bertambah** (jurnal **202** "Pengembangan Nilai Aset
+  Langsung"); jurnalnya ber-`jumlah: 0` — murni transaksi nilai, kuantitasnya
+  tetap satu kesatuan.
+- **KDP DITOLAK** dengan penunjuk jalurnya sendiri (Pembukuan → KDP, 503).
+- **1 NUP 1 barang**: baris berjumlah ≠ 1 ditolak, dan peringatannya tampil
+  **sebelum** aset tujuan dipilih.
+- Kode barang baris dan aset tujuan **wajib sama**.
+- Barisnya ditandai `leburan`, bukan sekadar tertaut.
+
+> **Bedanya dengan "Tautkan" yang sudah ada.** Menautkan hanya menyalin
+> kode/NUP/nama ke barisnya — nilai asetnya **tak berubah sama sekali**. Untuk
+> belanja yang menambah nilai barang yang sudah ada, itu berarti uangnya
+> tercatat di register pengadaan tetapi tak pernah sampai ke nilai perolehan
+> asetnya.
+
+> **Kenapa KDP ditolak, bukan sekadar didokumentasikan.** Registry kode
+> transaksi sudah memisahkan keduanya sejak awal: KDP punya 501/502/503/505,
+> aset definitif memakai 202. Menerima KDP di sini mencatat termin konstruksi
+> dengan kode aset definitif — jurnal tetap tertulis, nilai tetap bertambah,
+> tak ada galat apa pun, dan yang keliru baru terlihat saat rekonsiliasi KDP
+> tak menemukan terminnya.
+
+> **Penanda `leburan` bukan hiasan.** Tanpa itu "Catat Semua Barang" tak bisa
+> membedakan baris terlebur dari baris yang menunggu dijadikan aset baru —
+> satu belanja akan tercatat DUA KALI: sebagai penambah nilai aset lama DAN
+> sebagai aset baru ber-NUP sendiri.
+
+> Uji sempat gagal karena monkeypatch salah sasaran: endpoint mengimpor
+> `catat_mutasi_bmn` LOKAL dari `shared_utils`, sehingga menambal atribut
+> modul `routes.pengadaan` tak berpengaruh — dan penugasan langsung
+> (`rp.catat_mutasi_bmn = …`) bocor ke uji berikutnya karena tak pernah
+> dikembalikan.
+
+---
+
 ## [#923] Peringatan NUP versus kuantitas BAST saat pencatatan — 2026-08-23
 
 Permintaan pemilik: *"pada saat LPB akan dibuat pastikan untuk dapat

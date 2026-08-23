@@ -23,6 +23,7 @@ import PerkiraanNomor from "@/components/persuratan/PerkiraanNomor";
 import PemilihPenandatangan from "@/components/pejabat/PemilihPenandatangan";
 import { getSatkerAktif } from "@/lib/satkerAktif";
 import { idTerpilih, payloadLpbGabungan } from "@/lib/lpbGabungan";
+import { bolehLeburkan, peringatanJumlahLebur } from "@/lib/peleburanBaris";
 import { bagikanWa, bagikanEmail, hasilTtd } from "@/lib/pesanTtd";
 import {
   dokumenSetelahGantiSifat, formDariPerolehan, payloadUbahPerolehan,
@@ -251,6 +252,31 @@ export default function PengadaanPage({ user, onBack }) {
       muat();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal menautkan");
+      setTaut((t) => (t ? { ...t, saving: false } : t));
+    }
+  };
+
+  // PELEBURAN ke aset yang sudah tercatat — BUKAN penautan. Menautkan hanya
+  // menyalin kode/NUP/nama ke barisnya; nilai asetnya tak berubah sama
+  // sekali. Di sini nilai aset BERTAMBAH (jurnal 202) sementara kuantitasnya
+  // tetap — satu aset tetap satu kesatuan.
+  const leburkan = async (assetId) => {
+    if (!taut) return;
+    setTaut((t) => ({ ...t, saving: true }));
+    try {
+      const r = await axios.post(
+        `${API}/pengadaan/${taut.perolehan.id}/leburkan`,
+        { index: taut.index, asset_id: assetId });
+      const d = r.data || {};
+      toast.success(
+        `Dileburkan ke ${d.kode} NUP ${d.nup} — nilai menjadi ${fmtRp(d.nilai_baru)}`,
+        { duration: 8000 });
+      setTaut(null);
+      muat();
+    } catch (e) {
+      // Penolakannya menerangkan syaratnya (1 NUP 1 barang, kode harus sama,
+      // KDP punya jalur sendiri) — jangan dipendekkan jadi "gagal".
+      toast.error(e?.response?.data?.detail || "Gagal meleburkan", { duration: 12000 });
       setTaut((t) => (t ? { ...t, saving: false } : t));
     }
   };
@@ -846,10 +872,30 @@ export default function PengadaanPage({ user, onBack }) {
                                 pasti gagal hanyalah undangan untuk mencoba. */}
                             {!b.psd_item_id && (
                               <Button size="sm" variant="outline" className="h-6 text-[10px] min-h-0 px-2"
-                                onClick={() => { setCari(""); setHasilCari([]); setTaut({ perolehan: p, index: i, saving: false }); }}
+                                onClick={() => { setCari(""); setHasilCari([]); setTaut({ perolehan: p, index: i, saving: false, mode: "taut" }); }}
                                 data-testid={`pengadaan-taut-${p.id}-${i}`}>
                                 {b.asset_id ? "Ubah Tautan" : "Tautkan"}
                               </Button>
+                            )}
+                            {/* LEBURKAN — berbeda dari Tautkan: nilai aset
+                                tujuan BERTAMBAH (jurnal 202), kuantitasnya
+                                tetap. Tak ditawarkan untuk baris persediaan
+                                maupun baris yang sudah tertaut/terlebur:
+                                server menolak keduanya. */}
+                            {bolehLeburkan(b) && (
+                              <Button size="sm" variant="outline"
+                                className="h-6 text-[10px] min-h-0 px-2 text-sky-700 dark:text-sky-400 border-sky-500/40"
+                                onClick={() => { setCari(""); setHasilCari([]); setTaut({ perolehan: p, index: i, saving: false, mode: "lebur" }); }}
+                                title="Kembangkan nilai aset yang sudah tercatat — kuantitasnya tetap"
+                                data-testid={`pengadaan-lebur-${p.id}-${i}`}>
+                                Leburkan ke NUP
+                              </Button>
+                            )}
+                            {b.leburan && (
+                              <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-700 dark:text-sky-400 text-[10px] font-semibold"
+                                data-testid={`pengadaan-badge-lebur-${p.id}-${i}`}>
+                                Terlebur ke NUP {b.NUP}
+                              </span>
                             )}
                           </li>
                         ))}
@@ -1142,11 +1188,33 @@ export default function PengadaanPage({ user, onBack }) {
       <Dialog open={!!taut} onOpenChange={(o) => { if (!o) setTaut(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Tautkan ke Aset Master</DialogTitle>
+            <DialogTitle>
+              {taut?.mode === "lebur"
+                ? "Leburkan ke Aset — Pengembangan Nilai"
+                : "Tautkan ke Aset Master"}
+            </DialogTitle>
             <DialogDescription className="text-xs">
-              {taut && `${taut.perolehan.barang?.[taut.index]?.uraian || ""} — cegah entri ganda dengan menautkan ke aset yang sudah dicatat.`}
+              {taut && (taut.mode === "lebur"
+                ? `${taut.perolehan.barang?.[taut.index]?.uraian || ""} — nilainya `
+                  + "ditambahkan ke aset yang dipilih (jurnal 202). Kuantitas "
+                  + "TIDAK berubah: aset tujuan tetap satu kesatuan. Kode "
+                  + "barangnya harus sama, dan KDP punya jalur pengembangannya "
+                  + "sendiri di Pembukuan."
+                : `${taut.perolehan.barang?.[taut.index]?.uraian || ""} — cegah entri ganda dengan menautkan ke aset yang sudah dicatat.`)}
             </DialogDescription>
           </DialogHeader>
+          {/* Peringatan DI MUKA, bukan setelah ditolak: satu NUP satu barang.
+              Operator yang baru tahu setelah menekan tombol sudah terlanjur
+              memilih aset tujuan dan mengira sistemnya yang rewel. */}
+          {taut?.mode === "lebur"
+            && peringatanJumlahLebur(taut.perolehan.barang?.[taut.index]) && (
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2"
+              data-testid="pengadaan-lebur-peringatan-jumlah">
+              <p className="text-[11px] text-amber-800 dark:text-amber-200">
+                {peringatanJumlahLebur(taut.perolehan.barang?.[taut.index])}
+              </p>
+            </div>
+          )}
           <div className="relative">
             <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
             <Input className="pl-8" placeholder="Cari nama/kode aset (min. 2 huruf)"
@@ -1157,7 +1225,8 @@ export default function PengadaanPage({ user, onBack }) {
               {mencari ? (
                 <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-orange-600" /></div>
               ) : hasilCari.map((a) => (
-                <button key={a.id} type="button" onClick={() => tautkan(a.id)} disabled={taut?.saving}
+                <button key={a.id} type="button" disabled={taut?.saving}
+                  onClick={() => (taut?.mode === "lebur" ? leburkan(a.id) : tautkan(a.id))}
                   className="w-full px-2.5 py-1.5 text-left hover:bg-muted">
                   <span className="block text-xs font-semibold text-foreground truncate">{a.asset_name}</span>
                   <span className="block text-[10px] text-muted-foreground font-mono">{a.asset_code} · {a.NUP} · {a.condition}</span>
@@ -1166,7 +1235,7 @@ export default function PengadaanPage({ user, onBack }) {
             </div>
           )}
           <DialogFooter className="gap-2">
-            {taut?.perolehan?.barang?.[taut?.index]?.asset_id && (
+            {taut?.mode !== "lebur" && taut?.perolehan?.barang?.[taut?.index]?.asset_id && (
               <Button variant="outline" className="text-red-500 hover:text-red-600" disabled={taut?.saving}
                 onClick={() => tautkan("")}>
                 Lepas Tautan
