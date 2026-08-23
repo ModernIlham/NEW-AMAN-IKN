@@ -67,6 +67,39 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#915] LPB: sekat golongan, bidang bernama & bernilai, sumber tak berulang — 2026-08-23
+
+Laporan pemilik atas keluaran LPB yang sudah terbit: *"pada per bidangnya masih
+tidak ada nama bidangnya dan jumlah totalnya … detail akan lebih spesifik lagi
+per golongan barang … dan khusus LPB tolong coba perbaiki informasi mana yang
+sekiranya melekat bersama informasi row data dengan meminimalisir informasi
+berulang … agar terorganisir dan terkelompokkan dengan baik."*
+
+- **Sekat GOLONGAN ditambahkan ke LPB** (pola yang sama dengan BAST PPK→KPB
+  di [#914]) — nama golongan, jumlah unit, dan nilai kelompoknya.
+- **Sekat BIDANG kini membawa nilai kelompoknya**, di LPB maupun BAST PPK→KPB.
+- **Bidang yang belum terdaftar** di referensi kodefikasi dinyatakan apa
+  adanya: *"BIDANG 101 — (belum terdaftar di referensi kodefikasi)"*.
+- **Jumlah unit menjumlah QTY**, bukan menghitung baris — 50 rim kertas pada
+  satu baris adalah 50 unit, bukan 1.
+- **Bundel sumber tak lagi berulang**: bila seluruh barang berasal dari satu
+  register, kalimatnya dicetak SEKALI di bawah tabel; bila berbeda-beda, ia
+  tetap menempel di barisnya dan hanya dicetak saat BERGANTI.
+
+> **Sekat tanpa nama terbaca seperti dokumennya yang rusak** — padahal yang
+> kurang adalah isi referensi kodefikasi satker itu. Menyebutkannya membuat
+> yang membaca tahu apa yang harus diisi, alih-alih melaporkan bug.
+
+> **Yang terulang berhenti dibaca.** Pada LPB yang seluruh barangnya dari satu
+> register — bentuk paling sering — kalimat penyedia/PPK/dokumen dulu tercetak
+> sebanyak jumlah barangnya. Akibatnya bukan sekadar boros ruang: ketika
+> SEBAGIAN barang datang dari register lain, perbedaan itu ikut terlewat.
+
+> Memangkas pengulangan **tidak boleh membuang informasinya** — karena itu
+> kalimat tunggalnya pindah ke bawah tabel, bukan hilang.
+
+---
+
 ## [#914] BAST PPK→KPB: golongan jadi sekat, bukan kolom — 2026-08-23
 
 Permintaan pemilik: *"pada bagian objek serah terima 'golongan barang' jangan
