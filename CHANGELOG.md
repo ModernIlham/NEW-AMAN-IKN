@@ -67,6 +67,65 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#925] Pengadaan memilih barang persediaan yang sudah terdaftar — 2026-08-23
+
+Permintaan pemilik: *"ketika persediaan pastikan sudah terdaftar untuk memilih
+sesuai kodifikasi … yang sudah tersedia dan tercatat di inventarisasi
+persediaan yang memiliki kode 16 digit"*.
+
+**Masalahnya: server MENEBAK kartu stok tujuannya.** Baris pengadaan menyimpan
+`kode` sebagai teks bebas. Saat "Daftarkan ke Persediaan" ditekan, master
+dicocokkan lewat awalan kode **dan** nama barang yang sama persis. Tebakan itu
+sudah dua kali salah arah (lihat komentar di `daftarkan_persediaan`), dan
+tebakan terbaik pun tetap tebakan: "Kertas HVS A4" versus "Kertas HVS A4 80gr"
+adalah barang yang sama di gudang tetapi berbeda bagi regex — hasilnya dua
+kartu stok untuk satu tumpukan kertas, yang baru ketahuan saat opname.
+
+Pemilih kode di layar juga hanya menarik **referensi kodefikasi**, yang
+maksimal 10 digit. Barang yang sudah punya kartu stok — dan karenanya sudah
+ber-kode 16 digit — tak pernah muncul untuk dipilih.
+
+**Yang berubah**
+
+- **Pemilih kode barang kini dua sumber.** Satu ketikan menembak referensi
+  kodefikasi *dan* master persediaan satker (`Promise.allSettled`, jadi satu
+  sumber yang mati tak mengosongkan yang lain). Barang terdaftar tampil lebih
+  dulu di bawah judul **"Terdaftar di persediaan — kode 16 digit"**, lengkap
+  dengan sisa stok dan satuannya.
+- **Pilihan itu tersimpan** sebagai `psd_master_id` pada baris, dan kode baris
+  **naik ke 16 digit** milik master — supaya BAST, LPB, dan kartu stok
+  mencetak kode yang sama persis. Uraian yang sudah diketik tidak ditimpa:
+  nama di BAST kerap lebih panjang, dan menimpanya berarti mengarang isi
+  dokumen sumber.
+- **Tautan eksplisit mengalahkan tebakan** di `daftarkan-persediaan`. Master
+  yang lenyap di antara pemilihan dan pendaftaran tidak diam-diam diganti
+  master baru — barisnya dilaporkan gagal supaya operator memilih ulang.
+- **Tautan gugur otomatis** begitu kolom kode diketik ulang ke barang lain.
+  Kode 10 digit yang masih menjadi awalan kode master tetap tertaut — itu
+  barang yang sama, hanya ditulis sampai level kodefikasinya.
+- **Peringatan, bukan paksaan.** Baris persediaan tanpa tautan tetap boleh
+  disimpan dan diposting seperti sebelumnya; yang baru hanya panel kuning di
+  form (menyebut baris nomor berapa) dan toast setelah pencatatan yang
+  menyebutkan baris mana masternya dicocokkan otomatis. Register ini
+  pendamping SAKTI, bukan gerbangnya — memaksa akan mengunci data lama.
+- **Isolasi satker ditegakkan** pada pencarian master: id milik satker lain
+  ditolak 400, tak pernah menjadi kartu tujuan.
+
+**Berkas**: `backend/persediaan_pengadaan.py` (baru, murni),
+`backend/routes/pengadaan.py`, `frontend/src/lib/persediaanTaut.js` (baru),
+`frontend/src/lib/perolehanUbah.js`, `frontend/src/pages/PengadaanPage.jsx`.
+
+**Uji**: `test_persediaan_pengadaan.py` (24 uji murni),
+`test_pengadaan_catat_semua.py` (kelas `TestTautPersediaanTerdaftar`),
+`persediaanTaut.test.js`, `KodeBarangPicker.test.jsx`, `perolehanUbah.test.js`.
+Tiga mutasi dipasang lalu terbukti mati: (1) server mengabaikan tautan
+eksplisit → uji dua kartu ber-kode sama gagal; (2) tautan tak pernah gugur saat
+kode diketik ulang → 4 uji gagal; (3) peringatan dihitung sesudah perulangan →
+2 uji gagal. Mutasi (1) sempat **lolos** pada versi awal uji karena kode baris
+sudah dinaikkan ke 16 digit sehingga tebakannya kebetulan benar; ujinya
+diganti dengan dua master ber-kode barang sama tetapi NUP berbeda — satu-satunya
+kasus yang tak bisa dibedakan tebakan apa pun.
+
 ## [#924] Peleburan pengadaan ke NUP yang sudah ada — pengembangan nilai — 2026-08-23
 
 Permintaan pemilik: *"pastikan sistem pengadaan sekarang juga sudah dapat

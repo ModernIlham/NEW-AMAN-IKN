@@ -23,6 +23,9 @@ from lpb_utils import (
     peringatan_nup, pilah_barang_perolehan, ringkas_pencatatan,
     total_nilai_lpb, unit_per_baris,
 )
+from persediaan_pengadaan import (
+    kode_setelah_taut, peringatan_persediaan, validate_taut_persediaan,
+)
 from persediaan_utils import KODE_PENUH_LEN, KODE_PREFIX_LEN
 from db import db
 from shared_utils import kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker, delete_document_from_gridfs, get_document_from_gridfs, log_audit
@@ -50,6 +53,10 @@ class BarangIn(BaseModel):
     jumlah: float = Field(gt=0)
     harga_satuan: float = Field(ge=0)
     asset_id: str = ""                 # tautan ke aset master (opsional)
+    # Barang persediaan yang SUDAH terdaftar di inventarisasi (kode 16 digit).
+    # Diisi lewat pemilih di layar; kosong = biarkan sistem menebak masternya
+    # saat pendaftaran stok (perilaku lama, kini berperingatan).
+    psd_master_id: str = ""
 
     @field_validator("jumlah", "harga_satuan")
     @classmethod
@@ -103,6 +110,11 @@ class BarangUbahIn(BaseModel):
     kode: str = ""
     jumlah: float = Field(gt=0)
     harga_satuan: float = Field(ge=0)
+    # Beda dengan `asset_id`: tautan persediaan TIDAK melewati pemeriksaan
+    # apa pun yang ada di jalur lain — masternya tetap dicari ber-scope satker
+    # di `_taut_master_persediaan`, jadi menerimanya di sini bukan pintu
+    # belakang, melainkan satu-satunya cara mengubah pilihan sebelum diposting.
+    psd_master_id: str = ""
 
     @field_validator("jumlah", "harga_satuan")
     @classmethod
@@ -298,6 +310,11 @@ async def daftarkan_persediaan(perolehan_id: str, user: dict = Depends(require_w
         raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
     await pastikan_akses_dok_satker(user, p)  # isolasi satker (REVIEW-9 R8)
     barang = list(p.get("barang") or [])
+    # Peringatan DIPOTRET SEBELUM perulangan: begitu satu baris berhasil
+    # diposting ia mendapat `psd_item_id` dan otomatis lepas dari daftar
+    # peringatan — dihitung belakangan, laporannya jadi selalu kosong dan
+    # operator tak pernah tahu baris mana yang masternya ditebak sistem.
+    peringatan = peringatan_persediaan(barang)
     dibuat_master = masuk = dilewati_nonpsd = dilewati_terdaftar = 0
     gagal = []
     for idx_baris, row in enumerate(barang):
@@ -329,50 +346,70 @@ async def daftarkan_persediaan(perolehan_id: str, user: dict = Depends(require_w
                 "Baris DILEWATI (tak dicatat); pecah barisnya atau ubah satuannya.")
             continue
         jumlah = int(jumlah_asli)
-        # Lookup master DALAM LINGKUP SATKER (REVIEW-9 R3): tanpa scope,
-        # master satker lain yang kebetulan ber-kode sama terpilih → jalur
-        # create terlewati → transaksi_masuk 403 dan baris macet permanen.
-        #
-        # COCOKKAN PER-AWALAN **DAN NAMA** (dua temuan audit berturut-turut).
-        #
-        # Ronde 1: `create_persediaan` menyimpan kode 16 digit (`next_kode_penuh`:
-        # 10 digit kodefikasi + 6 digit nomor urut) sedangkan baris BAST membawa
-        # 10 digit, jadi pencocokan PERSIS selalu meleset → master baru dibuat
-        # setiap kali barang yang sama dibeli, dan satu jenis kertas HVS pecah
-        # jadi puluhan kartu stok.
-        #
-        # Ronde 2: mencocokkan per-awalan SAJA lebih buruk lagi. Enam digit
-        # terakhir itu justru yang MEMBEDAKAN barang berbeda pada kodefikasi
-        # 10-digit yang sama ("Kertas HVS A4" vs "Kertas HVS F4"). Mengambil
-        # nomor urut terkecil membuang stok & layer FIFO ke kartu barang yang
-        # SALAH — lebih merusak daripada kartu yang pecah.
-        #
-        # Karena itu: awalan kode + nama barang yang sama (abaikan kapital &
-        # spasi berlebih). Tak ada yang cocok → master baru, sebagaimana
-        # mestinya. Kode yang lebih pendek dari awalan baku (mis. "1") tak
-        # pernah dicocokkan per-awalan — dulu ditolak, dan tetap harus ditolak.
-        nama_row = str(row.get("uraian") or "").strip()
-        if len(kode) == KODE_PENUH_LEN:
-            q_kode = {"kode_barang": kode}
-        elif len(kode) >= KODE_PREFIX_LEN:
-            q_kode = {"kode_barang": {"$regex": f"^{re.escape(kode)}"},
-                      "nama_barang": {"$regex": f"^{re.escape(nama_row)}$",
-                                      "$options": "i"}}
-        else:
-            q_kode = {"kode_barang": kode}     # kode cacat: jangan menebak
-        it = await db.persediaan.find_one(
-            scope_query_field_satker(user, q_kode),
-            {"_id": 0, "id": 1}, sort=[("kode_barang", 1)])
-        if not it:
-            try:
-                it = await create_persediaan(PersediaanCreate(
-                    kode_barang=kode,
-                    nama_barang=str(row.get("uraian") or "Barang persediaan").strip()[:300],
-                ), _user=user)
-                dibuat_master += 1
-            except HTTPException as e:
-                gagal.append(f"{row.get('uraian')}: {e.detail}")
+        # TAUTAN EKSPLISIT MENANG atas segala tebakan. Operator sudah memilih
+        # barang mana di inventarisasi yang dimaksud (`psd_master_id`);
+        # mencocokkan ulang lewat kode+nama hanya membuka lagi peluang meleset
+        # yang justru hendak dihapus. Master yang hilang di antara pemilihan
+        # dan pendaftaran (dihapus definitif, atau id milik satker lain) TIDAK
+        # diam-diam diganti master baru — barisnya dilaporkan gagal supaya
+        # operator memilih ulang, karena membuat kartu stok baru diam-diam
+        # justru bentuk kesalahan yang sama.
+        mid = str(row.get("psd_master_id") or "").strip()
+        if mid:
+            it = await db.persediaan.find_one(
+                scope_query_field_satker(user, {"id": mid}),
+                {"_id": 0, "id": 1, "kode_barang": 1})
+            if not it:
+                gagal.append(
+                    f"{row.get('uraian')}: barang persediaan yang dipilih "
+                    "sudah tidak ada di inventarisasi satker ini — pilih "
+                    "ulang lewat Ubah register.")
                 continue
+        else:
+            # Lookup master DALAM LINGKUP SATKER (REVIEW-9 R3): tanpa scope,
+            # master satker lain yang kebetulan ber-kode sama terpilih → jalur
+            # create terlewati → transaksi_masuk 403 dan baris macet permanen.
+            #
+            # COCOKKAN PER-AWALAN **DAN NAMA** (dua temuan audit berturut-turut).
+            #
+            # Ronde 1: `create_persediaan` menyimpan kode 16 digit (`next_kode_penuh`:
+            # 10 digit kodefikasi + 6 digit nomor urut) sedangkan baris BAST membawa
+            # 10 digit, jadi pencocokan PERSIS selalu meleset → master baru dibuat
+            # setiap kali barang yang sama dibeli, dan satu jenis kertas HVS pecah
+            # jadi puluhan kartu stok.
+            #
+            # Ronde 2: mencocokkan per-awalan SAJA lebih buruk lagi. Enam digit
+            # terakhir itu justru yang MEMBEDAKAN barang berbeda pada kodefikasi
+            # 10-digit yang sama ("Kertas HVS A4" vs "Kertas HVS F4"). Mengambil
+            # nomor urut terkecil membuang stok & layer FIFO ke kartu barang yang
+            # SALAH — lebih merusak daripada kartu yang pecah.
+            #
+            # Karena itu: awalan kode + nama barang yang sama (abaikan kapital &
+            # spasi berlebih). Tak ada yang cocok → master baru, sebagaimana
+            # mestinya. Kode yang lebih pendek dari awalan baku (mis. "1") tak
+            # pernah dicocokkan per-awalan — dulu ditolak, dan tetap harus ditolak.
+            nama_row = str(row.get("uraian") or "").strip()
+            if len(kode) == KODE_PENUH_LEN:
+                q_kode = {"kode_barang": kode}
+            elif len(kode) >= KODE_PREFIX_LEN:
+                q_kode = {"kode_barang": {"$regex": f"^{re.escape(kode)}"},
+                          "nama_barang": {"$regex": f"^{re.escape(nama_row)}$",
+                                          "$options": "i"}}
+            else:
+                q_kode = {"kode_barang": kode}     # kode cacat: jangan menebak
+            it = await db.persediaan.find_one(
+                scope_query_field_satker(user, q_kode),
+                {"_id": 0, "id": 1}, sort=[("kode_barang", 1)])
+            if not it:
+                try:
+                    it = await create_persediaan(PersediaanCreate(
+                        kode_barang=kode,
+                        nama_barang=str(row.get("uraian") or "Barang persediaan").strip()[:300],
+                    ), _user=user)
+                    dibuat_master += 1
+                except HTTPException as e:
+                    gagal.append(f"{row.get('uraian')}: {e.detail}")
+                    continue
         try:
             await transaksi_masuk(it["id"], TransaksiMasukIn(
                 jenis="pembelian", jumlah=jumlah,
@@ -407,6 +444,7 @@ async def daftarkan_persediaan(perolehan_id: str, user: dict = Depends(require_w
     return {"masuk": masuk, "dibuat_master": dibuat_master,
             "dilewati_bukan_persediaan": dilewati_nonpsd,
             "dilewati_sudah_terdaftar": dilewati_terdaftar,
+            "peringatan_persediaan": peringatan,
             "gagal": gagal[:20]}
 
 
@@ -439,6 +477,34 @@ async def export_pengadaan(_user: dict = Depends(require_user)):
                     headers={"Content-Disposition": 'attachment; filename="register_pengadaan.csv"'})
 
 
+async def _taut_master_persediaan(b: dict, user: dict) -> dict:
+    """Selesaikan `psd_master_id` satu baris → potongan field untuk baris itu.
+
+    Mengembalikan {"psd_master_id", "psd_master_kode", "psd_master_nama"} dan —
+    bila tertaut — "kode" yang sudah dinaikkan ke 16 digit milik master.
+    Baris tanpa tautan mengembalikan field kosong, BUKAN dict kosong: dengan
+    begitu tautan lama ikut terhapus saat operator melepaskannya.
+
+    Master dicari DALAM LINGKUP SATKER. Tanpa scope, id milik satker lain akan
+    lolos dan stok BAST kita mendarat di kartu stok mereka — persis lubang yang
+    sudah ditutup di jalur aset (`pastikan_akses_aset`).
+    """
+    kosong = {"psd_master_id": "", "psd_master_kode": "", "psd_master_nama": ""}
+    mid = str(b.get("psd_master_id") or "").strip()
+    if not mid:
+        return kosong
+    master = await db.persediaan.find_one(
+        scope_query_field_satker(user, {"id": mid}),
+        {"_id": 0, "id": 1, "kode_barang": 1, "nama_barang": 1, "satuan": 1})
+    errs = validate_taut_persediaan(b.get("kode"), master)
+    if errs:
+        raise HTTPException(status_code=400, detail="; ".join(errs))
+    return {"psd_master_id": master["id"],
+            "psd_master_kode": kode_setelah_taut(master),
+            "psd_master_nama": str(master.get("nama_barang") or ""),
+            "kode": kode_setelah_taut(master)}
+
+
 @pengadaan_router.post("/pengadaan")
 async def buat_perolehan(payload: PerolehanIn, user: dict = Depends(require_writer)):
     """Catat perolehan baru (barang boleh ditautkan ke aset master)."""
@@ -461,6 +527,7 @@ async def buat_perolehan(payload: PerolehanIn, user: dict = Depends(require_writ
                "jumlah": float(b["jumlah"]),
                "harga_satuan": float(b["harga_satuan"]),
                "asset_id": "", "asset_code": "", "NUP": "", "asset_name": ""}
+        row.update(await _taut_master_persediaan(b, user))
         aid = str(b.get("asset_id") or "").strip()
         if aid:
             a = await db.assets.find_one(
@@ -550,13 +617,16 @@ async def ubah_perolehan(perolehan_id: str, payload: PerolehanUbahIn,
         # Semua baris masih bebas (kunci["barang"] True berarti tak satu pun
         # tertaut aset/persediaan), jadi daftarnya disusun ulang utuh — tak ada
         # tautan yang bisa hilang karenanya.
-        barang_rows = [{"uraian": b["uraian"].strip(),
-                        "kode": str(b.get("kode") or "").strip(),
-                        "jumlah": float(b["jumlah"]),
-                        "harga_satuan": float(b["harga_satuan"]),
-                        "asset_id": "", "asset_code": "", "NUP": "",
-                        "asset_name": ""}
-                       for b in data["barang"]]
+        barang_rows = []
+        for b in data["barang"]:
+            baris = {"uraian": b["uraian"].strip(),
+                     "kode": str(b.get("kode") or "").strip(),
+                     "jumlah": float(b["jumlah"]),
+                     "harga_satuan": float(b["harga_satuan"]),
+                     "asset_id": "", "asset_code": "", "NUP": "",
+                     "asset_name": ""}
+            baris.update(await _taut_master_persediaan(b, user))
+            barang_rows.append(baris)
 
     # 2. Identitas dokumen — dibandingkan, bukan dipercaya. Klien lama yang
     #    tidak tahu kunci ini tetap tak bisa menembusnya.
@@ -1101,6 +1171,9 @@ async def catat_semua_barang(perolehan_id: str, payload: CatatSemuaIn,
     return {**ringkas, "lpb_id": lpb_id, "nomor_lpb": nomor_lpb,
             "baris_tanpa_kode": [i + 1 for i, _ in pilah["tanpa_kode"]],
             "peringatan_nup": hasil_aset.get("peringatan_nup") or [],
+            # Sisi persediaan punya peringatannya sendiri: baris mana yang
+            # masternya DITEBAK sistem karena belum dipilih dari inventarisasi.
+            "peringatan_persediaan": hasil_psd.get("peringatan_persediaan") or [],
             "kegiatan": hasil_aset.get("kegiatan", ""),
             "perolehan": _enrich(segar or p)}
 

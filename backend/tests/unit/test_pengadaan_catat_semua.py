@@ -763,3 +763,188 @@ class TestPeleburanKeAsetYangSudahAda:
                     user=USER)
             assert e.value.status_code == 400
         _jalan(skenario())
+
+
+# ── Tautan ke barang persediaan yang SUDAH TERDAFTAR ───────────────────────
+
+class TestTautPersediaanTerdaftar:
+    """Operator memilih kartu stok tujuannya; server berhenti menebak.
+
+    Tebakan lama (kode awalan + nama barang sama persis) sudah dua kali salah
+    arah. Uji-uji di sini memakai nama barang yang SENGAJA berbeda dari master
+    — "Kertas HVS A4 80gr" versus "Kertas HVS A4" — supaya tebakan itu PASTI
+    meleset. Dengan begitu, lulusnya uji hanya bisa disebabkan tautannya
+    dipakai, bukan kebetulan tebakannya benar.
+    """
+
+    async def _master(self, dbx, **ubah):
+        doc = {"id": "psd-a4", "kode_satker": "", "kode_barang": "1010301001000001",
+               "nup": "1", "nama_barang": "Kertas HVS A4", "satuan": "Rim",
+               "stok": 0, "batches": [], "harga_satuan": 0}
+        doc.update(ubah)
+        await dbx.persediaan.insert_one(doc)
+        return doc
+
+    def _perolehan(self, **ubah):
+        b = {"uraian": "Kertas HVS A4 80gr", "kode": "1010301001",
+             "jumlah": 5, "harga_satuan": 60_000}
+        b.update(ubah)
+        return rp.PerolehanIn(
+            jenis="pembelian", pihak="PT X", nomor_bast="BAST-TAUT/2026",
+            tanggal_bast="2026-03-12", barang=[rp.BarangIn(**b)])
+
+    def test_baris_mengadopsi_kode_16_digit_masternya(self, dbx):
+        async def skenario():
+            await _seed(dbx)
+            await self._master(dbx)
+            rec = await _unwrap(rp.buat_perolehan)(
+                self._perolehan(psd_master_id="psd-a4"), user=USER)
+            assert rec["barang"][0]["kode"] == "1010301001000001", (
+                "kode baris tetap 10 digit — LPB & kartu stok akan mencetak "
+                "kode yang berbeda untuk barang yang sama")
+            assert rec["barang"][0]["psd_master_id"] == "psd-a4"
+            assert rec["barang"][0]["psd_master_nama"] == "Kertas HVS A4"
+        _jalan(skenario())
+
+    def test_stok_masuk_ke_kartu_yang_DIPILIH_bukan_kembarannya(self, dbx):
+        """DUA kartu ber-kode barang SAMA, NUP berbeda — sah menurut master
+        persediaan (keunikannya kode+NUP, bukan kode saja).
+
+        Tebakan apa pun buta terhadap perbedaan ini: kode 16 digitnya identik,
+        namanya pun identik, dan `find_one` mengambil salah satu sekenanya.
+        Hanya pilihan operator yang bisa membedakan keduanya — jadi inilah
+        satu-satunya kasus yang membuktikan tautannya SUNGGUH dipakai, bukan
+        kebetulan sejalan dengan tebakan.
+        """
+        async def skenario():
+            await _seed(dbx)
+            await self._master(dbx)                       # psd-a4, NUP 1
+            await self._master(dbx, id="psd-a4-kedua", nup="2")
+            rec = await _unwrap(rp.buat_perolehan)(
+                self._perolehan(psd_master_id="psd-a4-kedua"), user=USER)
+            hasil = await _unwrap(rp.daftarkan_persediaan)(rec["id"], user=USER)
+            assert hasil["dibuat_master"] == 0, (
+                "master BARU dibuat padahal kartunya sudah dipilih operator")
+            pertama = await dbx.persediaan.find_one({"id": "psd-a4"})
+            kedua = await dbx.persediaan.find_one({"id": "psd-a4-kedua"})
+            assert kedua["stok"] == 5, "stok mendarat di kartu yang tak dipilih"
+            assert pertama["stok"] == 0
+        _jalan(skenario())
+
+    def test_kartu_yang_namanya_beda_pun_tak_melahirkan_master_baru(self, dbx):
+        """Nama di BAST kerap lebih panjang daripada nama di master."""
+        async def skenario():
+            await _seed(dbx)
+            await self._master(dbx)
+            rec = await _unwrap(rp.buat_perolehan)(
+                self._perolehan(psd_master_id="psd-a4"), user=USER)
+            hasil = await _unwrap(rp.daftarkan_persediaan)(rec["id"], user=USER)
+            assert hasil["dibuat_master"] == 0
+            a4 = await dbx.persediaan.find_one({"id": "psd-a4"})
+            assert a4["stok"] == 5
+        _jalan(skenario())
+
+    def test_tanpa_tautan_nama_yang_beda_MEMANG_melahirkan_master_baru(self, dbx):
+        """Pembanding yang membuat uji di atas bermakna.
+
+        Tanpa uji ini, `dibuat_master == 0` bisa saja karena tebakannya
+        kebetulan berhasil — dan tautannya tak membuktikan apa pun.
+        """
+        async def skenario():
+            await _seed(dbx)
+            await self._master(dbx)
+            rec = await _unwrap(rp.buat_perolehan)(self._perolehan(), user=USER)
+            hasil = await _unwrap(rp.daftarkan_persediaan)(rec["id"], user=USER)
+            assert hasil["dibuat_master"] == 1
+            a4 = await dbx.persediaan.find_one({"id": "psd-a4"})
+            assert a4["stok"] == 0
+        _jalan(skenario())
+
+    def test_master_satker_LAIN_ditolak_400(self, dbx):
+        async def skenario():
+            await _seed(dbx)
+            await self._master(dbx, id="psd-lain", kode_satker="999999")
+            with pytest.raises(rp.HTTPException) as e:
+                await _unwrap(rp.buat_perolehan)(
+                    self._perolehan(psd_master_id="psd-lain"),
+                    user={**USER, "role": "operator", "kode_satker": "111111"})
+            assert e.value.status_code == 400
+            assert "satker" in str(e.value.detail).lower()
+        _jalan(skenario())
+
+    def test_kode_yang_menunjuk_barang_LAIN_ditolak_400(self, dbx):
+        async def skenario():
+            await _seed(dbx)
+            await self._master(dbx)
+            with pytest.raises(rp.HTTPException) as e:
+                await _unwrap(rp.buat_perolehan)(
+                    self._perolehan(kode="1010302002", psd_master_id="psd-a4"),
+                    user=USER)
+            assert e.value.status_code == 400
+            assert "tidak cocok" in str(e.value.detail)
+        _jalan(skenario())
+
+    def test_master_yang_LENYAP_sesudah_dipilih_dilaporkan_gagal(self, dbx):
+        """Bukan diam-diam diganti master baru — itu kesalahan yang sama."""
+        async def skenario():
+            await _seed(dbx)
+            await self._master(dbx)
+            rec = await _unwrap(rp.buat_perolehan)(
+                self._perolehan(psd_master_id="psd-a4"), user=USER)
+            await dbx.persediaan.delete_one({"id": "psd-a4"})
+            hasil = await _unwrap(rp.daftarkan_persediaan)(rec["id"], user=USER)
+            assert hasil["masuk"] == 0
+            assert hasil["dibuat_master"] == 0
+            assert len(hasil["gagal"]) == 1
+            assert "pilih ulang" in hasil["gagal"][0]
+        _jalan(skenario())
+
+    def test_peringatan_dipotret_sebelum_baris_diposting(self, dbx):
+        """Dihitung sesudah perulangan, daftarnya SELALU kosong."""
+        async def skenario():
+            await _seed(dbx)
+            rec = await _unwrap(rp.buat_perolehan)(self._perolehan(), user=USER)
+            hasil = await _unwrap(rp.daftarkan_persediaan)(rec["id"], user=USER)
+            assert hasil["masuk"] == 1, "barisnya tak jadi diposting"
+            assert [w["index"] for w in hasil["peringatan_persediaan"]] == [0]
+        _jalan(skenario())
+
+    def test_baris_tertaut_tak_memunculkan_peringatan(self, dbx):
+        async def skenario():
+            await _seed(dbx)
+            await self._master(dbx)
+            rec = await _unwrap(rp.buat_perolehan)(
+                self._perolehan(psd_master_id="psd-a4"), user=USER)
+            hasil = await _unwrap(rp.daftarkan_persediaan)(rec["id"], user=USER)
+            assert hasil["peringatan_persediaan"] == []
+        _jalan(skenario())
+
+    def test_catat_semua_meneruskan_peringatannya(self, dbx):
+        async def skenario():
+            await _seed(dbx)
+            rec = await _unwrap(rp.buat_perolehan)(self._perolehan(), user=USER)
+            hasil = await _unwrap(rp.catat_semua_barang)(
+                rec["id"], rp.CatatSemuaIn(activity_id="keg1",
+                                           booking_nomor=False), user=USER)
+            assert [w["index"] for w in hasil["peringatan_persediaan"]] == [0]
+        _jalan(skenario())
+
+    def test_ubah_register_mempertahankan_tautan(self, dbx):
+        """Form ubah mengirim ulang seluruh daftar barang. Bila `psd_master_id`
+        tak ikut dibaca server, satu perbaikan salah ketik akan MELEPAS tautan
+        yang sudah dipilih tanpa satu pun tanda di layar."""
+        async def skenario():
+            await _seed(dbx)
+            await self._master(dbx)
+            rec = await _unwrap(rp.buat_perolehan)(
+                self._perolehan(psd_master_id="psd-a4"), user=USER)
+            segar = await _unwrap(rp.ubah_perolehan)(
+                rec["id"], rp.PerolehanUbahIn(
+                    jenis="pembelian", pihak="PT X",
+                    nomor_bast="BAST-TAUT/2026", tanggal_bast="2026-03-12",
+                    barang=[rp.BarangUbahIn(
+                        uraian="Kertas HVS A4 80gr", kode="1010301001000001",
+                        jumlah=5, harga_satuan=60_000,
+                        psd_master_id="psd-a4")]), user=USER)
+            assert segar["barang"][0]["psd_master_id"] == "psd-a4"
+        _jalan(skenario())

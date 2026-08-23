@@ -54,7 +54,8 @@ describe("payloadUbahPerolehan", () => {
   test("daftar barang bebas dikirim sebagai angka, bukan teks", () => {
     const form = formDariPerolehan(PEROLEHAN);
     expect(payloadUbahPerolehan(form).barang).toEqual([
-      { uraian: "Printer", kode: "3050102001", jumlah: 2, harga_satuan: 2500000 },
+      { uraian: "Printer", kode: "3050102001", jumlah: 2, harga_satuan: 2500000,
+        psd_master_id: "" },
     ]);
   });
 
@@ -124,5 +125,46 @@ describe("dokumenSetelahGantiSifat", () => {
     // Operator yang ragu lalu mengosongkan pilihannya tak boleh kehilangan
     // apa yang sudah diketiknya.
     expect(dokumenSetelahGantiSifat(ISI, "")).toEqual({ ...ISI, sifat: "" });
+  });
+});
+
+describe("tautan persediaan pada perjalanan pulang-pergi form ubah", () => {
+  const REC = {
+    id: "p1", jenis: "pembelian", pihak: "PT X", nomor_bast: "B-1",
+    tanggal_bast: "2026-03-12",
+    barang: [{
+      uraian: "Kertas HVS A4 80gr", kode: "1010301001000007",
+      jumlah: 5, harga_satuan: 60000,
+      psd_master_id: "psd-1", psd_master_kode: "1010301001000007",
+      psd_master_nama: "Kertas HVS A4",
+    }],
+  };
+
+  test("form memuat tautan yang sudah tersimpan", () => {
+    // Tanpa ini, membuka form ubah lalu menyimpan akan MELEPAS tautan yang
+    // sudah dipilih — tanpa satu pun tanda di layar.
+    const b = formDariPerolehan(REC).barang[0];
+    expect(b.psd_master_id).toBe("psd-1");
+    expect(b.psd_master_kode).toBe("1010301001000007");
+    expect(b.psd_master_nama).toBe("Kertas HVS A4");
+  });
+
+  test("payload mengirim ulang tautannya", () => {
+    const p = payloadUbahPerolehan(formDariPerolehan(REC));
+    expect(p.barang[0].psd_master_id).toBe("psd-1");
+  });
+
+  test("register lama tanpa tautan menghasilkan '' — bukan undefined", () => {
+    // `undefined` hilang saat JSON diserialkan; server lalu menerima baris
+    // tanpa kunci itu sama sekali, yang artinya berbeda dari "tak tertaut".
+    const p = payloadUbahPerolehan(formDariPerolehan({
+      ...REC, barang: [{ uraian: "A", kode: "3050102001", jumlah: 1, harga_satuan: 1 }],
+    }));
+    expect(p.barang[0].psd_master_id).toBe("");
+  });
+
+  test("daftar terkunci tetap mengirim barang: null", () => {
+    const f = formDariPerolehan({ ...REC, ubah: { identitas: true, barang: false } });
+    expect(payloadUbahPerolehan(f).barang).toBeNull();
   });
 });
