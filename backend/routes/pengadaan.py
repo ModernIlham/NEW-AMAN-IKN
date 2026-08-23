@@ -1462,7 +1462,49 @@ async def bangun_bast_ppk_pdf(perolehan_id: str, _user: dict) -> bytes:
                + _gaya_sekat_bidang(_sekat_bid, warna="#f1f5f9"))))
     el.append(t)
 
-    nomor_pasal = 2
+    # ── Kelengkapan berkas yang WAJIB ikut diserahkan ────────────────────
+    # Permintaan pemilik: *"perhatikan agar PPK menyerahkan lengkap berkasnya
+    # saat serah terima barang, tidak hanya pengadaannya saja."*
+    #
+    # Berkas yang tidak ikut saat serah terima hampir tak pernah menyusul. Ia
+    # baru dicari bertahun-tahun kemudian — saat penghapusan, pemindahtanganan,
+    # atau pemeriksaan — ketika PPK-nya sudah berpindah dan penyedianya sudah
+    # tak terhubung. Mencetak daftarnya PADA dokumen yang keduanya tanda
+    # tangani membuat kekurangannya terlihat di detik yang tepat.
+    from berkas_serah_terima import catatan_ambang, kelompok_berkas
+    _klp_berkas = kelompok_berkas(p.get("barang") or [])
+    if _klp_berkas:
+        _blok = [Paragraph(
+            "<b>PASAL 2 — KELENGKAPAN BERKAS YANG DISERAHKAN</b>", lbl_pasal),
+            Paragraph(
+                "PIHAK KESATU menyerahkan kepada PIHAK KEDUA berkas berikut "
+                "beserta barangnya, dikelompokkan menurut golongan dan sifat "
+                "barangnya:", isi)]
+        for _judul, _sifat, _berkas, _nama, _perhatian in _klp_berkas:
+            _b = [Paragraph(f"<b>{_esc(_judul)}</b>", ket),
+                  Paragraph(f"<i>Sifat: {_esc(_sifat)}</i>", ket)]
+            if _nama:
+                _b.append(Paragraph(
+                    "Barang: " + _esc(", ".join(_nama[:6]))
+                    + (f" (+{len(_nama) - 6} lainnya)" if len(_nama) > 6 else ""),
+                    ket))
+            for _x in _berkas:
+                # Penanda centang memakai kurung siku ASCII, BUKAN "☐"
+                # (U+2610): Helvetica tak memuat glif itu, dan ReportLab
+                # menggantinya dengan kotak HITAM PEKAT — terbaca sebagai
+                # kotak yang sudah dicoret, kebalikan dari maksudnya.
+                _b.append(Paragraph(f"[   ]  {_esc(_x)}", ket))
+            _b.append(Spacer(1, 1.2 * rl_mm))
+            _blok.append(KeepTogether(_b))
+        _ctt = catatan_ambang(p.get("barang") or [])
+        if _ctt:
+            _blok.append(Paragraph(f"<i>{_esc(_ctt)}</i>", ket))
+        el.append(KeepTogether(_blok[:2]))
+        el.extend(_blok[2:])
+        el.append(Spacer(1, 1.5 * rl_mm))
+        nomor_pasal = 3
+    else:
+        nomor_pasal = 2
 
     def pasal(judul, isi_list):
         nonlocal nomor_pasal

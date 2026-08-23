@@ -1392,7 +1392,9 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
     from io import BytesIO
 
     from reportlab.lib.units import mm as rl_mm
-    from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
+    from reportlab.platypus import (
+        KeepTogether, Paragraph, Spacer, Table, TableStyle,
+    )
 
     from shared_utils import resolve_pejabat_peran, resolve_penandatangan_kpb
     from reportlab.lib.styles import ParagraphStyle
@@ -1622,7 +1624,29 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
         el.append(Paragraph(
             f"<i>Seluruh barang di atas berasal dari — {_esc(_bundel_tunggal)}</i>",
             _kecil))
-    el.append(Spacer(1, 6 * rl_mm))
+    el.append(Spacer(1, 4 * rl_mm))
+
+    # ── Kelengkapan berkas yang menyertai barangnya ──────────────────────
+    # Aturan & alasan yang sama dengan BAST PPK→KPB (lihat
+    # `berkas_serah_terima`): berkas yang tidak ikut saat penerimaan hampir
+    # tak pernah menyusul. LPB adalah dokumen yang DIPEGANG pengurus barang —
+    # di sinilah daftar itu paling sering dibuka kembali.
+    from berkas_serah_terima import catatan_ambang, kelompok_berkas
+    _klp_berkas = kelompok_berkas(_items)
+    if _klp_berkas:
+        el.append(Paragraph("<b>KELENGKAPAN BERKAS YANG MENYERTAI BARANG</b>",
+                            st['Meta']))
+        for _judul, _sifat, _berkas, _nama, _perhatian in _klp_berkas:
+            _b = [Paragraph(f"<b>{_esc(_judul)}</b> — <i>{_esc(_sifat)}</i>",
+                            _kecil)]
+            for _x in _berkas:
+                _b.append(Paragraph(f"[   ]  {_esc(_x)}", _kecil))
+            _b.append(Spacer(1, 1.0 * rl_mm))
+            el.append(KeepTogether(_b))
+        _ctt = catatan_ambang(_items)
+        if _ctt:
+            el.append(Paragraph(f"<i>{_esc(_ctt)}</i>", _kecil))
+        el.append(Spacer(1, 4 * rl_mm))
 
     # Tanda tangan 3 kolom: Dibuat (pengurus barang), Diperiksa (atasan
     # langsung — dititik bila belum diatur), Disetujui (KPB).
