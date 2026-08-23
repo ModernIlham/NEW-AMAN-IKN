@@ -103,3 +103,45 @@ def test_narasi_hari_tanggal_tak_valid():
     assert narasi_hari_tanggal("") is None
     assert narasi_hari_tanggal("bukan tanggal") is None
     assert narasi_hari_tanggal("9999-12-31") is None  # placeholder SIMAN
+
+
+class TestTanggalIdSingkat:
+    """Kembar-MURNI dari `routes/reports._fmt_tanggal_id`.
+
+    Dibuat di `pelaporan_utils` supaya modul murni seperti `lpb_utils` dapat
+    memformat tanggal tanpa menyeret ReportLab dan koneksi Mongo lewat rantai
+    impor `routes.reports`.
+    """
+
+    def test_tanggal_iso_jadi_gaya_indonesia(self):
+        from pelaporan_utils import tanggal_id_singkat
+        assert tanggal_id_singkat("2026-08-10") == "10 Agustus 2026"
+
+    def test_stempel_waktu_dipotong_ke_tanggalnya(self):
+        from pelaporan_utils import tanggal_id_singkat
+        assert tanggal_id_singkat("2026-08-10T05:00:00") == "10 Agustus 2026"
+
+    def test_bulan_di_luar_jangkauan_TIDAK_dikarang(self):
+        """Menjepit 13 menjadi Desember akan mencetak bulan yang tak pernah
+        diinput ke dokumen resmi. Nilai tak terbaca dikembalikan APA ADANYA —
+        tanggal mentah lebih baik daripada tanggal yang salah."""
+        from pelaporan_utils import tanggal_id_singkat
+        assert tanggal_id_singkat("2026-13-01") == "2026-13-01"
+        assert tanggal_id_singkat("2026-00-10") == "2026-00-10"
+
+    def test_hari_di_luar_jangkauan_juga_tak_dikarang(self):
+        from pelaporan_utils import tanggal_id_singkat
+        assert tanggal_id_singkat("2026-08-40") == "2026-08-40"
+
+    def test_bukan_tanggal_dikembalikan_apa_adanya(self):
+        from pelaporan_utils import tanggal_id_singkat
+        assert tanggal_id_singkat("segera") == "segera"
+        assert tanggal_id_singkat("2026/08/10") == "2026/08/10"
+
+    def test_angka_tak_terbaca_tak_meledak(self):
+        from pelaporan_utils import tanggal_id_singkat
+        assert tanggal_id_singkat("20x6-08-10") == "20x6-08-10"
+
+    def test_kosong_aman(self):
+        from pelaporan_utils import tanggal_id_singkat
+        assert tanggal_id_singkat("") == "" and tanggal_id_singkat(None) == ""

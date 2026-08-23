@@ -1393,7 +1393,8 @@ def _baris_nip_ppk(lpb: dict) -> str:
     return f"<b>{baris[0]}</b>"
 
 
-async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
+async def bangun_lpb_pdf(lpb_id: str, _user: dict,
+                         sertakan_kelengkapan: bool = False) -> bytes:
     """Susun PDF LPB → bytes. Dipisah dari route-nya karena jalur TTD
     elektronik butuh berkasnya sebagai BYTE untuk disimpan ke GridFS, bukan
     sebagai respons HTTP. Satu penyusun, dua pemakai: dokumen yang diunduh
@@ -1675,8 +1676,16 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
     # `berkas_serah_terima`): berkas yang tidak ikut saat penerimaan hampir
     # tak pernah menyusul. LPB adalah dokumen yang DIPEGANG pengurus barang —
     # di sinilah daftar itu paling sering dibuka kembali.
+    # OPSIONAL (permintaan pemilik: *"hilangkan bagian KELENGKAPAN BERKAS
+    # YANG MENYERTAI BARANG, buat opsional saja, bisa ditampilkan atau
+    # tidak"*). Bawaan MATI: LPB adalah bukti penerimaan yang dibaca
+    # berulang-ulang, dan daftar periksa yang selalu ikut membuatnya berlipat
+    # panjang tanpa diminta. Yang membutuhkannya menyalakannya sendiri.
+    #
+    # BAST PPK→KPB tetap memuatnya apa adanya — di sanalah serah terima
+    # berkasnya benar-benar terjadi.
     from berkas_serah_terima import catatan_ambang, kelompok_berkas
-    _klp_berkas = kelompok_berkas(_items)
+    _klp_berkas = kelompok_berkas(_items) if sertakan_kelengkapan else []
     if _klp_berkas:
         el.append(Paragraph("<b>KELENGKAPAN BERKAS YANG MENYERTAI BARANG</b>",
                             st['Meta']))
@@ -1764,16 +1773,21 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
 
 
 @persediaan_router.get("/persediaan/lpb/{lpb_id}/pdf")
-async def lpb_pdf(lpb_id: str,
+async def lpb_pdf(lpb_id: str, kelengkapan: bool = False,
                   _user: dict = Depends(require_user_or_query_token)):
     """Laporan Penerimaan Barang (LPB) — format resmi satker: kop, info 2
     kolom, tabel barang ber-total (plus kolom NUP bila kategorinya aset),
-    tanda tangan 3 kolom (Dibuat/Diperiksa/Disetujui)."""
+    tanda tangan 3 kolom (Dibuat/Diperiksa/Disetujui).
+
+    `kelengkapan=true` menambahkan daftar periksa berkas yang menyertai
+    barang. BAWAAN MATI — lihat alasannya di `bangun_lpb_pdf`.
+    """
     from io import BytesIO
 
     from fastapi.responses import StreamingResponse
 
-    data = await bangun_lpb_pdf(lpb_id, _user)
+    data = await bangun_lpb_pdf(lpb_id, _user,
+                                sertakan_kelengkapan=bool(kelengkapan))
     return StreamingResponse(BytesIO(data), media_type="application/pdf",
                              headers={"Content-Disposition":
                                       f'attachment; filename="LPB_{lpb_id[:8]}.pdf"'})

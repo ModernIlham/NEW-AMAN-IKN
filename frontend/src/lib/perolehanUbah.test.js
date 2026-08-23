@@ -69,9 +69,9 @@ describe("payloadUbahPerolehan", () => {
     // atas, melainkan bahwa payload tak pernah membawa kunci yang tak
     // sengaja. Menambah kolom berarti sengaja memperbarui daftar ini.
     expect(Object.keys(p).sort()).toEqual([
-      "barang", "jenis", "jenis_up", "keterangan", "no_dokumen", "no_sp_spk",
-      "no_spby", "no_spm", "no_spp", "nomor_bast", "nomor_kontrak", "pihak",
-      "sifat", "tanggal_bast",
+      "barang", "jenis", "jenis_up", "keterangan", "no_bukti", "no_dokumen",
+      "no_sp_spk", "no_spby", "no_spm", "no_spp", "nomor_bast",
+      "nomor_kontrak", "pihak", "sifat", "tanggal_bast",
     ]);
   });
 
@@ -85,6 +85,14 @@ describe("payloadUbahPerolehan", () => {
     expect(p.jenis_up).toBe("tup");
     expect(p.no_spby).toBe("SPBy-1");
     expect(p.no_spm).toBe("02847T/621001/2024");
+  });
+
+  test("No. Bukti/Faktur ikut terkirim", () => {
+    // Kolom BARU (permintaan pemilik: "ini tidak ada inputan tambah
+    // pengadaan, tolong tambahkan"). Server menulis ulang seluruh kolom
+    // dokumen; yang tak terkirim akan MENGOSONGKAN nomor yang sudah tercatat.
+    const form = formDariPerolehan({ ...PEROLEHAN, no_bukti: "INV-2026/08/0417" });
+    expect(payloadUbahPerolehan(form).no_bukti).toBe("INV-2026/08/0417");
   });
 });
 

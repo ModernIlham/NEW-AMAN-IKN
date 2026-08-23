@@ -85,6 +85,7 @@ class PerolehanIn(BaseModel):
     no_spby: str = ""
     no_spp: str = ""
     no_spm: str = ""
+    no_bukti: str = ""
     no_dokumen: str = ""
     barang: list[BarangIn] = Field(min_length=1, max_length=100)
 
@@ -138,6 +139,7 @@ class PerolehanUbahIn(BaseModel):
     no_spby: str = ""
     no_spp: str = ""
     no_spm: str = ""
+    no_bukti: str = ""
     no_dokumen: str = ""
     barang: list[BarangUbahIn] | None = Field(default=None, max_length=100)
 

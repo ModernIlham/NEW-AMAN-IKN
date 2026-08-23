@@ -186,6 +186,29 @@ def terbilang_id(n) -> str:
     return f"{terbilang_id(n // 1000)} ribu" + (f" {terbilang_id(sisa)}" if sisa else "")
 
 
+def tanggal_id_singkat(iso) -> str:
+    """'2026-08-10' → '10 Agustus 2026'. MURNI, tanpa strptime.
+
+    Kembar-murni dari `routes/reports._fmt_tanggal_id`, dibuat di sini supaya
+    modul MURNI (mis. `lpb_utils`) dapat memakainya tanpa menyeret ReportLab
+    dan koneksi Mongo lewat rantai impor `routes.reports`.
+
+    Nilai yang tak terbaca dikembalikan APA ADANYA — dokumen resmi lebih baik
+    memuat tanggal mentah daripada kehilangan tanggalnya.
+    """
+    t = str(iso or "").strip()[:10]
+    bagian = t.split("-")
+    if len(bagian) != 3:
+        return str(iso or "").strip()
+    try:
+        th, bl, hr = int(bagian[0]), int(bagian[1]), int(bagian[2])
+    except ValueError:
+        return t
+    if not (1 <= bl <= 12) or not (1 <= hr <= 31):
+        return t
+    return f"{hr} {BULAN_ID[bl - 1]} {th}"
+
+
 def narasi_hari_tanggal(iso) -> dict:
     """Komponen narasi BA dari tanggal ISO 'YYYY-MM-DD[…]'.
 

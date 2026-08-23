@@ -142,6 +142,8 @@ export default function PersediaanPage({ user, onBack }) {
   // Dialog tautan TTD sebuah LPB — jalan kembali ke permintaan yang sudah
   // dikirim (pola yang sama dengan Riwayat BAST).
   const [tautanTtdLpb, setTautanTtdLpb] = useState(null);
+  // Opsi cetak LPB: sertakan daftar kelengkapan berkas (bawaan MATI).
+  const [lpbKelengkapan, setLpbKelengkapan] = useState(false);
   const searchTimer = useRef(null);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
@@ -2103,6 +2105,21 @@ export default function PersediaanPage({ user, onBack }) {
               tercatat di sini — unduh ulang atau kirim untuk ditandatangani kapan pun.
             </DialogDescription>
           </DialogHeader>
+          {/* Daftar periksa kelengkapan berkas OPSIONAL — bawaan mati.
+              LPB dibaca berulang-ulang sebagai bukti penerimaan; daftar
+              periksa yang selalu ikut membuatnya berlipat panjang tanpa
+              diminta. Pilihannya di sini, bukan di tiap baris: ia menyangkut
+              BENTUK CETAKAN, bukan sifat LPB-nya. */}
+          <label className="flex items-start gap-2 text-[11px] text-muted-foreground cursor-pointer">
+            <input type="checkbox" className="mt-0.5 h-4 w-4 flex-shrink-0"
+              checked={lpbKelengkapan}
+              onChange={(e) => setLpbKelengkapan(e.target.checked)}
+              data-testid="lpb-opsi-kelengkapan" />
+            <span>
+              Sertakan <b>daftar kelengkapan berkas</b> pada PDF yang diunduh —
+              berkas apa saja yang menyertai tiap golongan barang.
+            </span>
+          </label>
           {riwayatLpb?.loading ? (
             <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-emerald-600" /></div>
           ) : (riwayatLpb?.items || []).length === 0 ? (
@@ -2158,7 +2175,9 @@ export default function PersediaanPage({ user, onBack }) {
                     </div>
                     <div className="flex flex-col gap-1 flex-shrink-0">
                       <Button size="sm" variant="outline" className="h-7 text-[11px]"
-                        onClick={() => downloadFileWithProgress(`${API}/persediaan/lpb/${l.id}/pdf`,
+                        onClick={() => downloadFileWithProgress(
+                          `${API}/persediaan/lpb/${l.id}/pdf`
+                          + (lpbKelengkapan ? "?kelengkapan=true" : ""),
                           `LPB_${(l.nomor || l.id.slice(0, 8)).replace(/[\/\s]/g, "_")}.pdf`,
                           { label: "Laporan Penerimaan Barang" }).catch(() => {})}>
                         Unduh

@@ -177,8 +177,17 @@ def snapshot_sumber(perolehan) -> dict:
         "penyedia": str(d.get("pihak") or "").strip(),
         "ppk_nama": str(d.get("ppk_nama") or "").strip(),
         "ppk_nip": str(d.get("ppk_nip") or "").strip(),
+        # Status kepegawaian PPK ikut DIBEKUKAN supaya aturan privasi NIP
+        # (Non-ASN/NIK tak dicetak) bisa ditegakkan dari keadaan SAAT dokumen
+        # terbit — sama seperti yang dilakukan kepala surat LPB.
+        "ppk_status_kepegawaian": str(d.get("ppk_status_kepegawaian") or "").strip(),
         "nomor_bast_ppk": str(((d.get("bast_ppk") or {}).get("nomor")) or "").strip(),
         "nomor_bast": str(d.get("nomor_bast") or "").strip(),
+        # Tanggal BAST penyedia → PPK = saat barangnya DATANG. Dibekukan per
+        # register karena satu LPB gabungan merangkum banyak BAST dengan
+        # tanggal berbeda-beda; satu tanggal di kepala surat tak bisa mewakili
+        # semuanya.
+        "tanggal_bast": str(d.get("tanggal_bast") or "").strip()[:10],
         "sifat": str(d.get("sifat") or "").strip(),
         **bersihkan_dokumen(d),
     }
@@ -197,13 +206,29 @@ def bundel_sumber(sumber) -> str:
         DOKUMEN_PENGADAAN, JENIS_UP, SIFAT_PENGADAAN,
     )
 
+    from pegawai_utils import baris_identitas_ttd
+    from pelaporan_utils import tanggal_id_singkat
+
     s = sumber or {}
     bagian = []
     if s.get("penyedia"):
         bagian.append(f"Penyedia: {s['penyedia']}")
     if s.get("ppk_nama"):
         ppk = f"PPK: {s['ppk_nama']}"
+        # NIP PPK MENEMPEL pada barisnya (permintaan pemilik). Satu LPB
+        # gabungan merangkum banyak BAST dengan PPK yang bisa berbeda; NIP di
+        # kepala surat hanya bisa menyebut satu orang.
+        #
+        # Melewati `baris_identitas_ttd` — ATURAN SISTEM yang sama dengan blok
+        # tanda tangan: Non-ASN dan nomor berformat NIK tidak dicetak.
+        nip = baris_identitas_ttd(s.get("ppk_nip"),
+                                  s.get("ppk_status_kepegawaian"))
+        if nip:
+            ppk += f" ({nip[0]})"
         bagian.append(ppk)
+    if s.get("tanggal_bast"):
+        bagian.append("Tgl kedatangan: "
+                      + (tanggal_id_singkat(s["tanggal_bast"]) or s["tanggal_bast"]))
     sifat = str(s.get("sifat") or "").strip()
     if sifat in SIFAT_PENGADAAN:
         bagian.append(SIFAT_PENGADAAN[sifat].split(" (")[0])

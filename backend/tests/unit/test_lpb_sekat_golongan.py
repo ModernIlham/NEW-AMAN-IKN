@@ -70,7 +70,7 @@ def _it(kode, nama, jml, harga, sumber=None, nup=""):
             "nup": nup, "sumber": sumber}
 
 
-async def _pdf(dbx, items):
+async def _pdf(dbx, items, kelengkapan=False):
     await dbx.kodefikasi.insert_many([
         {"kode": "305", "uraian": "Alat Kantor dan Rumah Tangga"},
         {"kode": "302", "uraian": "Alat Angkutan"},
@@ -79,7 +79,7 @@ async def _pdf(dbx, items):
         "id": "lpb-1", "kode_satker": SATKER, "kategori": "gabungan",
         "nomor": "LPB-01/2026", "tanggal": "2026-08-23", "items": items,
         "total_nilai": sum(x["total"] for x in items)})
-    return await rps.bangun_lpb_pdf("lpb-1", USER)
+    return await rps.bangun_lpb_pdf("lpb-1", USER, sertakan_kelengkapan=kelengkapan)
 
 
 def _teks(raw):
@@ -177,20 +177,38 @@ class TestSumberTidakBerulang:
 
 
 class TestKelengkapanBerkasDiLpb:
-    """LPB adalah dokumen yang DIPEGANG pengurus barang — di sinilah daftar
-    berkasnya paling sering dibuka kembali."""
+    """OPSIONAL di LPB — permintaan pemilik: *"hilangkan bagian KELENGKAPAN
+    BERKAS YANG MENYERTAI BARANG, buat opsional saja, bisa ditampilkan atau
+    tidak."*
 
-    def test_blok_kelengkapan_terbit(self, dbx):
+    BAWAAN MATI: LPB adalah bukti penerimaan yang dibaca berulang-ulang, dan
+    daftar periksa yang selalu ikut membuatnya berlipat panjang tanpa diminta.
+    BAST PPK→KPB tetap memuatnya apa adanya — di sanalah serah terima
+    berkasnya benar-benar terjadi.
+    """
+
+    def test_BAWAANNYA_MATI(self, dbx):
         teks = _teks(_jalan(_pdf(dbx, CAMPUR)))
+        assert "KELENGKAPAN BERKAS YANG MENYERTAI BARANG" not in teks
+        assert "BPKB" not in teks
+
+    def test_tabel_barangnya_tetap_utuh_saat_kelengkapan_mati(self, dbx):
+        """Mematikan daftar periksa tak boleh menyentuh isi lain dokumen."""
+        teks = _teks(_jalan(_pdf(dbx, CAMPUR)))
+        assert "Laptop" in teks and "Kendaraan" in teks
+        assert "GOLONGAN 3" in teks
+
+    def test_terbit_saat_dinyalakan(self, dbx):
+        teks = _teks(_jalan(_pdf(dbx, CAMPUR, kelengkapan=True)))
         assert "KELENGKAPAN BERKAS YANG MENYERTAI BARANG" in teks
 
     def test_kendaraan_diminta_BPKB(self, dbx):
-        teks = _teks(_jalan(_pdf(dbx, CAMPUR)))
+        teks = _teks(_jalan(_pdf(dbx, CAMPUR, kelengkapan=True)))
         assert "BPKB" in teks
 
     def test_persediaan_TIDAK_diminta_BPKB(self, dbx):
         teks = _teks(_jalan(_pdf(dbx, [
-            _it("1010301001", "Kertas HVS", 5, 50_000)])))
+            _it("1010301001", "Kertas HVS", 5, 50_000)], kelengkapan=True)))
         assert "KELENGKAPAN BERKAS YANG MENYERTAI BARANG" in teks
         assert "BPKB" not in teks
 
@@ -198,25 +216,26 @@ class TestKelengkapanBerkasDiLpb:
         """Baris LPB membawa `total`, bukan hanya `harga_satuan` — ambangnya
         harus tetap kena."""
         teks = _teks(_jalan(_pdf(dbx, [
-            _it("3050104001", "Server", 1, 250_000_000)])))
+            _it("3050104001", "Server", 1, 250_000_000)], kelengkapan=True)))
         assert "Rp100.000.000 atau lebih" in teks
 
     def test_barang_kecil_tidak_memunculkan_catatan_ambang(self, dbx):
         teks = _teks(_jalan(_pdf(dbx, [
-            _it("1010301001", "Kertas HVS", 5, 50_000)])))
+            _it("1010301001", "Kertas HVS", 5, 50_000)], kelengkapan=True)))
         assert "atau lebih" not in teks
 
     def test_butir_disusun_dua_kolom_di_LPB_juga(self, dbx):
-        teks = _teks(_jalan(_pdf(dbx, CAMPUR)))
+        teks = _teks(_jalan(_pdf(dbx, CAMPUR, kelengkapan=True)))
         ganda = [b for b in teks.splitlines() if b.count("[ ]") >= 2]
         assert len(ganda) >= 2, [b for b in teks.splitlines() if "[ ]" in b]
 
     def test_isi_daftar_tidak_berkurang_setelah_dipadatkan(self, dbx):
-        teks = _rapat(_teks(_jalan(_pdf(dbx, CAMPUR))))
+        teks = _rapat(_teks(_jalan(_pdf(dbx, CAMPUR, kelengkapan=True))))
         for butir in ("BPKBatasnamaPemerintahRIc.q.K/L",
                       "Kartu/beritaacarapenerimaangudang",
                       "BeritaAcaraPemeriksaan/Penerimaanbarang"):
             assert butir in teks, butir
+
 
 
 class TestKepalaSuratTidakMengulangTabel:

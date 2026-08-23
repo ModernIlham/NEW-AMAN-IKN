@@ -212,3 +212,58 @@ class TestTabelLpbDiPdf:
         assert "Kertas HVS" in teks
         # Keterangan lama tetap tercetak sebagai bundel — tak ada yang hilang.
         assert "BAST-9/2026" in teks
+
+
+class TestBundelMembawaInfoPerBAST:
+    """Permintaan pemilik: *"informasi tanggal kedatangan, NIP PPK, No.
+    Bukti/Faktur … harusnya menempel ke informasi row barang … agar saat
+    memiliki banyak BAST sekaligus dalam 1 LPB dapat rapi tersusun."*
+
+    Kepala surat hanya punya SATU baris untuk masing-masing. Pada LPB gabungan
+    yang merangkum banyak BAST, satu nilai di kepala tak bisa mewakili
+    semuanya — dan yang membacanya tak punya cara tahu nilai itu milik BAST
+    yang mana.
+    """
+
+    LENGKAP = {**PEROLEHAN, "no_bukti": "INV-2026/08/0417",
+               "ppk_status_kepegawaian": "pns", "tanggal_bast": "2026-08-01"}
+
+    def test_tanggal_kedatangan_menempel_di_barisnya(self):
+        t = bundel_sumber(snapshot_sumber(self.LENGKAP))
+        assert "Tgl kedatangan: 1 Agustus 2026" in t
+
+    def test_NIP_PPK_menempel_di_barisnya(self):
+        t = bundel_sumber(snapshot_sumber(self.LENGKAP))
+        assert "PPK: Budi Komitmen (NIP. 197001011990031001)" in t
+
+    def test_no_bukti_faktur_menempel_di_barisnya(self):
+        t = bundel_sumber(snapshot_sumber(self.LENGKAP))
+        assert "No. Bukti/Faktur: INV-2026/08/0417" in t
+
+    def test_NIP_PPK_Non_ASN_TIDAK_dicetak(self):
+        """ATURAN SISTEM yang sama dengan blok tanda tangan — bundel bukan
+        pintu belakang untuk membatalkannya."""
+        t = bundel_sumber(snapshot_sumber(
+            {**self.LENGKAP, "ppk_status_kepegawaian": "non_asn"}))
+        assert "Budi Komitmen" in t
+        assert "197001011990031001" not in t
+
+    def test_NIP_berformat_NIK_juga_tertahan(self):
+        t = bundel_sumber(snapshot_sumber(
+            {**self.LENGKAP, "ppk_nip": "3506042503900001"}))
+        assert "3506042503900001" not in t
+
+    def test_dua_BAST_membawa_tanggal_dan_bukti_MASING_MASING(self):
+        """Inilah alasan semuanya menempel per baris."""
+        lain = {**self.LENGKAP, "id": "p-2", "tanggal_bast": "2026-08-20",
+                "no_bukti": "INV-2026/08/0999",
+                "barang": [{"kode": "3060101001", "uraian": "Kamera",
+                            "jumlah": 1, "harga_satuan": 5_000_000}]}
+        baris = baris_lpb_gabungan([self.LENGKAP, lain])
+        teks = {bundel_sumber(b["sumber"]) for b in baris}
+        assert any("1 Agustus 2026" in t and "INV-2026/08/0417" in t for t in teks)
+        assert any("20 Agustus 2026" in t and "INV-2026/08/0999" in t for t in teks)
+
+    def test_register_tanpa_tanggal_atau_bukti_tak_menyisakan_label_kosong(self):
+        t = bundel_sumber(snapshot_sumber({"pihak": "CV X"}))
+        assert t == "Penyedia: CV X"

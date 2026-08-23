@@ -67,6 +67,39 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#922] LPB: kelengkapan berkas opsional; tanggal, NIP PPK & No. Bukti menempel per baris — 2026-08-23
+
+Permintaan pemilik: *"hilangkan bagian KELENGKAPAN BERKAS YANG MENYERTAI
+BARANG, buat opsional saja … dan untuk informasi tanggal kedatangan, NIP PPK,
+No. Bukti/Faktur (ini tidak ada inputan tambah pengadaan, tolong tambahkan) …
+harusnya menempel ke informasi row barang … agar saat memiliki banyak BAST
+sekaligus dalam 1 LPB dapat rapi tersusun."*
+
+- **Daftar kelengkapan berkas di LPB kini OPSIONAL, bawaan MATI**
+  (`?kelengkapan=true`), dengan centangnya di dialog Riwayat LPB. BAST PPK→KPB
+  tetap memuatnya apa adanya — di sanalah serah terima berkasnya terjadi.
+- **`No. Bukti/Faktur` jadi kolom pengadaan sungguhan.** Didaftarkan di
+  `DOKUMEN_PENGADAAN`, sehingga validasi, blok dokumen BAST, bundel sumber,
+  dan form ubah ikut mengenalinya sekali daftar.
+- **Bundel per baris kini membawa** tanggal kedatangan, NIP PPK, dan No.
+  Bukti/Faktur register asalnya.
+
+> **Kepala surat hanya punya SATU baris untuk masing-masing.** Pada LPB
+> gabungan yang merangkum banyak BAST, satu nilai di kepala tak bisa mewakili
+> semuanya — dan yang membacanya tak punya cara tahu nilai itu milik BAST yang
+> mana. Karena itu ketiganya turun ke barisnya sendiri.
+
+> **NIP PPK di bundel tetap melewati `baris_identitas_ttd`** — aturan sistem
+> yang sama dengan blok tanda tangan. Bundel bukan pintu belakang untuk
+> membatalkannya; `snapshot_sumber` karena itu ikut membekukan
+> `ppk_status_kepegawaian`.
+
+> `pelaporan_utils.tanggal_id_singkat` dibuat sebagai kembar-MURNI dari
+> `routes/reports._fmt_tanggal_id`: modul murni seperti `lpb_utils` tak boleh
+> menyeret ReportLab dan koneksi Mongo lewat rantai impor `routes.reports`.
+
+---
+
 ## [#921] LPB: kepala surat berhenti mengulang isi tabel — 2026-08-23
 
 Laporan pemilik: *"hilangkan informasi yang berulang di bagian header karena
