@@ -1424,9 +1424,12 @@ async def bangun_bast_ppk_pdf(perolehan_id: str, _user: dict) -> bytes:
             keterangan=fmt_rp(_rp_gol)))
         for _kode_bid, _isi in _bidang_list:
             _n_bid = sum(float(x.get("jumlah") or 0) for x in _isi)
+            _rp_bid = sum(float(x.get("harga_satuan") or 0)
+                          * float(x.get("jumlah") or 0) for x in _isi)
             _sekat_bid.append(len(data))
             data.append(_baris_sekat_bidang(
-                _kode_bid, _uraian_bidang.get(_kode_bid, ""), _n_bid, _KOL, st))
+                _kode_bid, _uraian_bidang.get(_kode_bid, ""), _n_bid, _KOL, st,
+                keterangan=fmt_rp(_rp_bid)))
             for row in _isi:
                 _no += 1
                 harga = float(row.get("harga_satuan") or 0)

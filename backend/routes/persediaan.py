@@ -1396,11 +1396,13 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
 
     from shared_utils import resolve_pejabat_peran, resolve_penandatangan_kpb
     from reportlab.lib.styles import ParagraphStyle
-    from kodefikasi_utils import kelompokkan_per_bidang as _kelompokkan_per_bidang
+    from kodefikasi_utils import (
+        kelompokkan_per_golongan_bidang as _kelompokkan_per_golongan_bidang,
+    )
     from kodefikasi_utils import normalize_kode as _norm_kode
-    from lpb_utils import bundel_sumber
+    from lpb_utils import bundel_sumber, label_golongan
     from routes.reports import (
-        _baris_sekat_bidang, _fit_col_widths, _fmt_tanggal_id,
+        _baris_sekat_bidang, _baris_sekat_golongan, _fit_col_widths, _fmt_tanggal_id,
         _gaya_sekat_bidang, _get_report_styles, _kop_surat_flowables,
         _page_footer_factory, _peta_subsub_kelompok, _peta_uraian_bidang,
         _std_doc, _std_table_style, _title_block,
@@ -1525,46 +1527,77 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
     _kode_semua = [str(b.get("kode_barang") or "") for b in _items]
     _subsub = await _peta_subsub_kelompok(_kode_semua)
     _uraian_bidang = await _peta_uraian_bidang(_kode_semua)
-    _kelompok = _kelompokkan_per_bidang(
+    _kelompok = _kelompokkan_per_golongan_bidang(
         [{**b, "asset_code": b.get("kode_barang") or ""} for b in _items])
+
+    # INFORMASI BERULANG DIPANGKAS (permintaan pemilik). Bundel sumber
+    # (penyedia · PPK · dokumen · BAST asal) dulu dicetak di BAWAH SETIAP
+    # barang. Pada LPB yang seluruh barangnya berasal dari satu register —
+    # bentuk yang paling sering — kalimat yang sama persis terulang sebanyak
+    # jumlah barangnya, padahal kepala surat sudah menyebut penyedia & PPK-nya.
+    # Yang terulang berhenti dibaca, dan yang berbeda jadi ikut terlewat.
+    def _bundel_baris(b):
+        return bundel_sumber(b.get("sumber")) or str(b.get("keterangan") or "")
+
+    _bundel_unik = {x for x in (_bundel_baris(b) for b in _items) if x}
+    _bundel_tunggal = _bundel_unik.pop() if len(_bundel_unik) == 1 else ""
 
     _kepala = ["No", "Identitas Barang<br/>(Sub-sub Kelompok · Kode · NUP)",
                "Nama Barang", "Qty", "Satuan", "Harga (Rp)", "Total (Rp)"]
     lebar = [24, 150, 150, 34, 44, 78, 88]
     data = [[Paragraph(h, st['TableHeader']) for h in _kepala]]
     _kecil = ParagraphStyle('LpbKecil', parent=cell, fontSize=7.0, leading=8.6)
-    _baris_sekat, _baris_bundel = [], []
+    _sekat_gol, _sekat_bid, _baris_bundel = [], [], []
+    _bundel_terakhir = ""
     i = 0
-    for _kode_bidang, _isi in _kelompok:
-        _baris_sekat.append(len(data))
-        data.append(_baris_sekat_bidang(_kode_bidang,
-                                        _uraian_bidang.get(_kode_bidang, ""),
-                                        len(_isi), len(_kepala), st))
-        for b in _isi:
-            i += 1
-            _kode = str(b.get("kode_barang") or "-").strip()
-            _nup = str(b.get("nup") or "").strip()
-            _nm_subsub = _subsub.get(_norm_kode(_kode), "")
-            _identitas = "".join([
-                f"<font size=7>{_esc(_nm_subsub)}</font><br/>" if _nm_subsub else "",
-                f"<b>{_esc(_kode)}</b>",
-                f" · NUP {_esc(_nup)}" if _nup else "",
-            ])
-            data.append([
-                Paragraph(str(i), cellc),
-                Paragraph(_identitas, cell),
-                Paragraph(_esc(str(b.get("nama_barang") or "-")), cell),
-                Paragraph(str(b.get("jumlah")), cellc),
-                Paragraph(_esc(str(b.get("satuan") or "-")), cellc),
-                Paragraph(fmt_rp(b.get("harga_satuan")), cellr),
-                Paragraph(fmt_rp(b.get("total")), cellr),
-            ])
-            _bundel = bundel_sumber(b.get("sumber")) or str(b.get("keterangan") or "")
-            if _bundel:
-                _baris_bundel.append(len(data))
-                data.append([Paragraph("", _kecil),
-                             Paragraph(f"<i>{_esc(_bundel)}</i>", _kecil)]
-                            + [Paragraph("", _kecil)] * (len(_kepala) - 2))
+
+    def _unit(daftar):
+        return sum(float(x.get("jumlah") or 0) for x in daftar)
+
+    def _rupiah(daftar):
+        return sum(float(x.get("total") or 0) for x in daftar)
+
+    for _kode_gol, _bidang_list in _kelompok:
+        _isi_gol = [x for _, isi in _bidang_list for x in isi]
+        _sekat_gol.append(len(data))
+        data.append(_baris_sekat_golongan(
+            _kode_gol, label_golongan(_kode_gol), _unit(_isi_gol),
+            len(_kepala), st, keterangan=fmt_rp(_rupiah(_isi_gol))))
+        for _kode_bidang, _isi in _bidang_list:
+            _sekat_bid.append(len(data))
+            data.append(_baris_sekat_bidang(
+                _kode_bidang, _uraian_bidang.get(_kode_bidang, ""),
+                _unit(_isi), len(_kepala), st,
+                keterangan=fmt_rp(_rupiah(_isi))))
+            for b in _isi:
+                i += 1
+                _kode = str(b.get("kode_barang") or "-").strip()
+                _nup = str(b.get("nup") or "").strip()
+                _nm_subsub = _subsub.get(_norm_kode(_kode), "")
+                _identitas = "".join([
+                    f"<font size=7>{_esc(_nm_subsub)}</font><br/>" if _nm_subsub else "",
+                    f"<b>{_esc(_kode)}</b>",
+                    f" · NUP {_esc(_nup)}" if _nup else "",
+                ])
+                data.append([
+                    Paragraph(str(i), cellc),
+                    Paragraph(_identitas, cell),
+                    Paragraph(_esc(str(b.get("nama_barang") or "-")), cell),
+                    Paragraph(str(b.get("jumlah")), cellc),
+                    Paragraph(_esc(str(b.get("satuan") or "-")), cellc),
+                    Paragraph(fmt_rp(b.get("harga_satuan")), cellr),
+                    Paragraph(fmt_rp(b.get("total")), cellr),
+                ])
+                _bundel = _bundel_baris(b)
+                # Dicetak HANYA bila sumbernya BERBEDA dari baris sebelumnya —
+                # dan sama sekali tidak bila seluruh LPB satu sumber (kalimat
+                # tunggalnya dicetak sekali di bawah tabel).
+                if _bundel and not _bundel_tunggal and _bundel != _bundel_terakhir:
+                    _bundel_terakhir = _bundel
+                    _baris_bundel.append(len(data))
+                    data.append([Paragraph("", _kecil),
+                                 Paragraph(f"<i>{_esc(_bundel)}</i>", _kecil)]
+                                + [Paragraph("", _kecil)] * (len(_kepala) - 2))
     data.append([Paragraph("", cell), Paragraph("", cell),
                  Paragraph("<b>JUMLAH</b>", cell), Paragraph("", cell),
                  Paragraph("", cell), Paragraph("", cell),
@@ -1580,8 +1613,15 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
                          ('BOTTOMPADDING', (0, r), (-1, r), 2)]
     t.setStyle(_std_table_style(zebra=True, total_row=True, extra=[
         ('ALIGN', (0, 0), (0, -1), 'CENTER'),
-    ] + _gaya_sekat_bidang(_baris_sekat, padding=0.5) + _gaya_bundel))
+    ] + _gaya_sekat_bidang(_sekat_gol, warna="#e2e8f0", padding=1.0)
+        + _gaya_sekat_bidang(_sekat_bid, padding=0.5) + _gaya_bundel))
     el.append(t)
+    if _bundel_tunggal:
+        # Satu kalimat untuk SELURUH tabel — menggantikan pengulangan yang
+        # dulu menempel di bawah setiap barang.
+        el.append(Paragraph(
+            f"<i>Seluruh barang di atas berasal dari — {_esc(_bundel_tunggal)}</i>",
+            _kecil))
     el.append(Spacer(1, 6 * rl_mm))
 
     # Tanda tangan 3 kolom: Dibuat (pengurus barang), Diperiksa (atasan

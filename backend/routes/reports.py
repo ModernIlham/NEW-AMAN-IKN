@@ -414,12 +414,21 @@ async def _peta_uraian_bidang(codes):
     return {d["kode"]: str(d.get("uraian") or "").strip() for d in docs}
 
 
-def _baris_sekat_bidang(kode_bidang, nama_bidang, jumlah, n_kolom, st):
+def _baris_sekat_bidang(kode_bidang, nama_bidang, jumlah, n_kolom, st,
+                        keterangan=""):
     """Baris SEKAT PEMBAGI satu kelompok BIDANG beserta jumlah unitnya.
 
     Mengembalikan satu baris tabel (sel pertama berisi label, sisanya kosong
     karena akan di-SPAN oleh `_gaya_sekat_bidang`). Bidang tanpa kode barang
     dinyatakan terus terang, bukan disamarkan menjadi bidang lain.
+
+    `keterangan` menampung nilai rupiah kelompoknya — subtotal per bidang
+    TANPA baris subtotal tersendiri yang akan menggandakan tinggi tabel.
+
+    BIDANG YANG BELUM TERDAFTAR di referensi kodefikasi disebutkan apa adanya.
+    Laporan pemilik: sekatnya muncul tanpa nama sama sekali, dan tak ada
+    apa pun di dokumen yang menerangkan kenapa — terbaca seperti dokumennya
+    yang rusak, padahal referensi kodefikasinya yang belum diisi.
     """
     from reportlab.platypus import Paragraph
     from xml.sax.saxutils import escape as _esc
@@ -427,9 +436,13 @@ def _baris_sekat_bidang(kode_bidang, nama_bidang, jumlah, n_kolom, st):
              else "TANPA KODE BARANG")
     if nama_bidang:
         label += f" — {_esc(nama_bidang)}"
+    elif kode_bidang:
+        label += " — <i>(belum terdaftar di referensi kodefikasi)</i>"
+    ekor = f" · {int(jumlah)} unit"
+    if keterangan:
+        ekor += f" · {_esc(str(keterangan))}"
     gaya = st.get('CellSekat') or st['Cell']
-    return ([Paragraph(f"<b>{label}</b> · {int(jumlah)} unit", gaya)]
-            + [""] * max(0, n_kolom - 1))
+    return [Paragraph(f"<b>{label}</b>{ekor}", gaya)] + [""] * max(0, n_kolom - 1)
 
 
 def _baris_sekat_golongan(kode_golongan, nama_golongan, jumlah, n_kolom, st,

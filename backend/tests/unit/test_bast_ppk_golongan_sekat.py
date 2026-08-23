@@ -145,6 +145,14 @@ class TestSekatBidangBersarang:
         i_b101 = teks.index("BIDANG 101")
         assert i_gol1 < i_b101 < i_gol3 < i_b302 < i_b305
 
+    def test_sekat_bidang_menyebut_nilainya_juga(self, dbx):
+        """Sekat tanpa nilai memaksa pembaca menjumlah sendiri kolom terakhir
+        untuk tahu berapa nilai satu kelompok — pekerjaan yang justru
+        dihindari dengan mengelompokkan."""
+        rapat = _rapat(_jalan(_teks(dbx)))
+        assert "BIDANG302—AlatAngkutan·1unit·350.000.000" in rapat
+        assert "BIDANG305—AlatKantordanRumahTangga·5unit·54.000.000" in rapat
+
     def test_urut_menaik_bukan_urutan_penginputan(self, dbx):
         """Daftar diinput acak; dokumen resmi harus terurut kodefikasi."""
         teks = _jalan(_teks(dbx))
