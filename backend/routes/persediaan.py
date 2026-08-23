@@ -1475,32 +1475,79 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
     else:
         label_jenis = JENIS_MASUK.get(lpb.get("jenis"), lpb.get("jenis") or "-")
     label_kat = KATEGORI_LPB.get(kategori, "Persediaan")
-    info = Table([
-        [Paragraph(f"Instansi: <b>{_esc(str(settings.get('nama_instansi') or '-'))}</b>", meta),
-         Paragraph(f"Jenis: <b>{_esc(label_kat)} — {_esc(label_jenis)}</b>", meta)],
-        [Paragraph(f"Kantor/Satker: <b>{_esc(str(settings.get('nama_sub_unit') or settings.get('nama_unit_organisasi') or '-'))}</b>", meta),
-         Paragraph(f"No. Bukti/Faktur: <b>{_esc(str(lpb.get('jenis_dokumen') or '-'))}</b>", meta)],
-        [Paragraph(f"Tgl Kedatangan: <b>{_fmt_tanggal_id(lpb.get('tanggal')) or '-'}</b>", meta),
-         Paragraph("Tautan BAST Pengadaan: <b>"
-                   + (f"{len(lpb.get('perolehan_ids') or [])} perolehan (gabungan)"
-                      if is_gabungan
-                      else (lpb.get('perolehan_id')[:8] + '…'
-                            if lpb.get('perolehan_id') else '-'))
-                   + "</b>", meta)],
-        [Paragraph(f"Nama Rekanan/Penyedia: <b>{_esc(str(lpb.get('penyedia') or '-'))}</b>", meta),
-         Paragraph(f"Keterangan: <b>{_esc(str(lpb.get('keterangan') or '-'))}</b>", meta)],
-        # PPK: pihak yang berkomitmen atas pengadaan barang ini (Perpres
-        # 16/2018 Pasal 11). Selama ini absen di LPB — pemeriksa yang menelusuri
-        # satu penerimaan tak menemukan atas komitmen siapa barang itu datang.
-        #
-        # NIP-nya melewati `baris_identitas_ttd`, ATURAN YANG SAMA dengan blok
-        # tanda tangan di bawah (temuan audit): Non-ASN tak dicetak nomornya.
-        # `snapshot_ppk` sengaja membekukan `ppk_status_kepegawaian` justru
-        # untuk ini — mencetak NIP mentah di sini membatalkan aturan privasi
-        # yang ditegakkan di seluruh dokumen lain.
-        [Paragraph(f"PPK: <b>{_esc(str(lpb.get('ppk_nama') or '-'))}</b>", meta),
-         Paragraph(_baris_nip_ppk(lpb), meta)],
-    ], colWidths=[doc.width * 0.52, doc.width * 0.48], hAlign='LEFT')
+
+    _items = list(lpb.get("items") or [])
+
+    # INFORMASI BERULANG DIPANGKAS (permintaan pemilik). Bundel sumber
+    # (penyedia · PPK · dokumen · BAST asal) dulu dicetak di BAWAH SETIAP
+    # barang. Pada LPB yang seluruh barangnya berasal dari satu register —
+    # bentuk yang paling sering — kalimat yang sama persis terulang sebanyak
+    # jumlah barangnya, padahal kepala surat sudah menyebut penyedia & PPK-nya.
+    # Yang terulang berhenti dibaca, dan yang berbeda jadi ikut terlewat.
+    def _bundel_baris(b):
+        return bundel_sumber(b.get("sumber")) or str(b.get("keterangan") or "")
+
+    _bundel_unik = {x for x in (_bundel_baris(b) for b in _items) if x}
+    # `next(iter(...))`, BUKAN `.pop()`: pop MENGOSONGKAN himpunannya, dan
+    # kepala surat yang membacanya sesudah ini akan mengira tak ada sumber
+    # apa pun — lalu mencetak ulang baris yang seharusnya dijatuhkan.
+    _bundel_tunggal = next(iter(_bundel_unik)) if len(_bundel_unik) == 1 else ""
+
+    # KEPALA SURAT MENJATUHKAN BARIS YANG SUDAH TERCETAK DI AREA TABEL.
+    #
+    # Laporan pemilik: *"hilangkan informasi yang berulang di bagian header
+    # karena sudah terjabarkan di setiap pembagian row per kategori BAST."*
+    #
+    # Sejak bundel sumber menempel pada barisnya (atau tercetak sekali di
+    # bawah tabel), penyedia/PPK/NIP dan keterangan nomor BAST muncul DUA
+    # KALI dalam satu halaman. Yang selalu sama berhenti dibaca — dan ketika
+    # salah satunya kelak berbeda, perbedaan itu ikut terlewat.
+    #
+    # DIJATUHKAN BERDASARKAN NILAI, bukan berdasarkan jenis LPB: baris hanya
+    # hilang bila teksnya memang sudah ada di area tabel. LPB persediaan lama
+    # yang tak punya bundel apa pun tetap menampilkan seluruh kepalanya.
+    from lpb_utils import keterangan_berulang, nilai_berulang
+    _teks_tabel = " · ".join(sorted(_bundel_unik))
+    _nip_ppk = _baris_nip_ppk(lpb)
+    _sel = [
+        Paragraph(f"Instansi: <b>{_esc(str(settings.get('nama_instansi') or '-'))}</b>", meta),
+        Paragraph(f"Jenis: <b>{_esc(label_kat)} — {_esc(label_jenis)}</b>", meta),
+        Paragraph(f"Kantor/Satker: <b>{_esc(str(settings.get('nama_sub_unit') or settings.get('nama_unit_organisasi') or '-'))}</b>", meta),
+        Paragraph(f"No. Bukti/Faktur: <b>{_esc(str(lpb.get('jenis_dokumen') or '-'))}</b>", meta),
+        Paragraph(f"Tgl Kedatangan: <b>{_fmt_tanggal_id(lpb.get('tanggal')) or '-'}</b>", meta),
+        Paragraph("Tautan BAST Pengadaan: <b>"
+                  + (f"{len(lpb.get('perolehan_ids') or [])} perolehan (gabungan)"
+                     if is_gabungan
+                     else (lpb.get('perolehan_id')[:8] + '…'
+                           if lpb.get('perolehan_id') else '-'))
+                  + "</b>", meta),
+    ]
+    if not nilai_berulang(lpb.get("penyedia"), _teks_tabel):
+        _sel.append(Paragraph(
+            f"Nama Rekanan/Penyedia: <b>{_esc(str(lpb.get('penyedia') or '-'))}</b>", meta))
+    if not keterangan_berulang(lpb.get("keterangan"), _teks_tabel):
+        _sel.append(Paragraph(
+            f"Keterangan: <b>{_esc(str(lpb.get('keterangan') or '-'))}</b>", meta))
+    # PPK: pihak yang berkomitmen atas pengadaan barang ini (Perpres 16/2018
+    # Pasal 11). NIP-nya melewati `baris_identitas_ttd`, ATURAN YANG SAMA
+    # dengan blok tanda tangan di bawah: Non-ASN tak dicetak nomornya.
+    if not nilai_berulang(lpb.get("ppk_nama"), _teks_tabel):
+        _sel.append(Paragraph(f"PPK: <b>{_esc(str(lpb.get('ppk_nama') or '-'))}</b>", meta))
+        if _nip_ppk:
+            _sel.append(Paragraph(_nip_ppk, meta))
+    elif _nip_ppk:
+        # NAMANYA sudah di area tabel, NIP-nya BELUM: bundel sumber hanya
+        # membawa nama PPK. Menjatuhkan barisnya sekalian akan MEMBUANG
+        # nomornya — pemangkasan pengulangan tak boleh menghilangkan
+        # informasi. Dicetak ber-label sendiri karena tetangganya sudah tiada.
+        _sel.append(Paragraph(f"PPK — {_nip_ppk}", meta))
+    # Disusun dua kolom dari daftar sel — bukan matriks tetap: baris yang
+    # dijatuhkan tak boleh meninggalkan lubang di tengah kepala surat.
+    _baris_info = [_sel[i:i + 2] for i in range(0, len(_sel), 2)]
+    if _baris_info and len(_baris_info[-1]) == 1:
+        _baris_info[-1].append(Paragraph("", meta))
+    info = Table(_baris_info,
+                 colWidths=[doc.width * 0.52, doc.width * 0.48], hAlign='LEFT')
     info.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('LEFTPADDING', (0, 0), (-1, -1), 0),
@@ -1535,24 +1582,11 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
     # 1–3"): pemilik memintanya menyebut "dari nomor berapa sampai berapa", dan
     # nomor pertama saja membuat dokumen berkata "5 printer diterima" tanpa
     # bisa membuktikan printer YANG MANA.
-    _items = list(lpb.get("items") or [])
     _kode_semua = [str(b.get("kode_barang") or "") for b in _items]
     _subsub = await _peta_subsub_kelompok(_kode_semua)
     _uraian_bidang = await _peta_uraian_bidang(_kode_semua)
     _kelompok = _kelompokkan_per_golongan_bidang(
         [{**b, "asset_code": b.get("kode_barang") or ""} for b in _items])
-
-    # INFORMASI BERULANG DIPANGKAS (permintaan pemilik). Bundel sumber
-    # (penyedia · PPK · dokumen · BAST asal) dulu dicetak di BAWAH SETIAP
-    # barang. Pada LPB yang seluruh barangnya berasal dari satu register —
-    # bentuk yang paling sering — kalimat yang sama persis terulang sebanyak
-    # jumlah barangnya, padahal kepala surat sudah menyebut penyedia & PPK-nya.
-    # Yang terulang berhenti dibaca, dan yang berbeda jadi ikut terlewat.
-    def _bundel_baris(b):
-        return bundel_sumber(b.get("sumber")) or str(b.get("keterangan") or "")
-
-    _bundel_unik = {x for x in (_bundel_baris(b) for b in _items) if x}
-    _bundel_tunggal = _bundel_unik.pop() if len(_bundel_unik) == 1 else ""
 
     _kepala = ["No", "Identitas Barang<br/>(Sub-sub Kelompok · Kode · NUP)",
                "Nama Barang", "Qty", "Satuan", "Harga (Rp)", "Total (Rp)"]

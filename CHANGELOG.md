@@ -67,6 +67,41 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#921] LPB: kepala surat berhenti mengulang isi tabel — 2026-08-23
+
+Laporan pemilik: *"hilangkan informasi yang berulang di bagian header karena
+sudah terjabarkan di setiap pembagian row per kategori BAST."*
+
+Sejak [#915] bundel sumber menempel pada barisnya (atau tercetak sekali di
+bawah tabel), penyedia/PPK dan keterangan nomor BAST muncul **dua kali** dalam
+satu halaman.
+
+- Baris kepala **dijatuhkan berdasarkan NILAI**, bukan berdasarkan jenis LPB:
+  `lpb_utils.nilai_berulang` + `keterangan_berulang` (keduanya MURNI).
+- Kepala surat disusun dari **daftar sel lalu dipotong dua kolom** — baris
+  yang hilang tak meninggalkan lubang di tengah.
+
+> **NIP PPK tidak ikut hilang.** Bundel sumber hanya membawa NAMA PPK;
+> menjatuhkan barisnya sekalian akan membuang nomornya. Ketika namanya sudah
+> ada di tabel, NIP-nya dicetak ber-label sendiri: `PPK — NIP. 1989…`.
+> Pemangkasan pengulangan tak boleh menghilangkan informasi.
+
+> **Keterangan tulisan operator selalu bertahan.** Yang dijatuhkan hanya
+> keterangan bangkitan sendiri (`"Gabungan seluruh BAST PPK-KPB: …"`) yang
+> SELURUH nomornya sudah tercetak. Membuang kalimat orang karena kebetulan
+> memuat nomor yang sama adalah kehilangan informasi.
+
+> **Dua cacat ketahuan saat merakit ini.** (1) `_bundel_unik.pop()` MENGOSONGKAN
+> himpunannya, sehingga kepala surat yang membacanya sesudah itu mengira tak
+> ada sumber apa pun — diganti `next(iter(...))`. (2) Perhitungan bundelnya
+> semula berada SESUDAH kepala surat; urutannya dibalik.
+
+> `nilai_berulang("")` harus False: string kosong `in` teks apa pun selalu
+> True, dan tanpa penjagaan itu SELURUH baris kepala akan dijatuhkan pada
+> dokumen yang penyedianya memang belum diisi.
+
+---
+
 ## [#920] BAST PPK→KPB: akronim tetap kapital di tengah kalimat — 2026-08-23
 
 Laporan pemilik: *"ubah apbn menjadi kapital semua APBN."*
