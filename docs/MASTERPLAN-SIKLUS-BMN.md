@@ -158,7 +158,7 @@ dokumen sumber, surat, referensi kodefikasi, kepegawaian. Stack serupa
 
 ## 5. Prinsip Integrasi Antar Modul (Arsitektur Target)
 
-Semua modul baru wajib tunduk pada tujuh prinsip berikut:
+Semua modul baru wajib tunduk pada delapan prinsip berikut:
 
 1. **Satu identitas aset.** `kode_barang (10 digit) + NUP` unik per satker;
    `kode_register` (32 hex) kunci lintas sistem. Semua modul merujuk aset
@@ -183,6 +183,18 @@ Semua modul baru wajib tunduk pada tujuh prinsip berikut:
    `backend/asset_fields.py`: satu registry field → proyeksi list, PATCH,
    audit, CSV, template impor + unit test penjaga. UI modul terdaftar di
    `frontend/src/lib/bmnModules.js`.
+8. **Tanda tangan elektronik lewat SATU pintu.** Dokumen yang dapat
+   ditandatangani mendaftar `doc_type`-nya di `backend/ttd_penautan.py`
+   (`TAUT_TTD`) — sekali daftar menyalakan gerbang kepemilikan satker, tautan
+   maju `signature_request_id` yang ditulis SAAT PERMINTAAN DIBUAT (bukan saat
+   selesai diteken), dan ringkasan status untuk layar dokumennya. Modul TIDAK
+   boleh menulis `signature_request_id` sendiri.
+
+   Alasannya berasal dari kegagalan nyata: BAST dulu satu-satunya yang tidak
+   menulis tautan maju, sehingga Riwayat BAST tak pernah tahu permintaan sudah
+   dikirim. Tautannya hilang bersama dialog, dan satu-satunya jalan kembali —
+   modul TTD — baru ditengok setelah jendela 14 harinya lewat. Layarnya
+   selalu berakhir pada "tautan mati" tanpa ada yang tahu sebabnya.
 
 ---
 

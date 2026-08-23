@@ -243,6 +243,16 @@ async def daftar_bast(asset_id: str = "", q: str = "", nip: str = "",
                    .sort("created_at", -1)
                    .skip((page - 1) * page_size).limit(page_size)
                    .to_list(page_size))
+    # STATUS TTD ELEKTRONIK ikut, satu kueri untuk sehalaman. Tanpa ini
+    # Riwayat BAST tak punya cara menjawab "sudah ditandatangani belum?" —
+    # dan tombol "Kirim ke TTD" tampak seperti satu-satunya jalan, sehingga
+    # ditekan lagi dan lagi sementara permintaan yang lama menua sampai
+    # tautannya mati.
+    from ttd_penautan import status_ttd_dokumen
+    peta_ttd = await status_ttd_dokumen(
+        db, "bast", [str(b.get("id") or "") for b in items])
+    for b in items:
+        b["ttd"] = peta_ttd.get(str(b.get("id") or "")) or None
     return {"items": items, "total": total, "page": page,
             "total_pages": max(1, -(-total // page_size)),
             "label_jenis": JENIS_BAST}

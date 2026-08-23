@@ -27,6 +27,8 @@ import {
 } from "@/lib/pjTambahan";
 import KartuTapDialog from "@/components/pegawai/KartuTapDialog";
 import { bagikanWa, bagikanEmail, hasilTtd } from "@/lib/pesanTtd";
+import { ringkasTtdDokumen, kelasNada } from "@/lib/statusTtd";
+import TautanTtdDialog from "@/components/ttd/TautanTtdDialog";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -121,6 +123,10 @@ export default function PenggunaanPage({ user, onBack }) {
   // `ringkas` yang mengisi keterangan pesan WA/email.
   const [ttdHasil, setTtdHasil] = useState(null);
   const [kirimTtdId, setKirimTtdId] = useState(null); // id BAST yang sedang dikirim ke TTD
+  // Dialog tautan TTD sebuah BAST — JALAN KEMBALI ke permintaan yang sudah
+  // dikirim. Tanpa ini tautannya hilang bersama dialog pembuatan, dan yang
+  // tersisa berminggu-minggu kemudian hanya "tautan mati".
+  const [tautanTtdBast, setTautanTtdBast] = useState(null);
   // Referensi pejabat yang layak jadi "yang menyerahkan" BAST (peran
   // pengelolaan BMN: KPB / Petugas Penatausahaan / Pengelola BMN Satker),
   // aktif hari ini — dari registry pejabat + metadata peran_penyerah_bast.
@@ -524,6 +530,10 @@ export default function PenggunaanPage({ user, onBack }) {
       // tautan sementara pesan dari halaman TTD Elektronik lengkap.
       setTtdHasil(hasilTtd(r.data, "BAST"));
       toast.success("Permintaan TTD elektronik dibuat — bagikan tautan ke penanda tangan");
+      // Muat ulang riwayat: barisnya kini membawa status TTD + tombol
+      // "Tautan TTD". Tanpa ini, dialog tautan tetap satu-satunya jalan dan
+      // hilang begitu ditutup — persis keluhan yang diperbaiki.
+      bukaRiwayatBast();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal membuat permintaan TTD");
     } finally {
@@ -1810,6 +1820,13 @@ export default function PenggunaanPage({ user, onBack }) {
                       ) : (
                         <p className="text-[10px] text-amber-600 dark:text-amber-400">Bukti ttd belum diunggah</p>
                       )}
+                      {(() => {
+                        const r = ringkasTtdDokumen(b.ttd);
+                        return r ? (
+                          <p className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${kelasNada(r.nada)}`}
+                            data-testid={`bast-status-ttd-${b.id}`}>{r.teks}</p>
+                        ) : null;
+                      })()}
                       {b.tt_dicabut && !b.bukti?.file_id ? (
                         <p className="text-[10px] font-semibold text-red-600 dark:text-red-400" data-testid={`bast-tt-dicabut-${b.id}`}>
                           ⚠ TTD elektronik dibatalkan — tanda tangan tidak berlaku
@@ -1848,10 +1865,20 @@ export default function PenggunaanPage({ user, onBack }) {
                           onClick={() => window.open(authMediaUrl(`${API}/bast/${b.id}/bukti`), "_blank")}>Lihat Bukti</Button>
                       ) : b.direvisi_oleh ? null : (
                         <>
+                          {b.ttd?.id ? (
+                            <Button size="sm" variant="outline" className="h-7 text-[11px]"
+                              onClick={() => setTautanTtdBast({
+                                srId: b.ttd.id,
+                                judul: b.ttd.judul || `BAST ${b.nomor || ""}`.trim(),
+                              })}
+                              data-testid={`bast-tautan-ttd-${b.id}`}>Tautan TTD</Button>
+                          ) : null}
                           <Button size="sm" variant="outline" className="h-7 text-[11px]"
                             disabled={kirimTtdId === b.id} onClick={() => kirimKeTtd(b)}
                             data-testid={`bast-kirim-ttd-${b.id}`}>
-                            {kirimTtdId === b.id ? "Mengirim…" : "Kirim ke TTD"}
+                            {kirimTtdId === b.id
+                              ? "Mengirim…"
+                              : (b.ttd?.id ? "Kirim ulang ke TTD" : "Kirim ke TTD")}
                           </Button>
                           <Button size="sm" className="h-7 text-[11px]"
                             onClick={() => { setBuktiUntuk(b.id); buktiRef.current?.click(); }}
@@ -1988,6 +2015,12 @@ export default function PenggunaanPage({ user, onBack }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {tautanTtdBast && (
+        <TautanTtdDialog srId={tautanTtdBast.srId} judul={tautanTtdBast.judul}
+          onTutup={() => setTautanTtdBast(null)}
+          onBerubah={bukaRiwayatBast} />
+      )}
 
       {/* ── Dialog hasil "Kirim ke TTD": tautan e-sign per penanda tangan ── */}
       <Dialog open={!!ttdHasil} onOpenChange={(o) => { if (!o) setTtdHasil(null); }}>
