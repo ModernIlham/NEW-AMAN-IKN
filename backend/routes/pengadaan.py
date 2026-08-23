@@ -530,6 +530,29 @@ async def buat_perolehan(payload: PerolehanIn, user: dict = Depends(require_writ
         row.update(await _taut_master_persediaan(b, user))
         aid = str(b.get("asset_id") or "").strip()
         if aid:
+            # PINTU KETIGA ke pencatatan ganda. Dua pintu lain sudah dijaga:
+            # jalur otomatis (`buat_draft_aset_dari_perolehan`) melewati
+            # golongan 1, dan tombol "Tautkan" (`tautkan_barang`) menolaknya
+            # terang-terangan. Pintu ini — mengirim `asset_id` LANGSUNG saat
+            # register dicatat — tak pernah diperiksa, sehingga satu rim kertas
+            # HVS bisa berdiri di kartu stok DAN sebagai BMN ber-NUP sekaligus,
+            # keduanya berjurnal ke Neraca.
+            #
+            # Membaca `row["kode"]` — kode YANG TERSIMPAN, sesudah tautan
+            # persediaan menaikkannya ke 16 digit milik master. Hari ini itu
+            # setara dengan memeriksa kode mentahnya, karena
+            # `validate_taut_persediaan` sudah menolak kode non-golongan-1
+            # lebih dulu sehingga tautan tak pernah bisa MENGUBAH golongan
+            # sebuah baris. Disebutkan terang-terangan agar tak ada yang
+            # mengira urutannya sekadar kebetulan: bila kelak tautan boleh
+            # menulis kode dari sumber lain, tempat inilah yang tetap benar.
+            if is_persediaan(row["kode"]):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(f"Kode {row['kode']} bergolongan 1 = barang "
+                            "persediaan, bukan aset tetap. Hapus tautan "
+                            "asetnya; barang ini masuk lewat \"Catat Semua "
+                            "Barang\" agar tercatat di kartu stok."))
             a = await db.assets.find_one(
                 {"id": aid}, {**_PROJ_ASET, "activity_id": 1})
             if not a:

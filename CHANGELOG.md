@@ -67,6 +67,39 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#927] Pintu ketiga ke pencatatan ganda ditutup — 2026-08-23
+
+Ditemukan saat menelusuri ulang diff `[#925]`, bukan dari laporan pengguna —
+dan **sudah ada sebelum** perubahan itu.
+
+Barang persediaan tak boleh sekaligus menjadi BMN ber-NUP: keduanya berjurnal
+ke Neraca, jadi satu rim kertas HVS akan terhitung dua kali. Dua pintu ke sana
+sudah dijaga — jalur otomatis (`buat_draft_aset_dari_perolehan`) melewati
+golongan 1, dan tombol "Tautkan" (`tautkan_barang`) menolaknya
+terang-terangan. **Pintu ketiga tidak**: mengirim `asset_id` LANGSUNG pada
+baris saat register dicatat (`POST /pengadaan`) tak pernah diperiksa sama
+sekali. Dibuktikan dengan probe sebelum ditambal — hasilnya `LOLOS`.
+
+**Yang berubah**: `buat_perolehan` menolak 400 bila baris ber-kode golongan 1
+membawa `asset_id`, dengan pesan yang menunjuk jalan yang benar ("Catat Semua
+Barang"). Baris aset tetap ber-`asset_id` dan baris persediaan tanpa tautan
+sama-sama tak terpengaruh — yang ditolak adalah TAUTANNYA, bukan barangnya.
+
+**Uji**: `TestPintuKetigaPencatatanGanda` (5 uji). Mutasi dipasang lalu
+terbukti mati: (1) penjaga dicabut → 2 uji; (2) penjaga terlalu lebar
+(menolak baris aset juga) → 1 uji; (3) pemeriksaan golongan di
+`validate_taut_persediaan` dicabut → 2 uji.
+
+**Catatan kejujuran uji.** Satu uji sempat ditulis dengan klaim "kode yang
+dinaikkan lewat tautan persediaan ikut terjaring" — dan mutasi yang mengubah
+penjaga agar membaca kode MENTAH alih-alih kode tersimpan **LOLOS**, karena
+kode yang dipakai uji itu sudah golongan 1 sejak diketik. Setelah ditelusuri,
+kedua bacaan itu memang **setara**: `validate_taut_persediaan` menolak kode
+non-golongan-1 lebih dulu, sehingga tautan tak pernah bisa MENGUBAH golongan
+sebuah baris. Ujinya dibuang dan diganti dengan yang menguji sifat itu
+langsung, dan komentar di kode diperbaiki agar tidak lagi mengaku menjaga
+sesuatu yang tak bisa dibuktikan.
+
 ## [#926] LPB: kepala surat berhenti mengulang tanggal, PPK & No. Bukti — 2026-08-23
 
 Permintaan pemilik: *"di LPB pada header informasi mengenai tanggal
