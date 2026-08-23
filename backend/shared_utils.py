@@ -3,7 +3,6 @@ Shared utilities used across route modules.
 Cache, audit logging, thumbnail generation, OTP, constants, limiter.
 """
 import re
-from pegawai_utils import PLACEHOLDER_IDENTITAS
 import os
 import io
 import sys
@@ -1280,8 +1279,7 @@ async def blok_ttd_kpb(settings, per_iso=None, kode_satker=""):
             'nama': kpb["nama"],
             'ttd_img': await ambil_ttd_img(kpb.get("ttd_file_id")),
             'after': baris_identitas_ttd(
-                kpb["nip"], PLACEHOLDER_IDENTITAS,
-                kpb.get("status_kepegawaian"))}
+                kpb["nip"], kpb.get("status_kepegawaian"))}
 
 
 def nama_file_disposition(filename, fallback="dokumen"):
@@ -1445,8 +1443,7 @@ async def blok_ttd_kpb_titik(settings, per_iso=None, kode_satker=""):
             'nama': kpb["nama"] if kpb["nama"] != "-" else '...........................',
             'ttd_img': await ambil_ttd_img(kpb.get("ttd_file_id")),
             'after': baris_identitas_ttd(
-                kpb["nip"], PLACEHOLDER_IDENTITAS,
-                kpb.get("status_kepegawaian"))}
+                kpb["nip"], kpb.get("status_kepegawaian"))}
 
 
 async def enforce_pegawai_terdaftar(pengguna_nip, nip_lama=""):

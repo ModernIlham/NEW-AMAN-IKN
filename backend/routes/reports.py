@@ -33,7 +33,6 @@ from report_filters import active_asset_filter
 from report_utils import hitung_status_stiker, distribusi_pengguna
 from satker_utils import NILAI_DOKUMEN, NILAI_DOKUMEN_DEFAULT
 from markupsafe import Markup
-from pegawai_utils import PLACEHOLDER_IDENTITAS
 
 logger = logging.getLogger(__name__)
 
@@ -613,17 +612,17 @@ def _info_kegiatan_2kolom(activity, settings, doc_width):
     return t
 
 
-async def _baris_nip_ttd(nip, placeholder=PLACEHOLDER_IDENTITAS):
-    """Baris identitas di bawah nama blok TTD dengan aturan privasi: bila
-    penandatangan ber-status Non-ASN (dicari dari registry pejabat lalu
-    Master Pegawai per NIP) atau nomornya berformat NIK, baris NIP/NIK
-    TIDAK dicetak. Label mengikuti jenis nomor (NIP/NI PPPK/NRP)."""
+async def _baris_nip_ttd(nip):
+    """Baris identitas di bawah nama blok TTD — ATURAN SISTEM, lihat
+    `docs/ATURAN-BLOK-TANDA-TANGAN.md`: hanya NIP/NI PPPK/NRP yang dicetak.
+    Non-ASN (dicari dari registry pejabat lalu Master Pegawai per NIP),
+    nomor berformat NIK, dan nomor kosong → tidak ada baris sama sekali."""
     from shared_utils import status_kepegawaian_by_nip
     from pegawai_utils import baris_identitas_ttd
     n = str(nip or "").strip()
     if not n or set(n) <= set(".-_ "):
-        return [placeholder] if placeholder else []
-    return baris_identitas_ttd(n, placeholder, await status_kepegawaian_by_nip(n))
+        return []
+    return baris_identitas_ttd(n, await status_kepegawaian_by_nip(n))
 
 
 async def _peta_status_kepegawaian(nips) -> dict:
@@ -692,8 +691,7 @@ def _blok_ttd_tim_kpb(tim, settings, tanggal_iso, ident, doc_width,
                  "nama": m.get("nama") or "________________________",
                  # Anggota Non-ASN: baris NIP/NIK tidak dicetak (privasi)
                  "after": baris_identitas_ttd(
-                     nip_m, PLACEHOLDER_IDENTITAS,
-                     peta_status.get(nip_m, ""))}
+                     nip_m, peta_status.get(nip_m, ""))}
             if i == 0 and j == len(pasangan) - 1:
                 # tempat/tanggal sekali, di kanan atas area tanda tangan
                 s["pre"] = [_tempat_tanggal_laporan(settings, tanggal_iso)]
@@ -713,7 +711,7 @@ def _blok_ttd_tim_kpb(tim, settings, tanggal_iso, ident, doc_width,
                 "role": str(m.get("jabatan") or "").strip() or None,
                 "nama": m.get("nama") or "________________________",
                 "after": baris_identitas_ttd(
-                    nip_s, "", peta_status.get(nip_s, "")),
+                    nip_s, peta_status.get(nip_s, "")),
             })
         els.extend(_signature_block(signers, doc_width))
         els.append(Spacer(1, 5 * rl_mm))
@@ -721,7 +719,7 @@ def _blok_ttd_tim_kpb(tim, settings, tanggal_iso, ident, doc_width,
     # Penanggung jawab UAKPB (KPB) mengesahkan — tengah bawah.
     nip_kpb = str(ident.get('kasatker_nip') or '').strip()
     baris_kpb = (baris_identitas_laporan(nip_kpb, peta_status.get(nip_kpb, ""))
-                 if nip_kpb else PLACEHOLDER_IDENTITAS)
+                 if nip_kpb else "")
     kolom = [
         Paragraph(header_mengetahui, sig),
         Paragraph(escape(str(ident.get("kasatker_jabatan") or "Kuasa Pengguna Barang,")), sig),

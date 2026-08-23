@@ -1340,33 +1340,32 @@ def info_masa_pegawai(pegawai, hari_ini_iso) -> dict:
     return out
 
 
-# Label baris identitas pada garis tanda tangan yang MASIH KOSONG.
-#
-# Permintaan pemilik: *"pastikan di semua generate PDF bagian NIP/NIK/NRP dapat
-# otomatis terdeteksi."* Untuk nomor yang ADA, deteksinya sudah berjalan lewat
-# `label_nomor_identitas` (NIP / NI PPPK / NRP, dan NIK ditahan demi privasi).
-# Yang belum: garis tanda tangan KOSONG — yang diisi tangan setelah dicetak —
-# memakai label "NIP." yang dipatok. Penanda tangan Non-ASN (NIK) atau
-# TNI/POLRI (NRP) jadi diminta menuliskan nomornya di bawah label yang salah,
-# dan tak ada satu pun jalur kode yang bisa mendeteksinya: nomornya memang
-# belum ada saat PDF dicetak.
-#
-# Jalan keluarnya bukan menebak, melainkan tidak menebak: satu label netral
-# yang benar untuk ketiganya.
-PLACEHOLDER_IDENTITAS = "NIP/NIK/NRP. ................"
+def baris_identitas_ttd(nomor, status_kepegawaian="") -> list:
+    """ATURAN SISTEM — baris identitas pada BLOK TANDA TANGAN dokumen.
 
+    Berlaku untuk **seluruh** dokumen yang digenerate (PDF maupun Word), di
+    **semua** modul, tanpa kecuali. Rujukan lengkap beserta alasannya:
+    `docs/ATURAN-BLOK-TANDA-TANGAN.md`.
 
-def baris_identitas_ttd(nomor, placeholder="", status_kepegawaian="") -> list:
-    """Baris identitas utk blok tanda tangan PDF (list utk 'after').
+        Di area tanda tangan, baris identitas HANYA dicetak bila nomornya
+        NIP (termasuk NI PPPK) atau NRP. Selain itu — nomor kosong, Non-ASN,
+        atau nomor berformat NIK — blok tanda tangan berisi NAMA SAJA.
 
-    Label mengikuti jenis nomor (NIP/NI PPPK/NRP); penandatangan Non-ASN
-    ATAU nomor berformat NIK TIDAK dicetak apa pun statusnya (privasi —
-    list kosong; termasuk ASN yang di master masih tercatat NIK, belum
-    NIP: cukup nama). Nomor kosong → placeholder titik-titik bila
-    diberikan (konvensi garis ttd)."""
+    Kembaliannya sengaja berupa list agar "tidak ada baris" terekspresikan
+    sebagai `[]` dan langsung dapat dipakai sebagai `after` pada
+    `_signature_block`; pemanggil tidak perlu (dan tidak boleh) menyediakan
+    teks pengganti sendiri.
+
+    TIDAK ADA parameter placeholder. Sebelumnya ada, dan garis tanda tangan
+    kosong dicetak berlabel "NIP/NIK/NRP. ................". Pemilik meminta
+    itu dihapus: bila informasi NIP-nya memang tidak ada, area tanda tangan
+    tidak menuliskan apa pun. Parameternya dihapus, bukan dibiarkan bernilai
+    bawaan kosong, supaya berkas lama yang masih mengirimnya GAGAL saat impor
+    — bukan diam-diam mengirimkan status kepegawaian ke slot yang salah.
+    """
     n = str(nomor or "").strip()
-    if not n or n in ("-", "--"):
-        return [placeholder] if placeholder else []
+    if not n or set(n) <= set(".-_ "):
+        return []
     b = baris_identitas_laporan(n, status_kepegawaian)
     return [b] if b else []
 

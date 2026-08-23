@@ -42,10 +42,19 @@ pengelolaan BMN — baca `docs/MASTERPLAN-SIKLUS-BMN.md` sebelum menambah modul.
    boleh online-only.
 5. **Laporan**: pakai helper desain reports.py; tanggal gaya Indonesia; tanpa
    data dummy; smoke-test dengan harness FakeDB sebelum ship.
-6. **Jangan perkecil tombol** di ≤1023px — aturan tap-target 44px global di
+6. **BLOK TANDA TANGAN — aturan sistem, TANPA KECUALI** (PDF *dan* Word, semua
+   modul): baris identitas HANYA dicetak bila nomornya NIP/NI PPPK/NRP. Nomor
+   kosong, penanda tangan Non-ASN, atau nomor berformat NIK → **nama saja**:
+   tanpa baris, tanpa garis titik, tanpa "NIP. -". Pakai
+   `baris_identitas_ttd(nomor, status_kepegawaian)` (list; `[]` = tak ada
+   baris) atau `baris_identitas_laporan` — jangan merakit label sendiri.
+   Berlaku HANYA di blok tanda tangan; kolom tabel, blok identitas kepala
+   naskah, dan ekspor tetap mencetak nomor apa adanya.
+   Aturan lengkap: `docs/ATURAN-BLOK-TANDA-TANGAN.md`.
+7. **Jangan perkecil tombol** di ≤1023px — aturan tap-target 44px global di
    `index.css`. Elemen kecil yang membengkak → beri `min-w-0 min-h-0`.
    (Riwayat lengkap: header CHANGELOG.md.)
-6b. **ATURAN HOVER (sering menggigit — ikon peta #66, tombol Kartu #75):**
+7b. **ATURAN HOVER (sering menggigit — ikon peta #66, tombol Kartu #75):**
    token `--accent` proyek ini = **BIRU pekat** + `--accent-foreground` =
    **PUTIH** (bukan abu lembut ala shadcn standar). Konsekuensi:
    - Hover halus pada tombol/kartu/baris buatan sendiri: pakai
@@ -56,10 +65,10 @@ pengelolaan BMN — baca `docs/MASTERPLAN-SIKLUS-BMN.md` sebelum menambah modul.
      (mis. `text-emerald-700`) WAJIB sertakan pasangan `hover:text-*` untuk
      kedua tema — kalau tidak, teks jadi putih di atas latar terang.
    - Uji SETIAP elemen interaktif baru di light DAN dark mode sebelum ship.
-7. **Overlay di atas kamera** (z-[120]): pakai elemen native (select, bukan
+8. **Overlay di atas kamera** (z-[120]): pakai elemen native (select, bukan
    Radix portal) di dalam FullCameraSheet.
-8. **Data uji**: `data-testid` untuk elemen interaktif baru.
-9. **Modul baru** ikut prinsip integrasi Bab 5 masterplan: satu identitas
+9. **Data uji**: `data-testid` untuk elemen interaktif baru.
+10. **Modul baru** ikut prinsip integrasi Bab 5 masterplan: satu identitas
    aset, satu kodefikasi, transaksi = jurnal, dokumen sumber = simpul,
    approval = gerbang, offline-first, registry anti-drift.
 10. **Regulasi dulu, kode kemudian**: sebelum membangun fitur ber-alur

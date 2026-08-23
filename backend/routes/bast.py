@@ -49,7 +49,6 @@ from shared_utils import (
     log_audit, pastikan_akses_aset, pastikan_akses_dok_satker,
     reserve_idempotency_key, scope_query_field_satker, store_idempotent_response,
 )
-from pegawai_utils import PLACEHOLDER_IDENTITAS
 
 logger = logging.getLogger(__name__)
 
@@ -1562,8 +1561,7 @@ async def bast_pdf(bast_id: str, nilai: str = "",
                                'nama': kpb["nama"],
                                # Non-ASN: baris NIP/NIK tidak dicetak
                                'after': _baris_ttd(
-                                   kpb['nip'], PLACEHOLDER_IDENTITAS,
-                                   kpb.get("status_kepegawaian")),
+                                   kpb['nip'], kpb.get("status_kepegawaian")),
                                'ttd_img': await ambil_ttd_img(kpb.get("ttd_file_id"))}]
     peran_kesatu = ('Yang Menyerahkan,' if jenis not in _JENIS_PENGEMBALIAN
                     else 'Yang Menerima,')
@@ -1576,16 +1574,15 @@ async def bast_pdf(bast_id: str, nilai: str = "",
          'role': ('Yang Menerima,' if jenis not in _JENIS_PENGEMBALIAN
                   else 'Yang Menyerahkan,'),
          'nama': p2.get("nama") or "................................",
-         # Label pintar (NIP/NRP); Non-ASN/NIK tidak dicetak; kosong → titik
+         # Label pintar (NIP/NRP); Non-ASN/NIK/kosong → tak ada baris
          'after': baris_identitas_ttd(
-             p2.get("nip"), "NIP/NIK. -",
+             p2.get("nip"),
              await status_kepegawaian_by_nip(p2.get("nip")))},
         {'pre': [_tempat_tanggal_laporan(settings, b.get("tanggal"))],
          'header': 'PIHAK KESATU,', 'role': peran_kesatu,
          'nama': p1.get("nama") or "................................",
          'after': baris_identitas_ttd(
-             p1.get("nip"), PLACEHOLDER_IDENTITAS,
-             await status_kepegawaian_by_nip(p1.get("nip")))},
+             p1.get("nip"), await status_kepegawaian_by_nip(p1.get("nip")))},
     ] + signers_mengetahui, doc.width, celah_mm=_CELAH_TTD_BAST,
         jarak_baris_mm=_JARAK_BARIS_TTD_BAST))
     # Blok SAKSI — wajib pada pengembalian almarhum (pihak yang seharusnya
@@ -1602,7 +1599,7 @@ async def bast_pdf(bast_id: str, nilai: str = "",
                 'role': _esc(str(s.get("jabatan") or "").strip()) or ' ',
                 'nama': _esc(str(s.get("nama") or "").strip()),
                 'after': baris_identitas_ttd(
-                    s.get("nip"), "NIP/NIK. -",
+                    s.get("nip"),
                     await status_kepegawaian_by_nip(s.get("nip")))})
         # Dirender BERPASANGAN (2 per baris): _signature_block hanya menangani
         # 1–3 penanda tangan dan MEMBUANG sisanya bila diberi ≥4 — memecah
@@ -1677,7 +1674,7 @@ async def bast_pdf(bast_id: str, nilai: str = "",
                  'header': 'Yang Menyatakan,', 'role': ' ',
                  'nama': _pen["nama"] or "................................",
                  'after': baris_identitas_ttd(
-                     _pen["nip"], "NIP/NIK. -",
+                     _pen["nip"],
                      await status_kepegawaian_by_nip(_pen["nip"]))},
             ], doc.width, celah_mm=_CELAH_TTD_BAST,
                 jarak_baris_mm=_JARAK_BARIS_TTD_BAST))

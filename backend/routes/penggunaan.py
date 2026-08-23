@@ -42,7 +42,6 @@ from penggunaan_utils import (
     validate_proses_penggunaan, validate_psp, validate_transisi_idle,
     validate_transisi_pengajuan_psp, validate_transisi_proses,
 )
-from pegawai_utils import PLACEHOLDER_IDENTITAS
 
 penggunaan_router = APIRouter()
 
@@ -520,11 +519,11 @@ async def bast_psp_pdf(sk_id: str, nilai: str = "",
     elements.extend(_signature_block([
         {'header': 'Pihak yang Menyerahkan,',
          'nama': '................................',
-         'after': [PLACEHOLDER_IDENTITAS]},
+         'after': []},
         {'pre': [_tempat_tanggal_laporan(settings, None)],
          'header': 'Pihak yang Menerima,',
          'nama': '................................',
-         'after': [PLACEHOLDER_IDENTITAS]},
+         'after': []},
         # KPB melekat ke satker DOKUMEN (SK-nya sendiri) — konsisten dengan kop
         # di atas; unduhan super-admin lintas-satker tetap KPB satker penerbit.
         await blok_ttd_kpb_titik(
@@ -1237,8 +1236,7 @@ async def daftar_pemegang_pdf(
          'nama': nama_tampil,
          # Label pintar (NIP/NRP); Non-ASN/NIK tidak dicetak (privasi)
          'after': baris_identitas_ttd(
-             nip, PLACEHOLDER_IDENTITAS,
-             await status_kepegawaian_by_nip(
+             nip, await status_kepegawaian_by_nip(
                  nip, kode_satker=kode_satker_user(_user)))},
         await blok_ttd_kpb_titik(settings, kode_satker=kode_satker_user(_user)),   # KPB dari registry pejabat (temuan #26)
     ], doc.width))

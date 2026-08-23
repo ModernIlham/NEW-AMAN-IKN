@@ -542,18 +542,16 @@ class TestBlokTandaTangan:
         assert "Satpam Joko" in isi
         assert not any(_NIP in b for b in isi)
 
-    def test_nip_kosong_dapat_garis_titik_BERLABEL_NETRAL(self):
-        """Garis kosong diisi tangan setelah dicetak, jadi tak ada satu pun
-        jalur kode yang bisa mendeteksi jenis nomornya. Label "NIP." di situ
-        menebak — dan menebak salah untuk Non-ASN (NIK) maupun TNI/POLRI
-        (NRP). Labelnya karena itu netral, benar untuk ketiganya."""
-        from pegawai_utils import PLACEHOLDER_IDENTITAS
+    def test_nip_kosong_TIDAK_menulis_apa_pun(self):
+        """ATURAN SISTEM (docs/ATURAN-BLOK-TANDA-TANGAN.md): tanpa NIP/NRP,
+        blok tanda tangan berisi NAMA SAJA. Word ikut aturan yang sama dengan
+        PDF — pemilik menyebut keduanya sekaligus."""
         d = dx.doc_baru()
         dx.signature_block(d, [{"nama": "Budi", "nip": ""}], _IDENT,
                            "Nusantara, 1 Januari 2026")
         isi = _isi_sel(d.tables[0].rows[1].cells[0])
-        assert any(b.startswith(PLACEHOLDER_IDENTITAS[:12]) for b in isi), isi
-        assert all(not b.startswith("NIP. .") for b in isi), isi
+        assert "Budi" in isi, isi
+        assert all(not b.startswith(("NIP", "NIK", "NRP")) for b in isi), isi
 
     def test_anggota_berupa_string_diterima(self):
         """Beberapa generator lama masih mengoper daftar nama polos."""
@@ -607,12 +605,14 @@ class TestBlokTandaTangan:
         assert _isi_sel(d.tables[-1].rows[0].cells[1])[0] == "Menyetujui,"
 
     def test_kpb_tanpa_nip_tidak_mencetak_nomor_sampah(self):
+        """KPB tanpa NIP: namanya tetap tercetak, barisan identitasnya tidak
+        ada sama sekali — bukan label kosong, bukan garis titik."""
         d = dx.doc_baru()
         dx.signature_block(d, [{"nama": "A"}], {"kasatker_nama": "Sartono"},
                            "Nusantara, 1 Januari 2026")
-        from pegawai_utils import PLACEHOLDER_IDENTITAS
-        teks = " ".join(_isi_sel(d.tables[-1].rows[0].cells[1]))
-        assert PLACEHOLDER_IDENTITAS[:12] in teks, teks
+        isi = _isi_sel(d.tables[-1].rows[0].cells[1])
+        assert "Sartono" in isi, isi
+        assert all(not b.startswith(("NIP", "NIK", "NRP")) for b in isi), isi
 
     def test_ruang_tanda_tangan_tetap_lega(self):
         """Empat baris kosong = area tanda tangan basah. Menghapusnya membuat
@@ -667,12 +667,12 @@ class TestTandaTanganTunggal:
         assert isi[0] == "Nusantara, 1 Januari 2026"
         assert isi[1] == "Yang membuat pernyataan,"
 
-    def test_nip_kosong_memakai_label_NETRAL(self):
-        from pegawai_utils import PLACEHOLDER_IDENTITAS
+    def test_nip_kosong_TIDAK_menulis_apa_pun(self):
         d = dx.doc_baru()
         dx.signature_single(d, nama="Sartono", nip="")
-        teks = " ".join(_isi_sel(d.tables[0].rows[0].cells[1]))
-        assert PLACEHOLDER_IDENTITAS[:12] in teks, teks
+        isi = _isi_sel(d.tables[0].rows[0].cells[1])
+        assert "Sartono" in isi, isi
+        assert all(not b.startswith(("NIP", "NIK", "NRP")) for b in isi), isi
 
     def test_privasi_nik_juga_berlaku_di_ttd_tunggal(self):
         d = dx.doc_baru()

@@ -67,6 +67,44 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#912] ATURAN SISTEM: blok tanda tangan hanya mencetak NIP/NRP — 2026-08-23
+
+Permintaan pemilik: *"apabila pegawai tersebut tidak memiliki informasi
+mengenai NIP dan/atau tergolong sebagai Non-ASN maka di bagian tanda tangan
+tidak perlu dituliskan, jadi hanya tuliskan jika NIP/NRP saja … jadikan ini
+aturan sistem dan tulis di dalam dokumentasi agar diterapkan saat generate
+PDF/Word ke depannya tanpa terkecuali, khusus di bagian tanda tangan saja."*
+
+- **Aturannya tertulis**: [`docs/ATURAN-BLOK-TANDA-TANGAN.md`](docs/ATURAN-BLOK-TANDA-TANGAN.md),
+  ditautkan dari README dan dirujuk balik oleh docstring fungsinya.
+- **Label netral titik-titik `"NIP/NIK/NRP. …"` DIHAPUS** dari 14 modul —
+  beserta konstantanya, `PLACEHOLDER_IDENTITAS`. Begitu pula `"NIP/NIK. -"`
+  pada BAST. Tanpa NIP/NRP yang sah, blok tanda tangan berisi **nama saja**.
+- **Parameter placeholder pada `baris_identitas_ttd` ikut dihapus**, bukan
+  dibiarkan bernilai bawaan kosong.
+- Berlaku sama untuk **PDF dan Word** — pemilik menyebut keduanya.
+
+> **Kenapa parameternya dihapus, bukan diberi nilai bawaan kosong.** Kalau
+> hanya nilai bawaannya yang diubah, pemanggil lama `f(nip, placeholder,
+> status)` tetap berjalan — dan status kepegawaiannya masuk ke slot yang
+> salah. Penanda tangan Non-ASN lalu dicetak NIK-nya, persis kebalikan dari
+> yang diminta, tanpa satu pun galat. Dengan parameternya dihapus, pemanggil
+> semacam itu GAGAL saat impor dan tertangkap `compileall` di CI.
+
+> **Ruang lingkupnya sempit dan disebutkan di dokumennya**: hanya BLOK TANDA
+> TANGAN. Kolom tabel, blok identitas di kepala naskah, dan ekspor Excel tetap
+> mencetak nomor apa adanya — di sana nomornya memang informasi yang diminta,
+> bukan tanda pengesahan.
+
+> **Penjaganya menyapu seluruh backend**, bukan daftar berkas. Daftar yang
+> ditulis tangan gagal justru pada kasus paling mungkin: modul PDF/Word BARU
+> lahir di luar daftar, jadi pemindaiannya hijau sejak hari pertama sementara
+> dokumennya mencetak label yang salah. Uji juga merender PDF sungguhan dan
+> membaca teksnya kembali — pemindai statis tak bisa membuktikan apa yang
+> benar-benar sampai ke kertas.
+
+---
+
 ## [#911] Layar pemilih penanda tangan — Master Satker & saat menerbitkan LPB — 2026-08-22
 
 Pelunasan [#910]. Aturan tiga lapisnya sudah jalan, tetapi pilihannya hanya
