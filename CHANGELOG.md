@@ -67,6 +67,32 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#918] Kelengkapan berkas: berkolom, satu kesatuan, tak terpecah — 2026-08-23
+
+Permintaan pemilik: *"pada kelengkapan berkasnya lebih ditingkatkan,
+menyesuaikan dan mengisi ruang yang ada, agar maksimal dan seperti satu
+kesatuan."*
+
+- Daftar periksa berubah dari **baris tegak** menjadi **tabel DUA KOLOM**
+  berkotak — di BAST PPK→KPB maupun LPB, lewat satu helper bersama
+  `routes/reports._tabel_kelengkapan`.
+- Judul kelompok membentang penuh dengan latar sendiri; nama barangnya ikut
+  di baris judul dengan huruf lebih kecil.
+
+> **Kenapa daftar tegak boros.** Tiap butir hanya beberapa kata, sehingga
+> lebih dari separuh lebar halaman menganggur — dan bloknya memanjang sampai
+> memaksa pasal berikutnya pindah halaman.
+
+> **Satu tabel untuk semua kelompok justru salah.** Bentuk itu tampak paling
+> menyatu, tetapi ReportLab memecah tabel di batas baris mana pun: pada
+> percobaan pertama, satu kelompok terbelah tepat di tengah dan judulnya
+> nyaris terdampar sendirian di kaki halaman. Sekarang SATU tabel per
+> kelompok, masing-masing dijaga utuh — kotaknya berimpit tanpa jarak
+> sehingga tetap terbaca bersambung. Ada uji yang menagih agar tak ada judul
+> kelompok yang diikuti kaki halaman.
+
+---
+
 ## [#917] Status & tautan TTD di Riwayat LPB dan dua daftar permohonan — 2026-08-23
 
 Melanjutkan [#913]. Riwayat BAST sudah punya status TTD dan tombol "Tautan

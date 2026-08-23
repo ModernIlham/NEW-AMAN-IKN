@@ -468,6 +468,74 @@ def _baris_sekat_golongan(kode_golongan, nama_golongan, jumlah, n_kolom, st,
     return [Paragraph(f"<b>{label}</b>{ekor}", gaya)] + [""] * max(0, n_kolom - 1)
 
 
+def _tabel_kelengkapan(kelompok, lebar, st, kolom=2, gaya=None,
+                       maks_barang=6):
+    """Daftar periksa kelengkapan berkas sebagai SATU tabel berkolom.
+
+    Permintaan pemilik: *"pada kelengkapan berkasnya lebih ditingkatkan,
+    menyesuaikan dan mengisi ruang yang ada, agar maksimal dan seperti satu
+    kesatuan."*
+
+    Bentuk lamanya daftar tegak satu butir per baris. Tiap butir hanya
+    beberapa kata, sehingga LEBIH DARI SEPARUH lebar halaman menganggur —
+    dan blok itu memanjang sampai memaksa pasal berikutnya pindah halaman.
+    Disusun berkolom di dalam satu kotak, ia menjadi ringkas, penuh, dan
+    terbaca sebagai satu kesatuan alih-alih tumpukan baris lepas.
+
+    `kelompok` = keluaran `berkas_serah_terima.kelompok_berkas`.
+    Mengembalikan LIST flowable (satu per kelompok, masing-masing dijaga utuh)
+    — kosong bila tak ada isinya.
+    """
+    from reportlab.lib import colors as rl_colors
+    from reportlab.platypus import Paragraph, Table, TableStyle
+    from xml.sax.saxutils import escape as _esc
+
+    if not kelompok:
+        return []
+    from reportlab.platypus import KeepTogether
+    kolom = max(1, int(kolom))
+    sel = gaya or st.get('CellSekat') or st['Cell']
+    garis = rl_colors.HexColor(_PALETTE["grid"])
+    latar = rl_colors.HexColor(_PALETTE["header_bg"])
+    keluar = []
+    for judul, sifat, berkas, barang, _perhatian in kelompok:
+        kepala = f"<b>{_esc(judul)}</b> — <i>{_esc(sifat)}</i>"
+        if barang:
+            tampil = ", ".join(barang[:maks_barang])
+            sisa = len(barang) - maks_barang
+            kepala += ("<br/><font size=6.5>Barang: " + _esc(tampil)
+                       + (f" (+{sisa} lainnya)" if sisa > 0 else "")
+                       + "</font>")
+        data = [[Paragraph(kepala, sel)] + [""] * (kolom - 1)]
+        for i in range(0, len(berkas), kolom):
+            potong = berkas[i:i + kolom]
+            data.append([Paragraph(f"[   ]  {_esc(x)}", sel) for x in potong]
+                        + [""] * (kolom - len(potong)))
+        t = Table(data, colWidths=[lebar / kolom] * kolom)
+        t.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('BOX', (0, 0), (-1, -1), 0.5, garis),
+            ('LEFTPADDING', (0, 0), (-1, -1), 4),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 1),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+            # Judul kelompok membentang penuh: ia keterangan satu kesatuan,
+            # bukan butir pertama pada kolom kiri.
+            ('SPAN', (0, 0), (-1, 0)),
+            ('BACKGROUND', (0, 0), (-1, 0), latar),
+            ('TOPPADDING', (0, 0), (-1, 0), 2),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 2),
+        ]))
+        # SATU tabel per kelompok, masing-masing DIJAGA UTUH. Satu tabel untuk
+        # semua kelompok tampak paling menyatu di layar, tetapi ReportLab
+        # memecahnya di batas baris mana pun — dan judul kelompok yang
+        # terdampar sendirian di kaki halaman meninggalkan pembaca dengan
+        # kepala tanpa isi. Kotaknya berimpit tanpa jarak sehingga tetap
+        # terbaca bersambung.
+        keluar.append(KeepTogether([t]))
+    return keluar
+
+
 def _gaya_sekat_bidang(baris_sekat, warna=None, padding=1.0):
     """Perintah TableStyle untuk baris sekat: melebar penuh (SPAN) dengan
     latar sendiri dan padding setipis mungkin — sekat adalah penanda, bukan

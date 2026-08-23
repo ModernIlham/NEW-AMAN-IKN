@@ -1220,6 +1220,7 @@ async def bangun_bast_ppk_pdf(perolehan_id: str, _user: dict) -> bytes:
     from pelaporan_utils import narasi_hari_tanggal
     from routes.reports import (
         _baris_sekat_bidang, _baris_sekat_golongan, _fit_col_widths,
+        _tabel_kelengkapan,
         _fmt_tanggal_id, _gaya_sekat_bidang, _get_report_styles,
         _kop_surat_flowables, _page_footer_factory, _peta_uraian_bidang,
         _signature_block, _std_doc, _std_table_style, _tempat_tanggal_laporan,
@@ -1480,24 +1481,15 @@ async def bangun_bast_ppk_pdf(perolehan_id: str, _user: dict) -> bytes:
                 "PIHAK KESATU menyerahkan kepada PIHAK KEDUA berkas berikut "
                 "beserta barangnya, dikelompokkan menurut golongan dan sifat "
                 "barangnya:", isi)]
-        for _judul, _sifat, _berkas, _nama, _perhatian in _klp_berkas:
-            _b = [Paragraph(f"<b>{_esc(_judul)}</b>", ket),
-                  Paragraph(f"<i>Sifat: {_esc(_sifat)}</i>", ket)]
-            if _nama:
-                _b.append(Paragraph(
-                    "Barang: " + _esc(", ".join(_nama[:6]))
-                    + (f" (+{len(_nama) - 6} lainnya)" if len(_nama) > 6 else ""),
-                    ket))
-            for _x in _berkas:
-                # Penanda centang memakai kurung siku ASCII, BUKAN "☐"
-                # (U+2610): Helvetica tak memuat glif itu, dan ReportLab
-                # menggantinya dengan kotak HITAM PEKAT — terbaca sebagai
-                # kotak yang sudah dicoret, kebalikan dari maksudnya.
-                _b.append(Paragraph(f"[   ]  {_esc(_x)}", ket))
-            _b.append(Spacer(1, 1.2 * rl_mm))
-            _blok.append(KeepTogether(_b))
+        # SATU tabel berkolom, bukan tumpukan baris tegak: daftar tegak
+        # membuang lebih dari separuh lebar halaman dan memanjang sampai
+        # memaksa pasal berikutnya pindah halaman. Penanda centang memakai
+        # kurung siku ASCII, BUKAN "☐" (U+2610) — Helvetica tak memuat glif
+        # itu dan ReportLab menggantinya dengan kotak HITAM PEKAT.
+        _blok.extend(_tabel_kelengkapan(_klp_berkas, doc.width, st, gaya=ket))
         _ctt = catatan_ambang(p.get("barang") or [])
         if _ctt:
+            _blok.append(Spacer(1, 1.0 * rl_mm))
             _blok.append(Paragraph(f"<i>{_esc(_ctt)}</i>", ket))
         el.append(KeepTogether(_blok[:2]))
         el.extend(_blok[2:])

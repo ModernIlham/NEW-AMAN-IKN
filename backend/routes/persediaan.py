@@ -1409,6 +1409,7 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
     from lpb_utils import bundel_sumber, label_golongan
     from routes.reports import (
         _baris_sekat_bidang, _baris_sekat_golongan, _fit_col_widths, _fmt_tanggal_id,
+        _tabel_kelengkapan,
         _gaya_sekat_bidang, _get_report_styles, _kop_surat_flowables,
         _page_footer_factory, _peta_subsub_kelompok, _peta_uraian_bidang,
         _std_doc, _std_table_style, _title_block,
@@ -1640,13 +1641,8 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
     if _klp_berkas:
         el.append(Paragraph("<b>KELENGKAPAN BERKAS YANG MENYERTAI BARANG</b>",
                             st['Meta']))
-        for _judul, _sifat, _berkas, _nama, _perhatian in _klp_berkas:
-            _b = [Paragraph(f"<b>{_esc(_judul)}</b> — <i>{_esc(_sifat)}</i>",
-                            _kecil)]
-            for _x in _berkas:
-                _b.append(Paragraph(f"[   ]  {_esc(_x)}", _kecil))
-            _b.append(Spacer(1, 1.0 * rl_mm))
-            el.append(KeepTogether(_b))
+        # SATU tabel berkolom — alasan & bentuk sama dengan BAST PPK→KPB.
+        el.extend(_tabel_kelengkapan(_klp_berkas, doc.width, st, gaya=_kecil))
         _ctt = catatan_ambang(_items)
         if _ctt:
             el.append(Paragraph(f"<i>{_esc(_ctt)}</i>", _kecil))
