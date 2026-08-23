@@ -696,6 +696,115 @@ async def tautkan_barang(perolehan_id: str, payload: TautkanIn,
     return _enrich(p)
 
 
+class LeburkanIn(BaseModel):
+    """Leburkan satu baris pengadaan ke aset yang SUDAH tercatat."""
+    index: int = Field(ge=0)
+    asset_id: str = Field(min_length=1)
+    tanggal_buku: str = ""
+    keterangan: str = ""
+
+
+@pengadaan_router.post("/pengadaan/{perolehan_id}/leburkan")
+async def leburkan_ke_aset(perolehan_id: str, payload: LeburkanIn,
+                           user: dict = Depends(require_writer)):
+    """Leburkan baris pengadaan ke aset yang SUDAH tercatat — PENGEMBANGAN NILAI.
+
+    Bedanya dengan `POST .../tautkan`: menautkan hanya menyalin kode/NUP/nama
+    ke barisnya; NILAI asetnya tak berubah sama sekali. Untuk belanja yang
+    menambah nilai barang yang sudah ada, itu berarti uangnya tercatat di
+    register pengadaan tetapi tak pernah sampai ke nilai perolehan asetnya.
+
+    Di sini nilai aset BERTAMBAH (jurnal 202 "Pengembangan Nilai Aset
+    Langsung") sementara KUANTITASnya tetap — satu aset tetap satu kesatuan,
+    dan jurnalnya ber-`jumlah: 0` karena ini murni transaksi nilai.
+
+    KDP DITOLAK: pengembangannya masih berupa termin dan punya jalur sendiri
+    (Pembukuan → KDP, jurnal 503). Lihat `peleburan_aset` untuk alasannya.
+    """
+    from peleburan_aset import (KODE_TRANSAKSI_LEBUR, nilai_leburan,
+                                ringkas_leburan, validate_leburan)
+    from pembukuan_utils import parse_harga
+    from shared_utils import (catat_mutasi_bmn, ensure_activity_not_sealed,
+                              pastikan_akses_aset)
+
+    p = await db.pengadaan.find_one({"id": perolehan_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
+    await pastikan_akses_dok_satker(user, p)   # isolasi satker
+    barang = p.get("barang") or []
+    if payload.index >= len(barang):
+        raise HTTPException(status_code=400, detail="Baris barang tidak ada")
+    row = barang[payload.index]
+
+    aset = await db.assets.find_one(
+        {"id": str(payload.asset_id).strip()},
+        {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+         "purchase_price": 1, "activity_id": 1, "dihapus": 1})
+    if not aset:
+        raise HTTPException(status_code=404, detail="Aset tujuan tidak ditemukan")
+    # Guard ASET tersendiri: register-nya sudah ber-guard, tetapi tanpa ini
+    # nilai aset satker LAIN bisa ditambah dari register satker ini.
+    await pastikan_akses_aset(user, aset)
+    await ensure_activity_not_sealed(aset.get("activity_id"))
+
+    galat = validate_leburan(row, aset)
+    if galat:
+        raise HTTPException(status_code=400, detail=" ".join(galat))
+
+    nilai = nilai_leburan(row)
+    if nilai <= 0:
+        raise HTTPException(status_code=400, detail=(
+            "Harga satuan baris ini 0 — tak ada nilai yang bisa dikembangkan."))
+
+    lama = parse_harga(aset.get("purchase_price"))
+    ringkas = ringkas_leburan(row, aset, lama)
+    now = datetime.now(timezone.utc).isoformat()
+    tgl = (str(payload.tanggal_buku or "").strip()[:10]
+           or str(p.get("tanggal_bast") or "").strip()[:10] or now[:10])
+
+    # `purchase_price` disimpan STRING di seluruh jalur create — baca lama,
+    # jumlahkan, tulis balik string. `$inc` pada string ditolak Mongo SETELAH
+    # efek lain terlanjur jalan (pelajaran kapitalisasi pemeliharaan).
+    await db.assets.update_one(
+        {"id": aset["id"]},
+        {"$set": {"purchase_price": str(int(round(ringkas["nilai_baru"]))),
+                  "updated_at": now},
+         "$inc": {"version": 1}})
+    await catat_mutasi_bmn({
+        "asset_id": aset["id"], "kode_transaksi": KODE_TRANSAKSI_LEBUR,
+        "kode_barang": str(aset.get("asset_code") or ""),
+        "nup": str(aset.get("NUP") or ""),
+        # jumlah 0: murni transaksi NILAI — unitnya tetap satu kesatuan.
+        "tanggal_buku": tgl, "jumlah": 0, "nilai": nilai,
+        "sumber_modul": "pengadaan", "ref_id": perolehan_id,
+        "keterangan": (f"Peleburan pengadaan BAST {p.get('nomor_bast') or '-'}"
+                       + (f": {str(payload.keterangan).strip()}"
+                          if str(payload.keterangan or "").strip() else ""))[:200],
+        "oleh": user.get("username", "system")})
+
+    # Barisnya ditandai TERLEBUR, bukan sekadar tertaut: tanpa penanda ini
+    # "Catat Semua Barang" tak bisa membedakannya dari baris yang menunggu
+    # dijadikan aset baru, dan `peringatan_nup` akan menghitungnya sebagai
+    # NUP yang gagal terbentuk.
+    row.update({"asset_id": aset["id"], "asset_code": aset.get("asset_code"),
+                "NUP": aset.get("NUP"), "asset_name": aset.get("asset_name"),
+                "leburan": True, "leburan_pada": now,
+                "leburan_nilai": nilai})
+    await db.pengadaan.update_one(
+        {"id": perolehan_id},
+        {"$set": {"barang": barang, "updated_at": now}})
+    await db.assets.update_one(
+        {"id": aset["id"]},
+        {"$set": build_asset_perolehan_projection(p, now)})
+    await log_audit("pengadaan_leburkan", "", perolehan_id,
+                    username=user.get("username", "system"),
+                    detail=(f"Jurnal {KODE_TRANSAKSI_LEBUR} Rp{int(nilai):,} ke "
+                            f"{ringkas['kode']} NUP {ringkas['nup']} — nilai "
+                            f"menjadi Rp{int(ringkas['nilai_baru']):,}"))
+    p["barang"] = barang
+    return {"ok": True, **ringkas, "perolehan": _enrich(p)}
+
+
 class BuatDraftAsetIn(BaseModel):
     activity_id: str = Field(min_length=1)   # kegiatan tujuan (dipilih saat aksi)
 

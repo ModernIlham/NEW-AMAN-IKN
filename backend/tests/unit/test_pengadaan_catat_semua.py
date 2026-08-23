@@ -619,3 +619,147 @@ class TestPeringatanNupSampaiKeEndpoint:
                 user=USER)
             assert hasil.get("peringatan_nup") == []
         _jalan(skenario())
+
+
+class TestPeleburanKeAsetYangSudahAda:
+    """Endpoint peleburan: nilai aset BERTAMBAH, kuantitasnya TIDAK.
+
+    Yang membedakannya dari "Tautkan": menautkan hanya menyalin kode/NUP/nama
+    ke barisnya — nilai asetnya tak berubah sama sekali. Uji ini membuktikan
+    perbedaan itu benar-benar terjadi di basis data, bukan hanya di helper.
+    """
+
+    async def _siap(self, dbx, kode="3050102001", jumlah=1, harga=2_000_000,
+                    kode_aset=None, harga_aset="15000000"):
+        await _seed(dbx)
+        rec = await _unwrap(rp.buat_perolehan)(rp.PerolehanIn(
+            jenis="pembelian", pihak="PT Sumber Rejeki",
+            nomor_kontrak="KTR-003/PPK/2026", nomor_bast="BAST-003/2026",
+            tanggal_bast="2026-03-10",
+            barang=[rp.BarangIn(uraian="RAM tambahan", kode=kode,
+                                jumlah=jumlah, harga_satuan=harga)]),
+            user=USER)
+        await dbx.assets.insert_one({
+            "id": "aset-lama", "asset_code": kode_aset or kode, "NUP": "7",
+            "asset_name": "Server Rak", "purchase_price": harga_aset,
+            "activity_id": "keg1", "kode_satker": "", "version": 1})
+        return rec
+
+    def test_nilai_aset_bertambah_dan_jurnal_202_tercatat(self, dbx, monkeypatch):
+        import shared_utils as su
+        jurnal = []
+
+        async def _rekam(d):
+            jurnal.append(d)
+
+        # Endpoint mengimpor `catat_mutasi_bmn` LOKAL dari `shared_utils`;
+        # menambal atribut modul `rp` tak berpengaruh sama sekali.
+        monkeypatch.setattr(su, "catat_mutasi_bmn", _rekam, raising=False)
+
+        async def skenario():
+            rec = await self._siap(dbx)
+            hasil = await _unwrap(rp.leburkan_ke_aset)(
+                rec["id"], rp.LeburkanIn(index=0, asset_id="aset-lama"),
+                user=USER)
+            assert hasil["nilai_baru"] == 17_000_000
+            segar = await dbx.assets.find_one({"id": "aset-lama"})
+            assert segar["purchase_price"] == "17000000"
+            assert jurnal and jurnal[0]["kode_transaksi"] == "202"
+            # Murni transaksi NILAI — kuantitasnya tetap satu kesatuan.
+            assert jurnal[0]["jumlah"] == 0
+            assert jurnal[0]["nilai"] == 2_000_000
+        _jalan(skenario())
+
+    def test_barisnya_ditandai_TERLEBUR_bukan_sekadar_tertaut(self, dbx):
+        """Tanpa penanda ini "Catat Semua Barang" tak bisa membedakannya dari
+        baris yang menunggu dijadikan aset baru."""
+        async def skenario():
+            rec = await self._siap(dbx)
+            await _unwrap(rp.leburkan_ke_aset)(
+                rec["id"], rp.LeburkanIn(index=0, asset_id="aset-lama"),
+                user=USER)
+            segar = await dbx.pengadaan.find_one({"id": rec["id"]})
+            baris = segar["barang"][0]
+            assert baris["leburan"] is True
+            assert baris["asset_id"] == "aset-lama"
+            assert baris["NUP"] == "7"
+        _jalan(skenario())
+
+    def test_baris_terlebur_TIDAK_jadi_aset_baru_saat_catat_semua(self, dbx):
+        """Kalau ikut terbuat, satu belanja tercatat DUA KALI: sebagai
+        penambah nilai aset lama DAN sebagai aset baru ber-NUP sendiri."""
+        async def skenario():
+            rec = await self._siap(dbx)
+            await _unwrap(rp.leburkan_ke_aset)(
+                rec["id"], rp.LeburkanIn(index=0, asset_id="aset-lama"),
+                user=USER)
+            hasil = await _unwrap(rp.buat_draft_aset_dari_perolehan)(
+                rec["id"], rp.BuatDraftAsetIn(activity_id="keg1"), user=USER)
+            assert hasil["dibuat"] == 0
+            assert hasil["dilewati_tertaut"] == 1
+            assert hasil["peringatan_nup"] == []
+        _jalan(skenario())
+
+    def test_jumlah_lebih_dari_satu_DITOLAK_400(self, dbx):
+        async def skenario():
+            rec = await self._siap(dbx, jumlah=3)
+            with pytest.raises(rp.HTTPException) as e:
+                await _unwrap(rp.leburkan_ke_aset)(
+                    rec["id"], rp.LeburkanIn(index=0, asset_id="aset-lama"),
+                    user=USER)
+            assert e.value.status_code == 400
+            assert "1 NUP untuk 1 barang" in e.value.detail
+            segar = await dbx.assets.find_one({"id": "aset-lama"})
+            assert segar["purchase_price"] == "15000000"   # tak tersentuh
+        _jalan(skenario())
+
+    def test_aset_KDP_DITOLAK_400(self, dbx):
+        async def skenario():
+            rec = await self._siap(dbx, kode="7010101001")
+            with pytest.raises(rp.HTTPException) as e:
+                await _unwrap(rp.leburkan_ke_aset)(
+                    rec["id"], rp.LeburkanIn(index=0, asset_id="aset-lama"),
+                    user=USER)
+            assert e.value.status_code == 400
+            assert "KDP" in e.value.detail and "503" in e.value.detail
+        _jalan(skenario())
+
+    def test_kode_barang_berbeda_DITOLAK_400(self, dbx):
+        async def skenario():
+            rec = await self._siap(dbx, kode_aset="3060101001")
+            with pytest.raises(rp.HTTPException) as e:
+                await _unwrap(rp.leburkan_ke_aset)(
+                    rec["id"], rp.LeburkanIn(index=0, asset_id="aset-lama"),
+                    user=USER)
+            assert e.value.status_code == 400 and "berbeda" in e.value.detail
+        _jalan(skenario())
+
+    def test_harga_nol_ditolak_bukan_menulis_jurnal_kosong(self, dbx):
+        async def skenario():
+            rec = await self._siap(dbx, harga=0)
+            with pytest.raises(rp.HTTPException) as e:
+                await _unwrap(rp.leburkan_ke_aset)(
+                    rec["id"], rp.LeburkanIn(index=0, asset_id="aset-lama"),
+                    user=USER)
+            assert e.value.status_code == 400
+        _jalan(skenario())
+
+    def test_aset_tujuan_tak_ada_404(self, dbx):
+        async def skenario():
+            rec = await self._siap(dbx)
+            with pytest.raises(rp.HTTPException) as e:
+                await _unwrap(rp.leburkan_ke_aset)(
+                    rec["id"], rp.LeburkanIn(index=0, asset_id="entah"),
+                    user=USER)
+            assert e.value.status_code == 404
+        _jalan(skenario())
+
+    def test_baris_di_luar_jangkauan_400(self, dbx):
+        async def skenario():
+            rec = await self._siap(dbx)
+            with pytest.raises(rp.HTTPException) as e:
+                await _unwrap(rp.leburkan_ke_aset)(
+                    rec["id"], rp.LeburkanIn(index=9, asset_id="aset-lama"),
+                    user=USER)
+            assert e.value.status_code == 400
+        _jalan(skenario())
