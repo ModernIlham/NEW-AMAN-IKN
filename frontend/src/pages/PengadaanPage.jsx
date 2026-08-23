@@ -558,7 +558,8 @@ export default function PengadaanPage({ user, onBack }) {
     mode: "baru",
     data: { jenis: "pembelian", pihak: "", nomor_kontrak: "", nomor_bast: "", tanggal_bast: new Date().toISOString().slice(0, 10), keterangan: "", penganggaran_id: "", ppk_pejabat_id: "",
       // Dokumen pengadaan; `sifat` menentukan kolom mana yang berlaku.
-      sifat: "", no_sp_spk: "", jenis_up: "", no_spby: "", no_spp: "", no_spm: "", no_dokumen: "" },
+      sifat: "", no_sp_spk: "", jenis_up: "", no_spby: "", no_spp: "", no_spm: "",
+      no_bukti: "", no_dokumen: "" },
     barang: [{ ...BARANG_KOSONG }], saving: false,
   });
   // Buka dialog yang SAMA dalam mode ubah. Bentuk datanya dipisah ke
@@ -968,6 +969,17 @@ export default function PengadaanPage({ user, onBack }) {
                 <Input id="pgd-spm" placeholder="02847T/621001/2024" className="font-mono" value={form.data.no_spm}
                   data-testid="pengadaan-no-spm"
                   onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, no_spm: e.target.value } }))} />
+              </div>
+              {/* No. Bukti/Faktur — nomor faktur/kuitansi PENYEDIA. Selama ini
+                  tak punya isian sama sekali, padahal LPB menyebut "No.
+                  Bukti/Faktur" di kepalanya (yang selama ini hanya berisi
+                  JENIS dokumennya, bukan nomornya). Berlaku pada kedua jalur
+                  pembayaran, jadi tak ikut disembunyikan oleh sifat. */}
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-nobukti">No. Bukti/Faktur (opsional)</label>
+                <Input id="pgd-nobukti" placeholder="INV-2026/08/0417" className="font-mono" value={form.data.no_bukti}
+                  data-testid="pengadaan-no-bukti"
+                  onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, no_bukti: e.target.value } }))} />
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-nodok">No. Dokumen (opsional)</label>

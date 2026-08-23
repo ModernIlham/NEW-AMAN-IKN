@@ -86,7 +86,7 @@ class TestMilikSifat:
 
     def test_kolom_umum_berlaku_di_kedua_jalur(self):
         umum = [d["kunci"] for d in DOKUMEN_PENGADAAN if not d["sifat"]]
-        assert set(umum) == {"no_spp", "no_spm", "no_dokumen"}
+        assert set(umum) == {"no_spp", "no_spm", "no_bukti", "no_dokumen"}
 
 
 class TestPertentanganDitolak:

@@ -64,6 +64,10 @@ DOKUMEN_PENGADAAN = [
      "sifat": "",
      "arti": "Surat Perintah Membayar — bentuknya sama dengan kolom SPM "
              "pada Inventarisasi Aset"},
+    {"kunci": "no_bukti", "label": "No. Bukti/Faktur",
+     "contoh": "INV-2026/08/0417", "sifat": "",
+     "arti": "Nomor faktur/kuitansi penyedia — bukti penerimaan barangnya "
+             "sendiri. Berlaku pada kedua jalur pembayaran"},
     {"kunci": "no_dokumen", "label": "No. Dokumen", "contoh": "ND-77/PBJ/2026",
      "sifat": "",
      "arti": "Rujukan dokumen lain yang menyertai perolehan ini"},
@@ -134,7 +138,7 @@ def validate_dokumen(sifat, dok) -> list:
 # keduanya menjawab pertanyaan berbeda dan diperiksa oleh orang berbeda.
 KELOMPOK_DOKUMEN = [
     ("Perikatan", ["no_sp_spk", "jenis_up", "no_spby"]),
-    ("Pembayaran", ["no_spp", "no_spm"]),
+    ("Pembayaran", ["no_spp", "no_spm", "no_bukti"]),
     ("Rujukan lain", ["no_dokumen"]),
 ]
 

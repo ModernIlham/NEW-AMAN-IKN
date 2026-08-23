@@ -24,7 +24,8 @@
  * kolomnya, supaya payload tak menjatuhkan kolom yang sudah tercatat.
  */
 export const KUNCI_DOKUMEN = [
-  "no_sp_spk", "jenis_up", "no_spby", "no_spp", "no_spm", "no_dokumen",
+  "no_sp_spk", "jenis_up", "no_spby", "no_spp", "no_spm", "no_bukti",
+  "no_dokumen",
 ];
 
 /** Kolom dokumen dari sebuah form/record, dipangkas spasi tepinya. */
@@ -76,6 +77,7 @@ export function formDariPerolehan(p) {
       no_spby: p.no_spby || "",
       no_spp: p.no_spp || "",
       no_spm: p.no_spm || "",
+      no_bukti: p.no_bukti || "",
       no_dokumen: p.no_dokumen || "",
     },
     barang: (p.barang || []).map((b) => ({
