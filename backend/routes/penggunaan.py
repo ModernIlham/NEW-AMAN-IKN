@@ -23,6 +23,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db
+from pegawai_utils import baris_identitas_isian
 from shared_utils import (kode_satker_user, scope_query_aset,
                           scope_query_field_satker, blok_ttd_kpb_titik,
                           pastikan_akses_dok_satker,
@@ -519,11 +520,11 @@ async def bast_psp_pdf(sk_id: str, nilai: str = "",
     elements.extend(_signature_block([
         {'header': 'Pihak yang Menyerahkan,',
          'nama': '................................',
-         'after': []},
+         'after': baris_identitas_isian(None)},
         {'pre': [_tempat_tanggal_laporan(settings, None)],
          'header': 'Pihak yang Menerima,',
          'nama': '................................',
-         'after': []},
+         'after': baris_identitas_isian(None)},
         # KPB melekat ke satker DOKUMEN (SK-nya sendiri) — konsisten dengan kop
         # di atas; unduhan super-admin lintas-satker tetap KPB satker penerbit.
         await blok_ttd_kpb_titik(

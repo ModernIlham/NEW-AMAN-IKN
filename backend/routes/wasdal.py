@@ -21,6 +21,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db
+from pegawai_utils import baris_identitas_isian
 from shared_utils import kode_satker_user, log_audit, scope_query_field_satker, pastikan_akses_dok_satker, blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs, pengaturan_kop
 from wasdal_utils import (
     AMBANG_BERLARUT_HARI, JENIS_TEMUAN, OBJEK_WASDAL, PEMICU_INSIDENTIL,
@@ -738,7 +739,7 @@ async def ba_insidentil_pdf(tiket_id: str, _user: dict = Depends(require_user)):
     elements.extend(_signature_block([
         {'pre': [''], 'header': 'Petugas Pemantauan,',
          'nama': '...........................',
-         'after': []},
+         'after': baris_identitas_isian(None)},
         await blok_ttd_kpb_titik(settings, kode_satker=ks_dok),   # KPB satker dokumen
     ], doc.width))
     footer = _page_footer_factory("Berita Acara Pemantauan Insidentil BMN")
@@ -856,7 +857,7 @@ async def laporan_wasdal_pdf(
     elements.extend(_signature_block([
         {'pre': [''], 'header': 'Petugas Pemantauan,',
          'nama': '...........................',
-         'after': []},
+         'after': baris_identitas_isian(None)},
         await blok_ttd_kpb_titik(settings, kode_satker=kode_satker_user(_user)),   # KPB dari registry pejabat (temuan #26)
     ], doc.width))
     footer = _page_footer_factory("Laporan Hasil Pemantauan Wasdal BMN")

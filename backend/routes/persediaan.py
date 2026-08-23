@@ -30,7 +30,7 @@ from db import db
 from shared_utils import kunci_idem, limiter, log_audit
 from meili_utils import jadwalkan_sync, jadwalkan_hapus, cari_id_persediaan
 from pencarian_utils import klausa_teks, pecah_kata
-from pegawai_utils import baris_identitas_ttd
+from pegawai_utils import baris_identitas_isian, baris_identitas_ttd
 from persediaan_akun_utils import akun_persediaan
 from persediaan_fields import EDITABLE_FIELD_NAMES
 from persediaan_utils import (
@@ -747,9 +747,12 @@ async def opname_kertas_kerja_pdf(gudang: str = "",
 
     elements.append(Spacer(1, 12 * rl_mm))
     elements.extend(_signature_block([
-        {'pre': [''], 'header': 'Petugas Penghitung,', 'nama': '...........................', 'after': []},
-        {'pre': [''], 'header': 'Saksi,', 'nama': '...........................', 'after': []},
-        {'pre': [''], 'header': 'Mengetahui,', 'nama': '...........................', 'after': []},
+        {'pre': [''], 'header': 'Petugas Penghitung,', 'nama': '...........................',
+         'after': baris_identitas_isian(None)},
+        {'pre': [''], 'header': 'Saksi,', 'nama': '...........................',
+         'after': baris_identitas_isian(None)},
+        {'pre': [''], 'header': 'Mengetahui,', 'nama': '...........................',
+         'after': baris_identitas_isian(None)},
     ], doc.width))
     footer = _page_footer_factory("Kertas Kerja Opname Fisik Persediaan")
     await asyncio.to_thread(doc.build, elements, onFirstPage=footer,
@@ -823,8 +826,10 @@ async def opname_baof_pdf(
     _kpb = await _kpb_signer(settings, user=_user)
     _kpb_nama = _kpb["nama"] if _kpb["nama"] != "-" else '...........................'
     elements.extend(_signature_block([
-        {'pre': [''], 'header': 'Petugas Penghitung,', 'nama': '...........................', 'after': []},
-        {'pre': [''], 'header': 'Saksi,', 'nama': '...........................', 'after': []},
+        {'pre': [''], 'header': 'Petugas Penghitung,', 'nama': '...........................',
+         'after': baris_identitas_isian(None)},
+        {'pre': [''], 'header': 'Saksi,', 'nama': '...........................',
+         'after': baris_identitas_isian(None)},
         {'pre': [''], 'header': 'Mengetahui,', 'role': _hdr_kpb(_kpb), 'nama': _kpb_nama,
          'after': baris_identitas_ttd(_kpb["nip"], _kpb.get("status_kepegawaian"))},
     ], doc.width))
