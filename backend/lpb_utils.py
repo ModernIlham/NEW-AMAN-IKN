@@ -505,6 +505,40 @@ def _angka_aman(v, bawaan=0.0) -> float:
         return bawaan
 
 
+def porsi_baris(jumlah, n_unit) -> float:
+    """Berapa bagian SATU baris BAST yang diwakili oleh SATU draft aset. MURNI.
+
+    Pemecahan per-NUP hanya berlaku untuk jumlah bulat 2..50 (`unit_per_baris`).
+    Di luar itu — 100 kursi, atau 2,5 ton besi — SATU draft berdiri untuk
+    SELURUH baris, karena register aset tak punya field kuantitas sama sekali:
+    satu record = satu NUP = satu barang.
+
+    Angka inilah yang menentukan TIGA hal yang dulu dihitung sendiri-sendiri
+    dan karenanya sempat berselisih:
+
+      1. `jumlah_bast` pada baris LPB — sudah benar sejak awal;
+      2. nilai perolehan draft (`purchase_price`) — dulu SELALU harga satuan,
+         sehingga satu record yang berdiri untuk 100 kursi tercatat seharga
+         satu kursi;
+      3. nilai entri jurnal Buku Barang — cacat yang sama, sehingga Neraca
+         kurang catat sebesar (jumlah − 1) × harga satuan.
+
+    → 1.0 bila barisnya dipecah per unit; jumlah baris itu sendiri bila tidak.
+    """
+    if n_unit and n_unit > 1:
+        return 1.0
+    try:
+        j = float(jumlah if jumlah is not None else 1)
+    except (TypeError, ValueError):
+        return 1.0
+    import math
+    # Sejalan dengan `unit_per_baris`: nilai tak-hingga/NaN tak boleh menjadi
+    # pengali nilai rupiah — satu baris cacat akan meracuni seluruh Neraca.
+    if not math.isfinite(j) or j <= 0:
+        return 1.0
+    return j
+
+
 def peringatan_nup(barang, aset_dibuat) -> list:
     """Peringatan NUP untuk baris jalur ASET. MURNI.
 

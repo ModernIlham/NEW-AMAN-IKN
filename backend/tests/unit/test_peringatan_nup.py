@@ -127,3 +127,40 @@ class TestPeringatanNup:
             [{"kode": "3050104001", "uraian": "Server Rak", "jumlah": 80}],
             _aset("3050104001", 1))
         assert "Server Rak" in w[0]["pesan"] and "3050104001" in w[0]["pesan"]
+
+
+# ── Porsi baris BAST yang diwakili satu draft ───────────────────────────────
+
+class TestPorsiBaris:
+    """Satu sumber untuk `jumlah_bast` LPB, nilai perolehan aset, dan nilai
+    jurnal. Ketiganya dulu dihitung sendiri-sendiri dan berselisih."""
+
+    def test_baris_yang_dipecah_per_unit_menghasilkan_satu(self):
+        from lpb_utils import porsi_baris, unit_per_baris
+        for j in (2, 5, 50):
+            assert porsi_baris(j, unit_per_baris(j)) == 1.0, j
+
+    def test_baris_di_luar_batas_diwakili_SELURUHNYA(self):
+        from lpb_utils import porsi_baris, unit_per_baris
+        assert porsi_baris(100, unit_per_baris(100)) == 100.0
+        assert porsi_baris(51, unit_per_baris(51)) == 51.0
+
+    def test_jumlah_pecahan_diwakili_apa_adanya(self):
+        from lpb_utils import porsi_baris, unit_per_baris
+        assert porsi_baris(2.5, unit_per_baris(2.5)) == 2.5
+
+    def test_satu_unit_tetap_satu(self):
+        from lpb_utils import porsi_baris, unit_per_baris
+        assert porsi_baris(1, unit_per_baris(1)) == 1.0
+
+    def test_nilai_cacat_tak_pernah_jadi_pengali_rupiah(self):
+        """Satu baris cacat tak boleh meracuni seluruh Neraca."""
+        from lpb_utils import porsi_baris
+        for j in (0, -5, float("nan"), float("inf"), None, "x", [1]):
+            assert porsi_baris(j, 1) == 1.0, j
+
+    def test_n_unit_menang_atas_jumlah(self):
+        """Bila barisnya SUDAH dipecah, tiap draft mewakili satu unit —
+        berapa pun jumlah barisnya."""
+        from lpb_utils import porsi_baris
+        assert porsi_baris(5, 5) == 1.0

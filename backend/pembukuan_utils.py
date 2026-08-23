@@ -87,6 +87,41 @@ def klasifikasi_komptabel(kode_barang, harga_satuan, ambang=None) -> str:
     return "intra" if parse_harga(harga_satuan) >= batas else "ekstra"
 
 
+def kuantitas_aset(a) -> float:
+    """Berapa BARANG FISIK yang diwakili satu record aset. Hampir selalu 1.
+
+    Register aset tak punya kuantitas: satu record = satu NUP = satu barang.
+    Satu-satunya pengecualian lahir di Pengadaan — baris BAST di luar 2..50
+    unit tak dipecah per NUP, sehingga SATU record berdiri untuk seluruh
+    baris dan nilai perolehannya adalah nilai baris (lihat
+    `lpb_utils.porsi_baris`). `jumlah_bast` menstempel berapa banyak.
+
+    MURNI. Nilai cacat/0/negatif dianggap 1 — tak ada record yang mewakili
+    kurang dari satu barang, dan mengembalikan 0 akan membuat pemanggilnya
+    membagi dengan nol.
+    """
+    import math
+    try:
+        n = float((a or {}).get("jumlah_bast") or 1)
+    except (TypeError, ValueError):
+        return 1.0
+    if not math.isfinite(n) or n <= 0:
+        return 1.0
+    return n
+
+
+def harga_satuan_aset(a) -> float:
+    """Nilai buku PER BARANG — dasar ambang kapitalisasi PMK 181.
+
+    Ambangnya berlaku per barang (peralatan-mesin Rp1 jt, gedung Rp25 jt),
+    BUKAN per record. Untuk record biasa ini sama saja dengan nilai bukunya;
+    yang membedakan hanyalah record yang berdiri untuk banyak barang, yang
+    tanpa pembagian ini akan digolongkan intrakomptabel semata-mata karena
+    dibeli banyak sekaligus. MURNI.
+    """
+    return nilai_buku_aset(a) / kuantitas_aset(a)
+
+
 def nilai_buku_aset(a):
     """Nilai buku TERKINI aset untuk laporan POSISI/NILAI (DBKP, Posisi BMN di
     Neraca, rekonsiliasi): nilai wajar hasil revaluasi (`nilai_wajar_terakhir`,
@@ -120,7 +155,10 @@ def build_dbkp_rows(assets, uraian_map=None, ambang=None):
         # Nilai buku terkini: pakai nilai wajar revaluasi bila ada (#254),
         # jika tidak nilai perolehan. Ini juga menentukan ambang intra/ekstra.
         harga = nilai_buku_aset(a)
-        kelas = klasifikasi_komptabel(a.get("asset_code"), harga, ambang)
+        # NILAI memakai nilai record; KELAS memakai harga per barang — ambang
+        # PMK 181 berlaku per barang, bukan per record (lihat kuantitas_aset).
+        kelas = klasifikasi_komptabel(
+            a.get("asset_code"), harga_satuan_aset(a), ambang)
         row = agg.setdefault(gol, {
             "golongan": gol,
             "uraian": uraian_map.get(gol) or (
@@ -193,7 +231,7 @@ def tombstones_penghapusan(assets, ambang=None):
             "timestamp": sk,
             "nilai": a.get("purchase_price"),
             "kelas_komptabel": klasifikasi_komptabel(
-                a.get("asset_code"), a.get("purchase_price"), ambang),
+                a.get("asset_code"), harga_satuan_aset(a), ambang),
         })
     return out
 
@@ -246,7 +284,8 @@ def build_lbkp_rows(assets, tombstones, dari, sampai, uraian_map=None, ambang=No
                 continue
         gol = golongan_of(a.get("asset_code")) or "?"
         harga = parse_harga(a.get("purchase_price"))
-        kelas = klasifikasi_komptabel(a.get("asset_code"), harga, ambang)
+        kelas = klasifikasi_komptabel(
+            a.get("asset_code"), harga_satuan_aset(a), ambang)
         row = _baris(kelas, gol)
         if tanggal < dari:
             row["jumlah_awal"] += 1
