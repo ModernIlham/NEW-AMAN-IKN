@@ -24,6 +24,10 @@ import PemilihPenandatangan from "@/components/pejabat/PemilihPenandatangan";
 import { getSatkerAktif } from "@/lib/satkerAktif";
 import { idTerpilih, payloadLpbGabungan } from "@/lib/lpbGabungan";
 import { bolehLeburkan, peringatanJumlahLebur } from "@/lib/peleburanBaris";
+import {
+  barisSetelahPilihPersediaan, barisSetelahUbahKode, barisTanpaTautPersediaan,
+  peringatanPersediaanForm,
+} from "@/lib/persediaanTaut";
 import { bagikanWa, bagikanEmail, hasilTtd } from "@/lib/pesanTtd";
 import {
   dokumenSetelahGantiSifat, formDariPerolehan, payloadUbahPerolehan,
@@ -38,47 +42,96 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 // Picker kode barang dari REFERENSI KODEFIKASI — ketik kode/nama, pilih dari
 // daftar. Dulu kolom kode diketik buta; salah satu digit membuat pemilahan
 // aset/persediaan salah kandang. Pola fetch debounce meniru AssetForm.
-function KodeBarangPicker({ value, onChange, onPick, testid }) {
+// Diekspor UNTUK DIUJI: perilaku dua-sumbernya (referensi kodefikasi +
+// persediaan terdaftar) adalah inti fitur ini, dan menguji lewat teks
+// sumber saja sudah pernah meloloskan mutasi di modul lain.
+export function KodeBarangPicker({ value, onChange, onPick, onPickPersediaan, testid }) {
   const [sug, setSug] = useState(null);   // null = tertutup; [] = kosong
+  // Barang persediaan yang SUDAH terdaftar di inventarisasi satker. Dulu
+  // pemilih ini hanya menarik referensi kodefikasi — yang maksimal 10 digit —
+  // sehingga barang 16 digit yang sudah punya kartu stok TIDAK PERNAH muncul
+  // untuk dipilih, dan setiap pembelian ulang berujung master baru.
+  const [psd, setPsd] = useState(null);
   const [buka, setBuka] = useState(false);
   const timerRef = useRef(null);
   const cari = (q) => {
     clearTimeout(timerRef.current);
-    if (!q || q.length < 2) { setSug(null); return; }
+    if (!q || q.length < 2) { setSug(null); setPsd(null); return; }
     timerRef.current = setTimeout(async () => {
-      try {
-        const r = await axios.get(`${API}/kodefikasi`, { params: { search: q, page_size: 12 } });
-        setSug(r.data?.items || []);
-      } catch { setSug(null); /* offline → biarkan ketik manual */ }
+      // Dua sumber, satu ketikan: keduanya berjalan berbarengan supaya daftar
+      // tak menunggu dua kali putaran jaringan. `allSettled` — bukan `all` —
+      // karena satu sumber yang mati tak boleh mengosongkan sumber lainnya.
+      const [rKode, rPsd] = await Promise.allSettled([
+        axios.get(`${API}/kodefikasi`, { params: { search: q, page_size: 12 } }),
+        axios.get(`${API}/persediaan`, { params: { search: q, page_size: 8 } }),
+      ]);
+      setSug(rKode.status === "fulfilled" ? (rKode.value.data?.items || []) : null);
+      setPsd(rPsd.status === "fulfilled" ? (rPsd.value.data?.items || []) : null);
     }, 300);
   };
+  const adaIsi = (Array.isArray(sug) && sug.length > 0)
+    || (Array.isArray(psd) && psd.length > 0);
   return (
     <div className="relative">
       <Input placeholder="Kode barang — ketik kode/nama" className="font-mono" value={value}
         onChange={(e) => { onChange(e.target.value); cari(e.target.value.trim()); setBuka(true); }}
-        onFocus={() => { if (sug) setBuka(true); }}
+        onFocus={() => { if (sug || psd) setBuka(true); }}
         onBlur={() => setTimeout(() => setBuka(false), 150)}
         data-testid={testid} />
-      {buka && Array.isArray(sug) && sug.length > 0 && (
+      {buka && adaIsi && (
         <div className="absolute z-50 left-0 right-0 mt-1 max-h-56 overflow-y-auto rounded-lg border border-border bg-popover shadow-elev-2">
-          {sug.map((k) => (
-            <button key={k.kode} type="button"
-              onMouseDown={(e) => { e.preventDefault(); onPick(k); setBuka(false); }}
-              className="w-full px-2 py-1.5 text-left hover:bg-accent flex items-start gap-2 min-h-0 min-w-0">
-              <span className="font-mono text-[11px] text-teal-700 dark:text-teal-400 flex-shrink-0">{k.kode}</span>
-              <span className="text-[11px] text-foreground flex-1 leading-snug">
-                {k.uraian}
-                <span className="text-muted-foreground"> · {k.label_level}{k.is_persediaan ? " · persediaan" : ""}</span>
-              </span>
-            </button>
-          ))}
+          {Array.isArray(psd) && psd.length > 0 && (
+            <>
+              <p className="px-2 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Terdaftar di persediaan — kode 16 digit
+              </p>
+              {psd.map((m) => (
+                <button key={m.id} type="button"
+                  onMouseDown={(e) => { e.preventDefault(); onPickPersediaan?.(m); setBuka(false); }}
+                  className="w-full px-2 py-1.5 text-left hover:bg-accent flex items-start gap-2 min-h-0 min-w-0"
+                  data-testid={`${testid}-psd-${m.id}`}>
+                  <span className="font-mono text-[11px] text-sky-700 dark:text-sky-400 flex-shrink-0">{m.kode_barang}</span>
+                  <span className="text-[11px] text-foreground flex-1 leading-snug">
+                    {m.nama_barang}
+                    <span className="text-muted-foreground">
+                      {" · stok "}{m.stok ?? 0}{" "}{m.satuan || ""}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </>
+          )}
+          {Array.isArray(sug) && sug.length > 0 && (
+            <>
+              {Array.isArray(psd) && psd.length > 0 && (
+                <p className="px-2 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground border-t border-border">
+                  Referensi kodefikasi
+                </p>
+              )}
+              {sug.map((k) => (
+                <button key={k.kode} type="button"
+                  onMouseDown={(e) => { e.preventDefault(); onPick(k); setBuka(false); }}
+                  className="w-full px-2 py-1.5 text-left hover:bg-accent flex items-start gap-2 min-h-0 min-w-0">
+                  <span className="font-mono text-[11px] text-teal-700 dark:text-teal-400 flex-shrink-0">{k.kode}</span>
+                  <span className="text-[11px] text-foreground flex-1 leading-snug">
+                    {k.uraian}
+                    <span className="text-muted-foreground"> · {k.label_level}{k.is_persediaan ? " · persediaan" : ""}</span>
+                  </span>
+                </button>
+              ))}
+            </>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-const BARANG_KOSONG = { uraian: "", kode: "", jumlah: "1", harga_satuan: "" };
+const BARANG_KOSONG = {
+  uraian: "", kode: "", jumlah: "1", harga_satuan: "",
+  // Tautan ke master persediaan terdaftar — lihat lib/persediaanTaut.js.
+  psd_master_id: "", psd_master_kode: "", psd_master_nama: "",
+};
 
 /**
  * Pengadaan — Fase 4 tahap awal: register perolehan per dokumen
@@ -212,6 +265,9 @@ export default function PengadaanPage({ user, onBack }) {
     const barang = form.barang.map((b) => ({
       uraian: b.uraian, kode: b.kode,
       jumlah: Number(b.jumlah || 0), harga_satuan: Number(b.harga_satuan || 0),
+      // Tautan ke kartu stok terdaftar. Tanpa dikirim, pilihan operator
+      // berhenti di layar dan server kembali menebak masternya.
+      psd_master_id: b.psd_master_id || "",
     }));
     try {
       if (ubah) {
@@ -363,6 +419,16 @@ export default function PengadaanPage({ user, onBack }) {
       }
       // Kegagalan sebagian TIDAK boleh tenggelam di balik toast hijau — jalur
       // ini memang tak transaksional.
+      // Baris persediaan yang masternya DITEBAK server. Dilaporkan lewat toast,
+      // bukan dialog LPB: BAST berisi persediaan saja tak menerbitkan LPB dari
+      // jalur ini sama sekali, jadi dialognya tak pernah muncul untuk kasus
+      // yang justru paling sering mengalaminya.
+      if ((d.peringatan_persediaan || []).length) {
+        toast.warning(
+          `${d.peringatan_persediaan.length} baris persediaan masternya dicocokkan `
+          + `otomatis:\n· ${d.peringatan_persediaan.map((w) => w.pesan).join("\n· ")}`,
+          { duration: 15000 });
+      }
       if (d.tanpa_kode) {
         toast.warning(`${d.tanpa_kode} baris belum berkode barang `
           + `(baris ${(d.baris_tanpa_kode || []).join(", ")}) — isi kode dulu.`,
@@ -583,6 +649,13 @@ export default function PengadaanPage({ user, onBack }) {
 
   const setFormBarang = (i, k, v) => setForm((f) => ({
     ...f, barang: f.barang.map((b, idx) => (idx === i ? { ...b, [k]: v } : b)),
+  }));
+  // Pengganti baris UTUH — dipakai tautan persediaan, yang menyentuh beberapa
+  // field sekaligus (kode + uraian + tiga field tautan) dan karenanya tak bisa
+  // ditulis lewat `setFormBarang` per-field tanpa tiga kali render dan satu
+  // keadaan setengah jadi di antaranya.
+  const gantiFormBaris = (i, ubah) => setForm((f) => ({
+    ...f, barang: f.barang.map((b, idx) => (idx === i ? ubah(b) : b)),
   }));
   // Buka dialog catat perolehan baru — dipakai tombol header & empty-state
   const bukaFormBaru = () => setForm({
@@ -1138,11 +1211,13 @@ export default function PengadaanPage({ user, onBack }) {
                           <Input value={b.kode} disabled data-testid={`pengadaan-barang-kode-${i}`} />
                         ) : (
                           <KodeBarangPicker value={b.kode}
-                            onChange={(v) => setFormBarang(i, "kode", v)}
-                            onPick={(k) => {
-                              setFormBarang(i, "kode", k.kode);
-                              if (!b.uraian) setFormBarang(i, "uraian", k.uraian);
-                            }}
+                            onChange={(v) => gantiFormBaris(i, (r) => barisSetelahUbahKode(r, v))}
+                            onPick={(k) => gantiFormBaris(i, (r) => ({
+                              ...barisSetelahUbahKode(r, k.kode),
+                              uraian: r.uraian || k.uraian,
+                            }))}
+                            onPickPersediaan={(m) => gantiFormBaris(
+                              i, (r) => barisSetelahPilihPersediaan(r, m))}
                             testid={`pengadaan-barang-kode-${i}`} />
                         )}
                       </div>
@@ -1158,8 +1233,56 @@ export default function PengadaanPage({ user, onBack }) {
                           data-testid={`pengadaan-barang-harga-${i}`} />
                       </div>
                     </div>
+                    {/* Tautan ke kartu stok yang SUDAH ADA. Ditampilkan di
+                        barisnya sendiri — bukan sekadar warna kode — karena
+                        yang menentukan stok mendarat di kartu mana adalah
+                        pilihan ini, bukan angka yang terbaca di kolom kode. */}
+                    {b.psd_master_id && (
+                      <p className="text-[11px] rounded-lg bg-sky-500/10 border border-sky-500/30 px-2.5 py-1.5 flex items-start gap-2"
+                        data-testid={`pengadaan-barang-psd-taut-${i}`}>
+                        <span className="flex-1 leading-snug text-sky-800 dark:text-sky-200">
+                          Masuk ke kartu stok terdaftar{" "}
+                          <span className="font-mono">{b.psd_master_kode}</span>
+                          {b.psd_master_nama ? ` — ${b.psd_master_nama}` : ""}
+                        </span>
+                        {!kunciBarang && (
+                          <button type="button"
+                            onClick={() => gantiFormBaris(i, barisTanpaTautPersediaan)}
+                            className="text-sky-700 dark:text-sky-300 underline flex-shrink-0 min-h-0 min-w-0"
+                            data-testid={`pengadaan-barang-psd-lepas-${i}`}>
+                            Lepas
+                          </button>
+                        )}
+                      </p>
+                    )}
                   </div>
                 ))}
+                {/* Ringkasan baris persediaan yang masternya masih akan
+                    ditebak server. Diletakkan di ujung daftar, bukan di tiap
+                    baris: dengan 20 baris, peringatan per baris justru
+                    tenggelam — yang dibutuhkan operator adalah SATU tempat
+                    yang menyebutkan baris nomor berapa saja yang tersisa. */}
+                {!kunciBarang && peringatanPersediaanForm(form.barang).length > 0 && (
+                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 space-y-1"
+                    data-testid="pengadaan-peringatan-persediaan-form">
+                    <p className="text-[11px] font-bold text-amber-700 dark:text-amber-300">
+                      Barang persediaan belum dipilih dari inventarisasi
+                    </p>
+                    {peringatanPersediaanForm(form.barang).map((w) => (
+                      <p key={w.index} className="text-[11px] text-amber-800 dark:text-amber-200 leading-snug">
+                        • Baris {w.index + 1} — {w.uraian} ({w.kode})
+                        {w.kodePendek ? " · baru 10 digit" : ""}
+                      </p>
+                    ))}
+                    <p className="text-[11px] text-amber-800/80 dark:text-amber-200/80 leading-snug">
+                      Ketik nama barangnya di kolom kode, lalu pilih dari
+                      kelompok <b>Terdaftar di persediaan</b> agar stoknya masuk
+                      ke kartu yang sudah ada. Dibiarkan pun tetap bisa
+                      disimpan — sistem yang akan mencocokkan sendiri, dan bila
+                      meleset kartu stok barunya terbentuk.
+                    </p>
+                  </div>
+                )}
                 {!kunciBarang && (
                   <Button size="sm" variant="outline" className="h-8 text-xs min-h-0"
                     onClick={() => setForm((f) => ({ ...f, barang: [...f.barang, { ...BARANG_KOSONG }] }))}>

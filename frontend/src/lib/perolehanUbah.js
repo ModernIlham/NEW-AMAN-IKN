@@ -85,6 +85,11 @@ export function formDariPerolehan(p) {
       kode: b.kode || "",
       jumlah: String(b.jumlah ?? ""),
       harga_satuan: String(b.harga_satuan ?? ""),
+      // Tautan persediaan ikut dimuat — form ubah yang tak mengenalnya akan
+      // MELEPAS tautan yang sudah dipilih tanpa satu pun tanda di layar.
+      psd_master_id: b.psd_master_id || "",
+      psd_master_kode: b.psd_master_kode || "",
+      psd_master_nama: b.psd_master_nama || "",
     })),
     saving: false,
   };
@@ -110,6 +115,7 @@ export function payloadUbahPerolehan(form) {
       kode: b.kode,
       jumlah: Number(b.jumlah || 0),
       harga_satuan: Number(b.harga_satuan || 0),
+      psd_master_id: b.psd_master_id || "",
     })),
   };
 }
