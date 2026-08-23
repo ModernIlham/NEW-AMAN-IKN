@@ -312,6 +312,43 @@ class TestKepalaSuratTidakMengulangTabel:
         """Baris yang dijatuhkan tak boleh menyisakan sel kosong di tengah —
         kolom kanan harus tetap terisi selama masih ada isian berikutnya."""
         teks = _teks(_jalan(self._pdf_lengkap(dbx)))
-        for wajib in ("Instansi:", "Jenis:", "Kantor/Satker:", "No. Bukti/Faktur:",
-                      "Tgl Kedatangan:", "Tautan BAST Pengadaan:"):
+        for wajib in ("Instansi:", "Jenis:", "Kantor/Satker:",
+                      "Tautan BAST Pengadaan:"):
             assert wajib in teks, wajib
+
+    def test_baris_No_Bukti_Faktur_di_kepala_surat_DIHAPUS(self, dbx):
+        """Ia tak pernah mencetak nomor bukti — isinya `jenis_dokumen`
+        ("BAST PPK-KPB"), yaitu JENIS dokumennya. Label dan isinya tak pernah
+        cocok, dan nomor buktinya yang sungguhan hidup pada bundel sumber."""
+        teks = _teks(_jalan(self._pdf_lengkap(dbx)))
+        assert "No. Bukti/Faktur:" not in teks
+
+    def test_tanggal_kedatangan_di_kepala_DIJATUHKAN_bila_tiap_baris_membawanya(self, dbx):
+        """Satu tanggal di kepala surat tak sanggup mewakili LPB gabungan
+        yang merangkum banyak BAST bertanggal berbeda."""
+        teks = _teks(_jalan(self._pdf_lengkap(dbx, items=[
+            _it("3050104001", "Laptop", 1, 15_000_000,
+                {**SUMBER_A, "tanggal_bast": "2026-08-10"}, "1"),
+            _it("1010301001", "Kertas", 5, 50_000,
+                {**SUMBER_B, "tanggal_bast": "2026-08-12"}, ""),
+        ])))
+        assert "Tgl Kedatangan:" not in teks
+        # Tanggalnya TIDAK hilang — masing-masing tercetak di barisnya.
+        assert "10 Agustus 2026" in teks and "12 Agustus 2026" in teks
+
+    def test_tanggal_di_kepala_BERTAHAN_bila_ada_baris_tanpa_tanggal(self, dbx):
+        """Satu baris yang belum membawa tanggalnya sudah cukup: pemangkasan
+        pengulangan tak boleh berubah jadi kehilangan informasi."""
+        teks = _teks(_jalan(self._pdf_lengkap(dbx, items=[
+            _it("3050104001", "Laptop", 1, 15_000_000,
+                {**SUMBER_A, "tanggal_bast": "2026-08-10"}, "1"),
+            _it("1010301001", "Kertas", 5, 50_000, SUMBER_B, ""),
+        ])))
+        assert "Tgl Kedatangan:" in teks
+
+    def test_PPK_BERBEDA_dari_bundel_tetap_dicetak(self, dbx):
+        """Sisi kembar dari uji penyedia: menjatuhkan PPK karena barisnya
+        KEBETULAN menyebut seorang PPK — siapa pun — akan menghilangkan
+        justru keterangan yang berbeda."""
+        teks = _teks(_jalan(self._pdf_lengkap(dbx, ppk_nama="Cahyo Sendiri")))
+        assert "Cahyo Sendiri" in teks

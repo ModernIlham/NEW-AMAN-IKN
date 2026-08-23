@@ -1507,15 +1507,23 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict,
     # DIJATUHKAN BERDASARKAN NILAI, bukan berdasarkan jenis LPB: baris hanya
     # hilang bila teksnya memang sudah ada di area tabel. LPB persediaan lama
     # yang tak punya bundel apa pun tetap menampilkan seluruh kepalanya.
-    from lpb_utils import keterangan_berulang, nilai_berulang
+    from lpb_utils import keterangan_berulang, kepala_tercakup, nilai_berulang
     _teks_tabel = " · ".join(sorted(_bundel_unik))
+    # Kunci mana yang sudah tercetak pada SETIAP baris tabel. Ini penjatuh
+    # yang lebih dapat diandalkan daripada mencocokkan teks: bundel sumber
+    # memformat tanggal dan NIP-nya sendiri, sehingga nilai kepala surat tak
+    # pernah muncul apa adanya di sana meski keterangannya sudah ada.
+    _tercakup = kepala_tercakup(_items)
     _nip_ppk = _baris_nip_ppk(lpb)
+    # Versi TANPA tag <b> — `_baris_nip_ppk` mengembalikan HTML, dan HTML tak
+    # akan pernah cocok dengan teks bundel sumber.
+    _nip_mentah = ((baris_identitas_ttd(lpb.get("ppk_nip"),
+                                        lpb.get("ppk_status_kepegawaian"))
+                    or [""])[0])
     _sel = [
         Paragraph(f"Instansi: <b>{_esc(str(settings.get('nama_instansi') or '-'))}</b>", meta),
         Paragraph(f"Jenis: <b>{_esc(label_kat)} — {_esc(label_jenis)}</b>", meta),
         Paragraph(f"Kantor/Satker: <b>{_esc(str(settings.get('nama_sub_unit') or settings.get('nama_unit_organisasi') or '-'))}</b>", meta),
-        Paragraph(f"No. Bukti/Faktur: <b>{_esc(str(lpb.get('jenis_dokumen') or '-'))}</b>", meta),
-        Paragraph(f"Tgl Kedatangan: <b>{_fmt_tanggal_id(lpb.get('tanggal')) or '-'}</b>", meta),
         Paragraph("Tautan BAST Pengadaan: <b>"
                   + (f"{len(lpb.get('perolehan_ids') or [])} perolehan (gabungan)"
                      if is_gabungan
@@ -1523,6 +1531,28 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict,
                            if lpb.get('perolehan_id') else '-'))
                   + "</b>", meta),
     ]
+    # BARIS "No. Bukti/Faktur" DIHAPUS SELURUHNYA, bukan dijatuhkan bersyarat.
+    #
+    # Ia tak pernah mencetak nomor bukti: isinya `lpb["jenis_dokumen"]`, yang
+    # bernilai "BAST" / "SK Penghapusan" — JENIS dokumennya, bukan nomornya.
+    # Label dan isinya tak pernah cocok sejak awal. Nomor bukti yang sungguhan
+    # hidup per register dan kini tercetak pada bundel sumber barisnya
+    # (`bersihkan_dokumen` → "No. Bukti/Faktur: …"), jadi tak ada keterangan
+    # yang hilang — yang hilang hanya label yang menyesatkan.
+    #
+    # Tanggal kedatangan menyusul: satu tanggal di kepala surat tak bisa
+    # mewakili LPB gabungan yang merangkum banyak BAST bertanggal berbeda.
+    # Ia hanya bertahan bila ada baris yang belum membawa tanggalnya sendiri.
+    if "tanggal" not in _tercakup:
+        _sel.append(Paragraph(
+            f"Tgl Kedatangan: <b>{_fmt_tanggal_id(lpb.get('tanggal')) or '-'}</b>", meta))
+    # Penyedia & PPK dijatuhkan HANYA bila NILAINYA memang sudah tercetak.
+    # Sempat dicoba berbasis cakupan — dan itu keliru: LPB gabungan yang tiap
+    # barisnya menyebut penyedia BERBEDA akan kehilangan nama penyedia di
+    # kepala suratnya, padahal justru itu keterangan yang berbeda. Cakupan
+    # hanya sah untuk keterangan yang kepala suratnya memang TAK SANGGUP
+    # mewakili (tanggal kedatangan di bawah), bukan untuk yang kebetulan
+    # sejenis.
     if not nilai_berulang(lpb.get("penyedia"), _teks_tabel):
         _sel.append(Paragraph(
             f"Nama Rekanan/Penyedia: <b>{_esc(str(lpb.get('penyedia') or '-'))}</b>", meta))
@@ -1536,7 +1566,7 @@ async def bangun_lpb_pdf(lpb_id: str, _user: dict,
         _sel.append(Paragraph(f"PPK: <b>{_esc(str(lpb.get('ppk_nama') or '-'))}</b>", meta))
         if _nip_ppk:
             _sel.append(Paragraph(_nip_ppk, meta))
-    elif _nip_ppk:
+    elif _nip_ppk and not nilai_berulang(_nip_mentah, _teks_tabel):
         # NAMANYA sudah di area tabel, NIP-nya BELUM: bundel sumber hanya
         # membawa nama PPK. Menjatuhkan barisnya sekalian akan MEMBUANG
         # nomornya — pemangkasan pengulangan tak boleh menghilangkan

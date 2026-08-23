@@ -67,6 +67,63 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#926] LPB: kepala surat berhenti mengulang tanggal, PPK & No. Bukti — 2026-08-23
+
+Permintaan pemilik: *"di LPB pada header informasi mengenai tanggal
+kedatangan, PPK, dan No. Bukti/Faktur masih ada tolong hapus karena sudah ada
+di informasi setiap row bagian BAST yang ada."*
+
+Lanjutan dari [#922] yang sudah memangkas penyedia & keterangan. Tiga baris
+sisanya bertahan karena dua sebab berbeda:
+
+1. **`No. Bukti/Faktur` tak pernah mencetak nomor bukti.** Isinya
+   `lpb["jenis_dokumen"]` — bernilai `"BAST"` / `"SK Penghapusan"`, yaitu
+   JENIS dokumennya. Label dan isinya tak pernah cocok sejak awal. Barisnya
+   **dihapus seluruhnya**, bukan dijatuhkan bersyarat: nomor bukti yang
+   sungguhan hidup per register dan sudah tercetak pada bundel sumber
+   barisnya sejak [#923].
+2. **`Tgl Kedatangan` dan `PPK` tak punya tandingan di area tabel.** LPB yang
+   terbit dari tombol "Catat Semua Barang" — bentuk yang paling sering
+   dilihat — memakai `baris_lpb_dari_aset`, yang **tidak melekatkan snapshot
+   sumber sama sekali**. Penjatuh berbasis nilai dari [#922] karenanya tak
+   punya apa pun untuk dibandingkan, dan kepala surat mencetak semuanya.
+
+**Yang berubah**
+
+- `baris_lpb_dari_aset(aset_dibuat, sumber=…)` kini melekatkan snapshot
+  register ke setiap baris, dan `catat-semua` mengirimkannya. Seluruh baris
+  berasal dari satu register, jadi bundelnya tercetak **sekali di bawah
+  tabel** — bukan berulang per baris.
+- `kepala_tercakup(items)` (baru, murni) menjawab kunci kepala surat mana yang
+  sudah tercetak pada **SETIAP** baris. Syarat "setiap", bukan "ada satu":
+  satu LPB gabungan bisa memuat BAST yang PPK-nya tercatat dan BAST lain yang
+  tidak, dan menjatuhkan kepala surat karena sebagian baris menyebutnya akan
+  menghilangkan keterangan bagi baris yang belum.
+- `Tgl Kedatangan` dijatuhkan hanya bila setiap baris membawa tanggal BAST-nya
+  sendiri. Satu tanggal di kepala surat memang tak sanggup mewakili LPB
+  gabungan yang merangkum banyak BAST bertanggal berbeda.
+- Penyedia dan PPK tetap dijatuhkan **berbasis nilai**, bukan cakupan.
+  Cakupan sempat dicoba dan itu keliru — LPB yang tiap barisnya menyebut
+  penyedia berbeda akan kehilangan nama penyedia di kepala suratnya, padahal
+  justru itulah keterangan yang berbeda. Uji `test_penyedia_BERBEDA_dari_
+  bundel_tetap_dicetak` yang menangkapnya, dan uji kembarannya untuk PPK
+  ditambahkan.
+- NIP PPK dibandingkan lewat teks mentahnya (`baris_identitas_ttd`), bukan
+  lewat HTML `<b>…</b>` keluaran `_baris_nip_ppk` yang tak akan pernah cocok
+  dengan teks bundel.
+
+**Berkas**: `backend/lpb_utils.py`, `backend/routes/persediaan.py`,
+`backend/routes/pengadaan.py`.
+
+**Uji**: `test_kepala_lpb_berulang.py` (kelas `TestKepalaTercakup` &
+`TestSumberMelekatPadaBarisLpbAset`), `test_lpb_sekat_golongan.py` (4 uji
+kepala surat baru), `test_pengadaan_catat_semua.py` — termasuk uji **ujung ke
+ujung** yang merender PDF LPB sungguhan dari alur "Catat Semua Barang" lalu
+membaca teksnya, karena yang dikeluhkan adalah yang TERCETAK. Backend 3442
+uji hijau. Tiga mutasi dipasang lalu terbukti mati: (1) cakupan cukup satu
+baris → 3 uji; (2) snapshot sumber tak dilekatkan → 3 uji; (3) baris kepala
+surat dihidupkan lagi → 3 uji termasuk uji PDF ujung ke ujung.
+
 ## [#925] Pengadaan memilih barang persediaan yang sudah terdaftar — 2026-08-23
 
 Permintaan pemilik: *"ketika persediaan pastikan sudah terdaftar untuk memilih

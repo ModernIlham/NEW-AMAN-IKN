@@ -128,7 +128,7 @@ def _angka(v, bawaan=0.0) -> float:
         return bawaan
 
 
-def baris_lpb_dari_aset(aset_dibuat) -> list:
+def baris_lpb_dari_aset(aset_dibuat, sumber=None) -> list:
     """Aset draft yang baru dibuat → baris tabel LPB.
 
     `aset_dibuat` = daftar dict berisi minimal asset_code/NUP/asset_name +
@@ -143,6 +143,13 @@ def baris_lpb_dari_aset(aset_dibuat) -> list:
     berapa banyak barang diterima — menyebut 1 unit padahal 100 datang, dan
     total nilainya ikut mengecil seratus kali lipat. Karena itu pemanggil
     boleh menitipkan `jumlah_bast`; bila ada, itulah yang dicetak.
+
+    `sumber` = snapshot register asalnya (lihat `snapshot_sumber`), dilekatkan
+    ke SETIAP baris. LPB dari satu BAST memang hanya punya satu sumber, jadi
+    bundelnya tercetak sekali di bawah tabel — bukan berulang per baris.
+    Gunanya: tanggal kedatangan, PPK berikut NIP-nya, dan No. Bukti/Faktur
+    berdiri di area tabel, tempat pemeriksa membacanya bersama barangnya —
+    sehingga kepala surat berhenti mengulangnya (`kepala_tercakup`).
     """
     baris = []
     for a in aset_dibuat or []:
@@ -160,6 +167,7 @@ def baris_lpb_dari_aset(aset_dibuat) -> list:
             "jumlah": jml, "satuan": str(d.get("satuan") or "Unit"),
             "harga_satuan": harga, "total": round(harga * float(jml), 2),
             "keterangan": str(d.get("keterangan") or "Kondisi Baik & Lengkap"),
+            **({"sumber": dict(sumber)} if sumber else {}),
         })
     return baris
 
@@ -376,6 +384,56 @@ def nilai_berulang(nilai, teks_tabel) -> bool:
     """
     v = str(nilai or "").strip()
     return bool(v) and v in str(teks_tabel or "")
+
+
+# Kunci kepala surat LPB yang BISA dijatuhkan karena barisnya sudah membawa
+# keterangan yang sama. Bukan sekadar daftar label: tiap kunci menunjuk field
+# di snapshot sumber baris, dan itulah yang menentukan "sudah tercetak" berarti
+# apa (lihat `kepala_tercakup`).
+FIELD_KEPALA_LPB = {
+    "penyedia": "penyedia",
+    "ppk_nama": "ppk_nama",
+    "tanggal": "tanggal_bast",
+}
+
+
+def kepala_tercakup(items) -> set:
+    """Kunci kepala surat LPB yang sudah tercetak pada SETIAP baris tabel.
+
+    Permintaan pemilik: *"pada header informasi mengenai tanggal kedatangan,
+    PPK, dan No. Bukti/Faktur masih ada, tolong hapus karena sudah ada di
+    informasi setiap row bagian BAST yang ada."*
+
+    SYARATNYA "SETIAP", BUKAN "ADA SATU". Satu LPB gabungan bisa memuat BAST
+    yang PPK-nya tercatat dan BAST lain yang tidak. Menjatuhkan baris kepala
+    karena sebagian baris sudah menyebutnya akan MENGHILANGKAN keterangan bagi
+    baris yang belum — pemangkasan pengulangan tak boleh berubah jadi
+    kehilangan informasi. Karena itu satu baris yang tak membawanya sudah cukup
+    untuk mempertahankan kepala suratnya.
+
+    `ppk_nip` diperiksa lewat `baris_identitas_ttd`, bukan lewat ada-tidaknya
+    nomor: aturan sistem melarang NIP Non-ASN/NIK dicetak, jadi baris yang
+    punya nomor tetapi tak boleh mencetaknya BELUM mencakup apa pun.
+
+    MURNI. → himpunan kunci dari `FIELD_KEPALA_LPB` + "ppk_nip".
+    """
+    from pegawai_utils import baris_identitas_ttd
+
+    rows = [b for b in (items or []) if isinstance(b, dict)]
+    if not rows:
+        return set()
+    tercakup = set(FIELD_KEPALA_LPB) | {"ppk_nip"}
+    for b in rows:
+        s = b.get("sumber") or {}
+        if not isinstance(s, dict):
+            s = {}
+        for kunci, field in FIELD_KEPALA_LPB.items():
+            if not str(s.get(field) or "").strip():
+                tercakup.discard(kunci)
+        if not baris_identitas_ttd(s.get("ppk_nip"),
+                                  s.get("ppk_status_kepegawaian")):
+            tercakup.discard("ppk_nip")
+    return tercakup
 
 
 def keterangan_berulang(keterangan, teks_tabel) -> bool:

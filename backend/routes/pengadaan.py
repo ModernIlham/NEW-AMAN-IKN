@@ -21,7 +21,7 @@ from auth_utils import (
 from lpb_utils import (
     baris_lpb_dari_aset, baris_lpb_gabungan, is_persediaan, label_golongan,
     peringatan_nup, pilah_barang_perolehan, ringkas_pencatatan,
-    total_nilai_lpb, unit_per_baris,
+    snapshot_sumber, total_nilai_lpb, unit_per_baris,
 )
 from persediaan_pengadaan import (
     kode_setelah_taut, peringatan_persediaan, validate_taut_persediaan,
@@ -1117,7 +1117,12 @@ async def catat_semua_barang(perolehan_id: str, payload: CatatSemuaIn,
     lpb_id, nomor_lpb = "", ""
     aset_dibuat = hasil_aset.get("aset_dibuat") or []
     if aset_dibuat:
-        items = baris_lpb_dari_aset(aset_dibuat)
+        # Snapshot sumber DILEKATKAN ke tiap baris: tanggal kedatangan, PPK
+        # berikut NIP-nya, dan No. Bukti/Faktur berdiri di area tabel bersama
+        # barangnya — dan kepala surat berhenti mengulangnya. Seluruh baris
+        # berasal dari satu register, jadi bundelnya tercetak SEKALI di bawah
+        # tabel, bukan berulang per baris.
+        items = baris_lpb_dari_aset(aset_dibuat, sumber=snapshot_sumber(p))
         tgl = str(p.get("tanggal_bast") or "").strip()[:10] or \
             datetime.now(timezone.utc).date().isoformat()
         # Satker DOKUMEN dibekukan dari perolehannya, bukan dari pemanggil:
