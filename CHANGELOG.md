@@ -67,6 +67,46 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#914] BAST PPK→KPB: golongan jadi sekat, bukan kolom — 2026-08-23
+
+Permintaan pemilik: *"pada bagian objek serah terima 'golongan barang' jangan
+jadikan sebagai kolom akan tetapi jadikan sebagai row yang membagi data-data
+row di bawahnya … dan juga buat pembagi lagi tambahan yaitu per bidangnya yang
+sudah rapi dan urut … tambahkan informasi juga … kontrak atau non-kontrak
+seperti SP/SPK, SPP/SPM, UP/TUP, SPBy, No Dokumen … agar rapi dan mudah
+dipahami."*
+
+- **Kolom "Golongan" dihapus**; golongan menjadi **baris sekat** yang menyebut
+  nama, jumlah unit, dan **nilai rupiah kelompoknya**.
+- **Sekat BIDANG bersarang di dalamnya** — dua tingkat, dibedakan warna latar
+  (bukan indentasi: sekat mengisi lebar penuh, jadi indentasi tak terbaca
+  sebagai jenjang).
+- Barisnya **terurut kodefikasi**, penomorannya **berlanjut menembus sekat**.
+- **Blok dokumen pengadaan ditata ulang**: sifat pengadaan menjadi kepala
+  blok, isinya berkelompok — *Perikatan* (SP/SPK · UP/TUP · SPBy),
+  *Pembayaran* (SPP · SPM), *Rujukan lain* (No. Dokumen).
+- `kodefikasi_utils.kelompokkan_per_golongan_bidang` + `_baris_sekat_golongan`
+  (reports.py) + `pengadaan_dokumen.kelompok_dokumen` — semuanya murni & dapat
+  dipakai ulang dokumen lain.
+
+> **Kenapa golongan tak layak jadi kolom.** Nilainya berulang identik pada
+> setiap baris satu kelompok, memakan lebar yang justru dibutuhkan uraian
+> barang, dan tetap tak menjawab pertanyaan yang orang bawa ke dokumen ini:
+> "golongan apa saja yang diserahkan, berapa banyak, berapa nilainya." Sebagai
+> sekat, ketiganya terjawab dalam satu baris.
+
+> **Nilai per golongan menumpang baris sekat**, bukan baris subtotal sendiri —
+> subtotal tersedia tanpa menggandakan tinggi tabel.
+
+> Golongan diturunkan dari **kode bidangnya**, bukan dihitung ulang dari kode
+> barang: bidang selalu berawalan digit golongannya, dan dua perhitungan yang
+> berdampingan membuka celah keduanya berselisih.
+
+> Uji merender **PDF sungguhan lalu membaca teksnya kembali** — susunan tabel
+> tak bisa dibuktikan dari kode saja.
+
+---
+
 ## [#913] Dokumen ↔ TTD elektronik saling tertaut — satu pintu — 2026-08-23
 
 Laporan pemilik: *"Riwayat BAST di bagian kirim tanda tangan selalu berakhir

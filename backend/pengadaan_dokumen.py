@@ -126,6 +126,52 @@ def validate_dokumen(sifat, dok) -> list:
     return errors
 
 
+# Pengelompokan dokumen untuk DICETAK — bukan urutan penyimpanannya.
+#
+# Permintaan pemilik: *"buat informasinya teratur dan terorganisasi dengan baik
+# agar rapi dan mudah dipahami."* Daftar rata enam baris memaksa pembaca
+# mengingat sendiri mana yang perikatan dan mana yang pembayaran; padahal
+# keduanya menjawab pertanyaan berbeda dan diperiksa oleh orang berbeda.
+KELOMPOK_DOKUMEN = [
+    ("Perikatan", ["no_sp_spk", "jenis_up", "no_spby"]),
+    ("Pembayaran", ["no_spp", "no_spm"]),
+    ("Rujukan lain", ["no_dokumen"]),
+]
+
+
+def kelompok_dokumen(sifat, dok) -> list:
+    """[(judul_kelompok, [(label, nilai), ...])] — hanya yang TERISI.
+
+    Kelompok yang seluruh isinya kosong TIDAK muncul, dan bila tak ada satu
+    dokumen pun terisi hasilnya daftar kosong: blok yang separuhnya bertanda
+    hubung membuat pembaca menghitung apa yang tak ada alih-alih membaca apa
+    yang ada.
+
+    `sifat` TIDAK ikut sebagai baris di sini — ia judul blok, bukan salah satu
+    dokumennya. Pemanggil mencetaknya di kepala blok lewat `label_sifat`.
+    """
+    bersih = bersihkan_dokumen(dok)
+    peta = {d["kunci"]: d for d in DOKUMEN_PENGADAAN}
+    keluar = []
+    for judul, kunci in KELOMPOK_DOKUMEN:
+        isi = []
+        for k in kunci:
+            v = bersih.get(k) or ""
+            if not v:
+                continue
+            isi.append((peta[k]["label"],
+                        JENIS_UP.get(v, v) if k == "jenis_up" else v))
+        if isi:
+            keluar.append((judul, isi))
+    return keluar
+
+
+def label_sifat(sifat) -> str:
+    """Uraian sifat pengadaan lengkap dengan jalur dokumennya, '' bila tak
+    dikenal. Dipakai sebagai kepala blok dokumen pada PDF."""
+    return SIFAT_PENGADAAN.get(str(sifat or "").strip(), "")
+
+
 def baris_dokumen(sifat, dok) -> list:
     """Baris dokumen untuk dicetak: [(label, nilai)] — hanya yang TERISI.
 

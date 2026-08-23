@@ -432,6 +432,29 @@ def _baris_sekat_bidang(kode_bidang, nama_bidang, jumlah, n_kolom, st):
             + [""] * max(0, n_kolom - 1))
 
 
+def _baris_sekat_golongan(kode_golongan, nama_golongan, jumlah, n_kolom, st,
+                          keterangan=""):
+    """Baris SEKAT tingkat GOLONGAN — pembagi paling kasar daftar barang.
+
+    Sekat bidang berada DI DALAMNYA, jadi dua tingkat ini harus terbaca
+    berjenjang. Pembedanya bukan indentasi (sekat mengisi lebar penuh) tetapi
+    warna latar & kata pembukanya. `keterangan` menampung nilai rupiah
+    kelompoknya — memberi jumlah per golongan TANPA menambah baris subtotal
+    yang akan menggandakan tinggi tabel.
+    """
+    from reportlab.platypus import Paragraph
+    from xml.sax.saxutils import escape as _esc
+    label = (f"GOLONGAN {_esc(kode_golongan)}" if kode_golongan
+             else "TANPA GOLONGAN")
+    if nama_golongan:
+        label += f" — {_esc(nama_golongan)}"
+    ekor = f" · {int(jumlah)} unit"
+    if keterangan:
+        ekor += f" · {_esc(str(keterangan))}"
+    gaya = st.get('CellSekat') or st['Cell']
+    return [Paragraph(f"<b>{label}</b>{ekor}", gaya)] + [""] * max(0, n_kolom - 1)
+
+
 def _gaya_sekat_bidang(baris_sekat, warna=None, padding=1.0):
     """Perintah TableStyle untuk baris sekat: melebar penuh (SPAN) dengan
     latar sendiri dan padding setipis mungkin — sekat adalah penanda, bukan
