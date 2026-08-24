@@ -37,20 +37,16 @@ it("aset berkoordinat ditandai hijau", () => {
   expect(ikon("a1").getAttribute("class")).toContain("text-emerald-500");
 });
 
-it("aset tanpa koordinat memakai warna netral yang dititipkan pemanggil", () => {
+it("aset tanpa koordinat SELALU abu-abu, tak bisa dititipi warna lain", () => {
+  // Laporan pemilik: pin cyan lama di kartu galeri terbaca seolah hijau,
+  // sehingga aset yang BELUM berkoordinat tampak sudah. Warna ikon ini tak
+  // lagi bisa dititipkan pemanggil — satu-satunya kontras yang boleh ada di
+  // sini adalah kontras yang MENANDAI sesuatu.
   render(<IkonLokasiAset asset={TANPA} warnaKosong="text-cyan-500" />);
   const kelas = ikon("a2").getAttribute("class");
-  expect(kelas).toContain("text-cyan-500");
-  expect(kelas).not.toContain("text-emerald-500");
-});
-
-it("warna khusus pemanggil TIDAK menimpa penanda hijau", () => {
-  // Kartu galeri menitipkan cyan untuk pin biasa; kalau titipan itu menang,
-  // penandanya lenyap justru di tampilan yang paling ramai.
-  render(<IkonLokasiAset asset={BERKOORDINAT} warnaKosong="text-cyan-500" />);
-  const kelas = ikon("a1").getAttribute("class");
-  expect(kelas).toContain("text-emerald-500");
+  expect(kelas).toContain("text-muted-foreground");
   expect(kelas).not.toContain("text-cyan-500");
+  expect(kelas).not.toContain("text-emerald-500");
 });
 
 it("keterangannya menyebut koordinatnya dan terbaca pembaca layar", () => {

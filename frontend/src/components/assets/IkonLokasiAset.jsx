@@ -19,9 +19,15 @@ import { labelKoordinat, punyaKoordinat } from "@/lib/koordinatAset";
  * Warnanya pun ikut berubah (hijau) supaya penandanya terbaca tanpa harus
  * membedakan bentuk ikon sekecil itu — bentuk DAN warna, bukan warna saja,
  * agar tetap terbaca oleh mata yang sulit membedakan warna.
+ *
+ * WARNANYA TAK BISA DITITIPKAN PEMANGGIL. Sempat ada prop `warnaKosong` supaya
+ * kartu galeri bisa mempertahankan pin cyan-nya yang lama — dan hasilnya
+ * justru mengaburkan penandanya: cyan dan hijau terlalu berdekatan, sehingga
+ * pin "belum berkoordinat" terbaca seolah sudah (laporan pemilik). Satu-satunya
+ * kontras yang boleh ada di ikon ini adalah kontras yang MENANDAI sesuatu; abu-
+ * abu untuk belum, hijau untuk sudah, sama di seluruh tampilan.
  */
-const IkonLokasiAset = memo(({ asset, className = "w-3 h-3",
-                              warnaKosong = "text-muted-foreground" }) => {
+const IkonLokasiAset = memo(({ asset, className = "w-3 h-3" }) => {
   const ada = punyaKoordinat(asset);
   const Ikon = ada ? MapPinCheck : MapPin;
   const judul = ada
@@ -30,7 +36,7 @@ const IkonLokasiAset = memo(({ asset, className = "w-3 h-3",
   return (
     <Ikon
       className={`${className} flex-shrink-0 ${
-        ada ? "text-emerald-500" : warnaKosong}`}
+        ada ? "text-emerald-500" : "text-muted-foreground"}`}
       title={judul}
       aria-label={judul}
       data-testid={`lokasi-ikon-${(asset || {}).id || ""}`}

@@ -67,6 +67,29 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#930] Pin tanpa koordinat abu-abu di semua tampilan — 2026-08-24
+
+Laporan pemilik atas [#929]: *"pada mode galeri, icon lokasi yang tidak
+memiliki koordinat buat tetap abu-abu saja, jangan sama-sama hijau."*
+
+Kartu galeri sebelumnya mempertahankan pin cyan-nya yang lama lewat prop
+`warnaKosong`, dengan maksud tidak mengubah tampilan yang sudah ada. Niat itu
+justru **membatalkan gunanya penanda**: cyan dan hijau terlalu berdekatan,
+sehingga pin "belum berkoordinat" terbaca seolah sudah — persis kebalikan dari
+yang penanda ini ada untuk sampaikan.
+
+**Yang berubah**: prop `warnaKosong` **dihapus seluruhnya**, bukan sekadar
+diganti nilainya di kartu galeri. Selama warnanya masih bisa dititipkan
+pemanggil, tampilan berikutnya bebas menyimpang lagi dengan alasan yang sama.
+Kini abu-abu untuk belum, hijau untuk sudah — sama di list, galeri, dan tabel.
+
+**Uji**: `IkonLokasiAset.test.jsx` — uji "warna dititipkan pemanggil" DIGANTI
+menjadi "warna tak bisa dititipkan"; `PenandaKoordinatBaris.test.jsx` menagih
+abu-abu di KETIGA tampilan sekaligus, supaya tak ada satu layar pun yang
+kembali menyimpang sendiri. Frontend 106 suite / 1136 uji hijau, eslint
+bersih, `yarn build` sukses. Mutasi "warna kosong kembali bisa dititipkan
+pemanggil (cyan di galeri)" dipasang lalu terbukti mati → 2 uji.
+
 ## [#929] Penanda koordinat pada ikon pin di setiap baris aset — 2026-08-24
 
 Permintaan pemilik: *"pada modul Inventarisasi, pada row data aset di setiap

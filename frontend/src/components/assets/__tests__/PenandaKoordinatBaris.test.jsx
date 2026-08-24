@@ -49,6 +49,18 @@ describe.each(TAMPILAN)("tampilan %s", (_nama, buat) => {
       .toHaveAttribute("data-berkoordinat", "tidak");
   });
 
+  test("pin tanpa koordinat ABU-ABU, tak berwarna seperti yang sudah", () => {
+    // Laporan pemilik atas tampilan galeri: pin cyan lama terbaca seolah
+    // hijau, sehingga aset yang BELUM berkoordinat tampak sudah. Diuji di
+    // SEMUA tampilan supaya tak ada satu layar pun yang kembali menyimpang.
+    render(buat({ ...BERKOORDINAT, id: "a8",
+                  koordinat_latitude: "", koordinat_longitude: "" }));
+    const kelas = screen.getByTestId("lokasi-ikon-a8").getAttribute("class");
+    expect(kelas).toContain("text-muted-foreground");
+    expect(kelas).not.toContain("text-emerald-500");
+    expect(kelas).not.toContain("text-cyan-500");
+  });
+
   test("berkoordinat TANPA nama lokasi tetap menampilkan penandanya", () => {
     render(buat(TANPA_LOKASI));
     expect(screen.getByTestId("lokasi-ikon-a2"))

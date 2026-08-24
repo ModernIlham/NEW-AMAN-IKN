@@ -293,8 +293,7 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
             paling sering belum diisi nama lokasinya. */}
         {(asset.location || punyaKoordinat(asset)) && (
           <div className="flex items-center gap-1 mb-0.5 w-full">
-            <IkonLokasiAset asset={asset} className="w-2.5 h-2.5"
-              warnaKosong="text-cyan-500" />
+            <IkonLokasiAset asset={asset} className="w-2.5 h-2.5" />
             <span className="text-[9px] sm:text-[10px] text-muted-foreground truncate">
               {asset.location || "Berkoordinat"}
             </span>
