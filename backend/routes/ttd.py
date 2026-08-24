@@ -34,6 +34,7 @@ from shared_utils import (
     cek_magic_gambar, delete_document_from_gridfs, get_document_from_gridfs,
     limiter, log_audit, pastikan_akses_dok_satker,
 )
+from ttd_kelengkapan import normalisasi_jumlah_ttd, pesan_kurang
 from ttd_utils import foto_ke_png_transparan, png_transparan_valid
 
 ttd_router = APIRouter()
@@ -391,6 +392,12 @@ class SignerIn(BaseModel):
     nip: str = ""
     jabatan: str = ""
     email: str = ""     # opsional — link dikirim otomatis via email bila diisi
+    # BERAPA TEMPAT yang harus diteken orang ini pada dokumen. Dideklarasikan
+    # pemilik dokumen karena hanya dialah yang melihat naskahnya; sistem tak
+    # bisa menebaknya dari PDF. Tanpa angka ini tak ada ukuran "lengkap", dan
+    # kiriman yang kurang tak pernah bisa ditolak (lihat ttd_kelengkapan.py).
+    # 1 = perilaku lama, jadi permintaan yang tak mengisinya tak berubah.
+    jumlah_ttd: int = 1
 
 
 class PermintaanIn(BaseModel):
@@ -612,7 +619,8 @@ async def _ringkas_dokumen(doc_type: str, doc_ref: str) -> dict:
 def _publik_signer(sg):
     """Bidang aman signer untuk halaman publik (tanpa jti/token)."""
     return {k: sg.get(k) for k in ("signer_id", "nama", "nip", "jabatan",
-                                   "urutan", "status", "signed_at")}
+                                   "urutan", "status", "signed_at")
+            } | {"jumlah_ttd": normalisasi_jumlah_ttd(sg.get("jumlah_ttd"))}
 
 
 @ttd_router.post("/ttd/permintaan")
@@ -697,6 +705,7 @@ async def buat_permintaan(payload: PermintaanIn, user: dict = Depends(require_wr
             "nip": str(s.nip or "").strip(), "jabatan": str(s.jabatan or "").strip(),
             "email": str(s.email or "").strip(),
             "urutan": urut, "status": "aktif" if aktif else "menunggu",
+            "jumlah_ttd": normalisasi_jumlah_ttd(s.jumlah_ttd),
             "jti": jti, "signature_file_id": "", "hash": "",
             "signed_at": "", "ip": ""})
         token, exp_tok = _cetak_token_signer(sr_id, signer_id, jti)
@@ -782,6 +791,11 @@ async def buat_permintaan_dengan_dokumen(
             nip=str((s or {}).get("nip") or ""),
             jabatan=str((s or {}).get("jabatan") or ""),
             email=str((s or {}).get("email") or ""),
+            # Jalur INILAH yang paling butuh: hanya permintaan ber-dokumen
+            # terlampir yang punya halaman untuk diteken berkali-kali.
+            # Menjatuhkannya di sini akan membuat deklarasi pemilik hilang
+            # justru pada satu-satunya jalur yang memakainya.
+            jumlah_ttd=normalisasi_jumlah_ttd((s or {}).get("jumlah_ttd")),
         ) for s in daftar])
     hasil = await buat_permintaan(payload=payload, user=user)
 
@@ -1727,6 +1741,17 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
     _maks_hal = int(sr.get("dok_halaman") or 0)
     posisi_ttd = _posisi_bersih(payload.posisi, _maks_hal)
     posisi_lain = _posisi_bersih_banyak(payload.posisi_lain, _maks_hal)
+    # KELENGKAPAN DITEGAKKAN DI SERVER, bukan hanya di layar. Link e-sign
+    # dibuka di peramban tamu yang tak terkendali, dan kiriman yang kurang
+    # TIDAK BISA diperbaiki sesudahnya: link sekali-pakai langsung tertutup
+    # dan satu-satunya pemulihan adalah membatalkan permintaan lalu meminta
+    # SEMUA orang meneken ulang. Diperiksa SEBELUM blob diunggah supaya
+    # penolakan tak meninggalkan berkas yatim di GridFS — dan dihitung dari
+    # posisi yang SUDAH dibersihkan, bukan dari kiriman mentah, agar entri
+    # rusak yang dibuang tak ikut terhitung sebagai pembubuhan yang sah.
+    _kurang = pesan_kurang(sg.get("jumlah_ttd"), posisi_ttd, posisi_lain)
+    if _kurang:
+        raise HTTPException(status_code=400, detail=_kurang)
     # QR verifikasi TIDAK diatur di sini (mandat pemilik): dulu tiap penanda
     # tangan bisa menggeser/memperbesar QR dan pengatur terakhir menang —
     # membingungkan dan sering terlewat sehingga QR jatuh menimpa footer.

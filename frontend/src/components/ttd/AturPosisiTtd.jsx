@@ -41,7 +41,7 @@ import {
 export default function AturPosisiTtd({
   jenis = "ttd", bangunUrlHalaman, jumlahHalaman = 1, pngTtd,
   nilaiAwal = null, onKirim, onBatal, mengirim = false,
-  labelKirim, banyak = false,
+  labelKirim, banyak = false, wajib = 1,
 }) {
   const qr = jenis === "qr";
   const MIN = qr ? 0.10 : 0.08;
@@ -64,6 +64,11 @@ export default function AturPosisiTtd({
   // operasional: blok tanda tangan Berita Acara + lembar Surat Pernyataan
   // Tanggung Jawab di halaman berikutnya).
   const [tetap, setTetap] = useState([]);
+  // Berapa tempat yang WAJIB diteken orang ini (deklarasi pemilik dokumen).
+  // Yang sedang diatur ikut terhitung — ia akan ikut terkirim saat tombol
+  // "Bubuhkan" ditekan.
+  const wajibN = Math.max(1, Number(wajib) || 1);
+  const kurang = Math.max(0, wajibN - (tetap.length + 1));
   const [rasio, setRasio] = useState(qr ? 1 : 0.45);
   const [rasioHal, setRasioHal] = useState(1.414); // tinggi/lebar halaman
   const wadahRef = useRef(null);
@@ -241,12 +246,29 @@ export default function AturPosisiTtd({
           : "Geser kotak biru ke tempat tanda tangan; tarik pegangan untuk mengubah ukuran."}
       </p>
 
-      {banyak && tetap.length > 0 && (
-        <div className="rounded-lg border border-border bg-muted/40 px-2.5 py-1.5 space-y-1"
+      {/* Panel ini tampil SEJAK AWAL bila pemilik dokumen mendeklarasikan
+          lebih dari satu tempat — bukan menunggu orangnya menekan "Tanda
+          tangan lagi" lebih dulu. Justru orang yang TIDAK TAHU dirinya harus
+          meneken di beberapa tempat itulah yang perlu diberi tahu; yang sudah
+          tahu tak butuh diingatkan. */}
+      {banyak && (tetap.length > 0 || wajibN > 1) && (
+        <div className={`rounded-lg border px-2.5 py-1.5 space-y-1 ${
+          kurang > 0 ? "border-amber-500/50 bg-amber-500/10"
+            : "border-border bg-muted/40"}`}
           data-testid="posisi-daftar">
           <p className="text-[11px] font-semibold">
-            {tetap.length + 1} tanda tangan akan dibubuhkan
+            {kurang > 0
+              ? `Dokumen ini menuntut ${wajibN} tanda tangan dari Anda — kurang ${kurang} lagi`
+              : `${tetap.length + 1} tanda tangan akan dibubuhkan`}
           </p>
+          {kurang > 0 && (
+            <p className="text-[11px] text-amber-800 dark:text-amber-200 leading-snug"
+              data-testid="posisi-kurang">
+              Tekan <b>Tanda tangan lagi</b>, pindah ke halaman berikutnya,
+              lalu tempatkan sisanya. Sekali dibubuhkan, tautan ini tertutup
+              dan lembar yang terlewat tak bisa ditambahkan lagi.
+            </p>
+          )}
           <div className="flex flex-wrap gap-1">
             {tetap.map((t, i) => (
               <span key={i} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-border bg-background">
@@ -287,12 +309,20 @@ export default function AturPosisiTtd({
               <Plus className="w-3.5 h-3.5 mr-1" />Tanda tangan lagi
             </Button>
           )}
-          <Button type="button" size="sm" className="h-9 text-xs" disabled={mengirim || gagalHal || muatHal}
+          {/* TOMBOL BUBUHKAN DITAHAN SELAMA MASIH KURANG.
+              Sekali dibubuhkan, tautan sekali-pakai tertutup dan lembar yang
+              terlewat TIDAK bisa ditambahkan lagi — satu-satunya pemulihan
+              yang ada adalah membatalkan permintaan lalu meminta SEMUA orang
+              meneken ulang. Karena itu penahanan ini, bukan sekadar
+              peringatan yang bisa dilewati. */}
+          <Button type="button" size="sm" className="h-9 text-xs"
+            disabled={mengirim || gagalHal || muatHal || kurang > 0}
             onClick={() => onKirim({ halaman, ...pos }, tetap)} data-testid="posisi-kirim">
             {mengirim ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
             {labelKirim || (qr ? "Simpan & Unduh"
-              : tetap.length ? `Bubuhkan ${tetap.length + 1} Tanda Tangan`
-                : "Bubuhkan di Posisi Ini")}
+              : kurang > 0 ? `Kurang ${kurang} tanda tangan lagi`
+                : tetap.length ? `Bubuhkan ${tetap.length + 1} Tanda Tangan`
+                  : "Bubuhkan di Posisi Ini")}
           </Button>
         </div>
       </div>

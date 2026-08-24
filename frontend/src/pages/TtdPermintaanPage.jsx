@@ -50,7 +50,7 @@ const LABEL_SIGNER = {
   ditandatangani: "Sudah TTD", aktif: "Giliran aktif", menunggu: "Menunggu",
 };
 
-const SIGNER_KOSONG = { nama: "", nip: "", jabatan: "", email: "" };
+const SIGNER_KOSONG = { nama: "", nip: "", jabatan: "", email: "", jumlah_ttd: 1 };
 const FORM_KOSONG = { judul: "", doc_type: "dokumen", doc_ref: "", mode: "paralel", signers: [{ ...SIGNER_KOSONG }] };
 
 function fmtWaktu(iso) {
@@ -539,6 +539,32 @@ export default function TtdPermintaanPage({ user, onBack }) {
                         placeholder="Email — link dikirim otomatis (opsional)"
                         className="h-8 text-xs sm:col-span-2" data-testid={`ttd-form-email-${i}`} />
                     </div>
+                    {/* BERAPA TEMPAT orang ini harus meneken. Hanya pemilik
+                        dokumen yang melihat naskahnya; sistem tak bisa
+                        menebaknya dari PDF. Tanpa angka ini tak ada ukuran
+                        "lengkap", dan penanda tangan yang lupa meneken lembar
+                        keduanya tak akan pernah ditahan — sekali dibubuhkan,
+                        tautannya tertutup dan SELURUH penanda tangan harus
+                        mengulang dari awal. */}
+                    <div className="flex items-center gap-2 pl-6">
+                      <label className="text-[11px] text-muted-foreground flex-1 leading-snug"
+                        htmlFor={`ttd-jumlah-${i}`}>
+                        Berapa tempat ia harus meneken di dokumen ini?
+                      </label>
+                      <Input id={`ttd-jumlah-${i}`} type="number" min="1" max="20"
+                        value={s.jumlah_ttd ?? 1}
+                        onChange={(e) => ubahSigner(i, "jumlah_ttd",
+                          Math.min(20, Math.max(1, parseInt(e.target.value, 10) || 1)))}
+                        className="h-8 text-xs w-16 flex-shrink-0"
+                        data-testid={`ttd-form-jumlah-${i}`} />
+                    </div>
+                    {(s.jumlah_ttd || 1) > 1 && (
+                      <p className="text-[11px] text-blue-700 dark:text-blue-300 pl-6 leading-snug"
+                        data-testid={`ttd-form-jumlah-catatan-${i}`}>
+                        Layar tanda tangan akan menahan tombol Bubuhkan sampai
+                        {" "}{s.jumlah_ttd} tanda tangan ditempatkan.
+                      </p>
+                    )}
                   </div>
                 ))}
                 <datalist id="ttd-pegawai-list">
