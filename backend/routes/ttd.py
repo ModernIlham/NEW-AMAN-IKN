@@ -25,6 +25,7 @@ from pydantic import BaseModel
 from auth_utils import (
     create_sign_token, require_admin, require_sign_token, require_user,
     require_user_or_query_token, require_user_or_sign_token, require_writer,
+    require_writer_satker,
 )
 from db import db, fs_bucket
 from ttd_penautan import (TAUT_TTD, kedaluwarsa_terdekat,
@@ -624,7 +625,8 @@ def _publik_signer(sg):
 
 
 @ttd_router.post("/ttd/permintaan")
-async def buat_permintaan(payload: PermintaanIn, user: dict = Depends(require_writer)):
+async def buat_permintaan(payload: PermintaanIn,
+                          user: dict = Depends(require_writer_satker)):
     """Buat permintaan tanda tangan + link per penanda tangan. Mode berurutan:
     hanya penanda tangan urutan pertama yang 'aktif'; paralel: semua aktif."""
     if not payload.signers:

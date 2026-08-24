@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
+    require_writer_satker,
 )
 from db import db
 from shared_utils import (
@@ -146,7 +147,7 @@ async def list_pemindahtanganan(_user: dict = Depends(require_user)):
 
 
 @pemindahtanganan_router.post("/pemindahtanganan")
-async def buat_usulan_pt(payload: UsulanPtIn, user: dict = Depends(require_writer)):
+async def buat_usulan_pt(payload: UsulanPtIn, user: dict = Depends(require_writer_satker)):
     """Buat usulan pemindahtanganan multi-aset (snapshot identitas)."""
     data = payload.model_dump()
     errors = validate_usulan_pt(data)

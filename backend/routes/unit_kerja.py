@@ -12,7 +12,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from auth_utils import require_admin, require_user
+from auth_utils import require_admin, require_user, require_admin_satker
 from db import db
 from shared_utils import kode_satker_user, log_audit, scope_query_field_satker
 from unit_kerja_utils import unit_dari_pegawai, validate_unit
@@ -38,7 +38,8 @@ async def daftar_unit_kerja(_user: dict = Depends(require_user)):
 
 
 @unit_kerja_router.post("/unit-kerja")
-async def buat_unit_kerja(payload: UnitIn, user: dict = Depends(require_admin)):
+async def buat_unit_kerja(payload: UnitIn,
+                          user: dict = Depends(require_admin_satker)):
     """Tambah unit (admin). Eselon >1 wajib induk eselon tepat di atasnya."""
     doc = {"nama_unit": str(payload.nama_unit or "").strip(),
            "eselon": str(payload.eselon or "").strip(),
@@ -107,7 +108,7 @@ async def hapus_unit_kerja(unit_id: str, user: dict = Depends(require_admin)):
 
 
 @unit_kerja_router.post("/unit-kerja/bangun-dari-pegawai")
-async def bangun_dari_pegawai(user: dict = Depends(require_admin)):
+async def bangun_dari_pegawai(user: dict = Depends(require_admin_satker)):
     """Bangun/lengkapi master unit OTOMATIS dari jalur eselon1–5 seluruh
     pegawai satker (idempoten — hanya menambah yang belum ada). Berguna
     pasca impor massal: master langsung terisi tanpa entri manual."""

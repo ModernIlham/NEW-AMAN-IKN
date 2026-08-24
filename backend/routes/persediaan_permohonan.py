@@ -31,7 +31,9 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ValidationError
 
 from auth_utils import (require_admin, require_user,
-                        require_user_or_query_token, require_writer)
+                        require_user_or_query_token, require_writer,
+    require_writer_satker,
+)
 from db import db
 from persediaan_permohonan_utils import (
     JALUR_PERMOHONAN, boleh_putuskan, ringkasan_permohonan,
@@ -56,7 +58,7 @@ class TolakIn(BaseModel):
 
 @persediaan_permohonan_router.post("/persediaan/permohonan")
 async def ajukan_permohonan(data: PermohonanIn, request: Request = None,
-                            user: dict = Depends(require_writer)):
+                            user: dict = Depends(require_writer_satker)):
     """Ajukan permohonan transaksi — belum menyentuh stok/jurnal sama sekali."""
     from shared_utils import kunci_idem
     idem_key = kunci_idem(

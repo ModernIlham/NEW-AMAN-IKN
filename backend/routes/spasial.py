@@ -24,7 +24,7 @@ from fastapi import (APIRouter, Depends, File, Form, HTTPException, Query,
                      Request, UploadFile)
 from pydantic import BaseModel
 
-from auth_utils import require_user, require_user_or_query_token, require_writer
+from auth_utils import require_user, require_user_or_query_token, require_writer, require_writer_satker
 from db import db
 from shared_utils import (kode_satker_user, limiter, log_audit, nama_pelaku,
                           pastikan_akses_dok_satker, scope_query_field_satker)
@@ -428,7 +428,7 @@ async def _peringatan_containment(geometry, tipe: str, parent_id, _user: dict):
 
 
 @spasial_router.post("/spasial/node")
-async def buat_node(payload: NodeIn, _user: dict = Depends(require_writer)):
+async def buat_node(payload: NodeIn, _user: dict = Depends(require_writer_satker)):
     doc = _bersih_node(payload)
     if not doc["nama"]:
         raise HTTPException(status_code=400, detail="Nama wajib diisi")

@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 
 from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
+    require_writer_satker,
 )
 from db import db
 from shared_utils import kunci_idem, limiter, log_audit
@@ -1189,7 +1190,7 @@ class TransaksiMassalIn(BaseModel):
 @persediaan_router.post("/persediaan/transaksi-massal")
 async def transaksi_massal(payload: TransaksiMassalIn,
                            request: Request = None,
-                           user: dict = Depends(require_writer)):
+                           user: dict = Depends(require_writer_satker)):
     """Satu dokumen (BAST/kuitansi/nota) untuk BANYAK barang sekaligus.
 
     Tiap barang diproses lewat jalur transaksi tunggal yang sudah atomik +
@@ -2002,7 +2003,7 @@ async def get_persediaan(item_id: str, _user: dict = Depends(require_user)):
 
 
 @persediaan_router.post("/persediaan")
-async def create_persediaan(data: PersediaanCreate, _user: dict = Depends(require_writer)):
+async def create_persediaan(data: PersediaanCreate, _user: dict = Depends(require_writer_satker)):
     kode = str(data.kode_barang or "").strip()
     ok, err = validate_kode_persediaan(kode)
     if not ok:
@@ -2731,7 +2732,7 @@ async def impor_referensi_sakti_pdf(
     request: Request,
     file: UploadFile = File(...),
     terapkan: bool = Query(False),
-    _user: dict = Depends(require_writer),
+    _user: dict = Depends(require_writer_satker),
 ):
     """Baca PDF SAKTI "UC_PER032 — Referensi Tabel Barang Persediaan" dan
     sinkronkan master persediaan SATKER INI.

@@ -17,7 +17,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from auth_utils import require_admin, require_user
+from auth_utils import require_admin, require_user, require_admin_satker
 from db import db
 from shared_utils import (kode_satker_user, log_audit,
                           pastikan_akses_dok_satker, scope_query_field_satker)
@@ -63,7 +63,7 @@ async def list_ruangan(_user: dict = Depends(require_user)):
 
 
 @ruangan_router.post("/ruangan")
-async def buat_ruangan(payload: RuanganIn, user: dict = Depends(require_admin)):
+async def buat_ruangan(payload: RuanganIn, user: dict = Depends(require_admin_satker)):
     """Tambah ruangan (admin). Kode ruangan harus unik."""
     doc = _bersih(payload)
     errors = validate_ruangan(doc)

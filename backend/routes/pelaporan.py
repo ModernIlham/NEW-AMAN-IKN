@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from auth_utils import require_admin, require_user
+from auth_utils import require_admin, require_user, require_admin_satker
 from db import db
 from shared_utils import kode_satker_user, scope_query_field_satker
 from pelaporan_utils import (
@@ -83,7 +83,7 @@ async def daftar_periode(_user: dict = Depends(require_user)):
 
 
 @pelaporan_router.post("/pelaporan/periode")
-async def buat_periode(payload: PeriodeIn, user: dict = Depends(require_admin)):
+async def buat_periode(payload: PeriodeIn, user: dict = Depends(require_admin_satker)):
     """Daftarkan periode pelaporan baru (admin — seluruh siklus hidup periode
     kunci/buka/hapus/tenggat juga admin-only)."""
     data = payload.model_dump()

@@ -42,6 +42,7 @@ from pydantic import BaseModel
 from bast_pasal import validate_pj_tambahan
 from auth_utils import (
     require_user, require_user_or_query_token, require_writer,
+    require_writer_satker,
 )
 from db import db
 from shared_utils import (
@@ -372,7 +373,7 @@ async def kirim_bast_ke_ttd(bast_id: str, user: dict = Depends(require_writer)):
 
 @bast_router.post("/bast")
 async def buat_bast(payload: BastIn, request: Request = None,
-                    user: dict = Depends(require_writer)):
+                    user: dict = Depends(require_writer_satker)):
     """Simpan BAST ke register (multi-aset; snapshot identitas aset dibekukan
     agar dokumen historis tak berubah saat master aset berubah).
     Idempotency-Key opsional: klik ganda / retry jaringan tidak menggandakan

@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
+    require_writer_satker,
 )
 from db import db
 from shared_utils import kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker, pastikan_akses_aset, delete_document_from_gridfs, get_document_from_gridfs, nama_file_disposition
@@ -140,7 +141,7 @@ async def export_kasus(_user: dict = Depends(require_user)):
 
 
 @pengamanan_router.post("/pengamanan/kasus")
-async def buka_kasus(payload: KasusIn, user: dict = Depends(require_writer)):
+async def buka_kasus(payload: KasusIn, user: dict = Depends(require_writer_satker)):
     """Buka kasus baru untuk satu aset (satu kasus aktif per aset)."""
     data = payload.model_dump()
     errors = validate_kasus(data)
@@ -276,7 +277,7 @@ async def export_dokumen(_user: dict = Depends(require_user)):
 
 
 @pengamanan_router.post("/pengamanan/dokumen")
-async def catat_dokumen(payload: DokumenIn, user: dict = Depends(require_writer)):
+async def catat_dokumen(payload: DokumenIn, user: dict = Depends(require_writer_satker)):
     """Catat satu dokumen kepemilikan untuk satu aset."""
     data = payload.model_dump()
     errors = validate_dokumen(data) + validate_kategori_sertipikasi(data)
@@ -489,7 +490,7 @@ async def export_checklist(_user: dict = Depends(require_user)):
 
 @pengamanan_router.post("/pengamanan/checklist")
 async def simpan_checklist(payload: ChecklistIn,
-                           user: dict = Depends(require_writer)):
+                           user: dict = Depends(require_writer_satker)):
     """Simpan/perbarui checklist satu aset (satu checklist per aset)."""
     data = payload.model_dump()
     errors = validate_checklist(data)
@@ -595,7 +596,7 @@ async def export_polis(_user: dict = Depends(require_user)):
 
 
 @pengamanan_router.post("/pengamanan/polis")
-async def catat_polis(payload: PolisIn, user: dict = Depends(require_writer)):
+async def catat_polis(payload: PolisIn, user: dict = Depends(require_writer_satker)):
     """Catat satu polis untuk satu aset (satu aset boleh berpolis ganda)."""
     data = payload.model_dump()
     errors = validate_polis(data)

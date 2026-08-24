@@ -477,6 +477,46 @@ async def require_writer(user: dict = Depends(require_user)) -> dict:
     return user
 
 
+async def require_writer_satker(user: dict = Depends(require_writer)) -> dict:
+    """Gate endpoint yang MEMBUAT dokumen ber-scope satker.
+
+    Selain syarat `require_writer`, pemanggil WAJIB terikat satker — entah
+    karena akunnya memang milik satker, atau karena super-admin pusat sudah
+    memilih "Satker Aktif" (lihat `_terapkan_satker_aktif`).
+
+    KENAPA GERBANG, BUKAN TAMBALAN PER TITIK. Sisiran menemukan 36 tempat yang
+    menstempel `kode_satker` dari pemanggil. Selama pemanggilnya bisa tak
+    bersatker, SETIAP tempat itu menulis stempel "" — dan
+    `scope_query_field_satker` SENGAJA meloloskan "" (kompatibilitas data era
+    lama), sehingga dokumennya tampil di register SEMUA satker. Menambal 36
+    titik satu per satu berarti 36 kesempatan untuk terlewat, dan titik ke-37
+    yang ditulis besok akan mengulang lubang yang sama. Satu gerbang menutup
+    seluruhnya dan mengikat yang belum ditulis.
+
+    TIDAK dipasang pada endpoint yang memang lintas-satker: Master Satker,
+    pengaturan Universal persuratan, dan klasifikasi arsip "Bersama" — di sana
+    stempel "" adalah ARTI, bukan kelalaian.
+    """
+    from satker_wajib import pesan_satker_wajib
+    pesan = pesan_satker_wajib(str(user.get("kode_satker") or "").strip(),
+                               "dokumen")
+    if pesan:
+        raise HTTPException(status_code=400, detail=pesan)
+    return user
+
+
+async def require_admin_satker(user: dict = Depends(require_admin)) -> dict:
+    """Sama dengan `require_writer_satker`, untuk endpoint ber-hak ADMIN yang
+    juga membuat dokumen ber-scope satker (referensi ruangan, perangkat IoT,
+    periode pelaporan, kalender penganggaran, impor SIMAN)."""
+    from satker_wajib import pesan_satker_wajib
+    pesan = pesan_satker_wajib(str(user.get("kode_satker") or "").strip(),
+                               "dokumen")
+    if pesan:
+        raise HTTPException(status_code=400, detail=pesan)
+    return user
+
+
 async def require_user_or_query_token(
     authorization: str = Header(default="", alias="Authorization"),
     token: str = Query(default=""),

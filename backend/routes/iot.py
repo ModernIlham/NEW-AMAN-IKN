@@ -32,7 +32,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel
 
-from auth_utils import require_admin, require_user, require_writer
+from auth_utils import require_admin, require_user, require_writer, require_admin_satker
 from db import db
 from shared_utils import (kode_satker_user, limiter, log_audit,
                           pastikan_akses_dok_satker, scope_query_field_satker)
@@ -74,7 +74,7 @@ class PerangkatIn(BaseModel):
 
 @iot_router.post("/iot/perangkat")
 async def daftar_perangkat(payload: PerangkatIn,
-                           _user: dict = Depends(require_admin)):
+                           _user: dict = Depends(require_admin_satker)):
     """Daftarkan perangkat pelacak. Token dikembalikan SEKALI — hanya hash-nya
     tersimpan, jadi token hilang berarti harus dirotasi, bukan dilihat ulang."""
     nama = str(payload.nama or "").strip()

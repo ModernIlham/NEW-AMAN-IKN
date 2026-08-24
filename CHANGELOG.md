@@ -67,6 +67,61 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#934] Gerbang global: dokumen ber-satker wajib bersatker — 2026-08-25
+
+Lanjutan [#933], atas permintaan pemilik: *"cek juga semua generate yang
+lainnya juga agar tidak ada kebocoran satker."* Pemilik memilih **gerbang
+global**, dan meminta sisirannya dituntaskan lebih dulu.
+
+**SISIRAN TUNTAS.** Tiga area yang sebelumnya tak tersentuh kini diperiksa:
+
+| Area | Hasil |
+|---|---|
+| `reports.py` / `exports.py` | **bersih** — tak ada endpoint ber-id tanpa penjaga; dua yang sempat tertandai ternyata dijaga di helper bersamanya (`pastikan_akses_kegiatan_id`) |
+| `ttd.py` | **bocor** — `buat_permintaan` menstempel dari pemanggil; komentarnya sendiri menyebut tanpa stempel itu admin satker LAIN bisa melihat & membatalkan permintaan TTD berikut PII penanda tangan |
+| `persediaan.py` | **bocor** — LPB (`transaksi_massal`), master persediaan (`create_persediaan`), impor referensi SAKTI |
+
+**Yang berubah**
+
+- **`require_writer_satker` / `require_admin_satker`** (baru, `auth_utils.py`)
+  — selain syarat tulis/admin, pemanggil WAJIB terikat satker (akun satker,
+  atau super-admin pusat yang sudah memilih Satker Aktif).
+- Dipasang pada **35 endpoint** yang menstempel `kode_satker` dari pemanggil
+  lalu menyisipkan dokumen.
+
+**Kenapa gerbang, bukan tambalan per titik.** Sisiran menemukan 36 tempat
+yang menstempel dari pemanggil. Menambal satu per satu berarti 36 kesempatan
+untuk terlewat — dan titik ke-37 yang ditulis besok mengulang lubang yang
+sama. Satu gerbang menutup seluruhnya dan mengikat yang belum ditulis.
+
+**Empat endpoint SENGAJA dikecualikan**, masing-masing dengan alasannya:
+klasifikasi arsip (`""` = "Bersama"), pengaturan persuratan (`""` =
+"Universal"), unduhan (daftarnya disaring per-PENGGUNA, bukan per-satker), dan
+geofence (sudah menurunkan satker dari perangkatnya).
+
+**Penjaga anti-drift** — `test_gerbang_satker_dokumen.py`. Uji endpoint di
+repo ini memanggil handler LANGSUNG, sehingga dependency FastAPI **tak pernah
+ikut berjalan**: gerbang yang lupa dipasang TIDAK akan membuat satu pun uji
+lain gagal. Penjaga struktural ini memindai AST seluruh `routes/*.py`,
+mengambil endpoint yang (a) menyisipkan dokumen DAN (b) menstempel
+`kode_satker` dari pemanggil, lalu menagih gerbangnya. Pembeda "menyisipkan"
+penting: endpoint BACA juga menyusun dict ber-kunci `kode_satker` — tetapi itu
+QUERY penyaring, dan menyaring ke satker sendiri justru perilaku yang benar.
+
+**Pemindainya sendiri dijaga**: satu uji menagih ia menemukan ≥15 endpoint,
+supaya pola yang berubah tak membuatnya lulus tanpa memeriksa apa pun.
+
+**Uji**: `test_gerbang_satker_dokumen.py` (7). Backend 3515 hijau. Tiga mutasi
+dipasang lalu terbukti mati: (1) gerbang dilepas dari satu endpoint → 1 uji;
+(2) gerbang meloloskan pemanggil tanpa satker → 1 uji; (3) pemindai anti-drift
+dibuat buta → 1 uji.
+
+**Temuan pemindai AST yang terlewat regex**: enam endpoint tulis —
+`ttd.py:buat_permintaan`, `aset_permohonan.py:ajukan_permohonan_aset`,
+`persediaan_permohonan.py:ajukan_permohonan`, `spasial.py:buat_node`, dan dua
+di `unit_kerja.py` — tak tertangkap sisiran regex awal. Itu sebabnya penjaga
+ini memakai AST, bukan pencocokan teks.
+
 ## [#933] Registrasi persuratan wajib bersatker — tutup kebocoran lintas satker — 2026-08-24
 
 Laporan pemilik: *"pada saat mengganti role masih ada kebocoran data di

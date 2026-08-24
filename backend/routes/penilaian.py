@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 
-from auth_utils import require_admin, require_user, require_writer
+from auth_utils import require_admin, require_user, require_writer, require_writer_satker
 from db import db
 from kodefikasi_utils import GOLONGAN_DEFAULTS
 from report_filters import active_asset_filter
@@ -292,7 +292,7 @@ async def riwayat_nilai_aset(
 
 @penilaian_router.post("/penilaian/koreksi")
 async def catat_koreksi_nilai(payload: KoreksiNilaiIn,
-                              user: dict = Depends(require_writer)):
+                              user: dict = Depends(require_writer_satker)):
     """Catat satu peristiwa nilai untuk satu aset (status SAKTI: belum)."""
     data = payload.model_dump()
     errors = validate_koreksi_nilai(data)

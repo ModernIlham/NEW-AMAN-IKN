@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
+    require_writer_satker,
 )
 from lpb_utils import (
     baris_lpb_dari_aset, baris_lpb_gabungan, is_persediaan, label_golongan,
@@ -506,7 +507,7 @@ async def _taut_master_persediaan(b: dict, user: dict) -> dict:
 
 
 @pengadaan_router.post("/pengadaan")
-async def buat_perolehan(payload: PerolehanIn, user: dict = Depends(require_writer)):
+async def buat_perolehan(payload: PerolehanIn, user: dict = Depends(require_writer_satker)):
     """Catat perolehan baru (barang boleh ditautkan ke aset master)."""
     # Hari-ini dalam WIB, bukan UTC: batas "tanggal BAST tak boleh di masa
     # depan" dulu memakai tanggal UTC yang TERTINGGAL 7 jam dari WIB — sehingga
