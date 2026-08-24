@@ -32,6 +32,7 @@ from pymongo import ReturnDocument
 
 from auth_utils import require_admin, require_user, require_writer
 from db import db
+from satker_wajib import pesan_satker_wajib, satker_pertama_terisi
 from shared_utils import (log_audit, kode_satker_user,
                           pastikan_akses_dok_satker, scope_query_field_satker)
 from meili_utils import jadwalkan_sync, jadwalkan_hapus, cari_id_surat
@@ -457,7 +458,21 @@ async def booking_nomor_otomatis(user, tgl_iso: str, perihal: str,
     from persuratan_utils import bangun_nomor, pilih_klasifikasi
     now0 = datetime.now(timezone.utc)
     tgl_surat = str(tgl_iso or "").strip()[:10] or now0.date().isoformat()
-    kode_satker = str(kode_satker or "").strip() or kode_satker_user(user)
+    kode_satker = satker_pertama_terisi(kode_satker, kode_satker_user(user))
+    # GERBANG TUNGGAL untuk SELURUH penerbitan nomor otomatis (LPB persediaan,
+    # LPB aset, nota dinas pemindahtanganan, surat persetujuan aset).
+    #
+    # Tanpa ini, pemanggil PUSAT yang belum memilih Satker Aktif menerbitkan
+    # surat berstempel "" — dan `scope_query_field_satker` sengaja meloloskan
+    # "" (kompatibilitas data era lama), sehingga surat itu tampil di
+    # Registrasi Persuratan SETIAP satker. Kerusakannya bukan sekadar
+    # tampilan: `_seed_agenda` memperlakukan surat tanpa stempel sebagai milik
+    # satker yang membacanya, jadi satu surat "" MENGHABISKAN satu nomor
+    # agenda di buku setiap satker — diukur langsung, satker yang baru
+    # menerbitkan surat pertamanya mendapat nomor 002.
+    _pesan = pesan_satker_wajib(kode_satker, "nomor surat otomatis")
+    if _pesan:
+        raise HTTPException(status_code=400, detail=_pesan)
     atur = await _pengaturan(kode_satker)
     # `kode_klasifikasi` (pilihan operator) MENANG atas aturan pemetaan —
     # urutan yang sama persis dengan booking manual di Registrasi Persuratan.
@@ -1112,6 +1127,13 @@ async def booking_surat_keluar(payload: SuratKeluarIn,
                      or now.date().isoformat())
     tahun = int(tanggal_surat[:4])
     _ks = kode_satker_user(user)
+    # Surat resmi adalah POSISI DALAM BUKU AGENDA sebuah satker. Pemanggil
+    # pusat yang belum memilih Satker Aktif akan menstempelnya "" — dan surat
+    # "" tampil di Registrasi Persuratan SETIAP satker sekaligus menghabiskan
+    # nomor agenda mereka (lihat satker_wajib.py). Ditolak, bukan ditebak.
+    _pesan = pesan_satker_wajib(_ks, "surat keluar")
+    if _pesan:
+        raise HTTPException(status_code=400, detail=_pesan)
     atur = await _pengaturan(_ks)
     periode = (_periode(atur, tanggal_surat)
                or _periode(atur, now.date().isoformat()))
@@ -1227,6 +1249,13 @@ async def agenda_surat_masuk(payload: SuratMasukIn,
     now = datetime.now(timezone.utc)
     tahun = now.year
     _ks = kode_satker_user(user)
+    # Surat resmi adalah POSISI DALAM BUKU AGENDA sebuah satker. Pemanggil
+    # pusat yang belum memilih Satker Aktif akan menstempelnya "" — dan surat
+    # "" tampil di Registrasi Persuratan SETIAP satker sekaligus menghabiskan
+    # nomor agenda mereka (lihat satker_wajib.py). Ditolak, bukan ditebak.
+    _pesan = pesan_satker_wajib(_ks, "surat masuk")
+    if _pesan:
+        raise HTTPException(status_code=400, detail=_pesan)
     atur = await _pengaturan(_ks)
     periode = _periode(atur, now.date().isoformat())
     # Surat MASUK tetap satu deret. Kode keamanan & klasifikasi milik nomor

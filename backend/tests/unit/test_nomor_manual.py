@@ -27,7 +27,11 @@ from persuratan_utils import (
     MAKS_PANJANG_NOMOR, bersihkan_nomor_manual, validate_nomor_manual,
 )
 
-ADMIN = {"username": "admin", "role": "admin", "name": "Admin", "kode_satker": ""}
+# Admin BER-SATKER. Registrasi persuratan kini menolak pemanggil tanpa
+# satker (lihat satker_wajib.py): surat berstempel "" tampil di register
+# SETIAP satker sekaligus menghabiskan nomor agenda mereka.
+ADMIN = {"username": "admin", "role": "admin", "name": "Admin",
+         "kode_satker": "527001"}
 
 
 def _unwrap(fn):
