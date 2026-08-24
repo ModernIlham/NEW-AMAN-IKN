@@ -67,6 +67,62 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#929] Penanda koordinat pada ikon pin di setiap baris aset — 2026-08-24
+
+Permintaan pemilik: *"pada modul Inventarisasi, pada row data aset di setiap
+kegiatan — baik tampilan di list maupun di galeri, dan baik di mode tampilan
+ukuran layar apa pun — berikan badge centang hijau kecil di sudut ikon pin
+lokasi sebagai penanda sudah terdapat titik koordinat, atau ganti dengan icon
+lokasi yang memiliki tanda centang."*
+
+**Dipilih yang kedua — mengganti ikon, bukan menempelkan badge.** Alasannya
+ukuran: pin di kartu galeri berukuran 10px (`w-2.5`), dan badge di sudutnya
+akan menjadi titik ~4px yang tak terbaca mata, apalagi bertumpuk dengan garis
+pin di belakangnya. `MapPinCheck` membawa centangnya DI DALAM bentuk pin,
+jadi tetap terbaca pada ukuran berapa pun — itulah yang membuat "di ukuran
+layar apa pun" benar-benar terpenuhi, bukan sekadar tersedia. Warnanya ikut
+berubah hijau: bentuk DAN warna, supaya tetap terbaca oleh mata yang sulit
+membedakan warna.
+
+**Yang berubah**
+
+- **`lib/koordinatAset.js`** (baru, murni) — `parseKoordinat`,
+  `punyaKoordinat`, `labelKoordinat`. Parser koordinat DIPINDAH ke sini dari
+  `AssetMapFullView`, dan peta kini memakainya: tanpa itu peta dan penanda
+  baris bisa berbeda pendapat, sehingga ada aset yang barisnya berkata "sudah
+  berkoordinat" tetapi tak pernah muncul di peta — tanpa galat apa pun.
+- **`IkonLokasiAset.jsx`** (baru) — satu komponen dipakai ketiga tampilan.
+- Terpasang di **kartu galeri**, **kartu list mobile** (<lg), dan **tabel
+  desktop** (≥lg).
+- **Baris lokasi kini juga tampil untuk aset yang SUDAH berkoordinat tetapi
+  nama lokasinya kosong** (label "Berkoordinat"). Dulu seluruh baris dirender
+  `if (asset.location)` saja — penandanya takkan pernah terlihat justru pada
+  aset yang paling sering belum diisi lokasinya.
+- **Rentang lg–xl ditutup.** Kolom Lokasi pada tabel desktop baru muncul di
+  `xl`; di bawah itu tabel tak menampilkan pin sama sekali. Penanda ringkas
+  ber-`xl:hidden` ditambahkan di kelompok penanda identitas, sehingga tepat
+  SATU pin tampil pada lebar berapa pun — bukan dua penanda untuk satu
+  keterangan di layar lebar.
+- Penanda ringkas hanya dirender bila asetnya MEMANG berkoordinat (penanda
+  positif, sejalan dengan penanda PSP di sebelahnya); pin abu-abu di setiap
+  baris hanya akan jadi kebisingan.
+
+Tanpa perubahan backend: `koordinat_latitude`/`koordinat_longitude` sudah ikut
+`LIST_PROJECTION` dan snapshot offline.
+
+**Uji**: `koordinatAset.test.js` (11), `IkonLokasiAset.test.jsx` (10),
+`PenandaKoordinatBaris.test.jsx` (11 — ketiga tampilan). Frontend 106 suite /
+1135 uji hijau, eslint bersih, `yarn build` sukses. Empat mutasi dipasang lalu
+terbukti mati: (1) ikon tak pernah berganti bentuk → 1 uji; (2) satu sumbu
+saja dianggap berkoordinat → 4 uji; (3) baris lokasi kembali hanya untuk aset
+ber-nama-lokasi → 2 uji; (4) penjaga `xl:hidden` dicabut → 1 uji.
+
+**Catatan uji**: tabel desktop memakai `@tanstack/react-virtual`, yang
+mengukur tinggi elemen gulir sungguhan — di jsdom tingginya 0, sehingga tak
+satu baris pun dirender dan uji apa pun terhadap isinya akan lulus tanpa arti.
+Virtualizer-nya diganti tiruan yang mengembalikan seluruh baris; yang diuji
+tetap kode perenderan barisnya sendiri.
+
 ## [#928] Neraca berhenti kurang catat baris BAST di luar 2–50 unit — 2026-08-23
 
 Defek yang diukur, bukan diduga. Satu baris BAST **100 kursi @ Rp1 juta**

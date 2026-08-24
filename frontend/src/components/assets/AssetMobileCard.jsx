@@ -1,5 +1,7 @@
 import React, { memo, useState, useRef } from "react";
-import { Camera, MapPin, Briefcase, Tag, Trash2, Lock, Cloud, Check, RotateCcw, RefreshCcw, MoreVertical, BookOpen, History, CreditCard, AlertTriangle, ShieldCheck, CheckCircle2, XCircle, PlusCircle, Scale, CircleDashed } from "lucide-react";
+import { Camera, Briefcase, Tag, Trash2, Lock, Cloud, Check, RotateCcw, RefreshCcw, MoreVertical, BookOpen, History, CreditCard, AlertTriangle, ShieldCheck, CheckCircle2, XCircle, PlusCircle, Scale, CircleDashed } from "lucide-react";
+import IkonLokasiAset from "./IkonLokasiAset";
+import { punyaKoordinat } from "@/lib/koordinatAset";
 import { sisaGaransi } from "../../lib/garansi";
 import { kelasStatusInventarisasi } from "../../lib/warnaAset";
 import { useSinkronSiman } from "../../lib/simanSync";
@@ -347,10 +349,14 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
                 truncates when a single value exceeds the whole row width. */}
             <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground flex-wrap">
               <span className="truncate min-w-0">{asset.category}</span>
-              {asset.location && (
+              {/* Tampil pula saat nama lokasi kosong tetapi koordinatnya
+                  sudah ada — penandanya menempel pada ikon pin ini. */}
+              {(asset.location || punyaKoordinat(asset)) && (
                 <span className="flex items-center gap-0.5 min-w-0">
-                  <MapPin className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                  <span className="truncate min-w-0">{asset.location}</span>
+                  <IkonLokasiAset asset={asset} className="w-3 h-3" />
+                  <span className="truncate min-w-0">
+                    {asset.location || "Berkoordinat"}
+                  </span>
                 </span>
               )}
             </div>
