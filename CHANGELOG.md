@@ -67,6 +67,72 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#931] E-sign menahan pembubuhan yang belum lengkap — 2026-08-24
+
+Laporan pemilik: *"ketika salah satu penanda tangan menandatangani hanya 1
+lembar yang ia tanda tangani dan sudah memencet tombol bubuhkan, sehingga
+lembaran yang ada tanda tangan dia lagi di lembar sebelum atau selanjutnya
+tidak ditandatangani ... jika memiliki banyak penandatangan yang sudah
+ditandatangani harus mengirim link baru dan meminta tanda tangan ulang, dan
+itu sangat merepotkan."*
+
+**Sebabnya bukan ketiadaan fitur, melainkan ketiadaan UKURAN.** Sejak [#8xx]
+modul e-sign sudah bisa membubuhkan satu orang di banyak halaman (tombol
+"Tanda tangan lagi" → `posisi_ttd_lain`). Yang tak ada adalah pengetahuan
+tentang berapa tempat yang SEHARUSNYA ia teken — jadi sistem tak pernah bisa
+berkata "masih kurang". Ia menerima apa pun yang dikirim, menutup tautan
+sekali-pakai, dan dokumen terbit dengan lembar kosong. Akibatnya berat
+sebelah: kelalaian sekejap satu orang memaksa SELURUH penanda tangan
+mengulang dari awal.
+
+**Yang berubah**
+
+- **`ttd_kelengkapan.py`** (baru, murni) — `normalisasi_jumlah_ttd`,
+  `jumlah_pembubuhan`, `kurang_pembubuhan`, `pesan_kurang`.
+- **Pemilik dokumen mendeklarasikan** berapa tempat tiap penanda tangan harus
+  teken (`SignerIn.jumlah_ttd`, bawaan 1). Hanya dialah yang melihat
+  naskahnya; sistem tak bisa menebaknya dari PDF.
+- **Layar menahan tombol Bubuhkan** selama masih kurang, labelnya berubah
+  jadi "Kurang N tanda tangan lagi", dan panel penjelas tampil **sejak awal**
+  — bukan menunggu orangnya menekan "Tanda tangan lagi" lebih dulu. Justru
+  yang TIDAK TAHU dirinya harus meneken beberapa kali yang perlu diberi tahu.
+- **Server menegakkan hal yang sama.** Link e-sign dibuka di peramban tamu
+  yang tak terkendali, dan ini aturan keutuhan dokumen, bukan kenyamanan.
+  Diperiksa **sebelum** blob diunggah (tak ada berkas yatim di GridFS) dan
+  dihitung dari posisi yang **sudah dibersihkan**, supaya entri rusak yang
+  dibuang `_posisi_bersih_banyak` tak menyamar jadi pembubuhan sah.
+- **Penolakan tidak menghanguskan tautan** — status tetap `aktif`, `jti`
+  tetap. Penolakan yang menutup tautan justru menciptakan kerusakan yang sama
+  dengan yang hendak dicegah.
+- Hanya BATAS BAWAH yang ditegakkan. Membubuhkan lebih banyak adalah tindakan
+  sengaja dan tetap terlihat di dokumen; menolaknya hanya mengembalikan
+  masalah yang sama dari arah sebaliknya.
+
+Permintaan LAMA tanpa `jumlah_ttd` berperilaku persis seperti sebelumnya —
+dijaga uji tersendiri di ketiga lapis (murni, endpoint, layar).
+
+**Berkas**: `backend/ttd_kelengkapan.py`, `backend/routes/ttd.py`,
+`frontend/src/components/ttd/AturPosisiTtd.jsx`,
+`frontend/src/pages/TtdPublikPage.jsx`,
+`frontend/src/pages/TtdPermintaanPage.jsx`.
+
+**Uji**: `test_ttd_kelengkapan.py` (18), `test_ttd_kirim_kelengkapan.py` (7
+uji endpoint), `test_ttd_esign.py` (+4), `KelengkapanPembubuhan.test.jsx`
+(11). Backend 3496 hijau, frontend 107 suite / 1147 hijau, build sukses.
+Empat mutasi dipasang lalu terbukti mati: (1) penegakan server dicabut → 4
+uji; (2) pemeriksaan dipindah sesudah unggah blob → 1 uji; (3) tombol layar
+tak lagi ditahan → 4 uji; (4) deklarasi tak diteruskan ke halaman publik → 3
+uji.
+
+**Catatan**: berkas uji baru sempat MELANGGAR penjaga produksi di
+`mediaUrl.test.js` — URL pratinjau halaman di dalamnya tak membawa token.
+Ujinya yang diperbaiki, bukan penjaganya dilonggarkan.
+
+**Belum dikerjakan**: pemulihan tanpa mengulang dari awal. Bila deklarasinya
+sendiri keliru (pemilik menulis 1 padahal 2), satu-satunya jalan tetap
+membatalkan permintaan. Membuka kembali giliran SATU orang tanpa membatalkan
+tanda tangan yang lain adalah PR tersendiri.
+
 ## [#930] Pin tanpa koordinat abu-abu di semua tampilan — 2026-08-24
 
 Laporan pemilik atas [#929]: *"pada mode galeri, icon lokasi yang tidak

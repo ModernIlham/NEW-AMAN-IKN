@@ -141,3 +141,40 @@ class TestPosisiQrBersih:
     def test_qr_min_mm_scannable(self):
         from routes.ttd import QR_MIN_MM
         assert QR_MIN_MM >= 15.0   # ambang aman pindai kamera HP
+
+
+class TestJumlahTtdSampaiKeHalamanPublik:
+    """Deklarasi "berapa tempat harus diteken" HARUS sampai ke layar publik.
+
+    Layar itulah yang menahan tombol Bubuhkan. Kalau angkanya tak ikut
+    terkirim, penahanannya lenyap dan masalahnya kembali persis seperti
+    semula — orang membubuhkan satu lembar lalu tautannya tertutup.
+    """
+
+    def test_jumlah_ttd_ikut_terkirim(self):
+        from routes.ttd import _publik_signer
+        pub = _publik_signer({"signer_id": "s1", "nama": "Budi",
+                              "status": "aktif", "jumlah_ttd": 3})
+        assert pub["jumlah_ttd"] == 3
+
+    def test_signer_LAMA_tanpa_field_dianggap_satu(self):
+        """Permintaan yang sudah berjalan sebelum fitur ini ada tak boleh
+        mendadak menahan tombolnya atas angka yang tak pernah ada."""
+        from routes.ttd import _publik_signer
+        pub = _publik_signer({"signer_id": "s1", "nama": "Budi",
+                              "status": "aktif"})
+        assert pub["jumlah_ttd"] == 1
+
+    def test_nilai_cacat_dinormalkan_bukan_diteruskan_mentah(self):
+        from routes.ttd import _publik_signer
+        for cacat in (0, -3, "abc", None, 9999):
+            pub = _publik_signer({"signer_id": "s1", "nama": "B",
+                                  "status": "aktif", "jumlah_ttd": cacat})
+            assert 1 <= pub["jumlah_ttd"] <= 20, cacat
+
+    def test_rahasia_tetap_tak_ikut(self):
+        """Penambahan field baru tak boleh membuka pintu bagi field lain."""
+        from routes.ttd import _publik_signer
+        pub = _publik_signer({"signer_id": "s1", "nama": "B", "status": "aktif",
+                              "jumlah_ttd": 2, "jti": "RAHASIA", "ip": "1.2.3.4"})
+        assert "jti" not in pub and "ip" not in pub

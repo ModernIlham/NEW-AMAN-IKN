@@ -322,6 +322,10 @@ function TandaTangan({ id, token }) {
           mengirim={kirim}
           onBatal={() => setPngSiap(null)}
           banyak
+          /* Deklarasi pemilik dokumen: berapa tempat yang harus diteken orang
+             ini. Tanpa diteruskan ke sini, layar tak punya ukuran "lengkap"
+             dan tombol Bubuhkan kembali bisa ditekan saat masih kurang. */
+          wajib={sg.jumlah_ttd || 1}
           onKirim={(posisi, posisiLain) => kirimTtd(pngSiap, posisi, posisiLain)}
         />
       </Kartu>
