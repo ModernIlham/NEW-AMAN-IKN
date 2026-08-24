@@ -1,6 +1,8 @@
 import React, { useRef, memo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Camera, Briefcase, MapPin, Tag, CreditCard, Trash2, History, ClipboardCheck, Lock, Cloud, CloudOff, Check, RotateCcw, Clock, Loader2, AlertTriangle, BookOpen, User, RefreshCcw, ShieldCheck } from "lucide-react";
+import { Camera, Briefcase, Tag, CreditCard, Trash2, History, ClipboardCheck, Lock, Cloud, CloudOff, Check, RotateCcw, Clock, Loader2, AlertTriangle, BookOpen, User, RefreshCcw, ShieldCheck } from "lucide-react";
+import IkonLokasiAset from "./IkonLokasiAset";
+import { punyaKoordinat } from "@/lib/koordinatAset";
 import { sisaGaransi } from "../../lib/garansi";
 import { kelasStatusInventarisasi } from "../../lib/warnaAset";
 import { useSinkronSiman } from "../../lib/simanSync";
@@ -75,11 +77,15 @@ const TitikPsp = memo(({ asset }) => {
 TitikPsp.displayName = "TitikPsp";
 
 // Helper: truncated cell with optional icon
-const TruncatedCell = memo(({ text, icon: Icon }) => {
+// `iconNode` = elemen ikon yang SUDAH dirender pemanggil. Dipakai sel yang
+// ikonnya bergantung pada isi barisnya (mis. pin lokasi yang bercentang bila
+// aset sudah berkoordinat); `icon` biasa tetap untuk ikon statis.
+const TruncatedCell = memo(({ text, icon: Icon, iconNode }) => {
   if (!text) return <span className="text-[10px] text-muted-foreground">-</span>;
   const isi = (
     <div className="flex items-center gap-0.5 min-w-0">
-      {Icon && <Icon className="w-3 h-3 text-muted-foreground flex-shrink-0" />}
+      {iconNode}
+      {!iconNode && Icon && <Icon className="w-3 h-3 text-muted-foreground flex-shrink-0" />}
       <span className="text-[11px] text-muted-foreground truncate">{text}</span>
     </div>
   );
@@ -327,6 +333,15 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
                     <span className="font-semibold text-[11px] text-foreground truncate">{a.asset_code}</span>
                     {a.NUP && <span className="text-[8px] bg-muted text-muted-foreground px-1 rounded flex-shrink-0">{a.NUP}</span>}
                     <SimanMarker asset={a} />
+                    {/* Kolom Lokasi baru muncul di xl; di bawah itu tabel ini
+                        tak menampilkan pin sama sekali. Penanda ringkas ini
+                        mengisi rentang lg..xl supaya "di ukuran layar apa pun"
+                        benar-benar terpenuhi — dan `xl:hidden` menjaga agar ia
+                        TIDAK tampil berdampingan dengan pin di kolom Lokasi,
+                        yang akan menjadi dua penanda untuk satu keterangan. */}
+                    {punyaKoordinat(a) && (
+                      <IkonLokasiAset asset={a} className="w-3 h-3 xl:hidden" />
+                    )}
                   </div>
                   <div className="text-[10px] text-muted-foreground truncate leading-tight">{a.category || '-'}</div>
                 </div>
@@ -361,7 +376,9 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
                 </div>
                 {/* Lokasi - xl. Nama pengguna ditambah di baris kedua (font kecil). */}
                 <div className="hidden xl:block flex-1 min-w-0 px-1">
-                  <TruncatedCell text={a.location} icon={MapPin} />
+                  <TruncatedCell
+                    text={a.location || (punyaKoordinat(a) ? "Berkoordinat" : "")}
+                    iconNode={<IkonLokasiAset asset={a} />} />
                   {a.user && (
                     <div className="flex items-center gap-0.5 min-w-0 leading-tight" title={`Pengguna: ${a.user}`}>
                       <User className="w-2.5 h-2.5 text-muted-foreground/70 flex-shrink-0" />

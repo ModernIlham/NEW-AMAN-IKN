@@ -1,5 +1,7 @@
 import React, { memo, useState, useCallback } from "react";
-import { Camera, MapPin, Tag, Images, User, QrCode, CreditCard, Trash2, FileCheck, FileX, Calendar, Lock, ClipboardCheck, Building2, ImageIcon, FileText, ShieldCheck, RefreshCcw as RefreshCcwIcon, Check as CheckIcon } from "lucide-react";
+import { Camera, Tag, Images, User, QrCode, CreditCard, Trash2, FileCheck, FileX, Calendar, Lock, ClipboardCheck, Building2, ImageIcon, FileText, ShieldCheck, RefreshCcw as RefreshCcwIcon, Check as CheckIcon } from "lucide-react";
+import IkonLokasiAset from "./IkonLokasiAset";
+import { punyaKoordinat } from "@/lib/koordinatAset";
 import TooltipKetuk from "../ui/TooltipKetuk";
 import { authMediaUrl } from "../../lib/mediaUrl";
 import { sisaGaransi } from "../../lib/garansi";
@@ -284,11 +286,18 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
           </div>
         )}
 
-        {/* Lokasi - full width, long range to edge */}
-        {asset.location && (
+        {/* Lokasi - full width, long range to edge.
+            Baris ini kini juga tampil untuk aset TANPA nama lokasi tetapi
+            SUDAH berkoordinat: penandanya menempel pada ikon pin, jadi tanpa
+            barisnya penanda itu takkan pernah terlihat justru pada aset yang
+            paling sering belum diisi nama lokasinya. */}
+        {(asset.location || punyaKoordinat(asset)) && (
           <div className="flex items-center gap-1 mb-0.5 w-full">
-            <MapPin className="w-2.5 h-2.5 text-cyan-500 flex-shrink-0" />
-            <span className="text-[9px] sm:text-[10px] text-muted-foreground truncate">{asset.location}</span>
+            <IkonLokasiAset asset={asset} className="w-2.5 h-2.5"
+              warnaKosong="text-cyan-500" />
+            <span className="text-[9px] sm:text-[10px] text-muted-foreground truncate">
+              {asset.location || "Berkoordinat"}
+            </span>
           </div>
         )}
 

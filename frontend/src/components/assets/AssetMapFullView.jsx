@@ -25,6 +25,7 @@ import { getSnapshotAssets } from "../../lib/offlineSnapshot";
 import { downloadFileWithProgress } from "../../lib/downloadFile";
 import { authMediaUrl } from "../../lib/mediaUrl";
 import { CONDITION_COLORS, STATUS_COLORS } from "../../lib/warnaAset";
+import { parseKoordinat } from "../../lib/koordinatAset";
 import { useBackGuard } from "../../hooks/useBackGuard";
 import { useUkurPeta } from "../../hooks/useUkurPeta";
 import { useDenahSpasial } from "../../hooks/useDenahSpasial";
@@ -40,11 +41,9 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const MAX_SELECTED_EXPORT = 200;
 
 // Koordinat aset tersimpan sebagai string — parse toleran (koma desimal).
-function parseCoord(v) {
-  if (v === null || v === undefined) return null;
-  const n = parseFloat(String(v).trim().replace(",", "."));
-  return Number.isFinite(n) && Math.abs(n) <= 180 ? n : null;
-}
+// Definisinya PINDAH ke lib/koordinatAset.js supaya peta dan penanda pin di
+// daftar aset tak bisa berbeda pendapat tentang "aset ini sudah berkoordinat".
+const parseCoord = parseKoordinat;
 
 // Data pengguna barang LENGKAP = nama pengguna + NIP/NIK terisi + BAST
 // sudah terunggah → pin diberi border hijau.
