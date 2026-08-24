@@ -197,11 +197,47 @@ export default function AturPosisiTtd({
           </div>
         )}
 
+        {/* PEMBUBUHAN YANG SUDAH TERSIMPAN pada halaman ini.
+            Laporan pemilik: setelah menetapkan letak lalu berpindah halaman
+            dan kembali lagi, letak & ukurannya tak terlihat lagi — sehingga
+            tak ada cara memastikan setiap halaman sudah tervisualisasi sesuai
+            pengaturan. Kini digambar kembali sebagai bayangan bergaris putus.
+
+            `pointer-events-none` WAJIB: bayangan yang menumpuk kotak aktif
+            akan merampas gesernya, dan orangnya mendadak tak bisa memindahkan
+            tanda tangan yang sedang diatur tanpa tahu sebabnya.
+
+            Tingginya dihitung ulang dari `rasioHal` HALAMAN INI — bukan
+            disimpan — karena halaman landscape punya rasio berbeda; memakai
+            tinggi beku akan menggambar kotak yang tak sesuai hasil cetaknya. */}
+        {!gagalHal && !muatHal && tetap.map((t, i) => (
+          t.halaman === halaman ? (
+            <div key={`tetap-${i}`}
+              className={`absolute z-10 border-2 border-dashed ${warna.border} rounded-md pointer-events-none opacity-70`}
+              style={{
+                left: `${t.x * 100}%`, top: `${t.y * 100}%`,
+                width: `${t.lebar * 100}%`,
+                height: `${((t.lebar * rasio) / rasioHal) * 100}%`,
+              }}
+              data-testid={`posisi-tetap-${i}`}
+              data-halaman={t.halaman}>
+              <img src={pngTtd} alt="" draggable={false}
+                className="w-full h-full object-contain" />
+              {/* Label DI DALAM kotak: wadah pratinjau ber-`overflow-hidden`,
+                  jadi label di atas garisnya akan terpotong habis begitu
+                  kotaknya menempel tepi atas halaman. */}
+              <span className="absolute top-0 left-0 text-[9px] px-1 rounded-br bg-blue-600 text-white whitespace-nowrap">
+                Tersimpan
+              </span>
+            </div>
+          ) : null
+        ))}
+
         {/* Kotak — geser untuk memindah, pegangan untuk ukuran. Pegangan DI
             DALAM kotak agar tak terpotong overflow saat menempel tepi. */}
         {!gagalHal && !muatHal && (
           <div
-            className={`absolute border-2 ${warna.border} ${warna.bg} rounded-md cursor-move ${qr ? "" : "shadow-[0_0_0_9999px_rgba(0,0,0,0.06)]"}`}
+            className={`absolute z-20 border-2 ${warna.border} ${warna.bg} rounded-md cursor-move ${qr ? "" : "shadow-[0_0_0_9999px_rgba(0,0,0,0.06)]"}`}
             style={{
               left: `${pos.x * 100}%`, top: `${pos.y * 100}%`,
               width: `${pos.lebar * 100}%`, height: `${tinggiKotak * 100}%`,
@@ -272,7 +308,20 @@ export default function AturPosisiTtd({
           <div className="flex flex-wrap gap-1">
             {tetap.map((t, i) => (
               <span key={i} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-border bg-background">
-                Halaman {t.halaman}
+                {/* Label MENJADI TOMBOL LONCAT ke halamannya. Memastikan
+                    "semua halaman sudah tervisualisasi sesuai pengaturan"
+                    menuntut orangnya bisa MELIHAT tiap letak, dan menyuruhnya
+                    menekan ◀ ▶ berkali-kali untuk itu adalah pekerjaan yang
+                    komputer bisa lakukan sekali tekan. */}
+                <button type="button"
+                  className={`min-w-0 min-h-0 underline-offset-2 ${
+                    t.halaman === halaman ? "font-semibold text-blue-600 dark:text-blue-400"
+                      : "hover:underline"}`}
+                  title={`Lihat letak pembubuhan di halaman ${t.halaman}`}
+                  data-testid={`posisi-lihat-${i}`}
+                  onClick={() => setHalaman(t.halaman)}>
+                  Halaman {t.halaman}
+                </button>
                 <button type="button" aria-label={`Batalkan pembubuhan halaman ${t.halaman}`}
                   className="text-red-500 min-w-0 min-h-0"
                   data-testid={`posisi-hapus-${i}`}

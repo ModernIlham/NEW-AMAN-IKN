@@ -67,6 +67,49 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#932] Letak pembubuhan tersimpan tetap terlihat di halamannya — 2026-08-24
+
+Laporan pemilik: *"apabila sudah menentukan posisi tanda tangan, saat di-next
+halaman berikutnya dan kembali lagi ke halaman tanda tangan, lokasi serta
+ukuran tanda tangan tidak terlihat lagi tampil — tolong buat agar muncul dan
+pengguna dapat memastikan semua halaman sudah tervisualisasi sesuai
+pengaturan."*
+
+Pratinjau hanya menggambar kotak yang SEDANG diatur. Letak yang sudah
+disimpan lewat "Tanda tangan lagi" hanya tercatat sebagai label teks
+("Halaman 3"), jadi orang yang hendak memeriksa hasil pengaturannya tak punya
+cara melihatnya sama sekali — persis pada langkah yang menuntut ketelitian,
+karena sesudah dibubuhkan tautannya tertutup.
+
+**Yang berubah**
+
+- Setiap pembubuhan tersimpan digambar kembali sebagai **bayangan bergaris
+  putus** pada halamannya sendiri, memakai letak & ukuran yang sama persis,
+  berlabel "Tersimpan" agar tak tertukar dengan yang sedang diatur.
+- **`pointer-events-none`** pada bayangan. Sesudah disimpan, bayangan dan
+  kotak aktif bertumpuk PERSIS; bayangan yang menangkap sentuhan akan
+  merampas gesernya dan tanda tangan aktif mendadak tak bisa dipindahkan
+  tanpa satu pun tanda kenapa.
+- Tingginya **dihitung ulang** dari rasio halaman yang sedang dibuka, bukan
+  disimpan: halaman landscape punya rasio berbeda, dan tinggi beku akan
+  menggambar kotak yang tak sesuai hasil cetaknya.
+- Label pada daftar menjadi **tombol loncat** ke halaman letaknya. Memastikan
+  "semua halaman sudah tervisualisasi" menuntut orangnya bisa MELIHAT tiap
+  letak; menyuruhnya menekan ◀ ▶ berkali-kali untuk itu adalah pekerjaan yang
+  komputer bisa lakukan sekali tekan.
+- Label "Tersimpan" ditaruh DI DALAM kotak — wadah pratinjau
+  ber-`overflow-hidden`, jadi label di atas garisnya akan terpotong habis
+  begitu kotaknya menempel tepi atas halaman.
+
+**Berkas**: `frontend/src/components/ttd/AturPosisiTtd.jsx`.
+
+**Uji**: `PembubuhanTersimpanTampil.test.jsx` (9) — termasuk pembanding bahwa
+bayangan TIDAK muncul di halaman lain dan peran QR tak menggambar apa pun.
+Frontend 108 suite / 1156 uji hijau, eslint bersih, `yarn build` sukses.
+Empat mutasi dipasang lalu terbukti mati: (1) bayangan tak digambar → 7 uji;
+(2) digambar di semua halaman → 2 uji; (3) bayangan menangkap sentuhan → 1
+uji; (4) label daftar tak meloncat → 1 uji.
+
 ## [#931] E-sign menahan pembubuhan yang belum lengkap — 2026-08-24
 
 Laporan pemilik: *"ketika salah satu penanda tangan menandatangani hanya 1
