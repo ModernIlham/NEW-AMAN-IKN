@@ -30,7 +30,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from pymongo import ReturnDocument
 
-from auth_utils import require_admin, require_user, require_writer
+from auth_utils import require_admin, require_user, require_writer, require_writer_satker
 from db import db
 from satker_wajib import pesan_satker_wajib, satker_pertama_terisi
 from shared_utils import (log_audit, kode_satker_user,
@@ -1108,7 +1108,7 @@ async def daftar_surat(jenis: str = "", status: str = "", modul: str = "",
 
 @persuratan_router.post("/persuratan/keluar")
 async def booking_surat_keluar(payload: SuratKeluarIn,
-                               user: dict = Depends(require_writer)):
+                               user: dict = Depends(require_writer_satker)):
     """BOOKING nomor surat keluar — nomor terbit atomik, status 'dibooking'.
 
     Nomor tetap milik surat ini sampai disahkan/dibatalkan; pembatalan
@@ -1235,7 +1235,7 @@ async def booking_surat_keluar(payload: SuratKeluarIn,
 
 @persuratan_router.post("/persuratan/masuk")
 async def agenda_surat_masuk(payload: SuratMasukIn,
-                             user: dict = Depends(require_writer)):
+                             user: dict = Depends(require_writer_satker)):
     """Catat surat masuk pada buku agenda (nomor agenda otomatis per periode).
 
     Periode mengikuti TANGGAL AGENDA (hari ini) — tanggal surat pengirim

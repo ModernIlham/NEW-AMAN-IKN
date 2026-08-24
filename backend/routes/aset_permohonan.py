@@ -29,7 +29,9 @@ from aset_permohonan_utils import (
     JALUR_PERMOHONAN_ASET, ringkasan_permohonan_aset, validate_permohonan_aset,
 )
 from auth_utils import (require_admin, require_user,
-                        require_user_or_query_token, require_writer)
+                        require_user_or_query_token, require_writer,
+    require_writer_satker,
+)
 from db import db
 from persediaan_permohonan_utils import boleh_putuskan
 from shared_utils import (kode_satker_user, log_audit,
@@ -51,7 +53,7 @@ class TolakAsetIn(BaseModel):
 
 @aset_permohonan_router.post("/pembukuan/permohonan")
 async def ajukan_permohonan_aset(data: PermohonanAsetIn, request: Request = None,
-                                 user: dict = Depends(require_writer)):
+                                 user: dict = Depends(require_writer_satker)):
     """Ajukan permohonan transaksi aset — belum menyentuh aset/jurnal."""
     from shared_utils import kunci_idem
     idem_key = kunci_idem(

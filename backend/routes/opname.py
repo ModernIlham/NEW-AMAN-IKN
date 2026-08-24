@@ -35,7 +35,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from pymongo.errors import DuplicateKeyError
 
-from auth_utils import require_user, require_writer
+from auth_utils import require_user, require_writer, require_writer_satker
 from db import db
 from shared_utils import (kode_satker_user, limiter, log_audit,
                           pastikan_akses_aset, scope_query_aset,
@@ -147,7 +147,7 @@ class ScanIn(BaseModel):
 @opname_router.post("/opname/scan")
 @limiter.limit("120/minute")
 async def catat_scan(request: Request, payload: ScanIn,
-                     _user: dict = Depends(require_writer)):
+                     _user: dict = Depends(require_writer_satker)):
     """Catat satu pemindaian stiker sebagai observasi lokasi.
 
     IDEMPOTEN lewat `scan_id` yang dibuat KLIEN sekali per tindakan pindai.

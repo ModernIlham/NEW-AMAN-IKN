@@ -18,7 +18,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
-from auth_utils import require_admin, require_user, require_writer
+from auth_utils import require_admin, require_user, require_writer, require_admin_satker
 from db import db
 from report_filters import active_asset_filter
 from shared_utils import (limiter, log_audit, kode_satker_user,
@@ -124,7 +124,7 @@ def _parse_siman_xlsx(isi: bytes) -> tuple:
 @limiter.limit("6/minute")
 async def import_siman(request: Request, file: UploadFile = File(...),
                        tandai_tidak_ditemukan: bool = False,
-                       user: dict = Depends(require_admin)):
+                       user: dict = Depends(require_admin_satker)):
     """Impor ekspor SIMAN V2 (XLSX "Master Aset") dan tandai selisih per aset.
 
     `tandai_tidak_ditemukan=true` juga menandai aset AMAN yang TIDAK ada di

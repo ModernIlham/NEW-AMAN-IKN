@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
-from auth_utils import require_admin, require_user, require_writer
+from auth_utils import require_admin, require_user, require_writer, require_writer_satker
 from db import db
 from pemeliharaan_utils import rekap_pemeliharaan
 from shared_utils import (kode_satker_user, scope_query_aset,
@@ -235,7 +235,7 @@ async def export_usulan_rkbmn(_user: dict = Depends(require_user)):
 
 @perencanaan_router.post("/perencanaan/usulan")
 async def buat_usulan_rkbmn(payload: UsulanRkbmnIn,
-                            user: dict = Depends(require_writer)):
+                            user: dict = Depends(require_writer_satker)):
     """Buat usulan RKBMN baru (status awal draft; aset opsional)."""
     data = payload.model_dump()
     errors = validate_usulan_rkbmn(data)

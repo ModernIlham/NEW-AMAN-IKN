@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
+    require_writer_satker,
 )
 from db import db
 from pegawai_utils import baris_identitas_isian
@@ -127,7 +128,7 @@ async def daftar_usulan_pemusnahan(_user: dict = Depends(require_user)):
 
 @pemusnahan_router.post("/pemusnahan/usulan")
 async def buat_usulan_pemusnahan(payload: UsulanPemusnahanIn,
-                                 user: dict = Depends(require_writer)):
+                                 user: dict = Depends(require_writer_satker)):
     """Buka usulan pemusnahan multi-aset (aset harus Rusak Berat)."""
     data = payload.model_dump()
     errors = validate_usulan_pemusnahan(data)
@@ -291,7 +292,7 @@ async def hapus_usulan_pemusnahan(usulan_id: str,
 
 
 @pemusnahan_router.post("/pemusnahan")
-async def buat_pemusnahan(payload: PemusnahanIn, user: dict = Depends(require_writer)):
+async def buat_pemusnahan(payload: PemusnahanIn, user: dict = Depends(require_writer_satker)):
     """Catat satu BA pemusnahan multi-aset (aset harus rusak berat)."""
     data = payload.model_dump()
     today_iso = datetime.now(timezone.utc).date().isoformat()

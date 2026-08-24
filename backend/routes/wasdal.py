@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
+    require_writer_satker,
 )
 from db import db
 from pegawai_utils import baris_identitas_isian
@@ -276,7 +277,7 @@ async def export_penertiban(_user: dict = Depends(require_user)):
 
 @wasdal_router.post("/wasdal/penertiban")
 async def catat_penertiban(payload: PenertibanIn,
-                           user: dict = Depends(require_writer)):
+                           user: dict = Depends(require_writer_satker)):
     """Buka tiket penertiban — tenggat otomatis 15 hari kerja."""
     data = payload.model_dump()
     errors = validate_penertiban(data)
@@ -436,7 +437,7 @@ async def export_insidentil(_user: dict = Depends(require_user)):
 
 @wasdal_router.post("/wasdal/insidentil")
 async def catat_insidentil(payload: InsidentilIn,
-                           user: dict = Depends(require_writer)):
+                           user: dict = Depends(require_writer_satker)):
     """Buka pemantauan insidentil (pemicu masyarakat/media/audit)."""
     data = payload.model_dump()
     errors = validate_insidentil(data)

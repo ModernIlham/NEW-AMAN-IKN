@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from auth_utils import require_admin, require_user, require_writer
+from auth_utils import require_admin, require_user, require_writer, require_writer_satker, require_admin_satker
 from db import db
 from shared_utils import kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker
 from penganggaran_utils import (
@@ -171,7 +171,7 @@ async def list_kalender_penganggaran(_user: dict = Depends(require_user)):
 
 @penganggaran_router.post("/penganggaran/kalender")
 async def buat_tahapan_kalender(payload: TahapanKalenderIn,
-                                admin: dict = Depends(require_admin)):
+                                admin: dict = Depends(require_admin_satker)):
     """Daftarkan satu tahapan kalender penganggaran (admin)."""
     data = payload.model_dump()
     errors = validate_tahapan_kalender(data)
@@ -228,7 +228,7 @@ async def _ambil_snapshot_rkbmn(rkbmn_id: str, user=None) -> dict:
 
 @penganggaran_router.post("/penganggaran")
 async def buat_usulan_anggaran(payload: UsulanAnggaranIn,
-                               user: dict = Depends(require_writer)):
+                               user: dict = Depends(require_writer_satker)):
     """Buat usulan penganggaran (opsional tertaut aset + FK usulan RKBMN)."""
     data = payload.model_dump()
     errors = validate_usulan_anggaran(data)
