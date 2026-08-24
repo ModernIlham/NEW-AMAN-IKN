@@ -14,6 +14,10 @@ from mongomock_motor import AsyncMongoMockClient
 import routes.persediaan as rps
 
 USER = {"username": "gudang", "role": "admin", "kode_satker": ""}
+# Operator yang TERIKAT satker — dipakai uji yang benar-benar
+# menerbitkan nomor surat.
+USER_SATKER = {"username": "gudang", "role": "admin",
+               "kode_satker": "527001"}
 
 
 def _unwrap(fn):
@@ -236,7 +240,12 @@ def test_booking_nomor_lpb_benar_benar_menerbitkan_nomor(dbx):
         m = _massal()
         m.booking_otomatis = True
         m.no_bukti = ""                     # kosongkan agar booking dipakai
-        hasil = await _unwrap(rps.transaksi_massal)(m, user=USER)
+        # Pemanggil BER-SATKER. Penerbitan nomor otomatis kini menolak
+        # pemanggil pusat tanpa satker (lihat satker_wajib.py): surat
+        # berstempel "" tampil di register SETIAP satker dan menghabiskan
+        # nomor agenda mereka. Yang diuji di sini penomorannya, jadi
+        # pemanggilnya dibuat wajar.
+        hasil = await _unwrap(rps.transaksi_massal)(m, user=USER_SATKER)
         assert hasil["nomor_lpb"], "nomor LPB tak pernah terbit"
 
         lpb = await dbx.lpb.find_one({"id": hasil["lpb_id"]})
@@ -262,7 +271,7 @@ def test_nomor_lpb_tak_pernah_terpakai_dua_kali(dbx):
             m = _massal()
             m.booking_otomatis = True
             m.no_bukti = ""
-            hasil = await _unwrap(rps.transaksi_massal)(m, user=USER)
+            hasil = await _unwrap(rps.transaksi_massal)(m, user=USER_SATKER)
             nomor.append(hasil["nomor_lpb"])
         assert len(set(nomor)) == 3, f"nomor LPB berulang: {nomor}"
     _jalan(skenario())

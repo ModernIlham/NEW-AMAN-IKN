@@ -33,7 +33,11 @@ from persuratan_utils import (
     pilih_klasifikasi, placeholder_tak_dikenal, terapkan_komposisi,
 )
 
-ADMIN = {"username": "admin", "role": "admin", "name": "Admin", "kode_satker": ""}
+# Admin BER-SATKER — penerbitan nomor menolak pemanggil tanpa satker
+# (satker_wajib.py): surat berstempel "" tampil di register SETIAP
+# satker sekaligus menghabiskan nomor agenda mereka.
+ADMIN = {"username": "admin", "role": "admin", "name": "Admin",
+         "kode_satker": "527001"}
 AKAR = pathlib.Path(__file__).resolve().parents[2]
 
 PETA = [{"modul": "pengadaan", "jenis_naskah": "", "kode": "PL.02"}]

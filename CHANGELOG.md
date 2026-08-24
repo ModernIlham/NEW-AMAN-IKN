@@ -67,6 +67,78 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#933] Registrasi persuratan wajib bersatker — tutup kebocoran lintas satker — 2026-08-24
+
+Laporan pemilik: *"pada saat mengganti role masih ada kebocoran data di
+registrasi persuratan saat pembuatan LPB. Cek juga semua generate yang lainnya
+agar tidak ada kebocoran satker."*
+
+**DIUKUR SEBELUM DITAMBAL**, dengan menjalankan jalurnya sungguhan:
+
+| | |
+|---|---|
+| Super-admin PUSAT (belum memilih Satker Aktif) memesan nomor LPB | surat tersimpan `kode_satker: ""` |
+| Operator satker 527001 membuka Registrasi Persuratan | surat itu **terlihat** |
+| Operator satker 999999 membuka Registrasi Persuratan | surat itu **juga terlihat** |
+| Satker menerbitkan surat PERTAMANYA sesudah itu | dapat nomor **002**, bukan 001 |
+
+`scope_query_field_satker` SENGAJA meloloskan dokumen berstempel `""` —
+konvensi kompatibilitas untuk data era lama. Yang benar untuk data lama
+menjadi lubang untuk data BARU. Dan kerusakannya bukan sekadar tampilan:
+`_seed_agenda` memperlakukan surat tanpa stempel sebagai milik satker yang
+membacanya, jadi satu surat `""` **menghabiskan satu nomor agenda di buku
+setiap satker**.
+
+**Yang berubah**
+
+- **`satker_wajib.py`** (baru, murni) — `satker_pertama_terisi`,
+  `pesan_satker_wajib`, `PETUNJUK_SATKER`. Satu kalimat penolakan untuk semua
+  jalur: penolakan yang berbeda-beda di tiap modul membuat operator mengira
+  ia menghadapi masalah yang berbeda-beda pula.
+- **Gerbang di tiga pintu penerbitan surat**: `booking_nomor_otomatis`
+  (dipakai LPB persediaan, LPB aset, nota dinas pemindahtanganan, surat
+  persetujuan aset), `booking_surat_keluar` manual, dan `agenda_surat_masuk`
+  manual. Pemanggil tanpa satker ditolak 400 dengan petunjuk memilih Satker
+  Aktif.
+- Gerbangnya berdiri **sebelum** nomor dipesan dan surat ditulis — penolakan
+  tak boleh meninggalkan surat yatim maupun menghabiskan nomor agenda.
+
+**Menolak, bukan menebak**: nomor surat resmi adalah posisi dalam buku agenda
+SEBUAH satker. Nomor tanpa satker bukan nomor yang kurang lengkap, melainkan
+nomor yang tak punya arti — dan menebak satkernya akan menaruh surat resmi di
+buku yang salah, kesalahan yang jauh lebih sulit diperbaiki daripada satu
+penolakan yang bisa langsung ditindaklanjuti.
+
+**Bukan kebocoran** (diperiksa, sengaja dibiarkan): `klasifikasi_arsip`
+berstempel `""` berarti "Bersama" dan `pengaturan_persuratan` berstempel `""`
+berarti "Universal" — keduanya lapisan bersama yang memang dirancang begitu.
+
+**Uji**: `test_kebocoran_satker_penerbitan.py` (12) — termasuk pengukuran
+ulang bahwa surat satker A tak lagi terlihat satker B dan deret nomor keduanya
+tak saling menggeser. Backend 3508 hijau. Empat mutasi dipasang lalu terbukti
+mati: (1) gerbang booking dicabut → 4 uji; (2) gerbang dipindah sesudah nomor
+dipesan → 1 uji; (3) gerbang surat keluar manual dicabut → 1 uji; (4) gerbang
+surat masuk manual dicabut → 1 uji.
+
+**Catatan kejujuran uji**: mutasi (3) mula-mula **LOLOS** — gerbang manual
+sempat ditambahkan tanpa satu pun uji yang menjaganya. Kelas
+`TestRegistrasiManualJugaBersatker` ditulis setelah mutasi itu membongkarnya.
+
+**Uji lama yang disesuaikan**: enam berkas uji memakai admin ber-`kode_satker:
+""` — persis kasus yang kini ditolak. Semuanya diikat ke satker karena yang
+diuji di sana klasifikasi/penomoran, bukan isolasi satker.
+
+**BELUM DIKERJAKAN — daftar tindak lanjut**: audit ke modul lain menemukan
+pola stempel yang SAMA (`kode_satker_user(user)` pada koleksi ber-scope
+satker, yang bernilai `""` untuk pemanggil pusat) di `pemusnahan.py`
+(166, 317, 379), `pemanfaatan.py` (179, 289, 524), `penggunaan.py` (1389,
+1494, 1586), `aset_permohonan.py` (474), `pengadaan.py` (1216, 1408, 1963),
+dan `bast.py` (575). Ketiga modul pertama sudah dipastikan membaca dengan
+`scope_query_field_satker` — yang meloloskan `""` — jadi kandidat ini sekelas
+dengan yang ditambal di sini. BELUM diverifikasi ujung-ke-ujung dan BELUM
+ditambal: masing-masing menuntut penurunan satker dari aset/dokumen sumbernya
+sendiri, jadi layak jadi PR tersendiri per modul.
+
 ## [#932] Letak pembubuhan tersimpan tetap terlihat di halamannya — 2026-08-24
 
 Laporan pemilik: *"apabila sudah menentukan posisi tanda tangan, saat di-next

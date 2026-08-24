@@ -26,7 +26,13 @@ from mongomock_motor import AsyncMongoMockClient
 
 import routes.persuratan as rp
 
-ADMIN = {"username": "admin", "role": "admin", "name": "Admin", "kode_satker": ""}
+# Admin BER-SATKER — bukan admin pusat tanpa satker. Penerbitan nomor
+# otomatis kini menolak pemanggil tanpa satker (lihat satker_wajib.py):
+# surat berstempel "" tampil di register SETIAP satker dan menghabiskan
+# nomor agenda mereka. Berkas ini menguji KLASIFIKASI, jadi ia memakai
+# pemanggil yang wajar; penolakannya sendiri diuji tersendiri di bawah.
+ADMIN = {"username": "admin", "role": "admin", "name": "Admin",
+         "kode_satker": "527001"}
 AKAR = pathlib.Path(__file__).resolve().parents[2]
 FORMAT = "{kode_keamanan}-{urut}/{kode_klasifikasi}/{kode_unit}/{bulan_romawi}/{tahun}"
 
