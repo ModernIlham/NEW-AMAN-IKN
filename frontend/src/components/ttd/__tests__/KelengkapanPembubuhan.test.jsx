@@ -31,6 +31,13 @@ function pasang(props = {}) {
 }
 
 const kirim = () => screen.getByTestId("posisi-kirim");
+/** Menekan "Bubuhkan" kini membuka PEMERIKSAAN AKHIR lebih dulu (dokumen
+ *  banyak halaman) — lihat PeriksaSebelumBubuh.test.jsx. Di sini dilewati. */
+function bubuhkan() {
+  fireEvent.click(kirim());
+  const lanjut = screen.queryByTestId("periksa-lanjut");
+  if (lanjut) fireEvent.click(lanjut);
+}
 const tambah = () => screen.getByTestId("posisi-tambah");
 
 describe("wajib lebih dari satu", () => {
@@ -57,7 +64,7 @@ describe("wajib lebih dari satu", () => {
     expect(kirim()).toBeDisabled();       // 2 dari 3
     fireEvent.click(tambah());
     expect(kirim()).not.toBeDisabled();   // 3 dari 3
-    fireEvent.click(kirim());
+    bubuhkan();
     expect(onKirim).toHaveBeenCalledTimes(1);
     expect(onKirim.mock.calls[0][1]).toHaveLength(2);
   });
@@ -90,7 +97,7 @@ describe("wajib satu (bawaan)", () => {
     const onKirim = pasang();
     expect(kirim()).not.toBeDisabled();
     expect(kirim()).toHaveTextContent("Bubuhkan di Posisi Ini");
-    fireEvent.click(kirim());
+    bubuhkan();
     expect(onKirim).toHaveBeenCalledTimes(1);
   });
 

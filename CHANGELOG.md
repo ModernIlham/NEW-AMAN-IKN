@@ -67,6 +67,61 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#935] Pemeriksaan akhir sebelum membubuhkan tanda tangan — 2026-08-25
+
+Laporan pemilik: *"ketika link bubuhkan tanda tangan diterima penanda tangan,
+sering kali penandatangan tidak melihat semua halaman terkait padahal ada
+lebih dari 1 kali tanda tangan yang seharusnya dia tandatangani, tapi dia
+tidak memperhatikan dan langsung mengklik membubuhkan tanpa mengecek ulang."*
+
+**Celah yang tersisa dari [#931].** Penahanan jumlah di sana hanya bekerja
+bila pemilik dokumen MENDEKLARASIKAN `jumlah_ttd`. Bila ia lupa — dan
+bawaannya 1 — tak ada apa pun yang menahan, dan penanda tangan menekan
+Bubuhkan atas dokumen yang belum ia lihat seluruhnya.
+
+**Yang berubah**
+
+- **`lib/ringkasPembubuhan.js`** (baru, murni) — `ringkasPembubuhan`
+  (halaman yang akan tertanda tangan / tidak / **belum pernah dibuka**) dan
+  `perluPeriksaAkhir`.
+- Menekan **Bubuhkan** pada dokumen banyak halaman kini **mengganti layar**
+  dengan daftar pemeriksaan, bukan langsung mengirim. Dua tombol: "Periksa
+  lagi" dan "Ya, bubuhkan sekarang".
+- Layar pengaturan **mencatat halaman mana yang pratinjaunya benar-benar
+  dimuat**, sehingga pemeriksaan bisa menyebut halaman yang **belum pernah
+  dibuka** — fakta pasti yang diketahui layar, bukan tuduhan. Itulah yang
+  mengubah "saya kira sudah semua" menjadi "saya belum melihat halaman 3".
+
+**Kenapa mengganti layar, bukan menambah peringatan.** Yang dikeluhkan bukan
+kurangnya informasi, melainkan informasi yang dilewati. Peringatan tambahan di
+layar yang sama akan dilewati dengan cara yang sama; daftar halaman harus
+menjadi **satu-satunya** yang terlihat pada detik keputusan diambil.
+
+**Dokumen SATU halaman tak diperiksa.** Tak ada halaman lain untuk terlewat,
+dan konfirmasi di sana hanya melatih orang menekan "Ya" tanpa membaca —
+pelatihan yang justru melumpuhkan konfirmasi yang benar-benar penting. Peran
+QR (pemilik menempatkan QR verifikasi) juga tak tersentuh.
+
+Halaman yang berisi pembubuhan otomatis terhitung dilihat: mustahil
+menempatkan kotak di halaman yang tak tampil, dan menuduhnya "belum dibuka"
+akan membuat peringatan tampak keliru lalu diabaikan.
+
+**Uji**: `ringkasPembubuhan.test.js` (9), `PeriksaSebelumBubuh.test.jsx` (10).
+Frontend 110 suite / 1175 uji hijau, eslint bersih, `yarn build` sukses. Empat
+mutasi dipasang lalu terbukti mati: (1) pemeriksaan dilewati → 7 uji; (2)
+halaman yang dibuka tak dicatat → 2 uji; (3) halaman ber-ttd tak terhitung
+dilihat → 3 uji; (4) dokumen satu halaman ikut diperiksa → 2 uji.
+
+**Catatan kejujuran uji**: mutasi (2) mula-mula hanya membunuh SATU uji —
+satu uji lain lolos karena berhenti di halaman yang sedang diatur, yang
+otomatis terhitung ber-ttd. Ujinya diganti dengan halaman yang DILEWATI
+(dibuka lalu ditinggalkan), satu-satunya yang benar-benar membedakan.
+
+**Uji lama yang disesuaikan**: lima uji di `AturPosisiBanyak.test.jsx` dan
+`KelengkapanPembubuhan.test.jsx` menekan Bubuhkan lalu menagih `onKirim`
+langsung terpanggil. Keduanya kini melewati layar pemeriksaan lewat pembantu
+`bubuhkan()`.
+
 ## [#934] Gerbang global: dokumen ber-satker wajib bersatker — 2026-08-25
 
 Lanjutan [#933], atas permintaan pemilik: *"cek juga semua generate yang
