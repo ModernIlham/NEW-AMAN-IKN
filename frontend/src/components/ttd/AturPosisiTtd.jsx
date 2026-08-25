@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { perluPeriksaAkhir, ringkasPembubuhan } from "@/lib/ringkasPembubuhan";
 import {
   ChevronLeft, ChevronRight, Loader2, MapPin, Maximize2, Plus, QrCode, X,
 } from "lucide-react";
@@ -64,6 +65,10 @@ export default function AturPosisiTtd({
   // operasional: blok tanda tangan Berita Acara + lembar Surat Pernyataan
   // Tanggung Jawab di halaman berikutnya).
   const [tetap, setTetap] = useState([]);
+  // Halaman yang pratinjaunya sudah pernah dimuat (lihat onLoad <img>).
+  const [dilihat, setDilihat] = useState(() => new Set());
+  // Pemeriksaan akhir: null = tertutup; objek ringkasan = sedang ditampilkan.
+  const [periksa, setPeriksa] = useState(null);
   // Berapa tempat yang WAJIB diteken orang ini (deklarasi pemilik dokumen).
   // Yang sedang diatur ikut terhitung — ia akan ikut terkirim saat tombol
   // "Bubuhkan" ditekan.
@@ -134,6 +139,64 @@ export default function AturPosisiTtd({
     ? { border: "border-emerald-500", bg: "bg-emerald-500/10", pegangan: "bg-emerald-600", accent: "accent-emerald-600", teks: "text-emerald-600" }
     : { border: "border-blue-500", bg: "bg-blue-500/10", pegangan: "bg-teal-700", accent: "accent-blue-600", teks: "text-blue-600" };
 
+  // PEMERIKSAAN AKHIR — layar tersendiri, bukan dialog kecil di atas peta.
+  //
+  // Laporan pemilik: penanda tangan "tidak memperhatikan dan langsung
+  // mengklik membubuhkan tanpa mengecek ulang". Yang menyembuhkannya bukan
+  // peringatan tambahan di layar yang sama — mata sudah terbiasa
+  // melewatinya — melainkan MENGGANTI layarnya, sehingga daftar halaman
+  // menjadi satu-satunya yang terlihat pada detik keputusan diambil.
+  if (periksa) {
+    const { ditandatangani, tanpaTtd, belumDibuka } = periksa;
+    return (
+      <div className="space-y-3" data-testid="periksa-akhir">
+        <p className="text-xs font-bold">Periksa sebelum membubuhkan</p>
+        <div className="rounded-xl border border-border divide-y divide-border text-[12px]">
+          <div className="px-3 py-2">
+            <p className="font-semibold text-emerald-700 dark:text-emerald-400">
+              Akan tertanda tangan — halaman {ditandatangani.join(", ")}
+            </p>
+          </div>
+          {tanpaTtd.length > 0 && (
+            <div className="px-3 py-2" data-testid="periksa-tanpa-ttd">
+              <p className="font-semibold text-muted-foreground">
+                TIDAK akan tertanda tangan — halaman {tanpaTtd.join(", ")}
+              </p>
+              <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
+                Bila salah satunya memuat blok tanda tangan Anda, lembar itu
+                akan terbit kosong.
+              </p>
+            </div>
+          )}
+          {belumDibuka.length > 0 && (
+            <div className="px-3 py-2 bg-amber-500/10" data-testid="periksa-belum-dibuka">
+              <p className="font-semibold text-amber-700 dark:text-amber-300">
+                Belum pernah Anda buka — halaman {belumDibuka.join(", ")}
+              </p>
+              <p className="text-[11px] text-amber-800 dark:text-amber-200 leading-snug mt-0.5">
+                Buka dulu untuk memastikan tak ada blok tanda tangan Anda di
+                sana. Sekali dibubuhkan, tautan ini tertutup.
+              </p>
+            </div>
+          )}
+        </div>
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+          <Button type="button" variant="outline" size="sm" className="h-9 text-xs"
+            disabled={mengirim} onClick={() => setPeriksa(null)}
+            data-testid="periksa-kembali">
+            Periksa lagi
+          </Button>
+          <Button type="button" size="sm" className="h-9 text-xs" disabled={mengirim}
+            onClick={() => onKirim({ halaman, ...pos }, tetap)}
+            data-testid="periksa-lanjut">
+            {mengirim ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+            Ya, bubuhkan sekarang
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3" data-testid={qr ? "atur-posisi-qr" : "atur-posisi-ttd"}>
       <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -184,6 +247,11 @@ export default function AturPosisiTtd({
             draggable={false}
             onLoad={(e) => {
               setMuatHal(false);
+              // Halaman ini BENAR-BENAR tampil di layar. Inilah satu-satunya
+              // fakta pasti tentang "sudah dilihat" yang dimiliki layar —
+              // dipakai pemeriksaan akhir untuk menyebut halaman mana yang
+              // belum pernah dibuka penanda tangan.
+              setDilihat((d) => (d.has(halaman) ? d : new Set(d).add(halaman)));
               if (e.target.naturalWidth > 0) {
                 setRasioHal(e.target.naturalHeight / e.target.naturalWidth);
               }
@@ -366,7 +434,21 @@ export default function AturPosisiTtd({
               peringatan yang bisa dilewati. */}
           <Button type="button" size="sm" className="h-9 text-xs"
             disabled={mengirim || gagalHal || muatHal || kurang > 0}
-            onClick={() => onKirim({ halaman, ...pos }, tetap)} data-testid="posisi-kirim">
+            onClick={() => {
+              const semuaTtd = [...tetap.map((t) => t.halaman), halaman];
+              // PEMERIKSAAN AKHIR, bukan pengiriman langsung. Penahanan
+              // jumlah hanya bekerja bila pemilik dokumen mendeklarasikannya;
+              // bila ia lupa, tak ada apa pun yang menahan dan orang menekan
+              // Bubuhkan atas dokumen yang belum ia lihat seluruhnya.
+              if (!qr && perluPeriksaAkhir(total)) {
+                setPeriksa(ringkasPembubuhan({
+                  jumlahHalaman: total, halamanTtd: semuaTtd,
+                  halamanDilihat: [...dilihat],
+                }));
+                return;
+              }
+              onKirim({ halaman, ...pos }, tetap);
+            }} data-testid="posisi-kirim">
             {mengirim ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
             {labelKirim || (qr ? "Simpan & Unduh"
               : kurang > 0 ? `Kurang ${kurang} tanda tangan lagi`

@@ -17,6 +17,15 @@ import AturPosisiTtd from "../AturPosisiTtd";
 
 const PNG = "data:image/png;base64,iVBORw0KGgo=";
 
+/** Menekan "Bubuhkan" kini membuka PEMERIKSAAN AKHIR lebih dulu (dokumen
+ *  banyak halaman) — daftar halaman yang akan & tidak tertanda tangan.
+ *  Lihat PeriksaSebelumBubuh.test.jsx; di sini ia sekadar dilewati. */
+function bubuhkan() {
+  fireEvent.click(screen.getByTestId("posisi-kirim"));
+  const lanjut = screen.queryByTestId("periksa-lanjut");
+  if (lanjut) fireEvent.click(lanjut);
+}
+
 function pasang(props = {}) {
   const onKirim = jest.fn();
   render(
@@ -46,7 +55,7 @@ describe("Pembubuhan tambahan", () => {
     // kolom", yang kebetulan benar hari ini — dan diam-diam salah begitu
     // servernya membedakan "kosong" dari "tak dikirim".
     const onKirim = pasang();
-    fireEvent.click(screen.getByTestId("posisi-kirim"));
+    bubuhkan();
     expect(onKirim).toHaveBeenCalledTimes(1);
     expect(onKirim.mock.calls[0][1]).toEqual([]);
   });
@@ -54,7 +63,7 @@ describe("Pembubuhan tambahan", () => {
   test("menambah satu letak lalu kirim membawa KEDUANYA", () => {
     const onKirim = pasang();
     fireEvent.click(screen.getByTestId("posisi-tambah"));
-    fireEvent.click(screen.getByTestId("posisi-kirim"));
+    bubuhkan();
     const [utama, lain] = onKirim.mock.calls[0];
     expect(lain).toHaveLength(1);
     expect(utama).toHaveProperty("halaman");
@@ -77,7 +86,7 @@ describe("Pembubuhan tambahan", () => {
     fireEvent.click(screen.getByTestId("posisi-tambah"));
     fireEvent.click(screen.getByTestId("posisi-tambah"));
     fireEvent.click(screen.getByTestId("posisi-hapus-0"));
-    fireEvent.click(screen.getByTestId("posisi-kirim"));
+    bubuhkan();
     expect(onKirim.mock.calls[0][1]).toHaveLength(1);
   });
 
