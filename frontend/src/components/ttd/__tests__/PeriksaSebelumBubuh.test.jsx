@@ -20,6 +20,14 @@ import AturPosisiTtd from "../AturPosisiTtd";
 
 const PNG = "data:image/png;base64,iVBORw0KGgo=";
 
+/** Pratinjau halaman dimuat lewat <img>; kotak baru digambar setelah siap.
+ *  Dideklarasikan sebagai `function` (bukan const) supaya terangkat — ia
+ *  dipakai `pasang()` di atas definisinya. */
+function muat() {
+  const g = document.querySelector("img");
+  if (g) fireEvent.load(g);
+}
+
 function pasang(props = {}) {
   const onKirim = jest.fn();
   render(
@@ -31,10 +39,6 @@ function pasang(props = {}) {
   return onKirim;
 }
 
-const muat = () => {
-  const g = document.querySelector("img");
-  if (g) fireEvent.load(g);
-};
 const bubuh = () => fireEvent.click(screen.getByTestId("posisi-kirim"));
 const mundur = () => {
   fireEvent.click(screen.getByLabelText("Halaman sebelumnya"));
