@@ -67,6 +67,51 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#937] Kirim TTD: pilih urutan teken & sifat urgensi — 2026-08-29
+
+Permintaan pemilik: *"di saat mengklik 'kirim ttd' juga dapat memilih jenis
+urutan tanda tangan apakah ingin paralel atau berurutan, dan berikan juga
+opsi pemilihan sifat urgensi suratnya."*
+
+Selama ini keduanya **dipatok diam-diam** — `mode="paralel"` dan urgensi tak
+ada sama sekali — sehingga pengirim tak pernah bisa menyatakan bahwa dokumen
+ini harus berurutan atau mendesak.
+
+**Yang berubah**
+
+- Tombol "Kirim ke TTD" membuka **dialog pilihan** lebih dulu: urutan tanda
+  tangan (paralel / berurutan) dan sifat urgensi (Biasa / Segera / Sangat
+  Segera).
+- `PermintaanIn.sifat_urgensi` tersimpan pada permintaan TTD dan **ikut ke
+  halaman publik penanda tangan**. Kalau hanya hidup di dokumen, "segera" tak
+  mengubah apa pun bagi orang yang diminta meneken.
+- Nilai asing ditolak 400 dengan menyebut pilihan yang sah; di layar ia
+  dijatuhkan ke bawaannya lebih dulu (`bersihkanPilihan`) — mengirim yang
+  pasti ditolak hanya menghasilkan galat yang tak bisa diterangkan.
+- `KirimTtdIn` **berbawaan sama dengan perilaku lama**, jadi klien yang belum
+  tahu kolom ini tetap berjalan persis seperti sebelumnya.
+
+**Arti pilihannya ditulis, bukan hanya istilahnya.** "Paralel" dan
+"berurutan" tak berarti apa-apa bagi orang yang baru pertama kali mengirim
+dokumen, jadi di bawah pemilihnya ada penjelasan singkat yang berubah
+mengikuti pilihan.
+
+`<select>` NATIVE, bukan Radix — konvensi repo ini untuk pemilih di dalam
+dialog, dan ia pula yang membuat `select.options` bisa diuji apa adanya.
+
+**Berkas**: `backend/routes/ttd.py`, `backend/routes/bast.py`,
+`frontend/src/lib/opsiKirimTtd.js` (baru),
+`frontend/src/components/ttd/PilihanKirimTtd.jsx` (baru),
+`frontend/src/pages/PenggunaanPage.jsx`.
+
+**Uji**: `opsiKirimTtd.test.js` (10), `PilihanKirimTtd.test.jsx` (8),
+`TestPilihanUrutanDanUrgensi` (5 uji endpoint — termasuk bahwa mode berurutan
+benar-benar hanya mengaktifkan giliran pertama, bukan sekadar label). Backend
+3541 hijau, frontend 1193 hijau, lint bersih, build sukses. Tiga mutasi
+dipasang lalu terbukti mati: (1) pilihan diabaikan server → 4 uji; (2) urgensi
+tak diteruskan ke halaman penanda tangan → 1 uji; (3) dialog mengabaikan
+pilihan pengguna → 1 uji.
+
 ## [#936] SPTJ menambah tempat teken otomatis — 2026-08-29
 
 Permintaan pemilik: *"pada aset pemegang, apabila disertakan surat pernyataan

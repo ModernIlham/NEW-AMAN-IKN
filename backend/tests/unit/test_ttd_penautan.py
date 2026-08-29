@@ -333,3 +333,68 @@ class TestSptjMenambahTempatTeken:
             # Satu pembubuhan saja BELUM cukup untuk orang ber-SPTJ.
             assert pesan_kurang(sari["jumlah_ttd"], {"halaman": 1}, []) != ""
         _jalan(skenario())
+
+
+class TestPilihanUrutanDanUrgensi:
+    """Permintaan pemilik: saat menekan "Kirim TTD" dapat memilih urutan teken
+    (paralel/berurutan) dan sifat urgensi suratnya."""
+
+    def test_bawaannya_sama_dengan_perilaku_lama(self, dbx):
+        async def skenario():
+            await dbx.bast_serah_terima.insert_one(_bast())
+            hasil = await _buka(rb.kirim_bast_ke_ttd)("bast-1", user=USER)
+            sr = await dbx.signature_requests.find_one({"id": hasil["id"]})
+            assert sr["mode"] == "paralel"
+            assert sr["sifat_urgensi"] == "biasa"
+        _jalan(skenario())
+
+    def test_pilihan_pengirim_benar_benar_tersimpan(self, dbx):
+        async def skenario():
+            await dbx.bast_serah_terima.insert_one(_bast())
+            hasil = await _buka(rb.kirim_bast_ke_ttd)(
+                "bast-1", rb.KirimTtdIn(mode="berurutan",
+                                        sifat_urgensi="sangat_segera"),
+                user=USER)
+            sr = await dbx.signature_requests.find_one({"id": hasil["id"]})
+            assert sr["mode"] == "berurutan"
+            assert sr["sifat_urgensi"] == "sangat_segera"
+        _jalan(skenario())
+
+    def test_mode_BERURUTAN_hanya_mengaktifkan_giliran_pertama(self, dbx):
+        """Pilihan itu baru berarti bila ia benar-benar mengubah siapa yang
+        bisa meneken sekarang — kalau tidak, ia hanya label."""
+        async def skenario():
+            await dbx.bast_serah_terima.insert_one(_bast())
+            hasil = await _buka(rb.kirim_bast_ke_ttd)(
+                "bast-1", rb.KirimTtdIn(mode="berurutan"), user=USER)
+            sr = await dbx.signature_requests.find_one({"id": hasil["id"]})
+            status = [s["status"] for s in sr["signers"]]
+            assert status.count("aktif") == 1, status
+            assert status.count("menunggu") == len(status) - 1, status
+        _jalan(skenario())
+
+    def test_urgensi_TAK_DIKENAL_ditolak_400(self, dbx):
+        async def skenario():
+            await dbx.bast_serah_terima.insert_one(_bast())
+            with pytest.raises(rt.HTTPException) as e:
+                await _buka(rb.kirim_bast_ke_ttd)(
+                    "bast-1", rb.KirimTtdIn(sifat_urgensi="gawat_darurat"),
+                    user=USER)
+            assert e.value.status_code == 400
+            assert "urgensi" in str(e.value.detail).lower()
+        _jalan(skenario())
+
+    def test_urgensi_sampai_ke_halaman_penanda_tangan(self, dbx):
+        """Kalau hanya hidup di dokumen, "segera" tak mengubah apa pun bagi
+        orang yang diminta meneken."""
+        async def skenario():
+            await dbx.bast_serah_terima.insert_one(_bast())
+            hasil = await _buka(rb.kirim_bast_ke_ttd)(
+                "bast-1", rb.KirimTtdIn(sifat_urgensi="segera"), user=USER)
+            sr = await dbx.signature_requests.find_one({"id": hasil["id"]})
+            sg = sr["signers"][0]
+            info = await _buka(rt.info_tandatangan)(
+                sr["id"], tok={"sr": sr["id"], "signer": sg["signer_id"],
+                               "jti": sg["jti"]})
+            assert info["sifat_urgensi"] == "segera"
+        _jalan(skenario())

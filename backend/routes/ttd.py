@@ -406,6 +406,11 @@ class PermintaanIn(BaseModel):
     doc_type: str = "dokumen"          # bast|berita_acara|dokumen|…
     doc_ref: str = ""                  # id dokumen sumber (opsional)
     mode: str = "paralel"              # "berurutan" | "paralel"
+    # Seberapa cepat dokumen ini harus diteken. Sumbu TERSENDIRI dari kode
+    # keamanan (lihat persuratan_utils.SIFAT_URGENSI) dan bukan sekadar
+    # hiasan: ia ikut ke halaman penanda tangan dan ke pesan yang dibagikan,
+    # supaya "segera" tak hanya hidup di kepala orang yang mengirim.
+    sifat_urgensi: str = "biasa"
     signers: List[SignerIn]
 
 
@@ -633,6 +638,13 @@ async def buat_permintaan(payload: PermintaanIn,
         raise HTTPException(status_code=400, detail="Minimal satu penanda tangan")
     if payload.mode not in ("berurutan", "paralel"):
         raise HTTPException(status_code=400, detail="Mode harus berurutan/paralel")
+    from persuratan_utils import SIFAT_URGENSI, SIFAT_URGENSI_DEFAULT
+    _urgensi = str(payload.sifat_urgensi or "").strip() or SIFAT_URGENSI_DEFAULT
+    if _urgensi not in SIFAT_URGENSI:
+        raise HTTPException(
+            status_code=400,
+            detail=("Sifat urgensi tidak dikenal: "
+                    f"{_urgensi} (pilih {'/'.join(SIFAT_URGENSI)})"))
     # Bila menaut dokumen TERSTRUKTUR (doc_type ber-koleksi + doc_ref = id-nya),
     # PASTIKAN dokumen itu milik satker pemohon. Ini GERBANG TUNGGAL: back-link
     # penyelesaian (menulis signature_request_id ke dokumen) dan cascade
@@ -729,6 +741,7 @@ async def buat_permintaan(payload: PermintaanIn,
         "doc_type": str(payload.doc_type or "dokumen"),
         "doc_ref": str(payload.doc_ref or ""), "mode": payload.mode,
         "status": "terkirim", "signers": signers,
+        "sifat_urgensi": _urgensi,
         # Isolasi multi-satker: tanpa stempel ini admin satker LAIN dapat
         # melihat & membatalkan permintaan TTD (dokumen + PII penandatangan).
         "kode_satker": kode_sat,
@@ -1696,6 +1709,9 @@ async def info_tandatangan(sr_id: str, tok: dict = Depends(require_sign_token)):
         alasan = "Menunggu giliran penanda tangan sebelumnya (mode berurutan)."
     return {"id": sr_id, "judul": sr.get("judul"), "doc_type": sr.get("doc_type"),
             "mode": sr.get("mode"), "status_dokumen": sr.get("status"),
+            # Penanda tangan berhak tahu seberapa cepat ini dituntut — kalau
+            # hanya hidup di kepala pengirim, "segera" tak mengubah apa pun.
+            "sifat_urgensi": str(sr.get("sifat_urgensi") or "biasa"),
             "penanda_tangan": _publik_signer(sg), "boleh_ttd": bisa,
             "alasan": alasan,
             # Sisa waktu tautan — dihitung DI SERVER (jam perangkat tamu bisa

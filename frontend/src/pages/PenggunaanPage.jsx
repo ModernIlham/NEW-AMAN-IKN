@@ -27,6 +27,7 @@ import {
 } from "@/lib/pjTambahan";
 import KartuTapDialog from "@/components/pegawai/KartuTapDialog";
 import { bagikanWa, bagikanEmail, hasilTtd } from "@/lib/pesanTtd";
+import PilihanKirimTtd from "@/components/ttd/PilihanKirimTtd";
 import { ringkasTtdDokumen, kelasNada } from "@/lib/statusTtd";
 import TautanTtdDialog from "@/components/ttd/TautanTtdDialog";
 
@@ -123,6 +124,8 @@ export default function PenggunaanPage({ user, onBack }) {
   // `ringkas` yang mengisi keterangan pesan WA/email.
   const [ttdHasil, setTtdHasil] = useState(null);
   const [kirimTtdId, setKirimTtdId] = useState(null); // id BAST yang sedang dikirim ke TTD
+  // BAST yang menunggu pilihan urutan & urgensi sebelum dilempar ke e-sign.
+  const [pilihKirimTtd, setPilihKirimTtd] = useState(null);
   // Dialog tautan TTD sebuah BAST — JALAN KEMBALI ke permintaan yang sudah
   // dikirim. Tanpa ini tautannya hilang bersama dialog pembuatan, dan yang
   // tersisa berminggu-minggu kemudian hanya "tautan mati".
@@ -521,10 +524,16 @@ export default function PenggunaanPage({ user, onBack }) {
   // Kirim BAST ke TTD elektronik — penaut TERSTRUKTUR (doc_ref = id BAST) +
   // penanda tangan otomatis dari pihak BAST. Server balas link per penanda
   // tangan untuk dibagikan (Salin/WhatsApp). Alternatif dari unggah scan bukti.
-  const kirimKeTtd = async (b) => {
+  // Dialog pilihan sebelum melempar ke e-sign: urutan teken & sifat urgensi.
+  // Dulu keduanya dipatok diam-diam ("paralel", "biasa") — pengirim tak pernah
+  // bisa menyatakan bahwa dokumen ini harus berurutan atau mendesak.
+  const kirimKeTtd = async (b, pilihan) => {
     setKirimTtdId(b.id);
     try {
-      const r = await axios.post(`${API}/bast/${b.id}/kirim-ttd`);
+      const r = await axios.post(`${API}/bast/${b.id}/kirim-ttd`, {
+        mode: pilihan?.mode || "paralel",
+        sifat_urgensi: pilihan?.sifat_urgensi || "biasa",
+      });
       // Pakai `hasilTtd` — menyusun objek ini dengan tangan pernah membuang
       // `ringkas`, sehingga pesan WA dari Riwayat BAST hanya berisi perihal +
       // tautan sementara pesan dari halaman TTD Elektronik lengkap.
@@ -1874,7 +1883,8 @@ export default function PenggunaanPage({ user, onBack }) {
                               data-testid={`bast-tautan-ttd-${b.id}`}>Tautan TTD</Button>
                           ) : null}
                           <Button size="sm" variant="outline" className="h-7 text-[11px]"
-                            disabled={kirimTtdId === b.id} onClick={() => kirimKeTtd(b)}
+                            disabled={kirimTtdId === b.id}
+                            onClick={() => setPilihKirimTtd(b)}
                             data-testid={`bast-kirim-ttd-${b.id}`}>
                             {kirimTtdId === b.id
                               ? "Mengirim…"
@@ -2540,6 +2550,18 @@ export default function PenggunaanPage({ user, onBack }) {
           } } : f));
         }} />
 
+      {/* Pilihan urutan teken & sifat urgensi sebelum dokumen dilempar ke
+          e-sign — lihat components/ttd/PilihanKirimTtd.jsx. */}
+      <PilihanKirimTtd
+        terbuka={!!pilihKirimTtd}
+        judul={pilihKirimTtd ? `BAST ${pilihKirimTtd.nomor || ""}`.trim() : ""}
+        mengirim={!!pilihKirimTtd && kirimTtdId === pilihKirimTtd.id}
+        onTutup={() => setPilihKirimTtd(null)}
+        onKirim={async (pilihan) => {
+          const b = pilihKirimTtd;
+          setPilihKirimTtd(null);
+          if (b) await kirimKeTtd(b, pilihan);
+        }} />
       {confirmDialog}
       {transitionDialog}
     </div>
