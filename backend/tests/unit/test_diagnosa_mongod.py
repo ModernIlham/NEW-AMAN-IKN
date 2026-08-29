@@ -254,3 +254,75 @@ class TestAlurnyaTerkunci:
         assert "/var/www/inventarisasi/backend/venv/bin/python -" in skrip
         assert "< scripts/diagnosa_mongod.py" in skrip
         assert skrip.count("ssh -i") == 1
+
+
+class TestPengukuranYangMenutupKasus:
+    """Bacaan 29 Agustus 2026 menemukan bebannya tetapi TIDAK menyebut namanya.
+
+    6.943.415 query dalam 17 jam — 112 per detik, terus-menerus, pada 06:49
+    pagi waktu setempat saat tak seorang pun memakai aplikasi — sementara
+    seluruh akses indeks pada `assets` hanya 236 kali. Query sebanyak itu
+    jelas tak memakai indeks.
+
+    Tetapi `currentOp` hanya menangkap operasi yang SEDANG berjalan. Query
+    yang selesai dalam 8 milidetik tak akan pernah tertangkap betapa pun
+    seringnya diulang — dan memang hanya `admin.$cmd` yang muncul. Alat itu
+    menemukan gejalanya lalu berhenti.
+
+    Dua bacaan kumulatif menutup celahnya: rasio dipindai/dikembalikan
+    (tanda pindai-koleksi), dan `top` yang menyebut namespace pemakan waktu
+    secara langsung.
+    """
+
+    def test_rasio_pindai_menandai_pindai_koleksi(self, modul):
+        keluar = "\n".join(modul.ringkas_beban({
+            "uptime": 61716,
+            "opcounters": {"query": 6_943_415, "insert": 115, "update": 1053, "delete": 52},
+            "metrics": {
+                "queryExecutor": {"scanned": 236, "scannedObjects": 44_000_000,
+                                  "collectionScans": {"total": 6_900_000}},
+                "document": {"returned": 120_000},
+            },
+        }))
+        assert "⚠ pindai-koleksi" in keluar
+        assert "112,5" in keluar, "query per detik tak dihitung"
+
+    def test_rasio_sehat_TIDAK_ditandai(self, modul):
+        # Kalau tandanya selalu muncul, ia tak berarti apa-apa.
+        keluar = "\n".join(modul.ringkas_beban({
+            "uptime": 1000, "opcounters": {"query": 100},
+            "metrics": {"queryExecutor": {"scanned": 100, "scannedObjects": 120},
+                        "document": {"returned": 100}},
+        }))
+        assert "⚠" not in keluar
+
+    def test_top_menyebut_namespace_pemakan_waktu_terbesar_lebih_dulu(self, modul):
+        # Yang KECIL sengaja ditaruh lebih dulu: dict Python mempertahankan
+        # urutan sisip, jadi kalau datanya sudah urut, uji ini lulus bahkan
+        # ketika pengurutannya dicabut — dan itu memang sempat terjadi.
+        keluar = modul.ringkas_top({"totals": {
+            "note": "all times in microseconds",
+            "aman.assets": {"total": {"time": 5_000_000, "count": 240},
+                            "queries": {"count": 240}, "commands": {"count": 0}},
+            "aman.report_settings": {"total": {"time": 900_000_000, "count": 6_900_000},
+                                     "queries": {"count": 6_900_000},
+                                     "commands": {"count": 0}},
+        }})
+        teks = "\n".join(keluar)
+        assert teks.index("report_settings") < teks.index("assets"), (
+            "namespace pemakan waktu terbesar harus disebut lebih dulu"
+        )
+        assert "note" not in teks, "kunci `note` dari `top` ikut jadi baris"
+        # Yang menguasai waktu ditebalkan supaya mata menemukannya.
+        baris = [b for b in keluar if "report_settings" in b][0]
+        assert "**" in baris
+
+    def test_top_kosong_dikatakan_apa_adanya(self, modul):
+        assert "tak memberi data" in "\n".join(modul.ringkas_top({"totals": {}}))
+
+    def test_angka_indonesia_tak_bercampur_titik_dan_titik(self, modul):
+        # Versi pertama menghasilkan `3.458.0 MB` — dua titik dengan arti
+        # berbeda dalam satu angka.
+        assert modul._angka(3458.0, 1) == "3.458,0"
+        assert modul._angka(6_943_415) == "6.943.415"
+        assert modul._mb(3458.0 * 1024 * 1024) == "3.458,0 MB"

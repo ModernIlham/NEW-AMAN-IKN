@@ -41,9 +41,23 @@ TERATAS = 8
 AMBANG_DETIK = 1
 
 
+def _angka(n, desimal: int = 0) -> str:
+    """Format Indonesia: titik ribuan, koma desimal.
+
+    Versi pertama menulis `f"{x:,.1f}".replace(",", ".")` dan menghasilkan
+    **`3.458.0 MB`** — dua titik dengan arti berbeda dalam satu angka, tak
+    terbaca sebagai apa pun. Penukarannya harus lewat penanda sementara.
+    """
+    try:
+        teks = f"{float(n):,.{desimal}f}"
+    except (TypeError, ValueError):
+        return "?"
+    return teks.replace(",", "\x00").replace(".", ",").replace("\x00", ".")
+
+
 def _mb(byte) -> str:
     try:
-        return f"{float(byte) / 1024 / 1024:,.1f} MB".replace(",", ".")
+        return f"{_angka(float(byte) / 1024 / 1024, 1)} MB"
     except (TypeError, ValueError):
         return "?"
 
@@ -67,7 +81,7 @@ def ringkas_server_status(doc: dict) -> list[str]:
     ]
     for k in ("query", "insert", "update", "delete", "getmore", "command"):
         if k in opc:
-            baris.append(f"| opcounter `{k}` | {opc[k]:,}".replace(",", ".") + " |")
+            baris.append(f"| opcounter `{k}` | {_angka(opc[k])} |")
     return baris
 
 
@@ -107,16 +121,97 @@ def ringkas_index_stats(nama: str, stats: list) -> list[str]:
     for s in sorted(stats, key=lambda x: (x.get("accesses") or {}).get("ops", 0)):
         ops = (s.get("accesses") or {}).get("ops", 0)
         tanda = " ⚠ tak pernah" if ops == 0 else ""
-        baris.append(f"| `{s.get('name', '?')}` | {ops:,}".replace(",", ".") + f"{tanda} |")
+        baris.append(f"| `{s.get('name', '?')}` | {_angka(ops)}{tanda} |")
     baris.append("")
     return baris
+
+
+def ringkas_beban(status: dict) -> list[str]:
+    """Bentuk bebannya: berapa query per detik, dan apakah ia memakai indeks.
+
+    Ini menjawab pertanyaan yang `currentOp` TIDAK bisa jawab. Bacaan
+    29 Agustus 2026 menemukan 6.943.415 query dalam 17 jam — 112 per detik,
+    terus-menerus, pada pukul 06:49 pagi waktu setempat saat tak seorang pun
+    memakai aplikasi. Tetapi `currentOp` hanya menangkap operasi yang SEDANG
+    berjalan; query yang selesai dalam 8 milidetik tak akan pernah tertangkap
+    betapa pun seringnya ia diulang. Angka kumulatif di sinilah yang melihatnya.
+
+    `scannedObjects / returned` adalah tanda pindai-koleksi yang klasik:
+    membaca 44.000 dokumen untuk mengembalikan satu berarti tak ada indeks
+    yang menolong, dan pada koleksi yang muat di cache itu menjadi beban CPU
+    murni tanpa satu pun I/O — persis gejala yang terbaca.
+    """
+    d = status or {}
+    m = d.get("metrics") or {}
+    qe = m.get("queryExecutor") or {}
+    dok = m.get("document") or {}
+    uptime = d.get("uptime") or 0
+    opc = d.get("opcounters") or {}
+    baris = ["| Ukuran | Bacaan |", "|---|---|"]
+    if uptime:
+        q = opc.get("query", 0)
+        tulis = sum(opc.get(k, 0) for k in ("insert", "update", "delete"))
+        baris.append(f"| Query per detik (rata-rata) | **{_angka(q / uptime, 1)}** |")
+        baris.append(f"| Tulis per detik (rata-rata) | {_angka(tulis / uptime, 3)} |")
+    dipindai = qe.get("scannedObjects")
+    dikembalikan = dok.get("returned")
+    baris.append(f"| Dokumen dipindai | {_angka(dipindai)} |")
+    baris.append(f"| Kunci indeks dipindai | {_angka(qe.get('scanned'))} |")
+    baris.append(f"| Dokumen dikembalikan | {_angka(dikembalikan)} |")
+    if dipindai and dikembalikan:
+        rasio = dipindai / dikembalikan
+        nilai = f"**{_angka(rasio, 1)} : 1**"
+        if rasio > 100:
+            nilai += " ⚠ pindai-koleksi"
+        baris.append(f"| Dipindai per dokumen dikembalikan | {nilai} |")
+    cs = qe.get("collectionScans") or {}
+    if cs:
+        baris.append(f"| Pindai koleksi (total) | {_angka(cs.get('total'))} |")
+    return baris
+
+
+def ringkas_top(doc: dict) -> list[str]:
+    """SIAPA yang memakan waktu mongod — per namespace, langsung.
+
+    `db.adminCommand({top: 1})` menyimpan akumulasi waktu per koleksi sejak
+    server naik. Inilah satu-satunya bacaan yang MENYEBUT NAMA sumber beban
+    tanpa harus kebetulan menangkap query-nya sedang berjalan.
+    """
+    total = (doc or {}).get("totals") or {}
+    baris_ns = []
+    for ns, v in total.items():
+        # `totals` memuat satu kunci `note` bernilai STRING di samping tiap
+        # namespace; pemeriksaan tipe ini yang menyaringnya. Penjaga eksplisit
+        # `ns == "note"` sempat ada di sini dan terbukti mati — mutasi yang
+        # mencabutnya lolos semua uji, karena `isinstance` sudah bekerja.
+        if not isinstance(v, dict):
+            continue
+        t = v.get("total") or {}
+        baris_ns.append((t.get("time", 0), t.get("count", 0), ns, v))
+    if not baris_ns:
+        return ["_`top` tak memberi data._"]
+    baris_ns.sort(reverse=True)
+    jumlah_waktu = sum(b[0] for b in baris_ns) or 1
+    keluar = ["| Namespace | Bagian waktu | Waktu (detik) | Operasi | Query | Perintah |",
+              "|---|---|---|---|---|---|"]
+    for waktu, jml, ns, v in baris_ns[:12]:
+        q = ((v.get("queries") or {}).get("count", 0))
+        c = ((v.get("commands") or {}).get("count", 0))
+        bagian = waktu / jumlah_waktu * 100
+        tebal = "**" if bagian >= 20 else ""
+        keluar.append(
+            f"| `{ns}` | {tebal}{_angka(bagian, 1)}%{tebal} "
+            f"| {_angka(waktu / 1_000_000, 1)} | {_angka(jml)} "
+            f"| {_angka(q)} | {_angka(c)} |"
+        )
+    return keluar
 
 
 def ringkas_coll_stats(nama: str, doc: dict) -> list[str]:
     d = doc or {}
     return [
-        f"| `{nama}` | {d.get('count', '?'):,}".replace(",", ".")
-        + f" | {_mb(d.get('size'))} | {_mb(d.get('storageSize'))} "
+        f"| `{nama}` | {_angka(d.get('count'))}"
+        f" | {_mb(d.get('size'))} | {_mb(d.get('storageSize'))} "
         f"| {d.get('nindexes', '?')} | {_mb(d.get('totalIndexSize'))} |"
     ]
 
@@ -148,6 +243,20 @@ def main() -> int:
         print("\n".join(ringkas_server_status(db.command("serverStatus"))))
     except Exception as e:  # noqa: BLE001 — satu bagian gagal tak boleh
         print(f"_Gagal membaca serverStatus: {type(e).__name__}._")
+
+    _judul("Bentuk beban")
+    try:
+        print("\n".join(ringkas_beban(db.command("serverStatus"))))
+    except Exception as e:  # noqa: BLE001
+        print(f"_Gagal membaca metrics: {type(e).__name__}._")
+
+    _judul("Waktu mongod per koleksi")
+    print("> Akumulasi sejak mongod naik. Baris teratas adalah sumber beban "
+          "yang sebenarnya — ia tak perlu tertangkap sedang berjalan.\n")
+    try:
+        print("\n".join(ringkas_top(klien.admin.command("top"))))
+    except Exception as e:  # noqa: BLE001
+        print(f"_Gagal membaca top: {type(e).__name__}._")
 
     _judul(f"Operasi aktif ≥ {AMBANG_DETIK} detik")
     try:
