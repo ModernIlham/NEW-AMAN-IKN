@@ -67,6 +67,48 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#941] OPTIMASI-VPS disesuaikan dengan bacaan mesin 29 Agustus — 2026-08-29
+
+Permintaan pemilik: *"sesuaikan update dengan yang tercatat saat ini."*
+Putaran pertama **Actions → Inventaris VPS** (alat dari [#940]) sudah jalan,
+jadi dokumen kini berisi bacaan mesin, bukan laporan.
+
+**Yang cocok** — `/root/installed-software-2026-08-25.txt` dibandingkan dengan
+mesin hari ini: **84 paket dipasang-manual, identik, tanpa satu pun selisih**.
+Versi juga sama persis (mongod 7.0.40, Node 22.23.2, nginx 1.24.0, Redis
+7.0.15, Meilisearch 1.11.3, certbot 5.7.0). Catatan Anda memang mutakhir.
+
+**Tiga koreksi yang mengubah isi dokumen, bukan sekadar menambah angka**
+
+1. **`fail2ban` tidak pernah terpasang di VPS.** Seluruh dugaan "fail2ban
+   memblokir IP runner" pada §4/§5 karena itu tak mungkin benar, dan perintah
+   `fail2ban-client status sshd` yang dianjurkan di sana tidak akan jalan.
+   `Connection timed out` tetap berarti paket SYN dijatuhkan diam-diam —
+   yang menjatuhkannya ada di **hulu**, bukan di VPS. Angka `bantime` 10 menit
+   yang mendasari jendela retry ~14 menit di `deploy.yml` kehilangan dasarnya;
+   jendelanya **tidak** diubah (sudah terbukti cukup), tetapi dicatat bahwa
+   alasannya tak lagi sahih supaya tak disetel ulang berdasar angka fiktif.
+2. **Kalimat 18 Agustus *"beban sistem 1,19 — bukan lagi CPU ±51% konstan"*
+   keliru.** Pada 2 vCPU, 1,19 ≈ 60% dan 1,01 ≈ 50%. Angka itu tak pernah
+   membantah gejalanya, ia mengonfirmasinya. Bacaan 29 Agustus **1,02 · 1,01 ·
+   1,01** — datar di ketiga jendela waktu — adalah tanda satu proses memakan
+   satu core terus-menerus. §2 butir 1 dinaikkan lagi jadi terbuka.
+3. **Topologi layanan ditulis apa adanya.** Backend AMAN berjalan di
+   **supervisor** (`inventarisasi-backend`), bukan systemd — mencari
+   `aman-backend.service` akan selalu berkata "tidak ada" dan terlihat seperti
+   backend mati padahal sehat. Dan `redis-server` **tidak punya unit systemd**
+   meski paketnya terpasang; kalau Redis memang tak hidup, seluruh cache jatuh
+   diam-diam kembali ke Mongo (`redis_utils.py`) — kandidat penjelasan beban
+   satu core itu. Keduanya ditandai BELUM terjawab, dengan perintah pemastinya.
+
+**Yang membaik**: swap praktis tak tersentuh (1,2 MiB dari 4 GiB, sebelumnya
+710 MiB), memori tersedia naik ke 5,8 GiB. Disk tumbuh 27,8 → 31 GB dalam 11
+hari; pada laju itu ambang 80% masih lebih dari setahun.
+
+Tak ada perubahan kode — hanya `docs/OPTIMASI-VPS.md`.
+
+---
+
 ## [#940] Inventaris VPS: baca kondisi mesin tanpa menyentuhnya — 2026-08-29
 
 Permintaan pemilik: *"tolong cek di VPS saya `/root/installed-software-2026-08-25.txt`
