@@ -1,0 +1,81 @@
+# Inventaris VPS — membaca kondisi mesin produksi TANPA mengubah apa pun.
+#
+# Hanya bisa dijalankan manual (Actions → "Inventaris VPS" → Run workflow).
+# Tidak ada pemicu push/schedule: ini alat diagnosis yang dijalankan saat
+# dibutuhkan, bukan proses yang menempel pada tiap commit.
+#
+# Hasilnya ditulis ke Ringkasan job (tab Actions), bukan ke artefak: ringkasan
+# bisa dibaca langsung di halaman run, tidak perlu diunduh, dan ikut terhapus
+# bersama run-nya saat retensi habis.
+#
+# Isi bacaan dan batas keamanannya ada di scripts/inventaris_vps.sh — baca
+# blok "ATURAN KERAS" di sana sebelum menambah perintah apa pun ke sini.
+name: Inventaris VPS
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  # Berbagi antrean dengan deploy: dua sesi SSH beruntun ke VPS yang sama
+  # adalah pola yang dulu diduga memicu pemblokiran fail2ban (lihat deploy.yml).
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  inventaris:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Baca inventaris via SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          if [ -z "$VPS_HOST" ] || [ -z "$VPS_USER" ] || [ -z "$VPS_SSH_KEY" ]; then
+            echo "::error::Secret VPS_HOST, VPS_USER, dan VPS_SSH_KEY belum lengkap di Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Secret boleh berisi SATU baris base64 (`base64 -w0 ~/deploy_key`) —
+          # sama seperti deploy.yml, supaya kedua workflow menerima bentuk yang
+          # sama dan pemilik tak perlu menyimpan dua versi kunci.
+          if ! ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null 2>&1; then
+            printf '%s' "$VPS_SSH_KEY" | tr -d ' \t\r\n' | base64 -d > ~/.ssh/deploy_key 2>/dev/null || true
+            chmod 600 ~/.ssh/deploy_key
+          fi
+          if ! ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null 2>&1; then
+            echo "::error::Isi secret VPS_SSH_KEY bukan private key OpenSSH yang valid."
+            exit 1
+          fi
+          {
+            echo "# Inventaris VPS"
+            echo ""
+            echo "Dibaca $(date -u '+%Y-%m-%d %H:%M UTC') dari commit \`${GITHUB_SHA:0:8}\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+          rc=0
+          # Retry hanya untuk kegagalan TINGKAT KONEKSI (ssh keluar 255),
+          # dengan jeda selebar bantime fail2ban — alasan lengkapnya di
+          # deploy.yml. Skrip yang berjalan lalu gagal tidak diulang.
+          for attempt in 1 2 3; do
+            rc=0
+            ssh -i ~/.ssh/deploy_key -p "${VPS_PORT:-22}" \
+                -o StrictHostKeyChecking=accept-new \
+                -o ConnectTimeout=20 \
+                "$VPS_USER@$VPS_HOST" 'bash -s' < scripts/inventaris_vps.sh \
+                >> "$GITHUB_STEP_SUMMARY" || rc=$?
+            [ "$rc" -eq 0 ] && break
+            [ "$rc" -ne 255 ] && break
+            if [ "$attempt" -lt 3 ]; then
+              echo "Percobaan $attempt/3 gagal menjangkau VPS (exit 255) - coba lagi 180 detik…"
+              sleep 180
+            fi
+          done
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::Gagal membaca inventaris VPS (exit $rc)."
+            exit "$rc"
+          fi
+          cat "$GITHUB_STEP_SUMMARY"
