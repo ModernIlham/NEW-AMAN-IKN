@@ -67,6 +67,68 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#943] Pembubuhan: yang berbunyi "bubuhkan" kini menempel, "Selesai" mengirim — 2026-08-29
+
+Permintaan pemilik: *"hilangkan bagian '+ tanda tangan lagi', otomatiskan;
+jika sudah mengklik 'bubuhkan di posisi ini', jika diklik lagi maka akan
+tertempel lagi. Dan pastikan ketika sudah selesai bubuhkan bisa memencet
+tombol 'Selesai' agar tidak terjadi kesalahan mis-konsepsi alur akibat bias
+makna kata dan fungsi tombol."*
+
+**Cacatnya persis seperti yang Anda namai.** Tombol berbunyi **"Bubuhkan di
+Posisi Ini"** tetapi FUNGSINYA mengirim seluruh pembubuhan dan menutup tautan
+sekali-pakai — sementara tombol yang benar-benar menempel bernama **"Tanda
+tangan lagi"**. Kata dan fungsi bertukar tempat. Orang yang baru menaruh SATU
+dari tiga tanda tangan yang diminta membaca "Bubuhkan di Posisi Ini" sebagai
+"tempelkan yang ini", menekannya, dan dokumennya terkirim dengan dua lembar
+kosong — tanpa jalan kembali.
+
+**Alur baru — kata dan fungsi sejalan**
+
+1. Arahkan kotak: klik di halaman, seret, atau tarik pegangan untuk ukuran.
+2. **"Bubuhkan di Posisi Ini"** MENEMPELKAN. Bisa diulang berkali-kali, di
+   halaman mana pun.
+3. **"Selesai — kirim N tanda tangan"** mengirim semuanya.
+
+`+ Tanda tangan lagi` **dihapus**; pekerjaannya kini dipegang tombol yang
+memang menyebut pekerjaan itu.
+
+**Yang ikut berubah, dan kenapa**
+
+- Tombol Selesai **terkunci sampai ada tempelan**. Dulu kotak yang sedang
+  diatur ikut terhitung, jadi menekan tombol tanpa menempel apa pun tetap
+  mengirim. Kini yang belum ditempel memang belum terhitung — label tombolnya
+  menyebut `Kurang N tanda tangan lagi`.
+- Cip halaman aktif berbunyi **"belum dibubuhkan"**, bukan "sedang diatur":
+  kotak itu belum jadi apa-apa sampai ditempel.
+- Menekan Bubuhkan **dua kali tanpa memindahkan kotak ditolak**, dengan
+  penjelasan. Dua tanda tangan bertumpuk persis pada dokumen resmi selalu
+  salah tekan; penempatan bersebelahan tetap lolos karena koordinatnya beda.
+- Panel daftar kini tampil untuk **semua** peran ttd, bukan hanya `banyak`.
+- **Peran QR tetap satu langkah.** Labelnya "Simpan & Unduh" sudah menyebut
+  fungsinya dengan tepat; menambah langkah "tempel dulu" untuk SATU kotak
+  hanya menambah klik tanpa menghapus kebingungan apa pun.
+
+**Satu mutasi LOLOS, dan celahnya nyata**
+
+Mutasi `onKirim(akanDikirim[0], [])` — tanda tangan kedua dan seterusnya
+hilang diam-diam — **lolos dari 117 uji**. Sebabnya: semua uji memakai dokumen
+4 halaman, sehingga "Selesai" membuka pemeriksaan akhir dan pengiriman
+sebenarnya terjadi di tombol `periksa-lanjut`. **Jalur kirim LANGSUNG** —
+dipakai dokumen satu halaman, yang sengaja tak diperiksa — tak pernah
+tersentuh dengan lebih dari satu tempelan. Satu halaman pun bisa memuat dua
+blok tanda tangan.
+
+Uji baru `dua tempelan di SATU halaman terkirim keduanya` menutup celah itu
+dan membunuh mutasinya.
+
+Tiga mutasi lain dipasang lalu dibunuh: Selesai kembali mengirim kotak yang
+belum ditempel, penjaga rangkap dicabut, dan QR ikut tertahan gerbang
+kelengkapan (regresi yang benar-benar sempat saya buat — `tetap` selalu kosong
+untuk QR, jadi rumus yang sama mengunci "Simpan & Unduh" selamanya).
+
+---
+
 ## [#942] Inventaris VPS putaran kedua: negatif-palsu diperbaiki, supervisor & CPU dibaca — 2026-08-29
 
 Putaran pertama ([#940]/[#941]) melaporkan `redis-server` **"unit tidak ada"**.

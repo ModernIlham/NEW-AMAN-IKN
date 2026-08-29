@@ -39,14 +39,36 @@ function pasang(props = {}) {
   return onKirim;
 }
 
+/** "Selesai" — kini TERKUNCI sampai ada tempelan, jadi hampir setiap uji di
+ *  berkas ini menempel dulu lewat `tempel()`. */
 const bubuh = () => fireEvent.click(screen.getByTestId("posisi-kirim"));
 const mundur = () => {
   fireEvent.click(screen.getByLabelText("Halaman sebelumnya"));
   muat();
 };
 
-it("menekan Bubuhkan TIDAK langsung mengirim — layar berganti dulu", () => {
+/** jsdom memberi ukuran 0 pada semua elemen; wadah dipalsukan 200×400. */
+function ukurWadah() {
+  const wadah = screen.getByTestId("posisi-wadah");
+  wadah.getBoundingClientRect = () => ({
+    left: 0, top: 0, width: 200, height: 400, right: 200, bottom: 400,
+  });
+  return wadah;
+}
+
+/** Tempelkan satu tanda tangan di halaman yang sedang terbuka. Titiknya
+ *  digeser tiap kali: dua tempelan pada koordinat identik ditolak. */
+let n = 0;
+function tempel() {
+  n += 1;
+  fireEvent.click(ukurWadah(), { clientX: 20 + n * 25, clientY: 40 + n * 45 });
+  fireEvent.click(screen.getByTestId("posisi-bubuh"));
+}
+beforeEach(() => { n = 0; });
+
+it("menekan Selesai TIDAK langsung mengirim — layar berganti dulu", () => {
   const onKirim = pasang();
+  tempel();
   bubuh();
   expect(onKirim).not.toHaveBeenCalled();
   expect(screen.getByTestId("periksa-akhir")).toBeInTheDocument();
@@ -54,6 +76,7 @@ it("menekan Bubuhkan TIDAK langsung mengirim — layar berganti dulu", () => {
 
 it("menyebut halaman yang TIDAK akan tertanda tangan", () => {
   pasang();                       // mulai di halaman 4 (terakhir)
+  tempel();
   bubuh();
   expect(screen.getByTestId("periksa-tanpa-ttd")).toHaveTextContent("1, 2, 3");
 });
@@ -61,6 +84,7 @@ it("menyebut halaman yang TIDAK akan tertanda tangan", () => {
 it("menyebut halaman yang BELUM PERNAH dibuka", () => {
   // Inilah yang mengubah "saya kira sudah semua" jadi "saya belum lihat".
   pasang();
+  tempel();
   bubuh();
   expect(screen.getByTestId("periksa-belum-dibuka")).toHaveTextContent("1, 2, 3");
 });
@@ -73,6 +97,7 @@ it("halaman yang DILEWATI tanpa ttd tetap terhitung sudah dibuka", () => {
   pasang();                       // mulai di halaman 4
   mundur();                       // lewati halaman 3
   mundur();                       // berhenti di halaman 2 (di sinilah ttd-nya)
+  tempel();
   bubuh();
   const teks = screen.getByTestId("periksa-belum-dibuka").textContent;
   expect(teks).toContain("1");
@@ -82,12 +107,14 @@ it("halaman yang DILEWATI tanpa ttd tetap terhitung sudah dibuka", () => {
 it("semua halaman terbuka → peringatan itu hilang sama sekali", () => {
   pasang();
   mundur(); mundur(); mundur();   // 3, 2, 1
+  tempel();
   bubuh();
   expect(screen.queryByTestId("periksa-belum-dibuka")).not.toBeInTheDocument();
 });
 
 it("'Periksa lagi' mengembalikan ke pengaturan tanpa mengirim", () => {
   const onKirim = pasang();
+  tempel();
   bubuh();
   fireEvent.click(screen.getByTestId("periksa-kembali"));
   expect(onKirim).not.toHaveBeenCalled();
@@ -96,19 +123,24 @@ it("'Periksa lagi' mengembalikan ke pengaturan tanpa mengirim", () => {
 
 it("'Ya, bubuhkan sekarang' barulah mengirim — beserta letak tersimpan", () => {
   const onKirim = pasang();
-  fireEvent.click(screen.getByTestId("posisi-tambah"));   // simpan hal. 4
-  mundur();                                              // ke hal. 3
+  tempel();                       // tempel di hal. 4
+  mundur();                       // ke hal. 3
+  tempel();                       // tempel di hal. 3
   bubuh();
   fireEvent.click(screen.getByTestId("periksa-lanjut"));
   expect(onKirim).toHaveBeenCalledTimes(1);
-  expect(onKirim.mock.calls[0][0].halaman).toBe(3);
+  // Yang PERTAMA ditempel jadi `posisi`, sisanya `posisi_lain` — urutan
+  // tempel, bukan urutan halaman.
+  expect(onKirim.mock.calls[0][0].halaman).toBe(4);
   expect(onKirim.mock.calls[0][1]).toHaveLength(1);
+  expect(onKirim.mock.calls[0][1][0].halaman).toBe(3);
 });
 
 it("halaman ber-ttd ikut terhitung sudah dilihat", () => {
   const onKirim = pasang();
-  fireEvent.click(screen.getByTestId("posisi-tambah"));   // ttd di hal. 4
-  mundur();                                              // atur di hal. 3
+  tempel();                       // ttd di hal. 4
+  mundur();                       // atur di hal. 3
+  tempel();
   bubuh();
   const teks = screen.getByTestId("periksa-belum-dibuka").textContent;
   expect(teks).not.toContain("4");
@@ -119,6 +151,7 @@ it("dokumen SATU halaman tak diperiksa — langsung terkirim", () => {
   // Tak ada halaman lain untuk terlewat. Konfirmasi di sana hanya melatih
   // orang menekan "Ya" tanpa membaca.
   const onKirim = pasang({ jumlahHalaman: 1 });
+  tempel();
   bubuh();
   expect(onKirim).toHaveBeenCalledTimes(1);
   expect(screen.queryByTestId("periksa-akhir")).not.toBeInTheDocument();

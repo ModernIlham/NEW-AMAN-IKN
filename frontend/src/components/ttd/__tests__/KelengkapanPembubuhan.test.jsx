@@ -31,14 +31,33 @@ function pasang(props = {}) {
 }
 
 const kirim = () => screen.getByTestId("posisi-kirim");
-/** Menekan "Bubuhkan" kini membuka PEMERIKSAAN AKHIR lebih dulu (dokumen
- *  banyak halaman) — lihat PeriksaSebelumBubuh.test.jsx. Di sini dilewati. */
+/** Menekan "Selesai" membuka PEMERIKSAAN AKHIR lebih dulu (dokumen banyak
+ *  halaman) — lihat PeriksaSebelumBubuh.test.jsx. Di sini dilewati. */
 function bubuhkan() {
   fireEvent.click(kirim());
   const lanjut = screen.queryByTestId("periksa-lanjut");
   if (lanjut) fireEvent.click(lanjut);
 }
-const tambah = () => screen.getByTestId("posisi-tambah");
+
+/** jsdom memberi ukuran 0 pada semua elemen; wadah dipalsukan 200×400. */
+function ukurWadah() {
+  const wadah = screen.getByTestId("posisi-wadah");
+  wadah.getBoundingClientRect = () => ({
+    left: 0, top: 0, width: 200, height: 400, right: 200, bottom: 400,
+  });
+  return wadah;
+}
+
+/** Arahkan kotak ke titik piksel lalu TEMPELKAN di sana. Titiknya harus
+ *  berbeda tiap kali: dua tempelan pada koordinat identik ditolak sebagai
+ *  salah tekan (lihat AturPosisiBanyak.test.jsx). */
+let n = 0;
+function bubuhLagi() {
+  n += 1;
+  fireEvent.click(ukurWadah(), { clientX: 20 + n * 25, clientY: 40 + n * 45 });
+  fireEvent.click(screen.getByTestId("posisi-bubuh"));
+}
+beforeEach(() => { n = 0; });
 
 describe("wajib lebih dari satu", () => {
   test("tombol Bubuhkan TERKUNCI selama masih kurang", () => {
@@ -55,21 +74,23 @@ describe("wajib lebih dari satu", () => {
 
   test("label tombol menyebut BERAPA lagi yang kurang", () => {
     pasang({ wajib: 3 });
-    expect(kirim()).toHaveTextContent("Kurang 2 tanda tangan lagi");
+    expect(kirim()).toHaveTextContent("Kurang 3 tanda tangan lagi");
   });
 
   test("terbuka tepat setelah jumlahnya genap", () => {
     const onKirim = pasang({ wajib: 3 });
-    fireEvent.click(tambah());
+    bubuhLagi();
+    expect(kirim()).toBeDisabled();       // 1 dari 3
+    bubuhLagi();
     expect(kirim()).toBeDisabled();       // 2 dari 3
-    fireEvent.click(tambah());
+    bubuhLagi();
     expect(kirim()).not.toBeDisabled();   // 3 dari 3
     bubuhkan();
     expect(onKirim).toHaveBeenCalledTimes(1);
     expect(onKirim.mock.calls[0][1]).toHaveLength(2);
   });
 
-  test("panel penjelas tampil SEJAK AWAL, sebelum menekan Tanda tangan lagi", () => {
+  test("panel penjelas tampil SEJAK AWAL, sebelum satu pun ditempel", () => {
     // Justru orang yang TIDAK TAHU dirinya harus meneken beberapa kali yang
     // perlu diberi tahu; menunggu ia menekan tombolnya lebih dulu berarti
     // memberi tahu hanya orang yang sudah tahu.
@@ -85,7 +106,8 @@ describe("wajib lebih dari satu", () => {
 
   test("menghapus satu letak MENGUNCI tombolnya kembali", () => {
     pasang({ wajib: 2 });
-    fireEvent.click(tambah());
+    bubuhLagi();
+    bubuhLagi();
     expect(kirim()).not.toBeDisabled();
     fireEvent.click(screen.getByTestId("posisi-hapus-0"));
     expect(kirim()).toBeDisabled();
@@ -93,10 +115,16 @@ describe("wajib lebih dari satu", () => {
 });
 
 describe("wajib satu (bawaan)", () => {
-  test("tak ada yang berubah dari perilaku lama", () => {
+  test("satu tempelan sudah cukup membuka tombolnya", () => {
+    // Perilaku LAMA (tombol terbuka sejak awal) sengaja tak dipertahankan:
+    // dulu kotak yang sedang diatur ikut terhitung, sehingga menekan tombol
+    // tanpa menempel apa pun tetap mengirim. Kini yang belum ditempel memang
+    // belum terhitung.
     const onKirim = pasang();
+    expect(kirim()).toBeDisabled();
+    bubuhLagi();
     expect(kirim()).not.toBeDisabled();
-    expect(kirim()).toHaveTextContent("Bubuhkan di Posisi Ini");
+    expect(kirim()).toHaveTextContent("Selesai");
     bubuhkan();
     expect(onKirim).toHaveBeenCalledTimes(1);
   });
@@ -114,6 +142,10 @@ describe("wajib satu (bawaan)", () => {
           onKirim={() => {}} onBatal={() => {}} />);
       const img = document.querySelector("img");
       if (img) fireEvent.load(img);
+      // Nilai cacat => diperlakukan sebagai wajib 1: SATU tempelan cukup,
+      // bukan tombol yang terkunci selamanya.
+      n = 0;
+      bubuhLagi();
       expect(screen.getByTestId("posisi-kirim")).not.toBeDisabled();
       unmount();
     }
