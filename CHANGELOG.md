@@ -67,6 +67,59 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#940] Inventaris VPS: baca kondisi mesin tanpa menyentuhnya — 2026-08-29
+
+Permintaan pemilik: *"tolong cek di VPS saya `/root/installed-software-2026-08-25.txt`
+untuk mengecek update yang telah saya lakukan di VPS terbaru saya, dan sesuaikan
+update dengan yang tercatat saat ini."*
+
+Satu-satunya jalur SSH ke VPS ada di GitHub Actions (kunci privatnya secret
+repositori dan memang harus tetap begitu), jadi bacaannya dikerjakan lewat
+workflow manual — bukan dengan menempelkan kunci ke tempat lain.
+
+**Yang bertambah**
+
+- **Actions → "Inventaris VPS" → Run workflow** membaca dan menampilkan di
+  Ringkasan job: isi `/root/installed-software-*.txt`, kondisi mesin (OS,
+  kernel, CPU, beban, memori, swap, disk), versi mongod/node/python/nginx/
+  redis/meilisearch/ffmpeg/git/certbot/fail2ban, status systemd layanan
+  terkait, dan daftar paket APT yang dipasang manual.
+- Mengantre pada `concurrency: deploy-vps` yang sama dengan deploy — dua sesi
+  SSH beruntun ke VPS yang sama adalah pola yang diduga memicu pemblokiran
+  fail2ban pada Agustus 2026 (riwayatnya di `deploy.yml`).
+
+**Kenapa ada penjaganya, dan kenapa penjaganya di uji unit**
+
+`docs/OPTIMASI-VPS.md` pernah **menyesatkan diagnosis**: pada 17-18 Agustus
+2026 tiga deploy gagal dan baris "tanpa swap" di dokumen itu — yang berasal
+dari laporan lisan, bukan dari mesin — dipakai sebagai dasar dugaan tekanan
+memori. Swap ternyata sudah lama terpasang. Alat ini menggantikan laporan
+lisan dengan bacaan yang bisa diulang siapa saja.
+
+Tetapi bentuk alat semacam ini gampang tumbuh ke arah yang buruk, dan
+pertumbuhannya **tidak akan membuat satu pun uji lain gagal**:
+
+| Yang gampang ditambahkan "sekalian" | Akibatnya |
+|---|---|
+| Satu input `jalur` | Workflow jadi `cat` berkas apa pun di VPS ke log Actions — `/root/.env`, kunci privat, URL Mongo lengkap dengan sandinya. Log itu terbaca semua kolaborator dan bertahan berbulan-bulan |
+| Satu `systemctl restart` | Alat diagnosis jadi alat yang bisa menjatuhkan produksi |
+| Satu pemicu `push` | Tiap commit menyeret sesi SSH baru ke VPS — pola fail2ban itu lagi |
+
+`backend/tests/unit/test_inventaris_vps.py` (53 uji) menagih ketiganya:
+skrip tak boleh memakai perintah yang mengubah keadaan, tak boleh menyentuh
+jalur absolut di luar daftar izin, berkas catatan harus dibaca dari **glob
+harfiah** (bukan variabel), workflow hanya boleh `workflow_dispatch` tanpa
+input, dan perintah jarak jauhnya harus tepat `bash -s` tanpa argumen.
+
+Empat mutasi dipasang lalu dibunuh: input jalur di workflow, `cat` konfigurasi
+nginx di skrip, `systemctl restart` di skrip, dan pemicu `push: [main]`.
+
+**Catatan jujur**: PR ini **belum** menyesuaikan `docs/OPTIMASI-VPS.md` —
+penyesuaiannya menunggu bacaan pertama dari alat ini, supaya isinya berasal
+dari mesin, bukan dari tebakan. Itu justru pelajaran dari kegagalan Agustus.
+
+---
+
 ## [#939] UX pembubuhan: klik untuk menaruh, navigasi di dekat tombol — 2026-08-29
 
 Permintaan pemilik: *"buat agar ttd tampil ketika diklik posisi bubuhkan di
