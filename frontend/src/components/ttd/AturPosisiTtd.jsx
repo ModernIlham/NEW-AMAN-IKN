@@ -31,13 +31,27 @@ import {
  * onKirim(posisi, posisiLain): {halaman 1-based, x, y, lebar} — fraksi
  * terhadap lebar/tinggi halaman, (x,y) pojok kiri-atas kotak.
  *
- * `banyak` (khusus peran ttd): satu orang kerap harus meneken LEBIH DARI
- * SEKALI pada dokumen yang sama — BAST operasional punya blok tanda tangan
- * Berita Acara DAN lembar Surat Pernyataan Tanggung Jawab di halaman
- * berikutnya. Tombol "Tanda tangan lagi" menyimpan letak yang sedang diatur
- * lalu membiarkan orangnya berpindah halaman dan mengatur letak berikutnya;
- * `posisiLain` membawa yang sudah tersimpan itu. Tanpanya lembar kedua terbit
- * KOSONG — dokumen resmi yang tampak lengkap padahal belum diteken.
+ * ALUR PERAN TTD — DUA LANGKAH, dan itu disengaja:
+ *   1. arahkan kotak (klik di halaman / seret / ubah ukuran),
+ *   2. "Bubuhkan di Posisi Ini" MENEMPELKAN — bisa diulang berkali-kali, di
+ *      halaman mana pun,
+ *   3. "Selesai" mengirim semuanya dan menutup tautan sekali-pakai.
+ *
+ * Sebelumnya tombol berbunyi "Bubuhkan di Posisi Ini" tetapi FUNGSINYA
+ * mengirim, sementara yang menempel bernama "Tanda tangan lagi" — kata dan
+ * fungsi bertukar tempat, dan orang yang baru menaruh satu dari tiga tanda
+ * tangan mengirim dokumennya dengan dua lembar kosong.
+ *
+ * `banyak`/`wajib` (khusus peran ttd): satu orang kerap harus meneken LEBIH
+ * DARI SEKALI pada dokumen yang sama — BAST operasional punya blok tanda
+ * tangan Berita Acara DAN lembar Surat Pernyataan Tanggung Jawab di halaman
+ * berikutnya. `posisiLain` membawa tempelan kedua dan seterusnya. Tanpanya
+ * lembar kedua terbit KOSONG — dokumen resmi yang tampak lengkap padahal
+ * belum diteken.
+ *
+ * Peran QR tetap SATU langkah: labelnya "Simpan & Unduh" sudah menyebut
+ * fungsinya dengan tepat, dan untuk satu kotak tak ada kebingungan yang
+ * dihapus oleh langkah tambahan.
  */
 export default function AturPosisiTtd({
   jenis = "ttd", bangunUrlHalaman, jumlahHalaman = 1, pngTtd,
@@ -70,10 +84,19 @@ export default function AturPosisiTtd({
   // Pemeriksaan akhir: null = tertutup; objek ringkasan = sedang ditampilkan.
   const [periksa, setPeriksa] = useState(null);
   // Berapa tempat yang WAJIB diteken orang ini (deklarasi pemilik dokumen).
-  // Yang sedang diatur ikut terhitung — ia akan ikut terkirim saat tombol
-  // "Bubuhkan" ditekan.
+  //
+  // Kotak yang sedang diatur TIDAK lagi ikut terhitung. Dulu ia terhitung
+  // karena tombol "Bubuhkan" sekaligus mengirim — jadi kotak aktif otomatis
+  // ikut terkirim. Kini "Bubuhkan di Posisi Ini" MENEMPELKAN dan "Selesai"
+  // yang mengirim, sehingga yang belum ditempel memang belum terhitung.
   const wajibN = Math.max(1, Number(wajib) || 1);
-  const kurang = Math.max(0, wajibN - (tetap.length + 1));
+  // Peran QR TIDAK ikut penahanan ini. `tetap` selalu kosong untuk QR, jadi
+  // rumus yang sama akan membuat tombol "Simpan & Unduh" terkunci selamanya —
+  // regresi yang sempat terjadi dan ditangkap KelengkapanPembubuhan.test.jsx.
+  const kurang = qr ? 0 : Math.max(0, wajibN - tetap.length);
+  // Peringatan "sudah ada di titik ini" — dinyalakan saat orang menekan
+  // Bubuhkan dua kali tanpa memindahkan kotaknya sama sekali.
+  const [rangkap, setRangkap] = useState(false);
   const [rasio, setRasio] = useState(qr ? 1 : 0.45);
   const [rasioHal, setRasioHal] = useState(1.414); // tinggi/lebar halaman
   const wadahRef = useRef(null);
@@ -166,6 +189,50 @@ export default function AturPosisiTtd({
     }));
   };
 
+  // Kotak pengarah berpindah / ganti halaman => peringatan rangkap tak
+  // relevan lagi. `pos` selalu objek baru saat berubah, jadi identitasnya
+  // cukup sebagai pemicu.
+  useEffect(() => { setRangkap(false); }, [pos, halaman]);
+
+  /**
+   * "BUBUHKAN DI POSISI INI" — menempelkan, BUKAN mengirim.
+   *
+   * Permintaan pemilik: *"hilangkan bagian '+ tanda tangan lagi', otomatiskan;
+   * jika sudah mengklik 'bubuhkan di posisi ini', jika diklik lagi maka akan
+   * tertempel lagi. Dan pastikan ketika sudah selesai bubuhkan bisa memencet
+   * tombol 'Selesai' agar tidak terjadi kesalahan mis-konsepsi alur akibat
+   * bias makna kata dan fungsi tombol."*
+   *
+   * Itu menamai cacat yang nyata. Sebelumnya tombol berbunyi "Bubuhkan di
+   * Posisi Ini" tetapi FUNGSINYA mengirim seluruh pembubuhan dan menutup
+   * tautan sekali-pakai — sementara tombol yang benar-benar menempel bernama
+   * "Tanda tangan lagi". Kata dan fungsinya bertukar tempat: orang yang baru
+   * menaruh SATU tanda tangan dari tiga yang diminta membaca "Bubuhkan di
+   * Posisi Ini" sebagai "tempelkan yang ini", menekannya, dan dokumennya
+   * terkirim dengan dua lembar kosong.
+   *
+   * Kini kata dan fungsi sejalan: yang berbunyi "bubuhkan" menempelkan, yang
+   * berbunyi "Selesai" mengakhiri.
+   */
+  const bubuhkanDiSini = () => {
+    if (gagalHal || muatHal || mengirim) return;
+    const baru = { halaman, ...pos };
+    // Dua tekanan tanpa memindahkan kotak = tanda tangan tertumpuk persis di
+    // atas dirinya sendiri pada dokumen resmi. Itu selalu salah tekan, tak
+    // pernah maksud; penempatan bersebelahan tetap lolos karena koordinatnya
+    // berbeda.
+    const sudahAda = tetap.some((t) =>
+      t.halaman === baru.halaman && t.x === baru.x && t.y === baru.y);
+    if (sudahAda) { setRangkap(true); return; }
+    setTetap((d) => [...d, baru]);
+  };
+
+  // Yang akan dikirim. Peran QR tetap satu langkah: labelnya "Simpan &
+  // Unduh" sudah menyebut fungsinya dengan tepat, dan menambah langkah
+  // "tempel dulu" untuk SATU kotak hanya menambah klik tanpa menghapus
+  // kebingungan apa pun.
+  const akanDikirim = qr ? [{ halaman, ...pos }] : tetap;
+
   const tinggiKotak = (pos.lebar * rasio) / rasioHal;
   const warna = qr
     ? { border: "border-emerald-500", bg: "bg-emerald-500/10", pegangan: "bg-emerald-600", accent: "accent-emerald-600", teks: "text-emerald-600" }
@@ -219,7 +286,7 @@ export default function AturPosisiTtd({
             Periksa lagi
           </Button>
           <Button type="button" size="sm" className="h-9 text-xs" disabled={mengirim}
-            onClick={() => onKirim({ halaman, ...pos }, tetap)}
+            onClick={() => onKirim(akanDikirim[0], akanDikirim.slice(1))}
             data-testid="periksa-lanjut">
             {mengirim ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
             Ya, bubuhkan sekarang
@@ -389,15 +456,24 @@ export default function AturPosisiTtd({
       <p className="text-[11px] text-muted-foreground">
         {qr
           ? "Geser kotak hijau ke tempat kosong (hindari kaki halaman), tarik pegangan untuk mengubah ukuran — jaga cukup besar agar mudah dipindai."
-          : "Geser kotak biru ke tempat tanda tangan; tarik pegangan untuk mengubah ukuran."}
+          : "Arahkan kotak biru ke tempat tanda tangan — klik di halaman, seret kotaknya, atau tarik pegangan untuk mengubah ukuran. Lalu tekan Bubuhkan di Posisi Ini."}
       </p>
+
+      {rangkap && (
+        <p className="text-[11px] rounded-lg border border-amber-500/50 bg-amber-500/10 px-2.5 py-1.5 text-amber-800 dark:text-amber-200 leading-snug"
+          data-testid="posisi-rangkap">
+          Titik ini sudah dibubuhkan. Pindahkan dulu kotaknya bila ingin
+          menambah tanda tangan kedua — dua tanda tangan bertumpuk persis akan
+          tercetak sebagai satu coretan tebal.
+        </p>
+      )}
 
       {/* Panel ini tampil SEJAK AWAL bila pemilik dokumen mendeklarasikan
           lebih dari satu tempat — bukan menunggu orangnya menekan "Tanda
           tangan lagi" lebih dulu. Justru orang yang TIDAK TAHU dirinya harus
           meneken di beberapa tempat itulah yang perlu diberi tahu; yang sudah
           tahu tak butuh diingatkan. */}
-      {banyak && (tetap.length > 0 || wajibN > 1) && (
+      {!qr && (tetap.length > 0 || wajibN > 1) && (
         <div className={`rounded-lg border px-2.5 py-1.5 space-y-1 ${
           kurang > 0 ? "border-amber-500/50 bg-amber-500/10"
             : "border-border bg-muted/40"}`}
@@ -405,14 +481,15 @@ export default function AturPosisiTtd({
           <p className="text-[11px] font-semibold">
             {kurang > 0
               ? `Dokumen ini menuntut ${wajibN} tanda tangan dari Anda — kurang ${kurang} lagi`
-              : `${tetap.length + 1} tanda tangan akan dibubuhkan`}
+              : `${tetap.length} tanda tangan akan dibubuhkan`}
           </p>
           {kurang > 0 && (
             <p className="text-[11px] text-amber-800 dark:text-amber-200 leading-snug"
               data-testid="posisi-kurang">
-              Tekan <b>Tanda tangan lagi</b>, pindah ke halaman berikutnya,
-              lalu tempatkan sisanya. Sekali dibubuhkan, tautan ini tertutup
-              dan lembar yang terlewat tak bisa ditambahkan lagi.
+              Arahkan kotak, tekan <b>Bubuhkan di Posisi Ini</b>, lalu pindah
+              halaman dan ulangi untuk sisanya. Baru setelah itu tekan
+              <b>Selesai</b> — sekali selesai, tautan ini tertutup dan lembar
+              yang terlewat tak bisa ditambahkan lagi.
             </p>
           )}
           <div className="flex flex-wrap gap-1">
@@ -440,8 +517,9 @@ export default function AturPosisiTtd({
                 </button>
               </span>
             ))}
-            <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded border border-blue-500/50 bg-blue-500/10">
-              Halaman {halaman} (sedang diatur)
+            <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded border border-blue-500/50 bg-blue-500/10"
+              data-testid="posisi-belum">
+              Halaman {halaman} — belum dibubuhkan
             </span>
           </div>
         </div>
@@ -460,12 +538,16 @@ export default function AturPosisiTtd({
               selalu ditentukan orang yang melihat dokumennya. */}
         </div>
         <div className="flex items-center gap-2">
-          {banyak && (
+          {/* "Tanda tangan lagi" DIHAPUS (permintaan pemilik). Pekerjaannya
+              kini dilakukan tombol yang MEMANG berbunyi "Bubuhkan di Posisi
+              Ini" — dua tombol untuk satu pekerjaan, dengan yang salah nama
+              memegang pekerjaan yang salah, adalah sumber kesalahan alurnya. */}
+          {!qr && (
             <Button type="button" variant="outline" size="sm" className="h-9 text-xs"
               disabled={mengirim || gagalHal || muatHal}
-              onClick={() => setTetap((d) => [...d, { halaman, ...pos }])}
-              data-testid="posisi-tambah">
-              <Plus className="w-3.5 h-3.5 mr-1" />Tanda tangan lagi
+              onClick={bubuhkanDiSini}
+              data-testid="posisi-bubuh">
+              <Plus className="w-3.5 h-3.5 mr-1" />Bubuhkan di Posisi Ini
             </Button>
           )}
           {/* TOMBOL BUBUHKAN DITAHAN SELAMA MASIH KURANG.
@@ -488,9 +570,10 @@ export default function AturPosisiTtd({
             </Button>
           )}
           <Button type="button" size="sm" className="h-9 text-xs"
-            disabled={mengirim || gagalHal || muatHal || kurang > 0}
+            disabled={mengirim || gagalHal || muatHal || kurang > 0
+              || akanDikirim.length === 0}
             onClick={() => {
-              const semuaTtd = [...tetap.map((t) => t.halaman), halaman];
+              const semuaTtd = akanDikirim.map((t) => t.halaman);
               // PEMERIKSAAN AKHIR, bukan pengiriman langsung. Penahanan
               // jumlah hanya bekerja bila pemilik dokumen mendeklarasikannya;
               // bila ia lupa, tak ada apa pun yang menahan dan orang menekan
@@ -502,13 +585,19 @@ export default function AturPosisiTtd({
                 }));
                 return;
               }
-              onKirim({ halaman, ...pos }, tetap);
+              onKirim(akanDikirim[0], akanDikirim.slice(1));
             }} data-testid="posisi-kirim">
             {mengirim ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+            {/* Label peran ttd BERHENTI memakai kata "bubuhkan": kata itu kini
+                milik tombol yang menempel. Yang ini mengakhiri, jadi ia
+                berbunyi "Selesai" — dan saat belum ada yang ditempel ia
+                menyebut apa yang kurang, bukan diam sambil mati. */}
+            {/* Tak ada cabang "belum ada yang dibubuhkan": `wajibN` minimal 1,
+                jadi selama belum ada tempelan `kurang` pasti > 0 dan cabang
+                itu tak akan pernah terlihat. */}
             {labelKirim || (qr ? "Simpan & Unduh"
               : kurang > 0 ? `Kurang ${kurang} tanda tangan lagi`
-                : tetap.length ? `Bubuhkan ${tetap.length + 1} Tanda Tangan`
-                  : "Bubuhkan di Posisi Ini")}
+                : `Selesai — kirim ${tetap.length} tanda tangan`)}
           </Button>
           {total > 1 && (
             <Button type="button" variant="outline" size="sm"

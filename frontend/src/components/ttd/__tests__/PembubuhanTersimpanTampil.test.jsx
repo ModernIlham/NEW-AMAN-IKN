@@ -42,7 +42,20 @@ const mundurHalaman = () => {
   fireEvent.click(screen.getByLabelText("Halaman sebelumnya"));
   muatHalaman();
 };
-const simpanLetak = () => fireEvent.click(screen.getByTestId("posisi-tambah"));
+const simpanLetak = () => fireEvent.click(screen.getByTestId("posisi-bubuh"));
+
+/** jsdom memberi ukuran 0 pada semua elemen; wadah dipalsukan 200×400. */
+function ukurWadah() {
+  const wadah = screen.getByTestId("posisi-wadah");
+  wadah.getBoundingClientRect = () => ({
+    left: 0, top: 0, width: 200, height: 400, right: 200, bottom: 400,
+  });
+  return wadah;
+}
+/** Pindahkan kotak pengarah — dua tempelan pada koordinat identik ditolak
+ *  sebagai salah tekan (lihat AturPosisiBanyak.test.jsx). */
+const arahkanKe = (x, y) =>
+  fireEvent.click(ukurWadah(), { clientX: x, clientY: y });
 
 it("letak tersimpan MUNCUL kembali saat halamannya dibuka lagi", () => {
   pasang();                      // mulai di halaman 4 (terakhir)
@@ -117,7 +130,9 @@ it("menghapus letak juga menghapus bayangannya", () => {
 
 it("beberapa letak pada halaman yang sama digambar semuanya", () => {
   pasang();
+  arahkanKe(50, 100);
   simpanLetak();
+  arahkanKe(150, 300);
   simpanLetak();
   expect(screen.getByTestId("posisi-tetap-0")).toBeInTheDocument();
   expect(screen.getByTestId("posisi-tetap-1")).toBeInTheDocument();
