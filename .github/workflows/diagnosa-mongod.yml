@@ -1,0 +1,79 @@
+# Diagnosa mongod — membaca kondisi basis data produksi TANPA mengubah apa pun.
+#
+# Hanya manual (Actions → "Diagnosa mongod" → Run workflow). Tidak ada pemicu
+# push/schedule: ini alat diagnosis yang dijalankan saat dibutuhkan, bukan
+# proses yang menempel pada tiap commit dan menyeret sesi SSH baru ke VPS.
+#
+# Menjawab pertanyaan yang terbuka sejak awal Agustus 2026: mongod memakai
+# 93,1% CPU terus-menerus pada mesin 2 vCPU, dan dua dugaan sebelumnya sudah
+# terbantah. Isi bacaan dan batas keamanannya ada di scripts/diagnosa_mongod.py
+# — baca blok "ATURAN KERAS" di sana sebelum menambah apa pun ke sini.
+name: Diagnosa mongod
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  # Berbagi antrean dengan deploy dan inventaris: dua sesi SSH beruntun ke VPS
+  # yang sama adalah pola yang dulu diduga memicu pemblokiran (lihat deploy.yml).
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  diagnosa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Baca diagnosa via SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          if [ -z "$VPS_HOST" ] || [ -z "$VPS_USER" ] || [ -z "$VPS_SSH_KEY" ]; then
+            echo "::error::Secret VPS_HOST, VPS_USER, dan VPS_SSH_KEY belum lengkap."
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Secret boleh berisi SATU baris base64 — sama seperti deploy.yml.
+          if ! ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null 2>&1; then
+            printf '%s' "$VPS_SSH_KEY" | tr -d ' \t\r\n' | base64 -d > ~/.ssh/deploy_key 2>/dev/null || true
+            chmod 600 ~/.ssh/deploy_key
+          fi
+          if ! ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null 2>&1; then
+            echo "::error::Isi secret VPS_SSH_KEY bukan private key OpenSSH yang valid."
+            exit 1
+          fi
+          {
+            echo "# Diagnosa mongod"
+            echo ""
+            echo "Dibaca $(date -u '+%Y-%m-%d %H:%M UTC') dari commit \`${GITHUB_SHA:0:8}\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+          # Dijalankan oleh PYTHON VENV BACKEND, bukan python sistem: pymongo
+          # dan python-dotenv ada di sana, dan versinya (3.11) yang memang
+          # dipakai aplikasi. Skrip dipipe lewat stdin — tak ada berkas yang
+          # ditinggalkan di VPS.
+          rc=0
+          for attempt in 1 2 3; do
+            rc=0
+            ssh -i ~/.ssh/deploy_key -p "${VPS_PORT:-22}" \
+                -o StrictHostKeyChecking=accept-new \
+                -o ConnectTimeout=20 \
+                "$VPS_USER@$VPS_HOST" \
+                '/var/www/inventarisasi/backend/venv/bin/python -' \
+                < scripts/diagnosa_mongod.py >> "$GITHUB_STEP_SUMMARY" || rc=$?
+            [ "$rc" -eq 0 ] && break
+            [ "$rc" -ne 255 ] && break
+            if [ "$attempt" -lt 3 ]; then
+              echo "Percobaan $attempt/3 gagal menjangkau VPS (exit 255) - coba lagi 180 detik…"
+              sleep 180
+            fi
+          done
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::Gagal membaca diagnosa mongod (exit $rc)."
+            exit "$rc"
+          fi
+          cat "$GITHUB_STEP_SUMMARY"
