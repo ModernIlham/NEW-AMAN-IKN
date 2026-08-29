@@ -67,6 +67,55 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#939] UX pembubuhan: klik untuk menaruh, navigasi di dekat tombol — 2026-08-29
+
+Permintaan pemilik: *"buat agar ttd tampil ketika diklik posisi bubuhkan di
+sini ... berikan tombol next dan previous (cukup ikonnya saja) di samping
+kanan kiri tombol bubuhkan ... di bagian page halaman di atas preview
+hilangkan next dan previousnya karena sudah di bawah, ganti dengan input
+manual jika ingin mengganti halaman langsung."*
+
+**Yang berubah**
+
+- **Klik di pratinjau = "bubuhkan di sini"** — kotaknya langsung pindah ke
+  titik itu, **berpusat** pada jari/kursor. Sebelumnya letak hanya bisa diubah
+  dengan MENYERET kotak yang sudah ada; orang yang tak sadar kotaknya bisa
+  diseret akan mengira letaknya tak bisa diubah sama sekali.
+- **◀ ▶ pindah ke bawah, mengapit tombol Bubuhkan.** Navigasi kini ada tepat
+  di tempat tangan sudah berada, sehingga alurnya menjadi "atur di halaman ini
+  → bubuhkan/simpan → maju" tanpa memindahkan pandangan ke atas layar. Ikon
+  saja — labelnya akan menggeser tombol utama di layar sempit.
+- **Di atas pratinjau, panahnya dicabut dan diganti input angka halaman.** Pada
+  dokumen berhalaman banyak, menekan panah belasan kali untuk sampai ke
+  halaman 17 adalah pekerjaan yang angka bisa selesaikan sekali ketik.
+  Panahnya tak digandakan di sana: dua tempat untuk pekerjaan yang sama hanya
+  membuat mata memilih.
+
+**Dua penjaga yang menentukan apakah ini terasa benar**
+
+1. **Klik sesudah menyeret DIABAIKAN.** Melepas seretan menghasilkan `click`
+   pada wadah; tanpa penjaga ini kotak melompat sekali lagi ke titik lepas —
+   persis membatalkan penempatan yang baru saja dikerjakan tangan. Penjaganya
+   menyala HANYA bila memang ada seretan, supaya klik biasa berikutnya tak
+   ikut tertelan.
+2. **Input halaman dijepit** ke 1..jumlah halaman, dan kotak tetap dijepit di
+   dalam halaman meski diklik tepat di tepi.
+
+**Catatan pilihan**: klik **memindahkan** kotak, bukan menambah pembubuhan
+baru. Menambah dilakukan lewat tombol "Tanda tangan lagi" yang sudah ada.
+Membuat setiap klik menambah pembubuhan akan menghasilkan tanda tangan
+berlebih yang tak disengaja pada dokumen resmi — dan tak ada cara memposisikan
+ulang tanpa menambah.
+
+**Uji**: `UxPembubuhan.test.jsx` (11). Frontend 1204 uji hijau, lint bersih,
+build sukses. Tiga mutasi dipasang lalu terbukti mati: (1) penjaga seret
+dicabut → 1 uji; (2) kotak diletakkan pada pojok klik, bukan berpusat → 1 uji;
+(3) input halaman tak dijepit → 1 uji.
+
+**Uji lama yang disesuaikan**: `PembubuhanTersimpanTampil.test.jsx` membaca
+nomor halaman dari teks indikator; kini nomornya hidup di input, jadi yang
+dibaca nilainya.
+
 ## [#938] Tanggal surat tak boleh mundur dari nomor terakhir — 2026-08-29
 
 Permintaan pemilik: *"pada pembuatan nomor surat, buatkan validasi langsung

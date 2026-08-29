@@ -78,6 +78,9 @@ export default function AturPosisiTtd({
   const [rasioHal, setRasioHal] = useState(1.414); // tinggi/lebar halaman
   const wadahRef = useRef(null);
   const dragRef = useRef(null); // {jenis:'geser'|'ukur', px, py, awal:{...}}
+  // Menandai bahwa seretan BARU SAJA selesai, supaya `click` yang menyusul
+  // pelepasan tak dianggap perintah "taruh di sini".
+  const baruSeret = useRef(false);
 
   useEffect(() => {
     if (qr || !pngTtd) return;
@@ -132,7 +135,36 @@ export default function AturPosisiTtd({
     if (d.jenis === "geser") setPos(jepit({ ...d.awal, x: d.awal.x + dx, y: d.awal.y + dy }));
     else setPos(jepit({ ...d.awal, lebar: d.awal.lebar + dx }));
   };
-  const selesaiDrag = () => { dragRef.current = null; };
+  const selesaiDrag = () => {
+    // Tandai HANYA bila memang ada seretan; klik biasa tak boleh
+    // menyalakan penjaganya dan menelan perintah berikutnya.
+    if (dragRef.current) baruSeret.current = true;
+    dragRef.current = null;
+  };
+
+  /**
+   * KLIK DI PRATINJAU = "bubuhkan di sini" — kotaknya langsung pindah ke titik
+   * itu, berpusat pada jari/kursor.
+   *
+   * Permintaan pemilik: *"buat agar ttd tampil ketika diklik posisi bubuhkan
+   * di sini."* Sebelumnya letak hanya bisa diubah dengan MENYERET kotak yang
+   * sudah ada — orang yang tak sadar kotaknya bisa diseret akan mengira
+   * letaknya tak bisa diubah sama sekali.
+   *
+   * Klik SESUDAH menyeret diabaikan: melepas seretan menghasilkan `click` pada
+   * wadah, dan tanpa penjaga ini kotak akan melompat sekali lagi ke titik
+   * lepas — persis membatalkan penempatan yang baru saja dikerjakan tangan.
+   */
+  const klikTaruh = (e) => {
+    if (gagalHal || muatHal || baruSeret.current) { baruSeret.current = false; return; }
+    const rect = wadahRef.current?.getBoundingClientRect();
+    if (!rect || !rect.width || !rect.height) return;
+    setPos((p) => jepit({
+      ...p,
+      x: (e.clientX - rect.left) / rect.width - p.lebar / 2,
+      y: (e.clientY - rect.top) / rect.height - ((p.lebar * rasio) / rasioHal) / 2,
+    }));
+  };
 
   const tinggiKotak = (pos.lebar * rasio) / rasioHal;
   const warna = qr
@@ -205,19 +237,28 @@ export default function AturPosisiTtd({
               : <MapPin className="w-3.5 h-3.5 text-blue-600" />}
           {qr ? "Atur letak QR verifikasi" : "Atur letak tanda tangan di dokumen"}
         </p>
+        {/* NAVIGASI ◀ ▶ PINDAH KE BAWAH, mengapit tombol Bubuhkan (permintaan
+            pemilik). Di sini tersisa LOMPATAN LANGSUNG lewat ketikan: pada
+            dokumen berhalaman banyak, menekan panah belasan kali untuk sampai
+            ke halaman 17 adalah pekerjaan yang angka bisa selesaikan sekali
+            ketik. Dua tempat untuk pekerjaan yang sama hanya membuat mata
+            memilih, jadi panahnya tak digandakan di sini. */}
         {total > 1 && (
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" size="sm" className="h-9 w-9 p-0 min-w-0 min-h-0"
-              disabled={halaman <= 1} onClick={() => setHalaman((h) => h - 1)} aria-label="Halaman sebelumnya">
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-            <span className="text-xs font-semibold whitespace-nowrap" data-testid="posisi-halaman">
-              Hal. {halaman}/{total}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-semibold whitespace-nowrap"
+              data-testid="posisi-halaman">Hal.</span>
+            <input
+              type="number" min={1} max={total} value={halaman}
+              onChange={(e) => {
+                const n = parseInt(e.target.value, 10);
+                if (Number.isFinite(n)) setHalaman(Math.min(total, Math.max(1, n)));
+              }}
+              className="w-14 h-9 rounded-lg border border-border bg-background px-2 text-xs text-center"
+              aria-label="Nomor halaman"
+              data-testid="posisi-halaman-input" />
+            <span className="text-xs font-semibold whitespace-nowrap text-muted-foreground">
+              / {total}
             </span>
-            <Button type="button" variant="outline" size="sm" className="h-9 w-9 p-0 min-w-0 min-h-0"
-              disabled={halaman >= total} onClick={() => setHalaman((h) => h + 1)} aria-label="Halaman berikutnya">
-              <ChevronRight className="w-4 h-4" />
-            </Button>
           </div>
         )}
       </div>
@@ -228,6 +269,7 @@ export default function AturPosisiTtd({
         style={muatHal || gagalHal ? { aspectRatio: `1 / ${rasioHal}` } : undefined}
         onMouseMove={gerak} onMouseUp={selesaiDrag} onMouseLeave={selesaiDrag}
         onTouchMove={gerak} onTouchEnd={selesaiDrag} onTouchCancel={selesaiDrag}
+        onClick={klikTaruh}
         data-testid="posisi-wadah"
       >
         {gagalHal ? (
@@ -432,6 +474,19 @@ export default function AturPosisiTtd({
               yang ada adalah membatalkan permintaan lalu meminta SEMUA orang
               meneken ulang. Karena itu penahanan ini, bukan sekadar
               peringatan yang bisa dilewati. */}
+          {/* ◀ ▶ MENGAPIT tombol Bubuhkan (permintaan pemilik): navigasi ada
+              tepat di tempat tangan sudah berada, sehingga alurnya menjadi
+              "atur di halaman ini → bubuhkan/simpan → maju" tanpa memindahkan
+              pandangan ke atas layar. Ikon saja — labelnya akan menggeser
+              tombol utama di layar sempit. */}
+          {total > 1 && (
+            <Button type="button" variant="outline" size="sm"
+              className="h-9 w-9 p-0 min-w-0 min-h-0" disabled={halaman <= 1 || mengirim}
+              onClick={() => setHalaman((h) => Math.max(1, h - 1))}
+              aria-label="Halaman sebelumnya" data-testid="posisi-prev">
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+          )}
           <Button type="button" size="sm" className="h-9 text-xs"
             disabled={mengirim || gagalHal || muatHal || kurang > 0}
             onClick={() => {
@@ -455,6 +510,15 @@ export default function AturPosisiTtd({
                 : tetap.length ? `Bubuhkan ${tetap.length + 1} Tanda Tangan`
                   : "Bubuhkan di Posisi Ini")}
           </Button>
+          {total > 1 && (
+            <Button type="button" variant="outline" size="sm"
+              className="h-9 w-9 p-0 min-w-0 min-h-0"
+              disabled={halaman >= total || mengirim}
+              onClick={() => setHalaman((h) => Math.min(total, h + 1))}
+              aria-label="Halaman berikutnya" data-testid="posisi-next">
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          )}
         </div>
       </div>
     </div>

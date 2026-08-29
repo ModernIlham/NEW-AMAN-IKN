@@ -98,10 +98,12 @@ it("label daftar MELONCAT ke halaman letaknya", () => {
   simpanLetak();                 // tersimpan di halaman 4
   mundurHalaman();
   mundurHalaman();               // sekarang di halaman 2
-  expect(screen.getByTestId("posisi-halaman")).toHaveTextContent("Hal. 2/4");
+  // Nomor halaman kini hidup di INPUT (navigasi ◀ ▶ pindah ke dekat tombol
+  // Bubuhkan), jadi yang dibaca nilainya — bukan teks di sebelahnya.
+  expect(screen.getByTestId("posisi-halaman-input")).toHaveValue(2);
   fireEvent.click(screen.getByTestId("posisi-lihat-0"));
   muatHalaman();
-  expect(screen.getByTestId("posisi-halaman")).toHaveTextContent("Hal. 4/4");
+  expect(screen.getByTestId("posisi-halaman-input")).toHaveValue(4);
   expect(screen.getByTestId("posisi-tetap-0")).toBeInTheDocument();
 });
 
