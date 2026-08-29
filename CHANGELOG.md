@@ -67,6 +67,66 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#942] Inventaris VPS putaran kedua: negatif-palsu diperbaiki, supervisor & CPU dibaca — 2026-08-29
+
+Putaran pertama ([#940]/[#941]) melaporkan `redis-server` **"unit tidak ada"**.
+Unitnya ternyata *loaded, enabled, running* sejak 26 Agustus di
+`127.0.0.1:6379`. Laporan palsu itu sempat masuk dokumen sebagai temuan, dan
+melahirkan hipotesis keliru bahwa cache aplikasi jatuh diam-diam ke Mongo dan
+itulah sebab beban satu core.
+
+**Akar masalahnya bukan systemd, melainkan bentuk perintah di alat saya:**
+
+```bash
+set -o pipefail; seq 1 2000000 | grep -q "^1$"; echo $?
+1        # "tidak cocok" — padahal 1 jelas ada
+```
+
+`grep -q` berhenti pada kecocokan **pertama** lalu menutup pipa; produsennya
+kena SIGPIPE; `pipefail` menjadikan seluruh pipeline gagal **meski grep-nya
+cocok**. Karena hasilnya bergantung pada balapan siapa-selesai-menulis-duluan,
+ia lolos di mesin uji dan menggigit di produksi — dan hanya pada **sebagian**
+unit, yang membuatnya tampak seperti temuan nyata alih-alih bug.
+
+**Yang berubah di alatnya**
+
+- `status_unit()` memakai `systemctl show -p LoadState --value` — satu perintah,
+  **tanpa pipa**. Unit yang systemd-nya tak menjawab kini dilaporkan
+  `? (systemd tak menjawab)`, bukan disamakan dengan "tidak ada".
+- Tebakan `aman-backend`/`aman` **dihapus** dari daftar unit: backend adalah
+  program supervisor `inventarisasi-backend`. Bagian **Program supervisor**
+  baru (`supervisorctl status`, read-only) yang menjawab apakah aplikasi hidup.
+- Bagian **Pemakan CPU teratas** baru — sampel **kedua** `top -b` (yang pertama
+  selalu rata-rata sejak boot). Tanpa `-c`: kolom COMMAND berisi nama program
+  saja, karena baris perintah lengkap bisa memuat kredensial pada argumen.
+- Versi Python **di dalam `backend/venv`** dibaca (sebelumnya hanya `python3`
+  sistem, yang memang berbeda: 3.12.3 vs 3.11.15 terpasang).
+- `ffmpeg` dibuang dari daftar — tak satu pun berkas di repo merujuknya.
+
+**Uji perilaku, bukan pencocokan teks.** Versi pertama uji ini mencari pipa di
+dalam `status_unit` dengan regex dan tersandung pada `|` pemisah kolom Markdown
+di dalam tanda kutip — pencocokan teks tak tahu beda pipa shell dan tabel yang
+dicetak. Saya buang, dan gantinya menjalankan skripnya sungguhan dengan
+`systemctl` tiruan yang **sengaja memuntahkan keluaran besar** untuk memicu
+SIGPIPE. Uji itu gagal persis ketika cacat aslinya dipasang kembali.
+
+Empat mutasi dipasang lalu dibunuh: cacat `grep -q` aslinya, `supervisorctl
+restart`, `top -c`, dan kembali menebak backend sebagai unit systemd.
+
+**Dokumen dikoreksi, bukan ditimpa.** `docs/OPTIMASI-VPS.md` §3d kini menulis
+Redis aktif dan backend RUNNING, dengan kotak koreksi yang menjelaskan
+bagaimana temuan sebelumnya bisa salah. Dugaan "cache jatuh ke Mongo" **batal**
+— beban satu core datar itu kembali **tanpa penjelasan**, dan sampel `top`
+putaran berikutnya yang akan menyebut nama pemakannya.
+
+Catatan: `redis-cli ping` menjawab `(error) NOAUTH Authentication required`.
+Itu **bukan kegagalan** — itu `requirepass` bekerja seperti yang diminta
+`docs/REDIS.md`. Dan `.env` ada di `/var/www/inventarisasi/backend/.env`;
+menjalankan `grep ... backend/.env` dari `/root` menjawab *No such file* karena
+jalurnya salah, bukan karena berkasnya hilang.
+
+---
+
 ## [#941] OPTIMASI-VPS disesuaikan dengan bacaan mesin 29 Agustus — 2026-08-29
 
 Permintaan pemilik: *"sesuaikan update dengan yang tercatat saat ini."*

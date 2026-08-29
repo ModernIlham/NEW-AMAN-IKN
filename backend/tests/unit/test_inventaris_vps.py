@@ -18,8 +18,10 @@ yang gampang ditumbuhkan sesudahnya:
 
 Ketiganya tidak akan membuat satu pun uji lain gagal. Uji inilah gerbangnya.
 """
+import os
 import pathlib
 import re
+import subprocess
 
 import pytest
 import yaml
@@ -96,6 +98,12 @@ class TestSkripTidakMembocorkanRahasia:
         "/dev/null",
         "/",
         "/g",  # akhiran `sed 's/|/ /g'`, bukan jalur
+        # Direktori aplikasi (default yang sama dengan scripts/deploy_vps.sh).
+        # Yang dibaca dari sana HANYA `venv/bin/python --version`; berkas
+        # `.env` di direktori yang sama tetap dilarang oleh
+        # test_tidak_mencetak_konfigurasi_atau_kredensial.
+        "/var/www/inventarisasi",
+        "/var/www/inventarisasi/backend/venv/bin/python",
     }
 
     def test_hanya_menyentuh_jalur_yang_diizinkan(self, isi_skrip):
@@ -160,4 +168,150 @@ class TestWorkflownyaTerkunci:
         assert alur["concurrency"]["group"] == "deploy-vps", (
             "Inventaris harus mengantre bersama deploy — dua sesi SSH beruntun "
             "ke VPS yang sama adalah pola yang diduga memicu fail2ban."
+        )
+
+
+class TestPelajaranPutaranPertama:
+    """Cacat nyata yang lolos ke produksi pada putaran pertama, dikunci.
+
+    Inventaris 29 Agustus melaporkan `redis-server` "unit tidak ada". Unitnya
+    ternyata loaded, enabled, dan running sejak tiga hari. Laporan itu masuk ke
+    docs/OPTIMASI-VPS.md sebagai temuan, dan sempat melahirkan hipotesis keliru
+    bahwa cache aplikasi jatuh diam-diam ke Mongo.
+
+    Sebabnya bukan systemd, melainkan bentuk perintahnya::
+
+        set -o pipefail; seq 1 2000000 | grep -q "^1$"; echo $?
+        1        # "tidak cocok", padahal 1 jelas ada
+
+    `grep -q` berhenti pada kecocokan PERTAMA lalu menutup pipa; produsennya
+    kena SIGPIPE; `pipefail` menjadikan seluruh pipeline gagal MESKI cocok.
+    Karena bergantung pada balapan siapa-selesai-duluan, ia lolos di mesin uji
+    dan menggigit di produksi - jenis cacat yang tak tertangkap dengan
+    "jalankan sekali, lihat hasilnya".
+    """
+
+    def test_tidak_ada_grep_q_di_skrip_ber_pipefail(self, isi_skrip):
+        perintah = _tanpa_komentar(isi_skrip)
+        assert "pipefail" in perintah, (
+            "Uji ini mengandaikan skrip memakai `set -o pipefail`; kalau itu "
+            "dicabut, tinjau ulang alasan larangan di bawah."
+        )
+        assert "grep -q" not in perintah, (
+            "`grep -q` di bawah `pipefail` melaporkan GAGAL meski cocok, bila "
+            "produsennya belum selesai menulis saat grep menutup pipa. Itu "
+            "yang membuat redis-server dilaporkan tidak ada. Pakai perintah "
+            "tunggal tanpa pipa (mis. `systemctl show -p LoadState --value`)."
+        )
+
+    def test_unit_yang_ADA_tidak_dilaporkan_hilang(self, tmp_path):
+        """Uji PERILAKU, bukan pencocokan teks.
+
+        Versi pertama uji ini mencari pipa di dalam `status_unit` dengan regex
+        dan tersandung pada `|` pemisah kolom Markdown di dalam tanda kutip —
+        pencocokan teks tidak tahu beda pipa shell dan tabel yang dicetak.
+        Jadi skripnya dijalankan sungguhan dengan `systemctl` tiruan.
+
+        Tiruannya sengaja memuntahkan keluaran BESAR untuk `list-unit-files`:
+        itulah yang memicu SIGPIPE bila pemanggilnya memipe ke `grep -q`, dan
+        itulah yang membuat putaran pertama melaporkan redis-server hilang.
+        """
+        stub = tmp_path / "bin"
+        stub.mkdir()
+        (stub / "systemctl").write_text(
+            "#!/bin/bash\n"
+            "case \"$1\" in\n"
+            "  list-unit-files)\n"
+            "    echo 'UNIT FILE STATE PRESET'\n"
+            "    echo \"$2 enabled enabled\"\n"
+            "    seq 1 200000 | sed 's/^/pad.service enabled enabled /'\n"
+            "    ;;\n"
+            "  show)\n"
+            "    for a in \"$@\"; do akhir=\"$a\"; done\n"
+            "    case \"$akhir\" in\n"
+            "      redis-server.service) echo loaded ;;\n"
+            "      *) echo not-found ;;\n"
+            "    esac ;;\n"
+            "  is-active)  echo active ;;\n"
+            "  is-enabled) echo enabled ;;\n"
+            "esac\n"
+        )
+        (stub / "supervisorctl").write_text(
+            "#!/bin/bash\necho 'inventarisasi-backend RUNNING pid 1, uptime 0:10:10'\n"
+        )
+        (stub / "top").write_text(
+            "#!/bin/bash\n"
+            "echo '  PID USER PR NI VIRT RES SHR S %CPU %MEM TIME+ COMMAND'\n"
+            "echo '    1 root 20 0 1 1 1 S 99.0 1.0 1:00.00 mongod'\n"
+            "echo '  PID USER PR NI VIRT RES SHR S %CPU %MEM TIME+ COMMAND'\n"
+            "echo '    1 root 20 0 1 1 1 S 99.0 1.0 1:00.00 mongod'\n"
+        )
+        for f in stub.iterdir():
+            f.chmod(0o755)
+
+        lingkungan = dict(os.environ, PATH=f"{stub}:{os.environ['PATH']}")
+        hasil = subprocess.run(
+            ["bash", str(SKRIP)], capture_output=True, text=True,
+            env=lingkungan, timeout=120,
+        )
+        keluaran = hasil.stdout
+
+        # Ambil HANYA bagian tabel systemd: "`redis-server`" juga muncul di
+        # tabel versi, dan mencocokkannya di seluruh keluaran akan menguji
+        # baris yang salah.
+        awal = keluaran.index("## Layanan systemd yang relevan")
+        tabel = keluaran[awal:keluaran.index("## ", awal + 3)]
+
+        baris_redis = [b for b in tabel.splitlines() if "`redis-server`" in b]
+        assert baris_redis, "baris redis-server tidak ada di keluaran"
+        assert "unit tidak ada" not in baris_redis[0], (
+            "Unit yang ADA dilaporkan hilang — cacat 29 Agustus terulang. "
+            "Barisnya: " + baris_redis[0]
+        )
+        assert "active" in baris_redis[0] and "enabled" in baris_redis[0]
+
+        # Yang benar-benar tak ada tetap harus dilaporkan tak ada — kalau tidak,
+        # uji di atas bisa lulus hanya karena skripnya selalu bilang "ada".
+        baris_f2b = [b for b in tabel.splitlines() if "`fail2ban`" in b]
+        assert baris_f2b and "unit tidak ada" in baris_f2b[0], (
+            "Unit yang tak ada TIDAK dilaporkan hilang: " + str(baris_f2b)
+        )
+
+        assert "inventarisasi-backend" in keluaran, (
+            "Status supervisor tak muncul — laporan tak menyebut apakah "
+            "backend hidup."
+        )
+
+    def test_systemd_bukan_penanda_hidup_matinya_backend(self, isi_skrip):
+        perintah = _tanpa_komentar(isi_skrip)
+        for tebakan in ("aman-backend", "aman.service"):
+            assert tebakan not in perintah, (
+                f"Skrip menanyakan `{tebakan}` ke systemd. Unit itu tidak "
+                "pernah ada; backend dikelola supervisor sebagai "
+                "`inventarisasi-backend`, dan systemd akan selalu menjawab "
+                "'tidak ada' - terbaca seolah backend mati padahal sehat."
+            )
+        assert "supervisorctl status" in perintah, (
+            "Backend hanya bisa dilihat lewat supervisor - tanpa itu laporan "
+            "tak pernah menyebut apakah aplikasinya hidup."
+        )
+
+    @pytest.mark.parametrize("cmd", [
+        "supervisorctl start", "supervisorctl stop", "supervisorctl restart",
+        "supervisorctl reload", "supervisorctl shutdown",
+    ])
+    def test_supervisor_hanya_dibaca(self, isi_skrip, cmd):
+        assert cmd not in _tanpa_komentar(isi_skrip), (
+            f"`{cmd}` mengubah keadaan produksi. Inventaris hanya boleh "
+            "`supervisorctl status`."
+        )
+
+    def test_top_tidak_meminta_baris_perintah_lengkap(self, isi_skrip):
+        perintah = _tanpa_komentar(isi_skrip)
+        if "top -b" not in perintah:
+            pytest.skip("skrip tidak lagi memakai top")
+        assert "top -c" not in perintah and "-b -c" not in perintah, (
+            "`top -c` mencetak baris perintah LENGKAP, yang bisa memuat "
+            "kredensial pada argumen (mis. URL ber-sandi). Keluaran ini masuk "
+            "ke log Actions - cukup nama program."
         )

@@ -53,7 +53,7 @@
 | CPU | ±51% konstan pada 2 vCPU (≈ 1 core penuh) | **Tidak wajar untuk idle** — wajar hanya bila job latar sedang berjalan; wajib diidentifikasi (lihat §2) |
 | RAM 8 GB | mongod (WiredTiger default ≈ 3,5 GB) + uvicorn + Meilisearch + Redis + nginx | Cukup, tetapi **tanpa swap satu lonjakan ekspor/restore bisa memicu OOM-killer** |
 | Disk 96 GB, terpakai **31 GB (32%)** — 29 Agu 2026 | Longgar | Aman; tumbuh ±3 GB dalam 11 hari (27,8 GB pada 18 Agu). Pada laju itu ambang 80% masih >1 tahun, tetapi GridFS foto adalah pertumbuhan utama — pasang alarm 80% |
-| Stack | MongoDB **7.0.40**, FastAPI/uvicorn (Python sistem **3.12.3**; **3.11.15** ikut dipasang manual — versi di dalam `backend/venv` belum terbaca), Meilisearch **1.11.3**, Redis **7.0.15**, nginx **1.24.0**, Node **22.23.2**, certbot **5.7.0** | Sudah tepat guna untuk skala satker; versi terverifikasi 29 Agu 2026 |
+| Stack | MongoDB **7.0.40**, FastAPI/uvicorn (Python sistem **3.12.3**; **3.11.15** ikut dipasang manual — versi di dalam `backend/venv` akan terbaca pada inventaris berikutnya), Meilisearch **1.11.3**, Redis **7.0.15**, nginx **1.24.0**, Node **22.23.2**, certbot **5.7.0** | Sudah tepat guna untuk skala satker; versi terverifikasi 29 Agu 2026 |
 
 **Pola "51% konstan stabil" itu ciri khas SATU proses yang memakan satu core terus-menerus** — bukan pola beban pengguna (yang naik-turun). Tiga tersangka utama berurutan kemungkinan:
 
@@ -96,39 +96,81 @@ Aturan praktis RAM 8 GB tanpa hibernasi: swap 2–4 GB. Ambil **4 GB** (ruang di
 
 ### d. Caching, cron, dan service
 
-**Topologi layanan sebenarnya (terverifikasi 29 Agu 2026).** Ini pernah
-ditebak salah di dokumen ini dan di alat inventarisnya sendiri, jadi ditulis
-apa adanya:
+**Topologi layanan sebenarnya (terverifikasi 29 Agu 2026, dikoreksi hari yang
+sama).** Bagian ini sempat memuat temuan yang SALAH; koreksinya ditulis di
+sini alih-alih ditimpa, karena cara ia salah lebih berguna daripada hasil
+akhirnya.
 
-| Komponen | Dikelola oleh | Status 29 Agu |
+| Komponen | Dikelola oleh | Status terverifikasi |
 |---|---|---|
 | `mongod` | systemd | aktif, enabled |
 | `nginx` | systemd | aktif, enabled |
 | `meilisearch` | systemd | aktif, enabled |
-| Backend AMAN | **supervisor**, program `inventarisasi-backend` | belum terbaca — inventaris hanya memeriksa systemd |
-| `redis-server` | seharusnya systemd (`scripts/setup_redis.sh` §4) | **unit tidak ditemukan**, padahal paketnya terpasang dan `redis-server --version` menjawab |
+| `redis-server` | systemd (`/usr/lib/systemd/system/redis-server.service`) | **aktif, enabled**, hidup sejak 26 Agu, `127.0.0.1:6379`, RAM 3,9 MB |
+| Backend AMAN | **supervisor**, program `inventarisasi-backend` | **RUNNING** |
 
-Dua hal yang belum terjawab dan **jangan dianggap beres**:
+Dua hal yang sekarang **terjawab**:
 
-1. **Backend berjalan di supervisor, bukan systemd** — `scripts/deploy_vps.sh`
-   me-restart lewat `supervisorctl restart inventarisasi-backend`. Mencari
-   `aman-backend.service` (seperti yang dilakukan inventaris putaran pertama)
-   akan selalu berkata "unit tidak ada" dan **terlihat seperti backend mati
-   padahal sehat**. Jangan pakai systemd sebagai penanda hidup-matinya.
-2. **`redis-server` tidak punya unit systemd.** Paketnya terpasang manual dan
-   binernya jalan, tetapi unitnya tak terdaftar. Kalau Redis memang tidak
-   hidup, `REDIS_URL` di `backend/.env` sedang menunjuk ke tempat yang tak
-   menjawab — dan menurut `backend/redis_utils.py` seluruh cache **jatuh
-   diam-diam kembali ke Mongo**. Itu tidak membuat aplikasi salah, tetapi
-   menambah beban mongod, dan **layak dicurigai sebagai salah satu penjelasan
-   beban satu core yang datar itu**. Perintah pemastinya:
+1. **Backend berjalan di supervisor, bukan systemd.** `scripts/deploy_vps.sh`
+   me-restart lewat `supervisorctl restart inventarisasi-backend`. Unit
+   `aman-backend.service` tidak pernah ada — menanyakannya ke systemd selalu
+   menjawab "tidak ada" dan **terbaca seolah backend mati padahal sehat**.
+   Jangan pakai systemd sebagai penanda hidup-matinya.
+2. **Redis hidup dan terlindungi.** `redis-cli ping` menjawab
+   `(error) NOAUTH Authentication required` — itu **bukan kegagalan**, itu
+   `requirepass` bekerja persis seperti yang diminta `docs/REDIS.md`. Redis
+   mendengar hanya di `127.0.0.1`.
+
+> **KOREKSI — inventaris putaran pertama melaporkan `redis-server` "unit tidak
+> ada", dan itu salah.** Unitnya loaded, enabled, dan running sejak tiga hari.
+> Dari laporan palsu itu dokumen ini sempat menyimpulkan bahwa cache aplikasi
+> mungkin jatuh diam-diam ke Mongo dan itulah sebab beban satu core. **Dugaan
+> itu batal.**
+>
+> Sebabnya bukan systemd, melainkan bentuk perintah di alat inventarisnya:
+>
+> ```bash
+> set -o pipefail; seq 1 2000000 | grep -q "^1$"; echo $?
+> 1        # "tidak cocok" — padahal 1 jelas ada
+> ```
+>
+> `grep -q` berhenti pada kecocokan PERTAMA lalu menutup pipa; produsennya kena
+> SIGPIPE; `pipefail` menjadikan seluruh pipeline gagal **meski grep-nya
+> cocok**. Karena hasilnya bergantung pada balapan siapa-selesai-menulis-duluan,
+> ia lolos di mesin uji dan menggigit di produksi — dan hanya pada SEBAGIAN
+> unit, yang membuatnya tampak seperti temuan nyata alih-alih bug.
+>
+> Sudah diperbaiki: `systemctl show -p LoadState --value` menjawab pertanyaan
+> yang sama dengan satu perintah tanpa pipa. Uji perilaku di
+> `backend/tests/unit/test_inventaris_vps.py` menjalankan skripnya dengan
+> `systemctl` tiruan yang sengaja memuntahkan keluaran besar, dan gagal bila
+> cacat ini dipasang kembali.
+>
+> **Pelajarannya bukan tentang shell.** Bacaan mesin lebih dipercaya daripada
+> laporan lisan — itulah alasan alat ini ada — tetapi alatnya sendiri tetap
+> perangkat lunak yang bisa salah. Temuan tunggal yang mengejutkan (satu
+> layanan hilang sementara tetangganya baik-baik saja) layak dikonfirmasi
+> dengan perintah kedua yang berbeda bentuk, sebelum dijadikan dasar hipotesis.
+
+**Yang masih terbuka:** beban satu core datar itu **belum ada penjelasannya**.
+Tersangka "cache jatuh ke Mongo" gugur bersama koreksi di atas. Inventaris
+putaran berikutnya menyertakan sampel kedua `top`, yang menyebut nama proses
+pemakannya langsung.
+
+Perintah pemastinya, bila ingin dijalankan manual (semuanya hanya membaca):
 
 ```bash
-supervisorctl status                 # backend AMAN hidup?
-systemctl status redis-server        # unit benar-benar tak ada?
-redis-cli ping                       # jawab PONG?
-grep -c REDIS_URL backend/.env       # env-nya memang diisi?
+supervisorctl status                                   # backend AMAN hidup?
+systemctl status redis-server --no-pager               # unit Redis
+redis-cli ping                                         # NOAUTH = sehat + ber-sandi
+grep -c REDIS_URL /var/www/inventarisasi/backend/.env  # jalur LENGKAP-nya
 ```
+
+> Catatan kecil yang menyelamatkan salah baca: `.env` ada di
+> `/var/www/inventarisasi/backend/.env` (lihat `APP_DIR` di
+> `scripts/deploy_vps.sh`). Menjalankan `grep ... backend/.env` dari `/root`
+> menjawab *No such file or directory* — itu jalur yang salah, bukan berkas
+> yang hilang.
 
 
 - `systemctl list-timers` + `crontab -l` (root & user aplikasi): kenali SETIAP timer; matikan yang tidak dikenal/dipakai (mis. `apt-daily` biarkan, `motd-news` boleh mati).
