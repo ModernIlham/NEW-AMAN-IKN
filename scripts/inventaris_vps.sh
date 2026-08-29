@@ -82,22 +82,85 @@ versi pip3         pip3 --version
 versi nginx        nginx -v
 versi redis-server redis-server --version
 versi meilisearch  meilisearch --version
-versi ffmpeg       ffmpeg -version
 versi git          git --version
 versi certbot      certbot --version
 versi fail2ban-client fail2ban-client --version
+# Versi Python yang BENAR-BENAR menjalankan backend. `python3` sistem sering
+# beda dengan isi venv, dan dokumen sempat menebak yang salah karenanya.
+# APP_DIR memakai default yang sama dengan scripts/deploy_vps.sh.
+if [ -x /var/www/inventarisasi/backend/venv/bin/python ]; then
+  baris "| venv backend | $(/var/www/inventarisasi/backend/venv/bin/python --version 2>&1 | head -1) |"
+else
+  baris "| venv backend | – (tidak ditemukan di /var/www/inventarisasi) |"
+fi
+
+# Status satu unit systemd — SENGAJA TANPA PIPA.
+#
+# Putaran pertama memakai `systemctl list-unit-files X | grep -q "^X"` dan
+# melaporkan `redis-server` "unit tidak ada", padahal unitnya loaded, enabled,
+# dan running sejak tiga hari. Sebabnya bukan systemd: `grep -q` berhenti pada
+# kecocokan PERTAMA lalu menutup pipa, produsennya kena SIGPIPE, dan
+# `set -o pipefail` di atas menjadikan seluruh pipeline gagal — meski grep-nya
+# COCOK. Karena bergantung pada balapan siapa-selesai-duluan, ia lolos di mesin
+# uji dan menggigit di produksi.
+#
+#   $ set -o pipefail; seq 1 2000000 | grep -q "^1$"; echo $?
+#   1        # "tidak cocok", padahal 1 jelas ada
+#
+# `systemctl show -p LoadState` menjawab pertanyaan yang sama dengan satu
+# perintah tanpa pipa: `loaded`, `not-found`, atau `masked`.
+status_unit() {
+  local unit="$1" load aktif boot
+  load="$(systemctl show -p LoadState --value "$unit.service" 2>/dev/null || true)"
+  if [ "$load" = "not-found" ]; then
+    baris "| \`$unit\` | – (unit tidak ada) | – |"
+    return
+  fi
+  if [ -z "$load" ]; then
+    baris "| \`$unit\` | ? (systemd tak menjawab) | ? |"
+    return
+  fi
+  aktif="$(systemctl is-active "$unit.service" 2>/dev/null || true)"
+  boot="$(systemctl is-enabled "$unit.service" 2>/dev/null || true)"
+  baris "| \`$unit\` | ${aktif:-?} | ${boot:-?} |"
+}
 
 judul "Layanan systemd yang relevan"
 baris "| Unit | Aktif | Otomatis saat boot |"
 baris "|---|---|---|"
-for unit in mongod nginx redis-server meilisearch aman-backend aman fail2ban; do
-  if systemctl list-unit-files "$unit.service" >/dev/null 2>&1 \
-     && systemctl list-unit-files "$unit.service" 2>/dev/null | grep -q "^$unit.service"; then
-    baris "| \`$unit\` | $(systemctl is-active "$unit" 2>/dev/null || echo '?') | $(systemctl is-enabled "$unit" 2>/dev/null || echo '?') |"
-  else
-    baris "| \`$unit\` | – (unit tidak ada) | – |"
-  fi
+# `aman-backend`/`aman` DIHAPUS dari daftar: backend AMAN tidak pernah jadi
+# unit systemd — ia program supervisor `inventarisasi-backend` (lihat
+# scripts/deploy_vps.sh). Menanyakannya ke systemd selalu menjawab "tidak ada"
+# dan terbaca seolah backend mati padahal sehat.
+for unit in mongod nginx redis-server meilisearch supervisor cron fail2ban ufw; do
+  status_unit "$unit"
 done
+
+judul "Program supervisor"
+if command -v supervisorctl >/dev/null 2>&1; then
+  baris '```'
+  supervisorctl status 2>&1 | head -30
+  baris '```'
+else
+  baris "_\`supervisorctl\` tidak ada di mesin ini._"
+fi
+
+judul "Pemakan CPU teratas"
+# Menjawab pertanyaan tertua di docs/OPTIMASI-VPS.md §2 butir 1: beban 1,00
+# datar pada 2 vCPU = satu core terbakar terus-menerus, oleh SIAPA?
+#
+# `top -b` TANPA `-c`: kolom COMMAND berisi nama program saja. Baris perintah
+# lengkap (`-c`) sengaja tidak diminta — ia bisa memuat kredensial pada
+# argumen, dan keluaran ini masuk ke log Actions.
+baris 'Sampel kedua `top` (yang pertama selalu rata-rata sejak boot):'
+baris ""
+baris '```'
+if command -v top >/dev/null 2>&1; then
+  top -b -w 512 -n 2 -d 1 2>/dev/null | awk 'BEGIN{n=0} /^ *PID +USER/{n++} n==2{print}' | head -12
+else
+  baris "top tidak ada"
+fi
+baris '```' 
 
 judul "Paket APT yang dipasang manual"
 baris '```'
