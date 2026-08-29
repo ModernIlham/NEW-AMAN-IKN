@@ -272,3 +272,64 @@ class TestEmpatDaftarMembawaStatusYangSAMA:
                 page=1, page_size=30, _user=USER)
             assert hasil["items"][0]["ttd"]["id"] == "sr-pp"
         _jalan(skenario())
+
+
+class TestSptjMenambahTempatTeken:
+    """Permintaan pemilik: BAST ber-Surat Pernyataan Tanggung Jawab otomatis
+    menambah tempat teken bagi orang yang namanya tercantum di lembar itu.
+
+    Diuji lewat ENDPOINT-nya, bukan hanya modul murninya: yang menentukan
+    dokumen terbit lengkap atau tidak adalah angka yang benar-benar tersimpan
+    di `signature_requests`.
+    """
+
+    def test_tanpa_SPTJ_setiap_orang_satu_tempat(self, dbx):
+        async def skenario():
+            await dbx.bast_serah_terima.insert_one(_bast())
+            hasil = await _buka(rb.kirim_bast_ke_ttd)("bast-1", user=USER)
+            sr = await dbx.signature_requests.find_one({"id": hasil["id"]})
+            assert [s["jumlah_ttd"] for s in sr["signers"]] == [1, 1]
+        _jalan(skenario())
+
+    async def _kirim(self, dbx, **ubah):
+        await dbx.bast_serah_terima.insert_one(
+            {**_bast(), "surat_pernyataan": True, **ubah})
+        hasil = await _buka(rb.kirim_bast_ke_ttd)("bast-1", user=USER)
+        sr = await dbx.signature_requests.find_one({"id": hasil["id"]})
+        return {s["nama"]: s["jumlah_ttd"] for s in sr["signers"]}
+
+    def test_PEMEGANG_dapat_tempat_tambahan_pada_jenis_penguasaan(self, dbx):
+        """Kasus yang dimaksud pemilik ("aset pemegang"): pada BAST penguasaan,
+        yang MEMEGANG BMN sesudah serah terima adalah Pihak Kedua, dan dialah
+        yang menyatakan tanggung jawab."""
+        async def skenario():
+            per_nama = await self._kirim(dbx, jenis="penggunaan_melekat")
+            assert per_nama["Sari"] == 2, per_nama
+            assert per_nama["Budi"] == 1, "penyerah tak ikut menyatakan"
+        _jalan(skenario())
+
+    def test_pada_PENGEMBALIAN_lembarnya_jatuh_ke_PIHAK_PERTAMA(self, dbx):
+        """Aturannya mengikuti SIAPA YANG MEMEGANG sesudahnya, bukan posisi
+        di dokumen — dan modul ini mengikuti `daftar_penyata` apa adanya,
+        bukan memaksakan pendapatnya sendiri. Uji ini yang membuktikannya:
+        seandainya kode di sini menebak "selalu Pihak Kedua", ia gagal."""
+        async def skenario():
+            per_nama = await self._kirim(dbx, jenis="operasional")
+            assert per_nama["Budi"] == 2, per_nama
+            assert per_nama["Sari"] == 1, per_nama
+        _jalan(skenario())
+
+    def test_gerbang_kelengkapan_ikut_menagihnya(self, dbx):
+        """Angka itu baru berguna bila gerbang kelengkapan membacanya —
+        kalau tidak, lembar pernyataan tetap bisa terbit kosong."""
+        from ttd_kelengkapan import pesan_kurang
+
+        async def skenario():
+            await dbx.bast_serah_terima.insert_one(
+                {**_bast(), "surat_pernyataan": True})
+            hasil = await _buka(rb.kirim_bast_ke_ttd)("bast-1", user=USER)
+            sr = await dbx.signature_requests.find_one({"id": hasil["id"]})
+            sari = next(s for s in sr["signers"] if s["nama"] == "Budi")
+            # Satu pembubuhan saja BELUM cukup untuk orang ber-SPTJ.
+            assert pesan_kurang(sari["jumlah_ttd"], {"halaman": 1}, []) != ""
+        _jalan(skenario())

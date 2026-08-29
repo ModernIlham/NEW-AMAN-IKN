@@ -6,6 +6,7 @@ benar, penolakan kode ambigu, jaring anti-replay antrean luring, dan janji
 terpenting fase ini — bahwa memindai TIDAK diam-diam memindahkan catatan lokasi.
 """
 import asyncio
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from mongomock_motor import AsyncMongoMockClient
@@ -180,12 +181,24 @@ class TestWaktuScan:
         # terbaru). HP Indonesia mengirim +07:00; tanpa normalisasi
         # "08:00+07:00" tampak lebih besar daripada "09:00+00:00" yang
         # sebenarnya terjadi dua jam kemudian.
+        # Waktunya RELATIF terhadap sekarang, bukan tanggal mati.
+        #
+        # Versi sebelumnya memakai "2026-07-27T08:00:00+07:00" apa adanya —
+        # dan uji ini menjadi BOM WAKTU: `_waktu_scan` menjatuhkan scan yang
+        # lebih tua dari MAKS_UMUR_SCAN_HARI (30) ke waktu server, sehingga
+        # begitu jam dinding melewati 30 hari sejak tanggal itu, yang tersimpan
+        # bukan lagi hasil normalisasi zona waktu melainkan waktu server — dan
+        # uji ini gagal tanpa satu baris kode produksi pun berubah.
+        wib = timezone(timedelta(hours=7))
+        kejadian = (datetime.now(timezone.utc) - timedelta(days=1)).astimezone(wib)
+
         async def jalan():
             await _seed(dbx)
             r = await _scan(kode="#3.05.01.05.007-12", node_id="r305",
-                            scan_id="tz1", ts_scan="2026-07-27T08:00:00+07:00")
+                            scan_id="tz1", ts_scan=kejadian.isoformat())
             return r["scan"]["pada"]
-        assert _jalan(jalan()) == "2026-07-27T01:00:00+00:00"
+        # Yang dijaga tetap sama: jam ber-offset +07:00 tersimpan sebagai UTC.
+        assert _jalan(jalan()) == kejadian.astimezone(timezone.utc).isoformat()
 
     def test_jam_klien_dari_masa_depan_dijatuhkan_ke_waktu_server(self, dbx):
         async def jalan():
