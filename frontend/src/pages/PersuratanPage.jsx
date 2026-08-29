@@ -738,7 +738,26 @@ export default function PersuratanPage({ user, onBack }) {
               <Field label="Perihal *"><Input value={formKeluar.perihal} onChange={setK("perihal")} placeholder="cth. Penyampaian LHI Semester I 2026" data-testid="keluar-perihal" /></Field>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Kepada / Tujuan"><Input value={formKeluar.tujuan} onChange={setK("tujuan")} placeholder="cth. KPKNL Balikpapan" /></Field>
-                <Field label="Tanggal Surat"><Input type="date" value={formKeluar.tanggal_surat} onChange={setK("tanggal_surat")} /></Field>
+                {/* TANGGAL TAK BOLEH MUNDUR dari surat bernomor terakhir.
+                    `min` menahannya di pemilih tanggal — server tetap gerbang
+                    terakhirnya (400), tetapi menahan di sini berarti operator
+                    tak pernah sampai ke penolakan. Jalur SISIPAN sengaja
+                    dibebaskan: ia justru ada untuk surat backdate. */}
+                <Field label="Tanggal Surat">
+                  <Input type="date" value={formKeluar.tanggal_surat}
+                    min={formKeluar.sisipan ? undefined : (pratinjau?.tanggal_minimum || undefined)}
+                    onChange={setK("tanggal_surat")}
+                    data-testid="surat-tanggal" />
+                  {!formKeluar.sisipan && pratinjau?.tanggal_minimum && (
+                    <p className="text-[10px] text-muted-foreground leading-snug mt-0.5"
+                      data-testid="surat-tanggal-batas">
+                      Tak boleh lebih awal dari {pratinjau.tanggal_minimum}
+                      {pratinjau.nomor_terakhir
+                        ? ` — tanggal surat bernomor terakhir (${pratinjau.nomor_terakhir})`
+                        : ""}. Untuk surat yang terlewat, pakai nomor sisipan.
+                    </p>
+                  )}
+                </Field>
                 <Field label="Jenis Naskah">
                   <select value={formKeluar.jenis_naskah} onChange={setK("jenis_naskah")}
                     className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm" data-testid="keluar-jenis-naskah">

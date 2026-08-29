@@ -38,6 +38,7 @@ from shared_utils import (log_audit, kode_satker_user,
 from meili_utils import jadwalkan_sync, jadwalkan_hapus, cari_id_surat
 from pencarian_utils import klausa_teks
 from persuratan_utils import (
+    pesan_tanggal_mundur,
     FORMAT_NOMOR_DEFAULT, JENIS_NASKAH, KODE_KEAMANAN, MODUL_AMAN,
     RESET_URUT, RESET_URUT_DEFAULT,
     STATUS_KELUAR, STATUS_MASUK, TRANSISI_KELUAR, TRANSISI_MASUK,
@@ -330,6 +331,35 @@ async def _tandai_migrasi_tahunan(jenis: str, periode: str, kode: str) -> None:
         await db.counters.update_one(
             {"_id": cid, "dimigrasi_bulanan": {"$exists": False}},
             {"$set": {"dimigrasi_bulanan": periode}})
+
+
+async def _surat_bernomor_terakhir(periode: str, kode_satker: str,
+                                   dimensi: str = "", kunci: str = "") -> dict:
+    """Surat KELUAR ber-nomor agenda TERTINGGI pada deret yang sama.
+
+    Dipakai gerbang "tanggal tak boleh mundur": batasnya adalah tanggal surat
+    yang nomornya terbit TERAKHIR, bukan tanggal terbesar yang pernah ada —
+    keduanya berbeda begitu ada satu surat backdate yang sah lewat sisipan.
+
+    Deret DISARING sama persis dengan `_no_agenda_berikut` (satker + periode +
+    dimensi/kunci). Membandingkan lintas deret akan menolak tanggal yang sah
+    hanya karena deret LAIN sudah lebih maju.
+    """
+    q = {"jenis": "keluar", "kode_satker": {"$in": [kode_satker, "", None]}}
+    if kunci and _FIELD_DIMENSI.get(dimensi):
+        q[_FIELD_DIMENSI[dimensi]] = kunci
+    if "-" in periode:
+        q["tanggal_surat"] = {"$regex": f"^{periode}"}
+    else:
+        q["tahun"] = int(periode[:4]) if periode[:4].isdigit() else 0
+    terakhir = None
+    async for r in db.surat.find(
+            q, {"_id": 0, "no_agenda": 1, "sisipan": 1, "nomor": 1,
+                "tanggal_surat": 1}):
+        kunci_urut = (int(r.get("no_agenda") or 0), int(r.get("sisipan") or 0))
+        if terakhir is None or kunci_urut > terakhir[0]:
+            terakhir = (kunci_urut, r)
+    return terakhir[1] if terakhir else {}
 
 
 async def _no_agenda_berikut(jenis: str, periode: str,
@@ -867,8 +897,14 @@ async def pratinjau_nomor(jenis_naskah: str = "", modul: str = "",
                          kode_klasifikasi=kode, kode_unit=atur["kode_unit"],
                          kode_keamanan=kode_keamanan,
                          kode_bawaan=atur["kode_klasifikasi_default"])
+    # Batas tanggal untuk pemilih di layar: tanggal surat bernomor TERAKHIR
+    # pada deret ini. Dikirim dari sini karena kedua dialog booking sudah
+    # memanggil endpoint ini — tanpa satu pun permintaan tambahan.
+    _akhir = await _surat_bernomor_terakhir(periode, _ks, dim, kunci)
     return {"nomor": nomor, "urut_berikut": urut_berikut,
             "kode_klasifikasi": kode, "sumber_klasifikasi": sumber,
+            "tanggal_minimum": str(_akhir.get("tanggal_surat") or "")[:10],
+            "nomor_terakhir": str(_akhir.get("nomor") or ""),
             # Potongan tulisan milik satker, ikut di sini supaya KEDUA dialog
             # booking (Registrasi Persuratan dan tombol Booking Nomor lintas
             # modul) mendapatkannya tanpa satu pun permintaan tambahan —
@@ -1143,6 +1179,20 @@ async def booking_surat_keluar(payload: SuratKeluarIn,
         atur["peta_klasifikasi"], data.get("modul"), data.get("jenis_naskah"),
         eksplisit=data.get("kode_klasifikasi"))
     dim, kunci = _dimensi_kunci(atur, data.get("kode_keamanan") or "B", kode_klas)
+    # TANGGAL TAK BOLEH MUNDUR dari surat bernomor terakhir pada deret yang
+    # sama. Nomor agenda terbit berurutan; nomor 010 bertanggal lebih awal
+    # daripada 009 membuat arsip mustahil ditelusuri kronologis, dan tak ada
+    # satu pun galat yang muncul saat itu terjadi.
+    #
+    # Jalur SISIPAN sengaja dilewati: ia justru ada untuk menomori surat
+    # backdate yang terlewat, dan menutupnya mencabut satu-satunya jalan sah
+    # memperbaiki arsip.
+    if not data.get("sisipan"):
+        _akhir = await _surat_bernomor_terakhir(periode, _ks, dim, kunci)
+        _pesan_mundur = pesan_tanggal_mundur(
+            tanggal_surat, _akhir.get("tanggal_surat"), _akhir.get("nomor"))
+        if _pesan_mundur:
+            raise HTTPException(status_code=400, detail=_pesan_mundur)
     sisip = 0
     if data.get("sisipan"):
         jangkar = await _jangkar_sisipan(periode, _ks, tanggal_surat, dim, kunci)
