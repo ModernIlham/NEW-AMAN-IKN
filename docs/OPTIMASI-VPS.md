@@ -7,22 +7,42 @@
 > `assets` (filter `activity_id`, `location`, `eselon1`, `eselon2`,
 > `condition`, `status`, `stiker_status`), swap belum dikonfigurasi.
 
-> **Status terverifikasi 18 Agustus 2026** (dibaca langsung dari mesin, bukan
-> laporan): swap **4 GB SUDAH terpasang** (terpakai 17%) — rekomendasi §3a di
-> bawah sudah dikerjakan. Memori terpakai **36%**, tersedia 4,8 GiB dari 7,8
-> GiB. Beban sistem 1,19 — bukan lagi "CPU ±51% konstan". Disk **29% dari
-> 95,82 GB (±27,8 GB)**, tumbuh ±12 GB dari catatan awal 15,7 GB; kemungkinan
-> besar foto di GridFS, belum mendesak tetapi perlu dipantau.
+> **Status terverifikasi 29 Agustus 2026** — dibaca mesin lewat **Actions →
+> "Inventaris VPS"** (`scripts/inventaris_vps.sh`), bukan laporan. Sejak alat
+> itu ada, angka di dokumen ini bisa diperbarui siapa saja dengan satu klik;
+> tak ada lagi alasan menaruh tebakan di sini.
 >
-> `dmesg | grep -i 'oom\|killed process'` **tidak menghasilkan apa pun** —
-> tidak ada satu pun kejadian OOM-killer. Kekhawatiran §2 butir 3 tidak
-> terbukti pada beban saat ini.
+> | Aspek | Bacaan 18 Agu | Bacaan 29 Agu |
+> |---|---|---|
+> | Beban (1/5/15 mnt) | 1,19 | **1,02 · 1,01 · 1,01** |
+> | Memori | 36% terpakai, 4,8 GiB tersedia | **1,9 GiB / 7,8 GiB terpakai, 5,8 GiB tersedia** |
+> | Swap | 4 GiB, terpakai 710 MiB (17%) | 4 GiB, terpakai **1,2 MiB (≈0%)** |
+> | Disk `/` | 27,8 GB / 95,8 GB (29%) | **31 GB / 96 GB (32%)** |
+> | Uptime | — | 3 hari 23 jam |
 >
-> Catatan cara kerja: angka-angka di atas menggantikan bagian "kondisi acuan"
-> yang berasal dari laporan lisan. Dokumen ini pernah MENYESATKAN diagnosis —
-> pada 17-18 Agustus 2026 tiga deploy gagal dan "tanpa swap" di dokumen ini
-> dijadikan dasar dugaan tekanan memori, padahal swap sudah ada dan memori
-> lapang. Penyebab sebenarnya ada di jalur jaringan penyedia (lihat §5).
+> **Tiga hal yang harus mengubah isi dokumen ini, bukan sekadar ditempel:**
+>
+> 1. **`fail2ban` TIDAK TERPASANG di VPS** (`fail2ban-client` tidak ada;
+>    paketnya juga tak ada di daftar APT). Seluruh dugaan "fail2ban memblokir
+>    IP runner" pada §4/§5 karena itu **tidak bisa benar di mesin ini**, dan
+>    perintah `fail2ban-client status sshd` yang dianjurkan di sana **tidak
+>    akan jalan**. `Connection timed out` pada deploy 18–19 Agustus tetap
+>    berarti paket SYN dijatuhkan diam-diam — tetapi yang menjatuhkannya ada di
+>    **hulu**: firewall/proteksi DDoS penyedia, bukan VPS-nya.
+> 2. **Beban 1,00 datar di 1/5/15 menit pada 2 vCPU = satu core terbakar
+>    terus-menerus.** Kalimat 18 Agustus *"beban sistem 1,19 — bukan lagi CPU
+>    ±51% konstan"* **keliru**: 1,19 dari 2 vCPU justru ≈ 60%, dan 1,01 ≈ 50%.
+>    Angkanya tak pernah membantah gejala aslinya, ia mengonfirmasinya. §2
+>    butir 1 **masih terbuka**, dan tiga bacaan terpisah kini mendukungnya.
+> 3. **Swap praktis tak tersentuh** (1,2 MiB dari 4 GiB) dan memori lapang
+>    5,8 GiB. Tekanan memori bukan masalah mesin ini — dan `dmesg` 18 Agustus
+>    juga tak menemukan satu pun OOM-killer. §2 butir 3 tetap tidak terbukti.
+>
+> Catatan cara kerja: dokumen ini pernah MENYESATKAN diagnosis — pada 17-18
+> Agustus 2026 tiga deploy gagal dan "tanpa swap" di sini dijadikan dasar
+> dugaan tekanan memori, padahal swap sudah ada dan memori lapang. Butir 1 dan
+> 2 di atas adalah kesalahan sejenis yang baru ketahuan; keduanya sengaja
+> ditulis sebagai koreksi, bukan diam-diam ditimpa.
 
 ---
 
@@ -32,8 +52,8 @@
 |---|---|---|
 | CPU | ±51% konstan pada 2 vCPU (≈ 1 core penuh) | **Tidak wajar untuk idle** — wajar hanya bila job latar sedang berjalan; wajib diidentifikasi (lihat §2) |
 | RAM 8 GB | mongod (WiredTiger default ≈ 3,5 GB) + uvicorn + Meilisearch + Redis + nginx | Cukup, tetapi **tanpa swap satu lonjakan ekspor/restore bisa memicu OOM-killer** |
-| Disk 100 GB, terpakai 15,7 GB | Longgar | Aman; pantau pertumbuhan GridFS (foto) & log |
-| Stack | MongoDB, FastAPI/uvicorn, Meilisearch, Redis, nginx, systemd timer/job aplikasi | Sudah tepat guna untuk skala satker |
+| Disk 96 GB, terpakai **31 GB (32%)** — 29 Agu 2026 | Longgar | Aman; tumbuh ±3 GB dalam 11 hari (27,8 GB pada 18 Agu). Pada laju itu ambang 80% masih >1 tahun, tetapi GridFS foto adalah pertumbuhan utama — pasang alarm 80% |
+| Stack | MongoDB **7.0.40**, FastAPI/uvicorn (Python sistem **3.12.3**; **3.11.15** ikut dipasang manual — versi di dalam `backend/venv` belum terbaca), Meilisearch **1.11.3**, Redis **7.0.15**, nginx **1.24.0**, Node **22.23.2**, certbot **5.7.0** | Sudah tepat guna untuk skala satker; versi terverifikasi 29 Agu 2026 |
 
 **Pola "51% konstan stabil" itu ciri khas SATU proses yang memakan satu core terus-menerus** — bukan pola beban pengguna (yang naik-turun). Tiga tersangka utama berurutan kemungkinan:
 
@@ -76,6 +96,41 @@ Aturan praktis RAM 8 GB tanpa hibernasi: swap 2–4 GB. Ambil **4 GB** (ruang di
 
 ### d. Caching, cron, dan service
 
+**Topologi layanan sebenarnya (terverifikasi 29 Agu 2026).** Ini pernah
+ditebak salah di dokumen ini dan di alat inventarisnya sendiri, jadi ditulis
+apa adanya:
+
+| Komponen | Dikelola oleh | Status 29 Agu |
+|---|---|---|
+| `mongod` | systemd | aktif, enabled |
+| `nginx` | systemd | aktif, enabled |
+| `meilisearch` | systemd | aktif, enabled |
+| Backend AMAN | **supervisor**, program `inventarisasi-backend` | belum terbaca — inventaris hanya memeriksa systemd |
+| `redis-server` | seharusnya systemd (`scripts/setup_redis.sh` §4) | **unit tidak ditemukan**, padahal paketnya terpasang dan `redis-server --version` menjawab |
+
+Dua hal yang belum terjawab dan **jangan dianggap beres**:
+
+1. **Backend berjalan di supervisor, bukan systemd** — `scripts/deploy_vps.sh`
+   me-restart lewat `supervisorctl restart inventarisasi-backend`. Mencari
+   `aman-backend.service` (seperti yang dilakukan inventaris putaran pertama)
+   akan selalu berkata "unit tidak ada" dan **terlihat seperti backend mati
+   padahal sehat**. Jangan pakai systemd sebagai penanda hidup-matinya.
+2. **`redis-server` tidak punya unit systemd.** Paketnya terpasang manual dan
+   binernya jalan, tetapi unitnya tak terdaftar. Kalau Redis memang tidak
+   hidup, `REDIS_URL` di `backend/.env` sedang menunjuk ke tempat yang tak
+   menjawab — dan menurut `backend/redis_utils.py` seluruh cache **jatuh
+   diam-diam kembali ke Mongo**. Itu tidak membuat aplikasi salah, tetapi
+   menambah beban mongod, dan **layak dicurigai sebagai salah satu penjelasan
+   beban satu core yang datar itu**. Perintah pemastinya:
+
+```bash
+supervisorctl status                 # backend AMAN hidup?
+systemctl status redis-server        # unit benar-benar tak ada?
+redis-cli ping                       # jawab PONG?
+grep -c REDIS_URL backend/.env       # env-nya memang diisi?
+```
+
+
 - `systemctl list-timers` + `crontab -l` (root & user aplikasi): kenali SETIAP timer; matikan yang tidak dikenal/dipakai (mis. `apt-daily` biarkan, `motd-news` boleh mati).
 - `unattended-upgrades` biarkan aktif (keamanan), jadwalnya dini hari.
 - Nginx: pastikan `gzip on` untuk `text/*, application/json` dan `expires` panjang untuk `/static/` build frontend.
@@ -91,12 +146,12 @@ Aturan praktis RAM 8 GB tanpa hibernasi: swap 2–4 GB. Ambil **4 GB** (ruang di
 
 - Blok F memeriksa: listener tak dikenal (`ss -tulpn`), proses CPU teratas bernama aneh (miner biasanya menyaru `kworker`/acak di `/tmp`), cron liar, `authorized_keys` asing, login gagal beruntun.
 - Pastikan `ufw` default deny + allow 22/80/443 saja; Mongo/Redis/Meili TIDAK terekspos publik.
-- `fail2ban` untuk SSH bila belum ada.
+- `fail2ban` untuk SSH — **terverifikasi 29 Agu 2026: belum terpasang**. Bila dipasang, masukkan rentang IP GitHub Actions ke `ignoreip` sejak awal, jika tidak deploy otomatis akan memblokir dirinya sendiri.
 - Kredensial yang pernah bocor di riwayat chat/repo (JWT_SECRET, kunci API) **wajib dirotasi** — pengingat yang sama dengan sebelumnya.
 
 ## 4. Urutan prioritas (paling berdampak dulu)
 
-1. **Identifikasi sumber CPU 51%** (blok A) — semua langkah lain menunggu diagnosis ini; jangan restart-restart sebelum tahu penyebab.
+1. **Identifikasi sumber CPU 51%** (blok A) — semua langkah lain menunggu diagnosis ini; jangan restart-restart sebelum tahu penyebab. **Masih terbuka per 29 Agu 2026, dan buktinya menguat**: beban 1,02 · 1,01 · 1,01 pada 2 vCPU adalah satu core terbakar terus-menerus, datar di ketiga jendela waktu — pola satu proses, bukan pola beban pengguna.
 2. **Deploy aplikasi terbaru** → indeks komposit `assets` terpasang otomatis (menghilangkan tersangka #2 secara permanen).
 3. ~~**Pasang swap 4 GB + swappiness 10** (blok B)~~ — ✅ **selesai** (verifikasi 18 Agu 2026).
 4. **Batasi WiredTiger 2 GB + profiler slowms** (blok C).
@@ -130,15 +185,45 @@ Jendela karena itu diperpanjang jadi ~14 menit (5 percobaan berjeda 180 detik)
 — tetap sedikit percobaan supaya tak menambah tekanan, tetapi cukup sabar untuk
 melewati blokir 10 menit.
 
-Perintah yang memastikannya, dijalankan di VPS:
+> **KOREKSI 29 Agustus 2026 — dugaan di bawah ini terbantah sebagian.**
+> Inventaris VPS membaca langsung: `fail2ban-client` **tidak ada**, dan
+> `fail2ban` **tidak ada di daftar paket APT**. fail2ban tidak pernah
+> terpasang di mesin ini, jadi ia **tidak mungkin** yang menjatuhkan paket.
+>
+> Yang tetap berlaku: bacaan `Connection timed out` di atas benar, dan
+> maknanya tak berubah — paket SYN **dijatuhkan diam-diam**, bukan ditolak.
+> Yang berubah hanya SIAPA yang menjatuhkannya. Karena bukan VPS-nya, sisa
+> tersangkanya ada di **hulu**: firewall atau proteksi DDoS penyedia, atau
+> penyaringan di jalur antara runner GitHub dan Jakarta.
+>
+> Angka `bantime` 10 menit yang mendasari jendela retry ~14 menit karena itu
+> **kehilangan dasarnya**. Jendelanya sendiri tidak diubah: ia sudah terbukti
+> cukup pada semua deploy sesudahnya, dan mempersempitnya sekarang hanya
+> menukar masalah yang sudah tenang dengan risiko baru tanpa imbalan. Yang
+> dicatat di sini adalah bahwa **alasan angkanya tidak lagi sahih** — supaya
+> orang berikutnya tak menyetelnya berdasarkan bantime yang tak pernah ada.
+
+Perintah yang dulu dianjurkan untuk memastikannya **tidak akan jalan** di VPS
+ini (`fail2ban-client: command not found`):
 
 ```
-fail2ban-client status sshd     # daftar IP yang sedang terblokir
-fail2ban-client set sshd unbanip <IP>
+fail2ban-client status sshd     # ← TIDAK ADA di mesin ini
 ```
 
-Bila IP runner GitHub memang muncul di sana, penyelesaian di akarnya adalah
-menaikkan `maxretry` atau memasukkan rentang IP GitHub ke `ignoreip`.
+Gantinya, bila `Connection timed out` terulang, yang perlu ditanyakan ada di
+sisi penyedia — apakah ada proteksi DDoS/rate-limit port 22 pada VPS ini, dan
+apakah rentang IP runner GitHub bisa dikecualikan. Di sisi VPS yang masih bisa
+diperiksa sendiri:
+
+```
+ss -tulpn | grep ':22'          # sshd memang mendengar?
+journalctl -u ssh --since '1 hour ago' | tail -50
+ufw status verbose              # ufw terpasang — pastikan 22 tidak ter-rate-limit
+```
+
+Bila kelak `fail2ban` dipasang (§3f masih menganjurkannya), masukkan rentang
+IP GitHub Actions ke `ignoreip` **sejak awal** — supaya dugaan ini tidak
+menjadi kenyataan di kemudian hari.
 
 ### 19 Agustus 2026 — dua kegagalan beruntun, dan dugaan yang menunjuk diri sendiri
 
@@ -159,7 +244,7 @@ fakta: blip sesaat → 8 percobaan beruntun → fail2ban/proteksi penyedia memba
 polanya sebagai percobaan penyusupan → IP runner diblokir → semua deploy
 sesudahnya gagal.
 
-Belum terbukti — memastikannya butuh `fail2ban-client status sshd` di VPS. Tapi
+**TERBANTAH 29 Agu 2026** — inventaris VPS membaca `fail2ban` tidak terpasang sama sekali di mesin ini, jadi ia bukan pelakunya; lihat kotak koreksi di atas. Tapi
 rancangan retry sudah diubah karena perubahannya lebih baik pada KEDUA
 kemungkinan: kesabaran dipertahankan (~6 menit) sementara tekanan dikurangi
 separuh (4 percobaan berjeda 75 detik), probe `ssh-keyscan` dihapus sehingga
