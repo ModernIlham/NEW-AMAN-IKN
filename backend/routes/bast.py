@@ -324,7 +324,26 @@ async def kirim_bast_ke_ttd(bast_id: str, user: dict = Depends(require_writer)):
     if not b:
         raise HTTPException(status_code=404, detail="BAST tidak ditemukan")
     from routes.ttd import PermintaanIn, SignerIn, buat_permintaan
-    signers = [SignerIn(**s) for s in await _penanda_tangan_bast(b, user)]
+    # SURAT PERNYATAAN TANGGUNG JAWAB MENAMBAH TEMPAT TEKEN.
+    #
+    # BAST ber-SPTJ mencetak SATU LEMBAR TERSENDIRI untuk tiap penyata, dan
+    # lembar itu menuntut tanda tangan orangnya sendiri. Selama `jumlah_ttd`
+    # selalu 1, lembar pernyataan terbit KOSONG — dokumen resmi yang tampak
+    # lengkap padahal belum diteken.
+    #
+    # Jumlahnya diturunkan dari `daftar_penyata`, fungsi YANG SAMA yang
+    # dipakai `bast_pdf` mencetak lembarnya; menghitung sendiri di sini akan
+    # melahirkan dua pendapat tentang "berapa lembar".
+    _penyata = []
+    if b.get("surat_pernyataan"):
+        from bast_pasal import daftar_penyata
+        _penyata = daftar_penyata(
+            str(b.get("jenis") or ""), b.get("pihak_kedua") or {},
+            b.get("pihak_pertama") or {},
+            b.get("penanggung_jawab_tambahan"), b.get("aset"))
+    from ttd_lembar_pernyataan import terapkan_lembar_pernyataan
+    signers = [SignerIn(**s) for s in terapkan_lembar_pernyataan(
+        await _penanda_tangan_bast(b, user), _penyata)]
     if not signers:
         raise HTTPException(
             status_code=400,

@@ -67,6 +67,56 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#936] SPTJ menambah tempat teken otomatis — 2026-08-29
+
+Permintaan pemilik: *"pada aset pemegang, apabila disertakan surat pernyataan
+tanggung jawab maka otomatis menambah +1 tempat dalam meneken dokumen tersebut
+sesuai nama penandatangan."*
+
+BAST ber-SPTJ mencetak **satu lembar tersendiri** untuk tiap penyata, dan
+lembar itu menuntut tanda tangan orangnya sendiri. Selama `jumlah_ttd` setiap
+penanda tangan selalu 1, lembar pernyataan terbit **kosong** — dokumen resmi
+yang tampak lengkap padahal belum diteken. Gerbang kelengkapan dari [#931]
+hanya menagih angka yang DIDEKLARASIKAN, dan tak ada yang mendeklarasikannya.
+
+**Yang berubah**
+
+- **`ttd_lembar_pernyataan.py`** (baru, murni) — `lembar_untuk`,
+  `jumlah_ttd_dengan_pernyataan`, `terapkan_lembar_pernyataan`.
+- `kirim_bast_ke_ttd` menurunkan `jumlah_ttd` tiap penanda tangan dari
+  **`daftar_penyata`** — fungsi YANG SAMA yang dipakai `bast_pdf` mencetak
+  lembarnya. Menghitung sendiri akan melahirkan dua pendapat tentang "berapa
+  lembar", dan yang satu diam-diam berbeda dari yang tercetak.
+
+**Aturannya bukan "selalu Pihak Kedua".** Ia mengikuti SIAPA YANG MEMEGANG BMN
+sesudah serah terima: pada BAST penguasaan (kasus "aset pemegang") lembarnya
+ke Pihak Kedua; pada BAST pengembalian ke **Pihak Pertama**, karena dialah
+yang menerima barangnya kembali. Keduanya diuji — yang kedua akan gagal
+seandainya kode ini menebak sendiri.
+
+**Pencocokan identitas**: NIP menang bila KEDUANYA punya; bila salah satu tak
+berNIP — dan itu lazim, `daftar_penyata` kerap hanya membawa nama —
+perbandingan jatuh ke nama yang dinormalkan (kapital & spasi ganda diabaikan).
+Versi pertama modul ini memakai kunci tunggal "NIP bila ada, jika tidak nama",
+dan itu KELIRU: penanda tangan berNIP tak pernah cocok dengan lembar yang
+hanya bernama, sehingga lembarnya tak menambah tempat teken sama sekali.
+
+**Uji**: `test_ttd_lembar_pernyataan.py` (17 murni),
+`test_ttd_penautan.py::TestSptjMenambahTempatTeken` (4 uji endpoint, termasuk
+bahwa gerbang kelengkapan benar-benar menagih angkanya). Backend 3536 hijau.
+Tiga mutasi dipasang lalu terbukti mati: (1) SPTJ diabaikan → 3 uji; (2)
+pencocokan kembali ke kunci tunggal → 2 uji; (3) dua lembar satu orang
+dihitung satu → 2 uji.
+
+**Ikut diperbaiki — BOM WAKTU pada uji opname.** `test_jam_klien_ber_offset_
+disimpan_dalam_UTC` memakai tanggal MATI `2026-07-27`, sedangkan
+`_waktu_scan` menjatuhkan scan lebih tua dari `MAKS_UMUR_SCAN_HARI` (30) ke
+waktu server. Begitu jam dinding melewati 30 hari sejak tanggal itu, ujinya
+gagal **tanpa satu baris kode produksi pun berubah** — dan ia sudah gagal di
+`main`, menghalangi PR mana pun. Waktunya kini relatif terhadap sekarang;
+yang dijaga tetap sama (offset +07:00 tersimpan sebagai UTC). Kode
+produksinya tak disentuh — yang cacat memang ujinya.
+
 ## [#935] Pemeriksaan akhir sebelum membubuhkan tanda tangan — 2026-08-25
 
 Laporan pemilik: *"ketika link bubuhkan tanda tangan diterima penanda tangan,
