@@ -134,3 +134,61 @@ describe("klik untuk menaruh tanda tangan", () => {
     expect(parseFloat(gaya.top)).toBeGreaterThanOrEqual(0);
   });
 });
+
+describe("tata letak tombol", () => {
+  /**
+   * Laporan pemilik disertai tangkapan layar: empat tombol dalam SATU baris
+   * saling menghimpit, label "Selesai — kirim 1 tanda tangan" TERPOTONG jadi
+   * "elesai — kirim 1 tanda tanga", dan "Kembali" terlempar ke baris sendiri.
+   * `Button` membawa `whitespace-nowrap`, jadi label yang tak muat tidak
+   * melipat melainkan terpotong.
+   *
+   * Yang dikunci di sini adalah STRUKTURNYA — jsdom tak punya mesin tata
+   * letak, jadi ia tak bisa membuktikan "tak terpotong". Tetapi ia bisa
+   * membuktikan bahwa keempat tombol itu tak lagi berbagi satu baris, yang
+   * merupakan sebabnya.
+   */
+  test("◀ Bubuhkan ▶ berbagi satu baris, Selesai TIDAK ikut di dalamnya", () => {
+    pasang();
+    const baris = screen.getByTestId("posisi-prev").parentElement;
+    expect(baris).toContainElement(screen.getByTestId("posisi-bubuh"));
+    expect(baris).toContainElement(screen.getByTestId("posisi-next"));
+    expect(baris).not.toContainElement(screen.getByTestId("posisi-kirim"));
+  });
+
+  test("panahnya benar-benar MENGAPIT, bukan sekadar sebaris", () => {
+    pasang();
+    const prev = screen.getByTestId("posisi-prev");
+    const bubuh = screen.getByTestId("posisi-bubuh");
+    const next = screen.getByTestId("posisi-next");
+    // Node.DOCUMENT_POSITION_FOLLOWING = 4
+    expect(prev.compareDocumentPosition(bubuh) & 4).toBeTruthy();
+    expect(bubuh.compareDocumentPosition(next) & 4).toBeTruthy();
+  });
+
+  test("Bubuhkan dibuat lebih MENONJOL daripada Selesai", () => {
+    // Permintaan pemilik — dan juga yang lebih aman: Bubuhkan bisa diulang
+    // dan dibatalkan, sedangkan Selesai menutup tautan sekali-pakai untuk
+    // selamanya. Aksi yang tak bisa ditarik kembali tak pantas jadi tombol
+    // paling mencolok.
+    //
+    // Kelas Tailwind dipakai sebagai PROKSI ketinggian: jsdom tak menghitung
+    // tata letak, jadi tinggi sesungguhnya tak terbaca. Proksi ini sah di
+    // repo ini karena kelas Tailwind memang antarmuka penataannya.
+    pasang();
+    expect(screen.getByTestId("posisi-bubuh").className).toContain("h-11");
+    expect(screen.getByTestId("posisi-kirim").className).toContain("h-9");
+  });
+
+  test("peran QR: panah mengapit tombol simpannya, sebab tak ada Bubuhkan", () => {
+    render(
+      <AturPosisiTtd jenis="qr" jumlahHalaman={4}
+        bangunUrlHalaman={(h) => `/uji/${h}.png?token=uji`}
+        onKirim={() => {}} onBatal={() => {}} />);
+    muat();
+    expect(screen.queryByTestId("posisi-bubuh")).not.toBeInTheDocument();
+    const baris = screen.getByTestId("posisi-prev").parentElement;
+    expect(baris).toContainElement(screen.getByTestId("posisi-kirim"));
+    expect(baris).toContainElement(screen.getByTestId("posisi-next"));
+  });
+});

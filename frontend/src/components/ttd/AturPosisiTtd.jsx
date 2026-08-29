@@ -525,89 +525,126 @@ export default function AturPosisiTtd({
         </div>
       )}
 
-      <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" size="sm" className="h-9 text-xs" disabled={mengirim} onClick={onBatal}>
+      {/* TATA LETAK TOMBOL — DUA BARIS, dan itu memperbaiki cacat nyata.
+          Empat tombol dalam SATU baris (Bubuhkan, ◀, Selesai, ▶) saling
+          menghimpit di layar ponsel: `Button` membawa `whitespace-nowrap`,
+          jadi labelnya tidak melipat melainkan TERPOTONG — "Selesai — kirim 1
+          tanda tanga" — dan "Kembali" terlempar ke baris sendiri.
+
+          Sekarang: baris ATAS untuk pekerjaan yang diulang-ulang (◀ Bubuhkan
+          ▶), baris BAWAH untuk yang sekali saja (Kembali · Selesai). Tak ada
+          baris yang memuat lebih dari tiga hal, jadi tak ada yang terpotong. */}
+      <div className="space-y-2 pt-0.5">
+        {!qr && (
+          /* BARIS AKSI BERULANG. Tombol Bubuhkan dibuat PALING MENONJOL
+             (permintaan pemilik) — dan itu juga yang lebih aman: ia bisa
+             diulang dan dibatalkan, sedangkan "Selesai" menutup tautan
+             sekali-pakai untuk selamanya. Aksi yang tak bisa ditarik kembali
+             tidak pantas jadi tombol paling mencolok di layar.
+
+             ◀ ▶ tetap MENGAPITNYA (permintaan pemilik terdahulu): navigasi
+             ada tepat di tempat tangan sudah berada, sehingga alurnya
+             "atur → bubuhkan → maju" tanpa memindahkan pandangan. */
+          <div className="flex items-center gap-1.5 sm:gap-2 sm:justify-end">
+            {total > 1 && (
+              <Button type="button" variant="outline" size="sm"
+                className="h-11 w-10 sm:w-11 p-0 min-w-0 min-h-0 shrink-0"
+                disabled={halaman <= 1 || mengirim}
+                onClick={() => setHalaman((h) => Math.max(1, h - 1))}
+                aria-label="Halaman sebelumnya" data-testid="posisi-prev">
+                <ChevronLeft className="w-5 h-5" />
+              </Button>
+            )}
+            <Button type="button" size="sm"
+              className="h-11 flex-1 sm:flex-none sm:min-w-[16rem] px-2.5 sm:px-3 text-sm font-semibold min-w-0"
+              disabled={mengirim || gagalHal || muatHal}
+              onClick={bubuhkanDiSini}
+              data-testid="posisi-bubuh">
+              <Plus className="w-4 h-4 mr-1 shrink-0" />
+              <span className="truncate">Bubuhkan di Posisi Ini</span>
+            </Button>
+            {total > 1 && (
+              <Button type="button" variant="outline" size="sm"
+                className="h-11 w-10 sm:w-11 p-0 min-w-0 min-h-0 shrink-0"
+                disabled={halaman >= total || mengirim}
+                onClick={() => setHalaman((h) => Math.min(total, h + 1))}
+                aria-label="Halaman berikutnya" data-testid="posisi-next">
+                <ChevronRight className="w-5 h-5" />
+              </Button>
+            )}
+          </div>
+        )}
+
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2">
+          <Button type="button" variant="outline" size="sm"
+            className="h-9 text-xs w-full sm:w-auto shrink-0" disabled={mengirim} onClick={onBatal}>
             Kembali
           </Button>
           {/* "Otomatis saja" DICABUT (mandat pemilik): admin WAJIB menempatkan
               QR verifikasi sendiri. Penempatan otomatis di pojok kanan-bawah
               halaman terakhir kerap menimpa blok tanda tangan atau kaki
               halaman, dan karena tombolnya adalah jalan tercepat, itulah yang
-              paling sering dipakai. Menghapus jalan pintasnya membuat letak QR
-              selalu ditentukan orang yang melihat dokumennya. */}
-        </div>
-        <div className="flex items-center gap-2">
-          {/* "Tanda tangan lagi" DIHAPUS (permintaan pemilik). Pekerjaannya
-              kini dilakukan tombol yang MEMANG berbunyi "Bubuhkan di Posisi
-              Ini" — dua tombol untuk satu pekerjaan, dengan yang salah nama
-              memegang pekerjaan yang salah, adalah sumber kesalahan alurnya. */}
-          {!qr && (
-            <Button type="button" variant="outline" size="sm" className="h-9 text-xs"
-              disabled={mengirim || gagalHal || muatHal}
-              onClick={bubuhkanDiSini}
-              data-testid="posisi-bubuh">
-              <Plus className="w-3.5 h-3.5 mr-1" />Bubuhkan di Posisi Ini
+              paling sering dipakai. */}
+          <div className="flex items-center gap-2 min-w-0 w-full sm:w-auto">
+            {/* Peran QR tetap satu langkah, jadi ◀ ▶ mengapit tombol simpannya
+                di sini — tak ada baris aksi berulang untuknya. */}
+            {qr && total > 1 && (
+              <Button type="button" variant="outline" size="sm"
+                className="h-9 w-9 p-0 min-w-0 min-h-0 shrink-0"
+                disabled={halaman <= 1 || mengirim}
+                onClick={() => setHalaman((h) => Math.max(1, h - 1))}
+                aria-label="Halaman sebelumnya" data-testid="posisi-prev">
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+            )}
+            {/* SELESAI MENUTUP TAUTAN SEKALI-PAKAI. Lembar yang terlewat TIDAK
+                bisa ditambahkan lagi — satu-satunya pemulihan adalah
+                membatalkan permintaan lalu meminta SEMUA orang meneken ulang.
+                Karena itu ia ditahan selama masih kurang, bukan sekadar
+                diperingatkan; dan karena itu pula ia TIDAK dibuat semencolok
+                tombol Bubuhkan. */}
+            <Button type="button" size="sm"
+              variant={qr ? "default" : "outline"}
+              className={`h-9 text-xs min-w-0 flex-1 sm:flex-none ${
+                qr ? "" : "border-emerald-600/60 text-emerald-700 dark:text-emerald-400 font-semibold"}`}
+              disabled={mengirim || gagalHal || muatHal || kurang > 0
+                || akanDikirim.length === 0}
+              onClick={() => {
+                const semuaTtd = akanDikirim.map((t) => t.halaman);
+                // PEMERIKSAAN AKHIR, bukan pengiriman langsung. Penahanan
+                // jumlah hanya bekerja bila pemilik dokumen mendeklarasikannya;
+                // bila ia lupa, tak ada apa pun yang menahan dan orang menekan
+                // Selesai atas dokumen yang belum ia lihat seluruhnya.
+                if (!qr && perluPeriksaAkhir(total)) {
+                  setPeriksa(ringkasPembubuhan({
+                    jumlahHalaman: total, halamanTtd: semuaTtd,
+                    halamanDilihat: [...dilihat],
+                  }));
+                  return;
+                }
+                onKirim(akanDikirim[0], akanDikirim.slice(1));
+              }} data-testid="posisi-kirim">
+              {mengirim ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5 shrink-0" /> : null}
+              {/* Label peran ttd BERHENTI memakai kata "bubuhkan": kata itu
+                  kini milik tombol yang menempel. Tak ada cabang "belum ada
+                  yang dibubuhkan": `wajibN` minimal 1, jadi selama belum ada
+                  tempelan `kurang` pasti > 0 dan cabang itu tak terlihat. */}
+              <span className="truncate">
+                {labelKirim || (qr ? "Simpan & Unduh"
+                  : kurang > 0 ? `Kurang ${kurang} tanda tangan lagi`
+                    : `Selesai — kirim ${tetap.length} tanda tangan`)}
+              </span>
             </Button>
-          )}
-          {/* TOMBOL BUBUHKAN DITAHAN SELAMA MASIH KURANG.
-              Sekali dibubuhkan, tautan sekali-pakai tertutup dan lembar yang
-              terlewat TIDAK bisa ditambahkan lagi — satu-satunya pemulihan
-              yang ada adalah membatalkan permintaan lalu meminta SEMUA orang
-              meneken ulang. Karena itu penahanan ini, bukan sekadar
-              peringatan yang bisa dilewati. */}
-          {/* ◀ ▶ MENGAPIT tombol Bubuhkan (permintaan pemilik): navigasi ada
-              tepat di tempat tangan sudah berada, sehingga alurnya menjadi
-              "atur di halaman ini → bubuhkan/simpan → maju" tanpa memindahkan
-              pandangan ke atas layar. Ikon saja — labelnya akan menggeser
-              tombol utama di layar sempit. */}
-          {total > 1 && (
-            <Button type="button" variant="outline" size="sm"
-              className="h-9 w-9 p-0 min-w-0 min-h-0" disabled={halaman <= 1 || mengirim}
-              onClick={() => setHalaman((h) => Math.max(1, h - 1))}
-              aria-label="Halaman sebelumnya" data-testid="posisi-prev">
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-          )}
-          <Button type="button" size="sm" className="h-9 text-xs"
-            disabled={mengirim || gagalHal || muatHal || kurang > 0
-              || akanDikirim.length === 0}
-            onClick={() => {
-              const semuaTtd = akanDikirim.map((t) => t.halaman);
-              // PEMERIKSAAN AKHIR, bukan pengiriman langsung. Penahanan
-              // jumlah hanya bekerja bila pemilik dokumen mendeklarasikannya;
-              // bila ia lupa, tak ada apa pun yang menahan dan orang menekan
-              // Bubuhkan atas dokumen yang belum ia lihat seluruhnya.
-              if (!qr && perluPeriksaAkhir(total)) {
-                setPeriksa(ringkasPembubuhan({
-                  jumlahHalaman: total, halamanTtd: semuaTtd,
-                  halamanDilihat: [...dilihat],
-                }));
-                return;
-              }
-              onKirim(akanDikirim[0], akanDikirim.slice(1));
-            }} data-testid="posisi-kirim">
-            {mengirim ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
-            {/* Label peran ttd BERHENTI memakai kata "bubuhkan": kata itu kini
-                milik tombol yang menempel. Yang ini mengakhiri, jadi ia
-                berbunyi "Selesai" — dan saat belum ada yang ditempel ia
-                menyebut apa yang kurang, bukan diam sambil mati. */}
-            {/* Tak ada cabang "belum ada yang dibubuhkan": `wajibN` minimal 1,
-                jadi selama belum ada tempelan `kurang` pasti > 0 dan cabang
-                itu tak akan pernah terlihat. */}
-            {labelKirim || (qr ? "Simpan & Unduh"
-              : kurang > 0 ? `Kurang ${kurang} tanda tangan lagi`
-                : `Selesai — kirim ${tetap.length} tanda tangan`)}
-          </Button>
-          {total > 1 && (
-            <Button type="button" variant="outline" size="sm"
-              className="h-9 w-9 p-0 min-w-0 min-h-0"
-              disabled={halaman >= total || mengirim}
-              onClick={() => setHalaman((h) => Math.min(total, h + 1))}
-              aria-label="Halaman berikutnya" data-testid="posisi-next">
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          )}
+            {qr && total > 1 && (
+              <Button type="button" variant="outline" size="sm"
+                className="h-9 w-9 p-0 min-w-0 min-h-0 shrink-0"
+                disabled={halaman >= total || mengirim}
+                onClick={() => setHalaman((h) => Math.min(total, h + 1))}
+                aria-label="Halaman berikutnya" data-testid="posisi-next">
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>

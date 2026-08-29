@@ -67,6 +67,55 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#944] Tata letak tombol pembubuhan: dua baris, Bubuhkan paling menonjol — 2026-08-29
+
+Permintaan pemilik disertai tangkapan layar: *"perbaiki dulu halamannya dan
+buat lebih menonjol dan berada di area kanan untuk tombol bubuhkannya.
+Perbaiki tata letak dan desainnya."*
+
+**Cacatnya terlihat jelas di tangkapan layar itu**: empat tombol dalam satu
+baris saling menghimpit, label `Selesai — kirim 1 tanda tangan` terpotong jadi
+`elesai — kirim 1 tanda tanga`, dan `Kembali` terlempar ke baris sendiri.
+Sebabnya `Button` membawa `whitespace-nowrap` — label yang tak muat tidak
+melipat melainkan **terpotong di tengah kata**.
+
+**Yang berubah**
+
+- **Dua baris.** Atas untuk pekerjaan yang diulang-ulang (`◀ Bubuhkan ▶`),
+  bawah untuk yang sekali saja (`Kembali` · `Selesai`). Tak ada baris yang
+  memuat lebih dari tiga hal.
+- **Bubuhkan jadi tombol paling menonjol** — terisi penuh, `h-11`, di sisi
+  kanan, diapit panah halaman. Selesai turun jadi bergaris hijau `h-9`.
+- Di layar sempit Bubuhkan dan Selesai **melebar penuh**; `Kembali` turun ke
+  bawah. Di ≥640px keduanya kembali sebaris dengan Selesai di kanan.
+
+**Kenapa yang menonjol justru BUKAN tombol akhir.** Bubuhkan bisa diulang dan
+dibatalkan; **Selesai menutup tautan sekali-pakai untuk selamanya** — lembar
+yang terlewat tak bisa ditambahkan lagi. Aksi yang tak bisa ditarik kembali
+tidak pantas jadi tombol paling mencolok di layar. Permintaan pemilik dan
+keamanan alurnya kebetulan menunjuk ke arah yang sama.
+
+**Diverifikasi dengan mata, bukan aritmetika**
+
+jsdom tak punya mesin tata letak — ia tak bisa membuktikan "tak terpotong".
+Jadi halaman uji statis dirender di Chromium memakai **CSS hasil build
+sungguhan**, pada 360/480/900 px, lalu tiap label diukur `scrollWidth` vs
+`clientWidth`. Sebelum penyetelan, 360 px masih memotong dua label
+(175>162 dan 219>202); sesudahnya **ketiganya pas** di semua lebar.
+
+> Jebakan yang sempat menyesatkan: putaran pertama probe menunjukkan Selesai
+> menempel di kiri pada layar lebar. Penyebabnya bukan tata letak — kelas
+> `sm:justify-between` dan `sm:w-11` **belum ada di CSS terbangun**, karena
+> Tailwind hanya membangkitkan kelas yang benar-benar dipakai `src`. Probe
+> yang memakai kelas yang belum ada akan berbohong; ia baru sahih setelah
+> kelasnya masuk sumber dan `yarn build` diulang.
+
+Empat mutasi dipasang lalu dibunuh: keempat tombol dikembalikan ke satu baris,
+Bubuhkan dikecilkan jadi tombol bergaris, panah tak lagi mengapit, dan peran
+QR kehilangan panahnya.
+
+---
+
 ## [#943] Pembubuhan: yang berbunyi "bubuhkan" kini menempel, "Selesai" mengirim — 2026-08-29
 
 Permintaan pemilik: *"hilangkan bagian '+ tanda tangan lagi', otomatiskan;
