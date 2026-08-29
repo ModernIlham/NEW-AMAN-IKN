@@ -310,8 +310,20 @@ async def _penanda_tangan_bast(b: dict, user: dict) -> list:
     return hasil
 
 
+class KirimTtdIn(BaseModel):
+    """Pilihan pengirim saat melempar BAST ke e-sign.
+
+    Keduanya BERBAWAAN sama dengan perilaku lama, jadi klien yang belum tahu
+    kolom ini (atau tombol yang dipakai tanpa membuka dialog) tetap berjalan
+    persis seperti sebelumnya.
+    """
+    mode: str = "paralel"              # "paralel" | "berurutan"
+    sifat_urgensi: str = "biasa"       # biasa | segera | sangat_segera
+
+
 @bast_router.post("/bast/{bast_id}/kirim-ttd")
-async def kirim_bast_ke_ttd(bast_id: str, user: dict = Depends(require_writer)):
+async def kirim_bast_ke_ttd(bast_id: str, payload: KirimTtdIn | None = None,
+                            user: dict = Depends(require_writer)):
     """Buat permintaan TTD elektronik untuk sebuah BAST — dengan penaut
     TERSTRUKTUR (`doc_ref` = id BAST) + penanda tangan otomatis dari SEMUA
     kolom TTD dokumen (`_penanda_tangan_bast`: pihak, Mengetahui KPB, saksi).
@@ -349,8 +361,10 @@ async def kirim_bast_ke_ttd(bast_id: str, user: dict = Depends(require_writer)):
             status_code=400,
             detail="BAST belum memiliki pihak yang dapat menandatangani")
     judul = f"BAST {b.get('nomor') or bast_id}".strip()
+    _pil = payload or KirimTtdIn()
     payload = PermintaanIn(judul=judul, doc_type="bast", doc_ref=str(bast_id),
-                           mode="paralel", signers=signers)
+                           mode=_pil.mode, sifat_urgensi=_pil.sifat_urgensi,
+                           signers=signers)
     # buat_permintaan mengembalikan {id, judul, mode, links:[...]} + mencatat audit.
     hasil = await buat_permintaan(payload=payload, user=user)
 
