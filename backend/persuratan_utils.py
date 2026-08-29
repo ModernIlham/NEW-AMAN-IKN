@@ -769,3 +769,54 @@ def gabung_klasifikasi(milik_bersama, milik_satker) -> list:
         if kode:
             peta[kode] = k          # entri satker menang
     return sorted(peta.values(), key=lambda k: str(k.get("kode") or ""))
+
+
+# ── Tanggal surat tak boleh mundur dari nomor terakhir ─────────────────────
+#
+# Permintaan pemilik: *"pada pembuatan nomor surat, buatkan validasi langsung
+# pada pemilihan tanggalnya agar semua yang terkait dengan penomoran pada
+# surat terakhir tidak bisa memilih tanggal lebih muda, sehingga urutannya
+# berkelanjutan sesuai tanggal dengan nomor terakhir."*
+#
+# Buku agenda menomori surat BERURUTAN, dan urutan nomor seharusnya sejalan
+# dengan urutan tanggal. Nomor 010 bertanggal lebih awal daripada nomor 009
+# membuat arsip mustahil ditelusuri secara kronologis — dan tak ada satu pun
+# galat yang muncul saat itu terjadi.
+#
+# Yang DITOLAK hanya mundurnya; tanggal SAMA tetap sah (beberapa surat terbit
+# pada hari yang sama adalah keadaan normal). Jalur SISIPAN sengaja tak
+# tersentuh: ia justru ada untuk menomori surat backdate, dan menutupnya akan
+# mencabut satu-satunya jalan sah memperbaiki arsip yang terlewat.
+
+
+def tanggal_mundur(tanggal_baru, tanggal_terakhir) -> bool:
+    """Tanggal surat baru lebih AWAL daripada surat bernomor terakhir?
+
+    Perbandingan STRING pada format ISO `YYYY-MM-DD` — urut leksikografis
+    sama dengan urut kronologis, dan itu pula bentuk yang tersimpan. Salah
+    satu kosong/tak berformat → False: aturan ini menolak yang PASTI mundur,
+    bukan menebak-nebak data yang tak bisa dibaca.
+    """
+    a = str(tanggal_baru or "").strip()[:10]
+    b = str(tanggal_terakhir or "").strip()[:10]
+    if len(a) != 10 or len(b) != 10 or a[4] != "-" or b[4] != "-":
+        return False
+    return a < b
+
+
+def pesan_tanggal_mundur(tanggal_baru, tanggal_terakhir, nomor_terakhir="") -> str:
+    """Penolakan yang MENYEBUT nomor & tanggal pembandingnya; "" bila sah.
+
+    Menyebut nomornya penting: tanpa itu operator tak tahu surat mana yang
+    menjadi batas, dan tak bisa memutuskan apakah yang keliru tanggalnya atau
+    justru arsip sebelumnya.
+    """
+    if not tanggal_mundur(tanggal_baru, tanggal_terakhir):
+        return ""
+    sebut = f" (nomor {nomor_terakhir})" if str(nomor_terakhir or "").strip() else ""
+    return (f"Tanggal surat {str(tanggal_baru)[:10]} lebih awal daripada surat "
+            f"bernomor terakhir{sebut} yang bertanggal "
+            f"{str(tanggal_terakhir)[:10]}. Nomor agenda terbit berurutan, "
+            "jadi tanggalnya tak boleh mundur. Pakai tanggal itu atau "
+            "sesudahnya — untuk surat yang memang terlewat, gunakan nomor "
+            "sisipan.")

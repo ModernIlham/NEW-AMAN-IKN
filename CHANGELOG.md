@@ -67,6 +67,50 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#938] Tanggal surat tak boleh mundur dari nomor terakhir — 2026-08-29
+
+Permintaan pemilik: *"pada pembuatan nomor surat, buatkan validasi langsung
+pada pemilihan tanggalnya agar semua yang terkait dengan penomoran pada surat
+terakhir tidak bisa memilih tanggal lebih muda, sehingga urutannya
+berkelanjutan sesuai tanggal dengan nomor terakhir."*
+
+Buku agenda menomori surat **berurutan**, dan urutan nomor seharusnya sejalan
+dengan urutan tanggal. Nomor 010 bertanggal lebih awal daripada 009 membuat
+arsip mustahil ditelusuri kronologis — dan tak ada satu pun galat yang muncul
+saat itu terjadi.
+
+**Yang berubah**
+
+- `tanggal_mundur` & `pesan_tanggal_mundur` (baru, murni, di
+  `persuratan_utils.py`).
+- `_surat_bernomor_terakhir` — surat keluar ber-**nomor agenda tertinggi**
+  pada deret yang sama.
+- `booking_surat_keluar` menolak **400** bila tanggalnya mundur, dengan pesan
+  yang menyebut nomor & tanggal pembandingnya.
+- `pratinjau-nomor` mengembalikan `tanggal_minimum` + `nomor_terakhir`, dan
+  layar memakainya sebagai `min` pada pemilih tanggal berikut keterangannya —
+  operator tak perlu sampai ke penolakan untuk tahu batasnya.
+
+**Tiga keputusan**
+
+1. **Tanggal SAMA tetap sah.** Beberapa surat terbit pada hari yang sama
+   adalah keadaan normal; yang ditolak hanya yang benar-benar mundur.
+2. **Jalur SISIPAN sengaja dibebaskan** — ia justru ada untuk menomori surat
+   backdate yang terlewat, dan menutupnya mencabut satu-satunya jalan sah
+   memperbaiki arsip. Pesan penolakannya pun menunjuk ke sana.
+3. **Pembandingnya PER DERET.** Membandingkan lintas deret akan menolak
+   tanggal yang sah hanya karena deret lain sudah lebih maju. Dan batasnya
+   diambil dari surat ber-NOMOR tertinggi, bukan tanggal terbesar — keduanya
+   berbeda begitu ada satu surat sisipan yang sah.
+
+Gerbangnya berdiri **sebelum** counter naik: percobaan yang ditolak tak
+membakar nomor agenda — dijaga uji tersendiri.
+
+**Uji**: `test_tanggal_surat_tak_mundur.py` (13). Backend 3554 hijau,
+frontend 1193 hijau, lint bersih, build sukses. Tiga mutasi dipasang lalu
+terbukti mati: (1) gerbang dicabut → 2 uji; (2) tanggal sama ikut ditolak →
+2 uji; (3) batas tak diteruskan ke layar → 1 uji.
+
 ## [#937] Kirim TTD: pilih urutan teken & sifat urgensi — 2026-08-29
 
 Permintaan pemilik: *"di saat mengklik 'kirim ttd' juga dapat memilih jenis
