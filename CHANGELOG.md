@@ -67,6 +67,67 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#945] Diagnosa mongod: baca sumber beban CPU tanpa menyentuh basis data — 2026-08-29
+
+Permintaan pemilik: *"buatkan skrip diagnosis mongod yang read-only."*
+
+**Kenapa mendesak.** Inventaris 29 Agustus menemukan `mongod` memakai **93,1%
+CPU** terus-menerus pada mesin 2 vCPU — beban 1,00 datar di jendela 1/5/15
+menit selama berminggu-minggu. `docs/OPTIMASI-VPS.md` §2 butir 1 menyebutnya
+"belum teridentifikasi" sejak awal Agustus, dan **dua dugaan sudah terbantah**
+(job WebP; cache Redis yang jatuh ke Mongo). Menyetel WiredTiger atau
+menghapus indeks sekarang adalah tebakan ketiga.
+
+**Actions → "Diagnosa mongod" → Run workflow** menampilkan di Ringkasan job:
+
+- **Server** — uptime, koneksi, cache WiredTiger terpakai vs terkonfigurasi,
+  antrean baca/tulis, opcounters.
+- **Operasi aktif ≥ 1 detik** — namespace, jenis, lama jalan, dan
+  **`planSummary`**. `COLLSCAN` di sini berarti seluruh koleksi dipindai
+  baris-per-baris; itulah yang membakar CPU.
+- **Koleksi terbesar** — jumlah dokumen, data, ukuran di disk, ukuran indeks.
+- **Pemakaian indeks** (`$indexStats`) — indeks dengan `ops = 0` ditandai
+  ⚠ dan diurutkan paling atas. Indeks yang tak pernah dipakai membebani tiap
+  tulis tanpa imbalan.
+- **Status profiler** — dibaca saja, tidak dinyalakan.
+
+**Ditulis dalam Python, bukan shell — dan itu keputusan sadar.** Pelajaran
+[#942] masih segar: skrip shell yang tak bisa dijalankan di mesin pengembangan
+lolos uji lalu salah lapor di produksi. Python bisa dimuat sebagai modul dan
+fungsi-fungsi peringkasnya diuji terhadap dokumen contoh, tanpa mongod.
+Dijalankan oleh **venv backend** (`python3.11`), tempat `pymongo` dan
+`python-dotenv` sudah ada.
+
+**Dua bahaya yang dikunci uji**
+
+| Yang gampang ditambahkan "sekalian" | Akibatnya |
+|---|---|
+| `createIndex` / `setProfilingLevel` | Alat diagnosis jadi alat yang bisa mengunci koleksi seluruh data BMN di tengah jam kerja |
+| `print(op)` pada hasil `currentOp` | Dokumen `command` memuat **NILAI** filter — NIP, kode satker, nama orang — dan keluarannya masuk log Actions |
+
+`backend/tests/unit/test_diagnosa_mongod.py` (43 uji) menagihnya, dan
+memeriksa **kode**, bukan teks: docstring skripnya sendiri menyebut
+`setProfilingLevel`/`killOp`/`shutdown` justru untuk melarangnya, jadi
+pencocokan seluruh berkas akan selalu menuduh yang salah.
+
+**Satu mutasi LOLOS, dan ujinya diganti**
+
+Mutasi `print(f"...: {e}._")` — pesan galat pymongo kerap memuat **URI lengkap
+beserta sandinya** — lolos. Sebabnya: uji mencari teks `"{e}"` di antara
+konstanta string, sedangkan bagian `{e}` sebuah f-string adalah
+`FormattedValue`, bukan konstanta. Uji itu **tak pernah bisa** menangkapnya.
+Gantinya kini struktural: di dalam setiap `except … as e`, nama galat hanya
+boleh muncul sebagai `type(e).__name__` — dipasang ulang, dan mutasinya mati.
+
+Lima mutasi lain dipasang lalu dibunuh: `currentOp` dicetak utuh, profiler
+dinyalakan, indeks tak terpakai tak lagi ditandai, dan pemicu jadwal harian
+ditambahkan ke workflow.
+
+**Belum dilakukan**: menyetel apa pun. Skrip ini membaca; keputusan menyusul
+bacaannya.
+
+---
+
 ## [#944] Tata letak tombol pembubuhan: dua baris, Bubuhkan paling menonjol — 2026-08-29
 
 Permintaan pemilik disertai tangkapan layar: *"perbaiki dulu halamannya dan
