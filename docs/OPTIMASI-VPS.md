@@ -12,13 +12,22 @@
 > itu ada, angka di dokumen ini bisa diperbarui siapa saja dengan satu klik;
 > tak ada lagi alasan menaruh tebakan di sini.
 >
-> | Aspek | Bacaan 18 Agu | Bacaan 29 Agu |
-> |---|---|---|
-> | Beban (1/5/15 mnt) | 1,19 | **1,02 · 1,01 · 1,01** |
-> | Memori | 36% terpakai, 4,8 GiB tersedia | **1,9 GiB / 7,8 GiB terpakai, 5,8 GiB tersedia** |
-> | Swap | 4 GiB, terpakai 710 MiB (17%) | 4 GiB, terpakai **1,2 MiB (≈0%)** |
-> | Disk `/` | 27,8 GB / 95,8 GB (29%) | **31 GB / 96 GB (32%)** |
-> | Uptime | — | 3 hari 23 jam |
+> | Aspek | 18 Agu | 29 Agu | **30 Agu (sesudah perbaikan)** |
+> |---|---|---|---|
+> | Beban (1/5/15 mnt) | 1,19 | 1,02 · 1,01 · 1,01 | **0,07 · 0,25 · 0,26** |
+> | `mongod` %CPU | — | **93,1%** | **2,0%** |
+> | Memori | 36% terpakai | 1,9 / 7,8 GiB | 3,8 / 7,8 GiB, 3,9 GiB tersedia |
+> | Swap | 710 MiB terpakai | 1,2 MiB | 5,0 MiB |
+> | Disk `/` | 27,8 GB (29%) | 31 GB (32%) | 31 GB (32%) |
+>
+> **✅ SELESAI 30 Agustus 2026.** Beban satu core yang datar sejak awal
+> Agustus **turun ke 0,07**. Pelakunya dan ketiga cacatnya ada di §2 butir 1.
+>
+> Catatan atas memori: `mongod` kini memakai 3,2 GB RES karena cache
+> WiredTiger memanas mengisi plafonnya (3,46 GB) — itu wajar dan disengaja,
+> bukan kebocoran. Tersedia 3,9 GiB dan swap praktis tak tersentuh, jadi
+> rekomendasi §3b "batasi cache ke 2 GB" **belum mendesak**; catat saja bila
+> kelak ada layanan lain ditambahkan ke mesin ini.
 >
 > **Tiga hal yang harus mengubah isi dokumen ini, bukan sekadar ditempel:**
 >
@@ -120,6 +129,17 @@
    > 10 MB/20.000 dokumen ke 1 MB/1.000 — 20× lebih murah per putaran, tanpa
    > menyentuh latensi fanout. Laju sisip terukur hanya **485 dalam 22 jam**,
    > jadi seribu slot tetap cadangan berjam-jam.
+   >
+   > **HASIL AKHIR, terukur di mesin 30 Agustus 2026 pukul 05:49 UTC:**
+   >
+   > | | Sebelum | Sesudah |
+   > |---|---|---|
+   > | Beban (1/5/15 mnt) | 1,02 · 1,01 · 1,01 | **0,07 · 0,25 · 0,26** |
+   > | `mongod` %CPU | **93,1%** | **2,0%** |
+   > | Laju query | 112,5/detik | 10,5/detik |
+   >
+   > Rata-rata 15 menit (0,26) masih menyeret sisa beban lama; angka 1 menit
+   > (**0,07**) adalah keadaan sebenarnya. **Kasus ditutup.**
    >
    > **Pelajaran metodenya**: `currentOp` TIDAK menemukan ini — query yang
    > selesai dalam 8 ms tak pernah tertangkap sedang berjalan, betapa pun
