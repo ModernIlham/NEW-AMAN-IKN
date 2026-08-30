@@ -67,6 +67,59 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#951] Inventaris VPS menjawab "apakah pemutakhiran saya masuk?" — 2026-08-30
+
+Pemilik memutakhirkan VPS sesuai `apt list --upgradable` lalu meminta
+konfirmasi lewat Inventaris VPS. **Alat itu tak bisa menjawabnya** — dan
+lebih buruk, ia akan **menyesatkan**.
+
+Sebabnya `uname -r` melaporkan kernel yang sedang **BERJALAN**, bukan yang
+terpasang. Sesudah `apt upgrade` yang menyertakan kernel, angka itu tak
+berubah sampai mesin di-reboot. Pembacanya akan menyimpulkan pemutakhirannya
+gagal, padahal ia hanya menunggu reboot.
+
+**Bagian "Pemutakhiran sistem" yang baru:**
+
+| Aspek | Menjawab |
+|---|---|
+| Kernel berjalan vs **terpasang** | apakah ada kernel baru yang menunggu |
+| **Perlu reboot** | dari `/var/run/reboot-required`, ATAU dari kernel yang beda |
+| Paket masih bisa dimutakhirkan | apakah `apt upgrade` benar-benar tuntas |
+| Apt terakhir dijalankan | kapan pemutakhirannya terjadi |
+| Paket yang meminta reboot | daftarnya, bila ada |
+
+Label lama `| Kernel |` diganti `| Kernel (berjalan) |` — ambiguitas itu
+persis yang menyesatkan.
+
+**Batas keamanan yang ikut dikencangkan**
+
+`apt-get -s` (simulasi) tak mengubah apa pun, tak mengambil kunci, tak
+mengunduh. Tetapi jarak antara `-s` dan tanpa `-s` **cuma dua karakter**, dan
+yang tanpa `-s` akan **memutakhirkan produksi di tengah jam kerja**. Uji baru
+menuntut setiap `apt-get` di berkas ini memakai `-s`/`--simulate`/`--dry-run`,
+dan menolak `apt-get upgrade`, `dist-upgrade`, `autoremove`, serta padanan
+`apt`-nya.
+
+Dari `/var/log/apt/history.log` yang dibaca **hanya** baris `Start-Date:` —
+berkas itu juga memuat `Commandline:`, dan tak ada alasan menumpahkannya ke
+log Actions.
+
+**Uji saya sendiri menolak skrip yang sah, dan itu diperbaiki**
+
+Penjaga "perintah yang mengubah keadaan" mencocokkan **substring**, sehingga
+variabel `perlu_reboot` dan jalur `/var/run/reboot-required` dituduh memanggil
+`reboot`. Pola diganti agar menuntut kata itu berdiri di **posisi perintah** —
+awal baris, atau sesudah `;` `&&` `|` `(` `$(`. Larangannya tetap berlaku
+penuh; yang hilang cuma tuduhan palsunya.
+
+Empat mutasi dipasang lalu dibunuh: `apt-get` kehilangan `-s`, kernel
+diurutkan abjad (`sort` biasa menaruh 6.8.0-99 di atas 6.8.0-140), label
+`Kernel` dikembalikan tanpa keterangan, dan `grep -c` diganti `grep -q` —
+yang terakhir memasang ulang cacat SIGPIPE yang pernah membuat alat ini salah
+lapor soal Redis, dan dibunuh oleh **dua** uji sekaligus.
+
+---
+
 ## [#950] Kasus beban CPU ditutup dengan angka mesin — 2026-08-30
 
 Bacaan **Inventaris VPS 30 Agustus 05:49 UTC**, delapan menit setelah [#949]

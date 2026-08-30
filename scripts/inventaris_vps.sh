@@ -61,7 +61,7 @@ judul "Mesin"
 baris "| Aspek | Bacaan |"
 baris "|---|---|"
 baris "| OS | $( (. /etc/os-release 2>/dev/null && echo "$PRETTY_NAME") || uname -s) |"
-baris "| Kernel | $(uname -r) |"
+baris "| Kernel (berjalan) | $(uname -r) |"
 baris "| Arsitektur | $(uname -m) |"
 baris "| Uptime | $(uptime -p 2>/dev/null || echo '?') |"
 baris "| CPU | $(nproc) vCPU |"
@@ -69,6 +69,58 @@ baris "| Beban | $(cut -d' ' -f1-3 /proc/loadavg) |"
 baris "| Memori | $(free -h 2>/dev/null | awk '/^Mem:/{print $3" / "$2" terpakai, "$7" tersedia"}') |"
 baris "| Swap | $(free -h 2>/dev/null | awk '/^Swap:/{print ($2=="0B"||$2=="0"?"tidak ada":$3" / "$2" terpakai")}') |"
 baris "| Disk / | $(df -h --output=used,size,pcent / 2>/dev/null | tail -1 | awk '{print $1" / "$2" ("$3")"}') |"
+
+judul "Pemutakhiran sistem"
+# KENAPA BAGIAN INI ADA.
+#
+# Pemilik memutakhirkan VPS lalu bertanya apakah pemutakhirannya masuk. Alat
+# ini TIDAK BISA menjawabnya: `uname -r` melaporkan kernel yang sedang
+# BERJALAN, bukan yang terpasang. Setelah `apt upgrade` yang menyertakan
+# kernel, angka itu tak berubah sampai mesin di-reboot — dan pembacanya akan
+# menyimpulkan pemutakhirannya gagal, padahal ia hanya menunggu reboot.
+#
+# Semua di bawah ini MEMBACA. `apt-get -s` adalah mode simulasi: tak mengubah
+# apa pun, tak mengambil kunci, tak mengunduh. Itu satu-satunya bentuk apt
+# yang boleh muncul di berkas ini (ditagih uji).
+baris "| Aspek | Bacaan |"
+baris "|---|---|"
+
+kernel_jalan="$(uname -r)"
+# Kernel terpasang TERBARU dari /boot. Diurutkan menurut versi supaya
+# 6.8.0-140 menang atas 6.8.0-99 — urutan abjad akan salah.
+kernel_pasang="$(ls -1 /boot/vmlinuz-* 2>/dev/null | sed 's|.*/vmlinuz-||' | sort -V | tail -1)"
+baris "| Kernel berjalan | ${kernel_jalan:-?} |"
+baris "| Kernel terpasang (terbaru) | ${kernel_pasang:-? (/boot tak terbaca)} |"
+
+perlu_reboot="tidak"
+if [ -f /var/run/reboot-required ]; then
+  perlu_reboot="**YA**"
+elif [ -n "$kernel_pasang" ] && [ "$kernel_pasang" != "$kernel_jalan" ]; then
+  perlu_reboot="**YA** (kernel terpasang beda dari yang berjalan)"
+fi
+baris "| Perlu reboot | $perlu_reboot |"
+
+# Sisa paket yang masih bisa dimutakhirkan. `grep -c` membaca SELURUH masukan,
+# jadi tak ada SIGPIPE — pelajaran dari cacat `grep -q` di bawah `pipefail`
+# yang pernah membuat alat ini salah lapor.
+sisa="$(apt-get -s -q upgrade 2>/dev/null | grep -c '^Inst ' || true)"
+baris "| Paket masih bisa dimutakhirkan | ${sisa:-?} |"
+
+# Kapan apt terakhir dijalankan. Yang dibaca hanya TANGGAL dari history.log —
+# berkas itu juga memuat baris `Commandline:`, dan tak ada alasan
+# menumpahkannya ke log Actions.
+apt_terakhir="$(grep '^Start-Date:' /var/log/apt/history.log 2>/dev/null | tail -1 | cut -d' ' -f2-)"
+baris "| Apt terakhir dijalankan | ${apt_terakhir:-? (riwayat tak terbaca)} |"
+
+if [ -s /var/run/reboot-required.pkgs ]; then
+  baris ""
+  baris "Paket yang meminta reboot:"
+  baris ""
+  baris '```'
+  sort -u /var/run/reboot-required.pkgs | tr '\n' ' ' | fold -s -w 100
+  baris ""
+  baris '```'
+fi
 
 judul "Versi perangkat lunak terpasang"
 baris "| Program | Versi |"
