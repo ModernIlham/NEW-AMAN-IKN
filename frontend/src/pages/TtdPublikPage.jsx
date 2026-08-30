@@ -33,7 +33,9 @@ function fmtWaktu(iso) {
 
 function StatusPill({ status }) {
   const map = {
-    ditandatangani: { cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400", label: "Ditandatangani", Icon: BadgeCheck },
+    ditandatangani: { cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400", label: "Terverifikasi", Icon: BadgeCheck },
+    terverifikasi: { cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400", label: "Terverifikasi", Icon: BadgeCheck },
+    menunggu_validasi: { cls: "bg-violet-500/15 text-violet-700 dark:text-violet-300", label: "Menunggu validasi", Icon: ShieldCheck },
     aktif: { cls: "bg-blue-500/15 text-blue-600 dark:text-blue-400", label: "Giliran menandatangani", Icon: PenTool },
     menunggu: { cls: "bg-amber-500/15 text-amber-600 dark:text-amber-400", label: "Menunggu giliran", Icon: Clock },
   };
@@ -118,11 +120,16 @@ function Verifikasi({ id }) {
         {dibatalkan
           ? <CircleAlert className="w-12 h-12 mx-auto text-red-500" />
           : <ShieldCheck className={`w-12 h-12 mx-auto ${selesai ? "text-emerald-500" : "text-amber-500"}`} />}
-        <p className="font-extrabold text-lg" data-testid="verif-judul">{data.judul}</p>
+        <div className="flex items-center justify-center gap-2">
+          <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground text-[10px] font-bold">
+            {data.label_jenis || "Dokumen"}
+          </span>
+          <p className="font-extrabold text-lg" data-testid="verif-judul">{data.judul_tampil || data.judul}</p>
+        </div>
         <p className="text-xs text-muted-foreground">
           Dibuat {fmtWaktu(data.dibuat)} · Status:{" "}
           <b className={dibatalkan ? "text-red-600 dark:text-red-400" : (selesai ? "text-emerald-600" : "text-amber-600")}>
-            {dibatalkan ? "DIBATALKAN" : (selesai ? "SEMUA SUDAH MENANDATANGANI" : (data.status || "-").toUpperCase())}
+            {dibatalkan ? "DIBATALKAN" : (selesai ? "SUDAH DIVALIDASI" : (data.status || "-").replaceAll("_", " ").toUpperCase())}
           </b>
         </p>
       </div>
@@ -162,6 +169,13 @@ function Verifikasi({ id }) {
           diunduh setelah penerbit menempatkan kode QR verifikasi pada dokumen.
         </div>
       )}
+      {!data.dapat_unduh && data.menunggu_validasi && (
+        <div className="mt-3 rounded-xl border border-violet-500/40 bg-violet-500/10 p-2.5 text-[11px] text-violet-700 dark:text-violet-300"
+          data-testid="verif-menunggu-validasi">
+          Semua pembubuhan sudah masuk, tetapi dokumen belum final. Operator/admin
+          satker sedang memeriksa kesesuaian posisi, jumlah, dan dokumennya.
+        </div>
+      )}
       <p className="text-[11px] text-muted-foreground leading-relaxed border-t border-border pt-3 mt-3">{data.catatan}</p>
     </Kartu>
   );
@@ -176,6 +190,8 @@ function TandaTangan({ id, token }) {
   const [sukses, setSukses] = useState(false);
   // Alur 2 langkah bila ada dokumen: tangkap ttd → ATUR POSISI di dokumen.
   const [pngSiap, setPngSiap] = useState(null);
+  const [deklarasiTanpaArea, setDeklarasiTanpaArea] = useState(false);
+  const [catatanDeklarasi, setCatatanDeklarasi] = useState("");
   const drafKey = `ttd-draf-${id}-${(token || "").slice(-12)}`;
 
   const muat = useCallback(() => {
@@ -184,7 +200,8 @@ function TandaTangan({ id, token }) {
       .then((r) => {
         setInfo(r.data);
         // Perangkat lain sudah meneken? Batalkan langkah posisi yang basi.
-        if (r.data?.penanda_tangan?.status === "ditandatangani") setPngSiap(null);
+        if (["menunggu_validasi", "terverifikasi", "ditandatangani"]
+          .includes(r.data?.penanda_tangan?.status)) setPngSiap(null);
       })
       .catch((e) => {
         if (!e?.response) {
@@ -205,16 +222,20 @@ function TandaTangan({ id, token }) {
       // oleh pemilik dokumen saat mengunduh hasil akhir (mandat pemilik).
       await axios.post(`${API}/ttd/tandatangan/${id}/kirim`,
         { png_base64: png, posisi: posisi || null,
-          posisi_lain: posisiLain || [] },
+          posisi_lain: posisiLain || [],
+          deklarasi_tanpa_area: deklarasiTanpaArea,
+          catatan_deklarasi: deklarasiTanpaArea ? catatanDeklarasi.trim() : "" },
         { params: { token }, timeout: 60000 });
       setSukses(true);
       setPngSiap(null);
+      setDeklarasiTanpaArea(false);
+      setCatatanDeklarasi("");
       // Muat ulang status: bila tanda tangan ini yang MELENGKAPI (mode paralel,
       // siapa pun terakhir), layar sukses langsung menampilkan tombol unduh /
       // keterangan menunggu QR — tanpa perlu buka ulang tautan.
       muat();
       try { sessionStorage.removeItem(drafKey); } catch { /* noop */ }
-      toast.success("Tanda tangan berhasil dikirim");
+      toast.success("Pembubuhan dikirim dan menunggu validasi operator/admin satker");
     } catch (e) {
       if (e?.response?.status === 409) {
         // Bisa jadi submit SEBELUMNYA sudah tercatat tetapi responsnya hilang
@@ -230,7 +251,7 @@ function TandaTangan({ id, token }) {
     } finally {
       setKirim(false);
     }
-  }, [id, token, muat, drafKey]);
+  }, [id, token, muat, drafKey, deklarasiTanpaArea, catatanDeklarasi]);
 
   // Jangan biarkan tab tertutup diam-diam saat ttd sudah digambar tapi belum
   // terkirim (langkah atur posisi).
@@ -281,7 +302,8 @@ function TandaTangan({ id, token }) {
           <BadgeCheck className="w-14 h-14 text-emerald-500 mx-auto" />
           <p className="font-extrabold text-lg" data-testid="ttd-sukses">Terima kasih, {info.penanda_tangan?.nama}!</p>
           <p className="text-sm text-muted-foreground">
-            Tanda tangan Anda untuk <b>{info.judul}</b> sudah tercatat dengan aman.
+            Pembubuhan Anda untuk <b>{info.judul_tampil || info.judul}</b> sudah tercatat
+            dan <b>menunggu pemeriksaan operator/admin satker</b>. Dokumen belum dinyatakan final.
           </p>
           {/* Unduhan hasil akhir untuk penanda tangan — hanya bila semua sudah
               meneken DAN QR sudah ditempatkan penerbit. */}
@@ -311,7 +333,12 @@ function TandaTangan({ id, token }) {
       <Kartu>
         <div className="space-y-1">
           <p className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wide">Atur pembubuhan</p>
-          <p className="font-extrabold text-base sm:text-lg leading-snug">{info.judul}</p>
+          <p className="font-extrabold text-base sm:text-lg leading-snug flex items-center gap-2">
+            <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground text-[9px]">
+              {info.label_jenis || "Dokumen"}
+            </span>
+            {info.judul_tampil || info.judul}
+          </p>
         </div>
         <AturPosisiTtd
           jenis="ttd"
@@ -326,8 +353,26 @@ function TandaTangan({ id, token }) {
              ini. Tanpa diteruskan ke sini, layar tak punya ukuran "lengkap"
              dan tombol Bubuhkan kembali bisa ditekan saat masih kurang. */
           wajib={sg.jumlah_ttd || 1}
+          izinkanDeklarasiKurang={(sg.jumlah_ttd || 1) > 1}
+          deklarasiKurang={deklarasiTanpaArea}
+          onDeklarasiKurang={(v) => {
+            setDeklarasiTanpaArea(v);
+            if (!v) setCatatanDeklarasi("");
+          }}
           onKirim={(posisi, posisiLain) => kirimTtd(pngSiap, posisi, posisiLain)}
         />
+        {deklarasiTanpaArea && (
+          <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-2.5"
+            data-testid="ttd-catatan-deklarasi-wrap">
+            <label className="text-[11px] font-semibold text-violet-800 dark:text-violet-200">
+              Catatan untuk validator (opsional)
+            </label>
+            <textarea rows={2} value={catatanDeklarasi}
+              onChange={(e) => setCatatanDeklarasi(e.target.value)}
+              placeholder="Contoh: blok TTD saya hanya ditemukan di halaman 4"
+              className="mt-1 w-full rounded-md border border-input bg-background px-2.5 py-2 text-xs resize-y" />
+          </div>
+        )}
       </Kartu>
     );
   }
@@ -336,7 +381,14 @@ function TandaTangan({ id, token }) {
     <Kartu>
       <div className="space-y-1">
         <p className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wide">Permintaan tanda tangan</p>
-        <p className="font-extrabold text-base sm:text-lg leading-snug" data-testid="ttd-judul">{info.judul}</p>
+        <div className="flex items-center gap-2">
+          <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground text-[9px] font-bold">
+            {info.label_jenis || "Dokumen"}
+          </span>
+          <p className="font-extrabold text-base sm:text-lg leading-snug" data-testid="ttd-judul">
+            {info.judul_tampil || info.judul}
+          </p>
+        </div>
         <p className="text-xs text-muted-foreground">
           Mode {info.mode === "berurutan" ? "berurutan (sesuai giliran)" : "paralel"} · Status dokumen: {info.status_dokumen}
         </p>

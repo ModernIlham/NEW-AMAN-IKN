@@ -7,7 +7,7 @@ tidak ditandatangani."*
 """
 from ttd_kelengkapan import (
     MAKS_TTD_PER_ORANG, jumlah_pembubuhan, kurang_pembubuhan,
-    normalisasi_jumlah_ttd, pesan_kurang,
+    normalisasi_jumlah_ttd, pesan_deklarasi_tanpa_area, pesan_kurang,
 )
 
 POS = {"halaman": 1, "x": 0.5, "y": 0.7, "lebar": 0.3}
@@ -91,11 +91,27 @@ class TestPesanKurang:
         # yang sama berulang kali.
         assert "Tanda tangan lagi" in pesan_kurang(2, POS, [])
 
-    def test_menerangkan_kenapa_tak_bisa_diperbaiki_nanti(self):
-        """Tanpa ini, orang akan mengira bisa membubuhkan sisanya belakangan
-        — dan itulah persis kekeliruan yang melahirkan masalahnya."""
+    def test_menyebut_jalan_deklarasi_bila_angka_memang_berlebih(self):
         p = pesan_kurang(2, POS, [])
-        assert "tertutup" in p and "tak bisa ditambahkan" in p
+        assert "tidak ada area TTD saya lagi" in p
+        assert "operator/admin satker" in p
 
     def test_kiriman_KOSONG_juga_ditolak(self):
         assert pesan_kurang(1, None, []) != ""
+
+
+class TestDeklarasiTanpaArea:
+    def test_kurang_tanpa_deklarasi_tetap_ditolak(self):
+        assert pesan_deklarasi_tanpa_area(3, POS, [], False, True) != ""
+
+    def test_deklarasi_sah_masuk_ke_validator(self):
+        assert pesan_deklarasi_tanpa_area(3, POS, [], True, True) == ""
+
+    def test_deklarasi_hanya_untuk_pdf_yang_bisa_diperiksa(self):
+        assert "PDF" in pesan_deklarasi_tanpa_area(3, POS, [], True, False)
+
+    def test_deklarasi_tak_boleh_menggantikan_semua_pembubuhan(self):
+        assert pesan_deklarasi_tanpa_area(2, None, [], True, True) != ""
+
+    def test_kiriman_lengkap_tak_butuh_deklarasi(self):
+        assert pesan_deklarasi_tanpa_area(2, POS, [POS], False, True) == ""

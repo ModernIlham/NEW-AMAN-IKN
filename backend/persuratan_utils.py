@@ -591,10 +591,10 @@ def validate_transisi(status_lama, status_baru, jenis) -> str:
 def baris_agenda_csv(items) -> list:
     """Baris buku agenda (list of list) untuk ekspor CSV — kolom praktik
     buku agenda kembar."""
-    rows = [["No Agenda", "Jenis", "Status", "Keberlakuan", "Nomor Surat",
+    rows = [["No Agenda", "Jenis", "Status", "Catatan Data", "Keberlakuan", "Nomor Surat",
              "Nomor Eksternal", "Tanggal Surat", "Perihal", "Dari/Kepada",
              "Jenis Naskah", "Sifat Urgensi", "Modul", "Kegiatan", "Kode Klasifikasi",
-             "Disahkan/Diterima Pada", "Keterangan"]]
+             "Disahkan/Diterima Pada", "Dihapus Pada", "Dihapus Oleh", "Keterangan"]]
     for s in items or []:
         keluar = s.get("jenis") == "keluar"
         rows.append([
@@ -609,6 +609,7 @@ def baris_agenda_csv(items) -> list:
             "Keluar" if keluar else "Masuk",
             (STATUS_KELUAR if keluar else STATUS_MASUK).get(
                 s.get("status"), s.get("status")),
+            "DIHAPUS (soft-delete)" if s.get("dihapus") else "Aktif",
             # Diisi pemanggil (stempel keberlakuan terhitung); item tanpa
             # stempel — pemanggil lama / uji murni — tampil kosong, bukan
             # mengarang "Berlaku".
@@ -625,6 +626,8 @@ def baris_agenda_csv(items) -> list:
             s.get("kode_klasifikasi") or "",
             (s.get("disahkan_pada") if keluar else s.get("created_at") or "")[:10]
             if (s.get("disahkan_pada") or (not keluar and s.get("created_at"))) else "",
+            str(s.get("dihapus_pada") or "")[:19],
+            s.get("dihapus_oleh") or "",
             s.get("keterangan") or (s.get("alasan_batal") or ""),
         ])
     return rows

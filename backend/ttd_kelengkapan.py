@@ -96,5 +96,30 @@ def pesan_kurang(jumlah_wajib, posisi, posisi_lain) -> str:
     return (f"Dokumen ini menuntut {wajib} tanda tangan dari Anda, baru "
             f"{sudah} yang ditempatkan. Tekan \"Tanda tangan lagi\", pindah "
             f"ke halaman berikutnya, dan tempatkan {kurang} lagi sebelum "
-            "membubuhkan — sekali dibubuhkan, tautan ini tertutup dan "
-            "lembar yang terlewat tak bisa ditambahkan lagi.")
+            "membubuhkan. Jika angka permintaan memang berlebih, periksa "
+            "seluruh dokumen lalu gunakan deklarasi \"tidak ada area TTD "
+            "saya lagi\"; operator/admin satker akan memvalidasinya.")
+
+
+def pesan_deklarasi_tanpa_area(jumlah_wajib, posisi, posisi_lain,
+                               deklarasi=False, ada_dokumen=True) -> str:
+    """Validasi jalan keluar saat angka deklarasi pemilik terlalu besar.
+
+    ``""`` berarti kiriman boleh masuk ke antrean validator. Deklarasi hanya
+    sah bila ada PDF yang benar-benar dapat diperiksa dan sedikitnya satu
+    pembubuhan sudah ditempatkan; ia tidak boleh menjadi jalan pintas untuk
+    mengirim tanda tangan tanpa menunjuk satu area pun.
+    """
+    kurang = kurang_pembubuhan(jumlah_wajib, posisi, posisi_lain)
+    if not kurang:
+        return ""
+    if not deklarasi:
+        return pesan_kurang(jumlah_wajib, posisi, posisi_lain)
+    if not ada_dokumen:
+        return ("Deklarasi tanpa area hanya tersedia untuk dokumen PDF yang "
+                "dapat diperiksa halaman demi halaman")
+    sudah = jumlah_pembubuhan(posisi, posisi_lain)
+    if sudah < 1:
+        return ("Tempatkan sedikitnya satu tanda tangan Anda sebelum "
+                "menyatakan tidak ada area tanda tangan lainnya")
+    return ""

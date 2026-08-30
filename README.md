@@ -35,6 +35,9 @@ label BMN**, dan **backup otomatis terjadwal**.
 - **ATURAN SISTEM** — baris identitas pada blok tanda tangan seluruh dokumen
   PDF/Word (hanya NIP/NRP yang dicetak; kosong & Non-ASN & NIK → nama saja):
   [`docs/ATURAN-BLOK-TANDA-TANGAN.md`](./docs/ATURAN-BLOK-TANDA-TANGAN.md)
+- Tata kelola koreksi, validasi E-sign, buka ulang satu penanda tangan, dan
+  keputusan nomor surat/ralat:
+  [`docs/TATA-KELOLA-KOREKSI-ESIGN.md`](./docs/TATA-KELOLA-KOREKSI-ESIGN.md)
 - Rujukan regulasi & alur bisnis: [`docs/PUSTAKA-REGULASI-BMN.md`](./docs/PUSTAKA-REGULASI-BMN.md)
 - Penggunaan BMN dari sisi PEMOHON (5 rezim + rezim khusus IKN, berkas &
   ambang kewenangan): [`docs/PENGGUNAAN-BMN-PEMOHON.md`](./docs/PENGGUNAAN-BMN-PEMOHON.md)
@@ -264,7 +267,7 @@ Detail lengkap per PR di [`CHANGELOG.md`](./CHANGELOG.md) (#604–#614).
 
 - 🔄 **Sinkronisasi SIMAN V2 tangguh** — impor ekspor "Master Aset" dengan deteksi header di semua sheet, unggah andal (progres %, timeout longgar, coba-ulang otomatis saat koneksi putus), **validasi kode satker cerdas 6↔20 digit** (kode lengkap SIMAN ikut di kegiatan & Master Satker; kode 6 digit AMAN yang terkandung dalam kode 20 digit dianggap cocok), tanda "≠ SIMAN" per aset + sinkron 1-klik dari galeri/list; baris SIMAN belum tercatat bisa **diunduh CSV atau dibuat aset draft massal 1-klik** (#405, #462–#463).
 - 🏷️ **Cetak Stiker Label BMN** — 3 ukuran (besar/sedang/kecil) × kertas A4/A3 penuh-halaman, ikut filter & kelompok, QR ber-payload kode register + logo di tengah (level H), header nama/kode satker, rekap jumlah per ukuran (#397–#402).
-- ✍️ **Tanda Tangan Elektronik** — TTD via link per penanda tangan (kanvas mulus / foto→PNG transparan), **dibubuhkan langsung ke dokumen PDF unggahan dengan LETAK & UKURAN yang diatur sendiri di pratinjau halaman** (atau slot otomatis), QR + hash verifikasi publik (NIP di-masking), token sekali-pakai; halaman publik responsif + tahan rotasi/reload/jaringan putus (#398, #468).
+- ✍️ **Tanda Tangan Elektronik** — TTD via link per penanda tangan (kanvas mulus / foto→PNG transparan), **dibubuhkan langsung ke dokumen PDF unggahan dengan LETAK & UKURAN yang diatur sendiri di pratinjau halaman** (atau slot otomatis), QR + hash verifikasi publik (NIP di-masking), token sekali-pakai; pembubuhan masuk antrean validasi operator/admin, mendukung deklarasi jumlah TTD yang berlebih dan buka ulang satu orang tanpa mengulang semua penanda tangan; halaman publik responsif + tahan rotasi/reload/jaringan putus (#398, #468).
 - 👥 **Master SDM & Referensi** — Master Pegawai (impor Excel massal, **foto pegawai ber-krop persegi** geser/zoom + avatar di daftar), Referensi Pejabat, Unit Kerja Eselon I–V, keterkaitan aset↔pegawai (panel Perlu Serah Terima BMN), **Referensi Akun BAS per makna digit 1–6** (KEP-211/PB/2018), **Kartu Pegawai UID e-KTP/NFC** — tap kartu utk identifikasi cepat di form aset/BAST/TTD elektronik (hanya hash UID tersimpan, tanpa data chip kependudukan) (#391–#394, #460, #487).
 - 🔐 **Isolasi multi-satker & keamanan** — jejak audit, kartu inventarisasi, dan dokumen e-sign ter-scope ketat per satker (tutup kebocoran & IDOR); reset melindungi seluruh master referensi; rate-limit e-sign (#408).
 - ⚡ **Performa** — bilah progres inventarisasi memakai agregasi ringan, indeks database kunci (SIMAN/pemegang/persuratan/pegawai) (#409).

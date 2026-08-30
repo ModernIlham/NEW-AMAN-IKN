@@ -360,7 +360,10 @@ async def kirim_bast_ke_ttd(bast_id: str, payload: KirimTtdIn | None = None,
         raise HTTPException(
             status_code=400,
             detail="BAST belum memiliki pihak yang dapat menandatangani")
-    judul = f"BAST {b.get('nomor') or bast_id}".strip()
+    # Jenis dokumen disimpan di ``doc_type`` dan ditampilkan sebagai badge di
+    # registrasi TTD. Jangan menjejalkannya lagi ke judul: nomor BAST lazimnya
+    # sudah berawalan "BAST-", sehingga data lama terbaca "BAST BAST-035/...".
+    judul = str(b.get("nomor") or bast_id).strip()
     _pil = payload or KirimTtdIn()
     payload = PermintaanIn(judul=judul, doc_type="bast", doc_ref=str(bast_id),
                            mode=_pil.mode, sifat_urgensi=_pil.sifat_urgensi,

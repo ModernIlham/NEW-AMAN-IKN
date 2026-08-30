@@ -57,3 +57,18 @@ describe("kartu HP", () => {
     expect(blok).toContain("flex flex-wrap items-center justify-end gap-1");
   });
 });
+
+describe("soft-delete tetap terlihat sebagai jejak arsip", () => {
+  test("row dan kartu ditandai redup, grayscale, dan membawa watermark", () => {
+    expect(SUMBER).toContain('data-dihapus={s.dihapus ? "true" : "false"}');
+    expect(SUMBER).toContain('"bg-muted/40 opacity-40 grayscale"');
+    expect(SUMBER.match(/DI HAPUS/g)?.length || 0).toBeGreaterThanOrEqual(3);
+    expect(SUMBER).toContain("persuratan-watermark-row-");
+    expect(SUMBER).toContain("persuratan-watermark-");
+  });
+
+  test("record yang dihapus tidak lagi menawarkan tombol mutasi", () => {
+    expect(SUMBER).toContain("if (s.dihapus)");
+    expect(SUMBER).toContain("persuratan-watermark-aksi-");
+  });
+});

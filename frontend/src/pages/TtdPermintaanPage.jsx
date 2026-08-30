@@ -3,8 +3,8 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, BadgeCheck, ChevronDown, Copy, FileDown, FileSignature, FileText, IdCard,
-  Clock, Link2, Loader2, Mail, MessageCircle, PenTool, Plus, QrCode, Search, SearchX, ShieldCheck,
-  Trash2, Upload, Users, XCircle,
+  Clock, Eye, Link2, Loader2, Mail, MessageCircle, PenTool, Plus, QrCode, RotateCcw,
+  Search, SearchX, ShieldCheck, Trash2, Upload, Users, XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,20 +34,25 @@ function apiErr(e, fb) { return e?.response?.data?.detail || fb; }
 const WARNA_STATUS = {
   terkirim: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
   sebagian: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+  menunggu_validasi: "bg-violet-500/15 text-violet-700 dark:text-violet-300",
   selesai: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
   batal: "bg-red-500/15 text-red-600 dark:text-red-400",
 };
 const WARNA_SIGNER = {
   ditandatangani: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  terverifikasi: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  menunggu_validasi: "bg-violet-500/15 text-violet-700 dark:text-violet-300",
   aktif: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
   menunggu: "bg-muted text-muted-foreground",
 };
 // Label ramah pengguna utk enum status (temuan audit: enum mentah ambigu).
 const LABEL_STATUS = {
-  terkirim: "Terkirim", sebagian: "Sebagian TTD", selesai: "Selesai", batal: "Batal",
+  terkirim: "Terkirim", sebagian: "Sebagian TTD",
+  menunggu_validasi: "Menunggu Validasi", selesai: "Selesai", batal: "Batal",
 };
 const LABEL_SIGNER = {
-  ditandatangani: "Sudah TTD", aktif: "Giliran aktif", menunggu: "Menunggu",
+  ditandatangani: "Terverifikasi", terverifikasi: "Terverifikasi",
+  menunggu_validasi: "Perlu divalidasi", aktif: "Giliran aktif", menunggu: "Menunggu",
 };
 
 const SIGNER_KOSONG = { nama: "", nip: "", jabatan: "", email: "", jumlah_ttd: 1 };
@@ -96,6 +101,8 @@ export default function TtdPermintaanPage({ user, onBack }) {
   // Tap kartu e-KTP utk mengisi penanda tangan ke-i (null = tertutup)
   const [kartuTapSigner, setKartuTapSigner] = useState(null);
   const [dokFile, setDokFile] = useState(null);    // PDF unggahan utk dibubuhi ttd
+  const [validasi, setValidasi] = useState(null);  // {signer, aksi, alasan}
+  const [memvalidasi, setMemvalidasi] = useState(false);
   const { confirm, confirmDialog } = useConfirm();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
@@ -125,7 +132,8 @@ export default function TtdPermintaanPage({ user, onBack }) {
     let hasil = fStatus ? items.filter((it) => it.status === fStatus) : items;
     if (!s) return hasil;
     return hasil.filter((it) =>
-      (it.judul || "").toLowerCase().includes(s) ||
+      (it.judul_tampil || it.judul || "").toLowerCase().includes(s) ||
+      (it.label_jenis || "").toLowerCase().includes(s) ||
       (it.signers || []).some((sg) => (sg.nama || "").toLowerCase().includes(s)));
   }, [items, q, fStatus]);
 
@@ -245,6 +253,57 @@ export default function TtdPermintaanPage({ user, onBack }) {
     }
   };
 
+  const periksaDokumen = (it) => {
+    const url = authMediaUrl(`${API}/ttd/permintaan/${it.id}/dokumen-ttd`);
+    const tab = window.open(url, "_blank");
+    if (tab) tab.opener = null;
+    else toast.error("Popup diblokir — izinkan popup untuk memeriksa dokumen");
+  };
+
+  const prosesValidasi = async () => {
+    if (!detail || !validasi?.signer) return;
+    const alasan = (validasi.alasan || "").trim();
+    if (validasi.aksi === "buka_ulang" && !alasan) {
+      toast.error("Alasan membuka ulang wajib diisi"); return;
+    }
+    if (validasi.aksi === "setujui" && validasi.signer.deklarasi_tanpa_area && !alasan) {
+      toast.error("Catatan pemeriksaan deklarasi wajib diisi"); return;
+    }
+    setMemvalidasi(true);
+    try {
+      const idem = globalThis.crypto?.randomUUID?.()
+        || `ttd-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const r = await axios.post(
+        `${API}/ttd/permintaan/${detail.id}/validasi/${validasi.signer.signer_id}`,
+        { aksi: validasi.aksi, alasan },
+        { headers: { "If-Match": String(detail.version || 1),
+                     "Idempotency-Key": idem } });
+      if (validasi.aksi === "buka_ulang" && r.data?.link) {
+        const penuh = r.data.link.startsWith("http")
+          ? r.data.link : `${window.location.origin}${r.data.link}`;
+        setLinkUlang((p) => ({ ...p, [validasi.signer.signer_id]: penuh }));
+        await salin(penuh);
+        toast.success("Giliran dibuka ulang hanya untuk penanda tangan ini");
+      } else {
+        toast.success(r.data?.status === "selesai"
+          ? "Seluruh pembubuhan tervalidasi — dokumen siap difinalkan"
+          : "Pembubuhan dinyatakan sesuai");
+      }
+      setValidasi(null);
+      const d = await axios.get(`${API}/ttd/permintaan/${detail.id}`);
+      setDetail(d.data);
+      load();
+    } catch (e) {
+      toast.error(apiErr(e, "Gagal memproses validasi"));
+      if (e?.response?.status === 409) {
+        axios.get(`${API}/ttd/permintaan/${detail.id}`)
+          .then((r) => setDetail(r.data)).catch(() => {});
+      }
+    } finally {
+      setMemvalidasi(false);
+    }
+  };
+
   // Terbitkan ULANG link seorang penanda tangan (link lama otomatis mati).
   const terbitkanLink = async (s) => {
     try {
@@ -299,7 +358,7 @@ export default function TtdPermintaanPage({ user, onBack }) {
         {/* Ringkasan jumlah per status — sekilas tahu berapa yang masih menunggu. */}
         {!loading && items.length > 0 && (
           <div className="flex gap-1.5 flex-wrap" data-testid="ttd-ringkas-status">
-            {["terkirim", "sebagian", "selesai", "batal"].map((st) => {
+            {["terkirim", "sebagian", "menunggu_validasi", "selesai", "batal"].map((st) => {
               const n = items.filter((i) => i.status === st).length;
               if (!n) return null;
               const on = fStatus === st;
@@ -388,14 +447,19 @@ export default function TtdPermintaanPage({ user, onBack }) {
                 className="w-full text-left rounded-xl border border-border bg-card p-3 hover:bg-muted/60 transition-colors"
                 data-testid={`ttd-item-${it.id}`}>
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-bold truncate">{it.judul}</p>
+                  <div className="min-w-0 flex items-center gap-1.5">
+                    <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground text-[9px] font-bold flex-shrink-0">
+                      {it.label_jenis || "Dokumen"}
+                    </span>
+                    <p className="text-sm font-bold truncate">{it.judul_tampil || it.judul}</p>
+                  </div>
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${WARNA_STATUS[it.status] || "bg-muted text-muted-foreground"}`}>
                     {LABEL_STATUS[it.status] || it.status}
                   </span>
                 </div>
                 <p className="text-[11px] text-muted-foreground mt-1 flex items-center gap-3 flex-wrap">
                   <span className="inline-flex items-center gap-1"><Users className="w-3 h-3" />
-                    {it.selesai_jumlah}/{it.jumlah} menandatangani</span>
+                    {it.membubuhkan_jumlah}/{it.jumlah} membubuhkan · {it.selesai_jumlah}/{it.jumlah} tervalidasi</span>
                   <span>{it.mode === "berurutan" ? "Berurutan" : "Paralel"}</span>
                   <span>{fmtWaktu(it.created_at)}</span>
                   <span className="text-muted-foreground/70">oleh {it.created_by}</span>
@@ -421,6 +485,13 @@ export default function TtdPermintaanPage({ user, onBack }) {
                   <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 px-2 py-0.5 text-[10px] font-bold"
                     data-testid={`ttd-perlu-qr-${it.id}`}>
                     <QrCode className="w-3 h-3" />PERLU ATUR LETAK QR
+                  </p>
+                )}
+                {it.perlu_validasi && (
+                  <p className="mt-1.5 mr-1.5 inline-flex items-center gap-1.5 rounded-full bg-violet-500/15 text-violet-700 dark:text-violet-300 px-2 py-0.5 text-[10px] font-bold"
+                    data-testid={`ttd-perlu-validasi-${it.id}`}>
+                    <ShieldCheck className="w-3 h-3" />
+                    {it.menunggu_validasi_jumlah} PERLU DIVALIDASI
                   </p>
                 )}
               </button>
@@ -647,7 +718,12 @@ export default function TtdPermintaanPage({ user, onBack }) {
           {detail && (
             <>
               <DialogHeader>
-                <DialogTitle className="pr-6 break-words">{detail.judul}</DialogTitle>
+                <DialogTitle className="pr-6 break-words flex items-center gap-2">
+                  <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground text-[10px] font-bold flex-shrink-0">
+                    {detail.label_jenis || "Dokumen"}
+                  </span>
+                  <span>{detail.judul_tampil || detail.judul}</span>
+                </DialogTitle>
                 <DialogDescription className="break-words">
                   {detail.mode === "berurutan" ? "Berurutan" : "Paralel"} · dibuat {fmtWaktu(detail.created_at)} oleh {detail.created_by}
                   {" · "}
@@ -660,6 +736,22 @@ export default function TtdPermintaanPage({ user, onBack }) {
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-2 min-w-0">
+                {detail.dok_file_id && (detail.signers || []).some((s) => s.signature_file_id)
+                  && detail.status !== "batal" && (
+                  <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-2.5 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-violet-800 dark:text-violet-200">Pemeriksaan validator</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        Buka PDF dengan seluruh bubuhan yang sudah masuk sebelum menyetujui atau membuka ulang.
+                      </p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm"
+                      className="h-8 text-[11px] flex-shrink-0 border-violet-500/40"
+                      onClick={() => periksaDokumen(detail)} data-testid="ttd-periksa-dokumen">
+                      <Eye className="w-3.5 h-3.5 mr-1" />Periksa Dokumen
+                    </Button>
+                  </div>
+                )}
                 {(detail.signers || []).map((s) => (
                   <div key={s.signer_id} className="rounded-xl border border-border p-2.5 space-y-1.5 min-w-0 overflow-hidden">
                     <div className="flex items-center gap-2.5 min-w-0">
@@ -673,7 +765,7 @@ export default function TtdPermintaanPage({ user, onBack }) {
                       {/* Pratinjau gambar TTD disembunyikan bila permintaan
                           DIBATALKAN — endpoint gambar kini menolak (410) shg
                           <img> jadi ikon rusak; status pill tetap tampil. */}
-                      {s.status === "ditandatangani" && s.signature_file_id && detail.status !== "batal" ? (
+                      {s.signature_file_id && detail.status !== "batal" ? (
                         <img alt={`TTD ${s.nama}`}
                           src={authMediaUrl(`${API}/ttd/tandatangan/${detail.id}/gambar/${s.signer_id}`)}
                           className="h-10 max-w-[90px] object-contain bg-white rounded border border-border p-0.5 flex-shrink-0" />
@@ -684,7 +776,8 @@ export default function TtdPermintaanPage({ user, onBack }) {
                       {/* Sisa waktu tautan ORANG INI — dasar keputusan apakah
                           tautannya perlu diterbitkan ulang. Tak relevan bagi
                           yang sudah meneken. */}
-                      {s.status !== "ditandatangani" && detail.status !== "batal"
+                      {!["menunggu_validasi", "terverifikasi", "ditandatangani"].includes(s.status)
+                        && detail.status !== "batal"
                         && teksSisaWaktu(s.kedaluwarsa_info) && (
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${warnaSisaWaktu(s.kedaluwarsa_info)}`}
                           data-testid={`ttd-sisa-signer-${s.signer_id}`}>
@@ -693,7 +786,16 @@ export default function TtdPermintaanPage({ user, onBack }) {
                         </span>
                       )}
                     </div>
-                    {s.status !== "ditandatangani" && detail.status !== "batal" && (
+                    {s.deklarasi_tanpa_area && (
+                      <div className="rounded-lg bg-amber-500/10 border border-amber-500/25 p-2 text-[10px] text-amber-800 dark:text-amber-200"
+                        data-testid={`ttd-deklarasi-${s.signer_id}`}>
+                        <b>Deklarasi jumlah:</b> penanda tangan sudah memeriksa seluruh dokumen dan hanya menemukan
+                        {` ${s.deklarasi_jumlah_aktual || 0} dari ${s.deklarasi_jumlah_diminta || s.jumlah_ttd || 1} `}
+                        area TTD miliknya.
+                        {s.deklarasi_catatan ? ` Catatan: ${s.deklarasi_catatan}` : ""}
+                      </div>
+                    )}
+                    {["aktif", "menunggu"].includes(s.status) && detail.status !== "batal" && (
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]"
                           title="Buat link baru (link lama otomatis mati) lalu salin"
@@ -722,6 +824,30 @@ export default function TtdPermintaanPage({ user, onBack }) {
                           </>
                         )}
                       </div>
+                    )}
+                    {["menunggu_validasi", "terverifikasi"].includes(s.status)
+                      && detail.status !== "batal" && detail.status !== "selesai" && (
+                      <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                        {s.status === "menunggu_validasi" && (
+                          <Button type="button" size="sm" className="h-8 text-[11px]"
+                            onClick={() => setValidasi({ signer: s, aksi: "setujui", alasan: "" })}
+                            data-testid={`ttd-validasi-${s.signer_id}`}>
+                            <ShieldCheck className="w-3.5 h-3.5 mr-1" />Validasi Sesuai
+                          </Button>
+                        )}
+                        <Button type="button" variant="outline" size="sm"
+                          className="h-8 text-[11px] text-amber-700 border-amber-500/40"
+                          onClick={() => setValidasi({ signer: s, aksi: "buka_ulang", alasan: "" })}
+                          data-testid={`ttd-buka-ulang-${s.signer_id}`}>
+                          <RotateCcw className="w-3.5 h-3.5 mr-1" />Buka Ulang Orang Ini
+                        </Button>
+                      </div>
+                    )}
+                    {s.validated_at && (
+                      <p className="text-[10px] text-emerald-700 dark:text-emerald-300">
+                        Diverifikasi {fmtWaktu(s.validated_at)}{s.validated_by ? ` oleh ${s.validated_by}` : ""}
+                        {s.validation_note ? ` · ${s.validation_note}` : ""}
+                      </p>
                     )}
                   </div>
                 ))}
@@ -759,12 +885,18 @@ export default function TtdPermintaanPage({ user, onBack }) {
                         <DropdownMenuItem className="min-h-[42px]" onClick={() => unduhDokumen(detail, false)} data-testid="ttd-unduh-dokumen">
                           <FileText className="w-4 h-4 mr-2" />Dokumen Asli
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="min-h-[42px] text-emerald-700 dark:text-emerald-400"
-                          onClick={() => setAturQr(detail)}
-                          title="Atur letak QR verifikasi lalu unduh dokumen dengan bubuhan tanda tangan"
-                          data-testid="ttd-unduh-dokumen-ttd">
-                          <FileSignature className="w-4 h-4 mr-2" />Atur QR &amp; Unduh ber-TTD
-                        </DropdownMenuItem>
+                        {detail.status === "selesai" ? (
+                          <DropdownMenuItem className="min-h-[42px] text-emerald-700 dark:text-emerald-400"
+                            onClick={() => setAturQr(detail)}
+                            title="Atur letak QR verifikasi lalu unduh dokumen dengan bubuhan tanda tangan"
+                            data-testid="ttd-unduh-dokumen-ttd">
+                            <FileSignature className="w-4 h-4 mr-2" />Atur QR &amp; Unduh ber-TTD
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem className="min-h-[42px] text-muted-foreground" disabled>
+                            <ShieldCheck className="w-4 h-4 mr-2" />Menunggu validasi sebelum final
+                          </DropdownMenuItem>
+                        )}
                       </>
                     )}
                   </DropdownMenuContent>
@@ -773,6 +905,57 @@ export default function TtdPermintaanPage({ user, onBack }) {
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Keputusan validator selalu tercatat. Buka ulang hanya menyentuh satu
+          orang dan menerbitkan token baru; pembubuhan rekan lain tetap utuh. */}
+      <Dialog open={!!validasi} onOpenChange={(o) => { if (!o && !memvalidasi) setValidasi(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {validasi?.aksi === "buka_ulang" ? "Buka Ulang Pembubuhan" : "Validasi Pembubuhan"}
+            </DialogTitle>
+            <DialogDescription>
+              {validasi?.aksi === "buka_ulang"
+                ? <>Hanya giliran <b>{validasi?.signer?.nama}</b> yang dibuka kembali. Tanda tangan orang lain tidak berubah dan link lama orang ini dimatikan.</>
+                : <>Pastikan PDF sudah diperiksa. Persetujuan untuk <b>{validasi?.signer?.nama}</b> akan dicatat dalam jejak audit.</>}
+            </DialogDescription>
+          </DialogHeader>
+          {validasi?.signer?.deklarasi_tanpa_area && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-800 dark:text-amber-200">
+              Penanda tangan mendeklarasikan hanya menemukan {validasi.signer.deklarasi_jumlah_aktual || 0}
+              {` dari ${validasi.signer.deklarasi_jumlah_diminta || validasi.signer.jumlah_ttd || 1} `}
+              area. Catatan pemeriksaan validator wajib diisi.
+            </div>
+          )}
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground">
+              {validasi?.aksi === "buka_ulang" ? "Alasan koreksi *" : "Catatan pemeriksaan"}
+            </label>
+            <textarea rows={4} value={validasi?.alasan || ""}
+              onChange={(e) => setValidasi((v) => ({ ...v, alasan: e.target.value }))}
+              placeholder={validasi?.aksi === "buka_ulang"
+                ? "Contoh: angka deklarasi salah / posisi TTD menutupi isi dokumen"
+                : "Contoh: seluruh halaman dan posisi pembubuhan telah diperiksa"}
+              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-y"
+              data-testid="ttd-validasi-alasan" />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setValidasi(null)} disabled={memvalidasi}
+              className="h-9 text-xs">Batal</Button>
+            <Button onClick={prosesValidasi} disabled={memvalidasi
+              || (validasi?.aksi === "buka_ulang" && !(validasi?.alasan || "").trim())
+              || (validasi?.aksi === "setujui" && validasi?.signer?.deklarasi_tanpa_area
+                  && !(validasi?.alasan || "").trim())}
+              className="h-9 text-xs" data-testid="ttd-validasi-konfirmasi">
+              {memvalidasi ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                : validasi?.aksi === "buka_ulang"
+                  ? <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+                  : <ShieldCheck className="w-3.5 h-3.5 mr-1.5" />}
+              {validasi?.aksi === "buka_ulang" ? "Buka Ulang & Buat Link" : "Nyatakan Sesuai"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

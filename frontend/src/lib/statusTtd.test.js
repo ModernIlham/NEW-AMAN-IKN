@@ -25,7 +25,7 @@ describe("ringkasTtdDokumen", () => {
     const r = ringkasTtdDokumen({
       id: "sr-1", jumlah: 2, selesai_jumlah: 2, semua_selesai: true,
     });
-    expect(r.teks).toMatch(/lengkap/i);
+    expect(r.teks).toMatch(/terverifikasi lengkap/i);
     expect(r.perluTindakan).toBe(false);
     expect(r.nada).toBe("hijau");
   });
@@ -68,6 +68,17 @@ describe("ringkasTtdDokumen", () => {
     });
     expect(r.nada).toBe("hijau");
   });
+
+  it("pembubuhan yang masuk tidak disalahartikan sebagai final", () => {
+    const r = ringkasTtdDokumen({
+      id: "sr-1", status: "menunggu_validasi", jumlah: 2,
+      membubuhkan_jumlah: 2, selesai_jumlah: 1,
+    });
+    expect(r.teks).toMatch(/menunggu validasi/i);
+    expect(r.teks).toContain("2/2 membubuhkan");
+    expect(r.teks).toContain("1/2 tervalidasi");
+    expect(r.nada).toBe("kuning");
+  });
 });
 
 describe("kelasNada", () => {
@@ -82,6 +93,8 @@ describe("kelasNada", () => {
 describe("bisaTerbitUlang", () => {
   it("yang sudah menandatangani tidak perlu tautan lagi", () => {
     expect(bisaTerbitUlang({ status: "ditandatangani" })).toBe(false);
+    expect(bisaTerbitUlang({ status: "terverifikasi" })).toBe(false);
+    expect(bisaTerbitUlang({ status: "menunggu_validasi" })).toBe(false);
     expect(bisaTerbitUlang({ status: "aktif" })).toBe(true);
     expect(bisaTerbitUlang({ status: "menunggu" })).toBe(true);
   });

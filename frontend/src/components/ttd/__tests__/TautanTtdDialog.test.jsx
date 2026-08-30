@@ -26,6 +26,8 @@ const DETAIL = {
       status: "aktif", kedaluwarsa_info: { sisa_detik: 0, perkiraan: false } },
     { signer_id: "s2", nama: "Sari", jabatan: "Pemegang",
       status: "ditandatangani", kedaluwarsa_info: { sisa_detik: 0 } },
+    { signer_id: "s3", nama: "Tono", jabatan: "Validator",
+      status: "menunggu_validasi", kedaluwarsa_info: { sisa_detik: 0 } },
   ],
 };
 
@@ -64,7 +66,14 @@ test("yang sudah menandatangani tidak ditawari tautan lagi", async () => {
   pasang();
   await screen.findByTestId("ttd-signer-s2");
   expect(screen.queryByTestId("ttd-terbit-ulang-s2")).toBeNull();
-  expect(screen.getByText("Sudah menandatangani")).toBeInTheDocument();
+  expect(screen.getByText("Terverifikasi")).toBeInTheDocument();
+});
+
+test("yang menunggu validasi juga tidak ditawari tautan biasa", async () => {
+  pasang();
+  await screen.findByTestId("ttd-signer-s3");
+  expect(screen.queryByTestId("ttd-terbit-ulang-s3")).toBeNull();
+  expect(screen.getByText("Menunggu validasi")).toBeInTheDocument();
 });
 
 test("terbitkan ulang menembak endpoint penanda tangan itu saja", async () => {

@@ -33,10 +33,18 @@ from ttd_penautan import (TAUT_TTD, kedaluwarsa_terdekat,
 from shared_utils import (
     scope_query_field_satker,
     cek_magic_gambar, delete_document_from_gridfs, get_document_from_gridfs,
-    limiter, log_audit, pastikan_akses_dok_satker,
+    get_idempotent_response, kunci_idem, limiter, log_audit,
+    pastikan_akses_dok_satker, reserve_idempotency_key,
+    store_idempotent_response,
 )
-from ttd_kelengkapan import normalisasi_jumlah_ttd, pesan_kurang
+from ttd_kelengkapan import (
+    jumlah_pembubuhan, normalisasi_jumlah_ttd, pesan_deklarasi_tanpa_area,
+)
 from ttd_utils import foto_ke_png_transparan, png_transparan_valid
+from ttd_validasi import (
+    judul_ttd_tampil, label_jenis_ttd, status_permintaan, sudah_membubuhkan,
+    sudah_terverifikasi,
+)
 
 ttd_router = APIRouter()
 
@@ -78,6 +86,12 @@ class SpesimenIn(BaseModel):
     # hanya bisa membubuhkan SATU tanda tangan dan lembar sisanya terbit
     # kosong — dokumen resmi yang tampak lengkap padahal belum diteken.
     posisi_lain: list | None = None
+    # Jalan keluar bila pemilik dokumen salah mendeklarasikan jumlah tempat
+    # TTD terlalu besar. Penanda tangan menyatakan sudah memeriksa seluruh PDF
+    # dan tidak menemukan area miliknya lagi; kiriman TIDAK langsung final,
+    # melainkan masuk ke validator operator/admin satker.
+    deklarasi_tanpa_area: bool = False
+    catatan_deklarasi: str = ""
 
 
 # ── Jejak identitas pada TTD berposisi bebas ────────────────────────────────
@@ -414,6 +428,17 @@ class PermintaanIn(BaseModel):
     signers: List[SignerIn]
 
 
+class ValidasiPembubuhanIn(BaseModel):
+    """Keputusan pengelola atas SATU pembubuhan.
+
+    ``buka_ulang`` sengaja bekerja per penanda tangan. Dokumen asli dan
+    pembubuhan rekan lain tidak disentuh; bukti lama dipindahkan ke riwayat
+    agar koreksi tidak menghapus jejak audit.
+    """
+    aksi: str = "setujui"            # setujui | buka_ulang
+    alasan: str = ""
+
+
 def _link_ttd(sr_id, token):
     rel = f"/ttd/{sr_id}?token={token}"
     return (_APP_URL + rel) if _APP_URL else rel
@@ -625,7 +650,10 @@ async def _ringkas_dokumen(doc_type: str, doc_ref: str) -> dict:
 def _publik_signer(sg):
     """Bidang aman signer untuk halaman publik (tanpa jti/token)."""
     return {k: sg.get(k) for k in ("signer_id", "nama", "nip", "jabatan",
-                                   "urutan", "status", "signed_at")
+                                   "urutan", "status", "signed_at",
+                                   "validated_at", "deklarasi_tanpa_area",
+                                   "deklarasi_jumlah_aktual",
+                                   "deklarasi_jumlah_diminta")
             } | {"jumlah_ttd": normalisasi_jumlah_ttd(sg.get("jumlah_ttd"))}
 
 
@@ -745,8 +773,12 @@ async def buat_permintaan(payload: PermintaanIn,
         # Isolasi multi-satker: tanpa stempel ini admin satker LAIN dapat
         # melihat & membatalkan permintaan TTD (dokumen + PII penandatangan).
         "kode_satker": kode_sat,
+        # OCC untuk tindakan validator/reopen. Permintaan era-lama tanpa field
+        # ini diperlakukan sebagai versi 1 dan diinisialisasi saat dimutasi.
+        "version": 1,
         "created_by": user.get("username", "system"),
         "created_at": now.isoformat(),
+        "riwayat_validasi": [],
         # Ringkasan DIBEKUKAN untuk isi pesan WA/email (lihat _ringkas_dokumen).
         "ringkas": await _ringkas_dokumen(payload.doc_type, payload.doc_ref),
     }
@@ -1095,6 +1127,10 @@ async def atur_posisi_qr(sr_id: str, payload: PosisiQrIn,
         raise HTTPException(status_code=400, detail=(
             "Permintaan ini tidak melampirkan dokumen — tak ada halaman untuk "
             "menempatkan QR"))
+    if sr.get("status") != "selesai" or not _semua_terverifikasi(sr):
+        raise HTTPException(status_code=409, detail=(
+            "QR final baru dapat ditempatkan setelah seluruh pembubuhan "
+            "divalidasi operator/admin satker"))
     posisi = _posisi_qr_bersih(payload.posisi_qr,
                                int(sr.get("dok_halaman") or 0))
     await db.signature_requests.update_one({"id": sr_id},
@@ -1415,6 +1451,11 @@ def _semua_sudah_ttd(sr: dict) -> bool:
         str(s.get("signature_file_id") or "").strip() for s in daftar)
 
 
+def _semua_terverifikasi(sr: dict) -> bool:
+    daftar = sr.get("signers") or []
+    return bool(daftar) and all(sudah_terverifikasi(s) for s in daftar)
+
+
 def _qr_sudah_diatur(sr: dict) -> bool:
     return isinstance(sr.get("posisi_qr"), dict)
 
@@ -1425,17 +1466,56 @@ def _siap_diunduh(sr: dict) -> bool:
     Syarat (b) sengaja: tanpa itu QR jatuh di slot otomatis yang bisa menimpa
     kaki halaman — dan status "belum diatur" itulah yang dipakai layar
     pengelola (admin maupun operator) sebagai penanda agar segera diatur."""
-    return (sr.get("status") != "batal" and _semua_sudah_ttd(sr)
+    return (sr.get("status") == "selesai" and _semua_terverifikasi(sr)
+            and _semua_sudah_ttd(sr)
             and _qr_sudah_diatur(sr)
             and bool(str(sr.get("dok_file_id") or "").strip()))
 
 
+async def _catat_penyelesaian_ttd(sr: dict, sr_id: str) -> None:
+    """Tulis tautan balik ke dokumen sumber SETELAH validasi final.
+
+    Pada alur lama tautan ini ditulis segera setelah semua orang mengirim
+    gambar TTD. Sekarang itu terlalu dini: hasilnya masih harus diperiksa
+    operator/admin satker. Query ikut dibatasi kode satker permintaan agar
+    ``doc_ref`` mentah tidak dapat menulis record satker lain.
+    """
+    doc_type = str((sr or {}).get("doc_type") or "").strip().lower()
+    doc_ref = str((sr or {}).get("doc_ref") or "").strip()
+    if not doc_ref:
+        return
+    q = {"id": doc_ref}
+    kode = str((sr or {}).get("kode_satker") or "").strip()
+    if kode:
+        q["kode_satker"] = kode
+    now_iso = datetime.now(timezone.utc).isoformat()
+    if doc_type == "bast":
+        hasil = await db.bast_serah_terima.update_one(
+            q, {"$set": {"signature_request_id": sr_id,
+                         "tt_esign_selesai_pada": now_iso,
+                         "tt_dicabut": False}})
+        if hasil.matched_count:
+            await db.assets.update_many(
+                {"bast_terakhir.id": doc_ref,
+                 **({"kode_satker": kode} if kode else {}),
+                 "bast_terakhir.tt_dicabut": True},
+                {"$set": {"bast_terakhir.tt_dicabut": False}})
+    elif doc_type == "lpb":
+        await db.lpb.update_one(
+            q, {"$set": {"signature_request_id": sr_id,
+                         "tt_esign_selesai_pada": now_iso,
+                         "tt_dicabut": False}})
+
+
 def _respons_pdf_ttd(sr: dict, out: io.BytesIO):
     nama_dok = str(sr.get("dok_nama") or "dokumen.pdf").rsplit(".", 1)[0]
+    final = sr.get("status") == "selesai" and _semua_terverifikasi(sr)
+    akhiran = "ber-TTD" if final else "DRAF-pemeriksaan-TTD"
     return StreamingResponse(
         out, media_type="application/pdf",
         headers={"Content-Disposition":
-                 f'inline; filename="{nama_dok}_ber-TTD.pdf"',
+                 f'inline; filename="{nama_dok}_{akhiran}.pdf"',
+                 "X-Document-Status": "final" if final else "draft-review",
                  "X-Content-Type-Options": "nosniff"})
 
 
@@ -1456,7 +1536,9 @@ async def dokumen_ber_ttd(sr_id: str,
                for s in (sr.get("signers") or [])):
         raise HTTPException(status_code=400,
                             detail="Belum ada tanda tangan yang masuk")
-    return _respons_pdf_ttd(sr, await _bangun_pdf_ber_ttd(sr, sr_id, data))
+    final = sr.get("status") == "selesai" and _semua_terverifikasi(sr)
+    return _respons_pdf_ttd(
+        sr, await _bangun_pdf_ber_ttd(sr, sr_id, data, sertakan_qr=final))
 
 
 @ttd_router.get("/ttd/tandatangan/{sr_id}/dokumen-ttd")
@@ -1514,14 +1596,23 @@ async def daftar_permintaan(_user: dict = Depends(require_user)):
                    .sort("created_at", -1).limit(200).to_list(200))
     for it in items:
         sg = it.get("signers") or []
+        it["version"] = int(it.get("version", 1) or 1)
+        it["label_jenis"] = label_jenis_ttd(it.get("doc_type"))
+        it["judul_tampil"] = judul_ttd_tampil(it.get("judul"), it.get("doc_type"))
         it["jumlah"] = len(sg)
-        it["selesai_jumlah"] = sum(1 for s in sg if s.get("status") == "ditandatangani")
+        it["membubuhkan_jumlah"] = sum(1 for s in sg if sudah_membubuhkan(s))
+        it["selesai_jumlah"] = sum(1 for s in sg if sudah_terverifikasi(s))
+        it["menunggu_validasi_jumlah"] = sum(
+            1 for s in sg if s.get("status") == "menunggu_validasi")
+        it["perlu_validasi"] = (it.get("status") != "batal"
+                                and it["menunggu_validasi_jumlah"] > 0)
         # Penanda kerja untuk layar admin: yang SUDAH lengkap diteken tapi QR-nya
         # belum ditempatkan menahan unduhan bagi penanda tangan & pemindai QR —
         # tampilkan mencolok supaya segera dibereskan.
-        it["perlu_atur_qr"] = (it.get("status") != "batal"
+        it["perlu_atur_qr"] = (it.get("status") == "selesai"
                                and bool(str(it.get("dok_file_id") or "").strip())
-                               and _semua_sudah_ttd(it) and not _qr_sudah_diatur(it))
+                               and _semua_terverifikasi(it)
+                               and not _qr_sudah_diatur(it))
         it["siap_diunduh"] = _siap_diunduh(it)
         # Sisa waktu kartu = batas TERCEPAT di antara penanda tangan yang BELUM
         # meneken. Yang sudah meneken tak lagi relevan, dan menampilkan batas
@@ -1543,11 +1634,230 @@ async def detail_permintaan(sr_id: str, user: dict = Depends(require_user)):
     for _sg in (sr.get("signers") or []):
         _sg["kedaluwarsa_info"] = _sisa_kedaluwarsa(_sg, sr)
     return {**sr,
-            "perlu_atur_qr": (sr.get("status") != "batal"
+            "version": int(sr.get("version", 1) or 1),
+            "label_jenis": label_jenis_ttd(sr.get("doc_type")),
+            "judul_tampil": judul_ttd_tampil(sr.get("judul"), sr.get("doc_type")),
+            "perlu_validasi": any(
+                s.get("status") == "menunggu_validasi" for s in sr.get("signers") or []),
+            "perlu_atur_qr": (sr.get("status") == "selesai"
                               and bool(str(sr.get("dok_file_id") or "").strip())
-                              and _semua_sudah_ttd(sr)
+                              and _semua_terverifikasi(sr)
                               and not _qr_sudah_diatur(sr)),
             "siap_diunduh": _siap_diunduh(sr)}
+
+
+@ttd_router.post("/ttd/permintaan/{sr_id}/validasi/{signer_id}")
+async def validasi_pembubuhan(
+    sr_id: str, signer_id: str, payload: ValidasiPembubuhanIn,
+    request: Request, user: dict = Depends(require_writer),
+):
+    """Validasi atau buka ulang pembubuhan SATU penanda tangan.
+
+    ``If-Match`` wajib agar dua validator tidak menimpa keputusan satu sama
+    lain. ``Idempotency-Key`` mencegah klik/kiriman ulang membuat dua catatan
+    validasi atau dua tautan baru. Dokumen yang sudah final tidak dapat dibuka
+    ulang lewat jalur koreksi internal ini; setelah terbit harus memakai tata
+    kelola ralat/perubahan dokumen resmi.
+    """
+    aksi = str(payload.aksi or "").strip().lower()
+    alasan = str(payload.alasan or "").strip()
+    if aksi not in {"setujui", "buka_ulang"}:
+        raise HTTPException(status_code=400,
+                            detail="Aksi harus 'setujui' atau 'buka_ulang'")
+    if aksi == "buka_ulang" and not alasan:
+        raise HTTPException(status_code=400,
+                            detail="Alasan membuka ulang wajib dicatat")
+
+    if_match = request.headers.get("If-Match", "").strip().strip('"')
+    if not if_match.isdigit() or int(if_match) < 1:
+        raise HTTPException(
+            status_code=428,
+            detail="Header If-Match (versi permintaan) wajib disertakan")
+    expected_version = int(if_match)
+
+    sr = await db.signature_requests.find_one({"id": sr_id}, _PROJ)
+    if not sr:
+        raise HTTPException(status_code=404, detail="Permintaan tidak ditemukan")
+    _pastikan_pengelola_sr(sr, user)
+    raw_idem = request.headers.get("Idempotency-Key", "").strip()
+    idem_key = kunci_idem(
+        f"ttd-validasi:{sr_id}:{signer_id}:{aksi}:{raw_idem}" if raw_idem else "",
+        user)
+    # Replay harus diperiksa SEBELUM If-Match/status: respons pertama memang
+    # sudah menaikkan version dan mengubah status signer. Bila urutannya
+    # terbalik, retry yang sah selalu ditolak 409 dan idempotensi cuma nama.
+    if idem_key:
+        cached = await get_idempotent_response(idem_key)
+        if cached and cached.get("response") is not None:
+            return cached["response"]
+    _tolak_bila_batal(sr)
+
+    # Normalisasi dokumen era lama sebelum CAS. Tanpa ini `$inc` pada field
+    # yang hilang menghasilkan 1 (bukan 2), sehingga versi klien tidak maju.
+    if "version" not in sr:
+        await db.signature_requests.update_one(
+            {"id": sr_id, "version": {"$exists": False}},
+            {"$set": {"version": 1}})
+        sr["version"] = 1
+    current_version = int(sr.get("version", 1) or 1)
+    if expected_version != current_version:
+        raise HTTPException(
+            status_code=409,
+            detail={"message": "Permintaan telah diubah. Muat ulang sebelum memvalidasi.",
+                    "current_version": current_version,
+                    "your_version": expected_version})
+
+    signers = sr.get("signers") or []
+    sg = next((s for s in signers if s.get("signer_id") == signer_id), None)
+    if not sg:
+        raise HTTPException(status_code=404, detail="Penanda tangan tidak dikenal")
+    status_lama = str(sg.get("status") or "")
+    if aksi == "setujui" and status_lama != "menunggu_validasi":
+        raise HTTPException(status_code=409,
+                            detail="Pembubuhan ini tidak sedang menunggu validasi")
+    if aksi == "setujui" and sg.get("deklarasi_tanpa_area") and not alasan:
+        raise HTTPException(
+            status_code=400,
+            detail="Catatan pemeriksaan wajib untuk deklarasi tidak ada area TTD")
+    if aksi == "buka_ulang":
+        if sr.get("status") == "selesai":
+            raise HTTPException(
+                status_code=409,
+                detail=("Dokumen sudah final. Gunakan naskah ralat/perubahan "
+                        "resmi; jangan membuka ulang pembubuhan diam-diam."))
+        if status_lama not in {"menunggu_validasi", "terverifikasi"}:
+            raise HTTPException(status_code=409,
+                                detail="Pembubuhan ini belum dapat dibuka ulang")
+
+    if idem_key:
+        kepemilikan = await reserve_idempotency_key(idem_key)
+        if kepemilikan == "done":
+            cached = await get_idempotent_response(idem_key)
+            if cached and cached.get("response") is not None:
+                return cached["response"]
+        elif kepemilikan == "pending":
+            raise HTTPException(
+                status_code=409,
+                detail="Keputusan dengan kunci ini sedang diproses; tunggu sebentar")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    actor = user.get("username", "system")
+    daftar_baru = [dict(s) for s in signers]
+    target_baru = next(s for s in daftar_baru if s.get("signer_id") == signer_id)
+
+    if aksi == "setujui":
+        target_baru["status"] = "terverifikasi"
+        status_baru = status_permintaan(daftar_baru)
+        event = {"aksi": "setujui", "signer_id": signer_id,
+                 "nama": sg.get("nama", ""), "dari_status": status_lama,
+                 "ke_status": "terverifikasi", "alasan": alasan,
+                 "oleh": actor, "pada": now_iso,
+                 "deklarasi_tanpa_area": bool(sg.get("deklarasi_tanpa_area")),
+                 "jumlah_aktual": sg.get("deklarasi_jumlah_aktual"),
+                 "jumlah_diminta": sg.get("deklarasi_jumlah_diminta")}
+        set_data = {
+            "signers.$.status": "terverifikasi",
+            "signers.$.validated_at": now_iso,
+            "signers.$.validated_by": actor,
+            "signers.$.validation_note": alasan,
+            "status": status_baru,
+            "updated_at": now_iso,
+        }
+        if status_baru == "selesai":
+            set_data.update({"finalized_at": now_iso, "finalized_by": actor})
+        res = await db.signature_requests.update_one(
+            {"id": sr_id, "version": current_version,
+             "status": {"$ne": "batal"},
+             "signers": {"$elemMatch": {"signer_id": signer_id,
+                                          "status": "menunggu_validasi"}}},
+            {"$set": set_data, "$inc": {"version": 1},
+             "$push": {"riwayat_validasi": event}})
+        if res.modified_count == 0:
+            raise HTTPException(
+                status_code=409,
+                detail="Permintaan berubah saat divalidasi. Muat ulang dan periksa lagi.")
+        terkini = await db.signature_requests.find_one({"id": sr_id}, _PROJ)
+        if status_baru == "selesai":
+            await _catat_penyelesaian_ttd(terkini or sr, sr_id)
+        respons = {"ok": True, "aksi": aksi, "status": status_baru,
+                   "version": current_version + 1,
+                   "menunggu_validasi": status_baru != "selesai"}
+        await log_audit(
+            "validasi_ttd", "", sr_id, username=actor,
+            detail=(f"Pembubuhan {sg.get('nama') or signer_id} disetujui"
+                    + (f": {alasan}" if alasan else "")))
+    else:
+        jti = str(uuid.uuid4())
+        token, exp_tok = _cetak_token_signer(sr_id, signer_id, jti)
+        target_baru["status"] = "aktif"
+        target_baru["signature_file_id"] = ""
+        status_baru = status_permintaan(daftar_baru)
+        event = {
+            "aksi": "buka_ulang", "signer_id": signer_id,
+            "nama": sg.get("nama", ""), "dari_status": status_lama,
+            "ke_status": "aktif", "alasan": alasan, "oleh": actor,
+            "pada": now_iso,
+            # Bukti lama dipertahankan sebagai arsip, bukan dihapus dari
+            # GridFS. Ini penting untuk menjelaskan apa yang diperbaiki.
+            "bukti_lama": {
+                "signature_file_id": sg.get("signature_file_id", ""),
+                "hash": sg.get("hash", ""),
+                "signed_at": sg.get("signed_at", ""),
+                "posisi_ttd": sg.get("posisi_ttd"),
+                "posisi_ttd_lain": sg.get("posisi_ttd_lain") or [],
+                "deklarasi_tanpa_area": bool(sg.get("deklarasi_tanpa_area")),
+                "deklarasi_jumlah_aktual": sg.get("deklarasi_jumlah_aktual"),
+                "deklarasi_jumlah_diminta": sg.get("deklarasi_jumlah_diminta"),
+            },
+        }
+        kosongkan = {
+            "signers.$.signature_file_id": "", "signers.$.hash": "",
+            "signers.$.signed_at": "", "signers.$.posisi_ttd": "",
+            "signers.$.posisi_ttd_lain": "", "signers.$.ip": "",
+            "signers.$.deklarasi_tanpa_area": "",
+            "signers.$.deklarasi_jumlah_aktual": "",
+            "signers.$.deklarasi_jumlah_diminta": "",
+            "signers.$.deklarasi_catatan": "",
+            "signers.$.deklarasi_pada": "",
+            "signers.$.validated_at": "", "signers.$.validated_by": "",
+            "signers.$.validation_note": "",
+        }
+        res = await db.signature_requests.update_one(
+            {"id": sr_id, "version": current_version,
+             "status": {"$nin": ["selesai", "batal"]},
+             "signers": {"$elemMatch": {"signer_id": signer_id,
+                                          "status": status_lama}}},
+            {"$set": {"signers.$.status": "aktif", "signers.$.jti": jti,
+                      "signers.$.token_exp": exp_tok, "status": status_baru,
+                      "updated_at": now_iso},
+             "$unset": kosongkan, "$inc": {"version": 1},
+             "$push": {"riwayat_validasi": event}})
+        if res.modified_count == 0:
+            raise HTTPException(
+                status_code=409,
+                detail="Permintaan berubah saat dibuka ulang. Muat ulang dan periksa lagi.")
+
+        from tautan_pendek_utils import cabut_tautan
+        await cabut_tautan("ttd", sr_id, sub_ref=signer_id)
+        link = await _link_ttd_pendek(
+            sr_id, token, signer_id=signer_id,
+            kode_satker=str(sr.get("kode_satker") or ""), oleh=actor)
+        email_terkirim = False
+        if str(sg.get("email") or "").strip():
+            from shared_utils import send_esign_email
+            email_terkirim = await send_esign_email(
+                sg["email"], sg.get("nama") or "",
+                sr.get("judul") or "Dokumen", link)
+        respons = {"ok": True, "aksi": aksi, "status": status_baru,
+                   "version": current_version + 1, "link": link,
+                   "nama": sg.get("nama"), "email_terkirim": email_terkirim}
+        await log_audit(
+            "buka_ulang_ttd", "", sr_id, username=actor,
+            detail=f"Pembubuhan {sg.get('nama') or signer_id} dibuka ulang: {alasan}")
+
+    if idem_key:
+        await store_idempotent_response(idem_key, respons)
+    return respons
 
 
 @ttd_router.delete("/ttd/permintaan/{sr_id}")
@@ -1654,8 +1964,10 @@ async def buat_ulang_link(sr_id: str, signer_id: str,
                 if s.get("signer_id") == signer_id), -1)
     if idx < 0:
         raise HTTPException(status_code=404, detail="Penanda tangan tidak dikenal")
-    if signers[idx].get("status") == "ditandatangani":
-        raise HTTPException(status_code=409, detail="Sudah ditandatangani — link tidak diperlukan")
+    if sudah_membubuhkan(signers[idx]):
+        raise HTTPException(
+            status_code=409,
+            detail="Pembubuhan sudah masuk — gunakan Buka Ulang bila perlu koreksi")
     jti = str(uuid.uuid4())
     token, exp_tok = _cetak_token_signer(sr_id, signer_id, jti)
     # token_exp ikut diperbarui: link BARU berlaku 14 hari sejak SEKARANG,
@@ -1703,11 +2015,16 @@ async def info_tandatangan(sr_id: str, tok: dict = Depends(require_sign_token)):
                             detail="Link ini sudah tidak berlaku (telah diterbitkan ulang)")
     bisa = sg.get("status") == "aktif"
     alasan = ""
-    if sg.get("status") == "ditandatangani":
-        alasan = "Anda sudah menandatangani dokumen ini."
+    if sg.get("status") == "menunggu_validasi":
+        alasan = ("Pembubuhan Anda sudah masuk dan sedang diperiksa "
+                  "operator/admin satker.")
+    elif sg.get("status") in ("terverifikasi", "ditandatangani"):
+        alasan = "Pembubuhan Anda sudah diverifikasi dan dinyatakan sesuai."
     elif sg.get("status") == "menunggu":
         alasan = "Menunggu giliran penanda tangan sebelumnya (mode berurutan)."
     return {"id": sr_id, "judul": sr.get("judul"), "doc_type": sr.get("doc_type"),
+            "label_jenis": label_jenis_ttd(sr.get("doc_type")),
+            "judul_tampil": judul_ttd_tampil(sr.get("judul"), sr.get("doc_type")),
             "mode": sr.get("mode"), "status_dokumen": sr.get("status"),
             # Penanda tangan berhak tahu seberapa cepat ini dituntut — kalau
             # hanya hidup di kepala pengirim, "segera" tak mengubah apa pun.
@@ -1726,7 +2043,8 @@ async def info_tandatangan(sr_id: str, tok: dict = Depends(require_sign_token)):
             # Hasil akhir bisa diunduh penanda tangan setelah SEMUA meneken dan
             # penerbit menempatkan QR; `menunggu_qr` menerangkan penantiannya.
             "siap_diunduh": _siap_diunduh(sr),
-            "menunggu_qr": (sr.get("status") != "batal" and _semua_sudah_ttd(sr)
+            "menunggu_validasi": sr.get("status") == "menunggu_validasi",
+            "menunggu_qr": (sr.get("status") == "selesai" and _semua_terverifikasi(sr)
                             and not _qr_sudah_diatur(sr)
                             and bool(str(sr.get("dok_file_id") or "").strip()))}
 
@@ -1746,7 +2064,7 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
     if idx < 0:
         raise HTTPException(status_code=404, detail="Penanda tangan tidak dikenal")
     sg = signers[idx]
-    if sg.get("jti") != tok["jti"] or sg.get("status") == "ditandatangani":
+    if sg.get("jti") != tok["jti"] or sudah_membubuhkan(sg):
         raise HTTPException(status_code=409, detail="Link sudah dipakai / tidak berlaku")
     if sg.get("status") != "aktif":
         raise HTTPException(status_code=409, detail="Belum giliran Anda menandatangani")
@@ -1767,7 +2085,16 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
     # penolakan tak meninggalkan berkas yatim di GridFS — dan dihitung dari
     # posisi yang SUDAH dibersihkan, bukan dari kiriman mentah, agar entri
     # rusak yang dibuang tak ikut terhitung sebagai pembubuhan yang sah.
-    _kurang = pesan_kurang(sg.get("jumlah_ttd"), posisi_ttd, posisi_lain)
+    _ada_dokumen = bool(str(sr.get("dok_file_id") or "").strip())
+    # Tanpa PDF, gambar TTD itu sendiri adalah satu pembubuhan pada Lembar
+    # Pengesahan (perilaku lama). Deklarasi kekurangan hanya masuk akal pada
+    # PDF yang bisa diperiksa halaman demi halaman.
+    _kurang = ("" if not _ada_dokumen
+               and normalisasi_jumlah_ttd(sg.get("jumlah_ttd")) == 1 else
+               pesan_deklarasi_tanpa_area(
+                   sg.get("jumlah_ttd"), posisi_ttd, posisi_lain,
+                   deklarasi=bool(payload.deklarasi_tanpa_area),
+                   ada_dokumen=_ada_dokumen))
     if _kurang:
         raise HTTPException(status_code=400, detail=_kurang)
     # QR verifikasi TIDAK diatur di sini (mandat pemilik): dulu tiap penanda
@@ -1789,7 +2116,12 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
     # bersamaan tidak lagi saling menimpa (lost-update), dan filter jti/
     # status/batal di sini menutup jendela race pembatalan/link-lama yang
     # terbuka selama upload GridFS multi-await di atas.
-    set_fields = {"signers.$.status": "ditandatangani",
+    _jumlah_aktual = (jumlah_pembubuhan(posisi_ttd, posisi_lain)
+                      if _ada_dokumen else 1)
+    _jumlah_diminta = normalisasi_jumlah_ttd(sg.get("jumlah_ttd"))
+    _pakai_deklarasi = bool(payload.deklarasi_tanpa_area
+                            and _jumlah_aktual < _jumlah_diminta)
+    set_fields = {"signers.$.status": "menunggu_validasi",
                   "signers.$.signature_file_id": str(file_id),
                   "signers.$.hash": h,
                   "signers.$.signed_at": now.isoformat(),
@@ -1798,12 +2130,20 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
                   "signers.$.posisi_ttd": posisi_ttd,
                   # Pembubuhan tambahan (lembar lanjutan, lampiran pernyataan).
                   "signers.$.posisi_ttd_lain": posisi_lain,
+                  "signers.$.deklarasi_tanpa_area": _pakai_deklarasi,
+                  "signers.$.deklarasi_jumlah_aktual": _jumlah_aktual,
+                  "signers.$.deklarasi_jumlah_diminta": _jumlah_diminta,
+                  "signers.$.deklarasi_catatan": (
+                      str(payload.catatan_deklarasi or "").strip()
+                      if _pakai_deklarasi else ""),
+                  "signers.$.deklarasi_pada": (now.isoformat()
+                                                if _pakai_deklarasi else ""),
                   "signers.$.ip": (request.client.host if request.client else "")}
     res = await db.signature_requests.update_one(
         {"id": sr_id, "status": {"$ne": "batal"},
          "signers": {"$elemMatch": {"signer_id": tok["signer"],
                                     "jti": tok["jti"], "status": "aktif"}}},
-        {"$set": set_fields})
+        {"$set": set_fields, "$inc": {"version": 1}})
     if res.modified_count == 0:
         # Kalah race (sudah ttd / dibatalkan / link diganti) — bersihkan blob.
         try:
@@ -1861,45 +2201,25 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
                     nxt_sg["email"], nxt_sg.get("nama") or "",
                     (segar or {}).get("judul") or "Dokumen",
                     _link_ttd(sr_id, tok_nxt))
-    semua = bool(signers_segar) and all(
-        s.get("status") == "ditandatangani" for s in signers_segar)
-    status_dok = "selesai" if semua else "sebagian"
-    # "sebagian" tidak boleh menimpa "selesai" — dua submit paralel bisa
-    # membuat pembacaan basi; status final hanya bergerak maju.
-    kunci_status = (["batal"] if semua else ["batal", "selesai"])
+    status_dok = status_permintaan(signers_segar)
+    # Pembubuhan TIDAK pernah membuat permintaan final. Status final hanya
+    # bisa lahir dari endpoint validasi pengelola. Filter berbeda mencegah
+    # submit paralel yang membaca keadaan basi menurunkan "menunggu_validasi"
+    # kembali menjadi "sebagian".
+    if status_dok == "menunggu_validasi":
+        filter_status = {"$nin": ["batal", "selesai"]}
+    else:
+        filter_status = {"$in": ["terkirim", "sebagian"]}
     await db.signature_requests.update_one(
-        {"id": sr_id, "status": {"$nin": kunci_status}},
-        {"$set": {"status": status_dok}})
-    # BACK-LINK dua-arah TTD↔BAST: saat SEMUA pihak selesai meneken dan
-    # permintaan ini menaut BAST terstruktur (doc_type='bast' + doc_ref = id
-    # BAST, dari tombol "Kirim ke TTD"), tulis signature_request_id ke BAST.
-    # Idempoten ($set nilai sama aman diulang). Menjadi tumpuan cascade
-    # pembatalan (sinyal lunak) di langkah berikutnya.
-    if semua and sr.get("doc_type") == "bast" and str(sr.get("doc_ref") or "").strip():
-        doc_ref = str(sr["doc_ref"]).strip()
-        # Penyelesaian e-sign menulis back-link + MEMBERSIHKAN penanda "dicabut"
-        # dari pembatalan sebelumnya (bila BAST ini di-TTD ULANG lalu selesai) —
-        # pada BAST maupun aset terkait, agar tanda tak menyesatkan menetap.
-        await db.bast_serah_terima.update_one(
-            {"id": doc_ref},
-            {"$set": {"signature_request_id": sr_id,
-                      "tt_esign_selesai_pada": datetime.now(timezone.utc).isoformat(),
-                      "tt_dicabut": False}})
-        await db.assets.update_many(
-            {"bast_terakhir.id": doc_ref, "bast_terakhir.tt_dicabut": True},
-            {"$set": {"bast_terakhir.tt_dicabut": False}})
-    # Pola yang sama untuk LPB (doc_type='lpb'): tanpa tautan balik ini, layar
-    # Riwayat LPB tak punya cara menjawab "yang mana yang sudah lengkap
-    # tandatangannya" selain membuka satu per satu.
-    if semua and sr.get("doc_type") == "lpb" and str(sr.get("doc_ref") or "").strip():
-        await db.lpb.update_one(
-            {"id": str(sr["doc_ref"]).strip()},
-            {"$set": {"signature_request_id": sr_id,
-                      "tt_esign_selesai_pada": datetime.now(timezone.utc).isoformat(),
-                      "tt_dicabut": False}})
-    await log_audit("kirim_ttd", "", sr_id, username=sg.get("nama") or "tamu",
-                    detail=f"E-sign '{sr.get('judul')}' oleh {sg.get('nama')}")
+        {"id": sr_id, "status": filter_status},
+        {"$set": {"status": status_dok,
+                  "updated_at": datetime.now(timezone.utc).isoformat()}})
+    await log_audit(
+        "kirim_ttd", "", sr_id, username=sg.get("nama") or "tamu",
+        detail=(f"Pembubuhan e-sign '{sr.get('judul')}' oleh {sg.get('nama')} "
+                "dikirim untuk validasi operator/admin satker"))
     return {"ok": True, "status_dokumen": status_dok,
+            "menunggu_validasi": True,
             "verifikasi": f"/ttd/verifikasi/{sr_id}"}
 
 
@@ -1934,18 +2254,24 @@ async def verifikasi_publik(sr_id: str):
                         "created_at": 1, "dok_file_id": 1, "posisi_qr": 1,
                         "signers.nama": 1, "signers.jabatan": 1,
                         "signers.nip": 1, "signers.status": 1,
-                        "signers.signed_at": 1, "signers.signature_file_id": 1})
+                        "signers.signed_at": 1, "signers.validated_at": 1,
+                        "signers.signature_file_id": 1})
     if not sr:
         raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
     dibatalkan = sr.get("status") == "batal"
     return {
         "judul": sr.get("judul"), "doc_type": sr.get("doc_type"),
+        "label_jenis": label_jenis_ttd(sr.get("doc_type")),
+        "judul_tampil": judul_ttd_tampil(sr.get("judul"), sr.get("doc_type")),
         "status": sr.get("status"), "dibuat": sr.get("created_at"),
         # Unduhan dokumen ber-TTD dari halaman verifikasi: hanya setelah semua
         # meneken DAN QR ditempatkan. `menunggu_qr` dipakai layar untuk
         # menerangkan mengapa tombolnya belum ada (bukan diam-diam hilang).
         "dapat_unduh": _siap_diunduh(sr),
-        "menunggu_qr": (not dibatalkan and _semua_sudah_ttd(sr)
+        "menunggu_validasi": (not dibatalkan
+                               and sr.get("status") == "menunggu_validasi"),
+        "menunggu_qr": (not dibatalkan and sr.get("status") == "selesai"
+                        and _semua_terverifikasi(sr)
                         and not _qr_sudah_diatur(sr)
                         and bool(str(sr.get("dok_file_id") or "").strip())),
         # Tanda pembatalan eksplisit agar halaman publik menegaskan dokumen
@@ -1956,14 +2282,18 @@ async def verifikasi_publik(sr_id: str):
              # NIP di-masking di halaman verifikasi PUBLIK (data pribadi):
              # cukup 3 digit akhir untuk memastikan kecocokan, sisanya bintang.
              "nip": _mask_nip(s.get("nip")), "status": s.get("status"),
-             "signed_at": s.get("signed_at")}
+             "signed_at": s.get("signed_at"),
+             "validated_at": s.get("validated_at")}
             for s in sr.get("signers") or []],
         "catatan": ("PERMINTAAN TANDA TANGAN INI TELAH DIBATALKAN — tanda tangan "
                     "elektronik yang tercantum TIDAK berlaku."
-                    if dibatalkan else
+                    if dibatalkan else (
+                    "Pembubuhan masih menunggu validasi operator/admin satker "
+                    "dan belum merupakan dokumen final."
+                    if sr.get("status") != "selesai" else
                     "Tanda tangan elektronik internal satker (integritas + "
                     "jejak audit). Sah tanpa tanda tangan basah untuk keperluan "
-                    "administrasi internal."),
+                    "administrasi internal.")),
     }
 
 
@@ -1994,6 +2324,10 @@ async def lembar_pdf(sr_id: str, user: dict = Depends(require_user_or_query_toke
     el.extend(_kop_surat_flowables(settings, doc.width))
     el.extend(_title_block("LEMBAR PENGESAHAN\nTANDA TANGAN ELEKTRONIK",
                            subjudul=sr.get("judul")))
+    if sr.get("status") != "selesai" or not _semua_terverifikasi(sr):
+        el.append(Paragraph(
+            "<b>DRAF PEMERIKSAAN — BELUM DIVALIDASI / BELUM FINAL</b>",
+            st['Meta']))
     el.append(Paragraph(
         f"Dokumen: <b>{sr.get('judul')}</b> · Mode: {sr.get('mode')} · "
         f"Status: {sr.get('status')}", st['Meta']))
@@ -2044,10 +2378,16 @@ async def lembar_pdf(sr_id: str, user: dict = Depends(require_user_or_query_toke
         el.append(build_qr_flowable(verif, 28 * rl_mm))
     except Exception:
         pass
+    if sr.get("status") == "selesai" and _semua_terverifikasi(sr):
+        catatan_lembar = (
+            "Ditandatangani secara elektronik — sah tanpa tanda tangan basah "
+            "untuk keperluan administrasi internal satker. ")
+    else:
+        catatan_lembar = (
+            "Lembar ini hanya bahan pemeriksaan internal dan belum boleh "
+            "diperlakukan sebagai dokumen final. ")
     el.append(Paragraph(
-        "Ditandatangani secara elektronik — sah tanpa tanda tangan basah untuk "
-        f"keperluan administrasi internal satker. Verifikasi kode: {sr_id[:8]}.",
-        st['Small']))
+        f"{catatan_lembar}Verifikasi kode: {sr_id[:8]}.", st['Small']))
 
     footer = _page_footer_factory("Lembar Pengesahan TTD Elektronik")
     await asyncio.to_thread(doc.build, el, onFirstPage=footer,

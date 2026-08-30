@@ -19,23 +19,28 @@ import { teksSisaWaktu, mendesak } from "@/lib/sisaWaktu";
 export function ringkasTtdDokumen(ttd) {
   if (!ttd || !ttd.id) return null;
   const jumlah = Number(ttd.jumlah || 0);
-  const selesai = Number(ttd.selesai_jumlah || 0);
+  const tervalidasi = Number(ttd.selesai_jumlah || 0);
+  const membubuhkan = Number(ttd.membubuhkan_jumlah ?? tervalidasi);
 
   if (ttd.status === "batal") {
     return { teks: "TTD elektronik dibatalkan", nada: "merah", perluTindakan: false };
   }
   if (ttd.semua_selesai) {
-    return { teks: `Ditandatangani lengkap (${selesai}/${jumlah})`,
+    return { teks: `Terverifikasi lengkap (${tervalidasi}/${jumlah})`,
              nada: "hijau", perluTindakan: false };
+  }
+  if (ttd.status === "menunggu_validasi" || membubuhkan > tervalidasi) {
+    return { teks: `Menunggu validasi (${membubuhkan}/${jumlah} membubuhkan · ${tervalidasi}/${jumlah} tervalidasi)`,
+             nada: "kuning", perluTindakan: false };
   }
   if (ttd.perlu_terbit_ulang) {
     // INTI laporan pemilik: sebut jalan keluarnya, jangan berhenti di
     // "kedaluwarsa".
-    return { teks: `Tautan mati — terbitkan ulang (${selesai}/${jumlah} diteken)`,
+    return { teks: `Tautan mati — terbitkan ulang (${membubuhkan}/${jumlah} membubuhkan)`,
              nada: "merah", perluTindakan: true };
   }
   const sisa = teksSisaWaktu(ttd.kedaluwarsa_terdekat);
-  const inti = `Menunggu tanda tangan (${selesai}/${jumlah})`;
+  const inti = `Menunggu tanda tangan (${membubuhkan}/${jumlah})`;
   return {
     teks: sisa ? `${inti} · tautan ${sisa}` : inti,
     nada: mendesak(ttd.kedaluwarsa_terdekat) ? "kuning" : "biru",
@@ -56,5 +61,5 @@ export function kelasNada(nada) {
 
 /** Penanda tangan yang tautannya masih berguna untuk diterbitkan ulang. */
 export function bisaTerbitUlang(signer) {
-  return String(signer?.status || "") !== "ditandatangani";
+  return ["aktif", "menunggu"].includes(String(signer?.status || ""));
 }

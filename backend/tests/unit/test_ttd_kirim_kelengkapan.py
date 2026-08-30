@@ -168,7 +168,8 @@ class TestKirimBelumLengkap:
                 "sr-1", _kirim(_pos(2), [_pos(3)]), _Req(), tok=_tok())
             sr = await fake.signature_requests.find_one({"id": "sr-1"})
             sg = sr["signers"][0]
-            assert sg["status"] == "ditandatangani"
+            assert sg["status"] == "menunggu_validasi"
+            assert sr["status"] == "menunggu_validasi"
             assert [p["halaman"] for p in sg["posisi_ttd_lain"]] == [3]
         _jalan(skenario())
 
@@ -184,7 +185,7 @@ class TestKirimBelumLengkap:
             await _unwrap(rt.kirim_tandatangan)(
                 "sr-1", _kirim(_pos(2), []), _Req(), tok=_tok())
             sr = await fake.signature_requests.find_one({"id": "sr-1"})
-            assert sr["signers"][0]["status"] == "ditandatangani"
+            assert sr["signers"][0]["status"] == "menunggu_validasi"
         _jalan(skenario())
 
     def test_pembubuhan_LEBIH_dari_wajib_tetap_diterima(self, sadapan):
@@ -195,7 +196,26 @@ class TestKirimBelumLengkap:
             await _unwrap(rt.kirim_tandatangan)(
                 "sr-1", _kirim(_pos(1), [_pos(2), _pos(3)]), _Req(), tok=_tok())
             sr = await fake.signature_requests.find_one({"id": "sr-1"})
-            assert sr["signers"][0]["status"] == "ditandatangani"
+            assert sr["signers"][0]["status"] == "menunggu_validasi"
+        _jalan(skenario())
+
+    def test_kiriman_kurang_dengan_deklarasi_masuk_antrean_validator(self, sadapan):
+        fake, _bucket = sadapan
+
+        async def skenario():
+            await _seed(fake, jumlah_ttd=3)
+            payload = _kirim(_pos(2), [])
+            payload.deklarasi_tanpa_area = True
+            payload.catatan_deklarasi = "Sudah memeriksa halaman 1 sampai 4"
+            hasil = await _unwrap(rt.kirim_tandatangan)(
+                "sr-1", payload, _Req(), tok=_tok())
+            sr = await fake.signature_requests.find_one({"id": "sr-1"})
+            sg = sr["signers"][0]
+            assert hasil["menunggu_validasi"] is True
+            assert sg["status"] == "menunggu_validasi"
+            assert sg["deklarasi_tanpa_area"] is True
+            assert sg["deklarasi_jumlah_aktual"] == 1
+            assert sg["deklarasi_jumlah_diminta"] == 3
         _jalan(skenario())
 
     def test_entri_posisi_RUSAK_tak_terhitung_sebagai_pembubuhan(self, sadapan):
