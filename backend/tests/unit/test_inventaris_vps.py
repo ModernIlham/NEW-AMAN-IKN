@@ -69,9 +69,20 @@ class TestSkripHanyaMembaca:
 
     @pytest.mark.parametrize("perintah", MENULIS)
     def test_tidak_memakai_perintah_yang_mengubah_keadaan(self, isi_skrip, perintah):
-        assert perintah not in _tanpa_komentar(isi_skrip), (
-            f"scripts/inventaris_vps.sh memakai `{perintah}`. Skrip ini dipipe "
-            "ke VPS PRODUKSI; ia harus aman dijalankan kapan pun tanpa "
+        """Dicocokkan sebagai PERINTAH, bukan sebagai potongan kata.
+
+        Versi pertama uji ini mencocokkan substring dan menolak skrip yang
+        sah: variabel `perlu_reboot` dan jalur `/var/run/reboot-required`
+        memuat kata `reboot`, dan uji menuduhnya memanggil `reboot`. Pola di
+        bawah menuntut kata itu berdiri di POSISI perintah — awal baris, atau
+        sesudah `;` `&&` `|` `(` `$(`.
+        """
+        pola = re.compile(
+            r"(?:^|[;&|(]|\$\()\s*" + re.escape(perintah) + r"(?![\w-])",
+            re.M)
+        assert not pola.search(_tanpa_komentar(isi_skrip)), (
+            f"scripts/inventaris_vps.sh memanggil `{perintah}`. Skrip ini "
+            "dipipe ke VPS PRODUKSI; ia harus aman dijalankan kapan pun tanpa "
             "membangunkan siapa pun."
         )
 
@@ -98,6 +109,17 @@ class TestSkripTidakMembocorkanRahasia:
         "/dev/null",
         "/",
         "/g",  # akhiran `sed 's/|/ /g'`, bukan jalur
+        # Bagian "Pemutakhiran sistem". Tak satu pun memuat kredensial:
+        # /boot hanya berisi nama berkas kernel; reboot-required adalah
+        # penanda kosong beserta daftar nama paket; dari history.log yang
+        # dibaca HANYA baris `Start-Date:` — berkas itu juga memuat
+        # `Commandline:` dan tak ada alasan menumpahkannya ke log Actions.
+        "/boot",
+        "/boot/vmlinuz-*",
+        "/vmlinuz-",  # potongan dari `sed 's|.*/vmlinuz-||'`
+        "/var/run/reboot-required",
+        "/var/run/reboot-required.pkgs",
+        "/var/log/apt/history.log",
         # Direktori aplikasi (default yang sama dengan scripts/deploy_vps.sh).
         # Yang dibaca dari sana HANYA `venv/bin/python --version`; berkas
         # `.env` di direktori yang sama tetap dilarang oleh
@@ -315,3 +337,66 @@ class TestPelajaranPutaranPertama:
             "kredensial pada argumen (mis. URL ber-sandi). Keluaran ini masuk "
             "ke log Actions - cukup nama program."
         )
+
+
+class TestAptHanyaDisimulasikan:
+    """`apt` boleh dipanggil, tetapi HANYA dalam mode simulasi.
+
+    Bagian "Pemutakhiran sistem" perlu tahu berapa paket yang masih bisa
+    dimutakhirkan, dan satu-satunya cara membacanya adalah lewat apt sendiri.
+    `apt-get -s` (simulate) tak mengubah apa pun, tak mengambil kunci, dan tak
+    mengunduh — tetapi jarak antara `-s` dan tanpa `-s` cuma dua karakter, dan
+    yang tanpa `-s` akan MEMUTAKHIRKAN PRODUKSI di tengah jam kerja.
+    """
+
+    def test_setiap_apt_get_memakai_simulasi(self, isi_skrip):
+        perintah = _tanpa_komentar(isi_skrip)
+        panggilan = re.findall(r"apt-get[^\n|;]*", perintah)
+        assert panggilan, "tak ada apt-get sama sekali — uji ini jadi hampa"
+        for c in panggilan:
+            assert re.search(r"(?:^|\s)-s(?:\s|$)|--simulate|--dry-run", c), (
+                f"`{c.strip()}` bukan simulasi. Tanpa `-s`, perintah ini "
+                "mengubah paket di VPS produksi."
+            )
+
+    @pytest.mark.parametrize("bahaya", [
+        "apt-get upgrade", "apt-get dist-upgrade", "apt-get autoremove",
+        "apt upgrade", "apt full-upgrade",
+    ])
+    def test_bentuk_apt_yang_mengubah_ditolak(self, isi_skrip, bahaya):
+        assert bahaya not in _tanpa_komentar(isi_skrip), (
+            f"`{bahaya}` memutakhirkan paket di VPS produksi."
+        )
+
+
+class TestPemutakhiranTerbaca:
+    """Pemilik memutakhirkan VPS lalu bertanya apakah pemutakhirannya masuk.
+
+    Alat ini semula TIDAK BISA menjawabnya: `uname -r` melaporkan kernel yang
+    sedang BERJALAN, bukan yang terpasang. Sesudah `apt upgrade` yang
+    menyertakan kernel, angka itu tak berubah sampai reboot — dan pembacanya
+    akan menyimpulkan pemutakhirannya gagal, padahal ia hanya menunggu reboot.
+    """
+
+    def test_membedakan_kernel_berjalan_dari_yang_terpasang(self, isi_skrip):
+        assert "Kernel berjalan" in isi_skrip
+        assert "Kernel terpasang" in isi_skrip
+        # Label lama "| Kernel |" tanpa keterangan justru yang menyesatkan.
+        assert 'baris "| Kernel | ' not in isi_skrip
+
+    def test_kernel_terpasang_diurutkan_menurut_VERSI(self, isi_skrip):
+        # `sort` biasa menaruh 6.8.0-99 di atas 6.8.0-140 dan melaporkan
+        # kernel yang salah sebagai "terbaru".
+        assert "sort -V" in isi_skrip, (
+            "urutan abjad akan menyebut 6.8.0-99 lebih baru daripada 6.8.0-140"
+        )
+
+    def test_menyebut_apakah_perlu_reboot(self, isi_skrip):
+        assert "/var/run/reboot-required" in isi_skrip
+        assert "Perlu reboot" in isi_skrip
+
+    def test_menghitung_sisa_paket_dengan_grep_c_bukan_grep_q(self, isi_skrip):
+        # `grep -c` membaca SELURUH masukan; `grep -q` berhenti pada kecocokan
+        # pertama dan — di bawah `pipefail` — melaporkan gagal meski cocok.
+        # Itu cacat yang pernah membuat alat ini salah lapor soal Redis.
+        assert "grep -c '^Inst " in isi_skrip
