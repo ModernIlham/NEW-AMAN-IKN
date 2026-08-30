@@ -67,6 +67,73 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#952] Pengelola Pengguna: ubah nama di samping nama, ikon berhenti bertumpuk — 2026-08-30
+
+Laporan pemilik: *"tombol rename nama sangat mengganggu ... cukup taruh di
+samping nama dengan rapi. Dan untuk tombol centang dan silang ketika rename
+aktif, ikon bertumpuk/overlapping dengan yang lainnya ... dan tanda silang
+close halaman kelola pengguna dan semuanya juga ketika tambah user, ukurannya
+bisakah buat design yang lebih baik."*
+
+**AKAR KETUMPANGANNYA — dan kenapa ia tak terlihat di layar lebar**
+
+`frontend/src/index.css` memasang aturan tap-target global:
+
+```css
+@media (max-width: 1023px) { button, a { min-height: 44px; min-width: 44px; } }
+```
+
+`min-*` **selalu** menang atas `width`/`height` — riwayat ini sudah tercatat di
+berkas itu sendiri. Tombol ✓ dan ✗ mode ubah-nama ditulis `p-0.5` **tanpa**
+pengecualian `min-w-0 min-h-0`, jadi di ponsel keduanya membengkak jadi
+**44×44 px** dan dijejalkan ke kolom sempit yang pada saat bersamaan masih
+memuat indikator peran, sakelar aktif, dan panah lipat.
+
+**Diukur di Chromium memakai CSS hasil build sungguhan:**
+
+| Lebar | Sebelum | Sesudah |
+|---|---|---|
+| **360 px** | ✓ **44×44**, **bertumpuk** | 32×32, **tidak** |
+| 480 px | 44×44, tidak bertumpuk | 32×32, tidak |
+
+Di 480 px yang lama tak bertumpuk — **itulah sebabnya cacat ini hanya muncul di
+ponsel**. Tangkapan layar probe menunjukkan ✗ lama menindih tulisan "Operator".
+
+**Perbaikannya memberi RUANG, bukan mengecilkan di bawah ambang sentuh**:
+selama nama disunting, peran/sakelar/panah **menyingkir** — tak satu pun
+relevan saat itu, tetapi ketiganya ikut berebut lebar yang sama.
+
+**Yang berubah**
+
+- **Ubah nama pindah ke samping namanya.** Dulu ia terkubur di baris rincian
+  yang baru muncul setelah baris dilipat-buka — dan menekannya **melipat baris
+  itu kembali**, sehingga tindakannya seolah membatalkan dirinya sendiri.
+- **✓ dan ✗** jadi kotak 32 px ber-latar sorot, dengan nama aksesibel; `Esc`
+  membatalkan, `Enter` menyimpan.
+- **Tombol tutup dialog TIDAK dikecilkan** — ia tindakan utama sebuah dialog
+  dan pantas mendapat 44 px penuh. Yang diperbaiki bentuknya: ikon 16 px dulu
+  mengambang di kotak tak terlihat; kini kotaknya muncul saat disentuh.
+- **`pr-11` di kepala dicabut** — ia menyediakan tempat bagi tombol tutup
+  bawaan Dialog yang justru **disembunyikan** oleh `[&>button.absolute]:hidden`,
+  jadi 44 px itu murni ruang mati yang mendorong judul ke kiri.
+- **Tutup formulir tambah pengguna**: dulu `hover:text-muted-foreground` —
+  warna yang **sama persis** dengan keadaan diamnya, jadi sorotnya tak
+  melakukan apa pun.
+- **Dialog dilebarkan** `max-w-sm` → `max-w-md`. 384 px memaksa enam hal
+  berhimpitan dalam satu baris; himpitan itu yang memunculkan ketumpangan
+  lebih cepat.
+- **Teks jadi bahasa Indonesia**: "Users" → Pengelola Pengguna, "You" → Anda,
+  "Admin only" → Khusus admin, "User baru" → Pengguna baru, "Tambah user" →
+  Tambah pengguna. Mandat repo, dan berkas ini melanggarnya sejak awal.
+
+**Dialog ini sebelumnya tak punya SATU PUN uji.** Kini 16, dan lima mutasi
+dipasang lalu dibunuh: pengecualian tap-target dicabut dari ✓/✗ (cacat
+aslinya), kontrol kanan tak lagi menyingkir, ubah nama dikubur kembali di
+baris rincian (**membunuh 8 uji**), tutup dialog dikecilkan, dan sorot tutup
+formulir dikembalikan jadi no-op.
+
+---
+
 ## [#951] Inventaris VPS menjawab "apakah pemutakhiran saya masuk?" — 2026-08-30
 
 Pemilik memutakhirkan VPS sesuai `apt list --upgradable` lalu meminta
