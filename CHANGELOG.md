@@ -67,6 +67,81 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#953] Daftar Barang yang Digunakan dibagi per bobot tanggung jawab — 2026-08-30
+
+Permintaan pemilik: *"bedakan dan bagi terhadap barang BMN BAST yang sudah
+disahkan dan diunggah buktinya ... dibagi per jenis BAST-nya. Jika melekat ke
+individu dan jabatan berarti memang menjadi tanggung jawabnya; untuk yang
+operasional maka perpanjangan tangan atau jadi pendelegasian dan izin sesuai
+nama-nama yang menjadi penanggung jawabnya dan ikut bertanggung jawab dalam
+penjagaan barang tersebut. Dan jika dari awal digunakan untuk operasional dan
+langsung menggunakan nama penandatangan maka hampir sama dengan tusinya."*
+
+**Kenapa ini bukan soal tampilan.** Lampiran ini **ditandatangani pemegang DAN
+KPB**. Satu daftar datar menyamakan tiga hal yang bobot hukumnya berbeda —
+barang yang melekat pada orangnya, barang unit yang ia jaga sebagai
+perpanjangan tangan, dan barang yang belum berdasar apa pun — sehingga orang
+meneken tanggung jawab yang bukan miliknya, tanpa satu pun galat.
+
+**Enam golongan, berurutan dari yang paling mengikat**
+
+| Golongan | Jenis BAST | Bobotnya |
+|---|---|---|
+| Melekat pada Pemegang | `penggunaan_melekat`, `mutasi_pengguna` | penguasaan pribadi |
+| Operasional atas Nama Sendiri | `operasional_unit`, penerima = pemegang | setara tugas dan fungsi |
+| Pendelegasian/Perpanjangan Tangan | `operasional_unit`, penerima ≠ pemegang | **ikut** menjaga, tanpa penguasaan |
+| Penggunaan Sementara | `penggunaan_sementara` | berjangka waktu |
+| Ber-BAST Sah — Jenis Lain | sisanya | — |
+| **Belum Ber-BAST Sah** | tanpa bukti / ttd dicabut | **belum dapat dibebankan** |
+
+**Apa yang dianggap "sah"** bukan tebakan: pada `routes/bast.py`, mengunggah
+bukti tanda tangan ITULAH pengesahannya — ia menyetel `bast_file_id` pada tiap
+aset objek BAST **dan** menaikkan nomor agenda dari `dibooking` ke `disahkan`
+dalam satu tindakan. Jadi `bast_file_id` terisi memenuhi kedua syarat pemilik
+sekaligus; `bast_terakhir.tt_dicabut` membatalkannya kembali.
+
+**Barang tanpa BAST sah TIDAK dihapus dari dokumen.** Permintaannya bisa
+dibaca "hanya yang sah yang masuk", tetapi menghapusnya membuat daftar ini
+menyatakan lebih sedikit daripada yang benar-benar dipegang — pada dokumen
+yang justru diteken untuk mengakui apa yang dipegang. Ia dipisahkan ke
+golongan tersendiri yang menyatakan terang bahwa ia **belum** dapat
+dibebankan. Kalau memang ingin dihapus sama sekali, perubahannya satu baris.
+
+**Cacat yang ketemu sambil jalan**: `bast_terakhir` tak pernah ikut
+diproyeksikan, jadi jenis BAST tak pernah sampai ke penggolong — query tetap
+berhasil dan tabel tetap tercetak, hanya isinya yang kosong.
+
+Kolom BAST kini memuat **nomornya**, bukan "✓". Sesudah dibagi per golongan,
+centang pada golongan ber-BAST sah selalu ✓ — kolom yang isinya selalu sama
+tak memberi tahu apa pun. Lebarnya dinaikkan 30 → 97 pt: nomor seperti
+`BA-77/OIKN/2026` tak punya spasi, jadi pada 30 pt ia luber keluar sel dan
+hilang dari cetakan tanpa galat.
+
+**Dua klaim saya sendiri terbukti salah dan dikoreksi**
+
+1. Komentar kode menyebut `user`, `pengguna_jabatan`, dan
+   `pengguna_melekat_ke` juga tak diproyeksikan. **Salah** — ketiganya sudah
+   ada di `_PROJ` yang di-*spread* ke proyeksi ini. Yang benar-benar hilang
+   hanya `bast_terakhir`; field rangkap yang sempat saya tambahkan dibuang.
+2. Uji sempat menyatakan `mongomock` tak menghormati proyeksi sehingga uji
+   render mustahil menangkap kelalaian itu. **Salah** — mutasi yang seolah
+   membuktikannya ternyata mengenai proyeksi fungsi **lain** di berkas yang
+   sama (ada dua `"bast_terakhir": 1` di sana). Mencabutnya dari proyeksi yang
+   benar menggugurkan empat uji render.
+
+Penjaga strukturalnya tetap ada, dengan alasan yang benar: uji render hanya
+menangkap field yang kebetulan sudah ada ujinya, sedangkan pembacaan **baru**
+yang lupa diproyeksikan lolos semuanya. Terbukti — mutasi "baca field baru
+tanpa memproyeksikannya" dibunuh **hanya** oleh penjaga itu.
+
+35 uji baru (26 fungsi murni + 9 render/struktural). Tujuh mutasi dipasang
+lalu dibunuh: ttd dicabut tetap dianggap sah, operasional orang lain dikira
+tusi, jenis asing diam-diam jadi melekat, `bast_terakhir` dicabut dari
+proyeksi, penomoran diulang tiap golongan, golongan tanpa BAST dibuang dari
+dokumen, dan pembacaan baru tanpa proyeksinya.
+
+---
+
 ## [#952] Pengelola Pengguna: ubah nama di samping nama, ikon berhenti bertumpuk — 2026-08-30
 
 Laporan pemilik: *"tombol rename nama sangat mengganggu ... cukup taruh di
