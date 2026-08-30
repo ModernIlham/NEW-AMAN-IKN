@@ -126,25 +126,67 @@ const UserRow = ({ user, isSelf, adminId, onRefresh, onUpdateLocalUser, satkerLi
           <div data-testid={`user-status-${user.id}`} className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card ${user.is_online ? 'bg-emerald-400' : inactive ? 'bg-slate-300 dark:bg-slate-600' : 'bg-slate-400 dark:bg-slate-500'}`} />
         </div>
 
-        {/* Name & Email */}
+        {/* Nama & surel */}
         <div className="flex-1 min-w-0">
           {editName ? (
-            <div className="flex items-center gap-1">
+            /* MODE UBAH NAMA — BARIS DIAMBIL ALIH SEPENUHNYA.
+               Sebabnya bukan estetika. Aturan tap-target global di
+               index.css memaksa `button { min-height:44px; min-width:44px }`
+               pada ≤1023px, dan `min-*` SELALU menang atas width/height.
+               Tombol ✓ dan ✗ dulu ditulis `p-0.5` tanpa pengecualian, jadi
+               di ponsel keduanya membengkak jadi 44×44 px — dua kotak 44 px
+               dijejalkan ke kolom sempit yang pada saat bersamaan masih
+               memuat indikator peran, sakelar aktif, dan panah lipat.
+               Itulah ikon yang "bertumpuk" yang dilaporkan pemilik.
+
+               Perbaikannya memberi RUANG, bukan mengecilkan tombol di bawah
+               ambang sentuh: selama mengubah nama, kontrol lain baris ini tak
+               relevan dan disembunyikan (lihat `editName` di bawah), sehingga
+               tersisa tiga hal saja — kolom isian, ✓, dan ✗. */
+            <div className="flex items-center gap-1.5">
               <input
                 value={nameVal}
                 onChange={e => setNameVal(e.target.value)}
-                className="flex-1 h-6 px-2 text-xs border border-border rounded focus:outline-none focus:border-blue-400 bg-background text-foreground"
+                className="flex-1 min-w-0 h-8 px-2.5 text-xs border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/40 focus:border-blue-400 bg-background text-foreground"
+                aria-label="Nama pengguna"
+                data-testid={`user-nama-input-${user.id}`}
                 autoFocus
-                onKeyDown={e => e.key === 'Enter' && saveName()}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') saveName();
+                  if (e.key === 'Escape') setEditName(false);
+                }}
               />
-              <button onClick={saveName} className="p-0.5 text-emerald-500 hover:text-emerald-600"><Check className="w-3.5 h-3.5" /></button>
-              <button onClick={() => setEditName(false)} className="p-0.5 text-muted-foreground hover:text-muted-foreground"><X className="w-3.5 h-3.5" /></button>
+              <button type="button" onClick={saveName}
+                aria-label="Simpan nama"
+                data-testid={`user-nama-simpan-${user.id}`}
+                className="shrink-0 inline-flex items-center justify-center w-8 h-8 min-w-0 min-h-0 rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors">
+                <Check className="w-4 h-4" />
+              </button>
+              <button type="button" onClick={() => setEditName(false)}
+                aria-label="Batal ubah nama"
+                data-testid={`user-nama-batal-${user.id}`}
+                className="shrink-0 inline-flex items-center justify-center w-8 h-8 min-w-0 min-h-0 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                <X className="w-4 h-4" />
+              </button>
             </div>
           ) : (
             <>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 min-w-0">
                 <span className="text-[13px] font-medium text-foreground truncate">{user.name || user.username}</span>
-                {isSelf && <span className="text-[9px] font-medium text-blue-500 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30 px-1 py-0.5 rounded">You</span>}
+                {isSelf && <span className="shrink-0 text-[9px] font-medium text-blue-500 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30 px-1 py-0.5 rounded">Anda</span>}
+                {/* UBAH NAMA ADA DI SAMPING NAMANYA (permintaan pemilik).
+                    Dulu ia terkubur di baris aksi yang baru muncul setelah
+                    baris dilipat-buka — dan menekannya MELIPAT baris itu
+                    kembali, sehingga tindakannya seolah membatalkan dirinya
+                    sendiri. Tindakan yang menyunting sesuatu pantas berdiri
+                    di sebelah yang disuntingnya. */}
+                <button type="button"
+                  onClick={() => { setNameVal(user.name || ''); setEditName(true); }}
+                  aria-label={`Ubah nama ${user.name || user.username}`}
+                  data-testid={`user-ubah-nama-${user.id}`}
+                  className="shrink-0 inline-flex items-center justify-center w-6 h-6 min-w-0 min-h-0 rounded-md text-muted-foreground/70 hover:text-foreground hover:bg-muted transition-colors">
+                  <Edit3 className="w-3 h-3" />
+                </button>
               </div>
               <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
                 <span className="truncate">{user.username}</span>
@@ -157,54 +199,55 @@ const UserRow = ({ user, isSelf, adminId, onRefresh, onUpdateLocalUser, satkerLi
           )}
         </div>
 
-        {/* Role indicator */}
-        <div className="flex items-center gap-1">
-          <div className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
-          <span className="text-[11px] text-muted-foreground">{cfg.label}</span>
-        </div>
+        {/* KONTROL KANAN — SELURUHNYA DISEMBUNYIKAN saat mengubah nama.
+            Inilah separuh lain dari perbaikan ketumpangan: peran, sakelar,
+            dan panah lipat tak berarti apa-apa selama nama sedang disunting,
+            tetapi mereka tetap ikut berebut lebar baris yang sama dengan
+            kolom isian dan dua tombolnya. */}
+        {!editName && (
+          <>
+            {/* Indikator peran */}
+            <div className="flex items-center gap-1 shrink-0">
+              <div className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+              <span className="text-[11px] text-muted-foreground hidden xs:inline sm:inline">{cfg.label}</span>
+            </div>
 
-        {/* Toggle - small & consistent */}
-        {!isSelf && (
-          <Switch 
-            checked={!inactive} 
-            onCheckedChange={toggle}
-            disabled={busy}
-            className="data-[state=checked]:bg-emerald-400 h-4 w-7 min-w-0 min-h-0"
-          />
+            {/* Sakelar aktif */}
+            {!isSelf && (
+              <Switch
+                checked={!inactive}
+                onCheckedChange={toggle}
+                disabled={busy}
+                aria-label={`${inactive ? 'Aktifkan' : 'Nonaktifkan'} ${user.name || user.username}`}
+                className="shrink-0 data-[state=checked]:bg-emerald-400 h-4 w-7 min-w-0 min-h-0"
+              />
+            )}
+
+            {/* Lipat / buka rincian */}
+            <button
+              type="button"
+              onClick={() => setExpanded(!expanded)}
+              aria-expanded={expanded}
+              aria-label={expanded ? 'Tutup rincian' : 'Buka rincian'}
+              data-testid={`user-rincian-${user.id}`}
+              className={`shrink-0 inline-flex items-center justify-center w-7 h-7 min-w-0 min-h-0 rounded-lg transition-colors ${expanded ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+            >
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+            </button>
+          </>
         )}
-
-        {/* Expand */}
-        <button 
-          onClick={() => setExpanded(!expanded)}
-          className={`p-1 rounded transition-colors min-w-0 min-h-0 ${expanded ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
-        >
-          <ChevronDown className={`w-3.5 h-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
-        </button>
       </div>
 
       {/* Expanded Actions */}
       {expanded && (
         <div className="px-3 pb-2 pt-1 bg-muted/50">
           <div className="flex flex-wrap items-center gap-1.5">
-            {/* Edit Name - Icon only on mobile with tooltip */}
-            <TooltipProvider delayDuration={100}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button 
-                    onClick={() => { setEditName(true); setNameVal(user.name || ''); setExpanded(false); }}
-                    className="flex items-center justify-center h-6 w-6 sm:w-auto sm:px-2 min-w-0 min-h-0 text-[10px] bg-card border border-border rounded text-muted-foreground hover:border-border"
-                  >
-                    <Edit3 className="w-3 h-3 sm:mr-1" />
-                    <span className="hidden sm:inline">Nama</span>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="sm:hidden">
-                  <p>Edit Nama</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            
-            {/* Role Select - Keep text */}
+            {/* Tombol "Nama" DIHAPUS dari sini — ia kini berdiri di samping
+                nama yang disuntingnya. Menaruhnya di baris aksi menuntut dua
+                tindakan (buka rincian, lalu tekan) untuk satu pekerjaan, dan
+                tindakan keduanya MELIPAT baris itu kembali. */}
+
+            {/* Peran */}
             {!isSelf && (
               <Select value={role} onValueChange={chgRole}>
                 <SelectTrigger className="h-6 w-[70px] text-[10px] bg-card border-border">
@@ -400,30 +443,49 @@ function UserManagementDialog({ open, onClose, currentUser }) {
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="w-[95vw] max-w-sm max-h-[80vh] overflow-hidden flex flex-col p-0 gap-0 rounded-xl [&>button.absolute]:hidden">
-        {/* Header */}
-        <DialogHeader className="px-3 pr-11 sm:px-4 sm:pr-11 py-2.5 sm:py-3 border-b border-border flex-shrink-0">
+      {/* `max-w-md`, bukan `max-w-sm`. Satu barisnya memuat avatar, nama,
+          surel, indikator peran, sakelar aktif, dan panah lipat; 384 px
+          memaksa semuanya berhimpitan, dan himpitan itulah yang membuat
+          ketumpangan ikon muncul lebih cepat. 448 px memberi ruang tanpa
+          mengubah apa pun secara struktural. */}
+      <DialogContent className="w-[95vw] max-w-md max-h-[85vh] overflow-hidden flex flex-col p-0 gap-0 rounded-xl [&>button.absolute]:hidden">
+        {/* Kepala */}
+        <DialogHeader className="px-3 sm:px-4 py-2.5 sm:py-3 border-b border-border flex-shrink-0">
+          {/* `pr-11` DICABUT. Ia dulu menyediakan tempat bagi tombol tutup
+              bawaan Dialog — yang justru disembunyikan oleh
+              `[&>button.absolute]:hidden` di atas. Tombol tutup di sini
+              berdiri DI DALAM aliran (`ml-auto`), jadi sisa 44 px itu murni
+              ruang mati yang mendorong judul ke kiri. */}
           <DialogTitle className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <div className="w-6 h-6 rounded-lg bg-muted flex items-center justify-center">
+            <div className="w-6 h-6 shrink-0 rounded-lg bg-muted flex items-center justify-center">
               <Users className="w-3.5 h-3.5 text-muted-foreground" />
             </div>
-            Users
-            <span className="text-[10px] text-muted-foreground font-normal ml-1">{users.length}</span>
-            <button 
+            <span className="truncate">Pengelola Pengguna</span>
+            <span className="shrink-0 text-[10px] font-medium text-muted-foreground bg-muted rounded-full px-1.5 py-0.5 tabular-nums">
+              {users.length}
+            </span>
+            {/* Tombol tutup TIDAK dikecualikan dari aturan 44 px: ia tindakan
+                utama sebuah dialog dan pantas mendapat sasaran sentuh penuh.
+                Yang diperbaiki bentuknya — ikon 16 px dulu mengambang di
+                dalam kotak 44 px tanpa batas yang terlihat, sehingga tampak
+                hilang; kini kotaknya sendiri terlihat saat disentuh. */}
+            <button
+              type="button"
               onClick={() => onClose(false)}
-              className="ml-auto inline-flex items-center justify-center p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              aria-label="Tutup pengelola pengguna"
+              className="ml-auto -mr-1 shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted active:bg-muted transition-colors"
               data-testid="user-mgmt-close"
             >
               <X className="w-4 h-4" />
             </button>
           </DialogTitle>
-          <DialogDescription className="sr-only">User management</DialogDescription>
+          <DialogDescription className="sr-only">Pengelola pengguna</DialogDescription>
         </DialogHeader>
 
         {!isAdmin ? (
           <div className="flex-1 flex flex-col items-center justify-center py-10 text-center">
             <ShieldCheck className="w-8 h-8 text-slate-300 dark:text-slate-600 mb-2" />
-            <p className="text-xs text-muted-foreground">Admin only</p>
+            <p className="text-xs text-muted-foreground">Khusus admin</p>
           </div>
         ) : loading ? (
           <div className="flex-1 flex items-center justify-center py-10">
@@ -439,13 +501,26 @@ function UserManagementDialog({ open, onClose, currentUser }) {
                   className="w-full h-8 border border-dashed border-border rounded-lg flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground hover:border-foreground/30 hover:text-foreground hover:bg-muted/50 transition-all"
                   data-testid="add-user-btn"
                 >
-                  <UserPlus className="w-3.5 h-3.5" /> Tambah user
+                  <UserPlus className="w-3.5 h-3.5" /> Tambah pengguna
                 </button>
               ) : (
                 <div className="bg-muted rounded-lg p-3" data-testid="add-user-form">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[11px] font-medium text-muted-foreground">{otpSent ? 'Verifikasi OTP' : 'User baru'}</span>
-                    <button onClick={resetForm} className="text-muted-foreground hover:text-muted-foreground"><X className="w-3.5 h-3.5" /></button>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="text-[11px] font-medium text-muted-foreground">{otpSent ? 'Verifikasi OTP' : 'Pengguna baru'}</span>
+                    {/* Dulu: tanpa padding, tanpa latar sorot, dan
+                        `hover:text-muted-foreground` — warna yang SAMA dengan
+                        keadaan diamnya, jadi hover-nya tak melakukan apa pun.
+                        Ditambah aturan 44 px global, hasilnya kotak 44×44
+                        tak terlihat yang menabrak label di sebelahnya. */}
+                    <button
+                      type="button"
+                      onClick={resetForm}
+                      aria-label="Batalkan penambahan pengguna"
+                      data-testid="add-user-batal"
+                      className="-mr-1 -my-1 shrink-0 inline-flex items-center justify-center w-8 h-8 min-w-0 min-h-0 rounded-lg text-muted-foreground hover:text-foreground hover:bg-background/70 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
                   
                   {!otpSent ? (
