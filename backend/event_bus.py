@@ -19,6 +19,7 @@ import time
 from datetime import datetime, timezone
 from typing import Optional, Callable, Awaitable
 import pymongo
+from bson import ObjectId
 from pymongo.errors import CollectionInvalid
 
 logger = logging.getLogger(__name__)
@@ -110,29 +111,57 @@ async def publish(db, activity_id: str, event: dict):
         logger.warning(f"[event_bus] publish failed: {e}")
 
 
+async def _id_mulai(db) -> ObjectId:
+    """`_id` dokumen TERBARU saat gelung mulai — titik awal tailing.
+
+    Dipakai menggantikan `ts` sebagai penanda posisi. Alasannya bukan gaya:
+    `ws_events` hanya punya indeks `_id_`, jadi filter `{"ts": {"$gt": ...}}`
+    **memindai seluruh 20.000 dokumen** tiap kali kursor dibuat, sementara
+    `{"_id": {"$gt": ...}}` adalah pencarian indeks. Diagnosa 30 Agustus 2026
+    membaca `_id_` pada koleksi ini dipakai **0 kali** — indeksnya ada dan
+    menganggur, sementara 145 MILIAR dokumen dipindai sia-sia.
+
+    ObjectId monoton menurut waktu, jadi ia penanda posisi yang sah untuk
+    koleksi capped (urutan sisip = urutan alami).
+    """
+    try:
+        terakhir = await db[COLLECTION_NAME].find_one(sort=[("$natural", -1)])
+        if terakhir and terakhir.get("_id") is not None:
+            return terakhir["_id"]
+    except Exception as e:  # noqa: BLE001
+        logger.warning("[event_bus] Gagal membaca posisi awal (%s) — mulai dari waktu sekarang",
+                       type(e).__name__)
+    return ObjectId.from_datetime(datetime.now(timezone.utc))
+
+
 async def _tail_loop(db, handler: Callable[[str, dict], Awaitable[None]]):
     """Long-running task: tail the capped collection and invoke handler for each event
     originating from OTHER workers. Robust to cursor timeouts and collection drops."""
     logger.info(f"[event_bus] Tail loop starting (worker_id={WORKER_ID})")
-    # Start from current moment — skip old events
-    last_ts = datetime.now(timezone.utc)
+    # Mulai dari peristiwa TERBARU — yang lama dilewati.
+    last_id = await _id_mulai(db)
     mati_beruntun = 0
     while True:
         try:
-            query = {"ts": {"$gt": last_ts}, "worker_id": {"$ne": WORKER_ID}}
+            query = {"_id": {"$gt": last_id}, "worker_id": {"$ne": WORKER_ID}}
             cursor = db[COLLECTION_NAME].find(
                 query,
                 cursor_type=pymongo.CursorType.TAILABLE_AWAIT,
                 batch_size=20,
-            )
-            cursor.max_await_time_ms = 2000  # block up to 2s waiting for new docs
+                # `max_await_time_ms` adalah METODE BERANTAI, bukan atribut.
+                # Baris ini dulu berbunyi `cursor.max_await_time_ms = 2000`,
+                # yang diam-diam MENIMPA metodenya dengan sebuah integer —
+                # `maxAwaitTimeMS` tak pernah sampai ke server, dan kursornya
+                # memakai bawaan. Python tak mengeluh saat sebuah metode
+                # ditimpa nilai, jadi cacat ini tak berbunyi sama sekali.
+            ).max_await_time_ms(2000)
 
             mulai = time.monotonic()
             kosong = True
             async for doc in cursor:
                 kosong = False
                 try:
-                    last_ts = doc.get("ts", last_ts)
+                    last_id = doc.get("_id", last_id)
                     activity_id = doc.get("activity_id", "")
                     if not activity_id:
                         continue

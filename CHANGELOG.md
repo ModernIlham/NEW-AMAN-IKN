@@ -67,6 +67,63 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#948] Event-bus: metode yang tertimpa, dan indeks yang menganggur — 2026-08-30
+
+Bacaan produksi 30 Agustus **mengonfirmasi diagnosis [#947] tanpa ambiguitas**:
+
+| Namespace | Bagian waktu mongod | Query |
+|---|---|---|
+| `inventarisasi_bmn.ws_events` | **99,7%** | 7.261.074 |
+| `inventarisasi_bmn.assets` | 0,2% | 1.270 |
+
+Dan penahanan laju [#947] **bekerja persis seperti yang diukur**: pada jendela
+setelah deploy, laju query **112,5 → 9,6 per detik (12×)** — probe di luar
+produksi memprediksi 10/detik.
+
+Tetapi bacaan itu juga menyingkap **dua cacat lagi di gelung yang sama**.
+
+**1. `cursor.max_await_time_ms = 2000` tidak melakukan apa pun.**
+`max_await_time_ms` adalah **metode berantai**, bukan atribut. Penugasan itu
+menimpa metodenya dengan sebuah integer, dan `maxAwaitTimeMS` **tak pernah
+sampai ke server** — kursornya memakai bawaan sepanjang waktu. Python tidak
+mengeluh saat sebuah metode ditimpa nilai, jadi cacat ini tak pernah berbunyi.
+Diverifikasi langsung terhadap pustaka terpasang: `Cursor.max_await_time_ms`
+adalah `function`; pada Motor ia `MotorCursorChainingMethod`.
+
+**2. Filter memindai 20.000 dokumen sementara indeksnya menganggur.**
+
+| Bacaan | Angka |
+|---|---|
+| Dokumen dipindai | **145.238.636.134** |
+| Dokumen dikembalikan | 391.663 |
+| Dipindai per dokumen dikembalikan | **370.825 : 1** ⚠ |
+| Pindai koleksi | 7.263.861 |
+| Indeks `_id_` pada `ws_events` | **0 ops** |
+
+`ws_events` hanya punya indeks `_id_`, jadi `{"ts": {"$gt": …}}` memindai
+seluruh koleksi tiap kursor dibuat. Penanda posisi diganti ke **`_id`** —
+ObjectId monoton menurut waktu, jadi ia penanda yang sah untuk koleksi capped
+(urutan sisip = urutan alami), dan filternya menjadi pencarian indeks. Posisi
+awal dibaca dari dokumen terbaru (`sort=[("$natural", -1)]`), bukan dari
+ObjectId waktu-sekarang yang bisa melewatkan peristiwa di detik yang sama.
+
+**Empat mutasi dipasang lalu dibunuh**: kembali ke penugasan atribut, filter
+kembali ke `ts`, posisi awal tak dibaca dari dokumen terbaru, dan penyaring
+loopback `worker_id` dicabut.
+
+Kursor tiruan di uji kini mengekspos `max_await_time_ms` sebagai **metode** —
+sehingga penugasan atribut tak bisa lagi lolos diam-diam, yang persis
+membuat cacat ini bertahan berminggu-minggu.
+
+**`docs/OPTIMASI-VPS.md` ditutup pada pertanyaan tertuanya.** §2 butir 1
+("sumber CPU 51% belum teridentifikasi"), terbuka sejak awal Agustus, kini
+terjawab beserta ketiga cacatnya dan pelajaran metodenya: `currentOp` **tidak
+akan pernah** menemukan beban seperti ini — query yang selesai dalam 8 ms tak
+tertangkap sedang berjalan betapa pun seringnya diulang. Yang menemukannya
+angka **kumulatif** (`opcounters`, `metrics.queryExecutor`, `top`).
+
+---
+
 ## [#947] Gelung event-bus berhenti membanjiri mongod — 2026-08-30
 
 **Sumber beban CPU yang terbuka sejak awal Agustus akhirnya bernama.**

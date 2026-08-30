@@ -38,6 +38,7 @@ import asyncio
 import time
 
 import pytest
+from bson import ObjectId
 
 import event_bus
 
@@ -45,11 +46,21 @@ import event_bus
 class _KursorPalsu:
     """Kursor tailable tiruan. `tahan` = berapa lama ia menahan sebelum habis."""
 
-    max_await_time_ms = None
-
-    def __init__(self, dokumen, tahan):
+    def __init__(self, dokumen, tahan, catatan):
         self._dokumen = list(dokumen)
         self._tahan = tahan
+        self._catatan = catatan
+
+    def max_await_time_ms(self, ms):
+        """METODE BERANTAI, seperti Motor/PyMongo yang sesungguhnya.
+
+        Dulu kode produksinya menulis `cursor.max_await_time_ms = 2000`, yang
+        MENIMPA metode ini dengan sebuah integer — `maxAwaitTimeMS` tak pernah
+        sampai ke server. Tiruan ini sengaja METODE, bukan atribut, supaya
+        penugasan semacam itu tak bisa lagi lolos diam-diam.
+        """
+        self._catatan["max_await_time_ms"] = ms
+        return self
 
     def __aiter__(self):
         return self
@@ -63,16 +74,23 @@ class _KursorPalsu:
 
 
 class _KoleksiPalsu:
-    def __init__(self, dokumen=(), tahan=0.0, rtt=0.0):
+    def __init__(self, dokumen=(), tahan=0.0, rtt=0.0, terakhir=None):
         self.jumlah_find = 0
+        self.kueri_terakhir = None
+        self.catatan = {}
         self._dokumen = list(dokumen)
         self._tahan = tahan
         self._rtt = rtt
+        self._terakhir = terakhir
 
-    def find(self, *_a, **_k):
+    async def find_one(self, *_a, **_k):
+        return self._terakhir
+
+    def find(self, kueri=None, *_a, **_k):
         self.jumlah_find += 1
+        self.kueri_terakhir = kueri
         kirim, self._dokumen = self._dokumen, []
-        return _KursorPalsu(kirim, self._tahan or self._rtt)
+        return _KursorPalsu(kirim, self._tahan or self._rtt, self.catatan)
 
 
 class _DbPalsu:
@@ -147,7 +165,7 @@ async def test_dokumen_tetap_diteruskan_ke_handler():
 
     koleksi = _KoleksiPalsu(
         dokumen=[{"activity_id": "keg-1", "ts": None, "worker_id": "lain",
-                  "_id": 1, "tipe": "aset_disimpan"}],
+                  "_id": ObjectId(), "tipe": "aset_disimpan"}],
         rtt=0.008)
     await _jalankan(koleksi, 0.3, handler)
     assert diterima, "peristiwa tak pernah sampai ke handler"
@@ -171,3 +189,62 @@ async def test_keadaan_itu_diumumkan_ke_log(caplog):
         )
     finally:
         event_bus.AMBANG_LAPOR_KURSOR_MATI = asli
+
+
+class TestPenandaPosisiMemakaiIndeksYangADA:
+    """`ws_events` hanya punya indeks `_id_`, dan ia dipakai **0 kali**.
+
+    Diagnosa 30 Agustus 2026 setelah perbaikan laju:
+
+    ==================================  ===============
+    Waktu mongod di `ws_events`         **99,7%**
+    Dokumen dipindai                    145.238.636.134
+    Dipindai per dokumen dikembalikan   370.825 : 1
+    Pindai koleksi                      7.263.861
+    Indeks `_id_` pada `ws_events`      **0 ops**
+    ==================================  ===============
+
+    Filter `{"ts": {"$gt": …}}` memindai seluruh 20.000 dokumen tiap kali
+    kursor dibuat, sementara indeks yang bisa menjawabnya menganggur di
+    sebelahnya. `{"_id": {"$gt": …}}` mengubahnya jadi pencarian indeks.
+    """
+
+    @pytest.mark.asyncio
+    async def test_filter_memakai_id_bukan_ts(self):
+        koleksi = _KoleksiPalsu(rtt=0.005)
+        await _jalankan(koleksi, 0.3)
+        kueri = koleksi.kueri_terakhir
+        assert "_id" in kueri, f"filter tak memakai `_id`: {kueri}"
+        assert "ts" not in kueri, (
+            f"filter masih memakai `ts` — memindai 20.000 dokumen tiap kali: {kueri}"
+        )
+        # Penyaring loopback tetap ada; tanpanya tiap worker memproses
+        # peristiwanya sendiri.
+        assert "worker_id" in kueri
+
+    @pytest.mark.asyncio
+    async def test_max_await_time_ms_DIPANGGIL_bukan_ditugaskan(self):
+        # Kursor tiruan mengeksposnya sebagai METODE. Kode yang menulis
+        # `cursor.max_await_time_ms = 2000` akan menimpanya dan catatan ini
+        # tetap kosong — persis cacat yang berjalan berminggu-minggu.
+        koleksi = _KoleksiPalsu(rtt=0.005)
+        await _jalankan(koleksi, 0.3)
+        assert koleksi.catatan.get("max_await_time_ms") == 2000, (
+            "maxAwaitTimeMS tak pernah terpasang pada kursor"
+        )
+
+    @pytest.mark.asyncio
+    async def test_posisi_awal_diambil_dari_dokumen_TERBARU(self):
+        # Tanpa ini gelung mulai dari ObjectId waktu-sekarang dan bisa
+        # melewatkan peristiwa yang tiba di detik yang sama.
+        terbaru = ObjectId()
+        koleksi = _KoleksiPalsu(rtt=0.005, terakhir={"_id": terbaru})
+        await _jalankan(koleksi, 0.3)
+        assert koleksi.kueri_terakhir["_id"] == {"$gt": terbaru}
+
+    @pytest.mark.asyncio
+    async def test_koleksi_kosong_tetap_jalan(self):
+        # find_one mengembalikan None saat ring buffer masih kosong.
+        koleksi = _KoleksiPalsu(rtt=0.005, terakhir=None)
+        await _jalankan(koleksi, 0.3)
+        assert isinstance(koleksi.kueri_terakhir["_id"]["$gt"], ObjectId)
