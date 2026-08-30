@@ -32,8 +32,9 @@
 > 2. **Beban 1,00 datar di 1/5/15 menit pada 2 vCPU = satu core terbakar
 >    terus-menerus.** Kalimat 18 Agustus *"beban sistem 1,19 — bukan lagi CPU
 >    ±51% konstan"* **keliru**: 1,19 dari 2 vCPU justru ≈ 60%, dan 1,01 ≈ 50%.
->    Angkanya tak pernah membantah gejala aslinya, ia mengonfirmasinya. §2
->    butir 1 **masih terbuka**, dan tiga bacaan terpisah kini mendukungnya.
+>    Angkanya tak pernah membantah gejala aslinya, ia mengonfirmasinya.
+>    **✅ Sumbernya ditemukan 30 Agustus 2026** — gelung tail event-bus,
+>    99,7% waktu mongod. Lihat §2 butir 1.
 > 3. **Swap praktis tak tersentuh** (1,2 MiB dari 4 GiB) dan memori lapang
 >    5,8 GiB. Tekanan memori bukan masalah mesin ini — dan `dmesg` 18 Agustus
 >    juga tak menemukan satu pun OOM-killer. §2 butir 3 tetap tidak terbukti.
@@ -63,7 +64,44 @@
 
 ## 2. Masalah utama (dan cara memastikannya)
 
-1. **Sumber CPU 51% belum teridentifikasi.** Jalankan (§ perintah A) `pidstat` + `top -H` + `mongotop` selama 60 detik: bila pemakan CPU adalah `python` dengan thread yang sama terus → job latar aplikasi (cek antrean WebP di halaman admin); bila `mongod` → query tak berindeks; bila proses asing → insiden keamanan.
+1. ~~**Sumber CPU 51% belum teridentifikasi.**~~ — **TERJAWAB 30 Agustus 2026.**
+
+   > **Pelakunya: gelung tail event-bus (`backend/event_bus.py`).**
+   >
+   > `db.adminCommand({top: 1})` menyebutnya tanpa ambiguitas:
+   >
+   > | Namespace | Bagian waktu mongod | Query |
+   > |---|---|---|
+   > | `inventarisasi_bmn.ws_events` | **99,7%** | 7.261.074 |
+   > | `inventarisasi_bmn.assets` | 0,2% | 1.270 |
+   >
+   > Dan bentuk bebannya: **145.238.636.134 dokumen dipindai** untuk
+   > mengembalikan 391.663 — rasio **370.825 : 1**, dengan **7.263.861 pindai
+   > koleksi**. Indeks `_id_` pada `ws_events` dipakai **0 kali**.
+   >
+   > **Tiga cacat bertumpuk**, semuanya di satu gelung:
+   >
+   > 1. **Tak ada jeda pada jalur sukses.** Kursor `TAILABLE_AWAIT` yang habis
+   >    seketika membuat `while True` menerbitkan `find()` berikutnya tanpa
+   >    henti. Ditunjuk oleh `getmore` = **59** berbanding 6,94 juta query:
+   >    kursor yang benar-benar menahan menghasilkan jutaan getmore.
+   > 2. **`cursor.max_await_time_ms = 2000`** — `max_await_time_ms` adalah
+   >    **metode berantai**, bukan atribut. Penugasan itu menimpa metodenya
+   >    dengan sebuah integer, dan `maxAwaitTimeMS` **tak pernah sampai ke
+   >    server**. Python tak mengeluh saat metode ditimpa nilai.
+   > 3. **Filter `{"ts": {"$gt": …}}` pada koleksi yang hanya berindeks
+   >    `_id_`** — memindai seluruh 20.000 dokumen tiap kursor dibuat,
+   >    sementara indeks yang bisa menjawabnya menganggur di sebelahnya.
+   >
+   > **Hasil terukur**: laju query turun **112,5 → 9,6 per detik (12×)** hanya
+   > dari cacat 1. Cacat 2 dan 3 menyusul di PR yang sama halaman ini
+   > diperbarui.
+   >
+   > **Pelajaran metodenya**: `currentOp` TIDAK menemukan ini — query yang
+   > selesai dalam 8 ms tak pernah tertangkap sedang berjalan, betapa pun
+   > seringnya diulang. Yang menemukannya adalah angka **kumulatif**
+   > (`opcounters`, `metrics.queryExecutor`, dan terutama `top`). Bila kelak
+   > ada beban tak terjelaskan lagi, mulai dari sana, bukan dari `currentOp`.
 2. **Indeks komposit `assets` kurang.** Filter berat yang dilaporkan (`activity_id` + `location`/`eselon1`/`eselon2`/`condition`/`status`) selama ini hanya tertutup indeks tunggal — planner memilih indeks `activity_id` lalu menyaring sisanya baris-per-baris. **Sudah diperbaiki di aplikasi** (`backend/indexes.py`): lima indeks komposit baru dibuat otomatis saat backend restart pasca-deploy — tanpa tindakan manual.
 3. **~~Tanpa swap~~ — SUDAH DIPASANG (verifikasi 18 Agu 2026: 4 GB, terpakai 17%).** Alasan aslinya tetap dicatat: 8 GB dipakai bersama mongod+python+Meili+Redis; lonjakan ekspor XLSX berfoto/restore backup bisa memicu OOM-killer membunuh mongod (terburuk) — swap adalah sabuk pengaman murah.
 4. **WiredTiger cache default terlalu rakus untuk mesin bersama.** Default ≈ 50% × (RAM − 1 GB) ≈ 3,5 GB; untuk dataset belasan ribu dokumen, 1,5–2 GB lebih dari cukup dan menyisakan ruang untuk Python/Meili.
@@ -193,7 +231,7 @@ grep -c REDIS_URL /var/www/inventarisasi/backend/.env  # jalur LENGKAP-nya
 
 ## 4. Urutan prioritas (paling berdampak dulu)
 
-1. **Identifikasi sumber CPU 51%** (blok A) — semua langkah lain menunggu diagnosis ini; jangan restart-restart sebelum tahu penyebab. **Masih terbuka per 29 Agu 2026, dan buktinya menguat**: beban 1,02 · 1,01 · 1,01 pada 2 vCPU adalah satu core terbakar terus-menerus, datar di ketiga jendela waktu — pola satu proses, bukan pola beban pengguna.
+1. ~~**Identifikasi sumber CPU 51%**~~ — ✅ **TERJAWAB 30 Agustus 2026**, setelah terbuka sejak awal Agustus. Pelakunya `_tail_loop` di `backend/event_bus.py`; rinciannya di §2 butir 1 di bawah.
 2. **Deploy aplikasi terbaru** → indeks komposit `assets` terpasang otomatis (menghilangkan tersangka #2 secara permanen).
 3. ~~**Pasang swap 4 GB + swappiness 10** (blok B)~~ — ✅ **selesai** (verifikasi 18 Agu 2026).
 4. **Batasi WiredTiger 2 GB + profiler slowms** (blok C).
