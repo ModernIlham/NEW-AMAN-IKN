@@ -93,9 +93,33 @@
    >    `_id_`** — memindai seluruh 20.000 dokumen tiap kursor dibuat,
    >    sementara indeks yang bisa menjawabnya menganggur di sebelahnya.
    >
-   > **Hasil terukur**: laju query turun **112,5 → 9,6 per detik (12×)** hanya
-   > dari cacat 1. Cacat 2 dan 3 menyusul di PR yang sama halaman ini
-   > diperbarui.
+   > **Hasil terukur, tiga bacaan berturut-turut:**
+   >
+   > | Bacaan | Laju query | `getmore` | Pindai per query |
+   > |---|---|---|---|
+   > | 29 Agu 23:49 (sebelum) | **112,5/detik** | ~0 | 1,00 |
+   > | 30 Agu 02:49 (sesudah cacat 1) | **9,6/detik** | ~0 | 1,00 |
+   > | 30 Agu 05:16 (sesudah cacat 2 & 3) | **10,5/detik** | ~0 | **0,98** |
+   >
+   > **Turun 10,7× — dan di situlah ia berhenti.**
+   >
+   > **KOREKSI: cacat 3 tidak memberi manfaat yang saya klaim.** Saya menulis
+   > bahwa mengganti filter dari `ts` ke `_id` "mengubah pindai-koleksi jadi
+   > pencarian indeks". Bacaan 05:16 membantahnya: **0,98 pindai koleksi per
+   > query** dan **19.291 dokumen dipindai per pindaian** — praktis seluruh
+   > cincin, sama seperti sebelumnya. `ws_events._id_` tetap **0 ops**.
+   >
+   > Sebabnya terdokumentasi di MongoDB: **kursor tailable tidak memakai
+   > indeks.** Penggantian ke `_id` tetap dipertahankan (ObjectId memang
+   > penanda posisi yang lebih tepat untuk koleksi capped), tetapi ia **bukan**
+   > penghematan. Saya mengklaim manfaat sebelum mengukurnya — kesalahan yang
+   > sama bentuknya dengan yang dicatat halaman ini dua kali sebelumnya.
+   >
+   > **Yang benar-benar tersisa adalah UKURAN cincin.** Biaya tiap pindaian
+   > sebanding lurus dengan isinya, jadi `ws_events` dikecilkan dari
+   > 10 MB/20.000 dokumen ke 1 MB/1.000 — 20× lebih murah per putaran, tanpa
+   > menyentuh latensi fanout. Laju sisip terukur hanya **485 dalam 22 jam**,
+   > jadi seribu slot tetap cadangan berjam-jam.
    >
    > **Pelajaran metodenya**: `currentOp` TIDAK menemukan ini — query yang
    > selesai dalam 8 ms tak pernah tertangkap sedang berjalan, betapa pun

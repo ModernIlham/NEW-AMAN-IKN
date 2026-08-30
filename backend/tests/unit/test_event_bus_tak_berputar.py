@@ -248,3 +248,91 @@ class TestPenandaPosisiMemakaiIndeksYangADA:
         koleksi = _KoleksiPalsu(rtt=0.005, terakhir=None)
         await _jalankan(koleksi, 0.3)
         assert isinstance(koleksi.kueri_terakhir["_id"]["$gt"], ObjectId)
+
+
+class _DbCincin:
+    """Db tiruan untuk menguji pengecilan cincin."""
+
+    def __init__(self, maks, besar):
+        self.perintah = []
+        self._maks, self._besar = maks, besar
+
+    async def list_collection_names(self):
+        return [event_bus.COLLECTION_NAME]
+
+    async def command(self, perintah, *_a, **_k):
+        self.perintah.append(perintah)
+        if isinstance(perintah, dict) and "listCollections" in perintah:
+            opsi = {"capped": True}
+            if self._maks is not None:
+                opsi["max"] = self._maks
+            if self._besar is not None:
+                opsi["size"] = self._besar
+            return {"cursor": {"firstBatch": [{"options": opsi}]}}
+        return {"ok": 1}
+
+
+class TestCincinDikecilkan:
+    """Kursor tailable TIDAK memakai indeks — jadi ukuran cincin ADALAH biayanya.
+
+    Klaim di [#948] bahwa mengganti filter ke `_id` mengubah pindai-koleksi
+    menjadi pencarian indeks **terbukti SALAH**. Bacaan 30 Agustus 2026,
+    2,45 jam setelah perbaikan itu ter-deploy:
+
+    ===============================  ==========
+    Pindai koleksi per query         **0,98**
+    Dokumen dipindai per pindaian    **19.291**
+    `ws_events._id_` dipakai         **0 ops**
+    ===============================  ==========
+
+    Setiap query masih memindai praktis seluruh cincin. Dokumentasi MongoDB
+    menyebutnya terang: kursor tailable tidak memakai indeks.
+
+    Yang tersisa karena itu bukan soal filter melainkan soal UKURAN: biaya
+    pindaian sebanding lurus dengan isi cincin.
+    """
+
+    @pytest.mark.asyncio
+    async def test_cincin_lama_yang_kebesaran_dikecilkan(self):
+        db = _DbCincin(maks=20000, besar=10 * 1024 * 1024)
+        assert await event_bus.ensure_capped_collection(db) is True
+        mod = [p for p in db.perintah if isinstance(p, dict) and "collMod" in p]
+        assert mod, "cincin kebesaran tidak dikecilkan"
+        assert mod[0]["cappedMax"] == event_bus.CAPPED_MAX_DOCS
+        assert mod[0]["cappedSize"] == event_bus.CAPPED_SIZE_BYTES
+
+    @pytest.mark.asyncio
+    async def test_cincin_yang_SUDAH_pas_tak_disentuh(self):
+        # Tanpa ini, tiap start worker menulis collMod tanpa guna.
+        db = _DbCincin(maks=event_bus.CAPPED_MAX_DOCS,
+                       besar=event_bus.CAPPED_SIZE_BYTES)
+        await event_bus.ensure_capped_collection(db)
+        assert not [p for p in db.perintah if isinstance(p, dict) and "collMod" in p]
+
+    @pytest.mark.asyncio
+    async def test_cincin_yang_lebih_KECIL_tak_dibesarkan(self):
+        # Hanya mengecilkan. Membesarkan tak memberi manfaat dan justru
+        # menaikkan biaya pindaian tiap putaran.
+        db = _DbCincin(maks=100, besar=64 * 1024)
+        await event_bus.ensure_capped_collection(db)
+        assert not [p for p in db.perintah if isinstance(p, dict) and "collMod" in p]
+
+    @pytest.mark.asyncio
+    async def test_server_yang_menolak_collMod_tidak_menjatuhkan_bus(self):
+        class _Galat(_DbCincin):
+            async def command(self, perintah, *a, **k):
+                if isinstance(perintah, dict) and "collMod" in perintah:
+                    raise RuntimeError("collMod tak didukung")
+                return await super().command(perintah, *a, **k)
+
+        db = _Galat(maks=20000, besar=10 * 1024 * 1024)
+        assert await event_bus.ensure_capped_collection(db) is True
+
+    def test_cincin_cukup_besar_untuk_penyangga_nyata(self):
+        # Laju sisip terukur 485 dalam 22 jam = 0,006/detik. Seribu slot
+        # adalah cadangan berjam-jam. Batas bawah ini menjaga agar
+        # "mengecilkan" tak berubah jadi "membuang peristiwa".
+        assert event_bus.CAPPED_MAX_DOCS >= 500
+        assert event_bus.CAPPED_MAX_DOCS <= 5000, (
+            "cincin terlalu besar — tiap pindaian kursor tailable membacanya utuh"
+        )
