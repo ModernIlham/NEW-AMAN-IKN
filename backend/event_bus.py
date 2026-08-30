@@ -15,6 +15,7 @@ import os
 import uuid
 import logging
 import asyncio
+import time
 from datetime import datetime, timezone
 from typing import Optional, Callable, Awaitable
 import pymongo
@@ -28,6 +29,31 @@ WORKER_ID = os.environ.get("WORKER_ID") or f"worker-{uuid.uuid4().hex[:10]}"
 COLLECTION_NAME = "ws_events"
 CAPPED_SIZE_BYTES = 10 * 1024 * 1024   # 10 MB ring buffer
 CAPPED_MAX_DOCS = 20000                 # Max 20k events kept
+
+# Jendela minimum antara dua `find()` bila kursor habis TANPA memberi apa pun.
+#
+# KENAPA ADA — ini memperbaiki cacat yang membakar satu core CPU selama
+# berminggu-minggu. Kursor TAILABLE_AWAIT seharusnya MENAHAN hingga 2 detik
+# menunggu dokumen baru; bila ia justru habis seketika, `while True` di bawah
+# langsung menerbitkan `find()` berikutnya tanpa jeda sama sekali.
+#
+# Diagnosa 29 Agustus 2026 di produksi: **6.943.415 query dalam 17,1 jam**
+# (112,5 per detik) berbanding hanya **59 getmore**. Kursor yang benar-benar
+# menahan menghasilkan JUTAAN getmore; 59 berarti tiap putaran adalah `find()`
+# baru, bukan kelanjutan kursor. Tiap `find()` itu memindai seluruh 20.000
+# dokumen `ws_events` (koleksi ini hanya punya indeks `_id_`), dan pada 8 ms
+# per pindaian itu ≈ 90% satu core — persis 93,1% yang terbaca.
+#
+# Diukur ulang di luar produksi dengan kursor tiruan yang habis seketika dan
+# round-trip 8 ms: **121 find()/detik**, cocok dengan produksi dalam 8%.
+#
+# Jeda ini TIDAK menambah apa pun saat kursornya sehat: kursor yang menahan 2
+# detik sudah melewati jendela ini, jadi sisanya nol.
+JEDA_KURSOR_MATI = 0.1
+# Berapa putaran kosong-dan-cepat beruntun sebelum keadaannya diumumkan. Cacat
+# di atas berjalan berminggu-minggu tanpa satu pun baris log; diam bukan tanda
+# sehat.
+AMBANG_LAPOR_KURSOR_MATI = 100
 
 # Module-level state
 _tail_task: Optional[asyncio.Task] = None
@@ -90,6 +116,7 @@ async def _tail_loop(db, handler: Callable[[str, dict], Awaitable[None]]):
     logger.info(f"[event_bus] Tail loop starting (worker_id={WORKER_ID})")
     # Start from current moment — skip old events
     last_ts = datetime.now(timezone.utc)
+    mati_beruntun = 0
     while True:
         try:
             query = {"ts": {"$gt": last_ts}, "worker_id": {"$ne": WORKER_ID}}
@@ -100,7 +127,10 @@ async def _tail_loop(db, handler: Callable[[str, dict], Awaitable[None]]):
             )
             cursor.max_await_time_ms = 2000  # block up to 2s waiting for new docs
 
+            mulai = time.monotonic()
+            kosong = True
             async for doc in cursor:
+                kosong = False
                 try:
                     last_ts = doc.get("ts", last_ts)
                     activity_id = doc.get("activity_id", "")
@@ -111,6 +141,25 @@ async def _tail_loop(db, handler: Callable[[str, dict], Awaitable[None]]):
                     await handler(activity_id, payload)
                 except Exception as inner:
                     logger.warning(f"[event_bus] Handler error: {inner}")
+
+            # Kursor habis. Bila ia habis TANPA memberi apa pun dan lebih cepat
+            # daripada jendela tunggunya, awaitData tidak bekerja — dan tanpa
+            # jeda di sini `while True` akan menerbitkan `find()` berikutnya
+            # seketika, berulang ratusan kali per detik. Lihat JEDA_KURSOR_MATI.
+            sisa = JEDA_KURSOR_MATI - (time.monotonic() - mulai)
+            if kosong and sisa > 0:
+                mati_beruntun += 1
+                if mati_beruntun == AMBANG_LAPOR_KURSOR_MATI:
+                    logger.warning(
+                        "[event_bus] Kursor tailable habis seketika %d kali "
+                        "beruntun — awaitData tampaknya tidak bekerja. Laju "
+                        "find() ditahan ke %.0f/detik; fanout WS tetap jalan "
+                        "dengan latensi hingga %.0f ms.",
+                        mati_beruntun, 1 / JEDA_KURSOR_MATI,
+                        JEDA_KURSOR_MATI * 1000)
+                await asyncio.sleep(sisa)
+            else:
+                mati_beruntun = 0
         except asyncio.CancelledError:
             logger.info("[event_bus] Tail loop cancelled")
             raise
