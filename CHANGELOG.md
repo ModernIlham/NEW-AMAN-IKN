@@ -67,6 +67,60 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#946] Diagnosa mongod putaran kedua: ukur bentuk bebannya, sebut namanya — 2026-08-29
+
+Putaran pertama ([#945]) **menemukan gejalanya lalu berhenti**. Yang terbaca:
+
+| Bacaan | Angka |
+|---|---|
+| Query dalam 17,1 jam | **6.943.415** — 112,5 per detik, terus-menerus |
+| Tulis dalam periode yang sama | 1.220 (rasio baca:tulis **5.691 : 1**) |
+| Seluruh akses indeks pada `assets` | **236** |
+| Antrean baca/tulis | 0 / 0 |
+| Operasi aktif ≥ 1 detik | hanya `admin.$cmd` |
+
+Jam bacaannya 06:49 pagi waktu setempat — **tak seorang pun sedang memakai
+aplikasi**. Query sebanyak itu dengan akses indeks sesedikit itu jelas tidak
+memakai indeks; antrean nol dan hanya 4.680 halaman terbaca ke cache berarti
+tak ada I/O sama sekali. Semuanya **CPU murni di dalam memori**.
+
+**Tetapi alat itu tak bisa menyebut query-nya.** `currentOp` hanya menangkap
+operasi yang SEDANG berjalan; query yang selesai dalam 8 milidetik tak akan
+pernah tertangkap betapa pun seringnya diulang. Itu batas nyata bacaannya,
+bukan kesimpulan bahwa tak ada masalah.
+
+**Dua bacaan kumulatif yang menutup celahnya**
+
+- **Bentuk beban** — query per detik, dan `scannedObjects / returned`.
+  Membaca 44.000 dokumen untuk mengembalikan satu adalah tanda pindai-koleksi
+  yang klasik, dan rasio > 100 ditandai ⚠. Ini tak perlu menangkap query
+  sedang berjalan.
+- **Waktu mongod per koleksi** (`db.adminCommand({top: 1})`) — akumulasi waktu
+  per namespace sejak server naik, diurutkan, yang menguasai ≥20% ditebalkan.
+  **Inilah satu-satunya bacaan yang menyebut NAMA sumber beban langsung.**
+
+**Cacat format yang ikut diperbaiki**: `f"{x:,.1f}".replace(",", ".")`
+menghasilkan **`3.458.0 MB`** — dua titik dengan arti berbeda dalam satu
+angka. Penukarannya kini lewat penanda sementara: `3.458,0 MB`.
+
+**Dua mutasi LOLOS, dan keduanya menyingkap cacat pada uji saya sendiri**
+
+1. *Pengurutan `top` dicabut* — lolos, karena data uji saya **sudah urut sejak
+   awal** (dict Python mempertahankan urutan sisip). Uji itu tak pernah
+   menguji pengurutan. Diperbaiki dengan menaruh yang kecil lebih dulu.
+2. *Penjaga `ns == "note"` dicabut* — lolos, karena `isinstance(v, dict)` di
+   baris yang sama sudah menyaringnya (`note` bernilai string). Penjaga itu
+   **kode mati**; saya buang alih-alih menambah uji untuk sesuatu yang tak
+   pernah berjalan.
+
+Dua mutasi lain dibunuh: tanda pindai-koleksi dicabut, dan format angka
+dikembalikan bercampur.
+
+**Belum disimpulkan**: sumber bebannya. Alat ini sekarang bisa menyebutnya;
+bacaan berikutnya yang menentukan, bukan tebakan.
+
+---
+
 ## [#945] Diagnosa mongod: baca sumber beban CPU tanpa menyentuh basis data — 2026-08-29
 
 Permintaan pemilik: *"buatkan skrip diagnosis mongod yang read-only."*
