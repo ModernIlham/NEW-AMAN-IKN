@@ -19,6 +19,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import KartuTapDialog from "@/components/pegawai/KartuTapDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import AturPosisiTtd from "@/components/ttd/AturPosisiTtd";
+import BarisPenandaTangan from "@/components/ttd/BarisPenandaTangan";
 import { bagikanWa, bagikanEmail } from "@/lib/pesanTtd";
 import { authMediaUrl } from "@/lib/mediaUrl";
 import { teksSisaWaktu, warnaSisaWaktu, sudahKedaluwarsa } from "@/lib/sisaWaktu";
@@ -717,25 +718,53 @@ export default function TtdPermintaanPage({ user, onBack }) {
         <DialogContent className="max-w-lg overflow-x-hidden p-4 sm:p-6">
           {detail && (
             <>
-              <DialogHeader>
-                <DialogTitle className="pr-6 break-words flex items-center gap-2">
-                  <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground text-[10px] font-bold flex-shrink-0">
+              {/* `text-left` MELAWAN bawaan DialogHeader (`text-center
+                  sm:text-left`). Di HP judul ter-center, sehingga nomor BAST
+                  panjang terpecah jadi dua baris ragged di tengah dan baris
+                  keterangan ikut ter-center — ruang mendatar terbuang di kedua
+                  sisinya. `pr-6` juga DICABUT: DialogHeader sudah membawa
+                  `pr-11` untuk tombol tutup, jadi tambahan itu menyempitkan
+                  judul dua kali untuk satu tombol yang sama. */}
+              <DialogHeader className="text-left space-y-1">
+                {/* `text-base` (bawaan `text-lg`) + pemenggalan di mana saja:
+                    "BAST-052/SATKER-D/OIKN/VIII/2026" tak punya spasi yang
+                    bisa dipakai `break-words`, jadi ia melompat utuh ke baris
+                    berikutnya dan menyisakan baris pertama nyaris kosong. */}
+                {/* Chip jenis dokumen TETAP, tetapi `inline` di DALAM judul,
+                    bukan `flex` di sebelahnya: sebagai saudara flex ia
+                    memaksa judul jadi kolom kedua yang sempit, sehingga
+                    nomor BAST panjang membungkus lebih awal. Sebagai
+                    `inline-block` ia mengalir bersama teks dan baris
+                    berikutnya memakai lebar penuh. */}
+                <DialogTitle className="text-base leading-snug [overflow-wrap:anywhere]">
+                  <span className="align-middle mr-1.5 px-1.5 py-0.5 rounded bg-muted text-muted-foreground text-[10px] font-bold">
                     {detail.label_jenis || "Dokumen"}
                   </span>
-                  <span>{detail.judul_tampil || detail.judul}</span>
+                  {detail.judul_tampil || detail.judul}
                 </DialogTitle>
-                <DialogDescription className="break-words">
+                <DialogDescription className="text-[11px] leading-relaxed break-words">
                   {detail.mode === "berurutan" ? "Berurutan" : "Paralel"} · dibuat {fmtWaktu(detail.created_at)} oleh {detail.created_by}
                   {" · "}
                   <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${WARNA_STATUS[detail.status] || ""}`}>{LABEL_STATUS[detail.status] || detail.status}</span>
-                  {detail.doc_ref ? (
-                    <span className="block mt-1 text-[11px] text-muted-foreground break-words" data-testid="ttd-detail-doc-ref">
-                      Referensi dokumen: <b className="text-foreground">{detail.doc_ref}</b>
-                    </span>
-                  ) : null}
                 </DialogDescription>
+                {/* Referensi dokumen = UUID 36 karakter. Dibiarkan membungkus,
+                    ia memakan DUA baris penuh untuk nilai yang hampir tak
+                    pernah dibaca utuh — hanya dicocokkan atau disalin. Kini
+                    satu baris terpotong, nilai penuhnya di `title`, dan bisa
+                    disalin sekali tekan. */}
+                {detail.doc_ref ? (
+                  <button type="button"
+                    onClick={() => salin(detail.doc_ref)}
+                    title={`Salin referensi dokumen: ${detail.doc_ref}`}
+                    className="flex items-center gap-1 min-w-0 max-w-full text-[10px] text-muted-foreground hover:text-foreground min-h-0 min-w-0"
+                    data-testid="ttd-detail-doc-ref">
+                    <span className="shrink-0">Ref:</span>
+                    <span className="font-mono truncate">{detail.doc_ref}</span>
+                    <Copy className="w-3 h-3 shrink-0" />
+                  </button>
+                ) : null}
               </DialogHeader>
-              <div className="space-y-2 min-w-0">
+              <div className="space-y-1.5 min-w-0">
                 {detail.dok_file_id && (detail.signers || []).some((s) => s.signature_file_id)
                   && detail.status !== "batal" && (
                   <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-2.5 flex items-center justify-between gap-3">
@@ -753,111 +782,35 @@ export default function TtdPermintaanPage({ user, onBack }) {
                   </div>
                 )}
                 {(detail.signers || []).map((s) => (
-                  <div key={s.signer_id} className="rounded-xl border border-border p-2.5 space-y-1.5 min-w-0 overflow-hidden">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold truncate">{s.urutan}. {s.nama}</p>
-                        <p className="text-[11px] text-muted-foreground truncate">
-                          {s.jabatan || "-"}{s.nip ? ` · NIP ${s.nip}` : ""}
-                          {s.signed_at ? ` · ${fmtWaktu(s.signed_at)}` : ""}
-                        </p>
-                      </div>
-                      {/* Pratinjau gambar TTD disembunyikan bila permintaan
-                          DIBATALKAN — endpoint gambar kini menolak (410) shg
-                          <img> jadi ikon rusak; status pill tetap tampil. */}
-                      {s.signature_file_id && detail.status !== "batal" ? (
-                        <img alt={`TTD ${s.nama}`}
-                          src={authMediaUrl(`${API}/ttd/tandatangan/${detail.id}/gambar/${s.signer_id}`)}
-                          className="h-10 max-w-[90px] object-contain bg-white rounded border border-border p-0.5 flex-shrink-0" />
-                      ) : null}
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${WARNA_SIGNER[s.status] || "bg-muted text-muted-foreground"}`}>
-                        {LABEL_SIGNER[s.status] || s.status}
-                      </span>
-                      {/* Sisa waktu tautan ORANG INI — dasar keputusan apakah
-                          tautannya perlu diterbitkan ulang. Tak relevan bagi
-                          yang sudah meneken. */}
-                      {!["menunggu_validasi", "terverifikasi", "ditandatangani"].includes(s.status)
-                        && detail.status !== "batal"
-                        && teksSisaWaktu(s.kedaluwarsa_info) && (
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${warnaSisaWaktu(s.kedaluwarsa_info)}`}
-                          data-testid={`ttd-sisa-signer-${s.signer_id}`}>
-                          {sudahKedaluwarsa(s.kedaluwarsa_info)
-                            ? "Tautan mati" : teksSisaWaktu(s.kedaluwarsa_info)}
-                        </span>
-                      )}
-                    </div>
-                    {s.deklarasi_tanpa_area && (
-                      <div className="rounded-lg bg-amber-500/10 border border-amber-500/25 p-2 text-[10px] text-amber-800 dark:text-amber-200"
-                        data-testid={`ttd-deklarasi-${s.signer_id}`}>
-                        <b>Deklarasi jumlah:</b> penanda tangan sudah memeriksa seluruh dokumen dan hanya menemukan
-                        {` ${s.deklarasi_jumlah_aktual || 0} dari ${s.deklarasi_jumlah_diminta || s.jumlah_ttd || 1} `}
-                        area TTD miliknya.
-                        {s.deklarasi_catatan ? ` Catatan: ${s.deklarasi_catatan}` : ""}
-                      </div>
-                    )}
-                    {["aktif", "menunggu"].includes(s.status) && detail.status !== "batal" && (
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]"
-                          title="Buat link baru (link lama otomatis mati) lalu salin"
-                          onClick={() => terbitkanLink(s)} data-testid={`ttd-link-ulang-${s.signer_id}`}>
-                          <Link2 className="w-3 h-3 mr-1" />Terbitkan Link
-                        </Button>
-                        {linkUlang[s.signer_id] && (
-                          <>
-                            <Button type="button" variant="outline" size="sm"
-                              className="h-7 w-7 p-0 min-h-0 min-w-0 text-emerald-600"
-                              title="Bagikan via WhatsApp" aria-label="Bagikan via WhatsApp"
-                              onClick={() => bagikanWa(s.nama, detail.judul, linkUlang[s.signer_id], detail.ringkas)}>
-                              <MessageCircle className="w-3 h-3" />
-                            </Button>
-                            <Button type="button" variant="outline" size="sm"
-                              className="h-7 w-7 p-0 min-h-0 min-w-0"
-                              title="Bagikan via email" aria-label="Bagikan via email"
-                              onClick={() => bagikanEmail(s.nama, detail.judul, linkUlang[s.signer_id], detail.ringkas)}>
-                              <Mail className="w-3 h-3" />
-                            </Button>
-                            <Button type="button" variant="outline" size="sm" className="h-7 text-[10px] min-h-0 min-w-0"
-                              title={linkUlang[s.signer_id]}
-                              onClick={() => salin(linkUlang[s.signer_id])}>
-                              <Copy className="w-3 h-3 mr-1" />Salin lagi
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    )}
-                    {["menunggu_validasi", "terverifikasi"].includes(s.status)
-                      && detail.status !== "batal" && detail.status !== "selesai" && (
-                      <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                        {s.status === "menunggu_validasi" && (
-                          <Button type="button" size="sm" className="h-8 text-[11px]"
-                            onClick={() => setValidasi({ signer: s, aksi: "setujui", alasan: "" })}
-                            data-testid={`ttd-validasi-${s.signer_id}`}>
-                            <ShieldCheck className="w-3.5 h-3.5 mr-1" />Validasi Sesuai
-                          </Button>
-                        )}
-                        <Button type="button" variant="outline" size="sm"
-                          className="h-8 text-[11px] text-amber-700 border-amber-500/40"
-                          onClick={() => setValidasi({ signer: s, aksi: "buka_ulang", alasan: "" })}
-                          data-testid={`ttd-buka-ulang-${s.signer_id}`}>
-                          <RotateCcw className="w-3.5 h-3.5 mr-1" />Buka Ulang Orang Ini
-                        </Button>
-                      </div>
-                    )}
-                    {s.validated_at && (
-                      <p className="text-[10px] text-emerald-700 dark:text-emerald-300">
-                        Diverifikasi {fmtWaktu(s.validated_at)}{s.validated_by ? ` oleh ${s.validated_by}` : ""}
-                        {s.validation_note ? ` · ${s.validation_note}` : ""}
-                      </p>
-                    )}
-                  </div>
+                  <BarisPenandaTangan
+                    key={s.signer_id}
+                    signer={{ ...s, signed_at_teks: s.signed_at ? fmtWaktu(s.signed_at) : "",
+                      validated_at_teks: s.validated_at ? fmtWaktu(s.validated_at) : "" }}
+                    dibatalkan={detail.status === "batal"}
+                    gambarTtd={authMediaUrl(`${API}/ttd/tandatangan/${detail.id}/gambar/${s.signer_id}`)}
+                    link={linkUlang[s.signer_id]}
+                    labelStatus={LABEL_SIGNER[s.status] || s.status}
+                    warnaStatus={WARNA_SIGNER[s.status] || ""}
+                    onTerbitkan={() => terbitkanLink(s)}
+                    onWhatsapp={() => bagikanWa(s.nama, detail.judul, linkUlang[s.signer_id], detail.ringkas)}
+                    onEmail={() => bagikanEmail(s.nama, detail.judul, linkUlang[s.signer_id], detail.ringkas)}
+                    onSalin={() => salin(linkUlang[s.signer_id])}
+                    bisaValidasi={detail.status !== "batal" && detail.status !== "selesai"}
+                    onValidasi={() => setValidasi({ signer: s, aksi: "setujui", alasan: "" })}
+                    onBukaUlang={() => setValidasi({ signer: s, aksi: "buka_ulang", alasan: "" })}
+                  />
                 ))}
-                <div className="rounded-xl bg-muted/60 p-2.5 text-[11px] text-muted-foreground flex items-start gap-2">
-                  <ShieldCheck className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-                  <span>
-                    Verifikasi publik: <button type="button" className="underline font-semibold"
-                      onClick={() => salin(linkVerifikasi(detail.id))}>salin link verifikasi</button>{" "}
-                    — bisa dipindai dari QR pada Lembar Pengesahan.
-                  </span>
+                {/* Dipadatkan: `p-2.5` + teks tiga kalimat dulu memakan dua
+                    baris penuh untuk satu tautan. Keterangan "bisa dipindai
+                    dari QR" dipindah ke `title` — ia menjelaskan, bukan
+                    diperlukan saat membaca sekilas. */}
+                <div className="rounded-lg bg-muted/60 px-2.5 py-1.5 text-[10px] text-muted-foreground flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                  <span className="min-w-0 truncate">Verifikasi publik</span>
+                  <button type="button"
+                    className="underline font-semibold shrink-0 min-h-0 min-w-0 ml-auto"
+                    title="Salin tautan verifikasi — tautan yang sama dipindai dari QR pada Lembar Pengesahan"
+                    onClick={() => salin(linkVerifikasi(detail.id))}>salin tautan</button>
                 </div>
               </div>
               {/* Footer padat: aksi unduh (3 dokumen) dilipat ke satu menu

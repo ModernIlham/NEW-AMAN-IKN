@@ -15,6 +15,88 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#956] Dialog detail permintaan TTD dipadatkan — 2026-08-30
+
+Permintaan pemilik, disertai tangkapan layar: *"perbaiki tampilan ini agar
+semuanya rapi dan terlihat memanfaatkan ruang yang ada dan sudah diatur
+sedemikian rupa agar terlihat padat informasi yang ditampilkan."*
+
+**Diukur di Chromium dengan CSS hasil build sungguhan, dibandingkan terhadap
+`main` sesudah [#943] dan [#946] mendarat** (jadi chip jenis dokumen dan
+baris "Referensi dokumen" ikut terhitung di kolom Sebelum):
+
+| Lebar | Sebelum | Sesudah | Hemat | Nama terpotong (sebelum → sesudah) |
+|---|---|---|---|---|
+| 360 px | 651 px | 527 px | **19%** | 3 → **0** |
+| 400 px | 616 px | 469 px | **24%** | 3 → **0** |
+| 480 px | 596 px | 428 px | **28%** | 2 → **0** |
+
+**Empat sebab ruangnya terbuang**
+
+1. **Tombol "Terbitkan Link" berdiri di baris sendiri**, rata kiri, dua
+   pertiga lebar di sebelahnya kosong — tiga kali, satu per penanda tangan.
+2. **Tombol itu tak membawa `min-w-0 min-h-0`**, sehingga aturan tap-target
+   global (`button { min-height:44px; min-width:44px }` pada ≤1023 px)
+   membengkakkannya jadi 44 px; `min-*` selalu menang atas `height`.
+   Saudara-saudaranya (WhatsApp, Email, Salin) sudah dikecualikan — yang ini
+   terlewat. **Cacat yang sama** dengan ikon ✓/✗ bertumpuk di [#944].
+3. **`DialogHeader` ber-`text-center` di HP.** Nomor BAST panjang terpecah
+   jadi dua baris ragged di tengah, dan baris keterangan ikut ter-center —
+   ruang mendatar terbuang di KEDUA sisinya.
+4. **`pr-6` pada judul menumpuk di atas `pr-11` milik DialogHeader** — dua
+   penyisihan ruang untuk satu tombol tutup yang sama.
+
+**Yang berubah**
+
+- Baris penanda tangan **dua baris**, bukan tiga: tombol menempel di kanan
+  baris jabatan, mengisi ruang yang tadinya menganga.
+- Baris berbagi (WA/Email/Salin) **hanya muncul setelah tautannya terbit** —
+  saat memang ada tiga tombol yang butuh tempat.
+- Judul rata kiri, `text-base`, dengan `overflow-wrap:anywhere`:
+  `BAST-052/SATKER-D/OIKN/VIII/2026` tak punya spasi, jadi `break-words`
+  melemparkannya utuh ke baris berikutnya dan menyisakan baris pertama
+  nyaris kosong.
+- **Chip jenis dokumen dari [#943] dipertahankan**, tetapi dipindah menjadi
+  `inline-block` DI DALAM judul. Sebagai saudara `flex` ia memaksa judul jadi
+  kolom kedua yang sempit sehingga nomor BAST membungkus lebih awal; sebagai
+  elemen inline ia mengalir bersama teks dan baris berikutnya memakai lebar
+  penuh. Kepala dialog sendiri turun **160 px → 135 px** pada 400 px.
+- **Referensi dokumen** (UUID 36 karakter) dari dua baris membungkus jadi
+  **satu baris terpotong** dengan nilai penuh di `title` dan **sekali tekan
+  untuk menyalin** — ia memang dicocokkan atau disalin, tak pernah dibaca
+  utuh.
+- Catatan verifikasi dari dua baris jadi satu.
+
+**Satu trade-off yang saya ambil sadar.** Versi terpadat mencapai 392 px,
+tetapi memotong nama jadi `1. Karlinus Ignas…`. Nama dibiarkan
+**membungkus**: memangkas nama orang pada dialog yang justru menentukan siapa
+bertanggung jawab meneken apa bukan penghematan yang pantas. 469 px adalah
+harga keputusan itu, dan uji menguncinya — beserta pembanding bahwa jabatan
+**tetap** dipotong, sebab ia keterangan, bukan identitas.
+
+**Tak ada fungsi yang hilang saat dipadatkan.** Panel *Pemeriksaan validator*,
+deklarasi jumlah area TTD, tombol *Validasi Sesuai* / *Buka Ulang Orang Ini*,
+dan catatan hasil verifikasi — semuanya baru mendarat lewat [#943] — ikut
+pindah utuh ke baris yang dipadatkan. Syarat "boleh terbitkan tautan" bahkan
+dipertegas jadi **daftar-putih** `aktif`/`menunggu`: "asal belum
+ditandatangani" akan menawarkan tautan baru kepada orang yang bubuhannya
+sudah masuk dan sedang menunggu validasi — dan tautan baru mematikan yang
+lama.
+
+Baris penanda tangan **diekstrak** jadi `components/ttd/BarisPenandaTangan.jsx`
+— sebelumnya ia tertanam di halaman 838 baris tanpa satu pun uji. Kini **21**.
+
+Sembilan mutasi dipasang lalu dibunuh: pengecualian tap-target dicabut (cacat
+aslinya), tombol dikembalikan ke barisnya sendiri, baris berbagi muncul
+sebelum tautannya terbit, pratinjau TTD tetap tampil meski permintaan
+dibatalkan (endpoint gambarnya menolak 410 → ikon rusak), nama dipotong lagi
+— yang ini **LOLOS** sampai ujinya ditambahkan — lalu, sesudah penggabungan
+dengan [#943]: daftar-putih penerbitan tautan dicabut, gerbang `bisaValidasi`
+diabaikan, sisa waktu dipulihkan bagi yang sudah lewat tahap penekenan, dan
+kotak deklarasi jumlah area dihapus.
+
+---
+
 ## [#955] Pisahkan galeri dan kamera pada foto TTD — 2026-08-30
 
 - Mode **Foto (hapus BG)** kini menyediakan tombol **Pilih file / galeri**
