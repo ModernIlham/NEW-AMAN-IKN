@@ -67,6 +67,63 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#947] Gelung event-bus berhenti membanjiri mongod — 2026-08-30
+
+**Sumber beban CPU yang terbuka sejak awal Agustus akhirnya bernama.**
+
+Rantai buktinya, dari gejala ke baris kode:
+
+| Bacaan produksi (29 Agu, 17,1 jam) | Angka |
+|---|---|
+| Query | **6.943.415** — 112,5 per detik, terus-menerus |
+| Tulis | 1.220 → rasio **5.691 : 1** |
+| **`getmore`** | **59** |
+| Akses indeks pada `assets` | 236 |
+| Antrean baca / tulis | 0 / 0 |
+
+**Angka `getmore` itu yang menunjuk pelakunya.** Kursor `TAILABLE_AWAIT` yang
+benar-benar MENAHAN menghasilkan jutaan `getmore`; 59 berarti tiap putaran
+adalah `find()` **baru**, bukan kelanjutan kursor.
+
+`_tail_loop` di `backend/event_bus.py` tak punya satu pun jeda pada jalur
+suksesnya. Begitu kursornya habis seketika, `while True` langsung menerbitkan
+`find()` berikutnya — dan tiap `find()` memindai **seluruh 20.000 dokumen**
+`ws_events`, koleksi yang hanya punya indeks `_id_`.
+
+**Diukur ulang di luar produksi**, dengan kursor tiruan yang habis seketika:
+
+- **tanpa I/O** → gelungnya tak pernah melepas event loop; probe-nya *timeout*.
+  Bukan hanya Mongo yang terbebani — seluruh proses kelaparan.
+- **dengan round-trip 8 ms** → **121 find()/detik**. Produksi mengukur 112,5.
+  **Cocok dalam 8%.**
+
+**Perbaikannya**: bila kursor habis TANPA memberi dokumen apa pun DAN lebih
+cepat daripada jendela tunggunya, tidur sisa jendelanya. Pada probe yang sama:
+**121/detik → 10/detik**.
+
+Kursor yang sehat **tidak** ikut tertahan — ia sudah menahan 2 detik, jauh
+melewati jendela 100 ms, jadi sisanya nol dan latensi fanout tak berubah.
+Ditambah peringatan log setelah 100 putaran kosong beruntun: cacat ini
+berjalan berminggu-minggu **tanpa satu pun baris log**, dan diam bukan tanda
+sehat.
+
+**Satu mutasi LOLOS.** "Jeda diberikan tanpa syarat" — yang akan menahan
+kursor sehat juga — lolos, karena uji saya memakai waktu tahan 0,15 s dan
+bedanya hanya 4 lawan 3 `find()`, terlalu rapat untuk membedakan apa pun.
+Diperbaiki dengan memilih waktu tahan tepat di atas jendela jeda sehingga
+mutasi itu hampir melipatgandakan siklusnya; dipasang ulang, dan mati.
+
+Empat mutasi lain dibunuh: jeda dicabut (cacat aslinya), dokumen tak lagi
+diteruskan ke handler, peringatan log dicabut, dan penanda "kosong" dipaksa
+False.
+
+**Yang belum**: indeks pada `ts` untuk `ws_events` sengaja TIDAK ditambahkan.
+Kursor tailable pada koleksi capped secara tradisional memindai urutan alami,
+jadi manfaat indeksnya belum pasti — dan saya tak bisa mengujinya tanpa mongod
+sungguhan. Penahanan laju di atas bekerja terlepas dari itu.
+
+---
+
 ## [#946] Diagnosa mongod putaran kedua: ukur bentuk bebannya, sebut namanya — 2026-08-29
 
 Putaran pertama ([#945]) **menemukan gejalanya lalu berhenti**. Yang terbaca:

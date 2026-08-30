@@ -1,0 +1,173 @@
+"""Gelung tail event-bus tak boleh menerbitkan `find()` bertubi-tubi.
+
+CACAT YANG DIPERBAIKI, dan bagaimana ia ketahuan.
+
+Inventaris VPS 29 Agustus 2026 menemukan `mongod` memakai **93,1% CPU**
+terus-menerus pada mesin 2 vCPU — beban 1,00 datar di jendela 1/5/15 menit
+selama berminggu-minggu, tak peduli ada pengguna atau tidak. Diagnosa
+berikutnya membaca:
+
+===========================  =============
+Query dalam 17,1 jam         6.943.415  (112,5 per detik)
+Tulis dalam periode sama     1.220
+`getmore`                    **59**
+Akses indeks pada `assets`   236
+Antrean baca / tulis         0 / 0
+===========================  =============
+
+Angka `getmore` itu yang menunjuk pelakunya. Kursor TAILABLE_AWAIT yang
+benar-benar MENAHAN menghasilkan jutaan `getmore`; 59 berarti tiap putaran
+adalah `find()` BARU, bukan kelanjutan kursor. `_tail_loop` tak punya satu pun
+jeda pada jalur suksesnya, jadi begitu kursornya habis seketika ia langsung
+menerbitkan `find()` berikutnya — dan tiap `find()` memindai seluruh 20.000
+dokumen `ws_events`, koleksi yang hanya punya indeks `_id_`.
+
+Diukur ulang di luar produksi dengan kursor tiruan yang habis seketika:
+
+* tanpa I/O sama sekali → gelungnya **tak pernah melepas event loop**; probe-nya
+  timeout. Bukan hanya Mongo yang terbebani — seluruh proses kelaparan.
+* dengan round-trip 8 ms → **121 find()/detik**, cocok dengan 112,5/detik yang
+  terbaca di produksi dalam 8%.
+
+Sesudah diperbaiki, pada probe yang sama: **10 find()/detik**.
+
+Uji di bawah mengunci perilakunya, bukan angkanya: gelung yang kursornya mati
+harus TERTAHAN, dan gelung yang kursornya sehat TIDAK boleh ikut tertahan.
+"""
+import asyncio
+import time
+
+import pytest
+
+import event_bus
+
+
+class _KursorPalsu:
+    """Kursor tailable tiruan. `tahan` = berapa lama ia menahan sebelum habis."""
+
+    max_await_time_ms = None
+
+    def __init__(self, dokumen, tahan):
+        self._dokumen = list(dokumen)
+        self._tahan = tahan
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if self._dokumen:
+            return self._dokumen.pop(0)
+        if self._tahan:
+            await asyncio.sleep(self._tahan)
+        raise StopAsyncIteration
+
+
+class _KoleksiPalsu:
+    def __init__(self, dokumen=(), tahan=0.0, rtt=0.0):
+        self.jumlah_find = 0
+        self._dokumen = list(dokumen)
+        self._tahan = tahan
+        self._rtt = rtt
+
+    def find(self, *_a, **_k):
+        self.jumlah_find += 1
+        kirim, self._dokumen = self._dokumen, []
+        return _KursorPalsu(kirim, self._tahan or self._rtt)
+
+
+class _DbPalsu:
+    def __init__(self, koleksi):
+        self.koleksi = koleksi
+
+    def __getitem__(self, _nama):
+        return self.koleksi
+
+
+async def _jalankan(koleksi, detik, handler=None):
+    """Putar _tail_loop selama `detik`, lalu batalkan."""
+    async def _kosong(_a, _p):
+        return None
+
+    tugas = asyncio.create_task(
+        event_bus._tail_loop(_DbPalsu(koleksi), handler or _kosong))
+    mulai = time.monotonic()
+    await asyncio.sleep(detik)
+    lama = time.monotonic() - mulai
+    tugas.cancel()
+    try:
+        await tugas
+    except asyncio.CancelledError:
+        pass
+    return lama
+
+
+@pytest.mark.asyncio
+async def test_kursor_yang_mati_seketika_TIDAK_membanjiri_mongod():
+    # Kursor habis setelah round-trip 8 ms, tanpa memberi dokumen apa pun —
+    # persis gejala produksi (59 getmore berbanding 6,94 juta query).
+    koleksi = _KoleksiPalsu(rtt=0.008)
+    lama = await _jalankan(koleksi, 0.6)
+    laju = koleksi.jumlah_find / lama
+    # Tanpa perbaikan laju ini ±121/detik. Batasnya dipasang longgar (25)
+    # supaya uji tak rapuh pada mesin CI yang lambat, tetapi tetap jauh di
+    # bawah angka cacatnya.
+    assert laju < 25, (
+        f"gelung menerbitkan {laju:,.0f} find()/detik — ia berputar bebas lagi"
+    )
+
+
+@pytest.mark.asyncio
+async def test_kursor_yang_SEHAT_tak_ikut_tertahan():
+    # Kursor yang benar-benar menahan sudah melewati jendela jeda, jadi
+    # perbaikannya tak boleh menambah keterlambatan apa pun. Kalau uji ini
+    # dihapus, "perbaikan" berupa `sleep` tanpa syarat akan lolos.
+    # Waktu tahan dipilih TEPAT DI ATAS JEDA_KURSOR_MATI supaya jeda tanpa
+    # syarat hampir MELIPATGANDAKAN panjang siklusnya — versi pertama uji ini
+    # memakai 0,15 s dan bedanya hanya 4 lawan 3 find, terlalu rapat untuk
+    # membedakan apa pun. Mutasi "sleep tanpa syarat" lolos karenanya.
+    tahan = event_bus.JEDA_KURSOR_MATI + 0.01
+    koleksi = _KoleksiPalsu(tahan=tahan)
+    lama = await _jalankan(koleksi, 0.8)
+    # Benar  : siklus 0,11 s => ±7 find dalam 0,8 s.
+    # Cacat  : siklus 0,21 s => ±3 find.
+    assert koleksi.jumlah_find >= 5, (
+        f"hanya {koleksi.jumlah_find} find() dalam {lama:.2f}s — kursor sehat "
+        "ikut tertahan"
+    )
+
+
+@pytest.mark.asyncio
+async def test_dokumen_tetap_diteruskan_ke_handler():
+    # Penahanan laju tak boleh menelan peristiwanya. Tanpa uji ini, "perbaikan"
+    # berupa `return` di awal gelung akan lolos kedua uji di atas.
+    diterima = []
+
+    async def handler(activity_id, payload):
+        diterima.append((activity_id, payload))
+
+    koleksi = _KoleksiPalsu(
+        dokumen=[{"activity_id": "keg-1", "ts": None, "worker_id": "lain",
+                  "_id": 1, "tipe": "aset_disimpan"}],
+        rtt=0.008)
+    await _jalankan(koleksi, 0.3, handler)
+    assert diterima, "peristiwa tak pernah sampai ke handler"
+    assert diterima[0][0] == "keg-1"
+    # Metadata bus dilucuti, muatan diteruskan.
+    assert diterima[0][1] == {"tipe": "aset_disimpan"}
+
+
+@pytest.mark.asyncio
+async def test_keadaan_itu_diumumkan_ke_log(caplog):
+    # Cacat ini berjalan berminggu-minggu tanpa satu pun baris log. Diam bukan
+    # tanda sehat.
+    asli = event_bus.AMBANG_LAPOR_KURSOR_MATI
+    event_bus.AMBANG_LAPOR_KURSOR_MATI = 3
+    try:
+        with caplog.at_level("WARNING"):
+            await _jalankan(_KoleksiPalsu(rtt=0.001), 0.6)
+        assert any("awaitData" in r.message or "awaitData" in r.getMessage()
+                   for r in caplog.records), (
+            "kursor yang terus mati tak menghasilkan peringatan apa pun"
+        )
+    finally:
+        event_bus.AMBANG_LAPOR_KURSOR_MATI = asli
