@@ -65,6 +65,7 @@ export default function SignatureCapture({ onSave, saving = false, tokenQuery = 
   const [olah, setOlah] = useState(false);
   const sigRef = useRef(null);
   const fileRef = useRef(null);
+  const cameraRef = useRef(null);
   const wrapRef = useRef(null);
   const ukuranRef = useRef({ w: 0, h: 0 }); // ukuran CSS kanvas terakhir
 
@@ -159,6 +160,7 @@ export default function SignatureCapture({ onSave, saving = false, tokenQuery = 
     } finally {
       setOlah(false);
       if (fileRef.current) fileRef.current.value = "";
+      if (cameraRef.current) cameraRef.current.value = "";
     }
   }, [tokenQuery]);
 
@@ -215,8 +217,13 @@ export default function SignatureCapture({ onSave, saving = false, tokenQuery = 
         </div>
       ) : (
         <div className="rounded-xl border-2 border-dashed border-border p-3 text-center space-y-2 bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,rgba(120,120,120,0.05)_10px,rgba(120,120,120,0.05)_20px)]">
-          <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden"
+          {/* Galeri dan kamera WAJIB memakai input terpisah. Atribut `capture`
+              pada satu-satunya input membuat banyak browser HP langsung
+              membuka kamera dan menghilangkan pilihan file/galeri. */}
+          <input ref={fileRef} type="file" accept="image/*" className="hidden"
             onChange={(e) => olahFoto(e.target.files?.[0])} data-testid="ttd-foto-input" />
+          <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden"
+            onChange={(e) => olahFoto(e.target.files?.[0])} data-testid="ttd-kamera-input" />
           {fotoPng ? (
             <img src={fotoPng} alt="Pratinjau TTD" className="max-h-40 mx-auto" data-testid="ttd-foto-preview" />
           ) : (
@@ -224,11 +231,19 @@ export default function SignatureCapture({ onSave, saving = false, tokenQuery = 
               Foto tanda tangan pada kertas <b>terang & polos</b>, goresan gelap — background otomatis dihapus.
             </p>
           )}
-          <Button type="button" variant="outline" size="sm" className="h-8 text-xs" disabled={olah}
-            onClick={() => fileRef.current?.click()} data-testid="ttd-foto-pilih">
-            {olah ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Upload className="w-3.5 h-3.5 mr-1.5" />}
-            {fotoPng ? "Ganti foto" : "Pilih / ambil foto"}
-          </Button>
+          <p className="text-xs font-medium text-foreground">Pilih sumber foto</p>
+          <div className="grid grid-cols-2 gap-2">
+            <Button type="button" variant="outline" size="sm" className="min-h-[44px] h-auto text-xs"
+              disabled={olah} onClick={() => fileRef.current?.click()} data-testid="ttd-foto-pilih">
+              {olah ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Upload className="w-3.5 h-3.5 mr-1.5" />}
+              {fotoPng ? "Ganti dari galeri" : "Pilih file / galeri"}
+            </Button>
+            <Button type="button" variant="outline" size="sm" className="min-h-[44px] h-auto text-xs"
+              disabled={olah} onClick={() => cameraRef.current?.click()} data-testid="ttd-foto-kamera">
+              <Camera className="w-3.5 h-3.5 mr-1.5" />
+              {fotoPng ? "Foto ulang" : "Ambil foto kamera"}
+            </Button>
+          </div>
         </div>
       )}
 

@@ -15,6 +15,17 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#955] Pisahkan galeri dan kamera pada foto TTD — 2026-08-30
+
+- Mode **Foto (hapus BG)** kini menyediakan tombol **Pilih file / galeri**
+  dan **Ambil foto kamera** secara terpisah.
+- Input galeri tidak lagi memakai atribut `capture`, sehingga browser ponsel
+  tidak dipaksa langsung membuka kamera.
+- Kedua sumber tetap memakai proses kompresi, penghapusan background, dan
+  pratinjau tanda tangan yang sama.
+
+---
+
 ## [#952] Soft-delete Persuratan + gerbang validasi E-sign — 2026-08-30
 
 - Hapus pada Registrasi Persuratan kini berupa **soft-delete**: record, relasi,
