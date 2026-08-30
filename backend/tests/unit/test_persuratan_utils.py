@@ -96,8 +96,9 @@ class TestAgendaCsv:
         # keduanya penambahan yang benar. Yang layak dijaga adalah PEMETAAN
         # nilai ke kolomnya, bukan nomor urut kolom.
         kolom = {nama: i for i, nama in enumerate(rows[0])}
-        for wajib in ("No Agenda", "Keberlakuan", "Nomor Eksternal",
-                      "Jenis Naskah", "Sifat Urgensi"):
+        for wajib in ("No Agenda", "Catatan Data", "Keberlakuan",
+                      "Nomor Eksternal", "Jenis Naskah", "Sifat Urgensi",
+                      "Dihapus Pada", "Dihapus Oleh"):
             assert wajib in kolom, f"kolom '{wajib}' hilang dari buku agenda"
 
         def sel(baris, nama):
@@ -113,6 +114,17 @@ class TestAgendaCsv:
         # Baris tanpa sifat urgensi tampil kosong, bukan mengarang "Biasa" —
         # buku agenda tak boleh menyatakan sesuatu yang tak pernah dicatat.
         assert sel(2, "Sifat Urgensi") == ""
+
+    def test_soft_delete_terlihat_di_ekspor_bukan_hilang(self):
+        rows = baris_agenda_csv([{
+            "jenis": "masuk", "no_agenda": 8, "status": "diterima",
+            "nomor": "S-8", "perihal": "Salah catat", "dihapus": True,
+            "dihapus_pada": "2026-08-30T10:11:12+00:00",
+            "dihapus_oleh": "admin.satker",
+        }])
+        kolom = {n: i for i, n in enumerate(rows[0])}
+        assert rows[1][kolom["Catatan Data"]] == "DIHAPUS (soft-delete)"
+        assert rows[1][kolom["Dihapus Oleh"]] == "admin.satker"
 
 
 # ── Klasifikasi otomatis (persuratan smart) ──

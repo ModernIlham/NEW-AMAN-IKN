@@ -46,6 +46,7 @@ const WARNA_KEBERLAKUAN = {
   diubah: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
   tidak_berlaku: "bg-red-500/15 text-red-600 dark:text-red-400",
   draf: "bg-muted text-muted-foreground",
+  dihapus: "bg-red-500/15 text-red-700 dark:text-red-400",
 };
 // Label sifat urgensi untuk baris agenda. Sumbu ini terpisah dari kode
 // keamanan — lihat SIFAT_URGENSI di backend.
@@ -55,7 +56,7 @@ const LABEL_URGENSI = {
 
 const LABEL_KEBERLAKUAN = {
   berlaku: "Berlaku", diubah: "Diubah", tidak_berlaku: "Tidak Berlaku",
-  draf: "Draf",
+  draf: "Draf", dihapus: "Di Hapus",
 };
 
 const KELUAR_KOSONG = {
@@ -210,12 +211,12 @@ export default function PersuratanPage({ user, onBack }) {
     const ok = await confirm({
       title: `Hapus surat ${s.nomor}?`,
       description: s.jenis === "keluar"
-        ? "Catatan booking ini dihapus permanen; nomor agenda yang telanjur terpakai hangus (tidak dipakai ulang)."
-        : "Catatan surat masuk ini dihapus permanen dari buku agenda.",
-      confirmLabel: "Hapus", variant: "danger",
+        ? "Catatan tetap disimpan sebagai jejak arsip, tetapi seluruh row akan diredupkan dan ditandai DI HAPUS. Nomor agenda tetap hangus dan tidak dipakai ulang."
+        : "Catatan tetap disimpan sebagai jejak arsip, tetapi seluruh row akan diredupkan dan ditandai DI HAPUS.",
+      confirmLabel: "Tandai Di Hapus", variant: "danger",
     });
     if (!ok) return;
-    kirim(() => axios.delete(`${API}/persuratan/${s.id}`), `Surat ${s.nomor} dihapus`);
+    kirim(() => axios.delete(`${API}/persuratan/${s.id}`), `Surat ${s.nomor} ditandai Di Hapus`);
   };
 
   /**
@@ -337,8 +338,16 @@ export default function PersuratanPage({ user, onBack }) {
   ), [ref, fJenis]);
 
   // Aksi per surat — satu sumber untuk sel tabel (desktop) & kartu (mobile).
-  const renderAksi = (s, sfx = "") => (
-    <>
+  const renderAksi = (s, sfx = "") => {
+    if (s.dihapus) {
+      return (
+        <span className="inline-flex -rotate-6 rounded border-2 border-red-600/70 px-2 py-0.5 text-[10px] font-black tracking-[0.18em] text-red-700 dark:text-red-400"
+          data-testid={`persuratan-watermark-aksi-${s.id}${sfx}`}>
+          DI HAPUS
+        </span>
+      );
+    }
+    return (<>
       {s.jenis === "keluar" && s.status === "dibooking" && (
         <>
           <Button size="sm" onClick={() => transisi(s, "disahkan")}
@@ -401,8 +410,8 @@ export default function PersuratanPage({ user, onBack }) {
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       )}
-    </>
-  );
+    </>);
+  };
 
   return (
     <div className="min-h-screen bg-background" data-testid="persuratan-page">
@@ -554,7 +563,15 @@ export default function PersuratanPage({ user, onBack }) {
                 menutupi Perihal/Dari di layar sempit (umpan balik tangkapan layar). */}
             <ul className="sm:hidden divide-y divide-border/60" data-testid="persuratan-cards-mobile">
               {items.map((s) => (
-                <li key={s.id} className="p-3 space-y-1" data-testid={`persuratan-card-${s.id}`}>
+                <li key={s.id}
+                  className={`relative p-3 space-y-1 ${s.dihapus ? "bg-muted/40 opacity-40 grayscale" : ""}`}
+                  data-testid={`persuratan-card-${s.id}`} data-dihapus={s.dihapus ? "true" : "false"}>
+                  {s.dihapus && (
+                    <span className="pointer-events-none absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 -rotate-12 rounded border-4 border-red-600/80 px-4 py-1 text-lg font-black tracking-[0.25em] text-red-700 dark:text-red-400"
+                      data-testid={`persuratan-watermark-${s.id}`}>
+                      DI HAPUS
+                    </span>
+                  )}
                   <div className="flex items-center justify-between gap-2">
                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${s.jenis === "keluar" ? "bg-cyan-500/15 text-cyan-700 dark:text-cyan-400" : "bg-violet-500/15 text-violet-600 dark:text-violet-400"}`}>
                       {labelAgenda(s)}
@@ -623,7 +640,9 @@ export default function PersuratanPage({ user, onBack }) {
                 </thead>
                 <tbody>
                   {items.map((s) => (
-                    <tr key={s.id} className="border-b border-border/60 last:border-0 hover:bg-muted/50" data-testid={`persuratan-row-${s.id}`}>
+                    <tr key={s.id}
+                      className={`border-b border-border/60 last:border-0 ${s.dihapus ? "bg-muted/40 opacity-40 grayscale" : "hover:bg-muted/50"}`}
+                      data-testid={`persuratan-row-${s.id}`} data-dihapus={s.dihapus ? "true" : "false"}>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${s.jenis === "keluar" ? "bg-cyan-500/15 text-cyan-700 dark:text-cyan-400" : "bg-violet-500/15 text-violet-600 dark:text-violet-400"}`}>
                           {labelAgenda(s)}
@@ -681,6 +700,12 @@ export default function PersuratanPage({ user, onBack }) {
                             </span>
                           )}
                           {s.alasan_batal && <span className="text-[9px] text-red-500/80 max-w-full truncate" title={s.alasan_batal}>{s.alasan_batal}</span>}
+                          {s.dihapus && (
+                            <span className="-rotate-6 whitespace-nowrap rounded border-2 border-red-600 px-2 py-0.5 text-[10px] font-black tracking-[0.16em] text-red-700 dark:text-red-400"
+                              data-testid={`persuratan-watermark-row-${s.id}`}>
+                              DI HAPUS
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-3 py-2 text-right whitespace-nowrap sticky right-0 bg-card border-l border-border">

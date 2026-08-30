@@ -33,6 +33,8 @@ dapat diuji tanpa server.
 """
 from datetime import datetime, timedelta, timezone
 
+from ttd_validasi import sudah_membubuhkan, sudah_terverifikasi
+
 # doc_type → koleksi dokumennya + label untuk pesan galat.
 #
 # `backlink` menandai dokumen yang JUGA ditulisi saat seluruh tanda tangan
@@ -116,7 +118,7 @@ def kedaluwarsa_terdekat(sr: dict):
     gunanya angka ini.
     """
     belum = [s for s in (sr or {}).get("signers") or []
-             if s.get("status") != "ditandatangani"]
+             if not sudah_membubuhkan(s)]
     sisa = [sisa_kedaluwarsa(s, sr) for s in belum]
     sisa = [x for x in sisa if x.get("sisa_detik") is not None]
     return min(sisa, key=lambda x: x["sisa_detik"]) if sisa else None
@@ -133,16 +135,18 @@ def ringkas_status_ttd(sr: dict) -> dict:
     if not sr:
         return {}
     tanda = sr.get("signers") or []
-    selesai = sum(1 for s in tanda if s.get("status") == "ditandatangani")
+    membubuhkan = sum(1 for s in tanda if sudah_membubuhkan(s))
+    selesai = sum(1 for s in tanda if sudah_terverifikasi(s))
     batas = kedaluwarsa_terdekat(sr)
     mati = bool(batas) and int(batas.get("sisa_detik") or 0) <= 0
     dibatalkan = sr.get("status") == "batal"
-    semua = bool(tanda) and selesai == len(tanda)
+    semua = bool(tanda) and selesai == len(tanda) and sr.get("status") == "selesai"
     return {
         "id": sr.get("id", ""),
         "judul": sr.get("judul", ""),
         "status": sr.get("status", ""),
         "jumlah": len(tanda),
+        "membubuhkan_jumlah": membubuhkan,
         "selesai_jumlah": selesai,
         "semua_selesai": semua,
         "dikirim_pada": sr.get("created_at", ""),

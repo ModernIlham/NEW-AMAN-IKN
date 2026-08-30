@@ -69,7 +69,10 @@ export default function TautanTtdDialog({ srId, judul = "Dokumen", ringkas = nul
   };
 
   const signers = data?.signers || [];
-  const selesai = signers.filter((s) => s.status === "ditandatangani").length;
+  const membubuhkan = signers.filter((s) =>
+    ["menunggu_validasi", "terverifikasi", "ditandatangani"].includes(s.status)).length;
+  const tervalidasi = signers.filter((s) =>
+    ["terverifikasi", "ditandatangani"].includes(s.status)).length;
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onTutup?.(); }}>
@@ -77,8 +80,9 @@ export default function TautanTtdDialog({ srId, judul = "Dokumen", ringkas = nul
         <DialogHeader>
           <DialogTitle>Tanda tangan elektronik</DialogTitle>
           <DialogDescription>
-            {judul} — {selesai}/{signers.length} sudah menandatangani. Tautan
-            berlaku 14 hari dan sekali pakai; yang sudah mati bisa diterbitkan
+            {judul} — {membubuhkan}/{signers.length} sudah membubuhkan,
+            {` ${tervalidasi}/${signers.length} tervalidasi`}. Tautan berlaku
+            14 hari dan sekali pakai; yang belum membubuhkan dapat diterbitkan
             ulang di sini.
           </DialogDescription>
         </DialogHeader>
@@ -92,7 +96,8 @@ export default function TautanTtdDialog({ srId, judul = "Dokumen", ringkas = nul
               <p className="text-xs text-muted-foreground">Tidak ada penanda tangan.</p>
             )}
             {signers.map((s) => {
-              const sudah = s.status === "ditandatangani";
+              const sudah = ["menunggu_validasi", "terverifikasi", "ditandatangani"].includes(s.status);
+              const final = ["terverifikasi", "ditandatangani"].includes(s.status);
               const link = tautan[s.signer_id];
               return (
                 <div key={s.signer_id}
@@ -103,8 +108,10 @@ export default function TautanTtdDialog({ srId, judul = "Dokumen", ringkas = nul
                       {s.nama}
                     </span>
                     {sudah ? (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">
-                        Sudah menandatangani
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${final
+                        ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                        : "bg-violet-500/15 text-violet-700 dark:text-violet-300"}`}>
+                        {final ? "Terverifikasi" : "Menunggu validasi"}
                       </span>
                     ) : teksSisaWaktu(s.kedaluwarsa_info) ? (
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${warnaSisaWaktu(s.kedaluwarsa_info)}`}>

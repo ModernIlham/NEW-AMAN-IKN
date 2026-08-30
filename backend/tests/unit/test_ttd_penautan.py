@@ -102,6 +102,9 @@ class TestTautanMajuDitulisSaatDIKIRIM:
             # INTI PERBAIKAN: tertaut SEKARANG, bukan nanti setelah semua teken.
             assert b["signature_request_id"] == hasil["id"]
             assert b["tt_dikirim_pada"]
+            assert hasil["judul"] == "bast-1/2026", (
+                "jenis BAST disimpan terpisah; judul tidak boleh menjadi "
+                "'BAST BAST-…'")
         _jalan(skenario())
 
     def test_doc_type_tak_terdaftar_tidak_menggagalkan_permintaan(self, dbx):
@@ -122,9 +125,18 @@ class TestRingkasStatus:
 
     def test_semua_selesai(self):
         r = tpn.ringkas_status_ttd(_sr(signers=[
-            _signer("ditandatangani"), _signer("ditandatangani")]))
+            _signer("ditandatangani"), _signer("ditandatangani")],
+            status="selesai"))
         assert r["semua_selesai"] is True
         assert r["perlu_terbit_ulang"] is False
+
+    def test_semua_membubuhkan_belum_dianggap_selesai_sebelum_validasi(self):
+        r = tpn.ringkas_status_ttd(_sr(signers=[
+            _signer("menunggu_validasi"), _signer("menunggu_validasi")],
+            status="menunggu_validasi"))
+        assert r["membubuhkan_jumlah"] == 2
+        assert r["selesai_jumlah"] == 0
+        assert r["semua_selesai"] is False
 
     def test_tautan_mati_TAPI_belum_lengkap_perlu_terbit_ulang(self):
         """Justru inilah keadaan yang dilaporkan pemilik — dan ia BUKAN jalan
@@ -160,7 +172,8 @@ class TestStatusSehalamanDokumen:
         async def skenario():
             await dbx.signature_requests.insert_many([
                 _sr("sr-a", "bast-1", [_signer("aktif")]),
-                _sr("sr-b", "bast-2", [_signer("ditandatangani")]),
+                _sr("sr-b", "bast-2", [_signer("ditandatangani")],
+                    status="selesai"),
             ])
             peta = await tpn.status_ttd_dokumen(dbx, "bast", ["bast-1", "bast-2", "bast-9"])
             assert set(peta) == {"bast-1", "bast-2"}

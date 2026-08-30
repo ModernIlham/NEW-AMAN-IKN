@@ -57,6 +57,8 @@ export default function AturPosisiTtd({
   jenis = "ttd", bangunUrlHalaman, jumlahHalaman = 1, pngTtd,
   nilaiAwal = null, onKirim, onBatal, mengirim = false,
   labelKirim, banyak = false, wajib = 1,
+  izinkanDeklarasiKurang = false, deklarasiKurang = false,
+  onDeklarasiKurang,
 }) {
   const qr = jenis === "qr";
   const MIN = qr ? 0.10 : 0.08;
@@ -94,6 +96,8 @@ export default function AturPosisiTtd({
   // rumus yang sama akan membuat tombol "Simpan & Unduh" terkunci selamanya —
   // regresi yang sempat terjadi dan ditangkap KelengkapanPembubuhan.test.jsx.
   const kurang = qr ? 0 : Math.max(0, wajibN - tetap.length);
+  const semuaHalamanDilihat = dilihat.size >= total;
+  const kurangMenghalangi = kurang > 0 && !deklarasiKurang;
   // Peringatan "sudah ada di titik ini" — dinyalakan saat orang menekan
   // Bubuhkan dua kali tanpa memindahkan kotaknya sama sekali.
   const [rangkap, setRangkap] = useState(false);
@@ -525,6 +529,31 @@ export default function AturPosisiTtd({
         </div>
       )}
 
+      {!qr && izinkanDeklarasiKurang && kurang > 0 && (
+        <div className="rounded-lg border border-violet-500/35 bg-violet-500/5 px-2.5 py-2 space-y-1.5"
+          data-testid="posisi-deklarasi-kurang">
+          <label className={`flex items-start gap-2 text-[11px] leading-snug ${
+            semuaHalamanDilihat ? "cursor-pointer" : "text-muted-foreground"}`}>
+            <input type="checkbox" className="mt-0.5 accent-violet-600"
+              checked={!!deklarasiKurang}
+              disabled={!semuaHalamanDilihat || mengirim}
+              onChange={(e) => onDeklarasiKurang?.(e.target.checked)}
+              data-testid="posisi-deklarasi-checkbox" />
+            <span>
+              Saya sudah membuka dan memeriksa <b>seluruh {total} halaman</b>.
+              Tidak ada area tanda tangan saya lagi meskipun permintaan mencatat
+              {` ${wajibN} tempat`}. Hasil ini akan diperiksa operator/admin satker.
+            </span>
+          </label>
+          {!semuaHalamanDilihat && (
+            <p className="text-[10px] text-amber-700 dark:text-amber-300 pl-5"
+              data-testid="posisi-deklarasi-belum-bisa">
+              Buka seluruh halaman terlebih dahulu sebelum membuat deklarasi ini.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* TATA LETAK TOMBOL — DUA BARIS, dan itu memperbaiki cacat nyata.
           Empat tombol dalam SATU baris (Bubuhkan, ◀, Selesai, ▶) saling
           menghimpit di layar ponsel: `Button` membawa `whitespace-nowrap`,
@@ -607,7 +636,7 @@ export default function AturPosisiTtd({
               variant={qr ? "default" : "outline"}
               className={`h-9 text-xs min-w-0 flex-1 sm:flex-none ${
                 qr ? "" : "border-emerald-600/60 text-emerald-700 dark:text-emerald-400 font-semibold"}`}
-              disabled={mengirim || gagalHal || muatHal || kurang > 0
+              disabled={mengirim || gagalHal || muatHal || kurangMenghalangi
                 || akanDikirim.length === 0}
               onClick={() => {
                 const semuaTtd = akanDikirim.map((t) => t.halaman);
@@ -631,7 +660,8 @@ export default function AturPosisiTtd({
                   tempelan `kurang` pasti > 0 dan cabang itu tak terlihat. */}
               <span className="truncate">
                 {labelKirim || (qr ? "Simpan & Unduh"
-                  : kurang > 0 ? `Kurang ${kurang} tanda tangan lagi`
+                  : kurangMenghalangi ? `Kurang ${kurang} tanda tangan lagi`
+                    : deklarasiKurang ? `Selesai — kirim ${tetap.length} (deklarasi)`
                     : `Selesai — kirim ${tetap.length} tanda tangan`)}
               </span>
             </Button>

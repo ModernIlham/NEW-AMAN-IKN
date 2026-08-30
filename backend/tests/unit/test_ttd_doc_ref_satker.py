@@ -211,7 +211,7 @@ def test_pemilik_atur_posisi_qr_tersimpan_terjepit(dbx):
     """Posisi tersimpan dan DIJEPIT: lebar di luar 0,10–0,40 ditarik ke batas,
     halaman di luar jumlah halaman dokumen ikut dijepit."""
     async def skenario():
-        await dbx.signature_requests.insert_one(_sr_dok())
+        await dbx.signature_requests.insert_one(_sr_lengkap())
         r = await rt.atur_posisi_qr(
             "sr-dok", rt.PosisiQrIn(posisi_qr={"halaman": 9, "x": 0.5,
                                                "y": 0.5, "lebar": 0.99}),
@@ -226,7 +226,7 @@ def test_pemilik_atur_posisi_qr_tersimpan_terjepit(dbx):
 def test_posisi_qr_null_mengembalikan_ke_otomatis(dbx):
     async def skenario():
         await dbx.signature_requests.insert_one(
-            _sr_dok(posisi_qr={"halaman": 1, "x": 0.1, "y": 0.1, "lebar": 0.2}))
+            _sr_lengkap(posisi_qr={"halaman": 1, "x": 0.1, "y": 0.1, "lebar": 0.2}))
         r = await rt.atur_posisi_qr("sr-dok", rt.PosisiQrIn(posisi_qr=None),
                                     user=USER_A)
         return r, await dbx.signature_requests.find_one({"id": "sr-dok"})
@@ -257,6 +257,22 @@ def test_posisi_qr_tanpa_dokumen_ditolak_400(dbx):
     assert e.value.status_code == 400
 
 
+def test_posisi_qr_ditolak_sebelum_validasi_final(dbx):
+    async def skenario():
+        await dbx.signature_requests.insert_one(_sr_dok(
+            status="menunggu_validasi",
+            signers=[{"signer_id": "s1", "status": "menunggu_validasi",
+                      "signature_file_id": "f1"}]))
+        return await rt.atur_posisi_qr(
+            "sr-dok", rt.PosisiQrIn(
+                posisi_qr={"halaman": 1, "x": .1, "y": .1, "lebar": .2}),
+            user=USER_A)
+    with pytest.raises(HTTPException) as e:
+        _jalan(skenario())
+    assert e.value.status_code == 409
+    assert "divalidasi" in str(e.value.detail)
+
+
 # ── Gerbang "siap diunduh": semua TTD + QR sudah ditempatkan ────────────────
 #
 # Mandat pemilik: setelah semua meneken, link e-sign & halaman verifikasi
@@ -268,7 +284,7 @@ def _sr_lengkap(**ganti):
         {"signer_id": "s1", "nama": "A", "status": "ditandatangani",
          "signature_file_id": "f1", "jti": "j1"},
         {"signer_id": "s2", "nama": "B", "status": "ditandatangani",
-         "signature_file_id": "f2", "jti": "j2"}])
+         "signature_file_id": "f2", "jti": "j2"}], status="selesai")
     dasar.update(ganti)
     return dasar
 
@@ -427,7 +443,7 @@ def test_operator_satker_sama_boleh_atur_posisi_qr(dbx):
     """Inti mandat: operator yang BUKAN pembuat permintaan tetap boleh
     menempatkan QR — pekerjaan tak menggantung menunggu admin."""
     async def skenario():
-        await dbx.signature_requests.insert_one(_sr_dok())
+        await dbx.signature_requests.insert_one(_sr_lengkap())
         r = await rt.atur_posisi_qr(
             "sr-dok", rt.PosisiQrIn(posisi_qr={"halaman": 1, "x": 0.3,
                                                "y": 0.7, "lebar": 0.2}),

@@ -152,7 +152,7 @@ def test_timeline_memuat_dua_arah_dan_keberlakuan_ujung(dbx):
         "tidak_berlaku"
 
 
-def test_hapus_surat_membersihkan_panah_gantung(dbx):
+def test_soft_delete_surat_mempertahankan_relasi_tapi_mematikan_pengaruhnya(dbx):
     async def skenario():
         lama = await _buat(perihal="SK lama")
         baru = await _buat(perihal="SK baru")
@@ -160,16 +160,33 @@ def test_hapus_surat_membersihkan_panah_gantung(dbx):
         await rp.tambah_relasi_surat(
             baru["id"], RelasiIn(ke_id=lama["id"], jenis="mencabut"),
             user=USER)
-        # `baru` masih dibooking → boleh dihapus admin; panahnya wajib ikut.
+        # `baru` masih dibooking → boleh di-soft-delete admin. Panah tetap
+        # tersimpan sebagai jejak, tetapi tak lagi memengaruhi keberlakuan.
         await rp.hapus_surat(baru["id"], user=USER)
         daftar = await rp.daftar_surat(jenis="keluar", _user=USER)
         sisa_relasi = await dbx.surat_relasi.count_documents({})
-        return ({s["id"]: s["keberlakuan"] for s in daftar["items"]}[lama["id"]],
-                sisa_relasi)
-    keberlakuan_lama, sisa = _jalan(skenario())
-    assert sisa == 0
+        per_id = {s["id"]: s for s in daftar["items"]}
+        return per_id[lama["id"]]["keberlakuan"], sisa_relasi, per_id[baru["id"]]
+    keberlakuan_lama, sisa, dihapus = _jalan(skenario())
+    assert sisa == 1, "relasi adalah bagian jejak arsip dan tak boleh dimusnahkan"
     assert keberlakuan_lama == "berlaku", \
-        "surat tak boleh tetap 'dicabut oleh' dokumen yang sudah tak ada"
+        "surat tak boleh tetap 'dicabut oleh' record yang telah dihapus"
+    assert dihapus["dihapus"] is True
+    assert dihapus["keberlakuan"] == "dihapus"
+    assert dihapus["dihapus_oleh"] == USER["username"]
+
+
+def test_soft_delete_idempoten_dan_record_tetap_ada(dbx):
+    async def skenario():
+        surat = await _buat(perihal="Salah catat")
+        pertama = await rp.hapus_surat(surat["id"], user=USER)
+        kedua = await rp.hapus_surat(surat["id"], user=USER)
+        tersimpan = await dbx.surat.find_one({"id": surat["id"]}, {"_id": 0})
+        return pertama, kedua, tersimpan
+    pertama, kedua, tersimpan = _jalan(skenario())
+    assert pertama["dihapus"] is True
+    assert kedua["sudah_dihapus"] is True
+    assert tersimpan["dihapus"] is True
 
 
 def test_hapus_relasi_salah_catat_memulihkan_keberlakuan(dbx):

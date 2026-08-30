@@ -15,6 +15,29 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#952] Soft-delete Persuratan + gerbang validasi E-sign — 2026-08-30
+
+- Hapus pada Registrasi Persuratan kini berupa **soft-delete**: record, relasi,
+  ekspor, dan jejak audit tetap ada; row diredupkan dan distempel `DI HAPUS`.
+- Pembubuhan E-sign tidak lagi langsung menyelesaikan dokumen. Status baru
+  `menunggu_validasi` dan `terverifikasi` memisahkan tindakan penanda tangan
+  dari pemeriksaan operator/admin satker.
+- Validator mendapat tombol **Periksa Dokumen**, catatan keputusan, kontrol
+  versi `If-Match`, dan idempotency key untuk mencegah keputusan ganda/basi.
+- Angka `jumlah_ttd` yang terlalu besar dapat diselesaikan lewat deklarasi
+  penanda tangan setelah seluruh halaman dibuka; deklarasi wajib diperiksa dan
+  diberi catatan validator.
+- **Buka Ulang Orang Ini** mematikan link lama, mengarsipkan bukti sebelumnya,
+  dan menerbitkan link baru hanya untuk penanda tangan yang perlu mengoreksi;
+  pembubuhan orang lain tidak berubah.
+- Jenis dan judul dokumen TTD dipisahkan sehingga row tidak lagi menampilkan
+  teks rancu seperti `BAST BAST-035/...`.
+- Tata kelola ralat/perubahan dan penggunaan nomor surat didokumentasikan di
+  `docs/TATA-KELOLA-KOREKSI-ESIGN.md` berdasarkan Perka OIKN 4/2024 dan
+  PP 71/2019.
+
+---
+
 ## ⚠️ Catatan teknis penting — aturan tap-target 44px global
 
 Banyak bug tata letak di layar kecil (PR #7, #9, #11 — dan berpotensi muncul lagi)

@@ -35,7 +35,7 @@ from db import db
 from satker_wajib import pesan_satker_wajib, satker_pertama_terisi
 from shared_utils import (log_audit, kode_satker_user,
                           pastikan_akses_dok_satker, scope_query_field_satker)
-from meili_utils import jadwalkan_sync, jadwalkan_hapus, cari_id_surat
+from meili_utils import jadwalkan_sync, cari_id_surat
 from pencarian_utils import klausa_teks
 from persuratan_utils import (
     pesan_tanggal_mundur,
@@ -63,6 +63,14 @@ from surat_relasi_utils import (
 persuratan_router = APIRouter()
 
 _PROJ = {"_id": 0}
+
+
+def _tolak_bila_surat_dihapus(surat: dict) -> None:
+    """Catatan soft-delete tetap dapat dibaca, tetapi tak boleh dimutasi."""
+    if (surat or {}).get("dihapus") is True:
+        raise HTTPException(
+            status_code=410,
+            detail="Catatan surat sudah dihapus dan dipertahankan hanya sebagai jejak arsip")
 
 
 class SuratKeluarIn(BaseModel):
@@ -1126,15 +1134,16 @@ async def daftar_surat(jenis: str = "", status: str = "", modul: str = "",
                          atur["deret_per_kode"])
     for it in items:
         it["label_agenda"] = label_agenda(it, atur["reset_urut"], _dim)
+    aktif = {"dihapus": {"$ne": True}}
     ringkas = {
         "keluar_dibooking": await db.surat.count_documents(
-            scope_query_field_satker(_user, {"jenis": "keluar", "status": "dibooking"})),
+            scope_query_field_satker(_user, {**aktif, "jenis": "keluar", "status": "dibooking"})),
         "keluar_disahkan": await db.surat.count_documents(
-            scope_query_field_satker(_user, {"jenis": "keluar", "status": "disahkan"})),
+            scope_query_field_satker(_user, {**aktif, "jenis": "keluar", "status": "disahkan"})),
         "keluar_dibatalkan": await db.surat.count_documents(
-            scope_query_field_satker(_user, {"jenis": "keluar", "status": "dibatalkan"})),
+            scope_query_field_satker(_user, {**aktif, "jenis": "keluar", "status": "dibatalkan"})),
         "masuk_terbuka": await db.surat.count_documents(
-            scope_query_field_satker(_user, {"jenis": "masuk", "status": {"$in": ["diterima", "diproses"]}})),
+            scope_query_field_satker(_user, {**aktif, "jenis": "masuk", "status": {"$in": ["diterima", "diproses"]}})),
     }
     return {"items": items, "total": total, "page": page,
             "total_pages": max(1, -(-total // page_size)),
@@ -1362,6 +1371,7 @@ async def transisi_surat(surat_id: str, payload: TransisiIn,
     if not s:
         raise HTTPException(status_code=404, detail="Surat tidak ditemukan")
     await pastikan_akses_dok_satker(user, s)
+    _tolak_bila_surat_dihapus(s)
     ke = str(payload.status or "").strip()
     err = validate_transisi(s.get("status"), ke, s.get("jenis"))
     if err:
@@ -1408,6 +1418,7 @@ async def ubah_surat(surat_id: str, payload: UbahSuratIn,
     if not s:
         raise HTTPException(status_code=404, detail="Surat tidak ditemukan")
     await pastikan_akses_dok_satker(user, s)
+    _tolak_bila_surat_dihapus(s)
     update = {k: str(v).strip() for k, v in payload.model_dump().items()
               if v is not None}
     if not update:
@@ -1450,31 +1461,45 @@ async def ubah_surat(surat_id: str, payload: UbahSuratIn,
 
 @persuratan_router.delete("/persuratan/{surat_id}")
 async def hapus_surat(surat_id: str, user: dict = Depends(require_admin)):
-    """Hapus surat salah catat / batal dibuat (khusus admin).
+    """Soft-delete surat salah catat / batal dibuat (khusus admin).
 
     Surat keluar yang sudah DISAHKAN tidak dapat dihapus — batalkan dulu
     (beralasan) agar jejak nomor resmi tetap tercatat. Nomor agenda yang
     telanjur terpakai HANGUS (tidak dipakai ulang) demi keunikan penomoran.
+    Record, relasi, dan riwayat TIDAK dimusnahkan: buku agenda menampilkannya
+    redup dengan penanda "DI HAPUS" sebagai jejak audit.
     """
     s = await db.surat.find_one({"id": surat_id}, _PROJ)
     if not s:
         raise HTTPException(status_code=404, detail="Surat tidak ditemukan")
     await pastikan_akses_dok_satker(user, s)
+    if s.get("dihapus") is True:
+        return {"ok": True, "sudah_dihapus": True, **s}
     if s.get("jenis") == "keluar" and s.get("status") == "disahkan":
         raise HTTPException(status_code=409, detail=(
             "Surat keluar yang sudah DISAHKAN tidak dapat dihapus — batalkan "
             "dulu (dengan alasan) agar jejak nomor resmi tetap tercatat"))
-    await db.surat.delete_one({"id": surat_id})
-    # Relasi yang menyentuh surat terhapus ikut dibersihkan — panah gantung
-    # membuat surat lain tampak "dicabut oleh" dokumen yang tak ada.
-    await db.surat_relasi.delete_many(
-        {"$or": [{"dari_id": surat_id}, {"ke_id": surat_id}]})
-    jadwalkan_hapus("surat", surat_id)  # cabut dari indeks Meili (best-effort)
-    await log_audit("hapus_surat", s.get("kegiatan_id", ""),
+    now = datetime.now(timezone.utc).isoformat()
+    oleh = user.get("username", "system")
+    res = await db.surat.find_one_and_update(
+        {"id": surat_id, "dihapus": {"$ne": True}},
+        {"$set": {"dihapus": True, "dihapus_pada": now,
+                  "dihapus_oleh": oleh, "updated_at": now},
+         "$push": {"riwayat": {"status": "dihapus", "tanggal": now,
+                                 "oleh": oleh,
+                                 "catatan": "Soft-delete; record dan nomor dipertahankan"}}},
+        return_document=ReturnDocument.AFTER)
+    if res is None:
+        raise HTTPException(status_code=409,
+                            detail="Catatan berubah — muat ulang dan coba lagi")
+    res.pop("_id", None)
+    jadwalkan_sync("surat", res)
+    await log_audit("hapus_lunak_surat", s.get("kegiatan_id", ""),
                     username=user.get("username", "system"),
-                    detail=(f"Hapus surat {s.get('jenis')} {s.get('nomor')} "
-                            f"(status {s.get('status')}; nomor agenda hangus)"))
-    return {"ok": True}
+                    detail=(f"Soft-delete surat {s.get('jenis')} {s.get('nomor')} "
+                            f"(status {s.get('status')}; record dipertahankan; "
+                            "nomor agenda hangus)"))
+    return {"ok": True, **res}
 
 
 # ── Relasi ANTAR SURAT + status keberlakuan (mandat SURAT-3B) ───────────────
@@ -1498,11 +1523,13 @@ async def _panah_masuk_hidup(ids: list) -> dict:
     status_dari = {}
     if dari_ids:
         async for s in db.surat.find({"id": {"$in": dari_ids}},
-                                     {"_id": 0, "id": 1, "status": 1}):
-            status_dari[s["id"]] = s.get("status")
+                                     {"_id": 0, "id": 1, "status": 1,
+                                      "dihapus": 1}):
+            status_dari[s["id"]] = ("dihapus" if s.get("dihapus")
+                                      else s.get("status"))
     out = {}
     for r in masuk:
-        if status_dari.get(r.get("dari_id")) == "dibatalkan":
+        if status_dari.get(r.get("dari_id")) in ("dibatalkan", "dihapus"):
             continue
         out.setdefault(r.get("ke_id"), []).append(r)
     return out
@@ -1557,6 +1584,10 @@ async def _stempel_keberlakuan(items: list) -> list:
     (satu kueri massal — bukan per baris)."""
     hidup = await _panah_masuk_hidup([s.get("id") for s in items])
     for s in items:
+        if s.get("dihapus") is True:
+            s["keberlakuan"] = "dihapus"
+            s["keberlakuan_label"] = "Catatan dihapus (jejak arsip dipertahankan)"
+            continue
         kode = status_keberlakuan(s, hidup.get(s.get("id"), []))
         s["keberlakuan"] = kode
         s["keberlakuan_label"] = STATUS_KEBERLAKUAN.get(kode, kode)
@@ -1579,6 +1610,8 @@ async def tambah_relasi_surat(surat_id: str, payload: RelasiIn,
         raise HTTPException(status_code=404, detail="Surat tidak ditemukan")
     await pastikan_akses_dok_satker(user, dari)
     await pastikan_akses_dok_satker(user, ke)
+    _tolak_bila_surat_dihapus(dari)
+    _tolak_bila_surat_dihapus(ke)
     sudah = await db.surat_relasi.find(
         {"$or": [{"dari_id": dari["id"], "ke_id": ke["id"]},
                  {"dari_id": ke["id"], "ke_id": dari["id"]}]},

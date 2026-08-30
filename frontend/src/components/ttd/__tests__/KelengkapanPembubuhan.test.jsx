@@ -112,6 +112,33 @@ describe("wajib lebih dari satu", () => {
     fireEvent.click(screen.getByTestId("posisi-hapus-0"));
     expect(kirim()).toBeDisabled();
   });
+
+  test("deklarasi kekurangan baru tersedia setelah seluruh halaman diperiksa", () => {
+    function UjiDeklarasi() {
+      const [deklarasi, setDeklarasi] = React.useState(false);
+      return (
+        <AturPosisiTtd jenis="ttd" banyak jumlahHalaman={4} pngTtd={PNG}
+          bangunUrlHalaman={(h) => `/uji/${h}.png?token=uji`} wajib={3}
+          izinkanDeklarasiKurang deklarasiKurang={deklarasi}
+          onDeklarasiKurang={setDeklarasi} onKirim={() => {}} onBatal={() => {}} />
+      );
+    }
+    render(<UjiDeklarasi />);
+    fireEvent.load(document.querySelector("img")); // halaman bawaan: 4
+    bubuhLagi();                                  // baru 1 dari 3
+    const centang = screen.getByTestId("posisi-deklarasi-checkbox");
+    expect(centang).toBeDisabled();
+
+    const inputHalaman = screen.getByTestId("posisi-halaman-input");
+    for (const halaman of [1, 2, 3]) {
+      fireEvent.change(inputHalaman, { target: { value: String(halaman) } });
+      fireEvent.load(document.querySelector("img"));
+    }
+    expect(centang).not.toBeDisabled();
+    fireEvent.click(centang);
+    expect(kirim()).not.toBeDisabled();
+    expect(kirim()).toHaveTextContent(/deklarasi/i);
+  });
 });
 
 describe("wajib satu (bawaan)", () => {
