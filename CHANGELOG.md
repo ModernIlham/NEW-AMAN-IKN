@@ -67,6 +67,62 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#949] Cincin event-bus dikecilkan — dan satu klaim saya dikoreksi — 2026-08-30
+
+**Bacaan konfirmasi, 2,45 jam setelah [#948] ter-deploy:**
+
+| Bacaan | Laju query | `getmore` | Pindai koleksi per query |
+|---|---|---|---|
+| 29 Agu 23:49 (sebelum semua) | **112,5/detik** | ~0 | 1,00 |
+| 30 Agu 02:49 (sesudah [#947]) | **9,6/detik** | ~0 | 1,00 |
+| 30 Agu 05:16 (sesudah [#948]) | **10,5/detik** | ~0 | **0,98** |
+
+**Turun 10,7×.** Beban CPU mongod dari ~90% satu core ke ~8%.
+
+### KOREKSI: klaim saya di [#948] terbukti salah
+
+Saya menulis bahwa mengganti filter dari `ts` ke `_id` "mengubah pindai-koleksi
+jadi pencarian indeks". **Bacaan membantahnya:**
+
+- **0,98 pindai koleksi per query** — praktis setiap query masih memindai penuh
+- **19.291 dokumen dipindai per pindaian** — hampir seluruh cincin 20.000
+- **`ws_events._id_` tetap 0 ops** — indeksnya masih tak tersentuh
+
+Sebabnya terdokumentasi di MongoDB: **kursor tailable tidak memakai indeks.**
+Penggantian ke `_id` tetap dipertahankan — ObjectId memang penanda posisi yang
+lebih tepat untuk koleksi capped — tetapi ia **bukan penghematan**. Saya
+mengklaim manfaat sebelum mengukurnya; bentuk kesalahan yang sama sudah dua
+kali dicatat halaman `docs/OPTIMASI-VPS.md`, dan kini ketiga kalinya, oleh
+saya sendiri.
+
+### Yang benar-benar tersisa: UKURAN cincin
+
+Biaya tiap pindaian sebanding lurus dengan isi cincin. `ws_events` dikecilkan
+dari **10 MB / 20.000 dokumen** ke **1 MB / 1.000** — **20× lebih murah per
+putaran**, tanpa menyentuh latensi fanout sama sekali.
+
+Cukupkah 1.000? Laju sisip terukur **485 dalam 22 jam** (0,006/detik) dan
+peristiwa dikonsumsi dalam ~100 ms. Seribu slot adalah cadangan berjam-jam.
+
+Koleksi yang sudah ada dikecilkan lewat `collMod` saat start — **hanya
+mengecilkan, tak pernah membesarkan**; server yang menolaknya dicatat lalu
+diabaikan, cincin lama tetap bekerja. Peristiwa lama yang terpangkas tak
+berarti: itu penyangga fanout yang isinya sudah dikonsumsi dalam milidetik.
+
+Empat mutasi dipasang lalu dibunuh: pengecilan tak pernah dipanggil, `collMod`
+juga membesarkan, galat `collMod` menjatuhkan bus, dan cincin dikembalikan ke
+20.000.
+
+### Kenapa `getmore` tetap nol
+
+Kursornya **masih** mati seketika meski `maxAwaitTimeMS` kini benar-benar
+terpasang. Itu perilaku wajar yang didokumentasikan MongoDB: bila kursor
+tailable tak mengembalikan hasil atau mati, klien memang harus menunggu lalu
+menerbitkan ulang query-nya. Penahanan laju [#947] **adalah** implementasi
+nasihat itu, dan pengecilan cincin membuat penerbitan ulangnya murah.
+
+---
+
 ## [#948] Event-bus: metode yang tertimpa, dan indeks yang menganggur — 2026-08-30
 
 Bacaan produksi 30 Agustus **mengonfirmasi diagnosis [#947] tanpa ambiguitas**:

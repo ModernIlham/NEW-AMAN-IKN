@@ -28,8 +28,23 @@ logger = logging.getLogger(__name__)
 WORKER_ID = os.environ.get("WORKER_ID") or f"worker-{uuid.uuid4().hex[:10]}"
 
 COLLECTION_NAME = "ws_events"
-CAPPED_SIZE_BYTES = 10 * 1024 * 1024   # 10 MB ring buffer
-CAPPED_MAX_DOCS = 20000                 # Max 20k events kept
+CAPPED_SIZE_BYTES = 1 * 1024 * 1024    # 1 MB ring buffer
+CAPPED_MAX_DOCS = 1000                  # Maks 1.000 peristiwa disimpan
+
+# KENAPA DIKECILKAN dari 10 MB / 20.000 dokumen.
+#
+# Dokumentasi MongoDB menyebutnya terang: **kursor tailable TIDAK memakai
+# indeks**, jadi tiap kali kursor dibuat ulang ia memindai koleksi dari awal.
+# Bacaan produksi 30 Agustus 2026 mengukurnya: **19.291 dokumen dipindai per
+# pindaian** — praktis seluruh cincin — dan pindaian itu terjadi ~10 kali per
+# detik karena kursornya mati seketika (lihat JEDA_KURSOR_MATI).
+#
+# Biaya pindaian sebanding lurus dengan ISI cincin, jadi mengecilkannya 20×
+# memurahkan tiap putaran 20× — tanpa menyentuh latensi fanout sama sekali.
+#
+# Kenapa 1.000 cukup: cincin ini hanya penyangga antar-worker, dan peristiwa
+# dikonsumsi dalam ~100 ms. Laju sisip terukur **485 dalam 22 jam** (0,006 per
+# detik). Seribu slot adalah cadangan berjam-jam, bukan menit.
 
 # Jendela minimum antara dua `find()` bila kursor habis TANPA memberi apa pun.
 #
@@ -61,6 +76,43 @@ _tail_task: Optional[asyncio.Task] = None
 _local_handler: Optional[Callable[[str, dict], Awaitable[None]]] = None
 
 
+async def _kecilkan_bila_kebesaran(db, opts: dict) -> None:
+    """Kecilkan cincin yang dibuat versi lama (10 MB / 20.000) ke ukuran kini.
+
+    HANYA MENGECILKAN, tak pernah membesarkan: `collMod` yang membesar tak
+    memberi manfaat apa pun di sini dan hanya menambah biaya pindaian. Bila
+    servernya tak mendukung `collMod` untuk koleksi capped (< MongoDB 6.0),
+    kegagalannya dicatat lalu diabaikan — cincin lama tetap bekerja, cuma
+    lebih mahal.
+
+    Peristiwa lama yang terpangkas TIDAK berarti: ia penyangga fanout WS yang
+    isinya sudah dikonsumsi dalam hitungan milidetik, bukan catatan.
+    """
+    o = {}
+    for c in (opts.get("cursor", {}).get("firstBatch") or []):
+        o = c.get("options", {}) or {}
+        break
+    maks = o.get("max")
+    besar = o.get("size")
+    if not ((isinstance(maks, int) and maks > CAPPED_MAX_DOCS)
+            or (isinstance(besar, int) and besar > CAPPED_SIZE_BYTES)):
+        return
+    try:
+        await db.command({
+            "collMod": COLLECTION_NAME,
+            "cappedSize": CAPPED_SIZE_BYTES,
+            "cappedMax": CAPPED_MAX_DOCS,
+        })
+        logger.info(
+            "[event_bus] Cincin '%s' dikecilkan dari (%s dok / %s bita) ke "
+            "(%d dok / %d bita) — tiap pindaian kursor tailable jadi lebih murah",
+            COLLECTION_NAME, maks, besar, CAPPED_MAX_DOCS, CAPPED_SIZE_BYTES)
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "[event_bus] Gagal mengecilkan cincin '%s' (%s) — tetap jalan "
+            "dengan ukuran lama", COLLECTION_NAME, type(e).__name__)
+
+
 async def ensure_capped_collection(db) -> bool:
     """Create the capped collection if it doesn't exist. Returns True if capped
     collection is available (ideal path), False if we must fall back to regular coll."""
@@ -75,6 +127,7 @@ async def ensure_capped_collection(db) -> bool:
                 is_capped = c.get("options", {}).get("capped", False)
                 break
             if is_capped:
+                await _kecilkan_bila_kebesaran(db, opts)
                 logger.info(f"[event_bus] Using existing capped collection '{COLLECTION_NAME}'")
                 return True
             else:
