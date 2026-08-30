@@ -1137,9 +1137,17 @@ async def daftar_pemegang_pdf(
     )
 
     key = (" ".join(nama.split()).lower(), nip.strip())
+    # `bast_terakhir` DITAMBAHKAN — ia menyimpan JENIS BAST, dasar seluruh
+    # pembagian tanggung jawab di bawah, dan sebelumnya tak pernah ikut
+    # terbaca. Kelalaian semacam ini tak menimbulkan galat apa pun: query
+    # tetap berhasil dan tabel tetap tercetak, hanya isinya yang kosong —
+    # seluruh barang jatuh ke golongan "lain" seolah jenisnya tak dikenal.
+    # Mencabutnya kembali menggugurkan empat uji render; pembacaan BARU yang
+    # lupa diproyeksikan ditangkap penjaga struktural di
+    # tests/unit/test_daftar_pemegang_golongan.py.
     proj = {**_PROJ, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
             "brand": 1, "model": 1, "serial_number": 1,
-            "location": 1, "condition": 1, "bast_file_id": 1}
+            "location": 1, "condition": 1, "bast_terakhir": 1}
     from shared_utils import filter_aset_perhitungan
     rows = []
     jabatan = ""
@@ -1184,10 +1192,28 @@ async def daftar_pemegang_pdf(
     if melekat:
         identitas += f" · Melekat ke: {_esc(melekat)}"
     elements.append(Paragraph(identitas, st['Meta']))
-    elements.append(Paragraph(
-        f"Barang Milik Negara sejumlah {len(rows)} unit berikut berada dalam "
-        f"penggunaan pemegang tersebut dan wajib dipelihara serta dikembalikan "
-        f"dalam keadaan baik saat berakhirnya penggunaan.", st['Meta']))
+    # DIBAGI MENURUT BOBOT TANGGUNG JAWABNYA, bukan satu daftar datar.
+    #
+    # Permintaan pemilik: *"bedakan dan bagi terhadap barang BMN BAST yang
+    # sudah disahkan dan diunggah buktinya ... dibagi per jenis BAST-nya."*
+    # Alasannya kuat: dokumen ini diteken pemegang DAN KPB. Satu daftar datar
+    # menyamakan barang yang melekat pada orangnya, barang unit yang ia jaga
+    # sebagai perpanjangan tangan, dan barang yang belum berdasar apa pun —
+    # sehingga orang meneken tanggung jawab yang bukan miliknya.
+    from penggunaan_utils import kelompokkan_tanggung_jawab
+    golongan = kelompokkan_tanggung_jawab(rows, nama_tampil)
+    n_sah = sum(len(isi) for k, _j, _t, isi in golongan if k != "tanpa_bast")
+    ringkas = (f"Barang Milik Negara sejumlah <b>{len(rows)}</b> unit berikut "
+               f"berada dalam penggunaan pemegang tersebut")
+    if n_sah != len(rows):
+        # Angka yang membedakan dicetak SELALU bila berbeda — pembaca berhak
+        # tahu berapa yang benar-benar berdasar BAST sah sebelum meneken.
+        ringkas += (f", <b>{n_sah}</b> di antaranya berdasar BAST yang telah "
+                    f"disahkan dan buktinya terunggah")
+    ringkas += (". Barang wajib dipelihara serta dikembalikan dalam keadaan "
+                "baik saat berakhirnya penggunaan, sesuai bobot tanggung "
+                "jawab tiap golongan di bawah.")
+    elements.append(Paragraph(ringkas, st['Meta']))
     elements.append(Spacer(1, 4 * rl_mm))
 
     # Tabel ringkas (selaras BAST): kolom Identitas (Sub-sub Kelompok · kode ·
@@ -1203,31 +1229,53 @@ async def daftar_pemegang_pdf(
     # sama persis dengan tabel Objek Serah Terima pada BAST agar lampiran dan
     # induknya terbaca sebagai satu dokumen.
     uraian_bidang = await _peta_uraian_bidang([a.get("asset_code") for a in rows])
-    baris_sekat = []
+    # Kolom BAST dilebarkan 30 → 78. Ia dulu hanya memuat "✓"/"—", tetapi
+    # kini memuat NOMOR BAST — dan nomor seperti "BA-77/OIKN/2026" tak punya
+    # spasi, jadi ia tak bisa dilipat: pada 30pt ia luber keluar sel dan
+    # hilang dari cetakan tanpa satu pun galat. Lebar diambil dari kolom
+    # Uraian dan Lokasi yang paling longgar. Kolom "No" ikut naik 20 → 22:
+    # pada 20pt kata "No" pun terlipat jadi "N"/"o" di kepala tabel.
+    lebar_kolom = _fit_col_widths([22, 138, 150, 60, 44, 97], doc.width)
+    # Penomoran MENYAMBUNG lintas golongan: nomor pada lampiran ini dirujuk
+    # dari BAST induk dan berita acara lain, jadi ia harus tetap 1..N untuk
+    # seluruh barang yang dipegang — bukan mulai dari 1 lagi tiap golongan.
     i = 0
-    for kode_bidang, isi in kelompokkan_per_bidang(rows):
-        baris_sekat.append(len(table_data))
-        table_data.append(_baris_sekat_bidang(
-            kode_bidang, uraian_bidang.get(kode_bidang, ""), len(isi),
-            len(headers), st))
-        for a in isi:
-            i += 1
-            table_data.append([
-                Paragraph(str(i), st['CellCenter']),
-                _sel_identitas_barang(
-                    a, subsub.get(_norm(a.get("asset_code")), ""), st),
-                _sel_uraian_barang(a, st),
-                Paragraph(a.get("location") or "-", st['Cell']),
-                Paragraph(a.get("condition") or "-", st['CellCenter']),
-                Paragraph("✓" if str(a.get("bast_file_id") or "").strip() else "—",
-                          st['CellCenter']),
-            ])
-    table = Table(table_data,
-                  colWidths=_fit_col_widths([20, 150, 185, 74, 52, 30], doc.width),
-                  repeatRows=1)
-    table.setStyle(_std_table_style(zebra=True,
-                                    extra=_gaya_sekat_bidang(baris_sekat)))
-    elements.append(table)
+    for kunci, judul, keterangan, isi_gol in golongan:
+        # `Heading` — gaya tebal milik reports.py sendiri. Versi pertama
+        # menulis `st['SubHeading'] if ... else st['Meta']`: nama yang tak
+        # pernah ada, jadi fallback-nya SELALU menang dan judul golongan
+        # tercetak sekecil teks meta — tak terbaca sebagai pembatas apa pun.
+        elements.append(Paragraph(f"{judul} — {len(isi_gol)} unit",
+                                  st['Heading']))
+        elements.append(Paragraph(keterangan, st['Meta']))
+        elements.append(Spacer(1, 2 * rl_mm))
+
+        table_data = [[Paragraph(h, st['TableHeader']) for h in headers]]
+        baris_sekat = []
+        for kode_bidang, isi in kelompokkan_per_bidang(isi_gol):
+            baris_sekat.append(len(table_data))
+            table_data.append(_baris_sekat_bidang(
+                kode_bidang, uraian_bidang.get(kode_bidang, ""), len(isi),
+                len(headers), st))
+            for a in isi:
+                i += 1
+                table_data.append([
+                    Paragraph(str(i), st['CellCenter']),
+                    _sel_identitas_barang(
+                        a, subsub.get(_norm(a.get("asset_code")), ""), st),
+                    _sel_uraian_barang(a, st),
+                    Paragraph(a.get("location") or "-", st['Cell']),
+                    Paragraph(a.get("condition") or "-", st['CellCenter']),
+                    # Nomor BAST lebih berguna daripada centang: pada golongan
+                    # ber-BAST sah, centang selalu ✓ sehingga tak memberi tahu
+                    # apa pun. Pembaca butuh TAHU BAST mana yang mendasarinya.
+                    Paragraph(_sel_bast(a), st['CellCenter']),
+                ])
+        table = Table(table_data, colWidths=lebar_kolom, repeatRows=1)
+        table.setStyle(_std_table_style(zebra=True,
+                                        extra=_gaya_sekat_bidang(baris_sekat)))
+        elements.append(table)
+        elements.append(Spacer(1, 5 * rl_mm))
 
     elements.append(Spacer(1, 12 * rl_mm))
     from pegawai_utils import baris_identitas_ttd
@@ -1248,6 +1296,22 @@ async def daftar_pemegang_pdf(
     nama_file = nama_tampil.replace(" ", "_").replace("/", "-")
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition": f'attachment; filename="Daftar_Barang_{nama_file}.pdf"'})
+
+
+def _sel_bast(a: dict) -> str:
+    """Isi kolom BAST: nomornya bila ada, "—" bila belum ber-BAST sah.
+
+    Dulu kolom ini hanya "✓"/"—". Setelah tabel dibagi per golongan, seluruh
+    baris pada golongan ber-BAST sah bernilai ✓ — kolom yang isinya selalu
+    sama tidak memberi tahu apa pun. Nomor BAST menjawab pertanyaan yang
+    sebenarnya: DASAR MANA yang membebankan barang ini.
+    """
+    from xml.sax.saxutils import escape as _e
+    from penggunaan_utils import bast_sah
+    if not bast_sah(a):
+        return "—"
+    nomor = str(((a or {}).get("bast_terakhir") or {}).get("nomor") or "").strip()
+    return _e(nomor) if nomor else "✓"
 
 
 class BarangMasukIn(BaseModel):

@@ -853,3 +853,107 @@ def kelompokkan_psp_siman(aset_rows, nomor_sk_tercatat=None,
         hasil.append(k)
     hasil.sort(key=lambda x: (x["tanggal_psp"], x["no_psp"]), reverse=True)
     return hasil
+
+
+# ── Golongan tanggung jawab pada "Daftar Barang yang Digunakan" ─────────────
+#
+# Permintaan pemilik: *"pada output PDF DAFTAR BARANG YANG DIGUNAKAN tolong
+# bedakan dan bagi terhadap barang BMN BAST yang sudah disahkan dan diunggah
+# buktinya ... dan dibagi per jenis BAST-nya. Jika melekat ke individu dan
+# jabatan berarti memang menjadi tanggung jawabnya; untuk yang operasional
+# maka perpanjangan tangan atau jadi pendelegasian dan izin sesuai nama-nama
+# yang menjadi penanggung jawabnya dan ikut bertanggung jawab dalam penjagaan
+# barang tersebut. Dan jika dari awal digunakan untuk operasional dan langsung
+# menggunakan nama penandatangan maka hampir sama dengan tusinya."*
+#
+# Satu daftar datar menyamakan tiga hal yang bobot hukumnya berbeda: barang
+# yang melekat pada orangnya, barang unit yang ia jaga sebagai perpanjangan
+# tangan, dan barang yang belum berdasar apa pun. Dokumen ini ditandatangani
+# pemegang DAN KPB; menyamakan ketiganya membuat orang meneken tanggung jawab
+# yang bukan miliknya.
+#
+# APA YANG DIANGGAP "SAH". Bukan tebakan: pada `routes/bast.py`, mengunggah
+# bukti tanda tangan ITULAH pengesahannya — ia menyetel `bast_file_id` pada
+# tiap aset objek BAST dan menaikkan nomor agenda dari "dibooking" ke
+# "disahkan". Karena itu `bast_file_id` terisi = sudah disahkan DAN buktinya
+# terunggah, dua syarat yang diminta pemilik sekaligus. Tanda tangan yang
+# kemudian DICABUT (`bast_terakhir.tt_dicabut`) membatalkannya kembali.
+
+GOLONGAN_TJ = (
+    ("melekat", "Melekat pada Pemegang (Individu/Jabatan)",
+     "Penguasaan beralih kepada pemegang secara pribadi. Pemeliharaan, "
+     "keamanan, dan pengembalian dalam keadaan baik menjadi tanggung "
+     "jawabnya sendiri."),
+    ("tusi", "Operasional atas Nama Sendiri (setara tugas dan fungsi)",
+     "BAST operasional yang sejak semula diteken atas nama pemegang ini "
+     "sendiri, sehingga bobot tanggung jawabnya mendekati barang yang "
+     "melekat — melekat pada tugas dan fungsinya, bukan pada orangnya."),
+    ("delegasi", "Operasional — Pendelegasian/Perpanjangan Tangan",
+     "Barang unit/tempat/tugas yang penanggung jawabnya diteken pihak lain. "
+     "Pemegang di sini bertindak sebagai perpanjangan tangan atas izin "
+     "tersebut dan IKUT bertanggung jawab menjaga barangnya, tanpa "
+     "penguasaan pribadi."),
+    ("sementara", "Penggunaan Sementara (berjangka waktu)",
+     "Pinjam pakai internal yang berakhir pada waktu yang diperjanjikan."),
+    ("lain", "Ber-BAST Sah — Jenis Lain",
+     "Ber-BAST sah namun jenisnya di luar keempat golongan di atas."),
+    ("tanpa_bast", "Belum Ber-BAST Sah",
+     "Belum ada BAST yang disahkan dan buktinya terunggah, atau tanda "
+     "tangannya dicabut. Barang tetap didaftarkan karena benar berada pada "
+     "pemegang, tetapi BELUM dapat dibebankan sebagai tanggung jawabnya."),
+)
+
+_TJ_MELEKAT = frozenset({"penggunaan_melekat", "mutasi_pengguna"})
+
+
+def bast_sah(asset: dict) -> bool:
+    """BAST aset ini sudah disahkan DAN buktinya terunggah. MURNI.
+
+    Satu syarat, bukan dua: mengunggah bukti tanda tangan itulah yang
+    mengesahkan (lihat `unggah_bukti_bast` di routes/bast.py). Tanda tangan
+    yang dicabut kemudian membatalkannya.
+    """
+    a = asset or {}
+    if not str(a.get("bast_file_id") or "").strip():
+        return False
+    terakhir = a.get("bast_terakhir")
+    if isinstance(terakhir, dict) and terakhir.get("tt_dicabut"):
+        return False
+    return True
+
+
+def golongan_tj(asset: dict, nama_pemegang: str = "") -> str:
+    """Kunci golongan tanggung jawab satu aset. MURNI.
+
+    `nama_pemegang` dipakai HANYA untuk membedakan operasional atas nama
+    sendiri dari pendelegasian: bila penerima BAST-nya orang yang sama,
+    ia meneken untuk dirinya sendiri.
+    """
+    if not bast_sah(asset):
+        return "tanpa_bast"
+    terakhir = (asset or {}).get("bast_terakhir")
+    jenis = str((terakhir or {}).get("jenis") or "").strip()
+    if jenis in _TJ_MELEKAT:
+        return "melekat"
+    if jenis == "penggunaan_sementara":
+        return "sementara"
+    if jenis == "operasional_unit":
+        penerima = " ".join(str((terakhir or {}).get("penerima") or "").split()).lower()
+        pemegang = " ".join(str(nama_pemegang or "").split()).lower()
+        return "tusi" if penerima and pemegang and penerima == pemegang else "delegasi"
+    return "lain"
+
+
+def kelompokkan_tanggung_jawab(assets, nama_pemegang: str = ""):
+    """Bagi aset pemegang menjadi golongan tanggung jawab. MURNI.
+
+    → list `(kunci, judul, keterangan, [aset])` menurut urutan `GOLONGAN_TJ`,
+    HANYA golongan yang berisi. Urutan aset di dalam tiap golongan
+    dipertahankan apa adanya — pemanggil yang mengurutkannya (per bidang
+    kode barang, selaras BAST induk).
+    """
+    ember = {k: [] for k, _j, _t in GOLONGAN_TJ}
+    for a in assets or []:
+        ember[golongan_tj(a, nama_pemegang)].append(a)
+    return [(k, judul, ket, ember[k])
+            for k, judul, ket in GOLONGAN_TJ if ember[k]]
