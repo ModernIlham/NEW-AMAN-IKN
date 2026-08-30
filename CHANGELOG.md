@@ -67,6 +67,37 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
+## [#950] Kasus beban CPU ditutup dengan angka mesin — 2026-08-30
+
+Bacaan **Inventaris VPS 30 Agustus 05:49 UTC**, delapan menit setelah [#949]
+ter-deploy:
+
+| | 29 Agu (sebelum) | **30 Agu (sesudah)** |
+|---|---|---|
+| Beban (1/5/15 mnt) | 1,02 · 1,01 · 1,01 | **0,07 · 0,25 · 0,26** |
+| `mongod` %CPU | **93,1%** | **2,0%** |
+| Laju query | 112,5/detik | 10,5/detik |
+
+Rata-rata 15 menit (0,26) masih menyeret sisa beban lama; angka 1 menit
+(**0,07**) adalah keadaan sebenarnya.
+
+**Satu core yang terbakar datar sejak awal Agustus, padam.**
+
+`docs/OPTIMASI-VPS.md` ditutup dengan angka ini di dua tempat: blok status
+teratas dan §2 butir 1.
+
+**Catatan yang perlu dibaca benar**: `mongod` kini memakai **3,2 GB RES**
+(sebelumnya 1,3 GB) dan memori terpakai naik ke 3,8 dari 7,8 GiB. Itu **bukan
+kebocoran** — cache WiredTiger memanas mengisi plafonnya (3,46 GB), yang
+memang perilaku yang diinginkan. Tersedia 3,9 GiB dan swap praktis tak
+tersentuh (5 MB), jadi rekomendasi §3b "batasi cache ke 2 GB" **belum
+mendesak**; ia dicatat sebagai bahan pertimbangan bila kelak ada layanan lain
+ditambahkan ke mesin ini.
+
+**Tak ada perubahan kode** — hanya `docs/OPTIMASI-VPS.md` dan CHANGELOG.
+
+---
+
 ## [#949] Cincin event-bus dikecilkan — dan satu klaim saya dikoreksi — 2026-08-30
 
 **Bacaan konfirmasi, 2,45 jam setelah [#948] ter-deploy:**
