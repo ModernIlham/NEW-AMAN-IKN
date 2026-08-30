@@ -15,6 +15,69 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#957] Pembatalan permintaan TTD wajib beralasan — 2026-08-31
+
+Permintaan pemilik: *"ketika diklik pembatalan permintaan di ttd elektronik,
+munculkan kotak penjelasan alasannya kenapa."*
+
+**Yang salah dengan konfirmasi ya/tidak.** Dialog lama hanya bertanya "yakin?"
+Itu menahan salah-tekan, tetapi tak menjawab pertanyaan yang PASTI muncul
+sesudahnya. Membatalkan bukan sekadar menyembunyikan permintaan:
+
+- **seluruh tautan penanda tangan mati permanen**;
+- **tautan verifikasi yang sudah tercetak sebagai QR di dokumen** ikut dicabut;
+- bila permintaan menaut BAST/LPB, **BAST, LPB, dan aset yang tertaut**
+  ditandai `tt_dicabut`.
+
+Tak ada layar yang bisa memulihkannya. Yang bertanya "kenapa?" bukan hanya
+pemeriksa audit, melainkan orang-orang di dalam permintaan itu sendiri —
+mereka mendapati tautannya mati tanpa satu pun keterangan.
+
+**Yang berubah**
+
+- Menekan **Batalkan** kini membuka **kotak alasan**, bukan konfirmasi
+  ya/tidak. Tombol pembatalan terkunci sampai alasannya memadai.
+- **Syaratnya bukan "tidak kosong"** melainkan minimal 5 karakter setelah
+  spasi dirapikan: satu ketukan spasi atau `x` lolos uji tak-kosong tetapi tak
+  menjelaskan apa pun. Ambangnya disandingkan di kedua sisi (`MIN_ALASAN_BATAL`
+  di `routes/ttd.py` dan di `DialogBatalPermintaan.jsx`).
+- Dialog **menyebut akibat di luar modul e-sign** sesuai jenis dokumennya —
+  BAST menyebut aset ikut ditandai, LPB menyebut LPB, dokumen biasa tidak
+  mengarang akibat yang tak terjadi. Inilah satu-satunya layar tempat pengguna
+  masih bisa mundur.
+- Alasan disimpan **pada dokumennya** (`batal_alasan`, `batal_oleh`,
+  `batal_pada`), bukan hanya di jejak audit, lalu **ditampilkan kembali di
+  puncak dialog detail** permintaan yang batal. Jejak audit dibaca pemeriksa;
+  bidang ini dibaca orang yang membuka layar untuk mencari tahu kenapa
+  tautannya mati.
+- Tombol mundur berbunyi **"Kembali"**, bukan "Batal" — pada dialog
+  pembatalan, "Batal" berarti dua hal yang berlawanan sekaligus.
+
+**Jalur API**
+
+- Baru: `POST /ttd/permintaan/{id}/batal` dengan badan `{alasan}`. **POST,
+  bukan DELETE**: alasannya teks bebas yang lazim menyebut nama orang atau
+  nomor dokumen — tak pantas mendarat di log akses server lewat query string.
+  Repo ini juga belum punya satu pun endpoint DELETE berbadan, jadi jalur itu
+  tak dipakai untuk sesuatu yang tak bisa diuji di produksi.
+- `DELETE /ttd/permintaan/{id}` **dipertahankan** agar pemanggil lama tak
+  putus, tetapi kini **menuntut alasan yang sama**. Menyisakan satu jalur
+  tanpa alasan berarti syaratnya cuma hiasan.
+- **Alasan diperiksa SESUDAH kepemilikan**: pemanggil yang tak berhak ditolak
+  403 tanpa lebih dulu diberi umpan balik tentang bentuk masukan yang benar.
+
+Dialognya **diekstrak** jadi `components/ttd/DialogBatalPermintaan.jsx` —
+halaman induknya masih tanpa uji. Hook `useConfirm` yang jadi mati ikut
+dihapus dari halaman itu.
+
+**31 uji baru** (16 backend, 15 frontend). Tujuh mutasi dipasang lalu dibunuh:
+syarat panjang dicabut jadi sekadar tak-kosong, alasan tak disimpan pada
+dokumen, `DELETE` lama diberi alasan bawaan (pintu belakang), alasan diperiksa
+sebelum otorisasi, tombol tak lagi mengunci alasan pendek, `trim()` dilepas,
+dan akibat BAST/LPB tak lagi disebut.
+
+---
+
 ## [#956] Dialog detail permintaan TTD dipadatkan — 2026-08-30
 
 Permintaan pemilik, disertai tangkapan layar: *"perbaiki tampilan ini agar

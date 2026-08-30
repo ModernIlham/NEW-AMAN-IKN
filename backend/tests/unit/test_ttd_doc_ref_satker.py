@@ -569,7 +569,8 @@ def test_batal_permintaan_mematikan_tautan_pendeknya(dbx, monkeypatch):
                 mode="paralel", signers=[rt.SignerIn(nama="Budi")]),
             user=USER_A)
         kode = hasil["links"][0]["link"].rsplit("/s/", 1)[1]
-        await rt.batal_permintaan(hasil["id"], user=USER_A)
+        await rt.batal_permintaan(hasil["id"],
+                                  alasan="Dokumen salah unggah", user=USER_A)
         return await tp.resolve_tautan(kode)
     assert _jalan(skenario()) is None
 

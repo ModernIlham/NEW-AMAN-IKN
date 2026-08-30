@@ -428,6 +428,20 @@ class PermintaanIn(BaseModel):
     signers: List[SignerIn]
 
 
+class BatalPermintaanIn(BaseModel):
+    """Pembatalan permintaan TTD — WAJIB beralasan.
+
+    Membatalkan bukan sekadar menyembunyikan: SELURUH tautan penanda tangan
+    mati permanen, tautan verifikasi yang sudah tercetak sebagai QR di
+    dokumen ikut dicabut, dan bila permintaan ini menaut BAST/LPB maka BAST,
+    LPB, serta aset yang tertaut ditandai ``tt_dicabut``. Dampaknya menyebar
+    ke luar modul e-sign dan tak bisa dipulihkan lewat layar mana pun —
+    karena itu alasannya wajib, sejajar dengan pembatalan surat keluar di
+    Persuratan yang juga menghanguskan nomor agenda.
+    """
+    alasan: str = ""
+
+
 class ValidasiPembubuhanIn(BaseModel):
     """Keputusan pengelola atas SATU pembubuhan.
 
@@ -1860,16 +1874,70 @@ async def validasi_pembubuhan(
     return respons
 
 
+# Panjang minimum alasan pembatalan. Bukan sekadar "tidak kosong": satu
+# ketukan spasi atau "x" lolos uji tak-kosong tetapi tak menjelaskan apa pun,
+# padahal inilah satu-satunya catatan mengapa tautan orang lain dimatikan.
+MIN_ALASAN_BATAL = 5
+
+
+def _alasan_batal_bersih(alasan) -> str:
+    """Rapikan & tegakkan syarat alasan pembatalan; 400 bila tak memadai."""
+    teks = " ".join(str(alasan or "").split())
+    if len(teks) < MIN_ALASAN_BATAL:
+        raise HTTPException(
+            status_code=400,
+            detail=(f"Alasan pembatalan wajib diisi minimal {MIN_ALASAN_BATAL} "
+                    "karakter — tercatat dalam jejak audit"))
+    return teks[:500]
+
+
+@ttd_router.post("/ttd/permintaan/{sr_id}/batal")
+async def batal_permintaan_beralasan(
+    sr_id: str, payload: BatalPermintaanIn,
+    user: dict = Depends(require_writer),
+):
+    """Batalkan permintaan DISERTAI alasan (hanya pembuat atau admin).
+
+    Jalur utama pembatalan. Alasan dikirim lewat badan permintaan, bukan
+    query string, sebab teksnya bebas dan lazim menyebut nama orang atau
+    nomor dokumen — hal yang tak pantas mendarat di log akses server.
+    """
+    return await _kerjakan_pembatalan(sr_id, payload.alasan, user)
+
+
 @ttd_router.delete("/ttd/permintaan/{sr_id}")
-async def batal_permintaan(sr_id: str, user: dict = Depends(require_writer)):
-    """Batalkan permintaan (hanya pembuat atau admin)."""
+async def batal_permintaan(sr_id: str, alasan: str = "",
+                           user: dict = Depends(require_writer)):
+    """Batalkan permintaan (hanya pembuat atau admin). USANG.
+
+    Dipertahankan agar pemanggil lama tidak putus, tetapi kini menuntut
+    alasan yang sama seperti jalur POST — pembatalan tanpa keterangan
+    ditolak, bukan diloloskan diam-diam. Pemanggil baru pakai
+    ``POST /ttd/permintaan/{sr_id}/batal`` supaya alasannya tidak lewat URL.
+    """
+    return await _kerjakan_pembatalan(sr_id, alasan, user)
+
+
+async def _kerjakan_pembatalan(sr_id: str, alasan_mentah, user: dict):
     sr = await db.signature_requests.find_one(
         {"id": sr_id}, {"_id": 0, "created_by": 1, "judul": 1, "status": 1,
                         "doc_type": 1, "doc_ref": 1, "kode_satker": 1})
     if not sr:
         raise HTTPException(status_code=404, detail="Permintaan tidak ditemukan")
     _pastikan_pemilik_sr(sr, user)  # pembuat / admin SATKER YANG SAMA
-    await db.signature_requests.update_one({"id": sr_id}, {"$set": {"status": "batal"}})
+    # Alasan diperiksa SESUDAH kepemilikan, bukan sebelumnya: pemanggil yang
+    # tak berhak harus ditolak 403 tanpa lebih dulu diberi umpan balik tentang
+    # bentuk masukan yang benar.
+    alasan = _alasan_batal_bersih(alasan_mentah)
+    # Alasan disimpan PADA dokumennya, bukan hanya di jejak audit: layar
+    # detail menampilkannya kembali kepada siapa pun yang membuka permintaan
+    # yang sudah batal. Jejak audit menjawab "siapa & kapan" bagi pemeriksa;
+    # bidang ini menjawab "kenapa" bagi orang yang tautannya mendadak mati.
+    await db.signature_requests.update_one(
+        {"id": sr_id},
+        {"$set": {"status": "batal", "batal_alasan": alasan,
+                  "batal_oleh": user.get("username", "system"),
+                  "batal_pada": datetime.now(timezone.utc).isoformat()}})
     # Tautan pendek SELURUH permintaan ikut mati — termasuk tautan verifikasi
     # yang tercetak sebagai QR di dokumen. Rute panjangnya sudah menolak
     # permintaan batal (410); tautan pendek tak boleh jadi pintu belakang yang
@@ -1941,8 +2009,9 @@ async def batal_permintaan(sr_id: str, user: dict = Depends(require_writer)):
                     detail=(f"Permintaan TTD '{sr.get('judul') or sr_id}' dibatalkan"
                             f" (status sebelumnya: {sr.get('status') or '-'}"
                             + (f"; BAST {sr.get('doc_ref')} ditandai dicabut"
-                               if bast_dicabut else "") + ")"))
-    return {"ok": True, "bast_dicabut": bool(bast_dicabut)}
+                               if bast_dicabut else "")
+                            + f"; alasan: {alasan})"))
+    return {"ok": True, "bast_dicabut": bool(bast_dicabut), "alasan": alasan}
 
 
 @ttd_router.post("/ttd/permintaan/{sr_id}/link/{signer_id}")

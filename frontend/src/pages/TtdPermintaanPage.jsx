@@ -15,11 +15,11 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useBackGuard } from "@/hooks/useBackGuard";
-import { useConfirm } from "@/components/ui/ConfirmDialog";
 import KartuTapDialog from "@/components/pegawai/KartuTapDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import AturPosisiTtd from "@/components/ttd/AturPosisiTtd";
 import BarisPenandaTangan from "@/components/ttd/BarisPenandaTangan";
+import DialogBatalPermintaan, { MIN_ALASAN_BATAL } from "@/components/ttd/DialogBatalPermintaan";
 import { bagikanWa, bagikanEmail } from "@/lib/pesanTtd";
 import { authMediaUrl } from "@/lib/mediaUrl";
 import { teksSisaWaktu, warnaSisaWaktu, sudahKedaluwarsa } from "@/lib/sisaWaktu";
@@ -104,7 +104,10 @@ export default function TtdPermintaanPage({ user, onBack }) {
   const [dokFile, setDokFile] = useState(null);    // PDF unggahan utk dibubuhi ttd
   const [validasi, setValidasi] = useState(null);  // {signer, aksi, alasan}
   const [memvalidasi, setMemvalidasi] = useState(false);
-  const { confirm, confirmDialog } = useConfirm();
+  // Pembatalan: {permintaan, alasan}. Kotak alasan menggantikan konfirmasi
+  // ya/tidak — lihat `mintaBatal` di bawah.
+  const [batalDlg, setBatalDlg] = useState(null);
+  const [membatalkan, setMembatalkan] = useState(false);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
@@ -223,22 +226,36 @@ export default function TtdPermintaanPage({ user, onBack }) {
     }
   };
 
-  const batalkan = async (it) => {
-    // Destruktif permanen: SEMUA link penanda tangan langsung mati — wajib
-    // konfirmasi (temuan audit UI/UX).
-    const ok = await confirm({
-      title: `Batalkan permintaan "${it.judul}"?`,
-      description: "Semua link tanda tangan yang sudah dibagikan akan mati permanen dan tidak bisa dipulihkan.",
-      confirmLabel: "Batalkan Permintaan", variant: "danger",
-    });
-    if (!ok) return;
+  // Dulu: konfirmasi ya/tidak. Sekarang: kotak alasan.
+  //
+  // Konfirmasi ya/tidak hanya menahan salah-tekan. Ia tak menjawab
+  // pertanyaan yang PASTI muncul sesudahnya — para penanda tangan mendapati
+  // tautannya mati, dan bila permintaan ini menaut BAST maka BAST beserta
+  // asetnya ikut bertanda "TT dicabut". Yang bertanya "kenapa?" bukan hanya
+  // pemeriksa audit, tetapi orang-orang di dalam permintaan itu sendiri.
+  const mintaBatal = (it) => setBatalDlg({ permintaan: it, alasan: "" });
+
+  const prosesBatal = async () => {
+    const it = batalDlg?.permintaan;
+    const alasan = (batalDlg?.alasan || "").trim();
+    if (!it) return;
+    if (alasan.length < MIN_ALASAN_BATAL) {
+      toast.error(`Alasan pembatalan minimal ${MIN_ALASAN_BATAL} karakter`); return;
+    }
+    setMembatalkan(true);
     try {
-      await axios.delete(`${API}/ttd/permintaan/${it.id}`);
-      toast.success("Permintaan dibatalkan");
+      // POST, bukan DELETE: alasannya teks bebas yang lazim menyebut nama
+      // orang atau nomor dokumen — tak pantas mendarat di log akses server
+      // lewat query string.
+      await axios.post(`${API}/ttd/permintaan/${it.id}/batal`, { alasan });
+      toast.success("Permintaan dibatalkan — alasannya tercatat");
+      setBatalDlg(null);
       setDetail(null);
       load();
     } catch (e) {
       toast.error(apiErr(e, "Gagal membatalkan"));
+    } finally {
+      setMembatalkan(false);
     }
   };
 
@@ -765,6 +782,21 @@ export default function TtdPermintaanPage({ user, onBack }) {
                 ) : null}
               </DialogHeader>
               <div className="space-y-1.5 min-w-0">
+                {/* Alasan pembatalan ditampilkan PALING ATAS pada permintaan
+                    yang batal. Mencatatnya hanya di jejak audit membuat
+                    keterangan itu tak pernah sampai ke orang yang justru
+                    membuka layar ini untuk mencari tahu kenapa tautannya
+                    mati — jejak audit dibaca pemeriksa, bukan pengguna. */}
+                {detail.status === "batal" && detail.batal_alasan && (
+                  <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-2.5 space-y-0.5"
+                    data-testid="ttd-detail-alasan-batal">
+                    <p className="text-xs font-bold text-red-700 dark:text-red-300">
+                      Dibatalkan{detail.batal_oleh ? ` oleh ${detail.batal_oleh}` : ""}
+                      {detail.batal_pada ? ` · ${fmtWaktu(detail.batal_pada)}` : ""}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground break-words">{detail.batal_alasan}</p>
+                  </div>
+                )}
                 {detail.dok_file_id && (detail.signers || []).some((s) => s.signature_file_id)
                   && detail.status !== "batal" && (
                   <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-2.5 flex items-center justify-between gap-3">
@@ -818,7 +850,7 @@ export default function TtdPermintaanPage({ user, onBack }) {
                   popup berantakan). Baris tetap mendatar & membungkus rapi. */}
               <DialogFooter className="flex-row flex-wrap justify-end gap-1.5 space-x-0">
                 {detail.status !== "batal" && (
-                  <Button variant="outline" onClick={() => batalkan(detail)}
+                  <Button variant="outline" onClick={() => mintaBatal(detail)}
                     className="h-9 text-xs text-red-600 border-red-500/40 hover:bg-red-500/10">
                     <XCircle className="w-3.5 h-3.5 mr-1.5" />Batalkan
                   </Button>
@@ -860,6 +892,14 @@ export default function TtdPermintaanPage({ user, onBack }) {
           )}
         </DialogContent>
       </Dialog>
+
+      <DialogBatalPermintaan
+        permintaan={batalDlg?.permintaan}
+        alasan={batalDlg?.alasan || ""}
+        onAlasan={(v) => setBatalDlg((b) => ({ ...b, alasan: v }))}
+        onBatalkan={prosesBatal}
+        onTutup={() => setBatalDlg(null)}
+        sedangMemproses={membatalkan} />
 
       {/* Keputusan validator selalu tercatat. Buka ulang hanya menyentuh satu
           orang dan menerbitkan token baru; pembubuhan rekan lain tetap utuh. */}
@@ -968,7 +1008,6 @@ export default function TtdPermintaanPage({ user, onBack }) {
         </DialogContent>
       </Dialog>
 
-      {confirmDialog}
     </div>
   );
 }
