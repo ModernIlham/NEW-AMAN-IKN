@@ -18,6 +18,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import Lipatan from "@/components/ui/Lipatan";
 import { useTransitionDialog } from "@/components/ui/TransitionDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
+import KelengkapanDokumen from "@/components/bmn/KelengkapanDokumen";
 import { authMediaUrl } from "@/lib/mediaUrl";
 import { WARNA_CHIP, kelasChipStatus } from "@/lib/chipStatus";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
@@ -99,7 +100,13 @@ export default function PenggunaanPage({ user, onBack }) {
   const [hasilCariPsp, setHasilCariPsp] = useState([]);
   const cariPspTimer = useRef(null);
   // Dialog lampiran SK PSP: {sk, uploading}
+  // {sk, uploading, jenis} — `jenis` = kode dokumen yang sedang diunggah.
   const [lampPsp, setLampPsp] = useState(null);
+  // Daftar periksa dokumen usulan + kelengkapannya, dari registry backend.
+  const [syaratPsp, setSyaratPsp] = useState(null);
+  // Keadaan objek yang menentukan berkas mana yang wajib. Disimpan pada
+  // SK-nya, jadi ini hanya salinan kerja dialognya.
+  const [konteksPsp, setKonteksPsp] = useState(null);
   // Tiket proses alih status/penggunaan sementara: data GET + dialog baru
   const [proses, setProses] = useState(null);
   const [formProses, setFormProses] = useState(null);
@@ -166,6 +173,35 @@ export default function PenggunaanPage({ user, onBack }) {
     axios.get(`${API}/penggunaan/idle`)
       .then((r) => setIdle(r.data))
       .catch(() => toast.error("Gagal memuat daftar BMN idle"));
+  }, []);
+
+  // Muat daftar periksa dokumen untuk SK yang dialognya sedang terbuka.
+  // Sengaja MEMBACA ULANG dari server alih-alih menghitung di layar: tabel
+  // syaratnya tinggal di backend sebagai satu sumber kebenaran, dan salinan
+  // di frontend akan menyimpang begitu peraturannya diperbarui.
+  const muatSyaratPsp = useCallback(() => {
+    setLampPsp((l) => {
+      if (!l?.sk?.id) return l;
+      const k = l.sk.konteks_dokumen || {};
+      const q = new URLSearchParams({ rezim: "psp" });
+      // Hanya kirim yang bernilai — sisanya memakai bawaan server, yang
+      // condong MENAMPILKAN butir.
+      if (k.jenis_objek) q.set("jenis_objek", k.jenis_objek);
+      for (const nama of ["punya_dokumen_kepemilikan", "dokumen_tidak_ada",
+        "dokumen_hilang", "penandatangan_didelegasikan", "untuk_pmpp",
+        "fisik_tak_dikuasai"]) {
+        if (k[nama]) q.set(nama, "true");
+      }
+      for (const nama of ["ada_fotokopi", "unggah_pindaian"]) {
+        if (k[nama] === false) q.set(nama, "false");
+      }
+      const jenis = (l.sk.lampiran || []).map((f) => f.jenis).filter(Boolean);
+      if (jenis.length) q.set("terunggah", jenis.join(","));
+      axios.get(`${API}/syarat-dokumen?${q.toString()}`)
+        .then((r) => setSyaratPsp(r.data))
+        .catch(() => setSyaratPsp(null));
+      return l;
+    });
   }, []);
 
   const loadPsp = useCallback(() => {
@@ -754,14 +790,37 @@ export default function PenggunaanPage({ user, onBack }) {
     try {
       const fd = new FormData();
       fd.append("file", fileObj);
+      // Jenis dokumen ikut dikirim — inilah yang membuat berkas terhitung
+      // memenuhi butir wajib. Tanpa itu ia tersimpan, tetapi kelengkapannya
+      // tetap dilaporkan kurang (menebak jenis dari nama berkas akan
+      // melaporkan "lengkap" untuk berkas yang belum tentu benar).
+      fd.append("jenis", lampPsp.jenis || "");
       const res = await axios.post(`${API}/penggunaan/psp/${lampPsp.sk.id}/lampiran`, fd);
       toast.success("Lampiran terunggah");
-      setLampPsp((l) => (l ? { ...l, uploading: false,
+      setLampPsp((l) => (l ? { ...l, uploading: false, jenis: "",
         sk: { ...l.sk, lampiran: res.data?.lampiran || [] } } : l));
+      muatSyaratPsp();
       loadPsp();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal mengunggah lampiran");
       setLampPsp((l) => (l ? { ...l, uploading: false } : l));
+    }
+  };
+
+  const simpanKonteksPsp = async () => {
+    if (!lampPsp?.sk?.id || !konteksPsp) return;
+    try {
+      const r = await axios.post(
+        `${API}/penggunaan/psp/${lampPsp.sk.id}/konteks-dokumen`, konteksPsp);
+      // Keadaan disimpan PADA SK-nya, jadi salinan di dialog ikut diperbarui
+      // agar `muatSyaratPsp` membaca yang baru, bukan yang lama.
+      setLampPsp((l) => (l ? { ...l,
+        sk: { ...l.sk, konteks_dokumen: r.data?.konteks_dokumen || konteksPsp } } : l));
+      setTimeout(muatSyaratPsp, 0);
+      loadPsp();
+      toast.success("Daftar dokumen disesuaikan dengan keadaan objek");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menyimpan keadaan objek");
     }
   };
 
@@ -773,6 +832,7 @@ export default function PenggunaanPage({ user, onBack }) {
       setLampPsp((l) => (l ? { ...l,
         sk: { ...l.sk,
           lampiran: (l.sk.lampiran || []).filter((x) => x.file_id !== fileId) } } : l));
+      muatSyaratPsp();
       loadPsp();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal menghapus lampiran");
@@ -1311,7 +1371,19 @@ export default function PenggunaanPage({ user, onBack }) {
                         </>
                       )}
                       <button type="button" aria-label="Lampiran SK" title="Lampiran SK"
-                        onClick={() => setLampPsp({ sk, uploading: false })}
+                        onClick={() => {
+                          setLampPsp({ sk, uploading: false, jenis: "" });
+                          setKonteksPsp({
+                            jenis_objek: "", punya_dokumen_kepemilikan: false,
+                            ada_fotokopi: true, unggah_pindaian: true,
+                            dokumen_tidak_ada: false, dokumen_hilang: false,
+                            penandatangan_didelegasikan: false,
+                            untuk_pmpp: false, fisik_tak_dikuasai: false,
+                            ...(sk.konteks_dokumen || {}),
+                          });
+                          setSyaratPsp(null);
+                          setTimeout(muatSyaratPsp, 0);
+                        }}
                         className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted min-h-0 min-w-0"
                         data-testid={`penggunaan-psp-lampiran-${sk.id}`}>
                         <Paperclip className="w-3 h-3" />
@@ -1718,21 +1790,83 @@ export default function PenggunaanPage({ user, onBack }) {
 
       {/* ── Dialog lampiran SK PSP (arsip scan SK + dokumen pendukung) ── */}
       <Dialog open={!!lampPsp} onOpenChange={(o) => { if (!o) setLampPsp(null); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Lampiran SK Penetapan Penggunaan</DialogTitle>
-            <DialogDescription className="text-xs">
-              {lampPsp && `${lampPsp.sk.nomor_sk} (${lampPsp.sk.tanggal_sk}). Scan SK PSP / dokumen pendukung (PDF/JPG/PNG, maks 10MB, 10 berkas).`}
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader className="text-left space-y-1">
+            <DialogTitle className="text-base leading-snug">Kelengkapan Dokumen Usulan PSP</DialogTitle>
+            <DialogDescription className="text-[11px] leading-relaxed">
+              {lampPsp && `${lampPsp.sk.nomor_sk} (${lampPsp.sk.tanggal_sk}) · PDF/JPG/PNG, maks 10MB, 10 berkas.`}
             </DialogDescription>
           </DialogHeader>
-          <input ref={lampPspInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) unggahLampiranPsp(f); }} />
-          <Button size="sm" variant="outline" className="h-8 text-xs min-h-0 self-start"
-            disabled={lampPsp?.uploading || (lampPsp?.sk?.lampiran || []).length >= 10}
-            onClick={() => lampPspInputRef.current?.click()} data-testid="penggunaan-psp-lampiran-unggah">
-            {lampPsp?.uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Upload className="w-3.5 h-3.5 mr-1.5" />}
-            Unggah Berkas
-          </Button>
+
+          {/* Keadaan objek MENENTUKAN daftarnya. Ia ditanyakan di sini, bukan
+              di form SK: jawabannya baru dibutuhkan saat berkas dikumpulkan,
+              dan menaruhnya di form pembuatan akan menahan pencatatan SK
+              hanya karena satu pertanyaan berkas belum terjawab. */}
+          <div className="rounded-lg border border-border p-2.5 space-y-2">
+            <p className="text-xs font-bold">Keadaan objek</p>
+            <div>
+              <label className="text-[11px] text-muted-foreground block mb-1"
+                htmlFor="psp-jenis-objek">Jenis objek BMN</label>
+              <select id="psp-jenis-objek" value={konteksPsp?.jenis_objek || ""}
+                onChange={(e) => setKonteksPsp((k) => ({ ...k, jenis_objek: e.target.value }))}
+                className="w-full h-9 rounded-md border border-input bg-background px-2 text-xs"
+                data-testid="psp-jenis-objek">
+                <option value="">— Pilih jenis objek —</option>
+                <option value="tanah">Tanah</option>
+                <option value="bangunan">Bangunan</option>
+                <option value="tanah_dan_bangunan">Tanah dan Bangunan</option>
+                <option value="selain_tb">Selain Tanah dan/atau Bangunan</option>
+              </select>
+            </div>
+            {/* Empat pertanyaan ya/tidak yang mengubah daftar paling banyak.
+                Sisanya (PMPP dsb.) memakai bawaan sampai memang dibutuhkan —
+                pertanyaan yang jarang relevan menurunkan mutu jawaban atas
+                yang sering relevan. */}
+            {[["punya_dokumen_kepemilikan", "Punya dokumen kepemilikan (BPKB/sertipikat/setara)"],
+              ["dokumen_tidak_ada", "Ada dokumen yang tidak ada / tidak ditemukan"],
+              ["penandatangan_didelegasikan", "Surat diteken pejabat yang menerima pendelegasian"],
+              ["untuk_pmpp", "Dalam rangka Penyertaan Modal Pemerintah Pusat"]].map(([kunci, label]) => (
+              <label key={kunci} className="flex items-start gap-2 text-[11px] cursor-pointer">
+                <input type="checkbox" checked={!!konteksPsp?.[kunci]}
+                  onChange={(e) => setKonteksPsp((k) => ({ ...k, [kunci]: e.target.checked }))}
+                  className="mt-0.5 shrink-0" data-testid={`psp-konteks-${kunci}`} />
+                <span className="min-w-0">{label}</span>
+              </label>
+            ))}
+            <Button size="sm" variant="outline" className="h-8 text-xs min-h-0"
+              onClick={simpanKonteksPsp} data-testid="psp-konteks-simpan">
+              Terapkan
+            </Button>
+          </div>
+
+          <KelengkapanDokumen kelengkapan={syaratPsp}
+            terunggah={(lampPsp?.sk?.lampiran || []).map((f) => f.jenis).filter(Boolean)} />
+
+          {/* Unggah: jenis dipilih DULU, baru berkasnya. Urutan ini disengaja
+              — memilih berkas lebih dulu membuat orang menekan "unggah"
+              sebelum menyadari ada jenis yang harus dipilih. */}
+          <div className="rounded-lg border border-border p-2.5 space-y-2">
+            <p className="text-xs font-bold">Unggah berkas</p>
+            <select value={lampPsp?.jenis || ""}
+              onChange={(e) => setLampPsp((l) => ({ ...l, jenis: e.target.value }))}
+              className="w-full h-9 rounded-md border border-input bg-background px-2 text-xs"
+              data-testid="psp-lampiran-jenis">
+              <option value="">— Pilih Jenis Dokumen —</option>
+              {(syaratPsp?.pilihan || []).map((p) => (
+                <option key={p.kode} value={p.kode}>
+                  {p.nama} — {p.sifat_label}
+                </option>
+              ))}
+            </select>
+            <input ref={lampPspInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) unggahLampiranPsp(f); }} />
+            <Button size="sm" variant="outline" className="h-8 text-xs min-h-0 self-start"
+              disabled={lampPsp?.uploading || (lampPsp?.sk?.lampiran || []).length >= 10}
+              onClick={() => lampPspInputRef.current?.click()} data-testid="penggunaan-psp-lampiran-unggah">
+              {lampPsp?.uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Upload className="w-3.5 h-3.5 mr-1.5" />}
+              Unggah Berkas
+            </Button>
+          </div>
           {(lampPsp?.sk?.lampiran || []).length === 0 ? (
             <p className="text-xs text-muted-foreground text-center py-4">Belum ada lampiran.</p>
           ) : (
@@ -1744,7 +1878,13 @@ export default function PenggunaanPage({ user, onBack }) {
                     className="min-w-0 flex-1 text-left hover:underline">
                     <span className="block text-xs font-semibold text-foreground truncate">{f.filename}</span>
                     <span className="block text-[10px] text-muted-foreground">
-                      {String(f.tanggal || "").slice(0, 10)} · oleh {f.oleh}
+                      {/* Berkas warisan tak punya jenis. Menandainya di sini
+                          adalah satu-satunya cara operator tahu KENAPA ia tak
+                          terhitung memenuhi butir wajib mana pun. */}
+                      {f.jenis
+                        ? (syaratPsp?.butir || []).find((b) => b.kode === f.jenis)?.nama || f.jenis
+                        : "Tanpa jenis — tidak dihitung"}
+                      {" · "}{String(f.tanggal || "").slice(0, 10)} · oleh {f.oleh}
                     </span>
                   </button>
                   {isAdmin && (
