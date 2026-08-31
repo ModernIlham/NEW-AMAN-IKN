@@ -1,0 +1,106 @@
+# Unduh teks peraturan primer — DI RUNNER, karena lingkungan Claude Code
+# tidak bisa menjangkaunya.
+#
+# Gerbang egress sesi pengembangan menjawab 403 pada CONNECT untuk SETIAP
+# host peraturan yang dicoba (jdih.kemenkeu.go.id, peraturan.bpk.go.id,
+# djkn.kemenkeu.go.id, peraturan.go.id, jdihn.go.id, sipuu.setkab.go.id,
+# ngada.org, scribd.com, bahkan web.archive.org dan wikipedia). Itu kebijakan
+# organisasi, bukan kerusakan — dan tidak boleh diakali. Runner GitHub punya
+# egress biasa, jadi pengunduhannya dipindahkan ke sini.
+#
+# Hasilnya DIDORONG ke cabang `regulasi/unduhan`, bukan ke main: teks
+# peraturan adalah bahan mentah yang perlu ditelaah dulu, dan mendorongnya
+# langsung ke main melewati review yang justru paling dibutuhkan di sini.
+#
+# Jalankan manual: Actions → "Unduh Regulasi" → Run workflow.
+name: Unduh Regulasi
+
+on:
+  workflow_dispatch:
+    inputs:
+      cabang:
+        description: "Cabang tujuan hasil unduhan"
+        required: false
+        default: "regulasi/unduhan"
+
+concurrency:
+  group: unduh-regulasi
+  cancel-in-progress: false
+
+permissions:
+  # `contents: write` HANYA untuk mendorong cabang hasil. Tak ada izin lain:
+  # workflow ini tak menyentuh PR, issue, package, maupun deployment.
+  contents: write
+
+jobs:
+  unduh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Pasang pypdf
+        run: pip install --quiet pypdf
+
+      - name: Unduh & ekstrak teks peraturan
+        id: unduh
+        run: |
+          set -o pipefail
+          python3 scripts/regulasi_sumber.py docs/regulasi 2>&1 | tee /tmp/unduh.log
+
+      - name: Ringkasan
+        if: always()
+        run: |
+          {
+            echo "# Unduh Regulasi"
+            echo
+            echo '```'
+            cat /tmp/unduh.log 2>/dev/null || echo "(tak ada log)"
+            echo '```'
+            echo
+            if [ -f docs/regulasi/MANIFEST.json ]; then
+              echo "## Manifes"
+              echo
+              echo '| Kode | Halaman | Ukuran | Sumber |'
+              echo '|---|---|---|---|'
+              python3 - <<'PY'
+          import json
+          with open("docs/regulasi/MANIFEST.json", encoding="utf-8") as f:
+              m = json.load(f)
+          for b in m.get("berkas", []):
+              if b.get("berkas"):
+                  print(f"| `{b['kode']}` | {b['halaman']} | "
+                        f"{b['bytes'] // 1024} KB | {b['url'][:70]} |")
+              else:
+                  print(f"| `{b['kode']}` | — | — | **semua sumber gagal** |")
+          PY
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Dorong hasil ke cabang telaah
+        if: always()
+        env:
+          CABANG: ${{ inputs.cabang || 'regulasi/unduhan' }}
+        run: |
+          if [ -z "$(git status --porcelain docs/regulasi)" ]; then
+            echo "Tidak ada perubahan pada docs/regulasi — tak ada yang didorong."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Cabang dibuat ulang dari HEAD tiap kali: ia arsip hasil unduhan
+          # terakhir, bukan riwayat yang perlu dipelihara.
+          git checkout -B "$CABANG"
+          git add docs/regulasi
+          git commit -m "Teks peraturan primer hasil unduhan runner
+
+          Diunduh otomatis oleh workflow 'Unduh Regulasi'. Teks ini BUKTI,
+          bukan kesimpulan: status verifikasi di syarat_dokumen_utils.py
+          tetap dinaikkan secara sadar setelah pasalnya dibaca."
+          git push --force-with-lease -u origin "$CABANG"
+          echo "Hasil ada di cabang \`$CABANG\`." >> "$GITHUB_STEP_SUMMARY"

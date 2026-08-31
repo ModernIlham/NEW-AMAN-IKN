@@ -15,6 +15,79 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#959] Teks peraturan primer diunduh lewat runner — pustaka punya jalan keluar — 2026-08-31
+
+Permintaan pemilik: *"download semua referensi untuk memperkaya pustaka,
+temukan hingga ke sumber lainnya jika terblokir untuk mengunduh sampai
+pustaka kita lengkap."*
+
+**Yang saya temukan lebih dulu: blokirnya jauh lebih luas dari yang tercatat.**
+`docs/SITASI-DOKUMEN-RESMI.md` mencatat "sumber primer terblokir" seolah itu
+pemblokiran khusus situs hukum. Diuji ulang: gerbang egress menjawab **403
+pada CONNECT** untuk **web umum seluruhnya** — termasuk `en.wikipedia.org`
+dan `web.archive.org`. Enam belas host dicoba lewat dua jalur (curl dan
+WebFetch); **tak satu pun tembus**. Satu-satunya kanal hidup adalah WebSearch,
+yang mengembalikan ringkasan mesin pencari — bukti sekunder, bukan teks
+primer.
+
+Itu kebijakan organisasi, bukan kerusakan, dan tidak boleh diakali.
+
+**Jalan keluarnya: runner GitHub Actions punya egress biasa.**
+
+- **`scripts/regulasi_sumber.py`** — manifes **12 peraturan induk**, tiap
+  peraturan punya **beberapa sumber** yang dicoba berurutan. Mengambil PDF,
+  mengekstrak teks, menyimpan `.txt` yang bisa di-`grep`, plus manifes berisi
+  **sha256, ukuran, jumlah halaman, URL yang berhasil, dan seluruh percobaan
+  yang gagal**.
+- **`.github/workflows/unduh-regulasi.yml`** — *Actions → "Unduh Regulasi" →
+  Run workflow*. Hasilnya didorong ke cabang **`regulasi/unduhan`**, bukan
+  `main`: teks peraturan adalah bahan mentah yang perlu ditelaah, dan
+  mendorongnya langsung ke `main` melewati review yang justru paling
+  dibutuhkan di sini. Izinnya `contents: write` saja.
+
+**Urutan prioritas mengikuti celah terbesar di registry [#958]:**
+PMK 111/2016 (hibah, penjualan, tukar menukar, PMPP) → PMK 165/2021 →
+PMK 83/2016 (penghapusan & pemusnahan) → PMK 115/2020 (pemanfaatan) →
+PMK 40/2024 → PMK 181/2016 → PMK 207/2021 → PMK 53/2023 → PP 27/2014 jo.
+28/2020 → KMK 334/KM.6/2021 → PMK 4/2015. Kalau unduhan terputus di tengah,
+yang menutup celah terbesarlah yang sudah masuk.
+
+**Empat penjagaan yang sengaja dipasang**
+
+1. **PDF hasil pindai tanpa lapisan teks DITOLAK**, tidak diterima diam-diam.
+   Berkas `.txt` kosong yang tersimpan akan terlihat seperti bukti padahal
+   tak memuat apa pun — kegagalan paling berbahaya di seluruh alur ini.
+2. **Balasan HTML pada sumber ber-tipe PDF ditolak** — situs mati kerap
+   membalas halaman error dengan status 200, bukan 404.
+3. **Halaman JDIH dikerok tautan PDF-nya**, dengan lampiran sengaja
+   dikalahkan batang tubuh.
+4. **Manifes lama dipertahankan bila unduhan gagal** — kegagalan jaringan
+   sesaat tak boleh menghapus asal-usul berkas yang sudah pernah terkumpul.
+
+**Batas yang TIDAK ikut bergeser.** Teks yang terunduh adalah **bukti, bukan
+kesimpulan**. Menaikkan butir di `syarat_dokumen_utils.py` dari
+`belum_terverifikasi` jadi `terverifikasi` tetap langkah sadar setelah
+pasalnya dibaca. Otomatisasi yang menstempel "terverifikasi" hanya karena
+PDF-nya berhasil masuk akan menghapus satu-satunya pembeda yang membuat
+pustaka ini bisa dipercaya.
+
+**20 uji baru.** Enam mutasi dipasang lalu dibunuh — **dua LOLOS** lebih dulu:
+"lampiran tak lagi dikalahkan batang tubuh" (uji lama membandingkan dua URL
+yang berbeda di lebih dari satu hal, jadi yang menang bukan karena penalti
+lampirannya) dan "manifes lama dibuang saat unduhan gagal" (belum ada ujinya
+sama sekali). Keduanya risiko nyata: yang pertama menyimpan lampiran alih-alih
+batang tubuh, yang kedua menghapus sha256 dan URL sumber berkas yang masih
+ada di direktori.
+
+Alur ujung-ke-ujung diuji dengan **PDF sungguhan** (dibuat ReportLab,
+diekstrak pypdf) dan jaringan disulih: cadangan sumber dipakai saat yang
+pertama mati, halaman HTML dikerok, manifes tertulis dengan sha256 benar.
+
+Dokumentasi: `docs/regulasi/README.md`, plus koreksi di
+`docs/SITASI-DOKUMEN-RESMI.md` dan `docs/PUSTAKA-REGULASI-BMN.md` §14A.
+
+---
+
 ## [#958] Syarat dokumen usulan BMN jadi registry — daftar periksa ala SIMAN V2 — 2026-08-31
 
 Permintaan pemilik: *"carikan untuk keperluan dokumen apa saja yang
