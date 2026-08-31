@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import (
-    APIRouter, Depends, File, HTTPException, Query, Request, UploadFile,
+    APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile,
 )
 from fastapi.responses import Response
 import math
@@ -187,9 +187,19 @@ async def daftar_psp(_user: dict = Depends(require_user)):
     items = [s async for s in db.psp.find(
                  scope_query_field_satker(_user), {"_id": 0})
              .sort("tanggal_sk", -1).limit(500)]
+    from syarat_dokumen_utils import kelengkapan_dokumen
     for s in items:
         # Normalisasi record lama tanpa field status (= SK sudah terbit)
         s["status_pengajuan"] = status_pengajuan_psp(s)
+        # Kelengkapan berkas usulan. `konteks_dokumen` disimpan pada SK saat
+        # operator menjawab pertanyaan keadaan (jenis objek, punya dokumen
+        # kepemilikan, dst.); tanpa itu resolver memakai bawaannya yang
+        # condong MENAMPILKAN butir — daftar yang terlalu panjang masih jauh
+        # lebih baik daripada butir yang hilang diam-diam.
+        s["kelengkapan"] = kelengkapan_dokumen(
+            "psp",
+            [str(l.get("jenis") or "") for l in (s.get("lampiran") or [])],
+            s.get("konteks_dokumen") or {})
     from shared_utils import filter_aset_perhitungan
     total_aset = await db.assets.count_documents(
         await filter_aset_perhitungan(await scope_query_aset(_user, {})))
@@ -568,6 +578,52 @@ _MAX_LAMPIRAN_BYTES = 10 * 1024 * 1024
 _MAX_LAMPIRAN = 10
 
 
+class KonteksDokumenIn(BaseModel):
+    """Jawaban atas pertanyaan keadaan yang menentukan berkas mana yang wajib.
+
+    Disimpan pada SK-nya, bukan ditanyakan ulang tiap kali dialog dibuka:
+    jawabannya adalah sifat objeknya, yang tidak berubah antar-sesi, dan
+    menanyakannya berulang adalah cara paling andal membuat orang menjawab
+    asal-asalan.
+    """
+    jenis_objek: str = ""
+    punya_dokumen_kepemilikan: bool = False
+    ada_fotokopi: bool = True
+    unggah_pindaian: bool = True
+    dokumen_tidak_ada: bool = False
+    dokumen_hilang: bool = False
+    penandatangan_didelegasikan: bool = False
+    untuk_pmpp: bool = False
+    fisik_tak_dikuasai: bool = False
+
+
+@penggunaan_router.post("/penggunaan/psp/{sk_id}/konteks-dokumen")
+async def simpan_konteks_dokumen_psp(sk_id: str, payload: KonteksDokumenIn,
+                                     user: dict = Depends(require_writer)):
+    """Simpan keadaan objek → daftar periksa dokumennya menyesuaikan."""
+    from syarat_dokumen_utils import JENIS_OBJEK, kelengkapan_dokumen
+    if payload.jenis_objek and payload.jenis_objek not in JENIS_OBJEK:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Jenis objek tidak dikenal (pilihan: {', '.join(JENIS_OBJEK)})")
+    sk = await db.psp.find_one({"id": sk_id},
+                               {"_id": 0, "id": 1, "kode_satker": 1, "lampiran": 1})
+    if not sk:
+        raise HTTPException(status_code=404, detail="SK tidak ditemukan")
+    await pastikan_akses_dok_satker(user, sk)
+    konteks = payload.model_dump()
+    await db.psp.update_one(
+        {"id": sk_id},
+        {"$set": {"konteks_dokumen": konteks,
+                  "updated_at": datetime.now(timezone.utc).isoformat()}})
+    return {"message": "Keadaan objek tersimpan",
+            "konteks_dokumen": konteks,
+            "kelengkapan": kelengkapan_dokumen(
+                "psp",
+                [str(l.get("jenis") or "") for l in (sk.get("lampiran") or [])],
+                konteks)}
+
+
 def _lampiran_ext(filename: str) -> str:
     name = (filename or "").lower()
     for ext in _LAMPIRAN_MEDIA:
@@ -578,8 +634,21 @@ def _lampiran_ext(filename: str) -> str:
 
 @penggunaan_router.post("/penggunaan/psp/{sk_id}/lampiran")
 async def unggah_lampiran_psp(sk_id: str, file: UploadFile = File(...),
+                              jenis: str = Form(""),
                               user: dict = Depends(require_writer)):
-    """Unggah scan SK/dokumen pendukung (PDF/gambar, maks 10MB, 10 berkas)."""
+    """Unggah dokumen usulan PSP (PDF/gambar, maks 10MB, 10 berkas).
+
+    `jenis` adalah kode dari `syarat_dokumen_utils.KATALOG_DOKUMEN` —
+    sepadan dengan dropdown "Jenis Dokumen" di SIMAN V2. Ia OPSIONAL secara
+    teknis supaya lampiran warisan dan pemanggil lama tidak putus, tetapi
+    berkas tanpa jenis tidak dihitung memenuhi butir wajib mana pun:
+    menebak jenisnya dari nama berkas akan melaporkan "lengkap" untuk
+    berkas yang belum tentu benar."""
+    from syarat_dokumen_utils import KATALOG_DOKUMEN
+    jenis = str(jenis or "").strip()
+    if jenis and jenis not in KATALOG_DOKUMEN:
+        raise HTTPException(status_code=400,
+                            detail="Jenis dokumen tidak dikenal")
     sk = await db.psp.find_one(
         {"id": sk_id}, {"_id": 0, "id": 1, "lampiran": 1, "kode_satker": 1})
     if not sk:
@@ -616,6 +685,7 @@ async def unggah_lampiran_psp(sk_id: str, file: UploadFile = File(...),
 
     entri = {"file_id": file_id, "filename": _meta["filename"],
              "content_type": _meta["content_type"],
+             "jenis": jenis,
              "oleh": user.get("username"),
              "tanggal": datetime.now(timezone.utc).isoformat()}
     res = await db.psp.find_one_and_update(

@@ -467,6 +467,7 @@ from routes.persediaan_permohonan import persediaan_permohonan_router
 from routes.aset_permohonan import aset_permohonan_router
 from routes.tgr import tgr_router
 from routes.penggunaan import penggunaan_router
+from routes.syarat_dokumen import syarat_dokumen_router
 from routes.pengamanan import pengamanan_router
 from routes.pemeliharaan import pemeliharaan_router
 from routes.perencanaan import perencanaan_router
@@ -540,6 +541,7 @@ api_router.include_router(persediaan_laporan_router)
 api_router.include_router(aset_permohonan_router)
 api_router.include_router(tgr_router)
 api_router.include_router(penggunaan_router)
+api_router.include_router(syarat_dokumen_router)
 api_router.include_router(pengamanan_router)
 api_router.include_router(pemeliharaan_router)
 api_router.include_router(perencanaan_router)

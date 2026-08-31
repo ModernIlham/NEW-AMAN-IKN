@@ -15,6 +15,87 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#958] Syarat dokumen usulan BMN jadi registry — daftar periksa ala SIMAN V2 — 2026-08-31
+
+Permintaan pemilik: *"carikan untuk keperluan dokumen apa saja yang
+diperlukan pada saat penetapan status barang ... tambah lagi informasi dan
+peraturan yang seharusnya agar semua keperluan dokumen untuk segala macam
+jenis pengusulan BMN dapat ditangani aplikasi dengan baik ... agar pengajuan
+ke SIMAN V2 dari segala pengusulan kondisi dapat dimanajemen dengan baik."*
+
+**Temuan pertama: daftar sembilan butir di tangkapan layar itu sudah usang.**
+Artikel KPKNL yang dikirim pemilik menyitir **PMK 246/PMK.06/2014 jo.
+76/PMK.06/2019**. Untuk rezim Penggunaan, keduanya sudah digantikan **PMK 40
+Tahun 2024**, yang menyusun daftar lampirannya **bercabang per jenis objek**
+(Pasal 11 ayat (2) huruf a–g) — bukan sembilan slot seragam. Tabel kewenangan
+Rp100 juta pada artikel itu **tetap sejalan** (Pasal 6 ayat (3), Pasal 7 ayat
+(3)); yang berubah daftar lampirannya, bukan ambangnya.
+
+Sembilan slot seragam akan menagih **sertipikat** kepada pemilik laptop,
+**IMB** kepada pemilik kendaraan, dan **SPTJ** selalu — padahal SPTJ adalah
+*pengganti* dokumen yang tidak ada (Pasal 11 ayat (3)–(7)).
+
+**Yang dibangun**
+
+- `backend/syarat_dokumen_utils.py` — registry **14 rezim usulan**, 33 jenis
+  dokumen, tiap butir membawa **pemicunya sendiri** (wajib hanya bila
+  keadaannya menghendaki) dan **dasarnya**.
+- `GET /syarat-dokumen` + `/syarat-dokumen/rezim` — rute referensi lintas
+  modul; pemindahtanganan, penghapusan, dan pemanfaatan tinggal memanggilnya.
+- Dialog lampiran PSP jadi **"Kelengkapan Dokumen"** sepadan SIMAN V2:
+  pertanyaan keadaan objek → daftar periksa menyesuaikan → dropdown
+  **"Jenis Dokumen"** berlabel Wajib/Opsional → berkas terhitung memenuhi
+  butirnya.
+- `POST /penggunaan/psp/{id}/konteks-dokumen` menyimpan keadaan objek pada
+  SK-nya, jadi pertanyaannya tak diulang tiap dialog dibuka.
+
+**Tiga keputusan desain**
+
+1. **Tiga tingkat kekuatan bukti, bukan satu.** `terverifikasi` (pasal sudah
+   dibaca) · `empiris_siman` (terbaca dari layar SIMAN V2) ·
+   `belum_terverifikasi` (praktik lapangan). Sumber primer PMK 111/2016 dan
+   PMK 115/2020 **terblokir** dari lingkungan pengembangan; menyeragamkan
+   semuanya jadi "wajib" akan menyembunyikan perbedaan antara pasal yang
+   sudah dibaca dan tebakan. Rezim yang belum terverifikasi menampilkan
+   **peringatan** dan tak pernah jadi gerbang.
+2. **Sifat `muatan`, dipisah dari lampiran.** Data BMN diminta ada **di
+   dalam** surat permohonan (Pasal 11/24/34/46/54), bukan sebagai berkas
+   terpisah. Menagihnya sebagai unggahan melaporkan "belum lengkap" untuk
+   usulan yang sudah benar; menghapusnya menyembunyikan kewajiban yang nyata.
+3. **KIB sengaja berbeda antar-rezim.** Pasal PSP **tak menyebut KIB sama
+   sekali**; SIMAN V2 menandainya **Mandatory** untuk hibah. Menyeragamkan
+   keduanya akan salah di salah satu sisi.
+
+**BAST PSP tidak lagi jadi syarat usulan** — sesuai permintaan pemilik, dan
+benar menurut teksnya: Pasal 11 ayat (2) tak pernah meminta BAST sebagai
+lampiran berdiri sendiri; ia muncul hanya sebagai *pengganti* dokumen
+kepemilikan yang tidak ada. BAST PSP terbit **sesudah** SK ada — menagihnya
+membalik sebab-akibat. Tombol unduhnya tetap ada; ia dokumen internal.
+
+**Hibah**: delapan butir diambil **apa adanya** dari dropdown "Jenis Dokumen"
+SIMAN V2 (tangkapan layar pemilik), lengkap dengan penanda Mandatory/Opsional
+milik SIMAN — termasuk nama panjangnya, supaya operator bisa mencocokkan satu
+lawan satu.
+
+**Diukur di Chromium dengan CSS hasil build, lebar 400 px:** panel daftar
+periksa 1908 px → **1006 px (hemat 47%)** setelah butir yang tidak berlaku
+dilipat jadi satu grup — tetap ada dan bisa dibuka, tetapi tak lagi
+menenggelamkan empat butir wajib.
+
+**61 uji baru** (43 backend, 18 frontend). Delapan mutasi dipasang lalu
+dibunuh; satu (**"lampiran tanpa jenis dianggap memenuhi"**) **LOLOS** sampai
+ujinya diperkuat — dampak sebenarnya bukan di kelengkapan melainkan di
+`di_luar_daftar`, yang akan menuduh lampiran warisan berjenis asing.
+
+Uji anti-drift `test_rezim_penggunaan_setiap_wajibnya_berdasar_pasal` sudah
+menangkap **dua kesalahan saya sendiri** saat tabel ini ditulis:
+`daftar_bmn` dan `lapor_kehilangan` ditandai wajib padahal dasarnya belum
+terbaca.
+
+Dokumentasi: `docs/SYARAT-DOKUMEN-USULAN-BMN.md`.
+
+---
+
 ## [#957] Pembatalan permintaan TTD wajib beralasan — 2026-08-31
 
 Permintaan pemilik: *"ketika diklik pembatalan permintaan di ttd elektronik,
