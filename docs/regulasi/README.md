@@ -100,8 +100,22 @@ Sumbernya ada di `scripts/regulasi_sumber.py`.
 
 Tiap peraturan punya **beberapa** sumber, dicoba berurutan: URL JDIH berubah
 saat situsnya diperbarui, dan cermin kementerian lain (Pertanian, PUPR, BP
-Batam) memuat salinan PDF yang sama serta jauh lebih stabil karena ia berkas
-statis.
+Batam, BPHN) memuat salinan PDF yang sama serta jauh lebih stabil karena ia
+berkas statis.
+
+**Dua aturan yang dijaga uji**, bukan sekadar niat baik:
+
+- `test_tak_ada_peraturan_yang_bersumber_tunggal` — ambangnya **nol**.
+- `test_ada_cermin_di_luar_dua_host_utama` — tiap peraturan wajib punya
+  minimal satu sumber di luar `jdih.kemenkeu.go.id` dan
+  `peraturan.bpk.go.id`. Kalau seluruh sumber ada di dua host itu saja, satu
+  gangguan di sisi Kemenkeu/BPK menjatuhkan semuanya sekaligus.
+
+Total saat ini: **46 sumber untuk 12 peraturan**, 9 di antaranya tautan PDF
+langsung. Pola unduh langsung JDIH yang berguna saat menambah sumber baru:
+`https://jdih.kemenkeu.go.id/api/download/<uuid>/<nomor>~PMK.06~<tahun>Per.pdf`,
+dan BPHN memakai pola nama berkas yang bisa ditebak untuk PP:
+`https://bphn.go.id/data/documents/<yy>pp<nnn>.pdf`.
 
 ## Kalau sebuah peraturan tetap gagal
 
