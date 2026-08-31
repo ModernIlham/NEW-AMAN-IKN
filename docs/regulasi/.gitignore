@@ -1,0 +1,3 @@
+# PDF asli tidak disimpan: besar dan tak bisa di-diff. Yang masuk repo hanya
+# teks hasil ekstraksi (*.txt) dan MANIFEST.json.
+*.pdf

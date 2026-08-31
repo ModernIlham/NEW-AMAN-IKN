@@ -19,6 +19,23 @@ Karena itu status `terverifikasi` berarti: *nomor dan judulnya benar, dan
 pemakaiannya di kode cocok dengan judul itu.* Ia **tidak** berarti pasalnya
 sudah dibaca, dan **tidak** berarti peraturannya dipastikan masih berlaku.
 
+> **Pemutakhiran 2026-08-31 — batas ini kini ada jalan keluarnya.**
+> Blokirnya diuji ulang dan ternyata **lebih luas** dari yang tercatat di
+> atas: bukan hanya situs hukum, melainkan web umum seluruhnya — bahkan
+> `en.wikipedia.org` dan `web.archive.org` ditolak. Itu kebijakan egress
+> deny-all, bukan pemblokiran khusus JDIH.
+>
+> Yang berubah: **runner GitHub Actions punya egress biasa.** Workflow
+> **Unduh Regulasi** (`.github/workflows/unduh-regulasi.yml`) mengunduh PDF
+> peraturan di sana, mengekstrak teksnya, dan mendorongnya ke cabang
+> `regulasi/unduhan` — lengkap dengan sha256, jumlah halaman, dan URL sumber
+> tiap berkas. Rinciannya di `docs/regulasi/README.md`.
+>
+> **Yang TIDAK berubah:** teks yang terunduh adalah **bukti, bukan
+> kesimpulan**. Baris di tabel-tabel bawah ini baru boleh naik statusnya
+> setelah pasalnya benar-benar dibaca dari teks itu — bukan karena
+> unduhannya berhasil.
+
 ## Ringkasan
 
 | | Jumlah |

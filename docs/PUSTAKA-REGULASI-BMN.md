@@ -1315,6 +1315,22 @@ Logika murninya di `kodefikasi_utils` (`kunci_urut_aset`, `urutkan_aset_bmn`,
 
 ---
 
+## 14A. Teks primer — cara mendapatkannya (per 2026-08-31)
+
+Sumber primer **tidak terjangkau** dari lingkungan pengembangan: gerbang
+egress menjawab 403 pada CONNECT untuk seluruh web umum, termasuk Wikipedia
+dan Internet Archive. Bukan pemblokiran khusus situs hukum.
+
+Jalan keluarnya ada di **runner GitHub Actions**, yang egress-nya biasa:
+**Actions → "Unduh Regulasi" → Run workflow.** Hasilnya (teks batang tubuh 12
+peraturan induk + manifes ber-sha256) mendarat di cabang `regulasi/unduhan`.
+
+Baca `docs/regulasi/README.md` sebelum menaikkan status butir mana pun — teks
+yang terunduh adalah bukti, bukan kesimpulan, dan §14 di bawah tetap berlaku
+sampai pasalnya benar-benar dibaca.
+
+---
+
 ## 15. Sumber Utama
 
 Regulasi: PSAP 05 (ksap.org/standar/PSAP05.pdf) · PMK 181/PMK.06/2016
