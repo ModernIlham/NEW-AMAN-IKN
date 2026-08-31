@@ -84,7 +84,10 @@ MANIFES = [
         "guna": "Perubahan rezim pemindahtanganan",
         "prioritas": 2,
         "sumber": [
+            ("pdf", "https://jdih.kemenkeu.go.id/api/download/"
+                    "9a80cffe-c7d2-43cd-b06f-88dd1d9ea9b6/165~PMK.06~2021Per.pdf"),
             ("html", "https://jdih.kemenkeu.go.id/dok/165-pmk-06-2021"),
+            ("html", "https://peraturan.go.id/id/permenkeu-no-165-pmk-06-2021-tahun-2021"),
             ("html", "https://peraturan.bpk.go.id/Details/196037/pmk-no-165pmk062021"),
         ],
     },
@@ -132,7 +135,10 @@ MANIFES = [
         "prioritas": 6,
         "sumber": [
             ("html", "https://jdih.kemenkeu.go.id/dok/181-pmk-06-2016"),
+            ("html", "https://peraturan.go.id/id/permenkeu-no-181-pmk-06-2016-tahun-2016"),
             ("html", "https://peraturan.bpk.go.id/Details/112552/pmk-no-181pmk062016"),
+            ("html", "https://paralegal.id/peraturan/"
+                     "peraturan-menteri-keuangan-nomor-181-pmk-06-2016/"),
         ],
     },
     {
@@ -141,7 +147,13 @@ MANIFES = [
         "guna": "Modul Wasdal",
         "prioritas": 7,
         "sumber": [
+            ("pdf", "https://jdih.kemenkeu.go.id/api/download/"
+                    "0d61b4a6-0795-4ca1-8210-d15006233d89/207~PMK.06~2021Per.pdf"),
             ("html", "https://jdih.kemenkeu.go.id/dok/207-pmk-06-2021"),
+            ("html", "https://peraturan.go.id/id/permenkeu-no-207-pmk-06-2021-tahun-2021"),
+            ("html", "https://peraturan.bpk.go.id/Details/209347/pmk-no-207pmk062021"),
+            ("html", "https://paralegal.id/peraturan/"
+                     "peraturan-menteri-keuangan-nomor-207-pmk-06-2021/"),
         ],
     },
     {
@@ -151,6 +163,12 @@ MANIFES = [
         "prioritas": 8,
         "sumber": [
             ("html", "https://jdih.kemenkeu.go.id/dok/pmk-53-tahun-2023"),
+            ("html", "https://jdih.kemenkeu.go.id/dok/"
+                     "a66a7f2f-30dd-4178-035e-08db54fba7f4"),
+            ("html", "https://jdih-old.kemenkeu.go.id/in/dokumen/peraturan/"
+                     "a66a7f2f-30dd-4178-035e-08db54fba7f4"),
+            ("html", "https://peraturan.go.id/id/permenkeu-no-53-tahun-2023"),
+            ("html", "https://peraturan.bpk.go.id/Details/249043/pmk-no-53-tahun-2023"),
         ],
     },
     {
@@ -159,7 +177,10 @@ MANIFES = [
         "guna": "Induk seluruh rezim",
         "prioritas": 9,
         "sumber": [
-            ("html", "https://peraturan.bpk.go.id/Details/5510/pp-no-27-tahun-2014"),
+            ("pdf", "https://bphn.go.id/data/documents/14pp027.pdf"),
+            ("html", "https://peraturan.go.id/id/pp-no-27-tahun-2014"),
+            ("html", "https://peraturan.bpk.go.id/Details/5464/pp-no-27-tahun-2014"),
+            ("html", "https://jdih.kemenkeu.go.id/dok/pp-27-tahun-2014"),
         ],
     },
     {
@@ -168,7 +189,10 @@ MANIFES = [
         "guna": "Menambah KETUPI sebagai bentuk pemanfaatan ke-6",
         "prioritas": 10,
         "sumber": [
-            ("html", "https://peraturan.bpk.go.id/Details/141069/pp-no-28-tahun-2020"),
+            ("pdf", "https://bphn.go.id/data/documents/20pp028.pdf"),
+            ("html", "https://peraturan.bpk.go.id/Details/138973/pp-no-28-tahun-2020"),
+            ("html", "https://peraturan.go.id/id/pp-no-28-tahun-2020"),
+            ("html", "https://jdih.kemenkeu.go.id/dok/pp-28-tahun-2020"),
         ],
     },
     {
@@ -180,6 +204,8 @@ MANIFES = [
         "prioritas": 11,
         "sumber": [
             ("html", "https://jdih.kemenkeu.go.id/dok/334-km-6-2021"),
+            ("html", "https://jdih.kemenkeu.go.id/dok/kmk-334-km-6-2021"),
+            ("html", "https://peraturan.go.id/id/kepmenkeu-no-334-km-6-2021-tahun-2021"),
         ],
     },
     {
@@ -189,6 +215,10 @@ MANIFES = [
         "prioritas": 12,
         "sumber": [
             ("html", "https://jdih.kemenkeu.go.id/dok/4-pmk-06-2015"),
+            ("html", "https://peraturan.go.id/id/permenkeu-no-4-pmk-06-2015-tahun-2015"),
+            ("html", "https://peraturan.bpk.go.id/Details/111893/pmk-no-4pmk062015"),
+            ("html", "https://paralegal.id/peraturan/"
+                     "peraturan-menteri-keuangan-nomor-4-pmk-06-2015/"),
         ],
     },
 ]

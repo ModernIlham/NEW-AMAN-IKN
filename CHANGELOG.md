@@ -15,6 +15,41 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#960] Sumber peraturan diperbanyak — tak ada lagi yang bersumber tunggal — 2026-08-31
+
+Lanjutan [#959]. Pertanyaan pemilik: *"apakah sudah selesai mengumpulkan semua
+peraturan?"* — **belum, nol dari 12**: workflow "Unduh Regulasi" belum pernah
+dijalankan, dan pemicunya harus dari pemilik (`actions_run_trigger` menjawab
+403 untuk agen; diuji, bukan diingat).
+
+Waktu tunggunya dipakai untuk menaikkan peluang keberhasilan putaran pertama.
+**Enam dari 12 peraturan masih bersumber tunggal**, dan seluruhnya menunjuk ke
+`jdih.kemenkeu.go.id` atau `peraturan.bpk.go.id` — dua host yang pola URL-nya
+paling tidak pasti. Enam kegagalan yang bisa dicegah dengan satu pencarian per
+peraturan.
+
+**12 → 46 sumber**, tautan PDF langsung **3 → 9**, peraturan bersumber tunggal
+**6 → 0**.
+
+Dua pola unduh langsung terungkap saat mencari dan kini terpakai:
+
+- JDIH: `.../api/download/<uuid>/<nomor>~PMK.06~<tahun>Per.pdf` — UUID PMK
+  165/2021 dan PMK 207/2021 sudah masuk manifes
+- BPHN: `bphn.go.id/data/documents/<yy>pp<nnn>.pdf` — pola nama berkas yang
+  bisa ditebak untuk Peraturan Pemerintah
+
+**Dua uji baru mengunci perbaikannya**, bukan sekadar mencatatnya:
+
+- `test_tak_ada_peraturan_yang_bersumber_tunggal` — ambang **nol**. Versi
+  sebelumnya membolehkan sampai enam; ambang longgar itulah yang membuat
+  kekurangannya lolos sejak awal.
+- `test_ada_cermin_di_luar_dua_host_utama` — tiap peraturan wajib punya
+  minimal satu sumber di luar Kemenkeu/BPK. Tanpa ini, "empat sumber" bisa
+  berarti empat URL di satu host yang sama, dan satu gangguan menjatuhkan
+  semuanya.
+
+---
+
 ## [#959] Teks peraturan primer diunduh lewat runner — pustaka punya jalan keluar — 2026-08-31
 
 Permintaan pemilik: *"download semua referensi untuk memperkaya pustaka,

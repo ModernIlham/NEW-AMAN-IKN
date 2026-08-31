@@ -48,12 +48,28 @@ def test_prioritas_unik_dan_berurutan():
     assert p == list(range(1, len(rs.MANIFES) + 1))
 
 
-def test_setiap_peraturan_punya_lebih_dari_satu_sumber_kecuali_yang_dijelaskan():
+def test_tak_ada_peraturan_yang_bersumber_tunggal():
     """URL JDIH berubah saat situsnya diperbarui; satu URL mati akan
-    mematikan seluruh unduhan untuk peraturan itu."""
+    mematikan seluruh unduhan untuk peraturan itu.
+
+    Ambangnya sengaja NOL, bukan "sedikit". Versi pertama manifes ini
+    membiarkan enam peraturan bersumber tunggal — semuanya menunjuk ke
+    jdih.kemenkeu.go.id atau peraturan.bpk.go.id, dua host yang pola
+    URL-nya paling tidak pasti. Enam kegagalan yang bisa dicegah dengan
+    satu pencarian tiap peraturan.
+    """
     tunggal = [e["kode"] for e in rs.MANIFES if len(e["sumber"]) < 2]
-    # Yang bersumber tunggal boleh ada, tetapi harus sedikit dan disadari.
-    assert len(tunggal) <= 6, f"terlalu banyak bersumber tunggal: {tunggal}"
+    assert tunggal == [], f"bersumber tunggal: {tunggal}"
+
+
+def test_ada_cermin_di_luar_dua_host_utama():
+    """Kalau seluruh sumber sebuah peraturan ada di jdih.kemenkeu.go.id dan
+    peraturan.bpk.go.id saja, satu gangguan di sisi Kemenkeu/BPK
+    menjatuhkan semuanya sekaligus. Minimal satu cermin di luar keduanya."""
+    utama = ("jdih.kemenkeu.go.id", "peraturan.bpk.go.id")
+    kurus = [e["kode"] for e in rs.MANIFES
+             if not any(all(h not in url for h in utama) for _, url in e["sumber"])]
+    assert kurus == [], f"hanya bersandar pada Kemenkeu/BPK: {kurus}"
 
 
 def test_semua_sumber_https_dan_jenisnya_dikenal():
