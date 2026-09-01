@@ -68,6 +68,18 @@ from datetime import datetime, timezone
 # registry syarat dokumen didahulukan, supaya kegagalan di ekor daftar tidak
 # menunda yang paling dibutuhkan.
 
+#: Bentuk terbitan yang dikenali. Bawaannya `peraturan` — batang tubuh utuh
+#: dengan konsiderans. `lampiran` HANYA boleh dipasang per-entri, setelah
+#: naskahnya dibuktikan; lihat `bukan_batang_tubuh`.
+BENTUK_PERATURAN = "peraturan"
+BENTUK_LAMPIRAN = "lampiran"
+#: URAIAN TENTANG peraturan, bukan peraturannya — artikel unit Kemenkeu,
+#: pedoman satker, dan sejenisnya. Berkasnya berawalan `rujukan-` dan TIDAK
+#: PERNAH boleh menjadi dasar status `teks-primer` di
+#: `backend/sitasi_regulasi.py`; ada uji yang menagihnya.
+BENTUK_RUJUKAN = "rujukan"
+
+
 MANIFES = [
     {
         "kode": "pmk-111-2016-pemindahtanganan",
@@ -150,6 +162,18 @@ MANIFES = [
     },
     {
         "kode": "kmk-213-2021-tata-cara-pemanfaatan",
+        # DUA sumber resmi yang saling bebas — cermin Itjen Kemhan dan
+        # endpoint unduh DJKN sendiri — mengembalikan berkas yang SAMA
+        # PERSIS (469.096 karakter). Isinya lampiran KMK-nya: dibuka
+        # "BAB I PENDAHULUAN", memuat MEMUTUSKAN, Menetapkan, diktum, dan
+        # pasal bernomor — tetapi tanpa "Menimbang", yang tinggal di
+        # halaman diktum terpisah.
+        #
+        # Dugaan pertama adalah OCR yang menukar huruf. Laporan kemiripan
+        # membantahnya: yang ditemukan 'menyimpang' dan 'membangu' — kata
+        # Indonesia biasa, bukan "Menimbang" yang rusak. Jadi naskahnya
+        # memang terbit dalam bentuk ini, dan bentuk itulah yang diakui.
+        "bentuk": BENTUK_LAMPIRAN,
         "penanda": ["213/KM.6/2021"],
         "judul": ("KMK 213/KM.6/2021 — Tata Cara Pelaksanaan Pemanfaatan "
                   "Barang Milik Negara"),
@@ -320,6 +344,33 @@ MANIFES = [
                      "dbb8b516-9f26-4cd2-89de-5e9e5f0f7815"),
             ("html", "https://jdih.kemenkeu.go.id/dok/334-km-6-2021"),
             ("html", "https://peraturan.go.id/id/kepmenkeu-no-334-km-6-2021-tahun-2021"),
+        ],
+    },
+    {
+        "kode": "rujukan-kmk-334-2021-hibah-kecil",
+        "penanda": ["334/KM.6/2021", "KMK Nomor 334 Tahun 2021"],
+        "judul": ("RUJUKAN — Tata Cara Hibah BMN selain tanah/bangunan tanpa "
+                  "bukti kepemilikan ≤ Rp100 juta (KPPN Lubuk Sikaping, DJPb)"),
+        "guna": ("URAIAN TENTANG KMK 334/KM.6/2021, bukan naskahnya. KMK itu "
+                 "tidak terindeks di bagian peraturan DJKN dan sepuluh sumber "
+                 "unduhnya menjawab 404. Sampai naskahnya masuk, uraian dari "
+                 "unit Kemenkeu ini yang paling dekat — dan statusnya harus "
+                 "tetap terbaca sebagai rujukan, bukan bukti"),
+        "prioritas": 14,
+        "bentuk": BENTUK_RUJUKAN,
+        "sumber": [
+            ("teks", "https://djpb.kemenkeu.go.id/kppn/lubuksikaping/id/"
+                     "data-publikasi/artikel/3245-tata-cara-hibah-barang-milik-"
+                     "negara-bmn-selain-tanah-dan-atau-bangunan-yang-tidak-"
+                     "memiliki-bukti-kepemilikan-dengan-nilai-perolehan-sampai-"
+                     "dengan-rp100-000-000-berdasarkan-kmk-nomor-334-tahun-2021"
+                     ".html"),
+            ("teks", "https://djpb.kemenkeu.go.id/kppn/lubuksikaping/id/"
+                     "data-publikasi/309-artikel/3245-tata-cara-hibah-barang-"
+                     "milik-negara-bmn-selain-tanah-dan-atau-bangunan-yang-"
+                     "tidak-memiliki-bukti-kepemilikan-dengan-nilai-perolehan-"
+                     "sampai-dengan-rp100-000-000-berdasarkan-kmk-nomor-334-"
+                     "tahun-2021.html"),
         ],
     },
     {
@@ -495,7 +546,7 @@ def jejak_teks(teks: str) -> str:
     return "; ".join(jejak)
 
 
-def bukan_batang_tubuh(teks: str) -> str:
+def bukan_batang_tubuh(teks: str, bentuk: str = BENTUK_PERATURAN) -> str:
     """Alasan mengapa teks ini BUKAN naskah peraturan; '' bila ia naskah.
 
     Guard ini lahir dari kegagalan nyata. Unduhan pertama PMK 111/2016
@@ -515,7 +566,32 @@ def bukan_batang_tubuh(teks: str) -> str:
     # "MENTERlKEUANGAN". Pencocokan substring apa adanya akan menolak naskah
     # asli hanya karena OCR-nya berantakan.
     rapat = re.sub(r"\s+", "", asli).lower()
-    hilang = [k for k in _PENANDA_BATANG_TUBUH if k not in rapat]
+    if bentuk == BENTUK_RUJUKAN:
+        # Rujukan memang BUKAN batang tubuh — menuntutnya berarti menolak
+        # setiap uraian. Yang tersisa hanyalah penjagaan bahwa ia sebuah
+        # tulisan utuh, bukan halaman galat atau menu navigasi; nomornya
+        # sendiri ditagih terpisah oleh `nomor_tak_cocok`.
+        return ("" if len(asli.strip()) >= 2000 else
+                "rujukan terlalu pendek untuk sebuah uraian | "
+                + jejak_teks(asli))
+    if bentuk == BENTUK_LAMPIRAN:
+        # Sebagian Keputusan diterbitkan sebagai LAMPIRAN yang berdiri
+        # sendiri: konsiderans ("Menimbang") tinggal di halaman diktum yang
+        # terbit terpisah, sedangkan tata caranya — yang justru dicari —
+        # ada di lampirannya. Menuntut "Menimbang" pada berkas semacam itu
+        # menolak satu-satunya naskah yang tersedia.
+        #
+        # Kelonggaran ini TIDAK berlaku umum. Ia dipasang per-entri, hanya
+        # setelah naskahnya dibuktikan, dan tetap menuntut penanda lain:
+        # "MEMUTUSKAN", BAB bernomor romawi, serta pasal atau diktum.
+        # Ditambah `nomor_tak_cocok`, paparan tak bisa lewat jalur ini.
+        if not re.search(r"(?i)\bbab\s+(i|ii|iii|iv|v)\b", asli):
+            return ("ditandai bentuk lampiran tetapi tak ada BAB bernomor "
+                    "romawi | " + jejak_teks(asli))
+        wajib = ("memutuskan",)
+    else:
+        wajib = _PENANDA_BATANG_TUBUH
+    hilang = [k for k in wajib if k not in rapat]
     if hilang:
         return ("bukan batang tubuh peraturan — tak memuat "
                 + " maupun ".join(f"'{k}'" for k in hilang)
@@ -565,6 +641,18 @@ def ekstrak_teks(pdf: bytes) -> tuple[str, int]:
     return "\n\n".join(halaman), len(reader.pages)
 
 
+def _sebab_tolak(teks: str, entri: dict) -> str:
+    """Seluruh penjagaan isi dalam satu tempat.
+
+    Dua jalur unduh — PDF dan naskah HTML — harus menerapkan penjagaan yang
+    SAMA. Saat keduanya memanggil guard-nya sendiri-sendiri, penjagaan yang
+    ditambahkan belakangan mudah terpasang di satu jalur saja, dan jalur yang
+    terlewat tak akan berbunyi.
+    """
+    return (bukan_batang_tubuh(teks, entri.get("bentuk", BENTUK_PERATURAN))
+            or nomor_tak_cocok(teks, entri.get("penanda")))
+
+
 def unduh_satu(entri: dict) -> dict:
     """Coba tiap sumber berurutan sampai satu berhasil."""
     galat = []
@@ -577,8 +665,7 @@ def unduh_satu(entri: dict) -> dict:
                 if len(teks.strip()) < 500:
                     galat.append(f"{url}: halaman teks nyaris kosong")
                     continue
-                sebab = (bukan_batang_tubuh(teks)
-                         or nomor_tak_cocok(teks, entri.get("penanda")))
+                sebab = _sebab_tolak(teks, entri)
                 if sebab:
                     galat.append(f"{url}: {sebab}")
                     continue
@@ -607,8 +694,7 @@ def unduh_satu(entri: dict) -> dict:
                 galat.append(f"{url}: PDF tanpa lapisan teks ({n_hal} hlm) — "
                              "kemungkinan hasil pindai, perlu OCR")
                 continue
-            sebab = (bukan_batang_tubuh(teks)
-                     or nomor_tak_cocok(teks, entri.get("penanda")))
+            sebab = _sebab_tolak(teks, entri)
             if sebab:
                 galat.append(f"{url}: {sebab}")
                 continue
@@ -650,6 +736,7 @@ def main(argv) -> int:
                   flush=True)
             hasil.append({
                 "kode": entri["kode"], "judul": entri["judul"],
+                "bentuk": entri.get("bentuk", BENTUK_PERATURAN),
                 "guna": entri["guna"], "berkas": berkas, "url": r["url"],
                 "halaman": r["halaman"], "bytes": r["bytes"],
                 "sha256": r["sha256"],
@@ -680,6 +767,7 @@ def main(argv) -> int:
             lama = manifes_lama.get(entri["kode"]) or {}
             if lama.get("berkas"):
                 entri_baru = dict(lama)
+                entri_baru["bentuk"] = entri.get("bentuk", BENTUK_PERATURAN)
                 entri_baru["percobaan_gagal"] = r["galat"]
                 entri_baru["dipertahankan_dari"] = lama.get("diunduh", "?")
                 hasil.append(entri_baru)
@@ -688,6 +776,7 @@ def main(argv) -> int:
             else:
                 hasil.append({
                     "kode": entri["kode"], "judul": entri["judul"],
+                    "bentuk": entri.get("bentuk", BENTUK_PERATURAN),
                     "guna": entri["guna"], "berkas": None,
                     "percobaan_gagal": r["galat"],
                 })
@@ -700,23 +789,37 @@ def main(argv) -> int:
         # sehingga unduhan ketiga melaporkan "berhasil 5, gagal 7" padahal
         # sembilan naskah ada di direktori: pembacanya akan mengira pustakanya
         # menyusut. Hasil per-run tetap dilaporkan, dengan namanya sendiri.
-        tersedia = sum(1 for b in hasil if b.get("berkas"))
+        # RUJUKAN dihitung TERPISAH. Kalau ia ikut masuk "berhasil",
+        # pustaka akan terbaca "12 dari 14 naskah" padahal naskah primernya
+        # tetap 11 dari 13 — angka yang membesar tanpa satu pun peraturan
+        # baru terbaca. Itu jenis laporan yang sudah dua kali menyesatkan
+        # putaran berikutnya.
+        primer = [b for b in hasil if b.get("bentuk") != BENTUK_RUJUKAN]
+        rujukan = [b for b in hasil if b.get("bentuk") == BENTUK_RUJUKAN]
+        tersedia = sum(1 for b in primer if b.get("berkas"))
+        rujukan_ada = sum(1 for b in rujukan if b.get("berkas"))
         json.dump({
             "dibuat": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "catatan": ("Teks hasil ekstraksi PDF peraturan publik. BUKTI, "
                         "bukan kesimpulan: status verifikasi di "
                         "syarat_dokumen_utils.py tetap dinaikkan secara sadar "
                         "setelah pasalnya dibaca. `berhasil`/`gagal` = keadaan "
-                        "PUSTAKA; `unduhan_*` = hasil run terakhir."),
-            "berhasil": tersedia, "gagal": len(hasil) - tersedia,
+                        "PUSTAKA naskah PRIMER; `rujukan_*` dihitung terpisah "
+                        "karena berkas berawalan `rujukan-` adalah URAIAN "
+                        "TENTANG peraturan, bukan naskahnya, dan tak pernah "
+                        "boleh menjadi dasar status `teks-primer`; "
+                        "`unduhan_*` = hasil run terakhir."),
+            "berhasil": tersedia, "gagal": len(primer) - tersedia,
+            "rujukan_ada": rujukan_ada,
+            "rujukan_belum": len(rujukan) - rujukan_ada,
             "unduhan_segar": berhasil, "unduhan_gagal": gagal,
             "berkas": hasil,
         }, f, ensure_ascii=False, indent=2)
         f.write("\n")
 
     print(f"\nSelesai. Unduhan segar: {berhasil}; gagal: {gagal}. "
-          f"Pustaka kini memuat {sum(1 for b in hasil if b.get('berkas'))} "
-          f"dari {len(hasil)} naskah.", flush=True)
+          f"Pustaka kini memuat {tersedia} dari {len(primer)} naskah primer "
+          f"dan {rujukan_ada} dari {len(rujukan)} rujukan.", flush=True)
     # Keluar 0 walau sebagian gagal: sebagian pustaka lebih baik daripada tak
     # ada, dan kegagalan sudah tercatat di manifes untuk ditindaklanjuti.
     return 0

@@ -361,7 +361,11 @@ def test_penghitung_menggambarkan_keadaan_pustaka_bukan_satu_run(
     m = json.loads((tujuan / "MANIFEST.json").read_text(encoding="utf-8"))
     # Satu berkas bertahan → pustaka memuat 1, bukan 0.
     assert m["berhasil"] == 1
-    assert m["gagal"] == len(rs.MANIFES) - 1
+    # `berhasil`/`gagal` menghitung naskah PRIMER saja; rujukan sekunder
+    # punya penghitungnya sendiri supaya pustaka tak terbaca membesar tanpa
+    # satu pun peraturan baru terbaca.
+    primer = [e for e in rs.MANIFES if e.get("bentuk") != rs.BENTUK_RUJUKAN]
+    assert m["gagal"] == len(primer) - 1
     # Hasil run tetap terlaporkan terpisah: tak ada unduhan segar.
     assert m["unduhan_segar"] == 0
     assert m["unduhan_gagal"] == len(rs.MANIFES)
@@ -865,3 +869,153 @@ def test_kmk_213_memakai_jalur_download_djkn_bukan_hanya_detail():
     assert all(j == "pdf" for j, u in e["sumber"]
                if "djkn" in u and "/download/" in u), (
         "berakhiran .html tetapi isinya PDF — penjaga %PDF memeriksa isi")
+
+
+# ── Bentuk `lampiran`: Keputusan yang terbit sebagai lampiran ────────────
+#
+# Dua sumber resmi yang saling bebas — cermin Itjen Kemhan dan endpoint unduh
+# DJKN sendiri — mengembalikan berkas KMK 213/KM.6/2021 yang SAMA PERSIS
+# (469.096 karakter): lampirannya, dibuka "BAB I PENDAHULUAN", memuat
+# MEMUTUSKAN, Menetapkan, diktum, dan pasal bernomor — tanpa "Menimbang".
+#
+# Dugaan pertama adalah OCR yang menukar huruf. Laporan kemiripan
+# membantahnya: yang ditemukan 'menyimpang' dan 'membangu' — kata Indonesia
+# biasa. Naskahnya memang terbit dalam bentuk itu.
+
+_LAMPIRAN = """MENTERI KEUANGAN REPUBLIK INDONESIA
+BAB I PENDAHULUAN
+A. Latar Belakang
+Pada dasarnya, Barang Milik Negara (BMN) diadakan untuk menunjang tugas ...
+sebagaimana diatur dalam Keputusan Menteri Keuangan Nomor 213/KM.6/2021.
+MEMUTUSKAN:
+Menetapkan : tata cara pelaksanaan Pemanfaatan BMN.
+KESATU  : ...
+Pasal 1
+BAB II TATA CARA
+"""
+
+
+def test_lampiran_diterima_hanya_bila_ditandai():
+    """Kelonggaran ini per-entri, bukan berlaku umum."""
+    assert rs.bukan_batang_tubuh(_LAMPIRAN) != "", (
+        "tanpa penandaan, 'Menimbang' tetap wajib")
+    assert rs.bukan_batang_tubuh(_LAMPIRAN, rs.BENTUK_LAMPIRAN) == ""
+
+
+def test_lampiran_tetap_menuntut_bab_bernomor():
+    """Kalau tidak, jalur ini jadi pintu bagi apa pun yang memuat
+    'MEMUTUSKAN' — dan itu membatalkan seluruh guard-nya."""
+    tanpa_bab = _LAMPIRAN.replace("BAB I ", "").replace("BAB II ", "")
+    sebab = rs.bukan_batang_tubuh(tanpa_bab, rs.BENTUK_LAMPIRAN)
+    assert "BAB" in sebab
+
+
+def test_paparan_tetap_ditolak_walau_ditandai_lampiran():
+    paparan = ("Pemindahtanganan Barang Milik Negara\n"
+               "Direktorat Jenderal Kekayaan Negara\n"
+               "Ø Hibah\nü Pengguna Barang mengajukan permohonan\n" * 30)
+    assert rs.bukan_batang_tubuh(paparan, rs.BENTUK_LAMPIRAN) != ""
+
+
+def test_paparan_yang_mengutip_penanda_tertangkap_guard_nomor():
+    """Pertahanan berlapis: paparan yang kebetulan mengutip "MEMUTUSKAN",
+    "BAB I", dan "Pasal 1" lolos guard bentuk — dan justru di situ guard
+    nomor yang menahannya."""
+    licik = ("Bahan paparan\nMEMUTUSKAN:\nBAB I\nPasal 1 dikutip di slide\n" * 30)
+    assert rs.bukan_batang_tubuh(licik, rs.BENTUK_LAMPIRAN) == "", (
+        "prasyarat uji: guard bentuk memang tak menahannya")
+    assert rs.nomor_tak_cocok(licik, ["213/KM.6/2021"]) != ""
+
+
+def test_hanya_kmk_213_yang_ditandai_lampiran():
+    """Penandaan ini melonggarkan penjagaan, jadi ia harus tetap satu
+    pengecualian yang bisa ditunjuk — bukan kebiasaan baru."""
+    ditandai = [e["kode"] for e in rs.MANIFES
+                if e.get("bentuk") == rs.BENTUK_LAMPIRAN]
+    assert ditandai == ["kmk-213-2021-tata-cara-pemanfaatan"], ditandai
+
+
+def test_bentuk_diteruskan_dari_entri_ke_guard(monkeypatch, tanpa_jeda):
+    """Guard yang benar tetapi tak menerima bentuknya sama saja dengan
+    tidak ada."""
+    monkeypatch.setattr(rs, "_ambil", lambda u: (_PDF_KOSONG, "application/pdf"))
+    monkeypatch.setattr(rs, "ekstrak_teks",
+                        lambda b: (_LAMPIRAN + "x" * 600, 120))
+    entri = {"penanda": ["213/KM.6/2021"], "bentuk": rs.BENTUK_LAMPIRAN,
+             "sumber": [("pdf", "https://x/lampiran.pdf")]}
+    assert rs.unduh_satu(entri)["ok"] is True
+    entri.pop("bentuk")
+    assert rs.unduh_satu(entri)["ok"] is False
+
+
+# ── Tingkat `rujukan`: uraian TENTANG peraturan, bukan naskahnya ─────────
+
+def test_rujukan_tak_dituntut_batang_tubuh():
+    """KMK 334/KM.6/2021 tak terindeks di DJKN dan sepuluh sumber unduhnya
+    menjawab 404. Uraian dari unit Kemenkeu adalah yang paling dekat —
+    dan ia memang bukan batang tubuh."""
+    artikel = ("Tata Cara Hibah BMN selain tanah dan/atau bangunan "
+               "berdasarkan KMK Nomor 334 Tahun 2021. " * 60)
+    assert rs.bukan_batang_tubuh(artikel) != "", "prasyarat: ia bukan naskah"
+    assert rs.bukan_batang_tubuh(artikel, rs.BENTUK_RUJUKAN) == ""
+
+
+def test_rujukan_terlalu_pendek_ditolak():
+    """Halaman galat dan menu navigasi juga "bukan batang tubuh"; tanpa
+    ambang panjang, keduanya tersimpan sebagai rujukan."""
+    assert rs.bukan_batang_tubuh("Halaman tidak ditemukan.",
+                                 rs.BENTUK_RUJUKAN) != ""
+
+
+def test_rujukan_tetap_wajib_menyebut_nomornya():
+    """Longgarnya bentuk tak boleh melonggarkan sasarannya — artikel
+    tentang peraturan LAIN tak berguna sebagai rujukan peraturan ini."""
+    artikel = "Artikel tentang pengelolaan aset daerah. " * 80
+    assert rs.nomor_tak_cocok(artikel, ["334/KM.6/2021"]) != ""
+
+
+def test_berkas_rujukan_berawalan_rujukan():
+    """Awalannya yang membuat statusnya terbaca dari nama berkas saja,
+    tanpa harus membuka manifesnya."""
+    for e in rs.MANIFES:
+        punya_awalan = e["kode"].startswith("rujukan-")
+        rujukan = e.get("bentuk") == rs.BENTUK_RUJUKAN
+        assert punya_awalan == rujukan, e["kode"]
+
+
+def test_rujukan_tak_pernah_jadi_dasar_teks_primer():
+    """Penjagaan terpenting pada tingkat ini. `teks-primer` berarti
+    NASKAHNYA bisa dibaca; sebuah uraian yang menyamar jadi naskah akan
+    menghapus satu-satunya pembeda yang membuat pustaka ini bisa dipercaya.
+    """
+    import sitasi_regulasi as S
+    kode_rujukan = [e["kode"] for e in rs.MANIFES
+                    if e.get("bentuk") == rs.BENTUK_RUJUKAN]
+    assert kode_rujukan, "uji ini kehilangan maknanya bila tak ada rujukan"
+    for sitasi, status in S.SITASI_TERDAFTAR.items():
+        if status != S.TEKS_PRIMER:
+            continue
+        _, nomor, tahun = S.kunci_peraturan(sitasi)
+        if not (nomor and tahun):
+            continue
+        for kode in kode_rujukan:
+            assert f"-{nomor}-{tahun}-" not in f"-{kode}", (
+                f"{sitasi} bertanda teks-primer tetapi yang ada di pustaka "
+                f"hanyalah rujukan {kode}")
+
+
+def test_rujukan_dihitung_terpisah_dari_naskah_primer(tmp_path, monkeypatch,
+                                                      tanpa_jeda):
+    """Kalau rujukan ikut masuk "berhasil", pustaka terbaca membesar tanpa
+    satu pun peraturan baru terbaca — jenis laporan yang sudah dua kali
+    menyesatkan putaran berikutnya."""
+    import json
+    tujuan = tmp_path / "regulasi"
+    tujuan.mkdir()
+    monkeypatch.setattr(rs, "_ambil",
+                        lambda u: (_ for _ in ()).throw(OSError("mati")))
+    rs.main(["x", str(tujuan)])
+    m = json.loads((tujuan / "MANIFEST.json").read_text(encoding="utf-8"))
+    primer = [e for e in rs.MANIFES if e.get("bentuk") != rs.BENTUK_RUJUKAN]
+    assert m["berhasil"] + m["gagal"] == len(primer)
+    assert m["rujukan_ada"] + m["rujukan_belum"] == len(rs.MANIFES) - len(primer)

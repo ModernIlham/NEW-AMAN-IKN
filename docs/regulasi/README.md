@@ -291,6 +291,74 @@ dan/atau Bangunan yang Tidak Memiliki Bukti Kepemilikan dengan Nilai Perolehan
 Sampai dengan Rp100.000.000"*. Ia **rujukan, bukan naskah** — tak boleh masuk
 pustaka ini, dan `bukan_batang_tubuh` memang akan menolaknya.
 
+## Unduhan kedelapan — dugaan OCR terbantah, dan dua tingkat baru
+
+Jalur unduh DJKN **berhasil**: `download/411` mengembalikan berkas yang sama
+persis dengan cermin Itjen Kemhan — 469.096 karakter, dua sumber resmi yang
+saling bebas. Berkasnya bukan masalah.
+
+Dan laporan kemiripan **membantah dugaan sebelumnya**. Yang ditemukan bukan
+"Menimbang" yang rusak OCR, melainkan `'menyimpang'` dan `'membangu'` — kata
+Indonesia biasa. Jadi naskah itu memang **tidak memuat "Menimbang" sama
+sekali**, dan hipotesis putaran lalu keliru. Itulah gunanya jejak diagnostik:
+ia tak cuma mempercepat tebakan yang benar, ia menutup tebakan yang salah.
+
+### Bentuk `lampiran`
+
+Naskah itu adalah **lampiran** KMK 213/KM.6/2021 — dibuka "BAB I
+PENDAHULUAN", memuat MEMUTUSKAN, Menetapkan, diktum, dan pasal bernomor.
+Konsiderans tinggal di halaman diktum yang terbit terpisah. Menuntut
+"Menimbang" pada berkas semacam itu berarti menolak satu-satunya naskah yang
+tersedia — dan justru lampiran itulah yang memuat tata caranya.
+
+Kelonggarannya **per-entri, bukan berlaku umum**, dan tetap berlapis:
+
+| Syarat | Tetap ditagih? |
+|---|---|
+| "Menimbang" | tidak, untuk bentuk `lampiran` |
+| "MEMUTUSKAN" | ya |
+| BAB bernomor romawi | ya |
+| pasal bernomor atau diktum | ya |
+| menyebut nomornya sendiri | ya (`nomor_tak_cocok`) |
+
+Diuji: paparan pelatihan tetap ditolak walau ditandai `lampiran`, dan paparan
+yang **mengutip** "MEMUTUSKAN" + "BAB I" + "Pasal 1" lolos guard bentuk
+tetapi tertahan guard nomor. Satu uji menahan agar penandaan ini tetap satu
+pengecualian yang bisa ditunjuk, bukan kebiasaan baru.
+
+### Tingkat `rujukan` — uraian TENTANG peraturan
+
+KMK 334/KM.6/2021 **tidak terindeks** di bagian peraturan DJKN, dan sepuluh
+sumber unduhnya menjawab 404. Yang paling dekat adalah uraian dari unit
+Kemenkeu sendiri (artikel KPPN Lubuk Sikaping, DJPb).
+
+Ia disimpan — tetapi tak boleh menyamar jadi naskah:
+
+- berkasnya berawalan **`rujukan-`**, terbaca dari namanya saja;
+- penghitungnya **terpisah** (`rujukan_ada`/`rujukan_belum`), supaya pustaka
+  tak terbaca membesar tanpa satu pun peraturan baru terbaca;
+- ada uji yang menahannya menjadi dasar status `teks-primer` di
+  `backend/sitasi_regulasi.py`.
+
+Guard-nya melonggar pada bentuk, **tidak** pada sasaran: rujukan tetap wajib
+menyebut nomor peraturannya dan tetap ditolak bila terlalu pendek — halaman
+galat dan menu navigasi juga "bukan batang tubuh".
+
+### PMK 115/2020 memang tak memuat daftar dokumennya
+
+Ditelusuri langsung di naskah primer yang sudah ada di sini (OCR menulisnya
+"Pasal96" tanpa spasi, itu sebabnya luput dari pencarian sebelumnya):
+
+> **Pasal 96** — *Ketentuan lebih lanjut mengenai tata cara pelaksanaan
+> Pemanfaatan BMN ditetapkan dengan Keputusan Menteri Keuangan yang
+> ditandatangani oleh Direktur Jenderal atas nama Menteri Keuangan.*
+
+Dua frasa "dengan melampirkan" di PMK 115/2020 (Pasal 101 dan 102) mengatur
+**persetujuan surut** KSP dan BGS/BSG yang sudah terlanjur terjadi — bukan
+daftar dokumen permohonan. Jadi sewa dan pinjam pakai tetap
+`belum_terverifikasi` sampai KMK 213 masuk; tak ada jalan pintas lewat
+PMK-nya.
+
 ## Isi
 
 - `<kode>.txt` — teks batang tubuh hasil ekstraksi
@@ -336,8 +404,8 @@ berkas statis.
   `peraturan.bpk.go.id`. Kalau seluruh sumber ada di dua host itu saja, satu
   gangguan di sisi Kemenkeu/BPK menjatuhkan semuanya sekaligus.
 
-Total saat ini: **68 sumber untuk 13 peraturan**, 20 di antaranya tautan PDF
-langsung. Pola unduh langsung JDIH yang berguna saat menambah sumber baru:
+Total saat ini: **70 sumber untuk 13 peraturan primer + 1 rujukan**,
+20 di antaranya tautan PDF langsung. Pola unduh langsung JDIH yang berguna saat menambah sumber baru:
 `https://jdih.kemenkeu.go.id/api/download/<uuid>/<nomor>~PMK.06~<tahun>Per.pdf`,
 dan BPHN memakai pola nama berkas yang bisa ditebak untuk PP:
 `https://bphn.go.id/data/documents/<yy>pp<nnn>.pdf`.
