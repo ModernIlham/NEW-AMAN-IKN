@@ -421,17 +421,21 @@ def test_kib_wajib_pada_hibah_tetapi_hanya_anjuran_pada_psp():
 # ── Kejujuran bukti ────────────────────────────────────────────────────────
 
 def test_rezim_yang_pasalnya_belum_terbaca_ditandai_jujur():
-    """Sumber primer PMK 111/2016 & PMK 115/2020 terblokir dari lingkungan
-    pengembangan. Butir wajibnya boleh ada sebagai kerangka kerja, tetapi
-    TIDAK boleh mengaku terverifikasi."""
-    # Daftar ini MENYUSUT dua kali pada 2026-09-01. Putaran pertama:
-    # `penghapusan` dan `pemusnahan` keluar (PMK 83/2016 dibaca). Putaran
-    # kedua: penjualan, tukar menukar, dan PMPP keluar (PMK 111/2016 dibaca).
-    # Yang tersisa hanya sewa dan pinjam pakai — dan itu BUKAN karena belum
-    # dibaca, melainkan karena PMK 115/2020 Pasal 96 menaruh tata caranya di
-    # KMK pelaksana yang belum ada di pustaka.
-    for rezim in ("sewa", "pinjam_pakai"):
-        assert rezim not in sd.REZIM_BERDASAR_PASAL
+    """Rezim yang pasalnya BELUM terbaca boleh punya kerangka kerja, tetapi
+    tidak boleh mengaku terverifikasi.
+
+    Daftarnya MENYUSUT tiga kali pada 2026-09-01, tiap kali karena sebuah
+    naskah primer masuk pustaka — bukan karena ambangnya dilonggarkan:
+
+    1. `penghapusan`, `pemusnahan`      ← PMK 83/2016
+    2. penjualan, tukar menukar, PMPP   ← PMK 111/2016
+    3. `sewa`, `pinjam_pakai`           ← KMK 213/KM.6/2021
+
+    Kini kosong. Uji ini tetap berlaku umum: rezim BARU yang ditambahkan
+    tanpa dasar pasal tetap wajib menandai dirinya jujur, dan di sinilah ia
+    akan berbunyi bila tidak.
+    """
+    for rezim in set(sd.REZIM) - sd.REZIM_BERDASAR_PASAL:
         for b in sd.syarat_dokumen(rezim, {}):
             assert b["verifikasi"] != "terverifikasi", f"{rezim}/{b['kode']}"
 
@@ -601,23 +605,93 @@ def test_pmpp_menagih_kesediaan_calon_penerima():
 
 # ── Sewa & pinjam pakai: TIDAK dinaikkan, dan itu disengaja ───────────────
 
-def test_sewa_dan_pinjam_pakai_TETAP_belum_terverifikasi():
-    """PMK 115/2020 **Pasal 96** mendelegasikan tata cara pelaksanaannya ke
-    "Keputusan Menteri Keuangan yang ditandatangani oleh Direktur Jenderal
-    atas nama Menteri Keuangan". Daftar dokumennya karena itu TIDAK ada di
-    batang tubuh PMK-nya — bukan karena belum dibaca, melainkan karena
-    memang bukan di sana tempatnya.
+def test_sewa_dan_pinjam_pakai_naik_setelah_kmk_213_dibaca():
+    """DIBALIK dengan sengaja pada 2026-09-01, setelah naskahnya terbaca.
 
+    Versi sebelumnya menahan kedua rezim ini di `belum_terverifikasi` selama
+    lima putaran unduhan, sebab PMK 115/2020 **Pasal 96** menaruh tata
+    caranya di "Keputusan Menteri Keuangan yang ditandatangani oleh Direktur
+    Jenderal atas nama Menteri Keuangan" — bukan di batang tubuh PMK-nya.
     Menaikkannya berdasarkan PMK 115/2020 akan mengklaim dasar yang teksnya
-    sendiri menyatakan ada di tempat lain. Uji ini menahan godaan itu.
+    sendiri menyatakan ada di tempat lain.
+
+    KMK itu adalah **213/KM.6/2021**, dan naskahnya kini ada di
+    `docs/regulasi/`: BAB III memuat tata cara Sewa, BAB IV Pinjam Pakai.
+    Penahanannya terangkat oleh BUKTI, bukan oleh kehabisan kesabaran —
+    karena itu uji ini menagih tiap butir wajibnya menyebut KMK-nya.
     """
     for rezim in ("sewa", "pinjam_pakai"):
-        assert rezim not in sd.REZIM_BERDASAR_PASAL, rezim
+        assert rezim in sd.REZIM_BERDASAR_PASAL, rezim
         for b in sd.syarat_dokumen(rezim, {}):
-            assert b["verifikasi"] != "terverifikasi", f"{rezim}/{b['kode']}"
+            if b["sifat"] in ("wajib", "wajib_bersyarat", "muatan"):
+                assert b["verifikasi"] == "terverifikasi", f"{rezim}/{b['kode']}"
+                assert "KMK 213" in b["dasar"], f"{rezim}/{b['kode']}: {b['dasar']}"
 
 
-def test_hanya_sewa_dan_pinjam_pakai_yang_tersisa():
-    """Sisa pekerjaan tercatat di kode, bukan hanya di ingatan."""
+def test_kenaikan_sewa_bertumpu_pada_naskah_yang_ADA_di_disk():
+    """Penjagaan terkuat pada kenaikan ini: klaimnya diperiksa terhadap
+    ARTEFAKNYA. Menyebut "KMK 213/KM.6/2021" di kolom `dasar` tak berarti
+    apa-apa bila naskahnya tak pernah masuk pustaka — dan itu persis
+    kekeliruan yang tingkat verifikasi ini ada untuk mencegahnya.
+    """
+    import os
+    # Jalur diturunkan dari letak modulnya sendiri, bukan dari cwd: uji ini
+    # harus benar baik dijalankan dari `backend/` maupun dari akar repo.
+    jalur = os.path.join(
+        os.path.dirname(os.path.abspath(sd.__file__)), "..",
+        "docs", "regulasi", "kmk-213-2021-tata-cara-pemanfaatan.txt")
+    assert os.path.exists(jalur), "naskah KMK 213 tidak ada di docs/regulasi/"
+    assert os.path.getsize(jalur) > 100_000, "naskahnya terpotong"
+    with open(jalur, encoding="utf-8") as f:
+        naskah = f.read()
+    # Kedua BAB yang dirujuk registry memang ada di naskahnya.
+    assert "TATA CARA PELAKSANAAN SEWA" in naskah
+    assert "TATA CARA PELAKSANAAN PINJAM PAKAI" in naskah
+
+
+def test_sewa_seluruhnya_muatan_kecuali_pendukung_faktor_penyesuai():
+    """Pembedaan yang diambil dari teksnya, bukan dari selera: BAB III sama
+    sekali tak memakai kata "dilampiri" — seluruh butir permohonan Sewa
+    adalah MUATAN SURAT. Yang benar-benar berupa lampiran hanyalah dokumen
+    pendukung faktor penyesuai, dan semuanya bersyarat.
+
+    Kalau butir Sewa mulai bermunculan sebagai `wajib` tanpa syarat, itu
+    tanda seseorang menyalin pola rezim lain alih-alih membaca BAB III.
+    """
+    wajib_tanpa_syarat = [
+        b["kode"] for b in sd.syarat_dokumen("sewa", {})
+        if b["sifat"] == "wajib"]
+    assert wajib_tanpa_syarat == ["surat_permohonan"], wajib_tanpa_syarat
+
+
+def test_pinjam_pakai_punya_lampiran_sungguhan():
+    """Kebalikannya, dan juga dari teksnya: BAB IV MEMAKAI kata "dilampiri".
+    Tiga lampiran itu harus benar-benar tertagih."""
+    kode = {b["kode"] for b in sd.syarat_dokumen("pinjam_pakai", {})
+            if b["sifat"] == "wajib"}
+    for wajib in ("permohonan_calon_peminjam", "pernyataan_tak_ganggu_tusi",
+                  "data_bmn_objek", "foto_bmn"):
+        assert wajib in kode, wajib
+
+
+def test_penilaian_sewa_bukan_lampiran_pemohon():
+    """KMK-nya menugaskan PENGELOLA BARANG yang menunjuk Penilai. Menagihnya
+    sebagai berkas pemohon akan membuat operator menyiapkan sesuatu yang
+    bukan tanggung jawabnya — kekeliruan yang sama bentuknya dengan
+    menagih BAST-PSP sebagai syarat usulan PSP."""
+    butir = next(b for b in sd.syarat_dokumen("sewa", {})
+                 if b["kode"] == "penilaian")
+    assert butir["sifat"] == "anjuran"
+    assert "PENGELOLA BARANG" in butir["dasar"]
+
+
+def test_seluruh_rezim_kini_berdasar_pasal():
+    """Sisa pekerjaan tercatat di kode, bukan hanya di ingatan — dan sejak
+    2026-09-01 sisanya NOL.
+
+    Uji ini tetap ada meski daftarnya kosong: rezim baru yang ditambahkan
+    tanpa dasar pasal akan langsung berbunyi di sini, alih-alih diam-diam
+    menumpang pada reputasi yang dibangun tiga belas rezim sebelumnya.
+    """
     belum = sorted(set(sd.REZIM) - sd.REZIM_BERDASAR_PASAL)
-    assert belum == ["pinjam_pakai", "sewa"], belum
+    assert belum == [], belum

@@ -289,6 +289,12 @@ SITASI_TERDAFTAR = {
     "PMK 153/2021": PUSTAKA,
     "Permendagri 7/2024": PUSTAKA,
     "Perpres 46": PUSTAKA,
+    # KMK PELAKSANA Pasal 96 PMK 115/2020 — tata cara Sewa (BAB III) dan
+    # Pinjam Pakai (BAB IV). Naskahnya masuk pustaka 2026-09-01 lewat jalur
+    # `baca/` DJKN, dalam bentuk LAMPIRAN: tanpa konsiderans, tetapi memuat
+    # seluruh tata caranya. Dua rezim terakhir di syarat_dokumen_utils.py
+    # naik ke berdasar-pasal karena naskah ini.
+    "KMK 213/KM.6/2021": TEKS_PRIMER,
     "KMK 128/KM.6/2022": PUSTAKA,
     "KMK 266/KM.6/2023": PUSTAKA,
     "KMK 295/KM.6/2019": PUSTAKA,

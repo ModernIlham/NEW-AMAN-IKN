@@ -80,15 +80,29 @@ def test_pilihan_ikut_dikembalikan_untuk_dropdown():
     assert r["pilihan"] and r["pilihan"][-1]["kode"] == "dokumen_lainnya"
 
 
-def test_rezim_belum_terverifikasi_ditandai():
-    """Dipindah ke `sewa`: `penjualan_lelang` NAIK ke berdasar pasal pada
-    2026-09-01 setelah PMK 111/2016 Pasal 32–33 dibaca. Sewa tetap belum,
-    sebab PMK 115/2020 Pasal 96 menaruh tata caranya di KMK pelaksana."""
+def test_rezim_berdasar_pasal_ditandai():
+    """`sewa` dipakai uji ini dua kali sebagai contoh rezim yang BELUM
+    berdasar pasal — dan dua kali contohnya kedaluwarsa karena naskahnya
+    akhirnya masuk pustaka (2026-09-01: KMK 213/KM.6/2021). Kini keempat
+    belas rezim sudah berdasar pasal."""
+    for rezim in ("sewa", "pinjam_pakai", "penjualan_lelang"):
+        r = _jalan(rs.daftar_syarat(rezim=rezim, _user=USER))
+        assert r["berdasar_pasal"] is True, rezim
+
+
+def test_rezim_tanpa_dasar_pasal_tetap_ditandai_false(monkeypatch):
+    """Cabang `False` tak boleh ikut hilang bersama contoh terakhirnya.
+
+    Tak ada lagi rezim sungguhan yang bisa memerankannya, jadi ia diperankan
+    secara sintetis — sekaligus membuktikan rute ini MEMBACA registry, bukan
+    menyalin daftar rezim ke dalam dirinya sendiri.
+    """
+    import syarat_dokumen_utils as sd
+    monkeypatch.setattr(
+        sd, "REZIM_BERDASAR_PASAL",
+        frozenset(sd.REZIM_BERDASAR_PASAL - {"sewa"}))
     r = _jalan(rs.daftar_syarat(rezim="sewa", _user=USER))
     assert r["berdasar_pasal"] is False
-    # Pembanding: yang sudah naik memang ditandai sebaliknya.
-    assert _jalan(rs.daftar_syarat(rezim="penjualan_lelang",
-                                   _user=USER))["berdasar_pasal"] is True
 
 
 # ── Konteks dokumen pada SK PSP ────────────────────────────────────────────

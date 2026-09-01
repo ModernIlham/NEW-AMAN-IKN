@@ -172,6 +172,53 @@ KATALOG_DOKUMEN = {
                             "dan/atau dokumen penguasaan)"),
     "dok_penganggaran_pmpp": ("Fotokopi KAK, RKA-K/L, atau POK (bila DIPA tak "
                               "tegas menyatakan BMN untuk PMPP)"),
+    # — Pemanfaatan: Sewa (KMK 213/KM.6/2021 BAB III) —
+    "identitas_pemohon_sewa": "Identitas diri calon penyewa (NIK dan/atau NPWP)",
+    "usulan_peruntukan_sewa": ("Usulan peruntukan Sewa mengacu jenis kegiatan "
+                               "usaha (bisnis, non bisnis, sosial)"),
+    "usulan_jangka_periodesitas": ("Usulan jangka waktu dan periodesitas Sewa "
+                                   "(per jam/hari/bulan ≤1 tahun; per tahun >1 "
+                                   "tahun)"),
+    "informasi_objek_pemanfaatan": ("Informasi BMN objek Pemanfaatan — luas "
+                                    "keseluruhan dan yang dimanfaatkan untuk "
+                                    "tanah/bangunan; jumlah atau kapasitas "
+                                    "untuk selain tanah/bangunan"),
+    "kajian_rencana_sewa": ("Kajian rencana Sewa (proyeksi usaha dan proyeksi "
+                            "keuangan)"),
+    "usulan_faktor_penyesuai": "Usulan faktor penyesuai Sewa dalam kondisi tertentu",
+    "akta_pendirian_koperasi": ("Akta pendirian yang memuat anggaran dasar "
+                                "koperasi"),
+    "ket_usaha_mikro": ("Surat keterangan bentuk usaha dan jumlah kekayaan "
+                        "bersih (ultra mikro, mikro, kecil)"),
+    "laporan_keuangan_sederhana": ("Laporan keuangan dalam bentuk sederhana "
+                                   "berisi hasil penjualan"),
+    "pernyataan_inisiasi_satker": ("Surat pernyataan pimpinan unit/satker bahwa "
+                                   "peruntukan Sewa adalah inisiasi satker "
+                                   "pengguna BMN"),
+    "pernyataan_sarpras_pendidikan": ("Surat pernyataan pimpinan unit/satker "
+                                      "bahwa Sewa sarana/prasarana pendidikan "
+                                      "untuk keluarga ASN/TNI/Polri dan pegawai "
+                                      "penunjang"),
+    "ket_kegiatan_sosial": ("Dokumen dari instansi dan/atau pihak terkait yang "
+                            "menjelaskan kegiatan bersifat sosial"),
+    # — Pemanfaatan: Pinjam Pakai (KMK 213/KM.6/2021 BAB IV) —
+    "permohonan_calon_peminjam": ("Surat permohonan Pinjam Pakai dari calon "
+                                  "peminjam pakai (pertimbangan, identitas, "
+                                  "tujuan, jangka waktu)"),
+    "pernyataan_tak_ganggu_tusi": ("Surat pernyataan Pengguna Barang bahwa "
+                                   "Pinjam Pakai tidak mengganggu pelaksanaan "
+                                   "tugas dan fungsi penyelenggaraan "
+                                   "pemerintahan negara"),
+    "data_bmn_objek": ("Data BMN objek — kode barang, nama barang, NUP, tahun "
+                       "perolehan, harga perolehan, nilai buku"),
+    "keputusan_pp_sebelumnya": ("Keputusan Pinjam Pakai sebelumnya dari "
+                                "Pengelola Barang"),
+    "pernyataan_pp_masih_digunakan": ("Surat pernyataan peminjam pakai bahwa "
+                                      "objek masih digunakan untuk menunjang "
+                                      "tugas dan fungsi Pemda/Pemdes"),
+    "pertimbangan_pinjam_pakai": "Pertimbangan yang mendasari permohonan Pinjam Pakai",
+    "identitas_peminjam_pakai": "Identitas peminjam pakai",
+    "tujuan_penggunaan_pp": "Tujuan penggunaan objek Pinjam Pakai",
     "dokumen_lainnya": "Dokumen Lainnya",
 }
 
@@ -348,6 +395,52 @@ def penerima_lembaga_nonpemerintah(konteks) -> bool:
     return bool((konteks or {}).get("penerima_lembaga_nonpemerintah"))
 
 
+def pemohon_pihak_ketiga(konteks) -> bool:
+    """Jalur permohonan Sewa dari CALON PENYEWA langsung ke Pengelola Barang.
+    KMK 213/KM.6/2021 BAB III memisahkannya dari jalur Pengguna Barang, dan
+    hanya jalur ini yang menagih identitas diri (NIK/NPWP)."""
+    return bool((konteks or {}).get("pemohon_pihak_ketiga"))
+
+
+def sewa_lebih_5_tahun(konteks) -> bool:
+    """Kajian rencana Sewa hanya ditagih untuk jangka waktu lebih dari lima
+    tahun; menagihnya pada sewa pendek akan membebani tanpa dasar."""
+    try:
+        return float((konteks or {}).get("jangka_waktu_sewa_tahun") or 0) > 5
+    except (TypeError, ValueError):
+        return False
+
+
+def _kelompok_usaha(konteks) -> str:
+    return str((konteks or {}).get("kelompok_usaha") or "").strip().lower()
+
+
+def sewa_koperasi(konteks) -> bool:
+    return _kelompok_usaha(konteks) == "koperasi"
+
+
+def sewa_usaha_mikro(konteks) -> bool:
+    return _kelompok_usaha(konteks) in ("ultra_mikro", "mikro", "kecil")
+
+
+def sewa_kegiatan_sosial(konteks) -> bool:
+    return _kelompok_usaha(konteks) == "sosial"
+
+
+def sewa_inisiasi_pengguna(konteks) -> bool:
+    return bool((konteks or {}).get("sewa_inisiasi_pengguna"))
+
+
+def sewa_sarpras_pendidikan(konteks) -> bool:
+    return bool((konteks or {}).get("sewa_sarpras_pendidikan"))
+
+
+def perpanjangan(konteks) -> bool:
+    """Perpanjangan jangka waktu, bukan permohonan baru. Lampirannya berbeda:
+    keputusan sebelumnya dan pernyataan objek masih digunakan."""
+    return bool((konteks or {}).get("perpanjangan"))
+
+
 PEMICU = {
     f.__name__: f for f in (
         objek_tanah, objek_bangunan, objek_selain_tb, punya_dok_kepemilikan,
@@ -359,6 +452,9 @@ PEMICU = {
         wajib_kib, wajib_dok_kepemilikan, tanpa_dok_kepemilikan_umum,
         sebab_putusan_pengadilan, sebab_pemindahtanganan,
         objek_tanah_atau_bangunan,
+        pemohon_pihak_ketiga, sewa_lebih_5_tahun, sewa_koperasi,
+        sewa_usaha_mikro, sewa_kegiatan_sosial, sewa_inisiasi_pengguna,
+        sewa_sarpras_pendidikan, perpanjangan,
     )
 }
 
@@ -778,23 +874,149 @@ _PMPP = (
     ("dokumen_lainnya", "opsional", None, "—", "belum_terverifikasi"),
 )
 
-# ── SEWA & PINJAM PAKAI: pasalnya SENGAJA tidak ada di PMK 115/2020 ──────
+# ── SEWA: [F] KMK 213/KM.6/2021 BAB III ─────────────────────────────────
 #
 # PMK 115/2020 **Pasal 96** mendelegasikan tata cara pelaksanaannya kepada
 # "Keputusan Menteri Keuangan yang ditandatangani oleh Direktur Jenderal atas
-# nama Menteri Keuangan". Daftar dokumen permohonan sewa dan pinjam pakai
-# KARENA ITU tidak ada di batang tubuh PMK-nya — bukan karena belum dibaca,
-# melainkan karena memang bukan di sana tempatnya.
+# nama Menteri Keuangan". Daftar dokumennya karena itu memang tidak ada di
+# batang tubuh PMK-nya — bukan karena belum dibaca, melainkan karena bukan di
+# sana tempatnya. KMK pelaksananya adalah **213/KM.6/2021**, dan naskahnya
+# masuk pustaka pada unduhan kesembilan (2026-09-01).
 #
-# Nomor KMK pelaksananya belum berhasil dipastikan. Sampai itu ketemu,
-# keduanya TETAP memakai kerangka dasar bertanda `belum_terverifikasi` —
-# menaikkannya berdasarkan PMK 115/2020 akan mengklaim dasar yang teksnya
-# sendiri menyatakan ada di tempat lain.
-_SEWA_PINJAM_PAKAI = _KERANGKA_DASAR + (
+# CATATAN BENTUK. BAB III sama sekali tidak memakai kata "dilampiri": seluruh
+# butir permohonan Sewa adalah **muatan surat**, bukan berkas yang diunggah.
+# Karena itu hampir semuanya bersifat `muatan`. Yang benar-benar berupa
+# lampiran hanyalah dokumen pendukung faktor penyesuai — dan semuanya
+# bersyarat.
+_SEWA = (
+    ("surat_permohonan", "wajib", None,
+     "KMK 213/KM.6/2021 BAB III — Sewa diajukan calon penyewa atau Pengguna "
+     "Barang kepada Pengelola Barang", "terverifikasi"),
+    ("identitas_pemohon_sewa", "muatan", "pemohon_pihak_ketiga",
+     "KMK 213/KM.6/2021 BAB III huruf a angka 1) — identitas diri (NIK "
+     "dan/atau NPWP); hanya pada jalur permohonan calon penyewa",
+     "terverifikasi"),
+    ("usulan_peruntukan_sewa", "muatan", None,
+     "KMK 213/KM.6/2021 BAB III huruf a angka 2) — mengacu jenis kegiatan "
+     "usaha (bisnis, non bisnis, sosial)", "terverifikasi"),
+    ("usulan_jangka_periodesitas", "muatan", None,
+     "KMK 213/KM.6/2021 BAB III huruf a angka 3) dan 4) — jangka waktu Sewa "
+     "dan periodesitas bila diusulkan", "terverifikasi"),
+    ("informasi_objek_pemanfaatan", "muatan", None,
+     "KMK 213/KM.6/2021 BAB III huruf a angka 6); pada jalur Pengguna Barang "
+     "angka 4) merinci luas tanah/bangunan keseluruhan dan yang disewakan, "
+     "atau jumlah/kapasitas untuk selain tanah/bangunan", "terverifikasi"),
+    ("kajian_rencana_sewa", "wajib_bersyarat", "sewa_lebih_5_tahun",
+     "KMK 213/KM.6/2021 BAB III jalur Pengguna Barang angka 2) — proyeksi "
+     "usaha dan proyeksi keuangan, untuk Sewa berjangka waktu LEBIH DARI 5 "
+     "(lima) tahun", "terverifikasi"),
+    ("usulan_faktor_penyesuai", "opsional", None,
+     "KMK 213/KM.6/2021 BAB III huruf a angka 7) — 'jika ada'",
+     "terverifikasi"),
+    # Dokumen pendukung faktor penyesuai — satu-satunya LAMPIRAN sungguhan di
+    # rezim Sewa, dan tiap butirnya melekat pada kelompok usaha tertentu.
+    ("akta_pendirian_koperasi", "wajib_bersyarat", "sewa_koperasi",
+     "KMK 213/KM.6/2021 BAB III angka 1 huruf a — syarat faktor penyesuai 50% "
+     "(koperasi primer) atau 75% (koperasi sekunder)", "terverifikasi"),
+    ("ket_usaha_mikro", "wajib_bersyarat", "sewa_usaha_mikro",
+     "KMK 213/KM.6/2021 BAB III angka 1 huruf b angka 1) — syarat faktor "
+     "penyesuai 25% bagi pelaku usaha perorangan ultra mikro, mikro, dan kecil",
+     "terverifikasi"),
+    ("laporan_keuangan_sederhana", "wajib_bersyarat", "sewa_usaha_mikro",
+     "KMK 213/KM.6/2021 BAB III angka 1 huruf b angka 2) — laporan keuangan "
+     "sederhana berisi hasil penjualan", "terverifikasi"),
+    ("pernyataan_inisiasi_satker", "wajib_bersyarat", "sewa_inisiasi_pengguna",
+     "KMK 213/KM.6/2021 BAB III angka 2 huruf b — syarat faktor penyesuai 15% "
+     "karena peruntukan Sewa diinisiasi Pengguna Barang untuk mendukung tugas "
+     "dan fungsi", "terverifikasi"),
+    ("pernyataan_sarpras_pendidikan", "wajib_bersyarat",
+     "sewa_sarpras_pendidikan",
+     "KMK 213/KM.6/2021 BAB III angka 2 huruf c — syarat faktor penyesuai 10% "
+     "untuk sarana dan prasarana pendidikan keluarga ASN/TNI/Polri dan pegawai "
+     "penunjang", "terverifikasi"),
+    ("ket_kegiatan_sosial", "wajib_bersyarat", "sewa_kegiatan_sosial",
+     "KMK 213/KM.6/2021 BAB III angka 3 — syarat faktor penyesuai 2,5% untuk "
+     "kegiatan sosial; diterbitkan instansi dan/atau pihak terkait",
+     "terverifikasi"),
+    # Penilaian BUKAN lampiran pemohon: KMK-nya menugaskan PENGELOLA BARANG
+    # yang menunjuk Penilai. Tetap ditampilkan sebagai keterangan supaya
+    # operator tak menyiapkannya sendiri dengan sia-sia.
     ("penilaian", "anjuran", None,
-     "PMK 115/2020 memakai nilai wajar hasil Penilaian sebagai tarif pokok "
-     "sewa; bentuk lampirannya diatur KMK pelaksana (Pasal 96)",
-     "belum_terverifikasi"),
+     "KMK 213/KM.6/2021 BAB III huruf b angka 3) — Penilaian ditugaskan "
+     "PENGELOLA BARANG kepada Penilai, bukan lampiran pemohon; bila BMN sudah "
+     "masuk daftar tarif pokok Sewa, besarannya memakai daftar itu",
+     "terverifikasi"),
+    ("ket_kebenaran_fotokopi", "anjuran", "ada_fotokopi",
+     "Praktik lapangan", "belum_terverifikasi"),
+    ("ket_kebenaran_arsip_digital", "anjuran", "unggah_pindaian",
+     "Praktik lapangan untuk unggahan arsip digital", "belum_terverifikasi"),
+    ("dokumen_lainnya", "opsional", None, "—", "belum_terverifikasi"),
+)
+
+# ── PINJAM PAKAI: [F] KMK 213/KM.6/2021 BAB IV ──────────────────────────
+#
+# Berbeda dari Sewa, BAB IV MEMANG memakai kata "dilampiri" — jadi di sini
+# ada berkas yang benar-benar diunggah, dan pembedaan `muatan` vs `wajib`
+# mengikuti teksnya, bukan selera.
+_PINJAM_PAKAI = (
+    ("surat_permohonan", "wajib", None,
+     "KMK 213/KM.6/2021 BAB IV — Pengguna Barang mengajukan permohonan "
+     "persetujuan Pinjam Pakai kepada Pengelola Barang", "terverifikasi"),
+    ("pertimbangan_pinjam_pakai", "muatan", None,
+     "KMK 213/KM.6/2021 BAB IV huruf a angka 1) — pertimbangan yang mendasari "
+     "permohonan", "terverifikasi"),
+    ("identitas_peminjam_pakai", "muatan", None,
+     "KMK 213/KM.6/2021 BAB IV huruf a angka 2)", "terverifikasi"),
+    ("tujuan_penggunaan_pp", "muatan", None,
+     "KMK 213/KM.6/2021 BAB IV huruf a angka 3)", "terverifikasi"),
+    ("informasi_objek_pemanfaatan", "muatan", None,
+     "KMK 213/KM.6/2021 BAB IV huruf a angka 4) — rincian data BMN, termasuk "
+     "luas tanah dan lokasi tanah dan/atau bangunan bila objeknya tanah "
+     "dan/atau bangunan", "terverifikasi"),
+    ("usulan_jangka_periodesitas", "muatan", None,
+     "KMK 213/KM.6/2021 BAB IV huruf a angka 5) — jangka waktu; paling lama 5 "
+     "(lima) tahun sejak perjanjian ditandatangani", "terverifikasi"),
+    # — Lampiran sungguhan: "dilampiri dengan" —
+    ("permohonan_calon_peminjam", "wajib", None,
+     "KMK 213/KM.6/2021 BAB IV huruf b angka 1) — dilampiri surat permohonan "
+     "dari calon peminjam pakai (Pemerintah Daerah atau Pemerintah Desa)",
+     "terverifikasi"),
+    ("pernyataan_tak_ganggu_tusi", "wajib", None,
+     "KMK 213/KM.6/2021 BAB IV huruf b angka 2) — pernyataan Pengguna Barang "
+     "bahwa Pinjam Pakai tidak mengganggu pelaksanaan tugas dan fungsi "
+     "penyelenggaraan pemerintahan negara", "terverifikasi"),
+    ("data_bmn_objek", "wajib", None,
+     "KMK 213/KM.6/2021 BAB IV huruf b angka 3) huruf a) — kode barang, nama "
+     "barang, NUP, tahun perolehan, harga perolehan, nilai buku",
+     "terverifikasi"),
+    ("kib", "wajib_bersyarat", "wajib_kib",
+     "KMK 213/KM.6/2021 BAB IV huruf b angka 3) huruf b) — 'jika BMN didukung "
+     "dengan KIB'", "terverifikasi"),
+    ("foto_bmn", "wajib", None,
+     "KMK 213/KM.6/2021 BAB IV huruf b angka 3) huruf c) — foto atas objek "
+     "Pinjam Pakai", "terverifikasi"),
+    # — Diperiksa pada penelitian administrasi Pengelola Barang —
+    ("sk_psp", "wajib", None,
+     "KMK 213/KM.6/2021 BAB IV angka 2 huruf e — keputusan penetapan status "
+     "penggunaan atas BMN yang akan menjadi objek Pinjam Pakai; termasuk "
+     "dokumen yang diteliti Pengelola Barang", "terverifikasi"),
+    ("dok_kepemilikan", "wajib_bersyarat", "wajib_dok_kepemilikan",
+     "KMK 213/KM.6/2021 BAB IV angka 2 huruf d angka 1) — bukti kepemilikan "
+     "atau dokumen yang dipersamakan", "terverifikasi"),
+    # — Perpanjangan: lampirannya berbeda —
+    ("keputusan_pp_sebelumnya", "wajib_bersyarat", "perpanjangan",
+     "KMK 213/KM.6/2021 BAB IV — permohonan perpanjangan dilampiri keputusan "
+     "Pinjam Pakai sebelumnya; diterima paling lambat 2 (dua) bulan sebelum "
+     "jangka waktu berakhir", "terverifikasi"),
+    ("pernyataan_pp_masih_digunakan", "wajib_bersyarat", "perpanjangan",
+     "KMK 213/KM.6/2021 BAB IV — pernyataan peminjam pakai bahwa objek masih "
+     "digunakan untuk menunjang tugas dan fungsi Pemda/Pemdes",
+     "terverifikasi"),
+    ("ket_kebenaran_fotokopi", "anjuran", "ada_fotokopi",
+     "Praktik lapangan", "belum_terverifikasi"),
+    ("ket_kebenaran_arsip_digital", "anjuran", "unggah_pindaian",
+     "Praktik lapangan untuk unggahan arsip digital", "belum_terverifikasi"),
+    ("dokumen_lainnya", "opsional", None, "—", "belum_terverifikasi"),
 )
 
 SYARAT = {
@@ -810,8 +1032,8 @@ SYARAT = {
     "pmpp": _PMPP,
     "penghapusan": _PENGHAPUSAN,
     "pemusnahan": _PEMUSNAHAN,
-    "sewa": _SEWA_PINJAM_PAKAI,
-    "pinjam_pakai": _SEWA_PINJAM_PAKAI,
+    "sewa": _SEWA,
+    "pinjam_pakai": _PINJAM_PAKAI,
 }
 
 #: Rezim yang seluruh butir wajibnya bertumpu pada pasal yang sudah dibaca.
@@ -825,9 +1047,13 @@ REZIM_BERDASAR_PASAL = frozenset({
     # pemusnahan dan penghapusan.
     "hibah", "pemusnahan", "penghapusan",
     # Naik 2026-09-01 putaran kedua: PMK 111/2016 Pasal 32, 33, 77, dan BAB VI.
-    # `sewa` dan `pinjam_pakai` SENGAJA tidak ikut — Pasal 96 PMK 115/2020
-    # mendelegasikan tata caranya ke KMK yang belum ada di pustaka.
     "penjualan_lelang", "penjualan_langsung", "tukar_menukar", "pmpp",
+    # Naik 2026-09-01 putaran ketiga, DUA REZIM TERAKHIR. PMK 115/2020 Pasal
+    # 96 mendelegasikan tata caranya ke KMK, dan KMK itu — 213/KM.6/2021 —
+    # akhirnya masuk pustaka. BAB III memuat tata cara Sewa, BAB IV Pinjam
+    # Pakai. Sampai naskahnya benar-benar terbaca, keduanya sengaja ditahan
+    # di `belum_terverifikasi` selama lima putaran unduhan.
+    "sewa", "pinjam_pakai",
 })
 
 
