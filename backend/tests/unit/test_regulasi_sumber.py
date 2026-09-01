@@ -110,7 +110,7 @@ def test_sewa_pinjam_pakai_punya_kmk_pelaksananya():
 def test_semua_sumber_https_dan_jenisnya_dikenal():
     for e in rs.MANIFES:
         for jenis, url in e["sumber"]:
-            assert jenis in ("pdf", "html"), f"{e['kode']}: jenis {jenis}"
+            assert jenis in ("pdf", "html", "teks"), f"{e['kode']}: jenis {jenis}"
             assert url.startswith("https://"), f"{e['kode']}: {url}"
 
 
@@ -476,3 +476,149 @@ def test_sumber_paparan_pelatihan_dicabut_dari_manifes():
     manifes hanya karena ia "sebuah sumber"."""
     semua = " ".join(u for e in rs.MANIFES for _, u in e["sumber"])
     assert "sibangkoman.pu.go.id" not in semua
+
+
+# ── Guard batang tubuh: dua kerapuhan yang menolak naskah ASLI ────────────
+#
+# Unduhan kelima menemukan KMK 213/KM.6/2021 di cermin Itjen Kemhan, lalu
+# MENOLAKNYA sendiri: "tak memuat 'menimbang'". Naskahnya benar; guard-nyalah
+# yang salah. Dua sebab, keduanya diperbaiki di sini.
+
+_KMK_DIKTUM = """KEPUTUSAN MENTERI KEUANGAN REPUBLIK INDONESIA
+NOMOR 213/KM.6/2021
+Menim bang : a. bahwa untuk melaksanakan ketentuan Pasal 96 ...
+MEMUTUSKAN:
+Menetapkan : KEPUTUSAN MENTERI KEUANGAN TENTANG TATA CARA ...
+KESATU  : Menetapkan tata cara pelaksanaan Pemanfaatan BMN ...
+KEDUA   : Tata cara sebagaimana dimaksud dalam Diktum KESATU ...
+"""
+
+
+def test_spasi_sisipan_ocr_tak_menolak_naskah_asli():
+    """Ekstraksi PDF hasil pindai kerap menyisipkan spasi di tengah kata —
+    teks yang sudah masuk pustaka memuat "se bagaimana", "tan pa", "clalam",
+    "MENTERlKEUANGAN". Pencocokan substring apa adanya menolak naskah asli
+    hanya karena OCR-nya berantakan.
+
+    Inilah yang terjadi pada KMK 213/KM.6/2021: berkasnya benar, terunduh,
+    berlapis teks — dan dibuang oleh guard-nya sendiri.
+    """
+    assert rs.bukan_batang_tubuh(_KMK_DIKTUM) == ""
+    # Pembanding: "Menimbang" memang harus ADA, sekadar boleh berspasi.
+    tanpa = _KMK_DIKTUM.replace("Menim bang", "Sekapur sirih")
+    assert rs.bukan_batang_tubuh(tanpa)
+
+
+def test_keputusan_memakai_diktum_bukan_pasal():
+    """PERATURAN memakai "Pasal 1, 2, 3…"; KEPUTUSAN memakai diktum
+    "KESATU, KEDUA…". Menuntut pasal bernomor saja menolak SETIAP KMK — dan
+    KMK-lah yang memuat tata cara pelaksanaan yang didelegasikan PMK
+    (PMK 115/2020 Pasal 96 menunjuk KMK 213/KM.6/2021)."""
+    assert "Pasal 1\n" not in _KMK_DIKTUM
+    assert rs.bukan_batang_tubuh(_KMK_DIKTUM) == ""
+
+
+def test_menetapkan_saja_tanpa_diktum_tetap_ditolak():
+    """Longgarnya jangan jadi pintu masuk: "Menetapkan" tanpa diktum
+    bernomor bukan batang tubuh."""
+    teks = ("Menimbang bahwa ...\nMEMUTUSKAN:\nMenetapkan : KEPUTUSAN "
+            "MENTERI KEUANGAN TENTANG SESUATU.\n")
+    sebab = rs.bukan_batang_tubuh(teks)
+    assert "diktum" in sebab
+
+
+def test_diktum_tanpa_menetapkan_tetap_ditolak():
+    teks = "Menimbang ...\nMEMUTUSKAN:\nKESATU : sesuatu\nKEDUA : lainnya\n"
+    assert rs.bukan_batang_tubuh(teks)
+
+
+def test_paparan_tetap_ditolak_setelah_guard_dilonggarkan():
+    """Pelonggaran untuk KMK tak boleh membuka jalan bagi paparan — sebab
+    itulah guard ini ada."""
+    paparan = ("Pemindahtanganan Barang Milik Negara\n"
+               "Direktorat Jenderal Kekayaan Negara\n"
+               "Ø Hibah\nü Pengguna Barang mengajukan permohonan\n")
+    assert rs.bukan_batang_tubuh(paparan)
+
+
+# ── Jenis sumber `teks`: naskah HTML, bukan PDF ──────────────────────────
+#
+# PP 27/2014 selalu gagal karena varian `.pdf`-nya memang TIDAK ADA — JDIH
+# hanya menyajikannya sebagai `.htm`. Pengunduh yang cuma menerima PDF tak
+# akan pernah bisa mengambilnya, berapa kali pun dijalankan.
+
+# Sengaja dibuat MELEBIHI ambang 500 karakter. Ambang itu penjagaan yang
+# benar — halaman nyaris kosong memang tak boleh diterima — jadi fixture-nya
+# yang harus realistis, bukan ambangnya yang dilonggarkan.
+_HTML_NASKAH = ("""<html><head><style>.x{color:red}</style>
+<script>var pasal = "Pasal 1"; document.write(pasal);</script></head>
+<body><p>PERATURAN PEMERINTAH REPUBLIK INDONESIA</p>
+<p>Menimbang : a. bahwa dalam rangka&nbsp;pengelolaan Barang Milik Negara ...</p>
+<p>MEMUTUSKAN:</p><p>Pasal 1</p>
+<p>Dalam Peraturan Pemerintah ini yang dimaksud dengan Barang Milik Negara
+adalah semua barang yang dibeli atau diperoleh atas beban Anggaran Pendapatan
+dan Belanja Negara atau berasal dari perolehan lainnya yang sah. """
+                + "Ketentuan lebih lanjut diatur dalam pasal berikutnya. " * 12
+                + """</p></body></html>""").encode("utf-8")
+
+
+def test_html_fulltext_diambil_naskahnya():
+    teks = rs.teks_dari_html(_HTML_NASKAH)
+    assert "Menimbang" in teks and "MEMUTUSKAN" in teks
+    assert "<p>" not in teks and "&nbsp;" not in teks
+    assert "pengelolaan" in teks, "entitas HTML harus dipulihkan"
+
+
+def test_skrip_dan_gaya_dibuang_beserta_isinya():
+    """Kalau tidak, kode JavaScript ikut tersimpan sebagai "naskah" — dan
+    berkasnya lolos uji panjang tanpa memuat peraturan apa pun."""
+    teks = rs.teks_dari_html(_HTML_NASKAH)
+    assert "document.write" not in teks
+    assert "color:red" not in teks
+
+
+def test_struktur_baris_dipertahankan():
+    """Guard batang tubuh mengenali "Pasal 1" dan diktum di AWAL BARIS.
+    Meratakan semuanya jadi satu baris akan membuat naskah asli ditolak."""
+    teks = rs.teks_dari_html(_HTML_NASKAH)
+    assert rs.bukan_batang_tubuh(teks) == ""
+
+
+def test_sumber_teks_melewati_pemeriksaan_pdf(monkeypatch, tanpa_jeda):
+    """Jenis `teks` tak boleh tersandung penjaga `%PDF` yang berlaku untuk
+    sumber PDF."""
+    monkeypatch.setattr(rs, "_ambil", lambda u: (_HTML_NASKAH, "text/html"))
+    r = rs.unduh_satu({"sumber": [("teks", "https://x/a.htm")]})
+    assert r["ok"] is True
+    assert r["halaman"] == 0, "naskah HTML tak punya halaman PDF"
+    assert "Menimbang" in r["teks"]
+
+
+def test_sumber_teks_yang_isinya_paparan_tetap_ditolak(monkeypatch, tanpa_jeda):
+    """Pelonggaran jenis sumber tak boleh melonggarkan mutu isinya.
+
+    Paparannya dibuat cukup PANJANG dengan sengaja: kalau ia pendek, yang
+    menolaknya adalah ambang 500 karakter — dan uji ini akan lulus tanpa
+    membuktikan bahwa guard batang tubuh berperan sama sekali.
+    """
+    paparan = ("<html><body><p>Ringkasan PMK tentang Pemanfaatan BMN</p>"
+               + "<p>Poin penting yang perlu diperhatikan operator satker.</p>" * 20
+               + "</body></html>").encode("utf-8")
+    monkeypatch.setattr(rs, "_ambil", lambda u: (paparan, "text/html"))
+    r = rs.unduh_satu({"sumber": [("teks", "https://x/a.htm")]})
+    assert r["ok"] is False
+    assert any("batang tubuh" in g for g in r["galat"])
+
+
+def test_halaman_teks_kosong_ditolak(monkeypatch, tanpa_jeda):
+    monkeypatch.setattr(rs, "_ambil",
+                        lambda u: (b"<html><body></body></html>", "text/html"))
+    r = rs.unduh_satu({"sumber": [("teks", "https://x/a.htm")]})
+    assert r["ok"] is False and any("nyaris kosong" in g for g in r["galat"])
+
+
+def test_pp_27_punya_sumber_htm():
+    """Varian `.pdf`-nya memang tak ada; tanpa `.htm` peraturan induk ini
+    tak akan pernah masuk pustaka."""
+    e = next(x for x in rs.MANIFES if x["kode"] == "pp-27-2014-pengelolaan-bmn")
+    assert any(j == "teks" and u.endswith(".htm") for j, u in e["sumber"])

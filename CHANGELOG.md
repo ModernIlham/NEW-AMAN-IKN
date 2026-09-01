@@ -15,6 +15,67 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#968] Guard batang tubuh menolak naskah asli — dan JDIH punya dua format — 2026-09-01
+
+Unduhan kelima: sepuluh naskah terunduh **segar** (jaringan sehat kali ini),
+tetapi ketiga target tetap gagal. Diagnosisnya menunjukkan **perkakasnya
+sendiri** yang salah pada dua hal berbeda.
+
+### Cacat 1 — guard menolak naskah yang benar
+
+**KMK 213/KM.6/2021 sebenarnya BERHASIL diunduh** dari cermin Itjen Kemhan,
+lalu **ditolak sendiri** dengan alasan *"tak memuat 'menimbang'"*. Naskahnya
+benar; guard-nya yang keliru. Dua sebab:
+
+1. **Pencocokan substring apa adanya.** Ekstraksi PDF hasil pindai menyisipkan
+   spasi di tengah kata — teks yang SUDAH ADA di pustaka ini memuat
+   *"se bagaimana"*, *"tan pa"*, *"clalam"*, *"MENTERlKEUANGAN"*. Kini spasi
+   dibuang seluruhnya sebelum penanda dicocokkan.
+2. **Menuntut "Pasal 1" bernomor.** **PERATURAN** memakai pasal; **KEPUTUSAN**
+   memakai diktum **KESATU/KEDUA/KETIGA**. Guard lama karenanya menolak
+   **setiap KMK** — padahal justru KMK yang memuat tata cara pelaksanaan yang
+   didelegasikan PMK (PMK 115/2020 Pasal 96 → KMK 213/KM.6/2021).
+
+Diuji ulang terhadap **kesepuluh naskah yang sudah ada**: semuanya tetap
+diterima, paparan pelatihan tetap ditolak, dan KMK ber-diktum dengan spasi
+OCR kini lolos.
+
+### Cacat 2 — JDIH punya dua FORMAT, bukan satu
+
+PP 27/2014 selalu gagal karena varian **`.pdf`-nya memang tidak ada**. JDIH
+hanya menyajikannya sebagai **`.htm`**:
+
+```
+jdih.kemenkeu.go.id/api/download/fulltext/2014/27TAHUN2014PP.htm
+```
+
+Pengunduh yang cuma menerima PDF **tak akan pernah bisa mengambilnya**,
+berapa kali pun dijalankan. Jenis sumber baru **`teks`** menangani naskah
+HTML — dan hasilnya justru lebih bersih: **tak ada derau OCR sama sekali**.
+
+Skrip dan gaya dibuang beserta isinya (kalau tidak, kode JavaScript ikut
+tersimpan sebagai "naskah" dan lolos uji panjang), entitas HTML dipulihkan,
+dan **struktur baris dipertahankan** — guard batang tubuh mengenali "Pasal 1"
+dan diktum di AWAL BARIS, jadi meratakan semuanya jadi satu baris akan
+menolak naskah asli.
+
+**Sumber: 55 → 61.** Ditambah UUID kandidat untuk KMK 334/2021 dan varian
+`.htm` untuk ketiganya.
+
+### Dua fixture uji yang tak membuktikan apa pun
+
+Keduanya ketahuan saat uji baru ditulis. Fixture HTML-nya hanya 172 karakter
+— di bawah ambang 500 — sehingga yang menolaknya adalah **penjaga panjang**,
+bukan yang sedang diuji. Fixture paparannya pun begitu: ia "ditolak" tanpa
+guard batang tubuh berperan sama sekali.
+
+Ambang 500 karakter itu penjagaan yang benar; **fixture-nya** yang harus
+realistis, bukan ambangnya yang dilonggarkan. Keduanya diperpanjang.
+
+Lima mutasi dipasang lalu dibunuh.
+
+---
+
 ## [#967] KMK pelaksana Pasal 96 ditemukan; pola nama berkas KMK dibetulkan — 2026-09-01
 
 Melanjutkan dua sisa pekerjaan atas permintaan pemilik. Keduanya bergerak

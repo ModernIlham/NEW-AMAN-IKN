@@ -58,6 +58,10 @@ from datetime import datetime, timezone
 #
 # `html` = halaman yang perlu dikerok tautan PDF-nya lebih dulu.
 # `pdf`  = tautan langsung.
+# `teks` = naskah lengkap yang disajikan sebagai HTML, bukan PDF. JDIH
+#          menyajikan sebagian peraturan begitu (mis. PP 27/2014 hanya ada
+#          sebagai `.htm`, tak pernah sebagai `.pdf`). Untuk keperluan
+#          pustaka ini justru LEBIH BAIK: tak ada derau OCR sama sekali.
 #
 # `prioritas` menentukan urutan unduh — yang menutup celah terbesar di
 # registry syarat dokumen didahulukan, supaya kegagalan di ekor daftar tidak
@@ -156,6 +160,8 @@ MANIFES = [
             # ada spasi setelah "KMK", dan TANPA akhiran `Per`/`Kep` seperti PMK.
             ("pdf", "https://jdih.kemenkeu.go.id/api/download/fulltext/2021/"
                     "KMK%20213~KM.6~2021.pdf"),
+            ("teks", "https://jdih.kemenkeu.go.id/api/download/fulltext/2021/"
+                     "KMK%20213~KM.6~2021.htm"),
             ("html", "https://www.djkn.kemenkeu.go.id/peraturan/detail/411/"
                      "Keputusan-Menteri-Keuangan-Nomor-213KM62021.html"),
             ("html", "https://jdih.kemenkeu.go.id/dok/213-km-6-2021"),
@@ -218,8 +224,14 @@ MANIFES = [
             # "Temporary failure in name resolution" — kegagalan DNS SESAAT
             # di runner, BUKAN 404. Ia praktis belum pernah benar-benar
             # dicoba, jadi tetap di depan.
+            # Naskah lengkapnya di JDIH hanya ada sebagai `.htm` — itulah
+            # sebabnya varian `.pdf` selalu gagal: ia memang tak pernah ada.
+            ("teks", "https://jdih.kemenkeu.go.id/api/download/fulltext/2014/"
+                     "27TAHUN2014PP.htm"),
             ("pdf", "https://jdih.kemenkeu.go.id/api/download/fulltext/2014/"
                     "27TAHUN2014PP.pdf"),
+            ("html", "https://jdih.kemenkeu.go.id/in/dokumen/peraturan/"
+                     "7aa67eed-89b7-4ead-8320-7ba130d863e7"),
             ("html", "https://jdih.kemenkeu.go.id/dok/pp-27-tahun-2014"),
             ("html", "https://paralegal.id/peraturan/"
                      "peraturan-pemerintah-nomor-27-tahun-2014/"),
@@ -259,6 +271,15 @@ MANIFES = [
                     "KMK%20334~KM.6~2021.pdf"),
             ("pdf", "https://jdih.kemenkeu.go.id/api/download/fulltext/2021/"
                     "334~KM.6~2021.pdf"),
+            # UUID kandidat dari hasil pencarian. Bila keliru, ia gagal
+            # tanpa merugikan — dan sebabnya tercatat untuk putaran berikut.
+            ("pdf", "https://jdih.kemenkeu.go.id/api/download/"
+                    "dbb8b516-9f26-4cd2-89de-5e9e5f0f7815/"
+                    "KMK%20334~KM.6~2021.pdf"),
+            ("teks", "https://jdih.kemenkeu.go.id/api/download/fulltext/2021/"
+                     "KMK%20334~KM.6~2021.htm"),
+            ("html", "https://jdih.kemenkeu.go.id/dok/"
+                     "dbb8b516-9f26-4cd2-89de-5e9e5f0f7815"),
             ("html", "https://jdih.kemenkeu.go.id/dok/334-km-6-2021"),
             ("html", "https://peraturan.go.id/id/kepmenkeu-no-334-km-6-2021-tahun-2021"),
         ],
@@ -346,15 +367,50 @@ def bukan_batang_tubuh(teks: str) -> str:
     Itu persis kegagalan yang paling berbahaya: bukan yang gagal berisik,
     melainkan yang berhasil dengan isi yang keliru.
     """
-    rendah = (teks or "").lower()
-    hilang = [k for k in _PENANDA_BATANG_TUBUH if k not in rendah]
+    asli = teks or ""
+    # Spasi DIBUANG seluruhnya sebelum mencocokkan penanda. Ekstraksi PDF
+    # hasil pindai kerap menyisipkan spasi di tengah kata — teks yang sudah
+    # masuk pustaka memuat "se bagaimana", "tan pa", "clalam",
+    # "MENTERlKEUANGAN". Pencocokan substring apa adanya akan menolak naskah
+    # asli hanya karena OCR-nya berantakan.
+    rapat = re.sub(r"\s+", "", asli).lower()
+    hilang = [k for k in _PENANDA_BATANG_TUBUH if k not in rapat]
     if hilang:
         return ("bukan batang tubuh peraturan — tak memuat "
                 + " maupun ".join(f"'{k}'" for k in hilang)
                 + " (kemungkinan paparan/ringkasan tentang peraturannya)")
-    if not re.search(r"(?im)^\s*pasal\s+\d+", teks or ""):
-        return "bukan batang tubuh peraturan — tak ada pasal bernomor"
-    return ""
+    # PERATURAN memakai "Pasal 1, 2, 3…"; KEPUTUSAN memakai diktum
+    # "KESATU, KEDUA, KETIGA…". Menuntut pasal bernomor saja akan menolak
+    # setiap KMK — dan KMK-lah yang memuat tata cara pelaksanaan yang
+    # didelegasikan PMK (mis. PMK 115/2020 Pasal 96 → KMK 213/KM.6/2021).
+    if re.search(r"(?im)^\s*pasal\s+\d+", asli):
+        return ""
+    if re.search(r"(?i)\bmenetapkan\b", asli) and re.search(
+            r"(?im)^\s*(kesatu|kedua|ketiga|keempat|kelima)\b", asli):
+        return ""
+    return ("bukan batang tubuh — tak ada pasal bernomor (Peraturan) "
+            "maupun diktum KESATU/KEDUA (Keputusan)")
+
+
+def teks_dari_html(html: bytes) -> str:
+    """Naskah dari halaman full-text HTML — tag dibuang, entitas dipulihkan.
+
+    Sengaja tanpa pustaka tambahan: yang dibutuhkan hanya membuang markup
+    dari halaman yang isinya memang naskah peraturan, bukan mem-parsing
+    dokumen sembarangan.
+    """
+    import html as _html
+    teks = html.decode("utf-8", "replace")
+    # Skrip dan gaya dibuang beserta isinya — kalau tidak, kode JavaScript
+    # ikut tersimpan sebagai "naskah" dan membuat berkasnya lolos uji panjang.
+    teks = re.sub(r"(?is)<(script|style)\b.*?</\1>", " ", teks)
+    teks = re.sub(r"(?i)<br\s*/?>|</p>|</div>|</tr>|</h[1-6]>", "\n", teks)
+    teks = re.sub(r"(?s)<[^>]+>", " ", teks)
+    teks = _html.unescape(teks)
+    # Rapikan tanpa menghapus baris — struktur baris dipakai guard batang
+    # tubuh untuk mengenali "Pasal 1" dan diktum di awal baris.
+    teks = re.sub(r"[ \t\xa0]+", " ", teks)
+    return re.sub(r"\n\s*\n\s*\n+", "\n\n", teks).strip()
 
 
 def ekstrak_teks(pdf: bytes) -> tuple[str, int]:
@@ -372,6 +428,21 @@ def unduh_satu(entri: dict) -> dict:
     for jenis, url in entri["sumber"]:
         try:
             isi, ctype = _ambil(url)
+            if jenis == "teks":
+                # Naskah HTML: tak ada halaman PDF untuk dihitung.
+                teks, n_hal = teks_dari_html(isi), 0
+                if len(teks.strip()) < 500:
+                    galat.append(f"{url}: halaman teks nyaris kosong")
+                    continue
+                sebab = bukan_batang_tubuh(teks)
+                if sebab:
+                    galat.append(f"{url}: {sebab}")
+                    continue
+                return {
+                    "ok": True, "url": url, "halaman": n_hal,
+                    "bytes": len(isi), "sha256": hashlib.sha256(isi).hexdigest(),
+                    "teks": teks, "galat": galat,
+                }
             if jenis == "html" and not isi[:5].startswith(b"%PDF"):
                 halaman = isi.decode("utf-8", "replace")
                 pdfs = tautan_pdf(halaman, url)
