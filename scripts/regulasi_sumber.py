@@ -354,6 +354,39 @@ def tautan_pdf(html: str, asal: str) -> list:
 _PENANDA_BATANG_TUBUH = ("menimbang", "memutuskan")
 
 
+def jejak_teks(teks: str) -> str:
+    """Apa yang JUSTRU ditemukan di dalam teks — bukan hanya yang hilang.
+
+    Pesan penolakan yang hanya menyebut penanda yang HILANG membuat diagnosis
+    buntu. Unduhan kelima menolak KMK 213/KM.6/2021 dengan "tak memuat
+    'menimbang'", dan dari kalimat itu saja tak ada cara membedakan tiga
+    kemungkinan yang tindak lanjutnya berbeda-beda:
+
+    * berkasnya paparan/ringkasan          → cabut sumbernya, cari cermin lain;
+    * berkasnya kutipan sebagian           → cari naskah utuh;
+    * naskahnya asli tetapi OCR-nya rusak  → guard-nya yang perlu diperbaiki.
+
+    Ketiganya terbaca dari jejak ini: panjang naskah, penanda mana yang
+    ternyata ADA, ada tidaknya pasal/diktum, dan kalimat pembuka — yang
+    biasanya langsung menyebut jenis dokumennya.
+    """
+    asli = teks or ""
+    rapat = re.sub(r"\s+", "", asli).lower()
+    ada = [k for k in _PENANDA_BATANG_TUBUH if k in rapat]
+    jejak = [f"{len(asli)} karakter"]
+    jejak.append("ada " + "+".join(ada) if ada else "tanpa penanda apa pun")
+    if re.search(r"(?im)^\s*pasal\s+\d+", asli):
+        jejak.append("ada pasal bernomor")
+    if re.search(r"(?im)^\s*(kesatu|kedua|ketiga|keempat|kelima)\b", asli):
+        jejak.append("ada diktum")
+    if re.search(r"(?i)\bmenetapkan\b", asli):
+        jejak.append("ada 'menetapkan'")
+    awal = re.sub(r"\s+", " ", asli[:400]).strip()
+    if awal:
+        jejak.append(f"pembuka: \u201c{awal[:120]}\u201d")
+    return "; ".join(jejak)
+
+
 def bukan_batang_tubuh(teks: str) -> str:
     """Alasan mengapa teks ini BUKAN naskah peraturan; '' bila ia naskah.
 
@@ -378,7 +411,8 @@ def bukan_batang_tubuh(teks: str) -> str:
     if hilang:
         return ("bukan batang tubuh peraturan — tak memuat "
                 + " maupun ".join(f"'{k}'" for k in hilang)
-                + " (kemungkinan paparan/ringkasan tentang peraturannya)")
+                + " (kemungkinan paparan/ringkasan tentang peraturannya)"
+                + " | " + jejak_teks(asli))
     # PERATURAN memakai "Pasal 1, 2, 3…"; KEPUTUSAN memakai diktum
     # "KESATU, KEDUA, KETIGA…". Menuntut pasal bernomor saja akan menolak
     # setiap KMK — dan KMK-lah yang memuat tata cara pelaksanaan yang
@@ -389,7 +423,8 @@ def bukan_batang_tubuh(teks: str) -> str:
             r"(?im)^\s*(kesatu|kedua|ketiga|keempat|kelima)\b", asli):
         return ""
     return ("bukan batang tubuh — tak ada pasal bernomor (Peraturan) "
-            "maupun diktum KESATU/KEDUA (Keputusan)")
+            "maupun diktum KESATU/KEDUA (Keputusan)"
+            " | " + jejak_teks(asli))
 
 
 def teks_dari_html(html: bytes) -> str:

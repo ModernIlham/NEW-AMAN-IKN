@@ -179,6 +179,48 @@ guard-nya yang keliru. Dua sebab:
 Diuji ulang terhadap kesepuluh naskah yang sudah ada: semuanya tetap diterima,
 dan paparan pelatihan tetap ditolak.
 
+## Unduhan keenam — PP 27/2014 masuk, dan pesan gagal yang buntu
+
+**11 dari 13 naskah kini ada.** PP 27/2014 — peraturan **induk** seluruh
+rezim, yang gagal tiga putaran berturut-turut — masuk lewat jenis sumber
+`teks`, 112.792 karakter, tanpa derau OCR sama sekali. Bersama PP 28/2020
+yang sudah lebih dulu ada, keduanya naik ke `teks-primer` di
+`backend/sitasi_regulasi.py`.
+
+Yang tersisa dua, keduanya KMK: **213/KM.6/2021** dan **334/KM.6/2021**.
+
+### Pesan gagal yang tak bisa ditindaklanjuti
+
+Unduhan kelima menolak KMK 213 dengan *"tak memuat 'menimbang'"*. Sesudah
+pencocokan spasi diperbaiki, unduhan keenam menolaknya dengan **alasan yang
+sama** — dan dari kalimat itu tak ada cara memilih tindak lanjutnya:
+
+| Kalau berkasnya… | Tindak lanjutnya |
+|---|---|
+| paparan/ringkasan | cabut sumbernya, cari cermin lain |
+| kutipan sebagian | cari naskah utuh |
+| naskah asli, OCR rusak | perbaiki guard-nya |
+
+Tiga kemungkinan, tiga tindakan berbeda, satu pesan yang tak memisahkannya.
+Satu putaran lagi terbuang untuk menebak.
+
+Kini penolakan membawa **jejak apa yang DITEMUKAN**, bukan cuma apa yang
+hilang: panjang naskah, penanda mana yang ternyata ada, ada tidaknya
+pasal/diktum, dan **kalimat pembukanya** — yang hampir selalu menyebut jenis
+dokumennya sendiri.
+
+Bentuknya (ilustrasi, bukan salinan run sungguhan):
+
+```
+bukan batang tubuh peraturan — tak memuat 'menimbang' (kemungkinan
+paparan/ringkasan tentang peraturannya) | <n> karakter; ada memutuskan;
+ada diktum; pembuka: “<kalimat pertama naskah>”
+```
+
+Pembukanya sendiri yang menjawab: `KEPUTUSAN MENTERI KEUANGAN ...` berarti
+guard-nya yang salah; `Sosialisasi KMK 213 ...` berarti sumbernya. Jejak ini
+sengaja dibatasi < 300 karakter — ia ikut ter-commit di `MANIFEST.json`.
+
 ## Isi
 
 - `<kode>.txt` — teks batang tubuh hasil ekstraksi
@@ -203,12 +245,13 @@ Sumbernya ada di `scripts/regulasi_sumber.py`.
 | 3 | PMK 83/PMK.06/2016 | Penghapusan & pemusnahan |
 | 4 | PMK 115/PMK.06/2020 | Sewa, pinjam pakai, KSP, BGS/BSG |
 | 5 | PMK 40 Tahun 2024 | Penggunaan — menutup rantai bukti riset yang sudah ada |
-| 6 | PMK 181/PMK.06/2016 | Penatausahaan |
-| 7 | PMK 207/PMK.06/2021 | Wasdal |
-| 8 | PMK 53 Tahun 2023 | Rezim khusus IKN |
-| 9–10 | PP 27/2014 jo. PP 28/2020 | Induk seluruh rezim |
-| 11 | KMK 334/KM.6/2021 | Hibah ≤ Rp100 juta tanpa bukti kepemilikan |
-| 12 | PMK 4/PMK.06/2015 | Delegasi kewenangan pemindahtanganan |
+| 6 | KMK 213/KM.6/2021 | Sewa & pinjam pakai — tata cara yang didelegasikan PMK 115/2020 Pasal 96 |
+| 7 | PMK 181/PMK.06/2016 | Penatausahaan |
+| 8 | PMK 207/PMK.06/2021 | Wasdal |
+| 9 | PMK 53 Tahun 2023 | Rezim khusus IKN |
+| 10–11 | PP 27/2014 jo. PP 28/2020 | Induk seluruh rezim |
+| 12 | KMK 334/KM.6/2021 | Hibah ≤ Rp100 juta tanpa bukti kepemilikan |
+| 13 | PMK 4/PMK.06/2015 | Delegasi kewenangan pemindahtanganan |
 
 Tiap peraturan punya **beberapa** sumber, dicoba berurutan: URL JDIH berubah
 saat situsnya diperbarui, dan cermin kementerian lain (Pertanian, PUPR, BP
@@ -223,7 +266,7 @@ berkas statis.
   `peraturan.bpk.go.id`. Kalau seluruh sumber ada di dua host itu saja, satu
   gangguan di sisi Kemenkeu/BPK menjatuhkan semuanya sekaligus.
 
-Total saat ini: **46 sumber untuk 12 peraturan**, 9 di antaranya tautan PDF
+Total saat ini: **61 sumber untuk 13 peraturan**, 15 di antaranya tautan PDF
 langsung. Pola unduh langsung JDIH yang berguna saat menambah sumber baru:
 `https://jdih.kemenkeu.go.id/api/download/<uuid>/<nomor>~PMK.06~<tahun>Per.pdf`,
 dan BPHN memakai pola nama berkas yang bisa ditebak untuk PP:

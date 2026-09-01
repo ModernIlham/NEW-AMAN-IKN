@@ -8,10 +8,89 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 > Format tanggal: `YYYY-MM-DD`. Semua perubahan UI di bawah sudah di-`yarn build`
 > (craco) hingga sukses sebelum di-merge.
 >
-> **Catatan penomoran:** sejak entri `[#276]`, nomor `[#N]` pada judul entri
-> = **nomor PR + 2** (bergeser karena dua nomor PR hangus). Contoh: entri
-> `[#614]` = PR #612. Tautan PR yang disebut DI DALAM badan entri tetap
-> memakai nomor PR asli.
+> **Catatan penomoran:** nomor `[#N]` pada judul entri = **nomor PR + 9**
+> (bergeser karena sembilan nomor PR hangus sepanjang pengembangan; dua di
+> antaranya sejak entri `[#276]`). Contoh: entri `[#968]` = PR #959. Tautan
+> PR yang disebut DI DALAM badan entri tetap memakai nomor PR asli.
+>
+> Urutannya **kronologis merge**, bukan urut nomor: PR yang dibuka lebih dulu
+> bisa ter-merge belakangan, jadi nomornya sesekali naik-turun.
+
+---
+
+## [#969] PP 27/2014 masuk pustaka — dan pesan gagal yang tak bisa ditindaklanjuti — 2026-09-01
+
+Unduhan keenam: **11 dari 13 naskah kini ada**. Yang masuk adalah **PP 27
+Tahun 2014**, peraturan **induk** seluruh rezim pengelolaan BMN — yang gagal
+tiga putaran berturut-turut karena varian `.pdf`-nya memang tidak pernah ada.
+
+### PP 27/2014 dan PP 28/2020 naik ke `teks-primer`
+
+112.792 karakter, lewat jenis sumber `teks` (`.htm`), **tanpa derau OCR sama
+sekali** — naskah HTML justru lebih bersih daripada ekstraksi PDF. Diperiksa
+sebelum dinaikkan: `bukan_batang_tubuh` meluluskannya, "Pasal 1" ada, dan
+penutupnya benar (`LEMBARAN NEGARA ... TAHUN 2014 NOMOR 92`), jadi ia naskah
+utuh, bukan potongan.
+
+PP 28/2020 sudah ada di pustaka sejak putaran pertama tetapi statusnya
+tertinggal di `pustaka`; keduanya kini `teks-primer`. Keduanya peraturan yang
+paling sering dirujuk registry syarat dokumen, jadi kutipannya kini bertumpu
+pada naskah yang bisa dibuka — bukan pada catatan riset.
+
+`test_teks_primer_berkasnya_memang_ada` memeriksa klaim itu terhadap **berkas
+di disk**, bukan terhadap manifesnya: manifes adalah catatan, dan catatan bisa
+keliru.
+
+### Pesan gagal yang buntu — cacat ketiga pada perkakasnya sendiri
+
+Unduhan kelima menolak KMK 213/KM.6/2021 dengan *"tak memuat 'menimbang'"*.
+Sesudah pencocokan spasi OCR diperbaiki, unduhan keenam menolaknya dengan
+**alasan yang persis sama**. Dari kalimat itu tak ada cara memilih tindak
+lanjut:
+
+| Kalau berkasnya… | Tindak lanjutnya |
+|---|---|
+| paparan/ringkasan | cabut sumbernya, cari cermin lain |
+| kutipan sebagian | cari naskah utuh |
+| naskah asli, OCR rusak | perbaiki guard-nya |
+
+Tiga kemungkinan, tiga tindakan berbeda — dan satu pesan yang tak
+memisahkannya. Ini pola yang sama dengan dua cacat sebelumnya (`[#964]`):
+bukan unduhan yang gagal, melainkan **laporan kegagalannya** yang membuat
+putaran berikutnya jadi tebakan.
+
+Penolakan kini membawa jejak **apa yang DITEMUKAN**: panjang naskah, penanda
+mana yang ternyata ada, ada tidaknya pasal/diktum, dan **kalimat pembukanya**
+— yang hampir selalu menyebut jenis dokumennya sendiri. `KEPUTUSAN MENTERI
+KEUANGAN ...` berarti guard-nya yang salah; `Sosialisasi KMK 213 ...` berarti
+sumbernya. Jejaknya dibatasi < 300 karakter karena ikut ter-commit di
+`MANIFEST.json`.
+
+Jejak hanya menempel pada **penolakan**; naskah yang lolos tetap mengembalikan
+string kosong, dan kesebelas naskah pustaka diuji ulang — semuanya tetap
+diterima.
+
+### Yang sengaja BELUM berubah
+
+**Sewa dan pinjam pakai tetap `belum_terverifikasi`.** PMK 115/2020 Pasal 96
+mendelegasikan tata caranya ke KMK 213/KM.6/2021, dan KMK itu belum ada di
+pustaka. Menaikkannya sekarang berarti menstempel "terverifikasi" pada pasal
+yang belum dibaca — persis yang membuat tingkat bukti ini tak berguna.
+
+### Kebersihan CHANGELOG
+
+Nomor `[#952]` terpakai dua kali dan dua entri salah nomor. Diperbaiki: entri
+PR #944 jadi `[#953]`, PR #945 jadi `[#954]`. Catatan penomoran di kepala
+berkas juga sudah usang — pergeserannya **+9**, bukan +2 — dan kini menyebut
+bahwa urutannya kronologis merge, sehingga nomornya memang sesekali naik-turun.
+
+### Berkas
+
+- `backend/sitasi_regulasi.py` — PP 27/2014 dan PP 28/2020 → `TEKS_PRIMER`
+- `scripts/regulasi_sumber.py` — `jejak_teks()` baru, dipakai kedua jalur tolak
+- `docs/regulasi/pp-27-2014-pengelolaan-bmn.txt` — naskah baru (112.792 karakter)
+- `docs/regulasi/MANIFEST.json`, `docs/regulasi/README.md`
+- `backend/tests/unit/test_regulasi_sumber.py` — 6 uji baru (52 total)
 
 ---
 
@@ -905,7 +984,7 @@ membengkakkannya jadi pita putih 127×36 px di sudut peta.
 
 ---
 
-## [#953] Daftar Barang yang Digunakan dibagi per bobot tanggung jawab — 2026-08-30
+## [#954] Daftar Barang yang Digunakan dibagi per bobot tanggung jawab — 2026-08-30
 
 Permintaan pemilik: *"bedakan dan bagi terhadap barang BMN BAST yang sudah
 disahkan dan diunggah buktinya ... dibagi per jenis BAST-nya. Jika melekat ke
@@ -980,7 +1059,7 @@ dokumen, dan pembacaan baru tanpa proyeksinya.
 
 ---
 
-## [#952] Pengelola Pengguna: ubah nama di samping nama, ikon berhenti bertumpuk — 2026-08-30
+## [#953] Pengelola Pengguna: ubah nama di samping nama, ikon berhenti bertumpuk — 2026-08-30
 
 Laporan pemilik: *"tombol rename nama sangat mengganggu ... cukup taruh di
 samping nama dengan rapi. Dan untuk tombol centang dan silang ketika rename

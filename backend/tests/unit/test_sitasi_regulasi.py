@@ -240,5 +240,9 @@ def test_teks_primer_lebih_kuat_daripada_pustaka():
     itu akan menyembunyikan bukti terkuat yang sudah dimiliki."""
     import sitasi_regulasi as S
     for sitasi in ("PMK 40/2024", "PMK 83/2016", "PMK 111/2016",
-                   "PMK 115/2020"):
+                   "PMK 115/2020",
+                   # Dua peraturan INDUK — paling sering dirujuk registry
+                   # syarat dokumen, jadi paling mahal bila statusnya
+                   # diam-diam turun lagi.
+                   "PP 27/2014", "PP 28/2020"):
         assert S.SITASI_TERDAFTAR[sitasi] == S.TEKS_PRIMER, sitasi
