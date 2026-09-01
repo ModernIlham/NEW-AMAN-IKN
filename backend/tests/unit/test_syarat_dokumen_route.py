@@ -81,8 +81,14 @@ def test_pilihan_ikut_dikembalikan_untuk_dropdown():
 
 
 def test_rezim_belum_terverifikasi_ditandai():
-    r = _jalan(rs.daftar_syarat(rezim="penjualan_lelang", _user=USER))
+    """Dipindah ke `sewa`: `penjualan_lelang` NAIK ke berdasar pasal pada
+    2026-09-01 setelah PMK 111/2016 Pasal 32–33 dibaca. Sewa tetap belum,
+    sebab PMK 115/2020 Pasal 96 menaruh tata caranya di KMK pelaksana."""
+    r = _jalan(rs.daftar_syarat(rezim="sewa", _user=USER))
     assert r["berdasar_pasal"] is False
+    # Pembanding: yang sudah naik memang ditandai sebaliknya.
+    assert _jalan(rs.daftar_syarat(rezim="penjualan_lelang",
+                                   _user=USER))["berdasar_pasal"] is True
 
 
 # ── Konteks dokumen pada SK PSP ────────────────────────────────────────────
