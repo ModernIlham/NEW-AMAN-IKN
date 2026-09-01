@@ -15,6 +15,76 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#962] Pustaka peraturan primer terisi — 9 naskah, dan satu jebakan — 2026-09-01
+
+Pemilik menjalankan workflow **Unduh Regulasi**. Runner menembus apa yang
+tak bisa ditembus sesi pengembangan.
+
+**9 dari 12 naskah masuk**, termasuk dua dari tiga celah terbesar di registry
+syarat dokumen: **PMK 83/2016** (penghapusan & pemusnahan, 46 hlm) dan
+**PMK 115/2020** (pemanfaatan, 80 hlm). Ditambah PMK 40/2024, PMK 165/2021,
+PMK 181/2016, PMK 207/2021, PMK 53/2023, PMK 4/2015, dan PP 28/2020.
+
+### Kegagalan yang paling berbahaya bukan yang gagal berisik
+
+Manifes mula-mula melaporkan **10** berhasil. Salah satunya keliru.
+
+**PMK 111/2016** kembali sebagai PDF **sah**, **berlapis teks**, **ditautkan
+dari situs kementerian** — dan lolos SETIAP guard yang sudah dipasang
+([#959]): `%PDF` ada, lapisan teks ada, tautan PDF ketemu. Isinya **29
+halaman slide ber-bullet Wingdings** dari `.../pelatihan/uploads/...`:
+**paparan pelatihan DJKN tentang** PMK 111, bukan batang tubuhnya.
+
+Ia akan duduk di direktori bukti berbulan-bulan sambil tampak persis seperti
+kutipan primer. Ketahuannya hanya karena naskahnya dibaca — bukan oleh guard
+mana pun.
+
+**Guard kelima ditambahkan**: `bukan_batang_tubuh` menuntut penanda naskah
+resmi — "Menimbang", "MEMUTUSKAN", dan pasal bernomor. **Diuji terhadap
+kesepuluh berkas hasil unduhan sungguhan**, bukan data sintetis: menolak
+tepat satu yang salah, menerima kesembilan yang asli. Sumber
+`sibangkoman.pu.go.id` dicabut, dengan uji yang menahannya kembali.
+
+Guard ini juga mematahkan empat uji lama yang fixture-nya mengembalikan
+`"A"*600` — dan itu benar: teks asal-asalan memang tak boleh lolos.
+Fixture-nya diganti naskah tiruan yang berbentuk peraturan.
+
+### Pola `fulltext` JDIH — temuan yang membuat sisanya bisa diambil
+
+Tujuh unduhan berhasil memakai pola yang bisa ditebak:
+
+```
+jdih.kemenkeu.go.id/api/download/fulltext/<tahun>/<nomor>~PMK.06~<tahun>Per.pdf
+jdih.kemenkeu.go.id/api/download/fulltext/<tahun>/<nomor>TAHUN<tahun>PP.pdf
+```
+
+Ia kini didahulukan untuk ketiga yang gagal — PMK 111/2016, PP 27/2014
+(BPHN & BPK menjawab 403 ke runner), dan KMK 334/KM.6/2021. Manifes: 46 → 48
+sumber.
+
+### Cacat di registry yang baru ketahuan setelah pasalnya dibaca
+
+Membaca **PMK 40/2024 Pasal 11** — pasal yang seluruh percabangan PSP di
+[#958] dibangun dari riset sekundernya — mengonfirmasi sebagian besar
+registry **dan menemukan tiga kekurangan nyata**:
+
+1. **`dok_lain_bast` juga wajib untuk bangunan dan tanah-dan-bangunan**
+   (huruf b angka 3, huruf c angka 4). Registry hanya mensyaratkannya untuk
+   selain-tanah/bangunan tanpa dokumen kepemilikan.
+2. **SPTJ (ayat 3) khusus TANAH tanpa sertipikat**, bukan pengganti dokumen
+   apa pun yang hilang — dan ia datang dengan **empat dokumen pendukung**
+   (akta jual beli/girik/letter c, surat keterangan lurah/camat, surat
+   permohonan pendaftaran hak, dokumen penguasaan) yang registry belum punya
+   sama sekali.
+3. **Huruf f** — bila DIPA tak tegas menyatakan BMN untuk PMPP, permohonan
+   harus didukung KAK/RKA-K/L/POK. Belum ada.
+
+Perbaikannya **PR tersendiri**: mengoreksi registry adalah perubahan
+perilaku, bukan pengisian pustaka, dan mencampurnya membuat keduanya sulit
+ditelaah.
+
+---
+
 ## [#961] `main` merah karena uji berbom waktu — deret bulanan vs "hari ini" — 2026-09-01
 
 CI di `main` gagal pada merge [#960] (`8934345`), padahal CI PR-nya hijau

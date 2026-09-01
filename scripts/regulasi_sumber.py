@@ -70,10 +70,17 @@ MANIFES = [
         "guna": "Hibah, penjualan, tukar menukar, PMPP — celah TERBESAR di registry",
         "prioritas": 1,
         "sumber": [
+            # Pola `fulltext` JDIH — ditemukan dari URL yang BERHASIL pada
+            # unduhan pertama (PMK 83, 181, 4, PP 28). Ia menuju batang tubuh
+            # langsung tanpa halaman perantara.
+            ("pdf", "https://jdih.kemenkeu.go.id/api/download/fulltext/2016/"
+                    "111~PMK.06~2016Per.pdf"),
             ("pdf", "https://ditjenbun.pertanian.go.id/template/uploads/2021/09/"
                     "PMK-111-TAHUN-2016-TATA-CARA-PELAKSANAAN-PEMINDAHTANGANAN-BMN.pdf"),
-            ("pdf", "https://sibangkoman.pu.go.id/center/pelatihan/uploads/edok/2020/07/"
-                    "9a70b_9cd00_09._PMK_111_PMK_062016_Tata_Cara_Pelaksanaan_Pemindahtanganan_BMN.pdf"),
+            # CATATAN: sumber sibangkoman.pu.go.id DICABUT. Ia mengembalikan
+            # PDF sah berlapis teks — tetapi isinya PAPARAN PELATIHAN DJKN
+            # berjudul sama, bukan batang tubuh PMK-nya. Lihat
+            # `bukan_batang_tubuh`; guard itu lahir dari kejadian ini.
             ("html", "https://jdih.kemenkeu.go.id/dok/111-pmk-06-2016"),
             ("html", "https://peraturan.bpk.go.id/Details/121125/pmk-no-111pmk062016"),
         ],
@@ -177,10 +184,14 @@ MANIFES = [
         "guna": "Induk seluruh rezim",
         "prioritas": 9,
         "sumber": [
+            # Pola PP pada fulltext JDIH terbukti lewat PP 28/2020
+            # (`28TAHUN2020PP.pdf`). BPHN dan BPK sama-sama menjawab 403 ke
+            # runner, jadi keduanya turun ke belakang.
+            ("pdf", "https://jdih.kemenkeu.go.id/api/download/fulltext/2014/"
+                    "27TAHUN2014PP.pdf"),
             ("pdf", "https://bphn.go.id/data/documents/14pp027.pdf"),
             ("html", "https://peraturan.go.id/id/pp-no-27-tahun-2014"),
             ("html", "https://peraturan.bpk.go.id/Details/5464/pp-no-27-tahun-2014"),
-            ("html", "https://jdih.kemenkeu.go.id/dok/pp-27-tahun-2014"),
         ],
     },
     {
@@ -203,8 +214,16 @@ MANIFES = [
                  "di SITASI-DOKUMEN-RESMI.md, pasalnya belum"),
         "prioritas": 11,
         "sumber": [
+            # Akhiran berkas untuk KMK BELUM terbukti — PMK memakai `Per`,
+            # PP memakai `PP`. Tiga tebakan dicoba berurutan; yang gagal akan
+            # tercatat di manifes sehingga tebakan berikutnya punya dasar.
+            ("pdf", "https://jdih.kemenkeu.go.id/api/download/fulltext/2021/"
+                    "334~KM.6~2021Kep.pdf"),
+            ("pdf", "https://jdih.kemenkeu.go.id/api/download/fulltext/2021/"
+                    "334~KM.6~2021KMK.pdf"),
+            ("pdf", "https://jdih.kemenkeu.go.id/api/download/fulltext/2021/"
+                    "334KM.62021Kep.pdf"),
             ("html", "https://jdih.kemenkeu.go.id/dok/334-km-6-2021"),
-            ("html", "https://jdih.kemenkeu.go.id/dok/kmk-334-km-6-2021"),
             ("html", "https://peraturan.go.id/id/kepmenkeu-no-334-km-6-2021-tahun-2021"),
         ],
     },
@@ -272,6 +291,36 @@ def tautan_pdf(html: str, asal: str) -> list:
     return sorted(unik, key=skor)
 
 
+#: Penanda batang tubuh peraturan Indonesia. Naskah resmi SELALU memuat
+#: "Menimbang", "MEMUTUSKAN", dan pasal bernomor. Paparan, ringkasan, dan
+#: bahan pelatihan tentang peraturan itu tidak.
+_PENANDA_BATANG_TUBUH = ("menimbang", "memutuskan")
+
+
+def bukan_batang_tubuh(teks: str) -> str:
+    """Alasan mengapa teks ini BUKAN naskah peraturan; '' bila ia naskah.
+
+    Guard ini lahir dari kegagalan nyata. Unduhan pertama PMK 111/2016
+    menghasilkan **paparan pelatihan DJKN** berjudul sama — PDF sah, berlapis
+    teks, ditautkan dari situs kementerian. Ia lolos SEMUA guard yang ada:
+    `%PDF` ada, lapisan teks ada, tautan PDF ketemu. Yang tersimpan adalah 29
+    halaman slide ber-bullet Wingdings, dan ia akan duduk di direktori bukti
+    berbulan-bulan sambil tampak seperti kutipan primer.
+
+    Itu persis kegagalan yang paling berbahaya: bukan yang gagal berisik,
+    melainkan yang berhasil dengan isi yang keliru.
+    """
+    rendah = (teks or "").lower()
+    hilang = [k for k in _PENANDA_BATANG_TUBUH if k not in rendah]
+    if hilang:
+        return ("bukan batang tubuh peraturan — tak memuat "
+                + " maupun ".join(f"'{k}'" for k in hilang)
+                + " (kemungkinan paparan/ringkasan tentang peraturannya)")
+    if not re.search(r"(?im)^\s*pasal\s+\d+", teks or ""):
+        return "bukan batang tubuh peraturan — tak ada pasal bernomor"
+    return ""
+
+
 def ekstrak_teks(pdf: bytes) -> tuple[str, int]:
     """PDF → (teks, jumlah halaman). Memakai pypdf yang sudah ada di repo."""
     import io
@@ -306,6 +355,10 @@ def unduh_satu(entri: dict) -> dict:
                 # akan terlihat seperti bukti padahal tak memuat apa pun.
                 galat.append(f"{url}: PDF tanpa lapisan teks ({n_hal} hlm) — "
                              "kemungkinan hasil pindai, perlu OCR")
+                continue
+            sebab = bukan_batang_tubuh(teks)
+            if sebab:
+                galat.append(f"{url}: {sebab}")
                 continue
             return {
                 "ok": True, "url": url, "halaman": n_hal,
