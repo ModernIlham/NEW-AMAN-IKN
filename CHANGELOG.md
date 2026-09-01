@@ -15,6 +15,58 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#967] KMK pelaksana Pasal 96 ditemukan; pola nama berkas KMK dibetulkan — 2026-09-01
+
+Melanjutkan dua sisa pekerjaan atas permintaan pemilik. Keduanya bergerak
+karena **diagnosis unduhan keempat akhirnya bisa dipercaya** — ia memakai
+kode yang diperbaiki di [#964], dan belum pernah dibaca.
+
+### Sewa & pinjam pakai: KMK pelaksananya ketemu
+
+**KMK 213/KM.6/2021 — Tata Cara Pelaksanaan Pemanfaatan Barang Milik
+Negara.** Inilah yang ditunjuk PMK 115/2020 Pasal 96. Kodenya `KM.6`, yakni
+Direktorat Jenderal Kekayaan Negara — persis yang disebut pasalnya
+(*"ditandatangani oleh Direktur Jenderal atas nama Menteri Keuangan"*).
+
+Masuk manifes dengan **prioritas 6**, lengkap dengan cermin PDF langsung di
+situs Itjen Kemhan — berkas statis, jauh lebih stabil daripada halaman JDIH
+yang memuat PDF lewat JavaScript. Satu putaran unduhan lagi, dan dua rezim
+terakhir bisa naik.
+
+### Dua diagnosis yang mengubah tindakan
+
+**PP 27/2014** — URL `fulltext`-nya gagal dengan *"Temporary failure in name
+resolution"*: kegagalan **DNS sesaat** di runner, **bukan 404**. Ia praktis
+belum pernah benar-benar dicoba, jadi tetap di urutan depan. Tanpa membaca
+diagnosisnya, godaannya adalah mencabut URL yang sebenarnya paling
+menjanjikan.
+
+**KMK 334/2021** — ketiga tebakan akhiran **semuanya menjawab 404**.
+Bentuknya memang salah. Pola sebenarnya terungkap dari contoh nyata
+`KMK 128~KM.6~2022.pdf`: **ada spasi setelah "KMK", dan tanpa akhiran
+`Per`/`Kep`** yang dipakai PMK.
+
+Pola nama berkas JDIH ternyata **tiga bentuk**, bukan satu — kini terdokumentasi
+di `docs/regulasi/README.md`.
+
+### Satu cacat pada manifes saya sendiri
+
+Entri KMK 334/2021 memuat `334~KM.6~2021KMK.pdf` **dua kali** — sisa suntingan
+manual. Manifes unduhan keempat mencatatnya gagal dua kali dengan galat
+berbeda (404 lalu timeout), dan itu **terbaca seolah dua sumber berbeda**.
+
+Sebuah skrip suntingan juga gagal di penggantian kedua sehingga berkasnya tak
+tertulis sama sekali — ketahuan hanya karena jumlah sumbernya diperiksa
+setelahnya, bukan diasumsikan.
+
+**Tiga penjaga baru:** URL kembar dalam satu entri, bentuk KMK yang sudah
+terbukti 404, dan keberadaan KMK pelaksana Pasal 96 di manifes. Ketiganya
+dimutasi lalu dibunuh.
+
+Manifes: 13 peraturan, 55 sumber.
+
+---
+
 ## [#966] Penjualan, tukar menukar, PMPP naik ke berdasar pasal — dan satu yang sengaja TIDAK — 2026-09-01
 
 Lanjutan [#965] atas permintaan pemilik. Teks PMK 111/2016 dan PMK 115/2020

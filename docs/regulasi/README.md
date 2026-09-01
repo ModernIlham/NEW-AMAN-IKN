@@ -133,6 +133,25 @@ berjalan 36 menit dengan banyak timeout pada sumber yang sebelumnya lancar.
 Menjalankan workflow berturut-turut dalam waktu dekat memperbesar peluang
 gagal; beri jeda bila memungkinkan.
 
+## Pola nama berkas JDIH — tiga bentuk, bukan satu
+
+Terungkap bertahap dari unduhan yang berhasil dan yang gagal:
+
+| Jenis | Pola | Contoh |
+|---|---|---|
+| PMK (lama) | `<nomor>~PMK.06~<tahun>Per.pdf` | `111~PMK.06~2016Per.pdf` |
+| PMK (2023+) | `<tahun>pmkeuangan<nnn>.pdf` | `2023pmkeuangan053.pdf` |
+| PP | `<nomor>TAHUN<tahun>PP.pdf` | `28TAHUN2020PP.pdf` |
+| **KMK** | **`KMK <nomor>~KM.6~<tahun>.pdf`** — ada **spasi**, dan **tanpa** akhiran `Per`/`Kep` | `KMK 128~KM.6~2022.pdf` |
+
+Dua jalur URL: `api/download/fulltext/<tahun>/<berkas>` (bisa ditebak) dan
+`api/download/<uuid>/<berkas>` (perlu UUID dari halaman dokumennya).
+
+Bentuk KMK baru ketahuan setelah **tiga tebakan berakhiran `Kep`/`KMK`
+semuanya menjawab 404** pada unduhan keempat. Ada uji
+(`test_kmk_memakai_pola_nama_berkasnya_sendiri`) yang menahan bentuk yang
+sudah terbukti salah itu kembali masuk.
+
 ## Isi
 
 - `<kode>.txt` — teks batang tubuh hasil ekstraksi

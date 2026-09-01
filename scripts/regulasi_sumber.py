@@ -139,10 +139,33 @@ MANIFES = [
         ],
     },
     {
+        "kode": "kmk-213-2021-tata-cara-pemanfaatan",
+        "judul": ("KMK 213/KM.6/2021 — Tata Cara Pelaksanaan Pemanfaatan "
+                  "Barang Milik Negara"),
+        "guna": ("KMK PELAKSANA yang ditunjuk PMK 115/2020 Pasal 96. Daftar "
+                 "dokumen permohonan sewa dan pinjam pakai memang tidak ada "
+                 "di batang tubuh PMK-nya — ia di sini. Menutup dua rezim "
+                 "terakhir yang belum berdasar pasal"),
+        "prioritas": 6,
+        "sumber": [
+            # Cermin PDF langsung di Itjen Kemhan — berkas statis, jauh lebih
+            # stabil daripada halaman JDIH yang memuat PDF lewat JavaScript.
+            ("pdf", "https://www.kemhan.go.id/itjen/wp-content/uploads/2022/07/"
+                    "8_KEP-MENKU-NOMOR-213-THN-2021-1.pdf"),
+            # Pola nama berkas KMK terungkap dari contoh `KMK 128~KM.6~2022.pdf`:
+            # ada spasi setelah "KMK", dan TANPA akhiran `Per`/`Kep` seperti PMK.
+            ("pdf", "https://jdih.kemenkeu.go.id/api/download/fulltext/2021/"
+                    "KMK%20213~KM.6~2021.pdf"),
+            ("html", "https://www.djkn.kemenkeu.go.id/peraturan/detail/411/"
+                     "Keputusan-Menteri-Keuangan-Nomor-213KM62021.html"),
+            ("html", "https://jdih.kemenkeu.go.id/dok/213-km-6-2021"),
+        ],
+    },
+    {
         "kode": "pmk-181-2016-penatausahaan",
         "judul": "PMK 181/PMK.06/2016 — Penatausahaan Barang Milik Negara",
         "guna": "Pembukuan, inventarisasi, pelaporan",
-        "prioritas": 6,
+        "prioritas": 7,
         "sumber": [
             ("html", "https://jdih.kemenkeu.go.id/dok/181-pmk-06-2016"),
             ("html", "https://peraturan.go.id/id/permenkeu-no-181-pmk-06-2016-tahun-2016"),
@@ -155,7 +178,7 @@ MANIFES = [
         "kode": "pmk-207-2021-wasdal",
         "judul": "PMK 207/PMK.06/2021 — Pengawasan dan Pengendalian BMN",
         "guna": "Modul Wasdal",
-        "prioritas": 7,
+        "prioritas": 8,
         "sumber": [
             ("pdf", "https://jdih.kemenkeu.go.id/api/download/"
                     "0d61b4a6-0795-4ca1-8210-d15006233d89/207~PMK.06~2021Per.pdf"),
@@ -170,7 +193,7 @@ MANIFES = [
         "kode": "pmk-53-2023-ikn",
         "judul": "PMK 53 Tahun 2023 — Pengelolaan BMN pada Otorita IKN",
         "guna": "Rezim khusus IKN — delegasi kewenangan Kepala Otorita",
-        "prioritas": 8,
+        "prioritas": 9,
         "sumber": [
             ("html", "https://jdih.kemenkeu.go.id/dok/pmk-53-tahun-2023"),
             ("html", "https://jdih.kemenkeu.go.id/dok/"
@@ -185,11 +208,16 @@ MANIFES = [
         "kode": "pp-27-2014-pengelolaan-bmn",
         "judul": "PP 27 Tahun 2014 — Pengelolaan Barang Milik Negara/Daerah",
         "guna": "Induk seluruh rezim",
-        "prioritas": 9,
+        "prioritas": 10,
         "sumber": [
             # Pola PP pada fulltext JDIH terbukti lewat PP 28/2020
             # (`28TAHUN2020PP.pdf`). BPHN dan BPK sama-sama menjawab 403 ke
             # runner, jadi keduanya turun ke belakang.
+            #
+            # CATATAN unduhan keempat: URL fulltext di bawah gagal dengan
+            # "Temporary failure in name resolution" — kegagalan DNS SESAAT
+            # di runner, BUKAN 404. Ia praktis belum pernah benar-benar
+            # dicoba, jadi tetap di depan.
             ("pdf", "https://jdih.kemenkeu.go.id/api/download/fulltext/2014/"
                     "27TAHUN2014PP.pdf"),
             ("html", "https://jdih.kemenkeu.go.id/dok/pp-27-tahun-2014"),
@@ -207,7 +235,7 @@ MANIFES = [
         "kode": "pp-28-2020-perubahan-pengelolaan-bmn",
         "judul": "PP 28 Tahun 2020 — Perubahan atas PP 27 Tahun 2014",
         "guna": "Menambah KETUPI sebagai bentuk pemanfaatan ke-6",
-        "prioritas": 10,
+        "prioritas": 11,
         "sumber": [
             ("pdf", "https://bphn.go.id/data/documents/20pp028.pdf"),
             ("html", "https://peraturan.bpk.go.id/Details/138973/pp-no-28-tahun-2020"),
@@ -221,21 +249,17 @@ MANIFES = [
                   "tanpa bukti kepemilikan, nilai perolehan ≤ Rp100 juta"),
         "guna": ("Dikutip pemindahtanganan_utils.py; judulnya sudah terkonfirmasi "
                  "di SITASI-DOKUMEN-RESMI.md, pasalnya belum"),
-        "prioritas": 11,
+        "prioritas": 12,
         "sumber": [
-            # Akhiran berkas untuk KMK BELUM terbukti — PMK memakai `Per`,
-            # PP memakai `PP`. Tiga tebakan dicoba berurutan; yang gagal akan
-            # tercatat di manifes sehingga tebakan berikutnya punya dasar.
+            # Tiga tebakan akhiran pada unduhan keempat SEMUANYA menjawab
+            # 404 — bentuknya memang salah. Polanya terungkap dari contoh
+            # nyata `KMK 128~KM.6~2022.pdf`: ada SPASI setelah "KMK", dan
+            # TANPA akhiran `Per`/`Kep` yang dipakai PMK.
             ("pdf", "https://jdih.kemenkeu.go.id/api/download/fulltext/2021/"
-                    "334~KM.6~2021Kep.pdf"),
+                    "KMK%20334~KM.6~2021.pdf"),
             ("pdf", "https://jdih.kemenkeu.go.id/api/download/fulltext/2021/"
-                    "334~KM.6~2021KMK.pdf"),
-            ("pdf", "https://jdih.kemenkeu.go.id/api/download/fulltext/2021/"
-                    "334KM.62021Kep.pdf"),
-            ("pdf", "https://jdih.kemenkeu.go.id/api/download/fulltext/2021/"
-                    "334~KM.6~2021KMK.pdf"),
+                    "334~KM.6~2021.pdf"),
             ("html", "https://jdih.kemenkeu.go.id/dok/334-km-6-2021"),
-            ("html", "https://jdih.kemenkeu.go.id/dok/kmk-334-tahun-2021"),
             ("html", "https://peraturan.go.id/id/kepmenkeu-no-334-km-6-2021-tahun-2021"),
         ],
     },
@@ -243,7 +267,7 @@ MANIFES = [
         "kode": "pmk-4-2015-delegasi",
         "judul": "PMK 4/PMK.06/2015 — Pendelegasian kewenangan pemindahtanganan BMN",
         "guna": "Ambang Rp100 juta jalur Pengguna Barang",
-        "prioritas": 12,
+        "prioritas": 13,
         "sumber": [
             ("html", "https://jdih.kemenkeu.go.id/dok/4-pmk-06-2015"),
             ("html", "https://peraturan.go.id/id/permenkeu-no-4-pmk-06-2015-tahun-2015"),
