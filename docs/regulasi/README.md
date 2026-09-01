@@ -102,6 +102,37 @@ Diuji terhadap kesepuluh berkas hasil unduhan sungguhan: menolak tepat satu
 yang salah, menerima kesembilan yang asli. Sumber `sibangkoman.pu.go.id`
 dicabut dari manifes, dan ada uji yang menahannya kembali.
 
+## Unduhan ketiga (2026-09-01) — dan dua cacat pada perkakasnya sendiri
+
+Sumber untuk tiga naskah yang gagal sudah diperbaiki, tetapi ketiganya
+**tetap gagal** — dan sebabnya tak bisa dibaca, karena perkakasnya menghapus
+buktinya sendiri.
+
+**Cacat 1 — diagnosis run terbaru ditimpa catatan lama.** Penjaga
+"pertahankan manifes lama" mempertahankan entri **apa pun keadaannya**,
+termasuk yang `berkas`-nya `None`. Akibatnya `percobaan_gagal` lama ikut
+bertahan. PMK 111/2016 melaporkan kegagalan sumber yang **sudah dicabut**,
+sementara apa yang terjadi pada URL penggantinya hilang tanpa jejak. Satu
+putaran penuh terbuang.
+
+Kini entri tanpa berkas **ditulis ulang** dari manifes yang berlaku, dan
+bahkan saat berkasnya dipertahankan, `percobaan_gagal` diisi hasil **kali
+ini** — provenans berkasnya tetap utuh, diagnosisnya yang diperbarui.
+
+**Cacat 2 — penghitung menggambarkan satu run, bukan keadaan pustaka.**
+Unduhan ketiga melaporkan *"berhasil 5, gagal 7"* padahal **sembilan** naskah
+ada di direktori: tujuh sumber memang gagal kali itu (JDIH dan BPK banyak
+menjawab 403/timeout), tetapi berkas lamanya bertahan sebagaimana mestinya.
+Pembacanya akan mengira pustakanya menyusut.
+
+Kini `berhasil`/`gagal` = **keadaan pustaka**; hasil per-run dilaporkan
+terpisah sebagai `unduhan_segar`/`unduhan_gagal`.
+
+**Catatan operasional:** JDIH dan BPK tampak membatasi laju. Unduhan ketiga
+berjalan 36 menit dengan banyak timeout pada sumber yang sebelumnya lancar.
+Menjalankan workflow berturut-turut dalam waktu dekat memperbesar peluang
+gagal; beri jeda bila memungkinkan.
+
 ## Isi
 
 - `<kode>.txt` — teks batang tubuh hasil ekstraksi

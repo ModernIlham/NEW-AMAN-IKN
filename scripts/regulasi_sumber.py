@@ -82,6 +82,9 @@ MANIFES = [
             # berjudul sama, bukan batang tubuh PMK-nya. Lihat
             # `bukan_batang_tubuh`; guard itu lahir dari kejadian ini.
             ("html", "https://jdih.kemenkeu.go.id/dok/111-pmk-06-2016"),
+            ("html", "https://peraturan.go.id/id/permenkeu-no-111-pmk-06-2016-tahun-2016"),
+            ("html", "https://paralegal.id/peraturan/"
+                     "peraturan-menteri-keuangan-nomor-111-pmk-06-2016/"),
             ("html", "https://peraturan.bpk.go.id/Details/121125/pmk-no-111pmk062016"),
         ],
     },
@@ -189,8 +192,14 @@ MANIFES = [
             # runner, jadi keduanya turun ke belakang.
             ("pdf", "https://jdih.kemenkeu.go.id/api/download/fulltext/2014/"
                     "27TAHUN2014PP.pdf"),
-            ("pdf", "https://bphn.go.id/data/documents/14pp027.pdf"),
+            ("html", "https://jdih.kemenkeu.go.id/dok/pp-27-tahun-2014"),
+            ("html", "https://paralegal.id/peraturan/"
+                     "peraturan-pemerintah-nomor-27-tahun-2014/"),
             ("html", "https://peraturan.go.id/id/pp-no-27-tahun-2014"),
+            # BPHN & BPK menjawab 403 ke runner pada DUA unduhan berturut-turut
+            # — disimpan di ekor, bukan dicabut, kalau-kalau kebijakannya
+            # berubah.
+            ("pdf", "https://bphn.go.id/data/documents/14pp027.pdf"),
             ("html", "https://peraturan.bpk.go.id/Details/5464/pp-no-27-tahun-2014"),
         ],
     },
@@ -223,7 +232,10 @@ MANIFES = [
                     "334~KM.6~2021KMK.pdf"),
             ("pdf", "https://jdih.kemenkeu.go.id/api/download/fulltext/2021/"
                     "334KM.62021Kep.pdf"),
+            ("pdf", "https://jdih.kemenkeu.go.id/api/download/fulltext/2021/"
+                    "334~KM.6~2021KMK.pdf"),
             ("html", "https://jdih.kemenkeu.go.id/dok/334-km-6-2021"),
+            ("html", "https://jdih.kemenkeu.go.id/dok/kmk-334-tahun-2021"),
             ("html", "https://peraturan.go.id/id/kepmenkeu-no-334-km-6-2021-tahun-2021"),
         ],
     },
@@ -409,11 +421,30 @@ def main(argv) -> int:
             print("   ✗ semua sumber gagal:", flush=True)
             for g in r["galat"]:
                 print(f"     · {g}", flush=True)
-            # Entri lama DIPERTAHANKAN bila unduhan kali ini gagal — kegagalan
-            # jaringan tak boleh menghapus bukti yang sudah pernah terkumpul.
-            if entri["kode"] in manifes_lama:
-                hasil.append(manifes_lama[entri["kode"]])
-                print("     (manifes lama dipertahankan)", flush=True)
+            # Entri lama dipertahankan HANYA bila ia benar-benar punya
+            # berkas — kegagalan jaringan tak boleh menghapus bukti yang
+            # sudah terkumpul.
+            #
+            # KOREKSI (2026-09-01). Versi pertama mempertahankan entri lama
+            # APA PUN keadaannya, termasuk yang `berkas`-nya None. Akibatnya
+            # `percobaan_gagal` LAMA ikut bertahan dan menimpa hasil
+            # percobaan kali ini — persis keterangan yang dibutuhkan untuk
+            # memperbaiki sumbernya. Pada unduhan ketiga hal itu benar-benar
+            # terjadi: PMK 111/2016 melaporkan kegagalan sumber yang sudah
+            # DICABUT dari manifes, sementara apa yang terjadi pada URL
+            # penggantinya hilang tanpa jejak.
+            #
+            # Bahkan saat berkasnya dipertahankan, `percobaan_gagal` diisi
+            # hasil KALI INI. Provenans berkasnya tetap utuh; yang diperbarui
+            # adalah diagnosisnya.
+            lama = manifes_lama.get(entri["kode"]) or {}
+            if lama.get("berkas"):
+                entri_baru = dict(lama)
+                entri_baru["percobaan_gagal"] = r["galat"]
+                entri_baru["dipertahankan_dari"] = lama.get("diunduh", "?")
+                hasil.append(entri_baru)
+                print(f"     (berkas lama dipertahankan, diunduh "
+                      f"{entri_baru['dipertahankan_dari']})", flush=True)
             else:
                 hasil.append({
                     "kode": entri["kode"], "judul": entri["judul"],
@@ -424,17 +455,28 @@ def main(argv) -> int:
         time.sleep(JEDA_ANTAR_UNDUH)
 
     with open(jalur_manifes, "w", encoding="utf-8") as f:
+        # `berhasil`/`gagal` menggambarkan KEADAAN PUSTAKA — berapa peraturan
+        # yang naskahnya ada. Versi pertama mengisinya dengan hasil satu run,
+        # sehingga unduhan ketiga melaporkan "berhasil 5, gagal 7" padahal
+        # sembilan naskah ada di direktori: pembacanya akan mengira pustakanya
+        # menyusut. Hasil per-run tetap dilaporkan, dengan namanya sendiri.
+        tersedia = sum(1 for b in hasil if b.get("berkas"))
         json.dump({
             "dibuat": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "catatan": ("Teks hasil ekstraksi PDF peraturan publik. BUKTI, "
                         "bukan kesimpulan: status verifikasi di "
                         "syarat_dokumen_utils.py tetap dinaikkan secara sadar "
-                        "setelah pasalnya dibaca."),
-            "berhasil": berhasil, "gagal": gagal, "berkas": hasil,
+                        "setelah pasalnya dibaca. `berhasil`/`gagal` = keadaan "
+                        "PUSTAKA; `unduhan_*` = hasil run terakhir."),
+            "berhasil": tersedia, "gagal": len(hasil) - tersedia,
+            "unduhan_segar": berhasil, "unduhan_gagal": gagal,
+            "berkas": hasil,
         }, f, ensure_ascii=False, indent=2)
         f.write("\n")
 
-    print(f"\nSelesai: {berhasil} berhasil, {gagal} gagal.", flush=True)
+    print(f"\nSelesai. Unduhan segar: {berhasil}; gagal: {gagal}. "
+          f"Pustaka kini memuat {sum(1 for b in hasil if b.get('berkas'))} "
+          f"dari {len(hasil)} naskah.", flush=True)
     # Keluar 0 walau sebagian gagal: sebagian pustaka lebih baik daripada tak
     # ada, dan kegagalan sudah tercatat di manifes untuk ditindaklanjuti.
     return 0
