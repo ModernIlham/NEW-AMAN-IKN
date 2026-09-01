@@ -138,6 +138,14 @@ def test_pdf_dengan_query_string_tetap_tertangkap():
 
 _PDF_KOSONG = b"%PDF-1.4 palsu"
 
+#: Teks tiruan yang berbentuk NASKAH peraturan. Fixture alur unduh memakainya
+#: alih-alih "A"*600: sejak ada `bukan_batang_tubuh`, teks asal-asalan ditolak
+#: — dan memang seharusnya begitu.
+_TEKS_NASKAH = (
+    "Menimbang: a. bahwa ...\nMEMUTUSKAN:\nPasal 1\nDalam Peraturan ini "
+    + "yang dimaksud dengan Barang Milik Negara adalah ... " * 20
+)
+
 
 @pytest.fixture()
 def tanpa_jeda(monkeypatch):
@@ -154,7 +162,7 @@ def test_sumber_kedua_dipakai_saat_yang_pertama_mati(monkeypatch, tanpa_jeda):
         return _PDF_KOSONG, "application/pdf"
 
     monkeypatch.setattr(rs, "_ambil", _ambil)
-    monkeypatch.setattr(rs, "ekstrak_teks", lambda b: ("A" * 600, 12))
+    monkeypatch.setattr(rs, "ekstrak_teks", lambda b: (_TEKS_NASKAH, 12))
     r = rs.unduh_satu({"sumber": [("pdf", "https://x/satu.pdf"),
                                   ("pdf", "https://x/dua.pdf")]})
     assert r["ok"] is True and r["url"].endswith("dua.pdf")
@@ -171,7 +179,7 @@ def test_halaman_html_dikerok_dulu_baru_pdfnya_diambil(monkeypatch, tanpa_jeda):
         return b'<a href="/dok/pmk.pdf">unduh</a>', "text/html"
 
     monkeypatch.setattr(rs, "_ambil", _ambil)
-    monkeypatch.setattr(rs, "ekstrak_teks", lambda b: ("A" * 600, 3))
+    monkeypatch.setattr(rs, "ekstrak_teks", lambda b: (_TEKS_NASKAH, 3))
     r = rs.unduh_satu({"sumber": [("html", "https://jdih.x.go.id/dok/a")]})
     assert r["ok"] is True and r["url"] == "https://jdih.x.go.id/dok/pmk.pdf"
 
@@ -213,7 +221,7 @@ def test_galat_pypdf_tak_menghentikan_sumber_berikutnya(monkeypatch, tanpa_jeda)
         e = next(urut)
         if e:
             raise e
-        return "A" * 600, 5
+        return _TEKS_NASKAH, 5
 
     monkeypatch.setattr(rs, "ekstrak_teks", _ekstrak)
     r = rs.unduh_satu({"sumber": [("pdf", "https://x/a.pdf"),
@@ -261,6 +269,80 @@ def test_manifes_rusak_tidak_menggagalkan_seluruh_unduhan(tmp_path, monkeypatch,
     tujuan.mkdir()
     (tujuan / "MANIFEST.json").write_text("{bukan json", encoding="utf-8")
     monkeypatch.setattr(rs, "_ambil", lambda u: (b"%PDF-1.4", "application/pdf"))
-    monkeypatch.setattr(rs, "ekstrak_teks", lambda b: ("A" * 600, 4))
+    monkeypatch.setattr(rs, "ekstrak_teks", lambda b: (_TEKS_NASKAH, 4))
     assert rs.main(["x", str(tujuan)]) == 0
     assert (tujuan / f"{rs.MANIFES[0]['kode']}.txt").exists()
+
+
+# ── Guard batang tubuh: paparan tentang peraturan ≠ peraturan ─────────────
+#
+# Lahir dari kegagalan nyata pada unduhan pertama. PMK 111/2016 kembali
+# sebagai PAPARAN PELATIHAN DJKN berjudul sama: PDF sah, berlapis teks,
+# ditautkan dari situs kementerian — lolos setiap guard yang ada. 29 halaman
+# slide ber-bullet Wingdings tersimpan di direktori bukti, tampak persis
+# seperti kutipan primer.
+
+_NASKAH = """PERATURAN MENTERI KEUANGAN REPUBLIK INDONESIA
+NOMOR 83/PMK.06/2016
+Menimbang : a. bahwa dalam rangka mewujudkan akuntabilitas ...
+MEMUTUSKAN:
+Pasal 1
+Dalam Peraturan Menteri ini yang dimaksud dengan ...
+"""
+
+_PAPARAN = """Pemindahtanganan Barang Milik Negara
+Direktorat Jenderal Kekayaan Negara
+Dasar Hukum Pengelolaan BMN
+Ø Hibah/sumbangan
+§ Penjualan
+ü Pengguna Barang mengajukan permohonan
+"""
+
+
+def test_naskah_peraturan_diterima():
+    assert rs.bukan_batang_tubuh(_NASKAH) == ""
+
+
+def test_paparan_pelatihan_ditolak():
+    sebab = rs.bukan_batang_tubuh(_PAPARAN)
+    assert sebab
+    assert "paparan" in sebab or "batang tubuh" in sebab
+
+
+def test_ringkasan_tanpa_memutuskan_ditolak():
+    """Sebagian ringkasan menyalin bagian "Menimbang" tetapi berhenti sebelum
+    "MEMUTUSKAN" — satu penanda saja tak cukup."""
+    teks = "Menimbang bahwa ... Peraturan ini mengatur Pasal 1 sampai Pasal 5."
+    assert rs.bukan_batang_tubuh(teks)
+
+
+def test_naskah_tanpa_pasal_bernomor_ditolak():
+    """Kutipan konsiderans saja bukan batang tubuh."""
+    teks = "Menimbang ... MEMUTUSKAN: Menetapkan Peraturan Menteri Keuangan."
+    sebab = rs.bukan_batang_tubuh(teks)
+    assert "pasal bernomor" in sebab
+
+
+def test_teks_kosong_ditolak_bukan_meledak():
+    assert rs.bukan_batang_tubuh("")
+    assert rs.bukan_batang_tubuh(None)
+
+
+def test_guard_menolak_di_alur_unduh_dan_lanjut_ke_sumber_berikutnya(
+        monkeypatch, tanpa_jeda):
+    """Paparan pada sumber pertama tak boleh menghentikan percobaan ke
+    cermin berikutnya — justru di sanalah naskah aslinya berada."""
+    monkeypatch.setattr(rs, "_ambil", lambda u: (_PDF_KOSONG, "application/pdf"))
+    urut = iter([_PAPARAN + "x" * 600, _NASKAH + "y" * 600])
+    monkeypatch.setattr(rs, "ekstrak_teks", lambda b: (next(urut), 29))
+    r = rs.unduh_satu({"sumber": [("pdf", "https://x/paparan.pdf"),
+                                  ("pdf", "https://x/naskah.pdf")]})
+    assert r["ok"] is True and r["url"].endswith("naskah.pdf")
+    assert any("batang tubuh" in g for g in r["galat"])
+
+
+def test_sumber_paparan_pelatihan_dicabut_dari_manifes():
+    """Sumber yang TERBUKTI mengembalikan paparan tak boleh tinggal di
+    manifes hanya karena ia "sebuah sumber"."""
+    semua = " ".join(u for e in rs.MANIFES for _, u in e["sumber"])
+    assert "sibangkoman.pu.go.id" not in semua

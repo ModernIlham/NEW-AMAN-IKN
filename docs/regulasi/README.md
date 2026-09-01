@@ -67,6 +67,41 @@ menghapus satu-satunya pembeda yang membuat pustaka ini bisa dipercaya.
 Uji `test_rezim_penggunaan_setiap_wajibnya_berdasar_pasal` menegakkan batas
 itu dari sisi kode; direktori ini menegakkannya dari sisi bukti.
 
+## Hasil putaran pertama (2026-09-01)
+
+**9 dari 12 naskah masuk.** Yang gagal, dan sebabnya:
+
+| Peraturan | Sebab |
+|---|---|
+| **PMK 111/2016** | Sumbernya mengembalikan **paparan pelatihan DJKN** berjudul sama — bukan batang tubuhnya. Lihat di bawah. |
+| PP 27/2014 | BPHN dan BPK menjawab 403 ke runner; `peraturan.go.id` timeout; halaman JDIH tak memuat tautan PDF |
+| KMK 334/KM.6/2021 | Halaman JDIH tak memuat tautan PDF; `peraturan.go.id` timeout |
+
+**Temuan terpenting: pola `fulltext` JDIH.** Tujuh unduhan yang berhasil
+memakai pola yang bisa ditebak, dan ia kini dipakai lebih dulu untuk ketiga
+yang gagal:
+
+```
+https://jdih.kemenkeu.go.id/api/download/fulltext/<tahun>/<nomor>~PMK.06~<tahun>Per.pdf
+https://jdih.kemenkeu.go.id/api/download/fulltext/<tahun>/<nomor>TAHUN<tahun>PP.pdf
+```
+
+### Kegagalan yang paling berbahaya: berhasil dengan isi yang keliru
+
+PMK 111/2016 kembali sebagai PDF **sah**, **berlapis teks**, **ditautkan dari
+situs kementerian** — dan lolos setiap guard yang ada. Isinya 29 halaman
+slide ber-bullet Wingdings dari `.../pelatihan/uploads/...`: **paparan
+tentang** PMK 111, bukan PMK-nya.
+
+Ia akan duduk di direktori ini berbulan-bulan sambil tampak persis seperti
+kutipan primer. Ketahuannya hanya karena naskahnya dibaca.
+
+Karena itu ada guard kelima — `bukan_batang_tubuh` — yang menuntut penanda
+naskah resmi: **"Menimbang"**, **"MEMUTUSKAN"**, dan **pasal bernomor**.
+Diuji terhadap kesepuluh berkas hasil unduhan sungguhan: menolak tepat satu
+yang salah, menerima kesembilan yang asli. Sumber `sibangkoman.pu.go.id`
+dicabut dari manifes, dan ada uji yang menahannya kembali.
+
 ## Isi
 
 - `<kode>.txt` — teks batang tubuh hasil ekstraksi
