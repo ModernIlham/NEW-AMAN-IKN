@@ -150,6 +150,19 @@ KATALOG_DOKUMEN = {
     "dok_pengganti_kepemilikan": ("Dokumen pengganti bukti kepemilikan (kontrak, "
                                  "akta/perjanjian jual beli, atau setara) ATAU "
                                  "Surat Pernyataan bermeterai cukup"),
+    "pernyataan_kebenaran_objek": ("Surat pernyataan atas kebenaran formil dan "
+                                  "materiil objek dan besaran nilai yang "
+                                  "diusulkan"),
+    "pernyataan_perlunya_tukar_menukar": ("Surat pernyataan tanggung jawab atas "
+                                         "perlunya dilaksanakan Tukar Menukar"),
+    "perda_tata_ruang": ("Peraturan daerah mengenai tata ruang wilayah atau "
+                        "penataan kota"),
+    "rincian_barang_pengganti": ("Rincian kebutuhan barang pengganti (tanah: luas "
+                                "dan lokasi; bangunan: jenis, luas, rencana "
+                                "konstruksi, sarana dan prasarana penunjang)"),
+    "kajian_tim_internal": "Hasil kajian tim internal",
+    "pernyataan_kesediaan_pmpp": ("Pernyataan kesediaan calon penerima Penyertaan "
+                                 "Modal Pemerintah Pusat"),
     "dok_pelaksanaan_pt": ("Dokumen pelaksanaan pemindahtanganan (risalah lelang, "
                           "perjanjian penjualan, naskah hibah, dan/atau BAST "
                           "sesuai bentuknya)"),
@@ -294,6 +307,12 @@ def sebab_putusan_pengadilan(konteks) -> bool:
     return str((konteks or {}).get("sebab_penghapusan") or "") == "putusan_pengadilan"
 
 
+def objek_tanah_atau_bangunan(konteks) -> bool:
+    """Objek yang mengandung tanah dan/atau bangunan — frasa yang dipakai
+    PMK 111/2016 untuk memisahkan tata caranya."""
+    return _objek(konteks) in ("tanah", "bangunan", "tanah_dan_bangunan")
+
+
 def sebab_pemindahtanganan(konteks) -> bool:
     """Sebab penghapusan yang paling lazim di satker. Bawaan bila tak diisi:
     condong MENAMPILKAN butirnya."""
@@ -339,6 +358,7 @@ PEMICU = {
         tanah_bersertipikat, perlu_dokumen_lain, dipa_tidak_tegas,
         wajib_kib, wajib_dok_kepemilikan, tanpa_dok_kepemilikan_umum,
         sebab_putusan_pengadilan, sebab_pemindahtanganan,
+        objek_tanah_atau_bangunan,
     )
 }
 
@@ -665,12 +685,116 @@ _KERANGKA_DASAR = (
     ("dokumen_lainnya", "opsional", None, "—", "belum_terverifikasi"),
 )
 
-_PENJUALAN = _KERANGKA_DASAR + (
+# ── PENJUALAN: [F] PMK 111/2016 Pasal 32 (tanah/bangunan) & 33 (selain) ──
+_PENJUALAN = (
+    ("surat_permohonan", "wajib", None,
+     "PMK 111/2016 Pasal 32 huruf e dan Pasal 33 huruf g — diajukan Pengguna "
+     "Barang kepada Pengelola Barang", "terverifikasi"),
+    ("pernyataan_kebenaran_objek", "wajib", None,
+     "PMK 111/2016 Pasal 32 huruf e angka 3 (kebenaran MATERIIL) dan Pasal 33 "
+     "huruf g angka 4 (kebenaran FORMIL DAN MATERIIL objek serta besaran "
+     "nilai)", "terverifikasi"),
+    ("berita_acara_penelitian", "wajib", None,
+     "PMK 111/2016 Pasal 32 huruf a angka 2 jo. huruf d, dan Pasal 33 huruf a "
+     "angka 2 jo. huruf f — penelitian data administratif dan fisik dituangkan "
+     "dalam berita acara", "terverifikasi"),
+    # Penilaian hanya melekat pada Pengguna Barang untuk SELAIN tanah/bangunan;
+    # pada tanah/bangunan Penilaian dimohonkan PENGELOLA kepada Penilai
+    # (Pasal 32 huruf f angka 4), jadi ia bukan lampiran pemohon.
+    ("penilaian", "wajib_bersyarat", "objek_selain_tb",
+     "PMK 111/2016 Pasal 33 huruf c–e jo. huruf g angka 3 — hasil Penilaian "
+     "jadi dasar penetapan nilai limit Penjualan", "terverifikasi"),
+    ("kib", "wajib_bersyarat", "wajib_kib",
+     "PMK 111/2016 Pasal 32 huruf a angka 1 — data tanah dan bangunan "
+     "sebagaimana tercantum dalam Kartu Identitas Barang", "terverifikasi"),
+    ("imb_pbg", "wajib_bersyarat", "objek_bangunan",
+     "PMK 111/2016 Pasal 32 huruf a angka 1 huruf b — dokumen pendukung "
+     "seperti Izin Mendirikan Bangunan", "terverifikasi"),
+    ("sk_psp", "muatan", "objek_selain_tb",
+     "PMK 111/2016 Pasal 33 huruf a angka 1 — keputusan penetapan status "
+     "penggunaan termasuk data administratif yang diteliti", "terverifikasi"),
+    ("daftar_bmn", "muatan", None,
+     "PMK 111/2016 Pasal 32 huruf e angka 1–2 dan Pasal 33 huruf g angka 2 — "
+     "data administratif serta nilai perolehan/nilai buku adalah MUATAN "
+     "permohonan", "terverifikasi"),
+    ("sk_tim_internal", "opsional", None,
+     "PMK 111/2016 Pasal 32 huruf b dan Pasal 33 huruf b — Pengguna Barang "
+     "DAPAT membentuk tim internal. Berbeda dari rezim hibah, yang "
+     "mewajibkannya (Pasal 93/95 huruf a)", "terverifikasi"),
+    ("ket_kebenaran_arsip_digital", "anjuran", "unggah_pindaian",
+     "Praktik lapangan untuk unggahan arsip digital", "belum_terverifikasi"),
+    ("dokumen_lainnya", "opsional", None, "—", "belum_terverifikasi"),
+)
+
+# ── TUKAR MENUKAR: [F] PMK 111/2016 Pasal 77 ─────────────────────────────
+_TUKAR_MENUKAR = (
+    ("surat_permohonan", "wajib", None,
+     "PMK 111/2016 Pasal 77 huruf a — permohonan persetujuan kepada Pengelola "
+     "Barang", "terverifikasi"),
+    ("pernyataan_perlunya_tukar_menukar", "wajib", None,
+     "PMK 111/2016 Pasal 77 huruf a angka 2 — ditandatangani Pengguna Barang "
+     "atau pejabat struktural yang diberi kuasa", "terverifikasi"),
+    ("perda_tata_ruang", "wajib_bersyarat", "objek_tanah_atau_bangunan",
+     "PMK 111/2016 Pasal 77 huruf a angka 3", "terverifikasi"),
+    ("rincian_barang_pengganti", "wajib", None,
+     "PMK 111/2016 Pasal 77 huruf a angka 5 — inilah pembeda pokok tukar "
+     "menukar dari bentuk pemindahtanganan lain", "terverifikasi"),
+    ("kib", "wajib_bersyarat", "wajib_kib",
+     "PMK 111/2016 Pasal 77 huruf a angka 4 — data BMN yang DILEPAS "
+     "sebagaimana tercantum dalam Kartu Identitas Barang", "terverifikasi"),
+    ("imb_pbg", "wajib_bersyarat", "objek_bangunan",
+     "PMK 111/2016 Pasal 77 huruf a angka 4 huruf b", "terverifikasi"),
+    ("daftar_bmn", "muatan", None,
+     "PMK 111/2016 Pasal 77 huruf a angka 1 dan 4 — penjelasan/pertimbangan "
+     "dan data administratif BMN yang dilepas", "terverifikasi"),
+    ("ket_kebenaran_arsip_digital", "anjuran", "unggah_pindaian",
+     "Praktik lapangan untuk unggahan arsip digital", "belum_terverifikasi"),
+    ("dokumen_lainnya", "opsional", None, "—", "belum_terverifikasi"),
+)
+
+# ── PMPP: [F] PMK 111/2016 (BAB VI, tata cara pada Pengguna Barang) ──────
+_PMPP = (
+    ("surat_permohonan", "wajib", None,
+     "PMK 111/2016 BAB VI — permohonan persetujuan kepada Pengelola Barang "
+     "memuat penjelasan/pertimbangan", "terverifikasi"),
+    ("kajian_tim_internal", "wajib", None,
+     "PMK 111/2016 BAB VI huruf c angka 2 — hasil kajian tim internal",
+     "terverifikasi"),
+    ("penilaian", "wajib_bersyarat", "objek_selain_tb",
+     "PMK 111/2016 BAB VI huruf c angka 3 — hasil Penilaian BMN selain tanah "
+     "dan/atau bangunan yang TELAH DITETAPKAN Pengguna Barang; untuk tanah "
+     "dan/atau bangunan, Penilaian dimohonkan Pengelola kepada Penilai",
+     "terverifikasi"),
+    ("pernyataan_kesediaan_pmpp", "wajib", None,
+     "PMK 111/2016 BAB VI huruf c angka 4 — pernyataan kesediaan calon "
+     "penerima menerima PMPP yang berasal dari BMN", "terverifikasi"),
+    ("kib", "wajib_bersyarat", "wajib_kib",
+     "PMK 111/2016 BAB VI huruf c angka 1 — kelengkapan data administratif",
+     "terverifikasi"),
+    ("daftar_bmn", "muatan", None,
+     "PMK 111/2016 BAB VI huruf c angka 1", "terverifikasi"),
+    ("ket_kebenaran_arsip_digital", "anjuran", "unggah_pindaian",
+     "Praktik lapangan untuk unggahan arsip digital", "belum_terverifikasi"),
+    ("dokumen_lainnya", "opsional", None, "—", "belum_terverifikasi"),
+)
+
+# ── SEWA & PINJAM PAKAI: pasalnya SENGAJA tidak ada di PMK 115/2020 ──────
+#
+# PMK 115/2020 **Pasal 96** mendelegasikan tata cara pelaksanaannya kepada
+# "Keputusan Menteri Keuangan yang ditandatangani oleh Direktur Jenderal atas
+# nama Menteri Keuangan". Daftar dokumen permohonan sewa dan pinjam pakai
+# KARENA ITU tidak ada di batang tubuh PMK-nya — bukan karena belum dibaca,
+# melainkan karena memang bukan di sana tempatnya.
+#
+# Nomor KMK pelaksananya belum berhasil dipastikan. Sampai itu ketemu,
+# keduanya TETAP memakai kerangka dasar bertanda `belum_terverifikasi` —
+# menaikkannya berdasarkan PMK 115/2020 akan mengklaim dasar yang teksnya
+# sendiri menyatakan ada di tempat lain.
+_SEWA_PINJAM_PAKAI = _KERANGKA_DASAR + (
     ("penilaian", "anjuran", None,
-     "Pustaka repo §7: nilai limit berasal dari penilaian/nilai taksiran — "
-     "pasalnya belum terbaca", "belum_terverifikasi"),
-    ("dok_kepemilikan", "anjuran", "punya_dok_kepemilikan",
-     "Praktik lapangan", "belum_terverifikasi"),
+     "PMK 115/2020 memakai nilai wajar hasil Penilaian sebagai tarif pokok "
+     "sewa; bentuk lampirannya diatur KMK pelaksana (Pasal 96)",
+     "belum_terverifikasi"),
 )
 
 SYARAT = {
@@ -682,12 +806,12 @@ SYARAT = {
     "hibah": _HIBAH,
     "penjualan_lelang": _PENJUALAN,
     "penjualan_langsung": _PENJUALAN,
-    "tukar_menukar": _KERANGKA_DASAR,
-    "pmpp": _KERANGKA_DASAR,
+    "tukar_menukar": _TUKAR_MENUKAR,
+    "pmpp": _PMPP,
     "penghapusan": _PENGHAPUSAN,
     "pemusnahan": _PEMUSNAHAN,
-    "sewa": _KERANGKA_DASAR,
-    "pinjam_pakai": _KERANGKA_DASAR,
+    "sewa": _SEWA_PINJAM_PAKAI,
+    "pinjam_pakai": _SEWA_PINJAM_PAKAI,
 }
 
 #: Rezim yang seluruh butir wajibnya bertumpu pada pasal yang sudah dibaca.
@@ -700,6 +824,10 @@ REZIM_BERDASAR_PASAL = frozenset({
     # Pasal 93 & 95 untuk hibah; PMK 83/2016 Pasal 11, 38, dan 40 untuk
     # pemusnahan dan penghapusan.
     "hibah", "pemusnahan", "penghapusan",
+    # Naik 2026-09-01 putaran kedua: PMK 111/2016 Pasal 32, 33, 77, dan BAB VI.
+    # `sewa` dan `pinjam_pakai` SENGAJA tidak ikut — Pasal 96 PMK 115/2020
+    # mendelegasikan tata caranya ke KMK yang belum ada di pustaka.
+    "penjualan_lelang", "penjualan_langsung", "tukar_menukar", "pmpp",
 })
 
 

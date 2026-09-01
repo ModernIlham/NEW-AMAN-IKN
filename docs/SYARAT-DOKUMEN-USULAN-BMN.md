@@ -226,12 +226,76 @@ perbedaan yang hanya terlihat setelah kedua pasalnya dibaca.
 Pasal 38 ayat (3) **mengonfirmasi pemetaan `DOKUMEN_PELAKSANAAN` yang sudah
 ada** di `backend/pemindahtanganan_utils.py` sejak sebelum pustaka ini ada.
 
-### 5.4 Rezim yang pasalnya BELUM terbaca
+### 5.3d Penjualan — [F] PMK 111/2016 Pasal 32 & 33
 
-Penjualan (lelang & tanpa lelang), tukar menukar, PMPP, sewa, pinjam pakai.
+| Dokumen | Sifat | Pasal |
+|---|---|---|
+| Surat permohonan | Wajib | Pasal 32 huruf e / 33 huruf g |
+| Surat pernyataan kebenaran objek | Wajib | Pasal 32 huruf e.3 (**materiil**) / 33 huruf g.4 (**formil dan materiil**, termasuk besaran nilai) |
+| Berita acara penelitian | Wajib | Pasal 32 huruf a.2 jo. d / 33 huruf a.2 jo. f |
+| Laporan Penilaian / nilai limit | Wajib **hanya untuk selain t/b** | Pasal 33 huruf c–e jo. g.3 |
+| KIB | Wajib bila BMN-nya ber-KIB | Pasal 32 huruf a.1 |
+| IMB/PBG | Wajib bila ada bangunan | Pasal 32 huruf a.1.b |
+| SK PSP | Muatan (selain t/b) | Pasal 33 huruf a.1 |
 
-*(Penghapusan dan pemusnahan KELUAR dari daftar ini pada 2026-09-01 —
-PMK 83/2016 masuk pustaka dan pasalnya dibaca.)*
+**Pembeda yang mudah terlewat:** pada **tanah/bangunan**, Penilaian dimohonkan
+**Pengelola** kepada Penilai (Pasal 32 huruf f angka 4) — jadi ia **bukan
+lampiran pemohon**. Pada selain t/b, Pengguna Barang-lah yang menetapkan nilai
+limitnya.
+
+**Tim internal di sini OPSIONAL** — Pasal 32/33 huruf b berbunyi *"DAPAT
+membentuk"*, sedangkan hibah (Pasal 93/95 huruf a) berbunyi *"membentuk"*.
+Beda satu kata, beda kewajiban.
+
+### 5.3e Tukar Menukar — [F] PMK 111/2016 Pasal 77
+
+Selain surat permohonan, KIB, dan IMB, tukar menukar menagih tiga hal yang
+**tak ada padanannya** di bentuk pemindahtanganan lain:
+
+1. **Surat pernyataan tanggung jawab atas perlunya dilaksanakan Tukar
+   Menukar** (huruf a angka 2)
+2. **Peraturan daerah tata ruang wilayah / penataan kota** (huruf a angka 3) —
+   hanya untuk tanah dan/atau bangunan
+3. **Rincian kebutuhan barang pengganti** (huruf a angka 5) — pembeda pokok
+   tukar menukar
+
+### 5.3f PMPP — [F] PMK 111/2016 BAB VI
+
+Permohonan disertai **kelengkapan data administratif**, **hasil kajian tim
+internal**, **hasil Penilaian** BMN selain t/b yang telah ditetapkan Pengguna
+Barang, dan **pernyataan kesediaan calon penerima** menerima PMPP yang berasal
+dari BMN.
+
+Pernyataan kesediaan itu sejajar dengan hibah — keduanya memindahkan
+kepemilikan kepada pihak lain, jadi kesediaan penerimanya harus tertulis.
+
+### 5.4 Sewa & Pinjam Pakai — pasalnya memang BUKAN di PMK 115/2020
+
+Dua rezim ini **tetap** bertanda `belum_terverifikasi`, dan itu **bukan
+karena teksnya belum dibaca**.
+
+**PMK 115/2020 Pasal 96** berbunyi:
+
+> *"Ketentuan lebih lanjut mengenai tata cara pelaksanaan Pemanfaatan BMN
+> ditetapkan dengan Keputusan Menteri Keuangan yang ditandatangani oleh
+> Direktur Jenderal atas nama Menteri Keuangan."*
+
+Daftar dokumen permohonan sewa dan pinjam pakai **tidak ada di batang tubuh
+PMK-nya** — ia didelegasikan ke KMK pelaksana. Nomor KMK itu belum berhasil
+dipastikan dan **belum ada di manifes unduhan**.
+
+Menaikkan keduanya berdasarkan PMK 115/2020 akan mengklaim dasar yang teksnya
+sendiri menyatakan ada di tempat lain. Ada uji yang menahan godaan itu:
+`test_sewa_dan_pinjam_pakai_TETAP_belum_terverifikasi`.
+
+**Cara melengkapinya:** temukan nomor KMK pelaksana Pasal 96, tambahkan ke
+`scripts/regulasi_sumber.py`, jalankan workflow. Atau — lebih cepat — potret
+dropdown "Jenis Dokumen" SIMAN V2 pada layar permohonan sewa, yang langsung
+menaikkannya ke `empiris_siman`.
+
+**Sisa pekerjaan tercatat di kode, bukan hanya di dokumen ini:**
+`test_hanya_sewa_dan_pinjam_pakai_yang_tersisa` akan gagal begitu daftarnya
+berubah.
 
 Sumber primer PMK 111/2016 jo. 165/2021 dan PMK 115/2020 terblokir. Yang
 disediakan adalah **kerangka dasar** yang benar-benar berulang di semua rezim

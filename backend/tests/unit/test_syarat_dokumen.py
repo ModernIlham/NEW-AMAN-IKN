@@ -424,10 +424,13 @@ def test_rezim_yang_pasalnya_belum_terbaca_ditandai_jujur():
     """Sumber primer PMK 111/2016 & PMK 115/2020 terblokir dari lingkungan
     pengembangan. Butir wajibnya boleh ada sebagai kerangka kerja, tetapi
     TIDAK boleh mengaku terverifikasi."""
-    # `penghapusan` dan `pemusnahan` KELUAR dari daftar ini pada 2026-09-01:
-    # PMK 83/2016 masuk pustaka dan pasalnya dibaca.
-    for rezim in ("penjualan_lelang", "penjualan_langsung", "tukar_menukar",
-                  "pmpp", "sewa", "pinjam_pakai"):
+    # Daftar ini MENYUSUT dua kali pada 2026-09-01. Putaran pertama:
+    # `penghapusan` dan `pemusnahan` keluar (PMK 83/2016 dibaca). Putaran
+    # kedua: penjualan, tukar menukar, dan PMPP keluar (PMK 111/2016 dibaca).
+    # Yang tersisa hanya sewa dan pinjam pakai — dan itu BUKAN karena belum
+    # dibaca, melainkan karena PMK 115/2020 Pasal 96 menaruh tata caranya di
+    # KMK pelaksana yang belum ada di pustaka.
+    for rezim in ("sewa", "pinjam_pakai"):
         assert rezim not in sd.REZIM_BERDASAR_PASAL
         for b in sd.syarat_dokumen(rezim, {}):
             assert b["verifikasi"] != "terverifikasi", f"{rezim}/{b['kode']}"
@@ -539,3 +542,82 @@ def test_setiap_rezim_menawarkan_dokumen_lainnya(rezim):
     """Jalan keluar wajib ada: daftar mana pun akan meleset suatu saat."""
     kode = [p["kode"] for p in sd.jenis_pilihan(rezim, {})]
     assert "dokumen_lainnya" in kode
+
+
+# ── Penjualan, tukar menukar, PMPP — naik dari PMK 111/2016 (putaran 2) ───
+
+def test_penjualan_menagih_pernyataan_kebenaran_objek():
+    """Pasal 32 huruf e angka 3 (materiil) dan Pasal 33 huruf g angka 4
+    (formil DAN materiil, termasuk besaran nilai)."""
+    assert "pernyataan_kebenaran_objek" in _wajib("penjualan_lelang", {})
+    nama = sd.KATALOG_DOKUMEN["pernyataan_kebenaran_objek"]
+    assert "formil" in nama and "materiil" in nama
+
+
+def test_penilaian_hanya_lampiran_pemohon_untuk_selain_tanah_bangunan():
+    """Pembeda yang mudah terlewat: pada tanah/bangunan, Penilaian
+    dimohonkan PENGELOLA kepada Penilai (Pasal 32 huruf f angka 4), jadi ia
+    bukan lampiran pemohon. Pada selain t/b, Pengguna Barang-lah yang
+    menetapkan nilai limitnya (Pasal 33 huruf c–e)."""
+    stb = _wajib("penjualan_lelang", {"jenis_objek": "selain_tb"})
+    assert "penilaian" in stb
+    tb = _wajib("penjualan_lelang", {"jenis_objek": "tanah_dan_bangunan"})
+    assert "penilaian" not in tb
+
+
+def test_tim_internal_penjualan_opsional_tetapi_hibah_wajib():
+    """Pasal 32/33 huruf b berbunyi "DAPAT membentuk"; Pasal 93/95 huruf a
+    berbunyi "membentuk". Beda satu kata, beda kewajiban."""
+    jual = next(b for b in sd.syarat_dokumen("penjualan_lelang", {})
+                if b["kode"] == "sk_tim_internal")
+    assert jual["sifat"] == "opsional"
+    hibah = {b["kode"]: b for b in sd.syarat_dokumen("hibah", {})}
+    assert "berita_acara_penelitian" in _wajib("hibah", {})
+    assert hibah["sk_tim_internal"]["sifat"] == "opsional"
+
+
+def test_tukar_menukar_menagih_rincian_barang_pengganti():
+    """Pembeda pokok tukar menukar dari bentuk pemindahtanganan lain —
+    Pasal 77 huruf a angka 5. Tak ada padanannya di penjualan/hibah/PMPP."""
+    assert "rincian_barang_pengganti" in _wajib("tukar_menukar", {})
+    for rezim in ("penjualan_lelang", "hibah", "pmpp"):
+        assert "rincian_barang_pengganti" not in _wajib(rezim, {}), rezim
+
+
+def test_perda_tata_ruang_hanya_untuk_tanah_atau_bangunan():
+    """Pasal 77 huruf a angka 3 berada di Paragraf tanah dan/atau bangunan."""
+    tb = _wajib("tukar_menukar", {"jenis_objek": "tanah_dan_bangunan"})
+    assert "perda_tata_ruang" in tb
+    stb = _wajib("tukar_menukar", {"jenis_objek": "selain_tb"})
+    assert "perda_tata_ruang" not in stb
+
+
+def test_pmpp_menagih_kesediaan_calon_penerima():
+    """BAB VI huruf c angka 4. Sejajar dengan hibah yang menagih kesediaan
+    menerima hibah — keduanya memindahkan kepemilikan kepada pihak lain."""
+    assert "pernyataan_kesediaan_pmpp" in _wajib("pmpp", {})
+    assert "kajian_tim_internal" in _wajib("pmpp", {})
+
+
+# ── Sewa & pinjam pakai: TIDAK dinaikkan, dan itu disengaja ───────────────
+
+def test_sewa_dan_pinjam_pakai_TETAP_belum_terverifikasi():
+    """PMK 115/2020 **Pasal 96** mendelegasikan tata cara pelaksanaannya ke
+    "Keputusan Menteri Keuangan yang ditandatangani oleh Direktur Jenderal
+    atas nama Menteri Keuangan". Daftar dokumennya karena itu TIDAK ada di
+    batang tubuh PMK-nya — bukan karena belum dibaca, melainkan karena
+    memang bukan di sana tempatnya.
+
+    Menaikkannya berdasarkan PMK 115/2020 akan mengklaim dasar yang teksnya
+    sendiri menyatakan ada di tempat lain. Uji ini menahan godaan itu.
+    """
+    for rezim in ("sewa", "pinjam_pakai"):
+        assert rezim not in sd.REZIM_BERDASAR_PASAL, rezim
+        for b in sd.syarat_dokumen(rezim, {}):
+            assert b["verifikasi"] != "terverifikasi", f"{rezim}/{b['kode']}"
+
+
+def test_hanya_sewa_dan_pinjam_pakai_yang_tersisa():
+    """Sisa pekerjaan tercatat di kode, bukan hanya di ingatan."""
+    belum = sorted(set(sd.REZIM) - sd.REZIM_BERDASAR_PASAL)
+    assert belum == ["pinjam_pakai", "sewa"], belum

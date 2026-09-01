@@ -15,6 +15,61 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#966] Penjualan, tukar menukar, PMPP naik ke berdasar pasal — dan satu yang sengaja TIDAK — 2026-09-01
+
+Lanjutan [#965] atas permintaan pemilik. Teks PMK 111/2016 dan PMK 115/2020
+sudah ada di pustaka; tinggal dibaca.
+
+**Tiga rezim naik dari PMK 111/2016:**
+
+- **Penjualan** (Pasal 32 tanah/bangunan, Pasal 33 selain) — surat pernyataan
+  kebenaran objek, berita acara penelitian, laporan Penilaian, KIB, IMB.
+- **Tukar Menukar** (Pasal 77) — surat pernyataan tanggung jawab atas
+  perlunya tukar menukar, **peraturan daerah tata ruang**, dan **rincian
+  kebutuhan barang pengganti** yang tak ada padanannya di bentuk lain.
+- **PMPP** (BAB VI) — hasil kajian tim internal, hasil Penilaian, dan
+  pernyataan kesediaan calon penerima.
+
+**Rezim berdasar pasal: 8 → 12 dari 14.**
+
+**Dua pembeda halus yang hanya terlihat dari teks aslinya:**
+
+1. **Penilaian bukan lampiran pemohon untuk tanah/bangunan.** Pasal 32 huruf
+   f angka 4 menyerahkannya kepada **Pengelola** yang memohon kepada Penilai;
+   pada selain t/b, Pengguna Barang-lah yang menetapkan nilai limitnya
+   (Pasal 33 huruf c–e). Menagihnya seragam akan menyuruh satker menyiapkan
+   penilaian yang bukan tugasnya.
+2. **Tim internal wajib pada hibah, opsional pada penjualan.** Pasal 93/95
+   huruf a berbunyi *"membentuk"*; Pasal 32/33 huruf b berbunyi *"DAPAT
+   membentuk"*. Beda satu kata, beda kewajiban.
+
+### Sewa dan pinjam pakai SENGAJA tidak dinaikkan
+
+Ini temuan terpenting putaran ini, dan ia berupa **ketiadaan**.
+
+**PMK 115/2020 Pasal 96** mendelegasikan tata cara pelaksanaannya ke
+*"Keputusan Menteri Keuangan yang ditandatangani oleh Direktur Jenderal atas
+nama Menteri Keuangan"*. Daftar dokumen permohonan sewa dan pinjam pakai
+**tidak ada di batang tubuh PMK-nya** — bukan karena belum dibaca, melainkan
+karena memang bukan di sana tempatnya.
+
+Nomor KMK pelaksananya tak berhasil dipastikan lewat pencarian dan belum ada
+di manifes unduhan. Menaikkan keduanya berdasarkan PMK 115/2020 akan
+mengklaim dasar yang teksnya sendiri menyatakan ada di tempat lain.
+`test_sewa_dan_pinjam_pakai_TETAP_belum_terverifikasi` menahan godaan itu,
+dan `test_hanya_sewa_dan_pinjam_pakai_yang_tersisa` membuat sisa pekerjaannya
+tercatat **di kode**, bukan hanya di dokumen.
+
+Lima mutasi dipasang lalu dibunuh — termasuk "sewa dinaikkan jadi berdasar
+pasal", yang justru mutasi paling penting di sini.
+
+Dua uji lama disesuaikan karena daftar rezim yang belum terverifikasi
+menyusut; salah satunya (`test_rezim_belum_terverifikasi_ditandai`) dipindah
+ke `sewa` dan diberi pembanding bahwa `penjualan_lelang` kini ditandai
+sebaliknya.
+
+---
+
 ## [#965] PMK 111/2016 masuk — hibah, penghapusan, pemusnahan naik ke berdasar pasal — 2026-09-01
 
 Unduhan keempat berhasil mengambil **PMK 111/2016** (104 halaman) lewat pola
