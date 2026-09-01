@@ -382,6 +382,42 @@ daftar dokumen permohonan. Jadi sewa dan pinjam pakai tetap
 `belum_terverifikasi` sampai KMK 213 masuk; tak ada jalan pintas lewat
 PMK-nya.
 
+## Unduhan kesembilan — pustaka selesai untuk keperluannya
+
+**12 dari 13 naskah primer + 1 rujukan.** Yang menang untuk KMK 213 adalah
+jalur **`baca/411`** — bentuk ketiga DJKN yang baru dicoba putaran ini.
+Berkasnya lampiran KMK-nya, 470 KB, tujuh BAB.
+
+Yang penting bukan angkanya, melainkan apa yang dibuka olehnya:
+
+| BAB | Isi | Menutup |
+|---|---|---|
+| III | Tata Cara Pelaksanaan Sewa | rezim `sewa` |
+| IV | Tata Cara Pelaksanaan Pinjam Pakai | rezim `pinjam_pakai` |
+
+Kedua rezim terakhir di `backend/syarat_dokumen_utils.py` naik ke
+berdasar-pasal. **Keempat belas rezim kini berdasar pasal** — sesuatu yang
+sembilan putaran unduhan lalu tampak tak mungkin, sebab lingkungan
+pengembangan ini tak bisa menjangkau satu pun sumber peraturan.
+
+### Yang tersisa
+
+Naskah asli **KMK 334/KM.6/2021** tetap tak ditemukan: ia tak terindeks di
+bagian peraturan DJKN, dan sepuluh sumber unduhnya menjawab 404. Yang ada
+adalah rujukan sekunder — uraian dari KPPN Lubuk Sikaping (DJPb) — yang
+**tidak** boleh menjadi dasar `terverifikasi`.
+
+Itu bukan kegagalan yang menghalangi apa pun: rezim `hibah` sudah berdasar
+pasal lewat PMK 111/2016 Pasal 93 & 95. KMK 334 hanya mengatur jalur khusus
+hibah ≤ Rp100 juta tanpa bukti kepemilikan.
+
+**Keterbatasan berkas rujukan.** `teks_dari_html` mengambil seluruh halaman,
+jadi berkas `rujukan-*.txt` ikut memuat menu navigasi situsnya. Isi
+substantifnya tetap utuh dan bisa di-`grep`; ia sengaja tidak dibersihkan,
+sebab penyaring yang menebak "bagian mana yang artikel" bisa membuang justru
+kalimat yang dicari. Untuk naskah primer masalah ini tak muncul — halaman
+`fulltext` JDIH memang hanya berisi naskahnya.
+
 ## Isi
 
 - `<kode>.txt` — teks batang tubuh hasil ekstraksi

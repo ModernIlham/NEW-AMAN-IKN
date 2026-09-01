@@ -15,6 +15,10 @@
    daftar lampirannya, bukan ambangnya.
 3. **BAST Penetapan Status Penggunaan BUKAN berkas usulan.** Lihat §4.
 4. Setiap butir membawa **kekuatan buktinya sendiri**. Tiga tingkat, §2.
+5. **Keempat belas rezim kini berdasar pasal.** Dua yang terakhir — Sewa dan
+   Pinjam Pakai — naik pada 2026-09-01 setelah **KMK 213/KM.6/2021** masuk
+   pustaka. Keduanya sengaja ditahan lima putaran unduhan, sebab PMK 115/2020
+   Pasal 96 menaruh tata caranya di KMK itu. Lihat §5.4.
 
 ---
 
@@ -269,10 +273,7 @@ dari BMN.
 Pernyataan kesediaan itu sejajar dengan hibah — keduanya memindahkan
 kepemilikan kepada pihak lain, jadi kesediaan penerimanya harus tertulis.
 
-### 5.4 Sewa & Pinjam Pakai — pasalnya memang BUKAN di PMK 115/2020
-
-Dua rezim ini **tetap** bertanda `belum_terverifikasi`, dan itu **bukan
-karena teksnya belum dibaca**.
+### 5.4 Sewa — [F] KMK 213/KM.6/2021 BAB III
 
 **PMK 115/2020 Pasal 96** berbunyi:
 
@@ -280,41 +281,87 @@ karena teksnya belum dibaca**.
 > ditetapkan dengan Keputusan Menteri Keuangan yang ditandatangani oleh
 > Direktur Jenderal atas nama Menteri Keuangan."*
 
-Daftar dokumen permohonan sewa dan pinjam pakai **tidak ada di batang tubuh
-PMK-nya** — ia didelegasikan ke KMK pelaksana. Nomor KMK itu belum berhasil
-dipastikan dan **belum ada di manifes unduhan**.
+Daftar dokumennya karena itu **memang bukan di batang tubuh PMK-nya**. Selama
+lima putaran unduhan kedua rezim ini sengaja ditahan di `belum_terverifikasi`,
+sebab menaikkannya berdasarkan PMK 115/2020 berarti mengklaim dasar yang
+teksnya sendiri menyatakan ada di tempat lain.
 
-Menaikkan keduanya berdasarkan PMK 115/2020 akan mengklaim dasar yang teksnya
-sendiri menyatakan ada di tempat lain. Ada uji yang menahan godaan itu:
-`test_sewa_dan_pinjam_pakai_TETAP_belum_terverifikasi`.
+KMK itu adalah **213/KM.6/2021** (`KM.6` = Direktorat Jenderal Kekayaan
+Negara, persis yang disebut Pasal 96), dan naskahnya masuk pustaka pada
+2026-09-01. Penahanannya terangkat oleh **bukti**, bukan oleh kehabisan
+kesabaran.
 
-**KMK pelaksananya sudah ketemu: KMK 213/KM.6/2021 — Tata Cara Pelaksanaan
-Pemanfaatan Barang Milik Negara.** Kodenya `KM.6`, yakni Direktorat Jenderal
-Kekayaan Negara — persis yang disebut Pasal 96 (*"ditandatangani oleh Direktur
-Jenderal atas nama Menteri Keuangan"*).
+**Sewa seluruhnya MUATAN SURAT.** BAB III sama sekali tidak memakai kata
+"dilampiri" — tak satu pun butir permohonan Sewa berupa berkas yang diunggah.
+Satu-satunya lampiran sungguhan adalah dokumen pendukung faktor penyesuai,
+dan semuanya bersyarat.
 
-Ia sudah masuk `scripts/regulasi_sumber.py` dengan prioritas 6, lengkap dengan
-cermin PDF langsung di situs Itjen Kemhan. **Tinggal satu putaran unduhan**,
-lalu kedua rezim ini bisa naik seperti yang lain.
+| Butir | Sifat | Dasar |
+|---|---|---|
+| Surat Permohonan | wajib | BAB III — diajukan calon penyewa atau Pengguna Barang |
+| Identitas diri (NIK/NPWP) | muatan | huruf a angka 1) — **hanya** jalur calon penyewa |
+| Usulan peruntukan (bisnis/non bisnis/sosial) | muatan | huruf a angka 2) |
+| Jangka waktu & periodesitas | muatan | huruf a angka 3) dan 4) |
+| Informasi BMN objek Sewa | muatan | huruf a angka 6); jalur Pengguna Barang angka 4) |
+| Kajian rencana Sewa | wajib bersyarat | jalur Pengguna Barang angka 2) — **hanya bila > 5 tahun** |
+| Usulan faktor penyesuai | opsional | huruf a angka 7) — *"jika ada"* |
 
-**Sisa pekerjaan tercatat di kode, bukan hanya di dokumen ini:**
-`test_hanya_sewa_dan_pinjam_pakai_yang_tersisa` akan gagal begitu daftarnya
-berubah.
+**Dokumen pendukung faktor penyesuai** — lampiran sungguhan, tiap butir
+melekat pada kelompok usahanya:
 
-Sumber primer PMK 111/2016 jo. 165/2021 dan PMK 115/2020 terblokir. Yang
-disediakan adalah **kerangka dasar** yang benar-benar berulang di semua rezim
-usulan — surat permohonan, daftar BMN, dua surat keterangan kebenaran, KIB,
-foto, laporan kondisi — seluruhnya `belum_terverifikasi`, sehingga layar
-menampilkannya sebagai **anjuran dengan peringatan**, bukan gerbang.
+| Butir | Untuk | Besaran |
+|---|---|---|
+| Akta pendirian memuat anggaran dasar koperasi | koperasi | 50% primer / 75% sekunder |
+| Surat keterangan bentuk usaha & kekayaan bersih | ultra mikro, mikro, kecil | 25% |
+| Laporan keuangan sederhana (hasil penjualan) | ultra mikro, mikro, kecil | 25% |
+| Surat pernyataan pimpinan unit/satker | Sewa diinisiasi Pengguna Barang untuk tusi | 15% |
+| Surat pernyataan pimpinan unit/satker | sarpras pendidikan keluarga ASN/TNI/Polri | 10% |
+| Dokumen dari instansi/pihak terkait | kegiatan sosial | 2,5% |
 
-Operator tetap mendapat daftar periksa yang berguna, tanpa aplikasi
-berpura-pura tahu.
+**Penilaian BUKAN lampiran pemohon.** BAB III huruf b angka 3): *"Pengelola
+Barang menugaskan Penilai"*. Ia tetap ditampilkan sebagai keterangan supaya
+operator tidak menyiapkannya sia-sia — kekeliruan yang sama bentuknya dengan
+menagih BAST-PSP sebagai syarat usulan PSP (§4).
 
-**Cara melengkapinya nanti:** minta **checklist resmi KPKNL Balikpapan**
-(kantor yang diduga mewilayahi IKN) atau buka satu tiket di SIMAN V2 untuk
-tiap jenis usulan dan potret dropdown "Jenis Dokumen"-nya — persis seperti
-tangkapan layar hibah yang sudah masuk. Itu langsung menaikkan statusnya ke
-`empiris_siman`.
+### 5.4a Pinjam Pakai — [F] KMK 213/KM.6/2021 BAB IV
+
+Kebalikan Sewa: BAB IV **memakai** kata "dilampiri", jadi di sini ada berkas
+yang benar-benar diunggah. Pembedaan `muatan` vs `wajib` mengikuti teksnya.
+
+**Muatan surat permohonan** (huruf a): pertimbangan yang mendasari · identitas
+peminjam pakai · tujuan penggunaan objek · rincian data BMN (termasuk luas dan
+lokasi bila tanah/bangunan) · jangka waktu — paling lama **5 tahun** sejak
+perjanjian ditandatangani.
+
+**Dilampiri dengan** (huruf b):
+
+| Butir | Sifat | Dasar |
+|---|---|---|
+| Surat permohonan dari calon peminjam pakai (Pemda/Pemdes) | wajib | huruf b angka 1) |
+| Surat pernyataan Pengguna Barang: Pinjam Pakai tidak mengganggu tusi | wajib | huruf b angka 2) |
+| Data BMN (kode barang, nama, NUP, tahun & harga perolehan, nilai buku) | wajib | huruf b angka 3) huruf a) |
+| **KIB** | wajib bersyarat | huruf b angka 3) huruf b) — *"jika BMN didukung dengan KIB"* |
+| **Foto objek Pinjam Pakai** | wajib | huruf b angka 3) huruf c) |
+
+Perhatikan: KIB dan foto BMN di rezim lain hanya `anjuran` bertanda "praktik
+lapangan". Di sini keduanya **tertulis di teksnya** — salah satu contoh
+paling jelas bahwa pustaka primer mengubah status butir yang sudah lama ada.
+
+**Diperiksa pada penelitian administrasi Pengelola Barang** (angka 2): bukti
+kepemilikan atau dokumen yang dipersamakan · dokumen pengelolaan BMN · dokumen
+penatausahaan BMN · **keputusan penetapan status penggunaan**.
+
+**Perpanjangan** punya lampiran sendiri: keputusan Pinjam Pakai sebelumnya,
+dan surat pernyataan peminjam pakai bahwa objek masih digunakan. Diterima
+paling lambat **2 bulan** sebelum jangka waktu berakhir.
+
+### 5.4b Catatan bentuk naskah KMK 213
+
+Naskah yang masuk pustaka adalah **lampiran** KMK-nya: tanpa konsiderans
+("Menimbang"), tetapi memuat seluruh tata caranya dalam tujuh BAB. Dua sumber
+resmi yang saling bebas — jalur `baca/` DJKN dan cermin Itjen Kemhan —
+mengembalikan berkas yang sama. Riwayat lengkap bagaimana ia akhirnya masuk
+ada di `docs/regulasi/README.md`.
 
 ## 6. Yang modul ini TIDAK lakukan
 

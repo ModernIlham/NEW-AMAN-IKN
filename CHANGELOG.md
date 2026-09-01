@@ -18,6 +18,90 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#972] Sewa dan pinjam pakai naik — keempat belas rezim berdasar pasal — 2026-09-01
+
+Jalur `baca/411` DJKN yang ditambahkan `[#971]` **berhasil**, dan naskah
+**KMK 213/KM.6/2021** masuk pustaka: 470 KB, tujuh BAB. BAB III memuat tata
+cara Sewa, BAB IV Pinjam Pakai — persis dua rezim terakhir yang selama lima
+putaran unduhan sengaja ditahan di `belum_terverifikasi`.
+
+Penahanannya terangkat oleh **bukti**, bukan oleh kehabisan kesabaran.
+
+### Sewa seluruhnya MUATAN SURAT
+
+BAB III sama sekali tidak memakai kata "dilampiri" — tak satu pun butir
+permohonan Sewa berupa berkas yang diunggah. Semuanya `muatan`: identitas
+diri (NIK/NPWP, **hanya** pada jalur calon penyewa), usulan peruntukan,
+jangka waktu dan periodesitas, informasi BMN objek Sewa. Kajian rencana Sewa
+hanya ditagih untuk jangka waktu **lebih dari 5 tahun**.
+
+Satu-satunya lampiran sungguhan adalah dokumen pendukung faktor penyesuai,
+dan tiap butirnya melekat pada kelompok usahanya: akta pendirian koperasi
+(50%/75%), surat keterangan bentuk usaha + laporan keuangan sederhana (25%
+ultra mikro/mikro/kecil), surat pernyataan pimpinan satker (15% inisiasi
+Pengguna Barang, 10% sarpras pendidikan), dokumen instansi terkait (2,5%
+sosial).
+
+**Penilaian BUKAN lampiran pemohon.** BAB III huruf b angka 3): *"Pengelola
+Barang menugaskan Penilai"*. Ia tetap ditampilkan sebagai keterangan supaya
+operator tak menyiapkannya sia-sia — kekeliruan yang sama bentuknya dengan
+menagih BAST-PSP sebagai syarat usulan PSP.
+
+### Pinjam pakai punya lampiran sungguhan
+
+Kebalikannya, dan juga dari teksnya: BAB IV **memakai** kata "dilampiri" —
+surat permohonan dari calon peminjam pakai, surat pernyataan Pengguna Barang
+bahwa Pinjam Pakai tak mengganggu tugas dan fungsi, dan data BMN (kode
+barang, nama, NUP, tahun dan harga perolehan, nilai buku).
+
+**KIB dan foto BMN naik dari `anjuran` ke `wajib`.** Di rezim lain keduanya
+hanya bertanda "praktik lapangan"; di sini keduanya tertulis di teksnya —
+KIB *"jika BMN didukung dengan KIB"*, foto tanpa syarat. Contoh paling jelas
+bahwa pustaka primer mengubah status butir yang sudah lama ada.
+
+Perpanjangan punya lampiran sendiri: keputusan Pinjam Pakai sebelumnya dan
+pernyataan objek masih digunakan, diterima paling lambat 2 bulan sebelum
+jangka waktu berakhir.
+
+### Tiga uji penahanan dibalik dengan sengaja
+
+`test_sewa_dan_pinjam_pakai_TETAP_belum_terverifikasi`,
+`test_hanya_sewa_dan_pinjam_pakai_yang_tersisa`, dan
+`test_rezim_yang_pasalnya_belum_terbaca_ditandai_jujur` ada untuk menahan
+godaan menaikkan tanpa dasar. Ketiganya kini menegakkan kebenaran barunya —
+dan yang menggantikannya lebih ketat, bukan lebih longgar:
+
+- tiap butir wajib Sewa dan Pinjam Pakai harus **menyebut KMK 213**;
+- klaimnya diperiksa terhadap **berkas di disk**, bukan terhadap niat baik —
+  mencabut naskahnya dari `docs/regulasi/` langsung membatalkan kenaikannya;
+- Sewa hanya boleh punya SATU butir `wajib` tanpa syarat (surat permohonan);
+  butir yang bermunculan sebagai wajib menandakan seseorang menyalin pola
+  rezim lain alih-alih membaca BAB III.
+
+Uji rute yang memakai `sewa` sebagai contoh rezim "belum berdasar pasal"
+kedaluwarsa untuk kedua kalinya. Cabang `False`-nya tak ikut dihapus: ia kini
+diperankan secara sintetis, sekaligus membuktikan rute itu MEMBACA registry
+alih-alih menyalin daftar rezim ke dalam dirinya sendiri.
+
+### Yang tersisa
+
+Naskah asli **KMK 334/KM.6/2021** tetap tak ditemukan — tak terindeks di
+DJKN, sepuluh sumber menjawab 404. Itu tak menghalangi apa pun: rezim `hibah`
+sudah berdasar pasal lewat PMK 111/2016 Pasal 93 & 95, dan KMK 334 hanya
+mengatur jalur khusus hibah ≤ Rp100 juta tanpa bukti kepemilikan.
+
+### Berkas
+
+- `backend/syarat_dokumen_utils.py` — `_SEWA` dan `_PINJAM_PAKAI` baru, 20
+  entri katalog, 8 pemicu; `REZIM_BERDASAR_PASAL` kini 14 dari 14
+- `backend/sitasi_regulasi.py` — `KMK 213/KM.6/2021` → `TEKS_PRIMER`
+- `backend/tests/unit/test_syarat_dokumen.py` — 3 uji dibalik, 4 uji baru
+- `backend/tests/unit/test_syarat_dokumen_route.py`
+- `docs/SYARAT-DOKUMEN-USULAN-BMN.md` §5.4, §5.4a, §5.4b
+- `docs/regulasi/` — naskah KMK 213 dan rujukan KMK 334
+
+---
+
 ## [#971] Dugaan OCR terbantah — KMK 213 terbit sebagai lampiran — 2026-09-01
 
 Jalur unduh DJKN yang ditambahkan `[#970]` **berhasil**: `download/411`
