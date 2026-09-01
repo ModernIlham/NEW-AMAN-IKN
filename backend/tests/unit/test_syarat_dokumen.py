@@ -109,16 +109,40 @@ def test_tanpa_dokumen_kepemilikan_bast_menggantikannya():
     assert "dok_kepemilikan" not in w
 
 
-def test_sptj_bukan_wajib_selalu():
-    """SPTJ adalah PENGGANTI dokumen yang tidak ada. Menjadikannya wajib
-    selalu adalah kesalahan versi lama yang uji ini menahan kembalinya."""
-    biasa = _wajib("psp", {"jenis_objek": "selain_tb",
-                           "punya_dokumen_kepemilikan": True})
-    assert "sptj" not in biasa
-    hilang = _wajib("psp", {"jenis_objek": "selain_tb",
-                            "punya_dokumen_kepemilikan": True,
-                            "dokumen_tidak_ada": True})
-    assert "sptj" in hilang
+def test_sptj_hanya_untuk_tanah_belum_bersertipikat():
+    """DIKOREKSI terhadap teks primer (2026-09-01).
+
+    Pembacaan sekunder menyimpulkan SPTJ adalah "pengganti dokumen apa pun
+    yang tidak ada". Pasal 11 ayat (3) jauh lebih sempit: ia dikecualikan
+    dari **huruf a, huruf c angka 1, dan huruf e angka 3** — ketiganya
+    tentang sertipikat TANAH. SPTJ tak pernah menggantikan BPKB kendaraan
+    ataupun IMB bangunan.
+    """
+    kendaraan = _wajib("psp", {"jenis_objek": "selain_tb",
+                               "punya_dokumen_kepemilikan": False,
+                               "dokumen_tidak_ada": True})
+    assert "sptj" not in kendaraan, "SPTJ tak menggantikan dokumen kendaraan"
+
+    tanah = _wajib("psp", {"jenis_objek": "tanah",
+                           "tanah_tanpa_sertipikat": True})
+    assert "sptj" in tanah
+    # Ayat (3) berbunyi "DIGANTI", bukan "ditambah".
+    assert "sertipikat" not in tanah
+    # SPTJ tanah wajib DILENGKAPI dokumen pendukung — yang registry lama
+    # tak punya sama sekali.
+    assert "pendukung_sptj_tanah" in tanah
+
+
+def test_tanah_bersertipikat_tak_diminta_sptj():
+    t = _wajib("psp", {"jenis_objek": "tanah"})
+    assert "sertipikat" in t and "sptj" not in t
+
+
+def test_bidang_lama_dokumen_tidak_ada_masih_bermakna_untuk_tanah():
+    """Catatan yang tersimpan dengan pembacaan lama tak boleh kehilangan
+    maknanya — tetapi hanya bila objeknya memang bertanah."""
+    t = _wajib("psp", {"jenis_objek": "tanah", "dokumen_tidak_ada": True})
+    assert "sptj" in t
 
 
 def test_kib_bukan_kewajiban_pada_psp():
@@ -128,19 +152,60 @@ def test_kib_bukan_kewajiban_pada_psp():
     assert butir["kib"]["wajib"] is False
 
 
-def test_bast_psp_bukan_syarat_usulan():
+def test_bast_PENETAPAN_bukan_syarat_usulan():
     """Permintaan pemilik: output "BERITA ACARA SERAH TERIMA PENETAPAN
-    STATUS PENGGUNAAN BMN" tidak diperlukan sebagai berkas usulan. Benar
-    menurut teksnya: BAST muncul di Pasal 11 hanya sebagai PENGGANTI
-    dokumen kepemilikan yang tidak ada, tak pernah berdiri sendiri. Ia
-    terbit SESUDAH SK ada — menagihnya membalik sebab-akibat."""
-    for konteks in ({"jenis_objek": "tanah"},
-                    {"jenis_objek": "bangunan"},
-                    {"jenis_objek": "tanah_dan_bangunan"},
-                    {"jenis_objek": "selain_tb",
-                     "punya_dokumen_kepemilikan": True}):
-        w = _wajib("psp", konteks)
-        assert "dok_lain_bast" not in w, konteks
+    STATUS PENGGUNAAN BMN" tidak diperlukan sebagai berkas usulan. Tetap
+    berlaku — ia terbit SESUDAH SK ada, jadi menagihnya membalik
+    sebab-akibat.
+
+    Versi pertama uji ini KELIRU: ia memakai `dok_lain_bast` sebagai
+    wakilnya, lalu menuntut butir itu tak pernah wajib. Padahal keduanya
+    dokumen yang BERBEDA — `dok_lain_bast` adalah BAST **perolehan** barang
+    (serah terima dari penyedia/pemegang sebelumnya), yang Pasal 11 justru
+    minta di beberapa cabang. Menyamakan keduanya membuat uji ini mengunci
+    kesalahan alih-alih menahannya.
+    """
+    # Cocokkan KEDUA frasa sekaligus. Versi pertama assertion ini hanya
+    # mencari "penetapan status", dan itu menangkap `sk_psp` — Fotokopi
+    # KEPUTUSAN Penetapan Status Penggunaan, yang justru WAJIB pada rezim
+    # penggunaan sementara, dioperasikan pihak lain, dan alih status. SK
+    # bukan BAST.
+    keliru = [k for k, v in sd.KATALOG_DOKUMEN.items()
+              if "berita acara" in v.lower() and "penetapan status" in v.lower()]
+    assert keliru == [], f"BAST Penetapan tak boleh jadi butir: {keliru}"
+    # Pembanding: SK-nya justru ADA dan memang wajib di rezim lain.
+    assert "sk_psp" in _wajib("penggunaan_sementara", {})
+
+
+def test_bast_perolehan_diminta_untuk_semua_objek_kecuali_tanah():
+    """KOREKSI terhadap teks primer (2026-09-01).
+
+    "Fotokopi dokumen lain, termasuk berita acara serah terima perolehan
+    barang" diminta pada huruf b angka 3 (bangunan), huruf c angka 4 (tanah
+    dan bangunan), huruf d angka 1 huruf b (selain t/b YANG PUNYA dokumen
+    kepemilikan — STNK atau BAST), dan huruf d angka 2 (yang tidak punya).
+
+    Registry lama hanya menagihnya pada cabang terakhir. Akibatnya pemegang
+    gedung tak pernah ditagih BAST perolehan yang pasalnya minta, dan
+    kekurangannya baru ketahuan saat berkas dikembalikan Pengelola Barang.
+    """
+    for objek in ("bangunan", "tanah_dan_bangunan"):
+        assert "dok_lain_bast" in _wajib("psp", {"jenis_objek": objek}), objek
+    for punya in (True, False):
+        w = _wajib("psp", {"jenis_objek": "selain_tb",
+                           "punya_dokumen_kepemilikan": punya})
+        assert "dok_lain_bast" in w, punya
+    # Tanah berdiri sendiri TIDAK: huruf a hanya menyebut sertipikat.
+    assert "dok_lain_bast" not in _wajib("psp", {"jenis_objek": "tanah"})
+
+
+def test_dipa_tak_tegas_menambah_kak_rka_pok():
+    """Pasal 11 ayat (2) huruf f — cabang yang registry lama tak punya."""
+    tanpa = _wajib("psp", {"jenis_objek": "tanah", "untuk_pmpp": True})
+    assert "dok_penganggaran_pmpp" not in tanpa
+    dengan = _wajib("psp", {"jenis_objek": "tanah", "untuk_pmpp": True,
+                            "dipa_tidak_tegas": True})
+    assert "dok_penganggaran_pmpp" in dengan
 
 
 def test_surat_keterangan_muncul_secara_bawaan():
@@ -303,7 +368,7 @@ def test_butir_tak_berlaku_tetap_ditampilkan():
     sertipikat = next(b for b in butir if b["kode"] == "sertipikat")
     assert sertipikat["berlaku"] is False
     assert sertipikat["wajib"] is False
-    assert sertipikat["pemicu"] == "objek_tanah"
+    assert sertipikat["pemicu"] == "tanah_bersertipikat"
 
 
 def test_rezim_tak_dikenal_menghasilkan_daftar_kosong_bukan_meledak():

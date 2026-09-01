@@ -595,6 +595,10 @@ class KonteksDokumenIn(BaseModel):
     penandatangan_didelegasikan: bool = False
     untuk_pmpp: bool = False
     fisik_tak_dikuasai: bool = False
+    # Pasal 11 ayat (3): tanah belum bersertipikat → sertipikat DIGANTI SPTJ.
+    tanah_tanpa_sertipikat: bool = False
+    # Pasal 11 ayat (2) huruf f: DIPA tak tegas menyatakan BMN untuk PMPP.
+    dipa_tidak_tegas: bool = False
 
 
 @penggunaan_router.post("/penggunaan/psp/{sk_id}/konteks-dokumen")

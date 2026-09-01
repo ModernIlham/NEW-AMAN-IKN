@@ -86,19 +86,48 @@ periksa usulan.
 
 ### 5.1 Penetapan Status Penggunaan (PSP) — [F] PMK 40/2024 Pasal 11
 
+> **Diverifikasi dari teks primer 2026-09-01** (`docs/regulasi/pmk-40-2024-penggunaan.txt`).
+> Tabel di bawah dibaca langsung dari pasalnya, bukan dari ringkasan.
+
 | Objek | Yang diminta pasal |
 |---|---|
-| **Tanah** | fotokopi **sertipikat** (huruf a) |
-| **Bangunan** | fotokopi **IMB/PBG** + dokumen perolehan + dokumen lain termasuk BAST (huruf b) |
-| **Tanah dan bangunan** | sertipikat + IMB/PBG + dokumen perolehan bangunan + dokumen lain (huruf c) |
-| **Selain tanah/bangunan, punya dokumen kepemilikan** | fotokopi dokumen kepemilikan (BPKB/kapal/pesawat atau setara) (huruf d angka 1) |
-| **Selain tanah/bangunan, tanpa dokumen kepemilikan** | fotokopi **BAST perolehan** sebagai penggantinya (huruf d angka 2) |
-| **Untuk PMPP** | + dokumen penganggaran, hasil reviu APIP/BPK, dan BAST pengelolaan sementara bila fisiknya sudah tak dikuasai (huruf e) |
+| **Tanah** | fotokopi **sertipikat** — hanya itu (huruf a) |
+| **Bangunan** | IMB/PBG + dokumen perolehan + **dokumen lain termasuk BAST perolehan** (huruf b angka 1–3) |
+| **Tanah dan bangunan** | sertipikat + IMB/PBG + dokumen perolehan bangunan + **dokumen lain termasuk BAST** (huruf c angka 1–4) |
+| **Selain t/b, punya dokumen kepemilikan** | dokumen kepemilikan (BPKB/kapal/pesawat/setara) **+ dokumen lain termasuk STNK atau BAST** (huruf d angka 1 huruf a dan b) |
+| **Selain t/b, tanpa dokumen kepemilikan, ≥ Rp100 juta/unit** | **BAST perolehan** + dokumen lain (huruf d angka 2) |
+| **Untuk PMPP** | + dokumen penganggaran, reviu APIP/BPK, sertipikat/IMB/dokumen perolehan sesuai objek, BAST perolehan, dan BAST pengelolaan sementara bila fisiknya tak dikuasai (huruf e angka 1–7) |
+| **PMPP, DIPA tak tegas** | + **KAK, RKA-K/L, atau POK** (huruf f) |
+| **Tanah BELUM bersertipikat** | sertipikat **DIGANTI** SPTJ bermeterai dari pejabat struktural, **dilengkapi** akta jual beli/girik/letter C/BAST/ledger jalan, surat keterangan lurah/camat, surat permohonan pendaftaran hak, dan/atau dokumen penguasaan (ayat (3) huruf a–d) |
 | **Semua fotokopi** | + **Surat Keterangan Kebenaran Fotokopi** (huruf g) |
 | **Semua unggahan pindaian** | + **Surat Keterangan Kebenaran Arsip Digital** (Pasal 73 ayat (1) huruf a) |
 
 Nama baku Surat Keterangan Kebenaran Arsip Digital **belum ditetapkan** PMK —
 konfirmasikan judulnya ke KPKNL sebelum templatenya dibekukan.
+
+#### Tiga koreksi yang hanya muncul setelah pasalnya dibaca
+
+Registry pertama dibangun dari riset sekunder. Membaca teks aslinya
+mengonfirmasi sebagian besarnya **dan menemukan tiga kekurangan nyata**:
+
+1. **"Dokumen lain termasuk BAST perolehan" diminta jauh lebih luas** —
+   huruf b angka 3, huruf c angka 4, huruf d angka 1 huruf b, dan huruf d
+   angka 2. Satu-satunya yang tidak dimintai adalah **tanah berdiri sendiri**.
+   Registry lama hanya menagihnya pada cabang terakhir, sehingga **pemegang
+   gedung tak pernah ditagih BAST perolehan** yang pasalnya minta.
+2. **SPTJ bukan pengganti dokumen apa pun yang hilang.** Ayat (3)
+   dikecualikan dari huruf a, huruf c angka 1, dan huruf e angka 3 —
+   ketiganya tentang **sertipikat tanah**. SPTJ tak pernah menggantikan BPKB
+   kendaraan ataupun IMB bangunan. Dan ia wajib **dilengkapi** empat dokumen
+   pendukung yang registry lama tak punya sama sekali.
+3. **Huruf f tak ada di registry lama.** Bila DIPA tak tegas menyatakan BMN
+   untuk PMPP, permohonan harus didukung KAK/RKA-K/L/POK.
+
+**Yang TIDAK berubah:** BAST *Penetapan Status Penggunaan* — dokumen yang
+AMAN cetak setelah SK terbit — tetap **bukan** berkas usulan. Ia berbeda dari
+BAST **perolehan** yang pasal ini minta. Uji pertama untuk aturan itu sempat
+mencampur keduanya; kini ia mencocokkan kedua frasa sekaligus, dengan
+pembanding bahwa **SK** PSP justru wajib pada rezim lain.
 
 ### 5.2 Rezim Penggunaan lain — jauh lebih ringan
 
