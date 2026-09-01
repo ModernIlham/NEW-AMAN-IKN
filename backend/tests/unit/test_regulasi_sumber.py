@@ -179,6 +179,12 @@ _PDF_KOSONG = b"%PDF-1.4 palsu"
 _TEKS_NASKAH = (
     "Menimbang: a. bahwa ...\nMEMUTUSKAN:\nPasal 1\nDalam Peraturan ini "
     + "yang dimaksud dengan Barang Milik Negara adalah ... " * 20
+    # Tiruan ini disulihkan untuk SELURUH entri manifes sekaligus, sedangkan
+    # `nomor_tak_cocok` menuntut tiap naskah menyebut nomornya sendiri. Nomor
+    # diambil dari manifes yang berlaku, bukan disalin: daftar yang disalin
+    # akan basi diam-diam saat peraturan baru ditambahkan, dan ujinya gagal
+    # karena fixture-nya — bukan karena kodenya.
+    + " ".join(p for e in rs.MANIFES for p in e["penanda"])
 )
 
 
@@ -700,3 +706,162 @@ def test_naskah_pustaka_tetap_lulus_setelah_pesan_diperkaya():
     pustaka ikut tertolak."""
     assert rs.bukan_batang_tubuh(_NASKAH) == ""
     assert rs.bukan_batang_tubuh(_KMK_DIKTUM) == ""
+
+
+# ── Guard salah-dokumen: nomor mirip, peraturan berbeda ──────────────────
+#
+# Pencarian sumber KMK 334/KM.6/2021 berulang kali menawarkan **KMK
+# 334/KMK.01/2021**: nomor sama, tahun sama, sama-sama tentang pengelolaan
+# BMN — peraturan yang berbeda. `bukan_batang_tubuh` tak bisa menolongnya,
+# sebab dokumen itu peraturan sah yang berstruktur benar.
+
+_KMK_SALAH = """KEPUTUSAN MENTERI KEUANGAN REPUBLIK INDONESIA
+NOMOR 334/KMK.01/2021
+TENTANG PENGELOLAAN BARANG MILIK NEGARA DI LINGKUNGAN KEMENTERIAN KEUANGAN
+Menimbang : a. bahwa untuk tertib pengelolaan Barang Milik Negara ...
+MEMUTUSKAN:
+Menetapkan : KEPUTUSAN MENTERI KEUANGAN TENTANG PENGELOLAAN ...
+KESATU  : Menetapkan pedoman pengelolaan Barang Milik Negara ...
+KEDUA   : Pedoman sebagaimana dimaksud dalam Diktum KESATU ...
+"""
+
+
+def test_peraturan_bernomor_mirip_ditolak():
+    """Justru yang paling berbahaya: ia lolos SEMUA penjagaan lain."""
+    assert rs.bukan_batang_tubuh(_KMK_SALAH) == "", (
+        "prasyarat uji: dokumen ini memang peraturan yang sah — kalau guard "
+        "batang tubuh sudah menolaknya, uji ini tak membuktikan apa pun")
+    sebab = rs.nomor_tak_cocok(_KMK_SALAH, ["334/KM.6/2021"])
+    assert sebab and "nomor" in sebab
+
+
+def test_peraturan_yang_benar_diterima():
+    benar = _KMK_SALAH.replace("334/KMK.01/2021", "334/KM.6/2021")
+    assert rs.nomor_tak_cocok(benar, ["334/KM.6/2021"]) == ""
+
+
+def test_huruf_mirip_angka_tak_menolak_naskah_asli():
+    """PP 28/2020 di pustaka ini menulis tahunnya "2O2O" — dengan huruf O.
+    Pencocokan angka apa adanya akan menolak naskah aslinya."""
+    rusak = "PERATURAN PEMERINTAH NOMOR 28 TAHUN 2O2O TENTANG ..."
+    assert rs.nomor_tak_cocok(rusak, ["NOMOR 28 TAHUN 2020"]) == ""
+
+
+def test_spasi_sisipan_tak_menolak_nomor():
+    assert rs.nomor_tak_cocok("... NOMOR 27 TAH UN 2014 ...",
+                              ["NOMOR 27 TAHUN 2014"]) == ""
+
+
+def test_tanpa_penanda_guard_tak_ikut_campur():
+    """Entri tanpa `penanda` tak boleh membuat unduhan gagal — tetapi
+    `test_setiap_entri_punya_penanda` memastikan itu tak pernah terjadi
+    pada manifes sungguhan."""
+    assert rs.nomor_tak_cocok("apa pun", None) == ""
+    assert rs.nomor_tak_cocok("apa pun", []) == ""
+
+
+def test_setiap_entri_punya_penanda():
+    """Tanpa ini, `penanda` yang lupa diisi membuat guard-nya diam — dan
+    diam terlihat persis seperti lulus."""
+    kurang = [e["kode"] for e in rs.MANIFES if not e.get("penanda")]
+    assert not kurang, kurang
+
+
+def test_penanda_memuat_seri_bukan_hanya_nomor_dan_tahun():
+    """Seri-lah yang membedakan KMK 334/KM.6/2021 dari 334/KMK.01/2021.
+    Penanda yang hanya "334" dan "2021" tak memisahkan keduanya."""
+    for e in rs.MANIFES:
+        for p in e["penanda"]:
+            rapat = p.replace(" ", "").upper()
+            assert ("PMK.06" in rapat or "KM.6" in rapat
+                    or "TAHUN" in rapat), (e["kode"], p)
+
+
+def test_guard_nomor_dipakai_di_alur_unduh(monkeypatch, tanpa_jeda):
+    """Guard yang tak dipanggil sama saja dengan tidak ada."""
+    monkeypatch.setattr(rs, "_ambil", lambda u: (_PDF_KOSONG, "application/pdf"))
+    monkeypatch.setattr(rs, "ekstrak_teks",
+                        lambda b: (_KMK_SALAH + "x" * 600, 12))
+    r = rs.unduh_satu({"penanda": ["334/KM.6/2021"],
+                       "sumber": [("pdf", "https://x/salah.pdf")]})
+    assert r["ok"] is False
+    assert any("nomornya sendiri" in g for g in r["galat"])
+
+
+# ── Diagnosis kemiripan: OCR yang MENUKAR huruf ─────────────────────────
+
+def test_penanda_yang_rusak_ocr_dilaporkan_sebagai_nyaris():
+    """Pembuangan spasi menangani OCR yang MEMECAH kata; yang tersisa adalah
+    OCR yang MENUKAR huruf. Tanpa laporan ini, "Menirnbang" menghasilkan
+    penolakan yang berbunyi persis sama dengan penolakan sebuah paparan."""
+    teks = ("MENTERI KEUANGAN REPUBLIK INDONESIA\n"
+            "Menirnbang : a. bahwa ...\nMEMUTUSKAN:\nKESATU : sesuatu\n")
+    sebab = rs.bukan_batang_tubuh(teks)
+    assert "menirnbang" in sebab and "nyaris" in sebab
+
+
+def test_nyaris_tak_dipakai_untuk_menerima():
+    """Melonggarkan pencocokan demi OCR akan membuka jalan yang sama bagi
+    ringkasan. Kemiripan DILAPORKAN, tak pernah meluluskan.
+
+    Naskahnya dibuat SAH pada setiap sisi lain — ada "MEMUTUSKAN",
+    "Menetapkan", dan diktum bernomor — supaya satu-satunya hal yang bisa
+    menolaknya adalah penanda yang hilang itu sendiri. Tanpa itu, ujinya
+    lulus lewat cabang lain dan tak membuktikan apa pun: versi pertamanya
+    memang begitu, dan sebuah mutasi yang melonggarkan guard-nya lolos.
+    """
+    teks = ("KEPUTUSAN MENTERI KEUANGAN REPUBLIK INDONESIA\n"
+            "Menirnbang : a. bahwa ...\n"
+            "MEMUTUSKAN:\n"
+            "Menetapkan : KEPUTUSAN MENTERI KEUANGAN TENTANG SESUATU.\n"
+            "KESATU  : sesuatu\n"
+            "KEDUA   : lainnya\n")
+    # Pembanding: dengan ejaan yang BENAR naskah ini diterima — jadi yang
+    # menolaknya di bawah memang huruf yang tertukar, bukan cacat lain.
+    assert rs.bukan_batang_tubuh(teks.replace("Menirnbang", "Menimbang")) == ""
+    assert rs.bukan_batang_tubuh(teks) != ""
+
+
+def test_nyaris_tak_mengarang_kemiripan():
+    """Paparan tak memuat apa pun yang mirip "menimbang"; melaporkan
+    kemiripan palsu akan menyesatkan ke arah yang salah."""
+    sebab = rs.bukan_batang_tubuh(
+        "Ringkasan pengelolaan aset negara bagi operator satker\n" * 5)
+    assert "nyaris" not in sebab
+
+
+def test_diagnosis_kemiripan_tak_lambat_pada_naskah_besar():
+    """Berjalan di runner untuk 13 peraturan; naskah terbesar di pustaka
+    ini 1 MB. Pemindaian yang lambat akan memperpanjang tiap putaran."""
+    import time
+    besar = ("Kalimat panjang tentang pengelolaan barang milik negara. " * 8000)
+    t0 = time.time()
+    rs.bukan_batang_tubuh(besar)
+    assert time.time() - t0 < 5.0
+
+
+# ── Sumber baru untuk dua KMK yang tersisa ──────────────────────────────
+
+def test_kmk_mencoba_ketiga_bentuk_nama_jdih():
+    """JDIH menamai KMK dengan tiga bentuk: `KMK 128~KM.6~2022.pdf` (spasi),
+    `KMK-216~KM.6~2021.pdf` (hubung), `KMK_33_KM.4_2023.pdf` (garis bawah).
+    Tiga putaran hanya mencoba bentuk pertama, lalu menyimpulkan berkasnya
+    tak ada."""
+    for kode in ("kmk-213-2021-tata-cara-pemanfaatan", "kmk-334-2021-hibah-kecil"):
+        e = next(x for x in rs.MANIFES if x["kode"] == kode)
+        url = " ".join(u for _, u in e["sumber"])
+        assert "KMK%20" in url or "KMK " in url, kode
+        assert "KMK-" in url, kode
+        assert "KMK_" in url, kode
+
+
+def test_kmk_213_memakai_jalur_download_djkn_bukan_hanya_detail():
+    """DJKN memisahkan `detail/` (JavaScript, tak memuat tautan — sudah
+    terbukti gagal dua putaran) dari `download/` yang mengirim berkasnya."""
+    e = next(x for x in rs.MANIFES
+             if x["kode"] == "kmk-213-2021-tata-cara-pemanfaatan")
+    unduh = [u for j, u in e["sumber"] if "djkn" in u and "/download/" in u]
+    assert unduh, "jalur download DJKN belum dicoba"
+    assert all(j == "pdf" for j, u in e["sumber"]
+               if "djkn" in u and "/download/" in u), (
+        "berakhiran .html tetapi isinya PDF — penjaga %PDF memeriksa isi")
