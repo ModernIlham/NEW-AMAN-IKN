@@ -15,6 +15,58 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#964] Perkakas unduh menghapus buktinya sendiri — dua cacat diperbaiki — 2026-09-01
+
+Pemilik menjalankan **Unduh Regulasi** putaran ketiga. Ketiga naskah yang
+dulu gagal — PMK 111/2016, PP 27/2014, KMK 334/KM.6/2021 — **tetap gagal**,
+dan sebabnya **tak bisa dibaca**: perkakasnya menghapus buktinya sendiri.
+
+**Cacat 1 — diagnosis run terbaru ditimpa catatan lama.**
+
+Penjaga "pertahankan manifes lama" ([#959]) dibuat agar kegagalan jaringan
+tak menghapus provenans berkas yang sudah terkumpul. Ia mempertahankan entri
+**apa pun keadaannya** — termasuk yang `berkas`-nya `None`, yang tak punya
+apa pun untuk dipertahankan. Akibatnya `percobaan_gagal` lama ikut bertahan
+dan menimpa hasil percobaan kali ini.
+
+Nyatanya: PMK 111/2016 melaporkan kegagalan **`sibangkoman.pu.go.id`** —
+sumber yang sudah **DICABUT** dari manifes di [#962] — sementara apa yang
+terjadi pada URL `fulltext` penggantinya hilang tanpa jejak. Satu putaran
+penuh terbuang, dan laporannya menuduh sumber yang bahkan tak dicoba.
+
+Kini entri tanpa berkas **ditulis ulang** dari manifes yang berlaku (judul
+dan guna ikut diperbarui, tanpa penanda `dipertahankan_dari` yang menyesatkan).
+Bahkan saat berkasnya memang dipertahankan, `percobaan_gagal` diisi hasil
+**kali ini**: provenans berkasnya utuh, diagnosisnya yang diperbarui.
+
+**Cacat 2 — penghitung menggambarkan satu run, bukan keadaan pustaka.**
+
+Manifes melaporkan *"berhasil 5, gagal 7"* padahal **sembilan** naskah ada di
+direktori. Tujuh sumber memang gagal kali itu — JDIH dan BPK banyak menjawab
+403/timeout — tetapi berkas lamanya bertahan sebagaimana mestinya. Pembacanya
+akan menyimpulkan pustakanya menyusut, padahal ia utuh.
+
+Kini `berhasil`/`gagal` = **keadaan pustaka**; hasil per-run dilaporkan
+terpisah sebagai `unduhan_segar`/`unduhan_gagal`.
+
+**Sumber ditambah** untuk ketiga yang belum masuk: 48 → **54**. PMK 111 dan
+PP 27 masing-masing 6 sumber, KMK 334 tujuh. BPHN dan BPK yang menjawab 403
+pada **dua** unduhan berturut-turut diturunkan ke ekor daftar — disimpan,
+bukan dicabut, kalau-kalau kebijakannya berubah.
+
+**Catatan operasional:** unduhan ketiga berjalan **36 menit** dengan banyak
+timeout pada sumber yang sebelumnya lancar. JDIH dan BPK tampak membatasi
+laju; menjalankan workflow berturut-turut dalam waktu dekat memperbesar
+peluang gagal.
+
+Tiga mutasi dipasang lalu dibunuh. **Yang pertama LOLOS** — perbaikan kedua
+sudah menetralkan bahaya utamanya, sehingga uji awal tak lagi membedakan.
+Sisa bahayanya nyata dan itulah yang akhirnya diuji: entri tanpa berkas akan
+mempertahankan **judul lama** dan mendapat penanda `dipertahankan_dari` yang
+tak bermakna.
+
+---
+
 ## [#963] Registry PSP dikoreksi terhadap teks primer — tiga cacat nyata — 2026-09-01
 
 Lanjutan [#962]. Pustaka peraturan baru terisi, dan pemakaian pertamanya

@@ -231,6 +231,101 @@ def test_galat_pypdf_tak_menghentikan_sumber_berikutnya(monkeypatch, tanpa_jeda)
 
 # ── Manifes tak boleh kehilangan bukti yang sudah terkumpul ────────────────
 
+def test_diagnosis_run_ini_tak_ditimpa_catatan_lama(tmp_path, monkeypatch,
+                                                   tanpa_jeda):
+    """KOREKSI (2026-09-01). Penjaga "pertahankan manifes lama" dulu
+    mempertahankan entri APA PUN keadaannya — termasuk yang `berkas`-nya
+    None. Akibatnya `percobaan_gagal` LAMA menimpa hasil percobaan kali ini,
+    persis keterangan yang dibutuhkan untuk memperbaiki sumbernya.
+
+    Pada unduhan ketiga hal itu benar-benar terjadi: PMK 111/2016 melaporkan
+    kegagalan sumber yang sudah DICABUT dari manifes, sementara apa yang
+    terjadi pada URL penggantinya hilang tanpa jejak. Satu putaran penuh
+    terbuang.
+    """
+    import json
+
+    tujuan = tmp_path / "regulasi"
+    tujuan.mkdir()
+    kode = rs.MANIFES[0]["kode"]
+    (tujuan / "MANIFEST.json").write_text(json.dumps({"berkas": [{
+        "kode": kode, "judul": "lama", "guna": "lama", "berkas": None,
+        "percobaan_gagal": ["sumber-yang-sudah-dicabut: catatan lama"],
+    }]}), encoding="utf-8")
+
+    monkeypatch.setattr(rs, "_ambil",
+                        lambda u: (_ for _ in ()).throw(OSError("galat baru")))
+    rs.main(["x", str(tujuan)])
+
+    m = json.loads((tujuan / "MANIFEST.json").read_text(encoding="utf-8"))
+    entri = next(b for b in m["berkas"] if b["kode"] == kode)
+    gabung = " ".join(entri["percobaan_gagal"])
+    assert "galat baru" in gabung, "diagnosis run ini harus tercatat"
+    assert "sudah-dicabut" not in gabung, "catatan lama tak boleh menimpa"
+    # Entri tanpa berkas ditulis ULANG dari manifes yang berlaku, bukan
+    # disalin dari yang lama: judul/guna yang berubah harus ikut berubah,
+    # dan `dipertahankan_dari` tak boleh muncul karena tak ada yang
+    # dipertahankan.
+    assert entri["judul"] == rs.MANIFES[0]["judul"], "judul lama tak boleh melekat"
+    assert "dipertahankan_dari" not in entri
+
+
+def test_berkas_dipertahankan_tetapi_diagnosisnya_diperbarui(tmp_path,
+                                                            monkeypatch,
+                                                            tanpa_jeda):
+    """Saat berkasnya memang ada, provenansnya tetap utuh — tetapi
+    `percobaan_gagal` diisi hasil KALI INI, bukan yang lama."""
+    import json
+
+    tujuan = tmp_path / "regulasi"
+    tujuan.mkdir()
+    kode = rs.MANIFES[0]["kode"]
+    (tujuan / "MANIFEST.json").write_text(json.dumps({"berkas": [{
+        "kode": kode, "berkas": f"{kode}.txt", "sha256": "abc123",
+        "url": "https://asal.example/lama.pdf", "diunduh": "2026-08-31T00:00:00+00:00",
+        "halaman": 58, "bytes": 900000,
+        "percobaan_gagal": ["galat lama yang sudah tak relevan"],
+    }]}), encoding="utf-8")
+
+    monkeypatch.setattr(rs, "_ambil",
+                        lambda u: (_ for _ in ()).throw(OSError("galat baru")))
+    rs.main(["x", str(tujuan)])
+
+    m = json.loads((tujuan / "MANIFEST.json").read_text(encoding="utf-8"))
+    e = next(b for b in m["berkas"] if b["kode"] == kode)
+    assert e["sha256"] == "abc123" and e["berkas"] == f"{kode}.txt"
+    assert e["dipertahankan_dari"] == "2026-08-31T00:00:00+00:00"
+    assert any("galat baru" in g for g in e["percobaan_gagal"])
+    assert not any("tak relevan" in g for g in e["percobaan_gagal"])
+
+
+def test_penghitung_menggambarkan_keadaan_pustaka_bukan_satu_run(
+        tmp_path, monkeypatch, tanpa_jeda):
+    """KOREKSI. Unduhan ketiga melaporkan "berhasil 5, gagal 7" padahal
+    sembilan naskah ada di direktori — pembacanya akan mengira pustakanya
+    menyusut. Hasil per-run tetap dilaporkan, dengan namanya sendiri."""
+    import json
+
+    tujuan = tmp_path / "regulasi"
+    tujuan.mkdir()
+    kode = rs.MANIFES[0]["kode"]
+    (tujuan / "MANIFEST.json").write_text(json.dumps({"berkas": [{
+        "kode": kode, "berkas": f"{kode}.txt", "sha256": "abc",
+        "diunduh": "2026-08-31T00:00:00+00:00",
+    }]}), encoding="utf-8")
+    monkeypatch.setattr(rs, "_ambil",
+                        lambda u: (_ for _ in ()).throw(OSError("mati")))
+    rs.main(["x", str(tujuan)])
+
+    m = json.loads((tujuan / "MANIFEST.json").read_text(encoding="utf-8"))
+    # Satu berkas bertahan → pustaka memuat 1, bukan 0.
+    assert m["berhasil"] == 1
+    assert m["gagal"] == len(rs.MANIFES) - 1
+    # Hasil run tetap terlaporkan terpisah: tak ada unduhan segar.
+    assert m["unduhan_segar"] == 0
+    assert m["unduhan_gagal"] == len(rs.MANIFES)
+
+
 def test_manifes_lama_dipertahankan_saat_unduhan_gagal(tmp_path, monkeypatch,
                                                        tanpa_jeda):
     """Kegagalan jaringan sesaat tak boleh menghapus asal-usul berkas yang
