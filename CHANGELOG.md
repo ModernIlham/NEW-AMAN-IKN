@@ -18,6 +18,100 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#971] Dugaan OCR terbantah — KMK 213 terbit sebagai lampiran — 2026-09-01
+
+Jalur unduh DJKN yang ditambahkan `[#970]` **berhasil**: `download/411`
+mengembalikan berkas yang sama persis dengan cermin Itjen Kemhan — 469.096
+karakter dari dua sumber resmi yang saling bebas. Berkasnya bukan masalah.
+
+### Jejak diagnostik menutup tebakan yang salah
+
+Laporan kemiripan **membantah dugaan putaran lalu**. Yang ditemukan bukan
+"Menimbang" yang rusak OCR, melainkan `'menyimpang'` dan `'membangu'` — kata
+Indonesia biasa. Naskah itu memang tak memuat "Menimbang" sama sekali.
+
+Itulah gunanya diagnosis: ia tak cuma mempercepat tebakan yang benar, ia
+menutup tebakan yang salah sebelum satu putaran lagi terbuang untuk
+membuktikannya.
+
+### Bentuk `lampiran`
+
+Naskahnya adalah **lampiran** KMK 213/KM.6/2021 — dibuka "BAB I PENDAHULUAN",
+memuat MEMUTUSKAN, Menetapkan, diktum, dan pasal bernomor. Konsiderans
+tinggal di halaman diktum yang terbit terpisah, dan justru lampiran itulah
+yang memuat tata caranya.
+
+Kelonggarannya **per-entri**, dan berlapis: bentuk `lampiran` tetap menagih
+"MEMUTUSKAN", BAB bernomor romawi, pasal atau diktum, serta nomornya sendiri.
+Paparan pelatihan tetap ditolak walau ditandai `lampiran`; paparan yang
+mengutip "MEMUTUSKAN" + "BAB I" + "Pasal 1" lolos guard bentuk tetapi
+tertahan guard nomor. Satu uji menahan agar penandaan ini tetap satu
+pengecualian yang bisa ditunjuk.
+
+### Jalur `baca/` DJKN — dan urutan yang menentukan
+
+DJKN ternyata punya **tiga** jalur untuk satu peraturan: `detail/`
+(JavaScript, gagal), `download/` (berkasnya langsung, lampirannya saja), dan
+`baca/` yang belum pernah dicoba.
+
+Menambahkannya memunculkan jebakan yang mudah terlewat: **urutan sumber
+adalah preferensi**. `unduh_satu` berhenti pada sumber pertama yang lolos
+penjagaan, jadi sumber baru yang ditaruh di belakang sumber yang sudah
+terbukti berhasil tak akan pernah dicoba — ia mati diam-diam, dan manifesnya
+tak menyebutkannya sama sekali. Versi pertama suntingan ini menaruh `baca/`
+di posisi keempat, di belakang cermin Kemhan yang sudah berhasil; ia tak akan
+pernah dijalankan. `baca/` kini di depan, Kemhan jadi jaring pengaman, dan
+ada uji yang menahan urutannya.
+
+Satu URL kini boleh muncul dua kali dengan jenis BERBEDA — `html` mencari
+tautan berkas, `teks` memperlakukan halamannya sebagai naskah. Uji URL kembar
+dipertajam ke pasangan (jenis, url), bukan dilonggarkan: yang dilarang tetap
+percobaan yang benar-benar terbuang, ditambah batas satu URL paling banyak
+dua jenis.
+
+### Tingkat `rujukan` — uraian TENTANG peraturan
+
+KMK 334/KM.6/2021 tak terindeks di bagian peraturan DJKN dan sepuluh sumber
+unduhnya menjawab 404. Yang paling dekat adalah uraian dari unit Kemenkeu
+sendiri (artikel KPPN Lubuk Sikaping, DJPb). Ia disimpan, tetapi tak boleh
+menyamar jadi naskah: berkasnya berawalan `rujukan-`, penghitungnya terpisah
+(`rujukan_ada`/`rujukan_belum`), dan ada uji yang menahannya menjadi dasar
+status `teks-primer`.
+
+Guard-nya melonggar pada **bentuk**, tidak pada **sasaran**: rujukan tetap
+wajib menyebut nomor peraturannya dan tetap ditolak bila terlalu pendek —
+halaman galat dan menu navigasi juga "bukan batang tubuh".
+
+### PMK 115/2020 memang tak memuat daftar dokumennya
+
+Ditelusuri langsung di naskah primer yang sudah ada (OCR menulisnya "Pasal96"
+tanpa spasi, itu sebabnya luput dari pencarian sebelumnya):
+
+> **Pasal 96** — *Ketentuan lebih lanjut mengenai tata cara pelaksanaan
+> Pemanfaatan BMN ditetapkan dengan Keputusan Menteri Keuangan yang
+> ditandatangani oleh Direktur Jenderal atas nama Menteri Keuangan.*
+
+Dua frasa "dengan melampirkan" di PMK 115/2020 mengatur **persetujuan surut**
+KSP dan BGS/BSG yang sudah terlanjur terjadi — bukan daftar dokumen
+permohonan. Sewa dan pinjam pakai tetap `belum_terverifikasi`; tak ada jalan
+pintas lewat PMK-nya.
+
+### Perapian
+
+Kedua jalur unduh — PDF dan naskah HTML — kini memanggil penjagaan yang sama
+lewat `_sebab_tolak()`. Saat keduanya memanggil guard sendiri-sendiri,
+penjagaan yang ditambahkan belakangan mudah terpasang di satu jalur saja, dan
+jalur yang terlewat tak akan berbunyi.
+
+### Berkas
+
+- `scripts/regulasi_sumber.py` — `BENTUK_LAMPIRAN`, `BENTUK_RUJUKAN`,
+  `_sebab_tolak()`, penghitung terpisah, entri rujukan KMK 334
+- `backend/tests/unit/test_regulasi_sumber.py` — 12 uji baru (79 total)
+- `docs/regulasi/README.md`
+
+---
+
 ## [#970] Dua KMK terakhir: sumber baru, dan nyaris salah-dokumen — 2026-09-01
 
 Unduhan ketujuh gagal lagi untuk KMK 213/KM.6/2021 dan KMK 334/KM.6/2021 —
