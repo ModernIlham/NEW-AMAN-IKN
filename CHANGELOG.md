@@ -18,6 +18,84 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#970] Dua KMK terakhir: sumber baru, dan nyaris salah-dokumen — 2026-09-01
+
+Unduhan ketujuh gagal lagi untuk KMK 213/KM.6/2021 dan KMK 334/KM.6/2021 —
+tetapi kali ini **sebabnya terbaca**, dan pencarian sumber penggantinya
+menemukan jebakan yang belum pernah terpikirkan.
+
+### Jejak diagnostik langsung terbayar
+
+KMK 213 ditolak dengan *"tak memuat 'menimbang'"* — persis seperti dua
+putaran sebelumnya. Bedanya sekarang jejaknya ikut:
+
+```
+469096 karakter; ada memutuskan; ada pasal bernomor; ada diktum;
+ada 'menetapkan'; pembuka: "MENTERI KEUANGAN REPUBLIK INDONESIA
+BAB I PENDAHULUAN A. Latar Belakang Pada dasarnya, Barang Milik Negara (BMN)
+diadaka..."
+```
+
+469 ribu karakter yang memuat diktum, "MEMUTUSKAN", "Menetapkan", **dan**
+pasal bernomor. Itu bukan paparan. Dugaan terkuatnya: OCR yang **menukar
+huruf**, bukan yang memecah kata — pembuangan spasi sudah menangani yang
+kedua sejak `[#968]`.
+
+Jejaknya kini melaporkan **kemiripan**: kata di naskah yang berjarak dekat
+dari penanda yang hilang, mis. `'menirnbang'~'menimbang'` (r-n terbaca m).
+Kemiripan **dilaporkan, tak pernah meluluskan** — melonggarkan pencocokan
+demi OCR membuka jalan yang sama bagi ringkasan, dan itulah alasan guard ini
+ada sejak awal.
+
+### Nyaris keliru: nomor sama, peraturan berbeda
+
+Pencarian sumber KMK 334/KM.6/2021 berulang kali menawarkan **KMK
+334/KMK.01/2021**: nomor sama, tahun sama, sama-sama tentang pengelolaan BMN
+— peraturan yang **berbeda**. Yang satu tata cara hibah kecil; yang lain
+pengelolaan BMN di lingkungan Kemenkeu.
+
+`bukan_batang_tubuh` tak bisa menolongnya. Dokumen itu peraturan sah yang
+berstruktur benar dan akan lolos **setiap** penjagaan yang ada, lalu duduk di
+`docs/regulasi/` dengan nama berkas yang salah. Itu lebih mahal daripada
+gagal unduh, sebab ia tampak seperti bukti — kegagalan yang sama bentuknya
+dengan paparan DJKN pada `[#962]`.
+
+Guard keenam `nomor_tak_cocok` menuntut naskah menyebut **nomornya sendiri
+lengkap dengan serinya**. Tahan rusak OCR: PP 28/2020 di pustaka ini menulis
+tahunnya "2O2O" dengan huruf O, jadi huruf mirip-angka dinormalkan lebih
+dulu. Batasnya dinyatakan apa adanya di kode dan README — guard ini
+membuktikan nomornya *disebut*, bukan bahwa naskahnya memang peraturan itu.
+
+### Pola nama KMK ternyata tiga bentuk, bukan satu
+
+Tiga putaran menyimpulkan berkasnya "tidak ada" padahal hanya satu dari tiga
+bentuk penamaan JDIH yang pernah dicoba: `KMK 128~KM.6~2022.pdf` (spasi),
+`KMK-216~KM.6~2021.pdf` (hubung), `KMK_33_KM.4_2023.pdf` (garis bawah).
+Ditambah jalur unduh DJKN `/peraturan/download/<id>/<slug>.html` yang
+mengirim berkasnya langsung — berbeda dari `/peraturan/detail/<id>/…` yang
+memuatnya lewat JavaScript dan sudah dua putaran gagal.
+
+Sumber untuk kedua KMK naik dari 12 jadi 19; total 68 sumber untuk 13
+peraturan.
+
+### Uji yang lulus karena alasan yang salah
+
+Mutasi "kemiripan dipakai untuk menerima" **lolos** pada percobaan pertama.
+`test_nyaris_tak_dipakai_untuk_menerima` memang menolak naskahnya — tetapi
+lewat cabang lain, sebab naskah ujinya kebetulan juga tak memuat
+"Menetapkan". Fixture-nya dibuat sah pada setiap sisi lain, ditambah
+pembanding berejaan benar yang harus diterima, sehingga satu-satunya yang
+bisa menolaknya adalah penanda yang hilang itu sendiri.
+
+### Berkas
+
+- `scripts/regulasi_sumber.py` — `nomor_tak_cocok()`, `_nyaris()`, `penanda`
+  pada 13 entri, 7 sumber baru
+- `backend/tests/unit/test_regulasi_sumber.py` — 16 uji baru (67 total)
+- `docs/regulasi/README.md`
+
+---
+
 ## [#969] PP 27/2014 masuk pustaka — dan pesan gagal yang tak bisa ditindaklanjuti — 2026-09-01
 
 Unduhan keenam: **11 dari 13 naskah kini ada**. Yang masuk adalah **PP 27

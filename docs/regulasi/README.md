@@ -221,6 +221,76 @@ Pembukanya sendiri yang menjawab: `KEPUTUSAN MENTERI KEUANGAN ...` berarti
 guard-nya yang salah; `Sosialisasi KMK 213 ...` berarti sumbernya. Jejak ini
 sengaja dibatasi < 300 karakter — ia ikut ter-commit di `MANIFEST.json`.
 
+## Unduhan ketujuh — dua KMK terakhir, dan sebuah nyaris-kekeliruan
+
+Jejak diagnostik langsung terbayar. KMK 213/KM.6/2021 ditolak dengan:
+
+```
+tak memuat 'menimbang' | 469096 karakter; ada memutuskan; ada pasal bernomor;
+ada diktum; ada 'menetapkan'; pembuka: “MENTERI KEUANGAN REPUBLIK INDONESIA
+BAB I PENDAHULUAN A. Latar Belakang Pada dasarnya, Barang Milik Negara (BMN)
+diadaka…”
+```
+
+469 ribu karakter yang memuat diktum, "MEMUTUSKAN", "Menetapkan", **dan**
+pasal bernomor — tetapi tidak "Menimbang". Itu bukan paparan. Kemungkinan
+terbesarnya: OCR yang **menukar huruf**, bukan yang memecah kata. Pembuangan
+spasi sudah menangani yang kedua; yang pertama belum pernah terlihat karena
+pesan penolakannya tak pernah menyebutkan apa yang ditemukan.
+
+Karena itu jejaknya kini melaporkan **kemiripan**: kata di dalam naskah yang
+berjarak dekat dari penanda yang hilang, mis. `'menirnbang'~'menimbang'`
+(r-n terbaca m). Kemiripan **dilaporkan, tak pernah meluluskan** — melonggarkan
+pencocokan demi OCR membuka jalan yang sama bagi ringkasan.
+
+### Nyaris keliru: nomor sama, peraturan berbeda
+
+Pencarian sumber KMK 334/KM.6/2021 berulang kali menawarkan **KMK
+334/KMK.01/2021** — nomor sama, tahun sama, sama-sama tentang pengelolaan BMN,
+peraturan yang **berbeda**. Yang satu tata cara hibah kecil; yang lain
+pengelolaan BMN di lingkungan Kemenkeu.
+
+`bukan_batang_tubuh` tak bisa menolongnya: dokumen itu peraturan sah yang
+berstruktur benar dan akan lolos setiap penjagaan yang ada. Ia akan duduk di
+direktori ini dengan nama berkas yang salah — kekeliruan yang lebih mahal
+daripada gagal unduh, sebab ia tampak seperti bukti.
+
+Guard keenam, `nomor_tak_cocok`, menuntut naskah menyebut **nomornya sendiri
+lengkap dengan serinya** (`334/KM.6/2021`, bukan sekadar "334" dan "2021").
+Tahan rusak OCR: PP 28/2020 di pustaka ini menulis tahunnya **"2O2O"** dengan
+huruf O, jadi huruf mirip-angka dinormalkan sebelum dicocokkan.
+
+**Batasnya dinyatakan apa adanya:** guard ini membuktikan nomornya *disebut*,
+bukan bahwa naskahnya memang peraturan itu — tiap PMK menyebut PP 27/2014 di
+bagian Mengingat, jadi penanda PP 27 cocok dengan hampir semua berkas di sini.
+Yang ditangkapnya adalah kasus "dokumennya sama sekali lain".
+
+### Pola nama KMK ternyata TIGA bentuk
+
+Tiga putaran menyimpulkan berkas KMK-nya "tidak ada" padahal hanya satu dari
+tiga bentuk penamaan yang pernah dicoba:
+
+| Bentuk | Contoh nyata |
+|---|---|
+| spasi | `KMK 128~KM.6~2022.pdf` |
+| tanda hubung | `KMK-216~KM.6~2021.pdf` |
+| garis bawah (pemisah `~` pun hilang) | `KMK_33_KM.4_2023.pdf` |
+
+Ditambah **jalur unduh DJKN** yang berbeda dari halaman detail-nya:
+`/peraturan/download/<id>/<slug>.html` mengirim berkasnya langsung, sedangkan
+`/peraturan/detail/<id>/…` memuatnya lewat JavaScript dan sudah dua putaran
+menjawab "halaman tak memuat tautan PDF". Berakhiran `.html` tetapi isinya
+PDF — penjaga `%PDF` memeriksa isi, bukan nama berkas.
+
+### Rujukan sekunder untuk KMK 334
+
+KMK 334/KM.6/2021 **tidak terindeks** di bagian peraturan DJKN. Sampai
+naskahnya masuk, uraian tata caranya ada di artikel KPPN Lubuk Sikaping
+(DJPb Kemenkeu): *"Tata Cara Hibah Barang Milik Negara (BMN) Selain Tanah
+dan/atau Bangunan yang Tidak Memiliki Bukti Kepemilikan dengan Nilai Perolehan
+Sampai dengan Rp100.000.000"*. Ia **rujukan, bukan naskah** — tak boleh masuk
+pustaka ini, dan `bukan_batang_tubuh` memang akan menolaknya.
+
 ## Isi
 
 - `<kode>.txt` — teks batang tubuh hasil ekstraksi
@@ -266,7 +336,7 @@ berkas statis.
   `peraturan.bpk.go.id`. Kalau seluruh sumber ada di dua host itu saja, satu
   gangguan di sisi Kemenkeu/BPK menjatuhkan semuanya sekaligus.
 
-Total saat ini: **61 sumber untuk 13 peraturan**, 15 di antaranya tautan PDF
+Total saat ini: **68 sumber untuk 13 peraturan**, 20 di antaranya tautan PDF
 langsung. Pola unduh langsung JDIH yang berguna saat menambah sumber baru:
 `https://jdih.kemenkeu.go.id/api/download/<uuid>/<nomor>~PMK.06~<tahun>Per.pdf`,
 dan BPHN memakai pola nama berkas yang bisa ditebak untuk PP:

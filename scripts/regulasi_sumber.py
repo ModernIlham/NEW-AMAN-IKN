@@ -38,6 +38,7 @@ Tidak menyimpan PDF-nya ke repo (besar dan tak bisa di-diff); hanya teksnya.
 """
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 import os
@@ -70,6 +71,7 @@ from datetime import datetime, timezone
 MANIFES = [
     {
         "kode": "pmk-111-2016-pemindahtanganan",
+        "penanda": ["111/PMK.06/2016"],
         "judul": "PMK 111/PMK.06/2016 — Tata Cara Pelaksanaan Pemindahtanganan BMN",
         "guna": "Hibah, penjualan, tukar menukar, PMPP — celah TERBESAR di registry",
         "prioritas": 1,
@@ -94,6 +96,7 @@ MANIFES = [
     },
     {
         "kode": "pmk-165-2021-perubahan-pemindahtanganan",
+        "penanda": ["165/PMK.06/2021"],
         "judul": "PMK 165/PMK.06/2021 — Perubahan atas PMK 111/PMK.06/2016",
         "guna": "Perubahan rezim pemindahtanganan",
         "prioritas": 2,
@@ -107,6 +110,7 @@ MANIFES = [
     },
     {
         "kode": "pmk-83-2016-pemusnahan-penghapusan",
+        "penanda": ["83/PMK.06/2016"],
         "judul": "PMK 83/PMK.06/2016 — Tata Cara Pelaksanaan Pemusnahan dan Penghapusan BMN",
         "guna": "Rezim penghapusan & pemusnahan — belum ada dasar pasal sama sekali",
         "prioritas": 3,
@@ -119,6 +123,7 @@ MANIFES = [
     },
     {
         "kode": "pmk-115-2020-pemanfaatan",
+        "penanda": ["115/PMK.06/2020"],
         "judul": "PMK 115/PMK.06/2020 — Pemanfaatan Barang Milik Negara",
         "guna": "Sewa, pinjam pakai, KSP, BGS/BSG, KSPI, KETUPI",
         "prioritas": 4,
@@ -131,6 +136,7 @@ MANIFES = [
     },
     {
         "kode": "pmk-40-2024-penggunaan",
+        "penanda": ["NOMOR 40 TAHUN 2024", "40/PMK.06/2024"],
         "judul": "PMK 40 Tahun 2024 — Tata Cara Penggunaan Barang Milik Negara",
         "guna": ("Rezim Penggunaan. Sudah diriset lewat sumber sekunder di "
                  "docs/PENGGUNAAN-BMN-PEMOHON.md; teks aslinya menutup rantai "
@@ -144,6 +150,7 @@ MANIFES = [
     },
     {
         "kode": "kmk-213-2021-tata-cara-pemanfaatan",
+        "penanda": ["213/KM.6/2021"],
         "judul": ("KMK 213/KM.6/2021 — Tata Cara Pelaksanaan Pemanfaatan "
                   "Barang Milik Negara"),
         "guna": ("KMK PELAKSANA yang ditunjuk PMK 115/2020 Pasal 96. Daftar "
@@ -162,13 +169,34 @@ MANIFES = [
                     "KMK%20213~KM.6~2021.pdf"),
             ("teks", "https://jdih.kemenkeu.go.id/api/download/fulltext/2021/"
                      "KMK%20213~KM.6~2021.htm"),
+            # DJKN memisahkan halaman `detail/` (JavaScript, tak memuat
+            # tautan) dari jalur `download/` yang MENGIRIM berkasnya langsung.
+            # Terkonfirmasi pada tetangga nomornya: `download/412/…216KM62021`
+            # dan `download/388/…53PMK062021` keduanya mengembalikan naskah.
+            # Berakhiran `.html` tetapi isinya PDF — penjaga `%PDF` sudah
+            # memeriksa isi, bukan nama berkas, jadi jenis `pdf` benar di sini.
+            ("pdf", "https://www.djkn.kemenkeu.go.id/peraturan/download/411/"
+                    "Keputusan-Menteri-Keuangan-Nomor-213KM62021.html"),
+            # JDIH menamai KMK dengan TIGA bentuk berbeda, bukan satu:
+            #   `KMK 128~KM.6~2022.pdf`  (spasi)
+            #   `KMK-216~KM.6~2021.pdf`  (tanda hubung)
+            #   `KMK_33_KM.4_2023.pdf`   (garis bawah, pemisah `~` pun hilang)
+            # Unduhan keempat sampai keenam hanya mencoba bentuk pertama.
+            ("pdf", "https://jdih.kemenkeu.go.id/api/download/fulltext/2021/"
+                    "KMK-213~KM.6~2021.pdf"),
+            ("pdf", "https://jdih.kemenkeu.go.id/api/download/fulltext/2021/"
+                    "KMK_213_KM.6_2021.pdf"),
             ("html", "https://www.djkn.kemenkeu.go.id/peraturan/detail/411/"
                      "Keputusan-Menteri-Keuangan-Nomor-213KM62021.html"),
+            # Akhiran `/view` adalah halaman baca JDIH — bentuk yang berbeda
+            # dari `/dok/<slug>`, dan kadang memuat tautan berkasnya.
+            ("html", "https://jdih.kemenkeu.go.id/dok/213-km-6-2021/view"),
             ("html", "https://jdih.kemenkeu.go.id/dok/213-km-6-2021"),
         ],
     },
     {
         "kode": "pmk-181-2016-penatausahaan",
+        "penanda": ["181/PMK.06/2016"],
         "judul": "PMK 181/PMK.06/2016 — Penatausahaan Barang Milik Negara",
         "guna": "Pembukuan, inventarisasi, pelaporan",
         "prioritas": 7,
@@ -182,6 +210,7 @@ MANIFES = [
     },
     {
         "kode": "pmk-207-2021-wasdal",
+        "penanda": ["207/PMK.06/2021"],
         "judul": "PMK 207/PMK.06/2021 — Pengawasan dan Pengendalian BMN",
         "guna": "Modul Wasdal",
         "prioritas": 8,
@@ -197,6 +226,7 @@ MANIFES = [
     },
     {
         "kode": "pmk-53-2023-ikn",
+        "penanda": ["NOMOR 53 TAHUN 2023", "53/PMK.06/2023"],
         "judul": "PMK 53 Tahun 2023 — Pengelolaan BMN pada Otorita IKN",
         "guna": "Rezim khusus IKN — delegasi kewenangan Kepala Otorita",
         "prioritas": 9,
@@ -212,6 +242,7 @@ MANIFES = [
     },
     {
         "kode": "pp-27-2014-pengelolaan-bmn",
+        "penanda": ["NOMOR 27 TAHUN 2014"],
         "judul": "PP 27 Tahun 2014 — Pengelolaan Barang Milik Negara/Daerah",
         "guna": "Induk seluruh rezim",
         "prioritas": 10,
@@ -245,6 +276,7 @@ MANIFES = [
     },
     {
         "kode": "pp-28-2020-perubahan-pengelolaan-bmn",
+        "penanda": ["NOMOR 28 TAHUN 2020"],
         "judul": "PP 28 Tahun 2020 — Perubahan atas PP 27 Tahun 2014",
         "guna": "Menambah KETUPI sebagai bentuk pemanfaatan ke-6",
         "prioritas": 11,
@@ -257,6 +289,7 @@ MANIFES = [
     },
     {
         "kode": "kmk-334-2021-hibah-kecil",
+        "penanda": ["334/KM.6/2021"],
         "judul": ("KMK 334/KM.6/2021 — Tata Cara Hibah BMN selain tanah/bangunan "
                   "tanpa bukti kepemilikan, nilai perolehan ≤ Rp100 juta"),
         "guna": ("Dikutip pemindahtanganan_utils.py; judulnya sudah terkonfirmasi "
@@ -276,8 +309,13 @@ MANIFES = [
             ("pdf", "https://jdih.kemenkeu.go.id/api/download/"
                     "dbb8b516-9f26-4cd2-89de-5e9e5f0f7815/"
                     "KMK%20334~KM.6~2021.pdf"),
+            ("pdf", "https://jdih.kemenkeu.go.id/api/download/fulltext/2021/"
+                    "KMK-334~KM.6~2021.pdf"),
+            ("pdf", "https://jdih.kemenkeu.go.id/api/download/fulltext/2021/"
+                    "KMK_334_KM.6_2021.pdf"),
             ("teks", "https://jdih.kemenkeu.go.id/api/download/fulltext/2021/"
                      "KMK%20334~KM.6~2021.htm"),
+            ("html", "https://jdih.kemenkeu.go.id/dok/334-km-6-2021/view"),
             ("html", "https://jdih.kemenkeu.go.id/dok/"
                      "dbb8b516-9f26-4cd2-89de-5e9e5f0f7815"),
             ("html", "https://jdih.kemenkeu.go.id/dok/334-km-6-2021"),
@@ -286,6 +324,7 @@ MANIFES = [
     },
     {
         "kode": "pmk-4-2015-delegasi",
+        "penanda": ["4/PMK.06/2015"],
         "judul": "PMK 4/PMK.06/2015 — Pendelegasian kewenangan pemindahtanganan BMN",
         "guna": "Ambang Rp100 juta jalur Pengguna Barang",
         "prioritas": 13,
@@ -354,6 +393,72 @@ def tautan_pdf(html: str, asal: str) -> list:
 _PENANDA_BATANG_TUBUH = ("menimbang", "memutuskan")
 
 
+#: Huruf yang kerap tertukar dengan angka pada hasil pindai. Naskah PP
+#: 28/2020 di pustaka ini menulis tahunnya "2O2O" — dengan huruf O.
+_HURUF_MIRIP_ANGKA = str.maketrans({"o": "0", "l": "1", "i": "1"})
+
+
+def _rapat_angka(teks: str) -> str:
+    """Teks tanpa spasi, huruf kecil, huruf mirip-angka dinormalkan."""
+    return re.sub(r"\s+", "", teks or "").lower().translate(_HURUF_MIRIP_ANGKA)
+
+
+def nomor_tak_cocok(teks: str, penanda) -> str:
+    """Alasan bila naskah ini bukan peraturan yang diminta; '' bila cocok.
+
+    Guard ini lahir dari pencarian sumber KMK 334/KM.6/2021. Hasilnya
+    berulang kali menawarkan **KMK 334/KMK.01/2021** — nomor yang sama,
+    tahun yang sama, sama-sama tentang pengelolaan BMN, tetapi peraturan
+    yang BERBEDA (yang satu tata cara hibah kecil, yang lain pengelolaan
+    BMN di lingkungan Kemenkeu).
+
+    `bukan_batang_tubuh` tak bisa menolongnya: dokumen itu peraturan yang
+    sah dan berstruktur benar. Ia akan lolos setiap penjagaan yang ada, lalu
+    duduk di pustaka dengan nama berkas yang salah — kekeliruan yang jauh
+    lebih mahal daripada gagal unduh, sebab ia tampak seperti bukti.
+
+    **Batas kemampuannya jangan dilebih-lebihkan.** Guard ini membuktikan
+    nomor yang diminta DISEBUT di dalam naskah, bukan bahwa naskahnya
+    memang peraturan itu: tiap PMK menyebut PP 27/2014 di bagian Mengingat,
+    jadi penanda PP 27 cocok dengan hampir semua berkas di pustaka. Yang
+    ditangkapnya adalah kasus "dokumennya sama sekali lain" — dan justru
+    itulah yang hampir terjadi pada KMK 334.
+    """
+    if not penanda:
+        return ""
+    rapat = _rapat_angka(teks)
+    if any(_rapat_angka(p) in rapat for p in penanda):
+        return ""
+    return ("naskah tak menyebut nomornya sendiri (" + " / ".join(penanda)
+            + ") — kemungkinan peraturan LAIN dengan nomor mirip")
+
+
+def _nyaris(teks: str, hilang) -> list:
+    """Kata di dalam naskah yang MIRIP penanda yang hilang.
+
+    Pembuangan spasi sudah menangani OCR yang memecah kata ("se bagaimana",
+    "tan pa"). Yang tersisa adalah OCR yang MENUKAR huruf — "clalam" untuk
+    "dalam", "MENTERlKEUANGAN" untuk "MENTERI KEUANGAN". Kalau itu yang
+    menimpa kata "Menimbang", penolakannya berbunyi persis sama dengan
+    penolakan sebuah paparan, dan dua putaran unduhan sudah terbuang untuk
+    membedakannya.
+
+    Kemiripan dilaporkan, BUKAN diterima: melonggarkan pencocokan penanda
+    demi OCR akan membuka jalan yang sama bagi ringkasan yang kebetulan
+    memuat kata serupa. Yang dibutuhkan cuma tahu ke mana harus melihat.
+    """
+    if not hilang:
+        return []
+    kata = {k.lower() for k in re.findall(r"[A-Za-z]{5,15}", teks or "")}
+    if len(kata) > 40000:      # naskah raksasa: cukup contoh secukupnya
+        kata = set(sorted(kata)[:40000])
+    hasil = []
+    for penanda in hilang:
+        for cocok in difflib.get_close_matches(penanda, kata, n=2, cutoff=0.8):
+            hasil.append(f"'{cocok}'~'{penanda}'")
+    return hasil
+
+
 def jejak_teks(teks: str) -> str:
     """Apa yang JUSTRU ditemukan di dalam teks — bukan hanya yang hilang.
 
@@ -375,6 +480,9 @@ def jejak_teks(teks: str) -> str:
     ada = [k for k in _PENANDA_BATANG_TUBUH if k in rapat]
     jejak = [f"{len(asli)} karakter"]
     jejak.append("ada " + "+".join(ada) if ada else "tanpa penanda apa pun")
+    mirip = _nyaris(asli, [k for k in _PENANDA_BATANG_TUBUH if k not in rapat])
+    if mirip:
+        jejak.append("nyaris: " + ", ".join(mirip))
     if re.search(r"(?im)^\s*pasal\s+\d+", asli):
         jejak.append("ada pasal bernomor")
     if re.search(r"(?im)^\s*(kesatu|kedua|ketiga|keempat|kelima)\b", asli):
@@ -469,7 +577,8 @@ def unduh_satu(entri: dict) -> dict:
                 if len(teks.strip()) < 500:
                     galat.append(f"{url}: halaman teks nyaris kosong")
                     continue
-                sebab = bukan_batang_tubuh(teks)
+                sebab = (bukan_batang_tubuh(teks)
+                         or nomor_tak_cocok(teks, entri.get("penanda")))
                 if sebab:
                     galat.append(f"{url}: {sebab}")
                     continue
@@ -498,7 +607,8 @@ def unduh_satu(entri: dict) -> dict:
                 galat.append(f"{url}: PDF tanpa lapisan teks ({n_hal} hlm) — "
                              "kemungkinan hasil pindai, perlu OCR")
                 continue
-            sebab = bukan_batang_tubuh(teks)
+            sebab = (bukan_batang_tubuh(teks)
+                     or nomor_tak_cocok(teks, entri.get("penanda")))
             if sebab:
                 galat.append(f"{url}: {sebab}")
                 continue
