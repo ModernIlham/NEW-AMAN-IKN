@@ -21,7 +21,8 @@ syarat_dokumen_router = APIRouter()
 def _konteks(jenis_objek, punya_dokumen_kepemilikan, ada_fotokopi,
              unggah_pindaian, dokumen_tidak_ada, dokumen_hilang,
              penandatangan_didelegasikan, untuk_pmpp, fisik_tak_dikuasai,
-             ada_pungutan_masyarakat, kspi, penerima_lembaga_nonpemerintah):
+             ada_pungutan_masyarakat, kspi, penerima_lembaga_nonpemerintah,
+             tanah_tanpa_sertipikat=False, dipa_tidak_tegas=False):
     return {
         "jenis_objek": jenis_objek,
         "punya_dokumen_kepemilikan": punya_dokumen_kepemilikan,
@@ -35,6 +36,8 @@ def _konteks(jenis_objek, punya_dokumen_kepemilikan, ada_fotokopi,
         "ada_pungutan_masyarakat": ada_pungutan_masyarakat,
         "kspi": kspi,
         "penerima_lembaga_nonpemerintah": penerima_lembaga_nonpemerintah,
+        "tanah_tanpa_sertipikat": tanah_tanpa_sertipikat,
+        "dipa_tidak_tegas": dipa_tidak_tegas,
     }
 
 
@@ -66,6 +69,8 @@ async def daftar_syarat(
     ada_pungutan_masyarakat: bool = False,
     kspi: bool = False,
     penerima_lembaga_nonpemerintah: bool = False,
+    tanah_tanpa_sertipikat: bool = False,
+    dipa_tidak_tegas: bool = False,
     # Bawaan `str = ""` polos, BUKAN `Query("")`: seluruh uji unit repo ini
     # memanggil fungsi rutenya langsung tanpa FastAPI, dan objek `Query`
     # akan sampai apa adanya ke `.split()`.
@@ -88,7 +93,8 @@ async def daftar_syarat(
         jenis_objek, punya_dokumen_kepemilikan, ada_fotokopi, unggah_pindaian,
         dokumen_tidak_ada, dokumen_hilang, penandatangan_didelegasikan,
         untuk_pmpp, fisik_tak_dikuasai, ada_pungutan_masyarakat, kspi,
-        penerima_lembaga_nonpemerintah)
+        penerima_lembaga_nonpemerintah, tanah_tanpa_sertipikat,
+        dipa_tidak_tegas)
     punya = [t.strip() for t in (terunggah or "").split(",") if t.strip()]
     hasil = kelengkapan_dokumen(rezim, punya, konteks)
     hasil["pilihan"] = jenis_pilihan(rezim, konteks)

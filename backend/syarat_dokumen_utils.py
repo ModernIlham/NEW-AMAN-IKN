@@ -139,6 +139,12 @@ KATALOG_DOKUMEN = {
     "sk_tim_internal": "SK Pembentukan Tim Internal",
     "pernyataan_instansi_teknis": "Surat pernyataan dari instansi teknis yang berwenang",
     "penilaian": "Laporan Penilaian / nilai taksiran",
+    "pendukung_sptj_tanah": ("Dokumen pendukung SPTJ tanah (akta jual beli/"
+                            "girik/letter C/BAST/ledger jalan, surat keterangan "
+                            "lurah/camat, surat permohonan pendaftaran hak, "
+                            "dan/atau dokumen penguasaan)"),
+    "dok_penganggaran_pmpp": ("Fotokopi KAK, RKA-K/L, atau POK (bila DIPA tak "
+                              "tegas menyatakan BMN untuk PMPP)"),
     "dokumen_lainnya": "Dokumen Lainnya",
 }
 
@@ -195,6 +201,56 @@ def dokumen_tidak_ada(konteks) -> bool:
     return bool((konteks or {}).get("dokumen_tidak_ada"))
 
 
+def tanah_tanpa_sertipikat(konteks) -> bool:
+    """Tanah yang BELUM bersertipikat — satu-satunya keadaan yang memicu SPTJ
+    pada rezim PSP.
+
+    KOREKSI atas pembacaan sekunder. Pasal 11 ayat (3) tidak berbunyi
+    "pengganti dokumen apa pun yang tidak ada": ia dikecualikan secara
+    spesifik dari **huruf a, huruf c angka 1, dan huruf e angka 3** — ketiganya
+    tentang sertipikat TANAH. SPTJ tak pernah menggantikan BPKB kendaraan
+    ataupun IMB bangunan.
+
+    Bidang lama `dokumen_tidak_ada` tetap dibaca agar catatan yang sudah
+    tersimpan dengan pembacaan lama tidak kehilangan maknanya — tetapi hanya
+    bila objeknya memang bertanah.
+    """
+    k = konteks or {}
+    if not objek_tanah(k):
+        return False
+    return bool(k.get("tanah_tanpa_sertipikat") or k.get("dokumen_tidak_ada"))
+
+
+def tanah_bersertipikat(konteks) -> bool:
+    """Kebalikan `tanah_tanpa_sertipikat` untuk objek bertanah. Dipakai agar
+    sertipikat BERHENTI ditagih saat SPTJ menggantikannya — Pasal 11 ayat (3)
+    menyebutnya "diganti", bukan "ditambah"."""
+    return objek_tanah(konteks) and not tanah_tanpa_sertipikat(konteks)
+
+
+def perlu_dokumen_lain(konteks) -> bool:
+    """Objek yang pasalnya meminta "fotokopi dokumen lain, termasuk BAST".
+
+    KOREKSI. Registry lama hanya menagihnya untuk selain-tanah/bangunan TANPA
+    dokumen kepemilikan. Teks aslinya jauh lebih luas — ia diminta pada huruf
+    b angka 3 (bangunan), huruf c angka 4 (tanah dan bangunan), huruf d angka
+    1 huruf b (selain t/b YANG PUNYA dokumen kepemilikan: STNK atau BAST),
+    dan huruf d angka 2 (yang tidak punya). Satu-satunya yang TIDAK dimintai
+    adalah tanah berdiri sendiri (huruf a hanya menyebut sertipikat).
+
+    Akibat cacat lama: pemegang gedung tak pernah ditagih BAST perolehan,
+    padahal pasalnya memintanya — dan kekurangannya baru ketahuan saat berkas
+    dikembalikan Pengelola Barang.
+    """
+    o = _objek(konteks)
+    return bool(o) and o != "tanah"
+
+
+def dipa_tidak_tegas(konteks) -> bool:
+    """DIPA tak menyatakan tegas BMN direncanakan untuk PMPP (huruf f)."""
+    return untuk_pmpp(konteks) and bool((konteks or {}).get("dipa_tidak_tegas"))
+
+
 def dokumen_hilang(konteks) -> bool:
     return bool((konteks or {}).get("dokumen_hilang"))
 
@@ -229,7 +285,8 @@ PEMICU = {
         tanpa_dok_kepemilikan, ada_fotokopi, unggah_pindaian, dokumen_tidak_ada,
         dokumen_hilang, penandatangan_didelegasikan, untuk_pmpp,
         fisik_tak_dikuasai, ada_pungutan_masyarakat, dalam_rangka_kspi,
-        penerima_lembaga_nonpemerintah,
+        penerima_lembaga_nonpemerintah, tanah_tanpa_sertipikat,
+        tanah_bersertipikat, perlu_dokumen_lain, dipa_tidak_tegas,
     )
 }
 
@@ -255,22 +312,42 @@ _PSP = (
     ("daftar_bmn", "muatan", None,
      "PMK 40/2024 Pasal 11 ayat (1) — data BMN adalah MUATAN permohonan; "
      "PMK tidak menyebutnya sebagai lampiran terpisah", "terverifikasi"),
-    ("sertipikat", "wajib_bersyarat", "objek_tanah",
-     "PMK 40/2024 Pasal 11 ayat (2) huruf a dan c", "terverifikasi"),
+    # `tanah_bersertipikat`, bukan `objek_tanah`: ayat (3) menyebut sertipikat
+    # DIGANTI SPTJ bila tanahnya belum bersertipikat — bukan ditambah.
+    ("sertipikat", "wajib_bersyarat", "tanah_bersertipikat",
+     "PMK 40/2024 Pasal 11 ayat (2) huruf a dan huruf c angka 1",
+     "terverifikasi"),
     ("imb_pbg", "wajib_bersyarat", "objek_bangunan",
-     "PMK 40/2024 Pasal 11 ayat (2) huruf b dan c", "terverifikasi"),
+     "PMK 40/2024 Pasal 11 ayat (2) huruf b angka 1 dan huruf c angka 2",
+     "terverifikasi"),
     ("dok_perolehan_bangunan", "wajib_bersyarat", "objek_bangunan",
-     "PMK 40/2024 Pasal 11 ayat (2) huruf b dan c", "terverifikasi"),
+     "PMK 40/2024 Pasal 11 ayat (2) huruf b angka 2 dan huruf c angka 3",
+     "terverifikasi"),
     ("dok_kepemilikan", "wajib_bersyarat", "punya_dok_kepemilikan",
      "PMK 40/2024 Pasal 11 ayat (2) huruf d angka 1", "terverifikasi"),
-    ("dok_lain_bast", "wajib_bersyarat", "tanpa_dok_kepemilikan",
-     "PMK 40/2024 Pasal 11 ayat (2) huruf d angka 2 — BAST perolehan "
-     "menggantikan dokumen kepemilikan yang tidak ada", "terverifikasi"),
-    ("sptj", "wajib_bersyarat", "dokumen_tidak_ada",
-     "PMK 40/2024 Pasal 11 ayat (3)–(7) — SPTJ adalah PENGGANTI dokumen yang "
-     "tidak ada, bukan lampiran yang selalu wajib", "terverifikasi"),
+    # KOREKSI (teks primer, 2026-09-01): diminta pada huruf b angka 3, huruf c
+    # angka 4, huruf d angka 1 huruf b, DAN huruf d angka 2 — semua objek
+    # kecuali tanah yang berdiri sendiri. Registry lama hanya menagihnya untuk
+    # selain-t/b tanpa dokumen kepemilikan, sehingga pemegang gedung tak
+    # pernah ditagih BAST perolehan yang pasalnya minta.
+    ("dok_lain_bast", "wajib_bersyarat", "perlu_dokumen_lain",
+     "PMK 40/2024 Pasal 11 ayat (2) huruf b angka 3, huruf c angka 4, huruf d "
+     "angka 1 huruf b (STNK/BAST), dan huruf d angka 2", "terverifikasi"),
+    # KOREKSI: SPTJ khusus TANAH belum bersertipikat, bukan pengganti dokumen
+    # apa pun yang hilang. Ayat (3) dikecualikan dari huruf a, huruf c angka 1,
+    # dan huruf e angka 3 — ketiganya tentang sertipikat tanah.
+    ("sptj", "wajib_bersyarat", "tanah_tanpa_sertipikat",
+     "PMK 40/2024 Pasal 11 ayat (3) — menggantikan sertipikat pada tanah yang "
+     "belum bersertipikat; ditandatangani pejabat struktural, bermeterai cukup",
+     "terverifikasi"),
+    ("pendukung_sptj_tanah", "wajib_bersyarat", "tanah_tanpa_sertipikat",
+     "PMK 40/2024 Pasal 11 ayat (3) huruf a–d — SPTJ tanah wajib DILENGKAPI "
+     "dokumen ini (\"dan/atau\": salah satunya sudah memenuhi)",
+     "terverifikasi"),
     ("ket_kebenaran_fotokopi", "wajib_bersyarat", "ada_fotokopi",
-     "PMK 40/2024 Pasal 11 ayat (2) huruf g", "terverifikasi"),
+     "PMK 40/2024 Pasal 11 ayat (2) huruf g — berlaku atas fotokopi pada "
+     "huruf a sampai huruf f, dari pejabat struktural K/L bersangkutan",
+     "terverifikasi"),
     ("ket_kebenaran_arsip_digital", "wajib_bersyarat", "unggah_pindaian",
      "PMK 40/2024 Pasal 73 ayat (1) huruf a — nama baku dokumennya belum "
      "ditetapkan; konfirmasikan judulnya ke KPKNL", "terverifikasi"),
@@ -281,7 +358,10 @@ _PSP = (
     ("reviu_apip", "wajib_bersyarat", "untuk_pmpp",
      "PMK 40/2024 Pasal 11 ayat (2) huruf e", "terverifikasi"),
     ("bast_pengelolaan_sementara", "wajib_bersyarat", "fisik_tak_dikuasai",
-     "PMK 40/2024 Pasal 11 ayat (2) huruf e", "terverifikasi"),
+     "PMK 40/2024 Pasal 11 ayat (2) huruf e angka 7", "terverifikasi"),
+    ("dok_penganggaran_pmpp", "wajib_bersyarat", "dipa_tidak_tegas",
+     "PMK 40/2024 Pasal 11 ayat (2) huruf f — bila DIPA tak tegas menyatakan "
+     "BMN direncanakan untuk PMPP", "terverifikasi"),
     # ANJURAN, bukan wajib-bersyarat: sumbernya satu blog praktisi, dan
     # PMK 40/2024 tak menyebutnya. Menaikkannya jadi wajib akan menahan
     # usulan atas dasar yang teksnya sendiri tak pernah minta.

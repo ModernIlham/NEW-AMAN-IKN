@@ -15,6 +15,65 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#963] Registry PSP dikoreksi terhadap teks primer — tiga cacat nyata — 2026-09-01
+
+Lanjutan [#962]. Pustaka peraturan baru terisi, dan pemakaian pertamanya
+langsung menemukan cacat di kode yang sudah berjalan.
+
+Registry [#958] dibangun dari **riset sekunder** atas PMK 40/2024. Membaca
+**teks aslinya** (`docs/regulasi/pmk-40-2024-penggunaan.txt`, Pasal 11)
+mengonfirmasi sebagian besarnya — percabangan tiga keranjang tanah/bangunan,
+`dok_kepemilikan`, `ket_kebenaran_fotokopi` huruf g, dan blok PMPP semuanya
+benar — **dan menemukan tiga kekurangan**:
+
+**1. "Dokumen lain termasuk BAST perolehan" diminta jauh lebih luas.**
+Huruf b angka 3 (bangunan), huruf c angka 4 (tanah dan bangunan), huruf d
+angka 1 huruf b (selain t/b YANG PUNYA dokumen kepemilikan — STNK atau
+BAST), dan huruf d angka 2 (yang tidak punya). Satu-satunya yang **tidak**
+dimintai adalah tanah berdiri sendiri.
+
+Registry lama menagihnya HANYA pada cabang terakhir. Akibatnya **pemegang
+gedung tak pernah ditagih BAST perolehan** yang pasalnya minta — dan
+kekurangannya baru ketahuan saat berkas dikembalikan Pengelola Barang.
+
+**2. SPTJ bukan pengganti dokumen apa pun yang hilang.** Pembacaan sekunder
+menyimpulkan demikian; ayat (3) jauh lebih sempit — ia dikecualikan dari
+**huruf a, huruf c angka 1, dan huruf e angka 3**, ketiganya tentang
+**sertipikat tanah**. SPTJ tak pernah menggantikan BPKB kendaraan ataupun
+IMB bangunan. Dan ayat (3) berbunyi *"diganti"*, bukan *"ditambah"* —
+sertipikat berhenti ditagih saat SPTJ berlaku.
+
+Ia juga wajib **dilengkapi** akta jual beli/girik/letter C/BAST/ledger jalan,
+surat keterangan lurah/camat, surat permohonan pendaftaran hak, dan/atau
+dokumen penguasaan (ayat (3) huruf a–d) — butir yang registry lama tak punya
+sama sekali.
+
+**3. Huruf f tak ada di registry lama.** Bila DIPA tak tegas menyatakan BMN
+direncanakan untuk PMPP, permohonan harus didukung KAK/RKA-K/L/POK.
+
+**Dua bidang keadaan baru** — `tanah_tanpa_sertipikat` dan `dipa_tidak_tegas`
+— tersambung dari layar sampai registry. Bidang lama `dokumen_tidak_ada`
+tetap dibaca agar catatan yang sudah tersimpan dengan pembacaan lama tak
+kehilangan maknanya, **tetapi hanya bila objeknya bertanah**.
+
+**Satu uji lama ternyata mengunci kesalahan, bukan menahannya.**
+`test_bast_psp_bukan_syarat_usulan` memakai `dok_lain_bast` sebagai wakil
+"BAST Penetapan Status Penggunaan" dan menuntut butir itu tak pernah wajib.
+Keduanya **dokumen berbeda**: yang satu BAST *perolehan* barang (serah terima
+dari penyedia), yang lain BAST *penetapan* yang AMAN cetak setelah SK terbit.
+Uji itu ditulis ulang untuk memeriksa hal yang benar — dan permintaan pemilik
+("BAST Penetapan bukan berkas usulan") **tetap berlaku serta tetap dijaga**,
+kini dengan pembanding bahwa **SK** PSP justru wajib pada rezim lain.
+
+Assertion penggantinya sempat terlalu longgar: mencari "penetapan status"
+saja menangkap `sk_psp`. Kini ia mencocokkan "berita acara" **dan** "penetapan
+status" sekaligus.
+
+Enam mutasi dipasang lalu dibunuh — masing-masing mengembalikan satu cacat
+yang baru saja dikoreksi.
+
+---
+
 ## [#962] Pustaka peraturan primer terisi — 9 naskah, dan satu jebakan — 2026-09-01
 
 Pemilik menjalankan workflow **Unduh Regulasi**. Runner menembus apa yang

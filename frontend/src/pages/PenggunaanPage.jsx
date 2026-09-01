@@ -189,7 +189,7 @@ export default function PenggunaanPage({ user, onBack }) {
       if (k.jenis_objek) q.set("jenis_objek", k.jenis_objek);
       for (const nama of ["punya_dokumen_kepemilikan", "dokumen_tidak_ada",
         "dokumen_hilang", "penandatangan_didelegasikan", "untuk_pmpp",
-        "fisik_tak_dikuasai"]) {
+        "fisik_tak_dikuasai", "tanah_tanpa_sertipikat", "dipa_tidak_tegas"]) {
         if (k[nama]) q.set(nama, "true");
       }
       for (const nama of ["ada_fotokopi", "unggah_pindaian"]) {
@@ -1379,6 +1379,7 @@ export default function PenggunaanPage({ user, onBack }) {
                             dokumen_tidak_ada: false, dokumen_hilang: false,
                             penandatangan_didelegasikan: false,
                             untuk_pmpp: false, fisik_tak_dikuasai: false,
+                            tanah_tanpa_sertipikat: false, dipa_tidak_tegas: false,
                             ...(sk.konteks_dokumen || {}),
                           });
                           setSyaratPsp(null);
@@ -1823,9 +1824,11 @@ export default function PenggunaanPage({ user, onBack }) {
                 pertanyaan yang jarang relevan menurunkan mutu jawaban atas
                 yang sering relevan. */}
             {[["punya_dokumen_kepemilikan", "Punya dokumen kepemilikan (BPKB/sertipikat/setara)"],
-              ["dokumen_tidak_ada", "Ada dokumen yang tidak ada / tidak ditemukan"],
+              // Pasal 11 ayat (3): sertipikat DIGANTI SPTJ, bukan ditambah.
+              ["tanah_tanpa_sertipikat", "Tanah belum bersertipikat"],
               ["penandatangan_didelegasikan", "Surat diteken pejabat yang menerima pendelegasian"],
-              ["untuk_pmpp", "Dalam rangka Penyertaan Modal Pemerintah Pusat"]].map(([kunci, label]) => (
+              ["untuk_pmpp", "Dalam rangka Penyertaan Modal Pemerintah Pusat"],
+              ["dipa_tidak_tegas", "DIPA tak tegas menyatakan BMN untuk PMPP"]].map(([kunci, label]) => (
               <label key={kunci} className="flex items-start gap-2 text-[11px] cursor-pointer">
                 <input type="checkbox" checked={!!konteksPsp?.[kunci]}
                   onChange={(e) => setKonteksPsp((k) => ({ ...k, [kunci]: e.target.checked }))}
