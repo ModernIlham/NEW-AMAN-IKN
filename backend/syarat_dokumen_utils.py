@@ -139,6 +139,20 @@ KATALOG_DOKUMEN = {
     "sk_tim_internal": "SK Pembentukan Tim Internal",
     "pernyataan_instansi_teknis": "Surat pernyataan dari instansi teknis yang berwenang",
     "penilaian": "Laporan Penilaian / nilai taksiran",
+    "berita_acara_penelitian": ("Berita acara penelitian tim internal "
+                               "(data administratif + penelitian fisik)"),
+    "pernyataan_pemusnahan": ("Surat Pernyataan Pengguna/Kuasa Pengguna Barang "
+                             "(identitas, tanggung jawab materiil dan formil, "
+                             "pernyataan BMN tak dapat digunakan/dimanfaatkan/"
+                             "dipindahtangankan)"),
+    "putusan_pengadilan": ("Salinan/fotokopi putusan pengadilan berkekuatan "
+                          "hukum tetap, dilegalisasi pejabat berwenang"),
+    "dok_pengganti_kepemilikan": ("Dokumen pengganti bukti kepemilikan (kontrak, "
+                                 "akta/perjanjian jual beli, atau setara) ATAU "
+                                 "Surat Pernyataan bermeterai cukup"),
+    "dok_pelaksanaan_pt": ("Dokumen pelaksanaan pemindahtanganan (risalah lelang, "
+                          "perjanjian penjualan, naskah hibah, dan/atau BAST "
+                          "sesuai bentuknya)"),
     "pendukung_sptj_tanah": ("Dokumen pendukung SPTJ tanah (akta jual beli/"
                             "girik/letter C/BAST/ledger jalan, surat keterangan "
                             "lurah/camat, surat permohonan pendaftaran hak, "
@@ -251,6 +265,42 @@ def dipa_tidak_tegas(konteks) -> bool:
     return untuk_pmpp(konteks) and bool((konteks or {}).get("dipa_tidak_tegas"))
 
 
+def wajib_kib(konteks) -> bool:
+    """BMN yang memang harus dilengkapi Kartu Identitas Barang.
+
+    PMK 83/2016 Pasal 11 ayat (2) huruf c dan Pasal 40 ayat (2) huruf c
+    berbunyi *"untuk BMN yang harus dilengkapi dengan kartu identitas
+    barang"* — bersyarat pada jenis barangnya, bukan berlaku menyeluruh.
+    Bawaan True: golongan yang ber-KIB (tanah, bangunan, kendaraan) justru
+    yang paling sering diusulkan.
+    """
+    k = konteks or {}
+    return bool(k.get("wajib_kib", True))
+
+
+def wajib_dok_kepemilikan(konteks) -> bool:
+    """BMN yang memang harus dilengkapi dokumen kepemilikan — frasa
+    bersyarat yang sama pada PMK 83/2016."""
+    return punya_dok_kepemilikan(konteks)
+
+
+def tanpa_dok_kepemilikan_umum(konteks) -> bool:
+    """Kebalikannya, lintas rezim (bukan khusus selain tanah/bangunan seperti
+    `tanpa_dok_kepemilikan` yang dipakai rezim PSP)."""
+    return not punya_dok_kepemilikan(konteks)
+
+
+def sebab_putusan_pengadilan(konteks) -> bool:
+    return str((konteks or {}).get("sebab_penghapusan") or "") == "putusan_pengadilan"
+
+
+def sebab_pemindahtanganan(konteks) -> bool:
+    """Sebab penghapusan yang paling lazim di satker. Bawaan bila tak diisi:
+    condong MENAMPILKAN butirnya."""
+    s = str((konteks or {}).get("sebab_penghapusan") or "").strip()
+    return s in ("", "pemindahtanganan")
+
+
 def dokumen_hilang(konteks) -> bool:
     return bool((konteks or {}).get("dokumen_hilang"))
 
@@ -287,6 +337,8 @@ PEMICU = {
         fisik_tak_dikuasai, ada_pungutan_masyarakat, dalam_rangka_kspi,
         penerima_lembaga_nonpemerintah, tanah_tanpa_sertipikat,
         tanah_bersertipikat, perlu_dokumen_lain, dipa_tidak_tegas,
+        wajib_kib, wajib_dok_kepemilikan, tanpa_dok_kepemilikan_umum,
+        sebab_putusan_pengadilan, sebab_pemindahtanganan,
     )
 }
 
@@ -475,28 +527,115 @@ _PENGGUNAAN_BERSAMA = (
 # pasal. Tetapi justru daftar inilah yang menentukan apakah unggahan
 # DITERIMA — jadi ia dipakai apa adanya, termasuk nama panjangnya.
 _HIBAH = (
-    ("permintaan_hibah", "wajib", None,
-     "SIMAN V2 — ditandai Mandatory", "empiris_siman"),
-    ("kib", "wajib", None,
-     "SIMAN V2 — ditandai Mandatory. Catat perbedaannya dengan rezim PSP, "
-     "yang pasalnya justru tidak menyebut KIB sama sekali", "empiris_siman"),
     ("surat_permohonan", "wajib", None,
-     "SIMAN V2 — ditandai Mandatory", "empiris_siman"),
+     "PMK 111/2016 Pasal 93 huruf c (tanah/bangunan) dan Pasal 95 huruf c "
+     "(selain tanah/bangunan) — diajukan Pengguna Barang kepada Pengelola "
+     "Barang; SIMAN V2 juga menandainya Mandatory", "terverifikasi"),
+    ("permintaan_hibah", "wajib", None,
+     "PMK 111/2016 Pasal 93 huruf c dan Pasal 95 huruf c — permohonan "
+     "DISERTAI surat pernyataan kesediaan menerima Hibah dari calon "
+     "penerima; SIMAN V2 menandainya Mandatory", "terverifikasi"),
     ("data_calon_penerima_hibah", "wajib", None,
-     "SIMAN V2 — ditandai Mandatory", "empiris_siman"),
-    ("sptj", "opsional", None,
-     "SIMAN V2 — ditandai Opsional", "empiris_siman"),
-    ("dok_penganggaran_hibah", "opsional", None,
-     "SIMAN V2 — ditandai Opsional", "empiris_siman"),
+     "PMK 111/2016 Pasal 93 huruf a angka 1 huruf c dan Pasal 95 huruf a "
+     "angka 1 huruf b — identitas calon penerima diteliti tim internal; "
+     "SIMAN V2 menandainya Mandatory", "terverifikasi"),
+    ("berita_acara_penelitian", "wajib", None,
+     "PMK 111/2016 Pasal 93 huruf a angka 2 jo. huruf b, dan Pasal 95 huruf "
+     "a angka 2 jo. huruf b — hasil penelitian tim internal dituangkan dalam "
+     "berita acara dan disampaikan kepada Pengguna Barang. TIDAK ada di "
+     "daftar SIMAN V2 maupun registry sebelumnya", "terverifikasi"),
+    # KIB: disebut Pasal 93 untuk TANAH/BANGUNAN, tetapi TIDAK disebut Pasal
+    # 95 untuk selain tanah/bangunan — padahal SIMAN V2 menandainya Mandatory
+    # justru pada layar hibah selain t/b. Keduanya dipertahankan apa adanya:
+    # inilah alasan tingkat bukti `empiris_siman` dipisahkan dari pasal.
+    ("kib", "wajib", None,
+     "PMK 111/2016 Pasal 93 huruf a angka 1 huruf a dan b menyebut KIB untuk "
+     "tanah/bangunan; Pasal 95 (selain tanah/bangunan) TIDAK menyebutnya, "
+     "namun SIMAN V2 tetap menandainya Mandatory di layar hibah selain t/b — "
+     "sistem meminta lebih dari pasalnya", "empiris_siman"),
+    ("dok_penganggaran_hibah", "wajib_bersyarat", "dipa_tidak_tegas",
+     "PMK 111/2016 Pasal 94 — BMN yang sejak awal pengadaannya dimaksudkan "
+     "untuk dihibahkan menambah persyaratan dokumen penganggaran; SIMAN V2 "
+     "menandainya Opsional", "terverifikasi"),
     ("sk_tim_internal", "opsional", None,
-     "SIMAN V2 — ditandai Opsional", "empiris_siman"),
-    ("dokumen_lainnya", "opsional", None,
+     "PMK 111/2016 Pasal 93 huruf a dan Pasal 95 huruf a mewajibkan Pengguna "
+     "Barang MEMBENTUK tim internal; SK-nya sendiri ditandai Opsional oleh "
+     "SIMAN V2 — yang wajib timnya, bukan lampiran SK-nya", "terverifikasi"),
+    ("dok_kepemilikan", "muatan", "punya_dok_kepemilikan",
+     "PMK 111/2016 Pasal 93 huruf c dan Pasal 95 huruf c — bukti kepemilikan "
+     "atau dokumen setara adalah MUATAN permohonan", "terverifikasi"),
+    ("daftar_bmn", "muatan", None,
+     "PMK 111/2016 Pasal 93 huruf c dan Pasal 95 huruf c — jenis/spesifikasi, "
+     "tahun perolehan, nilai perolehan, dan lokasi/data teknis adalah MUATAN "
+     "permohonan", "terverifikasi"),
+    ("sptj", "opsional", None,
      "SIMAN V2 — ditandai Opsional", "empiris_siman"),
     ("pernyataan_instansi_teknis", "anjuran", "penerima_lembaga_nonpemerintah",
      "Pustaka repo §7: penerima lembaga sosial/budaya/keagamaan/kemanusiaan/"
      "pendidikan non-komersial wajib disertai pernyataan instansi teknis — "
      "pasalnya belum terbaca", "belum_terverifikasi"),
-    ("daftar_bmn", "anjuran", None, "Praktik lapangan", "belum_terverifikasi"),
+    ("ket_kebenaran_arsip_digital", "anjuran", "unggah_pindaian",
+     "Praktik lapangan untuk unggahan arsip digital", "belum_terverifikasi"),
+    ("dokumen_lainnya", "opsional", None,
+     "SIMAN V2 — ditandai Opsional", "empiris_siman"),
+)
+
+# ── PEMUSNAHAN: [F] PMK 83/2016 Pasal 11 ──────────────────────────────────
+_PEMUSNAHAN = (
+    ("surat_permohonan", "wajib", None,
+     "PMK 83/2016 Pasal 11 ayat (1) — diajukan Pengguna Barang kepada "
+     "Pengelola Barang", "terverifikasi"),
+    ("pernyataan_pemusnahan", "wajib", None,
+     "PMK 83/2016 Pasal 11 ayat (2) huruf a", "terverifikasi"),
+    ("dok_kepemilikan", "wajib_bersyarat", "wajib_dok_kepemilikan",
+     "PMK 83/2016 Pasal 11 ayat (2) huruf b — untuk BMN yang harus "
+     "dilengkapi dokumen kepemilikan", "terverifikasi"),
+    ("dok_pengganti_kepemilikan", "wajib_bersyarat", "tanpa_dok_kepemilikan_umum",
+     "PMK 83/2016 Pasal 11 ayat (3) — pengganti bila dokumen kepemilikannya "
+     "tidak ada", "terverifikasi"),
+    ("kib", "wajib_bersyarat", "wajib_kib",
+     "PMK 83/2016 Pasal 11 ayat (2) huruf c — untuk BMN yang harus "
+     "dilengkapi kartu identitas barang", "terverifikasi"),
+    # Keduanya WAJIB di sini, sedangkan pada rezim PSP hanya anjuran. Beda
+    # yang nyata, dan hanya terlihat setelah kedua pasalnya dibaca.
+    ("laporan_kondisi", "wajib", None,
+     "PMK 83/2016 Pasal 11 ayat (2) huruf d", "terverifikasi"),
+    ("foto_bmn", "wajib", None,
+     "PMK 83/2016 Pasal 11 ayat (2) huruf e — foto TERKINI", "terverifikasi"),
+    ("daftar_bmn", "muatan", None,
+     "PMK 83/2016 Pasal 11 ayat (1) huruf b — tahun perolehan, identitas "
+     "barang, nilai perolehan dan/atau nilai buku adalah MUATAN permohonan",
+     "terverifikasi"),
+    ("ket_kebenaran_arsip_digital", "anjuran", "unggah_pindaian",
+     "Praktik lapangan untuk unggahan arsip digital", "belum_terverifikasi"),
+    ("dokumen_lainnya", "opsional", None, "—", "belum_terverifikasi"),
+)
+
+# ── PENGHAPUSAN: [F] PMK 83/2016 Pasal 38 dan Pasal 40 ────────────────────
+_PENGHAPUSAN = (
+    ("surat_permohonan", "wajib", None,
+     "PMK 83/2016 Pasal 40 ayat (1) untuk sebab putusan pengadilan; untuk "
+     "sebab pemindahtanganan yang disampaikan adalah LAPORAN Penghapusan "
+     "(Pasal 38 ayat (3))", "terverifikasi"),
+    ("dok_pelaksanaan_pt", "wajib_bersyarat", "sebab_pemindahtanganan",
+     "PMK 83/2016 Pasal 38 ayat (3) huruf a–d — risalah lelang dan/atau BAST "
+     "(penjualan lelang), perjanjian penjualan dan/atau BAST (tanpa lelang), "
+     "BAST (tukar menukar/PMPP), naskah hibah dan/atau BAST (hibah)",
+     "terverifikasi"),
+    ("putusan_pengadilan", "wajib_bersyarat", "sebab_putusan_pengadilan",
+     "PMK 83/2016 Pasal 40 ayat (2) huruf a", "terverifikasi"),
+    ("dok_kepemilikan", "wajib_bersyarat", "wajib_dok_kepemilikan",
+     "PMK 83/2016 Pasal 40 ayat (2) huruf b", "terverifikasi"),
+    ("dok_pengganti_kepemilikan", "wajib_bersyarat", "tanpa_dok_kepemilikan_umum",
+     "PMK 83/2016 Pasal 40 ayat (3)", "terverifikasi"),
+    ("kib", "wajib_bersyarat", "wajib_kib",
+     "PMK 83/2016 Pasal 40 ayat (2) huruf c", "terverifikasi"),
+    ("daftar_bmn", "muatan", None,
+     "PMK 83/2016 Pasal 40 ayat (1) huruf b — MUATAN permohonan",
+     "terverifikasi"),
+    ("ket_kebenaran_arsip_digital", "anjuran", "unggah_pindaian",
+     "Praktik lapangan untuk unggahan arsip digital", "belum_terverifikasi"),
+    ("dokumen_lainnya", "opsional", None, "—", "belum_terverifikasi"),
 )
 
 # ── Rezim yang pasalnya BELUM terbaca ──────────────────────────────────────
@@ -545,8 +684,8 @@ SYARAT = {
     "penjualan_langsung": _PENJUALAN,
     "tukar_menukar": _KERANGKA_DASAR,
     "pmpp": _KERANGKA_DASAR,
-    "penghapusan": _KERANGKA_DASAR,
-    "pemusnahan": _KERANGKA_DASAR,
+    "penghapusan": _PENGHAPUSAN,
+    "pemusnahan": _PEMUSNAHAN,
     "sewa": _KERANGKA_DASAR,
     "pinjam_pakai": _KERANGKA_DASAR,
 }
@@ -557,6 +696,10 @@ SYARAT = {
 REZIM_BERDASAR_PASAL = frozenset({
     "psp", "penggunaan_sementara", "dioperasikan_pihak_lain",
     "alih_status", "penggunaan_bersama",
+    # Naik setelah teks primernya masuk pustaka (2026-09-01): PMK 111/2016
+    # Pasal 93 & 95 untuk hibah; PMK 83/2016 Pasal 11, 38, dan 40 untuk
+    # pemusnahan dan penghapusan.
+    "hibah", "pemusnahan", "penghapusan",
 })
 
 

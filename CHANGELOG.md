@@ -15,6 +15,76 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#965] PMK 111/2016 masuk — hibah, penghapusan, pemusnahan naik ke berdasar pasal — 2026-09-01
+
+Unduhan keempat berhasil mengambil **PMK 111/2016** (104 halaman) lewat pola
+`fulltext` JDIH yang ditebak dari unduhan sebelumnya. Pustaka kini **10 dari
+12**; sisa PP 27/2014 dan KMK 334/KM.6/2021.
+
+Penghitung baru dari [#964] langsung terbukti berguna: manifes melaporkan
+*"PUSTAKA: 10 ada"* sekaligus *"RUN INI: 6 segar, 6 gagal"* — dua angka yang
+sebelumnya tercampur jadi satu yang menyesatkan.
+
+### Daftar SIMAN ternyata hampir seluruhnya berdasar pasal
+
+Konvergensi yang baru terlihat setelah naskahnya dibaca. Empat butir
+**Mandatory** di layar SIMAN V2 punya dasar di **PMK 111/2016 Pasal 93 & 95**
+— surat permohonan, surat pernyataan kesediaan menerima hibah, data calon
+penerima, dan (untuk tanah/bangunan) KIB.
+
+**Satu butir yang SIMAN pun tak sebut:** *berita acara penelitian* tim
+internal (Pasal 93 huruf b, Pasal 95 huruf b). Tak ada di dropdown SIMAN
+maupun di registry — ditemukan hanya karena pasalnya dibaca.
+
+**KIB adalah pembeda yang membenarkan tingkat `empiris_siman` itu ada.**
+Pasal 95 — yang mengatur hibah **selain** tanah/bangunan, persis layar di
+tangkapan pemilik — **tak menyebut KIB sama sekali**, padahal di situlah
+SIMAN menandainya Mandatory. Sistem meminta lebih dari pasalnya. Ia
+dipertahankan apa adanya, dan uji baru menjaga bahwa **hanya butir ini** yang
+wajib tanpa dasar pasal.
+
+### Pemusnahan & penghapusan — PMK 83/2016
+
+**Pemusnahan (Pasal 11):** surat pernyataan Pengguna/Kuasa Pengguna Barang,
+dokumen kepemilikan (bersyarat) atau penggantinya, KIB (bersyarat), **laporan
+kondisi barang**, dan **foto terkini** — dua terakhir **wajib**, sedangkan
+pada rezim PSP hanya anjuran.
+
+**Penghapusan:** sebabnya menentukan berkasnya. Pemindahtanganan → risalah
+lelang/perjanjian/naskah hibah/BAST (**Pasal 38 ayat (3)**, yang sekaligus
+**mengonfirmasi pemetaan `DOKUMEN_PELAKSANAAN`** yang sudah ada di repo).
+Putusan pengadilan → salinan putusan berkekuatan hukum tetap (**Pasal 40**).
+
+Rezim berdasar pasal: **5 → 8**.
+
+### Tingkat bukti baru yang tak bisa diklaim palsu
+
+`sitasi_regulasi.TEKS_PRIMER` — naskahnya ADA di `docs/regulasi/`. Ia satu-
+satunya status yang menyatakan **pasalnya bisa dibaca**, bukan sekadar nomor
+dan judulnya dipastikan.
+
+Dan satu-satunya yang **diperiksa terhadap artefaknya**: uji barunya membaca
+berkas **di disk** (ada, dan >5 KB), bukan manifesnya. Manifes adalah
+catatan, dan catatan bisa keliru — entri yang gagal diunduh tetap muncul di
+daftarnya. Empat belas sitasi naik dari `pustaka` ke `teks-primer`;
+PMK 111/2016 yang belum terdaftar sama sekali ikut masuk.
+
+Dua mutasi dipasang. Yang pertama (klaim `teks-primer` untuk PP 27/2014 yang
+naskahnya belum ada) dibunuh. **Yang kedua LOLOS** — melewati penyaring
+manifes membuat entri gagal ikut terhitung tersedia. Itulah yang mendorong
+pemeriksaan dipindahkan ke berkas di disk; sesudahnya ia dibunuh.
+
+Tiga uji lama dikoreksi karena mengunci keadaan sebelum kenaikan — termasuk
+satu yang menuntut butir hibah bertanda `empiris_siman`, yang jadi salah
+begitu pasalnya ditemukan. **Uji yang mengunci "belum ada dasarnya" akan
+menahan penemuan dasarnya.** Premis penjaga anti-drift juga dipertajam: yang
+dilarang adalah butir wajib yang `belum_terverifikasi`, bukan yang
+`empiris_siman` — bacaan langsung dari sistem bukan tebakan.
+
+Lima mutasi pada tabel rezim dipasang lalu dibunuh.
+
+---
+
 ## [#964] Perkakas unduh menghapus buktinya sendiri — dua cacat diperbaiki — 2026-09-01
 
 Pemilik menjalankan **Unduh Regulasi** putaran ketiga. Ketiga naskah yang
