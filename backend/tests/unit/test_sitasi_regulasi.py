@@ -126,7 +126,8 @@ class TestRegistryTidakBolehMelenceng:
 
     def test_status_hanya_dari_nilai_baku(self):
         assert set(S.SITASI_TERDAFTAR.values()) <= {
-            S.PUSTAKA, S.BELUM_RISET, S.PERLU_KOREKSI, S.TERVERIFIKASI}
+            S.PUSTAKA, S.BELUM_RISET, S.PERLU_KOREKSI, S.TERVERIFIKASI,
+            S.TEKS_PRIMER}
 
 
 class TestRepoTidakMembantahDirinya:
@@ -183,3 +184,61 @@ class TestBuktiRisetTercatat:
         Ia harus tetap berstatus belum-diriset, bukan diam-diam dianggap
         beres karena sisanya sudah ketemu."""
         assert S.SITASI_TERDAFTAR["KMK 339/KM.6/2024"] == S.BELUM_RISET
+
+
+# ── TEKS_PRIMER: satu-satunya status yang tak bisa diklaim palsu ──────────
+
+def test_teks_primer_berkasnya_memang_ada():
+    """Status `teks-primer` menyatakan NASKAHNYA bisa dibaca — klaim
+    terkuat di seluruh registry ini.
+
+    Karena itu ia diperiksa terhadap artefaknya, bukan terhadap niat baik:
+    tiap sitasi bertanda `teks-primer` wajib punya berkas di
+    `docs/regulasi/MANIFEST.json`. Menempelkan status ini tanpa naskahnya
+    langsung ketahuan di sini — tidak seperti tingkat lain, yang bertumpu
+    pada seseorang pernah merisetnya.
+    """
+    import json
+    import sitasi_regulasi as S
+
+    dir_reg = os.path.join(BACKEND, "..", "docs", "regulasi")
+    with open(os.path.join(dir_reg, "MANIFEST.json"), encoding="utf-8") as f:
+        manifes = json.load(f)
+
+    # Diperiksa terhadap BERKAS DI DISK, bukan terhadap manifesnya.
+    # Manifes adalah catatan; catatan bisa keliru. Sebuah entri yang
+    # `berkas`-nya None tetap muncul di daftar, jadi memeriksa manifes saja
+    # akan meloloskan peraturan yang justru GAGAL diunduh — dan itu persis
+    # klaim yang status ini ada untuk mencegahnya.
+    tersedia = set()
+    for b in manifes.get("berkas", []):
+        nama = b.get("berkas")
+        if not nama:
+            continue
+        jalur_teks = os.path.join(dir_reg, nama)
+        if os.path.exists(jalur_teks) and os.path.getsize(jalur_teks) > 5000:
+            tersedia.add(b["kode"])
+
+    kurang = []
+    for sitasi, status in S.SITASI_TERDAFTAR.items():
+        if status != S.TEKS_PRIMER:
+            continue
+        _, nomor, tahun = S.kunci_peraturan(sitasi)
+        if not (nomor and tahun):
+            continue
+        # Kode manifes berbentuk `<jenis>-<nomor>-<tahun>-<slug>`.
+        pola = f"-{nomor}-{tahun}-"
+        if not any(f"-{k}".find(pola) >= 0 for k in tersedia):
+            kurang.append(sitasi)
+    assert not kurang, (
+        "Sitasi bertanda teks-primer tetapi naskahnya TIDAK ada di "
+        f"docs/regulasi/: {kurang}")
+
+
+def test_teks_primer_lebih_kuat_daripada_pustaka():
+    """Peraturan yang naskahnya ada tak boleh turun lagi jadi `pustaka` —
+    itu akan menyembunyikan bukti terkuat yang sudah dimiliki."""
+    import sitasi_regulasi as S
+    for sitasi in ("PMK 40/2024", "PMK 83/2016", "PMK 111/2016",
+                   "PMK 115/2020"):
+        assert S.SITASI_TERDAFTAR[sitasi] == S.TEKS_PRIMER, sitasi

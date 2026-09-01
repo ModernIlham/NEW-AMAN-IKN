@@ -278,18 +278,134 @@ def test_kspi_menambah_pernyataan_arah_sebaliknya():
 
 # ── Hibah — daftar empiris SIMAN V2 ────────────────────────────────────────
 
-def test_hibah_cocok_persis_dengan_layar_siman():
-    """Empat Mandatory dan empat Opsional, sesuai dropdown "Jenis Dokumen"
-    pada dialog Kelengkapan Dokumen SIMAN V2."""
+# ── Hibah, pemusnahan, penghapusan — naik ke berdasar pasal (2026-09-01) ──
+#
+# Teks primer PMK 111/2016 dan PMK 83/2016 masuk pustaka lewat unduhan
+# runner. Ketiganya sebelumnya bertanda `belum_terverifikasi`, sehingga
+# layar menampilkan semuanya sebagai anjuran padahal pasalnya jelas.
+
+def test_hibah_daftar_siman_ternyata_bisa_diturunkan_dari_pasal():
+    """Empat butir Mandatory di layar SIMAN V2 ternyata punya dasar pasal —
+    dan itu baru ketahuan setelah PMK 111/2016 dibaca."""
     butir = {b["kode"]: b for b in sd.syarat_dokumen("hibah", {})}
-    mandatory = {"permintaan_hibah", "kib", "surat_permohonan",
-                 "data_calon_penerima_hibah"}
-    for kode in mandatory:
-        assert butir[kode]["sifat"] == "wajib", kode
-        assert butir[kode]["verifikasi"] == "empiris_siman", kode
-    for kode in ("sptj", "dok_penganggaran_hibah", "sk_tim_internal",
-                 "dokumen_lainnya"):
+    for kode in ("surat_permohonan", "permintaan_hibah",
+                 "data_calon_penerima_hibah"):
+        assert butir[kode]["wajib"] is True, kode
+        assert butir[kode]["verifikasi"] == "terverifikasi", kode
+        assert "Pasal 9" in butir[kode]["dasar"], kode
+
+
+def test_kib_hibah_TETAP_empiris_karena_pasal_95_tak_menyebutnya():
+    """Pembeda yang membenarkan adanya tingkat bukti `empiris_siman`.
+
+    Pasal 93 (tanah/bangunan) menyebut KIB; Pasal 95 (selain tanah/bangunan)
+    TIDAK — padahal justru di layar hibah selain t/b itulah SIMAN V2
+    menandainya Mandatory. Sistem meminta lebih dari pasalnya. Menaikkannya
+    jadi `terverifikasi` akan mengklaim dasar yang tak ada; menurunkannya
+    jadi anjuran akan membuat unggahan ditolak SIMAN.
+    """
+    kib = next(b for b in sd.syarat_dokumen("hibah", {}) if b["kode"] == "kib")
+    assert kib["wajib"] is True
+    assert kib["verifikasi"] == "empiris_siman"
+    assert "Pasal 95" in kib["dasar"] and "TIDAK menyebutnya" in kib["dasar"]
+
+
+def test_berita_acara_penelitian_butir_yang_SIMAN_pun_tak_sebut():
+    """Pasal 93 huruf b dan Pasal 95 huruf b: hasil penelitian tim internal
+    dituangkan dalam berita acara. Tak ada di daftar SIMAN maupun registry
+    sebelumnya — ditemukan hanya karena pasalnya dibaca."""
+    assert "berita_acara_penelitian" in _wajib("hibah", {})
+
+
+def test_tim_internal_wajib_tetapi_SK_nya_opsional():
+    """Bedanya halus dan disengaja: pasal mewajibkan MEMBENTUK tim; SIMAN
+    menandai SK-nya Opsional. Yang wajib timnya, bukan lampirannya."""
+    sk = next(b for b in sd.syarat_dokumen("hibah", {})
+              if b["kode"] == "sk_tim_internal")
+    assert sk["sifat"] == "opsional"
+    assert sk["verifikasi"] == "terverifikasi"
+
+
+# ── Pemusnahan ────────────────────────────────────────────────────────────
+
+def test_pemusnahan_laporan_kondisi_dan_foto_WAJIB_beda_dari_psp():
+    """PMK 83/2016 Pasal 11 ayat (2) huruf d dan e mewajibkan keduanya.
+    Pada rezim PSP mereka hanya anjuran — perbedaan yang hanya terlihat
+    setelah kedua pasalnya dibaca."""
+    p = {b["kode"]: b for b in sd.syarat_dokumen("pemusnahan", {})}
+    assert p["laporan_kondisi"]["wajib"] is True
+    assert p["foto_bmn"]["wajib"] is True
+    psp = {b["kode"]: b for b in sd.syarat_dokumen("psp", {})}
+    assert psp["laporan_kondisi"]["wajib"] is False
+    assert psp["foto_bmn"]["wajib"] is False
+
+
+def test_pemusnahan_menagih_surat_pernyataan_khususnya():
+    b = next(x for x in sd.syarat_dokumen("pemusnahan", {})
+             if x["kode"] == "pernyataan_pemusnahan")
+    assert b["wajib"] is True
+    assert "materiil" in sd.KATALOG_DOKUMEN["pernyataan_pemusnahan"]
+
+
+def test_dokumen_kepemilikan_dan_penggantinya_saling_meniadakan():
+    """Ayat (3): pengganti dipakai HANYA bila dokumen kepemilikannya tak ada.
+    Menagih keduanya sekaligus akan menyuruh orang mengunggah dua dokumen
+    untuk satu kewajiban."""
+    punya = _wajib("pemusnahan", {"punya_dokumen_kepemilikan": True})
+    assert "dok_kepemilikan" in punya and "dok_pengganti_kepemilikan" not in punya
+    tanpa = _wajib("pemusnahan", {"punya_dokumen_kepemilikan": False})
+    assert "dok_pengganti_kepemilikan" in tanpa and "dok_kepemilikan" not in tanpa
+
+
+def test_kib_bersyarat_bukan_menyeluruh():
+    """Pasalnya berbunyi "untuk BMN yang harus dilengkapi KIB" — bersyarat
+    pada jenis barangnya."""
+    tanpa = _wajib("pemusnahan", {"wajib_kib": False})
+    assert "kib" not in tanpa
+
+
+# ── Penghapusan ───────────────────────────────────────────────────────────
+
+def test_penghapusan_sebab_menentukan_dokumennya():
+    """Dua sebab, dua berkas yang sama sekali berbeda."""
+    pt = _wajib("penghapusan", {"sebab_penghapusan": "pemindahtanganan"})
+    assert "dok_pelaksanaan_pt" in pt and "putusan_pengadilan" not in pt
+    pengadilan = _wajib("penghapusan", {"sebab_penghapusan": "putusan_pengadilan"})
+    assert "putusan_pengadilan" in pengadilan
+    assert "dok_pelaksanaan_pt" not in pengadilan
+
+
+def test_penghapusan_sebab_kosong_condong_menampilkan():
+    """Sebab yang belum diisi memakai yang paling lazim di satker —
+    menyembunyikan butirnya akan membuat operator tak tahu ia ada."""
+    assert "dok_pelaksanaan_pt" in _wajib("penghapusan", {})
+
+
+def test_dokumen_pelaksanaan_menyebut_keempat_bentuknya():
+    """Pasal 38 ayat (3) huruf a–d. Operator harus tahu mana yang berlaku
+    untuk bentuk pemindahtanganannya."""
+    nama = sd.KATALOG_DOKUMEN["dok_pelaksanaan_pt"]
+    for kata in ("risalah lelang", "perjanjian penjualan", "naskah hibah", "BAST"):
+        assert kata in nama, kata
+
+
+def test_hibah_masih_cocok_dengan_bentuk_layar_siman():
+    """Empat Mandatory SIMAN tetap wajib, dan yang Opsional tetap opsional.
+
+    Yang DIPERIKSA di sini bentuknya, bukan tingkat buktinya. Versi pertama
+    uji ini menuntut keempatnya `empiris_siman` — dan itu jadi salah begitu
+    PMK 111/2016 masuk pustaka dan ternyata mendasari tiga di antaranya.
+    Uji yang mengunci "belum ada dasarnya" akan menahan penemuan dasarnya.
+    """
+    butir = {b["kode"]: b for b in sd.syarat_dokumen("hibah", {})}
+    for kode in ("permintaan_hibah", "kib", "surat_permohonan",
+                 "data_calon_penerima_hibah"):
+        assert butir[kode]["wajib"] is True, kode
+    for kode in ("sptj", "sk_tim_internal", "dokumen_lainnya"):
         assert butir[kode]["sifat"] == "opsional", kode
+    # `dok_penganggaran_hibah` Opsional di SIMAN, tetapi Pasal 94
+    # mewajibkannya bila BMN memang diadakan untuk dihibahkan.
+    assert butir["dok_penganggaran_hibah"]["sifat"] == "wajib_bersyarat"
 
 
 def test_kib_wajib_pada_hibah_tetapi_hanya_anjuran_pada_psp():
@@ -308,20 +424,45 @@ def test_rezim_yang_pasalnya_belum_terbaca_ditandai_jujur():
     """Sumber primer PMK 111/2016 & PMK 115/2020 terblokir dari lingkungan
     pengembangan. Butir wajibnya boleh ada sebagai kerangka kerja, tetapi
     TIDAK boleh mengaku terverifikasi."""
-    for rezim in ("penjualan_lelang", "tukar_menukar", "pmpp",
-                  "penghapusan", "pemusnahan", "sewa", "pinjam_pakai"):
+    # `penghapusan` dan `pemusnahan` KELUAR dari daftar ini pada 2026-09-01:
+    # PMK 83/2016 masuk pustaka dan pasalnya dibaca.
+    for rezim in ("penjualan_lelang", "penjualan_langsung", "tukar_menukar",
+                  "pmpp", "sewa", "pinjam_pakai"):
         assert rezim not in sd.REZIM_BERDASAR_PASAL
         for b in sd.syarat_dokumen(rezim, {}):
             assert b["verifikasi"] != "terverifikasi", f"{rezim}/{b['kode']}"
 
 
-def test_rezim_penggunaan_setiap_wajibnya_berdasar_pasal():
-    """Sebaliknya: yang diklaim berdasar pasal harus benar-benar begitu
-    untuk SETIAP butir wajibnya, bukan sekadar sebagian."""
+def test_rezim_berdasar_pasal_tak_punya_butir_wajib_yang_sekadar_tebakan():
+    """Yang diklaim berdasar pasal tak boleh punya satu pun butir wajib yang
+    `belum_terverifikasi`.
+
+    Premisnya DIPERTAJAM (2026-09-01). Versi pertama menuntut setiap butir
+    wajib bertanda `terverifikasi` — dan itu terlalu keras: KIB pada rezim
+    hibah wajib karena SIMAN V2 menuntutnya, bukan karena pasalnya, sebab
+    Pasal 95 memang tak menyebutnya. `empiris_siman` bukan tebakan; ia
+    bacaan langsung dari sistem yang justru menentukan diterima atau
+    tidaknya unggahan. Yang dilarang adalah praktik lapangan yang belum
+    terverifikasi menjadi gerbang.
+    """
     for rezim in sd.REZIM_BERDASAR_PASAL:
         for b in sd.syarat_dokumen(rezim, {}):
             if b["sifat"] in ("wajib", "wajib_bersyarat"):
-                assert b["verifikasi"] == "terverifikasi", f"{rezim}/{b['kode']}"
+                assert b["verifikasi"] != "belum_terverifikasi", \
+                    f"{rezim}/{b['kode']} wajib tetapi belum terverifikasi"
+
+
+def test_hanya_kib_hibah_yang_wajib_tanpa_dasar_pasal():
+    """Pengecualian di atas harus TETAP satu-satunya. Kalau butir lain ikut
+    menyelinap jadi `empiris_siman` yang wajib, longgarnya premis tadi
+    berubah jadi pintu masuk."""
+    empiris_wajib = [
+        f"{r}/{b['kode']}" for r in sd.REZIM_BERDASAR_PASAL
+        for b in sd.syarat_dokumen(r, {})
+        if b["sifat"] in ("wajib", "wajib_bersyarat")
+        and b["verifikasi"] == "empiris_siman"
+    ]
+    assert empiris_wajib == ["hibah/kib"], empiris_wajib
 
 
 # ── Kelengkapan ────────────────────────────────────────────────────────────

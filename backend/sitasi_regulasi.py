@@ -47,6 +47,21 @@ PERLU_KOREKSI = "perlu-koreksi"  # bertentangan dengan pustaka repo sendiri
 # dipastikan adalah NOMOR dan JUDULnya, bukan isi pasalnya.
 TERVERIFIKASI = "terverifikasi"
 
+# Tingkat tertinggi: NASKAHNYA ADA di `docs/regulasi/`, diunduh workflow
+# "Unduh Regulasi" lewat runner GitHub Actions dan tercatat di MANIFEST.json
+# lengkap dengan sha256-nya.
+#
+# Ini satu-satunya status yang menyatakan PASALNYA BISA DIBACA, bukan sekadar
+# nomor dan judulnya dipastikan. Ia juga satu-satunya yang TAK BISA diklaim
+# palsu: `test_teks_primer_berkasnya_memang_ada` memeriksa manifesnya, jadi
+# menempelkan status ini tanpa naskahnya akan langsung ketahuan.
+#
+# Catatan atas TERVERIFIKASI di atas: keterangan "sumber primer terblokir"
+# masih benar untuk lingkungan pengembangan, tetapi TIDAK lagi berarti
+# naskahnya tak terjangkau sama sekali — runner punya egress biasa. Lihat
+# `docs/regulasi/README.md`.
+TEKS_PRIMER = "teks-primer"
+
 
 def rapikan(sitasi: str) -> str:
     """Bentuk baku satu sitasi: spasi tunggal, tanpa kata "Nomor"."""
@@ -234,28 +249,31 @@ SITASI_TERDAFTAR = {
     "PP 71": PUSTAKA,
     "PSAP 05": PUSTAKA,
     "PSAP 07": PUSTAKA,
-    "PMK 181": PUSTAKA,
-    "PMK 181/2016": PUSTAKA,
-    "PMK 181/PMK.06/2016": PUSTAKA,
+    "PMK 181": TEKS_PRIMER,
+    "PMK 181/2016": TEKS_PRIMER,
+    "PMK 181/PMK.06/2016": TEKS_PRIMER,
     # — Siklus BMN —
-    "PMK 40": PUSTAKA,
-    "PMK 40/2024": PUSTAKA,
-    "PMK 115/2020": PUSTAKA,
+    "PMK 40": TEKS_PRIMER,
+    "PMK 40/2024": TEKS_PRIMER,
+    "PMK 115/2020": TEKS_PRIMER,
     "PMK 120/2024": PUSTAKA,
     "PMK 120/PMK.06/2024": PUSTAKA,
     "PMK 138/2024": PUSTAKA,
     "PMK 139/PMK.08/2022": PUSTAKA,
     "PMK 18/2024": PUSTAKA,
-    "PMK 165/2021": PUSTAKA,
-    "PMK 165/PMK.06/2021": PUSTAKA,
-    "PMK 83/2016": PUSTAKA,
-    "PMK 83/PMK.06/2016": PUSTAKA,
-    "PMK 207": PUSTAKA,
-    "PMK 207/2021": PUSTAKA,
-    "PMK 207/PMK.06/2021": PUSTAKA,
+    # Naskahnya masuk pustaka pada unduhan keempat (2026-09-01) lewat pola
+    # `fulltext` JDIH — 104 halaman.
+    "PMK 111/2016": TEKS_PRIMER,
+    "PMK 165/2021": TEKS_PRIMER,
+    "PMK 165/PMK.06/2021": TEKS_PRIMER,
+    "PMK 83/2016": TEKS_PRIMER,
+    "PMK 83/PMK.06/2016": TEKS_PRIMER,
+    "PMK 207": TEKS_PRIMER,
+    "PMK 207/2021": TEKS_PRIMER,
+    "PMK 207/PMK.06/2021": TEKS_PRIMER,
     "PMK 118/2017": PUSTAKA,
     "PMK 118/PMK.06/2017": PUSTAKA,
-    "PMK 4/2015": PUSTAKA,
+    "PMK 4/2015": TEKS_PRIMER,
     "PMK 218/2015": PUSTAKA,
     "PMK 234/2020": PUSTAKA,
     "PMK 65/2017": PUSTAKA,

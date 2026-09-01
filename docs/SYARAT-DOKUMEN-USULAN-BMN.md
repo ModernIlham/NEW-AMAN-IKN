@@ -145,7 +145,37 @@ berlawanan arah (Pasal 59 ayat (2)).
 Menempelkan checklist PSP ke rezim-rezim ini adalah kekeliruan yang berulang
 di banyak booklet praktik — daftarnya jauh lebih pendek.
 
-### 5.3 Hibah — [E] terbaca dari layar SIMAN V2
+### 5.3 Hibah — [F] PMK 111/2016 Pasal 93 & 95, dipadu layar SIMAN V2
+
+> **Diverifikasi dari teks primer 2026-09-01**
+> (`docs/regulasi/pmk-111-2016-pemindahtanganan.txt`, 104 halaman).
+
+**Daftar SIMAN ternyata hampir seluruhnya bisa diturunkan dari pasalnya** —
+konvergensi yang baru terlihat setelah naskahnya dibaca:
+
+| Dokumen | SIMAN | Pasal |
+|---|---|---|
+| Surat Permohonan | Mandatory | Pasal 93 huruf c / Pasal 95 huruf c |
+| Surat pernyataan kesediaan menerima hibah | Mandatory | Pasal 93 huruf c / Pasal 95 huruf c |
+| Data Calon Penerima Hibah | Mandatory | Pasal 93 huruf a.1.c / Pasal 95 huruf a.1.b |
+| Kartu Identitas Barang (KIB) | Mandatory | **Pasal 93 menyebutnya untuk tanah/bangunan; Pasal 95 TIDAK** |
+| Dokumen Penganggaran | Opsional | Pasal 94 — wajib bila BMN diadakan untuk dihibahkan |
+| SK Pembentukan Tim Internal | Opsional | Pasal 93/95 huruf a — **timnya** wajib, SK-nya opsional |
+
+**Satu butir yang SIMAN pun tak sebut:** *berita acara penelitian* tim
+internal (Pasal 93 huruf b, Pasal 95 huruf b). Ia tak ada di dropdown SIMAN
+maupun di registry sebelumnya — ditemukan hanya karena pasalnya dibaca.
+
+**KIB adalah pembeda yang membenarkan adanya tingkat `empiris_siman`.**
+Pasal 95 — yang mengatur hibah **selain** tanah/bangunan, persis layar di
+tangkapan pemilik — **tidak menyebut KIB sama sekali**, padahal di situlah
+SIMAN menandainya Mandatory. Sistem meminta lebih dari pasalnya.
+Menaikkannya jadi `terverifikasi` akan mengklaim dasar yang tak ada;
+menurunkannya jadi anjuran akan membuat unggahan ditolak SIMAN. Ia
+dipertahankan apa adanya, dan ada uji yang menjaga bahwa **hanya butir ini**
+yang wajib tanpa dasar pasal.
+
+### 5.3a Daftar asli SIMAN V2 (arsip)
 
 Dropdown **"Jenis Dokumen"** pada dialog *Kelengkapan Dokumen* SIMAN V2 untuk
 hibah selain tanah dan bangunan, lengkap dengan penanda milik SIMAN sendiri:
@@ -169,10 +199,39 @@ Nama dokumen dipakai **apa adanya**, termasuk yang panjang — operator harus
 bisa mencocokkan satu lawan satu dengan dropdown SIMAN, dan nama yang
 "diperbaiki" justru menghambat.
 
+### 5.3b Pemusnahan — [F] PMK 83/2016 Pasal 11
+
+| Dokumen | Sifat | Pasal |
+|---|---|---|
+| Surat permohonan | Wajib | ayat (1) |
+| Surat Pernyataan Pengguna/Kuasa Pengguna Barang | Wajib | ayat (2) huruf a |
+| Fotokopi dokumen kepemilikan | Wajib bila BMN-nya berdokumen | ayat (2) huruf b |
+| Pengganti (kontrak/akta/pernyataan bermeterai) | Wajib bila dokumennya tak ada | ayat (3) |
+| Kartu Identitas Barang | Wajib bila BMN-nya ber-KIB | ayat (2) huruf c |
+| **Laporan kondisi barang** | **Wajib** | ayat (2) huruf d |
+| **Foto terkini BMN** | **Wajib** | ayat (2) huruf e |
+
+Dua yang terakhir **wajib** di sini, sedangkan pada rezim PSP hanya anjuran —
+perbedaan yang hanya terlihat setelah kedua pasalnya dibaca.
+
+### 5.3c Penghapusan — [F] PMK 83/2016 Pasal 38 & 40
+
+**Sebabnya menentukan berkasnya**, dan keduanya sama sekali berbeda:
+
+| Sebab | Dokumen |
+|---|---|
+| **Pemindahtanganan** (paling lazim) | Laporan Penghapusan + risalah lelang dan/atau BAST (penjualan lelang), perjanjian penjualan dan/atau BAST (tanpa lelang), BAST (tukar menukar/PMPP), naskah hibah dan/atau BAST (hibah) — **Pasal 38 ayat (3) huruf a–d** |
+| **Putusan pengadilan** | Salinan putusan berkekuatan hukum tetap yang dilegalisasi + dokumen kepemilikan + KIB — **Pasal 40 ayat (2)** |
+
+Pasal 38 ayat (3) **mengonfirmasi pemetaan `DOKUMEN_PELAKSANAAN` yang sudah
+ada** di `backend/pemindahtanganan_utils.py` sejak sebelum pustaka ini ada.
+
 ### 5.4 Rezim yang pasalnya BELUM terbaca
 
-Penjualan (lelang & tanpa lelang), tukar menukar, PMPP, penghapusan,
-pemusnahan, sewa, pinjam pakai.
+Penjualan (lelang & tanpa lelang), tukar menukar, PMPP, sewa, pinjam pakai.
+
+*(Penghapusan dan pemusnahan KELUAR dari daftar ini pada 2026-09-01 —
+PMK 83/2016 masuk pustaka dan pasalnya dibaca.)*
 
 Sumber primer PMK 111/2016 jo. 165/2021 dan PMK 115/2020 terblokir. Yang
 disediakan adalah **kerangka dasar** yang benar-benar berulang di semua rezim
