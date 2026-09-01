@@ -183,8 +183,27 @@ MANIFES = [
                  "terakhir yang belum berdasar pasal"),
         "prioritas": 6,
         "sumber": [
+            # URUTAN ADALAH PREFERENSI: perulangan berhenti pada sumber
+            # PERTAMA yang lolos penjagaan, jadi yang paling lengkap harus
+            # didahulukan. Cermin Kemhan sudah terbukti berhasil — kalau ia
+            # tetap di depan, jalur mana pun yang ditambahkan di belakangnya
+            # tak akan pernah dicoba.
+            #
+            # Jalur `baca/` adalah bentuk KETIGA di DJKN, berbeda dari
+            # `detail/` (JavaScript, dua putaran gagal) maupun `download/`
+            # (berhasil, tetapi lampirannya saja). Bila ia menyajikan dokumen
+            # yang UTUH — halaman diktum berikut lampirannya — naskah itulah
+            # yang seharusnya masuk pustaka. Karena itu ia didahulukan, dengan
+            # `html` (cari tautan berkas) lalu `teks` (halamannya sendiri yang
+            # memuat naskah).
+            ("html", "https://www.djkn.kemenkeu.go.id/peraturan/baca/411/"
+                     "Keputusan-Menteri-Keuangan-Nomor-213KM62021.html"),
+            ("teks", "https://www.djkn.kemenkeu.go.id/peraturan/baca/411/"
+                     "Keputusan-Menteri-Keuangan-Nomor-213KM62021.html"),
             # Cermin PDF langsung di Itjen Kemhan — berkas statis, jauh lebih
             # stabil daripada halaman JDIH yang memuat PDF lewat JavaScript.
+            # Sudah terbukti berhasil, jadi ia jaring pengaman: bila `baca/`
+            # tak memberi apa-apa, lampirannya tetap masuk.
             ("pdf", "https://www.kemhan.go.id/itjen/wp-content/uploads/2022/07/"
                     "8_KEP-MENKU-NOMOR-213-THN-2021-1.pdf"),
             # Pola nama berkas KMK terungkap dari contoh `KMK 128~KM.6~2022.pdf`:

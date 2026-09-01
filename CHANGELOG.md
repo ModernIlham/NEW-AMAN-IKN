@@ -48,6 +48,27 @@ mengutip "MEMUTUSKAN" + "BAB I" + "Pasal 1" lolos guard bentuk tetapi
 tertahan guard nomor. Satu uji menahan agar penandaan ini tetap satu
 pengecualian yang bisa ditunjuk.
 
+### Jalur `baca/` DJKN — dan urutan yang menentukan
+
+DJKN ternyata punya **tiga** jalur untuk satu peraturan: `detail/`
+(JavaScript, gagal), `download/` (berkasnya langsung, lampirannya saja), dan
+`baca/` yang belum pernah dicoba.
+
+Menambahkannya memunculkan jebakan yang mudah terlewat: **urutan sumber
+adalah preferensi**. `unduh_satu` berhenti pada sumber pertama yang lolos
+penjagaan, jadi sumber baru yang ditaruh di belakang sumber yang sudah
+terbukti berhasil tak akan pernah dicoba — ia mati diam-diam, dan manifesnya
+tak menyebutkannya sama sekali. Versi pertama suntingan ini menaruh `baca/`
+di posisi keempat, di belakang cermin Kemhan yang sudah berhasil; ia tak akan
+pernah dijalankan. `baca/` kini di depan, Kemhan jadi jaring pengaman, dan
+ada uji yang menahan urutannya.
+
+Satu URL kini boleh muncul dua kali dengan jenis BERBEDA — `html` mencari
+tautan berkas, `teks` memperlakukan halamannya sebagai naskah. Uji URL kembar
+dipertajam ke pasangan (jenis, url), bukan dilonggarkan: yang dilarang tetap
+percobaan yang benar-benar terbuang, ditambah batas satu URL paling banyak
+dua jenis.
+
 ### Tingkat `rujukan` — uraian TENTANG peraturan
 
 KMK 334/KM.6/2021 tak terindeks di bagian peraturan DJKN dan sepuluh sumber

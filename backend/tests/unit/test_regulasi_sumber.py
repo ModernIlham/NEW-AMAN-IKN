@@ -79,11 +79,26 @@ def test_tak_ada_url_kembar_dalam_satu_entri():
     `334~KM.6~2021KMK.pdf` DUA kali, sisa suntingan manual. Manifes
     unduhan keempat mencatatnya gagal dua kali dengan galat berbeda (404
     lalu timeout), dan itu terbaca seolah dua sumber berbeda.
+
+    Yang dilarang adalah pasangan (jenis, url) yang IDENTIK — percobaan
+    yang benar-benar terbuang. URL sama dengan jenis BERBEDA bukan kembar:
+    `html` mencari tautan berkas di halamannya, `teks` memperlakukan
+    halamannya sendiri sebagai naskah. Halaman yang memuat naskah langsung
+    (seperti PP 27/2014) hanya terjangkau lewat yang kedua.
     """
     for e in rs.MANIFES:
-        urls = [u for _, u in e["sumber"]]
-        kembar = [u for u in set(urls) if urls.count(u) > 1]
+        pasangan = [(j, u) for j, u in e["sumber"]]
+        kembar = [p for p in set(pasangan) if pasangan.count(p) > 1]
         assert not kembar, f"{e['kode']}: {kembar}"
+
+
+def test_url_sama_paling_banyak_dua_jenis():
+    """Pelonggaran di atas jangan jadi pintu bagi tebakan berulang: satu URL
+    hanya masuk akal dicoba sebagai `html` dan `teks`, tak lebih."""
+    for e in rs.MANIFES:
+        urls = [u for _, u in e["sumber"]]
+        berlebih = [u for u in set(urls) if urls.count(u) > 2]
+        assert not berlebih, f"{e['kode']}: {berlebih}"
 
 
 def test_kmk_memakai_pola_nama_berkasnya_sendiri():
@@ -1019,3 +1034,42 @@ def test_rujukan_dihitung_terpisah_dari_naskah_primer(tmp_path, monkeypatch,
     primer = [e for e in rs.MANIFES if e.get("bentuk") != rs.BENTUK_RUJUKAN]
     assert m["berhasil"] + m["gagal"] == len(primer)
     assert m["rujukan_ada"] + m["rujukan_belum"] == len(rs.MANIFES) - len(primer)
+
+
+# ── Urutan sumber ADALAH preferensi ──────────────────────────────────────
+
+def test_sumber_baca_djkn_didahulukan_daripada_cermin_yang_sudah_berhasil():
+    """`unduh_satu` berhenti pada sumber PERTAMA yang lolos penjagaan.
+    Sumber baru yang ditaruh di belakang sumber yang sudah terbukti
+    berhasil tak akan pernah dicoba — ia mati diam-diam, dan manifesnya
+    tak akan menyebutkannya sama sekali.
+
+    Jalur `baca/` DJKN mungkin menyajikan dokumen yang utuh (halaman diktum
+    berikut lampirannya), sedangkan cermin Kemhan sudah terbukti hanya
+    memberi lampirannya. Karena itu yang mungkin lebih lengkap harus di
+    depan, dan yang sudah terbukti berhasil jadi jaring pengaman.
+    """
+    e = next(x for x in rs.MANIFES
+             if x["kode"] == "kmk-213-2021-tata-cara-pemanfaatan")
+    urut = [u for _, u in e["sumber"]]
+    baca = next(i for i, u in enumerate(urut) if "/peraturan/baca/" in u)
+    kemhan = next(i for i, u in enumerate(urut) if "kemhan.go.id" in u)
+    assert baca < kemhan, (
+        "cermin Kemhan sudah berhasil; sumber di belakangnya tak pernah dicoba")
+
+
+def test_unduh_berhenti_pada_sumber_pertama_yang_lolos(monkeypatch, tanpa_jeda):
+    """Sifat yang membuat urutan penting — dikunci di sini supaya alasan
+    uji di atas tak jadi kabur."""
+    dicoba = []
+
+    def _ambil(url):
+        dicoba.append(url)
+        return _PDF_KOSONG, "application/pdf"
+
+    monkeypatch.setattr(rs, "_ambil", _ambil)
+    monkeypatch.setattr(rs, "ekstrak_teks", lambda b: (_TEKS_NASKAH, 4))
+    r = rs.unduh_satu({"sumber": [("pdf", "https://x/satu.pdf"),
+                                  ("pdf", "https://x/dua.pdf")]})
+    assert r["ok"] is True and r["url"].endswith("satu.pdf")
+    assert dicoba == ["https://x/satu.pdf"], "sumber kedua tak boleh disentuh"

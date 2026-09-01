@@ -326,6 +326,29 @@ yang **mengutip** "MEMUTUSKAN" + "BAB I" + "Pasal 1" lolos guard bentuk
 tetapi tertahan guard nomor. Satu uji menahan agar penandaan ini tetap satu
 pengecualian yang bisa ditunjuk, bukan kebiasaan baru.
 
+### Jalur `baca/` DJKN, dan urutan yang menentukan
+
+DJKN ternyata punya **tiga** jalur untuk satu peraturan:
+
+| Jalur | Hasil |
+|---|---|
+| `/peraturan/detail/<id>/…` | halaman JavaScript, dua putaran gagal |
+| `/peraturan/download/<id>/…` | berkasnya langsung — tetapi lampirannya saja |
+| `/peraturan/baca/<id>/…` | belum dicoba; mungkin dokumen yang utuh |
+
+**Urutan sumber adalah preferensi.** `unduh_satu` berhenti pada sumber
+pertama yang lolos penjagaan, jadi sumber baru yang ditaruh di belakang
+sumber yang sudah terbukti berhasil **tak akan pernah dicoba** — ia mati
+diam-diam, dan manifesnya tak menyebutkannya sama sekali. Cermin Kemhan
+sudah terbukti berhasil, jadi `baca/` didahulukan dan Kemhan jadi jaring
+pengaman. Ada uji yang menahan urutan itu.
+
+Satu URL kini boleh muncul dua kali dengan jenis berbeda: `html` mencari
+tautan berkas di halamannya, `teks` memperlakukan halamannya sendiri sebagai
+naskah — halaman yang memuat naskah langsung (seperti PP 27/2014) hanya
+terjangkau lewat yang kedua. Yang tetap dilarang adalah pasangan
+(jenis, url) yang identik, sebab itu percobaan yang benar-benar terbuang.
+
 ### Tingkat `rujukan` — uraian TENTANG peraturan
 
 KMK 334/KM.6/2021 **tidak terindeks** di bagian peraturan DJKN, dan sepuluh
@@ -404,7 +427,7 @@ berkas statis.
   `peraturan.bpk.go.id`. Kalau seluruh sumber ada di dua host itu saja, satu
   gangguan di sisi Kemenkeu/BPK menjatuhkan semuanya sekaligus.
 
-Total saat ini: **70 sumber untuk 13 peraturan primer + 1 rujukan**,
+Total saat ini: **72 sumber untuk 13 peraturan primer + 1 rujukan**,
 20 di antaranya tautan PDF langsung. Pola unduh langsung JDIH yang berguna saat menambah sumber baru:
 `https://jdih.kemenkeu.go.id/api/download/<uuid>/<nomor>~PMK.06~<tahun>Per.pdf`,
 dan BPHN memakai pola nama berkas yang bisa ditebak untuk PP:
