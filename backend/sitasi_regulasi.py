@@ -242,10 +242,16 @@ SITASI_TERDAFTAR = {
     # — Induk & penatausahaan —
     "UU 17/2003": PUSTAKA,
     "UU 1/2004": PUSTAKA,
-    "PP 27": PUSTAKA,
-    "PP 27/2014": PUSTAKA,
-    "PP 28": PUSTAKA,
-    "PP 28/2020": PUSTAKA,
+    # Naskah keduanya ada di `docs/regulasi/`; keduanya peraturan INDUK yang
+    # paling sering dirujuk registry syarat dokumen. PP 27/2014 baru masuk
+    # pada unduhan keenam — JDIH menyajikannya sebagai `.htm`, tak pernah
+    # sebagai `.pdf`, jadi pengunduh lama tak akan pernah bisa mengambilnya.
+    # PP 28/2020 sudah ada sejak unduhan pertama; statusnya saja yang
+    # tertinggal di `pustaka` sampai sekarang.
+    "PP 27": TEKS_PRIMER,
+    "PP 27/2014": TEKS_PRIMER,
+    "PP 28": TEKS_PRIMER,
+    "PP 28/2020": TEKS_PRIMER,
     "PP 71": PUSTAKA,
     "PSAP 05": PUSTAKA,
     "PSAP 07": PUSTAKA,

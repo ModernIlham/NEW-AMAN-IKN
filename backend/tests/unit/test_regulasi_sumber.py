@@ -543,9 +543,11 @@ def test_paparan_tetap_ditolak_setelah_guard_dilonggarkan():
 
 # ── Jenis sumber `teks`: naskah HTML, bukan PDF ──────────────────────────
 #
-# PP 27/2014 selalu gagal karena varian `.pdf`-nya memang TIDAK ADA — JDIH
-# hanya menyajikannya sebagai `.htm`. Pengunduh yang cuma menerima PDF tak
-# akan pernah bisa mengambilnya, berapa kali pun dijalankan.
+# PP 27/2014 gagal tiga putaran berturut-turut karena varian `.pdf`-nya
+# memang TIDAK ADA — JDIH hanya menyajikannya sebagai `.htm`. Pengunduh yang
+# cuma menerima PDF tak akan pernah bisa mengambilnya, berapa kali pun
+# dijalankan. Sejak jenis sumber `teks` ada, naskahnya masuk pustaka pada
+# putaran berikutnya.
 
 # Sengaja dibuat MELEBIHI ambang 500 karakter. Ambang itu penjagaan yang
 # benar — halaman nyaris kosong memang tak boleh diterima — jadi fixture-nya
@@ -622,3 +624,79 @@ def test_pp_27_punya_sumber_htm():
     tak akan pernah masuk pustaka."""
     e = next(x for x in rs.MANIFES if x["kode"] == "pp-27-2014-pengelolaan-bmn")
     assert any(j == "teks" and u.endswith(".htm") for j, u in e["sumber"])
+
+
+# ── Pesan penolakan harus bisa DITINDAKLANJUTI ───────────────────────────
+#
+# Unduhan kelima menolak KMK 213/KM.6/2021 dengan "tak memuat 'menimbang'".
+# Dari kalimat itu saja tak ada cara memilih tindak lanjut: cabut sumbernya,
+# cari naskah utuh, atau perbaiki guard-nya? Tiga kemungkinan, tiga tindakan
+# berbeda — dan pesan yang cuma menyebut apa yang HILANG tak memisahkannya.
+#
+# Sebab itu penolakan sekarang membawa jejak APA YANG DITEMUKAN. Sifatnya
+# diagnostik, jadi yang diuji bukan susunan katanya melainkan apakah setiap
+# pembeda itu benar-benar terbawa.
+
+def test_penolakan_menyebut_penanda_yang_ADA_bukan_hanya_yang_hilang():
+    """Naskah yang punya "MEMUTUSKAN" tetapi tak punya "Menimbang" berbeda
+    jauh dari paparan yang tak punya keduanya — yang pertama kemungkinan
+    kutipan sebagian, yang kedua bukan peraturan sama sekali."""
+    sebagian = ("PERATURAN MENTERI KEUANGAN REPUBLIK INDONESIA\n"
+                "MEMUTUSKAN:\nPasal 1\nCukup jelas.\n")
+    sebab = rs.bukan_batang_tubuh(sebagian)
+    assert "'menimbang'" in sebab, "yang hilang tetap harus disebut"
+    assert "memutuskan" in sebab.split("|", 1)[1], (
+        "penanda yang ADA harus ikut dilaporkan; tanpa itu kutipan sebagian "
+        "tak terbedakan dari paparan")
+
+
+def test_penolakan_menyebut_panjang_naskah():
+    """Pembeda paling murah antara kutipan sebagian (beberapa ribu karakter)
+    dan naskah utuh yang OCR-nya rusak (puluhan ribu)."""
+    sebab = rs.bukan_batang_tubuh("Direktorat Jenderal Kekayaan Negara\n" * 40)
+    assert f"{40 * 36} karakter" in sebab
+
+
+def test_penolakan_menyebut_kalimat_pembuka():
+    """Kalimat pertama hampir selalu menyebut jenis dokumennya sendiri —
+    "KEPUTUSAN MENTERI KEUANGAN ..." vs "Sosialisasi KMK ...". Itu yang
+    langsung memberi tahu apakah sumbernya keliru atau guard-nya."""
+    sebab = rs.bukan_batang_tubuh(
+        "Sosialisasi KMK 213/KM.6/2021 bagi operator satker\n"
+        "Direktorat Jenderal Kekayaan Negara\n")
+    assert "Sosialisasi KMK 213" in sebab
+
+
+def test_jejak_membedakan_pasal_dari_diktum():
+    """Naskah yang punya diktum tetapi ditolak karena sebab lain harus
+    terbaca sebagai Keputusan, bukan Peraturan cacat."""
+    jejak = rs.jejak_teks("KESATU : sesuatu\nKEDUA : lainnya\n")
+    assert "ada diktum" in jejak and "ada pasal bernomor" not in jejak
+    jejak = rs.jejak_teks("Pasal 1\nCukup jelas.\n")
+    assert "ada pasal bernomor" in jejak and "ada diktum" not in jejak
+
+
+def test_jejak_tak_meluber_ke_seluruh_naskah():
+    """Pesan ini masuk ke MANIFEST.json yang ikut ter-commit. Jejak yang
+    memuat ribuan karakter naskah akan membuat manifesnya tak terbaca."""
+    jejak = rs.jejak_teks("Kata pembuka yang panjang sekali. " * 200)
+    assert len(jejak) < 300, jejak
+
+
+def test_kedua_jalur_tolak_membawa_jejak():
+    """Guard punya DUA jalur penolakan — penanda hilang, dan tak ada
+    pasal/diktum. Memperkaya satu saja meninggalkan separuh diagnosis tetap
+    buntu, dan jalur kedualah yang menolak Keputusan berbentuk aneh."""
+    tanpa_penanda = rs.bukan_batang_tubuh("Paparan singkat pengelolaan BMN\n")
+    tanpa_pasal = rs.bukan_batang_tubuh(
+        "Menimbang bahwa ...\nMEMUTUSKAN:\nSesuatu tanpa pasal.\n")
+    assert "karakter" in tanpa_penanda and "pembuka:" in tanpa_penanda
+    assert "karakter" in tanpa_pasal and "pembuka:" in tanpa_pasal
+
+
+def test_naskah_pustaka_tetap_lulus_setelah_pesan_diperkaya():
+    """Jejak diagnostik hanya boleh menempel pada penolakan. Naskah yang
+    diterima harus tetap mengembalikan string kosong — kalau tidak, seluruh
+    pustaka ikut tertolak."""
+    assert rs.bukan_batang_tubuh(_NASKAH) == ""
+    assert rs.bukan_batang_tubuh(_KMK_DIKTUM) == ""
