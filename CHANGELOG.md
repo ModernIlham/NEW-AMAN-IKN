@@ -15,6 +15,57 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#961] `main` merah karena uji berbom waktu — deret bulanan vs "hari ini" — 2026-09-01
+
+CI di `main` gagal pada merge [#960] (`8934345`), padahal CI PR-nya hijau
+beberapa menit sebelumnya. Deploy ikut **di-skip** — gerbangnya memang
+menuntut CI sukses, jadi produksi tidak menerima commit gagal-CI.
+
+**Bukan perubahan itu yang salah.** Diff-nya hanya menyentuh
+`scripts/regulasi_sumber.py`, ujinya, dan dokumen. Yang gagal:
+
+```
+test_tanggal_surat_tak_mundur.py::TestPratinjauMembawaBatasnya::test_batas_dikirim_ke_layar
+AssertionError: assert '' == '2026-08-05'
+```
+
+**Sebabnya jam, bukan kode.** CI PR berjalan 2026-08-31 23:55 UTC dan lulus;
+CI `main` berjalan **2026-09-01 00:00:32 UTC** dan gagal.
+
+Ujinya memesan surat bertanggal `2026-08-05`, lalu memanggil
+`pratinjau_nomor` **tanpa** `tanggal_surat` — sehingga route memakai
+`datetime.now()`. Deret nomor di-reset **bulanan**
+(`RESET_URUT_DEFAULT = "bulanan"`), jadi pratinjau mencari di periode
+`2026-09` dan tak menemukan surat yang dipesan di `2026-08`.
+
+Uji itu lulus sepanjang Agustus 2026 dan meledak pada detik pertama
+September. **Uji yang lulusnya bergantung pada bulan berapa CI dijalankan
+tidak menjaga apa pun — ia hanya menunda kegagalannya.**
+
+**Perbaikannya**: `tanggal_surat` dikirim eksplisit, sehingga pemesanan dan
+pratinjau berada di periode yang sama tanpa bergantung pada "sekarang" sama
+sekali. Deterministik, bukan sekadar lulus untuk September.
+
+**Insidennya diubah jadi cakupan.** Uji baru
+`test_batas_hanya_dari_deret_periode_yang_sama` menjaga perilaku yang tadi
+menjatuhkannya: deret bulanan berarti tiap bulan punya nomor 001-nya sendiri,
+maka surat bulan lalu **bukan** batas bawah bulan ini. Kalau ia ikut jadi
+batas, operator akan ditolak saat menomori surat awal bulan yang tanggalnya
+lebih awal daripada surat terakhir bulan lalu.
+
+Dua mutasi dibunuh: bom waktunya dikembalikan (uji lama gagal lagi), dan
+reset deret dipaksa tahunan sehingga Agustus–September menyatu (uji baru
+gagal). **Satu mutasi sengaja dicatat karena LOLOS pada percobaan pertama**:
+mengosongkan `periode` di route ternyata membuat pencarian tak menemukan
+apa-apa, sehingga uji baru lulus karena sebab yang salah — itulah alasan
+mutasinya diganti dengan yang benar-benar menyasar pemisahan periode.
+
+Pemeriksaan lanjutan: satu-satunya pemanggil `pratinjau_nomor` tanpa tanggal
+yang tersisa (`test_pratinjau_format_nomor.py`) tak pernah memesan surat,
+jadi tak ada ketidakcocokan periode di sana.
+
+---
+
 ## [#960] Sumber peraturan diperbanyak — tak ada lagi yang bersumber tunggal — 2026-08-31
 
 Lanjutan [#959]. Pertanyaan pemilik: *"apakah sudah selesai mengumpulkan semua
