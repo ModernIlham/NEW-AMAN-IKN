@@ -72,6 +72,41 @@ def test_ada_cermin_di_luar_dua_host_utama():
     assert kurus == [], f"hanya bersandar pada Kemenkeu/BPK: {kurus}"
 
 
+def test_tak_ada_url_kembar_dalam_satu_entri():
+    """URL yang sama dua kali adalah percobaan terbuang — dan tak terlihat.
+
+    Nyatanya terjadi: entri KMK 334/2021 sempat memuat
+    `334~KM.6~2021KMK.pdf` DUA kali, sisa suntingan manual. Manifes
+    unduhan keempat mencatatnya gagal dua kali dengan galat berbeda (404
+    lalu timeout), dan itu terbaca seolah dua sumber berbeda.
+    """
+    for e in rs.MANIFES:
+        urls = [u for _, u in e["sumber"]]
+        kembar = [u for u in set(urls) if urls.count(u) > 1]
+        assert not kembar, f"{e['kode']}: {kembar}"
+
+
+def test_kmk_memakai_pola_nama_berkasnya_sendiri():
+    """PMK memakai akhiran `Per`, PP memakai `PP`, KMK TIDAK memakai
+    keduanya — polanya `KMK <nomor>~KM.6~<tahun>.pdf`, dengan spasi.
+
+    Tiga tebakan pertama (berakhiran `Kep`/`KMK`) semuanya menjawab 404 pada
+    unduhan keempat. Uji ini menahan bentuk yang sudah terbukti salah itu
+    kembali masuk.
+    """
+    salah = [u for e in rs.MANIFES for _, u in e["sumber"]
+             if "KM.6" in u and (u.endswith("Kep.pdf") or u.endswith("KMK.pdf"))]
+    assert salah == [], f"bentuk yang sudah terbukti 404: {salah}"
+
+
+def test_sewa_pinjam_pakai_punya_kmk_pelaksananya():
+    """PMK 115/2020 Pasal 96 menaruh tata cara pemanfaatan di KMK pelaksana.
+    Tanpa KMK itu di manifes, rezim sewa dan pinjam pakai tak akan pernah
+    bisa naik dari `belum_terverifikasi`."""
+    kode = {e["kode"] for e in rs.MANIFES}
+    assert "kmk-213-2021-tata-cara-pemanfaatan" in kode
+
+
 def test_semua_sumber_https_dan_jenisnya_dikenal():
     for e in rs.MANIFES:
         for jenis, url in e["sumber"]:

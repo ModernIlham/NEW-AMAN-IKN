@@ -288,10 +288,14 @@ Menaikkan keduanya berdasarkan PMK 115/2020 akan mengklaim dasar yang teksnya
 sendiri menyatakan ada di tempat lain. Ada uji yang menahan godaan itu:
 `test_sewa_dan_pinjam_pakai_TETAP_belum_terverifikasi`.
 
-**Cara melengkapinya:** temukan nomor KMK pelaksana Pasal 96, tambahkan ke
-`scripts/regulasi_sumber.py`, jalankan workflow. Atau — lebih cepat — potret
-dropdown "Jenis Dokumen" SIMAN V2 pada layar permohonan sewa, yang langsung
-menaikkannya ke `empiris_siman`.
+**KMK pelaksananya sudah ketemu: KMK 213/KM.6/2021 — Tata Cara Pelaksanaan
+Pemanfaatan Barang Milik Negara.** Kodenya `KM.6`, yakni Direktorat Jenderal
+Kekayaan Negara — persis yang disebut Pasal 96 (*"ditandatangani oleh Direktur
+Jenderal atas nama Menteri Keuangan"*).
+
+Ia sudah masuk `scripts/regulasi_sumber.py` dengan prioritas 6, lengkap dengan
+cermin PDF langsung di situs Itjen Kemhan. **Tinggal satu putaran unduhan**,
+lalu kedua rezim ini bisa naik seperti yang lain.
 
 **Sisa pekerjaan tercatat di kode, bukan hanya di dokumen ini:**
 `test_hanya_sewa_dan_pinjam_pakai_yang_tersisa` akan gagal begitu daftarnya
