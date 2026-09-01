@@ -108,8 +108,44 @@ pulihkan() {
   echo "ROLLBACK selesai pada $(git rev-parse --short HEAD). PERIKSA LOG BACKEND." >&2
 }
 
+# ── Ambil perubahan, dengan pengulangan yang SAH ────────────────────────
+#
+# Deploy 1 Sep 2026 gagal di sini: SSH ke VPS berhasil, skripnya jalan, lalu
+#
+#     fatal: unable to access 'https://github.com/…': Failed to connect to
+#     github.com port 443 after 133334 ms: Couldn't connect to server
+#
+# Kaki jaringan yang putus bukan runner→VPS melainkan VPS→GitHub, dan workflow
+# hanya mengulang kegagalan tingkat koneksi SSH (exit 255). Kegagalan ini
+# exit 128, jadi tak diulang — padahal ia justru jenis yang paling pantas
+# diulang.
+#
+# Mengulangnya DI SINI tidak melanggar aturan "jangan ulangi deploy yang sudah
+# berjalan" (lihat deploy.yml dan test_jendela_retry_deploy.py). Aturan itu
+# menahan pengulangan kegagalan yang MENGUBAH keadaan; `git fetch` berjalan
+# SEBELUM `git reset` di bawah, jadi sampai titik ini belum ada apa pun yang
+# berubah. Tiga percobaan, bukan lima: cukup melewati blip, tak cukup untuk
+# terbaca sebagai tekanan.
+#
 # JANGAN git pull — selalu fetch + reset agar identik dengan cabang tujuan.
-git fetch origin "$DEPLOY_BRANCH"
+ambil_perubahan() {
+  local n
+  for n in 1 2 3; do
+    if git fetch origin "$DEPLOY_BRANCH"; then
+      return 0
+    fi
+    if [ "$n" -lt 3 ]; then
+      echo "Percobaan $n/3 git fetch gagal — VPS belum menjangkau GitHub; ulang 30 detik…" >&2
+      sleep 30
+    fi
+  done
+  echo "GAGAL JARINGAN DI SISI VPS: github.com:443 tak terjangkau dari VPS setelah 3 percobaan." >&2
+  echo "Ini BUKAN cacat kode dan BUKAN kegagalan koneksi runner→VPS. Tak ada yang diubah:" >&2
+  echo "produksi tetap pada commit $(git rev-parse --short HEAD). Periksa DNS dan jalur keluar" >&2
+  echo "jaringan VPS, lalu jalankan ulang deploy." >&2
+  return 128
+}
+ambil_perubahan
 git reset --hard "origin/${DEPLOY_BRANCH}"
 
 pasang_env

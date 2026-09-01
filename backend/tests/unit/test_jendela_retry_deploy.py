@@ -141,3 +141,74 @@ class TestDokumenTidakLagiMenyesatkan:
         d = re.sub(r"\s+", " ", self._doc()).lower()
         assert "insiden jaringan penyedia" in d
         assert "tidak pernah sampai" in d
+
+
+class TestGitFetchDiVpsBolehDiulang:
+    """Deploy 1 Sep 2026 gagal dengan pola yang belum pernah muncul.
+
+    SSH ke VPS BERHASIL, skripnya jalan, lalu::
+
+        fatal: unable to access 'https://github.com/…': Failed to connect to
+        github.com port 443 after 133334 ms: Couldn't connect to server
+
+    Kaki jaringan yang putus bukan runner→VPS melainkan **VPS→GitHub**.
+    Workflow hanya mengulang kegagalan tingkat koneksi SSH (exit 255); ini
+    exit 128, jadi tak diulang — padahal justru jenis yang paling pantas
+    diulang.
+
+    Mengulangnya di dalam skrip TIDAK melanggar aturan kelas di atas. Aturan
+    itu menahan pengulangan kegagalan yang MENGUBAH keadaan; `git fetch`
+    berjalan sebelum `git reset`, jadi sampai titik itu belum ada apa pun
+    yang berubah — dan itulah sifat yang diuji di sini.
+    """
+
+    def _skrip(self):
+        p = os.path.abspath(os.path.join(
+            os.path.dirname(__file__), "..", "..", "..",
+            "scripts", "deploy_vps.sh"))
+        with open(p, encoding="utf-8") as f:
+            return f.read()
+
+    def test_git_fetch_diulang_bukan_sekali_jalan(self):
+        s = self._skrip()
+        assert "ambil_perubahan()" in s, "git fetch masih panggilan tunggal"
+        assert re.search(r"for n in 1 2 3", s), "jumlah percobaannya tak terbaca"
+
+    def test_pengulangan_terjadi_SEBELUM_apa_pun_berubah(self):
+        """Sifat yang membuat pengulangan ini sah. Kalau `git reset --hard`
+        pindah ke ATAS pemanggilan `ambil_perubahan`, pengulangannya berubah
+        makna menjadi mengulang deploy yang sudah menyentuh produksi."""
+        s = self._skrip()
+        panggil = s.index("\nambil_perubahan\n")
+        reset = s.index('git reset --hard "origin/${DEPLOY_BRANCH}"')
+        assert panggil < reset, (
+            "git reset mendahului fetch — pengulangannya tak lagi aman")
+
+    def test_percobaannya_sedikit_bukan_lima(self):
+        """Kesabaran dan tekanan adalah dua hal berbeda (lihat docstring
+        modul). Tiga percobaan cukup melewati blip, tak cukup terbaca sebagai
+        tekanan."""
+        s = self._skrip()
+        blok = s[s.index("ambil_perubahan()"):s.index("\nambil_perubahan\n")]
+        assert "1 2 3 4 5" not in blok
+
+    def test_kegagalannya_menyebut_SISI_VPS(self):
+        """Pesan yang tak menyebut sisinya membuat pembacanya mencari cacat
+        kode yang tidak ada — persis yang terjadi pada insiden ini."""
+        s = re.sub(r"\s+", " ", self._skrip())
+        assert "GAGAL JARINGAN DI SISI VPS" in s
+        assert "produksi tetap pada commit" in s, (
+            "tak menyebut bahwa tak ada yang berubah")
+
+    def test_workflow_tak_lagi_mengaku_tahu_bahwa_bukan_jaringan(self):
+        """Langkah di workflow hanya tahu SATU hal dengan pasti: koneksi
+        runner ke VPS berhasil. Menyimpulkan lebih dari itu menyesatkan."""
+        p = os.path.abspath(os.path.join(
+            os.path.dirname(__file__), "..", "..", "..",
+            ".github", "workflows", "deploy.yml"))
+        with open(p, encoding="utf-8") as f:
+            w = f.read()
+        pesan = [b for b in w.splitlines()
+                 if "::error::Koneksi runner ke VPS" in b]
+        assert pesan, "pesan galatnya hilang"
+        assert "Ini bukan masalah jaringan" not in w

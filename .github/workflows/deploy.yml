@@ -122,7 +122,13 @@ jobs:
               break
             fi
             if [ "$rc" -ne 255 ]; then
-              echo "::error::Koneksi ke VPS BERHASIL tetapi skrip deploy gagal (exit $rc). Ini bukan masalah jaringan - periksa keluaran skrip di atas."
+              # JANGAN menyimpulkan "bukan masalah jaringan" di sini. Deploy
+              # 1 Sep 2026 keluar dengan 128 karena VPS-nya sendiri tak bisa
+              # menjangkau github.com:443 — masalah jaringan tulen, di kaki
+              # yang tak dilihat langkah ini. Pesan lama mengirim pembacanya
+              # mencari cacat kode yang tidak ada. Yang PASTI diketahui di
+              # sini hanyalah: koneksi runner ke VPS berhasil.
+              echo "::error::Koneksi runner ke VPS BERHASIL, tetapi skrip deploy keluar dengan $rc. Sebabnya ada di keluaran skrip di atas - bisa cacat kode, bisa juga jaringan VPS ke luar (mis. git fetch ke github.com gagal). Skrip menandai sendiri bila yang terjadi adalah 'GAGAL JARINGAN DI SISI VPS'."
               exit "$rc"
             fi
             if [ "$attempt" -lt 5 ]; then

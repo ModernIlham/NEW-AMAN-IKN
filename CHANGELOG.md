@@ -18,6 +18,58 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#973] Deploy gagal karena VPS tak menjangkau GitHub — dan pesannya menyesatkan — 2026-09-01
+
+Deploy `3501835` gagal dengan pola yang belum pernah muncul:
+
+```
+Commit saat ini (titik pulang bila gagal): 3501835e
+fatal: unable to access 'https://github.com/ModernIlham/NEW-AMAN-IKN.git/':
+  Failed to connect to github.com port 443 after 133334 ms: Couldn't connect to server
+```
+
+SSH ke VPS **berhasil**, skripnya jalan — lalu **VPS-nya sendiri** tak bisa
+menjangkau `github.com:443`. Kaki jaringan yang putus bukan runner→VPS,
+melainkan VPS→GitHub.
+
+Tak ada yang rusak: kegagalannya terjadi pada `git fetch`, **sebelum**
+`git reset --hard`, jadi produksi tetap utuh pada commit sebelumnya.
+
+### Dua cacat yang dibuka insiden ini
+
+**1. Kegagalan yang paling pantas diulang justru tidak diulang.** Workflow
+sengaja hanya mengulang kegagalan tingkat koneksi SSH (exit 255) — aturan
+yang benar dan sudah dijaga uji: skrip deploy yang benar-benar berjalan lalu
+gagal tak boleh diulang, sebab itu hanya mengulang kegagalan yang sama sambil
+menyamarkannya sebagai masalah jaringan. Kegagalan ini exit 128, jadi lolos
+dari jaring itu.
+
+Pengulangannya kini ada **di dalam skrip**, tepat di `git fetch`. Itu tidak
+melanggar aturannya: aturan itu menahan pengulangan kegagalan yang MENGUBAH
+keadaan, sedangkan `git fetch` berjalan sebelum apa pun berubah. Tiga
+percobaan, bukan lima — cukup melewati blip, tak cukup terbaca sebagai
+tekanan (pelajaran insiden 19 Agu 2026). Ada uji yang mengurung urutannya:
+bila `git reset` pindah ke atas pemanggilan itu, pengulangannya berubah makna
+dan ujinya merah.
+
+**2. Pesan galatnya mengaku tahu lebih dari yang ia tahu.** Workflow
+menyatakan *"Ini bukan masalah jaringan"* untuk **setiap** exit ≠ 255 —
+padahal ini masalah jaringan tulen, hanya di kaki yang tak dilihat langkah
+itu. Pembacanya akan mencari cacat kode yang tidak ada.
+
+Yang pasti diketahui di sana hanyalah: koneksi runner ke VPS berhasil. Pesan
+barunya menyebut itu saja, lalu menunjuk keluaran skrip — yang kini menandai
+dirinya sendiri dengan **"GAGAL JARINGAN DI SISI VPS"** dan menyebutkan bahwa
+produksi tak berubah.
+
+### Berkas
+
+- `scripts/deploy_vps.sh` — `ambil_perubahan()` dengan tiga percobaan
+- `.github/workflows/deploy.yml` — pesan galat tak lagi menyimpulkan berlebih
+- `backend/tests/unit/test_jendela_retry_deploy.py` — 5 uji baru
+
+---
+
 ## [#972] Sewa dan pinjam pakai naik — keempat belas rezim berdasar pasal — 2026-09-01
 
 Jalur `baca/411` DJKN yang ditambahkan `[#971]` **berhasil**, dan naskah
