@@ -147,10 +147,37 @@ Terungkap bertahap dari unduhan yang berhasil dan yang gagal:
 Dua jalur URL: `api/download/fulltext/<tahun>/<berkas>` (bisa ditebak) dan
 `api/download/<uuid>/<berkas>` (perlu UUID dari halaman dokumennya).
 
+**Dan dua FORMAT, bukan satu.** Sebagian peraturan hanya ada sebagai
+**`.htm`**, tak pernah sebagai `.pdf` — PP 27/2014 salah satunya. Pengunduh
+yang cuma menerima PDF tak akan pernah bisa mengambilnya, berapa kali pun
+dijalankan. Jenis sumber **`teks`** menangani itu, dan hasilnya justru lebih
+bersih: tak ada derau OCR sama sekali.
+
 Bentuk KMK baru ketahuan setelah **tiga tebakan berakhiran `Kep`/`KMK`
 semuanya menjawab 404** pada unduhan keempat. Ada uji
 (`test_kmk_memakai_pola_nama_berkasnya_sendiri`) yang menahan bentuk yang
 sudah terbukti salah itu kembali masuk.
+
+## Unduhan kelima — dan dua cacat pada guard batang tubuh
+
+Sepuluh naskah terunduh segar (jaringan sehat), tetapi ketiga target tetap
+gagal. Diagnosisnya — kini bisa dipercaya — menunjukkan **guard-nya sendiri**
+yang salah pada satu kasus:
+
+**KMK 213/KM.6/2021 sebenarnya BERHASIL diunduh** dari cermin Itjen Kemhan,
+lalu **ditolak** dengan alasan *"tak memuat 'menimbang'"*. Naskahnya benar;
+guard-nya yang keliru. Dua sebab:
+
+1. **Pencocokan substring apa adanya.** Ekstraksi PDF hasil pindai menyisipkan
+   spasi di tengah kata — teks yang sudah ada di pustaka ini memuat
+   *"se bagaimana"*, *"tan pa"*, *"clalam"*, *"MENTERlKEUANGAN"*. Kini spasi
+   dibuang seluruhnya sebelum penanda dicocokkan.
+2. **Menuntut "Pasal 1" bernomor.** **PERATURAN** memakai pasal; **KEPUTUSAN**
+   memakai diktum **KESATU/KEDUA/KETIGA**. Guard lama menolak **setiap KMK** —
+   padahal justru KMK yang memuat tata cara pelaksanaan yang didelegasikan PMK.
+
+Diuji ulang terhadap kesepuluh naskah yang sudah ada: semuanya tetap diterima,
+dan paparan pelatihan tetap ditolak.
 
 ## Isi
 
