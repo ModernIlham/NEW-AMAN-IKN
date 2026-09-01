@@ -141,13 +141,40 @@ class TestGerbangSaatBooking:
 class TestPratinjauMembawaBatasnya:
     def test_batas_dikirim_ke_layar(self, dbx):
         """Layar memakainya sebagai `min` pemilih tanggal — tanpa itu operator
-        baru tahu batasnya setelah ditolak."""
+        baru tahu batasnya setelah ditolak.
+
+        `tanggal_surat` DIKIRIM eksplisit, dan itu bukan kerapian belaka.
+        Versi pertama uji ini memanggil pratinjau tanpa tanggal, sehingga
+        route memakai `datetime.now()`. Deret nomor di-reset BULANAN
+        (`RESET_URUT_DEFAULT = "bulanan"`), jadi selama Agustus 2026 ia lulus
+        dan pada detik pertama September 2026 ia gagal — surat yang dipesan
+        di periode `2026-08` tak lagi terlihat dari periode `2026-09`.
+        Uji yang lulusnya bergantung pada bulan berapa CI dijalankan tidak
+        menjaga apa pun; ia hanya menunda kegagalannya.
+        """
         async def skenario():
             await _atur()
             await _booking("2026-08-05")
-            pra = await _unwrap(rp.pratinjau_nomor)(_user=ADMIN)
+            pra = await _unwrap(rp.pratinjau_nomor)(
+                tanggal_surat="2026-08-06", _user=ADMIN)
             assert pra["tanggal_minimum"] == "2026-08-05"
             assert pra["nomor_terakhir"]
+        _jalan(skenario())
+
+    def test_batas_hanya_dari_deret_periode_yang_sama(self, dbx):
+        """Perilaku yang dulu menjatuhkan uji di atas, kini dijaga sengaja.
+
+        Deret bulanan berarti tiap bulan punya nomor 001-nya sendiri —
+        maka surat bulan lalu BUKAN batas bawah bulan ini. Kalau ia ikut
+        jadi batas, operator akan ditolak saat menomori surat awal bulan
+        yang tanggalnya lebih awal daripada surat terakhir bulan lalu.
+        """
+        async def skenario():
+            await _atur()
+            await _booking("2026-08-05")
+            pra = await _unwrap(rp.pratinjau_nomor)(
+                tanggal_surat="2026-09-01", _user=ADMIN)
+            assert pra["tanggal_minimum"] == ""
         _jalan(skenario())
 
     def test_tanpa_surat_apa_pun_batasnya_kosong(self, dbx):
