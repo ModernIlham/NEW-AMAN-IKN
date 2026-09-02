@@ -18,7 +18,7 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
-## [#BELUM] Deploy dikunci ke commit yang benar-benar lulus CI — 2026-09-03
+## [#975] Deploy dikunci ke commit yang benar-benar lulus CI — 2026-09-03
 
 - SHA yang lulus CI sekarang diteruskan melintasi SSH dan menjadi satu-satunya
   target `git reset` di VPS; pergerakan `main` sesudah CI tidak lagi dapat
