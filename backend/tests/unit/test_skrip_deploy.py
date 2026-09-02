@@ -112,7 +112,7 @@ class TestRollback:
 
     def test_disimpan_SEBELUM_reset(self):
         t = _teks(DEPLOY)
-        assert t.index("PREV=") < t.index('git reset --hard "origin/')
+        assert t.index("PREV=") < t.index('git reset --hard "$DEPLOY_SHA"')
 
     def test_kedua_gerbang_kesehatan_memanggil_pulihkan(self):
         """Dangkal DAN mendalam — melewatkan satu berarti separuh perlindungan."""
@@ -236,7 +236,7 @@ class TestGerbangRestoreDeploy:
         t = _teks(DEPLOY)
         i_panggil = t.index("\nperiksa_restore_aktif\n")
         assert i_panggil < t.index('git fetch origin "$DEPLOY_BRANCH"')
-        assert i_panggil < t.index('git reset --hard "origin/')
+        assert i_panggil < t.index('git reset --hard "$DEPLOY_SHA"')
 
     def test_kueri_menyaring_job_restore_aktif_dan_segar(self):
         k = _kode(DEPLOY)

@@ -180,7 +180,7 @@ class TestGitFetchDiVpsBolehDiulang:
         makna menjadi mengulang deploy yang sudah menyentuh produksi."""
         s = self._skrip()
         panggil = s.index("\nambil_perubahan\n")
-        reset = s.index('git reset --hard "origin/${DEPLOY_BRANCH}"')
+        reset = s.index('git reset --hard "$DEPLOY_SHA"')
         assert panggil < reset, (
             "git reset mendahului fetch — pengulangannya tak lagi aman")
 

@@ -584,16 +584,22 @@ Lihat [DEPLOYMENT_GUIDE_HOSTINGER.md](./DEPLOYMENT_GUIDE_HOSTINGER.md) untuk pan
 `scripts/deploy_vps.sh` lewat SSH. Sekali saja, isi secret repo
 (Settings → Secrets and variables → Actions): `VPS_HOST`, `VPS_USER`,
 `VPS_SSH_KEY` (opsional `VPS_PORT`). Bisa juga dipicu manual dari tab
-Actions → Run workflow.
+Actions → Run workflow dengan memasukkan SHA lengkap commit `main` yang sudah
+lulus CI. Workflow menolak branch, tag, SHA pendek, dan commit tanpa CI sukses.
 
 **Update kode di VPS (manual):**
 ```bash
-cd /var/www/inventarisasi && bash scripts/deploy_vps.sh
+cd /var/www/inventarisasi
+git fetch origin main
+bash scripts/deploy_vps.sh <SHA-lengkap-yang-lulus-CI>
 # — atau langkah demi langkah (JANGAN git pull, selalu fetch + reset) —
 cp /var/www/inventarisasi/backend/.env /tmp/backend_env_backup
 cp /var/www/inventarisasi/frontend/.env /tmp/frontend_env_backup
 cd /var/www/inventarisasi
-git fetch origin && git reset --hard origin/main
+DEPLOY_SHA=<SHA-lengkap-yang-lulus-CI>
+git fetch origin main
+git merge-base --is-ancestor "$DEPLOY_SHA" origin/main
+git reset --hard "$DEPLOY_SHA"
 cp /tmp/backend_env_backup /var/www/inventarisasi/backend/.env
 cp /tmp/frontend_env_backup /var/www/inventarisasi/frontend/.env
 sudo supervisorctl restart inventarisasi-backend

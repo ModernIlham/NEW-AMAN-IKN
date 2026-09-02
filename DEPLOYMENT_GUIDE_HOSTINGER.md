@@ -1122,8 +1122,9 @@ python -c "from PIL import Image; print('Pillow OK')"
 
 ### Update Aplikasi (Setelah Perubahan Kode)
 
-> ⚠️ **PENTING:** Jangan gunakan `git pull` biasa! Jika branch diverged (bercabang), 
-> file-file baru tidak akan muncul dan backend bisa crash. Selalu gunakan metode **fetch + reset** di bawah ini.
+> ⚠️ **PENTING:** Jangan gunakan `git pull` biasa dan jangan memasang ujung
+> `origin/main` tanpa identitas rilis. Ambil SHA lengkap dari run CI `main` yang
+> sukses, lalu gunakan SHA itu sebagai target immutable.
 
 **Metode Aman (Recommended):**
 ```bash
@@ -1131,11 +1132,13 @@ python -c "from PIL import Image; print('Pillow OK')"
 cp /var/www/inventarisasi/backend/.env /tmp/backend_env_backup
 cp /var/www/inventarisasi/frontend/.env /tmp/frontend_env_backup
 
-# 2. Fetch & force reset ke versi terbaru
+# 2. Fetch & force reset ke commit yang SUDAH lulus CI
 cd /var/www/inventarisasi
-git fetch origin
-# GANTI 'main' dengan nama branch Anda jika berbeda
-git reset --hard origin/main
+DEPLOY_SHA=<SHA-lengkap-yang-lulus-CI>
+git fetch origin main
+git cat-file -e "${DEPLOY_SHA}^{commit}"
+git merge-base --is-ancestor "$DEPLOY_SHA" origin/main
+git reset --hard "$DEPLOY_SHA"
 
 # 3. Restore .env files (karena git reset menghapus perubahan lokal)
 cp /tmp/backend_env_backup /var/www/inventarisasi/backend/.env
@@ -1162,16 +1165,18 @@ yarn build
 
 **Atau gunakan script otomatis:**
 ```bash
-# Script ini otomatis handle semua langkah di atas termasuk backup .env
-chmod +x /var/www/inventarisasi/scripts/vps-fix.sh
-sudo /var/www/inventarisasi/scripts/vps-fix.sh
+# Script ini menangani backup .env, dependensi, restart, health gate, dan rollback.
+cd /var/www/inventarisasi
+git fetch origin main
+bash scripts/deploy_vps.sh <SHA-lengkap-yang-lulus-CI>
 ```
 
 **Kenapa `git pull` saja tidak cukup?**
 - Emergent.sh kadang melakukan force-push yang mengubah history commit
 - Ini menyebabkan branch lokal VPS "diverged" (bercabang) dari remote
 - `git pull` biasa akan gagal atau tidak mengambil file baru
-- `git fetch + git reset --hard` memastikan VPS selalu identik dengan remote
+- `git fetch` + reset ke SHA lengkap memastikan VPS identik dengan commit yang
+  benar-benar lulus CI, walaupun `main` bergerak lagi saat deploy berjalan
 
 **Verifikasi setelah update:**
 ```bash
@@ -1227,8 +1232,8 @@ sudo tail -f /var/log/supervisor/inventarisasi-backend.out.log
 
 | Aksi | Command |
 |------|---------|
-| **Update kode dari GitHub** | `cd /var/www/inventarisasi && git fetch origin && git reset --hard origin/main` |
-| **Script update otomatis** | `sudo /var/www/inventarisasi/scripts/vps-fix.sh` |
+| **Update kode dari GitHub** | `cd /var/www/inventarisasi && git fetch origin main && bash scripts/deploy_vps.sh <SHA-lengkap-yang-lulus-CI>` |
+| **Script pemulihan darurat** | `sudo /var/www/inventarisasi/scripts/vps-fix.sh` (jalur operator; tidak mengklaim verifikasi CI) |
 | Start backend | `sudo supervisorctl start inventarisasi-backend` |
 | Stop backend | `sudo supervisorctl stop inventarisasi-backend` |
 | Restart backend | `sudo supervisorctl restart inventarisasi-backend` |
@@ -1240,7 +1245,9 @@ sudo tail -f /var/log/supervisor/inventarisasi-backend.out.log
 | Rebuild frontend | `cd /var/www/inventarisasi/frontend && yarn build` |
 | Backup DB | `mongodump --db inventarisasi_bmn --out /root/backup/` |
 
-> ⚠️ **JANGAN** gunakan `git pull origin main` — selalu gunakan `git fetch + git reset --hard` untuk menghindari masalah branch diverged.
+> ⚠️ **JANGAN** gunakan `git pull origin main`. Untuk rilis normal, gunakan
+> `deploy_vps.sh` dengan SHA lengkap dari CI sukses; `vps-fix.sh` hanya untuk
+> pemulihan operator yang disengaja.
 
 ---
 
