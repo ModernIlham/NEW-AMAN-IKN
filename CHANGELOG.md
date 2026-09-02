@@ -18,7 +18,7 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
-## [belum-rilis] Bootstrap admin pertama ditutup dari pendaftaran publik — 2026-09-02
+## [#974] Bootstrap admin pertama ditutup dari pendaftaran publik — 2026-09-03
 
 - Pendaftaran publik dan verifikasi OTP tidak pernah lagi mengangkat pengguna
   pertama menjadi admin pusat; keduanya menunggu admin aktif yang sudah ada.
