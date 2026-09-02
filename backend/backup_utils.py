@@ -16,6 +16,10 @@ import re
 SKIP_COLLECTIONS = {
     "row_locks", "otp_store", "backup_jobs", "idempotency_keys",
     "ws_events", "media_previews",
+    # Kontrol keamanan lokal instalasi: jangan pernah ditimpa oleh arsip data
+    # (terutama backup lama/kustom yang dapat membuka kembali bootstrap admin).
+    # Karena masuk SKIP, reset-all juga mempertahankannya.
+    "admin_bootstrap_state",
     # Progress job latar bersama (ekspor async dll.) — sama transiennya dengan
     # backup_jobs; membawanya ke DB hasil restore = job "running" hantu.
     "background_jobs",
@@ -140,10 +144,13 @@ def collections_to_reset(all_names, keep=None, skip=None):
 
 def collections_from_backup(zip_names):
     """Nama koleksi yang ADA di dalam ZIP backup (file `<name>.json` di root,
-    kecuali metadata). Restore mengiterasi INI agar koleksi apa pun di backup
-    ikut dipulihkan meski DB tujuan masih kosong."""
+    kecuali metadata dan koleksi lokal/transien dalam ``SKIP_COLLECTIONS``).
+    Restore mengiterasi INI agar koleksi data aplikasi di backup ikut
+    dipulihkan meski DB tujuan masih kosong, tanpa dapat menimpa kontrol
+    keamanan lokal instalasi."""
     return sorted(n[:-5] for n in (zip_names or [])
-                  if n.endswith(".json") and n != "metadata.json" and "/" not in n)
+                  if n.endswith(".json") and n != "metadata.json"
+                  and "/" not in n and n[:-5] not in SKIP_COLLECTIONS)
 
 
 # ── Arsip backup di server + jadwal otomatis (audit backup #407) ──

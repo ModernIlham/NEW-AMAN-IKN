@@ -53,17 +53,30 @@ mkdir -p uploads
 #
 # Cara memakai:
 #     export MONGO_URL="..." JWT_SECRET="$(openssl rand -hex 32)"
+#     export ADMIN_BOOTSTRAP_TOKEN="$(openssl rand -hex 32)"
 #     export CORS_ORIGINS="https://domain-anda"
 #     sudo -E bash scripts/vps-deploy.sh
 #
-# JWT_SECRET dan MONGO_URL WAJIB. Menyediakan nilai bawaan untuk keduanya
+# JWT_SECRET, ADMIN_BOOTSTRAP_TOKEN, dan MONGO_URL WAJIB. Nilai bootstrap hanya
+# dipakai untuk membuat administrator pertama, lalu WAJIB dihapus dari .env.
+# Menyediakan nilai bawaan untuk rahasia-rahasia ini
 # berarti setiap pemasangan memakai rahasia yang sama — persis keadaan yang
 # baru saja diperbaiki. Skrip berhenti, bukan mengarang.
 : "${MONGO_URL:?WAJIB diekspor lebih dulu}"
 : "${JWT_SECRET:?WAJIB diekspor lebih dulu — buat acak: openssl rand -hex 32}"
+: "${ADMIN_BOOTSTRAP_TOKEN:?WAJIB diekspor lebih dulu — buat acak terpisah: openssl rand -hex 32}"
 if [ "${#JWT_SECRET}" -lt 32 ]; then
     echo "JWT_SECRET terlalu pendek (${#JWT_SECRET} karakter, minimal 32)." >&2
     echo "Buat yang baru: openssl rand -hex 32" >&2
+    exit 1
+fi
+if [ "${#ADMIN_BOOTSTRAP_TOKEN}" -lt 32 ]; then
+    echo "ADMIN_BOOTSTRAP_TOKEN terlalu pendek (${#ADMIN_BOOTSTRAP_TOKEN} karakter, minimal 32)." >&2
+    echo "Buat yang baru: openssl rand -hex 32" >&2
+    exit 1
+fi
+if [ "${ADMIN_BOOTSTRAP_TOKEN}" = "${JWT_SECRET}" ]; then
+    echo "ADMIN_BOOTSTRAP_TOKEN harus berbeda dari JWT_SECRET." >&2
     exit 1
 fi
 
@@ -72,6 +85,7 @@ fi
     echo "DB_NAME=\"${DB_NAME:-inventaris_bmn}\""
     echo "CORS_ORIGINS=\"${CORS_ORIGINS:-http://localhost:3000}\""
     echo "JWT_SECRET=${JWT_SECRET}"
+    echo "ADMIN_BOOTSTRAP_TOKEN=${ADMIN_BOOTSTRAP_TOKEN}"
     # Opsional: fitur terkait mati bila kosong, dan itu DINYATAKAN lewat
     # indikator kuota, bukan ditutupi nilai bawaan.
     [ -n "${TINIFY_API_KEY:-}" ]      && echo "TINIFY_API_KEY=${TINIFY_API_KEY}"

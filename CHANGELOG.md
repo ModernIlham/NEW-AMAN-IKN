@@ -18,6 +18,22 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [belum-rilis] Bootstrap admin pertama ditutup dari pendaftaran publik — 2026-09-02
+
+- Pendaftaran publik dan verifikasi OTP tidak pernah lagi mengangkat pengguna
+  pertama menjadi admin pusat; keduanya menunggu admin aktif yang sudah ada.
+- Instalasi kosong memakai `POST /auth/bootstrap` dengan
+  `ADMIN_BOOTSTRAP_TOKEN` minimal 32 karakter dari environment server.
+- Dokumen status MongoDB terpisah dengan `_id` konstan menjadi gerbang atomik;
+  bootstrap tetap tertutup bila seluruh akun kemudian dihapus atau data lama
+  dipulihkan dari backup.
+- Registrasi legacy kini memakai kebijakan password server yang sama dengan
+  registrasi OTP dan reset password.
+- Ditambah uji regresi untuk secret, sekali-pakai, jalur OTP sah, peran viewer,
+  balapan bootstrap, penutupan permanen, input state rusak, dan backup/reset.
+
+---
+
 ## [#973] Deploy gagal karena VPS tak menjangkau GitHub — dan pesannya menyesatkan — 2026-09-01
 
 Deploy `3501835` gagal dengan pola yang belum pernah muncul:
