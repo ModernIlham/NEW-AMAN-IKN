@@ -18,6 +18,25 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#975] Deploy dikunci ke commit yang benar-benar lulus CI — 2026-09-03
+
+- SHA yang lulus CI sekarang diteruskan melintasi SSH dan menjadi satu-satunya
+  target `git reset` di VPS; pergerakan `main` sesudah CI tidak lagi dapat
+  mengganti commit yang dipasang secara diam-diam.
+- Skrip VPS menolak SHA kosong/pendek/non-heksadesimal, commit yang tidak ada,
+  dan commit di luar riwayat `main`, lalu membuktikan `HEAD` sama persis sebelum
+  memasang dependensi, me-restart backend, atau membangun frontend.
+- Deploy manual dari Actions wajib menerima SHA lengkap serta memverifikasi run
+  CI `push` sukses untuk commit tersebut. Skrip lama yang masih fallback ke
+  ujung branch ditolak sebelum koneksi produksi.
+- Auto-deploy menolak run CI bertipe selain `push` dan menolak downgrade lewat
+  rerun CI lama; rollback ke commit CI terdahulu hanya tersedia dalam mode
+  manual yang disengaja. SHA heksadesimal huruf besar dinormalisasi.
+- Ditambah uji regresi batas CI→SSH→VPS, termasuk simulasi race ketika commit B
+  sudah menjadi ujung branch tetapi deploy A tetap memasang A.
+
+---
+
 ## [#974] Bootstrap admin pertama ditutup dari pendaftaran publik — 2026-09-03
 
 - Pendaftaran publik dan verifikasi OTP tidak pernah lagi mengangkat pengguna
