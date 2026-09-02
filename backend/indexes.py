@@ -7,6 +7,7 @@ Any module that needs to (re)build indexes should import from here, NOT from
 import logging
 
 from db import db
+from bootstrap_state import tutup_bila_pengguna_sudah_ada
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +112,15 @@ async def create_indexes() -> None:
     """Create database indexes for optimized query performance."""
     _KEGAGALAN_INDEKS.clear()
     try:
+        # Migrasi keamanan idempoten: instalasi yang sudah mempunyai pengguna
+        # harus tetap tertutup meski koleksi users kelak dikosongkan manual.
+        try:
+            await tutup_bila_pengguna_sudah_ada(db)
+        except Exception as e:
+            # Jangan biarkan migrasi marker menghentikan pembuatan seluruh
+            # indeks. Endpoint bootstrap sendiri tetap fail-closed bila users
+            # ada, dan galat ini harus terlihat di log operator.
+            logger.error("Marker bootstrap admin gagal dimigrasikan: %s", e)
         try:
             await db.assets.drop_index("asset_code_1")
         except Exception:

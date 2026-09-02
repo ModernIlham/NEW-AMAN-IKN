@@ -536,7 +536,8 @@ CORS_ORIGINS="https://domain-anda.com"
 # Buat SEKARANG dengan: openssl rand -hex 32
 # JANGAN memakai nilai contoh mana pun — rahasia yang pernah tertulis di
 # dokumen berarti rahasia yang bisa dibaca siapa pun yang membacanya.
-JWT_SECRET=<tempel-hasil-openssl-rand-hex-32-di-sini>
+JWT_SECRET=GANTI_TOKEN_ACAK
+ADMIN_BOOTSTRAP_TOKEN=GANTI_TOKEN_ACAK_LAIN
 
 # Opsional. Kosongkan bila belum punya; fitur terkait mati dan itu terlihat
 # jujur di indikator kuota, bukan tersembunyi.
@@ -555,6 +556,9 @@ APP_PUBLIC_URL="https://domain-anda.com"
 >   satker — seluruh isolasi satker dilewati begitu saja. Buat dengan
 >   `openssl rand -hex 32`, simpan HANYA di `.env` server (mode 600), dan
 >   jangan pernah menuliskannya di dokumen, skrip, atau pesan chat.
+> - `ADMIN_BOOTSTRAP_TOKEN` juga **WAJIB acak, minimal 32 karakter, dan harus
+>   berbeda dari `JWT_SECRET`**. Buat dengan perintah terpisah
+>   `openssl rand -hex 32`; token ini hanya untuk pemasangan admin pertama.
 > - `CORS_ORIGINS` sudah diset ke domain Anda
 > - `APP_PUBLIC_URL` = alamat publik frontend — dipakai membentuk **link e-sign
 >   yang dibagikan** dan **QR verifikasi** pada Lembar Pengesahan TTD. Bila
@@ -1013,7 +1017,22 @@ curl -s -o /dev/null -w "%{http_code}" https://amanikn-inventarisasi.com/
 # Harus: 200
 ```
 
-### 9.4 Test dari Browser
+### 9.4 Pasang Administrator Pertama (hanya instalasi baru)
+```bash
+read -rsp "Token bootstrap: " ADMIN_BOOTSTRAP_TOKEN; echo
+curl -X POST "https://amanikn-inventarisasi.com/api/auth/bootstrap" \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Bootstrap-Token: ${ADMIN_BOOTSTRAP_TOKEN}" \
+  -d '{"username":"admin@domain.go.id","password":"GantiPassword123","name":"Admin Awal"}'
+unset ADMIN_BOOTSTRAP_TOKEN
+```
+
+Setelah respons berhasil, hapus baris `ADMIN_BOOTSTRAP_TOKEN` dari
+`/var/www/inventarisasi/backend/.env`, lalu jalankan
+`sudo supervisorctl restart inventarisasi-backend`. Bootstrap kedua akan tetap
+ditolak meski token lama diketahui; jangan menyimpan token di riwayat shell.
+
+### 9.5 Test dari Browser
 Buka browser dan akses:
 1. ✅ `https://amanikn-inventarisasi.com` - Halaman utama
 2. ✅ `https://amanikn-inventarisasi.com/api/docs` - API Documentation

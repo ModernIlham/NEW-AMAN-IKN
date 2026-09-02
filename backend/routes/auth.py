@@ -4,17 +4,70 @@ import uuid
 import logging
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException, Request, Header
+from pymongo.errors import DuplicateKeyError
 
 from db import db
 from models import UserCreate, UserLogin, UserResponse, TokenResponse, OTPRequest, OTPVerify
 from preferensi_kamera import normalkan as normalkan_preferensi_kamera
 from auth_utils import hash_password, verify_password, verify_password_dummy, create_token, create_media_token, get_current_user
+from bootstrap_state import (COLLECTION_NAME as BOOTSTRAP_STATE_COLLECTION,
+                             STATE_ID as BOOTSTRAP_STATE_ID)
 import hmac
 
 from shared_utils import limiter, generate_otp, send_otp_email, store_otp, get_otp, delete_otp, catat_gagal_otp, RESEND_API_KEY, SENDER_EMAIL
 
 logger = logging.getLogger(__name__)
 auth_router = APIRouter()
+
+
+BOOTSTRAP_TOKEN_ENV = "ADMIN_BOOTSTRAP_TOKEN"
+MIN_BOOTSTRAP_TOKEN_LENGTH = 32
+
+
+async def _pastikan_admin_aktif_tersedia() -> None:
+    """Tolak pendaftaran publik bila belum ada admin yang dapat mengaktifkan.
+
+    Sebelumnya siapa pun yang paling cepat mendaftar pada database kosong
+    otomatis menjadi admin pusat. Selain eskalasi hak publik, pola
+    ``count_documents({}) == 0`` juga rentan balapan: dua request dapat sama-
+    sama membaca nol sebelum salah satunya menulis.
+
+    Instalasi kosong sekarang harus dipasang lewat ``/auth/bootstrap``.
+    ``is_active != False`` mempertahankan kompatibilitas admin lama yang belum
+    memiliki field tersebut.
+    """
+    admin = await db.users.find_one(
+        {"role": "admin", "$or": [
+            {"is_active": True},
+            {"is_active": {"$exists": False}},
+        ]},
+        {"_id": 1},
+    )
+    if not admin:
+        raise HTTPException(
+            status_code=503,
+            detail=("Administrator awal belum dipasang. Hubungi pengelola "
+                    "server untuk menjalankan bootstrap admin yang aman."),
+        )
+
+
+def _validasi_token_bootstrap(token: str) -> None:
+    """Validasi secret bootstrap tanpa nilai bawaan dan secara konstan-waktu."""
+    expected = str(os.environ.get(BOOTSTRAP_TOKEN_ENV) or "").strip()
+    if len(expected) < MIN_BOOTSTRAP_TOKEN_LENGTH:
+        logger.error(
+            "%s belum diset atau kurang dari %d karakter; bootstrap ditutup",
+            BOOTSTRAP_TOKEN_ENV, MIN_BOOTSTRAP_TOKEN_LENGTH,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Bootstrap admin belum dikonfigurasi oleh pengelola server.",
+        )
+    supplied = str(token or "").strip()
+    if not supplied or not hmac.compare_digest(
+            supplied.encode("utf-8"), expected.encode("utf-8")):
+        raise HTTPException(status_code=403,
+                            detail="Kredensial bootstrap tidak valid")
 
 
 def _debug_otp_allowed() -> bool:
@@ -29,68 +82,158 @@ def _debug_otp_allowed() -> bool:
     is_prod = env in ("production", "prod")
     return allow and not is_prod
 
+
+@auth_router.post("/auth/bootstrap")
+@limiter.limit("3/minute")
+async def bootstrap_admin(
+    request: Request,
+    user_data: UserCreate,
+    x_admin_bootstrap_token: str = Header(
+        default="", alias="X-Admin-Bootstrap-Token"),
+):
+    """Pasang SATU admin pusat awal memakai secret server sekali pakai.
+
+    Endpoint hanya berguna pada database pengguna yang benar-benar kosong.
+    Dokumen status ber-``_id`` konstan memanfaatkan indeks unik bawaan MongoDB
+    sebagai CAS: dua request bersamaan tidak mungkin sama-sama menjadi admin
+    awal, tanpa bergantung pada transaksi/replica set. Status berada di
+    koleksi terpisah agar bootstrap tidak terbuka lagi bila users dihapus.
+    """
+    _validasi_token_bootstrap(x_admin_bootstrap_token)
+
+    if await db.users.find_one({}, {"_id": 1}):
+        # Backfill fail-closed untuk instalasi lama. Update ini idempoten dan
+        # memastikan penghapusan akun di masa depan tidak membuka bootstrap.
+        await db[BOOTSTRAP_STATE_COLLECTION].update_one(
+            {"_id": BOOTSTRAP_STATE_ID},
+            {"$setOnInsert": {
+                "status": "closed",
+                "reason": "existing_users",
+                "closed_at": datetime.now(timezone.utc).isoformat(),
+            }},
+            upsert=True,
+        )
+        raise HTTPException(status_code=409,
+                            detail="Bootstrap admin sudah ditutup")
+
+    from auth_utils import periksa_kekuatan_password
+    galat_pw = periksa_kekuatan_password(user_data.password)
+    if galat_pw:
+        raise HTTPException(status_code=400, detail=galat_pw)
+
+    username = str(user_data.username or "").strip().lower()
+    if not username:
+        raise HTTPException(status_code=400, detail="Email wajib diisi")
+
+    user_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    claim_id = str(uuid.uuid4())
+    try:
+        await db[BOOTSTRAP_STATE_COLLECTION].insert_one({
+            "_id": BOOTSTRAP_STATE_ID,
+            "status": "claimed",
+            "claim_id": claim_id,
+            "claimed_at": now,
+        })
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409,
+                            detail="Bootstrap admin sudah ditutup")
+
+    user_doc = {
+        "id": user_id,
+        "username": username,
+        "password": hash_password(user_data.password),
+        "name": str(user_data.name or username).strip(),
+        "role": "admin",
+        "is_active": True,
+        "bootstrap_admin": True,
+        "created_at": now,
+    }
+    try:
+        await db.users.insert_one(user_doc)
+    except DuplicateKeyError:
+        # Lepaskan hanya claim milik request ini. Bila user ternyata sudah
+        # tersimpan tetapi respons Mongo tidak pasti, pemeriksaan users di
+        # request berikutnya tetap menutup bootstrap secara fail-closed.
+        await db[BOOTSTRAP_STATE_COLLECTION].delete_one({
+            "_id": BOOTSTRAP_STATE_ID,
+            "status": "claimed",
+            "claim_id": claim_id,
+        })
+        raise HTTPException(status_code=409,
+                            detail="Bootstrap admin sudah ditutup")
+
+    await db[BOOTSTRAP_STATE_COLLECTION].update_one(
+        {"_id": BOOTSTRAP_STATE_ID, "claim_id": claim_id},
+        {"$set": {"status": "closed", "reason": "bootstrap_completed",
+                  "closed_at": datetime.now(timezone.utc).isoformat()},
+         "$unset": {"claim_id": "", "claimed_at": ""}},
+    )
+
+    token = create_token(user_id, username)
+    logger.warning("Bootstrap admin awal berhasil dipasang: %s", username)
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {
+            "id": user_id,
+            "username": username,
+            "name": user_doc["name"],
+            "role": "admin",
+            "is_active": True,
+            "created_at": now,
+        },
+        "pending_approval": False,
+        "message": ("Administrator awal berhasil dipasang. Hapus "
+                    "ADMIN_BOOTSTRAP_TOKEN dari environment server lalu "
+                    "restart backend."),
+    }
+
 @auth_router.post("/auth/register")
 @limiter.limit("5/minute")
 async def register(request: Request, user_data: UserCreate):
     """
     Register a new user (legacy endpoint - kept for backward compat).
-    NEW BEHAVIOR: new users are created INACTIVE (is_active=False) and must be
-    activated by admin before they can log in. First user (bootstrap admin)
-    is auto-activated.
+    Semua pengguna dari jalur publik dibuat viewer nonaktif dan harus
+    diaktifkan admin. Admin awal hanya dapat dibuat lewat /auth/bootstrap.
     """
-    existing = await db.users.find_one({"username": user_data.username})
+    await _pastikan_admin_aktif_tersedia()
+    username = str(user_data.username or "").strip().lower()
+    if not username:
+        raise HTTPException(status_code=400, detail="Email wajib diisi")
+    existing = await db.users.find_one({"username": username})
     if existing:
         raise HTTPException(status_code=400, detail="Email sudah digunakan")
+
+    from auth_utils import periksa_kekuatan_password
+    galat_pw = periksa_kekuatan_password(user_data.password)
+    if galat_pw:
+        raise HTTPException(status_code=400, detail=galat_pw)
 
     user_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
 
-    # First user gets admin role + active (bootstrap), subsequent get viewer + inactive
-    user_count = await db.users.count_documents({})
-    is_first_user = (user_count == 0)
-    role = "admin" if is_first_user else "viewer"
-    is_active = True if is_first_user else False
-
     user_doc = {
         "id": user_id,
-        "username": user_data.username,
+        "username": username,
         "password": hash_password(user_data.password),
-        "name": user_data.name or user_data.username,
-        "role": role,
-        "is_active": is_active,
+        "name": user_data.name or username,
+        "role": "viewer",
+        "is_active": False,
         "created_at": now
     }
 
     await db.users.insert_one(user_doc)
 
-    # First admin: auto-login with token.
-    if is_first_user:
-        token = create_token(user_id, user_data.username)
-        logger.info(f"Bootstrap admin registered and auto-activated: {user_data.username}")
-        return {
-            "access_token": token,
-            "token_type": "bearer",
-            "user": {
-                "id": user_id,
-                "username": user_data.username,
-                "name": user_doc["name"],
-                "role": role,
-                "is_active": True,
-                "created_at": now,
-            },
-            "pending_approval": False,
-            "message": "Akun admin berhasil dibuat",
-        }
-
     # Regular user: pending admin approval, NO token issued.
-    logger.info(f"New user registered (pending admin approval): {user_data.username}")
+    logger.info(f"New user registered (pending admin approval): {username}")
     return {
         "access_token": None,
         "user": {
             "id": user_id,
-            "username": user_data.username,
+            "username": username,
             "name": user_doc["name"],
-            "role": role,
+            "role": "viewer",
             "is_active": False,
             "created_at": now,
         },
@@ -110,6 +253,7 @@ async def request_otp(request: Request, data: OTPRequest):
     Admin creates user with email, OTP is sent to that email.
     User must verify OTP to complete registration.
     """
+    await _pastikan_admin_aktif_tersedia()
     email = data.email.strip().lower()
     
     # Basic email validation
@@ -280,10 +424,10 @@ async def reset_password(request: Request, data: dict):
 async def verify_otp(request: Request, data: OTPVerify):
     """
     Verify OTP and complete user registration.
-    NEW BEHAVIOR: new users are created INACTIVE (is_active=False) and must be
-    activated by admin before they can log in. First user (bootstrap admin)
-    is auto-activated.
+    Semua pengguna hasil OTP dibuat viewer nonaktif. Instalasi kosong wajib
+    memasang admin awal lewat /auth/bootstrap terlebih dahulu.
     """
+    await _pastikan_admin_aktif_tersedia()
     email = data.email.strip().lower()
     otp = data.otp.strip()
 
@@ -315,19 +459,13 @@ async def verify_otp(request: Request, data: OTPVerify):
     user_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
 
-    # First user gets admin + active (bootstrap), subsequent get viewer + inactive
-    user_count = await db.users.count_documents({})
-    is_first_user = (user_count == 0)
-    role = "admin" if is_first_user else "viewer"
-    is_active = True if is_first_user else False
-
     user_doc = {
         "id": user_id,
         "username": email,
         "password": hash_password(user_data["password"]),
         "name": user_data["name"],
-        "role": role,
-        "is_active": is_active,
+        "role": "viewer",
+        "is_active": False,
         "email_verified": True,
         "created_at": now
     }
@@ -337,25 +475,6 @@ async def verify_otp(request: Request, data: OTPVerify):
     # Clear OTP from store
     await delete_otp(email)
 
-    # First admin: issue token & auto-login
-    if is_first_user:
-        token = create_token(user_id, email)
-        logger.info(f"Bootstrap admin registered via OTP and auto-activated: {email}")
-        return {
-            "access_token": token,
-            "token_type": "bearer",
-            "user": {
-                "id": user_id,
-                "username": email,
-                "name": user_doc["name"],
-                "role": role,
-                "is_active": True,
-                "created_at": now,
-            },
-            "pending_approval": False,
-            "message": "Akun admin berhasil dibuat",
-        }
-
     # Regular user: pending admin approval, NO token issued.
     logger.info(f"New user registered via OTP (pending admin approval): {email}")
     return {
@@ -364,7 +483,7 @@ async def verify_otp(request: Request, data: OTPVerify):
             "id": user_id,
             "username": email,
             "name": user_doc["name"],
-            "role": role,
+            "role": "viewer",
             "is_active": False,
             "created_at": now,
         },
@@ -384,7 +503,14 @@ KUNCI_MENIT = 15
 @limiter.limit("10/minute")
 async def login(request: Request, credentials: UserLogin):
     """Login user and return JWT token"""
-    user = await db.users.find_one({"username": credentials.username}, {"_id": 0})
+    username_input = str(credentials.username or "").strip()
+    user = await db.users.find_one({"username": username_input}, {"_id": 0})
+    username_normalized = username_input.lower()
+    if not user and username_normalized != username_input:
+        # Akun baru selalu disimpan lowercase. Lookup mentah tetap didahulukan
+        # agar akun legacy bercasing campuran tidak kehilangan akses.
+        user = await db.users.find_one(
+            {"username": username_normalized}, {"_id": 0})
     if not user:
         # User tak ada: tetap jalankan bcrypt (hash boneka) agar waktu respons
         # setara kasus user ada — tanpa ini timing membocorkan username valid.
