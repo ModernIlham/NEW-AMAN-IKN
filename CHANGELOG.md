@@ -18,6 +18,20 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#978] Tidak ada lagi kredensial bawaan semu — 2026-09-03
+
+- README kini menegaskan bahwa instalasi AMAN tidak menyediakan akun bawaan;
+  administrator pertama hanya dibuat melalui bootstrap sekali-pakai.
+- Harness Locust mewajibkan `AMAN_USERNAME` dan `AMAN_PASSWORD` lingkungan
+  staging, lalu gagal cepat sebelum request bila salah satunya kosong.
+- Dry-run workflow tetap mandiri menggunakan identitas fiktif yang hanya menuju
+  port lokal tanpa server; live-run tetap mengambil kredensial dari GitHub
+  Secrets.
+- Ditambah uji perilaku tanpa jaringan untuk kondisi kredensial kosong dan
+  eksplisit, serta penjaga anti-drift dokumentasi/workflow.
+
+---
+
 ## [#977] Bagikan Peta: yang dibagikan = yang tampil, dan jumlahnya terbaca — 2026-09-03
 
 Permintaan pemilik: *"ketika filter dan seleksi aktif, pada saat dibuat
