@@ -21,13 +21,15 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 ## [#976] Pembersihan VPS gagal tertutup saat data produksi terdeteksi — 2026-09-03
 
 - `vps-cleanup.sh` sekarang berhenti sebelum layanan apa pun dimatikan bila
-  menemukan direktori aplikasi AMAN atau marker data WiredTiger.
+  menemukan direktori aplikasi, data WiredTiger, konfigurasi AMAN, atau
+  perangkat deployment; direktori aplikasi kustom dapat dinyatakan eksplisit.
 - Penghapusan total yang disengaja memerlukan override eksplisit
   `AMAN_CLEANUP_PAKSA=1` dan tetap meminta konfirmasi manusia `YA`.
 - Panduan Hostinger tidak lagi menyediakan perintah penghapusan MongoDB langsung
-  yang melewati pagar skrip.
-- Ditambah uji regresi sintaks dan urutan fail-closed tanpa menjalankan operasi
-  penghancuran pada mesin pengujian.
+  yang melewati pagar skrip, dan membedakan clone baru dari pembaruan checkout
+  saat reinstall.
+- Ditambah uji regresi sintaks dan urutan seluruh kelas perintah mutatif tanpa
+  menjalankan operasi penghancuran pada mesin pengujian.
 
 ---
 

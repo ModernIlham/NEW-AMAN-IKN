@@ -141,22 +141,28 @@ ss -tlnp | grep -E "80|443|3000|8001|27017|3306"
 ### 1.3 Jalankan Pembersihan Berpagar
 
 Jangan menghentikan layanan atau menghapus direktori database secara manual.
-Jalankan skrip repo dari checkout yang akan dipasang:
+Unduh salinan skrip ke direktori sementara—bukan ke direktori aplikasi yang
+sedang dipakai—lalu periksa sintaksnya sebelum dijalankan:
 
 ```bash
-sudo ./scripts/vps-cleanup.sh
+curl -fL \
+  https://raw.githubusercontent.com/ModernIlham/NEW-AMAN-IKN/main/scripts/vps-cleanup.sh \
+  -o /tmp/aman-vps-cleanup.sh
+chmod 700 /tmp/aman-vps-cleanup.sh
+bash -n /tmp/aman-vps-cleanup.sh
+sudo /tmp/aman-vps-cleanup.sh
 ```
 
 Skrip akan **menolak sebelum layanan apa pun dihentikan** bila menemukan
-`/var/www/inventarisasi` atau `/var/lib/mongodb/WiredTiger`. Pada VPS baru yang
-benar-benar kosong, skrip tetap meminta konfirmasi `YA` lalu membersihkan
-software lama.
+direktori aplikasi, data WiredTiger, konfigurasi AMAN, atau perangkat deployment
+yang sudah terpasang. Pada VPS baru yang benar-benar kosong, skrip tetap meminta
+konfirmasi `YA` lalu membersihkan software lama.
 
 Jika ini penghapusan total yang disengaja, pastikan backup sudah diuji dapat
 dipulihkan. Barulah jalankan override eksplisit berikut dan tetap jawab `YA`:
 
 ```bash
-sudo env AMAN_CLEANUP_PAKSA=1 ./scripts/vps-cleanup.sh
+sudo env AMAN_CLEANUP_PAKSA=1 /tmp/aman-vps-cleanup.sh
 ```
 
 > **Jangan gunakan override untuk deployment atau upgrade rutin.** Deploy rutin
@@ -357,22 +363,25 @@ sudo systemctl is-active supervisor
 5. Tunggu sampai push selesai
 6. **PENTING:** Catat nama repository dan branch yang digunakan (biasanya `main`)
 
-**Langkah B - Di VPS Hostinger (Clone dari GitHub):**
+**Langkah B - Di VPS Hostinger (Clone Baru atau Perbarui Checkout Lama):**
 ```bash
-# Buat direktori aplikasi
+# Buat/masuk ke direktori aplikasi. vps-cleanup.sh sengaja tidak menghapus
+# checkout agar reinstall dapat memakai kembali remote dan .env yang ada.
 sudo mkdir -p /var/www/inventarisasi
 cd /var/www/inventarisasi
 
-# Clone repository dari GitHub Anda
-# Ganti USERNAME_ANDA dengan username GitHub Anda
-# Ganti NAMA_REPO dengan nama repository yang Anda buat di step A
-git clone https://github.com/USERNAME_ANDA/NAMA_REPO.git .
-
-# Jika private repo, gunakan Personal Access Token:
-# git clone https://TOKEN@github.com/USERNAME_ANDA/NAMA_REPO.git .
-
-# Pastikan branch yang benar
-git checkout main
+# Reinstall: perbarui checkout yang sudah ada.
+# Instalasi baru: clone hanya bila direktori benar-benar kosong.
+if [ -d ".git" ]; then
+  git fetch --prune origin main
+  git reset --hard origin/main
+else
+  if [ -n "$(ls -A)" ]; then
+    echo "DIBATALKAN: direktori aplikasi tidak kosong dan bukan checkout Git." >&2
+    exit 1
+  fi
+  git clone https://github.com/ModernIlham/NEW-AMAN-IKN.git .
+fi
 ```
 
 > **Cara membuat GitHub Personal Access Token** (jika repo private):
