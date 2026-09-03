@@ -92,3 +92,71 @@ test("gagal memuat data tidak merobohkan peta — toolbar tetap berdiri", async 
   expect(screen.getByTestId("asset-map-fullview")).toBeInTheDocument();
   expect(screen.getByTestId("asset-map-canvas")).toBeInTheDocument();
 });
+
+// ── Lingkup berbagi: yang dibagikan = yang TAMPIL ────────────────────────
+//
+// Permintaan pemilik: peta yang sedang disaring/diseleksi harus membagikan
+// titik itu saja, dan jumlahnya harus terbaca. Sebelum ini tombol Bagikan tak
+// membawa keterangan apa pun, sehingga tautannya selalu berisi seluruh aset
+// kegiatan — tak peduli apa yang terlihat di layar.
+//
+// Fixture SENDIRI, dengan `koordinat_latitude`/`koordinat_longitude`: `ASET`
+// di atas memakai `lat`/`lng`, dan peta membuang baris tanpa koordinat. Uji
+// lingkup butuh baris yang benar-benar sampai ke peta — memakai fixture
+// bersama akan menghasilkan daftar kosong yang lulus tanpa membuktikan apa pun.
+const BERKOORDINAT = [
+  { id: "aset-1", asset_name: "Kursi Rapat", asset_code: "3050104001", NUP: "1",
+    koordinat_latitude: -1.4001, koordinat_longitude: 116.7001 },
+  { id: "aset-2", asset_name: "Meja Kerja", asset_code: "3050104002", NUP: "2",
+    koordinat_latitude: -1.4003, koordinat_longitude: 116.7003 },
+];
+
+function pakaiAsetBerkoordinat() {
+  axios.get.mockImplementation((url) => {
+    if (/\/assets\?/.test(String(url))) {
+      return Promise.resolve({
+        data: { items: BERKOORDINAT, total: BERKOORDINAT.length, total_pages: 1 },
+      });
+    }
+    return Promise.resolve({ data: { items: [] } });
+  });
+}
+
+/** Buka dialog bagikan & kembalikan lingkup yang dibawa tombolnya. */
+async function lingkupSaatBagikan(tambahan = {}) {
+  const onShare = jest.fn();
+  pakaiAsetBerkoordinat();
+  render(<AssetMapFullView {...propsMinimal({ canEdit: true, onShare, ...tambahan })} />);
+  await waitFor(() => expect(axios.get).toHaveBeenCalled());
+  await waitFor(() =>
+    expect(screen.getByTestId("asset-map-share")).toBeInTheDocument());
+  screen.getByTestId("asset-map-share").click();
+  await waitFor(() => expect(onShare).toHaveBeenCalled());
+  return onShare.mock.calls[0][0];
+}
+
+test("tanpa penyempit: lingkup TIDAK membekukan daftar id", async () => {
+  const l = await lingkupSaatBagikan();
+  // ids null = server memakai perilaku "seluruh kegiatan" yang tetap HIDUP;
+  // mengirim daftar id lengkap akan membekukannya tanpa diminta.
+  expect(l.ids).toBeNull();
+  expect(l.disempitkan).toBe(false);
+  expect(l.jumlah).toBe(BERKOORDINAT.length);
+});
+
+test("seleksi aktif: lingkup hanya memuat aset terpilih", async () => {
+  const l = await lingkupSaatBagikan({ selectedIds: new Set(["aset-2"]) });
+  expect(l.ids).toEqual(["aset-2"]);
+  expect(l.jumlah).toBe(1);
+  expect(l.disempitkan).toBe(true);
+  expect(l.sebab).toBe("seleksi");
+  // Totalnya tetap disebut agar operator tahu berapa yang TIDAK ikut.
+  expect(l.total).toBe(BERKOORDINAT.length);
+});
+
+test("filter aktif tanpa seleksi: lingkup memuat hasil filter", async () => {
+  const l = await lingkupSaatBagikan({ activeFilterCount: 2 });
+  expect(l.disempitkan).toBe(true);
+  expect(l.sebab).toBe("filter");
+  expect(l.ids).toEqual(BERKOORDINAT.map((a) => a.id));
+});
