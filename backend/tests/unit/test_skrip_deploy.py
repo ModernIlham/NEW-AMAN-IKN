@@ -32,6 +32,9 @@ import pytest
 
 SKRIP = pathlib.Path(__file__).resolve().parents[3] / "scripts"
 DEPLOY = SKRIP / "deploy_vps.sh"
+CLEANUP = SKRIP / "vps-cleanup.sh"
+PANDUAN_DEPLOY = pathlib.Path(__file__).resolve().parents[3] / \
+    "DEPLOYMENT_GUIDE_HOSTINGER.md"
 
 
 def _teks(p):
@@ -53,12 +56,46 @@ def _kode(p):
 
 @pytest.mark.parametrize("nama", [
     "deploy_vps.sh", "vps-fix.sh", "update-all.sh", "vps-deploy.sh",
+    "vps-cleanup.sh",
 ])
 def test_sintaks_bash_sah(nama):
     """`bash -n` — skrip yang tak bisa diparse tak akan ketahuan sampai jam 2 pagi."""
     r = subprocess.run(["bash", "-n", str(SKRIP / nama)],
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
+
+
+class TestPagarPembersihanVPS:
+    """U33 — cleanup tidak boleh mematikan produksi karena salah pilih skrip."""
+
+    def test_mendeteksi_aplikasi_dan_data_mongodb(self):
+        k = _kode(CLEANUP)
+        assert "[ -e /var/www/inventarisasi ]" in k
+        assert "[ -e /var/lib/mongodb/WiredTiger ]" in k
+        assert '${AMAN_CLEANUP_PAKSA:-0}' in k
+
+    def test_gagal_tertutup_sebelum_prompt_dan_mutasi_pertama(self):
+        k = _kode(CLEANUP)
+        i_pagar = k.index('if [ "${AMAN_CLEANUP_PAKSA:-0}" != "1" ]; then')
+        i_tolak = k.index("exit 1", i_pagar)
+        i_prompt = k.index("read -p")
+        i_stop = k.index("systemctl stop")
+        i_hapus = k.index("rm -rf /var/lib/mongodb")
+        assert i_pagar < i_tolak < i_prompt < i_stop < i_hapus
+
+    def test_override_tidak_menghilangkan_konfirmasi_manusia(self):
+        k = _kode(CLEANUP)
+        i_override = k.index('if [ "${AMAN_CLEANUP_PAKSA:-0}" != "1" ]; then')
+        i_akhir_pagar = k.index("fi", k.index("else", i_override))
+        i_prompt = k.index("read -p")
+        assert i_override < i_akhir_pagar < i_prompt
+        assert 'if [ "$confirm" != "YA" ]; then' in k
+
+    def test_panduan_tidak_memberi_jalur_hapus_mongodb_tanpa_pagar(self):
+        panduan = _teks(PANDUAN_DEPLOY)
+        assert "sudo rm -rf /var/lib/mongodb" not in panduan
+        assert "AMAN_CLEANUP_PAKSA=1" in panduan
+        assert "scripts/vps-cleanup.sh" in panduan
 
 
 class TestPagarMemori:

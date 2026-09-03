@@ -138,97 +138,35 @@ echo "=== Listening Ports ==="
 ss -tlnp | grep -E "80|443|3000|8001|27017|3306"
 ```
 
-### 1.3 Stop Semua Service Lama
+### 1.3 Jalankan Pembersihan Berpagar
+
+Jangan menghentikan layanan atau menghapus direktori database secara manual.
+Jalankan skrip repo dari checkout yang akan dipasang:
+
 ```bash
-# Stop web servers
-sudo systemctl stop nginx 2>/dev/null
-sudo systemctl stop apache2 2>/dev/null
-
-# Stop databases
-sudo systemctl stop mongod 2>/dev/null
-sudo systemctl stop mysql 2>/dev/null
-
-# Stop Node.js apps (jika pakai PM2)
-pm2 kill 2>/dev/null
-
-# Stop Supervisor managed apps
-sudo supervisorctl stop all 2>/dev/null
-sudo systemctl stop supervisor 2>/dev/null
-
-# Stop Docker containers (jika ada)
-docker stop $(docker ps -q) 2>/dev/null
+sudo ./scripts/vps-cleanup.sh
 ```
 
-### 1.4 Hapus/Uninstall Software Lama
+Skrip akan **menolak sebelum layanan apa pun dihentikan** bila menemukan
+`/var/www/inventarisasi` atau `/var/lib/mongodb/WiredTiger`. Pada VPS baru yang
+benar-benar kosong, skrip tetap meminta konfirmasi `YA` lalu membersihkan
+software lama.
+
+Jika ini penghapusan total yang disengaja, pastikan backup sudah diuji dapat
+dipulihkan. Barulah jalankan override eksplisit berikut dan tetap jawab `YA`:
+
 ```bash
-# ==========================================
-# UNINSTALL - Jalankan yang relevan saja
-# ==========================================
-
-# Hapus Apache (jika terinstal)
-sudo apt purge apache2 apache2-utils apache2-bin libapache2-mod-* -y 2>/dev/null
-sudo apt autoremove -y
-
-# Hapus PHP (jika terinstal) 
-sudo apt purge php* libapache2-mod-php* -y 2>/dev/null
-sudo apt autoremove -y
-
-# Hapus MySQL/MariaDB (jika terinstal & TIDAK dipakai)
-# ⚠️ Ini akan HAPUS semua data MySQL!
-sudo apt purge mysql-server mysql-client mysql-common mariadb-server mariadb-client -y 2>/dev/null
-sudo rm -rf /var/lib/mysql
-sudo apt autoremove -y
-
-# Hapus MongoDB LAMA (kita akan install ulang versi yang tepat)
-sudo apt purge mongodb* mongod* -y 2>/dev/null
-sudo rm -rf /var/lib/mongodb
-sudo rm -rf /var/log/mongodb
-sudo apt autoremove -y
-
-# Hapus Node.js LAMA (kita akan install ulang versi yang tepat)
-sudo apt purge nodejs npm -y 2>/dev/null
-sudo rm -rf /usr/local/lib/node_modules
-sudo rm -rf /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/yarn
-# Hapus nvm jika ada
-rm -rf ~/.nvm
-
-# Hapus PM2 (jika ada)
-npm uninstall -g pm2 2>/dev/null
-
-# Hapus Docker (jika ada & tidak dipakai)
-sudo apt purge docker* containerd* -y 2>/dev/null
-sudo rm -rf /var/lib/docker
-sudo apt autoremove -y
-
-# Hapus Nginx LAMA (kita akan install ulang)
-sudo apt purge nginx nginx-common nginx-core -y 2>/dev/null
-
-# Hapus Supervisor LAMA (kita akan install ulang)
-sudo apt purge supervisor -y 2>/dev/null
-
-# Hapus Certbot LAMA
-sudo snap remove certbot 2>/dev/null
-sudo apt purge certbot python3-certbot-nginx -y 2>/dev/null
-
-# Hapus Python LAMA versi tambahan (keep system python)
-sudo apt purge python3.11 python3.11-venv python3.11-dev -y 2>/dev/null
+sudo env AMAN_CLEANUP_PAKSA=1 ./scripts/vps-cleanup.sh
 ```
 
-### 1.5 Hapus File Aplikasi Lama
-```bash
-# ⚠️ BACKUP dulu jika ada data penting!
-sudo rm -rf /var/www/html/*
-sudo rm -rf /var/www/inventarisasi 2>/dev/null
-sudo rm -rf /opt/app 2>/dev/null
-# Hapus apt sources lama yang mungkin conflict
-sudo rm -f /etc/apt/sources.list.d/mongodb*.list
-sudo rm -f /etc/apt/sources.list.d/nodesource*.list
-```
+> **Jangan gunakan override untuk deployment atau upgrade rutin.** Deploy rutin
+> dilakukan oleh GitHub Actions dan mempertahankan data produksi.
 
-### 1.6 Bersihkan Sistem
+### 1.4 Perbarui Indeks Paket
+
+Setelah pembersihan instalasi baru selesai:
+
 ```bash
-sudo apt autoremove -y
-sudo apt autoclean
 sudo apt update
 sudo apt upgrade -y
 ```

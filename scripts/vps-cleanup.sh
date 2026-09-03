@@ -13,6 +13,22 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# Pagar keadaan harus berjalan SEBELUM prompt dan mutasi pertama. Nama skrip
+# ini mudah tertukar dengan skrip deploy saat operator sedang memulihkan VPS;
+# konfirmasi "YA" saja tidak membuktikan bahwa server memang kosong.
+if [ "${AMAN_CLEANUP_PAKSA:-0}" != "1" ]; then
+    if [ -e /var/www/inventarisasi ] || \
+       [ -e /var/lib/mongodb/WiredTiger ]; then
+        echo -e "${RED}DIBATALKAN: instalasi AMAN atau data MongoDB terdeteksi.${NC}" >&2
+        echo -e "${YELLOW}Skrip berhenti sebelum layanan apa pun dihentikan.${NC}" >&2
+        echo "Pastikan backup dapat dipulihkan. Jika penghapusan total memang disengaja:" >&2
+        echo "  sudo env AMAN_CLEANUP_PAKSA=1 ./scripts/vps-cleanup.sh" >&2
+        exit 1
+    fi
+else
+    echo -e "${RED}PERINGATAN: AMAN_CLEANUP_PAKSA=1 aktif; pagar keadaan dilewati.${NC}" >&2
+fi
+
 echo -e "${RED}============================================${NC}"
 echo -e "${RED}  PEMBERSIHAN DEPLOYMENT LAMA               ${NC}"
 echo -e "${RED}  VPS: amanikn-inventarisasi.com            ${NC}"
