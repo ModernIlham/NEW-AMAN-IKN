@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Update aplikasi AMAN di VPS Hostinger ke origin/main.
+# Update aplikasi AMAN di VPS Hostinger ke commit main yang sudah disetujui.
 #
 # Dijalankan otomatis oleh workflow "Deploy ke Hostinger VPS" lewat SSH,
-# atau manual di VPS:  bash scripts/deploy_vps.sh
+# atau manual di VPS:  bash scripts/deploy_vps.sh <SHA-lengkap-yang-lulus-CI>
 #
 # ── Tiga sifat yang membedakan skrip ini dari versi sebelumnya (temuan C6) ──
 #
@@ -28,6 +28,23 @@ set -euo pipefail
 APP_DIR="${APP_DIR:-/var/www/inventarisasi}"
 # Cabang tujuan bisa diganti untuk uji coba; bawaannya main.
 DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
+# Argumen pertama menang atas environment supaya pemanggil otomatis tidak bisa
+# berubah sasaran karena environment lama yang tertinggal di server.
+DEPLOY_SHA="${1:-${DEPLOY_SHA:-}}"
+# Mode otomatis wajib monoton; mode manual boleh memilih commit CI lama untuk
+# rollback operator yang disengaja. Argumen kedua kembali menang atas env.
+DEPLOY_MODE="${2:-${DEPLOY_MODE:-manual}}"
+
+if [[ ! "$DEPLOY_SHA" =~ ^[0-9A-Fa-f]{40}$ ]]; then
+  echo "DEPLOY DIBATALKAN: berikan DEPLOY_SHA berupa commit SHA lengkap 40 karakter." >&2
+  echo "Contoh: bash scripts/deploy_vps.sh 0123456789abcdef0123456789abcdef01234567" >&2
+  exit 2
+fi
+DEPLOY_SHA="${DEPLOY_SHA,,}"
+if [[ "$DEPLOY_MODE" != "otomatis" && "$DEPLOY_MODE" != "manual" ]]; then
+  echo "DEPLOY DIBATALKAN: DEPLOY_MODE hanya boleh 'otomatis' atau 'manual'." >&2
+  exit 2
+fi
 cd "$APP_DIR"
 
 # Commit yang SEDANG melayani produksi — tujuan rollback bila deploy gagal.
@@ -127,7 +144,7 @@ pulihkan() {
 # berubah. Tiga percobaan, bukan lima: cukup melewati blip, tak cukup untuk
 # terbaca sebagai tekanan.
 #
-# JANGAN git pull — selalu fetch + reset agar identik dengan cabang tujuan.
+# JANGAN git pull — selalu fetch lalu reset ke SHA immutable yang disetujui.
 ambil_perubahan() {
   local n
   for n in 1 2 3; do
@@ -146,7 +163,37 @@ ambil_perubahan() {
   return 128
 }
 ambil_perubahan
-git reset --hard "origin/${DEPLOY_BRANCH}"
+
+# Fetch boleh melihat main yang lebih baru daripada keputusan CI. Itu tidak
+# boleh mengubah target: origin/main hanya menjadi bukti bahwa SHA yang diminta
+# memang commit cabang tujuan, bukan nilai yang dipasang ke produksi.
+if ! git cat-file -e "${DEPLOY_SHA}^{commit}" 2>/dev/null; then
+  echo "DEPLOY DIBATALKAN: commit ${DEPLOY_SHA} tidak tersedia setelah fetch." >&2
+  exit 1
+fi
+if ! git merge-base --is-ancestor "$DEPLOY_SHA" "origin/${DEPLOY_BRANCH}"; then
+  echo "DEPLOY DIBATALKAN: commit ${DEPLOY_SHA} bukan bagian origin/${DEPLOY_BRANCH}." >&2
+  exit 1
+fi
+
+# Concurrency menyerialkan job tetapi rerun CI lama tetap bisa datang setelah
+# rilis baru. Auto-deploy tidak boleh menurunkan produksi; rollback ke ancestor
+# lama hanya sah bila operator memilih mode manual secara eksplisit.
+if [ "$DEPLOY_MODE" = "otomatis" ] && [ "$DEPLOY_SHA" != "$PREV" ] \
+    && git merge-base --is-ancestor "$DEPLOY_SHA" "$PREV"; then
+  echo "DEPLOY DIBATALKAN: auto-deploy ${DEPLOY_SHA} lebih lama daripada HEAD produksi ${PREV}." >&2
+  echo "Untuk rollback yang disengaja, jalankan deploy manual dengan SHA yang sudah lulus CI." >&2
+  exit 1
+fi
+
+git reset --hard "$DEPLOY_SHA"
+TERPASANG="$(git rev-parse HEAD)"
+if [ "$TERPASANG" != "$DEPLOY_SHA" ]; then
+  echo "DEPLOY DIBATALKAN: HEAD ${TERPASANG} tidak sama dengan DEPLOY_SHA ${DEPLOY_SHA}." >&2
+  pulihkan
+  exit 1
+fi
+echo "Commit rilis terkunci dan terpasang: $(git rev-parse --short HEAD)"
 
 pasang_env
 # Dependensi backend bisa bertambah antar rilis.

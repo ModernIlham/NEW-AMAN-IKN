@@ -519,6 +519,7 @@ yarn start
 ```env
 MONGO_URL="mongodb://localhost:27017"
 DB_NAME="inventarisasi_bmn"
+ADMIN_BOOTSTRAP_TOKEN=
 TINIFY_API_KEY=xxx
 RESEND_API_KEY=xxx
 SENDER_EMAIL=noreply@domain.com
@@ -529,6 +530,27 @@ ILOVEAPI_PUBLIC_KEY=xxx
 ILOVEAPI_SECRET_KEY=xxx
 WHIPDOC_API_KEY=xxx
 ```
+
+`ADMIN_BOOTSTRAP_TOKEN` hanya diperlukan saat database pengguna masih kosong.
+Buat dengan `openssl rand -hex 32`, restart backend, lalu pasang admin awal:
+
+```bash
+curl -X POST "https://domain-anda/api/auth/bootstrap" \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Bootstrap-Token: $ADMIN_BOOTSTRAP_TOKEN" \
+  -d '{"username":"admin@domain.go.id","password":"GantiPassword123","name":"Admin Awal"}'
+```
+
+Setelah berhasil, hapus `ADMIN_BOOTSTRAP_TOKEN` dari `backend/.env` dan restart
+backend. Endpoint menolak bootstrap kedua; pendaftaran publik selanjutnya selalu
+membuat akun viewer nonaktif yang harus disetujui admin.
+
+Bila pemasangan terputus setelah claim tetapi sebelum akun tersimpan, endpoint
+sengaja tetap tertutup (fail-closed). Pemulihan harus dilakukan operator server:
+matikan backend, pastikan koleksi `users` benar-benar kosong, rotasi token,
+hapus hanya dokumen `_id: aman-admin-bootstrap-v1` dari koleksi
+`admin_bootstrap_state`, lalu hidupkan backend dan ulangi bootstrap. Jangan
+pernah menghapus marker jika satu akun pun sudah ada.
 
 **Frontend** (`frontend/.env`):
 ```env
@@ -562,16 +584,22 @@ Lihat [DEPLOYMENT_GUIDE_HOSTINGER.md](./DEPLOYMENT_GUIDE_HOSTINGER.md) untuk pan
 `scripts/deploy_vps.sh` lewat SSH. Sekali saja, isi secret repo
 (Settings → Secrets and variables → Actions): `VPS_HOST`, `VPS_USER`,
 `VPS_SSH_KEY` (opsional `VPS_PORT`). Bisa juga dipicu manual dari tab
-Actions → Run workflow.
+Actions → Run workflow dengan memasukkan SHA lengkap commit `main` yang sudah
+lulus CI. Workflow menolak branch, tag, SHA pendek, dan commit tanpa CI sukses.
 
 **Update kode di VPS (manual):**
 ```bash
-cd /var/www/inventarisasi && bash scripts/deploy_vps.sh
+cd /var/www/inventarisasi
+git fetch origin main
+bash scripts/deploy_vps.sh <SHA-lengkap-yang-lulus-CI>
 # — atau langkah demi langkah (JANGAN git pull, selalu fetch + reset) —
 cp /var/www/inventarisasi/backend/.env /tmp/backend_env_backup
 cp /var/www/inventarisasi/frontend/.env /tmp/frontend_env_backup
 cd /var/www/inventarisasi
-git fetch origin && git reset --hard origin/main
+DEPLOY_SHA=<SHA-lengkap-yang-lulus-CI>
+git fetch origin main
+git merge-base --is-ancestor "$DEPLOY_SHA" origin/main
+git reset --hard "$DEPLOY_SHA"
 cp /tmp/backend_env_backup /var/www/inventarisasi/backend/.env
 cp /tmp/frontend_env_backup /var/www/inventarisasi/frontend/.env
 sudo supervisorctl restart inventarisasi-backend

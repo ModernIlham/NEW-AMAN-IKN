@@ -18,7 +18,7 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
-## [#974] Bagikan Peta: yang dibagikan = yang tampil, dan jumlahnya terbaca — 2026-09-03
+## [#977] Bagikan Peta: yang dibagikan = yang tampil, dan jumlahnya terbaca — 2026-09-03
 
 Permintaan pemilik: *"ketika filter dan seleksi aktif, pada saat dibuat
 Bagikan Peta Kolaboratif, berarti hanya titik-titik itu saja yang dibagikan
@@ -91,6 +91,56 @@ jumlahnya. `lingkup: "semua"` membawa `jumlah_titik_dibagikan: null`, bukan
 - `frontend/src/pages/DashboardPage.jsx` — lingkup dibekukan saat tombol ditekan
 - `frontend/src/pages/PetaKolaborasiPage.jsx` — jumlah titik di header publik
 - Uji: 10 backend, 3 peta, 6 dialog
+
+---
+
+## [#976] Pembersihan VPS gagal tertutup saat data produksi terdeteksi — 2026-09-03
+
+- `vps-cleanup.sh` sekarang berhenti sebelum layanan apa pun dimatikan bila
+  menemukan direktori aplikasi, data WiredTiger, konfigurasi AMAN, atau
+  perangkat deployment; direktori aplikasi kustom dapat dinyatakan eksplisit.
+- Penghapusan total yang disengaja memerlukan override eksplisit
+  `AMAN_CLEANUP_PAKSA=1` dan tetap meminta konfirmasi manusia `YA`.
+- Panduan Hostinger tidak lagi menyediakan perintah penghapusan MongoDB langsung
+  yang melewati pagar skrip, dan membedakan clone baru dari pembaruan checkout
+  saat reinstall.
+- Ditambah uji regresi sintaks dan urutan seluruh kelas perintah mutatif tanpa
+  menjalankan operasi penghancuran pada mesin pengujian.
+
+---
+
+## [#975] Deploy dikunci ke commit yang benar-benar lulus CI — 2026-09-03
+
+- SHA yang lulus CI sekarang diteruskan melintasi SSH dan menjadi satu-satunya
+  target `git reset` di VPS; pergerakan `main` sesudah CI tidak lagi dapat
+  mengganti commit yang dipasang secara diam-diam.
+- Skrip VPS menolak SHA kosong/pendek/non-heksadesimal, commit yang tidak ada,
+  dan commit di luar riwayat `main`, lalu membuktikan `HEAD` sama persis sebelum
+  memasang dependensi, me-restart backend, atau membangun frontend.
+- Deploy manual dari Actions wajib menerima SHA lengkap serta memverifikasi run
+  CI `push` sukses untuk commit tersebut. Skrip lama yang masih fallback ke
+  ujung branch ditolak sebelum koneksi produksi.
+- Auto-deploy menolak run CI bertipe selain `push` dan menolak downgrade lewat
+  rerun CI lama; rollback ke commit CI terdahulu hanya tersedia dalam mode
+  manual yang disengaja. SHA heksadesimal huruf besar dinormalisasi.
+- Ditambah uji regresi batas CI→SSH→VPS, termasuk simulasi race ketika commit B
+  sudah menjadi ujung branch tetapi deploy A tetap memasang A.
+
+---
+
+## [#974] Bootstrap admin pertama ditutup dari pendaftaran publik — 2026-09-03
+
+- Pendaftaran publik dan verifikasi OTP tidak pernah lagi mengangkat pengguna
+  pertama menjadi admin pusat; keduanya menunggu admin aktif yang sudah ada.
+- Instalasi kosong memakai `POST /auth/bootstrap` dengan
+  `ADMIN_BOOTSTRAP_TOKEN` minimal 32 karakter dari environment server.
+- Dokumen status MongoDB terpisah dengan `_id` konstan menjadi gerbang atomik;
+  bootstrap tetap tertutup bila seluruh akun kemudian dihapus atau data lama
+  dipulihkan dari backup.
+- Registrasi legacy kini memakai kebijakan password server yang sama dengan
+  registrasi OTP dan reset password.
+- Ditambah uji regresi untuk secret, sekali-pakai, jalur OTP sah, peran viewer,
+  balapan bootstrap, penutupan permanen, input state rusak, dan backup/reset.
 
 ---
 

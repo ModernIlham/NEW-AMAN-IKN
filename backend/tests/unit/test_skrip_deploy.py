@@ -32,6 +32,9 @@ import pytest
 
 SKRIP = pathlib.Path(__file__).resolve().parents[3] / "scripts"
 DEPLOY = SKRIP / "deploy_vps.sh"
+CLEANUP = SKRIP / "vps-cleanup.sh"
+PANDUAN_DEPLOY = pathlib.Path(__file__).resolve().parents[3] / \
+    "DEPLOYMENT_GUIDE_HOSTINGER.md"
 
 
 def _teks(p):
@@ -53,12 +56,77 @@ def _kode(p):
 
 @pytest.mark.parametrize("nama", [
     "deploy_vps.sh", "vps-fix.sh", "update-all.sh", "vps-deploy.sh",
+    "vps-cleanup.sh",
 ])
 def test_sintaks_bash_sah(nama):
     """`bash -n` — skrip yang tak bisa diparse tak akan ketahuan sampai jam 2 pagi."""
     r = subprocess.run(["bash", "-n", str(SKRIP / nama)],
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
+
+
+class TestPagarPembersihanVPS:
+    """U33 — cleanup tidak boleh mematikan produksi karena salah pilih skrip."""
+
+    def test_mendeteksi_aplikasi_dan_data_mongodb(self):
+        k = _kode(CLEANUP)
+        assert "[ -e \"$AMAN_CLEANUP_APP_DIR\" ]" in k
+        assert "/var/www/inventarisasi" in k
+        assert "[ -e /var/lib/mongodb/WiredTiger ]" in k
+        assert '${AMAN_CLEANUP_PAKSA:-0}' in k
+
+    def test_mendeteksi_konfigurasi_dan_perangkat_deployment_kustom(self):
+        k = _kode(CLEANUP)
+        for marker in (
+            "/etc/supervisor/conf.d/inventarisasi-backend.conf",
+            "/etc/nginx/sites-available/inventarisasi",
+            "/etc/nginx/sites-enabled/inventarisasi",
+        ):
+            assert marker in k
+        for alat in ("mongod", "nginx", "supervisord", "supervisorctl",
+                     "pm2", "docker"):
+            assert alat in k
+        assert 'command -v "$alat"' in k
+
+    def test_gagal_tertutup_sebelum_prompt_dan_mutasi_pertama(self):
+        k = _kode(CLEANUP)
+        i_pagar = k.index('if [ "${AMAN_CLEANUP_PAKSA:-0}" != "1" ] &&')
+        i_tolak = k.index("exit 1", i_pagar)
+        i_prompt = k.index("read -p")
+        i_konfirmasi = k.index('if [ "$confirm" != "YA" ]; then')
+        i_akhir_konfirmasi = k.index("\nfi", i_konfirmasi)
+        pola_mutasi = re.compile(
+            r"^\s*(?:systemctl\s+stop|supervisorctl\s+stop|pm2\s+kill|"
+            r"docker\s+stop|apt\s+(?:purge|autoremove|autoclean)|"
+            r"npm\s+uninstall|snap\s+remove|rm\s+-[^\s]*[rf])\b",
+            re.M,
+        )
+        mutasi = [m.start() for m in pola_mutasi.finditer(k)]
+        assert mutasi, "tes wajib menemukan perintah mutatif di cleanup"
+        assert i_pagar < i_tolak < i_prompt < i_konfirmasi
+        assert i_akhir_konfirmasi < min(mutasi)
+
+    def test_override_tidak_menghilangkan_konfirmasi_manusia(self):
+        k = _kode(CLEANUP)
+        i_override = k.index('if [ "${AMAN_CLEANUP_PAKSA:-0}" != "1" ] &&')
+        i_akhir_pagar = k.index("\nfi", k.index("elif", i_override))
+        i_prompt = k.index("read -p")
+        assert i_override < i_akhir_pagar < i_prompt
+        assert 'if [ "$confirm" != "YA" ]; then' in k
+
+    def test_panduan_tidak_memberi_jalur_hapus_mongodb_tanpa_pagar(self):
+        panduan = _teks(PANDUAN_DEPLOY)
+        assert "sudo rm -rf /var/lib/mongodb" not in panduan
+        assert "AMAN_CLEANUP_PAKSA=1" in panduan
+        assert "/tmp/aman-vps-cleanup.sh" in panduan
+        assert "raw.githubusercontent.com/ModernIlham/NEW-AMAN-IKN/main" in panduan
+
+    def test_panduan_membedakan_checkout_lama_dari_clone_baru(self):
+        panduan = _teks(PANDUAN_DEPLOY)
+        assert 'if [ -d ".git" ]; then' in panduan
+        assert "git fetch --prune origin main" in panduan
+        assert "git reset --hard origin/main" in panduan
+        assert 'if [ -n "$(ls -A)" ]; then' in panduan
 
 
 class TestPagarMemori:
@@ -112,7 +180,7 @@ class TestRollback:
 
     def test_disimpan_SEBELUM_reset(self):
         t = _teks(DEPLOY)
-        assert t.index("PREV=") < t.index('git reset --hard "origin/')
+        assert t.index("PREV=") < t.index('git reset --hard "$DEPLOY_SHA"')
 
     def test_kedua_gerbang_kesehatan_memanggil_pulihkan(self):
         """Dangkal DAN mendalam — melewatkan satu berarti separuh perlindungan."""
@@ -236,7 +304,7 @@ class TestGerbangRestoreDeploy:
         t = _teks(DEPLOY)
         i_panggil = t.index("\nperiksa_restore_aktif\n")
         assert i_panggil < t.index('git fetch origin "$DEPLOY_BRANCH"')
-        assert i_panggil < t.index('git reset --hard "origin/')
+        assert i_panggil < t.index('git reset --hard "$DEPLOY_SHA"')
 
     def test_kueri_menyaring_job_restore_aktif_dan_segar(self):
         k = _kode(DEPLOY)

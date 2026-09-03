@@ -138,97 +138,41 @@ echo "=== Listening Ports ==="
 ss -tlnp | grep -E "80|443|3000|8001|27017|3306"
 ```
 
-### 1.3 Stop Semua Service Lama
+### 1.3 Jalankan Pembersihan Berpagar
+
+Jangan menghentikan layanan atau menghapus direktori database secara manual.
+Unduh salinan skrip ke direktori sementara—bukan ke direktori aplikasi yang
+sedang dipakai—lalu periksa sintaksnya sebelum dijalankan:
+
 ```bash
-# Stop web servers
-sudo systemctl stop nginx 2>/dev/null
-sudo systemctl stop apache2 2>/dev/null
-
-# Stop databases
-sudo systemctl stop mongod 2>/dev/null
-sudo systemctl stop mysql 2>/dev/null
-
-# Stop Node.js apps (jika pakai PM2)
-pm2 kill 2>/dev/null
-
-# Stop Supervisor managed apps
-sudo supervisorctl stop all 2>/dev/null
-sudo systemctl stop supervisor 2>/dev/null
-
-# Stop Docker containers (jika ada)
-docker stop $(docker ps -q) 2>/dev/null
+curl -fL \
+  https://raw.githubusercontent.com/ModernIlham/NEW-AMAN-IKN/main/scripts/vps-cleanup.sh \
+  -o /tmp/aman-vps-cleanup.sh
+chmod 700 /tmp/aman-vps-cleanup.sh
+bash -n /tmp/aman-vps-cleanup.sh
+sudo /tmp/aman-vps-cleanup.sh
 ```
 
-### 1.4 Hapus/Uninstall Software Lama
+Skrip akan **menolak sebelum layanan apa pun dihentikan** bila menemukan
+direktori aplikasi, data WiredTiger, konfigurasi AMAN, atau perangkat deployment
+yang sudah terpasang. Pada VPS baru yang benar-benar kosong, skrip tetap meminta
+konfirmasi `YA` lalu membersihkan software lama.
+
+Jika ini penghapusan total yang disengaja, pastikan backup sudah diuji dapat
+dipulihkan. Barulah jalankan override eksplisit berikut dan tetap jawab `YA`:
+
 ```bash
-# ==========================================
-# UNINSTALL - Jalankan yang relevan saja
-# ==========================================
-
-# Hapus Apache (jika terinstal)
-sudo apt purge apache2 apache2-utils apache2-bin libapache2-mod-* -y 2>/dev/null
-sudo apt autoremove -y
-
-# Hapus PHP (jika terinstal) 
-sudo apt purge php* libapache2-mod-php* -y 2>/dev/null
-sudo apt autoremove -y
-
-# Hapus MySQL/MariaDB (jika terinstal & TIDAK dipakai)
-# ⚠️ Ini akan HAPUS semua data MySQL!
-sudo apt purge mysql-server mysql-client mysql-common mariadb-server mariadb-client -y 2>/dev/null
-sudo rm -rf /var/lib/mysql
-sudo apt autoremove -y
-
-# Hapus MongoDB LAMA (kita akan install ulang versi yang tepat)
-sudo apt purge mongodb* mongod* -y 2>/dev/null
-sudo rm -rf /var/lib/mongodb
-sudo rm -rf /var/log/mongodb
-sudo apt autoremove -y
-
-# Hapus Node.js LAMA (kita akan install ulang versi yang tepat)
-sudo apt purge nodejs npm -y 2>/dev/null
-sudo rm -rf /usr/local/lib/node_modules
-sudo rm -rf /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/yarn
-# Hapus nvm jika ada
-rm -rf ~/.nvm
-
-# Hapus PM2 (jika ada)
-npm uninstall -g pm2 2>/dev/null
-
-# Hapus Docker (jika ada & tidak dipakai)
-sudo apt purge docker* containerd* -y 2>/dev/null
-sudo rm -rf /var/lib/docker
-sudo apt autoremove -y
-
-# Hapus Nginx LAMA (kita akan install ulang)
-sudo apt purge nginx nginx-common nginx-core -y 2>/dev/null
-
-# Hapus Supervisor LAMA (kita akan install ulang)
-sudo apt purge supervisor -y 2>/dev/null
-
-# Hapus Certbot LAMA
-sudo snap remove certbot 2>/dev/null
-sudo apt purge certbot python3-certbot-nginx -y 2>/dev/null
-
-# Hapus Python LAMA versi tambahan (keep system python)
-sudo apt purge python3.11 python3.11-venv python3.11-dev -y 2>/dev/null
+sudo env AMAN_CLEANUP_PAKSA=1 /tmp/aman-vps-cleanup.sh
 ```
 
-### 1.5 Hapus File Aplikasi Lama
-```bash
-# ⚠️ BACKUP dulu jika ada data penting!
-sudo rm -rf /var/www/html/*
-sudo rm -rf /var/www/inventarisasi 2>/dev/null
-sudo rm -rf /opt/app 2>/dev/null
-# Hapus apt sources lama yang mungkin conflict
-sudo rm -f /etc/apt/sources.list.d/mongodb*.list
-sudo rm -f /etc/apt/sources.list.d/nodesource*.list
-```
+> **Jangan gunakan override untuk deployment atau upgrade rutin.** Deploy rutin
+> dilakukan oleh GitHub Actions dan mempertahankan data produksi.
 
-### 1.6 Bersihkan Sistem
+### 1.4 Perbarui Indeks Paket
+
+Setelah pembersihan instalasi baru selesai:
+
 ```bash
-sudo apt autoremove -y
-sudo apt autoclean
 sudo apt update
 sudo apt upgrade -y
 ```
@@ -419,22 +363,25 @@ sudo systemctl is-active supervisor
 5. Tunggu sampai push selesai
 6. **PENTING:** Catat nama repository dan branch yang digunakan (biasanya `main`)
 
-**Langkah B - Di VPS Hostinger (Clone dari GitHub):**
+**Langkah B - Di VPS Hostinger (Clone Baru atau Perbarui Checkout Lama):**
 ```bash
-# Buat direktori aplikasi
+# Buat/masuk ke direktori aplikasi. vps-cleanup.sh sengaja tidak menghapus
+# checkout agar reinstall dapat memakai kembali remote dan .env yang ada.
 sudo mkdir -p /var/www/inventarisasi
 cd /var/www/inventarisasi
 
-# Clone repository dari GitHub Anda
-# Ganti USERNAME_ANDA dengan username GitHub Anda
-# Ganti NAMA_REPO dengan nama repository yang Anda buat di step A
-git clone https://github.com/USERNAME_ANDA/NAMA_REPO.git .
-
-# Jika private repo, gunakan Personal Access Token:
-# git clone https://TOKEN@github.com/USERNAME_ANDA/NAMA_REPO.git .
-
-# Pastikan branch yang benar
-git checkout main
+# Reinstall: perbarui checkout yang sudah ada.
+# Instalasi baru: clone hanya bila direktori benar-benar kosong.
+if [ -d ".git" ]; then
+  git fetch --prune origin main
+  git reset --hard origin/main
+else
+  if [ -n "$(ls -A)" ]; then
+    echo "DIBATALKAN: direktori aplikasi tidak kosong dan bukan checkout Git." >&2
+    exit 1
+  fi
+  git clone https://github.com/ModernIlham/NEW-AMAN-IKN.git .
+fi
 ```
 
 > **Cara membuat GitHub Personal Access Token** (jika repo private):
@@ -536,7 +483,8 @@ CORS_ORIGINS="https://domain-anda.com"
 # Buat SEKARANG dengan: openssl rand -hex 32
 # JANGAN memakai nilai contoh mana pun — rahasia yang pernah tertulis di
 # dokumen berarti rahasia yang bisa dibaca siapa pun yang membacanya.
-JWT_SECRET=<tempel-hasil-openssl-rand-hex-32-di-sini>
+JWT_SECRET=GANTI_TOKEN_ACAK
+ADMIN_BOOTSTRAP_TOKEN=GANTI_TOKEN_ACAK_LAIN
 
 # Opsional. Kosongkan bila belum punya; fitur terkait mati dan itu terlihat
 # jujur di indikator kuota, bukan tersembunyi.
@@ -555,6 +503,9 @@ APP_PUBLIC_URL="https://domain-anda.com"
 >   satker — seluruh isolasi satker dilewati begitu saja. Buat dengan
 >   `openssl rand -hex 32`, simpan HANYA di `.env` server (mode 600), dan
 >   jangan pernah menuliskannya di dokumen, skrip, atau pesan chat.
+> - `ADMIN_BOOTSTRAP_TOKEN` juga **WAJIB acak, minimal 32 karakter, dan harus
+>   berbeda dari `JWT_SECRET`**. Buat dengan perintah terpisah
+>   `openssl rand -hex 32`; token ini hanya untuk pemasangan admin pertama.
 > - `CORS_ORIGINS` sudah diset ke domain Anda
 > - `APP_PUBLIC_URL` = alamat publik frontend — dipakai membentuk **link e-sign
 >   yang dibagikan** dan **QR verifikasi** pada Lembar Pengesahan TTD. Bila
@@ -1013,7 +964,22 @@ curl -s -o /dev/null -w "%{http_code}" https://amanikn-inventarisasi.com/
 # Harus: 200
 ```
 
-### 9.4 Test dari Browser
+### 9.4 Pasang Administrator Pertama (hanya instalasi baru)
+```bash
+read -rsp "Token bootstrap: " ADMIN_BOOTSTRAP_TOKEN; echo
+curl -X POST "https://amanikn-inventarisasi.com/api/auth/bootstrap" \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Bootstrap-Token: ${ADMIN_BOOTSTRAP_TOKEN}" \
+  -d '{"username":"admin@domain.go.id","password":"GantiPassword123","name":"Admin Awal"}'
+unset ADMIN_BOOTSTRAP_TOKEN
+```
+
+Setelah respons berhasil, hapus baris `ADMIN_BOOTSTRAP_TOKEN` dari
+`/var/www/inventarisasi/backend/.env`, lalu jalankan
+`sudo supervisorctl restart inventarisasi-backend`. Bootstrap kedua akan tetap
+ditolak meski token lama diketahui; jangan menyimpan token di riwayat shell.
+
+### 9.5 Test dari Browser
 Buka browser dan akses:
 1. ✅ `https://amanikn-inventarisasi.com` - Halaman utama
 2. ✅ `https://amanikn-inventarisasi.com/api/docs` - API Documentation
@@ -1103,8 +1069,9 @@ python -c "from PIL import Image; print('Pillow OK')"
 
 ### Update Aplikasi (Setelah Perubahan Kode)
 
-> ⚠️ **PENTING:** Jangan gunakan `git pull` biasa! Jika branch diverged (bercabang), 
-> file-file baru tidak akan muncul dan backend bisa crash. Selalu gunakan metode **fetch + reset** di bawah ini.
+> ⚠️ **PENTING:** Jangan gunakan `git pull` biasa dan jangan memasang ujung
+> `origin/main` tanpa identitas rilis. Ambil SHA lengkap dari run CI `main` yang
+> sukses, lalu gunakan SHA itu sebagai target immutable.
 
 **Metode Aman (Recommended):**
 ```bash
@@ -1112,11 +1079,13 @@ python -c "from PIL import Image; print('Pillow OK')"
 cp /var/www/inventarisasi/backend/.env /tmp/backend_env_backup
 cp /var/www/inventarisasi/frontend/.env /tmp/frontend_env_backup
 
-# 2. Fetch & force reset ke versi terbaru
+# 2. Fetch & force reset ke commit yang SUDAH lulus CI
 cd /var/www/inventarisasi
-git fetch origin
-# GANTI 'main' dengan nama branch Anda jika berbeda
-git reset --hard origin/main
+DEPLOY_SHA=<SHA-lengkap-yang-lulus-CI>
+git fetch origin main
+git cat-file -e "${DEPLOY_SHA}^{commit}"
+git merge-base --is-ancestor "$DEPLOY_SHA" origin/main
+git reset --hard "$DEPLOY_SHA"
 
 # 3. Restore .env files (karena git reset menghapus perubahan lokal)
 cp /tmp/backend_env_backup /var/www/inventarisasi/backend/.env
@@ -1143,16 +1112,18 @@ yarn build
 
 **Atau gunakan script otomatis:**
 ```bash
-# Script ini otomatis handle semua langkah di atas termasuk backup .env
-chmod +x /var/www/inventarisasi/scripts/vps-fix.sh
-sudo /var/www/inventarisasi/scripts/vps-fix.sh
+# Script ini menangani backup .env, dependensi, restart, health gate, dan rollback.
+cd /var/www/inventarisasi
+git fetch origin main
+bash scripts/deploy_vps.sh <SHA-lengkap-yang-lulus-CI>
 ```
 
 **Kenapa `git pull` saja tidak cukup?**
 - Emergent.sh kadang melakukan force-push yang mengubah history commit
 - Ini menyebabkan branch lokal VPS "diverged" (bercabang) dari remote
 - `git pull` biasa akan gagal atau tidak mengambil file baru
-- `git fetch + git reset --hard` memastikan VPS selalu identik dengan remote
+- `git fetch` + reset ke SHA lengkap memastikan VPS identik dengan commit yang
+  benar-benar lulus CI, walaupun `main` bergerak lagi saat deploy berjalan
 
 **Verifikasi setelah update:**
 ```bash
@@ -1208,8 +1179,8 @@ sudo tail -f /var/log/supervisor/inventarisasi-backend.out.log
 
 | Aksi | Command |
 |------|---------|
-| **Update kode dari GitHub** | `cd /var/www/inventarisasi && git fetch origin && git reset --hard origin/main` |
-| **Script update otomatis** | `sudo /var/www/inventarisasi/scripts/vps-fix.sh` |
+| **Update kode dari GitHub** | `cd /var/www/inventarisasi && git fetch origin main && bash scripts/deploy_vps.sh <SHA-lengkap-yang-lulus-CI>` |
+| **Script pemulihan darurat** | `sudo /var/www/inventarisasi/scripts/vps-fix.sh` (jalur operator; tidak mengklaim verifikasi CI) |
 | Start backend | `sudo supervisorctl start inventarisasi-backend` |
 | Stop backend | `sudo supervisorctl stop inventarisasi-backend` |
 | Restart backend | `sudo supervisorctl restart inventarisasi-backend` |
@@ -1221,7 +1192,9 @@ sudo tail -f /var/log/supervisor/inventarisasi-backend.out.log
 | Rebuild frontend | `cd /var/www/inventarisasi/frontend && yarn build` |
 | Backup DB | `mongodump --db inventarisasi_bmn --out /root/backup/` |
 
-> ⚠️ **JANGAN** gunakan `git pull origin main` — selalu gunakan `git fetch + git reset --hard` untuk menghindari masalah branch diverged.
+> ⚠️ **JANGAN** gunakan `git pull origin main`. Untuk rilis normal, gunakan
+> `deploy_vps.sh` dengan SHA lengkap dari CI sukses; `vps-fix.sh` hanya untuk
+> pemulihan operator yang disengaja.
 
 ---
 

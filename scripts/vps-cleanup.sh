@@ -13,6 +13,51 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# Pagar keadaan harus berjalan SEBELUM prompt dan mutasi pertama. Nama skrip
+# ini mudah tertukar dengan skrip deploy saat operator sedang memulihkan VPS;
+# konfirmasi "YA" saja tidak membuktikan bahwa server memang kosong.
+AMAN_CLEANUP_APP_DIR="${AMAN_CLEANUP_APP_DIR:-${APP_DIR:-/var/www/inventarisasi}}"
+AMAN_CLEANUP_TERDETEKSI=()
+
+if [ -e "$AMAN_CLEANUP_APP_DIR" ]; then
+    AMAN_CLEANUP_TERDETEKSI+=("direktori aplikasi: $AMAN_CLEANUP_APP_DIR")
+fi
+if [ -e /var/lib/mongodb/WiredTiger ]; then
+    AMAN_CLEANUP_TERDETEKSI+=("data MongoDB: /var/lib/mongodb/WiredTiger")
+fi
+if [ -e /etc/supervisor/conf.d/inventarisasi-backend.conf ]; then
+    AMAN_CLEANUP_TERDETEKSI+=("konfigurasi Supervisor AMAN")
+fi
+if [ -e /etc/nginx/sites-available/inventarisasi ]; then
+    AMAN_CLEANUP_TERDETEKSI+=("konfigurasi Nginx AMAN")
+fi
+if [ -e /etc/nginx/sites-enabled/inventarisasi ]; then
+    AMAN_CLEANUP_TERDETEKSI+=("site Nginx AMAN aktif")
+fi
+
+# Instalasi dengan APP_DIR/dbPath kustom tetap terjaring lewat perangkat
+# deployment yang sudah terpasang. False positive di sini disengaja: operator
+# harus memilih override sebelum membersihkan mesin yang tidak benar-benar baru.
+for alat in mongod nginx supervisord supervisorctl pm2 docker; do
+    if command -v "$alat" >/dev/null 2>&1; then
+        AMAN_CLEANUP_TERDETEKSI+=("perangkat deployment: $alat")
+    fi
+done
+
+if [ "${AMAN_CLEANUP_PAKSA:-0}" != "1" ] && \
+   [ "${#AMAN_CLEANUP_TERDETEKSI[@]}" -gt 0 ]; then
+    echo -e "${RED}DIBATALKAN: keadaan server tidak aman untuk dibersihkan.${NC}" >&2
+    printf '  - %s\n' "${AMAN_CLEANUP_TERDETEKSI[@]}" >&2
+    echo -e "${YELLOW}Skrip berhenti sebelum layanan apa pun dihentikan.${NC}" >&2
+    echo "Pastikan backup dapat dipulihkan. Jika penghapusan total memang disengaja:" >&2
+    echo "  sudo env AMAN_CLEANUP_PAKSA=1 $0" >&2
+    exit 1
+elif [ "${AMAN_CLEANUP_PAKSA:-0}" = "1" ]; then
+    echo -e "${RED}PERINGATAN: AMAN_CLEANUP_PAKSA=1 aktif; pagar keadaan dilewati.${NC}" >&2
+else
+    echo -e "${GREEN}Preflight aman: tidak ada deployment lama yang terdeteksi.${NC}"
+fi
+
 echo -e "${RED}============================================${NC}"
 echo -e "${RED}  PEMBERSIHAN DEPLOYMENT LAMA               ${NC}"
 echo -e "${RED}  VPS: amanikn-inventarisasi.com            ${NC}"
