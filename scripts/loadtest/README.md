@@ -25,7 +25,7 @@ python -m scripts.synthdata -n 5000 -p mixed --format ndjson \
 cd ..
 
 # 2. Jalankan Locust (200 pengguna, ramp 20/dtk, 5 menit, headless)
-AMAN_USERNAME=admin AMAN_PASSWORD=rahasia \
+AMAN_USERNAME=penguji-staging@domain.go.id AMAN_PASSWORD=rahasia-staging \
 AMAN_ACTIVITY_ID=<id-kegiatan-uji> \
 AMAN_DATASET_FILE=scripts/loadtest/dataset.ndjson \
 locust -f scripts/loadtest/locustfile.py \
@@ -40,7 +40,7 @@ interaktif, jalankan tanpa `--headless` lalu buka `http://localhost:8089`.
 
 | Variabel | Arti | Default |
 |---|---|---|
-| `AMAN_USERNAME` / `AMAN_PASSWORD` | kredensial login | `admin` / `admin123` (DEV) |
+| `AMAN_USERNAME` / `AMAN_PASSWORD` | kredensial login staging | **Wajib; tanpa default** |
 | `AMAN_ACTIVITY_ID` | id kegiatan untuk uji-tulis; **kosong → baca saja** | `""` |
 | `AMAN_DATASET_FILE` | NDJSON body aset (dari generator) | body minimal inline |
 | `AMAN_ENABLE_HEAVY` | `1` → aktifkan tugas mahal (laporan/ekspor) | `0` |
