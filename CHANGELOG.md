@@ -18,6 +18,82 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#974] Bagikan Peta: yang dibagikan = yang tampil, dan jumlahnya terbaca — 2026-09-01
+
+Permintaan pemilik: *"ketika filter dan seleksi aktif, pada saat dibuat
+Bagikan Peta Kolaboratif, berarti hanya titik-titik itu saja yang dibagikan
+dan tidak semua titik. tolong berikan informasi jumlahnya juga agar tahu
+berapa aset titik yang ada di dalam peta-peta yang dibagikan."*
+
+### Yang terjadi sebelumnya
+
+`_titik_aset` mencocokkan `activity_id` **saja**. Peta yang disaring hingga
+tersisa lima titik tetap menerbitkan tautan berisi **seluruh** aset kegiatan,
+dan tombol Bagikan tak pernah membawa keterangan apa pun tentang apa yang
+sedang terlihat.
+
+Yang membuatnya mahal bukan hanya salahnya, melainkan **tak terlihatnya**:
+tautan hasil filter dan tautan seluruh kegiatan tampak identik di daftar,
+sehingga operator baru tahu dari penerima — kalau penerimanya menyadari.
+
+### Yang dibagikan sekarang
+
+Titik yang **benar-benar tampil** saat tombol ditekan: `displayRows`, yang
+sudah memuat filter server, seleksi daftar, dan kelompok Barang Serupa
+sekaligus. Menyusun ulang aturannya di tempat lain akan membuat "yang
+dibagikan" perlahan menyimpang dari "yang terlihat".
+
+Tanpa penyempit apa pun, daftar id sengaja **tidak** dikirim: tautan tetap
+HIDUP dan aset yang ditambahkan sesudahnya ikut tampil, persis perilaku
+selama ini.
+
+**Disimpan sebagai daftar id, bukan salinan filternya.** Filter adalah
+PERTANYAAN yang jawabannya berubah seiring data; tautan yang sudah tersebar
+ke pihak luar tak boleh diam-diam memuat aset yang belum ada saat ia
+dibagikan. Ada uji yang menahannya.
+
+### Jumlahnya terbaca di tiga tempat
+
+| Tempat | Yang disebut |
+|---|---|
+| Dialog, **sebelum** tombol ditekan | "Akan dibagikan **N** titik hasil filter" + total kegiatan |
+| Daftar link | "**7** titik dibagikan" vs "seluruh titik kegiatan" |
+| Halaman publik | "**N** titik (sebagian)" |
+
+Halaman publik menyebut "(sebagian)" karena pengunjung yang tak diberi tahu
+akan menyimpulkan bahwa yang ia lihat adalah seluruhnya — dan pada peta hasil
+filter, kesimpulan itu keliru serta bisa terbawa ke laporan.
+
+Dua keadaan tepi ikut dinyatakan: paging yang terpotong ("yang belum termuat
+tidak ikut dibagikan") dan nol titik (tombolnya dimatikan, bukan menerbitkan
+peta kosong).
+
+### Dua penjagaan di SERVER
+
+1. **Kepemilikan.** Id datang dari layar, jadi tak dipercaya. Tanpa
+   pemeriksaan ini, permintaan yang disusun tangan dapat membagikan aset
+   kegiatan LAIN lewat tautan publik.
+2. **Plafon.** Peta publik memang hanya mengirim `MAKS_TITIK_ASET_PUBLIK`
+   titik; permintaan yang melebihinya **ditolak dengan terang**, bukan
+   dipotong diam-diam — tautan tak boleh menjanjikan sesuatu yang tak pernah
+   ia tampilkan.
+
+Daftar id sendiri tak pernah keluar ke daftar pengelola; yang keluar hanya
+jumlahnya. `lingkup: "semua"` membawa `jumlah_titik_dibagikan: null`, bukan
+0 — jumlahnya mengikuti isi kegiatan, dan 0 akan terbaca "tak ada titik".
+
+### Berkas
+
+- `backend/routes/peta_kolaborasi.py` — `_lingkup_aset()`, penyaring pada
+  `_titik_aset`, ringkasan pada `_share_keluar` dan `lihat_peta`
+- `frontend/src/components/assets/AssetMapFullView.jsx` — `lingkupBagikan()`
+- `frontend/src/components/assets/BagikanPetaDialog.jsx` — ringkasan lingkup
+- `frontend/src/pages/DashboardPage.jsx` — lingkup dibekukan saat tombol ditekan
+- `frontend/src/pages/PetaKolaborasiPage.jsx` — jumlah titik di header publik
+- Uji: 10 backend, 3 peta, 6 dialog
+
+---
+
 ## [#973] Deploy gagal karena VPS tak menjangkau GitHub — dan pesannya menyesatkan — 2026-09-01
 
 Deploy `3501835` gagal dengan pola yang belum pernah muncul:

@@ -249,7 +249,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
   onQuickAdd,         // (lat, lng, nama) => void — tambah cepat aset di titik peta
   onSelectionChange,  // (updater|Set) => void — ubah himpunan aset terpilih (map→daftar)
   onBatchEditSelected,// () => void — tutup peta & buka Edit Massal utk aset terpilih
-  onShare,            // () => void — buka dialog Bagikan Peta Kolaboratif (link publik)
+  onShare,            // (lingkup) => void — buka dialog Bagikan Peta Kolaboratif
   visible = true,     // KEEP-ALIVE: komponen tetap ter-mount saat pindah mode; saat
                       // disembunyikan (display:none) ukuran Leaflet jadi 0 → panggil
                       // invalidateSize saat tampil lagi agar tak abu-abu/terpotong.
@@ -594,6 +594,33 @@ const AssetMapFullView = memo(function AssetMapFullView({
     if (groupKey === "__semua__") return base;
     return base.filter((r) => `${r.asset_code || ""}||${r.asset_name || ""}` === groupKey);
   }, [rows, groupKey, selectedIds, selectMode]);
+
+  // ── Lingkup yang dibagikan ────────────────────────────────────────────
+  //
+  // Yang dibagikan adalah titik yang BENAR-BENAR TAMPIL di peta saat tombol
+  // ditekan — `displayRows`, yang sudah memuat filter server, seleksi daftar,
+  // dan kelompok Barang Serupa sekaligus. Menyusun ulang aturannya di sini
+  // akan membuat "yang dibagikan" perlahan menyimpang dari "yang terlihat",
+  // dan penyimpangan itu tak akan terlihat sampai seseorang membuka tautannya.
+  //
+  // Tanpa penyempit apa pun, `ids` sengaja dikosongkan: tautan tetap HIDUP —
+  // aset yang ditambahkan sesudahnya ikut tampil, persis perilaku selama ini.
+  const lingkupBagikan = useCallback(() => {
+    const disempitkan = hasSelection || activeFilterCount > 0
+      || groupKey !== "__semua__";
+    return {
+      ids: disempitkan ? displayRows.map((r) => r.id) : null,
+      jumlah: displayRows.length,
+      total,
+      disempitkan,
+      // Paging terpotong → `rows` belum memuat semua yang cocok filter. Dialog
+      // harus mengatakannya: tautan akan membawa yang termuat saja.
+      terpotong: truncated,
+      sebab: hasSelection ? "seleksi"
+        : groupKey !== "__semua__" ? "kelompok"
+          : activeFilterCount > 0 ? "filter" : "",
+    };
+  }, [displayRows, hasSelection, activeFilterCount, groupKey, total, truncated]);
 
   // CATATAN: TIDAK ada auto-refit karena perubahan seleksi/Mode Seleksi. Memilih
   // pin (berapa pun), menyalakan/mematikan Mode Seleksi, maupun perubahan
@@ -1546,7 +1573,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
         {onShare && (
           <button
             type="button"
-            onClick={onShare}
+            onClick={() => onShare(lingkupBagikan())}
             aria-label="Bagikan peta kolaboratif"
             title="Bagikan peta kolaboratif (link publik)"
             className={`h-9 rounded-lg border border-blue-300 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 flex items-center gap-1 flex-shrink-0 ${

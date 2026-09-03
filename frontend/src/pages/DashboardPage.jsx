@@ -308,6 +308,11 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const [groupsCount, setGroupsCount] = useState(null);
   const [mapOpen, setMapOpen] = useState(false);
   const [shareMapOpen, setShareMapOpen] = useState(false); // dialog Bagikan Peta Kolaboratif
+  // Lingkup yang dibagikan, DIBEKUKAN saat tombol Bagikan ditekan. Kalau
+  // dialog membacanya langsung dari peta, mengubah filter selagi dialog
+  // terbuka akan diam-diam mengubah apa yang akan dibagikan — sedangkan yang
+  // dibaca operator di dialog adalah angka dari saat ia menekan tombol.
+  const [shareScope, setShareScope] = useState(null);
   // KEEP-ALIVE peta: sekali dibuka, komponen peta tetap ter-mount (hanya
   // disembunyikan display:none saat pindah mode) → posisi/zoom & data
   // dipertahankan tanpa refetch dari awal saat bolak-balik mode/seleksi. Data
@@ -1950,14 +1955,17 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                     onQuickAdd={perms.canEdit ? handleQuickAddPeta : undefined}
                     onSelectionChange={perms.canEdit ? setSelectedAssets : undefined}
                     onBatchEditSelected={perms.canEdit ? handleMapBatchEdit : undefined}
-                    onShare={perms.canEdit && activity?.id ? () => setShareMapOpen(true) : undefined}
+                    onShare={perms.canEdit && activity?.id
+                      ? (lingkup) => { setShareScope(lingkup); setShareMapOpen(true); }
+                      : undefined}
                   />
                 </Suspense>
               </div>
             )}
             {shareMapOpen && (
               <Suspense fallback={null}>
-                <BagikanPetaDialog open={shareMapOpen} onClose={() => setShareMapOpen(false)} activity={activity} />
+                <BagikanPetaDialog open={shareMapOpen} onClose={() => setShareMapOpen(false)}
+                  activity={activity} lingkup={shareScope} />
               </Suspense>
             )}
             {mapOpen ? null : loading ? (

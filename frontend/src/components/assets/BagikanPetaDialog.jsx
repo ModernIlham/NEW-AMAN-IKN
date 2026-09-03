@@ -17,6 +17,13 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { getApiError } from "../../lib/utils";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+/** Kenapa peta sedang disempitkan — dipakai untuk menyebut sebabnya, bukan
+ *  sekadar "terpilih", supaya operator tahu penyempit mana yang sedang aktif. */
+const LABEL_SEBAB = {
+  seleksi: "yang dipilih",
+  filter: "hasil filter",
+  kelompok: "kelompok barang serupa",
+};
 const PRESET = [
   { label: "1 hari", jam: 24 }, { label: "3 hari", jam: 72 },
   { label: "7 hari", jam: 168 }, { label: "30 hari", jam: 720 },
@@ -47,7 +54,7 @@ function sisa(iso) {
  * siapa pun berlink dapat melihat titik aset, berkomentar, & menambah titik.
  * Dikelola operator/admin satker kegiatan; dapat diperpanjang & dibatalkan.
  */
-export default function BagikanPetaDialog({ open, onClose, activity }) {
+export default function BagikanPetaDialog({ open, onClose, activity, lingkup = null }) {
   const [shares, setShares] = useState([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -65,6 +72,14 @@ export default function BagikanPetaDialog({ open, onClose, activity }) {
   // daftar yang menyusut tak terbaca sebagai data hilang.
   const [diarsipkan, setDiarsipkan] = useState(0);
   const { confirm, confirmDialog } = useConfirm();
+
+  // Lingkup dibekukan pemanggil saat tombol Bagikan ditekan; di sini ia hanya
+  // dibaca. `ids` null = seluruh kegiatan (perilaku sejak awal).
+  const ids = lingkup?.disempitkan ? (lingkup.ids || []) : null;
+  const disempitkan = !!lingkup?.disempitkan;
+  const jumlahTitik = disempitkan
+    ? (ids ? ids.length : 0)
+    : (Number(lingkup?.jumlah) || 0);
 
   const muat = useCallback(() => {
     if (!activity?.id) return;
@@ -91,6 +106,10 @@ export default function BagikanPetaDialog({ open, onClose, activity }) {
       const r = await axios.post(`${API}/peta/share`, {
         activity_id: activity.id, judul: judul.trim(), durasi_jam: durasiJam,
         izinkan_titik_publik: izinTitik, izinkan_komentar_publik: izinKomentar,
+        // Hanya dikirim saat peta memang sedang disempitkan. Tanpa penyempit,
+        // biarkan server memakai perilaku "seluruh kegiatan" yang HIDUP —
+        // mengirim daftar id lengkap akan membekukannya tanpa diminta.
+        ...(ids ? { asset_ids: ids } : {}),
       });
       toast.success("Link peta kolaboratif dibuat");
       setJudul("");
@@ -211,7 +230,36 @@ export default function BagikanPetaDialog({ open, onClose, activity }) {
               <MessageSquare className="w-3 h-3 text-blue-600" />Tamu boleh berkomentar
             </label>
           </div>
-          <Button onClick={buat} disabled={creating} size="sm" className="w-full h-9 gap-1.5 bg-teal-700 hover:bg-teal-800 text-white" data-testid="bagikan-buat">
+          {/* Apa yang akan dibagikan — ditulis SEBELUM tombolnya, sebab
+              inilah keputusan yang sedang diambil operator. Peta yang
+              disempitkan filter/seleksi membagikan titik itu saja, dan tanpa
+              kalimat ini tak ada tempat untuk mengetahuinya. */}
+          <div className={`rounded-lg border px-2.5 py-2 ${disempitkan
+            ? "border-amber-400/50 bg-amber-500/10"
+            : "border-border bg-muted/40"}`} data-testid="bagikan-lingkup">
+            <p className="text-[11px] font-semibold text-foreground flex items-center gap-1.5">
+              <MapPin className={`w-3 h-3 flex-shrink-0 ${disempitkan ? "text-amber-600" : "text-muted-foreground"}`} />
+              {disempitkan
+                ? <>Akan dibagikan <b>{jumlahTitik}</b> titik {LABEL_SEBAB[lingkup?.sebab] || "terpilih"}</>
+                : <>Akan dibagikan <b>seluruh titik</b> kegiatan ini</>}
+            </p>
+            <p className="text-[10px] text-muted-foreground leading-snug mt-0.5">
+              {disempitkan
+                ? `Titik lain tidak ikut, meski ada di kegiatan yang sama${lingkup?.total ? ` (${lingkup.total} titik seluruhnya)` : ""}. Himpunan ini tetap sama walau filter diubah setelah link terbit.`
+                : "Aset yang ditambahkan setelah ini ikut tampil di peta yang dibagikan."}
+            </p>
+            {disempitkan && lingkup?.terpotong && (
+              <p className="text-[10px] text-amber-700 dark:text-amber-400 leading-snug mt-1" data-testid="bagikan-lingkup-terpotong">
+                Sebagian titik yang cocok filter belum termuat di peta — yang belum termuat tidak ikut dibagikan.
+              </p>
+            )}
+            {disempitkan && jumlahTitik === 0 && (
+              <p className="text-[10px] text-red-600 dark:text-red-400 leading-snug mt-1" data-testid="bagikan-lingkup-kosong">
+                Tak ada titik yang tampil. Longgarkan filter atau kosongkan seleksi dulu.
+              </p>
+            )}
+          </div>
+          <Button onClick={buat} disabled={creating || (disempitkan && jumlahTitik === 0)} size="sm" className="w-full h-9 gap-1.5 bg-teal-700 hover:bg-teal-800 text-white" data-testid="bagikan-buat">
             {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}Buat & salin link
           </Button>
         </div>
@@ -272,7 +320,20 @@ export default function BagikanPetaDialog({ open, onClose, activity }) {
                   </button>
                 </div>
               )}
-              <p className="text-[10px] text-muted-foreground">{s.jumlah_kontribusi || 0} kontribusi</p>
+              {/* Jumlah titik yang DIBAGIKAN lewat tautan ini. Tanpa angka
+                  ini, dua tautan pada kegiatan yang sama tampak identik
+                  padahal yang satu membagikan lima titik dan yang lain
+                  seluruhnya. */}
+              <p className="text-[10px] text-muted-foreground flex items-center gap-1 flex-wrap">
+                <span className="inline-flex items-center gap-0.5">
+                  <MapPin className="w-2.5 h-2.5" />
+                  {s.lingkup === "terpilih"
+                    ? <><b className="text-foreground/80">{s.jumlah_titik_dibagikan || 0}</b> titik dibagikan</>
+                    : <>seluruh titik kegiatan</>}
+                </span>
+                <span aria-hidden="true">·</span>
+                <span>{s.jumlah_kontribusi || 0} kontribusi</span>
+              </p>
               <div className="flex flex-wrap items-center gap-1.5">
                 {/* Di HP baris aksi ini sempit — dua tombol berlabel memaksanya
                     pecah baris. Labelnya disembunyikan di <sm; yang tersisa

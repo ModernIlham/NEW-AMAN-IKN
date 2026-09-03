@@ -18,7 +18,7 @@ import uuid
 import base64
 import asyncio
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel
@@ -296,6 +296,15 @@ class ShareIn(BaseModel):
     berlaku_sampai: Optional[str] = None
     izinkan_titik_publik: bool = True
     izinkan_komentar_publik: bool = True
+    #: Titik yang DIBAGIKAN. Kosong/None = seluruh aset kegiatan, sebagaimana
+    #: perilaku sejak awal. Berisi = HANYA aset ini — dipakai saat operator
+    #: membagikan peta dengan filter atau seleksi aktif.
+    #:
+    #: Disimpan sebagai daftar id, bukan sebagai salinan filternya. Filter
+    #: adalah PERTANYAAN yang jawabannya berubah seiring data; tautan yang
+    #: sudah tersebar ke pihak luar tak boleh diam-diam memuat aset yang
+    #: belum ada saat ia dibagikan.
+    asset_ids: Optional[List[str]] = None
 
 
 class PerpanjangIn(BaseModel):
@@ -334,11 +343,67 @@ class GeserIn(BaseModel):
 
 
 def _share_keluar(sh: dict) -> dict:
-    """Bentuk aman untuk daftar/detail pengelola — tanpa jti (rahasia token)."""
-    d = {k: v for k, v in sh.items() if k != "jti"}
+    """Bentuk aman untuk daftar/detail pengelola — tanpa jti (rahasia token).
+
+    `asset_ids` ikut DIBUANG dan diganti ringkasannya. Daftar link memuat
+    banyak entri sekaligus; membawa ribuan id di tiap entri membengkakkan
+    jawaban tanpa satu pun layar membutuhkannya. Yang dibutuhkan hanyalah
+    JUMLAHNYA — itulah pertanyaan yang benar-benar diajukan operator:
+    "berapa titik yang saya bagikan lewat tautan ini?"
+    """
+    d = {k: v for k, v in sh.items() if k not in ("jti", "asset_ids")}
     d["kedaluwarsa"] = _kedaluwarsa(sh)
+    ids = sh.get("asset_ids") or []
+    d["lingkup"] = "terpilih" if ids else "semua"
+    # None (bukan 0) untuk lingkup "semua": jumlahnya tidak tetap — ia
+    # mengikuti isi kegiatan. Angka 0 akan terbaca "tak ada titik".
+    d["jumlah_titik_dibagikan"] = len(ids) if ids else None
     d["link"] = None  # link berisi token; hanya dikembalikan saat create/lihat-token
     return d
+
+
+async def _lingkup_aset(activity_id: str, asset_ids) -> list:
+    """Daftar id aset yang benar-benar dibagikan; [] berarti SELURUH kegiatan.
+
+    Dua hal ditegakkan di sini, dan keduanya harus di SERVER:
+
+    1. **Kepemilikan.** Id yang dikirim layar tak boleh dipercaya begitu saja —
+       tanpa pemeriksaan ini, seseorang dapat menyusun permintaan yang
+       membagikan aset kegiatan LAIN lewat tautan publik. Hanya id yang benar
+       terbukti milik kegiatan ini yang lolos.
+    2. **Plafon.** Peta publik memang hanya mengirim `MAKS_TITIK_ASET_PUBLIK`
+       titik. Menyimpan lebih dari itu akan membuat tautan menjanjikan sesuatu
+       yang tak pernah ia tampilkan — jadi permintaannya ditolak dengan terang,
+       bukan dipotong diam-diam.
+    """
+    if not asset_ids:
+        return []
+    bersih, terlihat = [], set()
+    for x in asset_ids:
+        v = str(x or "").strip()
+        if v and v not in terlihat:
+            terlihat.add(v)
+            bersih.append(v)
+    if not bersih:
+        return []
+    if len(bersih) > MAKS_TITIK_ASET_PUBLIK:
+        raise HTTPException(
+            status_code=400,
+            detail=(f"Terlalu banyak titik untuk dibagikan "
+                    f"({len(bersih)}; maks {MAKS_TITIK_ASET_PUBLIK}). "
+                    "Persempit filter atau seleksi terlebih dahulu."))
+    sah = set()
+    async for a in db.assets.find(
+            {"activity_id": activity_id, "id": {"$in": bersih},
+             "dihapus": {"$ne": True}}, {"_id": 0, "id": 1}):
+        sah.add(a.get("id"))
+    hasil = [i for i in bersih if i in sah]
+    if not hasil:
+        raise HTTPException(
+            status_code=400,
+            detail=("Tak satu pun aset terpilih ditemukan di kegiatan ini. "
+                    "Muat ulang peta lalu coba lagi."))
+    return hasil
 
 
 # ── Endpoint PENGELOLA (operator/admin, ter-scope satker) ──────────────────
@@ -355,6 +420,7 @@ async def buat_share(payload: ShareIn, user: dict = Depends(require_writer)):
     jti = uuid.uuid4().hex
     share_id = str(uuid.uuid4())
     berlaku = _hitung_berlaku(payload.durasi_jam, payload.berlaku_sampai, base)
+    lingkup_ids = await _lingkup_aset(payload.activity_id, payload.asset_ids)
     nama_keg = (act.get("nama") or act.get("nama_kegiatan")
                 or act.get("judul") or "")
     doc = {
@@ -367,6 +433,10 @@ async def buat_share(payload: ShareIn, user: dict = Depends(require_writer)):
         "berlaku_sampai": berlaku,
         "izinkan_titik_publik": bool(payload.izinkan_titik_publik),
         "izinkan_komentar_publik": bool(payload.izinkan_komentar_publik),
+        # [] = seluruh aset kegiatan (perilaku sejak awal, dan tetap HIDUP:
+        # aset yang ditambahkan kemudian ikut tampil). Berisi = himpunan tetap
+        # yang dipilih operator saat membagikan.
+        "asset_ids": lingkup_ids,
         "status": "aktif",
         "created_by": user.get("username", "system"),
         "created_at": base.isoformat(),
@@ -574,8 +644,16 @@ async def _titik_aset(share: dict) -> list:
     lapangan). SENGAJA TANPA: nilai/harga, foto, pengguna/NIP (PII), dokumen."""
     # jumlah_foto DIHITUNG (bukan field tersimpan): GridFS-first, fallback inline —
     # sama seperti daftar aset. $size dievaluasi di server; byte foto TIDAK ditarik.
+    cocok = {"activity_id": share.get("activity_id"), "dihapus": {"$ne": True}}
+    # Lingkup terbatas: tautan dibuat saat filter/seleksi aktif, jadi ia
+    # membagikan HANYA titik yang saat itu terlihat operator. Tanpa penyaring
+    # ini, tautan diam-diam memuat seluruh aset kegiatan — persis kebalikan
+    # dari yang dimaksud saat membagikannya.
+    lingkup = [str(i) for i in (share.get("asset_ids") or []) if i]
+    if lingkup:
+        cocok["id"] = {"$in": lingkup}
     pipeline = [
-        {"$match": {"activity_id": share.get("activity_id"), "dihapus": {"$ne": True}}},
+        {"$match": cocok},
         {"$limit": MAKS_TITIK_ASET_PUBLIK},
         {"$project": {
             "_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
@@ -624,6 +702,7 @@ async def lihat_peta(share_id: str, request: Request,
     # hilang. Kalau tidak, peta menyisakan garis ke posisi lama selamanya.
     usulan_geser = [k for k in kontrib
                     if k.get("jenis") == "geser" and _status_usulan(k) == "terbuka"]
+    titik_aset = await _titik_aset(sh)
     return {
         "id": share_id,
         "judul": sh.get("judul") or "",
@@ -644,7 +723,13 @@ async def lihat_peta(share_id: str, request: Request,
         "boleh_komentar": boleh_kontribusi and _izin_kontribusi(
             sh, ctx, punya_link, "izinkan_komentar_publik"),
         "tamu": bool(ctx.get("guest")),
-        "titik_aset": await _titik_aset(sh),
+        # Lingkup ikut dikirim supaya halaman publik dapat menyatakan bahwa
+        # peta ini SEBAGIAN, bukan seluruh kegiatan. Tanpa itu pengunjung
+        # menyimpulkan sendiri bahwa yang ia lihat adalah semuanya — dan pada
+        # peta hasil filter, kesimpulan itu keliru.
+        "lingkup": "terpilih" if (sh.get("asset_ids") or []) else "semua",
+        "titik_aset": titik_aset,
+        "jumlah_titik_aset": len(titik_aset),
         "titik_kolaborasi": titik_kolaborasi,
         "komentar": komentar,
         "usulan_geser": usulan_geser,

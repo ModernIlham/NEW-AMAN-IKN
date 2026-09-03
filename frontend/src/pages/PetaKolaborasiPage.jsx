@@ -981,6 +981,13 @@ export default function PetaKolaborasiPage() {
           <p className="text-sm font-bold text-foreground truncate leading-tight">{data?.judul || "Peta Kolaboratif"}</p>
           <p className="text-[11px] text-muted-foreground truncate flex items-center gap-1.5">
             {data?.nama_kegiatan ? <span className="truncate">{data.nama_kegiatan}</span> : null}
+            {/* Peta hasil filter/seleksi memuat SEBAGIAN aset kegiatan.
+                Pengunjung yang tak diberi tahu akan menyimpulkan bahwa yang
+                ia lihat adalah seluruhnya — dan pada peta semacam ini,
+                kesimpulan itu keliru serta bisa terbawa ke laporan. */}
+            <span className="inline-flex items-center gap-0.5 flex-shrink-0" data-testid="peta-jumlah-titik">
+              <MapPin className="w-3 h-3" />{jmlAset} titik{data?.lingkup === "terpilih" ? " (sebagian)" : ""}
+            </span>
             <span className="inline-flex items-center gap-0.5 flex-shrink-0"><Clock className="w-3 h-3" />{sisaTayang(data?.berlaku_sampai)}</span>
           </p>
         </div>

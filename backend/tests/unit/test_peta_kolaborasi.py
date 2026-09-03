@@ -274,3 +274,208 @@ def test_share_usang_tepat_di_batas_sebulan():
     lewat = (now - timedelta(days=UMUR_ARSIP_HARI, seconds=1)).isoformat()
     assert _share_usang({"status": "batal", "updated_at": persis}, now) is False
     assert _share_usang({"status": "batal", "updated_at": lewat}, now) is True
+
+
+# ── Lingkup berbagi: filter/seleksi aktif → HANYA titik itu ──────────────
+#
+# Permintaan pemilik: *"ketika filter dan seleksi aktif, pada saat dibuat
+# Bagikan Peta Kolaboratif, berarti hanya titik-titik itu saja yang dibagikan
+# dan tidak semua titik. tolong berikan informasi jumlahnya juga."*
+#
+# Sebelum ini, `_titik_aset` mencocokkan `activity_id` saja: peta yang disaring
+# hingga tersisa lima titik tetap membagikan SELURUH aset kegiatan. Operator
+# tak punya cara mengetahuinya — tautannya terlihat sama persis.
+
+import pytest
+from fastapi import HTTPException
+from mongomock_motor import AsyncMongoMockClient
+
+
+def _jalan(coro):
+    return asyncio.get_event_loop_policy().new_event_loop().run_until_complete(coro)
+
+
+async def _diam(*a, **k):
+    return None
+
+
+@pytest.fixture()
+def dbp(monkeypatch):
+    import routes.peta_kolaborasi as pk
+    fake = AsyncMongoMockClient()["uji"]
+    monkeypatch.setattr(pk, "db", fake, raising=False)
+    monkeypatch.setattr(pk, "log_audit", _diam, raising=False)
+    return fake
+
+
+async def _isi_aset(fake, activity_id, n, mulai=0):
+    for i in range(mulai, mulai + n):
+        await fake.assets.insert_one({
+            "id": f"a{i}", "activity_id": activity_id, "asset_name": f"Aset {i}",
+            "koordinat_latitude": -6.2 + i / 1000, "koordinat_longitude": 106.8,
+        })
+
+
+def test_lingkup_kosong_berarti_seluruh_kegiatan(dbp):
+    """Perilaku sejak awal harus utuh: tanpa penyempit, tautan tetap HIDUP —
+    aset yang ditambahkan sesudahnya ikut tampil."""
+    import routes.peta_kolaborasi as pk
+
+    async def jalan():
+        await _isi_aset(dbp, "keg-1", 3)
+        titik = await pk._titik_aset({"activity_id": "keg-1", "asset_ids": []})
+        assert len(titik) == 3
+        # Aset baru sesudah tautan terbit tetap ikut.
+        await _isi_aset(dbp, "keg-1", 1, mulai=99)
+        assert len(await pk._titik_aset({"activity_id": "keg-1"})) == 4
+    _jalan(jalan())
+
+
+def test_lingkup_terbatas_hanya_mengirim_titik_itu(dbp):
+    import routes.peta_kolaborasi as pk
+
+    async def jalan():
+        await _isi_aset(dbp, "keg-1", 5)
+        titik = await pk._titik_aset(
+            {"activity_id": "keg-1", "asset_ids": ["a1", "a3"]})
+        assert {t["id"] for t in titik} == {"a1", "a3"}
+    _jalan(jalan())
+
+
+def test_lingkup_terbatas_TIDAK_ikut_bertambah(dbp):
+    """Sifat yang membedakan menyimpan DAFTAR ID dari menyimpan filternya.
+
+    Filter adalah pertanyaan yang jawabannya berubah seiring data. Tautan yang
+    sudah tersebar ke pihak luar tak boleh diam-diam memuat aset yang belum
+    ada saat ia dibagikan — apalagi karena penerimanya tak punya cara tahu.
+    """
+    import routes.peta_kolaborasi as pk
+
+    async def jalan():
+        await _isi_aset(dbp, "keg-1", 2)
+        share = {"activity_id": "keg-1", "asset_ids": ["a0", "a1"]}
+        assert len(await pk._titik_aset(share)) == 2
+        await _isi_aset(dbp, "keg-1", 3, mulai=50)
+        assert len(await pk._titik_aset(share)) == 2, "aset baru ikut bocor"
+    _jalan(jalan())
+
+
+def test_id_kegiatan_lain_disaring_di_server(dbp):
+    """Id datang dari layar, jadi tak boleh dipercaya. Tanpa pemeriksaan ini,
+    permintaan yang disusun tangan dapat membagikan aset kegiatan LAIN lewat
+    tautan publik."""
+    import routes.peta_kolaborasi as pk
+
+    async def jalan():
+        await _isi_aset(dbp, "keg-1", 2)
+        await _isi_aset(dbp, "keg-2", 2, mulai=90)
+        sah = await pk._lingkup_aset("keg-1", ["a0", "a90", "a91"])
+        assert sah == ["a0"], sah
+    _jalan(jalan())
+
+
+def test_aset_dihapus_tak_ikut_lingkup(dbp):
+    import routes.peta_kolaborasi as pk
+
+    async def jalan():
+        await _isi_aset(dbp, "keg-1", 2)
+        await dbp.assets.update_one({"id": "a1"}, {"$set": {"dihapus": True}})
+        assert await pk._lingkup_aset("keg-1", ["a0", "a1"]) == ["a0"]
+    _jalan(jalan())
+
+
+def test_id_kembar_dan_kosong_dibersihkan(dbp):
+    import routes.peta_kolaborasi as pk
+
+    async def jalan():
+        await _isi_aset(dbp, "keg-1", 2)
+        assert await pk._lingkup_aset(
+            "keg-1", ["a0", " a0 ", "", None, "a1"]) == ["a0", "a1"]
+    _jalan(jalan())
+
+
+def test_melebihi_plafon_DITOLAK_bukan_dipotong_diam_diam(dbp):
+    """Peta publik memang hanya mengirim `MAKS_TITIK_ASET_PUBLIK` titik.
+    Memotong diam-diam akan membuat tautan menjanjikan sesuatu yang tak pernah
+    ia tampilkan, dan operator baru tahu dari penerima."""
+    import routes.peta_kolaborasi as pk
+
+    async def jalan():
+        banyak = [f"x{i}" for i in range(pk.MAKS_TITIK_ASET_PUBLIK + 1)]
+        with pytest.raises(HTTPException) as e:
+            await pk._lingkup_aset("keg-1", banyak)
+        assert e.value.status_code == 400
+        assert str(pk.MAKS_TITIK_ASET_PUBLIK) in e.value.detail
+    _jalan(jalan())
+
+
+def test_semua_id_asing_ditolak_dengan_terang(dbp):
+    """Membiarkannya lolos sebagai daftar kosong akan diam-diam berubah makna
+    menjadi "bagikan SELURUH kegiatan" — kebalikan dari yang diminta."""
+    import routes.peta_kolaborasi as pk
+
+    async def jalan():
+        await _isi_aset(dbp, "keg-1", 1)
+        with pytest.raises(HTTPException) as e:
+            await pk._lingkup_aset("keg-1", ["tak-ada", "juga-tidak"])
+        assert e.value.status_code == 400
+    _jalan(jalan())
+
+
+# ── Jumlahnya harus terbaca, di kedua sisi ──────────────────────────────
+
+def test_daftar_pengelola_membawa_jumlah_bukan_daftar_id():
+    """Operator bertanya "berapa titik yang saya bagikan lewat tautan ini?".
+    Daftar id-nya sendiri tak dibutuhkan layar mana pun, dan membawa ribuan
+    id di tiap entri membengkakkan jawaban tanpa alasan."""
+    from routes.peta_kolaborasi import _share_keluar
+    d = _share_keluar({"id": "s1", "jti": "rahasia",
+                       "asset_ids": ["a1", "a2", "a3"],
+                       "berlaku_sampai": _iso(+5)})
+    assert d["lingkup"] == "terpilih"
+    assert d["jumlah_titik_dibagikan"] == 3
+    assert "asset_ids" not in d, "daftar id bocor ke daftar pengelola"
+    assert "jti" not in d
+
+
+def test_lingkup_semua_tak_mengaku_punya_jumlah_tetap():
+    """0 akan terbaca "tak ada titik"; None menyatakan yang sebenarnya —
+    jumlahnya mengikuti isi kegiatan, jadi tak ada angka tetap untuk disebut."""
+    from routes.peta_kolaborasi import _share_keluar
+    d = _share_keluar({"id": "s1", "jti": "x", "berlaku_sampai": _iso(+5)})
+    assert d["lingkup"] == "semua"
+    assert d["jumlah_titik_dibagikan"] is None
+
+
+def test_terbitkan_ulang_TIDAK_melebarkan_lingkup(dbp, monkeypatch):
+    """Menerbitkan ulang mengganti tautannya, bukan isinya.
+
+    Kalau `asset_ids` ikut hilang, tautan pengganti diam-diam membagikan
+    SELURUH kegiatan — pelebaran akses yang tak diminta siapa pun, pada
+    tautan yang justru diterbitkan ulang karena yang lama bocor.
+    """
+    import routes.peta_kolaborasi as pk
+
+    async def jalan():
+        await dbp.peta_shares.insert_one({
+            "id": "s1", "activity_id": "keg-1", "kode_satker": "111111",
+            "jti": "lama", "status": "aktif", "asset_ids": ["a0", "a1"],
+            "berlaku_sampai": _iso(+5), "created_at": _iso(-1),
+        })
+        monkeypatch.setattr(pk, "pastikan_akses_dok_satker", _diam, raising=False)
+        monkeypatch.setattr(pk, "create_map_token", lambda *a, **k: "tok",
+                            raising=False)
+
+        async def _link(*a, **k):
+            return "https://contoh/peta"
+        monkeypatch.setattr(pk, "_link_peta_pendek", _link, raising=False)
+        import tautan_pendek_utils as tp
+        monkeypatch.setattr(tp, "cabut_tautan", _diam, raising=False)
+
+        await pk.terbitkan_ulang_share(
+            "s1", pk.PerpanjangIn(durasi_jam=24),
+            user={"username": "op", "kode_satker": "111111"})
+        sh = await dbp.peta_shares.find_one({"id": "s1"})
+        assert sh["asset_ids"] == ["a0", "a1"], "lingkup hilang saat terbit ulang"
+        assert sh["jti"] != "lama", "jti tak dirotasi"
+    _jalan(jalan())
