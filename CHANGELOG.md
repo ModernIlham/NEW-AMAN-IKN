@@ -18,7 +18,7 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
-## [#974] Bagikan Peta: yang dibagikan = yang tampil, dan jumlahnya terbaca — 2026-09-01
+## [#974] Bagikan Peta: yang dibagikan = yang tampil, dan jumlahnya terbaca — 2026-09-03
 
 Permintaan pemilik: *"ketika filter dan seleksi aktif, pada saat dibuat
 Bagikan Peta Kolaboratif, berarti hanya titik-titik itu saja yang dibagikan
