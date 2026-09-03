@@ -70,6 +70,11 @@ jobs:
 
       - name: Dry-run (validasi locustfile tanpa target live)
         if: ${{ github.event.inputs.host == '' }}
+        env:
+          # Nilai fiktif hanya agar modul dapat dimuat; host port 1 tidak
+          # memiliki server dan exit-code-on-error sengaja dinolkan.
+          AMAN_USERNAME: dry-run-tidak-dipakai
+          AMAN_PASSWORD: dry-run-tidak-dipakai
         run: |
           echo "Tidak ada host → dry-run singkat (memastikan locustfile jalan)."
           locust -f scripts/loadtest/locustfile.py --host http://127.0.0.1:1 \

@@ -17,7 +17,7 @@ Atau UI web:
   locust -f scripts/loadtest/locustfile.py --host https://staging.example.go.id
 
 Konfigurasi via environment (semua opsional kecuali kredensial):
-  AMAN_USERNAME / AMAN_PASSWORD  kredensial login (default admin/admin123 — DEV)
+  AMAN_USERNAME / AMAN_PASSWORD  kredensial login staging (wajib; tanpa default)
   AMAN_ACTIVITY_ID               id kegiatan utk uji-tulis (POST /assets).
                                  Bila kosong → tugas tulis DINONAKTIFKAN (baca saja).
   AMAN_DATASET_FILE              berkas NDJSON body aset (dari generator sintetis).
@@ -36,13 +36,19 @@ from locust import HttpUser, between, task
 from locust.exception import StopUser
 
 # ── Konfigurasi dari environment ──
-USERNAME = os.environ.get("AMAN_USERNAME", "admin")
-PASSWORD = os.environ.get("AMAN_PASSWORD", "admin123")
+USERNAME = os.environ.get("AMAN_USERNAME", "").strip()
+PASSWORD = os.environ.get("AMAN_PASSWORD", "")
 ACTIVITY_ID = os.environ.get("AMAN_ACTIVITY_ID", "").strip()
 DATASET_FILE = os.environ.get("AMAN_DATASET_FILE", "").strip()
 ENABLE_HEAVY = os.environ.get("AMAN_ENABLE_HEAVY", "0") == "1"
 THINK_MIN = float(os.environ.get("AMAN_THINK_MIN", "1"))
 THINK_MAX = float(os.environ.get("AMAN_THINK_MAX", "5"))
+
+if not USERNAME or not PASSWORD:
+    raise SystemExit(
+        "AMAN_USERNAME dan AMAN_PASSWORD wajib diisi dengan akun lingkungan "
+        "uji/staging; harness tidak memiliki kredensial bawaan."
+    )
 
 
 def _muat_dataset():
