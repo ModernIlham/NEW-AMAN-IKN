@@ -17,6 +17,7 @@ from db import db, fs_bucket
 from asset_fields import SCALAR_FIELD_NAMES
 from spasial_utils import terapkan_geo, sisip_geo_ke_update, entri_riwayat_lokasi
 import spasial_penempatan as sp
+import inventarisasi_stempel as stempel_inv
 from models import AssetCreate, AssetResponse
 from auth_utils import (
     require_admin, require_super_admin, require_user,
@@ -1036,6 +1037,12 @@ async def buat_aset_draft(data: AssetCreate, audit_user: str = "system") -> dict
         "updated_at": now,
         "version": 1,
     }
+    # WAKTU INVENTARISASI. Aset "Berlebih" lahir LANGSUNG berstatus
+    # ditemukan — ia justru diciptakan karena barangnya ada di lapangan.
+    # Tanpa cap di sini seluruh temuan berlebih hilang dari linimasa, padahal
+    # ia salah satu hasil inventarisasi yang paling perlu terlihat.
+    stempel_inv.stempel({}, asset_doc, now)
+
     # SPASIAL: turunkan `geo` (GeoJSON Point) dari pasangan koordinat string
     # agar aset masuk indeks 2dsphere. Tanpa ini kueri peta per-area memindai
     # seluruh koleksi. Lihat spasial_utils.py.
@@ -2143,6 +2150,15 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
+    # WAKTU INVENTARISASI. Jalur ini juga bisa menandai aset "Ditemukan"
+    # untuk PERTAMA kalinya (form aset disimpan dengan status baru), jadi
+    # tanpa panggilan ini aset yang diinventarisasi lewat form tak akan
+    # pernah punya tanggal — dan linimasa hanya memuat sebagian pekerjaan.
+    #
+    # Stempel LAMA aman tanpa perlakuan khusus: PUT menulis dengan `$set`,
+    # bukan `replace_one`, jadi field yang tak disebut tetap tinggal.
+    stempel_inv.stempel(existing, update_data, update_data["updated_at"])
+
     # SPASIAL: PUT full-replace juga menyentuh koordinat — hitung ulang `geo`
     # (celah lama: jalur ini tak pernah memanggilnya sehingga indeks 2dsphere
     # menyimpan titik basi) + penempatan otomatis inventarisasi (lihat PATCH
@@ -2659,6 +2675,13 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
     # Stamped on every write so the offline snapshot delta sync
     # (GET /assets/offline-snapshot?since=...) picks this change up.
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    # WAKTU INVENTARISASI: dicap SEKALI, pada transisi pertama keluar dari
+    # "Belum Diinventarisasi". Ikut dalam tulisan atomik yang sama dengan
+    # perubahan statusnya — tulisan susulan bisa gagal sendiri dan
+    # meninggalkan aset "Ditemukan" tanpa tanggal. Lihat
+    # backend/inventarisasi_stempel.py.
+    stempel_inv.stempel(existing, update_data, update_data["updated_at"])
 
     # SPASIAL: bila update menyentuh koordinat, hitung ulang `geo` dari gabungan
     # dokumen lama + perubahan (pengguna lazim memperbaiki SATU sumbu saja).

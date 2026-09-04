@@ -18,6 +18,93 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#979] Linimasa sungguhan: aset mencatat kapan ia diperiksa — 2026-09-04
+
+Permintaan pemilik: *"lanjutkan dengan membuat lini masanya"* — linimasa yang
+sungguhan, bukan turunan periode kegiatan.
+
+### Yang menghalangi sebelumnya
+
+Aset **tidak menyimpan** kapan ia diperiksa. Linimasa `[#978]` karena itu
+menempatkan SELURUH aset satu kegiatan pada bulan kegiatan itu dimulai:
+cukup untuk gambaran kasar, tetapi tak bisa menjawab "berapa yang selesai
+minggu ini".
+
+`updated_at` bukan penggantinya. Ia ter-cap pada **setiap** penyuntingan,
+jadi aset yang diperiksa Mei lalu fotonya diperbaiki Juli akan meloncat ke
+Juli — linimasa tampak presisi justru pada saat ia paling keliru.
+
+### `tanggal_inventarisasi`
+
+Dicap **sekali**, pada transisi pertama dari "Belum Diinventarisasi" ke
+status apa pun yang bukan itu. Dua sifat membuatnya bisa dipercaya:
+
+1. **Di-cap server, bukan diketik.** Ia sengaja BUKAN bagian
+   `ASSET_SCALAR_FIELDS`: tak dapat diimpor, diubah massal, atau disunting
+   lewat form. Tanggal yang bisa diketik mengubah linimasa dari catatan
+   menjadi pendapat. Bila klien menyertakannya di badan permintaan, nilainya
+   dibuang.
+2. **Sekali seumur hidup aset.** Mengoreksi kondisi atau mengubah status dari
+   "Ditemukan" ke "Sengketa" TIDAK menggesernya — yang dicatat adalah kapan
+   barangnya PERTAMA diperiksa. Tanpa sifat ini, batang bulan lalu menyusut
+   tiap kali seseorang menyunting.
+
+**Empat jalur** dapat mengubah status, dan keempatnya mencap: buat aset
+(temuan "Berlebih" lahir langsung ditemukan), PUT, PATCH (kamera lapangan,
+lembar edit cepat, antrean luring), dan ubah massal. Yang terakhir menulis
+dengan satu `update_many` sehingga stempelnya dipasang lewat tulisan kedua
+yang **disaring** ke aset belum-bercap — tanpa saringan itu satu klik
+"tandai ditemukan" akan menggeser tanggal seluruh aset yang dipilih.
+
+Logikanya di satu modul murni, `backend/inventarisasi_stempel.py`, bukan
+disalin empat kali.
+
+### Laporan: campuran yang menyebut dirinya campuran
+
+Linimasa kini memakai tanggal pemeriksaan **sungguhan**, dengan periode
+kegiatan sebagai **cadangan** untuk aset yang diperiksa sebelum stempel ini
+ada. Data lama tak boleh hilang dari grafiknya.
+
+Angka campuran yang diam soal campurannya adalah bentuk paling halus dari
+mengarang — pembacanya menyimpulkan seluruhnya presisi. Karena itu catatan di
+bawah grafik menyebut ketiga keadaannya:
+
+| Keadaan | Yang tertulis |
+|---|---|
+| seluruhnya bercap | "Seluruh aset ditempatkan menurut tanggal pemeriksaannya sendiri" |
+| campuran | "**N%** aset menurut tanggal pemeriksaannya sendiri; **M** sisanya diperiksa sebelum tanggal itu mulai direkam" |
+| tak satu pun | "Seluruh aset di sini diperiksa **sebelum** tanggal pemeriksaan mulai direkam" |
+
+Porsinya menyusut sendiri seiring pekerjaan berjalan: makin banyak aset
+diinventarisasi sesudah rilis ini, makin tinggi persentasenya.
+
+### Batas yang diketahui, dan sengaja tidak ditambal
+
+Stempelnya adalah saat perubahan **sampai ke server**. Pekerjaan lapangan
+berjalan luring dan tersinkron kemudian, jadi pemeriksaan larut malam 31 Mei
+yang baru terkirim 1 Juni tercatat di Juni. Untuk linimasa BULANAN selisih ini
+jarang dan kecil; menambalnya dengan tanggal kiriman klien akan mengembalikan
+persoalan "tanggal yang bisa diketik".
+
+### Mutasi yang lolos: penyambungan tak teruji
+
+"PATCH tak lagi mencap" **lolos** pada percobaan pertama — sepuluh uji modul
+hijau sementara linimasa diam-diam kembali ke perkiraan. Modul yang benar
+sempurna tetap tak berguna bila tak ada yang memanggilnya. Ditutup dengan uji
+rute PATCH sungguhan (mongomock), uji ubah-massal, dan satu uji struktural
+yang menagih keempat jalur tetap memanggil stempelnya.
+
+### Berkas
+
+- `backend/inventarisasi_stempel.py` — modul baru
+- `backend/routes/assets.py` — cap pada buat, PUT, PATCH
+- `backend/routes/batch.py` — cap pada ubah massal
+- `backend/routes/reports.py` — linimasa memakai stempel + cadangan + porsi
+- `backend/templates/laporan_satker_v2.html` — catatan tiga keadaan
+- Uji: 13 stempel, 2 linimasa baru
+
+---
+
 ## [#978] Laporan gabungan satker: linimasa, terkategori, dan berhenti mencetak tiap barang — 2026-09-03
 
 Permintaan pemilik: *"laporan hasil inventarisasi BMN yang gabungan dari

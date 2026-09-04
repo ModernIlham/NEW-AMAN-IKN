@@ -118,12 +118,55 @@ def test_tinggi_batang_dihitung_di_server_bukan_di_template(dbr):
     _jalan(jalan())
 
 
-def test_linimasa_menyatakan_sumbernya_periode_kegiatan():
-    """Aset tak menyimpan kapan ia diinventarisasi. Linimasa yang diam soal
-    itu mengaku punya ketelitian per-barang yang tak pernah ia miliki."""
+def test_linimasa_menyatakan_CAMPURAN_sumbernya():
+    """Sejak `tanggal_inventarisasi` dicap, linimasa memakai tanggal
+    pemeriksaan SUNGGUHAN — tetapi aset yang diperiksa sebelum stempel itu
+    ada tetap memakai perkiraan periode kegiatan.
+
+    Angka campuran yang diam soal campurannya adalah bentuk paling halus dari
+    mengarang: pembacanya menyimpulkan seluruhnya presisi. Laporan wajib
+    menyebut ketiga keadaannya — seluruhnya bercap, sebagian, atau tak satu
+    pun.
+    """
     t = re.sub(r"\s+", " ", _teks_template())
     assert "kumulatif" in t.lower()
-    assert "bukan per tanggal pemeriksaan tiap barang" in t
+    assert "linimasa_pct_stempel" in t, "porsi bercap tak pernah disebut"
+    assert "tanggal pemeriksaannya sendiri" in t
+    assert "sebelum tanggal itu mulai direkam" in t, (
+        "keadaan campuran tak dijelaskan")
+
+
+def test_linimasa_memakai_stempel_aset_bukan_bulan_kegiatan(dbr):
+    """Inti dari seluruh perubahan ini: aset yang DICAP Agustus masuk Agustus,
+    walau kegiatannya dimulai Mei."""
+    async def jalan():
+        aset = _aset("k1", 4, ditemukan=4)
+        for a in aset:
+            a["tanggal_inventarisasi"] = "2025-08-14T09:00:00+00:00"
+        await _seed(dbr, [_keg(1, 5)], aset)
+        d = await rp._build_satker_report_v2("k1")
+        per_bulan = {b["bulan"]: b["tercatat"] for b in d["linimasa"]}
+        assert per_bulan["MEI"] == 0, "masih memakai bulan kegiatan"
+        assert per_bulan["AGU"] == 4
+        assert d["linimasa_pct_stempel"] == 100.0
+        assert d["linimasa_perkiraan"] == 0
+    _jalan(jalan())
+
+
+def test_aset_tanpa_stempel_jatuh_ke_bulan_kegiatan(dbr):
+    """Data lama tak boleh hilang dari linimasa. Tanpa cadangan ini seluruh
+    riwayat sebelum stempel diperkenalkan lenyap dari grafiknya."""
+    async def jalan():
+        aset = _aset("k1", 4, ditemukan=2)
+        aset[0]["tanggal_inventarisasi"] = "2025-08-14T09:00:00+00:00"
+        await _seed(dbr, [_keg(1, 5)], aset)
+        d = await rp._build_satker_report_v2("k1")
+        per_bulan = {b["bulan"]: b["tercatat"] for b in d["linimasa"]}
+        assert per_bulan["MEI"] == 3, "tiga aset tanpa stempel"
+        assert per_bulan["AGU"] == 4, "kumulatif: 3 + 1 bercap Agustus"
+        assert d["linimasa_perkiraan"] == 3
+        assert d["linimasa_pct_stempel"] == 25.0
+    _jalan(jalan())
 
 
 # ── 2. PER KEGIATAN ─────────────────────────────────────────────────────

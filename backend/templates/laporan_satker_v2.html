@@ -286,9 +286,17 @@ td.r { text-align: right; font-variant-numeric: tabular-nums; }
       {% for b in linimasa %}<span class="{% if b.mulai %}aktif{% endif %}">{{ b.bulan }}</span>{% endfor %}
     </div>
     <p class="lm-note">
-      Angka bersifat <strong>kumulatif</strong>. Setiap kegiatan dihitung pada bulan kegiatan itu
-      <strong>dimulai</strong> — bukan per tanggal pemeriksaan tiap barang, sebab tanggal itu tidak
-      direkam per aset. Bulan bertanda tebal adalah bulan dimulainya kegiatan.
+      Angka bersifat <strong>kumulatif</strong>. Bulan bertanda tebal adalah bulan dimulainya kegiatan.
+      {% if linimasa_pct_stempel >= 100 %}
+      Seluruh aset ditempatkan menurut <strong>tanggal pemeriksaannya sendiri</strong>.
+      {% elif linimasa_pct_stempel > 0 %}
+      <strong>{{ linimasa_pct_stempel }}%</strong> aset ditempatkan menurut tanggal pemeriksaannya
+      sendiri; <strong>{{ linimasa_perkiraan }}</strong> sisanya diperiksa sebelum tanggal itu mulai
+      direkam, sehingga dihitung pada bulan kegiatannya dimulai.
+      {% else %}
+      Seluruh aset di sini diperiksa <strong>sebelum</strong> tanggal pemeriksaan mulai direkam,
+      sehingga dihitung pada bulan kegiatannya dimulai — bukan per barang.
+      {% endif %}
     </p>
   </div>
   {% endif %}
