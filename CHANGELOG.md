@@ -18,6 +18,61 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#985] Memilih kegiatan kini menyempitkan pilihan filter lainnya — 2026-09-04
+
+Permintaan pemilik: *"ketika kegiatan dipilih maka dapat mempengaruhi data
+filter lainnya yang menyesuaikan dengan pilihan kegiatan yang terpilih."*
+
+### Kegiatan adalah puncak hierarki
+
+Sebelumnya SELURUH daftar pilihan dirakit dari data penuh. Memilih satu
+kegiatan tetap menampilkan seluruh lokasi satker — termasuk lokasi milik
+kegiatan lain, yang bila dicentang hanya menghasilkan laporan kosong.
+
+Kini memilih **Kegiatan** menyempitkan daftar **tahun, status, kondisi, dan
+lokasi** ke nilai yang benar-benar ada di kegiatan itu.
+
+Aturan lamanya tidak dibuang, hanya dipertajam: **sebuah dimensi tak pernah
+menyempitkan daftarnya SENDIRI**. Memilih 2023 tetap tak boleh membuat 2024
+lenyap — di situlah pengguna terkurung tanpa kotak untuk mengembalikannya.
+Dan **daftar kegiatan sendiri tak pernah menyempit**: ia jalan pulangnya.
+
+### Yang tercentang di luar lingkup tetap tampil, bertanda
+
+Pindah dari Kegiatan 1 ke Kegiatan 2 sementara "Lantai 1" masih tercentang:
+filternya tetap berlaku dan mengosongkan laporan. Kalau kotaknya dihapus dari
+daftar, sebabnya lenyap dari layar dan tak ada lagi kotak untuk
+membatalkannya — **laporan kosong tanpa penjelasan**.
+
+Nilai seperti itu karenanya tetap ditampilkan dengan penanda
+**"di luar"** berwarna amber, sehingga ia bisa dilepas.
+
+### Fixture ujinya ikut diperbaiki
+
+Kedua kegiatan pada fixture semula memiliki himpunan kondisi dan lokasi yang
+**sama persis**, sehingga daftar yang disempitkan menurut kegiatan kebetulan
+identik dengan daftar penuh — uji penyempitan akan lolos tanpa pernah
+menyentuh perilakunya. Kegiatan 2 kini memakai `Gudang A/B` dan
+`Rusak Berat`; tahun sengaja dibiarkan sama sebagai dimensi pembanding yang
+memang tak berubah.
+
+### Uji mutasi — tiga dipasang, tiga dibunuh
+
+| Mutasi | Dibunuh oleh |
+|---|---|
+| Kegiatan tak lagi menyempitkan lingkup | `test_memilih_KEGIATAN_menyempitkan_pilihan_dimensi_lain` |
+| Pilihan di luar lingkup dibuang diam-diam | `test_pilihan_tercentang_di_luar_kegiatan_TETAP_TAMPIL_bertanda` |
+| Daftar kegiatan ikut menyempit | `test_daftar_KEGIATAN_tak_pernah_menyempit` |
+
+### Berkas
+
+- `backend/laporan_filter.py` — `aset_dalam_kegiatan()`, `_rakit_opsi()`, `pilihan_filter(..., filter_dipilih)`
+- `backend/routes/reports.py` — meneruskan filter ke perakit pilihan
+- `backend/templates/laporan_satker_v2.html` — penanda `di luar`, keterangan panel
+- `backend/tests/unit/test_laporan_filter.py` — fixture dibedakan, 4 uji baru
+
+---
+
 ## [#984] Angka stiker yang selalu nol, dan linimasa yang akhirnya fluktuatif — 2026-09-04
 
 Dua laporan pemilik atas laporan gabungan satker.
