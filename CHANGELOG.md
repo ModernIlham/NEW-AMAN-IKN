@@ -18,6 +18,77 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#980] Laporan gabungan jadi interaktif: filter lanjutan multi-pilihan — 2026-09-04
+
+Permintaan pemilik: *"jadikan interaktif dan dapat memilih kegiatan apa saja
+yang dapat di filter sesuai seleksi yang dipilih, buat filter menjadi advanced
+dan dapat memilih 2 pilihan sesuai seleksi di filter yang sama, tanggal tahun
+dan lain lain."*
+
+### Enam dimensi, masing-masing multi-pilihan
+
+| Filter | Bentuk |
+|---|---|
+| Kegiatan | centang berapa pun; yang tak dicentang tak ikut dihitung sama sekali |
+| Tahun perolehan | centang berapa pun |
+| Status inventarisasi | centang berapa pun |
+| Kondisi | centang berapa pun |
+| Lokasi | centang berapa pun |
+| Tanggal pemeriksaan | rentang `dari`–`sampai`, memakai stempel `[#979]` |
+
+Dimensi yang **berbeda** saling mempersempit (irisan); pilihan di dalam
+dimensi yang **sama** saling melebarkan — itulah "dua pilihan pada filter yang
+sama" yang diminta. Kotak yang dibiarkan kosong berarti **semua**, sehingga
+halaman yang dibuka tanpa parameter tetap menampilkan laporan utuh.
+
+### Tiga keputusan yang menentukan apakah filternya benar
+
+**1. Daftar pilihan dibangun dari data PENUH, sebelum penyaringan.** Kalau
+disusun dari hasil saringan, memilih 2023 membuat pilihan tahun lain lenyap
+— dan pengguna terkurung tanpa kotak untuk mengembalikannya. Jebakan klasik
+filter bertingkat, dan ia hanya terlihat setelah seseorang benar-benar
+terjebak.
+
+**2. Filter kegiatan menyusutkan KEDUA sisi** — kartu capaian dan angkanya.
+Kalau hanya asetnya yang disaring, kartu kegiatan kosong tetap tercetak dan
+terbaca sebagai "kegiatan ini nol", bukan "kegiatan ini tak dipilih".
+
+**3. Penyaringan di SERVER, bukan di peramban.** Formulir GET biasa, dan
+endpoint PDF menerima parameter yang sama — sehingga yang dicetak persis yang
+dibaca di layar. Menyaring di sisi peramban akan membuat tombol Cetak
+menghasilkan dokumen berisi seluruh satker, berbeda dari yang barusan dibaca,
+tanpa satu pun gejala.
+
+### Laporan tersaring mengatakan dirinya tersaring — juga di kertas
+
+Panel filter ber-`no-print`; yang **ikut tercetak** adalah pita penanda:
+
+> **Laporan ini tersaring.** Angka di dalamnya hanya mencakup N kegiatan dan
+> M NUP yang memenuhi filter — bukan keseluruhan satker.
+
+Di layar ada panel filter yang membantah salah baca. Di kertas tidak ada, dan
+justru di sanalah penandanya paling dibutuhkan. Satu uji menahan pita itu
+tetap tercetak.
+
+### Catatan bentuk
+
+Satu-satunya JavaScript di halaman ini adalah pintasan "semua / kosongkan"
+per blok. Penyaringannya sendiri tak bergantung padanya.
+
+Aset yang tanggal periksanya belum tercatat **tersaring keluar** begitu
+rentang tanggal diisi: menanyakan "yang diperiksa Agustus" lalu menerima aset
+yang tanggal periksanya tak diketahui akan menjawab pertanyaan yang berbeda
+dari yang diajukan. Ini dinyatakan di panelnya.
+
+### Berkas
+
+- `backend/laporan_filter.py` — modul baru (murni)
+- `backend/routes/reports.py` — parameter berulang pada endpoint HTML & PDF
+- `backend/templates/laporan_satker_v2.html` — panel filter + pita penanda
+- `backend/tests/unit/test_laporan_filter.py` — 13 uji baru
+
+---
+
 ## [#979] Linimasa sungguhan: aset mencatat kapan ia diperiksa — 2026-09-04
 
 Permintaan pemilik: *"lanjutkan dengan membuat lini masanya"* — linimasa yang
