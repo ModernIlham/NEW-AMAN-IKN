@@ -18,6 +18,78 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#987] Analisis data tak lagi dipangkas: tata letak yang mengukur — 2026-09-05
+
+Permintaan pemilik: *"perkategori dan lokasi juga buat jangan dibatasi biarkan
+saja mengalir dan buat smart mengatur dan berbagi posisi dengan bagian lainnya
+hingga benar benar 1 kertas penuh tidak bisa menampung tataletak yang ada lagi,
+baru pindah lanjut kekertas berikutnya."*
+
+### Dua cara keliru, dari arah berlawanan
+
+Sebelumnya panel analisis dipangkas `most_common(10)` dan halamannya
+ditetapkan di template (dua baris, dua kolom, selesai).
+
+- **Pemangkasan membuang data.** Satker dengan 47 lokasi hanya menampilkan
+  10, dan tak ada satu pun tanda bahwa 37 sisanya ada.
+- **Tetapan salah di kedua arah.** Terlalu besar → isi terpotong diam-diam
+  oleh `overflow: hidden`. Terlalu kecil → separuh kertas kosong sementara
+  halaman berikutnya dibuka untuk tiga baris.
+
+### Penyusun yang mengukur
+
+`backend/laporan_tataletak.py` (baru, murni, tanpa I/O) menghitung tinggi tiap
+panel dalam piksel, memecah yang lebih panjang dari satu kolom, dan menjatah
+potongannya sampai kertasnya **benar-benar penuh** sebelum kertas berikutnya
+dibuka.
+
+Tiga keputusan yang membentuknya:
+
+1. **Tingginya dihitung di Python, bukan ditebak di Jinja.** Aritmetika di
+   dalam template tak dapat diuji unit, dan kekeliruannya baru terlihat
+   sebagai isi yang hilang di halaman ke sekian.
+2. **Panel panjang DIPECAH, bukan dipangkas** — potongan berikutnya membawa
+   judul yang sama bertanda "(lanjutan)".
+3. **Kolom kiri diisi penuh dulu, baru kanan.** Percobaan pertama memakai
+   "kolom terpendek lebih dulu"; tingginya jadi rata tetapi **urutan bacanya
+   rusak** — pada data sungguhan "Per Lokasi (lanjutan)" berakhir di kolom
+   kiri sementara 42 baris pertamanya ada di kolom kanan. Ketahuan hanya
+   karena keluarannya benar-benar dilihat.
+
+Ekor potongan yang lebih pendek dari **4 baris** tak pernah dibuat: judul
+panelnya sendiri 55px, jadi potongan dua baris membuang lebih banyak ruang
+daripada yang dihematnya, dan terbaca sebagai kekeliruan cetak.
+
+### Hasilnya
+
+Pada 6 kegiatan / 360 NUP dengan 33 kategori, 47 lokasi, dan 19 Eselon II —
+**seluruhnya tampil**, tersusun dalam 2 halaman analisis, dan lembar HTML
+tetap sama dengan halaman PDF.
+
+### Uji mutasi — empat dipasang, empat dibunuh
+
+| Mutasi | Dibunuh oleh |
+|---|---|
+| Lokasi kembali dipangkas 10 teratas | `test_kategori_lokasi_dan_eselon_TIDAK_DIPANGKAS_sepuluh_teratas` |
+| Sisa ruang kolom tak lagi diisi | `test_SISA_RUANG_kolom_diisi_sebelum_pindah_kolom` |
+| Kolom kanan tak pernah terisi | `test_kedua_kolom_terisi_HAMPIR_SAMA_tinggi`, `test_halaman_baru_hanya_dibuka_setelah_yang_lama_PENUH` |
+| Ekor potongan dibuang | `test_TIDAK_ADA_baris_yang_hilang_berapa_pun_banyaknya` |
+
+Mutasi pertama dan kedua **lolos pada percobaan pertama**: uji modulnya
+memakai panel sintetis dan panel seragam, sehingga jalur pemangkasan laporan
+dan jalur pemecahan-di-tempat tak pernah tersentuh. Keduanya baru terbunuh
+setelah ujinya diberi data yang benar-benar melewatinya.
+
+### Berkas
+
+- `backend/laporan_tataletak.py` — **baru**: `tinggi_panel`, `baris_muat`, `susun`, `panel_batang`
+- `backend/routes/reports.py` — `most_common()` tanpa batas, `halaman_analisis`
+- `backend/templates/laporan_satker_v2.html` — halaman analisis dirender dari hasil penyusun
+- `backend/tests/unit/test_laporan_tataletak.py` — **baru**, 18 uji
+- `backend/tests/unit/test_laporan_gabungan_satker.py` — 2 uji baru
+
+---
+
 ## [#986] Chart tak lagi gepeng, Eselon II masuk, simpulan menunjuk kegiatan — 2026-09-04
 
 Tiga permintaan pemilik atas laporan gabungan satker.

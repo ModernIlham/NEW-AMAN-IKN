@@ -14,6 +14,7 @@ from typing import Optional, List
 from datetime import datetime, timezone
 import inventarisasi_stempel as stempel_inv
 import laporan_filter as lfil
+import laporan_tataletak as ltl
 from pathlib import Path
 
 # Template directory - relative to this file's location (works on any server)
@@ -6269,17 +6270,21 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
     for a in all_assets:
         c = a.get("category") or "Lainnya"
         cat_vals[c] = cat_vals.get(c, 0) + sp(a)
-    chart_kategori = [{"name": (cat_map.get(c, c) or c)[:20], "count": cnt, "pct": pct(cnt, tc), "val_fmt": fmt(cat_vals.get(c, 0))} for c, cnt in cat_counter.most_common(10)]
+    # TIDAK DIPANGKAS. `most_common(10)` membuang data tanpa satu pun tanda:
+    # satker dengan 40 kategori hanya menampilkan 10, dan pembacanya tak punya
+    # cara tahu 30 sisanya ada. Panjangnya kini ditangani penyusun tata letak
+    # (backend/laporan_tataletak.py) yang memecah, bukan memangkas.
+    chart_kategori = [{"name": (cat_map.get(c, c) or c)[:30], "count": cnt, "pct": pct(cnt, tc), "val_fmt": fmt(cat_vals.get(c, 0))} for c, cnt in cat_counter.most_common()]
 
     loc_counter = Counter(a.get("location", "-") or "-" for a in all_assets)
-    chart_lokasi = [{"name": l[:20], "count": cnt, "pct": pct(cnt, tc)} for l, cnt in loc_counter.most_common(10)]
+    chart_lokasi = [{"name": l[:30], "count": cnt, "pct": pct(cnt, tc)} for l, cnt in loc_counter.most_common()]
 
     es1_counter = Counter(a.get("eselon1", "") for a in all_assets if a.get("eselon1"))
     es1_vals = {}
     for a in all_assets:
         e = a.get("eselon1", "")
         if e: es1_vals[e] = es1_vals.get(e, 0) + sp(a)
-    chart_eselon1 = [{"name": e[:25], "count": cnt, "pct": pct(cnt, tc), "val_fmt": fmt(es1_vals.get(e, 0))} for e, cnt in es1_counter.most_common(10)]
+    chart_eselon1 = [{"name": e[:30], "count": cnt, "pct": pct(cnt, tc), "val_fmt": fmt(es1_vals.get(e, 0))} for e, cnt in es1_counter.most_common()]
 
     # Eselon II — permintaan pemilik: analisis data juga perlu memecah sampai
     # eselon II, bukan berhenti di eselon I. Satu Eselon I biasanya membawahi
@@ -6291,9 +6296,9 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
         e = a.get("eselon2", "")
         if e:
             es2_vals[e] = es2_vals.get(e, 0) + sp(a)
-    chart_eselon2 = [{"name": e[:25], "count": cnt, "pct": pct(cnt, tc),
+    chart_eselon2 = [{"name": e[:30], "count": cnt, "pct": pct(cnt, tc),
                       "val_fmt": fmt(es2_vals.get(e, 0))}
-                     for e, cnt in es2_counter.most_common(10)]
+                     for e, cnt in es2_counter.most_common()]
 
     # Per kegiatan chart
     act_counter = Counter(a.get("activity_id", "") for a in all_assets)
@@ -6670,6 +6675,36 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
                        activity_id, exc_info=True)
         kop = {}
 
+    # ── HALAMAN ANALISIS DISUSUN DENGAN MENGUKUR ────────────────────────
+    #
+    # Permintaan pemilik: *"perkategori dan lokasi juga buat jangan dibatasi
+    # biarkan saja mengalir dan buat smart mengatur dan berbagi posisi dengan
+    # bagian lainnya hingga benar benar 1 kertas penuh tidak bisa menampung
+    # tataletak yang ada lagi, baru pindah lanjut kekertas berikutnya."*
+    #
+    # Sebelumnya jumlah panel per halaman ditetapkan di template (dua baris,
+    # dua kolom, selesai) dan daftarnya dipangkas 10 teratas agar cukup. Kini
+    # panelnya boleh sepanjang datanya, dan penyusun di
+    # backend/laporan_tataletak.py yang memutuskan apa masuk halaman mana —
+    # dengan MENGUKUR tinggi tiap panel, bukan menebak cacahnya.
+    panel_analisis = [
+        ltl.panel_batang("Kondisi Barang (Ditemukan)", chart_kondisi,
+                         "", kolom_nilai="count"),
+        ltl.panel_batang("Status Inventarisasi", chart_status,
+                         "", kolom_nilai="count"),
+        ltl.panel_batang("Per Kategori", chart_kategori,
+                         "#1e40af", kolom_nilai="val_fmt"),
+        ltl.panel_batang("Per Lokasi", chart_lokasi,
+                         "#059669", kolom_nilai="count"),
+        ltl.panel_batang("Per Eselon I", chart_eselon1,
+                         "#7c3aed", kolom_nilai="val_fmt"),
+        ltl.panel_batang("Per Eselon II", chart_eselon2,
+                         "#0891b2", kolom_nilai="val_fmt"),
+    ]
+    # Panel yang warnanya kosong memakai warna per-baris (`c.color`); dua
+    # panel pertama memang mewarnai tiap batangnya sendiri.
+    halaman_analisis = ltl.susun(panel_analisis)
+
     # ── SIMPULAN PER KEGIATAN ───────────────────────────────────────────
     #
     # Permintaan pemilik: *"simpulan juga tidak spesifik terorganisasir dengan
@@ -6761,6 +6796,7 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
         "chart_kategori": chart_kategori, "chart_lokasi": chart_lokasi,
         "chart_eselon1": chart_eselon1, "chart_eselon2": chart_eselon2,
         "chart_per_kegiatan": chart_per_kegiatan,
+        "halaman_analisis": halaman_analisis,
         "assets": asset_rows, "dok_headers": dok_headers, "dok_rows": dok_rows,
         "dok_note": dok_note,
         "personil": personil,
