@@ -47,7 +47,15 @@ def dbf(monkeypatch):
 
 
 async def _seed(fake):
-    """Dua kegiatan; aset berselang-seling tahun, kondisi, dan lokasi."""
+    """Dua kegiatan; aset berselang-seling tahun, kondisi, dan lokasi.
+
+    Kondisi dan lokasi sengaja BERBEDA antar kegiatan. Versi pertama fixture
+    ini memberi kedua kegiatan himpunan nilai yang sama persis, sehingga
+    daftar pilihan yang disempitkan menurut kegiatan kebetulan identik dengan
+    daftar penuh — dan uji penyempitan lolos tanpa pernah menyentuh
+    perilakunya. Tahun sengaja dibiarkan sama pada keduanya, sebagai dimensi
+    pembanding yang memang tak berubah.
+    """
     for i, (bulan, n) in enumerate([(5, 6), (7, 4)], 1):
         await fake.inventory_activities.insert_one({
             "id": f"k{i}", "kode_satker": "401234",
@@ -59,8 +67,10 @@ async def _seed(fake):
                 "id": f"k{i}-a{j}", "activity_id": f"k{i}", "asset_name": f"B{j}",
                 "asset_code": "305", "NUP": str(j), "purchase_price": 100,
                 "purchase_date": f"{2023 + (j % 2)}-01-01",
-                "condition": "Baik" if j % 2 else "Rusak Ringan",
-                "location": f"Lantai {1 + j % 2}",
+                "condition": ("Baik" if j % 2 else
+                              ("Rusak Ringan" if i == 1 else "Rusak Berat")),
+                "location": (f"Lantai {1 + j % 2}" if i == 1
+                             else f"Gudang {'AB'[j % 2]}"),
                 "inventory_status": "Ditemukan" if j < 2 else "Belum Diinventarisasi",
                 "tanggal_inventarisasi": (f"2025-0{6 + i}-1{j}T00:00:00+00:00"
                                           if j < 2 else ""),
@@ -104,18 +114,79 @@ def test_filter_kosong_berarti_semua(dbf):
 
 # ── 2. Daftar pilihan tak menciut ───────────────────────────────────────
 
-def test_pilihan_tetap_lengkap_saat_tersaring(dbf):
+def _nilai(opsi):
+    return [o["nilai"] for o in opsi]
+
+
+def test_dimensi_tak_menyempitkan_daftarnya_SENDIRI(dbf):
     """Jebakan klasik filter bertingkat: memilih satu nilai membuat nilai lain
     lenyap dari daftarnya, dan pengguna terkurung — tak ada lagi kotak untuk
     mengembalikannya. Hanya terlihat setelah seseorang benar-benar terjebak."""
     async def jalan():
         await _seed(dbf)
         penuh = await rp._build_satker_report_v2("k1")
-        sempit = await rp._build_satker_report_v2(
-            "k1", {"tahun": ["2023"], "kegiatan": ["k1"]})
-        for dimensi in ("tahun", "kegiatan", "kondisi", "lokasi", "status"):
-            assert (sempit["pilihan"][dimensi] == penuh["pilihan"][dimensi]), dimensi
-        assert sempit["total_count"] < penuh["total_count"], "filter tak berefek"
+        for dimensi, nilai in (("tahun", "2023"), ("kondisi", "Baik"),
+                               ("lokasi", "Lantai 1"),
+                               ("status", "Ditemukan")):
+            sempit = await rp._build_satker_report_v2("k1", {dimensi: [nilai]})
+            assert _nilai(sempit["pilihan"][dimensi]) == _nilai(penuh["pilihan"][dimensi]), dimensi
+            assert sempit["total_count"] < penuh["total_count"], dimensi
+    _jalan(jalan())
+
+
+def test_memilih_KEGIATAN_menyempitkan_pilihan_dimensi_lain(dbf):
+    """Permintaan pemilik: *"ketika kegiatan dipilih maka dapat mempengaruhi
+    data filter lainnya yang menyesuaikan dengan pilihan kegiatan yang
+    terpilih."*
+
+    Kegiatan adalah puncak hierarki: satu kegiatan memang punya himpunan
+    lokasi dan kondisinya sendiri, dan menawarkan lokasi milik kegiatan lain
+    hanya menawarkan hasil kosong."""
+    async def jalan():
+        await _seed(dbf)
+        penuh = await rp._build_satker_report_v2("k1")
+        assert set(_nilai(penuh["pilihan"]["lokasi"])) == {
+            "Lantai 1", "Lantai 2", "Gudang A", "Gudang B"}
+
+        satu = await rp._build_satker_report_v2("k1", {"kegiatan": ["k1"]})
+        assert set(_nilai(satu["pilihan"]["lokasi"])) == {"Lantai 1", "Lantai 2"}
+        assert set(_nilai(satu["pilihan"]["kondisi"])) == {"Baik", "Rusak Ringan"}
+        assert "Rusak Berat" not in _nilai(satu["pilihan"]["kondisi"])
+
+        dua = await rp._build_satker_report_v2("k1", {"kegiatan": ["k2"]})
+        assert set(_nilai(dua["pilihan"]["lokasi"])) == {"Gudang A", "Gudang B"}
+    _jalan(jalan())
+
+
+def test_daftar_KEGIATAN_tak_pernah_menyempit(dbf):
+    """Jalan pulangnya. Kalau daftar kegiatan ikut menyempit menurut kegiatan
+    yang dipilih, pengguna terkunci pada pilihan pertamanya."""
+    async def jalan():
+        await _seed(dbf)
+        penuh = await rp._build_satker_report_v2("k1")
+        for f in ({"kegiatan": ["k1"]}, {"kegiatan": ["k2"]},
+                  {"kegiatan": ["k1"], "lokasi": ["Lantai 1"]}):
+            d = await rp._build_satker_report_v2("k1", f)
+            assert _nilai(d["pilihan"]["kegiatan"]) == _nilai(penuh["pilihan"]["kegiatan"]), f
+    _jalan(jalan())
+
+
+def test_pilihan_tercentang_di_luar_kegiatan_TETAP_TAMPIL_bertanda(dbf):
+    """Pindah dari kegiatan 1 ke kegiatan 2 sementara "Lantai 1" masih
+    tercentang: filternya tetap berlaku dan mengosongkan laporan. Kalau
+    kotaknya dihapus dari daftar, sebabnya lenyap dari layar dan tak ada lagi
+    kotak untuk membatalkannya — laporan kosong tanpa penjelasan."""
+    async def jalan():
+        await _seed(dbf)
+        d = await rp._build_satker_report_v2(
+            "k1", {"kegiatan": ["k2"], "lokasi": ["Lantai 1"]})
+        lok = {o["nilai"]: o["di_luar"] for o in d["pilihan"]["lokasi"]}
+        assert "Lantai 1" in lok, "kotaknya lenyap; tak bisa dilepas lagi"
+        assert lok["Lantai 1"] is True, "tak ditandai sebagai di luar lingkup"
+        assert lok["Gudang A"] is False
+        assert d["total_count"] == 0, "filternya memang mengosongkan hasil"
+        with open(TPL, encoding="utf-8") as f:
+            assert "tanda-luar" in f.read(), "penandanya tak digambar di panel"
     _jalan(jalan())
 
 

@@ -6215,10 +6215,14 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
     ).to_list(100000)
     categories = await db.categories.find({}, {"_id": 0}).to_list(10000)
     cat_map = {c.get("kode_aset", ""): c.get("label", "") for c in categories}
-    # Daftar pilihan filter dibangun dari data PENUH, SEBELUM penyaringan —
-    # kalau tidak, memilih satu tahun membuat pilihan tahun lain lenyap dan
-    # pengguna terkurung tanpa kotak untuk mengembalikannya.
-    pilihan = lfil.pilihan_filter(satker_acts, all_assets, _tahun_perolehan)
+    # Daftar pilihan dirakit SEBELUM penyaringan. Sebuah dimensi tak pernah
+    # menyempitkan daftarnya sendiri — memilih satu tahun tak boleh membuat
+    # tahun lain lenyap, sebab pengguna lalu terkurung tanpa kotak untuk
+    # mengembalikannya. KEGIATAN adalah kekecualiannya: ia menyempitkan
+    # daftar tahun/status/kondisi/lokasi, karena satu kegiatan memang punya
+    # himpunan lokasi dan tahunnya sendiri. Lihat backend/laporan_filter.py #1.
+    pilihan = lfil.pilihan_filter(satker_acts, all_assets, _tahun_perolehan,
+                                  filter_dipilih)
     satker_acts, all_assets = lfil.terapkan(
         satker_acts, all_assets, filter_dipilih, _tahun_perolehan)
 

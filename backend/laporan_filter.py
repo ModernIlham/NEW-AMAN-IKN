@@ -7,11 +7,23 @@ plus rentang tanggal.
 
 Tiga keputusan yang membentuk modul ini:
 
-1. **Daftar pilihan dibangun dari data PENUH, bukan dari hasil saringan.**
-   Kalau daftar tahun disusun dari aset yang sudah tersaring, memilih 2023
-   akan membuat pilihan lain lenyap — dan pengguna terkurung: tak ada lagi
-   kotak untuk mengembalikannya. Ini jebakan klasik filter bertingkat, dan
-   ia hanya terlihat setelah seseorang benar-benar terjebak.
+1. **Sebuah dimensi tak pernah menyempitkan daftarnya SENDIRI.** Kalau
+   daftar tahun disusun dari aset yang sudah tersaring menurut tahun, memilih
+   2023 akan membuat 2024 lenyap — dan pengguna terkurung: tak ada lagi kotak
+   untuk mengembalikannya. Ini jebakan klasik filter bertingkat, dan ia hanya
+   terlihat setelah seseorang benar-benar terjebak.
+
+   **Kegiatan adalah kekecualian yang disengaja** (permintaan pemilik):
+   memilih kegiatan MENYEMPITKAN daftar tahun/status/kondisi/lokasi, sebab
+   kegiatan adalah puncak hierarki — satu kegiatan memang punya himpunan
+   lokasi dan tahunnya sendiri, dan menawarkan lokasi milik kegiatan lain
+   hanya menawarkan hasil kosong. Daftar kegiatan sendiri TIDAK PERNAH
+   disempitkan oleh apa pun, jadi jalan pulang selalu ada.
+
+   Nilai yang masih tercentang tetapi tak ada di kegiatan terpilih **tetap
+   ditampilkan, bertanda `di_luar`** — bukan dihapus. Menghapusnya membuat
+   centangnya lenyap dari layar sementara filternya tetap berlaku: laporan
+   kosong tanpa sebab yang terlihat, dan tanpa kotak untuk membatalkannya.
 
 2. **Filter kegiatan menyusutkan KEDUA sisi.** Kegiatan yang tak dipilih
    hilang dari kartu capaian DAN asetnya hilang dari seluruh angka. Kalau
@@ -92,26 +104,54 @@ def dalam_rentang(a, dari, sampai) -> bool:
     return True
 
 
-def pilihan_filter(satker_acts, all_assets, ambil_tahun) -> dict:
-    """Seluruh nilai yang TERSEDIA — dibangun dari data penuh (lihat #1).
+def aset_dalam_kegiatan(all_assets, filter_dipilih):
+    """Aset milik kegiatan yang DIPILIH. Tanpa pilihan kegiatan = seluruhnya.
 
-    Bentuknya seragam `[{"nilai", "label"}]` untuk SETIAP dimensi, termasuk
-    kegiatan yang nilainya id dan labelnya nama. Template karenanya cukup
-    mengulang satu bentuk; merakit pasangan nilai-label di dalam Jinja butuh
-    filter buatan sendiri, dan logika yang pindah ke template adalah logika
-    yang tak lagi bisa diuji.
+    Inilah lingkup yang membentuk daftar pilihan dimensi lain (lihat #1).
     """
-    def opsi(nilai):
-        return [{"nilai": v, "label": v} for v in sorted({v for v in nilai if v})]
+    keg = set(bersihkan((filter_dipilih or {}).get("kegiatan")))
+    if not keg:
+        return all_assets
+    return [a for a in all_assets if a.get("activity_id") in keg]
+
+
+def _rakit_opsi(tersedia, terpilih, urut_terbalik=False):
+    """`[{"nilai","label","di_luar"}]` — tersedia dulu, lalu yang di luar.
+
+    `di_luar` menandai nilai yang MASIH tercentang tetapi tak ada pada
+    kegiatan terpilih. Ia sengaja tetap muncul; lihat #1.
+    """
+    ada = sorted({v for v in tersedia if v}, reverse=urut_terbalik)
+    keluar = [{"nilai": v, "label": v, "di_luar": False} for v in ada]
+    sisa = sorted({v for v in (terpilih or []) if v and v not in set(ada)},
+                  reverse=urut_terbalik)
+    keluar += [{"nilai": v, "label": v, "di_luar": True} for v in sisa]
+    return keluar
+
+
+def pilihan_filter(satker_acts, all_assets, ambil_tahun,
+                   filter_dipilih=None) -> dict:
+    """Nilai yang tersedia untuk tiap dimensi (lihat #1).
+
+    Bentuknya seragam `[{"nilai", "label", "di_luar"}]` untuk SETIAP dimensi,
+    termasuk kegiatan yang nilainya id dan labelnya nama. Template karenanya
+    cukup mengulang satu bentuk; merakit pasangan nilai-label di dalam Jinja
+    butuh filter buatan sendiri, dan logika yang pindah ke template adalah
+    logika yang tak lagi bisa diuji.
+    """
+    f = filter_dipilih or {}
+    dalam = aset_dalam_kegiatan(all_assets, f)
 
     return {
+        # Daftar kegiatan TIDAK PERNAH disempitkan — ia jalan pulangnya.
         "kegiatan": [{"nilai": a.get("id", ""),
-                      "label": a.get("nama_kegiatan") or a.get("id", "")}
+                      "label": a.get("nama_kegiatan") or a.get("id", ""),
+                      "di_luar": False}
                      for a in satker_acts if a.get("id")],
-        "tahun": [{"nilai": v, "label": v} for v in
-                  sorted({tahun_aset(a, ambil_tahun) for a in all_assets
-                          if tahun_aset(a, ambil_tahun)}, reverse=True)],
-        **{kunci: opsi(_teks(a.get(field)) for a in all_assets)
+        "tahun": _rakit_opsi((tahun_aset(a, ambil_tahun) for a in dalam),
+                             bersihkan(f.get("tahun")), urut_terbalik=True),
+        **{kunci: _rakit_opsi((_teks(a.get(field)) for a in dalam),
+                              bersihkan(f.get(kunci)))
            for kunci, field in DIMENSI},
     }
 
