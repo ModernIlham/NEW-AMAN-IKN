@@ -533,3 +533,211 @@ def test_linimasa_memakai_jam_yang_SAMA_dengan_tanggal_cetak():
     src = inspect.getsource(rp._build_satker_report_v2)
     assert "sekarang = datetime.now()" in src
     assert "datetime.now(timezone.utc)" not in src.split("sekarang =")[1][:200]
+
+
+# ── Tata letak: grafik terbaca, Eselon II, simpulan menunjuk ────────────
+#
+# Permintaan pemilik: *"maksimalkan penempatan untuk linimasa chartbar baik
+# bulan maupun tahun agar tidak terlalu gepeng chartnya dan angkanya juga jadi
+# jelas ... tambahkan juga grafik untuk pereselon II-nya dibagian analisis
+# data ... simpulan juga tidak spesifik terorganisasir dengan baik per
+# kegiatannya."*
+
+def _angka_css(teks, prop):
+    """Nilai px sebuah properti CSS, mis. `_angka_css(t, '.lm-plot ... height')`."""
+    import re
+    m = re.search(re.escape(prop) + r":\s*(\d+(?:\.\d+)?)px", teks)
+    return float(m.group(1)) if m else None
+
+
+def test_grafik_linimasa_dan_tahun_tak_lagi_gepeng():
+    """Dua belas batang setinggi 118px pada lembar 1123px: selisih 6 dan 21
+    nyaris tak terbaca, dan angkanya terjepit. Tingginya dinaikkan; ambang di
+    sini menjaga agar ia tak diam-diam mengecil lagi."""
+    import re
+    t = _teks_template()
+    lm = re.search(r"\.lm-plot \{[^}]*height:\s*(\d+)px", t)
+    th = re.search(r"\.th-plot \{[^}]*height:\s*(\d+)px", t)
+    assert lm and int(lm.group(1)) >= 240, "linimasa bulanan kembali gepeng"
+    assert th and int(th.group(1)) >= 200, "grafik tahun perolehan kembali gepeng"
+    # Angka di dalam dan di atas batang harus terbaca, bukan 7px.
+    nilai = re.search(r"\.lm-nilai \{[^}]*font-size:\s*([\d.]+)px", t)
+    atas = re.search(r"\.lm-atas \{[^}]*font-size:\s*([\d.]+)px", t)
+    assert nilai and float(nilai.group(1)) >= 8.5, "angka di batang masih kecil"
+    assert atas and float(atas.group(1)) >= 9, "total di atas batang masih kecil"
+
+
+def test_grafik_per_eselon_II_ada_di_analisis_data(dbr):
+    """Satu Eselon I biasanya membawahi beberapa Eselon II; grafik yang
+    berhenti di Eselon I menyembunyikan justru unit yang bertanggung jawab
+    atas barangnya."""
+    async def jalan():
+        aset = _aset("k1", 6, ditemukan=6)
+        for i, a in enumerate(aset):
+            a["eselon1"] = "Ditjen Satu"
+            a["eselon2"] = f"Direktorat {i % 3}"
+        await _seed(dbr, [_keg(1, 5)], aset)
+        d = await rp._build_satker_report_v2("k1")
+        nama = {c["name"]: c["count"] for c in d["chart_eselon2"]}
+        assert nama == {"Direktorat 0": 2, "Direktorat 1": 2, "Direktorat 2": 2}, nama
+        # Eselon I tetap ada — yang satu tak menggantikan yang lain.
+        assert [c["name"] for c in d["chart_eselon1"]] == ["Ditjen Satu"]
+    t = _teks_template()
+    assert "Per Eselon II" in t, "panelnya tak digambar"
+    _jalan(jalan())
+
+
+def test_eselon_II_kosong_menjelaskan_dirinya(dbr):
+    """Panel kosong tanpa keterangan terbaca sebagai "sistemnya rusak".
+    Yang benar: datanya memang belum diisi, dan itu bisa ditindaklanjuti."""
+    async def jalan():
+        await _seed(dbr, [_keg(1, 5)], _aset("k1", 3))
+        d = await rp._build_satker_report_v2("k1")
+        assert d["chart_eselon2"] == []
+    t = _teks_template()
+    assert "Belum ada aset yang mencantumkan Eselon II" in t
+    _jalan(jalan())
+
+
+def test_simpulan_MENUNJUK_kegiatan_dan_yang_tertinggal_dibaca_lebih_dulu(dbr):
+    """Simpulan tingkat satker benar tetapi tak dapat ditindaklanjuti: ia tak
+    memberi tahu kegiatan MANA yang tertinggal. Yang paling perlu perhatian
+    harus dibaca lebih dulu, bukan terkubur di bawah yang sudah tuntas."""
+    async def jalan():
+        # k1 tuntas (6/6), k2 tertinggal (1/8).
+        await _seed(dbr, [_keg(1, 5), _keg(2, 7)],
+                    _aset("k1", 6, ditemukan=6) + _aset("k2", 8, ditemukan=1))
+        d = await rp._build_satker_report_v2("k1")
+        sk = d["simpulan_kegiatan"]
+        assert len(sk) == 2
+        assert sk[0]["nama"] == "Kegiatan 2", "yang tertinggal tak dibaca lebih dulu"
+        assert sk[0]["nada"] == "tertinggal" and sk[0]["pct"] < 50
+        assert sk[1]["nama"] == "Kegiatan 1" and sk[1]["nada"] == "tuntas"
+        # Teksnya MENYEBUT angkanya, bukan sekadar "perlu perhatian".
+        assert "1 dari 8 NUP" in str(sk[0]["teks"])
+        assert "7 NUP</strong> belum diperiksa" in str(sk[0]["teks"])
+        # Pengesahan disebut apa adanya.
+        assert sk[0]["sah"] == "belum disahkan"
+    t = _teks_template()
+    assert "Simpulan per Kegiatan" in t
+    _jalan(jalan())
+
+
+def test_kegiatan_tuntas_tapi_BELUM_DISAHKAN_tak_disebut_selesai(dbr):
+    """Capaian 100% yang belum disahkan BELUM selesai secara administratif.
+    Simpulan yang diam soal itu menyatakan selesai lebih awal dari
+    kenyataannya."""
+    async def jalan():
+        await _seed(dbr, [_keg(1, 5)], _aset("k1", 5, ditemukan=5))
+        sk = (await rp._build_satker_report_v2("k1"))["simpulan_kegiatan"][0]
+        assert sk["pct"] == 100.0 and sk["nada"] == "tuntas"
+        assert sk["disahkan"] is False and sk["sah"] == "belum disahkan"
+    _jalan(jalan())
+
+
+def test_lembar_simpulan_dipaginasi_agar_tak_terpotong_diam_diam(dbr):
+    """Lembarnya bertinggi TETAP dengan overflow:hidden — blok yang tak muat
+    hilang tanpa satu pun tanda. Cacahnya dibatasi di template."""
+    import re
+    t = _teks_template()
+    assert "{% set SK_HAL_1 = " in t and "{% set SK_HAL_N = " in t
+    assert "jml_hal_sk" in t
+    # Cacah per halaman hanya bisa DITETAPKAN kalau tinggi tiap kartu SERAGAM.
+    # Nama kegiatan yang panjang membungkus jadi tiga baris — dan lencana
+    # "Disahkan" yang lebih lebar dari "Berjalan" menyempitkan kolom namanya
+    # sehingga bungkusnya bertambah lagi. Delapan kartu lalu muat di satu
+    # halaman tetapi tidak di halaman lain, dan yang tak muat hilang tanpa
+    # tanda.
+    #
+    # Ini diperiksa STRUKTURAL, bukan lewat render: uji render hanya dapat
+    # membuktikan "data INI muat", sedang yang harus dijamin adalah "data apa
+    # pun muat". Mutasi yang mencabut tinggi tetap ini lolos dari tiga fixture
+    # render berturut-turut sebelum pemeriksaan ini ditambahkan.
+    nama = re.search(r"\.keg-nama \{([^}]*)\}", t)
+    assert nama, ".keg-nama hilang"
+    assert re.search(r"height:\s*\d+(\.\d+)?px", nama.group(1)), (
+        "tinggi kartu kegiatan kembali mengikuti isi")
+    assert "overflow: hidden" in nama.group(1), (
+        "tanpa overflow:hidden, tinggi tetapnya tak memotong apa pun")
+
+    async def jalan():
+        keg = [_keg(i, (i % 12) + 1) for i in range(1, 15)]
+        aset = []
+        for i in range(1, 15):
+            aset += _aset(f"k{i}", 3, ditemukan=i % 4)
+        await _seed(dbr, keg, aset)
+        d = await rp._build_satker_report_v2("k1")
+        assert len(d["simpulan_kegiatan"]) == 14, "ada kegiatan yang hilang"
+    _jalan(jalan())
+
+
+def _render_pdf(d):
+    """(jumlah lembar HTML, jumlah halaman PDF) untuk data laporan `d`."""
+    import re
+    import tempfile
+    from jinja2 import Environment, FileSystemLoader, select_autoescape
+    import weasyprint
+    import pypdfium2
+
+    env = Environment(
+        loader=FileSystemLoader(os.path.join(os.path.dirname(TPL))),
+        autoescape=select_autoescape(["html"]))
+    html = env.get_template(os.path.basename(TPL)).render(preview=False, **d)
+    lembar = len(re.findall(r'<div class="hal[ "]', html))
+    with tempfile.NamedTemporaryFile(suffix=".pdf") as f:
+        weasyprint.HTML(string=html).write_pdf(f.name)
+        return lembar, len(pypdfium2.PdfDocument(f.name))
+
+
+def test_TIAP_LEMBAR_muat_satu_halaman_A4(dbr):
+    """Lembar bertinggi tetap + `overflow: hidden` berarti isi yang tak muat
+    HILANG tanpa satu pun tanda di layar — tetapi saat dicetak ia mendorong
+    halaman tambahan. Jumlah lembar HTML yang tak sama dengan jumlah halaman
+    PDF adalah tanda pasti ada lembar yang meluber.
+
+    Uji ini merender sungguhan. Versi pertamanya hanya memeriksa keberadaan
+    `-webkit-line-clamp` di CSS, dan mutasi yang mencabut TINGGI TETAP kartu
+    (biang lubernya) lolos tanpa satu pun uji berbunyi: propertinya masih ada,
+    hanya tak lagi berefek."""
+    async def jalan():
+        # Nama kegiatan sengaja PANJANG dan panjangnya BERBEDA-BEDA: nama yang
+        # membungkus jadi dua baris membuat delapan kartu muat di satu halaman
+        # tetapi tidak di halaman lain. Nama seragam pendek tak akan pernah
+        # memicunya.
+        keg = []
+        for i in range(1, 21):
+            k = _keg(i, ((i - 1) % 12) + 1)
+            # Panjang field yang REALISTIS. Fixture dengan nomor surat "S-1"
+            # dan nama kegiatan pendek tak pernah membuat kartunya membungkus,
+            # sehingga mutasi yang mencabut tinggi tetap lolos begitu saja.
+            k["nama_kegiatan"] = (
+                f"Inventarisasi Barang Milik Negara pada Wilayah Kerja "
+                f"Nomor {i} Tahun Anggaran 2025" + (" Lanjutan" * (i % 3)))
+            k["nomor_surat"] = f"S-{100 + i}/KPB.401234/{2025}"
+            k["penanggung_jawab"] = (
+                f"Pejabat Penanggung Jawab Kegiatan Inventarisasi {i}")
+            k["nama_satker"] = "Balai Pengelolaan BMN Ibu Kota Nusantara"
+            # Lencana "Disahkan" lebih lebar dari "Berjalan" dan tak boleh
+            # menyusut, sehingga ia MENYEMPITKAN kolom nama dan menambah baris
+            # bungkusnya. Fixture yang seluruhnya belum disahkan tak pernah
+            # menemui kartu paling tinggi.
+            k["disahkan"] = (i % 3 == 0)
+            keg.append(k)
+        aset = []
+        for i in range(1, 21):
+            batch = _aset(f"k{i}", 14 + i, ditemukan=(14 + i) // 2)
+            # Sebagian "Tidak Ditemukan" supaya KELIMA chip angka muncul di
+            # kartunya. Dengan empat chip barisnya cukup satu baris dan
+            # kartunya tak pernah melebar — fixture seperti itu tak akan
+            # pernah menyentuh batas halamannya.
+            for a in batch[::4]:
+                a["inventory_status"] = "Tidak Ditemukan"
+            aset += batch
+        await _seed(dbr, keg, aset)
+        d = await rp._build_satker_report_v2("k1")
+        lembar, halaman = _render_pdf(d)
+        assert lembar == halaman, (
+            f"{lembar} lembar HTML menjadi {halaman} halaman PDF — "
+            "ada lembar yang meluber dan isinya terpotong")
+        assert lembar > 8, "data ujinya terlalu kecil untuk menguji paginasi"
+    _jalan(jalan())
