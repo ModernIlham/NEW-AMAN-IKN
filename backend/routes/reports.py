@@ -6281,6 +6281,20 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
         if e: es1_vals[e] = es1_vals.get(e, 0) + sp(a)
     chart_eselon1 = [{"name": e[:25], "count": cnt, "pct": pct(cnt, tc), "val_fmt": fmt(es1_vals.get(e, 0))} for e, cnt in es1_counter.most_common(10)]
 
+    # Eselon II — permintaan pemilik: analisis data juga perlu memecah sampai
+    # eselon II, bukan berhenti di eselon I. Satu Eselon I biasanya membawahi
+    # beberapa Eselon II, jadi grafik yang berhenti di Eselon I menyembunyikan
+    # justru unit yang bertanggung jawab atas barangnya.
+    es2_counter = Counter(a.get("eselon2", "") for a in all_assets if a.get("eselon2"))
+    es2_vals = {}
+    for a in all_assets:
+        e = a.get("eselon2", "")
+        if e:
+            es2_vals[e] = es2_vals.get(e, 0) + sp(a)
+    chart_eselon2 = [{"name": e[:25], "count": cnt, "pct": pct(cnt, tc),
+                      "val_fmt": fmt(es2_vals.get(e, 0))}
+                     for e, cnt in es2_counter.most_common(10)]
+
     # Per kegiatan chart
     act_counter = Counter(a.get("activity_id", "") for a in all_assets)
     act_vals = {}
@@ -6656,6 +6670,54 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
                        activity_id, exc_info=True)
         kop = {}
 
+    # ── SIMPULAN PER KEGIATAN ───────────────────────────────────────────
+    #
+    # Permintaan pemilik: *"simpulan juga tidak spesifik terorganisasir dengan
+    # baik per kegiatannya."*
+    #
+    # Simpulan lama hanya berbicara pada tingkat SATKER: "dari 1.240 NUP, 62%
+    # ditemukan". Pada satker dengan enam kegiatan, kalimat itu benar tetapi
+    # tak dapat ditindaklanjuti — ia tak memberi tahu kegiatan MANA yang
+    # tertinggal, dan pembacanya harus membalik halaman untuk mencarinya
+    # sendiri. Simpulan yang tak menunjuk tak menutup apa pun.
+    #
+    # Tiap kegiatan karenanya membawa satu blok simpulannya sendiri: capaian,
+    # apa yang menahannya, dan status pengesahannya. Urutannya menurut capaian
+    # TERENDAH lebih dulu — yang paling perlu perhatian dibaca lebih dulu,
+    # bukan terkubur di bawah kegiatan yang sudah tuntas.
+    simpulan_kegiatan = []
+    for k in kegiatan_list:
+        n = k["count"]
+        if n <= 0:
+            catatan = "Belum ada BMN tercatat pada kegiatan ini."
+            warna, nada = "#94a3b8", "kosong"
+        else:
+            bagian = [f"<strong>{k['ditemukan']} dari {n} NUP</strong> "
+                      f"ditemukan (<strong>{k['pct']}%</strong>)"]
+            if k["tidak"]:
+                bagian.append(f"<strong>{k['tidak']} NUP</strong> tidak ditemukan")
+            if k["belum"]:
+                bagian.append(f"<strong>{k['belum']} NUP</strong> belum diperiksa")
+            catatan = "; ".join(bagian) + "."
+            if k["pct"] >= 90 and not k["belum"]:
+                warna, nada = "#059669", "tuntas"
+            elif k["pct"] >= 60:
+                warna, nada = "#d97706", "berjalan"
+            else:
+                warna, nada = "#dc2626", "tertinggal"
+        # Pengesahan disebut apa adanya: kegiatan dengan capaian 100% yang
+        # belum disahkan BELUM selesai secara administratif, dan simpulan yang
+        # diam soal itu menyatakan selesai lebih awal dari kenyataannya.
+        simpulan_kegiatan.append({
+            "nama": k["nama_kegiatan"], "nomor": k["nomor_surat"],
+            "periode": k["periode"], "pj": k["pj"],
+            "pct": k["pct"], "count": n, "value_fmt": k["value_fmt"],
+            "warna": warna, "nada": nada, "disahkan": k["disahkan"],
+            "sah": "sudah disahkan" if k["disahkan"] else "belum disahkan",
+            "teks": Markup(catatan),
+        })
+    simpulan_kegiatan.sort(key=lambda x: (x["pct"], -x["count"]))
+
     # Simpulan
     simpulan = []
     if tc > 0:
@@ -6697,12 +6759,14 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
         "kategori_lapangan": kategori_lapangan, "per_tahun": per_tahun,
         "chart_kondisi": chart_kondisi, "chart_status": chart_status,
         "chart_kategori": chart_kategori, "chart_lokasi": chart_lokasi,
-        "chart_eselon1": chart_eselon1, "chart_per_kegiatan": chart_per_kegiatan,
+        "chart_eselon1": chart_eselon1, "chart_eselon2": chart_eselon2,
+        "chart_per_kegiatan": chart_per_kegiatan,
         "assets": asset_rows, "dok_headers": dok_headers, "dok_rows": dok_rows,
         "dok_note": dok_note,
         "personil": personil,
         # Trusted server-built HTML → Markup so autoescape keeps the <strong> tags.
         "simpulan": [{**s, "text": Markup(s["text"])} for s in simpulan],
+        "simpulan_kegiatan": simpulan_kegiatan,
         "tim": [_member_dict(t) for act in satker_acts for t in (act.get("tim_peneliti", []) or [])],
         "tim_pendukung": [_member_dict(t) for act in satker_acts for t in (act.get("tim_pendukung", []) or [])],
         "tim_inti": [_member_dict(t) for act in satker_acts for t in (act.get("tim_inti", []) or [])],

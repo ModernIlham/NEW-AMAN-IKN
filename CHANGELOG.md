@@ -18,6 +18,84 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#986] Chart tak lagi gepeng, Eselon II masuk, simpulan menunjuk kegiatan — 2026-09-04
+
+Tiga permintaan pemilik atas laporan gabungan satker.
+
+### Grafik tak lagi gepeng
+
+Linimasa bulanan setinggi **118px** memuat dua belas batang; grafik tahun
+perolehan **112px** memuat sepuluh. Pada lembar setinggi 1123px selisih antara
+6 dan 21 nyaris tak terbaca, dan angkanya terjepit di 7px.
+
+Tingginya kini **300px** dan **250px**, dengan angka di batang 9px, total di
+atas batang 10px, dan label sumbu 8,5–9px. Ambang minimumnya dijaga uji supaya
+ia tak diam-diam mengecil lagi.
+
+### Grafik per Eselon II
+
+Satu Eselon I biasanya membawahi beberapa Eselon II. Grafik yang berhenti di
+Eselon I menyembunyikan justru unit yang **bertanggung jawab atas barangnya**.
+
+Panel Eselon II kini berdampingan dengan Eselon I di Analisis Data. Bila belum
+ada aset yang mencantumkannya, panelnya **menjelaskan dirinya** — panel kosong
+tanpa keterangan terbaca sebagai "sistemnya rusak", padahal yang benar adalah
+datanya memang belum diisi, dan itu bisa ditindaklanjuti.
+
+### Simpulan menunjuk kegiatan
+
+Simpulan lama hanya berbicara pada tingkat satker: *"dari 1.240 NUP, 62%
+ditemukan"*. Pada satker dengan enam kegiatan kalimat itu **benar tetapi tak
+dapat ditindaklanjuti** — ia tak memberi tahu kegiatan MANA yang tertinggal,
+dan pembacanya harus membalik halaman untuk mencarinya sendiri.
+
+Tiap kegiatan kini membawa blok simpulannya sendiri: capaian, apa yang
+menahannya, dan status pengesahannya — **terurut dari capaian terendah**,
+supaya yang paling perlu perhatian dibaca lebih dulu, bukan terkubur di bawah
+kegiatan yang sudah tuntas.
+
+Pengesahan disebut apa adanya: kegiatan bercapaian 100% yang **belum disahkan**
+belum selesai secara administratif, dan simpulan yang diam soal itu menyatakan
+selesai lebih awal dari kenyataannya.
+
+### Dua lembar yang selama ini meluber
+
+Ditemukan saat memverifikasi: pada 20 kegiatan, **12 lembar HTML menjadi 14
+halaman PDF**. Lembarnya bertinggi tetap dengan `overflow: hidden`, jadi isi
+yang tak muat **hilang tanpa satu pun tanda di layar** — hanya kertasnya yang
+membocorkannya.
+
+Sebabnya tinggi kartu yang mengikuti isi: nama kegiatan panjang membungkus jadi
+tiga baris, dan lencana "Disahkan" yang lebih lebar dari "Berjalan"
+menyempitkan kolom nama sehingga bungkusnya bertambah lagi. Delapan kartu lalu
+muat di satu halaman tetapi tidak di halaman lain.
+
+Tinggi nama kini **dikunci dua baris**, dan halaman Simpulan ikut dipaginasi.
+Diverifikasi dengan render sungguhan pada 1, 9, 20, dan 34 kegiatan: lembar
+HTML **sama dengan** halaman PDF di keempatnya.
+
+### Uji mutasi — empat dipasang, empat dibunuh
+
+| Mutasi | Dibunuh oleh |
+|---|---|
+| Linimasa kembali 118px | `test_grafik_linimasa_dan_tahun_tak_lagi_gepeng` |
+| Urutan simpulan dibalik (yang tuntas dulu) | `test_simpulan_MENUNJUK_kegiatan_dan_yang_tertinggal_dibaca_lebih_dulu` |
+| Grafik Eselon II selalu kosong | `test_grafik_per_eselon_II_ada_di_analisis_data` |
+| Tinggi kartu kegiatan kembali mengikuti isi | `test_lembar_simpulan_dipaginasi_agar_tak_terpotong_diam_diam` |
+
+Mutasi keempat **lolos dari tiga fixture render berturut-turut** sebelum
+pemeriksaan strukturalnya ditambahkan: uji render hanya dapat membuktikan
+"data INI muat", sedangkan yang harus dijamin adalah "data apa pun muat".
+Catatan itu ditulis di dalam ujinya.
+
+### Berkas
+
+- `backend/routes/reports.py` — `chart_eselon2`, `simpulan_kegiatan`
+- `backend/templates/laporan_satker_v2.html` — tinggi chart, panel Eselon II, blok simpulan per kegiatan + paginasinya, tinggi kartu dikunci
+- `backend/tests/unit/test_laporan_gabungan_satker.py` — 6 uji baru termasuk render PDF sungguhan
+
+---
+
 ## [#985] Memilih kegiatan kini menyempitkan pilihan filter lainnya — 2026-09-04
 
 Permintaan pemilik: *"ketika kegiatan dipilih maka dapat mempengaruhi data
