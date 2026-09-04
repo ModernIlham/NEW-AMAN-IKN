@@ -25,7 +25,17 @@
   --violet: #7c3aed;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: 'Georgia', 'Times New Roman', serif; font-size: 9.5pt; color: #1e293b; line-height: 1.6; background: #f1f5f9; }
+/* SATU keluarga huruf untuk seluruh dokumen. Versi sebelumnya memakai
+   Georgia (serif) untuk badan, sans-serif untuk label kecil, dan Courier
+   untuk kode — tiga rasa huruf dalam satu halaman, yang membuat laporan
+   terbaca seperti tempelan alih-alih satu naskah. Serif dipertahankan HANYA
+   pada sampul, tempat ia memang bekerja. */
+body { font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+       font-size: 9.5pt; color: #1e293b; line-height: 1.55; background: #f1f5f9;
+       -webkit-font-smoothing: antialiased; }
+/* Angka disejajarkan kolomnya: tabular-nums membuat digit sama lebar, jadi
+   angka bertumpuk berbaris rapi alih-alih bergoyang. */
+.num, .stat .num, td.r, .bar-val, .kpi-n, .lm-val { font-variant-numeric: tabular-nums; }
 .wrapper { max-width: 210mm; margin: 0 auto; background: #fff; box-shadow: 0 4px 40px rgba(0,0,0,0.1); }
 
 /* ===== TOOLBAR ===== */
@@ -58,97 +68,124 @@ body { font-family: 'Georgia', 'Times New Roman', serif; font-size: 9.5pt; color
 /* ===== SECTION ===== */
 .section { padding: 28px 36px; }
 .section-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #e2e8f0; }
-.section-num { width: 32px; height: 32px; border-radius: 6px; background: var(--navy); color: var(--gold); display: flex; align-items: center; justify-content: center; font-size: 12pt; font-weight: 700; flex-shrink: 0; font-family: 'Georgia', serif; }
+.section-num { width: 32px; height: 32px; border-radius: 6px; background: var(--navy); color: var(--gold); display: flex; align-items: center; justify-content: center; font-size: 12pt; font-weight: 700; flex-shrink: 0; }
 .section-title { font-size: 14pt; font-weight: 700; color: var(--navy); letter-spacing: 0.3px; }
 .section-desc { font-size: 8pt; color: #64748b; margin-top: 2px; }
 hr.gold { border: none; border-top: 1px solid #e2e8f0; margin: 0; }
 
 /* ===== INFO GRID ===== */
-.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
-.info-card { padding: 12px 14px; background: #fafbfc; border-radius: 6px; border-left: 3px solid var(--navy); }
-.info-card .lbl { font-size: 7pt; text-transform: uppercase; letter-spacing: 0.8px; color: #94a3b8; font-family: sans-serif; }
-.info-card .val { font-size: 9.5pt; font-weight: 700; color: var(--navy); margin-top: 1px; }
-.info-full { grid-column: 1 / -1; }
 
 /* ===== STAT CARDS ===== */
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 16px 0; }
 .stat { padding: 14px 10px; border-radius: 8px; text-align: center; position: relative; overflow: hidden; }
 .stat::before { content:''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: currentColor; opacity: 0.3; }
-.stat .num { font-size: 24pt; font-weight: 800; line-height: 1; font-family: 'Georgia', serif; }
-.stat .label { font-size: 7pt; text-transform: uppercase; letter-spacing: 0.8px; margin-top: 4px; opacity: 0.8; font-family: sans-serif; }
-.stat .sub { font-size: 7.5pt; margin-top: 2px; opacity: 0.6; font-family: sans-serif; }
+.stat .num { font-size: 24pt; font-weight: 800; line-height: 1; letter-spacing: -0.5px; }
+.stat .label { font-size: 7pt; text-transform: uppercase; letter-spacing: 0.8px; margin-top: 4px; opacity: 0.8; }
+.stat .sub { font-size: 7.5pt; margin-top: 2px; opacity: 0.6; }
 .s-blue { background: #eff6ff; color: #1e40af; }
 .s-green { background: #f0fdf4; color: #166534; }
 .s-red { background: #fef2f2; color: #991b1b; }
 .s-amber { background: #fffbeb; color: #92400e; }
-.s-violet { background: #f5f3ff; color: #5b21b6; }
 .s-slate { background: #f8fafc; color: #334155; }
+
+/* ===== LINIMASA (progres bulanan) ===== */
+.lm { border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px 16px 10px; }
+.lm-legend { display: flex; gap: 14px; justify-content: center; font-size: 7.5pt; color: #64748b; margin-bottom: 12px; }
+.lm-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.lm-plot { display: flex; align-items: flex-end; gap: 4px; height: 130px; }
+.lm-col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
+/* Batang bertumpuk: sisa (abu) di atas, ditemukan (hijau) di bawah — sama
+   dengan bentuk yang dipakai laporan rujukan, sehingga "berapa yang sudah"
+   terbaca dari tinggi hijaunya tanpa perlu membandingkan dua batang. */
+.lm-bar { display: flex; flex-direction: column; justify-content: flex-end; border-radius: 3px 3px 0 0; overflow: hidden; }
+.lm-sisa { background: #cbd5e1; }
+.lm-temu { background: var(--green); }
+.lm-val { font-size: 6.5pt; text-align: center; color: #fff; padding: 1px 0; font-weight: 700; }
+.lm-val.gelap { color: #475569; }
+.lm-kosong { height: 3px; background: #f1f5f9; border-radius: 2px; }
+.lm-x { display: flex; gap: 4px; margin-top: 5px; }
+.lm-x span { flex: 1; text-align: center; font-size: 6.5pt; color: #94a3b8; letter-spacing: 0.5px; }
+.lm-x span.aktif { color: var(--navy); font-weight: 700; }
+.lm-note { font-size: 7pt; color: #94a3b8; margin-top: 8px; line-height: 1.5; }
+
+/* ===== KARTU KATEGORI LAPANGAN ===== */
+.kat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0; }
+.kat { border-radius: 8px; padding: 14px 12px; text-align: center; border: 1px solid transparent; }
+.kat .kpi-n { font-size: 20pt; font-weight: 800; line-height: 1; letter-spacing: -0.5px; }
+.kat .kpi-l { font-size: 7.5pt; font-weight: 700; margin-top: 6px; line-height: 1.3; }
+.kat .kpi-s { font-size: 6.5pt; opacity: 0.75; margin-top: 2px; }
+.k-hijau { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
+.k-hijau-muda { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
+.k-kuning { background: #fefce8; color: #854d0e; border-color: #fde68a; }
+.k-merah { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+.k-jingga { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }
+.k-ungu { background: #f5f3ff; color: #5b21b6; border-color: #ddd6fe; }
+
+/* ===== KARTU KEGIATAN ===== */
+.keg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.keg { border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; break-inside: avoid; }
+.keg-head { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+.keg-idx { width: 22px; height: 22px; border-radius: 5px; background: var(--navy); color: var(--gold); font-size: 8pt; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.keg-nama { font-size: 8.5pt; font-weight: 700; color: var(--navy); line-height: 1.3; }
+.keg-meta { font-size: 6.5pt; color: #94a3b8; margin-top: 2px; }
+.keg-bar { height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; margin: 8px 0 6px; }
+.keg-bar i { display: block; height: 100%; background: var(--green); }
+.keg-angka { display: flex; gap: 10px; font-size: 7pt; color: #475569; flex-wrap: wrap; }
+.keg-angka b { color: var(--navy); font-variant-numeric: tabular-nums; }
+.keg-sah { font-size: 6pt; padding: 1px 5px; border-radius: 3px; background: #ecfdf5; color: #065f46; font-weight: 700; flex-shrink: 0; }
+.keg-sah.belum { background: #fefce8; color: #854d0e; }
+
+/* ===== BATANG PER TAHUN ===== */
+.th-plot { display: flex; align-items: flex-end; gap: 8px; height: 120px; }
+.th-col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
+.th-bar { display: flex; flex-direction: column; justify-content: flex-end; border-radius: 3px 3px 0 0; overflow: hidden; }
+.th-top { font-size: 7pt; font-weight: 700; color: var(--navy); text-align: center; margin-bottom: 3px; }
+.th-x { display: flex; gap: 8px; margin-top: 5px; }
+.th-x span { flex: 1; text-align: center; font-size: 7pt; color: #475569; font-weight: 600; }
 
 /* ===== CHARTS ===== */
 .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
 .chart-grid.full { grid-template-columns: 1fr; }
 .chart-panel { border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; }
-.chart-panel h4 { font-size: 8pt; font-weight: 700; color: var(--navy); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid #f1f5f9; font-family: sans-serif; }
-.bar-row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; font-size: 7.5pt; font-family: sans-serif; }
+.chart-panel h4 { font-size: 8pt; font-weight: 700; color: var(--navy); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid #f1f5f9; }
+.bar-row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; font-size: 7.5pt; }
 .bar-label { width: 90px; text-align: right; color: #64748b; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bar-track { flex: 1; height: 16px; background: #f1f5f9; border-radius: 3px; overflow: hidden; }
 .bar-fill { height: 100%; border-radius: 3px; display: flex; align-items: center; padding-left: 5px; font-size: 6.5pt; font-weight: 700; color: white; min-width: 24px; transition: width 0.3s; }
 .bar-val { width: 50px; text-align: right; font-weight: 600; color: #334155; flex-shrink: 0; }
 
 /* ===== TABLES ===== */
-.tbl { width: 100%; border-collapse: collapse; font-size: 7.5pt; margin: 12px 0; font-family: sans-serif; }
-.tbl th { background: var(--navy); color: var(--gold-light); padding: 7px 5px; text-align: left; font-weight: 600; font-size: 6.5pt; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
 .tbl td { padding: 5px; border-bottom: 1px solid #eef2f7; vertical-align: top; }
 .tbl tr:nth-child(even) { background: #fafbfc; }
 .tbl tr:hover { background: #f0f4ff; }
-.tbl tfoot td { background: #f8fafc; font-weight: 700; border-top: 2px solid var(--navy); }
 td.c { text-align: center; }
 td.r { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ===== BADGES ===== */
-.b { display: inline-block; padding: 1px 5px; border-radius: 3px; font-size: 6.5pt; font-weight: 600; font-family: sans-serif; }
-.b-ok { background: #dcfce7; color: #166534; }
-.b-rr { background: #fef3c7; color: #92400e; }
-.b-rb { background: #fee2e2; color: #991b1b; }
-.b-found { background: #dbeafe; color: #1e40af; }
-.b-miss { background: #fee2e2; color: #991b1b; }
-.b-extra { background: #fef3c7; color: #92400e; }
-.b-dispute { background: #ede9fe; color: #5b21b6; }
-.b-pending { background: #f1f5f9; color: #475569; }
 
 /* ===== KEGIATAN TABLE ===== */
-.kegiatan-tbl { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 8.5pt; }
-.kegiatan-tbl th, .kegiatan-tbl td { padding: 10px 12px; border: 1px solid #e2e8f0; text-align: left; }
-.kegiatan-tbl th { background: var(--navy); color: var(--gold-light); font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.5px; font-family: sans-serif; }
-.kegiatan-tbl td { font-family: sans-serif; }
 
 /* ===== ESELON ===== */
 .eselon-tbl { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 8.5pt; }
-.eselon-tbl th, .eselon-tbl td { padding: 8px 12px; border: 1px solid #e2e8f0; text-align: left; font-family: sans-serif; }
+.eselon-tbl th, .eselon-tbl td { padding: 8px 12px; border: 1px solid #e2e8f0; text-align: left; }
 .eselon-tbl th { background: #f1f5f9; font-weight: 700; color: var(--navy); font-size: 7.5pt; text-transform: uppercase; }
 .eselon-tbl .es1-row td { background: #eff6ff; font-weight: 600; color: #1e40af; }
 .eselon-tbl .es2-row td { padding-left: 28px; color: #475569; }
 
 /* ===== PERSONIL ===== */
-.personil-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin: 16px 0; }
 .personil-card { padding: 14px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fafbfc; text-align: center; }
-.personil-card .role { font-size: 7pt; text-transform: uppercase; letter-spacing: 1px; color: var(--gold-dark); font-weight: 600; margin-bottom: 4px; font-family: sans-serif; }
+.personil-card .role { font-size: 7pt; text-transform: uppercase; letter-spacing: 1px; color: var(--gold-dark); font-weight: 600; margin-bottom: 4px; }
 .personil-card .name { font-size: 9.5pt; font-weight: 700; color: var(--navy); }
-.personil-card .nip { font-size: 7.5pt; color: #64748b; font-family: sans-serif; }
+.personil-card .nip { font-size: 7.5pt; color: #64748b; }
 .personil-card.primary { border-color: var(--gold); background: linear-gradient(135deg, #fefce8 0%, #fff 100%); }
 .personil-card.primary .role { color: var(--navy); }
 
 /* ===== DOK ===== */
-.dok-tbl { width: 100%; border-collapse: collapse; font-size: 7pt; margin: 12px 0; font-family: sans-serif; }
-.dok-tbl th, .dok-tbl td { padding: 4px 5px; border: 1px solid #e2e8f0; }
-.dok-tbl th { background: #f1f5f9; font-weight: 700; color: #334155; font-size: 6.5pt; text-transform: uppercase; }
-.chk { color: var(--green); font-weight: 700; }
-.uchk { color: var(--red); opacity: 0.5; }
 
 /* ===== VALUE BOX ===== */
 .value-highlight { padding: 20px; background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%); border-radius: 10px; text-align: center; margin: 16px 0; color: white; }
-.value-highlight .big { font-size: 28pt; font-weight: 800; color: var(--gold); font-family: 'Georgia', serif; }
-.value-highlight .txt { font-size: 8pt; letter-spacing: 2px; text-transform: uppercase; color: rgba(255,255,255,0.6); margin-top: 4px; font-family: sans-serif; }
+.value-highlight .big { font-size: 28pt; font-weight: 800; color: var(--gold); letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+.value-highlight .txt { font-size: 8pt; letter-spacing: 2px; text-transform: uppercase; color: rgba(255,255,255,0.6); margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -196,33 +233,103 @@ td.r { text-align: right; font-variant-numeric: tabular-nums; }
   <div class="cover-footer">Dicetak {{ tanggal_cetak }}</div>
 </div>
 
-<!-- ===== 1. DAFTAR KEGIATAN ===== -->
+<!-- ===== 1. RINGKASAN EKSEKUTIF ===== -->
 <div class="section page-break">
   <div class="section-header">
     {% set sec.n = sec.n + 1 %}<div class="section-num">{{ sec.n }}</div>
-    <div><div class="section-title">Daftar Kegiatan Inventarisasi</div>
-    <div class="section-desc">Seluruh kegiatan inventarisasi yang terdaftar pada satker {{ kode_satker }}</div></div>
+    <div><div class="section-title">Ringkasan Eksekutif</div>
+    <div class="section-desc">Gabungan {{ total_kegiatan }} kegiatan inventarisasi pada satker {{ kode_satker }}</div></div>
   </div>
-  <table class="kegiatan-tbl">
-    <thead><tr><th style="width:30px">No</th><th>Nomor Surat</th><th>Nama Kegiatan</th><th>Periode</th><th>Penanggung Jawab</th><th style="text-align:right">Jumlah NUP</th><th style="text-align:right">Nilai (Rp)</th></tr></thead>
-    <tbody>
-      {% for k in kegiatan_list %}
-      <tr>
-        <td style="text-align:center">{{ loop.index }}</td>
-        <td style="font-family:monospace;font-size:8pt;">{{ k.nomor_surat }}</td>
-        <td>{{ k.nama_kegiatan }}</td>
-        <td>{{ k.periode }}</td>
-        <td>{{ k.pj }}</td>
-        <td style="text-align:right;font-weight:600;">{{ k.count }}</td>
-        <td style="text-align:right;font-weight:600;">{{ k.value_fmt }}</td>
-      </tr>
+
+  <div class="value-highlight">
+    <div class="big">Rp {{ total_value_fmt }}</div>
+    <div class="txt">Total Nilai {{ total_count }} NUP Barang Milik Negara</div>
+  </div>
+
+  <div class="stats">
+    <div class="stat s-blue"><div class="num">{{ total_count }}</div><div class="label">BMN Tercatat</div><div class="sub">{{ total_kegiatan }} kegiatan</div></div>
+    <div class="stat s-green"><div class="num">{{ cnt_ditemukan }}</div><div class="label">BMN Ditemukan</div><div class="sub">{{ pct_ditemukan }}%</div></div>
+    <div class="stat s-slate"><div class="num">{{ cnt_belum }}</div><div class="label">Belum Diinventarisasi</div><div class="sub">{{ pct_belum }}%</div></div>
+    <div class="stat s-green"><div class="num">{{ stiker_pct }}%</div><div class="label">Stiker Terpasang</div><div class="sub">{{ stiker_terpasang }}/{{ total_count }}</div></div>
+  </div>
+
+  <!-- ── LINIMASA ──
+       Bentuk yang diminta pemilik: perkembangan bulanan, bukan sekadar
+       angka akhir. Sumbernya PERIODE KEGIATAN, dan itu dinyatakan di
+       bawahnya — aset tak menyimpan kapan ia diinventarisasi, jadi
+       linimasa yang mengaku per-aset akan mengarang ketelitian. -->
+  {% if linimasa_ada %}
+  <h4 style="font-size:8pt;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:1px;margin:18px 0 10px;">
+    Progres Inventarisasi {{ tahun_linimasa }}</h4>
+  <div class="lm">
+    <div class="lm-legend">
+      <span><i style="background:var(--green)"></i>BMN Ditemukan</span>
+      <span><i style="background:#cbd5e1"></i>Belum / Sisa</span>
+    </div>
+    <div class="lm-plot">
+      {% for b in linimasa %}
+      <div class="lm-col">
+        {% if b.tercatat %}
+        <div class="lm-bar" style="height:{{ b.h_tercatat }}%">
+          <div class="lm-sisa" style="flex:{{ b.sisa }} 0 auto;min-height:0;">
+            {% if b.sisa %}<div class="lm-val gelap">{{ b.sisa }}</div>{% endif %}
+          </div>
+          <div class="lm-temu" style="flex:{{ b.ditemukan }} 0 auto;min-height:0;">
+            {% if b.ditemukan %}<div class="lm-val">{{ b.ditemukan }}</div>{% endif %}
+          </div>
+        </div>
+        {% else %}<div class="lm-kosong"></div>{% endif %}
+      </div>
       {% endfor %}
-    </tbody>
-  </table>
+    </div>
+    <div class="lm-x">
+      {% for b in linimasa %}<span class="{% if b.mulai %}aktif{% endif %}">{{ b.bulan }}</span>{% endfor %}
+    </div>
+    <p class="lm-note">
+      Angka bersifat <strong>kumulatif</strong>. Setiap kegiatan dihitung pada bulan kegiatan itu
+      <strong>dimulai</strong> — bukan per tanggal pemeriksaan tiap barang, sebab tanggal itu tidak
+      direkam per aset. Bulan bertanda tebal adalah bulan dimulainya kegiatan.
+    </p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- ===== 2. PER KEGIATAN ===== -->
+<div class="section page-break">
+  <div class="section-header">
+    {% set sec.n = sec.n + 1 %}<div class="section-num">{{ sec.n }}</div>
+    <div><div class="section-title">Capaian per Kegiatan</div>
+    <div class="section-desc">Setiap kegiatan dengan capaiannya sendiri — rincian barang ada di laporan masing-masing kegiatan</div></div>
+  </div>
+
+  <div class="keg-grid">
+    {% for k in kegiatan_list %}
+    <div class="keg">
+      <div class="keg-head">
+        <div class="keg-idx">{{ loop.index }}</div>
+        <div style="min-width:0;flex:1;">
+          <div class="keg-nama">{{ k.nama_kegiatan }}</div>
+          <div class="keg-meta">{{ k.nomor_surat }} &middot; {{ k.periode }}</div>
+          <div class="keg-meta">PJ: {{ k.pj }}</div>
+        </div>
+        <span class="keg-sah {% if not k.disahkan %}belum{% endif %}">
+          {% if k.disahkan %}Disahkan{% else %}Berjalan{% endif %}</span>
+      </div>
+      <div class="keg-bar"><i style="width:{{ k.pct }}%"></i></div>
+      <div class="keg-angka">
+        <span><b>{{ k.count }}</b> tercatat</span>
+        <span><b>{{ k.ditemukan }}</b> ditemukan ({{ k.pct }}%)</span>
+        {% if k.tidak %}<span><b>{{ k.tidak }}</b> tak ditemukan</span>{% endif %}
+        {% if k.belum %}<span><b>{{ k.belum }}</b> belum</span>{% endif %}
+        <span>Rp <b>{{ k.value_fmt }}</b></span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
 
   {% if eselon_list %}
-  <div style="margin-top: 20px;">
-    <h4 style="font-size: 9pt; font-weight: 700; color: var(--navy); margin-bottom: 8px;">Struktur Organisasi Eselon</h4>
+  <div style="margin-top: 18px;">
+    <h4 style="font-size: 8pt; font-weight: 700; color: var(--navy); text-transform:uppercase; letter-spacing:1px; margin-bottom: 8px;">Struktur Organisasi Eselon</h4>
     <table class="eselon-tbl">
       <thead><tr><th style="width:30px">No</th><th>Eselon I</th><th>Eselon II</th></tr></thead>
       <tbody>
@@ -239,31 +346,60 @@ td.r { text-align: right; font-variant-numeric: tabular-nums; }
   {% endif %}
 </div>
 
-<!-- ===== 2. RINGKASAN ===== -->
+<!-- ===== 3. KATEGORI DI LAPANGAN ===== -->
 <div class="section page-break">
   <div class="section-header">
     {% set sec.n = sec.n + 1 %}<div class="section-num">{{ sec.n }}</div>
-    <div><div class="section-title">Ringkasan Inventarisasi</div>
-    <div class="section-desc">Rangkuman hasil inventarisasi gabungan seluruh kegiatan</div></div>
+    <div><div class="section-title">Kategori Hasil di Lapangan</div>
+    <div class="section-desc">Pengelompokan seluruh {{ total_count }} NUP menurut temuan pemeriksaan fisik</div></div>
   </div>
 
-  <div class="value-highlight">
-    <div class="big">Rp {{ total_value_fmt }}</div>
-    <div class="txt">Total Nilai {{ total_count }} NUP Barang Milik Negara</div>
+  <div class="kat-grid">
+    {% for k in kategori_lapangan %}
+    <div class="kat {{ k.kelas }}">
+      <div class="kpi-n">{{ k.n }}</div>
+      <div class="kpi-l">{{ k.label }}</div>
+      <div class="kpi-s">{{ k.sub }}</div>
+    </div>
+    {% endfor %}
   </div>
 
-  <div class="stats">
-    <div class="stat s-blue"><div class="num">{{ total_count }}</div><div class="label">Total NUP</div><div class="sub">{{ total_kegiatan }} kegiatan</div></div>
-    <div class="stat s-green"><div class="num">{{ cnt_ditemukan }}</div><div class="label">Ditemukan</div><div class="sub">{{ pct_ditemukan }}%</div></div>
+  <div class="stats" style="grid-template-columns:repeat(3,1fr);">
     <div class="stat s-red"><div class="num">{{ cnt_tidak }}</div><div class="label">Tidak Ditemukan</div><div class="sub">{{ pct_tidak }}%</div></div>
     <div class="stat s-amber"><div class="num">{{ cnt_berlebih }}</div><div class="label">Berlebih</div><div class="sub">{{ pct_berlebih }}%</div></div>
+    <div class="stat s-blue"><div class="num">{{ dok_pct }}%</div><div class="label">Kelengkapan Dokumen</div><div class="sub">Rata-rata</div></div>
   </div>
-  <div class="stats">
-    <div class="stat s-violet"><div class="num">{{ cnt_sengketa }}</div><div class="label">Sengketa</div><div class="sub">{{ pct_sengketa }}%</div></div>
-    <div class="stat s-slate"><div class="num">{{ cnt_belum }}</div><div class="label">Belum Inventarisasi</div><div class="sub">{{ pct_belum }}%</div></div>
-    <div class="stat s-green"><div class="num">{{ stiker_pct }}%</div><div class="label">Stiker Terpasang</div><div class="sub">{{ stiker_terpasang }}/{{ cnt_ditemukan }}</div></div>
-    <div class="stat s-blue"><div class="num">{{ dok_pct }}%</div><div class="label">Kelengkapan Dok</div><div class="sub">Rata-rata</div></div>
+
+  <!-- ── PER TAHUN PEROLEHAN ──
+       Menjawab pertanyaan yang tak terjawab oleh angka gabungan: perolehan
+       tahun mana yang paling banyak belum ketemu. -->
+  {% if per_tahun %}
+  <h4 style="font-size:8pt;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:1px;margin:18px 0 10px;">
+    BMN Tercatat dan Ditemukan per Tahun Perolehan</h4>
+  <div class="lm">
+    <div class="lm-legend">
+      <span><i style="background:var(--green)"></i>Ditemukan</span>
+      <span><i style="background:#cbd5e1"></i>Belum Ditemukan</span>
+    </div>
+    <div class="th-plot">
+      {% for t in per_tahun %}
+      <div class="th-col">
+        <div class="th-top">{{ t.tercatat }}</div>
+        <div class="th-bar" style="height:{{ t.h_tercatat }}%">
+          <div class="lm-sisa" style="flex:{{ t.sisa }} 0 auto;min-height:0;">
+            {% if t.sisa %}<div class="lm-val gelap">{{ t.sisa }}</div>{% endif %}
+          </div>
+          <div class="lm-temu" style="flex:{{ t.ditemukan }} 0 auto;min-height:0;">
+            {% if t.ditemukan %}<div class="lm-val">{{ t.ditemukan }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="th-x">{% for t in per_tahun %}<span>{{ t.tahun }}</span>{% endfor %}</div>
+    <p class="lm-note">Sepuluh tahun perolehan terbaru. Aset tanpa tanggal perolehan tidak ikut dihitung di sini.</p>
   </div>
+  {% endif %}
 </div>
 
 <!-- ===== 3. ANALISIS ===== -->
@@ -315,86 +451,18 @@ td.r { text-align: right; font-variant-numeric: tabular-nums; }
   </div>
   {% endif %}
 
-  {% if chart_per_kegiatan %}
-  <div class="chart-grid full">
-    <div class="chart-panel">
-      <h4>Per Kegiatan</h4>
-      {% for c in chart_per_kegiatan %}
-      <div class="bar-row"><div class="bar-label" title="{{ c.name }}">{{ c.name }}</div><div class="bar-track"><div class="bar-fill" style="width:{{ c.pct }}%;background:#0ea5e9">{{ c.count }}</div></div><div class="bar-val">{{ c.val_fmt }}</div></div>
-      {% endfor %}
-    </div>
-  </div>
-  {% endif %}
 </div>
 
-<!-- ===== 4. DAFTAR ASET ===== -->
-<div class="section page-break">
-  <div class="section-header">
-    {% set sec.n = sec.n + 1 %}<div class="section-num">{{ sec.n }}</div>
-    <div><div class="section-title">Daftar Aset ({{ total_count }} NUP)</div>
-    <div class="section-desc">Rincian seluruh barang milik negara pada satker {{ kode_satker }}</div></div>
-  </div>
-  <table class="tbl">
-    <thead>
-      <tr>
-        <th>No</th><th>Kode / NUP</th><th>Nama Barang</th><th>Kategori</th>
-        <th>Merk/Model</th><th>Eselon I/II</th><th>Lokasi</th>
-        <th>Thn</th><th style="text-align:right">Nilai (Rp)</th><th>Kondisi</th><th>Status</th><th>Stiker</th><th>Kegiatan</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for a in assets %}
-      <tr>
-        <td class="c">{{ loop.index }}</td>
-        <td style="font-size:6.5pt;font-family:monospace;">{{ a.asset_code }}<br><strong>{{ a.nup }}</strong></td>
-        <td>{{ a.asset_name }}</td>
-        <td>{{ a.category }}</td>
-        <td>{{ a.brand_model }}</td>
-        <td style="font-size:6.5pt;">{{ a.eselon1 }}{% if a.eselon2 %}<br>{{ a.eselon2 }}{% endif %}</td>
-        <td>{{ a.location }}</td>
-        <td class="c">{{ a.year }}</td>
-        <td class="r">{{ a.value_fmt }}</td>
-        <td>{% if a.cond_badge %}<span class="b {{ a.cond_cls }}">{{ a.cond_badge }}</span>{% endif %}</td>
-        <td><span class="b {{ a.stat_cls }}">{{ a.stat_badge }}</span></td>
-        <td style="font-size:6.5pt;">{{ a.stiker }}</td>
-        <td style="font-size:6.5pt;">{{ a.kegiatan_nama }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-    <tfoot>
-      <tr><td colspan="8" class="r" style="padding:8px;">TOTAL NILAI</td><td class="r" style="padding:8px;">{{ total_value_fmt }}</td><td colspan="4"></td></tr>
-    </tfoot>
-  </table>
-</div>
+<!-- Bagian "Daftar Aset" dan "Kelengkapan Dokumen per Aset" SENGAJA
+     DIHAPUS dari laporan gabungan (permintaan pemilik: "tidak perlu detail
+     sampai ke barang karena itu tugasnya nanti di dalam masing-masing
+     kegiatan").
 
-<!-- ===== 5. KELENGKAPAN DOKUMEN ===== -->
-{% if dok_rows %}
-<div class="section page-break">
-  <div class="section-header">
-    {% set sec.n = sec.n + 1 %}<div class="section-num">{{ sec.n }}</div>
-    <div><div class="section-title">Kelengkapan Dokumen & Peralatan</div>
-    <div class="section-desc">Status kelengkapan dokumen per aset{% if dok_note %} ({{ dok_note }}){% endif %}</div></div>
-  </div>
-  <table class="dok-tbl">
-    <thead>
-      <tr><th style="width:25px">No</th><th>Kode / Nama</th>
-      {% for h in dok_headers %}<th style="text-align:center;width:50px;">{{ h }}</th>{% endfor %}
-      <th style="text-align:center">Skor</th></tr>
-    </thead>
-    <tbody>
-      {% for d in dok_rows %}
-      <tr>
-        <td class="c">{{ loop.index }}</td>
-        <td style="font-size:6.5pt;">{{ d.code }}<br>{{ d.name }}</td>
-        {% for v in d.checks %}<td class="c">{% if v %}<span class="chk">&#10003;</span>{% else %}<span class="uchk">&#10007;</span>{% endif %}</td>{% endfor %}
-        <td class="c" style="font-weight:600;">{{ d.score }}/{{ d.total }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-{% endif %}
-
+     Keduanya mencetak satu baris per NUP untuk SELURUH satker — pada satker
+     dengan ribuan NUP itu menenggelamkan ringkasannya di antara puluhan
+     halaman tabel, dan mengulang isi yang sudah ada di LHI/DBHI per kegiatan.
+     Rinciannya tetap tersedia di sana; di sini yang dibutuhkan adalah
+     gambaran gabungan. -->
 <!-- ===== 6. PERSONIL ===== -->
 <div class="section page-break">
   <div class="section-header">
@@ -405,7 +473,7 @@ td.r { text-align: right; font-variant-numeric: tabular-nums; }
 
   {% for p in personil %}
   {% if p.is_header %}
-  <h4 style="font-size:8pt;font-weight:700;color:var(--navy);margin:16px 0 8px;padding-bottom:4px;border-bottom:1px solid #e2e8f0;text-transform:uppercase;letter-spacing:1px;font-family:sans-serif;">{{ p.section }}</h4>
+  <h4 style="font-size:8pt;font-weight:700;color:var(--navy);margin:16px 0 8px;padding-bottom:4px;border-bottom:1px solid #e2e8f0;text-transform:uppercase;letter-spacing:1px;">{{ p.section }}</h4>
   {% else %}
   <div style="display:inline-block;width:48%;vertical-align:top;margin-bottom:8px;">
     <div class="personil-card {{ 'primary' if p.primary else '' }}">
@@ -432,7 +500,7 @@ td.r { text-align: right; font-variant-numeric: tabular-nums; }
   {% endif %}
 
   {% for s in simpulan %}
-  <div style="padding:8px 14px;margin-bottom:6px;border-left:3px solid {{ s.color }};background:#fafbfc;font-size:8.5pt;border-radius:0 6px 6px 0;font-family:sans-serif;">{{ s.text }}</div>
+  <div style="padding:8px 14px;margin-bottom:6px;border-left:3px solid {{ s.color }};background:#fafbfc;font-size:8.5pt;border-radius:0 6px 6px 0;">{{ s.text }}</div>
   {% endfor %}
 </div>
 

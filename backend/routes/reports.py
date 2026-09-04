@@ -6334,14 +6334,130 @@ async def _build_satker_report_v2(activity_id: str):
     for act in satker_acts:
         aid = act.get("id", "")
         act_assets = [a for a in all_assets if a.get("activity_id") == aid]
+        # Tiap kegiatan membawa statistiknya SENDIRI. Sebelumnya baris tabel
+        # ini hanya memuat jumlah dan nilai, sedangkan capaiannya terkubur
+        # sebagai satu batang di antara lima grafik lain — sehingga "bagaimana
+        # kegiatan ini berjalan" tak terjawab di tempat kegiatan itu disebut.
+        n_act = len(act_assets)
+        n_temu = sum(1 for a in act_assets
+                     if a.get("inventory_status") == "Ditemukan")
+        n_tidak = sum(1 for a in act_assets
+                      if a.get("inventory_status") == "Tidak Ditemukan")
+        n_belum = sum(1 for a in act_assets
+                      if (a.get("inventory_status") or "Belum Diinventarisasi")
+                      == "Belum Diinventarisasi")
         kegiatan_list.append({
             "nomor_surat": act.get("nomor_surat", "-"),
             "nama_kegiatan": act.get("nama_kegiatan", "-"),
             "periode": f"{_fmt_tanggal_id(act.get('tanggal_mulai')) or '-'} s/d {_fmt_tanggal_id(act.get('tanggal_selesai')) or '-'}",
             "pj": act.get("penanggung_jawab") or "-",
-            "count": len(act_assets),
+            "count": n_act,
             "value_fmt": fmt(sum(sp(a) for a in act_assets)),
+            "ditemukan": n_temu, "tidak": n_tidak, "belum": n_belum,
+            "pct": pct(n_temu, n_act),
+            "status": (act.get("status") or "").strip() or "—",
+            "disahkan": bool(act.get("disahkan") or act.get("tanggal_pengesahan")),
         })
+
+    # ── LINIMASA BULANAN ────────────────────────────────────────────────
+    #
+    # Permintaan pemilik: laporan gabungan harus punya linimasa seperti grafik
+    # "PROGRES INVENTARISASI" — batang bulanan yang menunjukkan perkembangan.
+    #
+    # PENTING, dan dinyatakan terang di laporannya: aset TIDAK menyimpan kapan
+    # ia diinventarisasi. `updated_at` ter-cap pada SETIAP penyuntingan, jadi
+    # memakainya berarti aset yang disunting bulan berikutnya akan meloncat
+    # bulan — linimasa yang tampak presisi padahal mengarang. Yang benar-benar
+    # diketahui adalah PERIODE KEGIATAN, jadi itulah sumbernya: setiap kegiatan
+    # menyumbang asetnya pada bulan kegiatan itu dimulai, lalu diakumulasikan.
+    _BULAN_SINGKAT = ("JAN", "FEB", "MAR", "APR", "MEI", "JUN",
+                      "JUL", "AGU", "SEP", "OKT", "NOV", "DES")
+
+    def _bulan_mulai(act):
+        """Bulan (1-12) dan tahun kegiatan dimulai; None bila tak terbaca."""
+        raw = act.get("tanggal_mulai") or act.get("created_at") or ""
+        teks = str(raw)[:10]
+        try:
+            d = datetime.strptime(teks, "%Y-%m-%d")
+            return d.year, d.month
+        except (ValueError, TypeError):
+            return None, None
+
+    tahun_kegiatan = [th for th, _ in (_bulan_mulai(a) for a in satker_acts) if th]
+    tahun_linimasa = max(tahun_kegiatan) if tahun_kegiatan else datetime.now().year
+
+    # Aset per bulan-mulai kegiatan, di tahun linimasa.
+    per_bulan_tercatat = [0] * 12
+    per_bulan_ditemukan = [0] * 12
+    ada_kegiatan_bulan = [False] * 12
+    for act in satker_acts:
+        th, bl = _bulan_mulai(act)
+        if th != tahun_linimasa or not bl:
+            continue
+        aset_act = [a for a in all_assets if a.get("activity_id") == act.get("id")]
+        per_bulan_tercatat[bl - 1] += len(aset_act)
+        per_bulan_ditemukan[bl - 1] += sum(
+            1 for a in aset_act if a.get("inventory_status") == "Ditemukan")
+        ada_kegiatan_bulan[bl - 1] = True
+
+    linimasa, kum_t, kum_d, puncak = [], 0, 0, 0
+    for i in range(12):
+        kum_t += per_bulan_tercatat[i]
+        kum_d += per_bulan_ditemukan[i]
+        puncak = max(puncak, kum_t)
+        linimasa.append({"bulan": _BULAN_SINGKAT[i], "tercatat": kum_t,
+                         "ditemukan": kum_d, "mulai": ada_kegiatan_bulan[i]})
+    # Tinggi batang relatif terhadap puncak — dihitung DI SINI, bukan di
+    # template: aritmetika di dalam Jinja mudah membagi nol tanpa terlihat.
+    for b in linimasa:
+        b["h_tercatat"] = round(b["tercatat"] / puncak * 100) if puncak else 0
+        b["h_ditemukan"] = round(b["ditemukan"] / puncak * 100) if puncak else 0
+        b["sisa"] = b["tercatat"] - b["ditemukan"]
+    linimasa_ada = puncak > 0
+
+    # ── KATEGORI DI LAPANGAN ────────────────────────────────────────────
+    #
+    # Kartu kategori mengikuti nilai yang BENAR-BENAR ada di sistem
+    # (`inventory_status` + `stiker_status`), bukan daftar kategori SIMAN yang
+    # dipaksakan. Kategori yang tak punya sumber data akan selalu bernilai nol
+    # dan hanya membuat pembaca mengira ada yang belum terisi.
+    ditemukan_berstiker = [a for a in ditemukan
+                           if (a.get("stiker_status") or "") == "Terpasang"]
+    kategori_lapangan = [
+        {"label": "BMN Ditemukan", "sub": "sesuai catatan",
+         "n": len(ditemukan), "kelas": "k-hijau"},
+        {"label": "Ditemukan, Stiker Terpasang", "sub": "sudah ditandai",
+         "n": len(ditemukan_berstiker), "kelas": "k-hijau-muda"},
+        {"label": "Ditemukan, Belum Berstiker", "sub": "menunggu penandaan",
+         "n": len(ditemukan) - len(ditemukan_berstiker), "kelas": "k-kuning"},
+        {"label": "BMN Tidak Ditemukan", "sub": "perlu penelusuran",
+         "n": len(tidak), "kelas": "k-merah"},
+        {"label": "BMN Berlebih", "sub": "ada fisik, tak tercatat",
+         "n": len(berlebih), "kelas": "k-jingga"},
+        {"label": "BMN Sengketa", "sub": "berperkara",
+         "n": len(sengketa), "kelas": "k-ungu"},
+    ]
+
+    # ── PER TAHUN PEROLEHAN ─────────────────────────────────────────────
+    th_counter, th_ditemukan = {}, {}
+    for a in all_assets:
+        th = _tahun_perolehan(a.get("purchase_date"))
+        if th == "-" or not th:
+            continue
+        th_counter[th] = th_counter.get(th, 0) + 1
+        if a.get("inventory_status") == "Ditemukan":
+            th_ditemukan[th] = th_ditemukan.get(th, 0) + 1
+    # Sepuluh tahun TERBARU, lalu dikembalikan ke urutan kronologis: laporan
+    # dibaca kiri-ke-kanan sebagai perjalanan waktu, bukan sebagai peringkat.
+    tahun_urut = sorted(th_counter, key=lambda x: str(x))[-10:]
+    puncak_th = max((th_counter[t] for t in tahun_urut), default=0)
+    per_tahun = [{
+        "tahun": t, "tercatat": th_counter[t], "ditemukan": th_ditemukan.get(t, 0),
+        "sisa": th_counter[t] - th_ditemukan.get(t, 0),
+        "h_tercatat": round(th_counter[t] / puncak_th * 100) if puncak_th else 0,
+        "h_ditemukan": round(th_ditemukan.get(t, 0) / puncak_th * 100) if puncak_th else 0,
+        "pct": pct(th_ditemukan.get(t, 0), th_counter[t]),
+    } for t in tahun_urut]
 
     # Personil (highest rank first)
     personil = []
@@ -6409,6 +6525,9 @@ async def _build_satker_report_v2(activity_id: str):
         "cnt_belum": len(belum), "pct_belum": pct(len(belum), tc),
         "stiker_terpasang": st_terpasang, "stiker_belum": st_belum, "stiker_pct": st_pct, "dok_pct": dok_pct,
         "eselon_list": eselon_list, "kegiatan_list": kegiatan_list,
+        "linimasa": linimasa, "linimasa_ada": linimasa_ada,
+        "tahun_linimasa": tahun_linimasa,
+        "kategori_lapangan": kategori_lapangan, "per_tahun": per_tahun,
         "chart_kondisi": chart_kondisi, "chart_status": chart_status,
         "chart_kategori": chart_kategori, "chart_lokasi": chart_lokasi,
         "chart_eselon1": chart_eselon1, "chart_per_kegiatan": chart_per_kegiatan,
