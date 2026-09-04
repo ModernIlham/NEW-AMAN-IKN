@@ -108,9 +108,15 @@ body {
 .lm-nilai { font-size: 7px; text-align: center; color: #fff; padding: 1px 0; font-weight: 700; }
 .lm-nilai.gelap { color: #475569; }
 .lm-kosong { height: 3px; background: #f1f5f9; border-radius: 2px; }
+/* Bulan yang BELUM BERJALAN dibedakan dari bulan yang berjalan tanpa
+   tambahan: yang pertama garis putus-putus samar, yang kedua garis padat.
+   Kalau keduanya digambar sama, "belum terjadi" tak terbedakan dari "tak ada
+   tambahan" — dan itu persis salah baca yang dilaporkan pemilik. */
+.lm-belum { height: 3px; border-top: 2px dashed #cbd5e1; border-radius: 0; }
 .lm-x { display: flex; gap: 4px; margin-top: 5px; }
 .lm-x span { flex: 1; text-align: center; font-size: 7px; color: var(--abu); letter-spacing: .5px; }
 .lm-x span.aktif { color: var(--navy); font-weight: 700; }
+.lm-x span.pudar { color: #cbd5e1; }
 .lm-nota { font-size: 7.5px; color: var(--abu); margin-top: 7px; line-height: 1.5; }
 .th-plot { display: flex; align-items: flex-end; gap: 9px; height: 112px; }
 .th-kol { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
@@ -444,7 +450,8 @@ lipat.addEventListener('click', function () {
       <div class="lm-plot">
         {% for b in linimasa %}
         <div class="lm-kol">
-          {% if b.tercatat %}
+          {% if b.belum_berjalan %}<div class="lm-belum" title="Belum berjalan"></div>
+          {% elif b.tercatat %}
           <div class="lm-batang" style="height:{{ b.h_tercatat }}%">
             <div class="lm-sisa" style="flex:{{ b.sisa }} 0 auto;min-height:0;">{% if b.sisa %}<div class="lm-nilai gelap">{{ b.sisa }}</div>{% endif %}</div>
             <div class="lm-temu" style="flex:{{ b.ditemukan }} 0 auto;min-height:0;">{% if b.ditemukan %}<div class="lm-nilai">{{ b.ditemukan }}</div>{% endif %}</div>
@@ -453,9 +460,13 @@ lipat.addEventListener('click', function () {
         </div>
         {% endfor %}
       </div>
-      <div class="lm-x">{% for b in linimasa %}<span class="{% if b.mulai %}aktif{% endif %}">{{ b.bulan }}</span>{% endfor %}</div>
+      <div class="lm-x">{% for b in linimasa %}<span class="{% if b.mulai %}aktif{% elif b.belum_berjalan %}pudar{% endif %}">{{ b.bulan }}</span>{% endfor %}</div>
       <p class="lm-nota">
         Angka bersifat <strong>kumulatif</strong>. Bulan bertanda tebal adalah bulan dimulainya kegiatan.
+        {% if linimasa_tahun_berjalan and 1 <= linimasa_bulan_terakhir < 12 %}
+        Bulan setelah <strong>{{ linimasa[linimasa_bulan_terakhir - 1].bulan }}</strong>
+        sengaja <strong>dikosongkan</strong> — belum berjalan, bukan berarti tanpa tambahan.
+        {% endif %}
         {% if linimasa_pct_stempel >= 100 %}
         Seluruh aset ditempatkan menurut <strong>tanggal pemeriksaannya sendiri</strong>.
         {% elif linimasa_pct_stempel > 0 %}

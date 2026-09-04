@@ -6398,8 +6398,18 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
         except (ValueError, TypeError):
             return None, None
 
+    # Tahun yang ditampilkan: kegiatan TERBARU yang tahunnya sudah berjalan.
+    #
+    # Tahun mendatang sengaja dilewati. Satu salah ketik tanggal — "2062"
+    # alih-alih "2026" — akan memindahkan seluruh linimasa ke tahun itu dan
+    # menyisakan grafik kosong, sementara pekerjaan tahun ini tak terlihat
+    # sama sekali. Kekeliruan datanya tetap terlihat di tempat lain (daftar
+    # kegiatan memuat periodenya apa adanya); yang tak boleh adalah satu baris
+    # salah menyandera seluruh grafik.
+    _th_kini = datetime.now().year
     tahun_kegiatan = [th for th, _ in (_bulan_mulai(a) for a in satker_acts) if th]
-    tahun_linimasa = max(tahun_kegiatan) if tahun_kegiatan else datetime.now().year
+    tahun_berjalan = [th for th in tahun_kegiatan if th <= _th_kini]
+    tahun_linimasa = max(tahun_berjalan) if tahun_berjalan else _th_kini
 
     def _bulan_stempel(a):
         """Bulan dari `tanggal_inventarisasi` — kapan aset ini BENAR-BENAR
@@ -6440,13 +6450,42 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
             if a.get("inventory_status") == "Ditemukan":
                 per_bulan_ditemukan[bl - 1] += 1
 
+    # BULAN YANG BELUM BERJALAN TIDAK BERISI APA-APA.
+    #
+    # Angka linimasa bersifat kumulatif, jadi tanpa batas ini bulan-bulan
+    # sisa tahun berjalan menyalin angka bulan terakhir dan tampil seolah
+    # pekerjaannya sudah selesai sampai Desember — grafik yang meramal, bukan
+    # melaporkan. Pembacanya tak punya cara membedakan "belum terjadi" dari
+    # "tidak ada tambahan".
+    #
+    # Hanya berlaku pada tahun berjalan (dan tahun mendatang, bila datanya
+    # ganjil). Tahun yang SUDAH LEWAT ditampilkan penuh: di sana angka bulan
+    # Desember memang bermakna "sampai akhir tahun sekian".
+    # Jam yang SAMA dengan `tanggal_cetak` laporan ini. Memakai jam berbeda
+    # membuat laporan bertanggal 1 Oktober memuat grafik yang berhenti di
+    # September — dua tanggal berbeda pada satu dokumen, tanpa penjelasan.
+    sekarang = datetime.now()
+    if tahun_linimasa > sekarang.year:
+        bulan_terakhir = 0          # seluruh tahunnya belum berjalan
+    elif tahun_linimasa == sekarang.year:
+        bulan_terakhir = sekarang.month
+    else:
+        bulan_terakhir = 12         # tahun lampau ditampilkan penuh
+
     linimasa, kum_t, kum_d, puncak = [], 0, 0, 0
     for i in range(12):
-        kum_t += per_bulan_tercatat[i]
-        kum_d += per_bulan_ditemukan[i]
-        puncak = max(puncak, kum_t)
-        linimasa.append({"bulan": _BULAN_SINGKAT[i], "tercatat": kum_t,
-                         "ditemukan": kum_d, "mulai": ada_kegiatan_bulan[i]})
+        berjalan = (i + 1) <= bulan_terakhir
+        if berjalan:
+            kum_t += per_bulan_tercatat[i]
+            kum_d += per_bulan_ditemukan[i]
+            puncak = max(puncak, kum_t)
+        linimasa.append({
+            "bulan": _BULAN_SINGKAT[i],
+            "tercatat": kum_t if berjalan else 0,
+            "ditemukan": kum_d if berjalan else 0,
+            "mulai": ada_kegiatan_bulan[i],
+            "belum_berjalan": not berjalan,
+        })
     # Tinggi batang relatif terhadap puncak — dihitung DI SINI, bukan di
     # template: aritmetika di dalam Jinja mudah membagi nol tanpa terlihat.
     for b in linimasa:
@@ -6454,6 +6493,9 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
         b["h_ditemukan"] = round(b["ditemukan"] / puncak * 100) if puncak else 0
         b["sisa"] = b["tercatat"] - b["ditemukan"]
     linimasa_ada = puncak > 0
+    # Dipakai layar untuk menerangkan mengapa sebagian bulan kosong.
+    linimasa_bulan_terakhir = bulan_terakhir
+    linimasa_tahun_berjalan = tahun_linimasa >= sekarang.year
     # Berapa persen linimasa ini bertumpu pada tanggal sungguhan, bukan
     # perkiraan periode kegiatan. Ditampilkan apa adanya di bawah grafiknya.
     n_total_lini = n_berstempel + n_perkiraan
@@ -6595,6 +6637,8 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
         "tahun_linimasa": tahun_linimasa,
         "linimasa_pct_stempel": linimasa_pct_stempel,
         "linimasa_perkiraan": linimasa_perkiraan,
+        "linimasa_bulan_terakhir": linimasa_bulan_terakhir,
+        "linimasa_tahun_berjalan": linimasa_tahun_berjalan,
         "kategori_lapangan": kategori_lapangan, "per_tahun": per_tahun,
         "chart_kondisi": chart_kondisi, "chart_status": chart_status,
         "chart_kategori": chart_kategori, "chart_lokasi": chart_lokasi,

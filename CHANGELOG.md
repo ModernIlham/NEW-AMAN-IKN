@@ -18,6 +18,66 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#983] Linimasa berhenti meramal: bulan yang belum berjalan dikosongkan — 2026-09-04
+
+Laporan pemilik atas `[#980]`: *"tahun berjalan seharusnya bulan kedepannya
+masih belum ada data tapi kenapa bisa muncul data tolong koreksi secara
+keseluruhan."*
+
+### Cacat: grafik yang meramal, bukan melaporkan
+
+Angka linimasa bersifat **kumulatif** — tiap bulan memuat total sampai bulan
+itu. Perulangannya mengisi kedua belas bulan tanpa kecuali, jadi begitu
+kegiatan terakhir lewat, **sisa bulan tahun berjalan menyalin angka bulan
+terakhir**. Grafiknya berdiri penuh sampai Desember dan terbaca seolah
+pekerjaannya sudah tuntas — padahal Oktober sampai Desember belum terjadi.
+
+Yang hilang bukan cuma ketepatan angkanya, tapi kemampuan membedakan **"belum
+terjadi"** dari **"berjalan, tanpa tambahan"**. Keduanya digambar sama persis.
+
+Batasnya kini ditarik di bulan berjalan: bulan setelahnya dibiarkan **nol**
+dan ditandai `belum_berjalan`. Tahun yang **sudah lewat** tetap ditampilkan
+**penuh** — di sana angka Desember memang bermakna "sampai akhir tahun
+sekian", dan mengosongkannya justru menghapus fakta.
+
+Jam yang dipakai **sama** dengan `tanggal_cetak` laporannya. Jam berbeda
+membuat laporan bertanggal 1 Oktober memuat grafik yang berhenti di September
+— dua tanggal berbeda pada satu dokumen, tanpa penjelasan.
+
+### Tahun mendatang tak lagi menyandera grafiknya
+
+Tahun linimasa diambil dari kegiatan **terbaru**. Satu salah ketik tanggal —
+`2062` alih-alih `2026` — memindahkan seluruh linimasa ke tahun itu dan
+menyisakan grafik kosong, sementara pekerjaan tahun ini tak terlihat sama
+sekali. Tahun yang belum berjalan kini dilewati saat memilih tahun linimasa.
+
+Kekeliruan datanya **tidak disembunyikan**: kegiatan bertahun ganjil tetap
+tercantum di daftar kegiatan dengan periodenya apa adanya. Yang tak boleh
+adalah satu baris salah menyandera seluruh grafik.
+
+### Bulan kosong menjelaskan dirinya sendiri
+
+Bulan belum-berjalan digambar sebagai **garis putus-putus samar** (bukan garis
+padat seperti bulan tanpa tambahan), namanya dipudarkan di sumbu bulan, dan
+catatan di bawah grafik menyebut batasnya: *"Bulan setelah SEP sengaja
+dikosongkan — belum berjalan, bukan berarti tanpa tambahan."*
+
+### Uji mutasi — tiga dipasang, tiga dibunuh
+
+| Mutasi | Dibunuh oleh |
+|---|---|
+| Kumulatif kembali mengisi bulan mendatang | `test_bulan_setelah_bulan_ini_dikosongkan` |
+| Tahun mendatang tak lagi dilewati | `test_salah_ketik_tahun_tak_menyandera_seluruh_grafik`, `test_seluruh_kegiatan_bertahun_depan_tak_menggambar_apa_pun` |
+| Penanda visual bulan belum-berjalan dicabut | `test_bulan_belum_berjalan_dibedakan_secara_VISUAL` |
+
+### Berkas
+
+- `backend/routes/reports.py` — batas `bulan_terakhir`, tapis tahun mendatang, kunci `linimasa_bulan_terakhir`/`linimasa_tahun_berjalan`
+- `backend/templates/laporan_satker_v2.html` — penanda `.lm-belum`, sumbu pudar, catatan batas
+- `backend/tests/unit/test_laporan_gabungan_satker.py` — 6 uji baru
+
+---
+
 ## [#982] Terapkan Filter membuang token; panel disamakan dengan lembar A4 — 2026-09-04
 
 Dua laporan dari pemilik atas `[#981]`.
