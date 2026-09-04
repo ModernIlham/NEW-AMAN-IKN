@@ -582,8 +582,11 @@ def test_grafik_per_eselon_II_ada_di_analisis_data(dbr):
         assert nama == {"Direktorat 0": 2, "Direktorat 1": 2, "Direktorat 2": 2}, nama
         # Eselon I tetap ada — yang satu tak menggantikan yang lain.
         assert [c["name"] for c in d["chart_eselon1"]] == ["Ditjen Satu"]
-    t = _teks_template()
-    assert "Per Eselon II" in t, "panelnya tak digambar"
+        # Panelnya benar-benar masuk halaman analisis, bukan cuma datanya.
+        judul = [p["judul"] for h in d["halaman_analisis"]
+                 for sisi in ("kiri", "kanan") for p in h[sisi]]
+        assert "Per Eselon II" in judul, judul
+        assert "Per Eselon I" in judul, judul
     _jalan(jalan())
 
 
@@ -594,8 +597,14 @@ def test_eselon_II_kosong_menjelaskan_dirinya(dbr):
         await _seed(dbr, [_keg(1, 5)], _aset("k1", 3))
         d = await rp._build_satker_report_v2("k1")
         assert d["chart_eselon2"] == []
+        # Panelnya TETAP muncul walau kosong. Panel yang dibuang diam-diam
+        # membuat pembacanya mengira dimensi itu tak ada di sistem.
+        kosong = [p for h in d["halaman_analisis"]
+                  for sisi in ("kiri", "kanan") for p in h[sisi]
+                  if p["judul"] == "Per Eselon II"]
+        assert len(kosong) == 1 and kosong[0]["baris"] == []
     t = _teks_template()
-    assert "Belum ada aset yang mencantumkan Eselon II" in t
+    assert "Belum ada aset yang mencantumkan data ini" in t
     _jalan(jalan())
 
 
@@ -740,4 +749,68 @@ def test_TIAP_LEMBAR_muat_satu_halaman_A4(dbr):
             f"{lembar} lembar HTML menjadi {halaman} halaman PDF — "
             "ada lembar yang meluber dan isinya terpotong")
         assert lembar > 8, "data ujinya terlalu kecil untuk menguji paginasi"
+    _jalan(jalan())
+
+
+# ── Analisis data tak lagi dipangkas ────────────────────────────────────
+#
+# Permintaan pemilik: *"perkategori dan lokasi juga buat jangan dibatasi
+# biarkan saja mengalir dan buat smart mengatur dan berbagi posisi dengan
+# bagian lainnya hingga benar benar 1 kertas penuh."*
+
+def test_kategori_lokasi_dan_eselon_TIDAK_DIPANGKAS_sepuluh_teratas(dbr):
+    """`most_common(10)` membuang data tanpa satu pun tanda: satker dengan 23
+    lokasi hanya menampilkan 10, dan pembacanya tak punya cara tahu 13 sisanya
+    ada. Angka di sini sengaja LEBIH BESAR dari 10 di keempat dimensi —
+    fixture dengan sembilan nilai akan lolos meski pemangkasnya dikembalikan."""
+    async def jalan():
+        aset = _aset("k1", 60, ditemukan=40)
+        for i, a in enumerate(aset):
+            a["location"] = f"Gedung Blok {i % 23}"
+            a["category"] = f"KAT{i % 17}"
+            a["eselon1"] = f"Ditjen {i % 13}"
+            a["eselon2"] = f"Direktorat {i % 19}"
+        await _seed(dbr, [_keg(1, 5)], aset)
+        d = await rp._build_satker_report_v2("k1")
+        assert len(d["chart_lokasi"]) == 23, len(d["chart_lokasi"])
+        assert len(d["chart_kategori"]) == 17, len(d["chart_kategori"])
+        assert len(d["chart_eselon1"]) == 13, len(d["chart_eselon1"])
+        assert len(d["chart_eselon2"]) == 19, len(d["chart_eselon2"])
+        # Dan seluruhnya benar-benar sampai ke halaman, bukan sekadar ke data.
+        baris = {}
+        for h in d["halaman_analisis"]:
+            for sisi in ("kiri", "kanan"):
+                for p in h[sisi]:
+                    baris.setdefault(p["judul"], 0)
+                    baris[p["judul"]] += len(p["baris"])
+        assert baris["Per Lokasi"] == 23, baris
+        assert baris["Per Kategori"] == 17, baris
+        assert baris["Per Eselon II"] == 19, baris
+    _jalan(jalan())
+
+
+def test_halaman_analisis_disusun_dengan_MENGUKUR_bukan_tetapan(dbr):
+    """Cacah panel per halaman tak lagi ditetapkan di template. Kalau
+    penyusunnya dilepas, seluruh panel menumpuk di satu lembar dan yang tak
+    muat hilang diam-diam."""
+    async def jalan():
+        aset = _aset("k1", 90, ditemukan=60)
+        for i, a in enumerate(aset):
+            a["location"] = f"Gedung Perkantoran Blok {i % 47}"
+            a["category"] = f"KAT{i % 33}"
+            a["eselon2"] = f"Direktorat Pengelolaan Kekayaan Negara {i % 19}"
+        await _seed(dbr, [_keg(1, 5)], aset)
+        d = await rp._build_satker_report_v2("k1")
+        hal = d["halaman_analisis"]
+        assert len(hal) >= 2, "47 lokasi + 33 kategori muat satu halaman?"
+        import laporan_tataletak as tl
+        for ke, h in enumerate(hal):
+            tersedia = tl.TINGGI_KOLOM - (tl.TINGGI_JUDUL_AWAL if ke == 0
+                                          else tl.TINGGI_JUDUL_LANJUT)
+            for sisi in ("kiri", "kanan"):
+                t = sum(p["tinggi"] for p in h[sisi])
+                t += tl.JARAK_PANEL * max(0, len(h[sisi]) - 1)
+                assert t <= tersedia, f"hal={ke} {sisi} {t} > {tersedia}"
+    t = _teks_template()
+    assert "halaman_analisis" in t, "template tak memakai hasil penyusun"
     _jalan(jalan())

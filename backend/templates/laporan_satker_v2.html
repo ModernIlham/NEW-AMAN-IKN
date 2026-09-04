@@ -132,7 +132,11 @@ body {
 .bar-jalur { flex: 1; height: 13px; background: #f1f5f9; border-radius: 3px; overflow: hidden; }
 .bar-isi { height: 100%; border-radius: 3px; color: #fff; font-size: 7px; font-weight: 700; display: flex; align-items: center; padding: 0 4px; min-width: 16px; }
 .bar-nilai { width: 62px; text-align: right; flex-shrink: 0; color: var(--navy); font-weight: 600; font-variant-numeric: tabular-nums; }
-.dua-kolom { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
+.dua-kolom { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; align-items: start; }
+/* Satu lajur = satu kolom halaman. Panel di dalamnya bertumpuk dengan
+   jarak yang SAMA dengan JARAK_PANEL di laporan_tataletak.py; kalau
+   keduanya bergeser, penyusunnya akan yakin sesuatu muat padahal tidak. */
+.lajur { display: flex; flex-direction: column; gap: 13px; }
 
 /* ── Kartu kegiatan ─────────────────────────────────────────── */
 .keg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
@@ -624,68 +628,47 @@ lipat.addEventListener('click', function () {
   {{ kaki('Temuan lapangan') }}
 </div>
 
-{# ── HALAMAN: ANALISIS DATA ──────────────────────────────────── #}
+{# ── HALAMAN: ANALISIS DATA (disusun dengan MENGUKUR) ────────────
+   Cacah panel per halaman TIDAK ditetapkan di sini. Penyusun di
+   backend/laporan_tataletak.py mengukur tinggi tiap panel, memecah yang
+   terlalu panjang, dan menjatahnya ke kolom yang sedang terpendek sampai
+   kertasnya benar-benar penuh — barulah kertas berikutnya dibuka. #}
 {% set sec.n = sec.n + 1 %}
+{% macro panel_batang(p) -%}
+<div class="panel">
+  <h4>{{ p.judul }}{% if p.lanjutan %} <span style="font-weight:600;color:#94a3b8;letter-spacing:0;text-transform:none;">(lanjutan)</span>{% endif %}</h4>
+  {% for c in p.baris %}
+  <div class="bar-baris">
+    <div class="bar-label" title="{{ c.name }}">{{ c.name }}</div>
+    <div class="bar-jalur">
+      <div class="bar-isi" style="width:{{ c.pct }}%;background:{{ p.warna or c.color }}">{% if p.warna %}{{ c.count }}{% else %}{{ c.pct }}%{% endif %}</div>
+    </div>
+    <div class="bar-nilai">{% if p.kolom_nilai == 'val_fmt' %}{{ c.val_fmt }}{% else %}{{ c.count }}{% endif %}</div>
+  </div>
+  {% else %}
+  <p style="font-size:8.5px;color:#94a3b8;line-height:1.6;">Belum ada aset yang mencantumkan data ini. Isi kolomnya pada data aset agar sebarannya terbaca di sini.</p>
+  {% endfor %}
+</div>
+{%- endmacro %}
+{% for hal in halaman_analisis %}
 <div class="hal">
   {{ kop('Bagian ' ~ sec.n) }}
   <div class="hal-isi">
+    {% if loop.first %}
     <div class="judul-bagian"><span class="no">{{ sec.n }}</span>Analisis Data</div>
-    <div class="ket-bagian">Distribusi dan komposisi data inventarisasi BMN</div>
-
-    <div class="dua-kolom">
-      <div class="panel"><h4>Kondisi Barang (Ditemukan)</h4>
-        {% for c in chart_kondisi %}
-        <div class="bar-baris"><div class="bar-label">{{ c.name }}</div><div class="bar-jalur"><div class="bar-isi" style="width:{{ c.pct }}%;background:{{ c.color }}">{{ c.pct }}%</div></div><div class="bar-nilai">{{ c.count }}</div></div>
-        {% endfor %}
-      </div>
-      <div class="panel"><h4>Status Inventarisasi</h4>
-        {% for c in chart_status %}
-        <div class="bar-baris"><div class="bar-label">{{ c.name }}</div><div class="bar-jalur"><div class="bar-isi" style="width:{{ c.pct }}%;background:{{ c.color }}">{{ c.pct }}%</div></div><div class="bar-nilai">{{ c.count }}</div></div>
-        {% endfor %}
-      </div>
-    </div>
-
-    <div class="dua-kolom" style="margin-top:13px;">
-      <div class="panel"><h4>Per Kategori (Top 10)</h4>
-        {% for c in chart_kategori %}
-        <div class="bar-baris"><div class="bar-label" title="{{ c.name }}">{{ c.name }}</div><div class="bar-jalur"><div class="bar-isi" style="width:{{ c.pct }}%;background:#1e40af">{{ c.count }}</div></div><div class="bar-nilai">{{ c.val_fmt }}</div></div>
-        {% endfor %}
-      </div>
-      <div class="panel"><h4>Per Lokasi (Top 10)</h4>
-        {% for c in chart_lokasi %}
-        <div class="bar-baris"><div class="bar-label" title="{{ c.name }}">{{ c.name }}</div><div class="bar-jalur"><div class="bar-isi" style="width:{{ c.pct }}%;background:var(--hijau)">{{ c.count }}</div></div><div class="bar-nilai">{{ c.count }}</div></div>
-        {% endfor %}
-      </div>
-    </div>
-
-    {% if chart_eselon1 or chart_eselon2 %}
-    <div class="dua-kolom" style="margin-top:13px;">
-      {% if chart_eselon1 %}
-      <div class="panel"><h4>Per Eselon I</h4>
-        {% for c in chart_eselon1 %}
-        <div class="bar-baris"><div class="bar-label" title="{{ c.name }}">{{ c.name }}</div><div class="bar-jalur"><div class="bar-isi" style="width:{{ c.pct }}%;background:var(--ungu)">{{ c.count }}</div></div><div class="bar-nilai">{{ c.val_fmt }}</div></div>
-        {% endfor %}
-      </div>
-      {% endif %}
-      {# Satu Eselon I biasanya membawahi beberapa Eselon II; grafik yang
-         berhenti di Eselon I menyembunyikan justru unit yang bertanggung
-         jawab atas barangnya. #}
-      {% if chart_eselon2 %}
-      <div class="panel"><h4>Per Eselon II</h4>
-        {% for c in chart_eselon2 %}
-        <div class="bar-baris"><div class="bar-label" title="{{ c.name }}">{{ c.name }}</div><div class="bar-jalur"><div class="bar-isi" style="width:{{ c.pct }}%;background:#0891b2">{{ c.count }}</div></div><div class="bar-nilai">{{ c.val_fmt }}</div></div>
-        {% endfor %}
-      </div>
-      {% else %}
-      <div class="panel"><h4>Per Eselon II</h4>
-        <p style="font-size:8.5px;color:#94a3b8;line-height:1.6;">Belum ada aset yang mencantumkan Eselon II. Isi kolom Eselon II pada data aset agar sebarannya terbaca di sini.</p>
-      </div>
-      {% endif %}
-    </div>
+    <div class="ket-bagian">Distribusi dan komposisi data inventarisasi BMN — seluruh nilai ditampilkan, tanpa dipangkas</div>
+    {% else %}
+    <div class="judul-bagian"><span class="no">{{ sec.n }}</span>Analisis Data <span style="font-size:10px;color:#94a3b8;font-weight:600;">(lanjutan)</span></div>
+    <div class="ket-bagian">&nbsp;</div>
     {% endif %}
+    <div class="dua-kolom">
+      <div class="lajur">{% for p in hal.kiri %}{{ panel_batang(p) }}{% endfor %}</div>
+      <div class="lajur">{% for p in hal.kanan %}{{ panel_batang(p) }}{% endfor %}</div>
+    </div>
   </div>
-  {{ kaki('Analisis') }}
+  {{ kaki('Analisis' ~ (' ' ~ loop.index ~ '/' ~ loop.length if loop.length > 1 else '')) }}
 </div>
+{% endfor %}
 
 {# ── HALAMAN: PERSONIL (dipaginasi) ──────────────────────────── #}
 {% set orang = personil | rejectattr('is_header') | list %}
