@@ -18,6 +18,96 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#978] Laporan gabungan satker: linimasa, terkategori, dan berhenti mencetak tiap barang — 2026-09-03
+
+Permintaan pemilik: *"laporan hasil inventarisasi BMN yang gabungan dari
+kegiatan-kegiatan masih tidak menggunakan font yang cocok, tata letak antar
+kegiatan masih tidak jelas dan berantakan tidak terkategori dengan baik, dan
+tidak ada time line ... agar singkat padat dan terorganisir ... tidak perlu
+detail sampai ke barang karena itu tugasnya nanti di dalam masing-masing
+kegiatan."*
+
+### Berhenti mencetak tiap barang
+
+Dua bagian dibuang: **Daftar Aset** dan **Kelengkapan Dokumen per Aset**.
+Keduanya mencetak satu baris per NUP untuk SELURUH satker — pada satker
+ribuan NUP itu menenggelamkan ringkasannya di antara puluhan halaman tabel,
+dan mengulang isi yang sudah ada di LHI/DBHI per kegiatan. Rinciannya tetap
+di sana; laporan gabungan menjawab pertanyaan yang berbeda.
+
+Contoh render: **6 halaman**, dari sebelumnya puluhan.
+
+### Linimasa — dan kejujuran tentang sumbernya
+
+Bentuk yang diminta: batang bulanan kumulatif, BMN ditemukan di atas dasar
+BMN tercatat.
+
+Yang penting adalah **dari mana angkanya**. Aset TIDAK menyimpan kapan ia
+diinventarisasi; `updated_at` ter-cap pada SETIAP penyuntingan, jadi
+memakainya berarti aset yang disunting bulan berikutnya meloncat bulan —
+linimasa yang tampak presisi padahal mengarang. Yang benar-benar diketahui
+adalah **periode kegiatan**, jadi itulah sumbernya, dan laporannya
+mengatakan itu di bawah grafiknya. Ada uji yang menahan kalimat itu tetap
+ada.
+
+### Terkategori: enam bagian, masing-masing satu pertanyaan
+
+| Bagian | Menjawab |
+|---|---|
+| Ringkasan Eksekutif | berapa totalnya, dan bagaimana progresnya |
+| Capaian per Kegiatan | kegiatan mana sudah sejauh mana |
+| Kategori Hasil di Lapangan | apa yang ditemukan tim di lapangan |
+| Analisis Data | komposisi kondisi, kategori, lokasi, eselon |
+| Personil Terlibat | siapa mengerjakan |
+| Simpulan | apa artinya |
+
+**Tiap kegiatan kini membawa capaiannya sendiri** — kartu berisi jumlah
+tercatat, ditemukan, persentase, dan status pengesahan. Sebelumnya ia hanya
+baris tabel berisi jumlah dan nilai, sedangkan capaiannya terkubur sebagai
+satu batang di antara lima grafik lain: "bagaimana kegiatan ini berjalan"
+tak terjawab di tempat kegiatan itu disebut. Grafik "Per Kegiatan" yang lama
+dibuang — angka yang sama dalam dua bentuk berbeda justru sumber
+keberantakannya.
+
+Ditambah dua tampilan baru: **kartu kategori lapangan** (dari nilai yang
+benar-benar ada di sistem, bukan daftar kategori yang dipaksakan — kategori
+tanpa sumber data akan selalu nol dan hanya membuat pembaca mengira ada yang
+belum terisi) dan **batang per tahun perolehan**, yang menjawab pertanyaan
+tak terjawab oleh angka gabungan: perolehan tahun mana yang paling banyak
+belum ketemu.
+
+### Satu keluarga huruf
+
+Versi sebelumnya memakai Georgia (serif) untuk badan, `sans-serif` generik
+untuk label kecil, dan Courier untuk kode — tiga rasa huruf dalam satu
+halaman, yang membuat laporan terbaca seperti tempelan alih-alih satu naskah.
+Kini satu tumpukan huruf untuk seluruh dokumen; serif hanya di sampul, tempat
+ia memang bekerja. Angka memakai `tabular-nums` supaya kolom angka berbaris
+alih-alih bergoyang.
+
+28 aturan CSS milik bagian yang dibuang ikut dihapus — berkas yang menyimpan
+aturan untuk markup yang tak ada lagi membuat pembaca berikutnya mengira
+bagian itu masih dipakai.
+
+### Dua uji yang lulus karena alasan yang salah
+
+- Uji huruf hanya mencari `font-family: sans-serif` **berspasi** dan lulus,
+  padahal masih ada dua deklarasi **inline tanpa spasi** yang menimpa tumpukan
+  huruf badan. Kini kedua ejaan diperiksa.
+- Uji urutan tahun memakai tahun lama dengan aset LEBIH BANYAK, sehingga
+  urutan kronologis dan urutan-menurut-jumlah kebetulan sama — mutasi yang
+  mengurutkan menurut jumlah lolos tanpa satu pun uji berbunyi. Fixture-nya
+  dibalik.
+
+### Berkas
+
+- `backend/routes/reports.py` — `linimasa`, `kategori_lapangan`, `per_tahun`,
+  statistik per kegiatan
+- `backend/templates/laporan_satker_v2.html` — struktur, huruf, gaya baru
+- `backend/tests/unit/test_laporan_gabungan_satker.py` — 13 uji baru
+
+---
+
 ## [#977] Bagikan Peta: yang dibagikan = yang tampil, dan jumlahnya terbaca — 2026-09-03
 
 Permintaan pemilik: *"ketika filter dan seleksi aktif, pada saat dibuat
