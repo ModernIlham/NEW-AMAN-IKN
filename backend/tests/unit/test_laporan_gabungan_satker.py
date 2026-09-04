@@ -212,12 +212,67 @@ def test_tak_ada_tabel_per_barang():
 
 
 def test_bagian_laporan_ringkas_dan_terkategori():
-    """Enam bagian bernama, masing-masing menjawab satu pertanyaan."""
+    """Enam bagian bernama, masing-masing menjawab satu pertanyaan.
+
+    Bagian yang panjang (kegiatan, personil) dipaginasi, jadi judulnya muncul
+    lebih dari sekali — yang dijaga adalah HIMPUNAN bagiannya, bukan jumlah
+    kemunculannya.
+    """
     t = _teks_template()
-    judul = re.findall(r'class="section-title">([^<]+)<', t)
-    assert judul == ["Ringkasan Eksekutif", "Capaian per Kegiatan",
-                     "Kategori Hasil di Lapangan", "Analisis Data",
-                     "Personil Terlibat", "Simpulan"], judul
+    judul = re.findall(r'class="no">\{\{ sec\.n \}\}</span>([^<{]+)', t)
+    unik = []
+    for j in (x.strip() for x in judul):
+        if j and j not in unik:
+            unik.append(j)
+    assert unik == ["Ringkasan Eksekutif", "Capaian per Kegiatan",
+                    "Kategori Hasil di Lapangan", "Analisis Data",
+                    "Personil Terlibat", "Simpulan"], unik
+
+
+# ── Halaman A4 tetap ────────────────────────────────────────────────────
+#
+# Permintaan pemilik: *"buatkan dengan fix A4 dan sudah dibagi perhalamannya
+# persis seperti di tampilan preview laporan eksekutif"*.
+
+def test_lembar_berukuran_A4_pasti():
+    """794x1123px = A4 pada 96dpi, ukuran yang sama dengan pratinjau laporan
+    eksekutif. Tinggi yang mengikuti isi membuat batas halaman baru terlihat
+    setelah dicetak — dan saat itu sudah terlambat."""
+    t = _teks_template()
+    assert "width: 794px; height: 1123px" in t
+    assert "@page { size: A4 portrait; margin: 0; }" in t
+    assert "page-break-after: always" in t
+
+
+def test_bagian_panjang_dipaginasi_bukan_dipotong():
+    """Tinggi tetap + `overflow: hidden` akan MEMOTONG diam-diam. Kegiatan
+    dan personil karenanya dibagi per halaman di template, bukan dibiarkan
+    meluber ke luar lembar."""
+    t = _teks_template()
+    assert "KEG_PER_HAL" in t and "PERSONIL_PER_HAL" in t
+    assert "kegiatan_list[mulai:mulai + KEG_PER_HAL]" in t
+    assert "orang[mulai:mulai + PERSONIL_PER_HAL]" in t
+
+
+def test_tiap_lembar_berkop_dan_berkaki():
+    """Lembar tanpa kop kehilangan identitasnya begitu dicetak dan tercecer
+    dari berkasnya. Kop & kaki ditulis SEKALI sebagai makro — lembar baru tak
+    boleh lahir dengan kop yang sedikit berbeda."""
+    t = _teks_template()
+    assert "{% macro kop(" in t and "{% macro kaki(" in t
+    # Setiap lembar isi memanggil keduanya.
+    assert t.count("{{ kop('Bagian ' ~ sec.n) }}") >= 5
+    assert t.count("{{ kaki(") >= 5
+
+
+def test_sampul_menyatakan_lingkupnya():
+    """Sampul adalah yang pertama dibaca dan paling sering difotokopi
+    terpisah. Laporan tersaring yang sampulnya diam akan beredar sebagai
+    laporan satker penuh."""
+    t = _teks_template()
+    i = t.index('data-testid="sampul-cap-filter"')
+    assert "{% if filter_aktif %}" in t[i - 200:i]
+    assert "bukan keseluruhan satker" in t
 
 
 # ── 4. KATEGORI LAPANGAN & TAHUN PEROLEHAN ──────────────────────────────

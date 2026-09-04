@@ -6548,6 +6548,19 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
     _tambah_tim("tim_peneliti", "Tim Peneliti", "Anggota Tim")
     _tambah_tim("tim_pendukung", "Tim Pendukung", "Pendukung")
 
+    # Identitas instansi untuk sampul — sumber yang SAMA dengan kop surat dan
+    # sampul laporan eksekutif, supaya ketiganya tak pernah berbeda.
+    #
+    # GAGAL-BUKA disengaja. Identitas ini hiasan sampul; substansi laporan tak
+    # bergantung padanya. Membiarkan galat pengaturan merobohkan seluruh
+    # laporan berarti menukar sampul yang kurang lengkap dengan halaman galat.
+    try:
+        kop = await pengaturan_kop(source_act) or {}
+    except Exception:                                  # noqa: BLE001
+        logger.warning("Pengaturan kop tak terbaca untuk laporan satker %s",
+                       activity_id, exc_info=True)
+        kop = {}
+
     # Simpulan
     simpulan = []
     if tc > 0:
@@ -6562,6 +6575,10 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
         "kode_satker": source_act.get("kode_satker") or "-",
         "nama_satker": source_act.get("nama_satker") or "-",
         "alamat_satker": source_act.get("alamat_satker") or "-",
+        "logo_url": kop.get("logo_url") or "",
+        "nama_instansi": (kop.get("nama_instansi") or "").strip(),
+        "nama_unit": (kop.get("nama_unit_organisasi") or "").strip(),
+        "alamat_instansi": (kop.get("alamat_instansi") or "").strip(),
         "tanggal_cetak": _fmt_tanggal_id(datetime.now()),
         "total_kegiatan": len(satker_acts), "total_count": tc, "total_value_fmt": fmt(tv),
         "cnt_ditemukan": len(ditemukan), "pct_ditemukan": pct(len(ditemukan), tc),
