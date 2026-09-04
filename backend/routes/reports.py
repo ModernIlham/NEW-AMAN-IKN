@@ -13,6 +13,7 @@ import base64
 from typing import Optional, List
 from datetime import datetime, timezone
 import inventarisasi_stempel as stempel_inv
+import laporan_filter as lfil
 from pathlib import Path
 
 # Template directory - relative to this file's location (works on any server)
@@ -6188,8 +6189,14 @@ async def generate_executive_grouped_pdf(activity_id: str, detail_fields: str = 
 # LAPORAN PER SATKER - Full Report with Cover, Analysis, Data
 # ============================================================================
 
-async def _build_satker_report_v2(activity_id: str):
-    """Build data for per-satker report — aggregates ALL activities with same kode_satker"""
+async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None):
+    """Data laporan per satker — menggabungkan SELURUH kegiatan satker itu.
+
+    `filter_dipilih` menyaring apa yang ikut dihitung: kegiatan mana, tahun
+    perolehan mana, status/kondisi/lokasi mana (masing-masing menerima LEBIH
+    DARI SATU pilihan), serta rentang tanggal pemeriksaan. Kosong = seluruhnya,
+    sebagaimana perilaku sejak awal. Lihat backend/laporan_filter.py.
+    """
     source_act = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not source_act:
         return None
@@ -6208,6 +6215,13 @@ async def _build_satker_report_v2(activity_id: str):
     ).to_list(100000)
     categories = await db.categories.find({}, {"_id": 0}).to_list(10000)
     cat_map = {c.get("kode_aset", ""): c.get("label", "") for c in categories}
+    # Daftar pilihan filter dibangun dari data PENUH, SEBELUM penyaringan —
+    # kalau tidak, memilih satu tahun membuat pilihan tahun lain lenyap dan
+    # pengguna terkurung tanpa kotak untuk mengembalikannya.
+    pilihan = lfil.pilihan_filter(satker_acts, all_assets, _tahun_perolehan)
+    satker_acts, all_assets = lfil.terapkan(
+        satker_acts, all_assets, filter_dipilih, _tahun_perolehan)
+
     act_name_map = {a.get("id", ""): (a.get("nama_kegiatan") or "") for a in satker_acts}
 
     def sp(a):
@@ -6557,6 +6571,9 @@ async def _build_satker_report_v2(activity_id: str):
         "cnt_belum": len(belum), "pct_belum": pct(len(belum), tc),
         "stiker_terpasang": st_terpasang, "stiker_belum": st_belum, "stiker_pct": st_pct, "dok_pct": dok_pct,
         "eselon_list": eselon_list, "kegiatan_list": kegiatan_list,
+        "pilihan": pilihan,
+        "filter_dipilih": filter_dipilih or {},
+        "filter_aktif": lfil.ada_yang_aktif(filter_dipilih),
         "linimasa": linimasa, "linimasa_ada": linimasa_ada,
         "tahun_linimasa": tahun_linimasa,
         "linimasa_pct_stempel": linimasa_pct_stempel,
@@ -6578,12 +6595,35 @@ async def _build_satker_report_v2(activity_id: str):
     }
 
 
+def _filter_laporan_satker(kegiatan, tahun, status, kondisi, lokasi,
+                           dari: str = "", sampai: str = "") -> dict:
+    """Rakit filter laporan dari query string.
+
+    Tiap dimensi menerima parameter BERULANG (`?tahun=2023&tahun=2024`) —
+    itulah bentuk "dua pilihan pada filter yang sama" yang diminta. FastAPI
+    menyerahkannya sebagai list, dan `laporan_filter.bersihkan` membuang
+    nilai kosong supaya formulir yang dikirim tanpa centang tak berubah makna
+    menjadi "hanya yang bernilai kosong".
+    """
+    return {"kegiatan": kegiatan, "tahun": tahun, "status": status,
+            "kondisi": kondisi, "lokasi": lokasi,
+            "dari": dari or "", "sampai": sampai or ""}
+
+
 @reports_router.get("/inventory-activities/{activity_id}/laporan-satker-html")
-async def laporan_satker_html(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
-    """Serve Laporan per Satker as interactive HTML preview - aggregates ALL activities for this satker"""
+async def laporan_satker_html(activity_id: str,
+                              kegiatan: List[str] = Query(default=[]),
+                              tahun: List[str] = Query(default=[]),
+                              status: List[str] = Query(default=[]),
+                              kondisi: List[str] = Query(default=[]),
+                              lokasi: List[str] = Query(default=[]),
+                              dari: str = "", sampai: str = "",
+                              _user: dict = Depends(require_user_or_query_token)):
+    """Pratinjau HTML laporan gabungan satker — interaktif, dengan filter."""
     await pastikan_akses_kegiatan_id(_user, activity_id)
     from jinja2 import Environment, FileSystemLoader
-    data = await _build_satker_report_v2(activity_id)
+    data = await _build_satker_report_v2(activity_id, _filter_laporan_satker(
+        kegiatan, tahun, status, kondisi, lokasi, dari, sampai))
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
     data["preview"] = True
@@ -6596,6 +6636,12 @@ async def laporan_satker_html(activity_id: str, _user: dict = Depends(require_us
 @reports_router.get("/inventory-activities/{activity_id}/laporan-satker-pdf")
 @limiter.limit("4/minute")
 async def laporan_satker_pdf(request: Request, activity_id: str,
+                             kegiatan: List[str] = Query(default=[]),
+                             tahun: List[str] = Query(default=[]),
+                             status: List[str] = Query(default=[]),
+                             kondisi: List[str] = Query(default=[]),
+                             lokasi: List[str] = Query(default=[]),
+                             dari: str = "", sampai: str = "",
                              _user: dict = Depends(require_user_or_query_token)):
     """Generate Laporan per Satker as PDF using weasyprint.
 
@@ -6605,7 +6651,11 @@ async def laporan_satker_pdf(request: Request, activity_id: str,
     await pastikan_akses_kegiatan_id(_user, activity_id)
     from jinja2 import Environment, FileSystemLoader
     import weasyprint
-    data = await _build_satker_report_v2(activity_id)
+    # Filter yang SAMA dengan pratinjau. Tanpa ini, tombol "Cetak" pada
+    # laporan tersaring akan menghasilkan PDF berisi seluruh satker —
+    # dokumen yang isinya berbeda dari yang barusan dibaca di layar.
+    data = await _build_satker_report_v2(activity_id, _filter_laporan_satker(
+        kegiatan, tahun, status, kondisi, lokasi, dari, sampai))
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
     data["preview"] = False

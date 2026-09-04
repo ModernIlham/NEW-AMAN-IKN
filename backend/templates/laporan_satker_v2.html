@@ -44,6 +44,33 @@ body { font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
 .btn-print { background: var(--gold); color: var(--navy); }
 .btn-print:hover { background: var(--gold-light); }
 
+/* ===== PANEL FILTER (hanya pratinjau, tak ikut tercetak) ===== */
+.filter-panel { background: #fff; border-bottom: 2px solid var(--gold); padding: 14px 24px 16px; }
+.filter-judul { font-size: 10pt; font-weight: 700; color: var(--navy); margin-bottom: 2px; }
+.filter-sub { font-size: 8pt; color: #64748b; margin-bottom: 12px; }
+.filter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.filter-blok { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; background: #fafbfc; }
+.filter-blok > h5 { font-size: 8pt; font-weight: 700; color: var(--navy); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 2px; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.filter-blok .aksi { font-size: 7pt; font-weight: 600; color: var(--accent); cursor: pointer; text-decoration: underline; letter-spacing: 0; text-transform: none; }
+.filter-hint { font-size: 7pt; color: #94a3b8; margin-bottom: 7px; }
+/* Daftar bergulir: satker dengan puluhan lokasi tak boleh mendorong tombol
+   Terapkan ke luar layar. */
+.filter-opsi { max-height: 132px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
+.filter-opsi label { display: flex; align-items: flex-start; gap: 6px; font-size: 8pt; color: #334155; cursor: pointer; line-height: 1.35; }
+.filter-opsi input { margin-top: 2px; flex-shrink: 0; }
+.filter-tgl { display: flex; gap: 6px; align-items: center; }
+.filter-tgl input { flex: 1; min-width: 0; font: inherit; font-size: 8pt; padding: 4px 6px; border: 1px solid #cbd5e1; border-radius: 5px; }
+.filter-aksi { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+.filter-aksi button, .filter-aksi a { font: inherit; font-size: 9pt; font-weight: 600; padding: 7px 18px; border-radius: 5px; border: none; cursor: pointer; text-decoration: none; }
+.btn-terapkan { background: var(--navy); color: var(--gold); }
+.btn-reset { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1 !important; }
+.filter-nyala { font-size: 8pt; color: #92400e; background: #fffbeb; border: 1px solid #fde68a; border-radius: 5px; padding: 5px 10px; }
+
+/* Penanda pada laporan TERCETAK bahwa isinya tersaring. Ikut tercetak —
+   justru di kertaslah pembaca paling mudah mengira ia melihat keseluruhan. */
+.pita-filter { background: #fffbeb; border: 1px solid #fde68a; border-left: 4px solid var(--amber); border-radius: 6px; padding: 9px 14px; margin: 0 36px 4px; font-size: 8.5pt; color: #92400e; }
+.pita-filter b { color: #78350f; }
+
 /* ===== COVER ===== */
 .cover { min-height: 297mm; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; position: relative; background: var(--navy); color: white; overflow: hidden; }
 .cover-ornament-top, .cover-ornament-bottom { position: absolute; left: 0; right: 0; height: 6px; background: linear-gradient(90deg, transparent 0%, var(--gold) 20%, var(--gold-light) 50%, var(--gold) 80%, transparent 100%); }
@@ -193,7 +220,98 @@ td.r { text-align: right; font-variant-numeric: tabular-nums; }
 
 {% if preview %}
 <div class="toolbar no-print">
+  {% if filter_aktif %}<span style="color:var(--gold-light);font-size:8.5pt;margin-right:auto;">Laporan sedang tersaring</span>{% endif %}
   <button class="btn-print" onclick="window.print()">Cetak / Simpan PDF</button>
+</div>
+
+{#  PANEL FILTER — hanya di pratinjau, dan `no-print` supaya tak ikut kertas.
+
+    Formulir GET biasa, bukan penyaringan di peramban: filter yang sama
+    dipakai endpoint PDF, sehingga yang dicetak PERSIS yang dibaca di layar.
+    Menyaring di sisi peramban akan membuat keduanya berbeda tanpa gejala. #}
+<form class="filter-panel no-print" method="get" data-testid="filter-laporan">
+  <div class="filter-judul">Saring Laporan</div>
+  <div class="filter-sub">
+    Setiap kotak boleh dicentang <strong>lebih dari satu</strong>. Kotak yang
+    dibiarkan kosong berarti <strong>semua</strong>.
+  </div>
+
+  <div class="filter-grid">
+    {% macro blok(judul, nama, opsi, terpilih, hint='') -%}
+    <div class="filter-blok" data-blok="{{ nama }}">
+      <h5>{{ judul }}
+        <span class="aksi" data-semua="{{ nama }}">semua</span>
+      </h5>
+      {% if hint %}<div class="filter-hint">{{ hint }}</div>{% endif %}
+      <div class="filter-opsi">
+        {% for o in opsi %}
+        <label><input type="checkbox" name="{{ nama }}" value="{{ o.nilai }}"
+          {% if o.nilai in terpilih %}checked{% endif %}>{{ o.label }}</label>
+        {% else %}
+        <span class="filter-hint">— tak ada pilihan —</span>
+        {% endfor %}
+      </div>
+    </div>
+    {%- endmacro %}
+
+    {{ blok('Kegiatan', 'kegiatan', pilihan.kegiatan,
+            filter_dipilih.get('kegiatan') or [],
+            'Kegiatan yang tak dicentang tak ikut dihitung sama sekali') }}
+    {{ blok('Tahun Perolehan', 'tahun', pilihan.tahun,
+            filter_dipilih.get('tahun') or []) }}
+    {{ blok('Status Inventarisasi', 'status', pilihan.status,
+            filter_dipilih.get('status') or []) }}
+    {{ blok('Kondisi', 'kondisi', pilihan.kondisi,
+            filter_dipilih.get('kondisi') or []) }}
+    {{ blok('Lokasi', 'lokasi', pilihan.lokasi,
+            filter_dipilih.get('lokasi') or []) }}
+
+    <div class="filter-blok">
+      <h5>Tanggal Pemeriksaan</h5>
+      <div class="filter-hint">
+        Aset yang tanggal periksanya belum tercatat tidak ikut saat rentang diisi.
+      </div>
+      <div class="filter-tgl">
+        <input type="date" name="dari" value="{{ filter_dipilih.get('dari') or '' }}" aria-label="Dari tanggal">
+        <span style="font-size:8pt;color:#94a3b8;">s.d.</span>
+        <input type="date" name="sampai" value="{{ filter_dipilih.get('sampai') or '' }}" aria-label="Sampai tanggal">
+      </div>
+    </div>
+  </div>
+
+  <div class="filter-aksi">
+    <button type="submit" class="btn-terapkan" data-testid="filter-terapkan">Terapkan</button>
+    <a href="?" class="btn-reset" data-testid="filter-reset">Tampilkan semua</a>
+    {% if filter_aktif %}
+    <span class="filter-nyala">Angka di bawah hanya mencakup yang tersaring.</span>
+    {% endif %}
+  </div>
+</form>
+
+<script>
+// Satu-satunya JS di halaman ini: pintasan "semua / kosongkan" per blok.
+// Penyaringannya sendiri tetap di server — lihat catatan pada formulir.
+document.querySelectorAll('[data-semua]').forEach(function (tombol) {
+  tombol.addEventListener('click', function () {
+    var blok = document.querySelector('[data-blok="' + tombol.dataset.semua + '"]');
+    if (!blok) return;
+    var kotak = blok.querySelectorAll('input[type=checkbox]');
+    var adaYangKosong = Array.prototype.some.call(kotak, function (k) { return !k.checked; });
+    kotak.forEach(function (k) { k.checked = adaYangKosong; });
+    tombol.textContent = adaYangKosong ? 'kosongkan' : 'semua';
+  });
+});
+</script>
+{% endif %}
+
+{# Penanda TERCETAK. Laporan tersaring yang tak mengatakan dirinya tersaring
+   akan dibaca sebagai keseluruhan satker — dan di kertas tak ada panel filter
+   yang bisa membantahnya. #}
+{% if filter_aktif %}
+<div class="pita-filter" data-testid="pita-filter">
+  <b>Laporan ini tersaring.</b> Angka di dalamnya hanya mencakup
+  {{ total_kegiatan }} kegiatan dan {{ total_count }} NUP yang memenuhi filter —
+  bukan keseluruhan satker {{ kode_satker }}.
 </div>
 {% endif %}
 
