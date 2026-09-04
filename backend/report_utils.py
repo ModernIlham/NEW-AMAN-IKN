@@ -4,6 +4,29 @@ Dipisah dari routes/reports.py agar dapat diuji unit tanpa WeasyPrint/Mongo.
 """
 
 
+#: Satu-satunya nilai `stiker_status` yang berarti "stikernya sudah menempel".
+#: Formulir aset hanya menawarkan dua nilai — "Belum Terpasang" dan
+#: "Sudah Terpasang" (lihat AssetForm.jsx dan models.py) — dan SELURUH
+#: perhitungan stiker wajib membandingkan dengan konstanta ini, bukan dengan
+#: teksnya sendiri-sendiri.
+#:
+#: Sebabnya konkret: laporan gabungan satker pernah membandingkan dengan
+#: "Terpasang" (tanpa "Sudah"). Nilai itu tak pernah ada di basis data, jadi
+#: kartu "Ditemukan, Stiker Terpasang" SELALU nol dan "Ditemukan, Belum
+#: Berstiker" selalu memuat seluruh temuan — salah yang tak menimbulkan galat
+#: apa pun, hanya angka yang tenang dan keliru.
+STIKER_TERPASANG = "Sudah Terpasang"
+
+
+def berstiker(aset) -> bool:
+    """Apakah stiker aset ini sudah terpasang.
+
+    Dipakai bersama oleh setiap penghitung stiker supaya perbandingannya
+    hanya ditulis SATU kali; lihat STIKER_TERPASANG.
+    """
+    return (aset or {}).get("stiker_status") == STIKER_TERPASANG
+
+
 def hitung_status_stiker(assets):
     """(terpasang, belum, pct) status pemasangan stiker atas SELURUH aset.
 
@@ -16,7 +39,7 @@ def hitung_status_stiker(assets):
     """
     lst = assets or []
     total = len(lst)
-    terpasang = sum(1 for a in lst if (a or {}).get("stiker_status") == "Sudah Terpasang")
+    terpasang = sum(1 for a in lst if berstiker(a))
     belum = total - terpasang
     pct = int(terpasang / total * 100) if total else 0
     return terpasang, belum, pct

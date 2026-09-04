@@ -32,7 +32,7 @@ from shared_utils import (pastikan_akses_kegiatan_id, ambang_kapitalisasi,
                           scope_query_aset, scope_query_field_satker,
                           kode_satker_user, _q_pejabat_satker)
 from report_filters import active_asset_filter
-from report_utils import hitung_status_stiker, distribusi_pengguna
+from report_utils import berstiker, hitung_status_stiker, distribusi_pengguna
 from satker_utils import NILAI_DOKUMEN, NILAI_DOKUMEN_DEFAULT
 from markupsafe import Markup
 
@@ -6422,45 +6422,86 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
         except (ValueError, TypeError):
             return None, None
 
-    # Aset per bulan. Sumber UTAMA adalah stempel per aset; periode kegiatan
-    # hanya CADANGAN untuk aset yang diperiksa sebelum stempel itu ada.
-    # Keduanya dihitung terpisah supaya laporannya dapat menyebut berapa
-    # banyak yang masih memakai perkiraan — angka campuran yang diam soal
-    # campurannya adalah bentuk paling halus dari mengarang.
-    per_bulan_tercatat = [0] * 12
-    per_bulan_ditemukan = [0] * 12
+    def _bulan_perolehan(a):
+        """Bulan dari `purchase_date` — kapan aset ini DIPEROLEH."""
+        teks = str(a.get("purchase_date") or "")[:10]
+        try:
+            d = datetime.strptime(teks, "%Y-%m-%d")
+            return d.year, d.month
+        except (ValueError, TypeError):
+            return None, None
+
+    # TIAP ASET DITEMPATKAN PADA BULAN PERISTIWANYA SENDIRI, DAN ANGKANYA
+    # PER BULAN — BUKAN KUMULATIF.
+    #
+    # Permintaan pemilik: *"linimasa yang dibagi perbulan harusnya juga
+    # fluktuatif, menyesuaikan tanggal perolehan untuk BMN yang belum
+    # diinventarisasi akan tetapi tercatat, begitupun yang ditemukan tercatat
+    # ditemukan jelas tanggalnya."*
+    #
+    # Sebelumnya SELURUH aset ditumpuk pada bulan kegiatannya dimulai lalu
+    # diakumulasikan, sehingga grafiknya berupa tangga yang hanya naik: ia
+    # menjawab "sudah sampai mana" tetapi tak pernah menjawab "bulan apa yang
+    # ramai". Dua pertanyaan berbeda, dan yang kedua yang hilang.
+    #
+    # Aturannya satu kalimat: **aset ditempatkan pada bulan peristiwa yang
+    # benar-benar diketahui tentangnya.**
+    #
+    # - Sudah diinventarisasi  → bulan `tanggal_inventarisasi` (kapan ia
+    #   diperiksa). Cadangan: bulan kegiatannya dimulai, untuk aset yang
+    #   diperiksa sebelum stempel itu ada.
+    # - Belum diinventarisasi  → bulan `purchase_date` (kapan ia diperoleh).
+    #   Inilah satu-satunya tanggal yang diketahui tentang aset yang belum
+    #   disentuh pemeriksaan; memakai bulan kegiatan untuknya berarti
+    #   mengaku-aku peristiwa yang belum terjadi.
+    #
+    # Konsekuensinya disebut terang di bawah grafik: aset yang peristiwanya
+    # jatuh di LUAR tahun yang ditampilkan tidak muncul di sini sama sekali —
+    # BMN perolehan 2019 yang belum diperiksa memang tak punya peristiwa apa
+    # pun pada tahun berjalan. Jumlah batang karenanya bukan total NUP, dan
+    # grafik yang diam soal itu akan terbaca sebagai "sisanya nol".
+    per_bulan_temu = [0] * 12          # diperiksa & DITEMUKAN
+    per_bulan_periksa_lain = [0] * 12  # diperiksa, hasilnya bukan "Ditemukan"
+    per_bulan_perolehan = [0] * 12     # belum diperiksa, ditaruh di bln perolehan
     ada_kegiatan_bulan = [False] * 12
     n_berstempel = 0
     n_perkiraan = 0
+    n_luar_tahun = 0
     for act in satker_acts:
         th_act, bl_act = _bulan_mulai(act)
         aset_act = [a for a in all_assets if a.get("activity_id") == act.get("id")]
         if th_act == tahun_linimasa and bl_act:
             ada_kegiatan_bulan[bl_act - 1] = True
         for a in aset_act:
-            th, bl = _bulan_stempel(a)
-            if th and bl:
-                n_berstempel += 1
+            status = a.get("inventory_status") or "Belum Diinventarisasi"
+            sudah_diperiksa = status != "Belum Diinventarisasi"
+            if sudah_diperiksa:
+                th, bl = _bulan_stempel(a)
+                if th and bl:
+                    n_berstempel += 1
+                else:
+                    th, bl = th_act, bl_act
+                    n_perkiraan += 1
             else:
-                th, bl = th_act, bl_act
-                n_perkiraan += 1
+                th, bl = _bulan_perolehan(a)
             if th != tahun_linimasa or not bl:
+                n_luar_tahun += 1
                 continue
-            per_bulan_tercatat[bl - 1] += 1
-            if a.get("inventory_status") == "Ditemukan":
-                per_bulan_ditemukan[bl - 1] += 1
+            if not sudah_diperiksa:
+                per_bulan_perolehan[bl - 1] += 1
+            elif status == "Ditemukan":
+                per_bulan_temu[bl - 1] += 1
+            else:
+                per_bulan_periksa_lain[bl - 1] += 1
 
     # BULAN YANG BELUM BERJALAN TIDAK BERISI APA-APA.
     #
-    # Angka linimasa bersifat kumulatif, jadi tanpa batas ini bulan-bulan
-    # sisa tahun berjalan menyalin angka bulan terakhir dan tampil seolah
-    # pekerjaannya sudah selesai sampai Desember — grafik yang meramal, bukan
-    # melaporkan. Pembacanya tak punya cara membedakan "belum terjadi" dari
-    # "tidak ada tambahan".
+    # Bulan mendatang tak punya peristiwa apa pun, jadi batangnya kosong
+    # dengan sendirinya — tetapi kosong-karena-belum-terjadi harus tetap
+    # DIBEDAKAN dari kosong-karena-tak-ada-tambahan, sebab keduanya menjawab
+    # pertanyaan yang berbeda. Penandanya (garis putus-putus) yang membedakan.
     #
-    # Hanya berlaku pada tahun berjalan (dan tahun mendatang, bila datanya
-    # ganjil). Tahun yang SUDAH LEWAT ditampilkan penuh: di sana angka bulan
-    # Desember memang bermakna "sampai akhir tahun sekian".
+    # Tahun yang SUDAH LEWAT ditampilkan penuh dua belas bulan.
     # Jam yang SAMA dengan `tanggal_cetak` laporan ini. Memakai jam berbeda
     # membuat laporan bertanggal 1 Oktober memuat grafik yang berhenti di
     # September — dua tanggal berbeda pada satu dokumen, tanpa penjelasan.
@@ -6472,17 +6513,19 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
     else:
         bulan_terakhir = 12         # tahun lampau ditampilkan penuh
 
-    linimasa, kum_t, kum_d, puncak = [], 0, 0, 0
+    linimasa, puncak, jml_lini = [], 0, 0
     for i in range(12):
         berjalan = (i + 1) <= bulan_terakhir
-        if berjalan:
-            kum_t += per_bulan_tercatat[i]
-            kum_d += per_bulan_ditemukan[i]
-            puncak = max(puncak, kum_t)
+        temu = per_bulan_temu[i] if berjalan else 0
+        lain = per_bulan_periksa_lain[i] if berjalan else 0
+        perolehan = per_bulan_perolehan[i] if berjalan else 0
+        total = temu + lain + perolehan
+        puncak = max(puncak, total)
+        jml_lini += total
         linimasa.append({
             "bulan": _BULAN_SINGKAT[i],
-            "tercatat": kum_t if berjalan else 0,
-            "ditemukan": kum_d if berjalan else 0,
+            "ditemukan": temu, "periksa_lain": lain, "perolehan": perolehan,
+            "tercatat": total,
             "mulai": ada_kegiatan_bulan[i],
             "belum_berjalan": not berjalan,
         })
@@ -6490,14 +6533,17 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
     # template: aritmetika di dalam Jinja mudah membagi nol tanpa terlihat.
     for b in linimasa:
         b["h_tercatat"] = round(b["tercatat"] / puncak * 100) if puncak else 0
-        b["h_ditemukan"] = round(b["ditemukan"] / puncak * 100) if puncak else 0
-        b["sisa"] = b["tercatat"] - b["ditemukan"]
     linimasa_ada = puncak > 0
+    linimasa_jumlah = jml_lini
+    linimasa_luar_tahun = n_luar_tahun
     # Dipakai layar untuk menerangkan mengapa sebagian bulan kosong.
     linimasa_bulan_terakhir = bulan_terakhir
     linimasa_tahun_berjalan = tahun_linimasa >= sekarang.year
-    # Berapa persen linimasa ini bertumpu pada tanggal sungguhan, bukan
-    # perkiraan periode kegiatan. Ditampilkan apa adanya di bawah grafiknya.
+    # Berapa persen aset YANG SUDAH DIPERIKSA bertumpu pada tanggal
+    # pemeriksaannya sendiri, bukan perkiraan periode kegiatan. Hanya aset
+    # terperiksa yang dihitung: aset yang belum diperiksa ditempatkan menurut
+    # tanggal perolehannya, dan itu bukan perkiraan — itu tanggal sungguhan
+    # untuk peristiwa yang lain.
     n_total_lini = n_berstempel + n_perkiraan
     linimasa_pct_stempel = (round(n_berstempel / n_total_lini * 100, 1)
                             if n_total_lini else 0)
@@ -6509,8 +6555,11 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
     # (`inventory_status` + `stiker_status`), bukan daftar kategori SIMAN yang
     # dipaksakan. Kategori yang tak punya sumber data akan selalu bernilai nol
     # dan hanya membuat pembaca mengira ada yang belum terisi.
-    ditemukan_berstiker = [a for a in ditemukan
-                           if (a.get("stiker_status") or "") == "Terpasang"]
+    # `berstiker` dipakai, bukan perbandingan teks di tempat: baris ini dulu
+    # membandingkan dengan "Terpasang" (tanpa "Sudah") — nilai yang tak pernah
+    # ada — sehingga kartu berstiker selalu nol dan kartu belum-berstiker
+    # selalu memuat SELURUH temuan.
+    ditemukan_berstiker = [a for a in ditemukan if berstiker(a)]
     kategori_lapangan = [
         {"label": "BMN Ditemukan", "sub": "sesuai catatan",
          "n": len(ditemukan), "kelas": "k-hijau"},
@@ -6639,6 +6688,8 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
         "linimasa_perkiraan": linimasa_perkiraan,
         "linimasa_bulan_terakhir": linimasa_bulan_terakhir,
         "linimasa_tahun_berjalan": linimasa_tahun_berjalan,
+        "linimasa_jumlah": linimasa_jumlah,
+        "linimasa_luar_tahun": linimasa_luar_tahun,
         "kategori_lapangan": kategori_lapangan, "per_tahun": per_tahun,
         "chart_kondisi": chart_kondisi, "chart_status": chart_status,
         "chart_kategori": chart_kategori, "chart_lokasi": chart_lokasi,

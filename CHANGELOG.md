@@ -18,6 +18,82 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#984] Angka stiker yang selalu nol, dan linimasa yang akhirnya fluktuatif — 2026-09-04
+
+Dua laporan pemilik atas laporan gabungan satker.
+
+### Cacat: "Ditemukan, Stiker Terpasang" selalu nol
+
+Kartu stiker membandingkan `stiker_status` dengan **`"Terpasang"`** — tanpa
+"Sudah". Nilai itu **tak pernah ada** di basis data: formulir aset hanya
+menawarkan `"Belum Terpasang"` dan `"Sudah Terpasang"`
+(`AssetForm.jsx`, `models.py`, `BatchEditPanel.jsx`).
+
+Akibatnya kartu **"Ditemukan, Stiker Terpasang"** selalu **0** dan
+**"Ditemukan, Belum Berstiker"** selalu memuat **seluruh** temuan — pada data
+uji: 0/50 padahal yang benar 33/17. Tak ada galat, tak ada peringatan; hanya
+angka yang tenang dan keliru.
+
+Ujinya lolos karena **fixture-nya ikut keliru** — ia juga menulis
+`"Terpasang"`, jadi uji dan kode salah dengan cara yang sama persis. Kini
+perbandingannya dipusatkan di `report_utils.berstiker()` / `STIKER_TERPASANG`,
+fixture memakai nilai sungguhan, dan sebuah uji memakai data **campuran**
+(4 berstiker, 2 tidak): fixture yang seragam akan tetap lolos meski
+pembandingnya tertukar dengan "selalu benar".
+
+### Linimasa per bulan kini fluktuatif
+
+Permintaan: *"linimasa yang dibagi perbulan harusnya juga fluktuatif,
+menyesuaikan tanggal perolehan untuk BMN yang belum diinventarisasi akan
+tetapi tercatat, begitupun yang ditemukan tercatat ditemukan jelas
+tanggalnya."*
+
+Sebelumnya **seluruh** aset ditumpuk pada bulan kegiatannya dimulai lalu
+**diakumulasikan** — grafiknya berupa tangga yang hanya naik. Ia menjawab
+"sudah sampai mana", tetapi tak pernah menjawab **"bulan apa yang ramai"**.
+
+Aturannya kini satu kalimat: **tiap aset ditempatkan pada bulan peristiwa yang
+benar-benar diketahui tentangnya**, dan angkanya **per bulan**, bukan
+kumulatif.
+
+| Keadaan aset | Bulan penempatan |
+|---|---|
+| Sudah diinventarisasi | `tanggal_inventarisasi` (cadangan: bulan kegiatan) |
+| Belum diinventarisasi | `purchase_date` — satu-satunya tanggal yang diketahui |
+
+Batangnya kini tiga segmen: **diperiksa & ditemukan** (hijau), **diperiksa,
+tak ditemukan** (jingga), dan **belum diperiksa, bulan perolehan** (abu).
+Tiap NUP muncul **tepat sekali**, jadi tak ada segmen yang bisa negatif.
+
+Pada data uji hasilnya benar-benar naik-turun: FEB 6 · MAR 11 · APR 14 ·
+MEI 5 · JUN 9 · JUL 21 · AGU 4.
+
+### Yang di luar tahun dinyatakan, bukan disembunyikan
+
+Konsekuensi aturan di atas: BMN perolehan tahun lampau yang belum diperiksa
+**tak punya peristiwa apa pun** pada tahun berjalan, jadi ia tak berbatang.
+Jumlah batang karenanya **bukan** total NUP. Grafik yang diam soal itu akan
+terbaca sebagai "sisanya nol", maka catatannya menyebut angkanya:
+*"memuat 70 dari 100 NUP; 30 sisanya berperistiwa di luar 2026 ... bukan
+berarti nol."*
+
+### Uji mutasi — tiga dipasang, tiga dibunuh
+
+| Mutasi | Dibunuh oleh |
+|---|---|
+| Pembanding stiker kembali ke `"Terpasang"` | `test_stiker_dihitung_dengan_nilai_yang_BENAR_BENAR_dipakai_aplikasi`, `test_kategori_lapangan_dari_data_sistem_bukan_daftar_karangan` |
+| Aset belum-diperiksa kembali ditumpuk di bulan kegiatan | `test_belum_diinventarisasi_ditempatkan_di_bulan_PEROLEHAN` (+3 lainnya) |
+| Angka kembali kumulatif | `test_linimasa_per_bulan_FLUKTUATIF_bukan_kumulatif` (+4 lainnya) |
+
+### Berkas
+
+- `backend/report_utils.py` — `STIKER_TERPASANG`, `berstiker()`
+- `backend/routes/reports.py` — penempatan per peristiwa, per-bulan, `linimasa_jumlah`/`linimasa_luar_tahun`
+- `backend/templates/laporan_satker_v2.html` — tiga segmen, legenda, catatan batas
+- `backend/tests/unit/test_laporan_gabungan_satker.py` — fixture diperbaiki, 3 uji baru
+
+---
+
 ## [#983] Linimasa berhenti meramal: bulan yang belum berjalan dikosongkan — 2026-09-04
 
 Laporan pemilik atas `[#980]`: *"tahun berjalan seharusnya bulan kedepannya
