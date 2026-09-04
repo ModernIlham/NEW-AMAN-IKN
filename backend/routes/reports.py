@@ -12,6 +12,7 @@ import logging
 import base64
 from typing import Optional, List
 from datetime import datetime, timezone
+import inventarisasi_stempel as stempel_inv
 from pathlib import Path
 
 # Template directory - relative to this file's location (works on any server)
@@ -6386,19 +6387,44 @@ async def _build_satker_report_v2(activity_id: str):
     tahun_kegiatan = [th for th, _ in (_bulan_mulai(a) for a in satker_acts) if th]
     tahun_linimasa = max(tahun_kegiatan) if tahun_kegiatan else datetime.now().year
 
-    # Aset per bulan-mulai kegiatan, di tahun linimasa.
+    def _bulan_stempel(a):
+        """Bulan dari `tanggal_inventarisasi` — kapan aset ini BENAR-BENAR
+        diperiksa. Dicap server pada transisi pertama; lihat
+        backend/inventarisasi_stempel.py."""
+        teks = str(a.get(stempel_inv.FIELD) or "")[:10]
+        try:
+            d = datetime.strptime(teks, "%Y-%m-%d")
+            return d.year, d.month
+        except (ValueError, TypeError):
+            return None, None
+
+    # Aset per bulan. Sumber UTAMA adalah stempel per aset; periode kegiatan
+    # hanya CADANGAN untuk aset yang diperiksa sebelum stempel itu ada.
+    # Keduanya dihitung terpisah supaya laporannya dapat menyebut berapa
+    # banyak yang masih memakai perkiraan — angka campuran yang diam soal
+    # campurannya adalah bentuk paling halus dari mengarang.
     per_bulan_tercatat = [0] * 12
     per_bulan_ditemukan = [0] * 12
     ada_kegiatan_bulan = [False] * 12
+    n_berstempel = 0
+    n_perkiraan = 0
     for act in satker_acts:
-        th, bl = _bulan_mulai(act)
-        if th != tahun_linimasa or not bl:
-            continue
+        th_act, bl_act = _bulan_mulai(act)
         aset_act = [a for a in all_assets if a.get("activity_id") == act.get("id")]
-        per_bulan_tercatat[bl - 1] += len(aset_act)
-        per_bulan_ditemukan[bl - 1] += sum(
-            1 for a in aset_act if a.get("inventory_status") == "Ditemukan")
-        ada_kegiatan_bulan[bl - 1] = True
+        if th_act == tahun_linimasa and bl_act:
+            ada_kegiatan_bulan[bl_act - 1] = True
+        for a in aset_act:
+            th, bl = _bulan_stempel(a)
+            if th and bl:
+                n_berstempel += 1
+            else:
+                th, bl = th_act, bl_act
+                n_perkiraan += 1
+            if th != tahun_linimasa or not bl:
+                continue
+            per_bulan_tercatat[bl - 1] += 1
+            if a.get("inventory_status") == "Ditemukan":
+                per_bulan_ditemukan[bl - 1] += 1
 
     linimasa, kum_t, kum_d, puncak = [], 0, 0, 0
     for i in range(12):
@@ -6414,6 +6440,12 @@ async def _build_satker_report_v2(activity_id: str):
         b["h_ditemukan"] = round(b["ditemukan"] / puncak * 100) if puncak else 0
         b["sisa"] = b["tercatat"] - b["ditemukan"]
     linimasa_ada = puncak > 0
+    # Berapa persen linimasa ini bertumpu pada tanggal sungguhan, bukan
+    # perkiraan periode kegiatan. Ditampilkan apa adanya di bawah grafiknya.
+    n_total_lini = n_berstempel + n_perkiraan
+    linimasa_pct_stempel = (round(n_berstempel / n_total_lini * 100, 1)
+                            if n_total_lini else 0)
+    linimasa_perkiraan = n_perkiraan
 
     # ── KATEGORI DI LAPANGAN ────────────────────────────────────────────
     #
@@ -6527,6 +6559,8 @@ async def _build_satker_report_v2(activity_id: str):
         "eselon_list": eselon_list, "kegiatan_list": kegiatan_list,
         "linimasa": linimasa, "linimasa_ada": linimasa_ada,
         "tahun_linimasa": tahun_linimasa,
+        "linimasa_pct_stempel": linimasa_pct_stempel,
+        "linimasa_perkiraan": linimasa_perkiraan,
         "kategori_lapangan": kategori_lapangan, "per_tahun": per_tahun,
         "chart_kondisi": chart_kondisi, "chart_status": chart_status,
         "chart_kategori": chart_kategori, "chart_lokasi": chart_lokasi,

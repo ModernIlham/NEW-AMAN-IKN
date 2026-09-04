@@ -10,6 +10,7 @@ import base64
 import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
+import inventarisasi_stempel as stempel_inv
 from typing import List
 from fastapi import (APIRouter, HTTPException, Query, Request, Header,
                      Depends)
@@ -284,6 +285,18 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
         if _geo_unset:
             _ops["$unset"] = _geo_unset
         await db.assets.update_many({"id": {"$in": data.asset_ids}}, _ops)
+        # WAKTU INVENTARISASI pada ubah massal. Jalur ini menulis dengan SATU
+        # `update_many` dan karenanya tak bisa memeriksa dokumen satu per satu,
+        # jadi stempelnya dipasang lewat tulisan kedua yang DISARING ke aset
+        # yang belum bercap — sifat "sekali seumur hidup" tetap terjaga.
+        #
+        # Ditempatkan SESUDAH tulisan utama: bila yang utama gagal, tak ada
+        # aset yang berubah status, jadi tak ada yang pantas dicap.
+        if not stempel_inv.belum_diperiksa(clean_updates.get("inventory_status")):
+            await db.assets.update_many(
+                {"id": {"$in": data.asset_ids},
+                 **stempel_inv.filter_belum_berstempel()},
+                {"$set": {stempel_inv.FIELD: now_str}})
         if harga_sebelum:
             from shared_utils import catat_jurnal_edit_harga
             for _a in harga_sebelum:
