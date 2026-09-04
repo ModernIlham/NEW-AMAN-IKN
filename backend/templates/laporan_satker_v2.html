@@ -105,8 +105,10 @@ body {
 .lm-kol { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
 .lm-batang { display: flex; flex-direction: column; justify-content: flex-end; border-radius: 3px 3px 0 0; overflow: hidden; }
 .lm-sisa { background: #cbd5e1; } .lm-temu { background: var(--hijau); }
+.lm-lain { background: var(--amber); }
 .lm-nilai { font-size: 7px; text-align: center; color: #fff; padding: 1px 0; font-weight: 700; }
 .lm-nilai.gelap { color: #475569; }
+.lm-atas { font-size: 7.5px; font-weight: 700; color: var(--navy); text-align: center; margin-bottom: 2px; font-variant-numeric: tabular-nums; }
 .lm-kosong { height: 3px; background: #f1f5f9; border-radius: 2px; }
 /* Bulan yang BELUM BERJALAN dibedakan dari bulan yang berjalan tanpa
    tambahan: yang pertama garis putus-putus samar, yang kedua garis padat.
@@ -444,16 +446,19 @@ lipat.addEventListener('click', function () {
     <div class="panel" style="margin-top:14px;">
       <h4>Progres Inventarisasi {{ tahun_linimasa }}</h4>
       <div class="lm-legenda">
-        <span><i style="background:var(--hijau)"></i>BMN Ditemukan</span>
-        <span><i style="background:#cbd5e1"></i>Belum / Sisa</span>
+        <span><i style="background:var(--hijau)"></i>Diperiksa &amp; ditemukan</span>
+        <span><i style="background:var(--amber)"></i>Diperiksa, tak ditemukan</span>
+        <span><i style="background:#cbd5e1"></i>Belum diperiksa (bulan perolehan)</span>
       </div>
       <div class="lm-plot">
         {% for b in linimasa %}
         <div class="lm-kol">
           {% if b.belum_berjalan %}<div class="lm-belum" title="Belum berjalan"></div>
           {% elif b.tercatat %}
+          <div class="lm-atas">{{ b.tercatat }}</div>
           <div class="lm-batang" style="height:{{ b.h_tercatat }}%">
-            <div class="lm-sisa" style="flex:{{ b.sisa }} 0 auto;min-height:0;">{% if b.sisa %}<div class="lm-nilai gelap">{{ b.sisa }}</div>{% endif %}</div>
+            <div class="lm-sisa" style="flex:{{ b.perolehan }} 0 auto;min-height:0;">{% if b.perolehan %}<div class="lm-nilai gelap">{{ b.perolehan }}</div>{% endif %}</div>
+            <div class="lm-lain" style="flex:{{ b.periksa_lain }} 0 auto;min-height:0;">{% if b.periksa_lain %}<div class="lm-nilai">{{ b.periksa_lain }}</div>{% endif %}</div>
             <div class="lm-temu" style="flex:{{ b.ditemukan }} 0 auto;min-height:0;">{% if b.ditemukan %}<div class="lm-nilai">{{ b.ditemukan }}</div>{% endif %}</div>
           </div>
           {% else %}<div class="lm-kosong"></div>{% endif %}
@@ -462,20 +467,24 @@ lipat.addEventListener('click', function () {
       </div>
       <div class="lm-x">{% for b in linimasa %}<span class="{% if b.mulai %}aktif{% elif b.belum_berjalan %}pudar{% endif %}">{{ b.bulan }}</span>{% endfor %}</div>
       <p class="lm-nota">
-        Angka bersifat <strong>kumulatif</strong>. Bulan bertanda tebal adalah bulan dimulainya kegiatan.
+        Angka <strong>per bulan</strong>, bukan kumulatif. Tiap NUP muncul sekali, pada bulan
+        peristiwanya sendiri: yang <strong>sudah diperiksa</strong> pada bulan pemeriksaannya, yang
+        <strong>belum diperiksa</strong> pada bulan perolehannya. Bulan bertanda tebal adalah bulan
+        dimulainya kegiatan.
         {% if linimasa_tahun_berjalan and 1 <= linimasa_bulan_terakhir < 12 %}
         Bulan setelah <strong>{{ linimasa[linimasa_bulan_terakhir - 1].bulan }}</strong>
         sengaja <strong>dikosongkan</strong> — belum berjalan, bukan berarti tanpa tambahan.
         {% endif %}
-        {% if linimasa_pct_stempel >= 100 %}
-        Seluruh aset ditempatkan menurut <strong>tanggal pemeriksaannya sendiri</strong>.
-        {% elif linimasa_pct_stempel > 0 %}
-        <strong>{{ linimasa_pct_stempel }}%</strong> aset ditempatkan menurut tanggal pemeriksaannya
-        sendiri; <strong>{{ linimasa_perkiraan }}</strong> sisanya diperiksa sebelum tanggal itu mulai
-        direkam, sehingga dihitung pada bulan kegiatannya dimulai.
-        {% else %}
-        Seluruh aset di sini diperiksa <strong>sebelum</strong> tanggal pemeriksaan mulai direkam,
-        sehingga dihitung pada bulan kegiatannya dimulai — bukan per barang.
+        {% if linimasa_luar_tahun %}
+        Grafik ini memuat <strong>{{ linimasa_jumlah }}</strong> dari {{ total_count }} NUP;
+        <strong>{{ linimasa_luar_tahun }}</strong> sisanya berperistiwa di luar {{ tahun_linimasa }}
+        (umumnya BMN perolehan tahun sebelumnya yang belum diperiksa) sehingga tak punya batang di
+        sini — bukan berarti nol.
+        {% endif %}
+        {% if linimasa_perkiraan %}
+        Dari aset yang sudah diperiksa, <strong>{{ linimasa_pct_stempel }}%</strong> memakai tanggal
+        pemeriksaannya sendiri; <strong>{{ linimasa_perkiraan }}</strong> sisanya diperiksa sebelum
+        tanggal itu mulai direkam, sehingga dihitung pada bulan kegiatannya dimulai.
         {% endif %}
       </p>
     </div>

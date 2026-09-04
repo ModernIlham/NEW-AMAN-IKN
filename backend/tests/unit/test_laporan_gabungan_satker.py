@@ -61,25 +61,37 @@ def _keg(i, bulan, n_id="k"):
             "nama_satker": "Satker Uji", "created_at": f"2025-{bulan:02d}-01"}
 
 
-def _aset(kid, n, ditemukan=0, tahun="2023"):
+def _aset(kid, n, ditemukan=0, tahun="2023", perolehan=None):
+    """`perolehan` menimpa tanggal perolehan penuh (YYYY-MM-DD) bila diisi.
+
+    Nilai `stiker_status` di sini WAJIB sama dengan yang benar-benar ditulis
+    aplikasi — "Sudah Terpasang". Versi pertama fixture ini memakai
+    "Terpasang", nilai yang tak pernah ada di basis data, sehingga ia sama
+    kelirunya dengan kode yang diujinya dan uji stiker lolos tanpa pernah
+    menyentuh keadaan sungguhan.
+    """
     out = []
     for i in range(n):
         out.append({
             "id": f"{kid}-a{i}", "activity_id": kid,
             "asset_name": f"Barang {i}", "asset_code": "3050104001",
             "NUP": str(i), "purchase_price": 1000,
-            "purchase_date": f"{tahun}-01-01",
+            "purchase_date": perolehan or f"{tahun}-01-01",
             "inventory_status": "Ditemukan" if i < ditemukan else "Belum Diinventarisasi",
-            "stiker_status": "Terpasang" if i < ditemukan else "Belum Terpasang",
+            "stiker_status": "Sudah Terpasang" if i < ditemukan else "Belum Terpasang",
         })
     return out
 
 
 # ── 1. LINIMASA ─────────────────────────────────────────────────────────
 
-def test_linimasa_dua_belas_bulan_dan_kumulatif(dbr):
-    """Kegiatan Mei (10 aset) lalu Juli (5 aset): Mei..Jun = 10, Jul..Des = 15.
-    Kumulatif, sebab yang ditanyakan adalah PROGRES, bukan tambahan bulanan."""
+def test_linimasa_per_bulan_FLUKTUATIF_bukan_kumulatif(dbr):
+    """Permintaan pemilik: linimasa per bulan harus FLUKTUATIF.
+
+    Versi kumulatif menjawab "sudah sampai mana" — tangga yang hanya naik dan
+    tak pernah turun, sehingga "bulan apa yang ramai" tak pernah terjawab.
+    Kegiatan Mei (4 diperiksa) dan Juli (2 diperiksa): Juni harus KEMBALI NOL,
+    bukan menyalin angka Mei."""
     async def jalan():
         await _seed(dbr, [_keg(1, 5), _keg(2, 7)],
                     _aset("k1", 10, ditemukan=4) + _aset("k2", 5, ditemukan=2))
@@ -88,11 +100,47 @@ def test_linimasa_dua_belas_bulan_dan_kumulatif(dbr):
         assert len(lm) == 12
         assert [b["bulan"] for b in lm][:3] == ["JAN", "FEB", "MAR"]
         per_bulan = {b["bulan"]: b["tercatat"] for b in lm}
-        assert per_bulan["APR"] == 0
-        assert per_bulan["MEI"] == 10 and per_bulan["JUN"] == 10
-        assert per_bulan["JUL"] == 15 and per_bulan["DES"] == 15
+        assert per_bulan["MEI"] == 4, per_bulan
+        assert per_bulan["JUN"] == 0, "kumulatif kembali: Juni menyalin Mei"
+        assert per_bulan["JUL"] == 2, per_bulan
+        assert per_bulan["DES"] == 0, "kumulatif kembali: Desember menyalin Juli"
         temu = {b["bulan"]: b["ditemukan"] for b in lm}
-        assert temu["MEI"] == 4 and temu["JUL"] == 6
+        assert temu["MEI"] == 4 and temu["JUL"] == 2
+    _jalan(jalan())
+
+
+def test_belum_diinventarisasi_ditempatkan_di_bulan_PEROLEHAN(dbr):
+    """*"menyesuaikan tanggal perolehan untuk BMN yang belum diinventarisasi
+    akan tetapi tercatat"* — satu-satunya tanggal yang diketahui tentang aset
+    yang belum disentuh pemeriksaan adalah tanggal perolehannya. Memakai bulan
+    kegiatan untuknya berarti mengaku-aku peristiwa yang belum terjadi."""
+    async def jalan():
+        # Kegiatan Mei; empat aset BELUM diperiksa, diperoleh Maret 2025.
+        await _seed(dbr, [_keg(1, 5)],
+                    _aset("k1", 4, ditemukan=0, perolehan="2025-03-09"))
+        d = await rp._build_satker_report_v2("k1")
+        per_bulan = {b["bulan"]: b for b in d["linimasa"]}
+        assert per_bulan["MAR"]["perolehan"] == 4, "tak jatuh ke bulan perolehan"
+        assert per_bulan["MAR"]["ditemukan"] == 0
+        assert per_bulan["MEI"]["tercatat"] == 0, "masih ditumpuk di bulan kegiatan"
+    _jalan(jalan())
+
+
+def test_peristiwa_di_luar_tahun_DINYATAKAN_bukan_disembunyikan(dbr):
+    """BMN perolehan tahun lampau yang belum diperiksa tak punya peristiwa apa
+    pun pada tahun berjalan, jadi ia tak berbatang. Grafik yang diam soal itu
+    akan terbaca sebagai "sisanya nol" — jumlahnya harus terhitung dan
+    laporannya harus menyebutnya."""
+    async def jalan():
+        # 10 aset perolehan 2023; 4 sudah diperiksa (jatuh di bulan kegiatan
+        # 2025), 6 belum (jatuh di 2023 — di luar tahun linimasa).
+        await _seed(dbr, [_keg(1, 5)], _aset("k1", 10, ditemukan=4, tahun="2023"))
+        d = await rp._build_satker_report_v2("k1")
+        assert d["linimasa_luar_tahun"] == 6, d["linimasa_luar_tahun"]
+        assert d["linimasa_jumlah"] == 4
+        assert d["total_count"] == 10, "totalnya tetap utuh di tempat lain"
+        t = _teks_template()
+        assert "berperistiwa di luar" in t, "batasnya tak dinyatakan di laporan"
     _jalan(jalan())
 
 
@@ -153,19 +201,25 @@ def test_linimasa_memakai_stempel_aset_bukan_bulan_kegiatan(dbr):
     _jalan(jalan())
 
 
-def test_aset_tanpa_stempel_jatuh_ke_bulan_kegiatan(dbr):
+def test_aset_TERPERIKSA_tanpa_stempel_jatuh_ke_bulan_kegiatan(dbr):
     """Data lama tak boleh hilang dari linimasa. Tanpa cadangan ini seluruh
-    riwayat sebelum stempel diperkenalkan lenyap dari grafiknya."""
+    riwayat sebelum stempel diperkenalkan lenyap dari grafiknya.
+
+    Cadangan ini hanya berlaku bagi aset yang SUDAH diperiksa. Aset yang belum
+    diperiksa memakai bulan perolehannya, dan itu bukan perkiraan — itu
+    tanggal sungguhan untuk peristiwa yang lain."""
     async def jalan():
-        aset = _aset("k1", 4, ditemukan=2)
+        aset = _aset("k1", 4, ditemukan=2, perolehan="2025-02-01")
         aset[0]["tanggal_inventarisasi"] = "2025-08-14T09:00:00+00:00"
         await _seed(dbr, [_keg(1, 5)], aset)
         d = await rp._build_satker_report_v2("k1")
         per_bulan = {b["bulan"]: b["tercatat"] for b in d["linimasa"]}
-        assert per_bulan["MEI"] == 3, "tiga aset tanpa stempel"
-        assert per_bulan["AGU"] == 4, "kumulatif: 3 + 1 bercap Agustus"
-        assert d["linimasa_perkiraan"] == 3
-        assert d["linimasa_pct_stempel"] == 25.0
+        assert per_bulan["AGU"] == 1, "aset bercap Agustus pindah bulan"
+        assert per_bulan["MEI"] == 1, "aset terperiksa tanpa stempel hilang"
+        assert per_bulan["FEB"] == 2, "dua aset belum diperiksa, perolehan Feb"
+        # Hanya dua aset TERPERIKSA yang masuk hitungan stempel/perkiraan.
+        assert d["linimasa_perkiraan"] == 1
+        assert d["linimasa_pct_stempel"] == 50.0
     _jalan(jalan())
 
 
@@ -290,6 +344,36 @@ def test_kategori_lapangan_dari_data_sistem_bukan_daftar_karangan(dbr):
     _jalan(jalan())
 
 
+def test_stiker_dihitung_dengan_nilai_yang_BENAR_BENAR_dipakai_aplikasi(dbr):
+    """Laporan gabungan pernah membandingkan `stiker_status` dengan
+    "Terpasang" — tanpa "Sudah". Nilai itu tak pernah ada di basis data
+    (formulir aset hanya menawarkan "Belum Terpasang" dan "Sudah Terpasang"),
+    jadi kartu berstiker SELALU nol dan kartu belum-berstiker selalu memuat
+    seluruh temuan. Tak ada galat, hanya angka yang tenang dan keliru.
+
+    Uji ini memakai nilai sungguhan dan campuran, bukan nilai seragam: fixture
+    yang seluruh asetnya berstiker akan tetap lolos meski pembandingnya
+    tertukar dengan "selalu benar"."""
+    from report_utils import STIKER_TERPASANG
+
+    async def jalan():
+        aset = _aset("k1", 6, ditemukan=6)
+        # Dua dari enam temuan BELUM berstiker.
+        aset[4]["stiker_status"] = "Belum Terpasang"
+        aset[5]["stiker_status"] = ""
+        await _seed(dbr, [_keg(1, 5)], aset)
+        d = await rp._build_satker_report_v2("k1")
+        kat = {k["label"]: k["n"] for k in d["kategori_lapangan"]}
+        assert kat["BMN Ditemukan"] == 6
+        assert kat["Ditemukan, Stiker Terpasang"] == 4, kat
+        assert kat["Ditemukan, Belum Berstiker"] == 2, kat
+        # Ringkasan utama memakai perbandingan yang SAMA.
+        assert d["stiker_terpasang"] == 4 and d["stiker_belum"] == 2
+    assert STIKER_TERPASANG == "Sudah Terpasang", (
+        "konstanta bergeser dari nilai yang ditulis AssetForm.jsx/models.py")
+    _jalan(jalan())
+
+
 def test_per_tahun_perolehan_urut_kronologis(dbr):
     """Laporan dibaca kiri-ke-kanan sebagai perjalanan waktu, bukan sebagai
     peringkat — mengurutkannya menurut jumlah membuat sumbu waktunya kacau.
@@ -394,7 +478,11 @@ def test_tahun_lampau_ditampilkan_PENUH(dbr):
         assert d["tahun_linimasa"] == lalu
         assert d["linimasa_bulan_terakhir"] == 12
         assert all(not b["belum_berjalan"] for b in d["linimasa"])
-        assert d["linimasa"][-1]["tercatat"] == 5, "kumulatif Desember hilang"
+        # Dua aset terperiksa jatuh di bulan kegiatan (Maret); tiga sisanya
+        # belum diperiksa dan berperolehan tahun lain, jadi di luar grafik.
+        per_bulan = {b["bulan"]: b["tercatat"] for b in d["linimasa"]}
+        assert per_bulan["MAR"] == 2, per_bulan
+        assert d["linimasa_luar_tahun"] == 3
     _jalan(jalan())
 
 
