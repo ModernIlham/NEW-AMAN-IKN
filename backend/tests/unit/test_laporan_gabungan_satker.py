@@ -342,3 +342,106 @@ def test_satu_keluarga_huruf_untuk_badan_dokumen():
         "serif hanya boleh tersisa di sampul")
     assert "font-variant-numeric: tabular-nums" in t, (
         "angka bertumpuk perlu digit selebar sama agar berbaris")
+
+
+# ── Bulan yang BELUM BERJALAN tak boleh berisi apa-apa ───────────────────
+#
+# Laporan pemilik: *"tahun berjalan seharusnya bulan kedepannya masih belum
+# ada data tapi kenapa bisa muncul data."*
+#
+# Angka linimasa kumulatif, jadi tanpa batas ini bulan sisa tahun berjalan
+# menyalin angka bulan terakhir dan tampil seolah pekerjaannya sudah selesai
+# sampai Desember — grafik yang MERAMAL, bukan melaporkan. Pembacanya tak
+# punya cara membedakan "belum terjadi" dari "tidak ada tambahan".
+
+def _keg_pada(i, tahun, bulan):
+    return {"id": f"t{i}", "kode_satker": "401234",
+            "nama_kegiatan": f"Kegiatan {i}", "nomor_surat": f"S-{i}",
+            "tanggal_mulai": f"{tahun}-{bulan:02d}-01",
+            "tanggal_selesai": f"{tahun}-{bulan:02d}-28",
+            "nama_satker": "Satker Uji", "created_at": f"{tahun}-{bulan:02d}-01"}
+
+
+def test_bulan_setelah_bulan_ini_dikosongkan(dbr):
+    from datetime import datetime
+    kini = datetime.now()
+
+    async def jalan():
+        bulan = max(1, kini.month - 1)
+        await _seed(dbr, [_keg_pada(1, kini.year, bulan)], _aset("t1", 6, ditemukan=2))
+        d = await rp._build_satker_report_v2("t1")
+        assert d["tahun_linimasa"] == kini.year
+        assert d["linimasa_bulan_terakhir"] == kini.month
+        for i, b in enumerate(d["linimasa"], start=1):
+            if i > kini.month:
+                assert b["belum_berjalan"] is True, b["bulan"]
+                assert b["tercatat"] == 0, (b["bulan"], b["tercatat"])
+                assert b["ditemukan"] == 0, b["bulan"]
+            else:
+                assert b["belum_berjalan"] is False, b["bulan"]
+    _jalan(jalan())
+
+
+def test_tahun_lampau_ditampilkan_PENUH(dbr):
+    """Di tahun yang sudah lewat, angka bulan Desember memang bermakna
+    'sampai akhir tahun sekian' — mengosongkannya justru menghapus fakta."""
+    from datetime import datetime
+
+    async def jalan():
+        lalu = datetime.now().year - 1
+        await _seed(dbr, [_keg_pada(1, lalu, 3)], _aset("t1", 5, ditemukan=2))
+        d = await rp._build_satker_report_v2("t1")
+        assert d["tahun_linimasa"] == lalu
+        assert d["linimasa_bulan_terakhir"] == 12
+        assert all(not b["belum_berjalan"] for b in d["linimasa"])
+        assert d["linimasa"][-1]["tercatat"] == 5, "kumulatif Desember hilang"
+    _jalan(jalan())
+
+
+def test_salah_ketik_tahun_tak_menyandera_seluruh_grafik(dbr):
+    """Satu "2062" alih-alih "2026" akan memindahkan linimasa ke tahun itu dan
+    menyisakan grafik kosong, sementara pekerjaan tahun ini tak terlihat sama
+    sekali. Kekeliruan datanya tetap tampak di daftar kegiatan."""
+    from datetime import datetime
+    kini = datetime.now()
+
+    async def jalan():
+        await _seed(dbr, [_keg_pada(1, kini.year, max(1, kini.month - 1)),
+                          _keg_pada(2, 2062, 5)],
+                    _aset("t1", 4, ditemukan=2) + _aset("t2", 3, ditemukan=1))
+        d = await rp._build_satker_report_v2("t1")
+        assert d["tahun_linimasa"] == kini.year, d["tahun_linimasa"]
+        assert d["linimasa_ada"] is True, "grafik tahun ini ikut hilang"
+        # Kegiatan bertahun ganjil TETAP tercatat di daftarnya.
+        assert len(d["kegiatan_list"]) == 2
+    _jalan(jalan())
+
+
+def test_seluruh_kegiatan_bertahun_depan_tak_menggambar_apa_pun(dbr):
+    from datetime import datetime
+
+    async def jalan():
+        depan = datetime.now().year + 1
+        await _seed(dbr, [_keg_pada(1, depan, 2)], _aset("t1", 5, ditemukan=2))
+        d = await rp._build_satker_report_v2("t1")
+        assert d["tahun_linimasa"] == datetime.now().year
+        assert d["linimasa_ada"] is False, "menggambar tahun yang belum terjadi"
+    _jalan(jalan())
+
+
+def test_bulan_belum_berjalan_dibedakan_secara_VISUAL():
+    """Kalau bulan belum-berjalan digambar sama dengan bulan tanpa tambahan,
+    salah bacanya kembali — hanya lebih halus."""
+    t = _teks_template()
+    assert "{% if b.belum_berjalan %}" in t
+    assert ".lm-belum" in t, "tak ada penanda khusus"
+    assert "belum berjalan, bukan berarti tanpa tambahan" in t
+
+
+def test_linimasa_memakai_jam_yang_SAMA_dengan_tanggal_cetak():
+    """Jam berbeda membuat laporan bertanggal 1 Oktober memuat grafik yang
+    berhenti di September — dua tanggal pada satu dokumen, tanpa penjelasan."""
+    import inspect
+    src = inspect.getsource(rp._build_satker_report_v2)
+    assert "sekarang = datetime.now()" in src
+    assert "datetime.now(timezone.utc)" not in src.split("sekarang =")[1][:200]
