@@ -18,6 +18,93 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#981] Laporan gabungan: halaman A4 tetap, sampul & filter dirombak — 2026-09-04
+
+Permintaan pemilik: *"buatkan dengan fix A4 dan sudah dibagi perhalamannya
+persis seperti di tampilan preview laporan eksekutif, dan bagian filternya dan
+cover nya buat lebih baik dan lebih rapi lagi ... pastikan peletakan tombolnya
+dalam merubah setiap filter terdesign dengan rapi dan terlihat menyatu dengan
+laporan agar navigasinya mudah. dan ketika dicetak nantinya sesuai hasil
+filter."*
+
+### Halaman A4 tetap
+
+Tiap bagian kini SATU lembar berukuran pasti **794 × 1123 px** (A4 pada
+96 dpi) — pola yang sama dengan pratinjau Laporan Eksekutif. Di pratinjau
+lembarnya melayang dengan bayangan, sehingga **batas halaman terlihat sebelum
+dicetak**; kejutan "ternyata terpotong" hanya muncul kalau batas itu
+disembunyikan.
+
+Terverifikasi pada PDF sungguhan: **595 × 842 pt**, persis A4.
+
+**Tinggi tetap berarti isi bisa terpotong diam-diam**, jadi bagian yang
+panjang dipaginasi di template: 8 kartu kegiatan dan 12 kartu personil per
+lembar, dengan judul ber-"(lanjutan)". Diuji pada 5 kegiatan dan 26 personil
+— seluruh nama muncul di PDF, dan jumlah lembar HTML sama dengan jumlah
+halaman PDF (tak ada yang meluber).
+
+Tiap lembar berkop dan berkaki, ditulis **sekali** sebagai makro: lembar baru
+tak boleh lahir dengan kop yang sedikit berbeda.
+
+### Sampul dirombak
+
+Mengikuti bahasa visual sampul eksekutif — gradien navy, bingkai ganda emas,
+lambang instansi, kotak identitas satker, dan kotak meta (jumlah kegiatan,
+NUP, nilai, tanggal cetak). Identitas instansi diambil dari sumber yang SAMA
+dengan kop surat, supaya ketiganya tak pernah berbeda.
+
+Pengambilannya **gagal-buka**: identitas adalah hiasan sampul, dan membiarkan
+galat pengaturan merobohkan seluruh laporan berarti menukar sampul yang kurang
+lengkap dengan halaman galat.
+
+**Sampul menyatakan lingkupnya.** Bila tersaring, ada cap di sampul — halaman
+yang paling sering difotokopi terpisah tak boleh beredar sebagai laporan
+satker penuh.
+
+### Filter yang menyatu
+
+Bilah aksi **melekat di atas** (sticky): pada satker dengan puluhan lokasi,
+panel filternya panjang, dan tombol Terapkan yang ikut tergulir memaksa
+pengguna menggulir balik ke atas hanya untuk menekannya — alat yang terasa
+melawan.
+
+Bilah memuat: judul, lencana ringkas (**berapa kegiatan / NUP**, dan apakah
+sedang tersaring), tombol **lipat panel**, **Terapkan Filter**, dan **Cetak /
+PDF**. Tombol Terapkan di bilah menyerahkan formulir yang berada di luar
+dirinya lewat atribut `form` — tanpa itu ia hanya tombol mati yang tampak bisa
+ditekan.
+
+Panelnya dapat **dilipat**: laporan dibaca lebih sering daripada disaring, dan
+panel yang selalu terbuka mendorong halaman pertama ke bawah setiap kali
+dibuka. Tiap blok kini menunjukkan **berapa yang dipilih** ("3 dipilih" vs
+"semua") dan punya pintasan *pilih semua* / *kosongkan*.
+
+### Cetak mengikuti filter
+
+Sudah berlaku sejak `[#980]` dan dijaga ulang di sini: panel dan bilah
+ber-`no-print`, sementara pita "laporan ini tersaring" **ikut tercetak**.
+Diverifikasi pada PDF: pita ada, panel tidak.
+
+### Uji mutasi — enam dipasang, enam dibunuh
+
+| Mutasi | Dibunuh oleh |
+|---|---|
+| Tinggi lembar mengikuti isi | `test_lembar_berukuran_A4_pasti` |
+| Paginasi kegiatan dicabut | `test_bagian_panjang_dipaginasi_bukan_dipotong` |
+| Bilah aksi berhenti melekat | `test_tombol_terapkan_selalu_terjangkau` |
+| Tombol bilah lepas dari formulir | idem |
+| Cap filter di sampul dihapus | `test_sampul_menyatakan_lingkupnya` |
+| Kop instansi berhenti gagal-buka | 7 uji |
+
+### Berkas
+
+- `backend/templates/laporan_satker_v2.html` — ditulis ulang (655 baris)
+- `backend/routes/reports.py` — identitas instansi untuk sampul, gagal-buka
+- `backend/tests/unit/test_laporan_gabungan_satker.py` — 4 uji A4 baru
+- `backend/tests/unit/test_laporan_filter.py` — 2 uji navigasi baru
+
+---
+
 ## [#980] Laporan gabungan jadi interaktif: filter lanjutan multi-pilihan — 2026-09-04
 
 Permintaan pemilik: *"jadikan interaktif dan dapat memilih kegiatan apa saja

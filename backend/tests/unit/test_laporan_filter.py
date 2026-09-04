@@ -184,16 +184,26 @@ def _tpl():
 
 def test_panel_filter_hanya_di_pratinjau():
     """Panel tak boleh ikut tercetak — kotak centang di atas kertas adalah
-    ruang terbuang, dan pembaca kertas tak bisa menekannya."""
+    ruang terbuang, dan pembaca kertas tak bisa menekannya.
+
+    Yang diuji SIFATNYA, bukan nama kelasnya: perombakan tampilan boleh
+    mengganti nama, tetapi tak boleh menghilangkan `no-print` dari formulir
+    maupun dari bilah aksinya.
+    """
     t = _tpl()
-    assert 'class="filter-panel no-print"' in t
+    form = re.search(r"<form[^>]*id=\"form-filter\"[^>]*>", t)
+    assert form, "formulir filter hilang"
+    assert "no-print" in form.group(0), "panel filter akan ikut tercetak"
+    bilah = re.search(r'<div class="bilah[^"]*"', t)
+    assert bilah and "no-print" in bilah.group(0), "bilah aksi akan ikut tercetak"
 
 
 def test_penyaringan_di_server_bukan_di_peramban():
     """Menyaring di sisi peramban membuat PDF dan layar berbeda tanpa gejala:
     tombol Cetak memanggil endpoint lain yang tak tahu apa-apa soal filternya."""
     t = _tpl()
-    assert '<form class="filter-panel no-print" method="get"' in t
+    form = re.search(r"<form[^>]*id=\"form-filter\"[^>]*>", t)
+    assert form and 'method="get"' in form.group(0)
 
 
 def test_laporan_tersaring_menyatakan_dirinya_DI_KERTAS():
@@ -211,3 +221,24 @@ def test_pdf_memakai_filter_yang_sama():
     import inspect
     src = inspect.getsource(rp.laporan_satker_pdf)
     assert "_filter_laporan_satker(" in src
+
+
+# ── Bilah aksi melekat: navigasi ────────────────────────────────────────
+
+def test_tombol_terapkan_selalu_terjangkau():
+    """Pada satker dengan puluhan lokasi, panel filternya panjang. Tombol
+    Terapkan yang ikut tergulir memaksa pengguna menggulir balik ke atas
+    hanya untuk menekannya — dan itu terasa seperti alat yang melawan."""
+    t = _tpl()
+    assert "position: sticky" in t, "bilah aksi tidak melekat"
+    # Tombol di bilah menyerahkan formulir yang berada DI LUAR dirinya;
+    # tanpa atribut `form` ia hanya tombol mati yang tampak bisa ditekan.
+    assert 'form="form-filter"' in t
+
+
+def test_panel_filter_dapat_dilipat():
+    """Laporan dibaca lebih sering daripada disaring; panel yang selalu
+    terbuka mendorong halaman pertama ke bawah setiap kali dibuka."""
+    t = _tpl()
+    assert 'id="lipat-filter"' in t
+    assert "panel.hidden" in t
