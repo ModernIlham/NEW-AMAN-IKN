@@ -23,7 +23,7 @@
 body {
   font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
   color: #1e293b; line-height: 1.5; -webkit-font-smoothing: antialiased;
-  {% if preview %}background: #e2e8f0; padding-bottom: 60px;{% else %}background: #fff;{% endif %}
+  {% if preview %}background: #e2e8f0; padding-bottom: 60px; min-width: 794px;{% else %}background: #fff;{% endif %}
 }
 .num, td.r, .kpi-n, .stat .num { font-variant-numeric: tabular-nums; }
 
@@ -167,8 +167,13 @@ body {
    puluhan lokasi, tombol Terapkan yang ikut tergulir memaksa
    pengguna menggulir balik ke atas hanya untuk menekannya.
    ============================================================ */
-.bilah { position: sticky; top: 0; z-index: 50; background: linear-gradient(135deg, var(--navy), var(--navy-3)); border-bottom: 3px solid var(--gold); box-shadow: 0 4px 18px rgba(15,23,42,.25); }
-.bilah-isi { max-width: 794px; margin: 0 auto; padding: 11px 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* Bilah & panel MENGIKUTI LEBAR LEMBAR A4, bukan lebar layar.
+   Lembarnya 794px pasti; panel yang melebar mengikuti layar akan lebih sempit
+   dari lembarnya di ponsel dan lebih lebar di monitor — terbaca sebagai dua
+   dokumen yang kebetulan bertumpuk, bukan satu laporan. Menyamakan lebarnya
+   membuat keduanya bergulir mendatar sebagai satu kesatuan. */
+.bilah { position: sticky; top: 0; z-index: 50; width: 794px; margin: 0 auto; background: linear-gradient(135deg, var(--navy), var(--navy-3)); border-bottom: 3px solid var(--gold); box-shadow: 0 4px 18px rgba(15,23,42,.25); }
+.bilah-isi { padding: 11px 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .bilah-judul { font-size: 12px; font-weight: 700; color: #fff; letter-spacing: .8px; text-transform: uppercase; margin-right: auto; display: flex; align-items: center; gap: 8px; }
 .bilah-judul .titik { width: 8px; height: 8px; border-radius: 2px; background: var(--gold); }
 .lencana { font-size: 9.5px; font-weight: 700; padding: 3px 9px; border-radius: 20px; background: rgba(201,168,76,.2); color: var(--gold-2); border: 1px solid rgba(201,168,76,.45); }
@@ -180,12 +185,17 @@ body {
 .t-garis:hover { background: rgba(255,255,255,.13); }
 .t-lipat { background: transparent; color: var(--gold-2); border: 1px solid rgba(201,168,76,.4); }
 
-.panel-filter { max-width: 794px; margin: 0 auto; background: #fff; border-radius: 0 0 8px 8px; box-shadow: 0 12px 30px rgba(15,23,42,.12); overflow: hidden; }
+.panel-filter { width: 794px; margin: 0 auto 34px; background: #fff; border-radius: 0 0 8px 8px; box-shadow: 0 12px 30px rgba(15,23,42,.12); overflow: hidden; }
 .panel-filter[hidden] { display: none; }
 .pf-kepala { padding: 12px 18px 0; }
 .pf-ket { font-size: 10px; color: #64748b; line-height: 1.5; }
 .pf-ket b { color: var(--navy); }
 .pf-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 12px 18px 4px; }
+/* Lebar lembar tetap 794px, jadi ambang ini soal LAYAR: di bawahnya pengguna
+   sudah menggulir mendatar, dan tiga kolom memaksanya menggeser lagi hanya
+   untuk melihat blok ketiga. Dua kolom cukup memuat semuanya dalam satu
+   pandangan gulir. */
+@media (max-width: 820px) { .pf-grid { grid-template-columns: repeat(2, 1fr); } }
 .pf-blok { border: 1px solid #e2e8f0; border-radius: 7px; background: #fafbfc; display: flex; flex-direction: column; overflow: hidden; }
 .pf-blok > h5 { font-size: 8.5px; font-weight: 800; color: var(--navy); text-transform: uppercase; letter-spacing: .8px; padding: 8px 10px 6px; display: flex; align-items: center; justify-content: space-between; gap: 6px; border-bottom: 1px solid #eef2f7; background: #fff; }
 .pf-blok .jml { font-size: 8px; font-weight: 700; color: var(--biru); background: #eff6ff; border-radius: 10px; padding: 1px 6px; }
@@ -232,6 +242,13 @@ body {
     parameter yang sama, sehingga yang dicetak persis yang dibaca. Menyaring
     di peramban akan membuat keduanya berbeda tanpa satu pun gejala. #}
 <form class="panel-filter no-print" id="form-filter" method="get" data-testid="filter-laporan">
+  {#  Formulir GET MENGGANTI seluruh query string dengan isiannya sendiri.
+      Pratinjau dibuka dengan `?token=<jwt>&sa=<satker>` karena window.open tak
+      bisa mengirim header Authorization — tanpa dititipkan kembali di sini,
+      menekan Terapkan membuang tokennya dan server menjawab 401. #}
+  {% for nama, nilai in (param_bawaan or []) %}
+  <input type="hidden" name="{{ nama }}" value="{{ nilai }}" data-bawaan="1">
+  {% endfor %}
   <div class="pf-kepala">
     <p class="pf-ket">
       Setiap kotak boleh dicentang <b>lebih dari satu</b>; yang dibiarkan kosong berarti <b>semua</b>.
@@ -288,7 +305,9 @@ body {
 
   <div class="pf-kaki">
     <button type="submit" class="tbl-pf pf-terapkan" data-testid="filter-terapkan">Terapkan Filter</button>
-    <a href="?" class="tbl-pf pf-reset" data-testid="filter-reset">Tampilkan Semua</a>
+    {# `?` polos akan membuang token yang sama; rakit ulang parameter bawaannya. #}
+    <a href="?{% for nama, nilai in (param_bawaan or []) %}{{ nama|urlencode }}={{ nilai|urlencode }}{% if not loop.last %}&amp;{% endif %}{% endfor %}"
+       class="tbl-pf pf-reset" data-testid="filter-reset">Tampilkan Semua</a>
     {% if filter_aktif %}
     <span class="pf-nota">Angka pada laporan di bawah hanya mencakup yang tersaring.</span>
     {% endif %}

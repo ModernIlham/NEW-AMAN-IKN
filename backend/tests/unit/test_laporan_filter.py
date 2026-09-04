@@ -242,3 +242,80 @@ def test_panel_filter_dapat_dilipat():
     t = _tpl()
     assert 'id="lipat-filter"' in t
     assert "panel.hidden" in t
+
+
+# ── Token autentikasi harus SELAMAT saat filter diterapkan ──────────────
+#
+# Cacat nyata di produksi: menekan "Terapkan Filter" menghasilkan
+# {"detail":"Autentikasi diperlukan"}. Pratinjau dibuka lewat `window.open`
+# yang tak bisa mengirim header Authorization, jadi tokennya dititip di
+# `?token=<jwt>&sa=<satker>`. Formulir `method="get"` MENGGANTI seluruh query
+# string dengan isiannya sendiri — perilaku HTML, bukan kekeliruan peramban —
+# sehingga tokennya terbuang dan server menolak permintaannya.
+
+class _QueryPalsu:
+    def __init__(self, pasangan):
+        self._p = list(pasangan)
+
+    def multi_items(self):
+        return list(self._p)
+
+
+class _PermintaanPalsu:
+    def __init__(self, pasangan):
+        self.query_params = _QueryPalsu(pasangan)
+
+
+def test_parameter_di_luar_filter_ikut_terbawa():
+    """Daftarnya UMUM, bukan nama yang dihafal: parameter baru yang
+    ditambahkan kelak ikut selamat tanpa memperbaiki cacat yang sama untuk
+    kedua kalinya."""
+    req = _PermintaanPalsu([
+        ("token", "jwt-abc"), ("sa", "401234"),
+        ("tahun", "2023"), ("kegiatan", "k1"), ("dari", "2025-01-01"),
+        ("param_baru_kelak", "x"),
+    ])
+    bawaan = rp._param_bukan_filter(req)
+    assert ("token", "jwt-abc") in bawaan
+    assert ("sa", "401234") in bawaan
+    assert ("param_baru_kelak", "x") in bawaan
+    # Isian filter TIDAK boleh ikut jadi input tersembunyi — kalau ikut, ia
+    # terkirim dua kali dan centang yang dilepas tak pernah benar-benar lepas.
+    for nama in ("tahun", "kegiatan", "dari"):
+        assert all(k != nama for k, _ in bawaan), nama
+
+
+def test_formulir_menitipkan_kembali_parameter_bawaan():
+    t = _tpl()
+    assert '{% for nama, nilai in (param_bawaan or []) %}' in t
+    assert 'type="hidden"' in t
+
+
+def test_tautan_tampilkan_semua_tak_membuang_token():
+    """`href="?"` polos membuang token yang sama — cacat yang persis serupa,
+    hanya di tombol yang berbeda."""
+    t = _tpl()
+    i = t.index('data-testid="filter-reset"')
+    potongan = t[i - 400:i]
+    assert "param_bawaan" in potongan, "tautan reset masih memakai ? polos"
+
+
+def test_rute_html_meneruskan_request():
+    """Tanpa `request`, rute tak punya cara membaca parameter bawaan."""
+    import inspect
+    tanda = inspect.signature(rp.laporan_satker_html)
+    assert "request" in tanda.parameters
+    assert "_param_bukan_filter(request)" in inspect.getsource(rp.laporan_satker_html)
+
+
+# ── Panel filter selebar lembar A4 ─────────────────────────────────────
+
+def test_panel_filter_selebar_lembar_A4():
+    """Umpan balik pemilik: *"bagian filter juga masih belum responsive
+    menyesuaikan A4nya"*. Panel yang melebar mengikuti layar akan lebih sempit
+    dari lembarnya di ponsel dan lebih lebar di monitor — terbaca sebagai dua
+    dokumen yang kebetulan bertumpuk, bukan satu laporan."""
+    t = _tpl()
+    assert ".panel-filter { width: 794px;" in t
+    assert re.search(r"\.bilah \{[^}]*width: 794px", t), "bilah tak selebar lembar"
+    assert "max-width: 794px" not in t, "masih ada yang melebar mengikuti layar"

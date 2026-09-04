@@ -6612,6 +6612,30 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
     }
 
 
+#: Nama parameter yang DIKELOLA formulir filter. Sisanya — token autentikasi,
+#: satker aktif, apa pun yang ditambahkan kemudian — harus ikut terbawa.
+_PARAM_FILTER = ("kegiatan", "tahun", "status", "kondisi", "lokasi",
+                 "dari", "sampai")
+
+
+def _param_bukan_filter(request: Request) -> list:
+    """Parameter query yang BUKAN milik formulir filter, sebagai (nama, nilai).
+
+    Formulir `method="get"` MENGGANTI seluruh query string dengan isiannya
+    sendiri — itu perilaku HTML, bukan kekeliruan peramban. Pratinjau laporan
+    dibuka dengan `?token=<jwt>&sa=<satker>` karena `window.open` tak bisa
+    mengirim header Authorization; tanpa dititipkan kembali sebagai input
+    tersembunyi, menekan "Terapkan Filter" membuang tokennya dan server
+    menjawab 401 "Autentikasi diperlukan".
+
+    Dikembalikan sebagai daftar UMUM, bukan daftar nama yang dihafal: parameter
+    baru yang ditambahkan kelak ikut selamat tanpa memperbaiki cacat yang sama
+    untuk kedua kalinya.
+    """
+    return [(k, v) for k, v in request.query_params.multi_items()
+            if k not in _PARAM_FILTER]
+
+
 def _filter_laporan_satker(kegiatan, tahun, status, kondisi, lokasi,
                            dari: str = "", sampai: str = "") -> dict:
     """Rakit filter laporan dari query string.
@@ -6628,7 +6652,7 @@ def _filter_laporan_satker(kegiatan, tahun, status, kondisi, lokasi,
 
 
 @reports_router.get("/inventory-activities/{activity_id}/laporan-satker-html")
-async def laporan_satker_html(activity_id: str,
+async def laporan_satker_html(activity_id: str, request: Request,
                               kegiatan: List[str] = Query(default=[]),
                               tahun: List[str] = Query(default=[]),
                               status: List[str] = Query(default=[]),
@@ -6644,6 +6668,9 @@ async def laporan_satker_html(activity_id: str,
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
     data["preview"] = True
+    # Token & satker-aktif dititipkan kembali ke formulir filter; lihat
+    # `_param_bukan_filter`.
+    data["param_bawaan"] = _param_bukan_filter(request)
     env = _jinja_env()
     template = env.get_template("laporan_satker_v2.html")
     html = template.render(**data)
