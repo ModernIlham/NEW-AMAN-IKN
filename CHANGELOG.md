@@ -18,6 +18,63 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#982] Terapkan Filter membuang token; panel disamakan dengan lembar A4 — 2026-09-04
+
+Dua laporan dari pemilik atas `[#981]`.
+
+### Cacat: "Autentikasi diperlukan"
+
+Menekan **Terapkan Filter** menghasilkan `{"detail":"Autentikasi
+diperlukan"}` — fiturnya benar-benar tak bisa dipakai.
+
+Sebabnya bukan di autentikasi, melainkan di bentuk formulirnya. Pratinjau
+dibuka lewat `window.open`, yang **tak bisa mengirim header Authorization**,
+jadi tokennya dititip di query: `?token=<jwt>&sa=<satker>`. Formulir
+`method="get"` **MENGGANTI seluruh query string** dengan isiannya sendiri —
+itu perilaku HTML, bukan kekeliruan peramban — sehingga token dan satker-aktif
+terbuang, dan server menolak permintaannya.
+
+Tautan **"Tampilkan Semua"** (`href="?"`) membuang keduanya dengan cara yang
+persis sama.
+
+Keduanya kini menitipkan kembali parameter di luar filter: formulir lewat
+input tersembunyi, tautan reset lewat query yang dirakit ulang. Daftarnya
+disusun **umum** — semua parameter yang bukan milik formulir filter — bukan
+nama yang dihafal, supaya parameter baru yang ditambahkan kelak ikut selamat
+tanpa memperbaiki cacat yang sama untuk kedua kalinya.
+
+Isian filter sendiri **tidak** ikut jadi input tersembunyi: kalau ikut, ia
+terkirim dua kali dan centang yang dilepas tak pernah benar-benar lepas.
+
+### Panel filter kini selebar lembar A4
+
+Umpan balik: *"bagian filter juga masih belum responsive menyesuaikan
+A4nya"*. Panel memakai `max-width: 794px`, sehingga di ponsel ia menyempit
+mengikuti layar sementara lembarnya tetap 794px — keduanya terbaca sebagai
+dua dokumen yang kebetulan bertumpuk, bukan satu laporan.
+
+Bilah dan panel kini **794px pasti**, sama dengan lembarnya, sehingga
+keduanya bergulir mendatar sebagai satu kesatuan. Di layar sempit grid
+filternya turun ke dua kolom: pengguna sudah menggulir mendatar, dan tiga
+kolom memaksanya menggeser lagi hanya untuk melihat blok ketiga.
+
+### Uji mutasi — empat dipasang, empat dibunuh
+
+| Mutasi | Dibunuh oleh |
+|---|---|
+| Input tersembunyi dicabut (cacat 401 kembali) | `test_formulir_menitipkan_kembali_parameter_bawaan` |
+| Tautan reset kembali ke `?` polos | `test_tautan_tampilkan_semua_tak_membuang_token` |
+| Isian filter ikut jadi input tersembunyi | `test_parameter_di_luar_filter_ikut_terbawa` |
+| Panel kembali melebar mengikuti layar | `test_panel_filter_selebar_lembar_A4` |
+
+### Berkas
+
+- `backend/routes/reports.py` — `_param_bukan_filter()`, rute HTML menerima `Request`
+- `backend/templates/laporan_satker_v2.html` — input tersembunyi, tautan reset, lebar
+- `backend/tests/unit/test_laporan_filter.py` — 5 uji baru
+
+---
+
 ## [#981] Laporan gabungan: halaman A4 tetap, sampul & filter dirombak — 2026-09-04
 
 Permintaan pemilik: *"buatkan dengan fix A4 dan sudah dibagi perhalamannya
