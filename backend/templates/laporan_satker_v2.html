@@ -364,14 +364,21 @@ body {
        panel kategori, tidak membuang satu aset pun. Ditaruh di panel yang sama
        karena di situlah pengguna sudah berada saat menyesuaikan laporannya. #}
     <div class="pf-blok" data-blok="kat_level">
-      <h5>Jenjang Kategori <span class="jml">{{ kat_level_label }}</span></h5>
-      <div class="pf-opsi">
-        {% for o in pilihan_kat_level %}
-        <label><input type="radio" name="kat_level" value="{{ o.nilai }}"
-          {% if o.nilai == kat_level|string %}checked{% endif %}>{{ o.label }}</label>
-        {% endfor %}
+      <h5>Jenjang Kategori
+        <span class="jml {% if kat_levels|length < 2 %}kosong{% endif %}">{{ kat_levels|length }} dipilih</span>
+      </h5>
+      <div class="pf-alat">
+        <span data-pilih="kat_level">pilih semua</span>
+        <span data-hapus="kat_level">kosongkan</span>
       </div>
-      <p class="pf-hint">Mengelompokkan panel <b>Per Kategori</b> menurut kode barang BMN. Bukan penyaring — tak satu pun aset dibuang.</p>
+      <select class="pf-select" name="kat_level" multiple
+              size="{{ pilihan_kat_level|length }}"
+              aria-label="Jenjang Kategori — dapat memilih lebih dari satu">
+        {% for o in pilihan_kat_level %}
+        <option value="{{ o.nilai }}"{% if o.nilai in kat_levels %} selected{% endif %}>{{ o.label }}</option>
+        {% endfor %}
+      </select>
+      <p class="pf-hint">Mengelompokkan panel <b>Per Kategori</b> menurut kode barang BMN. Boleh <b>lebih dari satu</b> — tiap jenjang mendapat panelnya sendiri. Bukan penyaring; tak satu pun aset dibuang. Dikosongkan berarti kembali ke <b>Bidang</b>.</p>
     </div>
 
     {# Jenjang denah — hanya tingkat yang BENAR-BENAR dipakai satker ini.
@@ -379,14 +386,21 @@ body {
        panel lokasi jatuh ke field teks bebas (judulnya mengatakan itu). #}
     {% if pilihan_lok_level %}
     <div class="pf-blok" data-blok="lok_level">
-      <h5>Jenjang Lokasi <span class="jml">{{ lok_level_label }}</span></h5>
-      <div class="pf-opsi">
-        {% for o in pilihan_lok_level %}
-        <label><input type="radio" name="lok_level" value="{{ o.nilai }}"
-          {% if o.nilai == lok_level %}checked{% endif %}>{{ o.label }}</label>
-        {% endfor %}
+      <h5>Jenjang Lokasi
+        <span class="jml {% if lok_levels|length < 2 %}kosong{% endif %}">{{ lok_levels|length }} dipilih</span>
+      </h5>
+      <div class="pf-alat">
+        <span data-pilih="lok_level">pilih semua</span>
+        <span data-hapus="lok_level">kosongkan</span>
       </div>
-      <p class="pf-hint">Mengelompokkan panel <b>Per Lokasi</b> menurut denah yang sudah ditetapkan. Bukan penyaring.</p>
+      <select class="pf-select" name="lok_level" multiple
+              size="{{ pilihan_lok_level|length }}"
+              aria-label="Jenjang Lokasi — dapat memilih lebih dari satu">
+        {% for o in pilihan_lok_level %}
+        <option value="{{ o.nilai }}"{% if o.nilai in lok_levels %} selected{% endif %}>{{ o.label }}</option>
+        {% endfor %}
+      </select>
+      <p class="pf-hint">Mengelompokkan panel <b>Per Lokasi</b> menurut denah yang sudah ditetapkan. Boleh <b>lebih dari satu</b> — tiap jenjang mendapat panelnya sendiri. Bukan penyaring. Dikosongkan berarti kembali ke jenjang terluas.</p>
     </div>
     {% endif %}
 

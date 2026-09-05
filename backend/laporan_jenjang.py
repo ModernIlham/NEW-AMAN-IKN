@@ -120,6 +120,32 @@ def pilihan_jenjang(tersedia, label_map) -> list:
             for v in tersedia]
 
 
+def jenjang_terpilih_banyak(diminta, sah, bawaan) -> list:
+    """Jenjang yang dipakai — bisa LEBIH DARI SATU sekaligus.
+
+    Permintaan pemilik: *"Jenjang Lokasi dan kategori jadikan juga pilihan
+    dapat memilih [lebih] dari 1."* Memilih Golongan DAN Bidang menghasilkan
+    dua panel berdampingan, sehingga sebaran kasar dan halus dapat dibandingkan
+    tanpa memuat laporannya dua kali.
+
+    Urutannya mengikuti `sah` (dari terluas ke terdalam), BUKAN urutan
+    kedatangan parameter: panel yang berpindah tempat setiap kali query
+    string-nya disusun ulang membuat dua cetakan laporan yang sama terlihat
+    berbeda.
+
+    Nilai tak sah dibuang diam-diam; bila tak satu pun tersisa, `bawaan` yang
+    dipakai — halaman tanpa panel apa pun akan terbaca sebagai laporan yang
+    gagal dimuat, bukan sebagai pilihan yang keliru.
+    """
+    if diminta is None:
+        diminta = []
+    if isinstance(diminta, (str, int)):
+        diminta = [diminta]
+    minta = {str(v).strip() for v in diminta}
+    dipakai = [v for v in sah if str(v) in minta]
+    return dipakai or ([bawaan] if bawaan else [])
+
+
 def jenjang_terpilih(diminta, sah, bawaan):
     """Nilai jenjang yang dipakai — `bawaan` bila permintaannya tak sah.
 

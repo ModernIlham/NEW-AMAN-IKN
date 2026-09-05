@@ -18,6 +18,68 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#993] Jenjang kategori dan lokasi boleh dipilih lebih dari satu — 2026-09-05
+
+Permintaan pemilik: *"Jenjang Lokasi dan kategori jadikan juga pilihan dapat
+memilih [lebih] dari 1."*
+
+### Dua kotak terakhir yang masih tunggal
+
+`[#992]` mengubah lima dimensi filter menjadi kotak `select multiple`, tetapi
+kedua pemilih jenjang masih **radio** — sekali pilih satu. Keduanya kini
+`select multiple` juga, lengkap dengan pintasan *pilih semua* / *kosongkan*.
+
+Memilih **Golongan dan Bidang** sekaligus menghasilkan **dua panel
+berdampingan**, sehingga sebaran kasar dan halus dapat dibandingkan tanpa
+memuat laporannya dua kali. Begitu pula Gedung dan Ruangan.
+
+```
+Pilih Golongan + Bidang, Gedung + Ruangan:
+  Per Kategori — Golongan | Per Kategori — Bidang | Per Lokasi — Gedung | Per Lokasi — Ruangan
+```
+
+Bagian **per kegiatan ikut mendapat panel yang sama** — perakitnya memang satu,
+dipakai kedua bagian. Dua perakit terpisah adalah cara tercepat membuat kedua
+bagian diam-diam berbeda lagi, dan itu persis cacat yang baru diperbaiki di
+`[#992]`.
+
+### Urutan panel mengikuti jenjang, bukan query string
+
+Dari terluas ke terdalam, apa pun urutan parameternya. Panel yang berpindah
+tempat setiap kali query string-nya disusun ulang membuat **dua cetakan laporan
+yang sama terlihat berbeda**.
+
+### Yang dijaga tetap sama
+
+- **Nilai tak sah dibuang, sisanya tetap dipakai** — satu nilai ngawur tak
+  membatalkan pilihan lain yang sah.
+- **Tanpa pilihan sah sama sekali → bawaan.** Halaman tanpa panel apa pun akan
+  terbaca sebagai laporan yang gagal dimuat, bukan sebagai pilihan yang keliru.
+- **Query string lama tetap bekerja** (`?kat_level=3`): nilai tunggal diterima
+  apa adanya, jadi tautan yang sudah tersimpan tak mendadak berhenti bekerja.
+- **Judul panel selalu menyebut jenjangnya.** Dua panel berdampingan yang
+  sama-sama berjudul "Per Kategori" terbaca sebagai satu daftar yang terpecah,
+  bukan sebagai dua sudut pandang.
+
+### Uji mutasi — empat dipasang, empat dibunuh
+
+| Mutasi | Dibunuh oleh |
+|---|---|
+| Hanya satu jenjang yang dipakai | `test_DUA_JENJANG_KATEGORI_menghasilkan_DUA_panel` (+4 lainnya) |
+| Urutan panel mengikuti query string | `test_urutan_panel_jenjang_dari_TERLUAS_ke_terdalam` (+2) |
+| Per kegiatan hanya dapat satu panel | `test_DUA_JENJANG_KATEGORI_menghasilkan_DUA_panel` |
+| Pemilih jenjang kembali tunggal | `test_pemilih_jenjang_menerima_LEBIH_DARI_SATU_di_panel` |
+
+### Berkas
+
+- `backend/laporan_jenjang.py` — `jenjang_terpilih_banyak()`
+- `backend/routes/reports.py` — `_chart_kategori()` / `_chart_lokasi()` / `_judul_lokasi()`, panel per jenjang di kedua bagian, rute menerima daftar
+- `backend/templates/laporan_satker_v2.html` — kedua pemilih jadi `select multiple`
+- `backend/tests/unit/test_laporan_jenjang.py` — 6 uji baru
+- `backend/tests/unit/test_laporan_gabungan_satker.py` — 4 uji baru
+
+---
+
 ## [#992] Jenjang sampai ke analisis per kegiatan; filter jadi kotak select — 2026-09-05
 
 Dua laporan pemilik atas `[#991]`.
