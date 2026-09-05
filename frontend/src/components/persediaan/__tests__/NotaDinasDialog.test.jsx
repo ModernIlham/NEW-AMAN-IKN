@@ -33,7 +33,7 @@ async function bukaDialog() {
 
 test("semua tercentang → unduh tanpa parameter ids (perilaku lama)", async () => {
   await bukaDialog();
-  expect(screen.getByText(/Unduh Nota Dinas \(2 barang\)/)).toBeInTheDocument();
+  expect(screen.getByText(/Terbitkan & Unduh \(2 barang\)/)).toBeInTheDocument();
   await userEvent.click(screen.getByTestId("nota-kritis-unduh"));
   await waitFor(() => expect(mockUnduh).toHaveBeenCalled());
   const url = String(mockUnduh.mock.calls[0][0]);
@@ -44,7 +44,7 @@ test("semua tercentang → unduh tanpa parameter ids (perilaku lama)", async () 
 test("barang yang tidak dicentang tidak ikut di ids", async () => {
   await bukaDialog();
   await userEvent.click(screen.getByTestId("nota-kritis-item-kri-1"));
-  expect(screen.getByText(/Unduh Nota Dinas \(1 barang\)/)).toBeInTheDocument();
+  expect(screen.getByText(/Terbitkan & Unduh \(1 barang\)/)).toBeInTheDocument();
   await userEvent.click(screen.getByTestId("nota-kritis-unduh"));
   await waitFor(() => expect(mockUnduh).toHaveBeenCalled());
   const url = String(mockUnduh.mock.calls[0][0]);
@@ -105,7 +105,7 @@ describe("dialog kedaluwarsa", () => {
 
   test("menghitung BARANG, bukan layer", async () => {
     await bukaKedaluwarsa();
-    expect(screen.getByText(/Unduh Nota Dinas \(2 barang\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Terbitkan & Unduh \(2 barang\)/)).toBeInTheDocument();
   });
 
   test("semua tercentang → unduh tanpa ids, dan jenisnya benar", async () => {
@@ -120,7 +120,7 @@ describe("dialog kedaluwarsa", () => {
   test("barang yang dilepas tidak ikut di ids", async () => {
     await bukaKedaluwarsa();
     await userEvent.click(screen.getByTestId("nota-kedaluwarsa-item-b-1"));
-    expect(screen.getByText(/Unduh Nota Dinas \(1 barang\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Terbitkan & Unduh \(1 barang\)/)).toBeInTheDocument();
     await userEvent.click(screen.getByTestId("nota-kedaluwarsa-unduh"));
     await waitFor(() => expect(mockUnduh).toHaveBeenCalled());
     const url = String(mockUnduh.mock.calls[0][0]);

@@ -1,11 +1,13 @@
 import React, { useMemo, useState } from "react";
+import axios from "axios";
+import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
-import { FileDown, Search } from "lucide-react";
+import { FileDown, FileSignature, Loader2, Search } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -83,9 +85,10 @@ export function saringBarang(daftar, kata) {
   });
 }
 
-export default function NotaDinasDialog({ items, jenis = "kritis" }) {
+export default function NotaDinasDialog({ items, jenis = "kritis", onTerbit }) {
   const [open, setOpen] = useState(false);
   const [cari, setCari] = useState("");
+  const [terbitLoading, setTerbitLoading] = useState(false);
   // Set id yang TIDAK dicentang — default kosong berarti semua terpilih,
   // dan pilihan tak perlu diinisialisasi ulang saat daftar peringatan segar.
   const [batal, setBatal] = useState(() => new Set());
@@ -107,15 +110,44 @@ export default function NotaDinasDialog({ items, jenis = "kritis" }) {
     return next;
   });
 
+  // Daftar id dikirim HANYA saat sebagian dipilih. Mengirimnya selalu membuat
+  // server memperlakukan nota lengkap sebagai nota tersaring, dan naskahnya
+  // lalu memuat kalimat "sengaja tidak disertakan" pada daftar yang utuh.
+  const sebagian = terpilih.length !== daftar.length;
+  const idsTerpilih = terpilih.map((it) => it.id);
+
   const unduh = () => {
-    const ids = terpilih.map((it) => it.id).join(",");
-    const param = terpilih.length === daftar.length
-      ? "" : `&ids=${encodeURIComponent(ids)}`;
+    const param = sebagian
+      ? `&ids=${encodeURIComponent(idsTerpilih.join(","))}` : "";
     downloadFileWithProgress(
       `${API}/persediaan/nota-dinas?jenis=${jenis}${param}`,
       NAMA_BERKAS[jenis],
-      { label: LABEL_TOMBOL[jenis] }).catch(() => {});
+      { label: `Pratinjau ${LABEL_TOMBOL[jenis]}` }).catch(() => {});
     setOpen(false);
+  };
+
+  // Terbitkan = booking nomor + bekukan daftarnya di register, lalu unduh
+  // naskah yang benar-benar terbit. Unduhan tak pernah membooking nomor
+  // sendiri: tombol unduh ditekan berkali-kali, dan tiap nomor surat yang
+  // terpesan tak pernah dipakai ulang.
+  const terbitkan = async () => {
+    setTerbitLoading(true);
+    try {
+      const { data } = await axios.post(`${API}/persediaan/nota-dinas/terbitkan`, {
+        jenis, ids: sebagian ? idsTerpilih : [],
+      });
+      toast.success(data?.message || "Nota dinas terbit");
+      setOpen(false);
+      onTerbit?.(data);
+      downloadFileWithProgress(
+        `${API}/persediaan/nota-dinas/${data.id}/pdf`,
+        `${NAMA_BERKAS[jenis].replace(/\.pdf$/, "")}_${data.nomor || data.id.slice(0, 8)}.pdf`,
+        { label: LABEL_TOMBOL[jenis] }).catch(() => {});
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menerbitkan nota dinas");
+    } finally {
+      setTerbitLoading(false);
+    }
   };
 
   return (
@@ -225,11 +257,31 @@ export default function NotaDinasDialog({ items, jenis = "kritis" }) {
               </li>
             ))}
           </ul>
-          <Button disabled={terpilih.length === 0} onClick={unduh}
-            data-testid={`nota-${jenis}-unduh`}>
-            <FileDown className="w-4 h-4 mr-1.5" />
-            Unduh Nota Dinas ({terpilih.length} barang)
-          </Button>
+          {/* DUA tindakan yang sengaja dibedakan: pratinjau tak bernomor dan
+              tak meninggalkan jejak; menerbitkan memesan nomor surat yang tak
+              pernah dipakai ulang. Satu tombol untuk keduanya akan membuat
+              orang memesan nomor hanya karena ingin melihat dokumennya. */}
+          <div className="flex flex-col gap-1.5">
+            <Button disabled={terpilih.length === 0 || terbitLoading}
+              onClick={terbitkan}
+              data-testid={`nota-${jenis}-terbitkan`}>
+              {terbitLoading
+                ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                : <FileSignature className="w-4 h-4 mr-1.5" />}
+              Terbitkan &amp; Unduh ({terpilih.length} barang)
+            </Button>
+            <Button variant="outline" disabled={terpilih.length === 0}
+              onClick={unduh}
+              data-testid={`nota-${jenis}-unduh`}>
+              <FileDown className="w-4 h-4 mr-1.5" />
+              Unduh pratinjau (tanpa nomor)
+            </Button>
+            <p className="text-[11px] text-muted-foreground">
+              Menerbitkan memesan nomor surat dari Registrasi Persuratan dan
+              membekukan daftar barangnya — naskahnya tidak lagi berubah
+              meski stok bergerak. Pratinjau tidak memesan nomor.
+            </p>
+          </div>
         </DialogContent>
       </Dialog>
     </>

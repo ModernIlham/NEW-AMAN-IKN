@@ -23,6 +23,7 @@ import { downloadFileWithProgress } from "@/lib/downloadFile";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 import PermohonanPanel from "@/components/persediaan/PermohonanPanel";
 import NotaDinasDialog from "@/components/persediaan/NotaDinasDialog";
+import RiwayatNotaDinas from "@/components/persediaan/RiwayatNotaDinas";
 import PerkiraanNomor from "@/components/persuratan/PerkiraanNomor";
 import { bagikanWa, bagikanEmail, hasilTtd } from "@/lib/pesanTtd";
 import { ringkasTtdDokumen, kelasNada } from "@/lib/statusTtd";
@@ -81,6 +82,9 @@ export default function PersediaanPage({ user, onBack }) {
   // (dieksekusi setelah disetujui admin lain), bukan menulis langsung.
   const [wajibSetuju, setWajibSetuju] = useState(false);
   const [permohonanVersi, setPermohonanVersi] = useState(0);
+  // Naik tiap satu nota dinas terbit — memaksa Riwayat Nota Dinas
+  // memuat ulang tanpa halaman perlu dibuka lagi.
+  const [notaVersi, setNotaVersi] = useState(0);
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -826,6 +830,7 @@ export default function PersediaanPage({ user, onBack }) {
               <NotaDinasDialog
                 jenis="kritis"
                 items={[...peringatan.habis, ...peringatan.kritis]}
+                onTerbit={() => setNotaVersi((v) => v + 1)}
               />
             )}
             {(peringatan.kedaluwarsa.length > 0 || peringatan.segera_kedaluwarsa.length > 0) && (
@@ -838,6 +843,7 @@ export default function PersediaanPage({ user, onBack }) {
                   ...peringatan.kedaluwarsa.map((r) => ({ ...r, lewat: true })),
                   ...peringatan.segera_kedaluwarsa,
                 ]}
+                onTerbit={() => setNotaVersi((v) => v + 1)}
               />
             )}
           </div>
@@ -921,6 +927,7 @@ export default function PersediaanPage({ user, onBack }) {
             </Button>
             <PermohonanPanel key={permohonanVersi} user={user}
               onSelesai={() => { load(page, search, status); refreshRingkasan(); }} />
+            <RiwayatNotaDinas versi={notaVersi} />
             {/* Menu Dokumen: laporan & berita acara dalam satu tombol */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
