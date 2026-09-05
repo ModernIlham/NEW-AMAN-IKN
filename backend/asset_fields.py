@@ -42,8 +42,18 @@ ASSET_SCALAR_FIELDS = (
     AssetField("purchase_date", "Tgl Beli", batchable=True),
     AssetField("purchase_price", "Harga", batchable=True),
     AssetField("location", "Lokasi", batchable=True),
+    # Unit organisasi tempat aset ini tercatat — LIMA tingkat, sama dengan
+    # `pegawai`. Sebelumnya berhenti di Eselon II, sehingga aset milik sebuah
+    # Subbagian hanya dapat dicatat sampai Bironya: seluruh Bagian dan
+    # Subbagian di bawahnya melebur menjadi satu baris yang tak dapat dipecah
+    # lagi, dan laporan berjenjang mentok di situ bukan karena datanya tak ada
+    # melainkan karena kolomnya tak ada. Nama-nama ini BAYANGAN master unit
+    # (`unit_kerja`); penggantian nama di master ikut menulis ulang kolom ini.
     AssetField("eselon1", "Eselon I", batchable=True),
     AssetField("eselon2", "Eselon II", batchable=True),
+    AssetField("eselon3", "Eselon III", batchable=True),
+    AssetField("eselon4", "Eselon IV", batchable=True),
+    AssetField("eselon5", "Eselon V", batchable=True),
     AssetField("user", "Pengguna", batchable=True),
     AssetField("pengguna_melekat_ke", "Melekat Ke", batchable=True),
     AssetField("pengguna_jabatan", "Jabatan Pengguna", batchable=True),

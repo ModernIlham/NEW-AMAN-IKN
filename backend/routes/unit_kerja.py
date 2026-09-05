@@ -99,9 +99,10 @@ async def _rambatkan_nama(user, fe_lama, fe_baru, level_lama, level_baru):
     bukan lewat namanya saja — dua Bagian Tata Usaha di bawah dua Biro berbeda
     tak boleh ikut terbawa.
 
-    `assets` hanya punya kolom eselon1 dan eselon2. Unit Eselon III ke bawah
-    karenanya tak dapat dikenali di sana, dan asetnya sengaja TIDAK disentuh:
-    menebaknya dari eselon2 akan mengubah aset milik unit saudaranya.
+    `pegawai` dan `assets` kini sama-sama membawa lima tingkat, jadi keduanya
+    diperlakukan sama. Sebelumnya aset berhenti di Eselon II sehingga unit
+    Eselon III ke bawah tak dapat dikenali di sana dan asetnya sengaja tak
+    disentuh — pembatasan itu gugur bersama sebabnya.
     """
     saring = org.filter_jalur(fe_lama, level_lama)
     if not saring:
@@ -118,28 +119,14 @@ async def _rambatkan_nama(user, fe_lama, fe_baru, level_lama, level_baru):
 
     hasil = await db.pegawai.update_many(
         scope_query_field_satker(user, dict(saring)), ubah)
-    n_aset = 0
-    if max(level_lama, level_baru) <= 2:
-        saring_aset = {k: v for k, v in saring.items() if k in ("eselon1",
-                                                                "eselon2")}
-        setel_aset = {k: v for k, v in setel.items() if k in ("eselon1",
-                                                              "eselon2")}
-        hapus_aset = [k for k in hapus if k in ("eselon1", "eselon2")]
-        if saring_aset and (setel_aset or hapus_aset):
-            ubah_aset = {}
-            if setel_aset:
-                ubah_aset["$set"] = setel_aset
-            if hapus_aset:
-                ubah_aset["$unset"] = {k: "" for k in hapus_aset}
-            # `assets` TIDAK membawa kode_satker; ia di-scope lewat kegiatan
-            # induknya. Memakai penyaring berbasis field akan mencocokkan
-            # dokumen yang field-nya TIDAK ADA — yaitu seluruh aset satker
-            # mana pun — dan penulisan ini akan merambat ke luar satker.
-            r = await db.assets.update_many(
-                await scope_query_aset(user, saring_aset), ubah_aset)
-            n_aset = getattr(r, "modified_count", 0) or 0
+    # `assets` TIDAK membawa kode_satker; ia di-scope lewat kegiatan induknya.
+    # Memakai penyaring berbasis field akan mencocokkan dokumen yang field-nya
+    # TIDAK ADA — yaitu seluruh aset satker mana pun — dan penulisan ini akan
+    # merambat ke luar satker.
+    r = await db.assets.update_many(
+        await scope_query_aset(user, dict(saring)), ubah)
     return {"pegawai": getattr(hasil, "modified_count", 0) or 0,
-            "aset": n_aset}
+            "aset": getattr(r, "modified_count", 0) or 0}
 
 
 @unit_kerja_router.put("/unit-kerja/{unit_id}")

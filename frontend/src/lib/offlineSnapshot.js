@@ -41,7 +41,8 @@ export const SNAPSHOT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 hari
 const SNAPSHOT_FIELDS = [
   "id", "asset_code", "NUP", "asset_name", "category", "brand", "model",
   "kode_register", "serial_number", "purchase_date", "purchase_price",
-  "location", "eselon1", "eselon2", "user", "condition", "status",
+  "location", "eselon1", "eselon2", "eselon3", "eselon4", "eselon5",
+  "user", "condition", "status",
   "pengguna_melekat_ke", "pengguna_jabatan", "pengguna_nip", "operasional_jenis", "nomor_bast",
   "bast_file_id", "bast_filename",
   "nomor_spm", "perolehan_dari_nama", "nomor_kontrak", "cara_bayar_kontrak", "nomor_bukti_perolehan",

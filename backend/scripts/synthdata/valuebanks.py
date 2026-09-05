@@ -98,6 +98,30 @@ ESELON2 = [
     "Direktorat Sistem Informasi dan Teknologi",
 ]
 
+# Eselon III–V. Sengaja TIDAK selalu terisi pada data yang dihasilkan: satker
+# nyata pun lazim mencatat asetnya berhenti di Eselon II, dan data uji yang
+# selalu lengkap sampai tingkat lima menyembunyikan justru kasus yang paling
+# sering ditemui — jalur yang putus di tengah.
+ESELON3 = [
+    "Bagian Rumah Tangga",
+    "Bagian Tata Usaha",
+    "Subdirektorat Penatausahaan",
+    "Bagian Keuangan",
+]
+
+ESELON4 = [
+    "Subbagian Perlengkapan",
+    "Subbagian Persuratan",
+    "Seksi Inventarisasi",
+    "Subbagian Perbendaharaan",
+]
+
+ESELON5 = [
+    "Urusan Gudang",
+    "Urusan Arsip",
+    "Urusan Pemeliharaan",
+]
+
 # ── Nama orang Indonesia (untuk pengguna/pegawai/penanda tangan) ──
 NAMA_DEPAN = [
     "Budi", "Siti", "Ahmad", "Dewi", "Rizki", "Putri", "Agus", "Rina",

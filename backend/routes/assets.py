@@ -129,7 +129,8 @@ def klausa_substring(v):
 # dulu TIDAK dicari sama sekali, sehingga mengetiknya selalu nihil hasil.
 FIELD_CARI_ASET = (
     "asset_code", "NUP", "asset_name", "serial_number", "location",
-    "brand", "model", "category", "eselon1", "eselon2", "user",
+    "brand", "model", "category", "eselon1", "eselon2", "eselon3",
+    "eselon4", "eselon5", "user",
     "pengguna_jabatan", "supplier", "perolehan_dari_nama",
     "condition", "status", "nomor_spm", "kode_register",
     "nomor_kontrak", "nomor_bast", "nomor_bukti_perolehan", "notes",

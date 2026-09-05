@@ -80,7 +80,8 @@ INDEKS = {
         # pencarian akan berubah tergantung Meili hidup atau mati.
         "searchable": [
             "asset_code", "NUP", "asset_name", "serial_number", "location",
-            "brand", "model", "category", "eselon1", "eselon2", "user",
+            "brand", "model", "category", "eselon1", "eselon2", "eselon3",
+            "eselon4", "eselon5", "user",
             "pengguna_jabatan", "supplier",
             "perolehan_dari_nama", "condition", "status", "nomor_spm",
             "kode_register", "nomor_kontrak", "nomor_bast",

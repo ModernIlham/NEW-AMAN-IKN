@@ -232,20 +232,26 @@ def test_pindah_induk_menulis_ulang_jalur_pegawai(dbx):
     assert p["eselon2"] == "Biro Keuangan" and p["eselon3"] == "Bagian RT"
 
 
-def test_aset_unit_eselon_tiga_ke_bawah_sengaja_tak_disentuh(dbx):
-    # `assets` hanya punya kolom eselon1 dan eselon2. Menebak aset unit Eselon
-    # III dari eselon2 akan mengubah aset milik unit saudaranya.
+def test_aset_unit_eselon_tiga_kini_IKUT_berubah(dbx):
+    # Aset dulu berhenti di Eselon II, sehingga unit Eselon III ke bawah tak
+    # dapat dikenali di sana dan asetnya sengaja tak disentuh. Kini aset
+    # membawa lima tingkat seperti pegawai, dan pembatasan itu gugur bersama
+    # sebabnya — tetapi hanya untuk aset yang jalurnya memang cocok.
     _, _, _, e3 = _pohon(dbx)
     _jalan(dbx.inventory_activities.insert_one(
         {"id": "k1", "kode_satker": "111111"}))
-    _jalan(dbx.assets.insert_one(
+    _jalan(dbx.assets.insert_many([
         {"id": "a1", "activity_id": "k1", "eselon1": "Setjen",
-         "eselon2": "Biro Umum"}))
+         "eselon2": "Biro Umum", "eselon3": "Bagian RT"},
+        {"id": "a2", "activity_id": "k1", "eselon1": "Setjen",
+         "eselon2": "Biro Umum"},          # berhenti di Eselon II — bukan ini
+    ]))
     r = _jalan(ruk.ubah_unit_kerja(e3, ruk.UnitUbah(nama_unit="Bagian Umum"),
                                    user=USER))
-    assert r["ikut_diperbarui"]["aset"] == 0
-    a = _jalan(dbx.assets.find_one({"id": "a1"}, {"_id": 0}))
-    assert a["eselon2"] == "Biro Umum"
+    assert r["ikut_diperbarui"]["aset"] == 1
+    aset = {a["id"]: a.get("eselon3")
+            for a in _jalan(dbx.assets.find({}, {"_id": 0}).to_list(10))}
+    assert aset == {"a1": "Bagian Umum", "a2": None}
 
 
 # ── 4. Lingkup kegiatan dicocokkan dengan master unit ───────────────────
