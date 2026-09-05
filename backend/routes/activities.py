@@ -260,6 +260,14 @@ class InventoryActivityCreate(BaseModel):
     # TIDAK ikut disimpan ke dokumen (di-pop sebelum insert/update).
     perbarui_satker: Optional[bool] = False
     eselon1: Optional[List[dict]] = []  # [{nama: str, eselon2: [str]}]
+    # Lingkup unit organisasi kegiatan ini — daftar id pada master `unit_kerja`,
+    # tingkat berapa pun (Eselon I–V). Menggantikan peran `eselon1` di atas
+    # yang hanya teks bebas dua tingkat: id merujuk unit yang NYATA, dan satu
+    # unit sudah mencakup seluruh keturunannya, sehingga lingkup sedalam apa
+    # pun cukup ditulis sekali. Kosong = seluruh satker (lihat
+    # `organisasi_utils.dalam_lingkup`), dan kegiatan lama yang belum dipetakan
+    # tetap jatuh ke pencocokan teks `eselon1`-nya.
+    lingkup_unit: Optional[List[str]] = []
     # === Tim Inventarisasi (Internal) ===
     tim_inti: Optional[List[dict]] = []  # [{nama, jabatan, nip, unit, is_ketua: bool}]
     tim_pembantu: Optional[List[dict]] = []  # [{nama, jabatan, nip, unit, is_ketua: bool}]
@@ -296,6 +304,7 @@ class InventoryActivityResponse(BaseModel):
     nama_satker: Optional[str] = ""
     kode_satker_lengkap: Optional[str] = ""
     eselon1: Optional[List[dict]] = []  # [{nama: str, eselon2: [str]}]
+    lingkup_unit: Optional[List[str]] = []
     # === Tim Inventarisasi (Internal) ===
     tim_inti: Optional[List[dict]] = []
     tim_pembantu: Optional[List[dict]] = []
@@ -578,6 +587,40 @@ async def satker_lookup(kode: str = "", nama: str = "", _user: dict = Depends(re
     return None
 
 @activities_router.post("/inventory-activities")
+async def _validasi_lingkup_unit(activity, _user) -> None:
+    """Pastikan tiap id lingkup benar-benar ada di master unit satker ini.
+
+    Id yang tak dikenal TIDAK didiamkan. Lingkup adalah penyaring: id mati
+    tidak menyaring apa pun, sehingga kegiatan yang dimaksudkan terbatas pada
+    satu Biro justru menampilkan seluruh satker — melebar diam-diam, ke arah
+    yang paling tak diinginkan, tanpa satu pun tanda pada laporannya.
+
+    Id milik satker LAIN ditolak dengan alasan yang sama seperti id yang tak
+    ada: dari sisi satker ini, keduanya sama-sama bukan unitnya.
+    """
+    ids = [str(i).strip() for i in (activity.lingkup_unit or []) if str(i).strip()]
+    if not ids:
+        activity.lingkup_unit = []
+        return
+    ada = await db.unit_kerja.find(
+        scope_query_field_satker(_user, {"id": {"$in": ids}}),
+        {"_id": 0, "id": 1}).to_list(len(ids))
+    dikenal = {u["id"] for u in ada}
+    hilang = [i for i in ids if i not in dikenal]
+    if hilang:
+        raise HTTPException(
+            status_code=400,
+            detail=(f"{len(hilang)} unit lingkup tidak dikenal di master unit "
+                    f"satker ini — perbarui pilihannya di Kelola Unit"))
+    # Duplikat dibuang, urutan pilihan dipertahankan.
+    terlihat, unik = set(), []
+    for i in ids:
+        if i not in terlihat:
+            terlihat.add(i)
+            unik.append(i)
+    activity.lingkup_unit = unik
+
+
 async def create_inventory_activity(activity: InventoryActivityCreate, _user: dict = Depends(require_writer)):
     """Create a new inventory activity"""
     # ISOLASI SATKER: user terikat satker hanya boleh membuat kegiatan untuk
@@ -594,6 +637,7 @@ async def create_inventory_activity(activity: InventoryActivityCreate, _user: di
         raise HTTPException(status_code=400, detail="Kode Satker wajib diisi")
     if not activity.nama_satker.strip():
         raise HTTPException(status_code=400, detail="Nama Satker wajib diisi")
+    await _validasi_lingkup_unit(activity, _user)
 
     if _kode_user and activity.kode_satker.strip() != _kode_user:
         # Pesan sadar-konteks: super-admin yang sedang bertindak sebagai satu
@@ -865,6 +909,7 @@ async def update_inventory_activity(activity_id: str, activity: InventoryActivit
             detail=f"Akun Anda terikat satker {_kode_user} — tidak dapat memindahkan kegiatan ke satker lain")
     if not activity.nama_satker.strip():
         raise HTTPException(status_code=400, detail="Nama Satker wajib diisi")
+    await _validasi_lingkup_unit(activity, _user)
 
     # Enforce max file counts (only when the fields are actually being updated)
     if activity.photos is not None and len(activity.photos) > MAX_ACTIVITY_PHOTOS:

@@ -251,6 +251,43 @@ async def hapus_unit_kerja(unit_id: str, user: dict = Depends(require_admin)):
     return {"ok": True, "id": unit_id}
 
 
+class LingkupTeksIn(BaseModel):
+    """Lingkup kegiatan bentuk LAMA: `[{nama, eselon2: [nama, …]}, …]`."""
+    eselon1: Optional[list] = []
+
+
+@unit_kerja_router.post("/unit-kerja/cocokkan-lingkup")
+async def cocokkan_lingkup(payload: LingkupTeksIn,
+                           user: dict = Depends(require_user)):
+    """Ubah lingkup yang DIKETIK menjadi rujukan ke master unit.
+
+    Kegiatan lama mencatat lingkupnya sebagai teks bebas dua tingkat, tak
+    pernah dihubungkan dengan master unit mana pun. Rute ini mencocokkannya
+    sekali supaya kegiatan lama tak perlu diisi ulang tangan.
+
+    Yang TIDAK cocok ikut dikembalikan, bukan dibuang diam-diam: salah ketik
+    pada data lama justru yang perlu dilihat orang yang memperbaikinya, dan
+    daftar yang menyusut tanpa keterangan terbaca sebagai data yang hilang.
+
+    Hanya MENGUSULKAN — penyimpanannya lewat rute kegiatan seperti biasa,
+    sehingga tetap satu jalur tulis.
+    """
+    semua = await db.unit_kerja.find(
+        scope_query_field_satker(user),
+        {"_id": 0, "id": 1, "nama_unit": 1, "eselon": 1,
+         "parent_id": 1}).to_list(5000)
+    ids, tak_cocok = org.cocokkan_lingkup_teks(payload.eselon1 or [], semua)
+    peta_unit = {u["id"]: u for u in semua}
+    peta_parent = {u["id"]: u.get("parent_id") for u in semua}
+    return {
+        "lingkup_unit": ids,
+        "tak_cocok": tak_cocok,
+        "unit": [{"id": i, "eselon": str(peta_unit[i].get("eselon") or ""),
+                  "jalur": org.jalur_nama(i, peta_unit, peta_parent)}
+                 for i in ids],
+    }
+
+
 @unit_kerja_router.post("/unit-kerja/bangun-dari-pegawai")
 async def bangun_dari_pegawai(user: dict = Depends(require_admin_satker)):
     """Bangun/lengkapi master unit OTOMATIS dari jalur eselon1–5 seluruh

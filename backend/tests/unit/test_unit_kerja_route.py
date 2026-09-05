@@ -246,3 +246,32 @@ def test_aset_unit_eselon_tiga_ke_bawah_sengaja_tak_disentuh(dbx):
     assert r["ikut_diperbarui"]["aset"] == 0
     a = _jalan(dbx.assets.find_one({"id": "a1"}, {"_id": 0}))
     assert a["eselon2"] == "Biro Umum"
+
+
+# ── 4. Lingkup kegiatan dicocokkan dengan master unit ───────────────────
+
+def test_cocokkan_lingkup_mengembalikan_jalur_lengkapnya(dbx):
+    _pohon(dbx)
+    r = _jalan(ruk.cocokkan_lingkup(
+        ruk.LingkupTeksIn(eselon1=[{"nama": "Setjen",
+                                    "eselon2": ["Biro Umum"]}]), user=USER))
+    assert len(r["lingkup_unit"]) == 1
+    assert r["unit"][0]["jalur"] == "Setjen / Biro Umum"
+    assert r["unit"][0]["eselon"] == "2"
+    assert r["tak_cocok"] == []
+
+
+def test_cocokkan_lingkup_melaporkan_yang_tak_ketemu(dbx):
+    _pohon(dbx)
+    r = _jalan(ruk.cocokkan_lingkup(
+        ruk.LingkupTeksIn(eselon1=[{"nama": "Setjen",
+                                    "eselon2": ["Biro Hantu"]}]), user=USER))
+    assert r["lingkup_unit"] == [] and r["tak_cocok"] == ["Setjen / Biro Hantu"]
+
+
+def test_cocokkan_lingkup_tak_melihat_unit_satker_lain(dbx):
+    _pohon(dbx)
+    r = _jalan(ruk.cocokkan_lingkup(
+        ruk.LingkupTeksIn(eselon1=[{"nama": "Setjen", "eselon2": []}]),
+        user={"username": "asing", "role": "admin", "kode_satker": "222222"}))
+    assert r["lingkup_unit"] == [] and r["tak_cocok"] == ["Setjen"]
