@@ -18,6 +18,80 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#990] Analisis data dan personil dibagi per kegiatan — 2026-09-05
+
+Permintaan pemilik: *"analisis data dan Personil Terlibat masih gabungan semua,
+itu bagus akan tetapi bagi juga per kegiatannya sehingga tahu jelas
+pembagiannya seperti apa."*
+
+### Yang gabungan TETAP ADA, dan tetap lebih dulu
+
+Keduanya menjawab pertanyaan yang berbeda:
+
+| Bagian | Menjawab |
+|---|---|
+| Analisis Data | *satker ini seperti apa* |
+| Analisis Data per Kegiatan | *sumbangan tiap kegiatan bentuknya seperti apa* |
+| Personil Terlibat | *siapa saja yang terlibat* |
+| Personil per Kegiatan | *siapa mengerjakan yang mana* |
+
+Menggantikan yang satu dengan yang lain akan **menukar pertanyaan**, bukan
+menjawab keduanya. Urutannya dijaga uji: yang gabungan selalu mendahului
+pecahannya, sebab pembaca perlu melihat satkernya dulu baru pembagiannya.
+
+### Persentase relatif terhadap kegiatannya sendiri
+
+Batang **60%** pada kegiatan berisi 5 NUP yang diam-diam dihitung atas 500 NUP
+satker akan tergambar nyaris tak terlihat — dan pembacanya menyimpulkan
+kegiatan itu kosong. Tiap kegiatan karenanya dihitung atas dirinya sendiri.
+
+### Personil per kegiatan MENGULANG nama yang bertugas ganda
+
+Daftar gabungan membuang nama yang berulang (`seen_names`), jadi orang yang
+bertugas pada tiga kegiatan hanya muncul sekali — dan pertanyaan *"siapa
+mengerjakan yang mana"* justru **tak terjawab olehnya**. Di bagian per
+kegiatan, nama yang sama boleh muncul beberapa kali, karena memang begitu
+keadaannya.
+
+### Yang sengaja tidak diulang
+
+- **Eselon I/II** tidak diulang per kegiatan: keduanya sifat organisasi,
+  nyaris sama di tiap kegiatan pada satker yang sama, dan mengulangnya
+  menggandakan halaman tanpa menambah keterangan. Keduanya tetap utuh di
+  bagian gabungan.
+- **Satu kegiatan** → kedua bagian ini tidak muncul; isinya akan sama persis
+  dengan bagian gabungan.
+- **Kegiatan tanpa aset** tidak diberi halaman analisis: empat panel kosong
+  berturut hanya memakan kertas. Ia tetap tercantum di *Capaian per Kegiatan*
+  dengan angkanya sendiri, yaitu nol.
+
+### Ukuran laporannya bertambah
+
+Pada 5 kegiatan / 91 NUP, laporan tumbuh dari **8 menjadi 20 halaman** — lima
+halaman analisis dan lima halaman personil. Itu harga dari pembagian yang
+diminta, dan tiap lembar membawa **kop kegiatannya sendiri**: tanpa itu,
+halaman analisis kelima terbaca sebagai lanjutan kegiatan keempat.
+
+### Uji mutasi — tiga dipasang, tiga dibunuh
+
+| Mutasi | Dibunuh oleh |
+|---|---|
+| Persentase per kegiatan dihitung atas satker | `test_persentase_per_kegiatan_dihitung_atas_KEGIATAN_ITU_SENDIRI` |
+| Nama bertugas ganda dibuang dari kegiatan berikutnya | `test_personil_per_kegiatan_MENGULANG_nama_yang_bertugas_ganda` |
+| Kegiatan tanpa aset tetap diberi halaman | `test_kegiatan_TANPA_ASET_tak_diberi_halaman_analisis` |
+
+Mutasi kedua **lolos pada percobaan pertama** karena mutasinya sendiri diberi
+jalan mundur (`or orang`) yang menetralkannya — bukan karena ujinya lemah.
+Dipasang ulang tanpa jalan mundur, ia langsung terbunuh.
+
+### Berkas
+
+- `backend/routes/reports.py` — `_panel_kegiatan()`, `analisis_kegiatan`, `_orang_kegiatan()`, `personil_kegiatan`
+- `backend/templates/laporan_satker_v2.html` — dua bagian baru, gaya `.kop-keg`
+- `backend/tests/unit/test_laporan_gabungan_satker.py` — 6 uji baru
+
+---
+
 ## [#989] Rumah yang sama, diiris per kegiatan — 2026-09-05
 
 Permintaan pemilik: *"selain grafik gabungan berikan juga grafik yang diambil

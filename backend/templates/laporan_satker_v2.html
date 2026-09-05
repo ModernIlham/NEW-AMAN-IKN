@@ -176,6 +176,13 @@ body {
 .personil-kartu .peran { font-size: 7px; text-transform: uppercase; letter-spacing: 1px; color: var(--gold-dark); font-weight: 700; }
 .personil-kartu .nama { font-size: 10px; font-weight: 700; color: var(--navy); margin-top: 2px; }
 .personil-kartu .nip { font-size: 8px; color: #64748b; }
+/* Kop kegiatan pada bagian per-kegiatan: menandai lembar ini milik kegiatan
+   yang mana. Tanpanya, halaman analisis kelima terbaca sebagai lanjutan
+   kegiatan keempat. */
+.kop-keg { border-left: 4px solid var(--navy); background: #f8fafc; border-radius: 0 6px 6px 0; padding: 7px 12px; margin-bottom: 11px; }
+.kop-keg-nama { font-size: 11px; font-weight: 700; color: var(--navy); line-height: 1.3; }
+.kop-keg-meta { font-size: 8px; color: #64748b; margin-top: 2px; }
+.kop-keg-meta b { color: var(--navy); font-variant-numeric: tabular-nums; }
 .sub-judul { font-size: 8.5px; font-weight: 700; color: var(--navy); text-transform: uppercase; letter-spacing: 1px; margin: 12px 0 6px; padding-bottom: 4px; border-bottom: 1px solid #e2e8f0; }
 .simpulan-baris { padding: 8px 13px; margin-bottom: 6px; border-left: 3px solid; background: #fafbfc; font-size: 9.5px; border-radius: 0 6px 6px 0; }
 /* Simpulan per kegiatan. Simpulan tingkat satker benar tetapi tak dapat
@@ -749,6 +756,39 @@ lipat.addEventListener('click', function () {
 </div>
 {% endfor %}
 
+{# ── HALAMAN: ANALISIS DATA PER KEGIATAN ─────────────────────────
+   Bagian gabungan di atas menjawab "satker ini seperti apa"; bagian ini
+   menjawab "sumbangan tiap kegiatan bentuknya seperti apa". Tiap kegiatan
+   mulai di lembar sendiri supaya pembagiannya terbaca tanpa ditelusuri. #}
+{% if analisis_kegiatan_ada %}
+{% set sec.n = sec.n + 1 %}
+{% for k in analisis_kegiatan %}
+{% for hal in k.halaman %}
+<div class="hal">
+  {{ kop('Bagian ' ~ sec.n) }}
+  <div class="hal-isi">
+    {% if loop.first and k == analisis_kegiatan[0] %}
+    <div class="judul-bagian"><span class="no">{{ sec.n }}</span>Analisis Data per Kegiatan</div>
+    <div class="ket-bagian">Persentase dihitung atas kegiatan itu sendiri. Eselon I/II tidak diulang di sini — keduanya sifat organisasi dan sudah utuh di bagian gabungan</div>
+    {% else %}
+    <div class="judul-bagian"><span class="no">{{ sec.n }}</span>Analisis Data per Kegiatan <span style="font-size:10px;color:#94a3b8;font-weight:600;">(lanjutan)</span></div>
+    <div class="ket-bagian">&nbsp;</div>
+    {% endif %}
+    <div class="kop-keg">
+      <div class="kop-keg-nama">{{ k.nama }}{% if not loop.first %} <span style="font-weight:600;color:#94a3b8;">(lanjutan)</span>{% endif %}</div>
+      <div class="kop-keg-meta">{{ k.nomor }} &middot; <b>{{ k.count }}</b> NUP &middot; Rp <b>{{ k.value_fmt }}</b></div>
+    </div>
+    <div class="dua-kolom">
+      <div class="lajur">{% for p in hal.kiri %}{{ panel_batang(p) }}{% endfor %}</div>
+      <div class="lajur">{% for p in hal.kanan %}{{ panel_batang(p) }}{% endfor %}</div>
+    </div>
+  </div>
+  {{ kaki('Analisis &mdash; ' ~ k.nama) }}
+</div>
+{% endfor %}
+{% endfor %}
+{% endif %}
+
 {# ── HALAMAN: PERSONIL (dipaginasi) ──────────────────────────── #}
 {% set orang = personil | rejectattr('is_header') | list %}
 {% set jml_hal_orang = ((orang|length / PERSONIL_PER_HAL)|round(0,'ceil')|int) or 1 %}
@@ -776,6 +816,49 @@ lipat.addEventListener('click', function () {
   {{ kaki('Personil ' ~ (mulai + 1) ~ '–' ~ ([mulai + PERSONIL_PER_HAL, orang|length]|min) ~ ' dari ' ~ orang|length) }}
 </div>
 {% endfor %}
+
+{# ── HALAMAN: PERSONIL PER KEGIATAN (dipaginasi) ─────────────────
+   Daftar gabungan membuang nama yang berulang, jadi orang yang bertugas pada
+   tiga kegiatan hanya muncul sekali — dan "siapa mengerjakan yang mana" justru
+   tak terjawab olehnya. Di sini nama yang sama boleh muncul beberapa kali,
+   karena memang begitu keadaannya. #}
+{% if personil_kegiatan_ada %}
+{% set PK_PER_HAL = 12 %}
+{% set sec.n = sec.n + 1 %}
+{% for k in personil_kegiatan %}
+{% set jml_hal_pk = ((k.orang|length / PK_PER_HAL)|round(0,'ceil')|int) or 1 %}
+{% for h in range(jml_hal_pk) %}
+{% set mulai = h * PK_PER_HAL %}
+<div class="hal">
+  {{ kop('Bagian ' ~ sec.n) }}
+  <div class="hal-isi">
+    {% if h == 0 and k == personil_kegiatan[0] %}
+    <div class="judul-bagian"><span class="no">{{ sec.n }}</span>Personil per Kegiatan</div>
+    <div class="ket-bagian">Siapa mengerjakan yang mana. Nama yang sama dapat muncul di beberapa kegiatan — memang begitu keadaannya</div>
+    {% else %}
+    <div class="judul-bagian"><span class="no">{{ sec.n }}</span>Personil per Kegiatan <span style="font-size:10px;color:#94a3b8;font-weight:600;">(lanjutan)</span></div>
+    <div class="ket-bagian">&nbsp;</div>
+    {% endif %}
+    <div class="kop-keg">
+      <div class="kop-keg-nama">{{ k.nama }}{% if h %} <span style="font-weight:600;color:#94a3b8;">(lanjutan)</span>{% endif %}</div>
+      <div class="kop-keg-meta">{{ k.nomor }} &middot; <b>{{ k.orang|length }}</b> personil</div>
+    </div>
+    <div class="personil-grid">
+      {% for p in k.orang[mulai:mulai + PK_PER_HAL] %}
+      <div class="personil-kartu {% if loop.first and h == 0 %}utama{% endif %}">
+        <div class="peran">{{ p.role }}</div>
+        <div class="nama">{{ p.name }}</div>
+        {% if p.nip %}<div class="nip">NIP. {{ p.nip }}</div>{% endif %}
+        {% if p.jabatan %}<div class="nip">{{ p.jabatan }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {{ kaki('Personil &mdash; ' ~ k.nama) }}
+</div>
+{% endfor %}
+{% endfor %}
+{% endif %}
 
 {# ── HALAMAN TERAKHIR: SIMPULAN (dipaginasi) ─────────────────────
    Lembarnya bertinggi TETAP dengan overflow:hidden, jadi blok yang tak muat
