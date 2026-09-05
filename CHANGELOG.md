@@ -18,6 +18,88 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#996] Fondasi struktur organisasi Eselon I–V — 2026-09-05
+
+Permintaan pemilik: *"sistem memang hanya support sampai eselon II saja, akan
+tetapi buat lebih berkembang lagi agar dapat mengakomodir hingga eselon ke 5
+dengan indukannya yang terkoneksi dengan master pegawai juga di struktur
+organisasi ... eselon I dan II adalah default wajib."*
+
+**PR pertama dari beberapa.** Yang ini hanya fondasinya — modul murni beserta
+ujinya. Belum ada koleksi, rute, layar, atau perubahan laporan; keduanya
+menyusul setelah bentuk pohonnya disepakati.
+
+### Keadaan yang diperbaiki
+
+Eselon hidup sebagai **teks bebas** di tiga tempat yang tak saling mengenal:
+
+| Tempat | Bentuk | Tingkat |
+|---|---|---|
+| `pegawai` | `eselon1` … `eselon5` | 5, tetapi **rata** |
+| `assets` | `eselon1`, `eselon2` | 2 |
+| `inventory_activities` | `[{nama, eselon2: []}]` | 2 |
+
+Lima kolom teks **tak dapat menyatakan** bahwa "Bagian Umum" berada di bawah
+"Biro Umum" di bawah "Sekretariat Jenderal" — keduanya hanya kebetulan ditulis
+pada baris yang sama. Salah ketik satu huruf melahirkan unit baru yang tak
+pernah ada, dan tak ada satu pun tempat yang dapat ditanyai *"unit apa saja
+yang ada"*.
+
+### Empat keputusan yang membentuk modulnya
+
+1. **`parent_id` satu-satunya yang disunting; `ancestors` dan `jalur`
+   DITURUNKAN.** Menyimpan ketiganya sebagai sumber kebenaran terpisah adalah
+   resep pohon yang saling bertentangan — pelajaran yang sudah dibayar modul
+   spasial, dan idiomnya sengaja ditiru supaya yang sudah mengenal satu
+   langsung mengenal yang lain.
+
+2. **Eselon I dan II wajib; III–V tumbuh belakangan — tetapi tingkat TIDAK
+   BOLEH dilompati.** Unit Eselon III berinduk pada Eselon II yang nyata.
+   Bedanya dengan pohon spasial (yang memang boleh melompat) adalah eselon
+   merupakan struktur yang **ditetapkan peraturan**: "Eselon III di bawah
+   Eselon I" bukan penyederhanaan, melainkan pernyataan yang keliru.
+
+3. **Unit yang masih punya anak tak boleh dihapus** — anaknya akan menggantung
+   sebagai Eselon III tanpa Eselon II, keadaan yang tak pernah sah.
+
+4. **Kedalaman dibatasi dan siklus dihentikan.** Data pohon yang rusak tak
+   boleh membuat permintaan menggantung selamanya.
+
+### Jembatan ke data yang sudah ada
+
+`field_eselon()` menurunkan `{eselon1 … eselon5}` dari rantai unit. Kolom teks
+pada `pegawai` dan `assets` tetap dipakai laporan, ekspor, dan impor CSV — dan
+kini menjadi **bayangan pohon, bukan sumber kebenaran kedua**, sehingga
+keduanya tak lagi dapat saling bertentangan.
+
+`dalam_lingkup()` menjawab permintaan *"tampil sesuai eselon yang dicatat di
+dalam kegiatan"*: unit lingkup mencakup **dirinya dan seluruh keturunannya**
+(mencatat "Biro Umum" berarti Bagian dan Subbagian di bawahnya ikut — itulah
+arti membawahi), dan **lingkup kosong berarti seluruhnya**, supaya kegiatan
+lama tak mendadak kehilangan datanya.
+
+### Uji mutasi — empat dipasang, empat dibunuh
+
+| Mutasi | Dibunuh oleh |
+|---|---|
+| Tingkat boleh dilompati | `test_induk_wajib_TEPAT_satu_tingkat_di_atas` (+1) |
+| Lingkup tak mencakup keturunan | `test_lingkup_mencakup_SELURUH_KETURUNAN` (+1) |
+| Unit berANAK boleh dihapus | `test_unit_berANAK_tak_boleh_dihapus` |
+| Siklus & kedalaman tak dijaga | `test_SIKLUS_dihentikan`, `test_kedalaman_BERLEBIH_dibatasi` |
+
+### Berkas
+
+- `backend/organisasi_utils.py` — **baru**: registry level, validasi, rantai induk, `field_eselon`, `dalam_lingkup`
+- `backend/tests/unit/test_organisasi_utils.py` — **baru**, 30 uji
+
+### Menyusul
+
+Koleksi `unit_organisasi` + rute CRUD · penautan master pegawai · penautan aset
+(registry `eselon3`–`eselon5`) · lingkup eselon pada kegiatan · laporan
+berjenjang sampai Eselon V yang dibatasi lingkup kegiatannya.
+
+---
+
 ## [#995] Tombol Terapkan tak lagi diulang di bilah atas — 2026-09-05
 
 Permintaan pemilik: *"pada headernya hapus bagian terapkan filter, karena sudah
