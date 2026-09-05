@@ -1,7 +1,8 @@
 import {
   susunPohonUnit, jalurUnit, ringkasLingkup,
   unitDalamLingkup, fieldEselon, unitDariField, perubahanEselonMassal,
-  unitTerdalam, jalurEselon,
+  unitTerdalam, jalurEselon, kelompokPilihanUnit,
+  opsiEselonBertingkat, pilihanEselonUsang,
 } from "../pohonUnit";
 
 // Setjen → Biro Umum → Bagian RT; Biro Keuangan sebagai saudara.
@@ -190,4 +191,126 @@ test("jalur yang dipotong membuang bagian AWAL dan menandainya", () => {
 test("jalur pendek tak pernah ditandai terpotong", () => {
   expect(jalurEselon({ eselon1: "Setjen" }, 2)).toBe("Setjen");
   expect(jalurEselon({}, 2)).toBe("");
+});
+
+// ── Pengelompokan pilihan unit untuk pemilih bawaan ─────────────────────
+
+test("pilihan dikelompokkan menurut jalur induknya", () => {
+  const pohon = susunPohonUnit([
+    ...POHON,
+    { id: "e4", nama_unit: "Subbag Perlengkapan", eselon: "4", parent_id: "e3" },
+  ]);
+  // Lingkup mencatat Biro Umum: yang boleh dipilih Biro Umum + turunannya.
+  const grup = kelompokPilihanUnit(unitDalamLingkup(pohon, ["e2"]), pohon);
+  expect(grup.map((g) => g.label)).toEqual([
+    "Setjen", "Setjen / Biro Umum", "Setjen / Biro Umum / Bagian RT"]);
+  expect(grup.map((g) => g.opsi.map((u) => u.id))).toEqual([
+    ["e2"], ["e3"], ["e4"]]);
+});
+
+test("beberapa unit seinduk masuk satu kelompok", () => {
+  // Inilah keadaan yang dilaporkan: lingkup mencatat beberapa Direktorat,
+  // seluruhnya sedalam yang sama, sehingga daftarnya rata tanpa hierarki.
+  const pohon = susunPohonUnit(POHON);
+  const grup = kelompokPilihanUnit(unitDalamLingkup(pohon, ["e2", "e2b"]), pohon);
+  const setjen = grup.filter((g) => g.label === "Setjen");
+  expect(setjen).toHaveLength(1);
+  expect(setjen[0].opsi.map((u) => u.nama_unit))
+    .toEqual(["Biro Keuangan", "Biro Umum"]);
+});
+
+test("unit puncak tak berlabel kelompok", () => {
+  const pohon = susunPohonUnit(POHON);
+  const grup = kelompokPilihanUnit(pohon, pohon);
+  expect(grup[0].label).toBe("");
+  expect(grup[0].opsi.map((u) => u.id)).toEqual(["e1"]);
+});
+
+test("daftar kosong menghasilkan kelompok kosong", () => {
+  expect(kelompokPilihanUnit([], [])).toEqual([]);
+  expect(kelompokPilihanUnit(null, null)).toEqual([]);
+});
+
+// ── Opsi filter eselon: bertingkat, dan hanya yang berdata ─────────────
+
+const JALUR = [
+  ["Setjen", "Biro Umum", "Bagian RT", "", ""],
+  ["Setjen", "Biro Umum", "Bagian Keuangan", "", ""],
+  ["Setjen", "Biro Keuangan", "", "", ""],
+  ["Kedeputian X", "Direktorat Y", "", "", ""],
+];
+
+test("tingkat tanpa data tak ditawarkan sama sekali", () => {
+  // Satker yang mencatat sampai Eselon III mendapat tiga kotak "Semua" yang
+  // tak pernah punya isi — memakan ruang dan mengesankan datanya hilang.
+  const o = opsiEselonBertingkat(JALUR, {});
+  expect(o.eselon4s).toEqual([]);
+  expect(o.eselon5s).toEqual([]);
+  expect(o.eselon1s).toEqual(["Kedeputian X", "Setjen"]);
+});
+
+test("Eselon II menyempit mengikuti Eselon I yang terpilih", () => {
+  const o = opsiEselonBertingkat(JALUR, { eselon1: ["Setjen"] });
+  expect(o.eselon2s).toEqual(["Biro Keuangan", "Biro Umum"]);
+  expect(o.eselon2s).not.toContain("Direktorat Y");
+});
+
+test("penyempitan berlanjut ke tingkat berikutnya", () => {
+  const o = opsiEselonBertingkat(
+    JALUR, { eselon1: ["Setjen"], eselon2: ["Biro Umum"] });
+  expect(o.eselon3s).toEqual(["Bagian Keuangan", "Bagian RT"]);
+  const p = opsiEselonBertingkat(
+    JALUR, { eselon1: ["Setjen"], eselon2: ["Biro Keuangan"] });
+  expect(p.eselon3s).toEqual([]);
+});
+
+test("pemilih TAK menyempitkan dirinya sendiri", () => {
+  // Kalau ia ikut menyaring dirinya, memilih satu nilai membuat nilai lain
+  // lenyap dari daftarnya dan penggunanya terkurung tanpa kotak untuk
+  // mengembalikannya.
+  const o = opsiEselonBertingkat(JALUR, { eselon1: ["Setjen"] });
+  expect(o.eselon1s).toEqual(["Kedeputian X", "Setjen"]);
+});
+
+test("dua pilihan pada satu tingkat menggabungkan cabangnya", () => {
+  const o = opsiEselonBertingkat(
+    JALUR, { eselon1: ["Setjen", "Kedeputian X"] });
+  expect(o.eselon2s).toEqual(["Biro Keuangan", "Biro Umum", "Direktorat Y"]);
+});
+
+test("tanpa pilihan apa pun, seluruh nilai yang ada ditawarkan", () => {
+  const o = opsiEselonBertingkat(JALUR, {});
+  expect(o.eselon2s).toEqual(
+    ["Biro Keuangan", "Biro Umum", "Direktorat Y"]);
+});
+
+test("masukan kosong dan cacat tak melempar", () => {
+  const o = opsiEselonBertingkat(null, null);
+  expect(o.eselon1s).toEqual([]);
+  expect(opsiEselonBertingkat([["A"]], {}).eselon1s).toEqual([]);
+});
+
+test("pilihan yang jadi mustahil dilaporkan sebagai usang", () => {
+  // Filter yang tertinggal di tingkat bawah menyaring diam-diam: daftarnya
+  // menyusut, kotaknya masih menyebut nilai yang sudah tak ada pilihannya.
+  const usang = pilihanEselonUsang(
+    JALUR, { eselon1: ["Kedeputian X"], eselon2: ["Biro Umum"] });
+  expect(usang).toEqual({ eselon2: ["Biro Umum"] });
+});
+
+test("pilihan yang masih sah tak dilaporkan usang", () => {
+  expect(pilihanEselonUsang(
+    JALUR, { eselon1: ["Setjen"], eselon2: ["Biro Umum"] })).toEqual({});
+  expect(pilihanEselonUsang(JALUR, {})).toEqual({});
+});
+
+test("tanpa data jalur, tak satu pun pilihan dianggap usang", () => {
+  // Keadaan paling lumrah: sebelum filter-options selesai dimuat, dan ketika
+  // pemuatannya gagal — yang memang sengaja diam karena bersifat pelengkap.
+  // Tanpa penjagaan ini, setiap filter eselon yang sudah dipasang pengguna
+  // terhapus sendiri pada saat itu juga.
+  const dipasang = { eselon1: ["Setjen"], eselon2: ["Biro Umum"] };
+  expect(pilihanEselonUsang([], dipasang)).toEqual({});
+  expect(pilihanEselonUsang(null, dipasang)).toEqual({});
+  expect(pilihanEselonUsang(undefined, dipasang)).toEqual({});
 });

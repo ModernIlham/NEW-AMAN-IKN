@@ -18,6 +18,68 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1006] Pemilih eselon: hierarki tergambar, dan filternya bertingkat — 2026-09-05
+
+Dua laporan pemilik, satu tema: hierarki yang tak terlihat.
+
+### Pemilih unit pada form aset tampak rata
+
+Indentasi memakai spasi tak-putus **tak terlihat pada pemilih bawaan Android**
+— dan lebih dari itu, ia tak menggambarkan apa pun ketika seluruh unit yang
+boleh dipilih berada pada kedalaman yang SAMA. Itulah yang terjadi pada lingkup
+kegiatan yang mencatat beberapa Direktorat: induknya tak ikut masuk lingkup,
+sehingga daftarnya rata dan tak ada hierarki yang tergambar sama sekali.
+
+`<optgroup>` menjawab keduanya: judul kelompoknya menyebut **jalur induknya**
+— meski induk itu sendiri tak dapat dipilih — dan pemilih bawaan merendernya
+sebagai kepala bagian yang tak dapat disentuh.
+
+### Filter eselon: lima kotak untuk data dua tingkat
+
+Panel filter selalu menampilkan Eselon I–V. Satker yang mencatat sampai Eselon
+II karenanya mendapat **tiga kotak "Semua" yang tak pernah punya isi** —
+memakan ruang layar dan mengesankan datanya hilang. Tingkat yang tak berdata
+kini tak ditawarkan sama sekali.
+
+Dan pemilih Eselon II menawarkan **seluruh** unit satker, termasuk yang jelas
+bukan milik Eselon I yang sedang terpilih. Memilih keduanya menghasilkan nol
+aset tanpa satu pun petunjuk bahwa kombinasinya memang mustahil. Kini tiap
+tingkat menyempit mengikuti tingkat di atasnya.
+
+Dasarnya field baru pada `filter-options`: **jalur eselon yang benar-benar
+dipakai aset**, bukan lima daftar terpisah. Lima daftar terpisah tak dapat
+menjawab "Eselon II apa saja yang ada DI BAWAH Eselon I ini". Cacahnya sebanyak
+jalur unit yang dipakai, bukan sebanyak asetnya — puluhan baris untuk satker
+besar sekalipun.
+
+Dua keputusan yang menjaganya tetap benar:
+
+- **Pemilih tak menyempitkan dirinya sendiri.** Kalau ia ikut menyaring
+  dirinya, memilih satu nilai membuat nilai lain lenyap dari daftarnya dan
+  penggunanya terkurung tanpa kotak untuk mengembalikannya.
+- **Pilihan tingkat bawah yang menjadi mustahil dibuang sendiri**, sebab
+  membiarkannya berarti menyaring diam-diam: daftar menyusut, kotaknya masih
+  menyebut nilai yang sudah tak ada pilihannya, dan tak ada yang menghubungkan
+  keduanya.
+
+### Cacat yang tertangkap uji yang sudah ada
+
+Pembersih pilihan usang mula-mula menghapus **setiap** filter eselon ketika
+daftar jalurnya kosong — dan daftar kosong terjadi pada keadaan paling lumrah:
+sebelum `filter-options` selesai dimuat, dan ketika pemuatannya gagal (yang
+memang sengaja diam karena bersifat pelengkap). Tak tahu bukan bukti bahwa
+pilihannya mustahil; penjaganya ditambahkan.
+
+### Cakupan
+
+- `backend/routes/assets.py` — `eselon_jalur` pada `filter-options`.
+- `frontend/src/lib/pohonUnit.js` — `kelompokPilihanUnit`,
+  `opsiEselonBertingkat`, `pilihanEselonUsang`.
+- `frontend/src/components/assets/AssetForm.jsx` — pemilih ber-`optgroup`.
+- `frontend/src/hooks/useAssetFilters.js`, `components/assets/AdvancedFilter.jsx`,
+  `DashboardToolbar.jsx`, `pages/DashboardPage.jsx`.
+- Uji: +14 `pohonUnit.test.js`.
+
 ## [#1005] Panel eselon kegiatan: kotak seragam, jarak rapat, induk ikut terpilih — 2026-09-05
 
 Tiga laporan pemilik dari layar kegiatan.

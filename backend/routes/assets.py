@@ -780,9 +780,30 @@ async def get_filter_options(activity_id: str = "", _user: dict = Depends(requir
     # berarti menyuruh operator mencari puluhan jarum di tumpukan yang 300 kali
     # lebih besar. Sumbernya `db.assets` yang SUDAH ter-scope satker+kegiatan —
     # bukan `db.categories`, yang memang master global tanpa kode satker.
+    # JALUR eselon yang benar-benar ada, bukan lima daftar terpisah. Daftar
+    # terpisah tak dapat menjawab "Eselon II apa saja yang ada DI BAWAH Eselon I
+    # ini", sehingga pemilih Eselon II menawarkan seluruh unit satker — termasuk
+    # yang jelas bukan miliknya — dan memilih dua jenjang berurutan menghasilkan
+    # nol aset tanpa petunjuk apa pun bahwa kombinasinya memang mustahil.
+    #
+    # Cacahnya sebanyak jalur unit yang dipakai aset, bukan sebanyak asetnya:
+    # puluhan baris untuk satker besar sekalipun.
+    async def _jalur_eselon():
+        pipa = [{"$match": query},
+                {"$group": {"_id": {f"e{n}": f"$eselon{n}" for n in range(1, 6)}}},
+                {"$limit": 5000}]
+        keluar = []
+        async for g in db.assets.aggregate(pipa):
+            baris = [str((g.get("_id") or {}).get(f"e{n}") or "").strip()
+                     for n in range(1, 6)]
+            if any(baris):
+                keluar.append(baris)
+        keluar.sort()
+        return keluar
+
     (locations, eselon1s, eselon2s, eselon3s, eselon4s, eselon5s, conditions,
      statuses, stiker_statuses, inventory_statuses,
-     categories) = await asyncio.gather(
+     categories, eselon_jalur) = await asyncio.gather(
         db.assets.distinct("location", query),
         db.assets.distinct("eselon1", query),
         db.assets.distinct("eselon2", query),
@@ -794,6 +815,7 @@ async def get_filter_options(activity_id: str = "", _user: dict = Depends(requir
         db.assets.distinct("stiker_status", query),
         db.assets.distinct("inventory_status", query),
         db.assets.distinct("category", query),
+        _jalur_eselon(),
     )
     
     # Filter out None/empty values and sort
@@ -807,6 +829,7 @@ async def get_filter_options(activity_id: str = "", _user: dict = Depends(requir
         "eselon3s": clean_sort(eselon3s),
         "eselon4s": clean_sort(eselon4s),
         "eselon5s": clean_sort(eselon5s),
+        "eselon_jalur": eselon_jalur,
         "conditions": clean_sort(conditions),
         "statuses": clean_sort(statuses),
         "stiker_statuses": clean_sort(stiker_statuses),
