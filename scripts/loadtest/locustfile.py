@@ -17,7 +17,8 @@ Atau UI web:
   locust -f scripts/loadtest/locustfile.py --host https://staging.example.go.id
 
 Konfigurasi via environment (semua opsional kecuali kredensial):
-  AMAN_USERNAME / AMAN_PASSWORD  kredensial login (default admin/admin123 — DEV)
+  AMAN_USERNAME / AMAN_PASSWORD  kredensial akun lingkungan uji/staging.
+                                 WAJIB — tanpa nilai bawaan (lihat di bawah).
   AMAN_ACTIVITY_ID               id kegiatan utk uji-tulis (POST /assets).
                                  Bila kosong → tugas tulis DINONAKTIFKAN (baca saja).
   AMAN_DATASET_FILE              berkas NDJSON body aset (dari generator sintetis).
@@ -36,13 +37,36 @@ from locust import HttpUser, between, task
 from locust.exception import StopUser
 
 # ── Konfigurasi dari environment ──
-USERNAME = os.environ.get("AMAN_USERNAME", "admin")
-PASSWORD = os.environ.get("AMAN_PASSWORD", "admin123")
+# Kredensial WAJIB dan tanpa nilai bawaan.
+#
+# Sebelumnya keduanya jatuh ke sepasang kredensial contoh bila kosong. Yang
+# berbahaya bukan nilainya — runtime AMAN tidak pernah membuat akun itu — tetapi
+# DIAMNYA: workflow live membaca `secrets.LOADTEST_USERNAME`, dan secret yang
+# belum dipasang menjadi string kosong, bukan galat. Harness lalu berjalan
+# mulus sambil menembakkan kredensial tebakan ke staging, dan kegagalan
+# konfigurasi itu terbaca sebagai uji beban yang seluruh loginnya gagal.
+#
+# `USERNAME` dirapikan, `PASSWORD` TIDAK: spasi di tepi password adalah
+# karakter yang sah, dan memangkasnya diam-diam mengubah kredensial yang
+# dikirim menjadi bukan yang dimaksud pemakainya.
+USERNAME = os.environ.get("AMAN_USERNAME", "").strip()
+PASSWORD = os.environ.get("AMAN_PASSWORD", "")
 ACTIVITY_ID = os.environ.get("AMAN_ACTIVITY_ID", "").strip()
 DATASET_FILE = os.environ.get("AMAN_DATASET_FILE", "").strip()
 ENABLE_HEAVY = os.environ.get("AMAN_ENABLE_HEAVY", "0") == "1"
 THINK_MIN = float(os.environ.get("AMAN_THINK_MIN", "1"))
 THINK_MAX = float(os.environ.get("AMAN_THINK_MAX", "5"))
+
+# Gagal SEKARANG — saat modul dimuat, sebelum Locust memunculkan satu pengguna
+# pun dan sebelum satu request pun terkirim. Memeriksanya di dalam `on_start`
+# berarti ratusan pengguna virtual lebih dulu lahir dan menghantam target.
+if not USERNAME or not PASSWORD:
+    raise SystemExit(
+        "AMAN_USERNAME dan AMAN_PASSWORD wajib diisi dengan akun lingkungan "
+        "uji/staging; harness ini tidak memiliki kredensial bawaan. "
+        "Pada workflow load test, pasang secrets LOADTEST_USERNAME dan "
+        "LOADTEST_PASSWORD."
+    )
 
 
 def _muat_dataset():
