@@ -11,7 +11,14 @@
             font-family: 'Inter', -apple-system, sans-serif;
             background: {% if preview %}#e8ecf1{% else %}#fff{% endif %};
             color: #1e293b;
-            {% if preview %}padding: 40px 20px;{% else %}padding: 0;{% endif %}
+            {# `min-width` sama dengan lebar lembarnya. Tanpa itu, pada layar
+               yang lebih sempit dari 794px badan halaman menyusut mengikuti
+               layar sementara lembarnya tidak — lembarnya meluber ke KANAN
+               sampai ke tepi layar, sedangkan padding kirinya tetap terlihat
+               sebagai celah. Sisi kiri dan kanan lalu tampak tak sepadan,
+               padahal keduanya diberi jarak yang sama. Laporan gabungan sudah
+               memakai penanganan ini sejak awal; yang ini terlewat. #}
+            {% if preview %}padding: 40px 0; min-width: 794px;{% else %}padding: 0;{% endif %}
         }
 
         {% if preview %}

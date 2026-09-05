@@ -6594,11 +6594,32 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
     # Master unit dipakai bila ada; kegiatan lama yang satkernya belum
     # membangun pohon tetap jatuh ke daftar teksnya, supaya laporannya tak
     # mendadak kehilangan bagian yang selama ini tercetak.
-    if unit_kerja:
+    # HANYA unit yang BENAR-BENAR tercatat pada kegiatan-kegiatannya, bukan
+    # seluruh master. Permintaan pemilik: *"berikan hanya sesuai dengan yang
+    # ada terdata di masing-masing kegiatan saja, tidak semua."* Master satker
+    # besar memuat puluhan unit yang tak satu pun menyentuh kegiatan ini, dan
+    # tabel berjudul "Struktur Organisasi" yang memuat semuanya menjawab
+    # pertanyaan yang tak sedang ditanyakan.
+    #
+    # Leluhurnya ikut dicetak meski tak dicatat sendiri: unit Eselon III yang
+    # berdiri tanpa Eselon II di atasnya bukan struktur, melainkan daftar.
+    # Sumbernya `lingkup_unit` yang DICATAT kegiatannya, bukan hasil
+    # pencocokan teksnya. Pencocokan teks dapat berhasil sebagian — "Setjen"
+    # ketemu, "Biro Umum" tidak — dan tabelnya lalu memuat separuh struktur
+    # yang diketik tanpa menyebutkan bahwa separuhnya hilang. Bila tak satu
+    # pun kegiatan mencatat lingkupnya, daftar teks lamanya dipakai UTUH.
+    _lingkup_semua = set()
+    for _a in satker_acts:
+        _lingkup_semua.update(
+            str(i).strip() for i in (_a.get("lingkup_unit") or []) if str(i).strip())
+    if unit_kerja and _lingkup_semua:
+        _tampil = set(_lingkup_semua)
+        for uid in _lingkup_semua:
+            _tampil.update(org.rantai_induk(uid, _peta_parent))
         struktur_eselon = [
             {"nama": u.get("nama_unit") or "", "depth": u.get("depth", 0),
              "eselon": org.label_level(u.get("eselon"))}
-            for u in org.pohon_terurut(unit_kerja)]
+            for u in org.pohon_terurut(unit_kerja) if u["id"] in _tampil]
     else:
         # Bentuk lama membawa Eselon II sebagai daftar DI DALAM induknya;
         # diratakan menjadi baris berjenjang supaya tabelnya satu bentuk saja.

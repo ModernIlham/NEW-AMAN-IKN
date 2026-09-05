@@ -18,6 +18,77 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1009] Umpan balik pemilik: empat perbaikan laporan dan pencarian nota dinas — 2026-09-05
+
+### Laporan eksekutif meluber ke kanan di layar sempit
+
+`body` laporan gabungan punya `min-width: 794px`; laporan eksekutif tidak. Pada
+layar lebih sempit dari 794px, badan halamannya menyusut mengikuti layar
+sementara lembarnya tidak — lembarnya meluber ke kanan sampai ke tepi layar,
+sedangkan padding kirinya tetap terlihat sebagai celah. Kedua sisi lalu tampak
+tak sepadan padahal keduanya diberi jarak yang sama.
+
+### Struktur Organisasi hanya yang tercatat di kegiatan
+
+Tabelnya membaca SELURUH master unit satker. Master besar memuat puluhan unit
+yang tak satu pun menyentuh kegiatan ini, dan tabel berjudul "Struktur
+Organisasi" yang memuat semuanya menjawab pertanyaan yang tak sedang
+ditanyakan. Kini hanya `lingkup_unit` yang **dicatat** kegiatannya, beserta
+leluhurnya — unit Eselon III yang berdiri tanpa Eselon II di atasnya bukan
+struktur, melainkan daftar.
+
+Sumbernya sengaja `lingkup_unit` mentah, **bukan** hasil pencocokan teksnya:
+pencocokan dapat berhasil sebagian — "Setjen" ketemu, "Biro Umum" tidak — dan
+tabelnya lalu memuat separuh struktur yang diketik tanpa menyebutkan bahwa
+separuhnya hilang. Tanpa satu pun kegiatan mencatat lingkupnya, daftar teks
+lamanya dipakai utuh.
+
+### Bagian "Personil per Kegiatan" dihapus
+
+Atas permintaan pemilik. Daftar gabungan "Personil Terlibat" sudah memuat
+seluruh nama; rinciannya per kegiatan menambah lembar tanpa menambah keputusan
+yang dapat diambil darinya. Datanya tetap disusun dan tersedia bila kelak
+dibutuhkan lagi.
+
+### Nomor halaman berjalan
+
+Bagian yang berlanjut hanya bertanda "(lanjutan)", sehingga cetakan yang
+tercecer tak dapat diurutkan kembali — pembacanya harus menebak dari isinya.
+Tiap lembar kini membawa **Hal. N** pada kakinya.
+
+Totalnya sengaja **tidak** dicetak. Jumlah lembar ditentukan oleh perulangan di
+dalam template — kegiatan, analisis, personil, simpulan — dan menghitungnya
+lagi di Python berarti dua perhitungan yang harus sepakat selamanya. Yang kedua
+tak pernah ikut diperbaiki, dan totalnya lalu berbohong justru pada dokumen
+yang dipakai memeriksa kelengkapan.
+
+### Pencarian barang pada Nota Dinas persediaan
+
+Daftar peringatan bisa memuat ratusan barang, dan mencentang satu di antaranya
+berarti menggulir mencarinya. Kata kunci dipecah per kata dan seluruhnya harus
+ada, boleh pada field berbeda: *"tinta hitam"* menemukan "Tinta Printer Hitam",
+dan *"K002 tinta"* menemukan barang yang sama lewat kodenya.
+
+Dua sifat yang menjaganya tetap jujur:
+
+- **Barang yang tersembunyi pencarian tetap terpilih.** Daftar yang menyaring
+  sekaligus melepas centang membuang pilihan yang sudah dibuat, tanpa satu pun
+  tanda.
+- **"Pilih semua" dan "Kosongkan" bekerja pada yang sedang TAMPIL**, dan
+  cacahnya menyebut seluruh daftar. Bekerja pada seluruh daftar sementara
+  layarnya tersaring membuat satu klik menyentuh barang yang tak terlihat.
+
+### Cakupan
+
+- `backend/templates/executive_summary.html` — `min-width` badan halaman.
+- `backend/templates/laporan_satker_v2.html` — nomor halaman; bagian personil
+  per kegiatan dihapus.
+- `backend/routes/reports.py` — struktur organisasi dibatasi lingkup kegiatan.
+- `frontend/src/components/persediaan/NotaDinasDialog.jsx` — `saringBarang`
+  dan kotak pencarian.
+- Uji: +6 `test_laporan_gabungan_satker`, +10 `NotaDinasDialog.test.jsx`;
+  empat uji lama disesuaikan karena menegaskan keadaan sebelum permintaan ini.
+
 ## [#1008] Linimasa Progres Inventarisasi pada Laporan Eksekutif — 2026-09-05
 
 Permintaan pemilik: *"pada laporan eksekutif aset berikan linimasa seperti di

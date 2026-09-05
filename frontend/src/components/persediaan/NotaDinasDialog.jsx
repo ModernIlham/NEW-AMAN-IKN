@@ -3,8 +3,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
-import { FileDown } from "lucide-react";
+import { FileDown, Search } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -64,8 +65,27 @@ const NAMA_BERKAS = {
   kedaluwarsa: "Nota_Dinas_Kedaluwarsa.pdf",
 };
 
+/**
+ * Saring daftar barang menurut kata kunci — nama ATAU kode.
+ *
+ * Kata kunci dipecah per kata dan SELURUHNYA harus ada, boleh pada field yang
+ * berbeda: "tinta hitam" menemukan "Tinta Printer Hitam", dan "K002 tinta"
+ * menemukan barang yang sama lewat kodenya. Pencocokan satu frasa utuh akan
+ * gagal pada keduanya, padahal itulah cara orang mengetik saat mencari.
+ */
+export function saringBarang(daftar, kata) {
+  const kunci = String(kata || "").trim().toLowerCase().split(/\s+/)
+    .filter(Boolean);
+  if (!kunci.length) return daftar || [];
+  return (daftar || []).filter((it) => {
+    const teks = `${it.nama_barang || ""} ${it.kode_barang || ""}`.toLowerCase();
+    return kunci.every((k) => teks.includes(k));
+  });
+}
+
 export default function NotaDinasDialog({ items, jenis = "kritis" }) {
   const [open, setOpen] = useState(false);
+  const [cari, setCari] = useState("");
   // Set id yang TIDAK dicentang — default kosong berarti semua terpilih,
   // dan pilihan tak perlu diinisialisasi ulang saat daftar peringatan segar.
   const [batal, setBatal] = useState(() => new Set());
@@ -75,6 +95,11 @@ export default function NotaDinasDialog({ items, jenis = "kritis" }) {
     [items, jenis]);
   const terpilih = useMemo(
     () => daftar.filter((it) => !batal.has(it.id)), [daftar, batal]);
+  // Yang TAMPIL menyusut mengikuti pencarian; yang TERPILIH tidak. Barang yang
+  // tersembunyi oleh kata kunci tetap ikut ke nota dinas — daftar yang
+  // menyaring sekaligus melepas centang akan membuang pilihan yang sudah
+  // dibuat, tanpa satu pun tanda.
+  const tampil = useMemo(() => saringBarang(daftar, cari), [daftar, cari]);
 
   const toggle = (id) => setBatal((prev) => {
     const next = new Set(prev);
@@ -114,19 +139,55 @@ export default function NotaDinasDialog({ items, jenis = "kritis" }) {
               ? "Centang barang yang akan dimasukkan ke nota dinas. Satu barang bisa punya beberapa layer bertanggal berbeda — memilih barang berarti SELURUH layer-nya ikut."
               : "Centang barang yang akan diusulkan pengadaannya — yang tidak dicentang tidak masuk nota dinas."}
           </p>
-          <div className="flex gap-1.5">
-            <Button size="sm" variant="outline" onClick={() => setBatal(new Set())}
+          {/* Pencarian: daftar peringatan bisa memuat ratusan barang, dan
+              mencentang satu di antaranya berarti menggulir mencarinya. */}
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <Input value={cari} onChange={(e) => setCari(e.target.value)}
+              placeholder="Cari nama atau kode barang…"
+              className="h-9 pl-8 text-xs"
+              data-testid={`nota-${jenis}-cari`} />
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Kedua tombol bekerja pada yang SEDANG TAMPIL. Bekerja pada
+                seluruh daftar sementara layarnya tersaring membuat satu klik
+                menyentuh barang yang tak terlihat sama sekali. */}
+            <Button size="sm" variant="outline"
+              onClick={() => setBatal((prev) => {
+                const next = new Set(prev);
+                tampil.forEach((it) => next.delete(it.id));
+                return next;
+              })}
               data-testid={`nota-${jenis}-semua`}>
-              Pilih semua
+              Pilih semua{cari ? " (tampil)" : ""}
             </Button>
             <Button size="sm" variant="outline"
-              onClick={() => setBatal(new Set(daftar.map((it) => it.id)))}
+              onClick={() => setBatal((prev) => {
+                const next = new Set(prev);
+                tampil.forEach((it) => next.add(it.id));
+                return next;
+              })}
               data-testid={`nota-${jenis}-kosongkan`}>
-              Kosongkan
+              Kosongkan{cari ? " (tampil)" : ""}
             </Button>
+            {/* Cacahnya menyebut SELURUH daftar, bukan yang tampil: dengan
+                pencarian aktif, yang menentukan isi nota dinas tetap
+                keseluruhannya. */}
+            <span className="text-[11px] text-muted-foreground ml-auto"
+              data-testid={`nota-${jenis}-cacah`}>
+              {terpilih.length} dari {daftar.length} dipilih
+              {cari ? ` · menampilkan ${tampil.length}` : ""}
+            </span>
           </div>
           <ul className="divide-y divide-border">
-            {daftar.map((it) => (
+            {cari && tampil.length === 0 && (
+              <li className="py-3 text-center text-xs text-muted-foreground"
+                data-testid={`nota-${jenis}-nihil`}>
+                Tak ada barang yang cocok dengan &ldquo;{cari}&rdquo;.
+                Pilihan yang sudah dibuat tetap tersimpan.
+              </li>
+            )}
+            {tampil.map((it) => (
               <li key={it.id}>
                 <label className="flex items-center gap-2.5 py-2 cursor-pointer">
                   <input type="checkbox" checked={!batal.has(it.id)}

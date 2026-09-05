@@ -8,7 +8,7 @@
 import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import NotaDinasDialog, { kelompokkanPerBarang } from "../NotaDinasDialog";
+import NotaDinasDialog, { kelompokkanPerBarang, saringBarang } from "../NotaDinasDialog";
 
 const mockUnduh = jest.fn();
 jest.mock("@/lib/downloadFile", () => ({
@@ -133,5 +133,94 @@ describe("dialog kedaluwarsa", () => {
     // Kalau layar menjanjikan pilihan per layer, ia berbohong.
     await bukaKedaluwarsa();
     expect(screen.queryAllByTestId(/^nota-kedaluwarsa-item-b-1$/)).toHaveLength(1);
+  });
+});
+
+// ── Pencarian barang ────────────────────────────────────────────────────
+//
+// Daftar peringatan bisa memuat ratusan barang, dan mencentang satu di
+// antaranya berarti menggulir mencarinya.
+
+describe("pencarian barang", () => {
+  test("mencocokkan nama maupun kode", () => {
+    expect(saringBarang(ITEMS, "tinta").map((x) => x.id)).toEqual(["kri-1"]);
+    expect(saringBarang(ITEMS, "K001").map((x) => x.id)).toEqual(["hab-1"]);
+  });
+
+  test("kata kunci dipecah dan boleh tersebar di field berbeda", () => {
+    // "Tinta Printer Hitam" berkode K002: pencocokan satu frasa utuh gagal
+    // pada keduanya, padahal begitulah cara orang mengetik saat mencari.
+    expect(saringBarang(ITEMS, "tinta hitam").map((x) => x.id)).toEqual(["kri-1"]);
+    expect(saringBarang(ITEMS, "k002 tinta").map((x) => x.id)).toEqual(["kri-1"]);
+  });
+
+  test("tak peduli besar-kecil huruf dan spasi tepi", () => {
+    expect(saringBarang(ITEMS, "  KERTAS  ").map((x) => x.id)).toEqual(["hab-1"]);
+  });
+
+  test("kata kunci kosong mengembalikan seluruh daftar", () => {
+    expect(saringBarang(ITEMS, "")).toHaveLength(2);
+    expect(saringBarang(ITEMS, "   ")).toHaveLength(2);
+    expect(saringBarang(ITEMS, null)).toHaveLength(2);
+  });
+
+  test("masukan cacat tak melempar", () => {
+    expect(saringBarang(null, "a")).toEqual([]);
+    expect(saringBarang([{ id: "x" }], "a")).toEqual([]);
+  });
+
+  test("mengetik kata kunci menyaring daftar yang tampil", async () => {
+    await bukaDialog();
+    await userEvent.type(screen.getByTestId("nota-kritis-cari"), "tinta");
+    await waitFor(() => {
+      expect(screen.queryByTestId("nota-kritis-item-hab-1")).toBeNull();
+    });
+    expect(screen.getByTestId("nota-kritis-item-kri-1")).toBeInTheDocument();
+  });
+
+  test("barang yang TERSEMBUNYI pencarian tetap ikut ke nota dinas", async () => {
+    // Daftar yang menyaring sekaligus melepas centang akan membuang pilihan
+    // yang sudah dibuat, tanpa satu pun tanda.
+    await bukaDialog();
+    await userEvent.type(screen.getByTestId("nota-kritis-cari"), "tinta");
+    await waitFor(() =>
+      expect(screen.queryByTestId("nota-kritis-item-hab-1")).toBeNull());
+    await userEvent.click(screen.getByTestId("nota-kritis-unduh"));
+    // Keduanya masih terpilih → URL kembali ke bentuk tanpa `ids`.
+    expect(mockUnduh).toHaveBeenCalled();
+    expect(mockUnduh.mock.calls[0][0]).not.toContain("ids=");
+  });
+
+  test("Kosongkan hanya melepas yang sedang TAMPIL", async () => {
+    // Bekerja pada seluruh daftar sementara layarnya tersaring membuat satu
+    // klik menyentuh barang yang tak terlihat sama sekali.
+    await bukaDialog();
+    await userEvent.type(screen.getByTestId("nota-kritis-cari"), "tinta");
+    await waitFor(() =>
+      expect(screen.queryByTestId("nota-kritis-item-hab-1")).toBeNull());
+    await userEvent.click(screen.getByTestId("nota-kritis-kosongkan"));
+    await userEvent.click(screen.getByTestId("nota-kritis-unduh"));
+    const url = mockUnduh.mock.calls[0][0];
+    expect(url).toContain("ids=hab-1");
+    expect(url).not.toContain("kri-1");
+  });
+
+  test("cacahnya menyebut SELURUH daftar, bukan yang tampil", async () => {
+    await bukaDialog();
+    await userEvent.type(screen.getByTestId("nota-kritis-cari"), "tinta");
+    await waitFor(() => {
+      const teks = screen.getByTestId("nota-kritis-cacah").textContent;
+      expect(teks).toContain("2 dari 2 dipilih");
+      expect(teks).toContain("menampilkan 1");
+    });
+  });
+
+  test("pencarian tanpa hasil menyebutkan pilihan tetap tersimpan", async () => {
+    await bukaDialog();
+    await userEvent.type(screen.getByTestId("nota-kritis-cari"), "zzz");
+    await waitFor(() =>
+      expect(screen.getByTestId("nota-kritis-nihil")).toBeInTheDocument());
+    expect(screen.getByTestId("nota-kritis-nihil").textContent)
+      .toContain("tetap tersimpan");
   });
 });

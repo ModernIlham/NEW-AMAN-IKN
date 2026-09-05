@@ -343,16 +343,19 @@ def test_bagian_laporan_ringkas_dan_terkategori():
     for j in (x.strip() for x in judul):
         if j and j not in unik:
             unik.append(j)
+    # "Personil per Kegiatan" DIHAPUS atas permintaan pemilik: daftar gabungan
+    # "Personil Terlibat" sudah memuat seluruh nama, dan rinciannya per
+    # kegiatan menambah lembar tanpa menambah keputusan yang dapat diambil.
     assert unik == ["Ringkasan Eksekutif", "BMN Tercatat per Kegiatan",
                     "Capaian per Kegiatan", "Kategori Hasil di Lapangan",
                     "Analisis Data", "Analisis Data per Kegiatan",
-                    "Personil Terlibat", "Personil per Kegiatan",
-                    "Simpulan"], unik
+                    "Personil Terlibat", "Simpulan"], unik
     # Yang gabungan selalu MENDAHULUI pecahannya: pembaca melihat satkernya
     # dulu, baru pembagiannya. Urutan terbalik memaksa ia menyusun sendiri
     # gambaran utuhnya dari potongan-potongan.
     assert unik.index("Analisis Data") < unik.index("Analisis Data per Kegiatan")
-    assert unik.index("Personil Terlibat") < unik.index("Personil per Kegiatan")
+    # Pasangan personil sudah tak berpasangan lagi: pecahannya dihapus.
+    assert "Personil per Kegiatan" not in unik
 
 
 # ── Halaman A4 tetap ────────────────────────────────────────────────────
@@ -1191,7 +1194,8 @@ def test_tiap_lembar_per_kegiatan_menyebut_KEGIATANNYA(dbr):
     assert ".kop-keg" in t, "tak ada kop kegiatan"
     assert "kop-keg-nama" in t
     assert "Analisis &mdash; ' ~ k.nama" in t, "kaki halaman tak menyebut kegiatan"
-    assert "Personil &mdash; ' ~ k.nama" in t
+    # Bagian personil per kegiatan sudah dihapus; kaki halamannya ikut hilang.
+    assert "Personil &mdash; ' ~ k.nama" not in t
 
 
 # ── Kategori berjenjang & lokasi menurut denah ──────────────────────────
@@ -1496,12 +1500,16 @@ def _unit(uid, nama, eselon, induk=None):
 
 def test_struktur_diambil_dari_pohon_unit_sedalam_yang_tercatat(dbr):
     async def jalan():
-        await _seed(dbr, [_keg(1, 5)], _aset("k1", 3))
+        # Kegiatan MENCATAT lingkupnya; strukturnya hanya memuat itu beserta
+        # leluhurnya, bukan seluruh master.
+        keg = dict(_keg(1, 5)); keg["lingkup_unit"] = ["e4"]
+        await _seed(dbr, [keg], _aset("k1", 3))
         await dbr.unit_kerja.insert_many([
             _unit("e1", "Setjen", 1),
             _unit("e2", "Biro Umum", 2, "e1"),
             _unit("e3", "Bagian RT", 3, "e2"),
             _unit("e4", "Subbag Perlengkapan", 4, "e3"),
+            _unit("z9", "Biro Tak Terlibat", 2, "e1"),
         ])
         d = await rp._build_satker_report_v2("k1")
         baris = [(u["depth"], u["nama"], u["eselon"])
@@ -1512,6 +1520,8 @@ def test_struktur_diambil_dari_pohon_unit_sedalam_yang_tercatat(dbr):
             (2, "Bagian RT", "Eselon III"),
             (3, "Subbag Perlengkapan", "Eselon IV")], baris
         assert d["struktur_sisa"] == 0
+        # Unit master yang tak disentuh kegiatan ini TIDAK ikut tercetak.
+        assert "Biro Tak Terlibat" not in [u["nama"] for u in d["struktur_eselon"]]
     _jalan(jalan())
 
 
@@ -1531,7 +1541,13 @@ def test_satker_tanpa_pohon_jatuh_ke_daftar_teks_lamanya(dbr):
 def test_sisa_yang_tak_muat_DISEBUT_jumlahnya(dbr):
     # Angka di sini sengaja jauh melebihi jatah halaman tersempit sekalipun.
     async def jalan():
-        await _seed(dbr, [_keg(i, 5) for i in range(1, 9)], _aset("k1", 3))
+        # Kedelapan kegiatan bersama-sama mencatat keempat puluh Bironya.
+        kegs = []
+        for i in range(1, 9):
+            k = dict(_keg(i, 5))
+            k["lingkup_unit"] = [f"b{j}" for j in range(i - 1, 40, 8)]
+            kegs.append(k)
+        await _seed(dbr, kegs, _aset("k1", 3))
         await dbr.unit_kerja.insert_many(
             [_unit("e1", "Setjen", 1)]
             + [_unit(f"b{i}", f"Biro {i:02d}", 2, "e1") for i in range(40)])
@@ -1566,3 +1582,83 @@ def test_template_menyebut_sisanya_dan_tak_lagi_memangkas_diam_diam():
     assert "dan {{ struktur_sisa }} unit lagi" in t
     # Kolomnya tak lagi mengunci dua tingkat.
     assert "<th>Unit Organisasi</th>" in t
+
+
+# ── Umpan balik pemilik: nomor halaman, struktur sesuai kegiatan ────────
+
+def test_tiap_lembar_membawa_NOMOR_halaman_berjalan():
+    """Bagian yang berlanjut dulu hanya bertanda "(lanjutan)", sehingga
+    cetakan yang tercecer tak dapat diurutkan kembali — pembacanya harus
+    menebak dari isinya."""
+    t = _teks_template()
+    assert "namespace(n=0)" in t, "tak ada pencacah halaman"
+    assert "{% set nsh.n = nsh.n + 1 %}" in t
+    # Nomornya dicetak di KAKI, yang dipakai SETIAP lembar.
+    kaki = t[t.index("{% macro kaki("):t.index("{%- endmacro %}",
+                                              t.index("{% macro kaki("))]
+    assert "Hal. {{ nsh.n }}" in kaki
+
+
+def test_nomor_halaman_naik_sekali_per_lembar():
+    # Pencacahnya di dalam makro kaki, dan tiap lembar memanggilnya tepat
+    # sekali — jadi nomornya tak pernah melompat atau terulang.
+    t = _teks_template()
+    assert t.count("{% set nsh.n = nsh.n + 1 %}") == 1
+    assert t.count("{{ kaki(") == t.count('<div class="hal">')
+
+
+def test_total_halaman_TIDAK_dicetak():
+    # Jumlah lembar ditentukan perulangan di template; menghitungnya lagi di
+    # Python berarti dua perhitungan yang harus sepakat selamanya, dan yang
+    # kedua berbohong justru pada dokumen yang dipakai memeriksa kelengkapan.
+    t = _teks_template()
+    assert "dari {{ total_hal" not in t
+    assert "total_halaman" not in t
+
+
+def test_struktur_hanya_memuat_unit_yang_TERCATAT_di_kegiatan(dbr):
+    """Master satker besar memuat puluhan unit yang tak satu pun menyentuh
+    kegiatan ini; tabel berjudul "Struktur Organisasi" yang memuat semuanya
+    menjawab pertanyaan yang tak sedang ditanyakan."""
+    async def jalan():
+        k1 = dict(_keg(1, 5)); k1["lingkup_unit"] = ["e2"]
+        k2 = dict(_keg(2, 6)); k2["lingkup_unit"] = ["e2b"]
+        await _seed(dbr, [k1, k2], _aset("k1", 2) + _aset("k2", 2))
+        await dbr.unit_kerja.insert_many([
+            _unit("e1", "Setjen", 1),
+            _unit("e2", "Biro Umum", 2, "e1"),
+            _unit("e2b", "Biro Keuangan", 2, "e1"),
+            _unit("z1", "Biro Asing", 2, "e1"),
+            _unit("z2", "Bagian Asing", 3, "z1"),
+        ])
+        d = await rp._build_satker_report_v2("k1")
+        nama = [u["nama"] for u in d["struktur_eselon"]]
+        # Kedua kegiatan digabung; leluhurnya ikut supaya tetap berjenjang.
+        assert nama == ["Setjen", "Biro Keuangan", "Biro Umum"], nama
+        assert "Biro Asing" not in nama and "Bagian Asing" not in nama
+    _jalan(jalan())
+
+
+def test_kegiatan_tanpa_lingkup_jatuh_ke_daftar_teksnya(dbr):
+    # Tanpa satu pun lingkup tercatat, memaksakan seluruh master justru
+    # mengembalikan cacat yang baru saja diperbaiki.
+    async def jalan():
+        keg = dict(_keg(1, 5))
+        keg["eselon1"] = [{"nama": "Setjen", "eselon2": ["Biro Umum"]}]
+        await _seed(dbr, [keg], _aset("k1", 2))
+        await dbr.unit_kerja.insert_many([
+            _unit("e1", "Setjen", 1), _unit("z1", "Biro Asing", 2, "e1")])
+        d = await rp._build_satker_report_v2("k1")
+        assert [u["nama"] for u in d["struktur_eselon"]] == ["Setjen", "Biro Umum"]
+    _jalan(jalan())
+
+
+def test_bagian_personil_per_kegiatan_benar_benar_hilang_dari_template():
+    # Dicari sebagai JUDUL BAGIAN yang tercetak, bukan sebagai teks di mana
+    # pun: komentar yang menerangkan penghapusannya memuat kata yang sama, dan
+    # mencocokkan berkas apa adanya membuat uji ini lolos walau bagiannya
+    # dikembalikan.
+    t = _teks_template()
+    judul = re.findall(r'class="no">\{\{ sec\.n \}\}</span>([^<{]+)', t)
+    assert "Personil per Kegiatan" not in [x.strip() for x in judul]
+    assert "personil_kegiatan_ada" not in t
