@@ -18,6 +18,60 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1011] Nota Dinas persediaan yang benar-benar terbit: bernomor dan beku — 2026-09-05
+
+Permintaan pemilik: *"saya tidak melihat integrasi nomer surat dan permintaan
+ttd elektroniknya."* Memang tidak ada, dan alasannya struktural: nota dinas
+persediaan adalah satu-satunya keluaran persuratan modul ini yang lahir sebagai
+GET tanpa jejak. Daftarnya dihitung ulang tiap unduh, tak ada dokumen yang
+tersimpan — sehingga tak ada tempat menyimpan nomor, dan tak ada `doc_ref` yang
+bisa ditandatangani. Menambahkan panggilan booking ke jalur unduh tidak akan
+menyelesaikannya; ia hanya akan mengisi buku agenda dengan nomor yang tak
+pernah menjadi naskah apa pun, sebab tombol unduh ditekan berkali-kali.
+
+Maka nota dinas kini punya register. `POST /persediaan/nota-dinas/terbitkan`
+memesan nomor SEKALI ke deret yang sama dengan LPB dan Surat Persetujuan,
+membekukan daftar barangnya, lalu menyimpannya; `GET .../{id}/pdf` mencetak
+dari daftar beku itu. Unduhan tak pernah memesan nomor lagi.
+
+Pembekuannya bukan kehati-hatian berlebih. Nota bernomor yang dicetak ulang
+dari peringatan yang dihitung ulang berubah isi setiap kali stok bergerak,
+sementara nomornya tetap sama — dokumen yang beredar dan yang tercetak lalu
+berselisih tanpa satu pun tanda. Yang dibekukan: daftar barangnya, pejabat
+penandatangannya (pola `ppk_nama` pada LPB), dan status "sebagian dipilih".
+Yang terakhir itu tampak sepele sampai satu barang kritis baru muncul: bila
+disimpulkan belakangan dari jumlah baris, naskah yang sebenarnya lengkap
+mendadak memuat kalimat "sengaja tidak disertakan".
+
+Bentuk dokumennya — judul, hal, nama dan lebar kolom, dua paragraf pengantar —
+dipindah ke `persediaan_nota_utils.py` SEBELUM jalur cetak kedua ditulis.
+Selama hanya ada satu jalur, literal di dalam badan route tidak menimbulkan
+masalah; begitu ada dua, itu persis pola yang berulang kali menggigit repo ini.
+
+Pratinjau tanpa nomor tetap ada dan tetap memakai nama berkas lama. Keduanya
+sengaja dipisah menjadi dua tombol: satu tombol untuk keduanya akan membuat
+orang memesan nomor surat hanya karena ingin melihat dokumennya.
+
+Sumber kop disamakan. Pratinjau dulu membaca `report_settings` global apa
+adanya sementara naskah terbit memakai kop master satker, sehingga pada satker
+berkop sendiri yang dipratinjau bukan yang terbit.
+
+Riwayat Nota Dinas ditambahkan di halaman Persediaan. Tanpa layar itu, nota
+bernomor hanya hidup di dialog tempat ia dibuat — begitu ditutup, satu-satunya
+jejaknya adalah nomor di buku agenda yang tak menunjuk balik ke daftar
+barangnya. Nota yang gagal memesan nomor tampil apa adanya sebagai "belum
+bernomor", bukan disembunyikan: ia sudah terbit, dan nomornya masih bisa
+dilengkapi dari Registrasi Persuratan.
+
+Satu cacat uji dari `[#1010]` ikut diperbaiki: fixture-nya menyemai koleksi
+`persediaan_items`, padahal `peringatan_persediaan` membaca `persediaan`.
+Notanya karena itu dirender KOSONG — kepala naskah dan tempat/tanggalnya tetap
+tercetak sehingga seluruh assertion tetap hijau, tapi tabel barangnya tak
+pernah teruji sama sekali.
+
+Tanda tangan elektronik untuk nota dinas menyusul pada tahap berikutnya:
+register ini adalah `doc_ref` yang selama ini tidak ada.
+
 ## [#1010] Nota Dinas persediaan menjadi naskah dinas — 2026-09-05
 
 Permintaan pemilik: *"buat permohonan barang persediaan lebih formal dan resmi

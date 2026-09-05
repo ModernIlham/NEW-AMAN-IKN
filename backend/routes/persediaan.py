@@ -198,20 +198,20 @@ async def peringatan_persediaan(
             "total_masalah": len(habis) + len(kritis) + len(lewat) + len(segera)}
 
 
-@persediaan_router.get("/persediaan/nota-dinas")
-async def nota_dinas_persediaan(
-    jenis: str = Query(..., pattern="^(kritis|kedaluwarsa)$"),
-    horizon_hari: int = Query(30, ge=1, le=365),
-    ids: str = Query("", max_length=8000),
-    _user: dict = Depends(require_user),
-):
-    """Nota dinas PDF otomatis (pustaka §3): stok kritis/habis ATAU layer
-    kedaluwarsa — kop surat + tabel + tanda tangan Kuasa Pengguna Barang.
+async def bangun_nota_dinas_pdf(jenis, rows, tanggal, settings, kpb,
+                                horizon_hari=30, seleksi=False, nomor="",
+                                yth="") -> bytes:
+    """Susun PDF Nota Dinas persediaan → bytes.
 
-    `ids` (id barang dipisah koma) menyaring ke barang TERPILIH saja —
-    tidak semua yang habis/kritis otomatis diusulkan pengadaan ulang;
-    kandidatnya tetap dihitung ulang dari peringatan (id di luar daftar
-    peringatan diabaikan, bukan disisipkan). Kosong = semua (perilaku lama).
+    Dipisah dari route-nya (pola `bangun_lpb_pdf`) karena berkasnya kini punya
+    DUA pemanggil: pratinjau yang menghitung daftarnya saat itu juga, dan nota
+    TERBIT yang mencetak ulang daftar beku dari register. Keduanya wajib
+    menghasilkan dokumen yang bentuknya sama persis — kalau tidak, yang
+    dipratinjau bukan yang terbit.
+
+    `rows` sudah tersaring dan siap cetak; fungsi ini tidak menghitung ulang
+    peringatan apa pun. `kpb` dibekukan oleh pemanggil supaya nota tahun lalu
+    tetap menyebut pejabat yang menandatanganinya, bukan pejabat hari ini.
     """
     from io import BytesIO
 
@@ -223,10 +223,8 @@ async def nota_dinas_persediaan(
         _kop_surat_flowables, _page_footer_factory, _signature_block, _std_doc,
         _std_table_style, _title_block,
     )
+    import persediaan_nota_utils as pnu
     import persuratan_utils as psu
-
-    data = await peringatan_persediaan(horizon_hari=horizon_hari, _user=_user)
-    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
 
     buffer = BytesIO()
     doc = _std_doc(buffer)
@@ -234,44 +232,7 @@ async def nota_dinas_persediaan(
     elements = []
     elements.extend(_kop_surat_flowables(settings, doc.width))
 
-    terpilih = {s for s in (x.strip() for x in ids.split(",")) if s}
-    if jenis == "kritis":
-        judul = "NOTA DINAS\nUSULAN PENGADAAN PERSEDIAAN (STOK KRITIS/HABIS)"
-        hal_nota = "Usulan Pengadaan Persediaan (Stok Kritis/Habis)"
-        rows = data["habis"] + data["kritis"]
-        if terpilih:
-            rows = [r for r in rows if r.get("id") in terpilih]
-        headers = ["No", "Kode Barang", "Nama Barang", "Satuan", "Stok", "Batas Kritis"]
-        widths = [28, 120, 190, 60, 45, 65]
-        body = [[str(i + 1), r["kode_barang"], r["nama_barang"], r.get("satuan") or "-",
-                 str(r["stok"]), str(r.get("batas_kritis") or 0)] for i, r in enumerate(rows)]
-        pengantar = ("Bersama ini disampaikan daftar barang persediaan yang stoknya telah "
-                     "HABIS atau mencapai batas kritis, untuk menjadi pertimbangan dalam "
-                     "pengadaan berikutnya.")
-        if terpilih:
-            pengantar += (" Daftar ini memuat barang yang DIPILIH untuk diusulkan; "
-                          "barang kritis/habis lain sengaja tidak disertakan.")
-    else:
-        judul = "NOTA DINAS\nPERSEDIAAN KEDALUWARSA / SEGERA KEDALUWARSA"
-        hal_nota = "Persediaan Kedaluwarsa / Segera Kedaluwarsa"
-        rows = data["kedaluwarsa"] + data["segera_kedaluwarsa"]
-        if terpilih:
-            rows = [r for r in rows if r.get("id") in terpilih]
-        headers = ["No", "Kode Barang", "Nama Barang", "Jumlah", "Kedaluwarsa"]
-        widths = [28, 130, 200, 55, 85]
-        body = [[str(i + 1), r["kode_barang"], r["nama_barang"], str(r["qty"]),
-                 _fmt_tanggal_id(r["expired"]) or r["expired"]] for i, r in enumerate(rows)]
-        pengantar = (f"Bersama ini disampaikan daftar persediaan yang telah/akan kedaluwarsa "
-                     f"dalam {data['horizon_hari']} hari ke depan, untuk ditindaklanjuti "
-                     f"(pemakaian prioritas, pemindahan, atau usulan penghapusan).")
-        if terpilih:
-            # Sama seperti nota stok kritis: dokumen resmi harus menyebut bahwa
-            # daftarnya SELEKSI, bukan seluruh temuan. Tanpa kalimat ini pembaca
-            # menyimpulkan tak ada barang kedaluwarsa lain — kesimpulan yang
-            # dibawa ke tindak lanjut.
-            pengantar += (" Daftar ini memuat barang yang DIPILIH untuk "
-                          "ditindaklanjuti; barang kedaluwarsa lain sengaja "
-                          "tidak disertakan.")
+    body = pnu.isi_tabel(jenis, rows, fmt_tanggal=_fmt_tanggal_id)
 
     # ── KEPALA NASKAH DINAS ─────────────────────────────────────────────
     #
@@ -280,48 +241,250 @@ async def nota_dinas_persediaan(
     # tak dapat diagendakan, tak dapat ditindaklanjuti penerimanya, dan tak
     # dapat diarsipkan sebagai naskah dinas — ia hanya cetakan daftar.
     # Susunannya mengikuti PerANRI 5/2021 (lihat persuratan_utils).
-    _kpb_kepala = await _kpb_signer(settings, user=_user)
-    elements.extend(_title_block(judul))
+    elements.extend(_title_block(pnu.judul(jenis)))
     elements.append(_identity_table(psu.kepala_nota_dinas(
-        yth=str(settings.get("nota_dinas_yth") or "").strip()
-            or "Pejabat Pengadaan Barang/Jasa",
-        dari=_hdr_kpb(_kpb_kepala).rstrip(","),
-        hal=hal_nota,
+        yth=(str(yth or "").strip() or "Pejabat Pengadaan Barang/Jasa"),
+        dari=_hdr_kpb(kpb).rstrip(","),
+        nomor=nomor,
+        hal=pnu.hal(jenis),
         lampiran=("1 (satu) berkas" if body else "-"),
-        tanggal_iso=data["tanggal"])))
+        tanggal_iso=tanggal)))
     elements.append(Spacer(1, 3 * rl_mm))
-    elements.append(Paragraph(pengantar, st['Meta']))
     elements.append(Paragraph(
-        f"Data per {_fmt_tanggal_id(data['tanggal'])}.", st['Meta']))
+        pnu.pengantar(jenis, horizon_hari=horizon_hari, seleksi=seleksi),
+        st['Meta']))
+    elements.append(Paragraph(
+        f"Data per {_fmt_tanggal_id(tanggal)}.", st['Meta']))
     elements.append(Spacer(1, 4 * rl_mm))
 
     if not body:
-        elements.append(Paragraph("Tidak ada barang yang memenuhi kriteria saat ini.", st['Cell']))
+        elements.append(Paragraph(
+            "Tidak ada barang yang memenuhi kriteria saat ini.", st['Cell']))
     else:
-        table_data = [[Paragraph(h, st['TableHeader']) for h in headers]]
+        table_data = [[Paragraph(h, st['TableHeader'])
+                       for h in pnu.headers(jenis)]]
         for r in body:
             table_data.append([Paragraph(str(c), st['Cell']) for c in r])
-        table = Table(table_data, colWidths=_fit_col_widths(widths, doc.width), repeatRows=1)
+        table = Table(table_data,
+                      colWidths=_fit_col_widths(pnu.widths(jenis), doc.width),
+                      repeatRows=1)
         table.setStyle(_std_table_style(zebra=True))
         elements.append(table)
 
     elements.append(Spacer(1, 12 * rl_mm))
-    kpb = await _kpb_signer(settings, user=_user)
     elements.extend(_signature_block([
-        {'pre': [psu.tempat_tanggal(settings, data["tanggal"])],
+        {'pre': [psu.tempat_tanggal(settings, tanggal)],
          'header': _hdr_kpb(kpb),
          'nama': kpb["nama"],
          # Non-ASN: baris NIP/NIK tidak dicetak (privasi)
-         'after': baris_identitas_ttd(kpb['nip'], kpb.get("status_kepegawaian"))},
+         'after': baris_identitas_ttd(kpb['nip'],
+                                      kpb.get("status_kepegawaian"))},
     ], doc.width))
 
     footer = _page_footer_factory("Nota Dinas Persediaan")
     await asyncio.to_thread(doc.build, elements, onFirstPage=footer,
                             onLaterPages=footer)
     buffer.seek(0)
-    fname = f"Nota_Dinas_{'Stok_Kritis' if jenis == 'kritis' else 'Kedaluwarsa'}.pdf"
+    return buffer.getvalue()
+
+
+@persediaan_router.get("/persediaan/nota-dinas")
+async def nota_dinas_persediaan(
+    jenis: str = Query(..., pattern="^(kritis|kedaluwarsa)$"),
+    horizon_hari: int = Query(30, ge=1, le=365),
+    ids: str = Query("", max_length=8000),
+    _user: dict = Depends(require_user),
+):
+    """PRATINJAU nota dinas PDF (pustaka §3): stok kritis/habis ATAU layer
+    kedaluwarsa — kop surat + kepala naskah + tabel + tanda tangan KPB.
+
+    TANPA NOMOR dan tanpa jejak: daftarnya dihitung saat ini juga, sehingga
+    dua unduhan pada hari yang sama bisa berbeda isi bila stok bergerak di
+    antaranya. Untuk naskah yang benar-benar terbit — bernomor, dibekukan,
+    dan dapat ditemukan lagi — pakai `POST /persediaan/nota-dinas/terbitkan`.
+
+    `ids` (id barang dipisah koma) menyaring ke barang TERPILIH saja —
+    tidak semua yang habis/kritis otomatis diusulkan pengadaan ulang;
+    kandidatnya tetap dihitung ulang dari peringatan (id di luar daftar
+    peringatan diabaikan, bukan disisipkan). Kosong = semua (perilaku lama).
+    """
+    from io import BytesIO
+
     from fastapi.responses import StreamingResponse
-    return StreamingResponse(buffer, media_type="application/pdf",
+    from shared_utils import kode_satker_user, pengaturan_kop
+
+    import persediaan_nota_utils as pnu
+
+    data = await peringatan_persediaan(horizon_hari=horizon_hari, _user=_user)
+    # Kop dari MASTER SATKER pemakai, bukan setelan global apa adanya —
+    # sumber yang sama dengan nota terbit. Dua sumber kop yang berbeda
+    # membuat pratinjau dan naskah yang benar-benar terbit berkop berlainan
+    # pada satker yang punya kop sendiri, dan tak ada yang menyebutkannya.
+    settings = await pengaturan_kop(kode_satker=kode_satker_user(_user))
+    terpilih = {s for s in (x.strip() for x in ids.split(",")) if s}
+    rows = pnu.baris_terpilih(jenis, data, terpilih)
+    kpb = await _kpb_signer(settings, user=_user)
+
+    isi = await bangun_nota_dinas_pdf(
+        jenis, rows, data["tanggal"], settings, kpb,
+        horizon_hari=data["horizon_hari"], seleksi=bool(terpilih),
+        yth=str(settings.get("nota_dinas_yth") or "").strip())
+    fname = pnu.nama_berkas(jenis)
+    return StreamingResponse(BytesIO(isi), media_type="application/pdf",
+                             headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
+class TerbitNotaDinasIn(BaseModel):
+    jenis: str = Field(pattern="^(kritis|kedaluwarsa)$")
+    horizon_hari: int = Field(30, ge=1, le=365)
+    ids: list[str] = Field(default_factory=list, max_length=2000)
+    yth: str = ""
+    kode_klasifikasi: str = ""
+
+
+@persediaan_router.post("/persediaan/nota-dinas/terbitkan")
+async def terbitkan_nota_dinas(payload: TerbitNotaDinasIn,
+                               user: dict = Depends(require_writer_satker)):
+    """TERBITKAN nota dinas: booking nomor ke buku agenda Persuratan, bekukan
+    daftar barangnya, simpan ke register.
+
+    Kenapa penerbitan berdiri sendiri, bukan nomor yang dibooking saat unduh:
+    nomor surat adalah deret yang tak pernah dipakai ulang, sementara tombol
+    unduh ditekan berkali-kali — sekali untuk melihat, sekali untuk dicetak,
+    sekali lagi karena berkasnya terselip. Membooking di jalur unduh berarti
+    buku agenda penuh nomor yang tak pernah menjadi naskah apa pun.
+
+    Daftarnya DIBEKUKAN pada saat terbit (pola LPB). Nota bernomor yang
+    dicetak ulang dari peringatan yang dihitung ulang akan berubah isi tiap
+    kali stok bergerak, sementara nomornya tetap sama — dokumen yang beredar
+    dan dokumen yang tercetak lalu berselisih tanpa satu pun tanda.
+
+    Gagal booking TIDAK membatalkan penerbitan (pola BAST/Surat Persetujuan):
+    notanya tetap tercatat, nomornya tampil sebagai titik-titik, dan dapat
+    dilengkapi kemudian dari Registrasi Persuratan.
+    """
+    import persediaan_nota_utils as pnu
+    from shared_utils import kode_satker_user, pengaturan_kop
+
+    data = await peringatan_persediaan(horizon_hari=payload.horizon_hari,
+                                       _user=user)
+    terpilih = {s.strip() for s in (payload.ids or []) if str(s).strip()}
+    rows = pnu.baris_terpilih(payload.jenis, data, terpilih)
+    if not rows:
+        raise HTTPException(
+            status_code=400,
+            detail=("Tidak ada barang yang memenuhi kriteria — nota dinas "
+                    "kosong tidak diterbitkan"))
+
+    ks = kode_satker_user(user)
+    settings = await pengaturan_kop(kode_satker=ks)
+    kpb = await _kpb_signer(settings, per_iso=data["tanggal"], user=user)
+    now = datetime.now(timezone.utc).isoformat()
+
+    nomor, surat_id = "", ""
+    try:
+        from routes.persuratan import booking_nomor_otomatis
+        nomor, surat_id = await booking_nomor_otomatis(
+            user, data["tanggal"],
+            perihal=pnu.perihal_agenda(payload.jenis),
+            tujuan=(str(payload.yth or "").strip()
+                    or str(settings.get("nota_dinas_yth") or "").strip()),
+            keterangan="booking otomatis dari nota dinas persediaan",
+            kode_satker=ks, kode_klasifikasi=payload.kode_klasifikasi,
+            jenis_naskah="Nota Dinas", referensi="NOTA-PERSEDIAAN")
+    except Exception:
+        nomor, surat_id = "", ""
+
+    nid = str(uuid.uuid4())
+    await db.persediaan_nota.insert_one({
+        "id": nid, "kode_satker": ks,
+        "jenis": payload.jenis, "tanggal": data["tanggal"],
+        "horizon_hari": data["horizon_hari"],
+        # `seleksi` dibekukan, bukan disimpulkan belakangan dari jumlah baris:
+        # daftar yang kebetulan memuat SEMUA barang kritis saat terbit akan
+        # tampak "tersaring" begitu satu barang kritis baru muncul, dan
+        # kalimat "sengaja tidak disertakan" lalu muncul pada nota yang
+        # sebenarnya lengkap.
+        "seleksi": bool(terpilih),
+        "yth": str(payload.yth or "").strip()
+               or str(settings.get("nota_dinas_yth") or "").strip(),
+        "hal": pnu.hal(payload.jenis),
+        "items": pnu.bekukan(payload.jenis, rows),
+        "jumlah_barang": len(rows),
+        "nomor": nomor, "surat_id": surat_id,
+        # KPB dibekukan — pejabat berganti, nota tahun lalu harus tetap
+        # menyebut yang menandatanganinya (pola `ppk_nama` pada LPB).
+        "kpb_nama": str((kpb or {}).get("nama") or ""),
+        "kpb_nip": str((kpb or {}).get("nip") or ""),
+        "kpb_jenis_pelaksana": str((kpb or {}).get("jenis_pelaksana") or ""),
+        "kpb_status_kepegawaian": str(
+            (kpb or {}).get("status_kepegawaian") or ""),
+        "created_by": user.get("username", "system"),
+        "created_at": now, "updated_at": now,
+    })
+    await log_audit("persediaan_nota_terbit", "", nid,
+                    username=user.get("username", "system"),
+                    detail=f"{payload.jenis} — {len(rows)} barang — "
+                           f"{nomor or 'tanpa nomor'}")
+    return {"id": nid, "nomor": nomor, "surat_id": surat_id,
+            "jumlah_barang": len(rows),
+            "message": ("Nota dinas terbit"
+                        + (f" dengan nomor {nomor}" if nomor
+                           else " tanpa nomor — buku agenda tidak merespons"))}
+
+
+@persediaan_router.get("/persediaan/nota-dinas/register")
+async def daftar_nota_dinas(page: int = Query(1, ge=1),
+                            page_size: int = Query(30, ge=1, le=100),
+                            jenis: str = Query("", pattern="^(|kritis|kedaluwarsa)$"),
+                            _user: dict = Depends(require_user)):
+    """Riwayat nota dinas persediaan yang TERBIT.
+
+    Tanpa layar ini nota bernomor hanya hidup di dialog tempat ia dibuat:
+    begitu ditutup, satu-satunya jejaknya adalah nomor di buku agenda yang
+    tak menunjuk balik ke daftar barangnya.
+    """
+    from shared_utils import scope_query_field_satker
+    q = scope_query_field_satker(_user)
+    if str(jenis or "").strip():
+        q = {**q, "jenis": jenis}
+    total = await db.persediaan_nota.count_documents(q)
+    items = await (db.persediaan_nota.find(q, {"_id": 0, "items": 0})
+                   .sort("created_at", -1)
+                   .skip((page - 1) * page_size).limit(page_size)
+                   .to_list(page_size))
+    return {"items": items, "total": total, "page": page,
+            "total_pages": max(1, -(-total // page_size))}
+
+
+@persediaan_router.get("/persediaan/nota-dinas/{nid}/pdf")
+async def unduh_nota_dinas(nid: str, _user: dict = Depends(require_user)):
+    """PDF nota dinas TERBIT — dicetak dari daftar beku di register, bukan
+    dari peringatan yang dihitung ulang."""
+    from io import BytesIO
+
+    from fastapi.responses import StreamingResponse
+    from shared_utils import pastikan_akses_dok_satker, pengaturan_kop
+
+    import persediaan_nota_utils as pnu
+
+    nota = await db.persediaan_nota.find_one({"id": nid}, {"_id": 0})
+    if not nota:
+        raise HTTPException(status_code=404, detail="Nota dinas tidak ditemukan")
+    await pastikan_akses_dok_satker(_user, nota)
+
+    settings = await pengaturan_kop(kode_satker=str(nota.get("kode_satker") or ""))
+    kpb = {"nama": nota.get("kpb_nama") or "",
+           "nip": nota.get("kpb_nip") or "",
+           "jenis_pelaksana": nota.get("kpb_jenis_pelaksana") or "",
+           "status_kepegawaian": nota.get("kpb_status_kepegawaian") or ""}
+    isi = await bangun_nota_dinas_pdf(
+        nota.get("jenis"), nota.get("items") or [], nota.get("tanggal"),
+        settings, kpb, horizon_hari=int(nota.get("horizon_hari") or 30),
+        seleksi=bool(nota.get("seleksi")), nomor=str(nota.get("nomor") or ""),
+        yth=str(nota.get("yth") or ""))
+    fname = pnu.nama_berkas(nota.get("jenis"), nota.get("nomor"))
+    return StreamingResponse(BytesIO(isi), media_type="application/pdf",
                              headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 

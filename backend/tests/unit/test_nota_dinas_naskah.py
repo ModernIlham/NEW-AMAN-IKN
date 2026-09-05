@@ -130,7 +130,12 @@ def dbx(monkeypatch):
     _jalan(fake.report_settings.insert_one({
         "type": "global", "nama_instansi": "Otorita Ibu Kota Nusantara",
         "tempat_laporan": "Nusantara"}))
-    _jalan(fake.persediaan_items.insert_one({
+    # Koleksi `persediaan` — BUKAN `persediaan_items`. Semaian ke koleksi yang
+    # salah membuat `peringatan_persediaan` tak menemukan apa pun, dan nota
+    # yang dirender jadi nota KOSONG: kepala naskah dan tempat/tanggalnya
+    # tetap tercetak sehingga seluruh assertion di bawah tetap hijau, tapi
+    # tabel barangnya tak pernah diuji sama sekali.
+    _jalan(fake.persediaan.insert_one({
         "id": "b1", "kode_barang": "1010309001000001", "kode_satker": "401234",
         "nama_barang": "E-Meterai Rp 10.000", "satuan": "Pcs",
         "stok": 0, "batas_kritis": 0}))
@@ -170,3 +175,17 @@ def test_tempat_dan_tanggal_tercetak_bukan_titik_titik_kosong(dbx):
 
 def test_hal_menyebut_perihal_notanya(dbx):
     assert "Usulan Pengadaan Persediaan" in _nota(dbx)
+
+
+def test_barang_peringatan_benar_benar_masuk_ke_tabelnya(dbx):
+    """Penjaga semaian: bila fixture menyemai koleksi yang salah, notanya
+    kosong dan seluruh test di atas TETAP hijau."""
+    t = _nota(dbx)
+    assert "E-Meterai Rp 10.000" in t, t[:600]
+    assert "Tidak ada barang yang memenuhi kriteria" not in t
+
+
+def test_lampiran_menyebut_berkas_saat_ada_daftarnya(dbx):
+    # "1 (satu) berkas" hanya benar bila tabelnya memang terisi — nota kosong
+    # harus menulis "-". Tanpa daftar yang sungguhan, cabang ini tak teruji.
+    assert "1 (satu) berkas" in _nota(dbx)
