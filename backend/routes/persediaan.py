@@ -219,10 +219,11 @@ async def nota_dinas_persediaan(
     from reportlab.platypus import Paragraph, Spacer, Table
 
     from routes.reports import (
-        _fit_col_widths, _fmt_tanggal_id, _get_report_styles, _kop_surat_flowables,
-        _page_footer_factory, _signature_block, _std_doc, _std_table_style,
-        _title_block,
+        _fit_col_widths, _fmt_tanggal_id, _get_report_styles, _identity_table,
+        _kop_surat_flowables, _page_footer_factory, _signature_block, _std_doc,
+        _std_table_style, _title_block,
     )
+    import persuratan_utils as psu
 
     data = await peringatan_persediaan(horizon_hari=horizon_hari, _user=_user)
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
@@ -236,6 +237,7 @@ async def nota_dinas_persediaan(
     terpilih = {s for s in (x.strip() for x in ids.split(",")) if s}
     if jenis == "kritis":
         judul = "NOTA DINAS\nUSULAN PENGADAAN PERSEDIAAN (STOK KRITIS/HABIS)"
+        hal_nota = "Usulan Pengadaan Persediaan (Stok Kritis/Habis)"
         rows = data["habis"] + data["kritis"]
         if terpilih:
             rows = [r for r in rows if r.get("id") in terpilih]
@@ -251,6 +253,7 @@ async def nota_dinas_persediaan(
                           "barang kritis/habis lain sengaja tidak disertakan.")
     else:
         judul = "NOTA DINAS\nPERSEDIAAN KEDALUWARSA / SEGERA KEDALUWARSA"
+        hal_nota = "Persediaan Kedaluwarsa / Segera Kedaluwarsa"
         rows = data["kedaluwarsa"] + data["segera_kedaluwarsa"]
         if terpilih:
             rows = [r for r in rows if r.get("id") in terpilih]
@@ -270,9 +273,26 @@ async def nota_dinas_persediaan(
                           "ditindaklanjuti; barang kedaluwarsa lain sengaja "
                           "tidak disertakan.")
 
+    # ── KEPALA NASKAH DINAS ─────────────────────────────────────────────
+    #
+    # Sebelumnya hanya judul lalu tabel: tanpa tujuan, tanpa pengirim, tanpa
+    # nomor, tanpa hal. Dokumen yang tak menyebut kepada siapa ia ditujukan
+    # tak dapat diagendakan, tak dapat ditindaklanjuti penerimanya, dan tak
+    # dapat diarsipkan sebagai naskah dinas — ia hanya cetakan daftar.
+    # Susunannya mengikuti PerANRI 5/2021 (lihat persuratan_utils).
+    _kpb_kepala = await _kpb_signer(settings, user=_user)
     elements.extend(_title_block(judul))
-    elements.append(Paragraph(f"Tanggal data: {_fmt_tanggal_id(data['tanggal'])}", st['Meta']))
+    elements.append(_identity_table(psu.kepala_nota_dinas(
+        yth=str(settings.get("nota_dinas_yth") or "").strip()
+            or "Pejabat Pengadaan Barang/Jasa",
+        dari=_hdr_kpb(_kpb_kepala).rstrip(","),
+        hal=hal_nota,
+        lampiran=("1 (satu) berkas" if body else "-"),
+        tanggal_iso=data["tanggal"])))
+    elements.append(Spacer(1, 3 * rl_mm))
     elements.append(Paragraph(pengantar, st['Meta']))
+    elements.append(Paragraph(
+        f"Data per {_fmt_tanggal_id(data['tanggal'])}.", st['Meta']))
     elements.append(Spacer(1, 4 * rl_mm))
 
     if not body:
@@ -288,7 +308,7 @@ async def nota_dinas_persediaan(
     elements.append(Spacer(1, 12 * rl_mm))
     kpb = await _kpb_signer(settings, user=_user)
     elements.extend(_signature_block([
-        {'pre': ['.................., .......................'],
+        {'pre': [psu.tempat_tanggal(settings, data["tanggal"])],
          'header': _hdr_kpb(kpb),
          'nama': kpb["nama"],
          # Non-ASN: baris NIP/NIK tidak dicetak (privasi)
