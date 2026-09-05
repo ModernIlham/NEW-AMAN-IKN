@@ -18,6 +18,64 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1003] Tabel Struktur Organisasi: dari pohon, dan tak lagi dipangkas diam-diam — 2026-09-05
+
+Penutup terakhir rangkaian eselon. Satu tabel tertinggal dari perubahan besar
+di sekitarnya.
+
+### Dua kolom pada sistem lima tingkat
+
+Tabel "Struktur Organisasi Eselon" pada bagian Capaian per Kegiatan masih
+berkepala `No | Eselon I | Eselon II`, dan sumbernya daftar teks yang diketik
+pada kegiatan — bukan master unit yang sejak `[#996]`–`[#1001]` menyimpan lima
+tingkat. Tabel berjudul "Struktur Organisasi" yang berhenti di tingkat kedua
+justru menyembunyikan strukturnya.
+
+Kini ia membaca `unit_kerja` dan mencetak pohonnya sedalam yang tercatat,
+menjorok mengikuti jenjangnya, dengan kolom jenjang yang menyebut Eselon I–V.
+Satker yang belum membangun pohonnya tetap jatuh ke daftar teks lamanya —
+diratakan menjadi baris berjenjang supaya tabelnya satu bentuk saja.
+
+### Pemangkasan tetapan enam
+
+Barisnya dipangkas `eselon_list[:6]`, dan **tetapan salah di kedua arah**:
+
+- **Terlalu kecil.** Tabel ini duduk di bawah kartu kegiatan pada halaman
+  terakhir bagian itu. Bahkan pada halaman berisi delapan kegiatan — kasus
+  tersempitnya — sebenarnya masih muat **14 baris**. Pada halaman berisi satu
+  kegiatan, muat **30**.
+- **Tak pernah bersuara.** Satker dengan lebih dari enam unit kehilangan
+  sisanya tanpa satu pun tanda; `overflow: hidden` pada lembar A4 memotong
+  tanpa berbunyi, dan pembacanya menyimpulkan satkernya memang sekian unit.
+
+`laporan_tataletak.baris_struktur_muat()` menghitung jatahnya dari sisa
+halaman — persis pekerjaan modul itu, dan alasan yang sama dengan yang tertulis
+di kepalanya sejak `[#979]`: *"Tetapan hanya benar untuk satu ukuran data, dan
+data tak pernah satu ukuran."* Yang tak muat kini **disebut jumlahnya**, beserta
+petunjuk bahwa seluruhnya tetap terhitung pada panel Per Unit Organisasi.
+
+### Dua celah uji yang ditemukan uji mutasi
+
+`pohon_terurut` (perataan pohon untuk ditampilkan) masuk tanpa uji unit sama
+sekali — mutasi "sembunyikan unit yatim" lolos hidup-hidup. Menutupnya
+memunculkan celah kedua: penjaga simpul-terkunjungi ternyata **tak terjangkau
+lewat siklus** — dengan satu `parent_id` per unit, gelang selalu tak terjangkau
+dari akar dan tertangkap jaring terakhir. Ia terjangkau lewat kasus lain: **id
+kembar** pada master, yang repo ini punya riwayatnya (lihat
+`indexes._rapikan_duplikat_satker`). Tanpa penjaga itu, unit kembar tercetak
+dua kali beserta seluruh cabangnya, dan tabel menyebut satker punya dua Biro
+Umum yang sebenarnya satu.
+
+### Cakupan
+
+- `backend/organisasi_utils.py` — `pohon_terurut` (cerminan `susunPohonUnit`).
+- `backend/laporan_tataletak.py` — `baris_struktur_muat` + tetapan tingginya.
+- `backend/routes/reports.py` — `struktur_eselon`, `struktur_maks`,
+  `struktur_sisa`.
+- `backend/templates/laporan_satker_v2.html` — tabel berjenjang, sisa disebut.
+- Uji: +6 `test_laporan_tataletak`, +9 `test_organisasi_utils`,
+  +5 `test_laporan_gabungan_satker`.
+
 ## [#1002] Menyimpan profil satker tak lagi menghapus struktur eselonnya — 2026-09-05
 
 Temuan sampingan dari rangkaian `[#996]`–`[#1001]`, dikerjakan terpisah karena

@@ -542,3 +542,49 @@ def normalkan_eselon_teks(nilai) -> list:
         if nama:
             keluar.append({"nama": nama, "eselon2": anak})
     return keluar
+
+
+def pohon_terurut(semua_unit) -> list:
+    """Daftar RATA berurut pohon: `[{...unit, depth, jalur}]`.
+
+    Cerminan `frontend/src/lib/pohonUnit.js#susunPohonUnit`, dengan tiga
+    keputusan yang sama:
+
+    1. **Urutannya urutan pohon, bukan urutan datang** — induk selalu
+       mendahului anaknya, saudara diurutkan menurut eselon lalu nama.
+    2. **Unit yatim tetap muncul, sebagai akar.** `parent_id` yang menunjuk
+       unit terhapus membuat cabangnya tak terjangkau dari puncak mana pun;
+       menyembunyikannya berarti unit yang ada di basis data tak pernah
+       tercetak di laporan mana pun.
+    3. **Penelusuran dibatasi.** Simpul yang sudah dikunjungi tak pernah
+       dikunjungi ulang, sehingga pohon yang melingkar berhenti sendiri.
+    """
+    daftar = [u for u in (semua_unit or []) if u and u.get("id")]
+    dikenal = {u["id"] for u in daftar}
+    anak_dari = {}
+    for u in daftar:
+        induk = u.get("parent_id")
+        kunci = induk if induk in dikenal else ""
+        anak_dari.setdefault(kunci, []).append(u)
+    for arr in anak_dari.values():
+        arr.sort(key=lambda u: (str(u.get("eselon") or ""),
+                                str(u.get("nama_unit") or "").casefold()))
+
+    keluar, dikunjungi = [], set()
+
+    def turun(induk_id, depth, jalur_induk):
+        for u in anak_dari.get(induk_id, []):
+            if u["id"] in dikunjungi:
+                continue
+            dikunjungi.add(u["id"])
+            nama = str(u.get("nama_unit") or "").strip()
+            jalur = f"{jalur_induk}{PEMISAH_JALUR}{nama}" if jalur_induk else nama
+            keluar.append({**u, "depth": depth, "jalur": jalur})
+            turun(u["id"], depth + 1, jalur)
+
+    turun("", 0, "")
+    for u in daftar:
+        if u["id"] not in dikunjungi:
+            keluar.append({**u, "depth": 0,
+                           "jalur": str(u.get("nama_unit") or "").strip()})
+    return keluar

@@ -754,15 +754,28 @@ lipat.addEventListener('click', function () {
       {% endfor %}
     </div>
 
-    {% if eselon_list and h == jml_hal_keg - 1 %}
+    {# Struktur organisasi dari MASTER UNIT, sedalam yang tercatat (Eselon I–V),
+       bukan lagi dua kolom dari daftar teks kegiatan. Jatah barisnya DIUKUR
+       dari sisa halaman (lihat laporan_tataletak.baris_struktur_muat), dan
+       yang tak muat DISEBUT jumlahnya — pemangkasan diam-diam pada lembar A4
+       tak pernah terlihat sebagai kekeliruan. #}
+    {% if struktur_eselon and h == jml_hal_keg - 1 %}
     <div class="sub-judul">Struktur Organisasi Eselon</div>
     <table class="tbl-es">
-      <thead><tr><th style="width:28px">No</th><th>Eselon I</th><th>Eselon II</th></tr></thead>
+      <thead><tr><th style="width:28px">No</th><th>Unit Organisasi</th><th style="width:88px">Jenjang</th></tr></thead>
       <tbody>
-        {% for es in eselon_list[:6] %}
-        <tr><td style="text-align:center">{{ loop.index }}</td><td>{{ es.nama }}</td>
-        <td>{% if es.eselon2 %}{{ es.eselon2|join(' | ') }}{% else %}&mdash;{% endif %}</td></tr>
+        {% for u in struktur_eselon[:struktur_maks] %}
+        <tr>
+          <td style="text-align:center">{{ loop.index }}</td>
+          <td style="padding-left:{{ 9 + u.depth * 14 }}px">{% if u.depth %}<span style="color:#94a3b8">&#9492;</span> {% endif %}{{ u.nama }}</td>
+          <td>{{ u.eselon or '&mdash;'|safe }}</td>
+        </tr>
         {% endfor %}
+        {% if struktur_sisa %}
+        <tr><td colspan="3" style="text-align:center;color:#64748b;font-style:italic">
+          &hellip; dan {{ struktur_sisa }} unit lagi &mdash; seluruhnya terhitung pada panel <b>Per Unit Organisasi</b> di Analisis Data
+        </td></tr>
+        {% endif %}
       </tbody>
     </table>
     {% endif %}

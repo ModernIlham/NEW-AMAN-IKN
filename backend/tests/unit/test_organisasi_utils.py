@@ -606,3 +606,88 @@ def test_pencocokan_lingkup_tetap_menerima_kedua_rupa():
     for bentuk in (["Sekretariat Jenderal"],
                    [{"nama": "Sekretariat Jenderal", "eselon2": []}]):
         assert org.cocokkan_lingkup_teks(bentuk, _POHON)[0] == ["e1"]
+
+
+# ── 11. Perataan pohon untuk ditampilkan ────────────────────────────────
+#
+# Cerminan `frontend/src/lib/pohonUnit.js#susunPohonUnit`; dipakai tabel
+# "Struktur Organisasi Eselon" pada laporan. Master unit datang sebagai daftar
+# RATA berisi `parent_id`, dan menampilkannya apa adanya membuat "Bagian Rumah
+# Tangga" berdiri sejajar dengan "Sekretariat Jenderal".
+
+def test_induk_selalu_mendahului_anaknya():
+    hasil = org.pohon_terurut(_POHON)
+    urut = [u["id"] for u in hasil]
+    for u in hasil:
+        if u.get("parent_id"):
+            assert urut.index(u["parent_id"]) < urut.index(u["id"]), u["id"]
+
+
+def test_depth_dan_jalur_mengikuti_kedalamannya():
+    hasil = {u["id"]: u for u in org.pohon_terurut(_POHON)}
+    assert hasil["e1"]["depth"] == 0 and hasil["e1"]["jalur"] == "Sekretariat Jenderal"
+    assert hasil["e3"]["depth"] == 2
+    assert hasil["e5"]["depth"] == 4
+    assert hasil["e5"]["jalur"].endswith("Urusan Gudang")
+    assert hasil["e5"]["jalur"].startswith("Sekretariat Jenderal / Biro Umum")
+
+
+def test_saudara_terurut_eselon_lalu_nama():
+    hasil = [u["nama_unit"] for u in org.pohon_terurut(_POHON) if u["depth"] == 1]
+    assert hasil == ["Biro Keuangan", "Biro Umum"], hasil
+
+
+def test_unit_YATIM_tetap_muncul_sebagai_akar():
+    # `parent_id` menunjuk unit yang sudah terhapus. Menyembunyikannya berarti
+    # unit yang ADA di basis data tak pernah tercetak di laporan mana pun —
+    # dan justru unit yatim itulah yang paling perlu dirapikan.
+    pohon = _POHON + [{"id": "y1", "nama_unit": "Bagian Yatim", "eselon": "3",
+                       "parent_id": "sudah-hilang"}]
+    hasil = {u["id"]: u for u in org.pohon_terurut(pohon)}
+    assert "y1" in hasil
+    assert hasil["y1"]["depth"] == 0
+    assert hasil["y1"]["jalur"] == "Bagian Yatim"
+
+
+def test_cabang_di_bawah_unit_yatim_tetap_berjenjang():
+    pohon = _POHON + [
+        {"id": "y1", "nama_unit": "Bagian Yatim", "eselon": "3",
+         "parent_id": "sudah-hilang"},
+        {"id": "y2", "nama_unit": "Subbag Ikut", "eselon": "4",
+         "parent_id": "y1"}]
+    hasil = {u["id"]: u for u in org.pohon_terurut(pohon)}
+    assert hasil["y2"]["depth"] == 1
+    assert hasil["y2"]["jalur"] == "Bagian Yatim / Subbag Ikut"
+
+
+def test_pohon_melingkar_tak_membekukan_penelusuran():
+    gelang = [{"id": "a", "nama_unit": "A", "eselon": "2", "parent_id": "b"},
+              {"id": "b", "nama_unit": "B", "eselon": "3", "parent_id": "a"}]
+    hasil = org.pohon_terurut(gelang)
+    assert sorted(u["id"] for u in hasil) == ["a", "b"]
+    assert len(hasil) == 2, "ada simpul yang tercetak dua kali"
+
+
+def test_tiap_unit_tercetak_TEPAT_sekali():
+    hasil = org.pohon_terurut(_POHON)
+    assert len(hasil) == len(_POHON)
+    assert len({u["id"] for u in hasil}) == len(_POHON)
+
+
+def test_daftar_kosong_dan_masukan_cacat_tak_melempar():
+    assert org.pohon_terurut([]) == []
+    assert org.pohon_terurut(None) == []
+    assert org.pohon_terurut([None, {"nama_unit": "tanpa id"}]) == []
+
+
+def test_id_KEMBAR_tak_membuat_unitnya_tercetak_dua_kali():
+    # Master pernah melahirkan dokumen kembar satu id sebelum indeks unik
+    # ditegakkan (lihat `indexes._rapikan_duplikat_satker` untuk pola yang
+    # sama pada satker). Tanpa penjaga simpul-terkunjungi, unit kembar
+    # tercetak dua kali beserta SELURUH cabang di bawahnya — dan tabel
+    # struktur menyebut satker punya dua Biro Umum yang sebenarnya satu.
+    kembar = _POHON + [{"id": "e2", "nama_unit": "Biro Umum", "eselon": "2",
+                        "parent_id": "e1"}]
+    hasil = org.pohon_terurut(kembar)
+    assert [u["id"] for u in hasil].count("e2") == 1, [u["id"] for u in hasil]
+    assert [u["id"] for u in hasil].count("e3") == 1, "cabangnya ikut ganda"

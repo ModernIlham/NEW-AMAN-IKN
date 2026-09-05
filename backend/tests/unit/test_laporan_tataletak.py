@@ -241,3 +241,45 @@ def test_panel_sangat_pendek_tak_memicu_pecahan_ekor(n):
     halaman = tl.susun([_panel("Kecil", n)])
     potongan = [p for h in halaman for sisi in ("kiri", "kanan") for p in h[sisi]]
     assert len(potongan) == 1
+
+
+# ── Jatah baris tabel struktur organisasi ───────────────────────────────
+#
+# Tabel struktur duduk di bawah kartu kegiatan pada halaman TERAKHIR bagian
+# itu. Jatahnya dulu tetapan enam, dan tetapan salah di kedua arah: pada
+# halaman berisi delapan kegiatan pun masih muat belasan baris, sementara
+# satker dengan lebih dari enam unit kehilangan sisanya tanpa satu pun tanda.
+
+def test_makin_banyak_kartu_makin_sedikit_baris_yang_muat():
+    jatah = [tl.baris_struktur_muat(n) for n in (2, 4, 6, 8)]
+    assert jatah == sorted(jatah, reverse=True), jatah
+    assert len(set(jatah)) > 1, "jatahnya tak bergantung isi halaman"
+
+
+def test_halaman_penuh_delapan_kegiatan_tetap_muat_lebih_dari_enam():
+    # Inilah yang membuat tetapan enam keliru bahkan pada kasus tersempitnya.
+    assert tl.baris_struktur_muat(8) > 6
+
+
+def test_halaman_lapang_memberi_jatah_jauh_lebih_besar():
+    assert tl.baris_struktur_muat(1) >= 2 * tl.baris_struktur_muat(8)
+
+
+def test_dua_kartu_sebaris_jadi_satu_baris_kartu():
+    # `.keg-grid` dua kolom: satu dan dua kegiatan memakai tinggi yang sama.
+    assert tl.baris_struktur_muat(1) == tl.baris_struktur_muat(2)
+    assert tl.baris_struktur_muat(3) == tl.baris_struktur_muat(4)
+
+
+def test_halaman_pertama_tak_pernah_lebih_lapang_daripada_lanjutannya():
+    # Halaman pertama membawa keterangan bagian, jadi ia memuat lebih sedikit.
+    for n in (1, 4, 8):
+        assert (tl.baris_struktur_muat(n, lanjutan=False)
+                <= tl.baris_struktur_muat(n, lanjutan=True))
+
+
+def test_jatah_tak_pernah_negatif():
+    # Halaman yang sudah penuh sesak tak boleh menghasilkan potongan terbalik.
+    assert tl.baris_struktur_muat(999) == 0
+    assert tl.baris_struktur_muat(0) > 0
+    assert tl.baris_struktur_muat(None) > 0

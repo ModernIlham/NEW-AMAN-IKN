@@ -6555,6 +6555,47 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
         if eselon_list:
             break
 
+    # ── STRUKTUR ORGANISASI: dari POHON, sedalam yang tercatat ──────────
+    #
+    # Tabelnya dulu dua kolom — Eselon I dan II — dan sumbernya daftar teks
+    # yang diketik pada kegiatan. Ia sudah tak sejalan dengan sistem yang kini
+    # menyimpan lima tingkat pada master unit, dan tabel berjudul "Struktur
+    # Organisasi" yang berhenti di tingkat kedua justru menyembunyikan
+    # strukturnya.
+    #
+    # Master unit dipakai bila ada; kegiatan lama yang satkernya belum
+    # membangun pohon tetap jatuh ke daftar teksnya, supaya laporannya tak
+    # mendadak kehilangan bagian yang selama ini tercetak.
+    if unit_kerja:
+        struktur_eselon = [
+            {"nama": u.get("nama_unit") or "", "depth": u.get("depth", 0),
+             "eselon": org.label_level(u.get("eselon"))}
+            for u in org.pohon_terurut(unit_kerja)]
+    else:
+        # Bentuk lama membawa Eselon II sebagai daftar DI DALAM induknya;
+        # diratakan menjadi baris berjenjang supaya tabelnya satu bentuk saja.
+        struktur_eselon = []
+        for e in eselon_list:
+            struktur_eselon.append({"nama": e["nama"], "depth": 0,
+                                    "eselon": org.label_level(1)})
+            struktur_eselon += [{"nama": n, "depth": 1,
+                                 "eselon": org.label_level(2)}
+                                for n in e["eselon2"]]
+
+    # Jatah barisnya DIUKUR dari sisa halaman, bukan ditetapkan. Tabel ini
+    # duduk di bawah kartu kegiatan pada halaman terakhir bagian itu; satu
+    # kartu menyisakan hampir satu halaman penuh, delapan kartu menyisakan
+    # sekitar sepertiganya.
+    _n_hal_keg = max(1, -(-len(satker_acts) // 8))
+    _n_keg_akhir = len(satker_acts) - (_n_hal_keg - 1) * 8
+    struktur_maks = ltl.baris_struktur_muat(_n_keg_akhir,
+                                            lanjutan=_n_hal_keg > 1)
+    # Sisa yang tak muat DISEBUT jumlahnya. Pemangkasan diam-diam pada lembar
+    # A4 tak pernah terlihat sebagai kekeliruan — `overflow: hidden`
+    # memotongnya tanpa bersuara, dan pembacanya menyimpulkan satkernya memang
+    # hanya sekian unit.
+    struktur_sisa = max(0, len(struktur_eselon) - struktur_maks)
+
     # Kegiatan list
     kegiatan_list = []
     for act in satker_acts:
@@ -7222,6 +7263,8 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
         "cnt_belum": len(belum), "pct_belum": pct(len(belum), tc),
         "stiker_terpasang": st_terpasang, "stiker_belum": st_belum, "stiker_pct": st_pct, "dok_pct": dok_pct,
         "eselon_list": eselon_list, "kegiatan_list": kegiatan_list,
+        "struktur_eselon": struktur_eselon, "struktur_maks": struktur_maks,
+        "struktur_sisa": struktur_sisa,
         "pilihan": pilihan,
         "kat_levels": [str(v) for v in kat_levels],
         "pilihan_kat_level": pilihan_kat_level,

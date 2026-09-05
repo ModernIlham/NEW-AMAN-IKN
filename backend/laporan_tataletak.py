@@ -190,3 +190,46 @@ def panel_batang(judul, baris, warna, kolom_nilai="count"):
     """
     return {"judul": judul, "warna": warna, "kolom_nilai": kolom_nilai,
             "baris": list(baris or [])}
+
+
+#: Tinggi satu kartu kegiatan pada halaman "Capaian per Kegiatan", diukur dari
+#: CSS-nya: padding 10+10, garis 1+1, blok atas 47+7, batang 6+7+5, dan baris
+#: angka yang lazim membungkus menjadi dua baris (~24). Kartunya dua kolom,
+#: jadi satu BARIS kartu setinggi satu kartu.
+TINGGI_KARTU_KEGIATAN = 118
+#: Jarak antar baris kartu (`.keg-grid` gap).
+JARAK_KARTU = 9
+#: Kartu per baris pada `.keg-grid` (dua kolom).
+KARTU_PER_BARIS = 2
+
+#: Blok "Struktur Organisasi Eselon" di bawah kartu: sub-judul (margin 12+6,
+#: teks ~11, garis bawah 4+1), margin tabel 5, dan baris kepala tabel ~22.
+TINGGI_KEPALA_STRUKTUR = 61
+#: Tinggi satu baris tabel struktur (`.tbl-es td`: padding 6+6, teks ~11, garis).
+TINGGI_BARIS_STRUKTUR = 24
+
+
+def baris_struktur_muat(n_kegiatan_halaman, lanjutan: bool = True,
+                        tinggi_kolom=TINGGI_KOLOM,
+                        judul_awal=TINGGI_JUDUL_AWAL,
+                        judul_lanjut=TINGGI_JUDUL_LANJUT) -> int:
+    """Berapa baris struktur organisasi yang muat di sisa halaman kegiatan.
+
+    Tabel ini duduk di bawah kartu-kartu kegiatan pada halaman TERAKHIR bagian
+    itu, dan sisa ruangnya bergantung pada berapa kartu yang ada di sana — satu
+    kartu menyisakan hampir satu halaman penuh, delapan kartu menyisakan
+    sekitar sepertiganya.
+
+    Sebelumnya jatahnya TETAPAN enam, dan tetapan salah di kedua arah: pada
+    halaman berisi delapan kegiatan pun sebenarnya masih muat belasan baris,
+    sementara satker dengan lebih dari enam unit kehilangan sisanya tanpa satu
+    pun tanda. Pemangkasan diam-diam pada lembar A4 tak terlihat sebagai
+    kekeliruan — `overflow: hidden` memotongnya tanpa bersuara.
+    """
+    n = max(0, int(n_kegiatan_halaman or 0))
+    baris_kartu = -(-n // KARTU_PER_BARIS)          # pembulatan ke atas
+    tinggi_kartu = (baris_kartu * TINGGI_KARTU_KEGIATAN
+                    + max(0, baris_kartu - 1) * JARAK_KARTU)
+    tersedia = (tinggi_kolom - (judul_lanjut if lanjutan else judul_awal)
+                - tinggi_kartu - TINGGI_KEPALA_STRUKTUR)
+    return max(0, tersedia // TINGGI_BARIS_STRUKTUR)
