@@ -106,6 +106,15 @@ body {
 .lm-batang { display: flex; flex-direction: column; justify-content: flex-end; border-radius: 3px 3px 0 0; overflow: hidden; }
 .lm-sisa { background: #cbd5e1; } .lm-temu { background: var(--hijau); }
 .lm-lain { background: var(--amber); }
+/* RUMAH = BMN tercatat. Ia digambar sebagai bingkai, bukan blok berwarna:
+   yang perlu terbaca justru RONGGA di dalamnya — bagian yang belum diperiksa.
+   Blok abu penuh akan terbaca sebagai "ada sesuatu di sini", padahal maknanya
+   justru "belum ada apa-apa di sini". */
+.lm-rumah { border: 1.5px solid var(--navy); border-radius: 4px 4px 0 0; background: #fff; }
+.lm-rongga { background: repeating-linear-gradient(135deg, #f1f5f9, #f1f5f9 4px, #e2e8f0 4px, #e2e8f0 8px); }
+.lm-tambah { font-size: 8px; font-weight: 700; color: var(--hijau); margin-left: 3px; }
+.lm-legenda i.i-rumah { border: 1.5px solid var(--navy); background: #fff; box-sizing: border-box; }
+.lm-legenda i.i-rongga { background: repeating-linear-gradient(135deg, #f1f5f9, #f1f5f9 3px, #e2e8f0 3px, #e2e8f0 6px); border: 1px solid #e2e8f0; box-sizing: border-box; }
 .lm-nilai { font-size: 9px; text-align: center; color: #fff; padding: 2px 0; font-weight: 700; font-variant-numeric: tabular-nums; }
 .lm-nilai.gelap { color: #475569; }
 .lm-atas { font-size: 10px; font-weight: 800; color: var(--navy); text-align: center; margin-bottom: 3px; font-variant-numeric: tabular-nums; }
@@ -476,18 +485,21 @@ lipat.addEventListener('click', function () {
     <div class="panel" style="margin-top:14px;">
       <h4>Progres Inventarisasi {{ tahun_linimasa }}</h4>
       <div class="lm-legenda">
-        <span><i style="background:var(--hijau)"></i>Diperiksa &amp; ditemukan</span>
+        <span><i class="i-rumah"></i>BMN tercatat (rumah)</span>
+        <span><i style="background:var(--hijau)"></i>Ditemukan</span>
         <span><i style="background:var(--amber)"></i>Diperiksa, tak ditemukan</span>
-        <span><i style="background:#cbd5e1"></i>Belum diperiksa (bulan perolehan)</span>
+        <span><i class="i-rongga"></i>Belum diperiksa</span>
       </div>
       <div class="lm-plot">
         {% for b in linimasa %}
         <div class="lm-kol">
           {% if b.belum_berjalan %}<div class="lm-belum" title="Belum berjalan"></div>
           {% elif b.tercatat %}
-          <div class="lm-atas">{{ b.tercatat }}</div>
-          <div class="lm-batang" style="height:{{ b.h_tercatat }}%">
-            <div class="lm-sisa" style="flex:{{ b.perolehan }} 0 auto;min-height:0;">{% if b.perolehan %}<div class="lm-nilai gelap">{{ b.perolehan }}</div>{% endif %}</div>
+          <div class="lm-atas">{{ b.tercatat }}{% if b.tambahan %}<span class="lm-tambah" title="BMN baru tercatat bulan ini">+{{ b.tambahan }}</span>{% endif %}</div>
+          {# RUMAH = BMN tercatat. Rongganya (belum diperiksa) sengaja tak
+             berwarna: ruang kosong di dalam rumah itulah tunggakannya. #}
+          <div class="lm-batang lm-rumah" style="height:{{ b.h_tercatat }}%" title="{{ b.tercatat }} tercatat · {{ b.ditemukan + b.periksa_lain }} diperiksa · {{ b.belum }} belum">
+            <div class="lm-rongga" style="flex:{{ b.belum }} 0 auto;min-height:0;">{% if b.belum %}<div class="lm-nilai gelap">{{ b.belum }}</div>{% endif %}</div>
             <div class="lm-lain" style="flex:{{ b.periksa_lain }} 0 auto;min-height:0;">{% if b.periksa_lain %}<div class="lm-nilai">{{ b.periksa_lain }}</div>{% endif %}</div>
             <div class="lm-temu" style="flex:{{ b.ditemukan }} 0 auto;min-height:0;">{% if b.ditemukan %}<div class="lm-nilai">{{ b.ditemukan }}</div>{% endif %}</div>
           </div>
@@ -497,24 +509,34 @@ lipat.addEventListener('click', function () {
       </div>
       <div class="lm-x">{% for b in linimasa %}<span class="{% if b.mulai %}aktif{% elif b.belum_berjalan %}pudar{% endif %}">{{ b.bulan }}</span>{% endfor %}</div>
       <p class="lm-nota">
-        Angka <strong>per bulan</strong>, bukan kumulatif. Tiap NUP muncul sekali, pada bulan
-        peristiwanya sendiri: yang <strong>sudah diperiksa</strong> pada bulan pemeriksaannya, yang
-        <strong>belum diperiksa</strong> pada bulan perolehannya. Bulan bertanda tebal adalah bulan
-        dimulainya kegiatan.
-        {% if linimasa_tahun_berjalan and 1 <= linimasa_bulan_terakhir < 12 %}
-        Bulan setelah <strong>{{ linimasa[linimasa_bulan_terakhir - 1].bulan }}</strong>
-        sengaja <strong>dikosongkan</strong> — belum berjalan, bukan berarti tanpa tambahan.
+        <strong>Rumah</strong> tiap batang adalah <strong>BMN tercatat</strong> sampai bulan itu —
+        stok yang harus diperiksa. Ia tumbuh tiap kali ada BMN baru tercatat, dan tambahannya
+        ditulis <span style="color:var(--hijau);font-weight:700;">+n</span> di atas atapnya.
+        Isinya adalah capaian sampai bulan itu; <strong>rongga bergaris</strong> di dalamnya adalah
+        yang <strong>belum diperiksa</strong>.
+        Bulan bertanda tebal adalah bulan dimulainya kegiatan.
+        {% if linimasa_stok_awal %}
+        Januari sudah memuat <strong>{{ linimasa_stok_awal }} NUP</strong> stok awal — BMN perolehan
+        tahun sebelumnya, yang tetap menjadi tanggungan tahun ini.
         {% endif %}
-        {% if linimasa_luar_tahun %}
-        Grafik ini memuat <strong>{{ linimasa_jumlah }}</strong> dari {{ total_count }} NUP;
-        <strong>{{ linimasa_luar_tahun }}</strong> sisanya berperistiwa di luar {{ tahun_linimasa }}
-        (umumnya BMN perolehan tahun sebelumnya yang belum diperiksa) sehingga tak punya batang di
-        sini — bukan berarti nol.
+        {% if linimasa_akhir_tercatat %}
+        Pada <strong>{{ linimasa[linimasa_bulan_terakhir - 1].bulan }}</strong>:
+        <strong>{{ linimasa_akhir_diperiksa }}</strong> dari
+        <strong>{{ linimasa_akhir_tercatat }} NUP</strong> sudah diperiksa,
+        <strong>{{ linimasa_akhir_belum }}</strong> belum.
+        {% endif %}
+        {% if linimasa_tahun_berjalan and 1 <= linimasa_bulan_terakhir < 12 %}
+        Bulan setelahnya sengaja <strong>dikosongkan</strong> — belum berjalan, bukan berarti
+        tanpa tambahan.
         {% endif %}
         {% if linimasa_perkiraan %}
-        Dari aset yang sudah diperiksa, <strong>{{ linimasa_pct_stempel }}%</strong> memakai tanggal
-        pemeriksaannya sendiri; <strong>{{ linimasa_perkiraan }}</strong> sisanya diperiksa sebelum
-        tanggal itu mulai direkam, sehingga dihitung pada bulan kegiatannya dimulai.
+        <strong>{{ linimasa_perkiraan }}</strong> aset diperiksa sebelum tanggal pemeriksaan mulai
+        direkam, sehingga dihitung pada bulan kegiatannya dimulai.
+        {% endif %}
+        {% if linimasa_janggal %}
+        <strong>Perhatian:</strong> pada satu titik terdapat <strong>{{ linimasa_janggal }} NUP</strong>
+        yang tanggal pemeriksaannya mendahului tanggal perolehannya — isi melampaui rumahnya.
+        Batangnya digencet agar tetap terbaca; tanggal perolehan aset-aset itu perlu diperiksa ulang.
         {% endif %}
       </p>
     </div>
