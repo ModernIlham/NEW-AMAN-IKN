@@ -1,10 +1,15 @@
 """Shared pytest configuration & fixtures for backend tests.
 
 Centralizes test credentials so they are NOT hardcoded across 40+ test files.
-Values default to the dev bootstrap admin; override in CI via environment:
 
-    export TEST_ADMIN_USERNAME=admin
-    export TEST_ADMIN_PASSWORD=admin123
+The defaults below are NOT a shipped account. AMAN has no default credentials:
+the first administrator can only be created once through the token-gated
+bootstrap endpoint. These values name whatever account you created by hand on
+your own local dev server, and the integration suites here only ever run
+against `http://localhost:8001`. Override them via environment:
+
+    export TEST_ADMIN_USERNAME=<akun dev lokal Anda>
+    export TEST_ADMIN_PASSWORD=<passwordnya>
     export TEST_BASE_URL=http://localhost:8001
 """
 import os

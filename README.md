@@ -608,9 +608,19 @@ cd frontend && yarn install --frozen-lockfile --ignore-engines && yarn build
 
 ---
 
-## Default Credentials
-- **Username**: `admin`
-- **Password**: `admin123`
+## Tidak Ada Kredensial Bawaan
+
+AMAN tidak menyediakan username maupun password bawaan. Pada instalasi baru,
+administrator pertama HANYA dapat dibuat sekali lewat endpoint bootstrap
+ber-token (`POST /auth/bootstrap`, lihat konfigurasi backend di atas). Setelah
+bootstrap berhasil, hapus `ADMIN_BOOTSTRAP_TOKEN` dari environment server lalu
+restart backend — jalurnya menutup diri dan tidak dapat dibuka lagi.
+
+Bagian ini dulu mencantumkan sepasang kredensial contoh sebagai "Default
+Credentials". Runtime tidak pernah membuat akun itu, sehingga yang tertulis
+bukan sekadar tidak aman melainkan TIDAK BENAR: pembaca yang mencobanya gagal
+masuk tanpa tahu sebabnya, dan pembaca yang mempercayainya justru membuat akun
+bertebak-tebakan itu dengan tangannya sendiri.
 
 ---
 

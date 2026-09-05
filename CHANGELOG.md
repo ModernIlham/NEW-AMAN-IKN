@@ -18,6 +18,49 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1015] Tidak ada lagi kredensial bawaan yang diiklankan — 2026-09-05
+
+Runtime AMAN memang tidak pernah membuat akun bawaan: administrator pertama
+hanya lahir lewat bootstrap ber-token sekali-pakai, dan jalurnya menutup diri
+setelah dipakai. Yang salah adalah dokumen dan perkakasnya — dan keduanya salah
+dengan cara yang berbeda.
+
+`README.md` dan `memory/PRD.md` mencantumkan bagian "Default Credentials". Itu
+bukan sekadar tidak aman melainkan TIDAK BENAR: pembaca yang mencobanya gagal
+masuk tanpa tahu sebabnya, dan pembaca yang mempercayainya justru membuat akun
+bertebak-tebakan itu dengan tangannya sendiri. Keduanya kini menjelaskan
+bootstrap sebagai satu-satunya jalan.
+
+Harness Locust jatuh ke pasangan yang sama bila environmentnya kosong.
+Bahayanya ada pada DIAMNYA: workflow live membaca `secrets.LOADTEST_USERNAME`,
+dan secret yang belum dipasang menjadi string kosong — bukan galat. Harness
+lalu berjalan mulus sambil menembakkan kredensial tebakan ke staging, dan
+kegagalan konfigurasi itu terbaca sebagai uji beban yang seluruh loginnya
+gagal. Kini ia berhenti saat modul dimuat, sebelum Locust memunculkan satu
+pengguna pun, dengan pesan yang menyebut secret mana yang harus dipasang.
+
+Username dirapikan spasinya — secret yang "diisi" spasi adalah kegagalan
+konfigurasi yang sama. Password TIDAK dirapikan: spasi di tepi password adalah
+karakter yang sah, dan memangkasnya diam-diam mengirim kredensial yang bukan
+dimaksud pemakainya, lalu gagal dengan pesan yang tak menunjuk sebabnya.
+
+Dry-run workflow tetap mandiri dengan identitas fiktif menuju port lokal tanpa
+server. Nilainya sengaja tidak menyerupai kredensial sungguhan: nilai contoh
+yang terlihat masuk akal akan disalin orang ke tempat lain.
+
+Docstring `backend/tests/conftest.py` menyebut nilainya "the dev bootstrap
+admin" — klaim yang juga tidak benar, karena bootstrap tak pernah membuat akun
+itu. Nilainya sendiri dibiarkan: suite integrasi di sana hanya berjalan
+terhadap `localhost:8001` dan menamai akun yang dibuat sendiri oleh pengembang
+di mesinnya.
+
+Pekerjaan ini mengambil alih PR #969 yang tertinggal 40 commit di belakang main
+dan bernomor CHANGELOG bentrok. Cakupannya diperluas: `memory/PRD.md` terlewat
+di sana, dan klaim palsu pada conftest belum tersentuh.
+
+Uji anti-drift-nya sempat menangkap cacat pada pekerjaan ini sendiri —
+paragraf yang menjelaskan penghapusan justru mengutip password yang dihapus.
+
 ## [#1014] SPPB: sisi keluar akhirnya punya naskahnya sendiri — 2026-09-05
 
 Permintaan pemilik, bagian terakhir: *"…hingga SPPB, dan lain-lain. misal SPPB
