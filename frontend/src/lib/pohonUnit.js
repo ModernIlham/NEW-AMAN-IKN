@@ -169,3 +169,24 @@ export function unitDariField(data, pohon) {
   });
   return cocok.length === 1 ? cocok[0].id : "";
 }
+
+/**
+ * Perubahan massal lima kolom eselon untuk satu unit terpilih.
+ *
+ * Bedanya dengan `fieldEselon`: tingkat yang TIDAK dipakai unit terpilih
+ * ditandai `"__clear__"`, bukan string kosong. Ubah massal hanya menuliskan
+ * kunci yang dikirimnya, jadi string kosong pun harus dinyatakan sebagai
+ * perintah kosongkan — kalau tidak, aset yang dipindahkan dari Subbagian ke
+ * Biro tetap membawa `eselon3` lamanya, dan baris itu terbaca sebagai unit
+ * yang tak pernah ada di sana.
+ */
+export function perubahanEselonMassal(unitId, pohon) {
+  if (!unitId) return {};
+  const f = fieldEselon(unitId, pohon);
+  const keluar = {};
+  for (let n = 1; n <= 5; n += 1) {
+    const k = `eselon${n}`;
+    keluar[k] = f[k] || "__clear__";
+  }
+  return keluar;
+}

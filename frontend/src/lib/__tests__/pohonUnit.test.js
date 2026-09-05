@@ -1,6 +1,6 @@
 import {
   susunPohonUnit, jalurUnit, ringkasLingkup,
-  unitDalamLingkup, fieldEselon, unitDariField,
+  unitDalamLingkup, fieldEselon, unitDariField, perubahanEselonMassal,
 } from "../pohonUnit";
 
 // Setjen → Biro Umum → Bagian RT; Biro Keuangan sebagai saudara.
@@ -125,4 +125,26 @@ test("jalur yang tak cocok tidak ditebak", () => {
     { eselon1: "Kedeputian X", eselon2: "Biro Umum" }, DALAM)).toBe("");
   expect(unitDariField({}, DALAM)).toBe("");
   expect(unitDariField({ eselon1: "Entah" }, DALAM)).toBe("");
+});
+
+test("ubah massal MENGOSONGKAN tingkat yang tak dipakai unit terpilih", () => {
+  // Ubah massal hanya menuliskan kunci yang dikirimnya. Aset yang dipindahkan
+  // dari Subbagian ke Biro akan tetap membawa eselon3 lamanya kalau tingkat
+  // itu tak dinyatakan sebagai perintah kosongkan.
+  expect(perubahanEselonMassal("e2", DALAM)).toEqual({
+    eselon1: "Setjen", eselon2: "Biro Umum",
+    eselon3: "__clear__", eselon4: "__clear__", eselon5: "__clear__",
+  });
+});
+
+test("ubah massal tanpa unit terpilih tidak menyentuh kolom mana pun", () => {
+  expect(perubahanEselonMassal("", DALAM)).toEqual({});
+  expect(perubahanEselonMassal(null, DALAM)).toEqual({});
+});
+
+test("unit terdalam mengisi kelima kolomnya tanpa satu pun perintah kosongkan", () => {
+  const r = perubahanEselonMassal("e4", DALAM);
+  expect(r.eselon4).toBe("Subbag Perlengkapan");
+  expect(r.eselon5).toBe("__clear__");
+  expect(Object.values(r).filter((v) => v === "__clear__")).toHaveLength(1);
 });

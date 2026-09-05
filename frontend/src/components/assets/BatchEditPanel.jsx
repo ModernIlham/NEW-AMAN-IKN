@@ -23,6 +23,12 @@ import {
   CONDITION_OPTIONS, STATUS_OPTIONS,
 } from "./InventoryFieldSheet";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import axios from "axios";
+import {
+  susunPohonUnit, unitDalamLingkup, perubahanEselonMassal,
+} from "@/lib/pohonUnit";
+
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const STIKER_STATUSES = ["Belum Terpasang", "Sudah Terpasang"];
 const STIKER_SIZES = ["Kecil", "Sedang", "Besar"];
@@ -196,10 +202,28 @@ const BatchEditPanel = memo(function BatchEditPanel({
     })));
   }, [docItemNames]);
 
-  // Extract eselon data from activity
+  // Extract eselon data from activity — jalur LAMA, dipakai hanya bila master
+  // unit masih kosong.
   const eselon1List = (activity?.eselon1 || []).map(e => typeof e === 'string' ? { nama: e, eselon2: [] } : e);
   const selectedEselon1 = updates.eselon1 || "";
   const eselon2List = eselon1List.find(e => e.nama === selectedEselon1)?.eselon2 || [];
+
+  // Master unit, dibatasi lingkup kegiatan — sumber yang SAMA dengan form
+  // aset. Dua sumber terpisah adalah cara tercepat membuat ubah massal
+  // menuliskan unit yang tak pernah bisa dipilih satu per satu.
+  const [unitPohon, setUnitPohon] = useState([]);
+  useEffect(() => {
+    let batal = false;
+    axios.get(`${API}/unit-kerja`).then((r) => {
+      if (batal) return;
+      const arr = Array.isArray(r.data) ? r.data : (r.data?.items || []);
+      setUnitPohon(susunPohonUnit(arr));
+    }).catch(() => {});
+    return () => { batal = true; };
+  }, []);
+  const unitPilihan = useMemo(
+    () => unitDalamLingkup(unitPohon, activity?.lingkup_unit || []),
+    [unitPohon, activity]);
 
   const setField = useCallback((field, value) => {
     setUpdates(prev => {
@@ -407,6 +431,10 @@ const BatchEditPanel = memo(function BatchEditPanel({
     const targetIds = selectedAssets instanceof Set
       ? Array.from(selectedAssets) : [...(selectedAssets || [])];
     const finalUpdates = { ...updates };
+    // `__unit_id` hanya penanda pilihan di layar — yang dikirim adalah lima
+    // kolom eselon yang sudah diturunkan darinya. Membiarkannya ikut terkirim
+    // menambahkan field yang bukan milik registry aset ke muatan tulis.
+    delete finalUpdates.__unit_id;
 
     // Add active doc checklist items with their files
     const activeItems = docItems.filter(d => d._active);
@@ -493,21 +521,57 @@ const BatchEditPanel = memo(function BatchEditPanel({
             <ClearableInput placeholder="—" value={updates.location === "__clear__" ? "" : updates.location} isClear={updates.location === "__clear__"} onChange={e => setField("location", e.target.value)} onClear={() => toggleClearField("location")} />
           </div>
 
-          {/* Eselon I */}
-          <div className="space-y-0.5">
-            <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Building2 className="w-2.5 h-2.5" />Eselon I</label>
-            <ClearableSelect value={updates.eselon1 || "__none__"} onValueChange={v => { setField("eselon1", v); if (v === "__clear__" || v === "__none__") setField("eselon2", undefined); }}>
-              {eselon1List.map(e => <SelectItem key={e.nama} value={e.nama}>{e.nama}</SelectItem>)}
-            </ClearableSelect>
-          </div>
+          {/* Unit organisasi — SATU pilihan mengisi Eselon I–V sekaligus.
+              Tingkat yang tak terpakai oleh unit terpilih ikut DIKOSONGKAN
+              ("__clear__"); tanpa itu sisa unit sebelumnya tertinggal pada
+              aset yang dipindahkan ke cabang lebih dangkal, dan terbaca
+              sebagai unit yang tak pernah ada di sana. */}
+          {unitPilihan.length > 0 ? (
+            <div className="space-y-0.5 col-span-2">
+              <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Building2 className="w-2.5 h-2.5" />Unit Organisasi (Eselon I&ndash;V)</label>
+              <select
+                className="w-full h-8 px-2 rounded-md border border-input bg-background text-xs"
+                data-testid="batch-unit-select"
+                value={updates.__unit_id || ""}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  const ubah = perubahanEselonMassal(id, unitPohon);
+                  setUpdates((prev) => {
+                    const next = { ...prev, __unit_id: id };
+                    for (let n = 1; n <= 5; n += 1) {
+                      const k = `eselon${n}`;
+                      if (id) next[k] = ubah[k]; else delete next[k];
+                    }
+                    return next;
+                  });
+                }}>
+                <option value="">&mdash; jangan ubah &mdash;</option>
+                {unitPilihan.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {"\u00A0".repeat(u.depth * 3)}{u.nama_unit} (E{u.eselon})
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <>
+              {/* Eselon I */}
+              <div className="space-y-0.5">
+                <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Building2 className="w-2.5 h-2.5" />Eselon I</label>
+                <ClearableSelect value={updates.eselon1 || "__none__"} onValueChange={v => { setField("eselon1", v); if (v === "__clear__" || v === "__none__") setField("eselon2", undefined); }}>
+                  {eselon1List.map(e => <SelectItem key={e.nama} value={e.nama}>{e.nama}</SelectItem>)}
+                </ClearableSelect>
+              </div>
 
-          {/* Eselon II */}
-          <div className="space-y-0.5">
-            <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Building2 className="w-2.5 h-2.5" />Eselon II</label>
-            <ClearableSelect value={updates.eselon2 || "__none__"} onValueChange={v => setField("eselon2", v)} disabled={!selectedEselon1 || selectedEselon1 === "__clear__" || eselon2List.length === 0} placeholder={selectedEselon1 && selectedEselon1 !== "__clear__" ? "—" : "Pilih Eselon I dulu"}>
-              {eselon2List.map(e2 => <SelectItem key={e2} value={e2}>{e2}</SelectItem>)}
-            </ClearableSelect>
-          </div>
+              {/* Eselon II */}
+              <div className="space-y-0.5">
+                <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Building2 className="w-2.5 h-2.5" />Eselon II</label>
+                <ClearableSelect value={updates.eselon2 || "__none__"} onValueChange={v => setField("eselon2", v)} disabled={!selectedEselon1 || selectedEselon1 === "__clear__" || eselon2List.length === 0} placeholder={selectedEselon1 && selectedEselon1 !== "__clear__" ? "—" : "Pilih Eselon I dulu"}>
+                  {eselon2List.map(e2 => <SelectItem key={e2} value={e2}>{e2}</SelectItem>)}
+                </ClearableSelect>
+              </div>
+            </>
+          )}
         </div>
       </Section>
 

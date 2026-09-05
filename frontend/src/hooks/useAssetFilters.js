@@ -34,7 +34,8 @@ const MIN_SEARCH_LEN = 2;
 // pencocokan substring satu frasa. Harga & tanggal tetap tunggal karena
 // keduanya RENTANG — dua batas sudah mewakili banyak nilai.
 export const FILTER_MULTI = new Set([
-  "condition", "status", "location", "eselon1", "eselon2",
+  "condition", "status", "location",
+  "eselon1", "eselon2", "eselon3", "eselon4", "eselon5",
   "stiker", "inventoryStatus",
 ]);
 
@@ -42,6 +43,8 @@ export const FILTER_MULTI = new Set([
 const PARAM_MULTI = {
   condition: "condition", status: "status", location: "location",
   eselon1: "eselon1_filter", eselon2: "eselon2_filter",
+  eselon3: "eselon3_filter", eselon4: "eselon4_filter",
+  eselon5: "eselon5_filter",
   stiker: "stiker_status", inventoryStatus: "inventory_status",
 };
 
@@ -98,7 +101,8 @@ export function useAssetFilters({ activityId }) {
   // pembeda itu, dipakai ulang oleh penghitung filter aktif, perakit
   // parameter, dan penyaring luring supaya ketiganya tak bisa drift.
   const initialFilterState = useMemo(() => ({
-    condition: [], status: [], location: [], eselon1: [], eselon2: [],
+    condition: [], status: [], location: [],
+    eselon1: [], eselon2: [], eselon3: [], eselon4: [], eselon5: [],
     stiker: [], inventoryStatus: [], priceMin: "", priceMax: "",
     nomorSpm: "", perolehanDari: "", user: "", penggunaNip: "",
     dateFrom: "", dateTo: ""
@@ -132,7 +136,8 @@ export function useAssetFilters({ activityId }) {
     // `categories` = kategori yang BENAR-BENAR dipakai aset di kegiatan ini
     // (bukan master 12 ribu entri) — lihat GET /assets/filter-options.
     categories: [],
-    locations: [], eselon1s: [], eselon2s: [], conditions: [],
+    locations: [], eselon1s: [], eselon2s: [], eselon3s: [], eselon4s: [],
+    eselon5s: [], conditions: [],
     statuses: [], stiker_statuses: [], inventory_statuses: []
   });
 
@@ -181,7 +186,8 @@ export function useAssetFilters({ activityId }) {
   const activeFilterCount = useMemo(() => [
     filterCategory?.length,
     filters.condition?.length, filters.status?.length, filters.location?.length,
-    filters.eselon1?.length, filters.eselon2?.length, filters.stiker?.length,
+    filters.eselon1?.length, filters.eselon2?.length, filters.eselon3?.length,
+    filters.eselon4?.length, filters.eselon5?.length, filters.stiker?.length,
     filters.inventoryStatus?.length, filters.priceMin, filters.priceMax,
     filters.nomorSpm, filters.perolehanDari, filters.user, filters.penggunaNip,
     filters.dateFrom, filters.dateTo

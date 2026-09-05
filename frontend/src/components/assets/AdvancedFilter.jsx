@@ -18,6 +18,9 @@ const CHIP_MULTI = [
   { field: "location", prefix: "Lokasi", testid: "badge-remove-location" },
   { field: "eselon1", prefix: "Es.I", tone: "violet", testid: "badge-remove-eselon1" },
   { field: "eselon2", prefix: "Es.II", tone: "violet", testid: "badge-remove-eselon2" },
+  { field: "eselon3", prefix: "Es.III", tone: "violet", testid: "badge-remove-eselon3" },
+  { field: "eselon4", prefix: "Es.IV", tone: "violet", testid: "badge-remove-eselon4" },
+  { field: "eselon5", prefix: "Es.V", tone: "violet", testid: "badge-remove-eselon5" },
   { field: "stiker", prefix: "Stiker", testid: "badge-remove-stiker" },
   { field: "inventoryStatus", prefix: "Inventarisasi", tone: "amber", testid: "badge-remove-inventory" },
 ];
@@ -55,7 +58,7 @@ const AdvancedFilter = memo(({
   isOpen,
   onClose,
   filters,           // { condition, status, location, stiker, priceMin, priceMax, nomorSpm, perolehanDari, eselon1, eselon2 }
-  filterOptions,     // { conditions, statuses, locations, stiker_statuses, eselon1s, eselon2s }
+  filterOptions,     // { conditions, statuses, locations, stiker_statuses, eselon1s … eselon5s }
   onFilterChange,    // (field, value) => void
   onReset,           // () => void
   activeFilterCount,
@@ -77,6 +80,9 @@ const AdvancedFilter = memo(({
               { field: "location", label: "Lokasi", opsi: filterOptions.locations, testid: "filter-location" },
               { field: "eselon1", label: "Eselon I", opsi: filterOptions.eselon1s, testid: "filter-eselon1" },
               { field: "eselon2", label: "Eselon II", opsi: filterOptions.eselon2s, testid: "filter-eselon2" },
+              { field: "eselon3", label: "Eselon III", opsi: filterOptions.eselon3s, testid: "filter-eselon3" },
+              { field: "eselon4", label: "Eselon IV", opsi: filterOptions.eselon4s, testid: "filter-eselon4" },
+              { field: "eselon5", label: "Eselon V", opsi: filterOptions.eselon5s, testid: "filter-eselon5" },
               { field: "stiker", label: "Stiker", opsi: filterOptions.stiker_statuses, testid: "filter-stiker" },
               { field: "inventoryStatus", label: "Inventarisasi", opsi: OPSI_INVENTARISASI, testid: "filter-inventory-status" },
             ].map(f => (
