@@ -1,4 +1,7 @@
-import { susunPohonUnit, jalurUnit, ringkasLingkup } from "../pohonUnit";
+import {
+  susunPohonUnit, jalurUnit, ringkasLingkup,
+  unitDalamLingkup, fieldEselon, unitDariField,
+} from "../pohonUnit";
 
 // Setjen → Biro Umum → Bagian RT; Biro Keuangan sebagai saudara.
 const POHON = [
@@ -71,4 +74,55 @@ test("id yang tak dikenal tetap dihitung dan ditandai", () => {
 test("lingkup kosong berarti tak ada penyaring", () => {
   expect(ringkasLingkup([], susunPohonUnit(POHON)).jumlah).toBe(0);
   expect(ringkasLingkup(null, []).tak_dikenal).toEqual([]);
+});
+
+// ── Lingkup kegiatan dan penurunan kolom eselon aset ─────────────────────
+
+const DALAM = susunPohonUnit([
+  ...POHON,
+  { id: "e4", nama_unit: "Subbag Perlengkapan", eselon: "4", parent_id: "e3" },
+]);
+
+test("lingkup mencakup unitnya sendiri DAN seluruh keturunannya", () => {
+  const ids = unitDalamLingkup(DALAM, ["e2"]).map((u) => u.id);
+  expect(ids).toEqual(["e2", "e3", "e4"]);
+});
+
+test("lingkup kosong berarti seluruh unit boleh dipilih", () => {
+  expect(unitDalamLingkup(DALAM, []).length).toBe(DALAM.length);
+  expect(unitDalamLingkup(DALAM, null).length).toBe(DALAM.length);
+});
+
+test("lingkup pada dua cabang menggabungkan keduanya", () => {
+  const ids = unitDalamLingkup(DALAM, ["e2b", "e3"]).map((u) => u.id);
+  expect(ids.sort()).toEqual(["e2b", "e3", "e4"]);
+});
+
+test("field eselon terisi tiap tingkat pada rantainya", () => {
+  expect(fieldEselon("e4", DALAM)).toEqual({
+    eselon1: "Setjen", eselon2: "Biro Umum", eselon3: "Bagian RT",
+    eselon4: "Subbag Perlengkapan", eselon5: "",
+  });
+});
+
+test("tingkat yang tak terpakai dikosongkan, bukan dihilangkan", () => {
+  // Kolom yang dikosongkan itulah yang menghapus sisa unit sebelumnya saat
+  // aset dipindahkan ke cabang yang lebih dangkal.
+  const f = fieldEselon("e1", DALAM);
+  expect(Object.keys(f)).toHaveLength(5);
+  expect(f.eselon2).toBe("");
+  expect(fieldEselon("", DALAM).eselon1).toBe("");
+});
+
+test("unit dikenali kembali dari kolom eselon aset", () => {
+  expect(unitDariField(fieldEselon("e4", DALAM), DALAM)).toBe("e4");
+  expect(unitDariField(fieldEselon("e2b", DALAM), DALAM)).toBe("e2b");
+});
+
+test("jalur yang tak cocok tidak ditebak", () => {
+  // Nama unit terdalam sama, jalurnya beda → bukan unit yang sama.
+  expect(unitDariField(
+    { eselon1: "Kedeputian X", eselon2: "Biro Umum" }, DALAM)).toBe("");
+  expect(unitDariField({}, DALAM)).toBe("");
+  expect(unitDariField({ eselon1: "Entah" }, DALAM)).toBe("");
 });

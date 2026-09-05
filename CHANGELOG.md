@@ -18,6 +18,78 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#999] Aset dicatat sampai Eselon V — 2026-09-05
+
+Lanjutan `[#996]`–`[#998]`. Kegiatan sudah bisa mencatat lingkupnya sedalam
+lima tingkat; asetnya belum.
+
+### Kolomnya yang tak ada, bukan datanya
+
+`assets` hanya membawa `eselon1` dan `eselon2`. Aset milik sebuah Subbagian
+karenanya hanya dapat dicatat sampai Bironya: seluruh Bagian dan Subbagian di
+bawahnya melebur menjadi satu baris yang tak dapat dipecah lagi. Laporan
+berjenjang mentok di situ **bukan karena datanya tak ada, melainkan karena
+kolomnya tak ada** — dan pemilihnya pun hanya dua kotak yang isinya diambil
+dari daftar teks yang diketik pada kegiatan.
+
+Registry aset kini membawa `eselon3`, `eselon4`, `eselon5`, sejajar dengan
+`pegawai` yang sejak awal memang lima. Ikut terbawa otomatis lewat registry:
+PATCH per-aset, ubah massal, audit trail, proyeksi daftar. Yang ditagih test
+anti-drift dan diisi manual: model Pydantic, kolom XLSX, template impor,
+atribut ekspor geo, field pencarian (lokal, server, dan Meili), serta
+strategi generator data sintetis.
+
+### Satu pilihan, bukan lima kotak
+
+Form aset kini menawarkan **satu** pemilih unit — pohon utuh dengan indentasi —
+yang mengisi Eselon I–V sekaligus. Daftarnya dibatasi **lingkup kegiatan** yang
+dicatat di `[#998]`: petugas hanya melihat unit yang memang tupoksinya.
+
+Dua hal yang sengaja dipertahankan:
+
+- **Yang tercatat ditampilkan apa adanya**, termasuk saat ia tak cocok dengan
+  unit mana pun di master — aset lama dan aset hasil impor kerap begitu, dan
+  menyembunyikannya membuat form terlihat kosong padahal datanya ada.
+- **Dua select lama tetap hidup** saat master unit masih kosong, sehingga
+  satker yang belum membangun pohonnya tak kehilangan apa pun.
+
+### Pembatasan dari `[#997]` yang gugur bersama sebabnya
+
+`[#997]` sengaja tidak merambatkan penggantian nama unit Eselon III ke bawah ke
+`assets`, karena unit sedalam itu tak dapat dikenali di sana. Sebabnya kini
+hilang, dan pembatasannya dicabut: penggantian nama merambat ke aset pada
+tingkat berapa pun, tetap lewat jalur lengkap dan tetap di dalam satkernya.
+
+### Kolom XLSX yang nyaris bergeser diam-diam
+
+Sheet "Data Aset" ditulis dengan indeks kolom yang **diketik tangan**.
+Menyisipkan tiga kolom di tengah menggeser 36 kolom sesudahnya, dan berkasnya
+tetap terbentuk dengan rapi — hanya saja setiap nilai berada tiga kolom di
+sebelah kiri judulnya. Penjaga yang ada hanya memeriksa **satu** kolom
+(`temuan_pencatatan`); ia memang menangkap penggeseran ini, tetapi penggeseran
+yang berhenti sebelum kolom terakhir akan lolos begitu saja.
+`test_kolom_xlsx_sejajar.py` (baru) kini memeriksa seluruh kolom: tiap nilai di
+bawah judulnya, tak ada dua field berebut satu kolom, dan tak ada judul yang
+tak pernah ditulisi.
+
+### Cakupan
+
+- `backend/asset_fields.py`, `models.py` — tiga field baru.
+- `backend/routes/exports.py` — kolom XLSX + atribut geo; 36 indeks digeser.
+- `backend/routes/templates.py` — baris template impor.
+- `backend/routes/assets.py`, `meili_utils.py` — field pencarian.
+- `backend/routes/unit_kerja.py` — batas perambatan dicabut.
+- `backend/scripts/synthdata/` — strategi generator (jalur sengaja sering
+  putus di tengah, seperti data satker sungguhan).
+- `frontend/src/lib/pohonUnit.js` — `unitDalamLingkup`, `fieldEselon`,
+  `unitDariField`.
+- `frontend/src/components/assets/AssetForm.jsx` — pemilih unit.
+- `frontend/src/lib/offlineSnapshot.js`, `pencarianLokal.js`.
+- Uji: `test_kolom_xlsx_sejajar` (4, baru), +7 `pohonUnit.test.js`.
+
+**Belum:** filter lanjutan, ubah massal, dan laporan masih berhenti di Eselon
+II. Ketiganya PR berikutnya.
+
 ## [#998] Kegiatan memilih lingkupnya dari pohon unit — 2026-09-05
 
 Permintaan pemilik: *"buat sistem tampil sesuai eselon yang dicatat di dalam

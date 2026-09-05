@@ -32,6 +32,7 @@ import { lebihAkurat } from "../../lib/gpsAkurasi";
 import { bolehSalinKoordinat } from "../../lib/salinKonteks";
 import { buatSesiAset, fotoNyasar } from "../../lib/sesiAset";
 import { simpanGpsTerakhir, ambilGpsTerakhir } from "../../lib/gpsCache";
+import { susunPohonUnit, unitDalamLingkup, fieldEselon, unitDariField } from "../../lib/pohonUnit";
 import { keIndeksFinal } from "../../lib/indeksFotoLuring";
 import { compressImageFile, compressDataUrl, generateThumbnailFromDataUrl, dataUrlBytes } from "../../lib/imageCompression";
 import { reserveDummyNup as reserveDummyNupLib } from "../../lib/dummyNup";
@@ -444,7 +445,8 @@ function buildEditFormData(a, activityId) {
     asset_code: a.asset_code || "", NUP: a.NUP || "", asset_name: a.asset_name || "", category: a.category || "",
     brand: a.brand || "", model: a.model || "", kode_register: a.kode_register || "",
     serial_number: a.serial_number || "", purchase_date: a.purchase_date || "", purchase_price: a.purchase_price || "",
-    location: a.location || "", eselon1: a.eselon1 || "", eselon2: a.eselon2 || "", user: a.user || "",
+    location: a.location || "", eselon1: a.eselon1 || "", eselon2: a.eselon2 || "",
+    eselon3: a.eselon3 || "", eselon4: a.eselon4 || "", eselon5: a.eselon5 || "", user: a.user || "",
     pengguna_melekat_ke: a.pengguna_melekat_ke || "", pengguna_jabatan: a.pengguna_jabatan || "",
     pengguna_nip: a.pengguna_nip || "",
     operasional_jenis: a.operasional_jenis || "",
@@ -578,7 +580,7 @@ const AssetForm = memo(({
   const emptyForm = useMemo(() => ({
     asset_code: "", NUP: "", asset_name: "", category: "", brand: "", model: "",
     kode_register: "", serial_number: "", purchase_date: "", purchase_price: "",
-    location: "", eselon1: "", eselon2: "", user: "",
+    location: "", eselon1: "", eselon2: "", eselon3: "", eselon4: "", eselon5: "", user: "",
     pengguna_melekat_ke: "", pengguna_jabatan: "", pengguna_nip: "", operasional_jenis: "", nomor_bast: "",
     condition: "Baik", status: "Aktif",
     nomor_spm: "", perolehan_dari_nama: "", nomor_kontrak: "", cara_bayar_kontrak: "",
@@ -655,6 +657,28 @@ const AssetForm = memo(({
   // Saran nama ruangan (master #294) untuk datalist field Lokasi — agar penamaan
   // ruangan KONSISTEN (dasar DBR/KIR yang rapi). Best-effort, tetap boleh teks bebas.
   const [ruanganNames, setRuanganNames] = useState([]);
+  // Master unit organisasi, rata berurut pohon. Dipakai pemilih unit di bawah;
+  // gagal memuat (mis. luring) hanya membuatnya jatuh ke dua select lama.
+  const [unitPohon, setUnitPohon] = useState([]);
+
+  useEffect(() => {
+    if (!isOpen || unitPohon.length) return undefined;
+    let cancelled = false;
+    axios.get(`${API}/unit-kerja`).then((r) => {
+      if (cancelled) return;
+      const arr = Array.isArray(r.data) ? r.data : (r.data?.items || []);
+      setUnitPohon(susunPohonUnit(arr));
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [isOpen, unitPohon.length]);
+
+  // Hanya unit yang berada DI DALAM lingkup kegiatan ini — permintaan pemilik:
+  // "buat sistem tampil sesuai eselon yang dicatat di dalam kegiatan sehingga
+  // tetap menyajikan data sesuai dengan tupoksinya dan tidak membingungkan
+  // akibat semakin banyak data input". Lingkup kosong = seluruh unit satker.
+  const unitPilihan = useMemo(
+    () => unitDalamLingkup(unitPohon, activity?.lingkup_unit || []),
+    [unitPohon, activity]);
 
   // Muat saran ruangan sekali saat form dibuka (best-effort; offline diabaikan).
   useEffect(() => {
@@ -1476,6 +1500,9 @@ const AssetForm = memo(({
       ...(!p.location && ctx.location ? { location: ctx.location } : {}),
       ...(!p.eselon1 && ctx.eselon1 ? { eselon1: ctx.eselon1 } : {}),
       ...(!p.eselon2 && ctx.eselon2 ? { eselon2: ctx.eselon2 } : {}),
+      ...(!p.eselon3 && ctx.eselon3 ? { eselon3: ctx.eselon3 } : {}),
+      ...(!p.eselon4 && ctx.eselon4 ? { eselon4: ctx.eselon4 } : {}),
+      ...(!p.eselon5 && ctx.eselon5 ? { eselon5: ctx.eselon5 } : {}),
       ...(!p.user && ctx.user ? { user: ctx.user } : {}),
       ...(salinKoord ? { koordinat_latitude: ctx.koordinat_latitude, koordinat_longitude: ctx.koordinat_longitude } : {}),
     }));
@@ -1789,7 +1816,8 @@ const AssetForm = memo(({
         const TEXT_FIELDS = [
           "asset_code", "NUP", "asset_name", "category", "brand", "model",
           "kode_register", "serial_number", "purchase_date", "purchase_price",
-          "location", "eselon1", "eselon2", "user", "condition", "status",
+          "location", "eselon1", "eselon2", "eselon3", "eselon4", "eselon5",
+          "user", "condition", "status",
           "pengguna_melekat_ke", "pengguna_jabatan", "pengguna_nip", "operasional_jenis", "nomor_bast",
           "nomor_spm", "perolehan_dari_nama", "nomor_kontrak", "cara_bayar_kontrak",
           "nomor_bukti_perolehan", "supplier", "notes",
@@ -1929,7 +1957,8 @@ const AssetForm = memo(({
       // koordinat hanya dipakai saat konteks masih baru (lihat salinKonteks).
       try {
         const ctx = {};
-        for (const k of ["location", "eselon1", "eselon2", "user"]) {
+        for (const k of ["location", "eselon1", "eselon2", "eselon3",
+                         "eselon4", "eselon5", "user"]) {
           if (formData[k]) ctx[k] = formData[k];
         }
         if (formData.koordinat_latitude && formData.koordinat_longitude) {
@@ -2502,26 +2531,59 @@ const AssetForm = memo(({
                 <span><b>Barang Bersejarah</b> — masuk seksi Laporan Barang Bersejarah pada LBP (PSAP 07: diungkapkan dalam kuantitas).</span>
               </label>
               <div className="space-y-1"><Label className="text-xs">Lokasi</Label><Input name="location" value={formData.location} onChange={handleInputChange} className="h-8" list="daftar-ruangan-master" placeholder="pilih ruangan / ketik bebas" /><datalist id="daftar-ruangan-master">{ruanganNames.map((n) => <option key={n} value={n} />)}</datalist></div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1"><Label className="text-xs">Eselon I</Label>
-                  <select name="eselon1" value={formData.eselon1} onChange={e => { handleInputChange(e); setFormData(p => ({...p, eselon2: ''})); }} className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm" data-testid="asset-eselon1-select">
-                    <option value="">-- Pilih Eselon I --</option>
-                    {(activity?.eselon1 || []).map((es, i) => {
-                      const nama = typeof es === 'object' ? es.nama : es;
-                      return <option key={i} value={nama}>{nama}</option>;
-                    })}
+              {/* Unit organisasi — SATU pilihan yang mengisi Eselon I–V sekaligus.
+                  Dua select terpisah dulu hanya sampai Eselon II, dan sumbernya
+                  daftar teks yang diketik pada kegiatan; kini dari master unit,
+                  dibatasi lingkup kegiatan ini. */}
+              {unitPilihan.length > 0 ? (
+                <div className="space-y-1">
+                  <Label className="text-xs">Unit Organisasi</Label>
+                  <select value={unitDariField(formData, unitPohon)}
+                    onChange={(e) => setFormData((p) => ({ ...p, ...fieldEselon(e.target.value, unitPohon) }))}
+                    className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm"
+                    data-testid="asset-unit-select">
+                    <option value="">-- Pilih Unit (Eselon I–V) --</option>
+                    {unitPilihan.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {"\u00A0".repeat(u.depth * 3)}{u.nama_unit} (E{u.eselon})
+                      </option>
+                    ))}
                   </select>
+                  {/* Yang TERCATAT ditampilkan apa adanya, termasuk saat ia tak
+                      cocok dengan unit mana pun di master — aset lama dan aset
+                      hasil impor kerap begitu, dan menyembunyikannya membuat
+                      form terlihat kosong padahal datanya ada. */}
+                  {(formData.eselon1 || formData.eselon2 || formData.eselon3
+                    || formData.eselon4 || formData.eselon5) && (
+                    <p className="text-[10px] text-muted-foreground" data-testid="asset-unit-tercatat">
+                      Tercatat: {[formData.eselon1, formData.eselon2, formData.eselon3,
+                                  formData.eselon4, formData.eselon5].filter(Boolean).join(" / ")}
+                      {!unitDariField(formData, unitPohon) && " — belum cocok dengan master unit"}
+                    </p>
+                  )}
                 </div>
-                <div className="space-y-1"><Label className="text-xs">Eselon II</Label>
-                  <select name="eselon2" value={formData.eselon2} onChange={handleInputChange} className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm" data-testid="asset-eselon2-select">
-                    <option value="">-- Pilih Eselon II --</option>
-                    {(() => {
-                      const sel = (activity?.eselon1 || []).find(es => (typeof es === 'object' ? es.nama : es) === formData.eselon1);
-                      return (sel && typeof sel === 'object' ? sel.eselon2 || [] : []).map((e2, i) => <option key={i} value={e2}>{e2}</option>);
-                    })()}
-                  </select>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1"><Label className="text-xs">Eselon I</Label>
+                    <select name="eselon1" value={formData.eselon1} onChange={e => { handleInputChange(e); setFormData(p => ({...p, eselon2: ''})); }} className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm" data-testid="asset-eselon1-select">
+                      <option value="">-- Pilih Eselon I --</option>
+                      {(activity?.eselon1 || []).map((es, i) => {
+                        const nama = typeof es === 'object' ? es.nama : es;
+                        return <option key={i} value={nama}>{nama}</option>;
+                      })}
+                    </select>
+                  </div>
+                  <div className="space-y-1"><Label className="text-xs">Eselon II</Label>
+                    <select name="eselon2" value={formData.eselon2} onChange={handleInputChange} className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm" data-testid="asset-eselon2-select">
+                      <option value="">-- Pilih Eselon II --</option>
+                      {(() => {
+                        const sel = (activity?.eselon1 || []).find(es => (typeof es === 'object' ? es.nama : es) === formData.eselon1);
+                        return (sel && typeof sel === 'object' ? sel.eselon2 || [] : []).map((e2, i) => <option key={i} value={e2}>{e2}</option>);
+                      })()}
+                    </select>
+                  </div>
                 </div>
-              </div>
+              )}
               {/* Pengguna — melekat ke Individual/Jabatan/Operasional + BAST */}
               <div className="p-2 bg-muted rounded-lg space-y-2" data-testid="pengguna-section">
                 <div className="flex items-center gap-1.5"><UserRound className="w-3.5 h-3.5 text-muted-foreground" /><Label className="text-xs font-medium">Pengguna</Label></div>

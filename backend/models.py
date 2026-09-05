@@ -73,6 +73,9 @@ class AssetCreate(BaseModel):
     location: Optional[str] = ""
     eselon1: Optional[str] = ""
     eselon2: Optional[str] = ""
+    eselon3: Optional[str] = ""
+    eselon4: Optional[str] = ""
+    eselon5: Optional[str] = ""
     user: Optional[str] = ""
     # Pengguna terstruktur: melekat ke "Individual" | "Jabatan" | "Operasional".
     # `user` tetap menyimpan NAMA orangnya (label UI menyesuaikan pilihan);
@@ -145,6 +148,9 @@ class AssetResponse(BaseModel):
     location: Optional[str] = ""
     eselon1: Optional[str] = ""
     eselon2: Optional[str] = ""
+    eselon3: Optional[str] = ""
+    eselon4: Optional[str] = ""
+    eselon5: Optional[str] = ""
     user: Optional[str] = ""
     # Pengguna terstruktur (lihat AssetCreate)
     pengguna_melekat_ke: Optional[str] = ""

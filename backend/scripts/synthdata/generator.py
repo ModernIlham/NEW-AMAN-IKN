@@ -160,6 +160,16 @@ FIELD_STRATEGIES = {
     "location": _s("teks", lambda r, c: r.choice(vb.LOKASI)),
     "eselon1": _s("teks", lambda r, c: r.choice(vb.ESELON1)),
     "eselon2": _s("teks", lambda r, c: r.choice(vb.ESELON2)),
+    # Jalur eselon SENGAJA sering putus di tengah — dua per tiga aset berhenti
+    # sebelum Eselon V, seperti data satker sungguhan. Data uji yang selalu
+    # lengkap sampai tingkat lima membuat panel berjenjang tampak selalu penuh
+    # dan menyembunyikan kasus yang justru paling sering ditemui.
+    "eselon3": _s("teks", lambda r, c: (
+        r.choice(vb.ESELON3) if r.random() < 0.65 else "")),
+    "eselon4": _s("teks", lambda r, c: (
+        r.choice(vb.ESELON4) if r.random() < 0.40 else "")),
+    "eselon5": _s("teks", lambda r, c: (
+        r.choice(vb.ESELON5) if r.random() < 0.20 else "")),
     "user": _s("teks", lambda r, c: c["nama_pengguna"]),
     "pengguna_melekat_ke": _s("teks", lambda r, c: c["melekat"]),
     "pengguna_jabatan": _s("teks", lambda r, c: (

@@ -86,3 +86,86 @@ export function ringkasLingkup(ids, pohon) {
     tak_dikenal: daftar.filter((i) => !dikenal.has(i)),
   };
 }
+
+/** Peta id → induk, dari daftar unit apa adanya. */
+function petaInduk(pohon) {
+  const m = new Map();
+  (pohon || []).forEach((u) => { if (u && u.id) m.set(u.id, u.parent_id || ""); });
+  return m;
+}
+
+/** Rantai leluhur satu unit, dari terjauh ke induk langsung. */
+function rantaiInduk(id, peta) {
+  const naik = [];
+  const terlihat = new Set([id]);
+  let kini = peta.get(id) || "";
+  while (kini && !terlihat.has(kini) && naik.length < 16) {
+    naik.push(kini);
+    terlihat.add(kini);
+    kini = peta.get(kini) || "";
+  }
+  return naik.reverse();
+}
+
+/**
+ * Unit yang boleh dipilih untuk sebuah kegiatan.
+ *
+ * Lingkup KOSONG berarti seluruhnya — kegiatan yang belum mencatat lingkup tak
+ * boleh mendadak kehilangan seluruh pilihannya. Unit lingkup mencakup dirinya
+ * sendiri DAN seluruh keturunannya: mencatat "Biro Umum" sebagai lingkup
+ * berarti Bagian dan Subbagian di bawahnya ikut dapat dipilih, sebab itulah
+ * arti membawahi. Cerminan `organisasi_utils.dalam_lingkup` di sisi server.
+ */
+export function unitDalamLingkup(pohon, lingkupIds) {
+  const lingkup = new Set((lingkupIds || []).filter(Boolean));
+  if (lingkup.size === 0) return pohon || [];
+  const peta = petaInduk(pohon);
+  return (pohon || []).filter((u) => lingkup.has(u.id)
+    || rantaiInduk(u.id, peta).some((i) => lingkup.has(i)));
+}
+
+/**
+ * `{eselon1..eselon5}` untuk satu unit — label tiap tingkat pada rantainya.
+ *
+ * Aset menyimpan unitnya sebagai lima kolom teks; ini yang mengisinya dari
+ * satu pilihan. Tingkat yang tak ada pada rantai dikembalikan sebagai string
+ * KOSONG, bukan dihilangkan: mengosongkan kolom itulah yang menghapus sisa
+ * unit sebelumnya saat pengguna memindahkan aset ke cabang yang lebih dangkal.
+ */
+export function fieldEselon(unitId, pohon) {
+  const keluar = { eselon1: "", eselon2: "", eselon3: "", eselon4: "", eselon5: "" };
+  if (!unitId) return keluar;
+  const byId = new Map((pohon || []).map((u) => [u.id, u]));
+  const peta = petaInduk(pohon);
+  [...rantaiInduk(unitId, peta), unitId].forEach((i) => {
+    const u = byId.get(i);
+    const lv = parseInt(String(u?.eselon || ""), 10);
+    if (u && lv >= 1 && lv <= 5) keluar[`eselon${lv}`] = String(u.nama_unit || "").trim();
+  });
+  return keluar;
+}
+
+/**
+ * Unit yang cocok dengan lima kolom eselon sebuah aset — untuk mengembalikan
+ * pilihan saat form dibuka lagi.
+ *
+ * Dicocokkan pada unit TERDALAM yang tercatat beserta seluruh jalurnya, bukan
+ * pada namanya saja: dua Bagian Tata Usaha di bawah dua Biro berbeda adalah
+ * dua unit berlainan. Tak ada yang cocok → "" , dan formnya menampilkan apa
+ * yang tercatat apa adanya alih-alih diam-diam memilih unit yang keliru.
+ */
+export function unitDariField(data, pohon) {
+  const nama = (n) => String((data || {})[`eselon${n}`] || "").trim();
+  let terdalam = 0;
+  for (let n = 1; n <= 5; n += 1) if (nama(n)) terdalam = n;
+  if (!terdalam) return "";
+  const cocok = (pohon || []).filter((u) => {
+    if (parseInt(String(u.eselon || ""), 10) !== terdalam) return false;
+    const f = fieldEselon(u.id, pohon);
+    for (let n = 1; n <= terdalam; n += 1) {
+      if (String(f[`eselon${n}`] || "") !== nama(n)) return false;
+    }
+    return true;
+  });
+  return cocok.length === 1 ? cocok[0].id : "";
+}

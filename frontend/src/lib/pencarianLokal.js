@@ -18,7 +18,8 @@
 // Cermin FIELD_CARI_ASET (backend/routes/assets.py). NIP sengaja TIDAK ada.
 export const FIELD_CARI_ASET = [
   "asset_code", "NUP", "asset_name", "serial_number", "location",
-  "brand", "model", "category", "eselon1", "eselon2", "user",
+  "brand", "model", "category", "eselon1", "eselon2", "eselon3",
+  "eselon4", "eselon5", "user",
   "pengguna_jabatan", "supplier", "perolehan_dari_nama",
   "condition", "status", "nomor_spm", "kode_register",
   "nomor_kontrak", "nomor_bast", "nomor_bukti_perolehan", "notes", "year",
