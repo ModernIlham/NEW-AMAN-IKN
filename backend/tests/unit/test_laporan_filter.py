@@ -308,10 +308,17 @@ def test_tombol_terapkan_selalu_terjangkau():
     Terapkan yang ikut tergulir memaksa pengguna menggulir balik ke atas
     hanya untuk menekannya — dan itu terasa seperti alat yang melawan."""
     t = _tpl()
-    assert "position: sticky" in t, "bilah aksi tidak melekat"
-    # Tombol di bilah menyerahkan formulir yang berada DI LUAR dirinya;
-    # tanpa atribut `form` ia hanya tombol mati yang tampak bisa ditekan.
-    assert 'form="form-filter"' in t
+    # Tombol "Terapkan" di BILAH ATAS dihapus atas permintaan pemilik — ia
+    # mengulang tombol yang sudah ada di kaki panel. Sifat yang dijaganya
+    # tetap berlaku, tetapi kini dipenuhi dengan MELEKATKAN kaki panelnya:
+    # satu tombol, bukan dua, dan tetap terjangkau tanpa menggulir balik.
+    kaki = t[t.index(".pf-kaki {"):t.index("}", t.index(".pf-kaki {"))]
+    assert "position: sticky" in kaki, "kaki panel tidak melekat"
+    assert "bottom: 0" in kaki
+    # Tombolnya BERADA DI DALAM formulir, jadi ia tak butuh atribut `form`.
+    kaki_html = t[t.index('<div class="pf-kaki">'):]
+    assert 'type="submit"' in kaki_html[:400]
+    assert 'data-testid="bilah-terapkan"' not in t, "tombol bilah masih ada"
 
 
 def test_panel_filter_dapat_dilipat():

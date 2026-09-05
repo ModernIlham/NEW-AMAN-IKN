@@ -18,6 +18,38 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#995] Tombol Terapkan tak lagi diulang di bilah atas — 2026-09-05
+
+Permintaan pemilik: *"pada headernya hapus bagian terapkan filter, karena sudah
+ada di halaman filter."*
+
+Benar — dua tombol dengan nama dan akibat yang sama persis hanya menambah satu
+keputusan (*"yang mana yang benar?"*) tanpa menambah satu pun kemampuan. Yang
+tersisa adalah tombol di kaki panel, tepat di bawah kotak-kotak yang baru saja
+diisi: di situlah tangan pengguna berada saat ia selesai memilih.
+
+### Sifat yang dijaga tombol itu tetap berlaku
+
+Tombol bilah dulu ada karena alasan yang nyata: pada satker dengan puluhan
+lokasi panelnya panjang, dan tombol Terapkan yang ikut tergulir memaksa
+pengguna menggulir balik hanya untuk menekannya.
+
+Alasan itu tak hilang begitu tombolnya dihapus. **Kaki panel kini melekat**
+(`position: sticky; bottom: 0`) — sifat yang sama, dipenuhi dengan **satu**
+tombol alih-alih dua. Ujinya ikut diubah: yang diperiksa kini kelekatan kaki
+panelnya, plus penegasan bahwa tombol bilah memang sudah tidak ada.
+
+Sejak kotak filternya menjadi `select multiple` (`[#992]`), panelnya juga jauh
+lebih pendek daripada saat ia berupa puluhan kotak centang — itulah yang
+membuat pengulangannya terasa berlebihan.
+
+### Berkas
+
+- `backend/templates/laporan_satker_v2.html` — tombol bilah dihapus, kaki panel melekat
+- `backend/tests/unit/test_laporan_filter.py` — uji keterjangkauan disesuaikan
+
+---
+
 ## [#994] Satu panel berjenjang, sampai Sub-sub Kelompok — 2026-09-05
 
 Permintaan pemilik: *"gunakan hingga ke sub-sub kelompok dan buat agar
