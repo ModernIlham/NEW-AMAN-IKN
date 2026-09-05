@@ -1467,3 +1467,89 @@ def test_baris_ANAK_benar_benar_MENJOROK_di_template():
     # Penanda cabang: jorokan saja tak terbaca pada label yang panjang dan
     # terpotong ellipsis.
     assert "bar-cabang" in t, "tak ada penanda cabang"
+
+
+# ── Struktur Organisasi Eselon: dari pohon, dan pemangkasannya bersuara ──
+#
+# Tabel ini dulu dua kolom — Eselon I dan II — bersumber dari daftar teks yang
+# diketik pada kegiatan, dan dipangkas TETAPAN enam baris. Ia sudah tak sejalan
+# dengan sistem yang menyimpan lima tingkat, dan pemangkasannya tak pernah
+# bersuara: `overflow: hidden` pada lembar A4 memotong tanpa satu pun tanda.
+
+def _unit(uid, nama, eselon, induk=None):
+    return {"id": uid, "nama_unit": nama, "eselon": str(eselon),
+            "parent_id": induk, "kode_satker": "401234"}
+
+
+def test_struktur_diambil_dari_pohon_unit_sedalam_yang_tercatat(dbr):
+    async def jalan():
+        await _seed(dbr, [_keg(1, 5)], _aset("k1", 3))
+        await dbr.unit_kerja.insert_many([
+            _unit("e1", "Setjen", 1),
+            _unit("e2", "Biro Umum", 2, "e1"),
+            _unit("e3", "Bagian RT", 3, "e2"),
+            _unit("e4", "Subbag Perlengkapan", 4, "e3"),
+        ])
+        d = await rp._build_satker_report_v2("k1")
+        baris = [(u["depth"], u["nama"], u["eselon"])
+                 for u in d["struktur_eselon"]]
+        assert baris == [
+            (0, "Setjen", "Eselon I"),
+            (1, "Biro Umum", "Eselon II"),
+            (2, "Bagian RT", "Eselon III"),
+            (3, "Subbag Perlengkapan", "Eselon IV")], baris
+        assert d["struktur_sisa"] == 0
+    _jalan(jalan())
+
+
+def test_satker_tanpa_pohon_jatuh_ke_daftar_teks_lamanya(dbr):
+    # Laporan satker yang belum membangun master unit tak boleh mendadak
+    # kehilangan bagian yang selama ini tercetak.
+    async def jalan():
+        keg = dict(_keg(1, 5))
+        keg["eselon1"] = [{"nama": "Setjen", "eselon2": ["Biro Umum"]}]
+        await _seed(dbr, [keg], _aset("k1", 3))
+        d = await rp._build_satker_report_v2("k1")
+        assert [(u["depth"], u["nama"]) for u in d["struktur_eselon"]] == [
+            (0, "Setjen"), (1, "Biro Umum")]
+    _jalan(jalan())
+
+
+def test_sisa_yang_tak_muat_DISEBUT_jumlahnya(dbr):
+    # Angka di sini sengaja jauh melebihi jatah halaman tersempit sekalipun.
+    async def jalan():
+        await _seed(dbr, [_keg(i, 5) for i in range(1, 9)], _aset("k1", 3))
+        await dbr.unit_kerja.insert_many(
+            [_unit("e1", "Setjen", 1)]
+            + [_unit(f"b{i}", f"Biro {i:02d}", 2, "e1") for i in range(40)])
+        d = await rp._build_satker_report_v2("k1")
+        assert len(d["struktur_eselon"]) == 41
+        assert d["struktur_maks"] < 41
+        assert d["struktur_sisa"] == 41 - d["struktur_maks"]
+        assert d["struktur_sisa"] > 0, "pemangkasannya tak bersuara"
+    _jalan(jalan())
+
+
+def test_jatah_baris_mengikuti_kepadatan_halaman_terakhir(dbr):
+    """Halaman terakhir berisi satu kegiatan menyisakan jauh lebih banyak
+    ruang daripada yang berisi delapan — jatah tetapan salah di kedua arah."""
+    async def jalan(n_keg):
+        await dbr.inventory_activities.delete_many({})
+        await dbr.assets.delete_many({})
+        await _seed(dbr, [_keg(i, 5) for i in range(1, n_keg + 1)],
+                    _aset("k1", 2))
+        d = await rp._build_satker_report_v2("k1")
+        return d["struktur_maks"]
+    lapang = _jalan(jalan(9))    # 9 kegiatan → halaman terakhir berisi SATU
+    sesak = _jalan(jalan(8))     # 8 kegiatan → halaman terakhir PENUH
+    assert lapang > sesak, (lapang, sesak)
+    assert sesak > 6, "jatah tersempitnya masih lebih besar dari tetapan lama"
+
+
+def test_template_menyebut_sisanya_dan_tak_lagi_memangkas_diam_diam():
+    t = _teks_template()
+    assert "struktur_eselon[:struktur_maks]" in t
+    assert "eselon_list[:6]" not in t, "pemangkasan tetapan masih ada"
+    assert "dan {{ struktur_sisa }} unit lagi" in t
+    # Kolomnya tak lagi mengunci dua tingkat.
+    assert "<th>Unit Organisasi</th>" in t
