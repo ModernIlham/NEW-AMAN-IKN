@@ -108,6 +108,34 @@ async def _kpb_signer(settings, per_iso=None, user=None):
                                            kode_satker_user(user))
 
 
+async def _periksa_penerima_persediaan(user, nip, unit_teks=""):
+    """→ `(snapshot, peringatan)` penerima barang persediaan.
+
+    Membungkus gerbang bersama `penerima_utils` dengan isolasi satker dan
+    menerjemahkan penolakan almarhum menjadi HTTP 400. Ditulis SEKALI di sini
+    karena tiga jalur memanggilnya: keluar tunggal, keluar massal, dan kelak
+    dokumen serah terimanya.
+    """
+    from functools import partial
+
+    from shared_utils import scope_query_field_satker
+    from penerima_utils import (PenerimaMeninggal, periksa_penerima,
+                                snapshot_penerima)
+
+    try:
+        peg, peringatan = await periksa_penerima(
+            db, partial(scope_query_field_satker, user), nip,
+            konteks="pengeluaran barang persediaan")
+    except PenerimaMeninggal as e:
+        raise HTTPException(status_code=400, detail=e.pesan)
+    if not str(nip or "").strip():
+        # Tanpa NIP tak ada identitas yang bisa dibekukan; jangan menulis
+        # bidang penerima kosong ke jurnal — bidang yang ada tetapi kosong
+        # terbaca sebagai "sudah diisi dan memang tak bernama".
+        return {}, ""
+    return snapshot_penerima(peg, unit_teks), peringatan
+
+
 def _hdr_kpb(kpb, label="Kuasa Pengguna Barang"):
     """Baris jabatan KPB dengan awalan 'Plt./Plh.' bila dijabat pelaksana
     tugas/harian (rangkap jabatan). Selalu berakhiran koma."""
@@ -1436,6 +1464,7 @@ class TransaksiMassalIn(BaseModel):
     penyedia: str = ""                      # masuk
     perolehan_id: str = ""                  # masuk — tautan BAST Pengadaan (#17)
     unit_penerima: str = ""                 # keluar
+    penerima_nip: str = ""                  # keluar — tautan Master Pegawai
     keterangan: str = ""
     # Nomor LPB otomatis dari Registrasi Persuratan bila no_bukti kosong
     # (arah masuk; tercatat di buku agenda berstatus dibooking).
@@ -1477,6 +1506,13 @@ async def transaksi_massal(payload: TransaksiMassalIn,
     snap_asal = {}
     if payload.arah == "masuk" and str(payload.perolehan_id or "").strip():
         snap_asal = await _ambil_snapshot_perolehan(payload.perolehan_id, user)
+    # Penerima massal divalidasi SEKALI di muka: penolakan (almarhum) harus
+    # terjadi sebelum satu pun barang keluar, bukan setelah separuh daftarnya
+    # terlanjur berkurang — jalur massal memang tak berkompensasi antarbaris.
+    peringatan_penerima = ""
+    if payload.arah == "keluar":
+        _, peringatan_penerima = await _periksa_penerima_persediaan(
+            user, payload.penerima_nip, payload.unit_penerima)
 
     # Nomor LPB: pakai no_bukti; atau pesan otomatis dari Persuratan.
     import uuid as _uuid
@@ -1510,6 +1546,7 @@ async def transaksi_massal(payload: TransaksiMassalIn,
                 r = await transaksi_keluar(it.persediaan_id, TransaksiKeluarIn(
                     jenis=payload.jenis, jumlah=it.jumlah,
                     unit_penerima=payload.unit_penerima,
+                    penerima_nip=payload.penerima_nip,
                     no_bukti=payload.no_bukti, keterangan=payload.keterangan,
                 ), user=user)
             hasil.append({"persediaan_id": it.persediaan_id, "ok": True,
@@ -1605,8 +1642,12 @@ async def transaksi_massal(payload: TransaksiMassalIn,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
 
-    return {"total": len(hasil), "sukses": sukses, "gagal": len(hasil) - sukses,
-            "hasil": hasil, "lpb_id": lpb_id, "nomor_lpb": nomor_lpb}
+    keluar = {"total": len(hasil), "sukses": sukses,
+              "gagal": len(hasil) - sukses, "hasil": hasil,
+              "lpb_id": lpb_id, "nomor_lpb": nomor_lpb}
+    if peringatan_penerima:
+        keluar["peringatan"] = peringatan_penerima
+    return keluar
 
 
 @persediaan_router.get("/persediaan/lpb")
@@ -2578,6 +2619,12 @@ class TransaksiKeluarIn(BaseModel):
     jenis: str = "habis_pakai"
     jumlah: int = Field(gt=0)
     unit_penerima: str = ""
+    # NIP penerima — tautan ke Master Pegawai. Sebelum ini pengeluaran barang
+    # hanya mencatat `unit_penerima` sebagai teks bebas: bukti pengeluaran tak
+    # pernah menyebut SIAPA yang menerima, dan karena itu tak ada yang bisa
+    # dimintai pertanggungjawaban maupun diminta menandatangani. Opsional —
+    # penerima berupa unit kerja atau pihak luar memang tak punya NIP.
+    penerima_nip: str = ""
     no_bukti: str = ""
     keterangan: str = ""
 
@@ -2596,6 +2643,10 @@ async def transaksi_keluar(item_id: str, data: TransaksiKeluarIn,
     Idempotency-Key (opsional): OCC mencegah lost-update, tetapi replay
     kunci sama tak boleh menggandakan pengeluaran — respons pertama disimpan
     & diputar ulang. Pemanggil internal (massal) tak mengoper `request`.
+
+    Penerima ber-NIP divalidasi ke Master Pegawai lewat gerbang yang SAMA
+    dengan BAST (`penerima_utils`): tak terdaftar → peringatan, meninggal
+    dunia → ditolak, nonaktif → peringatan.
     """
     await _gerbang_wajib_persetujuan(request)
     idem_key = kunci_idem(
@@ -2616,6 +2667,12 @@ async def transaksi_keluar(item_id: str, data: TransaksiKeluarIn,
             raise HTTPException(
                 status_code=409,
                 detail="Permintaan dengan kunci idempotensi ini sedang diproses, coba lagi sebentar")
+
+    # Penerima diperiksa SEKALI di muka — sebelum satu pun layer FIFO
+    # disentuh. Memeriksanya di dalam loop percobaan berarti penolakan bisa
+    # terjadi setelah stok terlanjur berkurang pada percobaan sebelumnya.
+    snap_penerima, peringatan_penerima = await _periksa_penerima_persediaan(
+        user, data.penerima_nip, data.unit_penerima)
 
     now = datetime.now(timezone.utc)
     for _attempt in range(3):
@@ -2663,11 +2720,13 @@ async def transaksi_keluar(item_id: str, data: TransaksiKeluarIn,
             "rincian_layer": rincian,
             "stok_sebelum": stok_sebelum,
             "stok_sesudah": stok_sesudah,
-            "unit_penerima": data.unit_penerima.strip(),
+            "unit_penerima": (snap_penerima.get("penerima_unit")
+                              or data.unit_penerima.strip()),
             "no_bukti": data.no_bukti.strip(),
             "keterangan": data.keterangan.strip(),
             "petugas": user.get("username") or user.get("user_id") or "-",
             "timestamp": now.isoformat(),
+            **snap_penerima,
         }
         try:
             await _insert_jurnal(jurnal)
@@ -2683,6 +2742,11 @@ async def transaksi_keluar(item_id: str, data: TransaksiKeluarIn,
         resp = {"message": f"{JENIS_KELUAR[data.jenis][0]} tercatat", "stok": stok_sesudah,
                 "nilai_keluar": total_nilai, "transaksi": jurnal,
                 "version": updated.get("version")}
+        # Peringatan IKUT di respons, bukan hanya di log: yang perlu tahu NIP
+        # penerimanya tak terdaftar adalah orang yang baru saja mengeluarkan
+        # barang, bukan pembaca log berminggu-minggu kemudian.
+        if peringatan_penerima:
+            resp["peringatan"] = peringatan_penerima
         if idem_key:
             from shared_utils import store_idempotent_response
             await store_idempotent_response(idem_key, resp, 200)
