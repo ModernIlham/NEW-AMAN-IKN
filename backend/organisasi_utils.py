@@ -6,19 +6,26 @@ dengan indukannya yang terkoneksi dengan master pegawai juga di struktur
 organisasi ... eselon I dan II adalah default wajib, dan memudahkan jika
 organisasi mulai berkembang ke depannya."*
 
-Keadaan sebelum modul ini: eselon hidup sebagai **teks bebas** di tiga tempat
-yang tak saling mengenal —
+Eselon hidup di empat tempat, dan hanya SATU di antaranya berbentuk pohon:
 
-    pegawai                 eselon1 … eselon5   (lima kolom, RATA)
-    assets                  eselon1, eselon2    (dua kolom)
+    unit_kerja              {nama_unit, eselon, parent_id}   ← pohonnya
+    pegawai                 eselon1 … eselon5   (lima kolom teks, RATA)
+    assets                  eselon1, eselon2    (dua kolom teks)
     inventory_activities    [{nama, eselon2:[]}] (dua tingkat, bersarang)
 
-Lima kolom teks tak dapat menyatakan bahwa "Bagian Umum" berada DI BAWAH "Biro
-Umum" di bawah "Sekretariat Jenderal": keduanya hanya kebetulan ditulis pada
-baris yang sama. Salah ketik satu huruf melahirkan unit baru yang tak pernah
-ada, dan tak ada satu pun tempat yang dapat ditanyai "unit apa saja yang ada".
+Modul ini TIDAK membuat pohon kedua. Koleksi `unit_kerja` sudah menyimpannya
+sejak awal; yang belum ada adalah satu tempat yang memutuskan apa yang sah di
+atasnya. Sebelum ini aturannya tersebar: sebagian di `unit_kerja_utils.
+validate_unit`, sebagian lagi ditulis ulang sebagai `if` di dalam rutenya —
+dua salinan yang sudah berbeda isi (rute menolak Eselon I berinduk dengan
+pesan "harus Eselon 0", yang bukan tingkat mana pun).
 
-Modul ini menyediakan pohonnya. Empat keputusan yang membentuknya:
+Bentuk dokumen di sini SENGAJA sama persis dengan koleksinya — `nama_unit`,
+`eselon`, `parent_id` — bukan bentuk baru yang lebih rapi. Lapisan penerjemah
+antara modul dan koleksinya adalah tempat ketiga yang harus ikut benar, dan
+tempat ketiga itu tak pernah ikut diperbarui.
+
+Empat keputusan yang membentuk modul ini:
 
 1. **`parent_id` satu-satunya yang disunting; `ancestors` dan `jalur`
    DITURUNKAN.** Menyimpan ketiganya sebagai sumber kebenaran terpisah adalah
@@ -121,12 +128,12 @@ def validasi_unit(unit, induk=None):
     pemanggil yang mengambilnya dari basis data.
     """
     u = unit or {}
-    nama = str(u.get("nama") or "").strip()
-    level = _int(u.get("level"))
+    nama = str(u.get("nama_unit") or "").strip()
+    level = _int(u.get("eselon"))
     if not nama:
         return False, "Nama unit wajib diisi"
     if not level_sah(level):
-        return False, (f"Level '{u.get('level')}' tidak sah — "
+        return False, (f"Eselon '{u.get('eselon')}' tidak sah — "
                        f"harus {LEVEL_MIN}–{LEVEL_MAKS} (Eselon I–V)")
     if level == LEVEL_MIN:
         if induk:
@@ -135,11 +142,11 @@ def validasi_unit(unit, induk=None):
     if not induk:
         return False, (f"{label_level(level)} wajib berinduk pada "
                        f"{label_level(level - 1)}")
-    if not parent_level_sah(induk.get("level"), level):
+    if not parent_level_sah(induk.get("eselon"), level):
         return False, (
             f"{label_level(level)} harus berinduk pada "
             f"{label_level(level - 1)}, bukan "
-            f"{label_level(induk.get('level')) or 'unit tanpa level'} — "
+            f"{label_level(induk.get('eselon')) or 'unit tanpa eselon'} — "
             "tingkat tidak boleh dilompati")
     return True, ""
 
@@ -173,7 +180,7 @@ def turunkan_ancestors(unit_id, parent_id, peta_parent) -> list:
 def jalur_nama(unit_id, peta_unit, peta_parent) -> str:
     """`"Setjen / Biro Umum / Bagian Rumah Tangga"` — leluhur lalu dirinya."""
     ids = rantai_induk(unit_id, peta_parent) + [unit_id]
-    nama = [str((peta_unit.get(i) or {}).get("nama") or "").strip()
+    nama = [str((peta_unit.get(i) or {}).get("nama_unit") or "").strip()
             for i in ids]
     return PEMISAH_JALUR.join(n for n in nama if n)
 
@@ -209,9 +216,9 @@ def field_eselon(unit_id, peta_unit, peta_parent) -> dict:
         return keluar
     for i in rantai_induk(unit_id, peta_parent) + [unit_id]:
         u = peta_unit.get(i) or {}
-        lv = _int(u.get("level"))
+        lv = _int(u.get("eselon"))
         if lv and level_sah(lv):
-            keluar[f"eselon{lv}"] = str(u.get("nama") or "").strip()
+            keluar[f"eselon{lv}"] = str(u.get("nama_unit") or "").strip()
     return keluar
 
 
@@ -250,3 +257,130 @@ def dalam_lingkup(unit_id, lingkup_ids, peta_parent) -> bool:
     if unit_id in lingkup:
         return True
     return any(i in lingkup for i in rantai_induk(unit_id, peta_parent))
+
+
+def keturunan(unit_id, semua_unit) -> set:
+    """Seluruh id yang berada DI BAWAH `unit_id`, sedalam apa pun.
+
+    Ditelusuri turun per tingkat, bukan dengan rekursi per simpul: pohon yang
+    rusak (anak menunjuk induk yang menunjuk balik kepadanya) menghentikan
+    rekursi hanya lewat batas kedalaman, sementara di sini simpul yang sudah
+    terkumpul tak pernah ditelusuri dua kali.
+    """
+    anak_dari = {}
+    for u in semua_unit or []:
+        anak_dari.setdefault((u or {}).get("parent_id"), []).append(
+            (u or {}).get("id"))
+    keluar, antre = set(), list(anak_dari.get(unit_id) or [])
+    while antre:
+        i = antre.pop()
+        if not i or i in keluar or i == unit_id:
+            continue
+        keluar.add(i)
+        antre += anak_dari.get(i) or []
+    return keluar
+
+
+def validasi_pindah(unit_id, calon_induk_id, semua_unit):
+    """(ok, pesan). Bolehkah unit ini dipindahkan ke bawah induk itu?
+
+    Dua hal yang membuat pohonnya berhenti menjadi pohon:
+
+    - **Berinduk pada diri sendiri.** Terbaca sepele, tetapi ia satu klik saja
+      di layar yang menampilkan seluruh unit sebagai calon induk.
+    - **Berinduk pada keturunannya sendiri.** Inilah yang melahirkan gelang:
+      Biro Umum di bawah Bagian TU yang di bawah Biro Umum. Setelahnya tak ada
+      satu pun unit pada gelang itu yang punya jalur ke puncak, dan setiap
+      penelusuran hanya berhenti karena batas kedalaman — bukan karena selesai.
+
+    Selama SETIAP sisi pohon memenuhi aturan tingkat, gelang sepanjang apa pun
+    mustahil: gelang menuntut selisih tingkat -1 di tiap sisi, dan jumlah
+    selisih mengelilingi gelang harus nol. Pemeriksaan ini karenanya tak
+    terjangkau lewat rute yang ada sekarang — ia menjaga dua hal lain: baris
+    lama yang dibuat sebelum aturan tingkat ditegakkan, dan kemungkinan aturan
+    itu dilonggarkan kelak bila ada satker yang strukturnya memang melompat.
+    """
+    if not calon_induk_id:
+        return True, ""
+    if calon_induk_id == unit_id:
+        return False, "Unit tak dapat menjadi induk bagi dirinya sendiri"
+    if calon_induk_id in keturunan(unit_id, semua_unit):
+        return False, ("Induk yang dipilih berada DI BAWAH unit ini — "
+                       "pemindahan itu membuat strukturnya melingkar")
+    return True, ""
+
+
+def validasi_perubahan(unit_lama, unit_baru, induk_baru, semua_unit):
+    """(ok, pesan). Seluruh aturan penyuntingan satu unit, dalam satu tempat.
+
+    Sebelum ada penyuntingan, unit yang salah ketik dan sudah punya anak tak
+    dapat diperbaiki sama sekali: menghapusnya ditolak karena masih membawahi,
+    dan tak ada jalan lain. Satu-satunya jalan keluar adalah membongkar seluruh
+    cabangnya lalu menyusunnya ulang — kerja yang besarnya tak sebanding dengan
+    satu huruf yang keliru.
+
+    Yang TIDAK boleh diubah adalah eselon unit yang masih membawahi: anak-
+    anaknya divalidasi terhadap eselon induknya saat mereka dibuat, dan
+    mengubahnya belakangan membuat seluruh cabang itu melanggar aturan tanpa
+    satu pun di antaranya ikut diperiksa. Pindahkan dulu yang di bawahnya.
+    """
+    lama, baru = unit_lama or {}, unit_baru or {}
+    # Diperiksa PALING DULU meski bukan yang paling umum: mengubah eselon unit
+    # beranak selalu ikut melanggar aturan tingkat, dan pesan tingkat itu
+    # menyebut akibatnya, bukan sebabnya — "Eselon III harus berinduk pada
+    # Eselon II" tak memberi tahu siapa pun bahwa yang salah adalah mengubah
+    # eselon unit yang masih membawahi.
+    if _int(lama.get("eselon")) != _int(baru.get("eselon")) \
+            and punya_anak(lama.get("id"), semua_unit):
+        return False, ("Eselon unit ini tak dapat diubah selama ia masih "
+                       "membawahi unit lain — pindahkan dulu yang di bawahnya")
+    ok, pesan = validasi_unit(baru, induk_baru)
+    if not ok:
+        return False, pesan
+    return validasi_pindah(lama.get("id"), (induk_baru or {}).get("id"),
+                           semua_unit)
+
+
+def filter_jalur(field_map, sampai_level) -> dict:
+    """`{eselon1: …, …, eselonN: …}` — jalur nama sampai tingkat itu.
+
+    Dipakai untuk MENEMUKAN baris pegawai/aset milik satu unit, yang menyimpan
+    unitnya sebagai nama, bukan sebagai id. Nama saja tak cukup: dua Bagian
+    Tata Usaha di bawah dua Biro berbeda adalah dua unit berlainan yang
+    kebetulan bernama sama, dan mencocokkan `eselon3` saja akan menyeret
+    keduanya. Yang mencukupi adalah nama BESERTA leluhurnya.
+
+    Tingkat yang kosong dilewati, bukan dicocokkan sebagai string kosong:
+    baris pegawai lama kerap tak mengisi seluruh tingkat, dan menuntut ""
+    membuatnya tak pernah cocok.
+    """
+    n = _int(sampai_level) or 0
+    keluar = {}
+    for lv in range(LEVEL_MIN, min(n, LEVEL_MAKS) + 1):
+        v = str((field_map or {}).get(f"eselon{lv}") or "").strip()
+        if v:
+            keluar[f"eselon{lv}"] = v
+    return keluar
+
+
+def perubahan_jalur(fe_lama, fe_baru, batas_level=LEVEL_MAKS):
+    """`(set_field, hapus_field)` supaya jalur lama menjadi jalur baru.
+
+    Kolom yang tingkatnya tak lagi terpakai DIHAPUS, tidak dibiarkan berisi
+    nama lama: unit yang naik dari Eselon III ke Eselon II meninggalkan
+    `eselon3` yang menyebut unit yang sudah tak ada di sana, dan kolom seperti
+    itu terbaca sebagai unit ketiga yang tak pernah ada.
+    """
+    setel, hapus = {}, []
+    for lv in range(LEVEL_MIN, min(_int(batas_level) or LEVEL_MAKS,
+                                   LEVEL_MAKS) + 1):
+        k = f"eselon{lv}"
+        lama = str((fe_lama or {}).get(k) or "").strip()
+        baru = str((fe_baru or {}).get(k) or "").strip()
+        if lama == baru:
+            continue
+        if baru:
+            setel[k] = baru
+        elif lama:
+            hapus.append(k)
+    return setel, hapus

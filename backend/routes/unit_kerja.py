@@ -14,8 +14,10 @@ from pydantic import BaseModel
 
 from auth_utils import require_admin, require_user, require_admin_satker
 from db import db
-from shared_utils import kode_satker_user, log_audit, scope_query_field_satker
-from unit_kerja_utils import unit_dari_pegawai, validate_unit
+from shared_utils import (kode_satker_user, log_audit, scope_query_aset,
+                          scope_query_field_satker)
+import organisasi_utils as org
+from unit_kerja_utils import unit_dari_pegawai
 
 unit_kerja_router = APIRouter()
 
@@ -26,6 +28,18 @@ class UnitIn(BaseModel):
     nama_unit: str
     eselon: str
     parent_id: Optional[str] = ""
+
+
+class UnitUbah(BaseModel):
+    """Penyuntingan satu unit. Ketiganya opsional — yang tak dikirim tetap.
+
+    `parent_id` dibedakan antara "tak dikirim" (None → biarkan) dan
+    "dikosongkan" (string kosong → jadikan puncak). Tanpa pembedaan itu,
+    mengganti nama saja akan diam-diam melepaskan unitnya dari induknya.
+    """
+    nama_unit: Optional[str] = None
+    eselon: Optional[str] = None
+    parent_id: Optional[str] = None
 
 
 @unit_kerja_router.get("/unit-kerja")
@@ -49,15 +63,9 @@ async def buat_unit_kerja(payload: UnitIn,
         induk = await db.unit_kerja.find_one({"id": doc["parent_id"]}, _PROJ)
         if not induk:
             raise HTTPException(status_code=400, detail="Induk tidak ditemukan")
-        if doc["eselon"].isdigit() and \
-                str(induk.get("eselon")) != str(int(doc["eselon"]) - 1):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Induk unit Eselon {doc['eselon']} harus Eselon "
-                       f"{int(doc['eselon']) - 1}")
-    errors = validate_unit(doc, punya_induk=bool(induk))
-    if errors:
-        raise HTTPException(status_code=400, detail="; ".join(errors))
+    ok, pesan = org.validasi_unit(doc, induk)
+    if not ok:
+        raise HTTPException(status_code=400, detail=pesan)
     kode = kode_satker_user(user)
     dup = await db.unit_kerja.find_one(
         {"nama_unit": doc["nama_unit"], "eselon": doc["eselon"],
@@ -74,6 +82,142 @@ async def buat_unit_kerja(payload: UnitIn,
                     username=user.get("username", "system"),
                     detail=f"Tambah unit Eselon {doc['eselon']}: {doc['nama_unit']}")
     return {"ok": True, "id": doc["id"]}
+
+
+async def _rambatkan_nama(user, fe_lama, fe_baru, level_lama, level_baru):
+    """Ikutkan pegawai dan aset saat nama/jalur unitnya berubah.
+
+    `pegawai` dan `assets` menyimpan unitnya sebagai NAMA, bukan sebagai id.
+    Mengganti nama di master saja membuat keduanya berselisih diam-diam: master
+    menyebut "Biro Umum dan Keuangan" sementara seluruh pegawainya masih
+    tertulis "Biro Umum", dan pilihan bertingkat pada form pegawai — yang
+    mencocokkan lewat nama — mendadak tak menemukan satu pun anak. Penggantian
+    nama yang tak ikut merambat bukan penggantian nama, melainkan penambahan
+    unit kembar.
+
+    Barisnya dicari lewat jalur lama LENGKAP (leluhur beserta namanya sendiri),
+    bukan lewat namanya saja — dua Bagian Tata Usaha di bawah dua Biro berbeda
+    tak boleh ikut terbawa.
+
+    `assets` hanya punya kolom eselon1 dan eselon2. Unit Eselon III ke bawah
+    karenanya tak dapat dikenali di sana, dan asetnya sengaja TIDAK disentuh:
+    menebaknya dari eselon2 akan mengubah aset milik unit saudaranya.
+    """
+    saring = org.filter_jalur(fe_lama, level_lama)
+    if not saring:
+        return {"pegawai": 0, "aset": 0}
+    setel, hapus = org.perubahan_jalur(fe_lama, fe_baru,
+                                       max(level_lama, level_baru))
+    if not setel and not hapus:
+        return {"pegawai": 0, "aset": 0}
+    ubah = {}
+    if setel:
+        ubah["$set"] = dict(setel)
+    if hapus:
+        ubah["$unset"] = {k: "" for k in hapus}
+
+    hasil = await db.pegawai.update_many(
+        scope_query_field_satker(user, dict(saring)), ubah)
+    n_aset = 0
+    if max(level_lama, level_baru) <= 2:
+        saring_aset = {k: v for k, v in saring.items() if k in ("eselon1",
+                                                                "eselon2")}
+        setel_aset = {k: v for k, v in setel.items() if k in ("eselon1",
+                                                              "eselon2")}
+        hapus_aset = [k for k in hapus if k in ("eselon1", "eselon2")]
+        if saring_aset and (setel_aset or hapus_aset):
+            ubah_aset = {}
+            if setel_aset:
+                ubah_aset["$set"] = setel_aset
+            if hapus_aset:
+                ubah_aset["$unset"] = {k: "" for k in hapus_aset}
+            # `assets` TIDAK membawa kode_satker; ia di-scope lewat kegiatan
+            # induknya. Memakai penyaring berbasis field akan mencocokkan
+            # dokumen yang field-nya TIDAK ADA — yaitu seluruh aset satker
+            # mana pun — dan penulisan ini akan merambat ke luar satker.
+            r = await db.assets.update_many(
+                await scope_query_aset(user, saring_aset), ubah_aset)
+            n_aset = getattr(r, "modified_count", 0) or 0
+    return {"pegawai": getattr(hasil, "modified_count", 0) or 0,
+            "aset": n_aset}
+
+
+@unit_kerja_router.put("/unit-kerja/{unit_id}")
+async def ubah_unit_kerja(unit_id: str, payload: UnitUbah,
+                          user: dict = Depends(require_admin_satker)):
+    """Perbaiki satu unit: ganti nama, pindahkan induk, atau ubah eselonnya.
+
+    Sebelum ada rute ini, unit yang salah ketik dan sudah punya anak tak dapat
+    diperbaiki sama sekali — menghapusnya ditolak karena masih membawahi, dan
+    tak ada jalan lain selain membongkar seluruh cabangnya lalu menyusunnya
+    ulang. Organisasi yang berkembang justru sering berganti nama dan berpindah
+    induk; struktur yang hanya bisa ditambah dan dihapus memaksa penggunanya
+    membuat unit kembar.
+    """
+    from shared_utils import pastikan_akses_dok_satker
+    u = await db.unit_kerja.find_one({"id": unit_id}, _PROJ)
+    if not u:
+        raise HTTPException(status_code=404, detail="Unit tidak ditemukan")
+    await pastikan_akses_dok_satker(user, u)
+
+    baru = dict(u)
+    if payload.nama_unit is not None:
+        baru["nama_unit"] = str(payload.nama_unit or "").strip()
+    if payload.eselon is not None:
+        baru["eselon"] = str(payload.eselon or "").strip()
+    if payload.parent_id is not None:
+        baru["parent_id"] = str(payload.parent_id or "").strip() or None
+
+    induk = None
+    if baru.get("parent_id"):
+        induk = await db.unit_kerja.find_one({"id": baru["parent_id"]}, _PROJ)
+        if not induk:
+            raise HTTPException(status_code=400, detail="Induk tidak ditemukan")
+        await pastikan_akses_dok_satker(user, induk)
+
+    semua = await db.unit_kerja.find(
+        scope_query_field_satker(user),
+        {"_id": 0, "id": 1, "nama_unit": 1, "eselon": 1,
+         "parent_id": 1}).to_list(5000)
+    ok, pesan = org.validasi_perubahan(u, baru, induk, semua)
+    if not ok:
+        raise HTTPException(status_code=400, detail=pesan)
+
+    kembar = await db.unit_kerja.find_one(
+        {"id": {"$ne": unit_id}, "nama_unit": baru["nama_unit"],
+         "eselon": baru["eselon"], "parent_id": baru.get("parent_id"),
+         "kode_satker": {"$in": [kode_satker_user(user), "", None]}}, _PROJ)
+    if kembar:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unit {baru['nama_unit']} sudah terdaftar di induk itu")
+
+    # Jalur nama SEBELUM dan SESUDAH, dihitung dari pohon yang sama supaya
+    # keduanya sebanding. Pohon "sesudah" adalah salinan dengan satu unit
+    # diganti — bukan hasil pembacaan ulang setelah menulis, yang akan
+    # kehilangan jalur lamanya justru saat ia masih dibutuhkan.
+    peta_unit = {x["id"]: x for x in semua}
+    peta_parent = {x["id"]: x.get("parent_id") for x in semua}
+    fe_lama = org.field_eselon(unit_id, peta_unit, peta_parent)
+    peta_unit_baru = dict(peta_unit, **{unit_id: baru})
+    peta_parent_baru = dict(peta_parent, **{unit_id: baru.get("parent_id")})
+    fe_baru = org.field_eselon(unit_id, peta_unit_baru, peta_parent_baru)
+    lv_lama = int(str(u.get("eselon") or "1"))
+    lv_baru = int(str(baru.get("eselon") or "1"))
+
+    await db.unit_kerja.update_one({"id": unit_id}, {"$set": {
+        "nama_unit": baru["nama_unit"], "eselon": baru["eselon"],
+        "parent_id": baru.get("parent_id"),
+        "updated_at": datetime.now(timezone.utc).isoformat()}})
+    rambat = await _rambatkan_nama(user, fe_lama, fe_baru, lv_lama, lv_baru)
+
+    await log_audit("ubah_unit_kerja", "", unit_id,
+                    username=user.get("username", "system"),
+                    detail=(f"Ubah unit Eselon {lv_lama}→{lv_baru}: "
+                            f"{u.get('nama_unit')} → {baru['nama_unit']}; "
+                            f"pegawai {rambat['pegawai']}, aset {rambat['aset']}"))
+    return {"ok": True, "id": unit_id, "jalur": org.jalur_nama(
+        unit_id, peta_unit_baru, peta_parent_baru), "ikut_diperbarui": rambat}
 
 
 @unit_kerja_router.delete("/unit-kerja/{unit_id}")

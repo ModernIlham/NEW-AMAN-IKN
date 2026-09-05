@@ -18,6 +18,85 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#997] Unit organisasi dapat diperbaiki, di bawah satu aturan — 2026-09-05
+
+Lanjutan `[#996]`. Sebelum menumbuhkan eselon ke tingkat III–V, dua hal harus
+diluruskan lebih dulu.
+
+### Koleksinya sudah ada — yang belum ada adalah satu aturan
+
+`[#996]` menyebut koleksi `unit_organisasi` akan dibuat. **Itu keliru.** Koleksi
+`unit_kerja` sudah menyimpan pohon Eselon I–V beserta `parent_id` sejak lama,
+lengkap dengan rute daftar/tambah/hapus dan pembangunan otomatis dari data
+pegawai. Membuat koleksi kedua hanya akan memecah kebenarannya menjadi dua.
+
+Yang benar-benar hilang adalah satu tempat yang memutuskan apa yang sah di atas
+pohon itu. Aturannya tersebar di dua salinan yang **sudah berbeda isi**:
+
+| | `unit_kerja_utils.validate_unit` | `if` di dalam rutenya |
+|---|---|---|
+| Eselon I berinduk | diterima | ditolak, *"harus Eselon 0"* |
+| Eselon III di bawah Eselon I | diterima | ditolak |
+| Eselon bukan angka | ditolak | pemeriksaan induk dilewati |
+
+*"Harus Eselon 0"* menyebut tingkat yang tak pernah ada. `organisasi_utils`
+kini menjadi satu-satunya pemegang aturan itu; `validate_unit` dihapus, dan
+bentuk dokumennya disamakan persis dengan koleksinya (`nama_unit`, `eselon`,
+`parent_id`) — lapisan penerjemah adalah tempat ketiga yang harus ikut benar,
+dan tempat ketiga itu tak pernah ikut diperbarui.
+
+### Unit yang salah ketik kini dapat diperbaiki
+
+Sebelumnya unit hanya dapat **ditambah** dan **dihapus**, dan penghapusan
+ditolak selama ia masih membawahi unit lain. Satu huruf yang keliru pada unit
+Eselon II yang sudah punya cabang karenanya tak dapat diperbaiki sama sekali —
+satu-satunya jalan adalah membongkar seluruh cabangnya lalu menyusunnya ulang.
+Organisasi yang berkembang justru sering berganti nama dan berpindah induk.
+
+`PUT /api/unit-kerja/{id}` menambahkan penggantian nama dan pemindahan induk,
+dengan tombol ubah di tempat pada daftar unit (halaman Pegawai → Kelola Unit).
+
+### Penggantian nama IKUT merambat
+
+`pegawai` dan `assets` menyimpan unitnya sebagai **nama**, bukan id. Mengganti
+nama di master saja membuat keduanya berselisih diam-diam: master menyebut
+"Biro Umum dan Keuangan" sementara seluruh pegawainya masih tertulis "Biro
+Umum", dan pilihan bertingkat pada form pegawai — yang mencocokkan lewat nama —
+mendadak tak menemukan satu pun anak. Penggantian nama yang tak merambat bukan
+penggantian nama, melainkan penambahan unit kembar.
+
+Barisnya dicari lewat **jalur lengkap** (leluhur beserta namanya sendiri), bukan
+namanya saja: dua "Bagian Tata Usaha" di bawah dua Biro berbeda adalah dua unit
+berlainan. Jumlah baris yang ikut berubah disebutkan pada notifikasinya.
+
+Dua batasnya dinyatakan terang-terangan, bukan ditebak:
+
+- **`assets` hanya punya kolom `eselon1` dan `eselon2`.** Unit Eselon III ke
+  bawah tak dapat dikenali di sana, jadi asetnya sengaja **tidak** disentuh —
+  menebaknya dari `eselon2` akan mengubah aset milik unit saudaranya.
+- **Eselon sebuah unit tak dapat diubah selama ia masih membawahi.** Anak-
+  anaknya divalidasi terhadap eselon induknya saat dibuat; mengubahnya
+  belakangan membuat seluruh cabang melanggar tanpa satu pun ikut diperiksa.
+
+### Kebocoran lintas satker yang tercegah
+
+`assets` **tidak** membawa `kode_satker`; ia di-scope lewat kegiatan induknya.
+Penyaring berbasis field pada koleksi itu akan mencocokkan dokumen yang
+field-nya tidak ada — yaitu aset satker mana pun — sehingga penggantian nama
+unit di satu satker akan menulis ulang aset satker lain. Perambatannya memakai
+`scope_query_aset`, dan ujinya memasang aset milik satker kedua sebagai jebakan.
+
+### Cakupan
+
+- `backend/organisasi_utils.py` — bentuk dokumen disamakan dengan koleksinya;
+  tambah `keturunan`, `validasi_pindah`, `validasi_perubahan`, `filter_jalur`,
+  `perubahan_jalur`.
+- `backend/unit_kerja_utils.py` — `validate_unit` dihapus; `ESELON_SAH`
+  bersumber dari registry.
+- `backend/routes/unit_kerja.py` — satu validator; rute `PUT` baru.
+- `frontend/src/pages/PegawaiPage.jsx` — tombol ubah + penyuntingan di tempat.
+- Uji: 45 (`test_organisasi_utils`) + 15 (`test_unit_kerja_route`, baru).
+
 ## [#996] Fondasi struktur organisasi Eselon I–V — 2026-09-05
 
 Permintaan pemilik: *"sistem memang hanya support sampai eselon II saja, akan
