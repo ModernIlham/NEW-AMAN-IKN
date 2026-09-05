@@ -413,10 +413,17 @@ def cocokkan_lingkup_teks(eselon_lama, semua_unit):
     master unit mana pun. Fungsi ini mencocokkannya sekali, supaya kegiatan
     lama tak perlu diisi ulang tangan.
 
-    Bila sebuah Eselon I menyebut Eselon II di bawahnya, yang masuk lingkup
-    adalah Eselon II itu — BUKAN Eselon I-nya. Mencatat induknya akan menarik
-    seluruh saudara yang justru sengaja tak disebut, dan lingkup yang melebar
-    diam-diam adalah kebalikan dari yang diminta.
+    Eselon I yang cocok IKUT masuk lingkup, bersama Eselon II yang disebut di
+    bawahnya. Percobaan pertama sengaja hanya mengambil Eselon II-nya, dengan
+    alasan mencatat induknya akan menarik saudara yang tak disebut — tetapi
+    daftar yang diketik itu adalah pernyataan satker tentang STRUKTURNYA
+    SENDIRI, bukan penyaring yang menyisihkan sebagian. Pemiliknya melaporkan
+    persis itu: unitnya sudah sama, tetapi barisnya tak ikut tercentang, dan
+    layar terbaca seperti gagal mencocokkan.
+
+    Bila daftarnya memang tak lengkap, memilih induknya melebarkan lingkup ke
+    Eselon II yang tak disebut. Itu terlihat: keduanya tercentang pada
+    daftarnya, dan pemakainya dapat melepas centang induknya.
 
     Nama yang tak ditemukan dikembalikan pada `tak_cocok`, tidak dibuang:
     salah ketik pada data lama harus terlihat oleh yang memperbaikinya.
@@ -430,9 +437,9 @@ def cocokkan_lingkup_teks(eselon_lama, semua_unit):
             # Eselon I tak dikenal: anaknya pun tak dapat dipastikan induknya.
             tak_cocok += anak
             continue
-        if not anak:
-            ids.append(u1["id"])
-            continue
+        # Induknya lebih dulu, lalu anak-anaknya — urutan baca yang sama
+        # dengan yang diketik.
+        ids.append(u1["id"])
         for nama2 in anak:
             u2 = cari_unit(nama2, 2, semua_unit, parent_id=u1["id"])
             if u2:

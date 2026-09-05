@@ -261,9 +261,9 @@ def test_cocokkan_lingkup_mengembalikan_jalur_lengkapnya(dbx):
     r = _jalan(ruk.cocokkan_lingkup(
         ruk.LingkupTeksIn(eselon1=[{"nama": "Setjen",
                                     "eselon2": ["Biro Umum"]}]), user=USER))
-    assert len(r["lingkup_unit"]) == 1
-    assert r["unit"][0]["jalur"] == "Setjen / Biro Umum"
-    assert r["unit"][0]["eselon"] == "2"
+    # Induknya IKUT, lalu anaknya — urutan baca yang sama dengan yang diketik.
+    assert [u["jalur"] for u in r["unit"]] == ["Setjen", "Setjen / Biro Umum"]
+    assert [u["eselon"] for u in r["unit"]] == ["1", "2"]
     assert r["tak_cocok"] == []
 
 
@@ -272,7 +272,9 @@ def test_cocokkan_lingkup_melaporkan_yang_tak_ketemu(dbx):
     r = _jalan(ruk.cocokkan_lingkup(
         ruk.LingkupTeksIn(eselon1=[{"nama": "Setjen",
                                     "eselon2": ["Biro Hantu"]}]), user=USER))
-    assert r["lingkup_unit"] == [] and r["tak_cocok"] == ["Setjen / Biro Hantu"]
+    # Induknya tetap terpilih; yang tak ketemu hanya anaknya, dan itu disebut.
+    assert [u["jalur"] for u in r["unit"]] == ["Setjen"]
+    assert r["tak_cocok"] == ["Setjen / Biro Hantu"]
 
 
 def test_cocokkan_lingkup_tak_melihat_unit_satker_lain(dbx):
