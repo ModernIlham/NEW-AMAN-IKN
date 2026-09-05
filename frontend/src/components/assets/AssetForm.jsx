@@ -32,7 +32,10 @@ import { lebihAkurat } from "../../lib/gpsAkurasi";
 import { bolehSalinKoordinat } from "../../lib/salinKonteks";
 import { buatSesiAset, fotoNyasar } from "../../lib/sesiAset";
 import { simpanGpsTerakhir, ambilGpsTerakhir } from "../../lib/gpsCache";
-import { susunPohonUnit, unitDalamLingkup, fieldEselon, unitDariField } from "../../lib/pohonUnit";
+import {
+  susunPohonUnit, unitDalamLingkup, fieldEselon, unitDariField,
+  kelompokPilihanUnit,
+} from "../../lib/pohonUnit";
 import { keIndeksFinal } from "../../lib/indeksFotoLuring";
 import { compressImageFile, compressDataUrl, generateThumbnailFromDataUrl, dataUrlBytes } from "../../lib/imageCompression";
 import { reserveDummyNup as reserveDummyNupLib } from "../../lib/dummyNup";
@@ -2542,11 +2545,24 @@ const AssetForm = memo(({
                     onChange={(e) => setFormData((p) => ({ ...p, ...fieldEselon(e.target.value, unitPohon) }))}
                     className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm"
                     data-testid="asset-unit-select">
-                    <option value="">-- Pilih Unit (Eselon I–V) --</option>
-                    {unitPilihan.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {"\u00A0".repeat(u.depth * 3)}{u.nama_unit} (E{u.eselon})
-                      </option>
+                    <option value="">-- Pilih Unit --</option>
+                    {/* Dikelompokkan menurut INDUKNYA. Indentasi spasi tak
+                        terlihat pada pemilih bawaan Android, dan tak
+                        menggambarkan apa pun ketika seluruh unit yang boleh
+                        dipilih sedalam yang sama — persis keadaan lingkup
+                        kegiatan yang mencatat beberapa Direktorat. Judul
+                        kelompok menyebut jalur induknya, meski induk itu
+                        sendiri tak dapat dipilih. */}
+                    {kelompokPilihanUnit(unitPilihan, unitPohon).map((g, gi) => (
+                      g.label ? (
+                        <optgroup key={gi} label={g.label}>
+                          {g.opsi.map((u) => (
+                            <option key={u.id} value={u.id}>{u.nama_unit} (E{u.eselon})</option>
+                          ))}
+                        </optgroup>
+                      ) : g.opsi.map((u) => (
+                        <option key={u.id} value={u.id}>{u.nama_unit} (E{u.eselon})</option>
+                      ))
                     ))}
                   </select>
                   {/* Yang TERCATAT ditampilkan apa adanya, termasuk saat ia tak

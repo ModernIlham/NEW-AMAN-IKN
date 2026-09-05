@@ -225,3 +225,111 @@ export function jalurEselon(data, maks = 5) {
   if (bagian.length <= maks) return bagian.join(" / ");
   return `… / ${bagian.slice(bagian.length - maks).join(" / ")}`;
 }
+
+/**
+ * Kelompokkan pilihan unit menurut INDUKNYA, untuk `<optgroup>`.
+ *
+ * Indentasi dengan spasi tak terlihat pada pemilih bawaan Android — dan lebih
+ * dari itu, ia tak menggambarkan apa pun ketika seluruh unit yang boleh dipilih
+ * berada pada kedalaman yang SAMA. Itulah yang terjadi pada lingkup kegiatan
+ * yang mencatat beberapa Direktorat: induknya tak ikut terpilih, sehingga
+ * daftarnya rata dan tak ada hierarki yang tergambar.
+ *
+ * `<optgroup>` menjawab keduanya: judul kelompoknya menyebut jalur induknya
+ * — meski induk itu sendiri tak dapat dipilih — dan pemilih bawaan merendernya
+ * sebagai kepala bagian yang tak dapat disentuh. Hierarkinya jadi terbaca
+ * tanpa bergantung pada spasi.
+ *
+ * `pohon` adalah pohon UTUH, bukan hanya yang boleh dipilih: jalur induk hanya
+ * dapat disusun dari sana.
+ */
+export function kelompokPilihanUnit(pilihan, pohon) {
+  const byId = new Map((pohon || []).map((u) => [u.id, u]));
+  const keluar = [];
+  let kini = null;
+  for (const u of pilihan || []) {
+    const induk = byId.get(u.parent_id);
+    const label = induk ? induk.jalur : "";
+    if (!kini || kini.label !== label) {
+      kini = { label, opsi: [] };
+      keluar.push(kini);
+    }
+    kini.opsi.push(u);
+  }
+  return keluar;
+}
+
+/**
+ * Opsi filter eselon yang BERTINGKAT dan hanya menampilkan yang berdata.
+ *
+ * `jalur` = daftar jalur eselon yang benar-benar dipakai aset, tiap baris lima
+ * unsur (`["Setjen", "Biro Umum", "", "", ""]`). `pilihan` = filter yang sedang
+ * aktif per tingkat.
+ *
+ * Dua hal yang diperbaikinya:
+ *
+ * 1. **Tingkat tanpa data tak ditawarkan.** Sebelumnya kelima tingkat selalu
+ *    tampil; satker yang mencatat sampai Eselon II mendapat tiga kotak "Semua"
+ *    yang tak pernah punya isi — memakan ruang layar dan mengesankan datanya
+ *    hilang.
+ *
+ * 2. **Tingkat di bawahnya menyempit mengikuti yang di atasnya.** Tanpa itu,
+ *    pemilih Eselon II menawarkan seluruh unit satker termasuk yang jelas bukan
+ *    milik Eselon I terpilih, dan memilih keduanya menghasilkan nol aset tanpa
+ *    petunjuk bahwa kombinasinya memang mustahil.
+ *
+ * Penyempitannya memakai pilihan tingkat DI ATAS saja. Memakai seluruh pilihan
+ * akan membuat tiap pemilih menyempitkan dirinya sendiri: begitu satu nilai
+ * dipilih, nilai lain lenyap dari daftarnya dan penggunanya terkurung tanpa
+ * kotak untuk mengembalikannya.
+ */
+export function opsiEselonBertingkat(jalur, pilihan) {
+  const baris = (jalur || []).filter((b) => Array.isArray(b) && b.length >= 5);
+  const dipilih = (n) => {
+    const v = (pilihan || {})[`eselon${n}`];
+    return Array.isArray(v) ? v.filter(Boolean) : (v ? [v] : []);
+  };
+  const keluar = {};
+  for (let n = 1; n <= 5; n += 1) {
+    const cocok = baris.filter((b) => {
+      for (let a = 1; a < n; a += 1) {
+        const pa = dipilih(a);
+        if (pa.length && !pa.includes(b[a - 1])) return false;
+      }
+      return true;
+    });
+    const nilai = new Set();
+    cocok.forEach((b) => { if (b[n - 1]) nilai.add(b[n - 1]); });
+    keluar[`eselon${n}s`] = [...nilai].sort((x, y) => x.localeCompare(y));
+  }
+  return keluar;
+}
+
+/**
+ * Pilihan filter eselon yang sudah TAK MUNGKIN setelah tingkat di atasnya
+ * berubah — `{eselon2: ["Biro Lama"], …}`, kosong bila semuanya masih sah.
+ *
+ * Filter yang tertinggal di tingkat bawah menyaring diam-diam: daftarnya
+ * menyusut, kotaknya masih menyebut nilai yang sudah tak ada pilihannya, dan
+ * tak ada yang menghubungkan keduanya.
+ */
+export function pilihanEselonUsang(jalur, pilihan) {
+  // Tanpa satu pun jalur, kita tak TAHU apa-apa — dan tak tahu bukan bukti
+  // bahwa pilihannya mustahil. Daftar jalur kosong terjadi pada keadaan yang
+  // paling lumrah: sebelum `filter-options` selesai dimuat, dan ketika
+  // pemuatannya gagal (yang memang sengaja diam karena bersifat pelengkap).
+  // Tanpa penjagaan ini, setiap filter eselon yang sudah dipasang pengguna
+  // terhapus sendiri pada saat itu juga.
+  if (!(jalur || []).length) return {};
+  const opsi = opsiEselonBertingkat(jalur, pilihan);
+  const usang = {};
+  for (let n = 1; n <= 5; n += 1) {
+    const k = `eselon${n}`;
+    const kini = (pilihan || {})[k];
+    const daftar = Array.isArray(kini) ? kini.filter(Boolean) : (kini ? [kini] : []);
+    const sah = new Set(opsi[`${k}s`] || []);
+    const buang = daftar.filter((v) => !sah.has(v));
+    if (buang.length) usang[k] = buang;
+  }
+  return usang;
+}

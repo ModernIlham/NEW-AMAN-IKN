@@ -62,7 +62,7 @@ const DashboardToolbar = memo(function DashboardToolbar({
   exporting, handleExport, handleExportExecutivePDF, handlePreviewExecutive,
   perms, openDialog,
   handlePrintBulkCards, onCetakStiker, assetsCount, selectedCount = 0,
-  filters, filterOptions, handleAdvancedFilterChange,
+  filters, filterOptions, opsiEselon, handleAdvancedFilterChange,
   resetAdvancedFilters, handleCategoryReset,
   refreshData,
   viewMode, setViewMode,
@@ -420,6 +420,7 @@ const DashboardToolbar = memo(function DashboardToolbar({
           onClose={() => setShowAdvancedFilter(false)}
           filters={filters}
           filterOptions={filterOptions}
+          opsiEselon={opsiEselon}
           onFilterChange={handleAdvancedFilterChange}
           onReset={resetAdvancedFilters}
           activeFilterCount={activeFilterCount}

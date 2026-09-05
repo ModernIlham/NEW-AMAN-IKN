@@ -58,7 +58,8 @@ const AdvancedFilter = memo(({
   isOpen,
   onClose,
   filters,           // { condition, status, location, stiker, priceMin, priceMax, nomorSpm, perolehanDari, eselon1, eselon2 }
-  filterOptions,     // { conditions, statuses, locations, stiker_statuses, eselon1s … eselon5s }
+  filterOptions,     // { conditions, statuses, locations, stiker_statuses, … }
+  opsiEselon,        // { eselon1s … eselon5s } — sudah menyempit bertingkat
   onFilterChange,    // (field, value) => void
   onReset,           // () => void
   activeFilterCount,
@@ -78,14 +79,20 @@ const AdvancedFilter = memo(({
               { field: "condition", label: "Kondisi", opsi: filterOptions.conditions, testid: "filter-condition" },
               { field: "status", label: "Status", opsi: filterOptions.statuses, testid: "filter-status" },
               { field: "location", label: "Lokasi", opsi: filterOptions.locations, testid: "filter-location" },
-              { field: "eselon1", label: "Eselon I", opsi: filterOptions.eselon1s, testid: "filter-eselon1" },
-              { field: "eselon2", label: "Eselon II", opsi: filterOptions.eselon2s, testid: "filter-eselon2" },
-              { field: "eselon3", label: "Eselon III", opsi: filterOptions.eselon3s, testid: "filter-eselon3" },
-              { field: "eselon4", label: "Eselon IV", opsi: filterOptions.eselon4s, testid: "filter-eselon4" },
-              { field: "eselon5", label: "Eselon V", opsi: filterOptions.eselon5s, testid: "filter-eselon5" },
+              // Eselon: opsinya sudah menyempit mengikuti tingkat di atasnya,
+              // dan tingkat yang TAK BERDATA disaring keluar di bawah — satker
+              // yang mencatat sampai Eselon II tak perlu tiga kotak "Semua"
+              // yang tak pernah punya isi.
+              { field: "eselon1", label: "Eselon I", opsi: (opsiEselon || {}).eselon1s, testid: "filter-eselon1", sembunyiBilaKosong: true },
+              { field: "eselon2", label: "Eselon II", opsi: (opsiEselon || {}).eselon2s, testid: "filter-eselon2", sembunyiBilaKosong: true },
+              { field: "eselon3", label: "Eselon III", opsi: (opsiEselon || {}).eselon3s, testid: "filter-eselon3", sembunyiBilaKosong: true },
+              { field: "eselon4", label: "Eselon IV", opsi: (opsiEselon || {}).eselon4s, testid: "filter-eselon4", sembunyiBilaKosong: true },
+              { field: "eselon5", label: "Eselon V", opsi: (opsiEselon || {}).eselon5s, testid: "filter-eselon5", sembunyiBilaKosong: true },
               { field: "stiker", label: "Stiker", opsi: filterOptions.stiker_statuses, testid: "filter-stiker" },
               { field: "inventoryStatus", label: "Inventarisasi", opsi: OPSI_INVENTARISASI, testid: "filter-inventory-status" },
-            ].map(f => (
+            ].filter(f => !(f.sembunyiBilaKosong && !(f.opsi || []).length
+                            && !(filters[f.field] || []).length))
+            .map(f => (
               <div key={f.field}>
                 <Label className="text-[10px] text-muted-foreground mb-1 block">{f.label}</Label>
                 <FilterMultiSelect

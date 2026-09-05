@@ -4,6 +4,7 @@
  */
 import { useState, useCallback, useMemo, useReducer, useEffect, useRef } from "react";
 import axios from "axios";
+import { opsiEselonBertingkat, pilihanEselonUsang } from "@/lib/pohonUnit";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -138,7 +139,11 @@ export function useAssetFilters({ activityId }) {
     categories: [],
     locations: [], eselon1s: [], eselon2s: [], eselon3s: [], eselon4s: [],
     eselon5s: [], conditions: [],
-    statuses: [], stiker_statuses: [], inventory_statuses: []
+    statuses: [], stiker_statuses: [], inventory_statuses: [],
+    // Jalur eselon yang BENAR-BENAR dipakai aset — dasar penyempitan
+    // bertingkat di bawah. Lima daftar terpisah tak dapat menjawab "Eselon II
+    // apa saja yang ada di bawah Eselon I ini".
+    eselon_jalur: [],
   });
 
   // Fetch filter options
@@ -155,6 +160,30 @@ export function useAssetFilters({ activityId }) {
       }
     }
   }, [activityId]);
+
+  // Opsi eselon yang sudah menyempit mengikuti tingkat di atasnya, dan
+  // mengosongkan tingkat yang memang tak berdata. Panel filter menyembunyikan
+  // yang kosong, sehingga satker yang mencatat sampai Eselon II tak mendapat
+  // tiga kotak "Semua" yang tak pernah punya isi.
+  const opsiEselon = useMemo(
+    () => opsiEselonBertingkat(filterOptions.eselon_jalur, filters),
+    [filterOptions.eselon_jalur, filters]);
+
+  // Pilihan tingkat bawah yang menjadi MUSTAHIL setelah tingkat di atasnya
+  // berubah dibuang sendiri. Membiarkannya berarti menyaring diam-diam:
+  // daftarnya menyusut, kotaknya masih menyebut nilai yang sudah tak ada
+  // pilihannya, dan tak ada yang menghubungkan keduanya.
+  useEffect(() => {
+    const usang = pilihanEselonUsang(filterOptions.eselon_jalur, filters);
+    Object.keys(usang).forEach((k) => dispatchFilter({
+      type: "SET", field: k,
+      value: (filters[k] || []).filter((v) => !usang[k].includes(v)),
+    }));
+    // `filters` sengaja tak masuk deps: efek ini MENGUBAH filters, dan
+    // menyertakannya membuat ia berjalan lagi atas hasilnya sendiri.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterOptions.eselon_jalur, filters.eselon1, filters.eselon2,
+      filters.eselon3, filters.eselon4]);
 
   // Build advanced filter query params
   const buildFilterParams = useCallback((params) => {
@@ -219,7 +248,9 @@ export function useAssetFilters({ activityId }) {
     debouncedSearch,
     showAdvancedFilter, setShowAdvancedFilter,
     filters, dispatchFilter,
-    filterOptions, fetchFilterOptions,
+    // `filterOptions` mentah tetap dikembalikan (kategori, lokasi, dsb.);
+    // `opsiEselon` sudah menyempit mengikuti tingkat di atasnya.
+    filterOptions, opsiEselon, fetchFilterOptions,
     buildFilterParams,
     activeFilterCount,
     handleAdvancedFilterChange,

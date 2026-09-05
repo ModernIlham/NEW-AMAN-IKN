@@ -274,7 +274,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const {
     searchInput, setSearchInput, filterCategory, setFilterCategory,
     sortBy, setSortBy, debouncedSearch, showAdvancedFilter, setShowAdvancedFilter,
-    filters, filterOptions, fetchFilterOptions, buildFilterParams,
+    filters, filterOptions, opsiEselon, fetchFilterOptions, buildFilterParams,
     activeFilterCount, handleAdvancedFilterChange, toggleFilterValue,
     handleCategoryReset, resetAdvancedFilters,
   } = filterHook;
@@ -1893,7 +1893,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
               sortBy={sortBy} setSortBy={setSortBy} exporting={exporting} handleExport={handleExport} handleExportExecutivePDF={handleExportExecutivePDF}
               handlePreviewExecutive={handlePreviewExecutive} perms={perms} openDialog={openDialog} handlePrintBulkCards={handlePrintBulkCards}
               onCetakStiker={() => setStikerOpen(true)} selectedCount={selectedAssets.size}
-              assetsCount={assets.length} filters={filters} filterOptions={filterOptions} handleAdvancedFilterChange={handleAdvancedFilterChange}
+              assetsCount={assets.length} filters={filters} filterOptions={filterOptions} opsiEselon={opsiEselon} handleAdvancedFilterChange={handleAdvancedFilterChange}
               resetAdvancedFilters={resetAdvancedFilters} handleCategoryReset={handleCategoryReset}
               refreshData={refreshData} viewMode={viewMode} setViewMode={setViewMode}
               inventoryMode={inventoryMode} setInventoryMode={setInventoryMode}
