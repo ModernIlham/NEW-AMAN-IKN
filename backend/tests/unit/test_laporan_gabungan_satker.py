@@ -1041,10 +1041,71 @@ def test_persentase_per_kegiatan_dihitung_atas_KEGIATAN_ITU_SENDIRI(dbr):
         kecil = [k for k in d["analisis_kegiatan"] if k["count"] == 4][0]
         baris = [b for h in kecil["halaman"]
                  for sisi in ("kiri", "kanan") for p in h[sisi]
-                 if p["judul"] == "Per Lokasi" for b in p["baris"]]
+                 if p["judul"].startswith("Per Lokasi") for b in p["baris"]]
         assert len(baris) == 1 and baris[0]["name"] == "Gudang Tunggal"
         assert baris[0]["pct"] == 100.0, (
             f"{baris[0]['pct']}% — dihitung atas satker, bukan kegiatannya")
+    _jalan(jalan())
+
+
+def _judul_keg(k, awalan):
+    return [p["judul"] for h in k["halaman"]
+            for sisi in ("kiri", "kanan") for p in h[sisi]
+            if p["judul"].startswith(awalan)]
+
+
+def test_analisis_per_kegiatan_MENGIKUTI_jenjang_yang_dipilih(dbr):
+    """Versi pertama bagian ini mengelompokkan menurut field `category` dan
+    `location` yang RATA, sementara bagian gabungan sudah berjenjang —
+    pemilihnya tak berpengaruh sama sekali di sini. Lebih buruk lagi, dua
+    bagian pada satu laporan lalu mengelompokkan hal yang sama dengan dua cara
+    berbeda, dan angkanya tak dapat dibandingkan."""
+    async def jalan():
+        aset = _aset("k1", 6, ditemukan=0) + _aset("k2", 6, ditemukan=0)
+        for i, a in enumerate(aset):
+            # Dua golongan, tetapi sub kelompok BERBEDA-BEDA. Fixture yang
+            # hanya punya dua kode akan menghasilkan dua kelompok di SETIAP
+            # jenjang, dan mutasi yang mengabaikan jenjangnya lolos begitu
+            # saja — grafiknya kebetulan sama.
+            a["asset_code"] = (f"{3 + (i % 2)}{i % 2:02d}{i % 3:02d}"
+                               f"{i % 100:02d}{i % 1000:03d}")
+        await _seed(dbr, [_keg(1, 5), _keg(2, 7)], aset)
+        for lv, label in ((1, "Golongan"), (2, "Bidang"), (4, "Sub Kelompok")):
+            d = await rp._build_satker_report_v2("k1", {"kat_level": str(lv)})
+            for k in d["analisis_kegiatan"]:
+                assert _judul_keg(k, "Per Kategori") == [
+                    f"Per Kategori — {label}"], (lv, k["nama"])
+        # Golongan menghasilkan LEBIH SEDIKIT kelompok daripada Sub Kelompok —
+        # bukti jenjangnya benar-benar dipakai, bukan sekadar judulnya berganti.
+        def _n(d):
+            k = d["analisis_kegiatan"][0]
+            return sum(len(p["baris"]) for h in k["halaman"]
+                       for sisi in ("kiri", "kanan") for p in h[sisi]
+                       if p["judul"].startswith("Per Kategori"))
+        gol = await rp._build_satker_report_v2("k1", {"kat_level": "1"})
+        sub = await rp._build_satker_report_v2("k1", {"kat_level": "4"})
+        assert _n(gol) < _n(sub), (_n(gol), _n(sub))
+    _jalan(jalan())
+
+
+def test_lokasi_per_kegiatan_juga_MENURUT_DENAH(dbr):
+    """Bagian gabungan memakai denah; bagian per kegiatan yang masih memakai
+    teks bebas akan memberi dua jawaban berbeda atas satu pertanyaan."""
+    async def jalan():
+        await _seed_denah(dbr)
+        aset = _aset("k1", 6, ditemukan=0) + _aset("k2", 3, ditemukan=0)
+        for i, a in enumerate(aset):
+            a["lokasi_spasial"] = {"node_id": ["r1", "r2", "r3"][i % 3]}
+            a["location"] = f"ketikan bebas {i}"
+        await _seed(dbr, [_keg(1, 5), _keg(2, 7)], aset)
+        d = await rp._build_satker_report_v2("k1", {"lok_level": "GEDUNG"})
+        for k in d["analisis_kegiatan"]:
+            assert _judul_keg(k, "Per Lokasi") == ["Per Lokasi — Gedung"], k["nama"]
+            nama = [b["name"] for h in k["halaman"]
+                    for sisi in ("kiri", "kanan") for p in h[sisi]
+                    if p["judul"].startswith("Per Lokasi") for b in p["baris"]]
+            assert all(n in ("Menara A", "Menara B") for n in nama), nama
+            assert not any(n.startswith("ketikan") for n in nama), nama
     _jalan(jalan())
 
 

@@ -186,7 +186,14 @@ def test_pilihan_tercentang_di_luar_kegiatan_TETAP_TAMPIL_bertanda(dbf):
         assert lok["Gudang A"] is False
         assert d["total_count"] == 0, "filternya memang mengosongkan hasil"
         with open(TPL, encoding="utf-8") as f:
-            assert "tanda-luar" in f.read(), "penandanya tak digambar di panel"
+            t = f.read()
+        # Yang diperiksa adalah penanda pada OPSI-nya, bukan sekadar keberadaan
+        # kelas CSS-nya. Versi pertama uji ini mencari "tanda-luar" saja —
+        # string yang tetap ada di lembar gaya dan di kalimat penjelas meski
+        # penandanya sudah tak lagi digambar pada satu opsi pun.
+        opsi = t[t.index("<option value="):t.index("</option>")]
+        assert 'class="di-luar"' in opsi, "opsi di luar lingkup tak ditandai"
+        assert "· di luar" in opsi, "penandanya tak terbaca tanpa warna"
     _jalan(jalan())
 
 
@@ -390,3 +397,71 @@ def test_panel_filter_selebar_lembar_A4():
     assert ".panel-filter { width: 794px;" in t
     assert re.search(r"\.bilah \{[^}]*width: 794px", t), "bilah tak selebar lembar"
     assert "max-width: 794px" not in t, "masih ada yang melebar mengikuti layar"
+
+
+# ── Kotak SELECT: beberapa pilihan pada filter yang sama ────────────────
+#
+# Permintaan pemilik: *"filter masih opsi pilihan, tidak ada opsi select di
+# dalam satu filter yang sama."*
+
+def _tpl():
+    with open(TPL, encoding="utf-8") as f:
+        return f.read()
+
+
+def test_filter_memakai_SELECT_MULTIPLE_bukan_daftar_centang():
+    """Satu kotak `select multiple` menerima beberapa pilihan pada filter yang
+    sama. Pada satker dengan 47 lokasi ia tetap setinggi delapan baris,
+    sementara 47 kotak centang mendorong seluruh panel menjadi selembar
+    sendiri."""
+    t = _tpl()
+    assert '<select class="pf-select"' in t, "kotak select-nya tak ada"
+    assert "multiple" in t.split('<select class="pf-select"')[1][:200], (
+        "select-nya tak menerima lebih dari satu pilihan")
+    # Daftar centang untuk dimensi filter sudah tak dipakai lagi.
+    assert 'type="checkbox" name="{{ nama }}"' not in t
+
+
+def test_tinggi_select_DIBATASI_agar_panel_tak_memanjang():
+    """Daftar yang memanjang mengikuti isinya akan mendorong panel filter
+    menjadi selembar sendiri — persis keluhan yang membuat kotak centang
+    diganti."""
+    t = _tpl()
+    assert "[opsi|length, 8]|min" in t, "tinggi select-nya tak dibatasi"
+
+
+def test_pintasan_pilih_semua_bekerja_pada_SELECT():
+    """Pintasannya dulu menyentuh `input[type=checkbox]`; setelah kotaknya
+    berganti, kode yang sama menjadi tak berefek sama sekali — tombol yang
+    tampak bisa ditekan tetapi tak melakukan apa pun."""
+    t = _tpl()
+    js = t[t.index("data-pilih],[data-hapus]"):]
+    assert "sel.options" in js, "pintasan masih mencari kotak centang"
+    assert "input[type=checkbox]" not in js
+    # Tanpa memicu `change`, peramban tak memberi tahu siapa pun bahwa
+    # pilihannya berubah.
+    assert "dispatchEvent" in js
+
+
+def test_keterangan_menyebut_CARA_memilih_lebih_dari_satu():
+    """Pada `select multiple`, memilih lebih dari satu menuntut Ctrl/⌘ —
+    tanpa diberi tahu, pengguna akan menyimpulkan filternya hanya menerima
+    satu pilihan, dan itu persis kesimpulan yang salah."""
+    import re
+    t = re.sub(r"\s+", " ", _tpl())
+    assert "lebih dari satu pilihan" in t
+    assert "Ctrl" in t and "⌘" in t
+
+
+def test_select_tetap_mengirim_nama_yang_SAMA_seperti_sebelumnya(dbf):
+    """`select multiple` mengirim beberapa nilai di bawah satu nama — bentuk
+    yang sama dengan kotak centang, jadi sisi server tak perlu berubah. Uji ini
+    menjaga kontraknya: dua nilai pada satu dimensi tetap melebarkan hasil."""
+    async def jalan():
+        await _seed(dbf)
+        dua = await rp._build_satker_report_v2("k1", {"tahun": ["2023", "2024"]})
+        satu = await rp._build_satker_report_v2("k1", {"tahun": ["2023"]})
+        assert dua["total_count"] > satu["total_count"]
+        t = _tpl()
+        assert 'name="{{ nama }}" multiple' in t
+    _jalan(jalan())

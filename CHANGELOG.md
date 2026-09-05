@@ -18,6 +18,73 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#992] Jenjang sampai ke analisis per kegiatan; filter jadi kotak select — 2026-09-05
+
+Dua laporan pemilik atas `[#991]`.
+
+### Cacat: "analisis per kegiatan masih tidak berdampak"
+
+Benar. `[#991]` membuat panel Kategori dan Lokasi berjenjang, tetapi **hanya di
+bagian gabungan**. Bagian *Analisis Data per Kegiatan* masih mengelompokkan
+menurut field `category` dan `location` yang **rata**, jadi pemilih jenjang tak
+berpengaruh sama sekali di sana.
+
+Lebih buruk daripada sekadar tak berpengaruh: dua bagian pada **satu laporan**
+lalu mengelompokkan hal yang sama dengan dua cara berbeda. Angkanya tak dapat
+dibandingkan, dan tak ada satu pun tanda bahwa keduanya memang tak sebanding.
+
+Kini keduanya memakai jenjang yang sama, dengan judul panel yang menyebutnya —
+`"Per Kategori — Bidang"`, `"Per Lokasi — Gedung"`. Persentasenya tetap
+dihitung atas kegiatan itu sendiri.
+
+### Cacat: filter tak punya kotak select
+
+Permintaan: *"filter masih opsi pilihan, tidak ada opsi select di dalam satu
+filter yang sama."* Panelnya memakai daftar kotak centang. Satu kotak
+**`select multiple`** menerima beberapa pilihan pada filter yang sama, dan pada
+satker dengan 47 lokasi ia tetap setinggi **delapan baris** — sementara 47
+kotak centang mendorong seluruh panel menjadi selembar sendiri.
+
+Bentuk kiriman formulirnya **tidak berubah**: `select multiple` mengirim
+beberapa nilai di bawah satu nama, sama seperti kotak centang, jadi sisi server
+tak perlu disentuh sama sekali.
+
+Dua hal yang ikut dibetulkan karena kotaknya berganti:
+
+- **Pintasan "pilih semua" / "kosongkan"** dulu menyentuh
+  `input[type=checkbox]`. Setelah kotaknya berganti, kode yang sama menjadi
+  **tak berefek** — tombol yang tampak bisa ditekan tetapi tak melakukan apa
+  pun. Kini ia menyalakan seluruh `option` dan memicu `change`.
+- **Keterangannya menyebut caranya**: pada `select multiple`, memilih lebih
+  dari satu menuntut **Ctrl/⌘**. Tanpa diberi tahu, pengguna akan menyimpulkan
+  filternya hanya menerima satu pilihan — persis kesimpulan yang salah.
+
+### Uji yang lolos karena alasan yang salah
+
+`test_pilihan_tercentang_di_luar_kegiatan_TETAP_TAMPIL_bertanda` memeriksa
+`"tanda-luar"` ada di template. String itu **tetap ada** di lembar gaya dan di
+kalimat penjelas meski penandanya sudah tak lagi digambar pada satu opsi pun.
+Kini yang diperiksa adalah penanda pada **opsinya**: `class="di-luar"` dan
+teks `· di luar`.
+
+### Uji mutasi — empat dipasang, empat dibunuh
+
+| Mutasi | Dibunuh oleh |
+|---|---|
+| Analisis per kegiatan kembali abai jenjang kategori | `test_analisis_per_kegiatan_MENGIKUTI_jenjang_yang_dipilih` |
+| Lokasi per kegiatan kembali dari teks bebas | `test_lokasi_per_kegiatan_juga_MENURUT_DENAH` |
+| `select` kehilangan `multiple` | `test_filter_memakai_SELECT_MULTIPLE_bukan_daftar_centang` (+1) |
+| Pintasan "pilih semua" kembali mencari kotak centang | `test_pintasan_pilih_semua_bekerja_pada_SELECT` |
+
+### Berkas
+
+- `backend/routes/reports.py` — `_panel_kegiatan()` memakai `kat_level`/`lok_level`
+- `backend/templates/laporan_satker_v2.html` — `select multiple`, pintasan, keterangan
+- `backend/tests/unit/test_laporan_gabungan_satker.py` — 2 uji baru
+- `backend/tests/unit/test_laporan_filter.py` — 5 uji baru, 1 dipertajam
+
+---
+
 ## [#991] Kategori berjenjang kodefikasi, lokasi menurut denah — 2026-09-05
 
 Permintaan pemilik: *"Per Kategori masih belum terbagi hingga ke per golongan,
