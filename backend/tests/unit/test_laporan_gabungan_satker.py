@@ -345,7 +345,14 @@ def test_bagian_laporan_ringkas_dan_terkategori():
             unik.append(j)
     assert unik == ["Ringkasan Eksekutif", "BMN Tercatat per Kegiatan",
                     "Capaian per Kegiatan", "Kategori Hasil di Lapangan",
-                    "Analisis Data", "Personil Terlibat", "Simpulan"], unik
+                    "Analisis Data", "Analisis Data per Kegiatan",
+                    "Personil Terlibat", "Personil per Kegiatan",
+                    "Simpulan"], unik
+    # Yang gabungan selalu MENDAHULUI pecahannya: pembaca melihat satkernya
+    # dulu, baru pembagiannya. Urutan terbalik memaksa ia menyusun sendiri
+    # gambaran utuhnya dari potongan-potongan.
+    assert unik.index("Analisis Data") < unik.index("Analisis Data per Kegiatan")
+    assert unik.index("Personil Terlibat") < unik.index("Personil per Kegiatan")
 
 
 # ── Halaman A4 tetap ────────────────────────────────────────────────────
@@ -976,3 +983,118 @@ def test_kegiatan_KESEMBILAN_dan_seterusnya_digabung_dan_DISEBUT(dbr):
     t = _teks_template()
     assert "kegiatan lainnya" in t and "Capaian per Kegiatan" in t
     _jalan(jalan())
+
+
+# ── Gabungan TETAP ada, pembagiannya DITAMBAHKAN ────────────────────────
+#
+# Permintaan pemilik: *"analisis data dan Personil Terlibat masih gabungan
+# semua, itu bagus akan tetapi bagi juga per kegiatannya sehingga tahu jelas
+# pembagiannya seperti apa."*
+
+def test_analisis_per_kegiatan_TIDAK_menggantikan_yang_gabungan(dbr):
+    """Keduanya menjawab pertanyaan berbeda: gabungan menjawab "satker ini
+    seperti apa", pecahan menjawab "sumbangan tiap kegiatan bentuknya seperti
+    apa". Menggantikan yang satu dengan yang lain menukar pertanyaan."""
+    async def jalan():
+        aset = _aset("k1", 6, ditemukan=4) + _aset("k2", 4, ditemukan=1)
+        for i, a in enumerate(aset):
+            a["location"] = f"Lokasi {i % 3}"
+        await _seed(dbr, [_keg(1, 5), _keg(2, 7)], aset)
+        d = await rp._build_satker_report_v2("k1")
+        assert d["halaman_analisis"], "bagian gabungan hilang"
+        assert d["analisis_kegiatan_ada"] is True
+        assert len(d["analisis_kegiatan"]) == 2
+        # Urutannya MENGIKUTI daftar kegiatan (terbaru dulu). Urutan yang
+        # berbeda antara dua bagian membuat pembacanya membandingkan kegiatan
+        # yang keliru saat membolak-balik halaman.
+        urut_daftar = [k["nama_kegiatan"] for k in d["kegiatan_list"]
+                       if k["count"]]
+        assert [k["nama"] for k in d["analisis_kegiatan"]] == urut_daftar
+    _jalan(jalan())
+
+
+def test_persentase_per_kegiatan_dihitung_atas_KEGIATAN_ITU_SENDIRI(dbr):
+    """Batang 60% pada kegiatan berisi 5 NUP yang diam-diam dihitung atas 500
+    NUP satker akan tergambar nyaris tak terlihat, dan pembacanya menyimpulkan
+    kegiatan itu kosong."""
+    async def jalan():
+        # k1 besar (40), k2 kecil (4) — seluruh aset k2 di satu lokasi.
+        aset = _aset("k1", 40, ditemukan=0) + _aset("k2", 4, ditemukan=0)
+        for i, a in enumerate(aset[:40]):
+            a["location"] = f"Lokasi {i % 8}"
+        for a in aset[40:]:
+            a["location"] = "Gudang Tunggal"
+        await _seed(dbr, [_keg(1, 5), _keg(2, 7)], aset)
+        d = await rp._build_satker_report_v2("k1")
+        kecil = [k for k in d["analisis_kegiatan"] if k["count"] == 4][0]
+        baris = [b for h in kecil["halaman"]
+                 for sisi in ("kiri", "kanan") for p in h[sisi]
+                 if p["judul"] == "Per Lokasi" for b in p["baris"]]
+        assert len(baris) == 1 and baris[0]["name"] == "Gudang Tunggal"
+        assert baris[0]["pct"] == 100.0, (
+            f"{baris[0]['pct']}% — dihitung atas satker, bukan kegiatannya")
+    _jalan(jalan())
+
+
+def test_satu_kegiatan_tak_mengulang_analisisnya(dbr):
+    """Pada satu kegiatan, isinya sama persis dengan bagian gabungan."""
+    async def jalan():
+        await _seed(dbr, [_keg(1, 5)], _aset("k1", 8, ditemukan=3))
+        d = await rp._build_satker_report_v2("k1")
+        assert d["analisis_kegiatan_ada"] is False
+        assert d["personil_kegiatan_ada"] is False
+    _jalan(jalan())
+
+
+def test_kegiatan_TANPA_ASET_tak_diberi_halaman_analisis(dbr):
+    """Empat panel kosong berturut hanya memakan kertas. Ia tetap tercantum di
+    Capaian per Kegiatan dengan angkanya sendiri, yaitu nol."""
+    async def jalan():
+        await _seed(dbr, [_keg(1, 5), _keg(2, 7), _keg(3, 9)],
+                    _aset("k1", 5, ditemukan=2) + _aset("k3", 3, ditemukan=1))
+        d = await rp._build_satker_report_v2("k1")
+        nama = [k["nama"] for k in d["analisis_kegiatan"]]
+        assert "Kegiatan 2" not in nama, nama
+        assert len(nama) == 2
+        # Tetap tercantum di daftar kegiatan, dengan nol.
+        k2 = [k for k in d["kegiatan_list"] if k["nama_kegiatan"] == "Kegiatan 2"]
+        assert len(k2) == 1 and k2[0]["count"] == 0
+    _jalan(jalan())
+
+
+def test_personil_per_kegiatan_MENGULANG_nama_yang_bertugas_ganda(dbr):
+    """Daftar gabungan membuang nama yang berulang, jadi orang yang bertugas
+    pada tiga kegiatan hanya muncul sekali — dan "siapa mengerjakan yang mana"
+    justru tak terjawab olehnya."""
+    async def jalan():
+        k1, k2 = _keg(1, 5), _keg(2, 7)
+        k1["penanggung_jawab"] = "Budi Santoso"
+        k2["penanggung_jawab"] = "Budi Santoso"       # orang yang SAMA
+        k1["tim_inti"] = [{"nama": "Ani", "nip": "1"}]
+        k2["tim_inti"] = [{"nama": "Ani", "nip": "1"}, {"nama": "Cita", "nip": "2"}]
+        await _seed(dbr, [k1, k2], _aset("k1", 3) + _aset("k2", 3))
+        d = await rp._build_satker_report_v2("k1")
+        assert d["personil_kegiatan_ada"] is True
+        per = {k["nama"]: [o["name"] for o in k["orang"]]
+               for k in d["personil_kegiatan"]}
+        assert per["Kegiatan 1"] == ["Budi Santoso", "Ani"], per
+        assert per["Kegiatan 2"] == ["Budi Santoso", "Ani", "Cita"], per
+        # Urutannya mengikuti daftar kegiatan, sama dengan bagian lain.
+        assert [k["nama"] for k in d["personil_kegiatan"]] == [
+            k["nama_kegiatan"] for k in d["kegiatan_list"]]
+        # Daftar GABUNGAN tetap menyebut tiap nama sekali — keduanya hidup
+        # berdampingan, tak saling menggantikan.
+        gabungan = [p["name"] for p in d["personil"] if not p["is_header"]]
+        assert gabungan.count("Budi Santoso") == 1
+        assert gabungan.count("Ani") == 1
+    _jalan(jalan())
+
+
+def test_tiap_lembar_per_kegiatan_menyebut_KEGIATANNYA(dbr):
+    """Tanpa kop kegiatan, halaman analisis kelima terbaca sebagai lanjutan
+    kegiatan keempat."""
+    t = _teks_template()
+    assert ".kop-keg" in t, "tak ada kop kegiatan"
+    assert "kop-keg-nama" in t
+    assert "Analisis &mdash; ' ~ k.nama" in t, "kaki halaman tak menyebut kegiatan"
+    assert "Personil &mdash; ' ~ k.nama" in t

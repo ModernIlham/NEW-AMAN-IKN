@@ -6780,6 +6780,48 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
     _tambah_tim("tim_peneliti", "Tim Peneliti", "Anggota Tim")
     _tambah_tim("tim_pendukung", "Tim Pendukung", "Pendukung")
 
+    # ── PERSONIL PER KEGIATAN ───────────────────────────────────────────
+    #
+    # Daftar gabungan di atas membuang nama yang berulang (`seen_names`), jadi
+    # orang yang bertugas pada tiga kegiatan hanya muncul sekali — dan
+    # pertanyaan "siapa mengerjakan yang mana" justru tak terjawab olehnya.
+    # Bagian ini menjawabnya: tiap kegiatan membawa daftarnya sendiri, dan
+    # nama yang sama boleh muncul di beberapa kegiatan karena memang begitu
+    # keadaannya.
+    def _orang_kegiatan(act):
+        orang, sudah = [], set()
+
+        def tambah(peran, nama, nip="", jabatan=""):
+            nama = (nama or "").strip()
+            if not nama or (peran, nama) in sudah:
+                return
+            sudah.add((peran, nama))
+            orang.append({"role": peran, "name": nama, "nip": nip or "",
+                          "jabatan": jabatan or ""})
+
+        tambah(act.get("kasatker_jabatan") or "Kuasa Pengguna Barang",
+               act.get("kasatker_nama"), act.get("kasatker_nip"))
+        tambah("Penanggung Jawab", act.get("penanggung_jawab"))
+        for field, peran in (("tim_inti", "Tim Inti"),
+                             ("tim_pembantu", "Tim Pembantu"),
+                             ("tim_peneliti", "Tim Peneliti"),
+                             ("tim_pendukung", "Tim Pendukung")):
+            for t in map(_member_dict, act.get(field, []) or []):
+                tambah(peran, t.get("nama"), t.get("nip"), t.get("jabatan"))
+        return orang
+
+    personil_kegiatan = []
+    for act in satker_acts:
+        orang = _orang_kegiatan(act)
+        if not orang:
+            continue
+        personil_kegiatan.append({
+            "nama": act.get("nama_kegiatan", "-"),
+            "nomor": act.get("nomor_surat", "-"),
+            "orang": orang,
+        })
+    personil_kegiatan_ada = len(personil_kegiatan) > 1
+
     # Identitas instansi untuk sampul — sumber yang SAMA dengan kop surat dan
     # sampul laporan eksekutif, supaya ketiganya tak pernah berbeda.
     #
@@ -6822,6 +6864,82 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
     # Panel yang warnanya kosong memakai warna per-baris (`c.color`); dua
     # panel pertama memang mewarnai tiap batangnya sendiri.
     halaman_analisis = ltl.susun(panel_analisis)
+
+    # ── ANALISIS DATA PER KEGIATAN ──────────────────────────────────────
+    #
+    # Permintaan pemilik: *"analisis data dan Personil Terlibat masih gabungan
+    # semua, itu bagus akan tetapi bagi juga per kegiatannya sehingga tahu
+    # jelas pembagiannya seperti apa."*
+    #
+    # Bagian gabungan TETAP ADA dan tetap lebih dulu — ia menjawab "satker ini
+    # seperti apa". Bagian ini menjawab yang berbeda: "sumbangan tiap kegiatan
+    # bentuknya seperti apa". Menggantikan yang satu dengan yang lain akan
+    # menukar pertanyaan, bukan menjawab keduanya.
+    #
+    # Persentasenya relatif terhadap kegiatan itu SENDIRI, bukan terhadap
+    # satker. Batang "60%" pada kegiatan berisi 5 NUP yang diam-diam dihitung
+    # atas 500 NUP satker akan tergambar nyaris tak terlihat, dan pembacanya
+    # menyimpulkan kegiatan itu kosong.
+    #
+    # Eselon I/II sengaja TIDAK diulang di sini: keduanya sifat organisasi,
+    # nyaris sama di tiap kegiatan pada satker yang sama, dan mengulangnya
+    # menggandakan halaman tanpa menambah keterangan. Keduanya tetap utuh di
+    # bagian gabungan.
+    def _panel_kegiatan(aset_keg):
+        n_keg = len(aset_keg)
+        temu_k = [a for a in aset_keg if a.get("inventory_status") == "Ditemukan"]
+        kondisi = [{"name": nm,
+                    "count": sum(1 for a in temu_k if a.get("condition") == nm),
+                    "color": cond_colors[nm]}
+                   for nm in ("Baik", "Rusak Ringan", "Rusak Berat")]
+        for c in kondisi:
+            c["pct"] = pct(c["count"], len(temu_k)) if temu_k else 0
+        st_counter = Counter((a.get("inventory_status") or "Belum Diinventarisasi")
+                             for a in aset_keg)
+        status = [{"name": nm[:18], "count": cnt, "pct": pct(cnt, n_keg),
+                   "color": stat_colors.get(nm.split()[0] if nm.startswith("Belum")
+                                            else nm, "#64748b")}
+                  for nm, cnt in st_counter.most_common()]
+        kat_c = Counter((a.get("category") or "Lainnya") for a in aset_keg)
+        kat_v = {}
+        for a in aset_keg:
+            c = a.get("category") or "Lainnya"
+            kat_v[c] = kat_v.get(c, 0) + sp(a)
+        kategori = [{"name": (cat_map.get(c, c) or c)[:30], "count": cnt,
+                     "pct": pct(cnt, n_keg), "val_fmt": fmt(kat_v.get(c, 0))}
+                    for c, cnt in kat_c.most_common()]
+        lok_c = Counter(a.get("location", "-") or "-" for a in aset_keg)
+        lokasi = [{"name": l[:30], "count": cnt, "pct": pct(cnt, n_keg)}
+                  for l, cnt in lok_c.most_common()]
+        return [
+            ltl.panel_batang("Kondisi Barang (Ditemukan)", kondisi, "",
+                             kolom_nilai="count"),
+            ltl.panel_batang("Status Inventarisasi", status, "",
+                             kolom_nilai="count"),
+            ltl.panel_batang("Per Kategori", kategori, "#1e40af",
+                             kolom_nilai="val_fmt"),
+            ltl.panel_batang("Per Lokasi", lokasi, "#059669",
+                             kolom_nilai="count"),
+        ]
+
+    analisis_kegiatan = []
+    for act in satker_acts:
+        aid = act.get("id", "")
+        aset_keg = [a for a in all_assets if a.get("activity_id") == aid]
+        # Kegiatan tanpa aset tak diberi halaman: empat panel kosong berturut
+        # hanya memakan kertas. Ia tetap tercantum di Capaian per Kegiatan
+        # dengan angkanya sendiri, yaitu nol.
+        if not aset_keg:
+            continue
+        analisis_kegiatan.append({
+            "nama": act.get("nama_kegiatan", "-"),
+            "nomor": act.get("nomor_surat", "-"),
+            "count": len(aset_keg),
+            "value_fmt": fmt(sum(sp(a) for a in aset_keg)),
+            "halaman": ltl.susun(_panel_kegiatan(aset_keg)),
+        })
+    # Pada satu kegiatan, isinya sama persis dengan bagian gabungan.
+    analisis_kegiatan_ada = len(analisis_kegiatan) > 1
 
     # ── SIMPULAN PER KEGIATAN ───────────────────────────────────────────
     #
@@ -6915,6 +7033,10 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
         "linimasa_janggal": linimasa_janggal,
         "linimasa_keg": linimasa_keg, "linimasa_keg_ada": linimasa_keg_ada,
         "legenda_kegiatan": legenda_kegiatan,
+        "analisis_kegiatan": analisis_kegiatan,
+        "analisis_kegiatan_ada": analisis_kegiatan_ada,
+        "personil_kegiatan": personil_kegiatan,
+        "personil_kegiatan_ada": personil_kegiatan_ada,
         "kategori_lapangan": kategori_lapangan, "per_tahun": per_tahun,
         "chart_kondisi": chart_kondisi, "chart_status": chart_status,
         "chart_kategori": chart_kategori, "chart_lokasi": chart_lokasi,
