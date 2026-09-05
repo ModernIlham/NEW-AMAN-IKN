@@ -6,7 +6,9 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
-import { FileDown, ScrollText } from "lucide-react";
+import { ringkasTtdDokumen, kelasNada } from "@/lib/statusTtd";
+import TautanTtdDialog from "@/components/ttd/TautanTtdDialog";
+import { FileDown, PenLine, ScrollText } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -38,11 +40,17 @@ export function tanggalId(iso) {
  * bernomor", bukan disembunyikan: ia sudah terbit, dan nomornya masih bisa
  * dilengkapi dari Registrasi Persuratan.
  */
-export default function RiwayatNotaDinas({ versi = 0 }) {
+export default function RiwayatNotaDinas({ versi = 0, user }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [aksiId, setAksiId] = useState("");
+  // Jalan KEMBALI ke tautan permintaan yang sudah dikirim — pola yang sama
+  // dengan Riwayat BAST, Riwayat LPB, dan panel permohonan. Tanpa ini
+  // tautannya hilang bersama dialog, dan yang tersisa berminggu-minggu
+  // kemudian hanya "tautan mati".
+  const [tautanTtd, setTautanTtd] = useState(null);
 
   const muat = useCallback(async () => {
     setLoading(true);
@@ -61,6 +69,19 @@ export default function RiwayatNotaDinas({ versi = 0 }) {
   // `versi` naik setiap satu nota terbit — daftarnya ikut segar tanpa
   // halaman perlu dibuka ulang.
   useEffect(() => { muat(); }, [muat, versi]);
+
+  const kirimTtd = async (n) => {
+    setAksiId(n.id);
+    try {
+      await axios.post(`${API}/persediaan/nota-dinas/${n.id}/kirim-ttd`, {});
+      toast.success("Nota dinas dikirim ke KPB untuk ditandatangani");
+      muat();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mengirim tanda tangan");
+    } finally {
+      setAksiId("");
+    }
+  };
 
   return (
     <>
@@ -97,36 +118,69 @@ export default function RiwayatNotaDinas({ versi = 0 }) {
             </p>
           )}
           <ul className="divide-y divide-border">
-            {items.map((n) => (
-              <li key={n.id} className="py-2.5 flex items-center gap-2.5"
-                data-testid={`persediaan-riwayat-nota-${n.id}`}>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm text-foreground truncate">
-                    {n.nomor || (
-                      <span className="text-amber-600 dark:text-amber-400">
-                        Belum bernomor
+            {items.map((n) => {
+              const r = ringkasTtdDokumen(n.ttd);
+              const sibuk = aksiId === n.id;
+              return (
+                <li key={n.id} className="py-2.5 flex items-start gap-2.5 flex-wrap"
+                  data-testid={`persediaan-riwayat-nota-${n.id}`}>
+                  <span className="min-w-[160px] flex-1">
+                    <span className="block text-sm text-foreground truncate">
+                      {n.nomor || (
+                        <span className="text-amber-600 dark:text-amber-400">
+                          Belum bernomor
+                        </span>
+                      )}
+                    </span>
+                    <span className="block text-[11px] text-muted-foreground">
+                      {LABEL_JENIS[n.jenis] || n.jenis} · {n.jumlah_barang} barang
+                      {" "}· {tanggalId(n.tanggal)}
+                      {n.seleksi ? " · sebagian dipilih" : ""}
+                    </span>
+                    {r && (
+                      <span className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${kelasNada(r.nada)}`}
+                        data-testid={`persediaan-riwayat-nota-ttd-${n.id}`}>
+                        {r.teks}
                       </span>
                     )}
                   </span>
-                  <span className="block text-[11px] text-muted-foreground">
-                    {LABEL_JENIS[n.jenis] || n.jenis} · {n.jumlah_barang} barang
-                    {" "}· {tanggalId(n.tanggal)}
-                    {n.seleksi ? " · sebagian dipilih" : ""}
+                  <span className="flex gap-1.5 flex-wrap flex-shrink-0">
+                    {n.signature_request_id && n.ttd?.id && (
+                      <Button size="sm" variant="outline"
+                        onClick={() => setTautanTtd({
+                          srId: n.ttd.id,
+                          judul: n.ttd.judul || `Nota Dinas ${n.nomor || ""}`.trim(),
+                        })}
+                        data-testid={`persediaan-riwayat-nota-tautan-${n.id}`}>
+                        <PenLine className="w-3.5 h-3.5 mr-1" />Tautan TTD
+                      </Button>
+                    )}
+                    {!n.signature_request_id && user?.role !== "viewer" && (
+                      <Button size="sm" variant="outline" disabled={sibuk}
+                        onClick={() => kirimTtd(n)}
+                        data-testid={`persediaan-riwayat-nota-kirim-ttd-${n.id}`}>
+                        <PenLine className="w-3.5 h-3.5 mr-1" />Kirim TTD KPB
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline"
+                      onClick={() => downloadFileWithProgress(
+                        `${API}/persediaan/nota-dinas/${n.id}/pdf`,
+                        `Nota_Dinas_${(n.nomor || n.id.slice(0, 8)).replace(/[^\w-]/g, "_")}.pdf`,
+                        { label: "Nota Dinas" }).catch(() => {})}
+                      data-testid={`persediaan-riwayat-nota-unduh-${n.id}`}>
+                      <FileDown className="w-3.5 h-3.5 mr-1" />Unduh
+                    </Button>
                   </span>
-                </span>
-                <Button size="sm" variant="outline" className="flex-shrink-0"
-                  onClick={() => downloadFileWithProgress(
-                    `${API}/persediaan/nota-dinas/${n.id}/pdf`,
-                    `Nota_Dinas_${(n.nomor || n.id.slice(0, 8)).replace(/[^\w-]/g, "_")}.pdf`,
-                    { label: "Nota Dinas" }).catch(() => {})}
-                  data-testid={`persediaan-riwayat-nota-unduh-${n.id}`}>
-                  <FileDown className="w-3.5 h-3.5 mr-1" />Unduh
-                </Button>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         </DialogContent>
       </Dialog>
+      {tautanTtd && (
+        <TautanTtdDialog srId={tautanTtd.srId} judul={tautanTtd.judul}
+          onTutup={() => setTautanTtd(null)} onBerubah={muat} />
+      )}
     </>
   );
 }

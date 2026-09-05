@@ -627,6 +627,17 @@ async def _ringkas_dokumen(doc_type: str, doc_ref: str) -> dict:
             return ringkas_lpb(lpb) if lpb else {}
         except Exception:
             return {}
+    if jenis == "nota_persediaan":
+        try:
+            import persediaan_nota_utils as pnu
+            nota = await db.persediaan_nota.find_one(
+                {"id": ref},
+                {"_id": 0, "nomor": 1, "tanggal": 1, "jenis": 1,
+                 "kpb_nama": 1, "jumlah_barang": 1,
+                 "items.kode_barang": 1, "items.nama_barang": 1})
+            return pnu.ringkas_nota(nota) if nota else {}
+        except Exception:
+            return {}
     if jenis != "bast":
         return {}
     try:

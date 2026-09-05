@@ -927,7 +927,7 @@ export default function PersediaanPage({ user, onBack }) {
             </Button>
             <PermohonanPanel key={permohonanVersi} user={user}
               onSelesai={() => { load(page, search, status); refreshRingkasan(); }} />
-            <RiwayatNotaDinas versi={notaVersi} />
+            <RiwayatNotaDinas versi={notaVersi} user={user} />
             {/* Menu Dokumen: laporan & berita acara dalam satu tombol */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

@@ -453,20 +453,24 @@ async def daftar_nota_dinas(page: int = Query(1, ge=1),
                    .sort("created_at", -1)
                    .skip((page - 1) * page_size).limit(page_size)
                    .to_list(page_size))
+    # Status TTD elektronik ikut — potongan yang SAMA dengan Riwayat LPB dan
+    # Riwayat BAST (lihat `ttd_penautan`), bukan salinan keenam.
+    from ttd_penautan import lampirkan_status_ttd
+    await lampirkan_status_ttd(db, "nota_persediaan", items)
     return {"items": items, "total": total, "page": page,
             "total_pages": max(1, -(-total // page_size))}
 
 
-@persediaan_router.get("/persediaan/nota-dinas/{nid}/pdf")
-async def unduh_nota_dinas(nid: str, _user: dict = Depends(require_user)):
-    """PDF nota dinas TERBIT — dicetak dari daftar beku di register, bukan
-    dari peringatan yang dihitung ulang."""
-    from io import BytesIO
+async def bangun_nota_register_pdf(nid: str, _user: dict) -> tuple:
+    """Ambil nota terbit + susun PDF-nya → `(bytes, nota)`.
 
-    from fastapi.responses import StreamingResponse
+    Dipisah dari route-nya (pola `bangun_lpb_pdf`) karena jalur TTD elektronik
+    membutuhkan berkasnya sebagai BYTE untuk dibekukan ke GridFS — penanda
+    tangan meneken dokumen yang benar-benar ia baca, bukan yang dibangun ulang
+    belakangan. Gerbang kepemilikan satkernya ikut di sini supaya kedua
+    pemanggil tak bisa lupa memasangnya.
+    """
     from shared_utils import pastikan_akses_dok_satker, pengaturan_kop
-
-    import persediaan_nota_utils as pnu
 
     nota = await db.persediaan_nota.find_one({"id": nid}, {"_id": 0})
     if not nota:
@@ -483,9 +487,88 @@ async def unduh_nota_dinas(nid: str, _user: dict = Depends(require_user)):
         settings, kpb, horizon_hari=int(nota.get("horizon_hari") or 30),
         seleksi=bool(nota.get("seleksi")), nomor=str(nota.get("nomor") or ""),
         yth=str(nota.get("yth") or ""))
+    return isi, nota
+
+
+@persediaan_router.get("/persediaan/nota-dinas/{nid}/pdf")
+async def unduh_nota_dinas(nid: str, _user: dict = Depends(require_user)):
+    """PDF nota dinas TERBIT — dicetak dari daftar beku di register, bukan
+    dari peringatan yang dihitung ulang."""
+    from io import BytesIO
+
+    from fastapi.responses import StreamingResponse
+
+    import persediaan_nota_utils as pnu
+
+    isi, nota = await bangun_nota_register_pdf(nid, _user)
     fname = pnu.nama_berkas(nota.get("jenis"), nota.get("nomor"))
     return StreamingResponse(BytesIO(isi), media_type="application/pdf",
                              headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
+class KirimTtdNotaIn(BaseModel):
+    mode: str = "berurutan"
+    signers: list[dict] = Field(default_factory=list, max_length=10)
+
+
+@persediaan_router.post("/persediaan/nota-dinas/{nid}/kirim-ttd")
+async def kirim_ttd_nota_dinas(nid: str, payload: KirimTtdNotaIn,
+                               user: dict = Depends(require_writer_satker)):
+    """Kirim nota dinas untuk diteken elektronik (pola Surat Persetujuan/LPB).
+
+    Penanda tangan bawaannya adalah KPB yang SUDAH DIBEKUKAN pada nota — bukan
+    yang berlaku hari ini. Meresolusi ulang di sini akan mengirim dokumen yang
+    blok tanda tangannya menyebut satu nama kepada orang yang bernama lain.
+
+    PDF-nya dibekukan ke GridFS SEKARANG: penanda tangan meneken dokumen yang
+    benar-benar ia baca.
+    """
+    from routes.ttd import PermintaanIn, SignerIn, buat_permintaan
+
+    import persediaan_nota_utils as pnu
+
+    isi, nota = await bangun_nota_register_pdf(nid, user)
+
+    daftar = list(payload.signers or [])
+    if not daftar and str(nota.get("kpb_nama") or "").strip():
+        from pejabat_utils import jabatan_kapasitas_kpb
+        daftar = [{"nama": str(nota.get("kpb_nama") or ""),
+                   "nip": str(nota.get("kpb_nip") or ""),
+                   "jabatan": jabatan_kapasitas_kpb(
+                       {"jenis_pelaksana": nota.get("kpb_jenis_pelaksana")}),
+                   "email": ""}]
+    if not daftar:
+        raise HTTPException(
+            status_code=400,
+            detail="Nota ini terbit tanpa KPB — isi Referensi Pejabat, atau "
+                   "kirim daftar penanda tangan secara manual")
+
+    hasil = await buat_permintaan(
+        payload=PermintaanIn(
+            judul=f"Nota Dinas {nota.get('nomor') or nid[:8]}",
+            doc_type="nota_persediaan", doc_ref=nid,
+            mode=("paralel" if payload.mode == "paralel" else "berurutan"),
+            signers=[SignerIn(nama=str(s.get("nama") or ""),
+                              nip=str(s.get("nip") or ""),
+                              jabatan=str(s.get("jabatan") or ""),
+                              email=str(s.get("email") or ""))
+                     for s in daftar]),
+        user=user)
+
+    nama_berkas = pnu.nama_berkas(nota.get("jenis"), nota.get("nomor"))
+    from gerbang_media import tulis_media
+    file_id, _meta = await tulis_media(
+        isi, nama=nama_berkas, content_type="application/pdf",
+        metadata={"kind": "nota_persediaan", "nota_id": nid})
+    await db.signature_requests.update_one(
+        {"id": hasil["id"]},
+        {"$set": {"dok_file_id": str(file_id), "dok_nama": nama_berkas,
+                  "dok_halaman": 1}})
+    # Tautan MAJU ditulis `buat_permintaan` (ttd_penautan.catat_pengiriman_ttd).
+    await log_audit("persediaan_nota_kirim_ttd", "", nid,
+                    username=user.get("username", "system"),
+                    detail=f"dikirim ke {len(daftar)} penanda tangan")
+    return {**hasil, "nota_id": nid}
 
 
 def _fmt_rp(val):

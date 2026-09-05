@@ -132,3 +132,57 @@ test("tanggal ditulis gaya Indonesia; yang cacat apa adanya", () => {
   expect(tanggalId("")).toBe("");
   expect(tanggalId("entah")).toBe("entah");
 });
+
+// ── Tanda tangan elektronik ────────────────────────────────────────────
+
+jest.mock("@/components/ttd/TautanTtdDialog", () => function Palsu({ srId }) {
+  return <div data-testid="tautan-ttd-dialog">{srId}</div>;
+});
+
+const NOTA = {
+  id: "n1", nomor: "B-7/PL.01/2026", jenis: "kritis",
+  jumlah_barang: 3, tanggal: "2026-09-05", seleksi: false,
+};
+
+async function bukaRiwayat(items) {
+  axios.get.mockResolvedValue({ data: { total: items.length, items } });
+  render(<RiwayatNotaDinas user={{ role: "operator" }} />);
+  await waitFor(() => expect(axios.get).toHaveBeenCalled());
+  await userEvent.click(screen.getByTestId("persediaan-riwayat-nota"));
+  await screen.findByTestId("persediaan-riwayat-nota-n1");
+}
+
+test("nota yang belum dikirim menawarkan Kirim TTD", async () => {
+  await bukaRiwayat([{ ...NOTA, ttd: null }]);
+  expect(screen.getByTestId("persediaan-riwayat-nota-kirim-ttd-n1")).toBeInTheDocument();
+  expect(screen.queryByTestId("persediaan-riwayat-nota-tautan-n1")).toBeNull();
+  await userEvent.click(screen.getByTestId("persediaan-riwayat-nota-kirim-ttd-n1"));
+  await waitFor(() => expect(axios.post).toHaveBeenCalled());
+  expect(String(axios.post.mock.calls[0][0]))
+    .toContain("/persediaan/nota-dinas/n1/kirim-ttd");
+});
+
+test("nota yang sudah dikirim menampilkan status dan jalan kembali ke tautannya", async () => {
+  // Tanpa jalan kembali, tautannya hilang bersama dialog dan yang tersisa
+  // berminggu-minggu kemudian hanya "tautan mati".
+  await bukaRiwayat([{
+    ...NOTA, signature_request_id: "sr-1",
+    ttd: { id: "sr-1", judul: "Nota Dinas B-7", status: "terkirim",
+           jumlah: 1, selesai_jumlah: 0, membubuhkan_jumlah: 0 },
+  }]);
+  expect(screen.getByTestId("persediaan-riwayat-nota-ttd-n1")).toBeInTheDocument();
+  expect(screen.queryByTestId("persediaan-riwayat-nota-kirim-ttd-n1")).toBeNull();
+  await userEvent.click(screen.getByTestId("persediaan-riwayat-nota-tautan-n1"));
+  expect(await screen.findByTestId("tautan-ttd-dialog")).toHaveTextContent("sr-1");
+});
+
+test("viewer tidak ditawari mengirim tanda tangan", async () => {
+  axios.get.mockResolvedValue({ data: { total: 1, items: [{ ...NOTA, ttd: null }] } });
+  render(<RiwayatNotaDinas user={{ role: "viewer" }} />);
+  await waitFor(() => expect(axios.get).toHaveBeenCalled());
+  await userEvent.click(screen.getByTestId("persediaan-riwayat-nota"));
+  await screen.findByTestId("persediaan-riwayat-nota-n1");
+  expect(screen.queryByTestId("persediaan-riwayat-nota-kirim-ttd-n1")).toBeNull();
+  // Unduh tetap tersedia — membaca dokumen bukan menandatanganinya.
+  expect(screen.getByTestId("persediaan-riwayat-nota-unduh-n1")).toBeInTheDocument();
+});
