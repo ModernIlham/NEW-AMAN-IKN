@@ -361,3 +361,97 @@ def test_perubahan_jalur_tak_menyentuh_tingkat_di_luar_batas():
     setel, hapus = org.perubahan_jalur(
         {"eselon1": "A", "eselon4": "D"}, {"eselon1": "Z", "eselon4": ""}, 2)
     assert setel == {"eselon1": "Z"} and hapus == []
+
+
+# ── 8. Lingkup kegiatan: dari teks bebas ke rujukan pohon ────────────────
+#
+# Kegiatan mencatat lingkupnya sebagai teks bebas dua tingkat, tak pernah
+# terhubung ke master unit mana pun. Yang dijaga di sini adalah pencocokannya
+# — dan batas-batas di mana ia menolak menebak.
+
+def test_lingkup_teks_memakai_ESELON_II_bukan_induknya():
+    # "Setjen, khususnya Biro Umum" berarti Biro Umum. Mencatat induknya akan
+    # menarik Biro Keuangan yang justru sengaja tak disebut.
+    ids, tak = org.cocokkan_lingkup_teks(
+        [{"nama": "Sekretariat Jenderal", "eselon2": ["Biro Umum"]}], _POHON)
+    assert ids == ["e2"] and tak == []
+
+
+def test_lingkup_teks_tanpa_anak_memakai_eselon_satunya():
+    ids, tak = org.cocokkan_lingkup_teks(
+        [{"nama": "Sekretariat Jenderal", "eselon2": []}], _POHON)
+    assert ids == ["e1"] and tak == []
+
+
+def test_lingkup_teks_menerima_bentuk_daftar_string():
+    ids, _ = org.cocokkan_lingkup_teks(["Sekretariat Jenderal"], _POHON)
+    assert ids == ["e1"]
+
+
+def test_nama_yang_tak_ditemukan_DILAPORKAN_bukan_dibuang():
+    ids, tak = org.cocokkan_lingkup_teks(
+        [{"nama": "Sekretariat Jenderal", "eselon2": ["Biro Hantu"]},
+         {"nama": "Kedeputian Entah", "eselon2": ["Direktorat X"]}], _POHON)
+    assert ids == []
+    assert tak == ["Sekretariat Jenderal / Biro Hantu",
+                   "Kedeputian Entah", "Direktorat X"]
+
+
+def test_pencocokan_tak_peduli_besar_kecil_huruf_dan_spasi_tepi():
+    ids, tak = org.cocokkan_lingkup_teks(
+        [{"nama": "  sekretariat JENDERAL  ", "eselon2": ["biro umum"]}],
+        _POHON)
+    assert ids == ["e2"] and tak == []
+
+
+def test_eselon_dua_dicocokkan_DI_BAWAH_induknya_saja():
+    # Biro Keuangan ada, tetapi bukan di bawah Kedeputian.
+    pohon = _POHON + [{"id": "x1", "nama_unit": "Kedeputian X", "eselon": "1",
+                       "parent_id": ""}]
+    ids, tak = org.cocokkan_lingkup_teks(
+        [{"nama": "Kedeputian X", "eselon2": ["Biro Keuangan"]}], pohon)
+    assert ids == [] and tak == ["Kedeputian X / Biro Keuangan"]
+
+
+def test_nama_yang_MENDUA_tak_ditebak():
+    # Dua unit sama-sama sah pada tingkat dan induk yang sama: menebak salah
+    # satunya menghasilkan lingkup keliru tanpa satu pun tanda.
+    kembar = _POHON + [{"id": "e2c", "nama_unit": "Biro Umum", "eselon": "2",
+                        "parent_id": "e1"}]
+    ids, tak = org.cocokkan_lingkup_teks(
+        [{"nama": "Sekretariat Jenderal", "eselon2": ["Biro Umum"]}], kembar)
+    assert ids == [] and tak == ["Sekretariat Jenderal / Biro Umum"]
+
+
+def test_lingkup_teks_membuang_duplikat_dan_menjaga_urutan():
+    ids, _ = org.cocokkan_lingkup_teks(
+        [{"nama": "Sekretariat Jenderal", "eselon2": ["Biro Keuangan",
+                                                      "Biro Umum",
+                                                      "Biro Keuangan"]}],
+        _POHON)
+    assert ids == ["e2b", "e2"]
+
+
+def test_lingkup_kegiatan_mengutamakan_rujukan_pohon():
+    act = {"lingkup_unit": ["e3"],
+           "eselon1": [{"nama": "Sekretariat Jenderal", "eselon2": []}]}
+    assert org.lingkup_kegiatan(act, _POHON) == ["e3"]
+
+
+def test_lingkup_kegiatan_JATUH_ke_teks_bila_belum_dipetakan():
+    # Kegiatan lama tak boleh mendadak melebar ke seluruh satker hanya karena
+    # field barunya masih kosong.
+    act = {"lingkup_unit": [],
+           "eselon1": [{"nama": "Sekretariat Jenderal",
+                        "eselon2": ["Biro Umum"]}]}
+    assert org.lingkup_kegiatan(act, _POHON) == ["e2"]
+
+
+def test_lingkup_kegiatan_membuang_id_yang_tak_ada_di_pohon():
+    act = {"lingkup_unit": ["e2", "hantu"]}
+    assert org.lingkup_kegiatan(act, _POHON) == ["e2"]
+
+
+def test_kegiatan_tanpa_lingkup_apa_pun_berarti_seluruh_satker():
+    assert org.lingkup_kegiatan({}, _POHON) == []
+    assert org.dalam_lingkup("e5", [], _PETA_PARENT) is True

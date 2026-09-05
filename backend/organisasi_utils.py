@@ -384,3 +384,90 @@ def perubahan_jalur(fe_lama, fe_baru, batas_level=LEVEL_MAKS):
         elif lama:
             hapus.append(k)
     return setel, hapus
+
+
+def cari_unit(nama, level, semua_unit, parent_id=None):
+    """Unit dengan nama itu pada tingkat itu; None bila tak ada/mendua.
+
+    Nama dibandingkan tanpa memedulikan besar-kecil huruf dan spasi tepi,
+    sebab yang dicocokkan adalah teks yang pernah diketik tangan. Nama yang
+    MENDUA pada satu tingkat dan satu induk dikembalikan sebagai None, bukan
+    dipilih yang pertama: menebak di antara dua unit yang sama-sama sah
+    menghasilkan lingkup yang salah tanpa satu pun tanda.
+    """
+    kunci = str(nama or "").strip().casefold()
+    if not kunci:
+        return None
+    cocok = [u for u in (semua_unit or [])
+             if str((u or {}).get("nama_unit") or "").strip().casefold() == kunci
+             and _int((u or {}).get("eselon")) == _int(level)
+             and (parent_id is None or (u or {}).get("parent_id") == parent_id)]
+    return cocok[0] if len(cocok) == 1 else None
+
+
+def cocokkan_lingkup_teks(eselon_lama, semua_unit):
+    """`(ids, tak_cocok)` — ubah lingkup yang DIKETIK menjadi rujukan pohon.
+
+    Bentuk lamanya `[{nama, eselon2: [nama, …]}, …]` (kadang `[nama, …]`):
+    teks bebas yang diketik pada form kegiatan, tak pernah dihubungkan dengan
+    master unit mana pun. Fungsi ini mencocokkannya sekali, supaya kegiatan
+    lama tak perlu diisi ulang tangan.
+
+    Bila sebuah Eselon I menyebut Eselon II di bawahnya, yang masuk lingkup
+    adalah Eselon II itu — BUKAN Eselon I-nya. Mencatat induknya akan menarik
+    seluruh saudara yang justru sengaja tak disebut, dan lingkup yang melebar
+    diam-diam adalah kebalikan dari yang diminta.
+
+    Nama yang tak ditemukan dikembalikan pada `tak_cocok`, tidak dibuang:
+    salah ketik pada data lama harus terlihat oleh yang memperbaikinya.
+    """
+    ids, tak_cocok = [], []
+    for baris in (eselon_lama or []):
+        if isinstance(baris, str):
+            baris = {"nama": baris, "eselon2": []}
+        nama1 = str((baris or {}).get("nama") or "").strip()
+        anak = [str(x or "").strip()
+                for x in ((baris or {}).get("eselon2") or []) if str(x or "").strip()]
+        u1 = cari_unit(nama1, 1, semua_unit)
+        if not u1:
+            if nama1:
+                tak_cocok.append(nama1)
+            # Eselon I tak dikenal: anaknya pun tak dapat dipastikan induknya.
+            tak_cocok += anak
+            continue
+        if not anak:
+            ids.append(u1["id"])
+            continue
+        for nama2 in anak:
+            u2 = cari_unit(nama2, 2, semua_unit, parent_id=u1["id"])
+            if u2:
+                ids.append(u2["id"])
+            else:
+                tak_cocok.append(f"{nama1} / {nama2}")
+    # Urutan kedatangan dipertahankan; duplikat dibuang.
+    unik, terlihat = [], set()
+    for i in ids:
+        if i not in terlihat:
+            terlihat.add(i)
+            unik.append(i)
+    return unik, tak_cocok
+
+
+def lingkup_kegiatan(act, semua_unit) -> list:
+    """Lingkup unit sebuah kegiatan — rujukan pohon bila ada, teks bila belum.
+
+    Permintaan pemilik: *"buat sistem tampil sesuai eselon yang dicatat di
+    dalam kegiatan sehingga tetap menyajikan data sesuai dengan tupoksinya."*
+
+    `lingkup_unit` (daftar id) menang bila terisi. Kegiatan lama yang belum
+    dipetakan jatuh ke pencocokan teksnya, sehingga laporannya tetap terbatas
+    sebagaimana selama ini — bukan mendadak melebar ke seluruh satker hanya
+    karena field barunya masih kosong.
+    """
+    a = act or {}
+    dipilih = [str(i).strip() for i in (a.get("lingkup_unit") or []) if str(i).strip()]
+    if dipilih:
+        sah = {str((u or {}).get("id")) for u in (semua_unit or [])}
+        return [i for i in dipilih if i in sah]
+    ids, _ = cocokkan_lingkup_teks(a.get("eselon1") or [], semua_unit)
+    return ids

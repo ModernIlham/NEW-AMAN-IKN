@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import axios from "axios";
+import { susunPohonUnit, ringkasLingkup } from "@/lib/pohonUnit";
 import { getApiError } from "@/lib/utils";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
@@ -146,6 +147,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
     tim_peneliti: [], tim_pendukung: [], kasatker_nama: '', kasatker_nip: '', kasatker_jabatan: '',
     alamat_satker: '', nomor_berita_acara: '', tanggal_berita_acara: '', kesimpulan: '',
     kode_satker: '', nama_satker: '', kode_satker_lengkap: '', eselon1: [],
+    lingkup_unit: [],
   });
   const [saving, setSaving] = useState(false);
   // Distinguishes a failed fetch (show retry) from a genuinely empty list.
@@ -166,6 +168,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
     tim_peneliti: [], tim_pendukung: [], kasatker_nama: '', kasatker_nip: '', kasatker_jabatan: '',
     alamat_satker: '', nomor_berita_acara: '', tanggal_berita_acara: '', kesimpulan: '',
     kode_satker: '', nama_satker: '', kode_satker_lengkap: '', eselon1: [],
+    lingkup_unit: [],
   };
 
   const fetchActivities = async () => {
@@ -194,6 +197,9 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
   // (penanggung jawab & tim tidak lagi diketik bebas; audit W4 #1-3).
   const [pegawaiRef, setPegawaiRef] = useState([]);
   const [unitRef, setUnitRef] = useState([]);
+  // Master unit UTUH, sudah rata berurut pohon: [{...unit, depth, jalur}].
+  const [unitPohon, setUnitPohon] = useState([]);
+  const [cocokSibuk, setCocokSibuk] = useState(false);
   const fetchReferensiTim = async () => {
     try {
       const r = await axios.get(`${API}/pegawai`);
@@ -205,8 +211,40 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
       const r = await axios.get(`${API}/unit-kerja`);
       const arr = Array.isArray(r.data) ? r.data : (r.data?.items || []);
       setUnitRef([...new Set(arr.map((u) => u.nama_unit || u.nama || "").filter(Boolean))].sort());
+      // Pohon UTUH juga disimpan: pemilih lingkup butuh induk dan jalurnya,
+      // bukan hanya nama-namanya yang sudah kehilangan hubungan itu.
+      setUnitPohon(susunPohonUnit(arr));
     } catch { /* silent */ }
   };
+  // Ubah daftar Eselon I/II yang DIKETIK menjadi rujukan master unit. Kegiatan
+  // lama mencatat lingkupnya sebagai teks bebas yang tak pernah terhubung ke
+  // master mana pun; ini memetakannya sekali supaya tak perlu diisi ulang.
+  const cocokkanLingkup = async () => {
+    setCocokSibuk(true);
+    try {
+      const r = await axios.post(`${API}/unit-kerja/cocokkan-lingkup`, {
+        eselon1: form.eselon1 || [],
+      });
+      const ids = r.data?.lingkup_unit || [];
+      const gagal = r.data?.tak_cocok || [];
+      setForm((p) => ({ ...p, lingkup_unit: ids }));
+      if (!ids.length && !gagal.length) toast.info("Belum ada Eselon I/II yang diisi");
+      else if (gagal.length) {
+        // Yang tak cocok DISEBUT, bukan didiamkan: salah ketik pada data lama
+        // justru yang perlu dilihat orang yang memperbaikinya.
+        toast.warning(`${ids.length} unit dicocokkan; ${gagal.length} tak ditemukan di master: ${gagal.slice(0, 3).join(", ")}${gagal.length > 3 ? "…" : ""}`);
+      } else toast.success(`${ids.length} unit dicocokkan dengan master`);
+    } catch (err) {
+      toast.error(getApiError(err, "Gagal mencocokkan lingkup"));
+    } finally { setCocokSibuk(false); }
+  };
+
+  const alihkanLingkup = (id) => setForm((p) => {
+    const kini = p.lingkup_unit || [];
+    return { ...p, lingkup_unit: kini.includes(id)
+      ? kini.filter((x) => x !== id) : [...kini, id] };
+  });
+
   // Isi-otomatis jabatan/NIP/unit saat nama persis cocok dengan master
   const dariPegawai = (nama) =>
     pegawaiRef.find((p) => p.nama === nama) || null;
@@ -412,6 +450,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
       kode_satker: act.kode_satker || '', nama_satker: act.nama_satker || '',
       kode_satker_lengkap: act.kode_satker_lengkap || '',
       eselon1: act.eselon1 || [],
+      lingkup_unit: act.lingkup_unit || [],
     });
     setFormErrors({});
     setShowCreate(true);
@@ -1185,6 +1224,57 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                     </div>
                   );
                 })}
+              </div>
+
+              {/* Lingkup unit (tupoksi kegiatan) — rujukan ke master unit */}
+              <div className="mt-2 pt-2 border-t border-emerald-200 dark:border-emerald-700 space-y-1.5">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <Label className="text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+                    Lingkup Unit (tupoksi)
+                  </Label>
+                  <button type="button" onClick={cocokkanLingkup} disabled={cocokSibuk}
+                    data-testid="cocokkan-lingkup-btn"
+                    className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-200 disabled:opacity-50">
+                    {cocokSibuk ? "Mencocokkan…" : "Cocokkan dari Eselon I di atas"}
+                  </button>
+                </div>
+                <p className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80">
+                  Laporan kegiatan ini dibatasi pada unit yang dipilih beserta seluruh unit di bawahnya.
+                  Kosong = seluruh satker. Daftarnya dari Master Unit (halaman Pegawai → Kelola Unit).
+                </p>
+                {unitPohon.length === 0 ? (
+                  <p className="text-[10px] text-emerald-500 dark:text-emerald-400 italic">
+                    Master unit masih kosong — isi lebih dulu di halaman Pegawai → Kelola Unit.
+                  </p>
+                ) : (
+                  <div className="border border-emerald-200 dark:border-emerald-600 rounded-lg max-h-44 overflow-y-auto divide-y divide-emerald-100 dark:divide-emerald-800">
+                    {unitPohon.map((u) => (
+                      <label key={u.id} style={{ paddingLeft: 8 + u.depth * 14 }}
+                        className="flex items-center gap-2 py-1 pr-2 cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-900/20">
+                        <input type="checkbox" className="min-w-0 min-h-0 w-3.5 h-3.5 accent-emerald-600"
+                          checked={(form.lingkup_unit || []).includes(u.id)}
+                          onChange={() => alihkanLingkup(u.id)}
+                          data-testid={`lingkup-unit-${u.id}`}
+                          aria-label={u.jalur} />
+                        <span className="text-[11px] text-emerald-800 dark:text-emerald-200 truncate">{u.nama_unit}</span>
+                        <span className="text-[9px] text-emerald-500 flex-shrink-0">E{u.eselon}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                {(form.lingkup_unit || []).length > 0 && (() => {
+                  const r = ringkasLingkup(form.lingkup_unit, unitPohon);
+                  return (
+                    <div className="text-[10px] text-emerald-700 dark:text-emerald-300 space-y-0.5">
+                      <p data-testid="lingkup-ringkas">{r.jumlah} unit dipilih: {r.jalur.slice(0, 3).join("; ")}{r.jalur.length > 3 ? `; +${r.jalur.length - 3} lagi` : ""}</p>
+                      {unitPohon.length > 0 && r.tak_dikenal.length > 0 && (
+                        <p className="text-amber-600 dark:text-amber-400" data-testid="lingkup-tak-dikenal">
+                          {r.tak_dikenal.length} unit tak ada lagi di master — hapus pilihannya, sebab unit yang tak dikenal tidak menyaring apa pun.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 

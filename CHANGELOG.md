@@ -18,6 +18,78 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#998] Kegiatan memilih lingkupnya dari pohon unit — 2026-09-05
+
+Permintaan pemilik: *"buat sistem tampil sesuai eselon yang dicatat di dalam
+kegiatan sehingga tetap menyajikan data sesuai dengan tupoksinya dan tidak
+membingungkan akibat semakin banyak data input."*
+
+Lanjutan `[#996]` dan `[#997]`. Inilah tempat batas "hanya sampai Eselon II"
+sebenarnya berada.
+
+### Di mana batas itu ternyata berada
+
+Kegiatan mencatat lingkupnya pada `inventory_activities.eselon1`, berbentuk
+`[{nama, eselon2: [nama, …]}]` — **teks bebas, tepat dua tingkat**, diketik
+tangan pada form kegiatan dan **tak pernah dihubungkan dengan master unit mana
+pun**. Master `unit_kerja` sudah menyimpan Eselon I–V; kegiatan tak pernah
+menoleh ke sana. Akibatnya dua sekaligus:
+
+- Lingkup tak bisa melewati Eselon II, karena bentuknya memang cuma dua lapis.
+- Salah ketik melahirkan unit yang tak pernah ada, dan tak ada yang menegur.
+
+### `lingkup_unit` — rujukan, bukan ketikan
+
+Kegiatan kini membawa `lingkup_unit`: daftar **id** unit pada master, tingkat
+berapa pun. Satu unit sudah mencakup seluruh keturunannya (`dalam_lingkup`),
+jadi lingkup sedalam apa pun cukup ditulis sekali — mencatat "Biro Umum" berarti
+seluruh Bagian dan Subbagian di bawahnya ikut. Kosong berarti seluruh satker.
+
+Pemilihnya menampilkan pohon utuh dengan indentasi dan jalur lengkapnya
+(Kegiatan → form → **Lingkup Unit (tupoksi)**).
+
+### Kegiatan lama tidak ditinggalkan
+
+`POST /api/unit-kerja/cocokkan-lingkup` memetakan daftar Eselon I/II yang sudah
+diketik ke unit pada master, sekali klik. Tiga keputusan di dalamnya:
+
+- **Bila sebuah Eselon I menyebut Eselon II di bawahnya, yang masuk lingkup
+  adalah Eselon II itu — bukan induknya.** Mencatat induknya akan menarik
+  seluruh saudara yang justru sengaja tak disebut; lingkup yang melebar diam-
+  diam adalah kebalikan dari yang diminta.
+- **Nama yang MENDUA tidak ditebak.** Dua unit sama-sama sah pada tingkat dan
+  induk yang sama → dilaporkan tak cocok, bukan dipilih yang pertama.
+- **Yang tak ditemukan disebutkan, bukan dibuang.** Salah ketik pada data lama
+  justru yang perlu dilihat orang yang memperbaikinya.
+
+Kegiatan yang belum dipetakan tetap jatuh ke pencocokan teksnya
+(`lingkup_kegiatan`), sehingga laporannya tetap terbatas sebagaimana selama ini
+— bukan mendadak melebar ke seluruh satker hanya karena field barunya kosong.
+
+### Id mati ditolak, bukan didiamkan
+
+Lingkup adalah **penyaring**: id yang tak dikenal tidak menyaring apa pun,
+sehingga kegiatan yang dimaksudkan terbatas pada satu Biro justru menampilkan
+seluruh satker — melebar ke arah yang paling tak diinginkan, tanpa satu pun
+tanda pada laporannya. Rute kegiatan menolaknya dengan 400; layarnya menandai
+pilihan yang unitnya sudah tak ada di master. Id milik satker lain ditolak
+dengan alasan yang sama: dari sisi satker ini, keduanya sama-sama bukan unitnya.
+
+### Cakupan
+
+- `backend/organisasi_utils.py` — `cari_unit`, `cocokkan_lingkup_teks`,
+  `lingkup_kegiatan`.
+- `backend/routes/activities.py` — `lingkup_unit` pada model + validasinya.
+- `backend/routes/unit_kerja.py` — rute `cocokkan-lingkup` (mengusulkan saja;
+  penyimpanannya tetap satu jalur lewat rute kegiatan).
+- `frontend/src/lib/pohonUnit.js` (baru) — perataan pohon, murni dan teruji.
+- `frontend/src/pages/ActivitySelectionPage.jsx` — pemilih lingkup.
+- Uji: +12 `test_organisasi_utils`, +3 `test_unit_kerja_route`,
+  `test_kegiatan_lingkup` (6, baru), `pohonUnit.test.js` (7, baru).
+
+**Belum:** laporan masih mengelompokkan menurut kolom teks `eselon1`/`eselon2`
+aset. Menghormati `lingkup_unit` sampai Eselon V adalah PR berikutnya.
+
 ## [#997] Unit organisasi dapat diperbaiki, di bawah satu aturan — 2026-09-05
 
 Lanjutan `[#996]`. Sebelum menumbuhkan eselon ke tingkat III–V, dua hal harus
