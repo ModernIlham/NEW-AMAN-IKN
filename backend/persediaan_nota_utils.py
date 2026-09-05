@@ -174,3 +174,41 @@ def pengantar(jenis, horizon_hari=30, seleksi=False) -> str:
                      "tidak disertakan.")
         return teks
     return ""
+
+
+# Sebanyak ini barang disebut namanya di pesan penanda tangan; sisanya
+# diringkas. Angkanya SENGAJA sama dengan `routes.ttd.MAKS_BARANG_RINGKAS` —
+# diimpor dari sana akan membuat modul murni ini menarik seluruh modul TTD.
+MAKS_BARANG_PESAN = 3
+
+
+def ringkas_nota(nota) -> dict:
+    """Nota dinas → ringkasan untuk pesan WA/email penanda tangan.
+
+    `_ringkas_dokumen` mengembalikan {} untuk `doc_type` yang tak dikenalnya,
+    dan itu tak terlihat sebagai galat: tautannya tetap benar, pesannya cuma
+    menyusut jadi "judul + tautan". Penanda tangan lalu harus membuka tautan
+    sekadar untuk tahu dokumen apa itu — dan setelah berbulan-bulan tak ada
+    jejak yang bisa dicari di riwayat percakapannya. Persis keluhan yang sudah
+    diperbaiki untuk BAST, lalu terulang pada LPB.
+    """
+    d = nota or {}
+    items = d.get("items") or []
+    try:
+        jumlah = int(d.get("jumlah_barang") or 0)
+    except (TypeError, ValueError):
+        jumlah = 0
+    penanda = str(d.get("kpb_nama") or "").strip()
+    return {
+        "nomor": str(d.get("nomor") or "").strip(),
+        "perihal": perihal_agenda(d.get("jenis")),
+        "tanggal": str(d.get("tanggal") or "")[:10],
+        "pihak": ([f"{penanda} (Kuasa Pengguna Barang)"] if penanda else []),
+        "barang": [{"kode": str((b or {}).get("kode_barang") or "").strip(),
+                    "nup": "",
+                    "nama": str((b or {}).get("nama_barang") or "").strip()}
+                   for b in items[:MAKS_BARANG_PESAN]],
+        # Panjang `items` bisa terpotong proyeksi pembacaan; jumlahnya tidak
+        # boleh ikut menyusut — angka itu bermakna "berapa barang di nota".
+        "jumlah_barang": jumlah or len(items),
+    }

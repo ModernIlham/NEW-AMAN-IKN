@@ -49,6 +49,8 @@ TAUT_TTD = {
     "persetujuan_persediaan": {"koleksi": "persediaan_permohonan",
                                "label": "Permohonan persediaan",
                                "backlink": False},
+    "nota_persediaan": {"koleksi": "persediaan_nota",
+                        "label": "Nota Dinas persediaan", "backlink": False},
 }
 
 KUNCI_TAUT = list(TAUT_TTD)

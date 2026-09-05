@@ -18,6 +18,49 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1012] Nota Dinas persediaan tersambung ke TTD elektronik — 2026-09-05
+
+Bagian kedua permintaan pemilik: *"saya tidak melihat integrasi nomer surat dan
+permintaan ttd elektroniknya untuk memudahkan."* Nomornya sudah pada `[#1011]`;
+ini tanda tangannya. Register yang lahir di sana adalah `doc_ref` yang selama
+ini tidak ada — tanpanya tak ada dokumen yang bisa ditunjuk sebuah permintaan
+tanda tangan.
+
+`nota_persediaan` didaftarkan di registry satu pintu `TAUT_TTD`. Sekali
+terdaftar, tiga hal menyala sekaligus: gerbang kepemilikan `POST
+/ttd/permintaan`, tautan maju yang ditulis saat permintaan dibuat, dan
+ringkasan status di layar dokumennya. Itulah gunanya registry — mendaftarkan
+`doc_type` baru tidak boleh berarti mengingat tiga tempat.
+
+Penanda tangan bawaannya adalah KPB yang SUDAH DIBEKUKAN pada notanya, bukan
+yang berlaku hari ini. Meresolusi ulang berarti mengirim dokumen yang blok
+tanda tangannya menyebut satu nama kepada orang yang bernama lain. PDF-nya
+dibekukan ke GridFS saat dikirim (pola LPB dan Surat Persetujuan): penanda
+tangan meneken dokumen yang benar-benar ia baca.
+
+`_ringkas_dokumen` mendapat cabang untuk nota dinas. Tanpa itu ia mengembalikan
+dict kosong dan pesan WA/email penanda tangan menyusut jadi "judul + tautan" —
+tak ada galat, tautannya tetap benar, pesannya cuma lebih pendek. Persis
+keluhan yang sudah diperbaiki untuk BAST lalu terulang pada LPB.
+
+Riwayat Nota Dinas kini menampilkan status TTD-nya dan menyediakan jalan
+kembali ke tautan permintaan yang sudah dikirim, memakai potongan yang sama
+dengan Riwayat BAST dan Riwayat LPB.
+
+Satu mutasi selamat dan memaksa uji diperkuat: melepas gerbang satker dari
+jalur kirim-TTD tidak membuat satu test pun merah, sebab permintaannya tetap
+gagal — oleh gerbang milik `buat_permintaan`, yang hidup dari keanggotaan
+`doc_type` di registry. Mencabut nota dari registry kelak akan mematikan
+gerbang itu tanpa penagih, sementara isi dokumen satker lain sudah terlanjur
+disusun di memori. Ujinya kini menagih penolakan terjadi SEBELUM dokumennya
+dibangun.
+
+Catatan untuk yang menyusul: bidang `backlink` pada `TAUT_TTD` bersifat
+dokumentatif, bukan penggerak — penulisan tautan balik saat seluruh tanda
+tangan selesai masih berupa if/elif per `doc_type` di `routes/ttd.py`. Nota
+dinas didaftarkan dengan `backlink: False` karena memang belum punya cascade
+itu, sama seperti kedua permohonan persetujuan.
+
 ## [#1011] Nota Dinas persediaan yang benar-benar terbit: bernomor dan beku — 2026-09-05
 
 Permintaan pemilik: *"saya tidak melihat integrasi nomer surat dan permintaan

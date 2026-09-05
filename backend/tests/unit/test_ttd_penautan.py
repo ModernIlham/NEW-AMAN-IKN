@@ -77,7 +77,8 @@ class TestRegistriSatuPintu:
         """Registry inilah yang menyalakan gerbang kepemilikan sekaligus
         penautan. `doc_type` yang tercecer kehilangan keduanya diam-diam."""
         assert set(tpn.TAUT_TTD) == {"bast", "lpb", "persetujuan_aset",
-                                     "persetujuan_persediaan"}
+                                     "persetujuan_persediaan",
+                                     "nota_persediaan"}
 
     def test_tiap_entri_menyebut_koleksi_dan_label(self):
         for k, v in tpn.TAUT_TTD.items():
