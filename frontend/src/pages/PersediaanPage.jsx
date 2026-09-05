@@ -24,6 +24,7 @@ import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 import PermohonanPanel from "@/components/persediaan/PermohonanPanel";
 import NotaDinasDialog from "@/components/persediaan/NotaDinasDialog";
 import RiwayatNotaDinas from "@/components/persediaan/RiwayatNotaDinas";
+import RiwayatSppb from "@/components/persediaan/RiwayatSppb";
 import PerkiraanNomor from "@/components/persuratan/PerkiraanNomor";
 import { bagikanWa, bagikanEmail, hasilTtd } from "@/lib/pesanTtd";
 import { opsiPenerima, cocokkanPenerima } from "@/lib/penerimaPersediaan";
@@ -86,6 +87,8 @@ export default function PersediaanPage({ user, onBack }) {
   // Naik tiap satu nota dinas terbit — memaksa Riwayat Nota Dinas
   // memuat ulang tanpa halaman perlu dibuka lagi.
   const [notaVersi, setNotaVersi] = useState(0);
+  // Naik tiap satu SPPB terbit dari transaksi keluar massal.
+  const [sppbVersi, setSppbVersi] = useState(0);
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -723,6 +726,11 @@ export default function PersediaanPage({ user, onBack }) {
       // Peringatan penerima ditampilkan di KEDUA cabang: sebagian gagal tak
       // membuat catatan tentang penerimanya jadi kurang penting.
       if (d.peringatan) toast.warning(d.peringatan);
+      if (d.sppb_id) {
+        setSppbVersi((v) => v + 1);
+        toast.success("SPPB terbit"
+          + (d.nomor_sppb ? ` — ${d.nomor_sppb}` : " (belum bernomor)"));
+      }
       if (d.lpb_id) {
         // Laporan Penerimaan Barang langsung terunduh (bisa diunduh ulang
         // kapan pun lewat riwayat LPB / endpoint yang sama).
@@ -950,6 +958,7 @@ export default function PersediaanPage({ user, onBack }) {
             <PermohonanPanel key={permohonanVersi} user={user}
               onSelesai={() => { load(page, search, status); refreshRingkasan(); }} />
             <RiwayatNotaDinas versi={notaVersi} user={user} />
+            <RiwayatSppb versi={sppbVersi} user={user} />
             {/* Menu Dokumen: laporan & berita acara dalam satu tombol */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
