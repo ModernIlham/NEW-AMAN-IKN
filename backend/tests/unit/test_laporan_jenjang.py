@@ -310,3 +310,84 @@ def test_hierarki_denah_yang_BELUM_DITEMPATKAN_tetap_terhitung():
     induk = [b for b in baris if b["depth"] == 0]
     assert sum(len(b["aset"]) for b in induk) == 8
     assert induk[-1]["label"] == ljj.TANPA_DENAH, [b["label"] for b in induk]
+
+
+# ── Unit organisasi berjenjang, dan lingkup kegiatannya ─────────────────
+#
+# Sebelumnya analisis eselon berupa DUA panel rata tanpa satu pun garis
+# penghubung. Yang dijaga di sini: hubungan induk-anak terbaca, aset di luar
+# lingkup dikumpulkan alih-alih disaring keluar, dan rantai "(tanpa …)" yang
+# tak menyatakan apa pun tidak ikut memenuhi kertas.
+
+_ASET_ES = [
+    {"id": "a1", "eselon1": "Setjen", "eselon2": "Biro Umum",
+     "eselon3": "Bagian RT"},
+    {"id": "a2", "eselon1": "Setjen", "eselon2": "Biro Umum"},
+    {"id": "a3", "eselon1": "Setjen", "eselon2": "Biro Keuangan"},
+    {"id": "a4"},
+]
+
+
+def test_eselon_bersarang_induk_sama_dengan_jumlah_anaknya():
+    baris = ljj.baris_hierarki_eselon(_ASET_ES, [1, 2])
+    setjen = next(b for b in baris if b["label"] == "Setjen")
+    anak = [b for b in baris if b["depth"] == 1
+            and b["label"] in ("Biro Umum", "Biro Keuangan")]
+    assert setjen["depth"] == 0 and len(setjen["aset"]) == 3
+    assert sum(len(b["aset"]) for b in anak) == 3
+
+
+def test_aset_tanpa_unit_dikumpulkan_bukan_dibuang():
+    baris = ljj.baris_hierarki_eselon(_ASET_ES, [1])
+    assert sum(len(b["aset"]) for b in baris) == len(_ASET_ES)
+    assert any(b["label"] == ljj.TANPA_ESELON for b in baris)
+
+
+def test_kelompok_tanpa_unit_selalu_di_akhir():
+    baris = [b for b in ljj.baris_hierarki_eselon(_ASET_ES, [1])]
+    assert baris[-1]["label"] == ljj.TANPA_ESELON
+
+
+def test_aset_di_luar_lingkup_DIKUMPULKAN_pada_barisnya_sendiri():
+    # Kegiatan yang mencatat tupoksinya pada satu Biro tetapi memuat aset Biro
+    # lain sedang menunjukkan lingkup yang belum lengkap ATAU aset yang salah
+    # kegiatan. Keduanya perlu dilihat; keduanya lenyap kalau barisnya disaring.
+    baris = ljj.baris_hierarki_eselon(_ASET_ES, [1, 2], di_luar={"a3"})
+    puncak = {b["label"]: len(b["aset"]) for b in baris if b["depth"] == 0}
+    assert puncak == {"Setjen": 2, ljj.DI_LUAR_LINGKUP: 1,
+                      ljj.TANPA_ESELON: 1}
+    assert sum(puncak.values()) == len(_ASET_ES), "jumlah batang ≠ jumlah aset"
+
+
+def test_penanda_di_luar_lingkup_hanya_di_jenjang_teratas():
+    # Kalau ia ikut dinilai di tiap jenjang, aset itu muncul sebagai
+    # "(di luar lingkup)" bersarang di bawah dirinya sendiri.
+    baris = ljj.baris_hierarki_eselon(_ASET_ES, [1, 2], di_luar={"a3"})
+    dalam = [b for b in baris if b["depth"] == 1]
+    assert any(b["label"] == "Biro Keuangan" for b in dalam)
+    assert not any(b["label"] == ljj.DI_LUAR_LINGKUP for b in dalam)
+
+
+def test_rantai_tanpa_unit_yang_ANAK_TUNGGAL_tidak_ikut_dicetak():
+    # Jalur eselon lazim putus di tengah. Pada panel lima tingkat, tiap unit
+    # tanpa anak melahirkan rantai "(tanpa …)" sedalam sisa jenjangnya —
+    # baris yang cacahnya persis sama dengan induknya dan tak menyatakan
+    # satu pun hal baru.
+    baris = ljj.baris_hierarki_eselon(_ASET_ES, [1, 2, 3, 4, 5])
+    keuangan_i = next(i for i, b in enumerate(baris)
+                      if b["label"] == "Biro Keuangan")
+    berikut = baris[keuangan_i + 1] if keuangan_i + 1 < len(baris) else None
+    assert berikut is None or berikut["depth"] <= 1, [b["label"] for b in baris]
+
+
+def test_tanpa_unit_yang_PUNYA_SAUDARA_tetap_dicetak():
+    # Di situ ia menyatakan sesuatu yang nyata: sekian aset di bawah Biro ini
+    # belum ditempatkan pada Bagian mana pun, sementara sisanya sudah.
+    baris = ljj.baris_hierarki_eselon(_ASET_ES, [1, 2, 3])
+    umum_i = next(i for i, b in enumerate(baris) if b["label"] == "Biro Umum")
+    anak = [b["label"] for b in baris[umum_i + 1:] if b["depth"] == 2]
+    assert "Bagian RT" in anak and ljj.TANPA_ESELON in anak, anak
+
+
+def test_jenjang_kosong_menghasilkan_panel_kosong():
+    assert ljj.baris_hierarki_eselon(_ASET_ES, []) == []

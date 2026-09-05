@@ -17,6 +17,7 @@ import laporan_filter as lfil
 import laporan_tataletak as ltl
 import laporan_jenjang as ljj
 import kodefikasi_utils as kod
+import organisasi_utils as org
 import spasial_utils as su
 from pathlib import Path
 
@@ -6261,6 +6262,17 @@ KAT_LEVEL_SAH = (1, 2, 3, 4, 5)
 #: Kelompok ke bawah mudah menjadi ratusan baris pada satker besar.
 KAT_LEVEL_BAWAAN = 2
 
+#: Jenjang unit organisasi yang boleh dipilih pada panel analisis.
+ES_LEVEL_SAH = tuple(b["level"] for b in org.daftar_level())
+#: Eselon II. Eselon I biasanya hanya beberapa baris — terlalu kasar untuk
+#: menunjuk siapa yang bertanggung jawab atas barangnya; Eselon III ke bawah
+#: baru berguna pada satker yang memang sudah mencatat sedalam itu, dan itu
+#: pilihan pembacanya, bukan bawaan.
+ES_LEVEL_BAWAAN = 2
+
+#: Label jenjang eselon untuk pemilih di panel filter.
+_LABEL_ESELON = {b["level"]: b["label"] for b in org.daftar_level()}
+
 
 async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None):
     """Data laporan per satker — menggabungkan SELURUH kegiatan satker itu.
@@ -6434,26 +6446,51 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
     chart_lokasi = _chart_lokasi(all_assets, tc)
     pilihan_lok_level = ljj.pilihan_jenjang(lok_level_sah, _LABEL_DENAH)
 
-    es1_counter = Counter(a.get("eselon1", "") for a in all_assets if a.get("eselon1"))
-    es1_vals = {}
-    for a in all_assets:
-        e = a.get("eselon1", "")
-        if e: es1_vals[e] = es1_vals.get(e, 0) + sp(a)
-    chart_eselon1 = [{"name": e[:30], "count": cnt, "pct": pct(cnt, tc), "val_fmt": fmt(es1_vals.get(e, 0))} for e, cnt in es1_counter.most_common()]
+    # ── UNIT ORGANISASI BERJENJANG, DIBATASI LINGKUP KEGIATAN ───────────
+    #
+    # Permintaan pemilik: *"buat sistem tampil sesuai eselon yang dicatat di
+    # dalam kegiatan sehingga tetap menyajikan data sesuai dengan tupoksinya
+    # dan tidak membingungkan akibat semakin banyak data input."*
+    #
+    # Sebelumnya dua panel RATA — "Per Eselon I" dan "Per Eselon II" — tanpa
+    # satu pun garis penghubung: pembacanya harus mencocokkan sendiri Biro mana
+    # milik Kementerian mana. Kini satu panel berjenjang sampai Eselon V,
+    # jenjangnya dipilih pembacanya seperti pada panel kategori dan lokasi.
+    unit_kerja = await db.unit_kerja.find(
+        {"kode_satker": {"$in": [kode_satker, "", None]}},
+        {"_id": 0, "id": 1, "nama_unit": 1, "eselon": 1,
+         "parent_id": 1}).to_list(5000) if kode_satker else []
+    _peta_unit = {u["id"]: u for u in unit_kerja}
+    _peta_parent = {u["id"]: u.get("parent_id") for u in unit_kerja}
 
-    # Eselon II — permintaan pemilik: analisis data juga perlu memecah sampai
-    # eselon II, bukan berhenti di eselon I. Satu Eselon I biasanya membawahi
-    # beberapa Eselon II, jadi grafik yang berhenti di Eselon I menyembunyikan
-    # justru unit yang bertanggung jawab atas barangnya.
-    es2_counter = Counter(a.get("eselon2", "") for a in all_assets if a.get("eselon2"))
-    es2_vals = {}
-    for a in all_assets:
-        e = a.get("eselon2", "")
-        if e:
-            es2_vals[e] = es2_vals.get(e, 0) + sp(a)
-    chart_eselon2 = [{"name": e[:30], "count": cnt, "pct": pct(cnt, tc),
-                      "val_fmt": fmt(es2_vals.get(e, 0))}
-                     for e, cnt in es2_counter.most_common()]
+    # Aset yang unitnya DI LUAR lingkup kegiatannya sendiri. Tiap aset dinilai
+    # terhadap kegiatan INDUKNYA — laporan ini menggabungkan seluruh kegiatan
+    # satker, dan tiap kegiatan punya tupoksinya masing-masing.
+    _lingkup_per_keg = {
+        a.get("id"): org.lingkup_kegiatan(a, unit_kerja) for a in satker_acts}
+    di_luar_lingkup = set()
+    if unit_kerja:
+        for a in all_assets:
+            lingkup = _lingkup_per_keg.get(a.get("activity_id")) or []
+            if lingkup and not org.aset_dalam_lingkup(
+                    a, lingkup, _peta_unit, _peta_parent):
+                di_luar_lingkup.add(a.get("id"))
+
+    es_levels = ljj.jenjang_terpilih_banyak(
+        (filter_dipilih or {}).get("es_level"), ES_LEVEL_SAH, ES_LEVEL_BAWAAN)
+
+    def _chart_eselon(aset, n_acuan):
+        # Aset di luar lingkup DIKUMPULKAN, bukan disaring keluar: jumlah
+        # batang harus tetap sama dengan jumlah aset, dan selisih yang tak
+        # terlihat tak pernah ditanyakan siapa pun.
+        return [{"name": b["label"][:44], "count": len(b["aset"]),
+                 "pct": pct(len(b["aset"]), n_acuan), "depth": b["depth"],
+                 "val_fmt": fmt(sum(sp(a) for a in b["aset"]))}
+                for b in ljj.baris_hierarki_eselon(aset, es_levels,
+                                                   di_luar_lingkup)]
+
+    chart_eselon = _chart_eselon(all_assets, tc)
+    pilihan_es_level = ljj.pilihan_jenjang(ES_LEVEL_SAH, _LABEL_ESELON)
 
     # Per kegiatan chart
     act_counter = Counter(a.get("activity_id", "") for a in all_assets)
@@ -7011,6 +7048,14 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
     judul_lokasi = (("Per Lokasi — " + " › ".join(
         _LABEL_DENAH.get(lv, lv) for lv in lok_levels))
         if lok_levels else "Per Lokasi (teks bebas)")
+    # Judul menyebut jenjangnya DAN, bila ada, berapa aset yang jatuh di luar
+    # lingkup kegiatannya. Angka itu tak boleh hanya jadi satu batang di antara
+    # batang lain: ia menunjukkan lingkup yang belum lengkap atau aset yang
+    # salah kegiatan, dan keduanya perlu ditanyakan, bukan sekadar dibaca.
+    judul_eselon = "Per Unit Organisasi — " + " › ".join(
+        _LABEL_ESELON.get(lv, str(lv)) for lv in es_levels)
+    if di_luar_lingkup:
+        judul_eselon += f" ({len(di_luar_lingkup)} di luar lingkup)"
 
     panel_analisis = [
         ltl.panel_batang("Kondisi Barang (Ditemukan)", chart_kondisi,
@@ -7021,10 +7066,8 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
                          "#1e40af", kolom_nilai="val_fmt"),
         ltl.panel_batang(judul_lokasi, chart_lokasi,
                          "#059669", kolom_nilai="count"),
-        ltl.panel_batang("Per Eselon I", chart_eselon1,
+        ltl.panel_batang(judul_eselon, chart_eselon,
                          "#7c3aed", kolom_nilai="val_fmt"),
-        ltl.panel_batang("Per Eselon II", chart_eselon2,
-                         "#0891b2", kolom_nilai="val_fmt"),
     ]
     # Panel yang warnanya kosong memakai warna per-baris (`c.color`); dua
     # panel pertama memang mewarnai tiap batangnya sendiri.
@@ -7212,7 +7255,10 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
         "kategori_lapangan": kategori_lapangan, "per_tahun": per_tahun,
         "chart_kondisi": chart_kondisi, "chart_status": chart_status,
         "chart_kategori": chart_kategori, "chart_lokasi": chart_lokasi,
-        "chart_eselon1": chart_eselon1, "chart_eselon2": chart_eselon2,
+        "chart_eselon": chart_eselon,
+        "es_levels": [str(v) for v in es_levels],
+        "pilihan_es_level": pilihan_es_level,
+        "n_di_luar_lingkup": len(di_luar_lingkup),
         "chart_per_kegiatan": chart_per_kegiatan,
         "halaman_analisis": halaman_analisis,
         "assets": asset_rows, "dok_headers": dok_headers, "dok_rows": dok_rows,
@@ -7232,7 +7278,7 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
 #: Nama parameter yang DIKELOLA formulir filter. Sisanya — token autentikasi,
 #: satker aktif, apa pun yang ditambahkan kemudian — harus ikut terbawa.
 _PARAM_FILTER = ("kegiatan", "tahun", "status", "kondisi", "lokasi",
-                 "dari", "sampai", "kat_level", "lok_level")
+                 "dari", "sampai", "kat_level", "lok_level", "es_level")
 
 
 def _param_bukan_filter(request: Request) -> list:
@@ -7255,7 +7301,8 @@ def _param_bukan_filter(request: Request) -> list:
 
 def _filter_laporan_satker(kegiatan, tahun, status, kondisi, lokasi,
                            dari: str = "", sampai: str = "",
-                           kat_level=None, lok_level=None) -> dict:
+                           kat_level=None, lok_level=None,
+                           es_level=None) -> dict:
     """Rakit filter laporan dari query string.
 
     Tiap dimensi menerima parameter BERULANG (`?tahun=2023&tahun=2024`) —
@@ -7275,7 +7322,8 @@ def _filter_laporan_satker(kegiatan, tahun, status, kondisi, lokasi,
             # Jenjang menerima BEBERAPA nilai, sama seperti dimensi filter
             # lain: memilih Golongan dan Bidang sekaligus menghasilkan dua
             # panel berdampingan.
-            "kat_level": kat_level or [], "lok_level": lok_level or []}
+            "kat_level": kat_level or [], "lok_level": lok_level or [],
+            "es_level": es_level or []}
 
 
 @reports_router.get("/inventory-activities/{activity_id}/laporan-satker-html")
@@ -7288,13 +7336,14 @@ async def laporan_satker_html(activity_id: str, request: Request,
                               dari: str = "", sampai: str = "",
                               kat_level: List[str] = Query(default=[]),
                               lok_level: List[str] = Query(default=[]),
+                              es_level: List[str] = Query(default=[]),
                               _user: dict = Depends(require_user_or_query_token)):
     """Pratinjau HTML laporan gabungan satker — interaktif, dengan filter."""
     await pastikan_akses_kegiatan_id(_user, activity_id)
     from jinja2 import Environment, FileSystemLoader
     data = await _build_satker_report_v2(activity_id, _filter_laporan_satker(
         kegiatan, tahun, status, kondisi, lokasi, dari, sampai, kat_level,
-        lok_level))
+        lok_level, es_level))
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
     data["preview"] = True
@@ -7318,6 +7367,7 @@ async def laporan_satker_pdf(request: Request, activity_id: str,
                              dari: str = "", sampai: str = "",
                              kat_level: List[str] = Query(default=[]),
                              lok_level: List[str] = Query(default=[]),
+                             es_level: List[str] = Query(default=[]),
                              _user: dict = Depends(require_user_or_query_token)):
     """Generate Laporan per Satker as PDF using weasyprint.
 
@@ -7332,7 +7382,7 @@ async def laporan_satker_pdf(request: Request, activity_id: str,
     # dokumen yang isinya berbeda dari yang barusan dibaca di layar.
     data = await _build_satker_report_v2(activity_id, _filter_laporan_satker(
         kegiatan, tahun, status, kondisi, lokasi, dari, sampai, kat_level,
-        lok_level))
+        lok_level, es_level))
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
     data["preview"] = False

@@ -18,6 +18,72 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1001] Laporan: unit organisasi berjenjang dan lingkup kegiatan — 2026-09-05
+
+Penutup rangkaian `[#996]`–`[#1000]`. Di sinilah `dalam_lingkup()` yang dibangun
+di `[#996]` akhirnya dipakai produksi.
+
+### Dua panel rata menjadi satu panel berjenjang
+
+Analisis eselon berupa **dua panel terpisah** — "Per Eselon I" dan "Per Eselon
+II" — tanpa satu pun garis penghubung di antaranya. Pembacanya harus
+mencocokkan sendiri Direktorat mana milik Ditjen mana, persis cacat yang sudah
+diperbaiki pada panel kategori (`[#986]`) dan lokasi.
+
+Kini **satu panel berjenjang sampai Eselon V**, dengan anak menjorok di bawah
+induknya dan tiap induk berjumlah tepat sama dengan anak-anaknya. Jenjangnya
+dipilih pembacanya lewat panel filter, sama seperti kategori dan lokasi, dan
+judul panel menyebut jenjang yang sedang dipakai.
+
+### Lingkup kegiatan: ditandai, bukan disembunyikan
+
+Aset yang unitnya berada **di luar lingkup eselon** yang dicatat kegiatannya
+dikumpulkan pada barisnya sendiri — `(di luar lingkup kegiatan)` — dan
+jumlahnya disebut di judul panel. Ia **tidak** disaring keluar.
+
+Menyaringnya akan membuat jumlah batang tak lagi sama dengan jumlah aset, dan
+selisih itu tak pernah ditanyakan siapa pun karena tak terlihat. Lagi pula
+keberadaannya bermakna: kegiatan yang mencatat tupoksinya pada satu Biro tetapi
+memuat aset Biro lain sedang menunjukkan **lingkup yang belum lengkap** atau
+**aset yang salah kegiatan** — keduanya perlu ditanyakan.
+
+Tiap aset dinilai terhadap kegiatan **induknya**, bukan terhadap satu lingkup
+gabungan: laporan ini menggabungkan seluruh kegiatan satker, dan tiap kegiatan
+punya tupoksinya masing-masing.
+
+### Rantai "(tanpa unit organisasi)" yang tak menyatakan apa pun
+
+Jalur eselon lazim putus di tengah. Pada panel lima tingkat, tiap unit tanpa
+anak melahirkan rantai `(tanpa unit organisasi)` sedalam sisa jenjangnya —
+baris yang cacahnya persis sama dengan induknya. Baris seperti itu dibuang.
+
+Yang **dipertahankan** adalah baris `(tanpa …)` yang punya saudara: di situ ia
+menyatakan sesuatu yang nyata — sekian aset di bawah Biro ini belum ditempatkan
+pada Bagian mana pun, sementara sisanya sudah. Itu justru selisih yang perlu
+dilihat.
+
+### Cacat yang ditemukan uji mutasi
+
+`aset_dalam_lingkup` ternyata **belum punya uji unit sama sekali** — dua mutasi
+lolos hidup-hidup. Menulis ujinya membongkar cacat nyata: unit lingkup yang
+**namanya sendiri kosong** tak dapat dikenali pada kolom aset, sehingga jalurnya
+menyusut menjadi jalur INDUKNYA. Lingkup "Biro tanpa nama" karenanya berlaku
+sebagai lingkup "Sekretariat Jenderal" — melebar satu tingkat ke atas, menarik
+seluruh Biro saudaranya, tanpa satu pun tanda. Jalur yang benar-benar kosong
+lebih buruk lagi: `all()` atas nol syarat bernilai benar, sehingga SETIAP aset
+dianggap masuk lingkup dan penandaannya mati diam-diam.
+
+### Cakupan
+
+- `backend/laporan_jenjang.py` — `baris_hierarki_eselon`, `_buang_ekor_kosong`,
+  `TANPA_ESELON`, `DI_LUAR_LINGKUP`.
+- `backend/organisasi_utils.py` — `aset_dalam_lingkup` + perbaikannya.
+- `backend/routes/reports.py` — panel berjenjang menggantikan dua panel rata;
+  parameter tampilan `es_level`.
+- `backend/templates/laporan_satker_v2.html` — pemilih Jenjang Unit Organisasi.
+- Uji: +8 `test_laporan_jenjang`, +10 `test_organisasi_utils`; tiga uji lama
+  ditulis ulang karena menegaskan rancangan dua panel yang sudah diganti.
+
 ## [#1000] Filter dan ubah massal sampai Eselon V — 2026-09-05
 
 Lanjutan `[#999]`. Aset sudah membawa lima tingkat; yang mencarinya belum.

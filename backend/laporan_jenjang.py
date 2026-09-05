@@ -39,6 +39,14 @@ Tiga keputusan yang membentuk modul ini:
 #: keadaan data yang memang begitu.
 TANPA_KODE = "(tanpa kode barang)"
 TANPA_DENAH = "(belum ditempatkan di denah)"
+TANPA_ESELON = "(tanpa unit organisasi)"
+
+#: Aset yang unitnya berada DI LUAR lingkup eselon kegiatan. Dikumpulkan,
+#: bukan dibuang: kegiatan yang mencatat tupoksinya pada satu Biro tetapi
+#: memuat aset Biro lain sedang menunjukkan salah satu dari dua hal — lingkup
+#: yang belum lengkap, atau aset yang salah kegiatan. Keduanya perlu dilihat,
+#: dan keduanya lenyap kalau barisnya disaring keluar diam-diam.
+DI_LUAR_LINGKUP = "(di luar lingkup kegiatan)"
 
 
 def potong_kode(kode, panjang: int) -> str:
@@ -87,7 +95,7 @@ def _hierarki(aset, kunci_fns, label_fns, depth=0):
 
 def _urut_mentah(grup):
     """Terbanyak dulu; kelompok "tanpa …" selalu di akhir (lihat `_urut`)."""
-    tanpa = {TANPA_KODE, TANPA_DENAH}
+    tanpa = {TANPA_KODE, TANPA_DENAH, TANPA_ESELON, DI_LUAR_LINGKUP}
     return sorted(grup.items(),
                   key=lambda kv: (kv[0] in tanpa, -len(kv[1]), kv[0]))
 
@@ -168,3 +176,79 @@ def jenjang_terpilih_banyak(diminta, sah, bawaan) -> list:
     return dipakai or ([bawaan] if bawaan else [])
 
 
+
+def baris_hierarki_eselon(aset, levels, di_luar=None):
+    """Satu panel berjenjang untuk unit organisasi: Eselon I → … → Eselon V.
+
+    Permintaan pemilik: *"buat sistem tampil sesuai eselon yang dicatat di
+    dalam kegiatan sehingga tetap menyajikan data sesuai dengan tupoksinya."*
+
+    Sebelumnya analisis eselon berupa DUA panel rata — "Per Eselon I" dan "Per
+    Eselon II" — yang tak punya satu pun garis penghubung. Pembacanya harus
+    mencocokkan sendiri Biro mana milik Kementerian mana, persis cacat yang
+    sudah diperbaiki pada panel kategori dan lokasi.
+
+    `levels` = daftar nomor tingkat terpilih (1..5), dari terluas ke terdalam.
+    Boleh melompat; anaknya tetap bersarang di bawah induknya.
+
+    `di_luar` = himpunan id aset yang unitnya berada di luar lingkup kegiatan.
+    Aset itu dikumpulkan pada satu kelompok tersendiri di jenjang teratas,
+    TIDAK disaring keluar: jumlah batang harus tetap sama dengan jumlah aset,
+    dan selisih yang tak terlihat tak pernah ditanyakan siapa pun.
+    """
+    di_luar = di_luar or set()
+
+    def kunci(lv):
+        def ambil(a):
+            if lv == levels[0] and (a or {}).get("id") in di_luar:
+                return DI_LUAR_LINGKUP
+            return str((a or {}).get(f"eselon{lv}") or "").strip() or TANPA_ESELON
+        return ambil
+
+    if not levels:
+        return []
+    return _buang_ekor_kosong(
+        _hierarki(aset, [kunci(lv) for lv in levels],
+                  [lambda k: k] * len(levels)))
+
+
+def _buang_ekor_kosong(baris):
+    """Buang baris "(tanpa …)" yang merupakan ANAK TUNGGAL induknya.
+
+    Jalur eselon lazim putus di tengah: satker mencatat aset sampai Eselon II
+    dan berhenti. Pada panel lima tingkat, tiap unit tanpa anak lalu melahirkan
+    rantai "(tanpa unit organisasi)" sedalam sisa jenjangnya — tiga baris
+    tambahan yang cacahnya persis sama dengan induknya dan tak menyatakan satu
+    pun hal baru.
+
+    Yang DIPERTAHANKAN adalah baris "(tanpa …)" yang punya saudara: di situ ia
+    menyatakan sesuatu yang nyata — sekian aset di bawah Biro ini belum
+    ditempatkan pada Bagian mana pun, sementara sisanya sudah. Itu justru
+    selisih yang perlu dilihat.
+    """
+    kosong = {TANPA_ESELON, DI_LUAR_LINGKUP}
+    keluar = []
+    for i, b in enumerate(baris):
+        if b["label"] not in kosong or b["depth"] == 0:
+            keluar.append(b)
+            continue
+        # Saudara = baris lain pada depth yang sama, di bawah induk yang sama.
+        # Induknya adalah baris terdekat sebelumnya dengan depth lebih dangkal;
+        # pencarian berhenti di situ, jadi cabang lain tak pernah terhitung.
+        punya_saudara = False
+        for j in range(i - 1, -1, -1):
+            if baris[j]["depth"] < b["depth"]:
+                break
+            if baris[j]["depth"] == b["depth"]:
+                punya_saudara = True
+                break
+        if not punya_saudara:
+            for j in range(i + 1, len(baris)):
+                if baris[j]["depth"] < b["depth"]:
+                    break
+                if baris[j]["depth"] == b["depth"]:
+                    punya_saudara = True
+                    break
+        if punya_saudara:
+            keluar.append(b)
+    return keluar

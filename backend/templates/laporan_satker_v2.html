@@ -418,6 +418,27 @@ body {
     </div>
     {% endif %}
 
+    {# Jenjang unit organisasi — Eselon I sampai V. Panel "Per Unit Organisasi"
+       menggantikan dua panel rata "Per Eselon I" dan "Per Eselon II" yang tak
+       punya satu pun garis penghubung di antaranya. #}
+    <div class="pf-blok" data-blok="es_level">
+      <h5>Jenjang Unit Organisasi
+        <span class="jml {% if es_levels|length < 2 %}kosong{% endif %}">{{ es_levels|length }} dipilih</span>
+      </h5>
+      <div class="pf-alat">
+        <span data-pilih="es_level">pilih semua</span>
+        <span data-hapus="es_level">kosongkan</span>
+      </div>
+      <select class="pf-select" name="es_level" multiple
+              size="{{ pilihan_es_level|length }}"
+              aria-label="Jenjang Unit Organisasi — dapat memilih lebih dari satu">
+        {% for o in pilihan_es_level %}
+        <option value="{{ o.nilai }}"{% if o.nilai in es_levels %} selected{% endif %}>{{ o.label }}</option>
+        {% endfor %}
+      </select>
+      <p class="pf-hint">Mengelompokkan panel <b>Per Unit Organisasi</b> menurut jenjang eselon, bersarang induk-anak. Boleh <b>lebih dari satu</b>. Bukan penyaring. Dikosongkan berarti kembali ke <b>Eselon II</b>.{% if n_di_luar_lingkup %} <b>{{ n_di_luar_lingkup }} aset</b> berada di luar lingkup eselon yang dicatat kegiatannya — tetap dihitung, dikumpulkan pada barisnya sendiri.{% endif %}</p>
+    </div>
+
     <div class="pf-blok">
       <h5>Tanggal Pemeriksaan
         <span class="jml {% if not (filter_dipilih.get('dari') or filter_dipilih.get('sampai')) %}kosong{% endif %}">
