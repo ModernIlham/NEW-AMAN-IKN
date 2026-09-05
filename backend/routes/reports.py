@@ -6551,11 +6551,7 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
     # Eselon list (from first activity that has data, or merge)
     eselon_list = []
     for act in satker_acts:
-        for es in (act.get("eselon1", []) or []):
-            if isinstance(es, dict):
-                eselon_list.append({"nama": es.get("nama", ""), "eselon2": es.get("eselon2", [])})
-            elif isinstance(es, str) and es:
-                eselon_list.append({"nama": es, "eselon2": []})
+        eselon_list = org.normalkan_eselon_teks(act.get("eselon1"))
         if eselon_list:
             break
 

@@ -29,6 +29,7 @@ from PIL import Image as PILImage
 
 from asset_fields import SCALAR_FIELD_NAMES
 from routes.assets import build_asset_search_query
+import organisasi_utils as org
 from db import db
 from shared_utils import (limiter, invalidate_asset_cache, log_audit,
                           get_photo_from_gridfs, kode_satker_user,
@@ -683,11 +684,9 @@ async def export_csv(request: Request, activity_id: Optional[str] = None, base_u
             yield f"# Kode Satker: {act_data.get('kode_satker','')} - {act_data.get('nama_satker','')}\n"
             yield f"# Periode: {act_data.get('tanggal_mulai','')} s/d {act_data.get('tanggal_selesai','')}\n"
             yield f"# Penanggung Jawab: {act_data.get('penanggung_jawab','')}\n"
-            eselon_list = act_data.get('eselon1', [])
-            for es in eselon_list:
-                nama_es1 = es.get('nama', '') if isinstance(es, dict) else str(es)
-                eselon2_list = es.get('eselon2', []) if isinstance(es, dict) else []
-                yield f"# Eselon I: {nama_es1} | Eselon II: {', '.join(eselon2_list)}\n"
+            for es in org.normalkan_eselon_teks(act_data.get('eselon1')):
+                yield (f"# Eselon I: {es['nama']} | "
+                       f"Eselon II: {', '.join(es['eselon2'])}\n")
             yield "#\n"
         
         # Kolom skalar diambil dari registry (asset_fields.py) supaya field
@@ -1347,14 +1346,11 @@ async def bangun_xlsx_bytes(query, activity_id="", base_url="", token=""):
                 ar += 1
             
             # Eselon data
-            eselon_list = act_data.get('eselon1', [])
-            for es in eselon_list:
-                nama_es1 = es.get('nama', '') if isinstance(es, dict) else str(es)
-                eselon2_items = es.get('eselon2', []) if isinstance(es, dict) else []
+            for es in org.normalkan_eselon_teks(act_data.get('eselon1')):
                 act_sheet.write(ar, 0, "Eselon I", label_fmt)
-                act_sheet.write(ar, 1, nama_es1, val_fmt)
+                act_sheet.write(ar, 1, es['nama'], val_fmt)
                 ar += 1
-                for e2 in eselon2_items:
+                for e2 in es['eselon2']:
                     act_sheet.write(ar, 0, "  - Eselon II", label_fmt)
                     act_sheet.write(ar, 1, e2, val_fmt)
                     ar += 1

@@ -14,7 +14,7 @@ import re
 from penandatangan_dokumen import bersihkan_penandatangan, validate_penandatangan
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from pymongo.errors import DuplicateKeyError
 
 from auth_utils import is_super_admin, require_admin, require_super_admin, require_user
+import organisasi_utils as org
 from db import db
 from shared_utils import kode_satker_user, log_audit
 
@@ -92,7 +93,12 @@ class SatkerIn(BaseModel):
     # bukan di setelan global — karena penanda tangan memang milik satker, dan
     # setelan global hanya boleh disentuh super-admin pusat.
     penandatangan: Optional[dict] = None
-    eselon1: Optional[List[str]] = None
+    # Menerima KEDUA bentuk yang benar-benar ada di basis data — daftar string
+    # (tulisan PUT lama) dan daftar dict bersarang (auto-registrasi kegiatan).
+    # Menuntut `List[str]` saja membuat satker hasil auto-registrasi ditolak
+    # 422 begitu profilnya disunting, dan yang menyuntingnya tak melakukan
+    # apa-apa yang salah. Disimpan dalam SATU bentuk (lihat `normalkan_eselon_teks`).
+    eselon1: Optional[List[Union[str, dict]]] = None
     aktif: bool = True
 
 
@@ -139,7 +145,8 @@ async def daftar_satker(_user: dict = Depends(require_user)):
             continue
         if kode not in master:
             items.append({"kode_satker": kode, "nama_satker": g.get("nama") or "",
-                          "eselon1": g.get("eselon1") or [], "aktif": True,
+                          "eselon1": org.normalkan_eselon_teks(g.get("eselon1")),
+                          "aktif": True,
                           "jumlah_kegiatan": g.get("n", 0), "terdaftar": False})
     items.sort(key=lambda x: str(x.get("kode_satker")))
     return {"items": items, "jumlah": len(items),
@@ -187,7 +194,6 @@ async def simpan_satker(kode: str, payload: SatkerIn,
     doc = {
         "kode_satker": k,
         "nama_satker": payload.nama_satker.strip(),
-        "eselon1": [str(e).strip() for e in (payload.eselon1 or []) if str(e).strip()],
         "aktif": bool(payload.aktif),
         "updated_at": now, "updated_by": admin.get("username", "system"),
     }
@@ -199,6 +205,14 @@ async def simpan_satker(kode: str, payload: SatkerIn,
     # resolusi peran". Keduanya beda maksud, jadi dibedakan di sini.
     if payload.penandatangan is not None:
         doc["penandatangan"] = bersihkan_penandatangan(payload.penandatangan)
+    # Aturan yang SAMA berlaku untuk struktur eselon, dan dulu tidak: `doc`
+    # menulisnya tanpa syarat, sementara layar Satker tak pernah mengirimnya
+    # sama sekali (tak ada `eselon1` pada FORM_KOSONG). Akibatnya setiap kali
+    # profil satker disimpan — mengganti alamat, telepon, apa pun — struktur
+    # Eselon I/II-nya terhapus diam-diam, dan kegiatan baru kehilangan
+    # isian otomatisnya tanpa satu pun pesan.
+    if payload.eselon1 is not None:
+        doc["eselon1"] = org.normalkan_eselon_teks(payload.eselon1)
     try:
         await db.satker.update_one(
             {"kode_satker": k},
@@ -260,7 +274,8 @@ async def sinkron_satker(admin: dict = Depends(require_super_admin)):
                 "alamat": str(g.get("alamat") or "").strip(),
                 "tempat_laporan": "", "tembusan_laporan": "",
                 "telepon": "", "email": "",
-                "eselon1": g.get("eselon1") or [], "aktif": True,
+                "eselon1": org.normalkan_eselon_teks(g.get("eselon1")),
+                "aktif": True,
                 "created_at": now, "updated_at": now,
                 "updated_by": admin.get("username", "system"),
             }},
