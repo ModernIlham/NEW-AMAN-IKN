@@ -18,6 +18,77 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#988] Progres Inventarisasi: rumahnya BMN tercatat, isinya capaian — 2026-09-05
+
+Permintaan pemilik: *"pada progres inventarisasi jadikan grafik rumah adalah
+BMN tercatat dan setiap kali ada tambahan BMN tercatat maka akan terlihat, dan
+di dalamnya baru informasi data sekarang."*
+
+### Grafik peristiwa tak menjawab pertanyaannya
+
+Versi `[#984]` menggambar **peristiwa** per bulan: tiap aset satu batang di
+bulan peristiwanya. Grafiknya memang fluktuatif — dan itu yang diminta saat
+itu — tetapi ia tak pernah menjawab pertanyaan yang paling sering diajukan
+atas laporan berjudul **"Progres Inventarisasi"**: *berapa yang harus
+diperiksa, dan berapa yang sudah.* Jarak antara keduanya adalah tunggakan
+pekerjaannya, dan pada grafik peristiwa jarak itu tak punya bentuk sama sekali.
+
+### Bentuk barunya
+
+| Bagian | Makna |
+|---|---|
+| **Rumah** (bingkai) | BMN tercatat **kumulatif** sampai bulan itu — stok yang harus diperiksa |
+| **Isi hijau** | Ditemukan, kumulatif |
+| **Isi jingga** | Diperiksa, tak ditemukan |
+| **Rongga bergaris** | **Belum diperiksa** — tunggakannya |
+
+Rumahnya digambar sebagai **bingkai**, bukan blok berwarna: yang perlu terbaca
+justru rongga di dalamnya. Blok abu penuh akan terbaca sebagai "ada sesuatu di
+sini", padahal maknanya justru "belum ada apa-apa di sini".
+
+Tambahan tiap bulan ditulis **`+n`** hijau di atas atapnya, sehingga
+pertumbuhan stok terlihat sebagaimana diminta.
+
+### Stok awal ikut dihitung
+
+BMN perolehan tahun-tahun sebelumnya tetap tercatat pada Januari tahun ini.
+Rumah yang dimulai dari nol menggambarkan satker seolah baru berdiri, dan
+**tunggakan terbesarnya — justru yang warisan — lenyap dari grafik**.
+
+Aset yang tanggal perolehannya tak terbaca juga masuk stok awal: ia jelas sudah
+tercatat, hanya kapannya yang tak diketahui. Perolehan bertahun **mendatang**
+tidak dihitung di mana pun — menaruhnya di stok awal akan menyatakan barang
+yang belum ada sebagai sudah ada.
+
+Pada data uji, bentuk ini memperlihatkan hal yang selama ini tak terlihat:
+rongga tunggakan **naik** di Maret (40→42) dan Juli (27→33) justru karena ada
+BMN baru tercatat. Pekerjaan bertambah, bukan berkurang.
+
+### Isi tak mungkin melampaui rumahnya
+
+Aset yang tanggal pemeriksaannya mendahului tanggal perolehannya membuat isi
+melebihi rumah. Itu kekeliruan data, bukan keadaan yang mungkin. Batangnya
+digencet supaya tetap terbaca, lalu **dihitung dan disebut** di bawah grafik —
+grafik yang menggencet diam-diam menyembunyikan justru baris yang perlu
+dibetulkan.
+
+### Uji mutasi — empat dipasang, empat dibunuh
+
+| Mutasi | Dibunuh oleh |
+|---|---|
+| Stok awal (BMN warisan) dibuang | `test_STOK_AWAL_ikut_dihitung_bukan_dibuang` (+8 lainnya) |
+| Rumah tak menumpuk antar bulan | `test_TAMBAHAN_BMN_tercatat_terlihat_sebagai_rumah_yang_tumbuh` |
+| Isi boleh melampaui rumah, diam-diam | `test_pemeriksaan_MENDAHULUI_perolehan_digencet_dan_DIHITUNG` |
+| Tambahan bulanan tak lagi digambar | `test_TAMBAHAN_BMN_tercatat_terlihat_sebagai_rumah_yang_tumbuh` |
+
+### Berkas
+
+- `backend/routes/reports.py` — model stok kumulatif, `linimasa_stok_awal` / `linimasa_tambah_tahun` / `linimasa_akhir_*` / `linimasa_janggal`
+- `backend/templates/laporan_satker_v2.html` — rumah bingkai, rongga bergaris, penanda `+n`, catatan baru
+- `backend/tests/unit/test_laporan_gabungan_satker.py` — bagian linimasa ditulis ulang, 6 uji baru
+
+---
+
 ## [#987] Analisis data tak lagi dipangkas: tata letak yang mengukur — 2026-09-05
 
 Permintaan pemilik: *"perkategori dan lokasi juga buat jangan dibatasi biarkan
