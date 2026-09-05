@@ -18,6 +18,57 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1005] Panel eselon kegiatan: kotak seragam, jarak rapat, induk ikut terpilih — 2026-09-05
+
+Tiga laporan pemilik dari layar kegiatan.
+
+### Kotak centang berbeda-beda ukuran
+
+Kotak centang pada daftar Lingkup Unit tak diberi `flex-shrink-0`, sehingga ia
+**ikut menyusut** saat nama unitnya panjang. Nama terpanjang justru ada di baris
+yang paling menjorok, jadi daftarnya terbaca seperti dua jenis kontrol yang
+berbeda. Ukurannya kini tetap, dan sedikit diperbesar (`w-4`) agar nyaman
+disentuh.
+
+### Baris input Eselon I/II renggang
+
+Aturan tap-target global (`button, a { min-height: 44px }` pada ≤1023px) hanya
+mengenai **tombol**, bukan input. Tombol X karenanya membengkak menjadi 44px
+sementara inputnya 24–28px — menyisakan ruang mati di atas dan bawah tiap
+input, dan itulah renggang yang terlihat.
+
+Yang diperbaiki adalah **ruang matinya**: input disamakan tinggi dengan
+tombolnya (`h-11` di layar sempit, kembali `h-7`/`h-6` di ≥1024px). Tap-target
+tombolnya **tidak** dikecilkan — jalan pintas itu memang merapatkan barisnya,
+tetapi dengan mengorbankan area sentuh 44px yang justru dijaga aturan tersebut.
+Sisa jaraknya lalu dirapatkan (`space-y-1.5` → `space-y-1`, `space-y-1` →
+`space-y-0.5`).
+
+### "Cocokkan dari Eselon I di atas" melewatkan Eselon I-nya
+
+Laporan pemilik: *"eselon I-nya sendiri tidak ikut terseleksi, padahal sudah
+sama."*
+
+Ini keputusan rancangan `[#998]` yang keliru dari sisi pemakainya. Alasannya
+saat itu: bila sebuah Eselon I menyebut Eselon II di bawahnya, mencatat
+induknya akan menarik saudara yang sengaja tak disebut. Tetapi daftar yang
+diketik itu adalah pernyataan satker tentang **strukturnya sendiri**, bukan
+penyaring yang menyisihkan sebagian — dan hasilnya, layar terbaca seperti gagal
+mencocokkan padahal unitnya sudah tepat.
+
+Induk kini ikut terpilih bersama anak-anaknya, dengan urutan baca yang sama
+seperti yang diketik. Bila daftarnya memang tak lengkap, memilih induknya
+melebarkan lingkup — dan itu **terlihat**: keduanya tercentang pada daftarnya,
+dan centang induknya dapat dilepas.
+
+### Cakupan
+
+- `frontend/src/pages/ActivitySelectionPage.jsx` — kotak centang, tinggi baris,
+  jarak.
+- `backend/organisasi_utils.py` — `cocokkan_lingkup_teks` menyertakan induknya.
+- Uji: `lingkupUnitTataLetak.test.js` (5, baru), +2 `test_organisasi_utils`;
+  tujuh uji lama disesuaikan karena menegaskan perilaku yang dikoreksi.
+
 ## [#1004] Tampilan aset menyebut unit terdalamnya — 2026-09-05
 
 Sisiran terakhir rangkaian eselon: tempat-tempat yang masih mengasumsikan dua

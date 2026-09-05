@@ -1183,22 +1183,22 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                 {(form.eselon1 || []).map((es, idx) => {
                   const esObj = typeof es === 'object' ? es : {nama: es, eselon2: []};
                   return (
-                    <div key={idx} className="border border-emerald-200 dark:border-emerald-600 rounded-lg p-2 space-y-1.5 bg-emerald-25 dark:bg-emerald-900/10">
+                    <div key={idx} className="border border-emerald-200 dark:border-emerald-600 rounded-lg p-2 space-y-1 bg-emerald-25 dark:bg-emerald-900/10">
                       <div className="flex items-center gap-1.5">
                         <span className="text-[10px] text-emerald-600 font-bold w-4 text-center flex-shrink-0">{idx + 1}.</span>
                         <Input
                           value={esObj.nama}
                           onChange={e => { const arr = [...(form.eselon1 || [])]; arr[idx] = {...esObj, nama: e.target.value}; setForm(p => ({...p, eselon1: arr})); }}
                           placeholder="Nama Eselon I"
-                          className="h-7 text-xs flex-1"
+                          className="h-11 lg:h-7 text-xs flex-1"
                           data-testid={`eselon1-input-${idx}`}
                         />
-                        <button type="button" onClick={() => setForm(p => ({...p, eselon1: (p.eselon1 || []).filter((_, i) => i !== idx)}))} className="h-7 w-7 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded flex-shrink-0" data-testid={`remove-eselon1-${idx}`}>
+                        <button type="button" onClick={() => setForm(p => ({...p, eselon1: (p.eselon1 || []).filter((_, i) => i !== idx)}))} className="h-11 w-11 lg:h-7 lg:w-7 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded flex-shrink-0" data-testid={`remove-eselon1-${idx}`}>
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
                       {/* Eselon II list under this Eselon I */}
-                      <div className="ml-5 space-y-1">
+                      <div className="ml-5 space-y-0.5">
                         <div className="flex items-center justify-between">
                           <span className="text-[9px] text-emerald-500 dark:text-emerald-400 font-medium">Eselon II</span>
                           <button type="button" onClick={() => { const arr = [...(form.eselon1 || [])]; const obj = {...esObj, eselon2: [...(esObj.eselon2 || []), '']}; arr[idx] = obj; setForm(p => ({...p, eselon1: arr})); }} className="text-[9px] text-emerald-500 hover:text-emerald-700 flex items-center gap-0.5" data-testid={`add-eselon2-btn-${idx}`}>
@@ -1212,10 +1212,10 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                               value={e2}
                               onChange={e => { const arr = [...(form.eselon1 || [])]; const e2arr = [...(esObj.eselon2 || [])]; e2arr[j] = e.target.value; arr[idx] = {...esObj, eselon2: e2arr}; setForm(p => ({...p, eselon1: arr})); }}
                               placeholder="Nama Eselon II"
-                              className="h-6 text-[11px] flex-1"
+                              className="h-11 lg:h-6 text-[11px] flex-1"
                               data-testid={`eselon2-input-${idx}-${j}`}
                             />
-                            <button type="button" onClick={() => { const arr = [...(form.eselon1 || [])]; arr[idx] = {...esObj, eselon2: (esObj.eselon2 || []).filter((_, k) => k !== j)}; setForm(p => ({...p, eselon1: arr})); }} className="h-6 w-6 flex items-center justify-center text-red-400 hover:text-red-600 rounded flex-shrink-0" data-testid={`remove-eselon2-${idx}-${j}`}>
+                            <button type="button" onClick={() => { const arr = [...(form.eselon1 || [])]; arr[idx] = {...esObj, eselon2: (esObj.eselon2 || []).filter((_, k) => k !== j)}; setForm(p => ({...p, eselon1: arr})); }} className="h-11 w-11 lg:h-6 lg:w-6 flex items-center justify-center text-red-400 hover:text-red-600 rounded flex-shrink-0" data-testid={`remove-eselon2-${idx}-${j}`}>
                               <X className="w-3 h-3" />
                             </button>
                           </div>
@@ -1251,7 +1251,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                     {unitPohon.map((u) => (
                       <label key={u.id} style={{ paddingLeft: 8 + u.depth * 14 }}
                         className="flex items-center gap-2 py-1 pr-2 cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-900/20">
-                        <input type="checkbox" className="min-w-0 min-h-0 w-3.5 h-3.5 accent-emerald-600"
+                        <input type="checkbox" className="min-w-0 min-h-0 w-4 h-4 flex-shrink-0 accent-emerald-600"
                           checked={(form.lingkup_unit || []).includes(u.id)}
                           onChange={() => alihkanLingkup(u.id)}
                           data-testid={`lingkup-unit-${u.id}`}

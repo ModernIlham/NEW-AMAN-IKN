@@ -369,12 +369,14 @@ def test_perubahan_jalur_tak_menyentuh_tingkat_di_luar_batas():
 # terhubung ke master unit mana pun. Yang dijaga di sini adalah pencocokannya
 # — dan batas-batas di mana ia menolak menebak.
 
-def test_lingkup_teks_memakai_ESELON_II_bukan_induknya():
-    # "Setjen, khususnya Biro Umum" berarti Biro Umum. Mencatat induknya akan
-    # menarik Biro Keuangan yang justru sengaja tak disebut.
+def test_induk_IKUT_terpilih_bersama_anak_yang_disebut():
+    # Daftar yang diketik adalah pernyataan satker tentang STRUKTURNYA SENDIRI,
+    # bukan penyaring yang menyisihkan sebagian. Percobaan pertama hanya
+    # mengambil Eselon II-nya, dan layar terbaca seperti gagal mencocokkan:
+    # unitnya sudah sama, tetapi baris induknya tak ikut tercentang.
     ids, tak = org.cocokkan_lingkup_teks(
         [{"nama": "Sekretariat Jenderal", "eselon2": ["Biro Umum"]}], _POHON)
-    assert ids == ["e2"] and tak == []
+    assert ids == ["e1", "e2"] and tak == []
 
 
 def test_lingkup_teks_tanpa_anak_memakai_eselon_satunya():
@@ -392,7 +394,7 @@ def test_nama_yang_tak_ditemukan_DILAPORKAN_bukan_dibuang():
     ids, tak = org.cocokkan_lingkup_teks(
         [{"nama": "Sekretariat Jenderal", "eselon2": ["Biro Hantu"]},
          {"nama": "Kedeputian Entah", "eselon2": ["Direktorat X"]}], _POHON)
-    assert ids == []
+    assert ids == ["e1"]
     assert tak == ["Sekretariat Jenderal / Biro Hantu",
                    "Kedeputian Entah", "Direktorat X"]
 
@@ -401,7 +403,7 @@ def test_pencocokan_tak_peduli_besar_kecil_huruf_dan_spasi_tepi():
     ids, tak = org.cocokkan_lingkup_teks(
         [{"nama": "  sekretariat JENDERAL  ", "eselon2": ["biro umum"]}],
         _POHON)
-    assert ids == ["e2"] and tak == []
+    assert ids == ["e1", "e2"] and tak == []
 
 
 def test_eselon_dua_dicocokkan_DI_BAWAH_induknya_saja():
@@ -410,7 +412,7 @@ def test_eselon_dua_dicocokkan_DI_BAWAH_induknya_saja():
                        "parent_id": ""}]
     ids, tak = org.cocokkan_lingkup_teks(
         [{"nama": "Kedeputian X", "eselon2": ["Biro Keuangan"]}], pohon)
-    assert ids == [] and tak == ["Kedeputian X / Biro Keuangan"]
+    assert ids == ["x1"] and tak == ["Kedeputian X / Biro Keuangan"]
 
 
 def test_nama_yang_MENDUA_tak_ditebak():
@@ -420,7 +422,7 @@ def test_nama_yang_MENDUA_tak_ditebak():
                         "parent_id": "e1"}]
     ids, tak = org.cocokkan_lingkup_teks(
         [{"nama": "Sekretariat Jenderal", "eselon2": ["Biro Umum"]}], kembar)
-    assert ids == [] and tak == ["Sekretariat Jenderal / Biro Umum"]
+    assert ids == ["e1"] and tak == ["Sekretariat Jenderal / Biro Umum"]
 
 
 def test_lingkup_teks_membuang_duplikat_dan_menjaga_urutan():
@@ -429,7 +431,7 @@ def test_lingkup_teks_membuang_duplikat_dan_menjaga_urutan():
                                                       "Biro Umum",
                                                       "Biro Keuangan"]}],
         _POHON)
-    assert ids == ["e2b", "e2"]
+    assert ids == ["e1", "e2b", "e2"]
 
 
 def test_lingkup_kegiatan_mengutamakan_rujukan_pohon():
@@ -444,7 +446,7 @@ def test_lingkup_kegiatan_JATUH_ke_teks_bila_belum_dipetakan():
     act = {"lingkup_unit": [],
            "eselon1": [{"nama": "Sekretariat Jenderal",
                         "eselon2": ["Biro Umum"]}]}
-    assert org.lingkup_kegiatan(act, _POHON) == ["e2"]
+    assert org.lingkup_kegiatan(act, _POHON) == ["e1", "e2"]
 
 
 def test_lingkup_kegiatan_membuang_id_yang_tak_ada_di_pohon():
@@ -691,3 +693,28 @@ def test_id_KEMBAR_tak_membuat_unitnya_tercetak_dua_kali():
     hasil = org.pohon_terurut(kembar)
     assert [u["id"] for u in hasil].count("e2") == 1, [u["id"] for u in hasil]
     assert [u["id"] for u in hasil].count("e3") == 1, "cabangnya ikut ganda"
+
+
+def test_seluruh_jalur_yang_diketik_tercermin_pada_pilihannya():
+    # Keluhan pemilik: "eselon I-nya sendiri tidak ikut terseleksi, padahal
+    # sudah sama." Yang dicentang harus mencerminkan apa yang diketik —
+    # induknya DAN anak-anaknya — supaya layarnya tak terbaca seperti gagal
+    # mencocokkan.
+    diketik = [{"nama": "Sekretariat Jenderal",
+                "eselon2": ["Biro Umum", "Biro Keuangan"]}]
+    ids, tak = org.cocokkan_lingkup_teks(diketik, _POHON)
+    assert ids == ["e1", "e2", "e2b"], ids
+    assert tak == []
+
+
+def test_memilih_induk_tak_mengubah_arti_lingkupnya():
+    # Induk sudah mencakup seluruh keturunannya, jadi mencentangnya bersama
+    # anak-anaknya tidak memperluas apa pun ketika daftarnya memang lengkap.
+    ids, _ = org.cocokkan_lingkup_teks(
+        [{"nama": "Sekretariat Jenderal",
+          "eselon2": ["Biro Umum", "Biro Keuangan"]}], _POHON)
+    hanya_induk, _ = org.cocokkan_lingkup_teks(
+        [{"nama": "Sekretariat Jenderal", "eselon2": []}], _POHON)
+    for uid in ("e2", "e2b", "e3", "e5"):
+        assert org.dalam_lingkup(uid, ids, _PETA_PARENT)
+        assert org.dalam_lingkup(uid, hanya_induk, _PETA_PARENT)
