@@ -144,6 +144,37 @@
 
         /* Info Grid */
         .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+
+        /* ── Linimasa "Progres Inventarisasi" ─────────────────────────────
+           Gaya yang SAMA dengan laporan gabungan (laporan_satker_v2.html),
+           hanya plotnya lebih pendek: halaman 2 ini sudah memuat kartu,
+           batang capaian, tabel rekapitulasi, simpulan, dan dua kotak info.
+           Sisa ruangnya sekitar 400px, sementara plot 300px milik laporan
+           gabungan beserta legenda dan notanya menghabiskan hampir seluruhnya
+           — dan `overflow: hidden` pada lembar A4 memotong tanpa bersuara. */
+        .lm-judul { font-size: 9px; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+        .lm-legenda { display: flex; gap: 14px; justify-content: center; font-size: 7.5px; color: #64748b; margin-bottom: 8px; }
+        .lm-legenda i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+        .lm-legenda i.i-rumah { border: 1.5px solid #0c1f3f; background: #fff; box-sizing: border-box; }
+        .lm-legenda i.i-rongga { background: repeating-linear-gradient(135deg, #f1f5f9, #f1f5f9 3px, #e2e8f0 3px, #e2e8f0 6px); border: 1px solid #e2e8f0; box-sizing: border-box; }
+        .lm-plot { display: flex; align-items: flex-end; gap: 4px; height: 200px; }
+        .lm-kol { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
+        .lm-batang { display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
+        .lm-rumah { border: 1.5px solid #0c1f3f; border-radius: 4px 4px 0 0; background: #fff; }
+        .lm-rongga { background: repeating-linear-gradient(135deg, #f1f5f9, #f1f5f9 4px, #e2e8f0 4px, #e2e8f0 8px); }
+        .lm-temu { background: #22c55e; }
+        .lm-lain { background: #f59e0b; }
+        .lm-nilai { font-size: 7.5px; text-align: center; color: #fff; padding: 1px 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+        .lm-nilai.gelap { color: #475569; }
+        .lm-atas { font-size: 8.5px; font-weight: 800; color: #0c1f3f; text-align: center; margin-bottom: 2px; font-variant-numeric: tabular-nums; }
+        .lm-tambah { font-size: 7px; font-weight: 700; color: #22c55e; margin-left: 2px; }
+        .lm-kosong { height: 3px; background: #f1f5f9; border-radius: 2px; }
+        .lm-belum { height: 3px; border-top: 2px dashed #cbd5e1; }
+        .lm-x { display: flex; gap: 4px; margin-top: 5px; }
+        .lm-x span { flex: 1; text-align: center; font-size: 7.5px; color: #94a3b8; letter-spacing: .5px; }
+        .lm-x span.aktif { color: #0c1f3f; font-weight: 700; }
+        .lm-x span.pudar { color: #cbd5e1; }
+        .lm-nota { font-size: 7px; color: #94a3b8; margin-top: 5px; line-height: 1.5; }
         .info-box { border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; }
         .info-box-title { font-size: 8.5px; font-weight: 700; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; display: flex; align-items: center; gap: 5px; }
         .mini-bar-row { display: flex; align-items: center; gap: 5px; margin-bottom: 4px; font-size: 8px; }
@@ -469,6 +500,47 @@
                 </div>
             </div>
         </div>
+
+        {# Linimasa "Progres Inventarisasi" — grafik yang SAMA dengan laporan
+           gabungan, dihitung modul yang sama (backend/laporan_linimasa.py),
+           hanya lingkupnya satu kegiatan. RUMAH tiap batang adalah BMN
+           tercatat; rongga bergaris di dalamnya adalah yang belum diperiksa. #}
+        {% if linimasa_ada %}
+        <div>
+            <div class="lm-judul">Progres Inventarisasi {{ tahun_linimasa }}</div>
+            <div class="lm-legenda">
+                <span><i class="i-rumah"></i>BMN Tercatat</span>
+                <span><i style="background:#22c55e"></i>Ditemukan</span>
+                <span><i style="background:#f59e0b"></i>Diperiksa, tak ditemukan</span>
+                <span><i class="i-rongga"></i>Belum diperiksa</span>
+            </div>
+            <div class="lm-plot">
+                {% for b in linimasa %}
+                <div class="lm-kol">
+                    {% if b.belum_berjalan %}<div class="lm-belum" title="Belum berjalan"></div>
+                    {% elif b.tercatat %}
+                    <div class="lm-atas">{{ b.tercatat }}{% if b.tambahan %}<span class="lm-tambah" title="BMN baru tercatat bulan ini">+{{ b.tambahan }}</span>{% endif %}</div>
+                    <div class="lm-batang lm-rumah" style="height:{{ b.h_tercatat }}%" title="{{ b.tercatat }} tercatat &middot; {{ b.ditemukan + b.periksa_lain }} diperiksa &middot; {{ b.belum }} belum">
+                        <div class="lm-rongga" style="flex:{{ b.belum }} 0 auto;min-height:0;">{% if b.belum %}<div class="lm-nilai gelap">{{ b.belum }}</div>{% endif %}</div>
+                        <div class="lm-lain" style="flex:{{ b.periksa_lain }} 0 auto;min-height:0;">{% if b.periksa_lain %}<div class="lm-nilai">{{ b.periksa_lain }}</div>{% endif %}</div>
+                        <div class="lm-temu" style="flex:{{ b.ditemukan }} 0 auto;min-height:0;">{% if b.ditemukan %}<div class="lm-nilai">{{ b.ditemukan }}</div>{% endif %}</div>
+                    </div>
+                    {% else %}<div class="lm-kosong"></div>{% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            <div class="lm-x">{% for b in linimasa %}<span class="{% if b.mulai %}aktif{% elif b.belum_berjalan %}pudar{% endif %}">{{ b.bulan }}</span>{% endfor %}</div>
+            <p class="lm-nota">
+                <strong>Rumah</strong> tiap batang adalah <strong>BMN tercatat</strong> sampai bulan itu &mdash;
+                stok yang harus diperiksa; tambahannya ditulis <span style="color:#22c55e;font-weight:700;">+n</span> di atas atapnya.
+                <strong>Rongga bergaris</strong> di dalamnya adalah yang <strong>belum diperiksa</strong>.
+                {% if linimasa_stok_awal %}Januari sudah memuat <strong>{{ linimasa_stok_awal }} NUP</strong> stok awal (perolehan tahun sebelumnya).{% endif %}
+                {% if linimasa_akhir_tercatat %}Pada <strong>{{ linimasa[linimasa_bulan_terakhir - 1].bulan }}</strong>: <strong>{{ linimasa_akhir_diperiksa }}</strong> dari <strong>{{ linimasa_akhir_tercatat }} NUP</strong> sudah diperiksa, <strong>{{ linimasa_akhir_belum }}</strong> belum.{% endif %}
+                {% if linimasa_tahun_berjalan and 1 <= linimasa_bulan_terakhir < 12 %}Bulan setelahnya sengaja dikosongkan &mdash; belum berjalan, bukan berarti tanpa tambahan.{% endif %}
+                {% if linimasa_janggal %}<strong>{{ linimasa_janggal }} NUP</strong> tercatat diperiksa sebelum tanggal perolehannya &mdash; periksa kembali tanggalnya.{% endif %}
+            </p>
+        </div>
+        {% endif %}
     </div>
     <div class="exec-footer">
         <div>Laporan Eksekutif Hasil Inventarisasi BMN &mdash; {{ satker_name }}</div>

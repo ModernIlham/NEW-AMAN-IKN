@@ -16,6 +16,7 @@ import inventarisasi_stempel as stempel_inv
 import laporan_filter as lfil
 import laporan_tataletak as ltl
 import laporan_jenjang as ljj
+import laporan_linimasa as llm
 import kodefikasi_utils as kod
 import organisasi_utils as org
 import spasial_utils as su
@@ -5712,7 +5713,34 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
     # dihitung sehingga "Halaman 2 dari N" selalu terlalu besar.
     total_pages = 3 + cat_pages + loc_pages
 
+    # ── LINIMASA "PROGRES INVENTARISASI" ────────────────────────────────
+    #
+    # Permintaan pemilik: *"pada laporan eksekutif aset berikan linimasa
+    # seperti di laporan gabungan, persis seperti tampilan Progres
+    # Inventarisasi-nya, hanya ditempatkan di bagian halaman 2 Ringkasan
+    # Eksekutif."*
+    #
+    # Perhitungan yang SAMA PERSIS dengan laporan gabungan — satu modul, bukan
+    # salinan. Bedanya hanya lingkupnya: di sini satu kegiatan, di sana seluruh
+    # kegiatan satker. Grafik yang dihitung dua kali dengan dua rumus adalah
+    # dua angka yang harus sama selamanya, dan yang kedua tak pernah ikut
+    # diperbaiki.
+    _lini = llm.hitung([activity], all_assets)
+    linimasa = _lini["baris"]
+
     return {
+        "linimasa": linimasa,
+        "linimasa_ada": _lini["ada"],
+        "tahun_linimasa": _lini["tahun"],
+        "linimasa_stok_awal": _lini["stok_awal"],
+        "linimasa_akhir_tercatat": _lini["akhir_tercatat"],
+        "linimasa_akhir_diperiksa": _lini["akhir_diperiksa"],
+        "linimasa_akhir_belum": _lini["akhir_belum"],
+        "linimasa_bulan_terakhir": _lini["bulan_terakhir"],
+        "linimasa_tahun_berjalan": _lini["tahun_berjalan"],
+        "linimasa_janggal": _lini["janggal"],
+        "linimasa_perkiraan": _lini["perkiraan"],
+        "linimasa_pct_stempel": _lini["pct_stempel"],
         "logo_url": settings.get("logo_url", ""),
         "nama_instansi": settings.get("nama_instansi", ""),
         "nama_unit": settings.get("nama_unit_organisasi", ""),
@@ -6628,212 +6656,25 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
 
     # ── LINIMASA BULANAN ────────────────────────────────────────────────
     #
-    # Permintaan pemilik: laporan gabungan harus punya linimasa seperti grafik
-    # "PROGRES INVENTARISASI" — batang bulanan yang menunjukkan perkembangan.
-    #
-    # PENTING, dan dinyatakan terang di laporannya: aset TIDAK menyimpan kapan
-    # ia diinventarisasi. `updated_at` ter-cap pada SETIAP penyuntingan, jadi
-    # memakainya berarti aset yang disunting bulan berikutnya akan meloncat
-    # bulan — linimasa yang tampak presisi padahal mengarang. Yang benar-benar
-    # diketahui adalah PERIODE KEGIATAN, jadi itulah sumbernya: setiap kegiatan
-    # menyumbang asetnya pada bulan kegiatan itu dimulai, lalu diakumulasikan.
-    _BULAN_SINGKAT = ("JAN", "FEB", "MAR", "APR", "MEI", "JUN",
-                      "JUL", "AGU", "SEP", "OKT", "NOV", "DES")
-
-    def _bulan_mulai(act):
-        """Bulan (1-12) dan tahun kegiatan dimulai; None bila tak terbaca."""
-        raw = act.get("tanggal_mulai") or act.get("created_at") or ""
-        teks = str(raw)[:10]
-        try:
-            d = datetime.strptime(teks, "%Y-%m-%d")
-            return d.year, d.month
-        except (ValueError, TypeError):
-            return None, None
-
-    # Tahun yang ditampilkan: kegiatan TERBARU yang tahunnya sudah berjalan.
-    #
-    # Tahun mendatang sengaja dilewati. Satu salah ketik tanggal — "2062"
-    # alih-alih "2026" — akan memindahkan seluruh linimasa ke tahun itu dan
-    # menyisakan grafik kosong, sementara pekerjaan tahun ini tak terlihat
-    # sama sekali. Kekeliruan datanya tetap terlihat di tempat lain (daftar
-    # kegiatan memuat periodenya apa adanya); yang tak boleh adalah satu baris
-    # salah menyandera seluruh grafik.
-    _th_kini = datetime.now().year
-    tahun_kegiatan = [th for th, _ in (_bulan_mulai(a) for a in satker_acts) if th]
-    tahun_berjalan = [th for th in tahun_kegiatan if th <= _th_kini]
-    tahun_linimasa = max(tahun_berjalan) if tahun_berjalan else _th_kini
-
-    def _bulan_stempel(a):
-        """Bulan dari `tanggal_inventarisasi` — kapan aset ini BENAR-BENAR
-        diperiksa. Dicap server pada transisi pertama; lihat
-        backend/inventarisasi_stempel.py."""
-        teks = str(a.get(stempel_inv.FIELD) or "")[:10]
-        try:
-            d = datetime.strptime(teks, "%Y-%m-%d")
-            return d.year, d.month
-        except (ValueError, TypeError):
-            return None, None
-
-    def _bulan_perolehan(a):
-        """Bulan dari `purchase_date` — kapan aset ini DIPEROLEH."""
-        teks = str(a.get("purchase_date") or "")[:10]
-        try:
-            d = datetime.strptime(teks, "%Y-%m-%d")
-            return d.year, d.month
-        except (ValueError, TypeError):
-            return None, None
-
-    # RUMAHNYA ADALAH BMN TERCATAT; ISINYA CAPAIAN PEMERIKSAAN.
-    #
-    # Permintaan pemilik: *"pada progres inventarisasi jadikan grafik rumah
-    # adalah BMN tercatat dan setiap kali ada tambahan BMN tercatat maka akan
-    # terlihat, dan di dalamnya baru informasi data sekarang."*
-    #
-    # Versi sebelumnya menggambar PERISTIWA per bulan: tiap aset satu batang
-    # di bulan peristiwanya. Grafiknya memang fluktuatif, tetapi ia tak pernah
-    # menjawab pertanyaan yang paling sering diajukan atas laporan berjudul
-    # "Progres Inventarisasi" — **berapa yang harus diperiksa, dan berapa yang
-    # sudah**. Jarak antara keduanya adalah tunggakan pekerjaannya, dan pada
-    # grafik peristiwa jarak itu tak punya bentuk sama sekali.
-    #
-    # Bentuknya kini:
-    #
-    #   RUMAH  = BMN tercatat KUMULATIF sampai bulan itu — stok yang ada.
-    #            Tumbuh tiap kali ada BMN baru tercatat, dan pertumbuhannya
-    #            terlihat sebagai kenaikan atap dari bulan sebelumnya.
-    #   ISI    = capaian pemeriksaan KUMULATIF sampai bulan itu: ditemukan
-    #            (hijau) dan diperiksa-tak-ditemukan (jingga).
-    #   RONGGA = sisanya, yaitu yang BELUM diperiksa. Ia tak digambar dengan
-    #            warna justru supaya terbaca sebagai ruang kosong — itulah
-    #            tunggakannya.
-    #
-    # STOK AWAL IKUT DIHITUNG. BMN perolehan tahun-tahun sebelumnya tetap
-    # tercatat pada bulan Januari tahun ini; rumah yang dimulai dari nol akan
-    # menggambarkan satker seolah baru berdiri, dan tunggakan terbesarnya —
-    # justru yang warisan — lenyap dari grafik. Aset yang tanggal perolehannya
-    # tak terbaca juga masuk stok awal: ia jelas sudah tercatat, hanya kapannya
-    # yang tak diketahui, dan membuangnya berarti menyusutkan stok yang nyata.
-    _BULAN_KOSONG = lambda: [0] * 12          # noqa: E731
-    tambah_bulan = _BULAN_KOSONG()      # BMN tercatat BARU pada bulan itu
-    temu_bulan = _BULAN_KOSONG()        # diperiksa & ditemukan pada bulan itu
-    lain_bulan = _BULAN_KOSONG()        # diperiksa, hasilnya bukan "Ditemukan"
-    ada_kegiatan_bulan = [False] * 12
-    stok_awal = 0                       # tercatat SEBELUM tahun ini
-    temu_awal = 0                       # sudah diperiksa sebelum tahun ini
-    lain_awal = 0
-    n_berstempel = 0
-    n_perkiraan = 0
-    # Rumah yang SAMA, diiris per kegiatan. Dipakai grafik kedua: rumahnya
-    # persis rumah grafik utama, tetapi isinya menjawab pertanyaan lain —
-    # kegiatan MANA yang menyumbang stok itu, dan kapan.
-    awal_keg = {}                       # id kegiatan -> stok awal
-    tambah_keg = {}                     # id kegiatan -> [12] tambahan per bulan
-    for act in satker_acts:
-        th_act, bl_act = _bulan_mulai(act)
-        aid = act.get("id", "")
-        awal_keg.setdefault(aid, 0)
-        tambah_keg.setdefault(aid, [0] * 12)
-        aset_act = [a for a in all_assets if a.get("activity_id") == act.get("id")]
-        if th_act == tahun_linimasa and bl_act:
-            ada_kegiatan_bulan[bl_act - 1] = True
-        for a in aset_act:
-            # Sisi RUMAH: kapan aset ini tercatat.
-            th_p, bl_p = _bulan_perolehan(a)
-            if th_p == tahun_linimasa and bl_p:
-                tambah_bulan[bl_p - 1] += 1
-                tambah_keg[aid][bl_p - 1] += 1
-            elif th_p is None or th_p < tahun_linimasa:
-                stok_awal += 1
-                awal_keg[aid] += 1
-            # Perolehan bertahun MENDATANG tidak dihitung di mana pun: ia belum
-            # menjadi stok tahun ini, dan menaruhnya di stok awal akan
-            # menyatakan barang yang belum ada sebagai sudah ada.
-
-            # Sisi ISI: kapan aset ini diperiksa, dan hasilnya.
-            status = a.get("inventory_status") or "Belum Diinventarisasi"
-            if status == "Belum Diinventarisasi":
-                continue
-            th_i, bl_i = _bulan_stempel(a)
-            if th_i and bl_i:
-                n_berstempel += 1
-            else:
-                th_i, bl_i = th_act, bl_act
-                n_perkiraan += 1
-            ditemukan_ini = status == "Ditemukan"
-            if th_i == tahun_linimasa and bl_i:
-                (temu_bulan if ditemukan_ini else lain_bulan)[bl_i - 1] += 1
-            elif th_i is not None and th_i < tahun_linimasa:
-                if ditemukan_ini:
-                    temu_awal += 1
-                else:
-                    lain_awal += 1
-
-    # BULAN YANG BELUM BERJALAN TIDAK BERISI APA-APA.
-    #
-    # Bulan mendatang tak punya peristiwa apa pun, jadi batangnya kosong
-    # dengan sendirinya — tetapi kosong-karena-belum-terjadi harus tetap
-    # DIBEDAKAN dari kosong-karena-tak-ada-tambahan, sebab keduanya menjawab
-    # pertanyaan yang berbeda. Penandanya (garis putus-putus) yang membedakan.
-    #
-    # Tahun yang SUDAH LEWAT ditampilkan penuh dua belas bulan.
-    # Jam yang SAMA dengan `tanggal_cetak` laporan ini. Memakai jam berbeda
-    # membuat laporan bertanggal 1 Oktober memuat grafik yang berhenti di
-    # September — dua tanggal berbeda pada satu dokumen, tanpa penjelasan.
-    sekarang = datetime.now()
-    if tahun_linimasa > sekarang.year:
-        bulan_terakhir = 0          # seluruh tahunnya belum berjalan
-    elif tahun_linimasa == sekarang.year:
-        bulan_terakhir = sekarang.month
-    else:
-        bulan_terakhir = 12         # tahun lampau ditampilkan penuh
-
-    # Rumah dan isinya sama-sama KUMULATIF, dimulai dari stok awal.
-    linimasa, puncak = [], 0
-    kum_catat, kum_temu, kum_lain = stok_awal, temu_awal, lain_awal
-    n_janggal = 0
-    for i in range(12):
-        berjalan = (i + 1) <= bulan_terakhir
-        tambahan = tambah_bulan[i] if berjalan else 0
-        if berjalan:
-            kum_catat += tambahan
-            kum_temu += temu_bulan[i]
-            kum_lain += lain_bulan[i]
-        diperiksa = kum_temu + kum_lain
-        # Aset yang tanggal PEMERIKSAANNYA mendahului tanggal PEROLEHANNYA
-        # membuat isi melampaui rumahnya. Itu kekeliruan data, bukan keadaan
-        # yang mungkin. Digencet supaya batangnya tetap terbaca, lalu
-        # dihitung — grafik yang menggencet diam-diam menyembunyikan justru
-        # baris yang perlu dibetulkan.
-        if diperiksa > kum_catat:
-            n_janggal = max(n_janggal, diperiksa - kum_catat)
-            diperiksa = kum_catat
-        temu = min(kum_temu, diperiksa)
-        lain = diperiksa - temu
-        puncak = max(puncak, kum_catat if berjalan else 0)
-        linimasa.append({
-            "bulan": _BULAN_SINGKAT[i],
-            "tercatat": kum_catat if berjalan else 0,
-            "tambahan": tambahan,
-            "ditemukan": temu if berjalan else 0,
-            "periksa_lain": lain if berjalan else 0,
-            "belum": (kum_catat - diperiksa) if berjalan else 0,
-            "mulai": ada_kegiatan_bulan[i],
-            "belum_berjalan": not berjalan,
-        })
-    # Tinggi batang relatif terhadap puncak — dihitung DI SINI, bukan di
-    # template: aritmetika di dalam Jinja mudah membagi nol tanpa terlihat.
-    for b in linimasa:
-        b["h_tercatat"] = round(b["tercatat"] / puncak * 100) if puncak else 0
-    linimasa_ada = puncak > 0
-    # Angka penutup: keadaan pada bulan terakhir yang sudah berjalan.
-    _akhir = linimasa[bulan_terakhir - 1] if bulan_terakhir else None
-    linimasa_stok_awal = stok_awal
-    linimasa_tambah_tahun = sum(tambah_bulan)
-    linimasa_akhir_tercatat = _akhir["tercatat"] if _akhir else 0
-    linimasa_akhir_diperiksa = ((_akhir["ditemukan"] + _akhir["periksa_lain"])
-                                if _akhir else 0)
-    linimasa_akhir_belum = _akhir["belum"] if _akhir else 0
-    linimasa_janggal = n_janggal
+    # Perhitungannya ada di `backend/laporan_linimasa.py` — modul murni, supaya
+    # laporan eksekutif dapat memakai grafik yang SAMA alih-alih menyalinnya.
+    # Dua perhitungan yang harus sama selamanya adalah cacat yang sudah dibayar
+    # dua kali di repo ini (`eselon1` dengan empat salinan cabang bentuk, dan
+    # aturan eselon dengan dua salinan yang berbeda isi).
+    _lini = llm.hitung(satker_acts, all_assets)
+    linimasa = _lini["baris"]
+    linimasa_ada = _lini["ada"]
+    tahun_linimasa = _lini["tahun"]
+    linimasa_stok_awal = _lini["stok_awal"]
+    linimasa_tambah_tahun = _lini["tambah_tahun"]
+    linimasa_akhir_tercatat = _lini["akhir_tercatat"]
+    linimasa_akhir_diperiksa = _lini["akhir_diperiksa"]
+    linimasa_akhir_belum = _lini["akhir_belum"]
+    linimasa_janggal = _lini["janggal"]
+    linimasa_bulan_terakhir = _lini["bulan_terakhir"]
+    linimasa_tahun_berjalan = _lini["tahun_berjalan"]
+    linimasa_pct_stempel = _lini["pct_stempel"]
+    linimasa_perkiraan = _lini["perkiraan"]
 
     # ── LINIMASA KEDUA: RUMAH YANG SAMA, DIIRIS PER KEGIATAN ────────────
     #
@@ -6841,83 +6682,8 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
     # diambil dari grafik gabungan utama, cukup bagian BMN tercatatnya saja
     # sebagai rumahnya, dan kemudian di depannya baru data grafik per
     # kegiatannya."*
-    #
-    # Rumahnya PERSIS rumah grafik utama — tinggi tiap bulan sama, sampai ke
-    # piksel — tetapi isinya menjawab pertanyaan yang lain: kegiatan MANA yang
-    # menyumbang stok itu, dan sejak bulan berapa. Grafik utama menjawab
-    # "sudah diperiksa berapa"; yang ini menjawab "punya siapa".
-    #
-    # Hanya digambar bila kegiatannya LEBIH DARI SATU. Pada satu kegiatan,
-    # irisannya identik dengan rumahnya sendiri — grafik yang tak menambahkan
-    # apa pun, hanya satu halaman lagi untuk dilewati.
-    #
-    # WARNA DIBATASI, DAFTARNYA TIDAK. Dua puluh irisan berwarna dalam satu
-    # batang tak dapat dibedakan mata siapa pun, jadi delapan kegiatan terbesar
-    # diberi warna sendiri dan sisanya digabung menjadi satu irisan yang
-    # MENYEBUT jumlah kegiatan di dalamnya. Rinciannya tidak hilang: bagian
-    # "Capaian per Kegiatan" memuat seluruhnya, satu per satu.
-    _WARNA_KEG = ("#2563eb", "#059669", "#d97706", "#7c3aed", "#dc2626",
-                  "#0891b2", "#db2777", "#65a30d")
-    MAKS_WARNA = len(_WARNA_KEG)
-
-    def _total_keg(aid):
-        return awal_keg.get(aid, 0) + sum(tambah_keg.get(aid, []))
-
-    urut_keg = sorted((a.get("id", "") for a in satker_acts),
-                      key=lambda i: (-_total_keg(i), act_name_map.get(i, "")))
-    keg_berwarna = [i for i in urut_keg if _total_keg(i) > 0][:MAKS_WARNA]
-    keg_lain = [i for i in urut_keg if i not in set(keg_berwarna)
-                and _total_keg(i) > 0]
-
-    legenda_kegiatan = [{"nama": act_name_map.get(i) or i,
-                         "warna": _WARNA_KEG[n], "n": _total_keg(i)}
-                        for n, i in enumerate(keg_berwarna)]
-    if keg_lain:
-        legenda_kegiatan.append({
-            "nama": f"{len(keg_lain)} kegiatan lainnya", "warna": "#94a3b8",
-            "n": sum(_total_keg(i) for i in keg_lain)})
-
-    linimasa_keg = []
-    kum_keg = {i: awal_keg.get(i, 0) for i in urut_keg}
-    for i in range(12):
-        berjalan = (i + 1) <= bulan_terakhir
-        if berjalan:
-            for aid in urut_keg:
-                kum_keg[aid] += tambah_keg.get(aid, [0] * 12)[i]
-        segmen = []
-        if berjalan:
-            for n, aid in enumerate(keg_berwarna):
-                if kum_keg[aid]:
-                    segmen.append({"n": kum_keg[aid], "warna": _WARNA_KEG[n],
-                                   "nama": act_name_map.get(aid) or aid})
-            sisa_lain = sum(kum_keg[aid] for aid in keg_lain)
-            if sisa_lain:
-                segmen.append({"n": sisa_lain, "warna": "#94a3b8",
-                               "nama": f"{len(keg_lain)} kegiatan lainnya"})
-        linimasa_keg.append({
-            "bulan": _BULAN_SINGKAT[i],
-            "tercatat": linimasa[i]["tercatat"],
-            "tambahan": linimasa[i]["tambahan"],
-            "h_tercatat": linimasa[i]["h_tercatat"],
-            "belum_berjalan": linimasa[i]["belum_berjalan"],
-            "mulai": linimasa[i]["mulai"],
-            "segmen": segmen,
-        })
-    # Digambar hanya bila ada yang bisa dibandingkan.
-    linimasa_keg_ada = linimasa_ada and len(
-        [i for i in urut_keg if _total_keg(i) > 0]) > 1
-    # Dipakai layar untuk menerangkan mengapa sebagian bulan kosong.
-    linimasa_bulan_terakhir = bulan_terakhir
-    linimasa_tahun_berjalan = tahun_linimasa >= sekarang.year
-    # Berapa persen aset YANG SUDAH DIPERIKSA bertumpu pada tanggal
-    # pemeriksaannya sendiri, bukan perkiraan periode kegiatan. Hanya aset
-    # terperiksa yang dihitung: aset yang belum diperiksa ditempatkan menurut
-    # tanggal perolehannya, dan itu bukan perkiraan — itu tanggal sungguhan
-    # untuk peristiwa yang lain.
-    n_total_lini = n_berstempel + n_perkiraan
-    linimasa_pct_stempel = (round(n_berstempel / n_total_lini * 100, 1)
-                            if n_total_lini else 0)
-    linimasa_perkiraan = n_perkiraan
+    linimasa_keg, legenda_kegiatan, linimasa_keg_ada = llm.iris_per_kegiatan(
+        _lini, act_name_map)
 
     # ── KATEGORI DI LAPANGAN ────────────────────────────────────────────
     #
