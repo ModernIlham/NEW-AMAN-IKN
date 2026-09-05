@@ -1,4 +1,5 @@
 import React, { useRef, memo } from "react";
+import { unitTerdalam, jalurEselon } from "@/lib/pohonUnit";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Camera, Briefcase, Tag, CreditCard, Trash2, History, ClipboardCheck, Lock, Cloud, CloudOff, Check, RotateCcw, Clock, Loader2, AlertTriangle, BookOpen, User, RefreshCcw, ShieldCheck } from "lucide-react";
 import IkonLokasiAset from "./IkonLokasiAset";
@@ -367,12 +368,17 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
                   {(a.brand || a.model) && <div className="text-[9px] text-muted-foreground truncate leading-tight">{[a.brand, a.model].filter(Boolean).join(' / ')}</div>}
                 </div>
 
-                {/* Eselon I/II - xl (flex-1: matches header, truncates only when
-                    needed). Eselon II tampil di baris kedua dengan font lebih
-                    kecil, tepat di bawah Eselon I. */}
+                {/* Unit organisasi - xl (flex-1: matches header, truncates only
+                    when needed). Baris kedua menyebut unit TERDALAM yang
+                    tercatat, bukan selalu Eselon II: aset sebuah Subbagian yang
+                    ditampilkan sebagai Bironya menyebut unit yang bukan
+                    pemegangnya. Judulnya membawa jalur lengkapnya. */}
                 <div className="hidden xl:block flex-1 min-w-0 px-1">
                   <TruncatedCell text={a.eselon1} icon={Briefcase} />
-                  {a.eselon2 && <div className="text-[9px] text-muted-foreground/80 truncate leading-tight pl-3.5" title={a.eselon2}>{a.eselon2}</div>}
+                  {unitTerdalam(a) && unitTerdalam(a) !== a.eselon1 && (
+                    <div className="text-[9px] text-muted-foreground/80 truncate leading-tight pl-3.5"
+                      title={jalurEselon(a)}>{unitTerdalam(a)}</div>
+                  )}
                 </div>
                 {/* Lokasi - xl. Nama pengguna ditambah di baris kedua (font kecil). */}
                 <div className="hidden xl:block flex-1 min-w-0 px-1">

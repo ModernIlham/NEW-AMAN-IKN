@@ -1,6 +1,7 @@
 import {
   susunPohonUnit, jalurUnit, ringkasLingkup,
   unitDalamLingkup, fieldEselon, unitDariField, perubahanEselonMassal,
+  unitTerdalam, jalurEselon,
 } from "../pohonUnit";
 
 // Setjen → Biro Umum → Bagian RT; Biro Keuangan sebagai saudara.
@@ -147,4 +148,46 @@ test("unit terdalam mengisi kelima kolomnya tanpa satu pun perintah kosongkan", 
   expect(r.eselon4).toBe("Subbag Perlengkapan");
   expect(r.eselon5).toBe("__clear__");
   expect(Object.values(r).filter((v) => v === "__clear__")).toHaveLength(1);
+});
+
+// ── Penyebutan unit aset pada tampilan sempit ───────────────────────────
+
+const ASET_DALAM = {
+  eselon1: "Setjen", eselon2: "Biro Umum", eselon3: "Bagian RT",
+  eselon4: "Subbag Perlengkapan", eselon5: "Urusan Gudang",
+};
+
+test("unit terdalam yang disebut, bukan Eselon II", () => {
+  // Aset sebuah Urusan yang ditampilkan sebagai Bironya menyebut unit yang
+  // bukan pemegangnya.
+  expect(unitTerdalam(ASET_DALAM)).toBe("Urusan Gudang");
+  expect(unitTerdalam({ eselon1: "Setjen", eselon2: "Biro Umum" })).toBe("Biro Umum");
+  expect(unitTerdalam({ eselon1: "Setjen" })).toBe("Setjen");
+});
+
+test("jalur putus di tengah tetap menyebut yang terdalam terisi", () => {
+  expect(unitTerdalam({ eselon1: "Setjen", eselon3: "Bagian RT" })).toBe("Bagian RT");
+});
+
+test("aset tanpa unit tak menyebut apa pun", () => {
+  expect(unitTerdalam({})).toBe("");
+  expect(unitTerdalam(null)).toBe("");
+  expect(unitTerdalam({ eselon2: "   " })).toBe("");
+});
+
+test("jalur menulis seluruh tingkat yang terisi", () => {
+  expect(jalurEselon(ASET_DALAM)).toBe(
+    "Setjen / Biro Umum / Bagian RT / Subbag Perlengkapan / Urusan Gudang");
+});
+
+test("jalur yang dipotong membuang bagian AWAL dan menandainya", () => {
+  // Eselon I sama untuk hampir semua aset satker, jadi ia yang paling sedikit
+  // membedakan; yang menjelaskan letak barang adalah unit terdalamnya.
+  expect(jalurEselon(ASET_DALAM, 2)).toBe("… / Subbag Perlengkapan / Urusan Gudang");
+  expect(jalurEselon(ASET_DALAM, 5)).not.toContain("…");
+});
+
+test("jalur pendek tak pernah ditandai terpotong", () => {
+  expect(jalurEselon({ eselon1: "Setjen" }, 2)).toBe("Setjen");
+  expect(jalurEselon({}, 2)).toBe("");
 });

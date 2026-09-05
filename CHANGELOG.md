@@ -18,6 +18,50 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1004] Tampilan aset menyebut unit terdalamnya — 2026-09-05
+
+Sisiran terakhir rangkaian eselon: tempat-tempat yang masih mengasumsikan dua
+tingkat setelah asetnya membawa lima.
+
+### Unit yang disebut bukan unit yang benar
+
+Tiga tampilan aset berhenti di Eselon II:
+
+| Tempat | Yang tercetak |
+|---|---|
+| Tabel aset (kolom xl) | `eselon2` saja pada baris kedua |
+| Panel Grup Aset | `eselon1 / eselon2` |
+| Kartu galeri | `eselon1 / eselon2` |
+
+Sejak `[#999]` aset dapat dicatat sampai Eselon V. Aset milik sebuah Urusan
+Gudang karenanya tercetak sebagai **Bironya** — bukan sekadar kurang lengkap,
+melainkan **menyebut unit yang bukan pemegangnya**. Petugas yang mencari barang
+di daftar itu diarahkan ke tempat yang salah.
+
+Ketiganya kini menyebut unit **terdalam** yang tercatat, dengan jalur lengkap
+pada `title` sehingga yang menggantung tetikus melihat rantai penuhnya.
+
+Ruang tiap tempat berbeda, jadi jalurnya dipotong berbeda pula — dan yang
+dipotong adalah bagian **awal**, bukan akhir: Eselon I sama untuk hampir semua
+aset satker sehingga ia yang paling sedikit membedakan, sedangkan yang
+menjelaskan letak barang justru unit terdalamnya. Pemotongannya ditandai `…`
+supaya tak terbaca sebagai jalur yang utuh.
+
+### Prosa laporan yang sudah tak sesuai
+
+Keterangan bagian per-kegiatan masih berbunyi *"Eselon I/II tidak diulang di
+sini — keduanya sifat organisasi…"*, menyebut dua tingkat dan panel yang sudah
+tak ada. Kini ia menunjuk panel **Per Unit Organisasi** yang sebenarnya.
+
+### Cakupan
+
+- `frontend/src/lib/pohonUnit.js` — `unitTerdalam`, `jalurEselon`
+  (cerminan `organisasi_utils.unit_terdalam`).
+- `frontend/src/components/assets/VirtualizedAssetTable.jsx`,
+  `AssetGroupsPanel.jsx`, `AssetGalleryCard.jsx`.
+- `backend/templates/laporan_satker_v2.html` — keterangan bagian.
+- Uji: +6 `pohonUnit.test.js`.
+
 ## [#1003] Tabel Struktur Organisasi: dari pohon, dan tak lagi dipangkas diam-diam — 2026-09-05
 
 Penutup terakhir rangkaian eselon. Satu tabel tertinggal dari perubahan besar

@@ -1,4 +1,5 @@
 import React, { memo, useState, useCallback } from "react";
+import { unitTerdalam, jalurEselon } from "@/lib/pohonUnit";
 import { Camera, Tag, Images, User, QrCode, CreditCard, Trash2, FileCheck, FileX, Calendar, Lock, ClipboardCheck, Building2, ImageIcon, FileText, ShieldCheck, RefreshCcw as RefreshCcwIcon, Check as CheckIcon } from "lucide-react";
 import IkonLokasiAset from "./IkonLokasiAset";
 import { punyaKoordinat } from "@/lib/koordinatAset";
@@ -277,11 +278,11 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
         )}
 
         {/* Eselon I/II - full width */}
-        {(asset.eselon1) && (
-          <div className="flex items-center gap-1 mb-0.5 w-full">
+        {unitTerdalam(asset) && (
+          <div className="flex items-center gap-1 mb-0.5 w-full" title={jalurEselon(asset)}>
             <Building2 className="w-2.5 h-2.5 text-violet-500 flex-shrink-0" />
             <span className="text-[9px] sm:text-[10px] text-muted-foreground truncate">
-              {asset.eselon1}{asset.eselon2 ? ` / ${asset.eselon2}` : ''}
+              {jalurEselon(asset, 2)}
             </span>
           </div>
         )}
