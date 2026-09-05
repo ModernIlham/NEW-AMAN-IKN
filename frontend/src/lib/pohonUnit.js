@@ -190,3 +190,38 @@ export function perubahanEselonMassal(unitId, pohon) {
   }
   return keluar;
 }
+
+/**
+ * Nama unit TERDALAM yang tercatat pada sebuah aset/pegawai (Eselon V → I).
+ *
+ * Tampilan sempit hanya punya ruang untuk satu nama, dan yang benar adalah
+ * yang TERDALAM: aset sebuah Subbagian yang ditampilkan sebagai Bironya
+ * menyebut unit yang bukan pemegangnya. Cerminan
+ * `organisasi_utils.unit_terdalam` di sisi server.
+ */
+export function unitTerdalam(data) {
+  for (let n = 5; n >= 1; n -= 1) {
+    const v = String((data || {})[`eselon${n}`] || "").trim();
+    if (v) return v;
+  }
+  return "";
+}
+
+/**
+ * Jalur unit aset sebagai satu teks: `"Setjen / Biro Umum / Bagian RT"`.
+ *
+ * `maks` membatasi berapa tingkat TERDALAM yang ikut ditulis — ruang di kartu
+ * memang terbatas. Yang dipotong adalah bagian AWAL, bukan akhir: yang paling
+ * menjelaskan letak barang adalah unit terdalamnya, sedangkan Eselon I sama
+ * untuk hampir semua aset satker dan karenanya paling sedikit membedakan.
+ * Pemotongannya ditandai "…" supaya tak terbaca sebagai jalur yang utuh.
+ */
+export function jalurEselon(data, maks = 5) {
+  const bagian = [];
+  for (let n = 1; n <= 5; n += 1) {
+    const v = String((data || {})[`eselon${n}`] || "").trim();
+    if (v) bagian.push(v);
+  }
+  if (bagian.length <= maks) return bagian.join(" / ");
+  return `… / ${bagian.slice(bagian.length - maks).join(" / ")}`;
+}

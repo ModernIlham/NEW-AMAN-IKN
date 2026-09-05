@@ -1,4 +1,5 @@
 import React, { useState, useEffect, memo, useCallback } from "react";
+import { unitTerdalam, jalurEselon } from "@/lib/pohonUnit";
 import { ChevronDown, ChevronRight, Layers, MapPin, User, Wrench, ClipboardList, Pen, Calendar, Tag, FileText, Building2, Truck } from "lucide-react";
 import { Button } from "../ui/button";
 import axios from "axios";
@@ -205,10 +206,11 @@ const AssetGroupsPanel = memo(({ activityId, isOpen, onToggle, onBatchEdit, embe
                                       <Truck className="w-2.5 h-2.5 flex-shrink-0" />{perolehan}
                                     </span>
                                   )}
-                                  {(m.eselon1 || m.eselon2) && (
-                                    <span className="inline-flex items-center gap-0.5">
+                                  {unitTerdalam(m) && (
+                                    <span className="inline-flex items-center gap-0.5"
+                                      title={jalurEselon(m)}>
                                       <Building2 className="w-2.5 h-2.5 flex-shrink-0" />
-                                      {[m.eselon1, m.eselon2].filter(Boolean).join(' / ')}
+                                      {jalurEselon(m, 3)}
                                     </span>
                                   )}
                                 </div>
