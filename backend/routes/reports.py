@@ -15,6 +15,9 @@ from datetime import datetime, timezone
 import inventarisasi_stempel as stempel_inv
 import laporan_filter as lfil
 import laporan_tataletak as ltl
+import laporan_jenjang as ljj
+import kodefikasi_utils as kod
+import spasial_utils as su
 from pathlib import Path
 
 # Template directory - relative to this file's location (works on any server)
@@ -6190,6 +6193,64 @@ async def generate_executive_grouped_pdf(activity_id: str, detail_fields: str = 
 # LAPORAN PER SATKER - Full Report with Cover, Analysis, Data
 # ============================================================================
 
+#: Jenjang denah yang ditawarkan panel lokasi, dari yang TERLUAS. Diambil dari
+#: registry spasial supaya labelnya tak pernah berbeda dengan layar Denah.
+_LABEL_DENAH = {b[1]: b[2] for b in su.LEVEL_SPASIAL}
+_URUT_DENAH = tuple(b[1] for b in su.LEVEL_SPASIAL)
+
+
+async def _peta_denah(aset):
+    """({node_id: {"level_nama": {KODE_BAKU: nama}}}, jenjang_yang_dipakai).
+
+    Snapshot `lokasi_spasial` pada aset hanya menyimpan node TERDALAM tempat ia
+    berada — nama gedung dan lantainya tidak ikut. Untuk mengelompokkan per
+    Gedung, leluhur node itu harus ditelusuri; itulah yang dilakukan di sini,
+    dengan DUA kueri saja: satu untuk node yang dipakai, satu untuk seluruh
+    leluhurnya sekaligus.
+
+    Jenjang yang dikembalikan hanya yang BENAR-BENAR ada pada rantai node yang
+    dipakai. Tingkat boleh dilompati (banyak satker hanya Gedung → Lantai →
+    Ruangan), dan menawarkan tingkat yang tak dipakai hanya menawarkan grafik
+    kosong.
+    """
+    ids = {(a.get("lokasi_spasial") or {}).get("node_id")
+           for a in (aset or [])}
+    ids.discard(None)
+    ids.discard("")
+    if not ids:
+        return {}, ()
+    _P = {"_id": 0, "id": 1, "nama": 1, "tipe": 1, "ancestors": 1}
+    node = await db.spasial_node.find({"id": {"$in": list(ids)}}, _P).to_list(20000)
+    leluhur = {i for n in node for i in (n.get("ancestors") or [])}
+    semua = {n["id"]: n for n in node}
+    kurang = [i for i in leluhur if i not in semua]
+    if kurang:
+        for n in await db.spasial_node.find({"id": {"$in": kurang}}, _P).to_list(20000):
+            semua[n["id"]] = n
+
+    peta, terpakai = {}, set()
+    for n in node:
+        level_nama = {}
+        # Leluhur dulu (terluar → terdalam), lalu node itu sendiri; kalau ada
+        # dua node bertipe sama pada satu rantai, yang TERDALAM yang menang.
+        for i in list(n.get("ancestors") or []) + [n["id"]]:
+            d = semua.get(i)
+            if d and d.get("tipe") and d.get("nama"):
+                level_nama[d["tipe"]] = d["nama"]
+        peta[n["id"]] = {"level_nama": level_nama}
+        terpakai.update(level_nama)
+    return peta, tuple(k for k in _URUT_DENAH if k in terpakai)
+
+
+#: Jenjang kodefikasi yang ditawarkan panel kategori. Level 5 (Sub-sub
+#: Kelompok, 10 digit) sengaja TIDAK ditawarkan: ia sudah setara daftar barang
+#: satu per satu, dan itu tugas laporan per kegiatan — bukan grafik sebaran.
+KAT_LEVEL_SAH = (1, 2, 3, 4)
+#: Bidang. Golongan hanya delapan baris — terlalu kasar untuk ditindaklanjuti;
+#: Kelompok ke bawah mudah menjadi ratusan baris pada satker besar.
+KAT_LEVEL_BAWAAN = 2
+
+
 async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None):
     """Data laporan per satker — menggabungkan SELURUH kegiatan satker itu.
 
@@ -6216,6 +6277,13 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
     ).to_list(100000)
     categories = await db.categories.find({}, {"_id": 0}).to_list(10000)
     cat_map = {c.get("kode_aset", ""): c.get("label", "") for c in categories}
+    # Referensi kodefikasi BMN — uraian per jenjang (Golongan → Sub Kelompok).
+    # Dimuat sekali di sini; panel kategori memakainya untuk memberi NAMA pada
+    # kode yang dipotong. Referensi yang belum lengkap tak menghalangi apa pun:
+    # `label_kode` jatuh ke kodenya sendiri.
+    kodefikasi = await db.kodefikasi.find(
+        {}, {"_id": 0, "kode": 1, "uraian": 1}).to_list(60000)
+    kode_uraian = {k.get("kode", ""): k.get("uraian", "") for k in kodefikasi}
     # Daftar pilihan dirakit SEBELUM penyaringan. Sebuah dimensi tak pernah
     # menyempitkan daftarnya sendiri — memilih satu tahun tak boleh membuat
     # tahun lain lenyap, sebab pengguna lalu terkurung tanpa kotak untuk
@@ -6265,19 +6333,76 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
     chart_status = [{"name": n, "count": len(i), "pct": pct(len(i), tc), "color": stat_colors.get(n, "#64748b")} for n, i in [("Ditemukan", ditemukan), ("Tidak Ditemukan", tidak), ("Berlebih", berlebih), ("Sengketa", sengketa), ("Belum", belum)] if i]
 
     from collections import Counter
-    cat_counter = Counter((a.get("category") or "Lainnya") for a in all_assets)
-    cat_vals = {}
-    for a in all_assets:
-        c = a.get("category") or "Lainnya"
-        cat_vals[c] = cat_vals.get(c, 0) + sp(a)
+    # ── KATEGORI BERJENJANG ─────────────────────────────────────────────
+    #
+    # Permintaan pemilik: *"Per Kategori masih belum terbagi hingga ke per
+    # golongan, bidang, kelompok, dan sub kelompok (dan bisa dipilih ingin
+    # ditampilkan seperti apa)."*
+    #
+    # Sebelumnya panel ini mengelompokkan menurut field `category` apa adanya —
+    # daftar RATA tanpa jenjang sama sekali. Padahal BMN justru dikodefikasi
+    # berjenjang, dan pertanyaan "berapa banyak Peralatan dan Mesin" tak dapat
+    # dijawab oleh daftar rata.
+    #
+    # Sumbernya kini `asset_code` (kode barang BMN), dipotong pada jenjang yang
+    # DIPILIH pembacanya — bukan ditebak: Golongan memberi delapan baris,
+    # terlalu kasar untuk ditindaklanjuti; Sub Kelompok bisa memberi ratusan,
+    # terlalu halus untuk dibaca sekali pandang. Yang benar bergantung pada
+    # pertanyaan yang sedang dibawa.
+    _kode_aset = lambda a: kod.normalize_kode(a.get("asset_code"))  # noqa: E731
+    kat_level = ljj.jenjang_terpilih(
+        (filter_dipilih or {}).get("kat_level"), KAT_LEVEL_SAH, KAT_LEVEL_BAWAAN)
+    grup_kat = ljj.kelompokkan_kode(
+        all_assets, kod.LEVEL_LENGTHS[kat_level], _kode_aset, kode_uraian)
     # TIDAK DIPANGKAS. `most_common(10)` membuang data tanpa satu pun tanda:
     # satker dengan 40 kategori hanya menampilkan 10, dan pembacanya tak punya
     # cara tahu 30 sisanya ada. Panjangnya kini ditangani penyusun tata letak
     # (backend/laporan_tataletak.py) yang memecah, bukan memangkas.
-    chart_kategori = [{"name": (cat_map.get(c, c) or c)[:30], "count": cnt, "pct": pct(cnt, tc), "val_fmt": fmt(cat_vals.get(c, 0))} for c, cnt in cat_counter.most_common()]
+    chart_kategori = [{"name": nama[:44], "count": len(isi),
+                       "pct": pct(len(isi), tc),
+                       "val_fmt": fmt(sum(sp(a) for a in isi))}
+                      for nama, isi in grup_kat]
+    pilihan_kat_level = ljj.pilihan_jenjang(KAT_LEVEL_SAH, kod.LEVEL_LABELS)
 
-    loc_counter = Counter(a.get("location", "-") or "-" for a in all_assets)
-    chart_lokasi = [{"name": l[:30], "count": cnt, "pct": pct(cnt, tc)} for l, cnt in loc_counter.most_common()]
+    # ── LOKASI MENURUT DENAH ────────────────────────────────────────────
+    #
+    # Permintaan pemilik: *"lokasi belum terbagi berdasarkan denah yang sudah
+    # ditetapkan."*
+    #
+    # Field teks `location` diketik bebas: "Lt.2", "Lantai 2", "lantai dua"
+    # adalah tiga baris berbeda pada grafik yang sama, dan tak satu pun
+    # menjawab "berapa banyak yang ada di Gedung A". Denah yang SUDAH
+    # ditetapkan (`spasial_node`) punya jenjang sungguhan — Kawasan → Gedung →
+    # Lantai → Ruangan — dan aset yang sudah ditempatkan membawa `node_id`-nya.
+    #
+    # Jenjang denah yang ditawarkan hanya yang BENAR-BENAR dipakai satker itu:
+    # tingkat boleh dilompati (banyak satker hanya Gedung → Lantai → Ruangan),
+    # dan menawarkan "Kawasan" pada satker yang tak memakainya hanya menawarkan
+    # grafik kosong.
+    peta_node, lok_level_sah = await _peta_denah(all_assets)
+    # Bawaannya jenjang TERLUAS yang dipakai (umumnya Gedung), bukan yang
+    # terdalam: satker dengan dua ratus ruangan akan langsung disodori dua
+    # ratus baris, dan gambaran besarnya — "gedung mana yang paling banyak" —
+    # justru tenggelam. Pembaca menurun dari luas ke sempit, bukan sebaliknya.
+    lok_level = ljj.jenjang_terpilih(
+        (filter_dipilih or {}).get("lok_level"), lok_level_sah,
+        lok_level_sah[0] if lok_level_sah else "")
+    if lok_level:
+        grup_lok = ljj.kelompokkan_denah(all_assets, lok_level, peta_node)
+        lok_sumber = "denah"
+    else:
+        # Belum ada satu pun aset yang ditempatkan di denah. Field teks
+        # `location` dipakai sebagai cadangan — dan laporannya MENGATAKAN
+        # bahwa itu yang terjadi, sebab grafik lokasi yang diam soal sumbernya
+        # membuat pembacanya mengira denahnya sudah terpakai.
+        gl = {}
+        for a in all_assets:
+            gl.setdefault(str(a.get("location") or "").strip() or "-", []).append(a)
+        grup_lok = sorted(gl.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+        lok_sumber = "teks"
+    chart_lokasi = [{"name": nama[:44], "count": len(isi),
+                     "pct": pct(len(isi), tc)} for nama, isi in grup_lok]
+    pilihan_lok_level = ljj.pilihan_jenjang(lok_level_sah, _LABEL_DENAH)
 
     es1_counter = Counter(a.get("eselon1", "") for a in all_assets if a.get("eselon1"))
     es1_vals = {}
@@ -6852,10 +6977,11 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
                          "", kolom_nilai="count"),
         ltl.panel_batang("Status Inventarisasi", chart_status,
                          "", kolom_nilai="count"),
-        ltl.panel_batang("Per Kategori", chart_kategori,
-                         "#1e40af", kolom_nilai="val_fmt"),
-        ltl.panel_batang("Per Lokasi", chart_lokasi,
-                         "#059669", kolom_nilai="count"),
+        ltl.panel_batang(f"Per Kategori — {kod.LEVEL_LABELS[kat_level]}",
+                         chart_kategori, "#1e40af", kolom_nilai="val_fmt"),
+        ltl.panel_batang(("Per Lokasi — " + _LABEL_DENAH.get(lok_level, lok_level))
+                         if lok_level else "Per Lokasi (teks bebas)",
+                         chart_lokasi, "#059669", kolom_nilai="count"),
         ltl.panel_batang("Per Eselon I", chart_eselon1,
                          "#7c3aed", kolom_nilai="val_fmt"),
         ltl.panel_batang("Per Eselon II", chart_eselon2,
@@ -7017,6 +7143,11 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
         "stiker_terpasang": st_terpasang, "stiker_belum": st_belum, "stiker_pct": st_pct, "dok_pct": dok_pct,
         "eselon_list": eselon_list, "kegiatan_list": kegiatan_list,
         "pilihan": pilihan,
+        "kat_level": kat_level, "pilihan_kat_level": pilihan_kat_level,
+        "kat_level_label": kod.LEVEL_LABELS.get(kat_level, ""),
+        "lok_level": lok_level, "pilihan_lok_level": pilihan_lok_level,
+        "lok_level_label": _LABEL_DENAH.get(lok_level, ""),
+        "lok_sumber": lok_sumber,
         "filter_dipilih": filter_dipilih or {},
         "filter_aktif": lfil.ada_yang_aktif(filter_dipilih),
         "linimasa": linimasa, "linimasa_ada": linimasa_ada,
@@ -7060,7 +7191,7 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
 #: Nama parameter yang DIKELOLA formulir filter. Sisanya — token autentikasi,
 #: satker aktif, apa pun yang ditambahkan kemudian — harus ikut terbawa.
 _PARAM_FILTER = ("kegiatan", "tahun", "status", "kondisi", "lokasi",
-                 "dari", "sampai")
+                 "dari", "sampai", "kat_level", "lok_level")
 
 
 def _param_bukan_filter(request: Request) -> list:
@@ -7082,7 +7213,8 @@ def _param_bukan_filter(request: Request) -> list:
 
 
 def _filter_laporan_satker(kegiatan, tahun, status, kondisi, lokasi,
-                           dari: str = "", sampai: str = "") -> dict:
+                           dari: str = "", sampai: str = "",
+                           kat_level: str = "", lok_level: str = "") -> dict:
     """Rakit filter laporan dari query string.
 
     Tiap dimensi menerima parameter BERULANG (`?tahun=2023&tahun=2024`) —
@@ -7093,7 +7225,13 @@ def _filter_laporan_satker(kegiatan, tahun, status, kondisi, lokasi,
     """
     return {"kegiatan": kegiatan, "tahun": tahun, "status": status,
             "kondisi": kondisi, "lokasi": lokasi,
-            "dari": dari or "", "sampai": sampai or ""}
+            "dari": dari or "", "sampai": sampai or "",
+            # Pilihan TAMPILAN, bukan penyaring: ia mengubah jenjang
+            # pengelompokan panel kategori, tidak membuang satu aset pun.
+            # Karena itu ia sengaja TIDAK ikut `ada_yang_aktif()` — laporan
+            # yang menyatakan dirinya "tersaring" hanya karena jenjangnya
+            # diganti akan berbohong tentang cakupannya.
+            "kat_level": kat_level or "", "lok_level": lok_level or ""}
 
 
 @reports_router.get("/inventory-activities/{activity_id}/laporan-satker-html")
@@ -7104,12 +7242,14 @@ async def laporan_satker_html(activity_id: str, request: Request,
                               kondisi: List[str] = Query(default=[]),
                               lokasi: List[str] = Query(default=[]),
                               dari: str = "", sampai: str = "",
+                              kat_level: str = "", lok_level: str = "",
                               _user: dict = Depends(require_user_or_query_token)):
     """Pratinjau HTML laporan gabungan satker — interaktif, dengan filter."""
     await pastikan_akses_kegiatan_id(_user, activity_id)
     from jinja2 import Environment, FileSystemLoader
     data = await _build_satker_report_v2(activity_id, _filter_laporan_satker(
-        kegiatan, tahun, status, kondisi, lokasi, dari, sampai))
+        kegiatan, tahun, status, kondisi, lokasi, dari, sampai, kat_level,
+        lok_level))
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
     data["preview"] = True
@@ -7131,6 +7271,7 @@ async def laporan_satker_pdf(request: Request, activity_id: str,
                              kondisi: List[str] = Query(default=[]),
                              lokasi: List[str] = Query(default=[]),
                              dari: str = "", sampai: str = "",
+                             kat_level: str = "", lok_level: str = "",
                              _user: dict = Depends(require_user_or_query_token)):
     """Generate Laporan per Satker as PDF using weasyprint.
 
@@ -7144,7 +7285,8 @@ async def laporan_satker_pdf(request: Request, activity_id: str,
     # laporan tersaring akan menghasilkan PDF berisi seluruh satker —
     # dokumen yang isinya berbeda dari yang barusan dibaca di layar.
     data = await _build_satker_report_v2(activity_id, _filter_laporan_satker(
-        kegiatan, tahun, status, kondisi, lokasi, dari, sampai))
+        kegiatan, tahun, status, kondisi, lokasi, dari, sampai, kat_level,
+        lok_level))
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
     data["preview"] = False

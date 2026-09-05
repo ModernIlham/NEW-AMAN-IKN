@@ -258,6 +258,7 @@ body {
 .pf-opsi label.di-luar { color: #b45309; }
 .tanda-luar { font-size: 7.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: #b45309; background: #fef3c7; border: 1px solid #fde68a; border-radius: 3px; padding: 0 3px; white-space: nowrap; }
 .pf-opsi input { margin-top: 2px; flex-shrink: 0; accent-color: var(--biru); }
+.pf-hint { font-size: 7.5px; color: #94a3b8; line-height: 1.45; margin-top: 5px; }
 .pf-hampa { font-size: 8.5px; color: var(--abu); padding: 6px 10px 9px; }
 .pf-tgl { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 6px; }
 .pf-tgl label { font-size: 8px; color: #64748b; font-weight: 600; }
@@ -342,6 +343,36 @@ body {
     {{ blok('Status Inventarisasi', 'status', pilihan.status, filter_dipilih.get('status') or []) }}
     {{ blok('Kondisi', 'kondisi', pilihan.kondisi, filter_dipilih.get('kondisi') or []) }}
     {{ blok('Lokasi', 'lokasi', pilihan.lokasi, filter_dipilih.get('lokasi') or []) }}
+
+    {# Pilihan TAMPILAN, bukan penyaring: ia mengubah jenjang pengelompokan
+       panel kategori, tidak membuang satu aset pun. Ditaruh di panel yang sama
+       karena di situlah pengguna sudah berada saat menyesuaikan laporannya. #}
+    <div class="pf-blok" data-blok="kat_level">
+      <h5>Jenjang Kategori <span class="jml">{{ kat_level_label }}</span></h5>
+      <div class="pf-opsi">
+        {% for o in pilihan_kat_level %}
+        <label><input type="radio" name="kat_level" value="{{ o.nilai }}"
+          {% if o.nilai == kat_level|string %}checked{% endif %}>{{ o.label }}</label>
+        {% endfor %}
+      </div>
+      <p class="pf-hint">Mengelompokkan panel <b>Per Kategori</b> menurut kode barang BMN. Bukan penyaring — tak satu pun aset dibuang.</p>
+    </div>
+
+    {# Jenjang denah — hanya tingkat yang BENAR-BENAR dipakai satker ini.
+       Tanpa satu pun aset yang ditempatkan di denah, blok ini tak muncul dan
+       panel lokasi jatuh ke field teks bebas (judulnya mengatakan itu). #}
+    {% if pilihan_lok_level %}
+    <div class="pf-blok" data-blok="lok_level">
+      <h5>Jenjang Lokasi <span class="jml">{{ lok_level_label }}</span></h5>
+      <div class="pf-opsi">
+        {% for o in pilihan_lok_level %}
+        <label><input type="radio" name="lok_level" value="{{ o.nilai }}"
+          {% if o.nilai == lok_level %}checked{% endif %}>{{ o.label }}</label>
+        {% endfor %}
+      </div>
+      <p class="pf-hint">Mengelompokkan panel <b>Per Lokasi</b> menurut denah yang sudah ditetapkan. Bukan penyaring.</p>
+    </div>
+    {% endif %}
 
     <div class="pf-blok">
       <h5>Tanggal Pemeriksaan

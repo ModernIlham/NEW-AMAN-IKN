@@ -851,7 +851,9 @@ def test_kategori_lokasi_dan_eselon_TIDAK_DIPANGKAS_sepuluh_teratas(dbr):
         aset = _aset("k1", 60, ditemukan=40)
         for i, a in enumerate(aset):
             a["location"] = f"Gedung Blok {i % 23}"
-            a["category"] = f"KAT{i % 17}"
+            # Kategori kini bersumber dari KODE BARANG, bukan field
+            # `category`: bidang = tiga digit pertama, jadi 17 bidang berbeda.
+            a["asset_code"] = f"3{i % 17:02d}0104001"
             a["eselon1"] = f"Ditjen {i % 13}"
             a["eselon2"] = f"Direktorat {i % 19}"
         await _seed(dbr, [_keg(1, 5)], aset)
@@ -867,9 +869,19 @@ def test_kategori_lokasi_dan_eselon_TIDAK_DIPANGKAS_sepuluh_teratas(dbr):
                 for p in h[sisi]:
                     baris.setdefault(p["judul"], 0)
                     baris[p["judul"]] += len(p["baris"])
-        assert baris["Per Lokasi"] == 23, baris
-        assert baris["Per Kategori"] == 17, baris
         assert baris["Per Eselon II"] == 19, baris
+        # Tanpa penempatan denah, panel lokasi jatuh ke field teks bebas — dan
+        # judulnya MENGATAKAN itu. Grafik yang diam soal sumbernya membuat
+        # pembacanya mengira denahnya sudah terpakai.
+        judul_lok = [j for j in baris if j.startswith("Per Lokasi")]
+        assert judul_lok == ["Per Lokasi (teks bebas)"], judul_lok
+        assert baris[judul_lok[0]] == 23, baris
+        # Judul panel kategori MENYEBUT jenjangnya. Tanpa itu, dua laporan
+        # dengan jenjang berbeda terlihat sama persis dan angkanya tak dapat
+        # dibandingkan oleh siapa pun yang tak menyimpan query string-nya.
+        judul_kat = [j for j in baris if j.startswith("Per Kategori")]
+        assert judul_kat == ["Per Kategori — Bidang"], judul_kat
+        assert baris[judul_kat[0]] == 17, baris
     _jalan(jalan())
 
 
@@ -881,7 +893,7 @@ def test_halaman_analisis_disusun_dengan_MENGUKUR_bukan_tetapan(dbr):
         aset = _aset("k1", 90, ditemukan=60)
         for i, a in enumerate(aset):
             a["location"] = f"Gedung Perkantoran Blok {i % 47}"
-            a["category"] = f"KAT{i % 33}"
+            a["asset_code"] = f"3{i % 33:02d}0104001"
             a["eselon2"] = f"Direktorat Pengelolaan Kekayaan Negara {i % 19}"
         await _seed(dbr, [_keg(1, 5)], aset)
         d = await rp._build_satker_report_v2("k1")
@@ -1098,3 +1110,193 @@ def test_tiap_lembar_per_kegiatan_menyebut_KEGIATANNYA(dbr):
     assert "kop-keg-nama" in t
     assert "Analisis &mdash; ' ~ k.nama" in t, "kaki halaman tak menyebut kegiatan"
     assert "Personil &mdash; ' ~ k.nama" in t
+
+
+# ── Kategori berjenjang & lokasi menurut denah ──────────────────────────
+#
+# Permintaan pemilik: *"Per Kategori masih belum terbagi hingga ke per
+# golongan, bidang, kelompok, dan sub kelompok (dan bisa dipilih ingin
+# ditampilkan seperti apa), begitupun yang lokasi belum terbagi berdasarkan
+# denah yang sudah ditetapkan."*
+
+def _judul_panel(d, awalan):
+    return [p["judul"] for h in d["halaman_analisis"]
+            for sisi in ("kiri", "kanan") for p in h[sisi]
+            if p["judul"].startswith(awalan)]
+
+
+def test_JENJANG_KATEGORI_dipilih_dan_benar_benar_mengubah_pembagian(dbr):
+    """Kalau keempat jenjang menghasilkan grafik yang sama, pemilihnya tak
+    berguna dan permintaannya tak terjawab."""
+    async def jalan():
+        aset = _aset("k1", 8, ditemukan=0)
+        for i, a in enumerate(aset):
+            # 2 golongan, 3 bidang, 4 kelompok, 8 sub kelompok.
+            gol, bid, kel = (3 if i < 5 else 4), i % 3, i % 4
+            a["asset_code"] = f"{gol}{bid:02d}{kel:02d}{i:02d}001"
+        await _seed(dbr, [_keg(1, 5)], aset)
+        jml = {}
+        for lv in (1, 2, 3, 4):
+            d = await rp._build_satker_report_v2("k1", {"kat_level": str(lv)})
+            jml[lv] = len(d["chart_kategori"])
+            assert d["kat_level"] == lv
+            assert _judul_panel(d, "Per Kategori") == [
+                f"Per Kategori — {rp.kod.LEVEL_LABELS[lv]}"]
+        assert jml[1] < jml[4], jml
+        assert jml[1] <= jml[2] <= jml[3] <= jml[4], jml
+        # Berapa pun jenjangnya, jumlah aset tetap utuh.
+        for lv in (1, 2, 3, 4):
+            d = await rp._build_satker_report_v2("k1", {"kat_level": str(lv)})
+            assert sum(c["count"] for c in d["chart_kategori"]) == 8, lv
+    _jalan(jalan())
+
+
+def test_jenjang_kategori_TAK_SAH_jatuh_ke_bawaan(dbr):
+    """`?kat_level=99` harus jatuh ke Bidang, bukan menghasilkan grafik kosong
+    yang tampak sah."""
+    async def jalan():
+        await _seed(dbr, [_keg(1, 5)], _aset("k1", 4))
+        for buruk in ("99", "abc", "", "0", "5"):
+            d = await rp._build_satker_report_v2("k1", {"kat_level": buruk})
+            assert d["kat_level"] == rp.KAT_LEVEL_BAWAAN, buruk
+        # Level 5 sengaja tak ditawarkan: ia setara daftar barang satu per satu.
+        assert [o["nilai"] for o in
+                (await rp._build_satker_report_v2("k1"))["pilihan_kat_level"]] == [
+            "1", "2", "3", "4"]
+    _jalan(jalan())
+
+
+def test_jenjang_kategori_BUKAN_penyaring(dbr):
+    """Ia mengubah pengelompokan, tidak membuang satu aset pun — dan laporan
+    yang menyatakan dirinya "tersaring" hanya karena jenjangnya diganti akan
+    berbohong tentang cakupannya."""
+    async def jalan():
+        await _seed(dbr, [_keg(1, 5)], _aset("k1", 9, ditemukan=4))
+        for lv in ("1", "4"):
+            d = await rp._build_satker_report_v2("k1", {"kat_level": lv})
+            assert d["total_count"] == 9, lv
+            assert d["filter_aktif"] is False, lv
+    _jalan(jalan())
+
+
+async def _seed_denah(fake):
+    """Menara A (Lt.1 R101, Lt.2 R201) dan Menara B (Lt.1 R101)."""
+    node = [
+        ("g1", "Menara A", "GEDUNG", []),
+        ("g2", "Menara B", "GEDUNG", []),
+        ("l1", "Lantai 1", "LANTAI", ["g1"]),
+        ("l2", "Lantai 2", "LANTAI", ["g1"]),
+        ("l3", "Lantai 1", "LANTAI", ["g2"]),
+        ("r1", "Ruang 101", "RUANGAN", ["g1", "l1"]),
+        ("r2", "Ruang 201", "RUANGAN", ["g1", "l2"]),
+        ("r3", "Ruang B-101", "RUANGAN", ["g2", "l3"]),
+    ]
+    for nid, nama, tipe, anc in node:
+        await fake.spasial_node.insert_one(
+            {"id": nid, "nama": nama, "tipe": tipe, "ancestors": anc})
+
+
+def test_LOKASI_dikelompokkan_menurut_DENAH_bukan_teks_bebas(dbr):
+    """Field teks `location` diketik bebas: "Lt.2", "Lantai 2", "lantai dua"
+    adalah tiga baris berbeda pada grafik yang sama, dan tak satu pun menjawab
+    "berapa banyak yang ada di Gedung A"."""
+    async def jalan():
+        await _seed_denah(dbr)
+        aset = _aset("k1", 9, ditemukan=0)
+        for i, a in enumerate(aset):
+            nid = ["r1", "r2", "r3"][i % 3]
+            a["lokasi_spasial"] = {"node_id": nid}
+            # Teks bebasnya sengaja KACAU — kalau ia yang dipakai, hasilnya
+            # akan sembilan baris berbeda, bukan dua gedung.
+            a["location"] = f"lokasi ketikan {i}"
+        await _seed(dbr, [_keg(1, 5)], aset)
+
+        d = await rp._build_satker_report_v2("k1", {"lok_level": "GEDUNG"})
+        assert d["lok_sumber"] == "denah"
+        nama = {c["name"]: c["count"] for c in d["chart_lokasi"]}
+        assert nama == {"Menara A": 6, "Menara B": 3}, nama
+        assert _judul_panel(d, "Per Lokasi") == ["Per Lokasi — Gedung"]
+
+        lt = await rp._build_satker_report_v2("k1", {"lok_level": "LANTAI"})
+        assert {c["name"]: c["count"] for c in lt["chart_lokasi"]} == {
+            "Lantai 1": 6, "Lantai 2": 3}
+
+        rg = await rp._build_satker_report_v2("k1", {"lok_level": "RUANGAN"})
+        assert len(rg["chart_lokasi"]) == 3
+        # Jenjang yang ditawarkan hanya yang BENAR-BENAR dipakai satker ini.
+        assert [o["nilai"] for o in rg["pilihan_lok_level"]] == [
+            "GEDUNG", "LANTAI", "RUANGAN"]
+    _jalan(jalan())
+
+
+def test_aset_BELUM_DITEMPATKAN_di_denah_tetap_terhitung(dbr):
+    """Aset yang belum ditempatkan justru yang paling perlu dibereskan.
+    Membuangnya membuat jumlah batang tak lagi sama dengan jumlah aset — dan
+    selisihnya tak pernah ditanyakan siapa pun karena tak terlihat."""
+    async def jalan():
+        await _seed_denah(dbr)
+        aset = _aset("k1", 10, ditemukan=0)
+        for a in aset[:4]:
+            a["lokasi_spasial"] = {"node_id": "r1"}
+        await _seed(dbr, [_keg(1, 5)], aset)
+        d = await rp._build_satker_report_v2("k1", {"lok_level": "GEDUNG"})
+        nama = {c["name"]: c["count"] for c in d["chart_lokasi"]}
+        assert nama == {"Menara A": 4, "(belum ditempatkan di denah)": 6}, nama
+        assert sum(c["count"] for c in d["chart_lokasi"]) == 10
+    _jalan(jalan())
+
+
+def test_tanpa_denah_sama_sekali_panel_lokasi_MENGATAKAN_sumbernya(dbr):
+    """Grafik lokasi yang diam soal sumbernya membuat pembacanya mengira
+    denahnya sudah terpakai, padahal yang tergambar teks ketikan bebas."""
+    async def jalan():
+        aset = _aset("k1", 6, ditemukan=0)
+        for i, a in enumerate(aset):
+            a["location"] = f"Ruang {i % 2}"
+        await _seed(dbr, [_keg(1, 5)], aset)
+        d = await rp._build_satker_report_v2("k1")
+        assert d["lok_sumber"] == "teks"
+        assert d["pilihan_lok_level"] == [], "menawarkan jenjang yang tak ada"
+        assert _judul_panel(d, "Per Lokasi") == ["Per Lokasi (teks bebas)"]
+        assert sum(c["count"] for c in d["chart_lokasi"]) == 6
+    _jalan(jalan())
+
+
+def test_jenjang_yang_DILOMPATI_tak_ditawarkan(dbr):
+    """Tingkat boleh dilompati — satker yang tak memakai Gedung tetap punya
+    Ruangan, dan menawarkan "Gedung" padanya hanya menawarkan grafik kosong."""
+    async def jalan():
+        await dbr.spasial_node.insert_one(
+            {"id": "x1", "nama": "Ruang Serbaguna", "tipe": "RUANGAN",
+             "ancestors": []})
+        aset = _aset("k1", 5, ditemukan=0)
+        for a in aset:
+            a["lokasi_spasial"] = {"node_id": "x1"}
+        await _seed(dbr, [_keg(1, 5)], aset)
+        d = await rp._build_satker_report_v2("k1")
+        assert [o["nilai"] for o in d["pilihan_lok_level"]] == ["RUANGAN"]
+        assert d["lok_level"] == "RUANGAN"
+
+
+def test_bawaan_lokasi_adalah_jenjang_TERLUAS(dbr):
+    """Satker dengan dua ratus ruangan akan langsung disodori dua ratus baris,
+    dan gambaran besarnya — "gedung mana yang paling banyak" — justru
+    tenggelam. Pembaca menurun dari luas ke sempit."""
+    async def jalan():
+        await _seed_denah(dbr)
+        aset = _aset("k1", 6, ditemukan=0)
+        for a in aset:
+            a["lokasi_spasial"] = {"node_id": "r1"}
+        await _seed(dbr, [_keg(1, 5)], aset)
+        d = await rp._build_satker_report_v2("k1")
+        assert d["lok_level"] == "GEDUNG", d["lok_level"]
+    _jalan(jalan())
+
+
+def test_pemilih_jenjang_ada_di_panel_filter():
+    t = _teks_template()
+    assert 'name="kat_level"' in t and 'name="lok_level"' in t
+    assert "Jenjang Kategori" in t and "Jenjang Lokasi" in t
+    # Keduanya milik formulir filter — kalau tidak, ia ikut jadi input
+    # tersembunyi dan terkirim dua kali.
+    assert "kat_level" in rp._PARAM_FILTER and "lok_level" in rp._PARAM_FILTER

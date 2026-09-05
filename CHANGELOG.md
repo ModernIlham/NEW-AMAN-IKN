@@ -18,6 +18,95 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#991] Kategori berjenjang kodefikasi, lokasi menurut denah — 2026-09-05
+
+Permintaan pemilik: *"Per Kategori masih belum terbagi hingga ke per golongan,
+bidang, kelompok, dan sub kelompok (dan bisa dipilih ingin ditampilkan seperti
+apa), begitupun yang lokasi belum terbagi berdasarkan denah yang sudah
+ditetapkan."*
+
+### Dua daftar rata di atas dua data yang berjenjang
+
+Panel "Per Kategori" mengelompokkan menurut field `category` apa adanya, dan
+"Per Lokasi" menurut field teks `location`. Keduanya **rata** — padahal BMN
+justru diatur berjenjang di dua sumbu:
+
+| Sumbu | Jenjang |
+|---|---|
+| Kodefikasi barang | Golongan → Bidang → Kelompok → Sub Kelompok |
+| Denah ruang | Kawasan → Gedung → Lantai → Ruangan |
+
+Pertanyaan *"berapa banyak Peralatan dan Mesin"* atau *"berapa banyak yang ada
+di Gedung A"* tak dapat dijawab daftar rata.
+
+### Kategori: dari kode barang, jenjangnya dipilih
+
+Sumbernya kini `asset_code` (kode barang BMN), dipotong pada jenjang yang
+dipilih lewat panel filter. Uraiannya diambil dari referensi `kodefikasi` dan
+ditulis **berdampingan dengan kodenya**: `301 — Alat Besar`. Referensi yang
+belum lengkap tak menyembunyikan apa pun — labelnya jatuh ke kodenya sendiri.
+
+Bawaannya **Bidang**: Golongan hanya delapan baris (terlalu kasar untuk
+ditindaklanjuti), Kelompok ke bawah mudah menjadi ratusan. Level 5 (Sub-sub
+Kelompok, 10 digit) sengaja **tidak** ditawarkan — ia sudah setara daftar
+barang satu per satu, dan itu tugas laporan per kegiatan.
+
+### Lokasi: dari denah, bukan ketikan bebas
+
+`location` diketik bebas: `"Lt.2"`, `"Lantai 2"`, `"lantai dua"` adalah tiga
+baris berbeda pada grafik yang sama. Denah yang **sudah ditetapkan**
+(`spasial_node`) punya jenjang sungguhan, dan aset yang sudah ditempatkan
+membawa `node_id`-nya.
+
+Snapshot `lokasi_spasial` hanya menyimpan node **terdalam**, jadi nama gedung
+dan lantainya ditelusuri dari leluhurnya — dengan **dua kueri saja**: satu
+untuk node yang dipakai, satu untuk seluruh leluhurnya sekaligus.
+
+Jenjang yang ditawarkan hanya yang **benar-benar dipakai** satker itu. Tingkat
+boleh dilompati (banyak satker hanya Gedung → Lantai → Ruangan), dan menawarkan
+"Kawasan" pada satker yang tak memakainya hanya menawarkan grafik kosong.
+Bawaannya jenjang **terluas** yang ada: satker dengan dua ratus ruangan akan
+langsung disodori dua ratus baris, dan gambaran besarnya justru tenggelam.
+
+**Bila belum ada satu pun aset yang ditempatkan di denah**, panelnya jatuh ke
+field teks sebagai cadangan — dan **judulnya mengatakan itu**
+(`"Per Lokasi (teks bebas)"`). Grafik yang diam soal sumbernya membuat
+pembacanya mengira denahnya sudah terpakai.
+
+### Yang tak punya kode/penempatan dikumpulkan, bukan dibuang
+
+Aset tanpa kode barang atau tanpa penempatan denah justru yang paling perlu
+dibereskan. Membuangnya dari grafik membuat jumlah batang tak lagi sama dengan
+jumlah aset — dan selisihnya tak pernah ditanyakan siapa pun karena tak
+terlihat. Keduanya masuk kelompok bernama sendiri, **selalu di baris terakhir**.
+
+### Pemilih jenjang BUKAN penyaring
+
+Keduanya mengubah pengelompokan, tidak membuang satu aset pun, dan sengaja
+**tidak** ikut `ada_yang_aktif()`. Laporan yang menyatakan dirinya "tersaring"
+hanya karena jenjangnya diganti akan berbohong tentang cakupannya. Judul panel
+menyebut jenjangnya (`"Per Kategori — Bidang"`) supaya dua laporan berjenjang
+berbeda tak terlihat sama persis.
+
+### Uji mutasi — empat dipasang, empat dibunuh
+
+| Mutasi | Dibunuh oleh |
+|---|---|
+| Kode lebih pendek dari jenjang mengarang kelompok | `test_kode_LEBIH_PENDEK_dari_jenjang_masuk_TANPA_KODE` |
+| Aset tanpa penempatan denah dibuang | `test_aset_TANPA_penempatan_dikumpulkan_bukan_dibuang` (+3 lainnya) |
+| `?kat_level=99` dipakai apa adanya | `test_jenjang_kategori_TAK_SAH_jatuh_ke_bawaan` (+3 lainnya) |
+| Leluhur node tak ditelusuri (Gedung/Lantai hilang) | `test_LOKASI_dikelompokkan_menurut_DENAH_bukan_teks_bebas` (+2 lainnya) |
+
+### Berkas
+
+- `backend/laporan_jenjang.py` — **baru**: `potong_kode`, `label_kode`, `kelompokkan_kode`, `kelompokkan_denah`, `jenjang_terpilih`
+- `backend/routes/reports.py` — `_peta_denah()`, `kat_level`/`lok_level`, referensi kodefikasi
+- `backend/templates/laporan_satker_v2.html` — dua pemilih jenjang di panel filter
+- `backend/tests/unit/test_laporan_jenjang.py` — **baru**, 20 uji
+- `backend/tests/unit/test_laporan_gabungan_satker.py` — 8 uji baru
+
+---
+
 ## [#990] Analisis data dan personil dibagi per kegiatan — 2026-09-05
 
 Permintaan pemilik: *"analisis data dan Personil Terlibat masih gabungan semua,
