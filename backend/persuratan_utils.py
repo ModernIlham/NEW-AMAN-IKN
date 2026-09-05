@@ -823,3 +823,71 @@ def pesan_tanggal_mundur(tanggal_baru, tanggal_terakhir, nomor_terakhir="") -> s
             "jadi tanggalnya tak boleh mundur. Pakai tanggal itu atau "
             "sesudahnya — untuk surat yang memang terlewat, gunakan nomor "
             "sisipan.")
+
+
+# ── Bentuk baku naskah dinas: tempat/tanggal dan kepala Nota Dinas ────────
+
+def tempat_dokumen(settings) -> str:
+    """Tempat penandatanganan dari profil satker; '' bila tak diketahui.
+
+    Urutannya `tempat_laporan` lalu `alamat_instansi`, dan hanya BARIS
+    PERTAMA-nya — alamat lengkap kerap memuat beberapa baris, dan menempelkan
+    seluruhnya ke belakang tanggal membuat blok tanda tangan meluber. Pola yang
+    sama sudah dipakai BAST dan Berita Acara Pengadaan; disatukan di sini agar
+    ketiganya tak berbeda sendiri-sendiri.
+    """
+    # Tiap calon dirapikan LEBIH DULU, baru dipilih. Memakai `or` atas nilai
+    # mentah membuat `tempat_laporan` berisi spasi saja — yang terjadi ketika
+    # admin "mengosongkan" field dengan menekan spasi — dianggap terisi,
+    # sehingga alamat yang tersedia diabaikan dan tempatnya jadi kosong.
+    for kunci in ("tempat_laporan", "alamat_instansi"):
+        t = str((settings or {}).get(kunci) or "").strip()
+        if t:
+            return t.splitlines()[0].strip()
+    return ""
+
+
+def tempat_tanggal(settings, tanggal_iso) -> str:
+    """`"Nusantara, 5 September 2026"` — baris di atas blok tanda tangan.
+
+    Naskah dinas menyatakan DI MANA dan KAPAN ia ditandatangani; tanpa itu ia
+    tak dapat diarsipkan menurut tempat maupun diurutkan menurut waktu, dan
+    pembacanya tak punya cara menilai apakah dokumennya masih mutakhir.
+
+    Yang tak diketahui ditulis sebagai TITIK-TITIK, bukan dikosongkan: garis
+    isian menyatakan "diisi tangan saat penandatanganan", sementara ruang
+    kosong terbaca sebagai bagian yang lupa dicetak.
+    """
+    from pelaporan_utils import tanggal_id_singkat
+    tempat = tempat_dokumen(settings)
+    tgl = tanggal_id_singkat(tanggal_iso) if tanggal_iso else ""
+    return f"{tempat or '..................'}, {tgl or '.......................'}"
+
+
+#: Urutan baku kepala Nota Dinas (PerANRI 5/2021 §Nota Dinas).
+URUT_KEPALA_NOTA = ("Yth.", "Dari", "Nomor", "Sifat", "Lampiran", "Hal",
+                    "Tanggal")
+
+
+def kepala_nota_dinas(yth="", dari="", nomor="", sifat="Biasa", lampiran="",
+                      hal="", tanggal_iso="") -> list:
+    """`[(label, isi)]` kepala Nota Dinas, urut baku dan LENGKAP.
+
+    Seluruh baris selalu dicetak, termasuk yang belum terisi — kepala naskah
+    dinas yang barisnya muncul-hilang mengikuti data membuat dua nota dinas
+    dari satker yang sama terlihat sebagai dua jenis dokumen. Yang kosong diisi
+    tanda hubung; yang belum bernomor diisi garis isian, sebab ia memang
+    menunggu diisi (pola yang sama dengan BAST belum bernomor).
+    """
+    from pelaporan_utils import tanggal_id_singkat
+    isi = {
+        "Yth.": str(yth or "").strip() or "-",
+        "Dari": str(dari or "").strip() or "-",
+        "Nomor": str(nomor or "").strip() or "......./......./........",
+        "Sifat": str(sifat or "").strip() or "Biasa",
+        "Lampiran": str(lampiran or "").strip() or "-",
+        "Hal": str(hal or "").strip() or "-",
+        "Tanggal": (tanggal_id_singkat(tanggal_iso) if tanggal_iso
+                    else "......................."),
+    }
+    return [(k, isi[k]) for k in URUT_KEPALA_NOTA]

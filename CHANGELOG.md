@@ -18,6 +18,76 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1010] Nota Dinas persediaan menjadi naskah dinas — 2026-09-05
+
+Permintaan pemilik: *"buat permohonan barang persediaan lebih formal dan resmi
+lagi, sertakan juga tempat dan tanggal pembuatannya."*
+
+**Tahap pertama dari beberapa.** Yang ini bentuk naskahnya; penomoran otomatis,
+permintaan tanda tangan elektronik, dan SPPB menyusul (lihat di bawah).
+
+### Cetakan daftar, bukan naskah dinas
+
+Dokumennya hanya judul lalu tabel — tanpa tujuan, tanpa pengirim, tanpa nomor,
+tanpa hal — dan baris tempat/tanggal di atas tanda tangan berupa titik-titik
+kosong. Dokumen yang tak menyebut kepada siapa ia ditujukan **tak dapat
+diagendakan**, tak dapat ditindaklanjuti penerimanya, dan tak dapat diarsipkan
+sebagai naskah dinas.
+
+Kepala naskahnya kini lengkap dan urut baku menurut PerANRI 5/2021: **Yth.,
+Dari, Nomor, Sifat, Lampiran, Hal, Tanggal**. Seluruh barisnya selalu dicetak,
+termasuk yang belum terisi — kepala yang barisnya muncul-hilang mengikuti data
+membuat dua nota dinas dari satker yang sama terlihat sebagai dua jenis
+dokumen. Yang kosong diisi tanda hubung; yang **menunggu diisi** (nomor,
+tanggal penandatanganan) diberi garis isian, sebab keduanya beda maksud.
+
+### Tempat dan tanggal
+
+`persuratan_utils.tempat_tanggal()` mencetak `"Nusantara, 5 September 2026"` di
+atas blok tanda tangan. Tempatnya dari profil satker (`tempat_laporan`, lalu
+`alamat_instansi`), **baris pertamanya saja** — alamat lengkap kerap memuat
+beberapa baris, dan menempelkan seluruhnya ke belakang tanggal membuat blok
+tanda tangan meluber. Pola itu sudah dipakai BAST dan Berita Acara Pengadaan;
+kini disatukan agar ketiganya tak berbeda sendiri-sendiri.
+
+### Cacat yang ditemukan ujinya
+
+Pemilihan tempat mula-mula memakai `or` atas nilai MENTAH, sehingga
+`tempat_laporan` berisi **spasi saja** — yang terjadi ketika admin
+"mengosongkan" field dengan menekan spasi — dianggap terisi. Alamat yang
+tersedia lalu diabaikan dan tempatnya jadi kosong. Tiap calon kini dirapikan
+lebih dulu, baru dipilih.
+
+### Yang sudah ada, dan yang belum
+
+Penelusuran atas seluruh keluaran persuratan persediaan menemukan bahwa
+infrastrukturnya **sudah lengkap dan dipakai** — kecuali oleh Nota Dinas:
+
+| Dokumen | Nomor | TTD elektronik |
+|---|---|---|
+| Surat Persetujuan Transaksi Persediaan | ✔ `booking_nomor_otomatis` | ✔ |
+| LPB (Laporan Penerimaan Barang) | ✔ | ✔ |
+| **Nota Dinas** | ✘ | ✘ |
+| **SPPB** | *belum ada sama sekali* | — |
+
+Transaksi keluar mencatat `unit_penerima` sebagai teks bebas, **tanpa nama
+penerima, tanpa NIP, tanpa tanda tangan** — sehingga tak ada dokumen serah
+terima yang menautkannya ke master pegawai.
+
+**Menyusul:** (1) penerbitan Nota Dinas bernomor + permintaan TTD elektronik,
+memakai `booking_nomor_otomatis` dan `routes/ttd` yang sudah dipakai Surat
+Persetujuan; (2) SPPB sebagai bukti penyerahan yang ditandatangani penerima dan
+tertaut ke master pegawai.
+
+### Cakupan
+
+- `backend/persuratan_utils.py` — `tempat_dokumen`, `tempat_tanggal`,
+  `kepala_nota_dinas`, `URUT_KEPALA_NOTA`.
+- `backend/routes/persediaan.py` — kepala naskah dan tempat/tanggal pada Nota
+  Dinas.
+- Uji: `test_nota_dinas_naskah` (14, baru) — termasuk render PDF sungguhan
+  yang membaca kembali teksnya.
+
 ## [#1009] Umpan balik pemilik: empat perbaikan laporan dan pencarian nota dinas — 2026-09-05
 
 ### Laporan eksekutif meluber ke kanan di layar sempit
