@@ -1171,11 +1171,17 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                 <div className="space-y-0.5"><Label className="text-[10px] text-emerald-600 dark:text-emerald-400">Jabatan</Label><Input value={form.kasatker_jabatan} onChange={e => setForm(p => ({...p, kasatker_jabatan: e.target.value}))} placeholder="Jabatan Kasatker" className="h-7 text-xs" /></div>
                 <div className="space-y-0.5"><Label className="text-[10px] text-emerald-600 dark:text-emerald-400">Alamat Satker</Label><Input value={form.alamat_satker} onChange={e => setForm(p => ({...p, alamat_satker: e.target.value}))} placeholder="Alamat lengkap" className="h-7 text-xs" /></div>
               </div>
-              {/* Eselon I with nested Eselon II */}
+              {/* Struktur Eselon I/II satker — dua tingkat, diketik.
+                  Tata letaknya: kolom nomor berlebar SAMA di kedua tingkat
+                  supaya tepi kirinya sejajar, garis tegak menandai bersarangnya
+                  Eselon II pada induknya, dan tinggi input SAMA dengan tombol
+                  hapusnya supaya tak ada ruang mati di antara baris. */}
               <div className="mt-2 pt-2 border-t border-emerald-200 dark:border-emerald-700 space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-[10px] font-medium text-emerald-700 dark:text-emerald-300">Eselon I</Label>
-                  <button type="button" onClick={() => setForm(p => ({...p, eselon1: [...(p.eselon1 || []), {nama: '', eselon2: []}]}))} className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-200 flex items-center gap-0.5" data-testid="add-eselon1-btn">
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Eselon I</Label>
+                  <button type="button" onClick={() => setForm(p => ({...p, eselon1: [...(p.eselon1 || []), {nama: '', eselon2: []}]}))}
+                    className="h-11 lg:h-8 px-2.5 rounded-md border border-emerald-300 dark:border-emerald-600 text-[10px] font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 flex items-center gap-1 flex-shrink-0"
+                    data-testid="add-eselon1-btn">
                     <Plus className="w-3 h-3" /> Tambah Eselon I
                   </button>
                 </div>
@@ -1183,40 +1189,45 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                 {(form.eselon1 || []).map((es, idx) => {
                   const esObj = typeof es === 'object' ? es : {nama: es, eselon2: []};
                   return (
-                    <div key={idx} className="border border-emerald-200 dark:border-emerald-600 rounded-lg p-2 space-y-1 bg-emerald-25 dark:bg-emerald-900/10">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-emerald-600 font-bold w-4 text-center flex-shrink-0">{idx + 1}.</span>
+                    <div key={idx} className="border border-emerald-200 dark:border-emerald-600 rounded-lg p-2.5 space-y-2 bg-emerald-25 dark:bg-emerald-900/10">
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-md bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">{idx + 1}</span>
                         <Input
                           value={esObj.nama}
                           onChange={e => { const arr = [...(form.eselon1 || [])]; arr[idx] = {...esObj, nama: e.target.value}; setForm(p => ({...p, eselon1: arr})); }}
                           placeholder="Nama Eselon I"
-                          className="h-11 lg:h-7 text-xs flex-1"
+                          className="h-11 lg:h-8 text-xs flex-1 min-w-0"
                           data-testid={`eselon1-input-${idx}`}
                         />
-                        <button type="button" onClick={() => setForm(p => ({...p, eselon1: (p.eselon1 || []).filter((_, i) => i !== idx)}))} className="h-11 w-11 lg:h-7 lg:w-7 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded flex-shrink-0" data-testid={`remove-eselon1-${idx}`}>
-                          <X className="w-3.5 h-3.5" />
+                        <button type="button" onClick={() => setForm(p => ({...p, eselon1: (p.eselon1 || []).filter((_, i) => i !== idx)}))} className="h-11 w-11 lg:h-8 lg:w-8 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md flex-shrink-0" data-testid={`remove-eselon1-${idx}`}>
+                          <X className="w-4 h-4" />
                         </button>
                       </div>
-                      {/* Eselon II list under this Eselon I */}
-                      <div className="ml-5 space-y-0.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[9px] text-emerald-500 dark:text-emerald-400 font-medium">Eselon II</span>
-                          <button type="button" onClick={() => { const arr = [...(form.eselon1 || [])]; const obj = {...esObj, eselon2: [...(esObj.eselon2 || []), '']}; arr[idx] = obj; setForm(p => ({...p, eselon1: arr})); }} className="text-[9px] text-emerald-500 hover:text-emerald-700 flex items-center gap-0.5" data-testid={`add-eselon2-btn-${idx}`}>
+                      {/* Eselon II di bawah Eselon I ini — garis tegak di kiri
+                          menandai bersarangnya, sehingga hubungannya terbaca
+                          tanpa bergantung pada besarnya margin. */}
+                      <div className="ml-3 pl-3 border-l-2 border-emerald-200 dark:border-emerald-700 space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[9px] font-semibold uppercase tracking-wide text-emerald-600/80 dark:text-emerald-400/80">Eselon II</span>
+                          <button type="button" onClick={() => { const arr = [...(form.eselon1 || [])]; const obj = {...esObj, eselon2: [...(esObj.eselon2 || []), '']}; arr[idx] = obj; setForm(p => ({...p, eselon1: arr})); }}
+                            className="h-11 lg:h-8 px-2 rounded-md border border-emerald-200 dark:border-emerald-700 text-[9px] font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 flex items-center gap-1 flex-shrink-0"
+                            data-testid={`add-eselon2-btn-${idx}`}>
                             <Plus className="w-2.5 h-2.5" /> Tambah
                           </button>
                         </div>
+                        {(esObj.eselon2 || []).length === 0 && <p className="text-[9px] text-emerald-500/80 dark:text-emerald-400/80 italic">Belum ada Eselon II.</p>}
                         {(esObj.eselon2 || []).map((e2, j) => (
-                          <div key={j} className="flex items-center gap-1">
-                            <span className="text-[9px] text-emerald-400 w-6 text-right flex-shrink-0">{idx+1}.{j+1}</span>
+                          <div key={j} className="flex items-center gap-2">
+                            <span className="w-6 text-[9px] font-medium text-emerald-500 dark:text-emerald-400 text-center flex-shrink-0">{idx+1}.{j+1}</span>
                             <Input
                               value={e2}
                               onChange={e => { const arr = [...(form.eselon1 || [])]; const e2arr = [...(esObj.eselon2 || [])]; e2arr[j] = e.target.value; arr[idx] = {...esObj, eselon2: e2arr}; setForm(p => ({...p, eselon1: arr})); }}
                               placeholder="Nama Eselon II"
-                              className="h-11 lg:h-6 text-[11px] flex-1"
+                              className="h-11 lg:h-8 text-[11px] flex-1 min-w-0"
                               data-testid={`eselon2-input-${idx}-${j}`}
                             />
-                            <button type="button" onClick={() => { const arr = [...(form.eselon1 || [])]; arr[idx] = {...esObj, eselon2: (esObj.eselon2 || []).filter((_, k) => k !== j)}; setForm(p => ({...p, eselon1: arr})); }} className="h-11 w-11 lg:h-6 lg:w-6 flex items-center justify-center text-red-400 hover:text-red-600 rounded flex-shrink-0" data-testid={`remove-eselon2-${idx}-${j}`}>
-                              <X className="w-3 h-3" />
+                            <button type="button" onClick={() => { const arr = [...(form.eselon1 || [])]; arr[idx] = {...esObj, eselon2: (esObj.eselon2 || []).filter((_, k) => k !== j)}; setForm(p => ({...p, eselon1: arr})); }} className="h-11 w-11 lg:h-8 lg:w-8 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md flex-shrink-0" data-testid={`remove-eselon2-${idx}-${j}`}>
+                              <X className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         ))}
@@ -1226,21 +1237,28 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                 })}
               </div>
 
-              {/* Lingkup unit (tupoksi kegiatan) — rujukan ke master unit */}
+              {/* Unit organisasi kegiatan ini — rujukan ke master unit.
+                  Namanya menyebut apa yang benar-benar dilakukannya: mengisi
+                  pilihan Unit Organisasi pada form aset. "Lingkup (tupoksi)"
+                  hanya menyebut akibat sampingannya pada laporan, dan itu
+                  bukan yang dilihat petugas setiap hari. */}
               <div className="mt-2 pt-2 border-t border-emerald-200 dark:border-emerald-700 space-y-1.5">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <Label className="text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
-                    Lingkup Unit (tupoksi)
+                  <Label className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                    Unit Organisasi untuk Pencatatan Aset
                   </Label>
                   <button type="button" onClick={cocokkanLingkup} disabled={cocokSibuk}
                     data-testid="cocokkan-lingkup-btn"
-                    className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-200 disabled:opacity-50">
-                    {cocokSibuk ? "Mencocokkan…" : "Cocokkan dari Eselon I di atas"}
+                    className="h-11 lg:h-8 px-2.5 rounded-md border border-emerald-300 dark:border-emerald-600 text-[10px] font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 disabled:opacity-50 flex items-center gap-1 flex-shrink-0">
+                    {cocokSibuk ? "Mencocokkan…" : "Ambil dari Eselon I di atas"}
                   </button>
                 </div>
-                <p className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80">
-                  Laporan kegiatan ini dibatasi pada unit yang dipilih beserta seluruh unit di bawahnya.
-                  Kosong = seluruh satker. Daftarnya dari Master Unit (halaman Pegawai → Kelola Unit).
+                <p className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 leading-relaxed">
+                  Unit yang dipilih di sini — beserta seluruh unit di bawahnya — menjadi
+                  pilihan <b>Unit Organisasi</b> saat mencatat aset di kegiatan ini, dan
+                  laporannya pun dibatasi pada unit tersebut.
+                  Dikosongkan berarti seluruh satker. Daftarnya dari Master Unit
+                  (halaman Pegawai → Kelola Unit).
                 </p>
                 {unitPohon.length === 0 ? (
                   <p className="text-[10px] text-emerald-500 dark:text-emerald-400 italic">
@@ -1266,7 +1284,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                   const r = ringkasLingkup(form.lingkup_unit, unitPohon);
                   return (
                     <div className="text-[10px] text-emerald-700 dark:text-emerald-300 space-y-0.5">
-                      <p data-testid="lingkup-ringkas">{r.jumlah} unit dipilih: {r.jalur.slice(0, 3).join("; ")}{r.jalur.length > 3 ? `; +${r.jalur.length - 3} lagi` : ""}</p>
+                      <p data-testid="lingkup-ringkas">{r.jumlah} unit dipakai: {r.jalur.slice(0, 3).join("; ")}{r.jalur.length > 3 ? `; +${r.jalur.length - 3} lagi` : ""}</p>
                       {unitPohon.length > 0 && r.tak_dikenal.length > 0 && (
                         <p className="text-amber-600 dark:text-amber-400" data-testid="lingkup-tak-dikenal">
                           {r.tak_dikenal.length} unit tak ada lagi di master — hapus pilihannya, sebab unit yang tak dikenal tidak menyaring apa pun.

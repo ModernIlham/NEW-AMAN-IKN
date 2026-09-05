@@ -18,6 +18,57 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1007] Struktur eselon kegiatan: nama yang tepat dan tata letak yang rapi — 2026-09-05
+
+Dua laporan pemilik dari form kegiatan.
+
+### "Lingkup Unit (tupoksi)" menyebut akibat sampingannya
+
+Namanya menyebut apa yang terjadi pada LAPORAN, sementara yang dilihat petugas
+setiap hari adalah akibat lainnya: daftar itu mengisi pilihan **Unit
+Organisasi** pada form aset. Label yang menyebut hal yang jarang dilihat
+membuat yang sering dilihat tak punya nama.
+
+Kini **"Unit Organisasi untuk Pencatatan Aset"**, dengan keterangan yang
+menyebut keduanya — pilihan pada form aset lebih dulu, pembatasan laporan
+sesudahnya. Tombolnya ikut: *"Ambil dari Eselon I di atas"*, sebab yang
+dikerjakannya memang mengambil, bukan mencocokkan sesuatu yang sudah ada.
+
+### Tata letak Eselon I/II belum rapi
+
+Tiga hal yang membuatnya terbaca berantakan, dan semuanya soal penempatan:
+
+| | Sebelum | Sesudah |
+|---|---|---|
+| Kolom nomor | `w-4` pada induk, `w-6` pada anak | `w-6` keduanya — tepi kiri sejajar |
+| Tanda bersarang | hanya `ml-5` | garis tegak `border-l-2` |
+| Tinggi baris | induk `h-7`, anak `h-6` | sama di kedua tingkat |
+| Tombol "+ Tambah" | teks polos yang dipaksa setinggi 44px | tombol berbingkai yang memang setinggi itu |
+
+Margin saja tak menyatakan hubungan apa pun; garis tegak menyatakannya. Dan
+tombol berupa teks polos yang dipaksa 44px oleh aturan tap-target global
+mengambang di baris kosong — yang sama tingginya, tetapi terbaca sebagai
+kekeliruan alih-alih sebagai tombol.
+
+`min-w-0` ditambahkan pada kedua input: tanpa itu, input di dalam flex menolak
+menyusut dan mendorong tombol hapusnya keluar baris ketika nama unitnya panjang.
+
+### Uji yang menguji SIFATNYA, bukan angkanya
+
+Uji tata letak sebelumnya mengunci nilai kelas persis (`h-11 lg:h-7`), sehingga
+merapikan tata letak akan memerahkannya tanpa ada yang benar-benar rusak. Kini
+yang diuji kesepadanannya — input setinggi tombolnya, dan kedua tingkat
+setinggi satu sama lain — sifat yang memang tak boleh berubah.
+
+Pembaca kelasnya juga diperbaiki: ia sempat membaca seluruh jendela sumber dan
+ikut menghitung tinggi lencana nomor di sebelahnya.
+
+### Cakupan
+
+- `frontend/src/pages/ActivitySelectionPage.jsx` — label, keterangan, tombol,
+  dan tata letak blok Eselon I/II.
+- Uji: `lingkupUnitTataLetak.test.js` bertambah menjadi 9.
+
 ## [#1006] Pemilih eselon: hierarki tergambar, dan filternya bertingkat — 2026-09-05
 
 Dua laporan pemilik, satu tema: hierarki yang tak terlihat.

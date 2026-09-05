@@ -54,15 +54,71 @@ test("kotak centang lingkup berukuran seragam, satu kelas untuk semua baris", ()
   expect(kotak[0]).toMatch(/w-4 h-4/);
 });
 
-test("input Eselon I setinggi tombol hapusnya di layar sempit", () => {
-  // Ruang mati muncul justru ketika keduanya berbeda tinggi.
-  expect(baris("eselon1-input-${idx}")).toContain("h-11 lg:h-7");
-  expect(baris("remove-eselon1-${idx}")).toContain("h-11 w-11 lg:h-7 lg:w-7");
+/**
+ * `className` milik ELEMEN yang membawa penanda itu — bukan seluruh jendela.
+ * Jendela ikut memuat elemen tetangga (mis. lencana nomor `h-6`), dan
+ * mencocokkan kelas di dalamnya akan menghitung tinggi yang bukan miliknya.
+ */
+function kelas(penanda) {
+  const i = HAL.indexOf(penanda);
+  expect(i).toBeGreaterThanOrEqual(0);
+  const awal = HAL.lastIndexOf("<", i);
+  const potong = HAL.slice(awal, i);
+  const m = potong.match(/className="([^"]*)"/g) || [];
+  return m.length ? m[m.length - 1].slice(11, -1) : "";
+}
+
+/** Kelas tinggi (`h-…` / `lg:h-…`) pada elemen itu saja. */
+function tinggi(penanda) {
+  return kelas(penanda).split(/\s+/)
+    .filter((c) => /^(lg:)?h-/.test(c)).sort();
+}
+
+test("input dan tombol hapus Eselon I SETINGGI satu sama lain", () => {
+  // Ruang mati muncul justru ketika keduanya berbeda tinggi. Yang diuji
+  // kesepadanannya, bukan angkanya — angka boleh berubah saat tata letaknya
+  // dirapikan, kesepadanannya tidak.
+  expect(tinggi("eselon1-input-${idx}"))
+    .toEqual(tinggi("remove-eselon1-${idx}"));
 });
 
-test("input Eselon II setinggi tombol hapusnya di layar sempit", () => {
-  expect(baris("eselon2-input-${idx}-${j}")).toContain("h-11 lg:h-6");
-  expect(baris("remove-eselon2-${idx}-${j}")).toContain("h-11 w-11 lg:h-6 lg:w-6");
+test("input dan tombol hapus Eselon II SETINGGI satu sama lain", () => {
+  expect(tinggi("eselon2-input-${idx}-${j}"))
+    .toEqual(tinggi("remove-eselon2-${idx}-${j}"));
+});
+
+test("kedua tingkat memakai tinggi baris yang SAMA", () => {
+  // Tingkat anak yang lebih pendek daripada induknya membuat kolomnya
+  // bergelombang, dan itulah yang terbaca sebagai tak rapi.
+  expect(tinggi("eselon1-input-${idx}"))
+    .toEqual(tinggi("eselon2-input-${idx}-${j}"));
+});
+
+test("kolom nomor kedua tingkat berlebar SAMA supaya tepi kirinya sejajar", () => {
+  // Sebelumnya w-4 pada induk dan w-6 pada anak: tepi kirinya tak pernah
+  // sejajar, dan itulah yang terbaca sebagai penempatan yang tak rapi.
+  // Dijangkarkan pada testid barisnya: penanda nomornya sendiri (`{idx + 1}`)
+  // juga muncul di tempat lain pada berkas ini.
+  for (const penanda of ["eselon1-input-${idx}", "eselon2-input-${idx}-${j}"]) {
+    const i = HAL.indexOf(penanda);
+    expect(i).toBeGreaterThanOrEqual(0);
+    const awal = HAL.lastIndexOf("<span", i);
+    expect(awal).toBeGreaterThanOrEqual(0);
+    expect(HAL.slice(awal, i)).toMatch(/className="w-6[\s"]/);
+  }
+});
+
+test("Eselon II bersarang ditandai GARIS, bukan sekadar margin", () => {
+  // Margin saja tak menyatakan hubungan apa pun; garis tegak menyatakannya.
+  expect(HAL).toContain("border-l-2 border-emerald-200");
+});
+
+test("input tak mendorong tata letak saat namanya panjang", () => {
+  // Tanpa `min-w-0`, input di dalam flex menolak menyusut dan mendorong
+  // tombol hapusnya keluar baris.
+  for (const p of ["eselon1-input-${idx}", "eselon2-input-${idx}-${j}"]) {
+    expect(baris(p)).toContain("min-w-0");
+  }
 });
 
 test("tap-target tombol hapus TIDAK dikecilkan untuk merapatkan jarak", () => {
