@@ -1200,7 +1200,7 @@ def test_JENJANG_KATEGORI_dipilih_dan_benar_benar_mengubah_pembagian(dbr):
         for lv in (1, 2, 3, 4):
             d = await rp._build_satker_report_v2("k1", {"kat_level": str(lv)})
             jml[lv] = len(d["chart_kategori"])
-            assert d["kat_level"] == lv
+            assert d["kat_levels"] == [str(lv)]
             assert _judul_panel(d, "Per Kategori") == [
                 f"Per Kategori — {rp.kod.LEVEL_LABELS[lv]}"]
         assert jml[1] < jml[4], jml
@@ -1219,7 +1219,7 @@ def test_jenjang_kategori_TAK_SAH_jatuh_ke_bawaan(dbr):
         await _seed(dbr, [_keg(1, 5)], _aset("k1", 4))
         for buruk in ("99", "abc", "", "0", "5"):
             d = await rp._build_satker_report_v2("k1", {"kat_level": buruk})
-            assert d["kat_level"] == rp.KAT_LEVEL_BAWAAN, buruk
+            assert d["kat_levels"] == [str(rp.KAT_LEVEL_BAWAAN)], buruk
         # Level 5 sengaja tak ditawarkan: ia setara daftar barang satu per satu.
         assert [o["nilai"] for o in
                 (await rp._build_satker_report_v2("k1"))["pilihan_kat_level"]] == [
@@ -1336,7 +1336,7 @@ def test_jenjang_yang_DILOMPATI_tak_ditawarkan(dbr):
         await _seed(dbr, [_keg(1, 5)], aset)
         d = await rp._build_satker_report_v2("k1")
         assert [o["nilai"] for o in d["pilihan_lok_level"]] == ["RUANGAN"]
-        assert d["lok_level"] == "RUANGAN"
+        assert d["lok_levels"] == ["RUANGAN"]
 
 
 def test_bawaan_lokasi_adalah_jenjang_TERLUAS(dbr):
@@ -1350,7 +1350,7 @@ def test_bawaan_lokasi_adalah_jenjang_TERLUAS(dbr):
             a["lokasi_spasial"] = {"node_id": "r1"}
         await _seed(dbr, [_keg(1, 5)], aset)
         d = await rp._build_satker_report_v2("k1")
-        assert d["lok_level"] == "GEDUNG", d["lok_level"]
+        assert d["lok_levels"] == ["GEDUNG"], d["lok_levels"]
     _jalan(jalan())
 
 
@@ -1361,3 +1361,75 @@ def test_pemilih_jenjang_ada_di_panel_filter():
     # Keduanya milik formulir filter — kalau tidak, ia ikut jadi input
     # tersembunyi dan terkirim dua kali.
     assert "kat_level" in rp._PARAM_FILTER and "lok_level" in rp._PARAM_FILTER
+
+
+# ── Beberapa jenjang sekaligus, di gabungan DAN per kegiatan ────────────
+
+def test_DUA_JENJANG_KATEGORI_menghasilkan_DUA_panel(dbr):
+    """Permintaan pemilik: jenjang boleh dipilih lebih dari satu. Dua panel
+    berdampingan membuat sebaran kasar dan halus dapat dibandingkan tanpa
+    memuat laporannya dua kali."""
+    async def jalan():
+        aset = _aset("k1", 8, ditemukan=0) + _aset("k2", 8, ditemukan=0)
+        for i, a in enumerate(aset):
+            a["asset_code"] = (f"{3 + (i % 2)}{i % 2:02d}{i % 3:02d}"
+                               f"{i % 100:02d}{i % 1000:03d}")
+        await _seed(dbr, [_keg(1, 5), _keg(2, 7)], aset)
+        d = await rp._build_satker_report_v2(
+            "k1", {"kat_level": ["1", "3"]})
+        assert d["kat_levels"] == ["1", "3"]
+        judul = _judul_panel(d, "Per Kategori")
+        assert judul == ["Per Kategori — Golongan", "Per Kategori — Kelompok"], judul
+        # Bagian PER KEGIATAN ikut mendapat kedua panel — kalau tidak, dua
+        # bagian pada satu laporan kembali berbicara dengan cara berbeda.
+        for k in d["analisis_kegiatan"]:
+            assert _judul_keg(k, "Per Kategori") == judul, k["nama"]
+    _jalan(jalan())
+
+
+def test_DUA_JENJANG_LOKASI_menghasilkan_DUA_panel(dbr):
+    async def jalan():
+        await _seed_denah(dbr)
+        aset = _aset("k1", 6, ditemukan=0) + _aset("k2", 3, ditemukan=0)
+        for i, a in enumerate(aset):
+            a["lokasi_spasial"] = {"node_id": ["r1", "r2", "r3"][i % 3]}
+        await _seed(dbr, [_keg(1, 5), _keg(2, 7)], aset)
+        d = await rp._build_satker_report_v2(
+            "k1", {"lok_level": ["GEDUNG", "RUANGAN"]})
+        assert d["lok_levels"] == ["GEDUNG", "RUANGAN"]
+        judul = _judul_panel(d, "Per Lokasi")
+        assert judul == ["Per Lokasi — Gedung", "Per Lokasi — Ruangan"], judul
+        for k in d["analisis_kegiatan"]:
+            assert _judul_keg(k, "Per Lokasi") == judul, k["nama"]
+        # Isinya benar-benar berbeda, bukan judul yang berganti saja.
+        n = {p["judul"]: sum(len(x["baris"]) for h in d["halaman_analisis"]
+                             for sisi in ("kiri", "kanan") for x in h[sisi]
+                             if x["judul"] == p["judul"])
+             for h in d["halaman_analisis"] for sisi in ("kiri", "kanan")
+             for p in h[sisi] if p["judul"].startswith("Per Lokasi")}
+        assert n["Per Lokasi — Gedung"] < n["Per Lokasi — Ruangan"], n
+    _jalan(jalan())
+
+
+def test_urutan_panel_jenjang_dari_TERLUAS_ke_terdalam(dbr):
+    """Panel yang berpindah tempat setiap kali query string-nya disusun ulang
+    membuat dua cetakan laporan yang sama terlihat berbeda."""
+    async def jalan():
+        await _seed(dbr, [_keg(1, 5)], _aset("k1", 4))
+        d = await rp._build_satker_report_v2(
+            "k1", {"kat_level": ["4", "1", "2"]})
+        assert _judul_panel(d, "Per Kategori") == [
+            "Per Kategori — Golongan", "Per Kategori — Bidang",
+            "Per Kategori — Sub Kelompok"]
+    _jalan(jalan())
+
+
+def test_pemilih_jenjang_menerima_LEBIH_DARI_SATU_di_panel():
+    """Kotaknya dulu `radio` — sekali pilih satu. Radio yang dibiarkan berarti
+    permintaannya tak terjawab, dan tak ada satu pun uji yang berbunyi."""
+    t = _teks_template()
+    assert 'name="kat_level" multiple' in t, "jenjang kategori masih tunggal"
+    assert 'name="lok_level" multiple' in t, "jenjang lokasi masih tunggal"
+    assert 'type="radio"' not in t, "masih ada kotak radio tersisa"
+    # Pintasan pilih semua / kosongkan ikut tersedia untuk keduanya.
+    assert 'data-pilih="kat_level"' in t and 'data-pilih="lok_level"' in t

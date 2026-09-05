@@ -175,3 +175,50 @@ def test_TANPA_DENAH_juga_di_akhir():
     aset = _aset_di("r1", 1) + [{} for _ in range(40)]
     grup = ljj.kelompokkan_denah(aset, "GEDUNG", _PETA)
     assert grup[-1][0] == ljj.TANPA_DENAH, [g[0] for g in grup]
+
+
+# ── 5. Beberapa jenjang sekaligus ───────────────────────────────────────
+#
+# Permintaan pemilik: *"Jenjang Lokasi dan kategori jadikan juga pilihan dapat
+# memilih [lebih] dari 1."* Memilih Golongan DAN Bidang menghasilkan dua panel
+# berdampingan, sehingga sebaran kasar dan halus dapat dibandingkan tanpa
+# memuat laporannya dua kali.
+
+def test_beberapa_jenjang_dipakai_SEKALIGUS():
+    assert ljj.jenjang_terpilih_banyak(["1", "3"], (1, 2, 3, 4), 2) == [1, 3]
+    assert ljj.jenjang_terpilih_banyak(["1", "2", "3", "4"], (1, 2, 3, 4), 2) == [
+        1, 2, 3, 4]
+
+
+def test_urutannya_mengikuti_JENJANG_bukan_urutan_parameter():
+    """Panel yang berpindah tempat setiap kali query string-nya disusun ulang
+    membuat dua cetakan laporan yang sama terlihat berbeda."""
+    assert ljj.jenjang_terpilih_banyak(["4", "1", "3"], (1, 2, 3, 4), 2) == [
+        1, 3, 4]
+    assert ljj.jenjang_terpilih_banyak(
+        ["RUANGAN", "GEDUNG"], ("GEDUNG", "LANTAI", "RUANGAN"), "GEDUNG") == [
+        "GEDUNG", "RUANGAN"]
+
+
+def test_nilai_tak_sah_dibuang_dan_sisanya_TETAP_dipakai():
+    """Satu nilai ngawur tak boleh membatalkan pilihan lain yang sah."""
+    assert ljj.jenjang_terpilih_banyak(["99", "2", "abc"], (1, 2, 3, 4), 1) == [2]
+
+
+def test_tanpa_pilihan_sah_jatuh_ke_BAWAAN():
+    """Halaman tanpa panel apa pun akan terbaca sebagai laporan yang gagal
+    dimuat, bukan sebagai pilihan yang keliru."""
+    for buruk in ([], None, ["99"], ["", " "], "abc"):
+        assert ljj.jenjang_terpilih_banyak(buruk, (1, 2, 3, 4), 2) == [2], buruk
+
+
+def test_satu_nilai_TUNGGAL_tetap_diterima():
+    """Query string lama (`?kat_level=3`) tak boleh mendadak berhenti bekerja."""
+    assert ljj.jenjang_terpilih_banyak("3", (1, 2, 3, 4), 2) == [3]
+    assert ljj.jenjang_terpilih_banyak(3, (1, 2, 3, 4), 2) == [3]
+
+
+def test_tanpa_jenjang_sah_sama_sekali_hasilnya_KOSONG():
+    """Satker tanpa satu pun penempatan denah tak punya jenjang lokasi; daftar
+    kosong di sini yang membuat panelnya jatuh ke teks bebas."""
+    assert ljj.jenjang_terpilih_banyak(["GEDUNG"], (), "") == []
