@@ -455,3 +455,92 @@ def test_lingkup_kegiatan_membuang_id_yang_tak_ada_di_pohon():
 def test_kegiatan_tanpa_lingkup_apa_pun_berarti_seluruh_satker():
     assert org.lingkup_kegiatan({}, _POHON) == []
     assert org.dalam_lingkup("e5", [], _PETA_PARENT) is True
+
+
+# ── 9. Aset dinilai terhadap lingkup kegiatannya ────────────────────────
+#
+# Aset menyimpan unitnya sebagai lima kolom TEKS, bukan sebagai id, jadi
+# penentuan "di dalam lingkup" adalah pencocokan jalur. Fungsi inilah yang
+# memutuskan aset mana ditandai di luar lingkup pada laporan — keliru di sini
+# berarti laporan menuduh aset yang benar, atau meloloskan yang salah.
+
+def test_aset_di_bawah_unit_lingkup_termasuk_lingkupnya():
+    aset = {"eselon1": "Sekretariat Jenderal", "eselon2": "Biro Umum"}
+    assert org.aset_dalam_lingkup(aset, ["e2"], _PETA_UNIT, _PETA_PARENT)
+
+
+def test_KETURUNAN_unit_lingkup_ikut_termasuk():
+    # Aset sebuah Subbagian tetap membawa nama Bironya di eselon2, sehingga ia
+    # cocok pada prefiks yang sama. Itulah arti membawahi.
+    aset = {"eselon1": "Sekretariat Jenderal", "eselon2": "Biro Umum",
+            "eselon3": "Bagian Rumah Tangga",
+            "eselon4": "Subbagian Perlengkapan"}
+    assert org.aset_dalam_lingkup(aset, ["e2"], _PETA_UNIT, _PETA_PARENT)
+
+
+def test_aset_cabang_lain_TIDAK_termasuk():
+    aset = {"eselon1": "Sekretariat Jenderal", "eselon2": "Biro Keuangan"}
+    assert not org.aset_dalam_lingkup(aset, ["e2"], _PETA_UNIT, _PETA_PARENT)
+
+
+def test_pencocokan_menuntut_SELURUH_jalur_bukan_nama_terdalam_saja():
+    # Dua "Biro Umum" di bawah dua induk berbeda adalah dua unit berlainan.
+    # Mencocokkan nama tingkat terdalam saja akan menyeret keduanya.
+    pohon = _POHON + [
+        {"id": "x1", "nama_unit": "Kedeputian X", "eselon": "1",
+         "parent_id": ""},
+        {"id": "x2", "nama_unit": "Biro Umum", "eselon": "2",
+         "parent_id": "x1"},
+    ]
+    peta_unit = {u["id"]: u for u in pohon}
+    peta_parent = {u["id"]: u["parent_id"] for u in pohon if u["parent_id"]}
+    aset = {"eselon1": "Kedeputian X", "eselon2": "Biro Umum"}
+    assert org.aset_dalam_lingkup(aset, ["x2"], peta_unit, peta_parent)
+    assert not org.aset_dalam_lingkup(aset, ["e2"], peta_unit, peta_parent)
+
+
+def test_lingkup_KOSONG_berarti_seluruhnya():
+    # Kegiatan yang belum mencatat lingkup tak boleh mendadak kehilangan
+    # seluruh datanya — atau, lebih buruk, melihat SETIAP asetnya ditandai
+    # "di luar lingkup".
+    aset = {"eselon1": "Sekretariat Jenderal", "eselon2": "Biro Keuangan"}
+    assert org.aset_dalam_lingkup(aset, [], _PETA_UNIT, _PETA_PARENT)
+    assert org.aset_dalam_lingkup({}, [], _PETA_UNIT, _PETA_PARENT)
+
+
+def test_aset_tanpa_unit_tak_termasuk_lingkup_mana_pun():
+    assert not org.aset_dalam_lingkup({}, ["e2"], _PETA_UNIT, _PETA_PARENT)
+
+
+def test_lingkup_dua_cabang_menerima_keduanya():
+    a1 = {"eselon1": "Sekretariat Jenderal", "eselon2": "Biro Umum"}
+    a2 = {"eselon1": "Sekretariat Jenderal", "eselon2": "Biro Keuangan"}
+    for a in (a1, a2):
+        assert org.aset_dalam_lingkup(a, ["e2", "e2b"], _PETA_UNIT,
+                                      _PETA_PARENT)
+
+
+def test_id_lingkup_yang_tak_dikenal_tidak_meloloskan_apa_pun():
+    # Unit yang sudah dihapus tak boleh berubah makna menjadi "cocokkan saja".
+    aset = {"eselon1": "Sekretariat Jenderal", "eselon2": "Biro Umum"}
+    assert not org.aset_dalam_lingkup(aset, ["sudah-hilang"], _PETA_UNIT,
+                                      _PETA_PARENT)
+
+
+def test_spasi_tepi_pada_kolom_aset_tak_membuatnya_meleset():
+    aset = {"eselon1": "  Sekretariat Jenderal  ", "eselon2": " Biro Umum "}
+    assert org.aset_dalam_lingkup(aset, ["e2"], _PETA_UNIT, _PETA_PARENT)
+
+
+def test_unit_lingkup_BERNAMA_KOSONG_tak_meloloskan_seluruh_aset():
+    # Jalur kosong dicocokkan dengan `all()` atas nol syarat — dan `all([])`
+    # bernilai benar. Tanpa penjagaan, SATU unit bernama kosong di dalam
+    # lingkup membuat setiap aset dianggap masuk, sehingga penandaan "di luar
+    # lingkup" mati diam-diam pada seluruh laporan. Data lama dan hasil
+    # derivasi otomatis bisa menghasilkan unit seperti itu.
+    pohon = _POHON + [{"id": "kosong", "nama_unit": "   ", "eselon": "2",
+                       "parent_id": "e1"}]
+    peta_unit = {u["id"]: u for u in pohon}
+    peta_parent = {u["id"]: u["parent_id"] for u in pohon if u["parent_id"]}
+    aset = {"eselon1": "Sekretariat Jenderal", "eselon2": "Biro Keuangan"}
+    assert not org.aset_dalam_lingkup(aset, ["kosong"], peta_unit, peta_parent)

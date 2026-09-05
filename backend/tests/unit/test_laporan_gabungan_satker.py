@@ -651,42 +651,49 @@ def test_grafik_linimasa_dan_tahun_tak_lagi_gepeng():
     assert atas and float(atas.group(1)) >= 9, "total di atas batang masih kecil"
 
 
-def test_grafik_per_eselon_II_ada_di_analisis_data(dbr):
-    """Satu Eselon I biasanya membawahi beberapa Eselon II; grafik yang
-    berhenti di Eselon I menyembunyikan justru unit yang bertanggung jawab
-    atas barangnya."""
+def test_unit_organisasi_BERSARANG_bukan_dua_panel_rata(dbr):
+    """Dua panel rata — "Per Eselon I" dan "Per Eselon II" — tak punya satu pun
+    garis penghubung: pembacanya harus mencocokkan sendiri Direktorat mana
+    milik Ditjen mana. Satu panel berjenjang menuliskan hubungan itu, dan tiap
+    induk berjumlah tepat sama dengan anak-anaknya."""
     async def jalan():
         aset = _aset("k1", 6, ditemukan=6)
         for i, a in enumerate(aset):
             a["eselon1"] = "Ditjen Satu"
             a["eselon2"] = f"Direktorat {i % 3}"
         await _seed(dbr, [_keg(1, 5)], aset)
-        d = await rp._build_satker_report_v2("k1")
-        nama = {c["name"]: c["count"] for c in d["chart_eselon2"]}
-        assert nama == {"Direktorat 0": 2, "Direktorat 1": 2, "Direktorat 2": 2}, nama
-        # Eselon I tetap ada — yang satu tak menggantikan yang lain.
-        assert [c["name"] for c in d["chart_eselon1"]] == ["Ditjen Satu"]
-        # Panelnya benar-benar masuk halaman analisis, bukan cuma datanya.
+        d = await rp._build_satker_report_v2(
+            "k1", rp._filter_laporan_satker([], [], [], [], [],
+                                            es_level=["1", "2"]))
+        baris = [(c["depth"], c["name"], c["count"]) for c in d["chart_eselon"]]
+        assert baris[0] == (0, "Ditjen Satu", 6), baris
+        anak = {n: c for dep, n, c in baris if dep == 1}
+        assert anak == {"Direktorat 0": 2, "Direktorat 1": 2, "Direktorat 2": 2}
+        assert sum(anak.values()) == baris[0][2], "induk ≠ jumlah anaknya"
+        # Panelnya benar-benar masuk halaman analisis, bukan cuma datanya, dan
+        # judulnya MENYEBUT jenjang yang sedang dipakai.
         judul = [p["judul"] for h in d["halaman_analisis"]
                  for sisi in ("kiri", "kanan") for p in h[sisi]]
-        assert "Per Eselon II" in judul, judul
-        assert "Per Eselon I" in judul, judul
+        assert "Per Unit Organisasi — Eselon I › Eselon II" in judul, judul
+        # Dua panel rata yang lama tak boleh tersisa di mana pun.
+        assert not any(j in ("Per Eselon I", "Per Eselon II") for j in judul)
     _jalan(jalan())
 
 
-def test_eselon_II_kosong_menjelaskan_dirinya(dbr):
-    """Panel kosong tanpa keterangan terbaca sebagai "sistemnya rusak".
-    Yang benar: datanya memang belum diisi, dan itu bisa ditindaklanjuti."""
+def test_aset_tanpa_unit_organisasi_DIHITUNG_bukan_dibuang(dbr):
+    """Panel kosong tanpa keterangan terbaca sebagai "sistemnya rusak", dan
+    aset yang disaring keluar membuat jumlah batang tak lagi sama dengan jumlah
+    aset — selisih yang tak pernah ditanyakan siapa pun karena tak terlihat.
+    Yang benar: barisnya ada, menyebut dirinya, dan jumlahnya utuh."""
     async def jalan():
         await _seed(dbr, [_keg(1, 5)], _aset("k1", 3))
         d = await rp._build_satker_report_v2("k1")
-        assert d["chart_eselon2"] == []
-        # Panelnya TETAP muncul walau kosong. Panel yang dibuang diam-diam
-        # membuat pembacanya mengira dimensi itu tak ada di sistem.
-        kosong = [p for h in d["halaman_analisis"]
-                  for sisi in ("kiri", "kanan") for p in h[sisi]
-                  if p["judul"] == "Per Eselon II"]
-        assert len(kosong) == 1 and kosong[0]["baris"] == []
+        assert [(c["name"], c["count"]) for c in d["chart_eselon"]] == [
+            ("(tanpa unit organisasi)", 3)]
+        panel = [p for h in d["halaman_analisis"]
+                 for sisi in ("kiri", "kanan") for p in h[sisi]
+                 if p["judul"].startswith("Per Unit Organisasi")]
+        assert len(panel) == 1 and len(panel[0]["baris"]) == 1
     t = _teks_template()
     assert "Belum ada aset yang mencantumkan data ini" in t
     _jalan(jalan())
@@ -860,8 +867,8 @@ def test_kategori_lokasi_dan_eselon_TIDAK_DIPANGKAS_sepuluh_teratas(dbr):
         d = await rp._build_satker_report_v2("k1")
         assert len(d["chart_lokasi"]) == 23, len(d["chart_lokasi"])
         assert len(d["chart_kategori"]) == 17, len(d["chart_kategori"])
-        assert len(d["chart_eselon1"]) == 13, len(d["chart_eselon1"])
-        assert len(d["chart_eselon2"]) == 19, len(d["chart_eselon2"])
+        # Bawaan panel unit organisasi adalah Eselon II — 19 baris, utuh.
+        assert len(d["chart_eselon"]) == 19, len(d["chart_eselon"])
         # Dan seluruhnya benar-benar sampai ke halaman, bukan sekadar ke data.
         baris = {}
         for h in d["halaman_analisis"]:
@@ -869,7 +876,8 @@ def test_kategori_lokasi_dan_eselon_TIDAK_DIPANGKAS_sepuluh_teratas(dbr):
                 for p in h[sisi]:
                     baris.setdefault(p["judul"], 0)
                     baris[p["judul"]] += len(p["baris"])
-        assert baris["Per Eselon II"] == 19, baris
+        judul_es = [j for j in baris if j.startswith("Per Unit Organisasi")]
+        assert len(judul_es) == 1 and baris[judul_es[0]] == 19, baris
         # Tanpa penempatan denah, panel lokasi jatuh ke field teks bebas — dan
         # judulnya MENGATAKAN itu. Grafik yang diam soal sumbernya membuat
         # pembacanya mengira denahnya sudah terpakai.

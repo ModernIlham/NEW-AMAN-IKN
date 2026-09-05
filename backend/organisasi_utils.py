@@ -471,3 +471,41 @@ def lingkup_kegiatan(act, semua_unit) -> list:
         return [i for i in dipilih if i in sah]
     ids, _ = cocokkan_lingkup_teks(a.get("eselon1") or [], semua_unit)
     return ids
+
+
+def aset_dalam_lingkup(aset, lingkup_ids, peta_unit, peta_parent) -> bool:
+    """Apakah aset ini berada di dalam salah satu unit lingkup kegiatannya.
+
+    Aset menyimpan unitnya sebagai lima kolom teks, bukan sebagai id, jadi
+    pencocokannya lewat JALUR: aset berada di dalam sebuah unit lingkup bila
+    seluruh nama pada jalur unit itu — leluhurnya beserta namanya sendiri —
+    sama persis dengan kolom eselon aset pada tingkat yang sama.
+
+    Cara ini sekaligus menangani keturunan tanpa kode tambahan: aset sebuah
+    Subbagian tetap membawa nama Bironya di `eselon2`, sehingga ia cocok dengan
+    lingkup "Biro Umum" pada prefiks yang sama. Itulah arti membawahi.
+
+    Lingkup KOSONG berarti seluruhnya — kegiatan yang belum mencatat lingkup
+    tak boleh mendadak kehilangan seluruh datanya.
+    """
+    if not lingkup_ids:
+        return True
+    a = aset or {}
+    for uid in lingkup_ids:
+        fe = field_eselon(uid, peta_unit, peta_parent)
+        lv = _int((peta_unit.get(uid) or {}).get("eselon"))
+        if not lv or not level_sah(lv):
+            continue
+        jalur = filter_jalur(fe, lv)
+        # Unit lingkup yang NAMANYA sendiri kosong tak dapat dikenali pada
+        # kolom aset. Jalurnya lalu menyusut menjadi jalur INDUKNYA, dan
+        # lingkup "Biro tanpa nama" diam-diam berlaku sebagai lingkup
+        # "Sekretariat Jenderal" — melebar satu tingkat ke atas, menarik
+        # seluruh Biro saudaranya, tanpa satu pun tanda pada laporannya.
+        # Jalur kosong lebih buruk lagi: `all()` atas nol syarat bernilai
+        # benar, sehingga SETIAP aset dianggap masuk.
+        if f"eselon{lv}" not in jalur:
+            continue
+        if all(str(a.get(k) or "").strip() == v for k, v in jalur.items()):
+            return True
+    return False
