@@ -6242,10 +6242,13 @@ async def _peta_denah(aset):
     return peta, tuple(k for k in _URUT_DENAH if k in terpakai)
 
 
-#: Jenjang kodefikasi yang ditawarkan panel kategori. Level 5 (Sub-sub
-#: Kelompok, 10 digit) sengaja TIDAK ditawarkan: ia sudah setara daftar barang
-#: satu per satu, dan itu tugas laporan per kegiatan — bukan grafik sebaran.
-KAT_LEVEL_SAH = (1, 2, 3, 4)
+#: Jenjang kodefikasi yang ditawarkan panel kategori — SELURUH lima level.
+#:
+#: Level 5 (Sub-sub Kelompok, 10 digit) sempat tak ditawarkan karena ia nyaris
+#: setara daftar barang satu per satu. Pemilik memintanya secara khusus, dan
+#: kini ia memang berguna: barisnya bersarang di bawah induknya, bukan berdiri
+#: sebagai daftar rata sepanjang ribuan baris.
+KAT_LEVEL_SAH = (1, 2, 3, 4, 5)
 #: Bidang. Golongan hanya delapan baris — terlalu kasar untuk ditindaklanjuti;
 #: Kelompok ke bawah mudah menjadi ratusan baris pada satker besar.
 KAT_LEVEL_BAWAAN = 2
@@ -6356,21 +6359,23 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
     kat_levels = ljj.jenjang_terpilih_banyak(
         (filter_dipilih or {}).get("kat_level"), KAT_LEVEL_SAH, KAT_LEVEL_BAWAAN)
 
-    def _chart_kategori(aset, n_acuan, level):
+    def _chart_kategori(aset, n_acuan):
+        # SATU panel berjenjang, bukan satu panel per jenjang. Panel terpisah
+        # memaksa pembacanya mencocokkan sendiri baris mana milik baris mana.
+        #
         # TIDAK DIPANGKAS. `most_common(10)` membuang data tanpa satu pun
         # tanda: satker dengan 40 kategori hanya menampilkan 10, dan pembacanya
         # tak punya cara tahu 30 sisanya ada. Panjangnya ditangani penyusun
         # tata letak (backend/laporan_tataletak.py) yang memecah, bukan
         # memangkas.
-        return [{"name": nama[:44], "count": len(isi),
-                 "pct": pct(len(isi), n_acuan),
-                 "val_fmt": fmt(sum(sp(a) for a in isi))}
-                for nama, isi in ljj.kelompokkan_kode(
-                    aset, kod.LEVEL_LENGTHS[level], _kode_aset, kode_uraian)]
+        return [{"name": b["label"][:44], "count": len(b["aset"]),
+                 "pct": pct(len(b["aset"]), n_acuan), "depth": b["depth"],
+                 "val_fmt": fmt(sum(sp(a) for a in b["aset"]))}
+                for b in ljj.baris_hierarki_kode(
+                    aset, [kod.LEVEL_LENGTHS[lv] for lv in kat_levels],
+                    _kode_aset, kode_uraian)]
 
-    # Panel PERTAMA tetap disebut `chart_kategori` — dipakai bagian lain
-    # laporan dan oleh uji lama sebagai wakil sebaran kategori.
-    chart_kategori = _chart_kategori(all_assets, tc, kat_levels[0])
+    chart_kategori = _chart_kategori(all_assets, tc)
     pilihan_kat_level = ljj.pilihan_jenjang(KAT_LEVEL_SAH, kod.LEVEL_LABELS)
 
     # ── LOKASI MENURUT DENAH ────────────────────────────────────────────
@@ -6399,23 +6404,26 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
         lok_level_sah[0] if lok_level_sah else "")
     lok_sumber = "denah" if lok_level_sah else "teks"
 
-    def _chart_lokasi(aset, n_acuan, level):
-        if level:
-            grup = ljj.kelompokkan_denah(aset, level, peta_node)
-        else:
-            # Belum ada satu pun aset yang ditempatkan di denah. Field teks
-            # `location` dipakai sebagai cadangan — dan laporannya MENGATAKAN
-            # bahwa itu yang terjadi, sebab grafik lokasi yang diam soal
-            # sumbernya membuat pembacanya mengira denahnya sudah terpakai.
-            gl = {}
-            for a in aset:
-                gl.setdefault(str(a.get("location") or "").strip() or "-",
-                              []).append(a)
-            grup = sorted(gl.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+    def _chart_lokasi(aset, n_acuan):
+        if lok_levels:
+            baris = ljj.baris_hierarki_denah(aset, lok_levels, peta_node)
+            return [{"name": b["label"][:44], "count": len(b["aset"]),
+                     "pct": pct(len(b["aset"]), n_acuan), "depth": b["depth"]}
+                    for b in baris]
+        # Belum ada satu pun aset yang ditempatkan di denah. Field teks
+        # `location` dipakai sebagai cadangan — dan laporannya MENGATAKAN
+        # bahwa itu yang terjadi, sebab grafik lokasi yang diam soal sumbernya
+        # membuat pembacanya mengira denahnya sudah terpakai.
+        gl = {}
+        for a in aset:
+            gl.setdefault(str(a.get("location") or "").strip() or "-",
+                          []).append(a)
         return [{"name": nama[:44], "count": len(isi),
-                 "pct": pct(len(isi), n_acuan)} for nama, isi in grup]
+                 "pct": pct(len(isi), n_acuan), "depth": 0}
+                for nama, isi in sorted(gl.items(),
+                                        key=lambda kv: (-len(kv[1]), kv[0]))]
 
-    chart_lokasi = _chart_lokasi(all_assets, tc, lok_levels[0] if lok_levels else "")
+    chart_lokasi = _chart_lokasi(all_assets, tc)
     pilihan_lok_level = ljj.pilihan_jenjang(lok_level_sah, _LABEL_DENAH)
 
     es1_counter = Counter(a.get("eselon1", "") for a in all_assets if a.get("eselon1"))
@@ -6986,30 +6994,25 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
     # panelnya boleh sepanjang datanya, dan penyusun di
     # backend/laporan_tataletak.py yang memutuskan apa masuk halaman mana —
     # dengan MENGUKUR tinggi tiap panel, bukan menebak cacahnya.
-    def _judul_lokasi(level):
-        """Judul panel lokasi — SELALU menyebut jenjangnya (atau bahwa ia
-        jatuh ke teks bebas). Dua panel berdampingan yang sama-sama berjudul
-        "Per Lokasi" terbaca sebagai satu daftar yang terpecah, bukan sebagai
-        dua sudut pandang."""
-        return (("Per Lokasi — " + _LABEL_DENAH.get(level, level)) if level
-                else "Per Lokasi (teks bebas)")
+    # Judul menyebut SELURUH jenjang yang dipilih, berurutan — pembacanya
+    # perlu tahu kedalaman apa yang sedang ia lihat sebelum membaca angkanya,
+    # dan panel berjenjang tanpa keterangan itu terbaca sebagai daftar rata
+    # yang kebetulan menjorok.
+    judul_kategori = "Per Kategori — " + " › ".join(
+        kod.LEVEL_LABELS[lv] for lv in kat_levels)
+    judul_lokasi = (("Per Lokasi — " + " › ".join(
+        _LABEL_DENAH.get(lv, lv) for lv in lok_levels))
+        if lok_levels else "Per Lokasi (teks bebas)")
 
-    # Satu panel per jenjang yang dipilih, berurutan dari terluas ke terdalam.
     panel_analisis = [
         ltl.panel_batang("Kondisi Barang (Ditemukan)", chart_kondisi,
                          "", kolom_nilai="count"),
         ltl.panel_batang("Status Inventarisasi", chart_status,
                          "", kolom_nilai="count"),
-    ] + [
-        ltl.panel_batang(f"Per Kategori — {kod.LEVEL_LABELS[lv]}",
-                         _chart_kategori(all_assets, tc, lv),
-                         "#1e40af", kolom_nilai="val_fmt")
-        for lv in kat_levels
-    ] + [
-        ltl.panel_batang(_judul_lokasi(lv), _chart_lokasi(all_assets, tc, lv),
-                         "#059669", kolom_nilai="count")
-        for lv in (lok_levels or [""])
-    ] + [
+        ltl.panel_batang(judul_kategori, chart_kategori,
+                         "#1e40af", kolom_nilai="val_fmt"),
+        ltl.panel_batang(judul_lokasi, chart_lokasi,
+                         "#059669", kolom_nilai="count"),
         ltl.panel_batang("Per Eselon I", chart_eselon1,
                          "#7c3aed", kolom_nilai="val_fmt"),
         ltl.panel_batang("Per Eselon II", chart_eselon2,
@@ -7072,16 +7075,10 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
                              kolom_nilai="count"),
             ltl.panel_batang("Status Inventarisasi", status, "",
                              kolom_nilai="count"),
-        ] + [
-            ltl.panel_batang(f"Per Kategori — {kod.LEVEL_LABELS[lv]}",
-                             _chart_kategori(aset_keg, n_keg, lv),
-                             "#1e40af", kolom_nilai="val_fmt")
-            for lv in kat_levels
-        ] + [
-            ltl.panel_batang(_judul_lokasi(lv),
-                             _chart_lokasi(aset_keg, n_keg, lv),
-                             "#059669", kolom_nilai="count")
-            for lv in (lok_levels or [""])
+            ltl.panel_batang(judul_kategori, _chart_kategori(aset_keg, n_keg),
+                             "#1e40af", kolom_nilai="val_fmt"),
+            ltl.panel_batang(judul_lokasi, _chart_lokasi(aset_keg, n_keg),
+                             "#059669", kolom_nilai="count"),
         ]
 
     analisis_kegiatan = []

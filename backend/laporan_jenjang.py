@@ -64,50 +64,72 @@ def label_kode(kode: str, uraian: str) -> str:
     return f"{k} — {u}" if k and u else (k or u)
 
 
-def kelompokkan_kode(aset, panjang: int, ambil_kode, uraian_map=None):
-    """[(label, [aset...])] terurut dari yang TERBANYAK.
+def _hierarki(aset, kunci_fns, label_fns, depth=0):
+    """Baris berjenjang: induk, lalu anak-anaknya, lalu induk berikutnya.
 
-    `ambil_kode(a)` mengembalikan kode barang aset. Aset yang kodenya lebih
-    pendek dari `panjang` — termasuk yang kosong — masuk `TANPA_KODE` (lihat #2).
+    Rekursif atas daftar fungsi kunci — satu per jenjang yang dipilih. Tiap
+    baris membawa `depth` supaya template dapat menjoroknya; tanpa itu, lima
+    jenjang dalam satu panel terbaca sebagai satu daftar rata yang kebetulan
+    memuat angka berulang.
+    """
+    if not kunci_fns:
+        return []
+    grup = {}
+    for a in aset or []:
+        grup.setdefault(kunci_fns[0](a), []).append(a)
+    keluar = []
+    for kunci, isi in _urut_mentah(grup):
+        keluar.append({"kunci": kunci, "label": label_fns[0](kunci),
+                       "aset": isi, "depth": depth})
+        keluar += _hierarki(isi, kunci_fns[1:], label_fns[1:], depth + 1)
+    return keluar
+
+
+def _urut_mentah(grup):
+    """Terbanyak dulu; kelompok "tanpa …" selalu di akhir (lihat `_urut`)."""
+    tanpa = {TANPA_KODE, TANPA_DENAH}
+    return sorted(grup.items(),
+                  key=lambda kv: (kv[0] in tanpa, -len(kv[1]), kv[0]))
+
+
+def baris_hierarki_kode(aset, panjangs, ambil_kode, uraian_map=None):
+    """Satu panel BERJENJANG, bukan satu panel per jenjang.
+
+    Permintaan pemilik: *"buat agar filternya tidak dibagi menjadi kartu
+    terpisah akan tetapi buat hierarkinya."* Panel terpisah per jenjang
+    memaksa pembacanya mencocokkan sendiri baris mana milik baris mana —
+    "301 — Alat Besar" pada satu panel dan "30101 — Alat Besar Darat" pada
+    panel lain tak punya garis yang menghubungkannya. Satu panel berjenjang
+    menuliskannya sebagai induk-anak, dan hubungan itu jadi terbaca.
+
+    `panjangs` = panjang prefix tiap jenjang terpilih, dari terluas ke
+    terdalam. Boleh melompat (Golongan lalu Kelompok) — anaknya tetap
+    bersarang di bawah induknya.
     """
     uraian_map = uraian_map or {}
-    grup = {}
-    for a in aset or []:
-        prefix = potong_kode(ambil_kode(a), panjang)
-        kunci = prefix or TANPA_KODE
-        grup.setdefault(kunci, []).append(a)
-    return _urut(grup, lambda k: (label_kode(k, uraian_map.get(k, ""))
-                                  if k != TANPA_KODE else k))
+
+    def kunci(n):
+        return lambda a: potong_kode(ambil_kode(a), n) or TANPA_KODE
+
+    def label(kunci_nilai):
+        return (kunci_nilai if kunci_nilai == TANPA_KODE
+                else label_kode(kunci_nilai, uraian_map.get(kunci_nilai, "")))
+
+    return _hierarki(aset, [kunci(n) for n in panjangs],
+                     [label] * len(panjangs))
 
 
-def kelompokkan_denah(aset, level, peta_node):
-    """[(label, [aset...])] menurut node denah pada `level` (kode_baku).
+def baris_hierarki_denah(aset, levels, peta_node):
+    """Satu panel berjenjang untuk denah: Gedung → Lantai → Ruangan."""
+    def kunci(level):
+        def ambil(a):
+            lok = (a or {}).get("lokasi_spasial") or {}
+            return ((peta_node.get(lok.get("node_id")) or {})
+                    .get("level_nama", {}).get(level, "")) or TANPA_DENAH
+        return ambil
 
-    `peta_node` = {node_id: {"level_nama": {KODE_BAKU: nama, ...}}} — hasil
-    penelusuran leluhur node, disiapkan pemanggil (modul ini tak menyentuh DB).
-    Aset tanpa penempatan, atau yang penempatannya tak punya leluhur di level
-    itu, masuk `TANPA_DENAH` (lihat #2).
-    """
-    grup = {}
-    for a in aset or []:
-        lok = (a or {}).get("lokasi_spasial") or {}
-        nama = ((peta_node.get(lok.get("node_id")) or {})
-                .get("level_nama", {}).get(level, ""))
-        grup.setdefault(nama or TANPA_DENAH, []).append(a)
-    return _urut(grup, lambda k: k)
-
-
-def _urut(grup, ke_label):
-    """Terbanyak lebih dulu; kelompok "tanpa …" SELALU di akhir.
-
-    Ia hampir selalu besar, dan menaruhnya di puncak membuat baris pertama
-    grafik berisi keterangan yang paling tak informatif — sekaligus mendorong
-    kelompok sungguhan turun dari pandangan pertama.
-    """
-    tanpa = {TANPA_KODE, TANPA_DENAH}
-    urut = sorted(grup.items(),
-                  key=lambda kv: (kv[0] in tanpa, -len(kv[1]), kv[0]))
-    return [(ke_label(k), v) for k, v in urut]
+    return _hierarki(aset, [kunci(lv) for lv in levels],
+                     [lambda k: k] * len(levels))
 
 
 def pilihan_jenjang(tersedia, label_map) -> list:
@@ -146,14 +168,3 @@ def jenjang_terpilih_banyak(diminta, sah, bawaan) -> list:
     return dipakai or ([bawaan] if bawaan else [])
 
 
-def jenjang_terpilih(diminta, sah, bawaan):
-    """Nilai jenjang yang dipakai — `bawaan` bila permintaannya tak sah.
-
-    Parameter dari query string tak pernah tepercaya: `?kat_level=99` harus
-    jatuh ke bawaan, bukan menghasilkan grafik kosong yang tampak sah.
-    """
-    t = str(diminta or "").strip()
-    for v in sah:
-        if t == str(v):
-            return v
-    return bawaan

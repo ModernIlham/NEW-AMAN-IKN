@@ -18,6 +18,87 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#994] Satu panel berjenjang, sampai Sub-sub Kelompok — 2026-09-05
+
+Permintaan pemilik: *"gunakan hingga ke sub-sub kelompok dan buat agar
+filternya tidak dibagi menjadi kartu terpisah akan tetapi buat hierarkinya,
+begitupun yang lokasi."*
+
+### Kartu terpisah tak menunjukkan hubungannya
+
+`[#993]` membuat tiap jenjang terpilih mendapat **panelnya sendiri**. Itu
+memaksa pembacanya mencocokkan sendiri baris mana milik baris mana:
+`301 — Alat Besar` pada satu panel dan `30101 — Alat Besar Darat` pada panel
+lain **tak punya garis yang menghubungkannya**.
+
+Kini seluruh jenjang terpilih menjadi **SATU panel berjenjang**, dengan anak
+menjorok di bawah induknya:
+
+```
+Per Kategori — Golongan › Bidang › Kelompok › Sub-sub Kelompok
+   3 — Peralatan dan Mesin                20
+     └ 301 — Alat Besar                    12
+       └ 30101 — Alat Besar Darat          12
+         └ 3010101001                       4
+         └ 3010101002                       4
+   4 — Gedung dan Bangunan                 4
+
+Per Lokasi — Gedung › Lantai › Ruangan
+   Menara Utama                           16
+     └ Lantai 1                             8
+       └ Ruang 101                           8
+```
+
+Tiap induk berjumlah tepat sama dengan anak-anaknya, dan jumlah baris teratas
+sama dengan total NUP.
+
+### Sub-sub Kelompok dibuka
+
+Level 5 (10 digit) sempat tak ditawarkan karena nyaris setara daftar barang
+satu per satu. Kini ia **berguna**: barisnya bersarang di bawah induknya, bukan
+berdiri sebagai daftar rata sepanjang ribuan baris.
+
+### Jenjang boleh melompat
+
+Golongan lalu Kelompok, tanpa Bidang — anaknya tetap bersarang di bawah
+induknya. Judul panel menyebut seluruh jenjang terpilih berurutan
+(`Golongan › Kelompok`); pembacanya perlu tahu kedalaman apa yang sedang ia
+lihat sebelum membaca angkanya.
+
+### Fungsi mati dihapus
+
+`kelompokkan_kode()`, `kelompokkan_denah()`, `_urut()`, dan `jenjang_terpilih()`
+tak lagi dipakai produksi sejak panelnya menjadi satu hierarki. Keduanya
+dihapus beserta ujinya yang dialihkan ke API baru — **fungsi mati yang tetap
+hijau karena ujinya sendiri terbaca sebagai kode yang hidup**, dan itu jebakan
+bagi perubahan berikutnya. Sifat yang dijaga tak hilang: diuji lewat
+`baris_hierarki_*` dengan SATU jenjang, yang persis setara pengelompokan rata
+dulu.
+
+### Uji mutasi — empat dipasang, empat dibunuh
+
+| Mutasi | Dibunuh oleh |
+|---|---|
+| Semua baris jadi depth 0 (hierarki jadi daftar rata) | `test_hierarki_DENAH_bersarang_sampai_ruangan` (+7 lainnya) |
+| Anak tak ditelusuri — hanya jenjang pertama tergambar | `test_DUA_JENJANG_KATEGORI_menghasilkan_DUA_panel` (+5) |
+| Sub-sub Kelompok ditutup lagi | `test_jenjang_kategori_TAK_SAH_jatuh_ke_bawaan` |
+| Baris anak tak lagi menjorok di template | `test_baris_ANAK_benar_benar_MENJOROK_di_template` |
+
+Mutasi keempat **lolos dari seluruh uji data** sebelum pemeriksaan template
+ditambahkan: datanya tetap membawa `depth` dengan benar, hanya tak tergambar.
+Hierarki yang tak menjorok adalah daftar rata — dan itu persis keadaan yang
+sedang diperbaiki.
+
+### Berkas
+
+- `backend/laporan_jenjang.py` — `baris_hierarki_kode()`, `baris_hierarki_denah()`, `_hierarki()`; empat fungsi mati dihapus
+- `backend/routes/reports.py` — `KAT_LEVEL_SAH` sampai 5, satu panel berjenjang per sumbu
+- `backend/templates/laporan_satker_v2.html` — jorokan menurut `depth`, penanda cabang, label diperlebar
+- `backend/tests/unit/test_laporan_jenjang.py` — 7 uji baru, 12 dialihkan ke API hierarki
+- `backend/tests/unit/test_laporan_gabungan_satker.py` — 1 uji baru, 4 disesuaikan
+
+---
+
 ## [#993] Jenjang kategori dan lokasi boleh dipilih lebih dari satu — 2026-09-05
 
 Permintaan pemilik: *"Jenjang Lokasi dan kategori jadikan juga pilihan dapat

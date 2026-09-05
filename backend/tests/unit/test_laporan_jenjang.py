@@ -29,6 +29,18 @@ def _kode(a):
 
 
 # ── 1. Tak ada aset yang hilang ─────────────────────────────────────────
+#
+# Sifat-sifat di bawah dulu diuji lewat `kelompokkan_kode`/`kelompokkan_denah`.
+# Keduanya sudah tak dipakai produksi sejak panelnya menjadi SATU hierarki, dan
+# dihapus: fungsi mati yang tetap hijau karena ujinya sendiri terbaca sebagai
+# kode yang hidup. Sifatnya tak hilang — diuji lewat `baris_hierarki_*` dengan
+# SATU jenjang, yang persis setara pengelompokan rata dulu.
+
+def _rata(aset, level, uraian_map=None):
+    """Baris satu jenjang → [(label, jumlah)] — setara pengelompokan rata."""
+    return [(b["label"], len(b["aset"])) for b in ljj.baris_hierarki_kode(
+        aset, [kod.LEVEL_LENGTHS[level]], _kode, uraian_map)]
+
 
 def test_JUMLAH_aset_utuh_di_tiap_jenjang():
     """Jumlah batang yang tak sama dengan jumlah aset berarti ada yang
@@ -37,91 +49,68 @@ def test_JUMLAH_aset_utuh_di_tiap_jenjang():
     aset = (_aset("3010203001", 5) + _aset("3010204001", 3)
             + _aset("3020101001", 7) + _aset("4010101001", 2)
             + _aset("", 4) + _aset("3", 2))
-    for level in (1, 2, 3, 4):
-        grup = ljj.kelompokkan_kode(aset, kod.LEVEL_LENGTHS[level], _kode)
-        assert sum(len(v) for _, v in grup) == len(aset), level
+    for level in (1, 2, 3, 4, 5):
+        assert sum(n for _, n in _rata(aset, level)) == len(aset), level
 
 
 def test_kode_LEBIH_PENDEK_dari_jenjang_masuk_TANPA_KODE():
     """Aset berkode "3" tak dapat dijawab pada jenjang Bidang, dan memotongnya
     menjadi dirinya sendiri akan mengarang bidang "3" yang tak pernah ada."""
-    grup = dict(ljj.kelompokkan_kode(
-        _aset("3", 2) + _aset("3010203001", 1), kod.LEVEL_LENGTHS[2], _kode))
-    assert grup[ljj.TANPA_KODE] and len(grup[ljj.TANPA_KODE]) == 2
-    assert "3" not in grup, "kode pendek dipaksa jadi bidang"
+    hasil = dict(_rata(_aset("3", 2) + _aset("3010203001", 1), 2))
+    assert hasil[ljj.TANPA_KODE] == 2
+    assert "3" not in hasil, "kode pendek dipaksa jadi bidang"
 
 
 def test_kelompok_TANPA_KODE_selalu_di_AKHIR():
     """Ia hampir selalu besar; menaruhnya di puncak membuat baris pertama
     grafik berisi keterangan yang paling tak informatif."""
-    grup = ljj.kelompokkan_kode(
-        _aset("", 50) + _aset("3010203001", 3), kod.LEVEL_LENGTHS[2], _kode)
-    assert grup[-1][0] == ljj.TANPA_KODE, [g[0] for g in grup]
-    assert grup[0][0].startswith("301")
+    hasil = _rata(_aset("", 50) + _aset("3010203001", 3), 2)
+    assert hasil[-1][0] == ljj.TANPA_KODE, hasil
+    assert hasil[0][0].startswith("301")
 
 
 def test_terbanyak_lebih_dulu():
-    grup = ljj.kelompokkan_kode(
-        _aset("3010101001", 2) + _aset("3020101001", 9)
-        + _aset("3030101001", 5), kod.LEVEL_LENGTHS[2], _kode)
-    assert [len(v) for _, v in grup] == [9, 5, 2]
+    hasil = _rata(_aset("3010101001", 2) + _aset("3020101001", 9)
+                  + _aset("3030101001", 5), 2)
+    assert [n for _, n in hasil] == [9, 5, 2]
 
 
 # ── 2. Jenjang benar-benar membagi berbeda ──────────────────────────────
 
 def test_jenjang_BERBEDA_menghasilkan_pembagian_berbeda():
-    """Kalau keempatnya menghasilkan grafik yang sama, pemilihnya tak berguna
+    """Kalau kelimanya menghasilkan grafik yang sama, pemilihnya tak berguna
     dan permintaannya tak terjawab."""
     aset = (_aset("3010203001", 1) + _aset("3010204001", 1)
             + _aset("3010301001", 1) + _aset("3020101001", 1)
             + _aset("4010101001", 1))
-    jml = {}
-    for level in (1, 2, 3, 4):
-        grup = ljj.kelompokkan_kode(aset, kod.LEVEL_LENGTHS[level], _kode)
-        jml[level] = len(grup)
-    # Golongan 3 dan 4 → 2 kelompok; makin dalam makin banyak.
-    assert jml[1] == 2, jml
+    jml = {lv: len(_rata(aset, lv)) for lv in (1, 2, 3, 4, 5)}
+    assert jml[1] == 2, jml     # golongan 3 dan 4
     assert jml[2] == 3, jml     # 301, 302, 401
     assert jml[3] == 4, jml     # 30102, 30103, 30201, 40101
     assert jml[4] == 5, jml     # seluruhnya berbeda
+    assert jml[5] == 5, jml
     assert jml[1] < jml[2] < jml[3] < jml[4]
-
-
-@pytest.mark.parametrize("diminta", ["", None, "0", "9", "abc", "2.0", " "])
-def test_jenjang_TAK_SAH_jatuh_ke_bawaan(diminta):
-    """`?kat_level=99` harus jatuh ke bawaan, bukan menghasilkan grafik kosong
-    yang tampak sah."""
-    assert ljj.jenjang_terpilih(diminta, (1, 2, 3, 4), 2) == 2
-
-
-def test_jenjang_sah_dipakai_apa_adanya():
-    for v in (1, 2, 3, 4):
-        assert ljj.jenjang_terpilih(str(v), (1, 2, 3, 4), 2) == v
 
 
 # ── 3. Label memuat kode DAN uraian ─────────────────────────────────────
 
 def test_label_memuat_kode_dan_uraian():
-    grup = ljj.kelompokkan_kode(
-        _aset("3010203001", 1), kod.LEVEL_LENGTHS[2], _kode,
-        {"301": "Alat Besar Darat"})
-    assert grup[0][0] == "301 — Alat Besar Darat"
+    hasil = _rata(_aset("3010203001", 1), 2, {"301": "Alat Besar Darat"})
+    assert hasil[0][0] == "301 — Alat Besar Darat"
 
 
 def test_uraian_TAK_DIKENAL_tak_menyembunyikan_asetnya():
     """Referensi yang belum lengkap bukan alasan menyembunyikan asetnya;
     kodenya sendiri sudah keterangan yang sah."""
-    grup = ljj.kelompokkan_kode(
-        _aset("3010203001", 4), kod.LEVEL_LENGTHS[2], _kode, {})
-    assert grup[0][0] == "301"
-    assert len(grup[0][1]) == 4
+    hasil = _rata(_aset("3010203001", 4), 2, {})
+    assert hasil == [("301", 4)], hasil
 
 
 def test_pilihan_jenjang_memakai_label_resmi():
-    opsi = ljj.pilihan_jenjang((1, 2, 3, 4), kod.LEVEL_LABELS)
+    opsi = ljj.pilihan_jenjang((1, 2, 3, 4, 5), kod.LEVEL_LABELS)
     assert [o["label"] for o in opsi] == [
-        "Golongan", "Bidang", "Kelompok", "Sub Kelompok"]
-    assert [o["nilai"] for o in opsi] == ["1", "2", "3", "4"]
+        "Golongan", "Bidang", "Kelompok", "Sub Kelompok", "Sub-sub Kelompok"]
+    assert [o["nilai"] for o in opsi] == ["1", "2", "3", "4", "5"]
 
 
 # ── 4. Denah ────────────────────────────────────────────────────────────
@@ -140,41 +129,43 @@ _PETA = {
 }
 
 
+def _rata_denah(aset, level, peta=None):
+    return {b["label"]: len(b["aset"]) for b in ljj.baris_hierarki_denah(
+        aset, [level], peta if peta is not None else _PETA)}
+
+
 def test_denah_mengelompokkan_menurut_LEVEL_yang_diminta():
     """Satu gedung memuat beberapa lantai, satu lantai beberapa ruangan —
     jenjangnya yang menentukan pertanyaan mana yang terjawab."""
     aset = _aset_di("r1", 4) + _aset_di("r2", 3) + _aset_di("r3", 2)
-    gedung = dict(ljj.kelompokkan_denah(aset, "GEDUNG", _PETA))
-    assert {k: len(v) for k, v in gedung.items()} == {"Menara A": 7,
-                                                      "Menara B": 2}
-    lantai = dict(ljj.kelompokkan_denah(aset, "LANTAI", _PETA))
-    assert {k: len(v) for k, v in lantai.items()} == {"Lantai 1": 6,
-                                                      "Lantai 2": 3}
+    assert _rata_denah(aset, "GEDUNG") == {"Menara A": 7, "Menara B": 2}
+    assert _rata_denah(aset, "LANTAI") == {"Lantai 1": 6, "Lantai 2": 3}
 
 
 def test_aset_TANPA_penempatan_dikumpulkan_bukan_dibuang():
     """Aset yang belum ditempatkan di denah justru yang paling perlu
     dibereskan."""
     aset = _aset_di("r1", 3) + [{}, {"lokasi_spasial": {}}]
-    grup = dict(ljj.kelompokkan_denah(aset, "GEDUNG", _PETA))
-    assert len(grup[ljj.TANPA_DENAH]) == 2
-    assert sum(len(v) for v in grup.values()) == len(aset)
+    hasil = _rata_denah(aset, "GEDUNG")
+    assert hasil[ljj.TANPA_DENAH] == 2
+    assert sum(hasil.values()) == len(aset)
 
 
 def test_node_yang_tak_punya_leluhur_di_level_itu_masuk_TANPA_DENAH():
     """Tingkat boleh dilompati — satker yang tak memakai Gedung tetap punya
     Ruangan, dan asetnya tak boleh lenyap saat dikelompokkan per Gedung."""
     peta = {"r9": {"level_nama": {"RUANGAN": "Ruang Serbaguna"}}}
-    grup = dict(ljj.kelompokkan_denah(_aset_di("r9", 5), "GEDUNG", peta))
-    assert len(grup[ljj.TANPA_DENAH]) == 5
-    ruang = dict(ljj.kelompokkan_denah(_aset_di("r9", 5), "RUANGAN", peta))
-    assert len(ruang["Ruang Serbaguna"]) == 5
+    assert _rata_denah(_aset_di("r9", 5), "GEDUNG", peta) == {
+        ljj.TANPA_DENAH: 5}
+    assert _rata_denah(_aset_di("r9", 5), "RUANGAN", peta) == {
+        "Ruang Serbaguna": 5}
 
 
 def test_TANPA_DENAH_juga_di_akhir():
     aset = _aset_di("r1", 1) + [{} for _ in range(40)]
-    grup = ljj.kelompokkan_denah(aset, "GEDUNG", _PETA)
-    assert grup[-1][0] == ljj.TANPA_DENAH, [g[0] for g in grup]
+    baris = ljj.baris_hierarki_denah(aset, ["GEDUNG"], _PETA)
+    assert baris[-1]["label"] == ljj.TANPA_DENAH, [b["label"] for b in baris]
+
 
 
 # ── 5. Beberapa jenjang sekaligus ───────────────────────────────────────
@@ -222,3 +213,100 @@ def test_tanpa_jenjang_sah_sama_sekali_hasilnya_KOSONG():
     """Satker tanpa satu pun penempatan denah tak punya jenjang lokasi; daftar
     kosong di sini yang membuat panelnya jatuh ke teks bebas."""
     assert ljj.jenjang_terpilih_banyak(["GEDUNG"], (), "") == []
+
+
+# ── 6. Satu panel BERJENJANG, bukan panel terpisah ──────────────────────
+#
+# Permintaan pemilik: *"gunakan hingga ke sub-sub kelompok dan buat agar
+# filternya tidak dibagi menjadi kartu terpisah akan tetapi buat hierarkinya,
+# begitupun yang lokasi."*
+
+def test_baris_hierarki_ANAK_mengikuti_INDUKNYA():
+    """Panel terpisah per jenjang memaksa pembacanya mencocokkan sendiri baris
+    mana milik baris mana — "301" pada satu panel dan "30101" pada panel lain
+    tak punya garis yang menghubungkannya."""
+    aset = (_aset("3010101001", 4) + _aset("3010201001", 2)
+            + _aset("3020101001", 3) + _aset("4010101001", 1))
+    baris = ljj.baris_hierarki_kode(
+        aset, [kod.LEVEL_LENGTHS[1], kod.LEVEL_LENGTHS[2]], _kode,
+        {"3": "Peralatan", "301": "Alat Besar"})
+    ringkas = [(b["depth"], b["label"], len(b["aset"])) for b in baris]
+    assert ringkas == [
+        (0, "3 — Peralatan", 9),
+        (1, "301 — Alat Besar", 6),
+        (1, "302", 3),
+        (0, "4", 1),
+        (1, "401", 1),
+    ], ringkas
+
+
+def test_induk_BERJUMLAH_sama_dengan_anak_anaknya():
+    """Induk yang jumlahnya tak sama dengan anak-anaknya berarti ada aset yang
+    hilang di salah satu jenjang — dan batangnya tetap tergambar wajar."""
+    aset = (_aset("3010101001", 5) + _aset("3020101001", 3)
+            + _aset("", 4) + _aset("3", 2))
+    baris = ljj.baris_hierarki_kode(
+        aset, [kod.LEVEL_LENGTHS[lv] for lv in (1, 2, 3)], _kode)
+    induk = [b for b in baris if b["depth"] == 0]
+    assert sum(len(b["aset"]) for b in induk) == len(aset)
+
+    # Anak ditentukan oleh POSISI, bukan awalan kode: aset berkode "3" tak
+    # dapat dijawab pada jenjang Bidang dan jatuh ke anak "(tanpa kode
+    # barang)" — yang jelas tidak berawalan "3". Mencocokkan dengan
+    # `startswith` akan melewatkannya dan menyimpulkan induknya timpang.
+    for i, b in enumerate(baris):
+        anak, j = [], i + 1
+        while j < len(baris) and baris[j]["depth"] > b["depth"]:
+            if baris[j]["depth"] == b["depth"] + 1:
+                anak.append(baris[j])
+            j += 1
+        if anak:
+            assert sum(len(x["aset"]) for x in anak) == len(b["aset"]), b["label"]
+
+
+def test_jenjang_boleh_MELOMPAT():
+    """Golongan lalu Kelompok, tanpa Bidang: anaknya tetap bersarang di bawah
+    induknya."""
+    baris = ljj.baris_hierarki_kode(
+        _aset("3010101001", 2) + _aset("3020101001", 1),
+        [kod.LEVEL_LENGTHS[1], kod.LEVEL_LENGTHS[3]], _kode)
+    assert [(b["depth"], b["kunci"]) for b in baris] == [
+        (0, "3"), (1, "30101"), (1, "30201")]
+
+
+def test_hierarki_sampai_SUB_SUB_KELOMPOK():
+    """Level 5 (10 digit) kini ditawarkan — permintaan pemilik. Ia berguna
+    karena barisnya bersarang, bukan berdiri sebagai daftar rata."""
+    baris = ljj.baris_hierarki_kode(
+        _aset("3010101001", 1) + _aset("3010101002", 1),
+        [kod.LEVEL_LENGTHS[lv] for lv in (1, 2, 3, 4, 5)], _kode)
+    assert max(b["depth"] for b in baris) == 4
+    daun = [b for b in baris if b["depth"] == 4]
+    assert sorted(b["kunci"] for b in daun) == ["3010101001", "3010101002"]
+
+
+def test_SATU_jenjang_tetap_datar():
+    """Satu jenjang tak boleh mendadak menjorok — tak ada induk untuk
+    dijoroki."""
+    baris = ljj.baris_hierarki_kode(
+        _aset("3010101001", 2), [kod.LEVEL_LENGTHS[2]], _kode)
+    assert [b["depth"] for b in baris] == [0]
+
+
+def test_hierarki_DENAH_bersarang_sampai_ruangan():
+    aset = _aset_di("r1", 4) + _aset_di("r2", 3) + _aset_di("r3", 2)
+    baris = ljj.baris_hierarki_denah(aset, ["GEDUNG", "LANTAI", "RUANGAN"], _PETA)
+    ringkas = [(b["depth"], b["label"], len(b["aset"])) for b in baris]
+    assert ringkas[0] == (0, "Menara A", 7), ringkas
+    assert (1, "Lantai 1", 4) in ringkas and (2, "Ruang 101", 4) in ringkas
+    assert (0, "Menara B", 2) in ringkas
+    # Seluruh aset terhitung di jenjang teratas.
+    assert sum(len(b["aset"]) for b in baris if b["depth"] == 0) == len(aset)
+
+
+def test_hierarki_denah_yang_BELUM_DITEMPATKAN_tetap_terhitung():
+    aset = _aset_di("r1", 3) + [{} for _ in range(5)]
+    baris = ljj.baris_hierarki_denah(aset, ["GEDUNG", "RUANGAN"], _PETA)
+    induk = [b for b in baris if b["depth"] == 0]
+    assert sum(len(b["aset"]) for b in induk) == 8
+    assert induk[-1]["label"] == ljj.TANPA_DENAH, [b["label"] for b in induk]
