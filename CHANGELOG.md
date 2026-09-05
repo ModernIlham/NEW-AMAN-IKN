@@ -18,6 +18,55 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1014] SPPB: sisi keluar akhirnya punya naskahnya sendiri — 2026-09-05
+
+Permintaan pemilik, bagian terakhir: *"…hingga SPPB, dan lain-lain. misal SPPB
+yang ditandatangani penerima barang persediaan terkoneksi dengan master pegawai
+agar menjadi satu sistem utuh yang benar-benar terintegrasi."*
+
+Sisi MASUK sudah punya LPB sejak lama. Sisi KELUAR tak punya apa-apa:
+pengeluaran barang hanya meninggalkan baris jurnal — ada catatan bahwa stok
+berkurang, tak ada naskah yang bisa ditandatangani penerimanya, dan tak ada
+layar tempat naskah itu bisa ditemukan lagi.
+
+SPPB kini terbit otomatis dari transaksi keluar massal, sejajar LPB di sisi
+masuk. Daftar barangnya DIBEKUKAN — hanya bidang yang benar-benar dicetak,
+bukan seluruh baris jurnal yang membawa rincian layer FIFO dan stok
+sebelum/sesudah. Penerima dan Kuasa Pengguna Barangnya ikut dibekukan.
+
+Naskahnya punya DUA blok tanda tangan: KPB yang memerintahkan barang keluar,
+dan PENERIMA yang membuktikan barangnya sampai. Blok kedua itulah inti dokumen
+ini — tanpanya SPPB hanya perintah keluar yang tak pernah dibuktikan sampai ke
+tangan siapa pun. Itu pula sebabnya `[#1013]` harus lebih dulu ada: sebelum
+penerima punya identitas, blok itu hanya akan mencetak nama unit.
+
+Urutan penandatanganannya berurutan dan tak sembarang: penerima menandatangani
+bahwa ia menerima barang yang diperintahkan keluar, sehingga perintahnya harus
+lebih dulu ada.
+
+Nomor hanya dibooking bila operator memintanya — ke deret yang sama dengan LPB,
+Nota Dinas, dan Surat Persetujuan. Naskah tanpa nomor tetap terbit dan tetap
+dapat ditandatangani; nomornya bisa dilengkapi kemudian dari Registrasi
+Persuratan.
+
+Kegagalan menerbitkan SPPB TIDAK menggagalkan transaksinya. Barangnya sudah
+keluar dan jurnalnya sudah tercatat; yang hilang hanyalah naskahnya, dan itu
+dapat diperbaiki. Membatalkan transaksi yang sah karena dokumennya gagal
+disusun jauh lebih merusak.
+
+`sppb` didaftarkan di registry satu pintu `TAUT_TTD`, dan `_ringkas_dokumen`
+mendapat cabangnya — pesan penanda tangan menyebut nomor, perihal, kedua pihak,
+dan barangnya, bukan hanya judul dan tautan.
+
+Riwayat SPPB ditambahkan di halaman Persediaan, dengan status TTD dan jalan
+kembali ke tautan permintaan. Daftarnya menyebut PENERIMA, bukan hanya nomor:
+daftar yang hanya menyebut nomor mengembalikan masalah yang justru hendak
+diselesaikan.
+
+Dengan ini rangkaian persuratan persediaan lengkap: Nota Dinas (usulan), Surat
+Persetujuan (gerbang), LPB (masuk), SPPB (keluar) — keempatnya bernomor dari
+satu deret dan bertanda tangan elektronik lewat satu registry.
+
 ## [#1013] Pengeluaran barang persediaan menyebut siapa penerimanya — 2026-09-05
 
 Permintaan pemilik: *"SPPB yang ditandatangani penerima barang persediaan

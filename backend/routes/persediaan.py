@@ -1509,9 +1509,9 @@ async def transaksi_massal(payload: TransaksiMassalIn,
     # Penerima massal divalidasi SEKALI di muka: penolakan (almarhum) harus
     # terjadi sebelum satu pun barang keluar, bukan setelah separuh daftarnya
     # terlanjur berkurang — jalur massal memang tak berkompensasi antarbaris.
-    peringatan_penerima = ""
+    snap_penerima, peringatan_penerima = {}, ""
     if payload.arah == "keluar":
-        _, peringatan_penerima = await _periksa_penerima_persediaan(
+        snap_penerima, peringatan_penerima = await _periksa_penerima_persediaan(
             user, payload.penerima_nip, payload.unit_penerima)
 
     # Nomor LPB: pakai no_bukti; atau pesan otomatis dari Persuratan.
@@ -1529,7 +1529,7 @@ async def transaksi_massal(payload: TransaksiMassalIn,
             keterangan="booking otomatis dari transaksi massal",
             kode_klasifikasi=payload.kode_klasifikasi)
 
-    hasil = []
+    hasil, jurnal_keluar = [], []
     for it in payload.items:
         try:
             if payload.arah == "masuk":
@@ -1551,6 +1551,12 @@ async def transaksi_massal(payload: TransaksiMassalIn,
                 ), user=user)
             hasil.append({"persediaan_id": it.persediaan_id, "ok": True,
                           "stok": r.get("stok"), "message": r.get("message")})
+            if payload.arah == "keluar" and r.get("transaksi"):
+                # Jurnalnya disimpan terpisah, bukan disisipkan ke `hasil`:
+                # `hasil` dibaca layar per baris, dan menempelkan rincian
+                # layer FIFO ke sana membuat respons membengkak tanpa ada
+                # yang memakainya.
+                jurnal_keluar.append(r["transaksi"])
         except HTTPException as e:
             hasil.append({"persediaan_id": it.persediaan_id, "ok": False,
                           "error": str(e.detail)})
@@ -1642,12 +1648,290 @@ async def transaksi_massal(payload: TransaksiMassalIn,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
 
+    # Register SPPB (Surat Perintah Pengeluaran Barang) — sisi KELUAR, sejajar
+    # LPB di sisi masuk. Sampai sekarang pengeluaran barang hanya meninggalkan
+    # baris jurnal: ada catatan bahwa stok berkurang, tak ada naskah yang bisa
+    # ditandatangani penerimanya.
+    sppb_id, nomor_sppb = "", ""
+    if payload.arah == "keluar" and jurnal_keluar:
+        sppb_id, nomor_sppb = await _terbitkan_sppb(
+            user, payload, jurnal_keluar, snap_penerima)
+
     keluar = {"total": len(hasil), "sukses": sukses,
               "gagal": len(hasil) - sukses, "hasil": hasil,
-              "lpb_id": lpb_id, "nomor_lpb": nomor_lpb}
+              "lpb_id": lpb_id, "nomor_lpb": nomor_lpb,
+              "sppb_id": sppb_id, "nomor_sppb": nomor_sppb}
     if peringatan_penerima:
         keluar["peringatan"] = peringatan_penerima
     return keluar
+
+
+async def _terbitkan_sppb(user, payload, jurnal_keluar, snap_penerima) -> tuple:
+    """Terbitkan SPPB dari transaksi keluar massal → `(sppb_id, nomor)`.
+
+    Nomornya dibooking ke deret yang SAMA dengan LPB, Nota Dinas, dan Surat
+    Persetujuan — hanya bila operator memintanya (`booking_otomatis`). Naskah
+    tanpa nomor tetap terbit dan tetap dapat ditandatangani; nomornya bisa
+    dilengkapi kemudian dari Registrasi Persuratan.
+
+    Gagal menerbitkan SPPB TIDAK menggagalkan transaksinya: barangnya sudah
+    keluar dan jurnalnya sudah tercatat. Yang hilang hanyalah naskahnya, dan
+    itu dapat diperbaiki; membatalkan transaksi yang sah karena dokumennya
+    gagal disusun jauh lebih merusak.
+    """
+    import sppb_utils as spu
+    from shared_utils import (kode_satker_user, pengaturan_kop,
+                              resolve_penandatangan_kpb)
+
+    try:
+        ks = kode_satker_user(user)
+        tanggal = (str(payload.tgl_dokumen or "").strip()[:10]
+                   or datetime.now(timezone.utc).date().isoformat())
+        baris = spu.baris_dari_jurnal(jurnal_keluar)
+        jenis_label = JENIS_KELUAR.get(payload.jenis, (payload.jenis,))[0]
+
+        nomor, surat_id = "", ""
+        if payload.booking_otomatis:
+            try:
+                from routes.persuratan import booking_nomor_otomatis
+                nomor, surat_id = await booking_nomor_otomatis(
+                    user, tanggal, perihal=spu.perihal_agenda(jenis_label),
+                    tujuan=str(snap_penerima.get("penerima_unit")
+                               or payload.unit_penerima or "").strip(),
+                    keterangan="booking otomatis dari SPPB persediaan",
+                    kode_satker=ks,
+                    kode_klasifikasi=payload.kode_klasifikasi,
+                    jenis_naskah="Surat Perintah", referensi="SPPB")
+            except Exception:
+                nomor, surat_id = "", ""
+
+        settings = await pengaturan_kop(kode_satker=ks)
+        kpb = await resolve_penandatangan_kpb(settings, per_iso=tanggal,
+                                              kode_satker=ks)
+        sppb_id = str(uuid.uuid4())
+        await db.persediaan_sppb.insert_one({
+            "id": sppb_id, "kode_satker": ks,
+            "nomor": nomor, "surat_id": surat_id, "tanggal": tanggal,
+            "jenis": payload.jenis, "jenis_label": jenis_label,
+            "no_bukti": str(payload.no_bukti or "").strip(),
+            "keterangan": str(payload.keterangan or "").strip(),
+            "unit_penerima": (snap_penerima.get("penerima_unit")
+                              or str(payload.unit_penerima or "").strip()),
+            # Penerima DIBEKUKAN — pegawai pindah unit dan berganti jabatan,
+            # sementara bukti pengeluaran harus tetap menyebut keadaan saat
+            # barang itu benar-benar diserahkan.
+            **{k: v for k, v in (snap_penerima or {}).items()},
+            "kpb_nama": str((kpb or {}).get("nama") or ""),
+            "kpb_nip": str((kpb or {}).get("nip") or ""),
+            "kpb_jenis_pelaksana": str((kpb or {}).get("jenis_pelaksana") or ""),
+            "kpb_status_kepegawaian": str(
+                (kpb or {}).get("status_kepegawaian") or ""),
+            "items": baris, "jumlah_barang": len(baris),
+            "total_nilai": spu.total_nilai(baris),
+            "created_by": user.get("username", "system"),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        await log_audit("persediaan_sppb_terbit", "", sppb_id,
+                        username=user.get("username", "system"),
+                        detail=f"{len(baris)} barang — {nomor or 'tanpa nomor'}")
+        return sppb_id, nomor
+    except Exception:
+        return "", ""
+
+
+@persediaan_router.get("/persediaan/sppb")
+async def daftar_sppb(page: int = Query(1, ge=1),
+                      page_size: int = Query(30, ge=1, le=100),
+                      _user: dict = Depends(require_user)):
+    """Riwayat SPPB — bukti pengeluaran barang persediaan."""
+    from shared_utils import scope_query_field_satker
+    q = scope_query_field_satker(_user)
+    total = await db.persediaan_sppb.count_documents(q)
+    items = await (db.persediaan_sppb.find(q, {"_id": 0, "items": 0})
+                   .sort("created_at", -1)
+                   .skip((page - 1) * page_size).limit(page_size)
+                   .to_list(page_size))
+    from ttd_penautan import lampirkan_status_ttd
+    await lampirkan_status_ttd(db, "sppb", items)
+    return {"items": items, "total": total, "page": page,
+            "total_pages": max(1, -(-total // page_size))}
+
+
+async def bangun_sppb_pdf(sppb_id: str, _user: dict) -> tuple:
+    """Ambil SPPB + susun PDF-nya → `(bytes, sppb)`.
+
+    Satu penyusun, dua pemakai (unduhan dan jalur TTD): dokumen yang diunduh
+    dan dokumen yang ditandatangani DIJAMIN identik. Gerbang kepemilikan
+    satkernya ikut di sini supaya kedua pemanggil tak bisa lupa memasangnya.
+    """
+    from io import BytesIO
+
+    from reportlab.lib.units import mm as rl_mm
+    from reportlab.platypus import Paragraph, Spacer, Table
+
+    from routes.reports import (
+        _fit_col_widths, _fmt_tanggal_id, _get_report_styles, _identity_table,
+        _kop_surat_flowables, _page_footer_factory, _signature_block, _std_doc,
+        _std_table_style, _title_block,
+    )
+    from shared_utils import pastikan_akses_dok_satker, pengaturan_kop
+
+    import persuratan_utils as psu
+    import sppb_utils as spu
+
+    sppb = await db.persediaan_sppb.find_one({"id": sppb_id}, {"_id": 0})
+    if not sppb:
+        raise HTTPException(status_code=404, detail="SPPB tidak ditemukan")
+    await pastikan_akses_dok_satker(_user, sppb)
+
+    settings = await pengaturan_kop(kode_satker=str(sppb.get("kode_satker") or ""))
+    buffer = BytesIO()
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    el = []
+    el.extend(_kop_surat_flowables(settings, doc.width))
+    el.extend(_title_block(
+        spu.JUDUL, nomor=sppb.get("nomor") or "......./......./........"))
+
+    baris = sppb.get("items") or []
+    el.append(_identity_table([
+        ("Tanggal", _fmt_tanggal_id(sppb.get("tanggal")) or "-"),
+        ("Jenis Pengeluaran", str(sppb.get("jenis_label") or "-")),
+        ("Unit Penerima", str(sppb.get("unit_penerima") or "-")),
+        ("Penerima", str(sppb.get("penerima_nama") or "-")),
+        ("No. Bukti", str(sppb.get("no_bukti") or "-")),
+        ("Jumlah Jenis Barang", str(sppb.get("jumlah_barang") or len(baris))),
+    ]))
+    el.append(Spacer(1, 3 * rl_mm))
+    el.append(Paragraph(
+        "Dengan ini diperintahkan pengeluaran barang persediaan sebagaimana "
+        "daftar berikut, dan barang tersebut telah diterima dalam keadaan "
+        "baik oleh penerima yang menandatangani surat ini.", st['Meta']))
+    el.append(Spacer(1, 4 * rl_mm))
+
+    if not baris:
+        el.append(Paragraph("Tidak ada barang tercatat.", st['Cell']))
+    else:
+        data = [[Paragraph(h, st['TableHeader']) for h in spu.HEADERS]]
+        for r in spu.isi_tabel(baris, fmt_rp=_fmt_rp):
+            data.append([Paragraph(str(c), st['Cell']) for c in r])
+        data.append([Paragraph("", st['Cell'])] * 5
+                    + [Paragraph(f"<b>{_fmt_rp(sppb.get('total_nilai'))}</b>",
+                                 st['Cell'])])
+        tabel = Table(data, colWidths=_fit_col_widths(spu.WIDTHS, doc.width),
+                      repeatRows=1)
+        tabel.setStyle(_std_table_style(zebra=True))
+        el.append(tabel)
+
+    el.append(Spacer(1, 10 * rl_mm))
+    # DUA blok tanda tangan: yang menyerahkan (KPB) dan yang MENERIMA. Blok
+    # penerima itulah inti dokumen ini — tanpanya SPPB hanya perintah keluar
+    # yang tak pernah dibuktikan sampai ke tangan siapa pun.
+    el.extend(_signature_block([
+        {'pre': [psu.tempat_tanggal(settings, sppb.get("tanggal"))],
+         'header': _hdr_kpb({
+             "jenis_pelaksana": sppb.get("kpb_jenis_pelaksana")}),
+         'nama': str(sppb.get("kpb_nama") or "-"),
+         'after': baris_identitas_ttd(sppb.get("kpb_nip"),
+                                      sppb.get("kpb_status_kepegawaian"))},
+        {'pre': ["Yang Menerima,"],
+         'header': str(sppb.get("penerima_jabatan") or "Penerima Barang") + ",",
+         'nama': str(sppb.get("penerima_nama") or "-"),
+         'after': baris_identitas_ttd(
+             sppb.get("penerima_nip"),
+             sppb.get("penerima_status_kepegawaian"))},
+    ], doc.width))
+
+    footer = _page_footer_factory("SPPB Persediaan")
+    await asyncio.to_thread(doc.build, el, onFirstPage=footer,
+                            onLaterPages=footer)
+    buffer.seek(0)
+    return buffer.getvalue(), sppb
+
+
+@persediaan_router.get("/persediaan/sppb/{sppb_id}/pdf")
+async def unduh_sppb(sppb_id: str, _user: dict = Depends(require_user)):
+    """PDF SPPB — dicetak dari daftar beku di register."""
+    from io import BytesIO
+
+    from fastapi.responses import StreamingResponse
+
+    import sppb_utils as spu
+
+    isi, sppb = await bangun_sppb_pdf(sppb_id, _user)
+    fname = spu.nama_berkas(sppb.get("nomor"))
+    return StreamingResponse(BytesIO(isi), media_type="application/pdf",
+                             headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
+class KirimTtdSppbIn(BaseModel):
+    mode: str = "berurutan"
+    signers: list[dict] = Field(default_factory=list, max_length=10)
+
+
+@persediaan_router.post("/persediaan/sppb/{sppb_id}/kirim-ttd")
+async def kirim_ttd_sppb(sppb_id: str, payload: KirimTtdSppbIn,
+                         user: dict = Depends(require_writer_satker)):
+    """Kirim SPPB untuk diteken elektronik: KPB lalu PENERIMA.
+
+    Urutannya berurutan dan tak sembarang: penerima menandatangani bahwa ia
+    menerima barang yang diperintahkan keluar, sehingga perintahnya harus
+    lebih dulu ada. Penanda tangannya diambil dari yang DIBEKUKAN di SPPB.
+    """
+    from routes.ttd import PermintaanIn, SignerIn, buat_permintaan
+
+    import sppb_utils as spu
+
+    isi, sppb = await bangun_sppb_pdf(sppb_id, user)
+
+    daftar = list(payload.signers or [])
+    if not daftar:
+        from pejabat_utils import jabatan_kapasitas_kpb
+        if str(sppb.get("kpb_nama") or "").strip():
+            daftar.append({
+                "nama": str(sppb.get("kpb_nama") or ""),
+                "nip": str(sppb.get("kpb_nip") or ""),
+                "jabatan": jabatan_kapasitas_kpb(
+                    {"jenis_pelaksana": sppb.get("kpb_jenis_pelaksana")}),
+                "email": ""})
+        if str(sppb.get("penerima_nama") or "").strip():
+            daftar.append({
+                "nama": str(sppb.get("penerima_nama") or ""),
+                "nip": str(sppb.get("penerima_nip") or ""),
+                "jabatan": str(sppb.get("penerima_jabatan") or "Penerima Barang"),
+                "email": ""})
+    if not daftar:
+        raise HTTPException(
+            status_code=400,
+            detail="SPPB ini tak punya KPB maupun penerima ber-nama — lengkapi "
+                   "Referensi Pejabat dan penerima transaksinya, atau kirim "
+                   "daftar penanda tangan secara manual")
+
+    hasil = await buat_permintaan(
+        payload=PermintaanIn(
+            judul=f"SPPB {sppb.get('nomor') or sppb_id[:8]}",
+            doc_type="sppb", doc_ref=sppb_id,
+            mode=("paralel" if payload.mode == "paralel" else "berurutan"),
+            signers=[SignerIn(nama=str(s.get("nama") or ""),
+                              nip=str(s.get("nip") or ""),
+                              jabatan=str(s.get("jabatan") or ""),
+                              email=str(s.get("email") or ""))
+                     for s in daftar]),
+        user=user)
+
+    nama_berkas = spu.nama_berkas(sppb.get("nomor"))
+    from gerbang_media import tulis_media
+    file_id, _meta = await tulis_media(
+        isi, nama=nama_berkas, content_type="application/pdf",
+        metadata={"kind": "sppb", "sppb_id": sppb_id})
+    await db.signature_requests.update_one(
+        {"id": hasil["id"]},
+        {"$set": {"dok_file_id": str(file_id), "dok_nama": nama_berkas,
+                  "dok_halaman": 1}})
+    await log_audit("persediaan_sppb_kirim_ttd", "", sppb_id,
+                    username=user.get("username", "system"),
+                    detail=f"dikirim ke {len(daftar)} penanda tangan")
+    return {**hasil, "sppb_id": sppb_id}
 
 
 @persediaan_router.get("/persediaan/lpb")
