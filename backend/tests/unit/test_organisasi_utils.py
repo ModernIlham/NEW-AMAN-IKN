@@ -544,3 +544,65 @@ def test_unit_lingkup_BERNAMA_KOSONG_tak_meloloskan_seluruh_aset():
     peta_parent = {u["id"]: u["parent_id"] for u in pohon if u["parent_id"]}
     aset = {"eselon1": "Sekretariat Jenderal", "eselon2": "Biro Keuangan"}
     assert not org.aset_dalam_lingkup(aset, ["kosong"], peta_unit, peta_parent)
+
+
+# ── 10. Bentuk lingkup eselon warisan: dua rupa jadi satu ───────────────
+#
+# `eselon1` pada satker/kegiatan hidup dalam dua rupa sekaligus — daftar
+# STRING dan daftar DICT bersarang — karena penulisnya tiga dan tak sepakat.
+# Akibatnya tiap PEMBACA menulis ulang cabang `isinstance` sendiri; ada empat
+# salinan, dan masing-masing bisa keliru sendiri-sendiri.
+
+def test_daftar_string_menjadi_bentuk_dict():
+    assert org.normalkan_eselon_teks(["Setjen", "Kedeputian X"]) == [
+        {"nama": "Setjen", "eselon2": []},
+        {"nama": "Kedeputian X", "eselon2": []}]
+
+
+def test_bentuk_dict_dipertahankan_beserta_anaknya():
+    assert org.normalkan_eselon_teks(
+        [{"nama": "Setjen", "eselon2": ["Biro Umum", "Biro Keuangan"]}]) == [
+        {"nama": "Setjen", "eselon2": ["Biro Umum", "Biro Keuangan"]}]
+
+
+def test_dua_rupa_bercampur_dalam_satu_daftar():
+    # Persis yang terjadi di basis data: satker yang pernah disunting admin
+    # DAN pernah tersentuh auto-registrasi.
+    assert org.normalkan_eselon_teks(
+        ["Setjen", {"nama": "Kedeputian X", "eselon2": ["Direktorat Y"]}]) == [
+        {"nama": "Setjen", "eselon2": []},
+        {"nama": "Kedeputian X", "eselon2": ["Direktorat Y"]}]
+
+
+def test_baris_tanpa_nama_dibuang():
+    # Ia tak dapat dirujuk, tak dapat dicocokkan dengan master unit, dan pada
+    # tabel identitas laporan tercetak sebagai baris kosong bernomor.
+    assert org.normalkan_eselon_teks(
+        ["", "   ", {"nama": ""}, {"eselon2": ["X"]}, None, 42]) == []
+
+
+def test_spasi_tepi_dirapikan_pada_induk_dan_anaknya():
+    assert org.normalkan_eselon_teks(
+        [{"nama": "  Setjen  ", "eselon2": [" Biro Umum ", "", "  "]}]) == [
+        {"nama": "Setjen", "eselon2": ["Biro Umum"]}]
+
+
+def test_masukan_kosong_dan_cacat_tak_melempar():
+    assert org.normalkan_eselon_teks(None) == []
+    assert org.normalkan_eselon_teks([]) == []
+
+
+def test_bentuk_hasil_SELALU_sama_walau_masukannya_berbeda():
+    # Inilah gunanya: pembacanya tak perlu lagi tahu rupa mana yang datang.
+    a = org.normalkan_eselon_teks(["Setjen"])
+    b = org.normalkan_eselon_teks([{"nama": "Setjen", "eselon2": []}])
+    assert a == b
+    assert all(set(x) == {"nama", "eselon2"} for x in a)
+
+
+def test_pencocokan_lingkup_tetap_menerima_kedua_rupa():
+    # `cocokkan_lingkup_teks` kini memakai penormal yang sama, bukan cabang
+    # `isinstance` miliknya sendiri.
+    for bentuk in (["Sekretariat Jenderal"],
+                   [{"nama": "Sekretariat Jenderal", "eselon2": []}]):
+        assert org.cocokkan_lingkup_teks(bentuk, _POHON)[0] == ["e1"]

@@ -18,6 +18,75 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1002] Menyimpan profil satker tak lagi menghapus struktur eselonnya — 2026-09-05
+
+Temuan sampingan dari rangkaian `[#996]`–`[#1001]`, dikerjakan terpisah karena
+ia cacat tersendiri.
+
+### Penghapusan yang tak pernah bersuara
+
+`PUT /api/satker/{kode}` menulis `eselon1` **tanpa syarat**:
+
+```python
+doc = { …, "eselon1": [str(e).strip() for e in (payload.eselon1 or []) …], … }
+await db.satker.update_one({"kode_satker": k}, {"$set": doc}, upsert=True)
+```
+
+Sementara layar Satker **tak pernah mengirimnya** — `FORM_KOSONG` di
+`SatkerPage.jsx` tak memuat `eselon1` sama sekali, dan `simpan()` mengirim
+persis kunci-kunci itu. Jadi setiap kali admin menyimpan profil satker —
+mengganti alamat, telepon, kop, apa pun — struktur Eselon I/II satker itu
+**terhapus menjadi daftar kosong**, tanpa satu pun pesan.
+
+Akibatnya baru terasa belakangan dan di tempat lain: `satker-lookup`
+mengisi otomatis `eselon1` kegiatan BARU dari master. Setelah profilnya
+tersimpan sekali, kegiatan baru berhenti mendapat isian itu, dan tak ada
+yang menghubungkan keduanya.
+
+Penulis kodenya sudah menyadari kelas cacat ini dan memperbaikinya untuk
+`penandatangan` **pada fungsi yang sama** — komentarnya masih terbaca di
+sana: *"`None` berarti jangan sentuh; peta kosong berarti kembalikan ke
+resolusi peran. Keduanya beda maksud."* `eselon1` terlewat. Aturan yang sama
+kini berlaku untuknya: tak dikirim = jangan sentuh, dikirim kosong = memang
+dikosongkan.
+
+### Bentuknya ada dua, dan tiap pembaca menanggungnya sendiri
+
+`db.satker.eselon1` ditulis dari tiga tempat dengan **dua bentuk**:
+
+| Penulis | Bentuk |
+|---|---|
+| `routes/satker.py` PUT admin | `["Setjen", …]` |
+| `routes/satker.py` daftar-dari-kegiatan | `[{nama, eselon2: […]}, …]` |
+| `routes/activities.py` auto-registrasi | `[{nama, eselon2: […]}, …]` |
+
+Model PUT-nya menuntut `List[str]` — sehingga satker hasil auto-registrasi
+akan **ditolak 422** begitu profilnya disunting, dan yang menyuntingnya tak
+melakukan apa pun yang salah.
+
+Dan karena bentuknya dua, setiap PEMBACA harus tahu keduanya. Ada **empat
+salinan** cabang `isinstance(es, dict)` — di `reports.py`, dua kali di
+`exports.py`, dan di `organisasi_utils` — masing-masing bisa keliru
+sendiri-sendiri.
+
+`normalkan_eselon_teks` menjadi satu-satunya tempat yang tahu. Bentuk dict
+yang dipilih sebagai kanonis, bukan string: string tak punya tempat untuk
+Eselon II di bawahnya, jadi mengubah dict menjadi string membuang data —
+sebaliknya tidak. Keempat salinan cabang itu dihapus.
+
+Data lama **tidak** dimigrasi: penormalannya berlaku pada tulisan, dan
+pembacanya sudah melewati satu pintu yang menerima kedua rupa.
+
+### Cakupan
+
+- `backend/organisasi_utils.py` — `normalkan_eselon_teks`; `cocokkan_lingkup_teks`
+  memakainya alih-alih cabangnya sendiri.
+- `backend/routes/satker.py` — "tak dikirim = jangan sentuh"; model menerima
+  kedua bentuk; kedua jalur derivasi menyimpan satu bentuk.
+- `backend/routes/activities.py` — auto-registrasi menyimpan satu bentuk.
+- `backend/routes/exports.py`, `reports.py` — cabang bentuk dihapus.
+- Uji: `test_satker_eselon_bentuk` (7, baru), +8 `test_organisasi_utils`.
+
 ## [#1001] Laporan: unit organisasi berjenjang dan lingkup kegiatan — 2026-09-05
 
 Penutup rangkaian `[#996]`–`[#1000]`. Di sinilah `dalam_lingkup()` yang dibangun

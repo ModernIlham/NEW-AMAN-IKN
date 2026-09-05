@@ -422,16 +422,11 @@ def cocokkan_lingkup_teks(eselon_lama, semua_unit):
     salah ketik pada data lama harus terlihat oleh yang memperbaikinya.
     """
     ids, tak_cocok = [], []
-    for baris in (eselon_lama or []):
-        if isinstance(baris, str):
-            baris = {"nama": baris, "eselon2": []}
-        nama1 = str((baris or {}).get("nama") or "").strip()
-        anak = [str(x or "").strip()
-                for x in ((baris or {}).get("eselon2") or []) if str(x or "").strip()]
+    for baris in normalkan_eselon_teks(eselon_lama):
+        nama1, anak = baris["nama"], baris["eselon2"]
         u1 = cari_unit(nama1, 1, semua_unit)
         if not u1:
-            if nama1:
-                tak_cocok.append(nama1)
+            tak_cocok.append(nama1)
             # Eselon I tak dikenal: anaknya pun tak dapat dipastikan induknya.
             tak_cocok += anak
             continue
@@ -509,3 +504,41 @@ def aset_dalam_lingkup(aset, lingkup_ids, peta_unit, peta_parent) -> bool:
         if all(str(a.get(k) or "").strip() == v for k, v in jalur.items()):
             return True
     return False
+
+
+def normalkan_eselon_teks(nilai) -> list:
+    """Satukan bentuk lingkup eselon warisan menjadi `[{nama, eselon2: […]}]`.
+
+    Bentuk ini hidup di dua rupa sekaligus di basis data — daftar STRING dan
+    daftar DICT bersarang — karena penulisnya ada tiga dan tak semuanya sepakat:
+
+        routes/satker.py  PUT admin            → ["Setjen", …]
+        routes/satker.py  daftar-dari-kegiatan → [{nama, eselon2: […]}, …]
+        routes/activities.py auto-registrasi   → [{nama, eselon2: […]}, …]
+
+    Akibatnya setiap PEMBACA harus tahu keduanya, dan tiap pembaca menulis
+    ulang cabang `isinstance(es, dict)`-nya sendiri — empat salinan yang
+    masing-masing bisa keliru sendiri-sendiri. Yang benar adalah satu tempat
+    yang tahu, dan penulis yang menyimpan satu bentuk saja.
+
+    Bentuk dict yang dipilih, bukan string, karena ia yang membawa lebih
+    banyak: string tak punya tempat untuk Eselon II di bawahnya, sehingga
+    mengubah dict menjadi string membuang data, sedangkan sebaliknya tidak.
+
+    Baris tanpa nama dibuang: ia tak dapat dirujuk, tak dapat dicocokkan
+    dengan master unit, dan pada tabel identitas laporan ia tercetak sebagai
+    baris kosong bernomor.
+    """
+    keluar = []
+    for baris in (nilai or []):
+        if isinstance(baris, str):
+            nama, anak = baris.strip(), []
+        elif isinstance(baris, dict):
+            nama = str(baris.get("nama") or "").strip()
+            anak = [str(x or "").strip()
+                    for x in (baris.get("eselon2") or []) if str(x or "").strip()]
+        else:
+            continue
+        if nama:
+            keluar.append({"nama": nama, "eselon2": anak})
+    return keluar

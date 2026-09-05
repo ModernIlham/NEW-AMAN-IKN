@@ -32,6 +32,7 @@ from shared_utils import (
     pastikan_akses_kegiatan,
 )
 from routes.pengesahan import next_ticket_number, ensure_ticket_number
+import organisasi_utils as org
 
 logger = logging.getLogger(__name__)
 activities_router = APIRouter()
@@ -771,7 +772,10 @@ async def create_inventory_activity(activity: InventoryActivityCreate, _user: di
                 if hasattr(activity, "alamat_satker") else "",
                 "tempat_laporan": "", "tembusan_laporan": "",
                 "telepon": "", "email": "",
-                "eselon1": activity.eselon1 or [] if hasattr(activity, "eselon1") else [],
+                # Satu bentuk saja yang disimpan — lihat
+                # `organisasi_utils.normalkan_eselon_teks`.
+                "eselon1": org.normalkan_eselon_teks(
+                    getattr(activity, "eselon1", None)),
                 "aktif": True, "created_at": now, "updated_at": now,
                 "updated_by": "auto-kegiatan",
             }},
