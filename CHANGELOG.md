@@ -18,6 +18,66 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1000] Filter dan ubah massal sampai Eselon V — 2026-09-05
+
+Lanjutan `[#999]`. Aset sudah membawa lima tingkat; yang mencarinya belum.
+
+### Bentuk kegagalan yang tak pernah berupa galat
+
+Filter eselon dijahit tangan di banyak tempat: setiap endpoint mendeklarasikan
+`eselonN_filter` sendiri lalu meneruskannya ke `build_asset_search_query`.
+`routes/batch.py` bahkan mencatat sendiri bahwa ia pernah drift.
+
+Endpoint yang ketinggalan satu tingkat **tidak gagal**. Ia menerima
+parameternya — FastAPI mengabaikan query string yang tak dikenal — menjalankan
+kuerinya tanpa penyaring itu, lalu mengembalikan LEBIH BANYAK aset daripada
+yang diminta. Tak ada yang error, hanya jawabannya yang salah, ke arah yang tak
+mencurigakan: daftar yang lebih panjang tak pernah terlihat seperti kekeliruan.
+
+`test_filter_eselon_lengkap.py` (baru) menjaganya di level sumber: bila satu
+tingkat disebut, kelimanya harus disebut — di setiap berkas, pada setiap
+deklarasi, pada setiap penerusan, dan setiap parameter yang diterima harus
+benar-benar dipakai menyaring.
+
+### Cakupan filter
+
+Lima tingkat kini tersedia di seluruh jalur yang sudah punya dua: daftar aset,
+ekspor (XLSX/geo), stiker, ubah massal, dan laporan — termasuk **ringkasan yang
+tercetak di kepala laporan**, yang harus menyebut seluruh filter aktif supaya
+dokumen tak tampak lebih luas daripada isinya. Opsi dropdown-nya diambil dari
+nilai yang benar-benar dipakai aset kegiatan itu, bukan master.
+
+Penyaringan luring di `DashboardPage` ikut lima tingkat, dan ketiganya masuk
+`deps` efek pemuatan ulang — filter baru yang lupa didaftarkan di sana tak
+memicu muat ulang sama sekali (jebakan yang sudah tercatat di panduan repo).
+
+### Ubah massal: satu pilihan, dan yang tak terpakai DIKOSONGKAN
+
+Panel ubah massal memakai pemilih unit yang sama dengan form aset — sumber yang
+sama, lingkup kegiatan yang sama. Dua sumber terpisah adalah cara tercepat
+membuat ubah massal menuliskan unit yang tak pernah bisa dipilih satu per satu.
+
+Tingkat yang tak dipakai unit terpilih dikirim sebagai `"__clear__"`, bukan
+dilewati: ubah massal hanya menuliskan kunci yang dikirimnya, jadi aset yang
+dipindahkan dari Subbagian ke Biro akan tetap membawa `eselon3` lamanya —
+terbaca sebagai unit yang tak pernah ada di sana. Logikanya diangkat ke
+`perubahanEselonMassal` supaya dapat diuji, bukan tinggal di dalam JSX.
+
+`__unit_id` (penanda pilihan di layar) dibuang sebelum dikirim; yang berangkat
+hanyalah lima kolom yang diturunkan darinya.
+
+### Cakupan
+
+- `backend/routes/assets.py` — builder + `filter-options` (lima `distinct`).
+- `backend/routes/exports.py`, `stiker.py`, `batch.py`, `reports.py` — plumbing.
+- `frontend/src/hooks/useAssetFilters.js`, `components/assets/AdvancedFilter.jsx`,
+  `pages/DashboardPage.jsx`, `components/assets/BatchEditPanel.jsx`.
+- `frontend/src/lib/pohonUnit.js` — `perubahanEselonMassal`.
+- Uji: `test_filter_eselon_lengkap` (5, baru), +3 `pohonUnit.test.js`.
+
+**Belum:** laporan masih MENGELOMPOKKAN menurut Eselon I dan II saja, dan belum
+menghormati `lingkup_unit` kegiatan. Itu PR terakhir rangkaian ini.
+
 ## [#999] Aset dicatat sampai Eselon V — 2026-09-05
 
 Lanjutan `[#996]`–`[#998]`. Kegiatan sudah bisa mencatat lingkupnya sedalam

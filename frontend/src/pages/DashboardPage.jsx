@@ -135,6 +135,9 @@ function filterSnapshotRows(rows, { search, category, filters }) {
     subMulti("location", filters.location);
     subMulti("eselon1", filters.eselon1);
     subMulti("eselon2", filters.eselon2);
+    subMulti("eselon3", filters.eselon3);
+    subMulti("eselon4", filters.eselon4);
+    subMulti("eselon5", filters.eselon5);
     eqMulti("stiker_status", filters.stiker);
     eqMulti("inventory_status", filters.inventoryStatus);
     sub("nomor_spm", filters.nomorSpm);
@@ -1077,7 +1080,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   useEffect(() => {
     if (isInitialMount.current) { isInitialMount.current = false; return; }
     refreshData(1, { showLoading: true });
-  }, [debouncedSearch, filterCategory, sortBy, pageSize, filters.condition, filters.status, filters.location, filters.eselon1, filters.eselon2, filters.stiker, filters.inventoryStatus, filters.priceMin, filters.priceMax, filters.nomorSpm, filters.perolehanDari, filters.dateFrom, filters.dateTo, filters.user, filters.penggunaNip]);
+  }, [debouncedSearch, filterCategory, sortBy, pageSize, filters.condition, filters.status, filters.location, filters.eselon1, filters.eselon2, filters.eselon3, filters.eselon4, filters.eselon5, filters.stiker, filters.inventoryStatus, filters.priceMin, filters.priceMax, filters.nomorSpm, filters.perolehanDari, filters.dateFrom, filters.dateTo, filters.user, filters.penggunaNip]);
 
   const goToPage = async (p) => {
     const np = Math.max(1, Math.min(p, totalPages));

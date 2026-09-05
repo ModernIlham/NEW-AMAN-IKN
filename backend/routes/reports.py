@@ -5214,7 +5214,9 @@ def _parse_detail_fields(detail_fields: str):
 _LABEL_FILTER = [
     ("search", "Pencarian"), ("category", "Kategori"), ("condition", "Kondisi"),
     ("status", "Status"), ("location", "Lokasi"), ("eselon1_filter", "Eselon I"),
-    ("eselon2_filter", "Eselon II"), ("stiker_status", "Stiker"),
+    ("eselon2_filter", "Eselon II"), ("eselon3_filter", "Eselon III"),
+    ("eselon4_filter", "Eselon IV"), ("eselon5_filter", "Eselon V"),
+    ("stiker_status", "Stiker"),
     ("inventory_status", "Status Inventarisasi"), ("nomor_spm", "No. SPM"),
     ("perolehan_dari", "Perolehan dari"), ("user_filter", "Pengguna"),
     ("pengguna_nip", "NIP/NIK Pengguna"), ("price_min", "Harga ≥"),
@@ -5228,7 +5230,8 @@ _LABEL_FILTER = [
 # TERCETAK di kepala laporan hanya menyebut satu, dan pembaca menyimpulkan
 # dokumennya lebih sempit daripada isinya yang sebenarnya.
 _FILTER_MULTI = {"category", "condition", "status", "location", "eselon1_filter",
-                 "eselon2_filter", "stiker_status", "inventory_status"}
+                 "eselon2_filter", "eselon3_filter", "eselon4_filter",
+                 "eselon5_filter", "stiker_status", "inventory_status"}
 
 
 class FilterLaporan:
@@ -5270,6 +5273,8 @@ def filter_laporan_dari_map(m) -> FilterLaporan:
         search=s("search"), category=d("category"), condition=d("condition"),
         status=d("status"), location=d("location"),
         eselon1_filter=d("eselon1_filter"), eselon2_filter=d("eselon2_filter"),
+        eselon3_filter=d("eselon3_filter"), eselon4_filter=d("eselon4_filter"),
+        eselon5_filter=d("eselon5_filter"),
         stiker_status=d("stiker_status"),
         inventory_status=d("inventory_status"),
         price_min=f("price_min"), price_max=f("price_max"),
@@ -5297,6 +5302,9 @@ def filter_laporan(
     location: List[str] = Query(default=[]),
     eselon1_filter: List[str] = Query(default=[]),
     eselon2_filter: List[str] = Query(default=[]),
+    eselon3_filter: List[str] = Query(default=[]),
+    eselon4_filter: List[str] = Query(default=[]),
+    eselon5_filter: List[str] = Query(default=[]),
     stiker_status: List[str] = Query(default=[]),
     inventory_status: List[str] = Query(default=[]),
     price_min: str = "", price_max: str = "",
