@@ -343,9 +343,9 @@ def test_bagian_laporan_ringkas_dan_terkategori():
     for j in (x.strip() for x in judul):
         if j and j not in unik:
             unik.append(j)
-    assert unik == ["Ringkasan Eksekutif", "Capaian per Kegiatan",
-                    "Kategori Hasil di Lapangan", "Analisis Data",
-                    "Personil Terlibat", "Simpulan"], unik
+    assert unik == ["Ringkasan Eksekutif", "BMN Tercatat per Kegiatan",
+                    "Capaian per Kegiatan", "Kategori Hasil di Lapangan",
+                    "Analisis Data", "Personil Terlibat", "Simpulan"], unik
 
 
 # ── Halaman A4 tetap ────────────────────────────────────────────────────
@@ -890,4 +890,89 @@ def test_halaman_analisis_disusun_dengan_MENGUKUR_bukan_tetapan(dbr):
                 assert t <= tersedia, f"hal={ke} {sisi} {t} > {tersedia}"
     t = _teks_template()
     assert "halaman_analisis" in t, "template tak memakai hasil penyusun"
+    _jalan(jalan())
+
+
+# ── Rumah yang sama, diiris per kegiatan ────────────────────────────────
+#
+# Permintaan pemilik: *"selain grafik gabungan berikan juga grafik yang diambil
+# dari grafik gabungan utama, cukup bagian BMN tercatatnya saja sebagai
+# rumahnya, dan kemudian di depannya baru data grafik per kegiatannya."*
+
+def test_rumah_per_kegiatan_SAMA_PERSIS_dengan_rumah_grafik_utama(dbr):
+    """Kalau tingginya berbeda sedikit saja, kedua grafik itu berbicara tentang
+    stok yang berbeda — dan pembacanya tak punya cara tahu yang mana yang
+    benar. Rumahnya harus identik sampai ke persen tingginya."""
+    async def jalan():
+        await _seed(dbr, [_keg(1, 5), _keg(2, 7)],
+                    _aset("k1", 9, ditemukan=3, perolehan="2025-02-01")
+                    + _aset("k2", 6, ditemukan=2, perolehan="2025-06-01"))
+        d = await rp._build_satker_report_v2("k1")
+        assert d["linimasa_keg_ada"] is True
+        for utama, keg in zip(d["linimasa"], d["linimasa_keg"]):
+            assert keg["bulan"] == utama["bulan"]
+            assert keg["tercatat"] == utama["tercatat"], keg["bulan"]
+            assert keg["h_tercatat"] == utama["h_tercatat"], keg["bulan"]
+            assert keg["tambahan"] == utama["tambahan"], keg["bulan"]
+            assert keg["belum_berjalan"] == utama["belum_berjalan"]
+    _jalan(jalan())
+
+
+def test_irisan_kegiatan_BERJUMLAH_tepat_dengan_rumahnya(dbr):
+    """Irisan yang tak berjumlah tepat berarti ada aset yang hilang atau
+    terhitung dua kali — dan batangnya akan terlihat wajar-wajar saja."""
+    async def jalan():
+        await _seed(dbr, [_keg(1, 5), _keg(2, 7), _keg(3, 9)],
+                    _aset("k1", 9, ditemukan=3, perolehan="2025-02-01")
+                    + _aset("k2", 6, ditemukan=2, perolehan="2025-06-01")
+                    + _aset("k3", 4, ditemukan=0, tahun="2019"))
+        d = await rp._build_satker_report_v2("k1")
+        for b in d["linimasa_keg"]:
+            assert sum(g["n"] for g in b["segmen"]) == b["tercatat"], b
+        # Stok warisan k3 sudah berdiri sejak Januari.
+        jan = d["linimasa_keg"][0]
+        assert jan["tercatat"] == 4 and len(jan["segmen"]) == 1
+        # Setelah Juni, ketiganya ikut.
+        jun = {b["bulan"]: b for b in d["linimasa_keg"]}["JUN"]
+        assert jun["tercatat"] == 19
+        assert sorted(g["n"] for g in jun["segmen"]) == [4, 6, 9]
+    _jalan(jalan())
+
+
+def test_satu_kegiatan_TIDAK_menggambar_grafik_kedua(dbr):
+    """Pada satu kegiatan, irisannya identik dengan rumahnya sendiri — grafik
+    yang tak menambahkan apa pun, hanya satu halaman lagi untuk dilewati."""
+    async def jalan():
+        await _seed(dbr, [_keg(1, 5)], _aset("k1", 8, ditemukan=3))
+        d = await rp._build_satker_report_v2("k1")
+        assert d["linimasa_keg_ada"] is False
+    _jalan(jalan())
+
+
+def test_kegiatan_KESEMBILAN_dan_seterusnya_digabung_dan_DISEBUT(dbr):
+    """Dua puluh irisan berwarna dalam satu batang tak dapat dibedakan mata
+    siapa pun. Yang digabung harus MENYEBUT jumlah kegiatan di dalamnya —
+    irisan abu tanpa keterangan terbaca sebagai satu kegiatan bernama
+    'lainnya'."""
+    async def jalan():
+        keg = [_keg(i, 3) for i in range(1, 13)]
+        aset = []
+        for i in range(1, 13):
+            # Ukuran menurun supaya urutan terbesarnya jelas.
+            aset += _aset(f"k{i}", 20 - i, ditemukan=0, perolehan="2025-03-01")
+        await _seed(dbr, keg, aset)
+        d = await rp._build_satker_report_v2("k1")
+        leg = d["legenda_kegiatan"]
+        assert len(leg) == 9, [x["nama"] for x in leg]
+        assert leg[-1]["nama"] == "4 kegiatan lainnya", leg[-1]
+        assert leg[-1]["n"] == sum(20 - i for i in range(9, 13))
+        # Totalnya tetap utuh.
+        assert sum(x["n"] for x in leg) == d["total_count"]
+        mar = {b["bulan"]: b for b in d["linimasa_keg"]}["MAR"]
+        assert len(mar["segmen"]) == 9
+        assert sum(g["n"] for g in mar["segmen"]) == mar["tercatat"]
+        # Rinciannya tidak hilang — seluruh 12 kegiatan tetap tercantum.
+        assert len(d["kegiatan_list"]) == 12
+    t = _teks_template()
+    assert "kegiatan lainnya" in t and "Capaian per Kegiatan" in t
     _jalan(jalan())

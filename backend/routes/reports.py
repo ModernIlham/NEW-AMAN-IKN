@@ -6494,8 +6494,16 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
     lain_awal = 0
     n_berstempel = 0
     n_perkiraan = 0
+    # Rumah yang SAMA, diiris per kegiatan. Dipakai grafik kedua: rumahnya
+    # persis rumah grafik utama, tetapi isinya menjawab pertanyaan lain —
+    # kegiatan MANA yang menyumbang stok itu, dan kapan.
+    awal_keg = {}                       # id kegiatan -> stok awal
+    tambah_keg = {}                     # id kegiatan -> [12] tambahan per bulan
     for act in satker_acts:
         th_act, bl_act = _bulan_mulai(act)
+        aid = act.get("id", "")
+        awal_keg.setdefault(aid, 0)
+        tambah_keg.setdefault(aid, [0] * 12)
         aset_act = [a for a in all_assets if a.get("activity_id") == act.get("id")]
         if th_act == tahun_linimasa and bl_act:
             ada_kegiatan_bulan[bl_act - 1] = True
@@ -6504,8 +6512,10 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
             th_p, bl_p = _bulan_perolehan(a)
             if th_p == tahun_linimasa and bl_p:
                 tambah_bulan[bl_p - 1] += 1
+                tambah_keg[aid][bl_p - 1] += 1
             elif th_p is None or th_p < tahun_linimasa:
                 stok_awal += 1
+                awal_keg[aid] += 1
             # Perolehan bertahun MENDATANG tidak dihitung di mana pun: ia belum
             # menjadi stok tahun ini, dan menaruhnya di stok awal akan
             # menyatakan barang yang belum ada sebagai sudah ada.
@@ -6595,6 +6605,78 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
                                 if _akhir else 0)
     linimasa_akhir_belum = _akhir["belum"] if _akhir else 0
     linimasa_janggal = n_janggal
+
+    # ── LINIMASA KEDUA: RUMAH YANG SAMA, DIIRIS PER KEGIATAN ────────────
+    #
+    # Permintaan pemilik: *"selain grafik gabungan berikan juga grafik yang
+    # diambil dari grafik gabungan utama, cukup bagian BMN tercatatnya saja
+    # sebagai rumahnya, dan kemudian di depannya baru data grafik per
+    # kegiatannya."*
+    #
+    # Rumahnya PERSIS rumah grafik utama — tinggi tiap bulan sama, sampai ke
+    # piksel — tetapi isinya menjawab pertanyaan yang lain: kegiatan MANA yang
+    # menyumbang stok itu, dan sejak bulan berapa. Grafik utama menjawab
+    # "sudah diperiksa berapa"; yang ini menjawab "punya siapa".
+    #
+    # Hanya digambar bila kegiatannya LEBIH DARI SATU. Pada satu kegiatan,
+    # irisannya identik dengan rumahnya sendiri — grafik yang tak menambahkan
+    # apa pun, hanya satu halaman lagi untuk dilewati.
+    #
+    # WARNA DIBATASI, DAFTARNYA TIDAK. Dua puluh irisan berwarna dalam satu
+    # batang tak dapat dibedakan mata siapa pun, jadi delapan kegiatan terbesar
+    # diberi warna sendiri dan sisanya digabung menjadi satu irisan yang
+    # MENYEBUT jumlah kegiatan di dalamnya. Rinciannya tidak hilang: bagian
+    # "Capaian per Kegiatan" memuat seluruhnya, satu per satu.
+    _WARNA_KEG = ("#2563eb", "#059669", "#d97706", "#7c3aed", "#dc2626",
+                  "#0891b2", "#db2777", "#65a30d")
+    MAKS_WARNA = len(_WARNA_KEG)
+
+    def _total_keg(aid):
+        return awal_keg.get(aid, 0) + sum(tambah_keg.get(aid, []))
+
+    urut_keg = sorted((a.get("id", "") for a in satker_acts),
+                      key=lambda i: (-_total_keg(i), act_name_map.get(i, "")))
+    keg_berwarna = [i for i in urut_keg if _total_keg(i) > 0][:MAKS_WARNA]
+    keg_lain = [i for i in urut_keg if i not in set(keg_berwarna)
+                and _total_keg(i) > 0]
+
+    legenda_kegiatan = [{"nama": act_name_map.get(i) or i,
+                         "warna": _WARNA_KEG[n], "n": _total_keg(i)}
+                        for n, i in enumerate(keg_berwarna)]
+    if keg_lain:
+        legenda_kegiatan.append({
+            "nama": f"{len(keg_lain)} kegiatan lainnya", "warna": "#94a3b8",
+            "n": sum(_total_keg(i) for i in keg_lain)})
+
+    linimasa_keg = []
+    kum_keg = {i: awal_keg.get(i, 0) for i in urut_keg}
+    for i in range(12):
+        berjalan = (i + 1) <= bulan_terakhir
+        if berjalan:
+            for aid in urut_keg:
+                kum_keg[aid] += tambah_keg.get(aid, [0] * 12)[i]
+        segmen = []
+        if berjalan:
+            for n, aid in enumerate(keg_berwarna):
+                if kum_keg[aid]:
+                    segmen.append({"n": kum_keg[aid], "warna": _WARNA_KEG[n],
+                                   "nama": act_name_map.get(aid) or aid})
+            sisa_lain = sum(kum_keg[aid] for aid in keg_lain)
+            if sisa_lain:
+                segmen.append({"n": sisa_lain, "warna": "#94a3b8",
+                               "nama": f"{len(keg_lain)} kegiatan lainnya"})
+        linimasa_keg.append({
+            "bulan": _BULAN_SINGKAT[i],
+            "tercatat": linimasa[i]["tercatat"],
+            "tambahan": linimasa[i]["tambahan"],
+            "h_tercatat": linimasa[i]["h_tercatat"],
+            "belum_berjalan": linimasa[i]["belum_berjalan"],
+            "mulai": linimasa[i]["mulai"],
+            "segmen": segmen,
+        })
+    # Digambar hanya bila ada yang bisa dibandingkan.
+    linimasa_keg_ada = linimasa_ada and len(
+        [i for i in urut_keg if _total_keg(i) > 0]) > 1
     # Dipakai layar untuk menerangkan mengapa sebagian bulan kosong.
     linimasa_bulan_terakhir = bulan_terakhir
     linimasa_tahun_berjalan = tahun_linimasa >= sekarang.year
@@ -6831,6 +6913,8 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
         "linimasa_akhir_diperiksa": linimasa_akhir_diperiksa,
         "linimasa_akhir_belum": linimasa_akhir_belum,
         "linimasa_janggal": linimasa_janggal,
+        "linimasa_keg": linimasa_keg, "linimasa_keg_ada": linimasa_keg_ada,
+        "legenda_kegiatan": legenda_kegiatan,
         "kategori_lapangan": kategori_lapangan, "per_tahun": per_tahun,
         "chart_kondisi": chart_kondisi, "chart_status": chart_status,
         "chart_kategori": chart_kategori, "chart_lokasi": chart_lokasi,

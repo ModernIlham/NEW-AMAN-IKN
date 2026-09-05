@@ -113,6 +113,10 @@ body {
 .lm-rumah { border: 1.5px solid var(--navy); border-radius: 4px 4px 0 0; background: #fff; }
 .lm-rongga { background: repeating-linear-gradient(135deg, #f1f5f9, #f1f5f9 4px, #e2e8f0 4px, #e2e8f0 8px); }
 .lm-tambah { font-size: 8px; font-weight: 700; color: var(--hijau); margin-left: 3px; }
+/* Legenda kegiatan bisa memuat sembilan entri bernama panjang; ia harus
+   membungkus, bukan memaksa lembarnya melebar. */
+.lm-legenda-keg { flex-wrap: wrap; gap: 6px 14px; }
+.lm-legenda-keg span { max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lm-legenda i.i-rumah { border: 1.5px solid var(--navy); background: #fff; box-sizing: border-box; }
 .lm-legenda i.i-rongga { background: repeating-linear-gradient(135deg, #f1f5f9, #f1f5f9 3px, #e2e8f0 3px, #e2e8f0 6px); border: 1px solid #e2e8f0; box-sizing: border-box; }
 .lm-nilai { font-size: 9px; text-align: center; color: #fff; padding: 2px 0; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -485,7 +489,7 @@ lipat.addEventListener('click', function () {
     <div class="panel" style="margin-top:14px;">
       <h4>Progres Inventarisasi {{ tahun_linimasa }}</h4>
       <div class="lm-legenda">
-        <span><i class="i-rumah"></i>BMN tercatat (rumah)</span>
+        <span><i class="i-rumah"></i>BMN Tercatat</span>
         <span><i style="background:var(--hijau)"></i>Ditemukan</span>
         <span><i style="background:var(--amber)"></i>Diperiksa, tak ditemukan</span>
         <span><i class="i-rongga"></i>Belum diperiksa</span>
@@ -544,6 +548,59 @@ lipat.addEventListener('click', function () {
   </div>
   {{ kaki('Halaman ringkasan') }}
 </div>
+
+{# ── HALAMAN: RUMAH YANG SAMA, DIIRIS PER KEGIATAN ───────────────
+   Rumahnya PERSIS rumah grafik utama — tinggi tiap bulan sama sampai ke
+   piksel. Yang berganti hanya isinya: grafik utama menjawab "sudah diperiksa
+   berapa", yang ini menjawab "punya kegiatan yang mana". #}
+{% if linimasa_keg_ada %}
+{% set sec.n = sec.n + 1 %}
+<div class="hal">
+  {{ kop('Bagian ' ~ sec.n) }}
+  <div class="hal-isi">
+    {{ pita() }}
+    <div class="judul-bagian"><span class="no">{{ sec.n }}</span>BMN Tercatat per Kegiatan</div>
+    <div class="ket-bagian">Rumah yang sama dengan Progres Inventarisasi — diiris menurut kegiatan penyumbangnya</div>
+
+    <div class="panel" style="margin-top:6px;">
+      <h4>BMN Tercatat {{ tahun_linimasa }} menurut Kegiatan</h4>
+      <div class="lm-legenda lm-legenda-keg">
+        {% for k in legenda_kegiatan %}
+        <span><i style="background:{{ k.warna }}"></i>{{ k.nama }} <b>({{ k.n }})</b></span>
+        {% endfor %}
+      </div>
+      <div class="lm-plot">
+        {% for b in linimasa_keg %}
+        <div class="lm-kol">
+          {% if b.belum_berjalan %}<div class="lm-belum" title="Belum berjalan"></div>
+          {% elif b.tercatat %}
+          <div class="lm-atas">{{ b.tercatat }}{% if b.tambahan %}<span class="lm-tambah">+{{ b.tambahan }}</span>{% endif %}</div>
+          <div class="lm-batang lm-rumah" style="height:{{ b.h_tercatat }}%">
+            {% for g in b.segmen %}
+            <div style="background:{{ g.warna }};flex:{{ g.n }} 0 auto;min-height:0;" title="{{ g.nama }}: {{ g.n }}">{% if g.n %}<div class="lm-nilai">{{ g.n }}</div>{% endif %}</div>
+            {% endfor %}
+          </div>
+          {% else %}<div class="lm-kosong"></div>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="lm-x">{% for b in linimasa_keg %}<span class="{% if b.mulai %}aktif{% elif b.belum_berjalan %}pudar{% endif %}">{{ b.bulan }}</span>{% endfor %}</div>
+      <p class="lm-nota">
+        Tinggi tiap batang <strong>sama persis</strong> dengan grafik Progres Inventarisasi —
+        yang berganti hanya isinya. Di sini isinya menjawab <strong>kegiatan mana</strong> yang
+        menyumbang stok itu dan sejak bulan berapa, bukan berapa yang sudah diperiksa.
+        {% if legenda_kegiatan|length and legenda_kegiatan[-1].nama.endswith('kegiatan lainnya') %}
+        Delapan kegiatan terbesar diberi warna sendiri; sisanya digabung menjadi satu irisan abu —
+        dua puluh irisan berwarna dalam satu batang tak dapat dibedakan mata siapa pun.
+        Rinciannya <strong>tidak hilang</strong>: bagian <em>Capaian per Kegiatan</em> memuat
+        seluruhnya, satu per satu.
+        {% endif %}
+      </p>
+    </div>
+  </div>
+  {{ kaki('Sebaran per kegiatan') }}
+</div>
+{% endif %}
 
 {# ── HALAMAN 3+: CAPAIAN PER KEGIATAN (dipaginasi) ───────────── #}
 {% set jml_hal_keg = ((kegiatan_list|length / KEG_PER_HAL)|round(0,'ceil')|int) or 1 %}

@@ -18,6 +18,60 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#989] Rumah yang sama, diiris per kegiatan — 2026-09-05
+
+Permintaan pemilik: *"selain grafik gabungan berikan juga grafik yang diambil
+dari grafik gabungan utama, cukup bagian BMN tercatatnya saja sebagai rumahnya,
+dan kemudian di depannya baru data grafik per kegiatannya."*
+Plus: label legenda `"BMN tercatat (rumah)"` disederhanakan menjadi
+**"BMN Tercatat"**.
+
+### Bagian baru: BMN Tercatat per Kegiatan
+
+Rumahnya **persis** rumah grafik Progres Inventarisasi — tinggi tiap bulan sama
+sampai ke persen. Yang berganti hanya isinya:
+
+| Grafik | Isinya menjawab |
+|---|---|
+| Progres Inventarisasi | *sudah diperiksa berapa* |
+| BMN Tercatat per Kegiatan | *kegiatan mana yang menyumbang, sejak bulan berapa* |
+
+Tinggi rumahnya **diambil dari** `linimasa`, bukan dihitung ulang. Kalau
+dihitung ulang lalu melenceng sedikit saja, kedua grafik itu berbicara tentang
+stok yang berbeda dan pembacanya tak punya cara tahu yang mana yang benar.
+
+### Yang tidak digambar, dan mengapa
+
+**Satu kegiatan → grafik ini tidak muncul.** Irisannya akan identik dengan
+rumahnya sendiri: grafik yang tak menambahkan apa pun, hanya satu halaman lagi
+untuk dilewati.
+
+**Warna dibatasi delapan, daftarnya tidak.** Dua puluh irisan berwarna dalam
+satu batang tak dapat dibedakan mata siapa pun. Delapan kegiatan terbesar
+diberi warna sendiri; sisanya digabung menjadi satu irisan abu yang
+**menyebut jumlah kegiatan di dalamnya** — irisan tanpa keterangan akan terbaca
+sebagai satu kegiatan bernama "lainnya". Rinciannya tidak hilang: bagian
+*Capaian per Kegiatan* tetap memuat seluruhnya, satu per satu.
+
+Diverifikasi pada 5 kegiatan / 91 NUP: tinggi rumah identik di kedua grafik
+(36 · 60 · 76 · 91 · 100), dan irisan berjumlah tepat di kedua belas bulan.
+
+### Uji mutasi — tiga dipasang, tiga dibunuh
+
+| Mutasi | Dibunuh oleh |
+|---|---|
+| Tinggi rumah kedua dihitung sendiri | `test_rumah_per_kegiatan_SAMA_PERSIS_dengan_rumah_grafik_utama` |
+| Irisan kegiatan ke-9 dst dibuang diam-diam | `test_kegiatan_KESEMBILAN_dan_seterusnya_digabung_dan_DISEBUT` |
+| Grafik kedua digambar walau kegiatannya satu | `test_satu_kegiatan_TIDAK_menggambar_grafik_kedua` |
+
+### Berkas
+
+- `backend/routes/reports.py` — `linimasa_keg`, `legenda_kegiatan`, `linimasa_keg_ada`
+- `backend/templates/laporan_satker_v2.html` — bagian baru, label legenda, gaya legenda kegiatan
+- `backend/tests/unit/test_laporan_gabungan_satker.py` — 4 uji baru
+
+---
+
 ## [#988] Progres Inventarisasi: rumahnya BMN tercatat, isinya capaian — 2026-09-05
 
 Permintaan pemilik: *"pada progres inventarisasi jadikan grafik rumah adalah
