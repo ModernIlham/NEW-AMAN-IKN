@@ -7026,26 +7026,42 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
                    "color": stat_colors.get(nm.split()[0] if nm.startswith("Belum")
                                             else nm, "#64748b")}
                   for nm, cnt in st_counter.most_common()]
-        kat_c = Counter((a.get("category") or "Lainnya") for a in aset_keg)
-        kat_v = {}
-        for a in aset_keg:
-            c = a.get("category") or "Lainnya"
-            kat_v[c] = kat_v.get(c, 0) + sp(a)
-        kategori = [{"name": (cat_map.get(c, c) or c)[:30], "count": cnt,
-                     "pct": pct(cnt, n_keg), "val_fmt": fmt(kat_v.get(c, 0))}
-                    for c, cnt in kat_c.most_common()]
-        lok_c = Counter(a.get("location", "-") or "-" for a in aset_keg)
-        lokasi = [{"name": l[:30], "count": cnt, "pct": pct(cnt, n_keg)}
-                  for l, cnt in lok_c.most_common()]
+        # JENJANG YANG SAMA DENGAN BAGIAN GABUNGAN.
+        #
+        # Versi pertama bagian ini mengelompokkan menurut field `category` dan
+        # `location` yang RATA, sementara bagian gabungan sudah berjenjang.
+        # Akibatnya pemilih Jenjang Kategori/Lokasi tak berpengaruh sama sekali
+        # di sini — pemilik melaporkannya sebagai "analisis per kegiatan masih
+        # tidak berdampak" — dan lebih buruk lagi, dua bagian pada satu laporan
+        # mengelompokkan hal yang sama dengan dua cara berbeda. Angkanya lalu
+        # tak dapat dibandingkan, dan tak ada satu pun tanda bahwa keduanya
+        # memang tak sebanding.
+        grup_kat_k = ljj.kelompokkan_kode(
+            aset_keg, kod.LEVEL_LENGTHS[kat_level], _kode_aset, kode_uraian)
+        kategori = [{"name": nama[:44], "count": len(isi),
+                     "pct": pct(len(isi), n_keg),
+                     "val_fmt": fmt(sum(sp(a) for a in isi))}
+                    for nama, isi in grup_kat_k]
+        if lok_level:
+            grup_lok_k = ljj.kelompokkan_denah(aset_keg, lok_level, peta_node)
+        else:
+            gl = {}
+            for a in aset_keg:
+                gl.setdefault(str(a.get("location") or "").strip() or "-",
+                              []).append(a)
+            grup_lok_k = sorted(gl.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+        lokasi = [{"name": nama[:44], "count": len(isi),
+                   "pct": pct(len(isi), n_keg)} for nama, isi in grup_lok_k]
         return [
             ltl.panel_batang("Kondisi Barang (Ditemukan)", kondisi, "",
                              kolom_nilai="count"),
             ltl.panel_batang("Status Inventarisasi", status, "",
                              kolom_nilai="count"),
-            ltl.panel_batang("Per Kategori", kategori, "#1e40af",
-                             kolom_nilai="val_fmt"),
-            ltl.panel_batang("Per Lokasi", lokasi, "#059669",
-                             kolom_nilai="count"),
+            ltl.panel_batang(f"Per Kategori — {kod.LEVEL_LABELS[kat_level]}",
+                             kategori, "#1e40af", kolom_nilai="val_fmt"),
+            ltl.panel_batang(("Per Lokasi — " + _LABEL_DENAH.get(lok_level, lok_level))
+                             if lok_level else "Per Lokasi (teks bebas)",
+                             lokasi, "#059669", kolom_nilai="count"),
         ]
 
     analisis_kegiatan = []

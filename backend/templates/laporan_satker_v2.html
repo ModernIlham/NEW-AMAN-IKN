@@ -258,6 +258,14 @@ body {
 .pf-opsi label.di-luar { color: #b45309; }
 .tanda-luar { font-size: 7.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: #b45309; background: #fef3c7; border: 1px solid #fde68a; border-radius: 3px; padding: 0 3px; white-space: nowrap; }
 .pf-opsi input { margin-top: 2px; flex-shrink: 0; accent-color: var(--biru); }
+/* Kotak select menerima beberapa pilihan sekaligus pada filter yang SAMA.
+   Tingginya dibatasi delapan baris: pada satker dengan puluhan nilai, daftar
+   yang memanjang mengikuti isinya akan mendorong panel filter menjadi selembar
+   sendiri — persis keluhan yang membuat kotak centang diganti. */
+.pf-select { width: 100%; font-size: 9px; font-family: inherit; color: #334155; border: 1px solid #cbd5e1; border-radius: 4px; padding: 3px; background: #fff; }
+.pf-select option { padding: 2px 4px; border-radius: 3px; }
+.pf-select option:checked { background: #dbeafe linear-gradient(#dbeafe, #dbeafe); color: #1e40af; font-weight: 600; }
+.pf-select option.di-luar { color: #b45309; }
 .pf-hint { font-size: 7.5px; color: #94a3b8; line-height: 1.45; margin-top: 5px; }
 .pf-hampa { font-size: 8.5px; color: var(--abu); padding: 6px 10px 9px; }
 .pf-tgl { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 6px; }
@@ -304,7 +312,8 @@ body {
   {% endfor %}
   <div class="pf-kepala">
     <p class="pf-ket">
-      Setiap kotak boleh dicentang <b>lebih dari satu</b>; yang dibiarkan kosong berarti <b>semua</b>.
+      Setiap kotak menerima <b>lebih dari satu pilihan</b> — tahan <b>Ctrl</b> (atau <b>⌘</b> di Mac)
+      sambil mengeklik, atau seret untuk memilih beberapa yang berurutan. Yang dibiarkan kosong berarti <b>semua</b>.
       Filter yang berbeda saling mempersempit. Hasilnya ikut saat dicetak.
       Memilih <b>Kegiatan</b> ikut menyempitkan pilihan pada kotak lainnya —
       tahun, status, kondisi, dan lokasi hanya menampilkan nilai yang benar-benar
@@ -328,12 +337,19 @@ body {
         <span data-pilih="{{ nama }}">pilih semua</span>
         <span data-hapus="{{ nama }}">kosongkan</span>
       </div>
-      <div class="pf-opsi">
+      {# KONTROL SELECT, bukan daftar centang. Permintaan pemilik: *"filter
+         masih opsi pilihan, tidak ada opsi select di dalam satu filter yang
+         sama."* Satu kotak `select multiple` menerima BEBERAPA pilihan pada
+         filter yang sama — dan pada satker dengan 47 lokasi ia tetap setinggi
+         delapan baris, sementara 47 kotak centang mendorong seluruh panel
+         menjadi selembar sendiri. #}
+      <select class="pf-select" name="{{ nama }}" multiple
+              size="{{ [opsi|length, 8]|min }}"
+              aria-label="{{ judul }} — dapat memilih lebih dari satu">
         {% for o in opsi %}
-        <label{% if o.di_luar %} class="di-luar" title="Tak ada pada kegiatan yang dipilih — filter ini masih berlaku dan mengosongkan hasilnya"{% endif %}><input type="checkbox" name="{{ nama }}" value="{{ o.nilai }}"
-          {% if o.nilai in terpilih %}checked{% endif %}>{{ o.label }}{% if o.di_luar %} <span class="tanda-luar">di luar</span>{% endif %}</label>
+        <option value="{{ o.nilai }}"{% if o.nilai in terpilih %} selected{% endif %}{% if o.di_luar %} class="di-luar" title="Tak ada pada kegiatan yang dipilih — filter ini masih berlaku dan mengosongkan hasilnya"{% endif %}>{{ o.label }}{% if o.di_luar %} · di luar{% endif %}</option>
         {% endfor %}
-      </div>
+      </select>
       {% else %}<div class="pf-hampa">— tak ada pilihan —</div>{% endif %}
     </div>
     {%- endmacro %}
@@ -410,8 +426,15 @@ document.querySelectorAll('[data-pilih],[data-hapus]').forEach(function (t) {
     var nama = t.dataset.pilih || t.dataset.hapus;
     var blok = document.querySelector('[data-blok="' + nama + '"]');
     if (!blok) return;
-    blok.querySelectorAll('input[type=checkbox]').forEach(function (k) {
-      k.checked = !!t.dataset.pilih;
+    // Kotaknya kini `select multiple`; pintasan ini menyalakan/mematikan
+    // seluruh `option` di dalamnya. Tanpa memicu `change`, peramban tak
+    // memberi tahu siapa pun bahwa pilihannya berubah.
+    var pilih = !!t.dataset.pilih;
+    blok.querySelectorAll('select').forEach(function (sel) {
+      Array.prototype.forEach.call(sel.options, function (o) {
+        o.selected = pilih;
+      });
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
     });
   });
 });
