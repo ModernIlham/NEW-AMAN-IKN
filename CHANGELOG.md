@@ -18,6 +18,62 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1008] Linimasa Progres Inventarisasi pada Laporan Eksekutif — 2026-09-05
+
+Permintaan pemilik: *"pada laporan eksekutif aset berikan linimasa seperti di
+laporan gabungan, persis seperti tampilan Progres Inventarisasi-nya, hanya
+ditempatkan di bagian halaman 2 Ringkasan Eksekutif."*
+
+### Satu perhitungan, bukan dua
+
+Grafiknya sudah ada, tetapi hidup sebagai **dua ratus baris di dalam**
+`_build_satker_report_v2` — tak dapat dipakai laporan lain tanpa menyalinnya.
+Menyalinnya berarti dua perhitungan yang harus sama selamanya, dan yang kedua
+tak pernah ikut diperbaiki. Repo ini sudah membayarnya dua kali dalam rangkaian
+terakhir saja: `eselon1` dengan empat salinan cabang bentuk (`[#1002]`), dan
+aturan eselon dengan dua salinan yang sudah berbeda isi (`[#997]`).
+
+`backend/laporan_linimasa.py` (baru) memindahkannya ke satu tempat. Laporan
+gabungan memakainya dan menghasilkan angka yang **sama persis** — dibuktikan
+oleh 72 uji laporan gabungan yang tetap hijau tanpa satu pun angka disesuaikan.
+
+Kelima keputusan yang membentuk grafik ini ikut pindah utuh: rumah = BMN
+tercatat kumulatif, rongga tak berwarna, stok awal ikut dihitung, bulan belum
+berjalan dibedakan dari bulan tanpa tambahan, dan isi yang melampaui rumahnya
+digencet **dan dihitung**.
+
+### Penempatan di halaman 2
+
+Halaman 2 sudah memuat enam kartu, batang capaian, tabel rekapitulasi,
+simpulan, dan dua kotak info; sisanya sekitar 400px, sementara plot 300px milik
+laporan gabungan beserta legenda dan notanya menghabiskan hampir seluruhnya.
+Lembar A4 ber-`overflow: hidden` memotong kelebihannya **tanpa bersuara**, jadi
+plotnya dipendekkan menjadi 200px. Seluruh kelas tampilannya sama — rumah,
+rongga bergaris, irisan hijau/jingga, penanda bulan belum berjalan.
+
+### Dua uji yang lolos karena alasan keliru
+
+Keduanya ketahuan dari mutasi yang selamat:
+
+- **Pembanding angka tak punya stok awal.** Fixture-nya hanya berisi perolehan
+  tahun berjalan, sehingga perhitungan tandingan yang membuang stok awal
+  menghasilkan angka yang sama persis. Fixture kini memuat perolehan tahun
+  sebelumnya dan tanggal yang tak terbaca — dua hal yang paling mudah
+  tertinggal pada salinan.
+- **Judul dicocokkan pada seluruh blok.** Komentar Jinja di blok yang sama juga
+  memuat kata "Progres Inventarisasi", sehingga uji itu lolos walau judulnya
+  diganti. Kini dicocokkan pada elemen `lm-judul` yang benar-benar tercetak.
+
+### Cakupan
+
+- `backend/laporan_linimasa.py` (baru) — `hitung`, `iris_per_kegiatan`,
+  `tahun_tampil`, `bulan_terakhir_berjalan`.
+- `backend/routes/reports.py` — kedua laporan memakainya.
+- `backend/templates/executive_summary.html` — grafik pada halaman 2.
+- Uji: `test_laporan_linimasa` (16, baru),
+  `test_laporan_eksekutif_linimasa` (7, baru); satu uji lama diubah dari
+  memeriksa teks sumber menjadi memeriksa perilaku.
+
 ## [#1007] Struktur eselon kegiatan: nama yang tepat dan tata letak yang rapi — 2026-09-05
 
 Dua laporan pemilik dari form kegiatan.

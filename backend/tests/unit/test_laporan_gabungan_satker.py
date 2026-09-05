@@ -612,11 +612,24 @@ def test_bulan_belum_berjalan_dibedakan_secara_VISUAL():
 
 def test_linimasa_memakai_jam_yang_SAMA_dengan_tanggal_cetak():
     """Jam berbeda membuat laporan bertanggal 1 Oktober memuat grafik yang
-    berhenti di September — dua tanggal pada satu dokumen, tanpa penjelasan."""
-    import inspect
-    src = inspect.getsource(rp._build_satker_report_v2)
-    assert "sekarang = datetime.now()" in src
-    assert "datetime.now(timezone.utc)" not in src.split("sekarang =")[1][:200]
+    berhenti di September — dua tanggal pada satu dokumen, tanpa penjelasan.
+
+    Diuji sebagai PERILAKU, bukan sebagai baris sumber: perhitungannya kini
+    hidup di `laporan_linimasa` supaya laporan eksekutif memakai yang sama, dan
+    uji yang menjangkarkan pada teks di satu fungsi akan memerah setiap kali
+    kodenya berpindah tempat tanpa ada yang benar-benar rusak.
+    """
+    import laporan_linimasa as llm
+    from datetime import datetime as _dt
+    # Jam yang diberikan menentukan batasnya — bukan jam lain di dalam.
+    assert llm.bulan_terakhir_berjalan(2026, _dt(2026, 7, 15)) == 7
+    assert llm.bulan_terakhir_berjalan(2025, _dt(2026, 7, 15)) == 12
+    assert llm.bulan_terakhir_berjalan(2027, _dt(2026, 7, 15)) == 0
+    # Dan `hitung` memakai jam ITU untuk seluruh keputusannya.
+    h = llm.hitung([{"id": "k", "tanggal_mulai": "2026-02-01"}], [],
+                   _dt(2026, 7, 15))
+    assert h["bulan_terakhir"] == 7
+    assert [b["belum_berjalan"] for b in h["baris"]][6:8] == [False, True]
 
 
 # ── Tata letak: grafik terbaca, Eselon II, simpulan menunjuk ────────────
