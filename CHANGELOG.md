@@ -18,6 +18,60 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1013] Pengeluaran barang persediaan menyebut siapa penerimanya — 2026-09-05
+
+Permintaan pemilik: *"SPPB yang ditandatangani penerima barang persediaan
+terkoneksi dengan master pegawai."* Prasyaratnya belum ada. Transaksi keluar
+hanya mencatat `unit_penerima` sebagai teks bebas — bukti pengeluaran tak
+pernah menyebut SIAPA yang menerima, sehingga tak ada yang bisa dimintai
+pertanggungjawaban maupun diminta menandatangani. Dokumen serah terima di atas
+data seperti itu hanya akan mencetak nama unit.
+
+`penerima_nip` ditambahkan pada transaksi keluar tunggal maupun massal, dan
+identitas penerimanya DIBEKUKAN ke jurnal: nama, NIP, jabatan, unit, status
+kepegawaian. Dibekukan, bukan di-join saat cetak — pegawai pindah unit dan
+berganti jabatan, sementara bukti pengeluaran harus tetap menyebut keadaan
+saat barang itu benar-benar diserahkan.
+
+Aturan penerimanya tidak ditulis ulang. Ia sudah ada dan sudah benar di
+`routes/bast.py`, tetapi hidup sebagai satu blok di dalam badan fungsi.
+Menyalinnya berarti dua tempat yang harus sepakat selamanya — dan yang paling
+mudah tercecer justru cabang penolakan almarhum, yang jarang dijalankan dan
+karena itu jarang diperiksa orang. Blok itu dipindah ke `penerima_utils` dan
+kini dipakai keduanya:
+
+* NIP tak terdaftar → **peringatan**. Master Pegawai bisa saja belum lengkap;
+  memblokir karenanya menghukum pengurus barang atas pekerjaan bagian
+  kepegawaian.
+* Berstatus meninggal dunia → **ditolak**. Secara hukum mustahil almarhum
+  menerima serah terima.
+* Pensiun/mutasi/nonaktif → **peringatan**. Bisa jadi memang tepat — serah
+  terima justru dilakukan karena yang bersangkutan pindah.
+
+Pemeriksaannya terjadi SEKALI di muka, sebelum satu pun layer FIFO disentuh.
+Di dalam loop percobaan OCC, penolakan bisa datang setelah stok terlanjur
+berkurang pada percobaan sebelumnya; pada jalur massal — yang memang tak
+berkompensasi antarbaris — ia akan meninggalkan separuh daftar sudah keluar.
+
+Peringatannya ikut di RESPONS, bukan hanya di log: yang perlu tahu NIP
+penerimanya tak terdaftar adalah orang yang baru saja mengeluarkan barang.
+
+Di layar, isian penerima memakai datalist Master Pegawai. Tetap boleh teks
+bebas — penerima bisa saja belum terdaftar, atau bukan pegawai satker ini.
+Nama yang dipakai lebih dari satu orang sengaja TIDAK ditebak: menebak salah
+satunya berarti membekukan NIP orang lain ke bukti pengeluaran, dan tak ada
+yang akan menyadarinya. Unit ikut terisi dari master hanya bila operator belum
+mengetiknya sendiri.
+
+Cacat yang ditemukan uji mutasi: cabang penolakan almarhum pada BAST — tempat
+aturan itu lahir — TIDAK punya satu pun uji. Mutasi yang menurunkannya menjadi
+peringatan lolos seluruh berkas uji BAST. Penjaganya dipasang bersama
+pemindahan blok itu.
+
+Catatan untuk yang menyusul: siasat mongomock (`find_one_and_update` +
+`projection` + `return_document` → None) kini tersalin di lima berkas uji.
+Pantas dipindah ke conftest, tetapi itu perubahan tersendiri.
+
 ## [#1012] Nota Dinas persediaan tersambung ke TTD elektronik — 2026-09-05
 
 Bagian kedua permintaan pemilik: *"saya tidak melihat integrasi nomer surat dan

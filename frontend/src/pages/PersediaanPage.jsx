@@ -26,6 +26,7 @@ import NotaDinasDialog from "@/components/persediaan/NotaDinasDialog";
 import RiwayatNotaDinas from "@/components/persediaan/RiwayatNotaDinas";
 import PerkiraanNomor from "@/components/persuratan/PerkiraanNomor";
 import { bagikanWa, bagikanEmail, hasilTtd } from "@/lib/pesanTtd";
+import { opsiPenerima, cocokkanPenerima } from "@/lib/penerimaPersediaan";
 import { ringkasTtdDokumen, kelasNada } from "@/lib/statusTtd";
 import TautanTtdDialog from "@/components/ttd/TautanTtdDialog";
 
@@ -94,6 +95,10 @@ export default function PersediaanPage({ user, onBack }) {
   const [gudang, setGudang] = useState("");
   const [daftarGudang, setDaftarGudang] = useState([]);
   const [unitKerjaList, setUnitKerjaList] = useState([]); // Master Unit Kerja (audit W4)
+  // Master Pegawai untuk memilih PENERIMA barang keluar. Gagal memuat
+  // (mis. luring) hanya membuat isiannya kembali jadi teks bebas —
+  // pengeluaran barang tak boleh terhenti karena master tak terjangkau.
+  const [penerimaOpsi, setPenerimaOpsi] = useState([]);
   const [loading, setLoading] = useState(false);
   const [satuanList, setSatuanList] = useState([]);
   // Dialog: {mode:"tambah", data} | {mode:"edit", id, version, data}
@@ -189,6 +194,9 @@ export default function PersediaanPage({ user, onBack }) {
       .then((r) => setUnitKerjaList([...new Set((r.data?.items || [])
         .map((u) => u.nama_unit || "").filter(Boolean))].sort()))
       .catch(() => setUnitKerjaList([]));
+    axios.get(`${API}/pegawai`)
+      .then((r) => setPenerimaOpsi(opsiPenerima(r.data?.items || [])))
+      .catch(() => setPenerimaOpsi([]));
     axios.get(`${API}/persediaan/peringatan`)
       .then((r) => setPeringatan(r.data))
       .catch(() => setPeringatan(null));
@@ -363,17 +371,24 @@ export default function PersediaanPage({ user, onBack }) {
     const d = keluar.data;
     const jumlah = parseInt(d.jumlah, 10);
     if (!jumlah || jumlah <= 0) { toast.error("Jumlah harus lebih dari 0"); return; }
+    // `penerima_teks` hanya isian layar (label datalist); yang dikirim adalah
+    // NIP-nya. Mengirim keduanya membuat server menerima bidang yang tak ia
+    // kenal dan membuat payloadnya membingungkan saat dibaca ulang di log.
+    const { penerima_teks: _abaikan, ...muatan } = d;
     setSaving(true);
     try {
       if (wajibSetuju) {
-        await ajukanPermohonan("keluar", keluar.item.id, { ...d, jumlah },
+        await ajukanPermohonan("keluar", keluar.item.id, { ...muatan, jumlah },
           keluar.idem);
         setKeluar(null);
         return;
       }
-      const r = await axios.post(`${API}/persediaan/${keluar.item.id}/keluar`, { ...d, jumlah },
+      const r = await axios.post(`${API}/persediaan/${keluar.item.id}/keluar`, { ...muatan, jumlah },
         { headers: { "Idempotency-Key": keluar.idem } });
       toast.success(`${r.data?.message} — nilai keluar ${fmtRp(r.data?.nilai_keluar)}, stok kini ${r.data?.stok}`);
+      // Peringatan penerima (NIP tak terdaftar / pegawai nonaktif) muncul
+      // SEBAGAI PERINGATAN, bukan tenggelam di balik toast sukses.
+      if (r.data?.peringatan) toast.warning(r.data.peringatan);
       setKeluar(null);
       load(page, search, status);
       refreshRingkasan();
@@ -668,7 +683,9 @@ export default function PersediaanPage({ user, onBack }) {
           kode_klasifikasi: massal.kode_klasifikasi || "",
           jenis_dokumen: massal.jenis_dokumen, penyedia: massal.penyedia,
           tgl_dokumen: massal.tgl_dokumen, perolehan_id: massal.perolehan_id,
-          unit_penerima: massal.unit_penerima, keterangan: massal.keterangan,
+          unit_penerima: massal.unit_penerima,
+          penerima_nip: massal.penerima_nip || "",
+          keterangan: massal.keterangan,
           items: massal.items.map((it) => ({
             persediaan_id: it.id, jumlah: parseInt(it.jumlah, 10),
             harga_satuan: massal.arah === "masuk" ? parseFloat(it.harga_satuan) : 0,
@@ -684,7 +701,9 @@ export default function PersediaanPage({ user, onBack }) {
         kode_klasifikasi: massal.kode_klasifikasi || "",
         jenis_dokumen: massal.jenis_dokumen, penyedia: massal.penyedia,
         tgl_dokumen: massal.tgl_dokumen, perolehan_id: massal.perolehan_id,
-        unit_penerima: massal.unit_penerima, keterangan: massal.keterangan,
+        unit_penerima: massal.unit_penerima,
+        penerima_nip: massal.penerima_nip || "",
+        keterangan: massal.keterangan,
         items: massal.items.map((it) => ({
           persediaan_id: it.id, jumlah: parseInt(it.jumlah, 10),
           harga_satuan: massal.arah === "masuk" ? parseFloat(it.harga_satuan) : 0,
@@ -701,6 +720,9 @@ export default function PersediaanPage({ user, onBack }) {
           + (d.nomor_lpb ? ` — LPB ${d.nomor_lpb}` : ""));
         setMassal(null);
       }
+      // Peringatan penerima ditampilkan di KEDUA cabang: sebagian gagal tak
+      // membuat catatan tentang penerimanya jadi kurang penting.
+      if (d.peringatan) toast.warning(d.peringatan);
       if (d.lpb_id) {
         // Laporan Penerimaan Barang langsung terunduh (bisa diunduh ulang
         // kapan pun lewat riwayat LPB / endpoint yang sama).
@@ -1528,6 +1550,36 @@ export default function PersediaanPage({ user, onBack }) {
                   onChange={(e) => setKeluar((m) => ({ ...m, data: { ...m.data, jumlah: e.target.value } }))}
                   data-testid="persediaan-keluar-jumlah" />
               </div>
+              {/* Penerima ber-NIP: bukti pengeluaran barang harus menyebut
+                  SIAPA yang menerima, bukan hanya unitnya. Tetap boleh teks
+                  bebas — penerima bisa saja belum ada di master, atau bukan
+                  pegawai satker ini. */}
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-out-penerima">Penerima (Master Pegawai)</label>
+                <Input id="psd-out-penerima" list="psd-penerima-list"
+                  placeholder="ketik nama atau NIP penerima"
+                  value={keluar.data.penerima_teks || ""}
+                  onChange={(e) => setKeluar((m) => {
+                    const teks = e.target.value;
+                    const cocok = cocokkanPenerima(teks, penerimaOpsi);
+                    return { ...m, data: { ...m.data, penerima_teks: teks,
+                      penerima_nip: cocok?.nip || "",
+                      // Unit ikut terisi dari master HANYA bila operator belum
+                      // mengetiknya sendiri — isian tangan tak boleh ditimpa.
+                      unit_penerima: (cocok?.unit && !m.data.unit_penerima)
+                        ? cocok.unit : m.data.unit_penerima } };
+                  })}
+                  data-testid="persediaan-keluar-penerima" />
+                <datalist id="psd-penerima-list">
+                  {penerimaOpsi.map((o) => <option key={o.label} value={o.label} />)}
+                </datalist>
+                <p className="text-[11px] text-muted-foreground mt-1"
+                  data-testid="persediaan-keluar-penerima-info">
+                  {keluar.data.penerima_nip
+                    ? `Tertaut Master Pegawai — NIP ${keluar.data.penerima_nip}`
+                    : "Belum tertaut Master Pegawai; bukti keluar hanya menyebut unitnya."}
+                </p>
+              </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-out-unit">Unit Penerima</label>
                 <Input id="psd-out-unit" list="psd-unit-kerja-list" placeholder="cth. Bagian Umum"
@@ -2013,14 +2065,35 @@ export default function PersediaanPage({ user, onBack }) {
                     )}
                   </>
                 ) : (
-                  <div>
-                    <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-m-unit">Unit Penerima</label>
-                    <Input id="psd-m-unit" list="psd-m-unit-kerja-list" placeholder="cth. Bagian Umum"
-                      value={massal.unit_penerima} onChange={(e) => setMField("unit_penerima", e.target.value)} />
-                    <datalist id="psd-m-unit-kerja-list">
-                      {unitKerjaList.map((u) => <option key={u} value={u} />)}
-                    </datalist>
-                  </div>
+                  <>
+                    <div>
+                      <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-m-penerima">Penerima (Master Pegawai)</label>
+                      <Input id="psd-m-penerima" list="psd-m-penerima-list"
+                        placeholder="ketik nama atau NIP penerima"
+                        value={massal.penerima_teks || ""}
+                        onChange={(e) => {
+                          const teks = e.target.value;
+                          const cocok = cocokkanPenerima(teks, penerimaOpsi);
+                          setMField("penerima_teks", teks);
+                          setMField("penerima_nip", cocok?.nip || "");
+                          if (cocok?.unit && !massal.unit_penerima) {
+                            setMField("unit_penerima", cocok.unit);
+                          }
+                        }}
+                        data-testid="persediaan-massal-penerima" />
+                      <datalist id="psd-m-penerima-list">
+                        {penerimaOpsi.map((o) => <option key={o.label} value={o.label} />)}
+                      </datalist>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-m-unit">Unit Penerima</label>
+                      <Input id="psd-m-unit" list="psd-m-unit-kerja-list" placeholder="cth. Bagian Umum"
+                        value={massal.unit_penerima} onChange={(e) => setMField("unit_penerima", e.target.value)} />
+                      <datalist id="psd-m-unit-kerja-list">
+                        {unitKerjaList.map((u) => <option key={u} value={u} />)}
+                      </datalist>
+                    </div>
+                  </>
                 )}
                 <div className={massal.arah === "masuk" ? "" : "sm:col-span-1"}>
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-m-ket">Keterangan</label>

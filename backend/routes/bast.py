@@ -679,41 +679,26 @@ async def buat_bast(payload: BastIn, request: Request = None,
             "revisi_mode": str(payload.revisi_mode),
             "revisi_alasan": str(payload.revisi_alasan).strip(),
         })
-    # Validasi LUNAK penerima ke Master Pegawai (non-blocking): NIP tak
-    # terdaftar hanya diberi peringatan — BAST tetap tersimpan.
-    peringatan_pegawai = ""
+    # Validasi penerima ke Master Pegawai — gerbang BERSAMA `penerima_utils`.
+    # Aturannya lahir di sini, lalu dibutuhkan sama persis oleh pengeluaran
+    # barang persediaan; disatukan supaya cabang penolakan almarhum — cabang
+    # yang jarang dijalankan dan karena itu jarang diperiksa orang — tak
+    # tercecer di salah satu salinan.
+    #
+    # Scope satker (REVIEW-9 R15): flag "terdaftar" + nama penerima harus dari
+    # Master Pegawai SATKER INI, bukan seluruh instansi.
+    from functools import partial as _partial
+
+    from penerima_utils import PenerimaMeninggal, periksa_penerima
+
     nip2 = str(record["pihak_kedua"].get("nip") or "").strip()
+    try:
+        peg, peringatan_pegawai = await periksa_penerima(
+            db, _partial(scope_query_field_satker, user), nip2)
+    except PenerimaMeninggal as e:
+        raise HTTPException(status_code=400, detail=e.pesan)
     if nip2:
-        # Scope satker (REVIEW-9 R15): flag "terdaftar" + nama penerima harus
-        # dari Master Pegawai SATKER INI, bukan seluruh instansi.
-        peg = await db.pegawai.find_one(
-            scope_query_field_satker(user, {"nip": nip2}),
-            {"_id": 0, "nama": 1, "status": 1})
         record["pihak_kedua_terdaftar"] = bool(peg)
-        if not peg:
-            peringatan_pegawai = (f"NIP {nip2} belum terdaftar di Master "
-                                  "Pegawai — periksa ejaan atau daftarkan dulu")
-        else:
-            from pegawai_utils import is_aktif, is_meninggal
-            # Penerima MENINGGAL DUNIA → TOLAK (bukan sekadar peringatan):
-            # secara hukum mustahil almarhum menerima serah terima. BAST lama
-            # atas namanya tetap sah; yang diperlukan adalah serah terima BMN
-            # almarhum kepada ahli waris/pengurus barang, bukan BAST baru
-            # kepadanya.
-            if is_meninggal(peg):
-                raise HTTPException(
-                    status_code=400,
-                    detail=(f"{peg.get('nama') or nip2} berstatus Meninggal "
-                            "Dunia di Master Pegawai — tidak dapat dijadikan "
-                            "penerima serah terima. Gunakan alur pengembalian "
-                            "BMN almarhum (penyerah: ahli waris/atasan) atau "
-                            "pilih penerima lain."))
-            # Pegawai pensiun/mutasi/nonaktif → peringatan lunak (tak memblokir).
-            if not is_aktif(peg):
-                st = str(peg.get("status") or "").strip() or "nonaktif"
-                peringatan_pegawai = (f"Penerima ({peg.get('nama') or nip2}) "
-                                      f"berstatus {st} di Master Pegawai — "
-                                      "pastikan serah terima ini memang tepat")
     await db.bast_serah_terima.insert_one({**record})
 
     if sumber_revisi:
