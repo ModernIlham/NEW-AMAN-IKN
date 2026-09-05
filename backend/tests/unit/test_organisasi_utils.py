@@ -30,12 +30,12 @@ import organisasi_utils as org
 #           e5  Urusan Gudang        (Eselon V)
 #     e2b Biro Keuangan             (Eselon II)
 _POHON = [
-    {"id": "e1", "nama": "Sekretariat Jenderal", "level": 1, "parent_id": ""},
-    {"id": "e2", "nama": "Biro Umum", "level": 2, "parent_id": "e1"},
-    {"id": "e2b", "nama": "Biro Keuangan", "level": 2, "parent_id": "e1"},
-    {"id": "e3", "nama": "Bagian Rumah Tangga", "level": 3, "parent_id": "e2"},
-    {"id": "e4", "nama": "Subbagian Perlengkapan", "level": 4, "parent_id": "e3"},
-    {"id": "e5", "nama": "Urusan Gudang", "level": 5, "parent_id": "e4"},
+    {"id": "e1", "nama_unit": "Sekretariat Jenderal", "eselon": "1", "parent_id": ""},
+    {"id": "e2", "nama_unit": "Biro Umum", "eselon": "2", "parent_id": "e1"},
+    {"id": "e2b", "nama_unit": "Biro Keuangan", "eselon": "2", "parent_id": "e1"},
+    {"id": "e3", "nama_unit": "Bagian Rumah Tangga", "eselon": "3", "parent_id": "e2"},
+    {"id": "e4", "nama_unit": "Subbagian Perlengkapan", "eselon": "4", "parent_id": "e3"},
+    {"id": "e5", "nama_unit": "Urusan Gudang", "eselon": "5", "parent_id": "e4"},
 ]
 _PETA_UNIT = {u["id"]: u for u in _POHON}
 _PETA_PARENT = {u["id"]: u["parent_id"] for u in _POHON if u["parent_id"]}
@@ -61,14 +61,14 @@ def test_induk_wajib_TEPAT_satu_tingkat_di_atas():
 @pytest.mark.parametrize("level", [0, 6, -1, "", None, "abc", 99])
 def test_level_di_luar_I_sampai_V_ditolak(level):
     assert org.level_sah(level) is False
-    ok, pesan = org.validasi_unit({"nama": "Unit", "level": level})
+    ok, pesan = org.validasi_unit({"nama_unit": "Unit", "eselon": level})
     assert ok is False and "tidak sah" in pesan
 
 
 def test_ESELON_I_adalah_puncak_dan_tak_berinduk():
-    ok, _ = org.validasi_unit({"nama": "Setjen", "level": 1})
+    ok, _ = org.validasi_unit({"nama_unit": "Setjen", "eselon": "1"})
     assert ok is True
-    ok, pesan = org.validasi_unit({"nama": "Setjen", "level": 1},
+    ok, pesan = org.validasi_unit({"nama_unit": "Setjen", "eselon": "1"},
                                   induk=_PETA_UNIT["e1"])
     assert ok is False and "puncak" in pesan
 
@@ -77,7 +77,7 @@ def test_ESELON_II_dan_ke_bawah_WAJIB_berinduk():
     """Eselon I dan II wajib ada sebelum tingkat di bawahnya boleh dipakai —
     unit Eselon III tanpa induk terbaca sebagai organisasi tanpa kepala."""
     for lv in (2, 3, 4, 5):
-        ok, pesan = org.validasi_unit({"nama": "Unit", "level": lv})
+        ok, pesan = org.validasi_unit({"nama_unit": "Unit", "eselon": lv})
         assert ok is False, lv
         assert "wajib berinduk" in pesan, pesan
 
@@ -86,7 +86,7 @@ def test_pesan_penolakan_MENYEBUT_induk_yang_seharusnya():
     """Pesan "tidak sah" tanpa menyebut apa yang seharusnya memaksa
     pembacanya menebak — dan kebanyakan orang menebak salah."""
     ok, pesan = org.validasi_unit(
-        {"nama": "Bagian X", "level": 3}, induk=_PETA_UNIT["e1"])
+        {"nama_unit": "Bagian X", "eselon": "3"}, induk=_PETA_UNIT["e1"])
     assert ok is False
     assert "Eselon III" in pesan and "Eselon II" in pesan
     assert "tidak boleh dilompati" in pesan
@@ -99,7 +99,7 @@ def test_unit_sah_diterima():
 
 
 def test_nama_kosong_ditolak():
-    ok, pesan = org.validasi_unit({"nama": "  ", "level": 1})
+    ok, pesan = org.validasi_unit({"nama_unit": "  ", "eselon": "1"})
     assert ok is False and "Nama unit wajib" in pesan
 
 
@@ -246,3 +246,118 @@ def test_label_level_dan_field_eselon_selaras():
     assert org.label_level(9) == ""
     assert org.FIELD_ESELON == ("eselon1", "eselon2", "eselon3",
                                 "eselon4", "eselon5")
+
+
+# ── 6. Unit dapat DIPERBAIKI tanpa membongkar cabangnya ──────────────────
+#
+# Sebelum ada penyuntingan, unit yang salah ketik dan sudah punya anak tak
+# dapat diperbaiki sama sekali: menghapusnya ditolak karena masih membawahi.
+# Yang dijaga di sini adalah batas-batas perbaikannya — sampai mana ia boleh,
+# dan di mana ia berhenti supaya pohonnya tetap pohon.
+
+def test_keturunan_mengumpulkan_seluruh_cabang_bukan_anak_langsung():
+    assert org.keturunan("e2", _POHON) == {"e3", "e4", "e5"}
+    assert org.keturunan("e1", _POHON) == {"e2", "e2b", "e3", "e4", "e5"}
+    assert org.keturunan("e5", _POHON) == set()
+
+
+def test_keturunan_berhenti_pada_pohon_yang_melingkar():
+    # a → b → a. Tanpa penjagaan, penelusurannya tak pernah selesai.
+    gelang = [{"id": "a", "parent_id": "b"}, {"id": "b", "parent_id": "a"}]
+    assert org.keturunan("a", gelang) == {"b"}
+
+
+def test_unit_tak_boleh_berinduk_pada_dirinya_sendiri():
+    ok, pesan = org.validasi_pindah("e2", "e2", _POHON)
+    assert not ok and "dirinya sendiri" in pesan
+
+
+def test_unit_tak_boleh_berinduk_pada_keturunannya():
+    # Memindahkan Biro Umum ke bawah Subbagian Perlengkapan menutup gelang:
+    # setelahnya tak satu pun unit pada gelang itu punya jalur ke puncak.
+    ok, pesan = org.validasi_pindah("e2", "e4", _POHON)
+    assert not ok and "melingkar" in pesan.lower()
+
+
+def test_pindah_ke_saudara_atau_ke_puncak_tetap_boleh():
+    assert org.validasi_pindah("e3", "e2b", _POHON)[0]
+    assert org.validasi_pindah("e2", "", _POHON)[0] is True
+
+
+def test_ganti_nama_unit_beranak_diperbolehkan():
+    lama = _PETA_UNIT["e2"]
+    baru = dict(lama, nama_unit="Biro Umum dan Keuangan")
+    ok, pesan = org.validasi_perubahan(lama, baru, _PETA_UNIT["e1"], _POHON)
+    assert ok, pesan
+
+
+def test_eselon_unit_yang_masih_membawahi_TAK_boleh_diubah():
+    # Anak-anaknya divalidasi terhadap eselon induknya saat dibuat; mengubahnya
+    # belakangan membuat seluruh cabang itu melanggar tanpa satu pun diperiksa.
+    lama = _PETA_UNIT["e2"]
+    baru = dict(lama, eselon="3", parent_id="e2b")
+    ok, pesan = org.validasi_perubahan(lama, baru, _PETA_UNIT["e2b"], _POHON)
+    assert not ok and "membawahi" in pesan
+
+
+def test_eselon_unit_TANPA_anak_boleh_diubah():
+    lama = _PETA_UNIT["e2b"]                    # Biro Keuangan, tanpa anak
+    baru = dict(lama, eselon="3", parent_id="e2")
+    ok, pesan = org.validasi_perubahan(lama, baru, _PETA_UNIT["e2"], _POHON)
+    assert ok, pesan
+
+
+def test_perubahan_tetap_tunduk_pada_aturan_tingkat():
+    lama = _PETA_UNIT["e3"]
+    baru = dict(lama, parent_id="e1")           # Eselon III langsung di bawah I
+    ok, pesan = org.validasi_perubahan(lama, baru, _PETA_UNIT["e1"], _POHON)
+    assert not ok and "dilompati" in pesan
+
+
+def test_perubahan_menolak_nama_kosong():
+    lama = _PETA_UNIT["e2"]
+    ok, pesan = org.validasi_perubahan(lama, dict(lama, nama_unit="   "),
+                                       _PETA_UNIT["e1"], _POHON)
+    assert not ok and "Nama" in pesan
+
+
+# ── 7. Jalur nama: menemukan baris pegawai/aset milik satu unit ──────────
+#
+# `pegawai` dan `assets` menyimpan unitnya sebagai NAMA, bukan id. Mencocokkan
+# nama saja menyeret unit lain yang kebetulan bernama sama di cabang berbeda.
+
+def test_filter_jalur_menyertakan_leluhur_bukan_namanya_saja():
+    fe = org.field_eselon("e3", _PETA_UNIT, _PETA_PARENT)
+    assert org.filter_jalur(fe, 3) == {
+        "eselon1": "Sekretariat Jenderal", "eselon2": "Biro Umum",
+        "eselon3": "Bagian Rumah Tangga"}
+
+
+def test_filter_jalur_melewati_tingkat_yang_kosong():
+    # Baris pegawai lama kerap tak mengisi seluruh tingkat; menuntut ""
+    # membuatnya tak pernah cocok.
+    assert org.filter_jalur({"eselon1": "A", "eselon2": "", "eselon3": "C"},
+                            3) == {"eselon1": "A", "eselon3": "C"}
+    assert org.filter_jalur({}, 5) == {}
+    assert org.filter_jalur({"eselon1": "A"}, 0) == {}
+
+
+def test_perubahan_jalur_hanya_menyebut_yang_berubah():
+    setel, hapus = org.perubahan_jalur(
+        {"eselon1": "A", "eselon2": "B"}, {"eselon1": "A", "eselon2": "Z"}, 5)
+    assert setel == {"eselon2": "Z"} and hapus == []
+
+
+def test_perubahan_jalur_MENGHAPUS_tingkat_yang_tak_lagi_terpakai():
+    # Unit yang naik dari Eselon III ke II meninggalkan eselon3 yang menyebut
+    # unit yang sudah tak ada di sana — terbaca sebagai unit ketiga.
+    setel, hapus = org.perubahan_jalur(
+        {"eselon1": "A", "eselon2": "B", "eselon3": "C"},
+        {"eselon1": "A", "eselon2": "C"}, 3)
+    assert setel == {"eselon2": "C"} and hapus == ["eselon3"]
+
+
+def test_perubahan_jalur_tak_menyentuh_tingkat_di_luar_batas():
+    setel, hapus = org.perubahan_jalur(
+        {"eselon1": "A", "eselon4": "D"}, {"eselon1": "Z", "eselon4": ""}, 2)
+    assert setel == {"eselon1": "Z"} and hapus == []

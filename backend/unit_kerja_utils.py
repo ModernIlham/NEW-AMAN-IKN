@@ -4,25 +4,19 @@ Adopsi pola KERJA-BARENG `UnitKerjaManager`: unit disimpan hierarkis
 {nama_unit, eselon "1".."5", parent_id} sehingga form pegawai dapat memakai
 pilihan BERTINGKAT (opsi Eselon N mengikuti induk Eselon N-1 yang dipilih)
 dan laporan BMN dapat direkap per unit organisasi resmi.
+
+Modul ini mengurus PEMETAAN antara pohon dan kolom teks eselon1–5 milik
+pegawai. Aturan tentang apa yang sah pada pohonnya sendiri — tingkat, induk,
+pemindahan, penghapusan — ada di `organisasi_utils`, dan hanya di sana.
+`validate_unit` di sini pernah menjadi salinan keduanya; salinan itu sudah
+menyimpang dari rutenya (satu menolak, satu meloloskan) sebelum sempat
+dipakai bersama, dan kini dihapus.
 """
+import organisasi_utils as org
 
-ESELON_SAH = ("1", "2", "3", "4", "5")
-
-
-def validate_unit(doc, punya_induk=True):
-    """Kembalikan daftar error (kosong bila valid). MURNI.
-
-    `punya_induk` = apakah parent_id terisi (relasi diperiksa pemanggil)."""
-    d = doc or {}
-    errors = []
-    if not str(d.get("nama_unit") or "").strip():
-        errors.append("Nama unit wajib diisi")
-    es = str(d.get("eselon") or "").strip()
-    if es not in ESELON_SAH:
-        errors.append("Eselon harus 1–5")
-    elif es != "1" and not punya_induk:
-        errors.append(f"Unit Eselon {es} wajib punya induk Eselon {int(es) - 1}")
-    return errors
+#: Tetap di sini sebagai bentuk STRING karena kolom `eselon` pegawai dan
+#: unit_kerja memang string; sumber angkanya satu, di `organisasi_utils`.
+ESELON_SAH = tuple(str(b["level"]) for b in org.daftar_level())
 
 
 def opsi_bertingkat(units, pilihan):

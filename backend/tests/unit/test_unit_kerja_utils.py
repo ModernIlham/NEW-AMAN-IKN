@@ -1,20 +1,16 @@
 """Uji Master Unit Kerja berjenjang (Eselon I–V) — murni."""
-from unit_kerja_utils import (ESELON_SAH, opsi_bertingkat, unit_dari_pegawai,
-                              validate_unit)
+import organisasi_utils as org
+from unit_kerja_utils import ESELON_SAH, opsi_bertingkat, unit_dari_pegawai
 
 
-def test_validate_unit():
-    assert validate_unit({"nama_unit": "Sekretariat", "eselon": "1"}) == []
-    assert any("Nama" in e for e in validate_unit({"eselon": "1"}))
-    assert any("Eselon" in e for e in
-               validate_unit({"nama_unit": "X", "eselon": "9"}))
-    # eselon >1 wajib induk
-    assert any("induk" in e.lower() for e in
-               validate_unit({"nama_unit": "Bagian", "eselon": "2"},
-                             punya_induk=False))
-    assert validate_unit({"nama_unit": "Bagian", "eselon": "2"},
-                         punya_induk=True) == []
+def test_eselon_sah_bersumber_dari_satu_registry():
+    # `validate_unit` di modul ini pernah menjadi salinan kedua aturan eselon
+    # dan sudah menyimpang dari rutenya sebelum sempat dipakai bersama. Yang
+    # tersisa hanyalah bentuk STRING-nya; angkanya tetap satu sumber.
     assert ESELON_SAH == ("1", "2", "3", "4", "5")
+    assert ESELON_SAH == tuple(str(b["level"]) for b in org.daftar_level())
+    import unit_kerja_utils as uk
+    assert not hasattr(uk, "validate_unit")
 
 
 UNITS = [

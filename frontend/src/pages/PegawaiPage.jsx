@@ -142,6 +142,11 @@ export default function PegawaiPage({ user, onBack }) {
   const [detailAset, setDetailAset] = useState(null); // {pegawai, items, memuat}
   const [units, setUnits] = useState([]);             // master unit kerja hierarkis
   const [kelolaUnit, setKelolaUnit] = useState(null); // {eselon, nama, parentId, sibuk}
+  // Unit yang sedang disunting di tempat: {id, nama, parentId, sibuk}. Null =
+  // tak ada. Menyunting di baris, bukan di dialog kedua — unit yang sedang
+  // diperbaiki perlu terlihat bersama saudara-saudaranya supaya jelas
+  // namanya akan bertabrakan dengan yang mana.
+  const [suntingUnit, setSuntingUnit] = useState(null);
   const [struktur, setStruktur] = useState(false);    // dialog bagan struktur organisasi
   const [strukturBuka, setStrukturBuka] = useState({}); // {unitId: true} simpul terbuka
   const fileRef = useRef(null);
@@ -274,6 +279,32 @@ export default function PegawaiPage({ user, onBack }) {
     } catch (err) {
       toast.error(getApiError(err, "Gagal menambah unit"));
       setKelolaUnit((k) => ({ ...k, sibuk: false }));
+    }
+  };
+
+  const simpanUnit = async () => {
+    const nama = String(suntingUnit?.nama || "").trim();
+    if (!nama) { toast.error("Nama unit wajib diisi"); return; }
+    setSuntingUnit((k) => ({ ...k, sibuk: true }));
+    try {
+      const r = await axios.put(`${API}/unit-kerja/${suntingUnit.id}`, {
+        nama_unit: nama, parent_id: suntingUnit.parentId || "",
+      });
+      const ikut = r.data?.ikut_diperbarui || {};
+      // Perambatannya disebutkan, bukan disembunyikan: penggantian nama unit
+      // ikut menulis ulang baris pegawai dan aset, dan pengguna berhak tahu
+      // berapa banyak data yang baru saja ikut berubah.
+      const jejak = [
+        ikut.pegawai ? `${ikut.pegawai} pegawai` : "",
+        ikut.aset ? `${ikut.aset} aset` : "",
+      ].filter(Boolean).join(" dan ");
+      toast.success(jejak ? `Unit diperbarui — ${jejak} ikut disesuaikan`
+        : "Unit diperbarui");
+      setSuntingUnit(null);
+      muatUnits();
+    } catch (err) {
+      toast.error(getApiError(err, "Gagal memperbarui unit"));
+      setSuntingUnit((k) => (k ? { ...k, sibuk: false } : k));
     }
   };
 
@@ -1592,7 +1623,7 @@ export default function PegawaiPage({ user, onBack }) {
       </Dialog>
 
       {/* ── Dialog kelola master unit kerja (Eselon I–V, hierarkis) ── */}
-      <Dialog open={!!kelolaUnit} onOpenChange={(o) => { if (!o && !kelolaUnit?.sibuk) setKelolaUnit(null); }}>
+      <Dialog open={!!kelolaUnit} onOpenChange={(o) => { if (!o && !kelolaUnit?.sibuk) { setKelolaUnit(null); setSuntingUnit(null); } }}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle>Kelola Unit Kerja (Eselon I–V)</DialogTitle>
@@ -1613,7 +1644,7 @@ export default function PegawaiPage({ user, onBack }) {
               <div className="flex bg-muted rounded-lg p-0.5 gap-0.5">
                 {["1", "2", "3", "4", "5"].map((es) => (
                   <button key={es} type="button"
-                    onClick={() => setKelolaUnit((k) => ({ ...k, eselon: es, parentId: "" }))}
+                    onClick={() => { setKelolaUnit((k) => ({ ...k, eselon: es, parentId: "" })); setSuntingUnit(null); }}
                     className={`flex-1 text-[11px] font-semibold py-1.5 rounded-md min-w-0 min-h-0 ${kelolaUnit.eselon === es ? "bg-card text-sky-700 dark:text-sky-400 shadow-sm" : "text-muted-foreground"}`}>
                     Eselon {es}
                   </button>
@@ -1644,6 +1675,35 @@ export default function PegawaiPage({ user, onBack }) {
                   <p className="text-center text-[11px] text-muted-foreground py-5">Belum ada unit Eselon {kelolaUnit.eselon}.</p>
                 ) : units.filter((u) => String(u.eselon) === kelolaUnit.eselon).map((u) => {
                   const induk = units.find((x) => x.id === u.parent_id);
+                  const disunting = suntingUnit?.id === u.id;
+                  if (disunting) {
+                    return (
+                      <div key={u.id} className="px-3 py-2 flex flex-wrap items-center gap-2 bg-sky-500/5">
+                        {Number(u.eselon) > 1 && (
+                          <select value={suntingUnit.parentId}
+                            onChange={(e) => setSuntingUnit((k) => ({ ...k, parentId: e.target.value }))}
+                            disabled={suntingUnit.sibuk} data-testid="unit-sunting-induk"
+                            aria-label={`Induk Eselon ${Number(u.eselon) - 1}`}
+                            className="h-9 rounded-md border border-input bg-background px-2 text-[11px] min-w-0 min-h-0 max-w-[45%]">
+                            <option value="">— induk Eselon {Number(u.eselon) - 1} —</option>
+                            {units.filter((x) => String(x.eselon) === String(Number(u.eselon) - 1))
+                              .map((x) => <option key={x.id} value={x.id}>{x.nama_unit}</option>)}
+                          </select>
+                        )}
+                        <Input value={suntingUnit.nama} disabled={suntingUnit.sibuk}
+                          onChange={(e) => setSuntingUnit((k) => ({ ...k, nama: e.target.value }))}
+                          onKeyDown={(e) => { if (e.key === "Enter") simpanUnit(); }}
+                          aria-label={`Nama unit ${u.nama_unit}`} data-testid="unit-sunting-nama"
+                          className="h-9 flex-1 min-w-[140px]" />
+                        <Button size="sm" className="h-9 gap-1 bg-sky-600 hover:bg-sky-700 text-white"
+                          disabled={suntingUnit.sibuk} onClick={simpanUnit} data-testid="unit-sunting-simpan">
+                          {suntingUnit.sibuk ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Simpan"}
+                        </Button>
+                        <Button size="sm" variant="outline" className="h-9" disabled={suntingUnit.sibuk}
+                          onClick={() => setSuntingUnit(null)}>Batal</Button>
+                      </div>
+                    );
+                  }
                   return (
                     <div key={u.id} className="px-3 py-1.5 flex items-center gap-2">
                       <div className="flex-1 min-w-0">
@@ -1653,6 +1713,12 @@ export default function PegawaiPage({ user, onBack }) {
                       {u.sumber === "derivasi pegawai" && (
                         <span className="px-1 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[9px] font-semibold">otomatis</span>
                       )}
+                      <button type="button" data-testid="unit-ubah"
+                        onClick={() => setSuntingUnit({ id: u.id, nama: u.nama_unit, parentId: u.parent_id || "", sibuk: false })}
+                        title={`Ubah ${u.nama_unit}`} aria-label={`Ubah ${u.nama_unit}`}
+                        className="p-1 rounded text-muted-foreground hover:text-sky-600 hover:bg-sky-500/10 min-w-0 min-h-0">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
                       <button type="button" onClick={() => hapusUnit(u)} title={`Hapus ${u.nama_unit}`} aria-label={`Hapus ${u.nama_unit}`}
                         className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0">
                         <Trash2 className="w-3.5 h-3.5" />
@@ -1664,7 +1730,7 @@ export default function PegawaiPage({ user, onBack }) {
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" disabled={kelolaUnit?.sibuk} onClick={() => setKelolaUnit(null)}>Tutup</Button>
+            <Button variant="outline" disabled={kelolaUnit?.sibuk} onClick={() => { setKelolaUnit(null); setSuntingUnit(null); }}>Tutup</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
