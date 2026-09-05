@@ -141,7 +141,11 @@ body {
 .th-x span { flex: 1; text-align: center; font-size: 9px; color: #475569; font-weight: 600; font-variant-numeric: tabular-nums; }
 
 .bar-baris { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 8px; }
-.bar-label { width: 88px; flex-shrink: 0; color: #475569; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* ".bar-label" DIPERLEBAR: label berjenjang membawa jorokan, dan 88px sudah
+   habis oleh jorokannya sendiri sebelum namanya sempat terbaca. */
+.bar-label { width: 132px; flex-shrink: 0; color: #475569; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-label.anak { color: #64748b; }
+.bar-cabang { color: #cbd5e1; margin-right: 2px; }
 .bar-jalur { flex: 1; height: 13px; background: #f1f5f9; border-radius: 3px; overflow: hidden; }
 .bar-isi { height: 100%; border-radius: 3px; color: #fff; font-size: 7px; font-weight: 700; display: flex; align-items: center; padding: 0 4px; min-width: 16px; }
 .bar-nilai { width: 62px; text-align: right; flex-shrink: 0; color: var(--navy); font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -793,7 +797,12 @@ lipat.addEventListener('click', function () {
   <h4>{{ p.judul }}{% if p.lanjutan %} <span style="font-weight:600;color:#94a3b8;letter-spacing:0;text-transform:none;">(lanjutan)</span>{% endif %}</h4>
   {% for c in p.baris %}
   <div class="bar-baris">
-    <div class="bar-label" title="{{ c.name }}">{{ c.name }}</div>
+    {# Baris berjenjang: anak MENJOROK di bawah induknya. Tanpa jorokan, lima
+       jenjang dalam satu panel terbaca sebagai satu daftar rata yang kebetulan
+       memuat angka berulang — dan hubungan induk-anak, yang justru menjadi
+       alasan panelnya disatukan, hilang sama sekali. #}
+    <div class="bar-label{% if c.depth %} anak{% endif %}" title="{{ c.name }}"
+      {% if c.depth %}style="padding-left:{{ c.depth * 7 }}px"{% endif %}>{% if c.depth %}<span class="bar-cabang">└</span>{% endif %}{{ c.name }}</div>
     <div class="bar-jalur">
       <div class="bar-isi" style="width:{{ c.pct }}%;background:{{ p.warna or c.color }}">{% if p.warna %}{{ c.count }}{% else %}{{ c.pct }}%{% endif %}</div>
     </div>

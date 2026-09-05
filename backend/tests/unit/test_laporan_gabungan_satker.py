@@ -1217,13 +1217,16 @@ def test_jenjang_kategori_TAK_SAH_jatuh_ke_bawaan(dbr):
     yang tampak sah."""
     async def jalan():
         await _seed(dbr, [_keg(1, 5)], _aset("k1", 4))
-        for buruk in ("99", "abc", "", "0", "5"):
+        # "5" TIDAK lagi di daftar ini: Sub-sub Kelompok kini jenjang yang sah.
+        for buruk in ("99", "abc", "", "0", "6"):
             d = await rp._build_satker_report_v2("k1", {"kat_level": buruk})
             assert d["kat_levels"] == [str(rp.KAT_LEVEL_BAWAAN)], buruk
-        # Level 5 sengaja tak ditawarkan: ia setara daftar barang satu per satu.
+        # Kelima jenjang ditawarkan, termasuk Sub-sub Kelompok — permintaan
+        # pemilik. Ia berguna karena barisnya bersarang di bawah induknya,
+        # bukan berdiri sebagai daftar rata sepanjang ribuan baris.
         assert [o["nilai"] for o in
                 (await rp._build_satker_report_v2("k1"))["pilihan_kat_level"]] == [
-            "1", "2", "3", "4"]
+            "1", "2", "3", "4", "5"]
     _jalan(jalan())
 
 
@@ -1378,12 +1381,18 @@ def test_DUA_JENJANG_KATEGORI_menghasilkan_DUA_panel(dbr):
         d = await rp._build_satker_report_v2(
             "k1", {"kat_level": ["1", "3"]})
         assert d["kat_levels"] == ["1", "3"]
+        # SATU panel, bukan dua: permintaan pemilik. Panel terpisah memaksa
+        # pembacanya mencocokkan sendiri baris mana milik baris mana.
         judul = _judul_panel(d, "Per Kategori")
-        assert judul == ["Per Kategori — Golongan", "Per Kategori — Kelompok"], judul
-        # Bagian PER KEGIATAN ikut mendapat kedua panel — kalau tidak, dua
-        # bagian pada satu laporan kembali berbicara dengan cara berbeda.
+        assert judul == ["Per Kategori — Golongan › Kelompok"], judul
         for k in d["analisis_kegiatan"]:
             assert _judul_keg(k, "Per Kategori") == judul, k["nama"]
+        # Barisnya BERSARANG: induk depth 0, anaknya depth 1.
+        dalam = {b["depth"] for b in d["chart_kategori"]}
+        assert dalam == {0, 1}, dalam
+        # Tiap anak mengikuti induknya, bukan terkumpul di akhir.
+        urut = [b["depth"] for b in d["chart_kategori"]]
+        assert urut[0] == 0 and 1 in urut[:3], urut
     _jalan(jalan())
 
 
@@ -1398,16 +1407,16 @@ def test_DUA_JENJANG_LOKASI_menghasilkan_DUA_panel(dbr):
             "k1", {"lok_level": ["GEDUNG", "RUANGAN"]})
         assert d["lok_levels"] == ["GEDUNG", "RUANGAN"]
         judul = _judul_panel(d, "Per Lokasi")
-        assert judul == ["Per Lokasi — Gedung", "Per Lokasi — Ruangan"], judul
+        assert judul == ["Per Lokasi — Gedung › Ruangan"], judul
         for k in d["analisis_kegiatan"]:
             assert _judul_keg(k, "Per Lokasi") == judul, k["nama"]
-        # Isinya benar-benar berbeda, bukan judul yang berganti saja.
-        n = {p["judul"]: sum(len(x["baris"]) for h in d["halaman_analisis"]
-                             for sisi in ("kiri", "kanan") for x in h[sisi]
-                             if x["judul"] == p["judul"])
-             for h in d["halaman_analisis"] for sisi in ("kiri", "kanan")
-             for p in h[sisi] if p["judul"].startswith("Per Lokasi")}
-        assert n["Per Lokasi — Gedung"] < n["Per Lokasi — Ruangan"], n
+        # Gedung di depth 0, ruangannya bersarang di depth 1.
+        gedung = [b for b in d["chart_lokasi"] if b["depth"] == 0]
+        ruang = [b for b in d["chart_lokasi"] if b["depth"] == 1]
+        assert {b["name"] for b in gedung} == {"Menara A", "Menara B"}
+        assert len(ruang) >= 3, ruang
+        # Tiap induk berjumlah sama dengan anak-anaknya.
+        assert sum(b["count"] for b in gedung) == d["total_count"]
     _jalan(jalan())
 
 
@@ -1419,8 +1428,7 @@ def test_urutan_panel_jenjang_dari_TERLUAS_ke_terdalam(dbr):
         d = await rp._build_satker_report_v2(
             "k1", {"kat_level": ["4", "1", "2"]})
         assert _judul_panel(d, "Per Kategori") == [
-            "Per Kategori — Golongan", "Per Kategori — Bidang",
-            "Per Kategori — Sub Kelompok"]
+            "Per Kategori — Golongan › Bidang › Sub Kelompok"]
     _jalan(jalan())
 
 
@@ -1433,3 +1441,21 @@ def test_pemilih_jenjang_menerima_LEBIH_DARI_SATU_di_panel():
     assert 'type="radio"' not in t, "masih ada kotak radio tersisa"
     # Pintasan pilih semua / kosongkan ikut tersedia untuk keduanya.
     assert 'data-pilih="kat_level"' in t and 'data-pilih="lok_level"' in t
+
+
+def test_baris_ANAK_benar_benar_MENJOROK_di_template():
+    """Datanya membawa `depth`, tetapi kalau template tak memakainya, lima
+    jenjang dalam satu panel terbaca sebagai satu daftar RATA yang kebetulan
+    memuat angka berulang — dan hubungan induk-anak, yang justru menjadi
+    alasan panelnya disatukan, hilang sama sekali.
+
+    Mutasi yang mencabut jorokan lolos dari seluruh uji data sebelum
+    pemeriksaan ini ada: datanya tetap benar, hanya tak tergambar."""
+    import re
+    t = re.sub(r"\s+", " ", _teks_template())
+    # Jorokan dihitung dari `depth`, bukan tetapan.
+    assert "c.depth * " in t, "baris anak tak menjorok sama sekali"
+    assert "padding-left" in t
+    # Penanda cabang: jorokan saja tak terbaca pada label yang panjang dan
+    # terpotong ellipsis.
+    assert "bar-cabang" in t, "tak ada penanda cabang"
