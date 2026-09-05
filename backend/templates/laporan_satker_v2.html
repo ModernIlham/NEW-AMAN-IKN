@@ -275,7 +275,13 @@ body {
 .pf-tgl { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 6px; }
 .pf-tgl label { font-size: 8px; color: #64748b; font-weight: 600; }
 .pf-tgl input { font: inherit; font-size: 9.5px; padding: 5px 7px; border: 1px solid #cbd5e1; border-radius: 5px; width: 100%; }
-.pf-kaki { padding: 9px 18px 13px; border-top: 1px solid #eef2f7; background: #f8fafc; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+/* Kaki panel MELEKAT di bawah. Tombol "Terapkan" di bilah atas dihapus atas
+   permintaan pemilik — ia mengulang tombol yang sudah ada di sini. Tetapi
+   sifat yang dijaga tombol itu tetap harus berlaku: pada satker dengan
+   puluhan lokasi panelnya panjang, dan tombol Terapkan yang ikut tergulir
+   memaksa pengguna menggulir balik hanya untuk menekannya. Melekatkannya
+   memenuhi sifat itu dengan SATU tombol, bukan dua. */
+.pf-kaki { position: sticky; bottom: 0; z-index: 5; padding: 9px 18px 13px; border-top: 1px solid #eef2f7; background: #f8fafc; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; box-shadow: 0 -6px 14px rgba(15,23,42,.06); }
 .tbl-pf { font: inherit; font-size: 11px; font-weight: 700; padding: 8px 18px; border-radius: 5px; border: none; cursor: pointer; text-decoration: none; }
 .pf-terapkan { background: var(--navy); color: var(--gold); }
 .pf-reset { background: #fff; color: #475569; border: 1px solid #cbd5e1; }
@@ -297,8 +303,12 @@ body {
     {% else %}
       <span class="lencana netral">{{ total_kegiatan }} kegiatan &middot; {{ total_count }} NUP</span>
     {% endif %}
+    {# "Terapkan Filter" TIDAK diulang di sini. Ia sudah ada di kaki panel
+       filter, tepat di bawah kotak-kotak yang baru saja diisi — di situlah
+       tangan pengguna berada saat ia selesai memilih. Tombol kedua di bilah
+       atas hanya menambah satu keputusan ("yang mana yang benar?") tanpa
+       menambah satu pun kemampuan. #}
     <button type="button" class="tbl-aksi t-lipat" id="lipat-filter" data-testid="tombol-lipat">Sembunyikan Filter</button>
-    <button type="submit" form="form-filter" class="tbl-aksi t-utama" data-testid="bilah-terapkan">Terapkan Filter</button>
     <button type="button" class="tbl-aksi t-garis" onclick="window.print()">Cetak / PDF</button>
   </div>
 </div>
