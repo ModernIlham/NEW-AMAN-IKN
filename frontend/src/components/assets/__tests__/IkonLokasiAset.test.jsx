@@ -19,26 +19,31 @@ const BERKOORDINAT = { id: "a1", koordinat_latitude: "-1.234567",
 const TANPA = { id: "a2", koordinat_latitude: "", koordinat_longitude: "" };
 
 const ikon = (id) => screen.getByTestId(`lokasi-ikon-${id}`);
-// Keterangan (title/aria-label) dibawa PEMBUNGKUS, bukan glyph-nya: pembungkus
-// itulah satuan penandanya — ia memuat latar denah sekaligus glyph koordinat,
-// dan dua nama untuk satu penanda akan disebut dua kali pembaca layar.
+// Keterangan (title/aria-label) dibawa PEMBUNGKUS, bukan gambarnya: pembungkus
+// itulah satuan penandanya, dan dua nama untuk satu penanda akan disebut dua
+// kali pembaca layar.
 const penanda = (id) => screen.getByTestId(`lokasi-penanda-${id}`);
+// Ikonnya digambar sendiri dari potongan lucide supaya tiap bagian bisa
+// diwarnai terpisah; bentuknya karena itu ditagih lewat `data-bentuk`, bukan
+// lewat nama kelas yang dulu disematkan lucide.
+const bagian = (id, nama) =>
+  ikon(id).querySelector(`[data-bagian="${nama}"]`);
 
 it("aset berkoordinat memakai ikon yang BERBEDA, bukan sekadar warna lain", () => {
   const { unmount } = render(<IkonLokasiAset asset={BERKOORDINAT} />);
-  const kelasAda = ikon("a1").getAttribute("class");
+  const bentukAda = ikon("a1").getAttribute("data-bentuk");
   unmount();
   render(<IkonLokasiAset asset={TANPA} />);
-  const kelasKosong = ikon("a2").getAttribute("class");
-  // lucide menyematkan nama ikonnya sebagai kelas (lucide-map-pin-check vs
-  // lucide-map-pin) — itulah buktinya bentuknya memang berganti.
-  expect(kelasAda).toContain("map-pin-check");
-  expect(kelasKosong).not.toContain("map-pin-check");
+  const bentukKosong = ikon("a2").getAttribute("data-bentuk");
+  expect(bentukAda).toContain("cek");
+  expect(bentukKosong).toContain("titik");
+  expect(bentukAda).not.toBe(bentukKosong);
 });
 
 it("aset berkoordinat ditandai hijau", () => {
   render(<IkonLokasiAset asset={BERKOORDINAT} />);
-  expect(ikon("a1").getAttribute("class")).toContain("text-emerald-500");
+  expect(bagian("a1", "koordinat").getAttribute("class"))
+    .toContain("stroke-emerald-500");
 });
 
 it("aset tanpa koordinat SELALU abu-abu, tak bisa dititipi warna lain", () => {
@@ -47,10 +52,10 @@ it("aset tanpa koordinat SELALU abu-abu, tak bisa dititipi warna lain", () => {
   // lagi bisa dititipkan pemanggil — satu-satunya kontras yang boleh ada di
   // sini adalah kontras yang MENANDAI sesuatu.
   render(<IkonLokasiAset asset={TANPA} warnaKosong="text-cyan-500" />);
-  const kelas = ikon("a2").getAttribute("class");
-  expect(kelas).toContain("text-muted-foreground");
-  expect(kelas).not.toContain("text-cyan-500");
-  expect(kelas).not.toContain("text-emerald-500");
+  const kelas = bagian("a2", "koordinat").getAttribute("class");
+  expect(kelas).toContain("stroke-muted-foreground");
+  expect(kelas).not.toContain("cyan");
+  expect(kelas).not.toContain("emerald");
 });
 
 it("keterangannya menyebut koordinatnya dan terbaca pembaca layar", () => {
@@ -103,7 +108,6 @@ it("aset kosong tak melempar", () => {
 // terbaca tanpa bergantung pada yang lain.
 
 const DI_DENAH = { id: "d1", di_denah: true, denah_jalur: "Gedung A / Lt 2 / R201" };
-const penandaEl = (id) => screen.getByTestId(`lokasi-penanda-${id}`);
 
 it.each([
   ["belum keduanya", {}, "tidak", "tidak"],
@@ -113,30 +117,96 @@ it.each([
 ])("keempat keadaan terbaca terpisah: %s", (_n, aset, koord, denah) => {
   render(<IkonLokasiAset asset={{ id: "z", ...aset }} />);
   expect(ikon("z")).toHaveAttribute("data-berkoordinat", koord);
-  expect(penandaEl("z")).toHaveAttribute("data-di-denah", denah);
+  expect(penanda("z")).toHaveAttribute("data-di-denah", denah);
 });
 
-it("latar denah muncul TANPA bergantung pada keadaan koordinat", () => {
+it("alas denah muncul TANPA bergantung pada keadaan koordinat", () => {
   // Inti permintaannya: penanda denah tetap terlihat pada kedua posisi.
-  const kelas = (aset) => {
-    const { container, unmount } = render(<IkonLokasiAset asset={aset} />);
-    const k = container.querySelector('[data-di-denah]').getAttribute("class");
-    unmount();
-    return k;
-  };
-  const tanpaKoord = kelas({ id: "p", di_denah: true });
-  const denganKoord = kelas({ id: "q", di_denah: true,
-    koordinat_latitude: "-1.2", koordinat_longitude: "116.7" });
-  expect(tanpaKoord).toContain("bg-sky-500/15");
-  expect(denganKoord).toContain("bg-sky-500/15");
+  const { unmount } = render(<IkonLokasiAset asset={{ id: "p", di_denah: true }} />);
+  expect(bagian("p", "denah")).toBeTruthy();
+  unmount();
+  render(<IkonLokasiAset asset={{ id: "q", di_denah: true,
+    koordinat_latitude: "-1.2", koordinat_longitude: "116.7" }} />);
+  expect(bagian("q", "denah")).toBeTruthy();
 });
 
-it("latar TIDAK dipakai untuk menandai koordinat", () => {
-  // Kalau latar ikut menyala oleh koordinat, kedua keterangan berhimpit dan
+it("WARNA denah dan warna koordinat berada pada elemen TERPISAH", () => {
+  // Keluhan pemilik atas percobaan pertama: ketika sudah ada denah tetapi
+  // belum ada koordinat, warnanya menjadi SARU. Sebabnya latar biru dan pin
+  // abu-abu bertumpuk pada bidang yang sama, sehingga mata membacanya sebagai
+  // satu penanda setengah menyala alih-alih dua keterangan.
+  //
+  // Yang dijaga: kedua warna hidup pada elemen yang BERBEDA, dan tak ada satu
+  // elemen pun yang menyandang keduanya.
+  render(<IkonLokasiAset asset={{ id: "saru", di_denah: true }} />);
+  const koord = bagian("saru", "koordinat").getAttribute("class");
+  const denah = bagian("saru", "denah").getAttribute("class");
+  expect(koord).toContain("stroke-muted-foreground");
+  expect(denah).toContain("stroke-sky-500");
+  expect(koord).not.toContain("sky");
+  expect(denah).not.toContain("muted-foreground");
+});
+
+it("alas denah TIDAK muncul untuk menandai koordinat", () => {
+  // Kalau alas ikut muncul oleh koordinat, kedua keterangan berhimpit dan
   // tak lagi terbaca terpisah.
   render(<IkonLokasiAset asset={{ id: "r",
     koordinat_latitude: "-1.2", koordinat_longitude: "116.7" }} />);
-  expect(penandaEl("r").getAttribute("class")).not.toContain("bg-sky");
+  expect(bagian("r", "denah")).toBeNull();
+});
+
+it("belum ada keduanya: seluruhnya abu-abu, tanpa alas", () => {
+  // Permintaan pemilik: "ketika belum memiliki semua maka semua menjadi abu."
+  render(<IkonLokasiAset asset={{ id: "kosong" }} />);
+  expect(bagian("kosong", "denah")).toBeNull();
+  expect(bagian("kosong", "koordinat").getAttribute("class"))
+    .toContain("stroke-muted-foreground");
+});
+
+it("centang tetap ada saat sudah di denah, hanya berpindah letak", () => {
+  // Permintaan pemilik: bentuknya berubah saat di denah, "akan tetapi tetap
+  // ada centangnya". Ruang kanan-bawah sudah terpakai alas, jadi centangnya
+  // masuk ke dalam kepala pin.
+  render(<IkonLokasiAset asset={{ id: "c", di_denah: true,
+    koordinat_latitude: "-1.2", koordinat_longitude: "116.7" }} />);
+  expect(ikon("c").getAttribute("data-bentuk")).toBe("ringkas-cek");
+  // Di sini centang MENGGANTIKAN titik, sebab ia berada di dalam kepala.
+  expect(ikon("c").querySelector("circle")).toBeNull();
+});
+
+it("pin MENGERUT saat beralas denah agar tak menembus alasnya", () => {
+  // Pin lebar menjulur sampai dasar kotak; dipakai bersama alas denah, ia
+  // menembusnya. Ditagih lewat path yang BENAR-BENAR digambar.
+  const d = (aset) => {
+    const { unmount } = render(<IkonLokasiAset asset={aset} />);
+    const path = ikon("m").querySelector("path").getAttribute("d");
+    unmount();
+    return path;
+  };
+  const ringkas = d({ id: "m", di_denah: true });
+  const lebar = d({ id: "m" });
+  expect(ringkas).not.toBe(lebar);
+  expect(ringkas.startsWith("M18 8")).toBe(true);
+  expect(lebar.startsWith("M20 10")).toBe(true);
+});
+
+it("penanda bentuk menyebut pin yang BENAR-BENAR digambar", () => {
+  // Bukan sekadar menyatakan ulang `di_denah`: atribut yang dihitung dari
+  // masukan yang sama dengan yang hendak dibuktikannya tak menjaga apa pun.
+  render(<IkonLokasiAset asset={{ id: "n", di_denah: true }} />);
+  const el = ikon("n");
+  expect(el.getAttribute("data-bentuk")).toBe("ringkas-titik");
+  expect(el.querySelector("path").getAttribute("d").startsWith("M18 8")).toBe(true);
+});
+
+it("pin bercentang di LUAR tetap punya titik di kepalanya", () => {
+  // Ditemukan saat memeriksa hasil cetaknya pada 32px: centang sempat
+  // MENGGANTIKAN titik juga di sini, sehingga pinnya tersisa sebagai tapal
+  // kuda — bentuk yang tak lagi terbaca sebagai pin lokasi. `MapPinCheck`
+  // asli membawa keduanya.
+  render(<IkonLokasiAset asset={BERKOORDINAT} />);
+  expect(ikon("a1").getAttribute("data-bentuk")).toBe("lebar-cek");
+  expect(ikon("a1").querySelector("circle")).toBeTruthy();
 });
 
 it("bentuk glyph TIDAK berubah oleh denah", () => {
@@ -153,7 +223,7 @@ it("bentuk glyph TIDAK berubah oleh denah", () => {
 
 it("keterangannya menyebut KEDUA hal sekaligus", () => {
   render(<IkonLokasiAset asset={DI_DENAH} />);
-  const t = penandaEl("d1").getAttribute("aria-label");
+  const t = penanda("d1").getAttribute("aria-label");
   expect(t).toMatch(/belum ada titik koordinat/i);
   expect(t).toMatch(/sudah masuk denah/i);
   expect(t).toContain("Gedung A / Lt 2 / R201");
@@ -163,12 +233,20 @@ it("yang belum di denah pun dinyatakan, bukan didiamkan", () => {
   // Keterangan yang hanya muncul saat sudah masuk denah membuat pembaca tak
   // bisa membedakan "belum" dari "penandanya memang tak ada".
   render(<IkonLokasiAset asset={{ id: "t" }} />);
-  expect(penandaEl("t").getAttribute("aria-label")).toMatch(/belum masuk denah/i);
+  expect(penanda("t").getAttribute("aria-label")).toMatch(/belum masuk denah/i);
 });
 
-it("pembungkusnya selalu ada agar baris tetap rata", () => {
-  // Pembungkus yang hanya muncul saat beralas denah menggeser teks di
-  // sebelahnya, dan baris-baris dalam satu daftar tak lagi lurus.
-  render(<IkonLokasiAset asset={{ id: "u" }} />);
-  expect(penandaEl("u").getAttribute("class")).toContain("p-[2px]");
+it("ukuran kotaknya TETAP di keempat keadaan agar baris rata", () => {
+  // Ikon yang berubah ukuran mengikuti keadaannya menggeser teks di
+  // sebelahnya, dan baris-baris dalam satu daftar tak lagi lurus. Seluruh
+  // bentuk digambar di dalam viewBox yang sama.
+  for (const [i, aset] of [{}, { di_denah: true },
+    { koordinat_latitude: "-1.2", koordinat_longitude: "116.7" }].entries()) {
+    const { unmount } = render(
+      <IkonLokasiAset asset={{ id: `u${i}`, ...aset }} className="w-3 h-3" />);
+    const el = ikon(`u${i}`);
+    expect(el.getAttribute("viewBox")).toBe("0 0 24 24");
+    expect(el.getAttribute("class")).toContain("w-3");
+    unmount();
+  }
 });
