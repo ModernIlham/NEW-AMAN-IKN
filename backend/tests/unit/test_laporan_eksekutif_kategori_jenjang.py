@@ -32,6 +32,7 @@ import pytest
 from mongomock_motor import AsyncMongoMockClient
 
 import kodefikasi_utils as kod
+import laporan_kolom as lkl
 import routes.reports as rp
 
 TPL = os.path.join(os.path.dirname(__file__), "..", "..", "templates",
@@ -477,15 +478,12 @@ def test_KETIGA_halaman_memakai_makro_yang_SAMA():
     assert "dist-mini-bar" not in tpl[tpl.index("{% macro halaman_dist("):]
 
 
-# ── 4. Halaman kategori harus MUAT pada A4 ──────────────────────────────
+# ── 5. Halaman kategori harus MUAT pada A4 ──────────────────────────────
 
-#: Tinggi yang benar-benar tersedia untuk isi satu lembar A4 laporan ini —
-#: 1122px dikurangi kop, kaki, dan padding `.exec-body`.
-JATAH_ISI_SELEMBAR = 969.0
-
-#: Kodefikasi padat: tiga Golongan, banyak cabang, uraian panjang. Halaman
-#: kategori adalah lembar TERPADAT laporan ini — jenjangnya lima dan barisnya
-#: sebanyak jenis barangnya — jadi ia yang menentukan batas jatah sehalaman.
+#: Kodefikasi padat lima jenjang: tiga Golongan, banyak cabang, uraian
+#: panjang. Halaman kategori adalah lembar TERPADAT laporan ini — jenjangnya
+#: lima dan barisnya sebanyak jenis barangnya — jadi ia yang menentukan batas
+#: jatah sehalaman.
 BARANG_PADAT = [
     (f"{gol}{bid:02d}{kel:02d}{sub:02d}{ss:03d}",
      f"Alat {'Laboratorium Pendidikan Kedokteran' if ss % 3 else 'Kantor'} "
@@ -495,64 +493,82 @@ BARANG_PADAT = [
 ]
 
 
-def _tinggi_isi_tiap_lembar(d):
-    """Tinggi `.exec-body` tiap lembar TANPA kekangan tinggi lembarnya.
 
-    Lembar aslinya `min-height: 1122px; overflow: hidden`, sehingga kotaknya
-    SELALU melaporkan 1122px entah isinya muat atau meluber. Kekangan itu
-    dilepas dulu supaya yang terukur adalah tinggi yang sungguh dibutuhkan.
+def _lembar_vs_halaman(d):
+    """(jumlah lembar HTML, jumlah halaman PDF) — DIRENDER ke A4 sungguhan.
+
+    Satu-satunya patokan luber yang dapat dipercaya. Mengukur tinggi
+    `.exec-body` pada lembar yang kekangan tingginya dilepas sempat dipakai dan
+    MENYESATKAN: halaman dua lajur dilaporkan ~200px lebih tinggi daripada yang
+    sungguh dipakainya, sehingga halaman yang muat dinilai meluber.
     """
+    import re
+    import tempfile
+
+    import pypdfium2
     import weasyprint
 
     html = rp._jinja_env().get_template("executive_summary.html").render(
         preview=False, **d)
-    bebas = (html.replace("width: 794px; min-height: 1122px;", "width: 794px;")
-                 .replace("background: #fff; overflow: hidden;",
-                          "background: #fff;")
-                 .replace("size: A4 portrait;", "size: 794px 9000px;"))
-    assert bebas != html, "penanda CSS-nya berubah — pengukurannya jadi palsu"
-    doc = weasyprint.HTML(string=bebas, base_url=os.path.dirname(TPL)).render()
-    tinggi = []
+    # Sampulnya berkelas sendiri (`cover-page`); menghitung `exec-page` saja
+    # membuat selisihnya selalu satu.
+    lembar = len(re.findall(r'<div class="(?:exec|cover)-page"', html))
+    with tempfile.NamedTemporaryFile(suffix=".pdf") as f:
+        weasyprint.HTML(string=html,
+                        base_url=os.path.dirname(TPL)).write_pdf(f.name)
+        return lembar, len(pypdfium2.PdfDocument(f.name))
 
-    def jalan(b):
+
+def _jarak_isi_ke_kaki(d):
+    """Jarak sisa antara bawah tabel dan kaki halaman, tiap lembar bertabel."""
+    import weasyprint
+
+    html = rp._jinja_env().get_template("executive_summary.html").render(
+        preview=False, **d)
+    doc = weasyprint.HTML(string=html, base_url=os.path.dirname(TPL)).render()
+
+    def kelas(b):
         e = b.element
-        if e is not None and "exec-body" in (e.get("class") or "").split():
-            tinggi.append(b.height)
-            return
-        for c in getattr(b, "children", []):
-            jalan(c)
+        return (e.get("class") or "").split() if e is not None else []
 
+    def kumpul(b, out, nama):
+        if nama in kelas(b):
+            out.append(b)
+        for c in getattr(b, "children", []):
+            kumpul(c, out, nama)
+
+    jarak = []
     for p in doc.pages:
-        jalan(p._page_box)
-    return tinggi
+        tbl, kaki = [], []
+        kumpul(p._page_box, tbl, "hier-table")
+        kumpul(p._page_box, kaki, "exec-footer")
+        if tbl and kaki:
+            jarak.append(min(f.position_y for f in kaki)
+                         - max(t.position_y + t.height for t in tbl))
+    return jarak
 
 
 @pytest.mark.parametrize("barang", [BARANG, BARANG_PADAT])
-def test_isi_lembar_kategori_MUAT_pada_A4(dbx, barang):
-    """Jatah baris sehalaman tak boleh melebihi yang sungguh muat.
+def test_lembar_kategori_TAK_meluber_pada_A4(dbx, barang):
+    """Jatah tinggi halaman tak boleh melebihi yang sungguh muat.
 
-    Luberan kecil TIDAK menambah halaman PDF — ia hanya mendorong kaki
-    halaman keluar lembar, dan `overflow: hidden` memotongnya tanpa suara.
-    Yang diukur di sini tinggi isinya sendiri, jadi luberan sekecil apa pun
-    ketahuan.
+    Luberan mendorong kaki halaman keluar lembar dan melahirkan halaman yang
+    isinya satu baris kaki — tanpa satu pun galat, tanpa satu pun tanda di
+    HTML-nya.
     """
-    d = _data(dbx, barang=barang)
-    luber = [t for t in _tinggi_isi_tiap_lembar(d) if t > JATAH_ISI_SELEMBAR]
-    assert not luber, f"isi melebihi jatah selembar: {luber}"
+    lembar, halaman = _lembar_vs_halaman(_data(dbx, barang=barang))
+    assert lembar == halaman, (
+        f"{halaman - lembar} halaman yatim: ada lembar yang meluber")
 
 
 def test_lembar_kategori_TIDAK_menyisakan_separuh_kertas(dbx):
-    """Permintaan pemilik: *"pastikan benar-benar tidak ada batas terbuang
-    sia-sia di ukuran A4 hingga mencapai footer terlebih dahulu."*
+    """Permintaan pemilik: *"semua distribusi tidak sampai ke bawah batasnya
+    sampai benar-benar tersisa sedikit gapnya dengan footer di bawahnya."*
 
-    Jatah yang terlalu kecil tak menimbulkan galat apa pun — ia hanya
-    mencetak dua kali lebih banyak kertas, dan itu persis keluhan yang
-    hendak dijawab.
+    Jatah yang terlalu kecil tak menimbulkan galat apa pun — ia hanya mencetak
+    dua kali lebih banyak kertas, dan itu persis keluhan yang hendak dijawab.
     """
-    d = _data(dbx, barang=BARANG_PADAT)
-    tinggi = _tinggi_isi_tiap_lembar(d)
-    # Lembar ke-2 (indeks 1) selalu halaman kategori pertama: indeks 0 adalah
-    # ringkasan eksekutif. Sampul tak punya `.exec-body`.
-    assert tinggi[1] > JATAH_ISI_SELEMBAR * 0.7, (
-        f"lembar kategori cuma terisi {tinggi[1]:.0f}px dari "
-        f"{JATAH_ISI_SELEMBAR:.0f}px — kertas terbuang")
+    jarak = _jarak_isi_ke_kaki(_data(dbx, barang=BARANG_PADAT))
+    assert jarak, "tak satu lembar bertabel pun terukur"
+    assert jarak[0] < 260, (
+        f"lembar kategori menyisakan {jarak[0]:.0f}px sebelum kaki halaman")

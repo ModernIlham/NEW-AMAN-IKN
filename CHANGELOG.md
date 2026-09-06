@@ -18,6 +18,55 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1032] Halaman distribusi terisi sampai dekat kaki halaman — 2026-09-06
+
+Permintaan pemilik: *"semua distribusi tidak sampai ke bawah batasnya sampai
+benar-benar tersisa sedikit gapnya dengan footer di bawahnya."*
+
+Lanjutan `[#1031]`, yang membuat halamannya tak lagi meluber tetapi menyisakan
+sepertiga kertas kosong pada halaman pengguna. Sebabnya bukan satu kekeliruan
+melainkan empat, semuanya jenis yang tak berbunyi.
+
+**Jatah halaman dihitung dalam satuan yang salah.** Satu angka "baris teks"
+dipakai tiga tabel yang tinggi barisnya berbeda-beda: angka yang pas untuk
+halaman kategori menyisakan sepertiga kertas di halaman pengguna. Kini
+satuannya PIKSEL, dengan geometri yang diukur dari render — baris tabel
+`baris_teks x 9.45 + 3.95`, kepala tabel 13.9, jatah isi selembar 969.5 —
+sehingga ketiga tabel diisi sampai batas fisik yang sama.
+
+**Lebar kolom ditaksir dari setengah ukuran huruf.** Terukur 3.7px per
+karakter, bukan 3.4px: selisih 9% yang cukup membuat halaman terpadat meluber
+48px. Tetapannya kini LEBAR PIKSEL kolomnya, bukan jumlah karakter hasil
+hitungan tangan — piksel dapat dicocokkan langsung dengan hasil render, dan
+`test_lebar_kolom_SESUAI_yang_tergambar` melakukannya.
+
+**Harga pembungkusan per kata dikenakan pada teks yang tak pernah dibungkus.**
+Nama sepanjang 25 huruf pada kolom yang memuat 25 huruf dinilai dua baris,
+seluruh tabel dinilai sepertiga lebih tinggi daripada sebenarnya, dan
+sepertiga kertas ditinggalkan kosong. Kini teks yang muat utuh selalu sebaris;
+harga itu hanya berlaku bagi yang memang membungkus.
+
+**Patokan lubernya sendiri menyesatkan.** Lembar `overflow: hidden` selalu
+melaporkan 1122px entah isinya muat atau tidak, jadi patokan sebelumnya
+merender lembarnya tanpa `min-height` lalu mengukur tinggi isinya — dan itu
+melaporkan halaman DUA LAJUR ~200px lebih tinggi daripada yang sungguh
+dipakainya. Halaman yang sebenarnya muat dinilai meluber, dan jatahnya ditekan
+dua kali lipat tanpa perlu. Yang dipakai sekarang render A4 sungguhan: jumlah
+halaman PDF dibanding jumlah lembar HTML. Dengan patokan itu, cadangan tata
+letak dikalibrasi ulang dengan menyapu lima fixture — 50 melahirkan halaman
+yatim, 70 ke atas tidak, diambil 100.
+
+Hasilnya, jarak isi ke kaki halaman pada lembar sambungan turun dari 300–460px
+menjadi 135–220px, dan laporan uji terpadat turun dari 8 halaman menjadi 7.
+
+Ikut ditutup, ditemukan uji mutasi: tinggi catatan kaki tabel tak diteruskan
+ke perencana halaman. Kapasitasnya benar, rencananya salah, dan tak satu pun
+uji berbunyi — cadangan tata letak kebetulan cukup menyerapnya pada data uji.
+Pada satker dengan banyak NIP tak terdaftar catatannya lebih panjang, dan yang
+kebetulan cukup itu tak lagi cukup.
+
+---
+
 ## [#1031] Distribusi laporan eksekutif: per pengguna berjenjang, tata letak yang tak menyisakan kertas kosong — 2026-09-06
 
 Permintaan pemilik: *"pastikan semua hierarki spasial yang digunakan dari

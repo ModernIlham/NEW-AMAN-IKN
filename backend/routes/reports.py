@@ -5631,6 +5631,20 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
         "count": sum(b["count"] for b in pengguna_hier if b["depth"] == 0),
         "value": sum(b["value"] for b in pengguna_hier if b["depth"] == 0),
     }
+    # Catatan kaki tabel pengguna DIRAKIT DI SINI, bukan di templat: tingginya
+    # ikut dikurangkan dari jatah halaman, dan yang merakitnya harus yang sama
+    # dengan yang mengukurnya. Cacah "NIP belum terdaftar" dulu tercetak di kop
+    # halaman ini; kop kini dipakai bersama ketiga distribusi, dan angka itu
+    # satu-satunya di halaman ini yang menyebut pekerjaan yang masih tersisa.
+    catatan_pengguna = (
+        "Key pengelompokan = NIP/NIK; nama & jabatan diambil dari Master "
+        "Pegawai bila NIP terdaftar. Aset tanpa NIP dikelompokkan sebagai "
+        "\u201cTanpa Pengguna / NIP\u201d. "
+        f"{pengguna_ringkas['jumlah_pengguna']} pengguna ber-NIP"
+        + (f", {pengguna_ringkas['jumlah_tak_terdaftar']} di antaranya belum "
+           "terdaftar di Master Pegawai"
+           if pengguna_ringkas["jumlah_tak_terdaftar"] else "")
+        + ".")
 
     # Status pie chart data (for SVG donut)
     status_pie = []
@@ -5809,7 +5823,9 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
     _teks_nama = lkl.tinggi_dari_teks(lambda b: b.get("name") or "")
     rencana_kat = lkl.rencana_kolom(cat_hier, _teks_nama)
     rencana_lok = lkl.rencana_kolom(loc_hier, _teks_nama)
-    rencana_peg = lkl.rencana_kolom(pengguna_hier, lkl.tinggi_pengguna)
+    rencana_peg = lkl.rencana_kolom(
+        pengguna_hier, lkl.tinggi_pengguna,
+        catatan_px=lkl.tinggi_catatan(catatan_pengguna))
     cat_pages = len(rencana_kat["halaman"])
     loc_pages = len(rencana_lok["halaman"])
     peg_pages = len(rencana_peg["halaman"])
@@ -5921,6 +5937,7 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
         "pengguna_hier": pengguna_hier, "pengguna_total": pengguna_total,
         "pengguna_jenjang_label": pengguna_jenjang_label,
         "pengguna_ringkas": pengguna_ringkas,
+        "catatan_pengguna": catatan_pengguna,
         "status_pie": status_pie,
         "condition_pie": condition_pie,
         "cond_by_cat": cond_by_cat,
