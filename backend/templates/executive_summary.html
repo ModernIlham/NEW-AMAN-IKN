@@ -804,11 +804,17 @@
                 '#10b981', 'hier-hijau', 'legend-hijau', '') }}
 
 {% if preview and pengguna_hier|length > 0 %}<div class="separator">Distribusi Per Pengguna</div>{% endif %}
+{#- Cacah pengguna dan NIP yang belum terdaftar dulu tercetak di kop halaman
+    ini. Kop kini dipakai bersama ketiga distribusi, jadi keterangannya pindah
+    ke catatan kaki tabel — bukan hilang: "berapa NIP yang belum terdaftar"
+    adalah satu-satunya angka di halaman ini yang menyebut pekerjaan yang
+    masih tersisa. -#}
+{% set catatan_pengguna %}Key pengelompokan = NIP/NIK; nama &amp; jabatan diambil dari Master Pegawai bila NIP terdaftar. Aset tanpa NIP dikelompokkan sebagai &ldquo;Tanpa Pengguna / NIP&rdquo;. {{ pengguna_ringkas.jumlah_pengguna }} pengguna ber-NIP{% if pengguna_ringkas.jumlah_tak_terdaftar > 0 %}, {{ pengguna_ringkas.jumlah_tak_terdaftar }} di antaranya belum terdaftar di Master Pegawai{% endif %}.{% endset %}
 {{ halaman_dist(pengguna_hier, rencana_peg, pengguna_total,
                 pengguna_jenjang_label, 'Distribusi Per Pengguna',
                 'Nama Pengguna', 'pengguna', '#0ea5e9', 'hier-langit',
                 'legend-langit',
-                'Key pengelompokan = NIP/NIK; nama & jabatan diambil dari Master Pegawai bila NIP terdaftar. Aset tanpa NIP dikelompokkan sebagai “Tanpa Pengguna / NIP”.') }}
+                catatan_pengguna) }}
 
 {% if preview %}<div class="separator">Analisis Lanjutan, Tim & Cakupan</div>{% endif %}
 

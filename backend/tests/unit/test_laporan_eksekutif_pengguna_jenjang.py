@@ -359,6 +359,28 @@ def test_nama_panjang_TIDAK_dipotong_saat_dirender(dbx):
     assert "&hellip;" not in blok and "\u2026" not in blok
 
 
+def test_cacah_NIP_belum_terdaftar_tetap_tercetak(dbx):
+    """Angka itu dulu ada di kop halaman ini; kopnya kini dipakai bersama.
+
+    "Berapa NIP yang belum terdaftar" adalah satu-satunya angka di halaman ini
+    yang menyebut pekerjaan yang masih tersisa. Menyatukan kop ketiga halaman
+    distribusi mudah sekali membuatnya lenyap tanpa satu pun galat — laporannya
+    tetap tercetak rapi, hanya tak lagi mengabarkan apa yang belum selesai.
+    """
+    d = _data(dbx, tak_terdaftar=3)
+    html = rp._jinja_env().get_template("executive_summary.html").render(
+        preview=False, **d)
+    awal = html.index("<h1>Distribusi Per Pengguna")
+    blok = html[awal:html.index("<h1>Analisis Lanjutan", awal)]
+    assert f"{d['pengguna_ringkas']['jumlah_pengguna']} pengguna ber-NIP" in blok
+    assert d["pengguna_ringkas"]["jumlah_tak_terdaftar"] == 3
+    assert "3 di antaranya belum terdaftar" in blok
+    # Entitas HTML-nya harus tergambar sebagai tanda kutip, bukan tercetak
+    # mentah sebagai "&ldquo;" — `{% set %}` di bawah autoescape mudah sekali
+    # membuatnya ter-escape dua kali.
+    assert "&amp;ldquo;" not in blok
+
+
 # ── 6. Tak ada lembar yang meluber sampai melahirkan halaman kaki ───────
 
 def _lembar_vs_halaman(d):

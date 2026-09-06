@@ -98,6 +98,11 @@ lama membagi rata seolah huruf boleh patah di mana saja, padahal pembungkus
 berhenti di batas kata dan menyisakan seperempat lebar kolom di ujung tiap
 baris.
 
+**Cacah NIP yang belum terdaftar dipindahkan, bukan dihilangkan.** Angka itu
+dulu tercetak di kop halaman ini; kopnya kini dipakai bersama ketiga
+distribusi, jadi keterangannya turun ke catatan kaki tabel. Ia satu-satunya
+angka di halaman itu yang menyebut pekerjaan yang masih tersisa.
+
 Dua sisi tersembunyi yang ikut diperbaiki: satker yang **tak punya satu pun
 jenjang eselon berdata** dulu merender tabel utuh dengan kolom nama KOSONG di
 setiap baris — daftar ratanya lupa mengisi `name`; dan jatah baris sehalaman
