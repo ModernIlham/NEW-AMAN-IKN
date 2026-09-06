@@ -45,6 +45,14 @@ import { labelLevel } from "@/lib/eselonSatker";
 export default function PemilihUnitOrganisasi({
   pilihan, pohon, nilai, onPilih, disabled = false,
   testId = "asset-unit",
+  // Ketiganya dapat ditimpa karena arti "tak memilih" berbeda per layar:
+  // pada form aset ia berarti asetnya tanpa unit, pada Ubah Massal ia berarti
+  // unit seluruh aset terpilih TIDAK disentuh. Kata yang sama untuk dua
+  // maksud itu adalah cara tercepat membuat orang menghapus unit padahal ia
+  // hanya ingin membiarkannya.
+  teksBelumDipilih = "Pilih unit organisasi…",
+  teksKosongkan = "— Kosongkan pilihan —",
+  keterangan = "Memilih satu unit mengisi Eselon I–V aset sekaligus.",
 }) {
   const [buka, setBuka] = useState(false);
   const [cari, setCari] = useState("");
@@ -83,7 +91,7 @@ export default function PemilihUnitOrganisasi({
               )}
             </>
           ) : (
-            <span className="text-muted-foreground">Pilih unit organisasi…</span>
+            <span className="text-muted-foreground">{teksBelumDipilih}</span>
           )}
         </span>
         <ChevronDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
@@ -97,8 +105,7 @@ export default function PemilihUnitOrganisasi({
           <DialogHeader>
             <DialogTitle>Unit Organisasi</DialogTitle>
             <DialogDescription className="text-xs">
-              {semua.length} unit dalam lingkup kegiatan ini. Memilih satu unit
-              mengisi Eselon I&ndash;V aset sekaligus.
+              {semua.length} unit dalam lingkup kegiatan ini. {keterangan}
             </DialogDescription>
           </DialogHeader>
 
@@ -122,7 +129,7 @@ export default function PemilihUnitOrganisasi({
               <button type="button" onClick={() => pilih("")}
                 data-testid={`${testId}-kosongkan`}
                 className="w-full text-left px-3 py-2 text-xs text-muted-foreground hover:bg-muted">
-                &mdash; Kosongkan pilihan &mdash;
+                {teksKosongkan}
               </button>
             )}
             {hasil.length === 0 ? (

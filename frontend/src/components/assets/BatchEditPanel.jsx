@@ -28,6 +28,7 @@ import {
   susunPohonUnit, unitDalamLingkup, perubahanEselonMassal,
 } from "@/lib/pohonUnit";
 import { fieldLevel, labelLevel, levelAkar, levelRingkas } from "@/lib/eselonSatker";
+import PemilihUnitOrganisasi from "./PemilihUnitOrganisasi";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -537,30 +538,35 @@ const BatchEditPanel = memo(function BatchEditPanel({
               sebagai unit yang tak pernah ada di sana. */}
           {unitPilihan.length > 0 ? (
             <div className="space-y-0.5 col-span-2">
-              <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Building2 className="w-2.5 h-2.5" />Unit Organisasi (Eselon I&ndash;V)</label>
-              <select
-                className="w-full h-8 px-2 rounded-md border border-input bg-background text-xs"
-                data-testid="batch-unit-select"
-                value={updates.__unit_id || ""}
-                onChange={(e) => {
-                  const id = e.target.value;
+              <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Building2 className="w-2.5 h-2.5" />Unit Organisasi</label>
+              {/* Pemilih yang SAMA dengan form aset. Sebelumnya `<select>`
+                  bawaan dengan jorokan spasi — yang tak terlihat pada pemilih
+                  Android — dan akhiran "(E1)" yang tersangkut di ujung nama
+                  panjang. Dua pemilih berbeda untuk satu pilihan yang sama
+                  membuat orang belajar dua kali. */}
+              <PemilihUnitOrganisasi
+                testId="batch-unit" pilihan={unitPilihan} pohon={unitPohon}
+                nilai={updates.__unit_id || ""}
+                teksBelumDipilih="— jangan ubah unit organisasi —"
+                teksKosongkan="— Jangan ubah unit organisasi —"
+                keterangan="Memilih satu unit mengisi Eselon I–V SELURUH aset terpilih sekaligus."
+                onPilih={(id) => {
                   const ubah = perubahanEselonMassal(id, unitPohon);
                   setUpdates((prev) => {
-                    const next = { ...prev, __unit_id: id };
+                    const next = { ...prev };
+                    // Membatalkan pilihan harus MENGHAPUS penandanya, bukan
+                    // mengosongkannya: `__unit_id: ""` tetap terhitung sebagai
+                    // perubahan, sehingga "Terapkan ke N aset" menyala padahal
+                    // tak ada satu pun field yang berubah — dan menekannya
+                    // menaikkan versi serta mencatat audit N aset tanpa sebab.
+                    if (id) next.__unit_id = id; else delete next.__unit_id;
                     for (let n = 1; n <= 5; n += 1) {
                       const k = `eselon${n}`;
                       if (id) next[k] = ubah[k]; else delete next[k];
                     }
                     return next;
                   });
-                }}>
-                <option value="">&mdash; jangan ubah &mdash;</option>
-                {unitPilihan.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {"\u00A0".repeat(u.depth * 3)}{u.nama_unit} (E{u.eselon})
-                  </option>
-                ))}
-              </select>
+                }} />
             </div>
           ) : (
             <>
