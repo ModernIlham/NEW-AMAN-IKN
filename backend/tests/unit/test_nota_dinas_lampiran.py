@@ -77,7 +77,7 @@ def test_daftar_pendek_menyebut_daftar_BERIKUT():
 # ── Daftar panjang: pindah ke lampiran ──────────────────────────────────
 
 @pytest.mark.parametrize("n", list(range(1, 31)) + [80, 300])
-def test_tanda_tangan_TIDAK_pernah_pindah_ke_halaman_dua(n):
+def test_tanda_tangan_surat_SELALU_di_halaman_pertama(n):
     """Inti permintaannya, dan sifat yang harus berlaku untuk SETIAP panjang.
 
     Rentangnya disapu rapat, bukan dicicipi beberapa angka: cacat ini hidup
@@ -85,10 +85,55 @@ def test_tanda_tangan_TIDAK_pernah_pindah_ke_halaman_dua(n):
     tetapi tak lagi menyisakan ruang bagi blok tanda tangan. Versi pertama
     uji ini melompat dari 11 langsung ke 30 dan melewatkan seluruh pita itu,
     sehingga mutasi yang mengabaikan tinggi blok tanda tangan lolos utuh.
+
+    Yang ditagih adalah tanda tangan SURATNYA, di halaman pertama bersama
+    narasinya. Lampiran membawa tanda tangannya sendiri — diuji terpisah di
+    bawah — sehingga menagih "tak ada tanda tangan di halaman mana pun
+    selain pertama" akan salah sejak lampiran ikut ditandatangani.
     """
     hal = _halaman(n)
     assert "Budi Santoso" in hal[0], f"{n} baris: tanda tangan bukan di hal. 1"
-    assert not any("Budi Santoso" in t for t in hal[1:]), n
+
+
+@pytest.mark.parametrize("n", [1, 5, 8, 11])
+def test_surat_sehalaman_hanya_bertanda_tangan_SEKALI(n):
+    """Tanpa lampiran tak ada tanda tangan kedua di mana pun."""
+    hal = _halaman(n)
+    assert len(hal) == 1, n
+    assert hal[0].count("Budi Santoso") == 1, n
+
+
+def test_lampiran_ikut_DITANDATANGANI_di_lembar_terakhirnya():
+    """Permintaan pemilik: lampirannya diberi kolom tanda tangan juga.
+
+    Lembar daftar yang tak bertanda tangan hanyalah cetakan tabel — ia dapat
+    ditukar atau ditambahi tanpa meninggalkan jejak, sementara surat induknya
+    tetap sah.
+    """
+    hal = _halaman(80)
+    assert len(hal) > 2
+    assert "Budi Santoso" in hal[-1], "lembar terakhir lampiran tak bertanda tangan"
+
+
+def test_lembar_lampiran_di_TENGAH_tak_bertanda_tangan():
+    """Yang ditandatangani adalah lampirannya, bukan tiap lembarnya.
+
+    Tanda tangan di setiap lembar membuat pembaca tak dapat mengetahui di mana
+    daftarnya sebenarnya berakhir.
+    """
+    hal = _halaman(300)
+    tengah = hal[1:-1]
+    assert tengah, "kasus ujinya tak menghasilkan lembar tengah"
+    assert not any("Budi Santoso" in t for t in tengah)
+
+
+def test_surat_dan_lampiran_menyebut_penanda_tangan_yang_SAMA():
+    # Diambil dari `kpb` beku yang sama, sehingga mustahil menyebut dua
+    # pejabat berbeda pada satu berkas.
+    hal = _halaman(80)
+    for lembar in (hal[0], hal[-1]):
+        assert "Budi Santoso" in lembar
+        assert "Kuasa Pengguna Barang" in lembar
 
 
 def test_daftar_panjang_pindah_ke_lampiran_dan_hilang_dari_badan_surat():
