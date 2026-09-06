@@ -65,8 +65,19 @@ def test_yang_tak_diketahui_jadi_GARIS_ISIAN_bukan_kosong():
 def test_kepala_urut_baku_dan_lengkap():
     kepala = psu.kepala_nota_dinas(hal="Usulan Pengadaan")
     assert [k for k, _ in kepala] == list(psu.URUT_KEPALA_NOTA)
-    assert [k for k, _ in kepala] == ["Yth.", "Dari", "Nomor", "Sifat",
+    assert [k for k, _ in kepala] == ["Yth.", "Dari", "Sifat",
                                       "Lampiran", "Hal", "Tanggal"]
+
+
+def test_nomor_TIDAK_ada_di_blok_kepala():
+    """Nomor dicetak di bawah judul naskah, bukan sebagai baris kepala.
+
+    Mencetaknya di kedua tempat membuat pembaca mengira ada dua penomoran;
+    mencetaknya HANYA di kepala membuat halaman lampiran — yang tak membawa
+    blok kepala — kehilangan rujukan nomor induknya.
+    """
+    assert "Nomor" not in psu.URUT_KEPALA_NOTA
+    assert "Nomor" not in dict(psu.kepala_nota_dinas())
 
 
 def test_baris_yang_belum_terisi_TETAP_dicetak():
@@ -75,18 +86,14 @@ def test_baris_yang_belum_terisi_TETAP_dicetak():
     assert isi["Sifat"] == "Biasa", "sifat baku hilang"
 
 
-def test_belum_bernomor_memakai_garis_isian_bukan_tanda_hubung():
-    # Nomornya MENUNGGU diisi — berbeda maksud dengan bagian yang memang
+def test_tanggal_belum_diisi_memakai_garis_isian_bukan_tanda_hubung():
+    # Tanggalnya MENUNGGU diisi — berbeda maksud dengan bagian yang memang
     # kosong. Pola yang sama dengan BAST belum bernomor.
-    isi = dict(psu.kepala_nota_dinas())
-    assert "..." in isi["Nomor"]
-    assert "..." in isi["Tanggal"]
+    assert "..." in dict(psu.kepala_nota_dinas())["Tanggal"]
 
 
-def test_nomor_dan_tanggal_yang_ada_dipakai_apa_adanya():
-    isi = dict(psu.kepala_nota_dinas(nomor="B-12/PL.01/2026",
-                                     tanggal_iso="2026-09-05"))
-    assert isi["Nomor"] == "B-12/PL.01/2026"
+def test_tanggal_yang_ada_dipakai_apa_adanya():
+    isi = dict(psu.kepala_nota_dinas(tanggal_iso="2026-09-05"))
     assert isi["Tanggal"] == "5 September 2026"
 
 
@@ -161,8 +168,7 @@ def _nota(dbx):
 
 def test_kepala_naskah_dinas_tercetak_di_dokumennya(dbx):
     t = _nota(dbx)
-    for label in ("Yth.", "Dari", "Nomor", "Sifat", "Lampiran", "Hal",
-                  "Tanggal"):
+    for label in ("Yth.", "Dari", "Sifat", "Lampiran", "Hal", "Tanggal"):
         assert label in t, label
 
 
@@ -185,7 +191,13 @@ def test_barang_peringatan_benar_benar_masuk_ke_tabelnya(dbx):
     assert "Tidak ada barang yang memenuhi kriteria" not in t
 
 
-def test_lampiran_menyebut_berkas_saat_ada_daftarnya(dbx):
-    # "1 (satu) berkas" hanya benar bila tabelnya memang terisi — nota kosong
-    # harus menulis "-". Tanpa daftar yang sungguhan, cabang ini tak teruji.
-    assert "1 (satu) berkas" in _nota(dbx)
+def test_daftar_pendek_TIDAK_mengaku_punya_lampiran(dbx):
+    """Satu barang muat di badan surat, jadi tak ada berkas yang dilampirkan.
+
+    Menyebut "1 (satu) berkas" pada naskah yang daftarnya justru tercetak di
+    bawahnya membuat pembaca mencari berkas yang tak pernah ada, dan
+    pengarsip mencatat lampiran yang tak pernah dikirim.
+    """
+    t = _nota(dbx)
+    assert "Lampiran" in t and "1 (satu) berkas" not in t
+    assert "LAMPIRAN NOTA DINAS" not in t

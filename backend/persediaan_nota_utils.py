@@ -35,7 +35,7 @@ FIELD_BEKU = {
 
 _SPEK = {
     "kritis": {
-        "judul": "NOTA DINAS\nUSULAN PENGADAAN PERSEDIAAN (STOK KRITIS/HABIS)",
+        "judul": "NOTA DINAS\nPERMOHONAN USULAN PENGADAAN PERSEDIAAN",
         "hal": "Usulan Pengadaan Persediaan (Stok Kritis/Habis)",
         "berkas": "Nota_Dinas_Stok_Kritis",
         "perihal": "Nota Dinas Usulan Pengadaan Persediaan (Stok Kritis/Habis)",
@@ -45,7 +45,7 @@ _SPEK = {
         "widths": [28, 120, 190, 60, 45, 65],
     },
     "kedaluwarsa": {
-        "judul": "NOTA DINAS\nPERSEDIAAN KEDALUWARSA / SEGERA KEDALUWARSA",
+        "judul": "NOTA DINAS\nPERMOHONAN TINDAK LANJUT PERSEDIAAN KEDALUWARSA",
         "hal": "Persediaan Kedaluwarsa / Segera Kedaluwarsa",
         "berkas": "Nota_Dinas_Kedaluwarsa",
         "perihal": "Nota Dinas Persediaan Kedaluwarsa / Segera Kedaluwarsa",
@@ -148,34 +148,6 @@ def isi_tabel(jenis, rows, fmt_tanggal=None) -> list:
     return out
 
 
-def pengantar(jenis, horizon_hari=30, seleksi=False) -> str:
-    """Paragraf pengantar. `seleksi` menandai daftar yang DIPILIH sebagian.
-
-    Kalimat tambahannya bukan hiasan: tanpa itu pembaca dokumen resmi
-    menyimpulkan daftarnya adalah SELURUH temuan, dan kesimpulan itulah yang
-    ia bawa ke tindak lanjut.
-    """
-    if jenis == "kritis":
-        teks = ("Bersama ini disampaikan daftar barang persediaan yang stoknya "
-                "telah HABIS atau mencapai batas kritis, untuk menjadi "
-                "pertimbangan dalam pengadaan berikutnya.")
-        if seleksi:
-            teks += (" Daftar ini memuat barang yang DIPILIH untuk diusulkan; "
-                     "barang kritis/habis lain sengaja tidak disertakan.")
-        return teks
-    if jenis == "kedaluwarsa":
-        teks = (f"Bersama ini disampaikan daftar persediaan yang telah/akan "
-                f"kedaluwarsa dalam {horizon_hari} hari ke depan, untuk "
-                f"ditindaklanjuti (pemakaian prioritas, pemindahan, atau "
-                f"usulan penghapusan).")
-        if seleksi:
-            teks += (" Daftar ini memuat barang yang DIPILIH untuk "
-                     "ditindaklanjuti; barang kedaluwarsa lain sengaja "
-                     "tidak disertakan.")
-        return teks
-    return ""
-
-
 # Sebanyak ini barang disebut namanya di pesan penanda tangan; sisanya
 # diringkas. Angkanya SENGAJA sama dengan `routes.ttd.MAKS_BARANG_RINGKAS` —
 # diimpor dari sana akan membuat modul murni ini menarik seluruh modul TTD.
@@ -212,3 +184,105 @@ def ringkas_nota(nota) -> dict:
         # boleh ikut menyusut — angka itu bermakna "berapa barang di nota".
         "jumlah_barang": jumlah or len(items),
     }
+
+
+# ── Naskah: kepala lampiran dan narasi ─────────────────────────────────
+
+JUDUL_LAMPIRAN = "LAMPIRAN NOTA DINAS"
+
+
+def label_lampiran(ada_lampiran) -> str:
+    """Isi baris "Lampiran" pada kepala naskah.
+
+    Menyebut "1 (satu) berkas" pada naskah yang daftarnya justru tercetak di
+    badan surat adalah keterangan yang salah: pembaca akan mencari berkas yang
+    tak pernah ada, dan pengarsip akan mencatat lampiran yang tak pernah
+    dikirim. Karena itu nilainya diturunkan dari keadaan naskah yang BENAR-
+    BENAR tersusun, bukan dari ada-tidaknya barang.
+    """
+    return "1 (satu) berkas" if ada_lampiran else "-"
+
+
+def _sebutan_daftar(terlampir) -> str:
+    """"sebagaimana daftar terlampir" vs "sebagaimana daftar berikut".
+
+    Surat yang menulis "terlampir" sementara tabelnya tercetak tepat di
+    bawahnya membuat pembaca mencari halaman yang tak ada.
+    """
+    return "sebagaimana daftar terlampir" if terlampir else \
+        "sebagaimana daftar berikut"
+
+
+def narasi(jenis, tanggal_teks="", jumlah=0, horizon_hari=30, seleksi=False,
+           terlampir=False) -> list:
+    """Paragraf pengantar naskah — daftar string, satu paragraf per elemen.
+
+    Ditulis panjang dan formal dengan sengaja. Nota dinas yang langsung
+    melompat ke tabel tidak menjelaskan MENGAPA pengadaan diperlukan, sehingga
+    pejabat yang menerimanya harus menyimpulkan sendiri urgensinya — dan
+    dokumen yang tak menyatakan alasannya sulit dipertanggungjawabkan ketika
+    kelak diperiksa.
+    """
+    j = str(jenis or "")
+    tgl = str(tanggal_teks or "").strip()
+    per_tanggal = f"per {tgl}" if tgl else "pada saat ini"
+    daftar = _sebutan_daftar(terlampir)
+    n = int(jumlah or 0)
+
+    if j == "kritis":
+        paragraf = [
+            "Dalam rangka menjaga kelancaran pelaksanaan tugas dan fungsi "
+            "serta mendukung tertib administrasi perkantoran dan mutu "
+            "pelayanan pada satuan kerja ini, ketersediaan barang persediaan "
+            "pada gudang perlu senantiasa dipertahankan pada tingkat yang "
+            "memadai.",
+
+            f"Berdasarkan hasil pemantauan atas catatan persediaan "
+            f"{per_tanggal}, terdapat {n} jenis barang yang stoknya telah "
+            f"HABIS atau berada pada/di bawah batas kritis, {daftar}. Apabila "
+            f"kondisi tersebut tidak segera ditindaklanjuti, kegiatan "
+            f"perkantoran sehari-hari serta pelayanan kepada unit kerja lain "
+            f"berpotensi terhambat.",
+
+            "Sehubungan dengan hal tersebut, dimohon kesediaan Saudara untuk "
+            "memproses usulan pengadaan barang persediaan dimaksud sesuai "
+            "ketentuan peraturan perundang-undangan yang berlaku, dengan "
+            "memperhatikan kebutuhan riil serta ketersediaan anggaran pada "
+            "tahun berjalan.",
+        ]
+    elif j == "kedaluwarsa":
+        paragraf = [
+            "Dalam rangka menjaga tertib pengelolaan Barang Milik Negara "
+            "serta mencegah kerugian negara akibat barang persediaan yang "
+            "tidak lagi layak pakai, persediaan yang mendekati masa "
+            "kedaluwarsa perlu diawasi dan ditindaklanjuti secara berkala.",
+
+            f"Berdasarkan hasil pemantauan atas catatan persediaan "
+            f"{per_tanggal}, terdapat {n} catatan barang yang telah "
+            f"kedaluwarsa atau akan kedaluwarsa dalam {horizon_hari} hari ke "
+            f"depan, {daftar}. Barang dalam kondisi tersebut tidak dapat "
+            f"digunakan untuk mendukung pelaksanaan tugas dan berpotensi "
+            f"membebani nilai persediaan apabila dibiarkan.",
+
+            "Sehubungan dengan hal tersebut, dimohon kesediaan Saudara untuk "
+            "menindaklanjuti melalui pemakaian prioritas, pemindahan kepada "
+            "unit kerja yang masih membutuhkan, atau pengusulan penghapusan "
+            "sesuai ketentuan peraturan perundang-undangan yang berlaku.",
+        ]
+    else:
+        return []
+
+    if seleksi:
+        # Dokumen resmi harus menyebut bahwa daftarnya SELEKSI, bukan seluruh
+        # temuan. Tanpa kalimat ini pembaca menyimpulkan tak ada barang lain
+        # yang bermasalah — dan kesimpulan itulah yang ia bawa ke tindak
+        # lanjut.
+        paragraf.append(
+            "Perlu kami sampaikan bahwa daftar dimaksud memuat barang yang "
+            "DIPILIH untuk diusulkan; barang lain yang berada dalam kondisi "
+            "serupa sengaja tidak disertakan pada naskah ini.")
+
+    paragraf.append(
+        "Demikian disampaikan. Atas perhatian dan kerja sama Saudara, "
+        "diucapkan terima kasih.")
+    return paragraf

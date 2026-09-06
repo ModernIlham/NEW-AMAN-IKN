@@ -18,6 +18,69 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1016] Nota Dinas: daftar panjang jadi lampiran, naskahnya utuh sehalaman — 2026-09-06
+
+Umpan balik pemilik atas Nota Dinas yang terbit: tanda tangan terdorong ke
+halaman kedua oleh daftar yang panjang, keterangan lampiran selalu menyebut
+"1 (satu) berkas", nomor surat terselip di tengah blok kepala, narasinya terlalu
+pendek untuk sebuah permohonan, dan tipografinya belum pantas disebut resmi.
+
+**Daftar berpindah menjadi lampiran begitu tanda tangan terdesak.** Naskah dinas
+yang tanda tangannya terpisah dari narasinya terbaca sebagai lembar lepas:
+pembaca halaman terakhir hanya melihat potongan tabel lalu sebuah tanda tangan,
+tanpa tahu ia menandatangani apa. Batasnya karena itu bukan cacah baris
+melainkan akibatnya — dan keputusannya diambil dengan MENGUKUR tinggi flowables
+yang sudah tersusun. Ambang berupa angka baris akan meleset: sepuluh baris
+bernama pendek masih muat, sepuluh baris bernama panjang tidak, dan nota yang
+membawa paragraf seleksi tambahan turun ambangnya sendiri.
+
+Pengukurannya sempat menjawab keliru tanpa pernah gagal. `KeepTogether.wrap()`
+sengaja melaporkan tinggi tak-hingga (0xFFFFFF) agar platypus memindahkannya ke
+frame berikutnya — dan blok tanda tangan justru dibungkus `KeepTogether`.
+Mengukurnya apa adanya membuat setiap nota, sependek apa pun, disimpulkan tak
+muat lalu daftarnya dilempar ke lampiran. Isinya kini diratakan lebih dulu.
+
+**Keterangan lampiran mengikuti keadaan naskah**, bukan ada-tidaknya barang.
+Menyebut "1 (satu) berkas" pada naskah yang daftarnya justru tercetak di badan
+surat membuat pembaca mencari berkas yang tak pernah ada dan pengarsip mencatat
+lampiran yang tak pernah dikirim. Narasinya ikut: "sebagaimana daftar
+terlampir" hanya ditulis bila memang dilampirkan.
+
+**Nomor pindah ke bawah judul** dan hilang dari blok kepala — mencetaknya di
+kedua tempat membuat pembaca mengira ada dua penomoran. Halaman lampiran
+membawa nomor induk, tanggal, dan cacah barisnya sendiri: lembar yang terlepas
+dari berkasnya harus bisa dikembalikan, dan halaman yang hilang harus ketahuan
+hilang.
+
+**Judulnya menjadi "NOTA DINAS PERMOHONAN USULAN PENGADAAN PERSEDIAAN"**, dengan
+padanan "PERMOHONAN TINDAK LANJUT PERSEDIAAN KEDALUWARSA" untuk jenis satunya —
+judul yang sama akan membuat kedua nota tak terbedakan di layar arsip.
+
+**Narasinya ditulis panjang dan formal**, menyebut alasannya lebih dulu:
+kelancaran tugas dan fungsi, tertib administrasi perkantoran, mutu pelayanan,
+lalu temuan stok berikut tanggal pemantauannya, lalu permohonannya. Nota dinas
+yang langsung melompat ke tabel tidak menjelaskan MENGAPA pengadaan diperlukan,
+sehingga pejabat penerima harus menyimpulkan sendiri urgensinya — dan dokumen
+yang tak menyatakan alasannya sulit dipertanggungjawabkan ketika kelak
+diperiksa.
+
+**Prosanya memakai gaya badan surat, bukan gaya keterangan kecil.** Sebelumnya
+narasi tercetak lebih kecil daripada label kepalanya sendiri, sehingga terbaca
+sebagai catatan kaki alih-alih isi naskah — itulah yang membuat tampilannya
+dinilai belum profesional.
+
+`pengantar()` yang lama dihapus, bukan disimpan berdampingan: satu naskah dengan
+dua penyusun kalimat pengantar adalah dua yang harus sepakat selamanya.
+
+Dua mutasi selamat dan memaksa uji diperkuat. Yang pertama mengabaikan tinggi
+blok tanda tangan: uji invariannya melompat dari 11 baris langsung ke 30 dan
+melewatkan seluruh PITA PERBATASAN — daftar yang tabelnya masih muat sendirian
+tetapi tak menyisakan ruang bagi tanda tangan, yakni persis cacat yang
+dilaporkan. Rentangnya kini disapu rapat. Yang kedua mengembalikan narasi ke
+gaya kecil dan hanya mati lewat efek sampingnya pada tata letak; kini ukuran dan
+tebal huruf dibaca LANGSUNG dari PDF yang tercetak, sebab gaya yang benar di
+sumber tetapi tak sampai ke halaman adalah kegagalan yang sama.
+
 ## [#1015] Tidak ada lagi kredensial bawaan yang diiklankan — 2026-09-05
 
 Runtime AMAN memang tidak pernah membuat akun bawaan: administrator pertama
