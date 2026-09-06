@@ -227,36 +227,61 @@ export function jalurEselon(data, maks = 5) {
 }
 
 /**
- * Kelompokkan pilihan unit menurut INDUKNYA, untuk `<optgroup>`.
+ * Baris siap-tampil untuk pemilih unit organisasi.
  *
- * Indentasi dengan spasi tak terlihat pada pemilih bawaan Android — dan lebih
- * dari itu, ia tak menggambarkan apa pun ketika seluruh unit yang boleh dipilih
- * berada pada kedalaman yang SAMA. Itulah yang terjadi pada lingkup kegiatan
- * yang mencatat beberapa Direktorat: induknya tak ikut terpilih, sehingga
- * daftarnya rata dan tak ada hierarki yang tergambar.
+ * Menggantikan pengelompokan `<optgroup>`, yang membuat nama induknya tercetak
+ * DUA KALI berturut-turut: sekali sebagai pilihan yang dapat disentuh, sekali
+ * lagi tepat di bawahnya sebagai judul kelompok yang tidak. Pemiliknya
+ * melaporkan persis itu: *"saat melakukan pemilihan unit organisasi ... saya
+ * gampang kebingungan"*.
  *
- * `<optgroup>` menjawab keduanya: judul kelompoknya menyebut jalur induknya
- * — meski induk itu sendiri tak dapat dipilih — dan pemilih bawaan merendernya
- * sebagai kepala bagian yang tak dapat disentuh. Hierarkinya jadi terbaca
- * tanpa bergantung pada spasi.
+ * Tiga keputusan:
  *
- * `pohon` adalah pohon UTUH, bukan hanya yang boleh dipilih: jalur induk hanya
- * dapat disusun dari sana.
+ * 1. **Indentasi dihitung dari induk yang BENAR-BENAR tampak**, bukan dari
+ *    kedalamannya di pohon. Lingkup kegiatan yang hanya mencatat beberapa
+ *    Direktorat membuat semuanya sedalam yang sama; menjorokkannya menurut
+ *    kedalaman pohon menggambarkan susunan yang tak terlihat di layar.
+ *
+ * 2. **Yang tak tampak diceritakan, bukan dijorokkan.** Induk yang tersaring
+ *    keluar lingkup muncul sebagai keterangan `konteks` di bawah namanya —
+ *    keterangan itulah yang membedakan dua Bagian Tata Usaha bernama sama.
+ *    Induk yang tampak TIDAK diulang di sana: indentasinya sudah menyatakan
+ *    hubungan itu, dan mengulangnya adalah kebingungan yang sedang diperbaiki.
+ *
+ * 3. **Pencarian meratakan.** Begitu daftarnya disaring, induk sebuah baris
+ *    bisa saja ikut tersaring keluar, sehingga jorokannya menunjuk induk yang
+ *    tak ada di layar. Saat mencari, semua baris rata dan `konteks` memuat
+ *    jalur induk LENGKAP. Kata kunci dicocokkan ke seluruh jalur, jadi
+ *    mengetik nama Kedeputian memunculkan Direktorat di bawahnya.
  */
-export function kelompokPilihanUnit(pilihan, pohon) {
+export function barisPilihanUnit(pilihan, pohon, kata = "") {
+  const daftar = (pilihan || []).filter((u) => u && u.id);
+  const tampak = new Set(daftar.map((u) => u.id));
   const byId = new Map((pohon || []).map((u) => [u.id, u]));
-  const keluar = [];
-  let kini = null;
-  for (const u of pilihan || []) {
-    const induk = byId.get(u.parent_id);
-    const label = induk ? induk.jalur : "";
-    if (!kini || kini.label !== label) {
-      kini = { label, opsi: [] };
-      keluar.push(kini);
-    }
-    kini.opsi.push(u);
-  }
-  return keluar;
+  const peta = petaInduk(pohon);
+  const nama = (id) => String(byId.get(id)?.nama_unit || "").trim();
+
+  const baris = daftar.map((u) => {
+    const rantai = rantaiInduk(u.id, peta);
+    const luar = rantai.filter((i) => !tampak.has(i)).map(nama).filter(Boolean);
+    const leluhur = rantai.map(nama).filter(Boolean);
+    return {
+      id: u.id,
+      nama_unit: String(u.nama_unit || ""),
+      eselon: String(u.eselon || ""),
+      tingkat: rantai.filter((i) => tampak.has(i)).length,
+      konteks: luar.join(PEMISAH),
+      jalur: [...leluhur, String(u.nama_unit || "")].join(PEMISAH),
+      jalur_induk: leluhur.join(PEMISAH),
+    };
+  });
+
+  const kunci = String(kata || "").trim().toLowerCase().split(/\s+/)
+    .filter(Boolean);
+  if (!kunci.length) return baris;
+  return baris
+    .filter((b) => kunci.every((k) => b.jalur.toLowerCase().includes(k)))
+    .map((b) => ({ ...b, tingkat: 0, konteks: b.jalur_induk }));
 }
 
 /**
