@@ -34,8 +34,8 @@ import { buatSesiAset, fotoNyasar } from "../../lib/sesiAset";
 import { simpanGpsTerakhir, ambilGpsTerakhir } from "../../lib/gpsCache";
 import {
   susunPohonUnit, unitDalamLingkup, fieldEselon, unitDariField,
-  kelompokPilihanUnit,
 } from "../../lib/pohonUnit";
+import PemilihUnitOrganisasi from "./PemilihUnitOrganisasi";
 import { fieldLevel, labelLevel, levelAkar, levelRingkas } from "../../lib/eselonSatker";
 import { keIndeksFinal } from "../../lib/indeksFotoLuring";
 import { compressImageFile, compressDataUrl, generateThumbnailFromDataUrl, dataUrlBytes } from "../../lib/imageCompression";
@@ -2547,30 +2547,12 @@ const AssetForm = memo(({
               {unitPilihan.length > 0 ? (
                 <div className="space-y-1">
                   <Label className="text-xs">Unit Organisasi</Label>
-                  <select value={unitDariField(formData, unitPohon)}
-                    onChange={(e) => setFormData((p) => ({ ...p, ...fieldEselon(e.target.value, unitPohon) }))}
-                    className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm"
-                    data-testid="asset-unit-select">
-                    <option value="">-- Pilih Unit --</option>
-                    {/* Dikelompokkan menurut INDUKNYA. Indentasi spasi tak
-                        terlihat pada pemilih bawaan Android, dan tak
-                        menggambarkan apa pun ketika seluruh unit yang boleh
-                        dipilih sedalam yang sama — persis keadaan lingkup
-                        kegiatan yang mencatat beberapa Direktorat. Judul
-                        kelompok menyebut jalur induknya, meski induk itu
-                        sendiri tak dapat dipilih. */}
-                    {kelompokPilihanUnit(unitPilihan, unitPohon).map((g, gi) => (
-                      g.label ? (
-                        <optgroup key={gi} label={g.label}>
-                          {g.opsi.map((u) => (
-                            <option key={u.id} value={u.id}>{u.nama_unit} (E{u.eselon})</option>
-                          ))}
-                        </optgroup>
-                      ) : g.opsi.map((u) => (
-                        <option key={u.id} value={u.id}>{u.nama_unit} (E{u.eselon})</option>
-                      ))
-                    ))}
-                  </select>
+                  {/* Pemilih berdialog & bercari — lihat PemilihUnitOrganisasi
+                      untuk sebab `<select>` bawaan ditinggalkan di sini. */}
+                  <PemilihUnitOrganisasi
+                    pilihan={unitPilihan} pohon={unitPohon}
+                    nilai={unitDariField(formData, unitPohon)}
+                    onPilih={(id) => setFormData((p) => ({ ...p, ...fieldEselon(id, unitPohon) }))} />
                   {/* Yang TERCATAT ditampilkan apa adanya, termasuk saat ia tak
                       cocok dengan unit mana pun di master — aset lama dan aset
                       hasil impor kerap begitu, dan menyembunyikannya membuat

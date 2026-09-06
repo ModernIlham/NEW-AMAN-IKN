@@ -1,7 +1,7 @@
 import {
   susunPohonUnit, jalurUnit, ringkasLingkup,
   unitDalamLingkup, fieldEselon, unitDariField, perubahanEselonMassal,
-  unitTerdalam, jalurEselon, kelompokPilihanUnit,
+  unitTerdalam, jalurEselon,
   opsiEselonBertingkat, pilihanEselonUsang,
 } from "../pohonUnit";
 
@@ -191,44 +191,6 @@ test("jalur yang dipotong membuang bagian AWAL dan menandainya", () => {
 test("jalur pendek tak pernah ditandai terpotong", () => {
   expect(jalurEselon({ eselon1: "Setjen" }, 2)).toBe("Setjen");
   expect(jalurEselon({}, 2)).toBe("");
-});
-
-// ── Pengelompokan pilihan unit untuk pemilih bawaan ─────────────────────
-
-test("pilihan dikelompokkan menurut jalur induknya", () => {
-  const pohon = susunPohonUnit([
-    ...POHON,
-    { id: "e4", nama_unit: "Subbag Perlengkapan", eselon: "4", parent_id: "e3" },
-  ]);
-  // Lingkup mencatat Biro Umum: yang boleh dipilih Biro Umum + turunannya.
-  const grup = kelompokPilihanUnit(unitDalamLingkup(pohon, ["e2"]), pohon);
-  expect(grup.map((g) => g.label)).toEqual([
-    "Setjen", "Setjen / Biro Umum", "Setjen / Biro Umum / Bagian RT"]);
-  expect(grup.map((g) => g.opsi.map((u) => u.id))).toEqual([
-    ["e2"], ["e3"], ["e4"]]);
-});
-
-test("beberapa unit seinduk masuk satu kelompok", () => {
-  // Inilah keadaan yang dilaporkan: lingkup mencatat beberapa Direktorat,
-  // seluruhnya sedalam yang sama, sehingga daftarnya rata tanpa hierarki.
-  const pohon = susunPohonUnit(POHON);
-  const grup = kelompokPilihanUnit(unitDalamLingkup(pohon, ["e2", "e2b"]), pohon);
-  const setjen = grup.filter((g) => g.label === "Setjen");
-  expect(setjen).toHaveLength(1);
-  expect(setjen[0].opsi.map((u) => u.nama_unit))
-    .toEqual(["Biro Keuangan", "Biro Umum"]);
-});
-
-test("unit puncak tak berlabel kelompok", () => {
-  const pohon = susunPohonUnit(POHON);
-  const grup = kelompokPilihanUnit(pohon, pohon);
-  expect(grup[0].label).toBe("");
-  expect(grup[0].opsi.map((u) => u.id)).toEqual(["e1"]);
-});
-
-test("daftar kosong menghasilkan kelompok kosong", () => {
-  expect(kelompokPilihanUnit([], [])).toEqual([]);
-  expect(kelompokPilihanUnit(null, null)).toEqual([]);
 });
 
 // ── Opsi filter eselon: bertingkat, dan hanya yang berdata ─────────────

@@ -18,6 +18,61 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1024] Pemilih unit organisasi pada form aset: bercari, berjenjang, terbaca — 2026-09-06
+
+Permintaan pemilik: *"saat melakukan pemilihan unit organisasi di bagian
+inventarisasi aset halaman edit dan tambah saya gampang kebingungan tolong
+perbagus dan rapikan di tampilan pilihannya di mode layar apapun."*
+
+Pemilihnya `<select>` bawaan ber-`<optgroup>`. Empat hal membuatnya
+membingungkan, dan tiga di antaranya memang tak dapat diperbaiki di dalam
+`<select>` — pemilih bawaan tak dapat digayakan:
+
+1. **Nama induk tercetak DUA KALI berturut-turut.** Sekali sebagai pilihan
+   yang dapat disentuh, sekali lagi tepat di bawahnya sebagai judul kelompok
+   yang tidak. Di layar HP keduanya membungkus jadi 2–3 baris, sehingga yang
+   terbaca adalah blok teks sama yang muncul dua kali tanpa keterangan.
+   Terlihat jelas pada tangkapan layar pemiliknya.
+2. **Tak ada pencarian.** Empat puluh unit bernama panjang dan berawalan sama
+   ("Direktorat Peng…") hanya dapat ditemukan dengan menggulir dan membaca
+   satu per satu.
+3. **"(E1)" tersangkut di ujung nama yang membungkus**, jadi penanda
+   jenjangnya mendarat di tengah baris ketiga dan berhenti menjadi penanda.
+4. **Yang sedang terpilih tak terlihat** selagi memilih.
+
+Kini sebuah tombol + dialog: jenjang digambar dengan indentasi dan garis yang
+KITA kendalikan — jadi sama di lebar layar mana pun — jenjangnya menjadi
+lencana "Es. I" di DEPAN nama, ada kotak cari, yang terpilih bertanda centang,
+dan tombolnya menyebut unit terpilih beserta jalur induknya.
+
+Dialog aman di sini: pemilih ini tak pernah dirender di dalam lembar kamera,
+satu-satunya tempat yang mengharuskan elemen bawaan karena portal Radix
+tenggelam di bawah lapisannya.
+
+Susunan barisnya dihitung `barisPilihanUnit` — modul murni, dapat diuji tanpa
+merender. Tiga keputusannya: indentasi dihitung dari induk yang BENAR-BENAR
+tampak (bukan kedalaman pohon, yang menggambarkan susunan tak terlihat ketika
+lingkup kegiatan hanya mencatat beberapa Direktorat); induk yang tak tampak
+DICERITAKAN sebagai keterangan alih-alih dijorokkan; dan pencarian MERATAKAN
+daftarnya, sebab induk sebuah baris bisa ikut tersaring keluar sehingga
+jorokannya menunjuk induk yang tak ada di layar. Kata kunci dicocokkan ke
+seluruh jalur, jadi mengetik nama Kedeputian memunculkan Direktorat di
+bawahnya.
+
+`kelompokPilihanUnit` beserta empat ujinya DIHAPUS: ia hanya melayani bentuk
+`<optgroup>`, dan meninggalkannya berarti menyediakan jalan untuk memasang
+kembali duplikasi yang justru sedang diperbaiki.
+
+Uji: 10 uji modul murni, 14 uji komponen, 3 uji sambungannya ke form aset.
+Enam mutasi dipasang; yang keenam SELAMAT — membuang argumen `id` pada
+`onPilih` lolos dari seluruh berkas uji yang ada, artinya tak ada yang
+membuktikan form aset benar-benar memakai pilihannya. Uji sambungan ditambah,
+dan mutasi itu mati. Tata letaknya diperiksa dengan merender pada lebar 360px
+dan 512px, bukan hanya diukur.
+
+**Belum termasuk**: panel Ubah Massal masih memakai `<select>` ber-indentasi
+spasi dengan akhiran "(E1)" yang sama.
+
 ## [#1023] Daftar panjang di laporan gabungan tak lagi terputus di tengah kolom — 2026-09-06
 
 Permintaan pemilik: *"pada laporan gabungan hasil outputnya untuk per kategori
