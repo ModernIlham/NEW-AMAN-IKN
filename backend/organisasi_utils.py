@@ -33,12 +33,27 @@ Empat keputusan yang membentuk modul ini:
    spasial (`backend/spasial_utils.py`), dan idiomnya sengaja ditiru di sini
    supaya yang sudah mengenal satu langsung mengenal yang lain.
 
-2. **Eselon I dan II WAJIB; III–V tumbuh belakangan.** Satker yang baru berdiri
-   hanya punya dua tingkat, dan memaksanya membuat tingkat kosong palsu hanya
-   untuk memenuhi rantai justru merusak datanya. Tetapi tingkat TIDAK BOLEH
-   dilompati: unit Eselon III wajib berinduk pada Eselon II yang nyata. Inilah
-   bedanya dengan pohon spasial, yang memang boleh melompat karena satker
-   daerah lazim tak punya Blok atau Persil.
+2. **Pohonnya berakar di TINGKAT SATKERNYA, bukan selalu di Eselon I.**
+   Tidak semua satker berpuncak Eselon I. Unit kantor pusat (Direktorat
+   Jenderal, Badan, Inspektorat Jenderal) memang satker Eselon I, tetapi
+   Kantor Wilayah adalah satker Eselon II, dan Kantor Pelayanan Pratama,
+   Lapas, Madrasah Negeri, atau Kantor Pertanahan kabupaten/kota adalah satker
+   Eselon III/IV — semuanya satker mandiri karena memegang DIPA sendiri.
+
+   Eselon I sebuah Lapas adalah Ditjen di kementeriannya, yang BUKAN bagian
+   dari struktur satker itu. Memaksa tiap satker mengisi dari Eselon I
+   membuatnya mengarang dua tingkat yang tak pernah ia miliki, dan angka
+   laporan lalu dikelompokkan menurut unit karangan itu.
+
+   Karena itu `level_akar` menjadi PARAMETER: tingkat yang diduduki satkernya
+   sendiri, dinyatakan sekali di master satker. Unit pada `level_akar` adalah
+   puncak dan tak berinduk; di bawahnya tingkat TIDAK BOLEH dilompati — unit
+   Eselon IV pada satker Eselon III tetap wajib berinduk pada Eselon III yang
+   nyata.
+
+   Membolehkan yatim di tingkat mana pun akan lebih sederhana, dan justru itu
+   yang dihindari: sistem tak lagi dapat membedakan "Eselon III ini puncak
+   karena satkernya memang Lapas" dari "Eselon III ini kehilangan induknya".
 
 3. **Unit yang masih punya anak tak boleh dihapus.** Menghapusnya membuat
    anak-anaknya menggantung tanpa induk — terlihat sebagai unit Eselon III
@@ -60,10 +75,15 @@ LEVEL_ESELON = (
     (5, "ESELON5", "Eselon V"),
 )
 
-#: Eselon I dan II wajib ada sebelum tingkat di bawahnya boleh dipakai.
-LEVEL_WAJIB = (1, 2)
+#: Rentang tingkat yang dikenal sistem. Puncaknya per satker ditentukan
+#: `level_akar`, bukan konstanta ini.
 LEVEL_MIN = 1
 LEVEL_MAKS = 5
+
+#: Tingkat akar BAWAAN: satker kantor pusat yang memang berpuncak Eselon I.
+#: Dipakai sebagai default di seluruh modul supaya satker lama — yang belum
+#: menyatakan tingkatnya — berperilaku persis seperti sebelumnya.
+LEVEL_AKAR_BAWAAN = 1
 
 _PETA_LEVEL = {b[0]: b for b in LEVEL_ESELON}
 _LABEL = {b[0]: b[2] for b in LEVEL_ESELON}
@@ -88,9 +108,31 @@ def kode_baku_level(level) -> str:
     return _KODE_BAKU.get(_int(level), "")
 
 
-def daftar_level() -> list:
-    """Registry terurut dari TERLUAS ke terdalam, untuk pemilih di layar."""
-    return [{"level": o, "kode_baku": k, "label": lb, "wajib": o in LEVEL_WAJIB}
+def level_akar(nilai=None) -> int:
+    """Tingkat puncak pohon sebuah satker — 1 bila tak dinyatakan/ tak sah.
+
+    Jatuh ke Eselon I secara diam-diam adalah pilihan yang disengaja: satker
+    lama tak punya field ini, dan menolak permintaannya karena itu akan
+    mematikan pengelolaan unit di seluruh pemasangan yang sudah berjalan.
+    """
+    v = _int(nilai)
+    return v if v is not None and LEVEL_MIN <= v <= LEVEL_MAKS \
+        else LEVEL_AKAR_BAWAAN
+
+
+def daftar_level(akar=None) -> list:
+    """Registry terurut dari TERLUAS ke terdalam, untuk pemilih di layar.
+
+    `tersedia` menandai tingkat yang masuk akal bagi satker ini — tingkat DI
+    ATAS puncaknya bukan miliknya, melainkan milik instansi induknya, dan
+    menawarkannya di layar adalah mengundang unit karangan.
+
+    `wajib` kini berarti "tingkat puncaknya", bukan lagi Eselon I–II untuk
+    semua: satker Eselon III wajib punya unit Eselon III, bukan Eselon I.
+    """
+    a = level_akar(akar)
+    return [{"level": o, "kode_baku": k, "label": lb,
+             "tersedia": o >= a, "wajib": o == a}
             for o, k, lb in LEVEL_ESELON]
 
 
@@ -121,13 +163,15 @@ def parent_level_sah(level_induk, level_anak) -> bool:
     return i == a - 1
 
 
-def validasi_unit(unit, induk=None):
+def validasi_unit(unit, induk=None, akar=None):
     """(ok, pesan). Periksa satu unit terhadap induknya SEBELUM disimpan.
 
-    `induk` = dokumen unit induk, atau None bila tak ada. Fungsi murni —
-    pemanggil yang mengambilnya dari basis data.
+    `induk` = dokumen unit induk, atau None bila tak ada. `akar` = tingkat
+    yang diduduki satkernya (lihat `level_akar`). Fungsi murni — pemanggil
+    yang mengambil keduanya dari basis data.
     """
     u = unit or {}
+    a = level_akar(akar)
     nama = str(u.get("nama_unit") or "").strip()
     level = _int(u.get("eselon"))
     if not nama:
@@ -135,9 +179,18 @@ def validasi_unit(unit, induk=None):
     if not level_sah(level):
         return False, (f"Eselon '{u.get('eselon')}' tidak sah — "
                        f"harus {LEVEL_MIN}–{LEVEL_MAKS} (Eselon I–V)")
-    if level == LEVEL_MIN:
+    if level < a:
+        # Tingkat di atas puncak satker bukan miliknya melainkan milik
+        # instansi induknya; mencatatnya di sini melahirkan unit karangan
+        # yang lalu dipakai mengelompokkan angka laporan.
+        return False, (
+            f"{label_level(level)} berada DI ATAS tingkat satker ini "
+            f"({label_level(a)}) — unit di atasnya milik instansi induk, "
+            f"bukan bagian struktur satker ini")
+    if level == a:
         if induk:
-            return False, f"{label_level(level)} adalah puncak; ia tak berinduk"
+            return False, (f"{label_level(level)} adalah puncak satker ini; "
+                           f"ia tak berinduk")
         return True, ""
     if not induk:
         return False, (f"{label_level(level)} wajib berinduk pada "
@@ -310,7 +363,8 @@ def validasi_pindah(unit_id, calon_induk_id, semua_unit):
     return True, ""
 
 
-def validasi_perubahan(unit_lama, unit_baru, induk_baru, semua_unit):
+def validasi_perubahan(unit_lama, unit_baru, induk_baru, semua_unit,
+                       akar=None):
     """(ok, pesan). Seluruh aturan penyuntingan satu unit, dalam satu tempat.
 
     Sebelum ada penyuntingan, unit yang salah ketik dan sudah punya anak tak
@@ -334,7 +388,7 @@ def validasi_perubahan(unit_lama, unit_baru, induk_baru, semua_unit):
             and punya_anak(lama.get("id"), semua_unit):
         return False, ("Eselon unit ini tak dapat diubah selama ia masih "
                        "membawahi unit lain — pindahkan dulu yang di bawahnya")
-    ok, pesan = validasi_unit(baru, induk_baru)
+    ok, pesan = validasi_unit(baru, induk_baru, akar=akar)
     if not ok:
         return False, pesan
     return validasi_pindah(lama.get("id"), (induk_baru or {}).get("id"),

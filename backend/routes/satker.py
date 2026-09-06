@@ -45,6 +45,12 @@ FIELD_KOP_SATKER = (
     "catatan_kaki",
     # Kebijakan nilai perolehan pada surat serah terima ("" = ikut global).
     "nilai_dokumen",
+    # Tingkat eselon yang DIDUDUKI satker ini — puncak pohon unit kerjanya.
+    # Tidak semua satker berpuncak Eselon I: Kantor Wilayah adalah satker
+    # Eselon II, sedangkan Kantor Pelayanan Pratama, Lapas, Madrasah Negeri,
+    # atau Kantor Pertanahan kabupaten/kota adalah satker Eselon III/IV —
+    # semuanya mandiri karena memegang DIPA sendiri.
+    "eselon_satker",
 )
 
 
@@ -87,6 +93,10 @@ class SatkerIn(BaseModel):
     # Kebijakan NILAI PEROLEHAN pada surat serah terima satker ini:
     # "" = ikut setelan universal · "tampilkan" · "sembunyikan".
     nilai_dokumen: str = ""
+    # Tingkat eselon satker ini sendiri (1–5); "" / tak diisi = Eselon I,
+    # perilaku satker lama. Menentukan di tingkat mana pohon unit kerjanya
+    # berakar — lihat organisasi_utils.
+    eselon_satker: str = ""
     # Penanda tangan pilihan SATKER per slot dokumen (slot → id pejabat).
     # Lapis KEDUA dari tiga: pilihan dokumen menang di atasnya, resolusi peran
     # pada Referensi Pejabat tetap jadi jaring terakhir. Rumahnya di sini —

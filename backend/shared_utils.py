@@ -1243,6 +1243,23 @@ async def pengaturan_kop(activity=None, kode_satker=""):
     return gabung_kop(settings, satker) if satker else settings
 
 
+async def eselon_satker(kode_satker: str = "") -> int:
+    """Tingkat eselon yang diduduki satker `kode_satker` — 1 bila tak diatur.
+
+    SATU pembaca untuk seluruh modul. Nilainya menentukan di tingkat mana
+    pohon unit kerja satker itu berakar, dan dua tempat yang membacanya
+    sendiri-sendiri akan melahirkan validasi yang menerima unit lalu layar
+    yang menolak menampilkannya.
+    """
+    from organisasi_utils import level_akar
+    kode = str(kode_satker or "").strip()
+    if not kode:
+        return level_akar(None)
+    doc = await db.satker.find_one({"kode_satker": kode},
+                                   {"_id": 0, "eselon_satker": 1})
+    return level_akar((doc or {}).get("eselon_satker"))
+
+
 async def ambang_kapitalisasi() -> dict:
     """Ambang kapitalisasi PMK 181 EFEKTIF: default digabung override setelan
     admin (dokumen `report_settings {type: "kapitalisasi"}`, field `ambang`).

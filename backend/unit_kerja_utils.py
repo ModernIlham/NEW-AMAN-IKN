@@ -49,19 +49,27 @@ def opsi_bertingkat(units, pilihan):
     return hasil
 
 
-def unit_dari_pegawai(pegawai_list):
+def unit_dari_pegawai(pegawai_list, akar=None):
     """Derivasi master unit hierarkis dari data pegawai (eselon1..5). MURNI.
 
     Tiap pegawai menyumbang jalur unitnya: eselon1 "A" → eselon2 "B" (induk
     A) → dst. Kembalikan daftar {nama_unit, eselon, induk_nama} UNIK per
     (eselon, nama, induk) — bahan upsert massal (bangun master 1-klik dari
     data impor).
+
+    `akar` = tingkat yang diduduki satkernya. Penelusuran dimulai DI SANA,
+    bukan selalu di Eselon I: pegawai satker Eselon III mengisi eselon3 dan
+    membiarkan eselon1–2 kosong, sehingga mulai dari 1 membuat jalurnya putus
+    pada langkah pertama dan derivasi menghasilkan NOL unit — tanpa satu pun
+    galat, hanya tombol yang tampak tak berbuat apa-apa.
     """
+    from organisasi_utils import LEVEL_MAKS, level_akar
+    a = level_akar(akar)
     seen = set()
     hasil = []
     for p in (pegawai_list or []):
         induk = ""
-        for n in range(1, 6):
+        for n in range(a, LEVEL_MAKS + 1):
             nama = str((p or {}).get(f"eselon{n}") or "").strip()
             if not nama:
                 break  # jalur putus — level di bawahnya tak sah tanpa induk

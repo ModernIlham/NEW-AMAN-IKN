@@ -14,8 +14,8 @@ from pydantic import BaseModel
 
 from auth_utils import require_admin, require_user, require_admin_satker
 from db import db
-from shared_utils import (kode_satker_user, log_audit, scope_query_aset,
-                          scope_query_field_satker)
+from shared_utils import (eselon_satker, kode_satker_user, log_audit,
+                          scope_query_aset, scope_query_field_satker)
 import organisasi_utils as org
 from unit_kerja_utils import unit_dari_pegawai
 
@@ -48,7 +48,12 @@ async def daftar_unit_kerja(_user: dict = Depends(require_user)):
     items = await db.unit_kerja.find(
         scope_query_field_satker(_user), _PROJ).to_list(5000)
     items.sort(key=lambda u: (str(u.get("eselon")), str(u.get("nama_unit", "")).lower()))
-    return {"items": items, "jumlah": len(items)}
+    # `level_akar` ikut supaya layar tak menebaknya sendiri. Form yang menebak
+    # "puncak = Eselon I" akan menuntut induk untuk unit puncak satker Eselon
+    # III, dan penggunanya terhenti sebelum permintaannya sampai ke server.
+    akar = await eselon_satker(kode_satker_user(_user))
+    return {"items": items, "jumlah": len(items), "level_akar": akar,
+            "level": org.daftar_level(akar)}
 
 
 @unit_kerja_router.post("/unit-kerja")
@@ -63,10 +68,10 @@ async def buat_unit_kerja(payload: UnitIn,
         induk = await db.unit_kerja.find_one({"id": doc["parent_id"]}, _PROJ)
         if not induk:
             raise HTTPException(status_code=400, detail="Induk tidak ditemukan")
-    ok, pesan = org.validasi_unit(doc, induk)
+    kode = kode_satker_user(user)
+    ok, pesan = org.validasi_unit(doc, induk, akar=await eselon_satker(kode))
     if not ok:
         raise HTTPException(status_code=400, detail=pesan)
-    kode = kode_satker_user(user)
     dup = await db.unit_kerja.find_one(
         {"nama_unit": doc["nama_unit"], "eselon": doc["eselon"],
          "parent_id": doc["parent_id"] or None,
@@ -166,7 +171,8 @@ async def ubah_unit_kerja(unit_id: str, payload: UnitUbah,
         scope_query_field_satker(user),
         {"_id": 0, "id": 1, "nama_unit": 1, "eselon": 1,
          "parent_id": 1}).to_list(5000)
-    ok, pesan = org.validasi_perubahan(u, baru, induk, semua)
+    ok, pesan = org.validasi_perubahan(
+        u, baru, induk, semua, akar=await eselon_satker(kode_satker_user(user)))
     if not ok:
         raise HTTPException(status_code=400, detail=pesan)
 
@@ -285,7 +291,7 @@ async def bangun_dari_pegawai(user: dict = Depends(require_admin_satker)):
         scope_query_field_satker(user),
         {"_id": 0, "eselon1": 1, "eselon2": 1, "eselon3": 1,
          "eselon4": 1, "eselon5": 1}).to_list(20000)
-    kandidat = unit_dari_pegawai(pegawai)
+    kandidat = unit_dari_pegawai(pegawai, akar=await eselon_satker(kode))
     ada = await db.unit_kerja.find(
         scope_query_field_satker(user),
         {"_id": 0, "id": 1, "nama_unit": 1, "eselon": 1, "parent_id": 1}
