@@ -18,6 +18,58 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1022] Struktur ringkas pada kegiatan ikut tingkat satkernya — 2026-09-06
+
+Lanjutan `[#1021]`. Pemilik menunjuk blok "ESELON I" pada form Kegiatan:
+*"berarti informasi ini juga perlu disesuaikan dan sesuai satkernya, mengingat
+informasi sebelumnya."*
+
+Bentuk warisan yang dipakai kegiatan hanya punya DUA laci —
+`[{nama, eselon2: […]}]` — dan keduanya dulu berarti Eselon I dan Eselon II
+bagi siapa pun. Bagi satker Eselon III seperti Lapas, keduanya adalah tingkat
+milik instansi induknya: mengisinya berarti mengarang dua tingkat yang tak
+pernah ia punya, sementara strukturnya yang nyata tak punya tempat sama
+sekali.
+
+Maknanya kini RELATIF terhadap puncak satker (`level_ringkas`): laci pertama
+tingkat puncaknya, laci kedua satu di bawahnya. Yang ikut berubah:
+
+- **Layar Kegiatan** — judul blok, tombol tambah, keadaan kosong, penampung
+  tingkat kedua, dan tombol "Ambil dari … di atas" semuanya menyebut tingkat
+  yang sebenarnya. Akarnya DIBACA: dari master unit satker pengguna, lalu
+  ditimpa hasil pencarian satker begitu kode/namanya dikenali — sebab kegiatan
+  boleh dibuat untuk satker yang kodenya diketik, dan tingkat yang benar
+  adalah tingkat satker ITU.
+- **Pencocokan lingkup** (`cocokkan_lingkup_teks`) — dulu selalu mencari di
+  tingkat 1 dan 2. Pada satker Eselon III itu berarti tak pernah menemukan apa
+  pun: seluruh daftarnya masuk `tak_cocok`, dan layar terbaca seperti
+  masternya yang salah, padahal pencariannya yang menengok tingkat yang bukan
+  milik satker itu.
+- **Dua select eselon warisan** pada form aset dan ubah massal — yang muncul
+  hanya saat master unit belum terisi — kini menulis ke kolom `eselon{N}` yang
+  benar. Dipatok `eselon1`/`eselon2`, unit sebuah Lapas tercatat sebagai
+  Eselon I miliknya; pada ubah massal kekeliruan itu ditulis ke seluruh aset
+  terpilih sekaligus. Tak ada pesan galat pada kedua kasus — nilainya
+  tersimpan, hanya di laci yang salah.
+- **`GET /satker-lookup`** ikut menyebutkan `eselon_satker`, dan membacanya
+  SELALU dari master satker: rute itu mencari dokumen kegiatan lebih dulu, dan
+  kegiatan tak menyimpan tingkat satker, sehingga membacanya dari dokumen yang
+  ketemu akan mengembalikan Eselon I untuk setiap satker yang sudah punya
+  kegiatan — yaitu justru yang datanya paling banyak.
+
+**Satker Eselon V tak punya laci kedua.** Laci itu memang tak menunjuk tingkat
+mana pun, dan menawarkan "Eselon VI" adalah mengarang tingkat yang tak ada di
+peraturan mana pun. Satker yang belum menyatakan tingkatnya tetap Eselon I–II,
+persis seperti sebelumnya.
+
+Uji: 6 uji rute/modul backend baru, 9 uji layar Kegiatan, 8 uji dua select
+warisan, 4 uji modul murni. Delapan mutasi dipasang dan seluruhnya mati.
+
+**Belum termasuk** — dua tempat lain yang masih berpatokan Eselon I dan akan
+menyusul: pengelompokan "Tanpa Eselon I" pada ringkasan eksekutif, dan jenjang
+BAWAAN panel analisis unit (`ES_LEVEL_BAWAAN = 2`) yang pada satker Eselon III
+menunjuk tingkat yang tak berisi apa pun.
+
 ## [#1021] Pohon unit kerja berakar di tingkat satkernya, bukan selalu Eselon I — 2026-09-06
 
 Permintaan pemilik: *"tidak semua satker memiliki eselon I sebagai indukan …

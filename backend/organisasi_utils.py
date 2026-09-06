@@ -459,7 +459,23 @@ def cari_unit(nama, level, semua_unit, parent_id=None):
     return cocok[0] if len(cocok) == 1 else None
 
 
-def cocokkan_lingkup_teks(eselon_lama, semua_unit):
+def level_ringkas(akar=None) -> list:
+    """Dua tingkat TERATAS satker — bentuk warisan `[{nama, eselon2: […]}]`.
+
+    Bentuk itu hanya punya dua laci, dan dulu keduanya berarti Eselon I dan
+    Eselon II bagi siapa pun. Bagi satker Eselon III keduanya kosong selamanya
+    sementara strukturnya yang nyata tak punya tempat sama sekali, jadi
+    maknanya kini RELATIF: laci pertama tingkat puncak satkernya, laci kedua
+    satu di bawahnya.
+
+    Satker Eselon V hanya mengembalikan satu tingkat. Laci keduanya memang tak
+    menunjuk tingkat mana pun, dan menawarkan "Eselon VI" adalah mengarang.
+    """
+    a = level_akar(akar)
+    return [a] if a >= LEVEL_MAKS else [a, a + 1]
+
+
+def cocokkan_lingkup_teks(eselon_lama, semua_unit, akar=None):
     """`(ids, tak_cocok)` — ubah lingkup yang DIKETIK menjadi rujukan pohon.
 
     Bentuk lamanya `[{nama, eselon2: [nama, …]}, …]` (kadang `[nama, …]`):
@@ -481,21 +497,31 @@ def cocokkan_lingkup_teks(eselon_lama, semua_unit):
 
     Nama yang tak ditemukan dikembalikan pada `tak_cocok`, tidak dibuang:
     salah ketik pada data lama harus terlihat oleh yang memperbaikinya.
+
+    Kedua tingkatnya RELATIF terhadap puncak satker (`level_ringkas`). Mencari
+    di tingkat 1 dan 2 pada satker Eselon III berarti tak pernah menemukan apa
+    pun — seluruh daftarnya masuk `tak_cocok`, dan layar terbaca seperti
+    masternya yang salah, padahal pencariannya yang menengok tingkat yang
+    memang bukan milik satker itu.
     """
+    tingkat = level_ringkas(akar)
+    lv1 = tingkat[0]
+    lv2 = tingkat[1] if len(tingkat) > 1 else None
     ids, tak_cocok = [], []
     for baris in normalkan_eselon_teks(eselon_lama):
         nama1, anak = baris["nama"], baris["eselon2"]
-        u1 = cari_unit(nama1, 1, semua_unit)
+        u1 = cari_unit(nama1, lv1, semua_unit)
         if not u1:
             tak_cocok.append(nama1)
-            # Eselon I tak dikenal: anaknya pun tak dapat dipastikan induknya.
+            # Puncak tak dikenal: anaknya pun tak dapat dipastikan induknya.
             tak_cocok += anak
             continue
         # Induknya lebih dulu, lalu anak-anaknya — urutan baca yang sama
         # dengan yang diketik.
         ids.append(u1["id"])
         for nama2 in anak:
-            u2 = cari_unit(nama2, 2, semua_unit, parent_id=u1["id"])
+            u2 = (cari_unit(nama2, lv2, semua_unit, parent_id=u1["id"])
+                  if lv2 else None)
             if u2:
                 ids.append(u2["id"])
             else:

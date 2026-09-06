@@ -269,7 +269,9 @@ async def cocokkan_lingkup(payload: LingkupTeksIn,
         scope_query_field_satker(user),
         {"_id": 0, "id": 1, "nama_unit": 1, "eselon": 1,
          "parent_id": 1}).to_list(5000)
-    ids, tak_cocok = org.cocokkan_lingkup_teks(payload.eselon1 or [], semua)
+    ids, tak_cocok = org.cocokkan_lingkup_teks(
+        payload.eselon1 or [], semua,
+        akar=await eselon_satker(kode_satker_user(user)))
     peta_unit = {u["id"]: u for u in semua}
     peta_parent = {u["id"]: u.get("parent_id") for u in semua}
     return {

@@ -36,6 +36,7 @@ import {
   susunPohonUnit, unitDalamLingkup, fieldEselon, unitDariField,
   kelompokPilihanUnit,
 } from "../../lib/pohonUnit";
+import { fieldLevel, labelLevel, levelAkar, levelRingkas } from "../../lib/eselonSatker";
 import { keIndeksFinal } from "../../lib/indeksFotoLuring";
 import { compressImageFile, compressDataUrl, generateThumbnailFromDataUrl, dataUrlBytes } from "../../lib/imageCompression";
 import { reserveDummyNup as reserveDummyNupLib } from "../../lib/dummyNup";
@@ -663,6 +664,10 @@ const AssetForm = memo(({
   // Master unit organisasi, rata berurut pohon. Dipakai pemilih unit di bawah;
   // gagal memuat (mis. luring) hanya membuatnya jatuh ke dua select lama.
   const [unitPohon, setUnitPohon] = useState([]);
+  // Tingkat puncak satker — dua select warisan di bawah menulis ke kolom
+  // eselon KE-BERAPA. Dipatok ke eselon1/eselon2, unit sebuah Lapas tercatat
+  // sebagai Eselon I miliknya, dan laporan mengelompokkan barangnya di sana.
+  const [akarUnit, setAkarUnit] = useState(levelAkar());
 
   useEffect(() => {
     if (!isOpen || unitPohon.length) return undefined;
@@ -670,6 +675,7 @@ const AssetForm = memo(({
     axios.get(`${API}/unit-kerja`).then((r) => {
       if (cancelled) return;
       const arr = Array.isArray(r.data) ? r.data : (r.data?.items || []);
+      setAkarUnit(levelAkar(r.data?.level_akar));
       setUnitPohon(susunPohonUnit(arr));
     }).catch(() => {});
     return () => { cancelled = true; };
@@ -2578,28 +2584,41 @@ const AssetForm = memo(({
                     </p>
                   )}
                 </div>
-              ) : (
+              ) : (() => {
+                /* Jalur WARISAN: dipakai hanya saat master unit belum terisi.
+                   Kedua tingkatnya — dan kolom yang ditulisinya — mengikuti
+                   puncak satker, bukan dipatok Eselon I/II. Struktur ringkas
+                   pada kegiatan menyimpan kedua laci itu di `eselon1`, tetapi
+                   ARTI lacinya relatif; yang tercatat pada asetnya harus
+                   menyebut tingkat yang sebenarnya. */
+                const [lv1, lv2] = levelRingkas(akarUnit);
+                const f1 = fieldLevel(lv1);
+                const f2 = lv2 ? fieldLevel(lv2) : "";
+                return (
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1"><Label className="text-xs">Eselon I</Label>
-                    <select name="eselon1" value={formData.eselon1} onChange={e => { handleInputChange(e); setFormData(p => ({...p, eselon2: ''})); }} className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm" data-testid="asset-eselon1-select">
-                      <option value="">-- Pilih Eselon I --</option>
+                  <div className="space-y-1"><Label className="text-xs">{labelLevel(lv1)}</Label>
+                    <select name={f1} value={formData[f1] || ''} onChange={e => { handleInputChange(e); if (f2) setFormData(p => ({...p, [f2]: ''})); }} className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm" data-testid="asset-eselon1-select">
+                      <option value="">-- Pilih {labelLevel(lv1)} --</option>
                       {(activity?.eselon1 || []).map((es, i) => {
                         const nama = typeof es === 'object' ? es.nama : es;
                         return <option key={i} value={nama}>{nama}</option>;
                       })}
                     </select>
                   </div>
-                  <div className="space-y-1"><Label className="text-xs">Eselon II</Label>
-                    <select name="eselon2" value={formData.eselon2} onChange={handleInputChange} className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm" data-testid="asset-eselon2-select">
-                      <option value="">-- Pilih Eselon II --</option>
+                  {f2 && (
+                  <div className="space-y-1"><Label className="text-xs">{labelLevel(lv2)}</Label>
+                    <select name={f2} value={formData[f2] || ''} onChange={handleInputChange} className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm" data-testid="asset-eselon2-select">
+                      <option value="">-- Pilih {labelLevel(lv2)} --</option>
                       {(() => {
-                        const sel = (activity?.eselon1 || []).find(es => (typeof es === 'object' ? es.nama : es) === formData.eselon1);
+                        const sel = (activity?.eselon1 || []).find(es => (typeof es === 'object' ? es.nama : es) === formData[f1]);
                         return (sel && typeof sel === 'object' ? sel.eselon2 || [] : []).map((e2, i) => <option key={i} value={e2}>{e2}</option>);
                       })()}
                     </select>
                   </div>
+                  )}
                 </div>
-              )}
+                );
+              })()}
               {/* Pengguna — melekat ke Individual/Jabatan/Operasional + BAST */}
               <div className="p-2 bg-muted rounded-lg space-y-2" data-testid="pengguna-section">
                 <div className="flex items-center gap-1.5"><UserRound className="w-3.5 h-3.5 text-muted-foreground" /><Label className="text-xs font-medium">Pengguna</Label></div>
