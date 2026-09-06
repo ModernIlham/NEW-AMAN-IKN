@@ -196,23 +196,45 @@ def test_acuan_batang_daun_TERBESAR_bukan_total_keseluruhan(dbx):
 
 def test_templat_menggambar_batang_hanya_bila_barisnya_membawanya():
     tpl = _teks_tpl()
-    awal = tpl.index("{% if cat_hier|length > 0 %}")
-    halaman = tpl[awal:tpl.index("{% if loc_hier|length > 0 %}")]
-    # Batang lama (`dist-mini-bar`) tak dipakai lagi; yang baru bersyarat.
-    assert "dist-mini-bar" not in halaman, "masih memakai batang daftar rata"
-    assert "{% if c.bar_pct is defined %}" in halaman
-    assert 'class="hier-bar-cell"' in halaman
+    awal = tpl.index("{% macro sel_dist(")
+    makro = tpl[awal:tpl.index("{%- endmacro %}", awal)]
+    assert "dist-mini-bar" not in makro, "masih memakai batang daftar rata"
+    assert "{% if b.bar_pct is defined %}" in makro
+    assert 'class="hier-bar-cell"' in makro
 
 
-def _render_halaman_kategori(d):
-    """HTML halaman kategori saja — dirender, bukan dibaca dari sumber."""
+# Judul <h1> ketiga distribusi, berurutan seperti di templat. Dipakai untuk
+# mengiris satu blok distribusi dari halaman berikutnya — bukan mencari nama
+# jenjang, sebab justru nama itulah yang diuji.
+_JUDUL_DIST = ("Distribusi Kategori Aset", "Distribusi Lokasi Aset",
+               "Distribusi Per Pengguna", "Analisis Lanjutan")
+
+
+def _render_dist(d, judul="Distribusi Kategori Aset"):
+    """HTML satu blok distribusi — DIRENDER, bukan dibaca dari sumbernya.
+
+    Irisannya dibatasi judul distribusi berikutnya: uji yang mengiris sampai
+    akhir berkas ikut menangkap halaman lain, lalu lulus/gagal karena baris
+    yang bukan urusannya.
+    """
     import os
     from jinja2 import Environment, FileSystemLoader
     env = Environment(loader=FileSystemLoader(
         os.path.join(os.path.dirname(__file__), "..", "..", "templates")))
     html = env.get_template("executive_summary.html").render(**d)
-    awal = html.index("Kodefikasi BMN Berjenjang")
-    return html[awal:html.index("</table>", awal)]
+    awal = html.index("<h1>" + judul)
+    # Blok distribusi bisa kosong (tak ada datanya) sehingga judulnya tak
+    # pernah tergambar — maka batasnya judul BERIKUTNYA yang benar-benar ada.
+    sisa = _JUDUL_DIST[_JUDUL_DIST.index(judul) + 1:]
+    for j in sisa:
+        akhir = html.find("<h1>" + j, awal)
+        if akhir >= 0:
+            return html[awal:akhir]
+    return html[awal:]
+
+
+def _render_halaman_kategori(d):
+    return _render_dist(d, "Distribusi Kategori Aset")
 
 
 def test_tiap_baris_berkolom_SAMA_BANYAK(dbx):
@@ -251,9 +273,7 @@ def test_tiap_baris_membawa_kelas_jenjangnya():
     # Kedalaman DIJEPIT: jenjang denah bisa lebih dalam daripada warna yang
     # ditetapkan, dan kelas `d9` yang tak punya aturan membuat barisnya
     # kehilangan warna sama sekali — tanpa satu pun tanda.
-    tpl = _teks_tpl()
-    assert 'class="d{{ [c.depth, 5]|min }}"' in tpl
-    assert 'class="d{{ [l.depth, 5]|min }}"' in tpl
+    assert 'class="d{{ [b.depth, 5]|min }}' in _teks_tpl()
 
 
 def test_tiap_kedalaman_yang_MUNGKIN_punya_warna():
@@ -280,10 +300,11 @@ def test_warna_barisnya_SAMAR_bukan_blok_pekat():
 def test_legenda_dibangun_dari_daftar_jenjang_yang_SAMA(dbx):
     # Legenda yang namanya ditulis tangan adalah legenda yang suatu saat
     # menerangkan jenjang yang sudah tak dipakai. Ia dirakit dari daftar yang
-    # sama dengan yang membentuk barisnya.
+    # sama dengan yang membentuk barisnya — dan kini SATU makro merakit
+    # legenda ketiga halaman, jadi ketiganya mustahil berbeda cara.
     tpl = _teks_tpl()
-    assert "{% for lb in kat_jenjang_label %}" in tpl
-    assert "{% for lb in loc_jenjang_label %}" in tpl
+    assert "{% for lb in jenjang_label %}" in tpl
+    assert tpl.count('<div class="hier-legend') == 1, "legenda tak lagi satu"
     potongan = _render_halaman_kategori(_data(dbx))
     for nama in ("Golongan", "Bidang", "Kelompok", "Sub Kelompok",
                  "Sub-sub Kelompok"):
@@ -292,25 +313,30 @@ def test_legenda_dibangun_dari_daftar_jenjang_yang_SAMA(dbx):
 
 # ── 3. Jatah baris per halaman tak boleh bergeser sendiri ───────────────
 
-def test_jatah_baris_per_halaman_SAMA_di_python_dan_templat():
-    # Kalau berbeda, "Hal 2 dari 3" pada kop berbohong: Python menghitung
-    # halaman dengan satu angka sementara templat memotongnya dengan angka
-    # lain. Tak ada galat, hanya nomor yang keliru.
-    import re
-    m = re.search(r"\{% set hier_per_page = (\d+) %\}", _teks_tpl())
-    assert m, "jatah baris templat tak ditemukan"
-    assert int(m.group(1)) == rp.KAT_HIER_PER_HALAMAN
+def test_templat_TIDAK_memutuskan_paginasinya_sendiri():
+    """Dulu templat memotong daftarnya dengan angkanya sendiri sementara Python
+    menghitung jumlah halaman dengan angka lain. Kalau keduanya berbeda,
+    "Hal 2 dari 3" pada kop berbohong — tanpa galat, hanya nomor yang keliru.
 
-
-def test_halaman_kategori_SATU_kolom(dbx):
-    # Pohon yang dipecah dua kolom menaruh anak di kolom kanan sementara
-    # induknya di kiri, dan hubungan yang justru menjadi alasan pohonnya
-    # dibuat hilang di situ.
+    Kini irisan tiap halaman DATANG dari Python (`rencana.halaman`), dan
+    templat hanya membacanya."""
     tpl = _teks_tpl()
-    awal = tpl.index("{% if cat_hier|length > 0 %}")
-    halaman = tpl[awal:tpl.index("{% if loc_hier|length > 0 %}")]
-    assert "use_two_cols" not in halaman
-    assert "grid-template-columns" not in halaman
+    assert "hier_per_page" not in tpl, "templat masih memotong sendiri"
+    assert "{% for hal in rencana.halaman %}" in tpl
+    assert "{% set awal = hal.awal %}" in tpl
+
+
+def test_kolom_kedua_yang_MULAI_di_tengah_pohon_menyebut_induknya(dbx):
+    """Dua kolom memecah pohonnya: sebuah baris bisa berdiri di kolom kanan
+    sementara induknya ada di kolom kiri. Kepala kolomnya karenanya menyebut
+    jalur induk baris pertamanya — tanpa itu hubungan yang justru menjadi
+    alasan pohonnya dibuat hilang di situ."""
+    tpl = _teks_tpl()
+    assert "jalur_induk(baris, pisah)" in tpl
+    assert 'class="lanjutan-jalur"' in tpl
+    # Fungsinya dititipkan dari Python, bukan dihitung ulang di Jinja.
+    d = _data(dbx)
+    assert callable(d["jalur_induk"])
 
 
 # ── 4. Distribusi LOKASI: denah berjenjang, teks bebas sebagai daun ─────
@@ -439,13 +465,94 @@ def test_tanpa_denah_sama_sekali_daftarnya_RATA(dbx):
     assert {b["depth"] for b in d["loc_hier"]} == {0}
 
 
-def test_halaman_lokasi_memakai_tabel_yang_SAMA_dengan_kategori():
-    # Dua tabel yang menjawab pertanyaan sejenis tak boleh berbeda cara dibaca.
+def test_KETIGA_halaman_memakai_makro_yang_SAMA():
+    """Dua tabel yang menjawab pertanyaan sejenis tak boleh berbeda cara
+    dibaca. Tiga salinan tata letak sudah pernah berbeda isi; satu makro
+    membuatnya mustahil."""
     tpl = _teks_tpl()
-    awal = tpl.index("{% if loc_hier|length > 0 %}")
-    # Dibatasi pada bloknya sendiri: halaman "Per Pengguna" di bawahnya memang
-    # masih daftar rata, dan ia di luar permintaan ini.
-    akhir = tpl.index("{% endfor %}\n{% endif %}", awal)
-    halaman = tpl[awal:akhir]
-    assert 'class="hier-table hier-hijau"' in halaman
-    assert "hier-bar-cell" in halaman and "dist-mini-bar" not in halaman
+    assert tpl.count("{% macro halaman_dist(") == 1
+    for pemanggil in ("halaman_dist(cat_hier", "halaman_dist(loc_hier",
+                      "halaman_dist(pengguna_hier"):
+        assert pemanggil in tpl, pemanggil
+    assert "dist-mini-bar" not in tpl[tpl.index("{% macro halaman_dist("):]
+
+
+# ── 4. Halaman kategori harus MUAT pada A4 ──────────────────────────────
+
+#: Tinggi yang benar-benar tersedia untuk isi satu lembar A4 laporan ini —
+#: 1122px dikurangi kop, kaki, dan padding `.exec-body`.
+JATAH_ISI_SELEMBAR = 969.0
+
+#: Kodefikasi padat: tiga Golongan, banyak cabang, uraian panjang. Halaman
+#: kategori adalah lembar TERPADAT laporan ini — jenjangnya lima dan barisnya
+#: sebanyak jenis barangnya — jadi ia yang menentukan batas jatah sehalaman.
+BARANG_PADAT = [
+    (f"{gol}{bid:02d}{kel:02d}{sub:02d}{ss:03d}",
+     f"Alat {'Laboratorium Pendidikan Kedokteran' if ss % 3 else 'Kantor'} "
+     f"Lainnya {gol}{bid}{kel}{sub}{ss}", 1)
+    for gol in (3, 5, 6) for bid in (1, 5) for kel in (1, 2)
+    for sub in (1, 2, 3) for ss in (1, 2, 3)
+]
+
+
+def _tinggi_isi_tiap_lembar(d):
+    """Tinggi `.exec-body` tiap lembar TANPA kekangan tinggi lembarnya.
+
+    Lembar aslinya `min-height: 1122px; overflow: hidden`, sehingga kotaknya
+    SELALU melaporkan 1122px entah isinya muat atau meluber. Kekangan itu
+    dilepas dulu supaya yang terukur adalah tinggi yang sungguh dibutuhkan.
+    """
+    import weasyprint
+
+    html = rp._jinja_env().get_template("executive_summary.html").render(
+        preview=False, **d)
+    bebas = (html.replace("width: 794px; min-height: 1122px;", "width: 794px;")
+                 .replace("background: #fff; overflow: hidden;",
+                          "background: #fff;")
+                 .replace("size: A4 portrait;", "size: 794px 9000px;"))
+    assert bebas != html, "penanda CSS-nya berubah — pengukurannya jadi palsu"
+    doc = weasyprint.HTML(string=bebas, base_url=os.path.dirname(TPL)).render()
+    tinggi = []
+
+    def jalan(b):
+        e = b.element
+        if e is not None and "exec-body" in (e.get("class") or "").split():
+            tinggi.append(b.height)
+            return
+        for c in getattr(b, "children", []):
+            jalan(c)
+
+    for p in doc.pages:
+        jalan(p._page_box)
+    return tinggi
+
+
+@pytest.mark.parametrize("barang", [BARANG, BARANG_PADAT])
+def test_isi_lembar_kategori_MUAT_pada_A4(dbx, barang):
+    """Jatah baris sehalaman tak boleh melebihi yang sungguh muat.
+
+    Luberan kecil TIDAK menambah halaman PDF — ia hanya mendorong kaki
+    halaman keluar lembar, dan `overflow: hidden` memotongnya tanpa suara.
+    Yang diukur di sini tinggi isinya sendiri, jadi luberan sekecil apa pun
+    ketahuan.
+    """
+    d = _data(dbx, barang=barang)
+    luber = [t for t in _tinggi_isi_tiap_lembar(d) if t > JATAH_ISI_SELEMBAR]
+    assert not luber, f"isi melebihi jatah selembar: {luber}"
+
+
+def test_lembar_kategori_TIDAK_menyisakan_separuh_kertas(dbx):
+    """Permintaan pemilik: *"pastikan benar-benar tidak ada batas terbuang
+    sia-sia di ukuran A4 hingga mencapai footer terlebih dahulu."*
+
+    Jatah yang terlalu kecil tak menimbulkan galat apa pun — ia hanya
+    mencetak dua kali lebih banyak kertas, dan itu persis keluhan yang
+    hendak dijawab.
+    """
+    d = _data(dbx, barang=BARANG_PADAT)
+    tinggi = _tinggi_isi_tiap_lembar(d)
+    # Lembar ke-2 (indeks 1) selalu halaman kategori pertama: indeks 0 adalah
+    # ringkasan eksekutif. Sampul tak punya `.exec-body`.
+    assert tinggi[1] > JATAH_ISI_SELEMBAR * 0.7, (
+        f"lembar kategori cuma terisi {tinggi[1]:.0f}px dari "
+        f"{JATAH_ISI_SELEMBAR:.0f}px — kertas terbuang")

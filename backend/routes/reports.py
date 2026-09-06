@@ -16,6 +16,7 @@ import inventarisasi_stempel as stempel_inv
 import laporan_filter as lfil
 import laporan_tataletak as ltl
 import laporan_jenjang as ljj
+import laporan_kolom as lkl
 import laporan_linimasa as llm
 import kodefikasi_utils as kod
 import organisasi_utils as org
@@ -5328,10 +5329,6 @@ def filter_laporan(
 #: sebaran sampai jenjang terdalam, bukan sebaran yang muat sehalaman.
 KAT_JENJANG_EKSEKUTIF = (1, 2, 3, 4, 5)
 
-#: Baris per halaman kategori berjenjang (satu kolom). Selaras `hier_per_page`
-#: di templat; keduanya bergeser bersama atau nomor halamannya berbohong.
-KAT_HIER_PER_HALAMAN = 62
-
 
 async def _build_executive_summary_data(activity_id: str, detail_fields=None,
                                         with_asset_rows: bool = True, row_slice=None,
@@ -5597,19 +5594,43 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
         _q_peg["kode_satker"] = {"$in": [_ks_keg, "", None]}
     peg_master = {}
     async for _p in db.pegawai.find(
-            _q_peg, {"_id": 0, "nip": 1, "nama": 1, "unit_kerja": 1}):
+            _q_peg, {"_id": 0, "nip": 1, "nama": 1, "unit_kerja": 1,
+                     "jabatan": 1, "eselon1": 1, "eselon2": 1, "eselon3": 1,
+                     "eselon4": 1, "eselon5": 1}):
         nip_p = str(_p.get("nip") or "").strip()
         if nip_p:
             peg_master[nip_p] = _p
     pengguna_rows, pengguna_ringkas = distribusi_pengguna(all_assets, peg_master)
-    peg_max = max((r["count"] for r in pengguna_rows), default=1)
-    pengguna_chart = [{
-        "nama": (r["nama"] or "")[:36], "nip": r["nip"],
-        "unit_kerja": (r["unit_kerja"] or "")[:28],
-        "terdaftar": r["terdaftar"], "tanpa_nip": r["tanpa_nip"],
-        "count": r["count"], "value": r["value"], "value_fmt": fmt(r["value"]),
-        "bar_pct": round(r["count"] / peg_max * 100),
-    } for r in pengguna_rows]
+    # ── Pengguna DIBAGI menurut jalur eselon unit kerjanya ──────────────
+    #
+    # Permintaan pemilik: *"pada bagian unit kerja menjadi pembagi row langsung
+    # mulai dari eselon I-V sesuai satker menginduk kemana."* Kolom "Unit
+    # Kerja" yang berulang di tiap baris memakan lebar tanpa menambah
+    # keterangan — nama Direktorat yang sama tercetak dua puluh kali. Sebagai
+    # PEMBAGI ia tercetak sekali, dan lebarnya kembali ke nama serta jabatan.
+    #
+    # Pembaginya MULAI dari puncak satkernya, bukan dari Eselon I. Jenjang di
+    # ATAS puncak satker sama isinya untuk seluruh baris laporan ini — pada
+    # satker Eselon III, "DITJEN X › KANWIL Y" tercetak sebagai dua baris
+    # pembagi yang memuat semua orang, memakan tinggi halaman tanpa membagi
+    # apa pun. Puncaknya diambil lewat aturan yang sama dengan ringkasan
+    # eksekutif (`level_kelompok_eselon`), termasuk mundurnya ke tingkat
+    # terdangkal yang berdata bila puncak yang dinyatakan ternyata kosong.
+    _peg_berdata = ljj.level_eselon_berdata(pengguna_rows)
+    _peg_akar = ljj.level_kelompok_eselon(_es_akar, _peg_berdata)
+    _peg_levels = [lv for lv in _peg_berdata if lv >= _peg_akar]
+    pengguna_hier = ljj.baris_hierarki_pengguna(
+        [{**r, "nama": (r["nama"] or ""), "jabatan": (r["jabatan"] or "")}
+         for r in pengguna_rows], _peg_levels)
+    for b in pengguna_hier:
+        b["value_fmt"] = fmt(b["value"])
+    ljj.tandai_batang_daun(pengguna_hier)
+    pengguna_jenjang_label = [_LABEL_ESELON.get(lv, str(lv))
+                              for lv in _peg_levels] + ["Pengguna"]
+    pengguna_total = {
+        "count": sum(b["count"] for b in pengguna_hier if b["depth"] == 0),
+        "value": sum(b["value"] for b in pengguna_hier if b["depth"] == 0),
+    }
 
     # Status pie chart data (for SVG donut)
     status_pie = []
@@ -5774,13 +5795,24 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
         })
 
     items_per_page = 140  # 70 per kolom * 2 kolom — selaras template (>=148 meluber)
-    # Halaman kategori SATU kolom: pohon yang dipecah dua kolom menaruh anak di
-    # kolom kanan sementara induknya di kiri, dan hubungan yang justru menjadi
-    # alasan pohonnya dibuat hilang di situ. Angkanya selaras `hier_per_page`
-    # pada template.
-    cat_pages = max(0, -(-len(cat_hier) // KAT_HIER_PER_HALAMAN)) if cat_hier else 0
-    loc_pages = (max(0, -(-len(loc_hier) // KAT_HIER_PER_HALAMAN))
-                 if loc_hier else 0)
+    # ── Rencana tata letak tiap tabel distribusi ────────────────────────
+    #
+    # Permintaan pemilik: *"pastikan benar benar tidak ada batas terbuang sia
+    # sia di ukuran A4 hingga mencapai footer terlebih dahulu di semua
+    # distribusi, agar dibuat smart juga apabila melebihi sudah maka berganti
+    # 2 kolom dengan Barchart yang menghilang agar cukup, baru lanjutkan ke
+    # halaman kedua apabila memang tidak cukup lagi."*
+    #
+    # Dihitung SEKALI di sini, bukan diputuskan template: template yang
+    # memutuskan sendiri jumlah kolomnya akan berbeda pendapat dengan
+    # penghitung halaman, dan "Hal 2 dari 3" pada kop lalu berbohong.
+    _teks_nama = lkl.tinggi_dari_teks(lambda b: b.get("name") or "")
+    rencana_kat = lkl.rencana_kolom(cat_hier, _teks_nama)
+    rencana_lok = lkl.rencana_kolom(loc_hier, _teks_nama)
+    rencana_peg = lkl.rencana_kolom(pengguna_hier, lkl.tinggi_pengguna)
+    cat_pages = len(rencana_kat["halaman"])
+    loc_pages = len(rencana_lok["halaman"])
+    peg_pages = len(rencana_peg["halaman"])
 
     # Split asset rows into pages (max 18 per page to avoid WeasyPrint table-break bug)
     assets_per_page = 18
@@ -5792,7 +5824,7 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
     # halaman lokasi + 1 analisis lanjutan/tim. Data per aset TIDAK ada di
     # template ini (diunduh terpisah via executive-data-pdf) — dulu ikut
     # dihitung sehingga "Halaman 2 dari N" selalu terlalu besar.
-    total_pages = 3 + cat_pages + loc_pages
+    total_pages = 3 + cat_pages + loc_pages + peg_pages
 
     # ── LINIMASA "PROGRES INVENTARISASI" ────────────────────────────────
     #
@@ -5874,6 +5906,11 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
         "gps_coverage_pct": gps_coverage_pct,
         "assets_with_photos": assets_with_photos,
         "assets_with_gps": assets_with_gps,
+        # Fungsi murni ikut dititipkan supaya templat tak menghitung sendiri
+        # jalur induk sebuah baris — aritmetika di dalam Jinja tak dapat diuji.
+        "jalur_induk": lkl.jalur_induk,
+        "rencana_kat": rencana_kat, "rencana_lok": rencana_lok,
+        "rencana_peg": rencana_peg,
         "cat_hier": cat_hier, "cat_hier_total": cat_hier_total,
         "kat_jenjang_label": [kod.LEVEL_LABELS[lv]
                               for lv in KAT_JENJANG_EKSEKUTIF],
@@ -5881,7 +5918,8 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
         "loc_jenjang_label": loc_jenjang_label,
         "year_chart": year_chart,
         "eselon_chart": eselon_chart,
-        "pengguna_chart": pengguna_chart,
+        "pengguna_hier": pengguna_hier, "pengguna_total": pengguna_total,
+        "pengguna_jenjang_label": pengguna_jenjang_label,
         "pengguna_ringkas": pengguna_ringkas,
         "status_pie": status_pie,
         "condition_pie": condition_pie,

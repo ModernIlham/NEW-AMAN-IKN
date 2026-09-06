@@ -55,8 +55,10 @@ def distribusi_pengguna(assets, pegawai_by_nip=None):
       dikumpulkan pada satu grup "Tanpa Pengguna / NIP".
     - Nama tampilan: prioritas nama pegawai dari master (`pegawai_by_nip[nip]`),
       fallback field aset `user`, lalu "(nama tak dicatat)".
-    - `unit_kerja` dari master (bila NIP terdaftar). `terdaftar` = NIP ada di
-      master pegawai.
+    - `unit_kerja`, `jabatan`, dan jalur `eselon1`..`eselon5` dari master (bila
+      NIP terdaftar). `terdaftar` = NIP ada di master pegawai. Jalur eselonnya
+      dibawa apa adanya — pemanggil yang memutuskan jenjang mana dipakai,
+      sebab itu bergantung tingkat satkernya.
     Kembalikan `(rows, ringkas)` — rows terurut nilai desc → count desc → nama;
     ringkas = {jumlah_pengguna, jumlah_tak_terdaftar, ada_tanpa_nip}. MURNI.
     """
@@ -78,10 +80,14 @@ def distribusi_pengguna(assets, pegawai_by_nip=None):
             g = grup[key] = {
                 "nip": nip, "nama": nama,
                 "unit_kerja": str((master or {}).get("unit_kerja") or "").strip(),
+                "jabatan": str((master or {}).get("jabatan") or "").strip(),
                 "terdaftar": bool(master) if nip else False,
                 "tanpa_nip": not nip,
                 "count": 0, "value": 0.0,
             }
+            for _n in range(1, 6):
+                g[f"eselon{_n}"] = str(
+                    (master or {}).get(f"eselon{_n}") or "").strip()
         g["count"] += 1
         try:
             g["value"] += float(a.get("purchase_price", 0) or 0)
