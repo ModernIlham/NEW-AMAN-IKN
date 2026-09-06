@@ -272,6 +272,11 @@
         .hier-table tr.d2 td:first-child { border-left: 3px solid #93c5fd; }
         .hier-table tr.d3 td { background: #ffffff; }
         .hier-table tr.d3 td:first-child { border-left: 3px solid #e2e8f0; }
+        /* Batang jenjang TERDALAM. Warnanya paling muda dalam keluarga tema:
+           ia menerangkan baris paling halus, bukan menariknya ke depan. */
+        .hier-table .hier-bar-cell { width: 84px; padding: 1px 6px 1px 2px; }
+        .hier-table .hier-bar { height: 5px; border-radius: 2px; min-width: 1.5px; background: #93c5fd; }
+        .hier-table tr.d3 .hier-bar { background: #60a5fa; }
         .hier-table .summary-row td { background: #0f172a; color: #fff; font-weight: 700; font-size: 7px; padding: 3px 8px; border: none; }
         .hier-table .summary-row td.r { text-align: right; }
         .hier-legend { display: flex; gap: 12px; font-size: 6px; color: #64748b; margin: -2px 0 4px 2px; }
@@ -623,15 +628,17 @@
             <span><i style="background:#ffffff;border-left:3px solid #e2e8f0"></i>Sub Kelompok</span>
         </div>
         <table class="hier-table">
-            <thead><tr><th>Kategori (Kode &mdash; Uraian)</th><th class="r">NUP</th><th class="r">Nilai (Rp)</th></tr></thead>
+            <thead><tr><th>Kategori (Kode &mdash; Uraian)</th><th class="hier-bar-cell"></th><th class="r">NUP</th><th class="r">Nilai (Rp)</th></tr></thead>
             <tbody>
             {% for c in page_rows %}
-            <tr class="d{{ c.depth }}"><td class="hier-name" style="padding-left:{{ 8 + c.depth * 13 }}px" title="{{ c.jenjang }}: {{ c.name }}">{{ c.name }}</td><td class="val-cell">{{ c.count }}</td><td class="money-cell">{{ '{:,.0f}'.format(c.value).replace(',', '.') }}</td></tr>
+            {# Batang HANYA pada jenjang terdalam. Selnya tetap ada di baris
+               pengelompokan supaya kolomnya lurus — kosong, bukan hilang. #}
+            <tr class="d{{ c.depth }}"><td class="hier-name" style="padding-left:{{ 8 + c.depth * 13 }}px" title="{{ c.jenjang }}: {{ c.name }}">{{ c.name }}</td><td class="hier-bar-cell">{% if c.bar_pct is defined %}<div class="hier-bar" style="width:{{ c.bar_pct }}%"></div>{% endif %}</td><td class="val-cell">{{ c.count }}</td><td class="money-cell">{{ '{:,.0f}'.format(c.value).replace(',', '.') }}</td></tr>
             {% endfor %}
             {% if loop.last %}
             {# Total dari jenjang TERATAS saja — menjumlahkan seluruh baris akan
                menghitung tiap aset empat kali, sebab induk memuat anaknya. #}
-            <tr class="summary-row"><td>Total seluruh aset ({{ cat_hier|selectattr('depth', 'equalto', 0)|list|length }} golongan)</td><td class="r">{{ cat_hier_total.count }}</td><td class="r">{{ '{:,.0f}'.format(cat_hier_total.value).replace(',', '.') }}</td></tr>
+            <tr class="summary-row"><td colspan="2">Total seluruh aset ({{ cat_hier|selectattr('depth', 'equalto', 0)|list|length }} golongan)</td><td class="r">{{ cat_hier_total.count }}</td><td class="r">{{ '{:,.0f}'.format(cat_hier_total.value).replace(',', '.') }}</td></tr>
             {% endif %}
             </tbody>
         </table>

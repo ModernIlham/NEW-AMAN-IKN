@@ -37,14 +37,26 @@ SAMA dengan laporan gabungan satker (`laporan_jenjang.baris_hierarki_kode`),
 jadi kedua laporan tak pernah membelah pohon yang sama dengan dua cara
 berbeda.
 
-**Batangnya dibuang.** Batang di samping baris berjenjang membandingkan induk
-dengan anaknya — dua besaran yang salah satunya MEMUAT yang lain — sehingga
-panjangnya tak pernah berarti apa pun. Yang menggantikan perannya: jorokan,
-warna baris yang menua ke arah dalam, dan garis kiri yang menajam ke arah
-luar. Keempat warnanya satu keluarga dengan tema biru laporan dan tetap
-terang; pada cetakan hitam-putih jorokan serta garis kirinya tetap terbaca.
-Sebuah legenda menyebut jenjang mana warna mana — tanpa itu warna baris hanya
-terbaca sebagai hiasan.
+**Batang tinggal di jenjang TERDALAM.** Permintaannya datang dua langkah —
+*"setiap pembagian buat tanpa bar disetiap rownya"*, lalu *"untuk barchart
+disetiap data sub sub kelompok jangan dihilangkan"* — dan keduanya sejalan.
+Pada baris PENGELOMPOKAN batang membandingkan induk dengan anaknya, dua
+besaran yang salah satunya MEMUAT yang lain, sehingga panjangnya tak pernah
+berarti apa pun; pada baris TERDALAM ia membandingkan sesama saudara, dan di
+sanalah panjangnya berarti. Acuannya cacah terbesar sesama daun, bukan total
+keseluruhan: dibagi total, seluruh batang menjadi sisa yang tak terbaca begitu
+satu cabang mendominasi.
+
+Selnya TETAP ada di baris pengelompokan — kosong, bukan hilang. Sel yang
+hilang menggeser NUP dan Nilai pada baris itu saja: angka Golongan mendarat di
+kolom batang sementara nilainya di kolom NUP, tabelnya tetap tergambar, hanya
+tiga barisnya berbohong.
+
+Yang menggantikan peran batang di baris pengelompokan: jorokan, warna baris
+yang menua ke arah dalam, dan garis kiri yang menajam ke arah luar. Keempat
+warnanya satu keluarga dengan tema biru laporan dan tetap terang; pada cetakan
+hitam-putih jorokan serta garis kirinya tetap terbaca. Sebuah legenda menyebut
+jenjang mana warna mana — tanpa itu warna baris hanya terbaca sebagai hiasan.
 
 Tiga hal yang dijaga:
 
@@ -62,10 +74,13 @@ Sub-sub Kelompok (10 digit) sengaja TAK ikut: pada satker dengan ribuan NUP ia
 melahirkan satu baris per barang, dan halaman "distribusi" berubah menjadi
 daftar aset.
 
-Uji: 13 uji baru, termasuk keutuhan pohonnya (induk berjumlah persis sama
+Uji: 17 uji baru, termasuk keutuhan pohonnya (induk berjumlah persis sama
 dengan anak-anaknya, cacah maupun nilai) dan penjaga bahwa aset TANPA kode
-tetap terhitung alih-alih lenyap dari distribusinya sendiri. Lima mutasi
-dipasang dan seluruhnya mati. Diperiksa juga dengan merender laporannya ke PDF
+tetap terhitung alih-alih lenyap dari distribusinya sendiri. Delapan mutasi
+dipasang; yang membungkus sel batang dengan `{% if %}` SELAMAT — sumbernya
+tetap memuat kelas itu, jadi seluruh penjaga struktural puas. Uji yang
+merender halamannya lalu mencacah kolom tiap baris ditambahkan, dan mutasi itu
+mati. Diperiksa juga dengan merender laporannya ke PDF
 memakai sebaran yang menyerupai data pemiliknya: 32 kategori menjadi 37 baris
 berjenjang pada satu halaman, dan totalnya tetap 216 NUP.
 

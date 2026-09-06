@@ -5536,6 +5536,23 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
                     [kod.LEVEL_LENGTHS[lv] for lv in KAT_JENJANG_EKSEKUTIF],
                     lambda a: kod.normalize_kode(a.get("asset_code")),
                     kode_uraian_exec)]
+    # Batang hanya pada jenjang TERDALAM — permintaan pemilik: *"untuk barchart
+    # disetiap data sub sub kelompok jangan dihilangkan."*
+    #
+    # Di sanalah batang berarti sesuatu: baris terdalam bersaudara, tak ada
+    # yang memuat yang lain, jadi panjangnya benar-benar membandingkan. Pada
+    # baris pengelompokan ia membandingkan induk dengan anaknya — dua besaran
+    # yang salah satunya memuat yang lain — dan itu yang dibuang.
+    #
+    # Acuannya cacah terbesar SESAMA daun, bukan total keseluruhan: dibagi
+    # total, seluruh batang menjadi sisa yang tak terbaca begitu satu cabang
+    # mendominasi.
+    _daun = KAT_JENJANG_EKSEKUTIF and len(KAT_JENJANG_EKSEKUTIF) - 1
+    _daun_maks = max((b["count"] for b in cat_hier if b["depth"] == _daun),
+                     default=0)
+    for b in cat_hier:
+        if b["depth"] == _daun and _daun_maks:
+            b["bar_pct"] = round(b["count"] / _daun_maks * 100)
     # Totalnya dari baris JENJANG TERATAS saja. Menjumlahkan seluruh baris akan
     # menghitung tiap aset empat kali — induk memuat anaknya — dan angka yang
     # empat kali lipat pada baris berjudul "Total" adalah kekeliruan yang

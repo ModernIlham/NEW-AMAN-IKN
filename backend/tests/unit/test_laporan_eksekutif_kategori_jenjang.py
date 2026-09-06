@@ -16,8 +16,12 @@ Tiga sifat dijaga di sini:
 1. **Pohonnya utuh.** Induk berjumlah persis sama dengan anak-anaknya, dan
    totalnya diambil dari jenjang TERATAS saja — menjumlahkan seluruh baris
    menghitung tiap aset empat kali.
-2. **Tak ada batang.** Batang di samping baris berjenjang membandingkan induk
-   dengan anaknya, dua besaran yang salah satunya memuat yang lain.
+2. **Batang HANYA di jenjang terdalam.** Permintaan pemilik dua langkah:
+   *"setiap pembagian buat tanpa bar disetiap rownya"*, lalu *"untuk barchart
+   disetiap data sub sub kelompok jangan dihilangkan."* Keduanya sejalan —
+   pada baris PENGELOMPOKAN batang membandingkan induk dengan anaknya, dua
+   besaran yang salah satunya memuat yang lain; pada baris TERDALAM ia
+   membandingkan sesama saudara, dan di sanalah panjangnya berarti.
 3. **Jatah baris per halaman tak boleh berbeda** antara Python dan templat;
    kalau berbeda, nomor halaman pada kop berbohong.
 """
@@ -162,15 +166,84 @@ def test_kegiatan_tanpa_aset_tak_menghasilkan_baris_hantu(dbx):
     assert d["cat_hier_total"] == {"count": 0, "value": 0}
 
 
-# ── 2. Tanpa batang, berwarna samar per jenjang ─────────────────────────
+# ── 2. Batang hanya di daun, berwarna samar per jenjang ────────────────
 
-def test_halaman_kategori_TAK_lagi_menggambar_batang():
+def test_batang_HANYA_pada_jenjang_terdalam(dbx):
+    d = _data(dbx)
+    daun = len(rp.KAT_JENJANG_EKSEKUTIF) - 1
+    for b in d["cat_hier"]:
+        if b["depth"] == daun:
+            assert "bar_pct" in b, b["name"]
+        else:
+            assert "bar_pct" not in b, f'{b["name"]} — batang di pengelompokan'
+
+
+def test_acuan_batang_daun_TERBESAR_bukan_total_keseluruhan(dbx):
+    # Dibagi total, seluruh batang menjadi sisa yang tak terbaca begitu satu
+    # cabang mendominasi: 35 dari 87 masih terlihat, 35 dari 216 hampir tidak.
+    d = _data(dbx)
+    daun = [b for b in d["cat_hier"]
+            if b["depth"] == len(rp.KAT_JENJANG_EKSEKUTIF) - 1]
+    terbesar = max(daun, key=lambda b: b["count"])
+    assert terbesar["bar_pct"] == 100, terbesar
+    assert all(0 <= b["bar_pct"] <= 100 for b in daun)
+    # Sebanding lurus dengan cacahnya — batang yang tak sebanding tak
+    # membandingkan apa pun.
+    for b in daun:
+        assert b["bar_pct"] == round(b["count"] / terbesar["count"] * 100)
+
+
+def test_templat_menggambar_batang_hanya_bila_barisnya_membawanya():
     tpl = _teks_tpl()
     awal = tpl.index("{% if cat_hier|length > 0 %}")
-    akhir = tpl.index("{% if loc_chart|length > 0 %}")
-    halaman = tpl[awal:akhir]
-    assert "dist-mini-bar" not in halaman, "masih ada batang per baris"
-    assert "bar-cell" not in halaman
+    halaman = tpl[awal:tpl.index("{% if loc_chart|length > 0 %}")]
+    # Batang lama (`dist-mini-bar`) tak dipakai lagi; yang baru bersyarat.
+    assert "dist-mini-bar" not in halaman, "masih memakai batang daftar rata"
+    assert "{% if c.bar_pct is defined %}" in halaman
+    assert 'class="hier-bar-cell"' in halaman
+
+
+def _render_halaman_kategori(d):
+    """HTML halaman kategori saja — dirender, bukan dibaca dari sumber."""
+    import os
+    from jinja2 import Environment, FileSystemLoader
+    env = Environment(loader=FileSystemLoader(
+        os.path.join(os.path.dirname(__file__), "..", "..", "templates")))
+    html = env.get_template("executive_summary.html").render(**d)
+    awal = html.index("Kodefikasi BMN Berjenjang")
+    return html[awal:html.index("</table>", awal)]
+
+
+def test_tiap_baris_berkolom_SAMA_BANYAK(dbx):
+    """Sel batang tetap ada di baris pengelompokan — kosong, bukan hilang.
+
+    Sel yang hilang menggeser NUP dan Nilai pada baris itu saja: angka
+    Golongan mendarat di kolom batang sementara nilainya di kolom NUP. Tabel
+    tetap tergambar, hanya tiga barisnya berbohong.
+
+    Ditemukan uji mutasi: membungkus selnya dengan `{% if %}` lolos dari
+    seluruh penjaga struktural, sebab sumbernya tetap MEMUAT kelas itu.
+    """
+    import re
+    potongan = _render_halaman_kategori(_data(dbx))
+    # Tag `<tr>`-nya ikut ditangkap: kelas baris ada DI SANA, dan baris total
+    # (ber-`colspan`) memang berkolom lebih sedikit dengan sengaja.
+    baris = re.findall(r"<tr[^>]*>.*?</tr>", potongan, re.S)
+    isi = [b for b in baris if "<td" in b and "summary-row" not in b]
+    assert len(isi) > 4, "data ujinya terlalu kecil"
+    jumlah = {b.count("<td") for b in isi}
+    assert jumlah == {4}, f"kolom tak seragam: {sorted(jumlah)}"
+
+
+def test_hanya_baris_TERDALAM_yang_benar_benar_menggambar_batang(dbx):
+    import re
+    potongan = _render_halaman_kategori(_data(dbx))
+    baris = re.findall(r'<tr class="d(\d)">(.*?)</tr>', potongan, re.S)
+    assert baris, "tak ada baris berjenjang yang dirender"
+    daun = str(len(rp.KAT_JENJANG_EKSEKUTIF) - 1)
+    for depth, isi in baris:
+        ada = 'class="hier-bar"' in isi
+        assert ada == (depth == daun), f"depth {depth}: batang={ada}"
 
 
 def test_tiap_baris_membawa_kelas_jenjangnya():
