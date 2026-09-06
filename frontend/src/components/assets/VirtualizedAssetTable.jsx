@@ -3,7 +3,7 @@ import { unitTerdalam, jalurEselon } from "@/lib/pohonUnit";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Camera, Briefcase, Tag, CreditCard, Trash2, History, ClipboardCheck, Lock, Cloud, CloudOff, Check, RotateCcw, Clock, Loader2, AlertTriangle, BookOpen, User, RefreshCcw, ShieldCheck } from "lucide-react";
 import IkonLokasiAset from "./IkonLokasiAset";
-import { punyaKoordinat } from "@/lib/koordinatAset";
+import { diDenah, labelBarisLokasi, punyaKoordinat } from "@/lib/koordinatAset";
 import { sisaGaransi } from "../../lib/garansi";
 import { kelasStatusInventarisasi } from "../../lib/warnaAset";
 import { useSinkronSiman } from "../../lib/simanSync";
@@ -340,7 +340,7 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
                         benar-benar terpenuhi — dan `xl:hidden` menjaga agar ia
                         TIDAK tampil berdampingan dengan pin di kolom Lokasi,
                         yang akan menjadi dua penanda untuk satu keterangan. */}
-                    {punyaKoordinat(a) && (
+                    {(punyaKoordinat(a) || diDenah(a)) && (
                       <IkonLokasiAset asset={a} className="w-3 h-3 xl:hidden" />
                     )}
                   </div>
@@ -382,8 +382,12 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
                 </div>
                 {/* Lokasi - xl. Nama pengguna ditambah di baris kedua (font kecil). */}
                 <div className="hidden xl:block flex-1 min-w-0 px-1">
+                  {/* `TruncatedCell` mengembalikan "-" dan MEMBUANG ikonnya
+                      saat teksnya kosong; `labelBarisLokasi` memastikan aset
+                      yang sudah di denah tetap punya teks, sehingga
+                      penandanya tak ikut hilang. */}
                   <TruncatedCell
-                    text={a.location || (punyaKoordinat(a) ? "Berkoordinat" : "")}
+                    text={labelBarisLokasi(a)}
                     iconNode={<IkonLokasiAset asset={a} />} />
                   {a.user && (
                     <div className="flex items-center gap-0.5 min-w-0 leading-tight" title={`Pengguna: ${a.user}`}>

@@ -2,7 +2,7 @@ import React, { memo, useState, useCallback } from "react";
 import { unitTerdalam, jalurEselon } from "@/lib/pohonUnit";
 import { Camera, Tag, Images, User, QrCode, CreditCard, Trash2, FileCheck, FileX, Calendar, Lock, ClipboardCheck, Building2, ImageIcon, FileText, ShieldCheck, RefreshCcw as RefreshCcwIcon, Check as CheckIcon } from "lucide-react";
 import IkonLokasiAset from "./IkonLokasiAset";
-import { punyaKoordinat } from "@/lib/koordinatAset";
+import { labelBarisLokasi } from "@/lib/koordinatAset";
 import TooltipKetuk from "../ui/TooltipKetuk";
 import { authMediaUrl } from "../../lib/mediaUrl";
 import { sisaGaransi } from "../../lib/garansi";
@@ -292,11 +292,11 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
             SUDAH berkoordinat: penandanya menempel pada ikon pin, jadi tanpa
             barisnya penanda itu takkan pernah terlihat justru pada aset yang
             paling sering belum diisi nama lokasinya. */}
-        {(asset.location || punyaKoordinat(asset)) && (
+        {labelBarisLokasi(asset) && (
           <div className="flex items-center gap-1 mb-0.5 w-full">
             <IkonLokasiAset asset={asset} className="w-2.5 h-2.5" />
             <span className="text-[9px] sm:text-[10px] text-muted-foreground truncate">
-              {asset.location || "Berkoordinat"}
+              {labelBarisLokasi(asset)}
             </span>
           </div>
         )}

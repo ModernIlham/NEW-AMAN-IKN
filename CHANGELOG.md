@@ -18,6 +18,66 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1018] Ikon lokasi membawa dua keterangan: titik koordinat dan denah — 2026-09-06
+
+Permintaan pemilik: penanda "sudah masuk denah atau belum" harus ada *"di dalam
+icon yang sama"* dan *"masih dapat dilihat baik dalam posisi belum berkoordinat
+dan sudah berkoordinatnya"*. Artinya dua keterangan yang saling BEBAS — empat
+keadaan — pada glyph selebar 10px di kartu galeri.
+
+**Datanya belum pernah sampai.** `lokasi_spasial` tidak termasuk
+`LIST_PROJECTION`, sehingga baris dan kartu daftar aset buta terhadap denah.
+Yang ditambahkan adalah RINGKASAN (`di_denah`, `denah_nama`, `denah_jalur`),
+bukan subdoc utuh: baris daftar hanya perlu tahu sudah/belum dan di node mana,
+sementara titik dan node_tipe hanya menggemukkan payload yang justru sengaja
+diperkecil di proyeksi itu.
+
+Benderanya diturunkan dari `node_id`, bukan dari keberadaan subdocnya:
+penempatan yang DILEPAS menyisakan subdoc dengan node_id kosong, dan memeriksa
+subdocnya saja akan membuat penanda di layar tak pernah padam. Perbandingannya
+memakai `$ne` terhadap "", bukan `$strLenCP` — operator itu menolak nilai
+non-string (dokumen era-lama menyimpan id sebagai angka) sehingga seluruh
+proyeksi daftar meledak, dan ia pun tak tersedia di mongomock sehingga
+ekspresinya tak dapat diuji sama sekali.
+
+**Empat glyph berbeda ditolak setelah dibandingkan pada ukuran sebenarnya.**
+Pembaca harus menghafal empat bentuk alih-alih membaca dua keterangan, lucide
+pun tak menyediakan kombinasi keempatnya (tak ada pin yang sekaligus bercentang
+dan beralas denah), dan `MapPinned` — satu-satunya pin beralas denah — menjadi
+coreng tak terbaca pada 10px. Kandidat cincin bulat berdesakan menjadi gumpalan;
+kandidat garis bawah menambah tinggi ikon sehingga merusak perataan baris teks.
+
+Yang dipakai: dua kanal yang saling tegak lurus.
+
+    BENTUK GLYPH  → titik koordinat   (MapPin ↔ MapPinCheck, abu ↔ hijau)
+    LATAR KOTAK   → penempatan denah  (polos ↔ kotak bertepi biru)
+
+Latar dipilih untuk denah, bukan sebaliknya, karena dua alasan. Bentuk glyph
+SUDAH bermakna koordinat sejak lama — memindahkannya mengubah arti penanda yang
+sudah dikenal pemakainya. Dan latar adalah bidang, bukan garis: ia tetap
+terbaca pada 10px justru ketika glyph di dalamnya sudah rapat, serta tak
+bergantung pada warna semata.
+
+Keterangan (title/aria-label) pindah ke pembungkusnya dengan `role="img"` dan
+menyebut KEDUA hal sekaligus, termasuk yang belum — keterangan yang hanya muncul
+saat sudah masuk denah membuat pembaca tak dapat membedakan "belum" dari
+"penandanya memang tak ada". Glyph-nya `aria-hidden` supaya pembaca layar tak
+menyebut satu penanda dua kali.
+
+**Cabang yang paling mudah terlewat ikut diperbaiki.** Keempat tempat pemakaian
+dulu merender barisnya `if (location || punyaKoordinat)`, dan baris ringkas
+tabel bahkan `if (punyaKoordinat)` saja — sehingga aset yang sudah di denah
+tetapi belum berkoordinat dan belum bernama lokasi takkan menampilkan
+penandanya sama sekali, yakni aset yang penandanya paling perlu dilihat. Kolom
+Lokasi tabel punya jalan kedua menuju kegagalan yang sama: `TruncatedCell`
+mengembalikan "-" dan MEMBUANG ikonnya saat teksnya kosong. Keduanya kini
+dijawab satu helper `labelBarisLokasi`, bukan empat salinan cabang.
+
+`diDenah` menjawab DUA bentuk data dengan fungsi yang sama — ringkasan
+`di_denah` untuk baris daftar dan subdoc `lokasi_spasial` untuk layar detail.
+Kalau tiap layar memeriksa bentuknya sendiri, akan ada aset yang di daftar
+tampak sudah di denah tetapi di detailnya tidak.
+
 ## [#1017] Bilah aksi tak lagi memeras tombolnya; nota usulan menyebut jumlahnya — 2026-09-06
 
 Dua laporan pemilik.
