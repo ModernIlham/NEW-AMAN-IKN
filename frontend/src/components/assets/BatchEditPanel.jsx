@@ -27,6 +27,7 @@ import axios from "axios";
 import {
   susunPohonUnit, unitDalamLingkup, perubahanEselonMassal,
 } from "@/lib/pohonUnit";
+import { fieldLevel, labelLevel, levelAkar, levelRingkas } from "@/lib/eselonSatker";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -205,22 +206,30 @@ const BatchEditPanel = memo(function BatchEditPanel({
   // Extract eselon data from activity — jalur LAMA, dipakai hanya bila master
   // unit masih kosong.
   const eselon1List = (activity?.eselon1 || []).map(e => typeof e === 'string' ? { nama: e, eselon2: [] } : e);
-  const selectedEselon1 = updates.eselon1 || "";
-  const eselon2List = eselon1List.find(e => e.nama === selectedEselon1)?.eselon2 || [];
 
   // Master unit, dibatasi lingkup kegiatan — sumber yang SAMA dengan form
   // aset. Dua sumber terpisah adalah cara tercepat membuat ubah massal
   // menuliskan unit yang tak pernah bisa dipilih satu per satu.
   const [unitPohon, setUnitPohon] = useState([]);
+  // Puncak satker — menentukan kolom eselon mana yang ditulis jalur warisan
+  // di bawah. Dipatok eselon1/eselon2, ubah massal menuliskan unit sebuah
+  // Lapas sebagai Eselon I-nya, ke SELURUH aset terpilih sekaligus.
+  const [akarUnit, setAkarUnit] = useState(levelAkar());
   useEffect(() => {
     let batal = false;
     axios.get(`${API}/unit-kerja`).then((r) => {
       if (batal) return;
       const arr = Array.isArray(r.data) ? r.data : (r.data?.items || []);
+      setAkarUnit(levelAkar(r.data?.level_akar));
       setUnitPohon(susunPohonUnit(arr));
     }).catch(() => {});
     return () => { batal = true; };
   }, []);
+  const [lvRingkas1, lvRingkas2] = levelRingkas(akarUnit);
+  const fRingkas1 = fieldLevel(lvRingkas1);
+  const fRingkas2 = lvRingkas2 ? fieldLevel(lvRingkas2) : "";
+  const selectedEselon1 = updates[fRingkas1] || "";
+  const eselon2List = eselon1List.find(e => e.nama === selectedEselon1)?.eselon2 || [];
   const unitPilihan = useMemo(
     () => unitDalamLingkup(unitPohon, activity?.lingkup_unit || []),
     [unitPohon, activity]);
@@ -555,21 +564,23 @@ const BatchEditPanel = memo(function BatchEditPanel({
             </div>
           ) : (
             <>
-              {/* Eselon I */}
+              {/* Jalur WARISAN — tingkat DAN kolom tujuannya mengikuti puncak
+                  satker, bukan dipatok Eselon I/II. */}
               <div className="space-y-0.5">
-                <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Building2 className="w-2.5 h-2.5" />Eselon I</label>
-                <ClearableSelect value={updates.eselon1 || "__none__"} onValueChange={v => { setField("eselon1", v); if (v === "__clear__" || v === "__none__") setField("eselon2", undefined); }}>
+                <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Building2 className="w-2.5 h-2.5" />{labelLevel(lvRingkas1)}</label>
+                <ClearableSelect value={updates[fRingkas1] || "__none__"} onValueChange={v => { setField(fRingkas1, v); if ((v === "__clear__" || v === "__none__") && fRingkas2) setField(fRingkas2, undefined); }}>
                   {eselon1List.map(e => <SelectItem key={e.nama} value={e.nama}>{e.nama}</SelectItem>)}
                 </ClearableSelect>
               </div>
 
-              {/* Eselon II */}
+              {fRingkas2 && (
               <div className="space-y-0.5">
-                <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Building2 className="w-2.5 h-2.5" />Eselon II</label>
-                <ClearableSelect value={updates.eselon2 || "__none__"} onValueChange={v => setField("eselon2", v)} disabled={!selectedEselon1 || selectedEselon1 === "__clear__" || eselon2List.length === 0} placeholder={selectedEselon1 && selectedEselon1 !== "__clear__" ? "—" : "Pilih Eselon I dulu"}>
+                <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Building2 className="w-2.5 h-2.5" />{labelLevel(lvRingkas2)}</label>
+                <ClearableSelect value={updates[fRingkas2] || "__none__"} onValueChange={v => setField(fRingkas2, v)} disabled={!selectedEselon1 || selectedEselon1 === "__clear__" || eselon2List.length === 0} placeholder={selectedEselon1 && selectedEselon1 !== "__clear__" ? "—" : `Pilih ${labelLevel(lvRingkas1)} dulu`}>
                   {eselon2List.map(e2 => <SelectItem key={e2} value={e2}>{e2}</SelectItem>)}
                 </ClearableSelect>
               </div>
+              )}
             </>
           )}
         </div>

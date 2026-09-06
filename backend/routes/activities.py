@@ -21,6 +21,7 @@ from routes.media import auto_compress_image
 import pdf_compress_utils as pcu
 from shared_utils import (
     decode_data_url,
+    eselon_satker,
     get_document_from_gridfs,
     delete_document_from_gridfs,
     delete_photo_from_gridfs,
@@ -557,11 +558,17 @@ _PROJ_LOOKUP = {"_id": 0, "kode_satker": 1, "nama_satker": 1, "eselon1": 1,
 
 
 async def _hasil_lookup(doc: dict) -> dict:
-    return {"kode_satker": doc.get("kode_satker", ""),
+    kode = doc.get("kode_satker", "")
+    # Tingkat satkernya SELALU dari master satker, tak pernah dari `doc`:
+    # `doc` bisa jadi dokumen kegiatan, dan kegiatan tak menyimpan tingkat itu
+    # — membacanya dari sana akan mengembalikan Eselon I untuk setiap satker
+    # yang sudah punya kegiatan, yaitu justru yang datanya paling banyak.
+    return {"kode_satker": kode,
             "nama_satker": doc.get("nama_satker", ""),
             "eselon1": doc.get("eselon1", []) or [],
+            "eselon_satker": await eselon_satker(kode),
             "kode_satker_lengkap": doc.get("kode_satker_lengkap")
-            or await _kode_lengkap_master(doc.get("kode_satker", ""))}
+            or await _kode_lengkap_master(kode)}
 
 
 @activities_router.get("/satker-lookup")

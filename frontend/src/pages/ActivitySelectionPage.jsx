@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner";
 import axios from "axios";
 import { susunPohonUnit, ringkasLingkup } from "@/lib/pohonUnit";
+import { labelLevel, levelAkar, levelRingkas } from "@/lib/eselonSatker";
 import { getApiError } from "@/lib/utils";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
@@ -199,6 +200,12 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
   const [unitRef, setUnitRef] = useState([]);
   // Master unit UTUH, sudah rata berurut pohon: [{...unit, depth, jalur}].
   const [unitPohon, setUnitPohon] = useState([]);
+  // Tingkat yang DIDUDUKI satker kegiatan ini — puncak strukturnya. Bentuk
+  // ringkas di bawah hanya punya dua laci; tanpa ini keduanya selalu berarti
+  // Eselon I dan II, yang bagi satker Eselon III adalah dua tingkat milik
+  // instansi induknya. Bawaan dari satker pengguna, ditimpa hasil pencarian
+  // satker begitu kode/nama satkernya dikenali.
+  const [akar, setAkar] = useState(levelAkar());
   const [cocokSibuk, setCocokSibuk] = useState(false);
   const fetchReferensiTim = async () => {
     try {
@@ -210,6 +217,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
     try {
       const r = await axios.get(`${API}/unit-kerja`);
       const arr = Array.isArray(r.data) ? r.data : (r.data?.items || []);
+      setAkar(levelAkar(r.data?.level_akar));
       setUnitRef([...new Set(arr.map((u) => u.nama_unit || u.nama || "").filter(Boolean))].sort());
       // Pohon UTUH juga disimpan: pemilih lingkup butuh induk dan jalurnya,
       // bukan hanya nama-namanya yang sudah kehilangan hubungan itu.
@@ -228,7 +236,9 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
       const ids = r.data?.lingkup_unit || [];
       const gagal = r.data?.tak_cocok || [];
       setForm((p) => ({ ...p, lingkup_unit: ids }));
-      if (!ids.length && !gagal.length) toast.info("Belum ada Eselon I/II yang diisi");
+      if (!ids.length && !gagal.length) {
+        toast.info(`Belum ada ${levelRingkas(akar).map(labelLevel).join("/")} yang diisi`);
+      }
       else if (gagal.length) {
         // Yang tak cocok DISEBUT, bukan didiamkan: salah ketik pada data lama
         // justru yang perlu dilihat orang yang memperbaikinya.
@@ -269,6 +279,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
         try {
           const r = await axios.get(`${API}/satker-lookup`, { params: { kode: value.trim() } });
           if (r.data?.nama_satker) {
+            setAkar(levelAkar(r.data.eselon_satker));
             setForm(p => ({ ...p, nama_satker: r.data.nama_satker, eselon1: r.data.eselon1 || [],
               kode_satker_lengkap: r.data.kode_satker_lengkap || '' }));
           }
@@ -286,6 +297,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
         try {
           const r = await axios.get(`${API}/satker-lookup`, { params: { nama: value.trim() } });
           if (r.data?.kode_satker) {
+            setAkar(levelAkar(r.data.eselon_satker));
             setForm(p => ({ ...p, kode_satker: r.data.kode_satker, eselon1: r.data.eselon1 || [],
               kode_satker_lengkap: r.data.kode_satker_lengkap || '' }));
           }
@@ -1171,21 +1183,30 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                 <div className="space-y-0.5"><Label className="text-[10px] text-emerald-600 dark:text-emerald-400">Jabatan</Label><Input value={form.kasatker_jabatan} onChange={e => setForm(p => ({...p, kasatker_jabatan: e.target.value}))} placeholder="Jabatan Kasatker" className="h-7 text-xs" /></div>
                 <div className="space-y-0.5"><Label className="text-[10px] text-emerald-600 dark:text-emerald-400">Alamat Satker</Label><Input value={form.alamat_satker} onChange={e => setForm(p => ({...p, alamat_satker: e.target.value}))} placeholder="Alamat lengkap" className="h-7 text-xs" /></div>
               </div>
-              {/* Struktur Eselon I/II satker — dua tingkat, diketik.
+              {/* Struktur ringkas satker — DUA tingkat, diketik.
+                  Kedua tingkatnya relatif terhadap puncak satkernya, bukan
+                  selalu Eselon I/II: satker Eselon III yang dipaksa mengisi
+                  Eselon I mengarang dua tingkat milik instansi induknya.
                   Tata letaknya: kolom nomor berlebar SAMA di kedua tingkat
                   supaya tepi kirinya sejajar, garis tegak menandai bersarangnya
-                  Eselon II pada induknya, dan tinggi input SAMA dengan tombol
-                  hapusnya supaya tak ada ruang mati di antara baris. */}
+                  tingkat kedua pada induknya, dan tinggi input SAMA dengan
+                  tombol hapusnya supaya tak ada ruang mati di antara baris. */}
               <div className="mt-2 pt-2 border-t border-emerald-200 dark:border-emerald-700 space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <Label className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Eselon I</Label>
+                  <Label className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300" data-testid="label-eselon-puncak">{labelLevel(levelRingkas(akar)[0])}</Label>
                   <button type="button" onClick={() => setForm(p => ({...p, eselon1: [...(p.eselon1 || []), {nama: '', eselon2: []}]}))}
                     className="h-11 lg:h-8 px-2.5 rounded-md border border-emerald-300 dark:border-emerald-600 text-[10px] font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 flex items-center gap-1 flex-shrink-0"
                     data-testid="add-eselon1-btn">
-                    <Plus className="w-3 h-3" /> Tambah Eselon I
+                    <Plus className="w-3 h-3" /> Tambah {labelLevel(levelRingkas(akar)[0])}
                   </button>
                 </div>
-                {(form.eselon1 || []).length === 0 && <p className="text-[10px] text-emerald-500 dark:text-emerald-400 italic">Belum ada data Eselon I.</p>}
+                {akar > 1 && (
+                  <p className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 leading-relaxed" data-testid="keterangan-akar-kegiatan">
+                    Satker ini <b>{labelLevel(akar)}</b> — strukturnya dimulai di sana.
+                    Tingkat di atasnya milik instansi induk dan bukan bagian satker ini.
+                  </p>
+                )}
+                {(form.eselon1 || []).length === 0 && <p className="text-[10px] text-emerald-500 dark:text-emerald-400 italic">Belum ada data {labelLevel(levelRingkas(akar)[0])}.</p>}
                 {(form.eselon1 || []).map((es, idx) => {
                   const esObj = typeof es === 'object' ? es : {nama: es, eselon2: []};
                   return (
@@ -1195,7 +1216,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                         <Input
                           value={esObj.nama}
                           onChange={e => { const arr = [...(form.eselon1 || [])]; arr[idx] = {...esObj, nama: e.target.value}; setForm(p => ({...p, eselon1: arr})); }}
-                          placeholder="Nama Eselon I"
+                          placeholder={`Nama ${labelLevel(levelRingkas(akar)[0])}`}
                           className="h-11 lg:h-8 text-xs flex-1 min-w-0"
                           data-testid={`eselon1-input-${idx}`}
                         />
@@ -1203,26 +1224,29 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                           <X className="w-4 h-4" />
                         </button>
                       </div>
-                      {/* Eselon II di bawah Eselon I ini — garis tegak di kiri
+                      {/* Tingkat kedua di bawah unit ini — garis tegak di kiri
                           menandai bersarangnya, sehingga hubungannya terbaca
-                          tanpa bergantung pada besarnya margin. */}
+                          tanpa bergantung pada besarnya margin. Satker Eselon V
+                          tak punya tingkat kedua: laci itu memang tak menunjuk
+                          tingkat mana pun, dan "Eselon VI" adalah karangan. */}
+                      {levelRingkas(akar).length > 1 && (
                       <div className="ml-3 pl-3 border-l-2 border-emerald-200 dark:border-emerald-700 space-y-1.5">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-[9px] font-semibold uppercase tracking-wide text-emerald-600/80 dark:text-emerald-400/80">Eselon II</span>
+                          <span className="text-[9px] font-semibold uppercase tracking-wide text-emerald-600/80 dark:text-emerald-400/80">{labelLevel(levelRingkas(akar)[1])}</span>
                           <button type="button" onClick={() => { const arr = [...(form.eselon1 || [])]; const obj = {...esObj, eselon2: [...(esObj.eselon2 || []), '']}; arr[idx] = obj; setForm(p => ({...p, eselon1: arr})); }}
                             className="h-11 lg:h-8 px-2 rounded-md border border-emerald-200 dark:border-emerald-700 text-[9px] font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 flex items-center gap-1 flex-shrink-0"
                             data-testid={`add-eselon2-btn-${idx}`}>
                             <Plus className="w-2.5 h-2.5" /> Tambah
                           </button>
                         </div>
-                        {(esObj.eselon2 || []).length === 0 && <p className="text-[9px] text-emerald-500/80 dark:text-emerald-400/80 italic">Belum ada Eselon II.</p>}
+                        {(esObj.eselon2 || []).length === 0 && <p className="text-[9px] text-emerald-500/80 dark:text-emerald-400/80 italic">Belum ada {labelLevel(levelRingkas(akar)[1])}.</p>}
                         {(esObj.eselon2 || []).map((e2, j) => (
                           <div key={j} className="flex items-center gap-2">
                             <span className="w-6 text-[9px] font-medium text-emerald-500 dark:text-emerald-400 text-center flex-shrink-0">{idx+1}.{j+1}</span>
                             <Input
                               value={e2}
                               onChange={e => { const arr = [...(form.eselon1 || [])]; const e2arr = [...(esObj.eselon2 || [])]; e2arr[j] = e.target.value; arr[idx] = {...esObj, eselon2: e2arr}; setForm(p => ({...p, eselon1: arr})); }}
-                              placeholder="Nama Eselon II"
+                              placeholder={`Nama ${labelLevel(levelRingkas(akar)[1])}`}
                               className="h-11 lg:h-8 text-[11px] flex-1 min-w-0"
                               data-testid={`eselon2-input-${idx}-${j}`}
                             />
@@ -1232,6 +1256,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                           </div>
                         ))}
                       </div>
+                      )}
                     </div>
                   );
                 })}
@@ -1250,7 +1275,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                   <button type="button" onClick={cocokkanLingkup} disabled={cocokSibuk}
                     data-testid="cocokkan-lingkup-btn"
                     className="h-11 lg:h-8 px-2.5 rounded-md border border-emerald-300 dark:border-emerald-600 text-[10px] font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 disabled:opacity-50 flex items-center gap-1 flex-shrink-0">
-                    {cocokSibuk ? "Mencocokkan…" : "Ambil dari Eselon I di atas"}
+                    {cocokSibuk ? "Mencocokkan…" : `Ambil dari ${labelLevel(levelRingkas(akar)[0])} di atas`}
                   </button>
                 </div>
                 <p className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 leading-relaxed">

@@ -97,6 +97,24 @@ export function levelTampil(akar, units) {
   return [...set].sort((a, b) => a - b);
 }
 
+/**
+ * Dua tingkat TERATAS satker — bentuk ringkas warisan `[{nama, eselon2: […]}]`
+ * yang dipakai kegiatan. Bentuk itu hanya punya dua laci, dan dulu keduanya
+ * berarti Eselon I dan II bagi siapa pun; kini maknanya relatif terhadap
+ * puncak satkernya. Satker Eselon V hanya punya satu tingkat — laci keduanya
+ * tak menunjuk tingkat mana pun, dan "Eselon VI" adalah tingkat karangan.
+ */
+export function levelRingkas(akar) {
+  const a = levelAkar(akar);
+  return a >= LEVEL_MAKS ? [a] : [a, a + 1];
+}
+
+/** Nama kolom eselon pada aset/pegawai untuk tingkat itu: 3 → "eselon3". */
+export function fieldLevel(level) {
+  const n = levelSah(level);
+  return n === null ? "" : `eselon${n}`;
+}
+
 /** Unit yang tak punya induk terjangkau — akar bagan, apa pun eselonnya. */
 export function unitAkar(units) {
   const daftar = (units || []).filter((u) => u && u.id);

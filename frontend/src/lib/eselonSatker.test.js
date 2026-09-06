@@ -1,6 +1,6 @@
 import {
-  AKAR_BAWAAN, LEVEL_MAKS, bolehTambah, butuhInduk, labelLevel, levelAkar,
-  levelSah, levelTampil, levelTersedia, unitAkar,
+  AKAR_BAWAAN, LEVEL_MAKS, bolehTambah, butuhInduk, fieldLevel, labelLevel,
+  levelAkar, levelRingkas, levelSah, levelTampil, levelTersedia, unitAkar,
 } from "./eselonSatker";
 
 const lapas = { eselon: "3", id: "u3", parent_id: "" };
@@ -79,5 +79,29 @@ describe("eselonSatker — akar pohon unit mengikuti tingkat satkernya", () => {
     const units = [{ id: "a", eselon: "4", parent_id: "hantu" }];
     expect(unitAkar(units).map((u) => u.id)).toEqual(["a"]);
     expect(unitAkar(null)).toEqual([]);
+  });
+});
+
+describe("eselonSatker — bentuk ringkas dua tingkat pada kegiatan", () => {
+  test("dua lacinya relatif terhadap puncak satker", () => {
+    expect(levelRingkas(1)).toEqual([1, 2]);
+    expect(levelRingkas(3)).toEqual([3, 4]);
+    expect(levelRingkas(4)).toEqual([4, 5]);
+  });
+
+  test("satker tanpa tingkat yang dinyatakan tetap Eselon I–II", () => {
+    expect(levelRingkas()).toEqual([1, 2]);
+    expect(levelRingkas("")).toEqual([1, 2]);
+  });
+
+  test("satker Eselon V hanya punya SATU laci — Eselon VI tak dikarang", () => {
+    expect(levelRingkas(5)).toEqual([5]);
+  });
+
+  test("kolom aset diturunkan dari tingkatnya, tidak dipatok eselon1", () => {
+    expect(fieldLevel(3)).toBe("eselon3");
+    expect(fieldLevel("5")).toBe("eselon5");
+    expect(fieldLevel(0)).toBe("");
+    expect(fieldLevel(6)).toBe("");
   });
 });

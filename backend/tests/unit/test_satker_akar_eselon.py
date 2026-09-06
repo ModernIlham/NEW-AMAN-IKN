@@ -28,6 +28,7 @@ import pytest
 from fastapi import HTTPException
 from mongomock_motor import AsyncMongoMockClient
 
+import routes.activities as ract
 import routes.satker as rs
 import routes.unit_kerja as ruk
 
@@ -54,9 +55,9 @@ async def _diam(*a, **k):
 def dbx(monkeypatch):
     fake = AsyncMongoMockClient()["uji"]
     import shared_utils as su
-    for mod in (rs, ruk, su):
+    for mod in (rs, ruk, ract, su):
         monkeypatch.setattr(mod, "db", fake, raising=False)
-    for mod in (rs, ruk):
+    for mod in (rs, ruk, ract):
         monkeypatch.setattr(mod, "log_audit", _diam, raising=False)
     return fake
 
@@ -212,3 +213,82 @@ def test_tanpa_dinyatakan_bangun_otomatis_lapas_menghasilkan_NOL(dbx):
     _daftarkan(LAPAS)
     _pegawai_lapas(dbx)
     assert _jalan(ruk.bangun_dari_pegawai(user=LAPAS))["dibuat"] == 0
+
+
+# ── 6. Bentuk ringkas pada kegiatan ikut tingkat satkernya ──────────────
+
+def test_dua_laci_bentuk_ringkas_relatif_terhadap_puncak():
+    import organisasi_utils as org
+    assert org.level_ringkas(1) == [1, 2]
+    assert org.level_ringkas(3) == [3, 4]
+    assert org.level_ringkas(None) == [1, 2]
+    # Eselon V hanya punya satu laci: "Eselon VI" bukan tingkat mana pun.
+    assert org.level_ringkas(5) == [5]
+
+
+def _pohon_lapas(dbx):
+    _daftarkan(LAPAS, eselon_satker="3")
+    puncak = _buat("Lapas Kelas IIA Nusantara", "3")
+    _buat("Subbagian Tata Usaha", "4", puncak)
+
+
+def _cocokkan(user=LAPAS, eselon1=None):
+    return _jalan(ruk.cocokkan_lingkup(
+        ruk.LingkupTeksIn(eselon1=eselon1 or []), user=user))
+
+
+def test_lingkup_yang_DIKETIK_lapas_cocok_dengan_masternya(dbx):
+    _pohon_lapas(dbx)
+    r = _cocokkan(eselon1=[{"nama": "Lapas Kelas IIA Nusantara",
+                            "eselon2": ["Subbagian Tata Usaha"]}])
+    assert len(r["lingkup_unit"]) == 2
+    assert [u["eselon"] for u in r["unit"]] == ["3", "4"]
+    assert r["tak_cocok"] == []
+
+
+def test_tanpa_dinyatakan_pencocokan_lapas_GAGAL_seluruhnya(dbx):
+    # Cacat aslinya, dipatok apa adanya: pencarian di tingkat 1 dan 2 pada
+    # satker Eselon III tak pernah menemukan apa pun, dan layar terbaca seperti
+    # masternya yang salah.
+    _daftarkan(LAPAS)
+    puncak = _jalan(dbx.unit_kerja.insert_one(
+        {"id": "u3", "nama_unit": "Lapas Kelas IIA Nusantara", "eselon": "3",
+         "parent_id": None, "kode_satker": "333333"}))
+    assert puncak
+    r = _cocokkan(eselon1=[{"nama": "Lapas Kelas IIA Nusantara",
+                            "eselon2": []}])
+    assert r["lingkup_unit"] == []
+    assert r["tak_cocok"] == ["Lapas Kelas IIA Nusantara"]
+
+
+def test_satker_Eselon_I_mencocokkan_PERSIS_seperti_sebelumnya(dbx):
+    _daftarkan(PUSAT)
+    e1 = _buat("Setjen", "1", user=PUSAT)
+    _buat("Biro Umum", "2", e1, user=PUSAT)
+    r = _cocokkan(user=PUSAT,
+                  eselon1=[{"nama": "Setjen", "eselon2": ["Biro Umum"]}])
+    assert [u["eselon"] for u in r["unit"]] == ["1", "2"]
+    assert r["tak_cocok"] == []
+
+
+# ── 7. Pencarian satker menyebutkan tingkatnya ──────────────────────────
+
+def test_satker_lookup_menyebutkan_tingkat_satkernya(dbx):
+    _daftarkan(LAPAS, eselon_satker="3")
+    r = _jalan(ract.satker_lookup(kode="333333", _user=LAPAS))
+    assert r["eselon_satker"] == 3
+
+
+def test_lookup_yang_menemukan_KEGIATAN_tetap_membaca_master(dbx):
+    # `satker-lookup` mencari kegiatan lebih dulu, dan kegiatan tak menyimpan
+    # tingkat satker. Membacanya dari dokumen yang ketemu akan mengembalikan
+    # Eselon I untuk setiap satker yang sudah punya kegiatan — yaitu justru
+    # yang datanya paling banyak.
+    _daftarkan(LAPAS, eselon_satker="3")
+    _jalan(dbx.inventory_activities.insert_one(
+        {"id": "k1", "kode_satker": "333333",
+         "nama_satker": "Lapas Kelas IIA Nusantara"}))
+    r = _jalan(ract.satker_lookup(kode="333333", _user=LAPAS))
+    assert r["eselon_satker"] == 3
+    # Dan dokumen kegiatan itu memang yang ditemukan lebih dulu.
+    assert r["nama_satker"] == "Lapas Kelas IIA Nusantara"
