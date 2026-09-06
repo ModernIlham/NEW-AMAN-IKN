@@ -42,7 +42,12 @@ def _teks_template():
 @pytest.fixture()
 def dbr(monkeypatch):
     fake = AsyncMongoMockClient()["uji"]
-    monkeypatch.setattr(rp, "db", fake, raising=False)
+    # `shared_utils` ikut ditambal: laporan membaca tingkat eselon satkernya
+    # lewat `shared_utils.eselon_satker`, yang memakai koleksi `db` MODULNYA
+    # sendiri. Tanpa ini pembacaan itu menyentuh Motor sungguhan di loop lain.
+    import shared_utils as su
+    for mod in (rp, su):
+        monkeypatch.setattr(mod, "db", fake, raising=False)
     return fake
 
 

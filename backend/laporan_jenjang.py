@@ -150,6 +150,102 @@ def pilihan_jenjang(tersedia, label_map) -> list:
             for v in tersedia]
 
 
+def level_eselon_berdata(aset) -> tuple:
+    """Tingkat eselon yang BENAR-BENAR terisi pada sekumpulan aset, menaik.
+
+    Dipakai memilih jenjang yang layak ditawarkan dan dijadikan bawaan.
+    Menawarkan jenjang yang tak berisi apa-apa hanya menawarkan grafik kosong,
+    dan grafik kosong terbaca sebagai laporan yang gagal dimuat.
+    """
+    from organisasi_utils import LEVEL_MAKS, LEVEL_MIN
+    ada = set()
+    for a in aset or []:
+        for n in range(LEVEL_MIN, LEVEL_MAKS + 1):
+            if n not in ada and str((a or {}).get(f"eselon{n}") or "").strip():
+                ada.add(n)
+    return tuple(sorted(ada))
+
+
+def _int_level(v):
+    from organisasi_utils import LEVEL_MAKS, LEVEL_MIN
+    try:
+        n = int(str(v).strip())
+    except (TypeError, ValueError):
+        return None
+    return n if LEVEL_MIN <= n <= LEVEL_MAKS else None
+
+
+def jenjang_eselon_satker(akar=None, level_berdata=()):
+    """`(sah, bawaan)` jenjang unit organisasi untuk satker berpuncak `akar`.
+
+    Bawaannya dulu TETAPAN Eselon II, dengan alasan Eselon I terlalu kasar
+    untuk menunjuk siapa yang bertanggung jawab atas barangnya. Alasannya
+    benar; patokannya yang keliru — pada satker Eselon III seperti Lapas,
+    Eselon II bukan tingkat yang lebih halus melainkan tingkat milik instansi
+    induknya, yang tak berisi apa pun. Panelnya terbuka kosong, dan panel
+    kosong terbaca sebagai laporan yang gagal dimuat.
+
+    Maknanya kini RELATIF: satu tingkat DI BAWAH puncak satkernya. Untuk satker
+    kantor pusat hasilnya tetap Eselon II — persis seperti sebelumnya.
+
+Aturannya diterapkan pada puncak EFEKTIF — tingkat terdangkal yang benar-benar
+    berisi, bila puncak yang dinyatakan ternyata kosong. Satker yang belum
+    menyatakan tingkatnya terbaca berpuncak Eselon I sementara datanya mulai di
+    Eselon III; menyodorkan panel kosong padahal datanya ada di tingkat sebelah
+    adalah kekeliruan yang sama, hanya berpindah tempat. Bila satu tingkat di
+    bawah puncak efektif itu pun kosong, puncak efektifnya sendiri yang
+    dipakai — panel satu baris masih mengabarkan sesuatu; panel kosong tidak.
+
+    `sah` memuat seluruh tingkat milik satker ini DITAMBAH tingkat di atasnya
+    yang terlanjur berisi. Yang terakhir bukan kelonggaran melainkan syarat:
+    satker yang baru menyatakan dirinya Eselon III masih menyimpan aset ber-
+    `eselon1`, dan menutup jenjang itu membuat datanya tak dapat dilihat sama
+    sekali — hilang dari laporan tetapi tetap hidup di basis data.
+    """
+    from organisasi_utils import LEVEL_MAKS, level_akar
+    a = level_akar(akar)
+    berdata = {n for n in (_int_level(v) for v in (level_berdata or []))
+               if n is not None}
+    sah = set(range(a, LEVEL_MAKS + 1)) | berdata
+    if not berdata:
+        return tuple(sorted(sah)), min(a + 1, LEVEL_MAKS)
+    akar_efektif = _akar_efektif(a, berdata)
+    bawaan = (akar_efektif + 1 if akar_efektif + 1 in berdata
+              else akar_efektif)
+    return tuple(sorted(sah)), bawaan
+
+
+def _akar_efektif(akar: int, berdata: set) -> int:
+    """Puncak yang BENAR-BENAR berisi: puncaknya sendiri bila berdata, kalau
+    tidak yang terdangkal di bawahnya, kalau tidak yang terdangkal di atasnya
+    (sisa data lama pada satker yang tingkatnya baru diturunkan)."""
+    if akar in berdata:
+        return akar
+    lebih_dalam = sorted(n for n in berdata if n > akar)
+    return lebih_dalam[0] if lebih_dalam else min(berdata)
+
+
+def level_kelompok_eselon(akar=None, level_berdata=()) -> int:
+    """Tingkat TUNGGAL untuk mengelompokkan ringkasan eksekutif.
+
+    Ringkasan mengelompokkan aset menurut `eselon1` dan menamai sisanya "Tanpa
+    Eselon I". Pada satker Eselon III seluruh asetnya jatuh ke keranjang itu —
+    satu batang berlabel "tanpa", yang tak mengabarkan apa pun kecuali bahwa
+    pertanyaannya salah alamat.
+
+    Yang dipakai kini tingkat PUNCAK satkernya. Bila puncaknya tak berisi
+    sementara tingkat lain berisi — satker yang belum menyatakan tingkatnya,
+    padahal pegawainya sudah mengisi mulai Eselon III — yang dipakai tingkat
+    terdangkal yang berdata, sehingga laporannya tetap mengabarkan sesuatu
+    alih-alih satu batang "tanpa".
+    """
+    from organisasi_utils import level_akar
+    a = level_akar(akar)
+    berdata = {n for n in (_int_level(v) for v in (level_berdata or []))
+               if n is not None}
+    return a if not berdata else _akar_efektif(a, berdata)
+
+
 def jenjang_terpilih_banyak(diminta, sah, bawaan) -> list:
     """Jenjang yang dipakai — bisa LEBIH DARI SATU sekaligus.
 

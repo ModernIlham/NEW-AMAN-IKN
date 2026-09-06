@@ -36,7 +36,8 @@ from shared_utils import (pastikan_akses_kegiatan_id, ambang_kapitalisasi,
                           filter_aset_perhitungan,
                           get_photo_from_gridfs, limiter, pengaturan_kop,
                           scope_query_aset, scope_query_field_satker,
-                          kode_satker_user, _q_pejabat_satker)
+                          kode_satker_user, _q_pejabat_satker,
+                          eselon_satker)
 from report_filters import active_asset_filter
 from report_utils import berstiker, hitung_status_stiker, distribusi_pengguna
 from satker_utils import NILAI_DOKUMEN, NILAI_DOKUMEN_DEFAULT
@@ -5444,10 +5445,18 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
         loc_breakdown[loc]["value"] += sp(a)
     loc_breakdown_sorted = sorted(loc_breakdown.items(), key=lambda x: x[1]["count"], reverse=True)
 
-    # Build per-eselon1 breakdown
+    # Sebaran per unit organisasi, dikelompokkan pada tingkat PUNCAK satkernya.
+    # Dulu selalu `eselon1`: pada satker Eselon III seluruh asetnya jatuh ke
+    # satu keranjang "Tanpa Eselon I" — satu batang yang tak mengabarkan apa pun
+    # kecuali bahwa pertanyaannya salah alamat.
+    _es_akar = await eselon_satker(
+        str((activity or {}).get("kode_satker") or "").strip())
+    _es_lv = ljj.level_kelompok_eselon(
+        _es_akar, ljj.level_eselon_berdata(all_assets))
+    _es_label = org.label_level(_es_lv) or "Eselon I"
     eselon1_breakdown = {}
     for a in all_assets:
-        e1 = a.get("eselon1", "") or "Tanpa Eselon I"
+        e1 = a.get(f"eselon{_es_lv}", "") or f"Tanpa {_es_label}"
         if e1 not in eselon1_breakdown:
             eselon1_breakdown[e1] = {"count": 0, "value": 0}
         eselon1_breakdown[e1]["count"] += 1
@@ -5783,6 +5792,10 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
         "cat_breakdown": cat_breakdown_sorted,
         "loc_breakdown": loc_breakdown_sorted,
         "eselon1_breakdown": eselon1_breakdown_sorted,
+        # Judul panelnya ikut menyebut tingkat yang benar-benar dikelompokkan;
+        # judul "Per Eselon I" di atas batang Eselon III adalah keterangan yang
+        # keliru, dan keterangan keliru lebih buruk daripada tak ada.
+        "eselon_label": _es_label,
         "year_breakdown": year_breakdown_sorted,
         "doc_completeness_pct": doc_completeness_pct,
         "photo_coverage_pct": photo_coverage_pct,
@@ -6290,13 +6303,12 @@ KAT_LEVEL_SAH = (1, 2, 3, 4, 5)
 #: Kelompok ke bawah mudah menjadi ratusan baris pada satker besar.
 KAT_LEVEL_BAWAAN = 2
 
-#: Jenjang unit organisasi yang boleh dipilih pada panel analisis.
-ES_LEVEL_SAH = tuple(b["level"] for b in org.daftar_level())
-#: Eselon II. Eselon I biasanya hanya beberapa baris — terlalu kasar untuk
-#: menunjuk siapa yang bertanggung jawab atas barangnya; Eselon III ke bawah
-#: baru berguna pada satker yang memang sudah mencatat sedalam itu, dan itu
-#: pilihan pembacanya, bukan bawaan.
-ES_LEVEL_BAWAAN = 2
+#: Jenjang unit organisasi yang sah DAN bawaannya tak lagi tetapan: keduanya
+#: mengikuti tingkat yang diduduki satkernya (`ljj.jenjang_eselon_satker`).
+#: Alasan bawaan lamanya tetap berlaku — Eselon I terlalu kasar untuk menunjuk
+#: siapa yang bertanggung jawab atas barangnya — tetapi patokannya yang keliru:
+#: pada satker Eselon III, Eselon II bukan tingkat yang lebih halus melainkan
+#: tingkat milik instansi induknya, yang tak berisi apa pun.
 
 #: Label jenjang eselon untuk pemilih di panel filter.
 _LABEL_ESELON = {b["level"]: b["label"] for b in org.daftar_level()}
@@ -6504,8 +6516,12 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
                     a, lingkup, _peta_unit, _peta_parent):
                 di_luar_lingkup.add(a.get("id"))
 
+    # Jenjang yang sah DAN bawaannya mengikuti puncak satker — bukan tetapan
+    # Eselon II, yang pada satker Eselon III membuka panel kosong.
+    es_sah, es_bawaan = ljj.jenjang_eselon_satker(
+        await eselon_satker(kode_satker), ljj.level_eselon_berdata(all_assets))
     es_levels = ljj.jenjang_terpilih_banyak(
-        (filter_dipilih or {}).get("es_level"), ES_LEVEL_SAH, ES_LEVEL_BAWAAN)
+        (filter_dipilih or {}).get("es_level"), es_sah, es_bawaan)
 
     def _chart_eselon(aset, n_acuan):
         # Aset di luar lingkup DIKUMPULKAN, bukan disaring keluar: jumlah
@@ -6518,7 +6534,8 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
                                                    di_luar_lingkup)]
 
     chart_eselon = _chart_eselon(all_assets, tc)
-    pilihan_es_level = ljj.pilihan_jenjang(ES_LEVEL_SAH, _LABEL_ESELON)
+    pilihan_es_level = ljj.pilihan_jenjang(es_sah, _LABEL_ESELON)
+    label_es_bawaan = _LABEL_ESELON.get(es_bawaan, str(es_bawaan))
 
     # Per kegiatan chart
     act_counter = Counter(a.get("activity_id", "") for a in all_assets)
@@ -7084,6 +7101,7 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
         "chart_eselon": chart_eselon,
         "es_levels": [str(v) for v in es_levels],
         "pilihan_es_level": pilihan_es_level,
+        "label_es_bawaan": label_es_bawaan,
         "n_di_luar_lingkup": len(di_luar_lingkup),
         "chart_per_kegiatan": chart_per_kegiatan,
         "halaman_analisis": halaman_analisis,

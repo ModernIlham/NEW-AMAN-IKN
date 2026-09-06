@@ -436,7 +436,7 @@ body {
         <option value="{{ o.nilai }}"{% if o.nilai in es_levels %} selected{% endif %}>{{ o.label }}</option>
         {% endfor %}
       </select>
-      <p class="pf-hint">Mengelompokkan panel <b>Per Unit Organisasi</b> menurut jenjang eselon, bersarang induk-anak. Boleh <b>lebih dari satu</b>. Bukan penyaring. Dikosongkan berarti kembali ke <b>Eselon II</b>.{% if n_di_luar_lingkup %} <b>{{ n_di_luar_lingkup }} aset</b> berada di luar lingkup eselon yang dicatat kegiatannya — tetap dihitung, dikumpulkan pada barisnya sendiri.{% endif %}</p>
+      <p class="pf-hint">Mengelompokkan panel <b>Per Unit Organisasi</b> menurut jenjang eselon, bersarang induk-anak. Boleh <b>lebih dari satu</b>. Bukan penyaring. Dikosongkan berarti kembali ke <b>{{ label_es_bawaan or 'Eselon II' }}</b> &mdash; satu jenjang di bawah puncak satker ini.{% if n_di_luar_lingkup %} <b>{{ n_di_luar_lingkup }} aset</b> berada di luar lingkup eselon yang dicatat kegiatannya — tetap dihitung, dikumpulkan pada barisnya sendiri.{% endif %}</p>
     </div>
 
     <div class="pf-blok">
