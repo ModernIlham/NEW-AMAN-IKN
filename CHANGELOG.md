@@ -18,6 +18,38 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1026] Ubah Massal memakai pemilih unit yang sama dengan form aset — 2026-09-06
+
+Permintaan pemilik: *"sesuaikan juga di Panel Ubah Massal — masih pakai
+`<select>` lama dengan '(E1)'."*
+
+Sisa terakhir dari `[#1024]`. Panelnya masih memakai `<select>` bawaan dengan
+jorokan spasi — yang tak terlihat pada pemilih Android — dan akhiran "(E1)"
+yang tersangkut di ujung nama panjang. Dua pemilih berbeda untuk satu pilihan
+yang sama membuat orang belajar dua kali, dan yang satu sudah diperbaiki
+sementara yang lain tidak.
+
+**Satu hal yang beda dan harus tetap beda: arti "tak memilih".** Pada form aset
+ia berarti asetnya tanpa unit; di Ubah Massal ia berarti unit seluruh aset
+terpilih TIDAK disentuh. Kata yang sama untuk dua maksud itu adalah cara
+tercepat membuat orang menghapus unit puluhan aset padahal ia hanya ingin
+membiarkannya — dan ubah massal tak menanyakan ulang per aset. Karena itu
+`PemilihUnitOrganisasi` kini menerima tiga teks yang dapat ditimpa: ajakan pada
+tombolnya, baris peresetnya, dan keterangan jangkauannya. Di sini ketiganya
+berbunyi "jangan ubah", dan keterangannya menyebut **SELURUH aset terpilih**.
+
+**Cacat yang ikut ketahuan sepanjang jalan**: membatalkan pilihan menyisakan
+`__unit_id: ""` di daftar perubahan. Penandanya memang dibuang sebelum dikirim,
+tetapi ia tetap terhitung sebagai perubahan — tombol "Terapkan ke N aset"
+menyala padahal tak ada satu pun field yang berubah, dan menekannya menaikkan
+versi serta mencatat audit N aset tanpa sebab. Penandanya kini DIHAPUS, bukan
+dikosongkan.
+
+Uji: 9 uji baru, termasuk yang paling mahal bila keliru — membatalkan pilihan
+tidak boleh mengirim `__clear__` pada eselon1–5, sebab itu akan menghapus unit
+organisasi seluruh aset terpilih sekaligus. Lima mutasi dipasang dan seluruhnya
+mati. Tata letaknya diperiksa dengan merender pada lebar 360px.
+
 ## [#1025] Jenjang unit di laporan mengikuti puncak satkernya — 2026-09-06
 
 Permintaan pemilik: *"betulkan dua patokan Eselon I di laporan — pengelompokan
