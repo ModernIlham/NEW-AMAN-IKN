@@ -170,6 +170,62 @@ def test_satu_panel_raksasa_tak_membuat_perulangan_tak_berujung():
     assert len(halaman) < 500, "tiap baris membuka halamannya sendiri"
 
 
+def test_SATU_KOLOM_tak_pernah_memuat_dua_potongan_panel_yang_SAMA():
+    """Cacat yang dilaporkan pemilik: *"selalu saja ada gap (lanjutan) yang
+    seharusnya masih bisa dilanjutkan tanpa terputus tapi malah terputus"*.
+
+    Penyebabnya panel dipotong LEBIH DULU menjadi kepingan sebesar satu kolom
+    penuh, sebelum diketahui di kolom mana kepingan itu akan jatuh. Sebuah
+    kolom lalu menerima ekor keping pertama, lalu kepala keping kedua —
+    berjajar, masing-masing berjudul "(lanjutan)", dengan jarak di antaranya.
+
+    Dua judul (110px) dan satu jarak terbuang di ruang yang sebenarnya memuat
+    satu daftar utuh yang lebih panjang. Tak ada baris yang hilang, jadi uji
+    "tak ada yang hilang" pun lolos — daftarnya hanya terputus tanpa sebab.
+    """
+    for n in (60, 90, 120, 137, 200):
+        panel = [_panel("Kondisi", 3), _panel("Status", 2),
+                 _panel("Kategori", 1), _panel("Lokasi", n)]
+        for ke, h in enumerate(tl.susun(panel)):
+            for sisi in ("kiri", "kanan"):
+                judul = [p["judul"] for p in h[sisi]]
+                assert len(judul) == len(set(judul)), (
+                    f"n={n} hal={ke} {sisi}: {judul} — panel yang sama "
+                    f"terputus di dalam satu kolom")
+
+
+def test_potongan_terputus_TIDAK_lebih_pendek_daripada_yang_utuh():
+    """Ukuran langsung dari perbaikannya: satu daftar utuh di kolom kanan
+    memuat LEBIH BANYAK baris daripada dua potongan berjajar, sebab judul
+    keduanya (55px) dan jarak di antaranya (13px) ikut memakan ruang."""
+    hal = tl.susun([_panel("Kondisi", 3), _panel("Status", 2),
+                    _panel("Kategori", 1), _panel("Lokasi", 120)])
+    kanan = hal[0]["kanan"]
+    assert len(kanan) == 1, [p["judul"] for p in kanan]
+    tersedia = tl.TINGGI_KOLOM - tl.TINGGI_JUDUL_AWAL
+    # 18 + 27 = 45 baris pada tata letak lama; utuh memuat 49.
+    assert len(kanan[0]["baris"]) == tl.baris_muat(tersedia)
+
+
+def test_pemecahan_DIPAKSA_saat_kolom_kosong_tetap_tak_cukup():
+    """Panel yang lebih tinggi dari kolom kosong tak boleh ditunda: kolom
+    berikutnya sama tingginya dan akan menolaknya lagi, sementara menaruhnya
+    utuh berarti melubernya dipotong diam-diam oleh `overflow: hidden`.
+
+    Ekornya pun dijaga tetap layak — pemecahan paksa yang menyisakan satu
+    baris hanya memindahkan kekeliruan cetaknya ke halaman berikutnya."""
+    tersedia = tl.TINGGI_KOLOM - tl.TINGGI_JUDUL_AWAL
+    pas = tl.baris_muat(tersedia)
+    for lebih in range(1, tl.MIN_BARIS_PECAH):
+        halaman = tl.susun([_panel("Lokasi", pas + lebih)])
+        potongan = [p for h in halaman for sisi in ("kiri", "kanan")
+                    for p in h[sisi]]
+        assert all(p["tinggi"] <= tersedia for p in potongan), (
+            f"lebih={lebih}: ada potongan yang meluber")
+        assert all(len(p["baris"]) >= tl.MIN_BARIS_PECAH for p in potongan), (
+            f"lebih={lebih}: {[len(p['baris']) for p in potongan]}")
+
+
 # ── 3. Kedua kolom terisi rata ──────────────────────────────────────────
 
 def test_URUTAN_BACA_terjaga_kiri_penuh_dulu_baru_kanan():

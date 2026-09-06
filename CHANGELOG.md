@@ -18,6 +18,45 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1023] Daftar panjang di laporan gabungan tak lagi terputus di tengah kolom — 2026-09-06
+
+Permintaan pemilik: *"pada laporan gabungan hasil outputnya untuk per kategori
+dan perlokasi selalu saja ada gap (lanjutan) yang seharusnya masih bisa
+dilanjutkan tanpa terputus tapi malah terputus."*
+
+Penyusun tata letak memotong tiap panel LEBIH DULU menjadi kepingan sebesar
+satu kolom penuh, lalu menempatkan kepingan-kepingan itu. Batas potongnya jadi
+ditentukan sebelum diketahui di kolom mana ia akan jatuh, dan akibatnya satu
+kolom bisa menerima ekor keping pertama LALU kepala keping kedua — berjajar,
+masing-masing berjudul "(lanjutan)", dengan jarak di antaranya.
+
+Pada data pemiliknya (140 lokasi), kolom kanan halaman pertama memuat 18 baris,
+terputus, lalu 27 baris lagi; kolom kiri halaman kedua memuat 22 lalu 24. Dua
+judul (110px) dan satu jarak terbuang di tiap kolom, di ruang yang sebenarnya
+memuat SATU daftar sepanjang 49 dan 50 baris. Seluruh daftarnya kini memakai
+empat potongan, bukan enam.
+
+Kini panel masuk antrean UTUH dan dipecah hanya ketika benar-benar tak muat,
+tepat pada batas ruang yang tersisa. Satu panel karenanya menyumbang paling
+banyak satu potongan per kolom.
+
+Pemecahan pra-tempat itu juga yang menjamin tiap kepingnya muat satu kolom
+kosong, jadi jaminan itu dipindahkan ke tempatnya: kolom yang MASIH KOSONG dan
+tetap tak cukup memaksa pemecahan — menundanya berarti menawarkannya ke kolom
+berikutnya yang sama tingginya, yang akan menolaknya lagi, sementara
+menaruhnya utuh berarti melubernya dipotong diam-diam oleh `overflow: hidden`.
+Batas paksanya digeser supaya ekornya tetap layak alih-alih menyisakan
+potongan satu baris di halaman berikutnya.
+
+Tak satu pun dari 24 uji tata letak yang ada menangkap cacat ini: tak ada
+baris yang hilang, tak ada kolom yang meluber, dan kedua kolom tetap terisi
+rapat — daftarnya hanya terputus tanpa sebab. Tiga uji baru mematoknya, yang
+pertama langsung pada sifatnya: satu kolom tak pernah memuat dua potongan dari
+panel yang sama. Empat mutasi dipasang dan seluruhnya mati.
+
+Diperiksa dengan merender laporannya: 140 lokasi, tata letak lama dan baru,
+sama-sama ke PDF lalu dilihat — bukan hanya diukur angkanya.
+
 ## [#1022] Struktur ringkas pada kegiatan ikut tingkat satkernya — 2026-09-06
 
 Lanjutan `[#1021]`. Pemilik menunjuk blok "ESELON I" pada form Kegiatan:

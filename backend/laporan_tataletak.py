@@ -21,7 +21,7 @@ Modul ini menggantikan keduanya dengan **pengukuran**: tiap panel menghitung
 tingginya sendiri dalam piksel, panel yang terlalu panjang dipecah, lalu
 potongannya dijatah ke dua kolom halaman sampai kertasnya benar-benar penuh.
 
-Tiga keputusan yang membentuk modul ini:
+Empat keputusan yang membentuk modul ini:
 
 1. **Tingginya dihitung di Python, bukan ditebak di Jinja.** Aritmetika di
    dalam template tak dapat diuji unit, dan kekeliruannya baru terlihat sebagai
@@ -44,6 +44,23 @@ Tiga keputusan yang membentuk modul ini:
    Mengisi kolom secara berurutan tetap memenuhi "berbagi posisi": keduanya
    sama-sama terisi sampai batas, hanya saja urutannya mengikuti cara orang
    membaca.
+
+4. **Pemecahan terjadi SAAT penempatan, bukan sebelumnya.** Percobaan
+   sebelumnya memotong tiap panel lebih dulu menjadi kepingan sebesar satu
+   kolom penuh, lalu menempatkan kepingan-kepingan itu. Batas potongnya jadi
+   ditentukan sebelum diketahui di kolom mana ia akan jatuh, dan akibatnya
+   satu kolom bisa menerima DUA potongan dari panel yang sama, berjajar,
+   masing-masing berjudul "(lanjutan)" dengan jarak di antaranya.
+
+   Pemiliknya melaporkan persis itu: *"selalu saja ada gap (lanjutan) yang
+   seharusnya masih bisa dilanjutkan tanpa terputus tapi malah terputus"*.
+   Pada data sungguhannya, kolom kanan memuat 18 baris lalu terputus, lalu 27
+   baris lagi — 45 baris memakai dua judul (110px) dan satu jarak, di ruang
+   yang sebenarnya memuat 49 baris sebagai SATU daftar.
+
+   Kini panel masuk antrean utuh dan dipecah hanya ketika benar-benar tak
+   muat, tepat pada batas ruang yang tersisa. Satu panel karenanya menyumbang
+   paling banyak satu potongan per kolom.
 """
 
 #: Tinggi kolom isi satu lembar A4 (1123px) setelah dikurangi kop, kaki, dan
@@ -82,24 +99,15 @@ def baris_muat(tinggi_tersedia: int) -> int:
     return sisa // TINGGI_BARIS if sisa > 0 else 0
 
 
-def _potong(panel, maks_baris):
-    """Pecah satu panel menjadi potongan-potongan yang muat satu kolom.
+def _siapkan(panel):
+    """Panel siap-antre: tingginya dihitung, dan ia belum berupa lanjutan.
 
-    Potongan kedua dan seterusnya ditandai `lanjutan` supaya judulnya dapat
-    menyatakan bahwa daftarnya belum habis (lihat #2).
+    TIDAK dipecah di sini — pemecahannya menunggu sampai diketahui berapa
+    ruang yang tersisa di kolom tempatnya jatuh (lihat #4).
     """
-    baris = panel.get("baris") or []
-    if not baris:
-        return [{**panel, "baris": [], "lanjutan": False,
-                 "tinggi": tinggi_panel(0)}]
-    if maks_baris <= 0:
-        maks_baris = 1
-    keluar = []
-    for i in range(0, len(baris), maks_baris):
-        bagian = baris[i:i + maks_baris]
-        keluar.append({**panel, "baris": bagian, "lanjutan": i > 0,
-                       "tinggi": tinggi_panel(len(bagian))})
-    return keluar
+    baris = list(panel.get("baris") or [])
+    return {**panel, "baris": baris, "lanjutan": False,
+            "tinggi": tinggi_panel(len(baris))}
 
 
 def susun(panel_list, tinggi_kolom=TINGGI_KOLOM,
@@ -129,13 +137,11 @@ def susun(panel_list, tinggi_kolom=TINGGI_KOLOM,
 
     tersedia = buka_halaman()
 
-    # Antrean, bukan perulangan bersarang: sebuah potongan yang tak muat di
-    # sisa kolom dapat dipecah lagi, dan ekornya harus diproses seperti
-    # potongan biasa — termasuk kemungkinan dipecah sekali lagi di halaman
-    # berikutnya.
-    antrean = []
-    for panel in panel_list:
-        antrean += _potong(panel, baris_muat(tersedia))
+    # Antrean, bukan perulangan bersarang: sebuah panel yang tak muat di sisa
+    # kolom dipecah di tempat, dan ekornya kembali ke antrean untuk diproses
+    # seperti panel biasa — termasuk kemungkinan dipecah lagi di kolom atau
+    # halaman berikutnya.
+    antrean = [_siapkan(p) for p in panel_list]
     antrean.reverse()
 
     while antrean:
@@ -154,7 +160,21 @@ def susun(panel_list, tinggi_kolom=TINGGI_KOLOM,
         # dihematnya, dan terbaca sebagai kekeliruan cetak.
         muat = baris_muat(ruang)
         sisa_baris = len(bagian["baris"]) - muat
-        if muat >= MIN_BARIS_PECAH and sisa_baris >= MIN_BARIS_PECAH:
+        layak = muat >= MIN_BARIS_PECAH and sisa_baris >= MIN_BARIS_PECAH
+
+        # Kolom yang MASIH KOSONG tak punya tempat lain untuk menunggu:
+        # menundanya berarti menawarkannya ke kolom berikutnya yang sama
+        # tingginya — yang akan menolaknya lagi — sementara menaruhnya utuh
+        # berarti melubernya dipotong diam-diam oleh `overflow: hidden`. Di
+        # sana pemecahan DIPAKSA, dan batasnya digeser supaya ekornya tetap
+        # layak alih-alih menyisakan potongan satu baris.
+        if not layak and tinggi == 0 and muat >= 1 and sisa_baris >= 1:
+            if sisa_baris < MIN_BARIS_PECAH:
+                muat = max(1, len(bagian["baris"]) - MIN_BARIS_PECAH)
+                sisa_baris = len(bagian["baris"]) - muat
+            layak = True
+
+        if layak:
             isi[SISI[sisi]].append({**bagian, "baris": bagian["baris"][:muat],
                                     "tinggi": tinggi_panel(muat)})
             tinggi += jarak + tinggi_panel(muat)
@@ -164,8 +184,8 @@ def susun(panel_list, tinggi_kolom=TINGGI_KOLOM,
             continue
 
         if tinggi == 0:
-            # Kolomnya masih kosong dan isinya tetap tak muat: taruh apa
-            # adanya. Tanpa cabang ini perulangannya tak pernah berhenti.
+            # Kolomnya tak cukup bahkan untuk satu baris: taruh apa adanya.
+            # Tanpa cabang ini perulangannya tak pernah berhenti.
             isi[SISI[sisi]].append(bagian)
             tinggi = bagian["tinggi"]
             continue
