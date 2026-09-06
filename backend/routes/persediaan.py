@@ -237,6 +237,19 @@ async def bangun_nota_dinas_pdf(jenis, rows, tanggal, settings, kpb,
     menghasilkan dokumen yang bentuknya sama persis — kalau tidak, yang
     dipratinjau bukan yang terbit.
 
+    ── Tabel di badan surat, atau sebagai LAMPIRAN ──────────────────────
+    Daftar barang persediaan bisa memuat ratusan baris. Dibiarkan di badan
+    surat, ia mendorong blok tanda tangan ke halaman berikutnya — dan naskah
+    dinas yang tanda tangannya terpisah dari narasinya terbaca sebagai lembar
+    lepas: pembaca halaman terakhir hanya melihat potongan tabel lalu sebuah
+    tanda tangan, tanpa tahu ia menandatangani apa.
+
+    Maka batasnya bukan jumlah baris melainkan AKIBATNYA: bila tanda tangan
+    tak lagi muat di halaman pertama, tabelnya pindah menjadi lampiran dan
+    surat kembali utuh satu halaman. Keputusannya diambil dengan MENGUKUR
+    tinggi flowables yang sudah tersusun, bukan menebak dari cacah baris —
+    tinggi baris berubah mengikuti panjang nama barang yang membungkus.
+
     `rows` sudah tersaring dan siap cetak; fungsi ini tidak menghitung ulang
     peringatan apa pun. `kpb` dibekukan oleh pemanggil supaya nota tahun lalu
     tetap menyebut pejabat yang menandatanganinya, bukan pejabat hari ini.
@@ -244,7 +257,10 @@ async def bangun_nota_dinas_pdf(jenis, rows, tanggal, settings, kpb,
     from io import BytesIO
 
     from reportlab.lib.units import mm as rl_mm
-    from reportlab.platypus import Paragraph, Spacer, Table
+    from reportlab.pdfgen.canvas import Canvas
+    from reportlab.platypus import (KeepTogether, PageBreak, Paragraph, Spacer,
+                                    Table)
+    from reportlab.platypus.flowables import _listWrapOn
 
     from routes.reports import (
         _fit_col_widths, _fmt_tanggal_id, _get_report_styles, _identity_table,
@@ -257,57 +273,128 @@ async def bangun_nota_dinas_pdf(jenis, rows, tanggal, settings, kpb,
     buffer = BytesIO()
     doc = _std_doc(buffer)
     st = _get_report_styles()
-    elements = []
-    elements.extend(_kop_surat_flowables(settings, doc.width))
+
+    # Kanvas buangan, semata untuk mengukur: `_listWrapOn` memerlukan kanvas,
+    # dan yang ini tak pernah ditulis ke berkas mana pun.
+    _kanvas_ukur = Canvas(BytesIO(), pagesize=doc.pagesize)
 
     body = pnu.isi_tabel(jenis, rows, fmt_tanggal=_fmt_tanggal_id)
+    tgl_teks = _fmt_tanggal_id(tanggal)
 
-    # ── KEPALA NASKAH DINAS ─────────────────────────────────────────────
-    #
-    # Sebelumnya hanya judul lalu tabel: tanpa tujuan, tanpa pengirim, tanpa
-    # nomor, tanpa hal. Dokumen yang tak menyebut kepada siapa ia ditujukan
-    # tak dapat diagendakan, tak dapat ditindaklanjuti penerimanya, dan tak
-    # dapat diarsipkan sebagai naskah dinas — ia hanya cetakan daftar.
-    # Susunannya mengikuti PerANRI 5/2021 (lihat persuratan_utils).
-    elements.extend(_title_block(pnu.judul(jenis)))
-    elements.append(_identity_table(psu.kepala_nota_dinas(
-        yth=(str(yth or "").strip() or "Pejabat Pengadaan Barang/Jasa"),
-        dari=_hdr_kpb(kpb).rstrip(","),
-        nomor=nomor,
-        hal=pnu.hal(jenis),
-        lampiran=("1 (satu) berkas" if body else "-"),
-        tanggal_iso=tanggal)))
-    elements.append(Spacer(1, 3 * rl_mm))
-    elements.append(Paragraph(
-        pnu.pengantar(jenis, horizon_hari=horizon_hari, seleksi=seleksi),
-        st['Meta']))
-    elements.append(Paragraph(
-        f"Data per {_fmt_tanggal_id(tanggal)}.", st['Meta']))
-    elements.append(Spacer(1, 4 * rl_mm))
+    def _tabel():
+        """Tabel daftar barang — dibangun ulang tiap dipakai.
+
+        Flowable ReportLab menyimpan keadaan saat di-`wrap`/`split`; memakai
+        objek yang SAMA untuk mengukur lalu mencetak membuat hasil cetaknya
+        bergantung pada pengukuran yang mendahuluinya.
+        """
+        data = [[Paragraph(h, st['TableHeader']) for h in pnu.headers(jenis)]]
+        for r in body:
+            data.append([Paragraph(str(c), st['Cell']) for c in r])
+        t = Table(data, colWidths=_fit_col_widths(pnu.widths(jenis), doc.width),
+                  repeatRows=1)
+        t.setStyle(_std_table_style(zebra=True))
+        return t
+
+    def _blok_ttd():
+        return _signature_block([
+            {'pre': [psu.tempat_tanggal(settings, tanggal)],
+             'header': _hdr_kpb(kpb),
+             'nama': kpb["nama"],
+             # Non-ASN: baris NIP/NIK tidak dicetak (privasi)
+             'after': baris_identitas_ttd(kpb['nip'],
+                                          kpb.get("status_kepegawaian"))},
+        ], doc.width)
+
+    def _kepala(lampiran_ada):
+        """Kop + judul + nomor + blok kepala + narasi."""
+        el = []
+        el.extend(_kop_surat_flowables(settings, doc.width))
+        # Nomor DI BAWAH JUDUL, bukan di blok kepala: itulah tempatnya pada
+        # naskah dinas, dan halaman lampiran yang tak membawa blok kepala pun
+        # tetap dapat menyebut nomor induknya.
+        el.extend(_title_block(
+            pnu.judul(jenis),
+            nomor=(str(nomor or "").strip() or "......./......./........")))
+        el.append(_identity_table(psu.kepala_nota_dinas(
+            yth=(str(yth or "").strip() or "Pejabat Pengadaan Barang/Jasa"),
+            dari=_hdr_kpb(kpb).rstrip(","),
+            hal=pnu.hal(jenis),
+            lampiran=pnu.label_lampiran(lampiran_ada),
+            tanggal_iso=tanggal)))
+        el.append(Spacer(1, 5 * rl_mm))
+        # Narasi memakai gaya BADAN SURAT, bukan gaya keterangan kecil.
+        # Prosa surat yang lebih kecil daripada label kepalanya sendiri
+        # terbaca sebagai catatan kaki, bukan sebagai isi naskah.
+        for par in pnu.narasi(jenis, tanggal_teks=tgl_teks, jumlah=len(body),
+                              horizon_hari=horizon_hari, seleksi=seleksi,
+                              terlampir=lampiran_ada):
+            el.append(Paragraph(par, st['Body']))
+        el.append(Spacer(1, 4 * rl_mm))
+        return el
+
+    def _ratakan(flowables) -> list:
+        """Ganti tiap `KeepTogether` dengan isinya, demi PENGUKURAN.
+
+        `KeepTogether.wrap()` sengaja melaporkan tinggi tak-hingga (0xFFFFFF)
+        agar platypus memindahkannya ke frame berikutnya. Mengukurnya apa
+        adanya karena itu TIDAK PERNAH GAGAL — ia hanya menjawab enam belas
+        juta poin, dan setiap nota, sependek apa pun, disimpulkan tak muat
+        lalu daftarnya dilempar ke lampiran. Blok tanda tangan justru
+        dibungkus `KeepTogether`, jadi ini bukan kasus pinggiran.
+        """
+        keluar = []
+        for f in flowables:
+            if isinstance(f, KeepTogether):
+                keluar.extend(_ratakan(f._content))
+            else:
+                keluar.append(f)
+        return keluar
+
+    def _tinggi(flowables) -> float:
+        """Tinggi tersusun sederet flowable pada lebar dokumen.
+
+        Memakai `_listWrapOn` — rutin yang SAMA yang dipakai platypus saat
+        benar-benar menata halaman — bukan menjumlahkan `wrap()` sendiri:
+        jarak antar-flowable ditentukan `max(spaceAfter, spaceBefore)`, bukan
+        penjumlahan keduanya. Ukuran yang dipakai memutuskan harus berasal
+        dari rutin yang sama dengan ukuran yang akhirnya tercetak.
+        """
+        _w, h = _listWrapOn(_ratakan(flowables), doc.width, _kanvas_ukur)
+        return float(h)
 
     if not body:
+        # Nota tanpa barang: tak ada yang bisa dilampirkan, dan kalimatnya
+        # menggantikan tabel.
+        elements = _kepala(False)
         elements.append(Paragraph(
-            "Tidak ada barang yang memenuhi kriteria saat ini.", st['Cell']))
+            "Tidak ada barang yang memenuhi kriteria saat ini.", st['Body']))
+        elements.append(Spacer(1, 12 * rl_mm))
+        elements.extend(_blok_ttd())
     else:
-        table_data = [[Paragraph(h, st['TableHeader'])
-                       for h in pnu.headers(jenis)]]
-        for r in body:
-            table_data.append([Paragraph(str(c), st['Cell']) for c in r])
-        table = Table(table_data,
-                      colWidths=_fit_col_widths(pnu.widths(jenis), doc.width),
-                      repeatRows=1)
-        table.setStyle(_std_table_style(zebra=True))
-        elements.append(table)
-
-    elements.append(Spacer(1, 12 * rl_mm))
-    elements.extend(_signature_block([
-        {'pre': [psu.tempat_tanggal(settings, tanggal)],
-         'header': _hdr_kpb(kpb),
-         'nama': kpb["nama"],
-         # Non-ASN: baris NIP/NIK tidak dicetak (privasi)
-         'after': baris_identitas_ttd(kpb['nip'],
-                                      kpb.get("status_kepegawaian"))},
-    ], doc.width))
+        sisa = (doc.height - _tinggi(_kepala(False))
+                - _tinggi(_blok_ttd()) - 12 * rl_mm)
+        muat = _tinggi([_tabel()]) <= sisa
+        elements = _kepala(not muat)
+        if muat:
+            elements.append(_tabel())
+            elements.append(Spacer(1, 12 * rl_mm))
+            elements.extend(_blok_ttd())
+        else:
+            elements.append(Spacer(1, 12 * rl_mm))
+            elements.extend(_blok_ttd())
+            elements.append(PageBreak())
+            elements.extend(_title_block(
+                pnu.JUDUL_LAMPIRAN,
+                nomor=(str(nomor or "").strip()
+                       or "......./......./........")))
+            elements.append(_identity_table([
+                ("Hal", pnu.hal(jenis)),
+                ("Tanggal", tgl_teks or "......................."),
+                ("Jumlah", f"{len(body)} baris"),
+            ]))
+            elements.append(Spacer(1, 5 * rl_mm))
+            elements.append(_tabel())
 
     footer = _page_footer_factory("Nota Dinas Persediaan")
     await asyncio.to_thread(doc.build, elements, onFirstPage=footer,

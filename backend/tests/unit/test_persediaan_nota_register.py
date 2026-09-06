@@ -121,8 +121,47 @@ def test_tanggal_kedaluwarsa_diformat_pemanggil():
 
 def test_kalimat_seleksi_hanya_muncul_saat_daftar_dipilih_sebagian():
     for jenis in pnu.JENIS_NOTA:
-        assert "sengaja tidak disertakan" not in pnu.pengantar(jenis)
-        assert "sengaja tidak disertakan" in pnu.pengantar(jenis, seleksi=True)
+        utuh = " ".join(pnu.narasi(jenis))
+        sebagian = " ".join(pnu.narasi(jenis, seleksi=True))
+        assert "sengaja tidak disertakan" not in utuh, jenis
+        assert "sengaja tidak disertakan" in sebagian, jenis
+
+
+def test_narasi_menyebut_terlampir_HANYA_saat_daftarnya_dilampirkan():
+    """Surat yang menulis "terlampir" sementara tabelnya tercetak tepat di
+    bawahnya membuat pembaca mencari halaman yang tak pernah ada."""
+    for jenis in pnu.JENIS_NOTA:
+        di_badan = " ".join(pnu.narasi(jenis, terlampir=False))
+        di_lampiran = " ".join(pnu.narasi(jenis, terlampir=True))
+        assert "daftar berikut" in di_badan and "terlampir" not in di_badan
+        assert "daftar terlampir" in di_lampiran
+
+
+def test_narasi_menyebut_jumlah_dan_tanggal_pemantauannya():
+    teks = " ".join(pnu.narasi("kritis", tanggal_teks="6 September 2026",
+                               jumlah=142))
+    assert "142" in teks and "per 6 September 2026" in teks
+
+
+def test_narasi_selalu_ditutup_salam_dan_dibuka_alasan():
+    for jenis in pnu.JENIS_NOTA:
+        par = pnu.narasi(jenis)
+        assert len(par) >= 4, jenis
+        assert par[-1].startswith("Demikian disampaikan"), jenis
+        # Paragraf pembuka menyatakan ALASANNYA, bukan langsung daftar:
+        # dokumen yang tak menyebut alasan sulit dipertanggungjawabkan.
+        assert "Dalam rangka" in par[0], jenis
+
+
+def test_narasi_jenis_asing_kosong_bukan_meledak():
+    assert pnu.narasi("entah") == []
+
+
+def test_label_lampiran_mengikuti_keadaan_naskah():
+    # Menyebut "1 (satu) berkas" pada naskah yang daftarnya tercetak di badan
+    # surat membuat pembaca mencari berkas yang tak pernah ada.
+    assert pnu.label_lampiran(True) == "1 (satu) berkas"
+    assert pnu.label_lampiran(False) == "-"
 
 
 def test_nama_berkas_pratinjau_tidak_berubah():

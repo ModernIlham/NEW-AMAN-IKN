@@ -865,25 +865,29 @@ def tempat_tanggal(settings, tanggal_iso) -> str:
 
 
 #: Urutan baku kepala Nota Dinas (PerANRI 5/2021 §Nota Dinas).
-URUT_KEPALA_NOTA = ("Yth.", "Dari", "Nomor", "Sifat", "Lampiran", "Hal",
-                    "Tanggal")
+# Nomor SENGAJA tidak ada di sini: pada naskah dinas ia dicetak tepat di bawah
+# JUDUL, bukan sebagai baris kepala. Mencetaknya di kedua tempat membuat
+# pembaca mengira ada dua penomoran.
+URUT_KEPALA_NOTA = ("Yth.", "Dari", "Sifat", "Lampiran", "Hal", "Tanggal")
 
 
-def kepala_nota_dinas(yth="", dari="", nomor="", sifat="Biasa", lampiran="",
+def kepala_nota_dinas(yth="", dari="", sifat="Biasa", lampiran="",
                       hal="", tanggal_iso="") -> list:
     """`[(label, isi)]` kepala Nota Dinas, urut baku dan LENGKAP.
 
     Seluruh baris selalu dicetak, termasuk yang belum terisi — kepala naskah
     dinas yang barisnya muncul-hilang mengikuti data membuat dua nota dinas
     dari satker yang sama terlihat sebagai dua jenis dokumen. Yang kosong diisi
-    tanda hubung; yang belum bernomor diisi garis isian, sebab ia memang
-    menunggu diisi (pola yang sama dengan BAST belum bernomor).
+    tanda hubung.
+
+    Nomor TIDAK termasuk: ia dicetak di bawah judul naskah (lihat
+    `_title_block`), sehingga halaman lampiran yang tak membawa blok kepala
+    pun tetap dapat menyebut nomor induknya.
     """
     from pelaporan_utils import tanggal_id_singkat
     isi = {
         "Yth.": str(yth or "").strip() or "-",
         "Dari": str(dari or "").strip() or "-",
-        "Nomor": str(nomor or "").strip() or "......./......./........",
         "Sifat": str(sifat or "").strip() or "Biasa",
         "Lampiran": str(lampiran or "").strip() or "-",
         "Hal": str(hal or "").strip() or "-",
