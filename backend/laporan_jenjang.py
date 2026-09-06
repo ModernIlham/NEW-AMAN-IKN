@@ -39,6 +39,11 @@ Tiga keputusan yang membentuk modul ini:
 #: keadaan data yang memang begitu.
 TANPA_KODE = "(tanpa kode barang)"
 TANPA_DENAH = "(belum ditempatkan di denah)"
+#: Field teks `location` yang kosong. Dibedakan dari `TANPA_DENAH`: yang satu
+#: berarti asetnya belum ditempatkan pada denah, yang lain berarti kolom lokasi
+#: bebasnya memang belum diisi. Menyatukan keduanya menyembunyikan mana yang
+#: sebenarnya kurang.
+TANPA_LOKASI_TEKS = "(lokasi belum diisi)"
 TANPA_ESELON = "(tanpa unit organisasi)"
 
 #: Aset yang unitnya berada DI LUAR lingkup eselon kegiatan. Dikumpulkan,
@@ -138,6 +143,121 @@ def baris_hierarki_denah(aset, levels, peta_node):
 
     return _hierarki(aset, [kunci(lv) for lv in levels],
                      [lambda k: k] * len(levels))
+
+
+def baris_hierarki_lokasi(aset, levels, peta_node, dengan_teks=True):
+    """Denah dari terluas ke terdalam, lalu lokasi TEKS BEBAS sebagai daun.
+
+    Permintaan pemilik: *"lakukan hal yang sama disemua distribusi lokasi
+    sesuai hierarki di peta denah juga dari awal hingga akhir, dan terakhir
+    data lokasi sekarang."*
+
+    Denah menjawab "di gedung mana"; field teks `location` menjawab "tertulis
+    di mana" — dan keduanya kerap tak sama. Menaruh teks itu sebagai jenjang
+    TERDALAM membuat selisihnya terbaca: satu Ruangan denah yang di bawahnya
+    berisi tiga tulisan berbeda ("Lt.2", "Lantai 2", "lantai dua") menunjukkan
+    persis pekerjaan pembersihan yang tersisa, dan itu tak pernah terlihat
+    selama keduanya berdiri sebagai dua grafik terpisah.
+
+    `levels` kosong berarti belum ada satu pun aset yang ditempatkan di denah;
+    yang tersisa hanya jenjang teksnya, dan panelnya jatuh menjadi daftar rata
+    seperti sebelumnya.
+    """
+    def kunci_denah(level):
+        def ambil(a):
+            lok = (a or {}).get("lokasi_spasial") or {}
+            return ((peta_node.get(lok.get("node_id")) or {})
+                    .get("level_nama", {}).get(level, "")) or TANPA_DENAH
+        return ambil
+
+    def kunci_teks(a):
+        return str((a or {}).get("location") or "").strip() or TANPA_LOKASI_TEKS
+
+    kunci_fns = [kunci_denah(lv) for lv in (levels or [])]
+    if dengan_teks:
+        kunci_fns.append(kunci_teks)
+    if not kunci_fns:
+        return []
+    return _rapatkan_rantai_kosong(
+        _hierarki(aset, kunci_fns, [lambda k: k] * len(kunci_fns)),
+        {TANPA_DENAH, TANPA_LOKASI_TEKS})
+
+
+def _punya_saudara_sebelumnya(baris, i):
+    """Adakah baris lain sedalam `baris[i]` di bawah induk yang sama, SEBELUMnya?
+
+    Menengok ke belakang saja sudah cukup — dan itu bukan penyederhanaan yang
+    kebetulan selamat: `_urut_mentah` selalu menaruh kelompok "(tanpa …)"
+    PALING AKHIR di antara saudaranya, jadi saudaranya — bila ada — pasti sudah
+    terlewati. Pemanggilnya hanya menanyakan baris "(tanpa …)".
+
+    Penelusurannya berhenti pada baris yang lebih DANGKAL: itulah batas
+    induknya, sehingga cabang lain tak pernah terhitung sebagai saudara.
+    """
+    b = baris[i]
+    for j in range(i - 1, -1, -1):
+        if baris[j]["depth"] < b["depth"]:
+            return False
+        if baris[j]["depth"] == b["depth"]:
+            return True
+    return False
+
+
+def _rapatkan_rantai_kosong(baris, kosong):
+    """Buang baris "(tanpa …)" yang ANAK TUNGGAL, lalu RAPATKAN kedalamannya.
+
+    Aset yang belum ditempatkan di denah melahirkan satu baris "(belum
+    ditempatkan di denah)" pada SETIAP jenjang denah — empat jenjang berarti
+    empat baris beruntun yang cacahnya persis sama dan tak menyatakan satu pun
+    hal baru. Yang menyatakan sesuatu hanya yang pertama.
+
+    Bedanya dengan `_buang_ekor_kosong`: di sini rantainya berada di PANGKAL,
+    bukan di ekor, sehingga keturunannya masih ada di bawah. Kedalaman mereka
+    ikut dirapatkan — kalau tidak, sebuah baris menjorok empat tingkat di bawah
+    induk yang cuma satu tingkat di atasnya, dan jorokan berhenti menggambarkan
+    apa pun.
+
+    Yang punya SAUDARA tetap dipertahankan: di situ ia menyatakan sesuatu yang
+    nyata — sekian aset di Gedung ini belum ditempatkan pada Lantai mana pun,
+    sementara sisanya sudah.
+    """
+    if not baris:
+        return baris
+    keluar, dibuang = [], []
+    for i, b in enumerate(baris):
+        dibuang = [d for d in dibuang if d < b["depth"]]
+        if (b["depth"] > 0 and b["label"] in kosong
+                and not _punya_saudara_sebelumnya(baris, i)):
+            dibuang.append(b["depth"])
+            continue
+        keluar.append({**b, "depth": b["depth"] - len(dibuang)})
+    return keluar
+
+
+def tandai_batang_daun(baris):
+    """Beri `bar_pct` HANYA pada jenjang terdalam; kembalikan `baris`.
+
+    Bekerja atas baris SIAP-TAMPIL (`{"count", "depth", …}`), bukan atas
+    keluaran `_hierarki` yang masih membawa daftar asetnya.
+
+    Permintaan pemilik: *"untuk barchart disetiap data sub sub kelompok jangan
+    dihilangkan."* Pada baris PENGELOMPOKAN batang membandingkan induk dengan
+    anaknya — dua besaran yang salah satunya memuat yang lain — sehingga
+    panjangnya tak pernah berarti apa pun. Pada baris terdalam ia
+    membandingkan sesama saudara, dan di sanalah panjangnya berarti.
+
+    Acuannya cacah terbesar SESAMA daun, bukan total keseluruhan: dibagi
+    total, seluruh batang menjadi sisa yang tak terbaca begitu satu cabang
+    mendominasi.
+    """
+    if not baris:
+        return baris
+    daun = max(b["depth"] for b in baris)
+    maks = max((b["count"] for b in baris if b["depth"] == daun), default=0)
+    for b in baris:
+        if b["depth"] == daun and maks:
+            b["bar_pct"] = round(b["count"] / maks * 100)
+    return baris
 
 
 def pilihan_jenjang(tersedia, label_map) -> list:

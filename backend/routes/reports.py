@@ -5322,10 +5322,11 @@ def filter_laporan(
 
 #: Jenjang kodefikasi yang dipakai halaman "Distribusi Kategori Aset" pada
 #: Laporan Eksekutif — Golongan → Bidang → Kelompok → Sub Kelompok, sesuai
-#: permintaan pemilik. Sub-sub Kelompok (10 digit) sengaja tak ikut: pada
-#: satker dengan ribuan NUP ia melahirkan satu baris per barang, dan halaman
-#: "distribusi" berubah menjadi daftar aset.
-KAT_JENJANG_EKSEKUTIF = (1, 2, 3, 4)
+#: permintaan pemilik: *"ya langsung sampai ke sub-sub kelompoknya."* Jenjang
+#: kelima (10 digit) memang dapat melahirkan satu baris per jenis barang pada
+#: satker besar — halamannya jadi panjang, dan itu diterima: yang diminta
+#: sebaran sampai jenjang terdalam, bukan sebaran yang muat sehalaman.
+KAT_JENJANG_EKSEKUTIF = (1, 2, 3, 4, 5)
 
 #: Baris per halaman kategori berjenjang (satu kolom). Selaras `hier_per_page`
 #: di templat; keduanya bergeser bersama atau nomor halamannya berbohong.
@@ -5536,23 +5537,7 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
                     [kod.LEVEL_LENGTHS[lv] for lv in KAT_JENJANG_EKSEKUTIF],
                     lambda a: kod.normalize_kode(a.get("asset_code")),
                     kode_uraian_exec)]
-    # Batang hanya pada jenjang TERDALAM — permintaan pemilik: *"untuk barchart
-    # disetiap data sub sub kelompok jangan dihilangkan."*
-    #
-    # Di sanalah batang berarti sesuatu: baris terdalam bersaudara, tak ada
-    # yang memuat yang lain, jadi panjangnya benar-benar membandingkan. Pada
-    # baris pengelompokan ia membandingkan induk dengan anaknya — dua besaran
-    # yang salah satunya memuat yang lain — dan itu yang dibuang.
-    #
-    # Acuannya cacah terbesar SESAMA daun, bukan total keseluruhan: dibagi
-    # total, seluruh batang menjadi sisa yang tak terbaca begitu satu cabang
-    # mendominasi.
-    _daun = KAT_JENJANG_EKSEKUTIF and len(KAT_JENJANG_EKSEKUTIF) - 1
-    _daun_maks = max((b["count"] for b in cat_hier if b["depth"] == _daun),
-                     default=0)
-    for b in cat_hier:
-        if b["depth"] == _daun and _daun_maks:
-            b["bar_pct"] = round(b["count"] / _daun_maks * 100)
+    ljj.tandai_batang_daun(cat_hier)
     # Totalnya dari baris JENJANG TERATAS saja. Menjumlahkan seluruh baris akan
     # menghitung tiap aset empat kali — induk memuat anaknya — dan angka yang
     # empat kali lipat pada baris berjudul "Total" adalah kekeliruan yang
@@ -5562,9 +5547,29 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
         "value": sum(b["value"] for b in cat_hier if b["depth"] == 0),
     }
 
-    # Pre-calculate chart bar widths for ALL locations
-    loc_max_count = max((l[1]["count"] for l in loc_breakdown_sorted), default=1)
-    loc_chart = [{"name": l[0][:30], "count": l[1]["count"], "value": l[1]["value"], "bar_pct": round(l[1]["count"] / loc_max_count * 100)} for l in loc_breakdown_sorted]
+    # ── Distribusi lokasi BERJENJANG mengikuti denah ────────────────────
+    #
+    # Permintaan pemilik: *"lakukan hal yang sama disemua distribusi lokasi
+    # sesuai hierarki di peta denah juga dari awal hingga akhir, dan terakhir
+    # data lokasi sekarang."*
+    #
+    # Jenjangnya SELURUH yang benar-benar dipakai denah satker ini — bukan
+    # daftar tetap: satker yang hanya menggambar Gedung dan Ruangan tak boleh
+    # disodori dua jenjang kosong di antaranya. Field teks `location` menjadi
+    # jenjang TERDALAM: denah menjawab "di gedung mana", teks menjawab
+    # "tertulis di mana", dan selisih keduanya justru pekerjaan yang tersisa.
+    peta_node_exec, lok_level_exec = await _peta_denah(all_assets)
+    loc_hier = [{"name": b["label"], "count": len(b["aset"]),
+                 "value": sum(sp(a) for a in b["aset"]), "depth": b["depth"]}
+                for b in ljj.baris_hierarki_lokasi(
+                    all_assets, lok_level_exec, peta_node_exec)]
+    ljj.tandai_batang_daun(loc_hier)
+    loc_hier_total = {
+        "count": sum(b["count"] for b in loc_hier if b["depth"] == 0),
+        "value": sum(b["value"] for b in loc_hier if b["depth"] == 0),
+    }
+    loc_jenjang_label = [_LABEL_DENAH.get(lv, lv) for lv in lok_level_exec]
+    loc_jenjang_label.append("Lokasi tercatat")
 
     # Year chart data (sorted by year ascending for chart)
     year_sorted_asc = sorted(year_breakdown.items(), key=lambda x: x[0])
@@ -5774,7 +5779,8 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
     # alasan pohonnya dibuat hilang di situ. Angkanya selaras `hier_per_page`
     # pada template.
     cat_pages = max(0, -(-len(cat_hier) // KAT_HIER_PER_HALAMAN)) if cat_hier else 0
-    loc_pages = max(0, -(-len(loc_chart) // items_per_page)) if loc_chart else 0
+    loc_pages = (max(0, -(-len(loc_hier) // KAT_HIER_PER_HALAMAN))
+                 if loc_hier else 0)
 
     # Split asset rows into pages (max 18 per page to avoid WeasyPrint table-break bug)
     assets_per_page = 18
@@ -5871,7 +5877,8 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
         "cat_hier": cat_hier, "cat_hier_total": cat_hier_total,
         "kat_jenjang_label": [kod.LEVEL_LABELS[lv]
                               for lv in KAT_JENJANG_EKSEKUTIF],
-        "loc_chart": loc_chart,
+        "loc_hier": loc_hier, "loc_hier_total": loc_hier_total,
+        "loc_jenjang_label": loc_jenjang_label,
         "year_chart": year_chart,
         "eselon_chart": eselon_chart,
         "pengguna_chart": pengguna_chart,

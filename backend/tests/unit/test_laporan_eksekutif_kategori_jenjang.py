@@ -108,11 +108,12 @@ def _data(dbx, **kw):
 
 # ── 1. Empat jenjang, pohon yang utuh ───────────────────────────────────
 
-def test_terbagi_menjadi_EMPAT_jenjang(dbx):
+def test_terbagi_sampai_SUB_SUB_KELOMPOK(dbx):
+    # Permintaan pemilik: *"ya langsung sampai ke sub-sub kelompoknya."*
     d = _data(dbx)
     assert d["kat_jenjang_label"] == ["Golongan", "Bidang", "Kelompok",
-                                      "Sub Kelompok"]
-    assert sorted({b["depth"] for b in d["cat_hier"]}) == [0, 1, 2, 3]
+                                      "Sub Kelompok", "Sub-sub Kelompok"]
+    assert sorted({b["depth"] for b in d["cat_hier"]}) == [0, 1, 2, 3, 4]
     # Tiap baris menyebut jenjangnya sendiri, bukan hanya kedalaman angka.
     for b in d["cat_hier"]:
         assert b["jenjang"] == kod.LEVEL_LABELS[
@@ -196,7 +197,7 @@ def test_acuan_batang_daun_TERBESAR_bukan_total_keseluruhan(dbx):
 def test_templat_menggambar_batang_hanya_bila_barisnya_membawanya():
     tpl = _teks_tpl()
     awal = tpl.index("{% if cat_hier|length > 0 %}")
-    halaman = tpl[awal:tpl.index("{% if loc_chart|length > 0 %}")]
+    halaman = tpl[awal:tpl.index("{% if loc_hier|length > 0 %}")]
     # Batang lama (`dist-mini-bar`) tak dipakai lagi; yang baru bersyarat.
     assert "dist-mini-bar" not in halaman, "masih memakai batang daftar rata"
     assert "{% if c.bar_pct is defined %}" in halaman
@@ -247,12 +248,17 @@ def test_hanya_baris_TERDALAM_yang_benar_benar_menggambar_batang(dbx):
 
 
 def test_tiap_baris_membawa_kelas_jenjangnya():
-    assert 'class="d{{ c.depth }}"' in _teks_tpl()
-
-
-def test_keempat_jenjang_punya_warna_yang_ditetapkan():
+    # Kedalaman DIJEPIT: jenjang denah bisa lebih dalam daripada warna yang
+    # ditetapkan, dan kelas `d9` yang tak punya aturan membuat barisnya
+    # kehilangan warna sama sekali — tanpa satu pun tanda.
     tpl = _teks_tpl()
-    for d in range(4):
+    assert 'class="d{{ [c.depth, 5]|min }}"' in tpl
+    assert 'class="d{{ [l.depth, 5]|min }}"' in tpl
+
+
+def test_tiap_kedalaman_yang_MUNGKIN_punya_warna():
+    tpl = _teks_tpl()
+    for d in range(6):
         assert f".hier-table tr.d{d} td {{" in tpl, d
         assert f".hier-table tr.d{d} td:first-child {{ border-left" in tpl, d
 
@@ -262,7 +268,7 @@ def test_warna_barisnya_SAMAR_bukan_blok_pekat():
     # terang — teks 7px di atas blok pekat tak terbaca pada cetakan.
     import re
     tpl = _teks_tpl()
-    for d in range(4):
+    for d in range(6):
         baris = re.search(rf"\.hier-table tr\.d{d} td \{{ background: (#[0-9a-fA-F]{{6}})",
                           tpl)
         assert baris, d
@@ -271,13 +277,17 @@ def test_warna_barisnya_SAMAR_bukan_blok_pekat():
         assert terang > 220, f"d{d} terlalu pekat: {baris.group(1)} ({terang})"
 
 
-def test_legenda_menyebut_keempat_jenjang():
-    # Tanpa legenda, warna baris hanya terbaca sebagai hiasan.
+def test_legenda_dibangun_dari_daftar_jenjang_yang_SAMA(dbx):
+    # Legenda yang namanya ditulis tangan adalah legenda yang suatu saat
+    # menerangkan jenjang yang sudah tak dipakai. Ia dirakit dari daftar yang
+    # sama dengan yang membentuk barisnya.
     tpl = _teks_tpl()
-    awal = tpl.index('<div class="hier-legend">')
-    legenda = tpl[awal:tpl.index("</div>", awal)]
-    for nama in ("Golongan", "Bidang", "Kelompok", "Sub Kelompok"):
-        assert nama in legenda, nama
+    assert "{% for lb in kat_jenjang_label %}" in tpl
+    assert "{% for lb in loc_jenjang_label %}" in tpl
+    potongan = _render_halaman_kategori(_data(dbx))
+    for nama in ("Golongan", "Bidang", "Kelompok", "Sub Kelompok",
+                 "Sub-sub Kelompok"):
+        assert nama in potongan, nama
 
 
 # ── 3. Jatah baris per halaman tak boleh bergeser sendiri ───────────────
@@ -298,6 +308,144 @@ def test_halaman_kategori_SATU_kolom(dbx):
     # dibuat hilang di situ.
     tpl = _teks_tpl()
     awal = tpl.index("{% if cat_hier|length > 0 %}")
-    halaman = tpl[awal:tpl.index("{% if loc_chart|length > 0 %}")]
+    halaman = tpl[awal:tpl.index("{% if loc_hier|length > 0 %}")]
     assert "use_two_cols" not in halaman
     assert "grid-template-columns" not in halaman
+
+
+# ── 4. Distribusi LOKASI: denah berjenjang, teks bebas sebagai daun ─────
+#
+# Permintaan pemilik: *"lakukan hal yang sama disemua distribusi lokasi sesuai
+# hierarki di peta denah juga dari awal hingga akhir, dan terakhir data lokasi
+# sekarang."*
+#
+# Denah menjawab "di gedung mana"; field teks `location` menjawab "tertulis di
+# mana" — dan keduanya kerap tak sama. Selisihnya hanya terbaca bila keduanya
+# berada di satu pohon.
+
+async def _seed_denah(fake):
+    """Menara A › Lantai 1 › R. Rapat, plus aset yang belum ditempatkan."""
+    await fake.spasial_node.insert_many([
+        {"id": "g1", "nama": "Menara A", "tipe": "GEDUNG", "ancestors": []},
+        {"id": "l1", "nama": "Lantai 1", "tipe": "LANTAI", "ancestors": ["g1"]},
+        {"id": "r1", "nama": "R. Rapat", "tipe": "RUANGAN",
+         "ancestors": ["g1", "l1"]},
+    ])
+    ditempat = [("r1", "Lt.1 R.Rapat"), ("r1", "Lantai 1 Ruang Rapat"),
+                ("g1", "Lobi")]
+    n = 100
+    for node, teks in ditempat:
+        n += 1
+        await fake.assets.insert_one(
+            {"id": f"d{n}", "activity_id": "k1", "asset_name": "Meja",
+             "asset_code": "3050104001", "NUP": str(n), "purchase_price": 1000,
+             "purchase_date": "2023-01-01", "location": teks,
+             "lokasi_spasial": {"node_id": node},
+             "inventory_status": "Belum Diinventarisasi"})
+
+
+def _data_denah(dbx):
+    _jalan(_seed(dbx, barang=[("3050104001", "Handy Talky (HT)", 2)]))
+    _jalan(_seed_denah(dbx))
+    return _jalan(rp._build_executive_summary_data("k1", with_asset_rows=False))
+
+
+def test_lokasi_berjenjang_mengikuti_denah_lalu_teksnya(dbx):
+    d = _data_denah(dbx)
+    assert d["loc_jenjang_label"][-1] == "Lokasi tercatat"
+    assert "Gedung" in d["loc_jenjang_label"][0]
+    nama = [b["name"] for b in d["loc_hier"]]
+    assert "Menara A" in nama and "Lantai 1" in nama and "R. Rapat" in nama
+    # Dua tulisan berbeda untuk satu ruangan denah — persis selisih yang
+    # hanya terbaca bila keduanya berada di satu pohon.
+    assert "Lt.1 R.Rapat" in nama and "Lantai 1 Ruang Rapat" in nama
+
+
+def test_lokasi_INDUK_berjumlah_sama_dengan_anak_anaknya(dbx):
+    d = _data_denah(dbx)
+    baris = d["loc_hier"]
+    for i, b in enumerate(baris):
+        anak, j = [], i + 1
+        while j < len(baris) and baris[j]["depth"] > b["depth"]:
+            if baris[j]["depth"] == b["depth"] + 1:
+                anak.append(baris[j])
+            j += 1
+        if anak:
+            assert sum(x["count"] for x in anak) == b["count"], b["name"]
+
+
+def test_lokasi_TOTAL_dari_jenjang_teratas_saja(dbx):
+    d = _data_denah(dbx)
+    assert d["loc_hier_total"]["count"] == d["asset_count"]
+    assert d["loc_hier_total"]["count"] == sum(
+        b["count"] for b in d["loc_hier"] if b["depth"] == 0)
+
+
+def test_batang_lokasi_hanya_pada_jenjang_TERDALAM(dbx):
+    d = _data_denah(dbx)
+    daun = max(b["depth"] for b in d["loc_hier"])
+    for b in d["loc_hier"]:
+        assert ("bar_pct" in b) == (b["depth"] == daun), b["name"]
+
+
+def test_rantai_BELUM_DITEMPATKAN_dirapatkan_bukan_berulang(dbx):
+    """Aset tanpa denah melahirkan satu baris "(belum ditempatkan)" pada SETIAP
+    jenjang — baris beruntun yang cacahnya persis sama dan tak menyatakan satu
+    pun hal baru. Yang menyatakan sesuatu hanya yang pertama."""
+    d = _data_denah(dbx)
+    from laporan_jenjang import TANPA_DENAH
+    kosong = [b for b in d["loc_hier"] if b["name"] == TANPA_DENAH]
+    # Satu di jenjang teratas (aset yang tak berdenah sama sekali) dan satu di
+    # bawah Menara A (aset berdenah Gedung tetapi tanpa Lantai) — yang kedua
+    # PUNYA saudara, jadi ia memang menyatakan sesuatu.
+    assert len(kosong) == 2, [b["name"] + f"@{b['depth']}" for b in d["loc_hier"]]
+    assert sorted(b["depth"] for b in kosong) == [0, 1]
+
+
+def test_kelompok_TANPA_selalu_terakhir_di_antara_saudaranya(dbx):
+    """Sifat yang disandari perapatan rantai: pencarian saudaranya hanya
+    menengok ke BELAKANG, dan itu cukup justru karena kelompok "(tanpa …)"
+    selalu diurutkan paling akhir. Kalau urutannya berubah, baris yang
+    sebenarnya punya saudara akan ikut terbuang."""
+    from laporan_jenjang import TANPA_DENAH
+    d = _data_denah(dbx)
+    baris = d["loc_hier"]
+    for i, b in enumerate(baris):
+        if b["name"] != TANPA_DENAH:
+            continue
+        # Tak boleh ada saudara SESUDAHnya di bawah induk yang sama.
+        for j in range(i + 1, len(baris)):
+            if baris[j]["depth"] < b["depth"]:
+                break
+            assert baris[j]["depth"] != b["depth"], (
+                f'{b["name"]} punya saudara sesudahnya: {baris[j]["name"]}')
+
+
+def test_kedalaman_lokasi_tetap_RAPAT_setelah_dirapatkan(dbx):
+    # Kedalaman yang melompat membuat sebuah baris menjorok tiga tingkat di
+    # bawah induk yang cuma satu tingkat di atasnya.
+    d = _data_denah(dbx)
+    sebelum = 0
+    for b in d["loc_hier"]:
+        assert b["depth"] <= sebelum + 1, b["name"]
+        sebelum = b["depth"]
+
+
+def test_tanpa_denah_sama_sekali_daftarnya_RATA(dbx):
+    # Belum ada satu pun aset yang ditempatkan: yang tersisa hanya jenjang
+    # teksnya, dan panelnya jatuh menjadi daftar rata seperti sebelumnya.
+    d = _data(dbx)
+    assert d["loc_jenjang_label"] == ["Lokasi tercatat"]
+    assert {b["depth"] for b in d["loc_hier"]} == {0}
+
+
+def test_halaman_lokasi_memakai_tabel_yang_SAMA_dengan_kategori():
+    # Dua tabel yang menjawab pertanyaan sejenis tak boleh berbeda cara dibaca.
+    tpl = _teks_tpl()
+    awal = tpl.index("{% if loc_hier|length > 0 %}")
+    # Dibatasi pada bloknya sendiri: halaman "Per Pengguna" di bawahnya memang
+    # masih daftar rata, dan ia di luar permintaan ini.
+    akhir = tpl.index("{% endfor %}\n{% endif %}", awal)
+    halaman = tpl[awal:akhir]
+    assert 'class="hier-table hier-hijau"' in halaman
+    assert "hier-bar-cell" in halaman and "dist-mini-bar" not in halaman
