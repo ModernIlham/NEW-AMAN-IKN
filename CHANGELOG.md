@@ -18,6 +18,67 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1021] Pohon unit kerja berakar di tingkat satkernya, bukan selalu Eselon I — 2026-09-06
+
+Permintaan pemilik: *"tidak semua satker memiliki eselon I sebagai indukan …
+karena mengingat sistem saat ini harus mengisi dari yang teratasnya, dan
+disetiap satker. tolong perbaiki problem ini."*
+
+Kantor pusat (Direktorat Jenderal, Badan, Inspektorat Jenderal) memang satker
+Eselon I. Tetapi Kantor Wilayah adalah satker Eselon II, sedangkan KPP
+Pratama, Lembaga Pemasyarakatan, Madrasah Negeri, dan Kantor Pertanahan
+kabupaten/kota adalah satker Eselon III/IV — semuanya satker MANDIRI karena
+memegang DIPA sendiri.
+
+Sebelum ini sistem memaksa setiap satker mengisi dari Eselon I, dan akibatnya
+dua cacat yang sama-sama bekerja tanpa satu pun pesan galat:
+
+1. **Satker seperti Lapas harus mengarang dua tingkat yang tak pernah ia
+   miliki.** Eselon I sebuah Lapas adalah Ditjen di kementeriannya — bukan
+   bagian struktur satker itu. Angka laporan lalu dikelompokkan menurut unit
+   karangan tadi.
+2. **"Bangun otomatis dari data pegawai" menghasilkan NOL unit.** Pegawainya
+   mengisi `eselon3` dan membiarkan `eselon1`–`eselon2` kosong, sehingga
+   penelusuran yang selalu mulai dari 1 putus pada langkah pertama. Tombolnya
+   tampak sekadar tak berbuat apa-apa.
+
+**Tingkat satker kini dinyatakan SEKALI**, di Master Satker (`eselon_satker`),
+dan seluruh lapisan membacanya dari sana: `organisasi_utils` (`level_akar`,
+`daftar_level`, `validasi_unit`, `validasi_perubahan`), derivasi dari pegawai
+(`unit_dari_pegawai`), rute `/unit-kerja` — yang kini ikut menyebutkan
+`level_akar` dan daftar tingkatnya supaya layar tak perlu menebak — serta
+layar Pegawai. Satker yang belum menyatakannya tetap Eselon I: perilakunya
+persis seperti sebelumnya, dan `GET /satker` versi lama pun tak membuat
+pengelolaan unit berhenti.
+
+**Kelonggarannya hanya di puncak.** Unit pada tingkat satker adalah puncak dan
+tak berinduk; di bawahnya tingkat TETAP tak boleh dilompati — unit Eselon IV
+pada satker Eselon III tetap wajib berinduk pada Eselon III yang nyata.
+Membolehkan yatim di tingkat mana pun akan lebih sederhana, dan justru itu
+yang dihindari: sistem tak lagi dapat membedakan *"Eselon III ini puncak
+karena satkernya memang Lapas"* dari *"Eselon III ini kehilangan induknya"*.
+Tingkat DI ATAS puncak ditolak dengan alasan yang menyebutkan sebabnya, bukan
+sekadar "tidak sah".
+
+Yang sudah terlanjur ada TIDAK disembunyikan. Satker yang baru menyatakan
+dirinya Eselon III bisa masih menyimpan unit Eselon I/II lama: tabnya tetap
+muncul — ditandai sebagai sisa data lama dan tak dapat ditambahi — supaya unit
+itu masih dapat dipindahkan atau dihapus. Begitu pula kolom eselon di form
+pegawai: tingkat di atas puncak hanya ditampilkan bila barisnya memang sudah
+terisi. Yang hilang dari layar tetapi tetap hidup di basis data adalah persis
+kelas cacat yang sedang diperbaiki di sini.
+
+Bagan Struktur Organisasi ikut berubah dasarnya: akarnya sekarang unit yang
+TAK punya induk terjangkau, bukan unit Eselon I. Dengan dasar lama, bagan
+satker seperti ini kosong sama sekali — dan bagan kosong terbaca sebagai
+"master belum diisi", bukan sebagai kesalahan.
+
+Modul murni baru `frontend/src/lib/eselonSatker.js` menjaga agar layar tak
+menuntut lebih daripada server; aturannya sendiri tetap ditegakkan backend.
+Uji: 14 uji rute/master satker baru, 8 uji layar Pegawai, 5 uji layar Satker,
+11 uji modul murni, ditambah uji akar pada `organisasi_utils` dan
+`unit_dari_pegawai`. Sembilan mutasi dipasang dan seluruhnya mati.
+
 ## [#1020] Lampiran Nota Dinas ikut ditandatangani — 2026-09-06
 
 Permintaan pemilik: *"berikan kolom tanda tangannya juga"* pada halaman

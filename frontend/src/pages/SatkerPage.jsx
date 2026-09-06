@@ -21,9 +21,21 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 function apiErr(e, fb) { return e?.response?.data?.detail || fb; }
 
+/** Pilihan tingkat satker. "" = ikut bawaan Eselon I, seperti satker lama. */
+const ESELON_SATKER = [
+  ["", "Eselon I (bawaan) — Ditjen / Badan / Itjen"],
+  ["2", "Eselon II — Kantor Wilayah, instansi vertikal besar, RS Pusat"],
+  ["3", "Eselon III — KPP Pratama, Lapas, Kantor Pertanahan"],
+  ["4", "Eselon IV — satker kecil / UPT"],
+  ["5", "Eselon V"],
+];
+
 const FORM_KOSONG = {
   kode_satker: "", nama_satker: "", nama_unit_organisasi: "", nama_sub_unit: "",
   kode_satker_lengkap: "",
+  // Tingkat eselon yang DIDUDUKI satker ini; "" = Eselon I (perilaku lama).
+  // Menentukan di tingkat mana pohon unit kerjanya berpuncak.
+  eselon_satker: "",
   alamat: "", tempat_laporan: "", tembusan_laporan: "", telepon: "", email: "",
   // "" = ikut setelan universal; "tampilkan"/"sembunyikan" = kebijakan satker.
   nilai_dokumen: "",
@@ -358,6 +370,28 @@ export function SatkerPanel({ user }) {
                     onChange={(e) => setForm({ ...form, nama_satker: e.target.value })}
                     placeholder="cth. KPKNL Balikpapan" className="h-9 mt-1" data-testid="satker-form-nama" />
                 </div>
+              </div>
+              {/* Tingkat satker — menentukan puncak pohon unit kerjanya.
+                  Tidak semua satker berpuncak Eselon I: Kantor Wilayah adalah
+                  satker Eselon II, sedangkan KPP Pratama, Lapas, Madrasah
+                  Negeri, dan Kantor Pertanahan kabupaten/kota adalah satker
+                  Eselon III/IV — mandiri karena memegang DIPA sendiri. */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground">Tingkat satker (puncak struktur)</label>
+                <select value={form.eselon_satker || ""}
+                  onChange={(e) => setForm({ ...form, eselon_satker: e.target.value })}
+                  className="w-full h-9 mt-1 rounded-md border border-input bg-background px-2 text-sm"
+                  data-testid="satker-form-eselon_satker">
+                  {ESELON_SATKER.map(([nilai, label]) => (
+                    <option key={nilai} value={nilai}>{label}</option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-muted-foreground leading-snug">
+                  Pohon Unit Kerja satker ini berpuncak di tingkat ini — unit puncak
+                  tak berinduk, dan tingkat di atasnya milik instansi induk sehingga
+                  tak perlu diisi. Contoh: Lapas &amp; KPP Pratama = Eselon III,
+                  Kantor Wilayah = Eselon II, Direktorat Jenderal = Eselon I.
+                </p>
               </div>
               <div className="rounded-xl border border-border p-2.5 space-y-2">
                 <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide">Kop laporan (override global)</p>

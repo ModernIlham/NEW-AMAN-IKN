@@ -54,3 +54,31 @@ def test_unit_dari_pegawai():
     assert not any(h["nama_unit"] == "Yatim" for h in hasil)
     assert len(hasil) == 5  # unik
     assert unit_dari_pegawai([]) == []
+
+
+def test_unit_dari_pegawai_mulai_dari_AKAR_satkernya():
+    """Pegawai satker Eselon III mengisi eselon3, bukan eselon1.
+
+    Penelusuran yang selalu mulai dari Eselon I putus pada langkah pertama dan
+    mengembalikan daftar KOSONG — tanpa galat, hanya tombol "bangun otomatis"
+    yang tampak tak berbuat apa-apa.
+    """
+    pegawai = [{"eselon3": "Lapas Kelas IIA Nusantara",
+                "eselon4": "Subbagian Tata Usaha"}]
+    assert unit_dari_pegawai(pegawai) == []
+    hasil = unit_dari_pegawai(pegawai, akar=3)
+    assert [(h["eselon"], h["nama_unit"], h["induk_nama"]) for h in hasil] == [
+        ("3", "Lapas Kelas IIA Nusantara", ""),
+        ("4", "Subbagian Tata Usaha", "Lapas Kelas IIA Nusantara")]
+
+
+def test_unit_dari_pegawai_akar_TAK_menyeret_tingkat_di_atasnya():
+    # Satker Eselon III yang barisnya masih membawa sisa eselon1/eselon2 dari
+    # impor lama: keduanya milik instansi induk, bukan struktur satker ini,
+    # dan tak boleh ikut menjadi unit.
+    hasil = unit_dari_pegawai([{"eselon1": "Ditjen Pemasyarakatan",
+                                "eselon2": "Kanwil Kalimantan Timur",
+                                "eselon3": "Lapas Kelas IIA Nusantara"}],
+                              akar=3)
+    assert [h["nama_unit"] for h in hasil] == ["Lapas Kelas IIA Nusantara"]
+    assert hasil[0]["induk_nama"] == ""

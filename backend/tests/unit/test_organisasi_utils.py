@@ -234,11 +234,80 @@ def test_beberapa_unit_lingkup_sekaligus():
 
 # ── 7. Registry level ───────────────────────────────────────────────────
 
-def test_daftar_level_menandai_yang_WAJIB():
+def test_daftar_level_menandai_PUNCAK_satkernya():
+    """`wajib` berarti tingkat PUNCAK satker itu, bukan Eselon I untuk semua.
+
+    Satker Eselon III wajib punya unit Eselon III; menuntutnya punya Eselon I
+    berarti menyuruhnya mengarang dua tingkat yang tak pernah ia miliki.
+    """
     d = org.daftar_level()
     assert [x["label"] for x in d] == [
         "Eselon I", "Eselon II", "Eselon III", "Eselon IV", "Eselon V"]
-    assert [x["wajib"] for x in d] == [True, True, False, False, False]
+    assert [x["wajib"] for x in d] == [True, False, False, False, False]
+    assert [x["tersedia"] for x in d] == [True] * 5
+
+    lapas = org.daftar_level(3)
+    assert [x["wajib"] for x in lapas] == [False, False, True, False, False]
+    # Tingkat DI ATAS puncaknya bukan miliknya melainkan milik instansi
+    # induknya; menawarkannya di layar mengundang unit karangan.
+    assert [x["tersedia"] for x in lapas] == [False, False, True, True, True]
+
+
+# ── 7b. Pohon berakar di tingkat satkernya ──────────────────────────────
+#
+# Tidak semua satker berpuncak Eselon I. Kantor Wilayah adalah satker Eselon
+# II; Kantor Pelayanan Pratama, Lapas, Madrasah Negeri, dan Kantor Pertanahan
+# kabupaten/kota adalah satker Eselon III/IV — semuanya mandiri karena
+# memegang DIPA sendiri. Eselon I sebuah Lapas adalah Ditjen di kementeriannya,
+# yang BUKAN bagian dari struktur satker itu.
+
+def test_level_akar_jatuh_ke_eselon_I_bila_tak_dinyatakan():
+    # Satker lama tak punya field ini; menolak permintaannya karena itu akan
+    # mematikan pengelolaan unit di seluruh pemasangan yang sudah berjalan.
+    for kosong in (None, "", "   ", "abc", 0, 9, -2):
+        assert org.level_akar(kosong) == 1, kosong
+    assert org.level_akar("3") == 3 and org.level_akar(5) == 5
+
+
+def test_unit_di_tingkat_satker_adalah_PUNCAK_dan_tak_berinduk():
+    ok, _ = org.validasi_unit({"nama_unit": "Lapas Kelas IIA", "eselon": "3"},
+                              None, akar=3)
+    assert ok is True
+
+
+def test_puncak_satker_menolak_induk():
+    ok, pesan = org.validasi_unit(
+        {"nama_unit": "Lapas", "eselon": "3"},
+        {"id": "x", "eselon": "2"}, akar=3)
+    assert ok is False and "puncak satker" in pesan
+
+
+def test_tingkat_DI_ATAS_puncak_satker_ditolak():
+    """Eselon I sebuah Lapas milik Ditjen-nya, bukan bagian struktur satker."""
+    ok, pesan = org.validasi_unit({"nama_unit": "Ditjen PAS", "eselon": "1"},
+                                  None, akar=3)
+    assert ok is False
+    assert "DI ATAS tingkat satker" in pesan and "instansi induk" in pesan
+
+
+def test_di_bawah_puncak_tingkat_TETAP_tak_boleh_dilompati():
+    # Longgar di puncaknya tidak berarti longgar di seluruh pohon: unit
+    # Eselon V pada satker Eselon III tetap wajib berinduk Eselon IV.
+    ok, pesan = org.validasi_unit(
+        {"nama_unit": "Urusan", "eselon": "5"},
+        {"id": "x", "eselon": "3"}, akar=3)
+    assert ok is False and "tidak boleh dilompati" in pesan
+
+
+def test_satker_eselon_I_berperilaku_PERSIS_seperti_sebelumnya():
+    # Tanpa `akar`, aturannya harus tak berubah sedikit pun — itulah yang
+    # membuat satker lama aman.
+    assert org.validasi_unit({"nama_unit": "Setjen", "eselon": "1"}, None)[0]
+    assert not org.validasi_unit({"nama_unit": "Biro", "eselon": "2"}, None)[0]
+    assert org.validasi_unit({"nama_unit": "Biro", "eselon": "2"},
+                             {"id": "x", "eselon": "1"})[0]
+    assert not org.validasi_unit({"nama_unit": "Lapas", "eselon": "3"},
+                                 None)[0]
 
 
 def test_label_level_dan_field_eselon_selaras():

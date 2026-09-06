@@ -19,6 +19,9 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
+import { bolehTambah, butuhInduk, labelLevel, levelAkar, levelTampil,
+  levelTersedia, unitAkar,
+} from "@/lib/eselonSatker";
 import KropFotoDialog from "@/components/pegawai/KropFotoDialog";
 import KartuTapDialog from "@/components/pegawai/KartuTapDialog";
 
@@ -141,6 +144,10 @@ export default function PegawaiPage({ user, onBack }) {
   const [serahTerima, setSerahTerima] = useState([]); // pegawai berisiko masih pegang aset
   const [detailAset, setDetailAset] = useState(null); // {pegawai, items, memuat}
   const [units, setUnits] = useState([]);             // master unit kerja hierarkis
+  // Tingkat eselon yang DIDUDUKI satker ini — puncak pohon unitnya. Datang
+  // dari server, tidak ditebak di sini: satker yang masternya masih kosong
+  // tak punya unit apa pun untuk ditebak dari. Lihat @/lib/eselonSatker.
+  const [akar, setAkar] = useState(levelAkar());
   const [kelolaUnit, setKelolaUnit] = useState(null); // {eselon, nama, parentId, sibuk}
   // Unit yang sedang disunting di tempat: {id, nama, parentId, sibuk}. Null =
   // tak ada. Menyunting di baris, bukan di dialog kedua — unit yang sedang
@@ -154,7 +161,7 @@ export default function PegawaiPage({ user, onBack }) {
 
   const muatUnits = useCallback(() => {
     axios.get(`${API}/unit-kerja`)
-      .then((r) => setUnits(r.data?.items || []))
+      .then((r) => { setUnits(r.data?.items || []); setAkar(levelAkar(r.data?.level_akar)); })
       .catch(() => setUnits([]));
   }, []);
 
@@ -221,12 +228,24 @@ export default function PegawaiPage({ user, onBack }) {
   // dipilih/tak dikenal → semua unit level itu.
   const opsiEselon = useCallback((level, f) => {
     const perLevel = units.filter((u) => String(u.eselon) === String(level));
-    if (level === 1) return perLevel.map((u) => u.nama_unit);
+    if (!butuhInduk(level, akar)) return perLevel.map((u) => u.nama_unit);
     const indukNama = String(f?.[`eselon${level - 1}`] || "").trim();
     const induk = units.find((u) => String(u.eselon) === String(level - 1) && u.nama_unit === indukNama);
     const anak = induk ? perLevel.filter((u) => u.parent_id === induk.id) : perLevel;
     return anak.map((u) => u.nama_unit);
-  }, [units]);
+  }, [units, akar]);
+
+  // Tingkat yang dimunculkan di form pegawai: yang menjadi milik satker ini,
+  // ditambah tingkat di atasnya yang TERLANJUR terisi pada baris ini. Sisa
+  // impor lama tak disembunyikan — nilainya tetap tersimpan dan tetap terbawa
+  // laporan, jadi ia harus terlihat supaya dapat dikosongkan.
+  const levelForm = useMemo(() => {
+    const set = new Set(levelTersedia(akar));
+    for (let n = 1; n < akar; n += 1) {
+      if (String(form?.[`eselon${n}`] || "").trim()) set.add(n);
+    }
+    return [...set].sort((a, b) => a - b);
+  }, [akar, form]);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
@@ -264,14 +283,19 @@ export default function PegawaiPage({ user, onBack }) {
   const tambahUnit = async () => {
     if (!kelolaUnit?.nama?.trim()) { toast.error("Nama unit wajib diisi"); return; }
     const level = Number(kelolaUnit.eselon);
-    if (level > 1 && !kelolaUnit.parentId) {
-      toast.error(`Pilih induk Eselon ${level - 1} dulu`); return;
+    if (!bolehTambah(level, akar)) {
+      toast.error(`${labelLevel(level)} berada di atas tingkat satker ini `
+        + `(${labelLevel(akar)}) — unit di atasnya milik instansi induk`);
+      return;
+    }
+    if (butuhInduk(level, akar) && !kelolaUnit.parentId) {
+      toast.error(`Pilih induk ${labelLevel(level - 1)} dulu`); return;
     }
     setKelolaUnit((k) => ({ ...k, sibuk: true }));
     try {
       await axios.post(`${API}/unit-kerja`, {
         nama_unit: kelolaUnit.nama.trim(), eselon: String(level),
-        parent_id: level > 1 ? kelolaUnit.parentId : "",
+        parent_id: butuhInduk(level, akar) ? kelolaUnit.parentId : "",
       });
       toast.success(`Unit Eselon ${level} ditambahkan`);
       setKelolaUnit((k) => ({ ...k, nama: "", sibuk: false }));
@@ -1498,10 +1522,18 @@ export default function PegawaiPage({ user, onBack }) {
                       )}
                     </Field>
                   </div>
-                  {/* Unit kerja berjenjang (Eselon I–V) — pilihan BERTINGKAT dari
-                      master unit; jenjang terdalam otomatis jadi Unit Kerja. */}
+                  {/* Unit kerja berjenjang — pilihan BERTINGKAT dari master unit;
+                      jenjang terdalam otomatis jadi Unit Kerja. Dimulai di
+                      tingkat SATKERNYA: Eselon I sebuah Lapas adalah Ditjen di
+                      kementeriannya, bukan bagian struktur satker itu. */}
+                  {akar > 1 && (
+                    <p className="text-[11px] text-muted-foreground -mb-1" data-testid="pegawai-akar-eselon">
+                      Satker ini {labelLevel(akar)} — pengisian dimulai dari sana.
+                      Tingkat di atasnya milik instansi induk.
+                    </p>
+                  )}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {[1, 2, 3, 4, 5].map((lv) => (
+                    {levelForm.map((lv) => (
                       <Field key={lv} label={`Eselon ${lv}`}>
                         <Input value={form[`eselon${lv}`]} onChange={set(`eselon${lv}`)}
                           list={`opsi-eselon-${lv}`}
@@ -1515,7 +1547,7 @@ export default function PegawaiPage({ user, onBack }) {
                     {isAdmin && (
                       <div className="flex items-end">
                         <Button type="button" variant="outline" size="sm" className="h-10 gap-1.5 w-full"
-                          onClick={() => setKelolaUnit({ eselon: "1", nama: "", parentId: "", sibuk: false })}
+                          onClick={() => setKelolaUnit({ eselon: String(akar), nama: "", parentId: "", sibuk: false })}
                           data-testid="pegawai-kelola-unit">
                           <Network className="w-3.5 h-3.5" />Kelola Unit Kerja ({units.length})
                         </Button>
@@ -1598,19 +1630,19 @@ export default function PegawaiPage({ user, onBack }) {
           <DialogHeader>
             <DialogTitle>Struktur Organisasi</DialogTitle>
             <DialogDescription className="text-xs">
-              Hierarki unit kerja Eselon I–V beserta jumlah pegawainya.
+              Hierarki unit kerja satker ini (berpuncak {labelLevel(akar)}) beserta jumlah pegawainya.
               Ketuk <b>angka</b> untuk memfilter daftar pegawai.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1" data-testid="struktur-organisasi-pohon">
-            {units.filter((u) => String(u.eselon) === "1").map((akar) => (
-              <PohonUnit key={akar.id} unit={akar} units={units} depth={0}
+            {unitAkar(units).map((puncak) => (
+              <PohonUnit key={puncak.id} unit={puncak} units={units} depth={0}
                 buka={strukturBuka}
                 onToggle={(id) => setStrukturBuka((b) => ({ ...b, [id]: !b[id] }))}
                 jumlah={jumlahPegawaiUnit}
                 onFilter={(nama) => { setSearch(nama); setStruktur(false); }} />
             ))}
-            {units.filter((u) => String(u.eselon) === "1").length === 0 && (
+            {unitAkar(units).length === 0 && (
               <p className="text-center text-xs text-muted-foreground py-8">
                 Master unit kerja masih kosong — buka &quot;Kelola Unit Kerja&quot; di form pegawai (tab Jabatan &amp; Unit) lalu gunakan &quot;Bangun otomatis dari data pegawai&quot;.
               </p>
@@ -1622,13 +1654,17 @@ export default function PegawaiPage({ user, onBack }) {
         </DialogContent>
       </Dialog>
 
-      {/* ── Dialog kelola master unit kerja (Eselon I–V, hierarkis) ── */}
+      {/* ── Dialog kelola master unit kerja (hierarkis, berpuncak di tingkat
+          satkernya sendiri) ── */}
       <Dialog open={!!kelolaUnit} onOpenChange={(o) => { if (!o && !kelolaUnit?.sibuk) { setKelolaUnit(null); setSuntingUnit(null); } }}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>Kelola Unit Kerja (Eselon I–V)</DialogTitle>
+            <DialogTitle>Kelola Unit Kerja ({labelLevel(akar)}–Eselon V)</DialogTitle>
             <DialogDescription className="text-xs">
-              Master hierarkis — unit Eselon N bernaung di bawah Eselon N−1. Dipakai pilihan bertingkat form pegawai &amp; rekap laporan.
+              Master hierarkis berpuncak <b>{labelLevel(akar)}</b> — tingkat yang diduduki satker ini.
+              Unit puncak tak berinduk; di bawahnya unit Eselon N bernaung di bawah Eselon N−1.
+              Dipakai pilihan bertingkat form pegawai &amp; rekap laporan.
+              {akar > 1 && " Tingkat di atas puncak milik instansi induk — ubah lewat Master Satker bila tingkatnya keliru."}
             </DialogDescription>
           </DialogHeader>
           {kelolaUnit && (
@@ -1642,7 +1678,7 @@ export default function PegawaiPage({ user, onBack }) {
                 Hanya jalur Eselon 1–5 yang sudah terisi di data pegawai yang dibentuk.
               </p>
               <div className="flex bg-muted rounded-lg p-0.5 gap-0.5">
-                {["1", "2", "3", "4", "5"].map((es) => (
+                {levelTampil(akar, units).map((n) => String(n)).map((es) => (
                   <button key={es} type="button"
                     onClick={() => { setKelolaUnit((k) => ({ ...k, eselon: es, parentId: "" })); setSuntingUnit(null); }}
                     className={`flex-1 text-[11px] font-semibold py-1.5 rounded-md min-w-0 min-h-0 ${kelolaUnit.eselon === es ? "bg-card text-sky-700 dark:text-sky-400 shadow-sm" : "text-muted-foreground"}`}>
@@ -1650,8 +1686,16 @@ export default function PegawaiPage({ user, onBack }) {
                   </button>
                 ))}
               </div>
+              {!bolehTambah(kelolaUnit.eselon, akar) && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-500 leading-snug"
+                  data-testid="unit-di-atas-puncak">
+                  {labelLevel(kelolaUnit.eselon)} berada di atas puncak satker ini
+                  ({labelLevel(akar)}) — sisa data lama. Unit di sini dapat
+                  dipindahkan atau dihapus, tetapi tak dapat ditambah.
+                </p>
+              )}
               <div className="flex items-center gap-2 flex-wrap">
-                {Number(kelolaUnit.eselon) > 1 && (
+                {butuhInduk(kelolaUnit.eselon, akar) && (
                   <select value={kelolaUnit.parentId}
                     onChange={(e) => setKelolaUnit((k) => ({ ...k, parentId: e.target.value }))}
                     className="h-9 rounded-md border border-input bg-background px-2 text-sm flex-1 min-w-[150px]"
@@ -1665,7 +1709,8 @@ export default function PegawaiPage({ user, onBack }) {
                   onChange={(e) => setKelolaUnit((k) => ({ ...k, nama: e.target.value }))}
                   placeholder={`Nama unit Eselon ${kelolaUnit.eselon}`} className="h-9 flex-1 min-w-[160px]"
                   data-testid="unit-nama" />
-                <Button size="sm" className="h-9 gap-1 bg-sky-600 hover:bg-sky-700 text-white" disabled={kelolaUnit.sibuk}
+                <Button size="sm" className="h-9 gap-1 bg-sky-600 hover:bg-sky-700 text-white"
+                  disabled={kelolaUnit.sibuk || !bolehTambah(kelolaUnit.eselon, akar)}
                   onClick={tambahUnit} data-testid="unit-tambah">
                   <Plus className="w-3.5 h-3.5" />Tambah
                 </Button>
@@ -1679,7 +1724,7 @@ export default function PegawaiPage({ user, onBack }) {
                   if (disunting) {
                     return (
                       <div key={u.id} className="px-3 py-2 flex flex-wrap items-center gap-2 bg-sky-500/5">
-                        {Number(u.eselon) > 1 && (
+                        {butuhInduk(u.eselon, akar) && (
                           <select value={suntingUnit.parentId}
                             onChange={(e) => setSuntingUnit((k) => ({ ...k, parentId: e.target.value }))}
                             disabled={suntingUnit.sibuk} data-testid="unit-sunting-induk"
