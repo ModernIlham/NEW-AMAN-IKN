@@ -18,7 +18,7 @@ import os
 import pytest
 from mongomock_motor import AsyncMongoMockClient
 
-import laporan_jenjang as ljj
+import laporan_kolom as lkl
 import routes.reports as rp
 
 TPL = os.path.join(os.path.dirname(__file__), "..", "..", "templates",
@@ -264,6 +264,87 @@ def test_kolom_nama_mendapat_lebar_TERBESAR_saat_dirender(dbx):
     assert lebar["hier-name"] > lebar["money-cell"] * 3
 
 
+def _lebar_kolom_terender(d):
+    """Lebar kotak kolom tiap tabel distribusi, dari render sungguhan.
+
+    Dikelompokkan PER TABEL, bukan dijadikan satu: halaman kategori dan
+    halaman pengguna sama-sama memakai kelas `hier-name` dengan lebar yang
+    sama sekali berbeda, dan mengambil yang pertama ketemu berarti mengukur
+    tabel yang salah.
+    """
+    import weasyprint
+
+    html = rp._jinja_env().get_template("executive_summary.html").render(
+        preview=False, **d)
+    doc = weasyprint.HTML(string=html, base_url=os.path.dirname(TPL)).render()
+    tabel = []
+
+    def kelas(b):
+        e = b.element
+        return (e.get("class") or "").split() if e is not None else []
+
+    def sel(b, kotak):
+        for nama in ("hier-name", "sel-jabatan"):
+            if nama in kelas(b):
+                kotak.setdefault(nama, b.width)
+        for c in getattr(b, "children", []):
+            sel(c, kotak)
+
+    def jalan(b):
+        if "hier-table" in kelas(b):
+            kotak = {"rapat": "hier-rapat" in kelas(b)}
+            sel(b, kotak)
+            if "hier-name" in kotak:
+                tabel.append(kotak)
+            return
+        for c in getattr(b, "children", []):
+            jalan(c)
+
+    for p in doc.pages:
+        jalan(p._page_box)
+    return tabel
+
+
+def _satu_tabel(tabel, *, pengguna, rapat):
+    """Kotak tabel pertama yang cocok — pengguna = punya kolom Jabatan."""
+    for t in tabel:
+        if ("sel-jabatan" in t) is pengguna and t["rapat"] is rapat:
+            return t
+    raise AssertionError(
+        f"tabel (pengguna={pengguna}, rapat={rapat}) tak ada di render")
+
+
+def test_lebar_kolom_SESUAI_yang_tergambar(dbx):
+    """Tetapan lebar kolom di `laporan_kolom` adalah HASIL PENGUKURAN.
+
+    Begitu CSS-nya digeser — satu persen lebar kolom nilai, satu kolom baru —
+    angka di modul itu diam-diam berbohong, dan taksiran tingginya ikut
+    meleset. Tak ada galat yang muncul; yang muncul halaman yang meluber atau
+    kertas yang menganggur. Uji ini membandingkan tetapannya dengan lebar
+    kotak yang benar-benar tergambar.
+    """
+    def sama(nyata, tetapan, apa):
+        assert abs(nyata - tetapan) < 12, (
+            f"{apa} tergambar {nyata:.1f}px, tetapannya {tetapan}")
+
+    tabel = _lebar_kolom_terender(_data(dbx))            # satu lajur
+    kat = _satu_tabel(tabel, pengguna=False, rapat=False)
+    peg = _satu_tabel(tabel, pengguna=True, rapat=False)
+    sama(kat["hier-name"], lkl.PX_NAMA_1_KOLOM, "nama kategori satu lajur")
+    sama(peg["hier-name"], lkl.PX_NAMA_PENGGUNA_1, "nama pengguna satu lajur")
+    sama(peg["sel-jabatan"], lkl.PX_JABATAN_1, "jabatan satu lajur")
+
+    banyak = [(f"20{i:04d}", f"Pegawai Bernama Cukup Panjang {i}",
+               "Pengelola Barang Milik Negara Tingkat Ahli Pertama",
+               "SEKRETARIAT JENDERAL", f"BIRO {i % 3}", f"BAGIAN {i % 5}", 1)
+              for i in range(60)]
+    d2 = _data(dbx, pegawai=banyak)                       # dua lajur
+    assert d2["rencana_peg"]["kolom"] == 2, "data ujinya kurang panjang"
+    peg2 = _satu_tabel(_lebar_kolom_terender(d2), pengguna=True, rapat=True)
+    sama(peg2["hier-name"], lkl.PX_NAMA_PENGGUNA_2, "nama pengguna dua lajur")
+    sama(peg2["sel-jabatan"], lkl.PX_JABATAN_2, "jabatan dua lajur")
+
+
 def test_batang_hanya_pada_baris_PENGGUNA_bukan_pembagi(dbx):
     d = _data(dbx)
     for b in d["pengguna_hier"]:
@@ -307,20 +388,19 @@ def test_tinggi_baris_dua_kolom_MEMPERHITUNGKAN_NIP_yang_turun(dbx):
     lembar `overflow: hidden` memotongnya tanpa satu pun galat — kaki halaman
     terdorong ke lembar berikutnya dan lahirlah halaman berisi kaki saja.
     """
-    import laporan_kolom as lkl
     nama = "Budi Santoso"
     daun = {"name": nama, "jabatan": "", "depth": 1, "daun": True}
     grup = {"name": nama, "jabatan": "", "depth": 1}
-    assert lkl.tinggi_pengguna(daun, 2) == lkl.tinggi_pengguna(grup, 2) + 1
+    assert (lkl.tinggi_pengguna(daun, 2)
+            == lkl.tinggi_pengguna(grup, 2) + lkl.TINGGI_BARIS_TEKS)
     assert lkl.tinggi_pengguna(daun, 1) == lkl.tinggi_pengguna(grup, 1), \
         "satu kolom: NIP punya selnya sendiri, tak menambah tinggi"
-    assert lkl.KAR_NAMA_2 < lkl.KAR_NAMA_1
+    assert lkl.PX_NAMA_PENGGUNA_2 < lkl.PX_NAMA_PENGGUNA_1
 
 
 def test_tinggi_baris_pengguna_diambil_dari_kolom_TERTINGGI(dbx):
     # Jabatan bisa lebih panjang daripada namanya. Menaksir tinggi baris dari
     # nama saja membuat halaman berjabatan panjang meluber diam-diam.
-    import laporan_kolom as lkl
     pendek = {"name": "Budi", "jabatan": "Analis", "depth": 1, "daun": True}
     panjang = {"name": "Budi", "daun": True, "depth": 1,
                "jabatan": "Pengelola Barang Milik Negara Tingkat Ahli Pertama "
@@ -381,10 +461,51 @@ def test_cacah_NIP_belum_terdaftar_tetap_tercetak(dbx):
     assert "&amp;ldquo;" not in blok
 
 
-# ── 6. Tak ada lembar yang meluber sampai melahirkan halaman kaki ───────
+# ── 6. Kertas terpakai sampai dekat kaki halaman, tanpa meluber ───────
+
+def _jarak_isi_ke_kaki(d):
+    """Jarak sisa antara bawah tabel dan kaki halaman, tiap lembar berisi tabel.
+
+    Ini ukuran "kertas yang menganggur" dalam arti yang diminta pemilik —
+    *"tidak sampai ke bawah batasnya sampai benar-benar tersisa sedikit gapnya
+    dengan footer di bawahnya"* — dan diukur pada render A4 SUNGGUHAN.
+    """
+    import weasyprint
+
+    html = rp._jinja_env().get_template("executive_summary.html").render(
+        preview=False, **d)
+    doc = weasyprint.HTML(string=html, base_url=os.path.dirname(TPL)).render()
+
+    def kelas(b):
+        e = b.element
+        return (e.get("class") or "").split() if e is not None else []
+
+    def kumpul(b, out, nama):
+        if nama in kelas(b):
+            out.append(b)
+        for c in getattr(b, "children", []):
+            kumpul(c, out, nama)
+
+    jarak = []
+    for p in doc.pages:
+        tbl, kaki = [], []
+        kumpul(p._page_box, tbl, "hier-table")
+        kumpul(p._page_box, kaki, "exec-footer")
+        if tbl and kaki:
+            jarak.append(min(f.position_y for f in kaki)
+                         - max(t.position_y + t.height for t in tbl))
+    return jarak
+
 
 def _lembar_vs_halaman(d):
-    """(jumlah lembar HTML, jumlah halaman PDF) — DIRENDER sungguhan."""
+    """(jumlah lembar HTML, jumlah halaman PDF) — DIRENDER ke A4 sungguhan.
+
+    Satu-satunya patokan luber yang dapat dipercaya. Patokan lain sempat
+    dipakai dan menyesatkan: merender lembarnya tanpa `min-height` lalu
+    mengukur tinggi `.exec-body` melaporkan halaman DUA LAJUR ~200px lebih
+    tinggi daripada yang sungguh dipakainya — halaman yang sebenarnya muat
+    dinilai meluber, dan jatah halamannya ikut ditekan tanpa perlu.
+    """
     import re
     import tempfile
 
@@ -403,6 +524,17 @@ def _lembar_vs_halaman(d):
         return lembar, len(pypdfium2.PdfDocument(f.name))
 
 
+def _pegawai_uji(banyak):
+    return [(f"20{i:04d}",
+             f"Muhammad Abdurrahman Wahid Syahputra Nasution {i}",
+             "Analis Pengelolaan Barang Milik Negara Ahli Pertama pada "
+             "Bagian Rumah Tangga",
+             "Kedeputian Bidang Transformasi Hijau dan Digital",
+             f"Direktorat Pengendalian Penyelenggaraan Pemerintahan {i % 4}",
+             f"Subdirektorat {i % 6}", 1)
+            for i in range(banyak)]
+
+
 @pytest.mark.parametrize("banyak", [4, 34, 90])
 def test_tak_ada_halaman_yatim(dbx, banyak):
     """Lembar `overflow: hidden` yang meluber TIDAK memotong kakinya.
@@ -416,104 +548,50 @@ def test_tak_ada_halaman_yatim(dbx, banyak):
     berlanjut ke halaman berikutnya — tiga jalur yang tingginya dihitung
     dengan cara berbeda-beda.
     """
-    peg = [(f"20{i:04d}",
-            f"Muhammad Abdurrahman Wahid Syahputra Nasution {i}",
-            "Analis Pengelolaan Barang Milik Negara Ahli Pertama pada "
-            "Bagian Rumah Tangga",
-            "Kedeputian Bidang Transformasi Hijau dan Digital",
-            f"Direktorat Pengendalian Penyelenggaraan Pemerintahan {i % 4}",
-            f"Subdirektorat {i % 6}", 1)
-           for i in range(banyak)]
-    lembar, halaman = _lembar_vs_halaman(_data(dbx, pegawai=peg))
+    lembar, halaman = _lembar_vs_halaman(_data(dbx, pegawai=_pegawai_uji(banyak)))
     assert lembar == halaman, (
         f"{halaman - lembar} halaman yatim: ada lembar yang meluber")
 
 
-#: Tinggi yang benar-benar tersedia untuk isi satu lembar A4 laporan ini:
-#: 1122px dikurangi kop, kaki, dan padding `.exec-body`. Diukur dari render,
-#: bukan dihitung dari CSS.
-JATAH_ISI_SELEMBAR = 969.0
-
-
-def _tinggi_isi_tiap_lembar(d):
-    """Tinggi `.exec-body` tiap lembar TANPA kekangan tinggi lembarnya.
-
-    Lembar aslinya `min-height: 1122px; overflow: hidden`, sehingga kotaknya
-    SELALU melaporkan 1122px entah isinya muat atau meluber — mengukurnya di
-    sana selalu menjawab "muat". Di sini kekangan itu dilepas dulu supaya
-    tinggi yang terukur adalah tinggi yang sungguh dibutuhkan isinya.
-    """
-    import weasyprint
-
-    html = rp._jinja_env().get_template("executive_summary.html").render(
-        preview=False, **d)
-    bebas = (html.replace("width: 794px; min-height: 1122px;", "width: 794px;")
-                 .replace("background: #fff; overflow: hidden;",
-                          "background: #fff;")
-                 .replace("size: A4 portrait;", "size: 794px 9000px;"))
-    assert bebas != html, "penanda CSS-nya berubah — pengukurannya jadi palsu"
-    doc = weasyprint.HTML(string=bebas, base_url=os.path.dirname(TPL)).render()
-    tinggi = []
-
-    def jalan(b):
-        e = b.element
-        if e is not None and "exec-body" in (e.get("class") or "").split():
-            tinggi.append(b.height)
-            return
-        for c in getattr(b, "children", []):
-            jalan(c)
-
-    for p in doc.pages:
-        jalan(p._page_box)
-    return tinggi
-
-
-@pytest.mark.parametrize("banyak", [4, 34, 90])
-def test_isi_tiap_lembar_MUAT_pada_A4(dbx, banyak):
-    """Jatah baris sehalaman tak boleh melebihi yang sungguh muat.
-
-    Ini penjaga sesungguhnya bagi `BARIS_TEKS_SEHALAMAN`: jumlah halaman PDF
-    baru bertambah ketika luberannya cukup besar, sementara luberan kecil
-    hanya mendorong kaki halaman keluar. Yang diukur di sini tinggi isinya
-    sendiri, jadi luberan sekecil apa pun ketahuan.
-    """
-    peg = [(f"20{i:04d}",
-            f"Muhammad Abdurrahman Wahid Syahputra Nasution {i}",
-            "Analis Pengelolaan Barang Milik Negara Ahli Pertama pada "
-            "Bagian Rumah Tangga",
-            "Kedeputian Bidang Transformasi Hijau dan Digital",
-            f"Direktorat Pengendalian Penyelenggaraan Pemerintahan {i % 4}",
-            f"Subdirektorat {i % 6}", 1)
-           for i in range(banyak)]
-    tinggi = _tinggi_isi_tiap_lembar(_data(dbx, pegawai=peg))
-    assert tinggi, "tak satu lembar pun terukur"
-    luber = [t for t in tinggi if t > JATAH_ISI_SELEMBAR]
-    assert not luber, f"isi melebihi jatah selembar: {luber}"
-
-
 def test_lembar_distribusi_TIDAK_menyisakan_separuh_kertas(dbx):
-    """Permintaan pemilik: *"pastikan benar-benar tidak ada batas terbuang
-    sia-sia di ukuran A4 hingga mencapai footer terlebih dahulu."*
+    """Permintaan pemilik: *"semua distribusi tidak sampai ke bawah batasnya
+    sampai benar-benar tersisa sedikit gapnya dengan footer di bawahnya."*
 
-    Jatah yang terlalu kecil tak menimbulkan galat apa pun — ia hanya
-    mencetak dua kali lebih banyak kertas. Yang diperiksa lembar distribusi
-    yang MASIH ADA sambungannya: lembar terakhir tiap distribusi memang boleh
-    setengah kosong, sebab datanya memang habis di situ.
+    Jatah yang terlalu kecil tak menimbulkan galat apa pun — ia hanya mencetak
+    dua kali lebih banyak kertas. Yang dinilai lembar yang MASIH ADA
+    sambungannya: lembar terakhir tiap distribusi memang boleh setengah
+    kosong, sebab datanya memang habis di situ.
     """
-    peg = [(f"20{i:04d}", f"Pegawai Nomor {i}", f"Analis Jenjang {i % 5}",
-            "Kedeputian Bidang Transformasi Hijau dan Digital",
-            f"Direktorat {i % 4}", f"Subdirektorat {i % 6}", 1)
-           for i in range(120)]
-    d = _data(dbx, pegawai=peg)
-    assert len(d["rencana_peg"]["halaman"]) > 1, "data ujinya kurang panjang"
-    tinggi = _tinggi_isi_tiap_lembar(d)
-    # Lembar pengguna ada di antara halaman lokasi dan halaman analisis;
-    # yang dinilai hanya yang BUKAN lembar terakhir distribusi itu.
+    d = _data(dbx, pegawai=_pegawai_uji(120))
     peg_hal = len(d["rencana_peg"]["halaman"])
-    sambungan = tinggi[-(peg_hal + 1):-2]
+    assert peg_hal > 1, "data ujinya kurang panjang"
+    jarak = _jarak_isi_ke_kaki(d)
+    # Lembar tabel berurutan: kategori, lokasi, lalu pengguna. Yang dinilai
+    # lembar pengguna KECUALI yang terakhir.
+    sambungan = jarak[-peg_hal:-1]
     assert len(sambungan) == peg_hal - 1, (
         f"irisan lembar pengguna meleset: {len(sambungan)} dari {peg_hal - 1}")
-    for t in sambungan:
-        assert t > JATAH_ISI_SELEMBAR * 0.6, (
-            f"lembar sambungan cuma terisi {t:.0f}px dari "
-            f"{JATAH_ISI_SELEMBAR:.0f}px — kertas terbuang")
+    for j in sambungan:
+        assert j < 420, (
+            f"jarak isi ke kaki halaman {j:.0f}px — kertas terbuang")
+
+
+def test_tinggi_catatan_kaki_DITERUSKAN_ke_perencana(dbx):
+    """Halaman pengguna satu-satunya yang bercatatan kaki, dan tingginya harus
+    ikut dikurangkan dari jatah barisnya.
+
+    Ditemukan uji mutasi: menghapus `catatan_px` dari pemanggilan perencana
+    lolos dari seluruh uji render — cadangan tata letak kebetulan cukup
+    menyerapnya pada data uji. Pada satker dengan banyak NIP tak terdaftar
+    catatannya lebih panjang, dan yang kebetulan cukup itu tak lagi cukup.
+    """
+    d = _data(dbx, pegawai=_pegawai_uji(120))
+    catatan_px = lkl.tinggi_catatan(d["catatan_pengguna"])
+    assert catatan_px > 0, "halaman pengguna kehilangan catatan kakinya"
+    seharusnya = lkl.rencana_kolom(
+        d["pengguna_hier"], lkl.tinggi_pengguna, catatan_px=catatan_px)
+    assert d["rencana_peg"]["halaman"] == seharusnya["halaman"]
+    # …dan rencana yang MENGABAIKAN catatannya memang berbeda, sehingga uji di
+    # atas benar-benar membedakan keduanya.
+    abai = lkl.rencana_kolom(d["pengguna_hier"], lkl.tinggi_pengguna)
+    assert abai["halaman"] != seharusnya["halaman"]

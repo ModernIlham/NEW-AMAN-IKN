@@ -135,29 +135,123 @@ def test_tinggi_dihitung_ULANG_untuk_tata_letak_dua_kolom():
 def test_jorokan_MEMAKAN_lebar_kolom_nama():
     # Baris jenjang terdalam paling banyak jumlahnya sekaligus paling dalam
     # jorokannya. Mengabaikan jorokan membuat taksiran meleset justru di sana.
-    assert lkl.lebar_setelah_jorok(46, 0) == 46
-    assert lkl.lebar_setelah_jorok(46, 4) == 46 - 4 * lkl.KARAKTER_PER_JOROKAN
-    assert lkl.lebar_setelah_jorok(46, 4) < lkl.lebar_setelah_jorok(46, 1)
+    assert lkl.lebar_setelah_jorok(226.0, 0) == 226.0
+    assert lkl.lebar_setelah_jorok(226.0, 4) == 226.0 - 4 * lkl.PX_JOROKAN
+    assert lkl.lebar_setelah_jorok(226.0, 4) < lkl.lebar_setelah_jorok(226.0, 1)
+
+
+def test_jorokan_dihitung_dalam_PIKSEL_bukan_karakter():
+    """Jorokan 11px sama besarnya di kolom lebar dan kolom sempit, tetapi
+    memakan BAGIAN yang jauh lebih besar pada yang sempit. Menguranginya
+    dalam satuan karakter membuat tiap tingkat berharga sama di kedua kolom,
+    dan kolom dua lajur lalu dinilai terlalu lapang justru pada baris
+    terdalam — baris yang paling banyak jumlahnya."""
+    lebar = 526.0 - lkl.lebar_setelah_jorok(526.0, 1)
+    sempit = 117.5 - lkl.lebar_setelah_jorok(117.5, 1)
+    assert lebar == sempit == lkl.PX_JOROKAN
+    assert sempit / 117.5 > 3 * lebar / 526.0
 
 
 def test_kolom_nama_tak_pernah_menyusut_sampai_tak_masuk_akal():
-    assert lkl.lebar_setelah_jorok(20, 50) == lkl.KARAKTER_MINIMUM
-    assert lkl.lebar_setelah_jorok(46, None) == 46
-    assert lkl.lebar_setelah_jorok(46, "bukan angka") == 46
+    assert lkl.lebar_setelah_jorok(80.0, 50) == lkl.PX_MINIMUM
+    assert lkl.lebar_setelah_jorok(226.0, None) == 226.0
+    assert lkl.lebar_setelah_jorok(226.0, "bukan angka") == 226.0
+
+
+def test_karakter_muat_memperhitungkan_pembungkusan_per_kata():
+    # Tanpa faktor ini taksirannya separuh dari tinggi sebenarnya: pembungkus
+    # berhenti di batas kata dan menyisakan ruang di ujung tiap baris.
+    assert lkl.FAKTOR_PEMBUNGKUS_KATA < 1
+    mentah = int(226.0 / lkl.LEBAR_KAR_7PX)
+    assert lkl.karakter_muat(226.0) < mentah
+
+
+def test_huruf_JABATAN_lebih_kecil_maka_lebih_banyak_muat():
+    # Kolom jabatan berhuruf 6.5px; memakai lebar huruf 7px membuatnya dinilai
+    # lebih sempit daripada sebenarnya, dan halamannya jadi boros.
+    assert lkl.LEBAR_KAR_65PX < lkl.LEBAR_KAR_7PX
+    assert lkl.karakter_muat(200.0, lkl.LEBAR_KAR_65PX) > lkl.karakter_muat(200.0)
+
+
+# ── 5. Jatah tinggi halaman dihitung dalam PIKSEL ───────────────────────
+
+def test_kapasitas_mengurangi_seluruh_PERABOT_halaman():
+    """Judul, legenda, kepala tabel, baris total, catatan, dan jalur induk
+    memakan tempat yang sudah dijanjikan kepada baris. Yang tak dikurangkan
+    membuat lembarnya meluber tepat sebanyak tinggi perabot itu — tanpa satu
+    pun galat, hanya kaki halaman yang terdorong ke lembar berikutnya."""
+    k1 = lkl.kapasitas_kolom(1)
+    assert k1 < (lkl.TINGGI_ISI_SEHALAMAN - lkl.TINGGI_JUDUL_LEGENDA
+                 - lkl.TINGGI_KEPALA_TABEL - lkl.TINGGI_BARIS_TOTAL)
+    # Dua lajur membayar satu baris jalur induk di kepala tiap kolom.
+    assert lkl.kapasitas_kolom(2) == k1 - lkl.TINGGI_JALUR_INDUK
+    # Catatan kaki mengurangi jatah persis setinggi catatannya.
+    catatan = lkl.tinggi_catatan("x " * 200)
+    assert catatan > 0
+    assert abs(lkl.kapasitas_kolom(1, catatan) - (k1 - catatan)) < 1e-9
+
+
+def test_tanpa_catatan_tak_ada_yang_dikurangi():
+    assert lkl.tinggi_catatan("") == 0
+    assert lkl.tinggi_catatan(None) == 0
+    assert lkl.kapasitas_kolom(1, 0.0) == lkl.kapasitas_kolom(1)
+
+
+def test_catatan_yang_MEMBUNGKUS_memakan_lebih_banyak():
+    sebaris = lkl.tinggi_catatan("Catatan pendek.")
+    panjang = lkl.tinggi_catatan("Catatan yang jauh lebih panjang. " * 20)
+    assert panjang > sebaris >= lkl.MARGIN_CATATAN
+
+
+def test_kapasitas_tak_pernah_negatif_betapapun_besar_catatannya():
+    # Catatan raksasa tak boleh membuat jatahnya minus — perulangan
+    # pemaketannya akan berhenti mengambil baris dan barisnya lenyap.
+    k = lkl.kapasitas_kolom(2, 100000.0)
+    assert k >= lkl.tinggi_baris(1)
+
+
+def test_tinggi_baris_TUMBUH_selaras_jumlah_baris_teksnya():
+    satu, dua = lkl.tinggi_baris(1), lkl.tinggi_baris(2)
+    assert dua - satu == lkl.TINGGI_BARIS_TEKS
+    assert lkl.tinggi_baris(0) == satu, "baris kosong tetap setinggi satu"
 
 
 def test_baris_teks_membulat_KE_ATAS_dan_tak_pernah_nol():
-    assert lkl.baris_teks("", 10) == 1, "baris kosong tetap setinggi satu"
-    assert lkl.baris_teks("a" * 10, 10) == 1
-    assert lkl.baris_teks("a" * 11, 10) == 2, "sisa sekarakter tetap sebaris"
-    assert lkl.baris_teks("a" * 30, 10) == 3
-    assert lkl.baris_teks(None, 10) == 1
+    px = 37.0                       # 10 karakter pada huruf 7px
+    assert lkl.baris_teks("", px) == 1, "baris kosong tetap setinggi satu"
+    assert lkl.baris_teks("a" * 10, px) == 1
+    assert lkl.baris_teks("a" * 11, px) == 2, "sisa sekarakter tetap dua baris"
+    assert lkl.baris_teks("a" * 30, px) == 4
+    assert lkl.baris_teks(None, px) == 1
     assert lkl.baris_teks("abc", 0) >= 1, "lebar nol tak boleh membagi nol"
+
+
+def test_teks_yang_MUAT_UTUH_tak_kena_harga_pembungkusan():
+    """Teks yang muat tak pernah dibungkus, jadi harga pembungkusan per kata
+    tak berlaku baginya.
+
+    Mengenakannya pada keduanya adalah kekeliruan yang mahal justru karena tak
+    berbunyi: nama 25 huruf pada kolom yang memuat 25 huruf dinilai dua baris,
+    seluruh tabel dinilai sepertiga lebih tinggi daripada sebenarnya, dan
+    sepertiga kertas ditinggalkan kosong.
+    """
+    px = 100.0
+    muat = int(px / lkl.LEBAR_KAR_7PX)          # persis muat, tanpa diskon
+    assert lkl.baris_teks("a" * muat, px) == 1
+    # Sekarakter lebih panjang: barisnya pecah, dan DI SANA diskonnya berlaku.
+    assert lkl.baris_teks("a" * (muat + 1), px) == 2
+
+
+def test_huruf_lebih_kecil_memuat_lebih_banyak_sebaris():
+    px = 100.0
+    besar = lkl.baris_teks("a" * 30, px, lkl.LEBAR_KAR_7PX)
+    kecil = lkl.baris_teks("a" * 30, px, lkl.LEBAR_KAR_65PX)
+    assert kecil <= besar
 
 
 def test_tinggi_dari_teks_memakai_lebar_yang_BERBEDA_di_tiap_tata_letak():
     f = lkl.tinggi_dari_teks(lambda b: b["name"])
-    b = {"name": "a" * 60, "depth": 0}
+    b = {"name": "a" * 200, "depth": 0}
     assert f(b, 1) < f(b, 2), "kolom sempit harus menghasilkan baris lebih banyak"
 
 
@@ -189,3 +283,21 @@ def test_jalur_induk_MELEWATI_saudara_bukan_leluhur():
 def test_baris_teratas_tak_punya_jalur_induk():
     baris = [{"name": "Gol", "depth": 0}, {"name": "Bid", "depth": 1}]
     assert lkl.jalur_induk(baris, 0) == []
+
+
+def test_catatan_kaki_MENGGESER_pemaketan_halaman():
+    """Catatan yang tak dikurangkan dari jatah memakan tempat yang sudah
+    dijanjikan kepada baris.
+
+    Diuji lewat RENCANA-nya, bukan lewat kapasitasnya saja: yang mudah
+    terlewat bukan rumus kapasitasnya melainkan meneruskan `catatan_px` dari
+    pemanggil ke perencana. Kalau ia tak diteruskan, kapasitasnya benar dan
+    rencananya tetap salah — dan tak ada satu pun galat.
+    """
+    baris = _baris(200)
+    tinggi = lkl.tinggi_dari_teks(lambda b: b["name"])
+    tanpa = lkl.rencana_kolom(baris, tinggi)
+    dengan = lkl.rencana_kolom(baris, tinggi, catatan_px=300.0)
+    assert dengan["halaman"] != tanpa["halaman"], (
+        "catatan setinggi 300px tak menggeser satu baris pun")
+    assert len(dengan["halaman"]) >= len(tanpa["halaman"])

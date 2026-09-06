@@ -35,90 +35,193 @@ Tiga keputusan yang membentuknya:
 
 import math
 
-#: Tinggi kolom isi satu lembar A4 laporan eksekutif, dalam BARIS TEKS 7px.
-#:
-#: DIUKUR, bukan diturunkan dari aritmetika CSS, dan diukur dengan alat yang
-#: benar. Mengukurnya dari tinggi kotak halaman TIDAK bisa: lembar
-#: `overflow: hidden` selalu melaporkan 1122px entah isinya muat atau tidak.
-#: Yang dipakai: lembarnya dirender ulang tanpa `min-height` dan tanpa
-#: `overflow`, lalu tinggi `.exec-body` yang sesungguhnya dibandingkan dengan
-#: jatah selembar (969px). Di atas jatah itu kaki halaman terdorong keluar dan
-#: mendarat sendirian di lembar berikutnya.
-#:
-#: Pada fixture terpadat (kategori lima jenjang, dua lajur) batasnya jatuh di
-#: antara 64 dan 66. Diambil 58: isi halaman terpadat menjadi 883px dari 969px
-#: — sisa 9% sebagai jaga-jaga terhadap metrik huruf yang berbeda di mesin
-#: lain, tanpa menyisakan kertas menganggur yang terlihat.
-BARIS_TEKS_SEHALAMAN = 58
+# ── Geometri lembar, DIUKUR dari render weasyprint ─────────────────────
+#
+# Satuannya PIKSEL, bukan "baris teks". Satuan baris teks pernah dipakai dan
+# gagal dengan cara yang tak berbunyi: satu angka jatah dipakai tiga tabel yang
+# tinggi barisnya berbeda-beda, sehingga angka yang pas untuk halaman kategori
+# menyisakan sepertiga kertas kosong di halaman pengguna. Piksel membuat
+# ketiganya diisi sampai batas fisik yang sama.
 
-#: Jumlah karakter yang muat pada kolom teks utama, DIUKUR dari lebar kotak
-#: kolomnya pada render weasyprint dibagi lebar rata-rata karakter — 3.4px
-#: untuk huruf 7px (nama), 3.15px untuk 6.5px (jabatan) — lalu dikalikan 0.75.
+#: Tinggi isi (`.exec-body`) satu lembar distribusi. Kop halaman distribusi
+#: dua baris, jadi jatahnya sedikit lebih kecil daripada lembar berkop satu
+#: baris (981px) — yang dipakai yang lebih kecil.
 #:
-#: Pengali 0.75 itu HARGA PEMBUNGKUSAN PER KATA. `baris_teks` membagi rata
-#: seolah huruf boleh patah di mana saja; pembungkus sungguhan berhenti di
-#: batas kata dan meninggalkan sisa di ujung tiap baris. Diukur pada nama
-#: kategori sungguhan, sisa itu seperempat lebar kolom — "305 — Alat Kantor
-#: dan Rumah Tangga" hanya memuat 21 dari 26 karakter yang seharusnya muat.
-#: Tanpa pengali ini taksirannya separuh dari tinggi sebenarnya.
+#: Mengukurnya dari tinggi kotak LEMBAR tidak bisa: lembar `overflow: hidden`
+#: selalu melaporkan 1122px entah isinya muat atau meluber, jadi jawabannya
+#: selalu "muat". Yang dipakai tinggi `.exec-body` pada lembar yang memang
+#: tidak meluber.
+TINGGI_ISI_SEHALAMAN = 969.5
+
+#: Judul grafik + legenda jenjang di atas tabel, berikut jaraknya.
+TINGGI_JUDUL_LEGENDA = 30.9
+
+#: Baris kepala tabel (`<thead>`).
+TINGGI_KEPALA_TABEL = 13.9
+
+#: Baris "Total seluruh aset" di kaki tabel. Ia hanya muncul di lembar
+#: terakhir; dihitung di semua lembar karena selisihnya satu baris.
+TINGGI_BARIS_TOTAL = 15.5
+
+#: Baris "↵ jalur induk" di kepala kolom yang mulai di tengah pohon — hanya
+#: pada tata letak dua lajur.
+TINGGI_JALUR_INDUK = 10.0
+
+#: Tinggi satu baris teks 7px (line-height 1.35) dan sisipan tetap tiap baris
+#: tabel (padding 1.5px atas-bawah + garis). Diukur: baris satu-baris 13.4px,
+#: baris dua-baris 22.9px — selisihnya 9.45, sisanya 3.95.
+TINGGI_BARIS_TEKS = 9.45
+SISIPAN_BARIS = 3.95
+
+#: Catatan kaki tabel: `margin-top` 6px + baris teks 7px selebar penuh.
+MARGIN_CATATAN = 6.0
+
+#: Cadangan yang HARUS ditinggalkan di luar perabot yang dapat ditunjuk.
 #:
-#: Angka sebelumnya ditaksir di atas kertas dan meleset di kedua arah sekaligus,
-#: sebab kolom namanya sendiri jauh lebih sempit daripada yang seharusnya:
-#: lebar kolom hanya tertulis pada `<td>` sementara `table-layout: fixed`
-#: membacanya dari baris KEPALA, sehingga ketiga kolom dibagi rata dan nama
-#: cuma kebagian sepertiga tabel. Setelah lebarnya dipasang di `<th>`, kolom
-#: nama satu lajur terukur 526px (dari 206.5px) dan dua lajur 226px (dari
-#: 106.5px).
-#: Taksiran yang terlalu murah hati membuat baris panjang dinilai muat sebaris
-#: padahal membungkus menjadi tiga — dan halamannya meluber. Yang lebih halus
-#: lagi: untuk menutupi luberan itu jatah baris sehalaman terpaksa ditekan
-#: sampai separuh kertas menganggur, persis "batas terbuang sia-sia" yang
-#: diminta hilang.
-KARAKTER_SATU_KOLOM = 112
-KARAKTER_DUA_KOLOM = 48
+#: Ia menyerap dua hal yang sama-sama nyata dan tak dapat dihilangkan dengan
+#: menghitung lebih teliti: kotak grid `.dua-lajur` tak melaporkan tinggi yang
+#: sungguh dipakainya, dan taksiran tinggi per baris meleset ke dua arah —
+#: pembungkusan sebenarnya bergantung di mana batas katanya jatuh, dan itu tak
+#: dapat dihitung dari panjang teks saja.
+#:
+#: DIKALIBRASI dengan patokan yang benar: laporan dirender ke A4 sungguhan dan
+#: jumlah halaman PDF dibandingkan dengan jumlah lembar HTML. Patokan lain
+#: sempat dipakai dan MENYESATKAN — merender lembarnya tanpa `min-height` lalu
+#: mengukur tinggi `.exec-body` melaporkan halaman dua lajur ~200px lebih
+#: tinggi daripada yang sungguh dipakainya, sehingga halaman yang sebenarnya
+#: muat dinilai meluber dan cadangannya dinaikkan dua kali lipat tanpa perlu.
+#:
+#: Pada lima fixture, 50 melahirkan halaman yatim dan 70 ke atas tidak.
+#: Diambil 100: dua kali jarak amannya, dan jarak isi ke kaki halaman pada
+#: lembar terpadat tinggal 135px dari 969px.
+CADANGAN_TATA_LETAK = 100.0
 
-#: Halaman Pengguna membagi lebarnya ke TIGA kolom yang sama-sama dapat
-#: membungkus (Nama, NIP, Jabatan), jadi jatah karakternya sendiri-sendiri.
-#: Pada dua kolom, Nama dan NIP menyatu sehingga jatah Nama menyempit lagi.
-KAR_NAMA_1 = 38
-KAR_JABATAN_1 = 56
-KAR_NAMA_2 = 25
-KAR_JABATAN_2 = 30
+# ── Lebar kolom, DIUKUR dari render weasyprint ─────────────────────────
+#
+# Yang ditulis di sini LEBAR PIKSEL kotak kolomnya, bukan jumlah karakter
+# hasil hitungan tangan: piksel dapat dicocokkan langsung dengan hasil render
+# (uji `test_lebar_kolom_sesuai_yang_tergambar` melakukannya), sedangkan angka
+# karakter hanya dapat dipercaya oleh yang menghitungnya.
 
-#: Tiap tingkat jorokan memakan ~11px dari kolom nama — sekitar tiga karakter
-#: pada huruf 7px. Mengabaikannya adalah cara paling halus membuat halaman
-#: meluber: baris jenjang terdalam kehilangan belasan karakter lebar, membungkus
-#: menjadi dua-tiga baris, dan taksiran tingginya meleset justru pada baris yang
-#: paling banyak jumlahnya.
-KARAKTER_PER_JOROKAN = 3
+#: Lebar rata-rata satu karakter. Diukur dari kotak baris yang benar-benar
+#: tergambar — lebar baris dibagi cacah hurufnya — bukan dari setengah
+#: ukuran huruf. Taksiran 3.4px pernah dipakai dan meleset ~9%: cukup untuk
+#: membuat halaman terpadat meluber 48px tanpa satu pun galat.
+LEBAR_KAR_7PX = 3.7
+LEBAR_KAR_65PX = 3.44
+
+#: Harga PEMBUNGKUSAN PER KATA. `baris_teks` membagi rata seolah huruf boleh
+#: patah di mana saja; pembungkus sungguhan berhenti di batas kata dan
+#: meninggalkan sisa di ujung tiap baris. Diukur pada nama kategori sungguhan,
+#: sisa itu seperempat lebar kolom — "305 — Alat Kantor dan Rumah Tangga"
+#: hanya memuat 21 dari 26 karakter yang seharusnya muat.
+FAKTOR_PEMBUNGKUS_KATA = 0.75
+
+#: Lebar kotak kolom nama pada tabel Kategori/Lokasi, satu dan dua lajur.
+#:
+#: Keduanya pernah jauh lebih sempit — 206.5px dan 106.5px — karena lebar
+#: kolomnya hanya tertulis pada `<td>` sementara `table-layout: fixed`
+#: membacanya dari baris KEPALA, sehingga ketiga kolom dibagi rata.
+PX_NAMA_1_KOLOM = 526.0
+PX_NAMA_2_KOLOM = 226.0
+
+#: Tabel Pengguna membagi lebarnya ke TIGA kolom yang sama-sama dapat
+#: membungkus (Nama, NIP, Jabatan). Pada dua lajur, Nama dan NIP menyatu
+#: sehingga jatah Nama menyempit lagi.
+PX_NAMA_PENGGUNA_1 = 177.7
+PX_JABATAN_1 = 244.3
+PX_NAMA_PENGGUNA_2 = 117.5
+PX_JABATAN_2 = 132.9
+
+#: Catatan kaki tabel selebar penuh isi lembar.
+PX_CATATAN = 742.0
+
+#: Tiap tingkat jorokan memakan 11px dari kolom nama. Mengabaikannya adalah
+#: cara paling halus membuat halaman meluber: baris jenjang terdalam kehilangan
+#: belasan karakter lebar, membungkus menjadi dua-tiga baris, dan taksiran
+#: tingginya meleset justru pada baris yang paling banyak jumlahnya.
+PX_JOROKAN = 11.0
 
 #: Kolom nama tak boleh menyusut sampai tak masuk akal betapa pun dalamnya
 #: jorokan; di bawah ini pembungkusannya sudah per-kata, bukan per-baris.
+PX_MINIMUM = 30.0
 KARAKTER_MINIMUM = 8
 
 
-def lebar_setelah_jorok(kar: int, depth) -> int:
-    """Jatah karakter kolom nama setelah dikurangi jorokan sedalam `depth`."""
+def karakter_muat(px: float, lebar_kar: float = LEBAR_KAR_7PX) -> int:
+    """Berapa karakter yang muat pada kolom selebar `px`."""
+    return max(KARAKTER_MINIMUM,
+               int(float(px) / lebar_kar * FAKTOR_PEMBUNGKUS_KATA))
+
+
+
+def lebar_setelah_jorok(px: float, depth) -> float:
+    """Lebar piksel kolom nama setelah jorokan sedalam `depth`.
+
+    Jorokan memakan lebar kolom NAMA, bukan lebar tabel: barisnya menjorok ke
+    dalam selnya sendiri.
+    """
     try:
         d = max(0, int(depth or 0))
     except (TypeError, ValueError):
         d = 0
-    return max(KARAKTER_MINIMUM, int(kar) - KARAKTER_PER_JOROKAN * d)
+    return max(PX_MINIMUM, float(px) - PX_JOROKAN * d)
 
 
-def baris_teks(teks, lebar_karakter: int) -> int:
-    """Berapa baris teks yang ditempati `teks` pada kolom selebar itu.
+def baris_teks(teks, px: float, lebar_kar: float = LEBAR_KAR_7PX) -> int:
+    """Berapa baris teks yang ditempati `teks` pada kolom selebar `px`.
 
-    Pembungkusan sebenarnya terjadi pada BATAS KATA, jadi angka ini perkiraan
-    yang sengaja tak pernah terlalu kecil: kekeliruan ke bawah membuat halaman
-    meluber dan terpotong diam-diam, kekeliruan ke atas hanya menyisakan
-    sedikit ruang.
+    Dua hal yang berbeda, dan membedakannya penting:
+
+    - Teks yang MUAT UTUH tak pernah dibungkus, jadi ia sebaris betapa pun
+      mepetnya. Harga pembungkusan per kata tak berlaku baginya.
+    - Teks yang TAK muat dibungkus pada batas kata, dan tiap barisnya
+      menyisakan ruang di ujung — di sinilah `FAKTOR_PEMBUNGKUS_KATA`.
+
+    Mengenakan harga itu pada keduanya adalah kekeliruan yang mahal justru
+    karena tak berbunyi: nama sepanjang 25 huruf pada kolom yang memuat 25
+    huruf dinilai dua baris, seluruh tabel dinilai sepertiga lebih tinggi
+    daripada sebenarnya, dan sepertiga kertas ditinggalkan kosong.
     """
     t = str(teks or "").strip()
-    lebar = max(1, int(lebar_karakter or 1))
     if not t:
         return 1
-    return max(1, math.ceil(len(t) / lebar))
+    mentah = max(1.0, float(px) / max(0.1, lebar_kar))
+    if len(t) <= mentah:
+        return 1
+    return max(2, math.ceil(len(t) / (mentah * FAKTOR_PEMBUNGKUS_KATA)))
+
+
+def tinggi_baris(jumlah_baris_teks: int) -> float:
+    """Tinggi satu baris tabel dalam piksel, dari jumlah baris teksnya."""
+    return max(1, int(jumlah_baris_teks)) * TINGGI_BARIS_TEKS + SISIPAN_BARIS
+
+
+def tinggi_catatan(teks) -> float:
+    """Tinggi catatan kaki tabel dalam piksel — 0 bila tak ada catatan.
+
+    Catatan yang tak dihitung memakan tempat yang sudah dijanjikan kepada
+    baris, dan lembarnya meluber tepat sebanyak tinggi catatan itu.
+    """
+    t = str(teks or "").strip()
+    if not t:
+        return 0.0
+    return MARGIN_CATATAN + baris_teks(t, PX_CATATAN) * TINGGI_BARIS_TEKS
+
+
+def kapasitas_kolom(kolom: int, catatan_px: float = 0.0) -> float:
+    """Tinggi yang tersisa untuk BARIS tabel pada satu lajur, dalam piksel.
+
+    Perabot halaman dikurangkan lebih dulu — judul, legenda, kepala tabel,
+    baris total, catatan kaki, dan (pada dua lajur) baris jalur induk. Tanpa
+    itu jatahnya dihitung seolah tabelnya memenuhi lembar dari tepi ke tepi,
+    dan kelebihan itu persis yang mendorong kaki halaman keluar.
+    """
+    sisa = (TINGGI_ISI_SEHALAMAN - CADANGAN_TATA_LETAK - TINGGI_JUDUL_LEGENDA
+            - TINGGI_KEPALA_TABEL - TINGGI_BARIS_TOTAL - max(0.0, catatan_px))
+    if kolom == 2:
+        sisa -= TINGGI_JALUR_INDUK
+    return max(tinggi_baris(1), sisa)
 
 
 def tinggi_dari_teks(ambil_teks):
@@ -128,13 +231,13 @@ def tinggi_dari_teks(ambil_teks):
     membungkus sekaligus dan menyusun fungsinya sendiri.
     """
     def tinggi(b, kolom):
-        kar = KARAKTER_SATU_KOLOM if kolom == 1 else KARAKTER_DUA_KOLOM
-        return baris_teks(ambil_teks(b),
-                          lebar_setelah_jorok(kar, b.get("depth")))
+        px = PX_NAMA_1_KOLOM if kolom == 1 else PX_NAMA_2_KOLOM
+        return tinggi_baris(baris_teks(
+            ambil_teks(b), lebar_setelah_jorok(px, b.get("depth"))))
     return tinggi
 
 
-def rencana_kolom(baris, tinggi_fn=None, sehalaman=None):
+def rencana_kolom(baris, tinggi_fn=None, sehalaman=None, catatan_px=0.0):
     """`{"kolom", "batang", "halaman"}` — rencana tata letak satu tabel.
 
     `tinggi_fn(baris, kolom)` mengembalikan tinggi satu baris dalam BARIS TEKS,
@@ -156,19 +259,24 @@ def rencana_kolom(baris, tinggi_fn=None, sehalaman=None):
     terbuang sia-sia" yang diminta hilang. Mengisi berurutan juga
     mempertahankan urutan baca — kiri dari atas ke bawah, lalu kanan.
     """
-    # Bacaannya di dalam badan fungsi, BUKAN sebagai nilai bawaan parameter:
-    # nilai bawaan dibekukan saat fungsinya didefinisikan, sehingga menyetel
-    # ulang tetapannya (mengukur ulang, atau uji yang menggantinya) tak
-    # berpengaruh apa pun — dan diamnya terbaca sebagai "angkanya memang sudah
-    # pas".
-    sehalaman = BARIS_TEKS_SEHALAMAN if sehalaman is None else sehalaman
+    # Jatahnya dihitung di dalam badan fungsi, BUKAN sebagai nilai bawaan
+    # parameter: nilai bawaan dibekukan saat fungsinya didefinisikan, sehingga
+    # menyetel ulang tetapannya (mengukur ulang, atau uji yang menggantinya)
+    # tak berpengaruh apa pun — dan diamnya terbaca sebagai "angkanya memang
+    # sudah pas".
+    #
+    # Jatah satu lajur dan dua lajur BERBEDA: dua lajur membayar satu baris
+    # jalur induk di kepala tiap kolom.
     tinggi_fn = tinggi_fn or (lambda b, kolom: 1)
     n = len(baris or [])
     if n == 0:
         return {"kolom": 1, "batang": True, "halaman": []}
 
+    jatah_1 = kapasitas_kolom(1, catatan_px) if sehalaman is None else sehalaman
+    jatah_2 = kapasitas_kolom(2, catatan_px) if sehalaman is None else sehalaman
+
     tinggi_1 = [tinggi_fn(b, 1) for b in baris]
-    if sum(tinggi_1) <= sehalaman:
+    if sum(tinggi_1) <= jatah_1:
         return {"kolom": 1, "batang": True,
                 "halaman": [{"awal": 0, "pisah": n, "akhir": n}]}
 
@@ -176,7 +284,7 @@ def rencana_kolom(baris, tinggi_fn=None, sehalaman=None):
     # kebagian tempat.
     tinggi_2 = [tinggi_fn(b, 2) for b in baris]
     return {"kolom": 2, "batang": False,
-            "halaman": _paket_dua_kolom(tinggi_2, sehalaman)}
+            "halaman": _paket_dua_kolom(tinggi_2, jatah_2)}
 
 
 def jalur_induk(baris, i):
@@ -242,10 +350,12 @@ def tinggi_pengguna(b, kolom) -> int:
     bertambah satu baris teks. Baris pembagi tak punya NIP, jadi ia tidak.
     """
     nama, jabatan = (b.get("name") or ""), (b.get("jabatan") or "")
-    kar_nama = lebar_setelah_jorok(
-        KAR_NAMA_1 if kolom == 1 else KAR_NAMA_2, b.get("depth"))
-    kar_jab = KAR_JABATAN_1 if kolom == 1 else KAR_JABATAN_2
-    tinggi_nama = baris_teks(nama, kar_nama)
+    px_nama = lebar_setelah_jorok(
+        PX_NAMA_PENGGUNA_1 if kolom == 1 else PX_NAMA_PENGGUNA_2,
+        b.get("depth"))
+    px_jab = PX_JABATAN_1 if kolom == 1 else PX_JABATAN_2
+    baris_nama = baris_teks(nama, px_nama)
     if kolom == 2 and b.get("daun"):
-        tinggi_nama += 1   # NIP turun ke barisnya sendiri
-    return max(tinggi_nama, baris_teks(jabatan, kar_jab))
+        baris_nama += 1   # NIP turun ke barisnya sendiri
+    return tinggi_baris(max(baris_nama,
+                            baris_teks(jabatan, px_jab, LEBAR_KAR_65PX)))
