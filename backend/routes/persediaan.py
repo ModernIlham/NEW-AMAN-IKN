@@ -363,44 +363,88 @@ async def bangun_nota_dinas_pdf(jenis, rows, tanggal, settings, kpb,
         _w, h = _listWrapOn(_ratakan(flowables), doc.width, _kanvas_ukur)
         return float(h)
 
-    if not body:
-        # Nota tanpa barang: tak ada yang bisa dilampirkan, dan kalimatnya
-        # menggantikan tabel.
-        elements = _kepala(False)
-        elements.append(Paragraph(
-            "Tidak ada barang yang memenuhi kriteria saat ini.", st['Body']))
-        elements.append(Spacer(1, 12 * rl_mm))
-        elements.extend(_blok_ttd())
-    else:
-        sisa = (doc.height - _tinggi(_kepala(False))
-                - _tinggi(_blok_ttd()) - 12 * rl_mm)
-        muat = _tinggi([_tabel()]) <= sisa
-        elements = _kepala(not muat)
-        if muat:
-            elements.append(_tabel())
+    def _satu_halaman(cerita) -> bool:
+        """Benar-benar tata `cerita` ke dokumen buangan → muat sehalaman?
+
+        Flowable ReportLab menyimpan keadaan saat ditata, jadi yang masuk ke
+        sini WAJIB susunan segar — dan yang dicetak nanti pun disusun ulang.
+        Memakai objek yang sama untuk mencoba lalu mencetak membuat hasil
+        cetaknya bergantung pada percobaan yang mendahuluinya.
+        """
+        uji = _std_doc(BytesIO())
+        uji.build(list(cerita))
+        return int(getattr(uji, "page", 1) or 1) <= 1
+
+    def _susun() -> bytes:
+        """Seluruh penataan — keputusan, percobaan, dan cetak — dalam SATU
+        lompatan thread.
+
+        Penataan percobaan sama beratnya dengan penataan sungguhan. Menjalankan
+        yang satu di thread sementara yang lain menahan event loop membuat
+        separuh pekerjaan CPU ini tetap memblokir server.
+        """
+        if not body:
+            # Nota tanpa barang: tak ada yang bisa dilampirkan, dan kalimatnya
+            # menggantikan tabel.
+            elements = _kepala(False)
+            elements.append(Paragraph(
+                "Tidak ada barang yang memenuhi kriteria saat ini.",
+                st['Body']))
             elements.append(Spacer(1, 12 * rl_mm))
             elements.extend(_blok_ttd())
         else:
-            elements.append(Spacer(1, 12 * rl_mm))
-            elements.extend(_blok_ttd())
-            elements.append(PageBreak())
-            elements.extend(_title_block(
-                pnu.JUDUL_LAMPIRAN,
-                nomor=(str(nomor or "").strip()
-                       or "......./......./........")))
-            elements.append(_identity_table([
-                ("Hal", pnu.hal(jenis)),
-                ("Tanggal", tgl_teks or "......................."),
-                ("Jumlah", f"{len(body)} baris"),
-            ]))
-            elements.append(Spacer(1, 5 * rl_mm))
-            elements.append(_tabel())
+            # ── Muat atau tidak: DIBUKTIKAN, bukan diperkirakan ──────────
+            #
+            # Pengukuran saja tidak cukup di perbatasan. Naskah 12 baris
+            # terukur 748,0 poin terhadap tinggi frame 751,2 — sisa 3,2 poin —
+            # namun platypus tetap memecahnya: ia menyimpan toleransi sendiri
+            # yang tak ikut terhitung. Mengejar epsilon itu menebak; menambah
+            # marjin aman itu menebak dengan angka yang lebih besar.
+            #
+            # Maka ukuran dipakai sebagai SARINGAN MURAH, dan hanya yang lolos
+            # saringan itu dibuktikan dengan benar-benar menatanya ke dokumen
+            # buangan lalu menghitung halamannya. Daftar yang jelas kepanjangan
+            # tak pernah menempuh penataan percobaan, sehingga nota 300 baris
+            # tetap disusun sekali saja.
+            #
+            # Arah kesalahannya tak setara, dan itu disengaja: menyimpulkan
+            # "tak muat" pada naskah yang sebenarnya muat hanya menyisakan
+            # halaman pertama agak lengang; menyimpulkan "muat" pada yang
+            # tidak akan melahirkan kembali cacat yang justru hendak dicegah —
+            # tanda tangan terlempar ke halaman dua.
+            def _badan():
+                return (_kepala(False) + [_tabel(), Spacer(1, 12 * rl_mm)]
+                        + _blok_ttd())
 
-    footer = _page_footer_factory("Nota Dinas Persediaan")
-    await asyncio.to_thread(doc.build, elements, onFirstPage=footer,
-                            onLaterPages=footer)
-    buffer.seek(0)
-    return buffer.getvalue()
+            muat = _tinggi(_badan()) <= doc.height
+            if muat:
+                muat = _satu_halaman(_badan())
+
+            if muat:
+                elements = _badan()
+            else:
+                elements = _kepala(True)
+                elements.append(Spacer(1, 12 * rl_mm))
+                elements.extend(_blok_ttd())
+                elements.append(PageBreak())
+                elements.extend(_title_block(
+                    pnu.JUDUL_LAMPIRAN,
+                    nomor=(str(nomor or "").strip()
+                           or "......./......./........")))
+                elements.append(_identity_table([
+                    ("Hal", pnu.hal(jenis)),
+                    ("Tanggal", tgl_teks or "......................."),
+                    ("Jumlah", f"{len(body)} baris"),
+                ]))
+                elements.append(Spacer(1, 5 * rl_mm))
+                elements.append(_tabel())
+
+        footer = _page_footer_factory("Nota Dinas Persediaan")
+        doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+        buffer.seek(0)
+        return buffer.getvalue()
+
+    return await asyncio.to_thread(_susun)
 
 
 @persediaan_router.get("/persediaan/nota-dinas")
@@ -418,10 +462,12 @@ async def nota_dinas_persediaan(
     antaranya. Untuk naskah yang benar-benar terbit — bernomor, dibekukan,
     dan dapat ditemukan lagi — pakai `POST /persediaan/nota-dinas/terbitkan`.
 
-    `ids` (id barang dipisah koma) menyaring ke barang TERPILIH saja —
-    tidak semua yang habis/kritis otomatis diusulkan pengadaan ulang;
-    kandidatnya tetap dihitung ulang dari peringatan (id di luar daftar
-    peringatan diabaikan, bukan disisipkan). Kosong = semua (perilaku lama).
+    `ids` (dipisah koma) menyaring ke barang TERPILIH saja — tidak semua yang
+    habis/kritis otomatis diusulkan pengadaan ulang; kandidatnya tetap
+    dihitung ulang dari peringatan (id di luar daftar peringatan diabaikan,
+    bukan disisipkan). Kosong = semua (perilaku lama). Tiap entri boleh
+    membawa jumlah usulan sebagai `<id>:<jumlah>`; tanpa itu kolom Jumlah
+    Diusulkan tercetak "-".
     """
     from io import BytesIO
 
@@ -436,13 +482,20 @@ async def nota_dinas_persediaan(
     # membuat pratinjau dan naskah yang benar-benar terbit berkop berlainan
     # pada satker yang punya kop sendiri, dan tak ada yang menyebutkannya.
     settings = await pengaturan_kop(kode_satker=kode_satker_user(_user))
-    terpilih = {s for s in (x.strip() for x in ids.split(",")) if s}
-    rows = pnu.baris_terpilih(jenis, data, terpilih)
+    terpilih, jumlah = pnu.urai_pilihan(ids.split(","))
+    rows = pnu.sematkan_jumlah(pnu.baris_terpilih(jenis, data, terpilih),
+                               jumlah)
+    # "Tersaring" berarti daftarnya BENAR-BENAR lebih pendek daripada seluruh
+    # temuan — bukan sekadar "ids dikirim". Keduanya dulu sama artinya, tetapi
+    # kini `ids` juga membawa jumlah usulan: daftar LENGKAP yang dikirim demi
+    # jumlahnya akan mengaku tersaring, dan naskahnya memuat kalimat "sengaja
+    # tidak disertakan" pada daftar yang sebenarnya utuh.
+    seleksi = len(rows) < len(pnu.baris_terpilih(jenis, data))
     kpb = await _kpb_signer(settings, user=_user)
 
     isi = await bangun_nota_dinas_pdf(
         jenis, rows, data["tanggal"], settings, kpb,
-        horizon_hari=data["horizon_hari"], seleksi=bool(terpilih),
+        horizon_hari=data["horizon_hari"], seleksi=seleksi,
         yth=str(settings.get("nota_dinas_yth") or "").strip())
     fname = pnu.nama_berkas(jenis)
     return StreamingResponse(BytesIO(isi), media_type="application/pdf",
@@ -452,6 +505,8 @@ async def nota_dinas_persediaan(
 class TerbitNotaDinasIn(BaseModel):
     jenis: str = Field(pattern="^(kritis|kedaluwarsa)$")
     horizon_hari: int = Field(30, ge=1, le=365)
+    # Entri boleh berbentuk `"<id>"` atau `"<id>:<jumlah usulan>"` — format
+    # yang SAMA dengan parameter kueri pratinjau, diurai parser yang sama.
     ids: list[str] = Field(default_factory=list, max_length=2000)
     yth: str = ""
     kode_klasifikasi: str = ""
@@ -483,8 +538,11 @@ async def terbitkan_nota_dinas(payload: TerbitNotaDinasIn,
 
     data = await peringatan_persediaan(horizon_hari=payload.horizon_hari,
                                        _user=user)
-    terpilih = {s.strip() for s in (payload.ids or []) if str(s).strip()}
-    rows = pnu.baris_terpilih(payload.jenis, data, terpilih)
+    terpilih, jumlah = pnu.urai_pilihan(payload.ids or [])
+    rows = pnu.sematkan_jumlah(
+        pnu.baris_terpilih(payload.jenis, data, terpilih), jumlah)
+    # Lihat catatan pada pratinjau: tersaring = daftarnya memang lebih pendek.
+    seleksi = len(rows) < len(pnu.baris_terpilih(payload.jenis, data))
     if not rows:
         raise HTTPException(
             status_code=400,
@@ -520,7 +578,7 @@ async def terbitkan_nota_dinas(payload: TerbitNotaDinasIn,
         # tampak "tersaring" begitu satu barang kritis baru muncul, dan
         # kalimat "sengaja tidak disertakan" lalu muncul pada nota yang
         # sebenarnya lengkap.
-        "seleksi": bool(terpilih),
+        "seleksi": seleksi,
         "yth": str(payload.yth or "").strip()
                or str(settings.get("nota_dinas_yth") or "").strip(),
         "hal": pnu.hal(payload.jenis),

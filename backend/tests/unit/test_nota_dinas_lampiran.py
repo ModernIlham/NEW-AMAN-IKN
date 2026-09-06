@@ -250,3 +250,36 @@ def test_narasi_dan_nomor_TIDAK_tebal():
 def test_kepala_tabel_tebal_agar_terbaca_sebagai_kepala():
     tp, t = _halaman_teks_dan_font()
     assert "Bold" in _nama_font(tp, t, "Kode Barang")
+
+
+# ── Jumlah usulan sampai ke naskah ─────────────────────────────────────
+
+def _rapat(teks) -> str:
+    """Rapatkan spasi/baris — kepala kolom sempit membungkus jadi dua baris
+    ("Jumlah\nDiusulkan"), dan itu memang wajar pada tabel resmi."""
+    return " ".join(str(teks or "").split())
+
+
+def test_jumlah_usulan_tercetak_di_kolomnya():
+    rows = _baris(4)
+    rows[0]["jumlah_diusulkan"] = 25
+    hal = _halaman(rows=rows)
+    assert "Jumlah Diusulkan" in _rapat(hal[0])
+    assert "25" in hal[0]
+
+
+def test_yang_tak_diisi_tercetak_tanda_hubung_bukan_nol():
+    """"0" terbaca sebagai permintaan NOL unit — dan itu tercetak pada naskah
+    resmi yang ditandatangani."""
+    hal = _halaman(rows=_baris(3))
+    kolom = [b for b in hal[0].splitlines() if "Pack 0 0" in b]
+    assert kolom, hal[0]
+    assert all(b.rstrip().endswith("-") for b in kolom), kolom
+
+
+def test_kolom_jumlah_ikut_ke_lampiran():
+    rows = _baris(80)
+    rows[0]["jumlah_diusulkan"] = 40
+    hal = _halaman(rows=rows)
+    assert "Jumlah Diusulkan" in _rapat(hal[1])
+    assert "40" in hal[1]

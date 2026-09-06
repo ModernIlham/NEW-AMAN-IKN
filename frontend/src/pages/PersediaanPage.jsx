@@ -946,10 +946,18 @@ export default function PersediaanPage({ user, onBack }) {
             </Button>
             {/* Sub-baris aksi: SELALU satu baris (flex-nowrap) — di HP mengambil
                 baris sendiri (basis-full) dan menggulir menyamping bila sempit,
-                tombol TIDAK diperkecil (aturan tap-target 44px). Di layar lebar
-                (basis auto) menempel di baris yang sama bila muat. Dropdown
-                aman dari clipping overflow karena Radix me-render via portal. */}
-            <div className="flex items-center gap-2 flex-nowrap overflow-x-auto basis-full sm:basis-auto min-w-0">
+                tombol TIDAK diperkecil. Di layar lebar (basis auto) menempel di
+                baris yang sama bila muat. Dropdown aman dari clipping overflow
+                karena Radix me-render via portal.
+
+                `[&>*]:shrink-0` bukan hiasan. Aturan tap-target global memasang
+                `min-width: 44px` pada SETIAP button (index.css, ≤1023px), dan
+                nilai eksplisit itu MENIMPA `min-width: auto` milik flex item —
+                justru nilai yang biasanya mencegah item menyusut di bawah lebar
+                isinya. Tanpa `shrink-0`, tombol berlabel panjang diperas sampai
+                44px sementara labelnya `whitespace-nowrap` meluber keluar kotak,
+                dan barisnya tak pernah menggulir seperti yang dimaksudkan. */}
+            <div className="flex items-center gap-2 flex-nowrap overflow-x-auto basis-full sm:basis-auto min-w-0 [&>*]:shrink-0">
             {/* Ikon ListPlus (bukan Layers) — Layers eksklusif bermakna layer FIFO */}
             <Button variant="outline" className="h-10 gap-1.5" onClick={bukaMassal}
               aria-label="Transaksi massal — satu dokumen banyak barang" title="Transaksi massal — satu dokumen banyak barang" data-testid="persediaan-massal">

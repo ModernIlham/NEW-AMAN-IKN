@@ -29,7 +29,7 @@ JENIS_NOTA = ("kritis", "kedaluwarsa")
 # tidak ia jamin.
 FIELD_BEKU = {
     "kritis": ("id", "kode_barang", "nama_barang", "satuan", "stok",
-               "batas_kritis"),
+               "batas_kritis", "jumlah_diusulkan"),
     "kedaluwarsa": ("id", "kode_barang", "nama_barang", "qty", "expired"),
 }
 
@@ -41,8 +41,8 @@ _SPEK = {
         "perihal": "Nota Dinas Usulan Pengadaan Persediaan (Stok Kritis/Habis)",
         "sumber": ("habis", "kritis"),
         "headers": ["No", "Kode Barang", "Nama Barang", "Satuan", "Stok",
-                    "Batas Kritis"],
-        "widths": [28, 120, 190, 60, 45, 65],
+                    "Batas Kritis", "Jumlah Diusulkan"],
+        "widths": [26, 112, 168, 52, 42, 58, 62],
     },
     "kedaluwarsa": {
         "judul": "NOTA DINAS\nPERMOHONAN TINDAK LANJUT PERSEDIAAN KEDALUWARSA",
@@ -130,6 +130,65 @@ def bekukan(jenis, rows) -> list:
     return [{k: r.get(k) for k in field} for r in (rows or [])]
 
 
+def teks_jumlah(nilai) -> str:
+    """Jumlah usulan untuk dicetak — "-" bila belum diisi.
+
+    Petugas boleh menerbitkan nota tanpa mengisi jumlahnya (kadang jumlahnya
+    memang ditentukan kemudian oleh pejabat pengadaan). Yang TIDAK boleh
+    adalah menebak angkanya: nol yang tercetak sebagai "0" terbaca sebagai
+    permintaan nol unit, dan angka karangan berbasis batas kritis akan
+    terbaca sebagai permintaan resmi yang tak pernah diketik siapa pun.
+    """
+    try:
+        n = int(nilai)
+    except (TypeError, ValueError):
+        return "-"
+    return str(n) if n > 0 else "-"
+
+
+def urai_pilihan(entri) -> tuple:
+    """`["b1", "b2:10"]` → `({"b1", "b2"}, {"b2": 10})`.
+
+    SATU format untuk dua jalur: parameter kueri `ids` pada pratinjau (dipisah
+    koma) dan daftar `ids` pada penerbitan. Dua bentuk kawat untuk maksud yang
+    sama adalah dua parser yang harus sepakat selamanya — dan yang satu selalu
+    ketinggalan saat yang lain diperbaiki.
+
+    Entri tanpa `:jumlah` tetap sah (perilaku lama), begitu pula jumlah yang
+    tak masuk akal: ia DIABAIKAN, bukan dibulatkan diam-diam menjadi nol —
+    angka yang dikarang dari masukan rusak akan tercetak di naskah resmi.
+    """
+    ids, jumlah = set(), {}
+    for e in (entri or []):
+        teks = str(e or "").strip()
+        if not teks:
+            continue
+        kunci, _, angka = teks.partition(":")
+        kunci = kunci.strip()
+        if not kunci:
+            continue
+        ids.add(kunci)
+        try:
+            n = int(str(angka).strip())
+        except (TypeError, ValueError):
+            continue
+        if n > 0:
+            jumlah[kunci] = n
+    return ids, jumlah
+
+
+def sematkan_jumlah(rows, jumlah=None) -> list:
+    """Tempelkan `jumlah_diusulkan` ke tiap baris — SALINAN, bukan di tempat.
+
+    Baris yang masuk berasal dari hasil `peringatan_persediaan`, dan objek yang
+    sama dipakai pemanggil lain (banner peringatan, cacah di layar). Menulis ke
+    dalamnya berarti nota dinas diam-diam mengubah data yang bukan miliknya.
+    """
+    peta = jumlah or {}
+    return [{**r, "jumlah_diusulkan": peta.get(str(r.get("id") or ""))}
+            for r in (rows or [])]
+
+
 def isi_tabel(jenis, rows, fmt_tanggal=None) -> list:
     """Isi tabel (tanpa baris kepala) sebagai teks siap cetak."""
     fmt = fmt_tanggal or (lambda v: str(v or ""))
@@ -139,7 +198,8 @@ def isi_tabel(jenis, rows, fmt_tanggal=None) -> list:
             out.append([str(i + 1), str(r.get("kode_barang") or ""),
                         str(r.get("nama_barang") or ""),
                         str(r.get("satuan") or "-"), str(r.get("stok")),
-                        str(r.get("batas_kritis") or 0)])
+                        str(r.get("batas_kritis") or 0),
+                        teks_jumlah(r.get("jumlah_diusulkan"))])
         elif jenis == "kedaluwarsa":
             exp = str(r.get("expired") or "")
             out.append([str(i + 1), str(r.get("kode_barang") or ""),
