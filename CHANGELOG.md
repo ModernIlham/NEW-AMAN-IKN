@@ -18,6 +18,31 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1020] Lampiran Nota Dinas ikut ditandatangani — 2026-09-06
+
+Permintaan pemilik: *"berikan kolom tanda tangannya juga"* pada halaman
+lampiran. Sebagian instansi memang menandatangani lampirannya, dan alasannya
+bukan formalitas: lembar daftar yang tak bertanda tangan hanyalah cetakan
+tabel — ia dapat ditukar atau ditambahi tanpa meninggalkan jejak, sementara
+surat induknya tetap sah.
+
+Penanda tangannya SAMA dengan surat induknya, diambil dari `kpb` yang sudah
+dibekukan pemanggil, sehingga surat dan lampirannya mustahil menyebut dua
+pejabat yang berbeda dalam satu berkas.
+
+Letaknya di UJUNG daftar, bukan di tiap lembar. Tanda tangan yang berulang di
+setiap lembar membuat pembaca tak dapat mengetahui di mana daftarnya sebenarnya
+berakhir — dan lembar yang hilang di tengah tak lagi ketahuan hilang.
+
+Uji invarian dari `[#1016]` ikut disesuaikan, dan ini yang perlu dicatat: ia
+dulu menagih *"tak ada tanda tangan di halaman mana pun selain pertama"*, yang
+menjadi salah sejak lampiran ikut ditandatangani. Yang dijaga dipertajam,
+bukan dilonggarkan — tanda tangan SURATNYA tetap wajib di halaman pertama
+untuk setiap panjang daftar (rentang 1..30 disapu rapat, ditambah 80 dan 300),
+dan tiga sifat baru ditambahkan: surat sehalaman hanya bertanda tangan sekali,
+lembar terakhir lampiran selalu bertanda tangan, dan lembar lampiran di TENGAH
+tidak.
+
 ## [#1019] Penanda denah dipisah dari penanda koordinat, bukan ditumpuk — 2026-09-06
 
 Umpan balik pemilik atas `[#1018]`: *"ketika sudah ada denah peta namun belum

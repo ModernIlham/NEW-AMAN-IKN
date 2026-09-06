@@ -438,6 +438,14 @@ async def bangun_nota_dinas_pdf(jenis, rows, tanggal, settings, kpb,
                 ]))
                 elements.append(Spacer(1, 5 * rl_mm))
                 elements.append(_tabel())
+                # Lampiran ikut ditandatangani. Lembar daftar yang tak
+                # bertanda tangan hanyalah cetakan tabel: ia dapat ditukar
+                # atau ditambahi tanpa meninggalkan jejak, sementara surat
+                # induknya tetap sah. Penanda tangannya SAMA — diambil dari
+                # `kpb` yang sudah dibekukan pemanggil — sehingga surat dan
+                # lampirannya mustahil menyebut dua pejabat yang berbeda.
+                elements.append(Spacer(1, 10 * rl_mm))
+                elements.extend(_blok_ttd())
 
         footer = _page_footer_factory("Nota Dinas Persediaan")
         doc.build(elements, onFirstPage=footer, onLaterPages=footer)
