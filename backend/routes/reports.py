@@ -5320,6 +5320,18 @@ def filter_laporan(
     return filter_laporan_dari_map(locals())
 
 
+#: Jenjang kodefikasi yang dipakai halaman "Distribusi Kategori Aset" pada
+#: Laporan Eksekutif — Golongan → Bidang → Kelompok → Sub Kelompok, sesuai
+#: permintaan pemilik. Sub-sub Kelompok (10 digit) sengaja tak ikut: pada
+#: satker dengan ribuan NUP ia melahirkan satu baris per barang, dan halaman
+#: "distribusi" berubah menjadi daftar aset.
+KAT_JENJANG_EKSEKUTIF = (1, 2, 3, 4)
+
+#: Baris per halaman kategori berjenjang (satu kolom). Selaras `hier_per_page`
+#: di templat; keduanya bergeser bersama atau nomor halamannya berbohong.
+KAT_HIER_PER_HALAMAN = 62
+
+
 async def _build_executive_summary_data(activity_id: str, detail_fields=None,
                                         with_asset_rows: bool = True, row_slice=None,
                                         filter_aset: "FilterLaporan" = None):
@@ -5497,8 +5509,41 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
     gps_coverage_pct = round(assets_with_gps / tc * 100, 1) if tc > 0 else 0
 
     # Pre-calculate chart bar widths for ALL categories
-    cat_max_count = max((c[1]["count"] for c in cat_breakdown_sorted), default=1)
-    cat_chart = [{"name": c[0][:30], "count": c[1]["count"], "value": c[1]["value"], "bar_pct": round(c[1]["count"] / cat_max_count * 100)} for c in cat_breakdown_sorted]
+    # ── Distribusi kategori BERJENJANG ──────────────────────────────────
+    #
+    # Permintaan pemilik: *"pada laporan eksekutif di distribusi aset, buat
+    # agar terbagi menjadi golongan, bidang, kelompok, sub kelompok."*
+    #
+    # Daftar sebelumnya RATA dan dikelompokkan menurut field `category` — teks
+    # bebas dari master kategori. "Kabel" dan "Handy Talky (HT)" berdiri
+    # sejajar dengan "Alat Laboratorium Pendidikan", padahal keduanya duduk di
+    # cabang kodefikasi yang sama sekali berbeda; daftar itu tak dapat menjawab
+    # "berapa banyak Peralatan dan Mesin" tanpa dijumlahkan tangan.
+    #
+    # Sumbernya kini KODE ASET, yang memang berjenjang: 1 digit Golongan,
+    # 3 Bidang, 5 Kelompok, 7 Sub Kelompok. Pengelompokannya memakai penyusun
+    # yang sama dengan laporan gabungan satker, jadi kedua laporan tak pernah
+    # membelah pohon yang sama dengan dua cara berbeda.
+    kodefikasi_ref = await db.kodefikasi.find(
+        {}, {"_id": 0, "kode": 1, "uraian": 1}).to_list(60000)
+    kode_uraian_exec = {k.get("kode", ""): k.get("uraian", "")
+                        for k in kodefikasi_ref}
+    cat_hier = [{"name": b["label"], "count": len(b["aset"]),
+                 "value": sum(sp(a) for a in b["aset"]), "depth": b["depth"],
+                 "jenjang": kod.LEVEL_LABELS[KAT_JENJANG_EKSEKUTIF[b["depth"]]]}
+                for b in ljj.baris_hierarki_kode(
+                    all_assets,
+                    [kod.LEVEL_LENGTHS[lv] for lv in KAT_JENJANG_EKSEKUTIF],
+                    lambda a: kod.normalize_kode(a.get("asset_code")),
+                    kode_uraian_exec)]
+    # Totalnya dari baris JENJANG TERATAS saja. Menjumlahkan seluruh baris akan
+    # menghitung tiap aset empat kali — induk memuat anaknya — dan angka yang
+    # empat kali lipat pada baris berjudul "Total" adalah kekeliruan yang
+    # paling mudah dipercaya.
+    cat_hier_total = {
+        "count": sum(b["count"] for b in cat_hier if b["depth"] == 0),
+        "value": sum(b["value"] for b in cat_hier if b["depth"] == 0),
+    }
 
     # Pre-calculate chart bar widths for ALL locations
     loc_max_count = max((l[1]["count"] for l in loc_breakdown_sorted), default=1)
@@ -5707,7 +5752,11 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
         })
 
     items_per_page = 140  # 70 per kolom * 2 kolom — selaras template (>=148 meluber)
-    cat_pages = max(0, -(-len(cat_chart) // items_per_page)) if cat_chart else 0
+    # Halaman kategori SATU kolom: pohon yang dipecah dua kolom menaruh anak di
+    # kolom kanan sementara induknya di kiri, dan hubungan yang justru menjadi
+    # alasan pohonnya dibuat hilang di situ. Angkanya selaras `hier_per_page`
+    # pada template.
+    cat_pages = max(0, -(-len(cat_hier) // KAT_HIER_PER_HALAMAN)) if cat_hier else 0
     loc_pages = max(0, -(-len(loc_chart) // items_per_page)) if loc_chart else 0
 
     # Split asset rows into pages (max 18 per page to avoid WeasyPrint table-break bug)
@@ -5802,7 +5851,9 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
         "gps_coverage_pct": gps_coverage_pct,
         "assets_with_photos": assets_with_photos,
         "assets_with_gps": assets_with_gps,
-        "cat_chart": cat_chart,
+        "cat_hier": cat_hier, "cat_hier_total": cat_hier_total,
+        "kat_jenjang_label": [kod.LEVEL_LABELS[lv]
+                              for lv in KAT_JENJANG_EKSEKUTIF],
         "loc_chart": loc_chart,
         "year_chart": year_chart,
         "eselon_chart": eselon_chart,

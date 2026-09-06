@@ -18,6 +18,57 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1029] Distribusi kategori Laporan Eksekutif jadi berjenjang, tanpa batang — 2026-09-06
+
+Permintaan pemilik: *"pada laporan eksekutif di distribusi aset, buat agar
+terbagi menjadi golongan, bidang, kelompok, sub kelompok. dimana setiap
+pembagian buat tanpa bar disetiap rownya dan warna row yang masih masuk dan
+samar dan cocok dengan tema dan terlihat rapi."*
+
+Daftarnya RATA dan dikelompokkan menurut field `category` — teks bebas dari
+master kategori. "Kabel" dan "Handy Talky (HT)" berdiri sejajar dengan "Alat
+Laboratorium Pendidikan", padahal keduanya duduk di cabang kodefikasi yang
+sama sekali berbeda. Daftar seperti itu tak dapat menjawab "berapa banyak
+Peralatan dan Mesin" tanpa dijumlahkan tangan.
+
+Sumbernya kini **kode aset**, yang memang berjenjang: 1 digit Golongan,
+3 Bidang, 5 Kelompok, 7 Sub Kelompok. Pengelompokannya memakai penyusun yang
+SAMA dengan laporan gabungan satker (`laporan_jenjang.baris_hierarki_kode`),
+jadi kedua laporan tak pernah membelah pohon yang sama dengan dua cara
+berbeda.
+
+**Batangnya dibuang.** Batang di samping baris berjenjang membandingkan induk
+dengan anaknya — dua besaran yang salah satunya MEMUAT yang lain — sehingga
+panjangnya tak pernah berarti apa pun. Yang menggantikan perannya: jorokan,
+warna baris yang menua ke arah dalam, dan garis kiri yang menajam ke arah
+luar. Keempat warnanya satu keluarga dengan tema biru laporan dan tetap
+terang; pada cetakan hitam-putih jorokan serta garis kirinya tetap terbaca.
+Sebuah legenda menyebut jenjang mana warna mana — tanpa itu warna baris hanya
+terbaca sebagai hiasan.
+
+Tiga hal yang dijaga:
+
+- **Totalnya dari jenjang TERATAS saja.** Menjumlahkan seluruh baris
+  menghitung tiap aset empat kali — induk memuat anaknya — dan angka empat
+  kali lipat pada baris berjudul "Total" adalah kekeliruan yang paling mudah
+  dipercaya.
+- **Halaman kategori jadi SATU kolom.** Pohon yang dipecah dua kolom menaruh
+  anak di kolom kanan sementara induknya di kiri, dan hubungan yang justru
+  menjadi alasan pohonnya dibuat hilang di situ.
+- **Jatah baris per halaman sama di Python dan templat.** Kalau berbeda,
+  "Hal 2 dari 3" pada kop berbohong — tanpa galat, hanya nomor yang keliru.
+
+Sub-sub Kelompok (10 digit) sengaja TAK ikut: pada satker dengan ribuan NUP ia
+melahirkan satu baris per barang, dan halaman "distribusi" berubah menjadi
+daftar aset.
+
+Uji: 13 uji baru, termasuk keutuhan pohonnya (induk berjumlah persis sama
+dengan anak-anaknya, cacah maupun nilai) dan penjaga bahwa aset TANPA kode
+tetap terhitung alih-alih lenyap dari distribusinya sendiri. Lima mutasi
+dipasang dan seluruhnya mati. Diperiksa juga dengan merender laporannya ke PDF
+memakai sebaran yang menyerupai data pemiliknya: 32 kategori menjadi 37 baris
+berjenjang pada satu halaman, dan totalnya tetap 216 NUP.
+
 ## [#1028] Nama penanggung jawab memakai lebar yang memang ada — 2026-09-06
 
 Permintaan pemilik: *"pada tampilan hp di bagian daftar kegiatan nama
