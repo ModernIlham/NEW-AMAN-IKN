@@ -954,8 +954,23 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                   <div className="flex items-center gap-3 mt-3 text-sm flex-wrap">
                     <span className="flex items-center gap-1 text-muted-foreground"><Package className="w-4 h-4 flex-shrink-0" /><b>{act.total_assets || 0}</b> aset</span>
                     <span className="flex items-center gap-1 text-blue-600"><CreditCard className="w-4 h-4 flex-shrink-0" /><span className="truncate">Rp {(act.total_value || 0).toLocaleString('id-ID')}</span></span>
+                    {/* Nama penanggung jawab memakai lebar yang MEMANG ada.
+                        Sebelumnya dipatok `max-w-[100px]` di layar sempit: baris
+                        ini `flex-wrap`, jadi begitu namanya tak muat di sisa
+                        baris ia turun ke barisnya SENDIRI — dengan lebar kartu
+                        penuh di depannya — dan tetap dipotong pada 100px.
+                        "Karlinus Ign…" di tengah ruang kosong dua ratus piksel.
+
+                        `min-w-0` membuatnya boleh menyusut sampai lebar baris;
+                        pemotongan tinggal menjadi jaring pengaman untuk nama
+                        yang benar-benar tak muat, dan `title` menyimpan yang
+                        utuh. Urutan bungkusnya tak berubah: flexbox membungkus
+                        lebih dulu, baru menyusutkan. */}
                     {act.penanggung_jawab && (
-                      <span className="flex items-center gap-1 text-muted-foreground"><Briefcase className="w-4 h-4 flex-shrink-0" /><span className="truncate max-w-[100px] sm:max-w-none">{act.penanggung_jawab}</span></span>
+                      <span className="flex items-center gap-1 text-muted-foreground min-w-0 max-w-full" title={act.penanggung_jawab}>
+                        <Briefcase className="w-4 h-4 flex-shrink-0" />
+                        <span className="truncate" data-testid={`activity-pj-${act.id}`}>{act.penanggung_jawab}</span>
+                      </span>
                     )}
                   </div>
                   {/* Lightweight count badges - photos & docs are NOT eagerly loaded */}

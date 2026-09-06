@@ -18,6 +18,36 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1028] Nama penanggung jawab memakai lebar yang memang ada — 2026-09-06
+
+Permintaan pemilik: *"pada tampilan hp di bagian daftar kegiatan nama
+penanggung jawab jadi disingkat, padahal areanya masih luas."*
+
+Baris metrik kartu kegiatan `flex-wrap`: begitu nama penanggung jawab tak muat
+di sisa baris, ia turun ke barisnya SENDIRI — dengan lebar kartu penuh di
+depannya. Patokan `max-w-[100px]` tetap memotongnya di sana, jadi
+"Karlinus Ign…" berdiri di tengah ruang kosong dua ratus piksel.
+
+Patokan itu memang menahan namanya dari mendesak metrik lain, tetapi
+PEMBUNGKUSAN sudah melakukan hal itu. Ia menyelesaikan masalah yang sudah
+tak ada, dan menimbulkan yang baru.
+
+`min-w-0` menggantikannya: item flex boleh menyusut sampai lebar barisnya, dan
+pemotongan tinggal menjadi jaring pengaman untuk nama yang benar-benar tak
+muat — dengan `title` yang menyimpan versi utuhnya supaya tak ada yang hilang
+tanpa jejak. Urutan bungkusnya tak berubah: flexbox membungkus lebih dulu,
+baru menyusutkan, jadi nama pendek tetap sebaris dengan cacah aset dan
+nilainya.
+
+Diperiksa dengan merender pada lebar 360px: nama 25 huruf yang dulu terpotong
+pada "Karlinus Ign…" kini tercetak utuh; nama 56 huruf tetap terpotong pada
+tepi kartu, bukan pada 100px; nama pendek tetap berbagi baris dengan metrik
+lain.
+
+Uji: 5 uji baru, termasuk penjaga bahwa barisnya TETAP `flex-wrap` — melepasnya
+akan memeras ketiga metrik jadi sebaris dan memotong ketiganya, pertukaran yang
+lebih buruk daripada cacat awalnya. Tiga mutasi dipasang dan seluruhnya mati.
+
 ## [#1027] Kelola Kategori Aset: satu tinggi kendali, angka terbaca — 2026-09-06
 
 Permintaan pemilik: *"bagian halaman kelola kategori aset sederhanakan dan
