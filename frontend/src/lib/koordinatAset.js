@@ -47,3 +47,53 @@ export function labelKoordinat(aset) {
   const a = aset || {};
   return `${parseKoordinat(a.koordinat_latitude)}, ${parseKoordinat(a.koordinat_longitude)}`;
 }
+
+/**
+ * Aset sudah menempati sebuah node denah?
+ *
+ * DUA BENTUK data dijawab fungsi yang sama, dan itu disengaja. Daftar aset
+ * menerima ringkasan `di_denah` (dihitung server di LIST_PROJECTION), sedangkan
+ * layar detail menerima subdoc `lokasi_spasial` utuh. Kalau masing-masing
+ * layar memeriksa bentuknya sendiri, akan ada aset yang di daftar tampak sudah
+ * di denah tetapi di detailnya tidak — persis jenis perselisihan yang modul
+ * ini ada untuk mencegahnya.
+ *
+ * `node_id` yang menentukan, bukan sekadar adanya subdoc: penempatan yang
+ * dilepas menyisakan subdoc dengan node_id kosong.
+ */
+export function diDenah(aset) {
+  const a = aset || {};
+  if (typeof a.di_denah === "boolean") return a.di_denah;
+  return String((a.lokasi_spasial || {}).node_id || "").trim() !== "";
+}
+
+/** Nama node denah untuk tooltip; "" bila belum ditempatkan. */
+export function labelDenah(aset) {
+  if (!diDenah(aset)) return "";
+  const a = aset || {};
+  const spasial = a.lokasi_spasial || {};
+  // Jalur lengkap lebih berguna daripada nama node saja — "Ruang 201" ada di
+  // banyak gedung. Nama node dipakai bila jalurnya belum tercatat.
+  return String(a.denah_jalur || spasial.jalur_nama
+    || a.denah_nama || spasial.node_nama || "").trim();
+}
+
+/**
+ * Teks baris lokasi pada kartu/baris daftar — "" bila tak ada yang perlu
+ * ditampilkan.
+ *
+ * Keempat tampilan (galeri, kartu HP, tabel ringkas, tabel lebar) dulu
+ * menyusun teks ini sendiri-sendiri sebagai `location || "Berkoordinat"`.
+ * Begitu penanda denah masuk, tiap tampilan harus ingat menambahkan cabang
+ * ketiganya — dan yang lupa akan MENYEMBUNYIKAN barisnya justru pada aset yang
+ * sudah di denah tetapi belum berkoordinat dan belum bernama lokasi, yakni
+ * aset yang penandanya paling perlu dilihat.
+ */
+export function labelBarisLokasi(aset) {
+  const a = aset || {};
+  const nama = String(a.location || "").trim();
+  if (nama) return nama;
+  if (punyaKoordinat(a)) return "Berkoordinat";
+  if (diDenah(a)) return labelDenah(a) || "Di denah";
+  return "";
+}

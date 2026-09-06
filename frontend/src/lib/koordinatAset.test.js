@@ -65,3 +65,64 @@ describe("labelKoordinat", () => {
     expect(labelKoordinat(null)).toBe("");
   });
 });
+
+// ── Penempatan denah ───────────────────────────────────────────────────
+//
+// Dijawab fungsi yang sama untuk DUA bentuk data: ringkasan `di_denah` yang
+// dihitung server untuk baris daftar, dan subdoc `lokasi_spasial` utuh pada
+// layar detail. Kalau tiap layar memeriksa bentuknya sendiri, akan ada aset
+// yang di daftar tampak sudah di denah tetapi di detailnya tidak.
+
+import { diDenah, labelDenah, labelBarisLokasi } from "./koordinatAset";
+
+const KOORD = { koordinat_latitude: "-1.23", koordinat_longitude: "116.7" };
+
+test("bentuk daftar (di_denah) dan bentuk detail (lokasi_spasial) sepakat", () => {
+  expect(diDenah({ di_denah: true })).toBe(true);
+  expect(diDenah({ di_denah: false })).toBe(false);
+  expect(diDenah({ lokasi_spasial: { node_id: "n1" } })).toBe(true);
+});
+
+test("penempatan yang DILEPAS tak lagi dihitung sudah di denah", () => {
+  // Melepas penempatan menyisakan subdoc dengan node_id kosong; memeriksa
+  // adanya subdoc saja akan menandai aset itu masih di denah selamanya.
+  expect(diDenah({ lokasi_spasial: { node_id: "" } })).toBe(false);
+  expect(diDenah({ lokasi_spasial: { node_id: "   " } })).toBe(false);
+  expect(diDenah({ lokasi_spasial: {} })).toBe(false);
+});
+
+test("masukan cacat tak melempar", () => {
+  expect(diDenah(null)).toBe(false);
+  expect(diDenah({})).toBe(false);
+  expect(labelDenah(null)).toBe("");
+});
+
+test("ringkasan server MENANG atas subdoc bila keduanya ada", () => {
+  // Baris daftar tak membawa lokasi_spasial; bila kelak ikut terbawa, yang
+  // dipakai harus tetap satu supaya kedua layar tak berselisih.
+  expect(diDenah({ di_denah: false, lokasi_spasial: { node_id: "n1" } })).toBe(false);
+});
+
+test("label denah mendahulukan jalur lengkap daripada nama node", () => {
+  // "Ruang 201" ada di banyak gedung.
+  expect(labelDenah({ di_denah: true, denah_jalur: "Gedung A / Lt 2 / R201",
+                      denah_nama: "R201" })).toBe("Gedung A / Lt 2 / R201");
+  expect(labelDenah({ di_denah: true, denah_nama: "R201" })).toBe("R201");
+  expect(labelDenah({ lokasi_spasial: { node_id: "n1", jalur_nama: "G / L / R" } }))
+    .toBe("G / L / R");
+});
+
+test("teks baris lokasi menyebut yang paling spesifik lebih dulu", () => {
+  expect(labelBarisLokasi({ location: "Ruang 101", ...KOORD })).toBe("Ruang 101");
+  expect(labelBarisLokasi({ ...KOORD })).toBe("Berkoordinat");
+  expect(labelBarisLokasi({ di_denah: true, denah_jalur: "G / L / R" })).toBe("G / L / R");
+  expect(labelBarisLokasi({ di_denah: true })).toBe("Di denah");
+});
+
+test("aset tanpa keterangan lokasi apa pun bertekskan kosong", () => {
+  // Penanda bukan alasan menambah baris kosong pada aset yang memang belum
+  // punya keterangan lokasi apa pun.
+  expect(labelBarisLokasi({})).toBe("");
+  expect(labelBarisLokasi(null)).toBe("");
+  expect(labelBarisLokasi({ location: "   " })).toBe("");
+});

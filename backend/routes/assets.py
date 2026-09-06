@@ -263,6 +263,23 @@ LIST_PROJECTION = {
     "siman": 1,
     # Jejak BAST serah terima terakhir (badge riwayat handover per aset).
     "bast_terakhir": 1,
+    # Penempatan pada denah — DIRINGKAS jadi satu bendera + satu nama, bukan
+    # subdoc `lokasi_spasial` utuh. Baris daftar hanya perlu menjawab "sudah
+    # masuk denah atau belum" dan "di node mana"; mengirim titik, node_tipe,
+    # dan jalur lengkapnya untuk tiap baris hanya menggemukkan payload yang
+    # justru sengaja diperkecil di sini (lihat catatan gallery_thumbnail).
+    #
+    # `node_id` yang menentukan, bukan keberadaan subdocnya: penempatan yang
+    # dilepas menyisakan subdoc dengan node_id kosong (spasial_utils), dan
+    # memeriksa subdocnya saja akan menandai aset itu masih di denah.
+    #
+    # Dibandingkan dengan "" lewat `$ne`, bukan diukur panjangnya: `$strLenCP`
+    # menolak nilai non-string (dokumen era-lama bisa menyimpan id sebagai
+    # angka) sehingga SELURUH proyeksi daftar meledak, dan ia pun tak tersedia
+    # di mongomock sehingga ekspresinya tak dapat diuji sama sekali.
+    "di_denah": {"$ne": [{"$ifNull": ["$lokasi_spasial.node_id", ""]}, ""]},
+    "denah_nama": {"$ifNull": ["$lokasi_spasial.node_nama", ""]},
+    "denah_jalur": {"$ifNull": ["$lokasi_spasial.jalur_nama", ""]},
     # GridFS-first (dokumen ter-migrasi punya photos=[] tapi gridfs terisi);
     # fallback ke inline untuk dokumen legacy.
     "photo_count": {"$cond": [
