@@ -264,24 +264,55 @@
            SAMAR: yang membedakan baris bukan warnanya sendiri melainkan
            urutannya menua — dan pada cetakan hitam-putih jorokan serta garis
            kirinya tetap terbaca. */
-        .hier-table tr.d0 td { background: #e7eefb; font-weight: 700; color: #13224a; }
+.hier-table tr.d0 td { background: #e7eefb; font-weight: 700; color: #13224a; }
         .hier-table tr.d0 td:first-child { border-left: 3px solid #1e3a8a; }
-        .hier-table tr.d1 td { background: #f0f5fd; font-weight: 600; }
-        .hier-table tr.d1 td:first-child { border-left: 3px solid #3b82f6; }
-        .hier-table tr.d2 td { background: #f7fafe; font-weight: 500; }
-        .hier-table tr.d2 td:first-child { border-left: 3px solid #93c5fd; }
-        .hier-table tr.d3 td { background: #ffffff; }
-        .hier-table tr.d3 td:first-child { border-left: 3px solid #e2e8f0; }
+        .hier-table tr.d1 td { background: #eef4fd; font-weight: 600; }
+        .hier-table tr.d1 td:first-child { border-left: 3px solid #2563eb; }
+        .hier-table tr.d2 td { background: #f4f8fe; font-weight: 500; }
+        .hier-table tr.d2 td:first-child { border-left: 3px solid #60a5fa; }
+        .hier-table tr.d3 td { background: #fafcff; }
+        .hier-table tr.d3 td:first-child { border-left: 3px solid #bfdbfe; }
+        .hier-table tr.d4 td { background: #ffffff; }
+        .hier-table tr.d4 td:first-child { border-left: 3px solid #e2e8f0; }
+        .hier-table tr.d5 td { background: #ffffff; }
+        .hier-table tr.d5 td:first-child { border-left: 3px solid #f1f5f9; }
+        /* Halaman lokasi memakai keluarga HIJAU — sama seperti titik judulnya.
+           Bentuk tabelnya identik dengan kategori; hanya warnanya yang
+           membedakan halaman, persis bahasa warna yang sudah dipakai laporan
+           ini sejak awal. */
+        .hier-table.hier-hijau tr.d0 td { background: #e6f6ef; color: #0b3b2c; }
+        .hier-table.hier-hijau tr.d0 td:first-child { border-left-color: #065f46; }
+        .hier-table.hier-hijau tr.d1 td { background: #eefaf4; }
+        .hier-table.hier-hijau tr.d1 td:first-child { border-left-color: #059669; }
+        .hier-table.hier-hijau tr.d2 td { background: #f4fcf8; }
+        .hier-table.hier-hijau tr.d2 td:first-child { border-left-color: #34d399; }
+        .hier-table.hier-hijau tr.d3 td { background: #fafefc; }
+        .hier-table.hier-hijau tr.d3 td:first-child { border-left-color: #a7f3d0; }
+        .hier-table.hier-hijau tr.d4 td:first-child,
+        .hier-table.hier-hijau tr.d5 td:first-child { border-left-color: #e2e8f0; }
         /* Batang jenjang TERDALAM. Warnanya paling muda dalam keluarga tema:
            ia menerangkan baris paling halus, bukan menariknya ke depan. */
         .hier-table .hier-bar-cell { width: 84px; padding: 1px 6px 1px 2px; }
-        .hier-table .hier-bar { height: 5px; border-radius: 2px; min-width: 1.5px; background: #93c5fd; }
-        .hier-table tr.d3 .hier-bar { background: #60a5fa; }
+        .hier-table .hier-bar { height: 5px; border-radius: 2px; min-width: 1.5px; background: #60a5fa; }
+        .hier-table.hier-hijau .hier-bar { background: #10b981; }
         .hier-table .summary-row td { background: #0f172a; color: #fff; font-weight: 700; font-size: 7px; padding: 3px 8px; border: none; }
         .hier-table .summary-row td.r { text-align: right; }
         .hier-legend { display: flex; gap: 12px; font-size: 6px; color: #64748b; margin: -2px 0 4px 2px; }
         .hier-legend span { display: flex; align-items: center; gap: 3px; white-space: nowrap; }
         .hier-legend i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; border: 1px solid rgba(15,23,42,0.06); }
+        /* Contoh warna legenda memakai tetapan yang SAMA dengan barisnya —
+           legenda yang warnanya ditulis sendiri adalah legenda yang suatu saat
+           menerangkan warna yang sudah tak dipakai. */
+        .hier-legend .sw-d0 { background: #e7eefb; border-left: 3px solid #1e3a8a; }
+        .hier-legend .sw-d1 { background: #eef4fd; border-left: 3px solid #2563eb; }
+        .hier-legend .sw-d2 { background: #f4f8fe; border-left: 3px solid #60a5fa; }
+        .hier-legend .sw-d3 { background: #fafcff; border-left: 3px solid #bfdbfe; }
+        .hier-legend .sw-d4 { background: #ffffff; border-left: 3px solid #e2e8f0; }
+        .hier-legend .sw-d5 { background: #ffffff; border-left: 3px solid #f1f5f9; }
+        .hier-legend.legend-hijau .sw-d0 { background: #e6f6ef; border-left-color: #065f46; }
+        .hier-legend.legend-hijau .sw-d1 { background: #eefaf4; border-left-color: #059669; }
+        .hier-legend.legend-hijau .sw-d2 { background: #f4fcf8; border-left-color: #34d399; }
+        .hier-legend.legend-hijau .sw-d3 { background: #fafefc; border-left-color: #a7f3d0; }
 
         /* SVG Donut */
         .donut-container { display: flex; align-items: center; gap: 16px; }
@@ -622,10 +653,9 @@
            hanya terbaca sebagai hiasan, dan jorokan sedalam empat tingkat
            menuntut pembacanya menghitung sendiri. #}
         <div class="hier-legend">
-            <span><i style="background:#e7eefb;border-left:3px solid #1e3a8a"></i>Golongan</span>
-            <span><i style="background:#f0f5fd;border-left:3px solid #3b82f6"></i>Bidang</span>
-            <span><i style="background:#f7fafe;border-left:3px solid #93c5fd"></i>Kelompok</span>
-            <span><i style="background:#ffffff;border-left:3px solid #e2e8f0"></i>Sub Kelompok</span>
+            {% for lb in kat_jenjang_label %}
+            <span><i class="sw-d{{ [loop.index0, 5]|min }}"></i>{{ lb }}</span>
+            {% endfor %}
         </div>
         <table class="hier-table">
             <thead><tr><th>Kategori (Kode &mdash; Uraian)</th><th class="hier-bar-cell"></th><th class="r">NUP</th><th class="r">Nilai (Rp)</th></tr></thead>
@@ -633,12 +663,12 @@
             {% for c in page_rows %}
             {# Batang HANYA pada jenjang terdalam. Selnya tetap ada di baris
                pengelompokan supaya kolomnya lurus — kosong, bukan hilang. #}
-            <tr class="d{{ c.depth }}"><td class="hier-name" style="padding-left:{{ 8 + c.depth * 13 }}px" title="{{ c.jenjang }}: {{ c.name }}">{{ c.name }}</td><td class="hier-bar-cell">{% if c.bar_pct is defined %}<div class="hier-bar" style="width:{{ c.bar_pct }}%"></div>{% endif %}</td><td class="val-cell">{{ c.count }}</td><td class="money-cell">{{ '{:,.0f}'.format(c.value).replace(',', '.') }}</td></tr>
+            <tr class="d{{ [c.depth, 5]|min }}"><td class="hier-name" style="padding-left:{{ 8 + c.depth * 13 }}px" title="{{ c.jenjang }}: {{ c.name }}">{{ c.name }}</td><td class="hier-bar-cell">{% if c.bar_pct is defined %}<div class="hier-bar" style="width:{{ c.bar_pct }}%"></div>{% endif %}</td><td class="val-cell">{{ c.count }}</td><td class="money-cell">{{ '{:,.0f}'.format(c.value).replace(',', '.') }}</td></tr>
             {% endfor %}
             {% if loop.last %}
             {# Total dari jenjang TERATAS saja — menjumlahkan seluruh baris akan
                menghitung tiap aset empat kali, sebab induk memuat anaknya. #}
-            <tr class="summary-row"><td colspan="2">Total seluruh aset ({{ cat_hier|selectattr('depth', 'equalto', 0)|list|length }} golongan)</td><td class="r">{{ cat_hier_total.count }}</td><td class="r">{{ '{:,.0f}'.format(cat_hier_total.value).replace(',', '.') }}</td></tr>
+            <tr class="summary-row"><td colspan="2">Total seluruh aset ({{ cat_hier|selectattr('depth', 'equalto', 0)|list|length }} kelompok teratas)</td><td class="r">{{ cat_hier_total.count }}</td><td class="r">{{ '{:,.0f}'.format(cat_hier_total.value).replace(',', '.') }}</td></tr>
             {% endif %}
             </tbody>
         </table>
@@ -648,55 +678,42 @@
 {% endfor %}
 {% endif %}
 
-{% if loc_chart|length > 0 %}
-{% for page_start in range(0, loc_chart|length, items_per_page) %}
-{% set page_items = loc_chart[page_start:page_start + items_per_page] %}
-{% set use_two_cols = page_items|length > items_per_col %}
-{% set half = ((page_items|length + 1) // 2) if use_two_cols else page_items|length %}
-{% set col1 = page_items[:half] %}
-{% set col2 = page_items[half:] if use_two_cols else [] %}
+{% if loc_hier|length > 0 %}
+{# Halaman lokasi BERJENJANG mengikuti denah, dengan lokasi teks bebas sebagai
+   jenjang terdalam. Bentuknya sengaja sama persis dengan halaman kategori:
+   dua tabel yang menjawab pertanyaan sejenis tak boleh berbeda cara dibaca. #}
+{% set hier_per_page = 62 %}
+{% for page_start in range(0, loc_hier|length, hier_per_page) %}
+{% set page_rows = loc_hier[page_start:page_start + hier_per_page] %}
 <div class="exec-page">
     <div class="exec-header">
         <div class="exec-header-logo">{% if logo_url %}<img src="{{ logo_url }}" alt="Logo" />{% endif %}</div>
         <div class="exec-header-text">
-            <h1>Distribusi Lokasi Aset{% if loc_chart|length > items_per_page %} ({{ page_start + 1 }}-{{ [page_start + items_per_page, loc_chart|length]|min }} dari {{ loc_chart|length }}){% endif %}</h1>
-            <p>{{ satker_name }} &mdash; {{ total_count }} NUP</p>
+            <h1>Distribusi Lokasi Aset{% if loc_hier|length > hier_per_page %} (lanjutan {{ loop.index }}/{{ loop.length }}){% endif %}</h1>
+            <p>{{ satker_name }} &mdash; {{ total_count }} NUP | Rp {{ total_value_fmt }}</p>
         </div>
         <div class="exec-header-meta"><div><strong>SK: {{ nomor_sk }}</strong></div><div>{{ tanggal_cetak }}</div></div>
     </div>
     <div class="exec-body">
-        <div class="chart-title"><div class="cdot" style="background:#10b981"></div>Seluruh Lokasi Aset ({{ loc_chart|length }} lokasi){% if loc_chart|length > items_per_page %} &mdash; Hal {{ loop.index }}{% endif %}</div>
-        <div style="display:grid;grid-template-columns:{% if use_two_cols %}1fr 1fr{% else %}1fr{% endif %};gap:10px;">
-            <table class="{% if use_two_cols %}dist-table{% else %}dist-table-full{% endif %}">
-                <thead><tr><th class="num">#</th><th>Lokasi</th><th class="bar-cell"></th><th class="r">NUP</th><th class="r">Nilai (Rp)</th></tr></thead>
-                <tbody>
-                {% for l in col1 %}
-                <tr><td class="num">{{ page_start + loop.index }}</td><td class="name-cell" title="{{ l.name }}">{{ l.name }}</td><td class="bar-cell"><div class="dist-mini-bar" style="width:{{ l.bar_pct }}%;background:{{ ['#10b981','#059669','#047857','#34d399','#6ee7b7'][loop.index0 % 5] }};"></div></td><td class="val-cell">{{ l.count }}</td><td class="money-cell">{{ '{:,.0f}'.format(l.value).replace(',', '.') }}</td></tr>
-                {% endfor %}
-                {% if not use_two_cols %}
-                <tr class="summary-row"><td colspan="3">Total ({{ col1|length }} lokasi)</td><td class="r">{{ col1|sum(attribute='count') }}</td><td class="r">{{ '{:,.0f}'.format(col1|sum(attribute='value')).replace(',', '.') }}</td></tr>
-                {% endif %}
-                </tbody>
-            </table>
-            {% if use_two_cols %}
-            <table class="dist-table">
-                <thead><tr><th class="num">#</th><th>Lokasi</th><th class="bar-cell"></th><th class="r">NUP</th><th class="r">Nilai (Rp)</th></tr></thead>
-                <tbody>
-                {% for l in col2 %}
-                <tr><td class="num">{{ page_start + half + loop.index }}</td><td class="name-cell" title="{{ l.name }}">{{ l.name }}</td><td class="bar-cell"><div class="dist-mini-bar" style="width:{{ l.bar_pct }}%;background:{{ ['#10b981','#059669','#047857','#34d399','#6ee7b7'][loop.index0 % 5] }};"></div></td><td class="val-cell">{{ l.count }}</td><td class="money-cell">{{ '{:,.0f}'.format(l.value).replace(',', '.') }}</td></tr>
-                {% endfor %}
-                </tbody>
-            </table>
+        <div class="chart-title"><div class="cdot" style="background:#10b981"></div>Denah Berjenjang &mdash; {{ loc_jenjang_label|join(' &rsaquo; ')|safe }}{% if loc_hier|length > hier_per_page %} &mdash; Hal {{ loop.index }}{% endif %}</div>
+        <div class="hier-legend legend-hijau">
+            {% for lb in loc_jenjang_label %}
+            <span><i class="sw-d{{ [loop.index0, 5]|min }}"></i>{{ lb }}</span>
+            {% endfor %}
+        </div>
+        <table class="hier-table hier-hijau">
+            <thead><tr><th>Lokasi</th><th class="hier-bar-cell"></th><th class="r">NUP</th><th class="r">Nilai (Rp)</th></tr></thead>
+            <tbody>
+            {% for l in page_rows %}
+            <tr class="d{{ [l.depth, 5]|min }}"><td class="hier-name" style="padding-left:{{ 8 + l.depth * 13 }}px" title="{{ l.name }}">{{ l.name }}</td><td class="hier-bar-cell">{% if l.bar_pct is defined %}<div class="hier-bar" style="width:{{ l.bar_pct }}%"></div>{% endif %}</td><td class="val-cell">{{ l.count }}</td><td class="money-cell">{{ '{:,.0f}'.format(l.value).replace(',', '.') }}</td></tr>
+            {% endfor %}
+            {% if loop.last %}
+            <tr class="summary-row"><td colspan="2">Total seluruh aset ({{ loc_hier|selectattr('depth', 'equalto', 0)|list|length }} kelompok teratas)</td><td class="r">{{ loc_hier_total.count }}</td><td class="r">{{ '{:,.0f}'.format(loc_hier_total.value).replace(',', '.') }}</td></tr>
             {% endif %}
-        </div>
-        {% if use_two_cols %}
-        <div style="margin-top:6px;background:#0f172a;color:#fff;font-size:7px;font-weight:700;padding:3px 8px;border-radius:3px;display:flex;justify-content:space-between;">
-            <span>Total Halaman Ini ({{ page_items|length }} lokasi)</span>
-            <span>{{ page_items|sum(attribute='count') }} NUP &mdash; Rp {{ '{:,.0f}'.format(page_items|sum(attribute='value')).replace(',', '.') }}</span>
-        </div>
-        {% endif %}
+            </tbody>
+        </table>
     </div>
-    <div class="exec-footer"><div>Laporan Eksekutif &mdash; {{ satker_name }}</div><div>Lokasi {{ page_start + 1 }}-{{ [page_start + items_per_page, loc_chart|length]|min }} dari {{ loc_chart|length }}</div></div>
+    <div class="exec-footer"><div>Laporan Eksekutif &mdash; {{ satker_name }}</div><div>Lokasi berjenjang, baris {{ page_start + 1 }}-{{ [page_start + hier_per_page, loc_hier|length]|min }} dari {{ loc_hier|length }}</div></div>
 </div>
 {% endfor %}
 {% endif %}

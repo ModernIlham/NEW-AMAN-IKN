@@ -18,6 +18,58 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1030] Distribusi lokasi ikut berjenjang; kategori sampai Sub-sub Kelompok — 2026-09-06
+
+Permintaan pemilik: *"ya langsung sampai ke sub-sub kelompoknya, dan lakukan
+hal yang sama disemua distribusi lokasi sesuai hierarki di peta denah juga
+dari awal hingga akhir, dan terakhir data lokasi sekarang."*
+
+Lanjutan `[#1029]`, dua bagian.
+
+**Kategori sampai jenjang kelima.** Sub-sub Kelompok (10 digit) sebelumnya
+sengaja ditahan karena pada satker besar ia melahirkan satu baris per jenis
+barang. Yang diminta sebaran sampai jenjang terdalam, bukan sebaran yang muat
+sehalaman — halamannya memang jadi lebih panjang, dan itu diterima. Batangnya
+ikut pindah ke jenjang terdalam yang baru.
+
+**Lokasi kini berjenjang mengikuti denah**, dengan jenjang SELURUH yang
+benar-benar dipakai denah satker itu — bukan daftar tetap: satker yang hanya
+menggambar Gedung dan Ruangan tak disodori jenjang kosong di antaranya. Field
+teks `location` menjadi jenjang TERDALAM, sebab denah menjawab "di gedung
+mana" sementara teks menjawab "tertulis di mana", dan keduanya kerap tak sama.
+Menaruhnya di satu pohon membuat selisihnya terbaca: satu Ruangan denah yang
+di bawahnya berisi "Lt.1 R.Rapat" DAN "Lantai 1 Ruang Rapat" menunjukkan
+persis pekerjaan pembersihan yang tersisa — dan itu tak pernah terlihat selama
+keduanya berdiri sebagai dua grafik terpisah.
+
+Halaman lokasi memakai tabel yang SAMA dengan kategori, hanya berkeluarga
+hijau mengikuti titik judulnya: dua tabel yang menjawab pertanyaan sejenis tak
+boleh berbeda cara dibaca.
+
+**Rantai "(belum ditempatkan di denah)" dirapatkan.** Aset tanpa denah
+melahirkan satu baris seperti itu pada SETIAP jenjang — empat jenjang berarti
+empat baris beruntun yang cacahnya persis sama dan tak menyatakan satu pun hal
+baru. Yang punya SAUDARA tetap dipertahankan: di situ ia menyatakan sesuatu
+yang nyata — sekian aset di Gedung ini belum ditempatkan pada Lantai mana pun,
+sementara sisanya sudah. Kedalaman keturunannya ikut dirapatkan; tanpa itu
+sebuah baris menjorok tiga tingkat di bawah induk yang cuma satu tingkat di
+atasnya, dan jorokan berhenti menggambarkan apa pun.
+
+Baris total kedua halaman diperbaiki dari "(2 golongan)" menjadi "(2 kelompok
+teratas)": kelompok "(tanpa kode barang)" dan "(belum ditempatkan di denah)"
+ikut terhitung di sana, dan keduanya bukan golongan maupun gedung.
+
+Uji: 25 uji, delapan di antaranya untuk halaman lokasi. Delapan mutasi
+dipasang; yang menengok saudara hanya ke belakang SELAMAT — pencarian ke depan
+ternyata tak pernah terjangkau, sebab `_urut_mentah` selalu menaruh kelompok
+"(tanpa …)" paling akhir. Kode tak terjangkau yang tampak menanggung beban itu
+jebakan: cabangnya dihapus, alasannya ditulis, dan sifat urutan yang
+disandarinya dipatok uji tersendiri.
+
+Diperiksa dengan merender laporannya ke PDF beserta denah sungguhan: Gedung ›
+Lantai › Ruangan › Lokasi tercatat, batang hanya pada baris terdalam, dan satu
+Ruangan yang memuat dua tulisan lokasi berbeda tampak sebagaimana adanya.
+
 ## [#1029] Distribusi kategori Laporan Eksekutif jadi berjenjang, tanpa batang — 2026-09-06
 
 Permintaan pemilik: *"pada laporan eksekutif di distribusi aset, buat agar
