@@ -18,6 +18,50 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1019] Penanda denah dipisah dari penanda koordinat, bukan ditumpuk — 2026-09-06
+
+Umpan balik pemilik atas `[#1018]`: *"ketika sudah ada denah peta namun belum
+ada koordinat warnanya menjadi saru."* Tepat, dan sebabnya jelas begitu
+ditunjuk — latar biru dan pin abu-abu bertumpuk pada BIDANG YANG SAMA, sehingga
+mata membacanya sebagai satu penanda setengah menyala alih-alih dua keterangan
+yang berdiri sendiri.
+
+Arahannya juga jelas: pakai opsi D (bentuknya berubah saat di denah, dengan
+kotak denah di bawahnya), centangnya tetap ada, warna denah dan warna koordinat
+dipisah, dan ketika belum ada keduanya semuanya abu-abu.
+
+Ikonnya karena itu tak lagi memakai komponen lucide apa adanya melainkan
+digambar dari potongan yang sama (MapPin, MapPinCheck, MapPinned; ISC, lucide
+0.507). Lucide tak menyediakan kombinasi keempat keadaannya — tak ada pin yang
+sekaligus bercentang DAN beralas denah — dan yang lebih menentukan: ikon lucide
+mewarnai seluruh goresannya sekaligus, sementara yang dibutuhkan justru dua
+warna pada dua bagian gambar yang terpisah.
+
+    PIN (+ centang)  → titik koordinat   · abu-abu ↔ hijau
+    ALAS DENAH       → penempatan denah  · muncul ↔ tak ada, biru
+
+Keduanya tak pernah bertumpuk, sehingga keadaan yang dikeluhkan kini terbaca
+sebagai pin ABU di atas alas BIRU — dua keterangan, dua warna, dua bentuk.
+
+Letak centangnya berpindah mengikuti ruang yang tersedia: di kanan-bawah saat
+tanpa alas (persis `MapPinCheck`, di sanalah ia paling lega dan karena itu masih
+terbaca pada 10px), dan di dalam kepala pin saat beralas denah (idiom
+`MapPinCheckInside`) sebab ruang kanan-bawah sudah terpakai alasnya. Bukan
+ketidakkonsistenan yang kelupaan: memaksa satu letak untuk kedua keadaan berarti
+mengorbankan keterbacaan keadaan yang paling sering muncul.
+
+Satu cacat ketahuan saat memeriksa hasil cetaknya pada 32px: centang sempat
+MENGGANTIKAN titik di kepala pin juga pada keadaan tanpa denah, sehingga pinnya
+tersisa sebagai tapal kuda — bentuk yang tak lagi terbaca sebagai pin lokasi.
+`MapPinCheck` asli membawa keduanya.
+
+Satu mutasi selamat dan membongkar uji yang menjaga dirinya sendiri: memakai pin
+lebar di atas alas denah — sehingga pinnya menembus alasnya — tak membuat satu
+uji pun merah, sebab `data-bentuk` dihitung ULANG dari `di_denah` alih-alih
+diturunkan dari pin yang benar-benar digambar. Atribut penanda yang sekadar
+menyatakan ulang masukannya tak membuktikan apa pun. Ia kini diturunkan dari
+path yang dipakai, dan ujinya menagih path itu langsung.
+
 ## [#1018] Ikon lokasi membawa dua keterangan: titik koordinat dan denah — 2026-09-06
 
 Permintaan pemilik: penanda "sudah masuk denah atau belum" harus ada *"di dalam

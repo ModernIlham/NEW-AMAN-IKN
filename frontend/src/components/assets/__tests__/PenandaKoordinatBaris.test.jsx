@@ -64,10 +64,11 @@ describe.each(TAMPILAN)("tampilan %s", (_nama, buat) => {
     // SEMUA tampilan supaya tak ada satu layar pun yang kembali menyimpang.
     render(buat({ ...BERKOORDINAT, id: "a8",
                   koordinat_latitude: "", koordinat_longitude: "" }));
-    const kelas = screen.getByTestId("lokasi-ikon-a8").getAttribute("class");
-    expect(kelas).toContain("text-muted-foreground");
-    expect(kelas).not.toContain("text-emerald-500");
-    expect(kelas).not.toContain("text-cyan-500");
+    const kelas = screen.getByTestId("lokasi-ikon-a8")
+      .querySelector('[data-bagian="koordinat"]').getAttribute("class");
+    expect(kelas).toContain("stroke-muted-foreground");
+    expect(kelas).not.toContain("emerald");
+    expect(kelas).not.toContain("cyan");
   });
 
   test("berkoordinat TANPA nama lokasi tetap menampilkan penandanya", () => {
