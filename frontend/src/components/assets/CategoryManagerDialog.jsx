@@ -12,6 +12,27 @@ import { useConfirm } from "../ui/ConfirmDialog";
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const CATEGORY_PAGE_SIZE = 50;
 
+/**
+ * Tinggi BAKU seluruh kendali di dialog ini: 44px di layar sentuh, 32px mulai
+ * `lg`. Satu nilai, dipakai input maupun tombol.
+ *
+ * Permintaan pemilik: *"bagian halaman kelola kategori aset sederhanakan dan
+ * seragamkan agar terlihat rapi dan proporsional."* Yang membuatnya tak
+ * proporsional bukan tombolnya yang kebesaran, melainkan tingginya yang tak
+ * seragam: aturan tap-target global (`index.css`, ≤1023px) memaksa SETIAP
+ * `button` menjadi 44×44, sementara input di sebelahnya tetap `h-8` = 32px.
+ * Tombol "+" karenanya berdiri satu setengah kali lebih tinggi daripada dua
+ * kotak isian di kirinya.
+ *
+ * Yang diperbaiki tingginya kendali lain, BUKAN tombolnya — mengecilkan tombol
+ * di layar sentuh melanggar aturan yang sama, dan kotak isian pun memang layak
+ * 44px oleh jari.
+ */
+const TINGGI_KENDALI = "h-11 lg:h-8";
+
+/** 12488 → "12.488". Angka lima digit tanpa pemisah dibaca dengan berhenti. */
+const angka = (n) => Number(n || 0).toLocaleString("id-ID");
+
 const CategoryManagerDialog = memo(({ open, onClose, categories, onCategoriesChanged }) => {
   const { confirm, confirmDialog } = useConfirm();
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -161,9 +182,12 @@ const CategoryManagerDialog = memo(({ open, onClose, categories, onCategoriesCha
         <DialogHeader><DialogTitle className="flex items-center gap-2"><FolderOpen className="w-5 h-5 text-blue-600" />Kelola Kategori Aset</DialogTitle></DialogHeader>
         <div className="space-y-3">
           <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-2">
-            <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">Total: {categories.length} kategori</span>
-            <Button variant="ghost" size="sm" onClick={handleDeleteAllCategories} className="text-xs text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 h-7">
-              <Trash2 className="w-3 h-3 mr-1" />Hapus Semua
+            <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">
+              Total: {angka(categories.length)} kategori
+            </span>
+            <Button variant="ghost" size="sm" onClick={handleDeleteAllCategories}
+              className={`text-xs text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0 ${TINGGI_KENDALI}`}>
+              <Trash2 className="w-3.5 h-3.5 mr-1" />Hapus Semua
             </Button>
           </div>
 
@@ -198,7 +222,7 @@ const CategoryManagerDialog = memo(({ open, onClose, categories, onCategoriesCha
                 <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Lepaskan file di sini...</span>
               </div>
             ) : (
-              <Button variant="outline" size="sm" onClick={() => categoryImportRef.current?.click()} className="w-full border-emerald-300 dark:border-emerald-600 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30" disabled={!!catImportProgress}>
+              <Button variant="outline" size="sm" onClick={() => categoryImportRef.current?.click()} className={`w-full ${TINGGI_KENDALI} border-emerald-300 dark:border-emerald-600 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30`} disabled={!!catImportProgress}>
                 <Upload className="w-4 h-4 mr-1" />{catImportProgress ? 'Sedang Import...' : 'Pilih File atau Seret & Lepas'}
               </Button>
             )}
@@ -226,53 +250,77 @@ const CategoryManagerDialog = memo(({ open, onClose, categories, onCategoriesCha
           
           <div className="space-y-1.5">
             <p className="text-xs font-semibold text-foreground">Tambah Kategori Manual</p>
-            <div className="flex flex-wrap gap-2">
-              <Input 
-                placeholder="Kode Aset (10 digit)" 
-                value={newCategoryCode} 
-                onChange={e => setNewCategoryCode(e.target.value)} 
-                onKeyPress={e => e.key === 'Enter' && handleAddCategory()} 
-                className="h-8 text-sm w-24 sm:w-32 font-mono" 
+            <div className="flex items-center gap-2">
+              {/* Lebarnya memuat sepuluh digit monospace beserta paddingnya;
+                  placeholder "(10 digit)" dulu terpotong jadi "Kode Ase…" —
+                  keterangan yang tak terbaca sama saja dengan tak ada, dan
+                  placeholder lenyap begitu diketik. Keterangannya pindah ke
+                  baris di bawah, tempat ia tetap terlihat. */}
+              <Input
+                placeholder="Kode Aset"
+                value={newCategoryCode}
+                onChange={e => setNewCategoryCode(e.target.value)}
+                onKeyPress={e => e.key === 'Enter' && handleAddCategory()}
+                className={`${TINGGI_KENDALI} text-sm w-28 sm:w-32 flex-shrink-0 font-mono`}
                 maxLength={10}
                 data-testid="category-code-input"
               />
-              <Input 
-                placeholder="Deskripsi kategori..." 
-                value={newCategoryName} 
-                onChange={e => setNewCategoryName(e.target.value)} 
-                onKeyPress={e => e.key === 'Enter' && handleAddCategory()} 
-                className="h-8 text-sm flex-1" 
+              <Input
+                placeholder="Deskripsi kategori…"
+                value={newCategoryName}
+                onChange={e => setNewCategoryName(e.target.value)}
+                onKeyPress={e => e.key === 'Enter' && handleAddCategory()}
+                className={`${TINGGI_KENDALI} text-sm flex-1 min-w-0`}
                 data-testid="category-name-input"
               />
-              <Button onClick={handleAddCategory} size="sm" className="h-8 px-3" data-testid="category-add-btn"><Plus className="w-4 h-4" /></Button>
+              <Button onClick={handleAddCategory} size="sm" aria-label="Tambah kategori"
+                className={`${TINGGI_KENDALI} w-11 lg:w-8 p-0 flex-shrink-0`}
+                data-testid="category-add-btn"><Plus className="w-4 h-4" /></Button>
             </div>
+            <p className="text-[10px] text-muted-foreground">
+              Kode Aset 10 digit sesuai kodefikasi BMN.
+            </p>
           </div>
           
-          <div className="relative">
-            <Input placeholder="Cari kategori..." value={categorySearch} onChange={e => { setCategorySearch(e.target.value); setCategoryPage(1); }} className="h-8 text-sm mb-2" />
-            
+          <div className="relative space-y-2">
+            <Input placeholder="Cari kategori…" value={categorySearch}
+              onChange={e => { setCategorySearch(e.target.value); setCategoryPage(1); }}
+              className={`${TINGGI_KENDALI} text-sm`} data-testid="category-search-input" />
+
             {filteredCategories.length > 0 && (
-              <div className="flex items-center justify-between mb-2 text-xs text-muted-foreground">
-                <span>
-                  {Math.min((categoryPage - 1) * CATEGORY_PAGE_SIZE + 1, filteredCategories.length)}-{Math.min(categoryPage * CATEGORY_PAGE_SIZE, filteredCategories.length)} dari {filteredCategories.length}
+              /* Ketiga angkanya TAK BOLEH membungkus: "1-50 dari 12488" yang
+                 patah menjadi "1-50 dari" + "12488" terbaca sebagai dua
+                 keterangan, dan "1 / 250" yang patah terbaca sebagai pecahan
+                 yang gagal dirender. Label tombolnya yang mengalah di layar
+                 sempit — panahnya sendiri sudah menyatakan arah. */
+              <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span className="whitespace-nowrap" data-testid="kategori-rentang">
+                  {angka(Math.min((categoryPage - 1) * CATEGORY_PAGE_SIZE + 1, filteredCategories.length))}
+                  &ndash;{angka(Math.min(categoryPage * CATEGORY_PAGE_SIZE, filteredCategories.length))}
+                  {" "}dari {angka(filteredCategories.length)}
                 </span>
                 {/* Ketiga kendali memakai `totalHalaman` yang SAMA. Sebelumnya
                     angka itu dihitung ulang di tiga tempat dengan ekor `|| 1`
                     hanya pada salah satunya — bentuk yang membuat label dan
                     keadaan tombol bisa berbeda pendapat. */}
-                <div className="flex items-center gap-1">
-                  <Button variant="outline" size="sm" className="h-6 px-2 text-xs min-w-0 min-h-0"
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <Button variant="outline" size="sm" aria-label="Halaman sebelumnya"
+                    className={`${TINGGI_KENDALI} w-11 sm:w-auto sm:px-2 p-0 text-xs`}
                     onClick={() => setCategoryPage(p => Math.max(1, p - 1))}
                     disabled={categoryPage <= 1} data-testid="kategori-prev">
-                    <ChevronLeft className="w-3 h-3" /> Sebelumnya
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline ml-0.5">Sebelumnya</span>
                   </Button>
-                  <span className="px-2 text-muted-foreground font-medium" data-testid="kategori-halaman">
-                    {categoryPage} / {totalHalaman}
+                  <span className="px-1 text-muted-foreground font-medium whitespace-nowrap"
+                    data-testid="kategori-halaman">
+                    {angka(categoryPage)} / {angka(totalHalaman)}
                   </span>
-                  <Button variant="outline" size="sm" className="h-6 px-2 text-xs min-w-0 min-h-0"
+                  <Button variant="outline" size="sm" aria-label="Halaman berikutnya"
+                    className={`${TINGGI_KENDALI} w-11 sm:w-auto sm:px-2 p-0 text-xs`}
                     onClick={() => setCategoryPage(p => Math.min(totalHalaman, p + 1))}
                     disabled={categoryPage >= totalHalaman} data-testid="kategori-next">
-                    Berikutnya <ChevronRight className="w-3 h-3" />
+                    <span className="hidden sm:inline mr-0.5">Berikutnya</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
                   </Button>
                 </div>
               </div>
@@ -303,7 +351,15 @@ const CategoryManagerDialog = memo(({ open, onClose, categories, onCategoriesCha
                           <span className="text-xs text-foreground break-words line-clamp-2" title={c.label}>{c.label}</span>
                         </td>
                         <td className="px-1 py-1.5">
-                          <Button variant="ghost" size="sm" onClick={() => handleDeleteCategory(c.id)} className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"><XCircle className="w-3.5 h-3.5 text-red-500" /></Button>
+                          {/* Di layar sentuh tombol ini TERLIHAT. Sebelumnya
+                              `opacity-0` sampai di-hover — dan layar sentuh tak
+                              punya hover — sementara aturan tap-target tetap
+                              memberinya 44×44: sebuah tombol HAPUS yang tak
+                              kelihatan namun tetap dapat tertekan jari. Yang
+                              tak terlihat tak dapat dihindari. */}
+                          <Button variant="ghost" size="sm" aria-label={`Hapus ${c.label}`}
+                            onClick={() => handleDeleteCategory(c.id)}
+                            className="h-11 w-11 lg:h-6 lg:w-6 p-0 opacity-100 lg:opacity-0 lg:group-hover:opacity-100"><XCircle className="w-3.5 h-3.5 text-red-500" /></Button>
                         </td>
                       </tr>
                     ))}

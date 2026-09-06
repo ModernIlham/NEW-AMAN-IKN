@@ -18,6 +18,48 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1027] Kelola Kategori Aset: satu tinggi kendali, angka terbaca — 2026-09-06
+
+Permintaan pemilik: *"bagian halaman kelola kategori aset sederhanakan dan
+seragamkan agar terlihat rapi dan proporsional."*
+
+Yang membuatnya tak proporsional BUKAN tombolnya yang kebesaran, melainkan
+tingginya yang tak seragam. Aturan tap-target global (`index.css`, ≤1023px)
+memaksa SETIAP `button` menjadi 44×44, sementara input di sebelahnya tetap
+`h-8` = 32px. Tombol "+" karenanya berdiri satu setengah kali lebih tinggi
+daripada dua kotak isian di kirinya — persis yang terlihat pada tangkapan
+layar pemiliknya.
+
+Yang diperbaiki tinggi kendali LAIN, bukan tombolnya: mengecilkan tombol di
+layar sentuh melanggar aturan yang sama, dan kotak isian pun memang layak 44px
+oleh jari. Satu tetapan `TINGGI_KENDALI` (`h-11 lg:h-8`) kini dipakai kotak
+kode, kotak deskripsi, tombol tambah, kotak cari, tombol impor, dan "Hapus
+Semua". Tombol "+" menjadi PERSEGI (`w-11 lg:w-8`), bukan pil.
+
+Empat hal lain yang ikut dibereskan:
+
+- **"Kode Aset (10 digit)" tak pernah muat** di kotak selebar itu — terbaca
+  "Kode Ase…" — dan placeholder lenyap begitu diketik. Keterangannya pindah ke
+  baris tetap di bawah, tempat ia tetap terlihat; kotaknya sendiri dilebarkan
+  agar sepuluh digit monospace muat utuh.
+- **Angka ribuan diberi pemisah**: `12488` → `12.488`, pada total maupun
+  rentang halaman. Angka lima digit tanpa pemisah dibaca dengan berhenti.
+- **Baris paginasi tak lagi membungkus.** "1-50 dari 12488" yang patah menjadi
+  "1-50 dari" + "12488" terbaca sebagai dua keterangan, dan "1 / 250" yang
+  patah terbaca sebagai pecahan yang gagal dirender. Keduanya kini
+  `whitespace-nowrap`; label tombolnya yang mengalah di layar sempit — panahnya
+  sendiri sudah menyatakan arah, dan keduanya diberi `aria-label`.
+- **Tombol hapus per baris TERLIHAT di layar sentuh.** Sebelumnya `opacity-0`
+  sampai di-hover — dan layar sentuh tak punya hover — sementara aturan
+  tap-target tetap memberinya 44×44: sebuah tombol HAPUS yang tak kelihatan
+  namun tetap dapat tertekan jari. Yang tak terlihat tak dapat dihindari.
+
+Uji: 13 uji baru, termasuk penjaga struktural yang menuntut tiap `Button`/
+`Input` menyatakan ukuran sentuh DAN ukuran layar lebar — satu tinggi saja
+berarti kendali itu mengabaikan aturan tap-target, dan barisnya kembali
+timpang. Lima mutasi dipasang dan seluruhnya mati. Tata letaknya diperiksa
+dengan merender pada lebar 360px dan 512px.
+
 ## [#1026] Ubah Massal memakai pemilih unit yang sama dengan form aset — 2026-09-06
 
 Permintaan pemilik: *"sesuaikan juga di Panel Ubah Massal — masih pakai
