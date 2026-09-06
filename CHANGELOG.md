@@ -18,6 +18,58 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1025] Jenjang unit di laporan mengikuti puncak satkernya — 2026-09-06
+
+Permintaan pemilik: *"betulkan dua patokan Eselon I di laporan — pengelompokan
+'Tanpa Eselon I' di ringkasan eksekutif, dan jenjang bawaan panel analisis
+unit yang dipatok Eselon II (kosong untuk satker Eselon III)."*
+
+Dua sisa terakhir dari `[#1021]`, keduanya bekerja tanpa satu pun pesan galat:
+
+1. **Ringkasan eksekutif mengelompokkan menurut `eselon1`.** Pada satker
+   Eselon III seluruh asetnya jatuh ke satu keranjang **"Tanpa Eselon I"** —
+   satu batang yang tak mengabarkan apa pun kecuali bahwa pertanyaannya salah
+   alamat. Judul panelnya pun tetap berbunyi "Distribusi Per Eselon I".
+2. **Panel analisis unit berjenjang bawaan Eselon II.** Pada satker Eselon III
+   itu bukan tingkat yang lebih halus melainkan tingkat milik instansi
+   induknya, yang tak berisi apa pun. Panelnya terbuka kosong, dan panel
+   kosong terbaca sebagai laporan yang gagal dimuat.
+
+Alasan bawaan lamanya TETAP berlaku — Eselon I terlalu kasar untuk menunjuk
+siapa yang bertanggung jawab atas barangnya — jadi yang diganti patokannya,
+bukan aturannya: **satu jenjang di bawah puncak satkernya**. Untuk satker
+kantor pusat hasilnya tetap Eselon II, persis seperti sebelumnya.
+
+Aturan itu diterapkan pada **puncak EFEKTIF**: tingkat terdangkal yang
+benar-benar berisi, bila puncak yang dinyatakan ternyata kosong. Satker yang
+belum menyatakan tingkatnya terbaca berpuncak Eselon I sementara datanya mulai
+di Eselon III — menyodorkan panel kosong padahal datanya ada di tingkat
+sebelah adalah kekeliruan yang sama, hanya berpindah tempat. Untuk satker
+seperti itu bawaannya kini Eselon IV, yakni Seksi/Subbagiannya. Bila satu
+tingkat di bawah puncak efektif pun kosong, puncak efektifnya sendiri yang
+dipakai: panel satu baris masih mengabarkan sesuatu, panel kosong tidak.
+
+Pemilih jenjang menawarkan tingkat milik satker itu DITAMBAH tingkat di
+atasnya yang terlanjur berisi — satker yang baru menyatakan dirinya Eselon III
+masih menyimpan aset ber-`eselon1`, dan menutup jenjang itu membuat datanya
+tak dapat dilihat sama sekali. Judul panel ringkasan dan keterangan filter
+ikut menyebut tingkat yang benar-benar dipakai; judul "Per Eselon I" di atas
+batang Eselon III adalah keterangan yang keliru, dan keterangan keliru lebih
+buruk daripada tak ada.
+
+`ES_LEVEL_SAH` dan `ES_LEVEL_BAWAAN` DIHAPUS — meninggalkannya menyediakan
+jalan untuk memasang kembali patokan yang baru saja dicabut.
+
+Dua harness uji laporan ikut menambal `shared_utils.db`: laporan kini membaca
+tingkat satkernya lewat `shared_utils.eselon_satker`, yang memakai koleksi
+`db` modulnya sendiri.
+
+Uji: 24 uji baru (15 modul murni, 9 lewat jalur laporan sungguhan). Tujuh
+mutasi dipasang dan seluruhnya mati. Diperiksa juga dengan merender panelnya
+untuk satker Lapas — sebelum: bawaan Eselon II, panel kosong, ringkasan satu
+batang "Tanpa Eselon I"; sesudah: bawaan Eselon IV dengan empat Seksi
+beserta angkanya, ringkasan berlabel Eselon III.
+
 ## [#1024] Pemilih unit organisasi pada form aset: bercari, berjenjang, terbaca — 2026-09-06
 
 Permintaan pemilik: *"saat melakukan pemilihan unit organisasi di bagian

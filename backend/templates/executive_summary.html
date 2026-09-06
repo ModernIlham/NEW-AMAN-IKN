@@ -734,7 +734,7 @@
             {% endif %}
             {% if eselon_chart|length > 0 %}
             <div class="chart-box">
-                <div class="chart-title"><div class="cdot" style="background:#8b5cf6"></div>Distribusi Per Eselon I ({{ eselon_chart|length }} unit)</div>
+                <div class="chart-title"><div class="cdot" style="background:#8b5cf6"></div>Distribusi Per {{ eselon_label or 'Eselon I' }} ({{ eselon_chart|length }} unit)</div>
                 {% for e in eselon_chart %}
                 <div class="hbar-row">
                     <div class="hbar-label" style="width:100px;">{{ e.name }}</div>
