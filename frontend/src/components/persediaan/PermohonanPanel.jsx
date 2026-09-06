@@ -181,12 +181,21 @@ export default function PermohonanPanel({ user, onSelesai, konfig }) {
 
   return (
     <>
-      <Button variant="outline" onClick={() => setOpen(true)}
+      {/* Disamakan dengan tombol tetangganya di bilah aksi: tinggi h-10, jarak
+          gap-1.5, dan label yang menepi di layar sempit. Tombol ini satu-
+          satunya yang labelnya selalu tampil, sehingga di HP ia jauh lebih
+          lebar daripada yang lain lalu paling banyak diperas flexbox. Lencana
+          jumlah menunggu TETAP tampil — itulah yang membuat tombol ini perlu
+          dilihat, dan menyembunyikannya bersama label akan menghapus satu-
+          satunya tanda bahwa ada permohonan yang menanti. */}
+      <Button variant="outline" className="h-10 gap-1.5"
+        onClick={() => setOpen(true)}
+        aria-label={k.judul} title={k.judul}
         data-testid={`${k.prefix}-buka`}>
-        <ClipboardList className="w-4 h-4 mr-2" />
-        Permohonan
+        <ClipboardList className="w-4 h-4" />
+        <span className="hidden sm:inline">Permohonan</span>
         {menunggu > 0 && (
-          <span className="ml-2 min-w-5 h-5 px-1 rounded-full bg-amber-500 text-white text-[11px] leading-5 text-center"
+          <span className="min-w-5 h-5 px-1 rounded-full bg-amber-500 text-white text-[11px] leading-5 text-center"
             data-testid={`${k.prefix}-badge`}>{menunggu}</span>
         )}
       </Button>

@@ -186,3 +186,76 @@ test("viewer tidak ditawari mengirim tanda tangan", async () => {
   // Unduh tetap tersedia — membaca dokumen bukan menandatanganinya.
   expect(screen.getByTestId("persediaan-riwayat-nota-unduh-n1")).toBeInTheDocument();
 });
+
+// ── Jumlah yang ingin diadakan ─────────────────────────────────────────
+//
+// Permintaan pemilik: *"sertakan juga berapa jumlah yang ingin diadakan
+// melalui inputan."* Jumlahnya menumpang parameter `ids` yang sudah ada
+// (`"<id>:<jumlah>"`), sehingga satu parser melayani pratinjau maupun
+// penerbitan.
+
+import { entriPilihan, totalDiusulkan } from "../NotaDinasDialog";
+
+test("entri membawa jumlah hanya bila angkanya masuk akal", () => {
+  const it = [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }];
+  expect(entriPilihan(it, { a: "10", b: "", c: "0", d: "-3" }))
+    .toEqual(["a:10", "b", "c", "d"]);
+});
+
+test("entri tahan masukan cacat", () => {
+  expect(entriPilihan(null, null)).toEqual([]);
+  expect(entriPilihan([{ id: "a" }], { a: "abc" })).toEqual(["a"]);
+});
+
+test("total hanya menjumlahkan yang terisi", () => {
+  const it = [{ id: "a" }, { id: "b" }];
+  expect(totalDiusulkan(it, { a: "10", b: "5" })).toBe(15);
+  expect(totalDiusulkan(it, { a: "10" })).toBe(10);
+  expect(totalDiusulkan(it, {})).toBe(0);
+});
+
+test("mengetik jumlah membuat ids terkirim WALAU semua barang terpilih", async () => {
+  // Tanpa ini, angka yang baru saja diketik petugas hilang tanpa satu pun
+  // tanda: `ids` dulu hanya dikirim saat pilihannya sebagian.
+  render(<NotaDinasDialog items={ITEMS} />);
+  await buka();
+  await userEvent.type(screen.getByTestId("nota-kritis-jumlah-hab-1"), "25");
+  await userEvent.click(screen.getByTestId("nota-kritis-terbitkan"));
+  await waitFor(() => expect(axios.post).toHaveBeenCalled());
+  expect(axios.post.mock.calls[0][1].ids).toEqual(["hab-1:25", "kri-1"]);
+});
+
+test("jumlah ikut ke pratinjau lewat parameter yang sama", async () => {
+  render(<NotaDinasDialog items={ITEMS} />);
+  await buka();
+  await userEvent.type(screen.getByTestId("nota-kritis-jumlah-kri-1"), "7");
+  await userEvent.click(screen.getByTestId("nota-kritis-unduh"));
+  await waitFor(() => expect(mockUnduh).toHaveBeenCalled());
+  expect(decodeURIComponent(String(mockUnduh.mock.calls[0][0])))
+    .toContain("ids=hab-1,kri-1:7");
+});
+
+test("tanpa jumlah, daftar lengkap tetap dikirim tanpa ids", async () => {
+  render(<NotaDinasDialog items={ITEMS} />);
+  await buka();
+  await userEvent.click(screen.getByTestId("nota-kritis-terbitkan"));
+  await waitFor(() => expect(axios.post).toHaveBeenCalled());
+  expect(axios.post.mock.calls[0][1].ids).toEqual([]);
+});
+
+test("cacah menyebut total unit yang diusulkan", async () => {
+  render(<NotaDinasDialog items={ITEMS} />);
+  await buka();
+  await userEvent.type(screen.getByTestId("nota-kritis-jumlah-hab-1"), "12");
+  expect(screen.getByTestId("nota-kritis-cacah")).toHaveTextContent("12 unit diusulkan");
+});
+
+test("nota kedaluwarsa TIDAK meminta jumlah pengadaan", async () => {
+  // Nota kedaluwarsa tidak meminta pengadaan; jumlahnya sudah ditentukan isi
+  // layer yang kedaluwarsa.
+  render(<NotaDinasDialog items={[{ id: "b-1", nama_barang: "Hand Sanitizer",
+    kode_barang: "K003", qty: 4, expired: "2026-08-01" }]} jenis="kedaluwarsa" />);
+  await userEvent.click(screen.getByTestId("persediaan-nota-kedaluwarsa"));
+  await screen.findByTestId("nota-kedaluwarsa-item-b-1");
+  expect(screen.queryByTestId("nota-kedaluwarsa-jumlah-b-1")).toBeNull();
+});

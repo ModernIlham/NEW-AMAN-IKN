@@ -18,6 +18,69 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1017] Bilah aksi tak lagi memeras tombolnya; nota usulan menyebut jumlahnya — 2026-09-06
+
+Dua laporan pemilik.
+
+**"Bagian permohonan jadi melewati batas."** Label "Permohonan" tercetak meluar
+dari kotak tombolnya di layar sempit, dan sebabnya berlawanan dengan dugaan:
+aturan tap-target global — `button, a { min-width: 44px }` pada ≤1023px —
+justru yang mengizinkannya. Nilai eksplisit itu MENIMPA `min-width: auto` milik
+flex item, yakni nilai yang biasanya mencegah item menyusut di bawah lebar
+isinya. Tombol karenanya boleh diperas sampai 44px sementara labelnya
+`whitespace-nowrap` meluber keluar kotak, dan barisnya tak pernah menggulir
+seperti yang dimaksudkan `overflow-x-auto`. Aturan yang dipasang untuk
+memperbesar tombol ternyata yang membuatnya bisa dikecilkan.
+
+Barisnya kini `[&>*]:shrink-0`, dan tombol Permohonan disamakan dengan
+tetangganya: tinggi `h-10`, jarak `gap-1.5`, label yang menepi di layar sempit.
+Ia satu-satunya yang labelnya selalu tampil — karena itu paling lebar, karena
+itu paling banyak diperas. Lencana jumlah menunggu TETAP tampil: menyembunyikan­
+nya bersama label akan menghapus satu-satunya tanda bahwa ada permohonan yang
+menanti, justru alasan tombol itu perlu dilihat. `aria-label` ditambahkan
+supaya tombol tidak menjadi anonim persis di layar tempat labelnya
+disembunyikan.
+
+**"Sertakan juga berapa jumlah yang ingin diadakan melalui inputan."** Nota
+usulan pengadaan kini punya kolom Jumlah Diusulkan, diisi per barang di dialog
+pemilihan. Angkanya menumpang parameter `ids` yang sudah ada sebagai
+`"<id>:<jumlah>"`, sehingga SATU parser melayani pratinjau (kueri koma) maupun
+penerbitan (daftar JSON) — dua bentuk kawat untuk maksud yang sama adalah dua
+parser yang harus sepakat selamanya.
+
+Yang dikosongkan tercetak "-", bukan "0": nol terbaca sebagai permintaan nol
+unit pada naskah yang ditandatangani. Isian juga tidak diberi nilai tebakan
+(misalnya batas kritis dikurangi stok) — angka yang terisi sendiri akan lolos
+tanpa dibaca lalu tercetak sebagai permintaan resmi yang tak pernah diketik
+siapa pun. Nota kedaluwarsa tidak mendapat kolom ini; ia tidak meminta
+pengadaan.
+
+Satu jebakan ikut diperbaiki. `ids` dulu hanya dikirim saat pilihannya
+sebagian, sehingga jumlah yang diketik pada daftar LENGKAP akan hilang tanpa
+satu pun tanda. Kini `ids` juga dikirim demi jumlahnya — dan karena itu arti
+"tersaring" harus berubah: ia kini berarti daftarnya BENAR-BENAR lebih pendek
+daripada seluruh temuan, bukan sekadar "ids dikirim". Tanpa perubahan itu,
+naskah yang memuat seluruh barang kritis akan memuat kalimat "sengaja tidak
+disertakan" — menyatakan ada barang lain yang ditinggalkan, padahal tak ada.
+
+**Pengukuran tata letak kini dibuktikan.** Kolom baru menggeser tinggi tabel,
+dan naskah 12 baris tertangkap uji invarian: terukur 748,0 poin terhadap tinggi
+frame 751,2 — sisa 3,2 poin — namun platypus tetap memecahnya, sebab ia
+menyimpan toleransi sendiri yang tak ikut terhitung. Mengejar epsilon itu
+menebak; menambah marjin aman itu menebak dengan angka lebih besar. Maka ukuran
+kini dipakai sebagai saringan murah, dan hanya yang lolos saringan dibuktikan
+dengan benar-benar menatanya ke dokumen buangan lalu menghitung halamannya.
+Daftar yang jelas kepanjangan tak pernah menempuh penataan percobaan. Seluruh
+penataan — keputusan, percobaan, dan cetak — kini berada dalam satu lompatan
+thread; menjalankan percobaan di event loop membuat separuh pekerjaan CPU ini
+tetap memblokir server.
+
+Dua mutasi selamat dan memaksa uji ditambah: arti "tersaring" tak berpenjaga di
+kedua jalur (pratinjau punya barisnya sendiri, dan tanpa uji keduanya boleh
+berselisih diam-diam), dan perbaikan bilah aksi sama sekali tak bertagih —
+jsdom tidak menata halaman, jadi ia dipindai dari sumber mengikuti pola
+`lingkupUnitTataLetak.test.js`.
+
 ## [#1016] Nota Dinas: daftar panjang jadi lampiran, naskahnya utuh sehalaman — 2026-09-06
 
 Umpan balik pemilik atas Nota Dinas yang terbit: tanda tangan terdorong ke

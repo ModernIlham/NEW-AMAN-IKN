@@ -85,10 +85,40 @@ export function saringBarang(daftar, kata) {
   });
 }
 
+/**
+ * Daftar barang terpilih → entri `ids` untuk server.
+ *
+ * Satu format untuk dua jalur (pratinjau lewat kueri, penerbitan lewat JSON):
+ * `"<id>"` bila jumlahnya belum diisi, `"<id>:<jumlah>"` bila diisi. Jumlah
+ * yang tak masuk akal (kosong, nol, negatif, bukan angka) sengaja DIBUANG,
+ * bukan dikirim sebagai nol: nol yang tercetak di naskah resmi terbaca sebagai
+ * permintaan nol unit, sementara "-" jujur menyatakan belum ditentukan.
+ */
+export function entriPilihan(items, jumlah) {
+  const peta = jumlah || {};
+  return (items || []).map((it) => {
+    const n = parseInt(String(peta[it.id] ?? "").trim(), 10);
+    return Number.isFinite(n) && n > 0 ? `${it.id}:${n}` : String(it.id);
+  });
+}
+
+/** Total unit yang diusulkan dari peta jumlah — 0 bila belum ada yang diisi. */
+export function totalDiusulkan(items, jumlah) {
+  const peta = jumlah || {};
+  return (items || []).reduce((jml, it) => {
+    const n = parseInt(String(peta[it.id] ?? "").trim(), 10);
+    return jml + (Number.isFinite(n) && n > 0 ? n : 0);
+  }, 0);
+}
+
 export default function NotaDinasDialog({ items, jenis = "kritis", onTerbit }) {
   const [open, setOpen] = useState(false);
   const [cari, setCari] = useState("");
   const [terbitLoading, setTerbitLoading] = useState(false);
+  // {id: teks jumlah usulan}. Disimpan sebagai TEKS, bukan angka: mengubahnya
+  // jadi angka saat diketik membuat isian yang sedang dikosongkan melompat
+  // kembali ke 0 di tengah pengetikan.
+  const [jumlah, setJumlah] = useState({});
   // Set id yang TIDAK dicentang — default kosong berarti semua terpilih,
   // dan pilihan tak perlu diinisialisasi ulang saat daftar peringatan segar.
   const [batal, setBatal] = useState(() => new Set());
@@ -114,11 +144,19 @@ export default function NotaDinasDialog({ items, jenis = "kritis", onTerbit }) {
   // server memperlakukan nota lengkap sebagai nota tersaring, dan naskahnya
   // lalu memuat kalimat "sengaja tidak disertakan" pada daftar yang utuh.
   const sebagian = terpilih.length !== daftar.length;
-  const idsTerpilih = terpilih.map((it) => it.id);
+  // Jumlah usulan menumpang parameter yang sama. Karena itu `ids` juga harus
+  // dikirim saat SELURUH barang terpilih tetapi jumlahnya sudah diisi —
+  // tanpa itu, angka yang baru saja diketik petugas hilang tanpa satu pun
+  // tanda. Server menentukan "tersaring" dari panjang daftarnya, bukan dari
+  // ada-tidaknya `ids`, sehingga nota lengkap tetap tak mengaku tersaring.
+  const entri = entriPilihan(terpilih, jumlah);
+  const adaJumlah = entri.some((e) => e.includes(":"));
+  const kirimIds = sebagian || adaJumlah;
+  const total = totalDiusulkan(terpilih, jumlah);
 
   const unduh = () => {
-    const param = sebagian
-      ? `&ids=${encodeURIComponent(idsTerpilih.join(","))}` : "";
+    const param = kirimIds
+      ? `&ids=${encodeURIComponent(entri.join(","))}` : "";
     downloadFileWithProgress(
       `${API}/persediaan/nota-dinas?jenis=${jenis}${param}`,
       NAMA_BERKAS[jenis],
@@ -134,7 +172,7 @@ export default function NotaDinasDialog({ items, jenis = "kritis", onTerbit }) {
     setTerbitLoading(true);
     try {
       const { data } = await axios.post(`${API}/persediaan/nota-dinas/terbitkan`, {
-        jenis, ids: sebagian ? idsTerpilih : [],
+        jenis, ids: kirimIds ? entri : [],
       });
       toast.success(data?.message || "Nota dinas terbit");
       setOpen(false);
@@ -169,7 +207,7 @@ export default function NotaDinasDialog({ items, jenis = "kritis", onTerbit }) {
           <p className="text-xs text-muted-foreground">
             {jenis === "kedaluwarsa"
               ? "Centang barang yang akan dimasukkan ke nota dinas. Satu barang bisa punya beberapa layer bertanggal berbeda — memilih barang berarti SELURUH layer-nya ikut."
-              : "Centang barang yang akan diusulkan pengadaannya — yang tidak dicentang tidak masuk nota dinas."}
+              : "Centang barang yang akan diusulkan pengadaannya — yang tidak dicentang tidak masuk nota dinas. Isi kolom jumlah bila banyaknya sudah ditentukan; yang dikosongkan tercetak \u201c-\u201d pada naskah."}
           </p>
           {/* Pencarian: daftar peringatan bisa memuat ratusan barang, dan
               mencentang satu di antaranya berarti menggulir mencarinya. */}
@@ -208,6 +246,7 @@ export default function NotaDinasDialog({ items, jenis = "kritis", onTerbit }) {
             <span className="text-[11px] text-muted-foreground ml-auto"
               data-testid={`nota-${jenis}-cacah`}>
               {terpilih.length} dari {daftar.length} dipilih
+              {total > 0 ? ` · ${total} unit diusulkan` : ""}
               {cari ? ` · menampilkan ${tampil.length}` : ""}
             </span>
           </div>
@@ -245,6 +284,25 @@ export default function NotaDinasDialog({ items, jenis = "kritis", onTerbit }) {
                       )}
                     </span>
                   </span>
+                  {/* Jumlah yang ingin diadakan — hanya pada nota usulan
+                      pengadaan. Nota kedaluwarsa tidak meminta pengadaan;
+                      jumlahnya sudah ditentukan isi layer yang kedaluwarsa.
+
+                      Sengaja TIDAK diisi nilai tebakan (mis. batas kritis
+                      dikurangi stok): angka yang terisi sendiri akan lolos
+                      tanpa dibaca, lalu tercetak sebagai permintaan resmi
+                      yang tak pernah diketik siapa pun. Kosong tercetak "-". */}
+                  {jenis === "kritis" && (
+                    <span className="flex-shrink-0" onClick={(e) => e.preventDefault()}>
+                      <input type="number" min="1" step="1" placeholder="jml"
+                        value={jumlah[it.id] ?? ""}
+                        onChange={(e) => setJumlah((prev) => ({
+                          ...prev, [it.id]: e.target.value }))}
+                        aria-label={`Jumlah diusulkan untuk ${it.nama_barang}`}
+                        className="w-16 h-8 px-2 rounded-lg border border-border bg-background text-xs text-right min-w-0 min-h-0"
+                        data-testid={`nota-${jenis}-jumlah-${it.id}`} />
+                    </span>
+                  )}
                   <span className={`px-2 py-0.5 rounded-full text-[11px] flex-shrink-0 ${
                     (jenis === "kedaluwarsa" ? it.lewat : it.stok <= 0)
                       ? "bg-red-500/15 text-red-600 dark:text-red-400"

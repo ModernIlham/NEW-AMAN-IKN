@@ -368,3 +368,105 @@ def test_nota_kedaluwarsa_terbit_memakai_kolomnya_sendiri(dbx, booking):
     assert "Kedaluwarsa" in t
     # Barang yang hanya kritis tak boleh ikut ke nota kedaluwarsa.
     assert "Kertas A4 80gsm" not in t
+
+
+# ── Jumlah yang ingin diadakan ──────────────────────────────────────────
+#
+# Permintaan pemilik: *"sertakan juga berapa jumlah yang ingin diadakan
+# melalui inputan."* Jumlahnya menumpang parameter `ids` yang sudah ada —
+# `"<id>:<jumlah>"` — sehingga SATU parser melayani pratinjau (kueri koma)
+# maupun penerbitan (daftar JSON). Dua bentuk kawat untuk maksud yang sama
+# adalah dua parser yang harus sepakat selamanya.
+
+def test_entri_tanpa_jumlah_tetap_sah():
+    ids, jumlah = pnu.urai_pilihan(["b1", "b2"])
+    assert ids == {"b1", "b2"} and jumlah == {}
+
+
+def test_jumlah_terbaca_dan_spasinya_dirapikan():
+    ids, jumlah = pnu.urai_pilihan([" b1 : 10 ", "b2:3"])
+    assert ids == {"b1", "b2"} and jumlah == {"b1": 10, "b2": 3}
+
+
+def test_jumlah_TAK_MASUK_AKAL_diabaikan_bukan_dibulatkan():
+    """Angka karangan dari masukan rusak akan tercetak di naskah resmi."""
+    _ids, jumlah = pnu.urai_pilihan(["a:abc", "b:0", "c:-5", "d:"])
+    assert jumlah == {}
+
+
+def test_entri_tanpa_id_dibuang():
+    ids, _ = pnu.urai_pilihan([":9", "", "   "])
+    assert ids == set()
+
+
+def test_teks_jumlah_kosong_jadi_tanda_hubung_bukan_nol():
+    # "0" terbaca sebagai permintaan NOL unit; "-" jujur menyatakan belum
+    # ditentukan.
+    assert pnu.teks_jumlah(12) == "12"
+    for kosong in (None, 0, -3, "", "abc"):
+        assert pnu.teks_jumlah(kosong) == "-", kosong
+
+
+def test_sematkan_jumlah_TIDAK_mengubah_baris_aslinya():
+    """Baris berasal dari hasil `peringatan_persediaan`, dan objek yang sama
+    dipakai banner peringatan serta cacah di layar."""
+    asli = {"id": "b1", "stok": 0}
+    hasil = pnu.sematkan_jumlah([asli], {"b1": 10})
+    assert hasil[0]["jumlah_diusulkan"] == 10
+    assert "jumlah_diusulkan" not in asli
+
+
+def test_kolom_jumlah_ikut_dibekukan_dan_dicetak():
+    assert "jumlah_diusulkan" in pnu.FIELD_BEKU["kritis"]
+    assert "Jumlah Diusulkan" in pnu.headers("kritis")
+    baris = pnu.sematkan_jumlah(
+        [{"id": "b1", "kode_barang": "K1", "nama_barang": "Kertas",
+          "satuan": "Rim", "stok": 0, "batas_kritis": 5}], {"b1": 25})
+    assert pnu.isi_tabel("kritis", baris)[0][-1] == "25"
+    assert set(pnu.bekukan("kritis", baris)[0]) == set(pnu.FIELD_BEKU["kritis"])
+
+
+def test_nota_kedaluwarsa_tak_berkolom_jumlah_pengadaan():
+    # Nota kedaluwarsa tidak meminta pengadaan.
+    assert "jumlah_diusulkan" not in pnu.FIELD_BEKU["kedaluwarsa"]
+    assert "Jumlah Diusulkan" not in pnu.headers("kedaluwarsa")
+
+
+def test_daftar_LENGKAP_berjumlah_tak_mengaku_tersaring(dbx, booking):
+    """Jumlah usulan menumpang parameter `ids`, sehingga daftar LENGKAP pun
+    kini mengirim `ids`.
+
+    Bila "tersaring" disimpulkan dari ada-tidaknya `ids`, naskah yang memuat
+    SELURUH barang kritis akan memuat kalimat "sengaja tidak disertakan" —
+    menyatakan ada barang lain yang ditinggalkan, padahal tak ada. Yang
+    menentukan haruslah panjang daftarnya.
+    """
+    hasil = _terbit(ids=["b1:10", "b2:5"])
+    assert hasil["jumlah_barang"] == 2
+    nota = _jalan(dbx.persediaan_nota.find_one({"id": hasil["id"]}))
+    assert nota["seleksi"] is False
+    t = _unduh(hasil["id"])
+    assert "sengaja tidak disertakan" not in t
+    assert "10" in t and "5" in t
+
+
+def test_daftar_SEBAGIAN_berjumlah_tetap_mengaku_tersaring(dbx, booking):
+    hasil = _terbit(ids=["b2:5"])
+    nota = _jalan(dbx.persediaan_nota.find_one({"id": hasil["id"]}))
+    assert nota["seleksi"] is True
+    assert "sengaja tidak disertakan" in _unduh(hasil["id"])
+
+
+def test_pratinjau_lengkap_berjumlah_juga_tak_mengaku_tersaring(dbx):
+    """Pratinjau punya barisnya sendiri; tanpa uji ini, hanya jalur terbit
+    yang terjaga dan keduanya boleh berselisih diam-diam."""
+    t = _teks_pdf(_jalan(rp.nota_dinas_persediaan(
+        jenis="kritis", horizon_hari=30, ids="b1:10,b2:5", _user=USER)))
+    assert "sengaja tidak disertakan" not in t
+    assert "10" in t
+
+
+def test_pratinjau_sebagian_tetap_mengaku_tersaring(dbx):
+    t = _teks_pdf(_jalan(rp.nota_dinas_persediaan(
+        jenis="kritis", horizon_hari=30, ids="b2:5", _user=USER)))
+    assert "sengaja tidak disertakan" in t
