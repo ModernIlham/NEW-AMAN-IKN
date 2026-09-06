@@ -62,7 +62,14 @@
 
         /* =================== SHARED PAGE STYLES =================== */
         .exec-page {
-            width: 794px; min-height: 1123px;
+            /* 1122, bukan 1123: `@page` A4 tanpa margin berukuran
+               210mm x 297mm = 793,7 x 1122,5px pada 96dpi. Lembar setinggi
+               1123px berarti setengah piksel LEBIH TINGGI daripada halamannya,
+               dan kaki halaman yang duduk di tepi bawah ikut terdorong ke
+               lembar berikutnya — meninggalkan halaman yang isinya hanya satu
+               baris kaki. Setengah piksel itu tak terlihat di layar; yang
+               terlihat halaman kosong di tengah laporan. */
+            width: 794px; min-height: 1122px;
             {% if preview %}margin: 0 auto 60px;{% else %}margin: 0 auto;{% endif %}
             background: #fff; overflow: hidden;
             {% if preview %}box-shadow: 0 25px 60px rgba(0,0,0,0.15); border-radius: 4px;{% endif %}
@@ -253,13 +260,30 @@
            sehingga panjangnya tak pernah berarti apa pun. Yang menggantikan
            perannya: jorokan, warna baris yang menua ke arah dalam, dan garis
            kiri yang menajam ke arah luar. */
-        .hier-table { width: 100%; border-collapse: collapse; font-size: 7px; }
+        /* `table-layout: fixed`. Tanpa itu tata letak OTOMATIS bebas
+           menciutkan kolom nama sampai seiris begitu kolom lain menuntut
+           lebar, dan `overflow-wrap` lalu memecah namanya menjadi empat-lima
+           baris pendek. Tingginya jadi tak dapat diperkirakan sama sekali —
+           dan penghitung halaman yang memperkirakannya pasti meleset. Dengan
+           lebar yang dipatok, kolom nama mendapat SISA lebar tabel, dan
+           pembungkusannya kembali dapat dihitung. */
+        .hier-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 7px; }
         .hier-table th { background: #f1f5f9; padding: 2.5px 8px; text-align: left; font-size: 6px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.4px; border-bottom: 2px solid #e2e8f0; }
         .hier-table th.r { text-align: right; }
-        .hier-table td { padding: 1.5px 8px; border-bottom: 1px solid #eef2f7; line-height: 1.35; }
-        .hier-table .hier-name { color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .hier-table .val-cell { text-align: right; font-weight: 700; color: #0f172a; white-space: nowrap; width: 46px; }
-        .hier-table .money-cell { text-align: right; color: #475569; font-size: 6.5px; white-space: nowrap; width: 92px; }
+        .hier-table td { padding: 1.5px 8px; border-bottom: 1px solid #eef2f7; line-height: 1.35; vertical-align: middle; }
+        /* Nama TIDAK dipotong "…" melainkan dibungkus ke bawah — permintaan
+           pemilik. Potongan "…" membuang justru bagian yang membedakan dua
+           Direktorat berawalan sama, dan pada cetakan tak ada tooltip yang
+           dapat mengembalikannya. `overflow-wrap: anywhere` menjaga kode
+           panjang tanpa spasi tetap patah alih-alih melebarkan kolomnya. */
+        /* `break-word`, bukan `anywhere`: kata dipecah hanya bila ia SENDIRI
+           tak muat. `anywhere` memecah di tengah kata biasa dan membuat nama
+           terbaca patah-patah tanpa alasan. */
+        .hier-table .hier-name { color: #1e293b; white-space: normal; overflow-wrap: break-word; }
+        .hier-table .val-cell { text-align: right; font-weight: 700; color: #0f172a; white-space: nowrap; width: 40px; }
+        .hier-table .money-cell { text-align: right; color: #475569; font-size: 6.5px; white-space: nowrap; width: 84px; }
+        .hier-table.hier-rapat .money-cell { width: 62px; }
+        .hier-table.hier-rapat .val-cell { width: 26px; }
         /* Empat jenjang, satu keluarga warna dengan tema biru laporan. Tetap
            SAMAR: yang membedakan baris bukan warnanya sendiri melainkan
            urutannya menua — dan pada cetakan hitam-putih jorokan serta garis
@@ -292,9 +316,44 @@
         .hier-table.hier-hijau tr.d5 td:first-child { border-left-color: #e2e8f0; }
         /* Batang jenjang TERDALAM. Warnanya paling muda dalam keluarga tema:
            ia menerangkan baris paling halus, bukan menariknya ke depan. */
-        .hier-table .hier-bar-cell { width: 84px; padding: 1px 6px 1px 2px; }
+        .hier-table .hier-bar-cell { width: 76px; padding: 1px 6px 1px 2px; }
         .hier-table .hier-bar { height: 5px; border-radius: 2px; min-width: 1.5px; background: #60a5fa; }
         .hier-table.hier-hijau .hier-bar { background: #10b981; }
+        /* Halaman pengguna — keluarga LANGIT, mengikuti titik judulnya. */
+        .hier-table.hier-langit tr.d0 td { background: #e3f2fb; color: #0a2c40; }
+        .hier-table.hier-langit tr.d0 td:first-child { border-left-color: #075985; }
+        .hier-table.hier-langit tr.d1 td { background: #edf7fd; }
+        .hier-table.hier-langit tr.d1 td:first-child { border-left-color: #0284c7; }
+        .hier-table.hier-langit tr.d2 td { background: #f4fafe; }
+        .hier-table.hier-langit tr.d2 td:first-child { border-left-color: #38bdf8; }
+        .hier-table.hier-langit tr.d3 td { background: #fbfdff; }
+        .hier-table.hier-langit tr.d3 td:first-child { border-left-color: #bae6fd; }
+        .hier-table.hier-langit tr.d4 td:first-child,
+        .hier-table.hier-langit tr.d5 td:first-child { border-left-color: #e2e8f0; }
+        .hier-table.hier-langit .hier-bar { background: #0ea5e9; }
+        /* Baris DAUN selalu berlatar putih apa pun kedalamannya: ia data, bukan
+           pembagi, dan warna pembagi di atasnya yang menyatakan letaknya. */
+        .hier-table tr.daun td { background: #ffffff; font-weight: 400; }
+        .hier-table .sel-nip { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 6.5px; color: #475569; white-space: nowrap; width: 96px; }
+        /* Jabatan MEMEPET batas NIP di kiri dan batas batang di kanan: kolom
+           nama dijepit supaya sisanya jatuh ke jabatan, bukan menganggur di
+           tengah. Keduanya kolom yang teksnya membungkus, jadi keduanya yang
+           paling butuh lebar. */
+        .hier-table .sel-jabatan { color: #475569; font-size: 6.5px; width: 34%; padding-left: 4px; padding-right: 4px; white-space: normal; overflow-wrap: break-word; }
+        .hier-table.hier-rapat .sel-jabatan { width: 38%; }
+        /* Kolom nama dipatok pada mode rapat: dibiarkan menyisa, ia yang
+           paling dulu diciutkan tata letak tabel dan namanya pecah jadi
+           empat-lima baris pendek. */
+        .hier-table.hier-rapat .hier-name { width: 36%; }
+        .hier-table .sel-nip { padding-right: 4px; }
+        .hier-table .sel-nip-gabung { display: block; font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 6px; color: #64748b; }
+        .hier-table.hier-rapat td { padding: 1.5px 5px; }
+        .hier-table .tag-warn { color: #d97706; font-size: 6px; font-weight: 700; }
+        /* Dua lajur dengan celah sempit — tiap piksel lebar kembali ke teks. */
+        .dua-lajur { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
+        .lanjutan-jalur { font-size: 6px; color: #94a3b8; padding: 0 0 2px 2px; }
+        .chart-note { font-weight: 500; color: #94a3b8; text-transform: none; letter-spacing: 0; }
+        .dist-catatan { margin-top: 6px; font-size: 7px; color: #64748b; }
         .hier-table .summary-row td { background: #0f172a; color: #fff; font-weight: 700; font-size: 7px; padding: 3px 8px; border: none; }
         .hier-table .summary-row td.r { text-align: right; }
         .hier-legend { display: flex; gap: 12px; font-size: 6px; color: #64748b; margin: -2px 0 4px 2px; }
@@ -309,6 +368,10 @@
         .hier-legend .sw-d3 { background: #fafcff; border-left: 3px solid #bfdbfe; }
         .hier-legend .sw-d4 { background: #ffffff; border-left: 3px solid #e2e8f0; }
         .hier-legend .sw-d5 { background: #ffffff; border-left: 3px solid #f1f5f9; }
+        .hier-legend.legend-langit .sw-d0 { background: #e3f2fb; border-left-color: #075985; }
+        .hier-legend.legend-langit .sw-d1 { background: #edf7fd; border-left-color: #0284c7; }
+        .hier-legend.legend-langit .sw-d2 { background: #f4fafe; border-left-color: #38bdf8; }
+        .hier-legend.legend-langit .sw-d3 { background: #fbfdff; border-left-color: #bae6fd; }
         .hier-legend.legend-hijau .sw-d0 { background: #e6f6ef; border-left-color: #065f46; }
         .hier-legend.legend-hijau .sw-d1 { background: #eefaf4; border-left-color: #059669; }
         .hier-legend.legend-hijau .sw-d2 { background: #f4fcf8; border-left-color: #34d399; }
@@ -630,132 +693,122 @@
 {% set items_per_col = 70 %}{# 75 meluber ke halaman ekstra saat >=74/kolom #}
 {% set items_per_page = items_per_col * 2 %}
 
-{% if cat_hier|length > 0 %}
-{# Halaman kategori BERJENJANG — Golongan → Bidang → Kelompok → Sub Kelompok.
-   SATU kolom, bukan dua: pohon yang dipecah dua kolom menaruh anak di kolom
-   kanan sementara induknya di kiri, dan hubungan yang justru menjadi alasan
-   pohonnya dibuat hilang di situ. #}
-{% set hier_per_page = 62 %}
-{% for page_start in range(0, cat_hier|length, hier_per_page) %}
-{% set page_rows = cat_hier[page_start:page_start + hier_per_page] %}
+{# ═══ TABEL DISTRIBUSI BERJENJANG — satu bentuk untuk tiga halaman ═══
+   Kategori, Lokasi, dan Pengguna menjawab pertanyaan sejenis: "sebaran aset
+   menurut apa". Tiga salinan tata letak sudah pernah berbeda isi; satu makro
+   membuatnya mustahil.
+
+   `rencana` datang dari Python (`laporan_kolom.rencana_kolom`) — bukan
+   diputuskan di sini: template yang memutuskan sendiri jumlah kolomnya akan
+   berbeda pendapat dengan penghitung halaman, dan "Hal 2 dari 3" pada kop lalu
+   berbohong tanpa satu pun galat. #}
+{% macro sel_dist(b, jenis, batang, gabung) -%}
+<td class="hier-name" style="padding-left:{{ (4 if gabung else 6) + b.depth * (6 if gabung else 11) }}px">{% if jenis == 'pengguna' and b.daun %}{{ b.name }}{% if gabung %}<span class="sel-nip-gabung">{{ b.nip if b.nip else '&mdash;' }}</span>{% endif %}{% if b.nip and not b.terdaftar %} <span class="tag-warn">(belum terdaftar)</span>{% endif %}{% else %}{{ b.name }}{% endif %}</td>
+{%- if jenis == 'pengguna' %}
+{%- if not gabung %}<td class="sel-nip">{% if b.daun %}{{ b.nip if b.nip else '&mdash;' }}{% endif %}</td>{% endif %}
+<td class="hier-name sel-jabatan">{% if b.daun %}{{ b.jabatan if b.jabatan else '&mdash;' }}{% endif %}</td>
+{%- endif %}
+{%- if batang %}<td class="hier-bar-cell">{% if b.bar_pct is defined %}<div class="hier-bar" style="width:{{ b.bar_pct }}%"></div>{% endif %}</td>{% endif %}
+<td class="val-cell">{{ b.count }}</td>
+<td class="money-cell">{{ '{:,.0f}'.format(b.value).replace(',', '.') }}</td>
+{%- endmacro %}
+
+{% macro kepala_dist(jenis, batang, gabung, judul_kolom) -%}
+{# Kelas lebar dipasang di BARIS KEPALA, bukan hanya di sel isinya:
+   `table-layout: fixed` mengambil lebar kolom dari baris PERTAMA saja. Selama
+   lebarnya cuma ada di `<td>`, tak satu pun terpakai — ketiga kolom lalu
+   dibagi rata dan kolom nama tinggal sepertiga tabel. Namanya membungkus
+   dua-tiga kali lebih sering, halamannya penuh oleh baris yang seharusnya
+   sebaris, dan tak ada satu pun galat yang menyebutkannya. #}
+<thead><tr><th class="hier-name">{{ judul_kolom }}{% if jenis == 'pengguna' and gabung %} / NIP{% endif %}</th>
+{%- if jenis == 'pengguna' %}{% if not gabung %}<th class="sel-nip">NIP/NIK</th>{% endif %}<th class="sel-jabatan">Jabatan</th>{% endif %}
+{%- if batang %}<th class="hier-bar-cell"></th>{% endif %}
+<th class="r val-cell">NUP</th><th class="r money-cell">Nilai (Rp)</th></tr></thead>
+{%- endmacro %}
+
+{% macro tabel_dist(baris, awal, akhir, jenis, batang, gabung, judul_kolom, kelas) -%}
+<table class="hier-table {{ kelas }}{% if gabung %} hier-rapat{% endif %}">
+    {{ kepala_dist(jenis, batang, gabung, judul_kolom) }}
+    <tbody>
+    {% for b in baris[awal:akhir] %}
+    <tr class="d{{ [b.depth, 5]|min }}{% if b.daun %} daun{% endif %}">{{ sel_dist(b, jenis, batang, gabung) }}</tr>
+    {% endfor %}
+    </tbody>
+</table>
+{%- endmacro %}
+
+{% macro halaman_dist(baris, rencana, total, jenjang_label, judul, judul_kolom, jenis, warna, kelas, legend_kelas, catatan) -%}
+{% if baris|length > 0 %}
+{% for hal in rencana.halaman %}
+{% set awal = hal.awal %}{% set pisah = hal.pisah %}{% set akhir = hal.akhir %}
+{% set gabung = (jenis == 'pengguna' and rencana.kolom == 2) %}
 <div class="exec-page">
     <div class="exec-header">
         <div class="exec-header-logo">{% if logo_url %}<img src="{{ logo_url }}" alt="Logo" />{% endif %}</div>
         <div class="exec-header-text">
-            <h1>Distribusi Kategori Aset{% if cat_hier|length > hier_per_page %} (lanjutan {{ loop.index }}/{{ loop.length }}){% endif %}</h1>
+            <h1>{{ judul }}{% if rencana.halaman|length > 1 %} (lanjutan {{ loop.index }}/{{ loop.length }}){% endif %}</h1>
             <p>{{ satker_name }} &mdash; {{ total_count }} NUP | Rp {{ total_value_fmt }}</p>
         </div>
         <div class="exec-header-meta"><div><strong>SK: {{ nomor_sk }}</strong></div><div>{{ tanggal_cetak }}</div></div>
     </div>
     <div class="exec-body">
-        <div class="chart-title"><div class="cdot" style="background:#3b82f6"></div>Kodefikasi BMN Berjenjang &mdash; {{ kat_jenjang_label|join(' &rsaquo; ')|safe }}{% if cat_hier|length > hier_per_page %} &mdash; Hal {{ loop.index }}{% endif %}</div>
-        {# Legenda menyebutkan jenjang mana warna mana. Tanpa itu warna baris
-           hanya terbaca sebagai hiasan, dan jorokan sedalam empat tingkat
-           menuntut pembacanya menghitung sendiri. #}
-        <div class="hier-legend">
-            {% for lb in kat_jenjang_label %}
+        <div class="chart-title"><div class="cdot" style="background:{{ warna }}"></div>{{ jenjang_label|join(' &rsaquo; ')|safe }}{% if rencana.halaman|length > 1 %} &mdash; Hal {{ loop.index }}{% endif %}{% if rencana.kolom == 2 %} <span class="chart-note">&mdash; dua kolom, batang dihilangkan agar muat</span>{% endif %}</div>
+        <div class="hier-legend {{ legend_kelas }}">
+            {% for lb in jenjang_label %}
             <span><i class="sw-d{{ [loop.index0, 5]|min }}"></i>{{ lb }}</span>
             {% endfor %}
         </div>
-        <table class="hier-table">
-            <thead><tr><th>Kategori (Kode &mdash; Uraian)</th><th class="hier-bar-cell"></th><th class="r">NUP</th><th class="r">Nilai (Rp)</th></tr></thead>
-            <tbody>
-            {% for c in page_rows %}
-            {# Batang HANYA pada jenjang terdalam. Selnya tetap ada di baris
-               pengelompokan supaya kolomnya lurus — kosong, bukan hilang. #}
-            <tr class="d{{ [c.depth, 5]|min }}"><td class="hier-name" style="padding-left:{{ 8 + c.depth * 13 }}px" title="{{ c.jenjang }}: {{ c.name }}">{{ c.name }}</td><td class="hier-bar-cell">{% if c.bar_pct is defined %}<div class="hier-bar" style="width:{{ c.bar_pct }}%"></div>{% endif %}</td><td class="val-cell">{{ c.count }}</td><td class="money-cell">{{ '{:,.0f}'.format(c.value).replace(',', '.') }}</td></tr>
-            {% endfor %}
-            {% if loop.last %}
-            {# Total dari jenjang TERATAS saja — menjumlahkan seluruh baris akan
-               menghitung tiap aset empat kali, sebab induk memuat anaknya. #}
-            <tr class="summary-row"><td colspan="2">Total seluruh aset ({{ cat_hier|selectattr('depth', 'equalto', 0)|list|length }} kelompok teratas)</td><td class="r">{{ cat_hier_total.count }}</td><td class="r">{{ '{:,.0f}'.format(cat_hier_total.value).replace(',', '.') }}</td></tr>
-            {% endif %}
-            </tbody>
-        </table>
-    </div>
-    <div class="exec-footer"><div>Laporan Eksekutif &mdash; {{ satker_name }}</div><div>Kategori berjenjang, baris {{ page_start + 1 }}-{{ [page_start + hier_per_page, cat_hier|length]|min }} dari {{ cat_hier|length }}</div></div>
-</div>
-{% endfor %}
-{% endif %}
+        {% if rencana.kolom == 1 %}
+        {{ tabel_dist(baris, awal, akhir, jenis, rencana.batang, false, judul_kolom, kelas) }}
+        {% else %}
+        {# Dua kolom: pohonnya terbelah, jadi kepala tiap kolom yang MULAI di
+           tengah pohon menyebutkan jalur induknya. Tanpa itu sebuah baris
+           berdiri sendirian tanpa induk yang terlihat di mana pun.
 
-{% if loc_hier|length > 0 %}
-{# Halaman lokasi BERJENJANG mengikuti denah, dengan lokasi teks bebas sebagai
-   jenjang terdalam. Bentuknya sengaja sama persis dengan halaman kategori:
-   dua tabel yang menjawab pertanyaan sejenis tak boleh berbeda cara dibaca. #}
-{% set hier_per_page = 62 %}
-{% for page_start in range(0, loc_hier|length, hier_per_page) %}
-{% set page_rows = loc_hier[page_start:page_start + hier_per_page] %}
-<div class="exec-page">
-    <div class="exec-header">
-        <div class="exec-header-logo">{% if logo_url %}<img src="{{ logo_url }}" alt="Logo" />{% endif %}</div>
-        <div class="exec-header-text">
-            <h1>Distribusi Lokasi Aset{% if loc_hier|length > hier_per_page %} (lanjutan {{ loop.index }}/{{ loop.length }}){% endif %}</h1>
-            <p>{{ satker_name }} &mdash; {{ total_count }} NUP | Rp {{ total_value_fmt }}</p>
-        </div>
-        <div class="exec-header-meta"><div><strong>SK: {{ nomor_sk }}</strong></div><div>{{ tanggal_cetak }}</div></div>
-    </div>
-    <div class="exec-body">
-        <div class="chart-title"><div class="cdot" style="background:#10b981"></div>Denah Berjenjang &mdash; {{ loc_jenjang_label|join(' &rsaquo; ')|safe }}{% if loc_hier|length > hier_per_page %} &mdash; Hal {{ loop.index }}{% endif %}</div>
-        <div class="hier-legend legend-hijau">
-            {% for lb in loc_jenjang_label %}
-            <span><i class="sw-d{{ [loop.index0, 5]|min }}"></i>{{ lb }}</span>
-            {% endfor %}
-        </div>
-        <table class="hier-table hier-hijau">
-            <thead><tr><th>Lokasi</th><th class="hier-bar-cell"></th><th class="r">NUP</th><th class="r">Nilai (Rp)</th></tr></thead>
-            <tbody>
-            {% for l in page_rows %}
-            <tr class="d{{ [l.depth, 5]|min }}"><td class="hier-name" style="padding-left:{{ 8 + l.depth * 13 }}px" title="{{ l.name }}">{{ l.name }}</td><td class="hier-bar-cell">{% if l.bar_pct is defined %}<div class="hier-bar" style="width:{{ l.bar_pct }}%"></div>{% endif %}</td><td class="val-cell">{{ l.count }}</td><td class="money-cell">{{ '{:,.0f}'.format(l.value).replace(',', '.') }}</td></tr>
-            {% endfor %}
-            {% if loop.last %}
-            <tr class="summary-row"><td colspan="2">Total seluruh aset ({{ loc_hier|selectattr('depth', 'equalto', 0)|list|length }} kelompok teratas)</td><td class="r">{{ loc_hier_total.count }}</td><td class="r">{{ '{:,.0f}'.format(loc_hier_total.value).replace(',', '.') }}</td></tr>
+           Titik pisahnya dihitung Python (kolom kiri penuh dulu), bukan
+           dibelah rata di sini. #}
+        <div class="dua-lajur">
+            <div>
+                {% if jalur_induk(baris, awal) %}<div class="lanjutan-jalur">&crarr; {{ jalur_induk(baris, awal)|join(' &rsaquo; ')|safe }}</div>{% endif %}
+                {{ tabel_dist(baris, awal, pisah, jenis, false, gabung, judul_kolom, kelas) }}
+            </div>
+            {% if pisah < akhir %}
+            <div>
+                {% if jalur_induk(baris, pisah) %}<div class="lanjutan-jalur">&crarr; {{ jalur_induk(baris, pisah)|join(' &rsaquo; ')|safe }}</div>{% endif %}
+                {{ tabel_dist(baris, pisah, akhir, jenis, false, gabung, judul_kolom, kelas) }}
+            </div>
             {% endif %}
-            </tbody>
-        </table>
-    </div>
-    <div class="exec-footer"><div>Laporan Eksekutif &mdash; {{ satker_name }}</div><div>Lokasi berjenjang, baris {{ page_start + 1 }}-{{ [page_start + hier_per_page, loc_hier|length]|min }} dari {{ loc_hier|length }}</div></div>
-</div>
-{% endfor %}
-{% endif %}
-
-{% if pengguna_chart is defined and pengguna_chart|length > 0 %}
-{% if preview %}<div class="separator">Distribusi Per Pengguna</div>{% endif %}
-{% for page_start in range(0, pengguna_chart|length, items_per_page) %}
-{% set page_items = pengguna_chart[page_start:page_start + items_per_page] %}
-<div class="exec-page">
-    <div class="exec-header">
-        <div class="exec-header-logo">{% if logo_url %}<img src="{{ logo_url }}" alt="Logo" />{% endif %}</div>
-        <div class="exec-header-text">
-            <h1>Distribusi Per Pengguna{% if pengguna_chart|length > items_per_page %} ({{ page_start + 1 }}-{{ [page_start + items_per_page, pengguna_chart|length]|min }} dari {{ pengguna_chart|length }}){% endif %}</h1>
-            <p>{{ satker_name }} &mdash; {{ pengguna_ringkas.jumlah_pengguna }} pengguna (key NIP/NIK, terhubung Master Pegawai){% if pengguna_ringkas.jumlah_tak_terdaftar > 0 %} &mdash; {{ pengguna_ringkas.jumlah_tak_terdaftar }} NIP belum terdaftar{% endif %}</p>
         </div>
-        <div class="exec-header-meta"><div><strong>SK: {{ nomor_sk }}</strong></div><div>{{ tanggal_cetak }}</div></div>
+        {% endif %}
+        {% if loop.last %}
+        <table class="hier-table {{ kelas }}"><tbody>
+        <tr class="summary-row"><td>Total seluruh aset ({{ baris|selectattr('depth', 'equalto', 0)|list|length }} kelompok teratas)</td><td class="r">{{ total.count }}</td><td class="r">{{ '{:,.0f}'.format(total.value).replace(',', '.') }}</td></tr>
+        </tbody></table>
+        {% endif %}
+        {% if catatan %}<div class="dist-catatan">{{ catatan }}</div>{% endif %}
     </div>
-    <div class="exec-body">
-        <div class="chart-title"><div class="cdot" style="background:#0ea5e9"></div>Distribusi Aset Per Pengguna ({{ pengguna_chart|length }} pengguna){% if pengguna_chart|length > items_per_page %} &mdash; Hal {{ loop.index }}{% endif %}</div>
-        <table class="dist-table-full">
-            <thead><tr><th class="num">#</th><th>Nama Pengguna</th><th>NIP/NIK</th><th>Unit Kerja</th><th class="bar-cell"></th><th class="r">NUP</th><th class="r">Nilai (Rp)</th></tr></thead>
-            <tbody>
-            {% for p in page_items %}
-            <tr>
-                <td class="num">{{ page_start + loop.index }}</td>
-                <td class="name-cell" title="{{ p.nama }}">{{ p.nama }}{% if p.nip and not p.terdaftar %} <span style="color:#d97706;font-size:6px;font-weight:700;">(belum terdaftar)</span>{% endif %}</td>
-                <td style="font-family:monospace;">{{ p.nip if p.nip else '—' }}</td>
-                <td class="name-cell" title="{{ p.unit_kerja }}">{{ p.unit_kerja if p.unit_kerja else '—' }}</td>
-                <td class="bar-cell"><div class="dist-mini-bar" style="width:{{ p.bar_pct }}%;background:{{ ['#0ea5e9','#0284c7','#0369a1','#38bdf8','#7dd3fc'][loop.index0 % 5] }};"></div></td>
-                <td class="val-cell">{{ p.count }}</td>
-                <td class="money-cell">{{ '{:,.0f}'.format(p.value).replace(',', '.') }}</td>
-            </tr>
-            {% endfor %}
-            <tr class="summary-row"><td colspan="5">Total Halaman Ini ({{ page_items|length }} pengguna)</td><td class="r">{{ page_items|sum(attribute='count') }}</td><td class="r">{{ '{:,.0f}'.format(page_items|sum(attribute='value')).replace(',', '.') }}</td></tr>
-            </tbody>
-        </table>
-        <div style="margin-top:6px;font-size:7px;color:#64748b;">Key pengelompokan = NIP/NIK; nama diambil dari Master Pegawai bila NIP terdaftar. Aset tanpa NIP dikelompokkan sebagai &ldquo;Tanpa Pengguna / NIP&rdquo;.</div>
-    </div>
-    <div class="exec-footer"><div>Laporan Eksekutif &mdash; {{ satker_name }}</div><div>Pengguna {{ page_start + 1 }}-{{ [page_start + items_per_page, pengguna_chart|length]|min }} dari {{ pengguna_chart|length }}</div></div>
+    <div class="exec-footer"><div>Laporan Eksekutif &mdash; {{ satker_name }}</div><div>{{ judul }} &mdash; baris {{ awal + 1 }}-{{ akhir }} dari {{ baris|length }}</div></div>
 </div>
 {% endfor %}
 {% endif %}
+{%- endmacro %}
+
+{% if preview and cat_hier|length > 0 %}<div class="separator">Distribusi Kategori Aset</div>{% endif %}
+{{ halaman_dist(cat_hier, rencana_kat, cat_hier_total, kat_jenjang_label,
+                'Distribusi Kategori Aset', 'Kategori (Kode — Uraian)', 'kode',
+                '#3b82f6', '', '', '') }}
+
+{% if preview and loc_hier|length > 0 %}<div class="separator">Distribusi Lokasi Aset</div>{% endif %}
+{{ halaman_dist(loc_hier, rencana_lok, loc_hier_total, loc_jenjang_label,
+                'Distribusi Lokasi Aset', 'Lokasi', 'lokasi',
+                '#10b981', 'hier-hijau', 'legend-hijau', '') }}
+
+{% if preview and pengguna_hier|length > 0 %}<div class="separator">Distribusi Per Pengguna</div>{% endif %}
+{{ halaman_dist(pengguna_hier, rencana_peg, pengguna_total,
+                pengguna_jenjang_label, 'Distribusi Per Pengguna',
+                'Nama Pengguna', 'pengguna', '#0ea5e9', 'hier-langit',
+                'legend-langit',
+                'Key pengelompokan = NIP/NIK; nama & jabatan diambil dari Master Pegawai bila NIP terdaftar. Aset tanpa NIP dikelompokkan sebagai “Tanpa Pengguna / NIP”.') }}
 
 {% if preview %}<div class="separator">Analisis Lanjutan, Tim & Cakupan</div>{% endif %}
 

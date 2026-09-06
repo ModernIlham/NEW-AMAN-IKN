@@ -18,6 +18,101 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1031] Distribusi laporan eksekutif: per pengguna berjenjang, tata letak yang tak menyisakan kertas kosong — 2026-09-06
+
+Permintaan pemilik: *"pastikan semua hierarki spasial yang digunakan dari
+tingkat awal hingga akhir didapatkan juga sesuai informasi dan ketersediaan
+data aset yang ada informasi data denahnya. dan pada data distribusi per
+pengguna buat sama seperti sebelumnya dengan, pada bagian unit kerja menjadi
+pembagi row langsung mulai dari eselon I-V sesuai satker menginduk kemana …
+dan pada bagian kolom unit kerjanya nanti digantikan dengan jabatan … apabila
+memang tidak cukup jangan gunakan "…", gunakan enter yang rapi tepat di
+bawahnya … pastikan benar-benar tidak ada batas terbuang sia-sia di ukuran A4
+hingga mencapai footer terlebih dahulu di semua distribusi, agar dibuat smart
+juga apabila melebihi sudah maka berganti 2 kolom dengan Barchart yang
+menghilang agar cukup, baru lanjutkan ke halaman kedua apabila memang tidak
+cukup lagi. dan pada distribusi per pengguna juga apabila menjadi 2 kolom,
+maka gabungkan kolom Nama dan NIP/NIK agar menghemat ruang juga."*
+
+Penutup rangkaian `[#1029]`–`[#1030]`: halaman **Distribusi Per Pengguna**
+menyusul dua saudaranya menjadi berjenjang, dan ketiganya kini memakai satu
+tabel, satu legenda, dan satu perencana tata letak.
+
+**Unit kerja menjadi PEMBAGI baris, bukan kolom yang berulang.** Kolom "Unit
+Kerja" mencetak nama Direktorat yang sama dua puluh kali — lebar terpakai
+tanpa satu pun keterangan tambahan. Sebagai pembagi ia tercetak sekali, dan
+lebarnya kembali kepada nama serta jabatan. Pembagiannya **mulai dari puncak
+satkernya**, bukan dari Eselon I: jenjang di atas puncak satker isinya sama
+untuk seluruh baris laporan, sehingga pada satker Eselon III "DITJEN X ›
+KANWIL Y" hanya melahirkan dua baris pembagi yang memuat semua orang. Jenjang
+yang tak berisi satu pegawai pun tak ditawarkan. Aturannya sama persis dengan
+yang dipakai ringkasan eksekutif (`level_kelompok_eselon`) — termasuk mundur
+ke tingkat terdangkal yang berdata bila puncak yang dinyatakan ternyata
+kosong.
+
+**Kolom "Unit Kerja" digantikan "Jabatan".** Unit kerjanya sudah tertulis di
+baris pembagi di atasnya; jabatan menjawab pertanyaan yang belum terjawab.
+
+**Nama panjang DIBUNGKUS, bukan dipotong "…".** Pemotongan membuang justru
+bagian yang membedakan dua nama berawalan sama, dan pada cetakan tak ada
+tooltip yang dapat mengembalikannya. Isinya rata tengah atas-bawah supaya
+baris satu-baris dan dua-baris tetap sejajar.
+
+**Tata letak pintar di SEMUA halaman distribusi.** Sebelumnya tiap halaman
+memakai tetapan baris per halaman, dan tetapan itu salah di kedua arah: daftar
+pendek menyisakan dua pertiga kertas kosong, daftar yang sedikit lebih panjang
+membuka kertas kedua untuk tiga baris. Urutan keputusannya kini:
+
+    muat satu kolom?      → satu kolom, BERBATANG
+    tidak                 → dua kolom, batang DIHILANGKAN
+    masih tidak muat      → baru halaman berikutnya
+
+Batang adalah yang paling boleh pergi: ia perbandingan yang masih terbaca dari
+angkanya sendiri. Yang dihitung **baris teks**, bukan baris tabel — nama yang
+membungkus jadi tiga baris menempati tinggi tiga baris, dan jorokan jenjang
+ikut memakan lebar kolom namanya. Pada dua kolom **Nama dan NIP/NIK
+digabung**, dan kolom yang mulai di tengah pohon menyebut jalur induknya di
+kepala kolom supaya tak ada baris yang berdiri tanpa induk yang terlihat.
+
+**Lebar kolom tak pernah terpakai — dan itu biang borosnya.** `table-layout:
+fixed` membaca lebar kolom dari baris PERTAMA tabel, sementara lebarnya hanya
+tertulis pada `<td>`. Akibatnya ketiga kolom dibagi rata dan kolom nama cuma
+kebagian sepertiga tabel: terukur 106px dari 226px yang semestinya pada dua
+lajur, dan 206px dari 526px pada satu lajur. Nama membungkus dua sampai tiga
+kali lebih sering daripada perlunya, halaman penuh oleh baris yang seharusnya
+sebaris, dan tak ada satu pun galat yang menyebutkannya — ia hanya tampak
+sebagai laporan yang boros kertas. Lebarnya kini dipasang di baris kepala.
+
+Batas amannya **diukur**, dan diukur dengan alat yang benar. Mengukurnya dari
+tinggi kotak lembar TIDAK bisa: lembar `overflow: hidden` selalu melaporkan
+1122px entah isinya muat atau meluber, sehingga jawabannya selalu "muat".
+Lembarnya dirender ulang tanpa `min-height` dan tanpa `overflow`, lalu tinggi
+isi sesungguhnya dibandingkan dengan jatah selembar (969px). Batasnya jatuh di
+antara 64 dan 66; diambil 58 — halaman terpadat terisi 883px dari 969px,
+menyisakan 9% sebagai jaga-jaga terhadap metrik huruf mesin lain. Bersama
+perbaikan lebar kolom, laporan uji terpadat turun dari 10 halaman menjadi 8.
+
+Jatah karakter tiap kolom ikut diukur ulang dari lebar kotak yang sungguh
+tergambar, dikalikan 0.75 sebagai **harga pembungkusan per kata**: taksiran
+lama membagi rata seolah huruf boleh patah di mana saja, padahal pembungkus
+berhenti di batas kata dan menyisakan seperempat lebar kolom di ujung tiap
+baris.
+
+Dua sisi tersembunyi yang ikut diperbaiki: satker yang **tak punya satu pun
+jenjang eselon berdata** dulu merender tabel utuh dengan kolom nama KOSONG di
+setiap baris — daftar ratanya lupa mengisi `name`; dan jatah baris sehalaman
+dibaca sebagai **nilai bawaan parameter**, yang dibekukan saat fungsinya
+didefinisikan, sehingga mengukur ulang tetapannya tak berpengaruh apa pun.
+Keduanya rusak yang tak menimbulkan satu pun galat.
+
+**Modul baru** `backend/laporan_kolom.py` (murni, teruji sendiri) memuat
+seluruh aritmetika tata letaknya; templat hanya membaca rencananya. Templat
+yang memutuskan sendiri jumlah kolomnya akan berbeda pendapat dengan
+penghitung halaman di Python, dan "Hal 2 dari 3" pada kop lalu berbohong tanpa
+satu pun galat.
+
+---
+
 ## [#1030] Distribusi lokasi ikut berjenjang; kategori sampai Sub-sub Kelompok — 2026-09-06
 
 Permintaan pemilik: *"ya langsung sampai ke sub-sub kelompoknya, dan lakukan

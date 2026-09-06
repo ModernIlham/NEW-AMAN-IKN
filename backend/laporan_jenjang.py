@@ -234,6 +234,64 @@ def _rapatkan_rantai_kosong(baris, kosong):
     return keluar
 
 
+def baris_hierarki_pengguna(pengguna, levels):
+    """Pengguna dikelompokkan menurut jalur eselon UNIT KERJANYA.
+
+    Permintaan pemilik: *"pada bagian unit kerja menjadi pembagi row langsung
+    mulai dari eselon I-V sesuai satker menginduk kemana."* Kolom "Unit Kerja"
+    yang berulang di tiap baris memakan lebar tanpa menambah keterangan — nama
+    Direktorat yang sama tercetak dua puluh kali. Sebagai PEMBAGI baris ia
+    tercetak sekali, dan lebarnya kembali ke nama serta jabatan.
+
+    `levels` = nomor jenjang (1..5) dari terluas ke terdalam, DITENTUKAN
+    pemanggil menurut tingkat satkernya: satker Eselon III tak punya Eselon I,
+    dan menawarkan jenjang itu hanya melahirkan satu kelompok kosong bernama
+    "(tanpa unit organisasi)" yang memuat seluruh pegawainya.
+
+    Tiap baris masukan wajib membawa `count`, `value`, dan `eselon1..5`.
+    Keluarannya baris siap-tampil: kelompok membawa jumlah keturunannya, daun
+    membawa datanya sendiri beserta `daun: True`.
+    """
+    if not pengguna:
+        return []
+
+    def kunci(n):
+        return lambda p: str((p or {}).get(f"eselon{n}") or "").strip() \
+            or TANPA_ESELON
+
+    kunci_fns = [kunci(n) for n in (levels or [])]
+    if not kunci_fns:
+        # Satker tanpa satu pun jenjang yang berdata: daftarnya rata, dan itu
+        # keadaan yang sah — bukan alasan menyembunyikan penggunanya. `name`
+        # tetap diisi: tanpa itu tabelnya tergambar utuh dengan kolom nama
+        # KOSONG di setiap baris — rusak yang tak menimbulkan satu pun galat.
+        return [{**p, "name": p.get("nama") or "", "depth": 0, "daun": True}
+                for p in pengguna]
+
+    grup = _rapatkan_rantai_kosong(
+        _hierarki(pengguna, kunci_fns, [lambda k: k] * len(kunci_fns)),
+        {TANPA_ESELON})
+    keluar = []
+    for i, b in enumerate(grup):
+        keluar.append({
+            "name": b["label"], "depth": b["depth"], "daun": False,
+            "count": sum(x["count"] for x in b["aset"]),
+            "value": sum(x["value"] for x in b["aset"]),
+        })
+        # Pengguna menempel pada baris TERDALAM cabangnya — bukan pada
+        # kedalaman tetap. Cabang yang jenjang bawahnya kosong ikut dirapatkan,
+        # dan menempelkan daun pada kedalaman tetap membuat penggunanya hilang
+        # dari laporan tanpa satu pun tanda.
+        terdalam = (i + 1 >= len(grup)) or (grup[i + 1]["depth"] <= b["depth"])
+        if not terdalam:
+            continue
+        for p in sorted(b["aset"], key=lambda x: (-x["value"], -x["count"],
+                                                  (x["nama"] or "").lower())):
+            keluar.append({**p, "name": p["nama"],
+                           "depth": b["depth"] + 1, "daun": True})
+    return keluar
+
+
 def tandai_batang_daun(baris):
     """Beri `bar_pct` HANYA pada jenjang terdalam; kembalikan `baris`.
 
