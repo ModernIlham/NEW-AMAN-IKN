@@ -21,12 +21,13 @@ import pytest
 from mongomock_motor import AsyncMongoMockClient
 
 import laporan_blok as lbk
+import laporan_kolom as lkl
 import routes.reports as rp
 
 TPL = os.path.join(os.path.dirname(__file__), "..", "..", "templates",
                    "executive_summary.html")
 
-#: Nama unit dan kategori yang PANJANG — di sinilah pemotongan dulu terjadi.
+#: Nama unit dan kelompok yang PANJANG — di sinilah pemotongan dulu terjadi.
 UNIT_A = "Kedeputian Bidang Transformasi Hijau dan Digital"
 UNIT_B = "Kedeputian Bidang Pengendalian Pembangunan"
 KATEGORI = [
@@ -37,6 +38,16 @@ KATEGORI = [
     "Handy Talky (HT)", "Note Book", "Kabel", "Tablet PC",
     "Papan Pengumuman", "Camera Digital", "Dehumidifier", "Televisi",
 ]
+
+
+def _kode_kelompok(i):
+    """Kode Kelompok (5 digit) ke-`i` — kunci pengelompokan daftar kondisi."""
+    return f"3{i + 10:02d}{i % 7 + 1:02d}"
+
+
+def _nama_kelompok(i, kategori=None):
+    """Sebagaimana laporan menuliskannya: "kode — uraian"."""
+    return f"{_kode_kelompok(i)} — {(kategori or KATEGORI)[i]}"
 
 
 def _jalan(coro):
@@ -80,11 +91,15 @@ async def _seed(fake, kategori=KATEGORI, tim_inti=None, tim_pembantu=None,
     })
     n = 0
     for i, nama in enumerate(kategori):
+        # Uraian kelompok datang dari master kodefikasi, sama seperti pada
+        # halaman Distribusi Kategori — bukan dari teks bebas field `category`.
+        await fake.kodefikasi.insert_one(
+            {"kode": _kode_kelompok(i), "uraian": nama})
         for _ in range(3 + i):
             n += 1
             await fake.assets.insert_one({
                 "id": f"a{n}", "activity_id": "k1", "asset_name": nama,
-                "asset_code": f"3{i:02d}0101{i:03d}", "NUP": str(n),
+                "asset_code": f"{_kode_kelompok(i)}01{i:03d}", "NUP": str(n),
                 "purchase_price": 1000, "purchase_date": "2023-01-01",
                 "category": nama, "eselon1": UNIT_A if n % 3 else UNIT_B,
                 "inventory_status": "Ditemukan",
@@ -128,8 +143,8 @@ def test_payload_TIDAK_memotong_nama(dbx):
     # memendekkan, jadi memeriksa "…" saja tak pernah menangkapnya.
     d = _data(dbx)
     assert {e["name"] for e in d["eselon_chart"]} == {UNIT_A, UNIT_B}
-    for c in d["cond_by_cat"]:
-        assert c["name"] in KATEGORI, c["name"]
+    diharap = {_nama_kelompok(i) for i in range(len(KATEGORI))}
+    assert {c["name"] for c in d["cond_by_cat"]} == diharap
 
 
 def test_label_TIDAK_dipotong_dengan_ellipsis():
@@ -191,43 +206,105 @@ def test_isi_TIDAK_menindih_kaki_halaman(dbx):
     assert min(jarak) > 0, f"isi menindih kaki halaman: {min(jarak):.0f}px"
 
 
-def test_daftar_kategori_MEMANJANG_mengisi_ruang_yang_tersisa(dbx):
-    """Kertas yang tersisa lebih berguna diisi baris data daripada dibiarkan
-    putih. Daftarnya mulai dari 8 dan memanjang selama ruangnya ada."""
-    d = _data(dbx)
-    assert len(d["cond_by_cat"]) > 8, "daftar kategori tak memanjang sama sekali"
-    assert len(d["cond_by_cat"]) <= len(KATEGORI)
-
-
-#: Kategori bernama SANGAT panjang: begitu daftarnya memanjang, baris-baris
-#: barunya membungkus dua-tiga kali dan memakan ruang jauh melebihi taksiran
-#: "satu baris per kategori" yang dipakai menghitung berapa yang muat.
-KATEGORI_PANJANG = [f"Kabel {i}" for i in range(8)] + [
+#: Kelompok bernama SANGAT panjang: barisnya membungkus dua-tiga kali, dan
+#: daftar sepanjang ini melebihi satu lembar.
+KATEGORI_PANJANG = [
     "Alat Laboratorium Pendidikan Kedokteran Bedah Perawatan Intensif dan "
-    f"Rehabilitasi Medik Terpadu Bergerak Nomor Seri {i:02d}" for i in range(14)]
+    f"Rehabilitasi Medik Terpadu Bergerak Nomor Seri {i:02d}" for i in range(26)]
 
 
-def test_memanjangnya_daftar_TIDAK_menambah_lembar(dbx):
-    """Penjaga yang membatalkan pertumbuhan bukan hiasan.
+def test_SELURUH_kelompok_ditampilkan(dbx):
+    """Permintaan pemilik: *"Kondisi Aset Per Kategori ditampilkan semua."*
 
-    Berapa baris yang muat ditaksir dari baris SEBARIS; kategori bernama
-    panjang membungkus dua-tiga kali, sehingga tambahannya memakan lebih
-    banyak daripada ruang yang ada. Tanpa penjaga, laporan yang seharusnya
-    selembar menjadi dua lembar — persis yang diminta pemilik untuk dihindari.
+    Dulu daftarnya dipotong di delapan teratas. Pemotongan itu menyembunyikan
+    kelompok yang justru paling ingin dilihat pada satker besar — dan tak
+    meninggalkan satu pun tanda bahwa ada yang disembunyikan.
     """
     d = _data(dbx, kategori=KATEGORI_PANJANG)
-    assert len(d["rencana_analisis"]["halaman"]) == 1, (
-        "daftar kategori memanjang sampai menambah lembar")
+    assert len(d["cond_by_cat"]) == len(KATEGORI_PANJANG)
 
 
-def test_memanjangnya_daftar_TIDAK_mendorong_blok_ke_lembar_lain(dbx):
-    """Menambah baris kategori dengan harga mendorong Tim Inventarisasi ke
-    lembar berikutnya bukan memaksimalkan kertas, melainkan menukar satu
-    kekosongan dengan kekosongan yang lebih besar."""
+def test_dikelompokkan_per_KELOMPOK_bukan_per_teks_kategori(dbx):
+    """Permintaan pemilik: *"hanya ditampilkan per kelompok saja sudah cukup."*
+
+    Kuncinya KODE pada jenjang Kelompok, bukan teks bebas field `category`:
+    teks bebas memecah satu kelompok barang menjadi beberapa baris yang
+    ejaannya berbeda, dan menjumlahkannya kembali mustahil dilakukan pembaca.
+    """
+    kat = list(KATEGORI[:3])
+    d = _data(dbx, kategori=kat)
+    assert [c["name"] for c in d["cond_by_cat"]] == [
+        _nama_kelompok(i, kat) for i in sorted(
+            range(len(kat)), key=lambda i: -(3 + i))]
+    # Kodenya lima digit — jenjang Kelompok, bukan Sub-sub Kelompok.
+    for c in d["cond_by_cat"]:
+        assert re.match(r"^\d{5} — ", c["name"]), c["name"]
+
+
+#: Sepanjang ini daftarnya PASTI melebihi satu lembar.
+KATEGORI_SELEMBAR_LEBIH = [
+    "Alat Laboratorium Pendidikan Kedokteran Bedah Perawatan Intensif dan "
+    f"Rehabilitasi Medik Terpadu Bergerak Nomor Seri {i:02d}" for i in range(60)]
+
+
+@pytest.mark.parametrize("kw", [
+    {"kategori": KATEGORI_SELEMBAR_LEBIH},
+    {"tim_pembantu": None},          # diisi di badan uji: 120 anggota
+])
+def test_TAK_ADA_blok_yang_lebih_tinggi_dari_lembarnya(dbx, kw):
+    """Blok yang lebih tinggi daripada lembarnya tak menimbulkan galat apa pun.
+
+    Ia tergambar sampai tepi kertas lalu sisanya lenyap — dan yang paling
+    menyesatkan, teksnya MASIH terbaca oleh pengekstrak PDF meski tak pernah
+    tercetak. Mencari nama yang hilang di teks PDF karena itu tak selalu
+    menangkapnya; yang menangkapnya tinggi bloknya sendiri.
+    """
+    if "tim_pembantu" in kw:
+        kw = {"tim_pembantu": _anggota(120, "Anggota Pembantu")}
+    d = _data(dbx, **kw)
+    jatah = lkl.TINGGI_ISI_SEHALAMAN - lkl.CADANGAN_TATA_LETAK
+    for i, hal in enumerate(d["rencana_analisis"]["halaman"]):
+        for b in hal:
+            assert b["tinggi"] <= jatah + 1, (
+                f"lembar {i + 1}: blok {[x['id'] for x in b['blok']]} setinggi "
+                f"{b['tinggi']:.0f}px pada lembar berjatah {jatah:.0f}px — "
+                "sisanya akan terpotong di tepi kertas")
+
+
+def test_daftar_yang_LEBIH_PANJANG_dari_selembar_dipecah_bukan_dipotong(dbx):
+    """Seluruh kelompok ditampilkan, jadi daftarnya dapat melebihi satu lembar.
+
+    Blok yang tak dapat dipecah akan ditempatkan utuh lalu ekornya terpotong
+    senyap oleh `overflow: hidden` — cacat yang sama yang dulu menelan delapan
+    anggota tim dari cetakan.
+    """
+    import tempfile
+
+    import pypdfium2
+    import weasyprint
+
+    d = _data(dbx, kategori=KATEGORI_PANJANG)
+    with tempfile.NamedTemporaryFile(suffix=".pdf") as f:
+        weasyprint.HTML(string=_render(d),
+                        base_url=os.path.dirname(TPL)).write_pdf(f.name)
+        teks = re.sub(r"\s+", " ", "\n".join(
+            p.get_textpage().get_text_range()
+            for p in pypdfium2.PdfDocument(f.name)))
+    hilang = [c["name"] for c in d["cond_by_cat"]
+              if re.sub(r"\s+", " ", c["name"]) not in teks]
+    assert not hilang, f"{len(hilang)} kelompok hilang dari cetakan: {hilang[:3]}"
+
+
+def test_blok_TIDAK_didorong_ke_lembar_lain_selagi_masih_muat(dbx):
+    """Lembar kedua hanya dibuka bila baris berikutnya sungguh tak muat.
+
+    Selama masih muat, tak ada blok yang berpindah — kekosongan di lembar
+    pertama yang ditukar dengan kekosongan lebih besar di lembar kedua adalah
+    persis yang diminta pemilik untuk dihindari.
+    """
     d = _data(dbx, tim_pembantu=_anggota(6, "Anggota Pembantu"))
     hal = d["rencana_analisis"]["halaman"]
     id_lembar1 = [x["id"] for b in hal[0] for x in b["blok"]]
-    # Blok tim TETAP di lembar pertama meski daftar kategorinya memanjang.
     assert "tim_internal" in id_lembar1, id_lembar1
 
 

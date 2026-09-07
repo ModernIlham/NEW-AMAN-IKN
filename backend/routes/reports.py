@@ -5330,6 +5330,12 @@ def filter_laporan(
 #: sebaran sampai jenjang terdalam, bukan sebaran yang muat sehalaman.
 KAT_JENJANG_EKSEKUTIF = (1, 2, 3, 4, 5)
 
+#: Jenjang pengelompokan daftar "Kondisi Aset". Permintaan pemilik: *"hanya
+#: ditampilkan per kelompok saja sudah cukup."* Jenjang Kelompok (5 digit)
+#: cukup kasar untuk memuat seluruhnya dalam satu daftar yang terbaca, dan
+#: cukup halus untuk membedakan Alat Kantor dari Alat Rumah Tangga.
+KONDISI_JENJANG_KELOMPOK = 3
+
 
 async def _build_executive_summary_data(activity_id: str, detail_fields=None,
                                         with_asset_rows: bool = True, row_slice=None,
@@ -5683,26 +5689,54 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
             condition_pie.append({"name": name, "count": count, "pct": p, "color": color, "offset": cond_cumulative})
             cond_cumulative += p
 
-    # Condition by top categories (cross-analysis)
-    #: Cacah awal daftar kondisi per kategori. Bukan batas akhir: bila lembar
-    #: analisisnya masih menyisakan ruang, daftarnya dipanjangkan sampai ruang
-    #: itu terpakai (lihat `_ANALISIS_KONDISI_MAKS`).
-    _KONDISI_AWAL = 8
+    # ── Kondisi aset per KELOMPOK kodefikasi ───────────────────────────
+    #
+    # Permintaan pemilik: *"Kondisi Aset Per Kategori ditampilkan semua dan
+    # disesuaikan lagi hanya ditampilkan per kelompok saja sudah cukup."*
+    #
+    # Sumbernya dulu field `category` — teks bebas dari master kategori — dan
+    # daftarnya dipotong di delapan teratas. Dua-duanya menyembunyikan: teks
+    # bebas memecah satu kelompok barang menjadi beberapa baris yang ejaannya
+    # berbeda, dan pemotongan menyembunyikan kelompok yang justru paling ingin
+    # dilihat pada satker besar.
+    #
+    # Kini kunci pengelompokannya KODE, pada jenjang Kelompok (5 digit) —
+    # jenjang yang sama dengan yang dipakai halaman Distribusi Kategori — dan
+    # seluruh kelompok ditampilkan. Daftar yang lebih panjang daripada selembar
+    # dipecah antar-lembar, bukan dipotong.
+    _PJG_KELOMPOK = kod.LEVEL_LENGTHS[KONDISI_JENJANG_KELOMPOK]
+    _kelompok = {}
+    for a in all_assets:
+        _kode = kod.normalize_kode(a.get("asset_code")) or ""
+        _k = _kode[:_PJG_KELOMPOK] if len(_kode) >= _PJG_KELOMPOK else ""
+        g = _kelompok.get(_k)
+        if g is None:
+            g = _kelompok[_k] = {"count": 0, "conditions": {}}
+        g["count"] += 1
+        _cond = a.get("condition", "") or "Belum Dinilai"
+        g["conditions"][_cond] = g["conditions"].get(_cond, 0) + 1
+
+    def _nama_kelompok(kode):
+        if not kode:
+            return ljj.TANPA_KODE
+        uraian = (kode_uraian_exec.get(kode) or "").strip()
+        return f"{kode} — {uraian}" if uraian else kode
+
     cond_by_cat = []
-    for cat_name, cat_data in cat_breakdown_sorted[:_KONDISI_AWAL]:
-        conditions = cat_data.get("conditions", {})
-        total_cat = cat_data["count"]
+    for _k, _g in sorted(_kelompok.items(),
+                         key=lambda x: (-x[1]["count"], x[0] or "\uffff")):
+        _c, _n = _g["conditions"], _g["count"]
         cond_by_cat.append({
-            # Nama kategori DIBAWA UTUH — dulu dipotong 20 huruf, sehingga
+            # Nama DIBAWA UTUH — dulu dipotong 20 huruf, sehingga
             # "Alat Laboratorium Pendidikan" tercetak "Alat Laboratorium Pe".
-            "name": cat_name,
-            "total": total_cat,
-            "baik": conditions.get("Baik", 0),
-            "rr": conditions.get("Rusak Ringan", 0),
-            "rb": conditions.get("Rusak Berat", 0),
-            "baik_pct": round(conditions.get("Baik", 0) / total_cat * 100) if total_cat > 0 else 0,
-            "rr_pct": round(conditions.get("Rusak Ringan", 0) / total_cat * 100) if total_cat > 0 else 0,
-            "rb_pct": round(conditions.get("Rusak Berat", 0) / total_cat * 100) if total_cat > 0 else 0,
+            "name": _nama_kelompok(_k),
+            "total": _n,
+            "baik": _c.get("Baik", 0),
+            "rr": _c.get("Rusak Ringan", 0),
+            "rb": _c.get("Rusak Berat", 0),
+            "baik_pct": round(_c.get("Baik", 0) / _n * 100) if _n > 0 else 0,
+            "rr_pct": round(_c.get("Rusak Ringan", 0) / _n * 100) if _n > 0 else 0,
+            "rb_pct": round(_c.get("Rusak Berat", 0) / _n * 100) if _n > 0 else 0,
         })
 
     # ── Tata letak halaman "Analisis Lanjutan, Tim & Cakupan Data" ─────
@@ -5738,11 +5772,6 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
     _SISA_HBAR = 40.0 + 60.0 + 8.0
     _SISA_SBAR = 30.0 + 60.0 + 8.0
 
-    #: Batas atas daftar kondisi. Kertas yang tersisa lebih berguna diisi baris
-    #: data daripada dibiarkan putih — tetapi daftar yang terlalu panjang
-    #: berhenti menjadi "kategori teratas" dan menjadi seluruh daftar kategori.
-    _ANALISIS_KONDISI_MAKS = 20
-
     def _rencana_analisis(kondisi):
         """`(rencana, kolom_kartu_peneliti)` untuk daftar kondisi sepanjang itu."""
         kolom_kartu = min(len(tim) or 1, 3)
@@ -5762,8 +5791,10 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
                 [e["name"] for e in eselon_chart], _lbl_es, _KAR_LABEL_7_5)),
                 separuh=True))
         if kondisi and len(ditemukan) > 0:
-            blok.append(lbk.blok("kondisi", lbk.tinggi_kondisi(_baris_label(
-                [c["name"] for c in kondisi], _lbl_kd, lkl.LEBAR_KAR_7PX))))
+            # Seluruh kelompok ditampilkan, jadi daftarnya dapat jauh melebihi
+            # satu lembar — bloknya harus dapat dipecah, bukan dipotong.
+            blok.append(lbk.blok_kondisi("kondisi", _baris_label(
+                [c["name"] for c in kondisi], _lbl_kd, lkl.LEBAR_KAR_7PX)))
         if status_pie:
             blok.append(lbk.blok("status", lbk.tinggi_donut(), separuh=True))
             blok.append(lbk.blok("cakupan", lbk.tinggi_cakupan(3), separuh=True))
@@ -5803,46 +5834,10 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
         return (lbk.rencana_blok(blok), kolom_kartu,
                 {"tahun": _lbl_th, "eselon": _lbl_es, "kondisi": _lbl_kd})
 
-    def _tata_letak(rencana):
-        """Blok apa di lembar mana — untuk membandingkan dua rencana."""
-        return [[x["id"] for b in hal for x in b["blok"]]
-                for hal in rencana["halaman"]]
-
+    # Daftar kondisi tak lagi ditumbuhkan bertahap: ia memang memuat SELURUH
+    # kelompok sejak awal, dan yang tak muat dipecah ke lembar berikutnya
+    # alih-alih disembunyikan.
     rencana_analisis, kolom_kartu_peneliti, _lbl = _rencana_analisis(cond_by_cat)
-    # Sisa ruang di lembar yang memuat daftar kondisi dipakai memanjangkan
-    # daftarnya. Pertumbuhannya DIBATALKAN bila ada blok yang jadi berpindah
-    # lembar: menambah baris kategori dengan harga mendorong Tim Inventarisasi
-    # ke lembar berikutnya bukan memaksimalkan kertas, melainkan menukar satu
-    # kekosongan dengan kekosongan yang lebih besar.
-    _hal_kondisi = next(
-        (i for i, hal in enumerate(rencana_analisis["halaman"])
-         for b in hal for x in b["blok"] if x["id"] == "kondisi"), None)
-    if _hal_kondisi is not None and len(cat_breakdown_sorted) > len(cond_by_cat):
-        _muat = int(lbk.sisa_ruang(rencana_analisis, _hal_kondisi)
-                    // lbk.tinggi_baris_sbar(1))
-        _tambah = min(_muat, _ANALISIS_KONDISI_MAKS - len(cond_by_cat),
-                      len(cat_breakdown_sorted) - len(cond_by_cat))
-        if _tambah > 0:
-            _kondisi_awal = list(cond_by_cat)
-            for cat_name, cat_data in cat_breakdown_sorted[
-                    len(cond_by_cat):len(cond_by_cat) + _tambah]:
-                _kondisi = cat_data.get("conditions", {})
-                _total = cat_data["count"]
-                cond_by_cat.append({
-                    "name": cat_name, "total": _total,
-                    "baik": _kondisi.get("Baik", 0),
-                    "rr": _kondisi.get("Rusak Ringan", 0),
-                    "rb": _kondisi.get("Rusak Berat", 0),
-                    "baik_pct": round(_kondisi.get("Baik", 0) / _total * 100) if _total > 0 else 0,
-                    "rr_pct": round(_kondisi.get("Rusak Ringan", 0) / _total * 100) if _total > 0 else 0,
-                    "rb_pct": round(_kondisi.get("Rusak Berat", 0) / _total * 100) if _total > 0 else 0,
-                })
-            _tumbuh, _kolom2, _lbl2 = _rencana_analisis(cond_by_cat)
-            if _tata_letak(_tumbuh) == _tata_letak(rencana_analisis):
-                rencana_analisis, kolom_kartu_peneliti, _lbl = (
-                    _tumbuh, _kolom2, _lbl2)
-            else:
-                cond_by_cat[:] = _kondisi_awal
     lbl_tahun_px, lbl_eselon_px, lbl_kondisi_px = (
         _lbl["tahun"], _lbl["eselon"], _lbl["kondisi"])
 
