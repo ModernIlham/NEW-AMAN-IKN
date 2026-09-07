@@ -367,6 +367,42 @@ aside .overflow-x-auto::-webkit-scrollbar-thumb:hover, .category-dropdown-scroll
 .peta-ukur-aktif .leaflet-marker-pane,
 .peta-ukur-aktif .leaflet-popup-pane { pointer-events: none; }
 
+/* ── Label nama aset di peta ───────────────────────────────────────────
+   Permintaan pemilik: nama aset tampil di samping marker, "font putih dan
+   diberikan stroke hitam agar terlihat di segala macam background latar".
+
+   Stroke-nya `paint-order: stroke` + `-webkit-text-stroke`: cara ini menggambar
+   garis tepi DI BELAKANG huruf, sehingga huruf tetap setebal aslinya. Tanpa
+   `paint-order`, stroke digambar di atas huruf dan menggerogotinya dari dalam —
+   pada huruf 11px teksnya berubah menjadi gumpalan hitam.
+
+   `text-shadow` ditumpuk sebagai cadangan bagi mesin yang tak mengenal
+   `-webkit-text-stroke` (di sana huruf putihnya tetap punya batas gelap).
+
+   Gelembung bawaan tooltip Leaflet dimatikan seluruhnya — latar, bingkai,
+   bayangan, dan segitiga penunjuknya: yang diminta label, bukan balon. */
+.aman-peta-label {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  padding: 4px 6px;
+  margin: 0;
+  max-width: 150px;
+  white-space: normal;
+  overflow-wrap: break-word;
+  font: 700 11px/13px system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: #fff;
+  paint-order: stroke fill;
+  -webkit-text-stroke: 2.5px #0f172a;
+  text-shadow:
+    -1px -1px 0 #0f172a, 1px -1px 0 #0f172a,
+    -1px 1px 0 #0f172a, 1px 1px 0 #0f172a;
+  /* Label tak boleh menangkap klik: di peta padat ia menutupi marker
+     tetangganya, dan pin yang tertutup label menjadi tak bisa diketuk. */
+  pointer-events: none;
+}
+.aman-peta-label::before { display: none; }
+
 /* Tablet */
 @media (min-width: 768px) and (max-width: 1023px) {
   .container { max-width: 100%; padding-left: 1.5rem; padding-right: 1.5rem; }
