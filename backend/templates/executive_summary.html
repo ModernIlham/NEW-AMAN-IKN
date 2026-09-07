@@ -88,7 +88,16 @@
         .exec-header-meta { text-align: right; flex-shrink: 0; }
         .exec-header-meta div { font-size: 9px; color: #94a3b8; line-height: 1.6; }
         .exec-header-meta strong { color: #e2e8f0; }
-        .exec-body { padding: 18px 26px 20px; flex: 1; }
+        /* `flex: 1 1 0` + `min-height: 0`, bukan `flex: 1` saja.
+           `flex: 1` mewarisi `min-height: auto`, dan tinggi minimum otomatis
+           itu membuat kotak isi DIREGANGKAN melewati jatahnya: pada lembar
+           dua lajur ia terukur 1007px padahal jatahnya 981px dan isinya
+           sendiri cuma 855px. Kelebihan 26px itu mendorong kaki halaman
+           keluar lembar, dan kaki yang terdorong mendarat sendirian di
+           lembar berikutnya — halaman yang terbaca kosong.
+           Gejalanya tak ada di HTML: lembarnya tetap satu, hanya PDF-nya
+           yang bertambah satu halaman. */
+        .exec-body { padding: 18px 26px 20px; flex: 1 1 0; min-height: 0; }
         .exec-footer { background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 8px 26px; display: flex; justify-content: space-between; align-items: center; font-size: 7.5px; color: #94a3b8; margin-top: auto; }
 
         /* ON PROGRESS Banner */

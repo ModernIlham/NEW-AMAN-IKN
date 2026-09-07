@@ -78,23 +78,28 @@ MARGIN_CATATAN = 6.0
 
 #: Cadangan yang HARUS ditinggalkan di luar perabot yang dapat ditunjuk.
 #:
-#: Ia menyerap dua hal yang sama-sama nyata dan tak dapat dihilangkan dengan
-#: menghitung lebih teliti: kotak grid `.dua-lajur` tak melaporkan tinggi yang
-#: sungguh dipakainya, dan taksiran tinggi per baris meleset ke dua arah —
-#: pembungkusan sebenarnya bergantung di mana batas katanya jatuh, dan itu tak
-#: dapat dihitung dari panjang teks saja.
+#: Ia menyerap kelesetan taksiran tinggi baris ke dua arah: pembungkusan
+#: sebenarnya bergantung di mana batas katanya jatuh, dan itu tak dapat
+#: dihitung dari panjang teks saja.
 #:
-#: DIKALIBRASI dengan patokan yang benar: laporan dirender ke A4 sungguhan dan
-#: jumlah halaman PDF dibandingkan dengan jumlah lembar HTML. Patokan lain
-#: sempat dipakai dan MENYESATKAN — merender lembarnya tanpa `min-height` lalu
-#: mengukur tinggi `.exec-body` melaporkan halaman dua lajur ~200px lebih
-#: tinggi daripada yang sungguh dipakainya, sehingga halaman yang sebenarnya
-#: muat dinilai meluber dan cadangannya dinaikkan dua kali lipat tanpa perlu.
+#: DIKALIBRASI dengan render A4 sungguhan pada delapan fixture, dengan dua
+#: patokan sekaligus:
 #:
-#: Pada lima fixture, 50 melahirkan halaman yatim dan 70 ke atas tidak.
-#: Diambil 100: dua kali jarak amannya, dan jarak isi ke kaki halaman pada
-#: lembar terpadat tinggal 135px dari 969px.
-CADANGAN_TATA_LETAK = 100.0
+#: - jumlah halaman PDF harus sama dengan jumlah lembar HTML (kaki halaman
+#:   tak terdorong keluar), dan
+#: - jarak antara bawah tabel dan kaki halaman harus tetap POSITIF.
+#:
+#: Patokan kedua yang mengikat sekarang: sejak `.exec-body` memakai
+#: `flex: 1 1 0; min-height: 0`, kelebihan isi tak lagi mendorong halaman
+#: melainkan menindih kaki halaman. Jarak nol tercapai pada -30; diambil 40,
+#: yang menyisakan 67px pada lembar terpadat — cukup terlihat sebagai batas,
+#: cukup jauh dari nol untuk menahan metrik huruf mesin lain.
+#:
+#: Angkanya pernah 100 karena menyerap cacat lain: kotak isi diregangkan
+#: melewati jatahnya oleh `min-height: auto` bawaan flex. Setelah cacat itu
+#: diperbaiki di CSS, cadangan sebesar itu tak lagi diperlukan — dan
+#: menyimpannya berarti membuang seratus piksel kertas di tiap lembar.
+CADANGAN_TATA_LETAK = 40.0
 
 # ── Lebar kolom, DIUKUR dari render weasyprint ─────────────────────────
 #

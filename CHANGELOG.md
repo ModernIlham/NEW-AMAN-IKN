@@ -18,6 +18,39 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1033] Halaman kosong setelah tabel dua lajur — 2026-09-07
+
+Permintaan pemilik: *"ketika menjadi 2 kolom tersisa 1 lembar kosong di
+bawahnya, tolong perbaiki."*
+
+Sebabnya satu baris CSS, dan bukan yang disangka. `.exec-body { flex: 1 }`
+mewarisi `min-height: auto`, dan tinggi minimum otomatis itu MEREGANGKAN kotak
+isi melewati jatahnya: pada lembar dua lajur ia terukur 1007px padahal
+jatahnya 981px dan isinya sendiri cuma 855px. Kelebihan 26px itu mendorong
+kaki halaman keluar lembar, dan kaki yang terdorong mendarat sendirian di
+lembar berikutnya — halaman yang terbaca kosong. `flex: 1 1 0; min-height: 0`
+menghentikannya.
+
+Yang membuatnya lolos selama ini: bentuk data yang memicunya bukan yang
+barisnya panjang, melainkan yang barisnya **pendek tetapi banyak** — 93 baris
+satu-baris yang memenuhi dua lajur nyaris pas. Seluruh fixture uji sebelumnya
+berbaris panjang, dan tak satu pun pernah menyentuhnya. Fixture
+`BARANG_DUA_LAJUR` kini menjaganya, dan mutasi yang mengembalikan `flex: 1`
+membuatnya berbunyi.
+
+**Cadangan tata letak turun dari 100px menjadi 40px.** Angka 100 dulu menyerap
+peregangan itu; setelah sebabnya diperbaiki di CSS, menyimpannya berarti
+membuang seratus piksel kertas di tiap lembar. Jarak isi ke kaki halaman pada
+lembar terpadat kini 67px, dari 135px.
+
+**Patokan amannya ikut berubah bentuk.** Sejak kotak isi tak lagi dapat
+meregang, kelebihan isi tak mendorong halaman melainkan MENINDIH kaki halaman
+— cacat yang sama sekali tak menambah halaman, jadi jumlah halaman saja tak
+lagi cukup menjaganya. Uji baru mengukur jaraknya sendiri dan menagihnya tetap
+positif.
+
+---
+
 ## [#1032] Halaman distribusi terisi sampai dekat kaki halaman — 2026-09-06
 
 Permintaan pemilik: *"semua distribusi tidak sampai ke bawah batasnya sampai
