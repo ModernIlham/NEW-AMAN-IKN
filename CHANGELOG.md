@@ -18,6 +18,36 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1035] Kondisi aset dikelompokkan per Kelompok, seluruhnya — 2026-09-07
+
+Permintaan pemilik: *"Kondisi Aset Per Kategori ditampilkan semua dan
+disesuaikan lagi hanya ditampilkan per kelompok saja sudah cukup."*
+
+**Kuncinya kini KODE, bukan teks bebas.** Daftar ini bersumber dari field
+`category` — teks bebas dari master kategori — sehingga satu kelompok barang
+pecah menjadi beberapa baris yang ejaannya berbeda, dan menjumlahkannya kembali
+mustahil dilakukan pembaca. Sekarang ia dikelompokkan pada jenjang **Kelompok**
+(5 digit), jenjang yang sama dengan yang dipakai halaman Distribusi Kategori,
+dan namanya ditulis "kode — uraian" dari master kodefikasi.
+
+**Seluruh kelompok ditampilkan.** Daftarnya dulu dipotong di delapan teratas,
+lalu (sejak `[#1034]`) dipanjangkan seadanya sampai ruang habis. Pemotongan itu
+menyembunyikan kelompok yang justru paling ingin dilihat pada satker besar —
+tanpa satu pun tanda bahwa ada yang disembunyikan. Daftar yang lebih panjang
+daripada selembar kini DIPECAH ke lembar berikutnya, sama seperti tabel tim.
+
+**Patokan uji yang menyesatkan diganti.** Cacat "isi terpotong di tepi lembar"
+sebelumnya dijaga dengan mencari nama yang hilang dari teks PDF. Patokan itu
+ternyata buta pada kasus ini: `overflow: hidden` memotongnya secara VISUAL —
+baris terakhir tercetak menembus kaki halaman dan sisanya tak tergambar sama
+sekali — sementara pengekstrak teks PDF tetap membacanya. Penjaga barunya
+geometris: tak satu blok pun boleh lebih tinggi daripada jatah lembarnya.
+
+Mekanisme pemecahan antar-lembar yang di `[#1034]` khusus tabel tim kini
+digeneralkan, jadi daftar kondisi memakai jalur yang sama persis.
+
+---
+
 ## [#1034] Halaman Analisis & Tim menata sendiri bloknya — 2026-09-07
 
 Permintaan pemilik: *"pada analisis, tim lanjutan & cakupan jadikan smart semua

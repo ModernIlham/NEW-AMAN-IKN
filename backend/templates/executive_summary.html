@@ -893,14 +893,15 @@
     {% endfor %}
 </div>
 {% elif id == 'kondisi' %}
+{% set iris = (potong or [{'awal': 0, 'akhir': cond_by_cat|length}])[0] %}
 <div class="chart-box">
-    {{ judul_box('#f59e0b', 'Kondisi Aset Per Kategori (%d teratas)'|format(cond_by_cat|length)) }}
+    {{ judul_box('#f59e0b', 'Kondisi Aset Per Kelompok (%d kelompok)'|format(cond_by_cat|length) + (' — lanjutan' if lanjutan else '')) }}
     <div class="kondisi-legenda">
         <div><div style="width:8px;height:8px;background:#22c55e;border-radius:2px;"></div>Baik</div>
         <div><div style="width:8px;height:8px;background:#f59e0b;border-radius:2px;"></div>Rusak Ringan</div>
         <div><div style="width:8px;height:8px;background:#ef4444;border-radius:2px;"></div>Rusak Berat</div>
     </div>
-    {% for c in cond_by_cat %}
+    {% for c in cond_by_cat[iris.awal:iris.akhir] %}
     <div class="sbar-row">
         <div class="sbar-label" style="width:{{ lbl_kondisi_px }}px;">{{ c.name }}</div>
         <div class="sbar-track">

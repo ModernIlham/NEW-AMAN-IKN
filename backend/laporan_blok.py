@@ -220,52 +220,81 @@ def blok(id_blok, tinggi, separuh=False, jarak=None):
             "jarak": JARAK_BLOK if jarak is None else float(jarak)}
 
 
-def blok_tabel_tim(id_blok, tabel, separuh=False):
-    """Blok tim bertabel yang BOLEH dipecah antar-lembar.
+def blok_pecah(id_blok, bagian, sisipan, sisipan_bagian=0.0, ekor=0.0,
+               separuh=False):
+    """Blok berdaftar yang BOLEH dipecah antar-lembar.
 
-    `tabel` = [(judul, kunci_data, cacah_baris), …]. Tanpa pemecahan, daftar
-    tim yang lebih panjang daripada satu lembar tetap ditempatkan utuh pada
-    satu lembar — dan sisanya terpotong senyap oleh `overflow: hidden`. Diuji
-    pada 60 anggota: delapan orang hilang dari cetakan tanpa satu pun tanda.
+    `bagian` = [(judul, kunci_data, [tinggi tiap baris]), …]; `sisipan` rangka
+    blok yang selalu ada (garis, padding, judul); `sisipan_bagian` yang menempel
+    pada tiap daftar di dalamnya (sub-judul, baris kepala tabel); `ekor` jarak
+    tetap di bawah daftar pertama.
+
+    Tanpa pemecahan, daftar yang lebih panjang daripada satu lembar tetap
+    ditempatkan UTUH pada satu lembar — dan sisanya terpotong senyap oleh
+    `overflow: hidden`. Diuji pada 60 anggota tim: delapan orang hilang dari
+    cetakan tanpa satu pun galat dan tanpa satu pun tanda di HTML-nya.
     """
-    isi = [(j, k, _baris_tabel(n)) for j, k, n in tabel]
+    isi = [(j, k, list(t or [])) for j, k, t in bagian]
     isi = [(j, k, t) for j, k, t in isi if t]
-    return {"id": id_blok, "separuh": bool(separuh), "jarak": JARAK_BLOK,
-            # Tinggi TIAP baris disimpan, bukan cacahnya saja: pemecahan
-            # antar-lembar harus tahu baris mana yang setinggi apa, sebab
-            # anggota berjabatan panjang memakan dua-tiga kali lipat.
-            "baris_tinggi": {k: [tinggi_baris_tim(n) for n in t]
-                             for _, k, t in isi},
-            "potong": [{"judul": j, "kunci": k, "awal": 0, "akhir": len(t),
-                        "lanjutan": False} for j, k, t in isi],
-            "tinggi": tinggi_tim_tabel(*[t for _, _, t in isi])}
+    b = {"id": id_blok, "separuh": bool(separuh), "jarak": JARAK_BLOK,
+         "sisipan": float(sisipan), "sisipan_bagian": float(sisipan_bagian),
+         "ekor": float(ekor),
+         # Tinggi TIAP baris disimpan, bukan cacahnya saja: pemecahan
+         # antar-lembar harus tahu baris mana yang setinggi apa, sebab baris
+         # berteks panjang memakan dua-tiga kali lipat.
+         "baris_tinggi": {k: list(t) for _, k, t in isi},
+         "potong": [{"judul": j, "kunci": k, "awal": 0, "akhir": len(t),
+                     "lanjutan": False} for j, k, t in isi]}
+    b["tinggi"] = _tinggi_potong(b, b["potong"])
+    return b
+
+
+def blok_tabel_tim(id_blok, tabel, separuh=False):
+    """Blok tim bertabel — `tabel` = [(judul, kunci_data, cacah/tinggi baris), …]."""
+    isi = [(j, k, [tinggi_baris_tim(n) for n in _baris_tabel(t)])
+           for j, k, t in tabel]
+    return blok_pecah(id_blok, isi, SISIPAN_TIM + TINGGI_JUDUL_TIM,
+                      TINGGI_SUBJUDUL_TIM + TINGGI_KEPALA_TABEL_TIM,
+                      JARAK_ANTAR_TABEL_TIM, separuh)
+
+
+def blok_kondisi(id_blok, baris_label, separuh=False):
+    """Daftar "Kondisi Aset Per Kelompok" — boleh dipecah antar-lembar.
+
+    Seluruh kelompok ditampilkan, jadi daftarnya dapat jauh melebihi satu
+    lembar; memotongnya di angka tertentu berarti menyembunyikan kelompok yang
+    justru paling ingin dilihat pada satker besar.
+    """
+    return blok_pecah(
+        id_blok, [("", "kondisi", [tinggi_baris_sbar(n) for n in baris_label])],
+        SISIPAN_BOX + TINGGI_JUDUL_BOX + TINGGI_LEGENDA_KONDISI,
+        separuh=separuh)
 
 
 def _tinggi_potong(b, potong) -> float:
-    """Tinggi blok tim untuk irisan tabel `potong`."""
+    """Tinggi blok untuk irisan daftar `potong`."""
     isi = 0.0
     for t in potong:
         tinggi = b["baris_tinggi"][t["kunci"]][t["awal"]:t["akhir"]]
-        isi += TINGGI_SUBJUDUL_TIM + TINGGI_KEPALA_TABEL_TIM + sum(tinggi)
+        isi += b["sisipan_bagian"] + sum(tinggi)
     if potong:
-        isi += JARAK_ANTAR_TABEL_TIM
-    return SISIPAN_TIM + TINGGI_JUDUL_TIM + isi
+        isi += b["ekor"]
+    return b["sisipan"] + isi
 
 
-def _pecah_blok_tim(b, sisa):
-    """`(kepala, ekor)` — bagi blok tim agar bagian pertamanya muat `sisa`.
+def _pecah_blok(b, sisa):
+    """`(kepala, ekor)` — bagi blok agar bagian pertamanya muat `sisa`.
 
     Mengembalikan `(None, None)` bila yang muat lebih sedikit daripada
     `MINIMUM_BARIS_PECAH`.
     """
-    ruang = float(sisa) - SISIPAN_TIM - TINGGI_JUDUL_TIM - JARAK_ANTAR_TABEL_TIM
+    ruang = float(sisa) - b["sisipan"] - b["ekor"]
     kepala, ekor, terambil = [], [], 0
     for t in b["potong"]:
         tinggi = b["baris_tinggi"][t["kunci"]][t["awal"]:t["akhir"]]
         muat = 0
-        if tinggi and ruang >= (TINGGI_SUBJUDUL_TIM + TINGGI_KEPALA_TABEL_TIM
-                                + tinggi[0]):
-            ruang -= TINGGI_SUBJUDUL_TIM + TINGGI_KEPALA_TABEL_TIM
+        if tinggi and ruang >= b["sisipan_bagian"] + tinggi[0]:
+            ruang -= b["sisipan_bagian"]
             for h in tinggi:
                 if ruang < h:
                     break
@@ -377,7 +406,7 @@ def _coba_pecah(baris_blok, sisa):
     b = baris_blok["blok"][0]
     if not b.get("baris_tinggi"):
         return None, None
-    kepala, ekor = _pecah_blok_tim(b, sisa)
+    kepala, ekor = _pecah_blok(b, sisa)
     if kepala is None:
         return None, None
     return ({"blok": [kepala], "tinggi": kepala["tinggi"],
