@@ -17,10 +17,15 @@ Prinsip keterbacaan (permintaan pemilik: "rapi di SEMUA ukuran"):
 - Hierarki tetap: kode barang > nama barang > sub-sub kelompok > baris
   identitas satker. Perbandingannya dipertahankan di semua ukuran stiker,
   jadi mata langsung menemukan kode barang lebih dulu.
-- LANTAI ukuran huruf: di stiker kecil huruf tidak dibiarkan mengecil
-  mengikuti skala (dulu bisa ~4,2 pt — praktis tak terbaca setelah dicetak);
-  ada batas bawah per peran, dan teks yang tak muat diselesaikan dengan
-  pemenggalan baris, bukan dengan mengecilkan huruf tanpa batas.
+- SATU DERET EMAS untuk seluruh keluarga: setiap ukuran huruf, di setiap
+  ukuran stiker, adalah anak tangga `9 pt × φ^(k/8)`. Karena semua peran
+  berangkat dari anak tangga yang sama, stiker kecil adalah stiker besar
+  yang mengecil — bukan tujuh peran yang mengecil sendiri-sendiri.
+- LANTAI ukuran huruf dikenakan SEKALI pada anak tangga dasar, bukan per
+  peran. Lantai per-peran dulu membuat tiap peran mentok pada saat berbeda,
+  sehingga di stiker kecil semuanya rata di ±5-6,6 pt dan hierarkinya hilang.
+  Teks yang tak muat diselesaikan dengan pemenggalan baris, bukan dengan
+  mengecilkan huruf tanpa batas.
 - Teks panjang LANJUT KE BARIS BERIKUTNYA (nama barang & sub-sub kelompok),
   bukan dipotong di baris pertama.
 """
@@ -46,24 +51,64 @@ MAKS_BARIS_SUBSUB = 2
 MARGIN_MM = 6.0   # margin halaman
 GAP_MM = 1.5      # celah tipis antar kotak (garis potong)
 
-# Perbandingan hierarki (pt pada stiker "besar" 95×45 mm) dan LANTAI
-# keterbacaan cetak (pt) per peran. Lantai inilah yang menjaga stiker kecil
-# tetap terbaca; tanpa itu semua peran menyusut ke ±4 pt dan hierarkinya
-# ikut hilang karena semua terlihat sama besar.
-_SKALA_FONT = {
-    #  peran        acuan  lantai  langit-langit
-    "instansi":     (9.6,   5.6,   13.0),
-    "sub":          (7.6,   5.0,   10.5),
-    "kode":         (11.5,  6.6,   15.0),
-    "nup":          (8.8,   5.6,   11.5),
-    "nama":         (9.0,   6.0,   12.0),
-    # Sub-sub kelompok kini duduk TEPAT di bawah kode barang sebagai
-    # keterangannya, bukan lagi baris terakhir badan — jadi ia dinaikkan
-    # sedikit agar terbaca pada stiker kecil, tetapi tetap jelas di bawah
-    # nama barang supaya hierarkinya tak kabur.
-    "subsub":       (7.9,   5.5,    9.8),
-    "label":        (6.4,   4.8,    8.5),
+# ── TANGGA EMAS: SATU skala untuk seluruh keluarga stiker ────────────────
+#
+# Permintaan pemilik: *"sesuaikan lagi ukuran font di setiap ukuran stiker
+# agar seolah-olah merupakan pengecilan penyesuaian dari font di stiker besar
+# hingga ke yang terkecil ... mungkin bisa dengan Golden Ratio (1,618) atau
+# fibonacci agar terlihat natural semua ukurannya"*.
+#
+# Model lama memberi TIAP PERAN acuan, lantai, dan langit-langitnya sendiri.
+# Akibatnya tiap peran menyentuh lantainya pada saat yang berbeda: di stiker
+# kecil SEMUA peran mentok lantai, hierarkinya rata (kode 6,6 · nama 6,0 ·
+# sub-sub 5,5 — selisihnya tak terlihat mata) dan hurufnya menyusut jauh
+# lebih sedikit daripada stikernya sendiri (stiker 0,49× tetapi huruf
+# 0,56–0,73×), sehingga stiker kecil terasa penuh sesak.
+#
+# Sekarang SELURUH ukuran huruf di seluruh ukuran stiker adalah anak tangga
+# dari SATU deret emas. Satu langkah = φ^(1/8) ≈ 1,062 — φ utuh (1,618) jauh
+# terlalu lompat untuk tujuh peran yang harus hidup berdampingan dalam satu
+# kotak beberapa sentimeter; seperlapan-φ memberi tangga halus yang tetap
+# menutup satu putaran emas penuh setiap delapan langkah.
+#
+# Perbandingan lama pada stiker BESAR ternyata sudah nyaris persis duduk di
+# tangga ini (simpangan terbesar 2,3% pada NUP), jadi stiker besar yang sudah
+# disetujui pemilik praktis tak berubah; yang diperbaiki adalah bagaimana ia
+# MENGECIL.
+RASIO_EMAS = 1.618033988749895
+LANGKAH_EMAS = RASIO_EMAS ** 0.125     # φ^(1/8) ≈ 1,062 — satu anak tangga
+ACUAN_PT = 9.0                         # ukuran peran "nama" di anak tangga 0
+
+#: Lantai & langit-langit CETAK. Lantai dikenakan pada peran terkecil yang
+#: muncul di stiker sungguhan (`sub` = baris kode satker di kepala), bukan
+#: per peran sendiri-sendiri — itulah sebabnya hierarkinya tak lagi rata saat
+#: mengecil: yang dijepit adalah SATU anak tangga dasar, seluruh tangga ikut
+#: bergeser utuh. `label` sengaja tak ikut menahan lantai: ia cuma keterangan
+#: garis ukur di stiker CONTOH yang tak pernah ditempel (penggambarnya
+#: memberi lantai sendiri).
+LANTAI_CETAK_PT = 4.0
+ATAP_CETAK_PT = 15.0
+
+#: Posisi tiap peran pada tangga emas, dihitung dari peran "nama" (= 0).
+#: Jarak inilah hierarki stiker: kode barang empat langkah di atas nama
+#: (φ^0,5 ≈ 1,272× — kode barang yang dicari mata lebih dulu), sub-sub
+#: kelompok dua langkah di bawahnya, baris kode satker tiga langkah.
+LANGKAH_PERAN = {
+    "kode": 4,        # kode barang — puncak hierarki
+    "instansi": 1,    # judul kepala stiker
+    "nup": 0,         # NUP, sebaris dengan kode barang
+    "nama": 0,        # nama barang — acuan tangga
+    "subsub": -2,     # sub-sub kelompok, keterangan kode barang
+    "sub": -3,        # baris kedua kepala (nama/kode satker)
+    "label": -6,      # keterangan garis ukur (stiker CONTOH saja)
 }
+
+#: Inset tepi stiker. Ikut mengecil bersama stikernya (φ^6 ≈ 17,94 bagian
+#: dari sisi pendek) dengan LANTAI absolut: toleransi mesin potong itu
+#: besaran fisik, bukan perbandingan — stiker sekecil apa pun tetap butuh
+#: jarak yang sama dari garis potong. Angka lantainya = inset QR yang lama,
+#: supaya teks dan QR kini memakai SATU inset yang sama.
+PAD_MIN_MM = 1.8
 
 
 def grid_optimal(page_w_mm, page_h_mm, target_w_mm, target_h_mm,
@@ -105,19 +150,54 @@ def tinggi_header(tinggi_label_mm, ukuran):
     return float(tinggi_label_mm) * (t["header"] / t["h"])
 
 
+def _pt(langkah):
+    """Ukuran huruf (pt) pada anak tangga emas ke-`langkah`. MURNI."""
+    return ACUAN_PT * (LANGKAH_EMAS ** langkah)
+
+
+def anak_tangga(lebar_mm, tinggi_mm):
+    """Anak tangga emas untuk label seukuran `lebar × tinggi` mm.
+
+    Skala diambil dari dimensi label NYATA (sisi yang paling menekan yang
+    menentukan, supaya label lebar-pendek tak memakai huruf yang tak muat
+    tingginya), lalu DIBULATKAN ke anak tangga terdekat — jadi tiap ukuran
+    stiker mendarat di rung yang bersih, bukan di angka acak hasil pembagian
+    kertas. Rung dijepit sekali di sini, dan karena semua peran berangkat
+    dari rung yang sama, hierarkinya tak bisa rata saat mentok. MURNI."""
+    import math
+    t = TARGET_STIKER["besar"]
+    skala = min(float(lebar_mm) / t["w"], float(tinggi_mm) / t["h"])
+    if skala <= 0:
+        return 0
+    n = round(math.log(skala) / math.log(LANGKAH_EMAS))
+    ln_langkah = math.log(LANGKAH_EMAS)
+    n_min = (math.ceil(math.log(LANTAI_CETAK_PT / ACUAN_PT) / ln_langkah)
+             - LANGKAH_PERAN["sub"])
+    n_maks = (math.floor(math.log(ATAP_CETAK_PT / ACUAN_PT) / ln_langkah)
+              - LANGKAH_PERAN["kode"])
+    return int(min(max(n, n_min), max(n_min, n_maks)))
+
+
 def ukuran_font(lebar_mm, tinggi_mm):
     """Ukuran huruf (pt) per peran untuk label seukuran `lebar × tinggi` mm.
 
-    Skalanya mengikuti dimensi label NYATA (dimensi terkecil yang menentukan,
-    supaya label lebar-pendek tidak memakai huruf yang tak muat tingginya),
-    lalu setiap peran dijepit antara lantai keterbacaan dan langit-langit
-    agar hierarkinya tetap terasa di semua ukuran. MURNI."""
-    t = TARGET_STIKER["besar"]
-    skala = min(float(lebar_mm) / t["w"], float(tinggi_mm) / t["h"])
-    hasil = {}
-    for peran, (acuan, lantai, atap) in _SKALA_FONT.items():
-        hasil[peran] = round(max(lantai, min(atap, acuan * skala)), 2)
-    return hasil
+    Semuanya anak tangga dari SATU deret emas: `ACUAN_PT × φ^((n + s)/8)`
+    dengan `n` rung ukuran stiker dan `s` rung peran. Konsekuensinya —
+    dan inilah yang diminta pemilik — perbandingan antar ukuran stiker SAMA
+    untuk setiap peran: stiker kecil benar-benar stiker besar yang mengecil,
+    bukan tujuh peran yang masing-masing mengecil sendiri-sendiri. MURNI."""
+    n = anak_tangga(lebar_mm, tinggi_mm)
+    return {peran: round(_pt(n + s), 2) for peran, s in LANGKAH_PERAN.items()}
+
+
+def padding_stiker(tinggi_mm):
+    """Inset tepi stiker (mm) — jarak teks & QR dari garis potong.
+
+    Dulu 1,6 mm mati untuk teks dan 1,8 mm untuk QR di SEMUA ukuran: pada
+    stiker besar teks jadi terasa menempel garis sementara QR tidak, dan
+    ketidakserasian itulah yang dikeluhkan pemilik. Kini satu angka untuk
+    keduanya, ikut mengecil bersama stikernya sampai lantai fisik. MURNI."""
+    return max(PAD_MIN_MM, float(tinggi_mm) / (RASIO_EMAS ** 6))
 
 
 def _penggal_kata(kata, lebar, ukur, size):
@@ -210,7 +290,7 @@ def susun_header(nama_instansi, baris2, lebar, tinggi, f_instansi, f_sub,
 
     Kembalikan dict {baris: [...], size, baris2, size2}. MURNI."""
     nama = str(nama_instansi or "").strip()
-    lantai = max(4.6, f_instansi * 0.72)
+    lantai = max(LANTAI_CETAK_PT, f_instansi * 0.72)
     tinggi_sub = (f_sub * 1.25) if str(baris2 or "").strip() else 0.0
     muat_dua_baris = tinggi >= f_instansi * 2.1 + tinggi_sub
 
@@ -230,7 +310,8 @@ def susun_header(nama_instansi, baris2, lebar, tinggi, f_instansi, f_sub,
     teks2, size2 = "", float(f_sub)
     if str(baris2 or "").strip():
         teks2, size2 = muat_satu_baris(str(baris2).strip(), lebar, ukur_biasa,
-                                       f_sub, max(4.2, f_sub * 0.75))
+                                       f_sub,
+                                       max(LANTAI_CETAK_PT, f_sub * 0.75))
     return {"baris": baris, "size": size, "baris2": teks2, "size2": size2}
 
 

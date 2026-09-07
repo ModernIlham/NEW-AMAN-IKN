@@ -7,10 +7,18 @@ modul ini hanya menerjemahkannya menjadi perintah gambar.
 """
 import io
 
-from stiker_utils import (GAP_MM, MARGIN_MM, TARGET_STIKER, bagi_baris,
-                          format_dimensi, grid_optimal, muat_satu_baris,
+from stiker_utils import (GAP_MM, LANTAI_CETAK_PT, MARGIN_MM, RASIO_EMAS,
+                          TARGET_STIKER, bagi_baris, format_dimensi,
+                          grid_optimal, muat_satu_baris, padding_stiker,
                           rencana_badan, susun_header, tinggi_header,
                           ukuran_font)
+
+#: Turun (descender) huruf Helvetica dalam satuan em. Baris NAMA BARANG
+#: menempel dasar stiker, jadi yang harus berjarak dari garis potong adalah
+#: TINTA-nya, bukan garis alasnya: menaruh baseline tepat di `pad` membuat
+#: ekor huruf "g/y/p" menonjol ke bawah dan teks terlihat menempel garis —
+#: persis yang dikeluhkan pemilik pada "Dedicated Cloud Server - NAS Synology".
+TURUN_HELVETICA = 0.212
 
 
 def logo_reader(logo_url: str):
@@ -68,7 +76,13 @@ def gambar_stiker(c, x, y, w, h, ukuran, aset, kop, logo, mm):
     ukur_tebal, ukur_biasa = _pengukur()
     f = ukuran_font(w / mm, h / mm)
     hdr_dasar = tinggi_header(h / mm, ukuran) * mm
-    pad = 1.6 * mm
+    # Inset tepi: SATU angka untuk teks dan QR (dulu 1,6 vs 1,8 mm, sehingga
+    # teks terlihat lebih menempel garis daripada QR), ikut mengecil bersama
+    # stikernya. Inset ATAS badan lebih rapat sebesar 1/φ: di sana sudah ada
+    # garis kepala yang memisahkan, jadi jarak sebesar tepi luar hanya
+    # menyisakan lubang kosong di tengah stiker.
+    pad = padding_stiker(h / mm) * mm
+    pad_atas = pad / RASIO_EMAS
 
     # Kepala boleh TUMBUH (sampai batas) demi nama instansi panjang: dengan
     # kepala setinggi standar, nama sepanjang "Kementerian Pekerjaan Umum dan
@@ -126,12 +140,12 @@ def gambar_stiker(c, x, y, w, h, ukuran, aset, kop, logo, mm):
     c.setLineWidth(0.5)
     c.line(x, hdr_y, x + w, hdr_y)
 
-    # ── Badan: teks kiri, QR kanan dengan GAP AMAN dari garis tepi
-    # (antisipasi meleset di mesin cutting — QR tidak ikut terpotong) ──
-    pad_qr = 1.8 * mm
-    qr_sisi = h - hdr - 2 * pad_qr
-    qr_x = x + w - pad_qr - qr_sisi
-    qr_y = y + pad_qr
+    # ── Badan: teks kiri, QR kanan — KEDUANYA memakai inset yang sama
+    # (antisipasi meleset di mesin cutting; dulu teks 1,6 mm vs QR 1,8 mm,
+    # sehingga teks terlihat menempel garis sementara QR tidak) ──
+    qr_sisi = h - hdr - pad - pad_atas
+    qr_x = x + w - pad - qr_sisi
+    qr_y = y + pad
     lebar_teks = qr_x - x - 2 * pad
 
     kode = str(aset.get("asset_code") or "").strip()
@@ -141,10 +155,10 @@ def gambar_stiker(c, x, y, w, h, ukuran, aset, kop, logo, mm):
     subsub = str(aset.get("_subsub") or aset.get("category") or "").strip()
     nama_brg = str(aset.get("asset_name") or "").strip()
 
-    tinggi_badan = h - hdr - 2 * pad
+    tinggi_badan = h - hdr - pad - pad_atas
     jatah = rencana_badan(tinggi_badan, f)
 
-    ty = y + h - hdr - pad - f["kode"]
+    ty = y + h - hdr - pad_atas - f["kode"]
     label_nup = f"NUP: {nup}" if nup else ""
     lebar_nup = ukur_tebal(label_nup, f["nup"]) if label_nup else 0
     kode_muat, f_kode = muat_satu_baris(
@@ -177,8 +191,9 @@ def gambar_stiker(c, x, y, w, h, ukuran, aset, kop, logo, mm):
         baris_nama = bagi_baris(nama_brg, lebar_teks, ukur_tebal, f["nama"],
                                 jatah["nama"])
         c.setFont("Helvetica-Bold", f["nama"])
-        # Garis dasar baris TERBAWAH: pad dari tepi bawah stiker.
-        ny = y + pad
+        # Garis dasar baris TERBAWAH dinaikkan setinggi ekor huruf, sehingga
+        # yang berjarak `pad` dari garis potong adalah TINTA paling bawah.
+        ny = y + pad + TURUN_HELVETICA * f["nama"]
         for baris in reversed(baris_nama):
             # Tak boleh menabrak sub-sub kelompok di atasnya; kalau ruangnya
             # sudah habis, baris sisanya memang tak digambar — lebih baik
@@ -235,7 +250,7 @@ def gambar_sampel(c, x, y, w, h, ukuran, lw_mm, lh_mm, mm):
     stiker bisa mengukur langsung hasil cetak — bukan untuk ditempel."""
     ukur_tebal, ukur_biasa = _pengukur()
     f = ukuran_font(w / mm, h / mm)
-    pad = 1.6 * mm
+    pad = padding_stiker(h / mm) * mm
     c.saveState()
     c.setDash(2, 2)
     c.setLineWidth(0.8)
@@ -248,7 +263,10 @@ def gambar_sampel(c, x, y, w, h, ukuran, lw_mm, lh_mm, mm):
     # lebih mepet ke garis stiker dibanding label "lebar". Panah MEMBENTANG
     # PENUH dari tepi ke tepi — dulu panah tinggi berhenti di bawah blok teks
     # sehingga tak sampai ujung dan tak jujur menunjukkan satu satuan stiker.
-    s_lab = f["label"]
+    # Stiker CONTOH dipakai untuk MENGUKUR bahan, jadi keterangan garis
+    # ukurnya harus terbaca walau perannya paling bawah di tangga emas —
+    # di sini lantai cetak dikenakan, bukan di tangga (lihat stiker_utils).
+    s_lab = max(f["label"], LANTAI_CETAK_PT)
     sirip = 1.2 * mm
     tepi = 1.4 * mm                     # jarak ujung panah dari garis stiker
     jarak_label = 1.0 * mm              # jarak teks ↔ garis ukur (sama 2 sisi)

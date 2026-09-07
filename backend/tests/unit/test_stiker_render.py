@@ -156,7 +156,7 @@ def test_urutan_badan_KODE_lalu_SUBSUB_lalu_NAMA(ukuran):
     # teks sub-sub ("P.C Unit (Personal Computer)"), sehingga ujinya akan
     # membandingkan sub-sub dengan dirinya sendiri dan lulus tanpa arti.
     nama = _posisi_teks(pdf, "Lenovo")
-    # rect = (kiri, atas, kanan, bawah) — makin ke bawah, ordinatnya mengecil.
+    # rect = (kiri, bawah, kanan, atas) — makin ke bawah, ordinatnya mengecil.
     assert kode[1] > subsub[1], "sub-sub tidak berada di bawah kode"
     assert subsub[1] > nama[1], "nama barang tidak berada di bawah sub-sub"
 
@@ -188,3 +188,136 @@ def test_nama_barang_RATA_KIRI_sejajar_kode():
     kode = _posisi_teks(pdf, "3050102001")
     nama = _posisi_teks(pdf, "Lenovo")
     assert abs(nama[0] - kode[0]) < 1.5, "nama barang tidak rata kiri dgn kode"
+
+
+# ── Jarak teks dari garis potong (permintaan pemilik) ──────────────────────
+#
+# *"sebelah kiri dan yang paling bawah tolong berikan jarak dengan garisnya
+# agar tidak terlalu dekat dan rapi dengan QRCodenya"*
+
+def _kotak_stiker_pertama(ukuran):
+    """(x_kiri, y_bawah, lebar_mm, tinggi_mm) stiker pertama di halaman."""
+    from stiker_utils import MARGIN_MM
+    t = TARGET_STIKER[ukuran]
+    _, _, lw_mm, lh_mm = grid_optimal(A4[0] / mm, A4[1] / mm, t["w"], t["h"])
+    return (MARGIN_MM * mm, A4[1] - MARGIN_MM * mm - lh_mm * mm, lw_mm, lh_mm)
+
+
+#: Nama BERBUNTUT: "g" dan "y" turun di bawah garis alas. Justru inilah yang
+#: dikeluhkan pemilik — "Dedicated Cloud Server - NAS Synology" tampak
+#: menempel garis bawah karena yang ditaruh sejarak inset adalah GARIS ALAS,
+#: bukan tintanya. Nama sependek ini muat satu baris, jadi baris yang diukur
+#: memang baris terbawah.
+ASET_BUNTUT = [{"asset_code": "3050102001", "NUP": "12",
+                "asset_name": "Synology", "_subsub": "P.C Unit",
+                "kode_register": ""}]
+
+_SKALA_RENDER = 4          # px per pt saat halaman dijadikan bitmap
+
+
+def _kotak_qr(ukuran):
+    """(inset_kanan, inset_bawah) KOTAK gambar QR dari garis stiker, dlm pt.
+
+    QR itu gambar vektor, tak terlihat oleh pengekstrak teks, jadi ia diukur
+    dari piksel halaman yang dirender. Dua hal harus dibereskan supaya
+    angkanya berarti:
+
+    1. Garis kepala stiker membentang selebar penuh sampai menyentuh tepi
+       kanan — mengukur seluruh isi kotak berarti mengukur garis itu, bukan
+       QR (dan melaporkan 0,26 mm yang tak ada hubungannya dengan QR).
+    2. Modul gelap terluar QR mundur SATU modul dari kotak gambarnya: zona
+       sunyi yang diwajibkan spesifikasi QR. Membandingkan tinta itu dengan
+       inset teks akan memaafkan inset QR yang meleset sampai selebar satu
+       modul. Lebar modul dipulihkan dari pola pencari kanan-atas — persegi
+       gelap selebar TEPAT tujuh modul — lalu dikurangkan.
+    """
+    np = pytest.importorskip("numpy")
+    pdfium = pytest.importorskip("pypdfium2")
+    data = _render(ASET_BUNTUT, ukuran, sampel_ukuran=False)
+    dok = pdfium.PdfDocument(io.BytesIO(data))
+    gbr = dok[0].render(scale=_SKALA_RENDER).to_pil().convert("L")
+    a = np.array(gbr) < 128
+    x_kiri, y_bawah, lw_mm, lh_mm = _kotak_stiker_pertama(ukuran)
+
+    def px(v):
+        return int(round(v * _SKALA_RENDER))
+
+    x0, x1 = px(x_kiri), px(x_kiri + lw_mm * mm)
+    y0, y1 = px(A4[1] - (y_bawah + lh_mm * mm)), px(A4[1] - y_bawah)
+    tepi = 3                      # px garis kotak stiker (0,8 pt × skala)
+    isi = a[y0 + tepi:y1 - tepi, x0 + tepi:x1 - tepi]
+    lebar = isi.shape[1]
+    penuh = np.nonzero(isi.sum(axis=1) > lebar * 0.9)[0]
+    assert len(penuh), f"garis kepala tak ditemukan pada stiker {ukuran}"
+    badan = isi[penuh[-1] + tepi:, lebar * 2 // 3:]
+    ys, xs = np.nonzero(badan)
+    assert len(xs), f"QR tak tergambar pada stiker {ukuran}"
+
+    baris_atas = badan[ys.min(), :]
+    i, n = int(np.nonzero(baris_atas)[0].max()), 0
+    while i >= 0 and baris_atas[i]:
+        n += 1
+        i -= 1
+    modul = n / 7.0
+    assert modul > 1, f"pola pencari QR tak terbaca pada stiker {ukuran}"
+    kanan = (badan.shape[1] - 1 - xs.max() + tepi - modul) / _SKALA_RENDER
+    bawah = (badan.shape[0] - 1 - ys.max() + tepi - modul) / _SKALA_RENDER
+    return kanan, bawah
+
+
+@pytest.mark.parametrize("ukuran", ["besar", "sedang", "kecil"])
+def test_teks_KIRI_dan_BAWAH_berjarak_penuh_dari_garis_potong(ukuran):
+    """Tinta terbawah & terkiri harus berjarak sepenuh inset dari garis.
+
+    Dulu jaraknya 1,6 mm di kiri dan — karena baris nama ditaruh dengan
+    GARIS ALAS di 1,6 mm — hanya ~0,9 mm di bawah untuk huruf berbuntut.
+    """
+    from stiker_utils import padding_stiker
+    x_kiri, y_bawah, _, lh_mm = _kotak_stiker_pertama(ukuran)
+    pad = padding_stiker(lh_mm) * mm
+    r = _posisi_teks(_render(ASET_BUNTUT, ukuran, sampel_ukuran=False),
+                     "Synology")
+    assert r[0] - x_kiri >= pad * 0.98, "teks terlalu dekat garis KIRI"
+    assert r[1] - y_bawah >= pad * 0.98, "tinta terlalu dekat garis BAWAH"
+
+
+@pytest.mark.parametrize("ukuran", ["besar", "sedang", "kecil"])
+def test_inset_teks_TUMBUH_bersama_ukuran_stiker(ukuran):
+    """Inset bukan angka mati: stiker besar mendapat tepi lebih lega.
+
+    Patokannya 1,6 mm — inset mati yang lama. Stiker besar harus melewatinya
+    dengan jelas, dan tak satu ukuran pun boleh turun di bawahnya.
+    """
+    x_kiri, y_bawah, _, lh_mm = _kotak_stiker_pertama(ukuran)
+    r = _posisi_teks(_render(ASET_BUNTUT, ukuran, sampel_ukuran=False),
+                     "Synology")
+    assert min(r[0] - x_kiri, r[1] - y_bawah) >= 1.6 * mm
+    if ukuran == "besar":
+        assert min(r[0] - x_kiri, r[1] - y_bawah) > 2.4 * mm
+
+
+def test_teks_dan_QR_memakai_INSET_yang_sama():
+    """*"...dan rapi dengan QRCodenya"*.
+
+    Dulu teks memakai 1,6 mm sementara QR 1,8 mm, sehingga pada stiker besar
+    teks terlihat menempel garis sementara QR mengambang di dalam. Keduanya
+    kini satu angka. QR diperiksa lewat GEOMETRI (kotak gambarnya), bukan
+    lewat tinta: modul gelapnya memang mundur satu modul karena zona sunyi
+    yang diwajibkan spesifikasi QR — itu bukan inset yang berbeda.
+    """
+    from stiker_utils import padding_stiker
+    for ukuran in ("besar", "sedang", "kecil"):
+        x_kiri, y_bawah, lw_mm, lh_mm = _kotak_stiker_pertama(ukuran)
+        pad = padding_stiker(lh_mm) * mm
+        r = _posisi_teks(_render(ASET_BUNTUT, ukuran, sampel_ukuran=False),
+                         "Synology")
+        # Sisi bawah kotak QR = pad; sisi bawah tinta teks = pad juga.
+        assert abs((r[1] - y_bawah) - pad) < 0.35 * mm, (
+            f"{ukuran}: inset teks {(r[1] - y_bawah) / mm:.2f} mm "
+            f"≠ inset QR {pad / mm:.2f} mm")
+        # Kotak QR duduk pada inset yang SAMA — bukan sekadar "tak lebih
+        # dekat": inset QR sendiri (dulu 1,8 mm mati) harus ikut bergerak.
+        kanan, bawah = _kotak_qr(ukuran)
+        assert abs(kanan - pad) < 0.2 * mm and abs(bawah - pad) < 0.2 * mm, (
+            f"{ukuran}: inset QR {kanan / mm:.2f}/{bawah / mm:.2f} mm "
+            f"≠ inset teks {pad / mm:.2f} mm")
