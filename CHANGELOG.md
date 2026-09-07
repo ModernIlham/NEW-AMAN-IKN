@@ -18,6 +18,59 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1040] Stiker label: satu deret emas untuk semua ukuran, tepi lebih lega — 2026-09-07
+
+Permintaan pemilik: *"sebelah kiri dan yang paling bawah tolong berikan jarak
+dengan garisnya agar tidak terlalu dekat dan rapi dengan QRCodenya, sesuaikan
+lagi ukuran font di setiap ukuran stiker agar seolah-olah merupakan pengecilan
+penyesuaian dari font di stiker besar hingga ke yang terkecil, saya lihat
+ukuran stiker kecil masih terasa besar ukuran fontnya … mungkin bisa dengan
+Golden Ratio (1,618) atau fibonacci agar terlihat natural semua ukurannya"*.
+
+**Seluruh ukuran huruf kini satu deret emas.** Model lama memberi tiap peran
+(kode barang, nama, sub-sub kelompok, kepala …) acuan, lantai, dan
+langit-langitnya SENDIRI. Akibatnya tiap peran menyentuh lantainya pada saat
+yang berbeda: di stiker kecil semuanya mentok sekaligus di 5,0–6,6 pt,
+hierarkinya rata (kode barang cuma 1,10× nama, di stiker besar 1,28×), dan
+hurufnya menyusut jauh lebih sedikit daripada stikernya sendiri — stiker 0,49×
+tetapi huruf 0,56–0,73×. Itulah sebabnya stiker kecil terasa penuh sesak.
+
+Sekarang setiap ukuran huruf, di setiap ukuran stiker, adalah anak tangga
+`9 pt × φ^(k/8)`. Seperlapan-φ (≈1,062) dipilih karena φ utuh terlalu melompat
+untuk tujuh peran yang harus hidup berdampingan dalam kotak beberapa
+sentimeter; delapan langkah menutup satu putaran emas penuh. Lantai cetak
+dikenakan SEKALI pada anak tangga dasar, bukan per peran — sehingga hierarkinya
+tak bisa lagi rata saat mentok.
+
+Hasilnya perbandingan pengecilan yang **seragam untuk seluruh peran**: sedang
+0,656× dan kecil 0,548× terhadap stiker besar, dengan sebaran antar peran di
+bawah 0,2% (dulu 0,558–0,729 pada stiker kecil). Kode:nama tetap φ^(1/2) ≈
+1,272 di semua ukuran. Stiker besar yang sudah disetujui praktis tak berubah
+(≤4,7%): perbandingannya ternyata sudah nyaris persis duduk di tangga ini.
+Yang benar-benar mengecil adalah stiker kecil — nama barang −18%, sub-sub
+kelompok −20% — dan ruang yang terbebas membuat nama panjang muat tiga baris
+utuh, bukan dua baris berujung "…".
+
+**Tepi kiri & bawah diberi jarak, seinset dengan QR.** Dulu teks memakai 1,6 mm
+mati di semua ukuran sementara QR 1,8 mm, dan baris nama barang ditaruh dengan
+GARIS ALAS-nya di 1,6 mm — sehingga ekor huruf "g/y" menonjol turun dan tinta
+terbawah hanya ~0,9 mm dari garis potong, persis yang terlihat pada "Dedicated
+Cloud Server - NAS Synology". Kini satu inset untuk teks dan QR, ikut mengecil
+bersama stikernya (φ⁶ bagian dari sisi pendek) sampai lantai fisik 1,8 mm —
+toleransi mesin potong itu besaran fisik, bukan perbandingan. Baris terbawah
+ditaruh sesuai TINTA-nya, bukan garis alasnya, jadi jaraknya penuh di semua
+ukuran (besar 1,6 → 2,6 mm). Inset atas badan sengaja lebih rapat sebesar 1/φ:
+di sana sudah ada garis kepala yang memisahkan.
+
+Diverifikasi dengan merender ketiga ukuran ke PDF lalu MENGUKUR jarak tinta ke
+garis, bukan menilai dari mata. Tinta QR diukur dari bitmap halaman — QR itu
+gambar vektor yang tak terlihat oleh pengekstrak teks.
+
+Dua uji lama ikut diganti karena justru mengunci kebijakan yang diminta
+berubah (`min(f.values()) >= 4.8` dan `kode >= 6,6 · nama >= 6,0`); angka-angka
+itu kini dipatok sebagai batas ATAS, sehingga kembalinya lantai per-peran
+menjatuhkan uji.
+
 ## [#1039] Stiker label: header sendiri, sub-sub di bawah kode, nama menempel dasar — 2026-09-07
 
 Permintaan pemilik: *"pada saat mengunduh stiker pada bagian header jangan

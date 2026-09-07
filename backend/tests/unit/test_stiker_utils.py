@@ -76,20 +76,100 @@ def _ukur(teks, size):
     return len(str(teks)) * size * 0.5
 
 
+UKURAN_NYATA = ((98.25, 46.25), (65.0, 30.333), (48.375, 22.375))  # A4
+#: Peran yang benar-benar muncul di stiker yang DITEMPEL. `label` hanya ada di
+#: stiker CONTOH (alat ukur bahan, tak pernah ditempel) dan penggambarnya
+#: memberi lantai cetak sendiri — lihat `gambar_sampel`.
+PERAN_NYATA = ("kode", "instansi", "nup", "nama", "subsub", "sub")
+
+
 def test_hierarki_font_terjaga_di_semua_ukuran():
     """Kode barang selalu paling besar, lalu nama, lalu sub-sub kelompok —
     dulu semuanya menumpuk di ±4,2-4,6 pt pada stiker kecil."""
-    for lebar, tinggi in ((98.25, 46.25), (65.0, 30.5), (48.0, 22.5)):
+    from stiker_utils import LANTAI_CETAK_PT
+    for lebar, tinggi in UKURAN_NYATA:
         f = ukuran_font(lebar, tinggi)
         assert f["kode"] > f["nama"] > f["subsub"] >= f["label"]
         assert f["instansi"] > f["sub"]
-        # lantai keterbacaan cetak: tak ada peran di bawah 4,8 pt
-        assert min(f.values()) >= 4.8
+        # Lantai cetak dikenakan pada peran yang sungguh ditempel.
+        assert min(f[p] for p in PERAN_NYATA) >= LANTAI_CETAK_PT
 
 
-def test_font_stiker_kecil_jauh_lebih_terbaca_dari_ambang_lama():
-    f = ukuran_font(48.0, 22.5)
-    assert f["kode"] >= 6.6 and f["nama"] >= 6.0 and f["subsub"] >= 5.2
+def test_stiker_kecil_hurufnya_IKUT_mengecil():
+    """Keluhan pemilik: *"saya lihat ukuran stiker kecil masih terasa besar
+    ukuran fontnya"*.
+
+    Penyebabnya lantai per-peran: di stiker kecil SEMUA peran mentok lantai
+    masing-masing (kode 6,6 · nama 6,0 · sub-sub 5,5 · sub 5,0), jadi huruf
+    berhenti mengecil jauh sebelum stikernya berhenti mengecil. Angka-angka
+    itulah yang dipatok di sini sebagai batas ATAS: kalau lantai per-peran
+    kembali, uji ini jatuh."""
+    f = ukuran_font(48.375, 22.375)
+    assert f["kode"] < 6.6
+    assert f["nama"] < 6.0
+    assert f["subsub"] < 5.5
+    assert f["sub"] < 5.0
+
+
+def test_pengecilan_antar_ukuran_SERAGAM_untuk_semua_peran():
+    """Permintaan pemilik: stiker kecil harus terlihat *"seolah-olah
+    merupakan pengecilan penyesuaian dari font di stiker besar"*.
+
+    Artinya SATU angka pengecilan untuk seluruh peran. Dulu tiap peran punya
+    angkanya sendiri karena masing-masing menyentuh lantainya pada saat yang
+    berbeda: pada stiker kecil rentangnya 0,558–0,729 — kode barang menyusut
+    44% sementara keterangan ukur cuma 27%, dan itulah yang membuat stiker
+    kecil terlihat sebagai rancangan lain, bukan rancangan yang sama."""
+    besar = ukuran_font(*UKURAN_NYATA[0])
+    for lebar, tinggi in UKURAN_NYATA[1:]:
+        f = ukuran_font(lebar, tinggi)
+        nisbah = [f[p] / besar[p] for p in besar]
+        # Simpangan hanya boleh dari pembulatan 2 desimal, bukan dari
+        # kebijakan yang berbeda antar peran.
+        assert max(nisbah) - min(nisbah) < 0.005, (
+            f"pengecilan tak seragam di {lebar}×{tinggi}: {nisbah}")
+
+
+def test_hierarki_PERSIS_sama_di_semua_ukuran():
+    """Perbandingan kode:nama dulu runtuh dari 1,278 (besar) ke 1,100
+    (kecil) — di stiker kecil kode barang praktis sebesar nama barang,
+    sehingga mata tak lagi menemukan kode lebih dulu."""
+    acuan = None
+    for lebar, tinggi in UKURAN_NYATA:
+        f = ukuran_font(lebar, tinggi)
+        nisbah = f["kode"] / f["nama"]
+        if acuan is None:
+            acuan = nisbah
+        assert abs(nisbah - acuan) < 0.01, f"hierarki bergeser di {lebar}"
+    assert abs(acuan - 1.618033988749895 ** 0.5) < 0.01   # φ^(1/2)
+
+
+def test_setiap_ukuran_huruf_duduk_di_ANAK_TANGGA_emas():
+    """Seluruh ukuran huruf di seluruh ukuran stiker adalah `9 × φ^(k/8)`
+    untuk k bulat — satu deret, bukan tujuh angka yang disetel tangan."""
+    import math
+
+    from stiker_utils import ACUAN_PT, LANGKAH_EMAS
+    for lebar, tinggi in UKURAN_NYATA:
+        for peran, pt in ukuran_font(lebar, tinggi).items():
+            k = math.log(pt / ACUAN_PT) / math.log(LANGKAH_EMAS)
+            assert abs(k - round(k)) < 0.02, (
+                f"{peran} {pt} pt bukan anak tangga emas (k={k:.3f})")
+
+
+def test_padding_mengecil_bersama_stiker_sampai_lantai_fisik():
+    """Inset tepi ikut mengecil, tetapi toleransi mesin potong itu besaran
+    FISIK: stiker sekecil apa pun tetap butuh jarak yang sama dari garis
+    potong, jadi ada lantai yang tak boleh ditembus."""
+    from stiker_utils import PAD_MIN_MM, padding_stiker
+    besar = padding_stiker(46.25)
+    sedang = padding_stiker(30.333)
+    kecil = padding_stiker(22.375)
+    assert besar > sedang >= kecil >= PAD_MIN_MM
+    # Dulu teks memakai 1,6 mm mati di SEMUA ukuran — pada stiker besar itu
+    # membuat teks terlihat menempel garis sementara QR (1,8 mm) tidak.
+    assert besar > 1.6
+    assert padding_stiker(5.0) == PAD_MIN_MM
 
 
 def test_font_tidak_meledak_di_stiker_raksasa():
