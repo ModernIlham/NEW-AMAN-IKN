@@ -9,7 +9,8 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Request, Header,
 import csv as csv_module
 
 from asset_fields import ASSET_SCALAR_FIELDS, import_row_value
-from spasial_utils import terapkan_geo, sisip_geo_ke_update
+from spasial_utils import (terapkan_geo, sisip_geo_ke_update,
+                           normalisasi_koordinat_doc)
 from impor_tanggal import normalkan_tanggal_baris
 from db import db
 from models import AssetCreate
@@ -409,6 +410,9 @@ async def import_assets(request: Request, file: UploadFile = File(...), force_up
             asset_data = {f.name: import_row_value(row, f) for f in ASSET_SCALAR_FIELDS}
             asset_data["asset_code"] = asset_code
             asset_data["activity_id"] = activity_id
+            # Excel Indonesia menuliskan koordinat dengan koma desimal, dan
+            # impor adalah jalur yang PALING sering membawanya masuk.
+            normalisasi_koordinat_doc(asset_data)
 
             _nip = str(asset_data.get("pengguna_nip") or "").strip()
             if wajib_pegawai and _nip and _nip not in nip_terdaftar:

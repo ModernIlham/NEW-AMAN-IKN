@@ -196,6 +196,12 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
         if v == "__clear__":
             clean_updates[k] = ""
 
+    # Koordinat memakai pemisah desimal TITIK, sama seperti jalur tunggal.
+    # Dilakukan SESUDAH sentinel `__clear__` diterjemahkan agar "kosongkan"
+    # tetap berarti kosong, bukan teks "__clear__" yang lolos apa adanya.
+    from spasial_utils import normalisasi_koordinat_doc
+    normalisasi_koordinat_doc(clean_updates)
+
     # Setelan opt-in "wajib pegawai terdaftar" berlaku juga utk ubah massal
     # (temuan #29 — dulu hanya create/PUT/PATCH tunggal yang menegakkan).
     if clean_updates.get("pengguna_nip"):

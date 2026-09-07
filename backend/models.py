@@ -123,6 +123,20 @@ class AssetCreate(BaseModel):
     garansi_jenis: Optional[str] = ""
     barang_bersejarah: Optional[str] = ""
 
+    @field_validator('koordinat_latitude', 'koordinat_longitude', mode='before')
+    @classmethod
+    def koordinat_titik_desimal(cls, v, info):
+        """Koordinat disimpan dengan pemisah desimal TITIK, bukan koma.
+
+        Dipasang pada MODEL, bukan pada tiap endpoint: create, update, dan
+        pembuatan draft aset semuanya melewati model ini, dan jalur yang lupa
+        memanggil pembersih sendiri akan menyimpan koma tanpa satu pun tanda.
+        """
+        from spasial_utils import BATAS_BUJUR, BATAS_LINTANG, normalisasi_koordinat
+        batas = (BATAS_LINTANG if info.field_name == "koordinat_latitude"
+                 else BATAS_BUJUR)
+        return normalisasi_koordinat(v, batas)
+
 class DocumentCheckItemResponse(BaseModel):
     """Response model for document checklist items - includes photo/doc counts for exclude_media mode"""
     name: str

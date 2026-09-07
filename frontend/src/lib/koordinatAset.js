@@ -29,6 +29,32 @@ export function parseKoordinat(v) {
 }
 
 /**
+ * Bentuk SIMPAN koordinat: pemisah desimal TITIK, bukan koma.
+ *
+ * Permintaan pemilik: *"ketika lat lng ditulis menggunakan koma ketika
+ * disimpan, tolong sesuaikan langsung menggunakan titik saja."*
+ *
+ * Pembaca koordinat di sini memang toleran terhadap koma (`parseKoordinat`),
+ * jadi koma yang tersimpan tak pernah tampak sebagai galat — pin tetap muncul
+ * di tempat yang benar. Yang bocor justru di tepi: Excel hasil ekspor menerima
+ * "-1,4001" sebagai teks, dan pembanding "berubah atau tidak" menganggap
+ * "-1,4" dan "-1.4" dua nilai berlainan sehingga menyimpan perubahan yang tak
+ * ada.
+ *
+ * Yang diganti HANYA pemisahnya — angkanya tidak dirender ulang, sebab itu
+ * akan membuang nol di belakang koma yang sengaja diketik petugas. Nilai yang
+ * BUKAN koordinat dikembalikan apa adanya: mengubahnya berarti menebak maksud
+ * orang, dan mengosongkannya membuang isian yang mungkin masih ingin
+ * diperbaiki.
+ */
+export function normalisasiKoordinat(v) {
+  if (v === null || v === undefined) return "";
+  const teks = String(v).trim();
+  if (!teks) return "";
+  return parseKoordinat(teks) === null ? teks : teks.replace(/,/g, ".");
+}
+
+/**
  * Aset punya titik koordinat yang bisa dipetakan?
  *
  * KEDUANYA wajib. Lintang tanpa bujur bukan titik — ia tak bisa dipetakan,

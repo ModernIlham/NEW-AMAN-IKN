@@ -2365,6 +2365,11 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
             raise HTTPException(status_code=409, detail="Permintaan dengan kunci idempotensi ini sedang diproses, coba lagi sebentar")
 
     body = await request.json()
+    # PATCH tak melewati model AssetCreate, jadi normalisasi koordinatnya
+    # dilakukan di sini — tanpa ini, jalur simpan tercepat (lembar edit cepat &
+    # antrean luring) justru satu-satunya yang masih menyimpan koma desimal.
+    from spasial_utils import normalisasi_koordinat_doc
+    normalisasi_koordinat_doc(body)
     existing = await db.assets.find_one({"id": asset_id})
     if not existing:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
