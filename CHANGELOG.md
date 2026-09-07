@@ -18,6 +18,35 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1046] Label peta: lebar eksplisit — panel Leaflet berukuran nol — 2026-09-07
+
+Laporan pemilik: *"label di peta masih muncul sedikit"* — labelnya memendek
+jadi "MERTANI / Sensor…" meski batasnya baru saja dilebarkan ke 240 px.
+
+**Panel tooltip Leaflet (`.leaflet-tooltip-pane`) berukuran NOL** — ia hanya
+wadah berposisi. Untuk elemen berposisi absolut, lebar `auto` dihitung
+shrink-to-fit: `min(max(min-content, tersedia), max-content)`. Karena
+"tersedia" bernilai 0, hasilnya jatuh ke **min-content** — selebar kata
+terpanjang — dan `max-width: 240px` tak pernah kebagian peran. Tooltip bawaan
+Leaflet lolos dari jebakan ini karena memakai `white-space: nowrap`, sehingga
+min-content dan max-content-nya sama.
+
+Perbaikannya satu baris: `width: max-content` (dengan pasangan
+`-webkit-max-content`) memberi lebar teks utuh, lalu `max-width` yang
+memotongnya.
+
+**Verifikasi sebelumnya menguji konteks yang salah, dan itu sebabnya cacat ini
+lolos.** Pratinjau yang dipakai memutuskan angka 240 px menaruh label di ALIRAN
+NORMAL selebar 340 px — di sana "tersedia" besar dan shrink-to-fit memang
+memilih 240. Benar di pratinjau, salah di peta. Cacatnya kini direproduksi
+dulu di tiruan panel berlebar nol, baru diperbaiki, lalu diperiksa ulang
+memakai aturan `index.css` yang sebenarnya dengan aturan Leaflet asli
+disisipkan SESUDAHNYA — persis urutan di produksi.
+
+Penjaganya menagih lebar eksplisit itu, sejajar dengan penjaga spesifisitas
+dari [#1044]: dua jebakan berbeda pada elemen yang sama, keduanya tak
+memunculkan galat apa pun.
+
 ## [#1045] Sub-sub kelompok seukuran nama barang; label peta 240 px — 2026-09-07
 
 Permintaan pemilik: *"sub sub kelompok yang ukuran stiker sedang masih kurang

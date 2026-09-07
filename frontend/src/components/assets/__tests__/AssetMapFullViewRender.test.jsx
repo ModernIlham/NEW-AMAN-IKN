@@ -264,6 +264,24 @@ test("aturan label MENGALAHKAN .leaflet-tooltip, bukan sekadar menuliskannya", (
   }
 });
 
+test("label punya LEBAR EKSPLISIT, bukan mengandalkan shrink-to-fit", () => {
+  /* PENJAGA REGRESI — cacat kedua yang lolos ke produksi pada label ini.
+
+     Panel tooltip Leaflet (`.leaflet-tooltip-pane`) berukuran NOL: ia hanya
+     wadah berposisi. Untuk elemen berposisi absolut, lebar `auto` dihitung
+     shrink-to-fit = `min(max(min-content, tersedia), max-content)`. Karena
+     "tersedia" bernilai 0, hasilnya jatuh ke MIN-CONTENT — selebar kata
+     terpanjang — dan `max-width: 240px` tak pernah kebagian peran. Labelnya
+     memendek jadi "MERTANI / Sensor…" meski batasnya 240 px.
+
+     Pratinjau yang dipakai memverifikasi lebar 240 px itu menaruh label di
+     ALIRAN NORMAL selebar 340 px, tempat "tersedia" besar dan shrink-to-fit
+     memang memilih 240 — benar di sana, salah di peta. Uji ini menagih
+     lebar eksplisitnya supaya jebakan yang sama tak terulang. */
+  const aturan = aturanLabelPeta().isi;
+  expect(aturan).toMatch(/(^|;|\s)width:\s*max-content/);
+});
+
 test("LEBAR_MAKS penata tabrakan = max-width label di CSS", () => {
   /* Yang benar-benar membungkus teks adalah CSS; `LEBAR_MAKS` hanya dipakai
      menaksir kotak tabrakannya. Bila keduanya berbeda, kotak yang dihitung
