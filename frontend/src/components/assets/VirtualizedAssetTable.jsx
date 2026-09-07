@@ -3,8 +3,10 @@ import { unitTerdalam, jalurEselon } from "@/lib/pohonUnit";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Camera, Briefcase, Tag, CreditCard, Trash2, History, ClipboardCheck, Lock, Cloud, CloudOff, Check, RotateCcw, Clock, Loader2, AlertTriangle, BookOpen, User, RefreshCcw, ShieldCheck } from "lucide-react";
 import IkonLokasiAset from "./IkonLokasiAset";
+import IkonStikerBelum from "./IkonStikerBelum";
 import { diDenah, labelBarisLokasi, punyaKoordinat } from "@/lib/koordinatAset";
 import { sisaGaransi } from "../../lib/garansi";
+import { keteranganStiker } from "@/lib/stikerAset";
 import { kelasStatusInventarisasi } from "../../lib/warnaAset";
 import { useSinkronSiman } from "../../lib/simanSync";
 import { berTitikHijau, keteranganPsp } from "../../lib/tandaPsp";
@@ -173,7 +175,7 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
             const a = assets[vr.index];
             const photo = a.thumbnail;
             const hasPhoto = photo && photo.length > 10;
-            const stiker = a.stiker_status === "Sudah Terpasang";
+            const stiker = keteranganStiker(a);
             const docT = a.doc_total || 0;
             const docC = a.doc_checked || 0;
             const docsOk = docT > 0 && docC === docT;
@@ -437,9 +439,35 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
                     {docT > 0 ? `${docC}/${docT}` : '-'}
                   </span>
                 </div>
-                {/* Stiker - xl */}
+                {/* Stiker - xl. Dulu berbunyi "Ya"/"-": "-" tak mengatakan
+                    apakah stikernya belum dipasang atau datanya belum diisi,
+                    dan ukurannya tak muncul sama sekali. Kini IKON + WARNA
+                    membawa statusnya (label utuh hijau ↔ label tercoret abu)
+                    dan satu huruf tebal membawa ukurannya. */}
                 <div className="hidden xl:flex w-10 flex-shrink-0 justify-center">
-                  <span className={`text-[10px] font-medium px-1 py-0.5 rounded-full ${stiker ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>{stiker ? 'Ya' : '-'}</span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span
+                        role="img"
+                        data-testid={`stiker-sel-${a.id}`}
+                        aria-label={`Stiker: ${stiker.status}${stiker.ukuran ? `, ukuran ${stiker.ukuran}` : ''}`}
+                        className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full ${stiker.terpasang ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>
+                        {stiker.terpasang
+                          ? <Tag className="w-3.5 h-3.5 flex-shrink-0" />
+                          : <IkonStikerBelum className="w-3.5 h-3.5 flex-shrink-0" />}
+                        {stiker.huruf && (
+                          <span className="text-[10px] font-bold leading-none">{stiker.huruf}</span>
+                        )}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="left">
+                      <p className="text-xs">
+                        Stiker: {stiker.status}
+                        {stiker.huruf && <> | <b>{stiker.huruf}</b></>}
+                        {!stiker.huruf && stiker.ukuran && <> | <b>{stiker.ukuran}</b></>}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
 
                 {/* INV — single glyph is cryptic on its own, so expose the full

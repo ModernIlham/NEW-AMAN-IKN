@@ -3,6 +3,7 @@ import { unitTerdalam, jalurEselon } from "@/lib/pohonUnit";
 import { Camera, Tag, Images, User, QrCode, CreditCard, Trash2, FileCheck, FileX, Calendar, Lock, ClipboardCheck, Building2, ImageIcon, FileText, ShieldCheck, RefreshCcw as RefreshCcwIcon, Check as CheckIcon } from "lucide-react";
 import IkonLokasiAset from "./IkonLokasiAset";
 import { labelBarisLokasi } from "@/lib/koordinatAset";
+import { keteranganStiker } from "@/lib/stikerAset";
 import TooltipKetuk from "../ui/TooltipKetuk";
 import { authMediaUrl } from "../../lib/mediaUrl";
 import { sisaGaransi } from "../../lib/garansi";
@@ -36,7 +37,8 @@ const extractYear = (dateStr) => {
 
 const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard, onOpenLightbox, isSelected, onToggleSelect, isLockedByOther, lockedByName }) => {
   const invInfo = INV_STATUS[asset.inventory_status] || INV_STATUS["Belum Diinventarisasi"];
-  const stikerOk = asset.stiker_status === "Sudah Terpasang";
+  const stiker = keteranganStiker(asset);
+  const stikerOk = stiker.terpasang;
   const price = formatPrice(asset.purchase_price);
   const photoCount = asset.photo_count || asset.photos?.length || 0;
   const year = extractYear(asset.purchase_date);
@@ -324,8 +326,16 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
         </TooltipKetuk>
 
         {/* Stiker status */}
+        {/* Ukuran stiker ikut disebut: ia dipilih SEBELUM stiker dicetak,
+            jadi "belum terpasang" hampir selalu sudah membawa ukurannya. */}
         <TooltipKetuk side="top" kelasKonten="text-[10px] px-2 py-1"
-          konten={`Stiker: ${asset.stiker_status || "Belum dipasang"}`}>
+          konten={(
+            <>
+              Stiker: {stiker.status}
+              {stiker.huruf && <> | <b>{stiker.huruf}</b></>}
+              {!stiker.huruf && stiker.ukuran && <> | <b>{stiker.ukuran}</b></>}
+            </>
+          )}>
           <button className={`flex-1 min-w-0 min-h-0 flex items-center justify-center py-1.5 rounded-md transition-colors ${stikerOk ? 'text-emerald-500' : 'text-slate-400'}`} onClick={e => e.stopPropagation()} data-testid={`gallery-stiker-${asset.id}`}>
             <QrCode className="w-3.5 h-3.5 flex-shrink-0" />
           </button>
