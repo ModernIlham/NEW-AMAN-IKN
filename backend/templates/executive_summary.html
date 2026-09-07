@@ -167,6 +167,15 @@
 
         /* Info Grid */
         .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+        /* Baris blok halaman Analisis. Jaraknya diberikan baris, bukan margin
+           tiap blok: margin yang menempel pada blok ikut terbawa ke mana pun
+           ia ditempatkan, dan blok pertama sebuah lembar lalu terdorong turun
+           oleh jarak yang tak memisahkan apa pun. `align-items: start` supaya
+           blok pendek tak ikut meregang mengikuti pasangannya. */
+        .blok-baris { display: grid; gap: 14px; align-items: start; margin-bottom: 14px; }
+        .blok-baris:last-child { margin-bottom: 0; }
+        .kondisi-legenda { display: flex; gap: 12px; margin-bottom: 6px; font-size: 7px; color: #64748b; }
+        .kondisi-legenda > div { display: flex; align-items: center; gap: 3px; }
 
         /* ── Linimasa "Progres Inventarisasi" ─────────────────────────────
            Gaya yang SAMA dengan laporan gabungan (laporan_satker_v2.html),
@@ -224,7 +233,11 @@
 
         /* Horizontal Bar Chart */
         .hbar-row { display: flex; align-items: center; gap: 4px; margin-bottom: 5px; }
-        .hbar-label { width: 120px; font-size: 7.5px; color: #334155; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; padding-right: 6px; }
+        /* Tanpa `text-overflow: ellipsis`: potongan "…" membuang justru bagian
+           yang membedakan dua unit berawalan sama, dan pada cetakan tak ada
+           tooltip yang mengembalikannya. Lebarnya dihitung dari isi di Python
+           (`lbl_*_px`) — secukupnya, tak lebih. */
+        .hbar-label { font-size: 7.5px; color: #334155; flex-shrink: 0; text-align: right; padding-right: 6px; white-space: normal; overflow-wrap: break-word; line-height: 1.21; }
         .hbar-track { flex: 1; height: 16px; background: #f1f5f9; border-radius: 3px; overflow: hidden; position: relative; }
         .hbar-fill { height: 100%; border-radius: 3px; display: flex; align-items: center; padding-left: 4px; }
         .hbar-fill-text { font-size: 6.5px; font-weight: 700; color: #fff; white-space: nowrap; }
@@ -396,7 +409,7 @@
 
         /* Stacked bar */
         .sbar-row { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
-        .sbar-label { width: 100px; font-size: 7px; color: #334155; flex-shrink: 0; text-align: right; padding-right: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sbar-label { font-size: 7px; color: #334155; flex-shrink: 0; text-align: right; padding-right: 5px; white-space: normal; overflow-wrap: break-word; line-height: 1.21; }
         .sbar-track { flex: 1; height: 14px; display: flex; overflow: hidden; border-radius: 3px; background: #f1f5f9; }
         .sbar-seg { height: 100%; }
         .sbar-count { width: 30px; font-size: 7px; font-weight: 700; color: #0f172a; text-align: right; }
@@ -409,9 +422,27 @@
         .coverage-pct { font-size: 9px; font-weight: 700; color: #0f172a; width: 40px; text-align: right; }
 
         /* Tim */
-        .tim-section { margin-top: 14px; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; }
+        .tim-section { border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; }
+        .tim-subjudul { font-size: 7.5px; font-weight: 700; color: #92400e; text-transform: uppercase; letter-spacing: 0.5px; margin: 6px 0 4px; }
+        /* `table-layout: fixed` + lebar kolom yang dinyatakan: tanpa itu lebar
+           kolom ditentukan isinya, berubah dari satu laporan ke laporan lain,
+           dan tinggi barisnya mustahil dihitung di muka. Dengan lebar yang
+           tetap, jumlah baris tiap sel dapat dihitung — dan penata halaman
+           tahu persis kapan tabelnya harus dipecah. */
+        .tim-tabel { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 8px; }
+        .tim-tabel td, .tim-tabel th { white-space: normal; overflow-wrap: break-word; }
+        .tim-tabel-pertama { margin-bottom: 8px; }
+        .tim-tabel thead tr { background: #fffbeb; }
+        .tim-tabel th { padding: 3px 5px; text-align: left; font-size: 7px; color: #92400e; border-bottom: 1px solid #fde68a; }
+        .tim-tabel tbody tr { border-bottom: 1px solid #f5f5f4; }
+        .tim-tabel td { padding: 3px 5px; color: #334155; }
+        .tim-tabel td.tebal { font-weight: 600; }
+        .tim-tabel td.ketua { font-weight: 700; color: #92400e; }
+        .tim-tabel-ungu thead tr { background: #faf5ff; }
+        .tim-tabel-ungu th { color: #7c3aed; border-bottom-color: #e9d5ff; }
+        .tim-tabel-ungu tbody tr { border-bottom-color: #f5f3ff; }
         .tim-header { font-size: 8.5px; font-weight: 700; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; display: flex; align-items: center; gap: 5px; }
-        .tim-grid { display: grid; grid-template-columns: repeat({{ [tim|length, 5]|min }}, 1fr); gap: 8px; }
+        .tim-grid { display: grid; gap: 8px; }
         .tim-card { background: #f8fafc; border-radius: 4px; padding: 6px 8px; text-align: center; }
         .tim-card .role { font-size: 7px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
         .tim-card .name { font-size: 8px; font-weight: 600; color: #0f172a; }
@@ -826,160 +857,162 @@
 {% if preview %}<div class="separator">Analisis Lanjutan, Tim & Cakupan</div>{% endif %}
 
 <!-- =================== ANALYSIS, COVERAGE & TIM PAGE =================== -->
+{#- Susunan halaman ini DATANG DARI PYTHON (`rencana_analisis`), tak lagi
+    ditulis tangan di sini. Dulu pasangan bloknya dipatok — tahun|eselon, lalu
+    kondisi selebar penuh, lalu status|cakupan — dan yang tak muat dipotong
+    dengan "…". Akibatnya berlawanan sekaligus: seperlima kertas menganggur di
+    bawah sementara nama unit terpangkas di atas. Kini tinggi tiap blok
+    dihitung dari isinya, blok pendek berbagi baris, dan lembar kedua hanya
+    dibuka bila baris berikutnya sungguh tak muat. -#}
+
+{% macro judul_box(warna, teks) -%}
+<div class="chart-title"><div class="cdot" style="background:{{ warna }}"></div>{{ teks }}</div>
+{%- endmacro %}
+
+{% macro blok_analisis(id, potong=None, lanjutan=false) -%}
+{% if id == 'tahun' %}
+<div class="chart-box">
+    {{ judul_box('#f59e0b', 'Distribusi Per Tahun Perolehan (%d tahun)'|format(year_chart|length)) }}
+    {% for y in year_chart %}
+    <div class="hbar-row">
+        <div class="hbar-label" style="width:{{ lbl_tahun_px }}px;font-weight:700;">{{ y.name }}</div>
+        <div class="hbar-track"><div class="hbar-fill" style="width:{{ y.bar_pct }}%;background:{{ ['#f59e0b','#d97706','#b45309','#fbbf24','#fcd34d'][loop.index0 % 5] }};"><span class="hbar-fill-text">{% if y.bar_pct > 20 %}{{ y.count }}{% endif %}</span></div></div>
+        <div class="hbar-val">{{ y.count }} NUP</div>
+    </div>
+    {% endfor %}
+</div>
+{% elif id == 'eselon' %}
+<div class="chart-box">
+    {{ judul_box('#8b5cf6', 'Distribusi Per %s (%d unit)'|format(eselon_label or 'Eselon I', eselon_chart|length)) }}
+    {% for e in eselon_chart %}
+    <div class="hbar-row">
+        <div class="hbar-label" style="width:{{ lbl_eselon_px }}px;">{{ e.name }}</div>
+        <div class="hbar-track"><div class="hbar-fill" style="width:{{ e.bar_pct }}%;background:{{ ['#8b5cf6','#7c3aed','#6d28d9','#a78bfa','#c4b5fd'][loop.index0 % 5] }};"><span class="hbar-fill-text">{% if e.bar_pct > 20 %}{{ e.count }}{% endif %}</span></div></div>
+        <div class="hbar-val">{{ e.count }} NUP</div>
+    </div>
+    {% endfor %}
+</div>
+{% elif id == 'kondisi' %}
+<div class="chart-box">
+    {{ judul_box('#f59e0b', 'Kondisi Aset Per Kategori (%d teratas)'|format(cond_by_cat|length)) }}
+    <div class="kondisi-legenda">
+        <div><div style="width:8px;height:8px;background:#22c55e;border-radius:2px;"></div>Baik</div>
+        <div><div style="width:8px;height:8px;background:#f59e0b;border-radius:2px;"></div>Rusak Ringan</div>
+        <div><div style="width:8px;height:8px;background:#ef4444;border-radius:2px;"></div>Rusak Berat</div>
+    </div>
+    {% for c in cond_by_cat %}
+    <div class="sbar-row">
+        <div class="sbar-label" style="width:{{ lbl_kondisi_px }}px;">{{ c.name }}</div>
+        <div class="sbar-track">
+            {% if c.baik_pct > 0 %}<div class="sbar-seg" style="width:{{ c.baik_pct }}%;background:#22c55e;"></div>{% endif %}
+            {% if c.rr_pct > 0 %}<div class="sbar-seg" style="width:{{ c.rr_pct }}%;background:#f59e0b;"></div>{% endif %}
+            {% if c.rb_pct > 0 %}<div class="sbar-seg" style="width:{{ c.rb_pct }}%;background:#ef4444;"></div>{% endif %}
+            {% set other_pct = 100 - c.baik_pct - c.rr_pct - c.rb_pct %}
+            {% if other_pct > 0 %}<div class="sbar-seg" style="width:{{ other_pct }}%;background:#e2e8f0;"></div>{% endif %}
+        </div>
+        <div class="sbar-count">{{ c.total }}</div>
+    </div>
+    {% endfor %}
+</div>
+{% elif id == 'status' %}
+<div class="chart-box">
+    {{ judul_box('#0f172a', 'Komposisi Status Inventarisasi') }}
+    <div class="donut-container">
+        <svg viewBox="0 0 120 120" width="100" height="100">
+            {% set circumference = 314.159 %}
+            {% for s in status_pie %}
+            <circle cx="60" cy="60" r="50" fill="none" stroke="{{ s.color }}" stroke-width="18"
+                stroke-dasharray="{{ (s.pct / 100 * circumference)|round(2) }} {{ circumference }}"
+                stroke-dashoffset="{{ (-s.offset / 100 * circumference)|round(2) }}"
+                transform="rotate(-90 60 60)" />
+            {% endfor %}
+            <circle cx="60" cy="60" r="35" fill="#fff"/>
+            <text x="60" y="57" text-anchor="middle" font-size="16" font-weight="800" fill="#0f172a">{{ total_count }}</text>
+            <text x="60" y="70" text-anchor="middle" font-size="7" fill="#64748b" font-weight="500">TOTAL NUP</text>
+        </svg>
+        <div class="donut-legend">
+            {% for s in status_pie %}
+            <div class="donut-legend-item"><div class="donut-legend-dot" style="background:{{ s.color }}"></div><div class="donut-legend-text">{{ s.name }}</div><div class="donut-legend-val">{{ s.count }} ({{ s.pct }}%)</div></div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% elif id == 'cakupan' %}
+<div class="chart-box">
+    {{ judul_box('#0ea5e9', 'Cakupan Pendataan') }}
+    <div class="coverage-bar"><div class="coverage-label">Dokumentasi Foto</div><div class="coverage-track"><div class="coverage-fill" style="width:{{ photo_coverage_pct }}%;background:#3b82f6;"></div></div><div class="coverage-pct">{{ photo_coverage_pct }}%</div></div>
+    <div class="coverage-bar"><div class="coverage-label">Koordinat GPS</div><div class="coverage-track"><div class="coverage-fill" style="width:{{ gps_coverage_pct }}%;background:#10b981;"></div></div><div class="coverage-pct">{{ gps_coverage_pct }}%</div></div>
+    <div class="coverage-bar"><div class="coverage-label">Kelengkapan Dokumen</div><div class="coverage-track"><div class="coverage-fill" style="width:{{ doc_completeness_pct }}%;background:#f59e0b;"></div></div><div class="coverage-pct">{{ doc_completeness_pct }}%</div></div>
+</div>
+{% elif id == 'pj' %}
+<div class="tim-section" style="border-color:#0ea5e9;">
+    <div class="tim-header"><div class="dot" style="background:#0ea5e9;width:7px;height:7px;border-radius:2px;"></div>Penanggung Jawab</div>
+    <div class="tim-grid" style="grid-template-columns:1fr;">
+        <div class="tim-card" style="background:#f0f9ff;text-align:left;">
+            <div class="name" style="font-size:9px;">{{ pj_nama }}</div><div class="role">{{ pj_jabatan or '-' }}</div><div class="nip">NIP. {{ pj_nip or '-' }}</div>
+        </div>
+    </div>
+</div>
+{% elif id == 'peneliti' %}
+<div class="tim-section">
+    <div class="tim-header"><div class="dot" style="background:#0f172a;width:7px;height:7px;border-radius:2px;"></div>Tim Peneliti (Eksternal)</div>
+    <div class="tim-grid" style="grid-template-columns:repeat({{ kolom_kartu_peneliti }}, 1fr);">
+        {% for t in tim %}
+        <div class="tim-card"><div class="role">{{ t.jabatan or '-' }}</div><div class="name">{{ t.nama or '-' }}</div><div class="nip">NIP. {{ t.nip or '-' }}</div></div>
+        {% endfor %}
+    </div>
+</div>
+{% elif id == 'tim_internal' %}
+<div class="tim-section" style="border-color:#f59e0b;">
+    <div class="tim-header"><div class="dot" style="background:#d97706;width:7px;height:7px;border-radius:2px;"></div>Tim Inventarisasi (Internal){% if lanjutan %} (lanjutan){% endif %}</div>
+    {% for t in potong %}
+    <div class="tim-subjudul">{{ t.judul }}{% if t.lanjutan %} (lanjutan){% endif %}</div>
+    {{ tabel_tim(data_tim[t.kunci][t.awal:t.akhir], loop.first) }}
+    {% endfor %}
+</div>
+{% elif id == 'pendukung' %}
+<div class="tim-section" style="border-color:#e9d5ff;">
+    <div class="tim-header"><div class="dot" style="background:#7c3aed;width:7px;height:7px;border-radius:2px;"></div>Tim Pendukung (Eksternal){% if lanjutan %} (lanjutan){% endif %}</div>
+    {% for t in potong %}
+    <table class="tim-tabel tim-tabel-ungu{% if loop.first %} tim-tabel-pertama{% endif %}">
+        <colgroup>{% for w in lebar_kolom_pendukung %}<col style="width:{{ w }}px">{% endfor %}</colgroup>
+        <thead><tr><th>Nama</th><th>Jabatan</th><th>NIP</th><th>Dari Pihak</th></tr></thead>
+        <tbody>{% for m in data_tim[t.kunci][t.awal:t.akhir] %}<tr><td class="tebal">{{ m.nama or '-' }}</td><td>{{ m.jabatan or '-' }}</td><td>{{ m.nip or '-' }}</td><td style="color:#7c3aed;font-weight:500;">{{ m.dari_pihak or '-' }}</td></tr>{% endfor %}</tbody>
+    </table>
+    {% endfor %}
+</div>
+{% endif %}
+{%- endmacro %}
+
+{% macro tabel_tim(anggota, pertama) -%}
+<table class="tim-tabel{% if pertama %} tim-tabel-pertama{% endif %}">
+    <colgroup>{% for w in lebar_kolom_tim %}<col style="width:{{ w }}px">{% endfor %}</colgroup>
+    <thead><tr><th>Peran</th><th>Nama</th><th>Jabatan</th><th>NIP/NIK</th><th>Unit</th></tr></thead>
+    <tbody>{% for t in anggota %}<tr><td class="{% if t.is_ketua %}ketua{% endif %}">{% if t.is_ketua %}Ketua Tim{% else %}Anggota{% endif %}</td><td class="tebal">{{ t.nama or '-' }}</td><td>{{ t.jabatan or '-' }}</td><td>{{ t.nip or '-' }}</td><td>{{ t.unit or '-' }}</td></tr>{% endfor %}</tbody>
+</table>
+{%- endmacro %}
+
+{% for hal in rencana_analisis.halaman %}
+{% if preview %}<div class="separator">Analisis Lanjutan, Tim &amp; Cakupan{% if rencana_analisis.halaman|length > 1 %} ({{ loop.index }}/{{ loop.length }}){% endif %}</div>{% endif %}
 <div class="exec-page">
     <div class="exec-header">
         <div class="exec-header-logo">{% if logo_url %}<img src="{{ logo_url }}" alt="Logo" />{% endif %}</div>
         <div class="exec-header-text">
-            <h1>Analisis Lanjutan, Tim & Cakupan Data</h1>
+            <h1>Analisis Lanjutan, Tim &amp; Cakupan Data{% if rencana_analisis.halaman|length > 1 %} (lanjutan {{ loop.index }}/{{ loop.length }}){% endif %}</h1>
             <p>{{ satker_name }}</p>
         </div>
         <div class="exec-header-meta"><div><strong>SK: {{ nomor_sk }}</strong></div><div>{{ tanggal_cetak }}</div></div>
     </div>
     <div class="exec-body">
-        <div class="info-grid">
-            {% if year_chart|length > 0 %}
-            <div class="chart-box">
-                <div class="chart-title"><div class="cdot" style="background:#f59e0b"></div>Distribusi Per Tahun Perolehan ({{ year_chart|length }} tahun)</div>
-                {% for y in year_chart %}
-                <div class="hbar-row">
-                    <div class="hbar-label" style="width:70px;font-weight:700;">{{ y.name }}</div>
-                    <div class="hbar-track"><div class="hbar-fill" style="width:{{ y.bar_pct }}%;background:{{ ['#f59e0b','#d97706','#b45309','#fbbf24','#fcd34d'][loop.index0 % 5] }};"><span class="hbar-fill-text">{% if y.bar_pct > 20 %}{{ y.count }}{% endif %}</span></div></div>
-                    <div class="hbar-val">{{ y.count }} NUP</div>
-                </div>
-                {% endfor %}
-            </div>
-            {% endif %}
-            {% if eselon_chart|length > 0 %}
-            <div class="chart-box">
-                <div class="chart-title"><div class="cdot" style="background:#8b5cf6"></div>Distribusi Per {{ eselon_label or 'Eselon I' }} ({{ eselon_chart|length }} unit)</div>
-                {% for e in eselon_chart %}
-                <div class="hbar-row">
-                    <div class="hbar-label" style="width:100px;">{{ e.name }}</div>
-                    <div class="hbar-track"><div class="hbar-fill" style="width:{{ e.bar_pct }}%;background:{{ ['#8b5cf6','#7c3aed','#6d28d9','#a78bfa','#c4b5fd'][loop.index0 % 5] }};"><span class="hbar-fill-text">{% if e.bar_pct > 20 %}{{ e.count }}{% endif %}</span></div></div>
-                    <div class="hbar-val">{{ e.count }} NUP</div>
-                </div>
-                {% endfor %}
-            </div>
-            {% endif %}
+        {% for baris in hal %}
+        <div class="blok-baris" style="grid-template-columns:repeat({{ baris.blok|length }}, 1fr);">
+            {% for b in baris.blok %}{{ blok_analisis(b.id, b.potong, b.potong and b.potong[0].lanjutan) }}{% endfor %}
         </div>
-
-        {% if cond_by_cat|length > 0 and cnt_ditemukan > 0 %}
-        <div class="chart-section">
-            <div class="chart-box">
-                <div class="chart-title"><div class="cdot" style="background:#f59e0b"></div>Kondisi Aset Per Kategori (Top {{ cond_by_cat|length }})</div>
-                <div style="display:flex;gap:12px;margin-bottom:6px;">
-                    <div style="display:flex;align-items:center;gap:3px;font-size:7px;color:#64748b;"><div style="width:8px;height:8px;background:#22c55e;border-radius:2px;"></div>Baik</div>
-                    <div style="display:flex;align-items:center;gap:3px;font-size:7px;color:#64748b;"><div style="width:8px;height:8px;background:#f59e0b;border-radius:2px;"></div>Rusak Ringan</div>
-                    <div style="display:flex;align-items:center;gap:3px;font-size:7px;color:#64748b;"><div style="width:8px;height:8px;background:#ef4444;border-radius:2px;"></div>Rusak Berat</div>
-                </div>
-                {% for c in cond_by_cat %}
-                <div class="sbar-row">
-                    <div class="sbar-label">{{ c.name }}</div>
-                    <div class="sbar-track">
-                        {% if c.baik_pct > 0 %}<div class="sbar-seg" style="width:{{ c.baik_pct }}%;background:#22c55e;"></div>{% endif %}
-                        {% if c.rr_pct > 0 %}<div class="sbar-seg" style="width:{{ c.rr_pct }}%;background:#f59e0b;"></div>{% endif %}
-                        {% if c.rb_pct > 0 %}<div class="sbar-seg" style="width:{{ c.rb_pct }}%;background:#ef4444;"></div>{% endif %}
-                        {% set other_pct = 100 - c.baik_pct - c.rr_pct - c.rb_pct %}
-                        {% if other_pct > 0 %}<div class="sbar-seg" style="width:{{ other_pct }}%;background:#e2e8f0;"></div>{% endif %}
-                    </div>
-                    <div class="sbar-count">{{ c.total }}</div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
-
-        {% if status_pie|length > 0 %}
-        <div class="info-grid">
-            <div class="chart-box">
-                <div class="chart-title"><div class="cdot" style="background:#0f172a"></div>Komposisi Status Inventarisasi</div>
-                <div class="donut-container">
-                    <svg viewBox="0 0 120 120" width="100" height="100">
-                        {% set circumference = 314.159 %}
-                        {% for s in status_pie %}
-                        <circle cx="60" cy="60" r="50" fill="none" stroke="{{ s.color }}" stroke-width="18"
-                            stroke-dasharray="{{ (s.pct / 100 * circumference)|round(2) }} {{ circumference }}"
-                            stroke-dashoffset="{{ (-s.offset / 100 * circumference)|round(2) }}"
-                            transform="rotate(-90 60 60)" />
-                        {% endfor %}
-                        <circle cx="60" cy="60" r="35" fill="#fff"/>
-                        <text x="60" y="57" text-anchor="middle" font-size="16" font-weight="800" fill="#0f172a">{{ total_count }}</text>
-                        <text x="60" y="70" text-anchor="middle" font-size="7" fill="#64748b" font-weight="500">TOTAL NUP</text>
-                    </svg>
-                    <div class="donut-legend">
-                        {% for s in status_pie %}
-                        <div class="donut-legend-item"><div class="donut-legend-dot" style="background:{{ s.color }}"></div><div class="donut-legend-text">{{ s.name }}</div><div class="donut-legend-val">{{ s.count }} ({{ s.pct }}%)</div></div>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-            <div class="chart-box">
-                <div class="chart-title"><div class="cdot" style="background:#0ea5e9"></div>Cakupan Pendataan</div>
-                <div class="coverage-bar"><div class="coverage-label">Dokumentasi Foto</div><div class="coverage-track"><div class="coverage-fill" style="width:{{ photo_coverage_pct }}%;background:#3b82f6;"></div></div><div class="coverage-pct">{{ photo_coverage_pct }}%</div></div>
-                <div class="coverage-bar"><div class="coverage-label">Koordinat GPS</div><div class="coverage-track"><div class="coverage-fill" style="width:{{ gps_coverage_pct }}%;background:#10b981;"></div></div><div class="coverage-pct">{{ gps_coverage_pct }}%</div></div>
-                <div class="coverage-bar"><div class="coverage-label">Kelengkapan Dokumen</div><div class="coverage-track"><div class="coverage-fill" style="width:{{ doc_completeness_pct }}%;background:#f59e0b;"></div></div><div class="coverage-pct">{{ doc_completeness_pct }}%</div></div>
-            </div>
-        </div>
-        {% endif %}
-
-        <!-- Penanggung Jawab -->
-        {% if pj_nama %}
-        <div class="tim-section" style="border-color:#0ea5e9;">
-            <div class="tim-header"><div class="dot" style="background:#0ea5e9;width:7px;height:7px;border-radius:2px;"></div>Penanggung Jawab</div>
-            <div class="tim-grid" style="grid-template-columns:1fr;">
-                <div class="tim-card" style="background:#f0f9ff;text-align:left;display:flex;gap:10px;align-items:center;">
-                    <div><div class="name" style="font-size:9px;">{{ pj_nama }}</div><div class="role">{{ pj_jabatan or '-' }}</div><div class="nip">NIP. {{ pj_nip or '-' }}</div></div>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-
-        <!-- Tim Inventarisasi (Internal) -->
-        {% if tim_inti|length > 0 or tim_pembantu|length > 0 %}
-        <div class="tim-section" style="border-color:#f59e0b;">
-            <div class="tim-header"><div class="dot" style="background:#d97706;width:7px;height:7px;border-radius:2px;"></div>Tim Inventarisasi (Internal)</div>
-            {% if tim_inti|length > 0 %}
-            <div style="font-size:7.5px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.5px;margin:6px 0 4px;">Tim Inti (Pelaksana)</div>
-            <table style="width:100%;border-collapse:collapse;font-size:8px;margin-bottom:8px;">
-                <thead><tr style="background:#fffbeb;"><th style="padding:3px 5px;text-align:left;font-size:7px;color:#92400e;border-bottom:1px solid #fde68a;">Peran</th><th style="padding:3px 5px;text-align:left;font-size:7px;color:#92400e;border-bottom:1px solid #fde68a;">Nama</th><th style="padding:3px 5px;text-align:left;font-size:7px;color:#92400e;border-bottom:1px solid #fde68a;">Jabatan</th><th style="padding:3px 5px;text-align:left;font-size:7px;color:#92400e;border-bottom:1px solid #fde68a;">NIP/NIK</th><th style="padding:3px 5px;text-align:left;font-size:7px;color:#92400e;border-bottom:1px solid #fde68a;">Unit</th></tr></thead>
-                <tbody>{% for t in tim_inti %}<tr style="border-bottom:1px solid #f5f5f4;"><td style="padding:3px 5px;font-weight:{% if t.is_ketua %}700{% else %}400{% endif %};color:{% if t.is_ketua %}#92400e{% else %}#334155{% endif %};">{% if t.is_ketua %}Ketua Tim{% else %}Anggota{% endif %}</td><td style="padding:3px 5px;font-weight:600;">{{ t.nama or '-' }}</td><td style="padding:3px 5px;">{{ t.jabatan or '-' }}</td><td style="padding:3px 5px;">{{ t.nip or '-' }}</td><td style="padding:3px 5px;">{{ t.unit or '-' }}</td></tr>{% endfor %}</tbody>
-            </table>
-            {% endif %}
-            {% if tim_pembantu|length > 0 %}
-            <div style="font-size:7.5px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.5px;margin:6px 0 4px;">Tim Pembantu</div>
-            <table style="width:100%;border-collapse:collapse;font-size:8px;">
-                <thead><tr style="background:#fffbeb;"><th style="padding:3px 5px;text-align:left;font-size:7px;color:#92400e;border-bottom:1px solid #fde68a;">Peran</th><th style="padding:3px 5px;text-align:left;font-size:7px;color:#92400e;border-bottom:1px solid #fde68a;">Nama</th><th style="padding:3px 5px;text-align:left;font-size:7px;color:#92400e;border-bottom:1px solid #fde68a;">Jabatan</th><th style="padding:3px 5px;text-align:left;font-size:7px;color:#92400e;border-bottom:1px solid #fde68a;">NIP/NIK</th><th style="padding:3px 5px;text-align:left;font-size:7px;color:#92400e;border-bottom:1px solid #fde68a;">Unit</th></tr></thead>
-                <tbody>{% for t in tim_pembantu %}<tr style="border-bottom:1px solid #f5f5f4;"><td style="padding:3px 5px;font-weight:{% if t.is_ketua %}700{% else %}400{% endif %};color:{% if t.is_ketua %}#92400e{% else %}#334155{% endif %};">{% if t.is_ketua %}Ketua Tim{% else %}Anggota{% endif %}</td><td style="padding:3px 5px;font-weight:600;">{{ t.nama or '-' }}</td><td style="padding:3px 5px;">{{ t.jabatan or '-' }}</td><td style="padding:3px 5px;">{{ t.nip or '-' }}</td><td style="padding:3px 5px;">{{ t.unit or '-' }}</td></tr>{% endfor %}</tbody>
-            </table>
-            {% endif %}
-        </div>
-        {% endif %}
-
-        <!-- Tim Peneliti (Eksternal) -->
-        {% if tim %}
-        <div class="tim-section">
-            <div class="tim-header"><div class="dot" style="background:#0f172a;width:7px;height:7px;border-radius:2px;"></div>Tim Peneliti (Eksternal)</div>
-            <div class="tim-grid">
-                {% for t in tim %}
-                <div class="tim-card"><div class="role">{{ t.jabatan or '-' }}</div><div class="name">{{ t.nama or '-' }}</div><div class="nip">NIP. {{ t.nip or '-' }}</div></div>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
-
-        <!-- Tim Pendukung (Eksternal) -->
-        {% if tim_pendukung %}
-        <div class="tim-section" style="border-color:#e9d5ff;">
-            <div class="tim-header"><div class="dot" style="background:#7c3aed;width:7px;height:7px;border-radius:2px;"></div>Tim Pendukung (Eksternal)</div>
-            <table style="width:100%;border-collapse:collapse;font-size:8px;">
-                <thead><tr style="background:#faf5ff;"><th style="padding:3px 5px;text-align:left;font-size:7px;color:#7c3aed;border-bottom:1px solid #e9d5ff;">Nama</th><th style="padding:3px 5px;text-align:left;font-size:7px;color:#7c3aed;border-bottom:1px solid #e9d5ff;">Jabatan</th><th style="padding:3px 5px;text-align:left;font-size:7px;color:#7c3aed;border-bottom:1px solid #e9d5ff;">NIP</th><th style="padding:3px 5px;text-align:left;font-size:7px;color:#7c3aed;border-bottom:1px solid #e9d5ff;">Dari Pihak</th></tr></thead>
-                <tbody>{% for t in tim_pendukung %}<tr style="border-bottom:1px solid #f5f3ff;"><td style="padding:3px 5px;font-weight:600;">{{ t.nama or '-' }}</td><td style="padding:3px 5px;">{{ t.jabatan or '-' }}</td><td style="padding:3px 5px;">{{ t.nip or '-' }}</td><td style="padding:3px 5px;color:#7c3aed;font-weight:500;">{{ t.dari_pihak or '-' }}</td></tr>{% endfor %}</tbody>
-            </table>
-        </div>
-        {% endif %}
+        {% endfor %}
     </div>
-    <div class="exec-footer"><div>Laporan Eksekutif Hasil Inventarisasi BMN &mdash; {{ satker_name }}</div><div>Analisis & Tim</div></div>
+    <div class="exec-footer"><div>Laporan Eksekutif Hasil Inventarisasi BMN &mdash; {{ satker_name }}</div><div>Analisis &amp; Tim</div></div>
 </div>
+{% endfor %}
 
 
 </body>
