@@ -367,48 +367,65 @@ aside .overflow-x-auto::-webkit-scrollbar-thumb:hover, .category-dropdown-scroll
 .peta-ukur-aktif .leaflet-marker-pane,
 .peta-ukur-aktif .leaflet-popup-pane { pointer-events: none; }
 
-/* ── Label nama aset di peta ───────────────────────────────────────────
-   Permintaan pemilik: nama aset tampil di samping marker, "font putih dan
-   diberikan stroke hitam agar terlihat di segala macam background latar".
+/* LABEL NAMA ASET DI PETA — tulisan telanjang, bukan balon tooltip.
 
-   TANPA `-webkit-text-stroke`. Versi pertama memakainya (2.5px) bersama
-   `paint-order: stroke fill` supaya garis tepinya tergambar DI BELAKANG huruf.
-   Di peramban yang tak menghormati `paint-order` — dan peramban pemilik salah
-   satunya — stroke setebal itu digambar DI ATAS huruf 11px dan menutupinya
-   sampai habis: labelnya menjadi batangan hitam pekat, bukan tulisan. Tak ada
-   galat, tak ada peringatan; hanya nama yang tak dapat dibaca.
+   SELEKTORNYA WAJIB DUA KELAS. `leaflet.css` diimpor DI DALAM komponen peta
+   yang dimuat malas, jadi ia berakhir di chunk CSS terpisah yang disisipkan
+   SETELAH index.css. Dengan satu kelas saja (`.aman-peta-label`),
+   spesifisitasnya seri dengan `.leaflet-tooltip` dan yang belakangan menang —
+   Leaflet mengembalikan background putih, border, bayangan kotak, warna #222,
+   dan `white-space: nowrap`. Yang tersisa dari aturan ini hanyalah
+   `text-shadow`, sehingga hasilnya teks GELAP ber-halo GELAP di atas kartu
+   putih: tebal, berlepotan, dan tak terbaca — persis yang dilaporkan pemilik
+   setelah perbaikan sebelumnya "berhasil" di uji terisolasi tetapi tak pernah
+   berlaku di produksi.
 
-   Yang dipakai sekarang bayangan berlapis: delapan arah sejauh 1px membentuk
-   garis tepi rapat, satu halo lembut 3px melunakkan tepinya. `text-shadow`
-   MENURUT DEFINISI digambar di belakang huruf, jadi ia mustahil menutupi
-   hurufnya sendiri — di peramban mana pun. Diuji dengan merender di atas tiga
-   latar: peta jalan terang, citra satelit rimbun, dan putih polos.
+   Teks GELAP ber-halo PUTIH, mengikuti contoh pemilik (label POI Google Maps).
+   Kedua peta aplikasi ini memakai basemap OpenStreetMap standar yang TERANG,
+   jadi arah kontrasnya ke sana; diperiksa di atas tiga warna OSM Carto yang
+   paling menekan — tanah #f2efe9, hutan #add19e, air #aad3df.
 
-   Rata tengah karena nama panjang membungkus ke baris kedua; rata kiri membuat
-   baris kedua menggantung dan tak lagi terbaca sebagai satu label. */
-.aman-peta-label {
+   Dibatasi DUA BARIS ber-elipsis: label yang mengalir lebih panjang menutupi
+   marker tetangganya, dan kotak tabrakan yang dihitung `lib/petaLabel`
+   mengandaikan dua baris. */
+.leaflet-tooltip.aman-peta-label {
   background: none;
+  background-color: transparent;
   border: 0;
+  border-radius: 0;
   box-shadow: none;
-  padding: 4px 6px;
+  padding: 0;
   margin: 0;
   max-width: 150px;
   white-space: normal;
   overflow-wrap: break-word;
   text-align: center;
-  font: 600 12px/14px system-ui, -apple-system, "Segoe UI", sans-serif;
-  color: #fff;
+  font: 600 12px/14px 'Plus Jakarta Sans Variable', 'Segoe UI', system-ui,
+    sans-serif;
+  color: #1f2937;
+  /* Delapan arah membentuk tepi rapat, dua halo melunakkannya. `text-shadow`
+     menurut definisi digambar DI BELAKANG huruf, jadi ia mustahil menutupi
+     hurufnya sendiri — tak seperti `-webkit-text-stroke`, yang pernah
+     mengubah label ini menjadi batangan pekat di peramban pemilik. */
   text-shadow:
-    -1px -1px 0 #0f172a, 1px -1px 0 #0f172a,
-    -1px 1px 0 #0f172a, 1px 1px 0 #0f172a,
-    0 -1px 0 #0f172a, 0 1px 0 #0f172a,
-    -1px 0 0 #0f172a, 1px 0 0 #0f172a,
-    0 0 3px rgba(15, 23, 42, 0.85);
+    -1.5px -1.5px 0 #fff, 1.5px -1.5px 0 #fff,
+    -1.5px 1.5px 0 #fff, 1.5px 1.5px 0 #fff,
+    0 -1.5px 0 #fff, 0 1.5px 0 #fff,
+    -1.5px 0 0 #fff, 1.5px 0 0 #fff,
+    0 0 3px #fff, 0 0 6px #fff;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   /* Label tak boleh menangkap klik: di peta padat ia menutupi marker
      tetangganya, dan pin yang tertutup label menjadi tak bisa diketuk. */
   pointer-events: none;
 }
-.aman-peta-label::before { display: none; }
+/* Panah balon Leaflet dimatikan untuk SEMUA arah — yang diminta tulisan
+   telanjang, bukan balon. Dua kelas supaya menang atas
+   `.leaflet-tooltip-bottom:before` dan saudara-saudaranya. */
+.leaflet-tooltip.aman-peta-label::before,
+.leaflet-tooltip.aman-peta-label::after { display: none; content: none; }
 
 /* Tablet */
 @media (min-width: 768px) and (max-width: 1023px) {

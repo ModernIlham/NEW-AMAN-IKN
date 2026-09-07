@@ -10,8 +10,8 @@
  * peta, dan tak satu pun galat memberi tahu.
  */
 import {
-  JARAK_DARI_MARKER, LEBAR_MAKS, MAKS_LABEL, SISIPAN_X,
-  kotakLabel, pilihLabelTampil, ukurLabel,
+  JARAK_DARI_MARKER, LEBAR_MAKS, MAKS_BARIS, MAKS_LABEL, SISIPAN_X,
+  SISIPAN_Y, TINGGI_BARIS, kotakLabel, pilihLabelTampil, ukurLabel,
 } from "./petaLabel";
 
 const kotak = (kiri, atas, kanan, bawah) => ({ kiri, atas, kanan, bawah });
@@ -45,11 +45,44 @@ describe("ukurLabel", () => {
 });
 
 describe("kotakLabel", () => {
-  test("label duduk di KANAN marker dan rata tengah terhadapnya", () => {
+  test("label duduk di BAWAH marker dan rata tengah terhadapnya", () => {
+    // Titik jangkar kedua gaya marker (pin 22×22 dan marker foto 46×54)
+    // sama-sama di TENGAH-BAWAH ikonnya, jadi satu penempatan "bawah"
+    // membuat label rapi di tengah pada keduanya — permintaan pemilik.
     const k = kotakLabel(100, 200, "Meja");
-    expect(k.kiri).toBe(100 + JARAK_DARI_MARKER);
-    expect((k.atas + k.bawah) / 2).toBeCloseTo(200, 5);
-    expect(k.kanan).toBeGreaterThan(k.kiri);
+    expect((k.kiri + k.kanan) / 2).toBeCloseTo(100, 5);
+    expect(k.atas).toBe(200 + JARAK_DARI_MARKER);
+    expect(k.bawah).toBeGreaterThan(k.atas);
+  });
+
+  test("kotak SEJALAN dengan yang tergambar, bukan di kanan marker", () => {
+    /* PENJAGA REGRESI. Kotak dulu dihitung di KANAN marker karena tooltipnya
+       memang `direction: "right"`. Setelah label pindah ke bawah, kotak yang
+       tertinggal di kanan membuat penata anti-tindih menyembunyikan label yang
+       sebenarnya lega dan meloloskan label yang sebenarnya bertindih —
+       tabrakan yang dihitungnya bukan tabrakan yang terjadi. */
+    const k = kotakLabel(100, 200, "Meja");
+    expect(k.kiri).toBeLessThan(100);      // membentang ke KIRI titik marker
+    expect(k.atas).toBeGreaterThan(200);   // seluruhnya di BAWAH titik marker
+  });
+
+  test("label paling banyak DUA baris", () => {
+    // Label yang mengalir lebih panjang menutupi marker tetangganya — dan
+    // justru marker itulah yang sedang dicari mata. Sisanya dipotong
+    // ber-elipsis oleh CSS; angka di sini harus sama dengan di index.css.
+    const panjang = "MERTANI Sensor Kualitas Udara (Sensor Kebisingan) GT-2.EF1";
+    expect(ukurLabel(panjang).baris).toBe(MAKS_BARIS);
+    expect(ukurLabel("A".repeat(400)).baris).toBe(MAKS_BARIS);
+    expect(ukurLabel("Meja").baris).toBe(1);
+  });
+
+  test("tinggi kotak ikut terbatas dua baris", () => {
+    const panjang = "A".repeat(400);
+    const pendek = "Meja";
+    expect(ukurLabel(panjang).tinggi)
+      .toBe(MAKS_BARIS * TINGGI_BARIS + SISIPAN_Y * 2);
+    expect(ukurLabel(panjang).tinggi)
+      .toBeGreaterThan(ukurLabel(pendek).tinggi);
   });
 });
 
