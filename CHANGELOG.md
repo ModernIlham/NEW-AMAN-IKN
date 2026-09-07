@@ -18,6 +18,30 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1043] Stiker label: sub-sub kelompok naik di SEMUA ukuran — 2026-09-07
+
+Permintaan pemilik: *"pada sub sub kelompok tambahkan ukurannya sedikit lagi
+sesuai perhitungan yang sebelumnya di semua ukuran stiker."*
+
+Di [#1041] sub-sub kelompok naik satu anak tangga emas, tetapi HANYA pada
+stiker yang lega — stiker kecil ditinggalkan di anak tangga lama karena
+pemilik menilainya sudah pas. Setelah mencetaknya ia meminta kenaikan yang
+sama diberlakukan di semua ukuran, jadi ambang tinggi 26 mm itu dibuang dan
+`subsub` kembali menjadi satu anak tangga tetap (−1) di seluruh keluarga:
+stiker kecil 4,37 → 4,64 pt; besar (8,47) dan sedang (5,56) tak berubah karena
+sudah berada di anak tangga itu.
+
+Efek sampingnya justru menyehatkan: pengecualian pertama terhadap keseragaman
+[#1040] hilang, dan penjaganya kembali menagih SELURUH peran alih-alih
+mengecualikan `subsub`. "Stiker kecil = stiker besar yang mengecil" utuh lagi.
+
+−1 memang batasnya: pada nol anak tangga sub-sub tepat sebesar nama barang dan
+hierarki "nama > sub-sub" hilang. Menaikkannya lagi berarti menurunkan nama
+barang — bukan menaikkan sub-sub.
+
+Satu hal yang dibayar: pada stiker kecil, huruf yang lebih besar memakan satu
+baris jatah sub-sub (dari dua baris menjadi satu). Nama barang tetap tiga baris.
+
 ## [#1042] Status stiker di baris aset: ukuran ikut tampil, ikon label tercoret — 2026-09-07
 
 Permintaan pemilik: *"ketika status stiker belum terpasang akan tetapi sudah
