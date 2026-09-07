@@ -18,6 +18,54 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1039] Stiker label: header sendiri, sub-sub di bawah kode, nama menempel dasar — 2026-09-07
+
+Permintaan pemilik: *"pada saat mengunduh stiker pada bagian header jangan
+gunakan 'Nama Instansi (baris 1 kop)' akan tetapi buatkan sendiri Header buat
+stiker yang bisa disesuaikan di setelan sistem juga. dan di semua ukuran stiker
+… bagian sub sub kelompok tempatkan tepat di bawah kode barangnya langsung dan
+sesuaikan ukurannya agar serasi, dan untuk nama barang buat dari arah paling
+bawah bottom dan align left, yang akan terus ke atas hingga 3 baris saja
+maksimal panjangnya jika lebih gunakan '…'"*
+
+**Kepala stiker punya setelannya sendiri** — `header_stiker`, dapat diisi di
+Pengaturan Sampul LHI (global) maupun Master Satker (per satker). Kop laporan
+memuat nama resmi lengkap ("KEMENTERIAN … REPUBLIK INDONESIA"); pada stiker
+seluas beberapa sentimeter nama sepanjang itu menyusut sampai nyaris tak
+terbaca dan memakan ruang yang dibutuhkan kode barang. Kosong = tetap memakai
+nama instansi, sehingga satker yang belum mengisinya tak berubah apa pun.
+
+**Sub-sub kelompok pindah ke bawah kode barang.** Ia menerangkan KODE, jadi ia
+menempel pada kode — sebelumnya ia terlempar ke bawah nama barang dan terbaca
+seolah keterangan nama, dan pada stiker kecil ia yang pertama hilang. Ukurannya
+dinaikkan sedikit (acuan 7.4 → 7.9 pt) agar terbaca sebagai keterangan kode,
+tetapi tetap di bawah nama barang supaya hierarkinya tak kabur.
+
+**Nama barang menempel DASAR stiker**, rata kiri, tumbuh ke atas, maksimal tiga
+baris — lebih dari itu ditutup elipsis. Di sini elipsis memang yang diminta dan
+memang tepat: stiker ditempel pada barang fisik, dan nama yang mengalir sampai
+enam baris memakan ruang kode barang yang justru jadi kunci pencocokannya.
+Garis dasar yang sama membuat sepuluh stiker berjajar terbaca dalam satu
+sapuan mata, alih-alih naik-turun mengikuti panjang nama.
+
+Diverifikasi dengan MERENDER ketiga ukuran (kecil/sedang/besar) ke PDF lalu
+memeriksa gambarnya, bukan hanya lolos uji.
+
+Dua cacat ikut ketahuan dan diperbaiki:
+
+- **Setelan berisi spasi saja mengosongkan kepala stiker.** `or` menganggap
+  `"   "` bernilai benar, sehingga satu spasi yang tak sengaja tersimpan
+  menghapus judul seluruh stiker satker itu. Tiap calon kini di-`strip` dulu
+  baru dipilih.
+- **Dua uji baru mengukur teks yang salah**: mereka mencari "Personal Computer"
+  yang ternyata juga muncul DI DALAM teks sub-sub ("P.C Unit (Personal
+  Computer)"), sehingga membandingkan sub-sub dengan dirinya sendiri dan lulus
+  tanpa arti. Salah satunya bahkan lolos dari mutasi yang mengembalikan
+  susunan lama; uji itu kini menagih URUTAN kode → sub-sub → nama, yang tak
+  punya celah seperti ambang jarak.
+
+---
+
 ## [#1038] Label peta terbaca: garis tepi dari bayangan, bukan stroke — 2026-09-07
 
 Permintaan pemilik: *"label tidak sesuai dan tidak terlihat"* — disertai

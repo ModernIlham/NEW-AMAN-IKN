@@ -35,6 +35,14 @@ TARGET_STIKER = {
     "kecil": {"w": 45, "h": 22, "header": 6.5},
 }
 
+#: Batas baris badan stiker. Nama barang paling banyak TIGA baris — permintaan
+#: pemilik: *"terus ke atas hingga 3 baris saja maksimal panjangnya jika lebih
+#: gunakan '...'"*. Di sini elipsis memang yang diminta: stiker ditempel di
+#: barang fisik, dan nama yang mengalir sampai enam baris memakan ruang kode
+#: barang yang justru jadi kunci pencocokannya.
+MAKS_BARIS_NAMA = 3
+MAKS_BARIS_SUBSUB = 2
+
 MARGIN_MM = 6.0   # margin halaman
 GAP_MM = 1.5      # celah tipis antar kotak (garis potong)
 
@@ -49,7 +57,11 @@ _SKALA_FONT = {
     "kode":         (11.5,  6.6,   15.0),
     "nup":          (8.8,   5.6,   11.5),
     "nama":         (9.0,   6.0,   12.0),
-    "subsub":       (7.4,   5.2,    9.5),
+    # Sub-sub kelompok kini duduk TEPAT di bawah kode barang sebagai
+    # keterangannya, bukan lagi baris terakhir badan — jadi ia dinaikkan
+    # sedikit agar terbaca pada stiker kecil, tetapi tetap jelas di bawah
+    # nama barang supaya hierarkinya tak kabur.
+    "subsub":       (7.9,   5.5,    9.8),
     "label":        (6.4,   4.8,    8.5),
 }
 
@@ -223,29 +235,37 @@ def susun_header(nama_instansi, baris2, lebar, tinggi, f_instansi, f_sub,
 
 
 def rencana_badan(tinggi_badan, f, sisakan=0.0):
-    """Jatah baris untuk nama barang & sub-sub kelompok pada ruang setinggi
-    `tinggi_badan` pt.
+    """Jatah baris badan stiker: `{"subsub": n, "nama": n}`.
 
-    Kode barang selalu dapat satu baris. Sisanya dibagi: nama barang lebih
-    dulu (maks 3 baris) karena paling dicari petugas saat mencocokkan fisik,
-    lalu sub-sub kelompok (maks 2 baris). Keduanya dijamin minimal satu baris
-    selama ruangnya ada — sub-sub kelompok tidak lagi hilang di stiker kecil.
-    MURNI."""
+    Susunannya (permintaan pemilik): KODE BARANG di atas, SUB-SUB KELOMPOK
+    tepat di bawahnya sebagai keterangan kode itu, lalu NAMA BARANG menempel
+    ke DASAR stiker dan tumbuh ke atas — maksimal tiga baris.
+
+    Sub-sub kelompok menerangkan kode, jadi ia harus menempel pada kode; dulu
+    ia terlempar ke bawah nama barang dan terbaca seolah keterangan nama.
+
+    Nama barang yang menempel dasar membuat seluruh stiker punya garis dasar
+    yang sama: sepuluh stiker berjajar, nama barangnya sejajar semua, dan mata
+    petugas menyusuri satu baris alih-alih naik-turun mengikuti panjang nama.
+
+    Saat ruang mepet, NAMA didahulukan — itu yang dicari petugas saat
+    mencocokkan barang fisik; sub-sub kelompok mengalah lebih dulu. MURNI."""
     sisa = float(tinggi_badan) - float(sisakan) - f["kode"] * 1.32
     tinggi_nama = f["nama"] * 1.18
     tinggi_sub = f["subsub"] * 1.16
     if sisa < tinggi_nama:
         return {"nama": 1 if sisa > 0 else 0, "subsub": 0}
-    # satu baris untuk masing-masing lebih dulu, baru tambahan untuk nama
+    # Satu baris nama dulu (yang paling dicari), baru satu baris sub-sub,
+    # baru sisanya dibagi: nama sampai tiga baris, sub-sub sampai dua.
     n_nama, n_sub = 1, 0
     sisa -= tinggi_nama
     if sisa >= tinggi_sub:
         n_sub = 1
         sisa -= tinggi_sub
-    while n_nama < 3 and sisa >= tinggi_nama:
+    while n_nama < MAKS_BARIS_NAMA and sisa >= tinggi_nama:
         n_nama += 1
         sisa -= tinggi_nama
-    while n_sub < 2 and n_sub >= 1 and sisa >= tinggi_sub:
+    while 1 <= n_sub < MAKS_BARIS_SUBSUB and sisa >= tinggi_sub:
         n_sub += 1
         sisa -= tinggi_sub
     return {"nama": n_nama, "subsub": n_sub}

@@ -33,6 +33,8 @@ const ESELON_SATKER = [
 const FORM_KOSONG = {
   kode_satker: "", nama_satker: "", nama_unit_organisasi: "", nama_sub_unit: "",
   kode_satker_lengkap: "",
+  // Judul kepala stiker label; "" = ikut nama instansi kop.
+  header_stiker: "",
   // Tingkat eselon yang DIDUDUKI satker ini; "" = Eselon I (perilaku lama).
   // Menentukan di tingkat mana pohon unit kerjanya berpuncak.
   eselon_satker: "",
@@ -398,6 +400,7 @@ export function SatkerPanel({ user }) {
                 {[["nama_unit_organisasi", "Unit organisasi (baris 2 kop)"],
                   ["nama_sub_unit", "Sub-unit (baris 3 kop — default: nama satker)"],
                   ["kode_satker_lengkap", "Kode satker lengkap ±20 digit (utk stiker label, cth. 126011600691778000KP)"],
+                  ["header_stiker", "Header stiker label (baris 1 stiker — kosong: ikut Nama Instansi)"],
                   ["alamat", "Alamat Instansi (boleh beberapa baris — tekan Enter)", true],
                   ["tempat_laporan", "Tempat laporan (kota ttd)"],
                   ["telepon", "Telepon"], ["email", "Email"]].map(([k, label, multiline]) => (

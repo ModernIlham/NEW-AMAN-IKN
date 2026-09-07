@@ -58,7 +58,13 @@ def test_peta_kop_konsisten():
                                     "subjudul_laporan", "tahun_anggaran",
                                     "catatan_kaki",
                                     # Kebijakan penyajian nilai perolehan
-                                    "nilai_dokumen"}
+                                    "nilai_dokumen",
+                                    # Judul kepala STIKER LABEL — setelan
+                                    # tersendiri, bukan `nama_instansi`: nama
+                                    # resmi yang panjang menyusut sampai tak
+                                    # terbaca pada stiker seluas beberapa
+                                    # sentimeter.
+                                    "header_stiker"}
     # Setiap field kop per-satker WAJIB juga terdaftar di FIELD_KOP_SATKER
     # (routes/satker.py) — kalau tidak, nilainya tak pernah tersimpan.
     from routes.satker import FIELD_KOP_SATKER
