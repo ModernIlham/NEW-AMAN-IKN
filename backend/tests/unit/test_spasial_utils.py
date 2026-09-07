@@ -720,3 +720,101 @@ def test_akurasi_monoton_tak_ada_celah_membalik():
     nilai = [0, 1, 8, 29.9, 30, 30.1, 100, 1000, 99999, 100000, 100001, 1e6, 1e12]
     hasil = [su.boleh_auto_ruangan(v) for v in nilai]
     assert hasil == sorted(hasil, reverse=True), list(zip(nilai, hasil))
+
+
+# ── Bentuk SIMPAN koordinat: pemisah desimal TITIK ──────────────────────
+#
+# Permintaan pemilik: *"ketika lat lng ditulis menggunakan koma ketika
+# disimpan, tolong sesuaikan langsung menggunakan titik saja."*
+#
+# Koma yang tersimpan tak pernah menampakkan diri sebagai galat — pembaca
+# koordinat di aplikasi ini toleran, jadi pin tetap muncul di tempat yang
+# benar. Yang bocor di tepi: Excel hasil ekspor menerimanya sebagai TEKS, dan
+# pembanding "berubah atau tidak" menganggap "-1,4" dan "-1.4" dua nilai
+# berlainan sehingga menyimpan perubahan yang tak ada.
+
+class TestNormalisasiKoordinat:
+    def test_koma_desimal_menjadi_titik(self):
+        from spasial_utils import normalisasi_koordinat
+        assert normalisasi_koordinat("-1,4001") == "-1.4001"
+        assert normalisasi_koordinat("116,700100") == "116.700100"
+
+    def test_yang_sudah_bertitik_tak_diusik(self):
+        from spasial_utils import normalisasi_koordinat
+        assert normalisasi_koordinat("-1.4001") == "-1.4001"
+
+    def test_nol_di_belakang_koma_DIPERTAHANKAN(self):
+        """Angkanya tak dirender ulang lewat `float`.
+
+        "-1,40010" yang menjadi "-1.4001" mengubah bentuk yang sengaja diketik
+        petugas — dan pada koordinat, digit terakhir itu ketelitian ~1 cm.
+        """
+        from spasial_utils import normalisasi_koordinat
+        assert normalisasi_koordinat("-1,40010") == "-1.40010"
+
+    def test_kosong_tetap_kosong(self):
+        from spasial_utils import normalisasi_koordinat
+        for v in ("", "   ", None):
+            assert normalisasi_koordinat(v) == ""
+
+    def test_spasi_tepi_dibuang(self):
+        from spasial_utils import normalisasi_koordinat
+        assert normalisasi_koordinat("  -1,4001  ") == "-1.4001"
+
+    def test_yang_BUKAN_koordinat_dikembalikan_apa_adanya(self):
+        """Mengubahnya berarti menebak maksud orang; mengosongkannya membuang
+        isian yang mungkin masih ingin diperbaiki pemiliknya."""
+        from spasial_utils import normalisasi_koordinat
+        assert normalisasi_koordinat("belum diukur") == "belum diukur"
+        assert normalisasi_koordinat("999,9") == "999,9"
+
+    def test_batas_lintang_dan_bujur_BERBEDA(self):
+        """Lintang mentok 90; nilai 116 yang sah sebagai bujur bukan lintang.
+
+        Batas yang salah membuat bujur yang tertulis di kolom lintang ikut
+        dirapikan, sehingga kekeliruan tukar-sumbu justru jadi lebih sulit
+        dikenali daripada bila komanya dibiarkan.
+        """
+        from spasial_utils import BATAS_LINTANG, normalisasi_koordinat
+        assert normalisasi_koordinat("116,7", BATAS_LINTANG) == "116,7"
+        assert normalisasi_koordinat("116,7") == "116.7"
+
+    def test_angka_bukan_string_ikut_dirapikan(self):
+        from spasial_utils import normalisasi_koordinat
+        assert normalisasi_koordinat(-1.4001) == "-1.4001"
+
+
+class TestNormalisasiKoordinatDoc:
+    def test_kedua_sumbu_dirapikan(self):
+        from spasial_utils import normalisasi_koordinat_doc
+        d = {"koordinat_latitude": "-1,4001", "koordinat_longitude": "116,7001"}
+        assert normalisasi_koordinat_doc(d) is d
+        assert d == {"koordinat_latitude": "-1.4001",
+                     "koordinat_longitude": "116.7001"}
+
+    def test_kunci_yang_TIDAK_dikirim_tak_disisipkan(self):
+        """Pada PATCH sebagian, menyisipkan kunci yang tak dikirim berarti
+        menimpa koordinat tersimpan dengan kosong — aset kehilangan titiknya
+        hanya karena namanya diperbaiki."""
+        from spasial_utils import normalisasi_koordinat_doc
+        d = {"asset_name": "Meja"}
+        normalisasi_koordinat_doc(d)
+        assert d == {"asset_name": "Meja"}
+
+    def test_hanya_satu_sumbu_pun_dilayani(self):
+        from spasial_utils import normalisasi_koordinat_doc
+        d = {"koordinat_latitude": "-1,4"}
+        normalisasi_koordinat_doc(d)
+        assert d == {"koordinat_latitude": "-1.4"}
+
+    def test_lintang_memakai_batas_LINTANG(self):
+        # Lewat dokumen, tiap sumbu memakai batasnya sendiri.
+        from spasial_utils import normalisasi_koordinat_doc
+        d = {"koordinat_latitude": "116,7", "koordinat_longitude": "116,7"}
+        normalisasi_koordinat_doc(d)
+        assert d["koordinat_latitude"] == "116,7"     # bukan lintang yang sah
+        assert d["koordinat_longitude"] == "116.7"
+
+    def test_bukan_dict_tak_meruntuhkan(self):
+        from spasial_utils import normalisasi_koordinat_doc
+        assert normalisasi_koordinat_doc(None) is None

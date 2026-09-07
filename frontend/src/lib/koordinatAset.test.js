@@ -1,4 +1,6 @@
-import { labelKoordinat, parseKoordinat, punyaKoordinat } from "./koordinatAset";
+import {
+  labelKoordinat, normalisasiKoordinat, parseKoordinat, punyaKoordinat,
+} from "./koordinatAset";
 
 describe("parseKoordinat", () => {
   test("angka biasa terbaca", () => {
@@ -125,4 +127,50 @@ test("aset tanpa keterangan lokasi apa pun bertekskan kosong", () => {
   expect(labelBarisLokasi({})).toBe("");
   expect(labelBarisLokasi(null)).toBe("");
   expect(labelBarisLokasi({ location: "   " })).toBe("");
+});
+
+
+// ── Bentuk SIMPAN: pemisah desimal TITIK ─────────────────────────────────
+//
+// Permintaan pemilik: *"ketika lat lng ditulis menggunakan koma ketika
+// disimpan, tolong sesuaikan langsung menggunakan titik saja."*
+
+describe("normalisasiKoordinat", () => {
+  test("koma desimal menjadi titik", () => {
+    expect(normalisasiKoordinat("-1,4001")).toBe("-1.4001");
+    expect(normalisasiKoordinat("116,700100")).toBe("116.700100");
+  });
+
+  test("yang sudah bertitik tak diusik", () => {
+    expect(normalisasiKoordinat("-1.4001")).toBe("-1.4001");
+  });
+
+  test("nol di belakang koma DIPERTAHANKAN", () => {
+    // Angkanya tidak dirender ulang lewat parseFloat: "-1,40010" yang menjadi
+    // "-1.4001" mengubah bentuk yang sengaja diketik petugas, dan pada
+    // koordinat, digit terakhir itu ketelitian ~1 cm.
+    expect(normalisasiKoordinat("-1,40010")).toBe("-1.40010");
+  });
+
+  test("kosong tetap kosong", () => {
+    for (const v of ["", "   ", null, undefined]) {
+      expect(normalisasiKoordinat(v)).toBe("");
+    }
+  });
+
+  test("spasi tepi dibuang", () => {
+    expect(normalisasiKoordinat("  -1,4001  ")).toBe("-1.4001");
+  });
+
+  test("yang BUKAN koordinat dikembalikan apa adanya", () => {
+    // Mengubahnya berarti menebak maksud orang; mengosongkannya membuang
+    // isian yang mungkin masih ingin diperbaiki pemiliknya.
+    expect(normalisasiKoordinat("belum diukur")).toBe("belum diukur");
+    expect(normalisasiKoordinat("999,9")).toBe("999,9");
+  });
+
+  test("nol adalah koordinat sah, bukan dianggap kosong", () => {
+    expect(normalisasiKoordinat("0")).toBe("0");
+    expect(normalisasiKoordinat(0)).toBe("0");
+  });
 });

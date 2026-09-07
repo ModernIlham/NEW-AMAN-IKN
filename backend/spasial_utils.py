@@ -48,6 +48,55 @@ def parse_koordinat(nilai, batas: float = BATAS_BUJUR) -> Optional[float]:
     return angka if abs(angka) <= batas else None
 
 
+def normalisasi_koordinat(nilai, batas: float = BATAS_BUJUR) -> str:
+    """Bentuk SIMPAN koordinat: pemisah desimal TITIK, bukan koma.
+
+    Permintaan pemilik: *"ketika lat lng ditulis menggunakan koma ketika
+    disimpan, tolong sesuaikan langsung menggunakan titik saja."*
+
+    Pembaca koordinat di aplikasi ini memang toleran terhadap koma desimal
+    (`parse_koordinat`), jadi koma yang tersimpan tak pernah menampakkan diri
+    sebagai galat — pin tetap muncul di tempat yang benar. Yang bocor justru di
+    tepi: Excel hasil ekspor menerima "-1,4001" sebagai TEKS (atau, pada
+    setelan wilayah lain, sebagai angka yang berbeda), baris koordinat di
+    laporan tercetak "-1,4001, 116,7001" yang mustahil dibaca sebagai sepasang
+    angka, dan pembanding "berubah atau tidak" menganggap "-1,4" dan "-1.4"
+    dua nilai berlainan sehingga menyimpan perubahan yang tak ada.
+
+    Yang diganti HANYA pemisahnya. Angkanya tidak dirender ulang lewat `float`:
+    itu akan membuang nol di belakang koma yang sengaja diketik petugas
+    ("-1,40010" → "-1.4001") dan mengubah bentuk yang mereka kenali.
+
+    Nilai yang BUKAN koordinat dikembalikan apa adanya — mengosongkannya
+    diam-diam membuang isian yang mungkin masih ingin diperbaiki pemiliknya,
+    dan menggantinya berarti menebak maksud orang.
+    """
+    if nilai is None:
+        return ""
+    teks = str(nilai).strip()
+    if not teks:
+        return ""
+    if parse_koordinat(teks, batas) is None:
+        return teks
+    return teks.replace(",", ".")
+
+
+def normalisasi_koordinat_doc(doc: dict) -> dict:
+    """Rapikan `koordinat_latitude`/`koordinat_longitude` pada satu dokumen.
+
+    Hanya kunci yang MEMANG ADA yang disentuh: pada PATCH sebagian, memasukkan
+    kunci yang tak dikirim berarti menimpa koordinat tersimpan dengan kosong.
+    Kembalikan `doc` yang sama (diubah di tempat) agar mudah dirantai.
+    """
+    if not isinstance(doc, dict):
+        return doc
+    for kunci, batas in (("koordinat_latitude", BATAS_LINTANG),
+                         ("koordinat_longitude", BATAS_BUJUR)):
+        if kunci in doc:
+            doc[kunci] = normalisasi_koordinat(doc[kunci], batas)
+    return doc
+
+
 def parse_lintang(nilai) -> Optional[float]:
     """Lintang valid (-90..90) atau None."""
     return parse_koordinat(nilai, BATAS_LINTANG)

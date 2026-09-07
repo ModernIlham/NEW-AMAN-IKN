@@ -18,6 +18,51 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1037] Koordinat disimpan dengan titik desimal, bukan koma — 2026-09-07
+
+Permintaan pemilik: *"ketika lat lng ditulis menggunakan koma ketika disimpan,
+tolong sesuaikan langsung menggunakan titik saja."*
+
+Koma yang tersimpan **tak pernah menampakkan diri sebagai galat**. Pembaca
+koordinat di aplikasi ini memang toleran terhadap koma desimal
+(`parse_koordinat`, `parseKoordinat`), jadi pin tetap muncul di tempat yang
+benar dan tak satu pun layar mengeluh. Yang bocor justru di tepi:
+
+- **Excel hasil ekspor** menerima "-1,4001" sebagai TEKS — atau, pada setelan
+  wilayah lain, sebagai angka yang berbeda.
+- **Baris koordinat di laporan** tercetak "-1,4001, 116,7001" — mustahil dibaca
+  sebagai sepasang angka.
+- **Pembanding "berubah atau tidak"** menganggap "-1,4" dan "-1.4" dua nilai
+  berlainan, sehingga form menyimpan perubahan yang sebenarnya tak ada.
+
+Perapiannya dipasang di SELURUH jalur tulis, bukan satu: validator pada model
+`AssetCreate` (menangkap create, update, dan pembuatan draft), lalu PATCH aset,
+Ubah Massal, dan impor berkas yang masing-masing tak melewati model itu. Satu
+jalur yang terlewat sudah cukup — dan yang terlewat justru akan jadi yang
+paling sering dipakai, sebab jalur cepat (lembar edit, impor Excel) adalah yang
+paling jarang diingat.
+
+Di form aset, komanya dirapikan **saat diketik**: petugas yang mengetik
+"-1,4001" langsung melihat "-1.4001" di kolomnya, sehingga yang tampak di layar
+sama dengan yang tersimpan.
+
+Dua hal yang sengaja TIDAK dilakukan:
+
+- **Angkanya tak dirender ulang lewat `float`.** Itu akan membuang nol di
+  belakang koma yang sengaja diketik petugas ("-1,40010" → "-1.4001") — dan
+  pada koordinat, digit terakhir itu ketelitian sekitar satu sentimeter.
+- **Nilai yang bukan koordinat dibiarkan apa adanya.** Mengubahnya berarti
+  menebak maksud orang; mengosongkannya membuang isian yang mungkin masih
+  ingin diperbaiki pemiliknya. Batas tiap sumbu pun dipakai sendiri-sendiri:
+  "116,7" dirapikan sebagai bujur tetapi TIDAK sebagai lintang, supaya
+  kekeliruan tukar-sumbu tak jadi makin sulit dikenali.
+
+Catatan: baris yang tersimpan SEBELUM perubahan ini masih membawa koma sampai
+ia disunting berikutnya. Pembacanya tetap toleran, jadi tak ada yang rusak —
+tetapi ekspornya masih ikut membawa koma itu.
+
+---
+
 ## [#1036] Label nama aset di peta — 2026-09-07
 
 Permintaan pemilik: *"pada halaman peta tambahkan fitur label yang menampilkan

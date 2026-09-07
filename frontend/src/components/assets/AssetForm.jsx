@@ -43,6 +43,7 @@ import { reserveDummyNup as reserveDummyNupLib } from "../../lib/dummyNup";
 import { statusInventarisasiOtomatis, autoInventarisasiEnabled } from "../../lib/inventoryStatus";
 import { terapkanHeaderSatker } from "../../lib/satkerAktif";
 import { keteranganPsp } from "../../lib/tandaPsp";
+import { normalisasiKoordinat } from "../../lib/koordinatAset";
 
 // ============================================================================
 // INVENTORY CLASSIFICATION INFO DATA (SE 17/SE/M/2024)
@@ -1261,7 +1262,12 @@ const AssetForm = memo(({
 
   const handleInputChange = useCallback(e => {
     const { name, value } = e.target;
-    setFormData(p => ({ ...p, [name]: value }));
+    // Koordinat dirapikan SAAT DIKETIK, bukan hanya saat disimpan: petugas yang
+    // mengetik "-1,4001" harus segera melihat "-1.4001" di kolomnya, supaya
+    // yang tampak di layar sama dengan yang tersimpan.
+    const isi = (name === "koordinat_latitude" || name === "koordinat_longitude")
+      ? normalisasiKoordinat(value) : value;
+    setFormData(p => ({ ...p, [name]: isi }));
     clearFieldError(name);
   }, [clearFieldError]);
 
