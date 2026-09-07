@@ -16,6 +16,7 @@ import inventarisasi_stempel as stempel_inv
 import laporan_filter as lfil
 import laporan_tataletak as ltl
 import laporan_jenjang as ljj
+import laporan_blok as lbk
 import laporan_kolom as lkl
 import laporan_linimasa as llm
 import kodefikasi_utils as kod
@@ -5575,7 +5576,12 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
 
     # Eselon chart
     e1_max = max((e[1]["count"] for e in eselon1_breakdown_sorted), default=1)
-    eselon_chart = [{"name": e[0][:25], "count": e[1]["count"], "value": e[1]["value"], "bar_pct": round(e[1]["count"] / e1_max * 100)} for e in eselon1_breakdown_sorted[:10]]
+    # Nama unit DIBAWA UTUH. Dulu dipotong 25 huruf, dan potongan itu membuang
+    # justru bagian yang membedakan: "Kedeputian Bidang Transformasi Hijau dan
+    # Digital" dan "Kedeputian Bidang Transparansi" sama-sama menjadi
+    # "Kedeputian Bidang Trans…". Lebar kolom labelnya kini dihitung dari isi
+    # (lihat `lbl_eselon_px`), jadi tak ada lagi yang perlu dipotong.
+    eselon_chart = [{"name": e[0], "count": e[1]["count"], "value": e[1]["value"], "bar_pct": round(e[1]["count"] / e1_max * 100)} for e in eselon1_breakdown_sorted[:10]]
 
     # Distribusi per PENGGUNA (key = NIP/NIK, tampil nama; terhubung master pegawai)
     # Scope satker (REVIEW-9 R15): Master Pegawai per-satker. Tanpa ini seluruh
@@ -5678,12 +5684,18 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
             cond_cumulative += p
 
     # Condition by top categories (cross-analysis)
+    #: Cacah awal daftar kondisi per kategori. Bukan batas akhir: bila lembar
+    #: analisisnya masih menyisakan ruang, daftarnya dipanjangkan sampai ruang
+    #: itu terpakai (lihat `_ANALISIS_KONDISI_MAKS`).
+    _KONDISI_AWAL = 8
     cond_by_cat = []
-    for cat_name, cat_data in cat_breakdown_sorted[:8]:
+    for cat_name, cat_data in cat_breakdown_sorted[:_KONDISI_AWAL]:
         conditions = cat_data.get("conditions", {})
         total_cat = cat_data["count"]
         cond_by_cat.append({
-            "name": cat_name[:20],
+            # Nama kategori DIBAWA UTUH — dulu dipotong 20 huruf, sehingga
+            # "Alat Laboratorium Pendidikan" tercetak "Alat Laboratorium Pe".
+            "name": cat_name,
             "total": total_cat,
             "baik": conditions.get("Baik", 0),
             "rr": conditions.get("Rusak Ringan", 0),
@@ -5692,6 +5704,147 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
             "rr_pct": round(conditions.get("Rusak Ringan", 0) / total_cat * 100) if total_cat > 0 else 0,
             "rb_pct": round(conditions.get("Rusak Berat", 0) / total_cat * 100) if total_cat > 0 else 0,
         })
+
+    # ── Tata letak halaman "Analisis Lanjutan, Tim & Cakupan Data" ─────
+    #
+    # Permintaan pemilik: *"jadikan smart semua dalam mengatur posisinya
+    # masing-masing menyesuaikan bagaimana caranya berbagi dan mengalah untuk
+    # menampilkan informasi sebaik mungkin tanpa harus melanjutkan ke halaman
+    # kedua dengan memaksimalkan A4 yang ada tanpa harus menggunakan '…'."*
+    #
+    # Tiga hal dihitung di sini, dan ketiganya dulu dipatok di templat:
+    # lebar kolom label (dari isinya), tinggi tiap blok (dari cacah barisnya),
+    # dan pasangan blok yang berbagi baris (dari tingginya).
+    _KAR_LABEL_7_5 = lkl.LEBAR_KAR_7PX * 7.5 / 7.0   # huruf label 7.5px
+
+    def _lebar_label(nama, lebar_baris, sisa_tetap, kar, bagian=0.62):
+        """Lebar kolom label: secukupnya isi, tak melewati jatah barisnya.
+
+        Dipatok 100px, nama unit yang panjang terpotong; dipatok selebar nama
+        terpanjang, palangnya tinggal secuil dan grafiknya berhenti
+        membandingkan apa pun. Karena itu ia isi-yang-dibutuhkan, DIBATASI
+        bagian dari lebar yang tersisa setelah palang dan angkanya.
+        """
+        butuh = max((len(str(n or "")) * kar for n in nama), default=0.0)
+        maks = max(40.0, (float(lebar_baris) - sisa_tetap) * bagian)
+        return round(max(40.0, min(butuh + 8.0, maks)), 1)
+
+    def _baris_label(nama, px, kar):
+        return [lkl.baris_teks(n, px, kar) for n in nama]
+
+    _isi_separuh = lbk.lebar_lajur(2) - lbk.SISIPAN_BOX
+    _isi_penuh = lbk.LEBAR_ISI - lbk.SISIPAN_BOX
+    #: Lebar tetap tiap baris palang: kolom angka + palang minimum + jarak.
+    _SISA_HBAR = 40.0 + 60.0 + 8.0
+    _SISA_SBAR = 30.0 + 60.0 + 8.0
+
+    #: Batas atas daftar kondisi. Kertas yang tersisa lebih berguna diisi baris
+    #: data daripada dibiarkan putih — tetapi daftar yang terlalu panjang
+    #: berhenti menjadi "kategori teratas" dan menjadi seluruh daftar kategori.
+    _ANALISIS_KONDISI_MAKS = 20
+
+    def _rencana_analisis(kondisi):
+        """`(rencana, kolom_kartu_peneliti)` untuk daftar kondisi sepanjang itu."""
+        kolom_kartu = min(len(tim) or 1, 3)
+        _lbl_th = _lebar_label([y["name"] for y in year_chart], _isi_separuh,
+                               _SISA_HBAR, _KAR_LABEL_7_5)
+        _lbl_es = _lebar_label([e["name"] for e in eselon_chart], _isi_separuh,
+                               _SISA_HBAR, _KAR_LABEL_7_5)
+        _lbl_kd = _lebar_label([c["name"] for c in kondisi], _isi_penuh,
+                               _SISA_SBAR, lkl.LEBAR_KAR_7PX)
+        blok = []
+        if year_chart:
+            blok.append(lbk.blok("tahun", lbk.tinggi_daftar_bar(_baris_label(
+                [y["name"] for y in year_chart], _lbl_th, _KAR_LABEL_7_5)),
+                separuh=True))
+        if eselon_chart:
+            blok.append(lbk.blok("eselon", lbk.tinggi_daftar_bar(_baris_label(
+                [e["name"] for e in eselon_chart], _lbl_es, _KAR_LABEL_7_5)),
+                separuh=True))
+        if kondisi and len(ditemukan) > 0:
+            blok.append(lbk.blok("kondisi", lbk.tinggi_kondisi(_baris_label(
+                [c["name"] for c in kondisi], _lbl_kd, lkl.LEBAR_KAR_7PX))))
+        if status_pie:
+            blok.append(lbk.blok("status", lbk.tinggi_donut(), separuh=True))
+            blok.append(lbk.blok("cakupan", lbk.tinggi_cakupan(3), separuh=True))
+        # Penanggung Jawab dan Tim Peneliti sama-sama kartu pendek, jadi
+        # keduanya ditaruh berurutan agar dapat berbagi satu baris.
+        if pj_nama:
+            blok.append(lbk.blok("pj", lbk.tinggi_tim_kartu(1), separuh=True))
+        if tim:
+            blok.append(lbk.blok("peneliti", lbk.tinggi_tim_kartu(
+                -(-len(tim) // kolom_kartu)), separuh=True))
+        # Dua blok ini BOLEH dipecah antar-lembar: daftar tim bisa jauh lebih
+        # panjang daripada satu lembar, dan blok yang tak dapat dipecah
+        # ditempatkan utuh lalu sisanya terpotong senyap.
+        #
+        # Tinggi TIAP baris dihitung dari isinya: anggota berjabatan panjang
+        # menempati dua-tiga baris, dan menganggap semuanya sebaris membuat
+        # blok tim ditaksir jauh lebih pendek daripada yang tergambar.
+        def _baris_anggota(anggota, ketua=True):
+            return [lbk.baris_teks_anggota(
+                (("Ketua Tim" if a.get("is_ketua") else "Anggota") if ketua else "",
+                 a.get("nama"), a.get("jabatan"), a.get("nip"), a.get("unit")))
+                for a in anggota]
+
+        def _baris_pendukung(anggota):
+            return [lbk.baris_teks_anggota(
+                (a.get("nama"), a.get("jabatan"), a.get("nip"),
+                 a.get("dari_pihak")), lbk.LEBAR_KOLOM_PENDUKUNG)
+                for a in anggota]
+
+        if tim_inti or tim_pembantu:
+            blok.append(lbk.blok_tabel_tim("tim_internal", [
+                ("Tim Inti (Pelaksana)", "tim_inti", _baris_anggota(tim_inti)),
+                ("Tim Pembantu", "tim_pembantu", _baris_anggota(tim_pembantu))]))
+        if tim_pendukung:
+            blok.append(lbk.blok_tabel_tim("pendukung", [
+                ("", "tim_pendukung", _baris_pendukung(tim_pendukung))]))
+        return (lbk.rencana_blok(blok), kolom_kartu,
+                {"tahun": _lbl_th, "eselon": _lbl_es, "kondisi": _lbl_kd})
+
+    def _tata_letak(rencana):
+        """Blok apa di lembar mana — untuk membandingkan dua rencana."""
+        return [[x["id"] for b in hal for x in b["blok"]]
+                for hal in rencana["halaman"]]
+
+    rencana_analisis, kolom_kartu_peneliti, _lbl = _rencana_analisis(cond_by_cat)
+    # Sisa ruang di lembar yang memuat daftar kondisi dipakai memanjangkan
+    # daftarnya. Pertumbuhannya DIBATALKAN bila ada blok yang jadi berpindah
+    # lembar: menambah baris kategori dengan harga mendorong Tim Inventarisasi
+    # ke lembar berikutnya bukan memaksimalkan kertas, melainkan menukar satu
+    # kekosongan dengan kekosongan yang lebih besar.
+    _hal_kondisi = next(
+        (i for i, hal in enumerate(rencana_analisis["halaman"])
+         for b in hal for x in b["blok"] if x["id"] == "kondisi"), None)
+    if _hal_kondisi is not None and len(cat_breakdown_sorted) > len(cond_by_cat):
+        _muat = int(lbk.sisa_ruang(rencana_analisis, _hal_kondisi)
+                    // lbk.tinggi_baris_sbar(1))
+        _tambah = min(_muat, _ANALISIS_KONDISI_MAKS - len(cond_by_cat),
+                      len(cat_breakdown_sorted) - len(cond_by_cat))
+        if _tambah > 0:
+            _kondisi_awal = list(cond_by_cat)
+            for cat_name, cat_data in cat_breakdown_sorted[
+                    len(cond_by_cat):len(cond_by_cat) + _tambah]:
+                _kondisi = cat_data.get("conditions", {})
+                _total = cat_data["count"]
+                cond_by_cat.append({
+                    "name": cat_name, "total": _total,
+                    "baik": _kondisi.get("Baik", 0),
+                    "rr": _kondisi.get("Rusak Ringan", 0),
+                    "rb": _kondisi.get("Rusak Berat", 0),
+                    "baik_pct": round(_kondisi.get("Baik", 0) / _total * 100) if _total > 0 else 0,
+                    "rr_pct": round(_kondisi.get("Rusak Ringan", 0) / _total * 100) if _total > 0 else 0,
+                    "rb_pct": round(_kondisi.get("Rusak Berat", 0) / _total * 100) if _total > 0 else 0,
+                })
+            _tumbuh, _kolom2, _lbl2 = _rencana_analisis(cond_by_cat)
+            if _tata_letak(_tumbuh) == _tata_letak(rencana_analisis):
+                rencana_analisis, kolom_kartu_peneliti, _lbl = (
+                    _tumbuh, _kolom2, _lbl2)
+            else:
+                cond_by_cat[:] = _kondisi_awal
+    lbl_tahun_px, lbl_eselon_px, lbl_kondisi_px = (
+        _lbl["tahun"], _lbl["eselon"], _lbl["kondisi"])
 
     simpulan = []
     if tc > 0:
@@ -5840,7 +5993,8 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
     # halaman lokasi + 1 analisis lanjutan/tim. Data per aset TIDAK ada di
     # template ini (diunduh terpisah via executive-data-pdf) — dulu ikut
     # dihitung sehingga "Halaman 2 dari N" selalu terlalu besar.
-    total_pages = 3 + cat_pages + loc_pages + peg_pages
+    total_pages = (2 + cat_pages + loc_pages + peg_pages
+                   + len(rencana_analisis["halaman"]))
 
     # ── LINIMASA "PROGRES INVENTARISASI" ────────────────────────────────
     #
@@ -5906,6 +6060,16 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
         "tim": tim, "tim_pendukung": tim_pendukung,
         "tim_inti": tim_inti, "tim_pembantu": tim_pembantu,
         "pj_nama": pj_nama, "pj_jabatan": pj_jabatan, "pj_nip": pj_nip,
+        "rencana_analisis": rencana_analisis,
+        # Irisan tabel tim datang dari rencananya; datanya diambil templat
+        # lewat kunci ini, supaya potongan dan isinya mustahil berbeda sumber.
+        "data_tim": {"tim_inti": tim_inti, "tim_pembantu": tim_pembantu,
+                     "tim_pendukung": tim_pendukung},
+        "lebar_kolom_tim": lbk.LEBAR_KOLOM_TIM,
+        "lebar_kolom_pendukung": lbk.LEBAR_KOLOM_PENDUKUNG,
+        "kolom_kartu_peneliti": kolom_kartu_peneliti,
+        "lbl_tahun_px": lbl_tahun_px, "lbl_eselon_px": lbl_eselon_px,
+        "lbl_kondisi_px": lbl_kondisi_px,
         "assets": asset_rows, "asset_pages": asset_pages, "total_pages": total_pages,
         "asset_count": len(all_assets),
         "is_in_progress": is_in_progress,

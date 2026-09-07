@@ -18,6 +18,59 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1034] Halaman Analisis & Tim menata sendiri bloknya — 2026-09-07
+
+Permintaan pemilik: *"pada analisis, tim lanjutan & cakupan jadikan smart semua
+dalam mengatur posisinya masing-masing menyesuaikan bagaimana caranya berbagi
+dan mengalah untuk menampilkan informasi sebaik mungkin tanpa harus
+melanjutkan ke halaman kedua dengan memaksimalkan A4 yang ada tanpa harus
+menggunakan "…" dan terpampang dengan baik."*
+
+Halaman ini satu-satunya yang belum ikut dirapikan. Susunannya TETAP:
+pasangan bloknya ditulis tangan di templat, lebar kolom label dipatok 100px,
+dan yang tak muat dipotong — nama unit pada 25 huruf, nama kategori pada 20.
+Akibatnya berlawanan sekaligus dan sama-sama tak berbunyi: seperlima kertas
+menganggur di bawah sementara di atasnya "Kedeputian Bidang Transformasi Hijau
+dan Digital" tercetak "Kedeputian Bidang Transfo".
+
+**Tak ada lagi yang dipotong.** Kedua pemotongan di Python dihapus dan
+`text-overflow: ellipsis` dicabut dari kedua label. Lebar kolom label kini
+dihitung dari isinya: secukupnya yang dibutuhkan, dibatasi bagian dari lebar
+yang tersisa setelah palang dan angkanya — dipatok 100px nama unit terpotong,
+dipatok selebar nama terpanjang palangnya tinggal secuil.
+
+**Blok menata dirinya sendiri.** Modul baru `backend/laporan_blok.py` (murni)
+menghitung tinggi tiap blok dari cacah barisnya, memasangkan blok pendek yang
+berurutan agar berbagi satu baris — tinggi barisnya yang tertinggi, yang
+pendek mengisi sisa ruangnya sendiri — dan membuka lembar kedua HANYA bila
+baris berikutnya sungguh tak muat. Penanggung Jawab dan Tim Peneliti kini
+berbagi satu baris; keduanya kartu pendek yang dulu masing-masing memakai
+selebar halaman.
+
+**Daftar kategori memanjang mengisi ruang yang tersisa** — dari 8 menjadi
+sebanyak yang muat (paling banyak 20). Pertumbuhannya DIBATALKAN bila membuat
+blok lain berpindah lembar: menambah baris kategori dengan harga mendorong Tim
+Inventarisasi ke lembar berikutnya bukan memaksimalkan kertas, melainkan
+menukar satu kekosongan dengan kekosongan yang lebih besar. Penjaga itu bukan
+hiasan — pada kategori bernama panjang, tanpa dia laporan yang seharusnya
+selembar menjadi dua lembar.
+
+**Cacat yang ditemukan sambil jalan: anggota tim hilang dari cetakan.** Daftar
+tim yang lebih panjang daripada satu lembar ditempatkan utuh pada satu lembar,
+dan sisanya terpotong senyap oleh `overflow: hidden`. Diuji pada 60 anggota:
+delapan orang tak pernah tercetak, tanpa satu pun galat dan tanpa satu pun
+tanda di HTML-nya. Tabel tim kini dapat dipecah antar-lembar — bagian yang
+muat tetap tercetak, sisanya menyambung dengan penanda "(lanjutan)".
+
+Tinggi tiap barisnya ikut dihitung dari isi selnya: anggota berjabatan panjang
+menempati dua-tiga baris, dan menganggap semuanya sebaris membuat blok tim
+ditaksir 220px untuk yang sebenarnya 288px. Tabel tim juga memakai
+`table-layout: fixed` berlebar kolom yang dinyatakan — tanpa itu lebarnya
+ditentukan isinya, berubah dari satu laporan ke laporan lain, dan tinggi
+barisnya mustahil dihitung di muka.
+
+---
+
 ## [#1033] Halaman kosong setelah tabel dua lajur — 2026-09-07
 
 Permintaan pemilik: *"ketika menjadi 2 kolom tersisa 1 lembar kosong di
