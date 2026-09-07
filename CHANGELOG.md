@@ -18,6 +18,36 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1041] Stiker label: sub-sub kelompok naik satu anak tangga di stiker lega — 2026-09-07
+
+Permintaan pemilik: *"agak besarkan lagi khusus di bagian sub-sub kelompoknya
+karena sepertinya terlalu kecil untuk yang sekarang. cukup di bagian sedang dan
+besar saja, yang stiker kecil sudah pas sempurna"*.
+
+Sub-sub kelompok kini naik SATU anak tangga emas (+6,2%) pada stiker yang lega:
+besar 7,98 → 8,47 pt, sedang 5,24 → 5,56 pt. Stiker kecil tak tersentuh (4,37
+pt) — pemilik menyatakannya sudah pas.
+
+Ini pengecualian pertama terhadap keseragaman yang baru dipasang di [#1040],
+dan pengecualian itu punya sebabnya sendiri: bukan perbandingan yang salah,
+melainkan RUANG KOSONG. Dengan langkah yang sama (0,887× nama barang) sub-sub
+terbaca pas di stiker kecil yang padat, tetapi tenggelam di stiker besar yang
+menyisakan pita kosong di tengah badan. Sub-sub kelompok memang peran yang
+MENGALAH saat ruang sempit — itu sudah berlaku untuk jatah barisnya sejak
+[#1031]; kini berlaku pula untuk ukuran hurufnya.
+
+Satu anak tangga, dan itu memang batasnya: dua anak tangga menaruh sub-sub
+tepat sebesar nama barang, dan hierarki "nama > sub-sub" hilang.
+
+Ambangnya TINGGI FISIK 26 mm, bukan nama ukuran atau anak tangga, supaya A4 dan
+A3 memutuskan sama — stiker sedang keluar 30,3 mm (A4) / 30,0 mm (A3), stiker
+kecil 22,4 / 22,6 mm, jadi ambangnya berjarak ±4 mm dari keduanya.
+
+Penjaga keseragaman [#1040] tidak sekadar dilonggarkan: `subsub` dikeluarkan
+dari pemeriksaan seragam, tetapi uji tersendiri menagih besar-kecilnya PERSIS
+satu anak tangga terhadap stiker kecil — bukan sekadar "lebih besar", yang akan
+lolos oleh perbesaran sembarang.
+
 ## [#1040] Stiker label: satu deret emas untuk semua ukuran, tepi lebih lega — 2026-09-07
 
 Permintaan pemilik: *"sebelah kiri dan yang paling bawah tolong berikan jarak
