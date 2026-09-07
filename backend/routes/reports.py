@@ -4891,6 +4891,13 @@ class ReportSettingsUpdate(BaseModel):
     # Kode satker LENGKAP registrasi BMN (±20 digit, mis. 126011600691778000KP)
     # — dipakai a.l. baris kedua header stiker label.
     kode_satker_lengkap: Optional[str] = ""
+    # Judul pada kepala STIKER LABEL — setelan tersendiri, bukan `nama_instansi`.
+    # Kop laporan memuat nama instansi lengkap ("KEMENTERIAN … REPUBLIK
+    # INDONESIA"); pada stiker seluas beberapa sentimeter, nama sepanjang itu
+    # menyusut sampai nyaris tak terbaca dan memakan ruang yang dibutuhkan kode
+    # barang. Kosong = tetap memakai nama instansi (perilaku lama), sehingga
+    # satker yang belum mengisinya tak berubah apa pun.
+    header_stiker: Optional[str] = ""
     # Evaluasi #4 (OPT-IN, default OFF): bila True, simpan aset menolak pengguna_nip
     # yang belum terdaftar di Master Pegawai. None = jangan ubah nilai tersimpan.
     wajib_pegawai_terdaftar: Optional[bool] = None
@@ -4912,6 +4919,7 @@ async def get_report_settings(_user: dict = Depends(require_user)):
             "nama_instansi": "",
             "nama_unit_organisasi": "",
             "nama_sub_unit": "",
+            "header_stiker": "",
             "alamat_instansi": "",
             "judul_laporan": "LAPORAN HASIL INVENTARISASI",
             "subjudul_laporan": "BARANG MILIK NEGARA (BMN)",

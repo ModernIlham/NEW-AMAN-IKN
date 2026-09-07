@@ -35,6 +35,8 @@ FIELD_KOP_SATKER = (
     "nama_satker", "nama_unit_organisasi", "nama_sub_unit", "alamat",
     "tempat_laporan", "tembusan_laporan", "telepon", "email",
     "kode_satker_lengkap",
+    # Judul kepala stiker label (kosong = ikut nama instansi).
+    "header_stiker",
     # Ditambahkan REVIEW-9 R15b. Sebelumnya field-field ini HANYA ada pada
     # dokumen global `report_settings`, sehingga ketika penulisan global
     # dibatasi super-admin, admin satker kehilangan cara mengatur kop laporan

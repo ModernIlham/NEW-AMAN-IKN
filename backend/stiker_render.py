@@ -76,8 +76,19 @@ def gambar_stiker(c, x, y, w, h, ukuran, aset, kop, logo, mm):
     # lantai keterbacaan, dan dulu berakhir terpotong "..." di stiker kecil.
     # Badan menyusut seperlunya — jatah barisnya dihitung ulang dari sisa.
     hdr_maks = min(h * 0.46, hdr_dasar * 1.85)
-    nama = str(kop.get("nama_instansi") or kop.get("nama_unit_organisasi")
-               or "").strip()
+    # Judul kepala stiker punya setelannya SENDIRI (`header_stiker`), bukan
+    # nama instansi kop laporan. Kop laporan memuat nama lengkap resmi
+    # ("KEMENTERIAN … REPUBLIK INDONESIA"); pada stiker seluas beberapa
+    # sentimeter nama sepanjang itu menyusut sampai nyaris tak terbaca dan
+    # memakan ruang yang dibutuhkan kode barang. Kosong = tetap memakai nama
+    # instansi, supaya satker yang belum mengisinya tak berubah apa pun.
+    # Tiap calon di-strip DULU baru dipilih: setelan berisi spasi saja bernilai
+    # benar bagi `or`, sehingga tanpa ini kepala stiker jadi KOSONG — satu spasi
+    # yang tak sengaja tersimpan menghapus judul seluruh stiker satker itu.
+    nama = next((t for t in (str(kop.get("header_stiker") or "").strip(),
+                             str(kop.get("nama_instansi") or "").strip(),
+                             str(kop.get("nama_unit_organisasi") or "").strip())
+                 if t), "")
     baris2 = str(kop.get("_baris2_stiker") or "").strip()
     logo_w_perkiraan = (hdr_dasar - 1.2 * mm + pad) if (
         logo is not None and (w / mm) >= 60) else 0
@@ -146,18 +157,36 @@ def gambar_stiker(c, x, y, w, h, ukuran, aset, kop, logo, mm):
         c.drawRightString(x + pad + lebar_teks, ty, label_nup)
     ty -= f["kode"] * 0.32
 
-    if jatah["nama"]:
-        c.setFont("Helvetica-Bold", f["nama"])
-        for baris in bagi_baris(nama_brg, lebar_teks, ukur_tebal, f["nama"],
-                                jatah["nama"]):
-            ty -= f["nama"] * 1.18
-            c.drawString(x + pad, ty, baris)
+    # ── SUB-SUB KELOMPOK tepat di bawah kode barang ──
+    # Ia menerangkan KODE, jadi ia menempel pada kode. Sebelumnya ia terlempar
+    # ke bawah nama barang dan terbaca seolah keterangan nama.
     if jatah["subsub"] and subsub:
         c.setFont("Helvetica", f["subsub"])
         for baris in bagi_baris(subsub, lebar_teks, ukur_biasa, f["subsub"],
                                 jatah["subsub"]):
             ty -= f["subsub"] * 1.16
             c.drawString(x + pad, ty, baris)
+
+    # ── NAMA BARANG menempel DASAR stiker, rata kiri, tumbuh ke atas ──
+    # Sepuluh stiker berjajar punya garis dasar yang sama, sehingga mata
+    # petugas menyusuri satu baris alih-alih naik-turun mengikuti panjang nama.
+    # Digambar dari baris TERAKHIR ke atas; kalau tiga baris tak cukup,
+    # `bagi_baris` menutupnya dengan elipsis (di sini elipsis memang diminta —
+    # nama yang mengalir panjang memakan ruang kode barang).
+    if jatah["nama"] and nama_brg:
+        baris_nama = bagi_baris(nama_brg, lebar_teks, ukur_tebal, f["nama"],
+                                jatah["nama"])
+        c.setFont("Helvetica-Bold", f["nama"])
+        # Garis dasar baris TERBAWAH: pad dari tepi bawah stiker.
+        ny = y + pad
+        for baris in reversed(baris_nama):
+            # Tak boleh menabrak sub-sub kelompok di atasnya; kalau ruangnya
+            # sudah habis, baris sisanya memang tak digambar — lebih baik
+            # daripada dua teks yang saling menimpa.
+            if ny + f["nama"] > ty:
+                break
+            c.drawString(x + pad, ny, baris)
+            ny += f["nama"] * 1.18
 
     # QR — payload format pemindai kartu (#kreg / #kode-nup). Stiker KECIL
     # tak punya ruang logo di header → logo ditaruh DI TENGAH QR dengan

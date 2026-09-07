@@ -93,3 +93,98 @@ def test_aset_tanpa_nup_dan_tanpa_subsub_tidak_meledak():
     aset = [{"asset_code": "1010101001", "asset_name": "Tanah Bangunan Kantor"}]
     teks = _teks(_render(aset, "sedang"))
     assert "1010101001" in teks and "NUP" not in teks
+
+
+# ── Kepala stiker punya setelannya SENDIRI ──────────────────────────────
+#
+# Permintaan pemilik: *"pada bagian header jangan gunakan 'Nama Instansi
+# (baris 1 kop)' akan tetapi buatkan sendiri Header buat stiker yang bisa
+# disesuaikan di setelan sistem juga."*
+
+def test_header_stiker_MENGGANTIKAN_nama_instansi():
+    kop = {**KOP_PANJANG, "header_stiker": "OTORITA IBU KOTA NUSANTARA"}
+    teks = _teks(_render(ASET, "besar", kop=kop, sampel_ukuran=False))
+    assert "OTORITA IBU KOTA NUSANTARA" in teks
+    # Nama instansi kop laporan TIDAK ikut tercetak — itulah gunanya setelan
+    # tersendiri: nama resmi yang panjang menyusut sampai nyaris tak terbaca.
+    assert "Kementerian Pekerjaan Umum" not in teks
+
+
+def test_tanpa_setelan_header_stiker_TETAP_memakai_nama_instansi():
+    """Satker yang belum mengisinya tak boleh mendapat stiker berkepala kosong."""
+    teks = _teks(_render(ASET, "besar", sampel_ukuran=False))
+    assert "Kementerian Pekerjaan Umum" in teks
+
+
+def test_header_stiker_kosong_tak_dianggap_terisi():
+    kop = {**KOP_PANJANG, "header_stiker": "   "}
+    teks = _teks(_render(ASET, "besar", kop=kop, sampel_ukuran=False))
+    assert "Kementerian Pekerjaan Umum" in teks
+
+
+# ── Susunan badan: sub-sub di bawah kode, nama menempel dasar ───────────
+
+def _posisi_teks(pdf_bytes, cari, halaman=0):
+    """Ordinat-Y (dari bawah) kemunculan pertama sebuah teks di halaman."""
+    pdfium = pytest.importorskip("pypdfium2")
+    dok = pdfium.PdfDocument(io.BytesIO(pdf_bytes))
+    hal = dok[halaman]
+    tp = hal.get_textpage()
+    penuh = tp.get_text_range()
+    idx = penuh.find(cari)
+    assert idx >= 0, f"{cari!r} tak tergambar"
+    # rect (kiri, bawah, kanan, atas) untuk potongan itu
+    n = tp.count_rects(idx, len(cari))
+    assert n > 0
+    return tp.get_rect(0)
+
+
+@pytest.mark.parametrize("ukuran", ["besar", "sedang", "kecil"])
+def test_urutan_badan_KODE_lalu_SUBSUB_lalu_NAMA(ukuran):
+    """Sub-sub kelompok menerangkan KODE, jadi ia menempel pada kode — dan
+    nama barang berada di bawahnya, menempel dasar stiker.
+
+    Diuji sebagai URUTAN, bukan sebagai jarak: ambang jarak longgar tetap
+    lolos ketika sub-sub terlempar ke bawah nama barang (susunan lama), sebab
+    pada stiker pendek ketiganya memang berdekatan. Urutan tak punya celah
+    seperti itu.
+    """
+    pdf = _render(ASET[:1], ukuran, sampel_ukuran=False)
+    kode = _posisi_teks(pdf, "3050102001")
+    subsub = _posisi_teks(pdf, "P.C Unit")
+    # "Lenovo", bukan "Personal Computer": yang terakhir juga muncul DI DALAM
+    # teks sub-sub ("P.C Unit (Personal Computer)"), sehingga ujinya akan
+    # membandingkan sub-sub dengan dirinya sendiri dan lulus tanpa arti.
+    nama = _posisi_teks(pdf, "Lenovo")
+    # rect = (kiri, atas, kanan, bawah) — makin ke bawah, ordinatnya mengecil.
+    assert kode[1] > subsub[1], "sub-sub tidak berada di bawah kode"
+    assert subsub[1] > nama[1], "nama barang tidak berada di bawah sub-sub"
+
+
+def test_nama_barang_MENEMPEL_DASAR_stiker():
+    """Sepuluh stiker berjajar punya garis dasar yang sama, sehingga mata
+    petugas menyusuri satu baris alih-alih naik-turun mengikuti panjang nama.
+
+    Diuji dengan DUA aset berpanjang nama berbeda: baris terbawah keduanya
+    harus sejajar. Kalau nama mengalir dari atas (susunan lama), aset bernama
+    pendek berakhir jauh di atas yang bernama panjang.
+    """
+    dua = [
+        {"asset_code": "3050102001", "NUP": "1", "kode_register": "",
+         "_subsub": "P.C Unit", "asset_name": "Lenovo"},
+        {"asset_code": "3050102002", "NUP": "2", "kode_register": "",
+         "_subsub": "P.C Unit", "asset_name":
+             "Personal Computer Lengkap Merek Acer Veriton Seri Terbaru"},
+    ]
+    pdf = _render(dua, "besar", sampel_ukuran=False)
+    pendek = _posisi_teks(pdf, "Lenovo")
+    panjang = _posisi_teks(pdf, "Veriton")
+    assert abs(pendek[3] - panjang[3]) < 1.0, (
+        "baris terbawah nama tidak sejajar antar stiker")
+
+
+def test_nama_barang_RATA_KIRI_sejajar_kode():
+    pdf = _render(ASET[:1], "besar", sampel_ukuran=False)
+    kode = _posisi_teks(pdf, "3050102001")
+    nama = _posisi_teks(pdf, "Lenovo")
+    assert abs(nama[0] - kode[0]) < 1.5, "nama barang tidak rata kiri dgn kode"

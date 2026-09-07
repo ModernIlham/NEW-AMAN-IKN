@@ -182,3 +182,56 @@ def test_rencana_badan_ruang_mepet_prioritaskan_nama():
 def test_format_dimensi_gaya_indonesia():
     assert format_dimensi(98.25, 46.25) == "98,3 × 46,3 mm"
     assert format_dimensi(45, 22) == "45,0 × 22,0 mm"
+
+
+# ── Susunan badan stiker: sub-sub di bawah kode, nama menempel dasar ────
+#
+# Permintaan pemilik: *"disemua ukuran stiker design stikernya bagian sub sub
+# kelompok tempatkan tepat dibawah kode barangnya langsung dan sesuaikan
+# ukurannya agar serasi, dan untuk nama barang buat dari arah paling bawah
+# bottom dan align left, yang akan terus keatas hingga 3 baris saja maksimal
+# panjangnya jika lebih gunakan '...'"*
+
+def test_nama_barang_paling_banyak_TIGA_baris():
+    """Nama yang mengalir sampai enam baris memakan ruang kode barang, dan
+    kode barang itulah kunci pencocokannya dengan catatan."""
+    from stiker_utils import MAKS_BARIS_NAMA, rencana_badan, ukuran_font
+    f = ukuran_font(100, 70)          # stiker besar, ruang berlimpah
+    assert rencana_badan(1000.0, f)["nama"] == MAKS_BARIS_NAMA == 3
+
+
+def test_subsub_paling_banyak_DUA_baris():
+    from stiker_utils import MAKS_BARIS_SUBSUB, rencana_badan, ukuran_font
+    f = ukuran_font(100, 70)
+    assert rencana_badan(1000.0, f)["subsub"] == MAKS_BARIS_SUBSUB == 2
+
+
+def test_ruang_mepet_NAMA_tetap_didahulukan():
+    """Nama barang yang dicari petugas saat mencocokkan fisik; sub-sub
+    kelompok mengalah lebih dulu."""
+    from stiker_utils import rencana_badan, ukuran_font
+    f = ukuran_font(50, 25)
+    jatah = rencana_badan(f["kode"] * 1.32 + f["nama"] * 1.2, f)
+    assert jatah == {"nama": 1, "subsub": 0}
+
+
+def test_subsub_TERBACA_tetapi_tetap_di_bawah_nama():
+    """Sub-sub kini duduk tepat di bawah kode sebagai keterangannya, jadi ia
+    dinaikkan agar terbaca — tetapi hierarkinya tak boleh terbalik: ia tetap
+    lebih kecil daripada nama barang dan kode."""
+    from stiker_utils import ukuran_font
+    for lebar, tinggi in ((100, 70), (70, 40), (50, 25), (38, 19)):
+        f = ukuran_font(lebar, tinggi)
+        assert f["subsub"] < f["nama"] < f["kode"], (lebar, tinggi)
+
+
+def test_elipsis_dipakai_saat_nama_melebihi_jatah():
+    """Di stiker, elipsis memang yang diminta — beda dari laporan."""
+    from stiker_utils import bagi_baris
+    def ukur(t, size):
+        return len(t) * size * 0.5
+    baris = bagi_baris("Alat Laboratorium Pendidikan Kedokteran Bedah dan "
+                       "Perawatan Intensif Terpadu Bergerak Nomor Seri 12",
+                       60.0, ukur, 8.0, maks_baris=3)
+    assert len(baris) == 3
+    assert baris[-1].endswith("...")

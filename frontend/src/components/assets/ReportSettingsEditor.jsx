@@ -70,6 +70,8 @@ export default function ReportSettingsEditor({ onClose }) {
     { key: "nama_unit_organisasi", label: "Unit Organisasi (baris 2, tebal)", placeholder: "Contoh: KUASA PENGGUNA BARANG" },
     { key: "nama_sub_unit", label: "Sub Unit/Satker (baris 3, tebal)", placeholder: "Contoh: SATUAN KERJA D (PP-THD)" },
     { key: "kode_satker_lengkap", label: "Kode Satker Lengkap (±20 digit — dipakai stiker label)", placeholder: "Contoh: 126011600691778000KP" },
+    { key: "header_stiker", label: "Header Stiker Label (baris 1 stiker)", placeholder: "Contoh: OTORITA IBU KOTA NUSANTARA",
+      bantuan: "Judul yang tercetak di kepala stiker label — setelan tersendiri, bukan Nama Instansi. Kop laporan memuat nama resmi lengkap; pada stiker seluas beberapa sentimeter nama sepanjang itu menyusut sampai nyaris tak terbaca. Kosongkan untuk memakai Nama Instansi." },
     { key: "alamat_instansi", label: "Alamat Instansi (boleh beberapa baris — tekan Enter)", placeholder: "Gedung Kantor Otorita IKN, Nusantara, Kalimantan\nPerwakilan I: Menara Mandiri II Lantai 5, Jakarta", multiline: true },
     { key: "judul_laporan", label: "Judul Laporan", placeholder: "LAPORAN HASIL INVENTARISASI" },
     { key: "subjudul_laporan", label: "Sub Judul", placeholder: "BARANG MILIK NEGARA (BMN)" },
