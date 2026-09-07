@@ -16,14 +16,24 @@
  * mengukur posisi marker di layar dan memasang/melepas labelnya.
  */
 
-/** Lebar rata-rata satu karakter pada huruf tebal 11px, dalam piksel. */
-export const LEBAR_KARAKTER = 6.2;
+/**
+ * Lebar rata-rata satu karakter label, dalam piksel.
+ *
+ * DIUKUR di Chromium pada huruf label yang sebenarnya (600 12px system-ui),
+ * atas delapan nama aset nyata: rata-ratanya 7.39 px dan yang paling boros
+ * 8.45 px. Yang diambil UJUNG ATAS rentang itu, bukan reratanya — kotak yang
+ * ditaksir terlalu sempit membuat dua label dinilai tak bertabrakan padahal
+ * bertindih di layar, dan bertindihnya label itulah yang justru sedang
+ * dicegah. Menaksir terlalu lebar hanya menyembunyikan satu-dua label lebih
+ * awal.
+ */
+export const LEBAR_KARAKTER = 8;
 
 /** Lebar maksimum satu label sebelum teksnya membungkus ke bawah. */
 export const LEBAR_MAKS = 150;
 
-/** Tinggi satu baris teks label, berikut sisipan atas-bawahnya. */
-export const TINGGI_BARIS = 13;
+/** Tinggi satu baris teks label — diukur 14.0px pada huruf 600 12px/14px. */
+export const TINGGI_BARIS = 14;
 
 /** Jarak label dari titik markernya (ke kanan) dan sisipan kotaknya. */
 export const JARAK_DARI_MARKER = 14;

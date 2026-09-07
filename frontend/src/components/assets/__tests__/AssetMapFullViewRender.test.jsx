@@ -201,21 +201,41 @@ test("pilihan label BERTAHAN antar sesi", async () => {
       .getAttribute("aria-pressed")).toBe("true"));
 });
 
-test("label TIDAK menangkap klik — pin di bawahnya tetap dapat diketuk", () => {
-  // Di peta padat label menutupi marker tetangganya; label yang menangkap
-  // klik membuat pin di bawahnya tak bisa dibuka sama sekali.
+function aturanLabelPeta() {
   const css = require("fs").readFileSync(
     require("path").join(__dirname, "../../../index.css"), "utf8");
   const awal = css.indexOf(".aman-peta-label {");
   expect(awal).toBeGreaterThan(-1);
-  const aturan = css.slice(awal, css.indexOf("}", awal));
-  expect(aturan).toMatch(/pointer-events:\s*none/);
-  // Putih ber-stroke gelap, dan strokenya digambar DI BELAKANG huruf —
-  // tanpa `paint-order`, stroke menggerogoti huruf 11px dari dalam.
+  return css.slice(awal, css.indexOf("}", awal));
+}
+
+test("label TIDAK menangkap klik — pin di bawahnya tetap dapat diketuk", () => {
+  // Di peta padat label menutupi marker tetangganya; label yang menangkap
+  // klik membuat pin di bawahnya tak bisa dibuka sama sekali.
+  expect(aturanLabelPeta()).toMatch(/pointer-events:\s*none/);
+});
+
+test("garis tepi label memakai BAYANGAN, bukan -webkit-text-stroke", () => {
+  /* PENJAGA REGRESI.
+
+     Versi pertama memakai `-webkit-text-stroke: 2.5px` bersama
+     `paint-order: stroke fill` supaya garis tepinya tergambar di belakang huruf.
+     Di peramban yang tak menghormati `paint-order` — dan peramban pemilik salah
+     satunya — stroke setebal itu digambar DI ATAS huruf 11px dan menutupinya
+     sampai habis: labelnya menjadi batangan hitam pekat, bukan tulisan.
+
+     `text-shadow` menurut definisi digambar di belakang huruf, jadi ia mustahil
+     menutupi hurufnya sendiri di peramban mana pun. */
+  const aturan = aturanLabelPeta();
+  expect(aturan).not.toMatch(/-webkit-text-stroke/);
+  expect(aturan).not.toMatch(/paint-order/);
   expect(aturan).toMatch(/color:\s*#fff/);
-  expect(aturan).toMatch(/-webkit-text-stroke:/);
-  expect(aturan).toMatch(/paint-order:\s*stroke/);
+  // Delapan arah 1px membentuk garis tepi rapat + satu halo melunakkan tepinya.
+  expect((aturan.match(/#0f172a/g) || []).length).toBeGreaterThanOrEqual(8);
+  expect(aturan).toMatch(/text-shadow:/);
   // Gelembung bawaan tooltip Leaflet dimatikan: yang diminta label, bukan balon.
   expect(aturan).toMatch(/background:\s*none/);
   expect(aturan).toMatch(/border:\s*0/);
+  // Nama panjang membungkus; rata tengah supaya baris kedua tak menggantung.
+  expect(aturan).toMatch(/text-align:\s*center/);
 });
