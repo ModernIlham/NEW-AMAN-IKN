@@ -98,10 +98,31 @@ LANGKAH_PERAN = {
     "instansi": 1,    # judul kepala stiker
     "nup": 0,         # NUP, sebaris dengan kode barang
     "nama": 0,        # nama barang — acuan tangga
-    "subsub": -2,     # sub-sub kelompok, keterangan kode barang
+    "subsub": -2,     # sub-sub kelompok — MENGALAH saat sempit, lihat bawah
     "sub": -3,        # baris kedua kepala (nama/kode satker)
     "label": -6,      # keterangan garis ukur (stiker CONTOH saja)
 }
+
+#: SUB-SUB KELOMPOK adalah peran yang MENGALAH saat ruang sempit — itu sudah
+#: berlaku untuk jatah barisnya (lihat `rencana_badan`), dan kini juga untuk
+#: ukuran hurufnya. Pada stiker yang lega ia naik satu anak tangga; hanya pada
+#: stiker sempit ia turun kembali.
+#:
+#: Sebabnya bukan perbandingan, melainkan RUANG KOSONG: dengan langkah yang
+#: sama (0,887× nama) sub-sub terbaca pas di stiker kecil yang padat, tetapi
+#: tenggelam di stiker besar yang menyisakan pita kosong di tengah badan.
+#: Pemilik menagihnya begitu: *"agak besarkan lagi khusus di bagian sub-sub
+#: kelompoknya ... cukup di bagian sedang dan besar saja, yang stiker kecil
+#: sudah pas sempurna"*.
+#:
+#: SATU anak tangga, dan itu memang batasnya: dua anak tangga menaruh sub-sub
+#: tepat sebesar nama barang, dan hierarki "nama > sub-sub" hilang.
+#:
+#: Ambangnya TINGGI FISIK, bukan nama ukuran atau anak tangga — supaya A4 dan
+#: A3 memutuskan sama. Stiker sedang keluar 30,3 mm (A4) / 30,0 mm (A3),
+#: stiker kecil 22,4 / 22,6 mm; 26 mm berjarak ±4 mm dari keduanya.
+LANGKAH_SUBSUB_LEGA = 1
+TINGGI_SUBSUB_LEGA_MM = 26.0
 
 #: Inset tepi stiker. Ikut mengecil bersama stikernya (φ^6 ≈ 17,94 bagian
 #: dari sisi pendek) dengan LANTAI absolut: toleransi mesin potong itu
@@ -185,9 +206,17 @@ def ukuran_font(lebar_mm, tinggi_mm):
     dengan `n` rung ukuran stiker dan `s` rung peran. Konsekuensinya —
     dan inilah yang diminta pemilik — perbandingan antar ukuran stiker SAMA
     untuk setiap peran: stiker kecil benar-benar stiker besar yang mengecil,
-    bukan tujuh peran yang masing-masing mengecil sendiri-sendiri. MURNI."""
+    bukan tujuh peran yang masing-masing mengecil sendiri-sendiri.
+
+    SATU pengecualian, atas permintaan pemilik: sub-sub kelompok naik satu
+    anak tangga pada stiker yang lega (lihat `TINGGI_SUBSUB_LEGA_MM`). Ia
+    tetap anak tangga emas — yang berbeda hanya rung-nya, bukan deretnya.
+    MURNI."""
     n = anak_tangga(lebar_mm, tinggi_mm)
-    return {peran: round(_pt(n + s), 2) for peran, s in LANGKAH_PERAN.items()}
+    langkah = dict(LANGKAH_PERAN)
+    if float(tinggi_mm) >= TINGGI_SUBSUB_LEGA_MM:
+        langkah["subsub"] += LANGKAH_SUBSUB_LEGA
+    return {peran: round(_pt(n + s), 2) for peran, s in langkah.items()}
 
 
 def padding_stiker(tinggi_mm):

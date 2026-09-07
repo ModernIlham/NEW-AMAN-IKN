@@ -123,11 +123,42 @@ def test_pengecilan_antar_ukuran_SERAGAM_untuk_semua_peran():
     besar = ukuran_font(*UKURAN_NYATA[0])
     for lebar, tinggi in UKURAN_NYATA[1:]:
         f = ukuran_font(lebar, tinggi)
-        nisbah = [f[p] / besar[p] for p in besar]
+        # `subsub` sengaja dikecualikan — ia peran yang MENGALAH saat sempit
+        # dan turun satu anak tangga di stiker kecil (uji tersendiri di
+        # bawah menagih besar-kecilnya persis satu anak tangga, jadi
+        # pengecualian ini tidak membuka celah).
+        nisbah = [f[p] / besar[p] for p in besar if p != "subsub"]
         # Simpangan hanya boleh dari pembulatan 2 desimal, bukan dari
         # kebijakan yang berbeda antar peran.
         assert max(nisbah) - min(nisbah) < 0.005, (
             f"pengecilan tak seragam di {lebar}×{tinggi}: {nisbah}")
+
+
+def test_subsub_naik_SATU_anak_tangga_di_stiker_lega():
+    """Permintaan pemilik: *"agak besarkan lagi khusus di bagian sub-sub
+    kelompoknya karena sepertinya terlalu kecil untuk yang sekarang. cukup di
+    bagian sedang dan besar saja, yang stiker kecil sudah pas sempurna"*.
+
+    Yang diuji BUKAN "sub-sub lebih besar" (itu lolos oleh perbesaran
+    sembarang), melainkan tiga hal sekaligus: stiker kecil tak tersentuh,
+    stiker lega naik PERSIS satu anak tangga emas, dan hierarkinya utuh —
+    dua anak tangga akan menaruh sub-sub tepat sebesar nama barang.
+    """
+    from stiker_utils import LANGKAH_EMAS, TINGGI_SUBSUB_LEGA_MM
+    (b_l, b_t), (s_l, s_t), (k_l, k_t) = UKURAN_NYATA
+    besar, sedang, kecil = (ukuran_font(b_l, b_t), ukuran_font(s_l, s_t),
+                            ukuran_font(k_l, k_t))
+    # Stiker kecil TIDAK berubah: sub-sub tetap sejajar peran lain.
+    assert abs(kecil["subsub"] / kecil["nama"]
+               - LANGKAH_EMAS ** -2) < 0.005
+    # Stiker sedang & besar naik persis satu anak tangga terhadap itu.
+    for f, nama in ((besar, "besar"), (sedang, "sedang")):
+        naik = (f["subsub"] / f["nama"]) / (kecil["subsub"] / kecil["nama"])
+        assert abs(naik - LANGKAH_EMAS) < 0.005, (
+            f"{nama}: sub-sub naik {naik:.4f}×, bukan satu anak tangga")
+        assert f["nama"] > f["subsub"], f"{nama}: sub-sub menyamai nama"
+    # Ambangnya tinggi FISIK, jadi A4 dan A3 memutuskan sama.
+    assert k_t < TINGGI_SUBSUB_LEGA_MM <= min(s_t, 30.0)
 
 
 def test_hierarki_PERSIS_sama_di_semua_ukuran():
