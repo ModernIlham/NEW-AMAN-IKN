@@ -264,6 +264,19 @@ test("aturan label MENGALAHKAN .leaflet-tooltip, bukan sekadar menuliskannya", (
   }
 });
 
+test("LEBAR_MAKS penata tabrakan = max-width label di CSS", () => {
+  /* Yang benar-benar membungkus teks adalah CSS; `LEBAR_MAKS` hanya dipakai
+     menaksir kotak tabrakannya. Bila keduanya berbeda, kotak yang dihitung
+     bukan kotak yang tergambar — penata anti-tindih lalu menyembunyikan label
+     yang sebenarnya lega dan meloloskan yang bertindih, dan tak satu pun
+     galat memberi tahu. Dua angka di dua berkas berbeda persis jenis hal
+     yang berpisah diam-diam saat salah satunya disetel. */
+  const { LEBAR_MAKS } = require("@/lib/petaLabel");
+  const css = aturanLabelPeta().isi.match(/max-width:\s*(\d+)px/);
+  expect(css).not.toBeNull();
+  expect(Number(css[1])).toBe(LEBAR_MAKS);
+});
+
 test("label TIDAK menangkap klik — pin di bawahnya tetap dapat diketuk", () => {
   // Di peta padat label menutupi marker tetangganya; label yang menangkap
   // klik membuat pin di bawahnya tak bisa dibuka sama sekali.

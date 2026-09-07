@@ -321,3 +321,49 @@ def test_teks_dan_QR_memakai_INSET_yang_sama():
         assert abs(kanan - pad) < 0.2 * mm and abs(bawah - pad) < 0.2 * mm, (
             f"{ukuran}: inset QR {kanan / mm:.2f}/{bawah / mm:.2f} mm "
             f"≠ inset teks {pad / mm:.2f} mm")
+
+
+# ── Hierarki nama vs sub-sub kini dibawa KETEBALAN, bukan ukuran ─────────
+
+def test_nama_barang_TEBAL_sub_sub_biasa_pada_ukuran_yang_SAMA():
+    """Sub-sub kelompok kini seukuran nama barang (permintaan pemilik,
+    bertahap tiga kali). Yang membedakan keduanya tinggal KETEBALAN — dan
+    karena itu ketebalan itu wajib dijaga: tanpa uji ini, mengganti
+    `Helvetica-Bold` menjadi `Helvetica` pada baris nama akan melenyapkan
+    seluruh hierarki tanpa satu pun galat.
+
+    Diuji lewat LEBAR TERGAMBAR, bukan lewat nama fontnya: pada ukuran huruf
+    yang sama, Helvetica-Bold menggambar teks yang sama lebih lebar daripada
+    Helvetica. Sub-sub dan nama sengaja diisi teks yang IDENTIK supaya yang
+    dibandingkan benar-benar ketebalannya, bukan panjang katanya.
+    """
+    pdfium = pytest.importorskip("pypdfium2")
+    sama = "Terminal"
+    aset = [{"asset_code": "3100204013", "NUP": "1", "kode_register": "",
+             "_subsub": sama, "asset_name": sama}]
+    data = _render(aset, "besar", sampel_ukuran=False)
+    tp = pdfium.PdfDocument(io.BytesIO(data))[0].get_textpage()
+    penuh = tp.get_text_range()
+
+    lebar = []
+    idx = penuh.find(sama)
+    while idx >= 0:
+        assert tp.count_rects(idx, len(sama)) > 0
+        kiri, _, kanan, _ = tp.get_rect(0)
+        lebar.append(kanan - kiri)
+        idx = penuh.find(sama, idx + 1)
+
+    # Urutan gambar: kode → SUB-SUB → NAMA (lihat gambar_stiker).
+    assert len(lebar) == 2, f"teks '{sama}' harusnya tergambar dua kali"
+    subsub, nama = lebar
+    assert nama > subsub, (
+        f"nama barang ({nama:.2f} pt) tidak lebih tebal daripada sub-sub "
+        f"({subsub:.2f} pt) — hierarkinya hilang")
+
+
+def test_ukuran_huruf_nama_dan_subsub_memang_SAMA():
+    """Pelengkap uji di atas: kalau ukurannya diam-diam dibedakan lagi,
+    perbandingan lebar tak lagi mengukur ketebalan."""
+    from stiker_utils import ukuran_font
+    f = ukuran_font(98.25, 46.25)
+    assert f["nama"] == f["subsub"]

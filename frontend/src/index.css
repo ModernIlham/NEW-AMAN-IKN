@@ -396,7 +396,7 @@ aside .overflow-x-auto::-webkit-scrollbar-thumb:hover, .category-dropdown-scroll
   box-shadow: none;
   padding: 0;
   margin: 0;
-  max-width: 150px;
+  max-width: 240px;
   white-space: normal;
   overflow-wrap: break-word;
   text-align: center;

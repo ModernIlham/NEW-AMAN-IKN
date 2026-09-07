@@ -18,6 +18,44 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1045] Sub-sub kelompok seukuran nama barang; label peta 240 px — 2026-09-07
+
+Permintaan pemilik: *"sub sub kelompok yang ukuran stiker sedang masih kurang
+besar dan tetap dengan perpedoman design perhitungannya. dan untuk label saat
+ini terlalu pendek kata kata yang ditampilkan hingga terakhir harus menggunakan
+'...' buat lebih panjang lagi."*
+
+**Sub-sub kelompok naik ke anak tangga yang SAMA dengan nama barang** —
+kenaikan ketiga, dan tetap di deret emas: dua anak tangga di bawah nama →
+satu → seukuran. Pada stiker sedang 5,56 → 5,91 pt (besar 8,47 → 9,00; kecil
+4,64 → 4,93).
+
+Konsekuensinya perlu disebut terang-terangan: hierarki "nama > sub-sub" tak
+lagi dibawa UKURAN, melainkan KETEBALAN — nama barang digambar
+`Helvetica-Bold`, sub-sub `Helvetica` biasa. Pada stiker tercetak huruf tebal
+memang terbaca lebih dulu daripada huruf biasa seukurannya, jadi pembedanya
+cukup; tetapi karena ketebalan itu kini SATU-SATUNYA pembeda, ia dijaga uji
+tersendiri yang mengukur lebar tergambar (Helvetica-Bold menggambar teks yang
+sama lebih lebar) memakai teks sub-sub dan nama yang identik.
+
+**Dan inilah batas atasnya.** Satu anak tangga lagi menaruh sub-sub lebih besar
+daripada nama barang — keterangan kodefikasi akan mengalahkan nama benda yang
+dicari petugas. Bila masih kurang, yang harus turun adalah nama barangnya:
+tukar-tambah yang berbeda, dan itu keputusan pemilik.
+
+**Label peta dilebarkan 150 → 240 px.** Pada 150 px dua dari empat nama aset
+nyata terpotong di kata keempat ("MERTANI Sensor Kualitas Udara (Sensor
+Kebisingan) GT-2.EF1" berhenti di "Udara…"). Diukur di Chromium memakai aturan
+CSS yang sebenarnya, bukan taksiran: pada 240 px keempatnya muat utuh dalam dua
+baris, pada 200 px yang terpanjang masih terpotong. Batas dua baris ber-elipsis
+tetap.
+
+Angka itu ada di DUA berkas — `max-width` di `index.css` (yang benar-benar
+membungkus teks) dan `LEBAR_MAKS` di `lib/petaLabel` (yang menaksir kotak
+tabrakannya) — jadi ditambahkan uji yang menagih keduanya sama. Berbeda sedikit
+saja, kotak yang dihitung bukan kotak yang tergambar, dan penata anti-tindih
+menyembunyikan label yang sebenarnya lega tanpa satu pun galat.
+
 ## [#1044] Label peta: tulisan telanjang di bawah marker, dua baris — 2026-09-07
 
 Permintaan pemilik: *"label pada peta masih sama saja hasilnya, masih jelek
