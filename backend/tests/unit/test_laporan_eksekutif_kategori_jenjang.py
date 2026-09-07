@@ -548,7 +548,21 @@ def _jarak_isi_ke_kaki(d):
     return jarak
 
 
-@pytest.mark.parametrize("barang", [BARANG, BARANG_PADAT])
+#: Kodefikasi yang barisnya PENDEK tetapi BANYAK: 93 baris satu-baris yang
+#: memenuhi dua lajur nyaris pas. Justru bentuk inilah yang dulu melahirkan
+#: halaman kosong — bukan yang barisnya panjang — sebab kotak isi diregangkan
+#: melewati jatahnya oleh `min-height: auto` bawaan flex, dan kelebihan 26px
+#: itu mendorong kaki halaman ke lembar berikutnya. Fixture yang barisnya
+#: panjang tak pernah menangkapnya.
+BARANG_DUA_LAJUR = [
+    (f"{gol}{bid:02d}{kel:02d}{sub:02d}{ss:03d}",
+     f"Alat Laboratorium {gol}{bid}{kel}{sub}{ss}", 1)
+    for gol in (3, 4, 5) for bid in (1, 2) for kel in (1, 2)
+    for sub in (1, 2) for ss in (1, 2)
+]
+
+
+@pytest.mark.parametrize("barang", [BARANG, BARANG_PADAT, BARANG_DUA_LAJUR])
 def test_lembar_kategori_TAK_meluber_pada_A4(dbx, barang):
     """Jatah tinggi halaman tak boleh melebihi yang sungguh muat.
 
@@ -561,6 +575,22 @@ def test_lembar_kategori_TAK_meluber_pada_A4(dbx, barang):
         f"{halaman - lembar} halaman yatim: ada lembar yang meluber")
 
 
+@pytest.mark.parametrize("barang", [BARANG_PADAT, BARANG_DUA_LAJUR])
+def test_isi_tabel_TIDAK_menindih_kaki_halaman(dbx, barang):
+    """Sejak `.exec-body` memakai `flex: 1 1 0; min-height: 0`, kelebihan isi
+    tak lagi mendorong halaman melainkan MENINDIH kaki halaman.
+
+    Cacatnya jadi berpindah bentuk, bukan hilang: dulu ia halaman kosong yang
+    terlihat, kini baris terakhir yang duduk di atas kaki halaman. Karena itu
+    jumlah halaman saja tak lagi cukup menjaganya — jaraknya sendiri yang
+    diukur, dan ia harus tetap positif.
+    """
+    jarak = _jarak_isi_ke_kaki(_data(dbx, barang=barang))
+    assert jarak, "tak satu lembar bertabel pun terukur"
+    assert min(jarak) > 0, (
+        f"isi tabel menindih kaki halaman: jarak terkecil {min(jarak):.0f}px")
+
+
 def test_lembar_kategori_TIDAK_menyisakan_separuh_kertas(dbx):
     """Permintaan pemilik: *"semua distribusi tidak sampai ke bawah batasnya
     sampai benar-benar tersisa sedikit gapnya dengan footer di bawahnya."*
@@ -570,5 +600,5 @@ def test_lembar_kategori_TIDAK_menyisakan_separuh_kertas(dbx):
     """
     jarak = _jarak_isi_ke_kaki(_data(dbx, barang=BARANG_PADAT))
     assert jarak, "tak satu lembar bertabel pun terukur"
-    assert jarak[0] < 260, (
+    assert jarak[0] < 150, (
         f"lembar kategori menyisakan {jarak[0]:.0f}px sebelum kaki halaman")

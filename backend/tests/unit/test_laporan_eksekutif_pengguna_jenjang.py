@@ -535,6 +535,14 @@ def _pegawai_uji(banyak):
             for i in range(banyak)]
 
 
+def test_isi_tabel_TIDAK_menindih_kaki_halaman(dbx):
+    """Kelebihan isi kini menindih kaki halaman alih-alih mendorongnya."""
+    jarak = _jarak_isi_ke_kaki(_data(dbx, pegawai=_pegawai_uji(120)))
+    assert jarak, "tak satu lembar bertabel pun terukur"
+    assert min(jarak) > 0, (
+        f"isi tabel menindih kaki halaman: jarak terkecil {min(jarak):.0f}px")
+
+
 @pytest.mark.parametrize("banyak", [4, 34, 90])
 def test_tak_ada_halaman_yatim(dbx, banyak):
     """Lembar `overflow: hidden` yang meluber TIDAK memotong kakinya.
@@ -572,7 +580,7 @@ def test_lembar_distribusi_TIDAK_menyisakan_separuh_kertas(dbx):
     assert len(sambungan) == peg_hal - 1, (
         f"irisan lembar pengguna meleset: {len(sambungan)} dari {peg_hal - 1}")
     for j in sambungan:
-        assert j < 420, (
+        assert j < 360, (
             f"jarak isi ke kaki halaman {j:.0f}px — kertas terbuang")
 
 
