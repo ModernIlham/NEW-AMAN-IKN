@@ -371,16 +371,21 @@ aside .overflow-x-auto::-webkit-scrollbar-thumb:hover, .category-dropdown-scroll
    Permintaan pemilik: nama aset tampil di samping marker, "font putih dan
    diberikan stroke hitam agar terlihat di segala macam background latar".
 
-   Stroke-nya `paint-order: stroke` + `-webkit-text-stroke`: cara ini menggambar
-   garis tepi DI BELAKANG huruf, sehingga huruf tetap setebal aslinya. Tanpa
-   `paint-order`, stroke digambar di atas huruf dan menggerogotinya dari dalam —
-   pada huruf 11px teksnya berubah menjadi gumpalan hitam.
+   TANPA `-webkit-text-stroke`. Versi pertama memakainya (2.5px) bersama
+   `paint-order: stroke fill` supaya garis tepinya tergambar DI BELAKANG huruf.
+   Di peramban yang tak menghormati `paint-order` — dan peramban pemilik salah
+   satunya — stroke setebal itu digambar DI ATAS huruf 11px dan menutupinya
+   sampai habis: labelnya menjadi batangan hitam pekat, bukan tulisan. Tak ada
+   galat, tak ada peringatan; hanya nama yang tak dapat dibaca.
 
-   `text-shadow` ditumpuk sebagai cadangan bagi mesin yang tak mengenal
-   `-webkit-text-stroke` (di sana huruf putihnya tetap punya batas gelap).
+   Yang dipakai sekarang bayangan berlapis: delapan arah sejauh 1px membentuk
+   garis tepi rapat, satu halo lembut 3px melunakkan tepinya. `text-shadow`
+   MENURUT DEFINISI digambar di belakang huruf, jadi ia mustahil menutupi
+   hurufnya sendiri — di peramban mana pun. Diuji dengan merender di atas tiga
+   latar: peta jalan terang, citra satelit rimbun, dan putih polos.
 
-   Gelembung bawaan tooltip Leaflet dimatikan seluruhnya — latar, bingkai,
-   bayangan, dan segitiga penunjuknya: yang diminta label, bukan balon. */
+   Rata tengah karena nama panjang membungkus ke baris kedua; rata kiri membuat
+   baris kedua menggantung dan tak lagi terbaca sebagai satu label. */
 .aman-peta-label {
   background: none;
   border: 0;
@@ -390,13 +395,15 @@ aside .overflow-x-auto::-webkit-scrollbar-thumb:hover, .category-dropdown-scroll
   max-width: 150px;
   white-space: normal;
   overflow-wrap: break-word;
-  font: 700 11px/13px system-ui, -apple-system, "Segoe UI", sans-serif;
+  text-align: center;
+  font: 600 12px/14px system-ui, -apple-system, "Segoe UI", sans-serif;
   color: #fff;
-  paint-order: stroke fill;
-  -webkit-text-stroke: 2.5px #0f172a;
   text-shadow:
     -1px -1px 0 #0f172a, 1px -1px 0 #0f172a,
-    -1px 1px 0 #0f172a, 1px 1px 0 #0f172a;
+    -1px 1px 0 #0f172a, 1px 1px 0 #0f172a,
+    0 -1px 0 #0f172a, 0 1px 0 #0f172a,
+    -1px 0 0 #0f172a, 1px 0 0 #0f172a,
+    0 0 3px rgba(15, 23, 42, 0.85);
   /* Label tak boleh menangkap klik: di peta padat ia menutupi marker
      tetangganya, dan pin yang tertutup label menjadi tak bisa diketuk. */
   pointer-events: none;

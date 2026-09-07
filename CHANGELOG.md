@@ -18,6 +18,45 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1038] Label peta terbaca: garis tepi dari bayangan, bukan stroke — 2026-09-07
+
+Permintaan pemilik: *"label tidak sesuai dan tidak terlihat"* — disertai
+tangkapan layar label yang tercetak sebagai BATANGAN HITAM PEKAT, dan sebuah
+contoh label peta yang baik sebagai acuan.
+
+**Sebabnya persis yang ditulis di komentar CSS-nya sendiri.** `[#1036]` memakai
+`-webkit-text-stroke: 2.5px` bersama `paint-order: stroke fill` agar garis
+tepinya tergambar di belakang huruf — dan komentarnya menjelaskan bahwa tanpa
+`paint-order`, stroke itu akan "menggerogoti huruf 11px dari dalam sampai
+teksnya menjadi gumpalan hitam". Itulah yang terjadi: peramban pemilik tidak
+menghormati `paint-order`, stroke setebal itu digambar DI ATAS huruf, dan
+labelnya hilang menjadi batangan. Tak ada galat, tak ada peringatan.
+
+Yang keliru bukan hanya nilainya — melainkan memilih teknik yang bergantung
+pada dukungan properti, lalu mengirimkannya tanpa pernah melihat hasilnya
+tergambar.
+
+**Garis tepinya kini dari `text-shadow`**: delapan arah sejauh 1px membentuk
+tepi rapat, satu halo lembut 3px melunakkannya. `text-shadow` menurut definisi
+digambar di belakang huruf, jadi ia MUSTAHIL menutupi hurufnya sendiri — di
+peramban mana pun. `-webkit-text-stroke` dan `paint-order` dibuang seluruhnya.
+
+Hurufnya naik ke 12px/600 dan rata tengah, mengikuti contoh yang diberikan
+pemilik: nama panjang membungkus ke baris kedua, dan rata kiri membuat baris
+kedua menggantung sehingga tak lagi terbaca sebagai satu label.
+
+**Diverifikasi dengan merender**, bukan ditebak: kandidatnya digambar di
+Chromium di atas tiga latar — peta jalan terang, citra satelit rimbun, dan
+putih polos — lalu dibandingkan berdampingan dengan bentuk lamanya.
+
+Ikut diperbaiki: lebar karakter untuk kotak anti-tabrakan diukur ulang pada
+huruf yang sebenarnya (7.39px rata-rata, 8.45px terboros; diambil 8) dan tinggi
+barisnya 14px. Tetapan lama 6.2px berasal dari huruf 11px dan menaksir kotak
+19% terlalu sempit — dua label bisa dinilai tak bertabrakan padahal bertindih
+di layar, yakni justru hal yang penata label ini ada untuk mencegahnya.
+
+---
+
 ## [#1037] Koordinat disimpan dengan titik desimal, bukan koma — 2026-09-07
 
 Permintaan pemilik: *"ketika lat lng ditulis menggunakan koma ketika disimpan,
