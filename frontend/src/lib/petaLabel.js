@@ -32,8 +32,22 @@
  */
 export const LEBAR_KARAKTER = 8;
 
-/** Lebar maksimum satu label sebelum teksnya membungkus ke bawah. */
-export const LEBAR_MAKS = 150;
+/**
+ * Lebar maksimum satu label sebelum teksnya membungkus ke bawah.
+ *
+ * WAJIB SAMA dengan `max-width` aturan `.leaflet-tooltip.aman-peta-label` di
+ * `index.css`: yang benar-benar membungkus teks adalah CSS, sedangkan angka
+ * ini hanya dipakai menaksir KOTAK TABRAKANNYA. Bila keduanya berbeda, kotak
+ * yang dihitung bukan kotak yang tergambar — penata anti-tindih lalu
+ * menyembunyikan label yang sebenarnya lega dan meloloskan yang bertindih.
+ *
+ * 150 px dulu memotong dua dari empat nama aset nyata pada baris kedua
+ * ("...MERTANI Sensor Kualitas Udara (Sensor Kebisingan) GT-2.EF1" berhenti di
+ * kata keempat), dan pemilik memintanya lebih panjang. Diukur di Chromium
+ * dengan aturan CSS yang sebenarnya: pada 240 px keempatnya muat utuh dalam
+ * dua baris, pada 200 px yang terpanjang masih terpotong.
+ */
+export const LEBAR_MAKS = 240;
 
 /**
  * Batas baris label. Label yang mengalir lebih panjang menutupi marker

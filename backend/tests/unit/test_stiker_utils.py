@@ -89,7 +89,10 @@ def test_hierarki_font_terjaga_di_semua_ukuran():
     from stiker_utils import LANTAI_CETAK_PT
     for lebar, tinggi in UKURAN_NYATA:
         f = ukuran_font(lebar, tinggi)
-        assert f["kode"] > f["nama"] > f["subsub"] >= f["label"]
+        # Sub-sub kini SEUKURAN nama barang atas permintaan pemilik;
+        # hierarki keduanya dibawa KETEBALAN, bukan ukuran (uji tersendiri
+        # di test_stiker_render menagih tebal/biasanya).
+        assert f["kode"] > f["nama"] >= f["subsub"] >= f["label"]
         assert f["instansi"] > f["sub"]
         # Lantai cetak dikenakan pada peran yang sungguh ditempel.
         assert min(f[p] for p in PERAN_NYATA) >= LANTAI_CETAK_PT
@@ -133,27 +136,31 @@ def test_pengecilan_antar_ukuran_SERAGAM_untuk_semua_peran():
             f"pengecilan tak seragam di {lebar}×{tinggi}: {nisbah}")
 
 
-def test_subsub_SATU_anak_tangga_di_bawah_nama_di_SEMUA_ukuran():
-    """Sub-sub kelompok duduk persis satu anak tangga emas di bawah nama
-    barang, di setiap ukuran stiker.
+def test_subsub_SEUKURAN_nama_di_SEMUA_ukuran():
+    """Sub-sub kelompok duduk di anak tangga yang SAMA dengan nama barang, di
+    setiap ukuran stiker.
 
-    Riwayatnya: mula-mula dua anak tangga di bawah nama; pemilik menilainya
-    tenggelam di stiker besar sehingga dinaikkan satu — tetapi HANYA pada
-    stiker lega, karena stiker kecil dinyatakan sudah pas. Setelah
-    mencetaknya ia meminta kenaikan yang sama *"di semua ukuran stiker"*,
-    jadi ambang tinggi 26 mm itu dibuang dan keseragamannya utuh lagi.
+    Riwayatnya bertahap, tiga kali atas permintaan pemilik: dua anak tangga di
+    bawah nama → satu → seukuran. Setiap kali ia tetap anak tangga emas; yang
+    berubah hanya rung-nya.
 
     Yang diuji BUKAN "sub-sub lebih besar" — itu lolos oleh perbesaran
-    sembarang — melainkan jaraknya yang PERSIS satu anak tangga, dan
-    hierarkinya: pada nol anak tangga sub-sub tepat sebesar nama barang.
+    sembarang — melainkan bahwa ia tepat di rung yang sama, dan tak pernah
+    MELAMPAUI nama barang: keterangan kodefikasi yang lebih besar daripada
+    nama benda akan membalik apa yang lebih dulu ditemukan mata petugas.
     """
-    from stiker_utils import LANGKAH_EMAS
     for lebar, tinggi in UKURAN_NYATA:
         f = ukuran_font(lebar, tinggi)
-        assert abs(f["subsub"] / f["nama"] - LANGKAH_EMAS ** -1) < 0.005, (
-            f"sub-sub bukan satu anak tangga di bawah nama "
-            f"pada {lebar}×{tinggi}")
-        assert f["nama"] > f["subsub"], "sub-sub menyamai nama barang"
+        assert f["subsub"] == f["nama"], f"{lebar}×{tinggi}"
+
+
+def test_subsub_TAK_BOLEH_melampaui_nama_barang():
+    """Batas atas tangga sub-sub. Uji ini yang jatuh bila suatu saat ia
+    dinaikkan satu rung lagi — dan itu memang perlu dijatuhkan, sebab
+    menaikkannya lagi berarti menurunkan nama barang, bukan hal yang sama."""
+    for lebar, tinggi in ((100, 70), (70, 40), (50, 25), (38, 19)):
+        f = ukuran_font(lebar, tinggi)
+        assert f["subsub"] <= f["nama"] < f["kode"], (lebar, tinggi)
 
 
 def test_subsub_stiker_kecil_IKUT_naik():
@@ -161,7 +168,7 @@ def test_subsub_stiker_kecil_IKUT_naik():
     ambang tinggi 26 mm; angka itu dipatok di sini sebagai batas BAWAH supaya
     ambang serupa tak diam-diam kembali."""
     f = ukuran_font(48.375, 22.375)
-    assert f["subsub"] > 4.37
+    assert f["subsub"] > 4.64
 
 
 def test_hierarki_PERSIS_sama_di_semua_ukuran():
@@ -327,16 +334,6 @@ def test_ruang_mepet_NAMA_tetap_didahulukan():
     f = ukuran_font(50, 25)
     jatah = rencana_badan(f["kode"] * 1.32 + f["nama"] * 1.2, f)
     assert jatah == {"nama": 1, "subsub": 0}
-
-
-def test_subsub_TERBACA_tetapi_tetap_di_bawah_nama():
-    """Sub-sub kini duduk tepat di bawah kode sebagai keterangannya, jadi ia
-    dinaikkan agar terbaca — tetapi hierarkinya tak boleh terbalik: ia tetap
-    lebih kecil daripada nama barang dan kode."""
-    from stiker_utils import ukuran_font
-    for lebar, tinggi in ((100, 70), (70, 40), (50, 25), (38, 19)):
-        f = ukuran_font(lebar, tinggi)
-        assert f["subsub"] < f["nama"] < f["kode"], (lebar, tinggi)
 
 
 def test_elipsis_dipakai_saat_nama_melebihi_jatah():

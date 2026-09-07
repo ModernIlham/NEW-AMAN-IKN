@@ -98,21 +98,25 @@ LANGKAH_PERAN = {
     "instansi": 1,    # judul kepala stiker
     "nup": 0,         # NUP, sebaris dengan kode barang
     "nama": 0,        # nama barang — acuan tangga
-    "subsub": -1,     # sub-sub kelompok, keterangan kode barang
+    "subsub": 0,      # sub-sub kelompok — sama besar dgn nama, lihat bawah
     "sub": -3,        # baris kedua kepala (nama/kode satker)
     "label": -6,      # keterangan garis ukur (stiker CONTOH saja)
 }
 
-#: Sub-sub kelompok sempat dinaikkan satu anak tangga HANYA pada stiker yang
-#: lega (ambang tinggi 26 mm), karena pemilik menilainya pas di stiker kecil
-#: tetapi tenggelam di stiker besar. Setelah mencetaknya ia meminta kenaikan
-#: yang sama diberlakukan *"di semua ukuran stiker"*, jadi ambang itu dibuang
-#: dan `subsub` kembali menjadi satu anak tangga tetap (-1) di seluruh
-#: keluarga — keseragaman "stiker kecil = stiker besar yang mengecil" utuh
-#: lagi, tanpa pengecualian.
+#: SUB-SUB KELOMPOK naik bertahap atas permintaan pemilik: dua anak tangga di
+#: bawah nama barang → satu → dan kini SEUKURAN nama barang. Setiap kali ia
+#: tetap anak tangga emas; yang berubah hanya rung-nya.
 #:
-#: -1 memang batasnya: pada -0 sub-sub tepat sebesar nama barang dan hierarki
-#: "nama > sub-sub" hilang. Menaikkannya lagi berarti menurunkan nama barang.
+#: Konsekuensinya hierarki "nama > sub-sub" tak lagi dibawa UKURAN, melainkan
+#: KETEBALAN: nama barang digambar Helvetica-Bold dan sub-sub Helvetica biasa
+#: (lihat `stiker_render.gambar_stiker`). Itu pembeda yang cukup — pada stiker
+#: tercetak, huruf tebal terbaca lebih dulu daripada huruf biasa seukurannya —
+#: dan itu pula sebabnya rung 0 masih bisa ditempuh.
+#:
+#: DAN INILAH BATASNYA. Satu anak tangga lagi menaruh sub-sub LEBIH BESAR
+#: daripada nama barang, dan keterangan kodefikasi akan mengalahkan nama benda
+#: yang dicari petugas. Bila masih dirasa kurang, yang harus turun adalah nama
+#: barangnya — tukar-tambah yang berbeda, dan itu keputusan pemilik.
 #: Inset tepi stiker. Ikut mengecil bersama stikernya (φ^6 ≈ 17,94 bagian
 #: dari sisi pendek) dengan LANTAI absolut: toleransi mesin potong itu
 #: besaran fisik, bukan perbandingan — stiker sekecil apa pun tetap butuh
