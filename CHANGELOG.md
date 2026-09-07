@@ -18,6 +18,53 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1044] Label peta: tulisan telanjang di bawah marker, dua baris — 2026-09-07
+
+Permintaan pemilik: *"label pada peta masih sama saja hasilnya, masih jelek
+hasil yang terlihat di aktualnya … agar pelabelannya mirip seperti screenshoot
+yang saya berikan, tidak pakai label langsung tulisannya dan jelas terbacanya …
+pastikan dari marker baik pin maupun foto, labelnya masih tetap rapi berada
+ditengah … jangan buat label terlalu panjang bagi menjadi 2 baris saja dan
+'...' jika sudah terlalu panjang. tanpa kartu label cukup tulisan saja."*
+
+**Perbaikan [#1038] tak pernah berlaku di produksi.** `leaflet.css` diimpor DI
+DALAM komponen peta yang dimuat malas, jadi ia berakhir di chunk CSS terpisah
+yang disisipkan SETELAH `index.css`. Dengan satu kelas saja, spesifisitas
+`.aman-peta-label` SERI dengan `.leaflet-tooltip` dan yang belakangan menang:
+
+| properti | aturan kita | Leaflet (menang) |
+|---|---|---|
+| `background` | `none` | `#fff` → kartu putih kembali |
+| `border` | `0` | `1px solid #fff` |
+| `box-shadow` | `none` | `0 1px 3px #0006` |
+| `color` | `#fff` | `#222` → teks gelap |
+| `white-space` | `normal` | `nowrap` → tak pernah membungkus |
+
+Yang lolos hanya `text-shadow` — halo GELAP. Hasilnya teks gelap ber-halo
+gelap di atas kartu putih: tebal, berlepotan, tak terbaca. Persis yang
+dilaporkan pemilik.
+
+Uji lamanya lulus karena ia hanya membaca APAKAH properti tertulis — nujum buta
+terhadap siapa yang menang. Penggantinya menagih SPESIFISITAS: selektornya
+wajib memuat `.leaflet-tooltip` dan berkelas lebih banyak daripada aturan
+Leaflet, dan setiap properti yang Leaflet setel wajib ditimpa.
+
+**Rupanya kini mengikuti contoh pemilik** (label POI Google Maps): tanpa kartu,
+teks GELAP `#1f2937` ber-halo PUTIH. Arah kontrasnya dibalik dari versi lama
+karena kedua peta aplikasi ini memakai basemap OpenStreetMap standar yang
+TERANG — tak ada lapisan satelit. Diperiksa di atas tiga warna OSM Carto yang
+paling menekan: tanah `#f2efe9`, hutan `#add19e`, air `#aad3df`.
+
+**Label pindah ke bawah-tengah marker.** Titik jangkar KEDUA gaya marker (pin
+22×22 dan marker foto 46×54) sama-sama berada di tengah-bawah ikonnya,
+sehingga satu penempatan `direction: "bottom"` membuat label rapi di tengah
+pada keduanya. Kotak tabrakan di `lib/petaLabel` ikut pindah — kotak yang
+tertinggal di kanan akan membuat penata anti-tindih menyembunyikan label yang
+sebenarnya lega dan meloloskan label yang sebenarnya bertindih.
+
+**Dibatasi dua baris ber-elipsis** (`-webkit-line-clamp`), dan `MAKS_BARIS`
+pada penata tabrakan disamakan dengannya.
+
 ## [#1043] Stiker label: sub-sub kelompok naik di SEMUA ukuran — 2026-09-07
 
 Permintaan pemilik: *"pada sub sub kelompok tambahkan ukurannya sedikit lagi

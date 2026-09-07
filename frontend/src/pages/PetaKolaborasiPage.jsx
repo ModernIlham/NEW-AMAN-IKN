@@ -25,7 +25,7 @@ import {
   MODE_GESER, ringkasGeser, teksJarak,
 } from "@/lib/geserUsulan";
 import { perluLaciAlat, ringkasAlatAktif } from "@/lib/alatPeta";
-import { kotakLabel, pilihLabelTampil } from "@/lib/petaLabel";
+import { JARAK_DARI_MARKER, kotakLabel, pilihLabelTampil } from "@/lib/petaLabel";
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from "../components/ui/popover";
@@ -856,8 +856,13 @@ export default function PetaKolaborasiPage() {
         try {
           entry.marker.bindTooltip(nama.get(key) || "", {
             permanent: true,
-            direction: "right",
-            offset: [12, 0],
+            // BAWAH-TENGAH, bukan kanan: titik jangkar kedua gaya marker
+            // (pin 22×22 dan marker foto 46×54) sama-sama di tengah-bawah
+            // ikonnya, jadi satu penempatan ini membuat label rapi di tengah
+            // pada keduanya. `offset` dipakai sebagai jarak, bukan `margin`
+            // bawaan Leaflet — margin itu ditimpa aturan label di index.css.
+            direction: "bottom",
+            offset: [0, JARAK_DARI_MARKER],
             className: "aman-peta-label",
             interactive: false,
           });

@@ -1,10 +1,13 @@
 /**
  * Penataan label nama aset di peta.
  *
- * Permintaan pemilik: *"pada halaman peta tambahkan fitur label yang
- * menampilkan nama-nama asetnya dengan font putih dan diberikan stroke hitam
- * agar terlihat di segala macam background latar, pastikan rapi mengingat ada
- * cluster dan berdekatan satu dengan lainnya."*
+ * Permintaan pemilik: label nama aset yang rapi walau ada cluster dan marker
+ * berdekatan; lalu — setelah melihat hasilnya — *"tolong perbaiki agar
+ * pelabelannya mirip seperti screenshoot yang saya berikan, tidak pakai label
+ * langsung tulisannya dan jelas terbacanya ... pastikan dari marker baik pin
+ * maupun foto, labelnya masih tetap rapi berada ditengah ... jangan buat label
+ * terlalu panjang bagi menjadi 2 baris saja dan '...' jika sudah terlalu
+ * panjang."*
  *
  * Bagian yang sulit bukan menggambar labelnya, melainkan membuatnya RAPI:
  * label permanen pada peta padat saling menimpa sampai tak satu pun terbaca,
@@ -32,13 +35,34 @@ export const LEBAR_KARAKTER = 8;
 /** Lebar maksimum satu label sebelum teksnya membungkus ke bawah. */
 export const LEBAR_MAKS = 150;
 
+/**
+ * Batas baris label. Label yang mengalir lebih panjang menutupi marker
+ * tetangganya — dan justru marker itulah yang sedang dicari mata. Baris
+ * ketiga dan seterusnya dipotong ber-elipsis oleh CSS (`-webkit-line-clamp`),
+ * jadi angka ini harus SAMA dengan yang di `index.css`: kotak tabrakan yang
+ * dihitung untuk tiga baris sementara yang tergambar dua akan menyembunyikan
+ * label yang sebenarnya tak bertabrakan.
+ */
+export const MAKS_BARIS = 2;
+
 /** Tinggi satu baris teks label — diukur 14.0px pada huruf 600 12px/14px. */
 export const TINGGI_BARIS = 14;
 
-/** Jarak label dari titik markernya (ke kanan) dan sisipan kotaknya. */
-export const JARAK_DARI_MARKER = 14;
-export const SISIPAN_X = 6;
-export const SISIPAN_Y = 4;
+/**
+ * Jarak label dari titik markernya (ke BAWAH) dan sisipan kotaknya.
+ *
+ * Label kini duduk di bawah-tengah marker, bukan di kanannya: titik jangkar
+ * kedua gaya marker (pin 22×22 dan marker foto 46×54) sama-sama berada di
+ * TENGAH-BAWAH ikonnya, sehingga satu penempatan "bawah" membuat label rapi
+ * di tengah pada keduanya — permintaan pemilik.
+ *
+ * Sisipannya kecil karena labelnya kini tulisan telanjang tanpa kartu; yang
+ * disisakan hanya selebar halo putihnya supaya dua label bersebelahan tak
+ * saling menggerus tepinya.
+ */
+export const JARAK_DARI_MARKER = 6;
+export const SISIPAN_X = 2;
+export const SISIPAN_Y = 2;
 
 /**
  * Banyaknya label yang masih pantas dihitung tabrakannya dalam satu sapuan.
@@ -59,8 +83,9 @@ export function ukurLabel(teks, { lebarMaks = LEBAR_MAKS } = {}) {
   const t = String(teks || "").trim();
   if (!t) return { lebar: 0, tinggi: 0, baris: 0 };
   const lebarPenuh = t.length * LEBAR_KARAKTER;
-  const baris = Math.max(1, Math.ceil(lebarPenuh / Math.max(1, lebarMaks)));
-  const lebar = baris > 1 ? lebarMaks : lebarPenuh;
+  const barisPenuh = Math.max(1, Math.ceil(lebarPenuh / Math.max(1, lebarMaks)));
+  const baris = Math.min(MAKS_BARIS, barisPenuh);
+  const lebar = barisPenuh > 1 ? lebarMaks : lebarPenuh;
   return {
     lebar: lebar + SISIPAN_X * 2,
     tinggi: baris * TINGGI_BARIS + SISIPAN_Y * 2,
@@ -71,17 +96,20 @@ export function ukurLabel(teks, { lebarMaks = LEBAR_MAKS } = {}) {
 /**
  * Kotak layar sebuah label bagi marker di titik `(x, y)`.
  *
- * Label duduk di KANAN marker dan rata tengah terhadapnya — arah yang sama
- * dengan tooltip Leaflet `direction: "right"`, supaya kotak yang dihitung di
- * sini benar-benar kotak yang tergambar.
+ * `(x, y)` adalah titik JANGKAR marker — tengah-bawah ikonnya pada kedua gaya
+ * marker. Label duduk tepat di bawahnya dan rata tengah terhadapnya, arah yang
+ * sama dengan tooltip Leaflet `direction: "bottom"`, supaya kotak yang
+ * dihitung di sini benar-benar kotak yang tergambar. Kotak yang tak sejalan
+ * dengan gambarnya membuat penata anti-tindih menyembunyikan label yang
+ * sebenarnya lega dan meloloskan label yang sebenarnya bertindih.
  */
 export function kotakLabel(x, y, teks, opsi) {
   const { lebar, tinggi } = ukurLabel(teks, opsi);
   return {
-    kiri: x + JARAK_DARI_MARKER,
-    atas: y - tinggi / 2,
-    kanan: x + JARAK_DARI_MARKER + lebar,
-    bawah: y + tinggi / 2,
+    kiri: x - lebar / 2,
+    atas: y + JARAK_DARI_MARKER,
+    kanan: x + lebar / 2,
+    bawah: y + JARAK_DARI_MARKER + tinggi,
   };
 }
 

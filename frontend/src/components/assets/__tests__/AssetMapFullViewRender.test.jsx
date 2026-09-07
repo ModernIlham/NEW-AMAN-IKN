@@ -201,18 +201,73 @@ test("pilihan label BERTAHAN antar sesi", async () => {
       .getAttribute("aria-pressed")).toBe("true"));
 });
 
-function aturanLabelPeta() {
-  const css = require("fs").readFileSync(
-    require("path").join(__dirname, "../../../index.css"), "utf8");
-  const awal = css.indexOf(".aman-peta-label {");
-  expect(awal).toBeGreaterThan(-1);
-  return css.slice(awal, css.indexOf("}", awal));
+function bacaCss(rel) {
+  return require("fs").readFileSync(
+    require("path").join(__dirname, rel), "utf8");
 }
+
+/** Selektor + isi aturan label peta di index.css. */
+function aturanLabelPeta() {
+  const css = bacaCss("../../../index.css");
+  const cocok = css.match(/([^{}]*aman-peta-label[^{}]*)\{([^}]*)\}/);
+  expect(cocok).not.toBeNull();
+  // Komentar DIBUANG: yang diuji deklarasinya, bukan prosanya. Tanpa ini
+  // sebuah komentar yang menyebut nama properti (mis. menjelaskan mengapa
+  // `-webkit-text-stroke` tak dipakai) terbaca seolah propertinya dipakai.
+  return {
+    selektor: cocok[1].replace(/\/\*[\s\S]*?\*\//g, "").trim(),
+    isi: cocok[2].replace(/\/\*[\s\S]*?\*\//g, ""),
+  };
+}
+
+/** Banyaknya kelas pada sebuah selektor — penentu spesifisitasnya di sini. */
+function jumlahKelas(selektor) {
+  return (selektor.match(/\.[A-Za-z_-][\w-]*/g) || []).length;
+}
+
+test("aturan label MENGALAHKAN .leaflet-tooltip, bukan sekadar menuliskannya", () => {
+  /* PENJAGA REGRESI — cacat yang lolos sekali dan dilaporkan pemilik.
+
+     `leaflet.css` diimpor DI DALAM komponen peta yang dimuat malas, jadi ia
+     berakhir di chunk CSS terpisah yang disisipkan SETELAH index.css. Dengan
+     satu kelas saja, spesifisitas `.aman-peta-label` SERI dengan
+     `.leaflet-tooltip` dan yang belakangan menang: Leaflet mengembalikan
+     kartu putih, teks #222, dan `white-space: nowrap`, menyisakan hanya
+     `text-shadow` gelap — teks gelap ber-halo gelap di atas kartu putih.
+
+     Uji lama hanya membaca APAKAH properti tertulis, dan itulah sebabnya ia
+     lulus sementara produksi menggambar kartu putih. Yang ditagih di sini
+     adalah spesifisitasnya, satu-satunya hal yang menentukan siapa menang. */
+  const { selektor } = aturanLabelPeta();
+  // Komentar dibuang dulu: aturan `.leaflet-tooltip` didahului dua baris
+  // komentar, sehingga pencocokan "tepat sesudah `}`" tak pernah kena.
+  const leaflet = bacaCss("../../../../node_modules/leaflet/dist/leaflet.css")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+  const aturanLeaflet = leaflet.match(/(?:^|\})\s*\.leaflet-tooltip\s*\{([^}]*)\}/);
+  expect(aturanLeaflet).not.toBeNull();
+
+  expect(selektor).toContain(".leaflet-tooltip");
+  expect(jumlahKelas(selektor)).toBeGreaterThan(jumlahKelas(".leaflet-tooltip"));
+
+  // Dan tiap properti yang Leaflet setel pada tooltipnya HARUS ditimpa di
+  // sini — kecuali yang memang miliknya (posisi & pilih-teks).
+  const milikLeaflet = (aturanLeaflet[1].match(/[a-z-]+\s*:/g) || [])
+    .map((d) => d.replace(/[:\s]/g, ""));
+  expect(milikLeaflet).toContain("background-color");   // regex benar-benar kena
+  // `position` milik Leaflet (ia yang menempatkan tooltipnya) dan
+  // `user-select` (berikut awalan vendornya) tak berpengaruh pada rupa label.
+  const milikSendiri = (p) => p === "position" || p.endsWith("user-select");
+  for (const prop of milikLeaflet) {
+    if (milikSendiri(prop)) continue;
+    const akar = prop.replace(/-color$|-radius$/, "");
+    expect(aturanLabelPeta().isi).toMatch(new RegExp(`(^|;|\\s)${akar}[a-z-]*\\s*:`));
+  }
+});
 
 test("label TIDAK menangkap klik — pin di bawahnya tetap dapat diketuk", () => {
   // Di peta padat label menutupi marker tetangganya; label yang menangkap
   // klik membuat pin di bawahnya tak bisa dibuka sama sekali.
-  expect(aturanLabelPeta()).toMatch(/pointer-events:\s*none/);
+  expect(aturanLabelPeta().isi).toMatch(/pointer-events:\s*none/);
 });
 
 test("garis tepi label memakai BAYANGAN, bukan -webkit-text-stroke", () => {
@@ -226,12 +281,14 @@ test("garis tepi label memakai BAYANGAN, bukan -webkit-text-stroke", () => {
 
      `text-shadow` menurut definisi digambar di belakang huruf, jadi ia mustahil
      menutupi hurufnya sendiri di peramban mana pun. */
-  const aturan = aturanLabelPeta();
+  const aturan = aturanLabelPeta().isi;
   expect(aturan).not.toMatch(/-webkit-text-stroke/);
   expect(aturan).not.toMatch(/paint-order/);
-  expect(aturan).toMatch(/color:\s*#fff/);
+  // Teks GELAP ber-halo PUTIH, mengikuti contoh pemilik: kedua peta memakai
+  // basemap OpenStreetMap standar yang TERANG.
+  expect(aturan).toMatch(/color:\s*#1f2937/);
   // Delapan arah 1px membentuk garis tepi rapat + satu halo melunakkan tepinya.
-  expect((aturan.match(/#0f172a/g) || []).length).toBeGreaterThanOrEqual(8);
+  expect((aturan.match(/#fff/g) || []).length).toBeGreaterThanOrEqual(8);
   expect(aturan).toMatch(/text-shadow:/);
   // Gelembung bawaan tooltip Leaflet dimatikan: yang diminta label, bukan balon.
   expect(aturan).toMatch(/background:\s*none/);
