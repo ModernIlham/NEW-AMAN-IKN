@@ -18,6 +18,54 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1036] Label nama aset di peta — 2026-09-07
+
+Permintaan pemilik: *"pada halaman peta tambahkan fitur label yang menampilkan
+nama-nama asetnya dengan font putih dan diberikan stroke hitam agar terlihat di
+segala macam background latar, pastikan rapi mengingat ada cluster dan
+berdekatan satu dengan lainnya, dan juga berikan tombol aktif tidak aktif dalam
+memberikan labelnya di samping marker."*
+
+Nama aset kini dapat tampil di samping markernya, di **Peta Aset** maupun di
+**Peta Kolaborasi** — keduanya memakai penata yang sama (`lib/petaLabel`), sebab
+dua penata berbeda akan menghasilkan dua peta yang "rapi" dengan aturan berbeda,
+dan yang kedua tak pernah ikut diperbaiki.
+
+**Putih ber-stroke gelap, terbaca di atas latar apa pun.** Strokenya digambar DI
+BELAKANG huruf (`paint-order: stroke`); tanpa itu stroke menggerogoti huruf 11px
+dari dalam sampai teksnya menjadi gumpalan hitam. `text-shadow` ditumpuk sebagai
+cadangan bagi mesin yang tak mengenal `-webkit-text-stroke`. Gelembung bawaan
+tooltip Leaflet dimatikan seluruhnya — yang diminta label, bukan balon.
+
+**Rapi berarti memilih.** Bagian yang sulit bukan menggambar labelnya: label
+permanen pada peta padat saling menimpa sampai tak satu pun terbaca, dan yang
+tertimpa tak menghilang — ia menjadi coretan hitam-putih di atas peta. Tiap kali
+peta bergerak, label dipilih ulang; yang kotaknya bertabrakan dengan label yang
+sudah dipilih tidak ditampilkan. Prioritasnya TETAP (urutan baris data), bukan
+posisi di layar: prioritas yang berubah saat peta digeser membuat label
+berkedip-kedip padahal petanya hanya bergeser sedikit.
+
+Tiga hal yang ikut dijaga:
+
+- **Anggota cluster dilewati.** Marker yang sedang mengerut ke dalam cluster tak
+  tergambar; ikut menghitungnya berarti ia menghabiskan jatah ruang bagi label
+  yang benar-benar tampak.
+- **Peta yang terlalu padat tak dilabeli sama sekali** (di atas 120 kandidat).
+  Label yang tersisa setelah tabrakan hanya segelintir yang tersebar acak, dan
+  pembaca tak punya cara menebak mengapa justru yang itu yang bernama.
+- **Label tak menangkap klik.** Di peta padat ia menutupi marker tetangganya,
+  dan pin yang tertutup label menjadi tak bisa diketuk sama sekali.
+
+**Nama panjang membungkus, bukan dipotong.** Yang dibatasi lebar kotaknya (150px),
+bukan teksnya — tak ada nama yang berakhir dengan "…".
+
+Tombolnya ada di toolbar kedua peta (dan di menu gabungan HP pada Peta Aset),
+mati secara bawaan, dan pilihannya bertahan antar sesi dengan kunci penyimpanan
+yang SAMA untuk kedua peta: dua peta yang menampilkan aset yang sama tak
+seharusnya menuntut pemakainya menyalakan label dua kali.
+
+---
+
 ## [#1035] Kondisi aset dikelompokkan per Kelompok, seluruhnya — 2026-09-07
 
 Permintaan pemilik: *"Kondisi Aset Per Kategori ditampilkan semua dan

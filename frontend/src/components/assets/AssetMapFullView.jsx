@@ -8,7 +8,7 @@ import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import axios from "axios";
-import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layers, ChevronDown, Boxes, MousePointerClick, CheckCheck, Eraser, PencilLine, SquareDashed, Share2, ImageIcon, Lock, LockOpen, LandPlot, Building2, Eye, EyeOff, Gauge, Ruler } from "lucide-react";
+import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layers, ChevronDown, Boxes, MousePointerClick, CheckCheck, Eraser, PencilLine, SquareDashed, Share2, ImageIcon, Lock, LockOpen, LandPlot, Building2, Eye, EyeOff, Gauge, Ruler, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { compressImageFile } from "../../lib/imageCompression";
 import {
@@ -25,6 +25,7 @@ import { getSnapshotAssets } from "../../lib/offlineSnapshot";
 import { downloadFileWithProgress } from "../../lib/downloadFile";
 import { authMediaUrl } from "../../lib/mediaUrl";
 import { CONDITION_COLORS, STATUS_COLORS } from "../../lib/warnaAset";
+import { kotakLabel, pilihLabelTampil } from "../../lib/petaLabel";
 import { parseKoordinat } from "../../lib/koordinatAset";
 import { useBackGuard } from "../../hooks/useBackGuard";
 import { useUkurPeta } from "../../hooks/useUkurPeta";
@@ -294,6 +295,18 @@ const AssetMapFullView = memo(function AssetMapFullView({
   useEffect(() => {
     try { localStorage.setItem("aman_map_marker_style", markerStyle); } catch { /* storage diblokir */ }
   }, [markerStyle]);
+  // Label nama aset di samping marker. Mati secara bawaan: pada peta padat,
+  // label yang menyala tanpa diminta menutupi petanya sendiri.
+  const [labelOn, setLabelOn] = useState(() => {
+    try { return localStorage.getItem("aman_map_label") === "1"; }
+    catch { return false; }
+  });
+  const labelOnRef = useRef(false);
+  useEffect(() => {
+    labelOnRef.current = labelOn;
+    try { localStorage.setItem("aman_map_label", labelOn ? "1" : "0"); }
+    catch { /* storage diblokir */ }
+  }, [labelOn]);
   // ── Lapisan DENAH (poligon kawasan → gedung → ruangan) ──
   // Mati secara bawaan: satker yang belum memetakan denah tak perlu menanggung
   // request tambahan tiap geser peta. Pilihan disimpan antar sesi.
@@ -1288,6 +1301,87 @@ const AssetMapFullView = memo(function AssetMapFullView({
     }
   }, [displayRows, canEdit, canDrag, buildPopupEl, refreshRowVersion, selectedIds, markerStyle, komentarVersi]);
 
+  // ── Label nama aset di samping marker ────────────────────────────────
+  //
+  // Permintaan pemilik: *"tambahkan fitur label yang menampilkan nama-nama
+  // asetnya … pastikan rapi mengingat ada cluster dan berdekatan satu dengan
+  // lainnya."*
+  //
+  // Yang sulit bukan menggambarnya, melainkan membuatnya rapi. Label permanen
+  // pada peta padat saling menimpa sampai tak satu pun terbaca — dan yang
+  // tertimpa tak menghilang, ia menjadi coretan di atas peta. Karena itu tiap
+  // kali peta bergerak, label dipilih ulang: yang kotaknya bertabrakan dengan
+  // label yang sudah dipilih tidak ditampilkan.
+  //
+  // Marker yang sedang MASUK CLUSTER dilewati: ia tak tergambar, jadi labelnya
+  // pun tak boleh ikut dihitung — kalau ikut, ia menghabiskan jatah ruang bagi
+  // label yang benar-benar tampak.
+  const perbaruiLabel = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const layer = layerRef.current;
+    if (!labelOnRef.current) {
+      for (const entry of markersRef.current.values()) {
+        if (entry.berlabel) { try { entry.marker.unbindTooltip(); } catch { /* sudah lepas */ } entry.berlabel = false; }
+      }
+      return;
+    }
+    let ukuran;
+    try { ukuran = map.getSize(); } catch { return; }
+    const batas = 80; // toleransi di luar layar supaya label tak berkedip saat digeser
+    const kandidat = [];
+    for (const [id, entry] of markersRef.current.entries()) {
+      // Anggota cluster yang sedang mengerut tak tergambar.
+      if (layer && typeof layer.getVisibleParent === "function") {
+        let induk = null;
+        try { induk = layer.getVisibleParent(entry.marker); } catch { induk = null; }
+        if (induk && induk !== entry.marker) continue;
+      }
+      const nama = String(entry.row?.asset_name || entry.row?.asset_code || "").trim();
+      if (!nama) continue;
+      let p;
+      try { p = map.latLngToContainerPoint([entry.lat, entry.lng]); } catch { continue; }
+      if (p.x < -batas || p.y < -batas
+        || p.x > (ukuran.x || 0) + batas || p.y > (ukuran.y || 0) + batas) continue;
+      kandidat.push({ id, nama, kotak: kotakLabel(p.x, p.y, nama) });
+    }
+    const tampil = pilihLabelTampil(kandidat);
+    const nama = new Map(kandidat.map((k) => [k.id, k.nama]));
+    for (const [id, entry] of markersRef.current.entries()) {
+      const perlu = tampil.has(id);
+      if (perlu && !entry.berlabel) {
+        try {
+          entry.marker.bindTooltip(nama.get(id) || "", {
+            permanent: true,
+            direction: "right",
+            offset: [12, 0],
+            className: "aman-peta-label",
+            interactive: false,
+          });
+          entry.berlabel = true;
+        } catch { /* marker sudah dilepas */ }
+      } else if (!perlu && entry.berlabel) {
+        try { entry.marker.unbindTooltip(); } catch { /* sudah lepas */ }
+        entry.berlabel = false;
+      }
+    }
+  }, []);
+
+  // Label dihitung ulang tiap peta bergerak, membesar, atau cluster mengembang.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return undefined;
+    perbaruiLabel();
+    const ulang = () => perbaruiLabel();
+    map.on("moveend zoomend", ulang);
+    const layer = layerRef.current;
+    try { layer?.on?.("animationend", ulang); } catch { /* bukan cluster group */ }
+    return () => {
+      try { map.off("moveend zoomend", ulang); } catch { /* map dilepas */ }
+      try { layer?.off?.("animationend", ulang); } catch { /* abaikan */ }
+    };
+  }, [perbaruiLabel, labelOn, clusterOn, displayRows, markerStyle]);
+
   // Mode Seleksi mematikan box-zoom bawaan Shift+seret (kita pakai Shift+seret
   // untuk KOTAK SELEKSI). Dipulihkan saat mode dimatikan.
   useEffect(() => {
@@ -1415,6 +1509,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
     d.push({ kunci: "muatUlang", lebarIkon: 36, label: "Muat Ulang" });
     d.push({ kunci: "cluster", lebarIkon: 36, label: "Cluster: Aktif" });
     d.push({ kunci: "marker", lebarIkon: 36, label: "Marker: Foto" });
+    d.push({ kunci: "label", lebarIkon: 36, label: "Label: Aktif" });
     d.push({ kunci: "denah", lebarIkon: 36, label: "Denah: Aktif" });
     d.push({ kunci: "ukur", lebarIkon: 36, label: "Ukur: Aktif" });
     if (groups.length > 0) d.push({ kunci: "grup", lebarIkon: 96, lebarPenuh: 240 });
@@ -1532,6 +1627,10 @@ const AssetMapFullView = memo(function AssetMapFullView({
             <DropdownMenuItem className="min-h-[42px]" onClick={() => setMarkerStyle((s) => (s === "photo" ? "pin" : "photo"))} data-testid="map-menu-marker-style">
               <ImageIcon className={`w-4 h-4 mr-2 ${markerStyle === "photo" ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground"}`} />
               Gaya Marker: {markerStyle === "photo" ? "Foto (sampul)" : "Pin"}
+            </DropdownMenuItem>
+            <DropdownMenuItem className="min-h-[42px]" onClick={() => setLabelOn((v) => !v)} data-testid="map-menu-label">
+              <Tag className={`w-4 h-4 mr-2 ${labelOn ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground"}`} />
+              Label Nama Aset: {labelOn ? "Aktif" : "Mati"}
             </DropdownMenuItem>
             <DropdownMenuItem className="min-h-[42px]" onClick={() => setUkurOn((v) => !v)} data-testid="map-menu-ukur">
               <Ruler className={`w-4 h-4 mr-2 ${ukurOn ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`} />
@@ -1717,6 +1816,27 @@ const AssetMapFullView = memo(function AssetMapFullView({
         >
           <ImageIcon className="w-3.5 h-3.5" />
           {petaTampil("marker") && <span>Marker: {markerStyle === "photo" ? "Foto" : "Pin"}</span>}
+        </button>
+        {/* Label nama aset di samping marker. Bersebelahan dengan Gaya Marker
+            karena keduanya mengatur RUPA marker, bukan isi petanya. */}
+        <button
+          type="button"
+          onClick={() => setLabelOn((v) => !v)}
+          aria-pressed={labelOn}
+          className={`h-9 rounded-lg border text-xs font-medium hidden sm:flex items-center gap-1 flex-shrink-0 transition-colors ${
+            petaTampil("label") ? "w-auto px-2.5 justify-start" : "w-9 px-0 justify-center"} ${
+            labelOn
+              ? "border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400"
+              : "border-border text-foreground/80 hover:bg-muted"
+          }`}
+          aria-label={labelOn ? "Sembunyikan label nama aset" : "Tampilkan label nama aset"}
+          title={labelOn
+            ? "Nama aset tampil di samping marker — klik untuk sembunyikan"
+            : "Tampilkan nama aset di samping marker (label yang bertindih disembunyikan otomatis)"}
+          data-testid="asset-map-label-toggle"
+        >
+          <Tag className="w-3.5 h-3.5" />
+          {petaTampil("label") && <span>Label: {labelOn ? "Aktif" : "Mati"}</span>}
         </button>
         {/* Alat Ukur (≥sm) — nasib yang sama dengan Gaya Marker di atas:
             dulu HANYA hidup di menu gabungan HP (sm:hidden), sehingga di

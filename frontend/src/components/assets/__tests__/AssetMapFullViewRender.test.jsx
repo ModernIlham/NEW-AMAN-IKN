@@ -160,3 +160,62 @@ test("filter aktif tanpa seleksi: lingkup memuat hasil filter", async () => {
   expect(l.sebab).toBe("filter");
   expect(l.ids).toEqual(BERKOORDINAT.map((a) => a.id));
 });
+
+
+// ── Label nama aset di samping marker ─────────────────────────────────────
+//
+// Permintaan pemilik: *"tambahkan fitur label yang menampilkan nama-nama
+// asetnya … dan juga berikan tombol aktif tidak aktif dalam memberikan
+// labelnya di samping marker."*
+
+test("tombol label ADA, dan menyalakannya mengubah keadaannya", async () => {
+  // Pilihan label disimpan di localStorage; tanpa dibersihkan, uji ini
+  // mewarisi keadaan uji sebelumnya dan lulus/gagal karena hal lain.
+  localStorage.removeItem("aman_map_label");
+  render(<AssetMapFullView {...propsMinimal()} />);
+  await waitFor(() => expect(axios.get).toHaveBeenCalled());
+  const tombol = screen.getByTestId("asset-map-label-toggle");
+  // Mati secara bawaan: pada peta padat, label yang menyala tanpa diminta
+  // menutupi petanya sendiri.
+  expect(tombol.getAttribute("aria-pressed")).toBe("false");
+  tombol.click();
+  await waitFor(() =>
+    expect(screen.getByTestId("asset-map-label-toggle")
+      .getAttribute("aria-pressed")).toBe("true"));
+});
+
+test("pilihan label BERTAHAN antar sesi", async () => {
+  // Pemakai yang menyalakan label lalu menutup peta tak seharusnya
+  // menyalakannya lagi setiap kali kembali.
+  localStorage.removeItem("aman_map_label");
+  const { unmount } = render(<AssetMapFullView {...propsMinimal()} />);
+  await waitFor(() => expect(axios.get).toHaveBeenCalled());
+  screen.getByTestId("asset-map-label-toggle").click();
+  await waitFor(() =>
+    expect(localStorage.getItem("aman_map_label")).toBe("1"));
+  unmount();
+
+  render(<AssetMapFullView {...propsMinimal()} />);
+  await waitFor(() =>
+    expect(screen.getByTestId("asset-map-label-toggle")
+      .getAttribute("aria-pressed")).toBe("true"));
+});
+
+test("label TIDAK menangkap klik — pin di bawahnya tetap dapat diketuk", () => {
+  // Di peta padat label menutupi marker tetangganya; label yang menangkap
+  // klik membuat pin di bawahnya tak bisa dibuka sama sekali.
+  const css = require("fs").readFileSync(
+    require("path").join(__dirname, "../../../index.css"), "utf8");
+  const awal = css.indexOf(".aman-peta-label {");
+  expect(awal).toBeGreaterThan(-1);
+  const aturan = css.slice(awal, css.indexOf("}", awal));
+  expect(aturan).toMatch(/pointer-events:\s*none/);
+  // Putih ber-stroke gelap, dan strokenya digambar DI BELAKANG huruf —
+  // tanpa `paint-order`, stroke menggerogoti huruf 11px dari dalam.
+  expect(aturan).toMatch(/color:\s*#fff/);
+  expect(aturan).toMatch(/-webkit-text-stroke:/);
+  expect(aturan).toMatch(/paint-order:\s*stroke/);
+  // Gelembung bawaan tooltip Leaflet dimatikan: yang diminta label, bukan balon.
+  expect(aturan).toMatch(/background:\s*none/);
+  expect(aturan).toMatch(/border:\s*0/);
+});

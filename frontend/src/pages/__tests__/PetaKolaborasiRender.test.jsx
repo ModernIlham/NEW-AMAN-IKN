@@ -90,6 +90,28 @@ test("galat server tampil sebagai pesan, bukan layar putih", async () => {
     .toBeInTheDocument();
 });
 
+// ── Label nama aset di samping marker ─────────────────────────────────────
+//
+// Permintaan pemilik: *"berikan tombol aktif tidak aktif dalam memberikan
+// labelnya di samping marker."* Peta ini memakai penata label yang SAMA dengan
+// Peta Aset (`lib/petaLabel`) — dua penata berbeda akan menghasilkan dua peta
+// yang "rapi" dengan aturan berbeda, dan yang kedua tak pernah ikut diperbaiki.
+
+test("tombol label ada dan dapat dinyalakan", async () => {
+  localStorage.removeItem("aman_map_label");
+  render(<PetaKolaborasiPage />);
+  await waitFor(() => expect(axios.get).toHaveBeenCalled());
+  const tombol = await screen.findByTestId("peta-kolab-label");
+  expect(tombol.getAttribute("aria-pressed")).toBe("false");
+  tombol.click();
+  await waitFor(() => expect(
+    screen.getByTestId("peta-kolab-label").getAttribute("aria-pressed")
+  ).toBe("true"));
+  // Pilihannya SATU dengan Peta Aset: dua peta yang menampilkan aset yang
+  // sama tak seharusnya menuntut label dinyalakan dua kali.
+  expect(localStorage.getItem("aman_map_label")).toBe("1");
+});
+
 test("tanpa id di URL: berhenti dengan pesan, tanpa satu pun permintaan jaringan", async () => {
   window.history.pushState({}, "", "/halaman-lain");
   render(<PetaKolaborasiPage />);

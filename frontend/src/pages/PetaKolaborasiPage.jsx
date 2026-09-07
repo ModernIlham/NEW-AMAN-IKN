@@ -14,7 +14,7 @@ import {
   AlertTriangle, RefreshCcw, WifiOff, Layers, Boxes, Trash2, ShieldCheck,
   Eraser, MousePointerClick, MessageSquare, ChevronLeft, ChevronRight, ImageIcon, Ruler,
   SlidersHorizontal, Check, RotateCcw, Wrench, Inbox, ThumbsUp, ThumbsDown,
-  Lock, LockOpen,
+  Lock, LockOpen, Tag,
 } from "lucide-react";
 import {
   bisaDisetujui, judulUsulan, kalimatYakinSemua, LABEL_STATUS,
@@ -25,6 +25,7 @@ import {
   MODE_GESER, ringkasGeser, teksJarak,
 } from "@/lib/geserUsulan";
 import { perluLaciAlat, ringkasAlatAktif } from "@/lib/alatPeta";
+import { kotakLabel, pilihLabelTampil } from "@/lib/petaLabel";
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from "../components/ui/popover";
@@ -242,6 +243,19 @@ export default function PetaKolaborasiPage() {
   const [lokasiFilter, setLokasiFilter] = useState("__semua__");
   const [laciFilter, setLaciFilter] = useState(false);
   const [clusterOn, setClusterOn] = useState(true);
+  // Label nama aset di samping marker — kunci penyimpanan SAMA dengan Peta
+  // Aset: dua peta yang menampilkan aset yang sama tak seharusnya menuntut
+  // pemakainya menyalakan label dua kali.
+  const [labelOn, setLabelOn] = useState(() => {
+    try { return localStorage.getItem("aman_map_label") === "1"; }
+    catch { return false; }
+  });
+  const labelOnRef = useRef(false);
+  useEffect(() => {
+    labelOnRef.current = labelOn;
+    try { localStorage.setItem("aman_map_label", labelOn ? "1" : "0"); }
+    catch { /* storage diblokir */ }
+  }, [labelOn]);
   // Gaya marker: "pin" (design 1, bawaan) ↔ "photo" (design 2, sampul foto).
   const [markerStyle, setMarkerStyle] = useState(() => {
     try { return localStorage.getItem("aman_petakolab_marker_style") === "photo" ? "photo" : "pin"; }
@@ -797,6 +811,79 @@ export default function PetaKolaborasiPage() {
 
   // Hidup/matikan clustering: pindahkan marker yang sudah ada ke layer baru
   // (tanpa membangun ulang marker) — pin & seleksi tetap.
+  // ── Label nama aset di samping marker ────────────────────────────────
+  //
+  // Logika penataannya SATU modul dengan Peta Aset (`lib/petaLabel`): dua
+  // penata label yang berbeda akan menghasilkan dua peta yang "rapi" dengan
+  // aturan berbeda, dan yang kedua tak pernah ikut diperbaiki.
+  //
+  // Marker yang sedang masuk cluster dilewati — ia tak tergambar, jadi
+  // labelnya tak boleh menghabiskan jatah ruang label yang benar-benar tampak.
+  const perbaruiLabel = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const layer = layerRef.current;
+    if (!labelOnRef.current) {
+      for (const entry of markersRef.current.values()) {
+        if (entry.berlabel) { try { entry.marker.unbindTooltip(); } catch { /* sudah lepas */ } entry.berlabel = false; }
+      }
+      return;
+    }
+    let ukuran;
+    try { ukuran = map.getSize(); } catch { return; }
+    const batas = 80;
+    const kandidat = [];
+    for (const [key, entry] of markersRef.current.entries()) {
+      if (layer && typeof layer.getVisibleParent === "function") {
+        let induk = null;
+        try { induk = layer.getVisibleParent(entry.marker); } catch { induk = null; }
+        if (induk && induk !== entry.marker) continue;
+      }
+      const p = entry.point || {};
+      const nama = String(p.nama || p.judul || p.kode || "").trim();
+      if (!nama) continue;
+      let titik;
+      try { titik = map.latLngToContainerPoint([entry.lat, entry.lng]); } catch { continue; }
+      if (titik.x < -batas || titik.y < -batas
+        || titik.x > (ukuran.x || 0) + batas || titik.y > (ukuran.y || 0) + batas) continue;
+      kandidat.push({ id: key, nama, kotak: kotakLabel(titik.x, titik.y, nama) });
+    }
+    const tampil = pilihLabelTampil(kandidat);
+    const nama = new Map(kandidat.map((k) => [k.id, k.nama]));
+    for (const [key, entry] of markersRef.current.entries()) {
+      const perlu = tampil.has(key);
+      if (perlu && !entry.berlabel) {
+        try {
+          entry.marker.bindTooltip(nama.get(key) || "", {
+            permanent: true,
+            direction: "right",
+            offset: [12, 0],
+            className: "aman-peta-label",
+            interactive: false,
+          });
+          entry.berlabel = true;
+        } catch { /* marker sudah dilepas */ }
+      } else if (!perlu && entry.berlabel) {
+        try { entry.marker.unbindTooltip(); } catch { /* sudah lepas */ }
+        entry.berlabel = false;
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return undefined;
+    perbaruiLabel();
+    const ulang = () => perbaruiLabel();
+    map.on("moveend zoomend", ulang);
+    const layer = layerRef.current;
+    try { layer?.on?.("animationend", ulang); } catch { /* bukan cluster group */ }
+    return () => {
+      try { map.off("moveend zoomend", ulang); } catch { /* map dilepas */ }
+      try { layer?.off?.("animationend", ulang); } catch { /* abaikan */ }
+    };
+  }, [perbaruiLabel, labelOn, clusterOn, asetTampil, data, markerStyle]);
+
   const toggleCluster = useCallback(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -1107,6 +1194,15 @@ export default function PetaKolaborasiPage() {
           data-testid="peta-kolab-marker-style"
         >
           <ImageIcon className="w-4 h-4" />
+        </button>
+        <button
+          type="button" onClick={() => setLabelOn((v) => !v)} aria-pressed={labelOn}
+          aria-label={labelOn ? "Label nama aset: aktif" : "Label nama aset: mati"}
+          className={`h-8 w-8 rounded-lg border flex items-center justify-center flex-shrink-0 transition-colors ${labelOn ? "border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400" : "border-border text-foreground/80 hover:bg-muted"}`}
+          title={labelOn ? "Nama aset tampil di samping marker — ketuk untuk sembunyikan" : "Tampilkan nama aset di samping marker (label yang bertindih disembunyikan otomatis)"}
+          data-testid="peta-kolab-label"
+        >
+          <Tag className="w-4 h-4" />
         </button>
         {/* GEMBOK geser marker — default terkunci supaya melihat peta nyaman.
             Saat terbuka, dua tombol IKON-SAJA memilih apa yang digeser
