@@ -1,6 +1,7 @@
 import React, { memo, useState, useRef } from "react";
-import { Camera, Briefcase, Tag, Trash2, Lock, Cloud, Check, RotateCcw, RefreshCcw, MoreVertical, BookOpen, History, CreditCard, AlertTriangle, ShieldCheck, CheckCircle2, XCircle, PlusCircle, Scale, CircleDashed } from "lucide-react";
+import { Camera, Briefcase, Trash2, Lock, Cloud, Check, RotateCcw, RefreshCcw, MoreVertical, BookOpen, History, CreditCard, AlertTriangle, ShieldCheck, CheckCircle2, XCircle, PlusCircle, Scale, CircleDashed } from "lucide-react";
 import IkonLokasiAset from "./IkonLokasiAset";
+import BadgeStiker from "./BadgeStiker";
 import { labelBarisLokasi } from "@/lib/koordinatAset";
 import { sisaGaransi } from "../../lib/garansi";
 import { kelasStatusInventarisasi } from "../../lib/warnaAset";
@@ -25,7 +26,6 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
   // Use thumbnail only (photos array is not included in list API for performance)
   const coverPhoto = asset.thumbnail;
   const hasPhoto = coverPhoto && coverPhoto.length > 10;
-  const stikerTerpasang = asset.stiker_status === "Sudah Terpasang";
   // Penanda ber-PSP + tersinkron SIMAN V2 (aturan bersama lib/tandaPsp.js).
   const titikHijau = berTitikHijau(asset, simanSynced);
   const ketPsp = keteranganPsp(asset, simanSynced);
@@ -375,10 +375,7 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
                   Rp {priceFormatted}
                 </span>
               )}
-              <span className={`inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${stikerTerpasang ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400' : 'bg-muted text-muted-foreground'}`}>
-                <Tag className="w-2.5 h-2.5" />
-                {stikerTerpasang ? `Stiker ${asset.stiker_ukuran || ''}` : 'Belum Stiker'}
-              </span>
+              <BadgeStiker asset={asset} />
               {/* Status inventarisasi = IKON SAJA (HP) — makna via warna +
                   tooltip/aria; label teks dihapus demi hemat ruang. */}
               {(() => {

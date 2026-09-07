@@ -18,6 +18,63 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1042] Status stiker di baris aset: ukuran ikut tampil, ikon label tercoret — 2026-09-07
+
+Permintaan pemilik: *"ketika status stiker belum terpasang akan tetapi sudah
+terdapat informasi ukuran stikernya … di mode HP tampilan list jangan berikan
+badge belum stiker saja akan tetapi tetap tulis stiker kecil, sedang atau
+besarnya juga … ubah menjadi icon label dicoret saja"*, lalu — dengan contoh
+gambar — *"perbagus lagi dan sesuaikan dengan warna yang sudah ada di sistem
+sekarang perhatikan juga dark mode dan light mode-nya … perjelas juga informasi
+di kolom stiker di data row agar cukup dengan icon atau makna icon dan warna
+saja dapat langsung mudah dipahami. dan pada pop up … tambahkan informasi …
+terkait ukuran stikernya, cukup (| S, | M, | L) dengan font Bold aja."*
+
+**Keadaan "belum terpasang tetapi ukurannya sudah dipilih" bukan keadaan
+ganjil, melainkan keadaan normal di tengah alur kerja:** ukuran dipilih dulu
+(itulah gunanya mode cetak "sesuai pilihan tiap aset"), stikernya dicetak, baru
+ditempel. Sepanjang jeda itu ketiga tampilan baris membuang satu-satunya
+keterangan yang sedang dibutuhkan petugas.
+
+**Badge baris HP jadi pil dua bagian** — status di kiri, ukuran pada tutup
+kanan sebagai satu huruf tebal (S/M/L), mengikuti contoh pemilik. Tutupnya
+memakai warna pekat dari keluarga warna pilnya sendiri, BUKAN hijau seperti
+contoh: hijau di aplikasi ini sudah berarti "sudah terpasang", sehingga tutup
+hijau pada badge "belum" akan membuat satu badge mengatakan dua hal yang
+berlawanan. Jadi warna tetap berarti STATUS, huruf tebal berarti UKURAN.
+
+**Kolom Stiker di tabel desktop** dulu berbunyi `Ya` / `-`. Tanda `-` tak
+mengatakan apakah stikernya belum dipasang atau datanya memang belum diisi, dan
+ukurannya tak muncul sama sekali. Kini ikon + warna membawa statusnya (label
+utuh hijau ↔ label tercoret abu) dan satu huruf tebal membawa ukurannya, dengan
+`aria-label` berisi keduanya untuk pembaca layar.
+
+**Popup stiker** (kartu galeri dan sel tabel) menyebut ukurannya: `Stiker:
+Belum Terpasang | **S**`.
+
+**Ikon label tercoret digambar sendiri.** Lucide 0.507 tak punya `TagOff`; yang
+ada hanya `TicketSlash`, dan tiket bukan label. Dua temuan dari pemeriksaan
+render sebelum memilih bentuknya:
+
+- Kebiasaan lucide menaruh coretan `*Off` dari kiri-atas ke kanan-bawah. Untuk
+  `Tag` justru itu yang salah — badan label membentang pada diagonal yang sama,
+  sehingga garisnya jatuh MEMANJANG di dalam label dan terbaca sebagai garis
+  lipatan; pada 10px nyaris tak dapat dibedakan dari label polos. Coretannya
+  memakai diagonal yang satu lagi.
+- Labelnya DIPUTUS di tempat coretan lewat (seperti contoh pemilik) memakai
+  MASK, bukan garis sewarna latar: badge abu, kartu, tabel, mode terang dan
+  gelap punya latar berbeda-beda, dan celah yang "ditutup cat" akan patah
+  begitu latarnya berubah.
+
+Teks dan pemetaan ukurannya dipusatkan di `lib/stikerAset.js` — dulu ketiga
+tampilan menyusun kalimatnya sendiri-sendiri ("Belum Stiker" / "Ya" / "Belum
+dipasang") untuk satu keadaan yang sama. Nilai ukuran lama yang berupa isian
+bebas ("5x3cm") tidak dipaksakan menjadi satu huruf: tutupnya tak muncul,
+tetapi nilainya tetap disebut utuh di tooltip.
+
+Uji: 1575 tes frontend lulus, build sukses. Empat mutasi dipasang dan semuanya
+mati.
+
 ## [#1041] Stiker label: sub-sub kelompok naik satu anak tangga di stiker lega — 2026-09-07
 
 Permintaan pemilik: *"agak besarkan lagi khusus di bagian sub-sub kelompoknya
