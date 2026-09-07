@@ -396,6 +396,15 @@ aside .overflow-x-auto::-webkit-scrollbar-thumb:hover, .category-dropdown-scroll
   box-shadow: none;
   padding: 0;
   margin: 0;
+  /* LEBAR HARUS EKSPLISIT. Panel tooltip Leaflet (`.leaflet-tooltip-pane`)
+     berukuran NOL — ia hanya wadah berposisi. Untuk elemen absolut, lebar
+     `auto` dihitung shrink-to-fit: `min(max(min-content, tersedia),
+     max-content)`. Karena "tersedia" = 0, hasilnya jatuh ke MIN-CONTENT, yaitu
+     kata terpanjang — dan `max-width` tak pernah kebagian peran. Itulah sebabnya
+     label memendek jadi "MERTANI / Sensor…" walau batasnya 240 px.
+     `max-content` memberi lebar teks utuh, lalu `max-width` yang memotongnya. */
+  width: -webkit-max-content;
+  width: max-content;
   max-width: 240px;
   white-space: normal;
   overflow-wrap: break-word;
