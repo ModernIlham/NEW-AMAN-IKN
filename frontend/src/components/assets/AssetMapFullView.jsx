@@ -25,7 +25,7 @@ import { getSnapshotAssets } from "../../lib/offlineSnapshot";
 import { downloadFileWithProgress } from "../../lib/downloadFile";
 import { authMediaUrl } from "../../lib/mediaUrl";
 import { CONDITION_COLORS, STATUS_COLORS } from "../../lib/warnaAset";
-import { JARAK_DARI_MARKER, kotakLabel, pilihLabelTampil } from "../../lib/petaLabel";
+import { JARAK_DARI_MARKER, kotakLabel, pasangLebarLabel, pilihLabelTampil } from "../../lib/petaLabel";
 import { parseKoordinat } from "../../lib/koordinatAset";
 import { useBackGuard } from "../../hooks/useBackGuard";
 import { useUkurPeta } from "../../hooks/useUkurPeta";
@@ -1351,7 +1351,8 @@ const AssetMapFullView = memo(function AssetMapFullView({
       const perlu = tampil.has(id);
       if (perlu && !entry.berlabel) {
         try {
-          entry.marker.bindTooltip(nama.get(id) || "", {
+          const teks = nama.get(id) || "";
+          entry.marker.bindTooltip(teks, {
             permanent: true,
             // BAWAH-TENGAH, bukan kanan: titik jangkar kedua gaya marker
             // (pin 22×22 dan marker foto 46×54) sama-sama di tengah-bawah
@@ -1363,6 +1364,13 @@ const AssetMapFullView = memo(function AssetMapFullView({
             className: "aman-peta-label",
             interactive: false,
           });
+          // Lebar dipasang DI SINI, bukan diserahkan ke `text-wrap: balance`:
+          // properti itu diabaikan diam-diam di peramban yang belum
+          // mendukungnya, dan labelnya kembali memenuhi baris pertama dulu.
+          // `update()` wajib menyusul — Leaflet menempatkan tooltip memakai
+          // offsetWidth yang diukur SEBELUM lebar ini berlaku, jadi tanpa itu
+          // label melenceng dari tengah markernya.
+          pasangLebarLabel(entry.marker, teks);
           entry.berlabel = true;
         } catch { /* marker sudah dilepas */ }
       } else if (!perlu && entry.berlabel) {

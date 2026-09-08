@@ -18,6 +18,41 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1048] Label peta: pembagian dua baris dihitung sendiri, tak lagi menumpang CSS — 2026-09-08
+
+Laporan pemilik setelah memuat ulang: *"masih tidak terjadi apa apa tetap
+seperti yang dulu, text panjang masih tidak dibagi 2 secara adil dan otomatis.
+masih memaksimalkan max."*
+
+**`text-wrap: balance` terkirim tetapi tak dijalankan.** Diperiksa pada CSS
+terbangun: propertinya ada utuh di `main.css`. Ia juga terbukti bekerja pada
+kombinasi produksi yang persis sama (dengan `-webkit-box`, `-webkit-line-clamp`
+dan `width: max-content`) di Chromium terbaru. Yang tak ada adalah dukungannya
+di peramban pemilik — properti itu baru hadir di Chrome 114+, Safari 17.5+, dan
+Firefox 121+. Peramban yang belum mendukungnya mengabaikannya **diam-diam**:
+tak ada galat, tak ada tanda apa pun, labelnya sekadar kembali memenuhi baris
+pertama lebih dulu.
+
+Karena itu pembagian barisnya tak lagi dititipkan ke peramban. Lebar seimbang
+dihitung `lib/petaLabel` lalu **DIPASANG** pada elemen labelnya
+(`pasangLebarLabel`), diikuti `tooltip.update()` — Leaflet menempatkan tooltip
+memakai `offsetWidth` yang diukur SEBELUM lebar itu berlaku, jadi tanpa
+`update()` label melenceng dari tengah markernya. Dengan lebar yang sudah
+dipersempit, pembungkusan biasa menghasilkan dua baris setara di peramban mana
+pun.
+
+Angkanya SAMA dengan yang dipakai menghitung kotak tabrakan — bukan dua
+taksiran yang harus dijaga sama, melainkan satu angka yang sama. Contoh:
+"Kantor Kelurahan Amborawang Darat" dipasang 132 px, "MERTANI Sensor Kualitas
+Udara (Sensor Kebisingan) GT-2.EF1" 232 px, "Mandiri Utama" 104 px (satu baris
+— tak dipersempit sama sekali, sebab mempersempit yang sudah muat justru
+memecahnya).
+
+`text-wrap: balance` dipertahankan sebagai penghalus di peramban yang
+mendukungnya, bukan sebagai penentu. Diverifikasi dengan merender di tiruan
+panel Leaflet berlebar nol memakai aturan `index.css` yang sebenarnya dan
+aturan itu SENGAJA DIBUANG — meniru peramban pemilik.
+
 ## [#1047] Dimensi stiker hanya di dialog Cetak; label peta dua baris seimbang — 2026-09-07
 
 Permintaan pemilik: *"hilangkan informasi ukuran stiker saat memilih kecil,

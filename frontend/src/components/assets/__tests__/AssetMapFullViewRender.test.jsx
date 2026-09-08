@@ -282,6 +282,26 @@ test("label punya LEBAR EKSPLISIT, bukan mengandalkan shrink-to-fit", () => {
   expect(aturan).toMatch(/(^|;|\s)width:\s*max-content/);
 });
 
+test("KEDUA peta memasang lebar seimbang, bukan menyerahkannya ke CSS", () => {
+  /* PENJAGA REGRESI. `text-wrap: balance` sempat dipakai sendirian dan
+     diabaikan diam-diam di peramban pemilik — propertinya terkirim utuh
+     sampai CSS terbangun, hanya tak dijalankan. Yang menjamin pembagiannya
+     sekarang adalah lebar yang dihitung `lib/petaLabel` dan DIPASANG pada
+     elemennya; uji komponen yang lulus sementara tak satu pun peta
+     memasangnya tidak menjaga apa pun. */
+  const dua = [
+    ["Peta Aset", "../AssetMapFullView.jsx"],
+    ["Peta Kolaborasi", "../../../pages/PetaKolaborasiPage.jsx"],
+  ];
+  for (const [nama, rel] of dua) {
+    const isi = require("fs").readFileSync(
+      require("path").join(__dirname, rel), "utf8");
+    expect(isi).toMatch(/pasangLebarLabel\(/);
+    expect(isi).toMatch(/from ["'][^"']*lib\/petaLabel["']/);
+    expect(nama).toBeTruthy();
+  }
+});
+
 test("label MENYEIMBANGKAN kedua barisnya", () => {
   /* Permintaan pemilik: *"label langsung menggunakan max kolom yang tersisa
      sehingga memanjang di baris pertama baru turun baris bawahnya dan tidak

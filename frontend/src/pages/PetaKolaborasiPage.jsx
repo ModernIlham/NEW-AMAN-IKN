@@ -25,7 +25,7 @@ import {
   MODE_GESER, ringkasGeser, teksJarak,
 } from "@/lib/geserUsulan";
 import { perluLaciAlat, ringkasAlatAktif } from "@/lib/alatPeta";
-import { JARAK_DARI_MARKER, kotakLabel, pilihLabelTampil } from "@/lib/petaLabel";
+import { JARAK_DARI_MARKER, kotakLabel, pasangLebarLabel, pilihLabelTampil } from "@/lib/petaLabel";
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from "../components/ui/popover";
@@ -854,7 +854,8 @@ export default function PetaKolaborasiPage() {
       const perlu = tampil.has(key);
       if (perlu && !entry.berlabel) {
         try {
-          entry.marker.bindTooltip(nama.get(key) || "", {
+          const teks = nama.get(key) || "";
+          entry.marker.bindTooltip(teks, {
             permanent: true,
             // BAWAH-TENGAH, bukan kanan: titik jangkar kedua gaya marker
             // (pin 22×22 dan marker foto 46×54) sama-sama di tengah-bawah
@@ -866,6 +867,13 @@ export default function PetaKolaborasiPage() {
             className: "aman-peta-label",
             interactive: false,
           });
+          // Lebar dipasang DI SINI, bukan diserahkan ke `text-wrap: balance`:
+          // properti itu diabaikan diam-diam di peramban yang belum
+          // mendukungnya, dan labelnya kembali memenuhi baris pertama dulu.
+          // `update()` wajib menyusul — Leaflet menempatkan tooltip memakai
+          // offsetWidth yang diukur SEBELUM lebar ini berlaku, jadi tanpa itu
+          // label melenceng dari tengah markernya.
+          pasangLebarLabel(entry.marker, teks);
           entry.berlabel = true;
         } catch { /* marker sudah dilepas */ }
       } else if (!perlu && entry.berlabel) {
