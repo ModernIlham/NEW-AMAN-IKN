@@ -11,6 +11,7 @@ import { extractScannedCode } from "./QrScanButton";
 import { haptic } from "../../lib/haptics";
 import { playShutterSound, shutterSoundEnabled } from "../../lib/shutterSound";
 import { autoInventarisasiEnabled } from "../../lib/inventoryStatus";
+import { UKURAN_STIKER } from "../../lib/stikerAset";
 import {
   PREFERENSI_BAWAAN, hitungBidang, resolusiTersedia,
 } from "../../lib/preferensiKamera";
@@ -1215,9 +1216,9 @@ const FullCameraSheet = memo(function FullCameraSheet({
                     <select value={formData?.stiker_ukuran || ""} className={camSelectCls}
                       onChange={e => onSetField("stiker_ukuran", e.target.value)} data-testid="cam-stiker-ukuran">
                       <option value="">Pilih ukuran stiker…</option>
-                      <option value="Kecil">Kecil (3x1.5cm)</option>
-                      <option value="Sedang">Sedang (5x3cm)</option>
-                      <option value="Besar">Besar (8x5cm)</option>
+                      {UKURAN_STIKER.map(u => (
+                        <option key={u} value={u}>{u}</option>
+                      ))}
                     </select>
                   )}
                 </div>

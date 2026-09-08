@@ -282,6 +282,17 @@ test("label punya LEBAR EKSPLISIT, bukan mengandalkan shrink-to-fit", () => {
   expect(aturan).toMatch(/(^|;|\s)width:\s*max-content/);
 });
 
+test("label MENYEIMBANGKAN kedua barisnya", () => {
+  /* Permintaan pemilik: *"label langsung menggunakan max kolom yang tersisa
+     sehingga memanjang di baris pertama baru turun baris bawahnya dan tidak
+     membaginya agar seimbang di tengah terlebih dahulu"*. Tanpa `balance`,
+     "Kantor Kelurahan Amborawang Darat" pecah jadi baris penuh + kata "Darat"
+     sendirian — timpang pada label yang rata tengah. Taksiran kotak tabrakan
+     di `lib/petaLabel` juga mengandaikan kedua baris seimbang, jadi mencabut
+     aturan ini membuat kotak dan gambarnya berpisah. */
+  expect(aturanLabelPeta().isi).toMatch(/text-wrap:\s*balance/);
+});
+
 test("LEBAR_MAKS penata tabrakan = max-width label di CSS", () => {
   /* Yang benar-benar membungkus teks adalah CSS; `LEBAR_MAKS` hanya dipakai
      menaksir kotak tabrakannya. Bila keduanya berbeda, kotak yang dihitung

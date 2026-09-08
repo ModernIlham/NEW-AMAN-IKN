@@ -99,7 +99,20 @@ export function ukurLabel(teks, { lebarMaks = LEBAR_MAKS } = {}) {
   const lebarPenuh = t.length * LEBAR_KARAKTER;
   const barisPenuh = Math.max(1, Math.ceil(lebarPenuh / Math.max(1, lebarMaks)));
   const baris = Math.min(MAKS_BARIS, barisPenuh);
-  const lebar = barisPenuh > 1 ? lebarMaks : lebarPenuh;
+  // CSS menyeimbangkan kedua baris (`text-wrap: balance`), jadi label dua
+  // baris TIDAK selebar `lebarMaks` — ia selebar separuh teksnya, dan tak
+  // pernah lebih sempit daripada kata terpanjangnya. Menaksirnya `lebarMaks`
+  // tetap aman (kotak yang kelebaran hanya menyembunyikan label lebih awal),
+  // tetapi meleset sampai dua kali lipat pada nama sedang — dan label yang
+  // disembunyikan padahal lega persis yang dikeluhkan pemilik.
+  //
+  // Tiga baris ke atas tak diseimbangkan: teksnya melampaui jatah dua baris,
+  // jadi keduanya memang terisi penuh sampai `lebarMaks`.
+  const kataTerpanjang = Math.max(
+    ...t.split(/\s+/).map((k) => k.length * LEBAR_KARAKTER));
+  const lebar = barisPenuh === 1 ? lebarPenuh
+    : barisPenuh > MAKS_BARIS ? lebarMaks
+      : Math.min(lebarMaks, Math.max(kataTerpanjang, lebarPenuh / baris));
   return {
     lebar: lebar + SISIPAN_X * 2,
     tinggi: baris * TINGGI_BARIS + SISIPAN_Y * 2,

@@ -15,6 +15,22 @@
  */
 
 /**
+ * Pilihan ukuran stiker — SATU daftar untuk semua isian.
+ *
+ * Nilainya persis seperti yang tersimpan di basis data (huruf besar di awal),
+ * dan yang ditampilkan adalah nilainya sendiri: TANPA dimensi.
+ *
+ * Dulu tiap isian menuliskan sendiri "Kecil (3x1.5cm)" / "Sedang (5x3cm)" /
+ * "Besar (8x5cm)". Angka itu bukan cuma mubazir, tetapi juga KELIRU: ukuran
+ * stiker yang sesungguhnya tak tetap — grid merentangkan label mengisi penuh
+ * kertas, jadi stiker "Sedang" keluar ±65×30 mm di A4 dan ±56×30 mm di A3,
+ * bukan 50×30 mm. Ukuran nyata per kertas hanya dapat disebut di tempat
+ * kertasnya sudah dipilih, yaitu dialog Cetak Stiker Label BMN — dan di
+ * sanalah angkanya tetap ditampilkan.
+ */
+export const UKURAN_STIKER = ["Kecil", "Sedang", "Besar"];
+
+/**
  * Ukuran → huruf ringkas. Kunci disimpan huruf kecil dan pencocokannya
  * tak peka besar-kecil: nilai lama di basis data pernah tersimpan sebagai
  * "Kecil" maupun "kecil".

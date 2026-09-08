@@ -18,6 +18,44 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1047] Dimensi stiker hanya di dialog Cetak; label peta dua baris seimbang — 2026-09-07
+
+Permintaan pemilik: *"hilangkan informasi ukuran stiker saat memilih kecil,
+sedang atau besar pada halaman edit, tambah, massal dan kolom input lainnya
+cukup di halaman Cetak Stiker Label BMN saja sudah cukup. dan untuk label pada
+marker … label langsung menggunakan max kolom yang tersisa sehingga memanjang
+di baris pertama baru turun baris bawahnya dan tidak membaginya agar seimbang
+di tengah terlebih dahulu."*
+
+**Dimensi dihapus dari semua isian.** Isian form aset, lembar edit cepat, dan
+lembar kamera masing-masing menuliskan sendiri "Kecil (3x1.5cm)" / "Sedang
+(5x3cm)" / "Besar (8x5cm)". Angka itu bukan cuma mubazir, tetapi **keliru**:
+ukuran stiker yang sesungguhnya tak tetap — grid merentangkan label mengisi
+penuh kertas, jadi stiker "Sedang" keluar ±65×30 mm di A4 dan ±56×30 mm di A3,
+bukan 50×30 mm. Ukuran nyata hanya dapat disebut di tempat kertasnya sudah
+dipilih, yaitu dialog Cetak Stiker Label BMN — dan di sanalah angkanya tetap
+ditampilkan, lengkap per kertas.
+
+Daftar pilihannya sekaligus disatukan menjadi `UKURAN_STIKER` di
+`lib/stikerAset` — sebelumnya empat salinan di empat berkas, melanggar
+konvensi repo sendiri ("ekspor konstanta opsi, jangan duplikasi daftarnya").
+Satu isian tersembunyi peninggalan zaman teks-bebas (`<Input hidden>` dengan
+placeholder "Ukuran (5x3cm)") ikut dibuang: ia terikat ke field yang sama
+dengan Select di bawahnya tetapi tak pernah dapat diisi siapa pun.
+
+**Label peta menyeimbangkan kedua barisnya** (`text-wrap: balance`). Tanpa itu
+"Kantor Kelurahan Amborawang Darat" pecah menjadi baris penuh + kata "Darat"
+sendirian — pada label yang rata tengah bentuknya timpang. Peramban lama
+mengabaikan properti ini dan kembali ke perilaku lama; tak ada yang rusak.
+
+Taksiran kotak tabrakan di `lib/petaLabel` ikut disesuaikan: label dua baris
+kini selebar SEPARUH teksnya (tak pernah lebih sempit daripada kata
+terpanjangnya), bukan selebar `LEBAR_MAKS`. Menaksirnya selebar batas tetap
+aman, tetapi meleset sampai dua kali lipat pada nama sedang — dan label yang
+disembunyikan padahal ruangnya lega persis yang dikeluhkan pemilik
+sebelumnya. Teks yang melampaui jatah dua baris tetap ditaksir selebar batas,
+sebab di situ kedua barisnya memang terisi penuh.
+
 ## [#1046] Label peta: lebar eksplisit — panel Leaflet berukuran nol — 2026-09-07
 
 Laporan pemilik: *"label di peta masih muncul sedikit"* — labelnya memendek

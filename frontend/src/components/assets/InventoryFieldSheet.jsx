@@ -10,6 +10,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../ui/select";
 import { autoInventarisasiEnabled } from "../../lib/inventoryStatus";
+import { UKURAN_STIKER } from "../../lib/stikerAset";
 
 // ============================================================================
 // InventoryFieldSheet — tampilan EKSKLUSIF mode inventarisasi lapangan.
@@ -582,9 +583,9 @@ const InventoryFieldSheet = ({
                 <Select value={formData.stiker_ukuran || ""} onValueChange={onStikerUkuranChange}>
                   <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Pilih ukuran" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Kecil">Kecil (3x1.5cm)</SelectItem>
-                    <SelectItem value="Sedang">Sedang (5x3cm)</SelectItem>
-                    <SelectItem value="Besar">Besar (8x5cm)</SelectItem>
+                    {UKURAN_STIKER.map(u => (
+                      <SelectItem key={u} value={u}>{u}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

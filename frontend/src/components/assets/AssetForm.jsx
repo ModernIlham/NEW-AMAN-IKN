@@ -44,6 +44,7 @@ import { statusInventarisasiOtomatis, autoInventarisasiEnabled } from "../../lib
 import { terapkanHeaderSatker } from "../../lib/satkerAktif";
 import { keteranganPsp } from "../../lib/tandaPsp";
 import { normalisasiKoordinat } from "../../lib/koordinatAset";
+import { UKURAN_STIKER } from "../../lib/stikerAset";
 
 // ============================================================================
 // INVENTORY CLASSIFICATION INFO DATA (SE 17/SE/M/2024)
@@ -2774,13 +2775,12 @@ const AssetForm = memo(({
                 <div className="grid grid-cols-2 gap-2">
                   <Select value={formData.stiker_status} onValueChange={handleStikerStatusChange}><SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent><SelectItem value="Belum Terpasang">Belum Terpasang</SelectItem><SelectItem value="Sudah Terpasang">Sudah Terpasang</SelectItem></SelectContent></Select>
-                  <Input name="stiker_ukuran" value={formData.stiker_ukuran} onChange={handleInputChange} placeholder="Ukuran (5x3cm)" className="h-7 text-xs hidden" />
                   <Select value={formData.stiker_ukuran || ""} onValueChange={v => setFormData(p => ({...p, stiker_ukuran: v}))}>
                     <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Pilih ukuran" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Kecil">Kecil (3x1.5cm)</SelectItem>
-                      <SelectItem value="Sedang">Sedang (5x3cm)</SelectItem>
-                      <SelectItem value="Besar">Besar (8x5cm)</SelectItem>
+                      {UKURAN_STIKER.map(u => (
+                        <SelectItem key={u} value={u}>{u}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
