@@ -28,12 +28,12 @@ import {
   susunPohonUnit, unitDalamLingkup, perubahanEselonMassal,
 } from "@/lib/pohonUnit";
 import { fieldLevel, labelLevel, levelAkar, levelRingkas } from "@/lib/eselonSatker";
+import { UKURAN_STIKER } from "@/lib/stikerAset";
 import PemilihUnitOrganisasi from "./PemilihUnitOrganisasi";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const STIKER_STATUSES = ["Belum Terpasang", "Sudah Terpasang"];
-const STIKER_SIZES = ["Kecil", "Sedang", "Besar"];
 const MAX_BATCH_PHOTOS = 6;
 // Satu sumber opsi: InventoryFieldSheet (konvensi repo — jangan duplikasi)
 const CONDITIONS = CONDITION_OPTIONS.map((o) => o.value);
@@ -631,7 +631,7 @@ const BatchEditPanel = memo(function BatchEditPanel({
           <div className="space-y-0.5">
             <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Sticker className="w-2.5 h-2.5" />Ukuran Stiker</label>
             <ClearableSelect value={updates.stiker_ukuran || "__none__"} onValueChange={v => setField("stiker_ukuran", v)}>
-              {STIKER_SIZES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              {UKURAN_STIKER.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
             </ClearableSelect>
           </div>
         </div>

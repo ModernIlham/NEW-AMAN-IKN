@@ -409,6 +409,14 @@ aside .overflow-x-auto::-webkit-scrollbar-thumb:hover, .category-dropdown-scroll
   white-space: normal;
   overflow-wrap: break-word;
   text-align: center;
+  /* DUA BARIS SEIMBANG, bukan baris pertama penuh lalu sisanya menggantung.
+     Tanpa ini "Kantor Kelurahan Amborawang Darat" pecah menjadi "Kantor
+     Kelurahan Amborawang" + "Darat" sendirian — satu kata yatim di bawah
+     baris penuh, dan pada label yang rata tengah bentuknya jadi timpang.
+     `balance` membagi rata dulu, baru memanjang sampai `max-width`.
+     Peramban lama mengabaikannya dan kembali ke perilaku lama — memendek
+     sedikit keindahannya, tak merusak apa pun. */
+  text-wrap: balance;
   font: 600 12px/14px 'Plus Jakarta Sans Variable', 'Segoe UI', system-ui,
     sans-serif;
   color: #1f2937;

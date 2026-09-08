@@ -10,8 +10,8 @@
  * peta, dan tak satu pun galat memberi tahu.
  */
 import {
-  JARAK_DARI_MARKER, LEBAR_MAKS, MAKS_BARIS, MAKS_LABEL, SISIPAN_X,
-  SISIPAN_Y, TINGGI_BARIS, kotakLabel, pilihLabelTampil, ukurLabel,
+  JARAK_DARI_MARKER, LEBAR_KARAKTER, LEBAR_MAKS, MAKS_BARIS, MAKS_LABEL,
+  SISIPAN_X, SISIPAN_Y, TINGGI_BARIS, kotakLabel, pilihLabelTampil, ukurLabel,
 } from "./petaLabel";
 
 const kotak = (kiri, atas, kanan, bawah) => ({ kiri, atas, kanan, bawah });
@@ -74,6 +74,35 @@ describe("kotakLabel", () => {
     expect(ukurLabel(panjang).baris).toBe(MAKS_BARIS);
     expect(ukurLabel("A".repeat(400)).baris).toBe(MAKS_BARIS);
     expect(ukurLabel("Meja").baris).toBe(1);
+  });
+
+  test("kotak dua baris SEIMBANG, bukan selebar batas", () => {
+    /* CSS menyeimbangkan kedua baris (`text-wrap: balance`), jadi label dua
+       baris tak selebar `LEBAR_MAKS` — ia selebar separuh teksnya. Menaksirnya
+       `LEBAR_MAKS` tetap aman tetapi meleset sampai dua kali lipat, dan label
+       yang disembunyikan padahal sebenarnya lega persis yang dikeluhkan
+       pemilik ("label di peta masih muncul sedikit"). */
+    const dua = "Kantor Kelurahan Amborawang Darat";      // 33 huruf → 2 baris
+    const { lebar, baris } = ukurLabel(dua);
+    expect(baris).toBe(2);
+    expect(lebar).toBeLessThan(LEBAR_MAKS);
+    // ± separuh teks, bukan sepenuh batas.
+    expect(lebar - SISIPAN_X * 2)
+      .toBeCloseTo((dua.length * LEBAR_KARAKTER) / 2, 0);
+  });
+
+  test("kotak tak pernah lebih sempit daripada kata terpanjang", () => {
+    // Satu baris mustahil lebih sempit daripada kata terpanjangnya; kotak yang
+    // lebih sempit daripada gambarnya membuat dua label dinilai tak
+    // bertabrakan padahal bertindih.
+    const { lebar } = ukurLabel("a Amborawangkelurahan b");
+    expect(lebar - SISIPAN_X * 2)
+      .toBeGreaterThanOrEqual("Amborawangkelurahan".length * LEBAR_KARAKTER);
+  });
+
+  test("teks yang melampaui dua baris tetap ditaksir selebar batas", () => {
+    // Di sini kedua barisnya memang terisi penuh — tak ada yang diseimbangkan.
+    expect(ukurLabel("A".repeat(400)).lebar).toBe(LEBAR_MAKS + SISIPAN_X * 2);
   });
 
   test("tinggi kotak ikut terbatas dua baris", () => {
