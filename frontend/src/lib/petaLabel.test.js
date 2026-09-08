@@ -11,7 +11,8 @@
  */
 import {
   JARAK_DARI_MARKER, LEBAR_KARAKTER, LEBAR_MAKS, MAKS_BARIS, MAKS_LABEL,
-  SISIPAN_X, SISIPAN_Y, TINGGI_BARIS, kotakLabel, pilihLabelTampil, ukurLabel,
+  SISIPAN_X, SISIPAN_Y, TINGGI_BARIS, kotakLabel, lebarPasang,
+  pasangLebarLabel, pilihLabelTampil, ukurLabel,
 } from "./petaLabel";
 
 const kotak = (kiri, atas, kanan, bawah) => ({ kiri, atas, kanan, bawah });
@@ -180,5 +181,57 @@ describe("pilihLabelTampil", () => {
   test("satu label yang sama tak pernah menghalangi dirinya sendiri", () => {
     const tampil = pilihLabelTampil([{ id: "a", kotak: kotak(0, 0, 50, 20) }]);
     expect(tampil.has("a")).toBe(true);
+  });
+});
+
+
+describe("lebarPasang / pasangLebarLabel", () => {
+  /* PEMBAGIAN DUA BARIS DIKERJAKAN DI JS, bukan oleh CSS.
+
+     `text-wrap: balance` melakukan hal yang sama dan sempat dipakai
+     sendirian — tetapi ia baru ada di Chrome 114+, Safari 17.5+, dan Firefox
+     121+. Di peramban pemilik ia DIABAIKAN DIAM-DIAM: propertinya terkirim
+     utuh sampai CSS terbangun (sudah diperiksa), hanya tak dijalankan, dan
+     labelnya kembali memenuhi baris pertama dulu. Tak ada galat, tak ada
+     tanda apa pun. Karena itu lebarnya kini dihitung dan dipasang sendiri. */
+
+  test("lebar pasang = lebar yang dipakai kotak tabrakan", () => {
+    // Satu angka, bukan dua taksiran yang harus dijaga sama.
+    for (const t of ["Meja", "Kantor Kelurahan Amborawang Darat", "A".repeat(400)]) {
+      expect(lebarPasang(t)).toBe(ukurLabel(t).lebar - SISIPAN_X * 2);
+    }
+  });
+
+  test("nama dua baris dipersempit ke ± separuh, bukan dibiarkan selebar batas", () => {
+    const t = "Kantor Kelurahan Amborawang Darat";
+    expect(lebarPasang(t)).toBeLessThan(LEBAR_MAKS);
+    expect(lebarPasang(t)).toBeCloseTo((t.length * LEBAR_KARAKTER) / 2, 0);
+  });
+
+  test("nama satu baris tak dipersempit sama sekali", () => {
+    // Mempersempit yang sudah muat justru memecahnya jadi dua baris.
+    expect(lebarPasang("Meja")).toBe("Meja".length * LEBAR_KARAKTER);
+  });
+
+  test("memasang max-width pada elemen tooltip lalu MEREPOSISI", () => {
+    // `update()` wajib: Leaflet menempatkan tooltip memakai offsetWidth yang
+    // diukur SEBELUM lebar ini berlaku, jadi tanpa itu label melenceng dari
+    // tengah markernya.
+    const el = { style: {} };
+    const tip = { getElement: () => el, update: jest.fn() };
+    const marker = { getTooltip: () => tip };
+    expect(pasangLebarLabel(marker, "Kantor Kelurahan Amborawang Darat")).toBe(true);
+    expect(el.style.maxWidth)
+      .toBe(`${lebarPasang("Kantor Kelurahan Amborawang Darat")}px`);
+    expect(tip.update).toHaveBeenCalledTimes(1);
+  });
+
+  test("marker yang sudah dilepas tak meruntuhkan sapuan", () => {
+    // Label dihitung ulang tiap peta bergerak; marker bisa lenyap di tengah.
+    expect(pasangLebarLabel(null, "Meja")).toBe(false);
+    expect(pasangLebarLabel({}, "Meja")).toBe(false);
+    expect(pasangLebarLabel({ getTooltip: () => null }, "Meja")).toBe(false);
+    expect(pasangLebarLabel(
+      { getTooltip: () => ({ getElement: () => null }) }, "Meja")).toBe(false);
   });
 });

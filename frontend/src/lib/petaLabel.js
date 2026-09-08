@@ -117,6 +117,9 @@ export function ukurLabel(teks, { lebarMaks = LEBAR_MAKS } = {}) {
     lebar: lebar + SISIPAN_X * 2,
     tinggi: baris * TINGGI_BARIS + SISIPAN_Y * 2,
     baris,
+    // Lebar yang harus DIPASANG pada elemennya — tanpa sisipan halo. Inilah
+    // yang membuat kedua baris terbagi rata; lihat `lebarPasang`.
+    lebarTeks: lebar,
   };
 }
 
@@ -138,6 +141,51 @@ export function kotakLabel(x, y, teks, opsi) {
     kanan: x + lebar / 2,
     bawah: y + JARAK_DARI_MARKER + tinggi,
   };
+}
+
+/**
+ * Lebar (px) yang harus dipasang sebagai `max-width` elemen label.
+ *
+ * PEMBAGIAN DUA BARIS DIKERJAKAN DI SINI, bukan oleh CSS. `text-wrap: balance`
+ * memang melakukan hal yang sama dan sempat dipakai sendirian — tetapi ia baru
+ * ada di Chrome 114+, Safari 17.5+, dan Firefox 121+; di peramban pemilik ia
+ * diabaikan diam-diam dan labelnya kembali memenuhi baris pertama dulu. Tak
+ * ada galat, tak ada tanda apa pun: propertinya terkirim utuh sampai CSS
+ * terbangun, hanya tak dijalankan.
+ *
+ * Dengan lebar yang sudah dipersempit ke ukuran seimbang, pembungkusan biasa
+ * menghasilkan dua baris yang setara di peramban mana pun. `text-wrap:
+ * balance` tetap dipertahankan sebagai penghalus di peramban yang
+ * mendukungnya, bukan sebagai penentu.
+ *
+ * Nilainya SAMA dengan yang dipakai menghitung kotak tabrakan, jadi kotak dan
+ * gambarnya tak bisa berpisah — bukan dua taksiran yang harus dijaga sama,
+ * melainkan satu angka yang sama.
+ */
+export function lebarPasang(teks, opsi) {
+  return ukurLabel(teks, opsi).lebarTeks;
+}
+
+/**
+ * Pasang lebar seimbang pada tooltip sebuah marker Leaflet.
+ *
+ * `update()` wajib menyusul: Leaflet menempatkan tooltip memakai `offsetWidth`
+ * yang diukur SEBELUM lebar ini berlaku, jadi tanpa itu label melenceng dari
+ * tengah markernya — persis kerapian yang diminta pemilik.
+ *
+ * Tak melempar bila markernya sudah dilepas dari peta di tengah sapuan.
+ */
+export function pasangLebarLabel(marker, teks, opsi) {
+  try {
+    const tip = marker?.getTooltip?.();
+    const el = tip?.getElement?.();
+    if (!el) return false;
+    el.style.maxWidth = `${lebarPasang(teks, opsi)}px`;
+    tip.update();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function bertabrakan(a, b) {
