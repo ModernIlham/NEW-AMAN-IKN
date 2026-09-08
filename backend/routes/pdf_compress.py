@@ -44,6 +44,7 @@ from auth_utils import require_user, require_writer
 from db import db
 from kompresi_rantai import URUTAN_PDF, layanan_aktif
 from shared_utils import limiter
+from unggahan_utils import baca_unggahan_terbatas
 
 logger = logging.getLogger(__name__)
 pdf_compress_router = APIRouter()
@@ -235,7 +236,9 @@ async def compress_pdf(request: Request, file: UploadFile = File(...),
     """
     import asyncio
 
-    pdf_bytes = await file.read()
+    pdf_bytes = await baca_unggahan_terbatas(
+        file, pcu.MAKS_UKURAN_PDF,
+        f"PDF melebihi {pcu.MAKS_UKURAN_PDF // (1024 * 1024)}MB")
     sah, galat = pcu.pdf_valid(pdf_bytes)
     if not sah:
         raise HTTPException(status_code=400, detail=galat)

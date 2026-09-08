@@ -11,9 +11,11 @@ from models import CategoryCreate
 from shared_utils import (limiter, invalidate_category_cache, cache_get,
                           cache_set, kode_satker_user)
 from jobs import buat_job, update_job, get_job
+from unggahan_utils import baca_unggahan_terbatas
 
 logger = logging.getLogger(__name__)
 categories_router = APIRouter()
+MAKS_IMPOR_KATEGORI = 10 * 1024 * 1024  # Sejalan dengan impor referensi kodefikasi.
 
 # Strong-ref ke task impor latar: asyncio hanya memegang weak ref, task
 # fire-and-forget bisa di-GC saat suspended di titik await → impor mati
@@ -187,7 +189,11 @@ async def import_categories_bulk(request: Request, file: UploadFile = File(...),
     if not (filename.endswith('.csv') or filename.endswith('.xlsx') or filename.endswith('.xls')):
         raise HTTPException(status_code=400, detail="File harus berformat CSV atau Excel (.xlsx)")
     
-    content = await file.read()
+    content = await baca_unggahan_terbatas(
+        file, MAKS_IMPOR_KATEGORI,
+        "File impor kategori maksimal 10 MB. Pecah data menjadi beberapa file.")
+    if not content:
+        raise HTTPException(status_code=400, detail="File impor kategori kosong")
     # Job persisten (multi-worker-safe) — kembalikan job_id utk polling progres.
     job_id = await buat_job(
         "import_kategori", _user.get("username", ""),

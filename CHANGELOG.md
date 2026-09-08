@@ -18,6 +18,31 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1050] Batas unggahan kategori dan PDF diperiksa sebelum diproses — 2026-09-08
+
+Tindak lanjut **U26** dari tinjauan sistem, diperiksa ulang pada main terbaru
+sebelum pengerjaan ([PR #1041](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1041)).
+
+- **Impor kategori maksimal 10 MB**, sejalan dengan impor referensi kodefikasi.
+  File kosong atau berlebih ditolak sebelum membuat job dan menjalankan parser.
+  Pemilih file maupun seret-lepas memeriksa batas yang sama di klien; petunjuk
+  menyarankan memecah file besar, bukan menjanjikan jutaan data tanpa batas.
+- **Kompresi PDF tetap maksimal 25 MB**. Pembacaan aplikasi berhenti paling
+  banyak satu byte setelah batas, sehingga tidak membaca seluruh file berlebih
+  sebelum menolaknya. Pesan HTTP 400 dan rantai kompresi/fallback tetap sama.
+- Batas dihitung dari **isi nyata**, bukan metadata ukuran unggahan. Ini batas
+  pembacaan **sesudah parser multipart**, bukan pengganti batas request nginx
+  atau klaim penutupan kerentanan OOM. MB di UI memakai kelipatan 1.024 byte.
+- Tidak ada migrasi data, perubahan izin/scope satker, atau dependensi baru.
+
+**Verifikasi:** 12 uji backend baru dan 8 uji DOM baru menjaga file kosong,
+batas inklusif, pembacaan pendek, berhenti pada batas + 1 byte, penolakan
+sebelum efek samping, serta pengiriman ulang setelah file besar ditolak.
+Suite terfokus: 29 uji backend dan 21 uji frontend lulus; lint berkas berubah,
+compileall, pemeriksa rahasia, dan build produksi berhasil. Uji backend lengkap
+lokal masih terhalang lingkungan Windows/dependensi sistem; gerbang CI Linux
+tetap wajib lulus sebelum merge.
+
 ## [#1048] Label peta: pembagian dua baris dihitung sendiri, tak lagi menumpang CSS — 2026-09-08
 
 Laporan pemilik setelah memuat ulang: *"masih tidak terjadi apa apa tetap
