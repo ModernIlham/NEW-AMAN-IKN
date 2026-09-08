@@ -11,6 +11,7 @@ import { useConfirm } from "../ui/ConfirmDialog";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const CATEGORY_PAGE_SIZE = 50;
+const MAKS_IMPOR_KATEGORI = 10 * 1024 * 1024;
 
 /**
  * Tinggi BAKU seluruh kendali di dialog ini: 44px di layar sentuh, 32px mulai
@@ -121,6 +122,11 @@ const CategoryManagerDialog = memo(({ open, onClose, categories, onCategoriesCha
 
   const handleCategoryBulkImport = useCallback(async e => {
     const file = e.target.files?.[0]; if (!file) return;
+    if (!file.size || file.size > MAKS_IMPOR_KATEGORI) {
+      toast.error(!file.size ? "File impor kategori kosong" : "File impor kategori maksimal 10 MB. Pecah data menjadi beberapa file.");
+      if (categoryImportRef.current) categoryImportRef.current.value = "";
+      return;
+    }
     try {
       setCatImportProgress({ status: "uploading", total: 0, processed: 0, imported: 0 });
       const fd = new FormData(); fd.append("file", file);
@@ -215,7 +221,7 @@ const CategoryManagerDialog = memo(({ open, onClose, categories, onCategoriesCha
             data-testid="category-dropzone"
           >
             <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">Import Kategori dari Excel/CSV</p>
-            <p className="text-[10px] text-emerald-600 dark:text-emerald-400">Format: Kolom "Kode Aset" (10 digit) + "Deskripsi Barang". Mendukung jutaan data.</p>
+            <p className="text-[10px] text-emerald-600 dark:text-emerald-400">Format: Kolom "Kode Aset" (10 digit) + "Deskripsi Barang". Maksimal 10 MB per file; pecah data besar menjadi beberapa file.</p>
             {isDragOver ? (
               <div className="flex flex-col items-center justify-center py-3 gap-1">
                 <FileUp className="w-6 h-6 text-emerald-500 animate-bounce" />
@@ -226,7 +232,7 @@ const CategoryManagerDialog = memo(({ open, onClose, categories, onCategoriesCha
                 <Upload className="w-4 h-4 mr-1" />{catImportProgress ? 'Sedang Import...' : 'Pilih File atau Seret & Lepas'}
               </Button>
             )}
-            <input ref={categoryImportRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleCategoryBulkImport} className="hidden" />
+            <input ref={categoryImportRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleCategoryBulkImport} className="hidden" data-testid="category-import-input" />
             
             {catImportProgress && (
               <div className="space-y-1.5 bg-card rounded-lg p-2 border">
