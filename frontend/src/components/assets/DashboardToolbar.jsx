@@ -55,7 +55,7 @@ const SearchInput = memo(function SearchInput({ value, onCommit }) {
 });
 
 const DashboardToolbar = memo(function DashboardToolbar({
-  searchInput, setSearchInput, onScanCode, onOpenMap, mapOpen = false,
+  searchInput, setSearchInput, searchResetKey = 0, onScanCode, onOpenMap, mapOpen = false,
   categories, filterCategory, setFilterCategory,
   activeFilterCount, showAdvancedFilter, setShowAdvancedFilter,
   sortBy, setSortBy,
@@ -120,7 +120,7 @@ const DashboardToolbar = memo(function DashboardToolbar({
         <div className="flex items-center gap-1.5">
           <div className="relative flex-1 min-w-0">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-            <SearchInput value={searchInput} onCommit={setSearchInput} />
+            <SearchInput key={searchResetKey} value={searchInput} onCommit={setSearchInput} />
           </div>
           <QrScanButton onDetected={onScanCode || setSearchInput} />
           {/* Saklar mode Dashboard|Inventarisasi — KHUSUS HP (<sm), disisipkan
