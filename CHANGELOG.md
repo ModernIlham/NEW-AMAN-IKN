@@ -18,6 +18,36 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1052] Mengubah urutan aset tidak lagi memuat ulang dengan urutan lama — 2026-09-09
+
+Lanjutan pemeriksaan toolbar **U15**, sesudah PR #1042, pada main terbaru
+([PR #1043](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1043)).
+
+- Kontrol urutan **desktop dan HP/tablet** kini hanya mengubah pilihan.
+  Efek halaman memuat daftar dan statistik sesudah state baru diterapkan,
+  tetap kembali ke halaman pertama dan menampilkan indikator pemuatan.
+- Sebelumnya handler langsung memuat data sesudah `setSortBy`, ketika
+  callback masih membaca urutan lama; efek lalu memuat lagi dengan urutan
+  baru. Uji interaksi membuktikan **dua panggilan daftar per pilihan**, dan
+  **enam panggilan untuk tiga perubahan**, dengan nilai lama tersisip.
+  Pemuatan ekstra tersebut dihapus; ini bukan klaim seluruh balapan respons
+  dari jalur lain di dasbor telah ditangani.
+- Prop `refreshData` tidak lagi dikirim ke toolbar. Hook penyegaran dari
+  PR #1042 tetap dipakai halaman, timer, dan alur penutupan form.
+- Pilihan urutan, tampilan, ukuran tombol, izin, API, data, dan pembaca
+  snapshot luring tidak berubah; tidak ada dependensi atau migrasi baru.
+
+**Verifikasi:** 6 uji interaksi memakai toolbar, Select Radix, dan hook filter/
+penyegaran produksi; 4 di antaranya gagal pada kode lama dan seluruhnya lulus
+setelah perbaikan. Ditambah 1 penjaga bahwa efek halaman tetap memantau
+`sortBy` dan memuat halaman pertama. Total 20 uji terfokus lulus. Build
+produksi, lint toolbar/berkas uji, pemeriksa kredensial, dan `git diff --check`
+lulus. Frontend lengkap lokal Windows: 1.623 lulus, 3 kegagalan path lama;
+backend lokal juga memiliki kendala lingkungan lama. CI Linux lengkap tetap
+menjadi gerbang sebelum merge dan deploy.
+
+---
+
 ## [#1051] Callback toolbar dasbor stabil dengan konteks data terbaru — 2026-09-09
 
 Tindak lanjut **U15**, diperiksa ulang pada main terbaru sebelum pengerjaan
