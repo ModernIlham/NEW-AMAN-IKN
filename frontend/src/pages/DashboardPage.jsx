@@ -65,6 +65,7 @@ import { statistikUntukKartu } from "@/lib/statistikAset";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useDragDropImport } from "@/hooks/useDragDropImport";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { usePenyegaranAset } from "@/hooks/usePenyegaranAset";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -310,6 +311,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const [rekapTotal, setRekapTotal] = useState(null);
   const [groupsCount, setGroupsCount] = useState(null);
   const [mapOpen, setMapOpen] = useState(false);
+  const handleMapToggle = useCallback(() => setMapOpen(p => !p), []);
   const [shareMapOpen, setShareMapOpen] = useState(false); // dialog Bagikan Peta Kolaboratif
   // Lingkup yang dibagikan, DIBEKUKAN saat tombol Bagikan ditekan. Kalau
   // dialog membacanya langsung dari peta, mengubah filter selagi dialog
@@ -1001,28 +1003,13 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     }
   };
 
-  const fetchParamsRef = useRef({ debouncedSearch, filterCategory, sortBy, pageSize, currentPage });
-  fetchParamsRef.current = { debouncedSearch, filterCategory, sortBy, pageSize, currentPage };
-
   // showLoading: user-initiated refetches (filter/sort/page-size) show the
   // list skeleton; background refreshes (post-save sync, WS) stay silent so
   // they never flash an overlay while someone is working.
-  const refreshData = (page, { showLoading = false, preserveMobile = false } = {}) => {
-    const p = fetchParamsRef.current;
-    const pg = page !== undefined ? page : p.currentPage;
-    const work = Promise.all([
-      // preserveMobile: rekonsiliasi daftar desktop + hitungan TANPA menyusun
-      // ulang jendela infinite-scroll HP (mencegah lompatan posisi scroll saat
-      // menutup form setelah simpan; baris tersimpan sudah diperbarui optimis).
-      doFetch(pg, p.pageSize, p.debouncedSearch, p.filterCategory, p.sortBy, false, preserveMobile),
-      doFetchStats(p.debouncedSearch),
-    ]);
-    if (showLoading) {
-      setPageLoading(true);
-      work.finally(() => setPageLoading(false));
-    }
-    return work;
-  };
+  const refreshData = usePenyegaranAset({
+    doFetch, doFetchStats, debouncedSearch, filterCategory, sortBy,
+    pageSize, currentPage, setPageLoading,
+  });
   const refreshDataRef = useRef(refreshData);
   refreshDataRef.current = refreshData;
 
@@ -1080,7 +1067,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   useEffect(() => {
     if (isInitialMount.current) { isInitialMount.current = false; return; }
     refreshData(1, { showLoading: true });
-  }, [debouncedSearch, filterCategory, sortBy, pageSize, filters.condition, filters.status, filters.location, filters.eselon1, filters.eselon2, filters.eselon3, filters.eselon4, filters.eselon5, filters.stiker, filters.inventoryStatus, filters.priceMin, filters.priceMax, filters.nomorSpm, filters.perolehanDari, filters.dateFrom, filters.dateTo, filters.user, filters.penggunaNip]);
+  }, [refreshData, debouncedSearch, filterCategory, sortBy, pageSize, filters.condition, filters.status, filters.location, filters.eselon1, filters.eselon2, filters.eselon3, filters.eselon4, filters.eselon5, filters.stiker, filters.inventoryStatus, filters.priceMin, filters.priceMax, filters.nomorSpm, filters.perolehanDari, filters.dateFrom, filters.dateTo, filters.user, filters.penggunaNip]);
 
   const goToPage = async (p) => {
     const np = Math.max(1, Math.min(p, totalPages));
@@ -1167,14 +1154,14 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       wsNeedsRefreshRef.current = false;
       if (queueNeedsRefresh || wsNeedsRefresh) refreshData(undefined, { preserveMobile: true });
     }, 300);
-  }, [editAssetForForm, unlockAsset, syncStatuses, consumeRefreshFlag]);
+  }, [editAssetForForm, unlockAsset, syncStatuses, consumeRefreshFlag, refreshData]);
 
   const handleFormSubmitSuccess = useCallback(() => {
     if (editAssetForForm?.id) unlockAsset(editAssetForForm.id);
     setEditAssetForForm(null);
     wsNeedsRefreshRef.current = false;
     refreshData();
-  }, [editAssetForForm, unlockAsset]);
+  }, [editAssetForForm, unlockAsset, refreshData]);
 
   // tempId aset yang ditambah via PETA → {adaFoto}, dipantau efek kegagalan sync.
   const petaAddRef = useRef(new Map());
@@ -1646,6 +1633,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
 
   // ── Cetak Stiker Label BMN (3 ukuran × A4/A3, ikut filter aktif) ──
   const [stikerOpen, setStikerOpen] = useState(false);
+  const handleCetakStiker = useCallback(() => setStikerOpen(true), []);
   // Daftar id terpilih dibekukan sebagai array agar dialog stiker tak
   // memuat-ulang rekap ukurannya tiap render (Set baru = referensi baru).
   const idsTerpilih = useMemo(() => Array.from(selectedAssets), [selectedAssets]);
@@ -1888,11 +1876,11 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
               />
             )}
             <DashboardToolbar
-              searchInput={searchInput} setSearchInput={setSearchInput} onScanCode={handleScannedCode} onOpenMap={() => setMapOpen(p => !p)} mapOpen={mapOpen} categories={categories} filterCategory={filterCategory} setFilterCategory={setFilterCategory}
+              searchInput={searchInput} setSearchInput={setSearchInput} onScanCode={handleScannedCode} onOpenMap={handleMapToggle} mapOpen={mapOpen} categories={categories} filterCategory={filterCategory} setFilterCategory={setFilterCategory}
               activeFilterCount={activeFilterCount} showAdvancedFilter={showAdvancedFilter} setShowAdvancedFilter={setShowAdvancedFilter}
               sortBy={sortBy} setSortBy={setSortBy} exporting={exporting} handleExport={handleExport} handleExportExecutivePDF={handleExportExecutivePDF}
               handlePreviewExecutive={handlePreviewExecutive} perms={perms} openDialog={openDialog} handlePrintBulkCards={handlePrintBulkCards}
-              onCetakStiker={() => setStikerOpen(true)} selectedCount={selectedAssets.size}
+              onCetakStiker={handleCetakStiker} selectedCount={selectedAssets.size}
               assetsCount={assets.length} filters={filters} filterOptions={filterOptions} opsiEselon={opsiEselon} handleAdvancedFilterChange={handleAdvancedFilterChange}
               resetAdvancedFilters={resetAdvancedFilters} handleCategoryReset={handleCategoryReset}
               refreshData={refreshData} viewMode={viewMode} setViewMode={setViewMode}
