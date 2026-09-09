@@ -32,3 +32,11 @@ test("penyegaran menerima pembaca data DAN parameter terbaru dari halaman", () =
     expect(wiring).toMatch(new RegExp(`\\b${nama}\\b`));
   }
 });
+
+test("reset hasil kosong memakai callback atomik dan membatalkan draf toolbar", () => {
+  const tombol = HALAMAN.match(/<Button\b[^>]*data-testid="empty-reset-filter-btn"[^>]*>/)?.[0];
+  expect(tombol).toBeDefined();
+  expect(tombol).toContain("onClick={resetAllFilters}");
+  expect(tombol).not.toContain("refreshData");
+  expect(TOOLBAR).toContain("searchResetKey={searchResetKey}");
+});

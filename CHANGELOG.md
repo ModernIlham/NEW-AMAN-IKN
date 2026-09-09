@@ -18,6 +18,35 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1053] Reset filter membatalkan kata pencarian lama dan draf tertunda — 2026-09-09
+
+Lanjutan pemeriksaan toolbar **U15**
+([PR #1044](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1044)).
+
+- Tombol **Reset filter** pada hasil kosong mengosongkan pencarian efektif,
+  kategori, dan filter lanjutan bersama-sama. Efek halaman memuat halaman
+  pertama sesudah state baru diterapkan; panggilan langsung dengan query lama
+  dihapus.
+- Reset eksplisit membatalkan pencarian pada kedua lapis jeda ketikan:
+  nilai di hook langsung dikosongkan dan kotak cari di-remount dengan key
+  baru. Draf yang belum dikirim ke halaman tidak dapat muncul kembali.
+- **Reset filter lanjutan** tetap mempertahankan kata pencarian. Pilihan
+  urutan, ukuran tombol, tampilan, izin, API, dan snapshot luring tidak berubah.
+  Tidak ada dependensi atau migrasi baru.
+- Ini menangani reset dan timer pencarian; guard respons lama dari permintaan
+  jaringan lain masih merupakan pekerjaan terpisah.
+
+**Verifikasi:** 6 uji perilaku dengan toolbar dan hook produksi, termasuk
+reset sebelum kedua timer selesai, mengetik segera setelah reset, dan minimum
+dua karakter. Kode lama gagal pada 3 skenario; sesudah perbaikan seluruhnya
+lulus. Ditambah penjaga wiring tombol halaman; total 24 uji terfokus lulus.
+Build produksi, lint hook/toolbar/uji, pemeriksa kredensial, dan pemeriksaan
+diff lulus. Uji frontend Windows lengkap: 1.630 lulus, 3 kegagalan path lama.
+Backend Windows: 679 lulus sebelum 3 kegagalan import/path lama; kendala ini
+ditangani terpisah. CI Linux lengkap tetap wajib hijau sebelum rilis.
+
+---
+
 ## [#1052] Mengubah urutan aset tidak lagi memuat ulang dengan urutan lama — 2026-09-09
 
 Lanjutan pemeriksaan toolbar **U15**, sesudah PR #1042, pada main terbaru

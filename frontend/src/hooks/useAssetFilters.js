@@ -2,7 +2,7 @@
  * useAssetFilters - Manages all filter state for asset listing.
  * Includes search, category filter, advanced filters, and filter options.
  */
-import { useState, useCallback, useMemo, useReducer, useEffect, useRef } from "react";
+import { useState, useCallback, useMemo, useReducer, useEffect } from "react";
 import axios from "axios";
 import { opsiEselonBertingkat, pilihanEselonUsang } from "@/lib/pohonUnit";
 
@@ -11,7 +11,7 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 function useDebounce(value, delay) {
   const [dv, setDv] = useState(value);
   useEffect(() => { const h = setTimeout(() => setDv(value), delay); return () => clearTimeout(h); }, [value, delay]);
-  return dv;
+  return [dv, setDv];
 }
 
 // Panjang minimum kata kunci pencarian. Di server, pencarian teks bebas memakai
@@ -90,7 +90,8 @@ export function useAssetFilters({ activityId }) {
   // perubahan tanpa menambah kebenaran.
   const [filterCategory, setFilterCategory] = useState([]);
   const [sortBy, setSortBy] = useState("newest");
-  const rawDebouncedSearch = useDebounce(searchInput, 300);
+  const [rawDebouncedSearch, setRawDebouncedSearch] = useDebounce(searchInput, 300);
+  const [searchResetKey, setSearchResetKey] = useState(0);
   // Kata kunci EFEKTIF: < MIN_SEARCH_LEN (setelah dipangkas) → "" (tanpa cari).
   const debouncedSearch = rawDebouncedSearch.trim().length >= MIN_SEARCH_LEN ? rawDebouncedSearch : "";
 
@@ -241,6 +242,16 @@ export function useAssetFilters({ activityId }) {
     setShowAdvancedFilter(false);
   }, []);
 
+  // Reset eksplisit harus mengosongkan query efektif pada render yang sama.
+  // Key juga membuang draf/timer lokal toolbar meski searchInput masih "".
+  // Reset panel lanjutan tetap terpisah: di sana kata pencarian dipertahankan.
+  const resetAllFilters = useCallback(() => {
+    setSearchInput("");
+    setRawDebouncedSearch("");
+    resetAdvancedFilters();
+    setSearchResetKey(k => k + 1);
+  }, [setRawDebouncedSearch, resetAdvancedFilters]);
+
   return {
     searchInput, setSearchInput,
     filterCategory, setFilterCategory,
@@ -257,5 +268,6 @@ export function useAssetFilters({ activityId }) {
     toggleFilterValue,
     handleCategoryReset,
     resetAdvancedFilters,
+    resetAllFilters, searchResetKey,
   };
 }

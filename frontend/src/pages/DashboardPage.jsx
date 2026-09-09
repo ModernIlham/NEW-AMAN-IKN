@@ -277,7 +277,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     sortBy, setSortBy, debouncedSearch, showAdvancedFilter, setShowAdvancedFilter,
     filters, filterOptions, opsiEselon, fetchFilterOptions, buildFilterParams,
     activeFilterCount, handleAdvancedFilterChange, toggleFilterValue,
-    handleCategoryReset, resetAdvancedFilters,
+    handleCategoryReset, resetAdvancedFilters, resetAllFilters, searchResetKey,
   } = filterHook;
 
   // Query filter aktif untuk LAPORAN EKSEKUTIF (nama param = GET /assets).
@@ -1876,7 +1876,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
               />
             )}
             <DashboardToolbar
-              searchInput={searchInput} setSearchInput={setSearchInput} onScanCode={handleScannedCode} onOpenMap={handleMapToggle} mapOpen={mapOpen} categories={categories} filterCategory={filterCategory} setFilterCategory={setFilterCategory}
+              searchInput={searchInput} setSearchInput={setSearchInput} searchResetKey={searchResetKey} onScanCode={handleScannedCode} onOpenMap={handleMapToggle} mapOpen={mapOpen} categories={categories} filterCategory={filterCategory} setFilterCategory={setFilterCategory}
               activeFilterCount={activeFilterCount} showAdvancedFilter={showAdvancedFilter} setShowAdvancedFilter={setShowAdvancedFilter}
               sortBy={sortBy} setSortBy={setSortBy} exporting={exporting} handleExport={handleExport} handleExportExecutivePDF={handleExportExecutivePDF}
               handlePreviewExecutive={handlePreviewExecutive} perms={perms} openDialog={openDialog} handlePrintBulkCards={handlePrintBulkCards}
@@ -1969,7 +1969,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                   <p className="text-muted-foreground mb-3">Tidak ada aset yang cocok dengan filter</p>
                   <Button
                     variant="outline" size="sm"
-                    onClick={() => { setSearchInput(''); resetAdvancedFilters(); refreshData(1); }}
+                    onClick={resetAllFilters}
                     data-testid="empty-reset-filter-btn"
                   >
                     Reset filter
