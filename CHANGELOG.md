@@ -18,6 +18,36 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1051] Callback toolbar dasbor stabil dengan konteks data terbaru — 2026-09-09
+
+Tindak lanjut **U15**, diperiksa ulang pada main terbaru sebelum pengerjaan
+([PR #1042](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1042)).
+
+- Callback **buka peta, cetak stiker, dan muat ulang** tidak lagi berganti
+  identitas pada setiap render halaman. Perbaikan dibatasi pada toolbar;
+  bukan klaim seluruh komponen `memo` aplikasi telah dioptimalkan.
+- Hook `usePenyegaranAset` tetap membaca parameter **dan fungsi pembaca data**
+  dari render terbaru yang sudah di-commit. Callback yang disimpan timer atau
+  penutupan form tidak membekukan konteks kegiatan, filter, antrean, maupun
+  pembaca snapshot luring dari render lama.
+- Pemuatan daftar dan statistik tetap paralel; pilihan halaman, skeleton
+  opsional, serta penjagaan jendela gulir HP tetap dipertahankan. Rantai
+  `finally` dikembalikan agar penolakan promise dapat ditangani pemanggil.
+- Tiga peringatan dependency hook berkurang. Tampilan, ukuran tombol, izin,
+  API, data, dan dependensi tidak berubah. Pencarian sudah memiliki debounce
+  sebelum PR ini; tidak ada klaim penghematan waktu tanpa pengukuran.
+
+**Verifikasi:** 37 uji terfokus lulus, termasuk 8 uji perilaku hook dan 2
+penjaga wiring baru. Uji membuktikan callback lama memakai pembaca terbaru,
+efek tidak terpicu ulang karena identitas callback, dan konsumen `memo` tidak
+dirender ulang tetapi klik tetap membaca konteks terbaru. Build produksi,
+lint berkas baru, pemeriksa kredensial, dan `git diff --check` lulus.
+Uji frontend lengkap lokal Windows: 1.616 lulus, 3 gagal pada uji path lama
+(`\\` versus `/`); uji backend lokal juga memiliki kendala lingkungan lama.
+CI Linux lengkap menjadi gerbang sebelum merge dan deploy.
+
+---
+
 ## [#1050] Batas unggahan kategori dan PDF diperiksa sebelum diproses — 2026-09-08
 
 Tindak lanjut **U26** dari tinjauan sistem, diperiksa ulang pada main terbaru
