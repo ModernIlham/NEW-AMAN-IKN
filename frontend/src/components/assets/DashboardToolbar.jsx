@@ -64,7 +64,6 @@ const DashboardToolbar = memo(function DashboardToolbar({
   handlePrintBulkCards, onCetakStiker, assetsCount, selectedCount = 0,
   filters, filterOptions, opsiEselon, handleAdvancedFilterChange,
   resetAdvancedFilters, handleCategoryReset,
-  refreshData,
   viewMode, setViewMode,
   inventoryMode, setInventoryMode,
 }) {
@@ -219,7 +218,9 @@ const DashboardToolbar = memo(function DashboardToolbar({
               )}
             </Button>
 
-            <Select value={sortBy} onValueChange={v => { setSortBy(v); refreshData(1); }}>
+            {/* Efek sortBy di DashboardPage memuat halaman 1 sesudah state
+                berubah. Refresh langsung di sini akan membaca urutan LAMA. */}
+            <Select value={sortBy} onValueChange={setSortBy}>
               {/* Ikut jadi katup terakhir bersama Select kategori — lihat catatan di sana. */}
               <SelectTrigger className={`h-8 text-xs min-w-0 ${tampil("urut") ? "w-32" : "w-[88px]"}`}><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -327,7 +328,7 @@ const DashboardToolbar = memo(function DashboardToolbar({
             size="compact"
           />
 
-          <Select value={sortBy} onValueChange={v => { setSortBy(v); refreshData(1); }}>
+          <Select value={sortBy} onValueChange={setSortBy}>
             <SelectTrigger className="w-auto max-w-[38%] h-9 min-h-0 px-2 text-[11px] gap-1 flex-shrink-0" aria-label="Urutkan" data-testid="mobile-sort-select">
               <SelectValue />
             </SelectTrigger>

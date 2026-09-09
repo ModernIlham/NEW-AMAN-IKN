@@ -9,9 +9,20 @@ test("toolbar tidak mendapat callback arrow baru pada tiap render halaman", () =
   expect(TOOLBAR).not.toMatch(/=>/);
   expect(TOOLBAR).toContain("onOpenMap={handleMapToggle}");
   expect(TOOLBAR).toContain("onCetakStiker={handleCetakStiker}");
-  expect(TOOLBAR).toContain("refreshData={refreshData}");
+  // Toolbar hanya mengubah state filter/urutan; pemiliknya yang memuat ulang.
+  expect(TOOLBAR).not.toContain("refreshData=");
   expect(HALAMAN).toMatch(/const handleMapToggle = useCallback\(\(\) => setMapOpen\(p => !p\), \[\]\)/);
   expect(HALAMAN).toMatch(/const handleCetakStiker = useCallback\(\(\) => setStikerOpen\(true\), \[\]\)/);
+});
+
+test("perubahan urutan tetap memuat halaman pertama melalui efek pemilik toolbar", () => {
+  // Penjaga anti-hampa untuk harness interaksi urutTanpaFetchGanda: menghapus
+  // fetch di kontrol hanya benar selama pemilik masih memantau sortBy.
+  const bagian = HALAMAN.slice(HALAMAN.indexOf("// Re-fetch on filter/search/sort change"));
+  const efek = bagian.slice(0, bagian.indexOf("]);") + 3);
+  const deps = efek.slice(efek.indexOf("}, ["));
+  expect(efek).toContain("refreshData(1, { showLoading: true });");
+  expect(deps).toMatch(/\bsortBy\b/);
 });
 
 test("penyegaran menerima pembaca data DAN parameter terbaru dari halaman", () => {

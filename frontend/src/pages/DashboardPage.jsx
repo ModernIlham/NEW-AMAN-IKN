@@ -1883,7 +1883,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
               onCetakStiker={handleCetakStiker} selectedCount={selectedAssets.size}
               assetsCount={assets.length} filters={filters} filterOptions={filterOptions} opsiEselon={opsiEselon} handleAdvancedFilterChange={handleAdvancedFilterChange}
               resetAdvancedFilters={resetAdvancedFilters} handleCategoryReset={handleCategoryReset}
-              refreshData={refreshData} viewMode={viewMode} setViewMode={setViewMode}
+              viewMode={viewMode} setViewMode={setViewMode}
               inventoryMode={inventoryMode} setInventoryMode={setInventoryMode}
             />
 
