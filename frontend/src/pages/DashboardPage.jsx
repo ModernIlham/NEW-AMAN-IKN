@@ -21,7 +21,7 @@ import { buatTempId, apakahTempId } from "@/lib/idAntrean";
 import { cocokAset } from "@/lib/pencarianLokal";
 import { useDragSelect } from "@/lib/useDragSelect";
 import { idsCetakKartu, galatPlafonKartu } from "@/lib/cakupanCetak";
-import { syncSnapshot, getSnapshotAssets, snapshotMeta, isSnapshotExpired, upsertSnapshotAsset, removeSnapshotAsset } from "@/lib/offlineSnapshot";
+import { syncSnapshot, upsertSnapshotAsset, removeSnapshotAsset } from "@/lib/offlineSnapshot";
 
 // Import refactored components
 import {
@@ -61,7 +61,8 @@ import { haptic } from "@/lib/haptics";
 import { useUnsyncedGuard } from "@/hooks/useUnsyncedGuard";
 import { useRowLocking } from "@/hooks/useRowLocking";
 import { useAssetFilters, normalkanMulti } from "@/hooks/useAssetFilters";
-import { statistikUntukKartu } from "@/lib/statistikAset";
+import { buatPemuatDaftarAset } from "@/lib/pemuatDaftarAset";
+import { HASIL_USANG, usePenjagaPermintaan } from "@/hooks/usePenjagaPermintaan";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useDragDropImport } from "@/hooks/useDragDropImport";
 import { useBackGuard } from "@/hooks/useBackGuard";
@@ -271,7 +272,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const [stats, setStats] = useState({ totalAssets: 0, totalValue: 0, activeCount: 0, maintenanceCount: 0 });
 
   // === CUSTOM HOOKS ===
-  const filterHook = useAssetFilters({ activityId: activity?.id });
+  const filterHook = useAssetFilters({ activityId: activity?.id, userId: user?.id, kodeSatker: user?.kode_satker });
   const {
     searchInput, setSearchInput, filterCategory, setFilterCategory,
     sortBy, setSortBy, debouncedSearch, showAdvancedFilter, setShowAdvancedFilter,
@@ -289,6 +290,11 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     buildFilterParams(p);
     return p.toString();
   }, [debouncedSearch, buildFilterParams]);
+
+  // Halaman bukan bagian lingkup: fetch sendiri boleh mengubah currentPage.
+  // Semua filter API (termasuk multi-nilai), kegiatan, akun dan satker ikut.
+  const lingkupPermintaan = JSON.stringify([activity?.id, user?.id, user?.kode_satker, filterLaporan, sortBy, pageSize]);
+  const penjaga = usePenjagaPermintaan(lingkupPermintaan);
 
   // === FORM / EDIT STATE ===
   const [editAssetForForm, setEditAssetForForm] = useState(null);
@@ -736,13 +742,10 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       // pengguna bisa lanjut aksi lain atau memverifikasi hasil tanpa memilih
       // ulang. Kosongkan manual lewat tombol "Batal pilih" bila perlu.
       setShowBatchPanel(false);
-      // Bukan simpul melingkar, tetapi memperbaikinya menuntut memindahkan
-      // ±254 baris blok pengambilan data (berisi 4 useRef) ke atas sini, atau
-      // menurunkan handler ini menjauh dari dua handler batch sekerabatnya.
-      // Keduanya menggeser urutan hook tanpa uji render sebagai jaring —
-      // ditunda ke backlog #320, bukan dipaksakan sekarang.
+      // Ref dipasang setelah pemuat data; dibaca ketika batch selesai,
+      // memakai konteks yang masih tampil tanpa mengunci closure awal.
       // eslint-disable-next-line no-use-before-define
-      refreshData();
+      refreshDataRef.current?.();
     } catch (err) {
       console.error("Batch update error:", err?.response?.status, err?.response?.data, err?.message);
       toast.dismiss('batch-progress');
@@ -767,223 +770,19 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   }, []);
 
   // === DATA FETCHING ===
-  // OFFLINE READ PATH: serve the list from the local snapshot (filter/sort/
-  // paginate client-side). Returns true when data was served. TTL >7 hari
-  // diperlakukan seperti tidak ada snapshot (pesan kedaluwarsa).
-  const serveFromSnapshot = async (page, size, search, category, sort, appendMobile = false, prependMobile = false) => {
-    if (!activity?.id) return false;
-    try {
-      const rows = await getSnapshotAssets(activity.id);
-      if (!rows) {
-        const meta = await snapshotMeta(activity.id);
-        if (isSnapshotExpired(meta)) {
-          toast.error("Data offline kedaluwarsa, hubungkan internet untuk sinkron ulang", { id: "snapshot-expired", duration: 6000 });
-        }
-        return false;
-      }
-      const filtered = sortSnapshotRows(filterSnapshotRows(rows, { search, category, filters }), sort);
-      const totalFiltered = filtered.length;
-      const totalPg = Math.max(1, Math.ceil(totalFiltered / size));
-      const pg = Math.max(1, Math.min(page, totalPg));
-      const pageItems = filtered.slice((pg - 1) * size, pg * size);
-      // Unsynced offline CREATEs live only in the save queue — merge them on
-      // page 1 exactly like doFetch does after a live refetch.
-      const pendingRows = pg === 1 ? getPendingItems()
-        .filter(it => !it.isEdit && it.payload && it.payload.activity_id === activity?.id)
-        .map(it => ({ ...it.payload, id: it.tempId, thumbnail: it.payload.photo || null, created_at: it.queuedAt || new Date().toISOString() }))
-        .filter(row => !pageItems.some(a => serverHasPendingRow(a, row))) : [];
-      const merged = pendingRows.length ? [...pendingRows, ...pageItems] : pageItems;
-      setAssets(merged);
-      setTotalItems(totalFiltered);
-      setTotalPages(totalPg);
-      setCurrentPage(pg);
-      // Kartu ringkasan dihitung dari BARIS TERSARING yang sama dengan daftar
-      // ini, bukan ditinggal memakai angka daring terakhir. Dihitung atas
-      // `filtered` (bukan `merged`) supaya Total Aset selalu sama dengan
-      // `totalFiltered` yang baru saja dipasang di atas.
-      setStats(statistikUntukKartu(filtered));
-      if (prependMobile) {
-        setMobileAssets(prev => [...pageItems, ...prev]);   // PREPEND (scroll-atas dua arah)
-        setMobileFirstPage(pg);
-      } else if (appendMobile && pg > 1) {
-        setMobileAssets(prev => [...prev, ...pageItems]);
-        setMobileCurrentPage(pg);
-      } else {
-        setMobileAssets(merged);
-        setMobileCurrentPage(pg);
-        setMobileFirstPage(pg);
-      }
-      const meta = await snapshotMeta(activity.id);
-      setOfflineLastSync(meta?.lastSync || null);
-      setOfflineServed(true);
-      setLoadingMessage(`Mode offline — menampilkan ${merged.length} dari ${totalFiltered} aset tersimpan`);
-      // Kembalikan baris halaman ini (append: hanya slice baru) agar pemanggil
-      // seperti loadMoreMobile bisa membuka aset pertama halaman berikutnya
-      // (alur simpan-lanjut lintas halaman). Array truthy → pemeriksaan
-      // `if (served)` di pemanggil lama tetap benar.
-      return prependMobile ? pageItems : (appendMobile && pg > 1) ? pageItems : merged;
-    } catch {
-      return false;
-    }
-  };
-
-  const doFetch = async (page, size, search, category, sort, appendMobile = false, preserveMobile = false) => {
-    // Offline: don't wait for a network timeout — serve the snapshot directly.
-    if (!isOnlineRef.current) {
-      const served = await serveFromSnapshot(page, size, search, category, sort, appendMobile);
-      if (served) return;
-    }
-    try {
-      setLoadingMessage(`Memuat halaman ${page}...`);
-      const params = new URLSearchParams();
-      if (search) params.append("search", search);
-      params.append("sort_by", sort || "newest");
-      params.append("page", String(page));
-      params.append("page_size", String(size));
-      if (activity?.id) params.append("activity_id", activity.id);
-      buildFilterParams(params);
-      const r = await axios.get(`${API}/assets?${params.toString()}`);
-      const newItems = r.data.items || [];
-      // Halaman di luar rentang (mis. baris terakhir baru dihapus) → mundur ke
-      // halaman terakhir yang berisi data alih-alih menampilkan layar kosong.
-      const totalPagesResp = r.data.total_pages || 1;
-      if ((r.data.total || 0) > 0 && newItems.length === 0 && page > totalPagesResp) {
-        return doFetch(totalPagesResp, size, search, category, sort, appendMobile);
-      }
-      // Keep unsynced CREATE rows visible: a refetch replaces the list, but
-      // rows still waiting in the save queue don't exist on the server yet.
-      const pendingRows = getPendingItems()
-        .filter(it => !it.isEdit && it.payload && it.payload.activity_id === activity?.id)
-        .map(it => ({ ...it.payload, id: it.tempId, thumbnail: it.payload.photo || null, created_at: it.queuedAt || new Date().toISOString() }))
-        .filter(row => !newItems.some(a => serverHasPendingRow(a, row)));
-      const merged = pendingRows.length ? [...pendingRows, ...newItems] : newItems;
-      setAssets(merged);
-      setTotalItems(r.data.total || 0);
-      setTotalPages(r.data.total_pages || 1);
-      setCurrentPage(r.data.page || 1);
-      if (appendMobile && page > 1) {
-        setMobileAssets(prev => [...prev, ...newItems]);
-      } else if (!preserveMobile) {
-        // Jendela galeri = [P, P]: JANGAN reset ke 1. Bila pindah dari halaman
-        // tabel (mis. hal. 5) lalu ke galeri, jendela mulai di 5 sehingga
-        // scroll-atas dapat memuat 4,3,2,1 (dua arah) dan scroll-bawah 6,7…
-        setMobileAssets(merged);
-        setMobileCurrentPage(r.data.page || 1);
-        setMobileFirstPage(r.data.page || 1);
-      }
-      // preserveMobile: sengaja TIDAK menyentuh mobileAssets/halaman galeri —
-      // jendela infinite-scroll + posisi scroll HP tetap; baris yang baru
-      // disimpan sudah diperbarui optimis + via onRowSynced.
-      setOfflineServed(false); // live data on screen again
-      setLoadingMessage(`Berhasil memuat ${newItems.length} dari ${r.data.total || 0} aset`);
-      // Kembalikan baris halaman ini agar pemanggil (goToPage → alur simpan-
-      // lanjut lintas halaman mode list/tabel) bisa membuka aset pertamanya.
-      return merged;
-    } catch {
-      // Network failed (offline / server unreachable) → fall back to snapshot
-      const served = await serveFromSnapshot(page, size, search, category, sort, appendMobile);
-      if (served) return Array.isArray(served) ? served : null;
-      if (!served) {
-        const meta = await snapshotMeta(activity?.id);
-        if (isSnapshotExpired(meta)) {
-          // serveFromSnapshot already toasted "Data offline kedaluwarsa…"
-          setLoadingMessage("Data offline kedaluwarsa — hubungkan internet untuk sinkron ulang");
-        } else if (!isOnlineRef.current || !navigator.onLine) {
-          // Offline with no snapshot yet — actionable message, not a generic error
-          toast.error("Anda sedang offline dan belum ada data tersimpan untuk kegiatan ini. Aktifkan Mode Inventarisasi saat online untuk menyiapkan data offline.", { id: "offline-no-snapshot", duration: 7000 });
-          setLoadingMessage("Mode offline — data tersimpan belum tersedia");
-        } else {
-          toast.error("Gagal memuat data");
-        }
-      }
-    }
-  };
-
-  // Mengembalikan array baris yang baru dimuat (halaman berikutnya) atau null
-  // bila tak ada lagi/ gagal — dipakai alur simpan-lanjut lintas halaman untuk
-  // membuka aset pertama halaman baru.
-  const loadMoreMobile = async () => {
-    if (mobileLoading || mobileCurrentPage >= totalPages) return null;
-    setMobileLoading(true);
-    const nextPage = mobileCurrentPage + 1;
-    // Offline: append the next page straight from the snapshot
-    if (!isOnlineRef.current) {
-      const served = await serveFromSnapshot(nextPage, pageSize, debouncedSearch, filterCategory, sortBy, true);
-      if (served) { setMobileLoading(false); return Array.isArray(served) ? served : []; }
-    }
-    try {
-      const params = new URLSearchParams();
-      if (debouncedSearch) params.append("search", debouncedSearch);
-      params.append("sort_by", sortBy || "newest");
-      params.append("page", String(nextPage));
-      params.append("page_size", String(pageSize));
-      if (activity?.id) params.append("activity_id", activity.id);
-      buildFilterParams(params);
-      const r = await axios.get(`${API}/assets?${params.toString()}`);
-      const items = r.data.items || [];
-      setMobileAssets(prev => [...prev, ...items]);
-      setMobileCurrentPage(nextPage);
-      return items;
-    } catch {
-      const served = await serveFromSnapshot(nextPage, pageSize, debouncedSearch, filterCategory, sortBy, true);
-      if (!served) toast.error("Gagal memuat data lanjutan");
-      return Array.isArray(served) ? served : null;
-    }
-    finally { setMobileLoading(false); }
-  };
+  const { doFetch, doFetchStats, loadMoreMobile, loadPrevMobile } = buatPemuatDaftarAset({
+    activity, filters, isOnlineRef, getPendingItems, serverHasPendingRow,
+    filterSnapshotRows, sortSnapshotRows, buildFilterParams,
+    mobileLoading, mobileCurrentPage, mobileFirstPage, totalPages, pageSize,
+    debouncedSearch, filterCategory, sortBy, penjaga, lingkupPermintaan,
+    setAssets, setTotalItems, setTotalPages, setCurrentPage, setStats,
+    setMobileAssets, setMobileCurrentPage, setMobileFirstPage, setMobileLoading,
+    setOfflineLastSync, setOfflineServed, setLoadingMessage,
+  });
   const loadMoreMobileRef = useRef(loadMoreMobile);
   loadMoreMobileRef.current = loadMoreMobile;
-
-  // Muat halaman SEBELUMNYA (scroll ke atas di galeri) — cermin loadMoreMobile,
-  // tetapi PREPEND agar urutan global & filter tetap terjaga. Flag mobileLoading
-  // yang sama menyerialkan terhadap loadMore sehingga sentinel atas & bawah tak
-  // saling memicu bersamaan. Mengembalikan baris baru (untuk anchor scroll).
-  const loadPrevMobile = async () => {
-    if (mobileLoading || mobileFirstPage <= 1) return null;
-    setMobileLoading(true);
-    const prevPage = mobileFirstPage - 1;
-    if (!isOnlineRef.current) {
-      const served = await serveFromSnapshot(prevPage, pageSize, debouncedSearch, filterCategory, sortBy, false, true);
-      if (served) { setMobileLoading(false); return Array.isArray(served) ? served : []; }
-    }
-    try {
-      const params = new URLSearchParams();
-      if (debouncedSearch) params.append("search", debouncedSearch);
-      params.append("sort_by", sortBy || "newest");
-      params.append("page", String(prevPage));
-      params.append("page_size", String(pageSize));
-      if (activity?.id) params.append("activity_id", activity.id);
-      buildFilterParams(params);
-      const r = await axios.get(`${API}/assets?${params.toString()}`);
-      const items = r.data.items || [];
-      setMobileAssets(prev => [...items, ...prev]);   // PREPEND
-      setMobileFirstPage(prevPage);
-      return items;
-    } catch {
-      const served = await serveFromSnapshot(prevPage, pageSize, debouncedSearch, filterCategory, sortBy, false, true);
-      if (!served) toast.error("Gagal memuat data sebelumnya");
-      return Array.isArray(served) ? served : null;
-    }
-    finally { setMobileLoading(false); }
-  };
   const loadPrevMobileRef = useRef(loadPrevMobile);
   loadPrevMobileRef.current = loadPrevMobile;
-
-  const doFetchStats = async (search) => {
-    try {
-      const params = new URLSearchParams();
-      if (search) params.append("search", search);
-      if (activity?.id) params.append("activity_id", activity.id);
-      // Filter lanjutan ikut dikirim — perakit yang SAMA dengan daftar
-      // (`buildFilterParams`). Sebelum ini kartu ringkasan hanya menerima
-      // cari/kategori/kegiatan, sehingga memilih "Kondisi: Rusak Berat"
-      // menyusutkan daftarnya tetapi Total Aset di atasnya tetap menyebut
-      // angka seluruh kegiatan.
-      buildFilterParams(params);
-      const r = await axios.get(`${API}/assets/stats?${params.toString()}`);
-      setStats({ totalAssets: r.data.total_assets||0, totalValue: (r.data.total_value||0).toLocaleString('id-ID'), activeCount: r.data.active_count||0, maintenanceCount: r.data.maintenance_count||0 });
-    } catch {}
-  };
 
   // Kategori di-cache ke localStorage agar "pilih kategori" (wajib isi) TETAP
   // bisa dipakai saat OFFLINE — sehingga input aset baru bisa masuk antrean
@@ -1008,7 +807,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   // they never flash an overlay while someone is working.
   const refreshData = usePenyegaranAset({
     doFetch, doFetchStats, debouncedSearch, filterCategory, sortBy,
-    pageSize, currentPage, setPageLoading,
+    pageSize, currentPage, setPageLoading, setLoading, lingkupPermintaan,
   });
   const refreshDataRef = useRef(refreshData);
   refreshDataRef.current = refreshData;
@@ -1058,9 +857,12 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   useEffect(() => {
     setLoading(true);
     setLoadingMessage("Memuat data aset...");
-    Promise.all([doFetch(1,50,"",[],"newest"), doFetchStats(""), doFetchCategories(), fetchFilterOptions()])
-      .finally(() => { setLoading(false); setLoadingMessage(""); });
-  }, [activity?.id]);
+    // Parameter dari render terbaru, bukan default yang mengabaikan filter
+    // yang dipertahankan ketika pengguna berganti kegiatan.
+    refreshData(1, { showLoading: true });
+    doFetchCategories();
+    fetchFilterOptions();
+  }, [activity?.id, user?.id, user?.kode_satker, refreshData, fetchFilterOptions]);
 
   // Re-fetch on filter/search/sort change
   const isInitialMount = useRef(true);
@@ -1071,32 +873,22 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
 
   const goToPage = async (p) => {
     const np = Math.max(1, Math.min(p, totalPages));
-    setPageLoading(true);
-    setLoadingMessage(`Memuat halaman ${np} dari ${totalPages}...`);
-    const items = await doFetch(np, pageSize, debouncedSearch, filterCategory, sortBy);
-    setPageLoading(false);
+    const [items] = await refreshData(np, { showLoading: true, hanyaDaftar: true });
     return items;   // baris halaman baru (untuk alur simpan-lanjut mode list)
   };
   const goToPageRef = useRef(goToPage);
   goToPageRef.current = goToPage;
 
   const applyFilters = () => {
-    setPageLoading(true);
-    Promise.all([
-      doFetch(1, pageSize, debouncedSearch, filterCategory, sortBy),
-      doFetchStats(debouncedSearch),
-    ]).finally(() => setPageLoading(false));
+    refreshData(1, { showLoading: true });
     setShowAdvancedFilter(false);
   };
 
   // === PULL TO REFRESH ===
   const { pull, mainContentRef, handleTouchStart, handleTouchMove, handleTouchEnd } = usePullToRefresh({
     onRefresh: async () => {
-      await Promise.all([
-        doFetch(1, pageSize, debouncedSearch, filterCategory, sortBy),
-        doFetchStats(debouncedSearch)
-      ]);
-      toast.success("Data berhasil diperbarui");
+      const [hasil] = await refreshData(1);
+      if (Array.isArray(hasil)) toast.success("Data berhasil diperbarui");
     },
   });
 
@@ -1441,6 +1233,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       const fresh = isDesktopList
         ? await goToPageRef.current(currentPage + 1)
         : await loadMoreMobileRef.current();
+      if (fresh === HASIL_USANG) return;
       const nextAsset = (fresh && fresh.length) ? fresh[0] : null;
       if (!nextAsset) {
         // Gagal memuat / halaman kosong (loadMoreMobile sudah beri tahu bila gagal)
@@ -1502,7 +1295,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     const locked = await lockAsset(target.id);
     if (locked) setEditAssetForForm(target);
     else toast.error("Aset sedang dikunci pengguna lain");
-  }, [assets, lockAsset, enqueueOptimistic, rowLocks, sessionId, activity?.id, syncStatuses]);
+  }, [assets, lockAsset, enqueueOptimistic, rowLocks, sessionId, syncStatuses]);
 
   const handleDelete = useCallback(async id => {
     // Aset yang BELUM tersinkron (id "temp_") → batalkan dari antrean simpan.

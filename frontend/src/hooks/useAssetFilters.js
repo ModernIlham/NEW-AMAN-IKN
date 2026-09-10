@@ -5,6 +5,7 @@
 import { useState, useCallback, useMemo, useReducer, useEffect } from "react";
 import axios from "axios";
 import { opsiEselonBertingkat, pilihanEselonUsang } from "@/lib/pohonUnit";
+import { HASIL_USANG, usePenjagaPermintaan } from "./usePenjagaPermintaan";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -81,7 +82,9 @@ export function objekFilter(qs) {
   return keluar;
 }
 
-export function useAssetFilters({ activityId }) {
+export function useAssetFilters({ activityId, userId, kodeSatker }) {
+  const lingkupOpsi = JSON.stringify([activityId, userId, kodeSatker]);
+  const penjagaOpsi = usePenjagaPermintaan(lingkupOpsi);
   const [searchInput, setSearchInput] = useState("");
   // Kategori kini MULTI-NILAI. Daftar kosong = tanpa filter; sentinel lama
   // `"Semua"` dipensiunkan. Disimpan terpisah dari reducer `filters` karena
@@ -149,18 +152,22 @@ export function useAssetFilters({ activityId }) {
 
   // Fetch filter options
   const fetchFilterOptions = useCallback(async () => {
+    const tiket = penjagaOpsi.mulai("opsi", lingkupOpsi);
+    if (!tiket) return HASIL_USANG;
     try {
       const params = new URLSearchParams();
       if (activityId) params.append("activity_id", activityId);
       const r = await axios.get(`${API}/assets/filter-options?${params.toString()}`);
+      if (!penjagaOpsi.berlaku(tiket)) return HASIL_USANG;
       setFilterOptions(r.data);
     } catch (e) {
+      if (!penjagaOpsi.berlaku(tiket)) return HASIL_USANG;
       // Filter options are enhancement-only; fall back to empty options on failure.
       if (process.env.NODE_ENV !== "production") {
         console.warn("[useAssetFilters] Failed to fetch filter options:", e?.message);
       }
-    }
-  }, [activityId]);
+    } finally { penjagaOpsi.selesai(tiket); }
+  }, [activityId, lingkupOpsi, penjagaOpsi]);
 
   // Opsi eselon yang sudah menyempit mengikuti tingkat di atasnya, dan
   // mengosongkan tingkat yang memang tak berdata. Panel filter menyembunyikan

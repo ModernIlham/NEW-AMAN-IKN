@@ -1,6 +1,7 @@
 import React, { memo, useEffect } from "react";
 import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { usePenyegaranAset } from "../usePenyegaranAset";
+import { HASIL_USANG } from "../usePenjagaPermintaan";
 
 function konteks(tambahan = {}) {
   return {
@@ -115,4 +116,56 @@ test("konsumen memo tidak dirender ulang tetapi klik tetap menjalankan closure b
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Muat ulang uji" })); });
   expect(awal.doFetch).not.toHaveBeenCalled();
   expect(terbaru.doFetch).toHaveBeenCalledTimes(1);
+});
+
+test.each([true, false])("finally lama tidak menutup skeleton pekerjaan pengganti; pengganti terlihat=%s", async showLoading => {
+  const a = tertunda(), b = tertunda();
+  const p = konteks({ doFetch: jest.fn().mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise), setLoading: jest.fn() });
+  const { result } = renderHook(usePenyegaranAset, { initialProps: p });
+  const lama = result.current(1, { showLoading: true });
+  const baru = result.current(2, { showLoading });
+  a.resolve(["lama"]);
+  expect(await lama).toEqual([HASIL_USANG, HASIL_USANG]);
+  expect(p.setPageLoading).not.toHaveBeenCalledWith(false);
+  expect(p.setLoading).not.toHaveBeenCalled();
+  b.resolve(["baru"]); expect(await baru).toEqual([["baru"], "statistik"]);
+  expect(p.setPageLoading).toHaveBeenLastCalledWith(false);
+  expect(p.setLoading).toHaveBeenCalledTimes(1);
+});
+
+test("pergantian lingkup membatalkan hasil dan finally meski belum ada request baru", async () => {
+  const a = tertunda();
+  const awal = konteks({ lingkupPermintaan: "A", doFetch: () => a.promise, setLoading: jest.fn() });
+  const { result, rerender } = renderHook(usePenyegaranAset, { initialProps: awal });
+  const lama = result.current(1, { showLoading: true });
+  const baru = konteks({ lingkupPermintaan: "B" }); rerender(baru);
+  awal.setPageLoading.mockClear(); baru.setPageLoading.mockClear();
+  a.resolve(["lama"]); expect(await lama).toEqual([HASIL_USANG, HASIL_USANG]);
+  expect(awal.setPageLoading).not.toHaveBeenCalled();
+  expect(baru.setPageLoading).not.toHaveBeenCalled();
+  expect(awal.setLoading).not.toHaveBeenCalled();
+});
+
+test("unmount tidak mengubah state dan callback yang tertinggal tidak memulai jaringan", async () => {
+  const a = tertunda(); const p = konteks({ doFetch: jest.fn(() => a.promise), setLoading: jest.fn() });
+  const { result, unmount } = renderHook(usePenyegaranAset, { initialProps: p });
+  const refresh = result.current, lama = refresh(1, { showLoading: true });
+  unmount(); p.setPageLoading.mockClear();
+  a.resolve(["lama"]); expect(await lama).toEqual([HASIL_USANG, HASIL_USANG]);
+  expect(p.setPageLoading).not.toHaveBeenCalled(); expect(p.setLoading).not.toHaveBeenCalled();
+  expect(await refresh()).toEqual([HASIL_USANG, HASIL_USANG]);
+  expect(p.doFetch).toHaveBeenCalledTimes(1);
+});
+
+test("paginasi hanya daftar tetap memakai pemilik skeleton yang sama", async () => {
+  const a = tertunda(), b = tertunda();
+  const p = konteks({ doFetch: jest.fn().mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise) });
+  const { result } = renderHook(usePenyegaranAset, { initialProps: p });
+  const lama = result.current(1, { showLoading: true });
+  const baru = result.current(2, { showLoading: true, hanyaDaftar: true });
+  expect(p.doFetchStats).toHaveBeenCalledTimes(1);
+  a.resolve(["lama"]); await lama;
+  expect(p.setPageLoading).not.toHaveBeenCalledWith(false);
+  b.resolve(["halaman-2"]); expect(await baru).toEqual([["halaman-2"], undefined]);
+  expect(p.setPageLoading).toHaveBeenLastCalledWith(false);
 });
