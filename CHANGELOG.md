@@ -18,6 +18,44 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1054] Pengujian lokal Windows lengkap tanpa melewati gerbang aplikasi — 2026-09-10
+
+Tindak lanjut kendala lingkungan pengembangan
+([PR #1045](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1045)).
+
+- Penjaga path frontend, GridFS, dan sitasi kini konsisten lintas separator
+  Windows/Linux. Pemangkasan berdasarkan nama direktori relatif tidak lagi
+  menelan folder runtime bernama mirip atau seluruh repo berinduk `tests`.
+  Registry sitasi dan allowlist kompresi tidak dilonggarkan.
+- Fixture parser memakai import modul uji lokal; fixture inventaris Bash
+  memakai UTF-8/LF, PATH native, dan pemeriksaan exit code. Tanggal uji
+  pemusnahan dibekukan di kedua sisi tengah malam UTC sesuai kontrak route.
+- Enam pemanggilan render uji memakai bytes di memori, menutup dokumen dan
+  mempertahankan pemeriksaan kelengkapan teks/jumlah halaman; Windows tidak
+  lagi mencoba membuka ulang NamedTemporaryFile yang sedang terkunci.
+- Uji tenggat topologi memakai proses nyata yang tersedia (`fork` Linux,
+  `spawn` Windows), termasuk pembuktian anak dibunuh dan dituai. Fallback
+  produksi tanpa `fork` tetap 20.000 titik dan diuji tersendiri pada batasnya.
+  GEOS yang berhasil memperbaiki bentuk patologis wajib menghasilkan geometri
+  sah; batas waktu dan uji worker menggantung tetap ditegakkan.
+- Skrip `scripts/uji_backend_windows.ps1` memeriksa Bash serta render Pango/
+  WeasyPrint sebelum pytest, meneruskan kegagalan, dan memulihkan cwd serta
+  lingkungan pemanggil. Tidak memasang paket atau mengubah PATH/registry global.
+  README mencatat cara menjalankan dan versi lingkungan yang diuji.
+- Tidak mengubah data, izin, API, template laporan, atau kebijakan produksi.
+  Guard respons jaringan terlambat, optimasi foto, dan diagnosis insiden VPS
+  tetap ditangani dalam pekerjaan terpisah.
+
+**Verifikasi:** backend Windows lengkap **4.782 lulus** tanpa skip (124
+peringatan lama); frontend **1.633 lulus / 146 suite**, lint dan build produksi
+lulus. Reproduksi sebelum perbaikan membuktikan kegagalan path, fork, zona
+waktu, dan kunci berkas; DLL Pango dipasang dari MSYS2 resmi secara lokal.
+Runner lulus pada PowerShell modern serta Windows PowerShell bawaan, dari cwd
+berbeda, dan empat jalur gagal tidak tertelan. Compileall, cek kredensial, dan
+diff whitespace lulus; CI Linux lengkap tetap gerbang sebelum rilis.
+
+---
+
 ## [#1053] Reset filter membatalkan kata pencarian lama dan draf tertunda — 2026-09-09
 
 Lanjutan pemeriksaan toolbar **U15**
