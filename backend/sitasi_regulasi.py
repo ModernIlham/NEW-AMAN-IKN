@@ -29,6 +29,7 @@ mustahil dijawab menjadi permintaan konkret.
 import ast
 import os
 import re
+from pathlib import Path
 
 # Jenis naskah yang dikenali. `S-` = surat dinas (mis. S-115/KN/2017).
 _JENIS = "PP|PMK|KMK|UU|Perpres|Permendagri|PSAP|SE"
@@ -126,9 +127,11 @@ def pindai_sumber(akar: str) -> dict:
     Uji & skrip dikecualikan: keduanya tidak menghasilkan dokumen resmi.
     """
     keluar = {}
-    for dirpath, _, berkas in os.walk(akar):
-        if any(x in dirpath for x in ("/tests", "/scripts", "__pycache__")):
-            continue
+    for dirpath, direktori, berkas in os.walk(akar):
+        # Nama segmen relatif, bukan substring path absolut: separator
+        # Windows dan folder induk bernama tests tidak mengubah cakupan.
+        direktori[:] = [d for d in direktori
+                        if d not in {"tests", "scripts", "__pycache__"}]
         for b in berkas:
             if not b.endswith(".py"):
                 continue
@@ -140,11 +143,12 @@ def pindai_sumber(akar: str) -> dict:
                 continue
             p = os.path.join(dirpath, b)
             try:
-                sumber = open(p, encoding="utf-8").read()
+                with open(p, encoding="utf-8") as f:
+                    sumber = f.read()
                 potongan = _teks_dokumen(sumber)
             except (SyntaxError, UnicodeDecodeError):
                 continue
-            rel = os.path.relpath(p, akar)
+            rel = Path(p).relative_to(akar).as_posix()
             for teks in potongan:
                 for s in sitasi_dalam(teks):
                     keluar.setdefault(s, set()).add(rel)

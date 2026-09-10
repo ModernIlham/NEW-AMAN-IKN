@@ -77,6 +77,31 @@ class TestFungsiMurni:
 
 
 class TestPemindaian:
+    @pytest.mark.parametrize("folder", [
+        "tests", "scripts", "__pycache__", "modul/tests", "modul/scripts",
+    ])
+    def test_folder_non_dokumen_dikecualikan_secara_portabel(self, tmp_path, folder):
+        modul = tmp_path / folder / "contoh.py"
+        modul.parent.mkdir(parents=True)
+        modul.write_text('DASAR = "PMK 999/PMK.06/2099"\n', encoding="utf-8")
+        assert S.pindai_sumber(str(tmp_path)) == {}
+
+    @pytest.mark.parametrize("folder", ["routes", "tests_layanan", "scripts_layanan"])
+    def test_folder_runtime_tetap_dipindai(self, tmp_path, folder):
+        modul = tmp_path / folder / "contoh.py"
+        modul.parent.mkdir()
+        modul.write_text('DASAR = "PMK 999/PMK.06/2099"\n', encoding="utf-8")
+        assert S.pindai_sumber(str(tmp_path)) == {
+            "PMK 999/PMK.06/2099": {f"{folder}/contoh.py"}}
+
+    def test_nama_induk_tests_tidak_mengosongkan_sapuan(self, tmp_path):
+        akar = tmp_path / "tests" / "backend"
+        akar.mkdir(parents=True)
+        (akar / "contoh.py").write_text(
+            'DASAR = "PMK 999/PMK.06/2099"\n', encoding="utf-8")
+        assert S.pindai_sumber(str(akar)) == {
+            "PMK 999/PMK.06/2099": {"contoh.py"}}
+
     def test_docstring_tidak_ikut_ditagih(self, tmp_path):
         """Menyebut peraturan di docstring justru dianjurkan — itu catatan
         pengembang, bukan teks yang tercetak. Bila pemindai ikut menagihnya,

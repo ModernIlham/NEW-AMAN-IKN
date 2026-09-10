@@ -30,7 +30,7 @@ function berkasJsx(dir) {
 const JANJI = /Bagikan\s+lewat\s+WhatsApp\s*\/\s*email/i;
 
 const semua = berkasJsx(SRC).map((f) => ({
-  nama: path.relative(SRC, f),
+  nama: path.relative(SRC, f).split(path.sep).join("/"),
   isi: fs.readFileSync(f, "utf8"),
 }));
 

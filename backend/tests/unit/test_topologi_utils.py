@@ -4,12 +4,34 @@ Semua fixture di sini lolos `spasial_utils.validasi_geometri` (struktur benar:
 larik, tertutup, ≥3 titik berbeda) tetapi rusak secara topologi — persis kelas
 bug yang Fase 3 dokumentasikan sebagai "belum diperiksa" dan Fase 4 tutup.
 """
+import multiprocessing
+from types import SimpleNamespace
+
 import pytest
 
 import spasial_utils as su
 import topologi_utils as tu
 
 pytest.importorskip("shapely")   # CI memasang requirements.txt → selalu ada
+
+
+@pytest.fixture
+def konteks_tenggat_nyata(monkeypatch):
+    """Uji kontrak worker dengan proses nyata yang tersedia di platform.
+
+    Produksi tetap memilih fork dan fallback konservatif bila tak tersedia.
+    Injeksi spawn di Windows HANYA untuk menguji kerja/pipa/kill yang sama,
+    bukan klaim bahwa produksi Windows menerima geometri besar.
+    """
+    metode = "fork" if "fork" in multiprocessing.get_all_start_methods() else "spawn"
+    konteks = multiprocessing.get_context(metode)
+
+    def pilih(diminta):
+        assert diminta == "fork", "pilihan konteks produksi berubah; tinjau kontraknya"
+        return konteks
+
+    monkeypatch.setattr(tu, "multiprocessing", SimpleNamespace(get_context=pilih))
+    return konteks
 
 
 def poligon(*cincin):
@@ -170,7 +192,7 @@ def _tolak_karena_besar():
         return tu.validasi_topologi(poligon(KOTAK)) or ""
 
 
-def test_poligon_sah_besar_LOLOS_bukan_ditolak():
+def test_poligon_sah_besar_LOLOS_bukan_ditolak(konteks_tenggat_nyata):
     """INTI PERBAIKAN GIS-1. Poligon batas wilayah 50.000 verteks itu SAH dan
     `is_valid` menyelesaikannya dalam hitungan milidetik. Plafon lama 20.000
     menolaknya mentah-mentah — itulah sebab node draft dilewati saat impor.
@@ -182,7 +204,7 @@ def test_poligon_sah_besar_LOLOS_bukan_ditolak():
     assert tu.validasi_topologi(besar) is None
 
 
-def test_poligon_sah_besar_dapat_diperbaiki_juga():
+def test_poligon_sah_besar_dapat_diperbaiki_juga(konteks_tenggat_nyata):
     """`make_valid` atas poligon sah 50.000 verteks = ~1 ms. Menolaknya karena
     cacah verteks berarti menolak perbaikan yang justru murah."""
     besar = lingkaran(50_000)
@@ -191,7 +213,7 @@ def test_poligon_sah_besar_dapat_diperbaiki_juga():
     assert usul is not None and tu.validasi_topologi(usul) is None
 
 
-def test_tenggat_membunuh_kerja_yang_kebablasan(monkeypatch):
+def test_tenggat_membunuh_kerja_yang_kebablasan(monkeypatch, konteks_tenggat_nyata):
     """Pagar sesungguhnya adalah TENGGAT, bukan cacah verteks.
 
     Dibuktikan dengan kerja yang sengaja menggantung: tanpa pembunuhan proses,
@@ -215,50 +237,54 @@ def _menggantung(_geom):
     time.sleep(3600)          # anak WAJIB dibunuh; kalau tidak, uji menggantung
 
 
-def test_anak_yang_kebablasan_benar_benar_DIBUNUH(monkeypatch):
+def test_anak_yang_kebablasan_benar_benar_DIBUNUH(monkeypatch, konteks_tenggat_nyata):
     """Tenggat lewat saja tidak cukup — prosesnya harus MATI.
 
     Tanpa `proses.kill()`, `_jalankan_bertenggat` tetap melaporkan TENGGAT tepat
     waktu sementara anaknya terus membakar CPU di latar. Uji ini menangkap
-    justru mutasi itu: ia memeriksa PID-nya sudah tak ada lagi.
+    justru mutasi itu: ia memeriksa prosesnya sudah selesai dan tidak hidup.
+    os.kill(pid, 0) bukan probe yang portable: di Windows ia dapat MEMBUNUH.
     """
-    import os
-    import time as _t
     dilihat = {}
-    nyata = tu.multiprocessing.get_context("fork")    # tangkap SEBELUM ditambal
+    nyata = konteks_tenggat_nyata
 
-    class Perekam(nyata.Process):
-        def start(self):
-            super().start()
-            dilihat["pid"] = self.pid
+    def proses_dicatat(*args, **kwargs):
+        # Objek proses asli tetap dapat dipickle oleh spawn; kelas lokal
+        # turunan Process justru gagal sebelum worker sempat dijalankan.
+        proses = nyata.Process(*args, **kwargs)
+        dilihat["proses"] = proses
+        return proses
 
-    class KonteksPerekam:
-        Pipe = staticmethod(nyata.Pipe)
-        Process = Perekam
-
-    monkeypatch.setattr(tu.multiprocessing, "get_context",
-                        lambda _m: KonteksPerekam())
-    status, _ = tu._jalankan_bertenggat(_menggantung, poligon(KOTAK), 0.5)
-    assert status == tu.TENGGAT and "pid" in dilihat
-
-    for _ in range(50):                    # beri kernel waktu menuai zombie
-        try:
-            os.kill(dilihat["pid"], 0)
-        except OSError:
-            break
-        _t.sleep(0.1)
-    else:
-        raise AssertionError(
-            f"proses {dilihat['pid']} MASIH HIDUP setelah tenggat lewat — "
+    perekam = SimpleNamespace(Pipe=nyata.Pipe, Process=proses_dicatat)
+    monkeypatch.setattr(tu, "multiprocessing",
+                        SimpleNamespace(get_context=lambda _m: perekam))
+    try:
+        status, _ = tu._jalankan_bertenggat(_menggantung, poligon(KOTAK), 0.5)
+        proses = dilihat["proses"]
+        assert status == tu.TENGGAT and proses.pid is not None
+        assert not proses.is_alive(), (
+            f"proses {proses.pid} MASIH HIDUP setelah tenggat lewat — "
             "kerja GEOS yang kebablasan tak pernah benar-benar dihentikan")
+        assert proses.exitcode is not None, "proses anak belum dituai"
+    finally:
+        # Bila regresi menghapus kill produksi, uji tetap gagal tetapi tidak
+        # meninggalkan worker menggantung satu jam di mesin pengembang/CI.
+        proses = dilihat.get("proses")
+        if proses is not None:
+            if proses.is_alive():
+                proses.kill()
+            if proses.pid is not None:
+                proses.join(5)
+            proses.close()
 
 
-def test_bentuk_patologis_nyata_selesai_dalam_waktu_terbatas(monkeypatch):
+def test_bentuk_patologis_nyata_selesai_dalam_waktu_terbatas(monkeypatch, konteks_tenggat_nyata):
     """Bukti dengan data ASLI, bukan tiruan.
 
     Bintang menyilang-diri 501 verteks terukur TIDAK selesai dalam 20 detik di
-    `make_valid` (dan plafon lama 20.000 meloloskannya begitu saja). Dengan
-    tenggat, panggilannya wajib kembali — menyerah — dalam hitungan detik.
+    `make_valid` pada versi GEOS awal (dan plafon lama 20.000 meloloskannya
+    begitu saja). Versi lain boleh lebih cepat: tenggat tetap wajib membatasi
+    durasi, dan hasil yang sempat selesai harus benar-benar sah.
     """
     import math
     import time as _t
@@ -277,8 +303,10 @@ def test_bentuk_patologis_nyata_selesai_dalam_waktu_terbatas(monkeypatch):
     t0 = _t.perf_counter()
     hasil = tu.perbaiki_topologi(bintang)
     lama = _t.perf_counter() - t0
-    assert hasil is None, "make_valid mustahil selesai untuk bentuk ini"
     assert lama < 15, f"perbaikan makan {lama:.1f} dtk — tenggat tidak menggigit"
+    if hasil is not None:
+        assert su.validasi_geometri(hasil) is None
+        assert tu.validasi_topologi(hasil) is None
 
 
 def test_perlu_disederhanakan_membedakan_tolak_dari_cacat():
@@ -293,16 +321,45 @@ def test_perlu_disederhanakan_membedakan_tolak_dari_cacat():
     assert not tu.perlu_disederhanakan("")
 
 
-def test_tanpa_proses_terpisah_kembali_ke_plafon_konservatif(monkeypatch):
+@pytest.mark.parametrize("n", [1_000, 19_999, 20_000, 50_000])
+def test_tanpa_proses_terpisah_kembali_ke_plafon_konservatif(monkeypatch, n):
     """Platform tanpa fork tak boleh diam-diam kehilangan pagarnya: bila tenggat
     mustahil dipasang, plafon verteks lama kembali menjadi satu-satunya pagar —
-    dan `make_valid` menolak, karena membeku jauh lebih buruk daripada menolak."""
-    monkeypatch.setattr(tu, "_jalankan_bertenggat",
-                        lambda *a, **k: (tu.TANPA_PROSES, None))
-    besar = lingkaran(50_000)
-    galat = tu.validasi_topologi(besar)
-    assert galat and galat.startswith(tu.AWALAN_TERLALU_BESAR)
-    assert tu.perbaiki_topologi(besar) is None
+    dan `make_valid` menolak di atas plafon. Windows memakai kegagalan fork
+    NYATA, Linux menyimulasikan platform tanpa fork pada batas konteksnya.
+    Pekerjaan GEOS tidak boleh dimulai untuk geometri yang melampaui plafon.
+    """
+    assert tu.MAKS_TITIK_TANPA_TENGGAT == 20_000, "pagar tanpa proses tidak boleh dilonggarkan"
+    if "fork" in multiprocessing.get_all_start_methods():
+        def tanpa_fork(_metode):
+            raise ValueError("fork tidak tersedia pada platform fixture")
+        monkeypatch.setattr(tu, "multiprocessing",
+                            SimpleNamespace(get_context=tanpa_fork))
+
+    panggilan = []
+
+    def validasi(geom):
+        panggilan.append("validasi")
+        return None
+
+    def perbaikan(geom):
+        panggilan.append("perbaikan")
+        return geom
+
+    monkeypatch.setattr(tu, "_kerja_validasi", validasi)
+    monkeypatch.setattr(tu, "_kerja_perbaikan", perbaikan)
+    geometri = lingkaran(n)
+    galat = tu.validasi_topologi(geometri)
+    hasil = tu.perbaiki_topologi(geometri)
+    if tu.jumlah_titik(geometri) <= tu.MAKS_TITIK_TANPA_TENGGAT:
+        assert galat is None
+        assert hasil is geometri
+        assert panggilan == ["validasi", "perbaikan"]
+    else:
+        assert galat and galat.startswith(tu.AWALAN_TERLALU_BESAR)
+        assert "pada lingkungan ini" in galat
+        assert hasil is None
+        assert panggilan == [], "geometri di atas plafon masuk GEOS tanpa tenggat"
 
 
 # ── degradasi anggun tanpa shapely ──────────────────────────────────────────

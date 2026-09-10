@@ -21,6 +21,7 @@ Ketiganya tidak akan membuat satu pun uji lain gagal. Uji inilah gerbangnya.
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 
 import pytest
@@ -238,6 +239,10 @@ class TestPelajaranPutaranPertama:
         itulah yang memicu SIGPIPE bila pemanggilnya memipe ke `grep -q`, dan
         itulah yang membuat putaran pertama melaporkan redis-server hilang.
         """
+        # Cari sebelum PATH fixture diubah. Windows memakai Bash Git/MSYS,
+        # Linux memakai Bash sistem; ketiadaannya adalah kegagalan, bukan skip.
+        bash = shutil.which("bash")
+        assert bash, "Bash diperlukan untuk menguji perilaku skrip inventaris"
         stub = tmp_path / "bin"
         stub.mkdir()
         (stub / "systemctl").write_text(
@@ -256,26 +261,39 @@ class TestPelajaranPutaranPertama:
             "    esac ;;\n"
             "  is-active)  echo active ;;\n"
             "  is-enabled) echo enabled ;;\n"
-            "esac\n"
+            "esac\n",
+            encoding="utf-8", newline="\n",
         )
         (stub / "supervisorctl").write_text(
-            "#!/bin/bash\necho 'inventarisasi-backend RUNNING pid 1, uptime 0:10:10'\n"
+            "#!/bin/bash\necho 'inventarisasi-backend RUNNING pid 1, uptime 0:10:10'\n",
+            encoding="utf-8", newline="\n",
         )
         (stub / "top").write_text(
             "#!/bin/bash\n"
             "echo '  PID USER PR NI VIRT RES SHR S %CPU %MEM TIME+ COMMAND'\n"
             "echo '    1 root 20 0 1 1 1 S 99.0 1.0 1:00.00 mongod'\n"
             "echo '  PID USER PR NI VIRT RES SHR S %CPU %MEM TIME+ COMMAND'\n"
-            "echo '    1 root 20 0 1 1 1 S 99.0 1.0 1:00.00 mongod'\n"
+            "echo '    1 root 20 0 1 1 1 S 99.0 1.0 1:00.00 mongod'\n",
+            encoding="utf-8", newline="\n",
         )
         for f in stub.iterdir():
             f.chmod(0o755)
 
-        lingkungan = dict(os.environ, PATH=f"{stub}:{os.environ['PATH']}")
+        # Checkout Windows bisa CRLF. Salinan LF meniru skrip yang sama di
+        # Linux tanpa bergantung pada opsi igncr di Bash milik pengembang.
+        skrip_uji = tmp_path / "inventaris_vps.sh"
+        skrip_uji.write_text(SKRIP.read_text(encoding="utf-8"),
+                             encoding="utf-8", newline="\n")
+        # MSYS mengonversi PATH native Windows (pemisah ;) saat Bash dimulai.
+        # Merakitnya dengan ':' memecah drive C: dan dapat melewati stub.
+        lingkungan = dict(os.environ, PATH=os.pathsep.join([str(stub), os.environ.get("PATH", "")]))
+        lingkungan.pop("BASH_ENV", None)  # jangan jalankan startup pengguna di fixture
         hasil = subprocess.run(
-            ["bash", str(SKRIP)], capture_output=True, text=True,
+            [bash, "--noprofile", "--norc", skrip_uji.as_posix()],
+            capture_output=True, text=True, encoding="utf-8",
             env=lingkungan, timeout=120,
         )
+        assert hasil.returncode == 0, hasil.stderr
         keluaran = hasil.stdout
 
         # Ambil HANYA bagian tabel systemd: "`redis-server`" juga muncul di

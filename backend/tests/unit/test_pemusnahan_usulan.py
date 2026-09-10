@@ -9,7 +9,7 @@
      nomor persetujuan & aset tersnapshot, ber-taut usulan_id.
 """
 import asyncio
-from datetime import date, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi import HTTPException
@@ -19,6 +19,21 @@ import routes.pemusnahan as rm
 
 USER = {"username": "op1", "role": "operator", "kode_satker": ""}
 ADMIN = {"username": "adm1", "role": "admin", "kode_satker": ""}
+
+
+@pytest.fixture(params=["2026-09-09T23:59:00+00:00", "2026-09-10T00:01:00+00:00"])
+def hari_ini_utc(monkeypatch, request):
+    # Kontrak route memakai UTC; date.today() mengikuti zona waktu mesin
+    # dan dapat sudah berganti hari di WITA sebelum server UTC berganti.
+    saat = datetime.fromisoformat(request.param)
+
+    class WaktuTetap(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return saat.astimezone(tz) if tz else saat.replace(tzinfo=None)
+
+    monkeypatch.setattr(rm, "datetime", WaktuTetap)
+    return saat.astimezone(timezone.utc).date()
 
 
 def _unwrap(fn):
@@ -102,7 +117,7 @@ def test_usulan_hanya_rusak_berat_dan_anti_ganda(dbx):
     _jalan(skenario())
 
 
-def test_dokumen_wajib_per_tahap(dbx):
+def test_dokumen_wajib_per_tahap(dbx, hari_ini_utc):
     async def skenario():
         await _seed(dbx)
         u = await _buka()
@@ -120,7 +135,7 @@ def test_dokumen_wajib_per_tahap(dbx):
                 status="disetujui", nomor_dokumen="S-77/KNL/2026"),
             admin=ADMIN)
         # dilaksanakan bertanggal masa depan → ditolak.
-        besok = (date.today() + timedelta(days=2)).isoformat()
+        besok = (hari_ini_utc + timedelta(days=1)).isoformat()
         with pytest.raises(HTTPException) as e2:
             await _unwrap(rm.transisi_usulan_pemusnahan)(
                 u["id"], rm.TransisiUsulanPemusnahanIn(
@@ -131,7 +146,7 @@ def test_dokumen_wajib_per_tahap(dbx):
     _jalan(skenario())
 
 
-def test_efek_dilaksanakan_lahirkan_ba(dbx):
+def test_efek_dilaksanakan_lahirkan_ba(dbx, hari_ini_utc):
     async def skenario():
         await _seed(dbx)
         u = await _buka()
@@ -145,11 +160,12 @@ def test_efek_dilaksanakan_lahirkan_ba(dbx):
         r = await _unwrap(rm.transisi_usulan_pemusnahan)(
             u["id"], rm.TransisiUsulanPemusnahanIn(
                 status="dilaksanakan", nomor_dokumen="BA-5/2026",
-                tanggal_dokumen=date.today().isoformat()), admin=ADMIN)
+                tanggal_dokumen=hari_ini_utc.isoformat()), admin=ADMIN)
         assert r["status"] == "dilaksanakan"
         ba = await dbx.pemusnahan.find_one({"nomor_ba": "BA-5/2026"},
                                            {"_id": 0})
         assert ba is not None
+        assert ba["tanggal_ba"] == hari_ini_utc.isoformat()
         assert ba["nomor_persetujuan"] == "S-77/KNL/2026"
         assert ba["cara"] == "dihancurkan"
         assert [a["asset_id"] for a in ba["aset"]] == ["as-rb"]
