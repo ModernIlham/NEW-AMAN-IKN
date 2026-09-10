@@ -18,6 +18,41 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1056] Lindungi pemuatan daftar aset dari respons usang — 2026-09-11
+
+[PR #1047](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1047).
+
+**Perbaikan**
+- Hasil daftar, statistik, snapshot luring, serta gulir galeri diperiksa dengan
+  tiket permintaan. Perubahan kegiatan, akun/satker, filter, urutan, atau ukuran
+  halaman membatalkan hak respons lama untuk mengubah tampilan dan pesan.
+- Pemuatan daftar dipisahkan menjadi pemuat yang sama untuk Dashboard dan uji
+  perilaku; perakit parameter API dan filter/sort snapshot tetap digunakan.
+- Snapshot menunggu baris dan metadata sebelum memperbarui layar; statistik
+  daring yang sudah digantikan snapshot diabaikan.
+- Gulir atas/bawah memakai kunci sinkron bersama. Penggantian jendela galeri
+  membatalkan hasil lama tanpa membiarkan finally-nya mematikan pemuatan baru.
+- Clamp halaman mempertahankan tiket serta opsi preserveMobile. Jalur offline
+  meneruskan baris ke Simpan Lanjut; hasil usang dibedakan dari halaman kosong.
+- Indikator pemuatan dimiliki permintaan terbaru untuk refresh, paginasi, dan
+  penerapan filter. Hasil lama tidak menutup indikator baru atau menyatakan
+  pull-to-refresh sukses.
+- Opsi filter dari kegiatan/akun/satker lama tidak lagi mengganti opsi terkini
+  atau menghapus pilihan eselon aktif. Pemuatan awal memakai filter terbaru.
+
+**Verifikasi dan batas**
+- 1.671 tes frontend (149 suite) lulus; 4.830 tes backend lulus di Windows,
+  satu tes zona waktu khusus POSIX menunggu CI Linux. Lint berkas perubahan,
+  pemeriksa kredensial, dan build produksi lulus (peringatan lama tercatat).
+- Tes regresi meliputi respons terbalik, kegagalan lama, pergantian lingkup,
+  unmount/StrictMode, dua tahap snapshot, statistik, clamp, mutex galeri,
+  pemilik indikator, opsi eselon, dan pending CREATE.
+- Tidak mengubah API, database, kontrak antrean simpan, OCC, atau idempotensi.
+  Rekonsiliasi versi baris dari WebSocket/simpanan optimistis adalah tahap
+  berikutnya, bukan klaim yang ditutup oleh tiket pemuatan daftar ini.
+
+---
+
 ## [#1055] Diagnosis terbatas insiden HTTP VPS dengan keluaran tersaring — 2026-09-10
 
 Persiapan pembuktian insiden 9 September sekitar 05:57 UTC
