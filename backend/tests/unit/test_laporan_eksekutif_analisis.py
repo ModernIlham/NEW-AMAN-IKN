@@ -278,18 +278,16 @@ def test_daftar_yang_LEBIH_PANJANG_dari_selembar_dipecah_bukan_dipotong(dbx):
     senyap oleh `overflow: hidden` — cacat yang sama yang dulu menelan delapan
     anggota tim dari cetakan.
     """
-    import tempfile
-
     import pypdfium2
     import weasyprint
 
     d = _data(dbx, kategori=KATEGORI_PANJANG)
-    with tempfile.NamedTemporaryFile(suffix=".pdf") as f:
-        weasyprint.HTML(string=_render(d),
-                        base_url=os.path.dirname(TPL)).write_pdf(f.name)
+    data_pdf = weasyprint.HTML(string=_render(d),
+                               base_url=os.path.dirname(TPL)).write_pdf()
+    with pypdfium2.PdfDocument(data_pdf) as dokumen:
         teks = re.sub(r"\s+", " ", "\n".join(
             p.get_textpage().get_text_range()
-            for p in pypdfium2.PdfDocument(f.name)))
+            for p in dokumen))
     hilang = [c["name"] for c in d["cond_by_cat"]
               if re.sub(r"\s+", " ", c["name"]) not in teks]
     assert not hilang, f"{len(hilang)} kelompok hilang dari cetakan: {hilang[:3]}"
@@ -338,27 +336,23 @@ def test_anggota_tim_TIDAK_hilang_dari_cetakan(dbx, banyak):
     sisanya terpotong senyap oleh `overflow: hidden` — tanpa satu pun galat,
     tanpa satu pun tanda di HTML-nya. Diuji dengan merender ke PDF lalu
     mencari tiap nama di teksnya."""
-    import tempfile
-
     import pypdfium2
     import weasyprint
 
     pembantu = _anggota(banyak, "Anggota Pembantu")
     d = _data(dbx, tim_pembantu=pembantu)
-    with tempfile.NamedTemporaryFile(suffix=".pdf") as f:
-        weasyprint.HTML(string=_render(d),
-                        base_url=os.path.dirname(TPL)).write_pdf(f.name)
+    data_pdf = weasyprint.HTML(string=_render(d),
+                               base_url=os.path.dirname(TPL)).write_pdf()
+    with pypdfium2.PdfDocument(data_pdf) as dokumen:
         teks = re.sub(r"\s+", " ", "\n".join(
             p.get_textpage().get_text_range()
-            for p in pypdfium2.PdfDocument(f.name)))
+            for p in dokumen))
     hilang = [t["nama"] for t in pembantu
               if re.sub(r"\s+", " ", t["nama"]) not in teks]
     assert not hilang, f"{len(hilang)} anggota hilang dari cetakan: {hilang[:3]}"
 
 
 def test_halaman_PDF_sama_banyak_dengan_lembar_HTML(dbx):
-    import tempfile
-
     import pypdfium2
     import weasyprint
 
@@ -366,10 +360,10 @@ def test_halaman_PDF_sama_banyak_dengan_lembar_HTML(dbx):
               tim_pendukung=_anggota(5, "Pendukung"))
     html = _render(d)
     lembar = len(re.findall(r'<div class="(?:exec|cover)-page"', html))
-    with tempfile.NamedTemporaryFile(suffix=".pdf") as f:
-        weasyprint.HTML(string=html,
-                        base_url=os.path.dirname(TPL)).write_pdf(f.name)
-        halaman = len(pypdfium2.PdfDocument(f.name))
+    data_pdf = weasyprint.HTML(string=html,
+                               base_url=os.path.dirname(TPL)).write_pdf()
+    with pypdfium2.PdfDocument(data_pdf) as dokumen:
+        halaman = len(dokumen)
     assert lembar == halaman, f"{halaman - lembar} halaman yatim"
 
 

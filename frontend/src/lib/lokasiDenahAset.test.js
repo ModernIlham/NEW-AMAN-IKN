@@ -71,7 +71,7 @@ describe("dialog denah dipakai bersama, bukan disalin", () => {
     const salinan = berkasJsx(SRC).filter((f) => {
       const isi = fs.readFileSync(f, "utf8");
       return isi.includes("spasial/lokasi-di-titik") && isi.includes("axios.put(submitUrl");
-    }).map((f) => path.relative(SRC, f));
+    }).map((f) => path.relative(SRC, f).split(path.sep).join("/"));
     expect(salinan).toEqual([DIALOG]);
   });
 

@@ -503,7 +503,6 @@ def _lembar_vs_halaman(d):
     sungguh dipakainya, sehingga halaman yang muat dinilai meluber.
     """
     import re
-    import tempfile
 
     import pypdfium2
     import weasyprint
@@ -513,10 +512,10 @@ def _lembar_vs_halaman(d):
     # Sampulnya berkelas sendiri (`cover-page`); menghitung `exec-page` saja
     # membuat selisihnya selalu satu.
     lembar = len(re.findall(r'<div class="(?:exec|cover)-page"', html))
-    with tempfile.NamedTemporaryFile(suffix=".pdf") as f:
-        weasyprint.HTML(string=html,
-                        base_url=os.path.dirname(TPL)).write_pdf(f.name)
-        return lembar, len(pypdfium2.PdfDocument(f.name))
+    data_pdf = weasyprint.HTML(string=html,
+                               base_url=os.path.dirname(TPL)).write_pdf()
+    with pypdfium2.PdfDocument(data_pdf) as dokumen:
+        return lembar, len(dokumen)
 
 
 def _jarak_isi_ke_kaki(d):

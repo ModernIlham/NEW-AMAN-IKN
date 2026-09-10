@@ -418,10 +418,10 @@ class TestPerilakuParserEkstraksi:
         return buf.getvalue()
 
     def test_parse_siman_xlsx(self):
-        import sys
-        sys.path.insert(0, str(BACKEND))
         from routes.siman import _parse_siman_xlsx
-        from tests.unit.test_siman_utils import HEADER_SIMAN, _baris
+        # Pytest memuat modul unit lokal tanpa paket tests. Import tests.unit
+        # dapat bertabrakan dengan direktori tests lain pada checkout lokal.
+        from test_siman_utils import HEADER_SIMAN, _baris
 
         isi = self._xlsx([["Kop Laporan"], HEADER_SIMAN,
                           _baris(), _baris(NUP="2")])

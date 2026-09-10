@@ -21,6 +21,7 @@ Berkas ini menjaga dua hal yang berbeda:
 import ast
 import io
 import os
+from pathlib import Path
 
 import pytest
 from PIL import Image as PILImage
@@ -248,16 +249,19 @@ _TULIS_GRIDFS = {"open_upload_stream_with_id", "open_upload_stream",
 def _berkas_penulis_gridfs():
     """Setiap berkas backend yang memanggil API tulis GridFS."""
     ketemu = set()
-    for akar, _dirs, berkas in os.walk(BACKEND):
-        if any(x in akar for x in ("/tests", "/venv", "__pycache__", "/scripts")):
-            continue
+    for akar, dirs, berkas in os.walk(BACKEND):
+        # Pangkas NAMA direktori di dalam backend, bukan substring path
+        # absolut: separator Windows berbeda dan repo boleh berinduk tests.
+        dirs[:] = [nama for nama in dirs
+                   if nama not in {"tests", "scripts", "venv", ".venv", "__pycache__"}]
         for nama in berkas:
             if not nama.endswith(".py"):
                 continue
-            path = os.path.join(akar, nama)
-            rel = os.path.relpath(path, BACKEND)
+            path = Path(akar) / nama
+            rel = path.relative_to(BACKEND).as_posix()
             try:
-                pohon = ast.parse(open(path, encoding="utf-8").read())
+                with path.open(encoding="utf-8") as sumber:
+                    pohon = ast.parse(sumber.read())
             except SyntaxError:
                 continue
             for simpul in ast.walk(pohon):
@@ -267,6 +271,48 @@ def _berkas_penulis_gridfs():
                     ketemu.add(rel)
                     break
     return ketemu
+
+
+@pytest.fixture
+def backend_pemindai(tmp_path, monkeypatch):
+    """Pohon kecil terisolasi; tidak bergantung isi repo atau separator OS."""
+    akar = tmp_path / "backend"
+    akar.mkdir()
+    monkeypatch.setitem(globals(), "BACKEND", str(akar))
+
+    def buat(relatif, sumber="bucket.upload_from_stream('bukti', b'foto')\n"):
+        tujuan = akar / relatif
+        tujuan.parent.mkdir(parents=True, exist_ok=True)
+        tujuan.write_text(sumber, encoding="utf-8")
+        return tujuan
+
+    return buat
+
+
+class TestPemindaiGridfs:
+    def test_penulis_baru_terdeteksi_dengan_path_posix(self, backend_pemindai):
+        backend_pemindai("routes/modul_baru.py")
+        backend_pemindai("routes/baca_saja.py", "bucket.open_download_stream('id')\n")
+        assert _berkas_penulis_gridfs() == {"routes/modul_baru.py"}
+
+    @pytest.mark.parametrize("direktori", ["tests", "scripts", "venv", ".venv", "__pycache__"])
+    @pytest.mark.parametrize("induk", ["", "routes/"])
+    def test_direktori_non_runtime_dipangkas(self, backend_pemindai, direktori, induk):
+        backend_pemindai(f"{induk}{direktori}/penulis.py")
+        backend_pemindai("routes/tetap_diperiksa.py")
+        assert _berkas_penulis_gridfs() == {"routes/tetap_diperiksa.py"}
+
+    @pytest.mark.parametrize("direktori", ["tests_extra", "scripts_extra", "venv_extra", "__pycache___extra"])
+    def test_nama_mirip_tetap_diperiksa(self, backend_pemindai, direktori):
+        backend_pemindai(f"{direktori}/penulis.py")
+        assert _berkas_penulis_gridfs() == {f"{direktori}/penulis.py"}
+
+    def test_ancestor_tests_tidak_mengosongkan_hasil(self, tmp_path, monkeypatch):
+        akar = tmp_path / "tests" / "proyek" / "backend"
+        akar.mkdir(parents=True)
+        (akar / "penulis.py").write_text("bucket.open_upload_stream('bukti')\n", encoding="utf-8")
+        monkeypatch.setitem(globals(), "BACKEND", str(akar))
+        assert _berkas_penulis_gridfs() == {"penulis.py"}
 
 
 class TestAntiPintas:
@@ -301,7 +347,8 @@ class TestAntiPintas:
 
     def test_pengecualian_tetap_punya_alasan_tertulis(self):
         """Pengecualian tanpa alasan berubah jadi tempat sampah."""
-        src = open(__file__, encoding="utf-8").read()
+        with open(__file__, encoding="utf-8") as sumber:
+            src = sumber.read()
         blok = src.split("PENGECUALIAN_TETAP = {", 1)[1].split("}", 1)[0]
         for berkas in PENGECUALIAN_TETAP:
             baris = [b for b in blok.splitlines() if berkas in b]

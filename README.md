@@ -573,6 +573,38 @@ cd frontend && yarn lint
 Gerbang CI (`.github/workflows/ci.yml`) menjalankan `compileall` + test unit
 backend serta `eslint` + `yarn build` frontend pada setiap PR.
 
+#### Pengujian lokal Windows
+
+Gunakan venv proyek dengan `backend/requirements.txt`, Git for Windows (Bash),
+dan pustaka Pango UCRT64 dari [MSYS2 resmi](https://www.msys2.org/).
+Ikuti [petunjuk Windows WeasyPrint](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#windows):
+perbarui MSYS2 hingga tuntas, lalu pasang `mingw-w64-ucrt-x86_64-pango`.
+Jangan mencampur DLL dari runtime lain atau menonaktifkan verifikasi paket.
+
+Dari PowerShell di root repo (sesuaikan lokasi MSYS2):
+
+```powershell
+# Memeriksa Bash dan merender dokumen sungguhan sebelum menjalankan seluruh uji.
+./scripts/uji_backend_windows.ps1 -DllDirectory 'C:/msys64/ucrt64/bin'
+
+# Hanya pemeriksaan lingkungan; BUKAN pengganti pengujian lengkap.
+./scripts/uji_backend_windows.ps1 -DllDirectory 'C:/msys64/ucrt64/bin' -PreflightOnly
+```
+
+Gunakan `-PythonPath` atau `-BashPath` jika executable tidak berada di lokasi
+default/PATH. Skrip tidak memasang paket, tidak mengubah registry/PATH global,
+dan mengembalikan variabel lingkungan setelah selesai atau gagal. Untuk uji
+terfokus, berikan `-PytestArgs @('backend/tests/unit/test_topologi_utils.py', '-q')`.
+Uji frontend tetap dijalankan dari `frontend` dengan
+`corepack yarn test --watchAll=false --runInBand`.
+
+Uji lokal Windows pernah diverifikasi memakai Python 3.13.5, WeasyPrint 68.1,
+Pango 1.58.2, GLib 2.88.3, dan HarfBuzz 14.4.0; CI Linux tetap memakai Python
+3.11. Paket MSYS2 bersifat rolling, jadi catat versi saat memasang ulang.
+Uji topologi menggunakan proses nyata `spawn` di Windows untuk menguji tenggat;
+fallback produksi Windows tanpa `fork` tetap dibatasi 20.000 titik dan diuji
+terpisah. Ini tidak mengubah kebijakan geometri aplikasi di VPS Linux.
+
 ---
 
 ## Deployment

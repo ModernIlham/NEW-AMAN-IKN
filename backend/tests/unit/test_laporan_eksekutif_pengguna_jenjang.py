@@ -507,7 +507,6 @@ def _lembar_vs_halaman(d):
     dinilai meluber, dan jatah halamannya ikut ditekan tanpa perlu.
     """
     import re
-    import tempfile
 
     import pypdfium2
     import weasyprint
@@ -518,10 +517,10 @@ def _lembar_vs_halaman(d):
     # membuat selisihnya SELALU satu, dan ujinya lalu menuduh lembar meluber
     # padahal tak satu pun meluber.
     lembar = len(re.findall(r'<div class="(?:exec|cover)-page"', html))
-    with tempfile.NamedTemporaryFile(suffix=".pdf") as f:
-        weasyprint.HTML(string=html, base_url=os.path.dirname(TPL)).write_pdf(
-            f.name)
-        return lembar, len(pypdfium2.PdfDocument(f.name))
+    data_pdf = weasyprint.HTML(string=html,
+                               base_url=os.path.dirname(TPL)).write_pdf()
+    with pypdfium2.PdfDocument(data_pdf) as dokumen:
+        return lembar, len(dokumen)
 
 
 def _pegawai_uji(banyak):

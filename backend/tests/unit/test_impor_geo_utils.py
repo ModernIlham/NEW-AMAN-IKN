@@ -9,6 +9,7 @@ import pytest
 import impor_geo_utils as ig
 import spasial_utils as su
 import topologi_utils as tu
+from test_topologi_utils import konteks_tenggat_nyata  # fixture worker lintas platform
 
 pytest.importorskip("shapefile")
 pytest.importorskip("utm")
@@ -262,12 +263,13 @@ def test_bersihkan_fitur_struktur_rusak_dilewati():
     assert g is None and "struktur" in alasan
 
 
-def test_poligon_besar_yang_SAH_ikut_terimpor_bukan_dilewati():
+def test_poligon_besar_yang_SAH_ikut_terimpor_bukan_dilewati(konteks_tenggat_nyata):
     """REGRESI LAPANGAN (GIS-1). Satu berkas berisi 6 poligon BWP IKN: hanya 1
     yang jadi node, 5 dilewati dengan "geometri terlalu besar (> 20.000 titik)".
 
     Poligon-poligon itu SAH; yang salah adalah plafonnya. Uji ini mengimpor
-    poligon sah 50.000 verteks dan menuntut ia LOLOS.
+    poligon sah 50.000 verteks dan menuntut ia LOLOS ketika proses bertenggat
+    tersedia (fixture nyata fork/spawn; bukan mengubah kebijakan Windows).
     """
     import math
     n = 50_000
@@ -378,7 +380,7 @@ def test_potong_atribut_tak_menghilangkan_kolom_bertabrakan():
     dengan pemotongan 10 karakter DBF. Regresi temuan tinjauan."""
     import ast
     import pathlib
-    src = pathlib.Path(__file__).parents[2].joinpath("routes/spasial.py").read_text()
+    src = pathlib.Path(__file__).parents[2].joinpath("routes/spasial.py").read_text(encoding="utf-8")
     fn = [n for n in ast.parse(src).body
           if isinstance(n, ast.FunctionDef) and n.name == "_potong_atribut"]
     ns = {}
