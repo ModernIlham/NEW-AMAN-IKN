@@ -1,0 +1,100 @@
+# Diagnosis terbatas insiden 9 September 2026. Bukan deploy/pembaca berkas umum.
+name: Diagnosis HTTP VPS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  diagnosis:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Pastikan commit diagnosis persis sudah lulus CI main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ ! "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]] || [ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]; then
+            echo "::error::Checkout diagnosis tidak cocok dengan SHA run."
+            exit 1
+          fi
+          hasil_ci="$(curl --fail --silent --max-time 30 \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&head_sha=$GITHUB_SHA&per_page=1")" || {
+              echo "::error::Tidak dapat memverifikasi CI; koneksi VPS tidak dijalankan."
+              exit 1
+            }
+          if ! printf '%s' "$hasil_ci" | python3 -c \
+            'import json, os, sys; d=json.load(sys.stdin); sys.exit(0 if any(r.get("head_sha")==os.environ["GITHUB_SHA"] and r.get("head_branch")=="main" and r.get("event")=="push" and r.get("status")=="completed" and r.get("conclusion")=="success" for r in d.get("workflow_runs", [])) else 1)' 2>/dev/null; then
+            echo "::error::Diagnosis ditolak: SHA ini belum memiliki CI push/main sukses."
+            exit 1
+          fi
+      - name: Baca diagnosis tetap lewat SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          if [ -z "$VPS_HOST" ] || [ -z "$VPS_USER" ] || [ -z "$VPS_SSH_KEY" ]; then
+            echo "::error::Secret koneksi VPS belum lengkap."
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          if ! ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null 2>&1; then
+            printf '%s' "$VPS_SSH_KEY" | tr -d ' \t\r\n' | base64 -d > ~/.ssh/deploy_key 2>/dev/null || true
+            chmod 600 ~/.ssh/deploy_key
+          fi
+          if ! ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null 2>&1; then
+            echo "::error::Kunci koneksi VPS tidak valid."
+            exit 1
+          fi
+          laporan="$RUNNER_TEMP/diagnosa-http-vps.json"
+          rc=0
+          for attempt in 1 2 3; do
+            rc=0
+            # Tidak ada raw stdout/stderr yang langsung masuk log Actions.
+            # Python tidak menulis bytecode; timeout membatasi sesi macet.
+            timeout 90 ssh -T -i ~/.ssh/deploy_key -p "${VPS_PORT:-22}" \
+              -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+              -o ConnectTimeout=20 \
+              "$VPS_USER@$VPS_HOST" 'python3 -B - 2>/dev/null' \
+              < scripts/diagnosa_http_vps.py > "$laporan" 2>/dev/null || rc=$?
+            [ "$rc" -eq 0 ] && break
+            [ "$rc" -ne 255 ] && break
+            if [ "$attempt" -lt 3 ]; then
+              echo "Koneksi diagnosis belum berhasil; ulangi setelah jeda 180 detik."
+              sleep 180
+            fi
+          done
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::Diagnosis tidak selesai (kode $rc); keluaran mentah tidak dipublikasikan."
+            exit 1
+          fi
+          # Validasi allowlist LAGI di runner: banner shell atau traceback tidak
+          # boleh menjadi jalan pintas melewati sensor di script VPS.
+          if ! python3 -B -c \
+            'import runpy, sys; m=runpy.run_path("scripts/diagnosa_http_vps.py"); sys.exit(m["ringkasan_dari_stdin"]())' \
+            < "$laporan" > "$RUNNER_TEMP/diagnosa-http-vps.md" 2>/dev/null; then
+            echo "::error::Format laporan diagnosis ditolak; tidak dipublikasikan."
+            exit 1
+          fi
+          printf 'Commit skrip diagnosis: `%s`.\n\n' "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          cat "$RUNNER_TEMP/diagnosa-http-vps.md" >> "$GITHUB_STEP_SUMMARY"
+          cat "$RUNNER_TEMP/diagnosa-http-vps.md"
