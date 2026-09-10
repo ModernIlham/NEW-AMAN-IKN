@@ -18,6 +18,37 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1055] Diagnosis terbatas insiden HTTP VPS dengan keluaran tersaring — 2026-09-10
+
+Persiapan pembuktian insiden 9 September sekitar 05:57 UTC
+([PR #1046](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1046)).
+
+- Workflow **Diagnosis HTTP VPS** dipicu manual tanpa input, hanya pada
+  `main`, memakai checkout SHA immutable yang persis sudah lulus CI main.
+  Antrean bersama deploy mencegah pemeriksaan berbarengan dengan pergantian
+  build; workflow diagnosis sendiri tidak melakukan deploy/restart.
+- Skrip Python standar dikirim lewat stdin SSH untuk membaca daftar log
+  nginx/rotasi tetap serta metadata build/index. Empat kategori dihitung
+  per menit pada jendela UTC tetap; panjang baris, byte dekompresi, dan waktu
+  dibatasi. File log symlink/FIFO ditolak.
+- Tidak memublikasikan baris log, alamat klien, token, konfigurasi, atau
+  exception. Runner memvalidasi allowlist keluaran SSH lagi sebelum menulis
+  ringkasan; banner dan nilai asing ditolak.
+- Panduan mencatat batas bukti: nol hitungan bukan bukti tidak ada insiden,
+  metadata saat dibaca bukan kondisi historis, dan mapping server/docroot
+  produksi belum diverifikasi. **Penyebab insiden belum terkonfirmasi**;
+  pengambilan bukti produksi tetap harus dijalankan secara terpisah.
+- Tidak mengubah data, izin, API, frontend, atau konfigurasi layanan VPS.
+
+**Verifikasi:** 48 uji diagnosis lulus di Windows, 1 uji `tzset`/DST khusus
+POSIX menunggu CI Linux. Backend lengkap: **4.830 lulus, 1 skip platform**,
+124 peringatan lama. Dua langkah shell lulus `bash -n`; py_compile, pemeriksa
+kredensial, dan whitespace lulus. Build frontend yang tidak berubah lulus
+dengan heap Node 2 GB khusus proses lokal setelah percobaan awal mengalami
+crash Node; peringatan lama tetap tercatat. CI Linux lengkap wajib hijau.
+
+---
+
 ## [#1054] Pengujian lokal Windows lengkap tanpa melewati gerbang aplikasi — 2026-09-10
 
 Tindak lanjut kendala lingkungan pengembangan
