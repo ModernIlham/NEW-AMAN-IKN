@@ -743,10 +743,10 @@
    berbeda pendapat dengan penghitung halaman, dan "Hal 2 dari 3" pada kop lalu
    berbohong tanpa satu pun galat. #}
 {% macro sel_dist(b, jenis, batang, gabung) -%}
-<td class="hier-name" style="padding-left:{{ (4 if gabung else 6) + b.depth * (6 if gabung else 11) }}px">{% if jenis == 'pengguna' and b.daun %}{{ b.name }}{% if gabung %}<span class="sel-nip-gabung">{{ b.nip if b.nip else '&mdash;' }}</span>{% endif %}{% if b.nip and not b.terdaftar %} <span class="tag-warn">(belum terdaftar)</span>{% endif %}{% else %}{{ b.name }}{% endif %}</td>
+<td class="hier-name" style="padding-left:{{ (4 if gabung else 6) + b.depth * (6 if gabung else 11) }}px">{% if jenis == 'pengguna' and b.daun %}{{ b.name }}{% if gabung %}<span class="sel-nip-gabung">{{ b.nip if b.nip else '—' }}</span>{% endif %}{% if b.nip and not b.terdaftar %} <span class="tag-warn">(belum terdaftar)</span>{% endif %}{% else %}{{ b.name }}{% endif %}</td>
 {%- if jenis == 'pengguna' %}
-{%- if not gabung %}<td class="sel-nip">{% if b.daun %}{{ b.nip if b.nip else '&mdash;' }}{% endif %}</td>{% endif %}
-<td class="hier-name sel-jabatan">{% if b.daun %}{{ b.jabatan if b.jabatan else '&mdash;' }}{% endif %}</td>
+{%- if not gabung %}<td class="sel-nip">{% if b.daun %}{{ b.nip if b.nip else '—' }}{% endif %}</td>{% endif %}
+<td class="hier-name sel-jabatan">{% if b.daun %}{{ b.jabatan if b.jabatan else '—' }}{% endif %}</td>
 {%- endif %}
 {%- if batang %}<td class="hier-bar-cell">{% if b.bar_pct is defined %}<div class="hier-bar" style="width:{{ b.bar_pct }}%"></div>{% endif %}</td>{% endif %}
 <td class="val-cell">{{ b.count }}</td>

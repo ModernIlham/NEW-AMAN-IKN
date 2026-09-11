@@ -32,7 +32,7 @@ async def _diam(*a, **k):
 
 
 @pytest.fixture()
-def dbx(monkeypatch):
+def dbx(monkeypatch, mongo_not_regex):
     fake = AsyncMongoMockClient()["uji"]
     import shared_utils as su
     import routes.reports as rrep

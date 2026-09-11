@@ -23,7 +23,8 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db
-from pegawai_utils import baris_identitas_isian
+from pegawai_utils import baris_identitas_isian, label_identitas_cetak
+from report_filters import active_asset_filter, tanpa_dummy_filter
 from shared_utils import (kode_satker_user, scope_query_aset,
                           scope_query_field_satker, blok_ttd_kpb_titik,
                           pastikan_akses_dok_satker,
@@ -50,6 +51,17 @@ _PROJ = {"_id": 0, "user": 1, "pengguna_nip": 1, "pengguna_melekat_ke": 1,
          "pengguna_jabatan": 1, "bast_file_id": 1, "activity_id": 1}
 
 
+async def _query_aset_pemegang(user):
+    """Daftar operasional: pemegang kegiatan berjalan juga perlu BAST.
+
+    Bukan perhitungan posisi/nilai final (gerbang W9 tetap berlaku di sana).
+    Isolasi satker, pengecualian dummy, dan penghapusan BMN tetap ditegakkan.
+    Dipakai bersama oleh rekap, rincian, dan lampiran agar isinya konsisten.
+    """
+    return active_asset_filter(tanpa_dummy_filter(await scope_query_aset(
+        user, {"user": {"$exists": True, "$nin": ["", None]}})))
+
+
 @penggunaan_router.get("/penggunaan/pemegang")
 async def daftar_pemegang(
     search: str = "",
@@ -58,10 +70,8 @@ async def daftar_pemegang(
     _user: dict = Depends(require_user),
 ):
     """Rekap pemegang: jumlah aset, kelengkapan BAST, jumlah kegiatan."""
-    from shared_utils import filter_aset_perhitungan
     assets = [a async for a in db.assets.find(
-        await filter_aset_perhitungan(await scope_query_aset(_user,
-            {"user": {"$exists": True, "$nin": ["", None]}})), _PROJ)]
+        await _query_aset_pemegang(_user), _PROJ)]
     rows = rekap_pemegang(assets)
     if search.strip():
         s = search.strip().lower()
@@ -72,8 +82,8 @@ async def daftar_pemegang(
     halaman = rows[start:start + page_size]
     # Perkaya dgn Master Pegawai via NIP (temuan #36) — additif, hanya halaman ini.
     nips = {r.get("nip") for r in halaman if str(r.get("nip") or "").strip()}
+    peg_map = {}
     if nips:
-        peg_map = {}
         # Scope satker (REVIEW-9 R15): pengaya rekap pemegang tak boleh
         # menarik nama/jabatan/unit pegawai satker lain.
         async for pgw in db.pegawai.find(
@@ -81,13 +91,14 @@ async def daftar_pemegang(
                 {"_id": 0, "nip": 1, "nama": 1, "jabatan": 1,
                  "unit_kerja": 1, "status": 1}):
             peg_map[pgw["nip"]] = pgw
-        for r in halaman:
-            m = peg_map.get(str(r.get("nip") or "").strip())
-            r["pegawai_master_nama"] = (m or {}).get("nama", "")
-            r["pegawai_master_jabatan"] = (m or {}).get("jabatan", "")
-            r["pegawai_master_unit"] = (m or {}).get("unit_kerja", "")
-            r["pegawai_master_status"] = (m or {}).get("status", "")
-            r["pegawai_terdaftar"] = bool(m)
+    for r in halaman:
+        m = peg_map.get(str(r.get("nip") or "").strip())
+        r["pegawai_master_nama"] = (m or {}).get("nama", "")
+        r["pegawai_master_jabatan"] = (m or {}).get("jabatan", "")
+        r["pegawai_master_unit"] = (m or {}).get("unit_kerja", "")
+        r["pegawai_master_status"] = (m or {}).get("status", "")
+        r["pegawai_terdaftar"] = bool(m)
+        r["label_identitas"] = label_identitas_cetak(r["nip"]) if r["nip"] else ""
     return {
         "items": halaman,
         "total": total, "page": page, "page_size": page_size,
@@ -108,11 +119,9 @@ async def aset_pemegang(
     proj = {**_PROJ, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
             "location": 1, "condition": 1, "inventory_status": 1,
             "bast_terakhir": 1}
-    from shared_utils import filter_aset_perhitungan
     out = []
     async for a in db.assets.find(
-            await filter_aset_perhitungan(await scope_query_aset(_user,
-                {"user": {"$exists": True, "$nin": ["", None]}})), proj):
+            await _query_aset_pemegang(_user), proj):
         if kunci_pemegang(a) == key:
             out.append({
                 "id": a.get("id"),
@@ -1222,14 +1231,12 @@ async def daftar_pemegang_pdf(
     proj = {**_PROJ, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
             "brand": 1, "model": 1, "serial_number": 1,
             "location": 1, "condition": 1, "bast_terakhir": 1}
-    from shared_utils import filter_aset_perhitungan
     rows = []
     jabatan = ""
     melekat = ""
     nama_tampil = ""
     async for a in db.assets.find(
-            await filter_aset_perhitungan(await scope_query_aset(_user,
-                {"user": {"$exists": True, "$nin": ["", None]}})), proj):
+            await _query_aset_pemegang(_user), proj):
         if kunci_pemegang(a) != key:
             continue
         rows.append(a)
@@ -1260,7 +1267,7 @@ async def daftar_pemegang_pdf(
     from xml.sax.saxutils import escape as _esc
     identitas = f"Nama pemegang: <b>{_esc(nama_tampil)}</b>"
     if nip.strip():
-        identitas += f" · NIP/NIK: {_esc(nip.strip())}"
+        identitas += f" · {label_identitas_cetak(nip.strip())}: {_esc(nip.strip())}"
     if jabatan:
         identitas += f" · Jabatan: {_esc(jabatan)}"
     if melekat:

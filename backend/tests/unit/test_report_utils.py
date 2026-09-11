@@ -55,3 +55,20 @@ def test_distribusi_pengguna_kosong():
     rows, ringkas = distribusi_pengguna([], {})
     assert rows == []
     assert ringkas == {"jumlah_pengguna": 0, "jumlah_tak_terdaftar": 0, "ada_tanpa_nip": False}
+
+
+def test_nama_tanpa_nomor_ditampilkan_dan_tidak_digabung_dengan_tanpa_pengguna():
+    rows, ringkas = distribusi_pengguna([
+        {"user": "  Sari   Uji ", "pengguna_jabatan": "Teknisi", "purchase_price": 10},
+        {"user": "sari uji", "purchase_price": 20},
+        {"user": "Budi Uji", "purchase_price": 30},
+        {"user": "", "purchase_price": 40},
+        {"user": "Sari Uji", "pengguna_nip": "123", "purchase_price": 50},
+    ], {"": {"nama": "Jangan cocokkan nomor kosong"}})
+    assert len(rows) == 4
+    sari = next(r for r in rows if r["nama"] == "Sari Uji" and not r["nip"])
+    assert sari["count"] == 2 and sari["value"] == 30
+    assert sari["jabatan"] == "Teknisi" and not sari["terdaftar"]
+    assert ringkas["jumlah_pengguna"] == 3
+    assert sum(r["count"] for r in rows) == 5
+    assert sum(r["value"] for r in rows) == 150

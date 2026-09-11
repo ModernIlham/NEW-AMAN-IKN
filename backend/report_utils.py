@@ -51,8 +51,10 @@ _TANPA_PENGGUNA = "Tanpa Pengguna / NIP"
 def distribusi_pengguna(assets, pegawai_by_nip=None):
     """Distribusi aset per pengguna — KEY = NIP/NIK, tampilan = nama pengguna.
 
-    - Pengelompokan by field aset `pengguna_nip` (NIP/NIK). Aset tanpa NIP
-      dikumpulkan pada satu grup "Tanpa Pengguna / NIP".
+    - Pengelompokan by field aset `pengguna_nip` (NIP/NIK). Tanpa nomor,
+      kelompokkan menurut nama yang dinormalkan; nama tetap ditampilkan.
+      Hanya aset tanpa nama DAN nomor masuk grup "Tanpa Pengguna / NIP".
+      Nama tanpa nomor tidak ditebak cocok dengan Master Pegawai.
     - Nama tampilan: prioritas nama pegawai dari master (`pegawai_by_nip[nip]`),
       fallback field aset `user`, lalu "(nama tak dicatat)".
     - `unit_kerja`, `jabatan`, dan jalur `eselon1`..`eselon5` dari master (bila
@@ -67,22 +69,27 @@ def distribusi_pengguna(assets, pegawai_by_nip=None):
     for a in (assets or []):
         a = a or {}
         nip = str(a.get("pengguna_nip") or "").strip()
-        key = nip or "__tanpa__"
+        nama_aset = " ".join(str(a.get("user") or "").split())
+        # Namespace berbeda: nama/nomor yang kebetulan sama tidak tercampur.
+        key = ("nomor", nip) if nip else (("nama", nama_aset.casefold())
+                                         if nama_aset else ("tanpa", ""))
         g = grup.get(key)
         if g is None:
             master = peg.get(nip) if nip else None
             if nip:
                 nama = (str((master or {}).get("nama") or "").strip()
-                        or str(a.get("user") or "").strip()
+                        or nama_aset
                         or "(nama tak dicatat)")
             else:
-                nama = _TANPA_PENGGUNA
+                nama = nama_aset or _TANPA_PENGGUNA
             g = grup[key] = {
                 "nip": nip, "nama": nama,
                 "unit_kerja": str((master or {}).get("unit_kerja") or "").strip(),
-                "jabatan": str((master or {}).get("jabatan") or "").strip(),
+                "jabatan": str((master or {}).get("jabatan")
+                               or a.get("pengguna_jabatan") or "").strip(),
                 "terdaftar": bool(master) if nip else False,
                 "tanpa_nip": not nip,
+                "tanpa_pengguna": not nip and not nama_aset,
                 "count": 0, "value": 0.0,
             }
             for _n in range(1, 6):
@@ -96,7 +103,7 @@ def distribusi_pengguna(assets, pegawai_by_nip=None):
     rows = sorted(grup.values(),
                   key=lambda r: (-r["value"], -r["count"], (r["nama"] or "").lower()))
     ringkas = {
-        "jumlah_pengguna": sum(1 for r in rows if not r["tanpa_nip"]),
+        "jumlah_pengguna": sum(1 for r in rows if not r["tanpa_pengguna"]),
         "jumlah_tak_terdaftar": sum(1 for r in rows if r["nip"] and not r["terdaftar"]),
         "ada_tanpa_nip": any(r["tanpa_nip"] for r in rows),
     }

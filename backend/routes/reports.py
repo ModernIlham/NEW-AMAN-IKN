@@ -5657,12 +5657,13 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
     # halaman ini; kop kini dipakai bersama ketiga distribusi, dan angka itu
     # satu-satunya di halaman ini yang menyebut pekerjaan yang masih tersisa.
     catatan_pengguna = (
-        "Key pengelompokan = NIP/NIK; nama & jabatan diambil dari Master "
-        "Pegawai bila NIP terdaftar. Aset tanpa NIP dikelompokkan sebagai "
+        "Pengelompokan menurut NIP/NIK; jika nomor kosong, menurut nama. "
+        "Nama dan jabatan mengikuti Master Pegawai bila nomor terdaftar, "
+        "selain itu memakai catatan aset. Tanpa nama dan nomor: "
         "\u201cTanpa Pengguna / NIP\u201d. "
-        f"{pengguna_ringkas['jumlah_pengguna']} pengguna ber-NIP"
-        + (f", {pengguna_ringkas['jumlah_tak_terdaftar']} di antaranya belum "
-           "terdaftar di Master Pegawai"
+        f"{pengguna_ringkas['jumlah_pengguna']} pengguna tercatat"
+        + (f", {pengguna_ringkas['jumlah_tak_terdaftar']} di antaranya memiliki "
+           "nomor yang belum terdaftar di Master Pegawai"
            if pengguna_ringkas["jumlah_tak_terdaftar"] else "")
         + ".")
 
