@@ -18,6 +18,37 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1057] Pulihkan daftar pemegang operasional dan identitas pengguna — 2026-09-12
+
+[PR #1048](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1048).
+
+**Perbaikan**
+- Rekap, rincian, dan lampiran Aset per Pemegang mencakup kegiatan yang masih
+  berjalan. Layar operasional ini tidak memakai gerbang laporan nilai final;
+  aturan W9 untuk laporan final tetap utuh. Isolasi satker, pengecualian dummy,
+  dan pengecualian BMN dihapus tetap diterapkan.
+- Kegagalan memuat daftar ditampilkan dengan pesan galat dan tombol Coba lagi,
+  bukan dianggap sebagai daftar pemegang kosong.
+- Identitas di baris, dialog rincian, dan kepala lampiran mengikuti jenis nomor,
+  termasuk NIK Non-ASN. Aturan identitas pada blok tanda tangan tidak berubah.
+- Distribusi per Pengguna dalam laporan inventarisasi tetap menampilkan nama
+  meskipun nomor identitas kosong. Pengelompokan memakai nama yang dinormalkan
+  bila NIP/NIK tidak tersedia, tanpa menebak kecocokan dengan Master Pegawai.
+  Total jumlah aset dan nilai tetap sama; hanya nama sekaligus nomor kosong
+  yang masuk kelompok Tanpa Pengguna / NIP.
+- Placeholder identitas/jabatan kosong pada tabel PDF tercetak sebagai tanda
+  pisah, bukan teks entitas HTML.
+
+**Verifikasi dan batas**
+- 51 tes backend terarah lulus, termasuk render dan pemeriksaan visual PDF.
+  Uji lengkap Windows: 4.836 lulus, satu tes khusus POSIX dilewati.
+- 1.674 tes frontend (150 suite), lint berkas perubahan, pemeriksa kredensial,
+  dan build produksi lulus; peringatan lama di luar perubahan tetap tercatat.
+- Tidak ada migrasi data. Penanda tangan E-sign, deteksi ulang denah, stiker,
+  dan konsolidasi konfigurasi server merupakan pekerjaan terpisah.
+
+---
+
 ## [#1056] Lindungi pemuatan daftar aset dari respons usang — 2026-09-11
 
 [PR #1047](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1047).
