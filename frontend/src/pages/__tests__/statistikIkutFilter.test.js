@@ -16,7 +16,29 @@ import fs from "fs";
 import path from "path";
 
 const SUMBER = fs.readFileSync(
-  path.join(__dirname, "..", "DashboardPage.jsx"), "utf8");
+  path.join(__dirname, "..", "..", "lib", "pemuatDaftarAset.js"), "utf8");
+const HALAMAN = fs.readFileSync(path.join(__dirname, "..", "DashboardPage.jsx"), "utf8");
+
+test("Dashboard benar-benar memakai pemuat yang diuji, dengan perakit filter dan semua setter", () => {
+  expect(HALAMAN).toContain('import { buatPemuatDaftarAset } from "@/lib/pemuatDaftarAset"');
+  const wiring = HALAMAN.match(/const \{ doFetch, doFetchStats, loadMoreMobile, loadPrevMobile \} = buatPemuatDaftarAset\(\{([\s\S]*?)\}\)/)?.[1];
+  expect(wiring).toBeDefined();
+  for (const nama of ["activity", "filters", "buildFilterParams", "penjaga", "lingkupPermintaan", "getPendingItems", "filterSnapshotRows", "sortSnapshotRows", "setAssets", "setStats", "setMobileAssets"]) {
+    expect(wiring).toMatch(new RegExp(`\\b${nama}\\b`));
+  }
+  const lingkup = HALAMAN.match(/const lingkupPermintaan = JSON.stringify\(\[([^\]]+)\]\)/)?.[1];
+  expect(lingkup).toBeDefined();
+  for (const nama of ["activity?.id", "user?.id", "user?.kode_satker", "filterLaporan", "sortBy", "pageSize"]) expect(lingkup).toContain(nama);
+  expect(lingkup).not.toContain("currentPage");
+  expect(HALAMAN).toContain("const penjaga = usePenjagaPermintaan(lingkupPermintaan)");
+});
+
+test("Simpan Lanjut berhenti sebelum menutup form untuk hasil usang", () => {
+  const navigasi = HALAMAN.slice(HALAMAN.indexOf("const fresh = isDesktopList"));
+  expect(navigasi.indexOf("if (fresh === HASIL_USANG) return;")).toBeGreaterThan(-1);
+  expect(navigasi.indexOf("if (fresh === HASIL_USANG) return;")).toBeLessThan(navigasi.indexOf("const nextAsset"));
+  expect(navigasi.indexOf("if (fresh === HASIL_USANG) return;")).toBeLessThan(navigasi.indexOf("setEditAssetForForm(null)"));
+});
 
 /** Potong badan satu fungsi `const nama = async (...) => {` sampai seimbang. */
 function badanFungsi(nama) {
