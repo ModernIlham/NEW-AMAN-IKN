@@ -153,6 +153,35 @@ def test_total_diambil_dari_jenjang_TERATAS_saja(dbx):
     assert sum(b["count"] for b in d["pengguna_hier"]) > d["total_count"]
 
 
+def test_nama_tanpa_identitas_tetap_ada_di_hierarki_dan_pdf(dbx, tmp_path):
+    import pypdfium2 as pdfium
+    from weasyprint import HTML
+
+    _jalan(_seed(dbx, pegawai=[], tanpa_nip=3))
+    _jalan(dbx.assets.update_one({"id": "t0"}, {"$set": {
+        "user": "Pemegang Tanpa Nomor A", "pengguna_jabatan": "Teknisi"}}))
+    _jalan(dbx.assets.update_one({"id": "t1"}, {"$set": {
+        "user": "Pemegang Tanpa Nomor B"}}))
+    d = _jalan(rp._build_executive_summary_data("k1", with_asset_rows=False))
+    daun = [b["name"] for b in d["pengguna_hier"] if b.get("daun")]
+    assert "Pemegang Tanpa Nomor A" in daun
+    assert "Pemegang Tanpa Nomor B" in daun
+    assert d["pengguna_ringkas"]["jumlah_pengguna"] == 2
+    assert d["pengguna_total"]["count"] == 3
+    html = rp._jinja_env().get_template("executive_summary.html").render(preview=False, **d)
+    data = HTML(string=html, base_url=os.path.dirname(TPL)).write_pdf()
+    with pdfium.PdfDocument(data) as pdf:
+        teks_pengguna = []
+        for page in pdf:
+            teks = page.get_textpage().get_text_range()
+            if "Distribusi Per Pengguna" in teks:
+                teks_pengguna.append(teks)
+                page.render(scale=1.3).to_pil().save(tmp_path / "distribusi-tanpa-nomor.png")
+        assert "Pemegang Tanpa Nomor A" in "\n".join(teks_pengguna)
+        assert "Pemegang Tanpa Nomor B" in "\n".join(teks_pengguna)
+        assert "&mdash;" not in "\n".join(teks_pengguna)
+
+
 # ── 2. Jenjangnya mengikuti tingkat satkernya ───────────────────────────
 
 def test_satker_ESELON_III_tak_dibagi_mulai_dari_Eselon_I(dbx):
@@ -452,9 +481,9 @@ def test_cacah_NIP_belum_terdaftar_tetap_tercetak(dbx):
         preview=False, **d)
     awal = html.index("<h1>Distribusi Per Pengguna")
     blok = html[awal:html.index("<h1>Analisis Lanjutan", awal)]
-    assert f"{d['pengguna_ringkas']['jumlah_pengguna']} pengguna ber-NIP" in blok
+    assert f"{d['pengguna_ringkas']['jumlah_pengguna']} pengguna tercatat" in blok
     assert d["pengguna_ringkas"]["jumlah_tak_terdaftar"] == 3
-    assert "3 di antaranya belum terdaftar" in blok
+    assert "3 di antaranya memiliki nomor yang belum terdaftar" in blok
     # Entitas HTML-nya harus tergambar sebagai tanda kutip, bukan tercetak
     # mentah sebagai "&ldquo;" — `{% set %}` di bawah autoescape mudah sekali
     # membuatnya ter-escape dua kali.

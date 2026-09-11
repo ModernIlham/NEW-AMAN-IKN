@@ -86,6 +86,7 @@ export default function PenggunaanPage({ user, onBack }) {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [gagalMuat, setGagalMuat] = useState(false);
   // Dialog daftar aset: {pemegang, rows, loading}
   const [detail, setDetail] = useState(null);
   // Data BMN idle: {kandidat, tiket, ringkasan, label_status, catatan}
@@ -153,6 +154,7 @@ export default function PenggunaanPage({ user, onBack }) {
 
   const load = useCallback(async (p = 1, s = search) => {
     setLoading(true);
+    setGagalMuat(false);
     try {
       const r = await axios.get(`${API}/penggunaan/pemegang`, {
         params: { search: s, page: p, page_size: 50 },
@@ -163,6 +165,7 @@ export default function PenggunaanPage({ user, onBack }) {
       setTotalPages(r.data?.total_pages || 1);
       setPage(p);
     } catch {
+      setGagalMuat(true);
       toast.error("Gagal memuat daftar pemegang");
     } finally {
       setLoading(false);
@@ -881,7 +884,7 @@ export default function PenggunaanPage({ user, onBack }) {
           <div className={BLOK_JUDUL}>
             <h1 className={JUDUL_KEPALA}>Aset per Pemegang</h1>
             <p className={SUBJUDUL_KEPALA}>
-              {total} pemegang · {totalLengkap} berkas lengkap (NIP + semua BAST) · lintas kegiatan
+              {total} pemegang · {totalLengkap} berkas lengkap (identitas + semua BAST) · lintas kegiatan
             </p>
           </div>
           <BookingNomorButton modul="penggunaan" jenisNaskah="Berita Acara" referensi="BAST PSP" />
@@ -928,12 +931,16 @@ export default function PenggunaanPage({ user, onBack }) {
           <Input
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Cari nama, NIP, atau jabatan…"
+            placeholder="Cari nama, NIP/NIK, atau jabatan…"
             className="pl-9 h-10"
             data-testid="penggunaan-search"
           />
         </div>
 
+        <p className="text-xs text-muted-foreground" data-testid="pemegang-lingkup-operasional">
+          Daftar operasional mencakup kegiatan yang masih berjalan; bukan rekap nilai final.
+          Pemegang tanpa NIP/NIK tetap ditampilkan. Aset dummy dan BMN yang sudah dihapus tidak disertakan.
+        </p>
         <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
           <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
             <UserCheck className="w-4 h-4 text-sky-600" />
@@ -946,12 +953,17 @@ export default function PenggunaanPage({ user, onBack }) {
             <div className="flex items-center justify-center py-16">
               <Loader2 className="w-7 h-7 animate-spin text-sky-600" />
             </div>
+          ) : gagalMuat ? (
+            <div className="text-center py-12 px-4" role="alert">
+              <p className="text-sm text-foreground">Daftar pemegang gagal dimuat. Data belum dapat ditampilkan.</p>
+              <Button variant="outline" className="mt-3" onClick={() => load(page, search)} data-testid="pemegang-coba-lagi">Coba lagi</Button>
+            </div>
           ) : items.length === 0 ? (
             <div className="text-center py-16 px-4">
               <UserCheck className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
               <p className="text-sm font-medium text-foreground">Belum ada pemegang tercatat</p>
               <p className="text-xs text-muted-foreground mt-1">
-                Isi kolom Pengguna (+NIP & BAST) pada aset di modul Inventarisasi — rekap ini terbangun otomatis.
+                Isi kolom Pengguna pada aset di modul Inventarisasi — rekap ini terbangun otomatis, meskipun NIP/NIK belum diisi.
               </p>
             </div>
           ) : (
@@ -967,11 +979,11 @@ export default function PenggunaanPage({ user, onBack }) {
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-foreground leading-tight">{p.nama}</p>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {[p.nip && `NIP ${p.nip}`, p.jabatan, p.melekat_ke,
+                        {[p.nip && `${p.label_identitas || "NIP/NIK"} ${p.nip}`, p.jabatan, p.melekat_ke,
                           `${p.jumlah_kegiatan} kegiatan`].filter(Boolean).join(" · ")}
                         {p.pegawai_terdaftar === false && (
                           <span className="ml-1.5 px-1.5 py-px rounded bg-orange-500/15 text-orange-600 dark:text-orange-400 font-semibold"
-                            title="NIP pemegang ini belum ada di Master Pegawai — daftarkan lewat halaman Master Pegawai agar identitas satu sumber">
+                            title="Identitas pemegang ini belum cocok dengan Master Pegawai — lengkapi lewat halaman Master Pegawai agar identitas satu sumber">
                             belum di master
                           </span>
                         )}
@@ -2619,7 +2631,7 @@ export default function PenggunaanPage({ user, onBack }) {
           <DialogHeader>
             <DialogTitle>Aset — {detail?.pemegang?.nama}</DialogTitle>
             <DialogDescription className="text-xs">
-              {[detail?.pemegang?.nip && `NIP ${detail.pemegang.nip}`, detail?.pemegang?.jabatan]
+              {[detail?.pemegang?.nip && `${detail.pemegang.label_identitas || "NIP/NIK"} ${detail.pemegang.nip}`, detail?.pemegang?.jabatan]
                 .filter(Boolean).join(" · ") || "Daftar aset yang melekat pada pemegang ini"}
             </DialogDescription>
           </DialogHeader>
