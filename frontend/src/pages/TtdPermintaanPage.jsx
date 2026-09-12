@@ -19,6 +19,7 @@ import KartuTapDialog from "@/components/pegawai/KartuTapDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import AturPosisiTtd from "@/components/ttd/AturPosisiTtd";
 import BarisPenandaTangan from "@/components/ttd/BarisPenandaTangan";
+import KelolaPenandatangan, { RiwayatPenandatangan } from "@/components/ttd/KelolaPenandatangan";
 import DialogBatalPermintaan, { MIN_ALASAN_BATAL } from "@/components/ttd/DialogBatalPermintaan";
 import { bagikanWa, bagikanEmail } from "@/lib/pesanTtd";
 import { authMediaUrl } from "@/lib/mediaUrl";
@@ -813,6 +814,9 @@ export default function TtdPermintaanPage({ user, onBack }) {
                     </Button>
                   </div>
                 )}
+                <KelolaPenandatangan data={detail} pegawai={pegawai}
+                  onBerubah={async () => { await bukaDetail(detail); await load(); }} />
+                <RiwayatPenandatangan data={detail} />
                 {(detail.signers || []).map((s) => (
                   <BarisPenandaTangan
                     key={s.signer_id}

@@ -104,3 +104,17 @@ test("gagal memuat tidak membuat dialog kosong tanpa keterangan", async () => {
   await waitFor(() => expect(axios.get).toHaveBeenCalled());
   expect(await screen.findByText(/Tidak ada penanda tangan/i)).toBeInTheDocument();
 });
+
+test("Riwayat BAST memuat peserta dan alasan terbaru setelah perubahan di E-sign", async () => {
+  const onBerubah = jest.fn();
+  pasang({ onBerubah });
+  await screen.findByTestId("ttd-signer-s1");
+  axios.get.mockResolvedValue({ data: { ...DETAIL,
+    signers: [...DETAIL.signers, { signer_id: "s4", nama: "Peserta Tambahan", status: "aktif" }],
+    riwayat_penandatangan: [{ aksi: "tambah", nama: "Peserta Tambahan", alasan: "Terlewat saat membuat permintaan", oleh: "operator" }] } });
+  await userEvent.click(screen.getByRole("button", { name: "Muat ulang status" }));
+  expect(await screen.findByTestId("ttd-signer-s4")).toHaveTextContent("Peserta Tambahan");
+  expect(screen.getByTestId("riwayat-penandatangan")).toHaveTextContent("Terlewat saat membuat permintaan");
+  expect(onBerubah).toHaveBeenCalled();
+  expect(axios.post).not.toHaveBeenCalled();
+});

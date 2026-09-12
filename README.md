@@ -38,6 +38,10 @@ label BMN**, dan **backup otomatis terjadwal**.
 - Tata kelola koreksi, validasi E-sign, buka ulang satu penanda tangan, dan
   keputusan nomor surat/ralat:
   [`docs/TATA-KELOLA-KOREKSI-ESIGN.md`](./docs/TATA-KELOLA-KOREKSI-ESIGN.md)
+- E-sign sebelum final: pembuat/admin satker dapat menambah atau menghapus
+  peserta yang belum membubuhkan lewat **Kelola penanda tangan**. Alasan dan
+  riwayat tampil di E-sign serta dialog TTD Riwayat BAST. PDF sumber dan nomor
+  surat tidak diganti; terbitkan/bagikan tautan peserta baru setelah ditambahkan.
 - Rujukan regulasi & alur bisnis: [`docs/PUSTAKA-REGULASI-BMN.md`](./docs/PUSTAKA-REGULASI-BMN.md)
 - Penggunaan BMN dari sisi PEMOHON (5 rezim + rezim khusus IKN, berkas &
   ambang kewenangan): [`docs/PENGGUNAAN-BMN-PEMOHON.md`](./docs/PENGGUNAAN-BMN-PEMOHON.md)

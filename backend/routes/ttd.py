@@ -10,17 +10,18 @@ import asyncio
 import base64
 import hashlib
 import io
+import json
 from concurrent.futures import ThreadPoolExecutor
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Literal
 
 from bson import ObjectId
 from fastapi import (APIRouter, Depends, File, Form, HTTPException, Request,
                      UploadFile)
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from auth_utils import (
     create_sign_token, require_admin, require_sign_token, require_user,
@@ -426,6 +427,14 @@ class PermintaanIn(BaseModel):
     # supaya "segera" tak hanya hidup di kepala orang yang mengirim.
     sifat_urgensi: str = "biasa"
     signers: List[SignerIn]
+
+
+class UbahPenandatanganIn(BaseModel):
+    aksi: Literal["tambah", "hapus"]
+    alasan: str = Field(min_length=5, max_length=1000)
+    signer: SignerIn | None = None
+    signer_id: str = Field(default="", max_length=100)
+    konfirmasi_final: bool = False
 
 
 class BatalPermintaanIn(BaseModel):
@@ -1629,7 +1638,9 @@ async def daftar_permintaan(_user: dict = Depends(require_user)):
     q = (scope_query_field_satker(_user, {}) if _peran_pengelola_ttd(_user)
          else {"created_by": _user.get("username", "")})
     items = await (db.signature_requests.find(
-        q, {**_PROJ, "signers.jti": 0, "signers.ip": 0})
+        q, {**_PROJ, "signers.jti": 0, "signers.ip": 0,
+            "riwayat_penandatangan.kunci": 0, "riwayat_penandatangan.fingerprint": 0,
+            "riwayat_penandatangan.hasil": 0})
                    .sort("created_at", -1).limit(200).to_list(200))
     for it in items:
         sg = it.get("signers") or []
@@ -1661,7 +1672,9 @@ async def daftar_permintaan(_user: dict = Depends(require_user)):
 @ttd_router.get("/ttd/permintaan/{sr_id}")
 async def detail_permintaan(sr_id: str, user: dict = Depends(require_user)):
     """Detail status per penanda tangan (untuk dasbor pembuat)."""
-    sr = await db.signature_requests.find_one({"id": sr_id}, {**_PROJ, "signers.jti": 0})
+    sr = await db.signature_requests.find_one({"id": sr_id}, {
+        **_PROJ, "signers.jti": 0, "riwayat_penandatangan.kunci": 0,
+        "riwayat_penandatangan.fingerprint": 0, "riwayat_penandatangan.hasil": 0})
     if not sr:
         raise HTTPException(status_code=404, detail="Permintaan tidak ditemukan")
     _pastikan_pengelola_sr(sr, user)  # isolasi: pembuat/pengelola satker
@@ -1671,6 +1684,7 @@ async def detail_permintaan(sr_id: str, user: dict = Depends(require_user)):
     for _sg in (sr.get("signers") or []):
         _sg["kedaluwarsa_info"] = _sisa_kedaluwarsa(_sg, sr)
     return {**sr,
+            "dapat_kelola_penandatangan": _boleh_kelola_peserta(sr, user),
             "version": int(sr.get("version", 1) or 1),
             "label_jenis": label_jenis_ttd(sr.get("doc_type")),
             "judul_tampil": judul_ttd_tampil(sr.get("judul"), sr.get("doc_type")),
@@ -1681,6 +1695,126 @@ async def detail_permintaan(sr_id: str, user: dict = Depends(require_user)):
                               and _semua_terverifikasi(sr)
                               and not _qr_sudah_diatur(sr)),
             "siap_diunduh": _siap_diunduh(sr)}
+
+
+def _boleh_kelola_peserta(sr, user):
+    if not _peran_pengelola_ttd(user) or sr.get("status") in {"selesai", "batal"}:
+        return False
+    try:
+        _cek_satker_sr(sr, user)
+        _pastikan_pemilik_sr(sr, user)
+        return True
+    except HTTPException:
+        return False
+
+
+def _replay_peserta(sr, kunci, fingerprint):
+    # Bukti idempotensi ditulis ATOMIK bersama daftar, bukan hanya cache
+    # terpisah yang bisa gagal sesudah perubahan berhasil.
+    for e in sr.get("riwayat_penandatangan") or []:
+        if e.get("kunci") == kunci:
+            if e.get("fingerprint") != fingerprint:
+                raise HTTPException(409, "Kunci pengiriman telah dipakai untuk isian berbeda")
+            return e["hasil"]
+    return None
+
+
+@ttd_router.post("/ttd/permintaan/{sr_id}/penandatangan")
+async def ubah_penandatangan(
+    sr_id: str, payload: UbahPenandatanganIn, request: Request,
+    user: dict = Depends(require_writer),
+):
+    from ttd_peserta import ubah_peserta
+    from pegawai_utils import is_meninggal
+
+    sr = await db.signature_requests.find_one({"id": sr_id}, _PROJ)
+    if not sr:
+        raise HTTPException(404, "Permintaan tidak ditemukan")
+    # Pemilik yang pindah satker maupun viewer tidak boleh melewati guard.
+    _cek_satker_sr(sr, user)
+    _pastikan_pemilik_sr(sr, user)
+    if not _peran_pengelola_ttd(user):
+        raise HTTPException(403, "Viewer tidak dapat mengubah penanda tangan")
+    versi = request.headers.get("If-Match", "").strip().strip('"')
+    raw_key = request.headers.get("Idempotency-Key", "").strip()
+    if (not versi.isascii() or not versi.isdigit() or len(versi) > 18
+            or int(versi) < 1 or not raw_key or len(raw_key) > 200):
+        raise HTTPException(428, "If-Match dan Idempotency-Key wajib disertakan")
+    idem = kunci_idem(f"ttd-peserta:{sr_id}:{raw_key}", user)
+    kunci = hashlib.sha256(idem.encode()).hexdigest()
+    fingerprint = hashlib.sha256(json.dumps(payload.model_dump(), sort_keys=True).encode()).hexdigest()
+    ulang = _replay_peserta(sr, kunci, fingerprint)
+    if ulang:
+        if ulang["status"] == "selesai" and sr.get("status") == "selesai":
+            await _catat_penyelesaian_ttd(sr, sr_id)
+        return ulang
+    current_version = int(sr.get("version") or 1)
+    if int(versi) != current_version:
+        raise HTTPException(409, "Permintaan telah berubah. Muat ulang dan periksa lagi")
+    alasan = payload.alasan.strip()
+    if len(alasan) < 5:
+        raise HTTPException(400, "Alasan perubahan minimal 5 karakter")
+    baru = None
+    if payload.aksi == "tambah":
+        if not payload.signer:
+            raise HTTPException(400, "Data penanda tangan wajib diisi")
+        baru = payload.signer.model_dump()
+        for field in ("nama", "nip", "jabatan", "email"):
+            baru[field] = baru[field].strip()
+            if len(baru[field]) > 300:
+                raise HTTPException(400, "Identitas penanda tangan terlalu panjang")
+        if not 1 <= baru["jumlah_ttd"] <= 20:
+            raise HTTPException(400, "Jumlah pembubuhan harus 1–20")
+        if baru["nip"]:
+            pg = await db.pegawai.find_one(scope_query_field_satker(user, {"nip": baru["nip"]}), _PROJ)
+            if pg and is_meninggal(pg):
+                raise HTTPException(400, "Pegawai berstatus Meninggal Dunia tidak dapat menjadi penanda tangan")
+        sid, jti = str(uuid.uuid4()), str(uuid.uuid4())
+        _, exp = _cetak_token_signer(sr_id, sid, jti)
+        baru.update(signer_id=sid, jti=jti, token_exp=exp)
+    try:
+        daftar, target, status = ubah_peserta(
+            sr, payload.aksi, baru=baru, signer_id=payload.signer_id,
+            konfirmasi_final=payload.konfirmasi_final)
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from e
+    claim = await reserve_idempotency_key(idem)
+    if claim == "pending":
+        raise HTTPException(409, "Pengiriman sedang diproses; tunggu lalu muat ulang")
+    now = datetime.now(timezone.utc).isoformat()
+    actor = user.get("username") or "system"
+    hasil = {"ok": True, "aksi": payload.aksi, "signer_id": target["signer_id"],
+             "nama": target.get("nama", ""), "status": status, "version": current_version + 1}
+    event = {"aksi": payload.aksi, "signer_id": target["signer_id"],
+             "nama": target.get("nama", ""), "alasan": alasan, "oleh": actor, "pada": now,
+             "jumlah_sebelum": len(sr.get("signers") or []), "jumlah_sesudah": len(daftar),
+             "konfirmasi_final": bool(status == "selesai" and payload.konfirmasi_final),
+             "kunci": kunci, "fingerprint": fingerprint, "hasil": hasil}
+    perubahan = {"signers": daftar, "status": status, "updated_at": now,
+                 "version": current_version + 1}
+    if status == "selesai":
+        perubahan.update(finalized_at=now, finalized_by=actor)
+    res = await db.signature_requests.update_one(
+        {"id": sr_id, "version": sr.get("version", {"$exists": False}),
+         "status": sr.get("status"), "signers": sr.get("signers") or []},
+        {"$set": perubahan, "$push": {"riwayat_penandatangan": event}})
+    # Kesamaan array juga melindungi perubahan jti/giliran era lama yang
+    # belum menaikkan version. Bubuhan, identitas dan posisi tidak tertimpa.
+    if not res.modified_count:
+        terkini = await db.signature_requests.find_one({"id": sr_id}, _PROJ) or {}
+        ulang = _replay_peserta(terkini, kunci, fingerprint)
+        if ulang:
+            return ulang
+        raise HTTPException(409, "Permintaan berubah saat disimpan. Muat ulang dan periksa lagi")
+    if status == "selesai":
+        await _catat_penyelesaian_ttd(sr, sr_id)
+    # Menghapus signer dari array langsung menolak token panjang/pendeknya
+    # pada endpoint publik; tautan peserta lain tidak dirotasi. Tautan baru
+    # diterbitkan/dibagikan melalui tombol yang sudah ada, bukan email diam-diam.
+    await log_audit("ubah_penandatangan", "", sr_id, username=actor,
+                    detail=f"{payload.aksi} penanda tangan {target.get('nama')}: {alasan}")
+    await store_idempotent_response(idem, hasil)
+    return hasil
 
 
 @ttd_router.post("/ttd/permintaan/{sr_id}/validasi/{signer_id}")
@@ -2248,7 +2382,7 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
     # Langkah 2 (idempoten, baca kondisi TERKINI): aktifkan giliran berikutnya
     # (mode berurutan) & hitung status dokumen dari keadaan nyata.
     segar = await db.signature_requests.find_one(
-        {"id": sr_id}, {"_id": 0, "mode": 1, "status": 1, "judul": 1,
+        {"id": sr_id}, {"_id": 0, "mode": 1, "status": 1, "judul": 1, "version": 1,
                         "signers.status": 1, "signers.signer_id": 1,
                         "signers.jti": 1, "signers.email": 1, "signers.nama": 1,
                         # `urutan` WAJIB ikut diproyeksikan — ia yang menentukan
@@ -2269,7 +2403,8 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
             key=lambda s: _nomor_urut(s), default=None)
         if nxt_sg:
             res_nxt = await db.signature_requests.update_one(
-                {"id": sr_id, "status": {"$ne": "batal"},
+                {"id": sr_id, "status": {"$nin": ["batal", "selesai"]},
+                 "signers.status": {"$ne": "aktif"},
                  "signers": {"$elemMatch": {"signer_id": nxt_sg["signer_id"],
                                             "status": "menunggu"}}},
                 {"$set": {"signers.$.status": "aktif"}})
@@ -2302,10 +2437,14 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
         filter_status = {"$nin": ["batal", "selesai"]}
     else:
         filter_status = {"$in": ["terkirim", "sebagian"]}
-    await db.signature_requests.update_one(
-        {"id": sr_id, "status": filter_status},
+    hasil_status = await db.signature_requests.update_one(
+        {"id": sr_id, "status": filter_status,
+         "version": (segar or {}).get("version", {"$exists": False})},
         {"$set": {"status": status_dok,
                   "updated_at": datetime.now(timezone.utc).isoformat()}})
+    if not hasil_status.matched_count:
+        terkini = await db.signature_requests.find_one({"id": sr_id}, {"status": 1})
+        status_dok = (terkini or {}).get("status", status_dok)
     await log_audit(
         "kirim_ttd", "", sr_id, username=sg.get("nama") or "tamu",
         detail=(f"Pembubuhan e-sign '{sr.get('judul')}' oleh {sg.get('nama')} "
