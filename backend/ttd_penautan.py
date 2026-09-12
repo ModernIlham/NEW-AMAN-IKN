@@ -149,6 +149,8 @@ def ringkas_status_ttd(sr: dict) -> dict:
         "judul": sr.get("judul", ""),
         "status": sr.get("status", ""),
         "jumlah": len(tanda),
+        "penanda_tangan": [{"signer_id": s.get("signer_id"), "nama": s.get("nama"),
+                            "status": s.get("status")} for s in tanda],
         "membubuhkan_jumlah": membubuhkan,
         "selesai_jumlah": selesai,
         "semua_selesai": semua,

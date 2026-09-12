@@ -1172,6 +1172,28 @@ Logika murninya di `kodefikasi_utils` (`kunci_urut_aset`, `urutkan_aset_bmn`,
 `kelompokkan_per_bidang`), penyajiannya di `routes/reports.py`
 (`_peta_uraian_bidang`, `_baris_sekat_bidang`, `_gaya_sekat_bidang`).
 
+## 11D. Perubahan peserta E-sign sebelum final (September 2026)
+
+PP 71/2019 Pasal 59 ayat (3) dan Pasal 62 mensyaratkan identitas/persetujuan
+penanda tangan serta perubahan pada tanda tangan/informasi terkait dapat
+diketahui. Pasal 60 membedakan tanda tangan tersertifikasi dan tidak
+tersertifikasi. Fitur internal ini tidak mengklaim sertifikasi PSrE.
+Sumber: [PP 71/2019 — JDIH Komdigi](https://jdih.komdigi.go.id/produk_hukum/view/id/695/t/peraturan%2Bpemerintah%2Bnomor%2B71%2Btahun%2B2019).
+
+**Kebijakan aplikasi, bukan kutipan aturan hukum:** pembuat atau admin satker
+dapat menambah peserta dan menghapus peserta yang belum membubuhkan, hanya
+sebelum permintaan final/batal. Nama, alasan, pelaku dan waktu perubahan
+dicatat. PDF sumber, nomor BAST, identitas pihak dalam naskah, serta bukti
+pembubuhan yang sudah masuk tidak diganti. Riwayat BAST membaca permintaan
+yang sama sehingga jumlah dan daftar peserta mengikuti perubahan tersebut.
+Jika penghapusan menyisakan seluruh peserta yang sudah tervalidasi,
+finalisasi tetap membutuhkan konfirmasi pemeriksaan eksplisit pengelola.
+
+Menambah peserta alur E-sign **tidak** berarti mengubah penerima/penanggung
+jawab pada isi BAST. Perubahan substansi atau naskah yang sudah final harus
+melalui tata naskah dinas/ralat yang disetujui pejabat berwenang, bukan
+memindahkan tanda tangan lama ke PDF pengganti secara diam-diam.
+
 ## 12. Kendala Umum Satker → Fitur Penangkal AMAN
 
 | Kendala nyata (temuan artikel DJKN/DJPb/BPK/jurnal) | Penangkal di AMAN |

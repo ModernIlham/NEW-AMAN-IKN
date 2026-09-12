@@ -47,6 +47,29 @@ validator memilih **Buka Ulang Orang Ini**. Sistem mengarsipkan bukti lama,
 mematikan link lama, menerbitkan link baru hanya untuk orang tersebut, dan
 tidak menghapus pembubuhan rekan lain.
 
+## Tambah/hapus peserta sebelum final
+
+Di halaman TTD Elektronik, buka permintaan lalu **Kelola penanda tangan**.
+Pembuat permintaan atau admin satker dapat menambah peserta yang terlewat;
+NIP/NIK dan pencocokan Master Pegawai tetap opsional sesuai kontrak BAST
+saat ini. Nama wajib, dan pegawai yang diketahui meninggal tidak diizinkan.
+Setelah ditambahkan, gunakan **Terbitkan tautan** lalu bagikan kepada peserta.
+
+Hanya peserta yang belum membubuhkan yang boleh dihapus, dan minimal satu
+peserta harus tersisa. Urutan peserta lain, token, bukti dan posisi pembubuhan
+tidak dihapus. Pada mode berurutan, bila peserta aktif dihapus, giliran maju
+ke peserta berikutnya. Setiap perubahan wajib beralasan; riwayatnya terlihat
+di permintaan dan dialog TTD pada Riwayat BAST. Tombol **Muat ulang status**
+memuat perubahan yang dibuat melalui halaman lain.
+
+Jika penghapusan menyisakan seluruh peserta yang sudah tervalidasi, pengelola
+harus membuka **Periksa Dokumen**, mencentang persetujuan, kemudian memilih
+**Hapus dan finalisasi**. Tanpa konfirmasi itu, server menolak finalisasi.
+Dokumen final/batal tidak dapat ditambah atau dikurangi pesertanya.
+
+Ini hanya mengubah daftar peserta alur E-sign: PDF sumber, nomor surat, serta
+penerima/penanggung jawab yang tertulis dalam isi BAST tidak diganti.
+
 ## Kapan nomor surat boleh dipertahankan?
 
 | Keadaan | Keputusan |

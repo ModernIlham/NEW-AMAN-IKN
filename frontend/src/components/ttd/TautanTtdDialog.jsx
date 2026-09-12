@@ -10,6 +10,7 @@ import {
 import { bagikanWa, bagikanEmail } from "@/lib/pesanTtd";
 import { teksSisaWaktu, warnaSisaWaktu, sudahKedaluwarsa } from "@/lib/sisaWaktu";
 import { bisaTerbitUlang } from "@/lib/statusTtd";
+import { RiwayatPenandatangan } from "@/components/ttd/KelolaPenandatangan";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -92,6 +93,10 @@ export default function TautanTtdDialog({ srId, judul = "Dokumen", ringkas = nul
           </div>
         ) : (
           <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+            <Button size="sm" variant="outline" disabled={muat} onClick={async () => {
+              await muatDetail(); onBerubah?.();
+            }}><RefreshCcw className="w-3 h-3 mr-1" />Muat ulang status</Button>
+            <RiwayatPenandatangan data={data} />
             {signers.length === 0 && (
               <p className="text-xs text-muted-foreground">Tidak ada penanda tangan.</p>
             )}
