@@ -18,6 +18,33 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1058] Kelola peserta E-sign sebelum final dan riwayat BAST — 2026-09-12
+
+[PR #1049](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1049).
+
+- Detail E-sign menyediakan **Kelola penanda tangan** bagi pembuat/admin
+  satker: tambah peserta yang terlewat atau hapus peserta yang belum membubuhkan.
+  Nama dan alasan wajib; minimal satu peserta tersisa. Permintaan final/batal
+  serta bubuhan yang sudah masuk dilindungi dari penghapusan.
+- Giliran berurutan maju jika peserta aktif dihapus. Tautan peserta lain tidak
+  diganti; peserta baru memakai tombol Terbitkan tautan lalu bagikan.
+- Jejak nama, alasan, pelaku dan waktu perubahan tampil di E-sign dan dialog
+  TTD Riwayat BAST. Muat ulang status mengambil daftar peserta terkini; jumlah
+  dan nama mengikuti permintaan yang sama, tanpa mengganti nomor/PDF BAST.
+- Bila penghapusan menyisakan semua peserta tervalidasi, pengelola wajib
+  membuka Periksa Dokumen dan mengonfirmasi Hapus dan finalisasi.
+- Penyimpanan bersyarat versi/status/array dan bukti idempotensi atomik
+  melindungi pembubuhan serta rotasi tautan yang masuk bersamaan. Status hasil
+  submit lama tidak menimpa status sesudah penambahan peserta.
+- Master Pegawai/NIP/NIK tetap opsional seperti alur BAST yang sudah ada;
+  pegawai yang diketahui meninggal ditolak. Fitur ini tidak mengubah pihak
+  penerima/penanggung jawab di dalam naskah atau mengklaim sertifikasi TTE.
+- Verifikasi lokal: 20 uji backend terarah dan 19 uji UI terarah lulus,
+  ditambah uji menyeluruh, lint JSX, pemeriksa kredensial dan build produksi.
+  Peringatan lama di luar perubahan tetap tercatat; tanpa migrasi data.
+
+---
+
 ## [#1057] Pulihkan daftar pemegang operasional dan identitas pengguna — 2026-09-12
 
 [PR #1048](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1048).
