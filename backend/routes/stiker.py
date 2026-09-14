@@ -32,11 +32,21 @@ from db import db
 from shared_utils import (kode_satker_user, pastikan_akses_kegiatan_id,
                           pengaturan_kop, scope_query_aset)
 from stiker_render import gambar_grup, logo_reader
-from stiker_utils import MARGIN_MM, TARGET_STIKER, kelompokkan_per_ukuran
+from stiker_utils import (MARGIN_MM, TARGET_STIKER, kelompokkan_per_ukuran,
+                          spesifikasi_tipografi)
 
 stiker_router = APIRouter()
 
 MAKS_STIKER = 2000
+
+
+@stiker_router.get("/stiker/tipografi")
+async def panduan_tipografi_stiker(kertas: str = "A4", _user: dict = Depends(require_user)):
+    """Spesifikasi desain universal, tanpa data aset/satker atau operasi tulis."""
+    try:
+        return spesifikasi_tipografi(kertas)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 _PROJ_STIKER = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
                 "category": 1, "kode_register": 1, "activity_id": 1,

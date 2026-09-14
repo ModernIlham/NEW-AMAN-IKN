@@ -18,6 +18,26 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1060] Panduan tipografi stiker mengikuti ukuran cetak — 2026-09-14
+
+[PR #1051](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1051).
+
+- **Font dan ukuran teks** di dialog Cetak Stiker menampilkan angka pt dan
+  dimensi aktual dari perhitungan grid/renderer yang sama: A4/A3, tiga ukuran,
+  serta mode per aset. Panduan dilipat, dimuat saat dibuka, mengabaikan respons
+  kertas lama, dan menyediakan coba ulang tanpa mengunci pembuatan PDF.
+- Empat peran tebal (judul stiker, kode barang, NUP, nama barang) memakai
+  konstanta **Helvetica-Bold** yang sama; keterangan memakai Helvetica biasa.
+  Desain, hierarki ukuran, penyesuaian teks panjang, dan font laporan resmi
+  tidak berubah. Enam kombinasi cetak menghasilkan perintah gambar PDF yang
+  identik sebelum/sesudah pemusatan konstanta.
+- Generator contoh dua halaman memakai renderer asli dan data ilustrasi saja,
+  disertai tabel ukuran huruf, dimensi label, serta garis uji 50 mm untuk cetak
+  100%. Cara pakai tercatat di `docs/TIPOGRAFI-STIKER.md`.
+- Endpoint spesifikasi memerlukan login, hanya membaca desain universal dan
+  tidak mengakses data satker/aset. Uji mencakup font/ukuran aktual di PDF,
+  autentikasi, masukan kertas, kegagalan jaringan, respons usang, dan generator.
+
 ## [#1059] Deteksi ulang denah menyamakan lokasi induk aset — 2026-09-14
 
 [PR #1050](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1050).

@@ -40,6 +40,20 @@ TARGET_STIKER = {
     "kecil": {"w": 45, "h": 22, "header": 6.5},
 }
 
+# Keluarga huruf tunggal untuk STIKER, terpisah dari font laporan resmi.
+# Empat peran penekanan memakai wajah bold yang sama; keterangan tetap regular.
+FONT_STIKER_TEBAL = "Helvetica-Bold"
+FONT_STIKER_BIASA = "Helvetica"
+PERAN_TIPOGRAFI = (
+    ("instansi", "Judul stiker", True),
+    ("kode", "Kode barang", True),
+    ("nup", "NUP", True),
+    ("nama", "Nama barang", True),
+    ("subsub", "Sub-sub kelompok", False),
+    ("sub", "Baris kedua header", False),
+)
+KERTAS_STIKER_MM = {"A4": (210.0, 297.0), "A3": (297.0, 420.0)}
+
 #: Batas baris badan stiker. Nama barang paling banyak TIGA baris — permintaan
 #: pemilik: *"terus ke atas hingga 3 baris saja maksimal panjangnya jika lebih
 #: gunakan '...'"*. Di sini elipsis memang yang diminta: stiker ditempel di
@@ -204,6 +218,31 @@ def ukuran_font(lebar_mm, tinggi_mm):
     MURNI."""
     n = anak_tangga(lebar_mm, tinggi_mm)
     return {peran: round(_pt(n + s), 2) for peran, s in LANGKAH_PERAN.items()}
+
+
+def spesifikasi_tipografi(kertas="A4"):
+    """Panduan dari perhitungan CETAK asli, bukan angka contoh hard-coded UI.
+
+    Angka pt adalah ukuran dasar SEBELUM penyesuaian teks panjang. Dimensi
+    dihitung dari grid kertas terpilih; bukan target bahan 95/62/45 mm.
+    Tidak membaca data aset/satker dan tidak mengubah konfigurasi apa pun.
+    """
+    kertas = str(kertas).strip().upper()
+    if kertas not in KERTAS_STIKER_MM:
+        raise ValueError("Kertas harus A4 atau A3")
+    ukuran = []
+    for kode, target in TARGET_STIKER.items():
+        kolom, baris, w, h = grid_optimal(
+            *KERTAS_STIKER_MM[kertas], target["w"], target["h"])
+        ukuran.append({"kode": kode, "nama": kode.capitalize(),
+                       "lebar_mm": round(w, 2), "tinggi_mm": round(h, 2),
+                       "kapasitas": kolom * baris, "font_pt": ukuran_font(w, h)})
+    return {"kertas": kertas, "font_tebal": FONT_STIKER_TEBAL,
+            "font_biasa": FONT_STIKER_BIASA,
+            "peran": [{"kode": k, "nama": nama, "tebal": tebal,
+                       "font": FONT_STIKER_TEBAL if tebal else FONT_STIKER_BIASA}
+                      for k, nama, tebal in PERAN_TIPOGRAFI],
+            "ukuran": ukuran}
 
 
 def padding_stiker(tinggi_mm):
