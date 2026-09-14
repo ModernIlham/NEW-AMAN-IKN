@@ -14,6 +14,9 @@ Pola pohon HYBRID: `parent_id` satu-satunya yang boleh diedit pengguna;
 `spasial_utils`. Memindah sebuah node berarti menulis ulang seluruh keturunannya.
 """
 import asyncio
+import hashlib
+import json
+import logging
 import re
 import time
 import uuid
@@ -1793,6 +1796,7 @@ class LokasiAsetIn(BaseModel):
 
 @spasial_router.put("/assets/{asset_id}/lokasi-spasial")
 async def set_lokasi_aset(asset_id: str, payload: LokasiAsetIn,
+                          request: Request,
                           _user: dict = Depends(require_writer)):
     """Tempatkan aset pada node denah (atau cabut penempatannya).
 
@@ -1801,50 +1805,55 @@ async def set_lokasi_aset(asset_id: str, payload: LokasiAsetIn,
     akses tetap satu sumber. Node divalidasi terpisah dengan scope satker
     user: menempatkan aset ke ruangan milik satker lain harus mustahil.
     """
-    from shared_utils import pastikan_akses_aset
+    from shared_utils import (pastikan_akses_aset, ensure_activity_not_sealed,
+                              invalidate_asset_cache, kunci_idem,
+                              get_idempotent_response, store_idempotent_response)
+    from routes.assets import _build_cas_filter, _strip_media
+    from meili_utils import jadwalkan_sync
+    from routes.websocket import notify_asset_change
 
     aset = await db.assets.find_one(
         {"id": asset_id},
         {"_id": 0, "id": 1, "activity_id": 1, "asset_name": 1,
-         "asset_code": 1, "NUP": 1, "lokasi_spasial": 1})
+         "asset_code": 1, "NUP": 1, "lokasi_spasial": 1, "version": 1,
+         "location": 1, "koordinat_latitude": 1, "koordinat_longitude": 1})
     if not aset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
     await pastikan_akses_aset(_user, aset)
+    await ensure_activity_not_sealed(aset.get("activity_id"))
+
+    expected = request.headers.get("If-Match", "").strip().strip('"')
+    raw_key = request.headers.get("Idempotency-Key", "").strip()
+    if not expected or not raw_key:
+        raise HTTPException(428, "Muat ulang aset sebelum menyimpan lokasi (versi dan kunci simpan wajib).")
+    if not re.fullmatch(r"[0-9]{1,18}", expected) or int(expected) < 1 or len(raw_key) > 200:
+        raise HTTPException(400, "Versi atau kunci simpan tidak valid")
+    version = int(aset.get("version", 1))
+    # Kunci terikat akun, endpoint, aset, versi, dan isi. CAS di bawah adalah
+    # reservasi atomiknya: dua pengiriman versi sama tidak bisa menulis dua kali.
+    idem_key = kunci_idem(f"lokasi-aset:{asset_id}:{raw_key}", _user)
+    fingerprint = hashlib.sha256(json.dumps(
+        {"versi": int(expected), "isi": payload.model_dump()},
+        sort_keys=True, default=str).encode()).hexdigest()
+    cached = (await get_idempotent_response(idem_key) or {}).get("response")
+    if cached:
+        if cached.get("fingerprint") != fingerprint:
+            raise HTTPException(409, "Kunci simpan sudah dipakai untuk perubahan berbeda")
+        return cached["hasil"]
+    if int(expected) != version:
+        raise HTTPException(409, "Aset telah berubah. Tutup denah dan muat ulang aset sebelum mencoba lagi.")
 
     now = datetime.now(timezone.utc).isoformat()
     lokasi_lama = aset.get("lokasi_spasial")
     username = _user.get("username", "")
 
-    if payload.hapus:
-        if lokasi_lama:
-            await db.riwayat_lokasi_aset.insert_one(
-                su.entri_riwayat_lokasi(asset_id, lokasi_lama, None,
-                                        username, now))
-        await db.assets.update_one({"id": asset_id},
-                                   {"$unset": {"lokasi_spasial": ""},
-                                    "$set": {"updated_at": now},
-                                    # $inc version: lihat alasan di cabang
-                                    # penempatan di bawah — pencabutan pun
-                                    # harus terlihat oleh OCC.
-                                    "$inc": {"version": 1}})
-        await log_audit("aset_lokasi_hapus", aset.get("activity_id") or "",
-                        asset_id, asset_code=aset.get("asset_code") or "",
-                        asset_name=aset.get("asset_name") or "",
-                        # Nama tampilan untuk jejak; `username` (alamat login)
-                        # tetap dipakai custody di riwayat lokasi di atas.
-                        username=nama_pelaku(_user) or "system",
-                        nup=str(aset.get("NUP") or ""),
-                        kode_satker=kode_satker_user(_user),
-                        detail="Penempatan denah dicabut")
-        return {"ok": True, "lokasi_spasial": None}
-
     lat = su.parse_lintang(payload.lat)
     lon = su.parse_bujur(payload.lon)
-    if lat is None or lon is None:
+    if not payload.hapus and (lat is None or lon is None):
         raise HTTPException(status_code=400, detail="Koordinat tidak valid")
     node = None
     nid = str(payload.node_id or "").strip()
-    if nid:
+    if nid and not payload.hapus:
         node = await db.spasial_node.find_one(
             scope_query_field_satker(_user, {"id": nid,
                                              "status": {"$ne": "dihapus"}}),
@@ -1852,37 +1861,65 @@ async def set_lokasi_aset(asset_id: str, payload: LokasiAsetIn,
         if not node:
             raise HTTPException(status_code=404,
                                 detail="Node denah tidak ditemukan")
-    lokasi = su.snapshot_lokasi_temuan(node, lon, lat)
-    lokasi.update({"ditandai_oleh": username, "ditandai_pada": now})
+    lokasi = None
+    perubahan = {"updated_at": now, "version": version + 1}
+    unset = {}
+    if payload.hapus:
+        # Cabut tautan denah, BUKAN menghapus koordinat/nama lokasi survei.
+        unset["lokasi_spasial"] = ""
+    else:
+        lokasi = su.snapshot_lokasi_temuan(node, lon, lat)
+        lokasi.update({"ditandai_oleh": username, "ditandai_pada": now})
+        perubahan.update({"lokasi_spasial": lokasi,
+                          "koordinat_latitude": str(lat),
+                          "koordinat_longitude": str(lon)})
+        if node:
+            perubahan["location"] = node["nama"]
+        unset.update(su.sisip_geo_ke_update(aset, perubahan))
+
+    operasi = {"$set": perubahan}
+    if unset:
+        operasi["$unset"] = unset
+    result = await db.assets.update_one(_build_cas_filter(asset_id, version), operasi)
+    if not result.matched_count:
+        raise HTTPException(409, "Aset telah berubah. Tutup denah dan muat ulang aset sebelum mencoba lagi.")
+    hasil_aset = {k: perubahan.get(k, aset.get(k, "")) for k in (
+        "location", "koordinat_latitude", "koordinat_longitude")}
+    hasil_aset.update({"id": asset_id, "version": version + 1,
+                       "updated_at": now, "lokasi_spasial": lokasi,
+                       "di_denah": bool((lokasi or {}).get("node_id")),
+                       "denah_nama": (lokasi or {}).get("node_nama", ""),
+                       "denah_jalur": (lokasi or {}).get("jalur_nama", "")})
+    hasil = {"ok": True, "lokasi_spasial": lokasi, "asset": hasil_aset}
+    await store_idempotent_response(idem_key, {"fingerprint": fingerprint, "hasil": hasil})
+    invalidate_asset_cache()
 
     # Riwayat HANYA saat benar-benar berpindah — menyimpan ulang lokasi yang
     # sama tak boleh menggelembungkan jejak custody (lihat helper).
-    if su.pindah_lokasi_berarti(lokasi_lama, lokasi):
-        await db.riwayat_lokasi_aset.insert_one(
-            su.entri_riwayat_lokasi(asset_id, lokasi_lama, lokasi,
-                                    username, now))
-    # $inc version: tanpa ini penjaga OCC/If-Match BUTA terhadap penempatan
-    # manual — persis alasan yang sama sudah ditulis di `/opname/terapkan`
-    # (routes/opname.py). Dulu kelalaian ini tak berbahaya karena TAK ADA
-    # jalur lain yang menulis `lokasi_spasial`. Sejak penempatan otomatis
-    # dari koordinat inventarisasi (spasial_penempatan.py), PATCH/PUT aset
-    # ikut menulis field itu: PATCH yang membaca dokumen SEBELUM operator
-    # menempatkan manual akan tetap lolos CAS dan MENIMPA "Ruang 305" dengan
-    # hasil derivasi mesin "Gedung A" — dan riwayatnya mencatat `dari: kosong`
-    # sehingga hilangnya penempatan sengaja itu tak berjejak.
-    await db.assets.update_one({"id": asset_id},
-                               {"$set": {"lokasi_spasial": lokasi,
-                                         "updated_at": now},
-                                "$inc": {"version": 1}})
-    await log_audit("aset_lokasi_tandai", aset.get("activity_id") or "",
+    try:
+        if su.pindah_lokasi_berarti(lokasi_lama, lokasi):
+            await db.riwayat_lokasi_aset.insert_one(
+                su.entri_riwayat_lokasi(asset_id, lokasi_lama, lokasi,
+                                        username, now))
+        await log_audit("aset_lokasi_hapus" if payload.hapus else "aset_lokasi_tandai", aset.get("activity_id") or "",
                     asset_id, asset_code=aset.get("asset_code") or "",
                     asset_name=aset.get("asset_name") or "",
                     username=nama_pelaku(_user) or "system",
                     nup=str(aset.get("NUP") or ""),
                     kode_satker=kode_satker_user(_user),
-                    detail=(lokasi.get("jalur_nama")
-                            or f"{lat:.6f}, {lon:.6f}")[:120])
-    return {"ok": True, "lokasi_spasial": lokasi}
+                    detail=("Penempatan denah dicabut" if payload.hapus else
+                            (lokasi.get("jalur_nama") or f"{lat:.6f}, {lon:.6f}"))[:120])
+    except Exception:
+        logging.getLogger(__name__).exception("Jejak lokasi aset gagal: %s", asset_id)
+    try:
+        fresh = await db.assets.find_one({"id": asset_id}, {"_id": 0})
+        if fresh:
+            jadwalkan_sync("assets", _strip_media(fresh))
+        await notify_asset_change(aset.get("activity_id") or "", "asset_updated",
+                                  {"id": asset_id}, nama_pelaku(_user), user_id=_user.get("id"))
+    except Exception:
+        logging.getLogger(__name__).exception("Sinkron turunan lokasi aset gagal: %s", asset_id)
+    return hasil
 
 
 @spasial_router.get("/assets/{asset_id}/riwayat-lokasi")

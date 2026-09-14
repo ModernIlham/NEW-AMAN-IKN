@@ -169,5 +169,6 @@ class TestWiringTerpasang:
         assert 'username=nama_pelaku(_user) or "system"' in fn
         # Custody-nya justru TIDAK boleh ikut berubah.
         assert "entri_riwayat_lokasi(asset_id, lokasi_lama, lokasi,\n" \
-               "                                    username, now)" in fn
-        assert fn.count("nup=str(aset.get(\"NUP\") or \"\")") == 2
+               "                                        username, now)" in fn
+        # Kedua aksi kini melewati komit dan audit bersama, bukan dua salinan.
+        assert fn.count("nup=str(aset.get(\"NUP\") or \"\")") == 1

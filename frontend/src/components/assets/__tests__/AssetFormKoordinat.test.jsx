@@ -14,7 +14,7 @@
  * seluruh berkas uji yang ada.
  */
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import AssetForm from "../AssetForm";
@@ -80,4 +80,26 @@ test("kolom LAIN tak ikut dirapikan", async () => {
   await waitFor(() => expect(nama).toBeInTheDocument());
   await userEvent.type(nama, "Meja, Kayu");
   await waitFor(() => expect(nama).toHaveValue("Meja, Kayu"));
+});
+
+test("denah memakai koordinat draft dan hanya menggabung field lokasi yang sudah disimpan", async () => {
+  const aset = { id: "a1", activity_id: "k1", asset_name: "Meja", asset_code: "123",
+    NUP: "1", version: 3, location: "Lama", koordinat_latitude: "-1.4", koordinat_longitude: "116.7" };
+  axios.get.mockImplementation(url => Promise.resolve({ data: url.includes("/assets/a1?") ? aset : { items: [] } }));
+  const onOpenLokasiDenah = jest.fn();
+  render(<AssetForm isOpen onClose={jest.fn()} activity={{ id: "k1" }} categories={[]}
+    editAsset={aset} onSubmitSuccess={jest.fn()} onOpenLokasiDenah={onOpenLokasiDenah} />);
+  await waitFor(() => expect(screen.getByTestId("asset-form-denah-btn")).toBeEnabled());
+  fireEvent.change(kolom("koordinat_latitude"), { target: { value: "-1.5" } });
+  fireEvent.change(kolom("asset_name"), { target: { value: "Meja belum disimpan" } });
+  fireEvent.click(screen.getByTestId("asset-form-denah-btn"));
+  const konteks = onOpenLokasiDenah.mock.calls[0][2];
+  expect(konteks.koordinat_latitude).toBe("-1.5");
+  expect(konteks.version).toBe(3);
+  act(() => konteks.onSaved({ id: "a1", version: 4, location: "Baru", koordinat_latitude: "-1.6", koordinat_longitude: "116.9" }));
+  expect(kolom("asset_name")).toHaveValue("Meja belum disimpan");
+  expect(kolom("location")).toHaveValue("Baru");
+  expect(kolom("koordinat_latitude")).toHaveValue("-1.6");
+  fireEvent.click(screen.getByTestId("asset-form-denah-btn"));
+  expect(onOpenLokasiDenah.mock.calls[1][2].version).toBe(4);
 });

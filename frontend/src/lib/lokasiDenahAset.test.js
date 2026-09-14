@@ -63,6 +63,14 @@ describe("endpoint penempatan denah punya pemanggil UI", () => {
     // berakhir 403 adalah janji palsu.
     expect(dasbor).toMatch(/onOpenLokasiDenah=\{perms\.canEdit \?/);
   });
+
+  test("respons simpan kembali ke baris/form dan tiap sesi denah dimount ulang", () => {
+    expect(dasbor).toContain("onSaved={lokasiDenahAset.onSaved}");
+    expect(dasbor).toContain("version={lokasiDenahAset.version}");
+    expect(dasbor).toContain("key={lokasiDenahAset.sesi}");
+    expect(dasbor).toContain("if (sesi !== urutanLokasiDenahRef.current) return;");
+    expect(dasbor).toContain("handleRowSynced(assetId, fresh, true)");
+  });
 });
 
 describe("dialog denah dipakai bersama, bukan disalin", () => {
@@ -109,11 +117,11 @@ describe("kata-kata dialog di-parameterkan tanpa mengubah pemakai lama", () => {
     expect(dasbor).toContain('labelHapus="Cabut Penempatan"');
   });
 
-  test("prop kata-kata ikut di deps useCallback", () => {
+  test("pesan simpan/hapus dikirim dari render terkini ke callback bersama", () => {
     // Toast yang membeku pada nilai render pertama akan menampilkan kalimat
     // milik pemakai lain setelah prop berubah.
-    expect(dialog).toMatch(/onSaved, onClose, pesanSimpan\]/);
-    expect(dialog).toMatch(/onSaved, onClose, pesanHapus\]/);
+    expect(dialog).toContain("node_id: nodeId }, pesanSimpan)");
+    expect(dialog).toContain("kirim({ hapus: true }, pesanHapus)");
   });
 });
 
@@ -235,7 +243,7 @@ describe("rantai menyempit hingga RUANGAN dan tombol tertata", () => {
     // menaikkan penempatan lantai menjadi ruangan + mencetak riwayat
     // custody palsu (temuan tinjauan TINGGI atas versi pertama).
     expect(dialog).toMatch(
-      /kini === lantaiAktif && kini !== nodeAwal\)\s*\n?\s*\? r\.data\.ruangan\.id : kini/);
+      /kini === lantaiAktif && \(kini !== nodeAwal \|\| penempatanDiubah\)\)\s*\n?\s*\? r\.data\.ruangan\.id : kini/);
   });
 
   test("tombol Batal dihapus; Simpan & Cabut dalam satu baris footer", () => {

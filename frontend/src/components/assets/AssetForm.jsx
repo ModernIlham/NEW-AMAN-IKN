@@ -759,6 +759,8 @@ const AssetForm = memo(({
 
   // Dirty tracking: store original data + modification flags
   const originalDataRef = useRef(null);
+  const asetDenahAktifRef = useRef(null);
+  asetDenahAktifRef.current = editAsset?.id;
   const photosModifiedRef = useRef(false);
   const checklistModifiedRef = useRef(false);
   // True begitu pengguna MEMILIH status inventarisasi secara manual di form ini
@@ -2231,7 +2233,26 @@ const AssetForm = memo(({
               <Button
                 type="button" variant="ghost" size="sm"
                 className="h-7 gap-1 px-2 text-[10px] text-teal-700 dark:text-teal-400 hover:bg-teal-100 hover:text-teal-800 dark:hover:bg-teal-900/40 dark:hover:text-teal-300"
-                onClick={() => onOpenLokasiDenah(editAsset.id, formData.asset_name || editAsset.asset_name)}
+                disabled={isFormLoading || isSubmitting}
+                onClick={() => {
+                  const id = editAsset.id;
+                  onOpenLokasiDenah(id, formData.asset_name || editAsset.asset_name, {
+                    version: assetVersion,
+                    koordinat_latitude: formData.koordinat_latitude,
+                    koordinat_longitude: formData.koordinat_longitude,
+                    onSaved: (aset) => {
+                      if (asetDenahAktifRef.current !== id) return;
+                      // Hanya tiga field yang baru dikomit. Foto, kondisi,
+                      // catatan, dan isian belum disimpan tidak di-reset.
+                      const lokasi = { location: aset.location,
+                        koordinat_latitude: aset.koordinat_latitude,
+                        koordinat_longitude: aset.koordinat_longitude };
+                      setFormData(p => ({ ...p, ...lokasi }));
+                      originalDataRef.current = { ...originalDataRef.current, ...lokasi };
+                      setAssetVersion(aset.version);
+                    },
+                  });
+                }}
                 title="Tempatkan aset ini pada ruangan di denah"
                 data-testid="asset-form-denah-btn"
               >
