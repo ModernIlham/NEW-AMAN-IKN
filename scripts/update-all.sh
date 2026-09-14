@@ -7,6 +7,9 @@
 
 set -e
 
+# Source hanya memuat helper env bersama, tidak menjalankan deploy otomatis.
+source "$(dirname -- "${BASH_SOURCE[0]}")/deploy_vps.sh"
+
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
@@ -45,9 +48,8 @@ echo ""
 echo -e "${YELLOW}[1/7] Pulling latest code...${NC}"
 cd ${APP_DIR}
 
-# Backup .env files before any git operation
-cp ${APP_DIR}/backend/.env /tmp/backend_env_backup 2>/dev/null || true
-cp ${APP_DIR}/frontend/.env /tmp/frontend_env_backup 2>/dev/null || true
+# Simpan hanya konfigurasi yang benar-benar ada; jangan pulihkan salinan run lama.
+aman_env_siapkan "$APP_DIR" 0
 
 # Check if branches have diverged
 git fetch origin
@@ -71,10 +73,8 @@ else
     fi
 fi
 
-# Restore .env files
-cp /tmp/backend_env_backup ${APP_DIR}/backend/.env 2>/dev/null || true
-cp /tmp/frontend_env_backup ${APP_DIR}/frontend/.env 2>/dev/null || true
-chmod 600 ${APP_DIR}/backend/.env 2>/dev/null || true
+# Kegagalan pemulihan tidak boleh disembunyikan sebagai keberhasilan.
+aman_env_pasang
 echo -e "${GREEN}  ✅ .env files preserved${NC}"
 
 # ============================================
@@ -214,10 +214,17 @@ fi
 echo -e "${YELLOW}[6/7] Rebuilding frontend (ini butuh waktu ~2-3 menit)...${NC}"
 cd ${APP_DIR}/frontend
 
-# Pastikan .env benar
+# Pertahankan seluruh setelan frontend yang sudah ada. Nilai awal ini hanya
+# untuk instalasi yang memang belum mempunyai frontend/.env.
+if [ ! -f .env ]; then
+(
+umask 077
 cat > .env << 'ENVEOF'
 REACT_APP_BACKEND_URL=https://amanikn-inventarisasi.com
 ENVEOF
+)
+fi
+chmod 600 .env
 
 # Fix title di index.html
 sed -i 's/<title>Emergent | Fullstack App<\/title>/<title>AMAN | Aplikasi Manajemen Aset Negara<\/title>/' public/index.html 2>/dev/null || true
