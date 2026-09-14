@@ -18,6 +18,28 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1059] Deteksi ulang denah menyamakan lokasi induk aset — 2026-09-14
+
+[PR #1050](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1050).
+
+- **Gunakan koordinat terbaru** mengambil lintang/bujur dari draft form;
+  **Deteksi ulang titik ini** memilih ulang gedung/lantai/ruangan, bukan
+  mempertahankan node lama. Membuka dialog saja tetap mempertahankan
+  penempatan tersimpan. Simpan menunggu deteksi ruangan selesai.
+- Satu tulisan atomik menyamakan koordinat, indeks `geo`, nama lokasi dan
+  snapshot denah. Versi dan kunci idempotensi menjaga retry/konflik;
+  akses satker serta kunci kegiatan disahkan tetap ditegakkan.
+- Daftar aset, snapshot luring dan tiga field lokasi form disegarkan setelah
+  berhasil, tanpa mereset isian/foto yang belum disimpan. Respons deteksi
+  usang dan pembukaan dialog yang saling mendahului dibatasi per sesi.
+- **Cabut Penempatan** hanya melepas tautan denah; koordinat/nama survei
+  dipertahankan. Tanpa node, label lokasi manual tidak dihapus. Tidak ada
+  migrasi atau pengubahan data lama massal; kontrak dialog Wasdal tetap.
+- Uji mencakup perpindahan, lantai lama, balapan CAS, retry, isolasi satker,
+  kegiatan disahkan, koordinat rusak, dan draft form. Build produksi serta
+  lint file yang diubah lulus. Jadwal fetch tetap nonaktif; pekerjaan
+  rekonsiliasi versi baris dan PhotoLightbox tetap ditunda.
+
 ## [#1058] Kelola peserta E-sign sebelum final dan riwayat BAST — 2026-09-12
 
 [PR #1049](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1049).
