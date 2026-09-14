@@ -469,6 +469,12 @@ pip show fastapi uvicorn motor weasyprint reportlab pillow
 > ```
 
 ### 4.3 Konfigurasi File .env Backend
+
+Konfigurasi aktif produksi hanya memakai `backend/.env` dan `frontend/.env`
+di `/var/www/inventarisasi`. Jangan membuat salinan aktif di `/root/.env`
+atau checkout lain. Ikuti [prosedur konsolidasi](docs/KONSOLIDASI-ENV.md)
+sebelum menghapus file lama; nilai unik dan pemakai lama harus diperiksa dahulu.
+
 ```bash
 # Buat/edit file .env
 nano /var/www/inventarisasi/backend/.env
@@ -536,6 +542,13 @@ uvicorn server:app --host 0.0.0.0 --port 8001 --workers 1
 ## 🎨 FASE 5: Setup Frontend - Build untuk Production (15 menit)
 
 ### 5.1 Konfigurasi File .env Frontend
+
+File ini hanya untuk konfigurasi publik. Jangan memasukkan JWT secret, sandi
+database, atau kunci API privat: variabel `REACT_APP_*` masuk ke bundel browser.
+Audit juga `.env.local`, `.env.production`, dan `.env.production.local` karena
+build dapat membacanya lebih dahulu daripada `.env`. Jangan langsung menghapus
+varian tersebut sebelum memindahkan setelan yang diperlukan.
+
 ```bash
 # Buat/edit file .env
 nano /var/www/inventarisasi/frontend/.env
@@ -908,14 +921,17 @@ exit
 > Restart: `sudo systemctl restart mongod`
 
 ### 8.3 Set Permissions yang Benar
-```bash
-# Set ownership
-sudo chown -R root:root /var/www/inventarisasi
 
-# Set permissions
-sudo chmod -R 755 /var/www/inventarisasi
+Periksa identitas pengguna Supervisor dan pengguna yang menjalankan build.
+Mereka harus bisa membaca file konfigurasi masing-masing. Jangan memberi
+izin `755` secara rekursif ke seluruh aplikasi: itu membuka `.env` sebelum
+perintah penguncian berikutnya sempat dijalankan.
+
+```bash
+# Kunci dua file aktif; jangan cetak isinya ke terminal/log.
 sudo chmod 600 /var/www/inventarisasi/backend/.env
 sudo chmod 600 /var/www/inventarisasi/frontend/.env
+sudo stat -c '%a %U:%G %n' /var/www/inventarisasi/backend/.env /var/www/inventarisasi/frontend/.env
 ```
 
 ---
@@ -1046,8 +1062,8 @@ ls -la /var/www/inventarisasi/frontend/build/
 # Cek nginx serve path
 sudo nginx -T | grep root
 
-# Cek REACT_APP_BACKEND_URL di .env frontend sebelum build
-cat /var/www/inventarisasi/frontend/.env
+# Periksa URL secara lokal di editor; jangan salin isi .env ke log/chat.
+nano /var/www/inventarisasi/frontend/.env
 # Jika URL salah, edit dan build ulang:
 cd /var/www/inventarisasi/frontend
 yarn build
@@ -1073,50 +1089,41 @@ python -c "from PIL import Image; print('Pillow OK')"
 > `origin/main` tanpa identitas rilis. Ambil SHA lengkap dari run CI `main` yang
 > sukses, lalu gunakan SHA itu sebagai target immutable.
 
-**Metode Aman (Recommended):**
-```bash
-# 1. Backup .env files dulu (WAJIB sebelum reset!)
-cp /var/www/inventarisasi/backend/.env /tmp/backend_env_backup
-cp /var/www/inventarisasi/frontend/.env /tmp/frontend_env_backup
+**Jalur utama:** PR draft → CI hijau → ready → squash merge → CI `main`
+hijau → workflow **Deploy ke Hostinger VPS**. Workflow mengunci SHA yang sudah
+lulus CI, memeriksa kesehatan backend/MongoDB/GridFS, dan menyimpan bundel
+frontend lama untuk pemulihan. Fetch terjadwal lokal tidak diperlukan.
 
-# 2. Fetch & force reset ke commit yang SUDAH lulus CI
+**Deploy manual oleh operator (SHA wajib sudah lulus CI push/main):**
+
+```bash
+set -euo pipefail
 cd /var/www/inventarisasi
-DEPLOY_SHA=<SHA-lengkap-yang-lulus-CI>
+DEPLOY_SHA='ISI_SHA_LENGKAP_40_KARAKTER_YANG_SUDAH_LULUS_CI'
 git fetch origin main
 git cat-file -e "${DEPLOY_SHA}^{commit}"
 git merge-base --is-ancestor "$DEPLOY_SHA" origin/main
-git reset --hard "$DEPLOY_SHA"
-
-# 3. Restore .env files (karena git reset menghapus perubahan lokal)
-cp /tmp/backend_env_backup /var/www/inventarisasi/backend/.env
-cp /tmp/frontend_env_backup /var/www/inventarisasi/frontend/.env
-chmod 600 /var/www/inventarisasi/backend/.env
-
-# 4. Update backend dependencies (jika ada perubahan)
-cd /var/www/inventarisasi/backend
-source venv/bin/activate
-sed -i '/emergentintegrations/d' requirements.txt
-pip install -r requirements.txt
-deactivate
-
-# 5. Restart backend
-sudo supervisorctl restart inventarisasi-backend
-
-# 6. Rebuild frontend (jika ada perubahan)
-cd /var/www/inventarisasi/frontend
-yarn install
-export NODE_OPTIONS="--max-old-space-size=4096"
-yarn build
-# Nginx otomatis serve file baru, tidak perlu restart
+# Jalankan skrip dari commit rilis, bukan salinan checkout lama.
+git show "$DEPLOY_SHA:scripts/deploy_vps.sh" | bash -s -- "$DEPLOY_SHA" manual
 ```
 
-**Atau gunakan script otomatis:**
-```bash
-# Script ini menangani backup .env, dependensi, restart, health gate, dan rollback.
-cd /var/www/inventarisasi
-git fetch origin main
-bash scripts/deploy_vps.sh <SHA-lengkap-yang-lulus-CI>
-```
+Skrip mensyaratkan dua `.env` aktif berupa file biasa, membuat snapshot pada
+direktori acak privat `0700`, dan menyimpan file snapshot `0600`. Pemulihan
+menjaga pemilik file, memakai staging pada filesystem tujuan, lalu rename
+atomik. File aktif setelah pemulihan berizin `0600`.
+
+Snapshot dibersihkan saat selesai, gagal biasa, atau menerima HUP/INT/TERM.
+Jika **pemulihan `.env` gagal**, snapshot privat dipertahankan dan lokasinya
+dilaporkan tanpa nilai rahasia; periksa dan pulihkan sebelum membersihkan.
+SIGKILL/padam mendadak tidak bisa ditangkap, sehingga residu privat juga perlu
+diaudit. Tidak ada penghapusan otomatis file `.env` lama di `/root` atau
+snapshot lama bernama tetap di `/tmp`; ikuti [prosedur konsolidasi](docs/KONSOLIDASI-ENV.md).
+
+`update-all.sh` adalah skrip pemeliharaan lama, bukan jalur rilis utama. Ia
+memakai helper snapshot yang sama dan tidak lagi menimpa setelan frontend
+yang sudah ada dengan satu URL bawaan. `vps-fix.sh` menyimpan arsip pemulihan
+persisten termasuk logo; arsip tersebut bukan konfigurasi aktif dan tidak
+boleh dihapus otomatis bersama snapshot sementara.
 
 **Kenapa `git pull` saja tidak cukup?**
 - Emergent.sh kadang melakukan force-push yang mengubah history commit

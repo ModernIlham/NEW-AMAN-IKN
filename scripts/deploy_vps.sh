@@ -23,6 +23,113 @@
 #    gagal skrip hanya keluar — meninggalkan produksi menjalankan commit yang
 #    baru saja terbukti tidak sehat, sampai ada manusia yang bangun. Commit
 #    sebelumnya kini disimpan dan dikembalikan otomatis.
+# Helper bersama juga dipakai update-all.sh lewat source. Tetap berada di
+# berkas ini: workflow mengirim HANYA deploy_vps.sh melalui stdin ke VPS.
+# Source hanya mendefinisikan helper; tidak menjalankan deploy atau memasang trap.
+aman_env_bersihkan() {
+  local rc=$?
+  trap - EXIT
+  if [ -n "${AMAN_ENV_STAGE:-}" ]; then
+    case "$AMAN_ENV_STAGE" in
+      "$AMAN_ENV_APP_DIR"/backend/.env-restore.*|"$AMAN_ENV_APP_DIR"/frontend/.env-restore.*)
+        rm -f -- "$AMAN_ENV_STAGE" || rc=1 ;;
+      *) echo "GAGAL: jalur staging env tidak sesuai; tidak dihapus." >&2; rc=1 ;;
+    esac
+  fi
+  if [ "${AMAN_ENV_PULIH_GAGAL:-0}" = 1 ]; then
+    echo "PEMULIHAN ENV GAGAL: salinan privat dipertahankan di $AMAN_ENV_TMP_DIR; periksa sebelum membersihkan." >&2
+    [ "$rc" -ne 0 ] || rc=1
+  elif [ -n "${AMAN_ENV_TMP_DIR:-}" ]; then
+    case "$AMAN_ENV_TMP_DIR" in
+      /tmp/aman-env.??????????)
+        if [ ! -L "$AMAN_ENV_TMP_DIR" ] && [ -d "$AMAN_ENV_TMP_DIR" ] \
+            && [ "$(stat -c %u -- "$AMAN_ENV_TMP_DIR")" = "$EUID" ]; then
+          if ! rm -f -- "$AMAN_ENV_TMP_DIR/backend.env" "$AMAN_ENV_TMP_DIR/frontend.env" \
+              || ! rmdir -- "$AMAN_ENV_TMP_DIR"; then
+            echo "GAGAL: salinan env sementara belum seluruhnya dibersihkan." >&2
+            rc=1
+          else
+            echo "Salinan konfigurasi sementara sudah dibersihkan."
+          fi
+        else
+          echo "GAGAL: direktori salinan env berubah; tidak dihapus." >&2
+          rc=1
+        fi ;;
+      *) echo "GAGAL: jalur salinan env tidak sesuai; tidak dihapus." >&2; rc=1 ;;
+    esac
+  fi
+  exit "$rc"
+}
+
+aman_env_siapkan() {
+  local komponen sumber wajib="${2:-1}"
+  AMAN_ENV_APP_DIR="$(cd -- "$1" && pwd -P)" || return 1
+  if [ "$AMAN_ENV_APP_DIR" = / ]; then
+    echo "GAGAL: direktori aplikasi tidak boleh akar filesystem." >&2
+    return 1
+  fi
+  for komponen in backend frontend; do
+    sumber="$AMAN_ENV_APP_DIR/$komponen/.env"
+    if [ -L "$AMAN_ENV_APP_DIR/$komponen" ] || [ ! -d "$AMAN_ENV_APP_DIR/$komponen" ] \
+        || [ -L "$sumber" ] || { [ -e "$sumber" ] && [ ! -f "$sumber" ]; }; then
+      echo "GAGAL: $komponen/.env harus berkas biasa di direktori aplikasi, bukan symlink." >&2
+      return 1
+    fi
+    if [ "$wajib" = 1 ] && [ ! -f "$sumber" ]; then
+      echo "GAGAL: $komponen/.env wajib tersedia sebelum deploy." >&2
+      return 1
+    fi
+  done
+  AMAN_ENV_TMP_DIR="$(umask 077; mktemp -d /tmp/aman-env.XXXXXXXXXX)" || return 1
+  AMAN_ENV_STAGE=""
+  AMAN_ENV_PULIH_GAGAL=0
+  trap aman_env_bersihkan EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  chmod 700 -- "$AMAN_ENV_TMP_DIR" || return 1
+  for komponen in backend frontend; do
+    sumber="$AMAN_ENV_APP_DIR/$komponen/.env"
+    # Ketidakhadiran asli dicatat dengan tidak adanya snapshot. Jangan pernah
+    # menghidupkan konfigurasi dari salinan run lama ketika sumbernya hilang.
+    if [ -f "$sumber" ]; then
+      cp -p -- "$sumber" "$AMAN_ENV_TMP_DIR/$komponen.env" || return 1
+      chmod 600 -- "$AMAN_ENV_TMP_DIR/$komponen.env" || return 1
+    fi
+  done
+}
+
+aman_env_pasang() {
+  local komponen tujuan
+  for komponen in backend frontend; do
+    [ -f "$AMAN_ENV_TMP_DIR/$komponen.env" ] || continue
+    tujuan="$AMAN_ENV_APP_DIR/$komponen/.env"
+    if [ -L "$AMAN_ENV_APP_DIR/$komponen" ] || [ ! -d "$AMAN_ENV_APP_DIR/$komponen" ] \
+        || [ -L "$tujuan" ] || { [ -e "$tujuan" ] && [ ! -f "$tujuan" ]; }; then
+      AMAN_ENV_PULIH_GAGAL=1
+      echo "GAGAL: tujuan pemulihan $komponen/.env tidak aman." >&2
+      return 1
+    fi
+    # Staging ada pada filesystem tujuan. Kegagalan cp tidak memotong .env
+    # aktif; rename mengganti inode (tidak mengikuti hardlink/symlink tujuan).
+    AMAN_ENV_STAGE="$(umask 077; mktemp "$AMAN_ENV_APP_DIR/$komponen/.env-restore.XXXXXXXXXX")" || {
+      AMAN_ENV_PULIH_GAGAL=1; return 1;
+    }
+    if ! cp -p -- "$AMAN_ENV_TMP_DIR/$komponen.env" "$AMAN_ENV_STAGE" \
+        || ! chmod 600 -- "$AMAN_ENV_STAGE" \
+        || ! mv -fT -- "$AMAN_ENV_STAGE" "$tujuan"; then
+      AMAN_ENV_PULIH_GAGAL=1
+      echo "GAGAL: pemulihan atomik $komponen/.env; salinan asli tetap diamankan." >&2
+      return 1
+    fi
+    AMAN_ENV_STAGE=""
+  done
+}
+
+if [[ -n "${BASH_SOURCE[0]:-}" && "${BASH_SOURCE[0]}" != "$0" ]]; then
+  return 0
+fi
+
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-/var/www/inventarisasi}"
@@ -89,13 +196,12 @@ periksa_restore_aktif() {
 }
 periksa_restore_aktif
 
-# .env berisi kredensial produksi dan TIDAK ikut repo — amankan dulu.
-cp backend/.env /tmp/backend_env_backup
-cp frontend/.env /tmp/frontend_env_backup
+# .env berisi kredensial produksi dan TIDAK ikut repo. Salinan hanya hidup
+# selama proses ini; nama lama di /tmp sama sekali tidak dibaca/ditimpa.
+aman_env_siapkan "$APP_DIR" 1
 
 pasang_env() {
-  cp /tmp/backend_env_backup backend/.env
-  cp /tmp/frontend_env_backup frontend/.env
+  aman_env_pasang || return 1
 }
 
 pasang_dependensi_backend() {
