@@ -18,6 +18,29 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1061] Snapshot env deploy privat dan pemulihan atomik — 2026-09-15
+
+[PR #1052](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1052).
+
+- Deploy utama dan updater lama tidak lagi membaca/menulis salinan `.env`
+  bernama tetap di `/tmp`. Helper bersama membuat direktori acak privat
+  `0700` dan snapshot `0600`, tanpa mencetak nilai konfigurasi.
+- Pemulihan memakai staging pada filesystem tujuan dan rename atomik,
+  mempertahankan pemilik. Sumber/tujuan symlink atau bukan file biasa ditolak;
+  file yang tidak ada pada awal updater tidak dipulihkan dari run lama.
+- Snapshot dibersihkan saat selesai, gagal normal, dan HUP/INT/TERM. Bila
+  pemulihan gagal, salinan privat dipertahankan untuk penyelamatan operator.
+  SIGKILL/padam mendadak tetap memerlukan audit residu.
+- Updater mempertahankan seluruh `.env` frontend yang sudah ada. Izin privat
+  saat membuat file baru tidak diwariskan ke build sehingga bundel tetap
+  terbaca Nginx. Jalur deploy satu file melalui stdin tetap didukung.
+- Panduan Hostinger dan prosedur konsolidasi membedakan dua konfigurasi aktif,
+  snapshot sementara, dan arsip pemulihan. Ini **bukan** penghapusan `.env`
+  lama di VPS: audit pemakai/nilai dan migrasi belum dijalankan karena akses
+  SSH langsung belum tersedia. Jadwal fetch tetap nonaktif.
+- Uji shell mencakup byte/owner/izin, isolasi run, sumber hilang, copy/rename
+  gagal, sinyal, symlink/hardlink, serta alur sukses/rollback/gagal build.
+
 ## [#1060] Panduan tipografi stiker mengikuti ukuran cetak — 2026-09-14
 
 [PR #1051](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1051).
