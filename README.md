@@ -42,6 +42,15 @@ label BMN**, dan **backup otomatis terjadwal**.
   peserta yang belum membubuhkan lewat **Kelola penanda tangan**. Alasan dan
   riwayat tampil di E-sign serta dialog TTD Riwayat BAST. PDF sumber dan nomor
   surat tidak diganti; terbitkan/bagikan tautan peserta baru setelah ditambahkan.
+- Koreksi lokasi aset: buka **Denah** dari form, pilih **Gunakan koordinat
+  terbaru** untuk memakai perubahan lintang/bujur di form, atau klik titik
+  lain di peta. **Deteksi ulang titik ini** mengganti hasil deteksi lama;
+  pilih lantai/ruangan lalu **Simpan Lokasi** untuk menyamakan koordinat,
+  nama lokasi, dan penempatan denah. Isian lain di form tetap belum disimpan.
+  Membuka dialog saja tetap mempertahankan lantai/ruangan lama. **Cabut
+  Penempatan** hanya melepas tautan denah, bukan menghapus koordinat survei.
+  Perubahan memerlukan jaringan; konflik versi meminta muat ulang, bukan
+  menimpa suntingan pengguna lain. Kegiatan yang disahkan tetap terkunci.
 - Rujukan regulasi & alur bisnis: [`docs/PUSTAKA-REGULASI-BMN.md`](./docs/PUSTAKA-REGULASI-BMN.md)
 - Penggunaan BMN dari sisi PEMOHON (5 rezim + rezim khusus IKN, berkas &
   ambang kewenangan): [`docs/PENGGUNAAN-BMN-PEMOHON.md`](./docs/PENGGUNAAN-BMN-PEMOHON.md)

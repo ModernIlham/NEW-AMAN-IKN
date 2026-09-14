@@ -17,6 +17,7 @@ sumber tampil utuh, aksi audit yang sama TIDAK boleh ikut lolos ke bagian log
 teknis — kalau lolos, tiap pemindaian muncul dua kali dan cacah chip filter
 per modul ikut menggelembung.
 """
+import ast
 import os
 import re
 
@@ -211,8 +212,14 @@ class TestAntiGanda:
                     "spasial_penempatan.py"):
             with open(os.path.join(backend, rel), encoding="utf-8") as f:
                 isi = f.read()
-            aksi |= set(re.findall(r'log_audit\(\s*\n?\s*"(opname_scan|aset_lokasi_\w+)"',
-                                   isi))
+            # Periksa argumen aksinya, termasuk dua cabang ekspresi bersyarat.
+            # Regex lama hanya melihat literal pertama pada audit bersama.
+            for call in ast.walk(ast.parse(isi)):
+                if (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+                        and call.func.id == "log_audit" and call.args):
+                    aksi |= {n.value for n in ast.walk(call.args[0])
+                             if isinstance(n, ast.Constant) and isinstance(n.value, str)
+                             and re.fullmatch(r"opname_scan|aset_lokasi_\w+", n.value)}
         assert aksi == AKSI_SUDAH_DI_BAGIAN_LOKASI
 
     def test_penyaring_benar_benar_terpasang_di_bagian_audit(self):

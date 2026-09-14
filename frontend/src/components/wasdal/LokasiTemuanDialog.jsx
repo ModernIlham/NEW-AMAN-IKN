@@ -28,9 +28,8 @@
 // viewport) supaya operator MELIHAT denahnya, bukan menebak — ubin OSM yang
 // lambat/mati di lapangan tak lagi menyisakan peta hitam kosong.
 //
-// Kontrak PUT-nya identik untuk kedua pemakai — itulah sebabnya dialog ini
-// hanya perlu di-parameterkan KATA-KATANYA, bukan disalin. Default-nya tetap
-// bunyi wasdal supaya pemanggil lama tak berubah perilaku.
+// Isi PUT dipakai bersama. Aset juga mengirim versi dan kunci idempotensi;
+// default kata-kata/kontrak Wasdal tetap berlaku bagi pemanggil lamanya.
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -41,21 +40,16 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { titikSah } from "@/lib/titikDenah";
+import { getApiError } from "@/lib/utils";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 // Pusat KIPP IKN — pandangan awal saat tiket belum punya penanda.
 const PUSAT_IKN = [-1.4025, 116.711];
 
-// [lon, lat] GeoJSON → {lat, lon}, atau null bila korup (string/NaN dari data
-// lama tak boleh meledakkan .toFixed di render — jatuh ke "belum ada").
-function titikSah(t) {
-  const lat = Number(t?.[1]);
-  const lon = Number(t?.[0]);
-  return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null;
-}
-
 export default function LokasiTemuanDialog({
   judul, submitUrl, lokasiAwal, titikAwal, onClose, onSaved,
+  version,
   judulDialog = "Lokasi Temuan",
   petunjuk = "klik peta untuk menancapkan titik; wilayah/gedung terdeteksi otomatis.",
   labelHapus = "Hapus Penanda",
@@ -85,6 +79,11 @@ export default function LokasiTemuanDialog({
   const [ruangan, setRuangan] = useState(null);   // hasil ruangan-di-titik
   const [sibuk, setSibuk] = useState(false);
   const [mendeteksi, setMendeteksi] = useState(false);
+  const [mendeteksiRuangan, setMendeteksiRuangan] = useState(false);
+  const [penempatanDiubah, setPenempatanDiubah] = useState(false);
+  const [konflik, setKonflik] = useState(false);
+  const sibukRef = useRef(false);
+  const permintaanRef = useRef(null);
   const seqRef = useRef(0);
   // Cermin nodeId untuk dibaca callback ber-deps kosong tanpa closure basi.
   const nodeIdRef = useRef(nodeId);
@@ -161,6 +160,7 @@ export default function LokasiTemuanDialog({
   // ── Peta ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!wadahRef.current || petaRef.current) return undefined;
+    const urutan = [seqRef, seqDenahRef, seqLantaiRef];
     const map = L.map(wadahRef.current, { zoomControl: true, attributionControl: true, maxZoom: 22 });
     map.attributionControl.setPrefix(false); // prefiks "Leaflet" opsional; © OpenStreetMap tetap (wajib lisensi)
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -182,6 +182,7 @@ export default function LokasiTemuanDialog({
       jamDenahRef.current = setTimeout(muatDenah, 300);
     });
     map.on("click", (e) => {
+      if (sibukRef.current) return;
       const { lat, lng } = e.latlng;
       if (markerRef.current) markerRef.current.setLatLng(e.latlng);
       else markerRef.current = L.marker(e.latlng).addTo(map);
@@ -192,6 +193,9 @@ export default function LokasiTemuanDialog({
       // lain, dan memilihnya menyimpan node yang tak memuat koordinatnya.
       setLantaiAktif("");
       setRuangan(null);
+      setPenempatanDiubah(true);
+      setNodeId("");
+      setDeteksi(null);
       deteksiTitik(lat, lng);
     });
     // "Leaflet blank di dalam modal": peta dibuat saat dialog masih beranimasi
@@ -205,6 +209,7 @@ export default function LokasiTemuanDialog({
       ro.observe(wadahRef.current);
     }
     return () => {
+      urutan.forEach(ref => { ref.current += 1; });
       jamInval.forEach(clearTimeout);
       clearTimeout(jamDenahRef.current);
       if (ro) ro.disconnect();
@@ -215,6 +220,21 @@ export default function LokasiTemuanDialog({
     // ulang per tiket/aset.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deteksiTitik, muatDenah]);
+
+  const deteksiUlang = (posisi) => {
+    if (!posisi || sibukRef.current) return;
+    const p = [posisi.lat, posisi.lon];
+    if (markerRef.current) markerRef.current.setLatLng(p);
+    else if (petaRef.current) markerRef.current = L.marker(p).addTo(petaRef.current);
+    petaRef.current?.setView(p, 18);
+    setTitik({ ...posisi });
+    setPenempatanDiubah(true);
+    setLantaiAktif("");
+    setRuangan(null);
+    setNodeId("");
+    setDeteksi(null);
+    deteksiTitik(posisi.lat, posisi.lon);
+  };
 
   // ── Persempit ke ruangan ─────────────────────────────────────────────────
   // Lantai terpilih + titik ada → tanyakan ruangan mana yang memuat titiknya.
@@ -229,8 +249,9 @@ export default function LokasiTemuanDialog({
   // lantai menjadi ruangan + mencetak riwayat custody palsu).
   const nodeAwal = lokasiAwal?.node_id || "";
   useEffect(() => {
-    if (!lantaiAktif || !titik) { setRuangan(null); return undefined; }
+    if (!lantaiAktif || !titik) { setRuangan(null); setMendeteksiRuangan(false); return undefined; }
     let batal = false;
+    setMendeteksiRuangan(true);
     (async () => {
       try {
         const r = await axios.get(`${API}/spasial/ruangan-di-titik`, {
@@ -241,13 +262,14 @@ export default function LokasiTemuanDialog({
         // Prapilih ruangan hasil deteksi HANYA bila pilihan masih di
         // lantainya DAN lantai itu bukan node tersimpan.
         if (r.data?.ditemukan && r.data?.ruangan?.id) {
-          setNodeId((kini) => (kini === lantaiAktif && kini !== nodeAwal)
+          setNodeId((kini) => (kini === lantaiAktif && (kini !== nodeAwal || penempatanDiubah))
             ? r.data.ruangan.id : kini);
         }
       } catch { if (!batal) setRuangan(null); }
+      finally { if (!batal) setMendeteksiRuangan(false); }
     })();
     return () => { batal = true; };
-  }, [lantaiAktif, titik, nodeAwal]);
+  }, [lantaiAktif, titik, nodeAwal, penempatanDiubah]);
 
   // Ruangan-ruangan lantai terpilih digambar sebagai lapisan tersendiri
   // (parameter `dalam`, mengikuti pola SpasialMaster) — bukan lewat
@@ -278,34 +300,36 @@ export default function LokasiTemuanDialog({
     return undefined;
   }, [lantaiAktif]);
 
-  const simpan = useCallback(async () => {
-    if (!titik) return;
+  const kirim = useCallback(async (isi, pesan) => {
+    if (sibukRef.current || konflik) return;
+    sibukRef.current = true;
     setSibuk(true);
+    const sidik = JSON.stringify({ submitUrl, version, isi });
+    if (permintaanRef.current?.sidik !== sidik) {
+      permintaanRef.current = { sidik, key: globalThis.crypto?.randomUUID?.()
+        || `denah-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+    }
+    // Wasdal tetap memakai kontrak lamanya. Versi hanya dikirim oleh aset.
+    const config = version == null ? undefined : { headers: {
+      "If-Match": String(version), "Idempotency-Key": permintaanRef.current.key,
+    } };
     try {
-      const r = await axios.put(submitUrl, { lat: titik.lat, lon: titik.lon, node_id: nodeId });
-      toast.success(pesanSimpan);
-      onSaved?.(r.data?.lokasi_spasial || null);
+      const r = await axios.put(submitUrl, isi, config);
+      toast.success(pesan);
+      onSaved?.(r.data?.lokasi_spasial || null, r.data);
       onClose?.();
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Gagal menyimpan lokasi");
+      if (e?.response?.status === 409) setKonflik(true);
+      toast.error(getApiError(e, "Gagal menyimpan lokasi. Periksa jaringan lalu coba lagi."));
     } finally {
+      sibukRef.current = false;
       setSibuk(false);
     }
-  }, [titik, nodeId, submitUrl, onSaved, onClose, pesanSimpan]);
-
-  const hapus = useCallback(async () => {
-    setSibuk(true);
-    try {
-      await axios.put(submitUrl, { hapus: true });
-      toast.success(pesanHapus);
-      onSaved?.(null);
-      onClose?.();
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || "Gagal menghapus penanda");
-    } finally {
-      setSibuk(false);
-    }
-  }, [submitUrl, onSaved, onClose, pesanHapus]);
+  }, [submitUrl, version, konflik, onSaved, onClose]);
+  const simpan = () => titik && kirim({ lat: titik.lat, lon: titik.lon, node_id: nodeId }, pesanSimpan);
+  const hapus = () => kirim({ hapus: true }, pesanHapus);
+  const terbaru = titikSah(titikAwal);
+  const koordinatBerbeda = terbaru && (!titik || terbaru.lat !== titik.lat || terbaru.lon !== titik.lon);
 
   const rantai = deteksi?.rantai || [];
   const lantai = deteksi?.lantai || [];
@@ -317,7 +341,7 @@ export default function LokasiTemuanDialog({
   const nilaiRuangan = opsiRuangan.some((r) => r.id === nodeId) ? nodeId : "";
 
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose?.()}>
+    <Dialog open onOpenChange={(o) => !o && !sibukRef.current && onClose?.()}>
       <DialogContent className="max-w-2xl p-0 gap-0" data-testid="lokasi-temuan-dialog">
         {/* pr-11 memberi ruang tombol tutup bawaan dialog (right-4 + w-7 =
             44px, standar components/ui/dialog.jsx) — tanpa ini judul/deskripsi
@@ -358,21 +382,29 @@ export default function LokasiTemuanDialog({
           {titik && deteksi && rantai.length === 0 && (
             <p className="text-amber-700 dark:text-amber-300">{deteksi.pesan || "Di luar kawasan terpetakan."}</p>
           )}
-          {titik && !deteksi && !mendeteksi && (
-            // Deteksi gagal (jaringan lapangan) — beri pintu coba lagi, jangan
-            // biarkan operator menutup-buka dialog hanya untuk mengulang.
-            <button type="button" className="text-teal-700 dark:text-teal-300 underline underline-offset-2 min-h-0 min-w-0 inline-flex items-center gap-1"
-                    onClick={() => deteksiTitik(titik.lat, titik.lon, true)}
+          {titik && (
+            <button type="button" disabled={sibuk || mendeteksi || konflik}
+                    className="text-teal-700 dark:text-teal-300 hover:bg-muted rounded px-2 min-h-[44px] inline-flex items-center gap-1 disabled:opacity-50"
+                    onClick={() => deteksiUlang(titik)}
                     data-testid="lokasi-temuan-deteksi-ulang">
-              <RotateCcw className="w-3 h-3" />Deteksi ulang
+              <RotateCcw className="w-3 h-3" />Deteksi ulang titik ini
             </button>
           )}
+          {koordinatBerbeda && (
+            <Button variant="outline" className="min-h-[44px] h-auto whitespace-normal text-left py-2 text-xs" disabled={sibuk || mendeteksi || konflik}
+                    onClick={() => deteksiUlang(terbaru)} data-testid="lokasi-temuan-koordinat-terbaru">
+              Gunakan koordinat terbaru ({terbaru.lat}, {terbaru.lon})
+            </Button>
+          )}
+          {version != null && <p className="text-muted-foreground">Simpan Lokasi menyamakan koordinat aset dan nama lokasi dengan node pilihan. Cabut Penempatan hanya melepas tautan denah.</p>}
+          {konflik && <p role="alert" className="text-red-700 dark:text-red-300">Aset telah berubah. Tutup denah dan muat ulang form aset; isian lain Anda belum disimpan.</p>}
           {lantai.length > 0 && (
             <label className="flex items-center gap-2">
               <span className="text-muted-foreground shrink-0">Persempit ke lantai</span>
-              <select value={lantaiAktif}
+              <select value={lantaiAktif} disabled={sibuk || mendeteksi || konflik}
                       onChange={(e) => {
                         const id = e.target.value;
+                        setPenempatanDiubah(true);
                         setLantaiAktif(id);
                         setRuangan(null);
                         setNodeId(id || (rantai.length ? rantai[rantai.length - 1].id : ""));
@@ -391,7 +423,7 @@ export default function LokasiTemuanDialog({
           {lantaiAktif && opsiRuangan.length > 0 && (
             <label className="flex items-center gap-2">
               <span className="text-muted-foreground shrink-0">Persempit ke ruangan</span>
-              <select value={nilaiRuangan}
+              <select value={nilaiRuangan} disabled={sibuk || mendeteksiRuangan || konflik}
                       onChange={(e) => setNodeId(e.target.value || lantaiAktif)}
                       className="h-8 flex-1 min-w-0 rounded-md border border-border bg-background px-2"
                       data-testid="lokasi-temuan-ruangan">
@@ -413,13 +445,13 @@ export default function LokasiTemuanDialog({
             overflow-x-hidden dialog memotongnya diam-diam). */}
         <div className="px-4 py-3 border-t border-border flex flex-wrap items-center gap-2">
           {lokasiAwal && (
-            <Button variant="outline" size="sm" className="text-red-600" disabled={sibuk}
+            <Button variant="outline" size="sm" className="min-h-[44px] text-red-700 dark:text-red-300 hover:text-red-800 dark:hover:text-red-200" disabled={sibuk || konflik}
                     onClick={hapus} data-testid="lokasi-temuan-hapus">
               <Trash2 className="w-3.5 h-3.5 mr-1" />{labelHapus}
             </Button>
           )}
           <div className="flex-1" />
-          <Button size="sm" onClick={simpan} disabled={!titik || sibuk || mendeteksi}
+          <Button size="sm" className="min-h-[44px]" onClick={simpan} disabled={!titik || sibuk || mendeteksi || mendeteksiRuangan || konflik}
                   data-testid="lokasi-temuan-simpan">
             {sibuk ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
                    : <Save className="w-3.5 h-3.5 mr-1" />}

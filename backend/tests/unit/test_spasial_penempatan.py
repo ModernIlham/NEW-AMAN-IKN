@@ -342,7 +342,7 @@ class TestInvarianYangMenopangKeamanannya:
                     and simpul.name == "set_lokasi_aset"):
                 fn = _ast.get_source_segment(src, simpul) or ""
                 # Dua cabang: menempatkan DAN mencabut penempatan.
-                assert fn.count('"$inc": {"version": 1}') == 2, (
+                assert '"version": version + 1' in fn and '_build_cas_filter(asset_id, version)' in fn, (
                     "set_lokasi_aset harus menaikkan version di kedua "
                     "cabangnya; tanpa itu CAS buta terhadap penempatan "
                     "manual dan penempatan otomatis bisa menimpanya.")

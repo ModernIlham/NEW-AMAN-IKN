@@ -18,6 +18,7 @@ import { authMediaUrl } from "@/lib/mediaUrl";
 import { exportViaJob } from "@/lib/jobExport";
 import { reserveDummyNup, cariKategoriDummy } from "@/lib/dummyNup";
 import { buatTempId, apakahTempId } from "@/lib/idAntrean";
+import { titikSah } from "@/lib/titikDenah";
 import { cocokAset } from "@/lib/pencarianLokal";
 import { useDragSelect } from "@/lib/useDragSelect";
 import { idsCetakKartu, galatPlafonKartu } from "@/lib/cakupanCetak";
@@ -343,6 +344,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   // Penempatan aset pada node denah: {id, nama, lokasi}. `lokasi` diambil
   // lewat GET terpisah karena baris daftar tak membawa `lokasi_spasial`.
   const [lokasiDenahAset, setLokasiDenahAset] = useState(null);
+  const urutanLokasiDenahRef = useRef(0);
   const [photoLightboxAsset, setPhotoLightboxAsset] = useState(null); // foto baris list → lightbox
 
   // Dialog visibility - consolidated into single reducer
@@ -1372,27 +1374,33 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   // Aset yang BELUM ditempatkan tapi sudah punya koordinat GPS diumpankan
   // sebagai `titikAwal`: peta terbuka tepat di posisinya dan langsung
   // terdeteksi, bukan kosong di pusat kawasan menunggu diklik manual.
-  const handleOpenLokasiDenah = useCallback(async (assetId, namaAset) => {
+  const handleOpenLokasiDenah = useCallback(async (assetId, namaAset, form = {}) => {
     if (!assetId) return;
-    let lokasi = null;
-    let titik = null;
+    const sesi = ++urutanLokasiDenahRef.current;
     try {
       const r = await axios.get(`${API}/assets/${assetId}?exclude_media=true`);
-      lokasi = r.data?.lokasi_spasial || null;
-      // Koordinat aset tersimpan sebagai string — parse toleran (koma desimal).
-      const lat = parseFloat(String(r.data?.koordinat_latitude ?? "").trim().replace(",", "."));
-      const lon = parseFloat(String(r.data?.koordinat_longitude ?? "").trim().replace(",", "."));
-      if (Number.isFinite(lat) && Number.isFinite(lon)
-          && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
-        titik = [lon, lat];                        // format GeoJSON [lon, lat]
+      if (sesi !== urutanLokasiDenahRef.current) return;
+      const lokasi = r.data?.lokasi_spasial || null;
+      const version = Number(r.data?.version) || 1;
+      if (form.version != null && form.version !== version) {
+        toast.error("Data aset sudah berubah. Simpan salinan isian Anda lalu muat ulang form sebelum membuka denah.");
+        return;
       }
+      const sumber = form.version == null ? r.data : form;
+      const p = titikSah([sumber.koordinat_longitude, sumber.koordinat_latitude]);
+      setLokasiDenahAset({ id: assetId, sesi, nama: namaAset || "Aset", lokasi,
+        titik: p ? [p.lon, p.lat] : null, version,
+        onSaved: (lokasiBaru, respons) => {
+          if (!respons?.asset) return;
+          const fresh = { ...respons.asset, activity_id: r.data.activity_id };
+          handleRowSynced(assetId, fresh, true);
+          setEditAssetForForm(a => a?.id === assetId ? { ...a, ...fresh } : a);
+          form.onSaved?.(fresh);
+        } });
     } catch {
-      // Gagal ambil lokasi berlaku bukan alasan menutup pintu: operator tetap
-      // bisa menancapkan titik baru, hanya tanpa posisi awal.
-      toast.error("Lokasi tersimpan gagal dimuat — peta dibuka tanpa posisi awal");
+      if (sesi === urutanLokasiDenahRef.current) toast.error("Lokasi terbaru gagal dimuat. Periksa jaringan lalu buka denah kembali.");
     }
-    setLokasiDenahAset({ id: assetId, nama: namaAset || "Aset", lokasi, titik });
-  }, []);
+  }, [handleRowSynced]);
 
   // === UI HANDLERS ===
   const handleAnalyticsToggle = useCallback(() => setAnalyticsOpen(prev => !prev), []);
@@ -1870,6 +1878,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         {timelineAssetId && <LazyAssetTimelineDialog open={!!timelineAssetId} assetId={timelineAssetId} onClose={() => setTimelineAssetId(null)} />}
         {lokasiDenahAset && (
           <LazyLokasiDenahDialog
+            key={lokasiDenahAset.sesi}
             judul={lokasiDenahAset.nama}
             judulDialog="Lokasi Aset di Denah"
             petunjuk="klik peta untuk menempatkan aset; ruangan/gedung terdeteksi otomatis."
@@ -1879,7 +1888,9 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
             submitUrl={`${API}/assets/${lokasiDenahAset.id}/lokasi-spasial`}
             lokasiAwal={lokasiDenahAset.lokasi}
             titikAwal={lokasiDenahAset.titik}
-            onClose={() => setLokasiDenahAset(null)}
+            version={lokasiDenahAset.version}
+            onSaved={lokasiDenahAset.onSaved}
+            onClose={() => { ++urutanLokasiDenahRef.current; setLokasiDenahAset(null); }}
           />
         )}
         {/* Lightbox foto dari baris mode list (tabel/kartu HP) — sama seperti galeri & popup peta. */}
