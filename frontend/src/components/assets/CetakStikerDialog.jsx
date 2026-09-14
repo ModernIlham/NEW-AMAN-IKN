@@ -11,6 +11,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { makeDownloadProgress } from "@/lib/downloadFile";
+import PanduanTipografiStiker from "./PanduanTipografiStiker";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -224,6 +225,8 @@ export default function CetakStikerDialog({ open, onOpenChange, buildParams, tot
               </Chip>
             </div>
           </div>
+
+          <PanduanTipografiStiker aktif={open} kertas={kertas} ukuran={ukuran} />
 
           {ukuran === "per_aset" && (
             <div className="rounded-lg border border-border bg-muted/40 p-2" data-testid="stiker-rekap-ukuran">

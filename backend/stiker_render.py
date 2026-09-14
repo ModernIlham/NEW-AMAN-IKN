@@ -7,7 +7,8 @@ modul ini hanya menerjemahkannya menjadi perintah gambar.
 """
 import io
 
-from stiker_utils import (GAP_MM, LANTAI_CETAK_PT, MARGIN_MM, RASIO_EMAS,
+from stiker_utils import (FONT_STIKER_BIASA, FONT_STIKER_TEBAL,
+                          GAP_MM, LANTAI_CETAK_PT, MARGIN_MM, RASIO_EMAS,
                           TARGET_STIKER, bagi_baris, format_dimensi,
                           grid_optimal, muat_satu_baris, padding_stiker,
                           rencana_badan, susun_header, tinggi_header,
@@ -56,10 +57,10 @@ def _pengukur():
     from reportlab.pdfbase.pdfmetrics import stringWidth
 
     def tebal(teks, size):
-        return stringWidth(str(teks), "Helvetica-Bold", size)
+        return stringWidth(str(teks), FONT_STIKER_TEBAL, size)
 
     def biasa(teks, size):
-        return stringWidth(str(teks), "Helvetica", size)
+        return stringWidth(str(teks), FONT_STIKER_BIASA, size)
 
     return tebal, biasa
 
@@ -129,12 +130,12 @@ def gambar_stiker(c, x, y, w, h, ukuran, aset, kop, logo, mm):
             logo_w = 0
     tengah_hdr = x + logo_w + (w - logo_w) / 2
     ky = hdr_y + (hdr + tinggi_isi) / 2 - kepala["size"]
-    c.setFont("Helvetica-Bold", kepala["size"])
+    c.setFont(FONT_STIKER_TEBAL, kepala["size"])
     for baris in kepala["baris"]:
         c.drawCentredString(tengah_hdr, ky, baris)
         ky -= kepala["size"] * 1.06
     if kepala["baris2"]:
-        c.setFont("Helvetica", kepala["size2"])
+        c.setFont(FONT_STIKER_BIASA, kepala["size2"])
         c.drawCentredString(tengah_hdr, ky - kepala["size2"] * 0.12,
                             kepala["baris2"])
     c.setLineWidth(0.5)
@@ -164,10 +165,10 @@ def gambar_stiker(c, x, y, w, h, ukuran, aset, kop, logo, mm):
     kode_muat, f_kode = muat_satu_baris(
         kode, lebar_teks - (lebar_nup + 2.5 * mm if label_nup else 0),
         ukur_tebal, f["kode"], f["kode"] * 0.78)
-    c.setFont("Helvetica-Bold", f_kode)
+    c.setFont(FONT_STIKER_TEBAL, f_kode)
     c.drawString(x + pad, ty, kode_muat)
     if label_nup:
-        c.setFont("Helvetica-Bold", f["nup"])
+        c.setFont(FONT_STIKER_TEBAL, f["nup"])
         c.drawRightString(x + pad + lebar_teks, ty, label_nup)
     ty -= f["kode"] * 0.32
 
@@ -175,7 +176,7 @@ def gambar_stiker(c, x, y, w, h, ukuran, aset, kop, logo, mm):
     # Ia menerangkan KODE, jadi ia menempel pada kode. Sebelumnya ia terlempar
     # ke bawah nama barang dan terbaca seolah keterangan nama.
     if jatah["subsub"] and subsub:
-        c.setFont("Helvetica", f["subsub"])
+        c.setFont(FONT_STIKER_BIASA, f["subsub"])
         for baris in bagi_baris(subsub, lebar_teks, ukur_biasa, f["subsub"],
                                 jatah["subsub"]):
             ty -= f["subsub"] * 1.16
@@ -190,7 +191,7 @@ def gambar_stiker(c, x, y, w, h, ukuran, aset, kop, logo, mm):
     if jatah["nama"] and nama_brg:
         baris_nama = bagi_baris(nama_brg, lebar_teks, ukur_tebal, f["nama"],
                                 jatah["nama"])
-        c.setFont("Helvetica-Bold", f["nama"])
+        c.setFont(FONT_STIKER_TEBAL, f["nama"])
         # Garis dasar baris TERBAWAH dinaikkan setinggi ekor huruf, sehingga
         # yang berjarak `pad` dari garis potong adalah TINTA paling bawah.
         ny = y + pad + TURUN_HELVETICA * f["nama"]
@@ -290,22 +291,22 @@ def gambar_sampel(c, x, y, w, h, ukuran, lw_mm, lh_mm, mm):
     dim_teks, f_dim = muat_satu_baris(teks_dim, teks_lebar, ukur_tebal,
                                       f["kode"], f["label"])
     ty = y + h - pad - f_judul
-    c.setFont("Helvetica-Bold", f_judul)
+    c.setFont(FONT_STIKER_TEBAL, f_judul)
     c.drawCentredString(teks_tengah, ty, judul)
     ty -= f_dim * 1.35
-    c.setFont("Helvetica-Bold", f_dim)
+    c.setFont(FONT_STIKER_TEBAL, f_dim)
     c.drawCentredString(teks_tengah, ty, dim_teks)
     ty -= s_lab * 1.3
     ket = f"Ukuran {str(ukuran).capitalize()} — bukan untuk ditempel"
     ket_teks, f_ket = muat_satu_baris(ket, teks_lebar, ukur_biasa,
                                       s_lab, s_lab * 0.7)
-    c.setFont("Helvetica", f_ket)
+    c.setFont(FONT_STIKER_BIASA, f_ket)
     c.drawCentredString(teks_tengah, ty, ket_teks)
 
     # ── Gambar kedua garis ukur ──
     c.setLineWidth(0.5)
     _panah_ukur(c, x + tepi, garis_y, x + w - tepi, garis_y, sirip)
-    c.setFont("Helvetica", s_lab)
+    c.setFont(FONT_STIKER_BIASA, s_lab)
     c.drawCentredString(x + w / 2, y + tepi + s_lab * 0.25,
                         f"lebar {teks_dim.split(' × ')[0]} mm")
     _panah_ukur(c, garis_x, y + tepi, garis_x, y + h - tepi, sirip)
