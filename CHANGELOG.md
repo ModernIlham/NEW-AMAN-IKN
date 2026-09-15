@@ -18,6 +18,27 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1062] Identitas satker sinkron lintas kegiatan dan modul — 2026-09-15
+
+[PR #1053](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1053).
+
+- Edit kegiatan ikut mendaftarkan master satker; kode/nama dinormalisasi.
+  Satker legacy dari kegiatan tetap bisa dipilih dan diikat ke pengguna.
+  Kode aktif yang tidak dikenal tidak lagi jatuh diam-diam ke Semua Satker.
+- Nama master/kegiatan/riwayat konsisten, termasuk satker dengan satu kegiatan.
+  Lookup mempertahankan anak eselon ketika memakai identitas master terbaru.
+- Perubahan kode berkonfirmasi memindahkan stempel lintas modul dan meneruskan
+  counter, tanpa mengganti nomor atau berkas dokumen terbit. Penggabungan ke
+  kode terpakai ditolak; migrasi ber-kunci dan memiliki kompensasi galat.
+- Stempel satker, Kelola Pengguna, pejabat, perencanaan, penggunaan, pengadaan,
+  kegiatan dan master menyegarkan referensi setelah edit/lintas-tab/fokus,
+  serta mengabaikan hasil muat yang sudah usang.
+- POST kegiatan kembali menunjuk handler create berautentikasi. Uji HTTP,
+  Mongo tiruan, pemulihan galat, dan hook/komponen antarmuka mengunci regresi.
+- Migrasi kode tetap operasi administrasi saat penyuntingan/antrean offline
+  sudah berhenti, bukan transaksi lintas koleksi atomik. Tidak ada migrasi
+  produksi otomatis atau penggabungan data lama yang ambigu pada deploy.
+
 ## [#1061] Snapshot env deploy privat dan pemulihan atomik — 2026-09-15
 
 [PR #1052](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1052).
