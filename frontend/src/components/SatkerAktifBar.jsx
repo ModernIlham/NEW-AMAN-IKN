@@ -1,4 +1,4 @@
-import axios from "axios";
+import useReferensiSatker from "@/hooks/useReferensiSatker";
 import { Building2, Check, Globe, GripHorizontal } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -16,7 +16,6 @@ import {
   majuTahap,
   tahapSetelahTarik,
 } from "@/lib/tarikBerat";
-import { TENGGAT_BAKA, muatAndal } from "@/lib/muatAndal";
 
 // Tahap tirai bertahan selama satu sesi tab. SENGAJA sessionStorage, bukan
 // localStorage: tiap sesi baru mulai dari keadaan rapi (tersembunyi), tetapi
@@ -24,9 +23,6 @@ import { TENGGAT_BAKA, muatAndal } from "@/lib/muatAndal";
 // tiap pindah halaman.
 const KUNCI_TAHAP = "satker_bar_tahap";
 
-const API = process.env.REACT_APP_BACKEND_URL
-  ? `${process.env.REACT_APP_BACKEND_URL}/api`
-  : "/api";
 
 /**
  * Bilah "Satker Aktif" — HANYA untuk super-admin pusat.
@@ -53,8 +49,6 @@ const API = process.env.REACT_APP_BACKEND_URL
  * sisa data satker lain yang menggantung di memori antar modul.
  */
 export default function SatkerAktifBar({ user }) {
-  const [daftar, setDaftar] = useState([]);
-  const [gagalDaftar, setGagalDaftar] = useState(false);
   const [aktif, setAktif] = useState(getSatkerAktif());
   const ref = useRef(null);
 
@@ -71,6 +65,7 @@ export default function SatkerAktifBar({ user }) {
   const tarikRef = useRef(null);
 
   const superAdmin = isSuperAdminPusat(user);
+  const { daftar, gagal: gagalDaftar } = useReferensiSatker(superAdmin);
   const terbuka = tahap > TAHAP_TERSEMBUNYI;
 
   useEffect(() => {
@@ -134,26 +129,6 @@ export default function SatkerAktifBar({ user }) {
       setTahap((v) => (v >= TAHAP_DAFTAR ? TAHAP_TERSEMBUNYI : v + 1));
     }
   }, []);
-
-  useEffect(() => {
-    if (!superAdmin) return;
-    let batal = false;
-    // Kegagalan di sini dulu ditelan `catch(() => {})`, dan daftar kosong itu
-    // dirender sebagai "Belum ada satker di Master Satker" — pernyataan yang
-    // KELIRU dan menyesatkan: super-admin bisa menyimpulkan master satkernya
-    // hilang, padahal jaringannya yang sedang buruk. Kini dibedakan.
-    muatAndal(() => axios.get(`${API}/satker`, { timeout: TENGGAT_BAKA }))
-      .then((r) => {
-        if (batal) return;
-        const items = (r.data?.items || []).filter((s) => s.kode_satker);
-        setDaftar(items);
-        setGagalDaftar(false);
-      })
-      .catch(() => { if (!batal) setGagalDaftar(true); });
-    return () => {
-      batal = true;
-    };
-  }, [superAdmin]);
 
   // Ketuk di luar tirai → kembali tersembunyi. Tirai ini MELAYANG di atas
   // halaman, jadi membiarkannya terbuka berarti ia terus menutupi isi layar.

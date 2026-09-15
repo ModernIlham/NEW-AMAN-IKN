@@ -163,7 +163,8 @@ async def set_user_satker(user_id: str, data: dict, _admin: dict = Depends(requi
                         "sendiri — melepas ikatan (lintas-satker) khusus "
                         "super-admin pusat"))
     if kode:
-        ada = await db.satker.find_one({"kode_satker": kode}, {"_id": 1})
+        from auth_utils import _satker_terdaftar
+        ada = await _satker_terdaftar(kode, database=db)
         if not ada:
             raise HTTPException(
                 status_code=400,

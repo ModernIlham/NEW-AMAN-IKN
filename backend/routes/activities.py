@@ -11,7 +11,6 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from pymongo.errors import DuplicateKeyError
 from PIL import Image as PILImage
 from bson import ObjectId  # noqa: F401  (kept for downstream import use)
 
@@ -411,20 +410,6 @@ async def get_satker_list(_user: dict = Depends(require_user)):
     result = await db.inventory_activities.aggregate(pipeline).to_list(100)
     return result
 
-# Koleksi ber-STEMPEL kode_satker langsung di dokumen (daftar kanonik ikut
-# mesin backfill routes/satker.py, ditambah pegawai/unit_kerja/riwayat
-# pengesahan/users) — semuanya ikut dimigrasi saat GANTI KODE satker agar
-# tidak ada dokumen "yatim" di kode lama / user terkunci dari datanya.
-_KOLEKSI_KODE_SATKER = (
-    "psp", "bmn_idle", "penggunaan_proses", "usulan_penghapusan",
-    "pemusnahan", "pemindahtanganan", "pemanfaatan", "penertiban",
-    "bast_serah_terima", "persediaan", "pengadaan", "penganggaran",
-    "perencanaan_usulan", "pemantauan_insidentil", "pengamanan_kasus",
-    "pengamanan_dokumen", "pengamanan_polis",
-    "pegawai", "unit_kerja", "inventory_history", "users",
-)
-
-
 async def _cek_atau_perbarui_satker(activity, exclude_id=None, user=None):
     """Konsistensi kode ↔ nama satker antar kegiatan.
 
@@ -437,7 +422,7 @@ async def _cek_atau_perbarui_satker(activity, exclude_id=None, user=None):
       + riwayat pengesahan (tampilan kartu) diganti nama barunya.
     - GANTI KODE (nama sama): semua kegiatan + Master Satker (re-key) +
       users terikat + SEMUA koleksi ber-stempel kode dimigrasi serentak
-      (_KOLEKSI_KODE_SATKER) — tanpa ini user terkunci dari datanya dan
+      (satker_referensi) — tanpa ini user terkunci dari datanya dan
       dokumen modul yatim di kode lama.
     Aset TIDAK disentuh: relasinya via activity_id (scoping saat query).
 
@@ -466,10 +451,44 @@ async def _cek_atau_perbarui_satker(activity, exclude_id=None, user=None):
 
     kode = activity.kode_satker.strip()
     nama = activity.nama_satker.strip()
-    q_id = {"id": {"$ne": exclude_id}} if exclude_id else {}
-    ex_kode = await db.inventory_activities.find_one(
-        {"kode_satker": kode, **q_id}, {"_id": 0, "nama_satker": 1})
-    if ex_kode and ex_kode.get("nama_satker", "") != nama:
+    # Master juga harus diperiksa untuk satker dengan SATU kegiatan. Mengecualikan
+    # kegiatan yang diedit dulu membuat perubahan identitasnya tidak tersinkron.
+    ex_kode = (await db.satker.find_one(
+        {"kode_satker": kode}, {"_id": 0, "nama_satker": 1})
+        or await db.inventory_activities.find_one(
+            {"kode_satker": kode}, {"_id": 0, "nama_satker": 1}))
+    asal = (await db.inventory_activities.find_one({"id": exclude_id}, {"_id": 0})
+            if exclude_id else None)
+    if asal and asal.get("kode_satker") and asal.get("kode_satker") != kode and ex_kode:
+        raise HTTPException(409, "Kode tujuan sudah dipakai satker lain. Penggabungan satker tidak dapat dilakukan lewat edit kegiatan.")
+    ex_nama = (await db.satker.find_one(
+        {"nama_satker": nama, "kode_satker": {"$nin": [kode, "", None]}},
+        {"_id": 0, "kode_satker": 1})
+        or await db.inventory_activities.find_one(
+            {"nama_satker": nama, "kode_satker": {"$nin": [kode, "", None]}},
+            {"_id": 0, "kode_satker": 1}))
+    # Saat kode DAN nama berubah ke identitas baru, rujuk identitas kegiatan
+    # lama; jangan meninggalkan seluruh referensi satkernya di kode lama.
+    if not ex_nama and not ex_kode and exclude_id:
+        lama = asal
+        if lama and lama.get("kode_satker") and lama.get("kode_satker") != kode:
+            ex_nama = lama
+    if ex_nama:
+        if ex_kode:
+            raise HTTPException(409, "Kode tujuan sudah dipakai satker lain. Penggabungan satker tidak dapat dilakukan lewat edit kegiatan.")
+        if not activity.perbarui_satker:
+            raise HTTPException(status_code=409, detail={
+                "konflik_satker": True, "jenis": "kode",
+                "pesan": (f"Nama Satker '{nama}' sudah terdaftar dengan kode "
+                          f"'{ex_nama['kode_satker']}'.")})
+        kode_lama = ex_nama["kode_satker"]
+        _pastikan_boleh_migrasi(kode_lama, "kode satker")
+        from satker_referensi import ganti_kode_satker
+        rincian = await ganti_kode_satker(db, kode_lama, kode, nama)
+        logger.warning(
+            f"GANTI KODE SATKER '{nama}': {kode_lama} → {kode} "
+            f"(konfirmasi pengguna; migrasi: {rincian or 'tidak ada dokumen lain'})")
+    elif ex_kode and ex_kode.get("nama_satker", "") != nama:
         if not activity.perbarui_satker:
             raise HTTPException(status_code=409, detail={
                 "konflik_satker": True, "jenis": "nama",
@@ -482,44 +501,6 @@ async def _cek_atau_perbarui_satker(activity, exclude_id=None, user=None):
             {"kode_satker": kode}, {"$set": {"nama_satker": nama}})
         await db.inventory_history.update_many(
             {"kode_satker": kode}, {"$set": {"nama_satker": nama}})
-        logger.warning(f"RENAME SATKER {kode}: nama → '{nama}' (konfirmasi pengguna)")
-    ex_nama = await db.inventory_activities.find_one(
-        {"nama_satker": nama, "kode_satker": {"$ne": kode}, **q_id},
-        {"_id": 0, "kode_satker": 1})
-    if ex_nama:
-        if not activity.perbarui_satker:
-            raise HTTPException(status_code=409, detail={
-                "konflik_satker": True, "jenis": "kode",
-                "pesan": (f"Nama Satker '{nama}' sudah terdaftar dengan kode "
-                          f"'{ex_nama['kode_satker']}'.")})
-        kode_lama = ex_nama["kode_satker"]
-        _pastikan_boleh_migrasi(kode_lama, "kode satker")
-        await db.inventory_activities.update_many(
-            {"nama_satker": nama, "kode_satker": kode_lama},
-            {"$set": {"kode_satker": kode}})
-        # Master Satker ikut pindah kode HANYA bila kode baru belum terdaftar
-        # (hindari dua doc master berebut satu kode). C32: dengan indeks unik
-        # menyala, kalah balapan pada check-then-act ini berubah dari "dua
-        # master" menjadi DuplicateKeyError di TENGAH migrasi lintas-koleksi —
-        # tangkap dan batalkan pemindahan masternya saja (dokumen lain tetap
-        # bermigrasi, sama seperti bila kode target memang sudah terdaftar).
-        try:
-            if not await db.satker.find_one({"kode_satker": kode}, {"_id": 1}):
-                await db.satker.update_one(
-                    {"kode_satker": kode_lama}, {"$set": {"kode_satker": kode}})
-        except DuplicateKeyError:
-            pass
-        # Migrasi serentak seluruh dokumen ber-stempel kode lama (termasuk
-        # users terikat — kalau tidak, mereka kehilangan akses datanya).
-        rincian = {}
-        for nama_koleksi in _KOLEKSI_KODE_SATKER:
-            res = await db[nama_koleksi].update_many(
-                {"kode_satker": kode_lama}, {"$set": {"kode_satker": kode}})
-            if res.modified_count:
-                rincian[nama_koleksi] = res.modified_count
-        logger.warning(
-            f"GANTI KODE SATKER '{nama}': {kode_lama} → {kode} "
-            f"(konfirmasi pengguna; migrasi: {rincian or 'tidak ada dokumen lain'})")
 
 
 async def _kode_lengkap_master(kode_satker: str) -> str:
@@ -559,13 +540,19 @@ _PROJ_LOOKUP = {"_id": 0, "kode_satker": 1, "nama_satker": 1, "eselon1": 1,
 
 async def _hasil_lookup(doc: dict) -> dict:
     kode = doc.get("kode_satker", "")
+    # Master menyimpan eselon rata; form kegiatan membutuhkan bentuk bersarang.
+    # Jangan kehilangan anak eselon hanya karena nama kini dibaca dari master.
+    kegiatan = await db.inventory_activities.find_one({"kode_satker": kode}, {"_id": 0, "eselon1": 1})
+    eselon = (kegiatan or {}).get("eselon1") or doc.get("eselon1") or []
+    eselon = [{"nama": e, "eselon2": []} if isinstance(e, str) else e
+              for e in eselon if isinstance(e, (str, dict))]
     # Tingkat satkernya SELALU dari master satker, tak pernah dari `doc`:
     # `doc` bisa jadi dokumen kegiatan, dan kegiatan tak menyimpan tingkat itu
     # — membacanya dari sana akan mengembalikan Eselon I untuk setiap satker
     # yang sudah punya kegiatan, yaitu justru yang datanya paling banyak.
     return {"kode_satker": kode,
             "nama_satker": doc.get("nama_satker", ""),
-            "eselon1": doc.get("eselon1", []) or [],
+            "eselon1": eselon,
             "eselon_satker": await eselon_satker(kode),
             "kode_satker_lengkap": doc.get("kode_satker_lengkap")
             or await _kode_lengkap_master(kode)}
@@ -575,26 +562,24 @@ async def _hasil_lookup(doc: dict) -> dict:
 async def satker_lookup(kode: str = "", nama: str = "", _user: dict = Depends(require_user)):
     """Lookup satker by kode or nama for auto-fill consistency (includes eselon1).
 
-    Sumber: kegiatan inventarisasi dulu (konsistensi nama antar kegiatan),
-    lalu FALLBACK ke MASTER SATKER — kegiatan PERTAMA untuk satker yang
-    sudah dirawat di master tetap ter-auto-isi.
+    Identitas master didahulukan; struktur eselon kegiatan tetap dipertahankan.
+    Satker era lama yang belum terdaftar jatuh ke referensi kegiatan.
     """
     if kode:
-        doc = (await db.inventory_activities.find_one({"kode_satker": kode}, _PROJ_LOOKUP)
-               or await db.satker.find_one({"kode_satker": kode}, _PROJ_LOOKUP))
+        doc = (await db.satker.find_one({"kode_satker": kode.strip()}, _PROJ_LOOKUP)
+               or await db.inventory_activities.find_one({"kode_satker": kode.strip()}, _PROJ_LOOKUP))
         if doc:
             return await _hasil_lookup(doc)
     if nama:
         # re.escape the user input so an exact (anchored) case-insensitive match
         # can't be abused for ReDoS or blow up on invalid regex metacharacters.
         q_nama = {"nama_satker": {"$regex": f"^{re.escape(nama)}$", "$options": "i"}}
-        doc = (await db.inventory_activities.find_one(q_nama, _PROJ_LOOKUP)
-               or await db.satker.find_one(q_nama, _PROJ_LOOKUP))
+        doc = (await db.satker.find_one(q_nama, _PROJ_LOOKUP)
+               or await db.inventory_activities.find_one(q_nama, _PROJ_LOOKUP))
         if doc:
             return await _hasil_lookup(doc)
     return None
 
-@activities_router.post("/inventory-activities")
 async def _validasi_lingkup_unit(activity, _user) -> None:
     """Pastikan tiap id lingkup benar-benar ada di master unit satker ini.
 
@@ -629,6 +614,7 @@ async def _validasi_lingkup_unit(activity, _user) -> None:
     activity.lingkup_unit = unik
 
 
+@activities_router.post("/inventory-activities")
 async def create_inventory_activity(activity: InventoryActivityCreate, _user: dict = Depends(require_writer)):
     """Create a new inventory activity"""
     # ISOLASI SATKER: user terikat satker hanya boleh membuat kegiatan untuk
@@ -636,6 +622,8 @@ async def create_inventory_activity(activity: InventoryActivityCreate, _user: di
     # (termasuk "Satker Aktif" super-admin) agar tak perlu diketik ulang. WAJIB
     # dilakukan SEBELUM validasi "kode wajib" di bawah — bila ditaruh sesudah,
     # 400 memicu lebih dulu dan auto-isi jadi kode mati (temuan tinjauan).
+    activity.kode_satker = activity.kode_satker.strip()
+    activity.nama_satker = activity.nama_satker.strip()
     _kode_user = kode_satker_user(_user)
     if _kode_user and not activity.kode_satker.strip():
         activity.kode_satker = _kode_user
@@ -645,6 +633,8 @@ async def create_inventory_activity(activity: InventoryActivityCreate, _user: di
         raise HTTPException(status_code=400, detail="Kode Satker wajib diisi")
     if not activity.nama_satker.strip():
         raise HTTPException(status_code=400, detail="Nama Satker wajib diisi")
+    from routes.satker import _valid_kode
+    _valid_kode(activity.kode_satker)
     await _validasi_lingkup_unit(activity, _user)
 
     if _kode_user and activity.kode_satker.strip() != _kode_user:
@@ -666,7 +656,6 @@ async def create_inventory_activity(activity: InventoryActivityCreate, _user: di
     # Konsistensi kode ↔ nama satker: konflik → 409 terstruktur (UI
     # menawarkan konfirmasi); perbarui_satker=True → rename/ganti kode
     # diterapkan serentak ke kegiatan lain + Master Satker lalu lolos.
-    await _cek_atau_perbarui_satker(activity, user=_user)
 
     # Validate unique nomor_surat
     # Keunikan nomor surat PER SATKER (REVIEW-9 R15). Nomor surat diterbitkan
@@ -760,12 +749,24 @@ async def create_inventory_activity(activity: InventoryActivityCreate, _user: di
         "created_at": now
     }
     
+    await _cek_atau_perbarui_satker(activity, user=_user)
     await db.inventory_activities.insert_one(doc)
     logger.info(f"Inventory activity created: {activity.nomor_surat}")
 
-    # Auto-registrasi MASTER SATKER (M-SATKER): satker baru dari kegiatan
-    # langsung terdaftar (kode+nama+eselon1) tanpa menimpa profil kop yang
-    # sudah dirawat admin ($setOnInsert saja). Best-effort: gagal ≠ batal.
+    await _daftarkan_satker_kegiatan(activity)
+
+    # Return the created document without MongoDB ObjectId
+    created_doc = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    return _strip_doc_payload(created_doc)
+
+
+async def _daftarkan_satker_kegiatan(activity):
+    """CREATE dan EDIT sama-sama mendaftarkan satker baru, tanpa menimpa kop.
+
+    Data lama yang belum terdaftar tetap dikenali pemilih/ikatan akun melalui
+    referensi kegiatan; kegagalan registrasi tidak memperluas scope request.
+    """
+    now = datetime.now(timezone.utc).isoformat()
     try:
         await db.satker.update_one(
             {"kode_satker": activity.kode_satker.strip()},
@@ -789,12 +790,6 @@ async def create_inventory_activity(activity: InventoryActivityCreate, _user: di
             upsert=True)
     except Exception:
         logger.warning("Auto-registrasi master satker gagal (non-fatal)", exc_info=True)
-
-    # Return the created document without MongoDB ObjectId
-    created_doc = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
-    # Replace heavy GridFS-stored documents with metadata-only entries for response
-    return _strip_doc_payload(created_doc)
-
 
 def _strip_doc_payload(activity: Optional[dict]) -> Optional[dict]:
     """Strip raw `data` base64 from any documents (including legacy inline ones)
@@ -907,6 +902,9 @@ async def update_inventory_activity(activity_id: str, activity: InventoryActivit
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
     await pastikan_akses_kegiatan(_user, existing)
 
+    activity.kode_satker = activity.kode_satker.strip()
+    activity.nama_satker = activity.nama_satker.strip()
+
     # Validate required satker fields
     if not activity.kode_satker.strip():
         raise HTTPException(status_code=400, detail="Kode Satker wajib diisi")
@@ -920,6 +918,8 @@ async def update_inventory_activity(activity_id: str, activity: InventoryActivit
             detail=f"Akun Anda terikat satker {_kode_user} — tidak dapat memindahkan kegiatan ke satker lain")
     if not activity.nama_satker.strip():
         raise HTTPException(status_code=400, detail="Nama Satker wajib diisi")
+    from routes.satker import _valid_kode
+    _valid_kode(activity.kode_satker)
     await _validasi_lingkup_unit(activity, _user)
 
     # Enforce max file counts (only when the fields are actually being updated)
@@ -930,7 +930,6 @@ async def update_inventory_activity(activity_id: str, activity: InventoryActivit
 
     # Konsistensi kode ↔ nama satker (kecualikan diri sendiri): konflik →
     # 409 terstruktur; perbarui_satker=True → rename/ganti kode serentak.
-    await _cek_atau_perbarui_satker(activity, exclude_id=activity_id, user=_user)
     
     # Check unique nomor_surat (exclude self)
     if activity.nomor_surat != existing.get("nomor_surat"):
@@ -1012,10 +1011,12 @@ async def update_inventory_activity(activity_id: str, activity: InventoryActivit
 
         update_data["documents"] = processed
 
+    await _cek_atau_perbarui_satker(activity, exclude_id=activity_id, user=_user)
     await db.inventory_activities.update_one(
         {"id": activity_id},
         {"$set": update_data}
     )
+    await _daftarkan_satker_kegiatan(activity)
 
     # Safe to delete orphan GridFS blobs only AFTER the DB write succeeded.
     # Failures here are non-fatal (we just have a temporary orphan blob, can

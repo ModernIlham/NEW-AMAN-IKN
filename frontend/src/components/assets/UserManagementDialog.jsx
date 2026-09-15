@@ -17,6 +17,7 @@ import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger
 } from "../ui/tooltip";
 import { toast } from "sonner";
+import useReferensiSatker from "@/hooks/useReferensiSatker";
 import axios from "axios";
 import { getApiError } from "../../lib/utils";
 import { useConfirm } from "../ui/ConfirmDialog";
@@ -385,15 +386,9 @@ function UserManagementDialog({ open, onClose, currentUser }) {
 
   // Master satker utk ikatan user→satker (multi-satker DB bersama);
   // gagal senyap — dropdown satker cukup tak muncul.
-  const [satkerList, setSatkerList] = useState([]);
-  useEffect(() => {
-    if (!open) return;
-    axios.get(`${API}/satker`)
-      .then(r => setSatkerList((r.data?.items || []).filter(s => s.terdaftar)))
-      .catch(() => {});
-  }, [open]);
+  const { daftar: satkerList, revisi: revisiSatker } = useReferensiSatker(open);
 
-  useEffect(() => { if (open) fetchUsers(); }, [open, fetchUsers]);
+  useEffect(() => { if (open) fetchUsers(); }, [open, fetchUsers, revisiSatker]);
 
   const handleUpdateLocalUser = (updatedUser) => {
     try {

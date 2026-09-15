@@ -43,13 +43,13 @@ def test_user_terikat_satker_TIDAK_bisa_menyamar(monkeypatch):
     assert au.is_super_admin(hasil) is False
 
 
-def test_kode_tak_terdaftar_diabaikan_bukan_ditolak(monkeypatch):
+def test_kode_tak_terdaftar_tidak_jatuh_ke_semua_satker(monkeypatch):
     _mock_satker_ada(monkeypatch, {"527"})
     user = {"id": "u3", "role": "admin", "kode_satker": ""}
-    hasil = _run(au._terapkan_satker_aktif(user, "999"))
-    assert hasil["kode_satker"] == ""         # jatuh ke lintas-satker biasa
-    assert "_satker_aktif" not in hasil
-    assert au.is_super_admin(hasil) is True    # tetap super-admin lintas satker
+    with pytest.raises(au.HTTPException) as err:
+        _run(au._terapkan_satker_aktif(user, "999"))
+    assert err.value.status_code == 409
+    assert user["kode_satker"] == ""
 
 
 def test_tanpa_header_tetap_lintas_satker(monkeypatch):

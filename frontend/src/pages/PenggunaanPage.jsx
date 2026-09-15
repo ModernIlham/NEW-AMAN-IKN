@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import useReferensiSatker from "@/hooks/useReferensiSatker";
 import axios from "axios";
 import { toast } from "sonner";
 import {
@@ -229,12 +230,7 @@ export default function PenggunaanPage({ user, onBack }) {
   }, []);
 
   // Referensi Master Satker — saran pihak asal/tujuan proses penggunaan (W7)
-  const [satkerList, setSatkerList] = useState([]);
-  useEffect(() => {
-    axios.get(`${API}/satker`)
-      .then((r) => setSatkerList(r.data?.items || []))
-      .catch(() => {});
-  }, []);
+  const { daftar: satkerList } = useReferensiSatker();
 
   // PSP resmi menurut data impor SIMAN V2 (W5) — kandidat pencatatan 1-klik
   const [pspSiman, setPspSiman] = useState(null);

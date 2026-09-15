@@ -235,6 +235,12 @@ async def simpan_satker(kode: str, payload: SatkerIn,
         # sendiri, tapi sisa kemungkinannya jatuh sebagai 500 tepat di tombol
         # Simpan admin. Dokumen kini pasti ada → cukup $set murni.
         await db.satker.update_one({"kode_satker": k}, {"$set": doc})
+    # Nama adalah identitas master, bukan salinan mandiri per kegiatan.
+    # Kop dan dokumen resmi yang sudah diterbitkan tidak dirender ulang.
+    await db.inventory_activities.update_many(
+        {"kode_satker": k}, {"$set": {"nama_satker": doc["nama_satker"]}})
+    await db.inventory_history.update_many(
+        {"kode_satker": k}, {"$set": {"nama_satker": doc["nama_satker"]}})
     await log_audit("simpan_satker", "", k, username=admin.get("username", "system"),
                     detail=f"Master satker {k} — {doc['nama_satker']}")
     return {"ok": True, "kode_satker": k}
