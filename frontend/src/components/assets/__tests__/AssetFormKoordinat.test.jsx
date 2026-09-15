@@ -82,7 +82,7 @@ test("kolom LAIN tak ikut dirapikan", async () => {
   await waitFor(() => expect(nama).toHaveValue("Meja, Kayu"));
 });
 
-test("denah memakai koordinat draft dan hanya menggabung field lokasi yang sudah disimpan", async () => {
+test("denah memperbarui kolom baca-saja tanpa menimpa draft lokasi manual", async () => {
   const aset = { id: "a1", activity_id: "k1", asset_name: "Meja", asset_code: "123",
     NUP: "1", version: 3, location: "Lama", koordinat_latitude: "-1.4", koordinat_longitude: "116.7" };
   axios.get.mockImplementation(url => Promise.resolve({ data: url.includes("/assets/a1?") ? aset : { items: [] } }));
@@ -92,14 +92,33 @@ test("denah memakai koordinat draft dan hanya menggabung field lokasi yang sudah
   await waitFor(() => expect(screen.getByTestId("asset-form-denah-btn")).toBeEnabled());
   fireEvent.change(kolom("koordinat_latitude"), { target: { value: "-1.5" } });
   fireEvent.change(kolom("asset_name"), { target: { value: "Meja belum disimpan" } });
+  fireEvent.change(kolom("location"), { target: { value: "Lokasi manual belum disimpan" } });
   fireEvent.click(screen.getByTestId("asset-form-denah-btn"));
   const konteks = onOpenLokasiDenah.mock.calls[0][2];
   expect(konteks.koordinat_latitude).toBe("-1.5");
   expect(konteks.version).toBe(3);
-  act(() => konteks.onSaved({ id: "a1", version: 4, location: "Baru", koordinat_latitude: "-1.6", koordinat_longitude: "116.9" }));
+  act(() => konteks.onSaved({ id: "a1", version: 4, location: "Lama", koordinat_latitude: "-1.6", koordinat_longitude: "116.9",
+    lokasi_spasial: { node_id: "r2", jalur_nama: "Gedung B / Lantai 2 / Ruang Baru" } }));
   expect(kolom("asset_name")).toHaveValue("Meja belum disimpan");
-  expect(kolom("location")).toHaveValue("Baru");
+  expect(kolom("location")).toHaveValue("Lokasi manual belum disimpan");
+  expect(screen.getByTestId("asset-lokasi-denah")).toHaveValue("Gedung B / Lantai 2 / Ruang Baru");
+  expect(screen.getByTestId("asset-lokasi-denah")).toHaveAttribute("readonly");
   expect(kolom("koordinat_latitude")).toHaveValue("-1.6");
   fireEvent.click(screen.getByTestId("asset-form-denah-btn"));
   expect(onOpenLokasiDenah.mock.calls[1][2].version).toBe(4);
+});
+
+test("lokasi denah dari cache tetap terbaca saat offline", async () => {
+  const daring = Object.getOwnPropertyDescriptor(window.navigator, "onLine");
+  Object.defineProperty(window.navigator, "onLine", { configurable: true, value: false });
+  try {
+    render(<AssetForm isOpen onClose={jest.fn()} activity={{ id: "k1" }} categories={[]}
+      editAsset={{ id: "a1", version: 3, location: "Lokasi manual", di_denah: true,
+        denah_jalur: "Gedung A / Ruang 1" }} onSubmitSuccess={jest.fn()} />);
+    expect(await screen.findByTestId("asset-lokasi-denah")).toHaveValue("Gedung A / Ruang 1");
+    expect(kolom("location")).toHaveValue("Lokasi manual");
+  } finally {
+    if (daring) Object.defineProperty(window.navigator, "onLine", daring);
+    else delete window.navigator.onLine;
+  }
 });

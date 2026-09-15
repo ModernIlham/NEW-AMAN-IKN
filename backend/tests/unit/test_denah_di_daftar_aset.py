@@ -60,6 +60,13 @@ def test_aset_tanpa_penempatan_bertanda_belum(dbx):
     r = _proyeksi(dbx, {})
     assert r["di_denah"] is False
     assert r["denah_nama"] == "" and r["denah_jalur"] == ""
+    assert r["denah_titik"] is None
+
+
+def test_titik_tanpa_node_dapat_dibedakan_dari_belum_ditempatkan(dbx):
+    r = _proyeksi(dbx, {"lokasi_spasial": {"node_id": "", "titik": [116.9, -1.5]}})
+    assert r["di_denah"] is False
+    assert r["denah_titik"] == [116.9, -1.5]
 
 
 def test_penempatan_yang_DILEPAS_tak_lagi_terhitung(dbx):

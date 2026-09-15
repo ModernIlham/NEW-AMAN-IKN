@@ -119,6 +119,23 @@ beforeEach(() => {
 // satu halaman besar yang kuotanya habis di tengah — cukup untuk sifat yang
 // diuji: putusnya penulisan, bukan mekanisme pagingnya.
 describe("kursor delta berhenti saat kuota perangkat penuh", () => {
+  test("proyeksi cache lama ditarik penuh sekali, lalu kembali delta", async () => {
+    mockSimpanan.meta.set("keg1", { activityId: "keg1", userId: "u1", count: 1,
+      lastSync: "2026-08-01T00:00:00Z", disegarkanPada: new Date().toISOString() });
+    mockSimpanan.assets.set("a1", { id: "a1", activity_id: "keg1", location: "Manual" });
+    const ambil = globalThis.__ambilHalaman;
+    globalThis.__ambilHalaman = jest.fn(ambil);
+    const jawaban = halaman({ ids: ["a1"], serverTime: "2026-08-08T10:00:00Z", total: 1 });
+    Object.assign(jawaban.data.items[0], { di_denah: true, denah_jalur: "Gedung / Ruang" });
+    mockHalaman.push(jawaban);
+    await syncSnapshot("keg1", "u1");
+    expect(globalThis.__ambilHalaman.mock.calls[0][0]).not.toContain("since=");
+    expect(mockSimpanan.assets.get("a1").denah_jalur).toBe("Gedung / Ruang");
+    expect((await snapshotMeta("keg1")).versiProyeksi).toBe(1);
+    await syncSnapshot("keg1", "u1");
+    expect(globalThis.__ambilHalaman.mock.calls[1][0]).toContain("since=2026-08-08T10%3A00%3A00Z");
+  });
+
   test("sinkron MULUS: kursor maju ke server_time halaman pertama", async () => {
     mockHalaman.push(halaman({
       ids: ["a1", "a2", "a3"], serverTime: "2026-08-08T10:00:00Z", total: 3,
@@ -143,6 +160,7 @@ describe("kursor delta berhenti saat kuota perangkat penuh", () => {
 
     const hasil = await syncSnapshot("keg1", "u1");
     expect(hasil.partial).toBe(true);
+    expect((await snapshotMeta("keg1")).versiProyeksi).toBeUndefined();
     // INI inti temuannya: kursor 08-08 akan membuat b1/b2 (updated_at 08-01)
     // tak pernah ikut delta berikutnya. Ia harus tetap di 08-01.
     expect((await snapshotMeta("keg1")).lastSync).toBe("2026-08-01T00:00:00Z");

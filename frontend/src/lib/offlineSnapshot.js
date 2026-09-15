@@ -27,6 +27,8 @@ const DB_NAME = "aman_offline_snapshot";
 // memilikinya dan sync delta tak akan mengisi ulang baris yang tak berubah,
 // jadi upgrade mengosongkan cache agar sync berikutnya full resync.
 const DB_VERSION = 2;
+// Muat ulang proyeksi saat daring tanpa menghapus cache baca/antrean luring.
+const VERSI_PROYEKSI = 1;
 const ASSET_STORE = "assets"; // keyed by asset id, indexed by activity_id
 const META_STORE = "meta";    // keyed by activityId → {activityId, userId, lastSync, count}
 
@@ -52,6 +54,7 @@ const SNAPSHOT_FIELDS = [
   "inventory_status", "temuan_pencatatan", "klasifikasi_tidak_ditemukan", "sub_klasifikasi",
   "uraian_tidak_ditemukan", "tindak_lanjut",
   "koordinat_latitude", "koordinat_longitude", "kronologis",
+  "di_denah", "denah_nama", "denah_jalur", "denah_titik",
   "keterangan_berlebih", "asal_usul_berlebih",
   "nomor_perkara", "pihak_bersengketa", "keterangan_sengketa",
   "garansi_hingga", "garansi_jenis", "barang_bersejarah",
@@ -170,7 +173,8 @@ async function _syncSnapshot(activityId, userId, onProgress, { forceFull = false
   // Delta only when the snapshot belongs to this user and is still fresh —
   // otherwise resync from scratch (also the different-user defense in depth;
   // the primary guard is ensureSnapshotOwner on login).
-  const canDelta = !forceFull && !!meta && meta.userId === userId && !isExpired(meta);
+  const canDelta = !forceFull && !!meta && meta.userId === userId && !isExpired(meta)
+    && meta.versiProyeksi === VERSI_PROYEKSI;
   const since = canDelta ? meta.lastSync : "";
   const fullSync = !since;
 
@@ -283,6 +287,7 @@ async function _syncSnapshot(activityId, userId, onProgress, { forceFull = false
   // sinkron berikutnya otomatis full, bukan delta.
   const newMeta = {
     activityId, userId, count,
+    versiProyeksi: quotaHit ? meta?.versiProyeksi : VERSI_PROYEKSI,
     lastSync: quotaHit ? (meta?.lastSync || "") : lastSyncCursor,
     disegarkanPada: new Date().toISOString(),
   };

@@ -388,6 +388,28 @@ def test_lokasi_berjenjang_mengikuti_denah_lalu_teksnya(dbx):
     assert "Lt.1 R.Rapat" in nama and "Lantai 1 Ruang Rapat" in nama
 
 
+@pytest.mark.parametrize("dengan_denah", [True, False])
+def test_eksekutif_memisahkan_titik_luar_dari_belum_ditempatkan(dbx, dengan_denah):
+    from laporan_jenjang import DI_LUAR_DENAH, TANPA_DENAH
+    async def skenario():
+        await _seed(dbx, barang=[("3050104001", "HT", 2)])
+        if dengan_denah:
+            await _seed_denah(dbx)
+        await dbx.assets.insert_one({
+            "id": "luar", "activity_id": "k1", "asset_name": "Aset Luar",
+            "asset_code": "3050104001", "purchase_price": 750,
+            "location": "Lapangan", "lokasi_spasial": {"node_id": "", "titik": [116.9, -1.5]},
+        })
+        return await rp._build_executive_summary_data("k1", with_asset_rows=False)
+    data = _jalan(skenario())
+    roots = {r["name"]: r for r in data["loc_hier"] if r["depth"] == 0}
+    assert roots[DI_LUAR_DENAH]["count"] == 1
+    assert roots[DI_LUAR_DENAH]["value"] == 750
+    assert roots[TANPA_DENAH]["count"] == 2
+    assert data["loc_hier_total"]["count"] == (6 if dengan_denah else 3)
+    assert data["loc_jenjang_label"][-1] == "Lokasi tercatat"
+
+
 def test_lokasi_INDUK_berjumlah_sama_dengan_anak_anaknya(dbx):
     d = _data_denah(dbx)
     baris = d["loc_hier"]

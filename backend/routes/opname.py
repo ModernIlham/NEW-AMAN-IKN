@@ -447,23 +447,17 @@ async def terapkan_perpindahan(request: Request, payload: TerapkanIn,
             lokasi_baru["titik"] = lokasi_lama["titik"]
         lokasi_baru.update({"ditandai_oleh": username, "ditandai_pada": now,
                             "sumber": "scan_qr", "scan_id": s.get("scan_id")})
-        nama_ruang = str(lokasi_baru.get("node_nama") or "").strip()
         lokasi_teks_lama = str(aset.get("location") or "")
         if su.pindah_lokasi_berarti(lokasi_lama, lokasi_baru):
             baris = su.entri_riwayat_lokasi(aset["id"], lokasi_lama, lokasi_baru,
                                             username, now)
-            # Nilai `location` LAMA ikut disimpan: ia akan ditimpa di bawah, dan
-            # riwayat custody adalah satu-satunya tempat ia masih bisa dibaca.
+            # Keterangan manual ikut menjadi konteks audit, tetapi tidak
+            # ditimpa oleh hierarki penempatan hasil opname.
             baris["location_lama"] = lokasi_teks_lama
             await db.riwayat_lokasi_aset.insert_one(baris)
         set_aset = {"lokasi_spasial": lokasi_baru, "updated_at": now}
-        # `location` (teks bebas) IKUT BERPINDAH — inilah yang dibaca KIR & DBR
-        # (reports.py `cocok_ruangan_master` mencocokkan STRING, bukan node_id).
-        # Tanpa ini, menerapkan hasil opname memperbarui denah tetapi membiarkan
-        # DOKUMEN RESMI menyebut ruangan lama: peta dan kertas saling
-        # bertentangan, dan yang dipegang pemeriksa justru kertasnya.
-        if nama_ruang and nama_ruang != lokasi_teks_lama:
-            set_aset["location"] = nama_ruang
+        # Field Lokasi tetap isian petugas. KIR/DBR yang memakai lokasi manual
+        # tidak boleh diam-diam berganti akibat penempatan pada denah.
         # $inc version: tanpa ini penjaga OCC/If-Match & cache media buta
         # terhadap perpindahan lokasi hasil opname (pola batch.py).
         await db.assets.update_one({"id": aset["id"]},

@@ -39,6 +39,7 @@ Tiga keputusan yang membentuk modul ini:
 #: keadaan data yang memang begitu.
 TANPA_KODE = "(tanpa kode barang)"
 TANPA_DENAH = "(belum ditempatkan di denah)"
+DI_LUAR_DENAH = "Di luar kawasan terpetakan"
 #: Field teks `location` yang kosong. Dibedakan dari `TANPA_DENAH`: yang satu
 #: berarti asetnya belum ditempatkan pada denah, yang lain berarti kolom lokasi
 #: bebasnya memang belum diisi. Menyatukan keduanya menyembunyikan mana yang
@@ -132,13 +133,31 @@ def baris_hierarki_kode(aset, panjangs, ambil_kode, uraian_map=None):
                      [label] * len(panjangs))
 
 
+def di_luar_denah(aset):
+    """Titik penempatan sah tanpa node, bukan sekadar GPS yang belum dideteksi.
+
+    Cabut penempatan, koordinat rusak, atau node lama hilang tidak boleh
+    diartikan sebagai bukti berada di luar kawasan.
+    """
+    from spasial_utils import parse_lintang, parse_bujur
+    lok = (aset or {}).get("lokasi_spasial") or {}
+    if not isinstance(lok, dict) or str(lok.get("node_id") or "").strip():
+        return False
+    titik = lok.get("titik")
+    if not isinstance(titik, (list, tuple)) or len(titik) != 2:
+        return False
+    lon, lat = parse_bujur(titik[0]), parse_lintang(titik[1])
+    return lon is not None and lat is not None and (lon != 0 or lat != 0)
+
+
 def baris_hierarki_denah(aset, levels, peta_node):
     """Satu panel berjenjang untuk denah: Gedung → Lantai → Ruangan."""
     def kunci(level):
         def ambil(a):
             lok = (a or {}).get("lokasi_spasial") or {}
             return ((peta_node.get(lok.get("node_id")) or {})
-                    .get("level_nama", {}).get(level, "")) or TANPA_DENAH
+                    .get("level_nama", {}).get(level, "")) or (
+                        DI_LUAR_DENAH if di_luar_denah(a) else TANPA_DENAH)
         return ambil
 
     return _hierarki(aset, [kunci(lv) for lv in levels],
@@ -159,28 +178,31 @@ def baris_hierarki_lokasi(aset, levels, peta_node, dengan_teks=True):
     persis pekerjaan pembersihan yang tersisa, dan itu tak pernah terlihat
     selama keduanya berdiri sebagai dua grafik terpisah.
 
-    `levels` kosong berarti belum ada satu pun aset yang ditempatkan di denah;
-    yang tersisa hanya jenjang teksnya, dan panelnya jatuh menjadi daftar rata
-    seperti sebelumnya.
+    Tanpa jenjang, lokasi teks tetap rata, KECUALI ada titik penempatan di luar
+    kawasan: tambahkan jenjang status agar ia tidak menyatu dengan belum
+    ditempatkan, termasuk laporan yang semua titiknya berada di luar denah.
     """
     def kunci_denah(level):
         def ambil(a):
             lok = (a or {}).get("lokasi_spasial") or {}
             return ((peta_node.get(lok.get("node_id")) or {})
-                    .get("level_nama", {}).get(level, "")) or TANPA_DENAH
+                    .get("level_nama", {}).get(level, "")) or (
+                        DI_LUAR_DENAH if di_luar_denah(a) else TANPA_DENAH)
         return ambil
 
     def kunci_teks(a):
         return str((a or {}).get("location") or "").strip() or TANPA_LOKASI_TEKS
 
     kunci_fns = [kunci_denah(lv) for lv in (levels or [])]
+    if not kunci_fns and any(di_luar_denah(a) for a in (aset or [])):
+        kunci_fns.append(lambda a: DI_LUAR_DENAH if di_luar_denah(a) else TANPA_DENAH)
     if dengan_teks:
         kunci_fns.append(kunci_teks)
     if not kunci_fns:
         return []
     return _rapatkan_rantai_kosong(
         _hierarki(aset, kunci_fns, [lambda k: k] * len(kunci_fns)),
-        {TANPA_DENAH, TANPA_LOKASI_TEKS})
+        {TANPA_DENAH, TANPA_LOKASI_TEKS, DI_LUAR_DENAH})
 
 
 def _punya_saudara_sebelumnya(baris, i):
