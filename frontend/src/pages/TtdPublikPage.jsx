@@ -9,6 +9,7 @@ import {
 import SignatureCapture from "@/components/ttd/SignatureCapture";
 import AturPosisiTtd from "@/components/ttd/AturPosisiTtd";
 import { teksSisaWaktu, warnaSisaWaktu, sudahKedaluwarsa } from "@/lib/sisaWaktu";
+import { teksIdentitasTtd } from "@/lib/identitasTtd";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -142,7 +143,7 @@ function Verifikasi({ id }) {
             <div className="min-w-0">
               <p className="text-sm font-semibold truncate">{s.nama}</p>
               <p className="text-[11px] text-muted-foreground truncate">
-                {s.jabatan || "-"}{s.nip ? ` · NIP ${s.nip}` : ""}
+                {s.jabatan || "-"}{teksIdentitasTtd(s) ? ` · ${teksIdentitasTtd(s)}` : ""}
                 {s.signed_at ? ` · ${fmtWaktu(s.signed_at)}` : ""}
               </p>
             </div>
@@ -408,8 +409,8 @@ function TandaTangan({ id, token }) {
       <div className="rounded-xl border border-border p-3 flex items-center justify-between gap-2">
         <div className="min-w-0">
           <p className="text-sm font-bold truncate" title={sg.nama}>{sg.nama}</p>
-          <p className="text-[11px] sm:text-xs text-muted-foreground truncate" title={`${sg.jabatan || ""}${sg.nip ? ` · NIP ${sg.nip}` : ""}`}>
-            {sg.jabatan || "Penanda tangan"}{sg.nip ? ` · NIP ${sg.nip}` : ""}
+          <p className="text-[11px] sm:text-xs text-muted-foreground truncate" title={`${sg.jabatan || ""}${teksIdentitasTtd(sg) ? ` · ${teksIdentitasTtd(sg)}` : ""}`}>
+            {sg.jabatan || "Penanda tangan"}{teksIdentitasTtd(sg) ? ` · ${teksIdentitasTtd(sg)}` : ""}
           </p>
         </div>
         <StatusPill status={sg.status} />

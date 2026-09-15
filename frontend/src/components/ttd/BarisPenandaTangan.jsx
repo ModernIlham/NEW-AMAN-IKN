@@ -2,6 +2,7 @@ import React from "react";
 import { Copy, Link2, Mail, MessageCircle, RotateCcw, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { teksSisaWaktu, warnaSisaWaktu, sudahKedaluwarsa } from "@/lib/sisaWaktu";
+import { teksIdentitasTtd } from "@/lib/identitasTtd";
 
 /** Status yang MASIH boleh diterbitkan tautannya. Sengaja daftar-putih:
  *  "belum ditandatangani" saja tidak cukup — orang yang sudah mengunggah
@@ -46,6 +47,7 @@ export default function BarisPenandaTangan({
   labelStatus = "", warnaStatus = "",
 }) {
   const s = signer || {};
+  const identitas = teksIdentitasTtd(s);
   const bisaTerbit = !dibatalkan && BOLEH_TERBIT.includes(s.status);
   const tampilkanSisa = !dibatalkan && !SUDAH_LEWAT.includes(s.status);
   const sisa = teksSisaWaktu(s.kedaluwarsa_info);
@@ -89,7 +91,7 @@ export default function BarisPenandaTangan({
           apa pun. */}
       <div className="flex items-center gap-2 min-w-0">
         <p className="text-[11px] text-muted-foreground truncate flex-1 min-w-0">
-          {s.jabatan || "-"}{s.nip ? ` · NIP ${s.nip}` : ""}
+          {s.jabatan || "-"}{identitas ? ` · ${identitas}` : ""}
           {s.signed_at ? ` · ${s.signed_at_teks || ""}` : ""}
         </p>
         {bisaTerbit && (

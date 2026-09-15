@@ -13,6 +13,7 @@ import io
 import json
 from concurrent.futures import ThreadPoolExecutor
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import List, Literal
@@ -29,6 +30,7 @@ from auth_utils import (
     require_writer_satker,
 )
 from db import db, fs_bucket
+from pegawai_utils import label_identitas_cetak
 from ttd_penautan import (TAUT_TTD, kedaluwarsa_terdekat,
                           ringkas_status_ttd, sisa_kedaluwarsa)
 from shared_utils import (
@@ -693,6 +695,16 @@ async def _ringkas_dokumen(doc_type: str, doc_ref: str) -> dict:
         return {}
 
 
+def _label_identitas_signer(sg):
+    """Label metadata UI dari nomor utuh, SEBELUM penyamaran publik.
+
+    Field legacy `nip` juga menyimpan NIK/NRP. Tidak mengubah nomor tersimpan
+    maupun aturan privasi blok tanda tangan pada dokumen cetak.
+    """
+    nomor = re.sub(r"[\s.\-]", "", str(sg.get("nip") or ""))
+    return label_identitas_cetak(nomor) if nomor else ""
+
+
 def _publik_signer(sg):
     """Bidang aman signer untuk halaman publik (tanpa jti/token)."""
     return {k: sg.get(k) for k in ("signer_id", "nama", "nip", "jabatan",
@@ -700,7 +712,8 @@ def _publik_signer(sg):
                                    "validated_at", "deklarasi_tanpa_area",
                                    "deklarasi_jumlah_aktual",
                                    "deklarasi_jumlah_diminta")
-            } | {"jumlah_ttd": normalisasi_jumlah_ttd(sg.get("jumlah_ttd"))}
+            } | {"jumlah_ttd": normalisasi_jumlah_ttd(sg.get("jumlah_ttd")),
+                 "label_identitas": _label_identitas_signer(sg)}
 
 
 @ttd_router.post("/ttd/permintaan")
@@ -1683,6 +1696,7 @@ async def detail_permintaan(sr_id: str, user: dict = Depends(require_user)):
     # ulang tautannya.
     for _sg in (sr.get("signers") or []):
         _sg["kedaluwarsa_info"] = _sisa_kedaluwarsa(_sg, sr)
+        _sg["label_identitas"] = _label_identitas_signer(_sg)
     return {**sr,
             "dapat_kelola_penandatangan": _boleh_kelola_peserta(sr, user),
             "version": int(sr.get("version", 1) or 1),
@@ -2510,7 +2524,8 @@ async def verifikasi_publik(sr_id: str):
         "dibatalkan": dibatalkan,
         "penanda_tangan": [
             {"nama": s.get("nama"), "jabatan": s.get("jabatan"),
-             # NIP di-masking di halaman verifikasi PUBLIK (data pribadi):
+             "label_identitas": _label_identitas_signer(s),
+             # Nomor identitas di-masking di halaman verifikasi PUBLIK:
              # cukup 3 digit akhir untuk memastikan kecocokan, sisanya bintang.
              "nip": _mask_nip(s.get("nip")), "status": s.get("status"),
              "signed_at": s.get("signed_at"),
