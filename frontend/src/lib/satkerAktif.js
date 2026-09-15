@@ -50,7 +50,7 @@ export function isSuperAdminPusat(user) {
 /** Sisipkan header X-Satker-Aktif ke config axios bila ada nilai tersimpan. */
 export function terapkanHeaderSatker(config) {
   const kode = getSatkerAktif();
-  if (kode && config?.headers && !config.headers["X-Satker-Aktif"]) {
+  if (kode && config?.headers && config.headers["X-Satker-Aktif"] === undefined) {
     config.headers["X-Satker-Aktif"] = kode;
   }
   return config;

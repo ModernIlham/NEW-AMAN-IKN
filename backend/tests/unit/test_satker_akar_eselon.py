@@ -290,5 +290,5 @@ def test_lookup_yang_menemukan_KEGIATAN_tetap_membaca_master(dbx):
          "nama_satker": "Lapas Kelas IIA Nusantara"}))
     r = _jalan(ract.satker_lookup(kode="333333", _user=LAPAS))
     assert r["eselon_satker"] == 3
-    # Dan dokumen kegiatan itu memang yang ditemukan lebih dulu.
-    assert r["nama_satker"] == "Lapas Kelas IIA Nusantara"
+    # Identitas master kini didahulukan; akar tetap dari master, bukan kegiatan.
+    assert r["nama_satker"] == "Satker 333333"

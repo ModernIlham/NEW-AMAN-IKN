@@ -28,6 +28,8 @@ import { compressPdfFile } from "@/lib/pdfCompression";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { useTripleClick } from "@/hooks/useTripleClick";
+import { kabarkanPerubahanSatker } from "@/lib/referensiSatker";
+import { useRevisiSatker } from "@/hooks/useReferensiSatker";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -157,8 +159,11 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
   const [formErrors, setFormErrors] = useState({});
   const [satkerList, setSatkerList] = useState([]);
   const [selectedSatker, setSelectedSatker] = useState('all');
+  const revisiSatker = useRevisiSatker();
   const [photoLightbox, setPhotoLightbox] = useState(null); // { activityId, index }
   const satkerLookupTimer = useRef(null);
+  const muatKegiatanSeq = useRef(0);
+  const muatSatkerSeq = useRef(0);
 
   const emptyForm = {
     nomor_surat: '', nama_kegiatan: '', deskripsi: '',
@@ -173,12 +178,15 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
   };
 
   const fetchActivities = async () => {
+    const seq = ++muatKegiatanSeq.current;
     setLoading(true);
     try {
       const r = await axios.get(`${API}/inventory-activities`);
+      if (seq !== muatKegiatanSeq.current) return;
       setActivities(r.data);
       setFetchError(null);
     } catch (err) {
+      if (seq !== muatKegiatanSeq.current) return;
       console.error('Fetch activities error:', err);
       // Keep an error state so the UI shows a retry card instead of the
       // "no activities" empty state (which would falsely read as "you have none").
@@ -188,8 +196,10 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
   };
 
   const fetchSatkerList = async () => {
+    const seq = ++muatSatkerSeq.current;
     try {
       const r = await axios.get(`${API}/satker-list`);
+      if (seq !== muatSatkerSeq.current) return;
       setSatkerList(r.data || []);
     } catch { /* silent */ }
   };
@@ -259,7 +269,14 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
   const dariPegawai = (nama) =>
     pegawaiRef.find((p) => p.nama === nama) || null;
 
-  useEffect(() => { fetchActivities(); fetchSatkerList(); fetchReferensiTim(); }, []);
+  const batalkanMuat = useCallback(() => {
+    muatKegiatanSeq.current++;
+    muatSatkerSeq.current++;
+  }, []);
+  useEffect(() => {
+    fetchActivities(); fetchSatkerList(); fetchReferensiTim();
+    return batalkanMuat;
+  }, [revisiSatker, batalkanMuat]);
 
   // W5: aset yang tercatat di >1 kegiatan — kegiatan = pemutakhir berkala,
   // bukan induk; sistem mengenali barang yang sama lintas kegiatan.
@@ -402,7 +419,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
         : `Ganti nama terdaftar menjadi '${form.nama_satker.trim()}'`;
       const ok = await confirm({
         title: "Data Satker Berbeda dengan yang Terdaftar",
-        description: `${det.pesan} ${ganti} sesuai input saat ini? Seluruh kegiatan satker tersebut dan Master Satker ikut diperbarui.`,
+        description: `${det.pesan} ${ganti} sesuai input saat ini? Seluruh kegiatan, akun, dan referensi modul satker tersebut ikut diperbarui. Nomor serta berkas dokumen terbit tetap. Jalankan saat pengguna satker tidak sedang menyunting data.`,
         confirmLabel: "Perbarui dengan Input Ini",
       });
       if (!ok) return null;
@@ -426,8 +443,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
         axios.post(`${API}/inventory-activities`, { ...payload, perbarui_satker: perbarui }));
       if (!r) return; // pengguna membatalkan konfirmasi satker
       toast.success("Kegiatan inventarisasi berhasil dibuat");
-      fetchActivities();
-      fetchSatkerList();
+      kabarkanPerubahanSatker();
       setShowCreate(false);
       setForm({...emptyForm});
       if (r.data?.id) onSelectActivity(r.data);
@@ -518,8 +534,8 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
         axios.put(`${API}/inventory-activities/${editingActivity.id}`, { ...payload, perbarui_satker: perbarui }));
       if (!r) return; // pengguna membatalkan konfirmasi satker
       toast.success("Kegiatan berhasil diperbarui");
-      fetchActivities();
-      fetchSatkerList();
+      if (selectedSatker === editingActivity.kode_satker) setSelectedSatker(r.data.kode_satker);
+      kabarkanPerubahanSatker();
       setShowCreate(false);
       setEditingActivity(null);
       setForm({...emptyForm});

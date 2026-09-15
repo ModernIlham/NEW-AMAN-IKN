@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState, lazy, Suspense } from "react";
+import useReferensiSatker from "@/hooks/useReferensiSatker";
 import axios from "axios";
 import { toast } from "sonner";
 import {
@@ -57,7 +58,7 @@ export default function PejabatPage({ user, onBack }) {
   const [unitList, setUnitList] = useState([]); // Master Unit Kerja (audit W4)
   const [pegawaiList, setPegawaiList] = useState([]); // Master Pegawai (picker PJB-1)
   const [pegawaiPick, setPegawaiPick] = useState(""); // teks pencarian picker
-  const [satkerList, setSatkerList] = useState([]); // Master Satker (super-admin)
+  const { daftar: satkerList } = useReferensiSatker(isSuperAdmin);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(null);
@@ -112,9 +113,6 @@ export default function PejabatPage({ user, onBack }) {
       .then((r) => setPegawaiList(r.data?.items || []))
       .catch(() => setPegawaiList([]));
     // Master Satker → pemilih & pembeda satker bagi super-admin (PJB-2)
-    if (isSuperAdmin) axios.get(`${API}/satker`)
-      .then((r) => setSatkerList(r.data?.items || []))
-      .catch(() => setSatkerList([]));
   }, [load, isAdmin, isSuperAdmin]);
 
   const togglePeran = (kode) => setForm((f) => {

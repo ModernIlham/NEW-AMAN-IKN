@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useRevisiSatker } from "@/hooks/useReferensiSatker";
 import axios from "axios";
 import { toast } from "sonner";
 import {
@@ -188,6 +189,7 @@ export default function PengadaanPage({ user, onBack }) {
   // pusat sedang ber-"act-as". Dipakai menyaring daftar pejabat yang boleh
   // menandatangani dan membaca setelan satker yang benar.
   const kodeSatkerEfektif = String(user?.kode_satker || "").trim() || getSatkerAktif();
+  const revisiSatker = useRevisiSatker();
 
   useEffect(() => {
     if (!lpbGab) return undefined;
@@ -212,7 +214,7 @@ export default function PengadaanPage({ user, onBack }) {
       }
     })();
     return () => { batal = true; };
-  }, [lpbGab, kodeSatkerEfektif]);
+  }, [lpbGab, kodeSatkerEfektif, revisiSatker]);
 
   const muat = useCallback(() => {
     axios.get(`${API}/pengadaan`)

@@ -1,4 +1,5 @@
 import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
+import useReferensiSatker from "@/hooks/useReferensiSatker";
 import axios from "axios";
 import { toast } from "sonner";
 import {
@@ -94,12 +95,7 @@ export default function PerencanaanPage({ user, onBack }) {
   }, []);
 
   // Referensi Master Satker — saran unit/KPB pengusul
-  const [satkerList, setSatkerList] = useState([]);
-  useEffect(() => {
-    axios.get(`${API}/satker`)
-      .then((r) => setSatkerList(r.data?.items || []))
-      .catch(() => {});
-  }, []);
+  const { daftar: satkerList } = useReferensiSatker();
 
   // ── SBSK (PMK 138/2024) + sanding usulan vs aset eksisting ──
   const [sbsk, setSbsk] = useState(null);

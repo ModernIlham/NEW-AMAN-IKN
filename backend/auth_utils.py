@@ -318,10 +318,15 @@ async def get_current_user(authorization: str):
     return await _decode_bearer(authorization)
 
 
-async def _satker_terdaftar(kode: str) -> bool:
+async def _satker_terdaftar(kode: str, database=None) -> bool:
     """True bila `kode` terdaftar di Master Satker. Diekstrak agar mudah
     di-mock pada pengujian (koleksi Motor sulit di-monkeypatch langsung)."""
-    return bool(await db.satker.find_one({"kode_satker": kode}, {"_id": 1}))
+    # Edit kegiatan versi lama belum melakukan auto-registrasi master.
+    # Tetap kenali satker yang NYATA dipakai kegiatan, tanpa membuka semua data.
+    basis = database if database is not None else db
+    return bool(await basis.satker.find_one({"kode_satker": kode}, {"_id": 1})
+                or await basis.inventory_activities.find_one(
+                    {"kode_satker": kode}, {"_id": 1}))
 
 
 async def _terapkan_satker_aktif(user: dict, x_satker_aktif: str) -> dict:
@@ -337,9 +342,9 @@ async def _terapkan_satker_aktif(user: dict, x_satker_aktif: str) -> dict:
     super-admin lewat `_super_admin_asli` (lihat is_super_admin).
 
     KEAMANAN: header ini DIABAIKAN untuk user yang sudah terikat satker — ia
-    tak boleh berpura-pura jadi satker lain. Kode yang tak terdaftar juga
-    diabaikan (jatuh ke perilaku lintas-satker biasa), bukan ditolak, agar
-    header basi tak mengunci aplikasi.
+    tak boleh berpura-pura jadi satker lain. Kode yang tidak dikenal ditolak:
+    label satu satker tidak boleh diam-diam menampilkan/menulis lintas satker.
+    Pemilih master mengirim header kosong eksplisit untuk pemulihan pilihan.
     """
     kode = str(x_satker_aktif or "").strip()
     # Hanya super-admin PUSAT (belum tersuntik) yang boleh act-as.
@@ -348,7 +353,9 @@ async def _terapkan_satker_aktif(user: dict, x_satker_aktif: str) -> dict:
     if not kode or not asli_super:
         return user
     if not await _satker_terdaftar(kode):
-        return user
+        raise HTTPException(status_code=409, detail=(
+            "Satker aktif tidak lagi tersedia. Pilih ulang satker pada stempel "
+            "Satker Aktif, atau pilih Semua Satker."))
     user["_super_admin_asli"] = True   # otoritas TETAP super-admin
     user["_kode_satker_asli"] = ""
     user["_satker_aktif"] = kode

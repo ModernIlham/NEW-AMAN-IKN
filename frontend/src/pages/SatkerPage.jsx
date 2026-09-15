@@ -1,4 +1,6 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useRevisiSatker } from "@/hooks/useReferensiSatker";
+import { kabarkanPerubahanSatker } from "@/lib/referensiSatker";
 import axios from "axios";
 import { toast } from "sonner";
 import {
@@ -66,19 +68,25 @@ export function SatkerPanel({ user }) {
   const [pejabat, setPejabat] = useState([]);
   const [slotTtd, setSlotTtd] = useState([]);
   const { confirm, confirmDialog } = useConfirm();
+  const loadSeq = useRef(0);
 
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     setLoading(true);
     try {
       const r = await axios.get(`${API}/satker`);
+      if (seq !== loadSeq.current) return;
       setData(r.data);
     } catch (e) {
+      if (seq !== loadSeq.current) return;
       toast.error(apiErr(e, "Gagal memuat master satker"));
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
   }, []);
-  useEffect(() => { load(); }, [load]);
+  const revisiSatker = useRevisiSatker();
+  const batalkanMuat = useCallback(() => { loadSeq.current++; }, []);
+  useEffect(() => { load(); return batalkanMuat; }, [load, revisiSatker, batalkanMuat]);
 
   // Gagal memuat referensi pejabat TIDAK menggagalkan halaman: profil satker
   // tetap bisa disunting, hanya bagian penanda tangannya yang menerangkan
@@ -106,6 +114,7 @@ export function SatkerPanel({ user }) {
     setSinkron(true);
     try {
       const r = await axios.post(`${API}/satker/sinkron`);
+      kabarkanPerubahanSatker();
       toast.success(r.data?.baru
         ? `${r.data.baru} satker dari kegiatan didaftarkan ke master`
         : "Semua satker kegiatan sudah terdaftar");
@@ -145,6 +154,7 @@ export function SatkerPanel({ user }) {
     try {
       const { _baru, ...body } = form;
       await axios.put(`${API}/satker/${encodeURIComponent(form.kode_satker.trim())}`, body);
+      kabarkanPerubahanSatker();
       toast.success(`Profil satker ${form.kode_satker} tersimpan — kop laporan kegiatan satker ini mengikuti`);
       setForm(null);
       load();
@@ -161,6 +171,7 @@ export function SatkerPanel({ user }) {
     if (!ok) return;
     try {
       await axios.delete(`${API}/satker/${encodeURIComponent(it.kode_satker)}`);
+      kabarkanPerubahanSatker();
       toast.success("Satker dihapus dari master");
       load();
     } catch (e) { toast.error(apiErr(e, "Gagal menghapus")); }
