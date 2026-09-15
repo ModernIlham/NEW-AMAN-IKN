@@ -18,6 +18,23 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1064] Lokasi manual terpisah dari denah dan kategori luar kawasan — 2026-09-15
+
+[PR #1055](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1055).
+
+- Simpan/deteksi ulang denah dan penerapan opname tidak menimpa Lokasi manual.
+  Kolom baca-saja Lokasi Denah (otomatis) di bawahnya memperlihatkan hierarki
+  penempatan tersimpan; draft lokasi/foto/catatan tidak dibuang saat simpan denah.
+- Distribusi Lokasi Aset pada laporan eksekutif memisahkan titik penempatan
+  di luar kawasan dari aset belum ditempatkan. Tetap terpisah tanpa node denah,
+  lokasi manual tetap daun hierarki, dan total hanya menghitung kelompok atas.
+- Ringkasan denah ikut cache offline. Cache proyeksi lama dimuat penuh ketika
+  sinkron daring berikutnya, tanpa menghapus cache baca atau antrean edit;
+  metadata yang belum ada tidak disalahartikan sebagai belum ditempatkan.
+- Uji form/draft/luring, route penempatan/opname, proyeksi, total hierarki dan
+  render PDF melindungi perilaku baru. Teks Lokasi yang sudah berubah pada versi
+  terdahulu tidak dipulihkan massal tanpa pemeriksaan riwayat/backup.
+
 ## [#1063] Label identitas penanda tangan elektronik sesuai nomor — 2026-09-15
 
 [PR #1054](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1054).
