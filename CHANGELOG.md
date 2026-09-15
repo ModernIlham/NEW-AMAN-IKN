@@ -18,6 +18,20 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1063] Label identitas penanda tangan elektronik sesuai nomor — 2026-09-15
+
+[PR #1054](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1054).
+
+- Pop-up penanda tangan, halaman pembubuhan beserta tooltip, dan verifikasi
+  publik menampilkan NIK/NIP/NI PPPK/NRP sesuai nomor, bukan label NIP tetap.
+- Jenis identitas dihitung server dari nomor utuh sebelum disamarkan. Nomor
+  tidak dikenal memakai label netral; respons lama tidak ditebak sebagai NIP.
+- Nomor tersimpan, token, dokumen dan alur validasi tidak berubah. Verifikasi
+  publik tetap hanya memperlihatkan tiga karakter akhir; aturan tidak mencetak
+  NIK pada blok tanda tangan PDF/Word tetap dipertahankan.
+- Uji route/serializer, komponen pop-up, kedua halaman publik dan formatter
+  menjaga label serta penyamaran identitas.
+
 ## [#1062] Identitas satker sinkron lintas kegiatan dan modul — 2026-09-15
 
 [PR #1053](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1053).

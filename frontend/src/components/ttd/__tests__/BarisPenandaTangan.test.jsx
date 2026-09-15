@@ -22,7 +22,7 @@ import BarisPenandaTangan from "../BarisPenandaTangan";
 
 const SIGNER = {
   signer_id: "s-1", urutan: 1, nama: "Karlinus Ignasius Manek",
-  jabatan: "Analis Kebijakan Ahli Madya", nip: "1990",
+  jabatan: "Analis Kebijakan Ahli Madya", nip: "1990", label_identitas: "NIP",
   status: "aktif", kedaluwarsa_info: { sisa_detik: 13 * 24 * 3600 },
 };
 
@@ -79,6 +79,13 @@ describe("Kepadatan", () => {
 });
 
 describe("Isi baris", () => {
+  test("pegawai dengan NIK tidak dilabeli NIP", () => {
+    pasang({ signer: { ...SIGNER, jabatan: "Konsultan Individu",
+      nip: "3506042503900001", label_identitas: "NIK" } });
+    expect(screen.getByText("Konsultan Individu · NIK 3506042503900001")).toBeInTheDocument();
+    expect(screen.queryByText(/NIP/)).not.toBeInTheDocument();
+  });
+
   test("nomor urut, nama, jabatan, dan NIP tetap tampil", () => {
     pasang();
     expect(screen.getByText("1. Karlinus Ignasius Manek")).toBeInTheDocument();
