@@ -104,6 +104,28 @@ export function labelDenah(aset) {
     || a.denah_nama || spasial.node_nama || "").trim();
 }
 
+/** Hasil penempatan tersimpan, bukan tebakan dari koordinat GPS mentah. */
+export function keteranganLokasiDenah(aset, { dariCache = false } = {}) {
+  const a = aset || {};
+  if (dariCache && typeof a.di_denah !== "boolean"
+      && !Object.prototype.hasOwnProperty.call(a, "lokasi_spasial")) {
+    return "Informasi denah belum tersinkron";
+  }
+  if (diDenah(a)) return labelDenah(a) || "Di denah (nama belum tersedia)";
+  const titik = Object.prototype.hasOwnProperty.call(a, "lokasi_spasial")
+    ? a.lokasi_spasial?.titik : a.denah_titik;
+  const angka = (v) => (v === null || v === undefined || String(v).trim() === ""
+    ? NaN : Number(String(v).replace(",", ".")));
+  if (Array.isArray(titik) && titik.length === 2) {
+    const [lon, lat] = titik.map(angka);
+    if (Number.isFinite(lon) && Number.isFinite(lat) && Math.abs(lon) <= 180
+        && Math.abs(lat) <= 90 && (lon !== 0 || lat !== 0)) {
+      return "Di luar kawasan terpetakan";
+    }
+  }
+  return "Belum ditempatkan di denah";
+}
+
 /**
  * Teks baris lokasi pada kartu/baris daftar — "" bila tak ada yang perlu
  * ditampilkan.

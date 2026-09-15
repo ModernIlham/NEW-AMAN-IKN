@@ -5581,6 +5581,8 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
         "value": sum(b["value"] for b in loc_hier if b["depth"] == 0),
     }
     loc_jenjang_label = [_LABEL_DENAH.get(lv, lv) for lv in lok_level_exec]
+    if not lok_level_exec and any(ljj.di_luar_denah(a) for a in all_assets):
+        loc_jenjang_label.append("Penempatan denah")
     loc_jenjang_label.append("Lokasi tercatat")
 
     # Year chart data (sorted by year ascending for chart)

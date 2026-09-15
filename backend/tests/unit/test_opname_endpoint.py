@@ -381,9 +381,8 @@ class TestPerpindahanDalamLingkupTakHilang:
 
 
 class TestTerapkanTidakMerusak:
-    def test_location_ikut_berpindah_agar_KIR_DBR_tak_tertinggal(self, dbx):
-        # reports.py mencocokkan ruangan lewat STRING `location`; tanpa ini,
-        # denah diperbarui tetapi DOKUMEN RESMI menyebut ruangan lama.
+    def test_lokasi_manual_tetap_saat_penempatan_opname_berpindah(self, dbx):
+        # KIR/DBR memakai lokasi manual: penerapan denah tidak menimpanya.
         async def jalan():
             await _seed(dbx)
             await dbx.assets.update_one({"id": "a1"},
@@ -395,7 +394,8 @@ class TestTerapkanTidakMerusak:
             riwayat = await dbx.riwayat_lokasi_aset.find_one({}, {"_id": 0})
             return aset, riwayat
         aset, riwayat = _jalan(jalan())
-        assert aset["location"] == "Ruang 307"
+        assert aset["location"] == "Ruang 305"
+        assert aset["lokasi_spasial"]["node_nama"] == "Ruang 307"
         # Nilai lama tak boleh lenyap tanpa jejak.
         assert riwayat["location_lama"] == "Ruang 305"
 

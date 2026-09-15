@@ -43,7 +43,7 @@ import { reserveDummyNup as reserveDummyNupLib } from "../../lib/dummyNup";
 import { statusInventarisasiOtomatis, autoInventarisasiEnabled } from "../../lib/inventoryStatus";
 import { terapkanHeaderSatker } from "../../lib/satkerAktif";
 import { keteranganPsp } from "../../lib/tandaPsp";
-import { normalisasiKoordinat } from "../../lib/koordinatAset";
+import { normalisasiKoordinat, keteranganLokasiDenah } from "../../lib/koordinatAset";
 import { UKURAN_STIKER } from "../../lib/stikerAset";
 
 // ============================================================================
@@ -656,6 +656,8 @@ const AssetForm = memo(({
   // URLs (photo strip, checklist photos/PDFs) so the browser cache is busted
   // whenever the asset changes.
   const [assetVersion, setAssetVersion] = useState(1);
+  // Metadata server baca-saja, di luar formData/diff/payload simpan.
+  const [infoDenahAset, setInfoDenahAset] = useState(null);
   const [isFormLoading, setIsFormLoading] = useState(false);
   // Offline edit: form initialized from the cached list row (offline snapshot)
   // because GET /assets/{id} was unreachable — shows a notice, media unavailable.
@@ -832,6 +834,7 @@ const AssetForm = memo(({
       setFieldErrors({});
       setIsSubmitting(false);
       setOfflineNotice(false);
+      setInfoDenahAset(null);
       originalDataRef.current = null;
       photosModifiedRef.current = false;
       checklistModifiedRef.current = false;
@@ -856,6 +859,7 @@ const AssetForm = memo(({
         // jadi `psp` ikut tersimpan di snapshot dan No. PSP tetap terbaca
         // saat petugas kehilangan sinyal.
         setInfoPspAset(editAsset.psp || null);
+        setInfoDenahAset(editAsset);
         setFormData(lightData);
         // Diff baseline = same cached row, so submit PATCHes only what the
         // user actually changed while offline.
@@ -878,6 +882,7 @@ const AssetForm = memo(({
           // ia tidak pernah dikirim balik saat simpan (baca-saja), jadi tak
           // boleh ikut perbandingan "ada perubahan" milik originalDataRef.
           setInfoPspAset(a.psp || null);
+          setInfoDenahAset(a);
           setFormData(lightData);
           setIsFormLoading(false);
 
@@ -930,6 +935,7 @@ const AssetForm = memo(({
       initializedIdRef.current = null;
       setFormData({...emptyForm});
       setEditId(null);
+      setInfoDenahAset(null);
       setAssetVersion(1);
       setFormSection("basic");
       setShowFullForm(false);
@@ -955,6 +961,7 @@ const AssetForm = memo(({
 
   const resetForm = useCallback(() => {
     setFormData({...emptyForm});
+    setInfoDenahAset(null);
     setEditId(null);
     setAssetVersion(1);
     setFormSection("basic");
@@ -2242,11 +2249,11 @@ const AssetForm = memo(({
                     koordinat_longitude: formData.koordinat_longitude,
                     onSaved: (aset) => {
                       if (asetDenahAktifRef.current !== id) return;
-                      // Hanya tiga field yang baru dikomit. Foto, kondisi,
-                      // catatan, dan isian belum disimpan tidak di-reset.
-                      const lokasi = { location: aset.location,
-                        koordinat_latitude: aset.koordinat_latitude,
+                      // Koordinat baru dikomit; lokasi manual termasuk draft
+                      // yang belum disimpan tetap milik petugas.
+                      const lokasi = { koordinat_latitude: aset.koordinat_latitude,
                         koordinat_longitude: aset.koordinat_longitude };
+                      setInfoDenahAset(aset);
                       setFormData(p => ({ ...p, ...lokasi }));
                       originalDataRef.current = { ...originalDataRef.current, ...lokasi };
                       setAssetVersion(aset.version);
@@ -2568,6 +2575,14 @@ const AssetForm = memo(({
                 <span><b>Barang Bersejarah</b> — masuk seksi Laporan Barang Bersejarah pada LBP (PSAP 07: diungkapkan dalam kuantitas).</span>
               </label>
               <div className="space-y-1"><Label className="text-xs">Lokasi</Label><Input name="location" value={formData.location} onChange={handleInputChange} className="h-8" list="daftar-ruangan-master" placeholder="pilih ruangan / ketik bebas" /><datalist id="daftar-ruangan-master">{ruanganNames.map((n) => <option key={n} value={n} />)}</datalist></div>
+              <div className="space-y-1">
+                <Label htmlFor="asset-lokasi-denah" className="text-xs">Lokasi Denah (otomatis)</Label>
+                <textarea id="asset-lokasi-denah" readOnly rows={2}
+                  value={isFormLoading ? "Memuat penempatan denah…" : keteranganLokasiDenah(infoDenahAset, { dariCache: offlineNotice })}
+                  className="w-full rounded-md border border-input bg-muted px-3 py-2 text-xs resize-none"
+                  data-testid="asset-lokasi-denah" />
+                <p className="text-[10px] text-muted-foreground">Hasil penempatan tersimpan. Setelah mengubah koordinat, gunakan Denah untuk deteksi ulang. Lokasi manual tidak ditimpa.</p>
+              </div>
               {/* Unit organisasi — SATU pilihan yang mengisi Eselon I–V sekaligus.
                   Dua select terpisah dulu hanya sampai Eselon II, dan sumbernya
                   daftar teks yang diketik pada kegiatan; kini dari master unit,

@@ -44,19 +44,21 @@ async def simpan(req=None, **isi):
         **({"lat": "-1,5", "lon": "116,8", "node_id": "baru"} | isi)), req or request(), USER)
 
 
-def test_pindah_menyamakan_induk_geo_snapshot_dan_riwayat(monkeypatch):
+def test_pindah_menyamakan_geo_snapshot_riwayat_tanpa_menimpa_lokasi_manual(monkeypatch):
     async def jalan():
         db = await siapkan(monkeypatch)
         hasil = await simpan()
         a = await db.assets.find_one({"id": "a1"})
         assert a["version"] == hasil["asset"]["version"] == 4
-        assert a["location"] == "Ruang Baru"
+        assert a["location"] == "Ruang Lama"
         assert a["koordinat_latitude"] == "-1.5"
         assert a["koordinat_longitude"] == "116.8"
         assert a["geo"]["coordinates"] == a["lokasi_spasial"]["titik"] == [116.8, -1.5]
         assert a["notes"] == "Tetap"
         assert hasil["asset"]["di_denah"] is True
         assert hasil["asset"]["denah_nama"] == "Ruang Baru"
+        assert hasil["asset"]["denah_jalur"] == "Gedung B / Lantai 2 / Ruang Baru"
+        assert hasil["asset"]["denah_titik"] == [116.8, -1.5]
         jejak = await db.riwayat_lokasi_aset.find_one({"asset_id": "a1"})
         assert jejak and jejak["oleh"] == "uji"
         shared_utils.invalidate_asset_cache.assert_called_once()
@@ -75,6 +77,7 @@ def test_cabut_tidak_menghapus_koordinat_atau_nama_lokasi(monkeypatch):
         assert a["location"] == "Ruang Lama"
         assert a["geo"]["coordinates"] == [116.7, -1.4]
         assert hasil["asset"]["di_denah"] is False
+        assert hasil["asset"]["denah_titik"] is None
     asyncio.run(jalan())
 
 

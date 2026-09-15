@@ -263,15 +263,13 @@ LIST_PROJECTION = {
     "siman": 1,
     # Jejak BAST serah terima terakhir (badge riwayat handover per aset).
     "bast_terakhir": 1,
-    # Penempatan pada denah — DIRINGKAS jadi satu bendera + satu nama, bukan
-    # subdoc `lokasi_spasial` utuh. Baris daftar hanya perlu menjawab "sudah
-    # masuk denah atau belum" dan "di node mana"; mengirim titik, node_tipe,
-    # dan jalur lengkapnya untuk tiap baris hanya menggemukkan payload yang
-    # justru sengaja diperkecil di sini (lihat catatan gallery_thumbnail).
+    # Ringkasan penempatan untuk daftar dan kolom baca-saja saat offline.
+    # Titik tersimpan membedakan di luar denah dari belum ditempatkan;
+    # subdoc/audit penempatan lengkap tidak ikut dikirim pada daftar.
     #
-    # `node_id` yang menentukan, bukan keberadaan subdocnya: penempatan yang
-    # dilepas menyisakan subdoc dengan node_id kosong (spasial_utils), dan
-    # memeriksa subdocnya saja akan menandai aset itu masih di denah.
+    # `node_id` yang menentukan, bukan keberadaan subdocnya: titik di luar
+    # kawasan tersimpan dengan node_id kosong; cabut penempatan menghapus
+    # subdoc. Keduanya tidak lagi menempati node denah.
     #
     # Dibandingkan dengan "" lewat `$ne`, bukan diukur panjangnya: `$strLenCP`
     # menolak nilai non-string (dokumen era-lama bisa menyimpan id sebagai
@@ -280,6 +278,7 @@ LIST_PROJECTION = {
     "di_denah": {"$ne": [{"$ifNull": ["$lokasi_spasial.node_id", ""]}, ""]},
     "denah_nama": {"$ifNull": ["$lokasi_spasial.node_nama", ""]},
     "denah_jalur": {"$ifNull": ["$lokasi_spasial.jalur_nama", ""]},
+    "denah_titik": {"$ifNull": ["$lokasi_spasial.titik", None]},
     # GridFS-first (dokumen ter-migrasi punya photos=[] tapi gridfs terisi);
     # fallback ke inline untuk dokumen legacy.
     "photo_count": {"$cond": [

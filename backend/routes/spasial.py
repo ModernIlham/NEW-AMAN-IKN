@@ -1873,8 +1873,8 @@ async def set_lokasi_aset(asset_id: str, payload: LokasiAsetIn,
         perubahan.update({"lokasi_spasial": lokasi,
                           "koordinat_latitude": str(lat),
                           "koordinat_longitude": str(lon)})
-        if node:
-            perubahan["location"] = node["nama"]
+        # Lokasi manual terpisah dari hierarki denah; deteksi ulang hanya
+        # memperbarui penempatan dan koordinat, bukan keterangan petugas.
         unset.update(su.sisip_geo_ke_update(aset, perubahan))
 
     operasi = {"$set": perubahan}
@@ -1889,6 +1889,7 @@ async def set_lokasi_aset(asset_id: str, payload: LokasiAsetIn,
                        "updated_at": now, "lokasi_spasial": lokasi,
                        "di_denah": bool((lokasi or {}).get("node_id")),
                        "denah_nama": (lokasi or {}).get("node_nama", ""),
+                       "denah_titik": (lokasi or {}).get("titik"),
                        "denah_jalur": (lokasi or {}).get("jalur_nama", "")})
     hasil = {"ok": True, "lokasi_spasial": lokasi, "asset": hasil_aset}
     await store_idempotent_response(idem_key, {"fingerprint": fingerprint, "hasil": hasil})

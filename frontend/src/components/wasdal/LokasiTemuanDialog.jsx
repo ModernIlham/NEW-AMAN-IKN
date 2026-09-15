@@ -396,7 +396,7 @@ export default function LokasiTemuanDialog({
               Gunakan koordinat terbaru ({terbaru.lat}, {terbaru.lon})
             </Button>
           )}
-          {version != null && <p className="text-muted-foreground">Simpan Lokasi menyamakan koordinat aset dan nama lokasi dengan node pilihan. Cabut Penempatan hanya melepas tautan denah.</p>}
+          {version != null && <p className="text-muted-foreground">Simpan Lokasi memperbarui koordinat dan Lokasi Denah. Isian Lokasi manual tidak berubah. Cabut Penempatan hanya melepas tautan denah.</p>}
           {konflik && <p role="alert" className="text-red-700 dark:text-red-300">Aset telah berubah. Tutup denah dan muat ulang form aset; isian lain Anda belum disimpan.</p>}
           {lantai.length > 0 && (
             <label className="flex items-center gap-2">

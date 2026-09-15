@@ -40,6 +40,18 @@ beforeEach(() => {
 });
 
 describe("upsertSnapshotAsset — baca-gabung-tulis", () => {
+  test("ringkasan denah masuk cache dan pencabutan membersihkan penempatan sebelumnya", async () => {
+    await upsertSnapshotAsset("keg1", { id: "a1", location: "Manual", di_denah: true,
+      denah_nama: "Ruang", denah_jalur: "Gedung / Ruang", denah_titik: [116.9, -1.5] });
+    expect(mockSimpanan.assets.get("a1").denah_jalur).toBe("Gedung / Ruang");
+    await upsertSnapshotAsset("keg1", { id: "a1", di_denah: false,
+      denah_nama: "", denah_jalur: "", denah_titik: null });
+    const baris = mockSimpanan.assets.get("a1");
+    expect(baris.location).toBe("Manual");
+    expect(baris.denah_titik).toBeNull();
+    expect(baris.denah_jalur).toBe("");
+  });
+
   test("potongan PATCH tidak menghapus field lain dari baris tersimpan", async () => {
     mockSimpanan.assets.set("a1", {
       id: "a1", activity_id: "keg1", asset_name: "Meja Rapat",
