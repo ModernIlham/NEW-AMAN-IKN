@@ -2434,7 +2434,7 @@ const AssetForm = memo(({
                       {!kodeLocked && (
                         <DropdownMenu open={kodePickerOpen} onOpenChange={setKodePickerOpen}>
                           <DropdownMenuTrigger asChild>
-                            <button type="button" title="Cari kode barang di referensi kodefikasi" className="h-8 px-2.5 rounded-md border border-input bg-card hover:bg-accent flex items-center gap-1 text-xs shrink-0" data-testid="asset-code-picker">
+                            <button type="button" title="Cari kode barang di referensi kodefikasi" className="h-8 min-h-0 min-w-0 px-2.5 rounded-md border border-input bg-card hover:bg-muted flex items-center gap-1 text-xs shrink-0" data-testid="asset-code-picker">
                               <Search className="w-3.5 h-3.5" /><span className="hidden sm:inline">Referensi</span>
                             </button>
                           </DropdownMenuTrigger>
@@ -2550,13 +2550,13 @@ const AssetForm = memo(({
               </div>
               <div className="space-y-1"><Label className="text-xs">Kode Register</Label><Input name="kode_register" value={formData.kode_register} onChange={handleInputChange} placeholder="32 karakter hex" maxLength={32} className="h-8" /></div>
               <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1"><Label className="text-xs">Tanggal Beli</Label><InputTanggal name="purchase_date" value={formData.purchase_date} onChange={handleInputChange} className="h-8 text-sm" /></div>
+                <div className="space-y-1 min-w-0"><Label className="text-xs">Tanggal Beli</Label><InputTanggal name="purchase_date" value={formData.purchase_date} onChange={handleInputChange} className="h-8 min-h-0 min-w-0 gap-1 px-2 py-0 text-sm [&_svg]:ml-0" aria-label="Tanggal beli" data-testid="asset-purchase-date" /></div>
                 <div className="space-y-1"><Label className="text-xs">Harga (Rp)</Label><Input type="number" name="purchase_price" value={formData.purchase_price} onChange={handleInputChange} className="h-8" /></div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <Label className="text-xs">Garansi hingga{garansiOtomatis ? <span className="ml-1 text-[10px] text-sky-600 dark:text-sky-400 font-normal">otomatis</span> : null}</Label>
-                  <InputTanggal name="garansi_hingga" value={formData.garansi_hingga || ""} onChange={handleInputChange} className="h-8 text-sm" data-testid="asset-garansi" />
+                  <InputTanggal name="garansi_hingga" value={formData.garansi_hingga || ""} onChange={handleInputChange} className="h-8 min-h-0 min-w-0 gap-1 px-2 py-0 text-sm [&_svg]:ml-0" aria-label="Garansi hingga" data-testid="asset-garansi" />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Jenis garansi</Label>
@@ -2704,13 +2704,13 @@ const AssetForm = memo(({
                     {/* Tap kartu e-KTP → pegawai terisi otomatis (identifikasi cepat) */}
                     <button type="button" title="Tap kartu pegawai (e-KTP/NFC)"
                       onClick={() => setKartuTapOpen(true)}
-                      className="h-8 px-2 rounded-md border border-input bg-card hover:bg-accent flex items-center shrink-0 min-w-0 min-h-0"
+                      className="h-8 px-2 rounded-md border border-input bg-card hover:bg-muted flex items-center shrink-0 min-w-0 min-h-0"
                       data-testid="pengguna-tap-kartu">
                       <IdCard className="w-3.5 h-3.5 text-blue-600" />
                     </button>
                     <DropdownMenu open={pegawaiPickerOpen} onOpenChange={setPegawaiPickerOpen}>
                       <DropdownMenuTrigger asChild>
-                        <button type="button" title="Pilih dari Master Pegawai" className="h-8 px-2.5 rounded-md border border-input bg-card hover:bg-accent flex items-center gap-1 text-xs shrink-0" data-testid="pengguna-pegawai-picker">
+                        <button type="button" title="Pilih dari Master Pegawai" className="h-8 min-h-0 min-w-0 px-2.5 rounded-md border border-input bg-card hover:bg-muted flex items-center gap-1 text-xs shrink-0" data-testid="pengguna-pegawai-picker">
                           <Search className="w-3.5 h-3.5" /><span className="hidden sm:inline">Pegawai</span>
                         </button>
                       </DropdownMenuTrigger>
@@ -2756,7 +2756,7 @@ const AssetForm = memo(({
                     {isEditing && (
                       <Button
                         type="button" variant="outline" size="sm"
-                        className="h-8 px-2 text-[10px] flex-shrink-0"
+                        className="h-8 min-h-0 min-w-0 px-2 text-[10px] flex-shrink-0"
                         onClick={() => bastInputRef.current?.click()}
                         disabled={bastUploading}
                         title="Unggah dokumen BAST (PDF/gambar, maks 10MB)"
