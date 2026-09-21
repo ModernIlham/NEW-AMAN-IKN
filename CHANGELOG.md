@@ -18,6 +18,22 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1067] Satu referensi jenis operasional Unit/Tempat/Tugas — 2026-09-21
+
+[PR #1058](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1058).
+
+- Pilihan Kegiatan/Acara/Kebutuhan menjadi Unit/Tempat/Tugas pada form
+  tambah/edit, lembar cepat, kamera lapangan, ubah massal, dan panduan aplikasi.
+  Pilihan Ruangan tetap tersedia dengan makna yang sama.
+- Nilai lama dikenali sebagai alias, termasuk ketika form membaca cache
+  offline. Kartu aset, ekspor CSV/XLSX, dan template impor memakai nama baru.
+  Tidak ada migrasi massal atau perubahan foto/dokumen/audit historis;
+  nilai kustom tidak dibuang dan membuka form tidak menulis ke database.
+- Backend 4.957 tes lulus, 5 dilewati; frontend 160 suite / 1.759 tes lulus.
+  Lint berkas berubah, build produksi, dan pemeriksa rahasia lulus. QA pada
+  10 kombinasi lebar layar/tema memakai CSS produksi; label tidak terpotong,
+  hover tetap terbaca, dan kartu PDF diperiksa visual.
+
 ## [#1066] Kontrol form aset sejajar pada HP dan tablet — 2026-09-21
 
 [PR #1057](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1057).

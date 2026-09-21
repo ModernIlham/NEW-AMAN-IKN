@@ -27,6 +27,7 @@ from xml.sax.saxutils import escape as _xml_escape
 from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
 from auth_utils import require_user
+from operasional_utils import nama_jenis_operasional
 from shared_utils import pastikan_akses_aset, scope_query_aset, limiter
 
 from reportlab.lib.pagesizes import A4, landscape
@@ -448,7 +449,7 @@ def create_ktp_card_elements(asset, history=None):
     # --- Penanggung jawab = pengguna (asset.user) + qualifier melekat ---
     melekat = str(asset.get('pengguna_melekat_ke') or '').strip()
     jabatan = str(asset.get('pengguna_jabatan') or '').strip()
-    operasional = str(asset.get('operasional_jenis') or '').strip()
+    operasional = nama_jenis_operasional(asset.get('operasional_jenis'))
     if melekat == 'Jabatan' and jabatan:
         pj_qual = f"Jabatan: {jabatan}"
     elif melekat == 'Operasional' and operasional:

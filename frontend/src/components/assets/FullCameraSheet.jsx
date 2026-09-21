@@ -12,6 +12,7 @@ import { haptic } from "../../lib/haptics";
 import { playShutterSound, shutterSoundEnabled } from "../../lib/shutterSound";
 import { autoInventarisasiEnabled } from "../../lib/inventoryStatus";
 import { UKURAN_STIKER } from "../../lib/stikerAset";
+import { normalisasiJenisOperasional } from "../../lib/jenisOperasional";
 import {
   PREFERENSI_BAWAAN, hitungBidang, resolusiTersedia,
 } from "../../lib/preferensiKamera";
@@ -47,13 +48,13 @@ function cameraErrMsg(err) {
 // kamera DAN dicetak di watermark foto (fungsi murni, di luar komponen):
 //   Individual  → "Individual"
 //   Jabatan     → "Jabatan — <nama jabatan>"
-//   Operasional → "Operasional — <Kegiatan/Acara/Kebutuhan | Ruangan>"
+//   Operasional → "Operasional — <Unit/Tempat/Tugas | Ruangan>"
 // Kosong ("") bila belum dipilih.
 function deskripsiMelekat(fd) {
   const m = (fd?.pengguna_melekat_ke || "").trim();
   if (!m) return "";
   if (m === "Jabatan") return fd?.pengguna_jabatan ? `Jabatan — ${fd.pengguna_jabatan}` : "Jabatan";
-  if (m === "Operasional") return fd?.operasional_jenis ? `Operasional — ${fd.operasional_jenis}` : "Operasional";
+  if (m === "Operasional") return fd?.operasional_jenis ? `Operasional — ${normalisasiJenisOperasional(fd.operasional_jenis)}` : "Operasional";
   return m; // Individual (atau nilai lain apa adanya)
 }
 
@@ -1234,7 +1235,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
                   {formData?.pengguna_melekat_ke === "Operasional" && (
                     <div className="grid grid-cols-2 gap-1.5">
                       {OPERASIONAL_JENIS_OPTIONS.map(o => (
-                        <CamChip key={o} selected={formData?.operasional_jenis === o} cls="bg-indigo-600 border-indigo-600 text-white"
+                        <CamChip key={o} selected={normalisasiJenisOperasional(formData?.operasional_jenis) === o} cls="bg-indigo-600 border-indigo-600 text-white"
                           onClick={() => onSetField("operasional_jenis", o)} testId={`cam-opjenis-${o}`}>{o}</CamChip>
                       ))}
                     </div>
