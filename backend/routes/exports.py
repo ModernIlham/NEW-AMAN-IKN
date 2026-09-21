@@ -28,6 +28,7 @@ import xlsxwriter
 from PIL import Image as PILImage
 
 from asset_fields import SCALAR_FIELD_NAMES
+from operasional_utils import nama_jenis_operasional
 from routes.assets import build_asset_search_query
 import organisasi_utils as org
 from db import db
@@ -728,7 +729,8 @@ async def export_csv(request: Request, activity_id: Optional[str] = None, base_u
             photo_count = len(asset.get('photo_gridfs_ids', []))
             
             row = [
-                *[asset.get(n, _CSV_ROW_DEFAULTS.get(n, '')) for n in SCALAR_FIELD_NAMES],
+                *[nama_jenis_operasional(asset.get(n)) if n == 'operasional_jenis'
+                  else asset.get(n, _CSV_ROW_DEFAULTS.get(n, '')) for n in SCALAR_FIELD_NAMES],
                 str(photo_count),
                 asset.get('created_at', ''),
                 doc_data.get('kelengkapan_items', ''),
@@ -1196,7 +1198,7 @@ async def bangun_xlsx_bytes(query, activity_id="", base_url="", token=""):
         worksheet.write(row, 19, asset.get('pengguna_melekat_ke', ''), cell_format)
         worksheet.write(row, 20, asset.get('pengguna_jabatan', ''), cell_format)
         worksheet.write(row, 21, asset.get('pengguna_nip', ''), cell_format)
-        worksheet.write(row, 22, asset.get('operasional_jenis', ''), cell_format)
+        worksheet.write(row, 22, nama_jenis_operasional(asset.get('operasional_jenis')), cell_format)
         worksheet.write(row, 23, asset.get('nomor_bast', ''), cell_format)
         worksheet.write(row, 24, asset.get('condition', ''), cell_format)
         worksheet.write(row, 25, asset.get('status', ''), cell_format)

@@ -34,8 +34,10 @@ _DARI_VARIABEL = {"asset_code": "asset_code", "asset_nup": "NUP",
 def _tulisan():
     """{indeks kolom: nama field} dari blok penulisan baris aset."""
     keluar = {}
+    # Formatter label operasional tetap menulis field yang sama. Jangan
+    # mengecualikan kolomnya dari penjaga posisi maupun kelengkapan header.
     for m in re.finditer(
-            r"worksheet\.write\(row, (\d+), (?:str\()?asset\.get\('(\w+)'",
+            r"worksheet\.write\(row, (\d+), (?:(?:str|nama_jenis_operasional)\()?asset\.get\('(\w+)'",
             _SRC):
         keluar[int(m.group(1))] = m.group(2)
     for m in re.finditer(r"worksheet\.write\(row, (\d+), (\w+), cell_format\)",

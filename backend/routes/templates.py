@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 import xlsxwriter
 
 from auth_utils import require_user
+from operasional_utils import JENIS_OPERASIONAL
 from db import db
 from shared_utils import (
     VALID_INVENTORY_STATUSES, VALID_KLASIFIKASI, VALID_SUB_KLASIFIKASI_ALL,
@@ -112,10 +113,10 @@ ASSET_TEMPLATE_SCHEMA = [
      "sample1": "198601012010121001", "sample2": "", "dropdown": None},
     {"field": "operasional_jenis", "required": False, "width": 24,
      "rule": "Isi hanya bila pengguna_melekat_ke = Operasional. "
-             "Pilih: Kegiatan/Acara/Kebutuhan / Ruangan "
+             "Pilih: Unit/Tempat/Tugas / Ruangan "
              "(Ruangan = barang harus tetap berada di ruang tsb).",
      "sample1": "", "sample2": "",
-     "dropdown": ["Kegiatan/Acara/Kebutuhan", "Ruangan"]},
+     "dropdown": list(JENIS_OPERASIONAL)},
     {"field": "nomor_bast", "required": False, "width": 24,
      "rule": "Nomor BAST serah terima ke pengguna (dokumen BAST diunggah lewat aplikasi).",
      "sample1": "", "sample2": "", "dropdown": None},

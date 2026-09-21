@@ -80,8 +80,9 @@ class AssetCreate(BaseModel):
     # Pengguna terstruktur: melekat ke "Individual" | "Jabatan" | "Operasional".
     # `user` tetap menyimpan NAMA orangnya (label UI menyesuaikan pilihan);
     # `pengguna_jabatan` hanya terisi bila melekat ke Jabatan;
-    # `operasional_jenis` ("Kegiatan/Acara/Kebutuhan" | "Ruangan") hanya
-    # terisi bila melekat ke Operasional.
+    # `operasional_jenis` ("Unit/Tempat/Tugas" | "Ruangan") hanya
+    # terisi bila melekat ke Operasional; nilai lama "Kegiatan/Acara/Kebutuhan"
+    # tetap dikenali sebagai alias saat ditampilkan/diekspor.
     pengguna_melekat_ke: Optional[str] = ""
     pengguna_jabatan: Optional[str] = ""
     pengguna_nip: Optional[str] = ""  # NIP/NIK pegawai pengguna aset

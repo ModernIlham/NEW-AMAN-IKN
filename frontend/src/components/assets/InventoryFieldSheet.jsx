@@ -11,6 +11,7 @@ import {
 } from "../ui/select";
 import { autoInventarisasiEnabled } from "../../lib/inventoryStatus";
 import { UKURAN_STIKER } from "../../lib/stikerAset";
+import { OPERASIONAL_JENIS_OPTIONS, normalisasiJenisOperasional } from "../../lib/jenisOperasional";
 
 // ============================================================================
 // InventoryFieldSheet — tampilan EKSKLUSIF mode inventarisasi lapangan.
@@ -43,7 +44,8 @@ export const PENGGUNA_NAME_LABELS = {
 };
 // Sub-opsi bila melekat ke Operasional — nilai HARUS sama dengan backend
 // (operasional_jenis). "Ruangan" = barang harus tetap berada di ruang tsb.
-export const OPERASIONAL_JENIS_OPTIONS = ["Kegiatan/Acara/Kebutuhan", "Ruangan"];
+// Tetap diekspor di sini agar seluruh pemakai mengikuti referensi yang sama.
+export { OPERASIONAL_JENIS_OPTIONS };
 
 // Nilai HARUS sama persis dengan opsi Select pada form penuh (AssetForm).
 // Temuan cacat pencatatan yang dijumpai saat inventarisasi. Berdiri sendiri —
@@ -491,7 +493,7 @@ const InventoryFieldSheet = ({
                     {OPERASIONAL_JENIS_OPTIONS.map(o => (
                       <SegButton
                         key={o}
-                        selected={formData.operasional_jenis === o}
+                        selected={normalisasiJenisOperasional(formData.operasional_jenis) === o}
                         selectedClass="bg-teal-700 border-teal-700 text-white"
                         onClick={() => onOperasionalJenisChange(o)}
                         testId={`sheet-operasional-${o}`}

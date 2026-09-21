@@ -757,7 +757,7 @@ const BatchEditPanel = memo(function BatchEditPanel({
                     <div className="grid grid-cols-2 gap-1">
                       {OPERASIONAL_JENIS_OPTIONS.map(o => (
                         <button key={o} type="button" onClick={() => setOperasionalJenis(o)}
-                          className={`h-7 rounded-md border text-[9px] font-semibold leading-tight px-1 transition-colors ${updates.operasional_jenis === o ? 'bg-teal-700 border-teal-700 text-white' : 'bg-background border-border text-foreground/80 hover:bg-accent'}`}>
+                          className={`h-7 rounded-md border text-[9px] font-semibold leading-tight px-1 transition-colors ${updates.operasional_jenis === o ? 'bg-teal-700 border-teal-700 text-white' : 'bg-background border-border text-foreground/80 hover:bg-muted'}`}>
                           {o}
                         </button>
                       ))}

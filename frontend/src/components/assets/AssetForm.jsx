@@ -18,6 +18,7 @@ import {
 } from "../ui/dropdown-menu";
 import { DocumentChecklist } from "./DocumentChecklist";
 import { InputTanggal } from "@/components/ui/input-tanggal";
+import { normalisasiJenisOperasional } from "../../lib/jenisOperasional";
 import { bangunChecklist, rekomendasiKelengkapan } from "@/lib/kelengkapanBmn";
 import InventoryFieldSheet, { PENGGUNA_MELEKAT_OPTIONS, PENGGUNA_NAME_LABELS, OPERASIONAL_JENIS_OPTIONS, CONDITION_OPTIONS, SUB_KLASIFIKASI_OPTIONS, TEMUAN_PENCATATAN_OPTIONS } from "./InventoryFieldSheet";
 import FullCameraSheet from "./FullCameraSheet";
@@ -455,7 +456,7 @@ function buildEditFormData(a, activityId) {
     eselon3: a.eselon3 || "", eselon4: a.eselon4 || "", eselon5: a.eselon5 || "", user: a.user || "",
     pengguna_melekat_ke: a.pengguna_melekat_ke || "", pengguna_jabatan: a.pengguna_jabatan || "",
     pengguna_nip: a.pengguna_nip || "",
-    operasional_jenis: a.operasional_jenis || "",
+    operasional_jenis: normalisasiJenisOperasional(a.operasional_jenis),
     nomor_bast: a.nomor_bast || "",
     condition: a.condition || "Baik", status: a.status || "Aktif",
     nomor_spm: a.nomor_spm || "", perolehan_dari_nama: a.perolehan_dari_nama || "",
@@ -2687,7 +2688,7 @@ const AssetForm = memo(({
                           className={`h-7 rounded-md border text-[10px] font-semibold leading-tight px-1 transition-colors ${
                             formData.operasional_jenis === o
                               ? "bg-teal-700 border-teal-700 text-white"
-                              : "bg-card border-border text-foreground/80 hover:bg-accent"
+                              : "bg-card border-border text-foreground/80 hover:bg-muted"
                           }`}
                         >
                           {o}
