@@ -18,6 +18,20 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1065] Batang progres bernilai sama benar-benar sejajar — 2026-09-21
+
+[PR #1056](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1056).
+
+- Grafik Progres Inventarisasi laporan eksekutif dan gabungan memakai skala
+  presisi dari dasar yang sama. Label, padding, dan bingkai tidak lagi mengubah
+  tinggi segmen; angka 152 pada Juni/Juli/Agustus tampil sejajar.
+- Grafik per kegiatan tetap memakai tinggi rumah yang identik. Hitungan stok,
+  pemeriksaan, dan data tersimpan tidak diubah.
+- Uji render templat produksi mereproduksi pergeseran sebelum patch, lalu
+  memeriksa kesejajaran PDF (toleransi 0,01 px), batang satu unit, kenaikan
+  September, dan skala grafik per kegiatan. Backend 4.945 lulus, 5 dilewati;
+  build produksi dan pemeriksa rahasia lulus; hasil PDF diperiksa visual.
+
 ## [#1064] Lokasi manual terpisah dari denah dan kategori luar kawasan — 2026-09-15
 
 [PR #1055](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1055).
