@@ -18,6 +18,19 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1066] Kontrol form aset sejajar pada HP dan tablet — 2026-09-21
+
+[PR #1057](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1057).
+
+- Tombol tanggal beli/garansi, pencarian kode barang/pegawai, dan unggah BAST
+  pada form tambah/edit mengikuti tinggi input 32 px, tanpa mengubah aturan
+  tombol global atau mengecilkan tombol Simpan (tetap 44 px di HP/tablet).
+- Tanggal dan ikon tetap muat di layar 320 px; hover pencarian/kartu pegawai
+  tetap terbaca pada tema terang dan gelap. Alur simpan/offline tidak diubah.
+- 13 tes form, lint, build produksi, dan pemeriksa rahasia lulus. QA Chromium
+  memeriksa 20 kombinasi mode form/lebar layar/tema dengan CSS produksi asli;
+  tinggi dan posisi sejajar, tidak meluber. Backend 4.945 lulus, 5 dilewati.
+
 ## [#1065] Batang progres bernilai sama benar-benar sejajar — 2026-09-21
 
 [PR #1056](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1056).
