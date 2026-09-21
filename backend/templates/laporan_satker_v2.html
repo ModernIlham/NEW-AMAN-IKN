@@ -102,15 +102,18 @@ body {
 .lm-legenda { display: flex; gap: 16px; justify-content: center; font-size: 9px; color: #64748b; margin-bottom: 11px; }
 .lm-legenda i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
 .lm-plot { display: flex; align-items: flex-end; gap: 5px; height: 300px; }
-.lm-kol { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
-.lm-batang { display: flex; flex-direction: column; justify-content: flex-end; border-radius: 3px 3px 0 0; overflow: hidden; }
+/* Skala 280px + ruang atap 20px: teks dan bingkai tidak ikut membagi tinggi. */
+.lm-kol { flex: 1; position: relative; height: 280px; }
+.lm-batang { position: absolute; bottom: 0; left: 0; right: 0; overflow: hidden; }
+.lm-segmen { overflow: hidden; }
 .lm-sisa { background: #cbd5e1; } .lm-temu { background: var(--hijau); }
 .lm-lain { background: var(--amber); }
 /* RUMAH = BMN tercatat. Ia digambar sebagai bingkai, bukan blok berwarna:
    yang perlu terbaca justru RONGGA di dalamnya — bagian yang belum diperiksa.
    Blok abu penuh akan terbaca sebagai "ada sesuatu di sini", padahal maknanya
    justru "belum ada apa-apa di sini". */
-.lm-rumah { border: 1.5px solid var(--navy); border-radius: 4px 4px 0 0; background: #fff; }
+.lm-rumah { border-radius: 4px 4px 0 0; background: #fff; }
+.lm-rumah::after { content: ''; position: absolute; top: 0; right: 0; bottom: 0; left: 0; border: 1.5px solid var(--navy); border-radius: inherit; box-sizing: border-box; }
 .lm-rongga { background: repeating-linear-gradient(135deg, #f1f5f9, #f1f5f9 4px, #e2e8f0 4px, #e2e8f0 8px); }
 .lm-tambah { font-size: 8px; font-weight: 700; color: var(--hijau); margin-left: 3px; }
 /* Legenda kegiatan bisa memuat sembilan entri bernama panjang; ia harus
@@ -121,13 +124,13 @@ body {
 .lm-legenda i.i-rongga { background: repeating-linear-gradient(135deg, #f1f5f9, #f1f5f9 3px, #e2e8f0 3px, #e2e8f0 6px); border: 1px solid #e2e8f0; box-sizing: border-box; }
 .lm-nilai { font-size: 9px; text-align: center; color: #fff; padding: 2px 0; font-weight: 700; font-variant-numeric: tabular-nums; }
 .lm-nilai.gelap { color: #475569; }
-.lm-atas { font-size: 10px; font-weight: 800; color: var(--navy); text-align: center; margin-bottom: 3px; font-variant-numeric: tabular-nums; }
-.lm-kosong { height: 3px; background: #f1f5f9; border-radius: 2px; }
+.lm-atas { position: absolute; width: 100%; font-size: 10px; font-weight: 800; color: var(--navy); text-align: center; margin-bottom: 3px; font-variant-numeric: tabular-nums; }
+.lm-kosong { position: absolute; bottom: 0; width: 100%; height: 3px; background: #f1f5f9; border-radius: 2px; }
 /* Bulan yang BELUM BERJALAN dibedakan dari bulan yang berjalan tanpa
    tambahan: yang pertama garis putus-putus samar, yang kedua garis padat.
    Kalau keduanya digambar sama, "belum terjadi" tak terbedakan dari "tak ada
    tambahan" — dan itu persis salah baca yang dilaporkan pemilik. */
-.lm-belum { height: 3px; border-top: 2px dashed #cbd5e1; border-radius: 0; }
+.lm-belum { position: absolute; bottom: 0; width: 100%; height: 3px; border-top: 2px dashed #cbd5e1; border-radius: 0; }
 .lm-x { display: flex; gap: 5px; margin-top: 6px; }
 .lm-x span { flex: 1; text-align: center; font-size: 8.5px; color: var(--abu); letter-spacing: .5px; }
 .lm-x span.aktif { color: var(--navy); font-weight: 700; }
@@ -620,13 +623,13 @@ lipat.addEventListener('click', function () {
         <div class="lm-kol">
           {% if b.belum_berjalan %}<div class="lm-belum" title="Belum berjalan"></div>
           {% elif b.tercatat %}
-          <div class="lm-atas">{{ b.tercatat }}{% if b.tambahan %}<span class="lm-tambah" title="BMN baru tercatat bulan ini">+{{ b.tambahan }}</span>{% endif %}</div>
+          <div class="lm-atas" style="bottom:{{ b.h_tercatat }}%">{{ b.tercatat }}{% if b.tambahan %}<span class="lm-tambah" title="BMN baru tercatat bulan ini">+{{ b.tambahan }}</span>{% endif %}</div>
           {# RUMAH = BMN tercatat. Rongganya (belum diperiksa) sengaja tak
              berwarna: ruang kosong di dalam rumah itulah tunggakannya. #}
           <div class="lm-batang lm-rumah" style="height:{{ b.h_tercatat }}%" title="{{ b.tercatat }} tercatat · {{ b.ditemukan + b.periksa_lain }} diperiksa · {{ b.belum }} belum">
-            <div class="lm-rongga" style="flex:{{ b.belum }} 0 auto;min-height:0;">{% if b.belum %}<div class="lm-nilai gelap">{{ b.belum }}</div>{% endif %}</div>
-            <div class="lm-lain" style="flex:{{ b.periksa_lain }} 0 auto;min-height:0;">{% if b.periksa_lain %}<div class="lm-nilai">{{ b.periksa_lain }}</div>{% endif %}</div>
-            <div class="lm-temu" style="flex:{{ b.ditemukan }} 0 auto;min-height:0;">{% if b.ditemukan %}<div class="lm-nilai">{{ b.ditemukan }}</div>{% endif %}</div>
+            <div class="lm-segmen lm-rongga" style="height:{{ b.belum / b.tercatat * 100 }}%;">{% if b.belum %}<div class="lm-nilai gelap">{{ b.belum }}</div>{% endif %}</div>
+            <div class="lm-segmen lm-lain" style="height:{{ b.periksa_lain / b.tercatat * 100 }}%;">{% if b.periksa_lain %}<div class="lm-nilai">{{ b.periksa_lain }}</div>{% endif %}</div>
+            <div class="lm-segmen lm-temu" style="height:{{ b.ditemukan / b.tercatat * 100 }}%;">{% if b.ditemukan %}<div class="lm-nilai">{{ b.ditemukan }}</div>{% endif %}</div>
           </div>
           {% else %}<div class="lm-kosong"></div>{% endif %}
         </div>
@@ -695,10 +698,10 @@ lipat.addEventListener('click', function () {
         <div class="lm-kol">
           {% if b.belum_berjalan %}<div class="lm-belum" title="Belum berjalan"></div>
           {% elif b.tercatat %}
-          <div class="lm-atas">{{ b.tercatat }}{% if b.tambahan %}<span class="lm-tambah">+{{ b.tambahan }}</span>{% endif %}</div>
+          <div class="lm-atas" style="bottom:{{ b.h_tercatat }}%">{{ b.tercatat }}{% if b.tambahan %}<span class="lm-tambah">+{{ b.tambahan }}</span>{% endif %}</div>
           <div class="lm-batang lm-rumah" style="height:{{ b.h_tercatat }}%">
             {% for g in b.segmen %}
-            <div style="background:{{ g.warna }};flex:{{ g.n }} 0 auto;min-height:0;" title="{{ g.nama }}: {{ g.n }}">{% if g.n %}<div class="lm-nilai">{{ g.n }}</div>{% endif %}</div>
+            <div class="lm-segmen" style="background:{{ g.warna }};height:{{ g.n / b.tercatat * 100 }}%;" title="{{ g.nama }}: {{ g.n }}">{% if g.n %}<div class="lm-nilai">{{ g.n }}</div>{% endif %}</div>
             {% endfor %}
           </div>
           {% else %}<div class="lm-kosong"></div>{% endif %}

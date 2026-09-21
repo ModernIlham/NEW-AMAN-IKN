@@ -188,7 +188,9 @@ def hitung(kegiatan, aset, sekarang=None) -> dict:
     # Tinggi batang dihitung DI SINI, bukan di template: aritmetika di dalam
     # Jinja mudah membagi nol tanpa terlihat.
     for b in baris:
-        b["h_tercatat"] = round(b["tercatat"] / puncak * 100) if puncak else 0
+        # Jangan bulatkan persen: dua isi bernilai sama harus punya tinggi
+        # persis sama walaupun total rumahnya berbeda (mis. 152/168, 152/213).
+        b["h_tercatat"] = b["tercatat"] / puncak * 100 if puncak else 0
 
     akhir = baris[batas - 1] if batas else None
     n_lini = d["berstempel"] + d["perkiraan"]

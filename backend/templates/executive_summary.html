@@ -190,18 +190,21 @@
         .lm-legenda i.i-rumah { border: 1.5px solid #0c1f3f; background: #fff; box-sizing: border-box; }
         .lm-legenda i.i-rongga { background: repeating-linear-gradient(135deg, #f1f5f9, #f1f5f9 3px, #e2e8f0 3px, #e2e8f0 6px); border: 1px solid #e2e8f0; box-sizing: border-box; }
         .lm-plot { display: flex; align-items: flex-end; gap: 4px; height: 200px; }
-        .lm-kol { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
-        .lm-batang { display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
-        .lm-rumah { border: 1.5px solid #0c1f3f; border-radius: 4px 4px 0 0; background: #fff; }
+        /* Sisakan 20px untuk angka atap. Label/border tak boleh mengubah skala. */
+        .lm-kol { flex: 1; position: relative; height: 180px; }
+        .lm-batang { position: absolute; bottom: 0; left: 0; right: 0; overflow: hidden; }
+        .lm-rumah { border-radius: 4px 4px 0 0; background: #fff; }
+        .lm-rumah::after { content: ''; position: absolute; top: 0; right: 0; bottom: 0; left: 0; border: 1.5px solid #0c1f3f; border-radius: inherit; box-sizing: border-box; }
+        .lm-segmen { overflow: hidden; }
         .lm-rongga { background: repeating-linear-gradient(135deg, #f1f5f9, #f1f5f9 4px, #e2e8f0 4px, #e2e8f0 8px); }
         .lm-temu { background: #22c55e; }
         .lm-lain { background: #f59e0b; }
         .lm-nilai { font-size: 7.5px; text-align: center; color: #fff; padding: 1px 0; font-weight: 700; font-variant-numeric: tabular-nums; }
         .lm-nilai.gelap { color: #475569; }
-        .lm-atas { font-size: 8.5px; font-weight: 800; color: #0c1f3f; text-align: center; margin-bottom: 2px; font-variant-numeric: tabular-nums; }
+        .lm-atas { position: absolute; width: 100%; font-size: 8.5px; font-weight: 800; color: #0c1f3f; text-align: center; margin-bottom: 2px; font-variant-numeric: tabular-nums; }
         .lm-tambah { font-size: 7px; font-weight: 700; color: #22c55e; margin-left: 2px; }
-        .lm-kosong { height: 3px; background: #f1f5f9; border-radius: 2px; }
-        .lm-belum { height: 3px; border-top: 2px dashed #cbd5e1; }
+        .lm-kosong { position: absolute; bottom: 0; width: 100%; height: 3px; background: #f1f5f9; border-radius: 2px; }
+        .lm-belum { position: absolute; bottom: 0; width: 100%; height: 3px; border-top: 2px dashed #cbd5e1; }
         .lm-x { display: flex; gap: 4px; margin-top: 5px; }
         .lm-x span { flex: 1; text-align: center; font-size: 7.5px; color: #94a3b8; letter-spacing: .5px; }
         .lm-x span.aktif { color: #0c1f3f; font-weight: 700; }
@@ -698,11 +701,11 @@
                 <div class="lm-kol">
                     {% if b.belum_berjalan %}<div class="lm-belum" title="Belum berjalan"></div>
                     {% elif b.tercatat %}
-                    <div class="lm-atas">{{ b.tercatat }}{% if b.tambahan %}<span class="lm-tambah" title="BMN baru tercatat bulan ini">+{{ b.tambahan }}</span>{% endif %}</div>
+                    <div class="lm-atas" style="bottom:{{ b.h_tercatat }}%">{{ b.tercatat }}{% if b.tambahan %}<span class="lm-tambah" title="BMN baru tercatat bulan ini">+{{ b.tambahan }}</span>{% endif %}</div>
                     <div class="lm-batang lm-rumah" style="height:{{ b.h_tercatat }}%" title="{{ b.tercatat }} tercatat &middot; {{ b.ditemukan + b.periksa_lain }} diperiksa &middot; {{ b.belum }} belum">
-                        <div class="lm-rongga" style="flex:{{ b.belum }} 0 auto;min-height:0;">{% if b.belum %}<div class="lm-nilai gelap">{{ b.belum }}</div>{% endif %}</div>
-                        <div class="lm-lain" style="flex:{{ b.periksa_lain }} 0 auto;min-height:0;">{% if b.periksa_lain %}<div class="lm-nilai">{{ b.periksa_lain }}</div>{% endif %}</div>
-                        <div class="lm-temu" style="flex:{{ b.ditemukan }} 0 auto;min-height:0;">{% if b.ditemukan %}<div class="lm-nilai">{{ b.ditemukan }}</div>{% endif %}</div>
+                        <div class="lm-segmen lm-rongga" style="height:{{ b.belum / b.tercatat * 100 }}%;">{% if b.belum %}<div class="lm-nilai gelap">{{ b.belum }}</div>{% endif %}</div>
+                        <div class="lm-segmen lm-lain" style="height:{{ b.periksa_lain / b.tercatat * 100 }}%;">{% if b.periksa_lain %}<div class="lm-nilai">{{ b.periksa_lain }}</div>{% endif %}</div>
+                        <div class="lm-segmen lm-temu" style="height:{{ b.ditemukan / b.tercatat * 100 }}%;">{% if b.ditemukan %}<div class="lm-nilai">{{ b.ditemukan }}</div>{% endif %}</div>
                     </div>
                     {% else %}<div class="lm-kosong"></div>{% endif %}
                 </div>
