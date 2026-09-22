@@ -13,7 +13,7 @@ import ReportDownloads from "./rekapitulasi/ReportDownloads";
 const API = (process.env.REACT_APP_BACKEND_URL || "http://localhost:8001") + "/api";
 
 function RekapitulasiPanel({ activityId, isOpen, onToggle, embedded = false, onTotal,
-                             filterLaporan = "", filterAktifCount = 0 }) {
+                             filterLaporan = "", filterAktifCount = 0, sortBy = "newest" }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState("");
@@ -151,6 +151,7 @@ function RekapitulasiPanel({ activityId, isOpen, onToggle, embedded = false, onT
             data={data}
             activityId={activityId}
             filterLaporan={filterLaporan}
+            sortBy={sortBy}
             filterAktifCount={filterAktifCount}
             downloading={downloading}
             onDownloadPDF={handleDownloadPDF}

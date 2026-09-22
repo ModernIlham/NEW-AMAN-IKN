@@ -20,6 +20,8 @@ import laporan_blok as lbk
 import laporan_kolom as lkl
 import laporan_linimasa as llm
 import kodefikasi_utils as kod
+import data_aset_pdf as dap
+from asset_sorting import ASSET_SORT_OPTIONS
 import organisasi_utils as org
 import spasial_utils as su
 from pathlib import Path
@@ -5347,7 +5349,9 @@ KONDISI_JENJANG_KELOMPOK = 3
 
 async def _build_executive_summary_data(activity_id: str, detail_fields=None,
                                         with_asset_rows: bool = True, row_slice=None,
-                                        filter_aset: "FilterLaporan" = None):
+                                        filter_aset: "FilterLaporan" = None,
+                                        data_group_by: str = "", sort_by: str = "",
+                                        data_user=None):
     """Build all data needed for the executive summary template.
 
     detail_fields: optional set of EXEC_DETAIL_FIELDS keys — extra per-asset
@@ -5373,10 +5377,16 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
     # Filter layar (bila ada) IKUT diterapkan — laporan mencerminkan apa yang
     # sedang dilihat pengguna, bukan selalu seluruh kegiatan.
     q_aset = {"activity_id": activity_id, **((filter_aset.query if filter_aset else {}) or {})}
-    all_assets = await db.assets.find(
+    cursor_aset = db.assets.find(
         q_aset,
         {"_id": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0},
-    ).to_list(100000)
+    )
+    # Data Aset mengikuti urutan daftar, termasuk tiebreaker id. Pemanggil
+    # ringkasan lain tidak mengubah urutan lama bila sort_by tidak diberikan.
+    if sort_by:
+        dap.validasi_pilihan(data_group_by, sort_by)
+        cursor_aset = cursor_aset.sort(ASSET_SORT_OPTIONS[sort_by])
+    all_assets = await cursor_aset.to_list(100000)
     categories = await db.categories.find({}, {"_id": 0}).to_list(10000)
     cat_map = {c.get("kode_aset", ""): c.get("label", "") for c in categories}
 
@@ -5871,12 +5881,20 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
         simpulan.append({"color": "#0f172a", "text": "Seluruh hasil inventarisasi didokumentasikan dalam <strong>LHI</strong> (BAHI, RHI, 6 DBHI, Surat Pernyataan)."})
 
     asset_rows = []
+    asset_groups = []
     # Loop mahal (fallback GridFS per aset) — dilewati bila pemanggil hanya
     # butuh halaman ringkasan (executive-summary-html/pdf, data-info). Bila
     # row_slice diberikan, HANYA aset halaman itu yang di-embed fotonya (cegah
     # OOM pada kegiatan berisi ratusan ribu aset).
     if with_asset_rows:
-        _rows_src = all_assets[row_slice[0]:row_slice[1]] if row_slice else all_assets
+        if data_group_by == "psp":
+            if data_user is None:
+                raise ValueError("Pengelompokan PSP memerlukan lingkup pengguna")
+            from routes.assets import lengkapi_psp
+            await lengkapi_psp(all_assets, data_user)
+        _rows_src, asset_groups = dap.irisan_kelompok(
+            all_assets, data_group_by, row_slice, kode_uraian_exec, peg_master,
+            format_tanggal=_fmt_tanggal_id)
     else:
         _rows_src = []
     for a in _rows_src:
@@ -6077,6 +6095,9 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
         "lbl_tahun_px": lbl_tahun_px, "lbl_eselon_px": lbl_eselon_px,
         "lbl_kondisi_px": lbl_kondisi_px,
         "assets": asset_rows, "asset_pages": asset_pages, "total_pages": total_pages,
+        "data_group_label": dap.GROUP_OPTIONS.get(data_group_by, ""),
+        "asset_groups": [{**g, "assets": asset_rows[g["start"]:g["end"]]}
+                         for g in asset_groups],
         "asset_count": len(all_assets),
         "is_in_progress": is_in_progress,
         "cat_breakdown": cat_breakdown_sorted,
@@ -6163,12 +6184,17 @@ async def generate_executive_summary_pdf(activity_id: str, detail_fields: str = 
 @reports_router.get("/inventory-activities/{activity_id}/executive-data-pdf")
 async def generate_executive_data_pdf(activity_id: str, page: int = 1, detail_fields: str = "",
                                       filter_aset: FilterLaporan = Depends(filter_laporan),
-                                      _user: dict = Depends(require_user_or_query_token)):
+                                      _user: dict = Depends(require_user_or_query_token),
+                                      data_group_by: str = "", sort_by: str = "newest"):
     """Generate Executive Summary Data PDF (Part 2: Asset detail pages).
 
     Each page contains up to 499 assets. page=1 -> assets 1-499, page=2 -> 500-998, etc.
     """
     await pastikan_akses_kegiatan_id(_user, activity_id)
+    try:
+        dap.validasi_pilihan(data_group_by, sort_by)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     from jinja2 import Environment, FileSystemLoader
     import weasyprint
 
@@ -6181,7 +6207,8 @@ async def generate_executive_data_pdf(activity_id: str, page: int = 1, detail_fi
     data = await _build_executive_summary_data(
         activity_id, _parse_detail_fields(detail_fields),
         with_asset_rows=True, row_slice=(start_idx, end_idx),
-        filter_aset=filter_aset)
+        filter_aset=filter_aset, data_group_by=data_group_by,
+        sort_by=sort_by, data_user=_user)
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
@@ -6197,6 +6224,9 @@ async def generate_executive_data_pdf(activity_id: str, page: int = 1, detail_fi
     template = env.get_template("executive_summary_data.html")
     html = template.render(
         chunk_assets=chunk_assets,
+        chunk_groups=data.get("asset_groups", []),
+        data_group_by=data_group_by,
+        data_group_label=data.get("data_group_label", ""),
         total_chunk=len(chunk_assets),
         total_all=total_assets,
         satker_name=data["satker_name"],
@@ -7880,6 +7910,8 @@ class BatchPDFRequest(BaseModel):
     # Kolom tambahan PDF Eksekutif (SPM/Perolehan/BAST dll.) — supaya isi
     # ZIP identik dengan unduhan tunggal yang memakai pilihan yang sama.
     detail_fields: str = ""
+    data_group_by: str = ""
+    sort_by: str = "newest"
     # Filter daftar aset yang sedang aktif di layar (nama kunci = nama query
     # param GET /assets). Ikut diterapkan ke laporan Eksekutif / Barang
     # Serupa / Data Aset di dalam ZIP supaya isinya sama dengan unduhan
@@ -7930,6 +7962,10 @@ async def batch_download_pdf_zip(request: Request, activity_id: str,
                             detail="Terlalu banyak laporan dalam satu batch (maks. 40)")
     detail_fields = str(payload.detail_fields or "")
     f_aset = filter_laporan_dari_map(payload.filter or {})
+    try:
+        dap.validasi_pilihan(payload.data_group_by, payload.sort_by)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     zip_buffer = io.BytesIO()
     generated = []
@@ -7990,6 +8026,7 @@ async def batch_download_pdf_zip(request: Request, activity_id: str,
                         response = await generate_executive_data_pdf(
                             activity_id, page=p["page"],
                             detail_fields=detail_fields,
+                            data_group_by=payload.data_group_by, sort_by=payload.sort_by,
                             filter_aset=f_aset, _user=_user)
                         pdf_buffer = await _get_pdf_buffer_from_response(response)
                         filename = (f"Data_Aset_{p['start']}-{p['end']}"

@@ -80,6 +80,19 @@ const detailFieldOptions = [
   { key: "serial", label: "S/N" },
 ];
 
+export const dataGroupOptions = [
+  ["", "Biasa (tanpa pengelompokan)"],
+  ["kode_1", "Barang level 1 — Golongan"],
+  ["kode_2", "Barang level 2 — Bidang"],
+  ["kode_3", "Barang level 3 — Kelompok"],
+  ["kode_4", "Barang level 4 — Sub Kelompok"],
+  ["kode_5", "Barang level 5 — Sub-sub Kelompok"],
+  ["lokasi", "Lokasi"], ["pemegang", "Pemegang"], ["spm", "SPM"],
+  ["eselon1", "Eselon I"], ["eselon2", "Eselon II"],
+  ["eselon3", "Eselon III"], ["eselon4", "Eselon IV"], ["eselon5", "Eselon V"],
+  ["supplier", "Supplier"], ["perolehan", "Perolehan"], ["psp", "PSP"],
+];
+
 const allBatchItems = [
   { key: "lhi", label: "LHI Lengkap (gabungan)", group: "lhi" },
   { key: "cover", label: "Sampul LHI", group: "lhi" },
@@ -125,7 +138,7 @@ const batchGroupColors = {
 };
 
 export default function ReportDownloads({
-  filterLaporan = "", filterAktifCount = 0,
+  filterLaporan = "", filterAktifCount = 0, sortBy = "newest",
   data, activityId, downloading, onDownloadPDF, onDownloadDBHI, onDownloadDocx, onDownloadDBHIDocx
 }) {
   const [batchMode, setBatchMode] = useState(false);
@@ -133,6 +146,7 @@ export default function ReportDownloads({
   const [batchDownloading, setBatchDownloading] = useState(false);
   const [dataInfo, setDataInfo] = useState(null);
   const [dataDownloading, setDataDownloading] = useState(null);
+  const [dataGroupBy, setDataGroupBy] = useState("");
   const [groupedDownloading, setGroupedDownloading] = useState(false);
   const [detailFields, setDetailFields] = useState(() => {
     try {
@@ -143,11 +157,14 @@ export default function ReportDownloads({
 
   // Fetch data page info when component mounts
   useEffect(() => {
+    let aktif = true;
+    setDataInfo(null);
     if (!activityId) return;
     axios.get(`${API}/inventory-activities/${activityId}/executive-data-info`
               + (filterLaporan ? `?${filterLaporan}` : ""))
-      .then(r => setDataInfo(r.data))
-      .catch(() => setDataInfo(null));
+      .then(r => { if (aktif) setDataInfo(r.data); })
+      .catch(() => { if (aktif) setDataInfo(null); });
+    return () => { aktif = false; };
   }, [activityId, filterLaporan]);
 
   const toggleDetailField = (key) => {
@@ -160,15 +177,18 @@ export default function ReportDownloads({
   };
 
   const detailFieldsValue = Array.from(detailFields).join(",");
-  const detailFieldsParam = detailFieldsValue ? `&detail_fields=${detailFieldsValue}` : "";
 
   const handleDownloadDataPage = async (pageNum, startIdx, endIdx) => {
     setDataDownloading(pageNum);
     try {
+      const params = new URLSearchParams(filterLaporan);
+      params.set("page", String(pageNum));
+      params.set("detail_fields", detailFieldsValue);
+      params.set("data_group_by", dataGroupBy);
+      params.set("sort_by", sortBy);
       await downloadFileWithProgress(
-        `${API}/inventory-activities/${activityId}/executive-data-pdf?page=${pageNum}${detailFieldsParam}`
-        + (filterLaporan ? `&${filterLaporan}` : ""),
-        `Data_Aset_${startIdx}-${endIdx}_${activityId.substring(0, 8)}.pdf`,
+        `${API}/inventory-activities/${activityId}/executive-data-pdf?${params}`,
+        `Data_Aset_${startIdx}-${endIdx}${dataGroupBy ? `_${dataGroupBy}` : ""}_${activityId.substring(0, 8)}.pdf`,
         // Laporan berat: lewat 45 dtk otomatis dilanjutkan di Pusat Unduhan.
         { label: `Data Aset ${startIdx}-${endIdx}`, timeout: 45000 }
       );
@@ -215,6 +235,7 @@ export default function ReportDownloads({
           // detail_fields ikut dikirim agar PDF Eksekutif/Data Aset di ZIP
           // memuat kolom tambahan yang sama dgn unduhan tunggal.
           data: { types: Array.from(selected), detail_fields: detailFieldsValue,
+                  data_group_by: dataGroupBy, sort_by: sortBy,
                   // Laporan eksekutif di dalam ZIP ikut filter yang sama.
                   filter: objekFilter(filterLaporan) } }
       );
@@ -364,6 +385,18 @@ export default function ReportDownloads({
               ))}
             </div>
           )}
+          <div className="rounded-lg border border-border bg-muted/30 p-2.5 space-y-1.5" data-testid="pengaturan-pdf-data-aset">
+            <label htmlFor="data-aset-group" className="block text-xs font-medium">Susunan PDF Data Aset</label>
+            <select id="data-aset-group" data-testid="data-aset-group" value={dataGroupBy}
+              onChange={e => setDataGroupBy(e.target.value)} disabled={dataDownloading !== null || batchDownloading}
+              className="w-full min-w-0 min-h-11 rounded-md border border-border bg-background px-2 text-xs text-foreground">
+              {dataGroupOptions.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            </select>
+            <p className="text-[10px] leading-relaxed text-muted-foreground">
+              Berlaku untuk Data Aset, termasuk dalam ZIP. Filter dan sort daftar tetap diikuti.
+              {dataGroupBy ? " Satu dasar per unduhan; sort berlaku di dalam kelompok, dengan urutan kelompok mengikuti kemunculan pertama. Data yang belum diisi tetap ditampilkan." : " Tampilan biasa tanpa pembagi kelompok."}
+            </p>
+          </div>
           {dataInfo && dataInfo.total_assets > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
               {dataInfo.pages.map(p => (

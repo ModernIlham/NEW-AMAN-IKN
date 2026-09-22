@@ -24,6 +24,12 @@
         .data-header-meta strong { color: #e2e8f0; }
 
         .data-table-wrapper { padding: 4mm 8mm 2mm; }
+        .data-table + .data-table { margin-top: 4mm; }
+        .data-table thead th.group-heading { background: #e0f2fe; color: #0c4a6e;
+            text-align: left; font-size: 10px; text-transform: none;
+            letter-spacing: 0; padding: 8px; overflow-wrap: break-word; }
+        .group-meta { font-size: 8px; font-weight: 400; margin-top: 3px; }
+        .group-banner { padding: 8px 12px; font-size: 10px; color: #0c4a6e; background: #f0f9ff; }
         .data-table { width: 100%; border-collapse: collapse; font-size: 9px; table-layout: fixed; }
         .data-table thead { display: table-header-group; }
         .data-table thead th { background: #0f172a; color: #e2e8f0; padding: 6px 4px; font-weight: 600; font-size: 7px; text-transform: uppercase; letter-spacing: 0.3px; text-align: center; border: 1px solid #1e293b; }
@@ -94,7 +100,7 @@
      sejak halaman pertama sehingga tampil di SETIAP halaman (bukan hanya
      halaman terakhir). position:running mengeluarkannya dari alur normal. -->
 <div class="data-footer">
-    <div>Menampilkan <strong>{{ global_offset + 1 }}-{{ global_offset + total_chunk }}</strong> dari <strong>{{ total_all }}</strong> BMN &nbsp;|&nbsp; Total Nilai: <strong>Rp {{ total_value_fmt }}</strong></div>
+    <div>Menampilkan <strong>{{ global_offset + 1 if total_chunk else 0 }}-{{ global_offset + total_chunk }}</strong> dari <strong>{{ total_all }}</strong> BMN &nbsp;|&nbsp; Total Nilai: <strong>Rp {{ total_value_fmt }}</strong></div>
     <div>Bagian {{ data_page_num }}/{{ total_data_pages }}</div>
 </div>
 
@@ -111,8 +117,22 @@
 {% endif %}
 
 <div class="data-table-wrapper">
+    {% if data_group_by %}
+    <div class="group-banner">Dikelompokkan menurut <strong>{{ data_group_label }}</strong>.
+        Urutan dalam setiap kelompok mengikuti sort daftar; urutan kelompok mengikuti kemunculan pertama.</div>
+    {% endif %}
+    {% set groups = chunk_groups if data_group_by else [{"assets": chunk_assets, "offset": global_offset}] %}
+    {% for group in groups %}
     <table class="data-table">
+        <colgroup>
+            {% for width in [3, 8, 6, 12, 12, 4, 8, 15, 12, 12, 8] %}<col style="width:{{ width }}%;" />{% endfor %}
+        </colgroup>
         <thead>
+            {% if data_group_by %}
+            <tr><th colspan="11" class="group-heading">{{ data_group_label }}: {{ group.label }}{% if group.lanjutan %} (lanjutan){% endif %}
+                <div class="group-meta">{{ group.count }} aset - Rp {{ group.value_fmt }}{% if group.part_count != group.count %} - {{ group.part_count }} aset di bagian ini{% endif %}</div>
+            </th></tr>
+            {% endif %}
             <tr>
                 <th style="width:3%;">No</th>
                 <th style="width:8%;">Foto</th>
@@ -128,9 +148,9 @@
             </tr>
         </thead>
         <tbody>
-            {% for a in chunk_assets %}
+            {% for a in group.assets %}
             <tr>
-                <td class="center">{{ global_offset + loop.index }}</td>
+                <td class="center">{{ group.offset + loop.index }}</td>
                 <td class="photo-cell">
                     {% if a.photo_url %}<img src="{{ a.photo_url }}" class="photo-img" alt="Foto" />
                     {% else %}<div class="photo-empty">No Foto</div>{% endif %}
@@ -171,6 +191,7 @@
             {% endfor %}
         </tbody>
     </table>
+    {% endfor %}
 </div>
 
 </body>

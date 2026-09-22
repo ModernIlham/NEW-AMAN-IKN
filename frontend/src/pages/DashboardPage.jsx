@@ -1719,7 +1719,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
             </div>
             )}
             {!inventoryMode && !mapOpen && analyticsOpen && <Suspense fallback={null}><AnalyticsPanel embedded activityId={activity?.id} isOpen={analyticsOpen} onToggle={handleAnalyticsToggle} panelHeight={analyticsPanelHeight} onDragStart={handleAnalyticsDragStart} /></Suspense>}
-            {!inventoryMode && !mapOpen && rekapOpen && <Suspense fallback={null}><RekapitulasiPanel embedded activityId={activity?.id} isOpen={rekapOpen} onToggle={() => setRekapOpen(p => !p)} onTotal={setRekapTotal} filterLaporan={filterLaporan} filterAktifCount={activeFilterCount + (debouncedSearch ? 1 : 0)} /></Suspense>}
+            {!inventoryMode && !mapOpen && rekapOpen && <Suspense fallback={null}><RekapitulasiPanel embedded activityId={activity?.id} isOpen={rekapOpen} onToggle={() => setRekapOpen(p => !p)} onTotal={setRekapTotal} filterLaporan={filterLaporan} sortBy={sortBy} filterAktifCount={activeFilterCount + (debouncedSearch ? 1 : 0)} /></Suspense>}
             {!mapOpen && groupsOpen && <Suspense fallback={null}><AssetGroupsPanel embedded activityId={activity?.id} isOpen={groupsOpen} onToggle={() => setGroupsOpen(p => !p)} onCount={setGroupsCount} onBatchEdit={perms.canEdit ? handleGroupBatchEdit : undefined} /></Suspense>}
 
             {/* Peta KEEP-ALIVE (di luar ternary): sekali dibuka tetap ter-mount,
