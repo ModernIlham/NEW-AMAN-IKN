@@ -30,6 +30,7 @@ import {
   Popover, PopoverContent, PopoverTrigger,
 } from "../components/ui/popover";
 import { useUkurPeta } from "../hooks/useUkurPeta";
+import SaringanPetaDicari, { PilihanFilter } from "../components/assets/SaringanPetaDicari";
 import {
   SEMUA, daftarGrup, daftarNilai as nilaiUnik, hitungFilterAktif, saringAset,
 } from "../lib/filterPetaKolaborasi";
@@ -181,22 +182,6 @@ function BagianFilter({ judul, ikon: Ikon, children }) {
   );
 }
 
-/** Satu pilihan saringan: penanda terpilih + label + jumlah aset. */
-function PilihanFilter({ aktif, onPilih, label, jumlah, warna, kode }) {
-  return (
-    <button
-      type="button" onClick={onPilih} aria-pressed={aktif}
-      className={`w-full flex items-center gap-1.5 px-2 py-1.5 rounded-md text-left min-h-0 ${aktif ? "bg-blue-500/10 text-blue-700 dark:text-blue-300" : "hover:bg-muted"}`}
-    >
-      <Check className={`w-3 h-3 flex-shrink-0 ${aktif ? "opacity-100" : "opacity-0"}`} />
-      {warna && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: warna }} />}
-      {kode && <span className="font-mono text-[9.5px] text-muted-foreground flex-shrink-0">{kode}</span>}
-      <span className="flex-1 truncate text-[11px]">{label}</span>
-      <span className="text-[10px] font-semibold text-muted-foreground flex-shrink-0">{jumlah}</span>
-    </button>
-  );
-}
-
 /**
  * Halaman PUBLIK peta kolaboratif (link ber-token). Paritas fitur dengan Peta
  * Aset: pin berwarna per status, clustering, filter status + Barang Serupa,
@@ -242,6 +227,7 @@ export default function PetaKolaborasiPage() {
   const [kondisiFilter, setKondisiFilter] = useState("__semua__");
   const [lokasiFilter, setLokasiFilter] = useState("__semua__");
   const [laciFilter, setLaciFilter] = useState(false);
+  const [resetPencarian, setResetPencarian] = useState(0);
   const [clusterOn, setClusterOn] = useState(true);
   // Label nama aset di samping marker — kunci penyimpanan SAMA dengan Peta
   // Aset: dua peta yang menampilkan aset yang sama tak seharusnya menuntut
@@ -466,6 +452,8 @@ export default function PetaKolaborasiPage() {
   const statusList = useMemo(() => nilaiUnik(data?.titik_aset, "status"), [data]);
   const kondisiList = useMemo(() => nilaiUnik(data?.titik_aset, "kondisi"), [data]);
   const lokasiList = useMemo(() => nilaiUnik(data?.titik_aset, "lokasi"), [data]);
+  const pilihanLokasi = useMemo(() => lokasiList.map(l => ({ ...l, label: l.nilai })), [lokasiList]);
+  const pilihanBarang = useMemo(() => groups.map(g => ({ nilai: g.key, label: g.name, kode: g.code, jumlah: g.count })), [groups]);
 
   // Titik aset setelah SEMUA saringan (status, kondisi, lokasi, barang serupa).
   const asetTampil = useMemo(() => saringAset(data?.titik_aset, {
@@ -921,6 +909,7 @@ export default function PetaKolaborasiPage() {
   const resetFilter = useCallback(() => {
     setStatusFilter(SEMUA); setKondisiFilter(SEMUA);
     setLokasiFilter(SEMUA); setGroupKey(SEMUA);
+    setResetPencarian(n => n + 1);
     fitOnceRef.current = false;
   }, []);
 
@@ -1172,22 +1161,16 @@ export default function PetaKolaborasiPage() {
               )}
 
               {lokasiList.length > 0 && (
-                <BagianFilter judul="Lokasi" ikon={MapPin}>
-                  <PilihanFilter aktif={lokasiFilter === "__semua__"} onPilih={() => changeLokasi("__semua__")} label="Semua lokasi" jumlah={jmlAset} />
-                  {lokasiList.map((l) => (
-                    <PilihanFilter key={l.nilai} aktif={lokasiFilter === l.nilai} onPilih={() => changeLokasi(l.nilai)} label={l.nilai} jumlah={l.jumlah} />
-                  ))}
-                </BagianFilter>
+                <SaringanPetaDicari key={`lokasi-${resetPencarian}`} judul="Lokasi" ikon={MapPin}
+                  pilihan={pilihanLokasi} aktif={lokasiFilter} onPilih={changeLokasi}
+                  labelSemua="Semua lokasi" jumlah={jmlAset} placeholder="Cari nama lokasi…" testId="peta-filter-lokasi" />
               )}
 
               {groups.length > 0 && (
-                <BagianFilter judul="Barang serupa" ikon={Layers}>
-                  <PilihanFilter aktif={groupKey === "__semua__"} onPilih={() => changeGroup("__semua__")} label={`Semua barang (${groups.length} jenis)`} jumlah={jmlAset} />
-                  {groups.map((g) => (
-                    <PilihanFilter key={g.key} aktif={groupKey === g.key} onPilih={() => changeGroup(g.key)}
-                      label={g.name} kode={g.code} jumlah={g.count} />
-                  ))}
-                </BagianFilter>
+                <SaringanPetaDicari key={`barang-${resetPencarian}`} judul="Barang serupa" ikon={Layers}
+                  pilihan={pilihanBarang} aktif={groupKey} onPilih={changeGroup}
+                  labelSemua={`Semua barang (${groups.length} jenis)`} jumlah={jmlAset}
+                  placeholder="Cari nama atau kode barang…" testId="peta-filter-barang" />
               )}
             </div>
           </PopoverContent>

@@ -16,6 +16,20 @@ export const STATUS_BAWAAN = "Belum Diinventarisasi";
 
 const teks = (v) => String(v ?? "").trim();
 
+/** Cari label/kode tanpa regex; setiap kata wajib cocok, urutan opsi tetap. */
+export function cariPilihanPeta(pilihan, pencarian) {
+  const kata = teks(pencarian).toLocaleLowerCase("id").split(/\s+/).filter(Boolean);
+  if (!kata.length) return pilihan || [];
+  return (pilihan || []).filter(p => {
+    const label = teks(p.label).toLocaleLowerCase("id");
+    const kode = teks(p.kode).toLocaleLowerCase("id");
+    // Kode BMN boleh diketik dengan/tanpa titik pemisah.
+    const kodeRapat = kode.replace(/[.\s-]/g, "");
+    return kata.every(k => label.includes(k) || kode.includes(k)
+      || (/^[\d.-]+$/.test(k) && /\d/.test(k) && kodeRapat.includes(k.replace(/[.-]/g, ""))));
+  });
+}
+
 /** Kunci kelompok "barang serupa": kode + nama barang. */
 export function kunciGrup(a) {
   return `${a?.kode || ""}||${a?.nama || ""}`;
