@@ -406,6 +406,12 @@ Perbaikan menyeluruh untuk kolaborasi multi-user & performa penyimpanan:
 - **Import**: CSV/XLSX dengan validasi (kode aset, duplikasi, kategori)
 - **Export CSV**: 46 kolom, streaming, UTF-8
 - **Export XLSX**: 4 sheets (Data Aset + Kelengkapan Dokumen + Data Kegiatan + Tim Inventarisasi) dengan foto HD embedded
+- **PDF Data Aset**: pilih susunan biasa atau satu pembagi: kode barang level 1–5,
+  lokasi, pemegang, SPM, Eselon I–V, supplier, perolehan, atau PSP. Filter aktif
+  tetap berlaku; sort daftar dipertahankan dalam setiap kelompok, dengan urutan
+  kelompok mengikuti kemunculan pertama. Pilihan juga berlaku pada Data Aset
+  dalam ZIP; data kosong/tanpa identitas tetap tampil. Batas 499 aset per berkas
+  dipertahankan dan kelompok yang melintasinya diberi penanda lanjutan.
 - **Export PDF**: Landscape A4 dengan foto thumbnail, summary box, color-coded
 
 ### 15+ Laporan PDF Resmi

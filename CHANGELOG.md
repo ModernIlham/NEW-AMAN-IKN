@@ -18,6 +18,26 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1069] Pilihan pengelompokan PDF Data Aset mengikuti filter dan sort — 2026-09-22
+
+[PR #1060](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1060).
+
+- PDF Data Aset dapat tetap biasa atau dibagi menurut satu pilihan: kode
+  barang level 1–5, lokasi, pemegang, SPM, Eselon I–V, supplier, perolehan,
+  atau PSP. Pilihan yang sama berlaku pada Data Aset dalam ZIP.
+- Filter aktif tetap berlaku; sort daftar kini ikut diteruskan dan memakai
+  registry yang sama di backend. Pada mode kelompok, sort dipertahankan di
+  dalam kelompok; urutan kelompok mengikuti kemunculan pertama.
+- Pengelompokan mendahului pembagian 499 aset per berkas. Header kelompok
+  berisi jumlah/nilai dan berulang pada halaman berikutnya; lintas berkas
+  diberi penanda lanjutan. Foto hanya diambil untuk irisan yang diminta.
+- Aset tanpa nilai pengelompokan/nomor identitas tetap tampil. PSP memakai
+  SK resmi terbaru dengan fallback SIMAN dan scope satker yang sama seperti
+  daftar aset. Tidak ada migrasi atau perubahan data tersimpan.
+- Backend 5.013 tes lulus (5 dilewati), frontend 163 suite / 1.792 tes lulus;
+  lint berkas berubah, build produksi, dan pemeriksa rahasia lulus. QA PDF
+  biasa/lokasi/pemegang dan kontrol pada 8 kombinasi layar/tema diperiksa.
+
 ## [#1068] Pencarian saringan lokasi dan barang serupa di peta dibagikan — 2026-09-22
 
 [PR #1059](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1059).
