@@ -18,6 +18,26 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1070] Pencarian responsif dan multipilih saringan peta dibagikan — 2026-09-22
+
+[PR #1061](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1061).
+
+- Kolom pencarian Lokasi/Barang Serupa memakai satu bingkai fokus dan satu
+  tombol hapus; kontrol 44 px, teks 16 px pada HP/tablet, serta panel yang
+  menyesuaikan lebar dan tinggi layar. Label panjang dapat turun baris.
+- Keempat saringan (status, kondisi, lokasi, barang serupa) dapat memilih
+  lebih dari satu opsi: ATAU dalam kelompok, DAN antar-kelompok. Klik ulang
+  melepas satu pilihan, Semua mereset kelompoknya, Reset membersihkan semua
+  pilihan dan pencarian. Pilihan tetap aktif saat mencari opsi lain.
+- Status aset lama yang kosong tetap dapat dipilih sebagai Belum
+  Diinventarisasi. Penyaringan tetap lokal dan tidak memperluas lingkup
+  data tautan; tidak ada perubahan data tersimpan atau migrasi.
+- Frontend 163 suite / 1.802 tes dan backend 5.013 tes lulus (5 dilewati).
+  Lint berkas berubah, build produksi, dan pemeriksa rahasia lulus.
+  QA build asli di Chromium pada 10 kombinasi layar/tema memeriksa fokus,
+  target sentuh, batas panel, multipilih, jumlah marker, reset, dan pencarian
+  pilihan di luar jendela 50 baris. Termasuk layar HP 320 px dan layar pendek.
+
 ## [#1069] Pilihan pengelompokan PDF Data Aset mengikuti filter dan sort — 2026-09-22
 
 [PR #1060](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1060).
