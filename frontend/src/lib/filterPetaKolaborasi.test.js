@@ -3,7 +3,7 @@
  * pilihannya lahir dari data peta itu sendiri.
  */
 import {
-  SEMUA, STATUS_BAWAAN, daftarGrup, daftarNilai, hitungFilterAktif, kunciGrup, saringAset,
+  SEMUA, STATUS_BAWAAN, daftarGrup, daftarNilai, hitungFilterAktif, kunciGrup, saringAset, cariPilihanPeta,
 } from "./filterPetaKolaborasi";
 
 const ASET = [
@@ -59,4 +59,24 @@ test("kelompok barang serupa hanya yang ≥2 unit", () => {
 test("lencana menghitung saringan yang aktif saja", () => {
   expect(hitungFilterAktif({ status: SEMUA, kondisi: SEMUA, lokasi: SEMUA, grup: SEMUA })).toBe(0);
   expect(hitungFilterAktif({ status: "Ditemukan", kondisi: SEMUA, lokasi: "Gedung A", grup: SEMUA })).toBe(2);
+});
+
+describe("pencarian pilihan, bukan penyaringan titik", () => {
+  const pilihan = [
+    { nilai: "a", label: "Gedung A Lantai 2" },
+    { nilai: "b", label: "Laptop Rapat", kode: "3.10.01.02.001" },
+    { nilai: "c", label: "Laptop Kerja", kode: "3.10.01.02.002" },
+  ];
+  test.each([
+    ["  GEDUNG   lantai ", ["a"]], ["laptop", ["b", "c"]],
+    ["3100102001", ["b"]], ["3.10.01 laptop", ["b", "c"]],
+    ["3100102002 kerja", ["c"]], ["tidak ada", []], ["[.*", []], ["...", []],
+  ])("%s mencocokkan label/kode tanpa regex pengguna", (cari, harapan) => {
+    expect(cariPilihanPeta(pilihan, cari).map(p => p.nilai)).toEqual(harapan);
+  });
+  test("kosong mempertahankan daftar dan urutan asli", () => {
+    expect(cariPilihanPeta(pilihan, "  ")).toBe(pilihan);
+    expect(cariPilihanPeta(undefined, "x")).toEqual([]);
+    expect(cariPilihanPeta(null, "")).toEqual([]);
+  });
 });

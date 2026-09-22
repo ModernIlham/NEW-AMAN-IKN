@@ -18,6 +18,21 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1068] Pencarian saringan lokasi dan barang serupa di peta dibagikan — 2026-09-22
+
+[PR #1059](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1059).
+
+- Saringan Lokasi dan Barang Serupa memiliki pencarian nama/kode barang,
+  termasuk kode tanpa pemisah titik. Pencarian hanya menyaring pilihan;
+  isi peta berubah setelah pilihan diklik, dengan kombinasi filter tetap sama.
+- Pilihan aktif tetap terbaca saat pencarian tidak cocok. Reset global
+  membersihkan pilihan dan pencarian. Daftar besar ditampilkan bertahap
+  50 pilihan tanpa membatasi hasil pencarian.
+- Frontend 162 suite / 1.772 tes dan backend 4.957 tes lulus (5 dilewati).
+  Lint berkas berubah, build produksi, dan pemeriksa rahasia lulus. QA pada
+  8 kombinasi ukuran layar/tema memastikan pencarian tidak meluber dan
+  tetap terbaca saat hover, dengan kontrol pencarian minimal 44 px.
+
 ## [#1067] Satu referensi jenis operasional Unit/Tempat/Tugas — 2026-09-21
 
 [PR #1058](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1058).
