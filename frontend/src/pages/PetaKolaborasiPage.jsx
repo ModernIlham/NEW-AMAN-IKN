@@ -32,7 +32,7 @@ import {
 import { useUkurPeta } from "../hooks/useUkurPeta";
 import SaringanPetaDicari, { PilihanFilter } from "../components/assets/SaringanPetaDicari";
 import {
-  SEMUA, daftarGrup, daftarNilai as nilaiUnik, hitungFilterAktif, saringAset,
+  SEMUA, daftarGrup, daftarNilai as nilaiUnik, hitungFilterAktif, saringAset, togglePilihanSaringan,
 } from "../lib/filterPetaKolaborasi";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -170,15 +170,15 @@ function FotoImg({ url, alt = "", className = "", spinner = false, ...rest }) {
 }
 
 /** Satu kelompok saringan di dalam laci (judul + daftar pilihan). */
-function BagianFilter({ judul, ikon: Ikon, children }) {
+function BagianFilter({ judul, ikon: Ikon, children, testId }) {
   return (
-    <div className="rounded-lg border border-border overflow-hidden">
+    <section className="rounded-lg border border-border overflow-hidden" aria-label={judul} data-testid={testId}>
       <div className="flex items-center gap-1.5 px-2 py-1.5 bg-muted/60">
         {Ikon && <Ikon className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />}
         <span className="text-[10.5px] font-bold uppercase tracking-wide text-muted-foreground">{judul}</span>
       </div>
       <div className="max-h-44 overflow-y-auto p-1 space-y-0.5">{children}</div>
-    </div>
+    </section>
   );
 }
 
@@ -222,10 +222,10 @@ export default function PetaKolaborasiPage() {
   // Toolbar (paritas Peta Aset) + dua saringan khas peta kolaborasi: KONDISI
   // dan LOKASI. Keempatnya dikumpulkan di SATU tombol berlaci supaya toolbar
   // tetap muat di layar sempit (dulu tiap saringan memakan satu dropdown).
-  const [statusFilter, setStatusFilter] = useState("__semua__");
-  const [groupKey, setGroupKey] = useState("__semua__");
-  const [kondisiFilter, setKondisiFilter] = useState("__semua__");
-  const [lokasiFilter, setLokasiFilter] = useState("__semua__");
+  const [statusFilter, setStatusFilter] = useState([]);
+  const [groupKey, setGroupKey] = useState([]);
+  const [kondisiFilter, setKondisiFilter] = useState([]);
+  const [lokasiFilter, setLokasiFilter] = useState([]);
   const [laciFilter, setLaciFilter] = useState(false);
   const [resetPencarian, setResetPencarian] = useState(0);
   const [clusterOn, setClusterOn] = useState(true);
@@ -902,13 +902,13 @@ export default function PetaKolaborasiPage() {
   }, []);
 
   // Ganti filter → pusatkan ulang peta ke subset (reset flag fit).
-  const changeStatus = useCallback((v) => { setStatusFilter(v); fitOnceRef.current = false; }, []);
-  const changeGroup = useCallback((v) => { setGroupKey(v); fitOnceRef.current = false; }, []);
-  const changeKondisi = useCallback((v) => { setKondisiFilter(v); fitOnceRef.current = false; }, []);
-  const changeLokasi = useCallback((v) => { setLokasiFilter(v); fitOnceRef.current = false; }, []);
+  const changeStatus = useCallback((v) => { setStatusFilter(prev => togglePilihanSaringan(prev, v)); fitOnceRef.current = false; }, []);
+  const changeGroup = useCallback((v) => { setGroupKey(prev => togglePilihanSaringan(prev, v)); fitOnceRef.current = false; }, []);
+  const changeKondisi = useCallback((v) => { setKondisiFilter(prev => togglePilihanSaringan(prev, v)); fitOnceRef.current = false; }, []);
+  const changeLokasi = useCallback((v) => { setLokasiFilter(prev => togglePilihanSaringan(prev, v)); fitOnceRef.current = false; }, []);
   const resetFilter = useCallback(() => {
-    setStatusFilter(SEMUA); setKondisiFilter(SEMUA);
-    setLokasiFilter(SEMUA); setGroupKey(SEMUA);
+    setStatusFilter([]); setKondisiFilter([]);
+    setLokasiFilter([]); setGroupKey([]);
     setResetPencarian(n => n + 1);
     fitOnceRef.current = false;
   }, []);
@@ -1121,7 +1121,7 @@ export default function PetaKolaborasiPage() {
               data-testid="peta-kolab-filter"
               className={`h-8 px-2 rounded-lg border flex items-center gap-1.5 flex-shrink-0 transition-colors ${jmlFilterAktif > 0 ? "border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400" : "border-border text-foreground/80 hover:bg-muted"}`}
             >
-              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: statusFilter === "__semua__" ? "#94a3b8" : (STATUS_COLORS[statusFilter] || STATUS_DEFAULT) }} />
+              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: statusFilter.length === 1 ? (STATUS_COLORS[statusFilter[0]] || STATUS_DEFAULT) : "#94a3b8" }} />
               <SlidersHorizontal className="w-3.5 h-3.5" />
               <span className="text-[11px] font-medium hidden sm:inline">Saringan</span>
               {jmlFilterAktif > 0 && (
@@ -1131,31 +1131,34 @@ export default function PetaKolaborasiPage() {
               )}
             </button>
           </PopoverTrigger>
-          <PopoverContent align="end" className="w-[19rem] max-w-[92vw] p-0 z-[900]">
-            <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+          <PopoverContent align="end" collisionPadding={12} data-testid="peta-filter-panel"
+            className="w-[calc(100vw-1.5rem)] sm:w-96 lg:w-[26rem] max-w-[calc(100vw-1.5rem)] p-0 z-[900] flex flex-col"
+            style={{ maxHeight: "min(80dvh, var(--radix-popover-content-available-height, 80dvh))" }}>
+            <div className="flex shrink-0 items-center justify-between px-3 py-2 border-b border-border">
               <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Saringan aset</span>
               <button
-                type="button" onClick={resetFilter} disabled={jmlFilterAktif === 0}
+                type="button" onClick={resetFilter}
                 className="h-7 px-2 rounded-md text-[11px] flex items-center gap-1 text-foreground/80 hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent"
                 data-testid="peta-kolab-filter-reset"
               >
                 <RotateCcw className="w-3 h-3" /> Reset
               </button>
             </div>
-            <div className="max-h-[58vh] overflow-y-auto p-2 space-y-2">
-              <BagianFilter judul="Status aset" ikon={ShieldCheck}>
-                <PilihanFilter aktif={statusFilter === "__semua__"} onPilih={() => changeStatus("__semua__")} label="Semua status" jumlah={jmlAset} warna="#94a3b8" />
+            <div className="min-h-0 overflow-y-auto overscroll-contain p-2 space-y-2">
+              <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">Boleh pilih lebih dari satu. Pilihan dalam satu saringan berlaku ATAU, antar-saringan berlaku DAN. Pilih Semua untuk menghapus saringan tersebut.</p>
+              <BagianFilter judul="Status aset" ikon={ShieldCheck} testId="peta-filter-status">
+                <PilihanFilter aktif={statusFilter.length === 0} onPilih={() => changeStatus(SEMUA)} label="Semua status" jumlah={jmlAset} warna="#94a3b8" />
                 {statusList.map((s) => (
-                  <PilihanFilter key={s.nilai} aktif={statusFilter === s.nilai} onPilih={() => changeStatus(s.nilai)}
+                  <PilihanFilter key={s.nilai} aktif={statusFilter.includes(s.nilai)} onPilih={() => changeStatus(s.nilai)}
                     label={s.nilai} jumlah={s.jumlah} warna={STATUS_COLORS[s.nilai] || STATUS_DEFAULT} />
                 ))}
               </BagianFilter>
 
               {kondisiList.length > 0 && (
-                <BagianFilter judul="Kondisi" ikon={Wrench}>
-                  <PilihanFilter aktif={kondisiFilter === "__semua__"} onPilih={() => changeKondisi("__semua__")} label="Semua kondisi" jumlah={jmlAset} />
+                <BagianFilter judul="Kondisi" ikon={Wrench} testId="peta-filter-kondisi">
+                  <PilihanFilter aktif={kondisiFilter.length === 0} onPilih={() => changeKondisi(SEMUA)} label="Semua kondisi" jumlah={jmlAset} />
                   {kondisiList.map((k) => (
-                    <PilihanFilter key={k.nilai} aktif={kondisiFilter === k.nilai} onPilih={() => changeKondisi(k.nilai)} label={k.nilai} jumlah={k.jumlah} />
+                    <PilihanFilter key={k.nilai} aktif={kondisiFilter.includes(k.nilai)} onPilih={() => changeKondisi(k.nilai)} label={k.nilai} jumlah={k.jumlah} />
                   ))}
                 </BagianFilter>
               )}
@@ -1163,14 +1166,14 @@ export default function PetaKolaborasiPage() {
               {lokasiList.length > 0 && (
                 <SaringanPetaDicari key={`lokasi-${resetPencarian}`} judul="Lokasi" ikon={MapPin}
                   pilihan={pilihanLokasi} aktif={lokasiFilter} onPilih={changeLokasi}
-                  labelSemua="Semua lokasi" jumlah={jmlAset} placeholder="Cari nama lokasi…" testId="peta-filter-lokasi" />
+                  labelSemua="Semua lokasi" jumlah={jmlAset} placeholder="Nama lokasi…" testId="peta-filter-lokasi" />
               )}
 
               {groups.length > 0 && (
                 <SaringanPetaDicari key={`barang-${resetPencarian}`} judul="Barang serupa" ikon={Layers}
                   pilihan={pilihanBarang} aktif={groupKey} onPilih={changeGroup}
                   labelSemua={`Semua barang (${groups.length} jenis)`} jumlah={jmlAset}
-                  placeholder="Cari nama atau kode barang…" testId="peta-filter-barang" />
+                  placeholder="Nama/kode barang…" testId="peta-filter-barang" />
               )}
             </div>
           </PopoverContent>
@@ -1374,7 +1377,7 @@ export default function PetaKolaborasiPage() {
         </div>
         {/* Hitungan aset & kolaborasi — sebaris di bawah tombol. */}
         <p className="text-[11px] text-muted-foreground px-1 leading-tight">
-          <b className="text-foreground">{asetTampil.length}</b>/{jmlAset} aset
+          <b className="text-foreground" data-testid="peta-aset-tersaring">{asetTampil.length}</b>/{jmlAset} aset
           {" · "}
           <b className="text-foreground">{jmlKolab}</b> kolaborasi
         </p>

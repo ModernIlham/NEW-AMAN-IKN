@@ -465,6 +465,24 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 /* === S1 — Design Token Foundation === */
 
+/* Pencarian di laci peta: satu bingkai fokus pada gabungan ikon + input + X.
+   Aturan aksesibilitas global di atas tetap berlaku di semua input lain.
+   Font 16px pada perangkat kecil (kelas komponen) mencegah zoom otomatis iOS. */
+.peta-filter-search:focus-within {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+.peta-filter-search > input,
+.peta-filter-search > input:focus,
+.peta-filter-search > input:focus-visible {
+  appearance: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  outline: none;
+  box-shadow: none;
+}
+
 /* Skip-link — WCAG 2.4.1 "Bypass Blocks" */
 /* Tautan "lompat ke konten" — untuk pengguna papan ketik/pembaca layar.
    DUA PELAJARAN MAHAL dari laporan lapangan (kotak putih misterius di kiri-atas

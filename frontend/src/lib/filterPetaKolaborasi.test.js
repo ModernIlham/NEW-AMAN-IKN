@@ -3,7 +3,7 @@
  * pilihannya lahir dari data peta itu sendiri.
  */
 import {
-  SEMUA, STATUS_BAWAAN, daftarGrup, daftarNilai, hitungFilterAktif, kunciGrup, saringAset, cariPilihanPeta,
+  SEMUA, STATUS_BAWAAN, daftarGrup, daftarNilai, hitungFilterAktif, kunciGrup, saringAset, cariPilihanPeta, pilihanSaringan, togglePilihanSaringan,
 } from "./filterPetaKolaborasi";
 
 const ASET = [
@@ -78,5 +78,41 @@ describe("pencarian pilihan, bukan penyaringan titik", () => {
     expect(cariPilihanPeta(pilihan, "  ")).toBe(pilihan);
     expect(cariPilihanPeta(undefined, "x")).toEqual([]);
     expect(cariPilihanPeta(null, "")).toEqual([]);
+  });
+});
+
+describe("pilihan jamak pada semua saringan", () => {
+  test.each([
+    ["status", ["Ditemukan", "Tidak Ditemukan"], ["1", "2", "3"]],
+    ["kondisi", ["Baik", "Rusak Ringan"], ["1", "2", "3"]],
+    ["lokasi", ["Gedung A", "Gedung B"], ["1", "2", "3"]],
+    ["grup", [kunciGrup(ASET[0]), kunciGrup(ASET[2])], ["1", "2", "3"]],
+  ])("%s memakai ATAU, tidak menggandakan aset", (field, values, expected) => {
+    expect(id(saringAset(ASET, { [field]: [...values, values[0]] }))).toEqual(expected);
+  });
+  test("empat saringan jamak digabung dengan DAN dan mempertahankan urutan sumber", () => {
+    expect(id(saringAset(ASET, { status: ["Ditemukan", "Tidak Ditemukan"],
+      kondisi: ["Baik", "Rusak Berat"], lokasi: ["Gedung A", "Gedung B"],
+      grup: [kunciGrup(ASET[0]), kunciGrup(ASET[3])] }))).toEqual(["1"]);
+    expect(saringAset(ASET, { lokasi: ["tidak ada"], kondisi: ["Baik"] })).toEqual([]);
+  });
+  test("kosong tidak menyaring; scalar era lama tetap didukung", () => {
+    expect(saringAset(ASET, { status: [], kondisi: [], lokasi: [], grup: [] })).toBe(ASET);
+    expect(pilihanSaringan(SEMUA)).toEqual([]);
+    expect(pilihanSaringan("Gedung A")).toEqual(["Gedung A"]);
+    expect(pilihanSaringan([null, "", "Gedung A", "Gedung A"])).toEqual(["Gedung A"]);
+    expect(hitungFilterAktif({ status: [], kondisi: [], lokasi: ["A", "B"], grup: ["x"] })).toBe(2);
+  });
+  test("toggle murni, menghapus terakhir kembali Semua, reset satu kelompok", () => {
+    const prev = Object.freeze(["A", "B"]);
+    expect(togglePilihanSaringan(prev, "A")).toEqual(["B"]);
+    expect(togglePilihanSaringan(prev, "C")).toEqual(["A", "B", "C"]);
+    expect(togglePilihanSaringan(["A"], "A")).toEqual([]);
+    expect(togglePilihanSaringan(prev, SEMUA)).toEqual([]);
+    expect(prev).toEqual(["A", "B"]);
+  });
+  test("pilihan status bawaan tersedia untuk aset era lama", () => {
+    expect(daftarNilai(ASET, "status")).toContainEqual({ nilai: STATUS_BAWAAN, jumlah: 1 });
+    expect(id(saringAset(ASET, { status: [STATUS_BAWAAN, "Tidak Ditemukan"] }))).toEqual(["3", "4"]);
   });
 });
