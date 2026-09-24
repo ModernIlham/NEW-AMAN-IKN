@@ -18,6 +18,26 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1071] Jaga cover lama saat menambah foto aset — 2026-09-24
+
+[PR #1062](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1062).
+
+- Perbaiki kehilangan sumber foto legacy saat PATCH `photo_ops`: ID GridFS
+  yang terisi tetapi blob-nya hilang sebelumnya dianggap aman, sehingga
+  salinan inline yang masih bisa dibuka ikut dibuang ketika menambah foto.
+  Reproduksi menunjukkan GET foto pertama berubah dari sukses menjadi 404.
+- Sekarang sumber GridFS diperiksa sebelum inline dilepas. Bila tidak dapat
+  dibaca, foto disimpan kembali dari inline yang masih tersedia; kegagalan
+  unggahan/konflik CAS/galat DB membatalkan perubahan dan menjaga foto lama.
+  Foto GridFS-only tidak mendapat pembacaan ekstra di langkah preservasi.
+- Tidak ada migrasi massal atau pemulihan otomatis foto yang sudah telanjur
+  kehilangan sumber penuh. Kasus aset produksi tetap perlu diidentifikasi
+  untuk pemeriksaan cadangan; perbaikan ini menutup jalur kehilangan yang
+  direproduksi dengan data uji, bukan menyatakan semua foto lama telah pulih.
+- Delapan regresi baru membandingkan foto penuh lewat handler GET/PATCH,
+  termasuk empat skenario rollback. Total backend 5.021 tes lulus, 5 dilewati;
+  compileall, build frontend, diff check, dan pemeriksa rahasia lulus.
+
 ## [#1070] Pencarian responsif dan multipilih saringan peta dibagikan — 2026-09-22
 
 [PR #1061](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1061).
