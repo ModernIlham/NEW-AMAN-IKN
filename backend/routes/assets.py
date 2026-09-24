@@ -2518,12 +2518,14 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
 
         # Process new photos: store in GridFS + generate thumbnails (atomic rollback if one fails)
         try:
-            # KRITIS (anti-kehilangan): foto KEPT dari dokumen legacy yang belum
-            # punya blob (gid "") harus DIUNGGAH sekarang — karena photos inline
-            # tidak dipersist lagi, tanpa unggahan ini byte foto lama lenyap
-            # begitu pengguna mengedit aset legacy.
+            # KRITIS: ID terisi bukan bukti blob masih ada. Endpoint GET bisa
+            # membuka foto legacy lewat fallback inline walau ID GridFS-nya
+            # menggantung. Sebelum membuang inline di bawah, pastikan sumber
+            # penggantinya benar-benar terbaca; bila tidak, unggah salinan yang
+            # masih ada. Kalau unggahan gagal, rollback dan biarkan dokumen
+            # lama utuh. Foto GridFS-only tidak perlu dibaca ulang di sini.
             for i, gid in enumerate(final_gridfs_ids):
-                if not gid and final_srcs[i]:
+                if final_srcs[i] and (not gid or not await get_photo_from_gridfs(gid)):
                     new_gid = await store_photo_to_gridfs(final_srcs[i])
                     newly_uploaded_gridfs.append(new_gid)
                     final_gridfs_ids[i] = new_gid
