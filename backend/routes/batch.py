@@ -19,6 +19,7 @@ from pymongo import UpdateOne, ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from asset_fields import BATCHABLE_FIELD_NAMES
+from marker_pin import bersihkan_marker_doc
 from meili_utils import jadwalkan_sync_id
 from spasial_utils import sisip_geo_ke_update
 from auth_utils import require_user, require_writer
@@ -201,6 +202,7 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
     # tetap berarti kosong, bukan teks "__clear__" yang lolos apa adanya.
     from spasial_utils import normalisasi_koordinat_doc
     normalisasi_koordinat_doc(clean_updates)
+    await bersihkan_marker_doc(clean_updates)
 
     # Setelan opt-in "wajib pegawai terdaftar" berlaku juga utk ubah massal
     # (temuan #29 — dulu hanya create/PUT/PATCH tunggal yang menegakkan).

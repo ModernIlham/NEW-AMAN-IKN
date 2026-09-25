@@ -45,6 +45,8 @@ import { statusInventarisasiOtomatis, autoInventarisasiEnabled } from "../../lib
 import { terapkanHeaderSatker } from "../../lib/satkerAktif";
 import { keteranganPsp } from "../../lib/tandaPsp";
 import { normalisasiKoordinat, keteranganLokasiDenah } from "../../lib/koordinatAset";
+import MarkerPinEditor from "./MarkerPinEditor";
+import { STATUS_COLORS } from "../../lib/warnaAset";
 import { UKURAN_STIKER } from "../../lib/stikerAset";
 
 // ============================================================================
@@ -475,6 +477,7 @@ function buildEditFormData(a, activityId) {
     tindak_lanjut: a.tindak_lanjut || "",
     koordinat_latitude: a.koordinat_latitude || "",
     koordinat_longitude: a.koordinat_longitude || "",
+    marker_pin: a.marker_pin || "",
     kronologis: a.kronologis || "",
     keterangan_berlebih: a.keterangan_berlebih || "",
     asal_usul_berlebih: a.asal_usul_berlebih || "",
@@ -596,6 +599,7 @@ const AssetForm = memo(({
     stiker_status: "Belum Terpasang", stiker_ukuran: "", stiker_photo_index: null,
     inventory_status: "Belum Diinventarisasi", temuan_pencatatan: "", klasifikasi_tidak_ditemukan: "", sub_klasifikasi: "", uraian_tidak_ditemukan: "", tindak_lanjut: "",
     koordinat_latitude: "", koordinat_longitude: "", kronologis: "",
+    marker_pin: "",
     keterangan_berlebih: "", asal_usul_berlebih: "", nomor_perkara: "", pihak_bersengketa: "", keterangan_sengketa: "",
     garansi_hingga: "", garansi_jenis: "", barang_bersejarah: "",
     // KOSONG (0/0), bukan lima baris bawaan. Daftar lama ("Buku Manual,
@@ -608,6 +612,7 @@ const AssetForm = memo(({
   }), [activity?.id]);
 
   const [formData, setFormData] = useState(emptyForm);
+  const [markerBusy, setMarkerBusy] = useState(false);
   const [editId, setEditId] = useState(null);
   // Auto-isi GARANSI dari inventarisasi sebelumnya: saat kode barang + NUP
   // dan/atau kode register sama dengan aset yang pernah tercatat DAN kolom
@@ -1717,6 +1722,7 @@ const AssetForm = memo(({
     // dipaksa, jalur EDIT (butuh originalDataRef) belum siap dan bisa jatuh ke
     // CREATE lalu MENIMPA aset lama dengan data aset baru sebelumnya.
     if (isFormLoading) { toast.info("Menunggu data aset dimuat…"); return; }
+    if (markerBusy) { toast.info("Menunggu ikon marker selesai disiapkan…"); return; }
 
     // === Inline client-side validation ===
     const errs = {};
@@ -1851,6 +1857,7 @@ const AssetForm = memo(({
           "inventory_status", "temuan_pencatatan", "klasifikasi_tidak_ditemukan", "sub_klasifikasi",
           "uraian_tidak_ditemukan", "tindak_lanjut",
           "koordinat_latitude", "koordinat_longitude", "kronologis",
+          "marker_pin",
           "keterangan_berlebih", "asal_usul_berlebih",
           "nomor_perkara", "pihak_bersengketa", "keterangan_sengketa",
           "garansi_hingga", "garansi_jenis", "barang_bersejarah",
@@ -2067,7 +2074,7 @@ const AssetForm = memo(({
       else if (err.code === 'ECONNABORTED') errorMsg = "Koneksi timeout. Coba kurangi ukuran file.";
       toast.error(errorMsg);
     } finally { setIsSubmitting(false); }
-  }, [formData, isEditing, editId, assetVersion, isFormLoading, resetForm, onSubmitSuccess, onOptimisticSubmit, onSaveAndNavigate, onCameraReviewSaved, onExitToNewAsset, onClose, focusFieldError]);
+  }, [formData, isEditing, editId, assetVersion, isFormLoading, markerBusy, resetForm, onSubmitSuccess, onOptimisticSubmit, onSaveAndNavigate, onCameraReviewSaved, onExitToNewAsset, onClose, focusFieldError]);
 
   // — Aksi alur beruntun Mode Kamera Penuh (semua lewat handleSubmit agar
   //   validasi + kompresi + payload tetap konsisten) —
@@ -3051,6 +3058,12 @@ const AssetForm = memo(({
                 </div>
               </div>
               
+              <details className="rounded-lg border border-border p-2">
+                <summary className="cursor-pointer text-xs font-semibold min-h-[44px] flex items-center">Desain marker pin</summary>
+                <MarkerPinEditor value={formData.marker_pin} onChange={(marker_pin) => setFormData(p => ({ ...p, marker_pin }))}
+                  onBusyChange={setMarkerBusy} disabled={isSubmitting || isFormLoading} scopeKey={editAsset?.id || "baru"} color={STATUS_COLORS[formData.inventory_status]} />
+              </details>
+
               {/* Photos */}
               <div className="space-y-1.5">
                 <Label className="text-xs">Foto Aset ({currentPhotoCount}/6)</Label>
@@ -3152,7 +3165,7 @@ const AssetForm = memo(({
                 <Button
                   id="asset-form-submit-btn" type="submit"
                   className={`flex-1 h-9 relative ${isEditing ? "bg-amber-600 hover:bg-amber-700" : ""}`}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || markerBusy}
                   onClick={() => {
                     if (isEditing && onSaveAndNavigate && assetIndex >= 0
                         && (assetIndex < totalAssetsInView - 1 || hasMoreToLoad)) {

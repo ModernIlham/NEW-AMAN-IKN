@@ -40,6 +40,14 @@ beforeEach(() => {
 });
 
 describe("upsertSnapshotAsset — baca-gabung-tulis", () => {
+  test("desain marker tersimpan offline dan tidak hilang oleh patch field lain", async () => {
+    const marker_pin = '{"v":1,"mode":"text","text":"A1"}';
+    await upsertSnapshotAsset("keg1", { id: "a1", marker_pin });
+    await upsertSnapshotAsset("keg1", { id: "a1", location: "Ruang" });
+    expect(mockSimpanan.assets.get("a1").marker_pin).toBe(marker_pin);
+    await upsertSnapshotAsset("keg1", { id: "a1", marker_pin: "" });
+    expect(mockSimpanan.assets.get("a1").marker_pin).toBe("");
+  });
   test("ringkasan denah masuk cache dan pencabutan membersihkan penempatan sebelumnya", async () => {
     await upsertSnapshotAsset("keg1", { id: "a1", location: "Manual", di_denah: true,
       denah_nama: "Ruang", denah_jalur: "Gedung / Ruang", denah_titik: [116.9, -1.5] });

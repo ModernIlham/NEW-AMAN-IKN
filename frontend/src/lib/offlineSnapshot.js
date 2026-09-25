@@ -28,7 +28,9 @@ const DB_NAME = "aman_offline_snapshot";
 // jadi upgrade mengosongkan cache agar sync berikutnya full resync.
 const DB_VERSION = 2;
 // Muat ulang proyeksi saat daring tanpa menghapus cache baca/antrean luring.
-const VERSI_PROYEKSI = 1;
+// v2 menambah marker_pin; tab lama mungkin telah memajukan cursor sambil
+// membuang field baru. Tarik penuh sekali supaya marker tidak polos luring.
+const VERSI_PROYEKSI = 2;
 const ASSET_STORE = "assets"; // keyed by asset id, indexed by activity_id
 const META_STORE = "meta";    // keyed by activityId → {activityId, userId, lastSync, count}
 
@@ -58,6 +60,7 @@ const SNAPSHOT_FIELDS = [
   "keterangan_berlebih", "asal_usul_berlebih",
   "nomor_perkara", "pihak_bersengketa", "keterangan_sengketa",
   "garansi_hingga", "garansi_jenis", "barang_bersejarah",
+  "marker_pin",
   "photo_count", "doc_total", "doc_checked", "doc_summary",
   "siman",  // subdoc sinkronisasi SIMAN V2 — badge "≠ SIMAN" tetap tampil offline
 ];

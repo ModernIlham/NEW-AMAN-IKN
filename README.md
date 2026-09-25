@@ -8,6 +8,24 @@
 
 ## Ringkasan
 
+### Desain marker pin
+
+- Di **Tambah/Edit Aset → Info Dasar → Desain marker pin**, pilih polos,
+  ikon (28 pilihan dalam 6 kategori + pencarian), 1–3 huruf/angka, atau
+  ikon custom. Atur warna ikon, isian lingkaran, serta warna/ketebalan garis.
+- Untuk banyak aset: seleksi baris atau pin peta → **Edit Massal** → centang
+  **Ubah desain pin** → atur desain → **Terapkan**. Hanya ID yang diseleksi
+  diubah; bidang lain tetap, kecuali ikut dipilih untuk diubah. Edit massal
+  memerlukan koneksi; edit satu aset ikut antrean offline yang sudah ada.
+- PNG/JPEG/WebP maksimal 2 MB dan 4096×4096 dinormalisasi menjadi PNG
+  64×64, mempertahankan rasio, dengan ruang tepi dan maksimal 10 KB.
+  SVG/GIF/URL eksternal ditolak; metadata dibuang server. Ikon tersimpan
+  bersama aset, ikut backup, ekspor/impor, snapshot luring, dan peta dibagikan.
+  Hindari data pribadi pada ikon karena ikut terlihat dalam peta dibagikan.
+- Pengaturan berlaku pada gaya **Pin**; gaya **Foto** tetap menggunakan
+  sampul. Warna status, penanda kelengkapan, seleksi, serta lencana komentar
+  tetap bermakna. Pilih **Polos** untuk kembali ke desain awal.
+
 **AMAN** (sebelumnya InventoryMaster Pro) adalah aplikasi full-stack untuk pengelolaan dan inventarisasi Barang Milik Negara (BMN). Mendukung proses inventarisasi lapangan, pencatatan aset, pelacakan status, manajemen tim, dan pembuatan 13+ jenis laporan resmi dalam format PDF.
 
 **Live:** [https://amanikn-inventarisasi.com](https://amanikn-inventarisasi.com)

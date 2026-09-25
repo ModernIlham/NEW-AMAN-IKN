@@ -96,7 +96,7 @@ ASSET_SHEET_HEADERS = ['Foto', 'Foto Stiker', 'Kode Aset', 'NUP', 'Nama Aset', '
                        'Keterangan Berlebih', 'Asal Usul Berlebih', 'Nomor Perkara', 'Pihak Bersengketa', 'Keterangan Sengketa',
                        'Garansi Hingga', 'Jenis Garansi', 'Cara Bayar Kontrak', 'Barang Bersejarah',
                        'Jumlah Foto', 'Tanggal Input',
-                       'Temuan Pencatatan']
+                       'Temuan Pencatatan', 'Desain Marker Pin']
 
 
 def _xlsx_image_buffer(img_data: str, max_px: int, quality: int = 70) -> io.BytesIO:
@@ -1235,6 +1235,7 @@ async def bangun_xlsx_bytes(query, activity_id="", base_url="", token=""):
         worksheet.write(row, 52, asset.get('created_at', ''), cell_format)
         # Temuan Pencatatan — ditambahkan di ujung; lihat catatan header.
         worksheet.write(row, 53, asset.get('temuan_pencatatan', ''), cell_format)
+        worksheet.write(row, 54, asset.get('marker_pin') or '', cell_format)
         
         # Write document checklist to separate sheet - ONLY items with checked=True (✓ Ada)
         checklist = asset.get('document_checklist', [])

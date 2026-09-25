@@ -124,6 +124,14 @@ class AssetCreate(BaseModel):
     garansi_jenis: Optional[str] = ""
     barang_bersejarah: Optional[str] = ""
 
+    marker_pin: Optional[str] = ""
+
+    @field_validator('marker_pin', mode='before')
+    @classmethod
+    def desain_pin_valid(cls, v):
+        from marker_pin import normalisasi_marker_pin
+        return normalisasi_marker_pin(v)
+
     @field_validator('koordinat_latitude', 'koordinat_longitude', mode='before')
     @classmethod
     def koordinat_titik_desimal(cls, v, info):
@@ -215,6 +223,7 @@ class AssetResponse(BaseModel):
     garansi_jenis: Optional[str] = ""
     barang_bersejarah: Optional[str] = ""
     created_at: str
+    marker_pin: Optional[str] = ""
     # Stamped on every write — delta cursor for /assets/offline-snapshot
     updated_at: Optional[str] = ""
     # Optimistic Concurrency Control — incremented on every write

@@ -18,6 +18,29 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1072] Desain marker pin per aset dan massal — 2026-09-25
+
+[PR #1063](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1063).
+
+- Editor pin di form aset: 28 ikon dalam enam kategori, pencarian, huruf/angka,
+  ikon custom, isian lingkaran, warna ikon/garis, dan ketebalan garis 0–3 px.
+  Pratinjau memakai renderer yang sama dengan peta internal dan peta dibagikan.
+- Edit Massal mengubah desain hanya untuk ID terpilih, opt-in; Polos mereset
+  desain. Warna status, tanda seleksi/kelengkapan, dan lencana tetap terjaga.
+  Gaya Foto tetap memakai sampul; pin tanpa pengaturan tetap seperti sebelumnya.
+- Unggah PNG/JPEG/WebP ≤2 MB → PNG 64×64 ≤10 KB dengan rasio/ruang tepi.
+  Validasi backend, decode/re-encode di thread, serta pembuangan metadata;
+  tanpa HTML/SVG/URL pengguna. Hasil decode usang tidak masuk ke form lain.
+- Field `marker_pin` melalui registry: create/PUT/PATCH/massal, proyeksi list,
+  cache offline, audit, backup, CSV/XLSX/impor/template. PUT klien lama dan
+  impor tanpa kolom desain mempertahankan pengaturan yang sudah ada.
+- Data lama tetap valid tanpa migrasi. Pengeditan satu aset mengikuti antrean
+  luring; perubahan massal tetap online sesuai mekanisme yang sudah ada.
+- Naikkan versi proyeksi cache agar perangkat lama menarik desain lengkap
+  sekali saat daring, tanpa menghapus antrean. Pertahankan kutip JSON pada
+  impor CSV desain; tetapkan lapisan SVG lokal agar CSS Leaflet tidak menutup
+  huruf, lingkaran, atau ikon custom di tengah pin.
+
 ## [#1071] Jaga cover lama saat menambah foto aset — 2026-09-24
 
 [PR #1062](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1062).

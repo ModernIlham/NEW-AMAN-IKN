@@ -30,6 +30,7 @@ import {
 import { fieldLevel, labelLevel, levelAkar, levelRingkas } from "@/lib/eselonSatker";
 import { UKURAN_STIKER } from "@/lib/stikerAset";
 import PemilihUnitOrganisasi from "./PemilihUnitOrganisasi";
+import MarkerPinEditor from "./MarkerPinEditor";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -166,6 +167,7 @@ const BatchEditPanel = memo(function BatchEditPanel({
 }) {
   const [updates, setUpdates] = useState({});
   const [gpsLoading, setGpsLoading] = useState(false);
+  const [markerBusy, setMarkerBusy] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const [clearPhotos, setClearPhotos] = useState(false);
   const [clearDocChecklist, setClearDocChecklist] = useState(false);
@@ -435,6 +437,7 @@ const BatchEditPanel = memo(function BatchEditPanel({
   };
 
   const handleApply = async () => {
+    if (markerBusy) return;
     // Snapshot ID aset terpilih SEKARANG (sinkron, sebelum dialog konfirmasi /
     // render ulang) agar simpan massal tetap jalan walau pengguna langsung
     // menekan "Kosongkan" seleksi sesudah menekan Terapkan.
@@ -635,6 +638,20 @@ const BatchEditPanel = memo(function BatchEditPanel({
             </ClearableSelect>
           </div>
         </div>
+      </Section>
+
+      <Section icon={MapPin} title="Desain marker pin">
+        <label className="flex items-center gap-2 text-xs min-h-[44px]">
+          <input type="checkbox" data-testid="batch-marker-enable" disabled={updating}
+            checked={Object.prototype.hasOwnProperty.call(updates, "marker_pin")}
+            onChange={(e) => setField("marker_pin", e.target.checked ? "__clear__" : "__none__")} />
+          Ubah desain pin untuk {selectedCount} aset terpilih
+        </label>
+        {Object.prototype.hasOwnProperty.call(updates, "marker_pin") && <>
+          <p className="text-[11px] text-muted-foreground mb-2">Desain berikut menggantikan desain lama hanya pada aset terseleksi. Polos mengembalikan pin bawaan; field lain tidak ikut berubah.</p>
+          <MarkerPinEditor value={updates.marker_pin === "__clear__" ? "" : updates.marker_pin}
+            onChange={(v) => setField("marker_pin", v || "__clear__")} onBusyChange={setMarkerBusy} disabled={updating} />
+        </>}
       </Section>
 
       {/* Extended Fields */}
@@ -966,7 +983,7 @@ const BatchEditPanel = memo(function BatchEditPanel({
             kasar ke BANYAK aset sekaligus — lalu gerbang selesai, koordinatnya
             dibuang dari form, dan muncul pesan "koordinat tidak disimpan" yang
             keliru: sudah terlanjur tersimpan. */}
-        <Button onClick={handleApply} disabled={!hasUpdates || updating || gpsLoading}
+        <Button onClick={handleApply} disabled={!hasUpdates || updating || gpsLoading || markerBusy}
           title={gpsLoading ? "Menunggu GPS mengunci — koordinat sementara belum lolos gerbang akurasi ±8 m" : undefined}
           className="bg-teal-700 hover:bg-teal-800 text-white h-8 text-xs" data-testid="batch-apply-btn">
           {updating ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <CheckSquare className="w-3 h-3 mr-1" />}

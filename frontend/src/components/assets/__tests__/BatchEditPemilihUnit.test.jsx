@@ -13,7 +13,7 @@
  * membiarkannya — dan ubah massal tak menanyakan ulang per aset.
  */
 import React from "react";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axios from "axios";
 
@@ -66,6 +66,30 @@ const terapkan = async () => {
 };
 
 beforeEach(() => jest.clearAllMocks());
+
+test("desain pin massal opt-in, hanya mengirim desain dan ID terpilih", async () => {
+  const onApply = pasang();
+  await screen.findByTestId("batch-unit-pemicu");
+  expect(screen.queryByTestId("marker-pin-editor")).toBeNull();
+  fireEvent.click(screen.getByTestId("batch-marker-enable"));
+  fireEvent.click(screen.getByTestId("marker-mode-icon"));
+  fireEvent.click(screen.getByTestId("marker-icon-monitor"));
+  fireEvent.click(screen.getByTestId("batch-apply-btn"));
+  await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1));
+  const [updates, ids] = onApply.mock.calls[0];
+  expect(Object.keys(updates)).toEqual(["marker_pin"]);
+  expect(JSON.parse(updates.marker_pin).icon).toBe("monitor");
+  expect(ids).toEqual(["a1", "a2", "a3"]);
+});
+
+test("membatalkan pengaturan marker massal berarti tidak diubah", async () => {
+  pasang();
+  await screen.findByTestId("batch-unit-pemicu");
+  fireEvent.click(screen.getByTestId("batch-marker-enable"));
+  fireEvent.click(screen.getByTestId("marker-mode-text"));
+  fireEvent.click(screen.getByTestId("batch-marker-enable"));
+  expect(screen.getByTestId("batch-apply-btn")).toBeDisabled();
+});
 
 // ── 1. Pemilih yang sama, bukan `<select>` lama ─────────────────────────
 
