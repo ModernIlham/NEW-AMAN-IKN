@@ -257,6 +257,9 @@ FIELD_STRATEGIES = {
     # menguji seksi h LBP tanpa mendistorsi profil data.
     "barang_bersejarah": _s("teks", lambda r, c: (
         "Ya" if r.random() < 0.02 else "")),
+    "marker_pin": _s("teks", lambda r, c: r.choice([
+        "", '{"v":1,"mode":"icon","icon":"monitor"}',
+        '{"v":1,"mode":"text","text":"A1"}'])),
 }
 
 
@@ -275,7 +278,9 @@ def generate_asset(rng, profil_cfg, index=0, activity_id=None):
             record[name] = ""
             continue
         nilai = strat["fn"](rng, ctx)
-        anom = maybe_anomali(rng, strat["jenis"], rasio)
+        # Desain adalah JSON ber-skema ketat; uji payload liar ada di test
+        # validator, bukan dataset yang dijanjikan selalu lolos AssetCreate.
+        anom = maybe_anomali(rng, strat["jenis"], 0 if name == "marker_pin" else rasio)
         record[name] = anom if anom is not None else nilai
     if activity_id is not None:
         record["activity_id"] = activity_id

@@ -102,6 +102,8 @@ ASSET_SCALAR_FIELDS = (
     # dalam kuantitas tanpa nilai). Nilai "Ya" = bersejarah, kosong = bukan;
     # menghidupkan seksi "h. Laporan Barang Bersejarah" pada LBP.
     AssetField("barang_bersejarah", "Barang Bersejarah", batchable=True),
+    # JSON tervalidasi; satu nilai atomik untuk desain, ekspor, dan antrean luring.
+    AssetField("marker_pin", "Desain Marker Pin", batchable=True),
 )
 
 SCALAR_FIELD_NAMES = tuple(f.name for f in ASSET_SCALAR_FIELDS)

@@ -26,6 +26,7 @@ import {
 } from "@/lib/geserUsulan";
 import { perluLaciAlat, ringkasAlatAktif } from "@/lib/alatPeta";
 import { JARAK_DARI_MARKER, kotakLabel, pasangLebarLabel, pilihLabelTampil } from "@/lib/petaLabel";
+import { opsiPinDesain } from "../lib/markerPin";
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from "../components/ui/popover";
@@ -651,7 +652,8 @@ export default function PetaKolaborasiPage() {
       const cover = `${API}/peta/kolaborasi/${id}/aset/${encodeURIComponent(p.id)}/foto/${p.thumbnail_index || 0}?${q.toString()}`;
       return photoMarkerIconKolab(cover, { color: entry.color, badge: entry.badge, selected: entry.selected });
     }
-    return pinIcon(entry.color, { badge: entry.badge, selected: entry.selected });
+    const desain = entry.jenis === "aset" && opsiPinDesain(p?.marker_pin, { color: entry.color, badge: entry.badge, selected: entry.selected });
+    return desain ? L.divIcon(desain) : pinIcon(entry.color, { badge: entry.badge, selected: entry.selected });
   }, [markerStyle, id, token]);
 
   // Sinkron marker INKREMENTAL (tak clear+bangun-ulang) — meniru AssetMapFullView
@@ -670,7 +672,7 @@ export default function PetaKolaborasiPage() {
       // iconKey ikut memuat gaya + identitas sampul (thumbnail_index) → ganti
       // gaya / ganti sampul memicu rebuild ikon lewat jalur inkremental.
       const usePhoto = markerStyle === "photo" && jenis === "aset" && (Number(point?.jumlah_foto) || 0) > 0;
-      const iconKey = `${color}|${badge}|${usePhoto ? `p${point.thumbnail_index || 0}` : "n"}`;
+      const iconKey = `${color}|${badge}|${usePhoto ? `p${point.thumbnail_index || 0}` : `n${point.marker_pin || ""}`}`;
       const existing = markersRef.current.get(key);
       if (existing) {
         existing.point = point;

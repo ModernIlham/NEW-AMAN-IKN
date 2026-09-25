@@ -27,6 +27,7 @@ import { authMediaUrl } from "../../lib/mediaUrl";
 import { CONDITION_COLORS, STATUS_COLORS } from "../../lib/warnaAset";
 import { JARAK_DARI_MARKER, kotakLabel, pasangLebarLabel, pilihLabelTampil } from "../../lib/petaLabel";
 import { parseKoordinat } from "../../lib/koordinatAset";
+import { opsiPinDesain } from "../../lib/markerPin";
 import { useBackGuard } from "../../hooks/useBackGuard";
 import { useUkurPeta } from "../../hooks/useUkurPeta";
 import { useDenahSpasial } from "../../hooks/useDenahSpasial";
@@ -155,6 +156,8 @@ function photoMarkerIcon(row, { color, complete = false, selected = false } = {}
 // Pilih ikon sesuai gaya marker aktif: "photo" + punya foto → marker foto;
 // selain itu (termasuk aset tanpa foto) → pin berwarna seperti biasa.
 function assetMarkerIcon(row, { color, hasPhoto, complete, selected, style, jmlKomentar = 0 }) {
+  const desain = opsiPinDesain(row.marker_pin, { color, hasPhoto, complete, selected, badge: jmlKomentar });
+  if (desain && !(style === "photo" && hasPhoto)) return L.divIcon(desain);
   const dasar = (style === "photo" && hasPhoto)
     ? photoMarkerIcon(row, { color, complete, selected })
     : markerIcon(color, hasPhoto, complete, false, selected);
@@ -1218,7 +1221,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
       const jmlKomentar = (komentarRef.current[row.id] || []).length;
       const iconKey = (markerStyle === "photo" && hasPhoto
         ? `photo|${color}|${complete}|${selected}|${row.thumbnail_index || 0}|${row.version || 1}`
-        : `pin|${color}|${hasPhoto}|${complete}|${selected}`) + `|k${jmlKomentar}`;
+        : `pin|${color}|${hasPhoto}|${complete}|${selected}|${row.marker_pin || ""}`) + `|k${jmlKomentar}`;
       const existing = markersRef.current.get(row.id);
 
       if (existing) {

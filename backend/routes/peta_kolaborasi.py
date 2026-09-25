@@ -615,6 +615,7 @@ async def hapus_kontribusi(share_id: str, kontrib_id: str,
 KUNCI_PUBLIK_TITIK = frozenset({
     "id", "lat", "lng", "kode", "nup", "nama", "kategori", "status",
     "kondisi", "merk", "tipe", "lokasi", "jumlah_foto", "thumbnail_index",
+    "marker_pin",
 })
 
 
@@ -626,7 +627,9 @@ def baris_titik_publik(a: dict, lat: float, lng: float) -> dict:
     lahir, dan justru field BARU-lah yang paling mungkin sensitif. Dengan
     allowlist, field yang tak dikenal otomatis tidak ikut keluar.
     """
+    from marker_pin import marker_pin_publik
     return {"id": a.get("id"), "lat": lat, "lng": lng,
+            "marker_pin": marker_pin_publik(a.get("marker_pin")),
             "kode": a.get("asset_code") or "", "nup": a.get("NUP") or "",
             "nama": a.get("asset_name") or "",
             "kategori": a.get("category") or "",
@@ -659,6 +662,7 @@ async def _titik_aset(share: dict) -> list:
             "_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
             "category": 1, "inventory_status": 1, "condition": 1,
             "brand": 1, "model": 1, "location": 1, "thumbnail_index": 1,
+            "marker_pin": 1,
             "koordinat_latitude": 1, "koordinat_longitude": 1,
             "jumlah_foto": {"$let": {
                 "vars": {"ng": {"$size": {"$ifNull": ["$photo_gridfs_ids", []]}}},

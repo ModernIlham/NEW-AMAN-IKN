@@ -15,6 +15,7 @@ from pymongo.errors import DuplicateKeyError
 
 from db import db, fs_bucket
 from asset_fields import SCALAR_FIELD_NAMES
+from marker_pin import bersihkan_marker_doc
 from spasial_utils import terapkan_geo, sisip_geo_ke_update, entri_riwayat_lokasi
 import spasial_penempatan as sp
 import inventarisasi_stempel as stempel_inv
@@ -1153,6 +1154,9 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
 
     # ISOLASI SATKER: aset hanya boleh dibuat pada kegiatan satker user.
     await pastikan_akses_kegiatan_id(_user, asset.activity_id)
+    _pin = {"marker_pin": asset.marker_pin}
+    await bersihkan_marker_doc(_pin)
+    asset.marker_pin = _pin["marker_pin"]
     # Kegiatan yang sudah disahkan terkunci — tolak penambahan aset (423)
     await ensure_activity_not_sealed(asset.activity_id)
     await _enforce_pegawai_terdaftar(asset.pengguna_nip)
@@ -2087,6 +2091,11 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
     # Kegiatan yang sudah disahkan terkunci — cek activity asal DAN tujuan
     # (bila aset dipindah antar kegiatan lewat PUT).
     await pastikan_akses_aset(_user, existing)
+    # Klien lama belum mengenal field desain: PUT-nya tidak menghapus desain.
+    _pin = {"marker_pin": asset.marker_pin if "marker_pin" in asset.model_fields_set
+            else existing.get("marker_pin", "")}
+    await bersihkan_marker_doc(_pin)
+    asset.marker_pin = _pin["marker_pin"]
     if asset.activity_id and asset.activity_id != existing.get("activity_id"):
         await pastikan_akses_kegiatan_id(_user, asset.activity_id)
     await ensure_activity_not_sealed(existing.get("activity_id"))
@@ -2351,6 +2360,7 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
             raise HTTPException(status_code=409, detail="Permintaan dengan kunci idempotensi ini sedang diproses, coba lagi sebentar")
 
     body = await request.json()
+    await bersihkan_marker_doc(body)
     # PATCH tak melewati model AssetCreate, jadi normalisasi koordinatnya
     # dilakukan di sini — tanpa ini, jalur simpan tercepat (lembar edit cepat &
     # antrean luring) justru satu-satunya yang masih menyimpan koma desimal.

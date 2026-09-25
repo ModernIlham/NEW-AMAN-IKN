@@ -218,6 +218,10 @@ ASSET_TEMPLATE_SCHEMA = [
      "rule": "Isi \"Ya\" bila barang bersejarah (PSAP 07) — masuk seksi "
              "Laporan Barang Bersejarah pada LBP; kosongkan bila bukan.",
      "sample1": "", "sample2": "", "dropdown": ["Ya"]},
+    {"field": "marker_pin", "required": False, "width": 24,
+     "rule": "JSON desain marker dari ekspor AMAN; kosong = pin polos. "
+             "Disarankan mengatur ikon melalui form atau Edit Massal.",
+     "sample1": "", "sample2": "", "dropdown": None},
 ]
 
 
