@@ -20,6 +20,8 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ## [#1072] Desain marker pin per aset dan massal — 2026-09-25
 
+[PR #1063](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1063).
+
 - Editor pin di form aset: 28 ikon dalam enam kategori, pencarian, huruf/angka,
   ikon custom, isian lingkaran, warna ikon/garis, dan ketebalan garis 0–3 px.
   Pratinjau memakai renderer yang sama dengan peta internal dan peta dibagikan.
