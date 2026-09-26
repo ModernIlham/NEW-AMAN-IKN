@@ -54,6 +54,7 @@ function kolom(nama) {
 test("koma yang diketik SEGERA menjadi titik di kolom lintang", async () => {
   bukaForm();
   await waitFor(() => expect(kolom("koordinat_latitude")).toBeInTheDocument());
+  expect(screen.getAllByTestId("marker-design-icon")).toHaveLength(2);
   await userEvent.type(kolom("koordinat_latitude"), "-1,4001");
   await waitFor(() => expect(kolom("koordinat_latitude")).toHaveValue("-1.4001"));
 });

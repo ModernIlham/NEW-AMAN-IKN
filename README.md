@@ -11,8 +11,10 @@
 ### Desain marker pin
 
 - Di **Tambah/Edit Aset → Info Dasar → Desain marker pin**, pilih polos,
-  ikon (185 pilihan dalam 13 kategori + pencarian), 1–3 huruf/angka, atau
-  ikon custom. Atur warna ikon, isian lingkaran, serta warna/ketebalan garis.
+  ikon (421 pilihan dalam 25 kategori + pencarian), 1–3 huruf/angka, atau
+  ikon custom. Judul pengaturan memakai ikon pin dan pensil, juga pada Edit
+  Massal. Katalog ditampilkan 72 ikon per tahap agar ringan; pencarian tetap
+  mencakup seluruh katalog. Atur warna ikon, isian lingkaran, serta warna/ketebalan garis.
   Warna bisa dipilih lewat palet atau diketik sebagai enam digit HEX,
   dengan/tanpa `#` (contoh `#2563EB`), pada editor tunggal maupun massal.
   Lengkapi kode yang tidak valid sebelum menyimpan. Lencana kamera tetap

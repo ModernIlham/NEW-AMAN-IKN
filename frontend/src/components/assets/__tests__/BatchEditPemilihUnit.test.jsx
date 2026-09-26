@@ -71,10 +71,12 @@ test("desain pin massal opt-in, hanya mengirim desain dan ID terpilih", async ()
   const onApply = pasang();
   await screen.findByTestId("batch-unit-pemicu");
   expect(screen.queryByTestId("marker-pin-editor")).toBeNull();
+  expect(screen.getByTestId("marker-design-icon")).toBeInTheDocument();
   fireEvent.click(screen.getByTestId("batch-marker-enable"));
+  expect(screen.getAllByTestId("marker-design-icon")).toHaveLength(2);
   fireEvent.click(screen.getByTestId("marker-mode-icon"));
-  fireEvent.change(screen.getByTestId("marker-search"), { target: { value: "mikroskop" } });
-  fireEvent.click(screen.getByTestId("marker-icon-microscope"));
+  fireEvent.change(screen.getByTestId("marker-search"), { target: { value: "bianglala" } });
+  fireEvent.click(screen.getByTestId("marker-icon-ferriswheel"));
   fireEvent.change(screen.getByTestId("marker-iconColor-hex"), { target: { value: "#zz" } });
   expect(screen.getByTestId("batch-apply-btn")).toBeDisabled();
   expect(onApply).not.toHaveBeenCalled();
@@ -85,7 +87,7 @@ test("desain pin massal opt-in, hanya mengirim desain dan ID terpilih", async ()
   await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1));
   const [updates, ids] = onApply.mock.calls[0];
   expect(Object.keys(updates)).toEqual(["marker_pin"]);
-  expect(JSON.parse(updates.marker_pin)).toMatchObject({ icon: "microscope", iconColor: "#aabbcc", circleColor: "#123456", strokeColor: "#654321" });
+  expect(JSON.parse(updates.marker_pin)).toMatchObject({ icon: "ferriswheel", iconColor: "#aabbcc", circleColor: "#123456", strokeColor: "#654321" });
   expect(ids).toEqual(["a1", "a2", "a3"]);
 });
 

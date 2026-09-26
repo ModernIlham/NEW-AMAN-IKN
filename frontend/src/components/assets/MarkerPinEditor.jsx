@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Search, X, Upload, MapPin } from "lucide-react";
+import MarkerDesignIcon from "./MarkerDesignIcon";
 import { bacaMarkerPin, cariIkonPin, IKON_PIN, KATEGORI_PIN, opsiPinDesain, PIN_BAWAAN, siapkanIkonPin } from "../../lib/markerPin";
 
 const kontrol = "w-full min-w-0 rounded-md border border-border bg-background text-foreground text-xs px-2 py-2";
@@ -12,6 +13,12 @@ export default function MarkerPinEditor({ value = "", onChange, onBusyChange, di
   const d = useMemo(() => bacaMarkerPin(value), [value]);
   const [q, setQ] = useState("");
   const [kategori, setKategori] = useState("Semua");
+  const [batasIkon, setBatasIkon] = useState(72);
+  const daftarIkonRef = useRef(null);
+  useEffect(() => {
+    setBatasIkon(72);
+    if (daftarIkonRef.current) daftarIkonRef.current.scrollTop = 0;
+  }, [q, kategori]);
   const [galat, setGalat] = useState("");
   const [busy, setBusy] = useState(false);
   const [kodeWarna, setKodeWarna] = useState({});
@@ -39,7 +46,7 @@ export default function MarkerPinEditor({ value = "", onChange, onBusyChange, di
     finally { if (tiket === urutan.current) setBusy(false); }
   };
   return <fieldset disabled={disabled} className="min-w-0 space-y-3 rounded-lg border border-border bg-card p-3" data-testid="marker-pin-editor">
-    <legend className="px-1 text-xs font-semibold">Desain marker pin</legend>
+    <legend className="px-1 text-xs font-semibold"><span className="inline-flex items-center gap-1.5"><MarkerDesignIcon className="w-4 h-4 shrink-0" />Desain marker pin</span></legend>
     <div className="flex items-center gap-3">
       <div className="h-16 w-16 shrink-0 rounded-lg bg-muted flex items-center justify-center" aria-label="Pratinjau marker">
         {preview ? <div data-testid="marker-pin-preview" dangerouslySetInnerHTML={{ __html: preview.html }} /> : <MapPin className="w-8 h-8" style={{ color }} />}
@@ -69,11 +76,13 @@ export default function MarkerPinEditor({ value = "", onChange, onBusyChange, di
         <input type="text" className={`${kontrol} !pl-8 !pr-11`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari ikon…" aria-label="Cari ikon marker" data-testid="marker-search" />
         {q && <button type="button" className="absolute right-0 top-0 h-full w-10 min-w-0 min-h-0 flex items-center justify-center" aria-label="Hapus pencarian ikon" onClick={() => setQ("")}><X className="w-4 h-4" /></button>}
       </div>
-      <p className="text-[11px] text-muted-foreground" aria-live="polite">{pilihan.length} dari {IKON_PIN.length} ikon · {KATEGORI_PIN.length} kategori</p>
-      <div className="grid grid-cols-3 gap-1.5 max-h-56 overflow-y-auto p-1" role="group" aria-label="Pilihan ikon">
-        {pilihan.map(({ id, nama, Icon }) => <button type="button" key={id} title={nama} aria-label={nama} aria-pressed={d.icon === id} data-testid={`marker-icon-${id}`} onClick={() => ubah({ icon: id })}
+      <p className="text-[11px] text-muted-foreground" aria-live="polite">{pilihan.length} dari {IKON_PIN.length} ikon · {KATEGORI_PIN.length} kategori · tampil {Math.min(batasIkon, pilihan.length)}</p>
+      <p className="text-[11px] text-primary">Terpilih: {IKON_PIN.find(i => i.id === d.icon)?.nama}</p>
+      <div ref={daftarIkonRef} className="grid grid-cols-3 gap-1.5 max-h-56 overflow-y-auto p-1" role="group" aria-label="Pilihan ikon">
+        {pilihan.slice(0, batasIkon).map(({ id, nama, Icon }) => <button type="button" key={id} title={nama} aria-label={nama} aria-pressed={d.icon === id} data-testid={`marker-icon-${id}`} onClick={() => ubah({ icon: id })}
           className={`${tombol} min-w-0 flex flex-col items-center gap-1 ${d.icon === id ? "border-primary bg-primary/10 text-primary" : "border-border"}`}><Icon className="w-5 h-5 shrink-0" /><span className="text-[10px] leading-tight break-words">{nama}</span></button>)}
       </div>
+      {pilihan.length > batasIkon && <button type="button" data-testid="marker-icons-more" className={`${tombol} w-full border-border`} onClick={() => setBatasIkon(n => n + 72)}>Tampilkan {Math.min(72, pilihan.length - batasIkon)} ikon lagi</button>}
       {!pilihan.length && <p className="text-xs text-muted-foreground">Ikon tidak ditemukan. Ubah kata pencarian atau kategori.</p>}
     </div>}
     {d && <div className="space-y-2 border-t border-border pt-3">

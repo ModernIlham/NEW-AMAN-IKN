@@ -82,7 +82,7 @@ def test_katalog_frontend_backend_selaras():
     src = (root / "frontend/src/lib/markerPin.js").read_text(encoding="utf-8")
     ids = set(re.findall(r'\["([a-z]+)", "[^"]+", "[^"]+", [A-Z]', src))
     assert ids == IKON_PIN
-    assert len(ids) == 185
+    assert len(ids) == 421
     for icon in ids:
         assert json.loads(_standarkan(desain(icon=icon)))["icon"] == icon
 

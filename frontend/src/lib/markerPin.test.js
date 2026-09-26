@@ -4,8 +4,9 @@ const desain = (d = {}) => JSON.stringify({ ...PIN_BAWAAN, ...d });
 test("katalog unik, berkategori, dan pencarian lintas nama/kategori", () => {
   expect(new Set(IKON_PIN.map(i => i.id)).size).toBe(IKON_PIN.length);
   expect(cariIkonPin("rambu jalan").map(i => i.id)).toEqual(["signpost"]);
-  expect(IKON_PIN).toHaveLength(185);
-  expect(KATEGORI_PIN).toHaveLength(13);
+  expect(IKON_PIN).toHaveLength(421);
+  expect(KATEGORI_PIN).toHaveLength(25);
+  expect(cariIkonPin("desain marker pin").map(i => i.id)).toEqual(["designpin"]);
   expect(cariIkonPin("", "Kendaraan")).toHaveLength(14);
   expect(cariIkonPin("laptop", "Kendaraan")).toHaveLength(0);
   expect(cariIkonPin("pemadam api").map(i => i.id)).toEqual(["extinguisher"]);

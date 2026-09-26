@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import MarkerPinEditor from "./MarkerPinEditor";
 import * as pinLib from "../../lib/markerPin";
 
@@ -28,6 +28,33 @@ test("mode huruf mengganti desain dan tetap ada pratinjau", () => {
   fireEvent.click(screen.getByTestId("marker-mode-text"));
   fireEvent.change(screen.getByTestId("marker-text"), { target: { value: "IKN" } });
   expect(screen.getByTestId("marker-pin-preview").textContent.trim()).toBe("IKN");
+});
+
+test("judul berikon, katalog bertahap, dan pencarian menjangkau ikon terakhir", () => {
+  render(<Form />);
+  expect(screen.getByTestId("marker-design-icon").getAttribute("aria-hidden")).toBe("true");
+  fireEvent.click(screen.getByTestId("marker-mode-icon"));
+  const grid = screen.getByRole("group", { name: "Pilihan ikon" });
+  expect(within(grid).getAllByRole("button")).toHaveLength(72);
+  fireEvent.click(screen.getByTestId("marker-icons-more"));
+  expect(within(grid).getAllByRole("button")).toHaveLength(144);
+  grid.scrollTop = 200;
+  fireEvent.change(screen.getByTestId("marker-search"), { target: { value: "desain marker pin" } });
+  expect(grid.scrollTop).toBe(0);
+  expect(within(grid).getAllByRole("button")).toHaveLength(1);
+  expect(screen.queryByTestId("marker-icons-more")).toBeNull();
+  fireEvent.click(screen.getByTestId("marker-icon-designpin"));
+  expect(JSON.parse(screen.getByTestId("hasil").textContent).icon).toBe("designpin");
+  fireEvent.click(screen.getByRole("button", { name: "Hapus pencarian ikon" }));
+  expect(within(grid).getAllByRole("button")).toHaveLength(72);
+  expect(screen.getByText("Terpilih: Desain marker pin")).toBeTruthy();
+  fireEvent.click(screen.getByTestId("marker-icons-more"));
+  fireEvent.change(screen.getByTestId("marker-category"), { target: { value: "Kendaraan" } });
+  expect(within(grid).getAllByRole("button")).toHaveLength(14);
+  fireEvent.change(screen.getByTestId("marker-category"), { target: { value: "Semua" } });
+  expect(within(grid).getAllByRole("button")).toHaveLength(72);
+  while (screen.queryByTestId("marker-icons-more")) fireEvent.click(screen.getByTestId("marker-icons-more"));
+  expect(within(grid).getAllByRole("button")).toHaveLength(421);
 });
 
 test.each(["iconColor", "circleColor", "strokeColor"])("kode HEX %s sinkron dua arah, tidak menyimpan kode salah", key => {

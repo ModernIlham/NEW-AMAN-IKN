@@ -46,6 +46,7 @@ import { terapkanHeaderSatker } from "../../lib/satkerAktif";
 import { keteranganPsp } from "../../lib/tandaPsp";
 import { normalisasiKoordinat, keteranganLokasiDenah } from "../../lib/koordinatAset";
 import MarkerPinEditor from "./MarkerPinEditor";
+import MarkerDesignIcon from "./MarkerDesignIcon";
 import { STATUS_COLORS } from "../../lib/warnaAset";
 import { UKURAN_STIKER } from "../../lib/stikerAset";
 
@@ -3059,7 +3060,7 @@ const AssetForm = memo(({
               </div>
               
               <details className="rounded-lg border border-border p-2">
-                <summary className="cursor-pointer text-xs font-semibold min-h-[44px] flex items-center">Desain marker pin</summary>
+                <summary className="cursor-pointer text-xs font-semibold min-h-[44px] flex items-center gap-1.5"><MarkerDesignIcon className="w-4 h-4 shrink-0" />Desain marker pin</summary>
                 <MarkerPinEditor value={formData.marker_pin} onChange={(marker_pin) => setFormData(p => ({ ...p, marker_pin }))}
                   onBusyChange={setMarkerBusy} disabled={isSubmitting || isFormLoading} scopeKey={editAsset?.id || "baru"} color={STATUS_COLORS[formData.inventory_status]} />
               </details>
