@@ -1,11 +1,35 @@
-import { bacaMarkerPin, cariIkonPin, IKON_PIN, opsiPinDesain, PIN_BAWAAN, siapkanIkonPin } from "./markerPin";
+import { bacaMarkerPin, cariIkonPin, IKON_PIN, KATEGORI_PIN, opsiPinDesain, PIN_BAWAAN, siapkanIkonPin } from "./markerPin";
 
 const desain = (d = {}) => JSON.stringify({ ...PIN_BAWAAN, ...d });
 test("katalog unik, berkategori, dan pencarian lintas nama/kategori", () => {
   expect(new Set(IKON_PIN.map(i => i.id)).size).toBe(IKON_PIN.length);
   expect(cariIkonPin("rambu jalan").map(i => i.id)).toEqual(["signpost"]);
-  expect(cariIkonPin("", "Kendaraan")).toHaveLength(4);
+  expect(IKON_PIN).toHaveLength(185);
+  expect(KATEGORI_PIN).toHaveLength(13);
+  expect(cariIkonPin("", "Kendaraan")).toHaveLength(14);
   expect(cariIkonPin("laptop", "Kendaraan")).toHaveLength(0);
+  expect(cariIkonPin("pemadam api").map(i => i.id)).toEqual(["extinguisher"]);
+  for (const ikon of IKON_PIN) {
+    expect(ikon.Icon).toBeTruthy();
+    expect(opsiPinDesain(desain({ icon: ikon.id })).html).toContain("lucide-");
+    expect(bacaMarkerPin(desain({ icon: ikon.id })).icon).toBe(ikon.id);
+  }
+});
+
+test.each([0, 3])("lencana kamera berupa SVG lingkaran dan tidak digantikan komentar %s", badge => {
+  const div = document.createElement("div");
+  div.innerHTML = opsiPinDesain(desain({ icon: "router" }), { hasPhoto: true, badge }).html;
+  const foto = div.querySelector('[data-marker-badge="photo"]');
+  expect(foto.style.borderRadius).toBe("50%");
+  expect(foto.style.width).toBe("14px");
+  expect(foto.querySelector("svg circle").getAttribute("r")).toBe("4");
+  expect(div.innerHTML).not.toContain("▣");
+  const komentar = div.querySelector('[data-marker-badge="comment"]');
+  if (badge) {
+    expect(komentar.textContent.trim()).toBe("3");
+    expect(komentar.style.left).toBe("-6px");
+  } else expect(komentar).toBeNull();
+  expect(opsiPinDesain(desain(), { hasPhoto: false }).html).not.toContain('data-marker-badge="photo"');
 });
 test.each(["", "bad", "[]", '{"v":2}', desain({ mode: "custom", image: "https://example.com/x.svg" })])("data invalid/polos menjadi pin bawaan %s", v => {
   expect(bacaMarkerPin(v)).toBeNull();

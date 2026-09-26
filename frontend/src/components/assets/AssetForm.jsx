@@ -1722,7 +1722,7 @@ const AssetForm = memo(({
     // dipaksa, jalur EDIT (butuh originalDataRef) belum siap dan bisa jatuh ke
     // CREATE lalu MENIMPA aset lama dengan data aset baru sebelumnya.
     if (isFormLoading) { toast.info("Menunggu data aset dimuat…"); return; }
-    if (markerBusy) { toast.info("Menunggu ikon marker selesai disiapkan…"); return; }
+    if (markerBusy) { toast.info("Lengkapi kode warna dan tunggu ikon marker selesai disiapkan…"); return; }
 
     // === Inline client-side validation ===
     const errs = {};

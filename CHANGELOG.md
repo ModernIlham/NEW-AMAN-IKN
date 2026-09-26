@@ -18,6 +18,18 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1073] Pulihkan lencana kamera, kode warna HEX, dan perluas ikon pin — 2026-09-26
+
+[PR #1064](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1064).
+
+- Lencana foto kembali menjadi kamera SVG di lingkaran kecil, bukan karakter
+  kotak. Komentar memiliki lencana tersendiri sehingga tidak menutupi kamera.
+- Input kode warna HEX sinkron dengan palet untuk ikon, lingkaran, dan garis
+  pada form aset serta Edit Massal. Kode belum lengkap menahan simpan/terapkan;
+  hanya kode valid enam digit yang dikirim. Draft direset saat ganti aset.
+- Perluas katalog dari 28 menjadi 185 ikon dalam 13 kategori, tetap memakai
+  impor statis terkurasi, pencarian, dan validasi backend yang selaras.
+
 ## [#1072] Desain marker pin per aset dan massal — 2026-09-25
 
 [PR #1063](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1063).

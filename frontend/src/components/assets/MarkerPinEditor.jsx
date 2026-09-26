@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Search, X, Upload, MapPin } from "lucide-react";
-import { bacaMarkerPin, cariIkonPin, KATEGORI_PIN, opsiPinDesain, PIN_BAWAAN, siapkanIkonPin } from "../../lib/markerPin";
+import { bacaMarkerPin, cariIkonPin, IKON_PIN, KATEGORI_PIN, opsiPinDesain, PIN_BAWAAN, siapkanIkonPin } from "../../lib/markerPin";
 
 const kontrol = "w-full min-w-0 rounded-md border border-border bg-background text-foreground text-xs px-2 py-2";
 const tombol = "min-h-[44px] px-2 py-1.5 rounded-md border text-xs hover:bg-muted transition-colors";
+const WARNA_PIN = [["iconColor", "Warna ikon / huruf"], ["circleColor", "Warna lingkaran"], ["strokeColor", "Warna garis tepi"]];
+const hex = (v) => /^#?[0-9a-f]{6}$/i.test(v || "") ? "#" + v.replace(/^#/, "").toLowerCase() : null;
+const warnaAktif = (d, key) => d && !(key === "iconColor" && d.mode === "custom") && !(key === "circleColor" && !d.circle);
 
 export default function MarkerPinEditor({ value = "", onChange, onBusyChange, disabled = false, scopeKey = "", color = "#64748b" }) {
   const d = useMemo(() => bacaMarkerPin(value), [value]);
@@ -11,12 +14,16 @@ export default function MarkerPinEditor({ value = "", onChange, onBusyChange, di
   const [kategori, setKategori] = useState("Semua");
   const [galat, setGalat] = useState("");
   const [busy, setBusy] = useState(false);
+  const [kodeWarna, setKodeWarna] = useState({});
+  const warnaInvalid = WARNA_PIN.some(([key]) => warnaAktif(d, key) && kodeWarna[key] !== undefined && !hex(kodeWarna[key]));
+  const belumSiap = busy || warnaInvalid;
   const fileRef = useRef(null);
   const urutan = useRef(0);
   // Hasil decode lambat tak boleh menulis ke aset berikutnya/reset/jenis lain.
   useEffect(() => { urutan.current += 1; setBusy(false); setGalat(""); }, [scopeKey]);
   useEffect(() => () => { urutan.current += 1; }, []);
-  useEffect(() => { onBusyChange?.(busy); return () => onBusyChange?.(false); }, [busy, onBusyChange]);
+  useEffect(() => { setKodeWarna({}); }, [scopeKey, d?.mode]);
+  useEffect(() => { onBusyChange?.(belumSiap); return () => onBusyChange?.(false); }, [belumSiap, onBusyChange]);
   const ubah = (patch) => { urutan.current += 1; setBusy(false); setGalat(""); onChange(JSON.stringify({ ...(d || PIN_BAWAAN), ...patch })); };
   const pilihan = cariIkonPin(q, kategori);
   const preview = opsiPinDesain(value, { color });
@@ -62,6 +69,7 @@ export default function MarkerPinEditor({ value = "", onChange, onBusyChange, di
         <input type="text" className={`${kontrol} !pl-8 !pr-11`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari ikon…" aria-label="Cari ikon marker" data-testid="marker-search" />
         {q && <button type="button" className="absolute right-0 top-0 h-full w-10 min-w-0 min-h-0 flex items-center justify-center" aria-label="Hapus pencarian ikon" onClick={() => setQ("")}><X className="w-4 h-4" /></button>}
       </div>
+      <p className="text-[11px] text-muted-foreground" aria-live="polite">{pilihan.length} dari {IKON_PIN.length} ikon · {KATEGORI_PIN.length} kategori</p>
       <div className="grid grid-cols-3 gap-1.5 max-h-56 overflow-y-auto p-1" role="group" aria-label="Pilihan ikon">
         {pilihan.map(({ id, nama, Icon }) => <button type="button" key={id} title={nama} aria-label={nama} aria-pressed={d.icon === id} data-testid={`marker-icon-${id}`} onClick={() => ubah({ icon: id })}
           className={`${tombol} min-w-0 flex flex-col items-center gap-1 ${d.icon === id ? "border-primary bg-primary/10 text-primary" : "border-border"}`}><Icon className="w-5 h-5 shrink-0" /><span className="text-[10px] leading-tight break-words">{nama}</span></button>)}
@@ -71,9 +79,18 @@ export default function MarkerPinEditor({ value = "", onChange, onBusyChange, di
     {d && <div className="space-y-2 border-t border-border pt-3">
       <label className="flex gap-2 items-center text-xs min-h-[44px]"><input type="checkbox" checked={d.circle} onChange={(e) => ubah({ circle: e.target.checked })} data-testid="marker-circle" />Isi lingkaran di belakang ikon</label>
       <div className="grid grid-cols-2 gap-2">
-        {[["iconColor", "Warna ikon / huruf"], ["circleColor", "Warna lingkaran"], ["strokeColor", "Warna garis tepi"]].map(([key, label]) => <label key={key} className="min-w-0 text-[11px] space-y-1">{label}<input type="color" aria-label={label} data-testid={`marker-${key}`} className="block w-full h-11 rounded border border-border bg-background" value={d[key]} disabled={(key === "iconColor" && d.mode === "custom") || (key === "circleColor" && !d.circle)} onChange={(e) => ubah({ [key]: e.target.value })} /></label>)}
+        {WARNA_PIN.map(([key, label]) => <div key={key} className="min-w-0 text-[11px] space-y-1">
+          <span>{label}</span>
+          <input type="color" aria-label={label} data-testid={`marker-${key}`} className="block w-full h-11 rounded border border-border bg-background" value={d[key]} disabled={!warnaAktif(d, key)}
+            onChange={(e) => { setKodeWarna(p => ({ ...p, [key]: undefined })); ubah({ [key]: e.target.value }); }} />
+          <input type="text" aria-label={`Kode ${label.toLowerCase()}`} data-testid={`marker-${key}-hex`} className={`${kontrol} min-h-[44px] font-mono`} value={kodeWarna[key] ?? d[key]}
+            disabled={!warnaAktif(d, key)} maxLength={7} spellCheck={false} autoComplete="off" placeholder="#RRGGBB" pattern="#?[0-9a-fA-F]{6}" aria-invalid={warnaAktif(d, key) && kodeWarna[key] !== undefined && !hex(kodeWarna[key])}
+            onChange={(e) => { const raw = e.target.value; setKodeWarna(p => ({ ...p, [key]: raw })); const valid = hex(raw); if (valid) ubah({ [key]: valid }); }}
+            onBlur={() => { const valid = hex(kodeWarna[key]); if (valid) setKodeWarna(p => ({ ...p, [key]: valid })); }} />
+        </div>)}
         <label className="min-w-0 text-[11px] space-y-1">Ketebalan garis<select className={`${kontrol} min-h-[44px]`} aria-label="Ketebalan garis marker" data-testid="marker-stroke" value={d.strokeWidth} onChange={(e) => ubah({ strokeWidth: Number(e.target.value) })}>{[0, 1, 2, 3].map((n) => <option key={n} value={n}>{n ? `${n} px` : "Tanpa garis"}</option>)}</select></label>
       </div>
+      {warnaInvalid && <p role="alert" className="text-xs text-destructive">Kode warna harus 6 digit heksadesimal, misalnya #2563EB. Lengkapi kode sebelum menyimpan.</p>}
     </div>}
   </fieldset>;
 }
