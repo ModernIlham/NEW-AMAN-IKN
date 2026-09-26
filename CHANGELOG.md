@@ -20,6 +20,8 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ## [#1073] Pulihkan lencana kamera, kode warna HEX, dan perluas ikon pin — 2026-09-26
 
+[PR #1064](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1064).
+
 - Lencana foto kembali menjadi kamera SVG di lingkaran kecil, bukan karakter
   kotak. Komentar memiliki lencana tersendiri sehingga tidak menutupi kamera.
 - Input kode warna HEX sinkron dengan palet untuk ikon, lingkaran, dan garis
