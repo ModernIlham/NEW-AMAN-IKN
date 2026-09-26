@@ -31,6 +31,7 @@ import { fieldLevel, labelLevel, levelAkar, levelRingkas } from "@/lib/eselonSat
 import { UKURAN_STIKER } from "@/lib/stikerAset";
 import PemilihUnitOrganisasi from "./PemilihUnitOrganisasi";
 import MarkerPinEditor from "./MarkerPinEditor";
+import MarkerDesignIcon from "./MarkerDesignIcon";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -640,7 +641,7 @@ const BatchEditPanel = memo(function BatchEditPanel({
         </div>
       </Section>
 
-      <Section icon={MapPin} title="Desain marker pin">
+      <Section icon={MarkerDesignIcon} title="Desain marker pin">
         <label className="flex items-center gap-2 text-xs min-h-[44px]">
           <input type="checkbox" data-testid="batch-marker-enable" disabled={updating}
             checked={Object.prototype.hasOwnProperty.call(updates, "marker_pin")}

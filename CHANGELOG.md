@@ -18,6 +18,17 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1074] Ikon judul desain pin dan katalog 421 ikon — 2026-09-26
+
+[PR #1065](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1065).
+
+- Ikon pin dan pensil menyertai judul Desain marker pin pada form aset,
+  editor, dan Edit Massal; tersedia juga sebagai pilihan isi marker.
+- Tambah 236 pilihan menjadi 421 ikon dalam 25 kategori, dengan validasi
+  frontend/backend yang sama dan tanpa dependensi baru.
+- Tampilkan 72 ikon per tahap agar ringan di HP; pencarian menjangkau seluruh
+  katalog dan nama ikon terpilih tetap terlihat saat memakai filter.
+
 ## [#1073] Pulihkan lencana kamera, kode warna HEX, dan perluas ikon pin — 2026-09-26
 
 [PR #1064](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1064).
