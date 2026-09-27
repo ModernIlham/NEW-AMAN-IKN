@@ -34,7 +34,7 @@ import { useDenahSpasial } from "../../hooks/useDenahSpasial";
 import { warnaLevel, ordinalLantai } from "../../lib/spasialDenah";
 import { labelDilepas } from "../../lib/labelRingkas";
 import useLebarElemen from "../../hooks/useLebarElemen";
-import Lightbox from "./PhotoLightbox";
+import Lightbox from "./PhotoLightboxLoader";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 

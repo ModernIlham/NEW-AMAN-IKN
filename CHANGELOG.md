@@ -18,6 +18,27 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1078] Penampil foto terpisah dan siap dibuka saat luring — 2026-09-28
+
+- Daftar, galeri, dan peta memakai satu pemuat PhotoLightbox bersama. Kode
+  penampil baru dijalankan ketika foto dibuka; pratinjau dan tombol tutup
+  langsung tersedia. Kegagalan unduhan dapat dicoba lagi tanpa reload halaman
+  atau menghapus form dan antrean simpan.
+- Build menyisipkan nama berkas final penampil beserta dependensinya ke
+  service worker. Seluruh berkas harus tersimpan sebelum worker baru aktif;
+  unduhan gagal mempertahankan worker dan cache lama. Hanya kode/CSS publik
+  yang disiapkan, bukan foto asli atau API privat pengguna.
+- Potongan dasbor turun dari sekitar 146,0 menjadi 140,4 KB gzip; kode penampil
+  berpindah ke potongan tersendiri. Ini bukan pengurangan ukuran login maupun
+  total JavaScript. Foto asli yang belum tersimpan tetap membutuhkan internet.
+- Uji Chrome membuktikan pembukaan pertama saat luring, reload luring setelah
+  cache aplikasi siap, serta pemulihan pembaruan worker setelah unduhan gagal.
+  Tampilan muat/gagal, tutup, dan coba lagi diuji pada HP/tablet/desktop dalam
+  tema terang dan gelap, termasuk akses foto lewat galeri dan peta.
+- Verifikasi: 1.879 uji frontend, 5.068 uji backend (5 dilewati), lint berkas
+  terkait dan build produksi lulus. Menuntaskan U16 yang sebelumnya ditunda;
+  tidak mengaktifkan kembali jadwal fetch repository.
+
 ## [#1077] Rekonsiliasi versi baris dan simpanan beruntun — 2026-09-27
 
 - Respons WebSocket, pemulihan konflik, dan hasil simpan tidak lagi menurunkan

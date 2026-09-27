@@ -43,7 +43,7 @@ const AuditLogPanel = lazy(() => import("@/components/assets/AuditLogPanel"));
 const AssetGroupsPanel = lazy(() => import("@/components/assets/AssetGroupsPanel"));
 const AssetMapFullView = lazy(() => import("@/components/assets/AssetMapFullView"));
 const BagikanPetaDialog = lazy(() => import("@/components/assets/BagikanPetaDialog"));
-const PhotoLightbox = lazy(() => import("@/components/assets/PhotoLightbox"));
+import PhotoLightbox from "@/components/assets/PhotoLightboxLoader";
 import DashboardHeader from "@/components/assets/DashboardHeader";
 import StatsBar from "@/components/assets/StatsBar";
 import InventoryProgressBar from "@/components/assets/InventoryProgressBar";

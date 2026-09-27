@@ -1,5 +1,6 @@
 // craco.config.js
 const path = require("path");
+const { LightboxPrecachePlugin } = require("./plugins/lightbox-precache-plugin.cjs");
 require("dotenv").config();
 
 // Check if we're in development/preview mode (not production build)
@@ -55,6 +56,10 @@ const webpackConfig = {
       '@': path.resolve(__dirname, 'src'),
     },
     configure: (webpackConfig) => {
+
+      if (process.env.NODE_ENV === "production") {
+        webpackConfig.plugins.push(new LightboxPrecachePlugin(path.resolve(__dirname, "public/service-worker.js")));
+      }
 
       // Add ignored patterns to reduce watched directories
         webpackConfig.watchOptions = {
