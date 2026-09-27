@@ -22,6 +22,9 @@ tombol **Muat Ulang**. Sinkronisasi otomatis dan antrean luring tetap berjalan.
   ikon custom. Judul pengaturan memakai ikon pin dan pensil, juga pada Edit
   Massal. Katalog ditampilkan 72 ikon per tahap agar ringan; pencarian tetap
   mencakup seluruh katalog. Atur warna ikon, isian lingkaran, serta warna/ketebalan garis.
+  Input warna berupa satu kotak berwarna dengan kode HEX di dalamnya;
+  ketuk ikon palet di kanan untuk memilih warna, atau ketik kode langsung.
+  Warna teks otomatis hitam/putih sesuai latar agar terbaca.
   Warna bisa dipilih lewat palet atau diketik sebagai enam digit HEX,
   dengan/tanpa `#` (contoh `#2563EB`), pada editor tunggal maupun massal.
   Lengkapi kode yang tidak valid sebelum menyimpan. Lencana kamera tetap

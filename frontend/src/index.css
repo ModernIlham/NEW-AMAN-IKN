@@ -469,6 +469,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 /* === S1 — Design Token Foundation === */
 
+/* Fokus tetap terlihat pada seluruh swatch, termasuk input palet transparan. */
+.marker-color-field:focus-within {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+.marker-color-field > input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 /* Pencarian di laci peta: satu bingkai fokus pada gabungan ikon + input + X.
    Aturan aksesibilitas global di atas tetap berlaku di semua input lain.
    Font 16px pada perangkat kecil (kelas komponen) mencegah zoom otomatis iOS. */
