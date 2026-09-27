@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Search, X, Upload, MapPin } from "lucide-react";
 import MarkerDesignIcon from "./MarkerDesignIcon";
+import MarkerColorInput from "./MarkerColorInput";
 import { bacaMarkerPin, cariIkonPin, IKON_PIN, KATEGORI_PIN, opsiPinDesain, PIN_BAWAAN, siapkanIkonPin } from "../../lib/markerPin";
 
 const kontrol = "w-full min-w-0 rounded-md border border-border bg-background text-foreground text-xs px-2 py-2";
@@ -87,16 +88,13 @@ export default function MarkerPinEditor({ value = "", onChange, onBusyChange, di
     </div>}
     {d && <div className="space-y-2 border-t border-border pt-3">
       <label className="flex gap-2 items-center text-xs min-h-[44px]"><input type="checkbox" checked={d.circle} onChange={(e) => ubah({ circle: e.target.checked })} data-testid="marker-circle" />Isi lingkaran di belakang ikon</label>
-      <div className="grid grid-cols-2 gap-2">
-        {WARNA_PIN.map(([key, label]) => <div key={key} className="min-w-0 text-[11px] space-y-1">
-          <span>{label}</span>
-          <input type="color" aria-label={label} data-testid={`marker-${key}`} className="block w-full h-11 rounded border border-border bg-background" value={d[key]} disabled={!warnaAktif(d, key)}
-            onChange={(e) => { setKodeWarna(p => ({ ...p, [key]: undefined })); ubah({ [key]: e.target.value }); }} />
-          <input type="text" aria-label={`Kode ${label.toLowerCase()}`} data-testid={`marker-${key}-hex`} className={`${kontrol} min-h-[44px] font-mono`} value={kodeWarna[key] ?? d[key]}
-            disabled={!warnaAktif(d, key)} maxLength={7} spellCheck={false} autoComplete="off" placeholder="#RRGGBB" pattern="#?[0-9a-fA-F]{6}" aria-invalid={warnaAktif(d, key) && kodeWarna[key] !== undefined && !hex(kodeWarna[key])}
-            onChange={(e) => { const raw = e.target.value; setKodeWarna(p => ({ ...p, [key]: raw })); const valid = hex(raw); if (valid) ubah({ [key]: valid }); }}
-            onBlur={() => { const valid = hex(kodeWarna[key]); if (valid) setKodeWarna(p => ({ ...p, [key]: valid })); }} />
-        </div>)}
+      <div className="grid grid-cols-1 gap-2">
+        {WARNA_PIN.map(([key, label]) => <MarkerColorInput key={key} label={label} testId={`marker-${key}`}
+          color={d[key]} value={kodeWarna[key] ?? d[key]} disabled={!warnaAktif(d, key)}
+          invalid={warnaAktif(d, key) && kodeWarna[key] !== undefined && !hex(kodeWarna[key])}
+          onColorChange={value => { setKodeWarna(p => ({ ...p, [key]: undefined })); ubah({ [key]: value }); }}
+          onTextChange={raw => { setKodeWarna(p => ({ ...p, [key]: raw })); const valid = hex(raw); if (valid) ubah({ [key]: valid }); }}
+          onBlur={() => { const valid = hex(kodeWarna[key]); if (valid) setKodeWarna(p => ({ ...p, [key]: valid })); }} />)}
         <label className="min-w-0 text-[11px] space-y-1">Ketebalan garis<select className={`${kontrol} min-h-[44px]`} aria-label="Ketebalan garis marker" data-testid="marker-stroke" value={d.strokeWidth} onChange={(e) => ubah({ strokeWidth: Number(e.target.value) })}>{[0, 1, 2, 3].map((n) => <option key={n} value={n}>{n ? `${n} px` : "Tanpa garis"}</option>)}</select></label>
       </div>
       {warnaInvalid && <p role="alert" className="text-xs text-destructive">Kode warna harus 6 digit heksadesimal, misalnya #2563EB. Lengkapi kode sebelum menyimpan.</p>}

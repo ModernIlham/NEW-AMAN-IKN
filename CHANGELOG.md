@@ -18,6 +18,17 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1076] Input warna marker terpadu — 2026-09-27
+
+[PR #1067](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1067).
+
+- Satukan swatch warna dan input HEX menjadi satu kotak: kode di kiri dan
+  ikon palet di kanan, pada editor desain pin tunggal maupun massal.
+- Warna teks mengikuti kontras latar, target ikon 44px, dan input 16px untuk
+  layar kecil. Palet memakai input native yang bisa disentuh/diakses keyboard.
+- Pertahankan validasi enam digit, sinkronisasi palet/HEX, serta penahanan
+  simpan selama kode salah. Warna nonaktif tetap tidak bisa diubah.
+
 ## [#1075] Gulir HP tanpa refresh tidak sengaja — 2026-09-27
 
 [PR #1066](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1066).
