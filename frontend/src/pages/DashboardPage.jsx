@@ -68,6 +68,8 @@ import { useMuatUlangManual } from "@/hooks/useMuatUlangManual";
 import { useDragDropImport } from "@/hooks/useDragDropImport";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { usePenyegaranAset } from "@/hooks/usePenyegaranAset";
+import { useRekonsiliasiBaris } from "@/hooks/useRekonsiliasiBaris";
+import { gabungVersiBaris, versiBaris } from "@/lib/rekonsiliasiBaris";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -363,6 +365,11 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   editAssetRef.current = editAssetForForm;
   const wsNeedsRefreshRef = useRef(false);
   const wsRefreshTimerRef = useRef(null);
+  const pendingItemsRef = useRef(() => []);
+  const { terapkanBaris, muatBaris } = useRekonsiliasiBaris({
+    activityId: activity?.id, lingkupPermintaan, penjaga,
+    setAssets, setMobileAssets, pendingItemsRef, editAssetRef, wsNeedsRefreshRef,
+  });
 
   const onWsAssetChange = useCallback((eventType, assetInfo) => {
     // PATCH TERTARGET: update oleh rekan cukup mengganti SATU baris (fetch
@@ -372,16 +379,11 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     if (eventType === "asset_updated" && assetInfo?.id) {
       // Baris yang sedang DIEDIT pengguna ini jangan ditimpa — tunda ke refresh.
       if (editAssetRef.current?.id === assetInfo.id) { wsNeedsRefreshRef.current = true; return; }
-      axios.get(`${API}/assets/${assetInfo.id}?exclude_media=true`).then(res => {
-        const fresh = res?.data;
-        if (!fresh) return;
-        if (fresh.activity_id) upsertSnapshotAsset(fresh.activity_id, fresh);
-        setAssets(prev => prev.some(a => a.id === fresh.id) ? prev.map(a => a.id === fresh.id ? { ...a, ...fresh } : a) : prev);
-        setMobileAssets(prev => prev.some(a => a.id === fresh.id) ? prev.map(a => a.id === fresh.id ? { ...a, ...fresh } : a) : prev);
-      }).catch(() => { /* aset mungkin baru dihapus — refresh berikutnya merapikan */ });
+      muatBaris(assetInfo.id, true);
       return;
     }
     if (eventType === "asset_deleted" && assetInfo?.id) {
+      penjaga.batalkan(`baris:${assetInfo.id}`);
       setAssets(prev => prev.filter(a => a.id !== assetInfo.id));
       setMobileAssets(prev => prev.filter(a => a.id !== assetInfo.id));
       setTotalItems(prev => Math.max(0, prev - 1));
@@ -411,7 +413,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         refreshData();
       }
     }, 2000);
-  }, [activity?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activity?.id, muatBaris, penjaga]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { if (wsRefreshTimerRef.current) clearTimeout(wsRefreshTimerRef.current); }, []);
   const { onlineUsers, connected: wsConnected, sendMessage: wsSend } = useWebSocket({
     activityId: activity?.id, userId: user?.id,
@@ -445,12 +447,10 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     if (!serverData) return;
     // Keep the offline snapshot fresh with the confirmed server row (no-op
     // when no snapshot exists; heavy fields are stripped before writing).
-    if (serverData.activity_id) upsertSnapshotAsset(serverData.activity_id, serverData);
     if (isEdit) {
-      // Update the specific row in the local list with server data
-      setAssets(prev => prev.map(a => a.id === assetKey ? { ...a, ...serverData } : a));
-      setMobileAssets(prev => prev.map(a => a.id === assetKey ? { ...a, ...serverData } : a));
+      terapkanBaris(serverData);
     } else {
+      if (serverData.activity_id) upsertSnapshotAsset(serverData.activity_id, serverData);
       // For new items, replace the temp item with the server row — dan pastikan
       // HANYA ADA SATU baris ber-id server. Sebuah refetch yang berlomba (mis.
       // dipicu WebSocket) bisa sudah menyisipkan baris server (id nyata) di
@@ -470,22 +470,31 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
           || !activityIdRef.current
           || serverData.activity_id === activityIdRef.current;
         const dedupeReplace = (prev) => {
+          // Refetch/WS mungkin sudah membawa versi lebih baru daripada respons
+          // CREATE yang tertahan jaringan. Dedup tidak boleh memundurkannya.
+          const confirmed = gabungVersiBaris(prev.find(a => a.id === serverId), serverData);
           const withoutDupServer = prev.filter(a => a.id !== serverId || a.id === assetKey);
-          const mapped = withoutDupServer.map(a => a.id === assetKey ? { ...a, ...serverData, id: serverId } : a);
+          const mapped = withoutDupServer.map(a => a.id === assetKey ? { ...a, ...confirmed, id: serverId } : a);
           if (mapped.some(a => a.id === serverId)) return mapped;
-          return kegiatanCocok ? [{ ...serverData }, ...mapped] : mapped;
+          return kegiatanCocok ? [{ ...confirmed }, ...mapped] : mapped;
         };
         setAssets(dedupeReplace);
         setMobileAssets(dedupeReplace);
       }
     }
-  }, []);
+  }, [terapkanBaris]);
 
   // Latest known row versions — conflict retries and serialized same-asset
   // saves must send the freshest If-Match, not the version captured at submit.
   const assetsStateRef = useRef([]);
   assetsStateRef.current = assets;
-  const getLatestVersion = useCallback((assetId) => assetsStateRef.current.find(a => a.id === assetId)?.version ?? null, []);
+  const mobileAssetsStateRef = useRef([]);
+  mobileAssetsStateRef.current = mobileAssets;
+  const getLatestVersion = useCallback((assetId) => {
+    const versions = [assetsStateRef.current, mobileAssetsStateRef.current]
+      .map(rows => versiBaris(rows.find(a => a.id === assetId))).filter(v => v != null);
+    return versions.length ? Math.max(...versions) : null;
+  }, []);
 
   // Throttle toast konflik per-aset: tanpa ini, flush berulang / beberapa antrian
   // atas aset yang sama memunculkan toast "diubah pengguna lain" bertubi-tubi.
@@ -522,17 +531,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         toast.error(conflictDetail?.message || "Data telah diubah pengguna lain. Memuat versi terbaru...", { duration: 4500 });
       }
       // Fetch the fresh row to update the local state with the winning version
-      axios.get(`${API}/assets/${assetId}?exclude_media=true`).then(res => {
-        if (res?.data) {
-          setAssets(prev => prev.map(a => a.id === assetId ? { ...a, ...res.data } : a));
-          setMobileAssets(prev => prev.map(a => a.id === assetId ? { ...a, ...res.data } : a));
-        }
-      }).catch((e) => {
-        // Non-fatal: asset may have been deleted by another user mid-request.
-        if (process.env.NODE_ENV !== "production") {
-          console.warn("[dashboard] Failed to refresh asset after WS event:", assetId, e?.message);
-        }
-      });
+      muatBaris(assetId);
     },
     onItemDismissed: (tempId, item) => {
       // EDIT yang di-"Abaikan" (temuan audit G3): nilai optimistis yang
@@ -543,12 +542,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       if (item?.isEdit) {
         const assetId = item.editId || tempId;
         if (navigator.onLine) {
-          axios.get(`${API}/assets/${assetId}?exclude_media=true`).then(res => {
-            if (!res?.data) return;
-            setAssets(prev => prev.map(a => a.id === assetId ? { ...a, ...res.data } : a));
-            setMobileAssets(prev => prev.map(a => a.id === assetId ? { ...a, ...res.data } : a));
-            if (activity?.id) upsertSnapshotAsset(activity.id, res.data);
-          }).catch(() => { /* offline mendadak / aset terhapus — refresh berikutnya membereskan */ });
+          muatBaris(assetId);
         }
         // Luring: payload hanya berisi patch, kebenaran server tak tersedia —
         // baris terpaksa menampilkan nilai yang dibatalkan sampai sinkron
@@ -575,6 +569,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       );
     },
   });
+  pendingItemsRef.current = getPendingItems;
 
   // Muat-ulang ramah tapi aman: bila masih ada antrian & ONLINE → otomatis
   // sinkron (best-effort) lalu reload lancar tanpa dialog; bila OFFLINE → tahan
@@ -942,9 +937,12 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       const queueNeedsRefresh = consumeRefreshFlag();
       const wsNeedsRefresh = wsNeedsRefreshRef.current;
       wsNeedsRefreshRef.current = false;
+      // preserveMobile mempertahankan jendela HP; baris yang WS-nya ditunda
+      // selama edit harus disegarkan tersendiri pada KEDUA daftar.
+      if (wsNeedsRefresh && closingId) muatBaris(closingId, true);
       if (queueNeedsRefresh || wsNeedsRefresh) refreshData(undefined, { preserveMobile: true });
     }, 300);
-  }, [editAssetForForm, unlockAsset, syncStatuses, consumeRefreshFlag, refreshData]);
+  }, [editAssetForForm, unlockAsset, syncStatuses, consumeRefreshFlag, refreshData, muatBaris]);
 
   const handleFormSubmitSuccess = useCallback(() => {
     if (editAssetForForm?.id) unlockAsset(editAssetForForm.id);
