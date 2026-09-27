@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import DashboardToolbar from "../DashboardToolbar";
 import { useAssetFilters } from "@/hooks/useAssetFilters";
@@ -20,6 +20,26 @@ beforeAll(() => {
   window.HTMLElement.prototype.hasPointerCapture = () => false;
   window.HTMLElement.prototype.releasePointerCapture = () => {};
   window.HTMLElement.prototype.scrollIntoView = () => {};
+});
+
+test("geseran toolbar bukan refresh; menu Muat ulang data hanya aktif saat dipilih", async () => {
+  const onRefreshData = jest.fn();
+  const props = { categories: [], assetsCount: 20, perms: {}, onRefreshData };
+  const { rerender } = render(<DashboardToolbar {...props} />);
+  const toolbar = screen.getByTestId("dashboard-toolbar");
+  fireEvent.touchStart(toolbar, { touches: [{ clientY: 20 }] });
+  fireEvent.touchMove(toolbar, { touches: [{ clientY: 320 }] });
+  fireEvent.touchEnd(toolbar);
+  expect(onRefreshData).not.toHaveBeenCalled();
+  const pengguna = userEvent.setup({ pointerEventsCheck: 0 });
+  await pengguna.click(screen.getByRole("button", { name: "Menu aksi lainnya" }));
+  await pengguna.click(await screen.findByTestId("mobile-refresh-data-btn"));
+  expect(onRefreshData).toHaveBeenCalledTimes(1);
+  rerender(<DashboardToolbar {...props} refreshing />);
+  await pengguna.click(screen.getByRole("button", { name: "Menu aksi lainnya" }));
+  const muat = await screen.findByTestId("mobile-refresh-data-btn");
+  expect(muat).toHaveAttribute("aria-disabled", "true");
+  expect(muat).toHaveTextContent("Memuat ulang");
 });
 
 function LayarUji({ doFetch, doFetchStats, setPageLoading }) {
