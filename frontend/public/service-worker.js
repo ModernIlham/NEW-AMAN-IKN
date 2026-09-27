@@ -10,12 +10,12 @@ const RUNTIME_CACHE = `inventory-runtime-${CACHE_VERSION}`;
 
 // Pre-cache the app shell so a COLD start with zero connectivity still boots
 // the SPA (the asset list itself then loads from the IndexedDB snapshot).
-// NOTE: the hashed /static/js|css chunks are NOT precached here — CRA renames
-// them every build and a plain public/ service worker can't know the hashes.
-// They are cached opportunistically (cache-first + stale-while-revalidate in
-// the fetch handler below) on first online visit, which in practice covers
-// offline reloads. Precaching the full build manifest would require Workbox
-// InjectManifest (CRA build integration) — out of scope here.
+// Grup PhotoLightbox diinjeksi dari hasil webpack (hash final + dependensi),
+// agar pembukaan PERTAMA penampil tetap dapat berjalan setelah masuk luring.
+// Hanya kode/CSS publik, BUKAN foto/API pengguna. Chunk modul lain tetap
+// disimpan saat dipakai daring; ini bukan precache seluruh aplikasi.
+// Nama cache v4 dipertahankan: chunk rilis lama masih dipakai tab yang terbuka.
+const LIGHTBOX_PRECACHE_URLS = /* AMAN_LIGHTBOX_PRECACHE */ [];
 const PRECACHE_URLS = [
   '/',
   '/index.html',
@@ -28,7 +28,8 @@ const PRECACHE_URLS = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(STATIC_CACHE)
-      .then(cache => cache.addAll(PRECACHE_URLS))
+      // Gagal satu berkas → install gagal, worker/cache lama tetap melayani.
+      .then(cache => cache.addAll([...PRECACHE_URLS, ...LIGHTBOX_PRECACHE_URLS]))
       .then(() => self.skipWaiting()) // Activate immediately
   );
 });
