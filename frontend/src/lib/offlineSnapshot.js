@@ -19,6 +19,7 @@ import { openDB } from "idb";
 import axios from "axios";
 import { isQuotaExceeded } from "./idbErrors";
 import { TENGGAT_BAKA, muatAndal } from "./muatAndal";
+import { gabungVersiBaris } from "./rekonsiliasiBaris";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -237,7 +238,10 @@ async function _syncSnapshot(activityId, userId, onProgress, { forceFull = false
       }
       try {
         const tx = db.transaction(ASSET_STORE, "readwrite");
-        for (const row of staged) tx.store.put(row);
+        for (const row of staged) {
+          const lama = await tx.store.get(row.id);
+          await tx.store.put(gabungVersiBaris(lama, row));
+        }
         await tx.done;
         for (const row of staged) fetchedIds?.add(row.id);
         loaded += items.length;
@@ -348,11 +352,14 @@ export async function upsertSnapshotAsset(activityId, row) {
     // server tak memuat field turunan proyeksi list (doc_total/doc_checked/
     // doc_summary/siman) → ganti-buta menghapus nilainya yang sudah benar.
     // Menggabung dengan rekaman lama membuat potongan tetap potongan.
-    let lama = null;
-    try { lama = await db.get(ASSET_STORE, row.id); } catch { /* baca gagal → tanpa dasar */ }
+    // Satu transaksi baca-tulis: dua upsert paralel tidak boleh membaca dasar
+    // yang sama lalu menimpa hasil satu sama lain (termasuk versi lebih baru).
+    const tx = db.transaction(ASSET_STORE, "readwrite");
+    const lama = await tx.store.get(row.id);
     const dasar = lama && lama.activity_id === activityId ? lama : {};
-    const clean = toSnapshotRow({ ...dasar, ...row, activity_id: activityId });
-    await db.put(ASSET_STORE, clean);
+    const clean = toSnapshotRow({ ...gabungVersiBaris(dasar, row), activity_id: activityId });
+    await tx.store.put(clean);
+    await tx.done;
   } catch {
     // Best-effort cache maintenance — the queue still holds the real change.
   }

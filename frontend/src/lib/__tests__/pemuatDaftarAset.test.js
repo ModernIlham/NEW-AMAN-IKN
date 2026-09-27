@@ -45,6 +45,29 @@ beforeEach(() => {
   isSnapshotExpired.mockReturnValue(false);
 });
 
+test.each([false, true])("muat ulang %s tidak memundurkan versi WS/simpan yang sudah tampil", async luring => {
+  const p = layar({ isOnlineRef: { current: !luring } });
+  const baru = { id: "aset", version: 8, asset_name: "Terbaru" };
+  p.state.Assets = [baru]; p.state.MobileAssets = [baru];
+  const lama = { ...baru, version: 7, asset_name: "Lama" };
+  axios.get.mockResolvedValue({ data: { items: [lama], total: 1, total_pages: 1, page: 1 } });
+  getSnapshotAssets.mockResolvedValue([lama]);
+  await muat(p);
+  expect(p.state.Assets).toEqual([baru]);
+  expect(p.state.MobileAssets).toEqual([baru]);
+});
+
+test("respons daftar mempertahankan edit yang masih antre tanpa mengubah filter/urutan", async () => {
+  const p = layar();
+  const lokal = { id: "aset", version: 5, asset_name: "Edit lokal" };
+  p.state.Assets = [lokal]; p.state.MobileAssets = [lokal];
+  p.k.getPendingItems.mockReturnValue([{ isEdit: true, editId: "aset", payload: { asset_name: "Edit lokal" } }]);
+  axios.get.mockResolvedValue({ data: { items: [{ id: "lain" }, { id: "aset", version: 6, asset_name: "Rekan" }], total: 2, total_pages: 1, page: 1 } });
+  await muat(p);
+  expect(p.state.Assets).toEqual([{ id: "lain" }, lokal]);
+  expect(p.state.MobileAssets).toEqual([{ id: "lain" }, lokal]);
+});
+
 test.each([false, true])("daftar A tidak menimpa B yang selesai dahulu; gagal A=%s", async gagal => {
   const a = tertunda(), b = tertunda();
   axios.get.mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise);

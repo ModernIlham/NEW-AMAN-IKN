@@ -62,6 +62,7 @@ jest.mock("idb", () => ({
       const tertunda = [];
       return {
         store: {
+          get: async id => mockSimpanan.assets.get(id),
           put: (row) => {
             mockSimpanan.putTerjadi += 1;
             if (mockSimpanan.putTerjadi > mockSimpanan.putSebelumPenuh) {
@@ -119,6 +120,14 @@ beforeEach(() => {
 // satu halaman besar yang kuotanya habis di tengah — cukup untuk sifat yang
 // diuji: putusnya penulisan, bukan mekanisme pagingnya.
 describe("kursor delta berhenti saat kuota perangkat penuh", () => {
+  test("sinkron massal yang terlambat tidak menurunkan versi hasil upsert", async () => {
+    mockSimpanan.assets.set("a1", { id: "a1", activity_id: "keg1", version: 8, asset_name: "Terbaru" });
+    const jawaban = halaman({ ids: ["a1"], serverTime: new Date().toISOString(), total: 1 });
+    Object.assign(jawaban.data.items[0], { version: 7, asset_name: "Lama" });
+    mockHalaman.push(jawaban);
+    await syncSnapshot("keg1", "u1");
+    expect(mockSimpanan.assets.get("a1")).toMatchObject({ version: 8, asset_name: "Terbaru" });
+  });
   test.each([undefined, 1])("proyeksi cache lama %s ditarik penuh sekali termasuk desain pin, lalu kembali delta", async (versiProyeksi) => {
     mockSimpanan.meta.set("keg1", { activityId: "keg1", userId: "u1", count: 1,
       versiProyeksi, lastSync: "2026-08-01T00:00:00Z", disegarkanPada: new Date().toISOString() });

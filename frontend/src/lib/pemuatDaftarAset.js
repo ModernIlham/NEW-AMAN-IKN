@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { getSnapshotAssets, snapshotMeta, isSnapshotExpired } from "@/lib/offlineSnapshot";
 import { statistikUntukKartu } from "@/lib/statistikAset";
 import { HASIL_USANG } from "@/hooks/usePenjagaPermintaan";
+import { rekonsiliasiDaftar } from "./rekonsiliasiBaris";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -52,7 +53,8 @@ export function buatPemuatDaftarAset(konteks) {
       const merged = pendingRows.length ? [...pendingRows, ...pageItems] : pageItems;
       // Statistik daring yang berangkat sebelum snapshot ini sudah usang.
       penjaga.batalkan("statistik");
-      setAssets(merged);
+      const pending = getPendingItems();
+      setAssets(prev => rekonsiliasiDaftar(prev, merged, pending));
       setTotalItems(totalFiltered);
       setTotalPages(totalPg);
       setCurrentPage(pg);
@@ -68,7 +70,7 @@ export function buatPemuatDaftarAset(konteks) {
         setMobileAssets(prev => [...prev, ...pageItems]);
         setMobileCurrentPage(pg);
       } else if (!preserveMobile) {
-        setMobileAssets(merged);
+        setMobileAssets(prev => rekonsiliasiDaftar(prev, merged, pending));
         setMobileCurrentPage(pg);
         setMobileFirstPage(pg);
       }
@@ -132,7 +134,8 @@ export function buatPemuatDaftarAset(konteks) {
           .map(it => ({ ...it.payload, id: it.tempId, thumbnail: it.payload.photo || null, created_at: it.queuedAt || new Date().toISOString() }))
           .filter(row => !newItems.some(a => serverHasPendingRow(a, row)));
         const merged = pendingRows.length ? [...pendingRows, ...newItems] : newItems;
-        setAssets(merged);
+        const pending = getPendingItems();
+        setAssets(prev => rekonsiliasiDaftar(prev, merged, pending));
         setTotalItems(r.data.total || 0);
         setTotalPages(r.data.total_pages || 1);
         setCurrentPage(r.data.page || 1);
@@ -142,7 +145,7 @@ export function buatPemuatDaftarAset(konteks) {
           // Jendela galeri = [P, P]: JANGAN reset ke 1. Bila pindah dari halaman
           // tabel (mis. hal. 5) lalu ke galeri, jendela mulai di 5 sehingga
           // scroll-atas dapat memuat 4,3,2,1 (dua arah) dan scroll-bawah 6,7…
-          setMobileAssets(merged);
+          setMobileAssets(prev => rekonsiliasiDaftar(prev, merged, pending));
           setMobileCurrentPage(r.data.page || 1);
           setMobileFirstPage(r.data.page || 1);
         }

@@ -25,7 +25,13 @@ jest.mock("idb", () => ({
     delete: async (store, key) =>
       (store === "meta" ? mockSimpanan.meta : mockSimpanan.assets).delete(key),
     getAll: async () => [],
-    transaction: () => { throw new Error("tak dipakai uji ini"); },
+    transaction: () => ({
+      store: {
+        get: async id => mockSimpanan.assets.get(id),
+        put: async row => mockSimpanan.assets.set(row.id, row),
+      },
+      done: Promise.resolve(),
+    }),
   }),
 }));
 // (openDB di atas: arrow yang MENGEMBALIKAN promise objek — dipanggil sebagai
@@ -40,6 +46,11 @@ beforeEach(() => {
 });
 
 describe("upsertSnapshotAsset — baca-gabung-tulis", () => {
+  test("respons versi lama tidak memundurkan snapshot hasil simpan terbaru", async () => {
+    await upsertSnapshotAsset("keg1", { id: "a1", version: 8, asset_name: "Baru" });
+    await upsertSnapshotAsset("keg1", { id: "a1", version: 7, asset_name: "Lama" });
+    expect(mockSimpanan.assets.get("a1")).toMatchObject({ version: 8, asset_name: "Baru" });
+  });
   test("desain marker tersimpan offline dan tidak hilang oleh patch field lain", async () => {
     const marker_pin = '{"v":1,"mode":"text","text":"A1"}';
     await upsertSnapshotAsset("keg1", { id: "a1", marker_pin });

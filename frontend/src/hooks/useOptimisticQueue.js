@@ -227,8 +227,9 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
   }, []);
 
   useEffect(() => {
+    const timers = failTimersRef.current;
     return () => {
-      Object.values(failTimersRef.current).forEach(t => clearTimeout(t));
+      Object.values(timers).forEach(t => clearTimeout(t));
     };
   }, []);
 
@@ -299,7 +300,14 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
         item.resolve?.(result);
         return;
       }
-      updateStatus(statusKey, "saved");
+      // Lepaskan hanya simpanan yang selesai SEBELUM memberi tahu layar.
+      // Simpanan berikutnya harus tetap terbaca sebagai pending agar respons
+      // pertama tidak menimpa nilai optimistis yang lebih baru.
+      if (failedItemsRef.current[statusKey]?.antreanId === item.antreanId) {
+        delete failedItemsRef.current[statusKey];
+      }
+      const masihTertunda = !!failedItemsRef.current[statusKey];
+      if (!masihTertunda) updateStatus(statusKey, "saved");
       // Clear only if still 'saved' — a follow-up save of the same row may have
       // set a newer status (queued/saving/failed) that this timer must not wipe
       setTimeout(() => {
@@ -307,7 +315,7 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
       }, 3000);
 
       // Unlock the saved row
-      if (item.isEdit && item.editId) {
+      if (item.isEdit && item.editId && !masihTertunda) {
         onItemSaved?.(item.editId);
       }
 
@@ -315,7 +323,8 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
       const serverData = result?.data;
       if (serverData) {
         if (item.isEdit && item.editId && serverData.version != null) {
-          lastSavedVersionsRef.current[item.editId] = serverData.version;
+          lastSavedVersionsRef.current[item.editId] = resolveBaseVersion(
+            serverData.version, lastSavedVersionsRef.current[item.editId]);
         }
         onRowSynced?.(statusKey, serverData, item.isEdit);
       }
@@ -331,9 +340,6 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
       // simpanan lain atas aset yang sama yang mendaftar (mis. yang tadi gagal
       // lalu didaftarkan ulang), rekamannya harus tetap hidup agar bisa
       // di-replay — bukan ikut terhapus oleh keberhasilan kita.
-      if (failedItemsRef.current[statusKey]?.antreanId === item.antreanId) {
-        delete failedItemsRef.current[statusKey];
-      }
       removePersistedItem(statusKey, item.antreanId); // confirmed by server
 
       item.resolve?.(result);

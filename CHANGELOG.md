@@ -18,6 +18,28 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1077] Rekonsiliasi versi baris dan simpanan beruntun — 2026-09-27
+
+- Respons WebSocket, pemulihan konflik, dan hasil simpan tidak lagi menurunkan
+  versi baris yang sudah tampil lebih baru pada daftar desktop maupun HP/galeri.
+  Respons kegiatan/filter lama, komponen yang sudah ditutup, dan GET sebelum
+  penghapusan dibatalkan; form yang baru dibuka selama GET tetap dilindungi.
+- Hasil simpan pertama mempertahankan edit berikutnya yang masih mengantre,
+  termasuk status sinkron dan kunci baris. Antrean selesai dilepas sebelum
+  callback layar; versi dasar hanya mengikuti hasil simpan sendiri, bukan
+  dinaikkan otomatis ke versi rekan untuk melewati pemeriksaan konflik.
+- Muat ulang daftar daring/luring mempertahankan versi lebih baru dan edit
+  tertunda untuk baris yang sama tanpa mengubah urutan/keanggotaan filter server.
+  Pemulihan konflik ikut membaca versi baris yang hanya ada di jendela HP.
+  Pembaruan tertunda selama form terbuka menyegarkan baris HP setelah ditutup.
+- Cache luring memakai transaksi baca-gabung-tulis dan pemeriksaan versi,
+  termasuk saat sinkron massal, agar respons lama tidak mengganti hasil simpan
+  baru. Uji Chrome dengan IndexedDB asli: 100 upsert versi terbalik paralel,
+  patch parsial bersamaan, sinkron usang, dan baca kembali setelah reload/luring.
+- Menyelesaikan tahap rekonsiliasi baris yang sempat ditunda. Pemisahan chunk
+  PhotoLightbox beserta jaminan ketersediaannya saat luring masih tahap terpisah;
+  rilis ini tidak mengubahnya ataupun mengaktifkan jadwal fetch repository.
+
 ## [#1076] Input warna marker terpadu — 2026-09-27
 
 [PR #1067](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1067).
