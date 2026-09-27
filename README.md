@@ -8,6 +8,13 @@
 
 ## Ringkasan
 
+### Gulir dan muat ulang di HP
+
+Geser daftar, galeri, atau peta tidak memicu refresh. Untuk memperbarui data
+secara sengaja, buka **Menu aksi lainnya (ikon pengaturan) → Muat ulang data**.
+Filter, urutan, dan halaman aktif tetap dipertahankan. Pada peta tersedia juga
+tombol **Muat Ulang**. Sinkronisasi otomatis dan antrean luring tetap berjalan.
+
 ### Desain marker pin
 
 - Di **Tambah/Edit Aset → Info Dasar → Desain marker pin**, pilih polos,

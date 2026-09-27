@@ -2,7 +2,7 @@ import React, { memo, useState, useEffect, useMemo, useRef } from "react";
 import {
   Search, Filter, Download, Upload, Settings,
   Loader2, Trash2, Eye, FileText, FileSpreadsheet, CreditCard,
-  List, LayoutGrid, MapPinned, Tags,
+  List, LayoutGrid, MapPinned, Tags, RefreshCw,
 } from "lucide-react";
 import { labelDilepas } from "@/lib/labelRingkas";
 import useLebarElemen from "@/hooks/useLebarElemen";
@@ -66,6 +66,7 @@ const DashboardToolbar = memo(function DashboardToolbar({
   resetAdvancedFilters, handleCategoryReset,
   viewMode, setViewMode,
   inventoryMode, setInventoryMode,
+  onRefreshData, refreshing = false,
 }) {
   // ── Satu baris di lebar berapa pun ────────────────────────────────────────
   // Lebar diukur dari KONTAINER (bukan viewport) lalu label dilepas satu per
@@ -374,6 +375,12 @@ const DashboardToolbar = memo(function DashboardToolbar({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
+              {onRefreshData && <>
+                <DropdownMenuItem onSelect={onRefreshData} disabled={refreshing} className="min-h-[44px]" data-testid="mobile-refresh-data-btn">
+                  <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />{refreshing ? "Memuat ulang…" : "Muat ulang data"}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>}
               <DropdownMenuItem onClick={() => handleExport('xlsx')} disabled={exporting} data-testid="mobile-export-xlsx-btn">
                 <FileSpreadsheet className="w-4 h-4 mr-2" />Export Excel
               </DropdownMenuItem>

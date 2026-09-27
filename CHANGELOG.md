@@ -18,6 +18,19 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1075] Gulir HP tanpa refresh tidak sengaja — 2026-09-27
+
+[PR #1066](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1066).
+
+- Hapus gestur tarik-untuk-refresh pada area utama aset: geser daftar,
+  galeri, dan peta tidak lagi memunculkan indikator atau memuat ulang data.
+- Cegah overscroll vertikal meneruskan gestur ke refresh bawaan browser,
+  tanpa mematikan gulir biasa, pan/zoom peta, atau navigasi horizontal.
+- Penggantinya: **Menu aksi lainnya → Muat ulang data** di HP/tablet.
+  Pertahankan filter, urutan, dan halaman aktif; daftar HP dimuat ulang
+  dari halaman itu. Klik ganda ditahan selama pemuatan. Tombol Muat Ulang
+  pada peta tetap tersedia.
+
 ## [#1074] Ikon judul desain pin dan katalog 421 ikon — 2026-09-26
 
 [PR #1065](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1065).

@@ -64,7 +64,7 @@ import { useRowLocking } from "@/hooks/useRowLocking";
 import { useAssetFilters, normalkanMulti } from "@/hooks/useAssetFilters";
 import { buatPemuatDaftarAset } from "@/lib/pemuatDaftarAset";
 import { HASIL_USANG, usePenjagaPermintaan } from "@/hooks/usePenjagaPermintaan";
-import { usePullToRefresh } from "@/hooks/usePullToRefresh";
+import { useMuatUlangManual } from "@/hooks/useMuatUlangManual";
 import { useDragDropImport } from "@/hooks/useDragDropImport";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { usePenyegaranAset } from "@/hooks/usePenyegaranAset";
@@ -886,13 +886,9 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     setShowAdvancedFilter(false);
   };
 
-  // === PULL TO REFRESH ===
-  const { pull, mainContentRef, handleTouchStart, handleTouchMove, handleTouchEnd } = usePullToRefresh({
-    onRefresh: async () => {
-      const [hasil] = await refreshData(1);
-      if (Array.isArray(hasil)) toast.success("Data berhasil diperbarui");
-    },
-  });
+  // Gulir daftar/galeri dan pan/zoom peta tidak boleh menjadi pemicu refresh.
+  const mainContentRef = useRef(null);
+  const { refreshing, onRefreshData } = useMuatUlangManual(refreshData);
 
   // === FORM HANDLERS ===
   const handleEdit = useCallback(async (asset) => {
@@ -1637,17 +1633,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         )}
 
         {/* MAIN CONTENT */}
-        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden" ref={mainContentRef} style={{ contain: 'layout style', willChange: 'width' }} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
-          {/* Pull-to-refresh indicator - Mobile only */}
-          <div className="sm:hidden flex items-center justify-center overflow-hidden transition-all duration-200 bg-gradient-to-b from-teal-50 to-transparent dark:from-teal-950/40" style={{ height: pull.pullDistance > 0 ? pull.pullDistance : 0, opacity: pull.pullDistance > 0 ? 1 : 0 }}>
-            <div className="flex flex-col items-center gap-1">
-              <div className={`w-8 h-8 rounded-full border-2 border-teal-600 flex items-center justify-center transition-transform duration-200 ${pull.isRefreshing ? 'animate-spin' : ''}`} style={{ transform: `rotate(${Math.min(pull.pullDistance * 3, 360)}deg)` }}>
-                {pull.isRefreshing ? <Loader2 className="w-4 h-4 text-teal-600" /> : <ChevronDown className={`w-4 h-4 text-teal-600 transition-transform ${pull.pullDistance >= 80 ? 'rotate-180' : ''}`} />}
-              </div>
-              <span className="text-xs text-blue-600 font-medium">{pull.isRefreshing ? 'Memperbarui...' : pull.pullDistance >= 80 ? 'Lepaskan untuk refresh' : 'Tarik ke bawah'}</span>
-            </div>
-          </div>
-
+        <main data-testid="asset-main-content" className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden overscroll-y-contain" ref={mainContentRef} style={{ contain: 'layout style', willChange: 'width' }}>
           <div className="p-1.5 sm:p-3 space-y-1.5 sm:space-y-2">
             {/* Banner kegiatan disahkan — seluruh data terkunci */}
             {sealed && (
@@ -1686,6 +1672,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
               resetAdvancedFilters={resetAdvancedFilters} handleCategoryReset={handleCategoryReset}
               viewMode={viewMode} setViewMode={setViewMode}
               inventoryMode={inventoryMode} setInventoryMode={setInventoryMode}
+              onRefreshData={onRefreshData} refreshing={refreshing}
             />
 
             {/* Tiga panel (Analytics/Rekapitulasi/Barang Serupa) disatukan jadi

@@ -6,6 +6,10 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Hindari refresh browser saat mencapai ujung gulir, termasuk peta dibagikan.
+   Hanya sumbu vertikal: gulir biasa, pan/zoom peta, dan navigasi horizontal tetap. */
+html { overscroll-behavior-y: none; }
+
 body {
   margin: 0;
   font-family: 'Plus Jakarta Sans Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
