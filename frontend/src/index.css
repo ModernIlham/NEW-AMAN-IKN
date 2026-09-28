@@ -469,6 +469,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 /* === S1 — Design Token Foundation === */
 
+/* Layar kamera mendatar/pendek: rincian tetap ada di Edit Info dan stempel,
+   jangan mendorong rana/navigasi ke luar layar. Jam dan GPS tetap terlihat. */
+@media (max-height: 540px) {
+  [data-testid="full-camera-sheet"] .camera-live-asset-info { display: none; }
+  [data-testid="full-camera-sheet"] .camera-bottom-controls { padding-top: 8px; padding-bottom: 8px; }
+  [data-testid="full-camera-sheet"] .camera-bottom-controls > :not([hidden]) ~ :not([hidden]) { margin-top: 6px; }
+}
+
 /* Kontrol desain pin ringkas dan sama pada editor tunggal/massal.
    Label di samping menghemat tinggi; area sentuh HP tetap 44px. */
 .marker-style-row {

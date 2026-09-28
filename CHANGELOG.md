@@ -18,6 +18,33 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1080] Kamera: thumbnail utuh, stempel ringkas, rasio dan bantuan makro — 2026-09-28
+
+- Tombol hapus foto dipisahkan dari thumbnail: ikon silang 20px di dalam area
+  sentuh 44px, tidak menutup gambar atau keluar dari strip galeri. Konfirmasi
+  hapus tetap wajib. Panel Setelan berada di atas kontrol bawah; pada layar
+  pendek rincian tetap tersedia di Edit Info. Jarak kontrol dipadatkan dan
+  panel bawah dapat digulir bila ruang tidak cukup (termasuk Simpan & Scan).
+- Stempel hasil foto memakai sudut membulat, latar bergradasi, aksen tipis dan
+  hierarki teks. Luas panel dan seluruh detail waktu/GPS/kode/NUP/nama/lokasi/
+  pengguna dipertahankan; tidak memperbesar resolusi/JPEG atau mengubah objek.
+- Rasio **Asli, 3:4, 9:16, 1:1, Full** tersimpan per akun. Pratinjau dan hasil
+  memakai potongan tengah yang sama, tanpa meregangkan foto. Full mengikuti
+  layar; orientasi paksa tetap dihormati. Akun lama tetap memakai Asli.
+- **Makro cerdas** mendeteksi kontrol fokus kamera yang diekspos browser.
+  Bila manual tersedia, bandingkan ketajaman area tengah pada beberapa posisi
+  fokus dalam rentang sah, lalu kunci hasil terbaik; bila hanya autofocus,
+  gunakan bantuan fokus otomatis. Tidak mengklaim deteksi jarak/lensa makro
+  khusus. Tidak tersedia bila kontrol tidak diekspos. Rana dikunci selama
+  pencarian; pembatalan/pergantian kamera memulihkan fokus awal pada track asal.
+- Preferensi disimpan lokal segera; PUT diurutkan, respons lama tidak menimpa
+  pilihan baru, dan setelan luring disinkronkan saat kamera dibuka kembali
+  daring. Cache tetap terpisah per akun, termasuk respons yang datang terlambat.
+- Uji mencakup geometri/capture rasio, metadata stempel, tombol hapus/konfirmasi,
+  kamera yang mengabaikan fokus, pembatalan, pergantian kamera dan cache luring.
+  Uji browser menggunakan stream simulasi; kualitas makro optik tetap perlu
+  diuji di perangkat lapangan yang sesungguhnya.
+
 ## [#1079] Kontrol warna dan ketebalan marker lebih ringkas — 2026-09-28
 
 - Label warna/ketebalan sejajar di kiri, kontrol selebar 144px di kanan,

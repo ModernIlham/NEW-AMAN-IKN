@@ -21,16 +21,18 @@ function idPengguna() {
 }
 
 const kunci = () => `aman_preferensi_kamera_${idPengguna()}`;
+const revisi = new Map();
+const antrean = new Map();
 
-export function bacaCache() {
+export function bacaCache(key = kunci()) {
   try {
-    const raw = localStorage.getItem(kunci());
+    const raw = localStorage.getItem(key);
     return raw ? normalkanPreferensi(JSON.parse(raw)) : { ...PREFERENSI_BAWAAN };
   } catch { return { ...PREFERENSI_BAWAAN }; }
 }
 
-function tulisCache(p) {
-  try { localStorage.setItem(kunci(), JSON.stringify(p)); } catch { /* diam */ }
+function tulisCache(p, key) {
+  try { localStorage.setItem(key, JSON.stringify(p)); } catch { /* diam */ }
 }
 
 /**
@@ -39,13 +41,19 @@ function tulisCache(p) {
  * dibuka hanya karena setelan tak bisa diambil.
  */
 export async function muatPreferensi() {
+  const key = kunci(), versi = revisi.get(key) || 0;
+  // Edit luring tidak dibuang oleh GET akun lama ketika koneksi pulih.
+  try {
+    if (localStorage.getItem(`${key}_tertunda`) === "1") return (await simpanPreferensi(bacaCache(key))).pref;
+  } catch { /* cache tidak tersedia */ }
   try {
     const r = await axios.get(`${API}/auth/preferensi-kamera`, { timeout: 8000 });
     const p = normalkanPreferensi(r.data);
-    tulisCache(p);
+    if ((revisi.get(key) || 0) !== versi || antrean.has(key)) return bacaCache(key);
+    tulisCache(p, key);
     return p;
   } catch {
-    return bacaCache();
+    return bacaCache(key);
   }
 }
 
@@ -55,14 +63,25 @@ export async function muatPreferensi() {
  * dikembalikan agar pemanggil tahu apakah sudah tersimpan ke akun.
  */
 export async function simpanPreferensi(pref) {
+  const key = kunci(), versi = (revisi.get(key) || 0) + 1;
+  revisi.set(key, versi);
   const p = normalkanPreferensi(pref);
-  tulisCache(p);
-  try {
-    const r = await axios.put(`${API}/auth/preferensi-kamera`, p, { timeout: 8000 });
-    const server = normalkanPreferensi(r.data);
-    tulisCache(server);
-    return { pref: server, tersimpanKeAkun: true };
-  } catch {
-    return { pref: p, tersimpanKeAkun: false };
-  }
+  tulisCache(p, key);
+  try { localStorage.setItem(`${key}_tertunda`, "1"); } catch { /* diam */ }
+  const pekerjaan = (antrean.get(key) || Promise.resolve()).catch(() => {}).then(async () => {
+    // Jangan mengirim setelan akun lama lewat sesi akun yang baru login.
+    if (kunci() !== key || revisi.get(key) !== versi) return { pref: bacaCache(key), tersimpanKeAkun: false };
+    try {
+      const r = await axios.put(`${API}/auth/preferensi-kamera`, p, { timeout: 8000 });
+      const server = normalkanPreferensi(r.data);
+      if (revisi.get(key) === versi) {
+        tulisCache(server, key);
+        try { localStorage.removeItem(`${key}_tertunda`); } catch { /* diam */ }
+      }
+      return { pref: server, tersimpanKeAkun: true };
+    } catch { return { pref: p, tersimpanKeAkun: false }; }
+  });
+  antrean.set(key, pekerjaan);
+  try { return await pekerjaan; }
+  finally { if (antrean.get(key) === pekerjaan) antrean.delete(key); }
 }

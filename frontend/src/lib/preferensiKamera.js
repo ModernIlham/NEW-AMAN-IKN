@@ -13,6 +13,7 @@
  */
 
 export const ORIENTASI = ["auto", "potret", "lanskap"];
+export const RASIO_FOTO = ["asli", "3:4", "9:16", "1:1", "full"];
 
 /** Pilihan resolusi = SISI TERPANJANG foto hasil (px). */
 export const RESOLUSI_PILIHAN = [1280, 1920, 2560, 3840];
@@ -25,6 +26,7 @@ export const KUALITAS_MAX = 100;
 
 export const PREFERENSI_BAWAAN = Object.freeze({
   orientasi: "auto",
+  rasio: "asli",     // pertahankan hasil akun lama sampai pengguna memilih rasio
   resolusi: 1920,      // setara pipeline kompresi form sebelum fitur ini ada
   kualitas: 85,        // persen (JPEG q0.85)
 });
@@ -51,6 +53,7 @@ export function normalkanPreferensi(raw) {
   const kual = angka(p.kualitas);
   return {
     orientasi,
+    rasio: RASIO_FOTO.includes(p.rasio) ? p.rasio : PREFERENSI_BAWAAN.rasio,
     resolusi: res == null ? PREFERENSI_BAWAAN.resolusi
       : Math.round(jepit(res, RESOLUSI_MIN, RESOLUSI_MAX)),
     kualitas: kual == null ? PREFERENSI_BAWAAN.kualitas
@@ -87,15 +90,21 @@ const RASIO = { potret: 3 / 4, lanskap: 4 / 3 };
  * `resolusi`; foto tak pernah diperBESAR dari bingkai aslinya (memperbesar
  * hanya menambah berkas tanpa menambah detail).
  */
-export function hitungBidang(vw, vh, orientasi, resolusi) {
+export function hitungBidang(vw, vh, orientasi, resolusi, pilihanRasio = "asli", rasioLayar = vw / vh) {
   const w = Math.max(1, Math.round(Number(vw) || 0));
   const h = Math.max(1, Math.round(Number(vh) || 0));
-  const rasio = RASIO[orientasi];
+  let rasio = RASIO[orientasi];
+  if (pilihanRasio !== "asli" && RASIO_FOTO.includes(pilihanRasio)) {
+    const layar = Number.isFinite(rasioLayar) && rasioLayar > 0 ? rasioLayar : w / h;
+    const dasar = { "3:4": 3 / 4, "9:16": 9 / 16, "1:1": 1, full: Math.min(layar, 1 / layar) }[pilihanRasio];
+    const potret = orientasi === "potret" || (orientasi !== "lanskap" && layar <= 1);
+    rasio = potret ? dasar : 1 / dasar;
+  }
 
   let sw = w, sh = h;
   if (rasio) {
-    if (w / h > rasio) sw = Math.round(h * rasio);   // bingkai terlalu lebar
-    else sh = Math.round(w / rasio);                  // bingkai terlalu tinggi
+    if (w / h > rasio) sw = Math.max(1, Math.round(h * rasio));
+    else sh = Math.max(1, Math.round(w / rasio));
   }
   const sx = Math.round((w - sw) / 2);
   const sy = Math.round((h - sh) / 2);

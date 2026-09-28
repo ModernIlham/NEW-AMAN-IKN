@@ -6,7 +6,7 @@ import {
 
 test("nilai sah dipertahankan apa adanya", () => {
   expect(normalkanPreferensi({ orientasi: "potret", resolusi: 2560, kualitas: 92 }))
-    .toEqual({ orientasi: "potret", resolusi: 2560, kualitas: 92 });
+    .toEqual({ orientasi: "potret", rasio: "asli", resolusi: 2560, kualitas: 92 });
 });
 
 test("nilai rusak/kosong jatuh ke bawaan, bukan menggagalkan kamera", () => {
@@ -70,4 +70,22 @@ test("boolean bukan angka yang sah (Number(true) === 1 menyesatkan)", () => {
   const p = normalkanPreferensi({ resolusi: true, kualitas: false });
   expect(p.resolusi).toBe(PREFERENSI_BAWAAN.resolusi);
   expect(p.kualitas).toBe(PREFERENSI_BAWAAN.kualitas);
+});
+
+test.each(["asli", "3:4", "9:16", "1:1", "full"])("rasio %s tersimpan tanpa mengubah orientasi/resolusi", rasio => {
+  expect(normalkanPreferensi({ rasio })).toEqual({ ...PREFERENSI_BAWAAN, rasio });
+});
+test.each([null, "16:0", [], {}])("rasio salah %p menjadi Asli", rasio => {
+  expect(normalkanPreferensi({ rasio }).rasio).toBe("asli");
+});
+test.each([["3:4", 3 / 4], ["9:16", 9 / 16], ["1:1", 1], ["full", 0.5]])("potong %s sesuai bingkai tanpa meregangkan", (rasio, target) => {
+  const b = hitungBidang(1920, 1080, "auto", 1920, rasio, 0.5);
+  expect(b.sw / b.sh).toBeCloseTo(target, 2);
+  expect(b.lebar / b.tinggi).toBeCloseTo(target, 2);
+  expect(b.sx * 2 + b.sw).toBeCloseTo(1920, 0);
+  expect(b.sy * 2 + b.sh).toBe(1080);
+});
+test("layar diputar: rasio mengikuti lanskap, orientasi paksa tetap dihormati", () => {
+  expect(hitungBidang(1920, 1080, "auto", 1920, "3:4", 2).sw / 1080).toBeCloseTo(4 / 3);
+  expect(hitungBidang(1920, 1080, "potret", 1920, "3:4", 2).sw / 1080).toBeCloseTo(3 / 4);
 });
