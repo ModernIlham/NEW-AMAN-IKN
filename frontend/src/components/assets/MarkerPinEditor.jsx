@@ -95,7 +95,7 @@ export default function MarkerPinEditor({ value = "", onChange, onBusyChange, di
           onColorChange={value => { setKodeWarna(p => ({ ...p, [key]: undefined })); ubah({ [key]: value }); }}
           onTextChange={raw => { setKodeWarna(p => ({ ...p, [key]: raw })); const valid = hex(raw); if (valid) ubah({ [key]: valid }); }}
           onBlur={() => { const valid = hex(kodeWarna[key]); if (valid) setKodeWarna(p => ({ ...p, [key]: valid })); }} />)}
-        <label className="min-w-0 text-[11px] space-y-1">Ketebalan garis<select className={`${kontrol} min-h-[44px]`} aria-label="Ketebalan garis marker" data-testid="marker-stroke" value={d.strokeWidth} onChange={(e) => ubah({ strokeWidth: Number(e.target.value) })}>{[0, 1, 2, 3].map((n) => <option key={n} value={n}>{n ? `${n} px` : "Tanpa garis"}</option>)}</select></label>
+        <label className="marker-style-row text-[11px]"><span>Ketebalan garis</span><select className="marker-stroke-select w-full min-w-0 rounded-md border border-border bg-background text-foreground" aria-label="Ketebalan garis marker" data-testid="marker-stroke" value={d.strokeWidth} onChange={(e) => ubah({ strokeWidth: Number(e.target.value) })}>{[0, 1, 2, 3].map((n) => <option key={n} value={n}>{n ? `${n} px` : "Tanpa garis"}</option>)}</select></label>
       </div>
       {warnaInvalid && <p role="alert" className="text-xs text-destructive">Kode warna harus 6 digit heksadesimal, misalnya #2563EB. Lengkapi kode sebelum menyimpan.</p>}
     </div>}

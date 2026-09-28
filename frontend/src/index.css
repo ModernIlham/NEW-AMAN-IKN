@@ -469,6 +469,33 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 /* === S1 — Design Token Foundation === */
 
+/* Kontrol desain pin ringkas dan sama pada editor tunggal/massal.
+   Label di samping menghemat tinggi; area sentuh HP tetap 44px. */
+.marker-style-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 9rem);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.marker-color-field, .marker-stroke-select { height: 44px; }
+.marker-color-picker { width: 44px; height: 44px; }
+.marker-color-picker::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-left: 1px solid currentColor;
+  opacity: 0.2;
+  pointer-events: none;
+}
+.marker-color-code { padding: 0 8px; font-size: 16px; line-height: 20px; }
+.marker-stroke-select { padding: 0 8px; font-size: 16px; }
+@media (min-width: 1024px) {
+  .marker-color-field, .marker-stroke-select { height: 36px; }
+  .marker-color-picker { width: 36px; height: 36px; }
+  .marker-color-code, .marker-stroke-select { font-size: 12px; }
+}
+
 /* Fokus tetap terlihat pada seluruh swatch, termasuk input palet transparan. */
 .marker-color-field:focus-within {
   outline: 2px solid hsl(var(--ring));

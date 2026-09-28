@@ -18,6 +18,18 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1079] Kontrol warna dan ketebalan marker lebih ringkas — 2026-09-28
+
+- Label warna/ketebalan sejajar di kiri, kontrol selebar 144px di kanan,
+  tidak lagi memenuhi lebar panel. Tinggi seragam 36px pada desktop dan
+  44px pada HP/tablet; ikon palet diperkecil tanpa mengecilkan area sentuh HP.
+- Berlaku pada form aset dan Edit Massal melalui editor bersama. Kode HEX,
+  palet native, kontras, validasi, status nonaktif dan pilihan tanpa garis
+  tetap berfungsi; tidak mengubah data/desain marker yang tersimpan.
+- Uji Chrome memakai CSS produksi pada 320/375/768/1280px, tema terang/gelap:
+  ukuran/sejajar sesuai, HEX utuh, tombol palet menerima klik, dan pilihan
+  warna/ketebalan tetap mengubah pratinjau. Tidak mengubah jalur simpan luring.
+
 ## [#1078] Penampil foto terpisah dan siap dibuka saat luring — 2026-09-28
 
 - Daftar, galeri, dan peta memakai satu pemuat PhotoLightbox bersama. Kode
