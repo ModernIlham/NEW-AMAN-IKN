@@ -15,6 +15,9 @@ test("kode dan pemilih native ada pada kotak warna yang sama, ikon tidak menutup
   const palet = screen.getByLabelText("Pilih warna ikon / huruf");
   expect(field).toContainElement(kode);
   expect(field).toContainElement(palet);
+  expect(field.parentElement).toHaveClass("marker-style-row");
+  expect(kode).toHaveClass("marker-color-code");
+  expect(palet.parentElement).toHaveClass("marker-color-picker");
   expect(palet).toHaveAttribute("type", "color");
   expect(palet).not.toHaveAttribute("tabindex", "-1");
   fireEvent.change(kode, { target: { value: "#abcdef" } });
