@@ -1,0 +1,63 @@
+import React from "react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { PREFERENSI_BAWAAN } from "../../../lib/preferensiKamera";
+import { bacaCache, muatPreferensi, simpanPreferensi } from "../../../lib/preferensiKameraApi";
+import { gambarWatermarkKamera } from "../../../lib/watermarkKamera";
+jest.mock("../../../hooks/useBackGuard", () => ({ useBackGuard: jest.fn() }));
+jest.mock("../../../lib/preferensiKameraApi");
+jest.mock("../../../lib/watermarkKamera");
+jest.mock("../../../lib/shutterSound", () => ({ playShutterSound: jest.fn(), shutterSoundEnabled: () => false }));
+jest.mock("../../../lib/haptics", () => ({ haptic: jest.fn() }));
+jest.mock("../QrScanButton", () => ({ extractScannedCode: s => s }));
+const fd = { asset_name: "Trainer Kit", asset_code: "3080158999", NUP: "10", location: "Lokasi uji" };
+let tr, ctx;
+let FullCameraSheet;
+beforeAll(() => {
+  const probe = jest.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ filter: "none" });
+  FullCameraSheet = require("../FullCameraSheet").default;
+  probe.mockRestore();
+});
+beforeEach(() => {
+  bacaCache.mockReturnValue(PREFERENSI_BAWAAN); muatPreferensi.mockResolvedValue(PREFERENSI_BAWAAN);
+  simpanPreferensi.mockImplementation(async p => ({ pref: p, tersimpanKeAkun: true }));
+  tr = { readyState: "live", stop: jest.fn(), addEventListener: jest.fn(), removeEventListener: jest.fn(), getCapabilities: () => ({}) };
+  Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia: jest.fn(async () => ({ getVideoTracks: () => [tr], getTracks: () => [tr] })) } });
+  Object.defineProperty(navigator, "geolocation", { configurable: true, value: undefined });
+  Object.defineProperty(HTMLVideoElement.prototype, "videoWidth", { configurable: true, get: () => 1920 });
+  Object.defineProperty(HTMLVideoElement.prototype, "videoHeight", { configurable: true, get: () => 1080 });
+  Object.defineProperty(HTMLVideoElement.prototype, "readyState", { configurable: true, get: () => 4 });
+  jest.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+  jest.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ x: 0, y: 0, left: 0, top: 0, width: 390, height: 780 });
+  ctx = { drawImage: jest.fn(), filter: "none" };
+  jest.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(ctx);
+  jest.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue("data:image/jpeg;base64,dGVzdA==");
+});
+afterEach(() => jest.restoreAllMocks());
+test("pilih rasio lalu potret memakai bidang yang sama, tetap terikat aset dan mutu JPEG", async () => {
+  const onCapture = jest.fn();
+  render(<FullCameraSheet formData={fd} sesiAset="aset-a" onClose={jest.fn()} onCapture={onCapture} />);
+  await waitFor(() => expect(screen.getByTestId("full-camera-shutter")).not.toBeDisabled());
+  fireEvent.loadedMetadata(screen.getByTestId("full-camera-video"));
+  fireEvent.click(screen.getByTestId("full-camera-setelan"));
+  await act(async () => { fireEvent.click(screen.getByTestId("setelan-rasio-1:1")); });
+  expect(simpanPreferensi).toHaveBeenCalledWith({ ...PREFERENSI_BAWAAN, rasio: "1:1" });
+  expect(screen.getByTestId("full-camera-video").style.width).toBe("390px");
+  expect(screen.getByTestId("full-camera-video").style.height).toBe("390px");
+  fireEvent.click(screen.getByTestId("full-camera-setelan"));
+  fireEvent.click(screen.getByTestId("full-camera-shutter"));
+  expect(ctx.drawImage).toHaveBeenCalledWith(expect.anything(), 420, 0, 1080, 1080, 0, 0, 1080, 1080);
+  expect(HTMLCanvasElement.prototype.toDataURL).toHaveBeenCalledWith("image/jpeg", 0.85);
+  expect(gambarWatermarkKamera).toHaveBeenCalledWith(ctx, 1080, 1080, expect.arrayContaining(["3080158999  NUP 10", "Trainer Kit • Lokasi uji"]));
+  expect(onCapture).toHaveBeenCalledWith("data:image/jpeg;base64,dGVzdA==", "aset-a");
+});
+test("tombol hapus terpisah dari thumbnail dan tetap membutuhkan konfirmasi", async () => {
+  const onRemovePhoto = jest.fn(); const { unmount } = render(<FullCameraSheet formData={fd} onClose={jest.fn()}
+    photos={["data:image/jpeg;base64,dGVzdA=="]} onRemovePhoto={onRemovePhoto} />);
+  await screen.findByTestId("full-camera-macro");
+  expect(screen.getByTestId("full-camera-macro")).toBeDisabled();
+  expect(screen.getByTestId("full-camera-del-0")).not.toHaveClass("absolute");
+  expect(screen.getByTestId("full-camera-del-icon-0")).toHaveClass("w-5", "h-5");
+  fireEvent.click(screen.getByTestId("full-camera-del-0")); expect(onRemovePhoto).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByTestId("full-camera-del-confirm")); expect(onRemovePhoto).toHaveBeenCalledWith(0);
+  unmount(); expect(tr.stop).toHaveBeenCalledTimes(1);
+});

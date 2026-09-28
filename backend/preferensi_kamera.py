@@ -10,13 +10,14 @@ yang dipakai kamera; keduanya punya uji sendiri agar pergeseran itu ketahuan.
 """
 
 ORIENTASI = ("auto", "potret", "lanskap")
+RASIO = ("asli", "3:4", "9:16", "1:1", "full")
 
 RESOLUSI_MIN = 640
 RESOLUSI_MAX = 4096
 KUALITAS_MIN = 50
 KUALITAS_MAX = 100
 
-BAWAAN = {"orientasi": "auto", "resolusi": 1920, "kualitas": 85}
+BAWAAN = {"orientasi": "auto", "rasio": "asli", "resolusi": 1920, "kualitas": 85}
 
 
 def _jepit(n: float, bawah: int, atas: int) -> int:
@@ -55,6 +56,7 @@ def normalkan(raw) -> dict:
     kual = _angka(p.get("kualitas"))
     return {
         "orientasi": orientasi,
+        "rasio": p.get("rasio") if p.get("rasio") in RASIO else BAWAAN["rasio"],
         "resolusi": _jepit(res, RESOLUSI_MIN, RESOLUSI_MAX) if res is not None
         else BAWAAN["resolusi"],
         "kualitas": _jepit(kual, KUALITAS_MIN, KUALITAS_MAX) if kual is not None
