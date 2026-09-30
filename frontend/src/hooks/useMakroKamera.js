@@ -45,7 +45,7 @@ export function useMakroKamera(track, videoRef, dijeda) {
         const jenis = await cariFokusMakro(track, pembacaKetajaman(videoRef.current), () => !op.batal);
         if (op.batal) return;
         setStatus("aktif");
-        setPesan(jenis === "manual" ? "Fokus detail terkunci. Ulangi makro jika jarak berubah." : "Bantuan fokus otomatis aktif. Dekatkan perlahan sesuai kemampuan lensa.");
+        setPesan(jenis === "manual" ? "Fokus detail terkunci pada kamera ini. Ulangi bantuan fokus jika jarak berubah." : "Bantuan fokus otomatis aktif pada kamera ini. Dekatkan perlahan sesuai kemampuan lensa.");
       } catch (err) {
         if (op.batal) return;
         await terapkanFokus(track, op.awal).catch(() => {});
