@@ -18,6 +18,27 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1082] Kamera: perpindahan lensa makro nyata dan bantuan fokus terpisah — 2026-09-30
+
+- Tombol Makro kini membuka kamera berbeda dengan ID perangkat yang tepat,
+  bukan hanya mengubah fokus di kamera yang sama. Kamera lama dilepas dahulu;
+  status aktif dan rana baru dibuka setelah ID sumber cocok dan video siap.
+  Tekan kembali untuk memulihkan kamera asal. Lensa fixed-focus tetap bisa dipilih.
+- Deteksi otomatis hanya memakai nama lensa yang secara eksplisit menyebut
+  macro/makro. Nama umum atau ultra-wide tidak ditebak: pilih kamera melalui
+  Setelan → Atur lensa / bantuan fokus. Pilihan disimpan lokal di browser
+  perangkat setelah berhasil; tidak ikut preferensi akun ke HP lain.
+- Bantuan fokus dekat dipisahkan dan dijelaskan tidak mengganti lensa. Jika
+  browser tidak mengekspos lensa tambahan, tampilkan keterbatasan tersebut;
+  kamera bawaan HP dan unggah lewat form aset tetap menjadi alternatif.
+- Pergantian gagal/ID tidak cocok memulihkan kamera asal, lalu default bila
+  perlu, tanpa percobaan tak berujung. Respons kamera/zoom/senter yang terlambat
+  tidak mengambil alih kamera baru; foto dan ikatan sesi aset tetap dipertahankan.
+- Uji mencakup pergantian sumber, kembali, pilihan manual/cache perangkat,
+  kegagalan, video belum siap, flip/tutup saat proses tertunda, enumerasi usang,
+  serta pemisahan bantuan fokus. Uji browser memakai stream simulasi;
+  ketersediaan dan kualitas optik makro tetap bergantung HP/browser sebenarnya.
+
 ## [#1081] Kamera: silang di sudut foto dan kontrol lensa vertikal — 2026-09-30
 
 - Silang hapus 18px menempel di pojok kanan atas tiap thumbnail 56px, tanpa

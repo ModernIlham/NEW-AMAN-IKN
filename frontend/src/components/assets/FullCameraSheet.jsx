@@ -8,6 +8,9 @@ import {
 import { toast } from "sonner";
 import { useBackGuard } from "../../hooks/useBackGuard";
 import { useMakroKamera } from "../../hooks/useMakroKamera";
+import { useLensaKamera } from "../../hooks/useLensaKamera";
+import { bukaLensa, idLensa } from "../../lib/lensaKamera";
+import CameraLensPanel from "./CameraLensPanel";
 import { gambarWatermarkKamera } from "../../lib/watermarkKamera";
 import { extractScannedCode } from "./QrScanButton";
 import { haptic } from "../../lib/haptics";
@@ -178,6 +181,10 @@ const FullCameraSheet = memo(function FullCameraSheet({
   const urutanPref = useRef(0);
   const prefAktif = useRef(false);
   const [panelSetel, setPanelSetel] = useState(false);
+  const [panelLensa, setPanelLensa] = useState(false);
+  const lensa = useLensaKamera(trackKamera, ready);
+  const { deviceId: idKameraDiminta } = lensa.permintaan;
+  const pulihkanLensa = lensa.pulihkan;
   const [maksSisiKamera, setMaksSisiKamera] = useState(0);   // dari getCapabilities
   const [menyimpanPref, setMenyimpanPref] = useState(false);
   useEffect(() => {
@@ -266,12 +273,13 @@ const FullCameraSheet = memo(function FullCameraSheet({
 
   // Back HP: tutup scanner/panel edit dulu, lalu konfirmasi hapus, lalu kamera.
   useBackGuard(useCallback(() => {
+    if (panelLensa) { setPanelLensa(false); return; }
     if (editOpen) { setEditOpen(false); return; }
     if (panelSetel) { setPanelSetel(false); return; }
     if (confirmIdx !== null) { setConfirmIdx(null); return; }
     if (scanActive) { setScanActive(false); return; }
     onCloseRef.current?.();
-  }, [editOpen, panelSetel, confirmIdx, scanActive]));
+  }, [editOpen, panelSetel, panelLensa, confirmIdx, scanActive]));
 
   // Kunci scroll latar selama kamera terbuka
   useEffect(() => {
@@ -308,8 +316,8 @@ const FullCameraSheet = memo(function FullCameraSheet({
     return () => navigator.geolocation.clearWatch(id);
   }, [onGpsFix, gpsNonce]);
 
-  // Nyalakan kamera (restart hanya saat flip kamera / coba-sambung-ulang — TIDAK
-  // pada tiap render). Menangani: fitur tak didukung, izin ditolak, kamera
+  // Nyalakan kamera (restart saat ganti lensa/arah/resolusi atau coba ulang —
+  // TIDAK pada tiap render). Menangani: fitur tak didukung, izin ditolak, kamera
   // direbut app lain, dan track yang berhenti (background/lock) tanpa menutup
   // sheet secara diam-diam.
   useEffect(() => {
@@ -317,21 +325,13 @@ const FullCameraSheet = memo(function FullCameraSheet({
     let cancelled = false;
     let track = null;
     let onEnded = null;
+    let stream = null;
     setReady(false); setStarting(true); setCamError(null); setSuspended(false); setTrackKamera(null);
     setMaksSisiKamera(0);
     (async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          // Minta bingkai seluas resolusi pilihan. `ideal` (bukan `exact`)
-          // supaya kamera yang tak sanggup tetap menyala dengan yang terdekat —
-          // memotret lebih penting daripada memenuhi angka.
-          video: {
-            facingMode: facing,
-            width: { ideal: pref.resolusi },
-            height: { ideal: Math.round(pref.resolusi * 3 / 4) },
-          },
-          audio: false,
-        });
+        // Exact untuk ID pilihan; ukuran tetap ideal agar lensa kecil dapat dibuka.
+        stream = await bukaLensa({ deviceId: idKameraDiminta, facing, resolusi: pref.resolusi });
         if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
         streamRef.current = stream;
         track = stream.getVideoTracks()[0];
@@ -364,8 +364,8 @@ const FullCameraSheet = memo(function FullCameraSheet({
             setTorchSupported(hasTorch);
             if (hasTorch && torchOnRef.current) {
               track.applyConstraints({ advanced: [{ torch: true }] })
-                .then(() => setTorchOn(true))
-                .catch(() => setTorchOn(false)); // keinginan (ref) dipertahankan
+                .then(() => { if (!cancelled) setTorchOn(true); })
+                .catch(() => { if (!cancelled) setTorchOn(false); }); // keinginan (ref) dipertahankan
             } else if (!hasTorch) {
               // Kamera ini tak punya torch (mis. kamera depan) — matikan UI saja,
               // keinginan tetap tersimpan agar flip balik menyalakannya lagi.
@@ -374,10 +374,17 @@ const FullCameraSheet = memo(function FullCameraSheet({
           } catch { setTorchSupported(false); }
         }
         const video = videoRef.current;
-        if (video) { video.srcObject = stream; await video.play().catch(() => {}); }
+        if (video) { video.srcObject = stream; await video.play(); }
         if (!cancelled) setReady(true);
       } catch (err) {
-        if (!cancelled) setCamError({ name: err?.name || "error", msg: cameraErrMsg(err) }); // JANGAN auto-close
+        if (!cancelled) {
+          stream?.getTracks().forEach(t => t.stop());
+          if (streamRef.current === stream) streamRef.current = null;
+          setTrackKamera(null);
+          if (pulihkanLensa(idKameraDiminta)) {
+            toast.error("Lensa pilihan gagal dibuka atau tidak terkonfirmasi. Memulihkan kamera sebelumnya…");
+          } else setCamError({ name: err?.name || "error", msg: cameraErrMsg(err) });
+        }
       } finally {
         if (!cancelled) setStarting(false);
       }
@@ -385,15 +392,28 @@ const FullCameraSheet = memo(function FullCameraSheet({
     return () => {
       cancelled = true;
       if (track && onEnded) track.removeEventListener("ended", onEnded);
-      if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
+      stream?.getTracks().forEach(t => t.stop());
+      if (streamRef.current === stream) streamRef.current = null;
     };
-  }, [facing, camNonce, supported, pref.resolusi]);
+  }, [facing, camNonce, supported, pref.resolusi, idKameraDiminta, pulihkanLensa]);
+
+  const pilihMakro = id => {
+    if (lensa.pilih(id)) { setReady(false); setPanelLensa(false); setPanelSetel(false); }
+  };
+  const toggleLensaMakro = () => {
+    if (lensa.aktif) { setReady(false); lensa.kembali(); return; }
+    if (lensa.kandidat && lensa.kandidat.id !== lensa.idAktif) pilihMakro(lensa.kandidat.id);
+    else { setPanelSetel(false); setPanelLensa(true); }
+  };
 
   // Terapkan zoom ke track aktif (perbesaran optik/digital sesuai kemampuan).
   const applyZoom = useCallback(async (z) => {
     const track = streamRef.current?.getVideoTracks?.()[0];
     if (!track || !track.applyConstraints) return;
-    try { await track.applyConstraints({ advanced: [{ zoom: z }] }); setZoom(z); } catch { /* tak didukung */ }
+    try {
+      await track.applyConstraints({ advanced: [{ zoom: z }] });
+      if (streamRef.current?.getVideoTracks?.()[0] === track) setZoom(z);
+    } catch { /* tak didukung */ }
   }, []);
 
   const zoomPresets = makeZoomPresets(zoomCaps);
@@ -405,6 +425,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
     const next = !torchOnRef.current;
     try {
       await track.applyConstraints({ advanced: [{ torch: next }] });
+      if (streamRef.current?.getVideoTracks?.()[0] !== track) return;
       torchOnRef.current = next;
       setTorchOn(next);
     } catch { toast.error("Senter tidak didukung kamera ini"); }
@@ -569,6 +590,9 @@ const FullCameraSheet = memo(function FullCameraSheet({
   // Ambil foto: gambar frame video ke canvas, stempel watermark ala Timemark,
   // hasilkan JPEG (sisi terpanjang ≤1920, q0.85 — setara pipeline kompresi form).
   const capture = useCallback(() => {
+    if (!ready || starting || (idKameraDiminta && idLensa(streamRef.current?.getVideoTracks?.()[0]) !== idKameraDiminta)) {
+      toast.info("Tunggu perpindahan kamera selesai sebelum memotret"); return;
+    }
     if (makroTerkunci) { toast.info("Tunggu pencarian fokus selesai sebelum memotret"); return; }
     // Penjaga di DALAM fungsi, bukan hanya atribut `disabled`. Atribut itu
     // urusan tampilan; yang menjaga satu-kesatuan foto↔aset adalah ini. Saat
@@ -635,7 +659,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
     // di induk. Watermark di badan foto (kode & NUP di atas) berasal dari
     // formData yang sama, jadi keduanya pasti bercerita tentang aset yang sama.
     onCapture(dataUrl, sesiAset);
-  }, [photos.length, maxPhotos, formData, onCapture, suspended, busy, sesiAset, makroTerkunci, rasioLayar]);
+  }, [photos.length, maxPhotos, formData, onCapture, suspended, busy, sesiAset, makroTerkunci, rasioLayar, ready, starting, idKameraDiminta]);
 
   // Getar SEKALI saat akurasi GPS mencapai SANGAT presisi (≤4 m) — "kunci
   // akurat" terasa tanpa harus melihat cincin. Rising-edge via ref agar tidak
@@ -955,14 +979,14 @@ const FullCameraSheet = memo(function FullCameraSheet({
               </div>
 
               <p className="text-[9.5px] text-white/50 border-t border-white/10 pt-2 leading-snug">
-                Setelan melekat pada akun Anda — ikut berpindah HP, bertahan sampai diubah lagi.
+                Rasio, orientasi, resolusi dan kualitas melekat pada akun Anda.
               </p>
               <p className="text-[10px] text-white/70" data-testid="full-camera-macro-support">
-                {makro.kemampuan.jenis === "manual" ? "Kontrol fokus manual terdeteksi — Makro cerdas dapat memilih fokus berdasarkan detail di tengah gambar."
-                  : makro.kemampuan.jenis === "otomatis" ? "Fokus otomatis terdeteksi — tersedia bantuan fokus dekat."
-                    : "Kontrol makro tidak tersedia pada browser/kamera ini. Gunakan kamera bawaan HP untuk lensa makro khusus."}
-                {" "}Tidak mendeteksi jarak objek atau menjamin lensa makro khusus.
+                Lensa makro: {lensa.kandidat?.label || "belum ditentukan dari kamera yang tersedia"}.
+                {" "}Pilihan lensa hanya disimpan di browser perangkat ini; bantuan fokus tidak mengganti lensa.
               </p>
+              <button type="button" onClick={() => { setPanelSetel(false); setPanelLensa(true); }} data-testid="setelan-lensa-makro"
+                className="w-full min-h-11 rounded-lg bg-white/10 text-xs font-semibold">Atur lensa / bantuan fokus</button>
             </div>
           </div>
         )}
@@ -990,19 +1014,19 @@ const FullCameraSheet = memo(function FullCameraSheet({
         {!scanActive && ready && !camError && !suspended && <div className="absolute inset-y-0 right-0 w-11 flex flex-col justify-end" data-testid="full-camera-macro-controls">
           <div className="camera-lensbar flex flex-col items-center max-h-full overflow-y-auto overscroll-contain rounded-full bg-black/20 pointer-events-auto"
             role="group" aria-label="Makro dan lensa kamera" data-testid="full-camera-lensbar">
-          <button type="button" onClick={makro.toggle} aria-pressed={makro.status === "aktif"}
-            aria-label={makro.status === "mencari" ? "Batalkan pencarian fokus makro" : makro.status === "aktif" ? "Matikan makro cerdas" : "Aktifkan makro cerdas"}
-            title={makro.kemampuan.jenis === "none" ? "Kontrol fokus tidak tersedia; lihat Setelan kamera" : "Makro cerdas — arahkan detail ke tengah"}
-            disabled={makro.kemampuan.jenis === "none" || makro.status === "memulihkan" || busy || preparing || panelSetel || editOpen}
+          <button type="button" onClick={toggleLensaMakro} aria-pressed={lensa.aktif}
+            aria-label={lensa.aktif ? "Kembali dari lensa makro ke kamera sebelumnya" : "Pindah ke lensa makro"}
+            title={lensa.aktif ? "Lensa pilihan aktif — tekan untuk kembali" : "Ganti kamera ke lensa makro; atur pilihan bila belum dikenali"}
+            disabled={makro.sibuk || busy || preparing || panelSetel || panelLensa || editOpen || lensa.memuat}
             data-testid="full-camera-macro" className="camera-lens-button w-11 h-11 p-0 shrink-0 flex items-center justify-center rounded-full disabled:opacity-40">
             <span className="camera-lens-disc flex flex-col items-center justify-center rounded-full font-semibold" aria-hidden="true">
-              {makro.sibuk ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Flower2 className="w-3.5 h-3.5" />}
-              <span className="text-[8px] leading-[9px]">{makro.status === "mencari" ? "Batal" : "Makro"}</span>
+              <Flower2 className="w-3.5 h-3.5" />
+              <span className="text-[8px] leading-[9px]">Makro</span>
             </span>
           </button>
             {zoomPresets.length >= 2 && zoomPresets.map((z) => (
               <button key={z} type="button" onClick={() => applyZoom(z)} disabled={makro.sibuk || makro.status === "aktif"}
-                data-testid={`full-camera-zoom-${z}`} aria-label={`Lensa ${fmtZoom(z)} kali`} aria-pressed={Math.abs((zoom || 1) - z) < 0.05}
+                data-testid={`full-camera-zoom-${z}`} aria-label={`Perbesaran ${fmtZoom(z)} kali`} aria-pressed={Math.abs((zoom || 1) - z) < 0.05}
                 className="camera-lens-button w-11 h-11 p-0 shrink-0 flex items-center justify-center rounded-full disabled:opacity-40">
                 <span className="camera-lens-disc flex items-center justify-center rounded-full font-bold" aria-hidden="true">{fmtZoom(z)}×</span>
               </button>
@@ -1013,6 +1037,9 @@ const FullCameraSheet = memo(function FullCameraSheet({
 
       {/* ── Overlay bawah: rana + navigasi ── */}
       <div className="camera-bottom-controls relative z-10 min-h-0 overflow-y-auto overscroll-contain bg-gradient-to-t from-black/80 to-transparent pt-3 pb-4 px-3 space-y-3">
+        {lensa.aktif && !scanActive && <p role="status" data-testid="camera-lens-active" className="text-center text-[10px] text-amber-200">
+          Lensa makro pilihan aktif · {lensa.daftar.find(d => d.id === lensa.idAktif)?.label || "Kamera terpilih"}
+        </p>}
         {!scanActive && makro.pesan && <p role="status" className="text-center text-[10px] leading-snug text-white/85 max-w-xs mx-auto">{makro.pesan}</p>}
         {/* Wajib isi Nama Aset dulu sebelum memotret — rana dikunci selama kosong. */}
         {!nameFilled && !scanActive && (
@@ -1062,7 +1089,10 @@ const FullCameraSheet = memo(function FullCameraSheet({
                 : <Camera className="w-6 h-6 text-black/70" />}
             </span>
           </button>
-          <button type="button" onClick={() => setFacing(f => (f === "environment" ? "user" : "environment"))}
+          <button type="button" onClick={() => {
+            const arah = trackKamera?.getSettings?.().facingMode || facing;
+            lensa.reset(); setReady(false); setFacing(arah === "environment" ? "user" : "environment"); setCamNonce(n => n + 1);
+          }}
             data-testid="full-camera-flip"
             className="flex flex-col items-center gap-1 text-white/90 text-[10px] font-medium w-16">
             <span className="w-11 h-11 rounded-full bg-white/15 flex items-center justify-center"><SwitchCamera className="w-5 h-5" /></span>
@@ -1133,6 +1163,10 @@ const FullCameraSheet = memo(function FullCameraSheet({
           </div>
         </div>
       )}
+
+      {panelLensa && <CameraLensPanel lensa={lensa} fokus={makro} busy={!ready || busy || preparing}
+        onClose={() => setPanelLensa(false)} onPilih={pilihMakro}
+        onFokus={() => { setPanelLensa(false); makro.toggle(); }} />}
 
       {/* ── Konfirmasi hapus foto ── */}
       {confirmIdx !== null && (
