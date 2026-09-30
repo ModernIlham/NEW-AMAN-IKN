@@ -687,7 +687,8 @@ const FullCameraSheet = memo(function FullCameraSheet({
     : accGood ? "#22c55e" : accFair ? "#eab308" : accPoor ? "#ef4444" : "#64748b";
 
   return createPortal(
-    <div ref={sheetRef} className="fixed inset-0 z-[120] bg-black flex flex-col" role="dialog" aria-modal="true" aria-label="Mode Kamera Penuh" data-testid="full-camera-sheet">
+    <div ref={sheetRef} className="fixed inset-0 z-[120] bg-black flex flex-col" role="dialog" aria-modal="true" aria-label="Mode Kamera Penuh" data-testid="full-camera-sheet"
+      data-lens-visible={!scanActive && ready && !camError && !suspended}>
       {/* Pratinjau kamera (filter kecerahan mengikuti gestur) */}
       <video ref={videoRef} className="absolute object-cover" playsInline muted
         onLoadedMetadata={e => setDimensiVideo({ lebar: e.currentTarget.videoWidth, tinggi: e.currentTarget.videoHeight })}
@@ -748,7 +749,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
 
       {/* Indikator kecerahan (muncul saat gestur aktif) */}
       {brightUI && (
-        <div className="absolute right-3 top-1/2 -translate-y-1/2 z-[8] flex flex-col items-center gap-1.5 pointer-events-none" data-testid="full-camera-bright-ui">
+        <div className="absolute right-16 top-1/2 -translate-y-1/2 z-[8] flex flex-col items-center gap-1.5 pointer-events-none" data-testid="full-camera-bright-ui">
           <Sun className="w-4 h-4 text-amber-300 drop-shadow" />
           <div className="w-1.5 h-40 rounded-full bg-white/25 overflow-hidden flex flex-col justify-end">
             <div className="w-full bg-amber-300 rounded-full"
@@ -969,44 +970,50 @@ const FullCameraSheet = memo(function FullCameraSheet({
         </div>
       </div>
 
-      <div className="flex-1" />
-
-      {/* ── Overlay bawah: thumbnail + kontrol ── */}
-      <div className="camera-bottom-controls relative z-10 min-h-0 overflow-y-auto overscroll-contain bg-gradient-to-t from-black/80 to-transparent pt-6 pb-4 px-3 space-y-3">
+      {/* Galeri di kiri bawah pratinjau, makro/lensa tegak di sisi kanan.
+          Lingkaran visual kecil; target sentuh tetap 44px tanpa kotak tambahan. */}
+      <div className={`camera-preview-tools relative z-[11] flex-1 mx-3 mb-2 pointer-events-none ${scanActive ? "min-h-0" : "min-h-16"}`}>
         {photos.length > 0 && !scanActive && (
-          <div className="flex gap-2 overflow-x-auto py-1" data-testid="full-camera-photos">
+          <div className={`camera-photo-strip absolute bottom-0 left-0 flex gap-2 overflow-x-auto py-1 pointer-events-auto ${ready && !camError && !suspended ? "right-14" : "right-0"}`} data-testid="full-camera-photos">
             {photos.map((p, i) => (
-              <div key={i} className="flex items-center shrink-0 rounded-lg bg-black/35">
+              <div key={i} className="relative w-14 h-14 shrink-0">
                 <img src={p} alt={`Foto ${i + 1}`} className="w-14 h-14 object-cover rounded-lg border border-white/30" />
                 <button type="button" aria-label={`Hapus foto ${i + 1}`} onClick={() => setConfirmIdx(i)}
                   data-testid={`full-camera-del-${i}`}
-                  className="w-11 h-11 shrink-0 rounded-lg text-white flex items-center justify-center hover:bg-white/10">
-                  <span className="w-5 h-5 rounded-full bg-red-600 flex items-center justify-center shadow" data-testid={`full-camera-del-icon-${i}`}><X className="w-3 h-3" /></span>
+                  className="absolute top-0 right-0 w-11 h-11 p-0.5 rounded-lg text-white flex items-start justify-end">
+                  <span className="w-[18px] h-[18px] rounded-full bg-red-600 border border-white/70 flex items-center justify-center shadow" data-testid={`full-camera-del-icon-${i}`}><X className="w-3 h-3" /></span>
                 </button>
               </div>
             ))}
           </div>
         )}
-        {!scanActive && ready && !camError && !suspended && <div className="text-center space-y-1" data-testid="full-camera-macro-controls">
-          <div className="flex items-center justify-center gap-1.5 flex-wrap" data-testid="full-camera-lensbar">
+        {!scanActive && ready && !camError && !suspended && <div className="absolute inset-y-0 right-0 w-11 flex flex-col justify-end" data-testid="full-camera-macro-controls">
+          <div className="camera-lensbar flex flex-col items-center max-h-full overflow-y-auto overscroll-contain rounded-full bg-black/20 pointer-events-auto"
+            role="group" aria-label="Makro dan lensa kamera" data-testid="full-camera-lensbar">
           <button type="button" onClick={makro.toggle} aria-pressed={makro.status === "aktif"}
             aria-label={makro.status === "mencari" ? "Batalkan pencarian fokus makro" : makro.status === "aktif" ? "Matikan makro cerdas" : "Aktifkan makro cerdas"}
             title={makro.kemampuan.jenis === "none" ? "Kontrol fokus tidak tersedia; lihat Setelan kamera" : "Makro cerdas — arahkan detail ke tengah"}
             disabled={makro.kemampuan.jenis === "none" || makro.status === "memulihkan" || busy || preparing || panelSetel || editOpen}
-            data-testid="full-camera-macro" className={`flex flex-col w-11 h-11 items-center justify-center rounded-full text-[9px] font-semibold disabled:opacity-40 ${makro.status === "aktif" ? "bg-amber-400 text-black" : "bg-black/50 text-white"}`}>
-            {makro.sibuk ? <Loader2 className="w-4 h-4 animate-spin" /> : <Flower2 className="w-4 h-4" />}
-            {makro.status === "mencari" ? "Batal" : makro.status === "aktif" ? "Aktif" : "Makro"}
+            data-testid="full-camera-macro" className="camera-lens-button w-11 h-11 p-0 shrink-0 flex items-center justify-center rounded-full disabled:opacity-40">
+            <span className="camera-lens-disc flex flex-col items-center justify-center rounded-full font-semibold" aria-hidden="true">
+              {makro.sibuk ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Flower2 className="w-3.5 h-3.5" />}
+              <span className="text-[8px] leading-[9px]">{makro.status === "mencari" ? "Batal" : "Makro"}</span>
+            </span>
           </button>
             {zoomPresets.length >= 2 && zoomPresets.map((z) => (
               <button key={z} type="button" onClick={() => applyZoom(z)} disabled={makro.sibuk || makro.status === "aktif"}
-                data-testid={`full-camera-zoom-${z}`}
-                className={`h-8 min-w-[42px] px-2 rounded-full text-[11px] font-bold transition-colors ${Math.abs((zoom || 1) - z) < 0.05 ? "bg-amber-400 text-black" : "bg-white/20 text-white hover:bg-white/30"}`}>
-                {fmtZoom(z)}×
+                data-testid={`full-camera-zoom-${z}`} aria-label={`Lensa ${fmtZoom(z)} kali`} aria-pressed={Math.abs((zoom || 1) - z) < 0.05}
+                className="camera-lens-button w-11 h-11 p-0 shrink-0 flex items-center justify-center rounded-full disabled:opacity-40">
+                <span className="camera-lens-disc flex items-center justify-center rounded-full font-bold" aria-hidden="true">{fmtZoom(z)}×</span>
               </button>
             ))}
           </div>
-          {makro.pesan && <p role="status" className="text-[10px] leading-snug text-white/85 max-w-xs mx-auto">{makro.pesan}</p>}
         </div>}
+      </div>
+
+      {/* ── Overlay bawah: rana + navigasi ── */}
+      <div className="camera-bottom-controls relative z-10 min-h-0 overflow-y-auto overscroll-contain bg-gradient-to-t from-black/80 to-transparent pt-3 pb-4 px-3 space-y-3">
+        {!scanActive && makro.pesan && <p role="status" className="text-center text-[10px] leading-snug text-white/85 max-w-xs mx-auto">{makro.pesan}</p>}
         {/* Wajib isi Nama Aset dulu sebelum memotret — rana dikunci selama kosong. */}
         {!nameFilled && !scanActive && (
           <button type="button" onClick={() => setEditOpen(true)} data-testid="full-camera-need-name"

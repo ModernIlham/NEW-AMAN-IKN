@@ -18,6 +18,22 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1081] Kamera: silang di sudut foto dan kontrol lensa vertikal — 2026-09-30
+
+- Silang hapus 18px menempel di pojok kanan atas tiap thumbnail 56px, tanpa
+  kotak tambahan di samping foto. Target sentuh tetap 44px dan konfirmasi
+  hapus tetap wajib; ikon berada di dalam gambar sehingga tidak terpotong.
+- Makro dan pilihan zoom/lensa disusun vertikal di sisi kanan pratinjau.
+  Lingkaran tidak aktif 28px; pilihan aktif 38px dengan warna kuning dan
+  penanda aksesibilitas. Pilihan panjang dapat digulir di layar pendek.
+- Galeri berada di kiri bawah pratinjau, tidak bertumpuk dengan lensa. Ruang
+  kosong tetap meneruskan ketuk fokus/gestur kecerahan; indikator kecerahan
+  digeser agar tidak bertumpuk dengan kolom lensa. Layar mendatar memberi
+  ruang tersendiri untuk kolom kanan tanpa menutupi rana/navigasi.
+- Tidak mengubah proses foto, makro, kualitas JPEG, stempel maupun simpan
+  luring. Uji mencakup konfirmasi hapus, pilihan zoom aktif, tata letak
+  responsif dan capture dengan stream kamera simulasi.
+
 ## [#1080] Kamera: thumbnail utuh, stempel ringkas, rasio dan bantuan makro — 2026-09-28
 
 - Tombol hapus foto dipisahkan dari thumbnail: ikon silang 20px di dalam area

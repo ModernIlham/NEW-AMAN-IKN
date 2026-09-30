@@ -469,12 +469,33 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 /* === S1 — Design Token Foundation === */
 
+.camera-lensbar { scrollbar-width: none; }
+.camera-lensbar::-webkit-scrollbar { display: none; }
+.camera-lens-disc {
+  width: 28px; height: 28px; font-size: 10px;
+  color: white; background: rgba(0, 0, 0, 0.5);
+  transition: width 120ms ease, height 120ms ease, background-color 120ms ease;
+}
+.camera-lens-button[aria-pressed="true"] .camera-lens-disc {
+  width: 38px; height: 38px; font-size: 12px;
+  color: #111827; background: #fbbf24;
+}
+@media (prefers-reduced-motion: reduce) {
+  .camera-lens-disc { transition: none; }
+}
+
 /* Layar kamera mendatar/pendek: rincian tetap ada di Edit Info dan stempel,
    jangan mendorong rana/navigasi ke luar layar. Jam dan GPS tetap terlihat. */
 @media (max-height: 540px) {
   [data-testid="full-camera-sheet"] .camera-live-asset-info { display: none; }
   [data-testid="full-camera-sheet"] .camera-bottom-controls { padding-top: 8px; padding-bottom: 8px; }
   [data-testid="full-camera-sheet"] .camera-bottom-controls > :not([hidden]) ~ :not([hidden]) { margin-top: 6px; }
+  /* Kolom tersendiri agar pilihan lensa tetap bisa dijangkau di layar mendatar. */
+  [data-testid="full-camera-sheet"][data-lens-visible="true"] .camera-bottom-controls { padding-right: 68px; }
+  [data-testid="full-camera-sheet"] .camera-lensbar {
+    position: fixed; top: 80px; bottom: 12px; right: 12px; width: 44px;
+    max-height: calc(100dvh - 92px); justify-content: flex-start;
+  }
 }
 
 /* Kontrol desain pin ringkas dan sama pada editor tunggal/massal.
