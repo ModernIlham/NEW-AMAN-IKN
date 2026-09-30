@@ -50,14 +50,31 @@ test("pilih rasio lalu potret memakai bidang yang sama, tetap terikat aset dan m
   expect(gambarWatermarkKamera).toHaveBeenCalledWith(ctx, 1080, 1080, expect.arrayContaining(["3080158999  NUP 10", "Trainer Kit • Lokasi uji"]));
   expect(onCapture).toHaveBeenCalledWith("data:image/jpeg;base64,dGVzdA==", "aset-a");
 });
-test("tombol hapus terpisah dari thumbnail dan tetap membutuhkan konfirmasi", async () => {
+test("silang kecil menempel di sudut thumbnail dan tetap membutuhkan konfirmasi", async () => {
   const onRemovePhoto = jest.fn(); const { unmount } = render(<FullCameraSheet formData={fd} onClose={jest.fn()}
     photos={["data:image/jpeg;base64,dGVzdA=="]} onRemovePhoto={onRemovePhoto} />);
   await screen.findByTestId("full-camera-macro");
   expect(screen.getByTestId("full-camera-macro")).toBeDisabled();
-  expect(screen.getByTestId("full-camera-del-0")).not.toHaveClass("absolute");
-  expect(screen.getByTestId("full-camera-del-icon-0")).toHaveClass("w-5", "h-5");
+  expect(screen.getByTestId("full-camera-del-0")).toHaveClass("absolute", "top-0", "right-0", "w-11", "h-11");
+  expect(screen.getByTestId("full-camera-del-icon-0")).toHaveClass("w-[18px]", "h-[18px]");
+  expect(screen.getByAltText("Foto 1").parentElement).toHaveClass("w-14", "h-14");
   fireEvent.click(screen.getByTestId("full-camera-del-0")); expect(onRemovePhoto).not.toHaveBeenCalled();
   fireEvent.click(screen.getByTestId("full-camera-del-confirm")); expect(onRemovePhoto).toHaveBeenCalledWith(0);
   unmount(); expect(tr.stop).toHaveBeenCalledTimes(1);
+});
+
+test("lensa disusun vertikal dan pilihan aktif mengikuti perubahan zoom", async () => {
+  tr.getCapabilities = () => ({ zoom: { min: 1, max: 5, step: 1 } });
+  tr.getSettings = () => ({ zoom: 1 });
+  tr.applyConstraints = jest.fn(async () => {});
+  render(<FullCameraSheet formData={fd} onClose={jest.fn()} />);
+  const pilihan = await screen.findByTestId("full-camera-zoom-2");
+  expect(screen.getByTestId("full-camera-lensbar")).toHaveClass("flex-col");
+  expect(screen.getByTestId("full-camera-sheet")).toHaveAttribute("data-lens-visible", "true");
+  expect(screen.getByTestId("full-camera-zoom-1")).toHaveAttribute("aria-pressed", "true");
+  expect(pilihan).toHaveAttribute("aria-pressed", "false");
+  await act(async () => { fireEvent.click(pilihan); });
+  expect(tr.applyConstraints).toHaveBeenCalledWith({ advanced: [{ zoom: 2 }] });
+  expect(pilihan).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByTestId("full-camera-zoom-1")).toHaveAttribute("aria-pressed", "false");
 });
