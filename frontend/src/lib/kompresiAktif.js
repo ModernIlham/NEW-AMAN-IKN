@@ -34,7 +34,7 @@ export const URUTAN_PDF = ["ilovepdf", "pypdf"];
  */
 export function sebabTampil(entri) {
   const e = entri || {};
-  const perluTindakan = e.status === "gagal" || e.terpasang === false;
+  const perluTindakan = ["gagal", "sementara", "tidak_tersedia", "kuota"].includes(e.status) || e.terpasang === false;
   return perluTindakan && e.alasan ? String(e.alasan) : "";
 }
 
@@ -56,6 +56,7 @@ export function sisaKuota(entri) {
 export function layakPakai(entri) {
   const e = entri || {};
   if (!e.terpasang) return false;
+  if (e.service === "tinify" && ["sementara", "tidak_tersedia", "kuota"].includes(e.status)) return false;
   return sisaKuota(e) !== 0;
 }
 

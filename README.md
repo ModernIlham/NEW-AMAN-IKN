@@ -8,6 +8,40 @@
 
 ## Ringkasan
 
+### Kompresi foto bertahap: penghematan tambahan di bawah 1%
+
+- Foto aset GridFS (JPEG/PNG/WebP), foto pegawai beserta sumber krop, foto
+  aset lama inline, foto checklist, dan foto kegiatan mendapat giliran saat
+  aplikasi sepi. Setelah hasil hemat **≥1%** diterapkan, foto masuk putaran
+  berikutnya. Hasil hemat **<1%** menjadi titik berhenti (plateau); bukan
+  target ukuran akhir 1% dari foto kamera. Tidak mengecilkan resolusi.
+- Tanda selesai dari aturan lama tanpa catatan ambang diperiksa ulang sekali
+  memakai batas 1%; foto yang belum diproses tetap mendapat prioritas.
+- Kuota Tinify maksimal 500 **operasi** per bulan UTC: shrink satu operasi,
+  konversi JPEG/PNG ke WebP dua operasi. WebP tidak dikonversi format lagi.
+  Anggaran dicadangkan atomik sebelum HTTP, dipadukan counter penyedia, dan
+  tidak dikembalikan sembarangan bila respons putus. Pakai API key khusus
+  instalasi ini; pemakaian serentak dari aplikasi lain di luar kendali AMAN.
+- Cadangan unggahan 50 operasi dilepas pada hari terakhir bulan UTC. Bila
+  kuota habis, antrean lanjut bulan berikutnya. Kegagalan jaringan, kunci,
+  atau kuota tidak lagi membuat foto dilewati permanen setelah tiga galat.
+- Hasil harus WebP utuh, dimensi/transparansi sama, lolos penjaga perubahan
+  piksel besar, serta benar-benar lebih kecil. Sumber yang meragukan tetap
+  disimpan dengan status perlu diperiksa, bukan diklaim selesai. Kompresi
+  lossy tidak menjamin detail identik; verifikasi visual tetap diperlukan.
+- Dokumen/BA/pindaian, spesimen TTD, logo, ikon, dan overlay denah tidak
+  ikut sapuan foto. Lampiran campuran scan BA/foto temuan belum memiliki
+  penanda jenis yang cukup aman, sehingga juga tidak diubah. Thumbnail
+  turunan dioptimalkan lokal tanpa membakar kuota Tinify.
+- Super-admin dapat membaca `GET /api/photo-compression-progress` untuk
+  status blob GridFS dan hash inline yang telah diamati. Angka ini **bukan**
+  sertifikasi bahwa seluruh foto hidup sudah selesai; foto baru tetap
+  disapu. Kuota tersedia di indikator kompresi; status tak diketahui tampil
+  sebagai `—/500`, bukan kuota penuh/kosong yang ditebak.
+- `WEBP_KONVERSI_AKTIF=0` menghentikan worker. Ambang 1% tetap; variabel lama
+  `WEBP_HEMAT_MIN_PERSEN` tidak lagi mengubahnya. Progres disimpan di metadata
+  GridFS/ledger hash; restore/reset tidak menolkan anggaran Tinify sebenarnya.
+
 ### Gulir dan muat ulang di HP
 
 Geser daftar, galeri, atau peta tidak memicu refresh. Untuk memperbarui data

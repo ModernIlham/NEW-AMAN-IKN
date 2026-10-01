@@ -1392,7 +1392,7 @@ async def get_asset(asset_id: str, exclude_media: bool = False, _user: dict = De
             try:
                 raw = await get_photo_from_gridfs(gid)
                 if raw:
-                    return "data:image/jpeg;base64," + base64.b64encode(raw).decode("ascii")
+                    return f"data:{_tebak_media_type(raw)};base64," + base64.b64encode(raw).decode("ascii")
             except Exception:
                 pass
             return ""
@@ -1606,7 +1606,7 @@ async def get_asset_checklist_photo(asset_id: str, item_idx: int, photo_idx: int
         raw = base64.b64decode(data)
     except Exception:
         raise HTTPException(status_code=500, detail="Foto rusak")
-    return Response(content=raw, media_type="image/jpeg", headers=_media_headers(etag))
+    return Response(content=raw, media_type=_tebak_media_type(raw), headers=_media_headers(etag))
 
 
 @assets_router.get("/assets/{asset_id}/checklist/{item_idx}/documents/{doc_idx}")

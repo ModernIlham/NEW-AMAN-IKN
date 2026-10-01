@@ -502,6 +502,24 @@ ILOVEAPI_SECRET_KEY=
 APP_PUBLIC_URL="https://domain-anda.com"
 ```
 
+**Kompresi foto bertahap:** aktif bawaan dengan `WEBP_KONVERSI_AKTIF=1`;
+isi `0` untuk menghentikan worker. Ambang penghematan tambahan tetap **1%**.
+Cadangan `WEBP_KUOTA_SISA_MIN=50` dilepas pada hari terakhir bulan UTC;
+500 adalah batas operasi, bukan jumlah foto (konversi WebP memerlukan dua
+operasi; shrink WebP satu). Gunakan kunci khusus AMAN dan jangan menyalinnya
+ke aplikasi lain. Aturan operasi mengikuti [dokumentasi Tinify](https://tinify.com/developers/reference/http).
+Tidak perlu cron baru: worker hidup bersama backend, mencicil saat sepi,
+menunggu saat kuota habis, lalu melanjutkan periode berikutnya.
+Tanda plateau lama tanpa catatan ambang akan diperiksa ulang sekali dengan
+batas 1%; hasil terverifikasi tidak diulang hanya karena berganti bulan.
+
+Setelah deploy, super-admin dapat memeriksa `/api/photo-compression-progress`
+(memerlukan autentikasi akun pusat) dan indikator kuota kompresi. Statistik
+hash/blob teramati bukan bukti semua foto hidup sudah plateau. Status perlu
+periksa harus ditinjau tanpa menghapus sumber. Koleksi `tinify_budget` tidak
+boleh dihapus/reset/ditimpa backup karena memuat anggaran akun dan transaksi
+yang mungkin sudah ditagih; `provider_used` dan `used` konservatif bisa berbeda.
+
 > ⚠️ **PENTING:** 
 > - `DB_NAME` bisa Anda ganti sesuai keinginan
 > - `JWT_SECRET` **WAJIB acak dan rahasia.** Siapa pun yang mengetahuinya

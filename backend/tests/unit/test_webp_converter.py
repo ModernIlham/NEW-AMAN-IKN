@@ -85,11 +85,12 @@ def test_registry_sumber_prioritas_dan_query():
     # Daftar sengaja diuji PERSIS (bukan sekadar "mengandung"): sumber baru yang
     # disisipkan di tengah akan menggeser prioritas tanpa ada yang menyadari.
     assert nama == ["aset", "pegawai", "pegawai_asli",
-                    "aset_ulang", "pegawai_ulang"]
+                    "aset_ulang", "pegawai_ulang", "pegawai_asli_ulang"]
     q_aset = wc.SUMBER[0]["query"]
     # Query aset tak boleh menyeret blob ber-`jenis` (mis. foto pegawai).
     assert q_aset["metadata.jenis"] == {"$exists": False}
-    assert q_aset["metadata.content_type"] == "image/jpeg"
+    assert q_aset["metadata.content_type"] == {"$in": ["image/jpeg", "image/png"]}
+    assert q_aset["metadata.kind"] == {"$exists": False}
     # Query pegawai spesifik ke jenis-nya & tak menyeret yg sudah webp.
     assert wc.SUMBER[1]["query"]["metadata.jenis"] == "foto_pegawai"
     assert "image/webp" not in wc.SUMBER[1]["query"]["metadata.content_type"]["$in"]
@@ -100,7 +101,7 @@ def test_registry_meta_baru_pertahankan_pemilik():
     m = {"pegawai_id": "peg-1", "jenis": "foto_pegawai", "content_type": "image/png"}
     # Blob WebP baru harus MEMBAWA jenis + pegawai_id agar serve & query kandidat
     # tetap benar.
-    assert wc.SUMBER[1]["meta"](m) == {"jenis": "foto_pegawai", "pegawai_id": "peg-1"}
-    assert wc.SUMBER[2]["meta"]({"pegawai_id": "peg-2"}) == {
-        "jenis": "foto_pegawai_asli", "pegawai_id": "peg-2"}
+    assert wc.SUMBER[1]["meta"](m) == m
+    asli = {"jenis": "foto_pegawai_asli", "pegawai_id": "peg-2", "kompresi": {"asli": 8000}}
+    assert wc.SUMBER[2]["meta"](asli) == asli
     assert wc.SUMBER[0]["meta"]({}) == {}   # aset: tak perlu metadata tambahan
