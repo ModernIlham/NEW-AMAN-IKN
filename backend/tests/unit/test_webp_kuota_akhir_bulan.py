@@ -130,12 +130,12 @@ class TestSumberKonversiUlang:
             nilai = ct if isinstance(ct, str) else ct.get("$in", [])
             assert "image/webp" not in nilai, n
 
-    def test_blob_mentok_disaring_dari_kandidat(self):
-        """Tanpa penyaring ini konverter mengulang blob yang sama tiap putaran
-        dan kuota habis tanpa hasil."""
-        for n in ("aset_ulang", "pegawai_ulang"):
+    def test_plateau_lama_tanpa_bukti_ambang_diperiksa_ulang(self):
+        """Flag lama bisa berasal dari override ambang >1%; status progres
+        baru, bukan flag ini, yang menahan foto setelah verifikasi ulang."""
+        for n in ("aset_ulang", "pegawai_ulang", "pegawai_asli_ulang"):
             q = self._cari(n)["query"]
-            assert q["metadata.webp_ulang_selesai"] == {"$ne": True}, n
+            assert "metadata.webp_ulang_selesai" not in q, n
 
     def test_fase_ulang_memakai_ambang_dan_penanda(self):
         for n in ("aset_ulang", "pegawai_ulang"):

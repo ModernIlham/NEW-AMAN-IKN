@@ -23,6 +23,8 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 - Antrean adil meliputi foto aset JPEG/PNG/WebP, foto pegawai dan sumber krop,
   foto aset inline lama, checklist, serta kegiatan. Hasil hemat ≥1% kembali
   diantrekan; <1% ditandai plateau. Tidak memaksa ukuran akhir menjadi 1%.
+- Plateau versi lama tanpa bukti ambang diperiksa ulang sekali sesuai batas
+  1%, setelah foto yang belum diproses mendapat giliran lebih dahulu.
 - Tinify memakai satu gerbang HTTP async berbatas waktu dengan reservasi
   anggaran lintas-worker 500 operasi/bulan UTC dan rekonsiliasi counter
   penyedia. JPEG/PNG→WebP dihitung 2, WebP shrink 1. Biaya ambigu tidak

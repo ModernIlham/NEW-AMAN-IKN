@@ -365,30 +365,29 @@ SUMBER = [
         "pemilik": _pegawai_pemilik("foto_asli_file_id"), "swap": _pegawai_swap("foto_asli_file_id"),
         "meta": _meta_foto},
     # ── Fase 3 — KONVERSI ULANG WebP yang sudah ada (permintaan pemilik) ──
-    # Foto WebP juga mendapat giliran; plateau lama tetap dihormati.
+    # Foto WebP juga mendapat giliran. Flag plateau lama tidak menyimpan
+    # ambang env saat keputusan dibuat (bisa >1%), jadi verifikasi satu kali
+    # dengan aturan baru. Progres v2 plateau-lah yang kemudian terminal.
     # Penanda skip/gagal lama tidak disaring karena dulunya mencampur galat
     # jaringan dengan foto rusak. Progres v2 mencatat alasan dan retry terpisah.
     {
         "nama": "aset_ulang",
         "query": {"metadata.content_type": "image/webp",
                   "filename": {"$regex": "^photo_"},
-                  "metadata.jenis": {"$exists": False}, "metadata.kind": {"$exists": False},
-                  "metadata.webp_ulang_selesai": {"$ne": True}},
+                  "metadata.jenis": {"$exists": False}, "metadata.kind": {"$exists": False}},
         "pemilik": _aset_pemilik, "swap": _aset_swap, "meta": _meta_foto,
         "ambang_hemat": AMBANG_HEMAT_ULANG, "tanda_selesai": "webp_ulang_selesai"},
     {
         "nama": "pegawai_ulang",
         "query": {"metadata.jenis": "foto_pegawai",
-                  "metadata.content_type": "image/webp",
-                  "metadata.webp_ulang_selesai": {"$ne": True}},
+                  "metadata.content_type": "image/webp"},
         "pemilik": _pegawai_pemilik("foto_file_id"), "swap": _pegawai_swap("foto_file_id"),
         "meta": _meta_foto,
         "ambang_hemat": AMBANG_HEMAT_ULANG, "tanda_selesai": "webp_ulang_selesai"},
     {
         "nama": "pegawai_asli_ulang",
         "query": {"metadata.jenis": "foto_pegawai_asli",
-                  "metadata.content_type": "image/webp",
-                  "metadata.webp_ulang_selesai": {"$ne": True}},
+                  "metadata.content_type": "image/webp"},
         "pemilik": _pegawai_pemilik("foto_asli_file_id"), "swap": _pegawai_swap("foto_asli_file_id"),
         "meta": _meta_foto,
         "ambang_hemat": AMBANG_HEMAT_ULANG, "tanda_selesai": "webp_ulang_selesai"},
@@ -424,9 +423,12 @@ async def _proses_satu(sumber, cadangan=0) -> str:
                 {"metadata.webp_progres.retry_at": {"$not": {"$type": "date"}}},
                 {"metadata.webp_progres.retry_at": {"$lte": now}}],
     }]}
-    # Yang belum pernah dicoba lebih dulu, kemudian hasil putaran terdahulu.
+    # Dahulukan foto tanpa flag plateau warisan agar validasi ulang tidak
+    # menghabiskan kuota sebelum foto lain mendapat kesempatan. Dalam tiap
+    # kelompok, yang belum pernah dicoba lalu percobaan terdahulu lebih dulu.
     f = await db["fs.files"].find_one(query, {"_id": 1, "metadata": 1},
-                                    sort=[("metadata.webp_progres.diperiksa", 1), ("_id", 1)])
+                                    sort=[("metadata.webp_ulang_selesai", 1),
+                                          ("metadata.webp_progres.diperiksa", 1), ("_id", 1)])
     if not f:
         return None
     old_id = f["_id"]
@@ -477,6 +479,7 @@ async def _proses_satu(sumber, cadangan=0) -> str:
         # Ditandai PERMANEN supaya tak dicoba lagi tiap putaran — inilah yang
         # membuat konverter berhenti sendiri saat semua sudah mentok.
         await _catat_progres(old_id, meta, "plateau", retry_at=now,
+                             ambang_persen=AMBANG_HEMAT_PERSEN,
                              hemat_terakhir=hemat_persen(len(old_bytes), len(webp)),
                              ukuran_sekarang=len(old_bytes))
         return "hemat_tipis"
@@ -487,6 +490,7 @@ async def _proses_satu(sumber, cadangan=0) -> str:
     lama_progres = meta.get("webp_progres") or {}
     baru_meta["webp_progres"] = {
         "v": VERSI_PROGRES, "status": "menunggu", "diperiksa": now,
+        "ambang_persen": AMBANG_HEMAT_PERSEN,
         "putaran": int(lama_progres.get("putaran", 0)) + 1,
         "ukuran_awal_teramati": lama_progres.get("ukuran_awal_teramati", len(old_bytes)),
         "ukuran_sekarang": len(webp), "hemat_terakhir": hemat_persen(len(old_bytes), len(webp)),
@@ -671,12 +675,11 @@ async def ringkasan_progres() -> dict:
     menghitung hash yang pernah diamati, bukan banyaknya foto hidup. Foto baru
     atau belum disapu tidak boleh diam-diam dihitung plateau.
     """
-    query = {"$or": [{k: v for k, v in s["query"].items()
-                      if k != "metadata.webp_ulang_selesai"} for s in SUMBER]}
+    query = {"$or": [s["query"] for s in SUMBER]}
     pipeline = [{"$match": query}, {"$group": {
         "_id": {"$ifNull": ["$metadata.webp_progres.status", {
             "$cond": [{"$eq": ["$metadata.webp_ulang_selesai", True]},
-                      "plateau_lama", "belum_diperiksa"]}]},
+                      "menunggu_verifikasi_ulang", "belum_diperiksa"]}]},
         "jumlah_blob": {"$sum": 1}, "bita": {"$sum": "$length"},
     }}]
     gridfs = await db["fs.files"].aggregate(pipeline, maxTimeMS=5000).to_list(20)
@@ -691,5 +694,6 @@ async def ringkasan_progres() -> dict:
         "sapuan_inline_terakhir": cursor.get("updated_at"),
         "semua_selesai": None,
         "catatan": "Statistik blob/hash teramati, bukan bukti seluruh foto hidup sudah selesai. "
-                   "Perlu periksa bukan plateau; foto baru masuk sapuan berikutnya.",
+                   "Perlu periksa bukan plateau; foto baru masuk sapuan berikutnya. "
+                   "Penanda plateau lama menunggu verifikasi ulang ambang 1%.",
     }

@@ -201,6 +201,99 @@ async def test_batas_satu_persen_tepat_dan_plateau_tidak_diulang(dunia, monkeypa
         d.hapus.assert_not_awaited()
 
 
+def _legacy_webp(d, nama="aset_ulang"):
+    d.bita[d.lama] = d.hasil
+    meta = {"content_type": "image/webp", "webp_ulang_selesai": True}
+    if nama != "aset_ulang":
+        jenis = "foto_pegawai" if nama == "pegawai_ulang" else "foto_pegawai_asli"
+        field = "foto_file_id" if nama == "pegawai_ulang" else "foto_asli_file_id"
+        d.mem.assets.delete_many({})
+        d.mem.pegawai.insert_one({"id": "P", field: d.lama})
+        meta.update(jenis=jenis, pegawai_id="P")
+    d.mem["fs.files"].update_one({"_id": ObjectId(d.lama)}, {"$set": {
+        "metadata": meta, "filename": "photo_lama.webp",
+    }})
+    d.sumber = next(s for s in wc.SUMBER if s["nama"] == nama)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("nama", ["aset_ulang", "pegawai_ulang", "pegawai_asli_ulang"])
+async def test_plateau_legacy_diverifikasi_sekali_lalu_terminal_v2(dunia, nama):
+    d = dunia
+    _legacy_webp(d, nama)
+    # Flag warisan mungkin dibuat saat env ambangnya 3%; tanpa bukti ambang
+    # lama, satu pemeriksaan diperlukan, bukan langsung dianggap selesai 1%.
+    assert await wc._proses_satu(d.sumber) == "hemat_tipis"
+    progres = _meta(d)["webp_progres"]
+    assert progres["v"] == wc.VERSI_PROGRES
+    assert progres["status"] == "plateau"
+    assert progres["ambang_persen"] == 1.0
+    assert progres["hemat_terakhir"] < 1.0
+    for _ in range(3):
+        assert await wc._proses_satu(d.sumber) is None
+    d.api.assert_awaited_once()
+    d.simpan.assert_not_awaited()
+    d.hapus.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_plateau_legacy_galat_sementara_retry_bukan_terminal(dunia):
+    d = dunia
+    _legacy_webp(d)
+    d.api.return_value = HasilTinify(status="sementara")
+    assert await wc._proses_satu(d.sumber) == "sementara"
+    assert _meta(d)["webp_progres"]["status"] == "menunggu"
+    assert await wc._proses_satu(d.sumber) is None
+    d.mem["fs.files"].update_one({"_id": ObjectId(d.lama)}, {"$set": {
+        "metadata.webp_progres.retry_at": datetime.now(timezone.utc) - timedelta(seconds=1),
+    }})
+    d.api.return_value = HasilTinify(data=d.hasil, status="ok")
+    assert await wc._proses_satu(d.sumber) == "hemat_tipis"
+    assert _meta(d)["webp_progres"]["status"] == "plateau"
+    assert await wc._proses_satu(d.sumber) is None
+    assert d.api.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_foto_belum_diperiksa_dahulu_sebelum_validasi_plateau_legacy(dunia):
+    d = dunia
+    _legacy_webp(d)
+    baru_belum_dicoba = str(ObjectId())
+    d.mem["fs.files"].insert_one({"_id": ObjectId(baru_belum_dicoba), "filename": "photo_belum.webp",
+                                "metadata": {"content_type": "image/webp"}})
+    d.mem.assets.insert_one({"id": "B", "version": 1, "photo_gridfs_ids": [baru_belum_dicoba]})
+    d.bita[baru_belum_dicoba] = d.hasil
+    # Legacy dibuat lebih dahulu (ObjectId lebih kecil); sortir baru harus
+    # tetap memberi jatah pertama ke foto tanpa penanda legacy.
+    assert await wc._proses_satu(d.sumber) == "hemat_tipis"
+    assert _meta(d, baru_belum_dicoba)["webp_progres"]["status"] == "plateau"
+    assert "webp_progres" not in _meta(d)
+    assert await wc._proses_satu(d.sumber) == "hemat_tipis"
+    assert _meta(d)["webp_progres"]["status"] == "plateau"
+    assert await wc._proses_satu(d.sumber) is None
+    assert d.api.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_plateau_legacy_masih_hemat_dua_persen_dilanjutkan(dunia, monkeypatch):
+    d = dunia
+    _legacy_webp(d)
+    d.bita[d.lama] = b"a" * 10000
+    d.api.return_value = HasilTinify(data=b"b" * 9800, status="ok")
+    monkeypatch.setattr(wc, "sumber_foto_valid", lambda data: True)
+    monkeypatch.setattr(wc, "verifikasi_foto", lambda a, b: True)
+    assert await wc._proses_satu(d.sumber) == "sukses"
+    meta = _meta(d, d.baru)
+    assert "webp_ulang_selesai" not in meta
+    assert meta["webp_progres"]["status"] == "menunggu"
+    assert meta["webp_progres"]["hemat_terakhir"] == 2.0
+    assert meta["webp_progres"]["ambang_persen"] == 1.0
+    assert await wc._proses_satu(d.sumber) == "hemat_tipis"
+    assert _meta(d, d.baru)["webp_progres"]["status"] == "plateau"
+    assert await wc._proses_satu(d.sumber) is None
+    assert d.api.await_count == 2
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status", ["sementara", "kuota", "tidak_tersedia"])
 async def test_lebih_dari_tiga_galat_sementara_tetap_bisa_retry(dunia, status):
@@ -446,7 +539,7 @@ async def test_ringkasan_hanya_observasi_bukan_klaim_semua_selesai(dunia):
     groups = {g["status"]: (g["jumlah_blob"], g["bita"]) for g in result["gridfs"]}
     assert groups == {
         "belum_diperiksa": (2, 200), "plateau": (1, 100), "menunggu": (1, 100),
-        "perlu_periksa": (1, 100), "yatim": (1, 100), "plateau_lama": (1, 100),
+        "perlu_periksa": (1, 100), "yatim": (1, 100), "menunggu_verifikasi_ulang": (1, 100),
     }
     assert {g["status"]: g["jumlah_hash"] for g in result["inline_teramati"]} == {
         "plateau": 2, "retry": 1, "manual_review": 1,

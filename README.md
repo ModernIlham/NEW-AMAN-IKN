@@ -15,6 +15,8 @@
   aplikasi sepi. Setelah hasil hemat **≥1%** diterapkan, foto masuk putaran
   berikutnya. Hasil hemat **<1%** menjadi titik berhenti (plateau); bukan
   target ukuran akhir 1% dari foto kamera. Tidak mengecilkan resolusi.
+- Tanda selesai dari aturan lama tanpa catatan ambang diperiksa ulang sekali
+  memakai batas 1%; foto yang belum diproses tetap mendapat prioritas.
 - Kuota Tinify maksimal 500 **operasi** per bulan UTC: shrink satu operasi,
   konversi JPEG/PNG ke WebP dua operasi. WebP tidak dikonversi format lagi.
   Anggaran dicadangkan atomik sebelum HTTP, dipadukan counter penyedia, dan

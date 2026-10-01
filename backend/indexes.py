@@ -707,6 +707,7 @@ async def create_indexes() -> None:
         # Sapuan foto bertahap: pemilihan sumber + urutan kunjungan, bukan
         # pemindaian foto/GridFS lain (dokumen/TTD tetap di luar registry).
         await _idx(db["fs.files"], [("metadata.content_type", 1), ("metadata.jenis", 1),
+                                  ("metadata.webp_ulang_selesai", 1),
                                   ("metadata.webp_progres.diperiksa", 1), ("_id", 1)],
                    name="foto_kompresi_sapuan")
         await _idx(db.foto_kompresi_status, "status", name="foto_kompresi_status")

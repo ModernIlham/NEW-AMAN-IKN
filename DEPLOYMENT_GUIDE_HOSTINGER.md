@@ -510,6 +510,8 @@ operasi; shrink WebP satu). Gunakan kunci khusus AMAN dan jangan menyalinnya
 ke aplikasi lain. Aturan operasi mengikuti [dokumentasi Tinify](https://tinify.com/developers/reference/http).
 Tidak perlu cron baru: worker hidup bersama backend, mencicil saat sepi,
 menunggu saat kuota habis, lalu melanjutkan periode berikutnya.
+Tanda plateau lama tanpa catatan ambang akan diperiksa ulang sekali dengan
+batas 1%; hasil terverifikasi tidak diulang hanya karena berganti bulan.
 
 Setelah deploy, super-admin dapat memeriksa `/api/photo-compression-progress`
 (memerlukan autentikasi akun pusat) dan indikator kuota kompresi. Statistik
