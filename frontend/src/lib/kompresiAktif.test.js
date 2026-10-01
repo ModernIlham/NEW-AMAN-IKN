@@ -105,6 +105,12 @@ describe("jawaban server diutamakan", () => {
 });
 
 describe("syarat giliran", () => {
+  test.each(["sementara", "tidak_tersedia", "kuota"])("Tinify %s tidak dipilih dari counter lama", (status) => {
+    const gagal = entri("tinify", { status, used: 100, remaining: 400, alasan: "Belum dapat dipastikan" });
+    expect(layakPakai(gagal)).toBe(false);
+    expect(sebabTampil(gagal)).toBe("Belum dapat dipastikan");
+    expect(entriAktif([gagal, pillow()]).service).toBe("pillow");
+  });
   test("kunci belum dipasang → dilewati", () => {
     expect(layakPakai(entri("compresto", { terpasang: false }))).toBe(false);
   });

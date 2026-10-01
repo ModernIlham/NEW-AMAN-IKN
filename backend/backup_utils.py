@@ -27,6 +27,11 @@ SKIP_COLLECTIONS = {
     # runtime murni yang dibangun ulang sendiri; membawanya ke DB hasil
     # restore mengembalikan kursor migrasi ke posisi lama (audit kesegaran).
     "app_runtime",
+    # Pengeluaran Tinify adalah keadaan akun penyedia, bukan data arsip.
+    # Restore/reset tak boleh mengembalikan reservasi biaya ambigu ke nol.
+    "tinify_budget",
+    # Ledger berbasis hash turunan foto; tidak berisi foto/data induk.
+    "foto_kompresi_status",
     # Observasi posisi IoT (Fase 11) — DIKECUALIKAN demi RETENSI, bukan demi
     # ukuran arsip. Retensi 30/90/365 hari ditegakkan TTL index; kalau observasi
     # ikut masuk arsip backup yang disimpan bertahun, jejak lokasi perangkat

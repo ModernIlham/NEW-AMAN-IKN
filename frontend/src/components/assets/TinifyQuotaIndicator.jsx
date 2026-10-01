@@ -87,6 +87,8 @@ function BarisLayanan({ q, aktif }) {
             <span className="text-slate-500">belum</span>
           ) : takTerbatas ? (
             <span className="text-emerald-400" title="Tak terbatas — lokal, tanpa kuota">∞</span>
+          ) : q.used == null ? (
+            <span className="text-slate-400" title="Kuota belum dapat dipastikan">—/{q.limit}</span>
           ) : (
             <span className={q.remaining < 50 ? "text-amber-400" : ""}>{q.remaining}/{q.limit}</span>
           )}
@@ -149,6 +151,10 @@ function PanelKuota({ imageQuotas, pdfQuotas, aktifGambar, aktifPdf }) {
 
       <p className="text-[10px] text-slate-500 leading-tight pt-1 border-t border-slate-700">
         Urutan: Tinify → Compresto → Uploadcare → Lokal. Otomatis beralih jika kuota habis.
+      </p>
+      <p className="text-[10px] text-slate-500 leading-tight">
+        Foto diproses ulang bertahap saat sepi sampai penghematan tambahan di bawah 1%.
+        Kuota Tinify dihitung per operasi, bukan per foto; konversi ke WebP memakai 2 operasi.
       </p>
     </div>
   );

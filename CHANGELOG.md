@@ -18,6 +18,28 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1083] Foto: kompresi bertahap sampai hemat tambahan di bawah 1% — 2026-10-01
+
+- Antrean adil meliputi foto aset JPEG/PNG/WebP, foto pegawai dan sumber krop,
+  foto aset inline lama, checklist, serta kegiatan. Hasil hemat ≥1% kembali
+  diantrekan; <1% ditandai plateau. Tidak memaksa ukuran akhir menjadi 1%.
+- Tinify memakai satu gerbang HTTP async berbatas waktu dengan reservasi
+  anggaran lintas-worker 500 operasi/bulan UTC dan rekonsiliasi counter
+  penyedia. JPEG/PNG→WebP dihitung 2, WebP shrink 1. Biaya ambigu tidak
+  dikembalikan buta; restore/reset tidak menolkan anggaran penyedia.
+- Gangguan sementara/kuota tidak lagi menjadi skip permanen setelah tiga
+  kegagalan. Cadangan unggahan dilepas akhir bulan; antrean menunggu periode
+  berikutnya jika jatah habis. Lease diperbarui selama I/O dan hasil usang
+  tidak mengganti foto saat pemilik/versi/lease berubah.
+- Verifikasi decode, dimensi, alfa, perubahan piksel besar, dan baca ulang
+  blob mendahului pergantian. Metadata ukuran awal teramati/putaran dipertahankan.
+  Blob lama yang masih dirujuk tidak dihapus. Dokumen, TTD, dan lampiran campuran
+  BA/foto tetap dikecualikan; thumbnail turunan tetap lokal.
+- Diagnostik super-admin `/api/photo-compression-progress` membedakan plateau,
+  menunggu, perlu periksa, dan belum diamati. Counter tak diketahui tidak
+  ditampilkan seolah nol. Uji memakai Mongo/HTTP tiruan, tanpa memakai kuota
+  atau mengirim foto produksi untuk percobaan.
+
 ## [#1082] Kamera: perpindahan lensa makro nyata dan bantuan fokus terpisah — 2026-09-30
 
 - Tombol Makro kini membuka kamera berbeda dengan ID perangkat yang tepat,

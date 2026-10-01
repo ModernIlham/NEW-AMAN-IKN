@@ -161,7 +161,7 @@ class TestLoopTerpasang:
         """Konstanta mati di loop = bantalan tak pernah dilepas, sisa kuota
         tetap hangus tiap bulan."""
         src = self._src()
-        assert "ambang_kuota_sisa(datetime.now(WIB))" in src
+        assert "ambang_kuota_sisa(datetime.now(timezone.utc))" in src
         loop = src.split("async def _loop", 1)[1]
         assert "> KUOTA_SISA_MIN" not in loop
 

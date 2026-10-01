@@ -261,7 +261,7 @@ class TestTerpasangDiRantaiSungguhan:
     def test_endpoint_kuota_mengirim_layanan_aktif(self):
         src = self._src()
         fn = src.split("async def get_all_compression_quotas", 1)[1]
-        assert '"aktif": layanan_aktif(quotas)' in fn
+        assert '"aktif": layanan_aktif(pilihan_aktif)' in fn
 
     @pytest.mark.parametrize("layanan", ["tinify", "compresto", "uploadcare", "pillow"])
     def test_endpoint_kuota_mengirim_terpasang_tiap_layanan(self, layanan):

@@ -704,6 +704,12 @@ async def create_indexes() -> None:
         # ulang: cari semua tautan satu dokumen sekaligus.
         await _idx(db.tautan_pendek, [("jenis", 1), ("ref", 1)],
                                             name="tautan_pendek_jenis_ref")
+        # Sapuan foto bertahap: pemilihan sumber + urutan kunjungan, bukan
+        # pemindaian foto/GridFS lain (dokumen/TTD tetap di luar registry).
+        await _idx(db["fs.files"], [("metadata.content_type", 1), ("metadata.jenis", 1),
+                                  ("metadata.webp_progres.diperiksa", 1), ("_id", 1)],
+                   name="foto_kompresi_sapuan")
+        await _idx(db.foto_kompresi_status, "status", name="foto_kompresi_status")
         if _KEGAGALAN_INDEKS:
             logger.error(
                 "Pembuatan indeks selesai dengan %d KEGAGALAN — kueri terkait "

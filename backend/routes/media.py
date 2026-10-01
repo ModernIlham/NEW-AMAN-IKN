@@ -4,7 +4,7 @@ Chain: Tinify → Compresto → Uploadcare → Local (Pillow)
 Quota tracking stored in MongoDB.
 
 Provides: POST /compress-image, GET /compression-stats, GET /compression-quotas
-Dependencies: tinify (optional), Pillow, httpx
+Dependencies: Pillow, httpx (Tinify memakai REST async bersama)
 """
 import io
 import os
@@ -19,8 +19,8 @@ from PIL import Image as PILImage, ImageOps
 import httpx
 
 from db import db
-from auth_utils import require_user
-from shared_utils import TINIFY_API_KEY, TINIFY_AVAILABLE
+from auth_utils import require_user, require_super_admin
+from shared_utils import TINIFY_API_KEY
 
 logger = logging.getLogger(__name__)
 media_router = APIRouter()
@@ -28,6 +28,7 @@ media_router = APIRouter()
 # API Keys from environment
 from kompresi_diagnostik import catat_percobaan, ringkas_layanan
 from kompresi_rantai import URUTAN, layanan_aktif
+from tinify_service import optimalkan as optimalkan_tinify, status_kuota as status_tinify
 
 COMPRESTO_API_KEY = os.environ.get("COMPRESTO_API_KEY", "")
 UPLOADCARE_PUBLIC_KEY = os.environ.get("UPLOADCARE_PUBLIC_KEY", "")
@@ -49,6 +50,10 @@ async def get_current_month():
 
 async def get_quota(service: str) -> dict:
     """Get quota usage for a service in current month."""
+    if service == "tinify":
+        q = await status_tinify()
+        # Kontrak lama selalu numerik. Status tak diketahui BUKAN sisa gratis.
+        return {**q, "service": service, "used": q["used"] if q["used"] is not None else 500}
     month = await get_current_month()
     quota = await db.compression_quotas.find_one(
         {"service": service, "month": month}, {"_id": 0}
@@ -60,6 +65,8 @@ async def get_quota(service: str) -> dict:
 
 async def increment_quota(service: str):
     """Increment usage count for a service."""
+    if service == "tinify":
+        raise ValueError("Anggaran Tinify harus direservasi melalui tinify_service")
     month = await get_current_month()
     await db.compression_quotas.update_one(
         {"service": service, "month": month},
@@ -151,31 +158,9 @@ def compress_with_pillow(image_bytes: bytes, max_size_kb: int = 500) -> bytes:
 
 
 async def compress_with_tinify(image_bytes: bytes) -> Optional[bytes]:
-    """Compress using Tinify API."""
-    if not TINIFY_AVAILABLE:
-        return None
-    if not await is_quota_available("tinify"):
-        logger.info("Tinify quota exhausted")
-        return None
-    try:
-        import tinify
-
-        def _kirim():
-            # SELURUH panggilan dijalankan di thread — termasuk `from_buffer`.
-            # Sebelumnya hanya `.to_buffer` yang dilempar ke thread, padahal
-            # `tinify.from_buffer(...)` ITU SENDIRI melakukan POST /shrink
-            # secara sinkron. Akibatnya event loop terhenti selama tiap
-            # unggahan foto: simpan aset, sinkronisasi luring, dan permintaan
-            # pengguna lain ikut membeku — gejalanya tampak seperti "server
-            # lambat", bukan seperti kompresi yang memblokir.
-            return tinify.from_buffer(image_bytes).to_buffer()
-
-        compressed = await asyncio.to_thread(_kirim)
-        await increment_quota("tinify")
-        return compressed
-    except Exception as e:
-        logger.warning(f"Tinify error: {e}")
-        return None
+    """Gerbang async bersama unggahan dan worker; tidak ada counter kedua."""
+    hasil = await optimalkan_tinify(image_bytes)
+    return hasil.data
 
 
 def _sekarang() -> str:
@@ -417,24 +402,22 @@ async def compress_image(request: CompressRequest, _user: dict = Depends(require
 @media_router.get("/compression-stats")
 async def get_compression_stats(_user: dict = Depends(require_user)):
     """Get current Tinify compression usage stats (backward compatible)."""
-    stats = {
-        "tinify_available": TINIFY_AVAILABLE,
+    q = await status_tinify()
+    return {
+        "tinify_available": q["tersedia"],
         "tinify_api_key_set": bool(TINIFY_API_KEY),
         "monthly_limit": 500,
-        "compressions_this_month": 0,
-        "remaining": 500,
+        "compressions_this_month": q["used"],
+        "remaining": q["remaining"],
+        "status": q["status"],
     }
-    if TINIFY_AVAILABLE:
-        try:
-            import tinify
-            tinify.validate()
-            stats["compressions_this_month"] = getattr(tinify, 'compression_count', 0) or 0
-            stats["remaining"] = 500 - stats["compressions_this_month"]
-        except Exception:
-            # Jangan bocorkan pesan galat internal SDK ke klien.
-            logger.warning("Gagal validasi Tinify saat ambil stats", exc_info=True)
-            stats["error"] = "Gagal memuat kuota kompresi"
-    return stats
+
+
+@media_router.get("/photo-compression-progress")
+async def get_photo_compression_progress(_user: dict = Depends(require_super_admin)):
+    """Progres optimasi tersimpan, khusus admin utama; tidak membakar kuota."""
+    from webp_converter import ringkasan_progres
+    return await ringkasan_progres()
 
 
 @media_router.get("/compression-quotas")
@@ -444,29 +427,20 @@ async def get_all_compression_quotas(_user: dict = Depends(require_user)):
     quotas = []
 
     # Tinify
-    tinify_quota = await get_quota("tinify")
+    tinify_quota = await status_tinify()
     tinify_used = tinify_quota["used"]
-    # Also check Tinify's own counter
-    if TINIFY_AVAILABLE:
-        try:
-            import tinify
-            tinify.validate()
-            tinify_api_count = getattr(tinify, 'compression_count', 0) or 0
-            if tinify_api_count > tinify_used:
-                tinify_used = tinify_api_count
-        except Exception:
-            pass
     quotas.append({
+        **tinify_quota,
         "service": "tinify",
         "name": "Tinify (TinyPNG)",
         "used": tinify_used,
         "limit": SERVICE_LIMITS["tinify"],
-        "remaining": max(0, SERVICE_LIMITS["tinify"] - tinify_used),
-        "available": bool(TINIFY_API_KEY),
-        # `terpasang` = syarat masuk rantai, PERSIS seperti yang diperiksa
-        # `compress_with_tinify`: pustaka ada DAN kunci ada. Kunci terisi
-        # tanpa pustaka terpasang berarti layanannya tak pernah dipanggil.
-        "terpasang": bool(TINIFY_API_KEY) and bool(TINIFY_AVAILABLE),
+        "remaining": tinify_quota["remaining"],
+        "available": tinify_quota["tersedia"],
+        "terpasang": bool(TINIFY_API_KEY),
+        "alasan": {"sementara": "Kuota belum dapat dipastikan; kompresi memakai layanan berikutnya",
+                   "tidak_tersedia": "Tinify belum tersedia atau kunci ditolak",
+                   "kuota": "Anggaran kompresi bulan ini habis"}.get(tinify_quota["status"], ""),
         "month": month,
     })
 
@@ -511,5 +485,8 @@ async def get_all_compression_quotas(_user: dict = Depends(require_user)):
     # memori, hangus tiap restart). Indikator kuota yang memakainya menampilkan
     # 0/500 milik Tinify padahal Compresto masih menyisakan ratusan — laporan
     # lapangan yang memunculkan perubahan ini.
+    # Counter diketahui tetapi provider sedang ditahan/gagal → jangan mengaku
+    # Tinify akan dipakai. Kuota historis tetap ditampilkan apa adanya.
+    pilihan_aktif = [q for q in quotas if q["service"] != "tinify" or q["available"]]
     return {"quotas": quotas, "month": month,
-            "aktif": layanan_aktif(quotas), "urutan": list(URUTAN)}
+            "aktif": layanan_aktif(pilihan_aktif), "urutan": list(URUTAN)}
