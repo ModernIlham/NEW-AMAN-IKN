@@ -75,6 +75,9 @@ logger.info(f"CORS allowed origins: {ALLOWED_ORIGINS}")
 from pemeliharaan import PemeliharaanMiddleware
 app.add_middleware(PemeliharaanMiddleware)
 
+from portal_middleware import PortalPemegangMiddleware
+app.add_middleware(PortalPemegangMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -92,6 +95,7 @@ app.add_middleware(RequestContextMiddleware)
 # WebP latar agar HANYA bekerja saat aplikasi benar-benar sepi.
 from activity_tracker import AktivitasMiddleware
 app.add_middleware(AktivitasMiddleware)
+
 
 # Log config status
 from shared_utils import TINIFY_API_KEY, RESEND_API_KEY
@@ -467,6 +471,8 @@ from routes.persediaan_permohonan import persediaan_permohonan_router
 from routes.aset_permohonan import aset_permohonan_router
 from routes.tgr import tgr_router
 from routes.penggunaan import penggunaan_router
+from routes.portal_auth import portal_auth_router
+from routes.portal_pemegang import portal_pemegang_router
 from routes.syarat_dokumen import syarat_dokumen_router
 from routes.pengamanan import pengamanan_router
 from routes.pemeliharaan import pemeliharaan_router
@@ -541,6 +547,8 @@ api_router.include_router(persediaan_laporan_router)
 api_router.include_router(aset_permohonan_router)
 api_router.include_router(tgr_router)
 api_router.include_router(penggunaan_router)
+api_router.include_router(portal_auth_router)
+api_router.include_router(portal_pemegang_router)
 api_router.include_router(syarat_dokumen_router)
 api_router.include_router(pengamanan_router)
 api_router.include_router(pemeliharaan_router)
@@ -644,6 +652,11 @@ async def reset_all_data(data: ResetConfirmation, _admin: dict = Depends(require
                     "— beralih ke 'Semua Satker' dulu."))
     if data.confirmation != "HAPUS SEMUA":
         raise HTTPException(status_code=400, detail="Kata konfirmasi tidak valid")
+
+    # Kredensial transien tidak masuk collections_to_reset. Cabut sebelum
+    # menghapus data agar tidak hidup lagi jika identitas yang sama dipulihkan.
+    from portal_auth import cabut_semua_portal_akses
+    await cabut_semua_portal_akses("Reset sistem")
 
     # DINAMIS (#290): hapus SELURUH koleksi data (operasional & referensi) +
     # GridFS, KECUALI akun & konfigurasi (users/report_settings/quotas) agar admin

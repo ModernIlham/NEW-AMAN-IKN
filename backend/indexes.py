@@ -711,6 +711,34 @@ async def create_indexes() -> None:
                                   ("metadata.webp_progres.diperiksa", 1), ("_id", 1)],
                    name="foto_kompresi_sapuan")
         await _idx(db.foto_kompresi_status, "status", name="foto_kompresi_status")
+        # Portal pemegang: alias multikey menahan penugasan ganda untuk satu
+        # identitas fisik, termasuk saudara lintas kegiatan tanpa register.
+        await _idx(db.portal_penugasan, "id", unique=True, name="portal_penugasan_id")
+        await _idx(db.portal_penugasan, "slot_aktif", unique=True,
+                   partialFilterExpression={"slot_aktif": {"$exists": True}},
+                   name="portal_penugasan_slot_aktif")
+        await _idx(db.portal_penugasan, [("kode_satker", 1), ("pegawai_id", 1), ("status", 1)],
+                   name="portal_penugasan_pemegang")
+        await _idx(db.portal_penugasan, [("asset_id", 1), ("created_at", -1)],
+                   name="portal_penugasan_aset")
+        await _idx(db.portal_laporan, "id", unique=True, name="portal_laporan_id")
+        await _idx(db.portal_laporan, [("kode_satker", 1), ("status", 1), ("created_at", -1)],
+                   name="portal_laporan_antrean")
+        await _idx(db.portal_laporan, [("pegawai_id", 1), ("created_at", -1)],
+                   name="portal_laporan_pemegang")
+        await _idx(db.portal_laporan, [("penugasan_id", 1), ("created_at", -1)],
+                   name="portal_laporan_penugasan")
+        await _idx(db.portal_laporan, [("asset_id", 1), ("created_at", -1)],
+                   name="portal_laporan_aset")
+        await _idx(db.portal_pemegang_akses, "id", unique=True, name="portal_akses_pegawai")
+        await _idx(db.portal_pemegang_akses, [("kode_satker", 1), ("aktif", 1)], name="portal_akses_satker")
+        await _idx(db.portal_pemegang_tokens, "expires_at", expireAfterSeconds=0, name="portal_token_ttl")
+        await _idx(db.portal_pemegang_tokens, "pegawai_id", name="portal_token_pegawai")
+        await _idx(db.portal_pemegang_sesi, "expires_at", expireAfterSeconds=0, name="portal_sesi_ttl")
+        await _idx(db.portal_pemegang_sesi, "idle_expires_at", expireAfterSeconds=0, name="portal_sesi_idle_ttl")
+        await _idx(db.portal_pemegang_sesi, "pegawai_id", name="portal_sesi_pegawai")
+        await _idx(db.portal_pemegang_sesi, "id", unique=True, name="portal_sesi_id")
+        await _idx(db.portal_pemegang_batas, "expires_at", expireAfterSeconds=0, name="portal_batas_ttl")
         if _KEGAGALAN_INDEKS:
             logger.error(
                 "Pembuatan indeks selesai dengan %d KEGAGALAN — kueri terkait "

@@ -18,6 +18,31 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1084] Portal Pemegang BMN: penugasan, laporan berbukti dan tinjauan — 2026-10-03
+
+- Tahap pertama **BMN Saya** (`/bmn-saya`) tanpa akun staf/password, memakai
+  tautan email sekali pakai pada browser yang sama. Email Master Pegawai dan
+  pemetaan penugasan sah harus diperiksa admin; email ambigu tidak membuka akses.
+- Akses/sesi terpisah dari JWT staf, cookie aman, token di-hash, masa berlaku,
+  pembatasan pengiriman dan CSRF. Perubahan identitas melalui edit/impor serta
+  pemulihan backup mencabut akses. Token/sesi tidak menjadi bagian backup.
+- Pengelola menautkan dasar penugasan; pemegang mengonfirmasi/menyanggah,
+  melaporkan kondisi, penggunaan, lokasi, kerusakan, kehilangan, perbaikan atau
+  permohonan pengembalian. Kehilangan tidak mewajibkan foto barang saat ini.
+- Maksimal tiga bukti gambar, total 3 MiB, diverifikasi isinya dan dicatat
+  hash serta waktu penerimaan. Bukti tersimpan tetap, tidak masuk Tinify;
+  hanya pemegang yang masih berhak atau staf satker yang dapat membukanya.
+- Draf/antrean luring opt-in khusus perangkat pribadi, terpisah dari data
+  staf. Setelah tersambung, sesi serta versi penugasan diperiksa kembali;
+  pengiriman ulang ber-idempotensi, tanpa menimpa penugasan yang sudah berubah.
+- Antrean tinjauan operator/admin, larangan meninjau laporan sendiri,
+  klarifikasi sebagai laporan lanjutan, serta jejak di Timeline Aset.
+  Verifikasi laporan **tidak** mengubah master, pemegang resmi, nilai buku,
+  penyusutan, jurnal, TGR atau penghapusan. Proses resmi tetap terpisah.
+- Kontrak integrasi §5P masterplan, panduan pengguna dan deployment diselaraskan.
+  Penerusan kasus lintas modul, serah terima atomik BAST/TTD, pengingat dan
+  eskalasi adalah tahap berikutnya, bukan diklaim selesai di rilis ini.
+
 ## [#1083] Foto: kompresi bertahap sampai hemat tambahan di bawah 1% — 2026-10-01
 
 - Antrean adil meliputi foto aset JPEG/PNG/WebP, foto pegawai dan sumber krop,

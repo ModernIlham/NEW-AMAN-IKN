@@ -239,7 +239,7 @@ export const SIKLUS_MODULES = [
     urutan: 4,
     status: "aktif",
     fase: 3,
-    ringkas: "Rekap pemegang, BMN idle, register SK PSP, dan tiket proses 4 rezim PMK 40/2024 sudah bisa dibuka.",
+    ringkas: "Rekap pemegang, portal BMN Saya dan tinjauan laporan, BMN idle, register SK PSP, dan proses penggunaan.",
     deskripsi:
       "Penggunaan BMN sesuai PMK 40 Tahun 2024: Penetapan Status Penggunaan (PSP), Alih "
       + "Status Penggunaan, Penggunaan Sementara, Penggunaan BMN untuk dioperasikan Pihak "
@@ -251,6 +251,7 @@ export const SIKLUS_MODULES = [
     ],
     fitur: [
       "✅ Rekap aset per pemegang lintas kegiatan + kelengkapan BAST/NIP",
+      "✅ Portal BMN Saya: akses email terverifikasi, pemetaan penugasan, konfirmasi/sanggahan, laporan berbukti dan tinjauan operator; bukan perubahan master/akuntansi otomatis",
       "✅ Daftar Barang yang Digunakan per pemegang (PDF lampiran BAST, tanda tangan pemegang + KPB)",
       "✅ Daftar pantau BMN idle (PMK 120/2024): kandidat otomatis + tiket klarifikasi → usul serah → diserahkan + ekspor CSV register tiket",
       "✅ Register SK penetapan penggunaan multi-aset (PSP/alih status/sementara/pihak lain/bersama) + cakupan aset ter-PSP + ekspor CSV",

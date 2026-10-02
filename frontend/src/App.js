@@ -47,6 +47,7 @@ const PersediaanPage = lazy(() => import("./pages/PersediaanPage"));
 const PelaporanPage = lazy(() => import("./pages/PelaporanPage"));
 const PersuratanPage = lazy(() => import("./pages/PersuratanPage"));
 const PenggunaanPage = lazy(() => import("./pages/PenggunaanPage"));
+const PortalPemegangPage = lazy(() => import("./pages/PortalPemegangPage"));
 const PengamananPage = lazy(() => import("./pages/PengamananPage"));
 const PemeliharaanPage = lazy(() => import("./pages/PemeliharaanPage"));
 const PerencanaanPage = lazy(() => import("./pages/PerencanaanPage"));
@@ -87,7 +88,7 @@ const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 // common industry default for business apps (well under the 24h token TTL).
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 
-function App() {
+function InternalApp() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const { dark, toggle: toggleDark } = useDarkMode();
@@ -891,6 +892,20 @@ function App() {
       <PusatUnduhan aktif={!!user} />
     </div>
   );
+}
+
+// Portal pemegang tidak memasang interceptor, heartbeat, snapshot, dan sesi
+// staf. Satu peramban boleh menyimpan sesi staf tanpa meminjamkannya ke portal.
+function App() {
+  if (/^\/bmn-saya\/?$/.test(window.location.pathname)) {
+    return (
+      <div className="App">
+        <HalamanLazy fallback={<PageLoader />}><PortalPemegangPage /></HalamanLazy>
+        <Toaster position="top-right" richColors />
+      </div>
+    );
+  }
+  return <InternalApp />;
 }
 
 export default App;

@@ -22,6 +22,7 @@ Catatan casing: koleksi `assets` memakai `NUP` (kapital); `mutasi_bmn`,
 MODUL_LABEL = {
     "inventarisasi": "Inventarisasi",
     "penggunaan": "Penggunaan",
+    "portal_pemegang": "Laporan Pemegang",
     "pemanfaatan": "Pemanfaatan",
     "pemeliharaan": "Pemeliharaan",
     "pengamanan": "Pengamanan",
@@ -67,6 +68,13 @@ LABEL_STATUS = {
     "dibatalkan": "Dibatalkan",
     "aktif": "Aktif",
     "berakhir": "Berakhir",
+    "menunggu_konfirmasi": "Menunggu konfirmasi pemegang",
+    "diterima": "Diterima pemegang",
+    "disanggah": "Disanggah pemegang",
+    "dicabut": "Akses portal dicabut",
+    "diajukan": "Menunggu pemeriksaan",
+    "terverifikasi": "Laporan terverifikasi",
+    "perlu_perbaikan": "Perlu perbaikan laporan",
     # Status inventarisasi aset
     "ditemukan": "Ditemukan",
     "tidak_ditemukan": "Tidak ditemukan",
@@ -149,6 +157,35 @@ def buat_event(modul, jenis, judul, tanggal="", detail="", ref_id="",
         "jenis": _s(jenis), "judul": _s(judul), "detail": _s(detail),
         "ref_id": _s(ref_id), "status": _s(status), "urut": _s(urut),
     }
+
+
+def event_portal_laporan(doc) -> list:
+    """Laporan dan tinjauan terpisah; tidak menyatakan mutasi resmi terjadi."""
+    d = doc or {}
+    nama = _s(d.get("pegawai_nama")) or "Pemegang"
+    jenis = {"berkala": "pemeriksaan berkala", "kerusakan": "kerusakan",
+             "kehilangan": "kehilangan", "perbaikan": "perbaikan",
+             "pengembalian": "permohonan pengembalian"}.get(d.get("jenis"), "keadaan barang")
+    detail = "; ".join(x for x in (
+        f"Dilaporkan oleh {nama}",
+        f"Kondisi laporan: {d.get('kondisi')}" if d.get("kondisi") else "",
+        f"Lokasi laporan: {d.get('lokasi_laporan')}" if d.get("lokasi_laporan") else "",
+        _s(d.get("catatan")),
+        "Bukan perubahan master atau jurnal akuntansi",
+    ) if x)
+    hasil = [buat_event("portal_pemegang", "laporan", f"Laporan {jenis}",
+                        tanggal=d.get("created_at", ""), detail=detail,
+                        ref_id=d.get("id", ""), status="diajukan")]
+    for t in d.get("tinjauan") or []:
+        hasil.append(buat_event(
+            "portal_pemegang", "tinjauan", f"Tinjauan laporan {jenis}",
+            tanggal=t.get("tanggal", ""), ref_id=d.get("id", ""),
+            status=t.get("keputusan", ""),
+            detail="; ".join(x for x in (
+                f"Pemeriksa: {t.get('oleh')}" if t.get("oleh") else "",
+                _s(t.get("catatan")), "Tidak mengubah catatan resmi BMN",
+            ) if x)))
+    return hasil
 
 
 def urut_events(events) -> list:
