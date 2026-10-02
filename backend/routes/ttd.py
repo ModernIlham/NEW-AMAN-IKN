@@ -1192,8 +1192,22 @@ async def atur_posisi_qr(sr_id: str, payload: PosisiQrIn,
             "divalidasi operator/admin satker"))
     posisi = _posisi_qr_bersih(payload.posisi_qr,
                                int(sr.get("dok_halaman") or 0))
-    await db.signature_requests.update_one({"id": sr_id},
-                                           {"$set": {"posisi_qr": posisi}})
+    if sr.get("bast_otomasi_manifest"):
+        if not posisi:
+            raise HTTPException(409, "QR BAST otomatis tidak dapat dikosongkan; gunakan revisi dokumen")
+        if isinstance(sr.get("posisi_qr"), dict) and sr["posisi_qr"] != posisi:
+            raise HTTPException(409, "QR BAST final telah dibekukan; gunakan revisi dokumen")
+    if sr.get("posisi_qr") != posisi or "posisi_qr" not in sr:
+        res = await db.signature_requests.update_one(
+            {"id": sr_id, "status": "selesai", "signers": sr.get("signers") or [],
+             "version": sr.get("version", {"$exists": False}),
+             "dok_file_id": sr.get("dok_file_id"),
+             "posisi_qr": sr.get("posisi_qr", {"$exists": False})},
+            {"$set": {"posisi_qr": posisi, "version": int(sr.get("version") or 1) + 1}})
+        if not res.matched_count:
+            raise HTTPException(409, "Permintaan berubah ketika QR ditempatkan; muat ulang")
+    # Replay penempatan yang sama juga memperbaiki sinkronisasi yang terputus.
+    await _catat_penyelesaian_ttd(sr, sr_id)
     await log_audit("atur_posisi_qr_ttd", "", sr_id,
                     username=user.get("username", "system"),
                     detail=("QR verifikasi diatur manual" if posisi
@@ -1539,6 +1553,11 @@ async def _catat_penyelesaian_ttd(sr: dict, sr_id: str) -> None:
     operator/admin satker. Query ikut dibatasi kode satker permintaan agar
     ``doc_ref`` mentah tidak dapat menulis record satker lain.
     """
+    # Snapshot sebelum CAS bisa sudah basi: peserta dihapus, link baru
+    # diterbitkan, atau pembatalan terjadi selama await. SR adalah otoritas.
+    sr = await db.signature_requests.find_one({"id": sr_id}, _PROJ)
+    if not sr or sr.get("status") != "selesai" or not _semua_terverifikasi(sr):
+        return
     doc_type = str((sr or {}).get("doc_type") or "").strip().lower()
     doc_ref = str((sr or {}).get("doc_ref") or "").strip()
     if not doc_ref:
@@ -1549,21 +1568,50 @@ async def _catat_penyelesaian_ttd(sr: dict, sr_id: str) -> None:
         q["kode_satker"] = kode
     now_iso = datetime.now(timezone.utc).isoformat()
     if doc_type == "bast":
+        # Hanya permintaan yang MASIH ditunjuk BAST boleh memperbarui marker.
+        # SR lama yang selesai belakangan tidak boleh mengambil alih pointer.
+        if not kode:
+            return
+        q["signature_request_id"] = sr_id
+        b = await db.bast_serah_terima.find_one(q, _PROJ)
+        if not b or b.get("direvisi_oleh"):
+            return
+        q["direvisi_oleh"] = b.get("direvisi_oleh", {"$exists": False})
+        q["tt_dicabut_pada"] = b.get("tt_dicabut_pada", {"$exists": False})
         hasil = await db.bast_serah_terima.update_one(
-            q, {"$set": {"signature_request_id": sr_id,
-                         "tt_esign_selesai_pada": now_iso,
+            q, {"$set": {"tt_esign_selesai_pada": sr.get("finalized_at") or now_iso,
                          "tt_dicabut": False}})
         if hasil.matched_count:
-            await db.assets.update_many(
-                {"bast_terakhir.id": doc_ref,
-                 **({"kode_satker": kode} if kode else {}),
-                 "bast_terakhir.tt_dicabut": True},
-                {"$set": {"bast_terakhir.tt_dicabut": False}})
+            # Pencabutan antar-koleksi tak boleh dijadikan izin. Periksa lagi
+            # sebelum efek turunan; guard portal selalu membaca SR langsung.
+            current = await db.signature_requests.find_one({"id": sr_id}, _PROJ) or {}
+            if current.get("status") == "batal":
+                await db.bast_serah_terima.update_one(
+                    {"id": doc_ref, "kode_satker": kode, "signature_request_id": sr_id},
+                    {"$set": {"tt_dicabut": True,
+                              "tt_dicabut_pada": current.get("batal_pada") or now_iso}})
+            elif current.get("status") == "selesai" and _semua_terverifikasi(current):
+                await db.assets.update_many(
+                    {"bast_terakhir.id": doc_ref, "kode_satker": kode,
+                     "bast_terakhir.tt_dicabut": True},
+                    {"$set": {"bast_terakhir.tt_dicabut": False}})
+            await _sinkronkan_portal_bast(sr)
     elif doc_type == "lpb":
         await db.lpb.update_one(
             q, {"$set": {"signature_request_id": sr_id,
                          "tt_esign_selesai_pada": now_iso,
                          "tt_dicabut": False}})
+
+
+async def _sinkronkan_portal_bast(sr: dict, oleh="sistem"):
+    """Gateway opsional bagi BAST managed; tidak menarik siklus impor modul."""
+    if sr.get("doc_type") != "bast" or not sr.get("doc_ref") or not sr.get("kode_satker"):
+        return
+    bast = await db.bast_serah_terima.find_one(
+        {"id": sr["doc_ref"], "kode_satker": sr["kode_satker"]}, _PROJ)
+    if bast and isinstance(bast.get("portal_otomasi"), dict):
+        from portal_bast import sinkronkan_bast
+        await sinkronkan_bast(db, bast["id"], oleh=oleh)
 
 
 def _respons_pdf_ttd(sr: dict, out: io.BytesIO):
@@ -1768,6 +1816,10 @@ async def ubah_penandatangan(
     alasan = payload.alasan.strip()
     if len(alasan) < 5:
         raise HTTPException(400, "Alasan perubahan minimal 5 karakter")
+    wajib = (sr.get("bast_otomasi_manifest") or {}).get("wajib") or []
+    if payload.aksi == "hapus" and any(s.get("signer_id") == payload.signer_id for s in wajib):
+        raise HTTPException(409, "Penanda tangan ini wajib pada BAST yang telah dibekukan. "
+                            "Perubahan pihak memerlukan perbaikan/revisi BAST dan permintaan TTD baru")
     baru = None
     if payload.aksi == "tambah":
         if not payload.signer:
@@ -1810,7 +1862,10 @@ async def ubah_penandatangan(
         perubahan.update(finalized_at=now, finalized_by=actor)
     res = await db.signature_requests.update_one(
         {"id": sr_id, "version": sr.get("version", {"$exists": False}),
-         "status": sr.get("status"), "signers": sr.get("signers") or []},
+         "status": sr.get("status"), "signers": sr.get("signers") or [],
+         # Pembekuan manifest tidak mengubah versi; jangan hapus peserta
+         # dari snapshot sebelum manifest lahir di request yang bersamaan.
+         "bast_otomasi_manifest": sr.get("bast_otomasi_manifest", {"$exists": False})},
         {"$set": perubahan, "$push": {"riwayat_penandatangan": event}})
     # Kesamaan array juga melindungi perubahan jti/giliran era lama yang
     # belum menaikkan version. Bubuhan, identitas dan posisi tidak tertimpa.
@@ -1868,12 +1923,28 @@ async def validasi_pembubuhan(
     idem_key = kunci_idem(
         f"ttd-validasi:{sr_id}:{signer_id}:{aksi}:{raw_idem}" if raw_idem else "",
         user)
+    # Bukti replay keputusan final hidup dalam CAS SR yang sama. Bila worker
+    # mati sesudah CAS tetapi sebelum hook/cache, retry tetap dapat menyusul
+    # proyeksi portal tanpa mengulang validasi atau menunggu cache sementara.
+    sidik_payload = hashlib.sha256(json.dumps(
+        {"aksi": aksi, "alasan": alasan, "signer_id": signer_id}, sort_keys=True).encode()).hexdigest()
+    kunci_replay = hashlib.sha256(idem_key.encode()).hexdigest() if idem_key else ""
+    if kunci_replay:
+        event_lama = next((e for e in (sr.get("riwayat_validasi") or [])
+                           if e.get("kunci_idempotensi") == kunci_replay), None)
+        if event_lama and event_lama.get("hasil"):
+            if event_lama.get("sidik_payload") != sidik_payload:
+                raise HTTPException(409, "Kunci idempotensi sudah dipakai untuk keputusan berbeda")
+            await _catat_penyelesaian_ttd(sr, sr_id)
+            await store_idempotent_response(idem_key, event_lama["hasil"])
+            return event_lama["hasil"]
     # Replay harus diperiksa SEBELUM If-Match/status: respons pertama memang
     # sudah menaikkan version dan mengubah status signer. Bila urutannya
     # terbalik, retry yang sah selalu ditolak 409 dan idempotensi cuma nama.
     if idem_key:
         cached = await get_idempotent_response(idem_key)
         if cached and cached.get("response") is not None:
+            await _catat_penyelesaian_ttd(sr, sr_id)
             return cached["response"]
     _tolak_bila_batal(sr)
 
@@ -1933,13 +2004,18 @@ async def validasi_pembubuhan(
     if aksi == "setujui":
         target_baru["status"] = "terverifikasi"
         status_baru = status_permintaan(daftar_baru)
+        respons = {"ok": True, "aksi": aksi, "status": status_baru,
+                   "version": current_version + 1,
+                   "menunggu_validasi": status_baru != "selesai"}
         event = {"aksi": "setujui", "signer_id": signer_id,
                  "nama": sg.get("nama", ""), "dari_status": status_lama,
                  "ke_status": "terverifikasi", "alasan": alasan,
                  "oleh": actor, "pada": now_iso,
                  "deklarasi_tanpa_area": bool(sg.get("deklarasi_tanpa_area")),
                  "jumlah_aktual": sg.get("deklarasi_jumlah_aktual"),
-                 "jumlah_diminta": sg.get("deklarasi_jumlah_diminta")}
+                 "jumlah_diminta": sg.get("deklarasi_jumlah_diminta"),
+                 "kunci_idempotensi": kunci_replay, "sidik_payload": sidik_payload,
+                 "hasil": respons}
         set_data = {
             "signers.$.status": "terverifikasi",
             "signers.$.validated_at": now_iso,
@@ -1964,9 +2040,6 @@ async def validasi_pembubuhan(
         terkini = await db.signature_requests.find_one({"id": sr_id}, _PROJ)
         if status_baru == "selesai":
             await _catat_penyelesaian_ttd(terkini or sr, sr_id)
-        respons = {"ok": True, "aksi": aksi, "status": status_baru,
-                   "version": current_version + 1,
-                   "menunggu_validasi": status_baru != "selesai"}
         await log_audit(
             "validasi_ttd", "", sr_id, username=actor,
             detail=(f"Pembubuhan {sg.get('nama') or signer_id} disetujui"
@@ -2105,10 +2178,10 @@ async def _kerjakan_pembatalan(sr_id: str, alasan_mentah, user: dict):
     # yang sudah batal. Jejak audit menjawab "siapa & kapan" bagi pemeriksa;
     # bidang ini menjawab "kenapa" bagi orang yang tautannya mendadak mati.
     await db.signature_requests.update_one(
-        {"id": sr_id},
+        {"id": sr_id, "status": {"$ne": "batal"}},
         {"$set": {"status": "batal", "batal_alasan": alasan,
                   "batal_oleh": user.get("username", "system"),
-                  "batal_pada": datetime.now(timezone.utc).isoformat()}})
+                  "batal_pada": datetime.now(timezone.utc).isoformat()}, "$inc": {"version": 1}})
     # Tautan pendek SELURUH permintaan ikut mati — termasuk tautan verifikasi
     # yang tercetak sebagai QR di dokumen. Rute panjangnya sudah menolak
     # permintaan batal (410); tautan pendek tak boleh jadi pintu belakang yang
@@ -2144,7 +2217,7 @@ async def _kerjakan_pembatalan(sr_id: str, alasan_mentah, user: dict):
             if b:
                 now_iso = datetime.now(timezone.utc).isoformat()
                 await db.bast_serah_terima.update_one(
-                    {"id": doc_ref},
+                    {"id": doc_ref, "signature_request_id": sr_id},
                     {"$set": {"tt_dicabut": True, "tt_dicabut_pada": now_iso}})
                 await db.assets.update_many(
                     {"bast_terakhir.id": doc_ref, "dihapus": {"$ne": True}},
@@ -2182,6 +2255,7 @@ async def _kerjakan_pembatalan(sr_id: str, alasan_mentah, user: dict):
                             + (f"; BAST {sr.get('doc_ref')} ditandai dicabut"
                                if bast_dicabut else "")
                             + f"; alasan: {alasan})"))
+    await _sinkronkan_portal_bast(sr, oleh=user.get("username") or "sistem")
     return {"ok": True, "bast_dicabut": bool(bast_dicabut), "alasan": alasan}
 
 

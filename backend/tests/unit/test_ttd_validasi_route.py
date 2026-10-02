@@ -69,7 +69,8 @@ async def _seed(fake, *, status="menunggu_validasi", deklarasi=False):
                     _signer("s2", "terverifikasi")],
     })
     await fake.bast_serah_terima.insert_one(
-        {"id": "bast-1", "kode_satker": "111111", "tt_dicabut": True})
+        {"id": "bast-1", "kode_satker": "111111", "tt_dicabut": True,
+         "signature_request_id": "sr-1"})
 
 
 class TestSetujui:

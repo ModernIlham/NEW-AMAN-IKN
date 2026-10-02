@@ -174,12 +174,43 @@ async def get_document_from_gridfs(gridfs_id: str) -> Optional[bytes]:
 
 
 async def delete_document_from_gridfs(gridfs_id: str):
-    """Delete a document from GridFS."""
+    """Hapus lampiran yang tidak lagi menjadi bukti BAST/arsip atau PDF TTD.
+
+    Aset boleh melepas referensinya tanpa menghapus bukti milik dokumen sumber.
+    Pagar ini sengaja lintas-satker: id blob menunjuk byte yang sama. False
+    berarti dipertahankan/gagal; kegagalan pemeriksaan TIDAK menjadi izin hapus.
+    """
     try:
         from bson import ObjectId
-        await fs_bucket.delete(ObjectId(gridfs_id))
+        fid = ObjectId(gridfs_id)
+    except Exception:
+        return False
+
+    async def masih_dirujuk():
+        # Hanya perlu satu hit, proyeksi kecil dan indeks per path; tidak
+        # membaca daftar aset/bukti lengkap atau blob. Bentuk ObjectId juga
+        # dilindungi bagi referensi lama yang belum diserialisasi ke string.
+        nilai = {"$in": [str(fid), fid]}
+        bast = await db.bast_serah_terima.find_one(
+            {"$or": [{"bukti.file_id": nilai}, {"bukti_riwayat.file_id": nilai}]},
+            {"_id": 1}, max_time_ms=2000)
+        if bast:
+            return True
+        return bool(await db.signature_requests.find_one(
+            {"dok_file_id": nilai}, {"_id": 1}, max_time_ms=2000))
+
+    try:
+        if await asyncio.wait_for(masih_dirujuk(), timeout=3):
+            return False
+    except Exception:
+        logger.warning("Penghapusan GridFS ditahan: referensi bukti tidak dapat diperiksa")
+        return False
+    try:
+        await fs_bucket.delete(fid)
+        return True
     except Exception as e:
         logger.error(f"GridFS document delete error for {gridfs_id}: {e}")
+        return False
 
 
 async def cascade_hapus_blob_aset(activity_id: str) -> tuple:

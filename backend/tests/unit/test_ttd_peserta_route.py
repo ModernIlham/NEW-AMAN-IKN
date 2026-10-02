@@ -43,7 +43,8 @@ async def seed(db, *, mode="paralel", status="sebagian", validasi="menunggu_vali
                "posisi_ttd": {"halaman": 1, "x": .1, "y": .2, "lebar": .2}},
               {"signer_id": "s2", "nama": "Kedua", "urutan": 2, "status": "aktif", "jti": "lama-2"}]}
     await db.signature_requests.insert_one(copy.deepcopy(sr))
-    await db.bast_serah_terima.insert_one({"id": "b1", "kode_satker": "111111", "nomor": "BAST-01"})
+    await db.bast_serah_terima.insert_one({"id": "b1", "kode_satker": "111111", "nomor": "BAST-01",
+                                         "signature_request_id": "sr"})
     return sr
 
 
@@ -154,6 +155,37 @@ def test_hapus_terakhir_butuh_konfirmasi_final_dan_backlink(dbx):
         assert hasil["status"] == "selesai"
         bast = await dbx.bast_serah_terima.find_one({"id": "b1"})
         assert bast["signature_request_id"] == "sr" and bast["tt_esign_selesai_pada"]
+    run(skenario())
+
+
+def test_peserta_wajib_manifest_tidak_bisa_dihapus_meski_konfirmasi_final(dbx):
+    async def skenario():
+        lama = await seed(dbx, validasi="terverifikasi")
+        await dbx.signature_requests.update_one({"id": "sr"}, {"$set": {
+            "bast_otomasi_manifest": {"wajib": [{"signer_id": "s1"}, {"signer_id": "s2"}]}}})
+        for konfirmasi in (False, True):
+            with pytest.raises(rt.HTTPException) as exc:
+                await ubah("hapus", signer_id="s2", konfirmasi_final=konfirmasi)
+            assert exc.value.status_code == 409
+            assert "wajib pada BAST" in str(exc.value.detail)
+        sr = await dbx.signature_requests.find_one({"id": "sr"})
+        assert sr["signers"] == lama["signers"] and sr["version"] == 4
+        assert not sr.get("riwayat_penandatangan")
+        assert await dbx.idempotency_keys.count_documents({}) == 0
+    run(skenario())
+
+
+def test_peserta_tambahan_di_luar_manifest_tetap_bisa_dihapus(dbx):
+    async def skenario():
+        lama = await seed(dbx)
+        manifest = {"wajib": [{"signer_id": "s1"}, {"signer_id": "s2"}]}
+        await dbx.signature_requests.update_one({"id": "sr"}, {"$set": {"bast_otomasi_manifest": manifest}})
+        tambahan = await ubah()
+        hasil = await ubah("hapus", Req("5", "hapus-tambahan"), signer_id=tambahan["signer_id"])
+        assert hasil["aksi"] == "hapus" and hasil["version"] == 6
+        sr = await dbx.signature_requests.find_one({"id": "sr"})
+        assert sr["signers"] == lama["signers"]
+        assert sr["bast_otomasi_manifest"] == manifest
     run(skenario())
 
 

@@ -445,6 +445,8 @@ async def create_indexes() -> None:
         # Register e-sign: daftar per pembuat, terbaru dulu.
         await _idx(db.signature_requests, "id", unique=True)
         await _idx(db.signature_requests, [("created_by", 1), ("created_at", -1)])
+        # Pagar penghapusan blob bersama: PDF sumber TTD wajib tetap utuh.
+        await _idx(db.signature_requests, "dok_file_id", sparse=True)
 
         # ── Indeks paginasi daftar yang belum tertutup (audit perf lanjutan) ──
         # Koleksi tumbuh yang DULU tanpa indeks kunci-sort → Mongo sort di memori
@@ -467,6 +469,9 @@ async def create_indexes() -> None:
             await db.bast_serah_terima.create_index("id", name="bast_id_lookup")
         await _idx(db.bast_serah_terima, [("created_at", -1)])
         await _idx(db.bast_serah_terima, "asset_ids")
+        # Bukti aktif dan riwayat arsip dapat berbagi blob dengan lampiran aset.
+        await _idx(db.bast_serah_terima, "bukti.file_id", sparse=True)
+        await _idx(db.bast_serah_terima, "bukti_riwayat.file_id", sparse=True)
         # Buku agenda surat: sort {tahun,no_agenda} saat filter `jenis` TIDAK
         # dipakai — indeks (jenis,tahun,no_agenda) yang ada tak melayani sort ini.
         await _idx(db.surat, [("tahun", -1), ("no_agenda", -1)])

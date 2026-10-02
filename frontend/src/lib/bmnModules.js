@@ -251,7 +251,7 @@ export const SIKLUS_MODULES = [
     ],
     fitur: [
       "✅ Rekap aset per pemegang lintas kegiatan + kelengkapan BAST/NIP",
-      "✅ Portal BMN Saya: akses email terverifikasi, pemetaan penugasan, konfirmasi/sanggahan, laporan berbukti dan tinjauan operator; bukan perubahan master/akuntansi otomatis",
+      "✅ Portal BMN Saya: BAST baru yang sah otomatis menerapkan amanah tanpa konfirmasi ulang; laporan berbukti ditinjau operator, tanpa perubahan akuntansi otomatis",
       "✅ Daftar Barang yang Digunakan per pemegang (PDF lampiran BAST, tanda tangan pemegang + KPB)",
       "✅ Daftar pantau BMN idle (PMK 120/2024): kandidat otomatis + tiket klarifikasi → usul serah → diserahkan + ekspor CSV register tiket",
       "✅ Register SK penetapan penggunaan multi-aset (PSP/alih status/sementara/pihak lain/bersama) + cakupan aset ter-PSP + ekspor CSV",

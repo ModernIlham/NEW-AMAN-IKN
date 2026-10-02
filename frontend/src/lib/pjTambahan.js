@@ -31,7 +31,7 @@ export function labelAset(a) {
 
 /** Baris penanggung jawab kosong. */
 export function pjKosong() {
-  return { nama: "", nip: "", unit_tempat_tugas: "", unit_eselon: "",
+  return { pegawai_id: "", nama: "", nip: "", unit_tempat_tugas: "", unit_eselon: "",
     asset_ids: [] };
 }
 
@@ -44,19 +44,15 @@ export function pjKosong() {
  * berarti dua salinan aturan yang sama, dan salinan yang tertinggal akan
  * menuliskan unit yang SALAH ke dokumen resmi tanpa satu pun galat.
  *
- * Mengembalikan hanya kolom yang memang ada isinya: pemanggil menimpa isian
- * lama dengan hasil ini, dan nilai kosong dari Master Pegawai tak boleh
- * menghapus apa yang sudah diketik operator.
+ * Pilihan orang baru mengganti identitas sepenuhnya. Nomor/unit kosong
+ * tidak boleh mempertahankan data orang sebelumnya.
  */
 export function dariPegawai(p) {
-  const out = {};
+  if (!p) return { pegawai_id: "", nama: "", nip: "", unit_eselon: "" };
   const nama = String(p?.nama || "").trim();
   const nip = String(p?.nip || "").trim();
   const unit = String(p?.unit_kerja || p?.unit_organisasi || "").trim();
-  if (nama) out.nama = nama;
-  if (nip) out.nip = nip;
-  if (unit) out.unit_eselon = unit;
-  return out;
+  return { pegawai_id: String(p.id || ""), nama, nip, unit_eselon: unit };
 }
 
 /** Semua id aset yang sudah melekat pada penanggung jawab MANA PUN. */
@@ -103,6 +99,7 @@ export function payloadPj(pjList) {
   return (pjList || [])
     .filter((p) => String(p?.nama || "").trim())
     .map((p) => ({
+      ...(p.pegawai_id ? { pegawai_id: String(p.pegawai_id).trim() } : {}),
       nama: String(p.nama).trim(),
       nip: String(p.nip || "").trim(),
       unit_tempat_tugas: String(p.unit_tempat_tugas || "").trim(),

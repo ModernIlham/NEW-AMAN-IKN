@@ -34,6 +34,7 @@ from penggunaan_utils import (
     ARAH_PROSES, JENIS_PROSES_PENGGUNAAN, JENIS_PSP, STATUS_IDLE,
     STATUS_PENGAJUAN_PSP, STATUS_PROSES, TRANSISI_PROSES, baris_csv_idle,
     baris_csv_proses, baris_csv_psp,
+    bast_lengkap_tercatat,
     STATUS_HENTI_GUNA,
     build_asset_alih_keluar_projection, build_asset_idle_serah_projection,
     build_asset_transfer_masuk, indikasi_idle,
@@ -48,7 +49,45 @@ from penggunaan_utils import (
 penggunaan_router = APIRouter()
 
 _PROJ = {"_id": 0, "user": 1, "pengguna_nip": 1, "pengguna_melekat_ke": 1,
-         "pengguna_jabatan": 1, "bast_file_id": 1, "activity_id": 1}
+         "pengguna_jabatan": 1, "bast_file_id": 1, "activity_id": 1,
+         "id": 1, "bast_terakhir": 1, "amanah_bast": 1}
+
+
+async def _lengkapi_bast_terkelola(assets, user):
+    """Pengaya tampilan saja; tiap BAST dievaluasi sekali per request.
+
+    Tidak menyamarkan PDF dasar tanpa bubuhan sebagai bast_file_id. Kuery
+    sumber dibatasi kelompok 200 ID; hasil tidak pernah disimpan ke master.
+    """
+    from portal_bast_validitas import evaluasi_bast_sah
+
+    managed = [a for a in assets if (a.get("amanah_bast") or {}).get("bast_id")]
+    ids = sorted({a["amanah_bast"]["bast_id"] for a in managed})
+    sumber, status = {}, {}
+    for start in range(0, len(ids), 200):
+        batch = ids[start:start + 200]
+        async for b in db.bast_serah_terima.find(
+                scope_query_field_satker(user, {"id": {"$in": batch}}), {"_id": 0}):
+            sumber[b["id"]] = b
+            status[b["id"]] = await evaluasi_bast_sah(db, b)
+    for a in managed:
+        pointer = a["amanah_bast"]
+        bid = pointer["bast_id"]
+        b, sah = sumber.get(bid) or {}, status.get(bid) or {}
+        item = next((x for x in (b.get("portal_otomasi") or {}).get("items", [])
+                     if x.get("asset_id") == a.get("id")), {})
+        penerima = item.get("penerima") or {}
+        cocok = (bool(b.get("portal_otomasi")) and a.get("id") in (b.get("asset_ids") or [])
+                 and pointer.get("aksi") == "serah" and pointer.get("kunci_bukti") == sah.get("kunci_bukti")
+                 and (a.get("bast_terakhir") or {}).get("id") == bid
+                 and pointer.get("pegawai_id") == penerima.get("pegawai_id")
+                 and kunci_pemegang(a) == kunci_pemegang({"user": penerima.get("nama"),
+                                                         "pengguna_nip": penerima.get("nip")}))
+        a["bast_otomatis_sah"] = bool(sah.get("sah") and cocok)
+        a["bast_otomatis_id"] = bid
+        a["bast_signature_request_id"] = (b.get("signature_request_id") or ""
+            if a["bast_otomatis_sah"] and sah.get("jenis") == "esign" else "")
+    return assets
 
 
 async def _query_aset_pemegang(user):
@@ -72,6 +111,7 @@ async def daftar_pemegang(
     """Rekap pemegang: jumlah aset, kelengkapan BAST, jumlah kegiatan."""
     assets = [a async for a in db.assets.find(
         await _query_aset_pemegang(_user), _PROJ)]
+    await _lengkapi_bast_terkelola(assets, _user)
     rows = rekap_pemegang(assets)
     if search.strip():
         s = search.strip().lower()
@@ -119,11 +159,12 @@ async def aset_pemegang(
     proj = {**_PROJ, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
             "location": 1, "condition": 1, "inventory_status": 1,
             "bast_terakhir": 1}
+    assets = [a async for a in db.assets.find(await _query_aset_pemegang(_user), proj)
+              if kunci_pemegang(a) == key]
+    await _lengkapi_bast_terkelola(assets, _user)
     out = []
-    async for a in db.assets.find(
-            await _query_aset_pemegang(_user), proj):
-        if kunci_pemegang(a) == key:
-            out.append({
+    for a in assets:
+        out.append({
                 "id": a.get("id"),
                 "asset_code": a.get("asset_code"),
                 "NUP": a.get("NUP"),
@@ -132,7 +173,9 @@ async def aset_pemegang(
                 "condition": a.get("condition"),
                 "inventory_status": a.get("inventory_status"),
                 "activity_id": a.get("activity_id"),
-                "ada_bast": bool(str(a.get("bast_file_id") or "").strip()),
+                "ada_bast": bast_lengkap_tercatat(a),
+                "bast_otomatis_sah": a.get("bast_otomatis_sah"),
+                "signature_request_id": a.get("bast_signature_request_id") or "",
                 "bast_terakhir": a.get("bast_terakhir") or None,
             })
     out.sort(key=lambda x: (x["asset_name"] or "", x["asset_code"] or ""))
@@ -1250,6 +1293,7 @@ async def daftar_pemegang_pdf(
     if not rows:
         raise HTTPException(status_code=404,
                             detail="Pemegang tidak ditemukan / tanpa aset")
+    await _lengkapi_bast_terkelola(rows, _user)
     # Urutan baris ditetapkan saat pengelompokan bidang di bawah (bidang →
     # kode barang → NUP terkecil), bukan menurut nama barang seperti dulu.
     # Kop per-satker (bukan report_settings global): dokumen resmi satker ini

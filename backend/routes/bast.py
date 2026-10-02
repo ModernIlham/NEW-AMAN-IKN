@@ -12,8 +12,8 @@ lampiran foto aset (opsional, sesuai setelan `sertakan_foto`).
 Tujuh jenis serah terima (kebutuhan lapangan):
 - penggunaan_melekat    : BAST ke pegawai (aset "Melekat ke" perorangan)
 - mutasi_pengguna       : alih pemegang — PIHAK KESATU pemegang lama,
-                          PIHAK KEDUA pemegang baru (opsional efek langsung
-                          ke master aset via `terapkan_ke_aset`)
+                          PIHAK KEDUA pemegang baru (diterapkan sesudah
+                          dokumen lengkap melalui gerbang finalisasi)
 - operasional_unit      : penanggung jawab operasional per unit/tempat/tugas
                           (+ daftar penanggung jawab tambahan opsional)
 - penggunaan_sementara  : pinjam pakai internal ber-jangka waktu
@@ -28,7 +28,9 @@ Register `bast_serah_terima` menyimpan tiap BAST (riwayat per aset dan per
 pengguna terlacak); PDF dirender ulang kapan pun dari register.
 """
 import asyncio
+import hashlib
 import io
+import json
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -109,6 +111,7 @@ DASAR_HUKUM_RINGKAS = (
 
 
 class PihakIn(BaseModel):
+    pegawai_id: str = ""
     nama: str = ""
     nip: str = ""
     jabatan: str = ""
@@ -123,6 +126,7 @@ class PjTambahanIn(BaseModel):
     pernah menyebut barang mana yang menjadi tanggung jawab siapa — padahal
     justru itu yang dicari orang saat membuka BAST setahun kemudian.
     """
+    pegawai_id: str = ""
     nama: str = ""
     # NIP (ASN) atau NIK (non-ASN) — satu kolom, karena dokumen ini dipakai
     # keduanya dan memisahkannya hanya melahirkan kolom yang selalu kosong.
@@ -181,9 +185,8 @@ class BastIn(BaseModel):
     # banyak satker menutup nilai pada naskah yang dipegang pegawai.
     tampilkan_nilai: Optional[bool] = None
     keterangan: Optional[str] = ""
-    # Handover langsung: BAST sekaligus MENERAPKAN perubahan ke master aset
-    # (mutasi → pengguna beralih ke PIHAK KEDUA; pengembalian → pengguna
-    # dikosongkan). Ber-audit + $inc version.
+    # Kompatibilitas klien lama. BAST baru SELALU menunggu bukti lengkap;
+    # gerbang finalisasi yang menerapkan penyerahan, bukan operasi create.
     terapkan_ke_aset: Optional[bool] = False
     # Pesan nomor otomatis dari Registrasi Persuratan (tercatat di buku
     # agenda berstatus dibooking).
@@ -396,6 +399,9 @@ async def kirim_bast_ke_ttd(bast_id: str, payload: KirimTtdIn | None = None,
             {"$set": {"dok_file_id": str(_fid), "dok_nama": _nama,
                       "dok_halaman": _n_hal}})
         hasil = {**hasil, "dok_nama": _nama, "dok_halaman": _n_hal}
+        if b.get("portal_otomasi"):
+            from portal_bast_validitas import bekukan_manifest_bast
+            await bekukan_manifest_bast(db, b, hasil["id"])
     except HTTPException:
         raise
     except Exception:
@@ -404,6 +410,9 @@ async def kirim_bast_ke_ttd(bast_id: str, payload: KirimTtdIn | None = None,
         # meneken (mode tanpa dokumen, perilaku lama).
         logger.warning("Lampiran PDF BAST %s ke permintaan TTD gagal", bast_id,
                        exc_info=True)
+        if b.get("portal_otomasi"):
+            raise HTTPException(409, "Dokumen atau manifest BAST belum berhasil "
+                                "dibekukan. Permintaan belum dapat mengaktifkan BMN Saya.")
     return hasil
 
 
@@ -456,6 +465,9 @@ async def buat_bast(payload: BastIn, request: Request = None,
             raise HTTPException(status_code=409, detail=(
                 "BAST ini sudah punya pengganti — buat revisi dari BAST "
                 "penggantinya (revisi terbaru), bukan dari arsip lama"))
+        if set(payload.asset_ids) != set(sumber_revisi.get("asset_ids") or []):
+            raise HTTPException(409, "Revisi harus mencakup seluruh barang BAST sumber; "
+                                "gunakan BAST mutasi/pengembalian terpisah untuk sebagian barang.")
     if not payload.asset_ids:
         raise HTTPException(status_code=400, detail="Pilih minimal satu aset")
     if not str(payload.pihak_kedua.nama or "").strip():
@@ -465,6 +477,14 @@ async def buat_bast(payload: BastIn, request: Request = None,
             and str(payload.jangka_sampai or "").strip()):
         raise HTTPException(status_code=400, detail=(
             "Penggunaan sementara wajib ber-jangka waktu (dari & sampai)"))
+    if payload.jenis == "penggunaan_sementara":
+        try:
+            awal = datetime.strptime(str(payload.jangka_dari).strip(), "%Y-%m-%d").date()
+            akhir = datetime.strptime(str(payload.jangka_sampai).strip(), "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(400, "Tanggal penggunaan sementara harus valid (YYYY-MM-DD)")
+        if awal > akhir:
+            raise HTTPException(400, "Tanggal mulai penggunaan sementara tidak boleh setelah tanggal berakhir")
     _saksi = [s for s in (payload.saksi or []) if str(s.nama or "").strip()]
     if payload.jenis == "pengembalian_almarhum":
         # Dasar BA: identitas almarhum WAJIB — tanpanya dokumen tak menjelaskan
@@ -488,6 +508,9 @@ async def buat_bast(payload: BastIn, request: Request = None,
         {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "brand": 1, "model": 1, "serial_number": 1, "condition": 1,
          "purchase_date": 1, "purchase_price": 1, "activity_id": 1,
+         "kode_satker": 1, "user": 1, "pengguna_nip": 1,
+         "pengguna_jabatan": 1, "pengguna_melekat_ke": 1, "kode_register": 1,
+         "version": 1, "bast_terakhir": 1, "amanah_bast": 1,
          "photos": 1, "photo_gridfs_ids": 1, "thumbnail_index": 1},
     ).to_list(500)
     _galat_pj = validate_pj_tambahan(
@@ -525,7 +548,8 @@ async def buat_bast(payload: BastIn, request: Request = None,
         # dipakai APA ADANYA — NIP/jabatan kosong tidak boleh diisi silang
         # dengan data KPB (identitas campur-aduk pada dokumen resmi).
         pihak_pertama = {"nama": p1.nama.strip(), "nip": p1.nip.strip(),
-                         "jabatan": p1.jabatan.strip(), "alamat": alamat_p1}
+                         "jabatan": p1.jabatan.strip(), "alamat": alamat_p1,
+                         "pegawai_id": p1.pegawai_id.strip()}
     else:
         # Kosong = otomatis KPB aktif dari REFERENSI PEJABAT satker aset pada
         # tanggal BAST (fallback setelan kasatker) — bukan setelan mentah yang
@@ -699,62 +723,21 @@ async def buat_bast(payload: BastIn, request: Request = None,
         raise HTTPException(status_code=400, detail=e.pesan)
     if nip2:
         record["pihak_kedua_terdaftar"] = bool(peg)
+    from portal_bast import siapkan_otomasi_bast
+    record["portal_otomasi"] = await siapkan_otomasi_bast(db, record, aset)
     await db.bast_serah_terima.insert_one({**record})
 
     if sumber_revisi:
-        # BAST lama ditandai TERGANTIKAN (arsipnya utuh; PDF-nya kelak
-        # mencetak penanda telah direvisi/dicabut) — rantai versi lurus.
-        await db.bast_serah_terima.update_one(
-            {"id": sumber_revisi["id"]},
-            {"$set": {"direvisi_oleh": record["id"],
-                      "direvisi_oleh_nomor": record["nomor"],
-                      "direvisi_pada": now.isoformat(),
-                      "direvisi_mode": record["revisi_mode"]}})
-        # Tautkan NOMOR AGENDA lewat relasi antar surat (SURAT-3B): nomor
-        # lama otomatis ber-status "Berlaku dengan perubahan" (mengubah) atau
-        # "Tidak Berlaku" (mencabut) di buku agenda — tanpa diketik siapa pun.
-        if record.get("surat_id") and sumber_revisi.get("surat_id"):
-            from routes.persuratan import catat_relasi_surat
-            s_baru = await db.surat.find_one({"id": record["surat_id"]}, _PROJ)
-            s_lama = await db.surat.find_one(
-                {"id": sumber_revisi["surat_id"]}, _PROJ)
-            if s_baru and s_lama:
-                await catat_relasi_surat(
-                    s_baru, s_lama, record["revisi_mode"],
-                    f"Revisi BAST ke-{record['revisi_ke']}: "
-                    f"{record['revisi_alasan']}",
-                    user.get("username", "system"))
+        # Draf revisi belum menggantikan sumber atau mengubah keberlakuan
+        # nomor agenda. Keduanya ditangani gerbang finalisasi sesudah sah.
         await log_audit(
             "revisi_bast", "", username=user.get("username", "system"),
-            detail=(f"BAST {sumber_revisi.get('nomor') or sumber_revisi['id']} "
-                    f"di-{record['revisi_mode']} oleh {record['nomor'] or record['id']} "
+            detail=(f"Draf revisi BAST {sumber_revisi.get('nomor') or sumber_revisi['id']} "
+                    f"mode {record['revisi_mode']} oleh {record['nomor'] or record['id']} "
+                    "— belum berlaku, menunggu bukti lengkap "
                     f"(revisi ke-{record['revisi_ke']}: {record['revisi_alasan']})"))
 
-    # Jejak BAST terakhir pada tiap aset (badge riwayat di UI) + efek data
-    # handover langsung bila diminta.
-    set_aset = {"bast_terakhir": {
-        "id": record["id"], "jenis": payload.jenis, "nomor": nomor_final,
-        "tanggal": record["tanggal"],
-        "penerima": record["pihak_kedua"]["nama"]}}
-    if payload.terapkan_ke_aset and payload.jenis == "mutasi_pengguna":
-        set_aset.update({
-            "user": record["pihak_kedua"]["nama"],
-            "pengguna_nip": record["pihak_kedua"].get("nip", ""),
-            "pengguna_jabatan": record["pihak_kedua"].get("jabatan", ""),
-        })
-    elif payload.terapkan_ke_aset and payload.jenis in _JENIS_PENGEMBALIAN:
-        set_aset.update({"user": "", "pengguna_nip": "",
-                         "pengguna_jabatan": "", "pengguna_melekat_ke": ""})
-    await db.assets.update_many(
-        {"id": {"$in": record["asset_ids"]}, "dihapus": {"$ne": True}},
-        {"$set": {**set_aset, "updated_at": now.isoformat()},
-         "$inc": {"version": 1}})
-
-    efek = ""
-    if payload.terapkan_ke_aset and payload.jenis == "mutasi_pengguna":
-        efek = f" (pengguna aset dialihkan ke {record['pihak_kedua']['nama']})"
-    elif payload.terapkan_ke_aset and payload.jenis in _JENIS_PENGEMBALIAN:
-        efek = " (pengguna aset dikosongkan)"
+    efek = " (belum diterapkan; menunggu bukti BAST lengkap dan finalisasi)"
     await log_audit("buat_bast", "", username=user.get("username", "system"),
                     detail=(f"BAST {JENIS_BAST[payload.jenis]} — "
                             f"{len(aset)} aset → {record['pihak_kedua']['nama']}"
@@ -766,12 +749,155 @@ async def buat_bast(payload: BastIn, request: Request = None,
     return respons
 
 
+def _header_otomasi_bast(request, user, bast_id, aksi):
+    headers = request.headers if request else {}
+    versi = str(headers.get("If-Match", "")).strip().strip('"')
+    key = str(headers.get("Idempotency-Key", "")).strip()
+    if (not versi.isascii() or not versi.isdigit() or len(versi) > 18
+            or int(versi) < 1 or not key or len(key) > 200):
+        raise HTTPException(428, "If-Match dan Idempotency-Key wajib disertakan")
+    operasi = hashlib.sha256(kunci_idem(
+        f"bast:{bast_id}:{aksi}:{key}", user).encode()).hexdigest()
+    return int(versi), operasi
+
+
+def _sidik_operasi_bast(data):
+    return hashlib.sha256(json.dumps(data, sort_keys=True,
+                                    ensure_ascii=False).encode()).hexdigest()
+
+
+def _ulang_bukti_bast(bast, operasi, sidik):
+    for old in bast.get("operasi_bukti") or []:
+        if old.get("kunci") == operasi:
+            if old.get("sidik") != sidik:
+                raise HTTPException(409, "Idempotency-Key sudah dipakai untuk unggahan berbeda")
+            return old
+    return None
+
+
+async def _hasil_bukti_terkelola(bast_id, verifikasi_lengkap, user, operasi):
+    if verifikasi_lengkap:
+        from portal_bast import sinkronkan_bast
+        summary = await sinkronkan_bast(db, bast_id, oleh=user.get("username") or "sistem")
+    latest = await db.bast_serah_terima.find_one({"id": bast_id}, _PROJ) or {}
+    if not verifikasi_lengkap:
+        summary = latest.get("portal_otomasi") or {}
+    surat = (await db.surat.find_one({"id": latest["surat_id"],
+                                     "kode_satker": latest.get("kode_satker")})
+             if latest.get("surat_id") else None)
+    hasil = {"ok": True, "nomor_agenda_disahkan": bool(surat and surat.get("status") == "disahkan"),
+             "portal_otomasi": summary}
+    await db.bast_serah_terima.update_one(
+        {"id": bast_id, "operasi_bukti.kunci": operasi},
+        {"$set": {"operasi_bukti.$.hasil": hasil}})
+    return hasil
+
+
+async def _unggah_bukti_terkelola(b, file, data, verifikasi_lengkap, request, user):
+    """Bukti baru ber-OCC; arsip lama utuh dan retry tidak menggandakan blob."""
+    from gerbang_media import tulis_media
+    from portal_bast_validitas import sidik_isi_bast
+    from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
+
+    versi, operasi = _header_otomasi_bast(request, user, b["id"], "bukti")
+    sidik = _sidik_operasi_bast({
+        "version": versi, "filename": file.filename,
+        "verifikasi_lengkap": verifikasi_lengkap,
+        "sha256": hashlib.sha256(data).hexdigest(),
+    })
+    ulang = _ulang_bukti_bast(b, operasi, sidik)
+    if ulang:
+        return ulang.get("hasil") or await _hasil_bukti_terkelola(
+            b["id"], ulang["verifikasi_lengkap"], user, operasi)
+    plan = b["portal_otomasi"]
+    if versi != int(plan.get("version") or 1):
+        raise HTTPException(409, "BAST berubah. Muat ulang sebelum mengunggah bukti")
+    if plan.get("ever_applied") or (b.get("bukti") or {}).get("verifikasi_lengkap") is True:
+        raise HTTPException(409, "Bukti BAST yang sudah diterapkan tidak dapat diganti. "
+                            "Buat revisi resmi agar arsip bukti tetap utuh")
+    lease = plan.get("lease") or {}
+    if lease:
+        expires = lease.get("expires_at")
+        if isinstance(expires, datetime) and expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        if not isinstance(expires, datetime) or expires > datetime.now(timezone.utc):
+            raise HTTPException(409, "Finalisasi BAST sedang berjalan. Tunggu sebelum mengganti bukti")
+
+    nama = str(file.filename or "").lower()
+    tipe = ("application/pdf" if nama.endswith(".pdf") else
+            "image/png" if nama.endswith(".png") else "image/jpeg")
+    fid, _ = await tulis_media(data, nama=file.filename, content_type=tipe)
+    stored = await get_document_from_gridfs(str(fid))
+    if not stored:
+        await delete_document_from_gridfs(str(fid))
+        raise HTTPException(503, "Bukti tersimpan belum dapat diverifikasi. Coba kembali")
+    now = datetime.now(timezone.utc).isoformat()
+    bukti = {"file_id": str(fid), "filename": file.filename, "content_type": tipe,
+             "diunggah_pada": now, "oleh": user.get("username") or "system",
+             "sha256": hashlib.sha256(stored).hexdigest(),
+             "bast_sidik": sidik_isi_bast(b), "verifikasi_lengkap": verifikasi_lengkap}
+    if verifikasi_lengkap:
+        bukti.update(diverifikasi_oleh=user.get("username") or "system",
+                     diverifikasi_pada=now)
+    event = {"kunci": operasi, "sidik": sidik, "file_id": str(fid),
+             "verifikasi_lengkap": verifikasi_lengkap, "pada": now}
+    # CAS seluruh sumber: finalisasi/e-sign selama upload mengalahkan bukti basi.
+    query = {"id": b["id"], "portal_otomasi": plan,
+             "bukti": b.get("bukti", {"$exists": False})}
+    for field in ("signature_request_id", "tt_dicabut", "direvisi_oleh"):
+        query[field] = b.get(field, {"$exists": False})
+    push = {"operasi_bukti": event}
+    if b.get("bukti"):
+        push["bukti_riwayat"] = b["bukti"]
+    changed = await db.bast_serah_terima.update_one(query, {
+        "$set": {"bukti": bukti, "updated_at": now},
+        "$inc": {"portal_otomasi.version": 1}, "$push": push})
+    if not changed.matched_count:
+        await delete_document_from_gridfs(str(fid))
+        current = await db.bast_serah_terima.find_one({"id": b["id"]}, _PROJ) or {}
+        ulang = _ulang_bukti_bast(current, operasi, sidik)
+        if ulang:
+            return ulang.get("hasil") or await _hasil_bukti_terkelola(
+                b["id"], ulang["verifikasi_lengkap"], user, operasi)
+        raise HTTPException(409, "BAST berubah saat bukti diunggah. Muat ulang dan periksa kembali")
+    await log_audit("bukti_bast", "", username=user.get("username") or "system",
+                    detail=f"Bukti BAST {b.get('nomor') or b['id']} disimpan; "
+                    + ("kelengkapan dinyatakan oleh petugas" if verifikasi_lengkap
+                       else "belum dinyatakan lengkap, tanpa perubahan pemegang"))
+    return await _hasil_bukti_terkelola(b["id"], verifikasi_lengkap, user, operasi)
+
+
+@bast_router.post("/bast/{bast_id}/sinkronkan-bmn")
+async def sinkronkan_bmn_bast(bast_id: str, request: Request,
+                              user: dict = Depends(require_writer)):
+    b = await db.bast_serah_terima.find_one({"id": bast_id}, _PROJ)
+    if not b:
+        raise HTTPException(404, "BAST tidak ditemukan")
+    await pastikan_akses_dok_satker(user, b)
+    if not b.get("portal_otomasi"):
+        raise HTTPException(409, "BAST lama belum mempunyai rencana penugasan otomatis")
+    versi, operasi = _header_otomasi_bast(request, user, bast_id, "sinkronkan")
+    sidik = _sidik_operasi_bast({"version": versi, "bast_id": bast_id})
+    cached = (await get_idempotent_response(operasi) or {}).get("response")
+    if cached:
+        if cached.get("sidik") != sidik:
+            raise HTTPException(409, "Idempotency-Key sudah dipakai untuk versi berbeda")
+        return cached["hasil"]
+    if versi != int(b["portal_otomasi"].get("version") or 1):
+        raise HTTPException(409, "BAST berubah. Muat ulang sebelum menyelaraskan BMN")
+    from portal_bast import sinkronkan_bast
+    hasil = await sinkronkan_bast(db, bast_id, oleh=user.get("username") or "sistem")
+    await store_idempotent_response(operasi, {"sidik": sidik, "hasil": hasil})
+    return hasil
+
+
 @bast_router.post("/bast/{bast_id}/bukti")
 async def unggah_bukti_bast(bast_id: str, file: UploadFile = File(...),
+                            verifikasi_lengkap: bool = Form(False),
+                            request: Request = None,
                             user: dict = Depends(require_writer)):
-    """Unggah scan BAST bertanda tangan (PDF/gambar ≤10MB) → tersimpan di
-    GridFS; bila nomor BAST berasal dari booking otomatis, nomor agenda di
-    Registrasi Persuratan langsung DISAHKAN (menutup siklus dua langkah)."""
+    """Arsip scan BAST. BAST baru hanya difinalisasi setelah petugas secara
+    eksplisit menyatakan seluruh pihak/lampiran telah lengkap ditandatangani."""
     b = await db.bast_serah_terima.find_one({"id": bast_id}, _PROJ)
     if not b:
         raise HTTPException(status_code=404, detail="BAST tidak ditemukan")
@@ -780,9 +906,14 @@ async def unggah_bukti_bast(bast_id: str, file: UploadFile = File(...),
     if not nama.endswith((".pdf", ".jpg", ".jpeg", ".png")):
         raise HTTPException(status_code=400,
                             detail="Berkas harus PDF/JPG/PNG")
-    data = await file.read()
+    data = await file.read(10 * 1024 * 1024 + 1)
     if len(data) > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Maksimal 10MB")
+    if not data:
+        raise HTTPException(400, "Berkas bukti tidak boleh kosong")
+    if b.get("portal_otomasi"):
+        return await _unggah_bukti_terkelola(
+            b, file, data, verifikasi_lengkap is True, request, user)
 
     tipe = "application/pdf" if nama.endswith(".pdf") else "image/jpeg"
     # GERBANG KOMPRESI — bukti serah terima (pindaian PDF atau foto).
@@ -791,10 +922,7 @@ async def unggah_bukti_bast(bast_id: str, file: UploadFile = File(...),
         data, nama=file.filename, content_type=tipe)
 
     now = datetime.now(timezone.utc).isoformat()
-    bukti_lama = (b.get("bukti") or {}).get("file_id")
-    res = await db.bast_serah_terima.update_one(
-        {"id": bast_id},
-        {"$set": {"bukti": {"file_id": str(file_id), "filename": file.filename,
+    perubahan = {"$set": {"bukti": {"file_id": str(file_id), "filename": file.filename,
                             "content_type": tipe,
                             "diunggah_pada": now,
                             "oleh": user.get("username", "system")},
@@ -802,16 +930,17 @@ async def unggah_bukti_bast(bast_id: str, file: UploadFile = File(...),
                   # "TTD dibatalkan" dari pembatalan e-sign sebelumnya (sejajar
                   # jalur re-sign). Tanpa ini, unggah bukti valid justru
                   # membalik metrik jadi "TTD BAST dibatalkan".
-                  "tt_dicabut": False}})
+                  "tt_dicabut": False}}
+    if b.get("bukti"):
+        perubahan["$push"] = {"bukti_riwayat": b["bukti"]}
+    res = await db.bast_serah_terima.update_one(
+        {"id": bast_id, "bukti": b.get("bukti", {"$exists": False})}, perubahan)
     if res.matched_count == 0:
         # BAST terhapus di sela — jangan tinggalkan blob yatim di GridFS.
         from shared_utils import delete_document_from_gridfs
         await delete_document_from_gridfs(str(file_id))
-        raise HTTPException(status_code=404, detail="BAST tidak ditemukan")
-    # Bukti lama diganti → hapus blob lama (cegah orphan GridFS).
-    if bukti_lama and str(bukti_lama) != str(file_id):
-        from shared_utils import delete_document_from_gridfs
-        await delete_document_from_gridfs(str(bukti_lama))
+        raise HTTPException(status_code=409, detail="Bukti BAST berubah. Muat ulang dahulu")
+    # Bukti lama tetap dirujuk bukti_riwayat, bukan dihapus dari arsip.
 
     # Bukti ttd = BAST sah → tautkan ke SEMUA aset objeknya (bast_file_id)
     # sehingga metrik kelengkapan pemegang ("BAST x/y", badge Lengkap) naik —
