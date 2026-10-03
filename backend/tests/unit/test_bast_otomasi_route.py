@@ -182,13 +182,19 @@ def test_bukti_memerlukan_header_dan_versi(env, version, key, status):
     run(scenario())
 
 
-def test_bukti_yang_pernah_diterapkan_tidak_dapat_diganti(env):
+@pytest.mark.parametrize("verified", [False, True])
+@pytest.mark.parametrize("bukti", [None, {"file_id": "arsip", "verifikasi_lengkap": False}])
+def test_bukti_yang_pernah_diterapkan_tidak_dapat_diganti(env, verified, bukti):
     async def scenario():
-        await seed(env, portal_otomasi={"version": 1, "ever_applied": True})
+        await seed(env, portal_otomasi={"version": 1, "ever_applied": True}, bukti=bukti)
+        before = await env.db.bast_serah_terima.find_one({"id": "b1"})
         with pytest.raises(HTTPException) as err:
-            await upload(env, verified=True)
+            await upload(env, verified=verified)
         assert err.value.status_code == 409
         assert "revisi resmi" in err.value.detail
+        assert "dokumen ber-TTD atau arsip bukti" in err.value.detail
+        assert await env.db.bast_serah_terima.find_one({"id": "b1"}) == before
+        assert env.calls == []
         assert not env.blobs
     run(scenario())
 
@@ -199,6 +205,7 @@ def test_bukti_verified_tetap_terkunci_meski_flag_penerapan_belum_tersimpan(env)
         with pytest.raises(HTTPException) as err:
             await upload(env, verified=True)
         assert err.value.status_code == 409
+        assert "sudah diverifikasi lengkap dan dikunci" in err.value.detail
         assert not env.blobs
     run(scenario())
 

@@ -2036,7 +2036,16 @@ export default function PenggunaanPage({ user, onBack }) {
             <p className="text-center text-xs text-muted-foreground py-6">Belum ada BAST untuk pemegang ini.</p>
           ) : (
             <ul className="space-y-2">
-              {riwayatBast.items.map((b) => (
+              {riwayatBast.items.map((b) => {
+                // Bukti elektronik bukan scan `bukti.file_id`. Jangan menawarkan
+                // unggah ulang setelah final, termasuk ketika proyeksi perlu ditinjau.
+                const elektronikFinal = Boolean(b.ttd?.id && b.ttd.semua_selesai
+                  && b.ttd.status === "selesai" && !b.tt_dicabut && !b.direvisi_oleh
+                  && (!b.signature_request_id || b.signature_request_id === b.ttd.id));
+                const buktiTerkunci = elektronikFinal || Boolean(b.portal_otomasi
+                  && (b.portal_otomasi.ever_applied || b.bukti?.verifikasi_lengkap));
+                const bolehUnggahBukti = !b.direvisi_oleh && !buktiTerkunci;
+                return (
                 <li key={b.id} className="rounded-lg border border-border p-2.5 text-xs" data-testid={`riwayat-bast-${b.id}`}>
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0 flex-1 basis-full sm:basis-auto">
@@ -2046,13 +2055,25 @@ export default function PenggunaanPage({ user, onBack }) {
                       <p className="font-mono text-[11px] text-muted-foreground break-all">
                         {b.nomor || "(tanpa nomor)"} · {String(b.tanggal || "").slice(0, 10)} · {(b.asset_ids || []).length} aset → {b.pihak_kedua?.nama}
                       </p>
+                      {elektronikFinal && (
+                        <p className="text-[10px] text-emerald-600 dark:text-emerald-400" data-testid={`bast-bukti-elektronik-${b.id}`}>
+                          Bukti elektronik lengkap — tidak perlu unggah scan tanda tangan ulang.
+                        </p>
+                      )}
                       {b.bukti?.file_id ? (
                         <p className={`text-[10px] ${b.portal_otomasi && !b.bukti.verifikasi_lengkap ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
                           {b.portal_otomasi ? (b.bukti.verifikasi_lengkap ? "✓ Kelengkapan bukti diverifikasi" : "Bukti diarsipkan — belum diverifikasi lengkap") : "Bukti dokumen lama terarsip"}
                           {` (${String(b.bukti.diunggah_pada || "").slice(0, 10)})`}
                         </p>
-                      ) : (
-                        <p className="text-[10px] text-amber-600 dark:text-amber-400">Bukti ttd belum diunggah</p>
+                      ) : elektronikFinal ? null : (
+                        <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                          {b.direvisi_oleh ? "Dokumen lama telah digantikan — arsip tidak diubah."
+                            : buktiTerkunci ? "BAST pernah diterapkan — bukti terkunci. Periksa status dokumen; perubahan isi melalui revisi resmi."
+                              : "Scan bukti tanda tangan basah belum diunggah. Tidak diperlukan bila menggunakan TTD elektronik lengkap."}
+                        </p>
+                      )}
+                      {!elektronikFinal && buktiTerkunci && b.bukti?.file_id && (
+                        <p className="text-[10px] text-muted-foreground">Bukti final terkunci; perubahan isi melalui revisi resmi.</p>
                       )}
                       {(() => {
                         const r = ringkasTtdDokumen(b.ttd);
@@ -2096,10 +2117,16 @@ export default function PenggunaanPage({ user, onBack }) {
                       <Button size="sm" variant="outline" className="h-7 text-[11px]"
                         onClick={() => setFotoSt({ bast: b, mode: "per", asset_id: "" })}
                         data-testid={`bast-foto-st-${b.id}`}>Foto Serah Terima</Button>
+                      {elektronikFinal && (
+                        <Button size="sm" className="h-7 text-[11px]"
+                          onClick={() => window.open(authMediaUrl(`${API}/ttd/permintaan/${b.ttd.id}/dokumen-ttd`), "_blank", "noopener,noreferrer")}
+                          data-testid={`bast-lihat-ttd-${b.id}`}>Lihat dokumen ber-TTD</Button>
+                      )}
                       {b.bukti?.file_id ? (
                         <Button size="sm" variant="outline" className="h-7 text-[11px]"
-                          onClick={() => window.open(authMediaUrl(`${API}/bast/${b.id}/bukti`), "_blank")}>Lihat Bukti</Button>
-                      ) : b.direvisi_oleh ? null : (
+                          onClick={() => window.open(authMediaUrl(`${API}/bast/${b.id}/bukti`), "_blank", "noopener,noreferrer")}
+                          data-testid={`bast-lihat-bukti-${b.id}`}>Lihat Bukti</Button>
+                      ) : !bolehUnggahBukti ? null : (
                         <>
                           {b.ttd?.id ? (
                             <Button size="sm" variant="outline" className="h-7 text-[11px]"
@@ -2122,7 +2149,7 @@ export default function PenggunaanPage({ user, onBack }) {
                             data-testid={`bast-unggah-bukti-${b.id}`}>Unggah Bukti TTD</Button>
                         </>
                       )}
-                      {b.bukti?.file_id && b.portal_otomasi && !b.bukti.verifikasi_lengkap && !b.direvisi_oleh && <Button size="sm" variant="outline" className="min-h-[44px] text-xs"
+                      {b.bukti?.file_id && b.portal_otomasi && bolehUnggahBukti && <Button size="sm" variant="outline" className="min-h-[44px] text-xs"
                         onClick={() => setBuktiUntuk({ bast: b, file: null, lengkap: false, key: crypto.randomUUID(), sibuk: false })}
                         data-testid={`bast-verifikasi-bukti-${b.id}`}>Lengkapi / verifikasi bukti</Button>}
                       {!b.direvisi_oleh && (
@@ -2135,7 +2162,8 @@ export default function PenggunaanPage({ user, onBack }) {
                     </div>
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
         </DialogContent>

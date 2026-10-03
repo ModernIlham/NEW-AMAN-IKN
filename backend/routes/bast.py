@@ -812,9 +812,13 @@ async def _unggah_bukti_terkelola(b, file, data, verifikasi_lengkap, request, us
     plan = b["portal_otomasi"]
     if versi != int(plan.get("version") or 1):
         raise HTTPException(409, "BAST berubah. Muat ulang sebelum mengunggah bukti")
-    if plan.get("ever_applied") or (b.get("bukti") or {}).get("verifikasi_lengkap") is True:
-        raise HTTPException(409, "Bukti BAST yang sudah diterapkan tidak dapat diganti. "
-                            "Buat revisi resmi agar arsip bukti tetap utuh")
+    if plan.get("ever_applied"):
+        raise HTTPException(409, "BAST sudah diterapkan; unggah/ganti bukti tidak tersedia. "
+                            "Periksa dokumen ber-TTD atau arsip bukti yang menjadi dasar. "
+                            "Buat revisi resmi hanya jika isi dokumen perlu diubah")
+    if (b.get("bukti") or {}).get("verifikasi_lengkap") is True:
+        raise HTTPException(409, "Bukti tanda tangan basah sudah diverifikasi lengkap dan dikunci. "
+                            "Buat revisi resmi jika isi dokumen perlu diubah; arsip bukti tetap utuh")
     lease = plan.get("lease") or {}
     if lease:
         expires = lease.get("expires_at")

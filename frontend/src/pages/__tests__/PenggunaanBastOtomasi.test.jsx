@@ -8,8 +8,11 @@ jest.mock("axios");
 jest.mock("@/lib/downloadFile", () => ({ downloadFileWithProgress: jest.fn(async () => {}) }));
 const pegawai = [{ id: "p1", nama: "Budi", nip: "111", email: "satu@example.test" }, { id: "p2", nama: "Budi", nip: "", email: "dua@example.test" }];
 const bast = { id: "b1", jenis: "penggunaan_melekat", nomor: "BAST-01", tanggal: "2026-10-01", asset_ids: ["aset-lama"], aset: [{ id: "aset-lama", asset_name: "Barang sebelum mutasi", asset_code: "305", NUP: "7" }], pihak_kedua: { nama: "Budi" }, portal_otomasi: { version: 4, status: "menunggu_keabsahan", alasan: "Tanda tangan belum lengkap", hasil: [] } };
+let bastRiwayat;
+const ttdFinal = { id: "ttd-1", status: "selesai", semua_selesai: true, jumlah: 3, selesai_jumlah: 3 };
 
 beforeEach(() => {
+  bastRiwayat = bast;
   downloadFileWithProgress.mockResolvedValue(undefined);
   Object.defineProperty(globalThis, "crypto", { configurable: true, value: require("crypto").webcrypto });
   axios.get.mockImplementation(async url => {
@@ -17,7 +20,7 @@ beforeEach(() => {
     if (url.endsWith("/penggunaan/pemegang/aset")) return { data: { items: [{ id: "a1", asset_name: "Laptop", asset_code: "301", NUP: "1" }] } };
     if (url.endsWith("/pegawai")) return { data: { items: pegawai } };
     if (url.endsWith("/bast/referensi")) return { data: { jenis: [{ kode: "penggunaan_melekat", uraian: "Penggunaan" }, { kode: "mutasi_pengguna", uraian: "Mutasi" }, { kode: "operasional_unit", uraian: "Operasional Unit" }] } };
-    if (url.endsWith("/bast")) return { data: { items: [bast] } };
+    if (url.endsWith("/bast")) return { data: { items: [bastRiwayat] } };
     return { data: { items: [] } };
   });
   axios.post.mockResolvedValue({ data: { id: "b2", ok: true } });
@@ -28,6 +31,86 @@ async function buka() {
   fireEvent.click(await screen.findByTestId("penggunaan-row-Pemegang"));
   await screen.findByTestId("penggunaan-aset-a1");
 }
+
+test.each([true, false])("BAST revisi final menampilkan PDF ber-TTD tanpa unggah/kirim ulang (diterapkan=%s)", async diterapkan => {
+  bastRiwayat = { ...bast, revisi_ke: 1, revisi_dari_nomor: "BAST-LAMA", signature_request_id: "ttd-1", ttd: ttdFinal,
+    portal_otomasi: { ...bast.portal_otomasi, ever_applied: diterapkan, status: diterapkan ? "selesai" : "perlu_tinjauan" } };
+  const open = jest.spyOn(window, "open").mockImplementation(() => null);
+  localStorage.setItem("media_token", "media-uji");
+  localStorage.setItem("satker_aktif", "SATKER-UJI");
+  try {
+    await buka(); fireEvent.click(screen.getByTestId("penggunaan-riwayat-bast"));
+    expect(await screen.findByTestId("bast-bukti-elektronik-b1")).toHaveTextContent("tidak perlu unggah scan");
+    expect(screen.queryByTestId("bast-unggah-bukti-b1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("bast-kirim-ttd-b1")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Bukti ttd belum diunggah/)).not.toBeInTheDocument();
+    expect(screen.getByTestId("bast-revisi-b1")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("bast-lihat-ttd-b1"));
+    const [url, target, features] = open.mock.calls[0];
+    expect(url).toContain("/ttd/permintaan/ttd-1/dokumen-ttd?");
+    const params = new URL(url, "https://example.test").searchParams;
+    expect(params.get("token")).toBe("media-uji");
+    expect(params.get("sa")).toBe("SATKER-UJI");
+    expect(target).toBe("_blank"); expect(features).toBe("noopener,noreferrer");
+    expect(downloadFileWithProgress).not.toHaveBeenCalled();
+    expect(axios.post).not.toHaveBeenCalled();
+  } finally { open.mockRestore(); localStorage.clear(); }
+});
+
+test.each([
+  { ttd: { ...ttdFinal, status: "menunggu_validasi", semua_selesai: false } },
+  { ttd: { ...ttdFinal, status: "batal", semua_selesai: false }, tt_dicabut: true },
+  { ttd: ttdFinal, signature_request_id: "permintaan-lain" },
+])("tanda tangan belum final/dibatalkan/tidak cocok tidak diklaim sebagai bukti final: %j", async perubahan => {
+  bastRiwayat = { ...bast, ...perubahan };
+  await buka(); fireEvent.click(screen.getByTestId("penggunaan-riwayat-bast"));
+  expect(await screen.findByTestId("bast-unggah-bukti-b1")).toBeInTheDocument();
+  expect(screen.queryByTestId("bast-lihat-ttd-b1")).not.toBeInTheDocument();
+  expect(screen.queryByTestId("bast-bukti-elektronik-b1")).not.toBeInTheDocument();
+});
+
+test.each([undefined, { file_id: "scan-awal", verifikasi_lengkap: false }])("BAST pernah diterapkan tetap terkunci saat TTD dicabut; scan=%j", async bukti => {
+  bastRiwayat = { ...bast, bukti, ttd: { ...ttdFinal, status: "batal", semua_selesai: false }, tt_dicabut: true,
+    portal_otomasi: { ...bast.portal_otomasi, ever_applied: true, status: "perlu_tinjauan" } };
+  await buka(); fireEvent.click(screen.getByTestId("penggunaan-riwayat-bast"));
+  await screen.findByTestId("riwayat-bast-b1");
+  expect(screen.queryByTestId("bast-lihat-ttd-b1")).not.toBeInTheDocument();
+  expect(screen.queryByTestId("bast-unggah-bukti-b1")).not.toBeInTheDocument();
+  expect(screen.queryByTestId("bast-verifikasi-bukti-b1")).not.toBeInTheDocument();
+  expect(screen.queryByTestId("bast-kirim-ttd-b1")).not.toBeInTheDocument();
+  expect(screen.getByText(/bukti terkunci|Bukti final terkunci/)).toBeInTheDocument();
+});
+
+test("arsip yang digantikan revisi tidak menawarkan dokumen elektronik sebagai final aktif", async () => {
+  bastRiwayat = { ...bast, ttd: ttdFinal, direvisi_oleh: "b2" };
+  await buka(); fireEvent.click(screen.getByTestId("penggunaan-riwayat-bast"));
+  await screen.findByTestId("riwayat-bast-b1");
+  expect(screen.queryByTestId("bast-lihat-ttd-b1")).not.toBeInTheDocument();
+  expect(screen.queryByTestId("bast-unggah-bukti-b1")).not.toBeInTheDocument();
+  expect(screen.queryByTestId("bast-revisi-b1")).not.toBeInTheDocument();
+});
+
+test.each([true, false])("scan basah tetap dapat dilihat; verifikasi hanya sebelum terkunci (lengkap=%s)", async lengkap => {
+  bastRiwayat = { ...bast, bukti: { file_id: "scan", verifikasi_lengkap: lengkap } };
+  const open = jest.spyOn(window, "open").mockImplementation(() => null);
+  localStorage.setItem("media_token", "media-uji");
+  try {
+    await buka(); fireEvent.click(screen.getByTestId("penggunaan-riwayat-bast"));
+    fireEvent.click(await screen.findByTestId("bast-lihat-bukti-b1"));
+    expect(open).toHaveBeenCalledWith(expect.stringContaining("/bast/b1/bukti?token=media-uji"), "_blank", "noopener,noreferrer");
+    expect(Boolean(screen.queryByTestId("bast-verifikasi-bukti-b1"))).toBe(!lengkap);
+    expect(screen.queryByTestId("bast-unggah-bukti-b1")).not.toBeInTheDocument();
+    expect(axios.post).not.toHaveBeenCalled();
+  } finally { open.mockRestore(); localStorage.clear(); }
+});
+
+test("scan lama pada BAST elektronik final tetap dapat dilihat tetapi tidak ditimpa", async () => {
+  bastRiwayat = { ...bast, ttd: ttdFinal, bukti: { file_id: "scan", verifikasi_lengkap: false } };
+  await buka(); fireEvent.click(screen.getByTestId("penggunaan-riwayat-bast"));
+  expect(await screen.findByTestId("bast-lihat-ttd-b1")).toBeInTheDocument();
+  expect(screen.getByTestId("bast-lihat-bukti-b1")).toBeInTheDocument();
+  expect(screen.queryByTestId("bast-verifikasi-bukti-b1")).not.toBeInTheDocument();
+});
 
 test("pratinjau riwayat BAST meminta PDF inline tanpa memanggil pengunduh atau menulis data", async () => {
   const open = jest.spyOn(window, "open").mockImplementation(() => null);

@@ -18,6 +18,19 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1090] Riwayat BAST mengenali bukti elektronik final — 2026-10-03
+
+- BAST elektronik yang terverifikasi lengkap menampilkan status bukti
+  elektronik dan tombol Lihat dokumen ber-TTD. Tidak lagi meminta scan ulang
+  atau menawarkan kirim ulang tanda tangan, termasuk pada BAST hasil revisi.
+- Pratinjau ber-TTD memakai jalur PDF inline dengan token media dan lingkup
+  satker aktif. Scan lama tetap dapat dilihat; arsip tidak ditimpa.
+- Unggah/verifikasi bukti disembunyikan setelah penerapan atau verifikasi
+  lengkap. Dokumen dicabut/digantikan tidak ditampilkan sebagai final aktif.
+- Server tetap menolak penggantian bukti terkunci dengan penjelasan yang
+  membedakan BAST sudah diterapkan dan scan sudah diverifikasi. Tidak ada
+  migrasi data, pembukaan kunci arsip, atau pengulangan tanda tangan.
+
 ## [#1089] Email akses BMN Saya lebih rapi dan mudah dibaca — 2026-10-03
 
 - Email tautan masuk memakai kartu beridentitas AMAN, tombol masuk yang jelas,
