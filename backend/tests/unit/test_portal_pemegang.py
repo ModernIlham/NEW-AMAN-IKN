@@ -99,6 +99,61 @@ def laporan(p, **kwargs):
     })
 
 
+def test_bukti_kamera_gps_tersimpan_tanpa_mengubah_aset_dan_retry_lama(basis):
+    async def scenario():
+        p = await buat(basis, accepted=True)
+        before = await basis.assets.find_one({"id": "as1"})
+        capture = {"waktu": "2026-10-03T10:00:00+08:00",
+                   "gps": {"lat": -0.96, "lng": 116.7, "accuracy": 15}}
+        body = laporan(p, bukti=[{**foto(), "pengambilan": capture}])
+        req = Req("kamera-gps", 2)
+        result = await rp.kirim_laporan(body, req, HOLDER)
+        assert await rp.kirim_laporan(body, req, HOLDER) == result
+        evidence = result["item"]["bukti"][0]
+        assert evidence["pengambilan"]["waktu"] == "2026-10-03T02:00:00+00:00"
+        assert evidence["pengambilan"]["gps"] == capture["gps"]
+        assert "data_base64" not in evidence
+        assert await basis.assets.find_one({"id": "as1"}) == before
+        assert (await basis.portal_laporan.find_one({"id": result["item"]["id"]}))["bukti"][0]["data_base64"] == foto()["data_base64"]
+        # Digest lama tetap sama walaupun model bukti mendapat field opsional.
+        legacy = laporan(p, bukti=[foto()])
+        old = legacy.model_dump()
+        for b in old["bukti"]:
+            b.pop("pengambilan", None)
+        assert rp._operasi(req, HOLDER, "uji", legacy, True)[1] == sidik_data({"payload": old, "version": 2})
+        other = laporan(p, bukti=[{**foto(), "pengambilan": {**capture, "gps": None}}])
+        with pytest.raises(HTTPException) as err:
+            await rp.kirim_laporan(other, req, HOLDER)
+        assert err.value.status_code == 409
+    run(scenario())
+
+
+@pytest.mark.parametrize("gps", [
+    {"lat": 91, "lng": 116}, {"lat": 1, "lng": -181},
+    {"lat": float("nan"), "lng": 116}, {"lat": 1, "lng": 116, "accuracy": -1},
+])
+def test_koordinat_kamera_invalid_ditolak(gps):
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        rp.BuktiIn(**foto(), pengambilan={"waktu": "2026-10-03T10:00:00Z", "gps": gps})
+
+
+def test_kamera_tanpa_gps_dan_waktu_invalid():
+    meta = {"waktu": "2026-10-03T10:00:00Z", "gps": None}
+    assert validasi_bukti([{**foto(), "pengambilan": meta}])[0]["pengambilan"]["gps"] is None
+    with pytest.raises(ValueError, match="zona waktu"):
+        validasi_bukti([{**foto(), "pengambilan": {"waktu": "2026-10-03T10:00:00"}}])
+
+
+def test_register_hanya_dari_aset_penugasan_aktif(basis):
+    async def scenario():
+        p = await buat(basis, accepted=True)
+        assert "kode_register" in (await rp.aset_saya(HOLDER))["items"][0]
+        assert (await rp.aset_saya({**HOLDER, "pegawai_id": "p2"}))["items"] == []
+        assert p["asset_id"] == "as1"
+    run(scenario())
+
+
 def test_mapping_konfirmasi_idempotensi_dan_tanpa_mutasi_master(basis):
     async def scenario():
         p = await buat(basis)

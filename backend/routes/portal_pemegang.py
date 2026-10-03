@@ -63,10 +63,22 @@ class KonfirmasiIn(_Masukan):
     catatan: str = Field(default="", max_length=3000)
 
 
+class GpsBuktiIn(_Masukan):
+    lat: float = Field(ge=-90, le=90, allow_inf_nan=False)
+    lng: float = Field(ge=-180, le=180, allow_inf_nan=False)
+    accuracy: float | None = Field(default=None, ge=0, le=100000, allow_inf_nan=False)
+
+
+class PengambilanBuktiIn(_Masukan):
+    waktu: str = Field(min_length=1, max_length=50)
+    gps: GpsBuktiIn | None = None
+
+
 class BuktiIn(_Masukan):
     nama: str = Field(min_length=1, max_length=160)
     mime: Literal["image/jpeg", "image/png", "image/webp"]
     data_base64: str = Field(min_length=1, max_length=4 * 1024 * 1024)
+    pengambilan: PengambilanBuktiIn | None = None
 
 
 class LaporanIn(_Masukan):
@@ -114,7 +126,12 @@ def _operasi(request, user, route, payload, portal=False):
         raise HTTPException(428, "If-Match wajib memuat versi yang dibaca")
     expected = int(match)
     operation = sidik_data([_aktor(user, portal), route, key])
-    digest = sidik_data({"payload": payload.model_dump(), "version": expected})
+    body = payload.model_dump()
+    # Metadata baru opsional tidak mengubah sidik retry laporan/antrean lama.
+    for b in body.get("bukti", []):
+        if b.get("pengambilan") is None:
+            b.pop("pengambilan", None)
+    digest = sidik_data({"payload": body, "version": expected})
     return operation, digest, expected
 
 
@@ -147,7 +164,7 @@ def _ringkas_penugasan(p, asset=None, internal=False):
                               ("id", "nomor", "tanggal", "jenis", "jangka_sampai")}
     if asset:
         out.update({k: asset.get(k, "") for k in
-                    ("asset_name", "asset_code", "NUP", "location", "condition")})
+                    ("asset_name", "asset_code", "NUP", "location", "condition", "kode_register")})
     if internal:
         out.update({k: p.get(k, "") for k in
                     ("pegawai_id", "pegawai_nama", "kode_satker", "created_by")})

@@ -24,6 +24,16 @@ beforeEach(() => {
 });
 afterEach(() => jest.useRealTimers());
 
+test("snapshot register dan metadata foto tetap tersedia pada draf luring pemilik yang sama", async () => {
+  const s = session(); await aktifkanLuringPortal(s);
+  await simpanSnapshotPortal(s, [{ ...assignment, kode_register: "REGISTER-01" }]);
+  const pengambilan = { waktu: "2026-10-03T10:00:00Z", gps: { lat: -0.96, lng: 116.7, accuracy: 15 } };
+  await simpanDrafPortal(s, { ...payload, bukti: [{ nama: "uji.jpg", mime: "image/jpeg", data_base64: "YQ==", pengambilan }] });
+  const result = await bacaLuringPortal(s);
+  expect(result.aset[0].kode_register).toBe("REGISTER-01");
+  expect(result.antrean[0].payload.bukti[0].pengambilan).toEqual(pengambilan);
+});
+
 test("API publik hanya memakai cookie portal tanpa token staf, cache, atau redirect", async () => {
   localStorage.setItem("token", "secret-staff-token");
   global.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ ok: true }) });

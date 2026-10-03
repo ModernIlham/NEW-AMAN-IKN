@@ -228,6 +228,47 @@ test("flip membatalkan perpindahan tertunda dan respons lama tidak mengganti kam
   expect(screen.getByTestId("full-camera-macro")).toHaveAttribute("aria-pressed", "false");
 });
 
+test("portal tidak membaca/menulis preferensi staf dan tidak menawarkan edit induk", async () => {
+  bacaCache.mockClear(); muatPreferensi.mockClear(); simpanPreferensi.mockClear();
+  const onCapture = jest.fn(), close = jest.fn();
+  const view = render(<FullCameraSheet modePemegang formData={fd} sesiAset="portal-1" onCapture={onCapture} onClose={close} panelLaporan={<p>Panel laporan observasi</p>} onScanAsset={jest.fn()} />);
+  await waitFor(() => expect(screen.getByTestId("full-camera-shutter")).not.toBeDisabled());
+  expect(bacaCache).not.toHaveBeenCalled(); expect(muatPreferensi).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByTestId("full-camera-setelan"));
+  fireEvent.click(screen.getByTestId("setelan-rasio-1:1"));
+  expect(simpanPreferensi).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByTestId("full-camera-setelan"));
+  fireEvent.click(screen.getByTestId("full-camera-edit-btn"));
+  expect(screen.getByText("Panel laporan observasi")).toBeInTheDocument();
+  expect(screen.queryByTestId("full-camera-edit-asset_name")).not.toBeInTheDocument();
+  expect(screen.queryByTestId("full-camera-autoinv")).not.toBeInTheDocument();
+  expect(screen.queryByTestId("full-camera-savenew")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByTestId("full-camera-edit-done"));
+  fireEvent.click(screen.getByTestId("full-camera-shutter"));
+  expect(onCapture).toHaveBeenCalledWith(expect.any(String), "portal-1", { waktu: expect.any(String), gps: null });
+  fireEvent.click(screen.getByTestId("camera-pemegang-selesai")); expect(close).toHaveBeenCalled();
+  view.unmount(); expect(tr.stop).toHaveBeenCalled();
+});
+
+test("portal mengikat GPS per jepretan dan tidak memakai fix usang/izin dicabut", async () => {
+  let fix, gagal;
+  const clear = jest.fn();
+  Object.defineProperty(navigator, "geolocation", { configurable: true, value: { watchPosition: (ok, err) => { fix = ok; gagal = err; return 42; }, clearWatch: clear } });
+  const onCapture = jest.fn();
+  const view = render(<FullCameraSheet modePemegang formData={fd} sesiAset="p1" onCapture={onCapture} onClose={jest.fn()} />);
+  await waitFor(() => expect(screen.getByTestId("full-camera-shutter")).not.toBeDisabled());
+  act(() => fix({ coords: { latitude: -0.96, longitude: 116.7, accuracy: 26 }, timestamp: Date.now() }));
+  fireEvent.click(screen.getByTestId("full-camera-shutter"));
+  expect(onCapture.mock.calls[0][2].gps).toEqual({ lat: -0.96, lng: 116.7, accuracy: 26 });
+  act(() => fix({ coords: { latitude: -0.96, longitude: 116.7, accuracy: 2 }, timestamp: Date.now() - 61000 }));
+  fireEvent.click(screen.getByTestId("full-camera-shutter"));
+  expect(onCapture.mock.calls[1][2].gps).toBeNull();
+  act(() => gagal({ code: 1 }));
+  fireEvent.click(screen.getByTestId("full-camera-shutter"));
+  expect(onCapture.mock.calls[2][2].gps).toBeNull();
+  view.unmount(); expect(clear).toHaveBeenCalledWith(42);
+});
+
 test("pilihan lokal kamera bernama umum digunakan lagi tanpa menebak lensa", async () => {
   localStorage.setItem("aman_lensa_makro_perangkat_v1", "tambahan");
   siapkanLensa({ utama: "Camera 0", tambahan: "Camera 2" });

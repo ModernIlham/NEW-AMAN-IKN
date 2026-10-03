@@ -2,7 +2,10 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { Camera, CheckCircle2, LogOut, Mail, Moon, RefreshCw, ShieldCheck, Sun, Upload, WifiOff, X } from "lucide-react";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import MonitorAsetPemegang, { RingkasanMonitorPemegang } from "@/components/portal/MonitorAsetPemegang";
+import MetadataBuktiPemegang from "@/components/portal/MetadataBuktiPemegang";
+import KameraPemegang from "@/components/portal/KameraPemegang";
 import { laporanTerbaruPemegang, ringkasanMonitorPemegang, urutLaporanPemegang } from "@/components/portal/monitorPemegang";
+import { buktiJepretan, cocokScanPemegang, ringkasPengambilan } from "@/lib/kameraPemegang";
 import {
   aktifkanLuringPortal, bacaBuktiPortal, bacaLuringPortal, hapusDrafPortal, hapusLuringPortal,
   kunciPortal, LABEL_LAPORAN, LABEL_STATUS, pemilikPortal, periksaAntreanPortal, portalRequest,
@@ -43,6 +46,13 @@ export default function PortalPemegangPage() {
   const [terkunci, setTerkunci] = useState(false);
   const [konfirmasi, setKonfirmasi] = useState(null);
   const [bukti, setBukti] = useState(null);
+  const [kamera, setKamera] = useState(null);
+  const [pesanKamera, setPesanKamera] = useState("");
+  const [fotoBusy, setFotoBusy] = useState(false);
+  const fotoLoading = useRef(false);
+  const kameraRef = useRef(null);
+  const formRef = useRef(form);
+  formRef.current = form;
   const sesiRef = useRef(null);
   const mounted = useRef(true);
   const fileRef = useRef(null);
@@ -63,6 +73,7 @@ export default function PortalPemegangPage() {
 
   const bersihkan = useCallback(async (message = "Sesi berakhir. Minta tautan masuk baru melalui email.") => {
     sesiRef.current = null;
+    kameraRef.current = null; setKamera(null);
     setSesi(null); setAset([]); setLaporan([]); setAntrean([]); setForm(null);
     setSearch(""); setFilter("semua"); setRiwayatAset(""); setRiwayatStatus(""); setTab("aset"); setEmail(""); setDraftId(null);
     setLuring(false); setKonfirmasi(null); setBukti(null); setTerkunci(false); payloadTerkirim.current = null; setPesan(message);
@@ -140,13 +151,52 @@ export default function PortalPemegangPage() {
     }
   };
   const bukaForm = assignment => {
+    kameraRef.current = null; setKamera(null);
     setForm(blankReport(assignment)); setDraftId(null); requestKey.current = kunciPortal(); payloadTerkirim.current = null; setTerkunci(false); setError(""); setTab("aset");
   };
   const lampirkan = async e => {
     const files = Array.from(e.target.files || []); e.target.value = "";
+    if (!form || terkunci || busy || fotoLoading.current) return;
     const assignmentId = form.penugasan_id;
-    try { const photos = await bacaBuktiPortal(files, form.bukti); setForm(f => f?.penugasan_id === assignmentId ? ({ ...f, bukti: photos }) : f); }
+    const owner = pemilikPortal(sesiRef.current), key = requestKey.current;
+    fotoLoading.current = true; setFotoBusy(true);
+    try {
+      const photos = await bacaBuktiPortal(files, form.bukti);
+      if (!mounted.current || owner !== pemilikPortal(sesiRef.current) || key !== requestKey.current || tenggatPortal(sesiRef.current) <= Date.now()) return;
+      setForm(f => f?.penugasan_id === assignmentId ? ({ ...f, bukti: photos }) : f);
+    }
     catch (err) { setError(err.message); }
+    finally { fotoLoading.current = false; if (mounted.current) setFotoBusy(false); }
+  };
+  const tutupKamera = () => { kameraRef.current = null; setKamera(null); };
+  const bukaKamera = () => {
+    if (!form || terkunci || busy || fotoBusy || tenggatPortal(sesiRef.current) <= Date.now()) return;
+    const next = { key: kunciPortal(), owner: pemilikPortal(sesiRef.current), assignment: form.penugasan_id };
+    kameraRef.current = next; setKamera(next); setPesanKamera("");
+  };
+  const tangkap = (url, key, pengambilan) => {
+    const active = kameraRef.current, f = formRef.current;
+    if (!mounted.current || !active || active.key !== key || active.owner !== pemilikPortal(sesiRef.current)
+        || tenggatPortal(sesiRef.current) <= Date.now() || f?.penugasan_id !== active.assignment || busy || terkunci) return;
+    try {
+      const photo = buktiJepretan(url, pengambilan, f.bukti);
+      const next = { ...f, bukti: [...f.bukti, photo] };
+      formRef.current = next; setForm(next); setPesanKamera("Foto ditambahkan. Tinjau laporan lalu kirim untuk diperiksa.");
+    } catch (e) { setPesanKamera(e.message); }
+  };
+  const pindai = (code, raw) => {
+    if (!kameraRef.current || tenggatPortal(sesiRef.current) <= Date.now() || busy || terkunci) return;
+    const candidates = cocokScanPemegang(aset, raw || code);
+    if (candidates.length !== 1) { setPesanKamera(candidates.length ? "Kode cocok dengan beberapa barang. Tutup kamera dan pilih NUP yang tepat di Barang Saya." : "Kode tidak cocok dengan barang aktif dalam amanah Anda. Tidak ada data yang diubah."); return; }
+    const a = candidates[0];
+    if (a.id === form.penugasan_id) { setPesanKamera(`Barang sesuai: ${a.asset_name} · NUP ${a.NUP}`); return; }
+    if (draftId || form.laporan_sebelumnya_id || form.bukti.length || form.catatan || form.lokasi_laporan || form.diambil_pada
+        || form.kondisi !== "Tidak diketahui" || form.status_operasional !== "tidak_diketahui" || form.jenis !== "berkala") {
+      setPesanKamera("Laporan barang ini belum selesai. Tinjau lalu kirim atau simpan draf sebelum berpindah barang."); return;
+    }
+    const next = { key: kunciPortal(), owner: pemilikPortal(sesiRef.current), assignment: a.id };
+    requestKey.current = kunciPortal(); formRef.current = blankReport(a); setForm(formRef.current);
+    kameraRef.current = next; setKamera(next); setPesanKamera(`Terpilih: ${a.asset_name} · NUP ${a.NUP}`);
   };
   const payloadForm = () => ({ ...form, catatan: form.catatan.trim(),
     ...(form.diambil_pada ? { diambil_pada: new Date(form.diambil_pada).toISOString() } : { diambil_pada: null }) });
@@ -197,6 +247,10 @@ export default function PortalPemegangPage() {
   };
 
   const terbaru = useMemo(() => laporanTerbaruPemegang(laporan), [laporan]);
+  const asetKamera = aset.find(a => a.id === form?.penugasan_id && a.status === "diterima" && a.version === form?.penugasan_version);
+  useEffect(() => {
+    if (!sesi || !asetKamera || busy || terkunci) { kameraRef.current = null; setKamera(null); }
+  }, [sesi, asetKamera, busy, terkunci]);
   const ringkasan = useMemo(() => ringkasanMonitorPemegang(aset, terbaru), [aset, terbaru]);
   const riwayatTampak = useMemo(() => urutLaporanPemegang(laporan).filter(r =>
     (!riwayatAset || r.penugasan_id === riwayatAset)
@@ -259,7 +313,7 @@ export default function PortalPemegangPage() {
           <p className="text-sm font-medium">{aset.find(a => a.id === form.penugasan_id)?.asset_name || "Barang penugasan"}</p>
           <p className="text-sm text-muted-foreground">Ceritakan keadaan yang Anda amati. Operator atau admin akan memeriksa laporan; kondisi dan lokasi di data induk resmi tidak langsung ditimpa.</p>
           {terkunci && <p className="rounded-lg bg-amber-500/10 p-3 text-sm">Pengiriman telah dicoba. Isi dikunci sampai hasilnya dipastikan; tekan kirim kembali untuk pemeriksaan dengan kunci yang sama. Jangan membuat laporan pengganti sebelum memeriksa riwayat.</p>}
-          <fieldset disabled={busy || terkunci} className="space-y-4">
+          <fieldset disabled={busy || terkunci || fotoBusy} className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2"><label className="block text-sm">Jenis laporan<select className={`${input} mt-1`} data-testid="portal-jenis" value={form.jenis} onChange={e => setForm(f => ({ ...f, jenis: e.target.value }))}>{Object.entries(LABEL_LAPORAN).map(([v, label]) => <option key={v} value={v}>{label}</option>)}</select></label>
             <label className="block text-sm">Kondisi hasil pemeriksaan<select className={`${input} mt-1`} data-testid="portal-kondisi" value={form.kondisi} onChange={e => setForm(f => ({ ...f, kondisi: e.target.value }))}>{["Tidak diketahui", "Baik", "Rusak Ringan", "Rusak Berat"].map(v => <option key={v}>{v}</option>)}</select></label>
             <label className="block text-sm">Keadaan operasional<select className={`${input} mt-1`} data-testid="portal-operasional" value={form.status_operasional} onChange={e => setForm(f => ({ ...f, status_operasional: e.target.value }))}>{[["tidak_diketahui", "Tidak diketahui"], ["digunakan", "Sedang digunakan"], ["tidak_digunakan", "Tidak digunakan"], ["diperbaiki", "Sedang diperbaiki"]].map(([v, label]) => <option key={v} value={v}>{label}</option>)}</select></label>
@@ -270,15 +324,18 @@ export default function PortalPemegangPage() {
           <label className="block text-sm">Hasil pemeriksaan / kronologi<textarea className={`${input} mt-1`} data-testid="portal-catatan" rows={4} maxLength={4000} value={form.catatan} onChange={e => setForm(f => ({ ...f, catatan: e.target.value }))} placeholder="Jelaskan keadaan sebenarnya, masalah, dan tindakan yang sudah dilakukan." /></label>
           <label className="block text-sm">Waktu pengambilan bukti (opsional)<input type="datetime-local" className={`${input} mt-1`} data-testid="portal-diambil-pada" value={form.diambil_pada || ""} onChange={e => setForm(f => ({ ...f, diambil_pada: e.target.value }))} /></label>
           <div className="space-y-2"><p className="text-sm font-medium">Bukti foto (opsional)</p><p className="text-xs text-muted-foreground">Maksimal 3 foto, total 3 MB · JPEG/PNG/WebP. Bukti disimpan tanpa kompresi ulang. Hindari wajah, identitas pribadi, atau dokumen sensitif yang tidak relevan.</p>
-            <div className="flex flex-wrap gap-2"><button type="button" className={button} data-testid="portal-pilih-foto" disabled={busy} onClick={() => fileRef.current?.click()}><Upload size={16} />Pilih file/foto</button><button type="button" className={button} data-testid="portal-kamera" disabled={busy} onClick={() => cameraRef.current?.click()}><Camera size={16} />Ambil foto</button></div>
+            <div className="flex flex-wrap gap-2"><button type="button" className={button} data-testid="portal-pilih-foto" disabled={busy} onClick={() => fileRef.current?.click()}><Upload size={16} />Pilih file/foto</button><button type="button" className={primary} data-testid="portal-kamera" disabled={busy || !asetKamera} onClick={bukaKamera}><Camera size={16} />Kamera & scanner</button><button type="button" className={button} data-testid="portal-kamera-biasa" disabled={busy} onClick={() => cameraRef.current?.click()}>Kamera biasa</button></div>
+            <p className="text-xs text-muted-foreground">Kamera & scanner: watermark waktu, identitas barang dan GPS jika diizinkan. Kamera biasa/file tidak diberi koordinat otomatis. Lokasi perangkat adalah data pengamatan, bukan bukti lokasi yang telah diverifikasi.</p>
             <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" multiple className="hidden" data-testid="portal-berkas-foto" onChange={lampirkan} /><input ref={cameraRef} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="hidden" data-testid="portal-berkas-kamera" onChange={lampirkan} />
             <ul className="space-y-1">{form.bukti.map((p, i) => <li key={`${p.nama}-${i}`} className="flex min-w-0 items-center justify-between gap-2 rounded-lg border px-3 py-1"><span className="truncate text-sm">{p.nama}</span><button type="button" aria-label={`Hapus foto ${p.nama}`} className={button} data-testid={`portal-hapus-foto-${i}`} disabled={busy} onClick={() => setForm(f => ({ ...f, bukti: f.bukti.filter((_, j) => j !== i) }))}><X size={16} /></button></li>)}</ul>
           </div>
           </fieldset>
-          <div className="flex flex-wrap gap-2"><button type="button" className={primary} disabled={busy || (terkunci && !online)} data-testid="portal-kirim-laporan" onClick={() => kerja(kirim)}>{online ? "Kirim untuk diperiksa" : "Masukkan antrean"}</button><button type="button" className={button} disabled={busy || !luring || terkunci} data-testid="portal-simpan-draf" onClick={() => kerja(() => simpan(false))}>Simpan draf perangkat</button></div>
+          {form.bukti.map((p, i) => p.pengambilan && <p key={i} data-testid={`portal-pengambilan-${i}`} className="text-xs text-muted-foreground">Foto {i + 1}: {ringkasPengambilan(p)}</p>)}
+          <div className="flex flex-wrap gap-2"><button type="button" className={primary} disabled={busy || fotoBusy || (terkunci && !online)} data-testid="portal-kirim-laporan" onClick={() => kerja(kirim)}>{online ? "Kirim untuk diperiksa" : "Masukkan antrean"}</button><button type="button" className={button} disabled={busy || fotoBusy || !luring || terkunci} data-testid="portal-simpan-draf" onClick={() => kerja(() => simpan(false))}>Simpan draf perangkat</button></div>
         </section>}
         {tab === "laporan" && <section className="space-y-3"><h3 className="font-semibold">Riwayat laporan Anda</h3><p className="text-sm text-muted-foreground">Ikuti pemeriksaan dan tanggapan petugas. Laporan terverifikasi tetap merupakan bukti pengamatan, bukan otomatis perubahan kondisi resmi atau pembukuan.</p><div className="grid gap-3 rounded-2xl border bg-card p-4 sm:grid-cols-2"><label className="min-w-0 text-sm" htmlFor="portal-riwayat-aset">Barang<select id="portal-riwayat-aset" data-testid="portal-riwayat-aset" value={riwayatAset} onChange={e => setRiwayatAset(e.target.value)} className={`${input} mt-1`}><option value="">Semua barang</option>{pilihanRiwayat.map(([id, nama]) => <option key={id} value={id}>{nama}</option>)}</select></label><label className="min-w-0 text-sm" htmlFor="portal-riwayat-status">Status pemeriksaan<select id="portal-riwayat-status" data-testid="portal-riwayat-status" value={riwayatStatus} onChange={e => setRiwayatStatus(e.target.value)} className={`${input} mt-1`}><option value="">Semua status</option>{Object.entries(LABEL_STATUS).filter(([id]) => id !== "menunggu_verifikasi").map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label><p role="status" className="text-xs text-muted-foreground sm:col-span-2">{riwayatTampak.length} dari {laporan.length} laporan ditampilkan, terbaru lebih dahulu.</p></div>{!laporan.length ? <p className="rounded-xl border border-dashed p-5 text-sm text-muted-foreground">Belum ada laporan terkirim. Mulai dari Perbarui keadaan pada Barang Saya. Draf perangkat ada pada tab Draf & Antrean.</p> : !riwayatTampak.length && <p className="rounded-xl border border-dashed p-5 text-sm text-muted-foreground">Belum ada laporan untuk barang dan status yang dipilih.</p>}{riwayatTampak.map(r => <article key={r.id} className="space-y-2 rounded-xl border bg-card p-4" data-testid={`portal-laporan-${r.id}`}><div className="flex flex-wrap items-center justify-between gap-2"><h4 className="break-words font-semibold">{r.asset_name}</h4><span className="rounded-full bg-muted px-2 py-1 text-xs font-medium">{LABEL_STATUS[r.status] || r.status}</span></div><p className="text-xs text-muted-foreground">{LABEL_LAPORAN[r.jenis]} · {tanggal(r.created_at)}</p><p className="text-sm">Dilaporkan: {r.kondisi} · {r.status_operasional?.replaceAll("_", " ")} · {r.lokasi_laporan || "Lokasi tidak disebutkan"}</p><p className="whitespace-pre-wrap break-words text-sm">{r.catatan}</p>
           {!!r.bukti?.length && <div className="flex flex-wrap gap-2">{r.bukti.map((p, i) => <button type="button" key={i} className={button} disabled={busy || !online} data-testid={`portal-lihat-bukti-${r.id}-${i}`} onClick={() => kerja(() => lihatBukti(r, i))}>Lihat foto {i + 1}</button>)}</div>}
+          <MetadataBuktiPemegang bukti={r.bukti} />
           {r.tinjauan?.map((t, i) => <p key={i} className="rounded-lg bg-muted p-3 text-sm"><strong>{LABEL_STATUS[t.keputusan] || t.keputusan}</strong> · {tanggal(t.tanggal)}<br />{t.catatan}</p>)}
           {r.status === "perlu_perbaikan" && aset.some(a => a.id === r.penugasan_id && a.status === "diterima") && <button type="button" className={button} data-testid={`portal-perbaiki-${r.id}`} disabled={busy} onClick={() => {
             const a = aset.find(v => v.id === r.penugasan_id); bukaForm(a); setForm({ ...blankReport(a), jenis: r.jenis, kondisi: r.kondisi, status_operasional: r.status_operasional, lokasi_laporan: r.lokasi_laporan || "", catatan: r.catatan || "", laporan_sebelumnya_id: r.id });
@@ -294,6 +351,13 @@ export default function PortalPemegangPage() {
         <footer className="flex items-start gap-2 border-t pt-4 text-xs text-muted-foreground"><CheckCircle2 size={16} className="shrink-0" /><p>Jaga barang, laporkan keadaan sebenarnya, dan ikuti arahan operator. Verifikasi laporan bukan pengesahan penghapusan, serah terima, kapitalisasi biaya, atau perubahan nilai akuntansi.</p></footer>
       </>}
       {bukti && <section role="dialog" aria-modal="true" aria-label="Bukti laporan" className="fixed inset-0 z-[150] flex flex-col bg-black/90 p-4"><div className="mb-3 flex items-center justify-between gap-3 text-white"><p className="min-w-0 truncate text-sm">{bukti.nama}</p><button autoFocus type="button" className={button} data-testid="portal-tutup-bukti" onClick={() => setBukti(null)}>Tutup</button></div><img src={bukti.url} alt={bukti.nama} className="min-h-0 flex-1 object-contain" /></section>}
+      {sesi && form && kamera && asetKamera && !busy && !terkunci &&
+        <KameraPemegang key={kamera.key} assignment={asetKamera} form={form} nama={sesi.pegawai.nama} sesiAset={kamera.key}
+          onCapture={tangkap} onScanAsset={(code, raw) => { if (kameraRef.current?.key === kamera.key) pindai(code, raw); }} pesanPemegang={pesanKamera} onClose={tutupKamera}
+          onKameraBiasa={() => { tutupKamera(); cameraRef.current?.click(); }}
+          onRemovePhoto={index => { if (kameraRef.current?.key === kamera.key) setForm(f => ({ ...f, bukti: f.bukti.filter((_, i) => i !== index) })); }}
+          onField={(key, value) => { if (kameraRef.current?.key === kamera.key && ["kondisi", "status_operasional", "lokasi_laporan", "catatan"].includes(key)) setForm(f => ({ ...f, [key]: value })); }} />
+      }
     </div>
   </main>;
 }

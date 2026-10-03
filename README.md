@@ -11,6 +11,19 @@
 ### Portal Pemegang — BMN Saya, otomatis dari BAST
 
 Rumah pengelola: **Penggunaan → Aset per Pemegang → Portal Pemegang**.
+
+**Kamera pemegang:** pada formulir laporan pilih **Kamera & scanner** untuk
+memakai kamera inventarisasi (watermark waktu/identitas/GPS, rasio, zoom,
+kecerahan, flash dan pilihan lensa sesuai kemampuan perangkat). Panel Laporan
+mengisi pengamatan, tidak mengedit data induk. Scan stiker hanya mencocokkan
+amanah aktif sendiri; kode ambigu meminta pemilihan NUP, isi laporan tidak
+dibuang saat hendak berganti barang. Browser tanpa scanner menyediakan input
+kode manual. **Kamera biasa** dan **Pilih file/foto** tetap terpisah.
+GPS opsional dan akurasinya dicatat per foto; fix lebih dari satu menit atau
+izin dicabut tidak digunakan. Waktu/GPS merupakan data perangkat yang perlu
+ditinjau petugas, bukan penetapan lokasi resmi. Maksimal tiga foto/3 MB;
+setelan kamera tidak memakai akun staf. Draf beserta metadata foto tetap
+mengikuti persetujuan penyimpanan luring dan batas sesi portal.
 Halaman pemegang: **`/bmn-saya`**, tanpa membuat akun staf/password.
 
 **Pemantauan sehari-hari:** BMN Saya menyediakan mode terang/gelap, ringkasan
