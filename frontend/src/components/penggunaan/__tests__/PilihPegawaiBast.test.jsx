@@ -7,10 +7,12 @@ test("nama kembar dibedakan UUID dan tanpa NIP tidak mewarisi identitas lama", (
   const daftar = [{ id: "pegawai-1", nama: "Budi", nip: "123", email: "satu@example.test" }, { id: "pegawai-2", nama: "Budi", nip: "", email: "dua@example.test" }];
   const pilih = jest.fn();
   render(<PilihPegawaiBast daftar={daftar} onPilih={pilih} testId="pilih" />);
-  fireEvent.change(screen.getByTestId("pilih"), { target: { value: "pegawai-2" } });
+  fireEvent.click(screen.getByTestId("pilih"));
+  fireEvent.click(screen.getByTestId("pilih-option-pegawai-2"));
   expect(pilih).toHaveBeenCalledWith(daftar[1]);
   expect({ nip: "nomor-lama", ...pihakDariPegawai(daftar[1]) }).toMatchObject({ pegawai_id: "pegawai-2", nama: "Budi", nip: "" });
-  fireEvent.change(screen.getByTestId("pilih-cari"), { target: { value: "dua@example" } });
+  fireEvent.click(screen.getByTestId("pilih"));
+  fireEvent.change(screen.getByTestId("pilih-search"), { target: { value: "dua@example" } });
   expect(screen.queryByRole("option", { name: /satu@example/ })).not.toBeInTheDocument();
   expect(screen.getByRole("option", { name: /dua@example/ })).toBeInTheDocument();
 });
@@ -18,9 +20,29 @@ test("nama kembar dibedakan UUID dan tanpa NIP tidak mewarisi identitas lama", (
 test("nama yang diketik tidak mengikat identitas sampai dipilih eksplisit", () => {
   const pilih = jest.fn();
   render(<PilihPegawaiBast daftar={[{ id: "p", nama: "Budi" }]} onPilih={pilih} testId="pilih" />);
-  fireEvent.change(screen.getByTestId("pilih-cari"), { target: { value: "Budi" } });
+  fireEvent.click(screen.getByTestId("pilih"));
+  fireEvent.change(screen.getByTestId("pilih-search"), { target: { value: "Budi" } });
   expect(pilih).not.toHaveBeenCalled();
   expect(pihakDariPegawai(null)).toEqual({ pegawai_id: "", nama: "", nip: "", jabatan: "", alamat: "" });
+});
+
+test("satu baris pilihan saat tertutup dan identitas yang hilang tidak disembunyikan", () => {
+  const view = render(<PilihPegawaiBast daftar={[{ id: "p", nama: "Budi", nip: "123" }]} value="p" onPilih={jest.fn()} testId="pilih" />);
+  expect(screen.getByTestId("pilih")).toHaveTextContent("Budi");
+  expect(screen.queryByTestId("pilih-search")).not.toBeInTheDocument();
+  expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  view.rerender(<PilihPegawaiBast daftar={[]} value="p" onPilih={jest.fn()} testId="pilih" />);
+  expect(screen.getByRole("alert")).toHaveTextContent("Pegawai tertaut tidak tersedia");
+  expect(screen.getByTestId("pilih")).toHaveTextContent("Pilihan tertaut tidak tersedia");
+});
+
+test("pihak luar tetap tersedia dan pegawai meninggal tidak dapat dipilih", () => {
+  const pilih = jest.fn();
+  render(<PilihPegawaiBast daftar={[{ id: "p", nama: "Budi", status: "meninggal" }]} onPilih={pilih} testId="pilih" />);
+  fireEvent.click(screen.getByTestId("pilih"));
+  expect(screen.queryByTestId("pilih-option-p")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByTestId("pilih-option-empty"));
+  expect(pilih).toHaveBeenCalledWith(null);
 });
 
 test("ringkasan otomasi memuat penolakan spesifik dan tombol pemeriksaan sumber", () => {

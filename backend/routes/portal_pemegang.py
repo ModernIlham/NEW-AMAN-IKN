@@ -307,6 +307,89 @@ async def daftar_penugasan_admin(pegawai_id: str = "", user: dict = Depends(requ
     return {"items": items, "total": len(items)}
 
 
+def _periksa_aset_manual(asset, peg, kode):
+    """Aturan yang sama untuk saran pilihan dan penyimpanan pengecualian.
+
+    Pemetaan portal bukan cara memindahkan pemegang resmi. Nama lama hanya
+    diperiksa jika nomor identitas belum ada; nomor tetap lebih otoritatif.
+    """
+    if asset.get("amanah_bast"):
+        raise HTTPException(409, "Amanah barang ini mengikuti BAST; gunakan sinkronisasi atau revisi BAST")
+    nomor = teks(asset.get("pengguna_nip"))
+    nama = " ".join(teks(asset.get("user")).split()).casefold()
+    if ((nomor and nomor != teks(peg.get("nip")))
+            or (not nomor and nama and nama != " ".join(teks(peg.get("nama")).split()).casefold())):
+        raise HTTPException(409, "Pemegang pada master aset berbeda; selesaikan penugasan resmi dahulu")
+    try:
+        return alias_identitas_aset(asset, kode)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+
+
+@portal_pemegang_router.get("/admin/kandidat-aset")
+async def kandidat_aset_admin(pegawai_id: str = Query(..., min_length=1, max_length=100),
+                             search: str = Query("", max_length=120),
+                             page: int = Query(1, ge=1),
+                             page_size: int = Query(20, ge=1, le=100),
+                             semua_satker: bool = False,
+                             user: dict = Depends(require_admin)):
+    """Saran read-only, bukan pemberian akses; create memeriksa ulang semuanya.
+
+    Default tepat nomor identitas pegawai, bukan substring/nama. Pengecualian
+    semua_satker tetap SATU satker aktif. Total mencakup hasil yang ditolak
+    agar sebabnya terlihat; pilihan tidak diam-diam melewati halaman.
+    """
+    kode = _satker_staff(user)
+    peg = await db.pegawai.find_one({"id": pegawai_id, "kode_satker": kode}, {"_id": 0})
+    if not peg:
+        raise HTTPException(404, "Pegawai tidak ditemukan dalam satker aktif")
+    if not pegawai_layak_portal(peg):
+        raise HTTPException(409, "Pegawai belum memenuhi syarat portal; periksa status dan email di Master Pegawai")
+    empty = {"items": [], "total": 0, "page": page, "page_size": page_size, "total_pages": 1}
+    nomor = teks(peg.get("nip"))
+    if not semua_satker and not nomor:
+        return {**empty, "message": "NIP/NIK pegawai belum diisi. Lengkapi identitas atau periksa pengecualian dalam satker aktif."}
+    activities = {a["id"]: a.get("name", "") async for a in db.inventory_activities.find(
+        {"kode_satker": kode}, {"_id": 0, "id": 1, "name": 1})}
+    if not activities:
+        return empty
+    q = {"activity_id": {"$in": list(activities)}, "dihapus": {"$ne": True},
+         "category": {"$not": re.compile("dummy", re.IGNORECASE)}}
+    if not semua_satker:
+        q["pengguna_nip"] = {"$regex": r"^\s*" + re.escape(nomor) + r"\s*$"}
+    if search.strip():
+        q["$or"] = [{k: {"$regex": re.escape(search.strip()), "$options": "i"}}
+                    for k in ("asset_name", "asset_code", "NUP", "location", "user")]
+    total, rows = await asyncio.gather(
+        db.assets.count_documents(q, maxTimeMS=10000),
+        db.assets.find(q, _PROJ_ASSET).max_time_ms(10000).sort([("asset_name", 1), ("id", 1)])
+        .skip((page - 1) * page_size).limit(page_size).to_list(page_size),
+    )
+    items, aliases_all = [], set()
+    for asset in rows:
+        aliases, alasan = [], ""
+        try:
+            aliases = _periksa_aset_manual(asset, peg, kode)
+        except HTTPException as exc:
+            alasan = str(exc.detail)
+        aliases_all.update(aliases)
+        items.append({**{k: asset.get(k, "") for k in (
+            "id", "asset_name", "asset_code", "NUP", "activity_id", "location", "user", "condition")},
+            "activity_name": activities.get(asset.get("activity_id"), ""),
+            "kunci_fisik": aliases, "boleh_dipilih": not alasan, "alasan": alasan})
+    occupied = set()
+    if aliases_all:
+        async for p in db.portal_penugasan.find(
+                {"kode_satker": kode, "slot_aktif": {"$in": list(aliases_all)}},
+                {"_id": 0, "slot_aktif": 1}):
+            occupied.update(p.get("slot_aktif") or [])
+    for item in items:
+        if item["boleh_dipilih"] and occupied.intersection(item["kunci_fisik"]):
+            item.update(boleh_dipilih=False, alasan="Barang fisik ini sudah memiliki penugasan portal; tinjau penugasan yang tercatat dahulu")
+    return {"items": items, "total": total, "page": page, "page_size": page_size,
+            "total_pages": max(1, (total + page_size - 1) // page_size)}
+
+
 @portal_pemegang_router.post("/admin/penugasan")
 async def buat_penugasan(data: PenugasanIn, request: Request,
                         user: dict = Depends(require_admin)):
@@ -323,14 +406,7 @@ async def buat_penugasan(data: PenugasanIn, request: Request,
     if not pegawai_layak_portal(peg):
         raise HTTPException(409, "Pegawai tidak memenuhi syarat portal")
     asset = await _aset_dalam_satker(data.asset_id, kode)
-    if asset.get("amanah_bast"):
-        raise HTTPException(409, "Amanah barang ini mengikuti BAST; gunakan sinkronisasi atau revisi BAST")
-    if teks(asset.get("pengguna_nip")) and teks(asset.get("pengguna_nip")) != teks(peg.get("nip")):
-        raise HTTPException(409, "Pemegang pada master aset berbeda; selesaikan penugasan resmi dahulu")
-    try:
-        aliases = alias_identitas_aset(asset, kode)
-    except ValueError as exc:
-        raise HTTPException(422, str(exc))
+    aliases = _periksa_aset_manual(asset, peg, kode)
     # Startup AMAN mencatat kegagalan indeks dan terus hidup. Gerbang domain
     # harus menolak pemetaan bila indeks penjaga duplikasi tidak tersedia.
     try:

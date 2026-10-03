@@ -34,6 +34,7 @@ import { ringkasTtdDokumen, kelasNada } from "@/lib/statusTtd";
 import TautanTtdDialog from "@/components/ttd/TautanTtdDialog";
 import PortalPemegangPanel from "@/components/penggunaan/PortalPemegangPanel";
 import PilihPegawaiBast, { pihakDariPegawai } from "@/components/penggunaan/PilihPegawaiBast";
+import PilihanRingkas from "@/components/ui/PilihanRingkas";
 import StatusOtomasiBast from "@/components/penggunaan/StatusOtomasiBast";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
@@ -92,6 +93,9 @@ export default function PenggunaanPage({ user, onBack }) {
   const [loading, setLoading] = useState(true);
   const [gagalMuat, setGagalMuat] = useState(false);
   const [portalTerbuka, setPortalTerbuka] = useState(false);
+  const [portalDimulai, setPortalDimulai] = useState(false);
+  const [portalBerisiko, setPortalBerisiko] = useState(false);
+  const konfirmasiKembali = useRef(false);
   // Dialog daftar aset: {pemegang, rows, loading}
   const [detail, setDetail] = useState(null);
   // Data BMN idle: {kandidat, tiket, ringkasan, label_status, catatan}
@@ -155,8 +159,21 @@ export default function PenggunaanPage({ user, onBack }) {
   // Tap kartu e-KTP utk mengisi pihak BAST — null | "pihak_kedua" | "pihak_pertama"
   const [kartuTapUntuk, setKartuTapUntuk] = useState(null);
 
-  useBackGuard(useCallback(() => onBack?.(), [onBack]));
   const { confirm, confirmDialog } = useConfirm();
+  const kembali = useCallback(async () => {
+    if (!onBack || konfirmasiKembali.current) return;
+    if (!portalBerisiko) { onBack(); return; }
+    konfirmasiKembali.current = true;
+    try {
+      const ok = await confirm({
+        title: "Tinggalkan proses penugasan?",
+        description: "Ada penugasan yang sedang dikirim atau hasilnya belum pasti. Permintaan yang sudah terkirim mungkin tetap diproses server. Meninggalkan halaman akan menghilangkan konteks dan kunci percobaan ulang; periksa penugasan yang tercatat sebelum membuat permintaan baru. Sebaiknya tetap di halaman sampai hasil dipastikan.",
+        confirmLabel: "Tetap tinggalkan", cancelLabel: "Tetap di halaman", variant: "danger",
+      });
+      if (ok) onBack();
+    } finally { konfirmasiKembali.current = false; }
+  }, [onBack, portalBerisiko, confirm]);
+  useBackGuard(kembali);
   const { minta, transitionDialog } = useTransitionDialog();
 
   const load = useCallback(async (p = 1, s = search) => {
@@ -893,7 +910,7 @@ export default function PenggunaanPage({ user, onBack }) {
         <div className={`max-w-5xl mx-auto ${BARIS_KEPALA}`}>
           <button
             type="button"
-            onClick={onBack}
+            onClick={kembali}
             aria-label="Kembali ke Beranda Modul"
             className={TOMBOL_KEPALA}
             data-testid="penggunaan-back"
@@ -915,12 +932,12 @@ export default function PenggunaanPage({ user, onBack }) {
 
       <main className="max-w-5xl mx-auto px-3 sm:px-6 py-4 space-y-3">
         <section className="rounded-xl border border-border bg-card p-3">
-          <Button variant="outline" onClick={() => setPortalTerbuka((v) => !v)}
+          <Button variant="outline" onClick={() => { setPortalDimulai(true); setPortalTerbuka((v) => !v); }}
             aria-expanded={portalTerbuka} aria-controls="portal-pemegang-panel"
             data-testid="penggunaan-portal-pemegang">
             <UserCheck className="w-4 h-4 mr-2" />Portal Pemegang — BMN Saya
           </Button>
-          {portalTerbuka && <div id="portal-pemegang-panel" className="mt-3"><PortalPemegangPanel user={user} /></div>}
+          {portalDimulai && <div id="portal-pemegang-panel" className="mt-3" hidden={!portalTerbuka}><PortalPemegangPanel user={user} onRiskChange={setPortalBerisiko} /></div>}
         </section>
         {/* Ringkasan statistik modul — kesehatan Penggunaan sekilas tanpa scroll */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" data-testid="penggunaan-statistik">
@@ -2352,27 +2369,19 @@ export default function PenggunaanPage({ user, onBack }) {
               {formBast.jenis === "mutasi_pengguna" && (
                 <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5 space-y-2">
                   <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">Pemegang lama (PIHAK KESATU) — menyerahkan</p>
-                  <PilihPegawaiBast daftar={pegawaiList || []} value={formBast.pihak_pertama.pegawai_id}
-                    label="Pegawai pemegang lama" testId="bast-lama-pegawai" onPilih={p => setFormBast(f => ({ ...f, pihak_pertama: pihakDariPegawai(p) }))} />
+                  <div className="flex min-w-0 items-start gap-2"><div className="min-w-0 flex-1"><PilihPegawaiBast daftar={pegawaiList || []} value={formBast.pihak_pertama.pegawai_id}
+                    label="Pegawai pemegang lama" testId="bast-lama-pegawai" onPilih={p => setFormBast(f => ({ ...f, pihak_pertama: pihakDariPegawai(p) }))} /></div><button type="button" title="Tap kartu pegawai (e-KTP/NFC)" aria-label="Pilih pemegang lama dari kartu pegawai" onClick={() => setKartuTapUntuk("pihak_pertama")} className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-lg border border-input bg-card hover:bg-accent" data-testid="bast-lama-tap-kartu"><IdCard className="h-4 w-4 text-blue-600" /></button></div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <div className="flex gap-1.5 min-w-0">
-                    <Input value={formBast.pihak_pertama.nama} readOnly={!!formBast.pihak_pertama.pegawai_id}
+                    {!formBast.pihak_pertama.pegawai_id && <Input value={formBast.pihak_pertama.nama}
                       placeholder="Nama pemegang lama *" data-testid="bast-lama-nama"
-                      className="flex-1 min-w-0"
+                      className="min-w-0 sm:col-span-2"
                       onChange={(e) => {
                         const v = e.target.value;
                         setFormBast((f) => ({ ...f, pihak_pertama: {
-                          ...f.pihak_pertama, nama: v, pegawai_id: "", nip: "" } }));
-                      }} />
-                    <button type="button" title="Tap kartu pegawai (e-KTP/NFC)"
-                      onClick={() => setKartuTapUntuk("pihak_pertama")}
-                      className="h-9 px-2 rounded-md border border-input bg-card hover:bg-accent flex items-center shrink-0 min-w-0 min-h-0"
-                      data-testid="bast-lama-tap-kartu">
-                      <IdCard className="w-4 h-4 text-blue-600" />
-                    </button>
-                    </div>
+                          ...f.pihak_pertama, nama: v, pegawai_id: "", nip: "", jabatan: "", alamat: "" } }));
+                      }} />}
                     <Input value={formBast.pihak_pertama.nip} readOnly={!!formBast.pihak_pertama.pegawai_id} placeholder="NIP/NIK" className="font-mono"
-                      onChange={(e) => setFormBast((f) => ({ ...f, pihak_pertama: { ...f.pihak_pertama, nip: e.target.value } }))} />
+                      onChange={(e) => setFormBast((f) => ({ ...f, pihak_pertama: { ...f.pihak_pertama, nip: e.target.value, pegawai_id: "" } }))} />
                     <Input value={formBast.pihak_pertama.jabatan} placeholder="Jabatan" className="sm:col-span-2"
                       onChange={(e) => setFormBast((f) => ({ ...f, pihak_pertama: { ...f.pihak_pertama, jabatan: e.target.value } }))} />
                     <Input value={formBast.pihak_pertama.alamat} placeholder="Alamat/lokasi pihak kesatu (boleh diisi manual)"
@@ -2429,27 +2438,19 @@ export default function PenggunaanPage({ user, onBack }) {
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div><label className="text-xs font-medium block mb-1">Penerima (PIHAK KEDUA) *</label>
-                  <PilihPegawaiBast daftar={pegawaiList || []} value={formBast.pihak_kedua.pegawai_id}
-                    label="Pegawai pihak kedua" testId="bast-penerima-pegawai" onPilih={p => setFormBast(f => ({ ...f, pihak_kedua: pihakDariPegawai(p) }))} />
-                  <div className="flex gap-1.5">
-                  <Input value={formBast.pihak_kedua.nama} readOnly={!!formBast.pihak_kedua.pegawai_id}
+                  <div className="flex min-w-0 items-start gap-2"><div className="min-w-0 flex-1"><PilihPegawaiBast daftar={pegawaiList || []} value={formBast.pihak_kedua.pegawai_id}
+                    label="Pegawai pihak kedua" testId="bast-penerima-pegawai" onPilih={p => setFormBast(f => ({ ...f, pihak_kedua: pihakDariPegawai(p) }))} /></div>
+                    <button type="button" title="Tap kartu pegawai (e-KTP/NFC)" aria-label="Pilih pihak kedua dari kartu pegawai" onClick={() => setKartuTapUntuk("pihak_kedua")} className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-lg border border-input bg-card hover:bg-accent" data-testid="bast-penerima-tap-kartu"><IdCard className="h-4 w-4 text-blue-600" /></button></div>
+                  {!formBast.pihak_kedua.pegawai_id && <Input value={formBast.pihak_kedua.nama}
                     placeholder="Nama pihak di luar master / identitas dokumen"
                     className="flex-1 min-w-0"
                     onChange={(e) => {
                       const v = e.target.value;
-                      setFormBast((f) => ({ ...f, pihak_kedua: { ...f.pihak_kedua, nama: v, pegawai_id: "", nip: "" } }));
-                    }} data-testid="bast-penerima" />
-                  {/* Tap kartu e-KTP penerima → identitas terisi otomatis */}
-                  <button type="button" title="Tap kartu pegawai (e-KTP/NFC)"
-                    onClick={() => setKartuTapUntuk("pihak_kedua")}
-                    className="h-9 px-2 rounded-md border border-input bg-card hover:bg-accent flex items-center shrink-0 min-w-0 min-h-0"
-                    data-testid="bast-penerima-tap-kartu">
-                    <IdCard className="w-4 h-4 text-blue-600" />
-                  </button>
-                  </div>
+                      setFormBast((f) => ({ ...f, pihak_kedua: { ...f.pihak_kedua, nama: v, pegawai_id: "", nip: "", jabatan: "", alamat: "" } }));
+                    }} data-testid="bast-penerima" />}
                   </div>
                 <div><label className="text-xs font-medium block mb-1">NIP/NIK</label>
-                  <Input value={formBast.pihak_kedua.nip} readOnly={!!formBast.pihak_kedua.pegawai_id} data-testid="bast-penerima-nip" onChange={(e) => setFormBast((f) => ({ ...f, pihak_kedua: { ...f.pihak_kedua, nip: e.target.value } }))} className="font-mono" /></div>
+                  <Input value={formBast.pihak_kedua.nip} readOnly={!!formBast.pihak_kedua.pegawai_id} data-testid="bast-penerima-nip" onChange={(e) => setFormBast((f) => ({ ...f, pihak_kedua: { ...f.pihak_kedua, nip: e.target.value, pegawai_id: "" } }))} className="font-mono" /></div>
                 <div><label className="text-xs font-medium block mb-1">Jabatan</label>
                   <Input value={formBast.pihak_kedua.jabatan} onChange={(e) => setFormBast((f) => ({ ...f, pihak_kedua: { ...f.pihak_kedua, jabatan: e.target.value } }))} /></div>
                 <div><label className="text-xs font-medium block mb-1">Alamat/Unit</label>
@@ -2500,34 +2501,35 @@ export default function PenggunaanPage({ user, onBack }) {
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium block">Penanggung jawab tambahan per unit/tempat/tugas (opsional)</label>
                   {formBast.pj_tambahan.map((pj, i) => {
-                    const ubah = (k, v) => setFormBast((f) => ({ ...f, pj_tambahan: f.pj_tambahan.map((x, j) => j === i ? { ...x, [k]: v } : x) }));
+                    const ubah = (k, v) => setFormBast((f) => ({ ...f, pj_tambahan: f.pj_tambahan.map((x, j) => j === i ? { ...x, [k]: v, ...(["nama", "nip"].includes(k) ? { pegawai_id: "" } : {}) } : x) }));
                     const melekat = (pj.asset_ids || [])
                       .map((id) => (formBast.aset_rows || []).find((a) => a.id === id))
                       .filter(Boolean);
-                    const tersedia = asetTersedia(formBast.aset_rows, formBast.aset, formBast.pj_tambahan, i);
+                    const tersedia = asetTersedia(formBast.aset_rows, formBast.aset, formBast.pj_tambahan, i)
+                      .filter(a => !(pj.asset_ids || []).includes(a.id));
                     return (
                       <div key={i} className="rounded-lg border border-border p-2 space-y-1.5"
                         data-testid={`bast-pj-${i}`}>
                         <PilihPegawaiBast daftar={pegawaiList || []} value={pj.pegawai_id} label={`Pegawai penanggung jawab ${i + 1}`}
                           testId={`bast-pj-pegawai-${i}`} onPilih={p => setFormBast(f => ({ ...f, pj_tambahan: f.pj_tambahan.map((x, j) => j === i ? { ...x, ...dariPegawai(p) } : x) }))} />
-                        <div className="flex gap-2">
-                          <Input value={pj.nama} readOnly={!!pj.pegawai_id} placeholder="Nama pihak di luar Master Pegawai"
+                        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_44px] gap-2">
+                          {!pj.pegawai_id && <Input value={pj.nama} placeholder="Nama pihak di luar Master Pegawai" className="col-span-2 min-w-0"
                             data-testid={`bast-pj-nama-${i}`}
                             onChange={(e) => {
                               const v = e.target.value;
                               setFormBast((f) => ({ ...f, pj_tambahan: f.pj_tambahan.map(
                                 (x, j) => (j === i
-                                  ? { ...x, nama: v, nip: "", pegawai_id: "" }
+                                  ? { ...x, nama: v, nip: "", pegawai_id: "", unit_eselon: "" }
                                   : x)) }));
-                            }} />
-                          <Input value={pj.nip || ""} readOnly={!!pj.pegawai_id} placeholder="NIP/NIK" className="font-mono w-40"
+                            }} />}
+                          <Input value={pj.nip || ""} readOnly={!!pj.pegawai_id} placeholder="NIP/NIK" className="min-w-0 font-mono"
                             data-testid={`bast-pj-nip-${i}`}
                             onChange={(e) => ubah("nip", e.target.value)} />
-                          <button type="button" className="p-1.5 rounded text-red-500 hover:bg-red-500/10 min-w-0 min-h-0" aria-label={`Hapus penanggung jawab ${i + 1}`}
+                          <button type="button" className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded text-red-500 hover:bg-red-500/10" aria-label={`Hapus penanggung jawab ${i + 1}`}
                             data-testid={`bast-pj-hapus-${i}`}
                             onClick={() => setFormBast((f) => ({ ...f, pj_tambahan: f.pj_tambahan.filter((_, j) => j !== i) }))}><X className="w-3.5 h-3.5" /></button>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                           <Input value={pj.unit_tempat_tugas} placeholder="Unit/tempat/tugas"
                             data-testid={`bast-pj-unit-${i}`}
                             onChange={(e) => ubah("unit_tempat_tugas", e.target.value)} />
@@ -2541,11 +2543,11 @@ export default function PenggunaanPage({ user, onBack }) {
                         <div className="flex flex-wrap items-center gap-1">
                           <span className="text-[10px] text-muted-foreground">BMN yang melekat:</span>
                           {melekat.map((a) => (
-                            <span key={a.id} className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded border border-border bg-muted/50"
+                            <span key={a.id} className="inline-flex max-w-full min-w-0 items-center gap-1 text-xs font-mono pl-2 rounded border border-border bg-muted/50"
                               data-testid={`bast-pj-${i}-aset-${a.id}`}>
-                              {labelAset(a)}
+                              <span className="min-w-0 break-words">{labelAset(a)}</span>
                               <button type="button" aria-label={`Lepas ${a.asset_name || a.id}`}
-                                className="text-red-500 min-w-0 min-h-0"
+                                className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center text-red-500"
                                 onClick={() => ubah("asset_ids", (pj.asset_ids || []).filter((x) => x !== a.id))}>
                                 <X className="w-3 h-3" />
                               </button>
@@ -2554,16 +2556,9 @@ export default function PenggunaanPage({ user, onBack }) {
                           {melekat.length === 0 && (
                             <span className="text-[10px] text-muted-foreground">— belum ada</span>
                           )}
-                          {tersedia.length > 0 && (
-                            <select value="" data-testid={`bast-pj-pilih-aset-${i}`}
-                              className="h-6 rounded border border-input bg-background px-1 text-[10px] min-h-0"
-                              onChange={(e) => { if (e.target.value) ubah("asset_ids", [...(pj.asset_ids || []), e.target.value]); }}>
-                              <option value="">+ lekatkan BMN…</option>
-                              {tersedia.map((a) => (
-                                <option key={a.id} value={a.id}>{labelAset(a)}</option>
-                              ))}
-                            </select>
-                          )}
+                          {tersedia.length > 0 && <PilihanRingkas value="" testId={`bast-pj-pilih-aset-${i}`} label={`Barang untuk penanggung jawab ${i + 1}`} placeholder="+ Pilih BMN yang melekat" clearable={false} className="w-full"
+                            options={tersedia.map(a => ({ value: a.id, label: a.asset_name || "Aset", description: [a.asset_code, `NUP ${a.NUP ?? "—"}`].filter(Boolean).join(" · ") }))}
+                            onChange={id => { if (id) ubah("asset_ids", [...(pj.asset_ids || []), id]); }} />}
                         </div>
                       </div>
                     );

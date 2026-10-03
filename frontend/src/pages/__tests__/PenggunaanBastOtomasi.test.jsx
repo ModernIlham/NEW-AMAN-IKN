@@ -14,7 +14,7 @@ beforeEach(() => {
     if (url.endsWith("/penggunaan/pemegang")) return { data: { items: [{ nama: "Pemegang", nip: "111", jumlah_aset: 1 }], total_pemegang: 1 } };
     if (url.endsWith("/penggunaan/pemegang/aset")) return { data: { items: [{ id: "a1", asset_name: "Laptop", asset_code: "301", NUP: "1" }] } };
     if (url.endsWith("/pegawai")) return { data: { items: pegawai } };
-    if (url.endsWith("/bast/referensi")) return { data: { jenis: [{ kode: "penggunaan_melekat", uraian: "Penggunaan" }, { kode: "mutasi_pengguna", uraian: "Mutasi" }] } };
+    if (url.endsWith("/bast/referensi")) return { data: { jenis: [{ kode: "penggunaan_melekat", uraian: "Penggunaan" }, { kode: "mutasi_pengguna", uraian: "Mutasi" }, { kode: "operasional_unit", uraian: "Operasional Unit" }] } };
     if (url.endsWith("/bast")) return { data: { items: [bast] } };
     return { data: { items: [] } };
   });
@@ -29,16 +29,50 @@ async function buka() {
 
 test("BAST membawa UUID pilihan pegawai dan tidak lagi meminta mutasi dini", async () => {
   await buka(); fireEvent.click(screen.getByTestId("penggunaan-buat-bast"));
-  await screen.findByRole("option", { name: /dua@example/ });
-  fireEvent.change(screen.getByTestId("bast-penerima-pegawai"), { target: { value: "p2" } });
+  fireEvent.click(await screen.findByTestId("bast-penerima-pegawai"));
+  fireEvent.click(await screen.findByTestId("bast-penerima-pegawai-option-p2"));
   expect(screen.getByTestId("bast-penerima-nip")).toHaveValue("");
-  expect(screen.getByTestId("bast-penerima")).toHaveAttribute("readonly");
+  expect(screen.queryByTestId("bast-penerima")).not.toBeInTheDocument();
+  expect(screen.getByTestId("bast-penerima-pegawai")).toHaveTextContent("Budi");
+  expect(screen.queryByTestId("bast-penerima-pegawai-search")).not.toBeInTheDocument();
   expect(screen.queryByTestId("bast-terapkan")).not.toBeInTheDocument();
   expect(screen.getByTestId("bast-penerapan-final")).toHaveTextContent("setelah dokumen sah");
   fireEvent.click(screen.getByTestId("bast-simpan"));
   await waitFor(() => expect(axios.post).toHaveBeenCalledWith(expect.stringMatching(/\/bast$/), expect.objectContaining({ pihak_kedua: expect.objectContaining({ pegawai_id: "p2", nama: "Budi", nip: "" }) }), expect.anything()));
   const body = axios.post.mock.calls.find(([url]) => url.endsWith("/bast"))[1];
   expect(body).not.toHaveProperty("terapkan_ke_aset");
+});
+
+test("ganti ke pihak luar mengosongkan FK dan identitas lama, tetap boleh menyusun BAST", async () => {
+  await buka(); fireEvent.click(screen.getByTestId("penggunaan-buat-bast"));
+  fireEvent.click(await screen.findByTestId("bast-penerima-pegawai"));
+  fireEvent.click(await screen.findByTestId("bast-penerima-pegawai-option-p1"));
+  expect(screen.getByTestId("bast-penerima-nip")).toHaveValue("111");
+  fireEvent.click(screen.getByTestId("bast-penerima-pegawai-clear"));
+  expect(screen.getByTestId("bast-penerima")).toHaveValue("");
+  expect(screen.getByTestId("bast-penerima-nip")).toHaveValue("");
+  fireEvent.change(screen.getByTestId("bast-penerima"), { target: { value: "Penerima Eksternal" } });
+  fireEvent.change(screen.getByTestId("bast-penerima-nip"), { target: { value: "123456" } });
+  fireEvent.click(screen.getByTestId("bast-simpan"));
+  await waitFor(() => expect(axios.post).toHaveBeenCalledWith(expect.stringMatching(/\/bast$/), expect.objectContaining({ pihak_kedua: expect.objectContaining({ pegawai_id: "", nama: "Penerima Eksternal", nip: "123456", jabatan: "", alamat: "" }) }), expect.anything()));
+});
+
+test("PJ memilih identitas otomatis dan tidak dapat melekatkan barang sama dua kali", async () => {
+  await buka(); fireEvent.click(screen.getByTestId("penggunaan-buat-bast"));
+  await screen.findByTestId("bast-jenis");
+  await screen.findByRole("option", { name: "Operasional Unit" });
+  fireEvent.change(screen.getByTestId("bast-jenis"), { target: { value: "operasional_unit" } });
+  fireEvent.click(screen.getByTestId("bast-pj-tambah"));
+  fireEvent.click(screen.getByTestId("bast-pj-pegawai-0"));
+  fireEvent.click(await screen.findByTestId("bast-pj-pegawai-0-option-p1"));
+  expect(screen.queryByTestId("bast-pj-nama-0")).not.toBeInTheDocument();
+  expect(screen.getByTestId("bast-pj-nip-0")).toHaveValue("111");
+  fireEvent.click(screen.getByTestId("bast-pj-pilih-aset-0"));
+  fireEvent.click(await screen.findByTestId("bast-pj-pilih-aset-0-option-a1"));
+  expect(screen.getByTestId("bast-pj-0-aset-a1")).toBeInTheDocument();
+  expect(screen.queryByTestId("bast-pj-pilih-aset-0")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Lepas Laptop" }));
+  expect(screen.getByTestId("bast-pj-pilih-aset-0")).toBeInTheDocument();
 });
 
 test("pemeriksaan ulang otomasi mengirim OCC versi ringkasan dan idempotensi", async () => {

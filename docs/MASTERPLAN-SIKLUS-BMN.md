@@ -245,6 +245,16 @@ tidak diklaim sebagai jumlah BAST sah/akses aktif atau skor kepatuhan. Pengecual
 legacy tetap terpisah; perombakan tampilan tidak memperluas izin maupun mengubah
 gerbang dokumen, proses akuntansi, atau kebijakan luring.
 
+**Pengecualian banyak barang:** pemilih kandidat admin bersifat read-only,
+default tepat nomor identitas pegawai dan selalu dalam satu satker aktif.
+Hasil berhalaman memuat kegiatan acuan serta alasan penolakan. Pemilihan
+lintas halaman tidak otomatis memilih baris fisik kembar atau kegiatan yang
+dianggap terbaru. Simpan memakai validasi create per barang dan idempotensi
+masing-masing; kegagalan sebagian tampil per barang, bukan dianggap sukses
+massal atau di-rollback semu. Pengecualian tidak boleh memetakan aset dengan
+identitas pemegang berbeda, termasuk nama berbeda ketika nomor belum diisi.
+Barang bersumber BAST tetap ditangani melalui sinkronisasi/revisi BAST.
+
 Kehilangan boleh dilaporkan tanpa foto barang saat ini; tidak otomatis menjadi
 TGR atau penghapusan. Tidak digunakan bukan keputusan BMN idle. Pegawai
 nonaktif/kontrak berakhir bukan bukti barang telah kembali. Admin aplikasi
