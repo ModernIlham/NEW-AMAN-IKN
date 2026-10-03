@@ -129,7 +129,7 @@ export async function bacaLuringPortal(sesi) {
 }
 
 export async function simpanSnapshotPortal(sesi, aset) {
-  const fields = ["id", "version", "status", "asset_id", "asset_name", "asset_code", "NUP", "location", "condition", "dasar_penugasan", "sumber_bast", "penerimaan_otomatis"];
+  const fields = ["id", "version", "status", "asset_id", "asset_name", "asset_code", "NUP", "kode_register", "location", "condition", "dasar_penugasan", "sumber_bast", "penerimaan_otomatis"];
   return transaksiPortal(sesi, store => store.put(aset.map(a => Object.fromEntries(fields.map(k => [k, a[k]]))), "aset"));
 }
 

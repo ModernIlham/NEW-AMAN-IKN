@@ -18,6 +18,22 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1092] Kamera inventarisasi dan scanner untuk laporan BMN Saya — 2026-10-03
+
+- Pilihan Kamera & scanner memakai kamera inventarisasi dengan watermark,
+  GPS, rasio, zoom, kecerahan, flash, makro/pilihan lensa sesuai perangkat.
+  Kamera biasa dan pilih file tetap terpisah. Panel kamera khusus laporan,
+  tanpa edit induk, auto-inventarisasi, pembuatan aset, atau API akun staf.
+- Scan hanya mencocokkan amanah aktif pemegang; kode ambigu/asing tidak
+  membuka aset lain. Isi laporan/foto tidak dibuang saat berpindah barang;
+  callback foto terikat sesi kamera agar tidak tertukar.
+- Waktu dan akurasi GPS dicatat per jepretan serta tampil di riwayat pemegang
+  dan pemeriksaan petugas. GPS usang/izin dicabut tidak dipakai; tanpa GPS
+  laporan tetap bisa dibuat. Metadata merupakan pengamatan perangkat,
+  tidak mengubah lokasi resmi, kondisi induk, atau pembukuan.
+- Batas bukti tiga foto/3 MB, byte bukti, OCC/idempotensi (termasuk retry
+  antrean lama), isolasi sesi, dan draf luring tetap dijaga.
+
 ## [#1091] Lampiran Edit Aset mengikuti BAST revisi yang diterapkan — 2026-10-03
 
 - Pembukaan lampiran aset membaca referensi BAST terapan dan memeriksa

@@ -136,11 +136,20 @@ def validasi_bukti(items):
         if teks(item.get("mime")).lower() != mime:
             raise ValueError("Jenis berkas foto tidak sesuai dengan isinya")
         nama = re.sub(r"[^\w. -]", "_", teks(item.get("nama")))[:120]
+        pengambilan = item.get("pengambilan")
+        metadata = {}
+        if pengambilan is not None:
+            # Data klien/perangkat, bukan penetapan posisi resmi aset.
+            waktu = waktu_pengambilan(pengambilan.get("waktu"))
+            if not waktu:
+                raise ValueError("Waktu pengambilan kamera wajib diisi")
+            metadata = {"pengambilan": {"waktu": waktu, "gps": pengambilan.get("gps")}}
         out.append({
             "nama": nama or f"bukti-{i + 1}", "mime": mime,
             "ukuran": len(raw), "width": width, "height": height,
             "sha256": hashlib.sha256(raw).hexdigest(),
             "data_base64": base64.b64encode(raw).decode("ascii"),
+            **metadata,
         })
     return out
 

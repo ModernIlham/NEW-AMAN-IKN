@@ -4,6 +4,7 @@ import { Box, ClipboardCheck, ExternalLink, FileCheck2, MapPin, RefreshCw, Searc
 import { kunciPortal, LABEL_LAPORAN, LABEL_STATUS, STATUS_PENUGASAN } from "@/lib/portalPemegang";
 import PilihanRingkas from "@/components/ui/PilihanRingkas";
 import PenugasanPortalMassal from "./PenugasanPortalMassal";
+import MetadataBuktiPemegang from "../portal/MetadataBuktiPemegang";
 
 const API = `${process.env.REACT_APP_BACKEND_URL || ""}/api`;
 const ROOT = `${API}/portal-pemegang/admin`;
@@ -211,7 +212,8 @@ export default function PortalPemegangPanel({ user, onRiskChange }) {
         {r.jenis === "kehilangan" && <p className="rounded-lg bg-amber-500/10 p-3 text-sm">Perlu penanganan pengamanan segera. Kehilangan belum menetapkan kesalahan, TGR, atau penghapusan; ikuti prosedur dan kewenangan instansi.</p>}
         {!!r.perlu_tindak_lanjut?.length && <p className={`text-sm ${notice}`}>Perlu tindak lanjut: {r.perlu_tindak_lanjut.join(", ")}. Periksa melalui modul terkait; arahan ini belum merupakan pencatatan kasus atau transaksi.</p>}
         {!!r.bukti?.length && <div className="flex flex-wrap gap-2">{r.bukti.map((p, i) => <button type="button" key={i} className={button} disabled={busy} data-testid={`portal-admin-bukti-${r.id}-${i}`} onClick={() => kerja(() => lihat(r, i))}><Search size={15} />Periksa foto {i + 1}</button>)}</div>}
-        {r.tinjauan?.map((t, i) => <p key={i} className="rounded-lg bg-muted p-3 text-sm"><strong>{LABEL_STATUS[t.keputusan] || t.keputusan}</strong> · {when(t.tanggal)}<br />{t.catatan}</p>)}
+          <MetadataBuktiPemegang bukti={r.bukti} />
+          {r.tinjauan?.map((t, i) => <p key={i} className="rounded-lg bg-muted p-3 text-sm"><strong>{LABEL_STATUS[t.keputusan] || t.keputusan}</strong> · {when(t.tanggal)}<br />{t.catatan}</p>)}
         {writer && ["diajukan", "menunggu_verifikasi"].includes(r.status) && <button type="button" className={primary} data-testid={`portal-admin-tinjau-${r.id}`} disabled={busy} onClick={() => setReview({ item: r, keputusan: "perlu_perbaikan", catatan: "" })}><FileCheck2 size={16} />Periksa & beri keputusan</button>}
       </article>)}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3"><p className="text-sm text-muted-foreground" data-testid="portal-admin-total-laporan">{laporanError ? "Jumlah laporan belum tersedia" : `${total} laporan sesuai saringan · Halaman ${page} dari ${totalPages}`}</p><div className="flex flex-wrap gap-2"><button type="button" className={button} data-testid="portal-admin-sebelumnya" disabled={busy || loading || page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>Sebelumnya</button><button type="button" className={button} data-testid="portal-admin-berikutnya" disabled={busy || loading || page >= totalPages} onClick={() => setPage(p => p + 1)}>Berikutnya</button></div></div>
