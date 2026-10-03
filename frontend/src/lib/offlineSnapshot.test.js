@@ -46,6 +46,12 @@ beforeEach(() => {
 });
 
 describe("upsertSnapshotAsset — baca-gabung-tulis", () => {
+  test("referensi BAST terapan tersimpan dan tidak mundur setelah revisi", async () => {
+    await upsertSnapshotAsset("keg1", { id: "a1", version: 4, bast_terakhir: { id: "lama" }, amanah_bast: { bast_id: "lama" } });
+    await upsertSnapshotAsset("keg1", { id: "a1", version: 5, bast_terakhir: { id: "baru" }, amanah_bast: { bast_id: "baru" } });
+    await upsertSnapshotAsset("keg1", { id: "a1", version: 4, amanah_bast: { bast_id: "lama" } });
+    expect(mockSimpanan.assets.get("a1")).toMatchObject({ bast_terakhir: { id: "baru" }, amanah_bast: { bast_id: "baru" } });
+  });
   test("respons versi lama tidak memundurkan snapshot hasil simpan terbaru", async () => {
     await upsertSnapshotAsset("keg1", { id: "a1", version: 8, asset_name: "Baru" });
     await upsertSnapshotAsset("keg1", { id: "a1", version: 7, asset_name: "Lama" });
