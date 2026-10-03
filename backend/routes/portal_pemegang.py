@@ -6,6 +6,7 @@ tidak dapat menggandakan aksi. Bukti asli berada pada laporan yang sama.
 """
 import asyncio
 import base64
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Literal
@@ -34,6 +35,10 @@ _PROJ_LAPORAN = {"_id": 0, "bukti.data_base64": 0,
                  "_idem_buat": 0, "_operasi": 0, "_identitas_pelapor": 0}
 _ASET_RINGKAS = ("asset_id", "asset_name", "asset_code", "NUP", "location", "condition")
 _LEASE_LAPORAN = timedelta(minutes=2)
+_PROJ_LAPORAN_TERAKHIR = {"_id": 0, **{k: 1 for k in (
+    "id", "penugasan_id", "pegawai_id", "status", "jenis", "kondisi",
+    "status_operasional", "lokasi_laporan", "catatan", "created_at",
+    "diambil_pada", "tinjauan", "perlu_tindak_lanjut", "laporan_sebelumnya_id")}}
 
 
 class _Masukan(BaseModel):
@@ -223,6 +228,65 @@ async def _penugasan_holder(pid, principal, harus_diterima=False):
     return p, asset
 
 
+async def _laporan_terakhir_penugasan(items, kode):
+    """Satu proyeksi metadata per penugasan, bukan laporan pemegang terdahulu.
+
+    Batas batch mencegah kueri $in besar; isi foto/token tidak dibaca untuk
+    kartu monitoring. Status laporan tetap observasi, bukan kondisi induk.
+    """
+    result = {}
+    ids = [p["id"] for p in items]
+    pemegang = {p["id"]: p.get("pegawai_id") for p in items}
+    for start in range(0, len(ids), 200):
+        pipeline = [
+            {"$match": {"kode_satker": kode, "penugasan_id": {"$in": ids[start:start + 200]},
+                        "$or": [{"penugasan_id": pid, "pegawai_id": pemegang[pid]}
+                                for pid in ids[start:start + 200]]}},
+            {"$project": _PROJ_LAPORAN_TERAKHIR},
+            {"$sort": {"created_at": -1, "id": -1}},
+            {"$group": {"_id": "$penugasan_id", "laporan": {"$first": "$$ROOT"}}},
+        ]
+        async for row in db.portal_laporan.aggregate(pipeline, maxTimeMS=10000):
+            laporan = row["laporan"]
+            # Data arsip tidak boleh melekat ke pemegang lain karena ID salah.
+            if laporan.get("pegawai_id") == pemegang.get(row["_id"]):
+                result[row["_id"]] = laporan
+    return result
+
+
+@portal_pemegang_router.get("/admin/monitoring")
+async def monitoring_admin(pegawai_id: str = "", user: dict = Depends(require_user)):
+    """Ringkasan status tercatat, bukan hitungan izin akses/BAST sah saat ini.
+
+    Satker aktif wajib. Hitungan meliputi seluruh halaman dan tidak mengikuti
+    pencarian/status daftar laporan; lingkup pegawai tetap mengikuti pilihan.
+    Pemeriksaan hak terkini tetap dilakukan di daftar/detail dan setiap tulis.
+    """
+    q = {"kode_satker": _satker_staff(user)}
+    if pegawai_id:
+        q["pegawai_id"] = pegawai_id
+    pipeline = [{"$match": q}, {"$group": {"_id": "$status", "jumlah": {"$sum": 1}}}]
+    assignments, reports, holders = await asyncio.gather(
+        db.portal_penugasan.aggregate(pipeline, maxTimeMS=10000).to_list(None),
+        db.portal_laporan.aggregate(pipeline, maxTimeMS=10000).to_list(None),
+        db.portal_penugasan.aggregate([
+            {"$match": {**q, "pegawai_id": {"$nin": [None, ""]},
+                        **({"pegawai_id": pegawai_id} if pegawai_id else {})}},
+            {"$group": {"_id": "$pegawai_id"}}, {"$count": "jumlah"},
+        ], maxTimeMS=10000).to_list(1),
+    )
+    a = {r["_id"]: r["jumlah"] for r in assignments}
+    r = {row["_id"]: row["jumlah"] for row in reports}
+    return {
+        "penugasan": {"total": sum(a.values()), **{k: a.get(k, 0) for k in
+                       ("diterima", "menunggu_konfirmasi", "disanggah", "dicabut")}},
+        "laporan": {"total": sum(r.values()),
+                    "menunggu_tinjauan": r.get("diajukan", 0) + r.get("menunggu_verifikasi", 0),
+                    **{k: r.get(k, 0) for k in ("perlu_perbaikan", "terverifikasi", "ditolak")}},
+        "pemegang": holders[0]["jumlah"] if holders else 0,
+    }
+
+
 @portal_pemegang_router.get("/admin/penugasan")
 async def daftar_penugasan_admin(pegawai_id: str = "", user: dict = Depends(require_user)):
     q = {"kode_satker": _satker_staff(user)}
@@ -237,6 +301,9 @@ async def daftar_penugasan_admin(pegawai_id: str = "", user: dict = Depends(requ
             asset, valid, alasan = None, False, exc.detail
         items.append({**_ringkas_penugasan(p, asset, True),
                       "akses_valid": valid, "alasan_akses": alasan})
+    latest = await _laporan_terakhir_penugasan(items, q["kode_satker"])
+    for item in items:
+        item["laporan_terakhir"] = latest.get(item["id"])
     return {"items": items, "total": len(items)}
 
 
@@ -484,16 +551,24 @@ async def kirim_laporan(data: LaporanIn, request: Request,
 @portal_pemegang_router.get("/admin/laporan")
 async def daftar_laporan_admin(status: str = "", page: int = Query(1, ge=1),
                               page_size: int = Query(30, ge=1, le=100),
-                              user: dict = Depends(require_user), pegawai_id: str = ""):
+                              user: dict = Depends(require_user), pegawai_id: str = "",
+                              search: str = ""):
     q = {"kode_satker": _satker_staff(user)}
     if pegawai_id:
         q["pegawai_id"] = pegawai_id
+    search = search.strip()
+    if len(search) > 120:
+        raise HTTPException(422, "Pencarian laporan maksimal 120 karakter")
+    if search:
+        q["$or"] = [{k: {"$regex": re.escape(search), "$options": "i"}} for k in
+                    ("asset_name", "asset_code", "NUP", "pegawai_nama", "lokasi_laporan")]
     if status:
         if status not in STATUS_LAPORAN:
             raise HTTPException(422, "Status laporan tidak dikenal")
         q["status"] = status
     total = await db.portal_laporan.count_documents(q)
-    rows = db.portal_laporan.find(q, _PROJ_LAPORAN).sort("created_at", -1).skip((page - 1) * page_size).limit(page_size)
+    rows = db.portal_laporan.find(q, _PROJ_LAPORAN).sort([
+        ("created_at", -1), ("id", -1)]).skip((page - 1) * page_size).limit(page_size)
     items = []
     async for r in rows:
         p = await db.portal_penugasan.find_one({"id": r["penugasan_id"],

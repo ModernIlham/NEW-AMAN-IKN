@@ -18,6 +18,23 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1086] BMN Saya dan Portal Pemegang berfokus pada pemantauan — 2026-10-03
+
+- Tombol mode terang/gelap tersedia sebelum dan setelah masuk BMN Saya,
+  memakai preferensi tema aplikasi. Tampilan responsif mengutamakan ringkasan,
+  barang yang dijaga, pembaruan terakhir, dan arahan pemeriksaan petugas.
+- Kartu barang membedakan kondisi/lokasi induk dari laporan pemegang; dasar
+  BAST tetap terlihat. Pencarian, saringan dan riwayat per penugasan memudahkan
+  pemeriksaan tanpa meminta penerimaan ulang untuk BAST otomatis.
+- Portal petugas mengutamakan monitoring, dengan ringkasan server seluruh data
+  dalam lingkup satker/pegawai dan pencarian laporan sebelum paginasi. Hitungan
+  status tercatat tidak disamarkan sebagai hak akses aktif atau skor kepatuhan.
+- Laporan terakhir dipilih per penugasan/pemegang dan waktu penerimaan server,
+  bukan waktu foto atau tinjauan. Metadata dimuat berkelompok tanpa foto/base64,
+  kredensial, atau data pemegang dari satker lain.
+- Pengelolaan akses/email dan pengecualian legacy menjadi panel lanjutan.
+  Gerbang BAST, otorisasi, OCC/idempotensi, luring dan akuntansi tidak diubah.
+
 ## [#1085] BAST sah menjadi sumber amanah otomatis di BMN Saya — 2026-10-03
 
 - BAST baru membekukan identitas pegawai dan pembagian barang; draf/revisi

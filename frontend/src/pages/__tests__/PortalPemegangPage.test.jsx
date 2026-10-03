@@ -1,5 +1,5 @@
 import React from "react";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import PortalPemegangPage from "../PortalPemegangPage";
 import * as portal from "@/lib/portalPemegang";
 
@@ -14,6 +14,8 @@ const asset = { id: "t1", version: 2, status: "diterima", asset_id: "a1", asset_
 const rejected = () => Object.assign(new Error("Sesi berakhir"), { status: 401 });
 
 beforeEach(() => {
+  localStorage.setItem("theme", "light");
+  document.documentElement.classList.remove("dark");
   Object.defineProperty(globalThis, "crypto", { configurable: true, value: require("crypto").webcrypto });
   window.history.replaceState(null, "", "/bmn-saya");
   Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
@@ -135,4 +137,113 @@ test("batas idle yang tampil berlaku juga untuk pembersihan UI dan draf", async 
   await act(async () => { jest.advanceTimersByTime(15001); });
   expect(screen.queryByTestId("portal-aset-t1")).not.toBeInTheDocument();
   expect(portal.hapusLuringPortal).toHaveBeenCalled();
+});
+
+test("mode terang/gelap tersedia sebelum login dan preferensi bertahan ketika portal dibuka ulang", async () => {
+  portal.portalRequest.mockImplementation(async () => { throw rejected(); });
+  const view = render(<PortalPemegangPage />);
+  await screen.findByTestId("portal-email");
+  fireEvent.click(screen.getByRole("button", { name: "Aktifkan mode gelap" }));
+  expect(document.documentElement).toHaveClass("dark");
+  expect(localStorage.getItem("theme")).toBe("dark");
+  view.unmount();
+  render(<PortalPemegangPage />);
+  await screen.findByTestId("portal-email");
+  fireEvent.click(screen.getByRole("button", { name: "Aktifkan mode terang" }));
+  expect(document.documentElement).not.toHaveClass("dark");
+  expect(localStorage.getItem("theme")).toBe("light");
+  expect(screen.getByTestId("portal-tema")).toHaveClass("min-h-[44px]");
+});
+
+const report = { id: "r1", penugasan_id: "t1", asset_name: "Laptop BMN", jenis: "berkala", status: "diajukan", kondisi: "Rusak Ringan", status_operasional: "diperbaiki", lokasi_laporan: "Bengkel", created_at: "2026-10-03T10:00:00Z", catatan: "Layar diperiksa oleh teknisi", tinjauan: [] };
+const asset2 = { ...asset, id: "t2", asset_id: "a2", asset_name: "Meja BMN", NUP: "2", sumber_bast: { nomor: "BAST-MEJA" } };
+function isiMonitoring(assets, reports) {
+  portal.portalRequest.mockImplementation(async path => path === "/sesi" ? sesi : path === "/aset" ? { items: assets } : path === "/laporan" ? { items: reports } : {});
+}
+
+test("ringkasan berasal dari laporan terbaru per penugasan dan filter tidak mencampurkan kondisi induk", async () => {
+  isiMonitoring([asset, asset2, { ...asset, id: "t3", asset_name: "Lemari", status: "menunggu_konfirmasi" }], [
+    { ...report, id: "r-lama", status: "perlu_perbaikan", created_at: "2026-10-01T10:00:00Z" },
+    report, { ...report, id: "r-asing", penugasan_id: "penugasan-lama", created_at: "2026-10-04T10:00:00Z" },
+  ]);
+  render(<PortalPemegangPage />);
+  await screen.findByTestId("portal-aset-t1");
+  expect(screen.getByTestId("portal-ringkasan-semua")).toHaveTextContent("3Barang dipantau");
+  expect(screen.getByTestId("portal-ringkasan-belum")).toHaveTextContent("1Belum dilaporkan");
+  expect(screen.getByTestId("portal-ringkasan-menunggu")).toHaveTextContent("1Menunggu pemeriksaan");
+  expect(screen.getByTestId("portal-ringkasan-perhatian")).toHaveTextContent("2Perlu perhatian");
+  expect(within(screen.getByTestId("portal-aset-t1")).getByText("Baik")).toBeInTheDocument();
+  expect(screen.getByTestId("portal-terakhir-t1")).toHaveTextContent("Rusak Ringan · Sedang diperbaiki");
+  expect(screen.getByTestId("portal-terakhir-t1")).toHaveTextContent("Menunggu pemeriksaan");
+  expect(screen.getByTestId("portal-terakhir-t1")).not.toHaveTextContent("Perlu perbaikan");
+  fireEvent.click(screen.getByTestId("portal-ringkasan-belum"));
+  expect(screen.queryByTestId("portal-aset-t1")).not.toBeInTheDocument();
+  expect(screen.getByTestId("portal-aset-t2")).toBeInTheDocument();
+  expect(screen.queryByTestId("portal-aset-t3")).not.toBeInTheDocument();
+  fireEvent.change(screen.getByTestId("portal-filter"), { target: { value: "semua" } });
+  fireEvent.change(screen.getByTestId("portal-cari"), { target: { value: " bast-meja " } });
+  expect(screen.getByTestId("portal-aset-t2")).toBeInTheDocument();
+  expect(screen.queryByTestId("portal-aset-t1")).not.toBeInTheDocument();
+  fireEvent.change(screen.getByTestId("portal-cari"), { target: { value: "tidak ditemukan" } });
+  fireEvent.click(screen.getByTestId("portal-reset-filter"));
+  expect(screen.getByTestId("portal-aset-t1")).toBeInTheDocument();
+});
+
+test("riwayat dari kartu terfokus ke penugasan dan dapat disaring menurut keputusan", async () => {
+  isiMonitoring([asset, asset2], [report, { ...report, id: "r2", penugasan_id: "t2", asset_name: "Meja BMN", status: "terverifikasi" }, { ...report, id: "r3", status: "terverifikasi", created_at: "2026-10-02T10:00:00Z" }]);
+  render(<PortalPemegangPage />);
+  fireEvent.click(await screen.findByTestId("portal-riwayat-t1"));
+  expect(screen.getByTestId("portal-riwayat-aset")).toHaveValue("t1");
+  expect(screen.getByTestId("portal-laporan-r1")).toBeInTheDocument();
+  expect(screen.getByTestId("portal-laporan-r3")).toBeInTheDocument();
+  expect(screen.queryByTestId("portal-laporan-r2")).not.toBeInTheDocument();
+  fireEvent.change(screen.getByTestId("portal-riwayat-status"), { target: { value: "terverifikasi" } });
+  expect(screen.queryByTestId("portal-laporan-r1")).not.toBeInTheDocument();
+  expect(screen.getByTestId("portal-laporan-r3")).toBeInTheDocument();
+  fireEvent.change(screen.getByTestId("portal-riwayat-aset"), { target: { value: "" } });
+  expect(screen.getByTestId("portal-laporan-r2")).toBeInTheDocument();
+});
+
+test("pergantian principal membersihkan pencarian, filter, riwayat dan ringkasan identitas lama", async () => {
+  isiMonitoring([asset], [report]);
+  render(<PortalPemegangPage />);
+  fireEvent.click(await screen.findByTestId("portal-riwayat-t1"));
+  fireEvent.change(screen.getByTestId("portal-riwayat-status"), { target: { value: "diajukan" } });
+  fireEvent.click(screen.getByTestId("portal-tab-aset"));
+  fireEvent.change(screen.getByTestId("portal-cari"), { target: { value: "Laptop BMN" } });
+  fireEvent.change(screen.getByTestId("portal-filter"), { target: { value: "menunggu" } });
+  portal.portalRequest.mockImplementation(async path => path === "/sesi" ? { ...sesi, session_id: "s2", pegawai: { ...sesi.pegawai, id: "p2", nama: "Pegawai Baru" } } : path === "/aset" ? { items: [asset2] } : { items: [] });
+  fireEvent.click(screen.getByTestId("portal-muat-ulang"));
+  await screen.findByTestId("portal-aset-t2");
+  expect(screen.getByTestId("portal-cari")).toHaveValue("");
+  expect(screen.getByTestId("portal-filter")).toHaveValue("semua");
+  expect(screen.queryByText("Laptop BMN")).not.toBeInTheDocument();
+  expect(screen.getByTestId("portal-ringkasan-semua")).toHaveTextContent("1Barang dipantau");
+  fireEvent.click(screen.getByTestId("portal-tab-laporan"));
+  expect(screen.getByTestId("portal-riwayat-aset")).toHaveValue("");
+  expect(screen.getByTestId("portal-riwayat-status")).toHaveValue("");
+  expect(screen.queryByTestId("portal-laporan-r1")).not.toBeInTheDocument();
+});
+
+test("keluar menghapus ringkasan dan riwayat pribadi tanpa menghapus preferensi tema", async () => {
+  isiMonitoring([asset], [report]);
+  render(<PortalPemegangPage />);
+  await screen.findByTestId("portal-aset-t1");
+  fireEvent.click(screen.getByTestId("portal-tema"));
+  fireEvent.click(screen.getByTestId("portal-keluar"));
+  await screen.findByTestId("portal-email");
+  expect(screen.queryByTestId("portal-ringkasan-semua")).not.toBeInTheDocument();
+  expect(screen.queryByTestId("portal-aset-t1")).not.toBeInTheDocument();
+  expect(screen.queryByText("Layar diperiksa oleh teknisi")).not.toBeInTheDocument();
+  expect(document.documentElement).toHaveClass("dark");
+  expect(localStorage.getItem("theme")).toBe("dark");
+  expect(portal.hapusLuringPortal).toHaveBeenCalled();
+});
+
+test("tanpa barang menuntun pemegang ke BAST sah, bukan pemetaan ulang mandiri", async () => {
+  isiMonitoring([], []);
+  render(<PortalPemegangPage />);
+  expect(await screen.findByText("Belum ada barang yang dapat dipantau")).toBeInTheDocument();
+  expect(screen.getByText(/Barang muncul setelah BAST lengkap dan sah/)).toBeInTheDocument();
+  expect(screen.getByTestId("portal-ringkasan-belum")).toHaveTextContent("0Belum dilaporkan");
 });
