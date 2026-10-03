@@ -207,6 +207,51 @@ def test_pdf_mengetahui_kpb_ikut_satker_dokumen(dbx):
     assert "Direktur Pengembangan Ekosistem Digital" not in teks
 
 
+@pytest.mark.parametrize("params,disposisi", [({}, "attachment"), ({"pratinjau": "false"}, "attachment"), ({"pratinjau": "true"}, "inline")])
+def test_pdf_pratinjau_inline_unduhan_tetap_attachment(dbx, params, disposisi):
+    """HTTP nyata: pemilihan disposisi tidak mengubah naskah atau register."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    import pypdfium2 as pdfium
+
+    bast = {"id": "bast-preview", "kode_satker": SATKER, "jenis": "penggunaan_melekat",
+            "nomor": "BAST-UJI-PRATINJAU", "tanggal": "2026-10-03",
+            "pihak_pertama": {"nama": "Penyerah Uji"},
+            "pihak_kedua": {"nama": "Penerima Uji"},
+            "aset": [], "asset_ids": [], "sertakan_foto": False}
+    async def seed():
+        await _seed_dasar(dbx)
+        await dbx.bast_serah_terima.insert_one(dict(bast))
+    _jalan(seed())
+    app = FastAPI()
+    app.include_router(rb.bast_router)
+    app.dependency_overrides[rb.require_user_or_query_token] = lambda: USER
+    with TestClient(app) as client:
+        response = client.get("/bast/bast-preview/pdf", params=params)
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.headers["content-disposition"] == f'{disposisi}; filename="BAST_bast-pre.pdf"'
+    assert response.content.startswith(b"%PDF-")
+    with pdfium.PdfDocument(response.content) as pdf:
+        teks = "\n".join(page.get_textpage().get_text_range() for page in pdf)
+    assert "BAST-UJI-PRATINJAU" in teks and "Penerima Uji" in teks
+    assert _jalan(dbx.bast_serah_terima.find_one({"id": bast["id"]}, {"_id": 0})) == bast
+
+
+def test_pdf_pratinjau_tetap_memerlukan_login_dan_akses_satker(dbx):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    _jalan(dbx.bast_serah_terima.insert_one({"id": "bast-private", "kode_satker": SATKER}))
+    app = FastAPI()
+    app.include_router(rb.bast_router)
+    with TestClient(app) as client:
+        assert client.get("/bast/bast-private/pdf?pratinjau=true").status_code == 401
+    app.dependency_overrides[rb.require_user_or_query_token] = lambda: {**USER, "kode_satker": "SATKER-LAIN"}
+    with TestClient(app) as client:
+        assert client.get("/bast/bast-private/pdf?pratinjau=true").status_code == 403
+
+
 def _y_teks_terbawah(body, potongan):
     """Koordinat-y kemunculan TERAKHIR `potongan` (halaman terakhir yang
     memuatnya, posisi paling bawah) — nama pihak juga tampil di tabel

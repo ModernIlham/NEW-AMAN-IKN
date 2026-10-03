@@ -1131,13 +1131,16 @@ async def unduh_bukti_bast(bast_id: str,
 
 @bast_router.get("/bast/{bast_id}/pdf")
 async def bast_pdf(bast_id: str, nilai: str = "",
-                   _user: dict = Depends(require_user_or_query_token)):
+                   _user: dict = Depends(require_user_or_query_token),
+                   pratinjau: bool = False):
     """Render BAST 1-2 halaman + lampiran foto opsional.
 
     `?nilai=0/1` mencetak salinan TANPA/DENGAN kolom Nilai Perolehan tanpa
     mengubah data — satu BAST bisa dicetak dua versi (arsip ber-nilai,
     salinan pegawai tanpa nilai). Tanpa parameter: ikut pilihan yang
-    dibekukan pada dokumen, lalu kebijakan satker."""
+    dibekukan pada dokumen, lalu kebijakan satker.
+    `?pratinjau=true` membuka PDF inline, bukan memerintahkan unduhan.
+    Jalur, isi PDF, dan pemeriksaan hak akses tetap sama."""
     from reportlab.lib.units import mm as rl_mm
     from reportlab.platypus import PageBreak, Paragraph, Spacer, Table, Image as RLImage
 
@@ -2001,6 +2004,7 @@ async def bast_pdf(bast_id: str, nilai: str = "",
     await asyncio.to_thread(doc.build, el, onFirstPage=footer,
                             onLaterPages=footer)
     buffer.seek(0)
+    disposisi = "inline" if pratinjau else "attachment"
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition":
-                                      f'attachment; filename="BAST_{bast_id[:8]}.pdf"'})
+                                      f'{disposisi}; filename="BAST_{bast_id[:8]}.pdf"'})

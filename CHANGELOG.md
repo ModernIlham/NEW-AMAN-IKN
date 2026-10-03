@@ -18,6 +18,16 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1088] Pratinjau riwayat BAST tanpa unduhan otomatis — 2026-10-03
+
+- Tombol Pratinjau meminta PDF dengan `pratinjau=true`; server mengirim
+  `Content-Disposition: inline` agar browser menampilkannya di tab baru.
+  Sebelumnya tombol membuka respons `attachment` yang memicu unduhan.
+- Tombol Unduh tetap menyimpan berkas melalui jalur unduhan terpisah.
+  Naskah, autentikasi, lingkup satker, serta status BAST tidak berubah.
+- Uji regresi memastikan pratinjau tidak memanggil pengunduh, parameter
+  autentikasi/satker tetap dibawa, dan respons PDF sesuai mode yang dipilih.
+
 ## [#1087] Pemilih ringkas dan penugasan legacy banyak aset — 2026-10-03
 
 - Pilihan pegawai BAST dan lingkup Portal Pemegang memakai satu pemilih
