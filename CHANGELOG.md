@@ -18,6 +18,16 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1089] Email akses BMN Saya lebih rapi dan mudah dibaca — 2026-10-03
+
+- Email tautan masuk memakai kartu beridentitas AMAN, tombol masuk yang jelas,
+  tata letak fleksibel untuk HP/komputer, dan panel keamanan ringkas.
+- Masa berlaku mengikuti TTL autentikasi; informasi sekali pakai, peramban
+  asal, larangan meneruskan tautan, dan login bukan penandatanganan tetap ada.
+- Alternatif teks disertakan untuk pembaca email tanpa HTML. Tidak memakai
+  gambar eksternal/font unduhan; nama dan tautan tetap di-escape. Mekanisme
+  token, sesi, penerima, dan pembatasan pengiriman tidak diubah.
+
 ## [#1088] Pratinjau riwayat BAST tanpa unduhan otomatis — 2026-10-03
 
 - Tombol Pratinjau meminta PDF dengan `pratinjau=true`; server mengirim

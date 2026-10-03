@@ -237,19 +237,14 @@ async def batas_kirim_portal(email, database=None):
 
 async def kirim_email_portal(email, nama, link):
     """Transport Resend existing, tanpa mencatat token/email/galat provider."""
-    from html import escape
+    from portal_email import isi_email_portal
     import shared_utils as su
 
     if not su.RESEND_API_KEY:
         return False
     params = {"from": su.SENDER_EMAIL, "to": [email],
-              "subject": "Tautan masuk BMN Saya — AMAN", "html": (
-        f"<p>Yth. {escape(str(nama))},</p><p>Gunakan tautan berikut pada peramban "
-        "tempat Anda meminta akses BMN Saya:</p>"
-        f'<p><a href="{escape(link, quote=True)}">Masuk ke BMN Saya</a></p>'
-        "<p>Tautan berlaku 15 menit dan hanya dapat dipakai sekali. Jangan "
-        "teruskan tautan ini. Abaikan email bila Anda tidak meminta akses.</p>"
-        "<p>Masuk ke portal bukan tindakan penandatanganan dokumen.</p>")}
+              "subject": "Tautan masuk BMN Saya — AMAN",
+              **isi_email_portal(nama, link, int(LINK_TTL.total_seconds() // 60))}
     try:
         await asyncio.wait_for(asyncio.to_thread(su.resend.Emails.send, params), timeout=12)
         await su.catat_email_terkirim("portal_pemegang")
