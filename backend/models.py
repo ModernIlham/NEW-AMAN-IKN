@@ -184,6 +184,9 @@ class AssetResponse(BaseModel):
     # Dokumen BAST (GridFS) — diisi server oleh POST /assets/{id}/bast
     bast_file_id: Optional[str] = ""
     bast_filename: Optional[str] = ""
+    # Referensi baca-saja dari penerapan BAST; bukan field input AssetCreate.
+    bast_terakhir: Optional[dict] = None
+    amanah_bast: Optional[dict] = None
     condition: Optional[str] = "Baik"
     status: Optional[str] = "Aktif"
     nomor_spm: Optional[str] = ""

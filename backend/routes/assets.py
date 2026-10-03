@@ -264,6 +264,7 @@ LIST_PROJECTION = {
     "siman": 1,
     # Jejak BAST serah terima terakhir (badge riwayat handover per aset).
     "bast_terakhir": 1,
+    "amanah_bast": 1,
     # Ringkasan penempatan untuk daftar dan kolom baca-saja saat offline.
     # Titik tersimpan membedakan di luar denah dari belum ditempatkan;
     # subdoc/audit penempatan lengkap tidak ikut dikirim pada daftar.
@@ -1968,11 +1969,13 @@ async def upload_asset_bast(
     existing = await db.assets.find_one(
         {"id": asset_id},
         {"_id": 0, "id": 1, "activity_id": 1, "asset_code": 1, "asset_name": 1,
-         "NUP": 1, "bast_file_id": 1},
+         "NUP": 1, "bast_file_id": 1, "amanah_bast": 1},
     )
     if not existing:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
     await pastikan_akses_aset(user, existing)
+    if existing.get("amanah_bast"):
+        raise HTTPException(409, "Lampiran mengikuti BAST yang diterapkan. Gunakan revisi resmi di riwayat BAST, bukan unggah pengganti dari Edit Aset")
     # Kegiatan yang sudah disahkan terkunci — sama seperti mutasi aset lain
     await ensure_activity_not_sealed(existing.get("activity_id"))
 
@@ -2015,7 +2018,9 @@ async def upload_asset_bast(
     # kode/nama berubah kemudian (reklasifikasi / ganti nama).
     from penggunaan_utils import snapshot_bast
     result = await db.assets.update_one(
-        {"id": asset_id},
+        {"id": asset_id,
+         "amanah_bast": existing.get("amanah_bast", {"$exists": False}),
+         "bast_file_id": existing.get("bast_file_id", {"$exists": False})},
         {"$set": {
             "bast_file_id": str(file_id),
             "bast_filename": filename,
@@ -2025,7 +2030,7 @@ async def upload_asset_bast(
     )
     if result.matched_count == 0:
         await delete_document_from_gridfs(str(file_id))
-        raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+        raise HTTPException(status_code=409, detail="Lampiran atau BAST aset berubah saat unggahan berlangsung. Muat ulang dahulu")
     if old_file_id:
         await delete_document_from_gridfs(old_file_id)
 
@@ -2048,16 +2053,47 @@ async def upload_asset_bast(
 @assets_router.get("/assets/{asset_id}/bast")
 async def get_asset_bast(asset_id: str, request: Request,
                          _user: dict = Depends(require_user_or_query_token)):
-    """Stream dokumen BAST aset. Dikonsumsi window.open() (tidak bisa membawa
-    Authorization header) → menerima header ATAU ?token=<jwt>. ETag berbasis
-    bast_file_id (unik per unggahan) → cacheable."""
+    """Baca sumber BAST terapan setiap kali dibuka; scan lama hanya untuk legacy."""
     asset = await db.assets.find_one(
         {"id": asset_id},
-        {"_id": 0, "bast_file_id": 1, "bast_filename": 1, "activity_id": 1}
+        {"_id": 0, "id": 1, "bast_file_id": 1, "bast_filename": 1, "activity_id": 1,
+         "amanah_bast": 1, "bast_terakhir": 1}
     )
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
     await pastikan_akses_aset(_user, asset)
+    from lampiran_bast_aset import sumber_lampiran_bast
+    sumber = await sumber_lampiran_bast(db, asset)
+    if sumber:
+        bast, sah = sumber
+        if sah["jenis"] == "esign":
+            # dok_file_id adalah PDF SUMBER, bukan PDF dengan bubuhan TTD.
+            # Pakai renderer final existing beserta pagar hak akses satkernya.
+            from routes.ttd import dokumen_ber_ttd
+            response = await dokumen_ber_ttd(bast.get("signature_request_id") or "", user=_user)
+            if response.headers.get("X-Document-Status") != "final":
+                raise HTTPException(409, "Dokumen elektronik belum final; periksa riwayat BAST")
+        else:
+            data = await get_document_from_gridfs(sah["file_id"])
+            if not data:
+                raise HTTPException(404, "Berkas bukti BAST terkini tidak tersedia")
+            from urllib.parse import quote
+            bukti = bast.get("bukti") or {}
+            nama = bukti.get("filename") or "bukti.pdf"
+            response = Response(content=data, media_type=bukti.get("content_type") or "application/pdf",
+                headers={"Content-Disposition": "inline; filename*=UTF-8''" + quote(nama, safe=""),
+                         "X-Content-Type-Options": "nosniff"})
+        # Perpindahan BAST ketika PDF sedang dibangun tidak boleh menyajikan
+        # dokumen yang baru saja digantikan. Tidak pernah fallback scan lama.
+        latest = await db.assets.find_one({"id": asset_id}, {"amanah_bast": 1, "bast_terakhir": 1, "activity_id": 1}) or {}
+        if (latest.get("amanah_bast") != asset.get("amanah_bast")
+                or latest.get("bast_terakhir") != asset.get("bast_terakhir")
+                or latest.get("activity_id") != asset.get("activity_id")):
+            raise HTTPException(409, "BAST aset berubah saat dibuka. Buka kembali lampiran terkini")
+        # Pembatalan sumber bisa terjadi tanpa perpindahan pointer aset.
+        await sumber_lampiran_bast(db, asset)
+        response.headers["Cache-Control"] = "private, no-store"
+        return response
     file_id = asset.get("bast_file_id") or ""
     if not file_id:
         raise HTTPException(status_code=404, detail="Aset belum memiliki dokumen BAST")
@@ -2065,6 +2101,7 @@ async def get_asset_bast(asset_id: str, request: Request,
     etag = f'"bast-{file_id}"'
     not_modified = _not_modified(request, etag)
     if not_modified:
+        not_modified.headers["Cache-Control"] = "private, no-cache"
         return not_modified
 
     file_bytes = await get_document_from_gridfs(file_id)
@@ -2075,7 +2112,8 @@ async def get_asset_bast(asset_id: str, request: Request,
     return Response(
         content=file_bytes,
         media_type=media_type,
-        headers=_media_headers(etag, {"Content-Disposition": f'inline; filename="{name}"'}),
+        headers=_media_headers(etag, {"Content-Disposition": f'inline; filename="{name}"',
+                                     "Cache-Control": "private, no-cache"}),
     )
 
 

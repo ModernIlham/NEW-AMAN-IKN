@@ -353,6 +353,12 @@ const _bastUsangDari = (src) => {
   return n(src.asset_code) !== n(s.kode) || n(src.asset_name) !== n(s.nama);
 };
 
+const _bastInfoDari = src => src?.amanah_bast && Object.keys(src.amanah_bast).length > 0
+  ? { terkelola: true, bast_id: src.amanah_bast.bast_id, filename: src.bast_terakhir?.nomor || "" }
+  : src?.bast_file_id
+    ? { file_id: src.bast_file_id, filename: src.bast_filename || "", usang: _bastUsangDari(src) }
+    : null;
+
 const axiosLargeUpload = axios.create({
   timeout: 120000,
   maxContentLength: Infinity,
@@ -861,7 +867,7 @@ const AssetForm = memo(({
       const initFromCacheRow = () => {
         const lightData = buildEditFormData(editAsset, activity?.id);
         setAssetVersion(Number(editAsset.version) || 1);
-        setBastInfo(editAsset.bast_file_id ? { file_id: editAsset.bast_file_id, filename: editAsset.bast_filename || "", usang: _bastUsangDari(editAsset) } : null);
+        setBastInfo(_bastInfoDari(editAsset));
         // Baris cache luring memakai proyeksi daftar yang SAMA dengan daring,
         // jadi `psp` ikut tersimpan di snapshot dan No. PSP tetap terbaca
         // saat petugas kehilangan sinyal.
@@ -884,7 +890,7 @@ const AssetForm = memo(({
           if (cancelled) return;
           const a = r.data;
           const lightData = buildEditFormData(a, activity?.id);
-          setBastInfo(a.bast_file_id ? { file_id: a.bast_file_id, filename: a.bast_filename || "", usang: _bastUsangDari(a) } : null);
+          setBastInfo(_bastInfoDari(a));
           // Keterangan PSP turunan dari server — SENGAJA di luar formData:
           // ia tidak pernah dikirim balik saat simpan (baca-saja), jadi tak
           // boleh ikut perbandingan "ada perubahan" milik originalDataRef.
@@ -1457,7 +1463,7 @@ const AssetForm = memo(({
   const handleBastUpload = useCallback(async e => {
     const file = e.target.files?.[0];
     e.target.value = "";
-    if (!file || !editId) return;
+    if (!file || !editId || bastInfo?.terkelola) return;
     const name = (file.name || "").toLowerCase();
     if (!name.endsWith(".pdf") && !/\.(jpe?g|png|webp)$/.test(name)) {
       toast.error("Dokumen BAST harus PDF atau gambar (JPG/PNG/WEBP)");
@@ -1484,13 +1490,15 @@ const AssetForm = memo(({
     } finally {
       setBastUploading(false);
     }
-  }, [editId]);
+  }, [editId, bastInfo?.terkelola]);
 
   const handleBastPreview = useCallback(() => {
     if (!editId) return;
-    // bast_file_id unik per unggahan → cache-buster alami untuk GET publik
-    window.open(authMediaUrl(`${API}/assets/${editId}/bast${bastInfo?.file_id ? `?v=${bastInfo.file_id}` : ""}`), "_blank");
-  }, [editId, bastInfo?.file_id]);
+    if (!navigator.onLine) { toast.info("Hubungkan internet untuk memeriksa dan membuka BAST terkini."); return; }
+    // Nonce per klik menghindari cache scan lama, termasuk bila BAST direvisi
+    // saat form masih terbuka. Server menentukan sumber, bukan ID file klien.
+    window.open(authMediaUrl(`${API}/assets/${editId}/bast?v=${Date.now()}`), "_blank", "noopener,noreferrer");
+  }, [editId]);
 
   const openCamera = useCallback(() => cameraInputRef.current?.click(), []);
   const openGallery = useCallback(() => fileInputRef.current?.click(), []);
@@ -2767,8 +2775,8 @@ const AssetForm = memo(({
                         type="button" variant="outline" size="sm"
                         className="h-8 min-h-0 min-w-0 px-2 text-[10px] flex-shrink-0"
                         onClick={() => bastInputRef.current?.click()}
-                        disabled={bastUploading}
-                        title="Unggah dokumen BAST (PDF/gambar, maks 10MB)"
+                        disabled={bastUploading || bastInfo?.terkelola}
+                        title={bastInfo?.terkelola ? "Lampiran mengikuti BAST terapan; perubahan melalui revisi resmi di riwayat BAST" : "Unggah dokumen BAST (PDF/gambar, maks 10MB)"}
                         data-testid="bast-upload-btn"
                       >
                         {bastUploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
@@ -2776,16 +2784,16 @@ const AssetForm = memo(({
                       </Button>
                     )}
                   </div>
-                  {isEditing && bastInfo?.file_id && (
+                  {isEditing && (bastInfo?.file_id || bastInfo?.terkelola) && (
                     <button
                       type="button"
                       onClick={handleBastPreview}
                       data-testid="bast-preview-btn"
-                      title={`Lampiran BAST tersedia${bastInfo.filename ? `: ${bastInfo.filename}` : ""} — terhubung otomatis dengan bukti serah terima dari modul Penggunaan`}
+                      title={`${bastInfo.terkelola ? "BAST terapan" : "Lampiran BAST"}${bastInfo.filename ? `: ${bastInfo.filename}` : ""} — dokumen terkini diperiksa saat dibuka`}
                       className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 text-[10px] font-semibold hover:bg-emerald-500/25 max-w-full min-w-0 min-h-0"
                     >
                       <Eye className="w-3 h-3 flex-shrink-0" />
-                      <span className="truncate">Lampiran BAST tersedia — lihat foto/dokumen</span>
+                      <span className="truncate">{bastInfo.terkelola ? "BAST terhubung — lihat dokumen terkini" : "Lampiran BAST tersedia — lihat foto/dokumen"}</span>
                     </button>
                   )}
                   {bastInfo?.usang && (

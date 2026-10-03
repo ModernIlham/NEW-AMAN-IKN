@@ -18,6 +18,21 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1091] Lampiran Edit Aset mengikuti BAST revisi yang diterapkan — 2026-10-03
+
+- Pembukaan lampiran aset membaca referensi BAST terapan dan memeriksa
+  keabsahannya kembali. Revisi elektronik menampilkan PDF dengan bubuhan
+  TTD/QR, bukan scan BAST lama atau PDF sumber tanpa tanda tangan.
+- Berlaku juga bagi revisi yang sudah diterapkan sebelum rilis ini, tanpa
+  migrasi data atau unggah ulang. Draf tidak menggantikan BAST terapan;
+  sumber tidak sah/dicabut tidak kembali diam-diam ke scan lama.
+- Referensi dibawa ke form dan cache luring; membuka dokumen terkini perlu
+  internet. Cache scan lama dilewati setiap klik dan respons terkelola tidak
+  disimpan cache. Nomor manual aset tidak ditimpa.
+- Unggah pengganti dari Edit Aset dikunci untuk BAST terkelola; perubahan
+  melalui revisi resmi. Konflik saat unggah/render tidak menimpa referensi
+  terbaru. Arsip lama tetap utuh dan unggahan manual legacy tetap didukung.
+
 ## [#1090] Riwayat BAST mengenali bukti elektronik final — 2026-10-03
 
 - BAST elektronik yang terverifikasi lengkap menampilkan status bukti
