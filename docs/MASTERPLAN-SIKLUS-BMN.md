@@ -236,6 +236,15 @@ lintas semua barang. Penerusan kasus ke Pemeliharaan/Pengamanan/Wasdal ber-FK,
 pengingat berkala, eskalasi dan dasbor kepatuhan masih tahap berikutnya.
 Tidak menyalakan penjadwalan baru secara diam-diam.
 
+**Pemantauan pemegang:** BMN Saya menjadi layar pemantauan harian barang yang
+diamanahkan, dengan tema terang/gelap, ringkasan dan saringan, data induk yang
+dibedakan dari laporan observasi terakhir, serta riwayat per penugasan. Panel
+pengelola mengutamakan tinjauan laporan dan ringkasan seluruh data dalam lingkup
+satker/pegawai, bukan hanya halaman daftar yang tampil. Hitungan status tercatat
+tidak diklaim sebagai jumlah BAST sah/akses aktif atau skor kepatuhan. Pengecualian
+legacy tetap terpisah; perombakan tampilan tidak memperluas izin maupun mengubah
+gerbang dokumen, proses akuntansi, atau kebijakan luring.
+
 Kehilangan boleh dilaporkan tanpa foto barang saat ini; tidak otomatis menjadi
 TGR atau penghapusan. Tidak digunakan bukan keputusan BMN idle. Pegawai
 nonaktif/kontrak berakhir bukan bukti barang telah kembali. Admin aplikasi

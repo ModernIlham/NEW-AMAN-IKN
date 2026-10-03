@@ -13,6 +13,19 @@
 Rumah pengelola: **Penggunaan → Aset per Pemegang → Portal Pemegang**.
 Halaman pemegang: **`/bmn-saya`**, tanpa membuat akun staf/password.
 
+**Pemantauan sehari-hari:** BMN Saya menyediakan mode terang/gelap, ringkasan
+barang yang diamanahkan, pencarian/saringan, serta laporan terakhir dan arahan
+petugas per barang. Kondisi/lokasi pada data induk dibedakan dari pengamatan
+yang dilaporkan. Riwayat dapat difokuskan pada satu barang; tidak perlu menerima
+ulang amanah yang sudah lengkap melalui BAST.
+
+Portal Pemegang untuk operator/admin menampilkan ringkasan seluruh data sesuai
+satker dan pegawai pilihan, pencarian laporan lintas halaman, serta pembaruan
+terakhir per penugasan. Angka penugasan adalah **status tercatat**, bukan jumlah
+izin akses yang pasti masih berlaku atau penilaian kepatuhan. Pengelolaan email
+dan pengecualian lama berada dalam panel lanjutan; aturan validasi BAST, batas
+satker, pencabutan akses, dan verifikasi laporan tetap berlaku.
+
 1. Petugas membuat BAST, memilih penerima dari Master Pegawai dan barangnya.
    Untuk operasional unit, setiap PJ hanya menerima barang bagiannya; sisanya
    kepada pihak kedua. Saksi/penanda tangan lain tidak otomatis menjadi pemegang.
