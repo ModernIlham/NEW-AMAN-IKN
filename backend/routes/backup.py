@@ -88,6 +88,33 @@ def serialize_doc(doc, keep_id: bool = False):
     return result
 
 
+def _amankan_portal_hasil_pulih(col_name: str, docs: list):
+    """Persetujuan akses dan lease proses tidak boleh dihidupkan oleh arsip.
+
+    Dipanggil SEBELUM insert, termasuk rollback: worker dapat berhenti sebelum
+    hook pencabutan akhir. Riwayat persetujuan/penugasan tetap dipertahankan;
+    hanya akses yang harus diverifikasi ulang dan lease sementara dibuang.
+    """
+    if col_name == "portal_pemegang_akses":
+        now = datetime.now(timezone.utc)
+        for doc in docs:
+            doc["aktif"] = False
+            doc["dicabut_pada"] = now
+            doc["alasan_pencabutan"] = "Verifikasi ulang setelah pemulihan backup"
+            for field in ("epoch", "version"):
+                try:
+                    doc[field] = max(0, int(doc.get(field, 0))) + 1
+                except (TypeError, ValueError, OverflowError):
+                    doc[field] = 1
+    elif col_name == "portal_penugasan":
+        for doc in docs:
+            # Pemilik lease tidak hidup dalam DB hasil restore. Selain itu,
+            # datetime BSON dalam JSON berubah menjadi teks sehingga tidak
+            # akan cocok dengan pembanding waktu Mongo untuk pemulihan lease.
+            doc.pop("laporan_aktif", None)
+    return docs
+
+
 async def _tulis_koleksi_json(zf: zipfile.ZipFile, col_name: str,
                               keep_id: bool) -> int:
     """Tulis `<col_name>.json` ke dalam `zf` BERTAHAP (satu dokumen per baris).
@@ -487,6 +514,11 @@ async def run_restore_task(job_id: str, zip_path: Path, username: str):
 
         await update_job(job_id, progress=10, message="Membuat safety backup...")
 
+        # Tutup akses portal SEBELUM safety snapshot maupun pergantian DB.
+        # Jadi rollback pun tidak mengembalikan browser yang masih terotorisasi.
+        from portal_auth import cabut_semua_portal_akses
+        await cabut_semua_portal_akses("Pemulihan backup dimulai")
+
         # Create safety backup of current data (SEMUA koleksi aplikasi + GridFS)
         # — ditulis ke DISK per koleksi (REVIEW-9 R6): dulu seluruh isi DB
         # ditampung di dict memori sampai restore selesai; pada DB besar worker
@@ -550,6 +582,7 @@ async def run_restore_task(job_id: str, zip_path: Path, username: str):
                         for d in docs:
                             for _k in _KUNCI_EFEMERAL:
                                 d.pop(_k, None)
+                    _amankan_portal_hasil_pulih(col_name, docs)
                     if docs:
                         await db[col_name].insert_many(docs)
                     restore_stats[col_name] = len(docs)
@@ -623,6 +656,7 @@ async def run_restore_task(job_id: str, zip_path: Path, username: str):
                             continue
                         col_name = name[:-5]
                         docs = json.loads(sz.read(name))
+                        _amankan_portal_hasil_pulih(col_name, docs)
                         await db[col_name].delete_many({})
                         if docs:
                             await db[col_name].insert_many(docs)
@@ -643,6 +677,10 @@ async def run_restore_task(job_id: str, zip_path: Path, username: str):
                 safety_gridfs_zip.unlink(missing_ok=True)
             if safety_data_zip.exists():
                 safety_data_zip.unlink(missing_ok=True)
+
+        # Pemetaan dalam arsip dapat lebih tua daripada pencabutan terakhir.
+        # Pemulihan data bukan persetujuan membuka akses; admin verifikasi ulang.
+        await cabut_semua_portal_akses("Verifikasi ulang setelah pemulihan backup")
 
         # Rebuild indexes
         await update_job(job_id, progress=95, message="Membangun ulang index database...")

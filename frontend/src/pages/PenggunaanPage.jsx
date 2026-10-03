@@ -32,6 +32,7 @@ import { bagikanWa, bagikanEmail, hasilTtd } from "@/lib/pesanTtd";
 import PilihanKirimTtd from "@/components/ttd/PilihanKirimTtd";
 import { ringkasTtdDokumen, kelasNada } from "@/lib/statusTtd";
 import TautanTtdDialog from "@/components/ttd/TautanTtdDialog";
+import PortalPemegangPanel from "@/components/penggunaan/PortalPemegangPanel";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -88,6 +89,7 @@ export default function PenggunaanPage({ user, onBack }) {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [gagalMuat, setGagalMuat] = useState(false);
+  const [portalTerbuka, setPortalTerbuka] = useState(false);
   // Dialog daftar aset: {pemegang, rows, loading}
   const [detail, setDetail] = useState(null);
   // Data BMN idle: {kandidat, tiket, ringkasan, label_status, catatan}
@@ -888,6 +890,14 @@ export default function PenggunaanPage({ user, onBack }) {
       </header>
 
       <main className="max-w-5xl mx-auto px-3 sm:px-6 py-4 space-y-3">
+        <section className="rounded-xl border border-border bg-card p-3">
+          <Button variant="outline" onClick={() => setPortalTerbuka((v) => !v)}
+            aria-expanded={portalTerbuka} aria-controls="portal-pemegang-panel"
+            data-testid="penggunaan-portal-pemegang">
+            <UserCheck className="w-4 h-4 mr-2" />Portal Pemegang — BMN Saya
+          </Button>
+          {portalTerbuka && <div id="portal-pemegang-panel" className="mt-3"><PortalPemegangPanel user={user} /></div>}
+        </section>
         {/* Ringkasan statistik modul — kesehatan Penggunaan sekilas tanpa scroll */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" data-testid="penggunaan-statistik">
           <div className="bg-card rounded-xl border border-border p-2.5 flex items-center gap-2">

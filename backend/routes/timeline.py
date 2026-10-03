@@ -18,7 +18,7 @@ from db import db
 from shared_utils import (kode_satker_user, pastikan_akses_aset,
                           scope_query_aset)
 from timeline_utils import (LABEL_STATUS, MODUL_LABEL, buat_event,
-                            event_dari_riwayat,
+                            event_dari_riwayat, event_portal_laporan,
                             event_pindah_lokasi, event_psp_siman,
                             event_scan_opname, identitas_aset, info_psp_siman,
                             label_transaksi_buku, query_identitas,
@@ -35,6 +35,11 @@ AKSI_SUDAH_DI_BAGIAN_LOKASI = frozenset(
      # `riwayat_lokasi_aset` yang SUDAH tampil utuh di bagian 12 — persis
      # seperti penempatan manual (`aset_lokasi_tandai`).
      "aset_lokasi_otomatis"})
+
+AKSI_SUDAH_DI_BAGIAN_PORTAL = frozenset({
+    "portal_penugasan_buat", "portal_penugasan_cabut", "portal_penugasan_konfirmasi",
+    "portal_laporan_kirim", "portal_laporan_tinjau",
+})
 
 _PROJ_SAUDARA = {"_id": 0, "id": 1, "activity_id": 1, "asset_code": 1,
                  "NUP": 1, "kode_register": 1, "asset_name": 1,
@@ -348,6 +353,23 @@ async def get_timeline_aset(asset_id: str, user: dict = Depends(require_user)):
             ).sort("pada", -1).limit(50):
         events.append(event_pindah_lokasi(d))
 
+    # Portal: dokumen historis dengan satker EKSPLISIT, bukan filter legacy
+    # lunak yang memasukkan kode kosong. Foto/token/metadata idempotensi tidak
+    # dimuat. Aset yang sudah dihapus pun tetap memiliki jejak pertanggungjawaban.
+    kode_portal = {k.get("kode_satker") for k in kegiatan.values() if k.get("kode_satker")}
+    q_portal = {"asset_id": {"$in": ids}, "kode_satker": {"$in": sorted(kode_portal)}}
+    async for d in db.portal_penugasan.find(q_portal, {
+            "_id": 0, "id": 1, "pegawai_nama": 1, "riwayat": 1,
+            "created_at": 1, "status": 1}).sort("created_at", -1).limit(100):
+        events.extend(event_dari_riwayat(
+            d, "portal_pemegang", f"Akses penugasan portal — {d.get('pegawai_nama') or 'pemegang'}",
+            ref_id=d.get("id", "")))
+    async for d in db.portal_laporan.find(q_portal, {
+            "_id": 0, "id": 1, "jenis": 1, "pegawai_nama": 1,
+            "kondisi": 1, "lokasi_laporan": 1, "catatan": 1,
+            "created_at": 1, "tinjauan": 1}).sort("created_at", -1).limit(100):
+        events.extend(event_portal_laporan(d))
+
     # ── 13. Audit log (pencatatan teknis) ──
     async for a in db.audit_logs.find(
             _q_satker_lunak(user, {"asset_id": {"$in": ids}}),
@@ -355,6 +377,8 @@ async def get_timeline_aset(asset_id: str, user: dict = Depends(require_user)):
             "changes": 1, "detail": 1, "timestamp": 1, "username": 1}
             ).sort("timestamp", -1).limit(60):
         aksi = str(a.get("action") or "").strip()
+        if aksi in AKSI_SUDAH_DI_BAGIAN_PORTAL:
+            continue
         ringkas = ringkas_perubahan_audit(a.get("changes"))
         if aksi == "update" and not ringkas:
             continue  # update tanpa perubahan terlacak = derau

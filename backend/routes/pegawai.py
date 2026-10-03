@@ -20,6 +20,9 @@ from kartu_utils import hash_kandidat, label_kartu, valid_uid
 from shared_utils import (kode_satker_user, limiter, log_audit,
                           pastikan_akses_dok_satker, scope_query_field_satker)
 from pejabat_utils import JENIS_PELAKSANA, STATUS_KEPEGAWAIAN
+from portal_auth import (FIELD_IDENTITAS_PORTAL, cabut_akses_portal_pegawai,
+                         cabut_email_bentrok, cabut_email_bentrok_banyak,
+                         identitas_portal_berubah)
 from pegawai_utils import (
     AGAMA, DIGIT_BANK, JENIS_IDENTITAS_WNA, JENIS_JABATAN, JENIS_KELAMIN,
     JENIS_KONTRAK_NON_ASN, KATEGORI_PEGAWAI, KEWARGANEGARAAN,
@@ -489,6 +492,7 @@ async def buat_pegawai(payload: PegawaiIn, user: dict = Depends(require_admin)):
                 "created_at": now, "updated_at": now,
                 "version": 1})  # OCC: klien kirim If-Match saat PUT berikutnya
     await db.pegawai.insert_one(dict(doc))
+    await cabut_email_bentrok(doc.get("email"), database=db)
     await log_audit("buat_pegawai", "", doc["id"],
                     username=user.get("username", "system"),
                     detail=f"Tambah pegawai {doc['nama']}",
@@ -745,6 +749,19 @@ async def impor_pegawai(request: Request, file: UploadFile = File(...),
 
     from pymongo import UpdateOne
     ops = []
+    # Satu pembacaan untuk seluruh impor, bukan satu lookup per baris.
+    # Persetujuan akses portal tidak boleh bertahan saat email/identitas
+    # berubah lewat impor. UUID revisi ikut ditulis atomik bersama master,
+    # sehingga perubahan lalu pemulihan nilai lama tidak menghidupkan sesi.
+    lama_per_kunci = {}
+    proyeksi_portal = {k: 1 for k in FIELD_IDENTITAS_PORTAL}
+    proyeksi_portal.update({"_id": 0, "unit_kerja": 1, "jabatan": 1})
+    async for peg in db.pegawai.find(
+            {"kode_satker": {"$in": [kode, "", None]}}, proyeksi_portal):
+        kunci_lama = kunci_dedup_pegawai(peg)
+        if kunci_lama:
+            lama_per_kunci.setdefault(kunci_lama, []).append(peg)
+    cabut_portal_ids = set()
     for kunci in urutan:
         doc, dipasok = per_orang[kunci]
         # HANYA field yang dipasok yang ditulis. Sisanya masuk $setOnInsert
@@ -756,18 +773,28 @@ async def impor_pegawai(request: Request, file: UploadFile = File(...),
         setel["nama"] = doc["nama"]          # kunci tampil, selalu ditulis
         setel["kode_satker"] = kode
         setel["updated_at"] = now
+        berubah = [p for p in lama_per_kunci.get(kunci, [])
+                   if identitas_portal_berubah(p, {**p, **setel})]
+        if berubah:
+            cabut_portal_ids.update(p["id"] for p in berubah if p.get("id"))
+            setel["portal_identitas_epoch"] = str(uuid.uuid4())
         saat_baru = {k: v for k, v in doc.items() if k not in setel}
         saat_baru["id"] = str(uuid.uuid4())
         saat_baru["created_at"] = now
         ops.append(UpdateOne(_filter_dedup(kunci, kode),
-                             {"$set": setel, "$setOnInsert": saat_baru},
+                             {"$set": setel, "$setOnInsert": saat_baru,
+                              "$inc": {"version": 1}},
                              upsert=True))
 
     dibuat = diperbarui = 0
     if ops:
+        await cabut_akses_portal_pegawai(
+            cabut_portal_ids, "Identitas Master Pegawai berubah melalui impor", database=db)
         res = await db.pegawai.bulk_write(ops, ordered=False)
         dibuat = (res.upserted_count or 0) + (res.inserted_count or 0)
         diperbarui = res.modified_count or 0
+        await cabut_email_bentrok_banyak(
+            [doc.get("email") for doc, _ in per_orang.values()], database=db)
     await log_audit("impor_pegawai", "", "impor",
                     username=user.get("username", "system"),
                     detail=(f"Impor pegawai: {dibuat} baru, {diperbarui} "
@@ -790,8 +817,7 @@ async def ubah_pegawai(pegawai_id: str, payload: PegawaiIn, request: Request,
     # Identitas lama ikut dibaca untuk mendeteksi perlunya sinkron aset.
     lama = await db.pegawai.find_one(
         {"id": pegawai_id},
-        {"_id": 0, "kode_satker": 1, "nama": 1, "gelar_depan": 1,
-         "gelar_belakang": 1, "jabatan": 1, "unit_kerja": 1, "version": 1})
+        {"_id": 0})
     if not lama:
         raise HTTPException(status_code=404, detail="Pegawai tidak ditemukan")
     await pastikan_akses_dok_satker(user, lama)
@@ -825,9 +851,18 @@ async def ubah_pegawai(pegawai_id: str, payload: PegawaiIn, request: Request,
     # version di-set eksplisit (bukan $inc) agar dokumen era lama tanpa field
     # version langsung melompat ke 2 — pembaca basi ber-If-Match 1 tertolak.
     doc["version"] = versi_kini + 1
-    res = await db.pegawai.update_one({"id": pegawai_id}, {"$set": doc})
+    if identitas_portal_berubah(lama, {**lama, **doc}):
+        doc["portal_identitas_epoch"] = str(uuid.uuid4())
+        await cabut_akses_portal_pegawai(
+            [pegawai_id], "Identitas Master Pegawai berubah; verifikasi ulang email", database=db)
+    filter_versi = {"id": pegawai_id, "version": versi_kini}
+    if versi_kini == 1:
+        filter_versi = {"id": pegawai_id, "$or": [
+            {"version": 1}, {"version": {"$exists": False}}, {"version": None}]}
+    res = await db.pegawai.update_one(filter_versi, {"$set": doc})
     if res.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Pegawai tidak ditemukan")
+        raise HTTPException(status_code=409, detail="Data pegawai telah berubah. Muat ulang sebelum menyimpan.")
+    await cabut_email_bentrok(doc.get("email"), database=db)
     await log_audit("ubah_pegawai", "", pegawai_id,
                     username=user.get("username", "system"),
                     detail=f"Ubah pegawai {doc['nama']}",
@@ -883,6 +918,8 @@ async def hapus_pegawai(pegawai_id: str, user: dict = Depends(require_admin)):
                 detail=f"Pegawai {peg.get('nama')} (NIP {peg['nip']}) masih tercatat "
                        f"sebagai pengguna pada {dipakai} aset — pindahkan aset atau "
                        f"ubah status pegawai menjadi nonaktif, jangan dihapus.")
+    await cabut_akses_portal_pegawai(
+        [pegawai_id], "Pegawai dihapus dari Master Pegawai", database=db)
     res = await db.pegawai.delete_one({"id": pegawai_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Pegawai tidak ditemukan")

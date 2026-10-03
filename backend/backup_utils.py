@@ -14,6 +14,9 @@ import re
 #   ke DB hasil restore bisa menelan save sah), ws_events (bus realtime capped),
 #   media_previews (cache JPEG hasil-resize ber-TTL, derivable dari GridFS asli).
 SKIP_COLLECTIONS = {
+    # Sesi/login portal bukan arsip penatausahaan. Mengembalikannya dari
+    # backup dapat menghidupkan token atau browser yang telah dicabut.
+    "portal_pemegang_tokens", "portal_pemegang_sesi", "portal_pemegang_batas",
     "row_locks", "otp_store", "backup_jobs", "idempotency_keys",
     "ws_events", "media_previews",
     # Kontrol keamanan lokal instalasi: jangan pernah ditimpa oleh arsip data

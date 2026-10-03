@@ -536,6 +536,17 @@ yang mungkin sudah ditagih; `provider_used` dan `used` konservatif bisa berbeda.
 >   kosong, aplikasi memakai origin pertama `CORS_ORIGINS` sebagai cadangan.
 
 ### 4.4 Buat Direktori Upload
+
+**Portal BMN Saya:** memakai layanan email Resend yang sama (tidak perlu
+akun/password pegawai). Gunakan HTTPS dan origin frontend yang eksplisit di
+`ALLOWED_ORIGINS`/`CORS_ORIGINS`; cookie sesi portal bersifat Secure,
+HttpOnly dan SameSite. Jangan menambahkan wildcard. Tautan login memerlukan
+browser yang dipakai meminta tautan, bukan sesi akun staf. Tidak ada akses
+pegawai yang otomatis aktif setelah deploy: admin memeriksa email pribadi dan
+dasar penugasan di Penggunaan → Aset per Pemegang → Portal Pemegang.
+Sesudah restore backup, akses perlu diverifikasi ulang; riwayat/bukti tetap
+ikut arsip, kredensial sesi tidak. Tidak ada jadwal pengingat/fetch baru.
+
 ```bash
 mkdir -p /var/www/inventarisasi/backend/uploads
 chmod 755 /var/www/inventarisasi/backend/uploads

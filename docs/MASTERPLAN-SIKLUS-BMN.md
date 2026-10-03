@@ -198,6 +198,56 @@ Semua modul baru wajib tunduk pada delapan prinsip berikut:
 
 ---
 
+## 5P. Kontrak Portal Pemegang BMN — disetujui 2026-10-03
+
+Rumah internal: **Penggunaan → Aset per Pemegang → Portal Pemegang**.
+Pintu pegawai: **BMN Saya** (`/bmn-saya`), principal tersendiri, bukan akun
+`users` atau peran baru yang dapat melewati penjaga akses staf.
+
+| Data / proses | Sumber dan batas penulisan |
+|---|---|
+| Identitas | `pegawai.id` tetap, email milik pribadi yang diperiksa admin; bukan nama/NIP sebagai kredensial. Email ambigu/ganda, satker kosong, pegawai tidak layak, atau pemetaan belum disetujui ditolak. |
+| Akses | `portal_pemegang_akses`; admin mencatat verifikasi email. Magic link sekali pakai dan sesi terpisah; perubahan identitas/email mencabut kelayakan akses, termasuk impor. |
+| Penugasan | `portal_penugasan` merujuk `asset_id` + identitas lintas kegiatan + satker + pegawai. Rilis awal menautkan **penugasan sah yang sudah ada**, dengan dasar dokumen dan catatan admin, bukan menerbitkan serah terima administratif baru. Tidak ada migrasi nama pemegang menjadi izin akses otomatis. |
+| Penerimaan | Pemegang dapat mengonfirmasi atau menyanggah. Konfirmasi portal bukan TTE BAST dan tidak mengubah master pemegang. Pencabutan akses bukan pengembalian barang. |
+| Laporan | `portal_laporan`: pengamatan kondisi, status operasional, lokasi yang dilaporkan, catatan dan bukti; waktu pengambilan terpisah dari penerimaan server. Isi yang diajukan tetap historis; perbaikan berupa laporan lanjutan, bukan menimpa bukti. |
+| Verifikasi | Operator/admin menilai kelengkapan/fakta, meminta perbaikan atau menolak; tidak boleh memverifikasi laporan sendiri. Status terverifikasi adalah status **laporan**, bukan pengesahan transaksi BMN. |
+| Akuntansi | Portal tidak menulis `purchase_price`, nilai buku, penyusutan, `dihapus`, jurnal `mutasi_bmn`, kondisi resmi, atau pemegang resmi. Dampak administrasi/akuntansi tetap lewat modul transaksi dan pejabat berwenang dengan dokumen sumber. |
+| Riwayat | Penugasan, konfirmasi, laporan, dan hasil tinjauan muncul di Timeline Aset internal. Laporan belum diverifikasi tidak disamarkan sebagai fakta resmi. Bukti hanya dapat diakses pemegang yang masih berhak atau staf satker. |
+
+**Batas keamanan:** semua baca/unduh/tulis portal dibatasi penugasan dan satker
+terkini, tanpa token media staf. Tulis ber-OCC dan idempotensi; perubahan
+penugasan saat luring harus ditolak saat sinkron, bukan ditimpa. Draft/antrean
+portal memakai penyimpanan terpisah, hanya setelah persetujuan penyimpanan
+perangkat, terikat principal/satker/sesi dan masa berlaku; dibersihkan saat
+keluar/akses kedaluwarsa. Perangkat luring tidak dapat dihapus jarak jauh.
+
+**Bukti dan retensi:** versi asli yang diterima portal beserta hash dipertahankan,
+tidak dimasukkan antrean kompresi lossy berulang/Tinify. Batas unggah harus
+jelas; tidak ada penghapusan otomatis bukti atau klaim retensi hukum buatan.
+JRA instansi, pembatasan akses, dasar pemrosesan data pribadi, dan legal hold
+perlu ditetapkan sebelum kebijakan pembersihan bukti. Foto/GPS/magic link tidak
+sendiri membuktikan keaslian, kesalahan pegawai, atau menggantikan TTE resmi.
+
+**Urutan implementasi:** (1) akses email + pemetaan penugasan + BMN Saya +
+laporan/bukti/antrean luring + tinjauan dan timeline; (2) penerusan kasus ke
+Pemeliharaan/Pengamanan/Wasdal dengan FK eksplisit dan status tindak lanjut;
+(3) serah terima atomik sesudah BAST, TTE dan validasi melalui gateway tunggal;
+(4) pengingat berkala, eskalasi dan dasbor kepatuhan. Tidak menyalakan
+penjadwalan baru secara diam-diam. Tahap 1 tidak mengklaim tahap 2–4 selesai.
+
+Kehilangan boleh dilaporkan tanpa foto barang saat ini; tidak otomatis menjadi
+TGR atau penghapusan. Tidak digunakan bukan keputusan BMN idle. Pegawai
+nonaktif/kontrak berakhir bukan bukti barang telah kembali. Admin aplikasi
+bukan otomatis KPB atau pejabat yang berwenang memutuskan transaksi.
+
+Dasar rancangan: PP 27/2014 jo. PP 28/2020 (pengamanan/pemeliharaan),
+PMK 40/2024 (penggunaan), PMK 181/2016 (penatausahaan), PMK 207/2021
+(wasdal), serta UU 27/2022 (pelindungan data pribadi). SOP dan kewenangan
+instansi tetap perlu ditetapkan; rancangan aplikasi bukan opini kepatuhan hukum.
+
+---
+
 ## 5A. Status Integrasi Antar-Modul & Daftar Gap (audit 2026-07-13)
 
 Audit lintas-modul terhadap 5 prinsip Bab 5. Kepatuhan saat ini:

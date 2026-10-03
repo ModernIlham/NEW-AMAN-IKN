@@ -8,6 +8,61 @@
 
 ## Ringkasan
 
+### Portal Pemegang — BMN Saya (tahap 1)
+
+Rumah pengelola: **Penggunaan → Aset per Pemegang → Portal Pemegang**.
+Halaman pemegang: **`/bmn-saya`**, tanpa membuat akun staf/password.
+
+1. Admin memilih satker aktif, memeriksa Master Pegawai dan email pribadi,
+   lalu mengaktifkan akses dengan catatan verifikasi. Email yang sama pada
+   pegawai berbeda tidak dapat dipakai; rapikan master terlebih dahulu.
+2. Admin menautkan aset dan dasar penugasan sah yang **sudah ada**. Ini
+   pemetaan akses portal, bukan penerbitan BAST atau pemindahan tanggung jawab.
+   Baris aset yang sama lintas kegiatan tidak boleh memberi dua penugasan aktif.
+3. Pegawai membuka `/bmn-saya`, meminta tautan email, lalu menekan **Masuk**
+   dari browser yang dipakai meminta tautan. Tautan berlaku 15 menit, sekali
+   pakai. Jika terbuka pada browser berbeda, minta tautan baru di browser itu.
+   Sesi terpisah dari staf; 30 menit tanpa permintaan atau maksimum 8 jam.
+4. Pemegang dapat menerima/menyanggah daftar barang, mengirim laporan berkala,
+   kerusakan, kehilangan, perbaikan atau pengembalian dengan bukti. Kehilangan
+   tidak mewajibkan foto barang saat ini. Kondisi, penggunaan dan lokasi yang
+   dilaporkan terpisah dari catatan resmi.
+5. Operator/admin membuka antrean, melihat bukti, mencatat hasil pemeriksaan,
+   meminta perbaikan atau menolak. Tidak boleh memverifikasi laporan sendiri.
+   Perbaikan adalah laporan lanjutan; bukti dan riwayat lama tidak ditimpa.
+
+**Batas penting:** verifikasi laporan tidak otomatis mengganti pemegang,
+kondisi resmi, lokasi manual/denah, nilai buku, penyusutan, jurnal, atau status
+penghapusan. Insiden kehilangan bukan keputusan TGR. Dampak administratif dan
+akuntansi tetap ditindaklanjuti melalui modul resmi dan pejabat berwenang.
+Konfirmasi penerimaan portal bukan tanda tangan elektronik BAST.
+
+**Luring dan privasi:** setelah login daring, pengguna dapat mengizinkan
+penyimpanan draf/antrean pada perangkat pribadi. Penyimpanan portal terpisah
+dari staf, dibatasi pemegang/satker/masa sesi; pengiriman ulang memeriksa akses
+dan versi penugasan lagi. Halaman yang sudah terbuka dapat digunakan saat
+sinyal putus; membuka ulang portal tetap perlu validasi sesi daring. Keluar,
+pergantian identitas atau sesi kedaluwarsa membersihkan data lokal. Jangan
+aktifkan simpan luring di perangkat bersama; perangkat yang terputus tidak
+dapat dibersihkan jarak jauh.
+**Batas luring bukan delapan jam:** draf/foto lokal kedaluwarsa paling lambat
+30 menit sejak pemeriksaan sesi daring terakhir (atau lebih cepat bila masa
+sesi habis). Batas waktu ditampilkan di portal. Kirim sebelum batas tersebut;
+draf yang kedaluwarsa/dihapus saat keluar tidak dapat dipulihkan oleh server.
+
+**Bukti:** maksimal tiga gambar JPEG/PNG/WebP, total 3 MiB per laporan.
+Versi yang diterima server disimpan utuh dengan hash SHA-256 dan tidak dikirim
+ke Tinify/kompresi berulang; ini berbeda dari foto operasional aset. Bukti
+tidak tersedia di tautan publik peta atau melalui token media staf. Riwayat
+ikut backup; token/sesi tidak. Setelah pemulihan backup, admin memverifikasi
+ulang akses portal. Tetapkan JRA/penahanan bukti bersama pengelola arsip dan
+pejabat terkait sebelum menerapkan pembersihan otomatis.
+
+**Tahap berikutnya:** penerusan kasus ber-FK ke Pemeliharaan/Pengamanan/Wasdal,
+serah terima atomik setelah BAST+TTD+validasi, serta pengingat dan eskalasi.
+Tahap pertama tidak mengaktifkan proses tersebut secara otomatis. Kontrak
+integrasi dan batas kewenangan ada di `docs/MASTERPLAN-SIKLUS-BMN.md` §5P.
+
 ### Kompresi foto bertahap: penghematan tambahan di bawah 1%
 
 - Foto aset GridFS (JPEG/PNG/WebP), foto pegawai beserta sumber krop, foto
