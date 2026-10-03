@@ -594,9 +594,9 @@ def _payload_revisi(dari_id, mode="mengubah", alasan="salah ketik NIP",
     return rb.BastIn(**dasar)
 
 
-def test_revisi_membentuk_rantai_lurus_dan_menandai_sumber(dbx):
-    """Revisi = BAST baru ber-revisi_ke naik; sumber ditandai tergantikan;
-    merevisi arsip yang SUDAH tergantikan ditolak (rantai tak bercabang)."""
+def test_revisi_draf_belum_menandai_sumber_dan_arsip_final_tetap_terkunci(dbx):
+    """Draf revisi belum menggantikan sumber; tanda final milik layanan
+    finalisasi tetap melarang merevisi arsip yang sudah tergantikan."""
     async def skenario():
         await _seed_dasar(dbx)
         asli = await _unwrap(rb.buat_bast)(_payload(nomor="BAST-ASLI"),
@@ -607,6 +607,8 @@ def test_revisi_membentuk_rantai_lurus_dan_menandai_sumber(dbx):
         rev2 = await _unwrap(rb.buat_bast)(
             _payload_revisi(rev1["id"], alasan="masih keliru"),
             request=None, user=USER)
+        await dbx.bast_serah_terima.update_one({"id": asli["id"]}, {
+            "$set": {"direvisi_oleh": rev1["id"], "direvisi_mode": "mengubah"}})
         with pytest.raises(Exception) as ex:
             await _unwrap(rb.buat_bast)(_payload_revisi(asli["id"]),
                                         request=None, user=USER)
@@ -614,8 +616,8 @@ def test_revisi_membentuk_rantai_lurus_dan_menandai_sumber(dbx):
     asli, rev1, sumber, rev2, galat = _jalan(skenario())
     assert rev1["revisi_ke"] == 1 and rev1["revisi_dari"] == asli["id"]
     assert rev1["revisi_dari_nomor"] == "BAST-ASLI"
-    assert sumber["direvisi_oleh"] == rev1["id"]
-    assert sumber["direvisi_mode"] == "mengubah"
+    assert "direvisi_oleh" not in sumber
+    assert "direvisi_mode" not in sumber
     assert rev2["revisi_ke"] == 2, "hitung revisi mengikuti rantai"
     assert getattr(galat, "status_code", None) == 409
 
@@ -643,10 +645,8 @@ def test_revisi_lintas_satker_ditolak(dbx):
     assert getattr(_jalan(skenario()), "status_code", None) == 403
 
 
-def test_revisi_menautkan_nomor_agenda_lewat_relasi_surat(dbx):
-    """Kedua BAST ber-booking otomatis → nomor agenda LAMA otomatis menjadi
-    'Berlaku dengan perubahan' (mengubah) di buku agenda — integrasi penuh
-    SURAT-3B tanpa ada yang mengetik status."""
+def test_revisi_draf_tidak_menautkan_nomor_agenda_sebelum_final(dbx):
+    """Booking revisi belum mengubah keberlakuan nomor sumber."""
     async def skenario():
         await _seed_dasar(dbx)
         import routes.persuratan as rp
@@ -660,7 +660,8 @@ def test_revisi_menautkan_nomor_agenda_lewat_relasi_surat(dbx):
     asli, surat = _jalan(skenario())
     peta = {s["id"]: s for s in surat}
     lama = peta[asli["surat_id"]]
-    assert lama["keberlakuan"] == "diubah"
+    assert lama["keberlakuan"] == "draf"
+    assert _jalan(dbx.surat_relasi.count_documents({})) == 0
 
 
 def test_pdf_bast_tergantikan_dan_pengganti_bercerita_jujur(dbx):
@@ -673,6 +674,10 @@ def test_pdf_bast_tergantikan_dan_pengganti_bercerita_jujur(dbx):
                             alasan="serah terima batal", nomor="BAST-GANTI"),
             request=None, user=USER)
         rev = await dbx.bast_serah_terima.find_one({"revisi_dari": asli["id"]})
+        # Proyeksi yang hanya boleh dilakukan layanan setelah revisi final.
+        await dbx.bast_serah_terima.update_one({"id": asli["id"]}, {"$set": {
+            "direvisi_oleh": rev["id"], "direvisi_oleh_nomor": "BAST-GANTI",
+            "direvisi_mode": "mencabut", "direvisi_pada": rev["created_at"]}})
         return (await _unwrap(rb.bast_pdf)(asli["id"], _user=USER),
                 await _unwrap(rb.bast_pdf)(rev["id"], _user=USER))
     pdf_lama, pdf_baru = _jalan(skenario())

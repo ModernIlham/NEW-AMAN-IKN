@@ -29,7 +29,7 @@ portal_pemegang_router = APIRouter(prefix="/portal-pemegang")
 _PROJ_ASSET = {"_id": 0, **{k: 1 for k in (
     "id", "activity_id", "asset_name", "asset_code", "NUP", "kode_register",
     "user", "pengguna_nip", "bast_terakhir", "location", "condition",
-    "inventory_status", "dihapus", "category")}}
+    "inventory_status", "dihapus", "category", "amanah_bast")}}
 _PROJ_LAPORAN = {"_id": 0, "bukti.data_base64": 0,
                  "_idem_buat": 0, "_operasi": 0, "_identitas_pelapor": 0}
 _ASET_RINGKAS = ("asset_id", "asset_name", "asset_code", "NUP", "location", "condition")
@@ -135,8 +135,11 @@ def _catat_operasi(operation, digest, hasil):
 def _ringkas_penugasan(p, asset=None, internal=False):
     keys = ("id", "version", "status", "asset_id", "asset_name", "asset_code",
             "NUP", "location", "condition", "dasar_penugasan", "catatan",
-            "created_at", "updated_at", "konfirmasi", "pencabutan")
+            "created_at", "updated_at", "konfirmasi", "pencabutan", "penerimaan_otomatis")
     out = {k: p[k] for k in keys if k in p}
+    if p.get("sumber_bast"):
+        out["sumber_bast"] = {k: p["sumber_bast"].get(k, "") for k in
+                              ("id", "nomor", "tanggal", "jenis", "jangka_sampai")}
     if asset:
         out.update({k: asset.get(k, "") for k in
                     ("asset_name", "asset_code", "NUP", "location", "condition")})
@@ -177,7 +180,7 @@ async def _validitas_penugasan(p):
         return False, str(exc.detail)
 
 
-async def periksa_penugasan_aktif(penugasan, principal=None, harus_diterima=False):
+async def periksa_penugasan_aktif(penugasan, principal=None, harus_diterima=False, sumber_cache=None):
     """Guard dapat dipakai integrasi lain; tak pernah memperbarui master.
 
 Selalu baca kembali pegawai, record aset pilihan, dan kegiatan induknya.
@@ -194,6 +197,15 @@ Riwayat portal tidak dapat menjadi pengganti penugasan yang sudah berubah.
             or teks(peg.get("kode_satker")) != p["kode_satker"]):
         raise HTTPException(403, "Pegawai tidak lagi memenuhi syarat akses portal")
     asset = await _aset_dalam_satker(p["asset_id"], p["kode_satker"])
+    # Baca status terkini, bukan snapshot sebelum transfer/cabut berjalan.
+    current = await db.portal_penugasan.find_one({"id": p["id"]}, {"status": 1})
+    if not current or current.get("status") == "dicabut":
+        raise HTTPException(403, "Akses penugasan telah dicabut")
+    if p.get("sumber_bast"):
+        from portal_bast import periksa_sumber_bast
+        await periksa_sumber_bast(db, p, asset, cache=sumber_cache)
+    elif asset.get("amanah_bast"):
+        raise HTTPException(403, "Amanah kini mengikuti BAST; pemetaan akses lama tidak berlaku")
     if ikatan_sumber(asset, p["kode_satker"]) != p.get("ikatan_sumber"):
         raise HTTPException(409, "Data penugasan aset berubah — minta petugas meninjau akses")
     if harus_diterima and p.get("status") != "diterima":
@@ -216,10 +228,10 @@ async def daftar_penugasan_admin(pegawai_id: str = "", user: dict = Depends(requ
     q = {"kode_satker": _satker_staff(user)}
     if pegawai_id:
         q["pegawai_id"] = pegawai_id
-    items = []
+    items, sumber_cache = [], {}
     async for p in db.portal_penugasan.find(q, {"_id": 0}).sort("created_at", -1):
         try:
-            asset = await periksa_penugasan_aktif(p)
+            asset = await periksa_penugasan_aktif(p, sumber_cache=sumber_cache)
             valid, alasan = True, ""
         except HTTPException as exc:
             asset, valid, alasan = None, False, exc.detail
@@ -244,6 +256,8 @@ async def buat_penugasan(data: PenugasanIn, request: Request,
     if not pegawai_layak_portal(peg):
         raise HTTPException(409, "Pegawai tidak memenuhi syarat portal")
     asset = await _aset_dalam_satker(data.asset_id, kode)
+    if asset.get("amanah_bast"):
+        raise HTTPException(409, "Amanah barang ini mengikuti BAST; gunakan sinkronisasi atau revisi BAST")
     if teks(asset.get("pengguna_nip")) and teks(asset.get("pengguna_nip")) != teks(peg.get("nip")):
         raise HTTPException(409, "Pemegang pada master aset berbeda; selesaikan penugasan resmi dahulu")
     try:
@@ -322,12 +336,12 @@ async def cabut_penugasan(pid: str, data: CabutIn, request: Request,
 
 @portal_pemegang_router.get("/aset")
 async def aset_saya(principal: dict = Depends(require_portal_session)):
-    items = []
+    items, sumber_cache = [], {}
     q = {"pegawai_id": principal["pegawai_id"], "kode_satker": principal["kode_satker"],
          "status": {"$ne": "dicabut"}}
     async for p in db.portal_penugasan.find(q, {"_id": 0}).sort("created_at", -1):
         try:
-            asset = await periksa_penugasan_aktif(p, principal)
+            asset = await periksa_penugasan_aktif(p, principal, sumber_cache=sumber_cache)
         except HTTPException:
             continue
         items.append(_ringkas_penugasan(p, asset))
@@ -368,11 +382,11 @@ async def konfirmasi_penugasan(pid: str, data: KonfirmasiIn, request: Request,
 
 @portal_pemegang_router.get("/laporan")
 async def laporan_saya(principal: dict = Depends(require_portal_session)):
-    valid = []
+    valid, sumber_cache = [], {}
     async for p in db.portal_penugasan.find({"pegawai_id": principal["pegawai_id"],
             "kode_satker": principal["kode_satker"], "status": "diterima"}, {"_id": 0}):
         try:
-            await periksa_penugasan_aktif(p, principal, True)
+            await periksa_penugasan_aktif(p, principal, True, sumber_cache=sumber_cache)
             valid.append(p["id"])
         except HTTPException:
             continue

@@ -18,6 +18,34 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1085] BAST sah menjadi sumber amanah otomatis di BMN Saya — 2026-10-03
+
+- BAST baru membekukan identitas pegawai dan pembagian barang; draf/revisi
+  belum sah tidak lagi mengganti pemegang. Setelah e-sign seluruh pihak wajib
+  tervalidasi dan QR siap, atau scan diperiksa lengkap oleh petugas, amanah
+  otomatis berstatus diterima tanpa input/konfirmasi kedua.
+- Mutasi menutup akses lama, pengembalian menutup tanpa penugasan personal KPB,
+  revisi efektif mengikuti pengesahan. Pembatalan tidak otomatis membalik
+  pemegang/fisik/jurnal. Pinjaman lewat batas tetap dapat dilaporkan hingga
+  penyelesaian resmi; sebelum tanggal mulai menunggu sinkronisasi petugas.
+- FK pegawai, nomor identitas unik, satker, manifest peserta wajib, hash PDF
+  dan sumber terkini diperiksa. Email unik layak mendapat akses awal; data
+  ambigu, perubahan identitas, revokasi dan restore memerlukan tinjauan admin.
+  Dokumen legacy tidak dimigrasikan menjadi izin akses tanpa pemeriksaan.
+- CAS per barang, riwayat sebelum/sesudah, proyeksi idempoten dan hasil per
+  barang mencegah retry menggandakan amanah atau menimpa perubahan terbaru.
+  Bukan transaksi atomik seluruh dokumen; konflik terlihat dan dapat ditinjau.
+- Callback e-sign lama/batal tidak mengambil alih permintaan baru. Bukti final
+  dan arsip scan dilindungi dari penghapusan saat lampiran aset diganti.
+  Rekap pemegang membaca keabsahan elektronik terkini tanpa menyebut PDF
+  sumber yang belum dibubuhi sebagai bukti final.
+- Cache, pencarian dan pemberitahuan aset disegarkan; selector pegawai
+  membedakan nama kembar dan mengosongkan identitas usang. Riwayat BAST
+  menampilkan kesiapan serta tombol pemulihan sinkronisasi.
+- Tidak ada perubahan nilai, penyusutan, jurnal, TGR atau penghapusan dari
+  laporan portal. Tidak ada aktivasi massal dokumen lama atau email percobaan
+  ke pegawai produksi. Panduan pengguna/deployment dan masterplan diperbarui.
+
 ## [#1084] Portal Pemegang BMN: penugasan, laporan berbukti dan tinjauan — 2026-10-03
 
 - Tahap pertama **BMN Saya** (`/bmn-saya`) tanpa akun staf/password, memakai

@@ -48,7 +48,7 @@ describe("pjKosong", () => {
     // `asset_ids` yang undefined akan lolos ke payload sebagai undefined dan
     // ditolak server dengan pesan yang tak menyebut sebab sebenarnya.
     expect(pjKosong()).toEqual({
-      nama: "", nip: "", unit_tempat_tugas: "", unit_eselon: "",
+      pegawai_id: "", nama: "", nip: "", unit_tempat_tugas: "", unit_eselon: "",
       asset_ids: [] });
   });
 });
@@ -59,7 +59,7 @@ describe("dariPegawai — tautan ke Master Pegawai", () => {
 
   test("nama, NIP, dan unit eselon terdalam ikut terisi", () => {
     expect(dariPegawai(PEG)).toEqual({
-      nama: "Budi Santoso", nip: "199001012021011001",
+      pegawai_id: "", nama: "Budi Santoso", nip: "199001012021011001",
       unit_eselon: "Direktorat Barang Milik Negara" });
   });
 
@@ -71,12 +71,12 @@ describe("dariPegawai — tautan ke Master Pegawai", () => {
     expect(dariPegawai(PEG).unit_eselon).not.toBe("Subbag Umum");
   });
 
-  test("kolom yang KOSONG di Master Pegawai tidak ikut dikembalikan", () => {
-    // Pemanggil menimpa isian lama dengan hasil ini; nilai kosong yang ikut
-    // terkirim akan MENGHAPUS apa yang sudah diketik operator.
-    expect(dariPegawai({ nama: "Budi" })).toEqual({ nama: "Budi" });
-    expect(dariPegawai({})).toEqual({});
-    expect(dariPegawai(null)).toEqual({});
+  test("orang baru tanpa NIP tidak membawa nomor/unit orang sebelumnya", () => {
+    const kosong = { pegawai_id: "", nama: "", nip: "", unit_eselon: "" };
+    expect(dariPegawai({ nama: "Budi", id: "p2" })).toEqual({ ...kosong, nama: "Budi", pegawai_id: "p2" });
+    expect(dariPegawai({})).toEqual(kosong);
+    expect(dariPegawai(null)).toEqual(kosong);
+    expect({ nama: "Sari", nip: "123", ...dariPegawai({ id: "p2", nama: "Budi" }) }.nip).toBe("");
   });
 
   test("unit_organisasi dipakai bila unit_kerja kosong", () => {
@@ -151,6 +151,9 @@ describe("lepasAset & selaraskanAset", () => {
 });
 
 describe("payloadPj", () => {
+  test("FK pegawai dibawa bersama pemetaan barang, bukan diturunkan dari nama", () => {
+    expect(payloadPj([{ pegawai_id: "pegawai-2", nama: "Budi", nip: "", asset_ids: ["a1"] }])[0]).toMatchObject({ pegawai_id: "pegawai-2", nip: "", asset_ids: ["a1"] });
+  });
   test("baris tanpa nama tidak pernah dikirim", () => {
     expect(payloadPj([{ nama: "  ", nip: "9" }, { nama: "Budi" }]))
       .toHaveLength(1);

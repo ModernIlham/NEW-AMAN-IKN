@@ -94,6 +94,16 @@ test("sanggahan tersedia dan penugasan belum diterima tidak boleh dilaporkan", a
   await waitFor(() => expect(portal.portalRequest).toHaveBeenCalledWith("/penugasan/t1/konfirmasi", expect.objectContaining({ method: "POST", version: 2, body: expect.objectContaining({ keputusan: "sanggah", version: 2 }) })));
 });
 
+test("BAST sah membuka laporan tanpa konfirmasi penerimaan berulang", async () => {
+  const otomatis = { ...asset, penerimaan_otomatis: true, sumber_bast: { id: "b1", nomor: "BAST-001", tanggal: "2026-10-01", jenis: "penggunaan_sementara", jangka_sampai: "2026-10-31" } };
+  portal.portalRequest.mockImplementation(async path => path === "/sesi" ? sesi : path === "/aset" ? { items: [otomatis] } : { items: [] });
+  render(<PortalPemegangPage />);
+  expect(await screen.findByTestId("portal-buat-laporan-t1")).toBeInTheDocument();
+  expect(screen.queryByTestId("portal-konfirmasi-t1")).not.toBeInTheDocument();
+  expect(screen.getByTestId("portal-aset-bast-t1")).toHaveTextContent("Penerimaan tercatat melalui BAST sah");
+  expect(screen.getByTestId("portal-aset-bast-t1")).toHaveTextContent("Lewat jangka waktu tidak berarti barang sudah dikembalikan");
+});
+
 test("retry setelah gangguan memakai kunci dan isi sama, bukan laporan duplikat", async () => {
   let writes = 0;
   portal.portalRequest.mockImplementation(async (path, options) => {

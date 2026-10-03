@@ -8,22 +8,25 @@
 
 ## Ringkasan
 
-### Portal Pemegang — BMN Saya (tahap 1)
+### Portal Pemegang — BMN Saya, otomatis dari BAST
 
 Rumah pengelola: **Penggunaan → Aset per Pemegang → Portal Pemegang**.
 Halaman pemegang: **`/bmn-saya`**, tanpa membuat akun staf/password.
 
-1. Admin memilih satker aktif, memeriksa Master Pegawai dan email pribadi,
-   lalu mengaktifkan akses dengan catatan verifikasi. Email yang sama pada
-   pegawai berbeda tidak dapat dipakai; rapikan master terlebih dahulu.
-2. Admin menautkan aset dan dasar penugasan sah yang **sudah ada**. Ini
-   pemetaan akses portal, bukan penerbitan BAST atau pemindahan tanggung jawab.
-   Baris aset yang sama lintas kegiatan tidak boleh memberi dua penugasan aktif.
+1. Petugas membuat BAST, memilih penerima dari Master Pegawai dan barangnya.
+   Untuk operasional unit, setiap PJ hanya menerima barang bagiannya; sisanya
+   kepada pihak kedua. Saksi/penanda tangan lain tidak otomatis menjadi pemegang.
+2. Setelah seluruh pihak wajib e-sign tervalidasi, PDF terikat dan QR siap,
+   **pemegang administratif dan BMN Saya otomatis mengikuti BAST**. Untuk scan
+   basah, petugas menyatakan seluruh tanda tangan/lampiran lengkap saat unggah.
+   Unggah arsip saja dan draf revisi tidak mengubah amanah. Email unik yang layak
+   mendapat akses awal; email kosong/ganda atau akses yang pernah dicabut perlu
+   verifikasi admin. Riwayat BAST menampilkan hasil dan pengecualian per barang.
 3. Pegawai membuka `/bmn-saya`, meminta tautan email, lalu menekan **Masuk**
    dari browser yang dipakai meminta tautan. Tautan berlaku 15 menit, sekali
    pakai. Jika terbuka pada browser berbeda, minta tautan baru di browser itu.
    Sesi terpisah dari staf; 30 menit tanpa permintaan atau maksimum 8 jam.
-4. Pemegang dapat menerima/menyanggah daftar barang, mengirim laporan berkala,
+4. Penerimaan dari BAST tidak diminta ulang. Pemegang mengirim laporan berkala,
    kerusakan, kehilangan, perbaikan atau pengembalian dengan bukti. Kehilangan
    tidak mewajibkan foto barang saat ini. Kondisi, penggunaan dan lokasi yang
    dilaporkan terpisah dari catatan resmi.
@@ -36,6 +39,26 @@ kondisi resmi, lokasi manual/denah, nilai buku, penyusutan, jurnal, atau status
 penghapusan. Insiden kehilangan bukan keputusan TGR. Dampak administratif dan
 akuntansi tetap ditindaklanjuti melalui modul resmi dan pejabat berwenang.
 Konfirmasi penerimaan portal bukan tanda tangan elektronik BAST.
+
+| Peristiwa | Dampak pada amanah dan akses |
+|---|---|
+| Draf BAST/revisi | Pemegang aktif tidak berubah |
+| BAST penyerahan/mutasi sah | Amanah baru aktif; akses pemegang lama ditutup, riwayat utuh |
+| BAST pengembalian sah | Pemegang dikosongkan; tidak membuat KPB/ahli waris menjadi pemegang personal |
+| Revisi sah | Menggantikan dasar lama untuk seluruh barang sumber; sebagian barang gunakan BAST mutasi/pengembalian terpisah |
+| Pembatalan/pencabutan | Akses sumber ditahan; tidak otomatis mengembalikan barang atau menghidupkan pemegang sebelumnya |
+| Pinjam belum mulai | Menunggu tanggal mulai; petugas sinkronkan kembali pada tanggal tersebut |
+| Pinjam lewat batas | Ditandai perlu penyelesaian; tetap dapat melapor sampai pengembalian sah |
+| Data induk berubah/duplikat antar-kegiatan | Ditahan untuk tinjauan, tidak menimpa data terbaru |
+
+Penerapan atomik **per barang**, bukan transaksi lintas seluruh BAST. Jika
+sebagian gagal, hasilnya terlihat dan tombol **Periksa / sinkronkan BMN Saya**
+melanjutkan secara idempoten. Perubahan email/identitas dan restore tetap
+memerlukan pemeriksaan akses; retry tidak menghidupkan revokasi admin.
+BAST lama tanpa manifest/rencana terikat tidak dimigrasikan diam-diam.
+Pemetaan manual dengan dasar terverifikasi tetap tersedia sebagai jalur legacy,
+dengan konfirmasi/sanggahan; barang yang sudah mengikuti BAST tidak dapat
+ditimpa lewat pemetaan manual. Bukti final hanya diperbaiki melalui revisi resmi.
 
 **Luring dan privasi:** setelah login daring, pengguna dapat mengizinkan
 penyimpanan draf/antrean pada perangkat pribadi. Penyimpanan portal terpisah
@@ -59,8 +82,8 @@ ulang akses portal. Tetapkan JRA/penahanan bukti bersama pengelola arsip dan
 pejabat terkait sebelum menerapkan pembersihan otomatis.
 
 **Tahap berikutnya:** penerusan kasus ber-FK ke Pemeliharaan/Pengamanan/Wasdal,
-serah terima atomik setelah BAST+TTD+validasi, serta pengingat dan eskalasi.
-Tahap pertama tidak mengaktifkan proses tersebut secara otomatis. Kontrak
+serta pengingat dan eskalasi. Rilis ini tidak mengaktifkan proses tersebut
+secara otomatis. Kontrak
 integrasi dan batas kewenangan ada di `docs/MASTERPLAN-SIKLUS-BMN.md` §5P.
 
 ### Kompresi foto bertahap: penghematan tambahan di bawah 1%

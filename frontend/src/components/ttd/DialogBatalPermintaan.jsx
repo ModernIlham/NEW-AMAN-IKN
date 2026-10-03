@@ -13,7 +13,7 @@ export const MIN_ALASAN_BATAL = 5;
 /** Akibat pembatalan DI LUAR modul e-sign, per jenis dokumen. Ditulis di sini
  *  karena inilah satu-satunya layar tempat pengguna masih bisa mundur. */
 const AKIBAT_TAUT = {
-  bast: "BAST yang tertaut beserta asetnya akan ditandai TT dicabut.",
+  bast: "BAST yang tertaut beserta asetnya akan ditandai TT dicabut. Akses BMN Saya yang bersumber dari BAST ini ditinjau/dihentikan sesuai status sumber; ini bukan bukti pengembalian fisik atau pembalikan pembukuan.",
   lpb: "LPB yang tertaut akan ditandai TT dicabut.",
 };
 

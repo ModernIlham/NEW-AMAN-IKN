@@ -206,13 +206,13 @@ Pintu pegawai: **BMN Saya** (`/bmn-saya`), principal tersendiri, bukan akun
 
 | Data / proses | Sumber dan batas penulisan |
 |---|---|
-| Identitas | `pegawai.id` tetap, email milik pribadi yang diperiksa admin; bukan nama/NIP sebagai kredensial. Email ambigu/ganda, satker kosong, pegawai tidak layak, atau pemetaan belum disetujui ditolak. |
-| Akses | `portal_pemegang_akses`; admin mencatat verifikasi email. Magic link sekali pakai dan sesi terpisah; perubahan identitas/email mencabut kelayakan akses, termasuk impor. |
-| Penugasan | `portal_penugasan` merujuk `asset_id` + identitas lintas kegiatan + satker + pegawai. Rilis awal menautkan **penugasan sah yang sudah ada**, dengan dasar dokumen dan catatan admin, bukan menerbitkan serah terima administratif baru. Tidak ada migrasi nama pemegang menjadi izin akses otomatis. |
-| Penerimaan | Pemegang dapat mengonfirmasi atau menyanggah. Konfirmasi portal bukan TTE BAST dan tidak mengubah master pemegang. Pencabutan akses bukan pengembalian barang. |
+| Identitas | `pegawai.id` tetap, nomor identitas unik dan email Master Pegawai; bukan nama/NIP sebagai kredensial. Email ambigu/ganda, satker kosong atau pegawai tidak layak ditolak. |
+| Akses | `portal_pemegang_akses`; aktivasi awal dari BAST lengkap tervalidasi atau verifikasi admin. Magic link sekali pakai dan sesi terpisah; perubahan identitas/email mencabut kelayakan akses, termasuk impor. Revokasi/restore tidak dihidupkan oleh retry BAST. |
+| Penugasan | `portal_penugasan` merujuk `asset_id` + identitas lintas kegiatan + satker + pegawai. BAST baru sah menjadi sumber otomatis. Pemetaan manual berdasarkan dokumen terverifikasi tetap untuk legacy. Tidak ada migrasi nama pemegang menjadi izin akses otomatis. |
+| Penerimaan | BAST lengkap memberi status diterima berdasarkan dokumen tanpa konfirmasi kedua. Pemetaan manual legacy tetap dikonfirmasi/disanggah. Konfirmasi portal bukan TTE BAST. Pencabutan akses bukan pengembalian barang. |
 | Laporan | `portal_laporan`: pengamatan kondisi, status operasional, lokasi yang dilaporkan, catatan dan bukti; waktu pengambilan terpisah dari penerimaan server. Isi yang diajukan tetap historis; perbaikan berupa laporan lanjutan, bukan menimpa bukti. |
 | Verifikasi | Operator/admin menilai kelengkapan/fakta, meminta perbaikan atau menolak; tidak boleh memverifikasi laporan sendiri. Status terverifikasi adalah status **laporan**, bukan pengesahan transaksi BMN. |
-| Akuntansi | Portal tidak menulis `purchase_price`, nilai buku, penyusutan, `dihapus`, jurnal `mutasi_bmn`, kondisi resmi, atau pemegang resmi. Dampak administrasi/akuntansi tetap lewat modul transaksi dan pejabat berwenang dengan dokumen sumber. |
+| Akuntansi | Laporan portal tidak menulis `purchase_price`, nilai buku, penyusutan, `dihapus`, jurnal `mutasi_bmn`, kondisi resmi, atau pemegang resmi. Gateway BAST sah hanya menerapkan pemegang administratif; dampak akuntansi tetap melalui modul transaksi dan pejabat berwenang. |
 | Riwayat | Penugasan, konfirmasi, laporan, dan hasil tinjauan muncul di Timeline Aset internal. Laporan belum diverifikasi tidak disamarkan sebagai fakta resmi. Bukti hanya dapat diakses pemegang yang masih berhak atau staf satker. |
 
 **Batas keamanan:** semua baca/unduh/tulis portal dibatasi penugasan dan satker
@@ -229,12 +229,12 @@ JRA instansi, pembatasan akses, dasar pemrosesan data pribadi, dan legal hold
 perlu ditetapkan sebelum kebijakan pembersihan bukti. Foto/GPS/magic link tidak
 sendiri membuktikan keaslian, kesalahan pegawai, atau menggantikan TTE resmi.
 
-**Urutan implementasi:** (1) akses email + pemetaan penugasan + BMN Saya +
-laporan/bukti/antrean luring + tinjauan dan timeline; (2) penerusan kasus ke
-Pemeliharaan/Pengamanan/Wasdal dengan FK eksplisit dan status tindak lanjut;
-(3) serah terima atomik sesudah BAST, TTE dan validasi melalui gateway tunggal;
-(4) pengingat berkala, eskalasi dan dasbor kepatuhan. Tidak menyalakan
-penjadwalan baru secara diam-diam. Tahap 1 tidak mengklaim tahap 2–4 selesai.
+**Status implementasi:** akses email, laporan/bukti/antrean luring, tinjauan
+dan timeline tersedia. Sesuai prioritas pemilik, gateway BAST otomatis
+didahulukan: CAS per barang dan proyeksi idempoten, bukan transaksi atomik
+lintas semua barang. Penerusan kasus ke Pemeliharaan/Pengamanan/Wasdal ber-FK,
+pengingat berkala, eskalasi dan dasbor kepatuhan masih tahap berikutnya.
+Tidak menyalakan penjadwalan baru secara diam-diam.
 
 Kehilangan boleh dilaporkan tanpa foto barang saat ini; tidak otomatis menjadi
 TGR atau penghapusan. Tidak digunakan bukan keputusan BMN idle. Pegawai
@@ -523,6 +523,36 @@ merujuk. Sebelum membangun modul, tulis dulu kontrak integrasinya (field apa
 yang dibaca dari mana, transaksi apa yang ditulis ke mana) di dokumen ini.
 
 ---
+
+### Kontrak lanjutan — BAST menjadi sumber BMN Saya (Oktober 2026)
+
+- BAST baru menyimpan FK pegawai dan pembagian barang per penerima/PJ. Draf,
+  termasuk draf revisi, tidak mengganti pemegang atau membatalkan akses aktif.
+- Gerbang tunggal membaca ulang dokumen: e-sign generasi aktif, PDF terikat,
+  semua pihak wajib tervalidasi, dan QR siap; atau bukti basah yang kelengkapan
+  dan kesesuaiannya dinyatakan petugas saat unggah. Unggah saja bukan izin.
+- Setelah gerbang terpenuhi, sistem menerapkan pemegang administratif dan
+  penugasan portal berstatus diterima berdasarkan BAST, tanpa input barang
+  atau konfirmasi penerimaan kedua. PJ operasional hanya menerima barang
+  bagiannya; saksi/penanda tangan lain tidak otomatis menjadi pemegang.
+- Mutasi menutup akses lama, pengembalian menutup tanpa membuat KPB menjadi
+  pemegang personal, dan revisi baru berlaku setelah sah. Pencabutan menahan
+  akses, tidak menghidupkan kembali pemegang lama atau menganggap terjadi
+  pengembalian fisik. Masa pinjam lewat ditandai perlu penyelesaian.
+- Penerapan menggunakan CAS per aset, sumber sebelum/sesudah, ID deterministik,
+  serta hasil rekonsiliasi tersimpan yang dapat dicoba ulang. Bukan transaksi
+  atomik lintas semua barang: konflik ditampilkan per barang, tidak ditimpa.
+  Setiap akses portal mengecek sumber terkini, bukan hanya hasil callback.
+- Pegawai harus cocok unik dengan Master Pegawai satker; nama saja tidak cukup.
+  Email unik yang layak dapat diaktifkan pertama kali dari BAST. Akses yang
+  pernah dicabut/di-restore tidak dihidupkan otomatis. Kekurangan identitas,
+  email, atau konflik ditampilkan sebagai pengecualian yang perlu petugas.
+- BAST lama tanpa ikatan bukti/manifest tidak dimigrasikan diam-diam menjadi
+  izin akses. Bukti lama dan laporan tetap diarsipkan. Pengesahan nomor agenda
+  dan hubungan revisi mengikuti finalisasi, tidak mendahuluinya.
+- Perubahan ini hanya penatausahaan tanggung jawab. Tidak mengubah nilai,
+  penyusutan, kepemilikan negara, atau jurnal; laporan kondisi/kehilangan tetap
+  perlu verifikasi dan tindak lanjut melalui modul berwenang.
 
 ## 9. Cara Kerja Bertahap per Fitur
 

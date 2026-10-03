@@ -542,8 +542,13 @@ akun/password pegawai). Gunakan HTTPS dan origin frontend yang eksplisit di
 `ALLOWED_ORIGINS`/`CORS_ORIGINS`; cookie sesi portal bersifat Secure,
 HttpOnly dan SameSite. Jangan menambahkan wildcard. Tautan login memerlukan
 browser yang dipakai meminta tautan, bukan sesi akun staf. Tidak ada akses
-pegawai yang otomatis aktif setelah deploy: admin memeriksa email pribadi dan
-dasar penugasan di Penggunaan → Aset per Pemegang → Portal Pemegang.
+pegawai lama yang otomatis aktif hanya karena deploy. BAST baru yang lengkap
+dan tervalidasi menerapkan amanah serta akses awal email unik yang layak;
+BAST lama tanpa manifest/rencana terikat tetap memerlukan tinjauan petugas.
+Email kosong/ganda, identitas berubah, atau akses pernah dicabut diperiksa
+di Penggunaan → Aset per Pemegang → Portal Pemegang. Draf tidak memutasi
+pemegang. Riwayat BAST menyediakan hasil per barang dan retry idempoten bila
+proyeksi terhenti; tidak perlu mengulang tanda tangan untuk kegagalan proyeksi.
 Sesudah restore backup, akses perlu diverifikasi ulang; riwayat/bukti tetap
 ikut arsip, kredensial sesi tidak. Tidak ada jadwal pengingat/fetch baru.
 

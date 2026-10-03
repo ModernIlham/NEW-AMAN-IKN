@@ -112,6 +112,12 @@ def _amankan_portal_hasil_pulih(col_name: str, docs: list):
             # datetime BSON dalam JSON berubah menjadi teks sehingga tidak
             # akan cocok dengan pembanding waktu Mongo untuk pemulihan lease.
             doc.pop("laporan_aktif", None)
+    elif col_name == "bast_serah_terima":
+        for doc in docs:
+            plan = doc.get("portal_otomasi")
+            if isinstance(plan, dict):
+                plan.pop("lease", None)
+                plan["akses_otomatis_ditahan"] = True
     return docs
 
 

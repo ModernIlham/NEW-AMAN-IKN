@@ -33,6 +33,8 @@ import PilihanKirimTtd from "@/components/ttd/PilihanKirimTtd";
 import { ringkasTtdDokumen, kelasNada } from "@/lib/statusTtd";
 import TautanTtdDialog from "@/components/ttd/TautanTtdDialog";
 import PortalPemegangPanel from "@/components/penggunaan/PortalPemegangPanel";
+import PilihPegawaiBast, { pihakDariPegawai } from "@/components/penggunaan/PilihPegawaiBast";
+import StatusOtomasiBast from "@/components/penggunaan/StatusOtomasiBast";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -125,7 +127,9 @@ export default function PenggunaanPage({ user, onBack }) {
   // Dialog riwayat BAST pemegang: {items, label_jenis, loading}
   const [riwayatBast, setRiwayatBast] = useState(null);
   const buktiRef = useRef(null);
-  const [buktiUntuk, setBuktiUntuk] = useState(null); // id BAST tujuan unggah bukti
+  const [buktiUntuk, setBuktiUntuk] = useState(null); // {bast,file,lengkap,key,sibuk}
+  const [sinkronBast, setSinkronBast] = useState(null);
+  const sinkronKeys = useRef(new Map());
   // Foto dokumentasi serah terima (lampiran BAST). Dua mode: PER BARANG
   // (pilih asetnya) atau SATU foto untuk seluruh barang dalam BAST itu.
   const fotoStRef = useRef(null);
@@ -321,7 +325,6 @@ export default function PenggunaanPage({ user, onBack }) {
                   tanggal_meninggal: "", nomor_akta_kematian: "" },
       saksi: [{ nama: "", jabatan: "", nip: "" },
               { nama: "", jabatan: "", nip: "" }],
-      terapkan_ke_aset: true,
       booking_otomatis: false,
       // Kosong = ikut aturan pemetaan klasifikasi di Pengaturan Penomoran.
       kode_klasifikasi: "",
@@ -329,6 +332,7 @@ export default function PenggunaanPage({ user, onBack }) {
       // (dimutakhirkan oleh permintaan /kebijakan-dokumen di atas).
       tampilkan_nilai: true,
       aset: new Set((detail?.rows || []).map((a) => a.id)),
+      aset_rows: detail?.rows || [],
       saving: false,
       // Idempotency-Key sekali per pembukaan form: klik ganda / retry
       // jaringan tidak menggandakan BAST + nomor booking otomatis.
@@ -405,24 +409,15 @@ export default function PenggunaanPage({ user, onBack }) {
         sertakan_foto: f.sertakan_foto,
         surat_pernyataan: !!f.surat_pernyataan, keterangan: f.keterangan,
         tampilkan_nilai: !!f.tampilkan_nilai,
-        // pengembalian_almarhum WAJIB ikut di sini — tanpanya checkbox
-        // "kosongkan pengguna" dipaksa false dan aset tetap atas nama almarhum
-        // (alur pengembalian almarhum gagal senyap di langkah terakhirnya).
-        terapkan_ke_aset: ["mutasi_pengguna", "pengembalian",
-                           "pengembalian_almarhum"].includes(f.jenis)
-          ? f.terapkan_ke_aset : false,
         booking_otomatis: f.booking_otomatis,
         kode_klasifikasi: f.kode_klasifikasi || "",
         ...(f.revisi ? { revisi_dari: f.revisi.dari, revisi_mode: f.revisi.mode,
                          revisi_alasan: f.revisi.alasan } : {}),
       }, { headers: { "Idempotency-Key": f.idem } });
-      if (["mutasi_pengguna", "pengembalian",
-           "pengembalian_almarhum"].includes(f.jenis) && f.terapkan_ke_aset) {
-        load(page, search); // pemegang berubah — segarkan rekap
-      } else if (detail?.pemegang) {
+      if (detail?.pemegang) {
         openDetail(detail.pemegang); // badge bast_terakhir baru langsung tampak
       }
-      toast.success("BAST tersimpan — mengunduh PDF…");
+      toast.success("Draf BAST tersimpan — pemegang dan BMN Saya diperbarui setelah dokumen sah dan lengkap");
       if (r.data?.peringatan_pegawai) {
         toast.warning(r.data.peringatan_pegawai, { duration: 8000 });
       }
@@ -446,6 +441,7 @@ export default function PenggunaanPage({ user, onBack }) {
   // membetulkan isinya, memilih mode (mengubah/mencabut) dan wajib beralasan.
   const bukaRevisiBast = (b) => {
     setRiwayatBast(null);
+    if (pegawaiList === null) axios.get(`${API}/pegawai`).then(r => setPegawaiList(r.data?.items || [])).catch(() => setPegawaiList([]));
     axios.get(`${API}/kebijakan-dokumen`)
       .then((r) => setFormBast((f) => (f
         ? { ...f, tampilkan_nilai: r.data?.tampilkan_nilai !== false } : f)))
@@ -468,12 +464,16 @@ export default function PenggunaanPage({ user, onBack }) {
       almarhum: { ...(b.almarhum || { nama: "", nip: "", tanggal_meninggal: "", nomor_akta_kematian: "" }) },
       saksi: (b.saksi?.length ? b.saksi.map((x) => ({ ...x }))
         : [{ nama: "", jabatan: "", nip: "" }, { nama: "", jabatan: "", nip: "" }]),
-      // Revisi = koreksi DOKUMEN; efek data sudah diterapkan BAST aslinya.
-      terapkan_ke_aset: false,
       booking_otomatis: true,   // nomor BARU untuk dokumen pengganti
       kode_klasifikasi: b.kode_klasifikasi || "",
       tampilkan_nilai: b.tampilkan_nilai !== false,
       aset: new Set(b.asset_ids || []),
+      // Aset dapat sudah berpindah pemegang. Snapshot dokumen memastikan
+      // barang sumber tetap terlihat saat revisi, bukan hanya UUID tersembunyi.
+      aset_rows: [...new Map([...(detail?.rows || []), ...(b.aset || []),
+        ...(b.asset_ids || []).filter(id => !(b.aset || []).some(a => a.id === id)
+          && !(detail?.rows || []).some(a => a.id === id)).map(id => ({ id, asset_name: `Aset sumber ${id}` }))]
+        .map(a => [a.id, a])).values()],
       revisi: { dari: b.id, dari_nomor: b.nomor || "(tanpa nomor)",
                 mode: "mengubah", alasan: "" },
       saving: false,
@@ -497,23 +497,47 @@ export default function PenggunaanPage({ user, onBack }) {
     }
   };
 
-  const unggahBukti = async (file) => {
-    if (!file || !buktiUntuk) return;
+  const unggahBukti = async () => {
+    if (!buktiUntuk?.file || buktiUntuk.sibuk) return;
+    const data = buktiUntuk;
     const fd = new FormData();
-    fd.append("file", file);
+    fd.append("file", data.file);
+    fd.append("verifikasi_lengkap", String(data.lengkap));
+    setBuktiUntuk(v => ({ ...v, sibuk: true }));
     try {
-      const r = await axios.post(`${API}/bast/${buktiUntuk}/bukti`, fd,
-        { headers: { "Content-Type": "multipart/form-data" } });
+      const r = await axios.post(`${API}/bast/${data.bast.id}/bukti`, fd,
+        { headers: { "Content-Type": "multipart/form-data", "If-Match": String(data.bast.portal_otomasi?.version ?? 0),
+          "Idempotency-Key": data.key }, timeout: 30000 });
       toast.success(r.data?.nomor_agenda_disahkan
-        ? "Bukti tersimpan — nomor agenda di Persuratan otomatis DISAHKAN"
-        : "Bukti tanda tangan tersimpan");
-      bukaRiwayatBast();
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || "Gagal mengunggah bukti");
-    } finally {
+        ? "Bukti lengkap diverifikasi — nomor agenda disahkan; periksa hasil sinkronisasi BMN Saya"
+        : "Bukti tersimpan; belum dianggap lengkap sampai pemeriksaan dinyatakan sesuai");
       setBuktiUntuk(null);
+      bukaRiwayatBast();
+      load(page, search);
+    } catch (e) {
+      toast.error(typeof e?.response?.data?.detail === "string" ? e.response.data.detail : "Gagal mengunggah bukti; periksa status sebelum mencoba kembali");
+      setBuktiUntuk(v => v && ({ ...v, sibuk: false }));
+    } finally {
       if (buktiRef.current) buktiRef.current.value = "";
     }
+  };
+
+  const sinkronkanBast = async b => {
+    if (sinkronBast) return;
+    const version = b.portal_otomasi?.version ?? 0;
+    const id = `${b.id}:${version}`;
+    if (!sinkronKeys.current.has(id)) sinkronKeys.current.set(id, crypto.randomUUID());
+    setSinkronBast(b.id);
+    try {
+      await axios.post(`${API}/bast/${b.id}/sinkronkan-bmn`, {}, { headers: {
+        "If-Match": String(version), "Idempotency-Key": sinkronKeys.current.get(id),
+      }, timeout: 30000 });
+      sinkronKeys.current.delete(id); await bukaRiwayatBast(); load(page, search);
+      toast.success("Pemeriksaan sinkronisasi selesai; lihat hasil tiap barang pada riwayat BAST");
+    } catch (e) {
+      toast.error(typeof e?.response?.data?.detail === "string" ? e.response.data.detail : "Sinkronisasi belum berhasil. Muat ulang dan periksa hasilnya.");
+      if (e.response?.status === 409) await bukaRiwayatBast();
+    } finally { setSinkronBast(null); }
   };
 
   const unggahFotoSerahTerima = async (file) => {
@@ -1960,13 +1984,33 @@ export default function PenggunaanPage({ user, onBack }) {
       {/* ── Dialog daftar aset pemegang ── */}
       {/* ── Dialog Riwayat BAST pemegang (pratinjau/unduh/bukti ttd) ── */}
       <input ref={buktiRef} type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden"
-        onChange={(e) => unggahBukti(e.target.files?.[0])} data-testid="bast-bukti-input" />
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) setBuktiUntuk(v => v && ({ ...v, file, lengkap: false, key: crypto.randomUUID() }));
+          e.target.value = "";
+        }} data-testid="bast-bukti-input" />
+      <Dialog open={!!buktiUntuk} onOpenChange={o => { if (!o && !buktiUntuk?.sibuk) setBuktiUntuk(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Periksa bukti BAST</DialogTitle><DialogDescription>
+            {buktiUntuk?.bast?.nomor || "BAST"} · Pilih dokumen yang benar. Unggah berkas saja belum mengaktifkan penugasan BMN Saya.
+          </DialogDescription></DialogHeader>
+          <div className="space-y-3">
+            <Button type="button" variant="outline" className="min-h-[44px]" disabled={buktiUntuk?.sibuk} data-testid="bast-bukti-pilih" onClick={() => buktiRef.current?.click()}>Pilih bukti PDF/foto</Button>
+            <p className="break-words text-sm">{buktiUntuk?.file?.name || "Belum ada berkas dipilih"}</p>
+            <label className="flex items-start gap-2 rounded-lg border p-3 text-sm"><input type="checkbox" className="mt-1 h-4 w-4 shrink-0" checked={!!buktiUntuk?.lengkap} disabled={buktiUntuk?.sibuk} data-testid="bast-bukti-lengkap"
+              onChange={e => setBuktiUntuk(v => ({ ...v, lengkap: e.target.checked, key: crypto.randomUUID() }))} />
+              <span>Saya sudah memeriksa dokumen ini: identitas, daftar barang, seluruh halaman dan tanda tangan pihak yang diwajibkan benar serta lengkap. Nyatakan bukti sah untuk penerapan BAST dan BMN Saya.</span></label>
+            <p className="text-xs text-muted-foreground">Tanpa centang, bukti hanya diarsipkan dan tetap menunggu verifikasi. Bukti efektif tidak boleh ditimpa; perubahan menggunakan revisi resmi. Pemeriksaan ini tercatat dengan identitas petugas.</p>
+          </div>
+          <DialogFooter><Button variant="outline" disabled={buktiUntuk?.sibuk} onClick={() => setBuktiUntuk(null)} data-testid="bast-bukti-batal">Batal</Button><Button onClick={unggahBukti} disabled={!buktiUntuk?.file || buktiUntuk?.sibuk} data-testid="bast-bukti-simpan">{buktiUntuk?.sibuk ? "Menyimpan…" : buktiUntuk?.lengkap ? "Simpan & verifikasi lengkap" : "Arsipkan tanpa verifikasi"}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={!!riwayatBast} onOpenChange={(o) => { if (!o) setRiwayatBast(null); }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Riwayat BAST — {detail?.pemegang?.nama}</DialogTitle>
             <DialogDescription className="text-xs">
-              Pratinjau membuka PDF di tab baru; unggah bukti tanda tangan akan otomatis MENYAHKAN nomor agendanya di Persuratan.
+              Pratinjau membuka PDF di tab baru. BAST diterapkan setelah tanda tangan lengkap tervalidasi dan QR final, atau bukti basah dinyatakan lengkap oleh petugas.
             </DialogDescription>
           </DialogHeader>
           {riwayatBast?.loading ? (
@@ -1986,7 +2030,10 @@ export default function PenggunaanPage({ user, onBack }) {
                         {b.nomor || "(tanpa nomor)"} · {String(b.tanggal || "").slice(0, 10)} · {(b.asset_ids || []).length} aset → {b.pihak_kedua?.nama}
                       </p>
                       {b.bukti?.file_id ? (
-                        <p className="text-[10px] text-emerald-600 dark:text-emerald-400">✓ Bukti ttd terunggah ({String(b.bukti.diunggah_pada || "").slice(0, 10)})</p>
+                        <p className={`text-[10px] ${b.portal_otomasi && !b.bukti.verifikasi_lengkap ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                          {b.portal_otomasi ? (b.bukti.verifikasi_lengkap ? "✓ Kelengkapan bukti diverifikasi" : "Bukti diarsipkan — belum diverifikasi lengkap") : "Bukti dokumen lama terarsip"}
+                          {` (${String(b.bukti.diunggah_pada || "").slice(0, 10)})`}
+                        </p>
                       ) : (
                         <p className="text-[10px] text-amber-600 dark:text-amber-400">Bukti ttd belum diunggah</p>
                       )}
@@ -2013,6 +2060,7 @@ export default function PenggunaanPage({ user, onBack }) {
                           ⚠ Telah {b.direvisi_mode === "mencabut" ? "dicabut" : "direvisi"} — digantikan {b.direvisi_oleh_nomor || "BAST pengganti"}
                         </p>
                       ) : null}
+                      <StatusOtomasiBast bast={b} onSinkronkan={["admin", "operator"].includes(user?.role) ? sinkronkanBast : null} sibuk={sinkronBast === b.id} />
                     </div>
                     {/* `flex-shrink-0` DIHAPUS (bug tombol meluber kanvas):
                         kontainer jadi menolak menyusut sehingga empat tombol
@@ -2052,10 +2100,13 @@ export default function PenggunaanPage({ user, onBack }) {
                               : (b.ttd?.id ? "Kirim ulang ke TTD" : "Kirim ke TTD")}
                           </Button>
                           <Button size="sm" className="h-7 text-[11px]"
-                            onClick={() => { setBuktiUntuk(b.id); buktiRef.current?.click(); }}
+                            onClick={() => setBuktiUntuk({ bast: b, file: null, lengkap: false, key: crypto.randomUUID(), sibuk: false })}
                             data-testid={`bast-unggah-bukti-${b.id}`}>Unggah Bukti TTD</Button>
                         </>
                       )}
+                      {b.bukti?.file_id && b.portal_otomasi && !b.bukti.verifikasi_lengkap && !b.direvisi_oleh && <Button size="sm" variant="outline" className="min-h-[44px] text-xs"
+                        onClick={() => setBuktiUntuk({ bast: b, file: null, lengkap: false, key: crypto.randomUUID(), sibuk: false })}
+                        data-testid={`bast-verifikasi-bukti-${b.id}`}>Lengkapi / verifikasi bukti</Button>}
                       {!b.direvisi_oleh && (
                         <Button size="sm" variant="outline"
                           className="h-7 text-[11px] text-amber-700 dark:text-amber-400 border-amber-500/40"
@@ -2233,7 +2284,7 @@ export default function PenggunaanPage({ user, onBack }) {
             </DialogTitle>
             <DialogDescription className="text-xs">
               {formBast?.revisi
-                ? "BAST sah tidak diedit — revisi menerbitkan BAST PENGGANTI bernomor baru; arsip lama utuh dan diberi penanda telah direvisi."
+                ? "BAST sah tidak diedit — revisi menerbitkan BAST pengganti bernomor baru. Pergantian pemegang/akses mengikuti revisi yang telah sah; arsip dan riwayat lama tetap utuh."
                 : "Multi-aset dalam satu BAST; nomor bisa dipesan lewat tombol Booking Nomor lalu ditempel di sini."}
             </DialogDescription>
           </DialogHeader>
@@ -2269,10 +2320,10 @@ export default function PenggunaanPage({ user, onBack }) {
                   <p className="text-[10px] text-muted-foreground mt-0.5">
                     {{
                       penggunaan_melekat: "Barang melekat ke satu pegawai (laptop/HP dinas) — pemakaian sehari-hari.",
-                      mutasi_pengguna: "Alih pemegang lama → baru; KPB ikut tanda tangan Mengetahui; bisa langsung memindahkan data pengguna aset.",
+                      mutasi_pengguna: "Alih pemegang lama → baru; berlaku setelah BAST sah dan lengkap, KPB ikut tanda tangan Mengetahui.",
                       operasional_unit: "Barang dipakai bersama pada unit/tempat/tugas; bisa menambah penanggung jawab per unit.",
                       penggunaan_sementara: "Pinjam pakai internal ber-jangka waktu — wajib tanggal dari & sampai; barang tetap tercatat di satker.",
-                      pengembalian: "Barang dikembalikan pegawai ke satker; bisa langsung mengosongkan data pengguna aset.",
+                      pengembalian: "Barang dikembalikan ke satker; penugasan ditutup setelah BAST sah dan lengkap.",
                       lainnya: "Jenis bebas — judul BAST diketik sendiri.",
                     }[formBast.jenis] || ""}
                   </p>
@@ -2301,22 +2352,17 @@ export default function PenggunaanPage({ user, onBack }) {
               {formBast.jenis === "mutasi_pengguna" && (
                 <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5 space-y-2">
                   <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">Pemegang lama (PIHAK KESATU) — menyerahkan</p>
+                  <PilihPegawaiBast daftar={pegawaiList || []} value={formBast.pihak_pertama.pegawai_id}
+                    label="Pegawai pemegang lama" testId="bast-lama-pegawai" onPilih={p => setFormBast(f => ({ ...f, pihak_pertama: pihakDariPegawai(p) }))} />
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {/* Terhubung Master Pegawai (datalist sama dgn Penerima):
-                        nama cocok → NIP & jabatan terisi otomatis (audit W4).
-                        Tap kartu e-KTP juga bisa (tombol ikon kartu). */}
                     <div className="flex gap-1.5 min-w-0">
-                    <Input value={formBast.pihak_pertama.nama} list="bast-pegawai-list"
+                    <Input value={formBast.pihak_pertama.nama} readOnly={!!formBast.pihak_pertama.pegawai_id}
                       placeholder="Nama pemegang lama *" data-testid="bast-lama-nama"
                       className="flex-1 min-w-0"
                       onChange={(e) => {
                         const v = e.target.value;
-                        const m = (pegawaiList || []).find((x) => (x.nama || "") === v);
                         setFormBast((f) => ({ ...f, pihak_pertama: {
-                          ...f.pihak_pertama, nama: v,
-                          ...(m ? { nip: m.nip || f.pihak_pertama.nip,
-                                    jabatan: m.jabatan || f.pihak_pertama.jabatan,
-                                    alamat: (m.alamat || m.unit_kerja || m.unit_organisasi || "").trim() || f.pihak_pertama.alamat } : {}) } }));
+                          ...f.pihak_pertama, nama: v, pegawai_id: "", nip: "" } }));
                       }} />
                     <button type="button" title="Tap kartu pegawai (e-KTP/NFC)"
                       onClick={() => setKartuTapUntuk("pihak_pertama")}
@@ -2325,7 +2371,7 @@ export default function PenggunaanPage({ user, onBack }) {
                       <IdCard className="w-4 h-4 text-blue-600" />
                     </button>
                     </div>
-                    <Input value={formBast.pihak_pertama.nip} placeholder="NIP/NIK" className="font-mono"
+                    <Input value={formBast.pihak_pertama.nip} readOnly={!!formBast.pihak_pertama.pegawai_id} placeholder="NIP/NIK" className="font-mono"
                       onChange={(e) => setFormBast((f) => ({ ...f, pihak_pertama: { ...f.pihak_pertama, nip: e.target.value } }))} />
                     <Input value={formBast.pihak_pertama.jabatan} placeholder="Jabatan" className="sm:col-span-2"
                       onChange={(e) => setFormBast((f) => ({ ...f, pihak_pertama: { ...f.pihak_pertama, jabatan: e.target.value } }))} />
@@ -2336,15 +2382,7 @@ export default function PenggunaanPage({ user, onBack }) {
                   <p className="text-[10px] text-amber-700/80 dark:text-amber-300/80">Isian Penerima di bawah = pemegang BARU; KPB ikut menandatangani sebagai Mengetahui.</p>
                 </div>
               )}
-              {["mutasi_pengguna", "pengembalian", "pengembalian_almarhum"].includes(formBast.jenis) && (
-                <label className="flex items-center gap-2 text-xs cursor-pointer">
-                  <input type="checkbox" checked={formBast.terapkan_ke_aset} className="w-3.5 h-3.5" data-testid="bast-terapkan"
-                    onChange={(e) => setFormBast((f) => ({ ...f, terapkan_ke_aset: e.target.checked }))} />
-                  {formBast.jenis === "mutasi_pengguna"
-                    ? "Handover langsung: pindahkan pengguna aset ke pemegang baru"
-                    : "Kosongkan pengguna pada aset (barang kembali ke satker)"}
-                </label>
-              )}
+              <p className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-3 text-xs" data-testid="bast-penerapan-final">Pemegang dan BMN Saya diperbarui otomatis hanya setelah dokumen sah dan lengkap. Menyimpan draf tidak memindahkan atau mengosongkan pengguna. Tidak perlu memasukkan barang atau menerima ulang BAST sah di portal; nilai/pembukuan tidak diubah oleh otomasi penugasan ini.</p>
               {formBast.jenis === "penggunaan_sementara" && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div><label className="text-xs font-medium block mb-1">Jangka: dari *</label>
@@ -2391,18 +2429,15 @@ export default function PenggunaanPage({ user, onBack }) {
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div><label className="text-xs font-medium block mb-1">Penerima (PIHAK KEDUA) *</label>
+                  <PilihPegawaiBast daftar={pegawaiList || []} value={formBast.pihak_kedua.pegawai_id}
+                    label="Pegawai pihak kedua" testId="bast-penerima-pegawai" onPilih={p => setFormBast(f => ({ ...f, pihak_kedua: pihakDariPegawai(p) }))} />
                   <div className="flex gap-1.5">
-                  <Input value={formBast.pihak_kedua.nama} list="bast-pegawai-list"
-                    placeholder="ketik nama — saran dari Master Pegawai"
+                  <Input value={formBast.pihak_kedua.nama} readOnly={!!formBast.pihak_kedua.pegawai_id}
+                    placeholder="Nama pihak di luar master / identitas dokumen"
                     className="flex-1 min-w-0"
                     onChange={(e) => {
                       const v = e.target.value;
-                      // Nama persis cocok dengan Master Pegawai → NIP & jabatan terisi otomatis.
-                      const m = (pegawaiList || []).find((x) => (x.nama || "") === v);
-                      setFormBast((f) => ({ ...f, pihak_kedua: m
-                        ? { ...f.pihak_kedua, nama: v, nip: m.nip || f.pihak_kedua.nip, jabatan: m.jabatan || f.pihak_kedua.jabatan,
-                            alamat: (m.alamat || m.unit_kerja || m.unit_organisasi || "").trim() || f.pihak_kedua.alamat }
-                        : { ...f.pihak_kedua, nama: v } }));
+                      setFormBast((f) => ({ ...f, pihak_kedua: { ...f.pihak_kedua, nama: v, pegawai_id: "", nip: "" } }));
                     }} data-testid="bast-penerima" />
                   {/* Tap kartu e-KTP penerima → identitas terisi otomatis */}
                   <button type="button" title="Tap kartu pegawai (e-KTP/NFC)"
@@ -2412,16 +2447,9 @@ export default function PenggunaanPage({ user, onBack }) {
                     <IdCard className="w-4 h-4 text-blue-600" />
                   </button>
                   </div>
-                  {/* Almarhum tak ditawarkan sebagai penerima — server juga
-                      menolaknya (serah terima kepada yang telah meninggal
-                      mustahil); gunakan alur pengembalian BMN almarhum. */}
-                  <datalist id="bast-pegawai-list">
-                    {(pegawaiList || []).filter((x) => String(x?.status || "") !== "meninggal").map((x) => (
-                      <option key={x.id || x.nip || x.nama} value={x.nama}>{x.nip ? `NIP ${x.nip}` : ""}</option>
-                    ))}
-                  </datalist></div>
+                  </div>
                 <div><label className="text-xs font-medium block mb-1">NIP/NIK</label>
-                  <Input value={formBast.pihak_kedua.nip} onChange={(e) => setFormBast((f) => ({ ...f, pihak_kedua: { ...f.pihak_kedua, nip: e.target.value } }))} className="font-mono" /></div>
+                  <Input value={formBast.pihak_kedua.nip} readOnly={!!formBast.pihak_kedua.pegawai_id} data-testid="bast-penerima-nip" onChange={(e) => setFormBast((f) => ({ ...f, pihak_kedua: { ...f.pihak_kedua, nip: e.target.value } }))} className="font-mono" /></div>
                 <div><label className="text-xs font-medium block mb-1">Jabatan</label>
                   <Input value={formBast.pihak_kedua.jabatan} onChange={(e) => setFormBast((f) => ({ ...f, pihak_kedua: { ...f.pihak_kedua, jabatan: e.target.value } }))} /></div>
                 <div><label className="text-xs font-medium block mb-1">Alamat/Unit</label>
@@ -2474,29 +2502,25 @@ export default function PenggunaanPage({ user, onBack }) {
                   {formBast.pj_tambahan.map((pj, i) => {
                     const ubah = (k, v) => setFormBast((f) => ({ ...f, pj_tambahan: f.pj_tambahan.map((x, j) => j === i ? { ...x, [k]: v } : x) }));
                     const melekat = (pj.asset_ids || [])
-                      .map((id) => (detail?.rows || []).find((a) => a.id === id))
+                      .map((id) => (formBast.aset_rows || []).find((a) => a.id === id))
                       .filter(Boolean);
-                    const tersedia = asetTersedia(detail?.rows, formBast.aset, formBast.pj_tambahan, i);
+                    const tersedia = asetTersedia(formBast.aset_rows, formBast.aset, formBast.pj_tambahan, i);
                     return (
                       <div key={i} className="rounded-lg border border-border p-2 space-y-1.5"
                         data-testid={`bast-pj-${i}`}>
+                        <PilihPegawaiBast daftar={pegawaiList || []} value={pj.pegawai_id} label={`Pegawai penanggung jawab ${i + 1}`}
+                          testId={`bast-pj-pegawai-${i}`} onPilih={p => setFormBast(f => ({ ...f, pj_tambahan: f.pj_tambahan.map((x, j) => j === i ? { ...x, ...dariPegawai(p) } : x) }))} />
                         <div className="flex gap-2">
-                          {/* Nama TERHUBUNG ke Master Pegawai: begitu namanya
-                              persis cocok, NIP/NIK dan unit eselon terdalamnya
-                              ikut terisi. Tetap boleh diketik bebas — tak semua
-                              penanggung jawab terdaftar di sana (tenaga alih
-                              daya, mitra). */}
-                          <Input value={pj.nama} placeholder="Nama — saran dari Master Pegawai"
-                            list="bast-pj-pegawai-list" data-testid={`bast-pj-nama-${i}`}
+                          <Input value={pj.nama} readOnly={!!pj.pegawai_id} placeholder="Nama pihak di luar Master Pegawai"
+                            data-testid={`bast-pj-nama-${i}`}
                             onChange={(e) => {
                               const v = e.target.value;
-                              const m = (pegawaiList || []).find((x) => (x.nama || "") === v);
                               setFormBast((f) => ({ ...f, pj_tambahan: f.pj_tambahan.map(
                                 (x, j) => (j === i
-                                  ? { ...x, nama: v, ...(m ? dariPegawai(m) : {}) }
+                                  ? { ...x, nama: v, nip: "", pegawai_id: "" }
                                   : x)) }));
                             }} />
-                          <Input value={pj.nip || ""} placeholder="NIP/NIK" className="font-mono w-40"
+                          <Input value={pj.nip || ""} readOnly={!!pj.pegawai_id} placeholder="NIP/NIK" className="font-mono w-40"
                             data-testid={`bast-pj-nip-${i}`}
                             onChange={(e) => ubah("nip", e.target.value)} />
                           <button type="button" className="p-1.5 rounded text-red-500 hover:bg-red-500/10 min-w-0 min-h-0" aria-label={`Hapus penanggung jawab ${i + 1}`}
@@ -2544,13 +2568,6 @@ export default function PenggunaanPage({ user, onBack }) {
                       </div>
                     );
                   })}
-                  <datalist id="bast-pj-pegawai-list">
-                    {(pegawaiList || []).filter((x) => String(x?.status || "") !== "meninggal").map((x) => (
-                      <option key={x.id || x.nip || x.nama} value={x.nama}>
-                        {[x.nip ? `NIP ${x.nip}` : "", x.unit_kerja || ""].filter(Boolean).join(" · ")}
-                      </option>
-                    ))}
-                  </datalist>
                   <Button size="sm" variant="outline" className="h-7 text-[11px]"
                     data-testid="bast-pj-tambah"
                     onClick={() => setFormBast((f) => ({ ...f, pj_tambahan: [...f.pj_tambahan, pjKosong()] }))}>
@@ -2561,7 +2578,7 @@ export default function PenggunaanPage({ user, onBack }) {
               <div>
                 <label className="text-xs font-medium block mb-1">Aset yang diserahterimakan ({formBast.aset.size} dipilih)</label>
                 <div className="max-h-36 overflow-y-auto border border-border rounded-lg divide-y divide-border/60">
-                  {(detail?.rows || []).map((a) => (
+                  {(formBast.aset_rows || []).map((a) => (
                     <label key={a.id} className="flex items-center gap-2 px-2.5 py-1.5 text-xs cursor-pointer hover:bg-muted">
                       <input type="checkbox" checked={formBast.aset.has(a.id)} className="w-3.5 h-3.5"
                         onChange={(e) => setFormBast((f) => {
@@ -2704,10 +2721,7 @@ export default function PenggunaanPage({ user, onBack }) {
           // Null-guard: respons tap bisa tiba SETELAH dialog BAST ditutup
           // (form null) — tanpa guard, spread f[pihak] melempar & layar putih.
           setFormBast((f) => (f ? { ...f, [pihak]: {
-            ...f[pihak], nama: p.nama || f[pihak]?.nama || "",
-            nip: p.nip || f[pihak]?.nip || "",
-            jabatan: p.jabatan || f[pihak]?.jabatan || "",
-            alamat: (p.alamat || p.unit_kerja || p.unit_organisasi || "").trim() || f[pihak]?.alamat || "",
+            ...f[pihak], ...pihakDariPegawai(p),
           } } : f));
         }} />
 

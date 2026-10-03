@@ -322,6 +322,20 @@ def baris_csv_idle(tiket_list) -> list:
     return baris
 
 
+def bast_lengkap_tercatat(asset: dict) -> bool:
+    """Kelengkapan tampilan; status terkelola diisi ulang resolver per-request.
+
+    False terkelola tidak boleh ditutupi blob scan lama milik BAST sebelumnya.
+    Data legacy mempertahankan perilaku perhitungan berkas yang sudah ada.
+    """
+    a = asset or {}
+    if "bast_otomatis_sah" in a:
+        return (a.get("bast_otomatis_sah") is True
+                and bool(a.get("bast_otomatis_id"))
+                and a["bast_otomatis_id"] == (a.get("bast_terakhir") or {}).get("id"))
+    return bool(str(a.get("bast_file_id") or "").strip())
+
+
 def bast_perlu_perbarui(asset: dict) -> bool:
     """True bila aset ber-BAST namun **kode/nama SEKARANG berbeda** dari yang
     di-snapshot saat BAST dilampirkan (mis. setelah reklasifikasi kodefikasi
@@ -387,7 +401,7 @@ def rekap_pemegang(assets):
             "_kegiatan": set(),
         })
         e["jumlah_aset"] += 1
-        if str(a.get("bast_file_id") or "").strip():
+        if bast_lengkap_tercatat(a):
             e["jumlah_bast"] += 1
         jab = str(a.get("pengguna_jabatan") or "").strip()
         if jab and not e["jabatan"]:
@@ -907,13 +921,14 @@ _TJ_MELEKAT = frozenset({"penggunaan_melekat", "mutasi_pengguna"})
 
 
 def bast_sah(asset: dict) -> bool:
-    """BAST aset ini sudah disahkan DAN buktinya terunggah. MURNI.
+    """Status tampilan BAST, bukan gerbang otorisasi. MURNI.
 
-    Satu syarat, bukan dua: mengunggah bukti tanda tangan itulah yang
-    mengesahkan (lihat `unggah_bukti_bast` di routes/bast.py). Tanda tangan
-    yang dicabut kemudian membatalkannya.
+    BAST terkelola memakai hasil resolver sumber terkini dari endpoint.
+    Legacy mempertahankan aturan scan terunggah dan tidak dicabut.
     """
     a = asset or {}
+    if "bast_otomatis_sah" in a:
+        return bast_lengkap_tercatat(a)
     if not str(a.get("bast_file_id") or "").strip():
         return False
     terakhir = a.get("bast_terakhir")

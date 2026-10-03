@@ -305,7 +305,9 @@ export default function TtdPermintaanPage({ user, onBack }) {
         toast.success("Giliran dibuka ulang hanya untuk penanda tangan ini");
       } else {
         toast.success(r.data?.status === "selesai"
-          ? "Seluruh pembubuhan tervalidasi — dokumen siap difinalkan"
+          ? detail.doc_type === "bast"
+            ? "Pembubuhan BAST lengkap tervalidasi — lengkapi QR final; lihat hasil penerapan BMN Saya pada Riwayat BAST"
+            : "Seluruh pembubuhan tervalidasi — dokumen siap difinalkan"
           : "Pembubuhan dinyatakan sesuai");
       }
       setValidasi(null);
@@ -816,6 +818,7 @@ export default function TtdPermintaanPage({ user, onBack }) {
                 )}
                 <KelolaPenandatangan data={detail} pegawai={pegawai}
                   onBerubah={async () => { await bukaDetail(detail); await load(); }} />
+                {detail.doc_type === "bast" && <p className="rounded-lg border bg-muted/30 p-2 text-xs" data-testid="ttd-bast-otomasi-info">BAST diterapkan ke pemegang dan BMN Saya setelah seluruh pihak wajib tervalidasi, dokumen lengkap dan QR final. Hasil tiap barang terlihat di Penggunaan → Riwayat BAST. Penambahan penanda tangan bukan otomatis penambahan pemegang barang; pembagian barang mengikuti isi BAST.</p>}
                 <RiwayatPenandatangan data={detail} />
                 {(detail.signers || []).map((s) => (
                   <BarisPenandaTangan
