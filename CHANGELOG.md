@@ -18,6 +18,30 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1087] Pemilih ringkas dan penugasan legacy banyak aset — 2026-10-03
+
+- Pilihan pegawai BAST dan lingkup Portal Pemegang memakai satu pemilih
+  berpencarian, bukan kotak cari dan dropdown terpisah. Identitas terisi dari
+  pegawai yang dipilih; nama tidak tampil ganda dan pihak luar tetap didukung.
+- Pilihan barang PJ BAST dapat dicari dan tidak menawarkan ulang barang yang
+  sudah melekat pada PJ tersebut. Pergantian identitas manual membersihkan
+  identitas lama agar tidak terbawa ke pihak berikutnya.
+- Pengecualian penugasan lama mendukung banyak aset, pilihan lintas pencarian
+  dan halaman, pelepasan per barang, serta hasil simpan per barang. Pengiriman
+  memakai jalur validasi/idempotensi yang sama; bukan transaksi atomik massal.
+- Melipat panel mempertahankan keranjang dan kunci percobaan. Hasil jaringan
+  yang belum pasti mengunci konteks percobaan ulang; keluar halaman memberi
+  peringatan bahwa permintaan terkirim mungkin tetap diproses server.
+- Tombol muat ulang menyegarkan daftar pegawai juga, tanpa menghapus pilihan
+  penugasan. Kegagalan daftar dapat dicoba ulang tanpa meninggalkan halaman.
+- Kandidat aset otomatis mengikuti NIP/NIK pegawai dalam satker aktif. Pilihan
+  pengecualian tetap dibatasi satu satker, menampilkan kegiatan acuan dan alasan
+  aset tidak layak. Barang ber-BAST otomatis dan barang yang sudah mempunyai
+  penugasan tidak ditimpa; identitas fisik lintas kegiatan tetap dijaga.
+- Validasi manual kini juga menolak nama pemegang berbeda ketika NIP/NIK aset
+  kosong. Daftar kandidat dan penyimpanan memakai aturan bersama; pemetaan
+  portal tidak memindahkan pemegang resmi maupun mengubah nilai/jurnal aset.
+
 ## [#1086] BMN Saya dan Portal Pemegang berfokus pada pemantauan — 2026-10-03
 
 - Tombol mode terang/gelap tersedia sebelum dan setelah masuk BMN Saya,

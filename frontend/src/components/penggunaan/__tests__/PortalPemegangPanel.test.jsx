@@ -8,6 +8,11 @@ const staff = { id: "p1", nama: "Pegawai Uji", email: "pegawai@example.test", ko
 const report = { id: "r1", version: 1, status: "diajukan", asset_name: "Laptop Uji", jenis: "kehilangan", pegawai_nama: "Pegawai Uji", kondisi: "Tidak diketahui", catatan: "Barang belum ditemukan", bukti: [] };
 const summary = { pemegang: 8, penugasan: { total: 87, diterima: 82, dicabut: 5 }, laporan: { total: 120, menunggu_tinjauan: 34, perlu_perbaikan: 12, terverifikasi: 71, ditolak: 3 } };
 const deferred = () => { let resolve; let reject; const promise = new Promise((res, rej) => { resolve = res; reject = rej; }); return { promise, resolve, reject }; };
+const pilihPemegang = async () => {
+  fireEvent.click(screen.getByTestId("portal-admin-pegawai"));
+  const option = await screen.findByTestId("portal-admin-pegawai-option-p1");
+  await act(async () => fireEvent.click(option));
+};
 
 beforeEach(() => {
   Object.defineProperty(globalThis, "crypto", { configurable: true, value: require("crypto").webcrypto });
@@ -27,7 +32,7 @@ beforeEach(() => {
 test("operator boleh memeriksa laporan, tidak memiliki tombol persetujuan atau pemetaan akses", async () => {
   render(<PortalPemegangPanel user={{ role: "operator" }} />);
   await screen.findByTestId("portal-admin-tinjau-r1");
-  fireEvent.change(screen.getByTestId("portal-admin-pegawai"), { target: { value: "p1" } });
+  await pilihPemegang();
   expect(await screen.findByText(/Operator dapat memeriksa laporan/)).toBeInTheDocument();
   await waitFor(() => expect(axios.get).toHaveBeenCalledWith(expect.stringMatching(/\/admin\/penugasan$/), { params: { pegawai_id: "p1" } }));
   expect(screen.queryByTestId("portal-admin-tambah-toggle")).not.toBeInTheDocument();
@@ -44,14 +49,14 @@ test("seluruh halaman laporan bisa ditelusuri dan status/pegawai difilter server
   expect(axios.get).toHaveBeenCalledWith(expect.stringMatching(/\/admin\/laporan$/), { params: { page: 2, page_size: 30, status: "" } });
   fireEvent.change(screen.getByTestId("portal-admin-status"), { target: { value: "perlu_perbaikan" } });
   await waitFor(() => expect(axios.get).toHaveBeenCalledWith(expect.stringMatching(/\/admin\/laporan$/), { params: { page: 1, page_size: 30, status: "perlu_perbaikan" } }));
-  fireEvent.change(screen.getByTestId("portal-admin-pegawai"), { target: { value: "p1" } });
+  await pilihPemegang();
   await waitFor(() => expect(axios.get).toHaveBeenCalledWith(expect.stringMatching(/\/admin\/laporan$/), { params: { page: 1, page_size: 30, status: "perlu_perbaikan", pegawai_id: "p1" } }));
 });
 
 test("persetujuan email memerlukan konfirmasi eksplisit dan versi akses", async () => {
   render(<PortalPemegangPanel user={{ role: "admin" }} />);
   await screen.findByTestId("portal-admin-tinjau-r1");
-  fireEvent.change(screen.getByTestId("portal-admin-pegawai"), { target: { value: "p1" } });
+  await pilihPemegang();
   const approve = await screen.findByTestId("portal-admin-aktifkan");
   expect(screen.getByTestId("portal-admin-akses-toggle").closest("details")).not.toHaveAttribute("open");
   fireEvent.click(screen.getByTestId("portal-admin-akses-toggle"));
@@ -110,8 +115,7 @@ test("hasil ringkasan dan laporan lama tidak menimpa lingkup pemegang baru", asy
     return baseGet(url, options);
   });
   render(<PortalPemegangPanel user={{ role: "operator" }} />);
-  await screen.findByRole("option", { name: "Pegawai Uji · A" });
-  fireEvent.change(screen.getByTestId("portal-admin-pegawai"), { target: { value: "p1" } });
+  await pilihPemegang();
   await screen.findByTestId("portal-admin-tinjau-r1");
   expect(within(screen.getByTestId("portal-monitor-pemegang")).getByText("1")).toBeInTheDocument();
   await act(async () => { pendingSummary.resolve({ data: summary }); pendingReports.resolve({ data: { items: [{ ...report, id: "usang" }], total: 99 } }); });
@@ -127,7 +131,7 @@ test("kartu amanah membedakan data induk, BAST, laporan dan riwayat dicabut", as
   ] } }) : baseGet(url, options));
   render(<PortalPemegangPanel user={{ role: "operator" }} />);
   await screen.findByTestId("portal-admin-tinjau-r1");
-  fireEvent.change(screen.getByTestId("portal-admin-pegawai"), { target: { value: "p1" } });
+  await pilihPemegang();
   const card = await screen.findByTestId("portal-admin-amanah-bast1");
   expect(card).toHaveTextContent("Kondisi data indukBaik");
   expect(card).toHaveTextContent("BAST 007/SATKER/2026");
@@ -195,4 +199,75 @@ test("review mewajibkan alasan, versi dan gerbang bukan mutasi master", async ()
   fireEvent.change(screen.getByTestId("portal-admin-tinjauan-catatan"), { target: { value: "Lengkapi kronologi dan lokasi terakhir" } });
   fireEvent.click(screen.getByTestId("portal-admin-tinjau-simpan"));
   await waitFor(() => expect(axios.post).toHaveBeenCalledWith(expect.stringMatching(/\/admin\/laporan\/r1\/tinjau$/), { version: 1, keputusan: "perlu_perbaikan", catatan: "Lengkapi kronologi dan lokasi terakhir" }, expect.objectContaining({ headers: { "If-Match": "1", "Idempotency-Key": expect.any(String) } })));
+});
+
+test("muat ulang memulihkan daftar pegawai yang gagal saat panel pertama dibuka", async () => {
+  const baseGet = axios.get.getMockImplementation();
+  let fail = true;
+  axios.get.mockImplementation((url, options) => url.endsWith("/pegawai") && fail ? Promise.reject(new Error("Koneksi gagal")) : baseGet(url, options));
+  render(<PortalPemegangPanel user={{ role: "operator" }} />);
+  expect(await screen.findByTestId("portal-admin-pegawai-galat")).toHaveTextContent("tekan Muat ulang");
+  await waitFor(() => expect(screen.getByTestId("portal-admin-muat")).not.toBeDisabled());
+  fail = false;
+  await act(async () => fireEvent.click(screen.getByTestId("portal-admin-muat")));
+  expect(screen.queryByTestId("portal-admin-pegawai-galat")).not.toBeInTheDocument();
+  await pilihPemegang();
+  expect(screen.getByTestId("portal-admin-pegawai")).toHaveTextContent(staff.nama);
+  expect(axios.get.mock.calls.filter(([url]) => url.endsWith("/pegawai"))).toHaveLength(2);
+});
+
+test("muat ulang menyegarkan pilihan pegawai sedangkan filter dan halaman tidak memuatnya ulang", async () => {
+  const baseGet = axios.get.getMockImplementation();
+  let employees = [staff];
+  axios.get.mockImplementation((url, options) => url.endsWith("/pegawai") ? Promise.resolve({ data: { items: employees } }) : baseGet(url, options));
+  render(<PortalPemegangPanel user={{ role: "operator" }} />);
+  await screen.findByTestId("portal-admin-tinjau-r1");
+  fireEvent.click(screen.getByTestId("portal-admin-berikutnya"));
+  await screen.findByTestId("portal-admin-tinjau-r31");
+  fireEvent.change(screen.getByTestId("portal-admin-status"), { target: { value: "terverifikasi" } });
+  await screen.findByTestId("portal-admin-tinjau-r1");
+  expect(axios.get.mock.calls.filter(([url]) => url.endsWith("/pegawai"))).toHaveLength(1);
+  employees = [{ ...staff, nama: "Nama pegawai diperbarui" }, { ...staff, id: "p2", nama: "Pegawai baru" }];
+  await act(async () => fireEvent.click(screen.getByTestId("portal-admin-muat")));
+  fireEvent.click(screen.getByTestId("portal-admin-pegawai"));
+  expect(await screen.findByTestId("portal-admin-pegawai-option-p1")).toHaveTextContent("Nama pegawai diperbarui");
+  expect(screen.getByTestId("portal-admin-pegawai-option-p2")).toHaveTextContent("Pegawai baru");
+  expect(axios.get.mock.calls.filter(([url]) => url.endsWith("/pegawai"))).toHaveLength(2);
+});
+
+test.each(["sukses", "gagal"])("respons pegawai awal yang terlambat %s tidak menimpa hasil muat ulang", async result => {
+  const baseGet = axios.get.getMockImplementation(); const old = deferred(); let employeeCalls = 0;
+  axios.get.mockImplementation((url, options) => {
+    if (!url.endsWith("/pegawai")) return baseGet(url, options);
+    employeeCalls += 1;
+    return employeeCalls === 1 ? old.promise : Promise.resolve({ data: { items: [{ ...staff, nama: "Pegawai termutakhir" }] } });
+  });
+  render(<PortalPemegangPanel user={{ role: "operator" }} />);
+  await screen.findByTestId("portal-admin-tinjau-r1");
+  await waitFor(() => expect(screen.getByTestId("portal-admin-muat")).not.toBeDisabled());
+  await act(async () => fireEvent.click(screen.getByTestId("portal-admin-muat")));
+  await act(async () => {
+    if (result === "sukses") old.resolve({ data: { items: [{ ...staff, nama: "Pegawai usang" }] } });
+    else old.reject(new Error("Galat dari permintaan lama"));
+  });
+  fireEvent.click(screen.getByTestId("portal-admin-pegawai"));
+  expect(await screen.findByTestId("portal-admin-pegawai-option-p1")).toHaveTextContent("Pegawai termutakhir");
+  expect(screen.queryByTestId("portal-admin-pegawai-galat")).not.toBeInTheDocument();
+});
+
+test("hasil pegawai panel yang sudah ditutup tidak masuk ke panel pengganti", async () => {
+  const baseGet = axios.get.getMockImplementation(); const old = deferred(); let employeeCalls = 0;
+  axios.get.mockImplementation((url, options) => {
+    if (!url.endsWith("/pegawai")) return baseGet(url, options);
+    employeeCalls += 1;
+    return employeeCalls === 1 ? old.promise : Promise.resolve({ data: { items: [{ ...staff, id: "baru", nama: "Pegawai panel baru" }] } });
+  });
+  const first = render(<PortalPemegangPanel user={{ role: "operator" }} />);
+  await screen.findByTestId("portal-admin-tinjau-r1"); first.unmount();
+  render(<PortalPemegangPanel user={{ role: "operator" }} />);
+  await screen.findByTestId("portal-admin-tinjau-r1");
+  await act(async () => old.resolve({ data: { items: [staff] } }));
+  fireEvent.click(screen.getByTestId("portal-admin-pegawai"));
+  expect(await screen.findByTestId("portal-admin-pegawai-option-baru")).toBeInTheDocument();
+  expect(screen.queryByTestId("portal-admin-pegawai-option-p1")).not.toBeInTheDocument();
 });

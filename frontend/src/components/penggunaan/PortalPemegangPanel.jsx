@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
-import { Box, ClipboardCheck, ExternalLink, FileCheck2, MapPin, RefreshCw, Search, ShieldCheck, UserPlus, Users } from "lucide-react";
+import { Box, ClipboardCheck, ExternalLink, FileCheck2, MapPin, RefreshCw, Search, ShieldCheck, Users } from "lucide-react";
 import { kunciPortal, LABEL_LAPORAN, LABEL_STATUS, STATUS_PENUGASAN } from "@/lib/portalPemegang";
+import PilihanRingkas from "@/components/ui/PilihanRingkas";
+import PenugasanPortalMassal from "./PenugasanPortalMassal";
 
 const API = `${process.env.REACT_APP_BACKEND_URL || ""}/api`;
 const ROOT = `${API}/portal-pemegang/admin`;
@@ -14,26 +16,26 @@ const notice = "text-amber-800 dark:text-amber-300";
 const readError = (e, fallback) => typeof e?.response?.data?.detail === "string" ? e.response.data.detail : fallback;
 
 /** Kantor daring: memantau amanah dan laporan, bukan memindahkan pemegang/master. */
-export default function PortalPemegangPanel({ user }) {
+export default function PortalPemegangPanel({ user, onRiskChange }) {
   const admin = user?.role === "admin";
   const writer = ["admin", "operator"].includes(user?.role);
   const [pegawai, setPegawai] = useState([]);
+  const [pegawaiError, setPegawaiError] = useState("");
   const [pilih, setPilih] = useState("");
-  const [cariPegawai, setCariPegawai] = useState("");
   const [akses, setAkses] = useState(null);
   const [penugasan, setPenugasan] = useState([]);
   const [laporan, setLaporan] = useState([]);
-  const [search, setSearch] = useState("");
-  const [hasil, setHasil] = useState([]);
-  const [asset, setAsset] = useState(null);
-  const [dasar, setDasar] = useState("");
-  const [catatan, setCatatan] = useState("");
   const [emailBenar, setEmailBenar] = useState(false);
   const [aksesCatatan, setAksesCatatan] = useState("");
   const [review, setReview] = useState(null);
   const [cabut, setCabut] = useState(null);
   const [preview, setPreview] = useState(null);
-  const [busy, setBusy] = useState(false);
+  const [working, setBusy] = useState(false);
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [batchUncertain, setBatchUncertain] = useState(false);
+  const [legacyOpen, setLegacyOpen] = useState(false);
+  const [legacyStarted, setLegacyStarted] = useState(false);
+  const busy = working || batchBusy;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [pesan, setPesan] = useState("");
@@ -50,10 +52,13 @@ export default function PortalPemegangPanel({ user }) {
   const [cariAsetPantau, setCariAsetPantau] = useState("");
   const [statusAsetPantau, setStatusAsetPantau] = useState("");
   const loadSeq = useRef(0);
-  const searchSeq = useRef(0);
+  const pegawaiSeq = useRef(0);
   const previewSeq = useRef(0);
   const writeKeys = useRef(new Map());
   const selected = pegawai.find(p => p.id === pilih);
+
+  useEffect(() => { onRiskChange?.(batchBusy || batchUncertain); }, [batchBusy, batchUncertain, onRiskChange]);
+  useEffect(() => () => { onRiskChange?.(false); }, [onRiskChange]);
 
   const muat = useCallback(async () => {
     const seq = ++loadSeq.current;
@@ -84,13 +89,22 @@ export default function PortalPemegangPanel({ user }) {
     ]);
     if (seq === loadSeq.current) setLoading(false);
   }, [pilih, admin, page, filterStatus, queryLaporan]);
-  useEffect(() => {
-    let current = true;
-    axios.get(`${API}/pegawai`).then(r => { if (current) setPegawai(r.data.items || []); }).catch(() => { if (current) setError("Daftar pegawai gagal dimuat. Buka ulang panel atau periksa koneksi."); });
-    return () => { current = false; };
+  const muatPegawai = useCallback(async () => {
+    const seq = ++pegawaiSeq.current;
+    setPegawaiError("");
+    try {
+      const response = await axios.get(`${API}/pegawai`);
+      if (seq === pegawaiSeq.current) setPegawai(response.data.items || []);
+    } catch {
+      if (seq === pegawaiSeq.current) setPegawaiError("Daftar pegawai gagal dimuat. Periksa koneksi lalu tekan Muat ulang untuk menyegarkan pilihan.");
+    }
   }, []);
   useEffect(() => {
-    setAkses(null); setPenugasan([]); setLaporan([]); setTotal(0); setAsset(null); setHasil([]); setEmailBenar(false); setAksesCatatan(""); setReview(null); setCabut(null); setPreview(null);
+    muatPegawai();
+    return () => { pegawaiSeq.current += 1; };
+  }, [muatPegawai]);
+  useEffect(() => {
+    setAkses(null); setPenugasan([]); setLaporan([]); setTotal(0); setEmailBenar(false); setAksesCatatan(""); setReview(null); setCabut(null); setPreview(null);
     previewSeq.current += 1;
     muat();
     return () => { loadSeq.current += 1; previewSeq.current += 1; };
@@ -100,16 +114,6 @@ export default function PortalPemegangPanel({ user }) {
     const timer = setTimeout(() => { setQueryLaporan(cariLaporan.trim()); setPage(1); }, 300);
     return () => clearTimeout(timer);
   }, [cariLaporan, queryLaporan]);
-  useEffect(() => {
-    const seq = ++searchSeq.current;
-    if (!pilih || search.trim().length < 2) { setHasil([]); return undefined; }
-    const timer = setTimeout(() => {
-      axios.get(`${API}/assets`, { params: { search: search.trim(), page_size: 20 } }).then(r => {
-        if (seq === searchSeq.current) setHasil(r.data.items || []);
-      }).catch(() => { if (seq === searchSeq.current) { setHasil([]); setError("Pencarian aset gagal. Coba kembali."); } });
-    }, 300);
-    return () => { clearTimeout(timer); searchSeq.current += 1; };
-  }, [search, pilih]);
   useEffect(() => () => { if (preview?.url) URL.revokeObjectURL(preview.url); }, [preview]);
 
   const kerja = async fn => {
@@ -135,12 +139,6 @@ export default function PortalPemegangPanel({ user }) {
       konfirmasi_email: emailBenar, catatan: aksesCatatan.trim() }, version);
     setAksesCatatan(""); setEmailBenar(false); await muat(); setPesan(aktif ? "Akses email portal diaktifkan setelah pemeriksaan. Pegawai dapat meminta tautan masuk sendiri." : "Akses portal dicabut; sesi/token terkait tidak lagi dapat dipakai. Tanggung jawab barang tidak otomatis berakhir.");
   };
-  const tambah = async () => {
-    if (!asset || !pilih) throw new Error("Pilih pegawai dan barang yang sesuai terlebih dahulu.");
-    if (dasar.trim().length < 10) throw new Error("Tuliskan dasar penugasan yang dapat ditelusuri (minimal 10 karakter).");
-    await post("/penugasan", { pegawai_id: pilih, asset_id: asset.id, dasar_penugasan: dasar.trim(), catatan: catatan.trim() }, 0);
-    setAsset(null); setSearch(""); setDasar(""); setCatatan(""); await muat(); setPesan("Penugasan portal dicatat dan menunggu konfirmasi pemegang. Pemegang resmi/data induk belum diubah.");
-  };
   const lihat = async (r, i) => {
     const seq = ++previewSeq.current;
     const scope = loadSeq.current;
@@ -148,7 +146,6 @@ export default function PortalPemegangPanel({ user }) {
     if (seq !== previewSeq.current || scope !== loadSeq.current) return;
     setPreview({ url: URL.createObjectURL(response.data), nama: r.bukti[i].nama });
   };
-  const pegawaiTampak = pegawai.filter(p => `${p.nama} ${p.email} ${p.kode_satker}`.toLowerCase().includes(cariPegawai.toLowerCase()));
   const laporanTampak = laporan;
   const penugasanTampak = penugasan.filter(a => (!statusAsetPantau || a.status === statusAsetPantau)
     && `${a.asset_name || ""} ${a.asset_code || ""} ${a.NUP || ""} ${a.location || ""} ${a.sumber_bast?.nomor || ""}`.toLowerCase().includes(cariAsetPantau.trim().toLowerCase()));
@@ -156,11 +153,12 @@ export default function PortalPemegangPanel({ user }) {
 
   return <section className="min-w-0 space-y-5 text-foreground" data-testid="penggunaan-portal-panel">
     <header className="rounded-2xl border bg-card p-4 sm:p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><p className="mb-1 text-xs font-semibold uppercase tracking-wider text-primary">Portal Pemegang BMN</p><h3 className="flex items-center gap-2 text-xl font-semibold"><ShieldCheck size={22} className="shrink-0" />Monitoring amanah aset</h3><p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">Pantau barang yang dijaga setiap pemegang, baca pembaruan keadaannya, dan berikan arahan yang jelas dalam satu tempat.</p></div><div className="flex flex-wrap gap-2"><a href="/bmn-saya" target="_blank" rel="noopener noreferrer" className={button} data-testid="portal-buka-publik"><ExternalLink size={16} />Buka BMN Saya</a><button type="button" className={button} disabled={busy || loading} data-testid="portal-admin-muat" onClick={() => kerja(muat)}><RefreshCw size={16} className={loading ? "animate-spin" : ""} />Muat ulang</button></div></div>
-      <p className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm leading-relaxed">BAST baru yang sah dan lengkap otomatis menjadi amanah di BMN Saya, tanpa penerimaan ulang. Email unik yang memenuhi syarat mendapat aktivasi awal otomatis. Penugasan lama dan masalah akses tetap ditangani sebagai pengecualian.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><p className="mb-1 text-xs font-semibold uppercase tracking-wider text-primary">Portal Pemegang BMN</p><h3 className="flex items-center gap-2 text-xl font-semibold"><ShieldCheck size={22} className="shrink-0" />Monitoring amanah aset</h3><p className="mt-1 text-sm text-muted-foreground">Pilih pemegang, pantau barang, lalu periksa pembaruannya.</p></div><div className="flex flex-wrap gap-2"><a href="/bmn-saya" target="_blank" rel="noopener noreferrer" className={button} data-testid="portal-buka-publik"><ExternalLink size={16} />BMN Saya</a><button type="button" className={button} disabled={busy || loading} data-testid="portal-admin-muat" onClick={() => kerja(() => Promise.all([muat(), muatPegawai()]))}><RefreshCw size={16} className={loading ? "animate-spin" : ""} />Muat ulang</button></div></div>
+      <p className="mt-3 text-xs leading-relaxed text-muted-foreground">BAST baru yang sah otomatis menjadi amanah tanpa penerimaan ulang. Penugasan lama/masalah akses ditangani sebagai pengecualian.</p>
     </header>
     {error && <p role="alert" className="rounded-lg bg-red-500/10 p-3 text-sm">{error}</p>}{pesan && <p role="status" className="rounded-lg bg-emerald-500/10 p-3 text-sm">{pesan}</p>}
-    <div className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-2"><label className="block min-w-0 text-sm font-medium">Cari pemegang<input className={`${input} mt-1 font-normal`} data-testid="portal-admin-cari-pegawai" value={cariPegawai} onChange={e => setCariPegawai(e.target.value)} placeholder="Nama, email, atau satker" /></label><label className="block min-w-0 text-sm font-medium">Lingkup monitoring<select className={`${input} mt-1 font-normal`} data-testid="portal-admin-pegawai" disabled={busy} value={pilih} onChange={e => { setPilih(e.target.value); setPage(1); setCariAsetPantau(""); setStatusAsetPantau(""); }}><option value="">Semua pemegang di satker aktif</option>{selected && !pegawaiTampak.some(p => p.id === pilih) && <option value={selected.id}>{selected.nama}</option>}{pegawaiTampak.map(p => <option key={p.id} value={p.id}>{p.nama} · {p.kode_satker || "Satker belum diisi"}</option>)}</select></label></div>
+    {pegawaiError && <p role="alert" className="rounded-lg bg-red-500/10 p-3 text-sm" data-testid="portal-admin-pegawai-galat">{pegawaiError}</p>}
+    <div className="rounded-xl border bg-card p-3"><PilihanRingkas label="Pemegang / lingkup monitoring" testId="portal-admin-pegawai" disabled={busy || batchUncertain} value={pilih} placeholder="Semua pemegang di satker aktif" emptyLabel="Semua pemegang di satker aktif" options={pegawai.map(p => ({ value: p.id, label: p.nama, description: [p.kode_satker, p.nip, p.email].filter(Boolean).join(" · "), keywords: [p.nama, p.nip, p.email, p.kode_satker].filter(Boolean).join(" ") }))} onChange={value => { if (value === pilih) return; setPilih(value); setPage(1); setCariAsetPantau(""); setStatusAsetPantau(""); setLegacyOpen(false); setLegacyStarted(false); }} />{batchUncertain && <p className="mt-2 text-xs text-amber-800 dark:text-amber-300">Selesaikan percobaan ulang penugasan yang hasilnya belum pasti sebelum mengganti pemegang.</p>}</div>
     <section aria-label="Ringkasan monitoring" className="space-y-2">
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         {[
@@ -183,7 +181,7 @@ export default function PortalPemegangPanel({ user }) {
       </div></details>}
       {!admin && <p className="text-sm text-muted-foreground">Persetujuan email serta pemetaan/pencabutan penugasan portal dilakukan admin satker. Operator dapat memeriksa laporan sesuai kewenangannya.</p>}
       <section className="space-y-3 rounded-xl border bg-card p-4"><div><h4 className="font-semibold">Aset dan riwayat amanah · {selected?.nama}</h4><p className="mt-1 text-sm text-muted-foreground">Bandingkan catatan barang dengan pembaruan terakhir dari pemegang. Laporan bukan perubahan otomatis data induk.</p></div>
-        <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm">Cari dalam amanah pegawai<input className={`${input} mt-1`} data-testid="portal-admin-cari-amanah" value={cariAsetPantau} maxLength={120} onChange={e => setCariAsetPantau(e.target.value)} placeholder="Barang, kode, NUP, lokasi, atau BAST" /></label><label className="text-sm">Status penugasan<select className={`${input} mt-1`} data-testid="portal-admin-status-amanah" value={statusAsetPantau} onChange={e => setStatusAsetPantau(e.target.value)}><option value="">Semua catatan termasuk riwayat</option>{Object.entries(STATUS_PENUGASAN).map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label></div>
+        <div className="grid grid-cols-[minmax(0,1fr)_minmax(110px,0.7fr)] gap-2"><label className="min-w-0 text-xs">Cari barang<input className={`${input} mt-1`} data-testid="portal-admin-cari-amanah" value={cariAsetPantau} disabled={busy} maxLength={120} onChange={e => setCariAsetPantau(e.target.value)} placeholder="Nama, kode, NUP…" /></label><label className="min-w-0 text-xs">Status amanah<select className={`${input} mt-1`} data-testid="portal-admin-status-amanah" disabled={busy} value={statusAsetPantau} onChange={e => setStatusAsetPantau(e.target.value)}><option value="">Semua + riwayat</option>{Object.entries(STATUS_PENUGASAN).map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label></div>
         {penugasanError && <p role="alert" className="rounded-lg bg-red-500/10 p-3 text-sm">{penugasanError}</p>}
         {!penugasanTampak.length && !loading && !penugasanError && <p className="rounded-lg bg-muted/50 p-4 text-sm text-muted-foreground">{penugasan.length ? "Tidak ada amanah sesuai pencarian/status. Ubah saringan untuk melihat catatan lain." : "Belum ada amanah tercatat untuk pegawai ini. Setelah BAST baru sah dan lengkap, barang akan tampil otomatis."}</p>}
         <div className="grid gap-3 xl:grid-cols-2">{penugasanTampak.map(a => <article key={a.id} className="min-w-0 space-y-3 rounded-xl border p-4" data-testid={`portal-admin-amanah-${a.id}`}>
@@ -196,11 +194,7 @@ export default function PortalPemegangPanel({ user }) {
           {admin && a.status !== "dicabut" && <details className="border-t pt-2"><summary className="min-h-[44px] cursor-pointer py-3 text-xs text-muted-foreground" data-testid={`portal-admin-amanah-akses-${a.id}`}>Tindakan akses barang</summary><button type="button" className={button} disabled={busy} data-testid={`portal-admin-cabut-${a.id}`} onClick={() => setCabut({ item: a, catatan: "" })}>Cabut penugasan portal</button></details>}
         </article>)}</div>
         {!!penugasan.length && <p className="text-xs text-muted-foreground">Menampilkan {penugasanTampak.length} dari {penugasan.length} catatan penugasan pegawai ini, termasuk riwayat yang dicabut.</p>}
-        {admin && <details className="rounded-lg border p-3"><summary className="min-h-[44px] cursor-pointer py-2 text-sm font-medium" data-testid="portal-admin-tambah-toggle">Pengecualian / penugasan lama yang belum bersumber dari BAST otomatis</summary><div className="mt-3 space-y-3"><p className="text-xs text-muted-foreground">Alur normal cukup menyelesaikan BAST. Gunakan pencatatan manual ini hanya untuk dasar penugasan lama/di luar alur otomatis yang sudah diperiksa; tidak memindahkan pemegang resmi dan masih memerlukan konfirmasi penerimaan portal.</p><label className="block text-sm">Cari aset<input className={`${input} mt-1`} data-testid="portal-admin-cari-aset" value={search} onChange={e => { setSearch(e.target.value); setAsset(null); }} placeholder="Minimal 2 karakter nama/kode" /></label><p className="text-xs text-muted-foreground">Hasil mengikuti lingkup satker aktif. Pilih baris kegiatan yang menjadi acuan; identitas fisik dan kecocokan pemegang akan diperiksa server.</p>
-          <div className="max-h-64 space-y-2 overflow-y-auto">{hasil.map(a => <button type="button" key={a.id} className={`${button} w-full justify-start text-left ${asset?.id === a.id ? "border-primary bg-primary/5" : ""}`} data-testid={`portal-admin-aset-${a.id}`} onClick={() => setAsset(a)}><span><strong>{a.asset_name}</strong><br /><span className="text-xs">{a.asset_code} · NUP {a.NUP} · {a.location || "Lokasi belum diisi"} · {a.user || "Pemegang belum diisi"}</span></span></button>)}</div>
-          {asset && <p className="rounded-lg bg-primary/5 p-2 text-sm">Terpilih: {asset.asset_name} · {asset.asset_code} / {asset.NUP}</p>}
-          <label className="block text-sm">Dasar penugasan yang dapat ditelusuri<input className={`${input} mt-1`} data-testid="portal-admin-dasar" maxLength={1000} value={dasar} onChange={e => setDasar(e.target.value)} placeholder="Nomor/tanggal BAST atau surat penugasan sah" /></label><label className="block text-sm">Catatan<textarea className={`${input} mt-1`} data-testid="portal-admin-penugasan-catatan" maxLength={2000} rows={2} value={catatan} onChange={e => setCatatan(e.target.value)} /></label><button type="button" className={primary} data-testid="portal-admin-tambah" disabled={busy || loading || !asset} onClick={() => kerja(tambah)}><UserPlus size={16} />Catat penugasan portal</button>
-        </div></details>}
+        {admin && <details className="rounded-lg border p-3" open={legacyOpen} onToggle={e => { setLegacyOpen(e.currentTarget.open); if (e.currentTarget.open) setLegacyStarted(true); }}><summary className="min-h-[44px] cursor-pointer py-2 text-sm font-medium" data-testid="portal-admin-tambah-toggle" aria-disabled={batchBusy} onClick={e => { if (batchBusy) e.preventDefault(); }}>Penugasan lama / pengecualian · pilih beberapa barang</summary>{legacyStarted && <div className="mt-3"><PenugasanPortalMassal key={pilih} pegawaiId={pilih} disabled={busy || loading} onBusyChange={setBatchBusy} onUncertainChange={setBatchUncertain} onComplete={muat} /></div>}</details>}
       </section>
     </>}
     {cabut && <section className="space-y-3 rounded-xl border border-red-500/30 p-4"><h4 className="font-semibold">Cabut akses barang: {cabut.item.asset_name}</h4><p className="text-sm">Ini menghentikan akses portal, tidak membuktikan pengembalian barang atau mengakhiri tanggung jawab administratif. Riwayat tetap tersimpan.</p><label className="block text-sm">Alasan<textarea className={`${input} mt-1`} rows={3} maxLength={2000} data-testid="portal-admin-cabut-alasan" value={cabut.catatan} onChange={e => setCabut(v => ({ ...v, catatan: e.target.value }))} /></label><div className="flex flex-wrap gap-2"><button type="button" className={primary} data-testid="portal-admin-cabut-simpan" disabled={busy} onClick={() => kerja(async () => {
@@ -209,7 +203,7 @@ export default function PortalPemegangPanel({ user }) {
       setCabut(null); await muat(); setPesan("Akses barang dicabut; riwayat tetap tercatat.");
     })}>Simpan pencabutan</button><button type="button" className={button} disabled={busy} data-testid="portal-admin-cabut-batal" onClick={() => setCabut(null)}>Batal</button></div></section>}
     <section className="space-y-3 rounded-xl border bg-card p-4"><div><h4 className="font-semibold">Pemeriksaan laporan pemegang</h4><p className="mt-1 text-sm text-muted-foreground">Baca bukti, periksa kesesuaian laporan, lalu berikan hasil pemeriksaan dan arahan tindak lanjut.</p></div>
-      <div className="grid gap-3 sm:grid-cols-2"><label className="min-w-0 text-sm">Cari laporan<input className={`${input} mt-1`} data-testid="portal-admin-cari-laporan" maxLength={120} value={cariLaporan} disabled={busy} onChange={e => setCariLaporan(e.target.value)} placeholder="Barang, kode, NUP, pemegang, atau lokasi" /></label><label className="min-w-0 text-sm">Status laporan<select className={`${input} mt-1`} data-testid="portal-admin-status" value={filterStatus} disabled={busy} onChange={e => { setFilterStatus(e.target.value); setPage(1); }}><option value="">Semua status</option>{Object.entries(LABEL_STATUS).filter(([id]) => id !== "menunggu_verifikasi").map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label></div>
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(110px,0.7fr)] gap-2"><label className="min-w-0 text-xs">Cari laporan<input className={`${input} mt-1`} data-testid="portal-admin-cari-laporan" maxLength={120} value={cariLaporan} disabled={busy} onChange={e => setCariLaporan(e.target.value)} placeholder="Barang, pemegang, lokasi…" /></label><label className="min-w-0 text-xs">Status laporan<select className={`${input} mt-1`} data-testid="portal-admin-status" value={filterStatus} disabled={busy} onChange={e => { setFilterStatus(e.target.value); setPage(1); }}><option value="">Semua status</option>{Object.entries(LABEL_STATUS).filter(([id]) => id !== "menunggu_verifikasi").map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label></div>
       <p className="rounded-lg bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">Verifikasi menyatakan hasil pemeriksaan laporan, bukan perubahan kondisi induk, lokasi, pemegang, nilai, penyusutan, jurnal, atau penghapusan. Tindakan resmi tetap melalui modul terkait dan pejabat berwenang.</p>
       {laporanError && <p role="alert" className="rounded-lg bg-red-500/10 p-3 text-sm">{laporanError}</p>}
       {!laporanTampak.length && !loading && !laporanError && <div className="rounded-lg border border-dashed p-6 text-center"><ClipboardCheck size={26} className="mx-auto mb-2 text-muted-foreground" /><p className="text-sm font-medium">Tidak ada laporan sesuai pilihan.</p><p className="mt-1 text-xs text-muted-foreground">Ubah pencarian atau status untuk menelusuri riwayat lain. Laporan baru akan tampil setelah dikirim pemegang.</p></div>}

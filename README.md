@@ -73,6 +73,16 @@ Pemetaan manual dengan dasar terverifikasi tetap tersedia sebagai jalur legacy,
 dengan konfirmasi/sanggahan; barang yang sudah mengikuti BAST tidak dapat
 ditimpa lewat pemetaan manual. Bukti final hanya diperbaiki melalui revisi resmi.
 
+Pemilih pegawai BAST/Portal Pemegang menyatukan pencarian dan pilihan; data
+identitas terisi otomatis tanpa memilih lewat nama yang mungkin kembar.
+Pengecualian legacy dapat memilih banyak barang lintas pencarian/halaman.
+Daftar awal mengikuti NIP/NIK pegawai; penelusuran seluruh satker tetap hanya
+satker aktif, dengan kegiatan acuan dan alasan untuk barang yang tidak layak.
+Admin memilih dasar penugasan yang sudah diperiksa, bukan memindahkan pemegang.
+Penyimpanan dilakukan per barang dengan hasil berhasil/gagal yang terlihat;
+coba ulang mempertahankan kunci idempotensi untuk respons yang belum pasti.
+Tidak ada klaim transaksi atomik seluruh pilihan atau perubahan akuntansi.
+
 **Luring dan privasi:** setelah login daring, pengguna dapat mengizinkan
 penyimpanan draf/antrean pada perangkat pribadi. Penyimpanan portal terpisah
 dari staf, dibatasi pemegang/satker/masa sesi; pengiriman ulang memeriksa akses
