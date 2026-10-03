@@ -2,13 +2,15 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import axios from "axios";
 import PenggunaanPage from "../PenggunaanPage";
+import { downloadFileWithProgress } from "@/lib/downloadFile";
 
 jest.mock("axios");
-jest.mock("@/lib/downloadFile", () => ({ downloadFileWithProgress: async () => {} }));
+jest.mock("@/lib/downloadFile", () => ({ downloadFileWithProgress: jest.fn(async () => {}) }));
 const pegawai = [{ id: "p1", nama: "Budi", nip: "111", email: "satu@example.test" }, { id: "p2", nama: "Budi", nip: "", email: "dua@example.test" }];
 const bast = { id: "b1", jenis: "penggunaan_melekat", nomor: "BAST-01", tanggal: "2026-10-01", asset_ids: ["aset-lama"], aset: [{ id: "aset-lama", asset_name: "Barang sebelum mutasi", asset_code: "305", NUP: "7" }], pihak_kedua: { nama: "Budi" }, portal_otomasi: { version: 4, status: "menunggu_keabsahan", alasan: "Tanda tangan belum lengkap", hasil: [] } };
 
 beforeEach(() => {
+  downloadFileWithProgress.mockResolvedValue(undefined);
   Object.defineProperty(globalThis, "crypto", { configurable: true, value: require("crypto").webcrypto });
   axios.get.mockImplementation(async url => {
     if (url.endsWith("/penggunaan/pemegang")) return { data: { items: [{ nama: "Pemegang", nip: "111", jumlah_aset: 1 }], total_pemegang: 1 } };
@@ -26,6 +28,37 @@ async function buka() {
   fireEvent.click(await screen.findByTestId("penggunaan-row-Pemegang"));
   await screen.findByTestId("penggunaan-aset-a1");
 }
+
+test("pratinjau riwayat BAST meminta PDF inline tanpa memanggil pengunduh atau menulis data", async () => {
+  const open = jest.spyOn(window, "open").mockImplementation(() => null);
+  localStorage.setItem("media_token", "token-media-uji");
+  localStorage.setItem("satker_aktif", "SATKER-UJI");
+  try {
+    await buka(); fireEvent.click(screen.getByTestId("penggunaan-riwayat-bast"));
+    fireEvent.click(await screen.findByTestId("bast-pratinjau-b1"));
+    expect(open).toHaveBeenCalledTimes(1);
+    const [url, target, features] = open.mock.calls[0];
+    expect(url).toContain("/bast/b1/pdf?pratinjau=true");
+    const params = new URL(url, "https://example.test").searchParams;
+    expect(params.get("token")).toBe("token-media-uji");
+    expect(params.get("sa")).toBe("SATKER-UJI");
+    expect(target).toBe("_blank");
+    expect(features).toBe("noopener,noreferrer");
+    expect(downloadFileWithProgress).not.toHaveBeenCalled();
+    expect(axios.post).not.toHaveBeenCalled();
+  } finally { open.mockRestore(); localStorage.clear(); }
+});
+
+test("tombol Unduh tetap mengunduh, terpisah dari pratinjau", async () => {
+  const open = jest.spyOn(window, "open").mockImplementation(() => null);
+  try {
+    await buka(); fireEvent.click(screen.getByTestId("penggunaan-riwayat-bast"));
+    fireEvent.click(await screen.findByTestId("bast-unduh-b1"));
+    expect(downloadFileWithProgress).toHaveBeenCalledWith(expect.stringMatching(/\/bast\/b1\/pdf$/), "BAST_Budi.pdf", { label: "BAST Serah Terima" });
+    expect(open).not.toHaveBeenCalled();
+    expect(axios.post).not.toHaveBeenCalled();
+  } finally { open.mockRestore(); }
+});
 
 test("BAST membawa UUID pilihan pegawai dan tidak lagi meminta mutasi dini", async () => {
   await buka(); fireEvent.click(screen.getByTestId("penggunaan-buat-bast"));

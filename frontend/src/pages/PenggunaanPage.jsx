@@ -2027,7 +2027,7 @@ export default function PenggunaanPage({ user, onBack }) {
           <DialogHeader>
             <DialogTitle>Riwayat BAST — {detail?.pemegang?.nama}</DialogTitle>
             <DialogDescription className="text-xs">
-              Pratinjau membuka PDF di tab baru. BAST diterapkan setelah tanda tangan lengkap tervalidasi dan QR final, atau bukti basah dinyatakan lengkap oleh petugas.
+              Pratinjau menampilkan PDF di tab baru tanpa unduhan otomatis. Gunakan Unduh untuk menyimpan berkas. BAST diterapkan setelah tanda tangan lengkap tervalidasi dan QR final, atau bukti basah dinyatakan lengkap oleh petugas.
             </DialogDescription>
           </DialogHeader>
           {riwayatBast?.loading ? (
@@ -2086,12 +2086,13 @@ export default function PenggunaanPage({ user, onBack }) {
                         rapi ke barisnya sendiri. */}
                     <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto sm:justify-end">
                       <Button size="sm" variant="outline" className="h-7 text-[11px]"
-                        onClick={() => window.open(authMediaUrl(`${API}/bast/${b.id}/pdf`), "_blank")}
+                        onClick={() => window.open(authMediaUrl(`${API}/bast/${b.id}/pdf?pratinjau=true`), "_blank", "noopener,noreferrer")}
                         data-testid={`bast-pratinjau-${b.id}`}>Pratinjau</Button>
                       <Button size="sm" variant="outline" className="h-7 text-[11px]"
                         onClick={() => downloadFileWithProgress(`${API}/bast/${b.id}/pdf`,
                           `BAST_${(b.pihak_kedua?.nama || "pengguna").replace(/\s/g, "_")}.pdf`,
-                          { label: "BAST Serah Terima" }).catch(() => {})}>Unduh</Button>
+                          { label: "BAST Serah Terima" }).catch(() => {})}
+                        data-testid={`bast-unduh-${b.id}`}>Unduh</Button>
                       <Button size="sm" variant="outline" className="h-7 text-[11px]"
                         onClick={() => setFotoSt({ bast: b, mode: "per", asset_id: "" })}
                         data-testid={`bast-foto-st-${b.id}`}>Foto Serah Terima</Button>
