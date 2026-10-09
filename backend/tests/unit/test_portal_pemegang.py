@@ -11,6 +11,7 @@ import pytest
 from fastapi import HTTPException
 from mongomock_motor import AsyncMongoMockClient
 from PIL import Image, ImageFile
+from pydantic import ValidationError
 from pymongo.errors import OperationFailure
 
 import routes.portal_pemegang as rp
@@ -97,6 +98,102 @@ def laporan(p, **kwargs):
         "lokasi_laporan": "Ruang B", "catatan": "Barang diperiksa langsung",
         **kwargs,
     })
+
+
+JENIS_UJI = ("berkala", "kerusakan", "kehilangan", "perbaikan", "pengembalian")
+
+
+@pytest.mark.parametrize("jenis", JENIS_UJI)
+@pytest.mark.parametrize("catatan", ["", "   ", "abcd", "abcde", "  abcde  "])
+def test_catatan_kondisional_semua_jenis_batas_karakter(jenis, catatan):
+    p = {"id": "penugasan-uji", "version": 2}
+    if jenis != "berkala" and len(catatan.strip()) < 5:
+        with pytest.raises(ValidationError, match="minimal 5 karakter"):
+            laporan(p, jenis=jenis, catatan=catatan)
+    else:
+        assert laporan(p, jenis=jenis, catatan=catatan).catatan == catatan.strip()
+
+
+@pytest.mark.parametrize("kondisi", ("Baik", "Rusak Ringan", "Rusak Berat", "Tidak diketahui"))
+@pytest.mark.parametrize("status", ("digunakan", "tidak_digunakan", "diperbaiki", "tidak_diketahui"))
+def test_berkala_non_normal_memerlukan_uraian(kondisi, status):
+    p = {"id": "penugasan-uji", "version": 2}
+    wajib = kondisi != "Baik" or status in ("diperbaiki", "tidak_diketahui")
+    if wajib:
+        with pytest.raises(ValidationError, match="minimal 5 karakter"):
+            laporan(p, kondisi=kondisi, status_operasional=status, catatan="")
+    else:
+        assert laporan(p, kondisi=kondisi, status_operasional=status, catatan="").catatan == ""
+
+
+@pytest.mark.parametrize("jenis", JENIS_UJI)
+def test_klarifikasi_semua_jenis_tetap_wajib_uraian(jenis):
+    p = {"id": "penugasan-uji", "version": 2}
+    with pytest.raises(ValidationError, match="minimal 5 karakter"):
+        laporan(p, jenis=jenis, catatan="", laporan_sebelumnya_id="laporan-lama")
+    assert laporan(p, jenis=jenis, catatan="abcde", laporan_sebelumnya_id="laporan-lama").catatan == "abcde"
+
+
+def test_berkala_normal_tanpa_field_catatan_dan_sidik_payload_lama_tetap():
+    lama = {"penugasan_id": "penugasan-uji", "penugasan_version": 2,
+            "jenis": "berkala", "kondisi": "Baik", "status_operasional": "digunakan",
+            "lokasi_laporan": "Ruang B", "catatan": "Barang diperiksa langsung",
+            "diambil_pada": None, "bukti": [], "laporan_sebelumnya_id": ""}
+    model = rp.LaporanIn(**lama)
+    assert model.model_dump() == lama
+    assert rp._operasi(Req("lama", 2), HOLDER, "kirim_laporan", model, True)[1] == sidik_data({"payload": lama, "version": 2})
+    tanpa = dict(lama)
+    tanpa.pop("catatan")
+    assert rp.LaporanIn(**tanpa).catatan == ""
+    with pytest.raises(ValidationError):
+        rp.LaporanIn(**{**lama, "catatan": "x" * 5001})
+
+
+@pytest.mark.parametrize("keputusan", ("terverifikasi", "perlu_perbaikan", "ditolak"))
+@pytest.mark.parametrize("catatan", ("", "   ", "abcd", "abcde"))
+def test_catatan_peninjau_selalu_wajib(keputusan, catatan):
+    if len(catatan.strip()) < 5:
+        with pytest.raises(ValidationError):
+            rp.TinjauIn(version=1, keputusan=keputusan, catatan=catatan)
+    else:
+        assert rp.TinjauIn(version=1, keputusan=keputusan, catatan=catatan).catatan == catatan
+
+
+@pytest.mark.parametrize("jenis", JENIS_UJI)
+@pytest.mark.parametrize("keputusan", ("terverifikasi", "perlu_perbaikan", "ditolak"))
+def test_semua_jenis_kirim_tinjau_tanpa_mengubah_induk_amanah_dan_transaksi(basis, jenis, keputusan):
+    async def scenario():
+        p = await buat(basis, accepted=True)
+        aset_awal = await basis.assets.find_one({"id": "as1"})
+        amanah_awal = await basis.portal_penugasan.find_one({"id": p["id"]})
+        catatan = "" if jenis == "berkala" else "abcde"
+        # Kehilangan tetap bisa dilaporkan tanpa foto/GPS barang yang tidak ada.
+        body = laporan(p, jenis=jenis, catatan=catatan, bukti=[])
+        req = Req("laporan-jenis", p["version"])
+        result = await rp.kirim_laporan(body, req, HOLDER)
+        assert await rp.kirim_laporan(body, req, HOLDER) == result
+        assert await basis.portal_laporan.count_documents({}) == 1
+        rid = result["item"]["id"]
+        assert result["item"]["catatan"] == catatan
+        assert result["item"]["bukti"] == []
+        assert bool(result["item"]["perlu_tindak_lanjut"]) == (jenis != "berkala")
+        asli = await basis.portal_laporan.find_one({"id": rid})
+        for daftar in (await rp.laporan_saya(HOLDER), await rp.daftar_laporan_admin("", 1, 30, ADMIN)):
+            assert daftar["total"] == 1
+            assert daftar["items"][0]["jenis"] == jenis
+        review = rp.TinjauIn(version=1, keputusan=keputusan, catatan="Hasil pemeriksaan dicatat petugas")
+        reviewed = await rp.tinjau_laporan(rid, review, Req("tinjau-jenis", 1), WRITER)
+        assert await rp.tinjau_laporan(rid, review, Req("tinjau-jenis", 1), WRITER) == reviewed
+        assert reviewed["item"]["status"] == keputusan
+        assert reviewed["item"]["version"] == 2
+        akhir = await basis.portal_laporan.find_one({"id": rid})
+        for field in ("jenis", "kondisi", "status_operasional", "lokasi_laporan", "catatan", "bukti", "created_at", "sidik_laporan_asli"):
+            assert akhir[field] == asli[field]
+        assert await basis.assets.find_one({"id": "as1"}) == aset_awal
+        assert await basis.portal_penugasan.find_one({"id": p["id"]}) == amanah_awal
+        for collection in ("pemeliharaan", "tgr", "mutasi_bmn", "usulan_penghapusan", "bast", "jurnal"):
+            assert await basis[collection].count_documents({}) == 0
+    run(scenario())
 
 
 def test_bukti_kamera_gps_tersimpan_tanpa_mengubah_aset_dan_retry_lama(basis):

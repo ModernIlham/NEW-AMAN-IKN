@@ -18,9 +18,11 @@ kecerahan, flash dan pilihan lensa sesuai kemampuan perangkat). Panel Laporan
 mengisi pengamatan, tidak mengedit data induk. Scan stiker hanya mencocokkan
 amanah aktif sendiri; kode ambigu meminta pemilihan NUP, isi laporan tidak
 dibuang saat hendak berganti barang. Browser tanpa scanner menyediakan input
-kode manual. **Kamera biasa** dan **Pilih file/foto** tetap terpisah.
-GPS opsional dan akurasinya dicatat per foto; fix lebih dari satu menit atau
-izin dicabut tidak digunakan. Waktu/GPS merupakan data perangkat yang perlu
+kode manual. **Kamera biasa** dihapus; **Pilih file/foto** tetap tersedia.
+Rana kamera memerlukan GPS terbaru dengan akurasi **maksimal 8 meter** (nilai
+asli, tidak dibulatkan). Fix lebih dari satu menit, izin dicabut, atau GPS belum
+tersedia mengunci rana hingga memperoleh fix yang memenuhi syarat; scanner
+tetap dapat digunakan. Waktu/GPS merupakan data perangkat yang perlu
 ditinjau petugas, bukan penetapan lokasi resmi. Maksimal tiga foto/3 MB;
 setelan kamera tidak memakai akun staf. Draf beserta metadata foto tetap
 mengikuti persetujuan penyimpanan luring dan batas sesi portal.
@@ -59,6 +61,16 @@ satker, pencabutan akses, dan verifikasi laporan tetap berlaku.
 5. Operator/admin membuka antrean, melihat bukti, mencatat hasil pemeriksaan,
    meminta perbaikan atau menolak. Tidak boleh memverifikasi laporan sendiri.
    Perbaikan adalah laporan lanjutan; bukti dan riwayat lama tidak ditimpa.
+
+**Uraian laporan:** berkala dengan kondisi Baik dan status digunakan/tidak
+digunakan boleh tanpa catatan. Kerusakan, kehilangan, perbaikan, pengembalian,
+berkala dengan kondisi/operasional bermasalah atau belum diketahui, serta
+semua klarifikasi laporan sebelumnya wajib uraian minimal 5 karakter.
+Label/panduan mengikuti jenis laporan; pengembalian meminta alasan, bukan
+kronologi insiden. Draf boleh belum lengkap, tetapi pengiriman daring maupun
+antrean luring mengikuti aturan yang sama. Foto/GPS tidak wajib untuk mengirim
+laporan, terutama kehilangan; batas 8 meter berlaku saat memakai rana kamera.
+Catatan pemeriksaan operator/admin tetap wajib untuk setiap keputusan.
 
 **Batas penting:** verifikasi laporan tidak otomatis mengganti pemegang,
 kondisi resmi, lokasi manual/denah, nilai buku, penyusutan, jurnal, atau status

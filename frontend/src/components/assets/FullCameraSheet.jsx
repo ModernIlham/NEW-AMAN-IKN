@@ -12,6 +12,7 @@ import { useLensaKamera } from "../../hooks/useLensaKamera";
 import { bukaLensa, idLensa } from "../../lib/lensaKamera";
 import CameraLensPanel from "./CameraLensPanel";
 import { gambarWatermarkKamera } from "../../lib/watermarkKamera";
+import { gpsPemegangLayak } from "../../lib/gpsKameraPemegang";
 import { extractScannedCode } from "./QrScanButton";
 import { haptic } from "../../lib/haptics";
 import { playShutterSound, shutterSoundEnabled } from "../../lib/shutterSound";
@@ -149,7 +150,6 @@ const FullCameraSheet = memo(function FullCameraSheet({
   panelLaporan = null,
   pesanPemegang = "",
   panelScan = null,
-  onKameraBiasa,
 }) {
   const videoRef = useRef(null);
   const sheetRef = useRef(null);
@@ -305,13 +305,15 @@ const FullCameraSheet = memo(function FullCameraSheet({
   // Error izin (code 1) ditandai agar surveyor diberi tahu + tombol Coba Lagi.
   useEffect(() => {
     if (!navigator.geolocation) { setGpsDenied(true); return undefined; }
+    let aktif = true;
     const id = navigator.geolocation.watchPosition(
       (pos) => {
+        if (!aktif) return;
         const fix = {
           lat: pos.coords.latitude.toFixed(6),
           lng: pos.coords.longitude.toFixed(6),
-          accuracy: Number.isFinite(pos.coords.accuracy) ? Math.round(pos.coords.accuracy) : null,
-          ...(modePemegang ? { timestamp: pos.timestamp || Date.now() } : {}),
+          accuracy: Number.isFinite(pos.coords.accuracy) ? (modePemegang ? pos.coords.accuracy : Math.round(pos.coords.accuracy)) : null,
+          ...(modePemegang ? { timestamp: pos.timestamp } : {}),
         };
         gpsRef.current = fix;
         setGps(fix);
@@ -319,12 +321,13 @@ const FullCameraSheet = memo(function FullCameraSheet({
         try { onGpsFix?.(fix); } catch { /* update form tidak boleh mematikan kamera */ }
       },
       (err) => {
+        if (!aktif) return;
         if (modePemegang) { gpsRef.current = null; setGps(null); }
         if (err && err.code === 1) setGpsDenied(true);
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
     );
-    return () => navigator.geolocation.clearWatch(id);
+    return () => { aktif = false; navigator.geolocation.clearWatch(id); };
   }, [onGpsFix, gpsNonce, modePemegang]);
 
   // Nyalakan kamera (restart saat ganti lensa/arah/resolusi atau coba ulang —
@@ -615,6 +618,11 @@ const FullCameraSheet = memo(function FullCameraSheet({
       toast.info("Sedang menyimpan aset ini — tunggu sebentar sebelum memotret lagi");
       return;
     }
+    const fix = gpsRef.current;
+    if (modePemegang && !gpsPemegangLayak(fix)) {
+      toast.info("Tunggu GPS terbaru dengan akurasi maksimal 8 meter. Izinkan lokasi presisi dan coba di area terbuka.");
+      return;
+    }
     const video = videoRef.current;
     // Track harus 'live' — cegah memotret frame BEKU saat kamera terputus
     // (background/lock) padahal watermark akan mencap waktu & GPS terbaru.
@@ -649,8 +657,6 @@ const FullCameraSheet = memo(function FullCameraSheet({
     if (bright !== 1 && !CANVAS_FILTER_OK) bakeBrightnessFallback(ctx, canvas.width, canvas.height, bright);
 
     // — Watermark Timemark: blok semi-transparan kiri-bawah —
-    const lastFix = gpsRef.current;
-    const fix = modePemegang && (!lastFix || Date.now() - lastFix.timestamp > 60000) ? null : lastFix;
     const t = new Date();
     // Info pengguna DUA baris terstruktur (hanya ditambah bila ada datanya):
     //   "Melekat ke: <Individual/Jabatan—.../Operasional—...>"
@@ -724,7 +730,8 @@ const FullCameraSheet = memo(function FullCameraSheet({
   const accFair = typeof gpsAcc === "number" && gpsAcc > 6 && gpsAcc <= 8;     // kuning (masih boleh)
   const accOk = typeof gpsAcc === "number" && gpsAcc <= 8;                     // ≤8 m → boleh potret
   const accPoor = typeof gpsAcc === "number" && gpsAcc > 8;                    // >8 m → rana dikunci
-  const gpsBlocked = !modePemegang && !gpsDenied && (gpsAcc == null || gpsAcc > 8);
+  // Portal wajib fix baru ≤8 m; mode staf mempertahankan perilaku sebelumnya.
+  const gpsBlocked = modePemegang ? !gpsPemegangLayak(gps, Math.max(now.getTime(), Date.now())) : !gpsDenied && (gpsAcc == null || gpsAcc > 8);
   const ringColor = gpsDenied ? null
     : accGood ? "#22c55e" : accFair ? "#eab308" : accPoor ? "#ef4444" : "#64748b";
 
@@ -811,7 +818,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
       {camError && (
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 px-8 text-center bg-black/85" data-testid="full-camera-error">
           <AlertTriangle className="w-10 h-10 text-amber-400" />
-          <p className="text-sm text-white/90 max-w-xs">{camError.msg}</p>
+          <p className="text-sm text-white/90 max-w-xs">{modePemegang ? camError.msg.replace("Gunakan tombol Galeri/Kamera biasa.", "Tutup kamera lalu gunakan Pilih file/foto jika diperlukan.").replace("Coba Lagi atau gunakan tombol Galeri/Kamera biasa.", "Coba Lagi atau tutup kamera lalu gunakan Pilih file/foto.") : camError.msg}</p>
           <div className="flex items-center gap-2">
             {supported && (
               <button type="button" onClick={() => { setCamError(null); setCamNonce((n) => n + 1); }}
@@ -822,7 +829,6 @@ const FullCameraSheet = memo(function FullCameraSheet({
             )}
             <button type="button" onClick={() => onCloseRef.current?.()}
               className="h-11 px-4 rounded-lg bg-white/15 text-white text-sm font-medium">Tutup</button>
-            {modePemegang && onKameraBiasa && <button type="button" data-testid="camera-error-biasa" onClick={onKameraBiasa} className="min-h-11 rounded-lg bg-teal-700 px-4 text-sm text-white">Kamera biasa</button>}
           </div>
         </div>
       )}
@@ -1058,7 +1064,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
       <div className="camera-bottom-controls relative z-10 min-h-0 overflow-y-auto overscroll-contain bg-gradient-to-t from-black/80 to-transparent pt-3 pb-4 px-3 space-y-3">
         {modePemegang && <div className="space-y-1 text-center text-xs text-white" data-testid="camera-pemegang-status">
           <p>{pesanPemegang || "Bukti pengamatan untuk diperiksa petugas; data induk tidak diubah."}</p>
-          <p className="text-white/75">{gps && Date.now() - gps.timestamp <= 60000 ? `GPS ±${gps.accuracy ?? "—"} m · akurasi dicatat bersama foto` : "GPS belum tersedia. Foto tetap dapat diambil tanpa koordinat."}</p>
+          <p className="text-white/75" data-testid="camera-pemegang-gps">{gpsBlocked ? "Foto menunggu GPS terbaru dengan akurasi maksimal 8 m. Izinkan lokasi presisi; coba di area terbuka." : `GPS ±${gps.accuracy} m · siap memotret, koordinat dicatat bersama foto`}</p>
         </div>}
         {modePemegang && panelScan}
         {lensa.aktif && !scanActive && <p role="status" data-testid="camera-lens-active" className="text-center text-[10px] text-amber-200">
@@ -1105,7 +1111,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
             data-testid="full-camera-shutter"
             title={busy
               ? "Menyimpan aset ini — tunggu sebentar agar foto tidak tertukar dengan aset berikutnya"
-              : gpsBlocked ? (gpsAcc == null ? "Menunggu sinyal GPS akurat…" : `Akurasi GPS ±${gpsAcc} m terlalu lebar (maks ±8 m)`) : undefined}
+              : gpsBlocked ? (modePemegang ? "Menunggu GPS terbaru dengan akurasi maksimal 8 m" : gpsAcc == null ? "Menunggu sinyal GPS akurat…" : `Akurasi GPS ±${gpsAcc} m terlalu lebar (maks ±8 m)`) : undefined}
             className="w-[72px] h-[72px] rounded-full border-4 border-white flex items-center justify-center disabled:opacity-40">
             <span className="w-14 h-14 rounded-full bg-white flex items-center justify-center">
               {busy
@@ -1164,7 +1170,6 @@ const FullCameraSheet = memo(function FullCameraSheet({
         </div>
         {modePemegang && <div className="flex flex-wrap justify-center gap-2">
           <button type="button" disabled={busy} onClick={onClose} data-testid="camera-pemegang-selesai" className="min-h-11 rounded-xl bg-teal-700 px-3 text-sm text-white">Selesai & tinjau laporan</button>
-          {onKameraBiasa && <button type="button" disabled={busy} onClick={onKameraBiasa} data-testid="camera-pemegang-biasa" className="min-h-11 rounded-xl bg-white/15 px-3 text-sm text-white">Kamera biasa</button>}
         </div>}
         {photos.length > 0 && !gps && !modePemegang && (
           <div className="text-center text-[11px] text-amber-300 font-medium">

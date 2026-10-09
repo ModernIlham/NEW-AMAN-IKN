@@ -18,6 +18,20 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1093] Batas GPS kamera dan aturan uraian laporan BMN Saya — 2026-10-09
+
+- Kamera biasa dihapus dari BMN Saya; Kamera & scanner dan pilih file/foto
+  tetap tersedia. Rana hanya aktif dengan GPS terbaru maksimal 8 meter,
+  tanpa pembulatan yang meloloskan akurasi di atas batas. Fix usang, belum
+  tersedia, atau izin dicabut ditolak juga di dalam proses pengambilan foto.
+- Uraian berkala normal opsional; kerusakan, kehilangan, perbaikan,
+  pengembalian, berkala bermasalah/belum diketahui, dan klarifikasi wajib
+  minimal 5 karakter. Label/panduan sesuai konteks. Draf belum lengkap boleh
+  disimpan, tetapi pengiriman daring/antrean divalidasi dengan aturan sama.
+- Kelima jenis laporan diuji sampai pemeriksaan, termasuk batas narasi,
+  idempotensi, luring dan tidak mengubah induk/akuntansi. Kehilangan tetap
+  bisa dilaporkan tanpa foto/GPS; catatan keputusan petugas tetap wajib.
+
 ## [#1092] Kamera inventarisasi dan scanner untuk laporan BMN Saya — 2026-10-03
 
 - Pilihan Kamera & scanner memakai kamera inventarisasi dengan watermark,
