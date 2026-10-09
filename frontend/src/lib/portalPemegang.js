@@ -1,4 +1,5 @@
 import { openDB } from "idb";
+import { kesalahanCatatanLaporan } from "./laporanPemegang";
 
 // Jalur publik ini sengaja TIDAK memakai axios/interceptor/token staf AMAN.
 export const PORTAL_API = `${process.env.REACT_APP_BACKEND_URL || ""}/api/portal-pemegang`;
@@ -134,6 +135,8 @@ export async function simpanSnapshotPortal(sesi, aset) {
 }
 
 export async function simpanDrafPortal(sesi, payload, { id, key, siap = false } = {}) {
+  const invalid = siap && kesalahanCatatanLaporan(payload);
+  if (invalid) throw new Error(invalid);
   return transaksiPortal(sesi, async store => {
     const antrean = (await store.get("antrean") || []).filter(d => d.expires > Date.now());
     const draftId = id || kunciPortal();
@@ -162,7 +165,7 @@ export function periksaAntreanPortal(draft, sesi, assignments) {
   const assignment = assignments.find(a => a.id === draft.payload.penugasan_id);
   if (!assignment || assignment.status !== "diterima") return "Penugasan belum diterima atau tidak lagi tersedia. Hubungi operator.";
   if (assignment.version !== draft.payload.penugasan_version) return "Penugasan berubah. Periksa data terbaru dan buat laporan baru; isi lama tidak ditimpa otomatis.";
-  return "";
+  return draft.siap ? kesalahanCatatanLaporan(draft.payload) : "";
 }
 
 export async function bacaBuktiPortal(files, existing = []) {

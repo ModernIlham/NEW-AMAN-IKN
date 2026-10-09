@@ -13,7 +13,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from auth_utils import require_admin, require_user, require_writer
@@ -88,10 +88,22 @@ class LaporanIn(_Masukan):
     kondisi: Literal["Baik", "Rusak Ringan", "Rusak Berat", "Tidak diketahui"]
     status_operasional: Literal["digunakan", "tidak_digunakan", "diperbaiki", "tidak_diketahui"]
     lokasi_laporan: str = Field(default="", max_length=1000)
-    catatan: str = Field(min_length=5, max_length=5000)
+    catatan: str = Field(default="", max_length=5000)
     diambil_pada: str | None = Field(default=None, max_length=50)
     bukti: list[BuktiIn] = Field(default_factory=list, max_length=3)
     laporan_sebelumnya_id: str = Field(default="", max_length=100)
+
+    @model_validator(mode="after")
+    def validasi_catatan(self):
+        # Hanya pemeriksaan berkala normal yang tidak memerlukan uraian.
+        # Tidak mengisi narasi otomatis atau menambah field payload: sidik
+        # retry laporan lama harus tetap sama, termasuk antrean luring.
+        normal = (self.jenis == "berkala" and self.kondisi == "Baik"
+                  and self.status_operasional in ("digunakan", "tidak_digunakan")
+                  and not self.laporan_sebelumnya_id)
+        if not normal and len(self.catatan) < 5:
+            raise ValueError("Tuliskan hasil pemeriksaan, kronologi, atau alasan minimal 5 karakter untuk laporan ini")
+        return self
 
 
 class TinjauIn(_Masukan):

@@ -31,6 +31,69 @@ beforeEach(() => {
 });
 afterEach(() => jest.useRealTimers());
 
+test("tutup form melindungi pengamatan berkala tanpa catatan atau foto", async () => {
+  const confirm = jest.spyOn(window, "confirm").mockReturnValue(false);
+  try {
+    render(<PortalPemegangPage />);
+    fireEvent.click(await screen.findByTestId("portal-buat-laporan-t1"));
+    fireEvent.change(screen.getByTestId("portal-kondisi"), { target: { value: "Baik" } });
+    fireEvent.change(screen.getByTestId("portal-operasional"), { target: { value: "digunakan" } });
+    fireEvent.change(screen.getByTestId("portal-lokasi"), { target: { value: "Ruang pemeriksaan" } });
+    expect(screen.getByTestId("portal-catatan")).toHaveValue("");
+    fireEvent.click(screen.getByTestId("portal-tutup-form"));
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("portal-kondisi")).toHaveValue("Baik");
+    expect(screen.getByTestId("portal-operasional")).toHaveValue("digunakan");
+    expect(screen.getByTestId("portal-lokasi")).toHaveValue("Ruang pemeriksaan");
+    confirm.mockReturnValue(true);
+    fireEvent.click(screen.getByTestId("portal-tutup-form"));
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(screen.queryByTestId("portal-form-laporan")).not.toBeInTheDocument();
+    expect(portal.portalRequest.mock.calls.some(([, o]) => o?.method === "POST")).toBe(false);
+  } finally { confirm.mockRestore(); }
+});
+
+test("form yang benar-benar kosong dapat ditutup tanpa dialog", async () => {
+  const confirm = jest.spyOn(window, "confirm").mockReturnValue(false);
+  try {
+    render(<PortalPemegangPage />);
+    fireEvent.click(await screen.findByTestId("portal-buat-laporan-t1"));
+    fireEvent.click(screen.getByTestId("portal-tutup-form"));
+    expect(confirm).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("portal-form-laporan")).not.toBeInTheDocument();
+  } finally { confirm.mockRestore(); }
+});
+
+test.each(["berkala", "kerusakan", "kehilangan", "perbaikan", "pengembalian"])("jenis %s menjelaskan kewajiban uraian dan mengirim sesuai isian", async jenis => {
+  render(<PortalPemegangPage />);
+  fireEvent.click(await screen.findByTestId("portal-buat-laporan-t1"));
+  fireEvent.change(screen.getByTestId("portal-jenis"), { target: { value: jenis } });
+  fireEvent.change(screen.getByTestId("portal-kondisi"), { target: { value: "Baik" } });
+  fireEvent.change(screen.getByTestId("portal-operasional"), { target: { value: "digunakan" } });
+  expect(screen.getByTestId("portal-catatan")).toHaveAttribute("aria-required", String(jenis !== "berkala"));
+  if (jenis !== "berkala") {
+    fireEvent.click(screen.getByTestId("portal-kirim-laporan"));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/5 karakter/);
+    expect(portal.portalRequest.mock.calls.some(([, o]) => o?.method === "POST")).toBe(false);
+    fireEvent.change(screen.getByTestId("portal-catatan"), { target: { value: "Uraian keadaan barang dan tindakan yang sudah dilakukan." } });
+  }
+  fireEvent.click(screen.getByTestId("portal-kirim-laporan"));
+  await waitFor(() => expect(portal.portalRequest).toHaveBeenCalledWith("/laporan", expect.objectContaining({ method: "POST", body: expect.objectContaining({ jenis, bukti: [], catatan: jenis === "berkala" ? "" : expect.any(String) }) })));
+});
+
+test("draf belum lengkap boleh disimpan, tetapi tidak boleh dimasukkan antrean", async () => {
+  portal.bacaLuringPortal.mockResolvedValue({ aktif: true, aset: [asset], antrean: [] });
+  render(<PortalPemegangPage />);
+  fireEvent.click(await screen.findByTestId("portal-buat-laporan-t1"));
+  Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
+  act(() => window.dispatchEvent(new Event("offline")));
+  fireEvent.click(screen.getByTestId("portal-kirim-laporan"));
+  expect(await screen.findByRole("alert")).toHaveTextContent(/5 karakter/);
+  expect(portal.simpanDrafPortal).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByTestId("portal-simpan-draf"));
+  await waitFor(() => expect(portal.simpanDrafPortal).toHaveBeenCalledWith(sesi, expect.objectContaining({ catatan: "" }), expect.objectContaining({ siap: false })));
+});
+
 test("tautan fragment langsung dibersihkan dan tidak masuk otomatis", async () => {
   window.history.replaceState(null, "", "/bmn-saya#token=secret-link");
   portal.portalRequest.mockImplementation(async path => { if (path === "/sesi") throw rejected(); return {}; });
@@ -59,7 +122,7 @@ test("laporan kehilangan bisa tanpa foto/GPS dan tidak mengubah data induk", asy
   fireEvent.change(screen.getByTestId("portal-jenis"), { target: { value: "kehilangan" } });
   fireEvent.change(screen.getByTestId("portal-catatan"), { target: { value: "Barang tidak ditemukan setelah pemeriksaan ruangan." } });
   expect(screen.getByTestId("portal-berkas-foto")).not.toHaveAttribute("capture");
-  expect(screen.getByTestId("portal-berkas-kamera")).toHaveAttribute("capture", "environment");
+  expect(screen.queryByTestId("portal-berkas-kamera")).not.toBeInTheDocument();
   fireEvent.click(screen.getByTestId("portal-kirim-laporan"));
   await waitFor(() => expect(portal.portalRequest).toHaveBeenCalledWith("/laporan", expect.objectContaining({ method: "POST", version: 2, csrf: "csrf", body: expect.objectContaining({ jenis: "kehilangan", bukti: [], penugasan_id: "t1", penugasan_version: 2 }) })));
   expect(await screen.findByText(/Laporan diterima untuk pemeriksaan operator/)).toBeInTheDocument();

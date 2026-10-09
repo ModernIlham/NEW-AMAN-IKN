@@ -15,7 +15,7 @@ const session = () => ({ session_id: "s1", pegawai: { id: "p1", nama: "Pemegang 
 const a = { id: "t1", asset_id: "a1", version: 2, status: "diterima", asset_code: "3050101001", asset_name: "Laptop", NUP: "1" };
 const b = { ...a, id: "t2", asset_id: "a2", NUP: "2" };
 const data = "data:image/jpeg;base64,YQ==";
-const meta = { waktu: "2026-10-03T10:00:00Z", gps: { lat: -0.96, lng: 116.7, accuracy: 25 } };
+const meta = { waktu: "2026-10-03T10:00:00Z", gps: { lat: -0.96, lng: 116.7, accuracy: 7.5 } };
 beforeEach(() => {
   localStorage.setItem("theme", "light");
   mockCamera = null;
@@ -32,7 +32,7 @@ async function buka() {
   fireEvent.click(screen.getByTestId("portal-kamera"));
   await screen.findByTestId("uji-kamera");
 }
-test("foto GPS dan laporan memakai endpoint portal saja, kamera biasa tetap terpisah", async () => {
+test("foto GPS dan laporan memakai endpoint portal saja, kamera biasa dihapus", async () => {
   await buka();
   act(() => mockCamera.onCapture(data, mockCamera.sesiAset, meta));
   expect(mockCamera.form.bukti[0].pengambilan).toEqual(meta);
@@ -40,8 +40,8 @@ test("foto GPS dan laporan memakai endpoint portal saja, kamera biasa tetap terp
   act(() => mockCamera.onField("asset_name", "Tidak boleh mengganti induk"));
   expect(mockCamera.form.asset_name).toBeUndefined();
   fireEvent.click(screen.getByText("Tutup kamera uji"));
-  expect(screen.getByTestId("portal-kamera-biasa")).toBeInTheDocument();
-  expect(screen.getByTestId("portal-berkas-kamera")).toHaveAttribute("capture", "environment");
+  expect(screen.queryByTestId("portal-kamera-biasa")).not.toBeInTheDocument();
+  expect(screen.queryByTestId("portal-berkas-kamera")).not.toBeInTheDocument();
   expect(screen.getByTestId("portal-berkas-foto")).not.toHaveAttribute("capture");
   fireEvent.click(screen.getByTestId("portal-kirim-laporan"));
   await waitFor(() => expect(portal.portalRequest).toHaveBeenCalledWith("/laporan", expect.objectContaining({ method: "POST", version: 2, csrf: "csrf", body: expect.objectContaining({ bukti: [expect.objectContaining({ pengambilan: meta })] }) })));

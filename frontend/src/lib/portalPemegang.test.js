@@ -142,6 +142,20 @@ test("otorisasi antrean selalu menguji pemilik, masa berlaku, status dan versi",
   expect(periksaAntreanPortal({ ...d, expires: 0 }, s, [assignment])).toMatch(/kedaluwarsa/);
 });
 
+test("draf belum lengkap tetap dapat dibuka, antrean wajib valid tanpa mutasi payload", async () => {
+  const s = session(); await aktifkanLuringPortal(s);
+  const kosong = { ...payload, jenis: "kehilangan", catatan: "" };
+  const [d] = await simpanDrafPortal(s, kosong, { id: "d1", key: "k1" });
+  expect(periksaAntreanPortal(d, s, [assignment])).toBe("");
+  expect(periksaAntreanPortal({ ...d, siap: true }, s, [assignment])).toMatch(/5 karakter/);
+  await expect(simpanDrafPortal(s, kosong, { id: "d1", siap: true })).rejects.toThrow(/5 karakter/);
+  expect((await bacaLuringPortal(s)).antrean[0]).toMatchObject({ siap: false, payload: kosong, key: "k1" });
+  const normal = { ...kosong, jenis: "berkala", kondisi: "Baik", status_operasional: "digunakan" };
+  const [siap] = await simpanDrafPortal(s, normal, { id: "d1", key: "k1", siap: true });
+  expect(periksaAntreanPortal(siap, s, [assignment])).toBe("");
+  expect(siap.payload.catatan).toBe("");
+});
+
 test("foto asli dibatasi jumlah, tipe dan ukuran; tidak ada kompresi diam-diam", async () => {
   await expect(bacaBuktiPortal([{ type: "image/jpeg", size: 4 * 1024 * 1024 }])).rejects.toThrow("3 MB");
   await expect(bacaBuktiPortal([{ type: "image/svg+xml", size: 12 }])).rejects.toThrow("JPEG");
