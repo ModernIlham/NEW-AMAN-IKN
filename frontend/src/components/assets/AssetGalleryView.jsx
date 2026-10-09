@@ -1,4 +1,5 @@
 import React, { memo, useState, useCallback, useRef, useEffect, useLayoutEffect, useMemo } from "react";
+import { useJangkarDaftarAset } from "@/hooks/usePosisiDaftarAset";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Loader2 } from "lucide-react";
 import AssetGalleryCard from "./AssetGalleryCard";
@@ -20,6 +21,7 @@ function getColumnCount(width) {
 // VIRTUALIZED GALLERY VIEW - Only renders visible cards
 // ============================================================================
 const AssetGalleryView = memo(({
+  daftarkanGulir,
   assets,
   editId,
   onEdit,
@@ -107,7 +109,9 @@ const AssetGalleryView = memo(({
     getScrollElement: () => containerRef.current,
     estimateSize: () => ROW_HEIGHT,
     overscan: 3,
+    getItemKey: (index) => rows[index]?.[0]?.id ?? `row-${index}`,
   });
+  useJangkarDaftarAset({ daftarkan: daftarkanGulir, nama: "galeri", assets, virtualizer, columns });
 
   // Re-measure virtual rows when the computed ROW_HEIGHT changes (container
   // resize / column breakpoint change) so cards don't overlap or stack
@@ -222,7 +226,8 @@ const AssetGalleryView = memo(({
             const row = rows[virtualRow.index];
             return (
               <div
-                key={virtualRow.index}
+                key={virtualRow.key}
+                data-scroll-asset-id={row[0]?.id}
                 style={{
                   position: 'absolute',
                   top: 0,

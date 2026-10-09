@@ -21,7 +21,7 @@ const HALAMAN = fs.readFileSync(path.join(__dirname, "..", "DashboardPage.jsx"),
 
 test("Dashboard benar-benar memakai pemuat yang diuji, dengan perakit filter dan semua setter", () => {
   expect(HALAMAN).toContain('import { buatPemuatDaftarAset } from "@/lib/pemuatDaftarAset"');
-  const wiring = HALAMAN.match(/const \{ doFetch, doFetchStats, loadMoreMobile, loadPrevMobile \} = buatPemuatDaftarAset\(\{([\s\S]*?)\}\)/)?.[1];
+  const wiring = HALAMAN.match(/const \{ doFetch, doFetchJendela, doFetchStats, loadMoreMobile, loadPrevMobile \} = buatPemuatDaftarAset\(\{([\s\S]*?)\}\)/)?.[1];
   expect(wiring).toBeDefined();
   for (const nama of ["activity", "filters", "buildFilterParams", "penjaga", "lingkupPermintaan", "getPendingItems", "filterSnapshotRows", "sortSnapshotRows", "setAssets", "setStats", "setMobileAssets"]) {
     expect(wiring).toMatch(new RegExp(`\\b${nama}\\b`));
@@ -38,6 +38,19 @@ test("Simpan Lanjut berhenti sebelum menutup form untuk hasil usang", () => {
   expect(navigasi.indexOf("if (fresh === HASIL_USANG) return;")).toBeGreaterThan(-1);
   expect(navigasi.indexOf("if (fresh === HASIL_USANG) return;")).toBeLessThan(navigasi.indexOf("const nextAsset"));
   expect(navigasi.indexOf("if (fresh === HASIL_USANG) return;")).toBeLessThan(navigasi.indexOf("setEditAssetForForm(null)"));
+});
+
+test("Ubah Massal memakai penyegaran jendela dan jangkar pada seluruh tampilan", () => {
+  const handler = HALAMAN.slice(HALAMAN.indexOf("const handleBatchUpdate"), HALAMAN.indexOf("const handleGroupBatchEdit"));
+  expect(handler).toContain("if (!penjaga.berlaku(tiketTampilan)) return;");
+  expect(handler.indexOf("if (!penjaga.berlaku(tiketTampilan)) return;")).toBeLessThan(handler.indexOf("tutupPanelMassal()"));
+  expect(handler).toContain("refreshDataRef.current?.(undefined, { refreshWindow: true })");
+  expect(handler).not.toMatch(/resetAllFilters|setCurrentPage\(1\)|setSelectedAssets/);
+  expect(HALAMAN).toContain("sebelumGantiJendela: () => rekamPosisi(true)");
+  expect(HALAMAN).toContain('onClose={tutupPanelMassal}');
+  for (const nama of ["VirtualizedMobileCards", "AssetGalleryView", "VirtualizedAssetTable"]) {
+    expect(HALAMAN).toContain(`<${nama} daftarkanGulir={daftarkanGulir}`);
+  }
 });
 
 /** Potong badan satu fungsi `const nama = async (...) => {` sampai seimbang. */
@@ -65,6 +78,10 @@ describe("parameter statistik", () => {
     // Penjaga anti-hampa: bila daftar suatu saat berhenti memakai
     // `buildFilterParams`, uji di atas kehilangan artinya tanpa memerah.
     expect(badanFungsi("doFetch")).toContain("buildFilterParams(params)");
+  });
+
+  test("refresh jendela massal memakai perakit filter yang sama", () => {
+    expect(badanFungsi("doFetchJendela")).toContain("buildFilterParams(params)");
   });
 
   test("statistik luring dihitung dari baris tersaring, bukan dibiarkan basi", () => {

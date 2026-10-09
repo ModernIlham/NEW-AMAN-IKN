@@ -1,5 +1,6 @@
 import React, { memo, useRef, useEffect } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { useJangkarDaftarAset } from "@/hooks/usePosisiDaftarAset";
 import { Loader2 } from "lucide-react";
 import AssetMobileCard from "./AssetMobileCard";
 
@@ -11,6 +12,7 @@ import AssetMobileCard from "./AssetMobileCard";
 // (measureElement) karena teks nama/lokasi bisa membungkus beda-beda.
 // ============================================================================
 const VirtualizedMobileCards = memo(({
+  daftarkanGulir,
   assets,
   editId,
   onEdit,
@@ -45,6 +47,7 @@ const VirtualizedMobileCards = memo(({
     // baris tak "tertukar" antar-aset saat daftar berubah (mis. setelah filter).
     getItemKey: (index) => assets[index]?.id ?? `row-${index}`,
   });
+  useJangkarDaftarAset({ daftarkan: daftarkanGulir, nama: "mobile", assets, virtualizer });
 
   // Re-measure HANYA saat LEBAR container berubah (rotasi HP / resize), BUKAN
   // tiap `assets` berubah. Sebelumnya `virtualizer.measure()` dipanggil blanket
@@ -139,6 +142,7 @@ const VirtualizedMobileCards = memo(({
           return (
             <div
               key={asset.id}
+              data-scroll-asset-id={asset.id}
               ref={virtualizer.measureElement}
               data-index={vItem.index}
               style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${vItem.start}px)` }}
