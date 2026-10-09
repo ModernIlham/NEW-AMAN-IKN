@@ -240,3 +240,120 @@ test.each(["loadMoreMobile", "loadPrevMobile"])("%s membedakan batas halaman sah
   expect(axios.get).not.toHaveBeenCalled();
   expect(p.k.setMobileLoading).not.toHaveBeenCalled();
 });
+
+const isiHalaman = (page, total = 6) => ({
+  data: { items: Array.from({ length: Math.min(2, Math.max(0, total - (page - 1) * 2)) },
+    (_, i) => ({ id: String((page - 1) * 2 + i + 1), version: 2 })),
+  total, total_pages: Math.max(1, Math.ceil(total / 2)), page },
+});
+
+test("massal memuat seluruh jendela secara atomic dengan filter, urutan, dan halaman aktif", async () => {
+  const akhir = tertunda();
+  const sebelumGantiJendela = jest.fn();
+  const p = layar({ mobileFirstPage: 1, mobileCurrentPage: 3, sebelumGantiJendela });
+  axios.get.mockImplementation(url => {
+    const page = Number(new URL(url, "http://uji").searchParams.get("page"));
+    return page === 3 ? akhir.promise : Promise.resolve(isiHalaman(page));
+  });
+  const hasil = p.doFetchJendela(2, 2, "meja", [], "name_asc");
+  await giliran();
+  expect(p.state.MobileAssets).toEqual([{ id: "awal" }]);
+  expect(p.k.setAssets).not.toHaveBeenCalled();
+  expect(sebelumGantiJendela).not.toHaveBeenCalled();
+  akhir.resolve(isiHalaman(3));
+  await hasil;
+  expect(p.state.Assets.map(a => a.id)).toEqual(["3", "4"]);
+  expect(p.state.MobileAssets.map(a => a.id)).toEqual(["1", "2", "3", "4", "5", "6"]);
+  expect(p.state.CurrentPage).toBe(2);
+  expect(p.state.MobileFirstPage).toBe(1);
+  expect(p.state.MobileCurrentPage).toBe(3);
+  expect(p.k.setMobileAssets).toHaveBeenCalledTimes(1);
+  expect(sebelumGantiJendela).toHaveBeenCalledTimes(1);
+  for (const [url] of axios.get.mock.calls) {
+    const query = new URL(url, "http://uji").searchParams;
+    expect(query.get("condition")).toBe("Baik");
+    expect(query.get("sort_by")).toBe("name_asc");
+    expect(query.get("search")).toBe("meja");
+    expect(query.get("activity_id")).toBe("kegiatan-a");
+  }
+});
+
+test("massal menjepit jendela dan halaman desktop saat hasil filter menyusut", async () => {
+  const p = layar({ mobileFirstPage: 4, mobileCurrentPage: 6 });
+  axios.get.mockImplementation(url => Promise.resolve(isiHalaman(Number(new URL(url, "http://uji").searchParams.get("page")))));
+  await p.doFetchJendela(6, 2, "", [], "newest");
+  expect(p.state.MobileAssets.map(a => a.id)).toEqual(["5", "6"]);
+  expect(p.state.MobileFirstPage).toBe(3);
+  expect(p.state.MobileCurrentPage).toBe(3);
+  expect(p.state.CurrentPage).toBe(3);
+  expect(axios.get).toHaveBeenCalledTimes(2);
+});
+
+test.each(["gagal", "berubah", "luring"])("massal gagal %s tidak mengganti separuh daftar atau memakai snapshot usang", async sebab => {
+  const p = layar({ mobileFirstPage: 1, mobileCurrentPage: 3, isOnlineRef: { current: sebab !== "luring" }, sebelumGantiJendela: jest.fn() });
+  axios.get.mockResolvedValueOnce(isiHalaman(1));
+  if (sebab === "gagal") axios.get.mockRejectedValue(new Error("putus"));
+  else axios.get.mockResolvedValue(isiHalaman(2, 5));
+  expect(await p.doFetchJendela(1, 2, "", [], "newest")).toBeNull();
+  expect(p.state.MobileAssets).toEqual([{ id: "awal" }]);
+  expect(p.k.setAssets).not.toHaveBeenCalled();
+  expect(p.k.setMobileFirstPage).not.toHaveBeenCalled();
+  expect(p.k.sebelumGantiJendela).not.toHaveBeenCalled();
+  expect(getSnapshotAssets).not.toHaveBeenCalled();
+  expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("Perubahan tersimpan"));
+  expect(p.k.penjaga.sibuk("jendela")).toBe(false);
+});
+
+test("massal tidak menghidupkan hasil atau anchor lingkup yang sudah ditinggalkan", async () => {
+  const akhir = tertunda();
+  const p = layar({ mobileFirstPage: 1, mobileCurrentPage: 3, sebelumGantiJendela: jest.fn() });
+  axios.get.mockResolvedValueOnce(isiHalaman(1)).mockReturnValue(akhir.promise);
+  const hasil = p.doFetchJendela(1, 2, "", [], "newest");
+  await giliran();
+  p.k.penjaga.aktifkan("B");
+  akhir.resolve(isiHalaman(2));
+  expect(await hasil).toBe(HASIL_USANG);
+  expect(p.k.setAssets).not.toHaveBeenCalled();
+  expect(p.k.sebelumGantiJendela).not.toHaveBeenCalled();
+  expect(toast.error).not.toHaveBeenCalled();
+});
+
+test("massal membatalkan append lama dan menahan sentinel sampai jendela baru lengkap", async () => {
+  const lama = tertunda(), baru = tertunda();
+  const p = layar({ mobileFirstPage: 1, mobileCurrentPage: 2 });
+  axios.get.mockReturnValueOnce(lama.promise).mockResolvedValueOnce(isiHalaman(1)).mockReturnValueOnce(baru.promise);
+  const append = p.loadMoreMobile();
+  const hasil = p.doFetchJendela(1, 2, "", [], "newest");
+  await giliran();
+  expect(await p.loadMoreMobile()).toBe(HASIL_USANG);
+  expect(await p.loadPrevMobile()).toBe(HASIL_USANG);
+  lama.resolve(isiHalaman(3));
+  expect(await append).toBe(HASIL_USANG);
+  expect(p.state.MobileAssets).toEqual([{ id: "awal" }]);
+  baru.resolve(isiHalaman(2));
+  await hasil;
+  expect(p.state.MobileAssets.map(a => a.id)).toEqual(["1", "2", "3", "4"]);
+});
+
+test("massal tetap merekonsiliasi versi terbaru, pending edit, dan ID duplikat antarhalaman", async () => {
+  const p = layar({ mobileFirstPage: 1, mobileCurrentPage: 2 });
+  const baru = { id: "1", version: 9, asset_name: "Versi WS" };
+  const lokal = { id: "2", version: 4, asset_name: "Belum sinkron" };
+  p.state.Assets = [baru, lokal]; p.state.MobileAssets = [baru, lokal];
+  p.k.getPendingItems.mockReturnValue([{ isEdit: true, editId: "2", payload: { asset_name: "Belum sinkron" } }]);
+  axios.get.mockResolvedValueOnce(isiHalaman(1, 4))
+    .mockResolvedValueOnce({ data: { ...isiHalaman(2, 4).data, items: [{ id: "2", version: 2 }, { id: "4", version: 2 }] } });
+  await p.doFetchJendela(1, 2, "", [], "newest");
+  expect(p.state.MobileAssets).toEqual([baru, lokal, { id: "4", version: 2 }]);
+  expect(p.state.Assets).toEqual([baru, lokal]);
+});
+
+test("massal yang mengeluarkan semua barang dari filter menampilkan hasil kosong sah", async () => {
+  const p = layar({ mobileFirstPage: 1, mobileCurrentPage: 3 });
+  axios.get.mockResolvedValue(isiHalaman(1, 0));
+  expect(await p.doFetchJendela(1, 2, "", [], "newest")).toEqual([]);
+  expect(p.state.MobileAssets).toEqual([]);
+  expect(p.state.TotalItems).toBe(0);
+  expect(p.state.MobileCurrentPage).toBe(1);
+  expect(toast.error).not.toHaveBeenCalled();
+});

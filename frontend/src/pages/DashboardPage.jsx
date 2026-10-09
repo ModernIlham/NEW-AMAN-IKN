@@ -69,6 +69,7 @@ import { useDragDropImport } from "@/hooks/useDragDropImport";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { usePenyegaranAset } from "@/hooks/usePenyegaranAset";
 import { useRekonsiliasiBaris } from "@/hooks/useRekonsiliasiBaris";
+import { usePosisiDaftarAset } from "@/hooks/usePosisiDaftarAset";
 import { gabungVersiBaris, versiBaris } from "@/lib/rekonsiliasiBaris";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -334,6 +335,9 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const [mapEverOpened, setMapEverOpened] = useState(false);
   useEffect(() => { if (mapOpen) setMapEverOpened(true); }, [mapOpen]);
   const [viewMode, setViewMode] = useState('list');
+  const mainContentRef = useRef(null);
+  const daftarContentRef = useRef(null);
+  const { daftarkan: daftarkanGulir, rekamPosisi } = usePosisiDaftarAset(mainContentRef, daftarContentRef);
   const viewModeRef = useRef(viewMode);
   viewModeRef.current = viewMode;
   const [auditOpen, setAuditOpen] = useState(false);
@@ -603,6 +607,10 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   // === BATCH SELECTION ===
   const [selectedAssets, setSelectedAssets] = useState(new Set());
   const [showBatchPanel, setShowBatchPanel] = useState(false);
+  const tutupPanelMassal = useCallback(() => {
+    rekamPosisi();
+    setShowBatchPanel(false);
+  }, [rekamPosisi]);
   const [batchUpdating, setBatchUpdating] = useState(false);
   // Drag-to-select: tekan-tahan kotak select lalu geser → seleksi rentang
   // (mouse; sentuh tetap menggulir). Dipasang lewat containerProps di pembungkus
@@ -703,6 +711,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     const allIds = (Array.isArray(idsArg) && idsArg.length)
       ? idsArg : Array.from(selectedAssets);
     if (allIds.length === 0) return;
+    const tiketTampilan = penjaga.mulai("massal", lingkupPermintaan);
     setBatchUpdating(true);
     try {
       const CHUNK_SIZE = 200;
@@ -738,11 +747,14 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       // lapangan): tutup panel edit tetapi biarkan baris tetap terseleksi agar
       // pengguna bisa lanjut aksi lain atau memverifikasi hasil tanpa memilih
       // ulang. Kosongkan manual lewat tombol "Batal pilih" bila perlu.
-      setShowBatchPanel(false);
+      // Simpan tetap menyelesaikan ID yang dikonfirmasi, tetapi hasil lama
+      // tidak boleh menutup panel atau memindahkan gulir di filter/kegiatan baru.
+      if (!penjaga.berlaku(tiketTampilan)) return;
+      tutupPanelMassal();
       // Ref dipasang setelah pemuat data; dibaca ketika batch selesai,
       // memakai konteks yang masih tampil tanpa mengunci closure awal.
       // eslint-disable-next-line no-use-before-define
-      refreshDataRef.current?.();
+      await refreshDataRef.current?.(undefined, { refreshWindow: true });
     } catch (err) {
       console.error("Batch update error:", err?.response?.status, err?.response?.data, err?.message);
       toast.dismiss('batch-progress');
@@ -750,8 +762,8 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       if (err.code === 'ECONNABORTED') toast.error("Request timeout — coba lagi dengan lebih sedikit aset");
       else if (err.response?.status === 413) toast.error("Data terlalu besar — kurangi jumlah foto/file");
       else toast.error(detail || `Gagal batch update: ${err.message || 'Unknown error'}`);
-    } finally { setBatchUpdating(false); }
-  }, [selectedAssets, user]);
+    } finally { penjaga.selesai(tiketTampilan); setBatchUpdating(false); }
+  }, [selectedAssets, user, penjaga, lingkupPermintaan, tutupPanelMassal]);
 
   const handleGroupBatchEdit = useCallback((assetIds) => {
     if (!assetIds || assetIds.length === 0) return;
@@ -767,7 +779,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   }, []);
 
   // === DATA FETCHING ===
-  const { doFetch, doFetchStats, loadMoreMobile, loadPrevMobile } = buatPemuatDaftarAset({
+  const { doFetch, doFetchJendela, doFetchStats, loadMoreMobile, loadPrevMobile } = buatPemuatDaftarAset({
     activity, filters, isOnlineRef, getPendingItems, serverHasPendingRow,
     filterSnapshotRows, sortSnapshotRows, buildFilterParams,
     mobileLoading, mobileCurrentPage, mobileFirstPage, totalPages, pageSize,
@@ -775,6 +787,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     setAssets, setTotalItems, setTotalPages, setCurrentPage, setStats,
     setMobileAssets, setMobileCurrentPage, setMobileFirstPage, setMobileLoading,
     setOfflineLastSync, setOfflineServed, setLoadingMessage,
+    sebelumGantiJendela: () => rekamPosisi(true),
   });
   const loadMoreMobileRef = useRef(loadMoreMobile);
   loadMoreMobileRef.current = loadMoreMobile;
@@ -803,7 +816,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   // list skeleton; background refreshes (post-save sync, WS) stay silent so
   // they never flash an overlay while someone is working.
   const refreshData = usePenyegaranAset({
-    doFetch, doFetchStats, debouncedSearch, filterCategory, sortBy,
+    doFetch, doFetchJendela, doFetchStats, debouncedSearch, filterCategory, sortBy,
     pageSize, currentPage, setPageLoading, setLoading, lingkupPermintaan,
   });
   const refreshDataRef = useRef(refreshData);
@@ -882,7 +895,6 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   };
 
   // Gulir daftar/galeri dan pan/zoom peta tidak boleh menjadi pemicu refresh.
-  const mainContentRef = useRef(null);
   const { refreshing, onRefreshData } = useMuatUlangManual(refreshData);
 
   // === FORM HANDLERS ===
@@ -1804,7 +1816,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                     <button onClick={clearSelection} title="Kosongkan seleksi" className="h-7 px-2 rounded-md border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 text-xs font-medium flex items-center gap-1 flex-shrink-0 transition-colors" data-testid="clear-selection-btn">
                       <X className="w-3.5 h-3.5" /><span className="hidden sm:inline">Kosongkan</span>
                     </button>
-                    <button onClick={() => setShowBatchPanel(v => !v)} className="ml-auto h-7 px-2.5 rounded-md bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold flex items-center gap-1 flex-shrink-0 transition-colors" data-testid="toggle-batch-panel-btn">
+                    <button onClick={() => showBatchPanel ? tutupPanelMassal() : setShowBatchPanel(true)} className="ml-auto h-7 px-2.5 rounded-md bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold flex items-center gap-1 flex-shrink-0 transition-colors" data-testid="toggle-batch-panel-btn">
                       <Pen className="w-3.5 h-3.5" />{showBatchPanel ? "Tutup" : "Ubah Massal"}
                     </button>
                   </div>
@@ -1817,23 +1829,23 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                 )}
                 {/* Menutup panel (X/Batal) MENCIUTKAN saja — seleksi dipertahankan. */}
                 {perms.canEdit && showBatchPanel && (
-                  <Suspense fallback={null}><BatchEditPanel attached selectedCount={selectedAssets.size} categories={categories} onApply={handleBatchUpdate} onClose={() => setShowBatchPanel(false)} updating={batchUpdating} activity={activity} assets={assets} selectedAssets={selectedAssets} /></Suspense>
+                  <Suspense fallback={null}><BatchEditPanel attached selectedCount={selectedAssets.size} categories={categories} onApply={handleBatchUpdate} onClose={tutupPanelMassal} updating={batchUpdating} activity={activity} assets={assets} selectedAssets={selectedAssets} /></Suspense>
                 )}
               </>)}
 
               {/* Pembungkus drag-to-select: containerProps menangkap tekan-geser
                   lintas kotak select (mouse). */}
-              <div {...(perms.canEdit ? dragSelectProps : {})}>
+              <div ref={daftarContentRef} {...(perms.canEdit ? dragSelectProps : {})}>
               {viewMode === 'gallery' ? (
-                <AssetGalleryView assets={mobileAssets} editId={editAssetForForm?.id} onEdit={perms.canEdit ? handleEdit : undefined} onDelete={perms.canDelete ? handleDelete : undefined} onPrintCard={handlePrintCard} onLoadMore={loadMoreMobile} onLoadPrev={loadPrevMobile} hasPrev={mobileFirstPage > 1} isLoadingMore={mobileLoading} hasMore={mobileCurrentPage < totalPages} totalItems={totalItems} rowLocks={rowLocks} currentSessionId={sessionId} selectedAssets={selectedAssets} onToggleSelect={perms.canEdit ? toggleSelectAsset : undefined} />
+                <AssetGalleryView daftarkanGulir={daftarkanGulir} assets={mobileAssets} editId={editAssetForForm?.id} onEdit={perms.canEdit ? handleEdit : undefined} onDelete={perms.canDelete ? handleDelete : undefined} onPrintCard={handlePrintCard} onLoadMore={loadMoreMobile} onLoadPrev={loadPrevMobile} hasPrev={mobileFirstPage > 1} isLoadingMore={mobileLoading} hasMore={mobileCurrentPage < totalPages} totalItems={totalItems} rowLocks={rowLocks} currentSessionId={sessionId} selectedAssets={selectedAssets} onToggleSelect={perms.canEdit ? toggleSelectAsset : undefined} />
               ) : (<>
                 <div className="relative hidden lg:block">
                   <TooltipProvider>
-                    <VirtualizedAssetTable assets={assets} editId={editAssetForForm?.id} onEdit={perms.canEdit ? handleEdit : undefined} onDelete={perms.canDelete ? handleDelete : undefined} onPrintCard={handlePrintCard} onOpenKartu={handleOpenKartu} onViewAudit={handleViewAssetAudit} onOpenPhoto={setPhotoLightboxAsset} pageSize={pageSize} rowLocks={rowLocks} currentSessionId={sessionId} syncStatuses={syncStatuses} onRetrySync={retrySync} onDismissSync={dismissSync} selectedAssets={selectedAssets} onToggleSelect={perms.canEdit ? toggleSelectAsset : undefined} onToggleSelectAll={perms.canEdit ? toggleSelectAll : undefined} />
+                    <VirtualizedAssetTable daftarkanGulir={daftarkanGulir} assets={assets} editId={editAssetForForm?.id} onEdit={perms.canEdit ? handleEdit : undefined} onDelete={perms.canDelete ? handleDelete : undefined} onPrintCard={handlePrintCard} onOpenKartu={handleOpenKartu} onViewAudit={handleViewAssetAudit} onOpenPhoto={setPhotoLightboxAsset} pageSize={pageSize} rowLocks={rowLocks} currentSessionId={sessionId} syncStatuses={syncStatuses} onRetrySync={retrySync} onDismissSync={dismissSync} selectedAssets={selectedAssets} onToggleSelect={perms.canEdit ? toggleSelectAsset : undefined} onToggleSelectAll={perms.canEdit ? toggleSelectAll : undefined} />
                   </TooltipProvider>
                 </div>
                 <div className="lg:hidden">
-                  <VirtualizedMobileCards assets={mobileAssets} editId={editAssetForForm?.id} onEdit={perms.canEdit ? handleEdit : undefined} onDelete={perms.canDelete ? handleDelete : undefined} onOpenKartu={handleOpenKartu} onViewAudit={handleViewAssetAudit} onPrintCard={handlePrintCard} onOpenPhoto={setPhotoLightboxAsset} onLoadMore={loadMoreMobile} isLoadingMore={mobileLoading} hasMore={mobileCurrentPage < totalPages} totalItems={totalItems} rowLocks={rowLocks} currentSessionId={sessionId} syncStatuses={syncStatuses} onRetrySync={retrySync} onDismissSync={dismissSync} selectedAssets={selectedAssets} onToggleSelect={perms.canEdit ? toggleSelectAsset : undefined} />
+                  <VirtualizedMobileCards daftarkanGulir={daftarkanGulir} assets={mobileAssets} editId={editAssetForForm?.id} onEdit={perms.canEdit ? handleEdit : undefined} onDelete={perms.canDelete ? handleDelete : undefined} onOpenKartu={handleOpenKartu} onViewAudit={handleViewAssetAudit} onPrintCard={handlePrintCard} onOpenPhoto={setPhotoLightboxAsset} onLoadMore={loadMoreMobile} isLoadingMore={mobileLoading} hasMore={mobileCurrentPage < totalPages} totalItems={totalItems} rowLocks={rowLocks} currentSessionId={sessionId} syncStatuses={syncStatuses} onRetrySync={retrySync} onDismissSync={dismissSync} selectedAssets={selectedAssets} onToggleSelect={perms.canEdit ? toggleSelectAsset : undefined} />
                 </div>
                 <div className="hidden lg:block">
                   <AssetPagination currentPage={currentPage} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} setPageSize={setPageSize} goToPage={goToPage} />

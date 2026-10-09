@@ -1,6 +1,7 @@
 import React, { useRef, memo } from "react";
 import { unitTerdalam, jalurEselon } from "@/lib/pohonUnit";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { useJangkarDaftarAset } from "@/hooks/usePosisiDaftarAset";
 import { Camera, Briefcase, Tag, CreditCard, Trash2, History, ClipboardCheck, Lock, Cloud, CloudOff, Check, RotateCcw, Clock, Loader2, AlertTriangle, BookOpen, User, RefreshCcw, ShieldCheck } from "lucide-react";
 import IkonLokasiAset from "./IkonLokasiAset";
 import IkonStikerBelum from "./IkonStikerBelum";
@@ -120,7 +121,7 @@ const formatPrice = (price) => {
 // md-lg: Foto, Identitas, Nama, Kondisi, Status, INV, Actions
 // xl+: + Eselon, Lokasi, Harga, Dok, Stiker
 // ============================================================================
-const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintCard, onOpenKartu, onViewAudit, onOpenPhoto, pageSize, rowLocks = {}, currentSessionId, syncStatuses = {}, onRetrySync, onDismissSync, selectedAssets, onToggleSelect, onToggleSelectAll }) => {
+const VirtualizedAssetTable = memo(({ daftarkanGulir, assets, editId, onEdit, onDelete, onPrintCard, onOpenKartu, onViewAudit, onOpenPhoto, pageSize, rowLocks = {}, currentSessionId, syncStatuses = {}, onRetrySync, onDismissSync, selectedAssets, onToggleSelect, onToggleSelectAll }) => {
   const parentRef = useRef(null);
   const ROW_HEIGHT = 52;
   const HEADER_HEIGHT = 32;
@@ -134,7 +135,9 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
     getScrollElement: () => parentRef.current,
     estimateSize: () => ROW_HEIGHT,
     overscan: 5,
+    getItemKey: (index) => assets[index]?.id ?? `row-${index}`,
   });
+  useJangkarDaftarAset({ daftarkan: daftarkanGulir, nama: "tabel", assets, virtualizer });
 
   return (
     <div className="bg-card rounded-lg border border-border overflow-hidden">
@@ -169,7 +172,7 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
       </div>
 
       {/* Virtualized Body */}
-      <div ref={parentRef} className="overflow-auto" style={{ height: containerHeight - HEADER_HEIGHT }}>
+      <div ref={parentRef} data-testid="asset-table-scroll" className="overflow-auto" style={{ height: containerHeight - HEADER_HEIGHT }}>
         <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
           {virtualizer.getVirtualItems().map((vr) => {
             const a = assets[vr.index];
@@ -196,6 +199,7 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
             return (
               <div
                 key={a.id}
+                data-scroll-asset-id={a.id}
                 onClick={rowClickable ? () => onEdit(a) : undefined}
                 {...(rowClickable ? {
                   role: "button",

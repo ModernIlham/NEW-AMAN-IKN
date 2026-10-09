@@ -17,7 +17,7 @@ export function buatPemuatDaftarAset(konteks) {
     debouncedSearch, filterCategory, sortBy, penjaga, lingkupPermintaan,
     setAssets, setTotalItems, setTotalPages, setCurrentPage, setStats,
     setMobileAssets, setMobileCurrentPage, setMobileFirstPage, setMobileLoading,
-    setOfflineLastSync, setOfflineServed, setLoadingMessage,
+    setOfflineLastSync, setOfflineServed, setLoadingMessage, sebelumGantiJendela,
   } = konteks;
   // === DATA FETCHING ===
   // OFFLINE READ PATH: serve the list from the local snapshot (filter/sort/
@@ -181,6 +181,90 @@ export function buatPemuatDaftarAset(konteks) {
     } finally { penjaga.selesai(tiket); penjaga.selesai(jendela); }
   };
 
+  // Sesudah ubah massal, seluruh jendela yang sudah dimuat harus disegarkan.
+  // preserveMobile hanya cocok untuk simpan tunggal yang sudah direkonsiliasi;
+  // memakai refresh biasa menyusutkan 200 kartu menjadi satu halaman 50 kartu.
+  // Jangan commit satu per satu atau fallback ke snapshot lama setelah tulis:
+  // filter/sort berubah oleh massal harus tetap mengikuti hasil server terbaru.
+  const doFetchJendela = async (page, size, search, category, sort) => {
+    const tiket = penjaga.mulai("daftar", lingkupPermintaan);
+    if (!tiket) return HASIL_USANG;
+    const jendela = penjaga.mulai("jendela", lingkupPermintaan);
+    penjaga.batalkan("mobile");
+    setMobileLoading(false);
+    try {
+      if (!isOnlineRef.current) throw new Error("luring");
+      const ambil = async pg => {
+        if (!penjaga.berlaku(tiket)) return HASIL_USANG;
+        const params = new URLSearchParams();
+        if (search) params.append("search", search);
+        params.append("sort_by", sort || "newest");
+        params.append("page", String(pg));
+        params.append("page_size", String(size));
+        if (activity?.id) params.append("activity_id", activity.id);
+        buildFilterParams(params);
+        const { data } = await axios.get(`${API}/assets?${params.toString()}`);
+        return penjaga.berlaku(tiket) ? data : HASIL_USANG;
+      };
+      let awal = await ambil(page);
+      if (awal === HASIL_USANG) return HASIL_USANG;
+      let pg = Math.max(1, Math.min(page, awal.total_pages || 1));
+      if (pg !== page) {
+        awal = await ambil(pg);
+        if (awal === HASIL_USANG) return HASIL_USANG;
+      }
+      const totalPg = awal.total_pages || 1;
+      const pertama = Math.max(1, Math.min(mobileFirstPage, totalPg));
+      const terakhir = Math.max(pertama, Math.min(mobileCurrentPage, totalPg));
+      const halaman = new Map([[pg, awal.items || []]]);
+      const antre = [];
+      for (let i = pertama; i <= terakhir; i++) if (i !== pg) antre.push(i);
+      // Batas paralel mencegah ratusan request serentak pada daftar panjang.
+      let indeks = 0;
+      await Promise.all(Array.from({ length: Math.min(4, antre.length) }, async () => {
+        while (indeks < antre.length && penjaga.berlaku(tiket)) {
+          const nomor = antre[indeks++];
+          const data = await ambil(nomor);
+          if (data === HASIL_USANG) return;
+          if ((data.total_pages || 1) !== totalPg || data.total !== awal.total) {
+            throw new Error("hasil berubah selama pemuatan");
+          }
+          halaman.set(nomor, data.items || []);
+        }
+      }));
+      if (!penjaga.berlaku(tiket)) return HASIL_USANG;
+      const itemDesktop = halaman.get(pg) || [];
+      const terlihat = new Map();
+      for (let i = pertama; i <= terakhir; i++) {
+        for (const row of halaman.get(i) || []) terlihat.set(row.id, row);
+      }
+      const itemMobile = [...terlihat.values()];
+      const pending = getPendingItems();
+      const tambahPending = rows => {
+        const belum = pending.filter(it => !it.isEdit && it.payload && it.payload.activity_id === activity?.id)
+          .map(it => ({ ...it.payload, id: it.tempId, thumbnail: it.payload.photo || null, created_at: it.queuedAt || new Date().toISOString() }))
+          .filter(row => !rows.some(a => serverHasPendingRow(a, row)));
+        return [...belum, ...rows];
+      };
+      const desktop = tambahPending(itemDesktop);
+      const mobile = pertama === 1 ? tambahPending(itemMobile) : itemMobile;
+      sebelumGantiJendela?.();
+      setAssets(prev => rekonsiliasiDaftar(prev, desktop, pending));
+      setMobileAssets(prev => rekonsiliasiDaftar(prev, mobile, pending));
+      setCurrentPage(pg);
+      setMobileFirstPage(pertama);
+      setMobileCurrentPage(terakhir);
+      setTotalItems(awal.total || 0);
+      setTotalPages(totalPg);
+      setOfflineServed(false);
+      return desktop;
+    } catch {
+      if (!penjaga.berlaku(tiket)) return HASIL_USANG;
+      toast.error("Perubahan tersimpan, tetapi daftar terbaru belum berhasil dimuat. Posisi dan data tampilan dipertahankan; tekan Muat ulang untuk mencoba lagi.");
+      return null;
+    } finally { penjaga.selesai(tiket); penjaga.selesai(jendela); }
+  };
+
   // Mengembalikan array baris yang baru dimuat (halaman berikutnya) atau null
   // bila tak ada lagi/ gagal — dipakai alur simpan-lanjut lintas halaman untuk
   // membuka aset pertama halaman baru.
@@ -285,5 +369,5 @@ export function buatPemuatDaftarAset(konteks) {
     } finally { penjaga.selesai(tiket); }
   };
 
-  return { doFetch, doFetchStats, loadMoreMobile, loadPrevMobile };
+  return { doFetch, doFetchJendela, doFetchStats, loadMoreMobile, loadPrevMobile };
 }

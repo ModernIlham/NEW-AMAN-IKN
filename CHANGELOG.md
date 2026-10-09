@@ -18,6 +18,20 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1094] Posisi daftar tetap setelah ubah massal dengan filter aktif — 2026-10-09
+
+- Ubah massal menyegarkan seluruh rentang halaman yang sudah dimuat, bukan
+  menggantinya dengan satu halaman yang memendekkan daftar HP/galeri. Hasil
+  disatukan sebelum ditampilkan; filter, urutan, halaman dan seleksi tetap.
+- Posisi barang dan offset dipertahankan pada kartu HP/tablet, galeri dan
+  tabel PC, termasuk saat panel massal ditutup. Bila barang keluar dari
+  filter, gunakan tetangga terdekat yang masih sesuai; hasil kosong tetap sah.
+- Pemuatan paralel dibatasi empat permintaan. Respons usang, gagal atau
+  jumlah hasil berubah tidak menampilkan daftar parsial; gulir terbaru
+  pengguna selama menunggu jaringan tetap dihormati.
+- Regresi unit dan 64 skenario browser diuji pada 375/768/1280 px, termasuk
+  urutan berubah, hasil menyusut, ukuran kartu berubah dan respons tertunda.
+
 ## [#1093] Batas GPS kamera dan aturan uraian laporan BMN Saya — 2026-10-09
 
 - Kamera biasa dihapus dari BMN Saya; Kamera & scanner dan pilih file/foto

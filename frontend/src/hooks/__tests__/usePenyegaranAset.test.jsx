@@ -61,6 +61,15 @@ test("rekonsiliasi sesudah form ditutup mempertahankan jendela gulir HP", async 
   expect(p.setPageLoading).not.toHaveBeenCalled();
 });
 
+test("refresh massal menyegarkan seluruh jendela tanpa reset halaman atau skeleton", async () => {
+  const p = konteks({ doFetchJendela: jest.fn().mockResolvedValue(["jendela"]) });
+  const { result } = renderHook(usePenyegaranAset, { initialProps: p });
+  expect(await result.current(undefined, { refreshWindow: true })).toEqual([["jendela"], "statistik"]);
+  expect(p.doFetchJendela).toHaveBeenCalledWith(3, 50, "meja", ["Mebel"], "newest");
+  expect(p.doFetch).not.toHaveBeenCalled();
+  expect(p.setPageLoading).not.toHaveBeenCalled();
+});
+
 test("skeleton menunggu KEDUA pekerjaan yang dimulai paralel", async () => {
   const daftar = tertunda();
   const statistik = tertunda();
