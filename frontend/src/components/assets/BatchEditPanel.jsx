@@ -4,7 +4,7 @@ import {
   Sticker, Building2, Camera, Images, FileCheck, Receipt,
   Calendar, DollarSign, Navigation, Package, Truck,
   LocateFixed, Search, FileUp, FileText, Check, ChevronDown,
-  Eraser, Trash2, Power, UserRound, StickyNote, Plus,
+  Eraser, Trash2, Power, UserRound, StickyNote, Plus, ChevronUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,7 +66,7 @@ function BatchCategorySelect({ categories, value, onChange }) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button type="button" className={`flex items-center justify-between w-full h-7 px-2 text-xs border rounded-md hover:bg-accent ${isClear ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400' : 'bg-background'}`} data-testid="batch-category-select">
+        <button type="button" className={`flex items-center justify-between w-full h-11 min-w-0 px-3 text-sm border rounded-md hover:bg-accent ${isClear ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400' : 'bg-background'}`} data-testid="batch-category-select">
           <span className="truncate">{isClear ? "— Kosongkan —" : value && value !== "__none__" ? value : "— Tidak diubah —"}</span>
           <ChevronDown className="w-3 h-3 flex-shrink-0 ml-1 text-muted-foreground" />
         </button>
@@ -75,7 +75,7 @@ function BatchCategorySelect({ categories, value, onChange }) {
         <div className="p-2 border-b">
           <div className="relative">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-            <Input ref={inputRef} placeholder="Cari kategori..." value={q} onChange={e => setQ(e.target.value)} className="pl-7 h-7 text-xs" />
+            <Input ref={inputRef} placeholder="Cari kategori..." value={q} onChange={e => setQ(e.target.value)} className="pl-7 h-11 text-sm" />
           </div>
         </div>
         <ScrollArea className="h-[200px]">
@@ -106,20 +106,20 @@ function BatchCategorySelect({ categories, value, onChange }) {
 function ClearableInput({ value, onChange, onClear, isClear, ...props }) {
   if (isClear) {
     return (
-      <div className="flex items-center h-7 px-2 text-xs border rounded-md bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700">
+      <div className="flex items-center min-h-11 min-w-0 pl-3 text-xs border rounded-md bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700">
         <Eraser className="w-3 h-3 text-red-500 mr-1 flex-shrink-0" />
         <span className="text-red-600 dark:text-red-400 flex-1 text-[10px]">Akan dikosongkan</span>
-        <button type="button" onClick={onClear} className="text-red-400 hover:text-red-600 ml-1" title="Batalkan kosongkan">
-          <X className="w-3 h-3" />
+        <button type="button" onClick={onClear} className="self-stretch min-h-11 shrink-0 px-2 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30" title="Batalkan kosongkan">
+          Batalkan
         </button>
       </div>
     );
   }
   return (
-    <div className="flex gap-0.5">
-      <Input className="h-7 text-xs flex-1" value={value || ""} onChange={onChange} {...props} />
-      <button type="button" onClick={onClear} className="h-7 w-7 flex items-center justify-center rounded-md border border-border hover:bg-red-50 dark:hover:bg-red-900/30 hover:border-red-300 dark:hover:border-red-700 text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0" title="Kosongkan field ini" data-testid="clear-field-btn">
-        <Eraser className="w-3 h-3" />
+    <div className="flex min-w-0 rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring/70">
+      <Input className="h-11 text-base sm:text-sm min-w-0 flex-1 border-0 shadow-none focus-visible:ring-0" value={value || ""} onChange={onChange} {...props} />
+      <button type="button" onClick={onClear} className="h-11 w-11 flex items-center justify-center rounded-r-md border-l border-border hover:bg-red-50 dark:hover:bg-red-900/30 text-muted-foreground hover:text-red-600 transition-colors shrink-0" title="Kosongkan field ini pada semua aset terpilih" aria-label="Kosongkan field ini pada semua aset terpilih" data-testid="clear-field-btn">
+        <Eraser className="w-4 h-4" />
       </button>
     </div>
   );
@@ -130,7 +130,7 @@ function ClearableSelect({ value, onValueChange, children, placeholder, ...props
   const isClear = value === "__clear__";
   return (
     <Select value={value || "__none__"} onValueChange={onValueChange} {...props}>
-      <SelectTrigger className={`h-7 text-xs ${isClear ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400' : ''}`}>
+      <SelectTrigger className={`h-11 min-w-0 text-sm bg-background ${isClear ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400' : ''}`}>
         <SelectValue placeholder={placeholder || "—"} />
       </SelectTrigger>
       <SelectContent>
@@ -149,16 +149,16 @@ function ClearableSelect({ value, onValueChange, children, placeholder, ...props
 // `right` = elemen aksi opsional (mis. tombol Hapus Semua) di kanan judul.
 function Section({ icon: Icon, title, right, children, first = false }) {
   return (
-    <div className={first ? "" : "mt-2 pt-2 border-t border-blue-200 dark:border-blue-800"}>
-      <div className="flex items-center gap-1 mb-1">
-        <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-blue-700/80 dark:text-blue-300/80">
-          {Icon && <Icon className="w-3 h-3" />}
+    <section className={`rounded-xl border border-border bg-card p-3 sm:p-4 ${first ? "" : "mt-3"}`}>
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          {Icon && <Icon className="w-4 h-4 shrink-0 text-teal-700 dark:text-teal-400" />}
           {title}
-        </div>
+        </h3>
         {right && <div className="ml-auto">{right}</div>}
       </div>
       {children}
-    </div>
+    </section>
   );
 }
 
@@ -498,12 +498,10 @@ const BatchEditPanel = memo(function BatchEditPanel({
   const hasUpdates = setCount > 0 || clearCount > 0;
 
   return (
-    // `attached`: panel menyambung mulus di bawah toolbar seleksi (satu kartu) —
-    // atas rata + tanpa garis atas ganda. Header ringkas (judul & tombol tutup
-    // sudah ada di toolbar), sisakan hanya pengalih "Tampilkan Semua Field".
-    <div className={`bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-3 print:hidden ${attached ? "rounded-b-lg border-t-0 pt-2" : "rounded-lg"}`} data-testid="batch-edit-panel">
+    // Panel menyambung ke toolbar seleksi; aksi panel dan seleksi terpisah.
+    <div className={`batch-edit-panel bg-muted/40 border border-blue-200 dark:border-blue-800 p-3 sm:p-4 print:hidden ${attached ? "rounded-b-lg border-t-0" : "rounded-lg"}`} data-testid="batch-edit-panel">
       {confirmDialog}
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
         {!attached && (
           <div className="flex items-center gap-2">
             <CheckSquare className="w-4 h-4 text-blue-600" />
@@ -512,17 +510,18 @@ const BatchEditPanel = memo(function BatchEditPanel({
             </span>
           </div>
         )}
-        <div className="flex items-center gap-1 ml-auto">
-          <button onClick={() => setShowMore(!showMore)} className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline px-2 py-0.5" data-testid="batch-toggle-more">
-            {showMore ? "Tampilkan Sedikit" : "Tampilkan Semua Field"}
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => setShowMore(!showMore)} aria-expanded={showMore} aria-controls="batch-additional-fields" className="flex items-center gap-2 min-h-11 rounded-md border border-input bg-card px-3 text-xs font-medium text-foreground hover:bg-accent" data-testid="batch-toggle-more">
+            {showMore ? <ChevronUp className="w-4 h-4" /> : <Plus className="w-4 h-4" />}{showMore ? "Sembunyikan kolom tambahan" : "Kolom tambahan"}
           </button>
-          {!attached && <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onClose}><X className="w-3.5 h-3.5" /></Button>}
+          {!attached && <Button type="button" variant="outline" className="h-11 text-xs" onClick={onClose}><ChevronUp className="w-4 h-4" />Sembunyikan panel</Button>}
         </div>
       </div>
+      <p className="text-xs leading-relaxed text-muted-foreground mb-3">Isi hanya kolom yang ingin diubah pada {selectedCount} aset. Kolom kosong atau “Tidak diubah” mempertahankan data lama. Tombol penghapus menandai data untuk dikosongkan saat diterapkan.</p>
 
       {/* ── Klasifikasi & Lokasi (selalu tampil) ── */}
       <Section icon={Tag} title="Klasifikasi & Lokasi" first>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+        <div className="batch-field-grid grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
           {/* Kategori - with search */}
           <div className="space-y-0.5">
             <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Tag className="w-2.5 h-2.5" />Kategori</label>
@@ -541,7 +540,7 @@ const BatchEditPanel = memo(function BatchEditPanel({
               aset yang dipindahkan ke cabang lebih dangkal, dan terbaca
               sebagai unit yang tak pernah ada di sana. */}
           {unitPilihan.length > 0 ? (
-            <div className="space-y-0.5 col-span-2">
+            <div className="space-y-0.5 sm:col-span-2 xl:col-span-3">
               <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Building2 className="w-2.5 h-2.5" />Unit Organisasi</label>
               {/* Pemilih yang SAMA dengan form aset. Sebelumnya `<select>`
                   bawaan dengan jorokan spasi — yang tak terlihat pada pemilih
@@ -598,7 +597,7 @@ const BatchEditPanel = memo(function BatchEditPanel({
 
       {/* ── Kondisi & Status (selalu tampil) ── */}
       <Section icon={ClipboardList} title="Kondisi & Status">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+        <div className="batch-field-grid grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
           {/* Kondisi */}
           <div className="space-y-0.5">
             <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Wrench className="w-2.5 h-2.5" />Kondisi</label>
@@ -656,11 +655,12 @@ const BatchEditPanel = memo(function BatchEditPanel({
       </Section>
 
       {/* Extended Fields */}
+      <div id="batch-additional-fields" hidden={!showMore}>
       {showMore && (
         <>
           {/* ── Administrasi Perolehan ── */}
           <Section icon={Receipt} title="Administrasi Perolehan">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+          <div className="batch-field-grid grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
             <div className="space-y-0.5">
               <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Receipt className="w-2.5 h-2.5" />Nomor SPM</label>
               <ClearableInput placeholder="—" value={updates.nomor_spm === "__clear__" ? "" : updates.nomor_spm} isClear={updates.nomor_spm === "__clear__"} onChange={e => setField("nomor_spm", e.target.value)} onClear={() => toggleClearField("nomor_spm")} />
@@ -712,8 +712,8 @@ const BatchEditPanel = memo(function BatchEditPanel({
 
           {/* ── Identitas & Catatan ── */}
           <Section icon={Package} title="Identitas & Catatan">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-            <div className="space-y-0.5">
+          <div className="batch-field-grid grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+            <div className="space-y-0.5 sm:col-span-2 xl:col-span-3">
               <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Package className="w-2.5 h-2.5" />Nama Aset</label>
               <ClearableInput placeholder="—" value={updates.asset_name === "__clear__" ? "" : updates.asset_name} isClear={updates.asset_name === "__clear__"} onChange={e => setField("asset_name", e.target.value)} onClear={() => toggleClearField("asset_name")} />
             </div>
@@ -727,7 +727,7 @@ const BatchEditPanel = memo(function BatchEditPanel({
             </div>
 
             {/* Catatan */}
-            <div className="space-y-0.5">
+            <div className="space-y-0.5 sm:col-span-2 xl:col-span-3">
               <label className="text-[10px] text-muted-foreground flex items-center gap-1"><StickyNote className="w-2.5 h-2.5" />Catatan</label>
               <ClearableInput placeholder="—" value={updates.notes === "__clear__" ? "" : updates.notes} isClear={updates.notes === "__clear__"} onChange={e => setField("notes", e.target.value)} onClear={() => toggleClearField("notes")} />
             </div>
@@ -736,15 +736,15 @@ const BatchEditPanel = memo(function BatchEditPanel({
 
           {/* ── Pengguna / Penanggung Jawab — struktur sama seperti form edit ── */}
           <Section icon={UserRound} title="Pengguna / Penanggung Jawab">
-            <div className="p-2 rounded-md border border-blue-200 dark:border-blue-800 bg-background/50">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+              <div className="batch-field-grid grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {/* Melekat ke */}
-                <div className="space-y-0.5">
+                <div className="space-y-0.5 sm:col-span-2">
                   <label className="text-[10px] text-muted-foreground">Melekat ke</label>
                   <div className="grid grid-cols-3 gap-1">
                     {PENGGUNA_MELEKAT_OPTIONS.map(o => (
                       <button key={o} type="button" onClick={() => setPenggunaMelekat(o)}
-                        className={`h-7 rounded-md border text-[10px] font-semibold leading-tight px-1 transition-colors ${updates.pengguna_melekat_ke === o ? 'bg-teal-700 border-teal-700 text-white' : 'bg-background border-border text-foreground/80 hover:bg-accent'}`}>
+                        aria-pressed={updates.pengguna_melekat_ke === o} className={`min-h-11 rounded-md border text-xs font-medium leading-tight px-2 transition-colors ${updates.pengguna_melekat_ke === o ? 'bg-teal-700 border-teal-700 text-white' : 'bg-background border-border text-foreground/80 hover:bg-accent'}`}>
                         {o}
                       </button>
                     ))}
@@ -775,7 +775,7 @@ const BatchEditPanel = memo(function BatchEditPanel({
                     <div className="grid grid-cols-2 gap-1">
                       {OPERASIONAL_JENIS_OPTIONS.map(o => (
                         <button key={o} type="button" onClick={() => setOperasionalJenis(o)}
-                          className={`h-7 rounded-md border text-[9px] font-semibold leading-tight px-1 transition-colors ${updates.operasional_jenis === o ? 'bg-teal-700 border-teal-700 text-white' : 'bg-background border-border text-foreground/80 hover:bg-muted'}`}>
+                          aria-pressed={updates.operasional_jenis === o} className={`min-h-11 rounded-md border text-xs font-medium leading-tight px-2 transition-colors ${updates.operasional_jenis === o ? 'bg-teal-700 border-teal-700 text-white' : 'bg-background border-border text-foreground/80 hover:bg-muted'}`}>
                           {o}
                         </button>
                       ))}
@@ -793,7 +793,7 @@ const BatchEditPanel = memo(function BatchEditPanel({
 
           {/* ── Koordinat GPS ── */}
           <Section icon={Navigation} title="Koordinat GPS">
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <div className="batch-field-grid grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
               <div className="space-y-0.5">
                 <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Navigation className="w-2.5 h-2.5" />Latitude</label>
                 <ClearableInput placeholder="—" value={updates.koordinat_latitude === "__clear__" ? "" : updates.koordinat_latitude} isClear={updates.koordinat_latitude === "__clear__"} onChange={e => setField("koordinat_latitude", e.target.value)} onClear={() => toggleClearField("koordinat_latitude")} />
@@ -802,13 +802,13 @@ const BatchEditPanel = memo(function BatchEditPanel({
                 <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Navigation className="w-2.5 h-2.5" />Longitude</label>
                 <ClearableInput placeholder="—" value={updates.koordinat_longitude === "__clear__" ? "" : updates.koordinat_longitude} isClear={updates.koordinat_longitude === "__clear__"} onChange={e => setField("koordinat_longitude", e.target.value)} onClear={() => toggleClearField("koordinat_longitude")} />
               </div>
-              <div className="space-y-0.5 col-span-2 sm:col-span-1">
+              <div className="space-y-0.5">
                 <label className="text-[10px] text-muted-foreground">Ambil Otomatis</label>
                 <button
                   type="button"
                   onClick={fetchGPS}
                   disabled={gpsLoading}
-                  className="w-full h-7 px-2 flex items-center justify-center gap-1 text-[11px] font-medium bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-md border border-emerald-300 dark:border-emerald-700 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-colors"
+                  className="w-full h-11 px-2 flex items-center justify-center gap-1 text-[11px] font-medium bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-md border border-emerald-300 dark:border-emerald-700 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-colors"
                   data-testid="batch-gps-btn"
                   title="Ambil lokasi GPS saat ini"
                 >
@@ -820,25 +820,24 @@ const BatchEditPanel = memo(function BatchEditPanel({
           </Section>
 
           {/* ── Foto ── */}
-          <div className="mt-2 pt-2 border-t border-blue-200 dark:border-blue-800">
-            <div className="flex items-center gap-1 mb-1 text-[10px] font-semibold uppercase tracking-wide text-blue-700/80 dark:text-blue-300/80"><Camera className="w-3 h-3" />Foto</div>
+          <Section icon={Camera} title="Foto aset">
             {clearPhotos ? (
               <div className="flex items-center gap-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-md">
                 <Trash2 className="w-4 h-4 text-red-500 flex-shrink-0" />
                 <span className="text-xs text-red-600 dark:text-red-400 flex-1">Semua foto akan dihapus dari {selectedCount} aset</span>
-                <button onClick={() => setClearPhotos(false)} className="text-red-400 hover:text-red-600"><X className="w-4 h-4" /></button>
+                <button type="button" onClick={() => setClearPhotos(false)} className="min-h-11 px-2 text-xs text-red-600 dark:text-red-400">Batalkan</button>
               </div>
             ) : (
               <div className="space-y-1.5">
                 {(updates.batch_photos || []).length > 0 && (
                   <>
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                       {(updates.batch_photos || []).map((p, i) => (
-                        <div key={i} className="relative w-12 h-12 flex-shrink-0">
-                          <img src={p} alt={`Foto ${i + 1}`} className="w-12 h-12 object-cover rounded border" />
+                        <div key={i} className="min-w-0 rounded-lg overflow-hidden border bg-card">
+                          <img src={p} alt={`Foto ${i + 1}`} className="w-full aspect-square object-cover" />
                           <button onClick={() => removePhoto(i)} title="Hapus foto ini" aria-label={`Hapus foto ${i + 1}`}
-                            className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center shadow ring-1 ring-white dark:ring-slate-900">
-                            <X className="w-2.5 h-2.5" />
+                            type="button" className="min-h-11 w-full flex items-center justify-center gap-1 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
+                            <Trash2 className="w-3.5 h-3.5" />Hapus
                           </button>
                         </div>
                       ))}
@@ -847,13 +846,13 @@ const BatchEditPanel = memo(function BatchEditPanel({
                   </>
                 )}
                 {(updates.batch_photos || []).length < MAX_BATCH_PHOTOS && (
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     {/* Dua opsi sumber: KAMERA (jepret langsung) & GALERI (multi-pilih). */}
-                    <label className="flex-1 flex items-center justify-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 bg-blue-100/50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-md p-2 cursor-pointer border border-dashed border-blue-300 dark:border-blue-700" data-testid="batch-photo-camera">
+                    <label className="min-h-11 flex-1 flex items-center justify-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 bg-blue-100/50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-md p-2 cursor-pointer border border-dashed border-blue-300 dark:border-blue-700" data-testid="batch-photo-camera">
                       <Camera className="w-4 h-4" />Kamera
                       <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoUpload} />
                     </label>
-                    <label className="flex-1 flex items-center justify-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 bg-blue-100/50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-md p-2 cursor-pointer border border-dashed border-blue-300 dark:border-blue-700" data-testid="batch-photo-upload">
+                    <label className="min-h-11 flex-1 flex items-center justify-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 bg-blue-100/50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-md p-2 cursor-pointer border border-dashed border-blue-300 dark:border-blue-700" data-testid="batch-photo-upload">
                       <Images className="w-4 h-4" />Galeri
                       <input ref={photoInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload} />
                     </label>
@@ -864,28 +863,28 @@ const BatchEditPanel = memo(function BatchEditPanel({
                       title="Hapus semua foto dari aset terpilih"
                       aria-label="Hapus semua foto"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-3.5 h-3.5 mr-1" /><span className="text-xs">Hapus semua</span>
                     </button>
                   </div>
                 )}
               </div>
             )}
-          </div>
+          </Section>
 
           {/* ── Kelengkapan Dokumen & Peralatan ── */}
-          <div className="mt-2 pt-2 border-t border-blue-200 dark:border-blue-800">
-            <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-blue-700/80 dark:text-blue-300/80">
-                <FileCheck className="w-3 h-3" />Kelengkapan Dokumen & Peralatan
-                {activeDocCount > 0 && <span className="text-[9px] bg-blue-200 dark:bg-blue-800/50 text-blue-700 dark:text-blue-300 px-1 rounded-full ml-1 normal-case">{activeDocCount} aktif</span>}
-              </div>
+          <section className="mt-3 rounded-xl border border-border bg-card p-3 sm:p-4">
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <h3 className="flex flex-wrap items-center gap-2 text-sm font-semibold text-foreground">
+                <FileCheck className="w-4 h-4 shrink-0 text-teal-700 dark:text-teal-400" />Kelengkapan Dokumen & Peralatan
+                {activeDocCount > 0 && <span className="text-[11px] bg-blue-200 dark:bg-blue-800/50 text-blue-700 dark:text-blue-300 px-1 rounded-full ml-1 normal-case">{activeDocCount} aktif</span>}
+              </h3>
               {!clearDocChecklist && (
                 <button
                   onClick={() => setClearDocChecklist(true)}
-                  className="flex items-center gap-1 text-[10px] text-red-500 hover:text-red-700 hover:underline"
+                  type="button" className="flex items-center gap-1.5 min-h-11 rounded-md px-2 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
                   data-testid="batch-clear-docs-btn"
                 >
-                  <Trash2 className="w-3 h-3" />Hapus Semua Dokumen
+                  <Trash2 className="w-4 h-4" />Hapus semua dokumen
                 </button>
               )}
             </div>
@@ -894,35 +893,35 @@ const BatchEditPanel = memo(function BatchEditPanel({
               <div className="flex items-center gap-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-md">
                 <Trash2 className="w-4 h-4 text-red-500 flex-shrink-0" />
                 <span className="text-xs text-red-600 dark:text-red-400 flex-1">Semua dokumen kelengkapan akan dihapus dari {selectedCount} aset</span>
-                <button onClick={() => setClearDocChecklist(false)} className="text-red-400 hover:text-red-600"><X className="w-4 h-4" /></button>
+                <button type="button" onClick={() => setClearDocChecklist(false)} className="min-h-11 px-2 text-xs text-red-600 dark:text-red-400">Batalkan</button>
               </div>
             ) : (
               <>
-                <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
+                <div className="space-y-2">
                   {docItems.map((item, idx) => (
                     <div key={idx}
                       className={`rounded-md border transition-all ${item._active ? 'border-blue-400 dark:border-teal-700 bg-blue-50 dark:bg-blue-900/30' : 'border-border bg-card hover:bg-muted/50'}`}
                       data-testid={`batch-doc-item-${idx}`}
                     >
                       {/* Toggle row */}
-                      <div className="flex items-center gap-2 p-1.5 cursor-pointer" onClick={() => toggleDocItem(idx)}>
+                      <button type="button" aria-pressed={item._active} aria-label={`Ubah kelengkapan ${item.name}`} className="flex w-full min-h-11 items-center gap-2 p-2 text-left" onClick={() => toggleDocItem(idx)}>
                         <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${item._active ? 'bg-blue-500 border-blue-500 text-white' : 'border-border'}`}>
                           {item._active && <Check className="w-2.5 h-2.5" />}
                         </div>
-                        <span className={`text-[11px] flex-1 ${item._active ? 'text-blue-800 dark:text-blue-300 font-medium' : 'text-muted-foreground'}`}>{item.name}</span>
+                        <span className={`text-sm flex-1 min-w-0 break-words ${item._active ? 'text-blue-800 dark:text-blue-300 font-medium' : 'text-muted-foreground'}`}>{item.name}</span>
                         {item._active && ((item.photos?.length || 0) + (item.documents?.length || 0) > 0) && (
-                          <span className="text-[9px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 px-1 rounded">{(item.photos?.length || 0) + (item.documents?.length || 0)} file</span>
+                          <span className="text-[11px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 px-1 rounded">{(item.photos?.length || 0) + (item.documents?.length || 0)} file</span>
                         )}
-                      </div>
+                      </button>
 
                       {/* Upload area when active */}
                       {item._active && (
                         <div className="px-2 pb-2 space-y-1.5">
-                          <label className="flex items-center justify-center gap-1 text-[10px] text-blue-600 dark:text-blue-400 bg-blue-100/50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded px-2 py-1 cursor-pointer border border-dashed border-blue-300 dark:border-blue-700">
-                            <FileUp className="w-3 h-3" />Upload Foto/PDF untuk semua aset
-                            <input type="file" accept="image/*,.pdf" multiple className="hidden" onChange={e => handleDocFileUpload(idx, e)} />
+                          <label className="flex min-h-11 items-center justify-center gap-2 text-xs text-blue-700 dark:text-blue-400 bg-blue-100/50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-md px-2 py-2 cursor-pointer border border-dashed border-blue-300 dark:border-blue-700">
+                            <FileUp className="w-4 h-4 shrink-0" />Tambah foto / PDF untuk semua aset
+                            <input type="file" aria-label={`Tambah foto atau PDF massal ${item.name}`} accept="image/*,.pdf" multiple className="sr-only" onChange={e => handleDocFileUpload(idx, e)} />
                           </label>
-                          <div className="text-[9px] text-muted-foreground">Maks 3 foto + 1 PDF per item</div>
+                          <div className="text-[11px] text-muted-foreground">Maks 3 foto + 1 PDF per item</div>
 
                           {/* Uploaded files preview */}
                           {((item.photos?.length || 0) + (item.documents?.length || 0) > 0) && (
@@ -930,15 +929,15 @@ const BatchEditPanel = memo(function BatchEditPanel({
                               {(item.photos || []).map((photo, pi) => (
                                 <div key={`p${pi}`} className="flex items-center gap-1.5 bg-card rounded p-1 border border-border">
                                   <img src={photo} alt="" className="w-8 h-8 object-cover rounded" />
-                                  <span className="text-[9px] text-muted-foreground flex-1">Foto {pi + 1}</span>
-                                  <button type="button" onClick={() => removeDocFile(idx, 'photo', pi)} className="text-red-400 hover:text-red-600"><X className="w-3 h-3" /></button>
+                                  <span className="text-xs text-muted-foreground flex-1">Foto {pi + 1}</span>
+                                  <button type="button" aria-label={`Hapus foto ${pi + 1} ${item.name}`} onClick={() => removeDocFile(idx, 'photo', pi)} className="flex items-center gap-1 min-h-11 px-2 text-xs text-red-600 dark:text-red-400"><Trash2 className="w-3.5 h-3.5" />Hapus</button>
                                 </div>
                               ))}
                               {(item.documents || []).map((doc, di) => (
                                 <div key={`d${di}`} className="flex items-center gap-1.5 bg-red-50 dark:bg-red-900/20 rounded p-1 border border-red-200 dark:border-red-700">
                                   <FileText className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0" />
-                                  <span className="text-[9px] text-red-700 dark:text-red-400 flex-1 truncate">{doc.name}</span>
-                                  <button type="button" onClick={() => removeDocFile(idx, 'doc', di)} className="text-red-400 hover:text-red-600"><X className="w-3 h-3" /></button>
+                                  <span className="text-xs text-foreground min-w-0 flex-1 break-words [overflow-wrap:anywhere]">{doc.name}</span>
+                                  <button type="button" aria-label={`Hapus PDF ${doc.name}`} onClick={() => removeDocFile(idx, 'doc', di)} className="flex shrink-0 items-center gap-1 min-h-11 px-2 text-xs text-red-600 dark:text-red-400"><Trash2 className="w-3.5 h-3.5" />Hapus</button>
                                 </div>
                               ))}
                             </div>
@@ -950,34 +949,42 @@ const BatchEditPanel = memo(function BatchEditPanel({
                 </div>
                 {/* Tambah dokumen kelengkapan BARU (nama kustom) → langsung
                     aktif & diterapkan massal ke semua aset terpilih. */}
-                <div className="flex gap-1 mt-1.5">
+                <div className="flex gap-2 mt-3">
                   <Input
                     placeholder="Tambah dokumen baru…"
                     value={customDoc}
                     onChange={e => setCustomDoc(e.target.value)}
                     onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustomDoc(); } }}
-                    className="h-7 text-xs flex-1"
+                    className="h-11 text-sm min-w-0 flex-1"
                     data-testid="batch-doc-custom-input"
                   />
                   <button
                     type="button"
                     onClick={addCustomDoc}
                     disabled={!customDoc.trim()}
-                    className="h-7 px-2 rounded-md border border-blue-300 dark:border-blue-700 bg-blue-100/50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[11px] font-semibold flex items-center gap-1 flex-shrink-0 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                    className="h-11 px-3 rounded-md border border-blue-300 dark:border-blue-700 bg-blue-100/50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[11px] font-semibold flex items-center gap-1 flex-shrink-0 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors disabled:opacity-40 disabled:pointer-events-none"
                     data-testid="batch-doc-custom-add"
                   >
                     <Plus className="w-3 h-3" />Tambah
                   </button>
                 </div>
-                <p className="text-[9px] text-muted-foreground mt-1">Klik item untuk mengaktifkan (atau tambahkan dokumen baru), lalu upload foto/PDF yang akan diterapkan ke semua aset terpilih</p>
+                <p className="text-xs leading-relaxed text-muted-foreground mt-2">Aktifkan item atau tambah item baru. Foto dan PDF yang diunggah akan diterapkan ke semua aset terpilih.</p>
               </>
             )}
-          </div>
+          </section>
         </>
       )}
+      </div>
 
       {/* Action Buttons */}
-      <div className="flex items-center gap-2 mt-3">
+      <div className="mt-4 border-t border-border pt-3 space-y-2">
+        <p className="text-xs text-muted-foreground" role="status">
+          {setCount > 0 && <span className="text-blue-700 dark:text-blue-400">{setCount} kolom/item diubah</span>}
+          {setCount > 0 && clearCount > 0 && <span className="mx-1">·</span>}
+          {clearCount > 0 && <span className="text-red-600 dark:text-red-400">{clearCount} dikosongkan</span>}
+          {setCount === 0 && clearCount === 0 && "Belum ada perubahan"}
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
         {/* Ditahan juga selama AKUISISI GPS berjalan (temuan audit G3): selama
             jendela itu updates.koordinat_* berisi nilai SEMENTARA dari onUpdate
             yang belum lolos gerbang ±8 m. Menerapkan saat itu menulis titik
@@ -986,17 +993,13 @@ const BatchEditPanel = memo(function BatchEditPanel({
             keliru: sudah terlanjur tersimpan. */}
         <Button onClick={handleApply} disabled={!hasUpdates || updating || gpsLoading || markerBusy}
           title={gpsLoading ? "Menunggu GPS mengunci — koordinat sementara belum lolos gerbang akurasi ±8 m" : undefined}
-          className="bg-teal-700 hover:bg-teal-800 text-white h-8 text-xs" data-testid="batch-apply-btn">
+          className="bg-teal-700 hover:bg-teal-800 text-white h-11 text-xs flex-1 sm:flex-none" data-testid="batch-apply-btn">
           {updating ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <CheckSquare className="w-3 h-3 mr-1" />}
           {gpsLoading ? "Menunggu GPS…" : `Terapkan ke ${selectedCount} aset`}
         </Button>
-        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onClose}>Batal</Button>
-        <span className="text-[10px] text-muted-foreground ml-auto">
-          {setCount > 0 && <span className="text-blue-600 dark:text-blue-400">{setCount} diubah</span>}
-          {setCount > 0 && clearCount > 0 && <span className="mx-1">·</span>}
-          {clearCount > 0 && <span className="text-red-500">{clearCount} dikosongkan</span>}
-          {setCount === 0 && clearCount === 0 && "Pilih field untuk diubah"}
-        </span>
+        <Button type="button" variant="outline" className="h-11 text-xs" onClick={onClose}><ChevronUp className="w-4 h-4" />Sembunyikan</Button>
+        </div>
+        <p className="text-[11px] text-muted-foreground">Sembunyikan panel tetap mempertahankan seleksi. Gunakan “Hapus seleksi” untuk mengakhiri pilihan aset.</p>
       </div>
     </div>
   );

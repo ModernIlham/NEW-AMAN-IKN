@@ -1,5 +1,5 @@
 import React, { memo, useState } from "react";
-import { Check, X, Plus, FileUp, FileText, ClipboardList } from "lucide-react";
+import { Check, X, Plus, FileUp, FileText, ClipboardList, Trash2 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -197,72 +197,67 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId, assetVersion = 1
   const totalFiles = checklist.reduce((sum, item) => sum + (item.photos?.length || 0) + (item.documents?.length || 0), 0);
   
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <Label className="flex items-center gap-1.5"><ClipboardList className="w-4 h-4 text-blue-600" />Kelengkapan Dokumen & Peralatan</Label>
-        <div className="flex gap-1">
-          <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{checkedCount}/{checklist.length}</span>
-          {totalFiles > 0 && <span className="text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded-full">{totalFiles} file</span>}
+    <div className="space-y-3 min-w-0" data-testid="document-checklist">
+      <div className="space-y-2">
+        <Label className="flex items-start gap-2 text-sm leading-snug"><ClipboardList className="w-4 h-4 shrink-0 text-blue-600 mt-0.5" />Kelengkapan Dokumen & Peralatan</Label>
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className="text-muted-foreground bg-muted px-2 py-1 rounded-md whitespace-nowrap">{checkedCount} dari {checklist.length} lengkap</span>
+          {totalFiles > 0 && <span className="text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-1 rounded-md whitespace-nowrap">{totalFiles} file</span>}
         </div>
       </div>
-      <div className="bg-muted rounded-lg p-2 space-y-1.5 max-h-[400px] overflow-y-auto">
+      <div className="space-y-2">
         {checklist.map((item, idx) => {
           const hasFiles = (item.photos?.length || 0) + (item.documents?.length || 0) > 0;
           return (
             <div key={idx} className={`rounded-lg transition-colors ${item.checked ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700' : 'bg-card border border-border'}`}>
-              <div className="flex items-center gap-2 p-2">
-                <button type="button" onClick={() => toggleItem(idx)}
-                  className={`w-5 h-5 rounded border flex items-center justify-center flex-shrink-0 ${item.checked ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-border hover:border-blue-400'}`}>
-                  {item.checked && <Check className="w-3 h-3" />}
+              <div className="flex items-center gap-1 px-2 py-1">
+                <button type="button" onClick={() => toggleItem(idx)} aria-pressed={item.checked}
+                  aria-label={`Kelengkapan ${item.name}`} className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <span className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 ${item.checked ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-input bg-background'}`}>
+                    {item.checked && <Check className="w-3.5 h-3.5" />}
+                  </span>
+                  <span className={`text-sm min-w-0 break-words ${item.checked ? 'text-emerald-700 dark:text-emerald-400 font-medium' : 'text-foreground'}`}>{item.name}</span>
                 </button>
-                <span className={`text-sm flex-1 ${item.checked ? 'text-emerald-700 dark:text-emerald-400 font-medium' : 'text-foreground'}`}>{item.name}</span>
-                {hasFiles && <span className="text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/40 px-1.5 py-0.5 rounded">{(item.photos?.length || 0) + (item.documents?.length || 0)} file</span>}
+                {hasFiles && <span className="text-[11px] shrink-0 whitespace-nowrap text-muted-foreground">{(item.photos?.length || 0) + (item.documents?.length || 0)} file</span>}
                 {!DEFAULT_DOC_ITEMS.includes(item.name) && (
-                  <button type="button" onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600"><X className="w-3.5 h-3.5" /></button>
+                  <button type="button" onClick={() => removeItem(idx)} aria-label={`Hapus item ${item.name}`} title={`Hapus item ${item.name}`} className="w-11 h-11 shrink-0 rounded-md flex items-center justify-center text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"><Trash2 className="w-4 h-4" /></button>
                 )}
               </div>
-              {item.checked && (
-                <div className="px-2 pb-2 space-y-2">
-                  <div className="flex gap-1.5">
+              {(item.checked || hasFiles) && (
+                <div className="px-3 pb-3 space-y-3">
+                  {item.checked ? <div className="space-y-1.5">
                     <label className="flex-1">
-                      <input type="file" accept="image/*,.pdf" multiple className="hidden" onChange={e => handleFileUpload(idx, e)} />
-                      <div className="flex items-center justify-center gap-1 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded px-2 py-1.5 cursor-pointer transition-colors border border-blue-200 dark:border-blue-700 border-dashed">
-                        <FileUp className="w-3.5 h-3.5" />Upload Foto/Dokumen
+                      <input type="file" accept="image/*,.pdf" multiple className="sr-only peer" aria-label={`Tambah foto atau PDF ${item.name}`} onChange={e => handleFileUpload(idx, e)} />
+                      <div className="flex min-h-11 items-center justify-center gap-2 text-xs text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-md px-2 py-2 cursor-pointer transition-colors border border-blue-200 dark:border-blue-700 border-dashed peer-focus-visible:ring-2 peer-focus-visible:ring-ring">
+                        <FileUp className="w-4 h-4 shrink-0" />Tambah foto / PDF
                       </div>
                     </label>
-                  </div>
-                  <div className="text-[10px] text-muted-foreground">Maks 3 foto + 1 PDF per item</div>
+                    <p className="text-[11px] leading-snug text-muted-foreground">Maks. 3 foto dan 1 PDF per item.</p>
+                  </div> : <p className="text-[11px] text-muted-foreground">File tetap tersimpan. Centang item untuk menambah file.</p>}
                   
                   {/* File preview section - IMPROVED */}
                   {hasFiles && (
-                    <div className="bg-card rounded-lg p-2 border border-border space-y-2">
-                      <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">File Terupload:</div>
+                    <div className="space-y-3">
                       
                       {/* Photos */}
                       {(item.photos?.length || 0) > 0 && (
                         <div className="space-y-1">
-                          <div className="text-[10px] text-muted-foreground">Foto ({item.photos.length}/3):</div>
-                          <div className="flex gap-2 flex-wrap">
+                          <div className="text-xs text-muted-foreground">Foto ({item.photos.length}/3)</div>
+                          <div className="grid grid-cols-3 gap-2">
                             {item.photos.map((photo, pi) => {
                               const src = photoSrcFor(item, photo, pi);
                               const previewSrc = isExistingPhoto(photo) && assetId
                                 ? authMediaUrl(`${API}/assets/${assetId}/checklist/${idx}/photos/${existingPhotoIdx(photo)}?v=${assetVersion}`)
                                 : src;
                               return (
-                                <div key={pi} className="relative group">
-                                  <img
-                                    src={src}
-                                    alt={`${item.name} foto ${pi+1}`}
-                                    className="w-14 h-14 sm:w-16 sm:h-16 object-cover rounded-lg border-2 border-border cursor-pointer hover:border-blue-400 transition-colors"
-                                    onClick={() => setPreviewImg(previewSrc)}
-                                  />
-                                  <button type="button" onClick={() => removeFile(idx, 'photo', pi)}
-                                    className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-red-500 text-white rounded-full flex items-center justify-center shadow-md hover:bg-red-600 transition-colors">
-                                    <X className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                                <div key={pi} className="min-w-0 rounded-lg border border-border bg-card overflow-hidden">
+                                  <button type="button" aria-label={`Lihat foto ${pi + 1} ${item.name}`} className="block w-full aspect-square focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring" onClick={() => setPreviewImg(previewSrc)}>
+                                    <img src={src} alt={`${item.name} foto ${pi+1}`} className="w-full h-full aspect-square object-cover" />
                                   </button>
-                                  <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[8px] text-center py-0.5 rounded-b-lg">
-                                    Foto {pi+1}
-                                  </div>
+                                  <button type="button" onClick={() => removeFile(idx, 'photo', pi)}
+                                    aria-label={`Hapus foto ${pi + 1} ${item.name}`} className="flex w-full min-h-11 items-center justify-center gap-1 text-[11px] text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
+                                    <Trash2 className="w-3.5 h-3.5 shrink-0" />Hapus
+                                  </button>
                                 </div>
                               );
                             })}
@@ -273,22 +268,26 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId, assetVersion = 1
                       {/* Documents */}
                       {(item.documents?.length || 0) > 0 && (
                         <div className="space-y-1">
-                          <div className="text-[10px] text-muted-foreground">Dokumen PDF:</div>
+                          <div className="text-xs text-muted-foreground">Dokumen PDF</div>
                           {item.documents.map((doc, di) => (
-                            <div key={di} className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 rounded-lg px-2 py-1.5 border border-red-200 dark:border-red-700">
-                              <FileText className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0" />
-                              <span className="text-xs text-red-700 dark:text-red-400 flex-1 min-w-0 truncate max-w-[120px] sm:max-w-[180px]" title={doc.name}>{doc.name}</span>
+                            <div key={di} className="rounded-lg bg-card border border-border p-2">
+                              <div className="flex items-start gap-2">
+                                <FileText className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                                <span className="text-xs leading-relaxed min-w-0 break-words [overflow-wrap:anywhere]" title={doc.name}>{doc.name}</span>
+                              </div>
+                              <div className="flex items-center gap-2 mt-1">
                               <button
                                 type="button"
                                 onClick={() => openPdf(doc, idx, di)}
-                                className="text-[10px] text-blue-600 hover:text-blue-800 underline"
+                                aria-label={`Lihat PDF ${doc.name}`} className="min-h-11 flex-1 rounded-md text-xs text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                                 data-testid={`checklist-doc-view-${idx}-${di}`}
                               >
-                                Lihat
+                                Lihat PDF
                               </button>
-                              <button type="button" onClick={() => removeFile(idx, 'doc', di)} className="text-red-400 hover:text-red-600">
-                                <X className="w-4 h-4" />
+                              <button type="button" aria-label={`Hapus PDF ${doc.name}`} onClick={() => removeFile(idx, 'doc', di)} className="min-h-11 flex-1 rounded-md flex items-center justify-center gap-1.5 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
+                                <Trash2 className="w-3.5 h-3.5" />Hapus
                               </button>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -301,10 +300,10 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId, assetVersion = 1
           );
         })}
       </div>
-      <div className="flex gap-1.5">
-        <Input placeholder="Tambah item lain..." value={customItem} onChange={e => setCustomItem(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addCustom())} className="h-8 text-sm" />
-        <Button type="button" variant="outline" size="sm" onClick={addCustom} className="h-8 px-2"><Plus className="w-3.5 h-3.5" /></Button>
+      <div className="flex gap-2 items-stretch">
+        <Input aria-label="Nama item kelengkapan baru" placeholder="Tambah item lain…" value={customItem} onChange={e => setCustomItem(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addCustom())} className="h-11 min-w-0 flex-1 text-sm" />
+        <Button type="button" variant="outline" onClick={addCustom} disabled={!customItem.trim()} className="h-11 shrink-0 px-3 text-xs" aria-label="Tambah item kelengkapan"><Plus className="w-4 h-4" />Tambah</Button>
       </div>
       
       {/* Image Preview Modal */}
@@ -313,8 +312,8 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId, assetVersion = 1
           <div className="relative max-w-3xl max-h-[90vh]">
             <img src={previewImg} alt="Preview" className="max-w-full max-h-[85vh] object-contain rounded-lg" />
             <button 
-              onClick={() => setPreviewImg(null)}
-              className="absolute -top-3 -right-3 w-8 h-8 bg-card text-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-muted"
+              type="button" aria-label="Tutup pratinjau foto" onClick={() => setPreviewImg(null)}
+              className="absolute top-2 right-2 w-11 h-11 bg-card text-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-muted"
             >
               <X className="w-5 h-5" />
             </button>
