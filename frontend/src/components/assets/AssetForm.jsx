@@ -3194,7 +3194,7 @@ const AssetForm = memo(({
                     </span>
                   )}
                 </Button>
-                {isEditing && <Button type="button" variant="outline" onClick={() => { resetForm(); onClose?.(); }} className="border-amber-300 text-amber-700" disabled={isSubmitting}><X className="w-4 h-4" /></Button>}
+                {isEditing && <Button type="button" variant="outline" onClick={() => { resetForm(); onClose?.(); }} className="border-amber-300 text-amber-700" disabled={isSubmitting}><X className="w-4 h-4" />Tutup</Button>}
               </div>
             </div>
           </form>

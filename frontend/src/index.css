@@ -252,6 +252,16 @@ aside .overflow-x-auto::-webkit-scrollbar-thumb, .category-dropdown-scroll::-web
 aside .overflow-x-auto::-webkit-scrollbar-thumb:hover, .category-dropdown-scroll::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.5); }
 
 /* Mobile touch targets */
+.batch-field-grid > div { min-width: 0; }
+.batch-field-grid > div > label {
+  min-height: 1.25rem;
+  margin-bottom: 0.375rem;
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  color: hsl(var(--foreground));
+}
+.batch-field-grid > div > label svg { width: 0.875rem; height: 0.875rem; flex-shrink: 0; }
+
 @media (max-width: 1023px) {
   .fixed.z-40 { backdrop-filter: blur(2px); }
   button, a { min-height: 44px; min-width: 44px; }

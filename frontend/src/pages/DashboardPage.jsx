@@ -48,6 +48,7 @@ import DashboardHeader from "@/components/assets/DashboardHeader";
 import StatsBar from "@/components/assets/StatsBar";
 import InventoryProgressBar from "@/components/assets/InventoryProgressBar";
 import DashboardToolbar from "@/components/assets/DashboardToolbar";
+import SelectionToolbar from "@/components/assets/SelectionToolbar";
 import AssetPagination from "@/components/assets/AssetPagination";
 import ScrollToTop from "@/components/assets/ScrollToTop";
 import ListLoadingSkeleton from "@/components/assets/ListLoadingSkeleton";
@@ -607,6 +608,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   // === BATCH SELECTION ===
   const [selectedAssets, setSelectedAssets] = useState(new Set());
   const [showBatchPanel, setShowBatchPanel] = useState(false);
+  const [batchDraftRevision, setBatchDraftRevision] = useState(0);
   const tutupPanelMassal = useCallback(() => {
     rekamPosisi();
     setShowBatchPanel(false);
@@ -750,6 +752,9 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       // Simpan tetap menyelesaikan ID yang dikonfirmasi, tetapi hasil lama
       // tidak boleh menutup panel atau memindahkan gulir di filter/kegiatan baru.
       if (!penjaga.berlaku(tiketTampilan)) return;
+      // Setelah berhasil, buka panel dengan draf baru agar foto/perubahan
+      // yang sudah diterapkan tidak terkirim lagi saat pengguna membukanya.
+      setBatchDraftRevision(revision => revision + 1);
       tutupPanelMassal();
       // Ref dipasang setelah pemuat data; dibaca ketika batch selesai,
       // memakai konteks yang masih tampil tanpa mengunci closure awal.
@@ -1803,23 +1808,9 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                 {/* Toolbar seleksi — tampil di SEMUA viewport (HP/tablet/desktop):
                     hitungan + pilih-semua/kosongkan + buka-tutup Ubah Massal. */}
                 {perms.canEdit && (
-                  <div className={`flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 px-2.5 py-1 ${showBatchPanel ? "rounded-t-lg border-b-0" : "rounded-lg"}`} data-testid="selection-toolbar">
-                    {/* Hitungan = TEKS (tanpa bingkai). Aksi = TOMBOL (berbingkai/
-                        solid) supaya jelas mana teks, mana tombol. Satu baris,
-                        padat; label aksi menciut jadi ikon di layar sempit. */}
-                    <span className="text-xs text-blue-800 dark:text-blue-300 flex-shrink-0 whitespace-nowrap">
-                      <b className="text-sm font-bold">{selectedAssets.size}</b> terpilih
-                    </span>
-                    <button onClick={toggleSelectAllVisible} title="Pilih/batal semua aset di tampilan ini" className="h-7 px-2 rounded-md border border-blue-300 dark:border-blue-700 bg-white/70 dark:bg-transparent text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-xs font-medium flex items-center gap-1 flex-shrink-0 transition-colors" data-testid="select-all-visible-btn">
-                      <CheckSquare className="w-3.5 h-3.5" /><span className="hidden sm:inline">Pilih semua</span>
-                    </button>
-                    <button onClick={clearSelection} title="Kosongkan seleksi" className="h-7 px-2 rounded-md border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 text-xs font-medium flex items-center gap-1 flex-shrink-0 transition-colors" data-testid="clear-selection-btn">
-                      <X className="w-3.5 h-3.5" /><span className="hidden sm:inline">Kosongkan</span>
-                    </button>
-                    <button onClick={() => showBatchPanel ? tutupPanelMassal() : setShowBatchPanel(true)} className="ml-auto h-7 px-2.5 rounded-md bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold flex items-center gap-1 flex-shrink-0 transition-colors" data-testid="toggle-batch-panel-btn">
-                      <Pen className="w-3.5 h-3.5" />{showBatchPanel ? "Tutup" : "Ubah Massal"}
-                    </button>
-                  </div>
+                  <SelectionToolbar count={selectedAssets.size} expanded={showBatchPanel}
+                    onSelectAll={toggleSelectAllVisible} onClear={clearSelection} disabled={batchUpdating}
+                    onTogglePanel={() => showBatchPanel ? tutupPanelMassal() : setShowBatchPanel(true)} />
                 )}
                 {selectedAssets.size === assets.length && totalItems > assets.length && (
                   <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-1.5 flex items-center justify-between text-xs">
@@ -1827,9 +1818,13 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                     <button onClick={selectAllPages} className="text-blue-600 dark:text-blue-400 hover:underline font-semibold ml-2" data-testid="select-all-pages-btn">Pilih semua {totalItems} aset</button>
                   </div>
                 )}
-                {/* Menutup panel (X/Batal) MENCIUTKAN saja — seleksi dipertahankan. */}
-                {perms.canEdit && showBatchPanel && (
-                  <Suspense fallback={null}><BatchEditPanel attached selectedCount={selectedAssets.size} categories={categories} onApply={handleBatchUpdate} onClose={tutupPanelMassal} updating={batchUpdating} activity={activity} assets={assets} selectedAssets={selectedAssets} /></Suspense>
+                {/* Sembunyikan tanpa unmount agar isian massal tidak hilang. */}
+                {perms.canEdit && (
+                  <div id="asset-batch-panel" hidden={!showBatchPanel}>
+                    <Suspense fallback={null}>
+                      <BatchEditPanel key={batchDraftRevision} attached selectedCount={selectedAssets.size} categories={categories} onApply={handleBatchUpdate} onClose={tutupPanelMassal} updating={batchUpdating} activity={activity} assets={assets} selectedAssets={selectedAssets} />
+                    </Suspense>
+                  </div>
                 )}
               </>)}
 
