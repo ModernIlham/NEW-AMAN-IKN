@@ -197,12 +197,12 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId, assetVersion = 1
   const totalFiles = checklist.reduce((sum, item) => sum + (item.photos?.length || 0) + (item.documents?.length || 0), 0);
   
   return (
-    <div className="space-y-3 min-w-0" data-testid="document-checklist">
+    <div className="space-y-2 min-w-0" data-testid="document-checklist" data-asset-density="compact">
       <div className="space-y-2">
-        <Label className="flex items-start gap-2 text-sm leading-snug"><ClipboardList className="w-4 h-4 shrink-0 text-blue-600 mt-0.5" />Kelengkapan Dokumen & Peralatan</Label>
-        <div className="flex flex-wrap gap-2 text-xs">
-          <span className="text-muted-foreground bg-muted px-2 py-1 rounded-md whitespace-nowrap">{checkedCount} dari {checklist.length} lengkap</span>
-          {totalFiles > 0 && <span className="text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-1 rounded-md whitespace-nowrap">{totalFiles} file</span>}
+        <Label className="flex items-start gap-1.5 text-[13px] leading-snug"><ClipboardList className="w-4 h-4 shrink-0 text-blue-600 mt-0.5" />Kelengkapan Dokumen & Peralatan</Label>
+        <div className="flex flex-wrap gap-1.5 text-xs">
+          <span className="text-muted-foreground bg-muted px-2 py-0.5 rounded-md whitespace-nowrap">{checkedCount} dari {checklist.length} lengkap</span>
+          {totalFiles > 0 && <span className="text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded-md whitespace-nowrap">{totalFiles} file</span>}
         </div>
       </div>
       <div className="space-y-2">
@@ -212,23 +212,23 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId, assetVersion = 1
             <div key={idx} className={`rounded-lg transition-colors ${item.checked ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700' : 'bg-card border border-border'}`}>
               <div className="flex items-center gap-1 px-2 py-1">
                 <button type="button" onClick={() => toggleItem(idx)} aria-pressed={item.checked}
-                  aria-label={`Kelengkapan ${item.name}`} className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                  <span className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 ${item.checked ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-input bg-background'}`}>
+                  aria-label={`Kelengkapan ${item.name}`} className="flex min-h-9 min-w-0 flex-1 items-center gap-1.5 text-left rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${item.checked ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-input bg-background'}`}>
                     {item.checked && <Check className="w-3.5 h-3.5" />}
                   </span>
-                  <span className={`text-sm min-w-0 break-words ${item.checked ? 'text-emerald-700 dark:text-emerald-400 font-medium' : 'text-foreground'}`}>{item.name}</span>
+                  <span className={`text-[13px] min-w-0 break-words ${item.checked ? 'text-emerald-700 dark:text-emerald-400 font-medium' : 'text-foreground'}`}>{item.name}</span>
                 </button>
                 {hasFiles && <span className="text-[11px] shrink-0 whitespace-nowrap text-muted-foreground">{(item.photos?.length || 0) + (item.documents?.length || 0)} file</span>}
                 {!DEFAULT_DOC_ITEMS.includes(item.name) && (
-                  <button type="button" onClick={() => removeItem(idx)} aria-label={`Hapus item ${item.name}`} title={`Hapus item ${item.name}`} className="w-11 h-11 shrink-0 rounded-md flex items-center justify-center text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"><Trash2 className="w-4 h-4" /></button>
+                  <button type="button" onClick={() => removeItem(idx)} aria-label={`Hapus item ${item.name}`} title={`Hapus item ${item.name}`} className="w-9 h-9 shrink-0 rounded-md flex items-center justify-center text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"><Trash2 className="w-4 h-4" /></button>
                 )}
               </div>
               {(item.checked || hasFiles) && (
-                <div className="px-3 pb-3 space-y-3">
+                <div className="px-2.5 pb-2.5 space-y-2">
                   {item.checked ? <div className="space-y-1.5">
                     <label className="flex-1">
                       <input type="file" accept="image/*,.pdf" multiple className="sr-only peer" aria-label={`Tambah foto atau PDF ${item.name}`} onChange={e => handleFileUpload(idx, e)} />
-                      <div className="flex min-h-11 items-center justify-center gap-2 text-xs text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-md px-2 py-2 cursor-pointer transition-colors border border-blue-200 dark:border-blue-700 border-dashed peer-focus-visible:ring-2 peer-focus-visible:ring-ring">
+                      <div className="flex min-h-9 items-center justify-center gap-1.5 text-xs text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-md px-2 py-1.5 cursor-pointer transition-colors border border-blue-200 dark:border-blue-700 border-dashed peer-focus-visible:ring-2 peer-focus-visible:ring-ring">
                         <FileUp className="w-4 h-4 shrink-0" />Tambah foto / PDF
                       </div>
                     </label>
@@ -237,13 +237,13 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId, assetVersion = 1
                   
                   {/* File preview section - IMPROVED */}
                   {hasFiles && (
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                       
                       {/* Photos */}
                       {(item.photos?.length || 0) > 0 && (
                         <div className="space-y-1">
                           <div className="text-xs text-muted-foreground">Foto ({item.photos.length}/3)</div>
-                          <div className="grid grid-cols-3 gap-2">
+                          <div className="grid grid-cols-[repeat(3,minmax(0,64px))] gap-1.5">
                             {item.photos.map((photo, pi) => {
                               const src = photoSrcFor(item, photo, pi);
                               const previewSrc = isExistingPhoto(photo) && assetId
@@ -255,7 +255,7 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId, assetVersion = 1
                                     <img src={src} alt={`${item.name} foto ${pi+1}`} className="w-full h-full aspect-square object-cover" />
                                   </button>
                                   <button type="button" onClick={() => removeFile(idx, 'photo', pi)}
-                                    aria-label={`Hapus foto ${pi + 1} ${item.name}`} className="flex w-full min-h-11 items-center justify-center gap-1 text-[11px] text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
+                                    aria-label={`Hapus foto ${pi + 1} ${item.name}`} className="flex w-full h-8 items-center justify-center gap-1 text-[11px] text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
                                     <Trash2 className="w-3.5 h-3.5 shrink-0" />Hapus
                                   </button>
                                 </div>
@@ -271,20 +271,20 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId, assetVersion = 1
                           <div className="text-xs text-muted-foreground">Dokumen PDF</div>
                           {item.documents.map((doc, di) => (
                             <div key={di} className="rounded-lg bg-card border border-border p-2">
-                              <div className="flex items-start gap-2">
+                              <div className="flex items-start gap-1.5">
                                 <FileText className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
-                                <span className="text-xs leading-relaxed min-w-0 break-words [overflow-wrap:anywhere]" title={doc.name}>{doc.name}</span>
+                                <span className="text-[11px] leading-snug min-w-0 break-words [overflow-wrap:anywhere]" title={doc.name}>{doc.name}</span>
                               </div>
-                              <div className="flex items-center gap-2 mt-1">
+                              <div className="flex items-center gap-1.5 mt-1">
                               <button
                                 type="button"
                                 onClick={() => openPdf(doc, idx, di)}
-                                aria-label={`Lihat PDF ${doc.name}`} className="min-h-11 flex-1 rounded-md text-xs text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                aria-label={`Lihat PDF ${doc.name}`} className="min-h-9 flex-1 rounded-md text-xs text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                                 data-testid={`checklist-doc-view-${idx}-${di}`}
                               >
                                 Lihat PDF
                               </button>
-                              <button type="button" aria-label={`Hapus PDF ${doc.name}`} onClick={() => removeFile(idx, 'doc', di)} className="min-h-11 flex-1 rounded-md flex items-center justify-center gap-1.5 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
+                              <button type="button" aria-label={`Hapus PDF ${doc.name}`} onClick={() => removeFile(idx, 'doc', di)} className="min-h-9 flex-1 rounded-md flex items-center justify-center gap-1.5 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
                                 <Trash2 className="w-3.5 h-3.5" />Hapus
                               </button>
                               </div>
@@ -300,10 +300,10 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId, assetVersion = 1
           );
         })}
       </div>
-      <div className="flex gap-2 items-stretch">
+      <div className="flex gap-1.5 items-stretch">
         <Input aria-label="Nama item kelengkapan baru" placeholder="Tambah item lain…" value={customItem} onChange={e => setCustomItem(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addCustom())} className="h-11 min-w-0 flex-1 text-sm" />
-        <Button type="button" variant="outline" onClick={addCustom} disabled={!customItem.trim()} className="h-11 shrink-0 px-3 text-xs" aria-label="Tambah item kelengkapan"><Plus className="w-4 h-4" />Tambah</Button>
+          onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addCustom())} className="h-9 min-w-0 flex-1 text-[13px]" />
+        <Button type="button" variant="outline" onClick={addCustom} disabled={!customItem.trim()} className="h-9 shrink-0 px-3 text-xs" aria-label="Tambah item kelengkapan"><Plus className="w-4 h-4" />Tambah</Button>
       </div>
       
       {/* Image Preview Modal */}
@@ -313,7 +313,7 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId, assetVersion = 1
             <img src={previewImg} alt="Preview" className="max-w-full max-h-[85vh] object-contain rounded-lg" />
             <button 
               type="button" aria-label="Tutup pratinjau foto" onClick={() => setPreviewImg(null)}
-              className="absolute top-2 right-2 w-11 h-11 bg-card text-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-muted"
+              className="absolute top-2 right-2 w-9 h-9 bg-card text-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-muted"
             >
               <X className="w-5 h-5" />
             </button>
