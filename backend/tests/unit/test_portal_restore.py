@@ -1,5 +1,6 @@
 """Restore portal mempertahankan riwayat, bukan akses maupun lease worker lama."""
 import asyncio
+import bcrypt
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import json
@@ -16,8 +17,14 @@ import routes.backup as rb
 import shared_utils
 
 
+_TEST_ADMIN = {"id": "operator-id", "username": "operator", "name": "Local test operator",
+               "role": "admin", "kode_satker": "", "is_active": True,
+               "created_at": "2026-10-15T00:00:00+00:00",
+               "password": bcrypt.hashpw(b"Local-Only-Test123!", bcrypt.gensalt(rounds=4)).decode()}
+
+
 def arsip(tmp_path, **collections):
-    docs = {"users": [], "categories": [], "assets": [],
+    docs = {"users": [dict(_TEST_ADMIN)], "categories": [], "assets": [],
             "inventory_activities": [], **collections}
     path = tmp_path / "unggahan.zip"
     with zipfile.ZipFile(path, "w") as zf:
@@ -59,6 +66,9 @@ def env(monkeypatch, tmp_path):
     async def update_job(job_id, **fields):
         jobs.append(fields)
 
+    async def seed_admin():
+        await database.users.insert_one(dict(_TEST_ADMIN))
+    asyncio.run(seed_admin())
     monkeypatch.setattr(rb, "update_job", update_job)
     revoke = AsyncMock(wraps=pa.cabut_semua_portal_akses)
     monkeypatch.setattr(pa, "cabut_semua_portal_akses", revoke)
@@ -147,9 +157,12 @@ async def test_rollback_juga_membuang_lease_dari_safety_snapshot(env, tmp_path, 
     await database.portal_penugasan.insert_one(penugasan("t-sebelum"))
     path = arsip(tmp_path, portal_pemegang_akses=[akses()], portal_penugasan=[penugasan()])
 
+    fired = False
     async def gagal_di_akhir_koleksi(job_id, **fields):
+        nonlocal fired
         jobs.append(fields)
-        if fields.get("message") == "Restore: users...":
+        if fields.get("message") == "Restore: users..." and not fired:
+            fired = True
             raise RuntimeError("Simulasi kegagalan restore")
 
     monkeypatch.setattr(rb, "update_job", gagal_di_akhir_koleksi)

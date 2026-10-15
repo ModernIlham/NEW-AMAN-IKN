@@ -16,7 +16,7 @@ from bson import ObjectId
 from pymongo.errors import DuplicateKeyError
 from pymongo import ReturnDocument
 from backup_archive import (MANIFEST_NAME, CHUNK_SIZE, digest_entry, iter_json_documents,
-                            read_json, validate_archive, write_manifest)
+                            read_json, validate_archive, write_manifest, usable_central_admin)
 
 from db import db, fs_bucket
 from auth_utils import get_current_user, _KUNCI_EFEMERAL
@@ -695,6 +695,13 @@ async def _apply_archive(zf, job_id):
 
 
 async def _verify_applied(zf, stats):
+    usable_admin = False
+    async for user in db.users.find({"role": "admin"}):
+        if usable_central_admin(user):
+            usable_admin = True
+            break
+    if not usable_admin:
+        raise ValueError("Verifikasi hasil restore: tidak ada admin pusat aktif yang dapat login")
     for col, expected in stats.items():
         # Ticket repair intentionally creates missing/maxes counters.
         actual = await db[col].count_documents({})
@@ -785,7 +792,7 @@ async def recover_restore(job_id, username):
         raise RuntimeError("Nama safety artifact tidak valid")
     safety = BACKUP_TEMP_DIR / safety_name
     with zipfile.ZipFile(safety) as zf:
-        await asyncio.to_thread(validate_archive, zf, False)
+        await asyncio.to_thread(validate_archive, zf, False, True)
     claim = await db.restore_control.update_one(
         {"_id": "GLOBAL", "job_id": job_id, "state": "recovery_required"},
         {"$set": {"state": "rolling_back", "active": True,
@@ -851,7 +858,7 @@ async def run_restore_task(job_id: str, zip_path: Path, username: str):
         with safety_data_zip.open("rb") as safety_file:
             os.fsync(safety_file.fileno())
         with zipfile.ZipFile(safety_data_zip) as sz:
-            await asyncio.to_thread(validate_archive, sz, False)
+            await asyncio.to_thread(validate_archive, sz, False, True)
         # Persist BEFORE destructive IO. A killed process never auto-opens data.
         from dataset_epoch import rotate_generation
         await _restore_state(job_id, "restoring", destructive_started=True)
@@ -872,7 +879,7 @@ async def run_restore_task(job_id: str, zip_path: Path, username: str):
             try:
                 await rotate_generation(db, "restore_rollback")
                 with zipfile.ZipFile(safety_data_zip) as sz:
-                    await asyncio.to_thread(validate_archive, sz, False)
+                    await asyncio.to_thread(validate_archive, sz, False, True)
                     old_stats, _, _ = await _apply_archive(sz, job_id)
                     await _finish_recovered_data(sz, old_stats)
                 await update_job(job_id, status="failed", error=str(error), recovery_required=False,

@@ -48,7 +48,10 @@ async def child(args):
     from bson import ObjectId
     fid = ObjectId("0123456789abcdef01234567")
     if args.child == "seed":
-        await db.users.insert_one({"id": "operator-id", "username": "drill-operator", "role": "admin", "is_active": True})
+        from auth_utils import hash_password
+        await db.users.insert_one({"id": "operator-id", "username": "drill-operator", "role": "admin", "is_active": True,
+            "name": "Isolated recovery operator", "created_at": "2026-10-15T00:00:00+00:00",
+            "password": hash_password(os.environ["AMAN_BACKUP_DRILL_PASSWORD"])})
         await db.categories.insert_one({"id": "category-id", "name": "Synthetic"})
         await db.inventory_activities.insert_one({"id": "activity-id", "ticket_number": "INV-2026-0041"})
         await db.counters.insert_one({"_id": "inventory_activity_ticket_2026", "seq": 41})
@@ -98,7 +101,16 @@ async def child(args):
         assert not (await db.portal_pemegang_akses.find_one({"id": "pegawai-id"}))["aktif"]
         assert await db.portal_pemegang_sesi.count_documents({}) == 0
         assert (await get_current_user("Bearer " + create_token("operator-id", "drill-operator")))["id"] == "operator-id"
-        print(json.dumps({"crash_after_wipe": True, "maintenance_survived_restart": True,
+        from routes.auth import login
+        from models import UserLogin
+        from starlette.requests import Request
+        handler = login
+        while hasattr(handler, "__wrapped__"):
+            handler = handler.__wrapped__
+        login_result = await handler(Request({"type": "http", "method": "POST", "path": "/api/auth/login", "headers": []}),
+            UserLogin(username="drill-operator", password=os.environ["AMAN_BACKUP_DRILL_PASSWORD"]))
+        assert login_result.user.id == "operator-id"
+        print(json.dumps({"actual_restored_password_login": True, "crash_after_wipe": True, "maintenance_survived_restart": True,
                           "recovery_verified": True, "real_gridfs_sha256": True,
                           "uploads_restored": True, "ticket_counter_valid": True,
                           "portal_revoked": True, "restored_user_auth_valid": True}))
@@ -116,6 +128,7 @@ def main():
     database = "aman_ci_backup_" + uuid.uuid4().hex
     environment = dict(os.environ)
     environment["AMAN_BACKUP_DRILL_JWT"] = uuid.uuid4().hex + uuid.uuid4().hex
+    environment["AMAN_BACKUP_DRILL_PASSWORD"] = uuid.uuid4().hex + "Aa1!"
     with tempfile.TemporaryDirectory(prefix="aman-backup-drill-") as directory:
         base = [sys.executable, str(Path(__file__).resolve()), "--workspace", directory,
                 "--database", database, "--child"]

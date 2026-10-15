@@ -4,6 +4,7 @@ import io
 import json
 import re
 import stat
+from datetime import datetime, timezone
 from pathlib import PurePosixPath
 
 from bson import BSON
@@ -18,6 +19,36 @@ MAX_ARCHIVE_BYTES = 100 * 1024 ** 3
 MAX_ENTRIES = 500_000
 _ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 _COL = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]{0,119}$")
+_BCRYPT = re.compile(r"^\$2[aby]\$(?:0[4-9]|[12][0-9]|3[01])\$[./A-Za-z0-9]{21}[.Oeu][./A-Za-z0-9]{30}[.CGKOSWaeimquy26]$")
+
+
+def usable_central_admin(document):
+    """Mirror persisted login/central-admin policy without knowing a password.
+
+    Bcrypt shape is validated without executing an attacker-controlled cost.
+    Act-as fields never grant authority; login subsequently strips those fields.
+    """
+    if (document.get("role") != "admin" or str(document.get("kode_satker") or "").strip()
+            or document.get("is_active", True) is not True):
+        return False
+    for field in ("id", "username"):
+        value = document.get(field)
+        if not isinstance(value, str) or not value.strip() or value != value.strip():
+            return False
+    if not isinstance(document.get("name"), str) or not isinstance(document.get("created_at"), str):
+        return False
+    locked_until = document.get("login_terkunci_hingga")
+    if locked_until:
+        try:
+            locked = datetime.fromisoformat(str(locked_until))
+            if locked.tzinfo is None:
+                locked = locked.replace(tzinfo=timezone.utc)
+            if locked > datetime.now(timezone.utc):
+                return False
+        except (ValueError, OverflowError):
+            pass  # Login itself ignores malformed lock timestamps.
+    return isinstance(document.get("password"), str) and bool(_BCRYPT.fullmatch(document["password"]))
+
 
 
 def iter_json_documents(binary, max_document_chars=MAX_DOCUMENT_CHARS):
@@ -154,12 +185,13 @@ def _references(collection, document):
         yield from _media_path(document, path.split("."))
 
 
-def validate_archive(zf, required=True):
+def validate_archive(zf, required=True, require_admin=None):
     """Preflight EVERY entry, CRC, digest, collection and referenced media.
 
     Legacy archives lack checksums; CRC, JSON, IDs, blob sizes and relationships
     still validate. Never extract paths from an unvalidated archive.
     """
+    require_admin = required if require_admin is None else require_admin
     infos = zf.infolist()
     names = [i.filename for i in infos]
     if len(names) > MAX_ENTRIES or len(set(names)) != len(names):
@@ -220,6 +252,7 @@ def validate_archive(zf, required=True):
         if entry.get("length") is not None and int(entry["length"]) != zf.getinfo(name).file_size:
             raise ValueError(f"Ukuran blob GridFS tidak cocok: {fid}")
     stats = {}
+    has_usable_admin = False
     for col, canonical_name in zip(cols, canonical):
         count = 0
         with zf.open(f"{col}.json") as fp:
@@ -230,10 +263,14 @@ def validate_archive(zf, required=True):
                 except (OverflowError, TypeError) as error:
                     raise ValueError("Dokumen tidak dapat disimpan sebagai BSON") from error
                 count += 1
+                if canonical_name == "users" and usable_central_admin(doc):
+                    has_usable_admin = True
                 for reference in _references(canonical_name, doc):
                     if reference not in blob_ids:
                         raise ValueError(f"Referensi GridFS tanpa blob: {canonical_name}/{reference}")
         stats[canonical_name] = count
+    if require_admin and not has_usable_admin:
+        raise ValueError("Backup harus memiliki admin pusat aktif dengan identitas dan hash password login yang valid")
     digests = {name: digest_entry(zf, name) for name in names
                if not name.endswith("/") and name != MANIFEST_NAME}
     for entry in gridfs:

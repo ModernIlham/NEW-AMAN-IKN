@@ -6,12 +6,19 @@ import zipfile
 from datetime import datetime, timedelta, timezone
 
 import pytest
+import bcrypt
 from bson import ObjectId
 from mongomock_motor import AsyncMongoMockClient
 
 import routes.backup as rb
 import pemeliharaan as pm
 from backup_archive import iter_json_documents, validate_archive, write_manifest
+
+
+_TEST_ADMIN = {"id": "operator-id", "username": "operator", "name": "Local test operator",
+               "role": "admin", "kode_satker": "", "is_active": True,
+               "created_at": "2026-10-15T00:00:00+00:00",
+               "password": bcrypt.hashpw(b"Local-Only-Test123!", bcrypt.gensalt(rounds=4)).decode()}
 
 
 def run(coro):
@@ -81,7 +88,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(pm, "_CACHE_TTL", 0.0)
     async def seed():
         await database.assets.insert_one({"id": "original", "asset_name": "Before"})
-        await database.users.insert_one({"username": "operator"})
+        await database.users.insert_one(dict(_TEST_ADMIN))
         await database.categories.insert_one({"id": "category-original"})
         await database.inventory_activities.insert_one({"id": "activity-original"})
         await database.backup_jobs.insert_one({"job_id": "test-job", "type": "restore",
@@ -93,7 +100,7 @@ def env(tmp_path, monkeypatch):
 def make_archive(path, missing=False, legacy=False, media=True):
     fid = "0123456789abcdef01234567"
     docs = {"assets": [{"id": "restored", "photo_gridfs_ids": [fid] if media else []}],
-            "users": [{"username": "new-operator"}], "categories": [],
+            "users": [{**_TEST_ADMIN, "id": "new-operator-id", "username": "new-operator"}], "categories": [],
             "inventory_activities": []}
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
         for name, rows in docs.items():
@@ -536,3 +543,65 @@ def test_backup_excludes_download_job_metadata_but_keeps_gridfs_bytes(env):
     with zipfile.ZipFile(rb.BACKUP_TEMP_DIR / "test-job.zip") as zf:
         assert "unduhan.json" not in zf.namelist()
         assert zf.read(f"gridfs/{fid}.bin") == b"download artifact bytes"
+
+
+def replace_users_archive(path, users):
+    rebuilt = path.with_name("rebuilt-" + path.name)
+    with zipfile.ZipFile(path) as source, zipfile.ZipFile(rebuilt, "w") as target:
+        for name in source.namelist():
+            target.writestr(name, json.dumps(users).encode() if name == "users.json" else source.read(name))
+    return rebuilt
+
+
+@pytest.mark.parametrize("users", [
+    [], [{"username": "admin"}],
+    [{**_TEST_ADMIN, "is_active": False}],
+    [{**_TEST_ADMIN, "role": "operator", "_super_admin_asli": True}],
+    [{**_TEST_ADMIN, "kode_satker": "111111", "_super_admin_asli": True}],
+    [{**_TEST_ADMIN, "password": "not-a-bcrypt-hash"}],
+    [{**_TEST_ADMIN, "id": ""}],
+    [{**_TEST_ADMIN, "username": " cannot-login-with-whitespace "}],
+    [{key: value for key, value in _TEST_ADMIN.items() if key != "password"}],
+    [{key: value for key, value in _TEST_ADMIN.items() if key != "name"}],
+    [{key: value for key, value in _TEST_ADMIN.items() if key != "created_at"}],
+    [{**_TEST_ADMIN, "login_terkunci_hingga": "2100-01-01T00:00:00+00:00"}],
+])
+def test_restore_without_usable_persisted_central_admin_is_rejected_before_wipe(env, users):
+    database, _ = env
+    source = make_archive(rb.BACKUP_TEMP_DIR / "restore_test-job.zip", legacy=True, media=False)
+    source = replace_users_archive(source, users)
+    run(rb.run_restore_task("test-job", source, "operator"))
+    assert run(database.assets.find_one({"id": "original"}))
+    assert run(database.users.find_one({"username": "operator"}))["password"] == _TEST_ADMIN["password"]
+    assert not run(rb.restore_control_status())
+    job = run(database.backup_jobs.find_one({"job_id": "test-job"}))
+    assert job["status"] == "failed" and "admin pusat aktif" in job["error"]
+
+
+def test_safety_without_usable_admin_aborts_before_first_wipe(env):
+    database, _ = env
+    run(database.users.update_many({}, {"$set": {"is_active": False}}))
+    source = make_archive(rb.BACKUP_TEMP_DIR / "restore_test-job.zip", media=False)
+    run(rb.run_restore_task("test-job", source, "operator"))
+    assert run(database.assets.find_one({"id": "original"}))
+    assert run(rb.restore_control_status())["state"] == "aborted"
+    assert not run(rb.restore_control_status())["destructive_started"]
+
+
+def test_applied_auth_invariant_failure_rolls_back_before_opening_or_deleting_safety(env, monkeypatch):
+    database, _ = env
+    original = rb._apply_archive
+    fired = False
+    async def lose_admin(zf, job_id):
+        nonlocal fired
+        result = await original(zf, job_id)
+        if not fired:
+            fired = True
+            await database.users.update_many({}, {"$set": {"is_active": False}})
+        return result
+    monkeypatch.setattr(rb, "_apply_archive", lose_admin)
+    source = make_archive(rb.BACKUP_TEMP_DIR / "restore_test-job.zip", media=False)
+    run(rb.run_restore_task("test-job", source, "operator"))
+    assert run(rb.restore_control_status())["state"] == "rolled_back"
+    assert run(database.users.find_one({"username": "operator"}))["is_active"] is True
+    assert run(database.backup_jobs.find_one({"job_id": "test-job"}))["status"] == "failed"

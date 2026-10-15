@@ -100,3 +100,20 @@ Pengaturan membaca `/backup/restore/recovery`; kontrol restore menjelaskan bahwa
 layanan ditahan bila rollback belum terverifikasi. Dialog tidak menjanjikan
 pengembalian otomatis selalu berhasil. Tes BackgroundTaskBar membuktikan job
 failed+recovery_required tidak dapat didismiss melalui UI.
+
+## Pencegahan kehilangan akses admin
+
+Preflight restore penuh mensyaratkan setidaknya satu admin pusat aktif dengan
+`id`/`username` persisten, hash bcrypt berformat sah, serta field `name` dan
+`created_at` yang dipakai respons login. Role/satker persisten menjadi otoritas;
+flag act-as tidak dapat menciptakan super-admin. Admin tidak boleh terkunci
+hingga waktu masa depan. Pemeriksaan hash hanya bentuk/encoding, tanpa
+menjalankan cost bcrypt dari arsip dan tanpa meminta atau membuat password.
+
+Safety snapshot memeriksa invariant autentikasi yang sama sebelum wipe, secara
+terpisah dari keberadaan koleksi kosong opsional. Hasil impor/rollback diperiksa
+kembali sebelum gate dibuka dan safety dihapus. Pengujian menolak arsip kosong,
+semua admin nonaktif, admin satker, identitas/password/field login tidak lengkap,
+serta otoritas efemeral palsu; kehilangan admin sesudah insert memicu rollback.
+Drill terisolasi memakai password acak khusus proses uji dan benar-benar
+memanggil handler login sesudah pemulihan, bukan hanya membuat JWT secara manual.
