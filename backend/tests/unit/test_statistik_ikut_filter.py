@@ -33,7 +33,7 @@ USER = {"username": "operator", "role": "admin", "name": "Operator",
 
 # Parameter yang memang hanya milik DAFTAR (bentuk halaman & urutan) — tak ada
 # artinya bagi angka agregat.
-KHUSUS_DAFTAR = {"sort_by", "page", "page_size"}
+KHUSUS_DAFTAR = {"sort_by", "page", "page_size", "pagination", "cursor"}
 
 
 def _unwrap(fn):

@@ -6,6 +6,7 @@ import { Label } from "../ui/label";
 import { toast } from "sonner";
 import { compressImageFile } from "../../lib/imageCompression";
 import { compressPdfFile } from "../../lib/pdfCompression";
+import { indeksItemMedia } from "../../lib/mediaChecklist";
 import { authMediaUrl } from "../../lib/mediaUrl";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -46,7 +47,7 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId, assetVersion = 1
     const n = parseInt(String(d?.data || "").split(":", 2)[1], 10);
     return Number.isFinite(n) ? n : -1;
   };
-  const photoSrcFor = (item, photo, photoIdx) => {
+  const photoSrcFor = (item, photo, visualIndex) => {
     if (isExistingPhoto(photo)) {
       // Prefer the inline thumbnail (already loaded with /checklist-full) for
       // fast rendering. Fall back to the streaming endpoint if no thumb.
@@ -55,7 +56,7 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId, assetVersion = 1
       if (origIdx >= 0 && origIdx < thumbs.length && thumbs[origIdx]) {
         return thumbs[origIdx];
       }
-      const itemIdx = checklist.indexOf(item);
+      const itemIdx = indeksItemMedia(item, visualIndex);
       if (assetId && itemIdx >= 0 && origIdx >= 0) {
         return authMediaUrl(`${API}/assets/${assetId}/checklist/${itemIdx}/photos/${origIdx}?v=${assetVersion}`);
       }
@@ -90,6 +91,7 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId, assetVersion = 1
           const { dataUrl, originalBytes, compressedBytes, method, savingsPercent, error } =
             await compressPdfFile(file);
           data = dataUrl;
+          if (compressedBytes > 8 * 1024 * 1024) { toast.error(`${file.name}: PDF setelah kompresi melebihi 8 MB`, { id: tId }); continue; }
           if (error) {
             toast.warning(`${file.name}: kompresi gagal, file asli digunakan`, { id: tId });
           } else if (savingsPercent > 0) {
@@ -129,7 +131,8 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId, assetVersion = 1
     onChange(u);
   };
   
-  const openPdf = (doc, itemIdx, docIdx) => {
+  const openPdf = (doc, item, visualIndex) => {
+    const itemIdx = indeksItemMedia(item, visualIndex);
     try {
       // Existing PDF (loaded from server) — open the streaming endpoint in a
       // new tab. The browser handles auth (cookies/header are not needed since
@@ -232,7 +235,7 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId, assetVersion = 1
                         <FileUp className="w-4 h-4 shrink-0" />Tambah foto / PDF
                       </div>
                     </label>
-                    <p className="text-[11px] leading-snug text-muted-foreground">Maks. 3 foto dan 1 PDF per item.</p>
+                    <p className="text-[11px] leading-snug text-muted-foreground">3 foto + 1 PDF · Foto 5 MB · PDF 8 MB · total lampiran 12 MB.</p>
                   </div> : <p className="text-[11px] text-muted-foreground">File tetap tersimpan. Centang item untuk menambah file.</p>}
                   
                   {/* File preview section - IMPROVED */}
@@ -245,9 +248,9 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId, assetVersion = 1
                           <div className="text-xs text-muted-foreground">Foto ({item.photos.length}/3)</div>
                           <div className="grid grid-cols-[repeat(3,minmax(0,64px))] gap-1.5">
                             {item.photos.map((photo, pi) => {
-                              const src = photoSrcFor(item, photo, pi);
+                              const src = photoSrcFor(item, photo, idx);
                               const previewSrc = isExistingPhoto(photo) && assetId
-                                ? authMediaUrl(`${API}/assets/${assetId}/checklist/${idx}/photos/${existingPhotoIdx(photo)}?v=${assetVersion}`)
+                                ? authMediaUrl(`${API}/assets/${assetId}/checklist/${indeksItemMedia(item, idx)}/photos/${existingPhotoIdx(photo)}?v=${assetVersion}`)
                                 : src;
                               return (
                                 <div key={pi} className="min-w-0 rounded-lg border border-border bg-card overflow-hidden">
@@ -278,7 +281,7 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId, assetVersion = 1
                               <div className="flex items-center gap-1.5 mt-1">
                               <button
                                 type="button"
-                                onClick={() => openPdf(doc, idx, di)}
+                                onClick={() => openPdf(doc, item, idx)}
                                 aria-label={`Lihat PDF ${doc.name}`} className="min-h-9 flex-1 rounded-md text-xs text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                                 data-testid={`checklist-doc-view-${idx}-${di}`}
                               >

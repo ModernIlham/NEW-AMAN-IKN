@@ -1,0 +1,31 @@
+[
+  {
+    "package": "motor",
+    "latest_on_check": "3.7.1",
+    "url": "https://pypi.org/pypi/motor/json",
+    "snippets": [
+      "docs.io/en/stable/?badge=stable)\n\n![image](https://raw.github.com/mongodb/motor/master/doc/_static/motor.png)\n\n> [!WARNING]\n> Motor will be deprecated on May 14th, 2026, one year after the production release of the PyMongo Async driver.\n> Critical bug fixes will be made until May 14th, 2027.\n> We strongly recommend that Motor users migrate to the PyMongo Async driver while Motor is still supported.\n> To learn more, see the migration guide: https://www.mongodb.com/docs/languages/python/pymongo-driver/current/reference/migration/.\n\n## About\n\nMotor is a full-featured, non-blocking [MongoDB](http://mongodb.org/)\ndriver for Python [async",
+      "ble/?badge=stable)\n\n![image](https://raw.github.com/mongodb/motor/master/doc/_static/motor.png)\n\n> [!WARNING]\n> Motor will be deprecated on May 14th, 2026, one year after the production release of the PyMongo Async driver.\n> Critical bug fixes will be made until May 14th, 2027.\n> We strongly recommend that Motor users migrate to the PyMongo Async driver while Motor is still supported.\n> To learn more, see the migration guide: https://www.mongodb.com/docs/languages/python/pymongo-driver/current/reference/migration/.\n\n## About\n\nMotor is a full-featured, non-blocking [MongoDB](http://mongodb.org/)\ndriver for Python [asyncio](https://do"
+    ],
+    "project_urls": {
+      "Documentation": "https://motor.readthedocs.io",
+      "Homepage": "https://www.mongodb.org",
+      "Source": "https://github.com/mongodb/motor",
+      "Tracker": "https://jira.mongodb.org/projects/MOTOR/issues"
+    }
+  },
+  {
+    "package": "pymongo",
+    "latest_on_check": "4.19.0",
+    "url": "https://pypi.org/pypi/pymongo/json",
+    "snippets": [
+      "e\n[BSON format](http://bsonspec.org) for Python. The `pymongo` package is\na native Python driver for MongoDB, offering both synchronous and asynchronous APIs. The `gridfs` package is a\n[gridfs](https://github.com/mongodb/specifications/blob/master/source/gridfs/gridfs-spec.md/)\nimplementation on top of `pymongo`.\n\nPyMongo supports MongoDB 4.4, 5.0, 6.0, 7.0, 8.0, and 9.0. PyMongo follows [semantic versioning](https://semver.org/spec/v2.0.0.html) for its releases.\n\n## Documentation\n\nDocumentation is available at\n[mongodb.com](https://www.mongodb.com/docs/languages/python/pymongo-driver/current/).\n\n[API documentation](https://pymongo."
+    ],
+    "project_urls": {
+      "Documentation": "https://www.mongodb.com/docs/languages/python/pymongo-driver/current/",
+      "Homepage": "https://www.mongodb.org",
+      "Source": "https://github.com/mongodb/mongo-python-driver",
+      "Tracker": "https://jira.mongodb.org/projects/PYTHON/issues"
+    }
+  }
+]

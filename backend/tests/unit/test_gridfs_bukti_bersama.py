@@ -59,8 +59,15 @@ def test_lampiran_yang_tidak_dirujuk_tetap_dibersihkan(env):
 @pytest.mark.parametrize("error", [RuntimeError("DB tidak tersedia"), asyncio.TimeoutError()])
 def test_kegagalan_lookup_tidak_pernah_diterjemahkan_sebagai_tidak_dirujuk(env, monkeypatch, caplog, gagal_pada, error):
     _, bucket, fid = env
-    db = SimpleNamespace(bast_serah_terima=SimpleNamespace(find_one=AsyncMock(return_value=None)),
-                         signature_requests=SimpleNamespace(find_one=AsyncMock(return_value=None)))
+    class ReferenceDatabase(SimpleNamespace):
+        def __getitem__(self, name):
+            assert name == "fs.files"
+            return self.files
+    # The ownership probe finds no managed file; the selected legacy lookup
+    # must then fail closed without deleting bytes or masking the outage.
+    db = ReferenceDatabase(files=SimpleNamespace(update_one=AsyncMock(return_value=SimpleNamespace(matched_count=0))),
+        bast_serah_terima=SimpleNamespace(find_one=AsyncMock(return_value=None)),
+        signature_requests=SimpleNamespace(find_one=AsyncMock(return_value=None)))
     getattr(db, gagal_pada).find_one.side_effect = error
     monkeypatch.setattr(su, "db", db)
     assert run(su.delete_document_from_gridfs(str(fid))) is False

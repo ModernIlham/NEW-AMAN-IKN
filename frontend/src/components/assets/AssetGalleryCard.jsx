@@ -98,10 +98,17 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
       {/* ===== PHOTO AREA (click → lightbox) ===== */}
       <div
         className="relative w-full aspect-[16/10] sm:aspect-[4/3] bg-muted overflow-hidden flex-shrink-0 cursor-pointer"
-        onClick={() => { if (!isLockedByOther && hasPhoto && onOpenLightbox) onOpenLightbox(asset); }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
+        <button
+          type="button"
+          onClick={() => onOpenLightbox?.(asset)}
+          disabled={isLockedByOther || !hasPhoto || !onOpenLightbox}
+          aria-label={`Lihat foto ${asset.asset_code || asset.asset_name || asset.id}`}
+          data-testid={`gallery-photo-${asset.id}`}
+          className="absolute inset-0 w-full h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-default"
+        >
         {hasPhoto ? (
           <img
             src={galleryThumb}
@@ -116,6 +123,7 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
             <span className="text-[10px]">Belum ada foto</span>
           </div>
         )}
+        </button>
 
         {/* Batch select — area seleksi: <label> ber-padding lebar supaya ketuk
             di sekitar kotak = MENYELEKSI, dan onClick stopPropagation menahan
@@ -131,6 +139,7 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
             <input
               type="checkbox"
               checked={!!isSelected}
+              aria-label={`Pilih aset ${asset.asset_code || asset.asset_name || asset.id}`}
               onChange={() => onToggleSelect(asset.id)}
               className="block w-5 h-5 rounded border-2 border-white/80 bg-black/30 cursor-pointer accent-blue-600"
               data-testid={`gallery-select-${asset.id}`}
@@ -180,7 +189,7 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
 
         {/* Top-right badges (garansi ikut di sini — posisi bawah tertutup
             gradasi hitam + badge jumlah foto, di atas selalu terlihat) */}
-        <div className="absolute top-1.5 right-1.5 z-[2] flex items-center gap-1">
+        <div className="absolute top-1.5 right-1.5 z-[2] flex items-center gap-1 pointer-events-none">
           {(() => {
             const g = sisaGaransi(asset.garansi_hingga);
             return g ? (

@@ -58,7 +58,8 @@ def set_job_id(job_id) -> None:
     request_id_ctx.set("job:" + rid)
 # Field terstruktur tambahan yang mungkin ditempel ke record (akses log).
 _EXTRA_FIELDS = ("http_method", "http_path", "http_status", "duration_ms",
-                 "client_ip")
+                 "client_ip", "event", "alert_name", "alert_state", "severity",
+                 "observed_value", "process_id")
 
 
 def _bersih_request_id(raw: str) -> str:

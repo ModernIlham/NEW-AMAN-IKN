@@ -1,13 +1,13 @@
 import axios from "axios";
 import { toast } from "sonner";
-import { getSnapshotAssets, snapshotMeta, isSnapshotExpired } from "../offlineSnapshot";
+import { getSnapshotAssets, getSnapshotPage, snapshotMeta, isSnapshotExpired } from "../offlineSnapshot";
 import { buatPemuatDaftarAset } from "../pemuatDaftarAset";
 import { buatPenjagaPermintaan, HASIL_USANG } from "@/hooks/usePenjagaPermintaan";
 
 jest.mock("axios", () => ({ get: jest.fn() }));
 jest.mock("sonner", () => ({ toast: { error: jest.fn() } }));
 jest.mock("../offlineSnapshot", () => ({
-  getSnapshotAssets: jest.fn(), snapshotMeta: jest.fn(), isSnapshotExpired: jest.fn(),
+  getSnapshotPage: jest.fn(), getSnapshotAssets: jest.fn(), snapshotMeta: jest.fn(), isSnapshotExpired: jest.fn(),
 }));
 
 function tertunda() {
@@ -23,7 +23,7 @@ function layar(tambahan = {}) {
   penjaga.aktifkan("A");
   const state = { Assets: [], MobileAssets: [{ id: "awal" }], MobileLoading: false };
   const k = {
-    activity: { id: "kegiatan-a" }, filters: {}, isOnlineRef: { current: true },
+    activity: { id: "kegiatan-a" }, pagedSnapshot: false, filters: {}, isOnlineRef: { current: true },
     getPendingItems: jest.fn(() => []), serverHasPendingRow: (a, b) => a.id === b.id,
     filterSnapshotRows: jest.fn(rows => rows), sortSnapshotRows: jest.fn(rows => rows),
     buildFilterParams: jest.fn(p => p.append("condition", "Baik")),
@@ -356,4 +356,53 @@ test("massal yang mengeluarkan semua barang dari filter menampilkan hasil kosong
   expect(p.state.TotalItems).toBe(0);
   expect(p.state.MobileCurrentPage).toBe(1);
   expect(toast.error).not.toHaveBeenCalled();
+});
+
+test("read dashboard lama dibatalkan tanpa fallback luring dan tidak menghapus tiket baru", async () => {
+  const a = tertunda(), b = tertunda();
+  axios.get.mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise);
+  const p = layar();
+  const lama = muat(p), signal = axios.get.mock.calls[0][1].signal;
+  const baru = muat(p, 2);
+  expect(signal.aborted).toBe(true);
+  a.reject(Object.assign(new Error("canceled"), { code: "ERR_CANCELED" }));
+  expect(await lama).toBe(HASIL_USANG);
+  expect(getSnapshotAssets).not.toHaveBeenCalled();
+  expect(toast.error).not.toHaveBeenCalled();
+  b.resolve(respons("baru", 2)); await baru;
+  expect(p.state.Assets).toEqual([{ id: "baru" }]);
+});
+
+test("reader halaman baru meneruskan scope dan memakai count/statistik query cache tanpa scan legacy", async () => {
+  getSnapshotPage.mockResolvedValue({ items: [{ id: "cached-page" }], total: 123, totalPages: 62, currentPage: 2,
+    stats: { totalAssets: 123, totalValue: "2.460", activeCount: 100, maintenanceCount: 23 }, meta: { lastSync: "baru" } });
+  const p = layar({ pagedSnapshot: true, ownerId: "u", kodeSatker: "s", isOnlineRef: { current: false } });
+  await muat(p, 2);
+  expect(getSnapshotPage).toHaveBeenCalledWith("kegiatan-a", expect.objectContaining({ ownerId: "u", kodeSatker: "s", page: 2, size: 2, sort: "newest" }));
+  expect(getSnapshotAssets).not.toHaveBeenCalled(); expect(p.k.filterSnapshotRows).not.toHaveBeenCalled();
+  expect(p.state.TotalItems).toBe(123); expect(p.state.Stats.totalAssets).toBe(123);
+});
+test("reader halaman baru yang selesai setelah scope berubah tidak mengubah daftar/statistik", async () => {
+  const pending = tertunda(); getSnapshotPage.mockReturnValue(pending.promise);
+  const p = layar({ pagedSnapshot: true, isOnlineRef: { current: false } }); const request = muat(p);
+  p.k.penjaga.aktifkan("B");
+  pending.resolve({ items: [{ id: "old" }], total: 1, totalPages: 1, currentPage: 1, stats: {}, meta: {} });
+  expect(await request).toBe(HASIL_USANG); expect(p.k.setAssets).not.toHaveBeenCalled(); expect(p.k.setStats).not.toHaveBeenCalled();
+});
+
+test("cache mobile absolut membatasi refresh pada jendela terlihat dengan margin", async () => {
+  const { buatCacheHalamanAset } = require("../cacheHalamanAset");
+  const cache = buatCacheHalamanAset();
+  for (let page = 1; page <= 6; page++) cache.put(page, [{ id: `p${page}`, version: 1 }]);
+  cache.setVisible(["p4"]);
+  const p = layar({ mobilePageCache: cache, mobileFirstPage: 1, mobileCurrentPage: 6, pageSize: 2 });
+  axios.get.mockImplementation(async url => {
+    const page = Number(new URL(url, "http://test").searchParams.get("page"));
+    return { data: { items: [{ id: `p${page}`, version: 2 }], page, total: 400, total_pages: 200 } };
+  });
+  await p.doFetchJendela(1, 2, "meja", [], "newest");
+  const pages = axios.get.mock.calls.map(([u]) => Number(new URL(u, "http://test").searchParams.get("page"))).sort((a,b) => a-b);
+  expect(pages).toEqual([1,3,4,5]);
+  expect(p.state.MobileAssets.map(row => row.id)).toEqual(["p3","p4","p5"]);
+  expect(p.state.MobileFirstPage).toBe(3); expect(p.state.MobileCurrentPage).toBe(5);
 });

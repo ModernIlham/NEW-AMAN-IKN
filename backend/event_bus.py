@@ -7,19 +7,18 @@ This bus uses a MongoDB *capped collection* with a *tailable cursor* — each
 worker publishes events to a shared queue and every worker tails the queue to
 broadcast to its local WS clients. Latency <100ms, no extra infra (Redis).
 
-Falls back gracefully:
- - If the capped collection can't be created, publish still inserts a regular doc
- - Each worker has a unique WORKER_ID to skip its own events (avoid loopback)
+If capped storage is unavailable, bounded periodic invalidation reconciles local
+clients; no uncapped event history is accumulated. Worker IDs skip loopback.
 """
 import os
 import uuid
 import logging
 import asyncio
 import time
+from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Optional, Callable, Awaitable
 import pymongo
-from bson import ObjectId
 from pymongo.errors import CollectionInvalid
 
 logger = logging.getLogger(__name__)
@@ -74,6 +73,14 @@ AMBANG_LAPOR_KURSOR_MATI = 100
 # Module-level state
 _tail_task: Optional[asyncio.Task] = None
 _local_handler: Optional[Callable[[str, dict], Awaitable[None]]] = None
+_publish_gap_pending = False
+_next_gap_retry = 0.0
+_bus_available = True
+RESYNC_INTERVAL_DETIK = 60.0
+HANDLER_TIMEOUT_DETIK = 15.0
+CURSOR_CLOSE_TIMEOUT_DETIK = 5.0
+# At most two capped-ring generations; event IDs are equality tokens only.
+DEDUP_MAX = 2 * CAPPED_MAX_DOCS
 
 
 async def _kecilkan_bila_kebesaran(db, opts: dict) -> None:
@@ -115,7 +122,7 @@ async def _kecilkan_bila_kebesaran(db, opts: dict) -> None:
 
 async def ensure_capped_collection(db) -> bool:
     """Create the capped collection if it doesn't exist. Returns True if capped
-    collection is available (ideal path), False if we must fall back to regular coll."""
+    collection is available, False for periodic reconciliation fallback."""
     try:
         # Check whether collection exists
         names = await db.list_collection_names()
@@ -131,7 +138,7 @@ async def ensure_capped_collection(db) -> bool:
                 logger.info(f"[event_bus] Using existing capped collection '{COLLECTION_NAME}'")
                 return True
             else:
-                logger.warning(f"[event_bus] Collection '{COLLECTION_NAME}' exists but is not capped. Fanout will use polling fallback.")
+                logger.warning(f"[event_bus] Collection '{COLLECTION_NAME}' is not capped; periodic reconciliation required")
                 return False
         # Create it
         await db.create_collection(
@@ -145,120 +152,253 @@ async def ensure_capped_collection(db) -> bool:
     except CollectionInvalid:
         return True  # Race: another worker created it — fine
     except Exception as e:
-        logger.warning(f"[event_bus] Could not ensure capped collection: {e}. Falling back to regular insert.")
+        logger.warning("[event_bus] Could not ensure capped collection (%s); periodic reconciliation required", type(e).__name__)
         return False
 
 
+def _resync_payload(reason):
+    return {"type": "resync_required", "reason": reason,
+            "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+async def _deliver(handler, activity_id, payload):
+    # Python 3.11 wait_for can consume external cancellation if its child
+    # finishes in the same loop turn. Deliver directly in this task so shutdown
+    # cannot leave a cancelling tail alive forever after a completed handler.
+    async with asyncio.timeout(HANDLER_TIMEOUT_DETIK):
+        await handler(activity_id, payload)
+
+
+async def _flush_publish_gap(db):
+    """Recovery marker after a failed publish; no credentials or asset payload."""
+    global _publish_gap_pending, _next_gap_retry
+    if not _publish_gap_pending or not _bus_available or time.monotonic() < _next_gap_retry:
+        return
+    _next_gap_retry = time.monotonic() + 2.0
+    try:
+        await db[COLLECTION_NAME].insert_one({
+            **_resync_payload("publish_failed"), "activity_id": "*",
+            "ts": datetime.now(timezone.utc), "worker_id": WORKER_ID,
+            "_bus_event_id": uuid.uuid4().hex,
+        })
+        _publish_gap_pending = False
+        _next_gap_retry = 0.0
+    except Exception:
+        pass  # retry on the next tail/publish iteration
+
+
 async def publish(db, activity_id: str, event: dict):
-    """Publish an event to the bus. Safe to fail — local broadcast still happens."""
+    """Publish best effort; loss triggers explicit reconciliation, not silence."""
+    global _publish_gap_pending
     try:
-        doc = {
-            **event,
-            "activity_id": activity_id,
-            "ts": datetime.now(timezone.utc),
-            "worker_id": WORKER_ID,
-        }
-        await db[COLLECTION_NAME].insert_one(doc)
+        if not _bus_available:
+            raise RuntimeError("Capped event storage is unavailable")
+        await db[COLLECTION_NAME].insert_one({
+            **event, "activity_id": activity_id,
+            "ts": datetime.now(timezone.utc), "worker_id": WORKER_ID,
+            "_bus_event_id": uuid.uuid4().hex,
+        })
     except Exception as e:
-        # Don't let event bus errors break the request
-        logger.warning(f"[event_bus] publish failed: {e}")
+        _publish_gap_pending = True
+        logger.warning("[event_bus] publish failed (%s); reconciliation required", type(e).__name__)
+        if _local_handler:
+            try:
+                await _deliver(_local_handler, "*", _resync_payload("publish_failed"))
+            except Exception:
+                pass
+        return False
+    await _flush_publish_gap(db)
+    return True
 
 
-async def _id_mulai(db) -> ObjectId:
-    """`_id` dokumen TERBARU saat gelung mulai — titik awal tailing.
+async def _id_mulai(db):
+    """Latest NATURAL insertion token; equality only, never ObjectId ordering."""
+    last = await db[COLLECTION_NAME].find_one(sort=[("$natural", -1)])
+    return last.get("_id") if last else None
 
-    Dipakai menggantikan `ts` sebagai penanda posisi. Alasannya bukan gaya:
-    `ws_events` hanya punya indeks `_id_`, jadi filter `{"ts": {"$gt": ...}}`
-    **memindai seluruh 20.000 dokumen** tiap kali kursor dibuat, sementara
-    `{"_id": {"$gt": ...}}` adalah pencarian indeks. Diagnosa 30 Agustus 2026
-    membaca `_id_` pada koleksi ini dipakai **0 kali** — indeksnya ada dan
-    menganggur, sementara 145 MILIAR dokumen dipindai sia-sia.
 
-    ObjectId monoton menurut waktu, jadi ia penanda posisi yang sah untuk
-    koleksi capped (urutan sisip = urutan alami).
-    """
-    try:
-        terakhir = await db[COLLECTION_NAME].find_one(sort=[("$natural", -1)])
-        if terakhir and terakhir.get("_id") is not None:
-            return terakhir["_id"]
-    except Exception as e:  # noqa: BLE001
-        logger.warning("[event_bus] Gagal membaca posisi awal (%s) — mulai dari waktu sekarang",
-                       type(e).__name__)
-    return ObjectId.from_datetime(datetime.now(timezone.utc))
+def _event_key(doc):
+    value = doc.get("_bus_event_id")
+    if value:
+        return "event:" + str(value)
+    value = doc.get("_id")
+    return type(value).__name__ + ":" + str(value)
+
+
+class RingReplay:
+    """Bounded equality dedup and natural-order continuity across cursor restarts."""
+    def __init__(self, anchor=None):
+        self.seen = OrderedDict()
+        self.last_key = (type(anchor).__name__ + ":" + str(anchor)) if anchor is not None else None
+        self.bootstrap = anchor is not None
+        self.waiting = self.last_key
+        self.cursor_last = None
+
+    def begin_cursor(self):
+        self.waiting = self.last_key
+        self.cursor_last = None
+
+    def _remember(self, key):
+        self.seen[key] = None
+        self.seen.move_to_end(key)
+        while len(self.seen) > DEDUP_MAX:
+            self.seen.popitem(last=False)
+
+    def accept(self, doc):
+        # Continuity anchors always use Mongo _id, including new envelopes that
+        # also carry a UUID event ID for duplicate publication/replay detection.
+        token = type(doc.get("_id")).__name__ + ":" + str(doc.get("_id"))
+        key = _event_key(doc)
+        self.cursor_last = token
+        gap = False
+        if self.waiting is not None:
+            if token == self.waiting:
+                self.waiting = None
+                self.bootstrap = False
+                self._remember(key)
+                return False, False
+            if self.bootstrap:
+                self._remember(key)
+                return False, False
+            if key not in self.seen:
+                # A new insertion precedes our missing anchor in natural order:
+                # rollover/drop occurred. Forward new events and require resync.
+                self.waiting = None
+                gap = True
+        if key in self.seen:
+            return False, gap
+        self._remember(key)
+        self.last_key = token
+        return True, gap
+
+    def end_batch(self):
+        if self.waiting is None:
+            return False
+        # Initial anchor rolled out before the first scan, or an entire missing
+        # cursor position disappeared. The authoritative read must reconcile.
+        self.waiting = None
+        self.bootstrap = False
+        self.last_key = self.cursor_last
+        return True
 
 
 async def _tail_loop(db, handler: Callable[[str, dict], Awaitable[None]]):
-    """Long-running task: tail the capped collection and invoke handler for each event
-    originating from OTHER workers. Robust to cursor timeouts and collection drops."""
-    logger.info(f"[event_bus] Tail loop starting (worker_id={WORKER_ID})")
-    # Mulai dari peristiwa TERBARU — yang lama dilewati.
-    last_id = await _id_mulai(db)
+    """Natural-order capped tail with bounded replay, dedup and explicit gaps.
+
+    Keep an ALIVE cursor across empty batches: a new query every empty batch
+    throws away getMore/awaitData and repeatedly scans the ring. Dead cursors
+    retain the 100ms throttle, including when a restart sees only duplicates.
+    """
+    logger.info("[event_bus] Tail loop starting (worker_id=%s)", WORKER_ID)
+    replay = None
+    reconnect = False
+    last_resync = time.monotonic()
     mati_beruntun = 0
     while True:
+        cursor = None
+        mulai = time.monotonic()
         try:
-            query = {"_id": {"$gt": last_id}, "worker_id": {"$ne": WORKER_ID}}
+            if replay is None:
+                replay = RingReplay(await _id_mulai(db))
+            replay.begin_cursor()
             cursor = db[COLLECTION_NAME].find(
-                query,
-                cursor_type=pymongo.CursorType.TAILABLE_AWAIT,
-                batch_size=20,
-                # `max_await_time_ms` adalah METODE BERANTAI, bukan atribut.
-                # Baris ini dulu berbunyi `cursor.max_await_time_ms = 2000`,
-                # yang diam-diam MENIMPA metodenya dengan sebuah integer —
-                # `maxAwaitTimeMS` tak pernah sampai ke server, dan kursornya
-                # memakai bawaan. Python tak mengeluh saat sebuah metode
-                # ditimpa nilai, jadi cacat ini tak berbunyi sama sekali.
-            ).max_await_time_ms(2000)
-
-            mulai = time.monotonic()
-            kosong = True
-            async for doc in cursor:
-                kosong = False
+                {}, cursor_type=pymongo.CursorType.TAILABLE_AWAIT,
+                batch_size=20).max_await_time_ms(2000)
+            iterator = cursor.__aiter__()
+            while True:
+                await _flush_publish_gap(db)
+                if time.monotonic() - last_resync >= RESYNC_INTERVAL_DETIK:
+                    await _deliver(handler, "*", _resync_payload("periodic_reconcile"))
+                    last_resync = time.monotonic()
+                read_started = time.monotonic()
                 try:
-                    last_id = doc.get("_id", last_id)
-                    activity_id = doc.get("activity_id", "")
-                    if not activity_id:
-                        continue
-                    # Strip bus metadata and forward payload to local handler
-                    payload = {k: v for k, v in doc.items() if k not in {"_id", "activity_id", "ts", "worker_id"}}
-                    await handler(activity_id, payload)
-                except Exception as inner:
-                    logger.warning(f"[event_bus] Handler error: {inner}")
-
-            # Kursor habis. Bila ia habis TANPA memberi apa pun dan lebih cepat
-            # daripada jendela tunggunya, awaitData tidak bekerja — dan tanpa
-            # jeda di sini `while True` akan menerbitkan `find()` berikutnya
-            # seketika, berulang ratusan kali per detik. Lihat JEDA_KURSOR_MATI.
+                    doc = await iterator.__anext__()
+                except StopAsyncIteration:
+                    gap = replay.end_batch()
+                    if reconnect or gap:
+                        await _deliver(handler, "*", _resync_payload("cursor_reconnected" if reconnect else "ring_gap"))
+                        reconnect = False
+                        last_resync = time.monotonic()
+                    if time.monotonic() - last_resync >= RESYNC_INTERVAL_DETIK:
+                        await _deliver(handler, "*", _resync_payload("periodic_reconcile"))
+                        last_resync = time.monotonic()
+                    if not getattr(cursor, "alive", False):
+                        break
+                    # A conforming getMore waits2s. An alive-but-empty cursor
+                    # returning immediately must also respect the idle bound.
+                    idle_delay = JEDA_KURSOR_MATI - (time.monotonic() - read_started)
+                    await asyncio.sleep(max(0, idle_delay))
+                    continue
+                accepted, gap = replay.accept(doc)
+                if reconnect or gap:
+                    await _deliver(handler, "*", _resync_payload("cursor_reconnected" if reconnect else "ring_gap"))
+                    reconnect = False
+                    last_resync = time.monotonic()
+                if not accepted or doc.get("worker_id") == WORKER_ID:
+                    continue
+                activity_id = doc.get("activity_id") or ""
+                if not activity_id:
+                    continue
+                payload = {k: v for k, v in doc.items()
+                           if k not in {"_id", "activity_id", "ts", "worker_id", "_bus_event_id"}}
+                try:
+                    await _deliver(handler, activity_id, payload)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    await _deliver(handler, activity_id, _resync_payload("handler_failed"))
+                if time.monotonic() - last_resync >= RESYNC_INTERVAL_DETIK:
+                    await _deliver(handler, "*", _resync_payload("periodic_reconcile"))
+                    last_resync = time.monotonic()
             sisa = JEDA_KURSOR_MATI - (time.monotonic() - mulai)
-            if kosong and sisa > 0:
+            if sisa > 0:
                 mati_beruntun += 1
                 if mati_beruntun == AMBANG_LAPOR_KURSOR_MATI:
-                    logger.warning(
-                        "[event_bus] Kursor tailable habis seketika %d kali "
-                        "beruntun — awaitData tampaknya tidak bekerja. Laju "
-                        "find() ditahan ke %.0f/detik; fanout WS tetap jalan "
-                        "dengan latensi hingga %.0f ms.",
-                        mati_beruntun, 1 / JEDA_KURSOR_MATI,
-                        JEDA_KURSOR_MATI * 1000)
+                    logger.warning("[event_bus] Kursor mati berulang; awaitData tidak bekerja, find dibatasi %.0f/detik", 1 / JEDA_KURSOR_MATI)
                 await asyncio.sleep(sisa)
             else:
                 mati_beruntun = 0
         except asyncio.CancelledError:
-            logger.info("[event_bus] Tail loop cancelled")
             raise
         except Exception as e:
-            # Cursor can die if collection is dropped or db restarted — reconnect
-            logger.warning(f"[event_bus] Tail cursor error, reconnecting in 2s: {e}")
+            reconnect = True
+            logger.warning("[event_bus] Tail reconnect (%s)", type(e).__name__)
             await asyncio.sleep(2)
+        finally:
+            if cursor is not None and hasattr(cursor, "close"):
+                try:
+                    async with asyncio.timeout(CURSOR_CLOSE_TIMEOUT_DETIK):
+                        await cursor.close()
+                except Exception:
+                    logger.warning("[event_bus] Cursor cleanup failed or exceeded its shutdown deadline")
+
+
+async def _reconcile_loop(handler):
+    """Safe fallback, without an unbounded non-capped event collection."""
+    while True:
+        try:
+            await _deliver(handler, "*", _resync_payload("event_bus_unavailable"))
+        except Exception:
+            logger.warning("[event_bus] Periodic reconciliation failed")
+        await asyncio.sleep(RESYNC_INTERVAL_DETIK)
 
 
 async def start(db, handler: Callable[[str, dict], Awaitable[None]]):
     """Start the bus. Call once on app startup. Handler is invoked for each
     remote event: `await handler(activity_id, payload)`."""
-    global _tail_task, _local_handler
+    global _tail_task, _local_handler, _bus_available
     _local_handler = handler
-    ok = await ensure_capped_collection(db)
+    # Rollback switch retains the safe reconciliation contract; never restore
+    # the invalid global ObjectId-order assumption to disable a new algorithm.
+    mode = os.environ.get("AMAN_EVENT_BUS_MODE", "natural").strip().lower()
+    if mode not in {"natural", "reconcile"}:
+        logger.warning("[event_bus] Unknown transport mode; using reconciliation")
+    ok = await ensure_capped_collection(db) if mode == "natural" else False
+    _bus_available = ok
     if not ok:
-        logger.warning("[event_bus] Capped collection unavailable — tailable cursor disabled, cross-worker fanout will not work")
+        logger.warning("[event_bus] Capped collection unavailable — periodic reconciliation enabled")
+        if _tail_task is None or _tail_task.done():
+            _tail_task = asyncio.create_task(_reconcile_loop(handler))
         return
     if _tail_task is None or _tail_task.done():
         _tail_task = asyncio.create_task(_tail_loop(db, handler))

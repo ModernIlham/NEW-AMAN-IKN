@@ -1,0 +1,88 @@
+{
+  "backend_supervisor_state": "RUNNING",
+  "backup": {
+    "archive_count": 0,
+    "archive_on_separate_device": false,
+    "archive_total_bytes": 0,
+    "latest_archive_age_seconds": null
+  },
+  "capacity_claim": "inventory_only_not_a_load_test",
+  "collected_at": "2026-10-15T13:10:31.268705+00:00",
+  "collection_duration_ms": 953,
+  "configuration_presence": {
+    "dr_key_file_configured": false,
+    "meili_configured": true,
+    "offsite_destination_configured": false,
+    "redis_configured": true
+  },
+  "health": {
+    "gridfs_ms": 0.7,
+    "gridfs_ok": true,
+    "http_status": 200,
+    "index_failures": 0,
+    "indexes_ok": true,
+    "maintenance": false,
+    "mongodb_ms": 0.6,
+    "mongodb_ok": true,
+    "ok": true,
+    "redis_ms": 1.7,
+    "redis_ok": true
+  },
+  "mongo": {
+    "active_background_jobs": 0,
+    "active_downloads": 0,
+    "active_writer_leases": 0,
+    "indexes": 327,
+    "latest_recorded_backup_success_age_seconds": null,
+    "readable": true,
+    "restore_destructive_started": false,
+    "restore_state": "none",
+    "topology": "standalone",
+    "version": "7.0.42",
+    "write_concern_acknowledged": true
+  },
+  "read_only": true,
+  "release": {
+    "backend_git_sha": "c3ac5559178472358aa5d3d03bf5eeb17b2adaa5",
+    "frontend_manifest_sha256": null
+  },
+  "schema_version": 1,
+  "services": {
+    "cron": "active",
+    "meilisearch": "active",
+    "mongod": "active",
+    "nginx": "active",
+    "redis-server": "active",
+    "supervisor": "active"
+  },
+  "software": {
+    "meili_binary": "1.11.3",
+    "mongo_binary": "7.0.42",
+    "nginx": "1.24.0",
+    "node": "22.23.2",
+    "python_backend": "3.11.15",
+    "python_system": "3.12.3",
+    "redis_binary": "7.0.15",
+    "yarn": "1.22.22"
+  },
+  "system": {
+    "architecture": "x86_64",
+    "cpu_count": 2,
+    "disk_free_bytes": 70055067648,
+    "disk_total_bytes": 102888095744,
+    "inode_available": 12651921,
+    "inode_total": 12976128,
+    "load_average": [
+      0.817,
+      0.259,
+      0.142
+    ],
+    "memory_available_bytes": 4198248448,
+    "memory_total_bytes": 8326623232,
+    "observed_backend_fd_count": 10,
+    "process_scan_truncated": false,
+    "swap_free_bytes": 4180144128,
+    "swap_total_bytes": 4294963200,
+    "uvicorn_gunicorn_process_count": 1
+  }
+}

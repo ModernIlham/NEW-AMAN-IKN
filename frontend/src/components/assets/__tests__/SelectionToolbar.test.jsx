@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axios from "axios";
 import SelectionToolbar from "../SelectionToolbar";
@@ -64,7 +64,10 @@ test("kolom tambahan dapat ditampilkan dan disembunyikan tanpa kehilangan isian"
   render(<Editor />);
   await userEvent.click(screen.getByTestId("batch-toggle-more"));
   expect(screen.getByTestId("batch-doc-custom-input")).toBeVisible();
-  await userEvent.type(screen.getByTestId("batch-doc-custom-input"), "Buku servis");
+  // Skenario ini memeriksa retensi kolom, bukan urutan keystroke. Satu
+  // perubahan nyata menghindari 11 render seluruh form tambahan pada CI.
+  fireEvent.change(screen.getByTestId("batch-doc-custom-input"), { target: { value: "Buku servis" } });
+  expect(screen.getByTestId("batch-doc-custom-input")).toHaveValue("Buku servis");
   await userEvent.click(screen.getByTestId("batch-doc-custom-add"));
   expect(screen.getByRole("button", { name: "Ubah kelengkapan Buku servis" })).toHaveAttribute("aria-pressed", "true");
   if (process.env.AMAN_QA_UI_DIR) {

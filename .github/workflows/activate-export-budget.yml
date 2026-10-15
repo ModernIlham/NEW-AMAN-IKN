@@ -1,0 +1,260 @@
+# A manual configuration operation on the already deployed, CI-approved SHA.
+# Activation's public static document proof creates no account or tenant data.
+name: Activate bounded export budget
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Full current main SHA, identical to this workflow revision
+        required: true
+        type: string
+      action:
+        description: Check configuration, activate 1/1 budget, or restore a private journal
+        required: true
+        default: check
+        type: choice
+        options: [check, activate, rollback]
+      journal_id:
+        description: Optional budget-ID; activation defaults to budget-RUN_ID, rollback requires it
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  checks: write
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  budget:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Validate manual main revision and bounded inputs
+        id: validate
+        shell: bash
+        env:
+          EXPECTED_SHA_INPUT: ${{ inputs.release_sha }}
+          OPERATION_INPUT: ${{ inputs.action }}
+          JOURNAL_INPUT: ${{ inputs.journal_id }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" != workflow_dispatch ] || [ "$GITHUB_REF" != refs/heads/main ] \
+              || [[ ! "$EXPECTED_SHA_INPUT" =~ ^[0-9A-Fa-f]{40}$ ]] \
+              || [[ ! "$GITHUB_SHA" =~ ^[0-9A-Fa-f]{40}$ ]]; then
+            echo '::error::A manual main workflow with a full immutable SHA is required.'
+            exit 1
+          fi
+          EXPECTED_SHA="${EXPECTED_SHA_INPUT,,}"
+          if [ "$EXPECTED_SHA" != "${GITHUB_SHA,,}" ]; then
+            echo '::error::Release SHA must equal this exact workflow revision.'
+            exit 1
+          fi
+          case "$OPERATION_INPUT" in check|activate|rollback) ;; *) exit 1;; esac
+          JOURNAL_ID="$JOURNAL_INPUT"
+          if [ "$OPERATION_INPUT" = activate ] && [ -z "$JOURNAL_ID" ]; then
+            [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ ]] || exit 1
+            JOURNAL_ID="budget-$GITHUB_RUN_ID"
+          fi
+          if [ -n "$JOURNAL_ID" ] && [[ ! "$JOURNAL_ID" =~ ^budget-[A-Za-z0-9_-]{1,80}$ ]]; then
+            echo '::error::Journal ID is invalid.'
+            exit 1
+          fi
+          if [ "$OPERATION_INPUT" = rollback ] && [ -z "$JOURNAL_ID" ]; then
+            echo '::error::Rollback requires its existing journal ID.'
+            exit 1
+          fi
+          printf 'sha=%s\noperation=%s\njournal=%s\n' "$EXPECTED_SHA" "$OPERATION_INPUT" "$JOURNAL_ID" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.validate.outputs.sha }}
+          fetch-depth: 0
+
+      - name: Require exact successful CI push on main before SSH
+        id: approval
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ steps.validate.outputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          umask 077
+          CI_RESPONSE="$RUNNER_TEMP/budget-ci.json"
+          trap 'rm -f "$CI_RESPONSE"' EXIT
+          git fetch --no-tags origin main >/dev/null 2>&1
+          [ "$(git rev-parse HEAD)" = "$EXPECTED_SHA" ]
+          git cat-file -e "${EXPECTED_SHA}^{commit}"
+          git merge-base --is-ancestor "$EXPECTED_SHA" origin/main
+          grep -Fx 'AMAN_EXPORT_BUDGET_PROTOCOL=1' scripts/activate_export_budget.py >/dev/null
+          curl --fail --silent --show-error --max-time 30 --max-filesize 1048576 \
+            -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&head_sha=$EXPECTED_SHA&per_page=1" \
+            > "$CI_RESPONSE" 2>/dev/null
+          python3 - "$CI_RESPONSE" "$EXPECTED_SHA" <<'PY'
+          import json,pathlib,sys
+          try:
+              path=pathlib.Path(sys.argv[1])
+              if path.stat().st_size>1024*1024:raise ValueError()
+              value=json.loads(path.read_text())
+              approved=any(run.get("head_sha")==sys.argv[2] and run.get("head_branch")=="main"
+                  and run.get("event")=="push" and run.get("status")=="completed"
+                  and run.get("conclusion")=="success" for run in value.get("workflow_runs",[]))
+              if not approved:raise ValueError()
+          except Exception:
+              raise SystemExit("Exact successful CI push/main approval is required") from None
+          PY
+
+      - name: Run one bounded operation through existing VPS access
+        id: remote
+        if: ${{ steps.approval.outcome == 'success' }}
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ steps.validate.outputs.sha }}
+          OPERATION: ${{ steps.validate.outputs.operation }}
+          JOURNAL_ID: ${{ steps.validate.outputs.journal }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          key_path="$RUNNER_TEMP/budget-ssh.key"
+          known_path="$RUNNER_TEMP/budget-known-hosts"
+          trap 'rm -f "$key_path" "$known_path"' EXIT
+          : > "$RUNNER_TEMP/budget-remote.raw"
+          : > "$RUNNER_TEMP/budget-ssh.stderr"
+          if [ -z "$VPS_HOST" ] || [ -z "$VPS_USER" ] || [ -z "$VPS_SSH_KEY" ]; then
+            echo '::error::Required VPS access secrets are missing.'
+            exit 1
+          fi
+          VPS_PORT="${VPS_PORT:-22}"
+          [[ "$VPS_USER" =~ ^[A-Za-z_][A-Za-z0-9_-]{0,63}$ ]] || exit 1
+          [[ "$VPS_HOST" =~ ^[A-Za-z0-9][A-Za-z0-9.:-]{0,252}$ ]] || exit 1
+          [[ "$VPS_PORT" =~ ^[0-9]{1,5}$ ]] && ((10#$VPS_PORT >= 1 && 10#$VPS_PORT <= 65535)) || exit 1
+          printf '%s\n' "$VPS_SSH_KEY" | tr -d '\r' > "$key_path"
+          if ! ssh-keygen -y -f "$key_path" >/dev/null 2>&1; then
+            printf '%s' "$VPS_SSH_KEY" | tr -d ' \t\r\n' | base64 -d > "$key_path" 2>/dev/null
+          fi
+          chmod 600 "$key_path"
+          ssh-keygen -y -f "$key_path" >/dev/null 2>&1
+          # Exactly one SSH attempt. A lost mutation acknowledgment is not retried.
+          ssh -i "$key_path" -p "$VPS_PORT" -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$known_path" \
+            -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 \
+            -- "$VPS_USER@$VPS_HOST" "bash -s -- '$EXPECTED_SHA' '$OPERATION' '$JOURNAL_ID'" \
+            > "$RUNNER_TEMP/budget-remote.raw" 2> "$RUNNER_TEMP/budget-ssh.stderr" <<'AMAN_REMOTE'
+          set -euo pipefail
+          umask 077
+          EXPECTED_SHA="$1"; OPERATION="$2"; JOURNAL_ID="$3"
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 70
+          case "$OPERATION" in check|activate|rollback) ;; *) exit 70;; esac
+          if [ "$OPERATION" != check ]; then
+            [[ "$JOURNAL_ID" =~ ^budget-[A-Za-z0-9_-]{1,80}$ ]] || exit 70
+          fi
+          APP=/var/www/inventarisasi
+          cd "$APP"
+          [ "$(git rev-parse HEAD)" = "$EXPECTED_SHA" ] || exit 70
+          git diff --exit-code "$EXPECTED_SHA" -- scripts/activate_export_budget.py \
+            scripts/releases/backend_environment.py scripts/releases/pinned_installer.py >/dev/null 2>&1 || exit 70
+          grep -Fx 'AMAN_EXPORT_BUDGET_PROTOCOL=1' scripts/activate_export_budget.py >/dev/null || exit 70
+          PYTHON="$APP/backend/venv/bin/python"
+          [ -x "$PYTHON" ] || exit 70
+          if [ "$OPERATION" = check ]; then
+            exec "$PYTHON" -I scripts/activate_export_budget.py --app "$APP" --expected-sha "$EXPECTED_SHA" --check-only
+          fi
+          # Prove the current API UID/release before creating private operations state.
+          "$PYTHON" -I scripts/activate_export_budget.py --app "$APP" --expected-sha "$EXPECTED_SHA" --check-only >/dev/null
+          "$PYTHON" -I - "$OPERATION" <<'PY'
+          import os,pathlib,stat,subprocess,sys
+          operations=pathlib.Path("/var/lib/aman/operations")
+          pid=int(subprocess.check_output(["supervisorctl","pid","inventarisasi-backend"],text=True).strip())
+          if pid<=1:raise SystemExit(70)
+          api_uid=pathlib.Path(f"/proc/{pid}").stat().st_uid
+          if os.geteuid()!=api_uid:raise SystemExit(70)
+          for path in reversed((operations,*operations.parents)):
+              try:metadata=path.lstat()
+              except FileNotFoundError:
+                  if sys.argv[1]!="activate":raise SystemExit(70)
+                  path.mkdir(mode=0o700);metadata=path.lstat()
+              if not stat.S_ISDIR(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode):raise SystemExit(70)
+              if metadata.st_uid not in {0,api_uid} or metadata.st_mode&0o022:raise SystemExit(70)
+          metadata=operations.lstat()
+          if metadata.st_uid!=api_uid or metadata.st_mode&0o077:raise SystemExit(70)
+          PY
+          if [ "$OPERATION" = activate ]; then
+            exec "$PYTHON" -I scripts/activate_export_budget.py --app "$APP" --expected-sha "$EXPECTED_SHA" \
+              --apply-journal "/var/lib/aman/operations/$JOURNAL_ID"
+          fi
+          exec "$PYTHON" -I scripts/activate_export_budget.py --app "$APP" --expected-sha "$EXPECTED_SHA" \
+            --rollback-journal "/var/lib/aman/operations/$JOURNAL_ID"
+          AMAN_REMOTE
+
+      - name: Publish only typed configuration and public-document evidence
+        if: ${{ always() && steps.validate.outcome == 'success' }}
+        uses: actions/github-script@v7
+        env:
+          AMAN_TARGET_SHA: ${{ steps.validate.outputs.sha }}
+          AMAN_OPERATION: ${{ steps.validate.outputs.operation }}
+          AMAN_REMOTE_OUTCOME: ${{ steps.remote.outcome }}
+        with:
+          script: |
+            const fs = require('fs'), path = require('path');
+            const sha = process.env.AMAN_TARGET_SHA, operation = process.env.AMAN_OPERATION;
+            if (!/^[0-9a-f]{40}$/.test(sha) || !['check','activate','rollback'].includes(operation)) {
+              throw new Error('Invalid validated operation metadata');
+            }
+            const report = {status: 'unverified', operation, source_sha: sha,
+              capability: {enabled: null, slots: null, satker_slots: null}, public_document_smoke: null,
+              failure_phase: 'unknown', error_category: 'unknown'};
+            const failurePhases = new Set(['preflight','draining','stopped','configured','healthy','unknown']);
+            const errorCategories = new Set(['validation','mongo','service','unknown']);
+            const boundedInteger = value => Number.isInteger(value) && value >= 1 && value <= 64;
+            const file = path.join(process.env.RUNNER_TEMP, 'budget-remote.raw');
+            try {
+              const info = fs.lstatSync(file);
+              if (!info.isFile() || info.isSymbolicLink() || info.size > 64 * 1024) throw new Error();
+              const value = JSON.parse(fs.readFileSync(file, 'utf8')), cap = value.capability;
+              if (value.ok === false && value.source_sha === sha && value.operation === operation) {
+                report.status = 'failed';
+                if (failurePhases.has(value.failure_phase)) report.failure_phase = value.failure_phase;
+                if (errorCategories.has(value.error_category)) report.error_category = value.error_category;
+                throw new Error();
+              }
+              if (value.ok !== true || value.source_sha !== sha
+                  || value.operation !== ({check:'preflight',activate:'activate',rollback:'rollback'})[operation]
+                  || cap.ok !== true || typeof cap.enabled !== 'boolean'
+                  || !boundedInteger(cap.slots) || !boundedInteger(cap.satker_slots)) throw new Error();
+              let smoke = null;
+              if (operation === 'activate') {
+                const proof = value.public_document_smoke;
+                if (cap.enabled !== true || cap.slots !== 1 || cap.satker_slots !== 1
+                    || proof.blocked_status !== 429 || proof.retry_after_seconds !== 5 || proof.document_status !== 200
+                    || !Number.isInteger(proof.document_bytes) || proof.document_bytes < 1 || proof.document_bytes > 8 * 1024 * 1024
+                    || proof.health_during_block !== true || proof.queue_holders_writers_empty !== true
+                    || proof.customer_data_read !== false || proof.accounts_created !== 0) throw new Error();
+                smoke = {blocked_status: 429, retry_after_seconds: 5, document_status: 200,
+                  document_bytes: proof.document_bytes, health_during_block: true,
+                  queue_holders_writers_empty: true, customer_data_read: false, accounts_created: 0};
+              }
+              if (process.env.AMAN_REMOTE_OUTCOME === 'success') {
+                report.status = 'verified'; report.capability = {enabled:cap.enabled,slots:cap.slots,satker_slots:cap.satker_slots};
+                report.public_document_smoke = smoke;
+                report.failure_phase = null; report.error_category = null;
+              }
+            } catch (_) {}
+            if (process.env.AMAN_REMOTE_OUTCOME === 'failure') report.status = 'failed';
+            const ok = report.status === 'verified';
+            await github.rest.checks.create({owner:context.repo.owner,repo:context.repo.repo,head_sha:sha,
+              name:'Export budget operation',status:'completed',conclusion:ok?'success':'failure',
+              output:{title:ok?'Budget configuration and required public proof verified':'Budget operation requires inspection',
+                summary:'```json\n'+JSON.stringify(report,null,2)+'\n```'}});
+            await core.summary.addCodeBlock(JSON.stringify(report,null,2),'json').write();
+            if (!ok) core.setFailed('No verified budget operation result; inspect the private operation journal and actual GLOBAL owner.');

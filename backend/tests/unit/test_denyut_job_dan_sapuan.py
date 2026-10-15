@@ -37,9 +37,16 @@ import pathlib
 import pytest
 
 import jobs
+from mongomock_motor import AsyncMongoMockClient
 
 BACKEND = pathlib.Path(__file__).resolve().parents[2]
 ROUTES = BACKEND / "routes"
+
+
+@pytest.fixture(autouse=True)
+def admission_database(monkeypatch):
+    """Denyut job owns a real admission interface on an isolated fake DB."""
+    monkeypatch.setattr(jobs, "db", AsyncMongoMockClient()["uji_denyut_admission"])
 
 
 @pytest.mark.asyncio

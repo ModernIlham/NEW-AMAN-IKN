@@ -1,0 +1,30 @@
+{
+  "dataset_rows": 50000,
+  "synthetic_bson_shape": {
+    "summary": [
+      {
+        "count": 50000,
+        "min": 1543,
+        "max": 22131,
+        "avg": 3696.11078,
+        "checklist_max": 201,
+        "checklist_avg": 53.8
+      }
+    ],
+    "histogram": [
+      {
+        "lower_bound_bytes": 1024,
+        "count": 31614
+      },
+      {
+        "lower_bound_bytes": 4096,
+        "count": 18329
+      },
+      {
+        "lower_bound_bytes": 16384,
+        "count": 57
+      }
+    ]
+  },
+  "limits": "Synthetic small fixture media only; not production media distribution or a purge/backfill justification"
+}

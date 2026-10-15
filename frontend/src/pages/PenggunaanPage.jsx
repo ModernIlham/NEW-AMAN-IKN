@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import useReferensiSatker from "@/hooks/useReferensiSatker";
 import axios from "axios";
+import { getSatkerAktif } from "@/lib/satkerAktif";
+import { usePencarianBaca } from "@/hooks/usePencarianBaca";
+import { HASIL_USANG, usePenjagaPermintaan } from "@/hooks/usePenjagaPermintaan";
 import { toast } from "sonner";
 import {
   ArrowLeft, Search, Loader2, UserCheck, ChevronLeft, ChevronRight,
@@ -84,6 +87,8 @@ const WARNA_STATUS_HENTI = {
 
 export default function PenggunaanPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";
+  const lingkupBaca = JSON.stringify([user?.id, String(user?.kode_satker || "").trim() || getSatkerAktif()]);
+  const penjagaBaca = usePenjagaPermintaan(lingkupBaca);
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [totalLengkap, setTotalLengkap] = useState(0);
@@ -108,7 +113,6 @@ export default function PenggunaanPage({ user, onBack }) {
   const [formPsp, setFormPsp] = useState(null);
   const [cariPsp, setCariPsp] = useState("");
   const [hasilCariPsp, setHasilCariPsp] = useState([]);
-  const cariPspTimer = useRef(null);
   // Dialog lampiran SK PSP: {sk, uploading}
   // {sk, uploading, jenis} — `jenis` = kode dokumen yang sedang diunggah.
   const [lampPsp, setLampPsp] = useState(null);
@@ -177,24 +181,29 @@ export default function PenggunaanPage({ user, onBack }) {
   const { minta, transitionDialog } = useTransitionDialog();
 
   const load = useCallback(async (p = 1, s = search) => {
+    const tiket = penjagaBaca.mulaiBaca("daftar", lingkupBaca);
+    if (!tiket) return HASIL_USANG;
     setLoading(true);
     setGagalMuat(false);
     try {
       const r = await axios.get(`${API}/penggunaan/pemegang`, {
+        signal: tiket.signal,
         params: { search: s, page: p, page_size: 50 },
       });
+      if (!penjagaBaca.berlaku(tiket)) return HASIL_USANG;
       setItems(r.data?.items || []);
       setTotal(r.data?.total_pemegang || 0);
       setTotalLengkap(r.data?.total_lengkap || 0);
       setTotalPages(r.data?.total_pages || 1);
       setPage(p);
     } catch {
+      if (!penjagaBaca.berlaku(tiket)) return HASIL_USANG;
       setGagalMuat(true);
       toast.error("Gagal memuat daftar pemegang");
     } finally {
-      setLoading(false);
+      if (penjagaBaca.selesai(tiket)) setLoading(false);
     }
-  }, [search]);
+  }, [lingkupBaca, penjagaBaca, search]);
 
   const loadIdle = useCallback(() => {
     axios.get(`${API}/penggunaan/idle`)
@@ -283,7 +292,7 @@ export default function PenggunaanPage({ user, onBack }) {
     });
   };
 
-  useEffect(() => { load(1, ""); loadIdle(); loadPsp(); loadProses(); loadHenti(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(1, ""); loadIdle(); loadPsp(); loadProses(); loadHenti(); }, [lingkupBaca]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     axios.get(`${API}/bast/referensi`).then((r) => setJenisBast(r.data?.jenis || [])).catch(() => {});
@@ -378,17 +387,24 @@ export default function PenggunaanPage({ user, onBack }) {
       : { id: "", nama: "", nip: "", jabatan: "", atas_nama_kpb: false } };
   });
 
+  useEffect(() => { if (!detail) penjagaBaca.batalkan("detail"); }, [detail, penjagaBaca]);
+
   const openDetail = async (p) => {
+    const tiket = penjagaBaca.mulaiBaca("detail", lingkupBaca);
+    if (!tiket) return;
     setDetail({ pemegang: p, rows: [], loading: true });
     try {
       const r = await axios.get(`${API}/penggunaan/pemegang/aset`, {
+        signal: tiket.signal,
         params: { nama: p.nama, nip: p.nip || "" },
       });
+      if (!penjagaBaca.berlaku(tiket)) return;
       setDetail({ pemegang: p, rows: r.data?.items || [], loading: false });
     } catch {
+      if (!penjagaBaca.berlaku(tiket)) return;
       toast.error("Gagal memuat aset pemegang");
       setDetail(null);
-    }
+    } finally { penjagaBaca.selesai(tiket); }
   };
 
   const kirimBast = async () => {
@@ -629,17 +645,14 @@ export default function PenggunaanPage({ user, onBack }) {
   };
 
   // Pencarian aset (debounce) untuk dialog catat SK PSP
-  useEffect(() => {
-    if ((!formPsp && !formProses && !formHenti) || cariPsp.trim().length < 2) { setHasilCariPsp([]); return undefined; }
-    clearTimeout(cariPspTimer.current);
-    cariPspTimer.current = setTimeout(async () => {
-      try {
-        const r = await axios.get(`${API}/assets`, { params: { search: cariPsp.trim(), page_size: 8 } });
-        setHasilCariPsp(r.data?.items || []);
-      } catch { setHasilCariPsp([]); }
-    }, 300);
-    return () => clearTimeout(cariPspTimer.current);
-  }, [cariPsp, formPsp, formProses, formHenti]);
+  usePencarianBaca({
+    lingkup: lingkupBaca, kunci: [cariPsp.trim(), !!formPsp, !!formProses, !!formHenti],
+    aktif: !!(formPsp || formProses || formHenti) && cariPsp.trim().length >= 2,
+    jalankan: signal => axios.get(`${API}/assets`, { signal, params: { search: cariPsp.trim(), page_size: 8 } }),
+    padaHasil: r => setHasilCariPsp(r.data?.items || []),
+    padaGagal: () => setHasilCariPsp([]),
+    padaKosong: () => setHasilCariPsp([]),
+  });
 
   // ── Henti guna mandiri (SK/BA di luar jalur idle; jurnal 401/402) ──
   const catatHenti = async () => {
@@ -681,6 +694,8 @@ export default function PenggunaanPage({ user, onBack }) {
   };
 
   const onSearchChange = (v) => {
+    penjagaBaca.batalkan("daftar");
+    setLoading(false);
     setSearch(v);
     if (searchTimer.current) clearTimeout(searchTimer.current);
     searchTimer.current = setTimeout(() => load(1, v), 350);

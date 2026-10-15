@@ -1,0 +1,40 @@
+{
+  "python": "3.11.17",
+  "node": "v24.19.0",
+  "yarn": "1.22.22",
+  "uv": "0.12.23",
+  "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+  "native": {
+    "pango-1.0": {
+      "library": "libpango-1.0.so.0",
+      "version": "1.56.3"
+    },
+    "cairo": {
+      "library": "libcairo.so.2",
+      "version": "1.18.4"
+    },
+    "fontconfig": {
+      "library": "libfontconfig.so.1",
+      "version": 21500
+    }
+  },
+  "font": {
+    "family": "Inter",
+    "sha256": "29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031",
+    "upstream_commit": "66928797f271fed5ee428544e7229685e2d90127"
+  },
+  "install_a": {
+    "elapsed_seconds": 5.966,
+    "installer_peak_rss_kib": 84716,
+    "exit_code": 0,
+    "disk_bytes_counting_links": 617828667
+  },
+  "install_b": {
+    "elapsed_seconds": 5.567,
+    "installer_peak_rss_kib": 173372,
+    "exit_code": 0,
+    "disk_bytes_counting_links": 617828667
+  },
+  "identical_distribution_manifest_sha256": "06ef74fc9e464bace03f5a46898310011a0210cd6652dbb539ffdfb83c0e5fb4",
+  "geometry_equal": true
+}

@@ -228,6 +228,8 @@ PENGECUALIAN_TETAP = {
     "routes/backup.py",        # restore wajib bita IDENTIK
     "routes/unduhan.py",       # artefak job ditulis berpotongan 64KB
     "jobs.py",                 # XLSX — bukan gambar/PDF, sudah ZIP-deflate
+    "export_worker.py",        # XLSX buatan server, 200MiB/chunk64KiB + reauth/fencing;
+                               # diuji test_export_worker (unit & real-Mongo contract)
     "webp_converter.py",       # sudah WebP & sudah membakar kuota
     "routes/ttd.py",           # alfa load-bearing + bita di-sha256 sbg bukti
 }

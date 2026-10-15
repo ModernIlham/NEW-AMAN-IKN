@@ -51,3 +51,16 @@ test("kunci eksklusif dilepas hanya oleh pemilik; pembatalan tidak membatalkan k
   expect(p.selesai(b)).toBe(true);
   expect(p.sibuk("mobile")).toBe(false);
 });
+
+test("read lama dibatalkan per kanal; mutasi tidak diberi pembatalan HTTP", () => {
+  const { result, rerender, unmount } = renderHook(usePenjagaPermintaan, { initialProps: "A" });
+  const p = result.current;
+  const a = p.mulaiBaca("daftar", "A"), stat = p.mulaiBaca("statistik", "A");
+  const mutasi = p.mulai("simpan", "A");
+  const b = p.mulaiBaca("daftar", "A");
+  expect(a.signal.aborted).toBe(true); expect(stat.signal.aborted).toBe(false);
+  expect(mutasi.signal).toBeUndefined(); expect(p.berlaku(mutasi)).toBe(true);
+  p.selesai(b); expect(b.signal.aborted).toBe(false);
+  rerender("B"); expect(stat.signal.aborted).toBe(true);
+  const c = p.mulaiBaca("daftar", "B"); unmount(); expect(c.signal.aborted).toBe(true);
+});

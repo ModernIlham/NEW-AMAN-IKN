@@ -1,0 +1,11 @@
+{
+  "python": "3.11.17",
+  "old_wait_for": {
+    "cancelled": false,
+    "cancelling": 1
+  },
+  "new_timeout_direct_await": {
+    "cancelled": true,
+    "cancelling": 1
+  }
+}

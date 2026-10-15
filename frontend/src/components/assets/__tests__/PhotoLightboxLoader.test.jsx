@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import PhotoLightboxLoader from "../PhotoLightboxLoader";
 import { muatPhotoLightbox } from "../../../lib/muatPhotoLightbox";
@@ -43,4 +43,37 @@ test("beralih aset saat pemuatan tidak menampilkan aset sebelumnya", async () =>
   await act(async () => { d.resolve({ default: Penampil }); await d.promise; });
   expect(screen.getByText("Foto Printer")).toBeTruthy();
   expect(muatPhotoLightbox).toHaveBeenCalledTimes(1);
+});
+
+function PemicuPenampil() {
+  const [open, setOpen] = useState(false);
+  return <>
+    <button onClick={() => setOpen(true)}>Buka foto</button>
+    {open && <PhotoLightboxLoader asset={foto} onClose={() => setOpen(false)} />}
+  </>;
+}
+
+test("tutup ketika loading mengembalikan fokus ke pemicu tanpa menggulir daftar", async () => {
+  const d = tertunda(); muatPhotoLightbox.mockReturnValue(d.promise);
+  render(<PemicuPenampil />);
+  const pemicu = screen.getByRole("button", { name: "Buka foto" });
+  pemicu.focus();
+  const focus = jest.spyOn(pemicu, "focus");
+  fireEvent.click(pemicu);
+  expect(screen.getByRole("button", { name: "Tutup penampil foto" })).toHaveFocus();
+  await act(async () => { fireEvent.keyDown(window, { key: "Escape" }); });
+  expect(pemicu).toHaveFocus();
+  expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+});
+
+test("pergantian loading ke penampil mempertahankan pemicu asal sampai penampil ditutup", async () => {
+  const d = tertunda(); muatPhotoLightbox.mockReturnValue(d.promise);
+  const PenampilFokus = ({ onClose }) => <button autoFocus onClick={onClose}>Tutup foto termuat</button>;
+  render(<PemicuPenampil />);
+  const pemicu = screen.getByRole("button", { name: "Buka foto" });
+  pemicu.focus(); fireEvent.click(pemicu);
+  await act(async () => { d.resolve({ default: PenampilFokus }); await d.promise; });
+  expect(screen.getByRole("button", { name: "Tutup foto termuat" })).toHaveFocus();
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Tutup foto termuat" })); });
+  expect(pemicu).toHaveFocus();
 });

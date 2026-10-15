@@ -1,0 +1,52 @@
+name: Dependency audit
+
+on:
+  workflow_call:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-audit-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  python:
+    name: Python ${{ matrix.scope }} advisory gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        scope: [runtime, dev]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install auditor into separate tooling environment
+        timeout-minutes: 3
+        run: |
+          python -m venv "$RUNNER_TEMP/dependency-audit-tools"
+          "$RUNNER_TEMP/dependency-audit-tools/bin/python" -m pip install \
+            --disable-pip-version-check --no-cache-dir --timeout 15 --retries 2 \
+            pip-audit==2.9.0
+      - name: Audit entire hash lock with current advisory data
+        timeout-minutes: 6
+        run: |
+          "$RUNNER_TEMP/dependency-audit-tools/bin/python" scripts/audit_dependencies.py \
+            "backend/requirements-${{ matrix.scope }}.lock" \
+            --output "$RUNNER_TEMP/audit-${{ matrix.scope }}.json"
+      - name: Preserve advisory evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-audit-${{ matrix.scope }}
+          path: ${{ runner.temp }}/audit-${{ matrix.scope }}.json
+          retention-days: 7
+          if-no-files-found: warn

@@ -458,9 +458,7 @@ def test_nama_panjang_TIDAK_dipotong_saat_dirender(dbx):
     d = _data(dbx, pegawai=[("1990", panjang, "Analis Barang Milik Negara",
                              "SEKRETARIAT JENDERAL", "BIRO UMUM",
                              "BAGIAN RUMAH TANGGA", 2)])
-    from jinja2 import Environment, FileSystemLoader
-    env = Environment(loader=FileSystemLoader(
-        os.path.join(os.path.dirname(__file__), "..", "..", "templates")))
+    env = rp._jinja_env()
     html = env.get_template("executive_summary.html").render(**d)
     awal = html.index("<h1>Distribusi Per Pengguna")
     blok = html[awal:html.index("<h1>Analisis Lanjutan", awal)]

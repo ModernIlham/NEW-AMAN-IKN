@@ -27,6 +27,8 @@ from kodefikasi_utils import (
 )
 
 kodefikasi_router = APIRouter()
+MAX_KODE_EXPORT_ROWS = 250000
+MAX_KODE_SNAPSHOT_BYTES = 128 * 1024 * 1024
 
 
 class KodefikasiIn(BaseModel):
@@ -130,53 +132,36 @@ async def export_kodefikasi(bentuk: str = Query("datar", pattern="^(datar|hierar
       tiap tingkat (Golongan → Sub-Sub Kelompok) + metadata SIMAN (Satuan, Dasar,
       Jenis BMN, TB/STB, Bukti Kepemilikan).
     """
-    from openpyxl import Workbook
+    import tempfile
+    from pathlib import Path
+    from kodefikasi_render import append_snapshot_rows, build_kodefikasi_xlsx
+    from render_executor import run_renderer
 
     await _ensure_golongan_seed()
-    wb = Workbook(write_only=True)
-    ws = wb.create_sheet("Kodefikasi")
-
-    if bentuk == "datar":
-        ws.append(["Kode", "Uraian", "Level", "Kode Induk"])
-        cursor = db.kodefikasi.find({}, {"_id": 0}).sort("kode", 1)
-        async for x in cursor:
-            lv = x.get("level")
-            ws.append([x.get("kode", ""), x.get("uraian", ""),
-                       f"{lv} {LEVEL_LABELS.get(lv, '')}".strip(),
-                       x.get("parent_kode") or ""])
-        nama_file = "kodefikasi_datar.xlsx"
-    else:  # hierarki
-        # Muat semua kode → uraian sekali untuk mengisi kolom leluhur.
-        uraian_map = {}
-        async for x in db.kodefikasi.find({}, {"_id": 0, "kode": 1, "uraian": 1}):
-            uraian_map[x["kode"]] = x.get("uraian", "")
-        ws.append([
-            "Kode Golongan", "Nama Golongan", "Kode Bidang", "Nama Bidang",
-            "Kode Kelompok", "Nama Kelompok", "Kode Sub Kelompok", "Nama Sub Kelompok",
-            "Kode Barang", "Nama Barang", "Satuan", "Dasar", "Jenis BMN",
-            "TB/STB", "Bukti Kepemilikan",
-        ])
-        cursor = db.kodefikasi.find({"level": 5}, {"_id": 0}).sort("kode", 1)
-        async for x in cursor:
-            k = x.get("kode", "")
-            g, b, kl, sk = k[:1], k[:3], k[:5], k[:7]
-            ws.append([
-                g, uraian_map.get(g, ""), b, uraian_map.get(b, ""),
-                kl, uraian_map.get(kl, ""), sk, uraian_map.get(sk, ""),
-                k, x.get("uraian", ""),
-                x.get("satuan", ""), x.get("dasar", ""), x.get("jenis_bmn", ""),
-                x.get("tb_stb", ""), x.get("bukti_kepemilikan", ""),
-            ])
-        nama_file = "kodefikasi_hierarki.xlsx"
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    return Response(
-        content=buf.getvalue(),
+    # Spool batches rather than materializing the complete master in RAM or
+    # invoking openpyxl on the event loop. Only plain row dictionaries cross
+    # into a builder thread; Motor stays on this async loop.
+    with tempfile.TemporaryDirectory(prefix="aman-kodefikasi-") as directory:
+        snapshot = str(Path(directory) / "rows.jsonl")
+        batch, count, size = [], 0, 0
+        async for item in db.kodefikasi.find({}, {"_id": 0}).sort("kode", 1):
+            count += 1
+            if count > MAX_KODE_EXPORT_ROWS:
+                raise HTTPException(413, f"Master melebihi batas ekspor {MAX_KODE_EXPORT_ROWS:,} kode; bagi data sebelum mengekspor.")
+            batch.append(item)
+            if len(batch) >= 500:
+                size += await run_renderer(append_snapshot_rows, snapshot, batch)
+                batch = []
+                if size > MAX_KODE_SNAPSHOT_BYTES:
+                    raise HTTPException(413, "Snapshot master melebihi batas ekspor 128 MiB.")
+        size += await run_renderer(append_snapshot_rows, snapshot, batch)
+        if size > MAX_KODE_SNAPSHOT_BYTES:
+            raise HTTPException(413, "Snapshot master melebihi batas ekspor 128 MiB.")
+        data = await run_renderer(build_kodefikasi_xlsx, snapshot, bentuk)
+    nama_file = "kodefikasi_datar.xlsx" if bentuk == "datar" else "kodefikasi_hierarki.xlsx"
+    return Response(content=data,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{nama_file}"'},
-    )
+        headers={"Content-Disposition": f'attachment; filename="{nama_file}"'})
 
 
 @kodefikasi_router.get("/kodefikasi/lookup/{kode}")

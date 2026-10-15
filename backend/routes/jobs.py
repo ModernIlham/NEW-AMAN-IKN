@@ -5,8 +5,6 @@ unduh mendukung DUAL-auth (header ATAU ?token=) agar bisa lewat anchor/window.op
 native untuk file besar (pola sama dengan /backup/download). Akses dibatasi
 PEMILIK job (dibuat_oleh) atau admin/super-admin.
 """
-import io
-
 from fastapi import APIRouter, Depends, HTTPException
 
 from auth_utils import require_user, require_user_or_query_token
@@ -28,6 +26,11 @@ def _boleh_akses(job: dict, user: dict) -> bool:
     dokumen tanpa kode_satker), pemiliknya sendiri selalu boleh.
     """
     from shared_utils import kode_satker_user
+
+    if (job.get("worker_protocol") == "export_v1"
+            and str((job.get("job_spec") or {}).get("principal_id") or "")
+            == str(user.get("id") or "") and user.get("id")):
+        return True
 
     pemilik = str(job.get("dibuat_oleh") or "").strip()
     username = str(user.get("username") or "").strip()
@@ -56,7 +59,8 @@ async def status_job(job_id: str, user: dict = Depends(require_user)):
         raise HTTPException(status_code=404, detail="Job tidak ditemukan")
     if not _boleh_akses(job, user):
         raise HTTPException(status_code=403, detail="Bukan job Anda")
-    return job
+    return {key: value for key, value in job.items()
+            if key not in {"job_spec", "worker_token", "worker_identity", "lease_until", "writer_lease_id"}}
 
 
 @jobs_router.get("/jobs/{job_id}/download")
@@ -68,13 +72,22 @@ async def download_job(job_id: str,
         raise HTTPException(status_code=404, detail="Job tidak ditemukan")
     if not _boleh_akses(job, user):
         raise HTTPException(status_code=403, detail="Bukan job Anda")
+    from export_worker import authorize_download
+    from db import db
+    await authorize_download(job, user, db)
     if job.get("status") != "done" or not job.get("artifact_id"):
         raise HTTPException(status_code=404, detail="Hasil belum siap atau kedaluwarsa")
     hasil = await ambil_artifact(job_id)
     if not hasil:
         raise HTTPException(status_code=404, detail="Hasil kedaluwarsa")
-    data, filename, ctype = hasil
+    stream, filename, ctype = hasil
+    async def chunks():
+        while True:
+            chunk = await stream.readchunk()
+            if not chunk:
+                break
+            yield chunk
     aman = nama_file_disposition(filename)
     return StreamingResponse(
-        io.BytesIO(data), media_type=ctype,
+        chunks(), media_type=ctype,
         headers={"Content-Disposition": f'attachment; filename="{aman}"'})

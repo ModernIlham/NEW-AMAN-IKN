@@ -1,0 +1,26 @@
+{
+  "method": "tracemalloc, real ASGI chunk producer and counting sink, excludes renderer and Mongo driver allocation",
+  "samples": [
+    {
+      "body_mib": 8,
+      "body_bytes": 8388608,
+      "peak_transport_python_bytes": 70670,
+      "largest_write_bytes": 65536,
+      "writes": 128
+    },
+    {
+      "body_mib": 32,
+      "body_bytes": 33554432,
+      "peak_transport_python_bytes": 70318,
+      "largest_write_bytes": 65536,
+      "writes": 512
+    },
+    {
+      "body_mib": 64,
+      "body_bytes": 67108864,
+      "peak_transport_python_bytes": 70294,
+      "largest_write_bytes": 65536,
+      "writes": 1024
+    }
+  ]
+}

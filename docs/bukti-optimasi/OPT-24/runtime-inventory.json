@@ -1,0 +1,4697 @@
+{
+  "dynamic_imports": [
+    {
+      "call": "__import__(_modul, fromlist=[_fn])",
+      "line": 262,
+      "path": "backend/server.py"
+    }
+  ],
+  "installed_distributions": [
+    {
+      "name": "aiohappyeyeballs",
+      "version": "2.6.1"
+    },
+    {
+      "name": "aiohttp",
+      "version": "3.13.3"
+    },
+    {
+      "name": "aiosignal",
+      "version": "1.4.0"
+    },
+    {
+      "name": "annotated-doc",
+      "version": "0.0.4"
+    },
+    {
+      "name": "annotated-types",
+      "version": "0.7.0"
+    },
+    {
+      "name": "anyio",
+      "version": "4.12.1"
+    },
+    {
+      "name": "async-timeout",
+      "version": "5.0.1"
+    },
+    {
+      "name": "attrs",
+      "version": "25.4.0"
+    },
+    {
+      "name": "bcrypt",
+      "version": "4.1.3"
+    },
+    {
+      "name": "boto3",
+      "version": "1.42.42"
+    },
+    {
+      "name": "botocore",
+      "version": "1.42.42"
+    },
+    {
+      "name": "brotli",
+      "version": "1.2.0"
+    },
+    {
+      "name": "cachetools",
+      "version": "7.0.1"
+    },
+    {
+      "name": "certifi",
+      "version": "2026.1.4"
+    },
+    {
+      "name": "cffi",
+      "version": "2.0.0"
+    },
+    {
+      "name": "charset-normalizer",
+      "version": "3.4.4"
+    },
+    {
+      "name": "click",
+      "version": "8.3.1"
+    },
+    {
+      "name": "cryptography",
+      "version": "46.0.4"
+    },
+    {
+      "name": "cssselect2",
+      "version": "0.9.0"
+    },
+    {
+      "name": "Deprecated",
+      "version": "1.3.1"
+    },
+    {
+      "name": "distro",
+      "version": "1.9.0"
+    },
+    {
+      "name": "dnspython",
+      "version": "2.8.0"
+    },
+    {
+      "name": "ecdsa",
+      "version": "0.19.1"
+    },
+    {
+      "name": "email-validator",
+      "version": "2.3.0"
+    },
+    {
+      "name": "et_xmlfile",
+      "version": "2.0.0"
+    },
+    {
+      "name": "fastapi",
+      "version": "0.110.1"
+    },
+    {
+      "name": "fastuuid",
+      "version": "0.14.0"
+    },
+    {
+      "name": "filelock",
+      "version": "3.20.3"
+    },
+    {
+      "name": "fonttools",
+      "version": "4.61.1"
+    },
+    {
+      "name": "frozenlist",
+      "version": "1.8.0"
+    },
+    {
+      "name": "fsspec",
+      "version": "2026.1.0"
+    },
+    {
+      "name": "google-ai-generativelanguage",
+      "version": "0.6.15"
+    },
+    {
+      "name": "google-api-core",
+      "version": "2.29.0"
+    },
+    {
+      "name": "google-api-python-client",
+      "version": "2.189.0"
+    },
+    {
+      "name": "google-auth",
+      "version": "2.49.0.dev0"
+    },
+    {
+      "name": "google-auth-httplib2",
+      "version": "0.3.0"
+    },
+    {
+      "name": "google-genai",
+      "version": "1.62.0"
+    },
+    {
+      "name": "googleapis-common-protos",
+      "version": "1.72.0"
+    },
+    {
+      "name": "grpcio",
+      "version": "1.76.0"
+    },
+    {
+      "name": "grpcio-status",
+      "version": "1.71.2"
+    },
+    {
+      "name": "h11",
+      "version": "0.16.0"
+    },
+    {
+      "name": "hf-xet",
+      "version": "1.2.0"
+    },
+    {
+      "name": "httpcore",
+      "version": "1.0.9"
+    },
+    {
+      "name": "httplib2",
+      "version": "0.31.2"
+    },
+    {
+      "name": "httpx",
+      "version": "0.28.1"
+    },
+    {
+      "name": "huggingface_hub",
+      "version": "1.5.0"
+    },
+    {
+      "name": "idna",
+      "version": "3.11"
+    },
+    {
+      "name": "importlib_metadata",
+      "version": "8.7.1"
+    },
+    {
+      "name": "Jinja2",
+      "version": "3.1.6"
+    },
+    {
+      "name": "jiter",
+      "version": "0.13.0"
+    },
+    {
+      "name": "jmespath",
+      "version": "1.1.0"
+    },
+    {
+      "name": "jq",
+      "version": "1.11.0"
+    },
+    {
+      "name": "jsonschema",
+      "version": "4.26.0"
+    },
+    {
+      "name": "jsonschema-specifications",
+      "version": "2025.9.1"
+    },
+    {
+      "name": "limits",
+      "version": "5.8.0"
+    },
+    {
+      "name": "litellm",
+      "version": "1.80.0"
+    },
+    {
+      "name": "lxml",
+      "version": "6.1.3"
+    },
+    {
+      "name": "markdown-it-py",
+      "version": "4.0.0"
+    },
+    {
+      "name": "MarkupSafe",
+      "version": "3.0.3"
+    },
+    {
+      "name": "mdurl",
+      "version": "0.1.2"
+    },
+    {
+      "name": "motor",
+      "version": "3.3.1"
+    },
+    {
+      "name": "multidict",
+      "version": "6.7.1"
+    },
+    {
+      "name": "numpy",
+      "version": "2.4.2"
+    },
+    {
+      "name": "oauthlib",
+      "version": "3.3.1"
+    },
+    {
+      "name": "openai",
+      "version": "1.99.9"
+    },
+    {
+      "name": "openpyxl",
+      "version": "3.1.5"
+    },
+    {
+      "name": "packaging",
+      "version": "26.0"
+    },
+    {
+      "name": "pandas",
+      "version": "3.0.0"
+    },
+    {
+      "name": "passlib",
+      "version": "1.7.4"
+    },
+    {
+      "name": "pillow",
+      "version": "12.1.0"
+    },
+    {
+      "name": "pip",
+      "version": "24.0"
+    },
+    {
+      "name": "platformdirs",
+      "version": "4.5.1"
+    },
+    {
+      "name": "propcache",
+      "version": "0.4.1"
+    },
+    {
+      "name": "proto-plus",
+      "version": "1.27.1"
+    },
+    {
+      "name": "protobuf",
+      "version": "5.29.6"
+    },
+    {
+      "name": "pyasn1",
+      "version": "0.6.2"
+    },
+    {
+      "name": "pyasn1_modules",
+      "version": "0.4.2"
+    },
+    {
+      "name": "pycparser",
+      "version": "3.0"
+    },
+    {
+      "name": "pydantic",
+      "version": "2.12.5"
+    },
+    {
+      "name": "pydantic_core",
+      "version": "2.41.5"
+    },
+    {
+      "name": "pydyf",
+      "version": "0.12.1"
+    },
+    {
+      "name": "Pygments",
+      "version": "2.19.2"
+    },
+    {
+      "name": "PyJWT",
+      "version": "2.11.0"
+    },
+    {
+      "name": "pymongo",
+      "version": "4.5.0"
+    },
+    {
+      "name": "pyparsing",
+      "version": "3.3.2"
+    },
+    {
+      "name": "pypdf",
+      "version": "6.7.4"
+    },
+    {
+      "name": "PyPDF2",
+      "version": "3.0.1"
+    },
+    {
+      "name": "pypdfium2",
+      "version": "5.12.1"
+    },
+    {
+      "name": "pyphen",
+      "version": "0.17.2"
+    },
+    {
+      "name": "pyshp",
+      "version": "3.1.4"
+    },
+    {
+      "name": "python-dateutil",
+      "version": "2.9.0.post0"
+    },
+    {
+      "name": "python-docx",
+      "version": "1.2.0"
+    },
+    {
+      "name": "python-dotenv",
+      "version": "1.2.1"
+    },
+    {
+      "name": "python-jose",
+      "version": "3.5.0"
+    },
+    {
+      "name": "python-multipart",
+      "version": "0.0.22"
+    },
+    {
+      "name": "python-pptx",
+      "version": "1.0.2"
+    },
+    {
+      "name": "PyYAML",
+      "version": "6.0.3"
+    },
+    {
+      "name": "redis",
+      "version": "5.2.1"
+    },
+    {
+      "name": "referencing",
+      "version": "0.37.0"
+    },
+    {
+      "name": "regex",
+      "version": "2026.1.15"
+    },
+    {
+      "name": "reportlab",
+      "version": "4.4.9"
+    },
+    {
+      "name": "requests",
+      "version": "2.32.5"
+    },
+    {
+      "name": "requests-oauthlib",
+      "version": "2.0.0"
+    },
+    {
+      "name": "resend",
+      "version": "2.22.0"
+    },
+    {
+      "name": "rich",
+      "version": "14.3.2"
+    },
+    {
+      "name": "rpds-py",
+      "version": "0.30.0"
+    },
+    {
+      "name": "rsa",
+      "version": "4.9.1"
+    },
+    {
+      "name": "s3transfer",
+      "version": "0.16.0"
+    },
+    {
+      "name": "s5cmd",
+      "version": "0.2.0"
+    },
+    {
+      "name": "setuptools",
+      "version": "79.0.1"
+    },
+    {
+      "name": "shapely",
+      "version": "2.1.2"
+    },
+    {
+      "name": "shellingham",
+      "version": "1.5.4"
+    },
+    {
+      "name": "six",
+      "version": "1.17.0"
+    },
+    {
+      "name": "slowapi",
+      "version": "0.1.9"
+    },
+    {
+      "name": "sniffio",
+      "version": "1.3.1"
+    },
+    {
+      "name": "starlette",
+      "version": "0.37.2"
+    },
+    {
+      "name": "stripe",
+      "version": "14.3.0"
+    },
+    {
+      "name": "tenacity",
+      "version": "9.1.2"
+    },
+    {
+      "name": "tiktoken",
+      "version": "0.12.0"
+    },
+    {
+      "name": "tinify",
+      "version": "1.7.1"
+    },
+    {
+      "name": "tinycss2",
+      "version": "1.5.1"
+    },
+    {
+      "name": "tinyhtml5",
+      "version": "2.0.0"
+    },
+    {
+      "name": "tokenizers",
+      "version": "0.22.2"
+    },
+    {
+      "name": "tqdm",
+      "version": "4.67.3"
+    },
+    {
+      "name": "typer",
+      "version": "0.21.1"
+    },
+    {
+      "name": "typer-slim",
+      "version": "0.21.1"
+    },
+    {
+      "name": "typing-inspection",
+      "version": "0.4.2"
+    },
+    {
+      "name": "typing_extensions",
+      "version": "4.15.0"
+    },
+    {
+      "name": "tzdata",
+      "version": "2025.3"
+    },
+    {
+      "name": "uritemplate",
+      "version": "4.2.0"
+    },
+    {
+      "name": "urllib3",
+      "version": "2.6.3"
+    },
+    {
+      "name": "utm",
+      "version": "0.8.1"
+    },
+    {
+      "name": "uvicorn",
+      "version": "0.25.0"
+    },
+    {
+      "name": "watchfiles",
+      "version": "1.1.1"
+    },
+    {
+      "name": "weasyprint",
+      "version": "68.1"
+    },
+    {
+      "name": "webencodings",
+      "version": "0.5.1"
+    },
+    {
+      "name": "websockets",
+      "version": "15.0.1"
+    },
+    {
+      "name": "wrapt",
+      "version": "2.1.1"
+    },
+    {
+      "name": "xlsxwriter",
+      "version": "3.2.9"
+    },
+    {
+      "name": "yarl",
+      "version": "1.22.0"
+    },
+    {
+      "name": "zipp",
+      "version": "3.23.0"
+    },
+    {
+      "name": "zopfli",
+      "version": "0.4.1"
+    }
+  ],
+  "policy": "No dependency is removed merely because no direct import was found.",
+  "python": "3.11.17",
+  "runtime_imports": {
+    "PIL": {
+      "distributions": [
+        "pillow"
+      ],
+      "locations": [
+        {
+          "lazy": false,
+          "line": 20,
+          "path": "backend/foto_inline_optimizer.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 10,
+          "path": "backend/foto_kompresi.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 125,
+          "path": "backend/gerbang_media.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": false,
+          "line": 14,
+          "path": "backend/marker_pin.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 8,
+          "path": "backend/migrate_thumbnails.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 213,
+          "path": "backend/pdf_compress_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 11,
+          "path": "backend/photo_rotate_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 16,
+          "path": "backend/portal_pemegang_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 14,
+          "path": "backend/routes/activities.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1565,
+          "path": "backend/routes/assets.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 52,
+          "path": "backend/routes/cards.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 29,
+          "path": "backend/routes/exports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 18,
+          "path": "backend/routes/media.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 949,
+          "path": "backend/routes/pegawai.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": true,
+          "line": 5152,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 26,
+          "path": "backend/shared_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 974,
+          "path": "backend/spasial_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 26,
+          "path": "backend/tinify_service.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 25,
+          "path": "backend/ttd_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 115,
+          "path": "backend/ttd_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 163,
+          "path": "backend/ttd_utils.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": false,
+          "line": 3,
+          "path": "backend/verify_thumbnail.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 146,
+          "path": "backend/webp_converter.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": true,
+          "line": 160,
+          "path": "backend/webp_converter.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": true,
+          "line": 183,
+          "path": "backend/webp_converter.py",
+          "try_guarded": true
+        }
+      ]
+    },
+    "PyPDF2": {
+      "distributions": [
+        "PyPDF2"
+      ],
+      "locations": [
+        {
+          "lazy": true,
+          "line": 968,
+          "path": "backend/routes/exports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 7819,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "bcrypt": {
+      "distributions": [
+        "bcrypt"
+      ],
+      "locations": [
+        {
+          "lazy": false,
+          "line": 7,
+          "path": "backend/auth_utils.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "boto3": {
+      "distributions": [
+        "boto3"
+      ],
+      "locations": [
+        {
+          "lazy": true,
+          "line": 39,
+          "path": "backend/backup_dr_cli.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 40,
+          "path": "backend/backup_dr_cli.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "bson": {
+      "distributions": [
+        "pymongo"
+      ],
+      "locations": [
+        {
+          "lazy": false,
+          "line": 12,
+          "path": "backend/asset_cursor.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 9,
+          "path": "backend/asset_sorting.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 9,
+          "path": "backend/backup_archive.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 16,
+          "path": "backend/export_worker.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 328,
+          "path": "backend/gerbang_media.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 15,
+          "path": "backend/gridfs_id_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 74,
+          "path": "backend/jobs.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 113,
+          "path": "backend/jobs.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 15,
+          "path": "backend/routes/activities.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 3056,
+          "path": "backend/routes/assets.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": true,
+          "line": 2713,
+          "path": "backend/routes/assets.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": false,
+          "line": 15,
+          "path": "backend/routes/backup.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 997,
+          "path": "backend/routes/pegawai.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1063,
+          "path": "backend/routes/pegawai.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1086,
+          "path": "backend/routes/pegawai.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1107,
+          "path": "backend/routes/pegawai.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1631,
+          "path": "backend/routes/spasial.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1725,
+          "path": "backend/routes/spasial.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 604,
+          "path": "backend/routes/spasial.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": false,
+          "line": 21,
+          "path": "backend/routes/ttd.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 44,
+          "path": "backend/routes/unduhan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 132,
+          "path": "backend/shared_utils.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": true,
+          "line": 170,
+          "path": "backend/shared_utils.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": true,
+          "line": 186,
+          "path": "backend/shared_utils.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": false,
+          "line": 41,
+          "path": "backend/webp_converter.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "cachetools": {
+      "distributions": [
+        "cachetools"
+      ],
+      "locations": [
+        {
+          "lazy": false,
+          "line": 13,
+          "path": "backend/routes/websocket.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 24,
+          "path": "backend/shared_utils.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "cryptography": {
+      "distributions": [
+        "cryptography"
+      ],
+      "locations": [
+        {
+          "lazy": false,
+          "line": 24,
+          "path": "backend/backup_dr.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "docx": {
+      "distributions": [
+        "python-docx"
+      ],
+      "locations": [
+        {
+          "lazy": true,
+          "line": 33,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 34,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 35,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 53,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 54,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 63,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 64,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 77,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 78,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 79,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 80,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 101,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 102,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 120,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 121,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 141,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 142,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 191,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 192,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 212,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 213,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 233,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 254,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 255,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 303,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 304,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 342,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 343,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 434,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 435,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 459,
+          "path": "backend/docx_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 528,
+          "path": "backend/routes/documents.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 529,
+          "path": "backend/routes/documents.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 530,
+          "path": "backend/routes/documents.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 531,
+          "path": "backend/routes/documents.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 532,
+          "path": "backend/routes/documents.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 533,
+          "path": "backend/routes/documents.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 577,
+          "path": "backend/routes/documents.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 51,
+          "path": "backend/routes/lbp.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 52,
+          "path": "backend/routes/lbp.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 60,
+          "path": "backend/routes/lbp.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 61,
+          "path": "backend/routes/lbp.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 76,
+          "path": "backend/routes/lbp.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 77,
+          "path": "backend/routes/lbp.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 78,
+          "path": "backend/routes/lbp.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 88,
+          "path": "backend/routes/lbp.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 98,
+          "path": "backend/routes/lbp.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 99,
+          "path": "backend/routes/lbp.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 119,
+          "path": "backend/routes/lbp.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 120,
+          "path": "backend/routes/lbp.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "dotenv": {
+      "distributions": [
+        "python-dotenv"
+      ],
+      "locations": [
+        {
+          "lazy": false,
+          "line": 7,
+          "path": "backend/db.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 6,
+          "path": "backend/migrate_thumbnails.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 13,
+          "path": "backend/server.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "fastapi": {
+      "distributions": [
+        "fastapi"
+      ],
+      "locations": [
+        {
+          "lazy": false,
+          "line": 13,
+          "path": "backend/asset_cursor.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 10,
+          "path": "backend/asset_sorting.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 10,
+          "path": "backend/auth_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 16,
+          "path": "backend/batch_operations.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 20,
+          "path": "backend/export_budget.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 233,
+          "path": "backend/export_budget.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 17,
+          "path": "backend/export_worker.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 2,
+          "path": "backend/lampiran_bast_aset.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 13,
+          "path": "backend/marker_pin.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 14,
+          "path": "backend/pemeliharaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 15,
+          "path": "backend/pemeliharaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 17,
+          "path": "backend/portal_auth.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 12,
+          "path": "backend/portal_bast.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 12,
+          "path": "backend/portal_bast_validitas.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 7,
+          "path": "backend/render_executor.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 2,
+          "path": "backend/report_read_limits.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 11,
+          "path": "backend/routes/activities.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 12,
+          "path": "backend/routes/activities.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 9,
+          "path": "backend/routes/akun_bas.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 24,
+          "path": "backend/routes/aset_permohonan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 25,
+          "path": "backend/routes/aset_permohonan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 13,
+          "path": "backend/routes/assets.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 15,
+          "path": "backend/routes/assets.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 7,
+          "path": "backend/routes/audit.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 598,
+          "path": "backend/routes/audit.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 6,
+          "path": "backend/routes/auth.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 13,
+          "path": "backend/routes/backup.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 14,
+          "path": "backend/routes/backup.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 39,
+          "path": "backend/routes/bast.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 41,
+          "path": "backend/routes/bast.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 15,
+          "path": "backend/routes/batch.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 28,
+          "path": "backend/routes/cards.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 29,
+          "path": "backend/routes/cards.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 6,
+          "path": "backend/routes/categories.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 13,
+          "path": "backend/routes/documents.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 14,
+          "path": "backend/routes/documents.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 14,
+          "path": "backend/routes/email_monitor.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 15,
+          "path": "backend/routes/exports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 18,
+          "path": "backend/routes/exports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 33,
+          "path": "backend/routes/geofence.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 8,
+          "path": "backend/routes/imports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 32,
+          "path": "backend/routes/iot.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 8,
+          "path": "backend/routes/jobs.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 11,
+          "path": "backend/routes/jobs.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 15,
+          "path": "backend/routes/kodefikasi.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 17,
+          "path": "backend/routes/kodefikasi.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 20,
+          "path": "backend/routes/lbp.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 16,
+          "path": "backend/routes/media.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 13,
+          "path": "backend/routes/mutasi_bmn.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 841,
+          "path": "backend/routes/mutasi_bmn.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 34,
+          "path": "backend/routes/opname.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 39,
+          "path": "backend/routes/pdf_compress.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 40,
+          "path": "backend/routes/pdf_compress.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 13,
+          "path": "backend/routes/pegawai.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 12,
+          "path": "backend/routes/pejabat.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 11,
+          "path": "backend/routes/pelaporan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 13,
+          "path": "backend/routes/pemanfaatan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 14,
+          "path": "backend/routes/pemanfaatan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 12,
+          "path": "backend/routes/pemeliharaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 260,
+          "path": "backend/routes/pemeliharaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 298,
+          "path": "backend/routes/pemeliharaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 385,
+          "path": "backend/routes/pemeliharaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 799,
+          "path": "backend/routes/pemeliharaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 11,
+          "path": "backend/routes/pemindahtanganan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 14,
+          "path": "backend/routes/pemindahtanganan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 97,
+          "path": "backend/routes/pemindahtanganan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 499,
+          "path": "backend/routes/pemindahtanganan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 11,
+          "path": "backend/routes/pemusnahan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 12,
+          "path": "backend/routes/pemusnahan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 406,
+          "path": "backend/routes/pemusnahan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 14,
+          "path": "backend/routes/pengadaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 15,
+          "path": "backend/routes/pengadaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1829,
+          "path": "backend/routes/pengadaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 10,
+          "path": "backend/routes/pengamanan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 11,
+          "path": "backend/routes/pengamanan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 129,
+          "path": "backend/routes/pengamanan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 264,
+          "path": "backend/routes/pengamanan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 476,
+          "path": "backend/routes/pengamanan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 583,
+          "path": "backend/routes/pengamanan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 14,
+          "path": "backend/routes/penganggaran.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 111,
+          "path": "backend/routes/penganggaran.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 19,
+          "path": "backend/routes/pengesahan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 20,
+          "path": "backend/routes/pengesahan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 14,
+          "path": "backend/routes/penggunaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 17,
+          "path": "backend/routes/penggunaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 325,
+          "path": "backend/routes/penggunaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 435,
+          "path": "backend/routes/penggunaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 853,
+          "path": "backend/routes/penggunaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1214,
+          "path": "backend/routes/penggunaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1252,
+          "path": "backend/routes/penggunaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1522,
+          "path": "backend/routes/penggunaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1746,
+          "path": "backend/routes/penggunaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1863,
+          "path": "backend/routes/penggunaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 12,
+          "path": "backend/routes/penghapusan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 13,
+          "path": "backend/routes/penghapusan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 102,
+          "path": "backend/routes/penghapusan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 427,
+          "path": "backend/routes/penghapusan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 13,
+          "path": "backend/routes/penilaian.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 234,
+          "path": "backend/routes/penilaian.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 13,
+          "path": "backend/routes/perencanaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 69,
+          "path": "backend/routes/perencanaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 215,
+          "path": "backend/routes/perencanaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 22,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 482,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 680,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 774,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 791,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 826,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1209,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1288,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1449,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1542,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 2010,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 2562,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 3490,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 10,
+          "path": "backend/routes/persediaan_akun.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 15,
+          "path": "backend/routes/persediaan_laporan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 16,
+          "path": "backend/routes/persediaan_laporan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 29,
+          "path": "backend/routes/persediaan_permohonan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 30,
+          "path": "backend/routes/persediaan_permohonan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 28,
+          "path": "backend/routes/persuratan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 29,
+          "path": "backend/routes/persuratan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 23,
+          "path": "backend/routes/peta_kolaborasi.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 7,
+          "path": "backend/routes/portal_auth.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 14,
+          "path": "backend/routes/portal_pemegang.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 15,
+          "path": "backend/routes/portal_pemegang.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 25,
+          "path": "backend/routes/referensi_akun.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 183,
+          "path": "backend/routes/referensi_akun.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 32,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 33,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 17,
+          "path": "backend/routes/ruangan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 19,
+          "path": "backend/routes/satker.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 12,
+          "path": "backend/routes/search_admin.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 18,
+          "path": "backend/routes/siman.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 445,
+          "path": "backend/routes/siman.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 26,
+          "path": "backend/routes/spasial.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1477,
+          "path": "backend/routes/spasial.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1538,
+          "path": "backend/routes/spasial.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1765,
+          "path": "backend/routes/spasial.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 27,
+          "path": "backend/routes/stiker.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 28,
+          "path": "backend/routes/stiker.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 11,
+          "path": "backend/routes/syarat_dokumen.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 13,
+          "path": "backend/routes/tautan_pendek.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 10,
+          "path": "backend/routes/templates.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 11,
+          "path": "backend/routes/templates.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 12,
+          "path": "backend/routes/tgr.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 170,
+          "path": "backend/routes/tgr.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 14,
+          "path": "backend/routes/timeline.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 22,
+          "path": "backend/routes/ttd.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 24,
+          "path": "backend/routes/ttd.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 46,
+          "path": "backend/routes/unduhan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 47,
+          "path": "backend/routes/unduhan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 12,
+          "path": "backend/routes/unit_kerja.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 4,
+          "path": "backend/routes/users.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 3,
+          "path": "backend/routes/validation.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 14,
+          "path": "backend/routes/wasdal.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 17,
+          "path": "backend/routes/wasdal.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 263,
+          "path": "backend/routes/wasdal.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 423,
+          "path": "backend/routes/wasdal.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 679,
+          "path": "backend/routes/wasdal.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 768,
+          "path": "backend/routes/wasdal.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 930,
+          "path": "backend/routes/wasdal.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 11,
+          "path": "backend/routes/websocket.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 5,
+          "path": "backend/satker_referensi.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 15,
+          "path": "backend/server.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 16,
+          "path": "backend/server.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 17,
+          "path": "backend/server.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 718,
+          "path": "backend/server.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 25,
+          "path": "backend/shared_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1056,
+          "path": "backend/shared_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1075,
+          "path": "backend/shared_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1141,
+          "path": "backend/shared_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 2,
+          "path": "backend/unggahan_utils.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "httpx": {
+      "distributions": [
+        "httpx"
+      ],
+      "locations": [
+        {
+          "lazy": false,
+          "line": 48,
+          "path": "backend/meili_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 19,
+          "path": "backend/routes/media.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 38,
+          "path": "backend/routes/pdf_compress.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 25,
+          "path": "backend/tinify_service.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "jinja2": {
+      "distributions": [
+        "Jinja2"
+      ],
+      "locations": [
+        {
+          "lazy": true,
+          "line": 104,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 6143,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 6161,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 6197,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 6537,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 6553,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 7515,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 7550,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "jwt": {
+      "distributions": [
+        "PyJWT"
+      ],
+      "locations": [
+        {
+          "lazy": false,
+          "line": 11,
+          "path": "backend/asset_cursor.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 6,
+          "path": "backend/auth_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 51,
+          "path": "backend/pdf_compress_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 12,
+          "path": "backend/routes/websocket.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 17,
+          "path": "backend/shared_utils.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "markupsafe": {
+      "distributions": [
+        "MarkupSafe"
+      ],
+      "locations": [
+        {
+          "lazy": false,
+          "line": 49,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 5935,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "motor": {
+      "distributions": [
+        "motor"
+      ],
+      "locations": [
+        {
+          "lazy": false,
+          "line": 8,
+          "path": "backend/db.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 7,
+          "path": "backend/migrate_thumbnails.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "numpy": {
+      "distributions": [
+        "numpy"
+      ],
+      "locations": [
+        {
+          "lazy": true,
+          "line": 26,
+          "path": "backend/ttd_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 116,
+          "path": "backend/ttd_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 135,
+          "path": "backend/ttd_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 164,
+          "path": "backend/ttd_utils.py",
+          "try_guarded": true
+        }
+      ]
+    },
+    "openpyxl": {
+      "distributions": [
+        "openpyxl"
+      ],
+      "locations": [
+        {
+          "lazy": true,
+          "line": 152,
+          "path": "backend/routes/categories.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 171,
+          "path": "backend/routes/imports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 133,
+          "path": "backend/routes/kodefikasi.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 266,
+          "path": "backend/routes/kodefikasi.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 554,
+          "path": "backend/routes/pegawai.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 555,
+          "path": "backend/routes/pegawai.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 556,
+          "path": "backend/routes/pegawai.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 557,
+          "path": "backend/routes/pegawai.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 668,
+          "path": "backend/routes/pegawai.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 74,
+          "path": "backend/routes/siman.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "pptx": {
+      "distributions": [
+        "python-pptx"
+      ],
+      "locations": [
+        {
+          "lazy": true,
+          "line": 80,
+          "path": "backend/routes/documents.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 81,
+          "path": "backend/routes/documents.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 82,
+          "path": "backend/routes/documents.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 83,
+          "path": "backend/routes/documents.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 84,
+          "path": "backend/routes/documents.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "pydantic": {
+      "distributions": [
+        "pydantic"
+      ],
+      "locations": [
+        {
+          "lazy": false,
+          "line": 18,
+          "path": "backend/export_worker.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 5,
+          "path": "backend/models.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 13,
+          "path": "backend/routes/activities.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 10,
+          "path": "backend/routes/akun_bas.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 26,
+          "path": "backend/routes/aset_permohonan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 42,
+          "path": "backend/routes/bast.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 17,
+          "path": "backend/routes/batch.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 15,
+          "path": "backend/routes/email_monitor.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1514,
+          "path": "backend/routes/exports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 34,
+          "path": "backend/routes/geofence.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 33,
+          "path": "backend/routes/iot.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 18,
+          "path": "backend/routes/kodefikasi.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 17,
+          "path": "backend/routes/media.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 14,
+          "path": "backend/routes/mutasi_bmn.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 35,
+          "path": "backend/routes/opname.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 15,
+          "path": "backend/routes/pegawai.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 13,
+          "path": "backend/routes/pejabat.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 12,
+          "path": "backend/routes/pelaporan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 15,
+          "path": "backend/routes/pemanfaatan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 13,
+          "path": "backend/routes/pemeliharaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 15,
+          "path": "backend/routes/pemindahtanganan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 13,
+          "path": "backend/routes/pemusnahan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 16,
+          "path": "backend/routes/pengadaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 12,
+          "path": "backend/routes/pengamanan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 15,
+          "path": "backend/routes/penganggaran.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 20,
+          "path": "backend/routes/penggunaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 14,
+          "path": "backend/routes/penghapusan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 14,
+          "path": "backend/routes/penilaian.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 14,
+          "path": "backend/routes/perencanaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 24,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 11,
+          "path": "backend/routes/persediaan_akun.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 31,
+          "path": "backend/routes/persediaan_permohonan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 30,
+          "path": "backend/routes/persuratan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 24,
+          "path": "backend/routes/peta_kolaborasi.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 8,
+          "path": "backend/routes/portal_auth.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 16,
+          "path": "backend/routes/portal_pemegang.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 26,
+          "path": "backend/routes/referensi_akun.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 34,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 18,
+          "path": "backend/routes/ruangan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 20,
+          "path": "backend/routes/satker.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 19,
+          "path": "backend/routes/siman.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 28,
+          "path": "backend/routes/spasial.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 15,
+          "path": "backend/routes/tgr.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 25,
+          "path": "backend/routes/ttd.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 48,
+          "path": "backend/routes/unduhan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 13,
+          "path": "backend/routes/unit_kerja.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 18,
+          "path": "backend/routes/wasdal.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "pymongo": {
+      "distributions": [
+        "pymongo"
+      ],
+      "locations": [
+        {
+          "lazy": false,
+          "line": 18,
+          "path": "backend/backup_dr.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 19,
+          "path": "backend/backup_dr.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 17,
+          "path": "backend/batch_operations.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 18,
+          "path": "backend/batch_operations.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 21,
+          "path": "backend/event_bus.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 22,
+          "path": "backend/event_bus.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 21,
+          "path": "backend/export_budget.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 19,
+          "path": "backend/export_worker.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 21,
+          "path": "backend/foto_inline_optimizer.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 45,
+          "path": "backend/meili_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 18,
+          "path": "backend/portal_auth.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 13,
+          "path": "backend/portal_bast.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 17,
+          "path": "backend/routes/assets.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 7,
+          "path": "backend/routes/auth.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 16,
+          "path": "backend/routes/backup.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 17,
+          "path": "backend/routes/backup.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 953,
+          "path": "backend/routes/bast.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 18,
+          "path": "backend/routes/batch.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 19,
+          "path": "backend/routes/batch.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 272,
+          "path": "backend/routes/geofence.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 347,
+          "path": "backend/routes/geofence.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 450,
+          "path": "backend/routes/iot.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 36,
+          "path": "backend/routes/opname.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 405,
+          "path": "backend/routes/pegawai.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 750,
+          "path": "backend/routes/pegawai.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 11,
+          "path": "backend/routes/pemeliharaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 21,
+          "path": "backend/routes/pengesahan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 31,
+          "path": "backend/routes/persuratan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 9,
+          "path": "backend/routes/portal_auth.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 10,
+          "path": "backend/routes/portal_auth.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 17,
+          "path": "backend/routes/portal_pemegang.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 98,
+          "path": "backend/routes/referensi_akun.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 22,
+          "path": "backend/routes/satker.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 199,
+          "path": "backend/routes/siman.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 563,
+          "path": "backend/routes/spasial.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1201,
+          "path": "backend/routes/spasial.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 41,
+          "path": "backend/routes/unduhan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 19,
+          "path": "backend/shared_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 20,
+          "path": "backend/shared_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 27,
+          "path": "backend/tinify_service.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 28,
+          "path": "backend/tinify_service.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 42,
+          "path": "backend/webp_converter.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "pypdf": {
+      "distributions": [
+        "pypdf"
+      ],
+      "locations": [
+        {
+          "lazy": true,
+          "line": 162,
+          "path": "backend/gerbang_media.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": true,
+          "line": 283,
+          "path": "backend/pdf_compress_utils.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": true,
+          "line": 389,
+          "path": "backend/routes/bast.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": true,
+          "line": 3531,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1272,
+          "path": "backend/routes/ttd.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 880,
+          "path": "backend/routes/ttd.py",
+          "try_guarded": true
+        }
+      ]
+    },
+    "pypdfium2": {
+      "distributions": [
+        "pypdfium2"
+      ],
+      "locations": [
+        {
+          "lazy": true,
+          "line": 1081,
+          "path": "backend/routes/ttd.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "redis": {
+      "distributions": [
+        "redis"
+      ],
+      "locations": [
+        {
+          "lazy": true,
+          "line": 61,
+          "path": "backend/redis_utils.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "reportlab": {
+      "distributions": [
+        "reportlab"
+      ],
+      "locations": [
+        {
+          "lazy": true,
+          "line": 342,
+          "path": "backend/routes/aset_permohonan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1148,
+          "path": "backend/routes/bast.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1149,
+          "path": "backend/routes/bast.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1193,
+          "path": "backend/routes/bast.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1194,
+          "path": "backend/routes/bast.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1195,
+          "path": "backend/routes/bast.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1252,
+          "path": "backend/routes/bast.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1476,
+          "path": "backend/routes/bast.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1855,
+          "path": "backend/routes/bast.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 34,
+          "path": "backend/routes/cards.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 35,
+          "path": "backend/routes/cards.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 36,
+          "path": "backend/routes/cards.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 37,
+          "path": "backend/routes/cards.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 38,
+          "path": "backend/routes/cards.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 39,
+          "path": "backend/routes/cards.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 47,
+          "path": "backend/routes/cards.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 50,
+          "path": "backend/routes/cards.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 51,
+          "path": "backend/routes/cards.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 20,
+          "path": "backend/routes/exports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 21,
+          "path": "backend/routes/exports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 22,
+          "path": "backend/routes/exports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 23,
+          "path": "backend/routes/exports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 24,
+          "path": "backend/routes/exports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 25,
+          "path": "backend/routes/exports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 26,
+          "path": "backend/routes/exports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 27,
+          "path": "backend/routes/exports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 772,
+          "path": "backend/routes/exports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 773,
+          "path": "backend/routes/exports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 967,
+          "path": "backend/routes/exports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 722,
+          "path": "backend/routes/mutasi_bmn.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 723,
+          "path": "backend/routes/mutasi_bmn.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 158,
+          "path": "backend/routes/pemeliharaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 159,
+          "path": "backend/routes/pemeliharaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 715,
+          "path": "backend/routes/pemeliharaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 716,
+          "path": "backend/routes/pemeliharaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 500,
+          "path": "backend/routes/pemindahtanganan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 501,
+          "path": "backend/routes/pemindahtanganan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 407,
+          "path": "backend/routes/pemusnahan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 408,
+          "path": "backend/routes/pemusnahan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1468,
+          "path": "backend/routes/pengadaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1469,
+          "path": "backend/routes/pengadaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1470,
+          "path": "backend/routes/pengadaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1471,
+          "path": "backend/routes/pengadaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1472,
+          "path": "backend/routes/pengadaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 436,
+          "path": "backend/routes/penggunaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 437,
+          "path": "backend/routes/penggunaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 505,
+          "path": "backend/routes/penggunaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 506,
+          "path": "backend/routes/penggunaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 507,
+          "path": "backend/routes/penggunaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 557,
+          "path": "backend/routes/penggunaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1253,
+          "path": "backend/routes/penggunaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1254,
+          "path": "backend/routes/penggunaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1747,
+          "path": "backend/routes/penggunaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1748,
+          "path": "backend/routes/penggunaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1864,
+          "path": "backend/routes/penggunaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1865,
+          "path": "backend/routes/penggunaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 428,
+          "path": "backend/routes/penghapusan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 429,
+          "path": "backend/routes/penghapusan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 259,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 260,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 261,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 263,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1145,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1146,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1223,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1224,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1321,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1322,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1467,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1468,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1922,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1923,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 2149,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 2150,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 2155,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 3399,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 3400,
+          "path": "backend/routes/persediaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 83,
+          "path": "backend/routes/persediaan_laporan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 84,
+          "path": "backend/routes/persediaan_laporan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 85,
+          "path": "backend/routes/persediaan_laporan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 86,
+          "path": "backend/routes/persediaan_laporan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 140,
+          "path": "backend/routes/persediaan_laporan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 141,
+          "path": "backend/routes/persediaan_laporan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 199,
+          "path": "backend/routes/persediaan_laporan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 200,
+          "path": "backend/routes/persediaan_laporan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 201,
+          "path": "backend/routes/persediaan_laporan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 218,
+          "path": "backend/routes/persediaan_laporan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 219,
+          "path": "backend/routes/persediaan_laporan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 270,
+          "path": "backend/routes/persediaan_laporan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 309,
+          "path": "backend/routes/persediaan_laporan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 357,
+          "path": "backend/routes/persediaan_laporan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 405,
+          "path": "backend/routes/persediaan_laporan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 315,
+          "path": "backend/routes/persediaan_permohonan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 125,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 126,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 127,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 128,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 129,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 130,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 241,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 242,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 243,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 294,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 295,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 296,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 308,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 309,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 326,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 327,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 447,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 472,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 503,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 504,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 509,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 558,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 576,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 593,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 606,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 709,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 785,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 786,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 868,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 869,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 897,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 898,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 956,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 957,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1365,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1366,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1711,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1712,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1860,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1861,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 2215,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 2216,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 2511,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 2512,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 2741,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 2742,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 2953,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 2954,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 3153,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 3154,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 3233,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 3234,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 3335,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 3336,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 3474,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 3475,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 3644,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 3645,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 3798,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 3799,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 4325,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 4326,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 4615,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 4616,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 4701,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 4702,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 5021,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 5022,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 5023,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 5024,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 5025,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 5026,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 7588,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 7589,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1086,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 5049,
+          "path": "backend/routes/reports.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": true,
+          "line": 1004,
+          "path": "backend/routes/reports.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": true,
+          "line": 159,
+          "path": "backend/routes/stiker.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 160,
+          "path": "backend/routes/stiker.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 161,
+          "path": "backend/routes/stiker.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1273,
+          "path": "backend/routes/ttd.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1274,
+          "path": "backend/routes/ttd.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1275,
+          "path": "backend/routes/ttd.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 2624,
+          "path": "backend/routes/ttd.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 2625,
+          "path": "backend/routes/ttd.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 1444,
+          "path": "backend/routes/ttd.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": true,
+          "line": 1486,
+          "path": "backend/routes/ttd.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": true,
+          "line": 680,
+          "path": "backend/routes/wasdal.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 681,
+          "path": "backend/routes/wasdal.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 769,
+          "path": "backend/routes/wasdal.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 770,
+          "path": "backend/routes/wasdal.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 931,
+          "path": "backend/routes/wasdal.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 932,
+          "path": "backend/routes/wasdal.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 42,
+          "path": "backend/server.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 57,
+          "path": "backend/stiker_render.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 32,
+          "path": "backend/stiker_render.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": true,
+          "line": 43,
+          "path": "backend/stiker_render.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": true,
+          "line": 44,
+          "path": "backend/stiker_render.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": true,
+          "line": 214,
+          "path": "backend/stiker_render.py",
+          "try_guarded": true
+        }
+      ]
+    },
+    "resend": {
+      "distributions": [
+        "resend"
+      ],
+      "locations": [
+        {
+          "lazy": false,
+          "line": 35,
+          "path": "backend/shared_utils.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "shapefile": {
+      "distributions": [
+        "pyshp"
+      ],
+      "locations": [
+        {
+          "lazy": true,
+          "line": 225,
+          "path": "backend/ekspor_geo_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 313,
+          "path": "backend/impor_geo_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 454,
+          "path": "backend/routes/exports.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "shapely": {
+      "distributions": [
+        "shapely"
+      ],
+      "locations": [
+        {
+          "lazy": true,
+          "line": 31,
+          "path": "backend/belah_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 32,
+          "path": "backend/belah_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 130,
+          "path": "backend/spasial_optimize.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": true,
+          "line": 178,
+          "path": "backend/spasial_optimize.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": true,
+          "line": 131,
+          "path": "backend/topologi_utils.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": true,
+          "line": 132,
+          "path": "backend/topologi_utils.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": true,
+          "line": 133,
+          "path": "backend/topologi_utils.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": true,
+          "line": 150,
+          "path": "backend/topologi_utils.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": true,
+          "line": 264,
+          "path": "backend/topologi_utils.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": true,
+          "line": 311,
+          "path": "backend/topologi_utils.py",
+          "try_guarded": true
+        },
+        {
+          "lazy": true,
+          "line": 312,
+          "path": "backend/topologi_utils.py",
+          "try_guarded": true
+        }
+      ]
+    },
+    "slowapi": {
+      "distributions": [
+        "slowapi"
+      ],
+      "locations": [
+        {
+          "lazy": false,
+          "line": 11,
+          "path": "backend/routes/portal_auth.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 19,
+          "path": "backend/server.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 20,
+          "path": "backend/server.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 32,
+          "path": "backend/shared_utils.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 33,
+          "path": "backend/shared_utils.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "starlette": {
+      "distributions": [
+        "starlette"
+      ],
+      "locations": [
+        {
+          "lazy": false,
+          "line": 2,
+          "path": "backend/portal_middleware.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 18,
+          "path": "backend/server.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "tinify": {
+      "distributions": [
+        "tinify"
+      ],
+      "locations": [
+        {
+          "lazy": false,
+          "line": 34,
+          "path": "backend/shared_utils.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "utm": {
+      "distributions": [
+        "utm"
+      ],
+      "locations": [
+        {
+          "lazy": true,
+          "line": 289,
+          "path": "backend/impor_geo_utils.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "uvicorn": {
+      "distributions": [
+        "uvicorn"
+      ],
+      "locations": [
+        {
+          "lazy": false,
+          "line": 723,
+          "path": "backend/server.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "weasyprint": {
+      "distributions": [
+        "weasyprint"
+      ],
+      "locations": [
+        {
+          "lazy": true,
+          "line": 6162,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 6198,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 6554,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 7551,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        }
+      ]
+    },
+    "xlsxwriter": {
+      "distributions": [
+        "xlsxwriter"
+      ],
+      "locations": [
+        {
+          "lazy": false,
+          "line": 28,
+          "path": "backend/routes/exports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 68,
+          "path": "backend/routes/perencanaan.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": true,
+          "line": 4159,
+          "path": "backend/routes/reports.py",
+          "try_guarded": false
+        },
+        {
+          "lazy": false,
+          "line": 12,
+          "path": "backend/routes/templates.py",
+          "try_guarded": false
+        }
+      ]
+    }
+  }
+}

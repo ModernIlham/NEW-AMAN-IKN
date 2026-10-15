@@ -1,0 +1,406 @@
+{
+  "basis": "Production JS source maps and application imports/config/navigation source; not manifest dependency/devDependency group labels",
+  "modules": {
+    "@eslint/plugin-kit": {
+      "advisory_records": 1,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "low": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "minimatch": {
+      "advisory_records": 6,
+      "unique_ghsa": 3,
+      "severity_counts": {
+        "high": 6
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "ajv": {
+      "advisory_records": 2,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "moderate": 2
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "brace-expansion": {
+      "advisory_records": 14,
+      "unique_ghsa": 7,
+      "severity_counts": {
+        "moderate": 4,
+        "high": 10
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "@humanfs/node": {
+      "advisory_records": 1,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "moderate": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "react-router": {
+      "advisory_records": 14,
+      "unique_ghsa": 14,
+      "severity_counts": {
+        "high": 7,
+        "moderate": 7
+      },
+      "classification": "browser_conditional_prerequisites_not_established"
+    },
+    "picomatch": {
+      "advisory_records": 4,
+      "unique_ghsa": 2,
+      "severity_counts": {
+        "moderate": 2,
+        "high": 2
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "postcss-selector-parser": {
+      "advisory_records": 3,
+      "unique_ghsa": 2,
+      "severity_counts": {
+        "low": 2,
+        "moderate": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "diff": {
+      "advisory_records": 1,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "low": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "jsonpath": {
+      "advisory_records": 2,
+      "unique_ghsa": 2,
+      "severity_counts": {
+        "moderate": 1,
+        "high": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "qs": {
+      "advisory_records": 4,
+      "unique_ghsa": 4,
+      "severity_counts": {
+        "low": 1,
+        "moderate": 3
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "serialize-javascript": {
+      "advisory_records": 2,
+      "unique_ghsa": 2,
+      "severity_counts": {
+        "high": 1,
+        "moderate": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "svgo": {
+      "advisory_records": 4,
+      "unique_ghsa": 4,
+      "severity_counts": {
+        "high": 3,
+        "moderate": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "flatted": {
+      "advisory_records": 2,
+      "unique_ghsa": 2,
+      "severity_counts": {
+        "high": 2
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "path-to-regexp": {
+      "advisory_records": 1,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "high": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "yaml": {
+      "advisory_records": 1,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "moderate": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "lodash": {
+      "advisory_records": 3,
+      "unique_ghsa": 3,
+      "severity_counts": {
+        "high": 1,
+        "moderate": 2
+      },
+      "classification": "build_or_dev_tooling_current_bundle_vendor_lodash_4.18.1_is_patched"
+    },
+    "follow-redirects": {
+      "advisory_records": 1,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "moderate": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "axios": {
+      "advisory_records": 35,
+      "unique_ghsa": 35,
+      "severity_counts": {
+        "moderate": 21,
+        "high": 13,
+        "low": 1
+      },
+      "classification": "browser_conditional_prerequisites_not_established"
+    },
+    "postcss": {
+      "advisory_records": 5,
+      "unique_ghsa": 5,
+      "severity_counts": {
+        "moderate": 3,
+        "high": 2
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "ws": {
+      "advisory_records": 3,
+      "unique_ghsa": 2,
+      "severity_counts": {
+        "moderate": 1,
+        "high": 2
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "@babel/plugin-transform-modules-systemjs": {
+      "advisory_records": 1,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "high": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "shell-quote": {
+      "advisory_records": 2,
+      "unique_ghsa": 2,
+      "severity_counts": {
+        "critical": 1,
+        "high": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "form-data": {
+      "advisory_records": 2,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "high": 2
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "launch-editor": {
+      "advisory_records": 1,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "moderate": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "http-proxy-middleware": {
+      "advisory_records": 1,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "moderate": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "js-yaml": {
+      "advisory_records": 8,
+      "unique_ghsa": 4,
+      "severity_counts": {
+        "moderate": 2,
+        "high": 6
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "websocket-driver": {
+      "advisory_records": 2,
+      "unique_ghsa": 2,
+      "severity_counts": {
+        "moderate": 1,
+        "critical": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "@babel/core": {
+      "advisory_records": 1,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "low": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "body-parser": {
+      "advisory_records": 1,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "low": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "fast-uri": {
+      "advisory_records": 9,
+      "unique_ghsa": 9,
+      "severity_counts": {
+        "high": 8,
+        "moderate": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "nanoid": {
+      "advisory_records": 3,
+      "unique_ghsa": 3,
+      "severity_counts": {
+        "high": 3
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "browserslist": {
+      "advisory_records": 2,
+      "unique_ghsa": 2,
+      "severity_counts": {
+        "high": 2
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "colord": {
+      "advisory_records": 1,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "moderate": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "baseline-browser-mapping": {
+      "advisory_records": 1,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "moderate": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "source-map-js": {
+      "advisory_records": 1,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "high": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "proxy-addr": {
+      "advisory_records": 1,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "critical": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "compression": {
+      "advisory_records": 1,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "high": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "nth-check": {
+      "advisory_records": 1,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "high": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "webpack-dev-server": {
+      "advisory_records": 6,
+      "unique_ghsa": 6,
+      "severity_counts": {
+        "moderate": 6
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "rollup": {
+      "advisory_records": 1,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "high": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "node-forge": {
+      "advisory_records": 5,
+      "unique_ghsa": 5,
+      "severity_counts": {
+        "high": 5
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "underscore": {
+      "advisory_records": 1,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "high": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "@tootallnate/once": {
+      "advisory_records": 1,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "low": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "uuid": {
+      "advisory_records": 1,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "moderate": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "webpack-dev-middleware": {
+      "advisory_records": 1,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "high": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "braces": {
+      "advisory_records": 1,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "high": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    },
+    "sprintf-js": {
+      "advisory_records": 1,
+      "unique_ghsa": 1,
+      "severity_counts": {
+        "moderate": 1
+      },
+      "classification": "build_test_or_development_tooling"
+    }
+  }
+}

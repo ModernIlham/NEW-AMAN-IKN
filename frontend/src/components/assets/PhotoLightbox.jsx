@@ -549,6 +549,7 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
   return createPortal(
     <div
       className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-md flex flex-col items-center justify-center"
+      role="dialog" aria-modal="true" aria-label="Penampil foto aset"
       onClick={onClose}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
@@ -556,6 +557,9 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
     >
       {/* Close button */}
       <button
+        type="button"
+        aria-label="Tutup penampil foto"
+        autoFocus
         className="absolute top-3 right-3 z-10 w-9 h-9 rounded-full bg-black/50 hover:bg-black/70 text-white ring-1 ring-white/40 shadow-lg flex items-center justify-center backdrop-blur-sm transition-colors"
         onClick={onClose}
         data-testid="lightbox-close"

@@ -1,0 +1,65 @@
+{
+  "python": "3.11.17",
+  "runtime_lock_sha256": "95e1e78b9d5dd6dbb5690e7d5c2f164c808610570e8afb5166fe0fe964b0ddbb",
+  "profiles": {
+    "b": {
+      "total_distributions": 140,
+      "runtime_distributions": 137,
+      "bootstrap_distributions": {
+        "pip": "26.2.1",
+        "setuptools": "84.0.0",
+        "wheel": "0.48.0"
+      },
+      "all_installed_manifest_sha256": "4fc114bedf7a549c48bbc661a254f186f2e7cbb47dde2e85d0630d48cac617f7",
+      "matches_runtime_lock": true,
+      "removed_legacy_packages_present": false,
+      "installed_distributions_audited": 140,
+      "installed_advisories": 0
+    },
+    "c": {
+      "total_distributions": 140,
+      "runtime_distributions": 137,
+      "bootstrap_distributions": {
+        "pip": "26.2.1",
+        "setuptools": "84.0.0",
+        "wheel": "0.48.0"
+      },
+      "all_installed_manifest_sha256": "4fc114bedf7a549c48bbc661a254f186f2e7cbb47dde2e85d0630d48cac617f7",
+      "matches_runtime_lock": true,
+      "removed_legacy_packages_present": false,
+      "installed_distributions_audited": 140,
+      "installed_advisories": 0
+    },
+    "d": {
+      "total_distributions": 137,
+      "runtime_distributions": 137,
+      "bootstrap_distributions": {},
+      "all_installed_manifest_sha256": "811eb1aeb81a6e78491ebe88adb413dc73801d2d2cb0ee66f8313a8006092e25",
+      "matches_runtime_lock": true,
+      "removed_legacy_packages_present": false,
+      "installed_distributions_audited": 137,
+      "installed_advisories": 0
+    },
+    "e": {
+      "total_distributions": 137,
+      "runtime_distributions": 137,
+      "bootstrap_distributions": {},
+      "all_installed_manifest_sha256": "811eb1aeb81a6e78491ebe88adb413dc73801d2d2cb0ee66f8313a8006092e25",
+      "matches_runtime_lock": true,
+      "removed_legacy_packages_present": false,
+      "installed_distributions_audited": 137,
+      "installed_advisories": 0
+    }
+  },
+  "fresh_without_pip_installs": [
+    "d",
+    "e"
+  ],
+  "installation": "separate pip26.2.1 --python target install --only-binary=:all: --require-hashes",
+  "installer_runtime_separate": true,
+  "installer": {
+    "packages": 1,
+    "pip": "26.2.1",
+    "advisories": 0
+  }
+}

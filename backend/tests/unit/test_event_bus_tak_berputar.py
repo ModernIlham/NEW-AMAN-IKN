@@ -191,63 +191,39 @@ async def test_keadaan_itu_diumumkan_ke_log(caplog):
         event_bus.AMBANG_LAPOR_KURSOR_MATI = asli
 
 
-class TestPenandaPosisiMemakaiIndeksYangADA:
-    """`ws_events` hanya punya indeks `_id_`, dan ia dipakai **0 kali**.
-
-    Diagnosa 30 Agustus 2026 setelah perbaikan laju:
-
-    ==================================  ===============
-    Waktu mongod di `ws_events`         **99,7%**
-    Dokumen dipindai                    145.238.636.134
-    Dipindai per dokumen dikembalikan   370.825 : 1
-    Pindai koleksi                      7.263.861
-    Indeks `_id_` pada `ws_events`      **0 ops**
-    ==================================  ===============
-
-    Filter `{"ts": {"$gt": …}}` memindai seluruh 20.000 dokumen tiap kali
-    kursor dibuat, sementara indeks yang bisa menjawabnya menganggur di
-    sebelahnya. `{"_id": {"$gt": …}}` mengubahnya jadi pencarian indeks.
-    """
+class TestPosisiCincinTidakMengurutkanObjectId:
+    """Capped cursors do not use indexes; ObjectId size is not insert order."""
 
     @pytest.mark.asyncio
-    async def test_filter_memakai_id_bukan_ts(self):
+    async def test_filter_tidak_memotong_id_turun_atau_event_worker_sendiri(self):
         koleksi = _KoleksiPalsu(rtt=0.005)
         await _jalankan(koleksi, 0.3)
-        kueri = koleksi.kueri_terakhir
-        assert "_id" in kueri, f"filter tak memakai `_id`: {kueri}"
-        assert "ts" not in kueri, (
-            f"filter masih memakai `ts` — memindai 20.000 dokumen tiap kali: {kueri}"
-        )
-        # Penyaring loopback tetap ada; tanpanya tiap worker memproses
-        # peristiwanya sendiri.
-        assert "worker_id" in kueri
+        # Own events must remain in the cursor to prove natural continuity,
+        # then be filtered at delivery, not by a global ObjectId comparison.
+        assert koleksi.kueri_terakhir == {}
 
     @pytest.mark.asyncio
     async def test_max_await_time_ms_DIPANGGIL_bukan_ditugaskan(self):
-        # Kursor tiruan mengeksposnya sebagai METODE. Kode yang menulis
-        # `cursor.max_await_time_ms = 2000` akan menimpanya dan catatan ini
-        # tetap kosong — persis cacat yang berjalan berminggu-minggu.
         koleksi = _KoleksiPalsu(rtt=0.005)
         await _jalankan(koleksi, 0.3)
-        assert koleksi.catatan.get("max_await_time_ms") == 2000, (
-            "maxAwaitTimeMS tak pernah terpasang pada kursor"
-        )
+        assert koleksi.catatan.get("max_await_time_ms") == 2000
 
     @pytest.mark.asyncio
-    async def test_posisi_awal_diambil_dari_dokumen_TERBARU(self):
-        # Tanpa ini gelung mulai dari ObjectId waktu-sekarang dan bisa
-        # melewatkan peristiwa yang tiba di detik yang sama.
-        terbaru = ObjectId()
-        koleksi = _KoleksiPalsu(rtt=0.005, terakhir={"_id": terbaru})
-        await _jalankan(koleksi, 0.3)
-        assert koleksi.kueri_terakhir["_id"] == {"$gt": terbaru}
+    async def test_anchor_natural_dipakai_hanya_untuk_kesetaraan(self):
+        terbaru = ObjectId("66ffffffffffffffffffffff")
+        replay = event_bus.RingReplay(terbaru)
+        replay.begin_cursor()
+        assert replay.accept({"_id": terbaru}) == (False, False)
+        turun = ObjectId("660000000000000000000001")
+        assert replay.accept({"_id": turun}) == (True, False)
+        assert replay.accept({"_id": turun}) == (False, False)
 
     @pytest.mark.asyncio
     async def test_koleksi_kosong_tetap_jalan(self):
-        # find_one mengembalikan None saat ring buffer masih kosong.
         koleksi = _KoleksiPalsu(rtt=0.005, terakhir=None)
         await _jalankan(koleksi, 0.3)
-        assert isinstance(koleksi.kueri_terakhir["_id"]["$gt"], ObjectId)
+        assert koleksi.kueri_terakhir == {}
+
 
 
 class _DbCincin:

@@ -229,6 +229,12 @@ _BG_TASKS: set = set()
 # Forward it to local WS clients (excluding the original sender by user_id).
 async def _on_remote_event(activity_id: str, payload: dict):
     msg_type = payload.get("type", "")
+    if msg_type == "resync_required" and activity_id == "*":
+        # The bus carries no tenant data in a gap marker. Only authenticated
+        # connections already admitted to these rooms receive invalidation.
+        await asyncio.gather(*(manager.broadcast_local(room, payload)
+                               for room in list(manager.active)))
+        return
     if msg_type == "__presence_snapshot__":
         # Store the remote worker's snapshot and re-broadcast the union locally.
         first_contact = manager.update_remote_presence(

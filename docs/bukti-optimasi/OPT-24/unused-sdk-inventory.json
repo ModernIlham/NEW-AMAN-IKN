@@ -1,0 +1,66 @@
+{
+  "measured_at": "2026-10-15T13:00:51.825843+00:00",
+  "scope": [
+    "backend/**/*.py",
+    "scripts/**/*.py"
+  ],
+  "python_files_parsed": 652,
+  "candidate_imports_after_migration": [],
+  "dynamic_import_sites_reviewed": [
+    {
+      "file": "backend/server.py",
+      "line": 272,
+      "expression": "__import__(_modul, fromlist=[_fn])"
+    },
+    {
+      "file": "backend/tests/unit/test_shutdown_hentikan_penjadwal.py",
+      "line": 139,
+      "expression": "__import__('routes.backup', fromlist=['stop_backup_scheduler'])"
+    },
+    {
+      "file": "backend/tests/unit/test_belah_utils.py",
+      "line": 35,
+      "expression": "__import__('shapely.geometry', fromlist=['shape'])"
+    },
+    {
+      "file": "backend/tests/unit/test_persediaan_permohonan.py",
+      "line": 264,
+      "expression": "__import__('io')"
+    }
+  ],
+  "server_dynamic_module_allowlist": [
+    "jobs",
+    "webp_converter",
+    "routes.backup"
+  ],
+  "installed_baseline_reverse_requirements": {
+    "ecdsa": [
+      {
+        "distribution": "python-jose",
+        "version": "3.5.0",
+        "requirement": "ecdsa!=0.15"
+      }
+    ],
+    "litellm": [],
+    "pypdf2": [],
+    "python-jose": []
+  },
+  "baseline_pypdf": "6.7.4",
+  "approved_removals": [
+    "PyPDF2",
+    "litellm",
+    "python-jose",
+    "ecdsa"
+  ],
+  "retained_conservatively": [
+    "openai",
+    "rsa",
+    "pyasn1"
+  ],
+  "validation": {
+    "real_mongo_asgi_pdf_contracts": 2,
+    "report_filter_unit_tests": 37,
+    "passed": true
+  },
+  "limits": "Inventory alone does not authorize other dependency removals. The lock resolver and clean environment suite verify the final dependency graph."
+}

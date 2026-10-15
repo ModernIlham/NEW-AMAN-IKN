@@ -533,6 +533,10 @@ async def create_indexes() -> None:
         await _idx(db.assets, [("activity_id", 1), ("eselon1", 1)])
         await _idx(db.assets, [("activity_id", 1), ("eselon2", 1)])
         await _idx(db.assets, [("activity_id", 1), ("status", 1)])
+        # Measured on synthetic50k: name page examines50 rows rather than10k.
+        # Keep older overlapping indexes until post-release usage observation.
+        await _idx(db.assets, [("activity_id", 1), ("asset_name", 1), ("id", 1)],
+                   name="asset_activity_name_id")
         # GridFS: pembersih artifact-ekspor yatim (jobs.py) memindai fs.files pada
         # metadata.job_id tiap jam — tanpa indeks = COLLSCAN penuh, makin lambat
         # seiring bertambahnya foto. sparse: hanya dokumen ber-metadata.job_id.

@@ -1,0 +1,49 @@
+{
+  "embedded_fonts": {
+    "/EBSVNQ+Inter": 13396,
+    "/PUREZO+Inter-Ultra-Bold": 13448,
+    "/RXEIRL+Inter-Bold": 13432,
+    "/TIBVJP+Inter-Heavy": 13452
+  },
+  "font_sha256": "29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031",
+  "host_fallback_without_bundle": "DejaVu Math TeX Gyre",
+  "http_font_requests": 0,
+  "layout_equal_to_pinned_file": true,
+  "page_geometry_pt": [
+    [
+      595.275591,
+      841.889764
+    ]
+  ],
+  "pages": 1,
+  "text_boxes": [
+    [
+      "AMAN 0123456789",
+      83.590551,
+      91.590551,
+      146.8125,
+      19.359375
+    ],
+    [
+      "AMAN 0123456789",
+      83.590551,
+      126.949926,
+      153.101562,
+      19.359375
+    ],
+    [
+      "AMAN 0123456789",
+      83.590551,
+      162.309301,
+      155.679688,
+      19.359375
+    ],
+    [
+      "AMAN 0123456789",
+      83.590551,
+      197.668676,
+      158.476562,
+      19.359375
+    ]
+  ]
+}

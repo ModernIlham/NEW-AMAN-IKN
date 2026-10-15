@@ -120,6 +120,50 @@ async def rekap_ukuran_stiker(
     return rekap
 
 
+def _build_stiker_pdf(aset, ukuran, kertas, page, kop, header_info, sampel_ukuran, terpotong):
+    """Pure snapshot→PDF builder; owns its canvas and logo reader."""
+    from reportlab.lib.units import mm
+    from reportlab.pdfgen import canvas as rl_canvas
+    logo = logo_reader(kop.get("logo_url"))
+    # Baris kedua header: NAMA satuan kerja (default) atau KODE SATKER
+    # LENGKAP ±20 digit (switch di dialog) — fallback silang bila kosong.
+    nama_instansi = str(kop.get("nama_instansi")
+                        or kop.get("nama_unit_organisasi") or "").strip()
+    nama_satker = str(kop.get("nama_sub_unit")
+                      or kop.get("nama_unit_organisasi") or "").strip()
+    if nama_satker == nama_instansi and not kop.get("nama_sub_unit"):
+        nama_satker = ""
+    kode_lengkap = str(kop.get("kode_satker_lengkap") or "").strip()
+    if str(header_info).strip().lower() == "kode":
+        kop["_baris2_stiker"] = kode_lengkap or nama_satker
+    else:
+        kop["_baris2_stiker"] = nama_satker
+
+    page_w, page_h = page
+    buf = io.BytesIO()
+    c = rl_canvas.Canvas(buf, pagesize=page)
+    c.setTitle(f"Stiker Label BMN — {ukuran} — {kertas}")
+    if ukuran == "per_aset":
+        # Kelompokkan sesuai pilihan tiap aset; tiap kelompok grid sendiri
+        # (dan contoh ukurannya sendiri — dimensinya memang berbeda).
+        ada = False
+        for u, grup in kelompokkan_per_ukuran(aset):
+            gambar_grup(c, grup, u, page_w, page_h, kop, logo, mm,
+                         mulai_halaman_baru=ada, sampel_ukuran=sampel_ukuran)
+            ada = True
+    else:
+        gambar_grup(c, aset, ukuran, page_w, page_h, kop, logo, mm,
+                     mulai_halaman_baru=False, sampel_ukuran=sampel_ukuran)
+    if terpotong:
+        c.showPage()
+        c.setFont("Helvetica", 9)
+        c.drawString(MARGIN_MM * mm, page_h - MARGIN_MM * mm - 12,
+                     f"Catatan: hasil melebihi batas {MAKS_STIKER} stiker — "
+                     "persempit filter lalu cetak lagi untuk sisanya.")
+    c.save()
+    return buf.getvalue()
+
+
 @stiker_router.get("/stiker/label")
 async def cetak_stiker_label(
     ukuran: str = "sedang",
@@ -157,8 +201,6 @@ async def cetak_stiker_label(
     menambahkan SATU stiker contoh berisi dimensi nyata per satuan di akhir
     tiap kelompok."""
     from reportlab.lib.pagesizes import A3, A4
-    from reportlab.lib.units import mm
-    from reportlab.pdfgen import canvas as rl_canvas
 
     ukuran = str(ukuran).strip().lower()
     if ukuran not in ("per_aset", *TARGET_STIKER):
@@ -209,46 +251,10 @@ async def cetak_stiker_label(
             a["_subsub"] = peta_subsub[kd]
 
     kop = await pengaturan_kop(kode_satker=kode_satker_user(_user)) or {}
-    logo = logo_reader(kop.get("logo_url"))
-    # Baris kedua header: NAMA satuan kerja (default) atau KODE SATKER
-    # LENGKAP ±20 digit (switch di dialog) — fallback silang bila kosong.
-    nama_instansi = str(kop.get("nama_instansi")
-                        or kop.get("nama_unit_organisasi") or "").strip()
-    nama_satker = str(kop.get("nama_sub_unit")
-                      or kop.get("nama_unit_organisasi") or "").strip()
-    if nama_satker == nama_instansi and not kop.get("nama_sub_unit"):
-        nama_satker = ""
-    kode_lengkap = str(kop.get("kode_satker_lengkap") or "").strip()
-    if str(header_info).strip().lower() == "kode":
-        kop["_baris2_stiker"] = kode_lengkap or nama_satker
-    else:
-        kop["_baris2_stiker"] = nama_satker
-
-    page_w, page_h = page
-    buf = io.BytesIO()
-    c = rl_canvas.Canvas(buf, pagesize=page)
-    c.setTitle(f"Stiker Label BMN — {ukuran} — {kertas}")
-    if ukuran == "per_aset":
-        # Kelompokkan sesuai pilihan tiap aset; tiap kelompok grid sendiri
-        # (dan contoh ukurannya sendiri — dimensinya memang berbeda).
-        ada = False
-        for u, grup in kelompokkan_per_ukuran(aset):
-            gambar_grup(c, grup, u, page_w, page_h, kop, logo, mm,
-                         mulai_halaman_baru=ada, sampel_ukuran=sampel_ukuran)
-            ada = True
-    else:
-        gambar_grup(c, aset, ukuran, page_w, page_h, kop, logo, mm,
-                     mulai_halaman_baru=False, sampel_ukuran=sampel_ukuran)
-    if terpotong:
-        c.showPage()
-        c.setFont("Helvetica", 9)
-        c.drawString(MARGIN_MM * mm, page_h - MARGIN_MM * mm - 12,
-                     f"Catatan: hasil melebihi batas {MAKS_STIKER} stiker — "
-                     "persempit filter lalu cetak lagi untuk sisanya.")
-    c.save()
-    buf.seek(0)
+    from render_executor import run_renderer
+    data = await run_renderer(_build_stiker_pdf, aset, ukuran, kertas, page, kop, header_info, sampel_ukuran, terpotong)
     return StreamingResponse(
-        buf, media_type="application/pdf",
+        io.BytesIO(data), media_type="application/pdf",
         headers={"Content-Disposition":
                  f'attachment; filename="stiker_label_{ukuran}_{kertas}.pdf"',
                  "X-Total-Stiker": str(len(aset))})

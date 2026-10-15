@@ -2,11 +2,10 @@
 
 Yang dikunci di sini:
 - pagar `path_unduhan_valid` (traversal, skema, area terlarang);
-- alur mulai → antre (hapus_pada = +30 hari, batas 3 job aktif per user);
+- alur mulai → antre (hapus_pada = +30 hari, batas 1 job aktif per user);
 - daftar hanya milik pemilik; unduh 404 sebelum siap; isolasi satker
   fail-closed pada akses file;
-- worker menyimpan hasil panggilan internal ke GridFS + status done
-  (transport HTTP dipalsukan — endpoint dalam tak benar-benar dipanggil);
+- worker menjalankan producer ASGI nyata dan menyimpan hasil ke GridFS;
 - sapuan retensi: blob GridFS yatim (dokumen sudah di-TTL) terhapus,
   blob ber-dokumen hidup dibiarkan, job macet di-relabel error.
 """
@@ -219,48 +218,17 @@ def test_unduh_file_belum_siap_404_dan_isolasi_satker(dbx, monkeypatch):
 
 
 # --------------------------------------------------------------------- worker
-class _RespPalsu:
-    def __init__(self, status=200, data=b"%PDF-1.4 isi",
-                 ctype="application/pdf"):
-        self.status_code = status
-        self.headers = {"content-type": ctype}
-        self._data = data
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *a):
-        return False
-
-    async def aread(self):
-        return self._data
-
-    async def aiter_bytes(self, _n):
-        yield self._data
-
-
-class _KlienPalsu:
-    def __init__(self, *a, **k):
-        pass
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *a):
-        return False
-
-    def stream(self, method, url, headers=None):
-        assert method == "GET" and url.startswith("/api/")
-        return _RespPalsu()
+def _asgi_response(status=200, body=b"%PDF-1.4 isi", content_type=b"application/pdf"):
+    async def app(scope, receive, send):
+        assert scope["method"] == "GET" and scope["path"].startswith("/api/")
+        await send({"type": "http.response.start", "status": status,
+                    "headers": [(b"content-type", content_type)]})
+        await send({"type": "http.response.body", "body": body})
+    return app
 
 
 def test_worker_simpan_hasil_ke_gridfs(dbx, monkeypatch):
-    class _HttpxPalsu:
-        ASGITransport = lambda *a, **k: None            # noqa: E731
-        Timeout = lambda *a, **k: None                  # noqa: E731
-        AsyncClient = _KlienPalsu
-    monkeypatch.setattr(ru, "httpx", _HttpxPalsu)
-    monkeypatch.setattr(ru, "_app_internal", lambda: None)
+    monkeypatch.setattr(ru, "_app_internal", lambda: _asgi_response())
 
     async def skenario():
         await dbx.unduhan.insert_one(
@@ -278,17 +246,8 @@ def test_worker_simpan_hasil_ke_gridfs(dbx, monkeypatch):
 
 
 def test_worker_galat_http_jadi_error_dengan_detail(dbx, monkeypatch):
-    class _Klien404(_KlienPalsu):
-        def stream(self, method, url, headers=None):
-            return _RespPalsu(status=404,
-                              data=b'{"detail": "Kegiatan tidak ditemukan"}')
-
-    class _HttpxPalsu:
-        ASGITransport = lambda *a, **k: None            # noqa: E731
-        Timeout = lambda *a, **k: None                  # noqa: E731
-        AsyncClient = _Klien404
-    monkeypatch.setattr(ru, "httpx", _HttpxPalsu)
-    monkeypatch.setattr(ru, "_app_internal", lambda: None)
+    monkeypatch.setattr(ru, "_app_internal", lambda: _asgi_response(
+        404, b'{"detail": "Kegiatan tidak ditemukan"}'))
 
     async def skenario():
         await dbx.unduhan.insert_one(

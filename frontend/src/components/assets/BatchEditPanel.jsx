@@ -163,10 +163,21 @@ function Section({ icon: Icon, title, right, children, first = false }) {
 }
 
 const BatchEditPanel = memo(function BatchEditPanel({
-  selectedCount, categories, onApply, onClose, updating, activity, assets, selectedAssets,
+  selectedCount, categories, onApply, onPrepare, onClose, updating, activity, assets, selectedAssets,
   attached = false,
 }) {
   const [updates, setUpdates] = useState({});
+  const [preparing, setPreparing] = useState(false);
+  const applyingRef = useRef(false);
+  // Versi saat draf dibuka, bukan versi baru dari WS yang tiba ketika mengetik.
+  const draftVersionsRef = useRef({});
+  useEffect(() => {
+    for (const asset of assets || []) {
+      if (selectedAssets?.has(asset.id) && !(asset.id in draftVersionsRef.current)) {
+        draftVersionsRef.current[asset.id] = Number(asset.version) || 1;
+      }
+    }
+  }, [assets, selectedAssets]);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [markerBusy, setMarkerBusy] = useState(false);
   const [showMore, setShowMore] = useState(false);
@@ -394,6 +405,7 @@ const BatchEditPanel = memo(function BatchEditPanel({
           const tId = toast.loading(`Mengompres ${file.name}...`);
           const { dataUrl, originalBytes, compressedBytes, method, savingsPercent, error } =
             await compressPdfFile(file);
+          if (compressedBytes > 8 * 1024 * 1024) { toast.error(`${file.name}: PDF setelah kompresi melebihi 8 MB`, { id: tId }); continue; }
           if (error) {
             toast.warning(`${file.name}: kompresi gagal, file asli digunakan`, { id: tId });
           } else if (savingsPercent > 0) {
@@ -438,7 +450,7 @@ const BatchEditPanel = memo(function BatchEditPanel({
   };
 
   const handleApply = async () => {
-    if (markerBusy) return;
+    if (markerBusy || updating || applyingRef.current) return;
     // Snapshot ID aset terpilih SEKARANG (sinkron, sebelum dialog konfirmasi /
     // render ulang) agar simpan massal tetap jalan walau pengguna langsung
     // menekan "Kosongkan" seleksi sesudah menekan Terapkan.
@@ -473,23 +485,33 @@ const BatchEditPanel = memo(function BatchEditPanel({
       return;
     }
 
+    applyingRef.current = true;
+    setPreparing(true);
+    try {
+    const plan = onPrepare ? await onPrepare(finalUpdates, targetIds, { ...draftVersionsRef.current }) : null;
+
     // Confirmation for destructive clear actions
     const clearActions = [];
     if (clearPhotos) clearActions.push("semua foto");
     if (clearDocChecklist) clearActions.push("semua dokumen kelengkapan");
     if (clearFieldCount > 0) clearActions.push(`${clearFieldCount} field data`);
 
-    if (clearActions.length > 0) {
+    if (clearActions.length > 0 || plan) {
       const ok = await confirm({
-        title: "Kosongkan Data Massal",
-        description: `Anda akan mengosongkan ${clearActions.join(", ")} dari ${selectedCount} aset. Tindakan ini tidak dapat dibatalkan. Lanjutkan?`,
-        confirmLabel: "Ya, Kosongkan",
-        variant: "danger",
+        title: clearActions.length ? "Kosongkan Data Massal" : "Terapkan Ubah Massal",
+        description: `${plan ? `${targetIds.length} aset telah diperiksa sebelum konfirmasi. ` : ""}${clearActions.length ? `Anda akan mengosongkan ${clearActions.join(", ")}. ` : ""}Perubahan memakai versi saat draf disiapkan; aset yang sudah berubah akan dilaporkan sebagai konflik. Lanjutkan?`,
+        confirmLabel: clearActions.length ? "Ya, Kosongkan" : "Ya, Terapkan",
+        variant: clearActions.length ? "danger" : "default",
       });
       if (!ok) return;
     }
 
-    onApply(finalUpdates, targetIds);
+    if (plan) await onApply(finalUpdates, targetIds, plan);
+    else await onApply(finalUpdates, targetIds);
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      toast.error((typeof detail === "string" ? detail : detail?.message) || error?.message || "Persiapan ubah massal gagal");
+    } finally { applyingRef.current = false; setPreparing(false); }
   };
 
   const activeDocCount = docItems.filter(d => d._active).length;
@@ -921,7 +943,7 @@ const BatchEditPanel = memo(function BatchEditPanel({
                             <FileUp className="w-4 h-4 shrink-0" />Tambah foto / PDF untuk semua aset
                             <input type="file" aria-label={`Tambah foto atau PDF massal ${item.name}`} accept="image/*,.pdf" multiple className="sr-only" onChange={e => handleDocFileUpload(idx, e)} />
                           </label>
-                          <div className="text-[11px] text-muted-foreground">Maks 3 foto + 1 PDF per item</div>
+                          <div className="text-[11px] text-muted-foreground">3 foto + 1 PDF · Foto 5 MB · PDF 8 MB · total lampiran 12 MB</div>
 
                           {/* Uploaded files preview */}
                           {((item.photos?.length || 0) + (item.documents?.length || 0) > 0) && (
@@ -991,10 +1013,10 @@ const BatchEditPanel = memo(function BatchEditPanel({
             kasar ke BANYAK aset sekaligus — lalu gerbang selesai, koordinatnya
             dibuang dari form, dan muncul pesan "koordinat tidak disimpan" yang
             keliru: sudah terlanjur tersimpan. */}
-        <Button onClick={handleApply} disabled={!hasUpdates || updating || gpsLoading || markerBusy}
+        <Button onClick={handleApply} disabled={!hasUpdates || updating || preparing || gpsLoading || markerBusy}
           title={gpsLoading ? "Menunggu GPS mengunci — koordinat sementara belum lolos gerbang akurasi ±8 m" : undefined}
           className="bg-teal-700 hover:bg-teal-800 text-white h-9 text-xs flex-1 sm:flex-none" data-testid="batch-apply-btn">
-          {updating ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <CheckSquare className="w-3 h-3 mr-1" />}
+          {updating || preparing ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <CheckSquare className="w-3 h-3 mr-1" />}
           {gpsLoading ? "Menunggu GPS…" : `Terapkan ke ${selectedCount} aset`}
         </Button>
         <Button type="button" variant="outline" className="h-9 text-xs" onClick={onClose}><ChevronUp className="w-4 h-4" />Sembunyikan</Button>

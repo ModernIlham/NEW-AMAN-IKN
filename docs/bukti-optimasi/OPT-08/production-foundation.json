@@ -1,0 +1,14 @@
+{
+  "release_sha": "c3ac5559178472358aa5d3d03bf5eeb17b2adaa5",
+  "ci_run": 38740257953,
+  "deploy_run": 38741148877,
+  "health_http": 200,
+  "health_ok": true,
+  "manifest_http": 200,
+  "manifest_sha256": "98ee78f1d18a94ee46de565952ef7c4f40cb07675c9cc2637263ca4ed7cee613",
+  "old_chunk": "/static/js/9311.08c8148e.chunk.js",
+  "old_chunk_http": 200,
+  "old_chunk_sha256": "800c1f8bf71f130226c39d35ed6b0a8e3adce13fb201af1dc325b80df59cc9da",
+  "old_chunk_bytes": 33652,
+  "old_chunk_retained": true
+}

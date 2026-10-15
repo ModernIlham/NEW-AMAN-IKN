@@ -36,7 +36,21 @@ def _sumber():
 
 
 def _jobs():
-    return yaml.safe_load(_sumber())["jobs"]
+    jobs = yaml.safe_load(_sumber())["jobs"]
+    resolved = {}
+    for name, job in jobs.items():
+        workflow = job.get("uses", "")
+        if workflow.startswith("./.github/workflows/"):
+            # A workflow-call job cannot declare timeout-minutes itself.
+            # Inspect every called runner job instead; none may be unbounded.
+            root = os.path.dirname(os.path.dirname(os.path.dirname(CI)))
+            with open(os.path.join(root, workflow[2:]), encoding="utf-8") as source:
+                called = yaml.safe_load(source)["jobs"]
+            assert called, "reusable workflow tidak memiliki job"
+            resolved.update({name + "/" + child: config for child, config in called.items()})
+        else:
+            resolved[name] = job
+    return resolved
 
 
 def _langkah_apt(jobs):

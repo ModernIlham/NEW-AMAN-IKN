@@ -1,0 +1,466 @@
+{
+  "selectors": 1888,
+  "invalid_selectors": [],
+  "changed_existing_selectors": 76,
+  "changed_existing_major": [],
+  "new_selector_count": 63,
+  "overrides": null,
+  "changes": [
+    {
+      "selector": "@babel/core@^7.1.0",
+      "previous": "7.28.5",
+      "version": "7.29.7",
+      "major_changed": false
+    },
+    {
+      "selector": "@babel/core@^7.11.1",
+      "previous": "7.28.5",
+      "version": "7.29.7",
+      "major_changed": false
+    },
+    {
+      "selector": "@babel/core@^7.12.3",
+      "previous": "7.28.5",
+      "version": "7.29.7",
+      "major_changed": false
+    },
+    {
+      "selector": "@babel/core@^7.16.0",
+      "previous": "7.28.5",
+      "version": "7.29.7",
+      "major_changed": false
+    },
+    {
+      "selector": "@babel/core@^7.7.2",
+      "previous": "7.28.5",
+      "version": "7.29.7",
+      "major_changed": false
+    },
+    {
+      "selector": "@babel/core@^7.8.0",
+      "previous": "7.28.5",
+      "version": "7.29.7",
+      "major_changed": false
+    },
+    {
+      "selector": "@babel/plugin-transform-modules-systemjs@^7.28.5",
+      "previous": "7.28.5",
+      "version": "7.29.8",
+      "major_changed": false
+    },
+    {
+      "selector": "@humanfs/node@^0.16.6",
+      "previous": "0.16.7",
+      "version": "0.16.8",
+      "major_changed": false
+    },
+    {
+      "selector": "ajv@^6.12.2",
+      "previous": "6.12.6",
+      "version": "6.15.0",
+      "major_changed": false
+    },
+    {
+      "selector": "ajv@^6.12.4",
+      "previous": "6.12.6",
+      "version": "6.15.0",
+      "major_changed": false
+    },
+    {
+      "selector": "ajv@^6.12.5",
+      "previous": "6.12.6",
+      "version": "6.15.0",
+      "major_changed": false
+    },
+    {
+      "selector": "ajv@^8.0.0",
+      "previous": "8.17.1",
+      "version": "8.20.0",
+      "major_changed": false
+    },
+    {
+      "selector": "ajv@^8.6.0",
+      "previous": "8.17.1",
+      "version": "8.20.0",
+      "major_changed": false
+    },
+    {
+      "selector": "ajv@^8.9.0",
+      "previous": "8.17.1",
+      "version": "8.20.0",
+      "major_changed": false
+    },
+    {
+      "selector": "brace-expansion@^1.1.7",
+      "previous": "1.1.12",
+      "version": "1.1.21",
+      "major_changed": false
+    },
+    {
+      "selector": "brace-expansion@^2.0.1",
+      "previous": "2.0.2",
+      "version": "2.1.7",
+      "major_changed": false
+    },
+    {
+      "selector": "browserslist@^4.0.0",
+      "previous": "4.28.1",
+      "version": "4.29.3",
+      "major_changed": false
+    },
+    {
+      "selector": "browserslist@^4.18.1",
+      "previous": "4.28.1",
+      "version": "4.29.3",
+      "major_changed": false
+    },
+    {
+      "selector": "browserslist@^4.21.4",
+      "previous": "4.28.1",
+      "version": "4.29.3",
+      "major_changed": false
+    },
+    {
+      "selector": "browserslist@^4.24.0",
+      "previous": "4.28.1",
+      "version": "4.29.3",
+      "major_changed": false
+    },
+    {
+      "selector": "browserslist@^4.28.0",
+      "previous": "4.28.1",
+      "version": "4.29.3",
+      "major_changed": false
+    },
+    {
+      "selector": "browserslist@^4.28.1",
+      "previous": "4.28.1",
+      "version": "4.29.3",
+      "major_changed": false
+    },
+    {
+      "selector": "colord@^2.9.1",
+      "previous": "2.9.3",
+      "version": "2.10.0",
+      "major_changed": false
+    },
+    {
+      "selector": "compression@^1.7.4",
+      "previous": "1.8.1",
+      "version": "1.8.2",
+      "major_changed": false
+    },
+    {
+      "selector": "diff@^4.0.1",
+      "previous": "4.0.2",
+      "version": "4.0.4",
+      "major_changed": false
+    },
+    {
+      "selector": "express@^4.17.3",
+      "previous": "4.22.1",
+      "version": "4.22.3",
+      "major_changed": false
+    },
+    {
+      "selector": "fast-uri@^3.0.1",
+      "previous": "3.1.0",
+      "version": "3.1.8",
+      "major_changed": false
+    },
+    {
+      "selector": "flatted@^3.2.9",
+      "previous": "3.3.3",
+      "version": "3.4.4",
+      "major_changed": false
+    },
+    {
+      "selector": "follow-redirects@^1.0.0",
+      "previous": "1.15.11",
+      "version": "1.16.1",
+      "major_changed": false
+    },
+    {
+      "selector": "form-data@^3.0.0",
+      "previous": "3.0.4",
+      "version": "3.0.5",
+      "major_changed": false
+    },
+    {
+      "selector": "http-proxy-middleware@^2.0.3",
+      "previous": "2.0.9",
+      "version": "2.0.10",
+      "major_changed": false
+    },
+    {
+      "selector": "js-yaml@^3.13.1",
+      "previous": "3.14.2",
+      "version": "3.15.2",
+      "major_changed": false
+    },
+    {
+      "selector": "js-yaml@^4.1.0",
+      "previous": "4.1.1",
+      "version": "4.3.2",
+      "major_changed": false
+    },
+    {
+      "selector": "jsonpath@^1.1.1",
+      "previous": "1.1.1",
+      "version": "1.3.0",
+      "major_changed": false
+    },
+    {
+      "selector": "launch-editor@^2.6.0",
+      "previous": "2.12.0",
+      "version": "2.14.2",
+      "major_changed": false
+    },
+    {
+      "selector": "lodash@^4.17.20",
+      "previous": "4.17.21",
+      "version": "4.18.1",
+      "major_changed": false
+    },
+    {
+      "selector": "lodash@^4.17.21",
+      "previous": "4.17.21",
+      "version": "4.18.1",
+      "major_changed": false
+    },
+    {
+      "selector": "lodash@^4.7.0",
+      "previous": "4.17.21",
+      "version": "4.18.1",
+      "major_changed": false
+    },
+    {
+      "selector": "minimatch@^3.0.4",
+      "previous": "3.1.2",
+      "version": "3.1.5",
+      "major_changed": false
+    },
+    {
+      "selector": "minimatch@^3.0.5",
+      "previous": "3.1.2",
+      "version": "3.1.5",
+      "major_changed": false
+    },
+    {
+      "selector": "minimatch@^3.1.1",
+      "previous": "3.1.2",
+      "version": "3.1.5",
+      "major_changed": false
+    },
+    {
+      "selector": "minimatch@^3.1.2",
+      "previous": "3.1.2",
+      "version": "3.1.5",
+      "major_changed": false
+    },
+    {
+      "selector": "minimatch@^5.0.1",
+      "previous": "5.1.6",
+      "version": "5.1.9",
+      "major_changed": false
+    },
+    {
+      "selector": "node-forge@^1",
+      "previous": "1.3.3",
+      "version": "1.4.0",
+      "major_changed": false
+    },
+    {
+      "selector": "picomatch@^2.0.4",
+      "previous": "2.3.1",
+      "version": "2.3.2",
+      "major_changed": false
+    },
+    {
+      "selector": "picomatch@^2.2.1",
+      "previous": "2.3.1",
+      "version": "2.3.2",
+      "major_changed": false
+    },
+    {
+      "selector": "picomatch@^2.2.2",
+      "previous": "2.3.1",
+      "version": "2.3.2",
+      "major_changed": false
+    },
+    {
+      "selector": "picomatch@^2.2.3",
+      "previous": "2.3.1",
+      "version": "2.3.2",
+      "major_changed": false
+    },
+    {
+      "selector": "picomatch@^2.3.1",
+      "previous": "2.3.1",
+      "version": "2.3.2",
+      "major_changed": false
+    },
+    {
+      "selector": "picomatch@^4.0.3",
+      "previous": "4.0.3",
+      "version": "4.0.7",
+      "major_changed": false
+    },
+    {
+      "selector": "postcss-selector-parser@^6.0.10",
+      "previous": "6.1.2",
+      "version": "6.1.4",
+      "major_changed": false
+    },
+    {
+      "selector": "postcss-selector-parser@^6.0.4",
+      "previous": "6.1.2",
+      "version": "6.1.4",
+      "major_changed": false
+    },
+    {
+      "selector": "postcss-selector-parser@^6.0.5",
+      "previous": "6.1.2",
+      "version": "6.1.4",
+      "major_changed": false
+    },
+    {
+      "selector": "postcss-selector-parser@^6.0.9",
+      "previous": "6.1.2",
+      "version": "6.1.4",
+      "major_changed": false
+    },
+    {
+      "selector": "postcss-selector-parser@^6.1.1",
+      "previous": "6.1.2",
+      "version": "6.1.4",
+      "major_changed": false
+    },
+    {
+      "selector": "postcss-selector-parser@^6.1.2",
+      "previous": "6.1.2",
+      "version": "6.1.4",
+      "major_changed": false
+    },
+    {
+      "selector": "postcss-selector-parser@^7.0.0",
+      "previous": "7.1.1",
+      "version": "7.1.6",
+      "major_changed": false
+    },
+    {
+      "selector": "postcss@^8.3.5",
+      "previous": "8.5.6",
+      "version": "8.5.30",
+      "major_changed": false
+    },
+    {
+      "selector": "postcss@^8.4.33",
+      "previous": "8.5.6",
+      "version": "8.5.30",
+      "major_changed": false
+    },
+    {
+      "selector": "postcss@^8.4.4",
+      "previous": "8.5.6",
+      "version": "8.5.30",
+      "major_changed": false
+    },
+    {
+      "selector": "postcss@^8.4.47",
+      "previous": "8.5.6",
+      "version": "8.5.30",
+      "major_changed": false
+    },
+    {
+      "selector": "postcss@^8.4.49",
+      "previous": "8.5.6",
+      "version": "8.5.30",
+      "major_changed": false
+    },
+    {
+      "selector": "proxy-addr@~2.0.7",
+      "previous": "2.0.7",
+      "version": "2.0.8",
+      "major_changed": false
+    },
+    {
+      "selector": "rollup@^2.43.1",
+      "previous": "2.79.2",
+      "version": "2.80.0",
+      "major_changed": false
+    },
+    {
+      "selector": "shell-quote@^1.7.3",
+      "previous": "1.8.3",
+      "version": "1.12.0",
+      "major_changed": false
+    },
+    {
+      "selector": "source-map-js@^1.0.1",
+      "previous": "1.2.1",
+      "version": "1.2.2",
+      "major_changed": false
+    },
+    {
+      "selector": "svgo@^2.7.0",
+      "previous": "2.8.0",
+      "version": "2.8.4",
+      "major_changed": false
+    },
+    {
+      "selector": "terser-webpack-plugin@^5.2.5",
+      "previous": "5.3.16",
+      "version": "5.6.1",
+      "major_changed": false
+    },
+    {
+      "selector": "terser-webpack-plugin@^5.3.16",
+      "previous": "5.3.16",
+      "version": "5.6.1",
+      "major_changed": false
+    },
+    {
+      "selector": "websocket-driver@>=0.5.1",
+      "previous": "0.7.4",
+      "version": "0.7.5",
+      "major_changed": false
+    },
+    {
+      "selector": "websocket-driver@^0.7.4",
+      "previous": "0.7.4",
+      "version": "0.7.5",
+      "major_changed": false
+    },
+    {
+      "selector": "ws@^7.4.6",
+      "previous": "7.5.10",
+      "version": "7.5.13",
+      "major_changed": false
+    },
+    {
+      "selector": "ws@^8.13.0",
+      "previous": "8.18.3",
+      "version": "8.22.0",
+      "major_changed": false
+    },
+    {
+      "selector": "yaml@^1.10.0",
+      "previous": "1.10.2",
+      "version": "1.10.3",
+      "major_changed": false
+    },
+    {
+      "selector": "yaml@^1.10.2",
+      "previous": "1.10.2",
+      "version": "1.10.3",
+      "major_changed": false
+    },
+    {
+      "selector": "yaml@^1.7.2",
+      "previous": "1.10.2",
+      "version": "1.10.3",
+      "major_changed": false
+    }
+  ]
+}

@@ -167,6 +167,49 @@ class BatchUpdateRequest(BaseModel):
     asset_ids: List[str]
     updates: dict  # Fields to update: category, location, condition, inventory_status, stiker_status, stiker_ukuran, eselon1, eselon2
 
+
+class BatchPreflightRequest(BaseModel):
+    asset_ids: List[str]
+
+
+class BatchV2Request(BaseModel):
+    operation_id: str
+    dataset_generation: str
+    asset_ids: List[str]
+    expected_versions: dict
+    updates: dict
+
+
+@batch_router.post("/assets/batch-v2/preflight")
+async def batch_v2_preflight(data: BatchPreflightRequest, _user: dict = Depends(require_writer)):
+    from batch_operations import preflight
+    return await preflight(data.asset_ids, _user)
+
+
+@batch_router.put("/assets/batch-v2")
+async def batch_v2_update(data: BatchV2Request, x_session_id: str = Header(None), _user: dict = Depends(require_writer)):
+    from batch_operations import execute
+    return await execute(data.model_dump(), _user, x_session_id or "unknown-session")
+
+
+@batch_router.post("/assets/batch-v2/prepare")
+async def batch_v2_prepare(data: BatchV2Request, _user: dict = Depends(require_writer)):
+    """Register every child operation before starting a multi-chunk batch."""
+    from batch_operations import execute
+    return await execute(data.model_dump(), _user, prepare_only=True)
+
+
+@batch_router.get("/assets/batch-v2/{operation_id}")
+async def batch_v2_status(operation_id: str, _user: dict = Depends(require_writer)):
+    from batch_operations import status
+    return await status(operation_id, _user)
+
+
+@batch_router.post("/assets/batch-v2/{operation_id}/resume")
+async def batch_v2_resume(operation_id: str, x_session_id: str = Header(None), _user: dict = Depends(require_writer)):
+    from batch_operations import resume
+    return await resume(operation_id, _user, x_session_id or "unknown-session")
+
 # Diturunkan dari registry (asset_fields.py, flag `batchable`) supaya selalu
 # selaras dengan field yang bisa diedit di form aset dan tidak drift lagi.
 BATCH_ALLOWED_FIELDS = set(BATCHABLE_FIELD_NAMES)

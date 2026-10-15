@@ -1,0 +1,14 @@
+{
+  "checked_at_utc": "2026-10-15T13:08:49.398161+00:00",
+  "tool": "pip-audit",
+  "tool_version": "2.9.0",
+  "service": "PyPI",
+  "runtime_lock_sha256": "95e1e78b9d5dd6dbb5690e7d5c2f164c808610570e8afb5166fe0fe964b0ddbb",
+  "packages_audited": 137,
+  "advisories": 0,
+  "skipped": [],
+  "ignored_advisories": [],
+  "dev_packages_audited": 156,
+  "dev_advisories": 0,
+  "dev_lock_sha256": "2f84a28385d532ae5300a2cbd09b21e54e0326f963a1a53b53e7a6e9689d62a5"
+}

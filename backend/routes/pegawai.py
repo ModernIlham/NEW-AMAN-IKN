@@ -38,6 +38,7 @@ from pegawai_utils import (
 )
 
 pegawai_router = APIRouter()
+MAX_PEGAWAI_EXPORT = 20000
 
 
 def _filter_dedup(kunci, kode_satker) -> dict:
@@ -541,14 +542,8 @@ async def template_impor_pegawai(_user: dict = Depends(require_user)):
                  'attachment; filename="template_impor_pegawai.csv"'})
 
 
-@pegawai_router.get("/pegawai/export-xlsx")
-async def export_pegawai_xlsx(_user: dict = Depends(require_user)):
-    """Ekspor Master Pegawai ke Excel siap-edit (W7).
-
-    Header = HEADER_IMPOR sehingga file hasil ekspor bisa langsung diedit
-    lalu DIIMPOR KEMBALI. Kolom pilihan diberi dropdown (data validation
-    dari sheet Referensi), kolom nomor dipaksa format teks (NIP tidak rusak
-    jadi float), header beku + berwarna + auto-filter."""
+def _build_pegawai_xlsx(items):
+    """Pure workbook builder; runs only inside the bounded render executor."""
     import io
 
     from openpyxl import Workbook
@@ -558,9 +553,6 @@ async def export_pegawai_xlsx(_user: dict = Depends(require_user)):
 
     from pegawai_utils import (HEADER_IMPOR, KOLOM_TEKS_EKSPOR,
                                OPSI_DROPDOWN_EKSPOR, baris_ekspor_pegawai)
-
-    items = await db.pegawai.find(
-        scope_query_field_satker(_user), _PROJ).sort("nama", 1).to_list(20000)
 
     wb = Workbook()
     ws = wb.active
@@ -644,10 +636,28 @@ async def export_pegawai_xlsx(_user: dict = Depends(require_user)):
 
     buf = io.BytesIO()
     wb.save(buf)
+    return buf.getvalue()
+
+
+@pegawai_router.get("/pegawai/export-xlsx")
+async def export_pegawai_xlsx(_user: dict = Depends(require_user)):
+    """Ekspor Master Pegawai ke Excel siap-edit (W7).
+
+    Header = HEADER_IMPOR sehingga file hasil ekspor bisa langsung diedit
+    lalu DIIMPOR KEMBALI. Kolom pilihan diberi dropdown (data validation
+    dari sheet Referensi), kolom nomor dipaksa format teks (NIP tidak rusak
+    jadi float), header beku + berwarna + auto-filter."""
+    items = await db.pegawai.find(
+        scope_query_field_satker(_user), _PROJ).sort("nama", 1).to_list(MAX_PEGAWAI_EXPORT + 1)
+    if len(items) > MAX_PEGAWAI_EXPORT:
+        raise HTTPException(413, f"Master melebihi batas ekspor {MAX_PEGAWAI_EXPORT:,} pegawai; ekspor tidak dipotong diam-diam.")
+
+    from render_executor import run_renderer
+    data = await run_renderer(_build_pegawai_xlsx, items)
     kode = kode_satker_user(_user)
     nama_file = f"master_pegawai{('_' + kode) if kode else ''}.xlsx"
     return Response(
-        content=buf.getvalue(),
+        content=data,
         media_type=("application/vnd.openxmlformats-officedocument"
                     ".spreadsheetml.sheet"),
         headers={"Content-Disposition":

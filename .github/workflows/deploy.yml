@@ -34,6 +34,7 @@ on:
 permissions:
   contents: read
   actions: read
+  checks: write
 
 concurrency:
   group: deploy-vps
@@ -47,6 +48,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success') }}
     env:
       DEPLOY_SHA_MENTAH: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.deploy_sha }}
+      DEPLOY_CONTROLLER_MENTAH: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       DEPLOY_MODE: ${{ github.event_name == 'workflow_run' && 'otomatis' || 'manual' }}
     steps:
       - name: Validasi format SHA rilis
@@ -56,61 +58,78 @@ jobs:
             echo "::error::DEPLOY_SHA wajib berupa commit SHA lengkap 40 karakter heksadesimal; tidak boleh branch, tag, singkatan, atau kosong."
             exit 1
           fi
+          if [[ ! "$DEPLOY_CONTROLLER_MENTAH" =~ ^[0-9A-Fa-f]{40}$ ]]; then
+            echo "::error::SHA pengendali deploy tidak sah."
+            exit 1
+          fi
           DEPLOY_SHA="${DEPLOY_SHA_MENTAH,,}"
+          echo "controller=${DEPLOY_CONTROLLER_MENTAH,,}" >> "$GITHUB_OUTPUT"
           echo "sha=$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
           echo "mode=$DEPLOY_MODE" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         with:
-          # Ambil TEPAT commit yang akan dipasang. Dengan fetch penuh, langkah
-          # berikutnya juga bisa membuktikan commit ini merupakan bagian main.
-          ref: ${{ steps.rilis.outputs.sha }}
+          # Pengendali berasal dari SHA workflow yang lulus CI. Saat rollback
+          # manual, target lama tetap memakai protokol clean-venv pengendali ini.
+          ref: ${{ steps.rilis.outputs.controller }}
           fetch-depth: 0
       - name: Validasi asal dan hasil CI commit rilis
         env:
           GH_TOKEN: ${{ github.token }}
           DEPLOY_SHA: ${{ steps.rilis.outputs.sha }}
+          DEPLOY_CONTROLLER_SHA: ${{ steps.rilis.outputs.controller }}
         run: |
           git fetch --no-tags origin main
-          if ! git cat-file -e "${DEPLOY_SHA}^{commit}" 2>/dev/null; then
-            echo "::error::DEPLOY_SHA tidak menunjuk objek commit yang tersedia."
-            exit 1
-          fi
-          if ! git merge-base --is-ancestor "$DEPLOY_SHA" origin/main; then
-            echo "::error::DEPLOY_SHA bukan bagian dari riwayat origin/main."
-            exit 1
-          fi
-
-          # workflow_run sudah membawa kesimpulan CI untuk SHA yang sama.
-          # Dispatch manual tidak boleh menjadi jalan pintas: cari run CI
-          # push/main yang sukses untuk SHA persis ini melalui Actions API.
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-            hasil_ci="$(curl --fail-with-body --silent --show-error \
-              -H "Accept: application/vnd.github+json" \
-              -H "Authorization: Bearer $GH_TOKEN" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&head_sha=$DEPLOY_SHA&per_page=1")"
-            if ! printf '%s' "$hasil_ci" | DEPLOY_SHA="$DEPLOY_SHA" python3 -c \
-              'import json, os, sys; data=json.load(sys.stdin); sha=os.environ["DEPLOY_SHA"]; sys.exit(0 if any(r.get("head_sha") == sha and r.get("head_branch") == "main" and r.get("event") == "push" and r.get("status") == "completed" and r.get("conclusion") == "success" for r in data.get("workflow_runs", [])) else 1)'; then
-              echo "::error::Deploy manual ditolak: tidak ditemukan run CI push/main yang sukses untuk DEPLOY_SHA ini."
+          for AMAN_VALIDATED_SHA in "$DEPLOY_SHA" "$DEPLOY_CONTROLLER_SHA"; do
+            if ! git cat-file -e "${AMAN_VALIDATED_SHA}^{commit}" 2>/dev/null \
+                || ! git merge-base --is-ancestor "$AMAN_VALIDATED_SHA" origin/main; then
+              echo "::error::Target atau pengendali deploy bukan commit main yang tersedia."
               exit 1
             fi
+          done
+          if [ "$GITHUB_EVENT_NAME" = "workflow_run" ] && [ "$DEPLOY_SHA" != "$DEPLOY_CONTROLLER_SHA" ]; then
+            echo "::error::Deploy otomatis wajib memakai target dan pengendali dari SHA CI yang sama."
+            exit 1
+          fi
+          # Dispatch manual membuktikan CI push/main untuk target DAN pengendali.
+          # Pengendali branch PR/tanpa CI tidak boleh menjalankan rollback lama.
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            for AMAN_CI_SHA in "$DEPLOY_SHA" "$DEPLOY_CONTROLLER_SHA"; do
+              hasil_ci="$(curl --fail-with-body --silent --show-error \
+                -H "Accept: application/vnd.github+json" \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&head_sha=$AMAN_CI_SHA&per_page=1")"
+              if ! printf '%s' "$hasil_ci" | AMAN_CI_SHA="$AMAN_CI_SHA" python3 -c \
+                'import json, os, sys; data=json.load(sys.stdin); sha=os.environ["AMAN_CI_SHA"]; sys.exit(0 if any(r.get("head_sha") == sha and r.get("head_branch") == "main" and r.get("event") == "push" and r.get("status") == "completed" and r.get("conclusion") == "success" for r in data.get("workflow_runs", [])) else 1)'; then
+                echo "::error::Deploy manual ditolak: target atau pengendali belum lulus CI push/main."
+                exit 1
+              fi
+            done
           fi
 
-          # Tolak checkout commit lama yang belum memahami kontrak SHA ini;
-          # argumen SHA tidak boleh diam-diam diabaikan lalu fallback ke main.
+          # Pengendali wajib memahami SHA dan pergantian lingkungan terisolasi;
+          # script target lama tidak boleh mengambil alih protokol rollback.
           grep -F 'git reset --hard "$DEPLOY_SHA"' scripts/deploy_vps.sh >/dev/null || {
-            echo "::error::Skrip pada DEPLOY_SHA belum mendukung deploy immutable."
+            echo "::error::Pengendali belum mendukung deploy SHA immutable."
+            exit 1
+          }
+          grep -Fx 'AMAN_CLEAN_VENV_PROTOCOL=1' scripts/deploy_vps.sh >/dev/null || {
+            echo "::error::Pengendali belum mendukung lingkungan rilis terisolasi."
             exit 1
           }
       - name: Deploy via SSH
+        id: ssh
         env:
           DEPLOY_SHA: ${{ steps.rilis.outputs.sha }}
+          DEPLOY_CONTROLLER_SHA: ${{ steps.rilis.outputs.controller }}
           DEPLOY_MODE: ${{ steps.rilis.outputs.mode }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_PORT: ${{ secrets.VPS_PORT }}
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
         run: |
+          umask 077
+          : > "$RUNNER_TEMP/aman-deploy-output.txt"
           if [ -z "$VPS_HOST" ] || [ -z "$VPS_USER" ] || [ -z "$VPS_SSH_KEY" ]; then
             echo "::notice::Deploy dilewati — set secret VPS_HOST, VPS_USER, dan VPS_SSH_KEY di Settings → Secrets and variables → Actions untuk mengaktifkan auto-deploy."
             exit 0
@@ -178,10 +197,16 @@ jobs:
           rc=0
           for attempt in 1 2 3 4 5; do
             rc=0
+            set +e
             ssh -i ~/.ssh/deploy_key -p "${VPS_PORT:-22}" \
                 -o StrictHostKeyChecking=accept-new \
                 -o ConnectTimeout=20 \
-                "$VPS_USER@$VPS_HOST" "bash -s -- '$DEPLOY_SHA' '$DEPLOY_MODE'" < scripts/deploy_vps.sh || rc=$?
+                "$VPS_USER@$VPS_HOST" "bash -s -- '$DEPLOY_SHA' '$DEPLOY_MODE' '$DEPLOY_CONTROLLER_SHA'" < scripts/deploy_vps.sh \
+                2>&1 | tee -a "$RUNNER_TEMP/aman-deploy-output.txt"
+            AMAN_PIPE_STATUS=("${PIPESTATUS[@]}")
+            set -e
+            rc="${AMAN_PIPE_STATUS[0]}"
+            if [ "${AMAN_PIPE_STATUS[1]}" -ne 0 ]; then rc=1; fi
             if [ "$rc" -eq 0 ]; then
               break
             fi
@@ -204,3 +229,43 @@ jobs:
             echo "::error::Tidak bisa terhubung ke VPS di port ${VPS_PORT:-22} setelah 5 percobaan (~14 menit). Gejalanya 'Connection timed out' - paket dijatuhkan diam-diam, bukan ditolak; sshd yang mati akan menjawab 'Connection refused'. Di VPS jalankan 'fail2ban-client status sshd' untuk melihat IP yang sedang terblokir, dan periksa firewall/proteksi DDoS penyedia."
             exit 1
           fi
+      - name: Bukti hasil deploy tanpa log atau konfigurasi
+        if: ${{ always() && steps.rilis.outcome == 'success' && steps.ssh.outcome != 'skipped' }}
+        env:
+          AMAN_TARGET_SHA: ${{ steps.rilis.outputs.sha }}
+          AMAN_CONTROLLER_SHA: ${{ steps.rilis.outputs.controller }}
+          AMAN_SSH_OUTCOME: ${{ steps.ssh.outcome }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs'), path = require('path');
+            const phases = new Set(['unknown', 'preflight', 'siapkan_environment_backend',
+              'hentikan_backend', 'kode', 'env', 'environment_backend', 'restart_backend',
+              'kesehatan_backend', 'dependency_frontend', 'build_frontend', 'retensi_static',
+              'aktivasi_frontend', 'verifikasi_akhir']);
+            const report = {schema_version: 1, target_sha: process.env.AMAN_TARGET_SHA,
+              controller_sha: process.env.AMAN_CONTROLLER_SHA, phase: 'unknown',
+              exit_code: null, recovery_required: null, terminal_acknowledged: false};
+            const file = path.join(process.env.RUNNER_TEMP, 'aman-deploy-output.txt');
+            if (fs.existsSync(file) && fs.statSync(file).size <= 32 * 1024 * 1024) {
+              const marker = fs.readFileSync(file, 'utf8').split('\n')
+                .filter(line => line.startsWith('AMAN_DEPLOY_RESULT ')).pop();
+              try {
+                const value = JSON.parse((marker || '').slice('AMAN_DEPLOY_RESULT '.length));
+                if (value.deploy_sha === report.target_sha && phases.has(value.phase)
+                    && Number.isInteger(value.exit_code) && value.exit_code >= 0 && value.exit_code <= 255
+                    && typeof value.recovery_required === 'boolean') {
+                  Object.assign(report, {phase: value.phase, exit_code: value.exit_code,
+                    recovery_required: value.recovery_required, terminal_acknowledged: true});
+                }
+              } catch (_) {}
+            }
+            const ok = report.terminal_acknowledged && report.exit_code === 0
+              && report.recovery_required === false && process.env.AMAN_SSH_OUTCOME === 'success';
+            await github.rest.checks.create({owner: context.repo.owner, repo: context.repo.repo,
+              head_sha: report.target_sha, name: 'Hasil deploy produksi', status: 'completed',
+              conclusion: ok ? 'success' : 'failure', output: {
+                title: ok ? 'Deployment acknowledged' : 'Deployment needs inspection',
+                summary: '```json\n' + JSON.stringify(report, null, 2) + '\n```'}});
+            await core.summary.addCodeBlock(JSON.stringify(report, null, 2), 'json').write();
+            if (!ok) core.setFailed('Deployment did not provide a successful terminal acknowledgement');

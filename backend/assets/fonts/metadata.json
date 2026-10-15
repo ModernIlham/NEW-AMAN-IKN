@@ -1,0 +1,17 @@
+{
+  "family": "Inter",
+  "version": "4.001;git-66647c0bb",
+  "file": "Inter.ttf",
+  "bytes": 876576,
+  "sha256": "29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031",
+  "upstream_repository": "https://github.com/google/fonts",
+  "upstream_commit": "66928797f271fed5ee428544e7229685e2d90127",
+  "upstream_path": "ofl/inter/Inter[opsz,wght].ttf",
+  "upstream_url": "https://raw.githubusercontent.com/google/fonts/66928797f271fed5ee428544e7229685e2d90127/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf",
+  "license": "SIL Open Font License 1.1",
+  "license_file": "OFL.txt",
+  "license_sha256": "5b9321a4298cfeb6b34354164a1c3afc3db114569984c502b9b35d988fd58c57",
+  "license_url": "https://raw.githubusercontent.com/google/fonts/66928797f271fed5ee428544e7229685e2d90127/ofl/inter/OFL.txt",
+  "variable_axes": {"opsz": [14, 32], "wght": [100, 900]},
+  "modified": false
+}

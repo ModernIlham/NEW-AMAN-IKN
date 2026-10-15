@@ -1,0 +1,67 @@
+{
+  "checked_at": "2026-10-15T14:14:45.963693+00:00",
+  "status": "local_pass_pending_ci_release",
+  "node": "22.23.2",
+  "yarn": "1.22.22",
+  "lock_sha256": "c029992a16b988f0778cf1f5dc4b9cdd3ddbbbbb53adb8595de6eef8622ee640",
+  "frozen_install": {
+    "ok": true,
+    "engine_bypass": false
+  },
+  "full_jest": {
+    "ok": true,
+    "suites": 217,
+    "tests": 2308,
+    "seconds": 172.925,
+    "execution": "sequential; no build/browser co-load"
+  },
+  "lint": {
+    "ok": true,
+    "errors": 0,
+    "baseline_warnings": 7,
+    "seconds": 7.79
+  },
+  "production_build": {
+    "ok": true,
+    "seconds": 172.32,
+    "limits": "Cold private build ran with first Jest; not comparable performance measurement."
+  },
+  "browser_fixture_build": {
+    "ok": true,
+    "seconds": 94.72,
+    "api_url": "http://127.0.0.1:18137",
+    "build_dir": "private candidate build-browser"
+  },
+  "native_browser": {
+    "ok": true,
+    "checks": 16,
+    "viewports_themes": 8,
+    "seconds": 55.95,
+    "result": "frontend-remediasi-browser.json",
+    "runner": "frontend-remediasi-runner.json"
+  },
+  "independent_read_only_review": {
+    "blockers": 0,
+    "semver_selectors": 1888,
+    "changed_existing_selectors": 76,
+    "major_changes_existing_selectors": 0,
+    "overrides": 0
+  },
+  "first_attempt": {
+    "full_jest": {
+      "suites_passed": 216,
+      "tests_passed": 2307,
+      "failures": 1,
+      "failure": "AssetFormChecklistMedia exceeded5000ms while cold production build ran concurrently; no assertion failure"
+    },
+    "quiet_focused_retry": {
+      "ok": true,
+      "suites": 2,
+      "tests": 7,
+      "seconds": 9.882
+    },
+    "test_timeout_increased": false
+  },
+  "scope": "dependency manifest/lock and real transport/router compatibility test; no app data schema or bundler migration; shared node_modules installed separately by onboarding owner",
+  "source_match_proof": "frontend-remediasi-source.json"
+}

@@ -7,7 +7,7 @@ import logging
 import asyncio
 import time
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Union
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -15,6 +15,8 @@ from PIL import Image as PILImage
 from bson import ObjectId  # noqa: F401  (kept for downstream import use)
 
 from db import db
+from asset_sorting import (ekspresi_harga, harga_json, harga_teks_eksak,
+                           jumlah_harga_eksak, harga_desimal)
 from auth_utils import require_admin, require_user, require_writer
 from routes.media import auto_compress_image
 import pdf_compress_utils as pcu
@@ -24,7 +26,6 @@ from shared_utils import (
     get_document_from_gridfs,
     delete_document_from_gridfs,
     delete_photo_from_gridfs,
-    cascade_hapus_blob_aset,
     log_audit,
     kode_satker_user,
     scope_query_aset,
@@ -298,7 +299,8 @@ class InventoryActivityResponse(BaseModel):
     documents: Optional[List[dict]] = []
     asset_ids: Optional[List[str]] = []
     total_assets: int = 0
-    total_value: float = 0
+    total_value: Union[float, str] = 0
+    total_value_exact: str = "0"
     summary: Optional[dict] = {}
     # === Satuan Kerja ===
     kode_satker: Optional[str] = ""
@@ -369,12 +371,7 @@ async def get_inventory_activities(_user: dict = Depends(require_user)):
         {"$group": {
             "_id": "$activity_id",
             "count": {"$sum": 1},
-            "total_value": {"$sum": {"$convert": {
-                "input": "$purchase_price", 
-                "to": "double", 
-                "onError": 0, 
-                "onNull": 0
-            }}}
+            "total_value": {"$sum": ekspresi_harga()}
         }}
     ]
     all_stats = await db.assets.aggregate(stats_pipeline).to_list(None)
@@ -385,7 +382,8 @@ async def get_inventory_activities(_user: dict = Depends(require_user)):
     for act in activities:
         act_stats = stats_map.get(act.get("id"), {})
         act["total_assets"] = act_stats.get("count", 0)
-        act["total_value"] = act_stats.get("total_value", 0)
+        act["total_value"] = harga_json(act_stats.get("total_value", 0))
+        act["total_value_exact"] = harga_teks_eksak(act_stats.get("total_value", 0))
     
     total_time = time.time() - start
     logger.info(f"get_inventory_activities: fetch={step1_time:.3f}s, aggregate={step2_time:.3f}s, total={total_time:.3f}s")
@@ -691,11 +689,8 @@ async def create_inventory_activity(activity: InventoryActivityCreate, _user: di
         # cocok dengan ringkasan di bawahnya.
         asset_ids_sah = [a["id"] for a in assets if a.get("id")]
         
+        total_value = jumlah_harga_eksak(a.get("purchase_price") for a in assets)
         for a in assets:
-            try:
-                total_value += float(a.get('purchase_price', 0) or 0)
-            except (ValueError, TypeError):
-                pass
             cond = a.get('condition', 'Tidak Diketahui')
             stat = a.get('status', 'Tidak Diketahui')
             cat = a.get('category', 'Lainnya')
@@ -740,7 +735,8 @@ async def create_inventory_activity(activity: InventoryActivityCreate, _user: di
         # panjang daftar mentah membuat header ("10 aset") tak cocok dengan
         # rekap di bawahnya (4 aset).
         "total_assets": len(asset_ids_sah),
-        "total_value": total_value,
+        "total_value": harga_json(total_value),
+        "total_value_exact": harga_teks_eksak(total_value),
         "summary": summary,
         # Nomor tiket: berurutan per tahun, atomik via counters (pengesahan.py)
         "ticket_number": await next_ticket_number(
@@ -802,6 +798,10 @@ def _strip_doc_payload(activity: Optional[dict]) -> Optional[dict]:
     """
     if not activity:
         return activity
+    if "total_value" in activity:
+        value = harga_desimal(activity.get("total_value_exact", activity["total_value"]))
+        activity["total_value"] = harga_json(value)
+        activity["total_value_exact"] = harga_teks_eksak(value)
     docs = activity.get("documents") or []
     cleaned = []
     for i, d in enumerate(docs):
@@ -1044,61 +1044,40 @@ async def delete_inventory_activity(activity_id: str, _admin: dict = Depends(req
     if sealed:
         raise HTTPException(status_code=423, detail="Kegiatan sudah disahkan dan terkunci")
 
-    # First load existing to clean up GridFS document blobs
-    existing = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0, "documents": 1})
-    if existing:
-        for d in (existing.get("documents") or []):
-            gid = d.get("gridfs_id") if isinstance(d, dict) else None
-            if gid:
-                await delete_document_from_gridfs(gid)
-
-    # Cascade blob GridFS aset — WAJIB sebelum delete_many. Blok ini dulu
-    # ditulis inline di sini saja; kini helper bersama, karena jalur hapus
-    # massal di routes/exports.py ternyata melewatkannya sama sekali (C18).
-    n_foto, n_dok = await cascade_hapus_blob_aset(activity_id)
-
-    result = await db.inventory_activities.delete_one({"id": activity_id})
-    if result.deleted_count == 0:
+    existing = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not existing:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
-    # Delete all assets linked to this activity — cabut dulu dari indeks
-    # pencarian agar tak meninggalkan dokumen yatim di Meili.
-    try:
-        from meili_utils import jadwalkan_hapus
-        async for _a in db.assets.find({"activity_id": activity_id},
-                                       {"_id": 0, "id": 1}):
-            if _a.get("id"):
-                jadwalkan_hapus("assets", _a["id"])
-    except Exception:
-        pass
-    # JEJAK AUDIT — dulu handler ini tidak menulis satu baris pun (C19).
-    # Dua pembaca bergantung padanya dan keduanya buta tanpa ini:
-    #   • routes/assets.py — `deleted_ids` & `requires_full_refresh` untuk feed
-    #     delta luring diturunkan DARI audit. Tanpanya klien lapangan yang
-    #     sedang berada di kegiatan ini tak mendapat sinyal apa pun, dan
-    #     antrean simpannya berakhir 404 tanpa penjelasan.
-    #   • routes/lbp.py — tombstone LBKP dibaca dari audit. Tanpanya nilai aset
-    #     yang lenyap tak pernah muncul sebagai baris "mutasi kurang": saldo
-    #     periode turun tanpa baris penjelas, dan pemeriksa tak punya cara
-    #     merekonstruksinya.
-    # Pelaku diambil dari identitas TERAUTENTIKASI, bukan header X-Audit-User
-    # yang bisa dipalsukan (konvensi hardening repo). Ditulis SEBELUM
-    # delete_many agar jejaknya ada walau proses mati di tengah penghapusan.
-    #
-    # SENGAJA satu baris per KEGIATAN, bukan per aset: pada kegiatan 5.000 aset
-    # itu berarti 5.000 dokumen audit dalam satu request. Ukur dulu (§5
-    # Gelombang 3) sebelum memperhalusnya.
     pelaku = _admin.get("name") or _admin.get("username") or "admin"
     jumlah_aset = await db.assets.count_documents({"activity_id": activity_id})
+    # Intent precedes every delete; children reconcile their durable receipts
+    # and CAS individually before releasing any referenced media.
     await log_audit(
         "bulk_delete", activity_id, "", "", "", pelaku,
-        detail=(f"Hapus kegiatan beserta {jumlah_aset} aset "
-                f"({n_foto} foto + {n_dok} dokumen GridFS dibebaskan)"),
+        detail=f"Permintaan hapus kegiatan beserta {jumlah_aset} aset", strict=True,
     )
-
-    asset_result = await db.assets.delete_many({"activity_id": activity_id})
-    logger.info(f"Deleted activity {activity_id} and {asset_result.deleted_count} associated assets "
-                f"(freed {n_foto} photo + {n_dok} doc GridFS blobs)")
-    return {"message": f"Kegiatan berhasil dihapus beserta {asset_result.deleted_count} data aset"}
+    from asset_deletion import delete_activity_assets
+    from shared_utils import invalidate_asset_cache
+    assets = await delete_activity_assets(activity_id, db)
+    invalidate_asset_cache()
+    if assets["conflicts"] or await db.assets.count_documents({"activity_id": activity_id}):
+        raise HTTPException(status_code=409, detail={
+            "message": "Kegiatan dipertahankan karena sebagian aset berubah saat penghapusan. Muat ulang sebelum mencoba kembali.",
+            **assets,
+        })
+    # Preserve newly replaced activity documents and a concurrent seal. A CAS
+    # miss retains the parent and its documents, even if children were deleted.
+    parent_filter = {"id": activity_id, "status_pengesahan": {"$ne": "disahkan"}}
+    for key in ("updated_at", "documents"):
+        parent_filter[key] = existing[key] if key in existing else {"$exists": False}
+    result = await db.inventory_activities.delete_one(parent_filter)
+    if not result.deleted_count:
+        raise HTTPException(status_code=409, detail="Kegiatan berubah saat dihapus; muat ulang sebelum mencoba kembali.")
+    for document in existing.get("documents", []) or []:
+        gid = document.get("gridfs_id") if isinstance(document, dict) else None
+        if gid:
+            await delete_document_from_gridfs(gid)
+    logger.info("Deleted activity %s and %s assets", activity_id, assets["deleted"])
+    return {"message": f"Kegiatan berhasil dihapus beserta {assets['deleted']} data aset"}
 
 
 @activities_router.get("/inventory-activities/{activity_id}/completion-status")

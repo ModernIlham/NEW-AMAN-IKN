@@ -2,27 +2,30 @@
 
 Panduan mengaktifkan **Meilisearch** — mesin pencari eksternal — untuk
 mempercepat pencarian teks bebas pada **Aset**, **Persuratan (surat)**, dan
-**Persediaan**. Fitur ini **opsional** dan **ber-feature-flag**: bila tidak
-diaktifkan, AMAN tetap berjalan normal memakai pencarian regex MongoDB.
+**Persediaan**. Mode bawaan tetap substring literal melalui MongoDB.
+Meilisearch memakai prefiks/toleransi typo hanya bila
+`MEILI_SEARCH_SEMANTICS=prefix_typo` dipilih secara eksplisit serta indeks dan
+checkpoint dinyatakan lengkap/terakui. Instalasi service atau URL/key saja
+mempertahankan pencarian MongoDB.
 
 ---
 
 ## 1. Mengapa Meilisearch?
 
 Pencarian teks bebas AMAN memakai `regex` infix (`$regex`, `$options:"i"`) pada
-belasan field sekaligus. Regex infix **tidak bisa memakai index B-tree** Mongo,
-sehingga pada data yang sudah sangat banyak setiap pencarian memaksa
-**pemindaian penuh** (COLLSCAN) dalam lingkup satker — makin lambat seiring data
-bertambah.
+belasan field sekaligus. Regex infix tidak memberi pencarian teks melalui
+index B-tree; indeks activity/satker/filter lain tetap dapat membatasi lingkup
+kueri Mongo. Biaya pemindaian perlu dibuktikan dengan explain pada data sendiri.
 
 MongoDB yang kita jalankan (self-hosted di VPS, **bukan** Atlas) tidak punya
-Atlas Search. Padanan "trigram/n-gram" yang tepat adalah **mesin pencari
-eksternal**. Meilisearch memberi:
+Atlas Search. Meilisearch menawarkan semantik prefiks/typo yang berbeda dari
+substring literal. Pilih mode tersebut secara eksplisit bila cocok dengan
+kebutuhan pencarian. Meilisearch memberi:
 
 - **Toleransi salah ketik** ("meaja" → "meja"),
 - **Pencocokan prefiks** cepat (ketik sebagian kata),
 - **Peringkat relevansi** bawaan,
-- Hasil dalam hitungan milidetik walau data ratusan ribu baris.
+- Kandidat teks dari indeks khusus; latensi/kapasitas aktual diukur pada beban sendiri.
 
 ## 2. Cara Kerja (ringkas & aman)
 
@@ -36,19 +39,22 @@ eksternal**. Meilisearch memberi:
 - **Sinkronisasi**: setiap buat/ubah/hapus (aset, surat, persediaan) otomatis
   memperbarui indeks Meili secara *best-effort* & non-blocking. Bila gagal /
   Meili mati, permintaan tetap sukses — reindex massal menambal selisih.
-- **Fallback**: bila Meilisearch nonaktif, mati, atau menolak, pencarian
-  **otomatis kembali** ke regex Mongo. Tidak ada yang rusak.
+- **Fallback**: mode literal, engine gagal, checkpoint belum lengkap/lebih lama
+  dari 300 detik, restore yang belum direkonsiliasi, atau kandidat terpotong
+  memakai Mongo. Daftar, count, dan ekspor memakai keputusan kelengkapan yang
+  sama; hasil parsial Meili tidak dijadikan seluruh hasil pencarian.
 
-## 3. Aktivasi (sekali jalan di VPS)
+## 3. Instalasi service dan pemilihan semantik
 
-Login SSH ke VPS lalu jalankan **satu perintah**:
+Periksa konfigurasi host terlebih dahulu. Jika service belum tersedia,
+operator dapat menjalankan installer berikut pada jendela operasi yang sesuai:
 
 ```bash
 cd /var/www/inventarisasi        # sesuaikan bila root aplikasi berbeda
 sudo bash scripts/setup_meilisearch.sh
 ```
 
-Skrip ini (idempoten — aman diulang) akan:
+Skrip installer menyiapkan:
 
 1. Mengunduh binari Meilisearch ke `/usr/local/bin/meilisearch`.
 2. Membuat user sistem `meilisearch` + direktori data `/var/lib/meilisearch`.
@@ -58,7 +64,11 @@ Skrip ini (idempoten — aman diulang) akan:
 5. Menambahkan `MEILI_URL` & `MEILI_MASTER_KEY` ke `backend/.env`.
 6. Merestart backend + **reindex** data awal dari Mongo.
 
-Setelah selesai, pencarian aset/surat/persediaan otomatis memakai Meilisearch.
+Installer tidak mengubah `MEILI_SEARCH_SEMANTICS`. Biarkan nilai `literal`
+untuk mempertahankan semantik substring. Untuk mode `prefix_typo`, uji engine
+nyata, task acknowledgement, reindex/checkpoint, kelengkapan hasil serta scope
+pada staging sebelum mengubah konfigurasi dan merestart backend secara terkontrol.
+Status/kredensial service yang tersedia bukan bukti mode ini siap digunakan.
 
 > **Deploy tidak terpengaruh.** Pipeline deploy (`scripts/deploy_vps.sh`)
 > mem-backup lalu mengembalikan `backend/.env` di setiap rilis, jadi
@@ -70,10 +80,13 @@ Setelah selesai, pencarian aset/surat/persediaan otomatis memakai Meilisearch.
 |---|---|---|---|
 | `MEILI_URL` | ya | `http://127.0.0.1:7700` | Alamat lokal Meili. Kosong = fitur mati. |
 | `MEILI_MASTER_KEY` | ya | `(hex 64 karakter)` | Kunci akses. Kosong = fitur mati. Rahasia. |
-| `MEILI_MAX_HITS` | tidak | `5000` | Batas id kandidat per pencarian (lihat §6). |
+| `MEILI_MAX_HITS` | tidak | `5000` | Batas kandidat 100–10.000; hasil mencapai batas memicu Mongo (lihat §6). |
+| `MEILI_SEARCH_SEMANTICS` | tidak | `literal` | Bawaan Mongo substring; `prefix_typo` memilih semantik Meili secara eksplisit. |
 
-Feature flag: fitur **aktif hanya bila `MEILI_URL` DAN `MEILI_MASTER_KEY`
-ter-set**. Kosongkan salah satu → kembali ke regex Mongo.
+URL dan key mengaktifkan koneksi service. Pemakaian kandidat pencarian
+memerlukan `prefix_typo` dan checkpoint lengkap/terakui yang masih segar.
+Mengosongkan salah satu credential atau mengembalikan semantik `literal`
+menggunakan MongoDB.
 
 ### (Opsional) Simpan master key sebagai GitHub secret
 
@@ -85,7 +98,7 @@ chat, issue, atau kode.
 
 ## 4. Reindex massal
 
-Sinkronisasi harian otomatis. Jalankan reindex penuh **setelah**:
+Sinkronisasi perubahan bersifat best-effort. Jalankan reindex penuh **setelah**:
 
 - Mengaktifkan Meilisearch pertama kali (skrip setup sudah melakukannya),
 - **Impor massal Excel**, **restore backup**, atau migrasi data,
@@ -119,6 +132,7 @@ Contoh respons:
   "aktif": true,
   "url": "http://127.0.0.1:7700",
   "max_hits": 5000,
+  "search_semantics": "literal",
   "indeks": {
     "assets":     {"uid": "aman_assets",     "jumlah_dokumen": 12345, "sedang_indexing": false},
     "surat":      {"uid": "aman_surat",      "jumlah_dokumen": 678,   "sedang_indexing": false},
@@ -142,27 +156,26 @@ systemctl restart meilisearch     # restart
 
 ## 6. Batas & catatan
 
-- **Batas kandidat** (`MEILI_MAX_HITS`, bawaan **5000**): satu pencarian
-  mengambil paling banyak sekian id kandidat paling relevan. Untuk kata kunci
-  yang sangat umum pada data raksasa, jumlah total bisa terpotong pada ambang
-  ini (yang tampil adalah yang paling relevan) — tetap jauh lebih cepat dari
-  COLLSCAN. Naikkan lewat env `MEILI_MAX_HITS` bila satker sangat besar
-  (indeks otomatis menyesuaikan `pagination.maxTotalHits` saat startup/ reindex).
-- **Field yang dicari** sama dengan sebelumnya: aset 16 field
-  (kode/nama/seri/lokasi/merk/model/kategori/eselon1-2/pengguna/pemasok/
-  kondisi/status/nomor SPM/kode register/catatan); surat 8 field; persediaan
-  6 field. Harga/PII sensitif **tidak** diindeks.
+- **Batas kandidat** (`MEILI_MAX_HITS`, bawaan **5000**, rentang 100–10.000):
+  jumlah hits yang mencapai batas, estimasi total yang melebihi hits, atau
+  checkpoint yang tidak lengkap membuat kandidat tidak dapat dipakai. API
+  kembali ke MongoDB sehingga count/paginasi/ekspor tidak diam-diam terpotong.
+  Menaikkan batas memerlukan pengukuran latensi/memori; bukan cara melewati
+  pemeriksaan kelengkapan.
+- **Pemulihan:** restore memaksa Mongo sampai reindex terakui. Indeks eksternal
+  yang masih dapat dihubungi tidak menghapus gate tersebut. Bukti kontrak dan
+  batas engine nyata tersedia di [OPT-14](bukti-optimasi/OPT-14/hasil.md).
+- **Field yang dicari** mengikuti registry `INDEKS` di
+  [backend/meili_utils.py](../backend/meili_utils.py), termasuk nama/pengguna,
+  kode, lokasi, supplier, dan catatan sesuai domain. Field identitas tertentu
+  menonaktifkan typo agar kode berbeda tidak dianggap barang yang sama.
 - **Keamanan**: master key hanya dipakai backend (server tepercaya), tak pernah
   dikirim ke browser. Meili bind ke localhost saja.
 
-## 7. Rollback (matikan fitur)
+## 7. Rollback mode pencarian
 
-Hapus dua baris di `backend/.env` lalu restart backend:
-
-```bash
-sed -i '/^MEILI_URL=/d;/^MEILI_MASTER_KEY=/d' backend/.env
-supervisorctl restart inventarisasi-backend
-```
-
-Pencarian otomatis kembali ke regex Mongo. Service Meili boleh dibiarkan atau
-dihentikan: `sudo systemctl disable --now meilisearch`.
+Kembalikan `MEILI_SEARCH_SEMANTICS=literal` di konfigurasi backend, lalu restart
+secara terkontrol melalui prosedur operasi host. Credential service dapat tetap
+ada; pencarian memakai MongoDB. Jika service memang tidak diperlukan, operator
+juga dapat mengosongkan URL/key dan menghentikan service. Perubahan ini tidak
+menghapus data Mongo atau menggantikan prosedur pemulihan setelah restore.

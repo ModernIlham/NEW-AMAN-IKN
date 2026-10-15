@@ -7,6 +7,9 @@ import asyncio
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import List
+from decimal import Decimal
+from asset_sorting import (ASSET_SORT_OPTIONS, batas_harga, ekspresi_harga, tahapan_urutan_aset,
+                           harga_json, harga_teks_eksak)
 from fastapi import (APIRouter, HTTPException, Query, Request, Depends,
                      UploadFile, File)
 from fastapi.responses import Response
@@ -15,6 +18,10 @@ from pymongo.errors import DuplicateKeyError
 
 from db import db, fs_bucket
 from asset_fields import SCALAR_FIELD_NAMES
+from asset_media_limits import (validate_checklist, validate_main_photos,
+                                validate_asset_document, resolve_checklist_for_validation)
+from checklist_storage import prepare_checklist, discard_staged
+from asset_photo_commit import register_photos, discard_uncommitted_photos, acknowledge_photos
 from marker_pin import bersihkan_marker_doc
 from spasial_utils import terapkan_geo, sisip_geo_ke_update, entri_riwayat_lokasi
 import spasial_penempatan as sp
@@ -41,6 +48,12 @@ from routes.websocket import notify_asset_change
 from photo_rotate_utils import normalisasi_derajat, rotate_jpeg_bytes
 from meili_utils import jadwalkan_sync, jadwalkan_hapus, cari_id_aset
 from pencarian_utils import MIN_PANJANG, klausa_teks, pecah_kata, rx_awalan
+from asset_cursor import (fingerprint, encode_cursor, decode_cursor, after_cursor,
+                          ensure_cursor_domain)
+from dataset_epoch import get_generation
+from checklist_storage import (array as media_array, safe_checklist, photo_count as checklist_photo_count,
+    hydrate_checklist, read_media as read_checklist_media, normalize_checklist,
+    prepare_checklist, discard_staged)
 
 logger = logging.getLogger(__name__)
 assets_router = APIRouter()
@@ -205,10 +218,11 @@ async def _collect_asset_blob_ids(asset: dict) -> dict:
     bast_id = asset.get("bast_file_id") or ""
     if bast_id:
         doc_ids.append(bast_id)
-    for item in (asset.get("document_checklist") or []):
+    for item in media_array(asset.get("document_checklist")):
         if not isinstance(item, dict):
             continue
-        for d in (item.get("documents") or []):
+        photo_ids.extend(gid for gid in media_array(item.get("photo_gridfs_ids")) if gid)
+        for d in media_array(item.get("documents")):
             gid = d.get("gridfs_id") if isinstance(d, dict) else None
             if gid:
                 doc_ids.append(gid)
@@ -246,6 +260,11 @@ def _build_cas_filter(asset_id: str, current_version: int) -> dict:
 # this reduces response size by ~95% for assets with images. Shared by
 # GET /assets and GET /assets/offline-snapshot so the offline cache stores
 # EXACTLY the same (media-free) shape as the live list.
+def array_field(expression):
+    """Legacy non-array values must not make an entire list/snapshot fail."""
+    return {"$cond": [{"$isArray": expression}, expression, []]}
+
+
 LIST_PROJECTION = {
     "_id": 0, "id": 1,
     # Semua field skalar aset dari registry (asset_fields.py) — termasuk
@@ -284,26 +303,28 @@ LIST_PROJECTION = {
     # GridFS-first (dokumen ter-migrasi punya photos=[] tapi gridfs terisi);
     # fallback ke inline untuk dokumen legacy.
     "photo_count": {"$cond": [
-        {"$gt": [{"$size": {"$ifNull": ["$photo_gridfs_ids", []]}}, 0]},
-        {"$size": {"$ifNull": ["$photo_gridfs_ids", []]}},
-        {"$size": {"$ifNull": ["$photos", []]}},
+        {"$gt": [{"$size": array_field("$photo_gridfs_ids")}, 0]},
+        {"$size": array_field("$photo_gridfs_ids")},
+        {"$size": array_field("$photos")},
     ]},
     # Computed doc checklist summary (avoids sending full checklist data)
-    "doc_total": {"$size": {"$ifNull": ["$document_checklist", []]}},
+    "doc_total": {"$size": array_field("$document_checklist")},
     "doc_checked": {"$size": {"$filter": {
-        "input": {"$ifNull": ["$document_checklist", []]},
+        "input": array_field("$document_checklist"),
         "cond": {"$eq": ["$$this.checked", True]}
     }}},
     "doc_summary": {"$map": {
-        "input": {"$ifNull": ["$document_checklist", []]},
+        "input": array_field("$document_checklist"),
         "as": "doc",
         "in": {
             "name": "$$doc.name",
             "checked": "$$doc.checked",
-            "has_photos": {"$gt": [{"$size": {"$ifNull": ["$$doc.photos", []]}}, 0]},
-            "has_documents": {"$gt": [{"$size": {"$ifNull": ["$$doc.documents", []]}}, 0]},
-            "photo_count": {"$size": {"$ifNull": ["$$doc.photos", []]}},
-            "doc_count": {"$size": {"$ifNull": ["$$doc.documents", []]}}
+            "has_photos": {"$gt": [{"$max": [{"$size": array_field("$$doc.photos")},
+                {"$size": array_field("$$doc.photo_gridfs_ids")}]}, 0]},
+            "has_documents": {"$gt": [{"$size": array_field("$$doc.documents")}, 0]},
+            "photo_count": {"$max": [{"$size": array_field("$$doc.photos")},
+                {"$size": array_field("$$doc.photo_gridfs_ids")}]},
+            "doc_count": {"$size": array_field("$$doc.documents")}
         }
     }}
     # EXCLUDED: "photos", "document_checklist" - fetched via GET /assets/{id}
@@ -324,12 +345,21 @@ async def lengkapi_psp(assets, user):
     ids = [str(a.get("id")) for a in (assets or []) if a.get("id")]
     if not ids:
         return assets
-    sk = await db.psp.find(
+    cursor = db.psp.find(
         scope_query_field_satker(user, {"aset.asset_id": {"$in": ids}}),
         {"_id": 0, "nomor_sk": 1, "tanggal_sk": 1, "jenis": 1,
          "status_pengajuan": 1, "aset.asset_id": 1},
-    ).to_list(length=None)
-    peta = peta_psp_dari_sk(sk)
+    ).batch_size(1)
+    # A matching SK may contain thousands of unrelated members. Keep one SK
+    # at a time and only the selected assets' latest official decisions.
+    wanted, peta = set(ids), {}
+    async for sk in cursor:
+        members = sk.get("aset") if isinstance(sk.get("aset"), list) else []
+        selected = {**sk, "aset": [member for member in members
+            if isinstance(member, dict) and str(member.get("asset_id") or "") in wanted]}
+        for aid, info in peta_psp_dari_sk([selected]).items():
+            if aid not in peta or info["tanggal"] >= peta[aid]["tanggal"]:
+                peta[aid] = info
     for a in assets:
         info = info_psp_aset(a, peta)
         if info:
@@ -351,8 +381,8 @@ def build_asset_search_query(
     eselon5_filter: str = "",
     stiker_status: str = "",
     inventory_status: str = "",
-    price_min: float = None,
-    price_max: float = None,
+    price_min: Decimal = None,
+    price_max: Decimal = None,
     nomor_spm: str = "",
     perolehan_dari: str = "",
     user_filter: str = "",
@@ -425,30 +455,17 @@ def build_asset_search_query(
     if pengguna_nip:
         query["pengguna_nip"] = _rx(pengguna_nip)
 
-    # Price range filter
-    if price_min is not None or price_max is not None:
-        price_query = {}
-        if price_min is not None:
-            price_query["$gte"] = price_min
-        if price_max is not None:
-            price_query["$lte"] = price_max
-        if price_query:
-            # Handle both numeric and string prices (including empty strings)
-            # Use $convert with onError to handle empty strings and invalid values
-            price_convert = {
-                "$convert": {
-                    "input": "$purchase_price",
-                    "to": "double",
-                    "onError": 0,
-                    "onNull": 0
-                }
-            }
-            query["$expr"] = {
-                "$and": [
-                    {"$gte": [price_convert, price_min or 0]},
-                    {"$lte": [price_convert, price_max or 999999999999]}
-                ]
-            }
+    # Zero is an explicit bound, and Decimal128 preserves large string prices.
+    lower, upper = batas_harga(price_min), batas_harga(price_max)
+    if lower is not None and upper is not None and lower.to_decimal() > upper.to_decimal():
+        raise HTTPException(400, "Harga minimum tidak boleh melebihi harga maksimum")
+    clauses = []
+    if lower is not None:
+        clauses.append({"$gte": [ekspresi_harga(), lower]})
+    if upper is not None:
+        clauses.append({"$lte": [ekspresi_harga(), upper]})
+    if clauses:
+        query["$expr"] = {"$and": clauses}
 
     # Rentang TANGGAL BELI (purchase_date, string YYYY-MM-DD — perbandingan
     # leksikal aman untuk prefiks tanggal). Aset tanpa tanggal beli otomatis
@@ -494,8 +511,8 @@ async def kueri_aset_terlihat(
     eselon5_filter=None,
     stiker_status=None,
     inventory_status=None,
-    price_min: float = None,
-    price_max: float = None,
+    price_min: Decimal = None,
+    price_max: Decimal = None,
     nomor_spm: str = "",
     perolehan_dari: str = "",
     user_filter: str = "",
@@ -574,6 +591,8 @@ async def get_assets(
     sort_by: str = "newest",
     page: int = 1,
     page_size: int = 50,
+    pagination: str = "page",
+    cursor: str = "",
     activity_id: str = "",
     # Filter lanjutan — tujuh yang pertama MULTI-NILAI (parameter berulang,
     # mis. ?status=Aktif&status=Rusak Berat); satu nilai tetap sah.
@@ -587,8 +606,8 @@ async def get_assets(
     eselon5_filter: List[str] = Query(default=[]),
     stiker_status: List[str] = Query(default=[]),
     inventory_status: List[str] = Query(default=[]),
-    price_min: float = None,
-    price_max: float = None,
+    price_min: Decimal = None,
+    price_max: Decimal = None,
     nomor_spm: str = "",
     perolehan_dari: str = "",
     user_filter: str = "",
@@ -619,8 +638,6 @@ async def get_assets(
     # skip/limit, tanpa kunci unik halaman bisa tumpang-tindih/terlewat
     # (nilai created_at/nama yang sama) — penting utk klien yang menjahit
     # beberapa halaman (mis. Peta Aset).
-    from asset_sorting import ASSET_SORT_OPTIONS
-    sort = ASSET_SORT_OPTIONS.get(sort_by, [("created_at", -1)])
     
     # Lightweight shared list projection (see LIST_PROJECTION above)
     projection = LIST_PROJECTION
@@ -629,18 +646,42 @@ async def get_assets(
     page_size = min(max(page_size, 10), 500)
     skip = (max(page, 1) - 1) * page_size
     
-    # Run count and fetch in parallel using aggregation for computed fields
+    if pagination not in {"page", "cursor"} or cursor and pagination != "cursor":
+        raise HTTPException(400, "Mode pagination tidak valid")
+    effective_sort = sort_by if sort_by in ASSET_SORT_OPTIONS else "newest"
+    read_query = query
+    current_page = max(page, 1)
+    context = None
+    fetch_limit = page_size
+    if pagination == "cursor":
+        if effective_sort not in {"newest", "oldest"} or page != 1:
+            raise HTTPException(400, "Cursor mendukung urutan terbaru/terlama dan page=1")
+        context = fingerprint(_user, query, effective_sort, page_size, await get_generation(db))
+        if cursor:
+            position = decode_cursor(cursor, context)
+            read_query = {"$and": [query, after_cursor(position, effective_sort)]}
+            current_page = position["page"]
+        else:
+            await ensure_cursor_domain(db.assets, query)
+        skip = 0
+        fetch_limit += 1
+
+    # Count remains exact. Cursor changes only sequential row retrieval.
     pipeline = [
-        {"$match": query},
-        {"$sort": dict(sort)},
+        {"$match": read_query},
+        *tahapan_urutan_aset(sort_by),
         {"$skip": skip},
-        {"$limit": page_size},
+        {"$limit": fetch_limit},
         {"$project": projection}
     ]
     total, assets = await asyncio.gather(
         db.assets.count_documents(query),
-        db.assets.aggregate(pipeline).to_list(page_size)
+        db.assets.aggregate(pipeline).to_list(fetch_limit)
     )
+    next_cursor = ""
+    if pagination == "cursor" and len(assets) > page_size:
+        assets = assets[:page_size]
+        next_cursor = encode_cursor(context, assets[-1], current_page + 1)
     await lengkapi_psp(assets, _user)
 
     total_pages = max(1, (total + page_size - 1) // page_size)
@@ -648,9 +689,11 @@ async def get_assets(
     return {
         "items": assets,
         "total": total,
-        "page": page,
+        "page": current_page if pagination == "cursor" else page,
         "page_size": page_size,
-        "total_pages": total_pages
+        "total_pages": total_pages,
+        **({"pagination": "cursor", "next_cursor": next_cursor,
+             "consistency": "mutable_dataset"} if pagination == "cursor" else {}),
     }
 
 
@@ -742,12 +785,13 @@ async def get_assets_offline_snapshot(
     requires_full_refresh = False
     if since and not cursor and skip == 0:
         tomb_query = {"action": "delete", "activity_id": activity_id, "timestamp": {"$gt": since}}
-        tombstones = await db.audit_logs.find(tomb_query, {"_id": 0, "asset_id": 1}).to_list(10000)
-        deleted_ids = [t["asset_id"] for t in tombstones if t.get("asset_id")]
+        tombstones = await db.audit_logs.find(tomb_query, {"_id": 0, "asset_id": 1}).to_list(10001)
+        overflow = len(tombstones) > 10000
+        deleted_ids = [] if overflow else [t["asset_id"] for t in tombstones if t.get("asset_id")]
         bulk = await db.audit_logs.count_documents(
             {"action": "bulk_delete", "activity_id": activity_id, "timestamp": {"$gt": since}}
         )
-        requires_full_refresh = bulk > 0
+        requires_full_refresh = overflow or bulk > 0
 
     return {
         "items": assets,
@@ -862,8 +906,8 @@ async def get_assets_stats(
     eselon5_filter: List[str] = Query(default=[]),
     stiker_status: List[str] = Query(default=[]),
     inventory_status: List[str] = Query(default=[]),
-    price_min: float = None,
-    price_max: float = None,
+    price_min: Decimal = None,
+    price_max: Decimal = None,
     nomor_spm: str = "",
     perolehan_dari: str = "",
     user_filter: str = "",
@@ -888,7 +932,7 @@ async def get_assets_stats(
         perolehan_dari=perolehan_dari, user_filter=user_filter,
         pengguna_nip=pengguna_nip, beli_dari=beli_dari, beli_sampai=beli_sampai,
     )
-    cache_key = kunci_cache_kueri(_user, query)
+    cache_key = "finite2|" + kunci_cache_kueri(_user, query)
     _cached = await cache_get("stats", cache_key)
     if _cached is not None:
         return _cached
@@ -898,14 +942,7 @@ async def get_assets_stats(
         {"$group": {
             "_id": None,
             "total_assets": {"$sum": 1},
-            "total_value": {"$sum": {
-                "$convert": {
-                    "input": "$purchase_price",
-                    "to": "double",
-                    "onError": 0,
-                    "onNull": 0
-                }
-            }},
+            "total_value": {"$sum": ekspresi_harga()},
             "active_count": {"$sum": {"$cond": [{"$eq": ["$status", "Aktif"]}, 1, 0]}},
             "maintenance_count": {"$sum": {"$cond": [{"$eq": ["$status", "Maintenance"]}, 1, 0]}}
         }}
@@ -916,12 +953,13 @@ async def get_assets_stats(
         r = result[0]
         stats = {
             "total_assets": r["total_assets"],
-            "total_value": r["total_value"],
+            "total_value": harga_json(r["total_value"]),
+            "total_value_exact": harga_teks_eksak(r["total_value"]),
             "active_count": r["active_count"],
             "maintenance_count": r["maintenance_count"]
         }
     else:
-        stats = {"total_assets": 0, "total_value": 0, "active_count": 0, "maintenance_count": 0}
+        stats = {"total_assets": 0, "total_value": 0, "total_value_exact": "0", "active_count": 0, "maintenance_count": 0}
     await cache_set("stats", cache_key, stats)
     return stats
 
@@ -929,7 +967,7 @@ async def get_assets_stats(
 async def get_assets_analytics(activity_id: str = "", _user: dict = Depends(require_user)):
     """Get analytics data for charts (cached 2 min per activity)"""
     await pastikan_akses_kegiatan_id(_user, activity_id)
-    cache_key = f"{kode_satker_user(_user)}|{activity_id or '_all'}"
+    cache_key = f"finite2|{kode_satker_user(_user)}|{activity_id or '_all'}"
     _cached = await cache_get("analytics", cache_key)
     if _cached is not None:
         return _cached
@@ -939,7 +977,7 @@ async def get_assets_analytics(activity_id: str = "", _user: dict = Depends(requ
         query["activity_id"] = activity_id
     query = await scope_query_aset(_user, query)
 
-    price_convert = {"$convert": {"input": "$purchase_price", "to": "double", "onError": 0, "onNull": 0}}
+    price_convert = ekspresi_harga()
 
     # SATU lintasan $facet: $match memilih set (via indeks activity_id) SEKALI,
     # lalu 5 grouping berjalan atas set yang sama — menggantikan 5 aggregation
@@ -978,11 +1016,11 @@ async def get_assets_analytics(activity_id: str = "", _user: dict = Depends(requ
     eselon_res = facets.get("by_eselon", [])
 
     result = {
-        "by_category": [{"name": r["_id"] or "Lainnya", "count": r["count"], "value": r["value"]} for r in cat_res],
+        "by_category": [{"name": r["_id"] or "Lainnya", "count": r["count"], "value": harga_json(r["value"]), "value_exact": harga_teks_eksak(r["value"])} for r in cat_res],
         "by_condition": [{"name": r["_id"] or "Lainnya", "count": r["count"]} for r in cond_res],
         "by_status": [{"name": r["_id"] or "Lainnya", "count": r["count"]} for r in stat_res],
         "by_location": [{"name": r["_id"] or "Lainnya", "count": r["count"]} for r in loc_res],
-        "by_eselon": [{"name": r["_id"] or "Lainnya", "count": r["count"], "value": r["value"]} for r in eselon_res],
+        "by_eselon": [{"name": r["_id"] or "Lainnya", "count": r["count"], "value": harga_json(r["value"]), "value_exact": harga_teks_eksak(r["value"])} for r in eselon_res],
     }
     await cache_set("analytics", cache_key, result)
     return result
@@ -1189,6 +1227,10 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
     if asset.photo and not photos:
         photos = [asset.photo]
     
+    validate_main_photos(photos)
+    validate_checklist([item.model_dump() for item in (asset.document_checklist or [])])
+    validate_asset_document(asset.model_dump())
+
     photo_gridfs_ids = []
     photo_thumbnails = []
     thumbnail = None
@@ -1201,6 +1243,8 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
         cover_idx = min(asset.thumbnail_index or 0, len(photos) - 1)
         thumbnail = await asyncio.to_thread(create_thumbnail, photos[cover_idx])
         gallery_thumbnail = await asyncio.to_thread(create_gallery_thumbnail, photos[cover_idx])
+
+    await register_photos(db, asset_id, photo_gridfs_ids)
 
     asset_doc = {
         "id": asset_id,
@@ -1240,29 +1284,42 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
     if lokasi_otomatis:
         asset_doc["lokasi_spasial"] = lokasi_otomatis
 
+    prepared_checklist = None
+    commit_attempted = False
     try:
+        prepared_checklist = await prepare_checklist(
+            asset_doc["document_checklist"], asset_id, db, fs_bucket)
+        asset_doc["document_checklist"] = prepared_checklist.items
+        validate_asset_document(asset_doc)
+        commit_attempted = True
         await db.assets.insert_one(asset_doc)
+    except HTTPException:
+        if prepared_checklist is not None:
+            await discard_staged(fs_bucket, prepared_checklist, database=db, asset_id=asset_id)
+        await discard_uncommitted_photos(db, fs_bucket, asset_id, photo_gridfs_ids)
+        raise
     except DuplicateKeyError:
+        if prepared_checklist is not None:
+            await discard_staged(fs_bucket, prepared_checklist, database=db, asset_id=asset_id)
         # Dua replay berpacu melewati pemeriksaan di atas — indeks unik parsial
         # idem_key_unik menghentikan yang kalah. Kembalikan aset yang menang:
         # bagi klien keduanya adalah SATU simpanan yang sama.
-        for gid in photo_gridfs_ids:
-            try:
-                await delete_photo_from_gridfs(gid)
-            except Exception:
-                pass
+        await discard_uncommitted_photos(db, fs_bucket, asset_id, photo_gridfs_ids)
         _menang = await db.assets.find_one({"idem_key": idem_key}, {"_id": 0}) if idem_key else None
         if _menang:
             return AssetResponse(**_strip_media(
                 {k: v for k, v in _menang.items() if k in AssetResponse.model_fields}))
         raise HTTPException(status_code=409, detail="Aset dengan kunci idempotensi ini sudah tersimpan")
     except Exception as e:
-        # Rollback GridFS photos on DB insert failure
-        for gid in photo_gridfs_ids:
-            try:
-                await delete_photo_from_gridfs(gid)
-            except Exception:
-                pass
+        # A timed-out Mongo call may still commit after this handler returns.
+        # Absence in an immediate read is not proof that it cannot commit.
+        if not commit_attempted:
+            if prepared_checklist is not None:
+                await discard_staged(fs_bucket, prepared_checklist, database=db, asset_id=asset_id)
+            await discard_uncommitted_photos(db, fs_bucket, asset_id, photo_gridfs_ids)
+        else:
+            from pemeliharaan import mark_current_writer_uncertain
+            await mark_current_writer_uncertain("asset_create")
         error_msg = str(e)
         if "document too large" in error_msg.lower():
             raise HTTPException(
@@ -1270,7 +1327,17 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
                 detail="Ukuran data terlalu besar (melebihi 16MB). Kurangi jumlah atau ukuran foto."
             )
         raise HTTPException(status_code=500, detail=f"Gagal menyimpan: {error_msg}")
-    
+    except BaseException:
+        if commit_attempted:
+            from pemeliharaan import mark_current_writer_uncertain
+            await mark_current_writer_uncertain("asset_create")
+        else:
+            if prepared_checklist:
+                await discard_staged(fs_bucket, prepared_checklist, database=db, asset_id=asset_id)
+            await discard_uncommitted_photos(db, fs_bucket, asset_id, photo_gridfs_ids)
+        raise
+
+    await acknowledge_photos(db, asset_id, photo_gridfs_ids)
     logger.info(f"Asset created: {asset.asset_code}")
     # Riwayat penempatan ditulis SETELAH insert sukses — riwayat tak boleh
     # mendahului kenyataan (pola set_lokasi_aset). Replay DuplicateKeyError
@@ -1328,15 +1395,14 @@ def _strip_media(asset: dict) -> dict:
     menyisipkan photo_count/document_count. Dipakai GET ?exclude_media=true dan
     respons tulis (POST/PUT/PATCH) — klien sudah memegang medianya sendiri,
     mengirim balik ratusan KB base64 hanya membuang kuota & waktu."""
-    real_photos = asset.get("photos", []) or []
-    asset["photo_count"] = len(asset.get("photo_gridfs_ids") or []) or len(real_photos)
+    real_photos = media_array(asset.get("photos"))
+    asset["photo_count"] = len(media_array(asset.get("photo_gridfs_ids"))) or len(real_photos)
     asset["photos"] = []
     asset.pop("photo", None)
-    if asset.get("document_checklist"):
-        asset["document_checklist"] = [
-            {**item, "photos": [], "documents": [], "photo_count": len(item.get("photos", []) or []), "document_count": len(item.get("documents", []) or [])}
-            for item in asset["document_checklist"]
-        ]
+    asset["document_checklist"] = [
+        {**item, "photos": [], "documents": [], "photo_count": checklist_photo_count(item),
+         "document_count": len(item["documents"])}
+        for item in safe_checklist(asset.get("document_checklist"))]
     return asset
 
 
@@ -1353,17 +1419,18 @@ async def get_asset(asset_id: str, exclude_media: bool = False, _user: dict = De
             {"$match": {"id": asset_id}},
             {"$set": {
                 "photo_count": {"$cond": [
-                    {"$gt": [{"$size": {"$ifNull": ["$photo_gridfs_ids", []]}}, 0]},
-                    {"$size": {"$ifNull": ["$photo_gridfs_ids", []]}},
-                    {"$size": {"$ifNull": ["$photos", []]}},
+                    {"$gt": [{"$size": array_field("$photo_gridfs_ids")}, 0]},
+                    {"$size": array_field("$photo_gridfs_ids")},
+                    {"$size": array_field("$photos")},
                 ]},
                 "document_checklist": {"$map": {
-                    "input": {"$ifNull": ["$document_checklist", []]},
+                    "input": array_field("$document_checklist"),
                     "as": "item",
-                    "in": {"$mergeObjects": ["$$item", {
+                    "in": {"$mergeObjects": [{"$cond": [{"$eq": [{"$type": "$$item"}, "object"]}, "$$item", {}]}, {
                         "photos": [], "documents": [],
-                        "photo_count": {"$size": {"$ifNull": ["$$item.photos", []]}},
-                        "document_count": {"$size": {"$ifNull": ["$$item.documents", []]}},
+                        "photo_count": {"$max": [{"$size": array_field("$$item.photos")},
+                                                  {"$size": array_field("$$item.photo_gridfs_ids")}]},
+                        "document_count": {"$size": array_field("$$item.documents")},
                     }]},
                 }},
             }},
@@ -1377,11 +1444,14 @@ async def get_asset(asset_id: str, exclude_media: bool = False, _user: dict = De
         # (dipanggil pada SETIAP buka lightbox/form edit).
         await pastikan_akses_aset(_user, docs[0])
         await lengkapi_psp(docs, _user)
+        docs[0]["document_checklist"] = safe_checklist(docs[0].get("document_checklist"))
         return AssetResponse(**docs[0])
     asset = await db.assets.find_one({"id": asset_id}, {"_id": 0})
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
     await pastikan_akses_aset(_user, asset)
+    for field in ("photos", "photo_gridfs_ids", "photo_thumbnails"):
+        asset[field] = media_array(asset.get(field))
     # Kontrak GET penuh = "beserta media". Dokumen bersih (GridFS-only,
     # photos=[]) dihidrasikan dari blob agar konsumen lama tetap bekerja.
     if not (asset.get("photos") or []) and (asset.get("photo_gridfs_ids") or []):
@@ -1404,6 +1474,8 @@ async def get_asset(asset_id: str, exclude_media: bool = False, _user: dict = De
         if 0 <= cover < len(hydrated) and hydrated[cover]:
             asset["photo"] = hydrated[cover]
     await lengkapi_psp([asset], _user)
+    asset["document_checklist"] = await hydrate_checklist(asset, db, fs_bucket)
+    asset["photos"] = media_array(asset.get("photos"))
     return AssetResponse(**asset)
 
 
@@ -1420,16 +1492,16 @@ async def get_asset_media(asset_id: str, _user: dict = Depends(require_user)):
     await pastikan_akses_aset(_user, asset)
     
     # Return thumbnails for display; if no thumbnails yet (legacy), generate on the fly
-    photo_thumbnails = asset.get("photo_thumbnails", []) or []
-    photo_gridfs_ids = asset.get("photo_gridfs_ids", []) or []
-    photos = asset.get("photos", []) or []
+    photo_thumbnails = media_array(asset.get("photo_thumbnails"))
+    photo_gridfs_ids = media_array(asset.get("photo_gridfs_ids"))
+    photos = media_array(asset.get("photos"))
     
     # Fallback for legacy assets without thumbnails: generate from full photos
     if photos and not photo_thumbnails:
         photo_thumbnails = await asyncio.to_thread(
             lambda pics: [generate_photo_thumbnail(p) or "" for p in pics], photos)
     
-    checklist = asset.get("document_checklist", []) or []
+    checklist = safe_checklist(asset.get("document_checklist"))
     # For document checklist, also return thumbnails for photos
     checklist_media = []
     for item in checklist:
@@ -1439,9 +1511,10 @@ async def get_asset_media(asset_id: str, _user: dict = Depends(require_user)):
             item_photo_thumbs = await asyncio.to_thread(
                 lambda pics: [generate_photo_thumbnail(p) or "" for p in pics], item_photos)
         checklist_media.append({
+            "id": item.get("id"),
             "name": item.get("name", ""),
             "photo_thumbnails": item_photo_thumbs,
-            "photo_count": len(item_photos),
+            "photo_count": checklist_photo_count(item),
             "documents": [{"name": d.get("name", "document.pdf")} for d in (item.get("documents", []) or [])],
             "document_count": len(item.get("documents", []) or [])
         })
@@ -1468,11 +1541,11 @@ async def get_asset_checklist_full(asset_id: str, _user: dict = Depends(require_
         state — the actual photo bytes are loaded by the <img> tag on demand)
       - documents: array of {name, idx} (NO data field)
     """
-    asset = await db.assets.find_one({"id": asset_id}, {"_id": 0, "document_checklist": 1, "activity_id": 1})
+    asset = await db.assets.find_one({"id": asset_id}, {"_id": 0, "id": 1, "document_checklist": 1, "activity_id": 1})
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
     await pastikan_akses_aset(_user, asset)
-    checklist = asset.get("document_checklist", []) or []
+    checklist = safe_checklist(asset.get("document_checklist"))
     normalized = []
     for item in checklist:
         item_photos = item.get("photos", []) or []
@@ -1482,16 +1555,18 @@ async def get_asset_checklist_full(asset_id: str, _user: dict = Depends(require_
             item_thumbs = await asyncio.to_thread(
                 lambda pics: [generate_photo_thumbnail(p) or "" for p in pics], item_photos)
         # Trim to actual count — never return more thumbs than photos
-        if len(item_thumbs) > len(item_photos):
-            item_thumbs = item_thumbs[: len(item_photos)]
+        count = checklist_photo_count(item)
+        if len(item_thumbs) > count:
+            item_thumbs = item_thumbs[:count]
         normalized.append({
+            "id": item.get("id"),
             "name": item.get("name", ""),
             "checked": bool(item.get("checked", False)),
             "notes": item.get("notes", ""),
             "photo_thumbnails": item_thumbs,
-            "photo_count": len(item_photos),
+            "photo_count": count,
             "documents": [
-                {"name": d.get("name", "document.pdf"), "idx": idx}
+                {"id": d.get("id"), "name": d.get("name", "document.pdf"), "idx": idx}
                 for idx, d in enumerate(item.get("documents", []) or [])
             ],
             "document_count": len(item.get("documents", []) or []),
@@ -1578,77 +1653,37 @@ def _not_modified(request: Request, etag: str):
 @assets_router.get("/assets/{asset_id}/checklist/{item_idx}/photos/{photo_idx}")
 async def get_asset_checklist_photo(asset_id: str, item_idx: int, photo_idx: int, request: Request,
                                     _user: dict = Depends(require_user_or_query_token)):
-    """Stream a single inline checklist photo by item & photo index."""
-    asset = await db.assets.find_one({"id": asset_id}, {"_id": 0, "document_checklist": 1, "version": 1, "activity_id": 1})
+    """Stream an owned checklist photo, supporting inline and GridFS storage."""
+    asset = await db.assets.find_one({"id": asset_id}, {"_id": 0, "id": 1,
+        "document_checklist": 1, "version": 1, "activity_id": 1})
     if not asset:
-        raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+        raise HTTPException(404, "Aset tidak ditemukan")
     await pastikan_akses_aset(_user, asset)
-    checklist = asset.get("document_checklist", []) or []
-    if item_idx < 0 or item_idx >= len(checklist):
-        raise HTTPException(status_code=404, detail="Item tidak ditemukan")
-    photos = (checklist[item_idx] or {}).get("photos", []) or []
-    if photo_idx < 0 or photo_idx >= len(photos):
-        raise HTTPException(status_code=404, detail="Foto tidak ditemukan")
     etag = f'"cl-{asset_id}-{item_idx}-p{photo_idx}-v{int(asset.get("version", 1) or 1)}"'
     not_modified = _not_modified(request, etag)
     if not_modified:
         return not_modified
-    photo_b64 = photos[photo_idx]
-    if not isinstance(photo_b64, str):
-        raise HTTPException(status_code=500, detail="Format foto tidak valid")
-    if photo_b64.startswith("data:"):
-        try:
-            _, data = photo_b64.split(",", 1)
-        except ValueError:
-            raise HTTPException(status_code=500, detail="Format foto tidak valid")
-    else:
-        data = photo_b64
-    try:
-        raw = base64.b64decode(data)
-    except Exception:
-        raise HTTPException(status_code=500, detail="Foto rusak")
-    return Response(content=raw, media_type=_tebak_media_type(raw), headers=_media_headers(etag))
+    raw, content_type, _ = await read_checklist_media(asset, item_idx, photo_idx, "photo", db, fs_bucket)
+    return Response(content=raw, media_type=content_type, headers=_media_headers(etag))
 
 
 @assets_router.get("/assets/{asset_id}/checklist/{item_idx}/documents/{doc_idx}")
 async def get_asset_checklist_document(asset_id: str, item_idx: int, doc_idx: int, request: Request,
                                        _user: dict = Depends(require_user_or_query_token)):
-    """Stream a single inline checklist PDF by item & document index."""
-    asset = await db.assets.find_one({"id": asset_id}, {"_id": 0, "document_checklist": 1, "version": 1, "activity_id": 1})
+    """Stream exact original PDF bytes from either supported storage shape."""
+    from urllib.parse import quote
+    asset = await db.assets.find_one({"id": asset_id}, {"_id": 0, "id": 1,
+        "document_checklist": 1, "version": 1, "activity_id": 1})
     if not asset:
-        raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+        raise HTTPException(404, "Aset tidak ditemukan")
     await pastikan_akses_aset(_user, asset)
-    checklist = asset.get("document_checklist", []) or []
-    if item_idx < 0 or item_idx >= len(checklist):
-        raise HTTPException(status_code=404, detail="Item tidak ditemukan")
-    docs = (checklist[item_idx] or {}).get("documents", []) or []
-    if doc_idx < 0 or doc_idx >= len(docs):
-        raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
     etag = f'"cl-{asset_id}-{item_idx}-d{doc_idx}-v{int(asset.get("version", 1) or 1)}"'
     not_modified = _not_modified(request, etag)
     if not_modified:
         return not_modified
-    doc = docs[doc_idx] or {}
-    data_url = doc.get("data", "") or ""
-    if not data_url:
-        raise HTTPException(status_code=404, detail="Data dokumen kosong")
-    if data_url.startswith("data:"):
-        try:
-            _, data = data_url.split(",", 1)
-        except ValueError:
-            raise HTTPException(status_code=500, detail="Format dokumen tidak valid")
-    else:
-        data = data_url
-    try:
-        raw = base64.b64decode(data)
-    except Exception:
-        raise HTTPException(status_code=500, detail="Dokumen rusak")
-    name = doc.get("name", "document.pdf") or "document.pdf"
-    return Response(
-        content=raw,
-        media_type="application/pdf",
-        headers=_media_headers(etag, {"Content-Disposition": f'inline; filename="{name}"'}),
-    )
+    raw, _, name = await read_checklist_media(asset, item_idx, doc_idx, "document", db, fs_bucket)
+    return Response(content=raw, media_type="application/pdf", headers=_media_headers(etag, {
+        "Content-Disposition": "inline; filename*=UTF-8''" + quote(name, safe="")}))
 
 
 def _tebak_media_type(b: bytes) -> str:
@@ -2193,9 +2228,18 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
         if kr_existing:
             raise HTTPException(status_code=400, detail=f"Kode Register '{asset.kode_register}' sudah digunakan dalam kegiatan ini")
     
+    put_checklist = ([item.model_dump() for item in (asset.document_checklist or [])]
+                     if "document_checklist" in asset.model_fields_set else existing.get("document_checklist", []))
+    if "document_checklist" in asset.model_fields_set:
+        put_checklist = resolve_checklist_for_validation(put_checklist, existing.get("document_checklist"))
+        validate_checklist(put_checklist, existing=existing.get("document_checklist") or [])
+    validate_asset_document({**existing, **asset.model_dump()}, existing=existing)
+
     photos = asset.photos or []
     if asset.photo and not photos:
         photos = [asset.photo]
+
+    validate_main_photos(photos, existing=existing.get("photos"))
 
     # Generate thumbnail from selected cover photo + GridFS storage
     thumbnail = existing.get("thumbnail")
@@ -2235,6 +2279,9 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
     has_real_gids = any(g for g in photo_gridfs_ids)
     preserve_legacy_inline = (not photos) and (not has_real_gids) and len(old_photos) > 0
 
+    new_main_photo_ids = [gid for gid in photo_gridfs_ids if gid and gid not in old_gridfs_for_rollback]
+    await register_photos(db, asset_id, new_main_photo_ids)
+
     update_data = {
         **asset.model_dump(),
         # Inline base64 tidak dipersist lagi — GridFS adalah sumber tunggal
@@ -2246,7 +2293,7 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
         "thumbnail": thumbnail,
         "gallery_thumbnail": gallery_thumbnail,
         "thumbnail_index": cover_idx,
-        "document_checklist": [item.model_dump() for item in (asset.document_checklist or [])],
+        "document_checklist": put_checklist,
         "created_at": existing["created_at"],
         # Stamped on every write so the offline snapshot delta sync
         # (GET /assets/offline-snapshot?since=...) picks this change up.
@@ -2273,7 +2320,14 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
     if lokasi_otomatis:
         update_data["lokasi_spasial"] = lokasi_otomatis
 
+    prepared_checklist = None
+    commit_attempted = False
     try:
+        if "document_checklist" in asset.model_fields_set:
+            prepared_checklist = await prepare_checklist(
+                put_checklist, asset_id, db, fs_bucket, existing=existing.get("document_checklist"))
+            update_data["document_checklist"] = prepared_checklist.items
+        validate_asset_document({**existing, **update_data, "version": current_version + 1}, existing=existing)
         # Atomic CAS update: only succeeds if version still matches.
         # Support legacy docs without version field: when current_version==1,
         # also match docs where version is missing ($exists=False).
@@ -2281,18 +2335,12 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
         _ops = {"$set": update_data, "$inc": {"version": 1}}
         if _geo_unset:
             _ops["$unset"] = _geo_unset
+        commit_attempted = True
         result = await db.assets.update_one(cas_filter, _ops)
         if result.matched_count == 0:
+            commit_attempted = False  # Acknowledged CAS rejection: no write.
             # Someone else bumped version between our read and write — 409
             fresh = await db.assets.find_one({"id": asset_id}, {"_id": 0, "version": 1, "asset_code": 1, "asset_name": 1})
-            # Rollback GridFS uploads that were freshly created for this request
-            if photo_gridfs_ids != old_gridfs_for_rollback:
-                for gid in photo_gridfs_ids:
-                    if gid and gid not in old_gridfs_for_rollback:
-                        try:
-                            await delete_photo_from_gridfs(gid)
-                        except Exception:
-                            pass
             raise HTTPException(
                 status_code=409,
                 detail={
@@ -2302,17 +2350,19 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
                     "current": fresh or {},
                 },
             )
-    except HTTPException:
+    except HTTPException as error:
+        if prepared_checklist is not None:
+            await discard_staged(fs_bucket, prepared_checklist, database=db, asset_id=asset_id)
+        await discard_uncommitted_photos(db, fs_bucket, asset_id, new_main_photo_ids)
         raise
     except Exception as e:
-        # Rollback new GridFS uploads on write error
-        if photo_gridfs_ids != old_gridfs_for_rollback:
-            for gid in photo_gridfs_ids:
-                if gid and gid not in old_gridfs_for_rollback:
-                    try:
-                        await delete_photo_from_gridfs(gid)
-                    except Exception:
-                        pass
+        if not commit_attempted:
+            if prepared_checklist is not None:
+                await discard_staged(fs_bucket, prepared_checklist, database=db, asset_id=asset_id)
+            await discard_uncommitted_photos(db, fs_bucket, asset_id, new_main_photo_ids)
+        else:
+            from pemeliharaan import mark_current_writer_uncertain
+            await mark_current_writer_uncertain("asset_put")
         error_msg = str(e)
         if "document too large" in error_msg.lower():
             raise HTTPException(
@@ -2320,6 +2370,17 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
                 detail="Ukuran data terlalu besar (melebihi 16MB). Kurangi jumlah atau ukuran foto."
             )
         raise HTTPException(status_code=500, detail=f"Gagal menyimpan: {error_msg}")
+    except BaseException:
+        if commit_attempted:
+            from pemeliharaan import mark_current_writer_uncertain
+            await mark_current_writer_uncertain("asset_put")
+        else:
+            if prepared_checklist:
+                await discard_staged(fs_bucket, prepared_checklist, database=db, asset_id=asset_id)
+            await discard_uncommitted_photos(db, fs_bucket, asset_id, new_main_photo_ids)
+        raise
+
+    await acknowledge_photos(db, asset_id, new_main_photo_ids)
 
     # After successful update: delete GridFS IDs that were replaced (old no-longer-referenced)
     if photo_gridfs_ids != old_gridfs_for_rollback:
@@ -2504,6 +2565,24 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
         })
         if kr_dup:
             raise HTTPException(status_code=400, detail=f"Kode Register '{update_data['kode_register']}' sudah digunakan dalam kegiatan ini")
+
+    if "document_checklist" in update_data:
+        validated_checklist = resolve_checklist_for_validation(update_data["document_checklist"], existing.get("document_checklist") or [])
+        validate_checklist(validated_checklist, existing=existing.get("document_checklist") or [])
+    if "photos" in update_data:
+        validate_main_photos(update_data["photos"], existing=existing.get("photos") or [])
+    if has_photo_ops:
+        photo_ops = body["photo_ops"]
+        if not isinstance(photo_ops, dict) or not isinstance(photo_ops.get("keep", []), list) or not isinstance(photo_ops.get("add", []), list):
+            raise HTTPException(400, "Operasi foto tidak valid")
+        if any(not isinstance(index, int) or isinstance(index, bool) for index in photo_ops.get("keep", [])):
+            raise HTTPException(400, "Posisi foto tidak valid")
+        validate_main_photos(photo_ops.get("add", []))
+        old_count = max(len(existing.get("photos") or []), len(existing.get("photo_gridfs_ids") or []))
+        final_count = len({index for index in photo_ops.get("keep", []) if 0 <= index < old_count}) + len(photo_ops.get("add", []))
+        if final_count > 6 and final_count > old_count:
+            raise HTTPException(413, "Maksimal 6 foto utama per aset")
+    validate_asset_document({**existing, **update_data}, existing=existing)
 
     # Track GridFS IDs that we create in this request for rollback on failure
     newly_uploaded_gridfs = []
@@ -2709,76 +2788,30 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
                 # JANGAN tulis update_data["photo"]: itu menyuntikkan kembali
                 # base64 full-res ke dokumen yang sudah bersih (GridFS-only).
 
-    # Handle document_checklist → normalize dicts. Frontend uses sentinels to
-    # signal "preserve existing item at this index" without re-shipping the
-    # base64 bytes; we resolve those sentinels against the existing doc here.
+    await register_photos(db, asset_id, newly_uploaded_gridfs)
+
+    # Resolve stable identity, owned refs and old-client sentinels through the
+    # same adapter used by preflight and create/PUT.
+    checklist_prepared = None
     if "document_checklist" in update_data:
-        existing_checklist = existing.get("document_checklist", []) or []
-        # Consume each existing item at most once, in order, so duplicate or
-        # empty checklist-item names can't cross-wire / lose photos on edit.
-        existing_by_name = {}
-        for _it in existing_checklist:
-            existing_by_name.setdefault((_it.get("name") or ""), deque()).append(_it)
-        new_checklist = []
-        for item in (update_data["document_checklist"] or []):
-            name = item.get("name", "") or ""
-            _q = existing_by_name.get(name)
-            orig_item = _q.popleft() if _q else {}
-            orig_photos = orig_item.get("photos", []) or []
-            orig_docs = orig_item.get("documents", []) or []
-            orig_thumbs = orig_item.get("photo_thumbnails", []) or []
-
-            # Resolve photo sentinels: "__existing__:<idx>" → orig_photos[idx]
-            resolved_photos = []
-            resolved_thumbs = []
-            for p in (item.get("photos", []) or []):
-                if isinstance(p, str) and p.startswith("__existing__:"):
-                    try:
-                        idx = int(p.split(":", 1)[1])
-                    except (ValueError, IndexError):
-                        continue
-                    if 0 <= idx < len(orig_photos) and orig_photos[idx]:
-                        resolved_photos.append(orig_photos[idx])
-                        if idx < len(orig_thumbs):
-                            resolved_thumbs.append(orig_thumbs[idx])
-                else:
-                    resolved_photos.append(p)
-                    # Thumbnail will be regenerated below for new uploads
-                    resolved_thumbs.append("")
-
-            # Resolve doc sentinels: doc with data == "__existing__:<idx>"
-            resolved_docs = []
-            for d in (item.get("documents", []) or []):
-                if not isinstance(d, dict):
-                    continue
-                data = d.get("data", "") or ""
-                if isinstance(data, str) and data.startswith("__existing__:"):
-                    try:
-                        idx = int(data.split(":", 1)[1])
-                    except (ValueError, IndexError):
-                        continue
-                    if 0 <= idx < len(orig_docs):
-                        resolved_docs.append(orig_docs[idx])
-                else:
-                    resolved_docs.append({"name": d.get("name", "document.pdf"), "data": data})
-
-            # Regenerate any missing photo thumbnails for newly added photos
+        try:
+            checklist_prepared = await prepare_checklist(update_data["document_checklist"],
+                asset_id, db, fs_bucket, existing=existing.get("document_checklist"))
+        except BaseException:
+            await discard_uncommitted_photos(db, fs_bucket, asset_id, newly_uploaded_gridfs)
+            raise
+        for item in checklist_prepared.items:
             final_thumbs = []
-            for i, ph in enumerate(resolved_photos):
-                t = resolved_thumbs[i] if i < len(resolved_thumbs) else ""
-                if not t and ph:
-                    t = await asyncio.to_thread(generate_photo_thumbnail, ph) or ""
-                final_thumbs.append(t)
-
-            new_checklist.append({
-                "name": name,
-                "checked": bool(item.get("checked", False)),
-                "notes": item.get("notes", ""),
-                "photos": resolved_photos,
-                "photo_thumbnails": final_thumbs,
-                "documents": resolved_docs,
-            })
-        update_data["document_checklist"] = new_checklist
+            photos = media_array(item.get("photos"))
+            thumbs = media_array(item.get("photo_thumbnails"))
+            for index in range(checklist_photo_count(item)):
+                thumb = thumbs[index] if index < len(thumbs) else ""
+                photo = photos[index] if index < len(photos) else ""
+                if not thumb and photo:
+                    thumb = await asyncio.to_thread(generate_photo_thumbnail, photo) or ""
+                final_thumbs.append(thumb)
+            item["photo_thumbnails"] = final_thumbs
+        update_data["document_checklist"] = checklist_prepared.items
 
     # Extract deferred rollback info before DB write
     deferred_delete_gids = update_data.pop("__rollback_old_removed_gids__", [])
@@ -2811,24 +2844,22 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
     if lokasi_otomatis:
         update_data["lokasi_spasial"] = lokasi_otomatis
 
+    commit_attempted = False
     try:
+        validate_asset_document({**existing, **update_data, "version": current_version + 1}, existing=existing)
         # Atomic CAS: only succeeds if version is still what client saw.
         # Support legacy docs without version field.
         cas_filter = _build_cas_filter(asset_id, current_version)
         _ops = {"$set": update_data, "$inc": {"version": 1}}
         if _geo_unset:
             _ops["$unset"] = _geo_unset
+        commit_attempted = True
         result = await db.assets.update_one(
             cas_filter,
             _ops,
         )
         if result.matched_count == 0:
-            # 409 — rollback newly uploaded GridFS blobs
-            for gid in newly_uploaded_gridfs:
-                try:
-                    await delete_photo_from_gridfs(gid)
-                except Exception:
-                    pass
+            commit_attempted = False  # Acknowledged CAS rejection: no write.
             fresh = await db.assets.find_one({"id": asset_id}, {"_id": 0, "version": 1, "asset_code": 1, "asset_name": 1})
             raise HTTPException(
                 status_code=409,
@@ -2839,19 +2870,34 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
                     "current": fresh or {},
                 },
             )
-    except HTTPException:
+    except HTTPException as error:
+        if checklist_prepared:
+            await discard_staged(fs_bucket, checklist_prepared, database=db, asset_id=asset_id)
+        await discard_uncommitted_photos(db, fs_bucket, asset_id, newly_uploaded_gridfs)
         raise
     except Exception as e:
-        # Rollback newly uploaded blobs on DB error
-        for gid in newly_uploaded_gridfs:
-            try:
-                await delete_photo_from_gridfs(gid)
-            except Exception:
-                pass
+        if not commit_attempted:
+            if checklist_prepared:
+                await discard_staged(fs_bucket, checklist_prepared, database=db, asset_id=asset_id)
+            await discard_uncommitted_photos(db, fs_bucket, asset_id, newly_uploaded_gridfs)
+        else:
+            from pemeliharaan import mark_current_writer_uncertain
+            await mark_current_writer_uncertain("asset_patch")
         error_msg = str(e)
         if "document too large" in error_msg.lower():
             raise HTTPException(status_code=413, detail="Ukuran data terlalu besar (melebihi 16MB). Kurangi jumlah atau ukuran foto.")
         raise HTTPException(status_code=500, detail=f"Gagal menyimpan: {error_msg}")
+    except BaseException:
+        if commit_attempted:
+            from pemeliharaan import mark_current_writer_uncertain
+            await mark_current_writer_uncertain("asset_patch")
+        else:
+            if checklist_prepared:
+                await discard_staged(fs_bucket, checklist_prepared, database=db, asset_id=asset_id)
+            await discard_uncommitted_photos(db, fs_bucket, asset_id, newly_uploaded_gridfs)
+        raise
+
+    await acknowledge_photos(db, asset_id, newly_uploaded_gridfs)
 
     # DB write succeeded — now safe to delete orphaned old GridFS blobs
     for gid in deferred_delete_gids:
@@ -2906,7 +2952,7 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
 @assets_router.delete("/assets/{asset_id}")
 async def delete_asset(asset_id: str, request: Request, _admin: dict = Depends(require_admin)):
     """Delete an asset (admin only)"""
-    asset_doc = await db.assets.find_one({"id": asset_id}, {"_id": 0})
+    asset_doc = await db.assets.find_one({"id": asset_id})
     if not asset_doc:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
     await pastikan_akses_aset(_admin, asset_doc)
@@ -2914,9 +2960,14 @@ async def delete_asset(asset_id: str, request: Request, _admin: dict = Depends(r
     # Kegiatan yang sudah disahkan terkunci — tolak penghapusan aset (423)
     await ensure_activity_not_sealed(asset_doc.get("activity_id"))
 
-    result = await db.assets.delete_one({"id": asset_id})
+    # Batch receipts must survive a crash between asset commit and receipt.
+    # Reconcile proofs before deletion and compare the exact loaded revision:
+    # another writer adding a proof between these awaits makes deletion fail.
+    from batch_operations import reconcile_before_asset_delete, cas_filter
+    await reconcile_before_asset_delete(asset_doc)
+    result = await db.assets.delete_one(cas_filter(asset_doc))
     if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+        raise HTTPException(status_code=409, detail="Aset berubah saat dihapus. Muat ulang sebelum mencoba kembali.")
 
     # Clean up GridFS blobs the doc referenced so they don't leak as orphans.
     # Best-effort: a blob-delete failure must NOT block the (already-done) doc

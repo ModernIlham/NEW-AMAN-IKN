@@ -1,0 +1,14 @@
+{
+  "source_member_count": 10000,
+  "selected_ids": 50,
+  "before": {
+    "p50_ms": 5.898943985812366,
+    "returned_members": 10000,
+    "bson_bytes": 599009
+  },
+  "after": {
+    "p50_ms": 25.23488798760809,
+    "returned_members": 50,
+    "bson_bytes": 3009
+  }
+}

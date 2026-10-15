@@ -16,10 +16,12 @@
  *   auto-401/idle logout does NOT — field data protection.
  */
 import { openDB } from "idb";
+import { ASSET_SCALAR_FIELDS } from "./assetFields";
 import axios from "axios";
 import { isQuotaExceeded } from "./idbErrors";
 import { TENGGAT_BAKA, muatAndal } from "./muatAndal";
 import { gabungVersiBaris } from "./rekonsiliasiBaris";
+import { buatCacheQuerySnapshot, queryHalamanSnapshot } from "./cacheQuerySnapshot";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -35,6 +37,31 @@ const VERSI_PROYEKSI = 2;
 const ASSET_STORE = "assets"; // keyed by asset id, indexed by activity_id
 const META_STORE = "meta";    // keyed by activityId → {activityId, userId, lastSync, count}
 
+const queryCache = buatCacheQuerySnapshot();
+let revisionChannel;
+function invalidateQueryCache(activityId) {
+  queryCache.clear();
+  try { revisionChannel?.postMessage({ activityId }); } catch { /* cache tetap lokal */ }
+}
+function listenForRevisions() {
+  if (revisionChannel || typeof window === "undefined" || !window.BroadcastChannel) return;
+  revisionChannel = new window.BroadcastChannel("aman-snapshot-revision");
+  revisionChannel.onmessage = () => queryCache.clear();
+  // Tab frontend lama tidak menaikkan revision ketika upsert; kembali ke tab
+  // ini tetap membaca ulang index sebelum memakai hasil cache sebelumnya.
+  window.addEventListener("focus", () => queryCache.clear());
+  revisionChannel.unref?.();
+}
+async function bumpRevision(db, activityId) {
+  invalidateQueryCache(activityId);
+  try {
+    const tx = db.transaction(META_STORE, "readwrite");
+    const meta = await tx.store.get(activityId);
+    if (meta) await tx.store.put({ ...meta, revision: (Number(meta.revision) || 0) + 1 });
+    await tx.done;
+  } catch (e) { if (!isQuotaExceeded(e)) throw e; }
+}
+
 const PAGE_LIMIT = 1000;
 // Refuse to serve a snapshot older than this — stale field data is worse
 // than an explicit "reconnect to resync" message.
@@ -44,30 +71,18 @@ export const SNAPSHOT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 hari
 // LIST_PROJECTION. Anything else (full photos, document_checklist, photo
 // blobs from optimistic payloads) is stripped before writing.
 const SNAPSHOT_FIELDS = [
-  "id", "asset_code", "NUP", "asset_name", "category", "brand", "model",
-  "kode_register", "serial_number", "purchase_date", "purchase_price",
-  "location", "eselon1", "eselon2", "eselon3", "eselon4", "eselon5",
-  "user", "condition", "status",
-  "pengguna_melekat_ke", "pengguna_jabatan", "pengguna_nip", "operasional_jenis", "nomor_bast",
-  "bast_file_id", "bast_filename", "bast_terakhir", "amanah_bast",
-  "nomor_spm", "perolehan_dari_nama", "nomor_kontrak", "cara_bayar_kontrak", "nomor_bukti_perolehan",
-  "supplier", "notes", "thumbnail", "thumbnail_index", "gallery_thumbnail",
-  "created_at", "updated_at", "activity_id", "version",
-  "stiker_status", "stiker_ukuran", "stiker_photo_index",
-  "inventory_status", "temuan_pencatatan", "klasifikasi_tidak_ditemukan", "sub_klasifikasi",
-  "uraian_tidak_ditemukan", "tindak_lanjut",
-  "koordinat_latitude", "koordinat_longitude", "kronologis",
-  "di_denah", "denah_nama", "denah_jalur", "denah_titik",
-  "keterangan_berlebih", "asal_usul_berlebih",
-  "nomor_perkara", "pihak_bersengketa", "keterangan_sengketa",
-  "garansi_hingga", "garansi_jenis", "barang_bersejarah",
-  "marker_pin",
-  "photo_count", "doc_total", "doc_checked", "doc_summary",
-  "siman",  // subdoc sinkronisasi SIMAN V2 — badge "≠ SIMAN" tetap tampil offline
+  ...ASSET_SCALAR_FIELDS,
+  "id", "bast_file_id", "bast_filename", "bast_terakhir", "amanah_bast",
+  "thumbnail", "thumbnail_index", "gallery_thumbnail", "created_at", "updated_at",
+  "activity_id", "version", "stiker_photo_index", "di_denah", "denah_nama",
+  "denah_jalur", "denah_titik", "photo_count", "doc_total", "doc_checked",
+  "doc_summary", "siman",
 ];
 
+let databasePromise;
 function getDB() {
-  return openDB(DB_NAME, DB_VERSION, {
+  if (databasePromise) return databasePromise;
+  databasePromise = openDB(DB_NAME, DB_VERSION, {
     upgrade(db, oldVersion, _newVersion, tx) {
       if (!db.objectStoreNames.contains(ASSET_STORE)) {
         const store = db.createObjectStore(ASSET_STORE, { keyPath: "id" });
@@ -81,7 +96,10 @@ function getDB() {
         tx.objectStore(META_STORE).clear();
       }
     },
-  });
+    blocking() { databasePromise?.then(db => db.close()); databasePromise = null; },
+    terminated() { databasePromise = null; },
+  }).catch(error => { databasePromise = null; throw error; });
+  return databasePromise;
 }
 
 // Ask the browser to protect our IndexedDB from storage-pressure eviction.
@@ -228,6 +246,7 @@ async function _syncSnapshot(activityId, userId, onProgress, { forceFull = false
       const tx = db.transaction(ASSET_STORE, "readwrite");
       for (const id of deletedIds) tx.store.delete(id);
       await tx.done;
+      await bumpRevision(db, activityId);
     }
 
     if (items.length) {
@@ -243,6 +262,7 @@ async function _syncSnapshot(activityId, userId, onProgress, { forceFull = false
           await tx.store.put(gabungVersiBaris(lama, row));
         }
         await tx.done;
+        await bumpRevision(db, activityId);
         for (const row of staged) fetchedIds?.add(row.id);
         loaded += items.length;
       } catch (e) {
@@ -274,6 +294,7 @@ async function _syncSnapshot(activityId, userId, onProgress, { forceFull = false
       const tx = db.transaction(ASSET_STORE, "readwrite");
       for (const id of stale) tx.store.delete(id);
       await tx.done;
+      await bumpRevision(db, activityId);
     }
   }
 
@@ -300,7 +321,12 @@ async function _syncSnapshot(activityId, userId, onProgress, { forceFull = false
   };
   let metaTersimpan = newMeta;
   try {
-    await db.put(META_STORE, newMeta);
+    const tx = db.transaction(META_STORE, "readwrite");
+    const latestMeta = await tx.store.get(activityId);
+    newMeta.revision = (Number(latestMeta?.revision) || 0) + 1;
+    await tx.store.put(newMeta);
+    await tx.done;
+    invalidateQueryCache(activityId);
   } catch (e) {
     // Meta ~beberapa byte; bila ini pun kena kuota, catat tanpa crash. Snapshot
     // parsial tanpa meta baru akan dilayani berdasarkan meta lama (delta) atau
@@ -314,8 +340,38 @@ async function _syncSnapshot(activityId, userId, onProgress, { forceFull = false
   return { count, lastSync: metaTersimpan?.lastSync || "", partial: quotaHit };
 }
 
+/** Paged dashboard reader: cache IDs/statistics, fetch media only for the page. */
+export async function getSnapshotPage(activityId, { ownerId, kodeSatker = "", search = "", category = [],
+  filters = {}, sort = "newest", page = 1, size = 50, pendingRevision = "", signal } = {}) {
+  if (!activityId) return null;
+  listenForRevisions();
+  const db = await getDB();
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const meta = await db.get(META_STORE, activityId);
+    if (!meta || isExpired(meta) || (ownerId && meta.userId !== ownerId)) return null;
+    const source = {
+      keys: () => db.getAllKeysFromIndex(ASSET_STORE, "by-activity", activityId),
+      rows: async ids => {
+        if (!ids.length) return [];
+        const tx = db.transaction(ASSET_STORE, "readonly");
+        const rows = await Promise.all(ids.map(id => tx.store.get(id)));
+        await tx.done;
+        return rows.filter(row => row?.activity_id === activityId);
+      },
+    };
+    const result = await queryHalamanSnapshot({ source, cache: queryCache,
+      scope: [ownerId || meta.userId, kodeSatker, activityId], meta,
+      query: { search, category, filters, sort }, page, size, pendingRevision, signal });
+    const latestMeta = await db.get(META_STORE, activityId);
+    if (latestMeta?.userId === meta.userId && latestMeta?.revision === meta.revision &&
+      latestMeta?.lastSync === meta.lastSync && !isExpired(latestMeta)) return { ...result, meta: latestMeta };
+    queryCache.clear();
+  }
+  throw new Error("Data offline sedang diperbarui. Coba muat ulang daftar setelah sinkron selesai.");
+}
+
 /**
- * All snapshot rows for an activity, sorted created_at desc.
+ * Legacy/full-map reader: all snapshot rows for an activity, sorted created_at desc.
  * Returns null when no servable snapshot exists (absent OR past the 7-day
  * TTL — check isSnapshotExpired(await snapshotMeta(id)) to tell them apart).
  */
@@ -360,6 +416,7 @@ export async function upsertSnapshotAsset(activityId, row) {
     const clean = toSnapshotRow({ ...gabungVersiBaris(dasar, row), activity_id: activityId });
     await tx.store.put(clean);
     await tx.done;
+    await bumpRevision(db, activityId);
   } catch {
     // Best-effort cache maintenance — the queue still holds the real change.
   }
@@ -374,6 +431,7 @@ export async function removeSnapshotAsset(activityId, id) {
     const meta = await db.get(META_STORE, activityId);
     if (!meta) return;
     await db.delete(ASSET_STORE, id);
+    await bumpRevision(db, activityId);
   } catch {
     // best-effort — TTL akan membereskan bila gagal
   }
@@ -382,6 +440,7 @@ export async function removeSnapshotAsset(activityId, id) {
 /** Remove one activity's snapshot (rows + meta). */
 export async function clearSnapshot(activityId) {
   if (!activityId) return;
+  invalidateQueryCache(activityId);
   try {
     const db = await getDB();
     const keys = await db.getAllKeysFromIndex(ASSET_STORE, "by-activity", activityId);
@@ -396,6 +455,7 @@ export async function clearSnapshot(activityId) {
 
 /** Wipe every snapshot (all activities). Used on manual logout / user switch. */
 export async function clearAllSnapshots() {
+  invalidateQueryCache();
   try {
     const db = await getDB();
     const tx = db.transaction([ASSET_STORE, META_STORE], "readwrite");

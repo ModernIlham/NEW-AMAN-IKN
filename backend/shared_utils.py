@@ -129,6 +129,9 @@ async def get_photo_from_gridfs(gridfs_id: str) -> Optional[bytes]:
 async def delete_photo_from_gridfs(gridfs_id: str):
     """Delete a photo from GridFS."""
     try:
+        from checklist_storage import retire_if_managed
+        if await retire_if_managed(db, gridfs_id):
+            return
         from bson import ObjectId
         await fs_bucket.delete(ObjectId(gridfs_id))
     except Exception as e:
@@ -183,6 +186,12 @@ async def delete_document_from_gridfs(gridfs_id: str):
     berarti dipertahankan/gagal; kegagalan pemeriksaan TIDAK menjadi izin hapus.
     """
     try:
+        from checklist_storage import retire_if_managed
+        if await retire_if_managed(db, gridfs_id):
+            return False
+    except Exception:
+        return False
+    try:
         from bson import ObjectId
         fid = ObjectId(gridfs_id)
     except Exception:
@@ -213,57 +222,6 @@ async def delete_document_from_gridfs(gridfs_id: str):
     except Exception as e:
         logger.error(f"GridFS document delete error for {gridfs_id}: {e}")
         return False
-
-
-async def cascade_hapus_blob_aset(activity_id: str) -> tuple:
-    """Hapus SEMUA blob GridFS milik aset sebuah kegiatan.
-
-    WAJIB dipanggil SEBELUM `db.assets.delete_many({"activity_id": ...})`.
-
-    Urutannya bukan selera. Id blob (`photo_gridfs_ids`, `bast_file_id`,
-    `document_checklist[].documents[].gridfs_id`) hanya TERSIMPAN di dokumen
-    asetnya. Begitu dokumen itu terhapus, id-nya ikut lenyap dan byte-nya tak
-    akan pernah bisa ditemukan lagi: menghapus kegiatannya pun tidak menolong,
-    karena loop cascade beriterasi atas `db.assets.find(...)` yang sudah kosong.
-    Penyapu berkala di `jobs.py` hanya menyasar artefak ekspor, bukan ini.
-    Hasilnya foto lapangan yatim permanen yang tetap memakan disk VPS.
-
-    Fungsi ini lahir dari temuan C18 tinjauan 2026-08: jalur yang BENAR sudah
-    ada di `routes/activities.py`, tetapi `routes/exports.py` (hapus massal aset
-    per kegiatan) memanggil `delete_many` tanpa mengumpulkan blob sama sekali.
-    Diangkat jadi helper bersama supaya pintu ketiga tak bisa lagi lupa.
-
-    Best-effort per blob: satu kegagalan dicatat, tidak pernah fatal — lebih
-    baik menyisakan satu blob yatim daripada membatalkan penghapusan yang
-    sudah diminta pengguna.
-
-    Returns: (jumlah_foto, jumlah_dokumen) yang dicoba dihapus.
-    """
-    photo_gids, doc_gids = [], []
-    async for a in db.assets.find(
-        {"activity_id": activity_id},
-        {"_id": 0, "photo_gridfs_ids": 1, "bast_file_id": 1, "document_checklist": 1},
-    ):
-        photo_gids.extend([g for g in (a.get("photo_gridfs_ids") or []) if g])
-        if a.get("bast_file_id"):
-            doc_gids.append(a["bast_file_id"])
-        for item in (a.get("document_checklist") or []):
-            if isinstance(item, dict):
-                for d in (item.get("documents") or []):
-                    gid = d.get("gridfs_id") if isinstance(d, dict) else None
-                    if gid:
-                        doc_gids.append(gid)
-    for gid in photo_gids:
-        try:
-            await delete_photo_from_gridfs(gid)
-        except Exception as e:
-            logger.warning(f"cascade_hapus_blob_aset: gagal hapus foto GridFS {gid}: {e}")
-    for gid in doc_gids:
-        try:
-            await delete_document_from_gridfs(gid)
-        except Exception as e:
-            logger.warning(f"cascade_hapus_blob_aset: gagal hapus dokumen GridFS {gid}: {e}")
-    return len(photo_gids), len(doc_gids)
 
 
 # --- Rate Limiter ---

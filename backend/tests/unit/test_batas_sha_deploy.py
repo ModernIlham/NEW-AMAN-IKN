@@ -33,12 +33,14 @@ class TestBatasWorkflow:
         alur = _teks(ALUR)
         assert "github.event.workflow_run.head_sha" in alur
         assert re.search(r"^\s*DEPLOY_SHA_MENTAH:.*workflow_run\.head_sha", alur, re.M)
-        assert "ref: ${{ steps.rilis.outputs.sha }}" in alur
+        assert "ref: ${{ steps.rilis.outputs.controller }}" in alur
+        assert '"$DEPLOY_SHA" != "$DEPLOY_CONTROLLER_SHA"' in alur
+        assert "DEPLOY_SHA: ${{ steps.rilis.outputs.sha }}" in alur
 
     def test_sha_diteruskan_melewati_batas_ssh(self):
         alur = _kode(ALUR)
         assert re.search(
-            r'"\$VPS_USER@\$VPS_HOST"\s+"bash -s -- \'\$DEPLOY_SHA\' \'\$DEPLOY_MODE\'"',
+            r'"\$VPS_USER@\$VPS_HOST"\s+"bash -s -- \'\$DEPLOY_SHA\' \'\$DEPLOY_MODE\' \'\$DEPLOY_CONTROLLER_SHA\'"',
             alur,
         ), "DEPLOY_SHA hanya ada di runner dan hilang saat masuk ke VPS"
 
@@ -76,7 +78,8 @@ class TestBatasWorkflow:
 
     def test_skrip_lama_yang_mengabaikan_sha_ditolak(self):
         alur = _teks(ALUR)
-        assert "Skrip pada DEPLOY_SHA belum mendukung deploy immutable" in alur
+        assert "Pengendali belum mendukung deploy SHA immutable" in alur
+        assert "grep -Fx 'AMAN_CLEAN_VENV_PROTOCOL=1'" in alur
         assert "grep -F 'git reset --hard \"$DEPLOY_SHA\"'" in alur
 
 
@@ -131,14 +134,14 @@ class TestBatasSkripVps:
         assert "exit 1" in pagar
         assert 'DEPLOY_MODE="${2:-${DEPLOY_MODE:-manual}}"' in kode
 
-    def test_head_dibuktikan_sebelum_efek_produksi(self):
+    def test_head_dibuktikan_sebelum_aktivasi_environment_dan_backend(self):
         kode = _kode(SKRIP)
         mulai = kode.index('git reset --hard "$DEPLOY_SHA"')
         sesudah_reset = kode[mulai:]
         i_bukti = sesudah_reset.index('TERPASANG="$(git rev-parse HEAD)"')
         assert i_bukti < sesudah_reset.index("\npasang_env\n")
-        assert i_bukti < sesudah_reset.index("\npasang_dependensi_backend\n")
-        assert i_bukti < sesudah_reset.index("\nrestart_backend\n")
+        assert i_bukti < sesudah_reset.index("\ntransaksi_environment activate\n")
+        assert i_bukti < sesudah_reset.index("\njalankan_supervisor start\n")
 
     def test_race_a_lulus_b_menjadi_main_tetap_memasang_a(self, tmp_path):
         """Jalankan sink reset aktual dari kontrak skrip pada repo mini."""

@@ -1,0 +1,18 @@
+{
+  "aggregate_requires_await": true,
+  "checks": {
+    "async_cursor_decimal_codec": true,
+    "cas": true,
+    "gridfs_abort": true,
+    "gridfs_chunk_stream": {
+      "bytes": 3670016,
+      "chunks": 15
+    },
+    "partial_unique_index": true,
+    "tailable_timeout_cancellation": true
+  },
+  "client_close_requires_await": true,
+  "gridfs_open_upload_requires_await": false,
+  "production_driver_changed": false,
+  "pymongo": "4.19.0"
+}

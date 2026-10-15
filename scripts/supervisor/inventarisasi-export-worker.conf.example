@@ -1,0 +1,20 @@
+; Optional OPT-22 single-VPS worker. Review paths/UID, run staging contracts,
+; and enable BOTH API flags only after the worker is installed and healthy.
+; API processes and this worker MUST share Unix UID, lock path and capacities.
+[program:inventarisasi-export-worker]
+command=/var/www/inventarisasi/backend/venv/bin/python -m export_worker
+directory=/var/www/inventarisasi/backend
+user=root
+numprocs=1
+autostart=false
+autorestart=unexpected
+exitcodes=0
+startsecs=3
+stopwaitsecs=1800
+stopasgroup=true
+killasgroup=true
+redirect_stderr=true
+stdout_logfile=/var/log/supervisor/inventarisasi-export-worker.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=5
+environment=PYTHONUNBUFFERED="1",AMAN_EXPORT_DURABLE_XLSX_ENABLED="1",AMAN_EXPORT_GLOBAL_BUDGET_ENABLED="1",AMAN_EXPORT_GLOBAL_SLOTS="2",AMAN_EXPORT_SATKER_SLOTS="2",AMAN_EXPORT_LOCK_DIR="/var/lib/aman/export-locks"

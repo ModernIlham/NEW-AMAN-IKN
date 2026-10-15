@@ -70,7 +70,7 @@ def _jalan(coro):
 
 
 @pytest.fixture()
-def dbx(monkeypatch):
+def dbx(monkeypatch, mongomock_update_sort_compat):
     fake = AsyncMongoMockClient()["uji"]
     import shared_utils as su
     for mod in (rs, su):

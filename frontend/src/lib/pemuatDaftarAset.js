@@ -1,9 +1,10 @@
 import axios from "axios";
 import { toast } from "sonner";
-import { getSnapshotAssets, snapshotMeta, isSnapshotExpired } from "@/lib/offlineSnapshot";
+import { getSnapshotAssets, getSnapshotPage, snapshotMeta, isSnapshotExpired } from "@/lib/offlineSnapshot";
 import { statistikUntukKartu } from "@/lib/statistikAset";
 import { HASIL_USANG } from "@/hooks/usePenjagaPermintaan";
 import { rekonsiliasiDaftar } from "./rekonsiliasiBaris";
+import { revisiAntreanSnapshot } from "./cacheQuerySnapshot";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -11,7 +12,7 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 // satu render; penjaga menolak seluruh hasilnya begitu lingkup berubah.
 export function buatPemuatDaftarAset(konteks) {
   const {
-    activity, filters, isOnlineRef, getPendingItems, serverHasPendingRow,
+    activity, ownerId, kodeSatker, mobilePageCache, pagedSnapshot = true, filters, isOnlineRef, getPendingItems, serverHasPendingRow,
     filterSnapshotRows, sortSnapshotRows, buildFilterParams,
     mobileLoading, mobileCurrentPage, mobileFirstPage, totalPages, pageSize,
     debouncedSearch, filterCategory, sortBy, penjaga, lingkupPermintaan,
@@ -19,6 +20,21 @@ export function buatPemuatDaftarAset(konteks) {
     setMobileAssets, setMobileCurrentPage, setMobileFirstPage, setMobileLoading,
     setOfflineLastSync, setOfflineServed, setLoadingMessage, sebelumGantiJendela,
   } = konteks;
+  const commitMobilePage = (page, rows, replace = false) => {
+    if (!mobilePageCache) return false;
+    sebelumGantiJendela?.();
+    if (replace) mobilePageCache.replace(page, rows);
+    else mobilePageCache.put(page, rows);
+    const cached = mobilePageCache.rows();
+    const pending = getPendingItems();
+    const creates = pending.filter(it => !it.isEdit && it.payload?.activity_id === activity?.id)
+      .map(it => ({ ...it.payload, id: it.tempId, thumbnail: it.payload.photo || null, created_at: it.queuedAt }))
+      .filter(row => !cached.some(a => serverHasPendingRow(a, row)));
+    setMobileAssets(prev => rekonsiliasiDaftar(prev, [...creates, ...cached], pending));
+    const range = mobilePageCache.range();
+    setMobileFirstPage(range.first); setMobileCurrentPage(range.last);
+    return true;
+  };
   // === DATA FETCHING ===
   // OFFLINE READ PATH: serve the list from the local snapshot (filter/sort/
   // paginate client-side). Mengembalikan baris/false/HASIL_USANG. TTL >7 hari
@@ -27,11 +43,16 @@ export function buatPemuatDaftarAset(konteks) {
     if (!penjaga.berlaku(tiket)) return HASIL_USANG;
     if (!activity?.id) return false;
     try {
-      const rows = await getSnapshotAssets(activity.id);
+      const snapshotPage = pagedSnapshot ? await getSnapshotPage(activity.id, {
+        ownerId, kodeSatker, search, category, filters, sort, page, size,
+        pendingRevision: revisiAntreanSnapshot(getPendingItems()), signal: tiket.signal,
+      }) : null;
+      if (!penjaga.berlaku(tiket)) return HASIL_USANG;
+      const rows = pagedSnapshot ? snapshotPage?.items : await getSnapshotAssets(activity.id);
       if (!penjaga.berlaku(tiket)) return HASIL_USANG;
       // Seluruh await SEBELUM commit layar: metadata lambat tidak boleh
       // meninggalkan daftar separuh baru dan banner dari permintaan lama.
-      const meta = await snapshotMeta(activity.id);
+      const meta = snapshotPage?.meta || await snapshotMeta(activity.id);
       if (!penjaga.berlaku(tiket)) return HASIL_USANG;
       if (!rows) {
         if (isSnapshotExpired(meta)) {
@@ -39,11 +60,11 @@ export function buatPemuatDaftarAset(konteks) {
         }
         return false;
       }
-      const filtered = sortSnapshotRows(filterSnapshotRows(rows, { search, category, filters }), sort);
-      const totalFiltered = filtered.length;
-      const totalPg = Math.max(1, Math.ceil(totalFiltered / size));
-      const pg = Math.max(1, Math.min(page, totalPg));
-      const pageItems = filtered.slice((pg - 1) * size, pg * size);
+      const filtered = snapshotPage ? null : sortSnapshotRows(filterSnapshotRows(rows, { search, category, filters }), sort);
+      const totalFiltered = snapshotPage ? snapshotPage.total : filtered.length;
+      const totalPg = snapshotPage ? snapshotPage.totalPages : Math.max(1, Math.ceil(totalFiltered / size));
+      const pg = snapshotPage ? snapshotPage.currentPage : Math.max(1, Math.min(page, totalPg));
+      const pageItems = snapshotPage ? snapshotPage.items : filtered.slice((pg - 1) * size, pg * size);
       // Unsynced offline CREATEs live only in the save queue — merge them on
       // page 1 exactly like doFetch does after a live refetch.
       const pendingRows = pg === 1 ? getPendingItems()
@@ -62,8 +83,10 @@ export function buatPemuatDaftarAset(konteks) {
       // ini, bukan ditinggal memakai angka daring terakhir. Dihitung atas
       // `filtered` (bukan `merged`) supaya Total Aset selalu sama dengan
       // `totalFiltered` yang baru saja dipasang di atas.
-      setStats(statistikUntukKartu(filtered));
-      if (prependMobile) {
+      setStats(snapshotPage ? snapshotPage.stats : statistikUntukKartu(filtered));
+      if (!preserveMobile && commitMobilePage(pg, pageItems, !prependMobile && !appendMobile)) {
+        // Halaman absolut + eviction menjaga jendela tetap berbatas.
+      } else if (prependMobile) {
         setMobileAssets(prev => [...pageItems, ...prev]);   // PREPEND (scroll-atas dua arah)
         setMobileFirstPage(pg);
       } else if (appendMobile && pg > 1) {
@@ -88,7 +111,7 @@ export function buatPemuatDaftarAset(konteks) {
   };
 
   const doFetch = async (page, size, search, category, sort, appendMobile = false, preserveMobile = false) => {
-    const tiket = penjaga.mulai("daftar", lingkupPermintaan);
+    const tiket = penjaga.mulaiBaca("daftar", lingkupPermintaan);
     if (!tiket) return HASIL_USANG;
     const jendela = !preserveMobile ? penjaga.mulai("jendela", lingkupPermintaan) : null;
     if (!preserveMobile) {
@@ -115,7 +138,7 @@ export function buatPemuatDaftarAset(konteks) {
           params.append("page_size", String(size));
           if (activity?.id) params.append("activity_id", activity.id);
           buildFilterParams(params);
-          r = await axios.get(`${API}/assets?${params.toString()}`);
+          r = await axios.get(`${API}/assets?${params.toString()}`, { signal: tiket.signal });
           if (!penjaga.berlaku(tiket)) return HASIL_USANG;
           // Halaman di luar rentang (mis. baris terakhir baru dihapus) → mundur ke
           // halaman terakhir yang berisi data alih-alih menampilkan layar kosong.
@@ -139,7 +162,9 @@ export function buatPemuatDaftarAset(konteks) {
         setTotalItems(r.data.total || 0);
         setTotalPages(r.data.total_pages || 1);
         setCurrentPage(r.data.page || 1);
-        if (appendMobile && page > 1) {
+        if (!preserveMobile && commitMobilePage(r.data.page || page, newItems, !appendMobile)) {
+          // Komit melalui cache jendela berbatas.
+        } else if (appendMobile && page > 1) {
           setMobileAssets(prev => [...prev, ...newItems]);
         } else if (!preserveMobile) {
           // Jendela galeri = [P, P]: JANGAN reset ke 1. Bila pindah dari halaman
@@ -187,7 +212,7 @@ export function buatPemuatDaftarAset(konteks) {
   // Jangan commit satu per satu atau fallback ke snapshot lama setelah tulis:
   // filter/sort berubah oleh massal harus tetap mengikuti hasil server terbaru.
   const doFetchJendela = async (page, size, search, category, sort) => {
-    const tiket = penjaga.mulai("daftar", lingkupPermintaan);
+    const tiket = penjaga.mulaiBaca("daftar", lingkupPermintaan);
     if (!tiket) return HASIL_USANG;
     const jendela = penjaga.mulai("jendela", lingkupPermintaan);
     penjaga.batalkan("mobile");
@@ -203,7 +228,7 @@ export function buatPemuatDaftarAset(konteks) {
         params.append("page_size", String(size));
         if (activity?.id) params.append("activity_id", activity.id);
         buildFilterParams(params);
-        const { data } = await axios.get(`${API}/assets?${params.toString()}`);
+        const { data } = await axios.get(`${API}/assets?${params.toString()}`, { signal: tiket.signal });
         return penjaga.berlaku(tiket) ? data : HASIL_USANG;
       };
       let awal = await ambil(page);
@@ -214,8 +239,9 @@ export function buatPemuatDaftarAset(konteks) {
         if (awal === HASIL_USANG) return HASIL_USANG;
       }
       const totalPg = awal.total_pages || 1;
-      const pertama = Math.max(1, Math.min(mobileFirstPage, totalPg));
-      const terakhir = Math.max(pertama, Math.min(mobileCurrentPage, totalPg));
+      const retained = mobilePageCache?.refreshRange(totalPg);
+      const pertama = retained?.first || Math.max(1, Math.min(mobileFirstPage, totalPg));
+      const terakhir = retained?.last || Math.max(pertama, Math.min(mobileCurrentPage, totalPg));
       const halaman = new Map([[pg, awal.items || []]]);
       const antre = [];
       for (let i = pertama; i <= terakhir; i++) if (i !== pg) antre.push(i);
@@ -250,10 +276,14 @@ export function buatPemuatDaftarAset(konteks) {
       const mobile = pertama === 1 ? tambahPending(itemMobile) : itemMobile;
       sebelumGantiJendela?.();
       setAssets(prev => rekonsiliasiDaftar(prev, desktop, pending));
-      setMobileAssets(prev => rekonsiliasiDaftar(prev, mobile, pending));
+      if (mobilePageCache) {
+        mobilePageCache.replaceWindow([...halaman].filter(([p]) => p >= pertama && p <= terakhir));
+        setMobileAssets(prev => rekonsiliasiDaftar(prev, tambahPending(mobilePageCache.rows()), pending));
+      } else setMobileAssets(prev => rekonsiliasiDaftar(prev, mobile, pending));
       setCurrentPage(pg);
-      setMobileFirstPage(pertama);
-      setMobileCurrentPage(terakhir);
+      const committedRange = mobilePageCache?.range() || { first: pertama, last: terakhir };
+      setMobileFirstPage(committedRange.first);
+      setMobileCurrentPage(committedRange.last);
       setTotalItems(awal.total || 0);
       setTotalPages(totalPg);
       setOfflineServed(false);
@@ -270,7 +300,7 @@ export function buatPemuatDaftarAset(konteks) {
   // membuka aset pertama halaman baru.
   const loadMoreMobile = async () => {
     if (mobileLoading || penjaga.sibuk("jendela")) return HASIL_USANG;
-    const tiket = penjaga.mulai("mobile", lingkupPermintaan, true);
+    const tiket = penjaga.mulaiBaca("mobile", lingkupPermintaan, true);
     if (!tiket) return HASIL_USANG;
     if (mobileCurrentPage >= totalPages) { penjaga.selesai(tiket); return null; }
     setMobileLoading(true);
@@ -290,11 +320,13 @@ export function buatPemuatDaftarAset(konteks) {
         params.append("page_size", String(pageSize));
         if (activity?.id) params.append("activity_id", activity.id);
         buildFilterParams(params);
-        const r = await axios.get(`${API}/assets?${params.toString()}`);
+        const r = await axios.get(`${API}/assets?${params.toString()}`, { signal: tiket.signal });
         if (!penjaga.berlaku(tiket)) return HASIL_USANG;
         const items = r.data.items || [];
-        setMobileAssets(prev => [...prev, ...items]);
-        setMobileCurrentPage(nextPage);
+        if (!commitMobilePage(nextPage, items)) {
+          setMobileAssets(prev => [...prev, ...items]);
+          setMobileCurrentPage(nextPage);
+        }
         return items;
       } catch {
         if (!penjaga.berlaku(tiket)) return HASIL_USANG;
@@ -312,7 +344,7 @@ export function buatPemuatDaftarAset(konteks) {
   // saling memicu bersamaan. Mengembalikan baris baru (untuk anchor scroll).
   const loadPrevMobile = async () => {
     if (mobileLoading || penjaga.sibuk("jendela")) return HASIL_USANG;
-    const tiket = penjaga.mulai("mobile", lingkupPermintaan, true);
+    const tiket = penjaga.mulaiBaca("mobile", lingkupPermintaan, true);
     if (!tiket) return HASIL_USANG;
     if (mobileFirstPage <= 1) { penjaga.selesai(tiket); return null; }
     setMobileLoading(true);
@@ -331,11 +363,13 @@ export function buatPemuatDaftarAset(konteks) {
         params.append("page_size", String(pageSize));
         if (activity?.id) params.append("activity_id", activity.id);
         buildFilterParams(params);
-        const r = await axios.get(`${API}/assets?${params.toString()}`);
+        const r = await axios.get(`${API}/assets?${params.toString()}`, { signal: tiket.signal });
         if (!penjaga.berlaku(tiket)) return HASIL_USANG;
         const items = r.data.items || [];
-        setMobileAssets(prev => [...items, ...prev]);   // PREPEND
-        setMobileFirstPage(prevPage);
+        if (!commitMobilePage(prevPage, items)) {
+          setMobileAssets(prev => [...items, ...prev]);
+          setMobileFirstPage(prevPage);
+        }
         return items;
       } catch {
         if (!penjaga.berlaku(tiket)) return HASIL_USANG;
@@ -348,7 +382,7 @@ export function buatPemuatDaftarAset(konteks) {
   };
 
   const doFetchStats = async (search) => {
-    const tiket = penjaga.mulai("statistik", lingkupPermintaan);
+    const tiket = penjaga.mulaiBaca("statistik", lingkupPermintaan);
     if (!tiket) return HASIL_USANG;
     try {
       if (!isOnlineRef.current) return;
@@ -361,7 +395,7 @@ export function buatPemuatDaftarAset(konteks) {
       // menyusutkan daftarnya tetapi Total Aset di atasnya tetap menyebut
       // angka seluruh kegiatan.
       buildFilterParams(params);
-      const r = await axios.get(`${API}/assets/stats?${params.toString()}`);
+      const r = await axios.get(`${API}/assets/stats?${params.toString()}`, { signal: tiket.signal });
       if (!penjaga.berlaku(tiket)) return HASIL_USANG;
       setStats({ totalAssets: r.data.total_assets||0, totalValue: (r.data.total_value||0).toLocaleString('id-ID'), activeCount: r.data.active_count||0, maintenanceCount: r.data.maintenance_count||0 });
     } catch {

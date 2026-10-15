@@ -297,7 +297,8 @@ def test_app_imports_and_routes_registered():
     """Import server:app menarik SEMUA modul route — smoke test wiring:
     salah import/salah nama simbol di route mana pun akan gagal di sini."""
     import server
-    paths = {getattr(r, "path", "") for r in server.app.routes}
+    # OpenAPI expands lazy included routers on current FastAPI releases.
+    paths = server.app.openapi()["paths"]
     assert any(p.startswith("/api/assets") for p in paths)
     assert any(p.startswith("/api/auth") for p in paths)
     assert len(paths) > 40

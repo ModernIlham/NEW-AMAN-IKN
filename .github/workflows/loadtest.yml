@@ -1,107 +1,123 @@
-# Uji beban/stres MANUAL (workflow_dispatch) — TIDAK jalan otomatis tiap PR.
-# Mewujudkan "efisiensi CI/CD": dataset sintetis dibuat TEPAT SEBELUM uji
-# sehingga siklus feedback cepat & tak menyimpan berkas data besar di repo.
-#
-# Prasyarat live-run: isi secrets LOADTEST_USERNAME / LOADTEST_PASSWORD
-# (+ opsional LOADTEST_ACTIVITY_ID untuk uji-tulis) dan sediakan `host`
-# lingkungan STAGING. Tanpa `host`, workflow hanya generate dataset + memvalidasi
-# locustfile (dry-run) — selalu bisa dijalankan sebagai pemeriksaan sehat.
+# Manual; runner menolak produksi sebelum request HTTP pertama.
 name: Load Test (manual)
 
 on:
   workflow_dispatch:
     inputs:
       host:
-        description: "URL target STAGING (mis. https://staging.example.go.id). Kosong = dry-run."
+        description: "Origin HTTPS staging yang ada di vars.LOADTEST_STAGING_HOSTS; kosong = API fixture loopback"
         required: false
         default: ""
       users:
-        description: "Jumlah pengguna serempak"
-        required: false
-        default: "100"
-      spawn_rate:
-        description: "Laju ramp (pengguna/detik)"
-        required: false
+        description: "Pengguna 1..50; akun unik dalam pool harus >= users"
         default: "10"
+      spawn_rate:
+        description: "Ramp 0.1..10 pengguna/detik"
+        default: "1"
       run_time:
-        description: "Durasi (mis. 3m, 30s)"
-        required: false
-        default: "3m"
-      dataset_count:
-        description: "Jumlah record aset sintetis"
-        required: false
-        default: "5000"
+        description: "3s..30m; mulai smoke 5m lalu stabil 15m per tingkat"
+        default: "5m"
       profile:
-        description: "Profil data"
-        required: false
-        default: "mixed"
+        description: "Auth mengukur limiter secara terpisah, bukan kapasitas throughput"
         type: choice
-        options: [normal, mixed, edge]
+        options: [read, crud, heavy, auth]
+        default: read
+      enable_crud:
+        description: "Izinkan CRUD sintetis (hanya profile crud)"
+        type: boolean
+        default: false
+      enable_job:
+        description: "Uji preflight job CSV nyata dan cleanup artifact selesai"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: loadtest-staging
+  cancel-in-progress: false
 
 jobs:
   loadtest:
-    name: Generate dataset + Locust
     runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      # Inputs remain structured environment values; never embedded as shell code.
+      AMAN_TARGET_HOST: ${{ inputs.host }}
+      AMAN_LOADTEST_USERS: ${{ inputs.users }}
+      AMAN_LOADTEST_SPAWN_RATE: ${{ inputs.spawn_rate }}
+      AMAN_LOADTEST_RUN_TIME: ${{ inputs.run_time }}
+      AMAN_LOADTEST_PROFILE: ${{ inputs.profile }}
+      AMAN_ENABLE_CRUD: ${{ inputs.enable_crud && '1' || '0' }}
+      AMAN_ENABLE_JOB: ${{ inputs.enable_job && '1' || '0' }}
+      # Host allowlist is administrator configuration, separate from target input.
+      AMAN_STAGING_HOSTS: ${{ vars.LOADTEST_STAGING_HOSTS }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      # Generator sintetis hanya butuh pustaka standar + asset_fields (ringan);
-      # shared_utils di-import opsional dengan fallback, jadi TAK perlu memasang
-      # seluruh requirements backend di sini → langkah ini cepat.
-      - name: Generate dataset sintetis (tepat sebelum uji)
-        working-directory: backend
-        run: |
-          python -m scripts.synthdata \
-            -n "${{ github.event.inputs.dataset_count }}" \
-            -p "${{ github.event.inputs.profile }}" \
-            --format ndjson \
-            -o ../scripts/loadtest/dataset.ndjson
-          wc -l ../scripts/loadtest/dataset.ndjson
-
-      - name: Validasi sintaks locustfile
-        run: python -m py_compile scripts/loadtest/locustfile.py
-
-      - name: Install Locust
-        run: pip install locust
-
-      - name: Dry-run (validasi locustfile tanpa target live)
-        if: ${{ github.event.inputs.host == '' }}
+          cache: pip
+          cache-dependency-path: scripts/loadtest/requirements.txt
+      - name: Install Locust versi tetap
+        run: pip install -r scripts/loadtest/requirements.txt
+      - name: Uji smoke API fixture nyata (tanpa target staging)
+        if: ${{ inputs.host == '' }}
         env:
-          # Nilai fiktif SEMATA agar modul dapat dimuat: targetnya port 1 di
-          # localhost, yang tak punya server, dan exit-code-on-error sengaja
-          # dinolkan. Dry-run memeriksa locustfile-nya jalan, bukan loginnya.
           AMAN_USERNAME: dry-run-tanpa-target
           AMAN_PASSWORD: dry-run-tanpa-target
-        run: |
-          echo "Tidak ada host → dry-run singkat (memastikan locustfile jalan)."
-          locust -f scripts/loadtest/locustfile.py --host http://127.0.0.1:1 \
-            --headless -u 2 -r 2 -t 3s --exit-code-on-error 0 || true
-
-      - name: Jalankan load test
-        if: ${{ github.event.inputs.host != '' }}
+        run: python scripts/loadtest/run.py --dry-run --profile read --output artifacts/loadtest/hasil
+      - name: Siapkan pool privat dan manifest dataset staging
+        if: ${{ inputs.host != '' }}
         env:
+          AMAN_POOL_JSON: ${{ secrets.LOADTEST_ACCOUNTS_JSON }}
+          AMAN_MANIFEST_JSON: ${{ vars.LOADTEST_MANIFEST_JSON }}
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          base = Path(os.environ['RUNNER_TEMP']) / 'aman-loadtest-private'
+          base.mkdir(mode=0o700)
+          for name, variable in [('accounts.json', 'AMAN_POOL_JSON'), ('manifest.json', 'AMAN_MANIFEST_JSON')]:
+              raw = os.environ.get(variable, '')
+              if not raw:
+                  raise SystemExit(variable + ' wajib dikonfigurasi dari dataset staging yang benar-benar sudah di-seed')
+              json.loads(raw)
+              descriptor = os.open(base / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+              with os.fdopen(descriptor, 'w') as file:
+                  file.write(raw)
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              env.write('AMAN_ACCOUNTS_FILE=' + str(base / 'accounts.json') + '\n')
+              env.write('AMAN_DATASET_MANIFEST=' + str(base / 'manifest.json') + '\n')
+          PY
+      - name: Jalankan workload pada dataset server terverifikasi
+        if: ${{ inputs.host != '' }}
+        env:
+          # No defaults. Pool token is preferred so login/IP limiter does not
+          # contaminate the throughput profile; auth is a separate workload.
           AMAN_USERNAME: ${{ secrets.LOADTEST_USERNAME }}
           AMAN_PASSWORD: ${{ secrets.LOADTEST_PASSWORD }}
-          AMAN_ACTIVITY_ID: ${{ secrets.LOADTEST_ACTIVITY_ID }}
-          AMAN_DATASET_FILE: scripts/loadtest/dataset.ndjson
         run: |
-          locust -f scripts/loadtest/locustfile.py \
-            --host "${{ github.event.inputs.host }}" \
-            --headless \
-            -u "${{ github.event.inputs.users }}" \
-            -r "${{ github.event.inputs.spawn_rate }}" \
-            -t "${{ github.event.inputs.run_time }}" \
-            --csv hasil
-
-      - name: Unggah hasil CSV
+          args=()
+          if [ "$AMAN_ENABLE_JOB" = 1 ]; then args+=(--enable-job); fi
+          python scripts/loadtest/run.py --output artifacts/loadtest/hasil "${args[@]}"
+      - name: Hapus hanya berkas credentials sementara milik run ini
+        if: always()
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          base = Path(os.environ['RUNNER_TEMP']) / 'aman-loadtest-private'
+          for name in ('accounts.json', 'manifest.json'):
+              (base / name).unlink(missing_ok=True)
+          if base.exists():
+              base.rmdir()
+          PY
+      - name: Unggah metrik tanpa credentials
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: hasil-loadtest
-          path: |
-            hasil_*.csv
-          if-no-files-found: ignore
+          path: artifacts/loadtest/
+          if-no-files-found: warn

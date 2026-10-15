@@ -14,6 +14,8 @@
  */
 import fs from "fs";
 import path from "path";
+import { buatPenjagaPermintaan } from "@/hooks/usePenjagaPermintaan";
+import { terapkanHasilBatchKeTampilan } from "@/lib/operasiBatch";
 
 const SUMBER = fs.readFileSync(
   path.join(__dirname, "..", "..", "lib", "pemuatDaftarAset.js"), "utf8");
@@ -40,14 +42,26 @@ test("Simpan Lanjut berhenti sebelum menutup form untuk hasil usang", () => {
   expect(navigasi.indexOf("if (fresh === HASIL_USANG) return;")).toBeLessThan(navigasi.indexOf("setEditAssetForForm(null)"));
 });
 
-test("Ubah Massal memakai penyegaran jendela dan jangkar pada seluruh tampilan", () => {
-  const handler = HALAMAN.slice(HALAMAN.indexOf("const handleBatchUpdate"), HALAMAN.indexOf("const handleGroupBatchEdit"));
-  expect(handler).toContain("if (!penjaga.berlaku(tiketTampilan)) return;");
-  expect(handler.indexOf("if (!penjaga.berlaku(tiketTampilan)) return;")).toBeLessThan(handler.indexOf("tutupPanelMassal()"));
-  expect(handler).toContain("refreshDataRef.current?.(undefined, { refreshWindow: true })");
-  expect(handler).not.toMatch(/resetAllFilters|setCurrentPage\(1\)|setSelectedAssets/);
+test("Ubah Massal hanya menutup draf dan menyegarkan jendela pada konteks pemilik tiket", async () => {
+  const penjaga = buatPenjagaPermintaan(); penjaga.aktifkan("filter-A");
+  const operation = { activityId: "kegiatan-A", total: 1, children: [{ prepared: true, asset_ids: ["a"],
+    response: { applied: 1, pending: 0, results: [{ id: "a", status: "applied" }] } }] };
+  const resetDraft = jest.fn(), hidePanel = jest.fn(), refresh = jest.fn();
+  let resolve;
+  const pending = new Promise(r => { resolve = r; });
+  const ticket = penjaga.mulai("massal", "filter-A");
+  const stale = pending.then(result => terapkanHasilBatchKeTampilan({ operation: result, penjaga, ticket,
+    activityId: "kegiatan-A", resetDraft, hidePanel, refresh }));
+  penjaga.aktifkan("filter-B"); resolve(operation);
+  expect(await stale).toBe("stale");
+  expect(resetDraft).not.toHaveBeenCalled(); expect(hidePanel).not.toHaveBeenCalled(); expect(refresh).not.toHaveBeenCalled();
+  const current = penjaga.mulai("massal", "filter-B");
+  expect(await terapkanHasilBatchKeTampilan({ operation, penjaga, ticket: current, activityId: "kegiatan-B", resetDraft, hidePanel, refresh })).toBe("stale");
+  expect(await terapkanHasilBatchKeTampilan({ operation, penjaga, ticket: current, activityId: "kegiatan-A", resetDraft, hidePanel, refresh })).toBe("completed");
+  expect(resetDraft).toHaveBeenCalledTimes(1); expect(hidePanel).toHaveBeenCalledTimes(1);
+  expect(refresh).toHaveBeenCalledWith(undefined, { refreshWindow: true });
+  expect(HALAMAN).toContain("terapkanHasilBatchKeTampilan({ operation, penjaga");
   expect(HALAMAN).toContain("sebelumGantiJendela: () => rekamPosisi(true)");
-  expect(HALAMAN).toContain('onClose={tutupPanelMassal}');
   for (const nama of ["VirtualizedMobileCards", "AssetGalleryView", "VirtualizedAssetTable"]) {
     expect(HALAMAN).toContain(`<${nama} daftarkanGulir={daftarkanGulir}`);
   }

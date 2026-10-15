@@ -1,0 +1,5 @@
+{
+  "source": "https://raw.githubusercontent.com/facebook/create-react-app/main/README.md",
+  "status": 200,
+  "notice": "p/blob/main/CONTRIBUTING.md)\n\n> [!CAUTION]\n>\n> ## Deprecated\n>\n> Create React App was one of the key tools for getting a React project up-and-running in 2017-2021, it is now in long-term stasis and we recommend that you migrate to one of React frameworks documented on [Start a New React Project](https://react.dev/learn/start-a-new-react-project).\n>\n> If you are following a tutorial to learn React, there is still value in continuing your tutorial,"
+}

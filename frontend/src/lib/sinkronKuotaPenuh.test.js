@@ -58,7 +58,11 @@ jest.mock("idb", () => ({
       [...mockSimpanan.assets.values()]
         .filter((r) => r.activity_id === activityId)
         .map((r) => r.id),
-    transaction: () => {
+    transaction: store => {
+      if (store === "meta") return { store: {
+        get: async key => mockSimpanan.meta.get(key),
+        put: async meta => mockSimpanan.meta.set(meta.activityId, meta),
+      }, done: Promise.resolve() };
       const tertunda = [];
       return {
         store: {

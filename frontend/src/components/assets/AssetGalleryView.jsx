@@ -22,6 +22,7 @@ function getColumnCount(width) {
 // ============================================================================
 const AssetGalleryView = memo(({
   daftarkanGulir,
+  onVisibleAssets,
   assets,
   editId,
   onEdit,
@@ -111,7 +112,7 @@ const AssetGalleryView = memo(({
     overscan: 3,
     getItemKey: (index) => rows[index]?.[0]?.id ?? `row-${index}`,
   });
-  useJangkarDaftarAset({ daftarkan: daftarkanGulir, nama: "galeri", assets, virtualizer, columns });
+  useJangkarDaftarAset({ daftarkan: daftarkanGulir, nama: "galeri", assets, virtualizer, columns, onVisibleAssets });
 
   // Re-measure virtual rows when the computed ROW_HEIGHT changes (container
   // resize / column breakpoint change) so cards don't overlap or stack

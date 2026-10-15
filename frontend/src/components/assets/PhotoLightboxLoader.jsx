@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Loader2, X } from "lucide-react";
 import { muatPhotoLightbox } from "../../lib/muatPhotoLightbox";
@@ -20,7 +20,7 @@ function StatusPemuatan({ asset, gagal, onClose, onRetry }) {
       <div className="w-full max-w-sm rounded-xl bg-card text-foreground shadow-xl p-4">
         <div className="flex items-center gap-2 justify-between mb-3">
           <p className="font-semibold">Foto aset</p>
-          <button type="button" onClick={onClose} aria-label="Tutup penampil foto"
+          <button type="button" onClick={onClose} aria-label="Tutup penampil foto" autoFocus
             data-testid="lightbox-loader-close" className="min-h-11 min-w-11 rounded-lg hover:bg-muted flex items-center justify-center">
             <X className="w-5 h-5" />
           </button>
@@ -39,6 +39,20 @@ function StatusPemuatan({ asset, gagal, onClose, onRetry }) {
 }
 
 export default function PhotoLightboxLoader(props) {
+  // Simpan pemicu sebelum portal memindahkan fokus. Umur loader meliputi
+  // pemuatan, kegagalan, retry, serta pergantian aset di penampil yang sama.
+  const pemicuRef = useRef(typeof document !== "undefined" ? document.activeElement : null);
+  useEffect(() => () => {
+    const pemicu = pemicuRef.current;
+    queueMicrotask(() => {
+      const aktif = document.activeElement;
+      // Editor yang baru dibuka dari lightbox boleh mengambil fokus sendiri.
+      // Baris yang telah divirtualisasi keluar tidak dipaksa muncul kembali.
+      if (pemicu?.isConnected && (aktif === document.body || !aktif?.isConnected)) {
+        pemicu.focus({ preventScroll: true });
+      }
+    });
+  }, []);
   const [Penampil, setPenampil] = useState(null);
   const [gagal, setGagal] = useState(false);
   const [percobaan, setPercobaan] = useState(0);

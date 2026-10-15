@@ -1,0 +1,2 @@
+# Harness terpisah dari dependency runtime aplikasi.
+locust==2.37.14

@@ -5,7 +5,7 @@
 // `idb` dimock dengan penyimpan in-memory sederhana: yang diuji adalah logika
 // gabung, bukan IndexedDB-nya.
 
-const mockSimpanan = { meta: new Map(), assets: new Map() };
+const mockSimpanan = { meta: new Map(), assets: new Map(), assetReads: 0, keyReads: 0 };
 
 // axios (ESM murni) tak bisa diparse jest CRA dari node_modules — dan memang
 // tak dipakai uji ini; upsertSnapshotAsset tak menyentuh jaringan.
@@ -25,9 +25,17 @@ jest.mock("idb", () => ({
     delete: async (store, key) =>
       (store === "meta" ? mockSimpanan.meta : mockSimpanan.assets).delete(key),
     getAll: async () => [],
-    transaction: () => ({
-      store: {
-        get: async id => mockSimpanan.assets.get(id),
+    getAllKeysFromIndex: async (_store, _index, activityId) => {
+      mockSimpanan.keyReads++;
+      return [...mockSimpanan.assets.values()].filter(r => r.activity_id === activityId).map(r => r.id);
+    },
+    transaction: store => ({
+      store: store === "meta" ? {
+        get: async key => mockSimpanan.meta.get(key),
+        put: async meta => mockSimpanan.meta.set(meta.activityId, meta),
+      } : {
+        get: async id => { mockSimpanan.assetReads++; return mockSimpanan.assets.get(id); },
+        delete: async id => mockSimpanan.assets.delete(id),
         put: async row => mockSimpanan.assets.set(row.id, row),
       },
       done: Promise.resolve(),
@@ -37,15 +45,23 @@ jest.mock("idb", () => ({
 // (openDB di atas: arrow yang MENGEMBALIKAN promise objek — dipanggil sebagai
 // fungsi oleh getDB; bungkusnya fungsi polos agar selamat dari resetMocks.)
 
-import { upsertSnapshotAsset } from "./offlineSnapshot";
+import { upsertSnapshotAsset, removeSnapshotAsset, getSnapshotPage, syncSnapshot } from "./offlineSnapshot";
+import axios from "axios";
 
 beforeEach(() => {
+  mockSimpanan.assetReads = 0; mockSimpanan.keyReads = 0;
   mockSimpanan.meta.clear();
   mockSimpanan.assets.clear();
   mockSimpanan.meta.set("keg1", { activityId: "keg1", lastSync: Date.now() });
 });
 
 describe("upsertSnapshotAsset — baca-gabung-tulis", () => {
+  test("nilai barang bersejarah dan pengosongan tersimpan pada snapshot", async () => {
+    await upsertSnapshotAsset("keg1", { id: "sejarah", version: 1, barang_bersejarah: "Ya" });
+    expect(mockSimpanan.assets.get("sejarah").barang_bersejarah).toBe("Ya");
+    await upsertSnapshotAsset("keg1", { id: "sejarah", version: 2, barang_bersejarah: "" });
+    expect(mockSimpanan.assets.get("sejarah").barang_bersejarah).toBe("");
+  });
   test("referensi BAST terapan tersimpan dan tidak mundur setelah revisi", async () => {
     await upsertSnapshotAsset("keg1", { id: "a1", version: 4, bast_terakhir: { id: "lama" }, amanah_bast: { bast_id: "lama" } });
     await upsertSnapshotAsset("keg1", { id: "a1", version: 5, bast_terakhir: { id: "baru" }, amanah_bast: { bast_id: "baru" } });
@@ -126,4 +142,30 @@ describe("upsertSnapshotAsset — baca-gabung-tulis", () => {
     expect(baris.asset_name).toBe("Printer");
     expect(baris.photos).toBeUndefined();            // blob tak boleh masuk snapshot
   });
+});
+
+
+test("paged IDB: halaman berikutnya membaca hanya halaman, upsert/delete/fullsync menginvalidasi index", async () => {
+  const activityId = "query-cache";
+  mockSimpanan.meta.set(activityId, { activityId, userId: "u", lastSync: new Date().toISOString(), revision: 1 });
+  for (let i = 0; i < 1000; i++) {
+    mockSimpanan.assets.set(`q-${i}`, { id: `q-${i}`, activity_id: activityId, purchase_price: String(i), thumbnail: "data:image/jpeg;base64,thumbnail" });
+  }
+  const first = await getSnapshotPage(activityId, { ownerId: "u", sort: "price_asc" });
+  expect(first.total).toBe(1000); expect(first.items[0].id).toBe("q-0");
+  const reads = mockSimpanan.assetReads;
+  const second = await getSnapshotPage(activityId, { ownerId: "u", sort: "price_asc", page: 2 });
+  expect(second.timing.scanned).toBe(0); expect(mockSimpanan.assetReads - reads).toBe(50);
+  expect(mockSimpanan.keyReads).toBe(1);
+  await upsertSnapshotAsset(activityId, { id: "q-999", purchase_price: "-1" });
+  const changed = await getSnapshotPage(activityId, { ownerId: "u", sort: "price_asc" });
+  expect(changed.items[0].id).toBe("q-999"); expect(mockSimpanan.keyReads).toBe(2);
+  await removeSnapshotAsset(activityId, "q-999");
+  expect((await getSnapshotPage(activityId, { ownerId: "u" })).total).toBe(999);
+  expect(await getSnapshotPage(activityId, { ownerId: "other" })).toBeNull();
+  axios.get.mockResolvedValue({ data: { items: [{ id: "only", activity_id: activityId, asset_name: "Hasil full sync" }], total: 1,
+    server_time: new Date().toISOString() } });
+  await syncSnapshot(activityId, "u", undefined, { forceFull: true });
+  const afterFull = await getSnapshotPage(activityId, { ownerId: "u" });
+  expect(afterFull.total).toBe(1); expect(afterFull.items.map(r => r.id)).toEqual(["only"]);
 });

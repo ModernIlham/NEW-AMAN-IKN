@@ -1,0 +1,600 @@
+{
+  "source_sha": "a7e6e562bbcec6aa798d53c1530cac26a458d786",
+  "database_kind": "synthetic10k",
+  "asset_count": 10000,
+  "requests_per_variant": 3200,
+  "route_mix": "list/stats/analytics/snapshot equal fixed cycle",
+  "worker_count_each": 1,
+  "rounds": [
+    {
+      "round": 0,
+      "enabled": 0,
+      "requests": 400,
+      "wall_seconds": 13.16650908900192,
+      "cpu_seconds": 8.12,
+      "cpu_us_per_request": 20300.0,
+      "p50_ms": 23.670027003390715,
+      "p95_ms": 89.18322500539944
+    },
+    {
+      "round": 0,
+      "enabled": 1,
+      "requests": 400,
+      "wall_seconds": 13.089682428020751,
+      "cpu_seconds": 8.55,
+      "cpu_us_per_request": 21375.0,
+      "p50_ms": 22.029954503523186,
+      "p95_ms": 87.28529399377294
+    },
+    {
+      "round": 1,
+      "enabled": 1,
+      "requests": 400,
+      "wall_seconds": 13.177586361998692,
+      "cpu_seconds": 9.009999999999998,
+      "cpu_us_per_request": 22524.999999999996,
+      "p50_ms": 21.20042849855963,
+      "p95_ms": 81.90342300804332
+    },
+    {
+      "round": 1,
+      "enabled": 0,
+      "requests": 400,
+      "wall_seconds": 14.551775891013676,
+      "cpu_seconds": 9.48,
+      "cpu_us_per_request": 23700.000000000004,
+      "p50_ms": 21.866460985620506,
+      "p95_ms": 84.8549299989827
+    },
+    {
+      "round": 2,
+      "enabled": 0,
+      "requests": 400,
+      "wall_seconds": 12.366986307984916,
+      "cpu_seconds": 8.55,
+      "cpu_us_per_request": 21375.0,
+      "p50_ms": 20.042630480020307,
+      "p95_ms": 74.65506799053401
+    },
+    {
+      "round": 2,
+      "enabled": 1,
+      "requests": 400,
+      "wall_seconds": 11.66560325701721,
+      "cpu_seconds": 7.899999999999995,
+      "cpu_us_per_request": 19749.999999999985,
+      "p50_ms": 20.544166487525217,
+      "p95_ms": 74.34947698493488
+    },
+    {
+      "round": 3,
+      "enabled": 1,
+      "requests": 400,
+      "wall_seconds": 12.946377469983418,
+      "cpu_seconds": 8.240000000000002,
+      "cpu_us_per_request": 20600.000000000004,
+      "p50_ms": 21.538699002121575,
+      "p95_ms": 75.70996799040586
+    },
+    {
+      "round": 3,
+      "enabled": 0,
+      "requests": 400,
+      "wall_seconds": 13.485611993004568,
+      "cpu_seconds": 7.579999999999998,
+      "cpu_us_per_request": 18949.999999999996,
+      "p50_ms": 23.517337496741675,
+      "p95_ms": 87.28440702543594
+    },
+    {
+      "round": 4,
+      "enabled": 0,
+      "requests": 400,
+      "wall_seconds": 12.577444588008802,
+      "cpu_seconds": 7.839999999999996,
+      "cpu_us_per_request": 19599.999999999993,
+      "p50_ms": 19.423125995672308,
+      "p95_ms": 81.21390998712741
+    },
+    {
+      "round": 4,
+      "enabled": 1,
+      "requests": 400,
+      "wall_seconds": 11.80001621201518,
+      "cpu_seconds": 8.049999999999997,
+      "cpu_us_per_request": 20124.999999999993,
+      "p50_ms": 18.383771515800618,
+      "p95_ms": 65.8429229806643
+    },
+    {
+      "round": 5,
+      "enabled": 1,
+      "requests": 400,
+      "wall_seconds": 11.609980306995567,
+      "cpu_seconds": 7.719999999999999,
+      "cpu_us_per_request": 19299.999999999996,
+      "p50_ms": 18.399448003037833,
+      "p95_ms": 69.83302001026459
+    },
+    {
+      "round": 5,
+      "enabled": 0,
+      "requests": 400,
+      "wall_seconds": 10.358930718997726,
+      "cpu_seconds": 7.199999999999996,
+      "cpu_us_per_request": 17999.99999999999,
+      "p50_ms": 18.233720009448007,
+      "p95_ms": 61.226746009197086
+    },
+    {
+      "round": 6,
+      "enabled": 0,
+      "requests": 400,
+      "wall_seconds": 11.771235682012048,
+      "cpu_seconds": 7.57,
+      "cpu_us_per_request": 18925.0,
+      "p50_ms": 20.91088298766408,
+      "p95_ms": 77.68358098110184
+    },
+    {
+      "round": 6,
+      "enabled": 1,
+      "requests": 400,
+      "wall_seconds": 12.35791754402453,
+      "cpu_seconds": 7.479999999999997,
+      "cpu_us_per_request": 18699.999999999993,
+      "p50_ms": 22.702232003211975,
+      "p95_ms": 80.65604500006884
+    },
+    {
+      "round": 7,
+      "enabled": 1,
+      "requests": 400,
+      "wall_seconds": 12.731119648989988,
+      "cpu_seconds": 8.480000000000004,
+      "cpu_us_per_request": 21200.00000000001,
+      "p50_ms": 20.781169514521025,
+      "p95_ms": 77.1020789979957
+    },
+    {
+      "round": 7,
+      "enabled": 0,
+      "requests": 400,
+      "wall_seconds": 15.13084411600721,
+      "cpu_seconds": 9.849999999999994,
+      "cpu_us_per_request": 24624.999999999985,
+      "p50_ms": 20.827138490858488,
+      "p95_ms": 85.42413401301019
+    }
+  ],
+  "mean_cpu_us_off": 20684.374999999996,
+  "mean_cpu_us_on": 20446.874999999996,
+  "mean_cpu_overhead_percent": -1.1482096993503554,
+  "paired_overhead_percent": [
+    5.295566502463056,
+    -4.95780590717303,
+    -7.602339181286622,
+    8.707124010554136,
+    2.678571428571419,
+    7.222222222222263,
+    -1.1889035667107417,
+    -13.908629441624266
+  ],
+  "paired_mean_percent": -0.4692742416229731,
+  "paired_stddev_percent": 7.916252634452844,
+  "shared_host_jitter": true,
+  "capacity_claim": false,
+  "snapshots": {
+    "0": {
+      "enabled": false,
+      "scope": "process",
+      "process_id": 224256,
+      "aggregation_note": "Setiap worker memiliki histogram sendiri; jangan menjumlahkan percentile atau menganggap snapshot ini seluruh VPS",
+      "release_sha": "d706bbc250f36030d26294369c36108e24609d73",
+      "uptime_seconds": 212.6,
+      "window_seconds": 300,
+      "max_route_keys": 257,
+      "window_bucket_seconds": 60,
+      "latency_bucket_upper_bounds_ms": [
+        5,
+        10,
+        25,
+        50,
+        100,
+        250,
+        500,
+        1000,
+        2000,
+        5000,
+        10000,
+        30000,
+        "overflow"
+      ],
+      "totals": {
+        "requests": 0,
+        "errors_5xx": 0,
+        "status_counts": {},
+        "latency_bucket_counts": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "duration_ms_sum": 0.0,
+        "p50_upper_bound_ms": null,
+        "p95_upper_bound_ms": null,
+        "p99_upper_bound_ms": null
+      },
+      "routes": {},
+      "observer_updates": 0,
+      "observer_update_ns_total": 0,
+      "observer_update_ns_average": 0,
+      "resources": {},
+      "event_loop_lag_last_ms": null,
+      "event_loop_lag_max_60_samples_ms": null,
+      "probes": {
+        "collected": false
+      },
+      "alerts": {
+        "backup_stale": {
+          "active": false,
+          "notification_pending": false
+        },
+        "core_dependency": {
+          "active": false,
+          "notification_pending": false
+        },
+        "disk_critical": {
+          "active": false,
+          "notification_pending": false
+        },
+        "disk_warning": {
+          "active": false,
+          "notification_pending": false
+        },
+        "event_loop_lag": {
+          "active": false,
+          "notification_pending": false
+        },
+        "export_queue_age": {
+          "active": false,
+          "notification_pending": false
+        },
+        "http_server_error": {
+          "active": false,
+          "notification_pending": false
+        },
+        "index_warning": {
+          "active": false,
+          "notification_pending": false
+        },
+        "maintenance": {
+          "active": false,
+          "notification_pending": false
+        },
+        "probe_unavailable": {
+          "active": false,
+          "notification_pending": false
+        },
+        "recovery_required": {
+          "active": false,
+          "notification_pending": false
+        },
+        "redis_warning": {
+          "active": false,
+          "notification_pending": false
+        },
+        "request_p95": {
+          "active": false,
+          "notification_pending": false
+        }
+      },
+      "thresholds": {
+        "error_ratio": 0.01,
+        "p95_ms": 2000.0,
+        "loop_lag_ms": 200.0,
+        "queue_age_seconds": 120.0,
+        "backup_age_hours": 48.0
+      },
+      "external_notifications": "not_configured; local transition logs only"
+    },
+    "1": {
+      "enabled": true,
+      "scope": "process",
+      "process_id": 224257,
+      "aggregation_note": "Setiap worker memiliki histogram sendiri; jangan menjumlahkan percentile atau menganggap snapshot ini seluruh VPS",
+      "release_sha": "d706bbc250f36030d26294369c36108e24609d73",
+      "uptime_seconds": 212.4,
+      "window_seconds": 300,
+      "max_route_keys": 257,
+      "window_bucket_seconds": 60,
+      "latency_bucket_upper_bounds_ms": [
+        5,
+        10,
+        25,
+        50,
+        100,
+        250,
+        500,
+        1000,
+        2000,
+        5000,
+        10000,
+        30000,
+        "overflow"
+      ],
+      "totals": {
+        "requests": 3231,
+        "errors_5xx": 0,
+        "status_counts": {
+          "200": 3231
+        },
+        "latency_bucket_counts": [
+          696,
+          768,
+          707,
+          351,
+          668,
+          22,
+          17,
+          2,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "duration_ms_sum": 86087.6,
+        "p50_upper_bound_ms": 25,
+        "p95_upper_bound_ms": 100,
+        "p99_upper_bound_ms": 250
+      },
+      "routes": {
+        "GET /api/assets": {
+          "requests": 808,
+          "errors_5xx": 0,
+          "status_counts": {
+            "200": 808
+          },
+          "latency_bucket_counts": [
+            0,
+            0,
+            570,
+            214,
+            9,
+            4,
+            10,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "duration_ms_sum": 23354.91,
+          "p50_upper_bound_ms": 25,
+          "p95_upper_bound_ms": 50,
+          "p99_upper_bound_ms": 500
+        },
+        "GET /api/assets/analytics": {
+          "requests": 807,
+          "errors_5xx": 0,
+          "status_counts": {
+            "200": 807
+          },
+          "latency_bucket_counts": [
+            435,
+            319,
+            48,
+            5,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "duration_ms_sum": 4688.37,
+          "p50_upper_bound_ms": 5,
+          "p95_upper_bound_ms": 25,
+          "p99_upper_bound_ms": 25
+        },
+        "GET /api/assets/offline-snapshot": {
+          "requests": 807,
+          "errors_5xx": 0,
+          "status_counts": {
+            "200": 807
+          },
+          "latency_bucket_counts": [
+            0,
+            0,
+            0,
+            125,
+            658,
+            17,
+            6,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "duration_ms_sum": 51794.09,
+          "p50_upper_bound_ms": 100,
+          "p95_upper_bound_ms": 100,
+          "p99_upper_bound_ms": 250
+        },
+        "GET /api/assets/stats": {
+          "requests": 808,
+          "errors_5xx": 0,
+          "status_counts": {
+            "200": 808
+          },
+          "latency_bucket_counts": [
+            261,
+            449,
+            88,
+            7,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "duration_ms_sum": 6225.92,
+          "p50_upper_bound_ms": 10,
+          "p95_upper_bound_ms": 25,
+          "p99_upper_bound_ms": 50
+        },
+        "GET /api/health/deep": {
+          "requests": 1,
+          "errors_5xx": 0,
+          "status_counts": {
+            "200": 1
+          },
+          "latency_bucket_counts": [
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "duration_ms_sum": 24.31,
+          "p50_upper_bound_ms": 25,
+          "p95_upper_bound_ms": 25,
+          "p99_upper_bound_ms": 25
+        }
+      },
+      "observer_updates": 3231,
+      "observer_update_ns_total": 105603503,
+      "observer_update_ns_average": 32684,
+      "resources": {
+        "rss_bytes": 159584256,
+        "rss_source": "current_proc_statm",
+        "fd_count": 21
+      },
+      "event_loop_lag_last_ms": 0.79,
+      "event_loop_lag_max_60_samples_ms": 94.7,
+      "probes": {
+        "collected": true,
+        "sampled_at": "2026-10-15T12:44:40.560482+00:00",
+        "failure_kind": null,
+        "core_ok": true,
+        "db_probe_latency_ms": 3.1,
+        "index_failures": 0,
+        "redis_ok": true,
+        "maintenance": false,
+        "recovery_required": false,
+        "queues": {
+          "background_jobs": {
+            "active": 0,
+            "oldest_age_seconds": null
+          },
+          "unduhan": {
+            "active": 0,
+            "oldest_age_seconds": null
+          }
+        },
+        "oldest_queue_age_seconds": 0,
+        "backup_enabled": false,
+        "backup_age_hours": null,
+        "disk_free_mb": 25395,
+        "disk_free_percent": 78.9
+      },
+      "alerts": {
+        "backup_stale": {
+          "active": false,
+          "notification_pending": false
+        },
+        "core_dependency": {
+          "active": false,
+          "notification_pending": false
+        },
+        "disk_critical": {
+          "active": false,
+          "notification_pending": false
+        },
+        "disk_warning": {
+          "active": false,
+          "notification_pending": false
+        },
+        "event_loop_lag": {
+          "active": false,
+          "notification_pending": false
+        },
+        "export_queue_age": {
+          "active": false,
+          "notification_pending": false
+        },
+        "http_server_error": {
+          "active": false,
+          "notification_pending": false
+        },
+        "index_warning": {
+          "active": false,
+          "notification_pending": false
+        },
+        "maintenance": {
+          "active": false,
+          "notification_pending": false
+        },
+        "probe_unavailable": {
+          "active": false,
+          "notification_pending": false
+        },
+        "recovery_required": {
+          "active": false,
+          "notification_pending": false
+        },
+        "redis_warning": {
+          "active": false,
+          "notification_pending": false
+        },
+        "request_p95": {
+          "active": false,
+          "notification_pending": false
+        }
+      },
+      "thresholds": {
+        "error_ratio": 0.01,
+        "p95_ms": 2000.0,
+        "loop_lag_ms": 200.0,
+        "queue_age_seconds": 120.0,
+        "backup_age_hours": 48.0
+      },
+      "external_notifications": "not_configured; local transition logs only"
+    }
+  },
+  "paired_95pct_interval_percent": [
+    -7.0884787163223155,
+    6.14993023307637
+  ],
+  "interpretation": "Shared host jitter exceeds5%; average shows no detectable added CPU, upperconfidencebounddoesnotprove<5%. Keep productiondefaultoff pendingrepresentativequietrepeat.",
+  "observer_sha256": "5bd1addad8afc5397d857849c0a9df406ad2a82bff1397ca233c245f4d26934f",
+  "captured_at_utc": "2026-10-15T12:46:30.602480+00:00"
+}
