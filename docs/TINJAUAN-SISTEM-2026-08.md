@@ -1,5 +1,11 @@
 # Tinjauan Sistem AMAN — Agustus 2026
 
+> Dokumen ini merekam kondisi saat review Agustus. Sejumlah temuan telah
+> diperbaiki. Untuk status yang diverifikasi pada baseline Oktober, baca
+> [review terbaru](REVIEW-ARSITEKTUR-2026-10.md) dan
+> [backlog optimasi](RENCANA-OPTIMASI-SKALABILITAS.md); jangan menyalin seluruh
+> rekomendasi historis sebagai pekerjaan terbuka.
+
 Tinjauan menyeluruh baca-saja atas backend, frontend, model data, operasional, keamanan
 multi-satker, integritas data, dan ketahanan model domain BMN terhadap perubahan aturan.
 Setiap temuan berjangkar pada berkas dan nomor baris. Tidak ada berkas kode yang diubah

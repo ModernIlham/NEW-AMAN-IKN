@@ -1,5 +1,9 @@
 # ROADMAP - AMAN (Aplikasi Manajemen Aset Negara)
 
+> Riwayat pengembangan. Untuk review dan backlog teknis yang diverifikasi pada
+> 15 Oktober 2026, gunakan [rencana optimasi terkini](../docs/RENCANA-OPTIMASI-SKALABILITAS.md).
+> Checkbox lama di bawah tidak otomatis berarti fitur belum tersedia.
+
 ## Status: Juli 2025 — v2.1 Production-Ready Multi-Worker
 
 ---
