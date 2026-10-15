@@ -32,7 +32,9 @@ pymongo/dotenv, dengan fallback mongosh. Pesan exception Mongo tidak dicetak
 karena bisa mengandung kredensial. Legacy job restore segar tetap diperiksa.
 
 Sesudah mengklaim mutex, deploy menolak restart bila `restore_write_leases`
-belum kosong atau unduhan masih `queued`/`running`. Writer/admission backend
+belum kosong, unduhan masih `queued`/`running`, atau background_jobs nonterminal
+(import/spasial/ekspor terlepas dari request) belum selesai. Query drain memiliki
+maxTimeMS5detik dan timeout driver5detik; timeout menolak deploy. Writer/admission backend
 baru memeriksa mutex ini sehingga permintaan baru tidak melewati batas drain.
 Deploy tidak menghapus lease/job atau menghentikan unduhan untuk memaksa lolos.
 
@@ -69,7 +71,8 @@ disimpulkan hanya dari nama fungsi atau assertion teks sumber.
 Kontrak Mongo nyata membuktikan enam proses berkompetisi menghasilkan satu
 pemilik mutex, owner lain tidak dapat melepasnya, state restore dengan heartbeat
 sangat lama dan tanpa backup_jobs tetap memblokir deploy, serta writer lease dan
-unduhan aktif mencegah restart. Database dibuat dengan nama acak
+unduhan aktif serta background_jobs importing/unknown nonterminal mencegah restart;
+terminal atau done=true baru dapat lolos drain. Database dibuat dengan nama acak
 `aman_deploy_contract_*` di loopback, kemudian hanya database tersebut dihapus.
 
 Hasil aktual akhir dicatat setelah seluruh pengujian selesai di bawah ini.

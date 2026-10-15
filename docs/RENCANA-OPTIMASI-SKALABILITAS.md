@@ -1,5 +1,10 @@
 # Rencana optimasi dan skalabilitas AMAN
 
+
+Status implementasi, pengujian, dan rilis terbaru dicatat pada
+[Status Eksekusi Optimasi](STATUS-EKSEKUSI-OPTIMASI.md). Tabel awal di bawah
+adalah baseline perencanaan; gunakan status eksekusi untuk pekerjaan lanjutan.
+
 **Disusun:** 15 Oktober 2026 · **Baseline:** `62e345422b0828f54d3ca3fd5b2c6cb876f01aa2`.
 **Pelaksana berikutnya:** GPT-6.1 Sol, satu paket/PR pada satu waktu.
 **Status:** rencana siap dikerjakan; seluruh OPT di bawah **belum diimplementasikan**.

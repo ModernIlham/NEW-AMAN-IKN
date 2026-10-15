@@ -185,9 +185,13 @@ try:
         terminal = ["completed", "rolled_back", "aborted"]
         now = datetime.now(timezone.utc).isoformat()
         if action == "drain":
-            writers = db.restore_write_leases.count_documents({})
-            jobs = db.unduhan.count_documents({"status": {"$in": ["queued", "running"]}})
-            print(1 if writers or jobs else 0)
+            writers = db.restore_write_leases.count_documents({}, maxTimeMS=5000)
+            jobs = db.unduhan.count_documents({"status": {"$in": ["queued", "running"]}}, maxTimeMS=5000)
+            detached = db.background_jobs.count_documents({
+                "status": {"$nin": ["done", "error", "completed", "failed", "cancelled", "canceled", "dismissed", "downloaded"]},
+                "done": {"$ne": True},
+                "$nor": [{"worker_protocol": "export_v1", "status": "queued"}]}, maxTimeMS=5000)
+            print(1 if writers or jobs or detached else 0)
         elif action == "release":
             result = db.restore_control.update_one(
                 {"_id": "GLOBAL", "state": "deploying", "owner": owner},
@@ -228,6 +232,10 @@ PYGUARD
   uri="$(grep -E '^MONGO_URL=' backend/.env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"' || true)"
   dbn="$(grep -E '^DB_NAME=' backend/.env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"' || true)"
   [ -n "$uri" ] || { echo "GAGAL: MONGO_URL tidak tersedia; deploy dibatalkan." >&2; return 1; }
+  case "$uri" in
+    *\?*) uri="${uri}&serverSelectionTimeoutMS=5000&connectTimeoutMS=5000&socketTimeoutMS=5000" ;;
+    *) uri="${uri}?serverSelectionTimeoutMS=5000&connectTimeoutMS=5000&socketTimeoutMS=5000" ;;
+  esac
   AMAN_GUARD_ACTION="$tindakan" AMAN_GUARD_OWNER="$AMAN_DEPLOY_OWNER" \
     AMAN_GUARD_DB="${dbn:-inventaris_bmn}" mongosh "$uri" --quiet --eval '
       db = db.getSiblingDB(process.env.AMAN_GUARD_DB);
@@ -236,9 +244,12 @@ PYGUARD
       const terminal = ["completed", "rolled_back", "aborted"];
       const now = new Date().toISOString();
       if (action === "drain") {
-        const writers = db.restore_write_leases.countDocuments({});
-        const jobs = db.unduhan.countDocuments({status:{$in:["queued","running"]}});
-        print(writers || jobs ? 1 : 0);
+        const writers = db.restore_write_leases.countDocuments({}, {maxTimeMS:5000});
+        const jobs = db.unduhan.countDocuments({status:{$in:["queued","running"]}}, {maxTimeMS:5000});
+        const detached = db.background_jobs.countDocuments({
+          status:{$nin:["done","error","completed","failed","cancelled","canceled","dismissed","downloaded"]},
+          done:{$ne:true}, $nor:[{worker_protocol:"export_v1",status:"queued"}]}, {maxTimeMS:5000});
+        print(writers || jobs || detached ? 1 : 0);
       } else if (action === "release") {
         const result = db.restore_control.updateOne({_id:"GLOBAL", state:"deploying", owner},
           {$set:{state:"completed", active:false, updated_at:now, completed_at:now}});
@@ -451,7 +462,7 @@ AMAN_DEPLOY_LOCK=1
 # berjalan harus selesai sebelum restart membunuh proses worker. Rilis backend
 # lama belum mengenal mutex ini: rollout awal tetap butuh jendela tanpa writer.
 if ! hasil_kontrol="$(kelola_kontrol_restore drain)" || [ "$hasil_kontrol" != 0 ]; then
-  echo "DEPLOY DIBATALKAN: writer lease atau unduhan queued/running masih ada; tunggu drain sebelum restart backend." >&2
+  echo "DEPLOY DIBATALKAN: writer lease, background job, atau unduhan aktif masih ada; tunggu drain sebelum restart backend." >&2
   exit 1
 fi
 if [ -L frontend/build ] || [ -L frontend/build.old ] || [ -L frontend/build.new ]; then

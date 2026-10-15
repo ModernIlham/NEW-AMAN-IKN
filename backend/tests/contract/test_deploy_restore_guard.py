@@ -91,4 +91,19 @@ def test_deploy_requires_download_workers_to_drain(real_guard):
     assert run("drain") == "1"
     db.restore_write_leases.delete_one({"_id":"writer-still-admitted"})
     assert run("drain") == "0"
+    db.background_jobs.insert_one({"job_id":"legacy-detached","status":"importing"})
+    assert run("drain") == "1"
+    db.background_jobs.update_one({"job_id":"legacy-detached"},{"$set":{"status":"done","done":True}})
+    assert run("drain") == "0"
+    db.background_jobs.insert_one({"job_id":"unknown-detached","status":"future_state"})
+    assert run("drain") == "1"
+    db.background_jobs.update_one({"job_id":"unknown-detached"},{"$set":{"done":True}})
+    assert run("drain") == "0"
+    db.background_jobs.insert_one({"job_id":"typed-queue","worker_protocol":"export_v1","status":"queued"})
+    assert run("drain") == "0"
+    db.background_jobs.update_one({"job_id":"typed-queue"},{"$set":{"status":"running"}})
+    assert run("drain") == "1"
+    db.background_jobs.update_one({"job_id":"typed-queue"},{"$set":{"status":"done"}})
+    db.background_jobs.insert_one({"job_id":"legacy-queue","status":"queued"})
+    assert run("drain") == "1"
     assert run("release") == "0"
