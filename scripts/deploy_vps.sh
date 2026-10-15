@@ -501,6 +501,10 @@ if [ ! -f build.new/index.html ]; then
   echo "GAGAL: build.new/index.html tidak ada — build tidak menghasilkan bundel." >&2
   exit 1
 fi
+DEPLOY_FASE=retensi_static
+PYTHON_RETENSI="$APP_DIR/backend/venv/bin/python"
+if [ ! -x "$PYTHON_RETENSI" ]; then PYTHON_RETENSI=python3; fi
+"$PYTHON_RETENSI" "$APP_DIR/scripts/retain_static_assets.py" --current build --staged build.new
 DEPLOY_FASE=aktivasi_frontend
 rm -rf build.old
 if [ -d build ]; then

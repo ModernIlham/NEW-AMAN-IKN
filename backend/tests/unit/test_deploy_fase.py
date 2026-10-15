@@ -89,6 +89,7 @@ if name == "yarn":
         if fault == "missing_build": sys.exit(0)
         (app / "frontend/build.new").mkdir()
         (app / "frontend/build.new/index.html").write_text("bundel baru")
+        (app / "frontend/build.new/asset-manifest.json").write_text('{"files":{}}')
         sys.exit(0)
 if name == "mv":
     if fault == "env" and version == "new" and args[-1].endswith("backend/.env"): sys.exit(19)
@@ -130,6 +131,8 @@ def deploy_case(tmp_path):
     git_run("config", "user.name", "Fault injection")
     (app / "backend").mkdir()
     (app / "frontend").mkdir()
+    (app / "scripts").mkdir()
+    shutil.copyfile(ROOT / "scripts/retain_static_assets.py", app / "scripts/retain_static_assets.py")
     (app / ".gitignore").write_text("backend/.env\nfrontend/.env\nbackend/venv/\nfrontend/build*/\n")
     (app / "version.txt").write_text("old")
     (app / "backend/requirements.txt").write_text("old-dependency==1.0\n")
@@ -150,6 +153,7 @@ def deploy_case(tmp_path):
     (app / "frontend/.env").write_bytes(b"PUBLIC_FIXTURE=synthetic\n")
     (app / "frontend/build").mkdir()
     (app / "frontend/build/index.html").write_text("bundel lama")
+    (app / "frontend/build/asset-manifest.json").write_text('{"files":{}}')
     (app / "frontend/build.old").mkdir()
     (app / "frontend/build.old/index.html").write_text("bundel lebih lama")
     for name in ["git", "mongosh", "sudo", "supervisorctl", "curl", "sleep", "yarn", "mv", "rm", "mktemp"]:
@@ -168,7 +172,7 @@ def deploy_case(tmp_path):
         if control_state:
             (state / "lock.json").write_text(json.dumps({"state": control_state, "destructive_started":True}))
         result = subprocess.run(["bash", "-s", "--", target_sha, mode], input=SCRIPT.read_text(),
-                                env=dict(env, AMAN_FAULT=fault), capture_output=True, text=True, timeout=40)
+                                env=dict(env, AMAN_FAULT=fault, AMAN_STATIC_BUDGET_MB="0" if fault=="retention" else "256"), capture_output=True, text=True, timeout=40)
         events = [json.loads(line) for line in (state / "events.jsonl").read_text().splitlines()]
         assert "never-log-this" not in result.stdout + result.stderr
         assert (app / "backend/.env").read_bytes() == original_env
@@ -198,7 +202,7 @@ def test_deploy_success_exact_ci_sha_keeps_previous_frontend(deploy_case):
         assert not Path(snapshot).exists()
 
 
-@pytest.mark.parametrize("fault", ["reset", "head_mismatch", "env", "pip", "restart", "health", "deep", "install", "build", "missing_build", "clear_new", "clear_old", "archive_move", "activate", "final_health", "signal_reset", "signal_env", "signal_pip", "signal_restart", "signal_install", "signal_build", "signal_archive", "signal_activate", "signal_final"])
+@pytest.mark.parametrize("fault", ["reset", "head_mismatch", "env", "pip", "restart", "health", "deep", "install", "build", "missing_build", "retention", "clear_new", "clear_old", "archive_move", "activate", "final_health", "signal_reset", "signal_env", "signal_pip", "signal_restart", "signal_install", "signal_build", "signal_archive", "signal_activate", "signal_final"])
 def test_every_mutating_failure_restores_verified_old_pair(deploy_case, fault):
     app, state, prev, target, latest, git_run, run = deploy_case
     result, events = run(fault)

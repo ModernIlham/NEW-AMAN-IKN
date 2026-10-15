@@ -190,6 +190,10 @@ def test_alur_deploy_stdin_sukses_rollback_dan_gagal_build(tmp_path, mode):
     (app / "backend" / ".env").write_text(backend_env)
     (app / "frontend" / ".env").write_text("ENV_UJI=frontend\n")
     (app / "frontend" / "build" / "index.html").write_text("bundel lama")
+    (app / "frontend" / "build" / "asset-manifest.json").write_text('{"files":{}}')
+    (app / "scripts").mkdir()
+    (app / "scripts" / "retain_static_assets.py").write_text(
+        (AKAR / "scripts" / "retain_static_assets.py").read_text())
     target = "a" * 40
     # Hanya batas eksternal dimock. Snapshot/restore/trap/cp/mv/rm yang
     # berjalan adalah implementasi produksi dengan data dan direktori uji.
@@ -217,6 +221,7 @@ yarn() {
     [ "$MODE_UJI" != frontend_gagal ] || return 9
     mkdir -p build.new
     printf 'bundel baru' > build.new/index.html
+    printf '{"files":{}}' > build.new/asset-manifest.json
   fi
 }
 mktemp() {

@@ -1,0 +1,22 @@
+{
+  "actual_build_A_main": "/static/js/main.c58ed824.js",
+  "actual_build_B_main": "/static/js/main.a43e77a3.js",
+  "old_lazy_path": "static/js/9311.08c8148e.chunk.js",
+  "old_lazy_sha256": "800c1f8bf71f130226c39d35ed6b0a8e3adce13fb201af1dc325b80df59cc9da",
+  "manifest_unchanged": true,
+  "browser_existing_tab": {
+    "originalTab": "A",
+    "loaded": true,
+    "webpackChunks": [
+      "webpackChunkfrontend"
+    ]
+  },
+  "retention": {
+    "retained_files": 64,
+    "total_hashed_files": 201,
+    "total_bytes": 10504686,
+    "grace_hours": 24
+  },
+  "rollback_old_chunk_http200": true,
+  "scope": "actual CRA build chunk fetch/registration in Chromium; not full N-client/API compatibility"
+}
