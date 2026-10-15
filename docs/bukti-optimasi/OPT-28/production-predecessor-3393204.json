@@ -1,0 +1,31 @@
+{
+  "inventory_check": 116510340997,
+  "inventory_collected_at": "2026-10-15T15:27:51.411029+00:00",
+  "checks": [
+    {
+      "path": "static/js/main.cf7538f6.js",
+      "status": 200,
+      "bytes": 454802,
+      "sha256": "8813410ecb354f8ac8dc5f654191888d0b82a174cfde840c3bf247c80e9604be",
+      "matches_previous_bytes_and_current_ledger": true,
+      "ledger_last_seen_epoch": 1792077248.562831
+    },
+    {
+      "path": "static/js/1006.66527a55.chunk.js",
+      "status": 200,
+      "bytes": 25884,
+      "sha256": "47d79b1e5c7a0037a6555c09da408914f4fd971a0a10dd8476c436e0c42a2a50",
+      "matches_previous_bytes_and_current_ledger": true,
+      "ledger_last_seen_epoch": 1792077248.562831
+    },
+    {
+      "path": "static/js/1055.83fd0e5f.chunk.js",
+      "status": 200,
+      "bytes": 7824,
+      "sha256": "02c1f4ca8d1c7adad561787e048430b6967b7a159746b6cd5dcb891a53ec2a76",
+      "matches_previous_bytes_and_current_ledger": true,
+      "ledger_last_seen_epoch": 1792077248.562831
+    }
+  ],
+  "ok": true
+}

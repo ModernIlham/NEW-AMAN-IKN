@@ -2,6 +2,7 @@
 from copy import deepcopy
 import importlib.util
 import json
+import hashlib
 from pathlib import Path
 from types import SimpleNamespace
 import sys
@@ -103,6 +104,64 @@ def test_mongo_exception_can_never_be_published(report, monkeypatch):
     # Unknown exception contents are not part of the schema at all.
     assert all("error" not in key for key in report["mongo"])
     assert len(inv.validate_report(report).encode()) < inv.MAX_OUTPUT
+
+
+def test_known_static_chunk_reports_manifest_ledger_and_bytes_independently(tmp_path):
+    app=tmp_path/"app";nginx=tmp_path/"nginx"
+    current=app/"frontend/build";previous=app/"frontend/build.old"
+    current.mkdir(parents=True);(previous/"static/js").mkdir(parents=True)
+    payload=b"known public hashed javascript"
+    checksum=hashlib.sha256(payload).hexdigest()
+    main="static/js/main.abcdef123456.js"
+    (previous/inv.KNOWN_OLD_CHUNK).write_bytes(payload)
+    (previous/main).write_bytes(payload)
+    (current/"asset-manifest.json").write_text(json.dumps({"files":{"main.js":"/static/js/other.12345678.js"}}))
+    (previous/"asset-manifest.json").write_text(json.dumps({"files":{"known":"/"+inv.KNOWN_OLD_CHUNK,"main.js":"/"+main}}))
+    (current/".aman-static-retention.json").write_text(json.dumps({"schema_version":1,"created_at":1000,"grace_hours":24,"assets":{main:{"sha256":checksum,"bytes":len(payload),"last_seen":700}}}))
+    (previous/".aman-static-retention.json").write_text(json.dumps({"schema_version":1,"created_at":900,"assets":{inv.KNOWN_OLD_CHUNK:{"sha256":checksum,"bytes":len(payload),"last_seen":800}}}))
+    (nginx/"sites-enabled").mkdir(parents=True)
+    (nginx/"sites-enabled/default").write_text(f"# SENTINEL_SECRET\nroot {current};\nlocation /static/ {{ alias {previous}/static/; }}")
+    data=inv.static_retention_inventory(app,nginx)
+    assert data["current"]["file_present"] is False
+    assert data["current"]["own_manifest_contains"] is False
+    assert data["current"]["ledger_contains"] is False
+    assert data["previous"]["file_sha256"]==checksum
+    assert data["previous"]["file_bytes"]==len(payload)
+    assert data["previous"]["own_manifest_contains"] is True
+    assert data["previous"]["ledger_last_seen_epoch"]==800
+    assert data["previous"]["ledger_created_epoch"]==900
+    assert data["current"]["ledger_grace_hours"]==24
+    assert data["previous"]["own_manifest_sha256"]==hashlib.sha256((previous/"asset-manifest.json").read_bytes()).hexdigest()
+    assert data["previous"]["own_js_sample"][0]=={"path":main,"file_bytes":len(payload),"file_sha256":checksum,"current_ledger_contains":True,"current_ledger_sha256":checksum,"current_ledger_last_seen_epoch":700}
+    assert data["nginx_flags"]["current_root_mentioned"] is True
+    assert data["nginx_flags"]["previous_static_alias_mentioned"] is True
+    assert data["nginx_flags"]["loaded_config_attested"] is False
+    assert "SENTINEL" not in json.dumps(data)
+    assert str(tmp_path) not in json.dumps(data)
+
+
+def test_static_inventory_rejects_arbitrary_digest_or_new_fields(report):
+    report["static_retention"]["previous"]["ledger_sha256"]="SENTINEL_SECRET"
+    with pytest.raises(ValueError):inv.validate_report(report)
+
+
+def test_static_sample_validator_accepts_only_three_public_hashed_js_paths(report):
+    sample={"path":"static/js/main.12345678.js","file_sha256":"a"*64,"file_bytes":1,"current_ledger_contains":True,"current_ledger_sha256":"a"*64,"current_ledger_last_seen_epoch":123}
+    report["static_retention"]["previous"]["own_js_sample"]=[sample]
+    inv.validate_report(report)
+    for invalid in ("../../../SENTINEL", "https://SENTINEL", "static/js/SENTINEL.js"):
+        sample["path"]=invalid
+        with pytest.raises(ValueError):inv.validate_report(report)
+
+
+def test_nginx_inventory_skips_symlink_outside_fixed_config_root(tmp_path):
+    nginx=tmp_path/"nginx";(nginx/"sites-enabled").mkdir(parents=True)
+    app=tmp_path/"app"
+    secret=tmp_path/"outside";secret.write_text(f"root {app}/frontend/build.old; SENTINEL_SECRET")
+    (nginx/"sites-enabled/outside").symlink_to(secret)
+    flags=inv.static_retention_inventory(app,nginx)["nginx_flags"]
+    assert flags["enabled_config_readable"] is False
+    assert flags["previous_root_mentioned"] is False
 
 
 def test_new_workflow_is_manual_readonly_with_checks_permission_and_exact_sha():

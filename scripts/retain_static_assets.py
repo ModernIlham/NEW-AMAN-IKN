@@ -8,12 +8,15 @@ import os
 from pathlib import Path,PurePosixPath
 import re
 import shutil
+import stat
 import tempfile
 import time
 
 LEDGER=".aman-static-retention.json"
 HASHED=re.compile(r"[.-][0-9a-f]{8,64}(?:[.-]|$)")
 MAX_FILES=20000
+MAX_SCAN_ENTRIES=MAX_FILES*4
+MAX_SCAN_DEPTH=8
 
 
 def digest(path):
@@ -63,6 +66,8 @@ def own_assets(root):
 
 def read_ledger(root):
     source=root/LEDGER
+    if source.is_symlink():
+        raise ValueError("Ledger retention tidak aman/terlalu besar")
     if not source.exists():
         return {}
     if source.is_symlink() or not source.is_file() or source.stat().st_size>8*1024*1024:
@@ -77,6 +82,65 @@ def read_ledger(root):
                 or not isinstance(meta.get("last_seen"),(int,float)) or not math.isfinite(meta["last_seen"]) or meta["last_seen"]<0):
             raise ValueError("Metadata ledger rusak")
     return value["assets"]
+
+
+def reject_untracked_legacy_static(root,known):
+    """No-ledger builds must not silently lose already-served hashed assets.
+
+    Inspect only static/, with bounded entries/depth and no-follow directory
+    descriptors. Unknown assets are not adopted or given a new grace period.
+    A build with a ledger keeps the existing inheritance/expiry policy.
+    """
+    static_root=root/"static"
+    if static_root.is_symlink():
+        raise ValueError("Symlink static ditolak")
+    if not static_root.exists():
+        return
+    flags=os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW
+    descriptor=os.open(static_root,flags)
+    stack=[]
+    try:
+        stack.append((descriptor,os.scandir(descriptor),("static",),0))
+    except BaseException:
+        os.close(descriptor)
+        raise
+    scanned=0
+    try:
+        while stack:
+            parent,iterator,parts,depth=stack[-1]
+            entry=next(iterator,None)
+            if entry is None:
+                iterator.close();os.close(parent);stack.pop()
+                continue
+            scanned+=1
+            if scanned>MAX_SCAN_ENTRIES:
+                raise ValueError("Inventaris static legacy melampaui batas jumlah entry")
+            if entry.name in {".",".."} or "\\" in entry.name:
+                raise ValueError("Path static legacy tidak aman")
+            mode=entry.stat(follow_symlinks=False).st_mode
+            if stat.S_ISLNK(mode):
+                raise ValueError("Symlink static ditolak")
+            relative=parts+(entry.name,)
+            if stat.S_ISDIR(mode):
+                if depth>=MAX_SCAN_DEPTH:
+                    raise ValueError("Inventaris static legacy melampaui batas kedalaman")
+                child=os.open(entry.name,flags,dir_fd=parent)
+                try:
+                    stack.append((child,os.scandir(child),relative,depth+1))
+                except BaseException:
+                    os.close(child)
+                    raise
+            elif stat.S_ISREG(mode):
+                name=PurePosixPath(*relative).as_posix()
+                if HASHED.search(entry.name) and Path(entry.name).suffix.lower()!=".map":
+                    safe_path(root,name)
+                    if name not in known:
+                        raise ValueError("Static orphan tanpa ledger: inventarisasi sebelum deploy")
+            else:
+                raise ValueError("Static legacy wajib regular file/direktori")
+    finally:
+        for descriptor,iterator,_,_ in reversed(stack):
+            iterator.close();os.close(descriptor)
 
 
 def fsync_directory(path):
@@ -125,9 +189,13 @@ def retain(current,staged,grace_hours=24,budget_bytes=256*1024*1024,min_free_byt
     if current.exists():
         if not current.is_dir():
             raise ValueError("Current build bukan direktori")
-        assets={name:dict(meta) for name,meta in read_ledger(current).items()
+        ledger=read_ledger(current)
+        current_own=own_assets(current)
+        if not (current/LEDGER).exists():
+            reject_untracked_legacy_static(current,current_own)
+        assets={name:dict(meta) for name,meta in ledger.items()
                 if now-meta["last_seen"]<grace_hours*3600}
-        for name in own_assets(current):
+        for name in current_own:
             source=safe_path(current,name)
             # Current manifest is the active release: protection starts at
             # this cutover, independent of its original build timestamp.

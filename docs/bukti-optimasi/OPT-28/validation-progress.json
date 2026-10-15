@@ -1,5 +1,5 @@
 {
-  "status": "in_progress_not_final_release",
+  "status": "deployed_postrelease_checks_in_progress",
   "production_foundation": {
     "sha": "c3ac5559178472358aa5d3d03bf5eeb17b2adaa5",
     "ci": 38740257953,
@@ -42,7 +42,9 @@
     "passed": 5920,
     "failed": 13,
     "seconds": 764.62,
-    "status": "failures_reproduced_compatibility_fixtures_corrected_final_full_rerun_pending"
+    "status": "historical_failed_run_preserved; later exact-main CI passed",
+    "status_at_historical_run": "failures_reproduced_compatibility_fixtures_corrected_final_full_rerun_pending",
+    "superseded_by_main_ci": 38756834500
   },
   "python_security": {
     "runtime_lock_packages": 137,
@@ -54,10 +56,8 @@
     "fresh_runtime_installed_advisories": 0
   },
   "remaining_gates": [
-    "Final CI on combined review fixes",
-    "Exact main SHA CI",
-    "Deploy exact main SHA and verify production",
-    "Global budget activation through guarded preflight and real functional smoke"
+    "CI/merge/deploy followup fail-closed guard for missing retention ledger or untracked hashed files; verify prior339 assets after that deployment",
+    "Activate global export budget1/1 through approved controller and record real functional smoke"
   ],
   "external_unavailable": [
     "offsite destination and separate key escrow",
@@ -67,7 +67,7 @@
   "integrated_snapshot": {
     "sha": "7601d14a356c897a669324fd167f68cb9442326b",
     "branch_commit": "af1a745302ef27fca7b1a6bf9287a7d0505dd15d",
-    "note": "Immutable local validation source; subsequent review fixes need exact SHA CI"
+    "note": "Historical immutable local validation source; later review fixes are included in the deployed main SHA recorded in production_release."
   },
   "backend_local_final_snapshot": {
     "unit": {
@@ -83,7 +83,9 @@
       "seconds": 918.21,
       "failure": "Legacy env-only fake did not implement new process attestation boundary; corrected fake with separate real-process coverage; 68 focused env/static/marker tests passed"
     },
-    "status": "Historical failed full runs retained; final exact-source CI required"
+    "status": "historical_failed_run_preserved; later exact-main CI passed",
+    "status_at_historical_run": "Historical failed full runs retained; final exact-source CI required",
+    "superseded_by_main_ci": 38756834500
   },
   "frontend_final_dependency_cohort": {
     "jest_suites": 217,
@@ -114,7 +116,8 @@
     "skipped": 0,
     "seconds": 189.717,
     "python": "3.11.17",
-    "note": "All latest contracts after review fixes and explicit per-test principal/restart isolation; exact branch SHA CI still required"
+    "note": "Local134-contract run after review fixes; exact-main134-contract pass is recorded in production_release.",
+    "scope": "local_contract_run_before_main_release"
   },
   "final_local_soak": {
     "passed": true,
@@ -130,5 +133,29 @@
     "server_stopped": true,
     "evidence": "../OPT-16/final-soak.json",
     "limits": "Previous failed runs retained; no capacity certification or TCP-race-fixed claim"
-  }
+  },
+  "remaining_gates_before_main_release": [
+    "Final CI on combined review fixes",
+    "Exact main SHA CI",
+    "Deploy exact main SHA and verify production",
+    "Global budget activation through guarded preflight and real functional smoke"
+  ],
+  "production_release": {
+    "source_sha": "33932042e1f41e2a594405b5c16a50b10718c80e",
+    "evidence": "production-release.json",
+    "ci_run_id": 38756834500,
+    "deployment_run_id": 38758168446,
+    "current_public_assets_verified": true,
+    "actual_predecessor_assets_verified": true,
+    "budget_activation_confirmed": false
+  },
+  "production_release_evidence": "production-release.json",
+  "code_deployed_operational_acceptance_open": true,
+  "cloud_setup_product_step": {
+    "draft": 7,
+    "status": "requires_product_publish"
+  },
+  "checkpoint_only": true,
+  "final_reconciliation_url": "https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1092",
+  "remaining_gates_scope": "At release339 checkpoint before PR1092; final actual results are recorded in the PR1092 description."
 }

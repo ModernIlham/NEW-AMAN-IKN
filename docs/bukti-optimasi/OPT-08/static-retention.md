@@ -20,6 +20,19 @@ timestamp lama sehingga tidak diperpanjang selamanya. Aset expired tidak disalin
 ke staging berikutnya; aset current selalu dilindungi24jam mulai cutover walaupun
 build-nya lama. `build.old` tetap tersedia untuk rollback seperti sebelumnya.
 
+Jika build current belum memiliki ledger, helper menginventarisasi hanya
+`static/`, maksimal 80.000 entry dan kedalaman 8, dengan directory descriptor
+tanpa mengikuti symlink. File regular nonhashed dan source map tidak diadopsi;
+symlink/nonregular ditolak. Aset hashed di luar manifest current menyebabkan
+deploy berhenti **sebelum copy atau penulisan ledger staging**, tanpa menulis
+ledger current. Operator harus mempertahankan aset, mengumpulkan manifest,
+inventaris/hash serta bukti deploy secara baca-saja, lalu meninjau asal dan
+perlindungannya sebelum pemulihan yang disetujui. Jangan menghapus aset/ledger
+agar pagar ini lolos, mengimpor `build.old` tanpa verifikasi, atau menyimpulkan
+umur/hak grace dari keberadaan file maupun mtime. Guard tidak mengadopsi atau
+memperpanjang grace aset yang tidak tercatat. Build yang sudah berledger tetap
+mengikuti expiry warisan semula, tanpa pembaruan grace selamanya.
+
 Budget default `AMAN_STATIC_BUDGET_MB=256` mencakup semua hashed static baru dan
 warisan protected, bukan hanya tambahan. Max20.000file; ledgermax8MiB. Budget
 kurang menyebabkan deploy gagal sebelum aktivasi, **tidak menghapus file yang
@@ -29,6 +42,13 @@ pemantauan disk. Tidak ada janji retensi tanpa batas bagi tab yang aktif>24jam.
 
 ## Bukti
 
+- Tambahan guard legacy: **18 tes helper lulus (0,93 detik)**, mencakup penolakan
+  orphan sebelum mutasi current/staging, cutover pertama manifest-only,
+  pengecualian source map, expiry berledger, batas entry/kedalaman, FIFO,
+  directory symlink dan ledger symlink rusak. Bukti ini tidak menentukan
+  penyebab kejadian historis di produksi.
+- Dua skenario controller deploy terfokus lulus: aktivasi sukses (10,26 detik)
+  dan rollback kegagalan fase retensi (17,21 detik), pada fixture lokal.
 - 10 tes helper lulus (0,76 detik): HTTP browser-path lama setelah docrootA→B dan rollback, expiry
 warisan vs reset timestamp current, budget/headroom, ENOSPCcopy/ledger,
 symlink/missingfile, collisionSHA256, penolakan grace<24jam, serta kegagalan

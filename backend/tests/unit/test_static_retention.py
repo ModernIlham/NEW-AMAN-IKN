@@ -136,3 +136,72 @@ def test_hash_name_collision_and_grace_reduction_fail_closed(tmp_path):
         module.retain(a,b,now=100000,min_free_bytes=0)
     with pytest.raises(ValueError,match="Grace"):
         module.retain(a,b,grace_hours=1)
+
+
+def _regular_contents(root):
+    return {path.relative_to(root).as_posix():path.read_bytes()
+            for path in root.rglob("*") if path.is_file() and not path.is_symlink()}
+
+
+def test_legacy_orphan_without_ledger_refuses_before_any_staged_write(tmp_path):
+    current=tmp_path/"current";staged=tmp_path/"staged"
+    build(current,"a");build(staged,"b")
+    orphan="static/js/previous.12345678.chunk.js"
+    (current/orphan).write_bytes(b"already served but absent from active manifest")
+    before_current=_regular_contents(current);before_staged=_regular_contents(staged)
+    with pytest.raises(ValueError,match="orphan tanpa ledger"):
+        module.retain(current,staged,now=100000,min_free_bytes=0)
+    assert _regular_contents(current)==before_current
+    assert _regular_contents(staged)==before_staged
+
+
+def test_manifest_only_legacy_first_cutover_ignores_maps_and_builds_ledger(tmp_path):
+    current=tmp_path/"current";staged=tmp_path/"staged"
+    name,data=build(current,"a");build(staged,"b")
+    (current/"static/js/README.txt").write_text("legitimate nonhashed auxiliary file")
+    before_current=_regular_contents(current)
+    manifest=(staged/"asset-manifest.json").read_bytes()
+    module.retain(current,staged,now=100000,min_free_bytes=0)
+    assert (staged/name).read_bytes()==data
+    assert module.read_ledger(staged)[name]["last_seen"]==100000
+    assert not (staged/(name+".map")).exists()
+    assert not (staged/"static/js/README.txt").exists()
+    assert (staged/"asset-manifest.json").read_bytes()==manifest
+    assert _regular_contents(current)==before_current
+    assert not (current/module.LEDGER).exists()
+
+
+def test_existing_ledger_keeps_expiry_without_adopting_or_renewing_orphans(tmp_path):
+    a=tmp_path/"a";b=tmp_path/"b";c=tmp_path/"c"
+    expired,_=build(a,"a");own,_=build(b,"b");build(c,"c")
+    module.retain(a,b,now=100000,min_free_bytes=0)
+    orphan="static/js/untracked.12345678.chunk.js"
+    (b/orphan).write_bytes(b"not adopted")
+    module.retain(b,c,now=100000+25*3600,min_free_bytes=0)
+    assert not (c/expired).exists() and not (c/orphan).exists()
+    assert (c/own).is_file()
+    assert expired not in module.read_ledger(c) and orphan not in module.read_ledger(c)
+
+
+@pytest.mark.parametrize("fault",["symlink","fifo","entry_limit","depth_limit","broken_ledger"])
+def test_legacy_inventory_is_bounded_and_rejects_unsafe_entries(tmp_path,monkeypatch,fault):
+    import os
+    current=tmp_path/"current";staged=tmp_path/"staged"
+    build(current,"a");build(staged,"b")
+    if fault=="symlink":
+        # Never descend outside static/, including through directory symlinks.
+        (current/"static/external").symlink_to(tmp_path,target_is_directory=True)
+    elif fault=="fifo":
+        os.mkfifo(current/"static/js/pipe.12345678.js")
+    elif fault=="entry_limit":
+        monkeypatch.setattr(module,"MAX_SCAN_ENTRIES",3)
+        for index in range(4):
+            (current/"static"/f"ignored-{index}.txt").write_text("bounded too")
+    elif fault=="depth_limit":
+        (current/"static"/Path(*(["nested"]*(module.MAX_SCAN_DEPTH+1)))).mkdir(parents=True)
+    else:
+        (current/module.LEDGER).symlink_to(tmp_path/"absent-ledger.json")
+    before_staged=_regular_contents(staged)
+    with pytest.raises((ValueError,OSError)):
+        module.retain(current,staged,now=100000,min_free_bytes=0)
+    assert _regular_contents(staged)==before_staged

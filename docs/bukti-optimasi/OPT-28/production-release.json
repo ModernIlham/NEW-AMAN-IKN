@@ -1,0 +1,108 @@
+{
+  "status": "deployed_postrelease_checks_in_progress",
+  "source_sha": "33932042e1f41e2a594405b5c16a50b10718c80e",
+  "pr": 1091,
+  "pr_url": "https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1091",
+  "ci": {
+    "run_id": 38756834500,
+    "url": "https://github.com/ModernIlham/NEW-AMAN-IKN/actions/runs/38756834500",
+    "conclusion": "success",
+    "validation_check_id": 116501999363,
+    "validation_check_url": "https://github.com/ModernIlham/NEW-AMAN-IKN/runs/116501999363"
+  },
+  "deployment": {
+    "run_id": 38758168446,
+    "url": "https://github.com/ModernIlham/NEW-AMAN-IKN/actions/runs/38758168446",
+    "conclusion": "success",
+    "result_check_id": 116503271957,
+    "result_check_url": "https://github.com/ModernIlham/NEW-AMAN-IKN/runs/116503271957"
+  },
+  "confirmed_main_ci_passed": {
+    "backend_and_operations_tests": 6192,
+    "contract_tests": 134,
+    "frontend_tests": 2308
+  },
+  "production_http_verification": {
+    "backend_release_sha": "33932042e1f41e2a594405b5c16a50b10718c80e",
+    "frontend_source_sha": "33932042e1f41e2a594405b5c16a50b10718c80e",
+    "health_http_status": 200,
+    "deep_health_http_status": 200,
+    "sri_assets_checked": 18,
+    "sri_assets_passed": 18,
+    "deep_health_release_sha": null,
+    "html_main_http_status": 200,
+    "service_worker_http_status": 200,
+    "evidence": "production-current-assets-3393204.json"
+  },
+  "legacy_chunk_probe": {
+    "reference": "9311",
+    "http_status": 404,
+    "asset_age": null,
+    "release_lineage": null,
+    "root_cause": null,
+    "status": "historical_observation_with_unproven_provenance_and_retention_entitlement",
+    "present_in_actual_predecessor_manifest": false,
+    "previous_retention_ledger_present": false,
+    "current_release_gate": false
+  },
+  "export_global_budget": {
+    "status": "preflight_passed_activation_pending_after_followup_main",
+    "requested_global_slots": 1,
+    "requested_satker_slots": 1,
+    "activation_confirmed": false,
+    "preflight_run_id": 38760234399,
+    "preflight_run_url": "https://github.com/ModernIlham/NEW-AMAN-IKN/actions/runs/38760234399",
+    "preflight_check_id": 116509386093,
+    "preflight_check_url": "https://github.com/ModernIlham/NEW-AMAN-IKN/runs/116509386093",
+    "observed_capability": {
+      "enabled": false,
+      "slots": 2,
+      "satker_slots": 2
+    }
+  },
+  "limits": [
+    "The historical9311 HTTP404 observation has unproven provenance/retention entitlement; no expiry, root cause or legacy repair is claimed.",
+    "Three actual immediate-predecessor assets and18 current critical assets passed; this does not establish compatibility of every historical tab or release.",
+    "Offsite/key escrow/independent restore drill, representative VPS capacity and external monitoring are not established by this release.",
+    "Durable XLSX worker/checklist GridFS writes remain off; full immutable application/nginx cutover remains staging."
+  ],
+  "evidence_origin": "Exact release/CI/deploy, Checks IDs and production HTTP facts reported by release coordinator; no additional measurements inferred.",
+  "actual_predecessor_assets": {
+    "status": "verified",
+    "assets_checked": 3,
+    "all_http_200": true,
+    "all_digests_match_previous_filesystem_and_current_ledger": true,
+    "evidence": "production-predecessor-3393204.json",
+    "inventory_run_id": 38760510215,
+    "inventory_run_url": "https://github.com/ModernIlham/NEW-AMAN-IKN/actions/runs/38760510215",
+    "inventory_check_id": 116510340997,
+    "inventory_check_url": "https://github.com/ModernIlham/NEW-AMAN-IKN/runs/116510340997"
+  },
+  "remaining_current_gates": [
+    "CI/merge/deploy followup fail-closed guard for missing retention ledger or untracked hashed files; verify prior339 assets after that deployment",
+    "Activate global export budget1/1 through approved controller and record real functional smoke"
+  ],
+  "production_login_smoke": {
+    "ok": true,
+    "viewports": [
+      1440,
+      360
+    ],
+    "login_visible": true,
+    "credentials_empty": true,
+    "css_texture_jpeg_decoded": true,
+    "runtime_errors": 0,
+    "posts": 0,
+    "authentication_attempted": false,
+    "evidence": "production-login-3393204.json",
+    "transport": "TLS-verifying CDP Fetch adapter using configured OS CA/proxy; not direct browser TLS proof",
+    "limits": "Login-only read-only smoke; HTML main script has no integrity attribute. The18 critical digest checks are separate manifest verification, not an HTML SRI-enforcement claim."
+  },
+  "checkpoint_only": true,
+  "checkpoint_scope": "Release339 checkpoint before PR1092 followup; pending fields describe this checkpoint, not later live production.",
+  "final_reconciliation": {
+    "pr": 1092,
+    "url": "https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1092",
+    "record": "PR description records final guard source SHA, exact CI/deploy and export budget results after actual execution"
+  }
+}

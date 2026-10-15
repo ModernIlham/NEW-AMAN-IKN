@@ -1,18 +1,26 @@
 # Rencana optimasi dan skalabilitas AMAN
 
+**Titik pemeriksaan:** dokumen ini mencatat rilis 339 sebelum tindak lanjut
+[PR #1092](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1092). Deskripsi PR #1092 menjadi rujukan
+rekonsiliasi akhir SHA guard, CI/deploy dan hasil aktivasi budget setelah
+eksekusi aktual. Status menunggu di bawah berlaku pada checkpoint ini.
+
 
 **Diperbarui:** 15 Oktober 2026 · **Baseline review/perencanaan:**
 `62e345422b0828f54d3ca3fd5b2c6cb876f01aa2`.
 **Pelaksana berikutnya:** GPT-6.1 Sol; lanjutkan dari bukti dan gap operasional,
 jangan mengulang paket yang sudah diimplementasikan.
 
-**Status berjalan:** fondasi OPT-05/06/08 dan pengaman OPT-14 sudah masuk main
-serta dirilis pada `c3ac5559178472358aa5d3d03bf5eeb17b2adaa5`
-(CI `38740257953`, deploy `38741148877`). Paket lain memiliki implementasi/bukti
-lokal dengan tingkat penyelesaian berbeda; rilis gabungan berikutnya dan
-OPT-28 belum ditutup. Frontend final lulus 217 suite/2.308 tes, build, lint dan
-16 pemeriksaan browser aplikasi. Kontrak lokal gabungan 134 tes lulus pada
-snapshot validasi; CI/rilis gabungan berikutnya masih menunggu bukti akhir.
+**Status berjalan:** kode gabungan [PR #1091](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1091) sudah dirilis
+pada `33932042e1f41e2a594405b5c16a50b10718c80e`. [CI main 38756834500](https://github.com/ModernIlham/NEW-AMAN-IKN/actions/runs/38756834500)
+dan [deploy 38758168446](https://github.com/ModernIlham/NEW-AMAN-IKN/actions/runs/38758168446) lulus.
+CI main meluluskan 6.192 tes backend/operasi, 134 kontrak dan 2.308 tes frontend.
+SHA backend/frontend cocok; health/deep HTTP 200 dan SRI 18 aset kritis lulus.
+[Bukti produksi](bukti-optimasi/OPT-28/production-release.json) membatasi klaim:
+tiga aset pendahulu terverifikasi 200/digest cocok; 9311 tetap observasi historis
+dengan provenance/kewajiban retensi belum terbukti. Penguatan guard retensi
+berikutnya serta aktivasi budget 1/1 masih menunggu. **OPT-28 belum sepenuhnya ditutup.** Fondasi awal
+`c3ac5559178472358aa5d3d03bf5eeb17b2adaa5` tetap tersimpan sebagai riwayat.
 
 [Status Eksekusi Optimasi](STATUS-EKSEKUSI-OPTIMASI.md) menjadi rujukan status
 per paket, pemetaan R01–R25, hasil gerbang dan pekerjaan yang masih terbuka.
@@ -53,8 +61,8 @@ flowchart LR
 ```
 
 Diagram menunjukkan arah target bertahap. Receipt batch dan worker XLSX tahan
-restart sudah tersedia dalam implementasi lokal; worker persisten/global budget
-tetap default mati sampai staging dan aktivasi terverifikasi. Mongo tetap sumber
+restart sudah termasuk kode yang dirilis; worker persisten tetap mati dan
+aktivasi budget global 1/1 masih menunggu verifikasi operasional. Mongo tetap sumber
 kebenaran; cache/search/WebSocket adalah turunan, bukan otoritas akses atau
 catatan transaksi utama.
 
@@ -64,42 +72,43 @@ Ukuran **S/M/L** menunjukkan keluasan perubahan relatif, bukan janji durasi.
 Paket L wajib dipecah menjadi PR `a`, `b`, dan seterusnya sesuai uraian. Jangan
 menumpuk perbaikan domain, migrasi schema, bundler, dan deploy dalam satu PR.
 
-`Lokal` berarti belum dirilis sebagai paket gabungan; `fondasi produksi` hanya
-merujuk bagian yang telah dibuktikan pada SHA di atas. Flag observabilitas,
-budget/worker dan checklist refs tetap mati; cursor adalah opt-in per request
-dengan default API page. Detail batas dan syarat aktivasi ada pada status eksekusi.
+`Kode dirilis` berarti implementasi tersedia pada SHA produksi di atas.
+Profil/fixture lokal tetap memiliki batas pengukuran sendiri. Collector,
+worker durable dan checklist refs belum diaktifkan; budget 1/1 menunggu aktivasi,
+cursor opt-in dengan default page. Offsite/monitoring/kapasitas dan full immutable
+cutover memiliki acceptance operasional tersendiri pada status eksekusi.
 
 | ID | Prioritas / ukuran | Hasil konkret | Dependensi sebelum dinyatakan selesai | Status |
 |---|---|---|---|---|
-| OPT-00 | P1 / M | Fixture dan smoke integrasi nyata | — | Fondasi kontrak main; browser/penguatan lokal, final CI menunggu |
-| OPT-01 | P1 / S | Seleksi tabel dan keyboard benar | — | Lokal teruji; menunggu CI/rilis |
-| OPT-02 | P1 / M | Batch CAS, media rollback, hasil per ID | — | Lokal teruji CAS/Mongo; menunggu CI/rilis |
-| OPT-03 | P1 / L | Batch aman retry sesudah crash/timeout | OPT-02 | Lokal teruji crash/retry; menunggu CI/rilis |
-| OPT-04 | P1 / M | UI progres/resume batch parsial | OPT-03 | Lokal teruji UI/resume; menunggu CI/rilis |
-| OPT-05 | P1 / M | Backup lengkap dan sukses-arsip terverifikasi | — | Fondasi produksi; pelengkap UI lokal |
-| OPT-06 | P1 / L | Restore fail-closed dan recovery state | — | Fondasi produksi; pelengkap lokal; DR host lain belum |
-| OPT-07 | P1 / L | Backup konsisten, offsite, restore drill | OPT-05, OPT-06 | Tooling lokal; offsite/key/host drill operasional belum |
-| OPT-08 | P1 / M | Semua fase deploy memiliki pemulihan | — | Fondasi produksi; cutover immutable terpisah OPT-25 |
-| OPT-09 | P1 / M | Transport artifact/download berbatas memori | OPT-10 untuk jalur job gabungan | Lokal teruji transport; menunggu CI/rilis |
-| OPT-10 | P1 / M | Heartbeat, klaim, status unduhan atomik | — | Lokal teruji multiproses; audit/drain rollout perlu |
-| OPT-11 | P1 / M | Sort/filter harga numerik benar | — | Lokal eksak/finite teruji; menunggu CI/rilis |
-| OPT-12 | P1 / M | Pencarian tidak ditimpa respons lama | — | Lokal respons terbalik/abort teruji; menunggu CI/rilis |
-| OPT-13 | P2 / M | Resume realtime tanpa asumsi ObjectId | OPT-00 | Lokal replay/resync teruji; menunggu CI/rilis |
-| OPT-14 | P2* / M | Search index lengkap dan dapat rekonsiliasi | OPT-00; P1 bila Meili dipakai untuk hasil operasional | Fondasi produksi; Mongo default, Meili prefix opt-in belum divalidasi nyata |
-| OPT-15 | P2* / M | Laporan lengkap dan restore berbatas memori | OPT-06 khusus restore PR15b; P1 bila truncation terbukti | Laporan lokal teruji; restore bertahap fondasi produksi |
-| OPT-16 | P1 / M | Load harness sah dan baseline kapasitas | OPT-00 | Harness/smoke lokal; ramp/soak staging belum |
-| OPT-17 | P2 / M | Inventaris, SLO, metrik dan alert teruji | — | Inventaris produksi ada; collector lokal default mati, monitor eksternal belum |
-| OPT-18 | P2 / L | Query/cursor/read model terukur | OPT-11, OPT-16 | Explain/indeks/cursor lokal; page default, read model ditunda berbukti |
-| OPT-19 | P2 / M | Query luring tidak dihitung penuh per halaman | OPT-12, OPT-16 | Lokal terukur native IDB; menunggu CI/rilis |
-| OPT-20 | P2 / M | Cache halaman mobile berbatas | OPT-19 | Lokal terukur 200 halaman; menunggu CI/rilis |
-| OPT-21 | P2 / M | Retensi service worker aman lintas rilis | OPT-00 browser smoke | SW lokal teruji; static server fondasi, rollout lintas rilis belum |
-| OPT-22 | P2 / L | Budget global dan worker ekspor tahan restart | OPT-09, OPT-10, OPT-16, OPT-17 | Executor/worker lokal teruji; flag budget/worker default mati |
-| OPT-23 | P2 / L | Service/form/registry diekstrak per use-case | OPT-02, OPT-04, OPT-12 | Boundary/registry/form lokal teruji; menunggu CI/rilis |
-| OPT-24 | P2 / M | Toolchain dan lock dependency dapat direproduksi | OPT-00 | Python lock/audit/clean install dan cohort frontend teruji; 25 GHSA tooling residual, native Async/Vite terpisah |
-| OPT-25 | P2 / L | Artefak rilis immutable dan aktivasi atomik | OPT-08, OPT-21, OPT-24 | Staging mekanisme teruji; belum cutover produksi |
-| OPT-26 | P2 / L | Lampiran checklist berbasis referensi berbatas | OPT-02, OPT-05, OPT-06 | Adapter/batas lokal teruji; flag write mati, tanpa purge/GC |
-| OPT-27 | P1 / S | Tombstone luring tidak terpotong senyap | — | Lokal boundary Mongo teruji; menunggu CI/rilis |
-| OPT-28 | Gerbang / M | Verifikasi akhir, kapasitas dan handoff aktual | Semua paket yang berlaku; keputusan tunda dibuktikan | Berjalan; backend/browser/CI/rilis akhir dan gap operasional belum ditutup |
+| OPT-00 | P1 / M | Fixture dan smoke integrasi nyata | — | Fixture/harness main, CI/browser final lulus |
+| OPT-01 | P1 / S | Seleksi tabel dan keyboard benar | — | Kode dirilis; perilaku/browser lulus |
+| OPT-02 | P1 / M | Batch CAS, media rollback, hasil per ID | — | Kode dirilis; CAS/Mongo/GridFS lulus |
+| OPT-03 | P1 / L | Batch aman retry sesudah crash/timeout | OPT-02 | Kode dirilis; crash/retry/receipt lulus |
+| OPT-04 | P1 / M | UI progres/resume batch parsial | OPT-03 | Kode dirilis; UI/resume/browser lulus |
+| OPT-05 | P1 / M | Backup lengkap dan sukses-arsip terverifikasi | — | Backend/UI dirilis; offsite OPT-07 terpisah |
+| OPT-06 | P1 / L | Restore fail-closed dan recovery state | — | Kode dirilis; DR host lain belum |
+| OPT-07 | P1 / L | Backup konsisten, offsite, restore drill | OPT-05, OPT-06 | Tooling dirilis; offsite/key/host drill operasional belum |
+| OPT-08 | P1 / M | Semua fase deploy memiliki pemulihan | — | Controller rollback/clean-venv dirilis; aset pendahulu terverifikasi, guard berikutnya menunggu |
+| OPT-09 | P1 / M | Transport artifact/download berbatas memori | OPT-10 untuk jalur job gabungan | Kode dirilis; transport lulus, memori renderer tetap berbatas domain |
+| OPT-10 | P1 / M | Heartbeat, klaim, status unduhan atomik | — | Kode dirilis; admission/heartbeat lulus, job legacy tidak otomatis resume |
+| OPT-11 | P1 / M | Sort/filter harga numerik benar | — | Kode eksak dirilis; tidak ada backfill uang resmi |
+| OPT-12 | P1 / M | Pencarian tidak ditimpa respons lama | — | Kode guard/abort dirilis; respons terbalik lulus |
+| OPT-13 | P2 / M | Resume realtime tanpa asumsi ObjectId | OPT-00 | Kode replay/resync dirilis; kontrak capped Mongo lulus |
+| OPT-14 | P2* / M | Search index lengkap dan dapat rekonsiliasi | OPT-00; P1 bila Meili dipakai untuk hasil operasional | Kode dirilis; Mongo default, prefix Meili tetap opt-in belum aktif |
+| OPT-15 | P2* / M | Laporan lengkap dan restore berbatas memori | OPT-06 khusus restore PR15b; P1 bila truncation terbukti | Batas laporan/restore bertahap dirilis; RSS renderer tetap diukur |
+| OPT-16 | P1 / M | Load harness sah dan baseline kapasitas | OPT-00 | Harness dirilis; soak lokal 15 menit lulus, kapasitas VPS belum disertifikasi |
+| OPT-17 | P2 / M | Inventaris, SLO, metrik dan alert teruji | — | Kode dirilis; collector mati, monitor eksternal belum |
+| OPT-18 | P2 / L | Query/cursor/read model terukur | OPT-11, OPT-16 | Query/index/cursor dirilis; page default, read model ditunda berbukti |
+| OPT-19 | P2 / M | Query luring tidak dihitung penuh per halaman | OPT-12, OPT-16 | Cache dirilis; native IDB 1k/10k/50k terukur |
+| OPT-20 | P2 / M | Cache halaman mobile berbatas | OPT-19 | Jendela dirilis; 200 halaman teruji, visible-data dilindungi |
+| OPT-21 | P2 / M | Retensi service worker aman lintas rilis | OPT-00 browser smoke | SW dirilis/SRI 18 aset kritis dan tiga aset pendahulu lulus; 9311 historis belum terbukti provenance-nya |
+| OPT-22 | P2 / L | Budget global dan worker ekspor tahan restart | OPT-09, OPT-10, OPT-16, OPT-17 | Kode executor/budget/worker dirilis; aktivasi budget 1/1 menunggu, durable off |
+| OPT-23 | P2 / L | Service/form/registry diekstrak per use-case | OPT-02, OPT-04, OPT-12 | Boundary/registry/form dirilis; kontrak 51 scalar lulus |
+| OPT-24 | P2 / M | Toolchain dan lock dependency dapat direproduksi | OPT-00 | Runtime/lock/cohort frontend dirilis; 25 GHSA tooling residual, native Async/Vite terpisah |
+| OPT-25 | P2 / L | Artefak rilis immutable dan aktivasi atomik | OPT-08, OPT-21, OPT-24 | Clean-venv/SHA dirilis; full aplikasi/nginx immutable tetap staging |
+| OPT-26 | P2 / L | Lampiran checklist berbasis referensi berbatas | OPT-02, OPT-05, OPT-06 | Batas/adapter dirilis; flag write mati, tanpa backfill/purge/GC |
+| OPT-27 | P1 / S | Tombstone luring tidak terpotong senyap | — | Kode overflow dirilis; boundary Mongo/HTTP lulus |
+| OPT-28 | Gerbang / M | Verifikasi akhir, kapasitas dan handoff aktual | Semua paket yang berlaku; keputusan tunda dibuktikan | CI/deploy 339 lulus; guard berikutnya/budget 1/1 dan gap operasional belum ditutup |
 
 **Gelombang A:** OPT-00/17 inventaris berjalan paralel dengan OPT-05/06/08 dan
 perbaikan kecil OPT-01/11/12/27. OPT-02→03→04 adalah satu rantai integritas mutasi.
@@ -177,7 +186,7 @@ seluruh bukti. Paket dependency yang konkret memblokir runtime boleh didahulukan
   Uji handler dan Mongo nyata; jangan hanya memeriksa string source.
 - **Migrasi/rollback:** siapkan endpoint/protokol `batch_v2` di balik capability,
   aktifkan hanya untuk klien OPT-04 yang memahami hasil parsial. Field `updated`
-  saja tidak membuat perubahan ini kompatibel: UI lama menganggap HTTP200 sukses
+  saja tidak membuat perubahan ini kompatibel: UI lama menganggap HTTP 200 sukses
   seluruhnya dan membuang draf. Jangan mengirim partial success baru ke klien lama
   atau 409 setelah commit sebagian tanpa receipt. Uji tab lama vs API baru dan
   sunset legacy melalui pesan upgrade sebelum mutasi, tanpa membuang draf.
@@ -453,7 +462,7 @@ seluruh bukti. Paket dependency yang konkret memblokir runtime boleh didahulukan
   export/report/job dan memvalidasi hasilnya. Seed masuk DB staging dan dihitung
   sebelum test; NDJSON lokal bukan bukti data server. Pool akun/satker sintetis,
   uji rate limiter terpisah dari throughput. Pin Locust; dry-run tidak menelan
-  galat. Assertion schema/status/domain, bukan hanya HTTP200.
+  galat. Assertion schema/status/domain, bukan hanya HTTP 200.
 - **Profil:** mulai 1k/10k aset, lanjut50k/100k jika aman, 3 satker/5 kegiatan,
   field sparse, sort ties, distribusi foto/checklist. Uji warm/cold terpisah,
   campuran read/write/WS/export/luring. Ramp 10→25→50 pengguna virtual secara
@@ -477,7 +486,7 @@ seluruh bukti. Paket dependency yang konkret memblokir runtime boleh didahulukan
   p95/error, event-loop lag, queue depth/age/attempt, cache hit/fallback, DB latency/
   pool wait, RSS, disk, backup freshness dan release SHA. Pilih collector ringan/
   layanan yang sudah ada; jangan membebani VPS dengan stack observability besar.
-- **Alert:** bedakan HTTP503 dependency utama, Redis/index warning pada HTTP200,
+- **Alert:** bedakan HTTP 503 dependency utama, Redis/index warning pada HTTP 200,
   maintenance/recovery, disk dan stale backup. Notifikasi eksternal memakai kanal
   yang ditetapkan pemilik; konfigurasi dapat disiapkan sebelum akses tersedia.
   Betulkan runbook journald vs supervisor berdasarkan hasil inventaris.

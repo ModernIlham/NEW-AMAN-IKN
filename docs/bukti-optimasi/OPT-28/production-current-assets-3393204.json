@@ -1,0 +1,189 @@
+{
+  "schema_version": 1,
+  "expected_sha": "33932042e1f41e2a594405b5c16a50b10718c80e",
+  "checked_at_utc": "2026-10-15T15:30:07Z",
+  "checks": {
+    "health": {
+      "ok": true,
+      "status": 200,
+      "release_sha": "33932042e1f41e2a594405b5c16a50b10718c80e"
+    },
+    "deep_health": {
+      "ok": true,
+      "status": 200,
+      "release_sha": null
+    },
+    "frontend_source": {
+      "ok": true,
+      "source_sha": "33932042e1f41e2a594405b5c16a50b10718c80e",
+      "id": "41798abd16fdf6c0"
+    },
+    "html_main": {
+      "ok": true,
+      "status": 200
+    },
+    "critical_assets": {
+      "ok": true,
+      "count": 18,
+      "assets": [
+        {
+          "path": "/static/css/main.e8853573.css",
+          "ok": true,
+          "status": 200,
+          "bytes": 244107,
+          "integrity_match": true,
+          "content_type": "text/css"
+        },
+        {
+          "path": "/static/js/1006.66527a55.chunk.js",
+          "ok": true,
+          "status": 200,
+          "bytes": 25884,
+          "integrity_match": true,
+          "content_type": "application/javascript"
+        },
+        {
+          "path": "/static/js/1668.0d9605d4.chunk.js",
+          "ok": true,
+          "status": 200,
+          "bytes": 24758,
+          "integrity_match": true,
+          "content_type": "application/javascript"
+        },
+        {
+          "path": "/static/js/2396.53f17dc5.chunk.js",
+          "ok": true,
+          "status": 200,
+          "bytes": 97596,
+          "integrity_match": true,
+          "content_type": "application/javascript"
+        },
+        {
+          "path": "/static/js/2898.d747039e.chunk.js",
+          "ok": true,
+          "status": 200,
+          "bytes": 3125,
+          "integrity_match": true,
+          "content_type": "application/javascript"
+        },
+        {
+          "path": "/static/js/5244.8c24146b.chunk.js",
+          "ok": true,
+          "status": 200,
+          "bytes": 133009,
+          "integrity_match": true,
+          "content_type": "application/javascript"
+        },
+        {
+          "path": "/static/js/5656.9cfc6f82.chunk.js",
+          "ok": true,
+          "status": 200,
+          "bytes": 27394,
+          "integrity_match": true,
+          "content_type": "application/javascript"
+        },
+        {
+          "path": "/static/js/5783.9bfd3d45.chunk.js",
+          "ok": true,
+          "status": 200,
+          "bytes": 23523,
+          "integrity_match": true,
+          "content_type": "application/javascript"
+        },
+        {
+          "path": "/static/js/5797.55fe83f3.chunk.js",
+          "ok": true,
+          "status": 200,
+          "bytes": 10170,
+          "integrity_match": true,
+          "content_type": "application/javascript"
+        },
+        {
+          "path": "/static/js/5946.a441af0b.chunk.js",
+          "ok": true,
+          "status": 200,
+          "bytes": 102936,
+          "integrity_match": true,
+          "content_type": "application/javascript"
+        },
+        {
+          "path": "/static/js/7242.51447091.chunk.js",
+          "ok": true,
+          "status": 200,
+          "bytes": 337917,
+          "integrity_match": true,
+          "content_type": "application/javascript"
+        },
+        {
+          "path": "/static/js/7427.1b77b030.chunk.js",
+          "ok": true,
+          "status": 200,
+          "bytes": 8941,
+          "integrity_match": true,
+          "content_type": "application/javascript"
+        },
+        {
+          "path": "/static/js/7736.34faf106.chunk.js",
+          "ok": true,
+          "status": 200,
+          "bytes": 33992,
+          "integrity_match": true,
+          "content_type": "application/javascript"
+        },
+        {
+          "path": "/static/js/9573.fa762de6.chunk.js",
+          "ok": true,
+          "status": 200,
+          "bytes": 230231,
+          "integrity_match": true,
+          "content_type": "application/javascript"
+        },
+        {
+          "path": "/static/js/asset-dashboard.6208ede0.chunk.js",
+          "ok": true,
+          "status": 200,
+          "bytes": 482327,
+          "integrity_match": true,
+          "content_type": "application/javascript"
+        },
+        {
+          "path": "/static/js/main.365425a9.js",
+          "ok": true,
+          "status": 200,
+          "bytes": 454802,
+          "integrity_match": true,
+          "content_type": "application/javascript"
+        },
+        {
+          "path": "/static/js/module-home.06cb5829.chunk.js",
+          "ok": true,
+          "status": 200,
+          "bytes": 50055,
+          "integrity_match": true,
+          "content_type": "application/javascript"
+        },
+        {
+          "path": "/static/js/photo-lightbox.6ef98fa7.chunk.js",
+          "ok": true,
+          "status": 200,
+          "bytes": 23439,
+          "integrity_match": true,
+          "content_type": "application/javascript"
+        }
+      ]
+    },
+    "service_worker": {
+      "ok": true,
+      "status": 200,
+      "bytes": 27433
+    }
+  },
+  "budget_capability": {
+    "enabled": false,
+    "ok": true,
+    "slots": 2,
+    "satker_slots": 2,
+    "error_category": null
+  },
+  "ok": true
+}
