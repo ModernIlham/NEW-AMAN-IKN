@@ -32,6 +32,23 @@ def source_basename(case):
     return basename if re.fullmatch(r"test_[A-Za-z0-9_.-]{1,150}\.py", basename) else "redacted_invalid_source"
 
 
+def source_failure_line(case, basename, kind):
+    # Read trace text only to select one integer for this validated test file.
+    # Never return/copy any trace substring, assertion or exception message.
+    if not re.fullmatch(r"test_[A-Za-z0-9_]+\.py", basename):
+        return None
+    pattern = re.compile(r"(?<![A-Za-z0-9_.-])(?:backend/tests/(?:unit|contract)/)?(test_[A-Za-z0-9_]+\.py):([0-9]{1,6})(?![0-9])")
+    line = None
+    for child in case:
+        if child.tag != kind:
+            continue
+        for match in pattern.finditer(child.text or ""):
+            number = int(match.group(2))
+            if match.group(1) == basename and 1 <= number <= 100000:
+                line = number
+    return line
+
+
 def failure_summary(path):
     try:
         with Path(path).open("rb") as stream:
@@ -66,10 +83,12 @@ def failure_summary(path):
         if kind:
             counts["errors" if kind == "error" else "failures"] += 1
             if len(failed) < MAX_FAILURES:
-                failed.append({"test_file": source_basename(case),
+                basename = source_basename(case)
+                failed.append({"test_file": basename,
                                "class_name": safe_identifier(case.get("classname")),
                                "test_name": safe_identifier(case.get("name")),
-                               "failure_type": kind})
+                               "failure_type": kind,
+                               "failure_line": source_failure_line(case, basename, kind)})
         elif "skipped" in tags:
             counts["skipped"] += 1
         else:

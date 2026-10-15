@@ -29,6 +29,10 @@ MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 FilterList = Annotated[list[Annotated[str, Field(max_length=200)]], Field(max_length=100)]
 
 
+class PublicationUncertain(RuntimeError):
+    """A dispatched Mongo write may still publish this attempt's artifact."""
+
+
 def enabled():
     return os.environ.get("AMAN_EXPORT_DURABLE_XLSX_ENABLED", "").lower() in {"1", "true", "yes"}
 
@@ -180,15 +184,9 @@ async def submit(parameters, user, total, database):
         "dibuat_oleh": user.get("username", ""), "kode_satker": spec.effective_satker,
         "created_at": now(), "updated_at": now(), "available_at": now(), "nama_file": filename,
         "job_spec": spec.model_dump(mode="json")}
-    try:
-        await database.background_jobs.insert_one(document)
-    except BaseException:
-        # Never remove admission after an unknown acknowledgement unless the
-        # following read proves no job was inserted.
-        with contextlib.suppress(Exception):
-            if not await database.background_jobs.find_one({"job_id": job_id}):
-                await database.export_resource_budget.update_one({"_id": POOL_ID}, {"$pull": {"pending_jobs": {"job_id": job_id}}})
-        raise
+    # Once dispatched, an absent read cannot fence an insert still executing
+    # on Mongo. Keep its bounded admission ticket across an unknown reply.
+    await database.background_jobs.insert_one(document)
     return {"job_id": job_id, "total": total, "message": f"Ekspor Excel masuk antrean untuk {total} aset.", "worker_protocol": PROTOCOL}
 
 
@@ -219,6 +217,9 @@ async def _publish(database, bucket, job, token, data):
     stream = bucket.open_upload_stream_with_id(file_id, filename=job["nama_file"],
         metadata={"job_id": job["job_id"], "worker_token": token, "content_type": MIME, "size": len(data)})
     closed = False
+    dispatched, acknowledged = False, False
+    owner = {"job_id": job["job_id"], "worker_token": token,
+        "attempt": job["attempt"], "status": "running"}
     try:
         for offset in range(0, len(data), 65536):
             await stream.write(data[offset:offset + 65536])
@@ -226,23 +227,64 @@ async def _publish(database, bucket, job, token, data):
         closed = True
         spec = JobSpec.model_validate(job["job_spec"])
         await reauthorize(spec, database)
+        # Persist this guard BEFORE dispatching terminal publication. A timeout
+        # can outlive both this coroutine and a subsequent negative read.
+        # Reclaim/reap must leave the exact attempt alone while it exists.
+        dispatched = True
+        pending = await database.background_jobs.update_one(
+            {**owner, "publication_pending": {"$exists": False}},
+            {"$set": {"publication_pending": {"artifact_id": str(file_id), "worker_token": token},
+                "updated_at": now()}})
+        pending_matched = pending.matched_count
+        acknowledged = True
+        if not pending_matched:
+            raise RuntimeError("Fenced export attempt cannot publish")
+        acknowledged = False
         result = await database.background_jobs.update_one(
-            {"job_id": job["job_id"], "worker_token": token, "attempt": job["attempt"], "status": "running"},
+            {**owner, "publication_pending.artifact_id": str(file_id)},
             {"$set": {"status": "done", "done": True, "progress": 100, "message": "Ekspor Excel selesai.",
                 "artifact_id": str(file_id), "artifact_nama": job["nama_file"], "artifact_type": MIME,
-                "artifact_size": len(data), "updated_at": now()}, "$unset": {"lease_until": ""}})
-        if not result.matched_count:
+                "artifact_size": len(data), "updated_at": now()},
+             "$unset": {"lease_until": "", "publication_pending": ""}})
+        matched = result.matched_count
+        acknowledged = True
+        if not matched:
             raise RuntimeError("Fenced export attempt cannot publish")
-    except BaseException:
+    except BaseException as exc:
+        if dispatched and not acknowledged:
+            from pemeliharaan import mark_current_writer_uncertain
+            await mark_current_writer_uncertain("export_publish")
+            if isinstance(exc, Exception):
+                raise PublicationUncertain("Export publication acknowledgement is unknown") from exc
+            raise
         if not closed:
             with contextlib.suppress(Exception):
                 await stream.abort()
         with contextlib.suppress(Exception):
-            current = await database.background_jobs.find_one({"job_id": job["job_id"]}, {"artifact_id": 1})
-            if not current or current.get("artifact_id") != str(file_id):
-                await bucket.delete(file_id)
+            await bucket.delete(file_id)
+        if acknowledged:
+            # A known CAS miss cannot publish our new ID. Clear only our own
+            # guard, never a replacement attempt's publication evidence.
+            with contextlib.suppress(Exception):
+                await database.background_jobs.update_one(
+                    {**owner, "publication_pending.artifact_id": str(file_id)},
+                    {"$unset": {"publication_pending": ""}})
         raise
     return str(file_id)
+
+
+async def _publication_uncertain(database, job):
+    if job.get("publication_pending"):
+        return True
+    lease_id = job.get("writer_lease_id")
+    if lease_id and await database.restore_write_leases.find_one(
+            {"_id": lease_id, "status": "uncertain_write"}, {"_id": 1}):
+        return True
+    # The marker's own acknowledgment and uncertainty metadata can both fail.
+    # A completed upload is independent, pre-existing evidence that this exact
+    # attempt entered publication; retain it even before the marker is visible.
+    return bool(lease_id and job.get("worker_token") and await database["fs.files"].find_one(
+        {"metadata.job_id": job["job_id"], "metadata.worker_token": job["worker_token"]}, {"_id": 1}))
 
 
 async def run_one(database, bucket, renderer=None):
@@ -255,6 +297,8 @@ async def run_one(database, bucket, renderer=None):
     # A dead same-host process is positive fencing evidence; a paused process
     # retains its flock and cannot be evicted merely for missing heartbeats.
     async for abandoned in database.background_jobs.find({"worker_protocol": PROTOCOL, "status": "running"}):
+        if await _publication_uncertain(database, abandoned):
+            continue
         if abandoned.get("worker_identity") and process_dead(abandoned["worker_identity"]):
             await database.background_jobs.update_one({"job_id": abandoned["job_id"], "worker_token": abandoned["worker_token"], "status": "running"},
                 {"$set": {"lease_until": now() - timedelta(seconds=1),
@@ -265,18 +309,21 @@ async def run_one(database, bucket, renderer=None):
                 # never clear unrelated admissions on heartbeat age alone.
                 await database.restore_write_leases.delete_one({"_id": abandoned["writer_lease_id"]})
     candidate = await database.background_jobs.find_one(
-        {"worker_protocol": PROTOCOL, "attempt": {"$lt": MAX_ATTEMPTS}, "$or": [
+        {"worker_protocol": PROTOCOL, "attempt": {"$lt": MAX_ATTEMPTS},
+         "publication_pending": {"$exists": False}, "$or": [
             {"status": "queued", "available_at": {"$lte": now()}},
             {"status": "running", "lease_until": {"$lt": now()}},
         ]}, sort=[("created_at", 1)])
-    if not candidate:
+    if not candidate or await _publication_uncertain(database, candidate):
         return False
     spec = JobSpec.model_validate(candidate["job_spec"])
     async def build():
         async with writer_admission(database=database) as writer_lease_id:
             token = uuid.uuid4().hex
             job = await database.background_jobs.find_one_and_update(
-                {"job_id": candidate["job_id"], "attempt": candidate["attempt"], "$or": [{"status": "queued"}, {"status": "running", "lease_until": {"$lt": now()}}]},
+                {"job_id": candidate["job_id"], "attempt": candidate["attempt"],
+                 "publication_pending": {"$exists": False},
+                 "$or": [{"status": "queued"}, {"status": "running", "lease_until": {"$lt": now()}}]},
                 {"$set": {"status": "running", "worker_token": token, "worker_identity": process_identity(),
                     "writer_lease_id": writer_lease_id,
                     "updated_at": now(), "lease_until": now() + timedelta(seconds=LEASE_SECONDS), "progress": 10}, "$inc": {"attempt": 1}},
@@ -294,6 +341,10 @@ async def run_one(database, bucket, renderer=None):
                 logger.info("Durable export published job=%s bytes=%s", job["job_id"], len(data))
             except asyncio.CancelledError:
                 raise
+            except PublicationUncertain:
+                # Do not race an in-flight terminal CAS with a retry/error
+                # update. Its artifact, guard and writer admission remain held.
+                logger.error("Durable export publication outcome unknown job=%s", job["job_id"])
             except Exception as exc:
                 permanent = isinstance(exc, (HTTPException, ValueError)) or job["attempt"] >= MAX_ATTEMPTS
                 await database.background_jobs.update_one({"job_id": job["job_id"], "worker_token": token, "status": "running"},

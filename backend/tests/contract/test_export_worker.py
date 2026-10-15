@@ -8,6 +8,8 @@ import uuid
 from pathlib import Path
 
 import pytest
+from bson import ObjectId
+from pymongo.errors import AutoReconnect
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="session")]
 
@@ -157,6 +159,165 @@ async def test_typed_spec_and_fenced_publish_on_real_gridfs(contract, export_fla
     await contract.db.background_jobs.update_one({"job_id": job_id}, {"$set": {"status": "error", "done": True}})
 
 
+class PublicationFault:
+    def __init__(self, database, stage, reply):
+        self.real, self.stage, self.reply = database.background_jobs, stage, reply
+        self.release, self.future, self.artifact_id = asyncio.Event(), None, None
+        self.fired = False
+
+    def __getattr__(self, name):
+        return getattr(self.real, name)
+
+    async def update_one(self, query, changes, *args, **kwargs):
+        fields = changes.get("$set", {})
+        target = fields.get("status") == "done" if self.stage == "terminal" else "publication_pending" in fields
+        if not target or self.fired:
+            return await self.real.update_one(query, changes, *args, **kwargs)
+        self.fired = True
+        self.artifact_id = fields.get("artifact_id") or fields["publication_pending"]["artifact_id"]
+        if self.reply == "visible":
+            await self.real.update_one(query, changes, *args, **kwargs)
+        else:
+            async def finish():
+                await self.release.wait()
+                return await self.real.update_one(query, changes, *args, **kwargs)
+            self.future = asyncio.create_task(finish())
+        if self.reply == "cancelled":
+            raise asyncio.CancelledError()
+        raise AutoReconnect("injected publication acknowledgement lost")
+
+
+class WorkerDatabaseFault:
+    def __init__(self, database, jobs, fail_uncertainty=False):
+        self.database, self.background_jobs = database, jobs
+        if fail_uncertainty:
+            class LeaseFault:
+                def __getattr__(self, name):
+                    return getattr(database.restore_write_leases, name)
+
+                async def update_one(self, query, changes, *args, **kwargs):
+                    if changes.get("$set", {}).get("status") == "uncertain_write":
+                        raise AutoReconnect("injected unavailable uncertainty metadata")
+                    return await database.restore_write_leases.update_one(query, changes, *args, **kwargs)
+            self.restore_write_leases = LeaseFault()
+
+    def __getattr__(self, name):
+        return getattr(self.database, name)
+
+    def __getitem__(self, name):
+        return getattr(self, name)
+
+
+@pytest.mark.parametrize("stage,reply,fail_uncertainty", [
+    ("terminal", "pending", False),
+    ("terminal", "visible", False),
+    ("terminal", "cancelled", False),
+    ("marker", "pending", False),
+    ("terminal", "pending", True),
+    ("marker", "pending", True),
+])
+async def test_unknown_publication_retains_bytes_admission_and_late_commit(
+        contract, export_flags, monkeypatch, stage, reply, fail_uncertainty):
+    import export_worker as worker
+    activity_id = await seed(contract)
+    submitted = await worker.submit(worker.ExportParameters(activity_id=activity_id), contract.users["a"], 1, contract.db)
+    job_id = submitted["job_id"]
+    leases_before = {row["_id"] async for row in contract.db.restore_write_leases.find({})}
+    fault = PublicationFault(contract.db, stage, reply)
+    database = WorkerDatabaseFault(contract.db, fault, fail_uncertainty)
+    expected = b"PK-synthetic-late-publication"
+    async def renderer(*_):
+        return expected
+    try:
+        if reply == "cancelled":
+            with pytest.raises(asyncio.CancelledError):
+                await worker.run_one(database, contract.fs, renderer)
+        else:
+            assert await worker.run_one(database, contract.fs, renderer)
+        assert fault.fired and fault.artifact_id
+        stream = await contract.fs.open_download_stream(ObjectId(fault.artifact_id))
+        assert await stream.read() == expected
+        job = await contract.db.background_jobs.find_one({"job_id": job_id})
+        assert job["attempt"] == 1 and job["status"] == ("done" if reply == "visible" else "running")
+        if reply != "visible" and stage == "terminal":
+            assert job["publication_pending"]["artifact_id"] == fault.artifact_id
+            assert not job.get("artifact_id"), "negative read must never authorize deleting a dispatched artifact"
+        lease = await contract.db.restore_write_leases.find_one({"_id": job["writer_lease_id"]})
+        assert lease and lease["_id"] not in leases_before
+        assert lease["status"] == ("active" if fail_uncertainty else "uncertain_write")
+        if not fail_uncertainty:
+            assert lease["uncertainty_reason"] == "export_publish"
+        # An old heartbeat or a dead worker cannot evict a pending publication.
+        await contract.db.background_jobs.update_one({"job_id": job_id}, {"$set": {
+            "lease_until": worker.now() - worker.timedelta(days=1)}})
+        with monkeypatch.context() as patch:
+            patch.setattr(worker, "process_dead", lambda _: True)
+            assert not await worker.run_one(contract.db, contract.fs, renderer)
+        still = await contract.db.background_jobs.find_one({"job_id": job_id})
+        assert still["attempt"] == 1 and still["worker_token"] == job["worker_token"]
+        assert await contract.db.restore_write_leases.find_one({"_id": lease["_id"]})
+        if fault.future:
+            fault.release.set()
+            assert (await fault.future).matched_count == 1
+        completed = await contract.db.background_jobs.find_one({"job_id": job_id})
+        if stage == "terminal":
+            assert completed["status"] == "done" and completed["artifact_id"] == fault.artifact_id
+            assert "publication_pending" not in completed
+            downloaded = await contract.http.get(f"/api/jobs/{job_id}/download", headers=contract.headers["a"])
+            assert downloaded.status_code == 200 and downloaded.content == expected
+        else:
+            assert completed["status"] == "running" and completed["publication_pending"]["artifact_id"] == fault.artifact_id
+        stream = await contract.fs.open_download_stream(ObjectId(fault.artifact_id))
+        assert await stream.read() == expected
+    finally:
+        # All injected server futures are positively complete before resolving
+        # this synthetic fixture's lease; production never clears it on age.
+        if fault.future and not fault.future.done():
+            fault.release.set()
+            await fault.future
+        await contract.db.background_jobs.update_one({"job_id": job_id}, {
+            "$set": {"status": "done" if stage == "terminal" else "error", "done": True},
+            "$unset": {"publication_pending": ""}})
+        job = await contract.db.background_jobs.find_one({"job_id": job_id})
+        if job.get("writer_lease_id") not in leases_before:
+            await contract.db.restore_write_leases.delete_one({"_id": job.get("writer_lease_id")})
+
+
+async def test_unknown_job_insert_retains_queue_admission_until_late_commit(contract, export_flags):
+    import export_worker as worker
+    activity_id = await seed(contract)
+    release, pending = asyncio.Event(), []
+    class InsertFault:
+        def __getattr__(self, name):
+            return getattr(contract.db.background_jobs, name)
+
+        async def insert_one(self, document):
+            async def finish():
+                await release.wait()
+                return await contract.db.background_jobs.insert_one(document)
+            pending.append((document["job_id"], asyncio.create_task(finish())))
+            raise AutoReconnect("injected insert still in flight")
+    database = WorkerDatabaseFault(contract.db, InsertFault())
+    try:
+        with pytest.raises(AutoReconnect):
+            await worker.submit(worker.ExportParameters(activity_id=activity_id), contract.users["a"], 1, database)
+        job_id, future = pending[0]
+        assert not await contract.db.background_jobs.find_one({"job_id": job_id})
+        pool = await contract.db.export_resource_budget.find_one({"_id": worker.POOL_ID})
+        assert any(ticket["job_id"] == job_id for ticket in pool["pending_jobs"])
+        with pytest.raises(Exception) as error:
+            await worker.submit(worker.ExportParameters(activity_id=activity_id), contract.users["a"], 1, database)
+        assert getattr(error.value, "status_code", None) == 409
+        release.set()
+        await future
+        assert (await contract.db.background_jobs.find_one({"job_id": job_id}))["status"] == "queued"
+    finally:
+        release.set()
+        for job_id, future in pending:
+            await future
+            await contract.db.background_jobs.update_one({"job_id": job_id}, {"$set": {"status": "error", "done": True}})
+
+
 @pytest.mark.parametrize("minimum,maximum,values,selected",[
     ("1000000000000000000.01","1000000000000000000.02",
      ["1000000000000000000.00","1000000000000000000.01","1000000000000000000.02","1000000000000000000.03"],{1,2}),
@@ -168,8 +329,15 @@ async def test_actual_durable_worker_and_legacy_xlsx_preserve_exact_price_filter
     from decimal import Decimal
     import io
     import openpyxl
+    from auth_utils import create_token
     from export_worker import run_one
     activity="worker-price-"+uuid.uuid4().hex
+    # Exercise the real per-user limiter without inheriting export quota from
+    # unrelated contracts when the whole suite finishes inside one minute.
+    principal={key:value for key,value in contract.users["a"].items() if key!="_id"}
+    principal.update(id=activity,username=activity)
+    await contract.db.users.insert_one(principal)
+    headers={"Authorization":"Bearer "+create_token(principal["id"],principal["username"])}
     await contract.db.inventory_activities.insert_one({"id":activity,"kode_satker":contract.users["a"]["kode_satker"],
         "status_pengesahan":"draft","nama_kegiatan":"Harga eksak worker","nomor_surat":"SYNTHETIC"})
     rows=[{"id":f"{activity}-{index}","asset_code":activity,"NUP":str(index),"asset_name":f"{activity}-{index}",
@@ -179,12 +347,12 @@ async def test_actual_durable_worker_and_legacy_xlsx_preserve_exact_price_filter
         "asset_name":activity+"-foreign","activity_id":"contract-activity-b","purchase_price":minimum})
     params={"activity_id":activity,"price_min":minimum,"price_max":maximum}
     expected={f"{activity}-{index}" for index in selected}
-    listed=await contract.http.get("/api/assets",headers=contract.headers["a"],params=params)
+    listed=await contract.http.get("/api/assets",headers=headers,params=params)
     assert listed.status_code==200,listed.text
     assert {row["id"] for row in listed.json()["items"]}==expected
-    legacy=await contract.http.get("/api/export/xlsx",headers=contract.headers["a"],params=params)
+    legacy=await contract.http.get("/api/export/xlsx",headers=headers,params=params)
     assert legacy.status_code==200,legacy.text[:500]
-    submitted=await contract.http.post("/api/export/xlsx/async",headers=contract.headers["a"],params=params)
+    submitted=await contract.http.post("/api/export/xlsx/async",headers=headers,params=params)
     assert submitted.status_code==200,submitted.text
     job_id=submitted.json()["job_id"]
     job=await contract.db.background_jobs.find_one({"job_id":job_id})
@@ -193,7 +361,7 @@ async def test_actual_durable_worker_and_legacy_xlsx_preserve_exact_price_filter
     assert await run_one(contract.db,contract.fs)
     completed=await contract.db.background_jobs.find_one({"job_id":job_id})
     assert completed["status"]=="done",completed.get("error_message")
-    downloaded=await contract.http.get(f"/api/jobs/{job_id}/download",headers=contract.headers["a"])
+    downloaded=await contract.http.get(f"/api/jobs/{job_id}/download",headers=headers)
     assert downloaded.status_code==200,downloaded.text[:500]
     def identifiers(data):
         workbook=openpyxl.load_workbook(io.BytesIO(data),read_only=True)

@@ -67,7 +67,7 @@ def wrap_python(venv):
     python.rename(actual)
     python.write_text(
         "#!/usr/bin/env python3\nimport os,pathlib,sys\n"
-        "if sys.argv[1:] == ['-']:\n"
+        "if sys.argv[1:2] == ['-']:\n"
         "    mongo=os.environ['AMAN_TEST_MONGO']\n"
         "    os.execv(mongo,[mongo])\n"
         "real=pathlib.Path(__file__).resolve().with_name('python-real')\n"

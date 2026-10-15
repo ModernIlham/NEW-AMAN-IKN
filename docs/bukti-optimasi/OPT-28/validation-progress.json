@@ -8,12 +8,11 @@
     "old_chunk_retained": true
   },
   "backend_contracts": {
-    "snapshot": "dfebb908ff380d05861333f7cc0237055d162b11",
-    "passed": 116,
+    "snapshot": "7601d14a356c897a669324fd167f68cb9442326b",
+    "passed": 127,
     "failed": 0,
-    "seconds": 159.47,
-    "python": "3.11.17",
-    "log": "/tmp/aman-contract-frozen3.log"
+    "seconds": 241.42,
+    "python": "3.11.17"
   },
   "frontend_before_dependency_cohort": {
     "node": "22.23.2",
@@ -55,17 +54,81 @@
     "fresh_runtime_installed_advisories": 0
   },
   "remaining_gates": [
-    "compatible frontend dependency cohort",
-    "local report-font reproducibility",
-    "full final backend unit suite",
-    "clean-venv deploy/rollback fault gates",
-    "corrected graceful-stop soak",
-    "PR CI and exact main SHA CI",
-    "deploy exact main SHA and verify production"
+    "Final CI on combined review fixes",
+    "Exact main SHA CI",
+    "Deploy exact main SHA and verify production",
+    "Global budget activation through guarded preflight and real functional smoke"
   ],
   "external_unavailable": [
     "offsite destination and separate key escrow",
     "independent restore host/provider access",
     "representative separate VPS staging for capacity certification"
-  ]
+  ],
+  "integrated_snapshot": {
+    "sha": "7601d14a356c897a669324fd167f68cb9442326b",
+    "branch_commit": "af1a745302ef27fca7b1a6bf9287a7d0505dd15d",
+    "note": "Immutable local validation source; subsequent review fixes need exact SHA CI"
+  },
+  "backend_local_final_snapshot": {
+    "unit": {
+      "passed": 5940,
+      "failed": 1,
+      "skipped": 1,
+      "seconds": 679.25,
+      "failure": "Reusable audit workflow caller cannot declare timeout; tests now inspect bounded called runner jobs; 9 focused tests passed"
+    },
+    "operations": {
+      "passed": 169,
+      "failed": 3,
+      "seconds": 918.21,
+      "failure": "Legacy env-only fake did not implement new process attestation boundary; corrected fake with separate real-process coverage; 68 focused env/static/marker tests passed"
+    },
+    "status": "Historical failed full runs retained; final exact-source CI required"
+  },
+  "frontend_final_dependency_cohort": {
+    "jest_suites": 217,
+    "jest_passed": 2308,
+    "jest_failed": 0,
+    "jest_seconds": 172.925,
+    "lint_errors": 0,
+    "lint_baseline_warnings": 7,
+    "node": "22.23.2",
+    "yarn": "1.22.22",
+    "browser_checks": 16,
+    "viewports_themes": 8,
+    "browser_seconds": 55.95,
+    "audit_advisory_occurrences": 49,
+    "audit_distinct_ghsa": 25,
+    "audit_critical": 0
+  },
+  "review_fixes": [
+    "Ambiguous GLOBAL release preserves healthy release without rollback; 5 actual fault tests passed",
+    "Ambiguous durable job publication/insert preserves artifact, writer lease, guard and admission; 12 real Mongo contracts and 22 unit tests passed; flag remains off",
+    "CI export quota contamination reproduced as 3 HTTP429 failures, corrected with explicit same-satker per-test principals; fast subset7/7 and full contracts134/134 passed",
+    "Realtime restart contract buffered cursor timing reproduced; explicit restart checkpoint and all 4 actual contracts passed"
+  ],
+  "backend_latest_contracts": {
+    "passed": 134,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 189.717,
+    "python": "3.11.17",
+    "note": "All latest contracts after review fixes and explicit per-test principal/restart isolation; exact branch SHA CI still required"
+  },
+  "final_local_soak": {
+    "passed": true,
+    "requests": 1952,
+    "failed": 0,
+    "seconds": 900,
+    "p95_ms": 320,
+    "p99_ms": 810,
+    "source_validation_sha": "7601d14a356c897a669324fd167f68cb9442326b",
+    "deep_health_status": 200,
+    "fixture_rows_unchanged": 10000,
+    "accounts_removed": 5,
+    "server_stopped": true,
+    "evidence": "../OPT-16/final-soak.json",
+    "limits": "Previous failed runs retained; no capacity certification or TCP-race-fixed claim"
+  }
 }

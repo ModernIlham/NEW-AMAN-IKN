@@ -120,6 +120,11 @@ async def test_actual_cursor_restart_replays_without_duplicates(contract, monkey
             await collection.insert_one({"_id": ObjectId(f"66000000{number:016x}"),
                                           "worker_id": "remote", "activity_id": "room",
                                           "type": "asset_updated", "number": number})
+            if number == 9:
+                # Motor may retain buffered documents after close(). Prove a
+                # real replacement cursor exists before publishing the next
+                # event, rather than racing delivery from that first batch.
+                await _wait_until(lambda: len(cursors) >= 2)
         await _wait_until(lambda: len([p for p in received if "number" in p]) == 2)
         assert [p["number"] for p in received if "number" in p] == [9, 8]
         assert len(cursors) >= 2

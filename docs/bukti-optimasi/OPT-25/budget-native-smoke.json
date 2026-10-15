@@ -1,0 +1,29 @@
+{
+  "started_at": "2026-10-15T14:34:40.382916+00:00",
+  "runtime": "Python3.11.17 dev156hashlock",
+  "production": false,
+  "port": 18006,
+  "smoke": {
+    "blocked_status": 429,
+    "retry_after_seconds": 5,
+    "document_status": 200,
+    "document_bytes": 48065,
+    "document_sha256": "2cadfa37d1344c40fdb17bd04810cbdee718c440b7369469a5279b5bd81e2e10",
+    "health_during_block": true,
+    "queue_holders_writers_empty": true,
+    "customer_data_read": false,
+    "accounts_created": 0
+  },
+  "smoke_seconds": 16.36,
+  "ok": true,
+  "account_count": 0,
+  "asset_count": 0,
+  "capability": {
+    "enabled": true,
+    "ok": true,
+    "slots": 1,
+    "satker_slots": 1,
+    "error_category": null
+  },
+  "temporary_database_removed": true
+}

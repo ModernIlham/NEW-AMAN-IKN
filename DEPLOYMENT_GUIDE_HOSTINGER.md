@@ -4,11 +4,12 @@
 > **VPS Target:** Ubuntu 24.04.4 LTS (x86_64), 8GB RAM, IP: 72.62.126.24
 > **Domain:** amanikn-inventarisasi.com
 > 
-> ⚠️ **PENTING - Sebelum Mulai Deployment:**
-> 1. **Push kode ke GitHub terlebih dahulu** menggunakan fitur "Save to GitHub" di Emergent.sh
-> 2. **Branch default: `main`** - Pastikan Anda menggunakan branch yang benar
-> 3. Catat nama repository dan username GitHub Anda untuk digunakan di FASE 3
-> 4. Jika repository private, siapkan Personal Access Token dari GitHub
+> **Rilis pada VPS yang sudah berjalan:** gunakan [workflow rilis pada bagian
+> Maintenance](#maintenance) dan [runbook controller](scripts/releases/README.md).
+> Workflow mengunci SHA target/controller yang lulus CI, mempersiapkan environment
+> bersih, dan memverifikasi aktivasi atau rollback. Fase provisioning/pembersihan
+> di bawah hanya untuk penyiapan host atau reinstall yang direncanakan terpisah;
+> rilis normal mempertahankan data, konfigurasi, dan layanan host.
 
 ---
 
@@ -73,12 +74,12 @@ Internet (HTTPS:443)
 ---
 
 <a name="2-versi-teknologi"></a>
-## 2️⃣ Versi Teknologi yang HARUS Diinstal (Sama Persis dengan Emergent.sh)
+## 2️⃣ Baseline runtime yang didukung
 
-| Software | Versi di Emergent.sh | Cara Install di Ubuntu 24.04 |
+| Software | Baseline aplikasi | Cara Install di Ubuntu 24.04 |
 |----------|---------------------|------------------------------|
-| **Python** | 3.11.14 | deadsnakes PPA |
-| **Node.js** | 20.20.0 | NodeSource repo |
+| **Python** | 3.11 (`.python-version`; patch host dicatat saat preflight) | deadsnakes PPA |
+| **Node.js** | 22 LTS (`.nvmrc`) | NodeSource repo |
 | **Yarn** | 1.22.22 | npm install -g |
 | **MongoDB** | 7.0.30 | MongoDB official repo |
 | **Nginx** | Latest stable | apt install |
@@ -198,7 +199,7 @@ sudo apt install -y \
   lsb-release
 ```
 
-### 2.2 Install Python 3.11 (Sama dengan Emergent: 3.11.14)
+### 2.2 Install Python 3.11
 ```bash
 # Ubuntu 24.04 default-nya Python 3.12, kita perlu 3.11
 sudo add-apt-repository ppa:deadsnakes/ppa -y
@@ -209,8 +210,7 @@ sudo apt install -y python3.11 python3.11-venv python3.11-dev python3.11-distuti
 python3.11 --version
 # Output harus: Python 3.11.x
 
-# Install pip untuk Python 3.11
-curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
+# Controller memakai installer eksternal terpin untuk candidate environment.
 ```
 
 ### 2.3 Install System Dependencies untuk WeasyPrint & Pillow
@@ -240,15 +240,15 @@ sudo apt install -y \
   libfreetype6-dev
 ```
 
-### 2.4 Install Node.js 20.x (Sama dengan Emergent: v20.20.0)
+### 2.4 Install Node.js 22 LTS
 ```bash
-# Install Node.js 20 dari NodeSource
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+# Install Node.js 22 dari NodeSource
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
 
 # Verifikasi
 node --version
-# Output harus: v20.x.x
+# Output harus: v22.x.x
 
 npm --version
 ```
@@ -363,18 +363,18 @@ sudo systemctl is-active supervisor
 5. Tunggu sampai push selesai
 6. **PENTING:** Catat nama repository dan branch yang digunakan (biasanya `main`)
 
-**Langkah B - Di VPS Hostinger (Clone Baru atau Perbarui Checkout Lama):**
+**Langkah B - Di VPS Hostinger (Clone Baru atau Fetch Checkout Lama):**
 ```bash
 # Buat/masuk ke direktori aplikasi. vps-cleanup.sh sengaja tidak menghapus
 # checkout agar reinstall dapat memakai kembali remote dan .env yang ada.
 sudo mkdir -p /var/www/inventarisasi
 cd /var/www/inventarisasi
 
-# Reinstall: perbarui checkout yang sudah ada.
+# Host yang sudah berjalan: fetch tanpa mengganti checkout aktif.
 # Instalasi baru: clone hanya bila direktori benar-benar kosong.
 if [ -d ".git" ]; then
   git fetch --prune origin main
-  git reset --hard origin/main
+  # Checkout aktif dipertahankan. Aktivasi memakai controller rilis di bagian Maintenance.
 else
   if [ -n "$(ls -A)" ]; then
     echo "DIBATALKAN: direktori aplikasi tidak kosong dan bukan checkout Git." >&2
@@ -390,33 +390,11 @@ fi
 > 3. Pilih scope: `repo` (full control of private repositories)
 > 4. Copy token dan gunakan untuk clone
 
-### Metode Alternatif: SCP (Transfer Langsung)
+### Artefak staging
 
-**Di Emergent.sh terminal, buat archive:**
-```bash
-cd /app
-# Buat archive (exclude node_modules dan file tidak perlu)
-tar czf /tmp/inventarisasi-app.tar.gz \
-  --exclude='node_modules' \
-  --exclude='.git' \
-  --exclude='__pycache__' \
-  --exclude='test_reports' \
-  --exclude='*.pyc' \
-  --exclude='backend/uploads/*' \
-  --exclude='frontend/build' \
-  backend/ frontend/ tests/ README.md
-```
-
-**Download file dari Emergent, lalu upload ke VPS:**
-```bash
-# Dari komputer lokal Anda
-scp inventarisasi-app.tar.gz root@72.62.126.24:/var/www/inventarisasi/
-
-# Di VPS
-cd /var/www/inventarisasi
-tar xzf inventarisasi-app.tar.gz
-rm inventarisasi-app.tar.gz
-```
+Packaging dan layout immutable diuji pada [OPT-25](scripts/releases/README.md).
+Layout tersebut masih staging. Aktivasi source/dependency/frontend pada host
+produksi mengikuti controller yang sama di bagian Maintenance.
 
 ### 3.1 Verifikasi Struktur File
 ```bash
@@ -432,41 +410,30 @@ ls -la /var/www/inventarisasi/
 <a name="fase-4"></a>
 ## ⚙️ FASE 4: Setup Backend (15 menit)
 
-### 4.1 Buat Python Virtual Environment
-```bash
-cd /var/www/inventarisasi/backend
+### 4.1 Environment Python per rilis
 
-# Buat virtual environment dengan Python 3.11
-python3.11 -m venv venv
+Produksi menggunakan Python 3.11 dan hash lock runtime dari SHA target.
+Controller yang disetujui menyiapkan environment baru tanpa pip di
+`backend/.venv-releases/<sha>-<uuid>`, memakai installer eksternal terpin,
+memeriksa inventory tepat terhadap lock, dan menjalankan smoke native/font
+sebelum menghentikan proses atau mengganti kode/pointer.
 
-# Aktivasi
-source venv/bin/activate
+`backend/venv` menjadi symlink stabil setelah migrasi. Path environment lama
+beserta inventory-nya dipertahankan untuk rollback; direktori tersebut tidak
+dipindah, diganti nama, atau dibersihkan berdasarkan umur/prefix.
 
-# Verifikasi
-python --version
-# Output: Python 3.11.x
-```
+### 4.2 Instalasi dan verifikasi melalui controller
 
-### 4.2 Install Python Dependencies
-```bash
-# Pastikan pip terbaru
-pip install --upgrade pip
+Ikuti [runbook environment produksi](scripts/releases/README.md)
+dan [bukti OPT-25](docs/bukti-optimasi/OPT-25/hasil.md), kemudian gunakan
+workflow rilis pada bagian Maintenance. Host kosong memerlukan provisioning
+baseline Python/Supervisor/environment pendahulu terlebih dahulu; controller
+memeriksa baseline itu dan menolak kondisi yang belum siap.
 
-# Install semua dependencies
-pip install -r requirements.txt
-
-# Install emergentintegrations (jika diperlukan)
-pip install emergentintegrations --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/
-
-# Verifikasi key packages
-pip show fastapi uvicorn motor weasyprint reportlab pillow
-```
-
-> **Jika ada error saat install WeasyPrint:**
-> ```bash
-> sudo apt install -y python3.11-dev libcairo2-dev pkg-config
-> pip install weasyprint
-> ```
+Dependency Python dipasang ke candidate melalui hash lock, bukan ke environment
+yang sedang melayani. SDK yang telah dihapus tidak dipasang kembali dari index
+opsional. Kegagalan WeasyPrint diperiksa pada library OS/font dan native smoke;
+perbaikannya mengikuti lock/CI/rilis yang sama, tanpa pemasangan paket ad hoc.
 
 ### 4.3 Konfigurasi File .env Backend
 
@@ -557,18 +524,18 @@ mkdir -p /var/www/inventarisasi/backend/uploads
 chmod 755 /var/www/inventarisasi/backend/uploads
 ```
 
-### 4.5 Test Backend Manual
-```bash
-cd /var/www/inventarisasi/backend
-source venv/bin/activate
+### 4.5 Verifikasi Backend
 
-# Test jalankan backend
-uvicorn server:app --host 0.0.0.0 --port 8001 --workers 1
-# Buka terminal baru, test:
-# curl http://localhost:8001/api/health
-# atau curl http://localhost:8001/docs
-# Ctrl+C untuk stop setelah berhasil
+Sesudah controller selesai, periksa service dan health tanpa menjalankan proses
+kedua pada port produksi:
+
+```bash
+sudo supervisorctl status inventarisasi-backend
+curl --fail --silent --show-error http://127.0.0.1:8001/api/health
 ```
+
+Cocokkan `release_sha` dengan target rilis dan pertahankan hasil verifikasi dari
+workflow. Health HTTP 200 saja tidak membuktikan SHA worker yang benar.
 
 ---
 
@@ -597,27 +564,16 @@ REACT_APP_BACKEND_URL=https://amanikn-inventarisasi.com
 > Frontend dan backend diakses melalui domain yang sama.
 > Request ke `/api/*` akan di-proxy ke backend port 8001.
 
-### 5.2 Install Dependencies & Build
-```bash
-cd /var/www/inventarisasi/frontend
+### 5.2 Build dan aktivasi melalui controller
 
-# Install dependencies dengan Yarn
-yarn install
+Gunakan Node 22 LTS/Yarn 1.22.22. Controller menjalankan frozen install dan build
+ke `build.new` dengan `REACT_APP_RELEASE_SHA` target, memverifikasi
+`aman-release.json.source_sha`, mempertahankan hashed static selama grace, lalu
+mengaktifkan pasangan frontend/backend. Build gagal mempertahankan rilis lama.
 
-# Build untuk production
-yarn build
-
-# Verifikasi build berhasil
-ls -la build/
-# Harus ada: index.html, static/, dll
-```
-
-> **Jika `yarn build` gagal karena memory:**
-> ```bash
-> # Tambah swap (untuk VPS 8GB biasanya tidak perlu)
-> export NODE_OPTIONS="--max-old-space-size=4096"
-> yarn build
-> ```
+Jalankan workflow **Deploy ke Hostinger VPS** dengan SHA yang lulus CI seperti
+bagian Maintenance. Pengaturan memori build berada pada controller; kegagalan
+memory/disk ditangani dari bukti resource/preflight dan rilis ulang yang sama.
 
 ### 5.3 Verifikasi Build
 ```bash
@@ -803,10 +759,10 @@ sudo systemctl restart nginx
 sudo nano /etc/supervisor/conf.d/inventarisasi-backend.conf
 ```
 
-**Isi file (v2.1 — Multi-Worker Production, Juli 2025):**
+**Contoh dasar Supervisor; pertahankan konfigurasi host yang telah diverifikasi:**
 ```ini
 [program:inventarisasi-backend]
-command=/var/www/inventarisasi/backend/venv/bin/uvicorn server:app --host 127.0.0.1 --port 8001 --workers 4 --proxy-headers --forwarded-allow-ips=127.0.0.1 --log-level info
+command=/var/www/inventarisasi/backend/venv/bin/uvicorn server:app --host 127.0.0.1 --port 8001 --workers 1 --proxy-headers --forwarded-allow-ips=127.0.0.1 --log-level info
 directory=/var/www/inventarisasi/backend
 user=root
 autostart=true
@@ -825,24 +781,19 @@ stderr_logfile_backups=5
 environment=PATH="/var/www/inventarisasi/backend/venv/bin:%(ENV_PATH)s"
 ```
 
-> **⚠️ PENTING — Perubahan dari versi sebelumnya:**
-> - `--workers 4` (naik dari 2) — memanfaatkan multi-core VPS untuk >50 user konkuren
-> - `--reload` DIHAPUS — jangan pakai di production (bikin memory leak & restart loop)
-> - `--proxy-headers` ditambah — agar backend kenali IP asli klien via nginx
->
-> **Kapan menaikkan/menurunkan workers:**
-> - VPS 4GB RAM + 2 core → `--workers 2` (hemat RAM)
-> - VPS 8GB RAM + 4 core → `--workers 4` (default production) ← **rekomendasi saat ini**
-> - VPS 16GB RAM + 8 core → `--workers 6-8` (high-traffic)
-> - Formula: `workers = min(2 × CPU_cores + 1, RAM_GB / 1.5)`
->
-> **Multi-worker sudah aman digunakan (sejak Juli 2025):**
-> Aplikasi memakai **cross-worker WebSocket event bus** via MongoDB capped collection (`ws_events`).
-> Setiap worker publish event ke capped collection, worker lain tail cursor-nya dan fanout ke WS klien
-> lokal. Tidak perlu Redis, tidak perlu replica set. Latency <100ms antar worker.
-> Lihat: `backend/event_bus.py` dan bagian **POST-DEPLOY VERIFICATION** di akhir dokumen.
+> Inventaris produksi terakhir memakai satu proses API pada 2 CPU/8 GB.
+> Perubahan jumlah worker memerlukan profil memori/latensi dan konfigurasi
+> budget/lock bersama; contoh ini tidak mengklaim kapasitas pengguna tertentu.
+> Controller memverifikasi command, interpreter dan SHA proses. Pertahankan
+> override serta UID host yang sudah terverifikasi; perubahan Supervisor
+> mengikuti preflight operasional sebelum rilis.
 
-### 7.2 Reload & Start Supervisor
+### 7.2 Konfigurasi Supervisor pada provisioning baseline
+
+Pada host aktif, pertahankan konfigurasi yang telah diverifikasi controller.
+Perintah berikut merupakan administrasi baseline layanan; penerapan kode,
+dependency, pointer environment, dan build tetap melalui workflow rilis.
+
 ```bash
 # Reload konfigurasi
 sudo supervisorctl reread
@@ -1098,9 +1049,7 @@ sudo nginx -T | grep root
 
 # Periksa URL secara lokal di editor; jangan salin isi .env ke log/chat.
 nano /var/www/inventarisasi/frontend/.env
-# Jika URL salah, edit dan build ulang:
-cd /var/www/inventarisasi/frontend
-yarn build
+# Setelah koreksi URL publik, terapkan ulang melalui workflow rilis SHA yang disetujui.
 ```
 
 ### Import/Export/PDF Error (WeasyPrint)
@@ -1128,18 +1077,22 @@ hijau → workflow **Deploy ke Hostinger VPS**. Workflow mengunci SHA yang sudah
 lulus CI, memeriksa kesehatan backend/MongoDB/GridFS, dan menyimpan bundel
 frontend lama untuk pemulihan. Fetch terjadwal lokal tidak diperlukan.
 
-**Deploy manual oleh operator (SHA wajib sudah lulus CI push/main):**
+**Rilis manual atau rollback:** buka Actions → **Deploy ke Hostinger VPS** →
+Run workflow pada `main`; isi `deploy_sha` dengan SHA lengkap yang sudah lulus
+CI `push/main`. Workflow memilih controller dari SHA workflow yang disetujui
+dan memverifikasi CI serta ancestry target/controller secara terpisah.
 
-```bash
-set -euo pipefail
-cd /var/www/inventarisasi
-DEPLOY_SHA='ISI_SHA_LENGKAP_40_KARAKTER_YANG_SUDAH_LULUS_CI'
-git fetch origin main
-git cat-file -e "${DEPLOY_SHA}^{commit}"
-git merge-base --is-ancestor "$DEPLOY_SHA" origin/main
-# Jalankan skrip dari commit rilis, bukan salinan checkout lama.
-git show "$DEPLOY_SHA:scripts/deploy_vps.sh" | bash -s -- "$DEPLOY_SHA" manual
+Untuk operasi shell yang dikelola operator, protokol controller adalah:
+
+```text
+bash <trusted-current-controller>/deploy_vps.sh TARGET_SHA manual CONTROLLER_SHA
 ```
+
+Sumber controller harus berasal dari SHA yang telah diverifikasi, termasuk
+ketika targetnya rilis lama. Ikuti [runbook controller/environment](scripts/releases/README.md)
+untuk prosedur shell tepatnya. Rollback memilih retained environment yang
+inventory-nya cocok; controller target lama tidak digunakan untuk mengelola
+pointer atau dependency rilis baru.
 
 Skrip mensyaratkan dua `.env` aktif berupa file biasa, membuat snapshot pada
 direktori acak privat `0700`, dan menyimpan file snapshot `0600`. Pemulihan
@@ -1220,7 +1173,7 @@ sudo tail -f /var/log/supervisor/inventarisasi-backend.out.log
 
 | Aksi | Command |
 |------|---------|
-| **Update kode dari GitHub** | `cd /var/www/inventarisasi && git fetch origin main && bash scripts/deploy_vps.sh <SHA-lengkap-yang-lulus-CI>` |
+| **Rilis / rollback** | Actions → Deploy ke Hostinger VPS → Run workflow (`main`, `deploy_sha` lengkap yang lulus CI) |
 | **Script pemulihan darurat** | `sudo /var/www/inventarisasi/scripts/vps-fix.sh` (jalur operator; tidak mengklaim verifikasi CI) |
 | Start backend | `sudo supervisorctl start inventarisasi-backend` |
 | Stop backend | `sudo supervisorctl stop inventarisasi-backend` |
@@ -1230,7 +1183,7 @@ sudo tail -f /var/log/supervisor/inventarisasi-backend.out.log
 | Restart MongoDB | `sudo systemctl restart mongod` |
 | Nginx error log | `sudo tail -f /var/log/nginx/error.log` |
 | SSL renew | `sudo certbot renew` |
-| Rebuild frontend | `cd /var/www/inventarisasi/frontend && yarn build` |
+| Terapkan konfigurasi/build frontend | Jalankan ulang workflow rilis dengan SHA disetujui |
 | Backup DB | `mongodump --db inventarisasi_bmn --out /root/backup/` |
 
 > ⚠️ **JANGAN** gunakan `git pull origin main`. Untuk rilis normal, gunakan
@@ -1242,10 +1195,10 @@ sudo tail -f /var/log/supervisor/inventarisasi-backend.out.log
 ## 🎯 CHECKLIST DEPLOYMENT
 
 - [ ] Fase 1: Bersihkan deployment lama
-- [ ] Fase 2: Install Python 3.11, Node.js 20, Yarn, MongoDB 7.0, Nginx, Supervisor, Certbot
+- [ ] Fase 2: Install Python 3.11, Node.js 22 LTS, Yarn, MongoDB 7.0, Nginx, Supervisor, Certbot
 - [ ] Fase 3: Transfer file aplikasi ke VPS
-- [ ] Fase 4: Setup backend (venv, pip install, .env)
-- [ ] Fase 5: Setup frontend (yarn install, .env, yarn build)
+- [ ] Fase 4: Verifikasi baseline backend dan candidate environment melalui controller
+- [ ] Fase 5: Konfigurasi publik frontend dan build/aktivasi melalui controller
 - [ ] Fase 6: Konfigurasi Nginx + SSL
 - [ ] Fase 7: Setup Supervisor
 - [ ] Fase 8: Firewall & Keamanan
@@ -1255,9 +1208,12 @@ sudo tail -f /var/log/supervisor/inventarisasi-backend.out.log
 
 ---
 
-## 🆕 POST-DEPLOY VERIFICATION — Fitur v2.1 (Juli 2025)
+## Catatan historis verifikasi v2.1 (Juli 2025)
 
-Setelah deployment selesai, verifikasi fitur stabilitas kolaborasi & performa baru:
+Bagian ini menyimpan contoh dan ekspektasi versi Juli 2025. Jumlah worker,
+format log, angka latensi, serta protokol/TTL idempotency di bawah merupakan
+catatan versi tersebut. Gerbang rilis sekarang mengikuti controller, health
+SHA, dan [status/bukti optimasi terkini](docs/STATUS-EKSEKUSI-OPTIMASI.md).
 
 ### ✅ 1. Event Bus Cross-Worker Aktif
 

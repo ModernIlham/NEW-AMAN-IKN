@@ -77,3 +77,51 @@ Runtime bersih security-runtime-a:16 kontrak Mongo/Redis lulus13,47 detik
 (6 health,5 ASGI budget,5 worker) dan53 unit budget/worker/numeric lulus20,21
 detik. Compileall dan git diff --check bersih. Worker tetap nonaktif; perbaikan
 harga tidak menghapus blocker lifecycle di atas.
+
+## Publikasi dengan acknowledgment tidak diketahui
+
+Review terakhir menemukan bahwa read negatif segera setelah timeout terminal
+CAS tidak membuktikan write tersebut batal. `_publish` kini menyimpan guard
+`publication_pending` dengan token/attempt yang sama sebelum mengirim CAS
+terminal. CAS sukses menghapus guard sekaligus menyimpan artifact. Jika balasan
+marker maupun terminal write tidak diketahui, blob tetap hidup, writer lease
+tanpa TTL dipertahankan dengan alasan `export_publish`, dan worker tidak
+mengubah pekerjaan menjadi queued/error atau mengambil ulang attempt tersebut.
+Reaper menghormati guard dan lease uncertain. Metadata GridFS untuk job/token
+yang sama juga mencegah reclaim bila marker belum terlihat dan pembaruan
+metadata uncertainty gagal. Hanya kegagalan sebelum dispatch atau CAS miss
+yang diakui boleh membersihkan blob baru milik attempt tersebut.
+
+Admission submit juga mempertahankan ticket jika insert job kehilangan balasan;
+read negatif tidak boleh melepaskan batas antrean sebelum late insert selesai.
+Kasus tidak pasti memerlukan pembuktian hasil write oleh operator sebelum
+guard/lease/ticket diselesaikan. Usia heartbeat, PID mati, atau read negatif
+saja tidak menjadi izin cleanup publikasi.
+
+Runtime bersih: **12 kontrak worker lulus dalam15,79 detik**, termasuk actual
+Mongo/GridFS late commit setelah exception/cancellation, commit terlihat dengan
+reply hilang, marker terlambat, metadata uncertainty gagal pada kedua tahap,
+reclaim/reap refusal saat expiry/PID mati, bytes download tetap utuh, dan late
+insert mempertahankan admission. **22 unit worker lulus dalam1,66 detik**,
+termasuk pre-publication authorization failure dan acknowledged terminal CAS
+miss yang hanya membersihkan blob attempt sendiri. Feature worker tetap off.
+
+## Isolasi kontrak terhadap kuota ekspor
+
+CI yang lebih cepat memperlihatkan kontaminasi kuota antar pengujian yang
+memakai `contract-a`: tiga kasus malformed-media sudah menghabiskan XLSX3/menit,
+sehingga dua kasus harga mendapat429; akumulasi CSV membuat kasus scalar
+heritage melewati5/menit. Subset tujuh kasus yang dijalankan cepat mereproduksi
+tepat tiga kegagalan tersebut. Setelah kedua kasus harga dan kasus scalar
+memakai principal tersimpan baru dengan satker/role identik dan JWT asli,
+subset yang sama lulus7/7 dalam8,70 detik. Limiter nyata tetap aktif, seluruh
+assertion matching ID/otorisasi/paritas nilai dipertahankan, dan konfigurasi
+atau batas rate-limit produksi tidak berubah. Isolasi tidak bergantung pada
+kecepatan mesin atau pergantian menit.
+
+Sesudah isolasi tersebut dan checkpoint restart event-bus diperbaiki oleh
+reviewer, suite kontrak lengkap terbaru lulus **134/134 dalam189,72 detik**,
+tanpa failure/error/skip. Lima source worker/maintenance dan kontrak terkait
+tetap identik sepanjang verifikasi hash; tidak ada perubahan kode selama run.
+Ini bukti lokal pada runtime bersih dan Mongo/Redis nyata, bukan klaim bahwa
+rerun GitHub atau deployment produksi telah selesai.

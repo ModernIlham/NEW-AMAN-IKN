@@ -6,6 +6,7 @@ import pytest
 from fastapi import HTTPException
 from mongomock_motor import AsyncMongoMockClient
 from pydantic import ValidationError
+from pymongo.results import UpdateResult
 from starlette.datastructures import QueryParams
 
 import export_worker as worker
@@ -141,6 +142,53 @@ def test_generation_change_holds_job_and_download_rechecks_owner(database):
         with pytest.raises(HTTPException) as error:
             await worker.authorize_download(job, USER, database)
         assert error.value.status_code == 409
+    run(scenario())
+
+
+def test_authorization_failure_before_publication_cleans_new_blob_and_releases_lease(database):
+    async def scenario():
+        result = await submit(database)
+        bucket = Bucket()
+        async def revoke_during_render(*_):
+            await database.users.update_one({"id": USER["id"]}, {"$set": {"is_active": False}})
+            return b"PK-revoked-output"
+        assert await worker.run_one(database, bucket, revoke_during_render)
+        job = await database.background_jobs.find_one({"job_id": result["job_id"]})
+        assert job["status"] == "error" and not job.get("artifact_id")
+        assert not bucket.files and len(bucket.deleted) == 1
+        assert await database.restore_write_leases.count_documents({}) == 0
+    run(scenario())
+
+
+def test_acknowledged_terminal_cas_miss_cleans_only_its_blob_and_releases_lease(database, monkeypatch):
+    async def scenario():
+        result = await submit(database)
+        real_update = database.background_jobs.update_one
+        async def miss_terminal(query, changes, *args, **kwargs):
+            if changes.get("$set", {}).get("status") == "done":
+                await real_update({"job_id": result["job_id"]}, {"$set": {
+                    "worker_token": "replacement", "attempt": 2, "artifact_id": "replacement-file"},
+                    "$unset": {"publication_pending": ""}})
+                return UpdateResult({"n": 0, "nModified": 0, "ok": 1}, True)
+            return await real_update(query, changes, *args, **kwargs)
+        class Jobs:
+            update_one = staticmethod(miss_terminal)
+            def __getattr__(self, name):
+                return getattr(database.background_jobs, name)
+        class Database:
+            background_jobs = Jobs()
+            def __getattr__(self, name):
+                return getattr(database, name)
+        publish = worker._publish
+        async def intercepted_publish(_database, *args):
+            return await publish(Database(), *args)
+        monkeypatch.setattr(worker, "_publish", intercepted_publish)
+        bucket = Bucket()
+        assert await worker.run_one(database, bucket, renderer)
+        job = await database.background_jobs.find_one({"job_id": result["job_id"]})
+        assert job["worker_token"] == "replacement" and job["artifact_id"] == "replacement-file"
+        assert not bucket.files and len(bucket.deleted) == 1
+        assert await database.restore_write_leases.count_documents({}) == 0
     run(scenario())
 
 

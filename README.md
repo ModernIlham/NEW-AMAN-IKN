@@ -717,20 +717,24 @@ Perbaikan menyeluruh untuk kolaborasi multi-user & performa penyimpanan:
 
 ## Quick Start (Development)
 
+Baseline pengembangan: Python **3.11**, Node **22 LTS**, Yarn **1.22.22**.
+[Dependency dan hash lock](backend/DEPENDENCIES.md) menjelaskan regenerasi dan
+pemisahan runtime/dev. Environment berikut khusus pengembangan lokal.
+
 ### Backend
 ```bash
+python3.11 -m venv .venv
+.venv/bin/python -m pip install -r backend/requirements-dev.txt
+source .venv/bin/activate
 cd backend
-python3.11 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-uvicorn server:app --host 0.0.0.0 --port 8001 --reload
+../.venv/bin/uvicorn server:app --host 127.0.0.1 --port 8001 --reload
 ```
 
 ### Frontend
 ```bash
 cd frontend
-yarn install
-yarn start
+corepack yarn install --frozen-lockfile --non-interactive
+corepack yarn start
 ```
 
 ### Environment Variables
@@ -839,24 +843,19 @@ Lihat [DEPLOYMENT_GUIDE_HOSTINGER.md](./DEPLOYMENT_GUIDE_HOSTINGER.md) untuk pan
 Actions → Run workflow dengan memasukkan SHA lengkap commit `main` yang sudah
 lulus CI. Workflow menolak branch, tag, SHA pendek, dan commit tanpa CI sukses.
 
-**Update kode di VPS (manual):**
-```bash
-cd /var/www/inventarisasi
-git fetch origin main
-bash scripts/deploy_vps.sh <SHA-lengkap-yang-lulus-CI>
-# — atau langkah demi langkah (JANGAN git pull, selalu fetch + reset) —
-cp /var/www/inventarisasi/backend/.env /tmp/backend_env_backup
-cp /var/www/inventarisasi/frontend/.env /tmp/frontend_env_backup
-cd /var/www/inventarisasi
-DEPLOY_SHA=<SHA-lengkap-yang-lulus-CI>
-git fetch origin main
-git merge-base --is-ancestor "$DEPLOY_SHA" origin/main
-git reset --hard "$DEPLOY_SHA"
-cp /tmp/backend_env_backup /var/www/inventarisasi/backend/.env
-cp /tmp/frontend_env_backup /var/www/inventarisasi/frontend/.env
-sudo supervisorctl restart inventarisasi-backend
-cd frontend && yarn install --frozen-lockfile --ignore-engines && yarn build
-```
+**Rilis manual atau rollback:** jalankan workflow yang sama melalui
+Actions → **Deploy ke Hostinger VPS** → Run workflow pada `main`, dengan
+`deploy_sha` berupa SHA lengkap yang sudah lulus CI `push/main`. Workflow
+memverifikasi target dan controller secara terpisah; rollback tetap memakai
+controller baru yang memahami environment versi lama.
+
+[Runbook environment produksi](scripts/releases/README.md)
+menjelaskan pemilihan controller, symlink `backend/venv`, environment per rilis,
+retensi rollback, dan pemulihan. Controller menyiapkan runtime bersih beserta
+pemeriksaan native sebelum pergantian; ia juga memeriksa SHA API/frontend dan
+mempertahankan chunk lama. Perubahan kode, dependency, atau konfigurasi build
+produksi diterapkan melalui jalur tersebut. Layout aplikasi/nginx immutable
+masih merupakan pekerjaan staging terpisah.
 
 ---
 

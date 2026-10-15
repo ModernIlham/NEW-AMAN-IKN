@@ -81,3 +81,13 @@ jangan mengganti import sebagai migrasi produksi. Jadwalkan migrasi native async
 sebelum 31 Maret 2027, mendahului akhir critical fixes Motor 14 Mei 2027.
 Migrasi bundler memerlukan
 port alias, env publik, Jest, precache, manifest dan kontrak deploy sekaligus.
+
+## Instalasi produksi bersih
+
+Controller memakai venv baru `--without-pip`, external pip26.2.1 dari wheel
+SHA256 terpin, hash runtime lock dan exact inventory137distribusi. Target tidak
+berisi pip/setuptools bootstrap; rollback tidak menginstal ulang requirements
+lama. Native Inter/PDF/XLSX/DOCX/PPTX dan disk reserve diperiksa sebelum service
+STOPPED/swap; fresh process/SHA diverifikasi setelah start. Ikuti
+[runbook environment rilis](../scripts/releases/README.md#environment-python-produksi-yang-terpisah),
+bukan manual pip pada backend/venv aktif.

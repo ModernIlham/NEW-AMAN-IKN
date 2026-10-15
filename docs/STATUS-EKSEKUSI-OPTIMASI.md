@@ -56,55 +56,59 @@ memerlukan konfigurasi, staging, atau keputusan berdasarkan pengukuran.
 
 ## Gerbang integrasi terakhir
 
-Hasil yang sudah diterima koordinator pada checkout gabungan sebelum delta
-indeks lampiran berikutnya:
+Kandidat rilis gabungan berada di [PR1091](https://github.com/ModernIlham/NEW-AMAN-IKN/pull/1091).
+Deskripsi PR tersebut mencatat hasil CI, SHA merge, deployment dan verifikasi
+produksi setelah selesai. Untuk SHA produksi aktual, cocokkan `/api/health`
+dan `aman-release.json` dengan Check **Validasi rilis (teruji)** serta
+**Hasil deploy produksi** pada commit yang sama. Check hanya memuat hitungan
+atau fase/status yang dibatasi; fixture, token dan isi dokumen tidak dipublikasikan.
 
-- Frontend wave3: **214 suite / 2.297 tes lulus**, 186,048 detik
-  (`/tmp/aman-jest-wave3.log`). Timeout fixture SelectionToolbar pada run
-  sebelumnya diperbaiki dengan satu change event untuk setup draf, tanpa
-  menaikkan timeout; alur klik dan pemeriksaan retensi tetap diuji.
-- Production build frontend: **lulus, 58,18 detik**
-  (`/tmp/aman-build-wave3.log`). Lint: **0 error / 7 warning baseline**, 13,78 detik
-  (`/tmp/aman-lint-final.log`). Ini hasil lokal, bukan CI/rilis baru.
-- Browser aplikasi wave2: **lulus, 17,75 detik**, termasuk checklist yang
-  benar-benar terlihat/lebar >0 pada 320/360/768/1440 × light/dark, retensi
-  draf lintas breakpoint, keyboard, simpan/readback dan preflight batch.
-  Bukti [form responsif](bukti-optimasi/OPT-23/form-responsif.md). Browser akhir
-  dari snapshot final/harness CI masih menunggu; wave2 bukan penggantinya.
-- Fixture SW Chromium native terpisah: **lulus, 7,37 detik**, dua tab/rilis,
-  offline, SRI, install gagal dan quota; [bukti](bukti-optimasi/OPT-21/hasil.md).
-  Fixture ini bukan dua siklus rilis aplikasi penuh pada produksi.
+- Frontend final: **217 suite / 2.308 tes lulus**, lint **0 error / 7 warning
+  baseline**, frozen install dan dua build produksi lulus. Chromium aplikasi
+  **16 pemeriksaan / delapan viewport-theme** membuktikan gambar decode,
+  simpan/readback, draf lintas breakpoint serta offline/reconnect tepat sekali.
+  [Bukti](bukti-optimasi/OPT-24/frontend-remediasi-gates.json).
+- Backend kontrak terbaru: **134/134 lulus**, tanpa gagal/error/skip,
+  **189,717 detik**, Python 3.11.17 dengan Mongo/Redis nyata. Ini mencakup
+  publikasi job dengan hasil Mongo belum pasti, harga eksak, media dan font lokal.
+- Snapshot lokal sebelumnya menjalankan **5.940 unit lulus / satu gagal / satu
+  skip** dan **169 operasi lulus / tiga gagal**. Kegagalan direproduksi pada
+  pembaca timeout reusable workflow dan fake proses legacy; keduanya diperbaiki
+  tanpa menghapus coverage. CI berikutnya meluluskan seluruh job unit dan operasi;
+  CI kontrak masih menemukan isolasi kuota akun dan timing cursor.
+- Perbedaan kontrak CI sudah direproduksi: tiga HTTP429 akibat kuota ekspor
+  antar tes, dan asumsi cursor sudah restart ketika event masih ada dalam
+  buffer. Akun uji kini terpisah dengan satker/izin yang sama dan tes menunggu
+  restart nyata; limiter, urutan dan pemeriksaan duplikasi tetap berlaku.
+  Subset tujuh tes serta seluruh 134 kontrak terbaru lulus.
+- Audit lock Python runtime **137** dan dev **156** paket lulus tanpa advisory,
+  skip atau ignore; dua runtime pipless bersih benar-benar memiliki 137 paket.
+  Frontend tersisa **49 kemunculan / 25 GHSA tooling / nol critical**, dengan
+  batas yang dijelaskan pada [remediasi](bukti-optimasi/OPT-24/remediasi-frontend.md).
+- Soak final **15 menit / 1.952 permintaan / nol kegagalan**, p95 320 ms dan
+  p99 810 ms. Data sintetis utuh, lima akun uji dibersihkan dan server berhenti.
+  [Bukti](bukti-optimasi/OPT-16/final-soak.json) mempertahankan riwayat run gagal;
+  tidak menyatakan race TCP hilang atau kapasitas VPS tersertifikasi.
+- Review akhir menutup race kehilangan balasan pelepasan GLOBAL dan publikasi
+  artifact job. Tes fault nyata membuktikan rilis sehat dan file/lease tetap
+  dipertahankan ketika hasil penulisan belum pasti. Durable worker tetap mati.
 
-Review visual setelah wave3 menemukan URL lampiran STNK memakai posisi visual
-rekomendasi, bukan indeks item server. [Perbaikan indeks media](bukti-optimasi/OPT-23/indeks-media.md)
-lulus 5 suite/25 tes terfokus dan lint 0 error/7 warning baseline. Rebuild privat
-berikutnya lulus Chromium 12 pemeriksaan/8 viewport-theme dalam 29,2 detik,
-termasuk thumbnail/lightbox/pratinjau yang berhasil decode dan URL STNK HTTP200.
-Gerbang frontend penuh/build kemudian diulang pada cohort dependency berikut;
-hasil wave3 di atas tetap merupakan riwayat, bukan hasil frontend terakhir.
-
-Cohort dependency frontend final lokal: **217 suite / 2.308 tes lulus**,
-172,925 detik; lint **0 error / 7 warning baseline**; dua build produksi lulus.
-Chromium asli **16 pemeriksaan / 55,95 detik** membuktikan media decode,
-form/batch readback, delapan viewport/theme, snapshot/reload offline, pending
-tanpa mutasi backend dan reconnect sekali tanpa replay kedua.
-[Bukti seluruh gerbang](bukti-optimasi/OPT-24/frontend-remediasi-gates.json),
-[batas audit frontend](bukti-optimasi/OPT-24/remediasi-frontend.md).
-Hasil ini berasal dari kandidat source/lock yang sama pada salinan privat,
-bukan bukti CI atau deployment.
-
-**Belum dicatat lulus:** suite backend gabungan final, kontrak gabungan pada
-snapshot final, gerbang CI, CI SHA rilis berikutnya, deploy serta
-pemeriksaan HTTP/health setelah rilis tersebut. Koordinator akan menambahkan
-hasil dan SHA tepatnya setelah selesai. Angka terfokus di setiap paket tidak
-dijumlahkan sebagai satu run final dan tidak dipakai menyatakan semua gerbang lulus.
+[Catatan validasi](bukti-optimasi/OPT-28/validation-progress.json) mempertahankan
+run gagal dan cakupan masing-masing bukti. Angka run terfokus tidak dijumlahkan
+sebagai satu suite. CI gabungan pada SHA terakhir, main CI, deploy dan aktivasi
+budget hanya dinyatakan selesai setelah Check serta hasil produksi terkait ada.
+Hasil fixture staging tidak menjadi klaim kapasitas produksi, RPO atau RTO.
 
 ## Flag dan keputusan yang tetap konservatif
+
+Default kode tidak menyatakan konfigurasi produksi saat ini. Budget aktual
+terbaca pada `/api/health.capabilities.export_global_budget`; aktivasi/rollback
+tercatat pada Check **Export budget operation** dari controller main yang lulus CI.
 
 | Mekanisme | Default/keputusan saat ini | Syarat sebelum mengubah |
 |---|---|---|
 | `AMAN_OBSERVABILITY_ENABLED` | Mati | Ulang overhead pada beban representatif yang lebih tenang; buktikan budget CPU lalu tetapkan pemilik alert. |
-| `AMAN_EXPORT_GLOBAL_BUDGET_ENABLED` | Mati | Lock directory bersama/UID/cap identik, drain semua proses dan kontrak staging dengan beban representatif. |
+| `AMAN_EXPORT_GLOBAL_BUDGET_ENABLED` | Default mati; controller aktivasi 1/1 tersedia | UID/direktori bersama, drain dan physical flock, health SHA serta dua permintaan dokumen publik wajib lulus. Kapasitas di atas 1 memerlukan pengukuran staging representatif. |
 | `AMAN_EXPORT_DURABLE_XLSX_ENABLED` | Mati; template worker `autostart=false` | Worker staging siap, restart/retry/otorisasi/artifact dan kapasitas dibuktikan sebelum API diaktifkan. |
 | `AMAN_CHECKLIST_GRIDFS_WRITE` | Mati | Dual-reader terpasang, staging seluruh consumer/backup/restore dan batas lampiran nyata lulus; backfill/purge tidak otomatis. |
 | Cursor aset | Default `pagination=page`; `pagination=cursor` opt-in per request, bukan flag env baru | Consumer harus menangani token, expiry/generasi, dedup dan semantik dataset berubah. UI lama tidak dialihkan otomatis. |

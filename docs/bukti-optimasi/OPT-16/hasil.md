@@ -87,3 +87,36 @@ valid, serta membuat kategori referensi yang dipakai aset. Profil edge tetap
 memiliki anomali disengaja. Cleanup kategori milik run hanya menghapus kategori
 yang tidak dirujuk aset lain; ini memungkinkan smoke form browser memakai
 fixture yang lolos validasi UI, bukan seluruh fixture berkode invalid.
+
+## Satu soak akhir 15 menit — 15 Oktober 2026, UTC
+
+[final-soak.json](final-soak.json) mencatat **1.952 request, nol kegagalan dan
+nol transport error**, p50 47 ms, **p95 320 ms**, p99 810 ms, maksimum
+1.426,9 ms. Locust dan wrapper keluar dengan kode 0. Pengujian memakai backend
+lokal terisolasi, 10.000 aset, lima kegiatan/akun, lima pengguna bersamaan,
+profil read, satu worker Uvicorn, keepalive bawaan 5 detik, think time 1–3
+detik, serta stop timeout 35 detik. Tidak ada retry request atau perubahan
+source, runtime, profil, konfigurasi maupun ambang selama run.
+
+Source yang diuji adalah snapshot validasi immutable
+`7601d14a356c897a669324fd167f68cb9442326b`, **bukan SHA rilis main**.
+Seluruh 243 berkas runtime dalam fingerprint diverifikasi ulang terhadap
+snapshot; digest backend tetap sama selama pengujian. Helper wrapper lama
+menamai field `git_sha` dengan HEAD checkout aktif saat itu; artifact final
+membedakannya dari SHA snapshot yang benar. Runtime Python 3.11.17 memakai
+137 distribusi runtime dan tiga tool bootstrap aman; harness tetap Locust
+2.37.14 dengan hash empat berkas yang sama seperti run sebelumnya.
+
+Deep health akhir 200, jumlah aset tetap 10.000, kelima akun sintetis terhapus
+dan tidak ada akun uji tersisa. Proses server milik run sudah berhenti. Median
+RSS server tiga menit awal 165,16 MB dan tiga menit akhir 167,35 MB; maksimum
+27 file descriptor. Ini sampel durabilitas pada host bersama, bukan bukti
+ketiadaan kebocoran untuk durasi tak terbatas.
+
+Riwayat baseline/candidate yang gagal tetap dipertahankan. Khusus run
+`durability-a977d22aa9064f2fadd420887e707556`, **1 dari 1.883 request gagal**
+dengan `ConnectionResetError(errno=104)` dan tetap berstatus gagal. Satu
+sampel akhir yang lulus tidak membuktikan race TCP sebelumnya telah hilang.
+Tidak ada klaim sertifikasi kapasitas produksi; ramp dan soak pada staging
+representatif, media nyata, concurrency lebih tinggi serta alur lain tetap
+menjadi prasyarat klaim kapasitas.

@@ -28,7 +28,7 @@ def test_synthetic_junit_failure_published_over_real_http_without_secrets(tmp_pa
     result = summary.failure_summary(report)
     assert result["counts"] == dict(tests=31, passed=1, failures=30, errors=0, skipped=0)
     assert len(result["failed_tests"]) == 25 and result["omitted_failures"] == 5
-    assert result["failed_tests"][0] == dict(test_file="test_scope.py", class_name="backend.tests.test_scope.TestCase", test_name="test_scope_0", failure_type="failure")
+    assert result["failed_tests"][0] == dict(test_file="test_scope.py", class_name="backend.tests.test_scope.TestCase", test_name="test_scope_0", failure_type="failure", failure_line=None)
     captured = []
     class Receiver(BaseHTTPRequestHandler):
         def do_POST(self):
@@ -61,7 +61,7 @@ def test_missing_invalid_and_untrusted_identifiers_are_typed(tmp_path):
     assert summary.failure_summary(report) == {"report_state": "invalid"}
     report.write_text('<testsuite><testcase file="/private/credentials.txt" classname="bad name" name="bad`name"><error message="secret"/></testcase></testsuite>')
     item = summary.failure_summary(report)["failed_tests"][0]
-    assert item == dict(test_file="redacted_invalid_source", class_name="redacted_invalid_identifier", test_name="redacted_invalid_identifier", failure_type="error")
+    assert item == dict(test_file="redacted_invalid_source", class_name="redacted_invalid_identifier", test_name="redacted_invalid_identifier", failure_type="error", failure_line=None)
 
 
 def test_context_rejects_invalid_or_mismatched_sha_without_network(monkeypatch, capsys):
@@ -86,3 +86,23 @@ def test_valid_cli_context_and_missing_report_publish_no_paths_or_token(monkeypa
     assert "SYNTHETIC_SECRET_TOKEN" not in output.out + output.err
     report_path.write_bytes('<!DOCTYPE x [<!ENTITY x "secret">]><testsuite/>'.encode("utf-16"))
     assert summary.failure_summary(report_path) == {"report_state": "invalid"}
+
+
+def test_trace_extracts_only_last_bounded_same_file_line_without_message(tmp_path):
+    secret = "SYNTHETIC_SECRET_TRACE_ASSERTION_EXPECTED_ACTUAL"
+    root = ET.Element("testsuite")
+    case = ET.SubElement(root, "testcase", file="backend/tests/contract/test_scope.py", classname="backend.tests.contract.test_scope", name="test_scope[" + secret + "]")
+    failure = ET.SubElement(case, "failure", message=secret)
+    failure.text = (secret + "\nbackend/tests/contract/test_scope.py:17: assertion " + secret
+                    + "\nbackend/tests/contract/test_other.py:100: foreign assertion " + secret
+                    + "\ntest_scope.py:42: expected " + secret + " actual " + secret
+                    + "\ntest_scope.py:0\ntest_scope.py:100001\ntest_scope.py:9999999")
+    report = tmp_path / "trace.xml"
+    ET.ElementTree(root).write(report)
+    result = summary.failure_summary(report)
+    assert result["failed_tests"][0]["failure_line"] == 42
+    published = json.dumps(summary.check_payload(result, "Contract failure details", SHA))
+    assert secret not in published and "assertion" not in published and "test_other.py" not in published
+    failure.text = "backend/tests/contract/test_other.py:90: " + secret
+    ET.ElementTree(root).write(report)
+    assert summary.failure_summary(report)["failed_tests"][0]["failure_line"] is None

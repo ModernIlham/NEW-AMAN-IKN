@@ -177,6 +177,34 @@ cd "$APP_DIR"
 PREV="$(git rev-parse HEAD)"
 echo "Commit saat ini (titik pulang bila gagal): $(git rev-parse --short HEAD)"
 
+# Pastikan mutex/drain akan memakai DB yang benar-benar dipakai process API.
+# Dilakukan sebelum snapshot, acquire GLOBAL, install atau penghentian service.
+AMAN_GUARD_ACTION=binding backend/venv/bin/python - "$APP_DIR" "${AMAN_SUPERVISOR_CONFIG:-/etc/supervisor/conf.d/inventarisasi-backend.conf}" <<'PYDATABASE'
+import configparser,os,pathlib,re,subprocess,sys
+from dotenv import dotenv_values
+def verify_database_binding(app,pid,config_path,proc=pathlib.Path('/proc')):
+    app=pathlib.Path(app)
+    values=dotenv_values(app/'backend/.env')
+    parser=configparser.ConfigParser(interpolation=None);parser.read(config_path)
+    configured=parser['program:inventarisasi-backend'].get('environment','')
+    if re.search(r'(?:^|,)\s*(?:MONGO_URL|DB_NAME)\s*=',configured):raise ValueError('Storage override')
+    raw=(proc/str(pid)/'environ').read_bytes()
+    if len(raw)>2*1024*1024:raise ValueError('Unbounded process metadata')
+    inherited=dict(item.decode().split('=',1) for item in raw.split(b'\0') if b'=' in item)
+    expected={'MONGO_URL':values.get('MONGO_URL'),'DB_NAME':values.get('DB_NAME') or 'inventaris_bmn'}
+    if not expected['MONGO_URL']:raise ValueError('Storage configuration missing')
+    for name,value in expected.items():
+        if name in inherited and inherited[name]!=value:raise ValueError('Process DB differs')
+if __name__=='__main__':
+    try:
+        result=subprocess.run(['sudo','-n','supervisorctl','pid','inventarisasi-backend'],capture_output=True,text=True,timeout=10)
+        if result.returncode:result=subprocess.run(['supervisorctl','pid','inventarisasi-backend'],capture_output=True,text=True,timeout=10)
+        pid=int(result.stdout.strip())
+        if result.returncode or pid<=1:raise ValueError('PID unproven')
+        verify_database_binding(sys.argv[1],pid,sys.argv[2])
+    except Exception:sys.exit('DEPLOY DIBATALKAN: storage binding process/Supervisor tidak terverifikasi; nilai privat tidak dicetak.')
+PYDATABASE
+
 # Kontrol restore tidak memakai TTL: restore yang terhenti setelah wipe tetap
 # memblokir deploy sampai recovery selesai. Mutex GLOBAL juga mencegah restore
 # baru dimulai di antara pemeriksaan dan restart. Pemeriksa gagal = fail closed.

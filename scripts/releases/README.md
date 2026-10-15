@@ -99,3 +99,23 @@ Kompatibilitas N-client→N+1-API, N+1→N rollback, service worker, antrean off
 serta queued jobs pada **website AMAN nyata** wajib dibuktikan. Hasil fixture
 membuktikan mekanisme staging, bukan izin otomatis mengganti layout produksi,
 zero downtime, atau penyelesaian seluruh OPT-25.
+
+## Environment Python produksi yang terpisah
+
+`deploy_vps.sh` mempertahankan layout checkout/nginx, menyiapkan Python3.11
+pipless di `backend/.venv-releases/<sha>-<uuid>`, lalu hash-install dengan
+installer pip26.2.1 terpisah, memeriksa exact runtime inventory dan native/font
+smoke sebelum STOPPED. Pointer stabil backend/venv ditukar sesudah seluruh
+worker berhenti. Fresh process/SHA/health wajib lolos; rollback memakai
+lingkungan lama utuh tanpa pip reinstall. Candidate memakai path absolut final,
+jangan dipindah setelah install. Retained env tidak dibersihkan otomatis.
+
+Gunakan workflow Deploy ke Hostinger VPS: target dan controller fullSHA harus
+memiliki CI push/main sukses. Protokol shell controller terpercaya:
+`bash /path/controller/deploy_vps.sh TARGET_SHA manual CONTROLLER_SHA`.
+Jangan checkout deploy script target lama untuk rollback; controller baru
+memahami retained/pipless environment dan snapshot privat.
+
+Lihat [runbook clean venv](../../docs/bukti-optimasi/OPT-25/clean-venv.md) untuk
+fase, disk reserve, unknown release acknowledgement dan fallback legacy awal.
+Full immutable application/nginx layout di atas tetap adapter staging terpisah.

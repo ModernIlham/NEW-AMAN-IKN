@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 _writer_lease_context = ContextVar("aman_current_writer_lease_id", default=None)
 _writer_state_context = ContextVar("aman_current_writer_state", default=None)
-_UNCERTAINTY_REASONS = {"asset_create", "asset_put", "asset_patch", "batch_asset", "checklist_backfill"}
+_UNCERTAINTY_REASONS = {"asset_create", "asset_put", "asset_patch", "batch_asset", "checklist_backfill", "export_publish"}
 
 
 def current_writer_lease_id():

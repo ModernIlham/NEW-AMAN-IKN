@@ -329,7 +329,7 @@ def attest_supervisor(app,path):
     if not section.getboolean("stopasgroup",False) or not section.getboolean("killasgroup",False):
         raise ValueError("Stop/killasgroup wajib agar seluruh worker lama berhenti")
     environment=section.get("environment","")
-    if re.search(r"(?:^|,)\s*(?:PYTHONHOME|PYTHONPATH|PYTHONUSERBASE)\s*=",environment):
+    if re.search(r"(?:^|,)\s*(?:PYTHONHOME|PYTHONPATH|PYTHONUSERBASE|MONGO_URL|DB_NAME)\s*=",environment):
         raise ValueError("Supervisor tidak boleh menyuntik jalur Python eksternal")
 
 

@@ -1,0 +1,149 @@
+{
+  "completion": {
+    "deep_health_status": 200,
+    "own_server_stopped": true,
+    "server_error_log_count": 0,
+    "server_traceback_count": 0,
+    "temporary_accounts_remaining": 0,
+    "temporary_accounts_removed": 5
+  },
+  "configuration": {
+    "bootstrap_tool_distributions": 3,
+    "cache": "Existing dedicated loopback Redis DB11; not flushed; preflight/warm state",
+    "external_packet_instrumentation": "Unavailable; no tcpdump/tshark installation or protocol injection",
+    "graceful_stop_timeout_seconds": 35,
+    "harness_python": "3.12.14",
+    "http_protocol": "h11",
+    "installed_distribution_fingerprint_sha256": "fbf2faf9e20068636a62d4635111feaf32f478a9d3e94e841b8883957d8524cb",
+    "keepalive_timeout_seconds": 5,
+    "locust": "2.37.14",
+    "loopback_only": true,
+    "observer_enabled": false,
+    "profile": "read",
+    "request_retries": 0,
+    "runtime_distributions": 137,
+    "source_runtime_profile_config_thresholds_mutated_during_run": false,
+    "server_installed_distributions": 140,
+    "server_python": "3.11.17",
+    "shared_host_coload": true,
+    "spawn_rate": 1,
+    "think_time_seconds": [
+      1,
+      3
+    ],
+    "users": 5,
+    "uvicorn": "0.25.0",
+    "worker_count": 1
+  },
+  "dataset": {
+    "account_count": 5,
+    "activity_count": 5,
+    "asset_count": 10000,
+    "asset_count_after_run": 10000,
+    "postflight_verified": true,
+    "preflight_verified": true
+  },
+  "exit_codes": {
+    "locust_runner": 0,
+    "wrapper": 0
+  },
+  "finished_at_utc": "2026-10-15T14:40:14.079276+00:00",
+  "harness_sha256": {
+    "contracts.py": "83f7577615b0566457b541d5f882873459b15cbb58b4774b9140fa16ac2c6f54",
+    "locustfile.py": "073be9c5079bfccecaba9c0840d50ecdf2c6ebb8be63a62949dbb6e69f5e1231",
+    "run.py": "46220297306876e201506851c0409d881edb60e64a66b867084a7251401f6e15",
+    "seed.py": "96f828b1b02c287c803c226c5df910c73b3898f03596cf6613930a247bc11403"
+  },
+  "limitations": [
+    "Passing one 900-second sample does not prove the earlier TCP keepalive race is fixed.",
+    "No production capacity claim; staging ramp, representative media, higher concurrency and broader workflows remain conditional."
+  ],
+  "load_duration_requested_seconds": 900,
+  "locust_timestamps_utc": {
+    "locust_run_limit_utc": "2026-10-15 14:39:54,908",
+    "locust_started_utc": "2026-10-15 14:24:55,663"
+  },
+  "metrics": {
+    "failure_ratio": 0.0,
+    "failures": 0,
+    "max_response_time_ms": 1426.9186330202501,
+    "p50_ms": 47,
+    "p95_ms": 320.0,
+    "p99_ms": 810.0,
+    "requests": 1952,
+    "requests_per_second": 2.171903426083847,
+    "routes": [
+      {
+        "failures": 0,
+        "method": "GET",
+        "name": "GET /assets stats",
+        "p95_ms": 250.0,
+        "requests": 420
+      },
+      {
+        "failures": 0,
+        "method": "GET",
+        "name": "GET /assets list",
+        "p95_ms": 310.0,
+        "requests": 1012
+      },
+      {
+        "failures": 0,
+        "method": "GET",
+        "name": "GET /assets analytics",
+        "p95_ms": 340.0,
+        "requests": 316
+      },
+      {
+        "failures": 0,
+        "method": "GET",
+        "name": "GET /assets offline-snapshot",
+        "p95_ms": 420.0,
+        "requests": 204
+      }
+    ],
+    "status_counts": {
+      "GET GET /assets analytics 200": 316,
+      "GET GET /assets list 200": 1012,
+      "GET GET /assets offline-snapshot 200": 204,
+      "GET GET /assets stats 200": 420
+    },
+    "thresholds_passed": true,
+    "transport_errors": {}
+  },
+  "previous_failed_sample_preserved": {
+    "failures": 1,
+    "outcome": "failed; not replaced or reclassified by this passing sample",
+    "requests": 1883,
+    "run_id": "durability-a977d22aa9064f2fadd420887e707556",
+    "transport_errors": {
+      "ConnectionError>ProtocolError>ConnectionResetError(errno=104)": 1
+    }
+  },
+  "resources": {
+    "server_fd_max": 27,
+    "server_fd_min": 14,
+    "server_rss_first_3m_median_bytes": 165163008.0,
+    "server_rss_last_3m_median_bytes": 167346176.0,
+    "server_rss_max_bytes": 167436288,
+    "server_rss_min_bytes": 156336128,
+    "server_samples_count": 184
+  },
+  "run_id": "durability-51260f9acfe249c1b5cc8134f786906d",
+  "runner_wall_seconds_including_preflight_postflight": 921.71,
+  "schema_version": 1,
+  "scope": "One local API read-only durability sample, not production capacity certification",
+  "source": {
+    "candidate_backend_differs_from_previous_failed_sample": true,
+    "backend_tree_sha256": "cad15ff7f95e103096998f8962939a5dcecbf2ce1097cabefe6fd2b00ab936db",
+    "backend_tree_unchanged_during_run": true,
+    "fingerprinted_runtime_file_count": 243,
+    "live_checkout_sha_recorded_by_private_wrapper": "af1a745302ef27fca7b1a6bf9287a7d0505dd15d",
+    "private_wrapper_git_sha_field_is_live_checkout_not_copied_source": true,
+    "snapshot_files_reverified_after_run": true,
+    "validation_snapshot_is_main_release": false,
+    "validation_snapshot_sha": "7601d14a356c897a669324fd167f68cb9442326b"
+  },
+  "started_at_utc": "2026-10-15T14:24:31.264330+00:00",
+  "strict_zero_errors_passed": true
+}
