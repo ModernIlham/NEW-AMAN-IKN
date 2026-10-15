@@ -12,6 +12,8 @@ import logging
 import secrets
 import string
 import asyncio
+import time
+from contextvars import ContextVar
 import jwt
 from datetime import datetime, timezone
 from pymongo import ReturnDocument
@@ -399,20 +401,60 @@ _CACHE_TTL = {"filter_opts": 180, "stats": 60, "analytics": 120,
               "categories": 300, "wasdal": 90}
 
 
+# Dataset generation partitions caches across restore/reset, including workers
+# with Redis disabled. Cache epoch checks are bounded to one read per 3s/worker.
+_CACHE_EPOCH_TTL = 3.0
+_cache_epoch_state = (0.0, None, None)
+_cache_query_epochs = ContextVar("cache_query_epochs", default=None)
+
+
+async def _cache_epoch():
+    global _cache_epoch_state
+    now = time.monotonic()
+    stamp, generation, database_identity = _cache_epoch_state
+    if generation is not None and database_identity == id(db) and now - stamp < _CACHE_EPOCH_TTL:
+        return generation
+    row = await db.dataset_state.find_one({"_id": "batch_generation"}, {"generation": 1})
+    current = str((row or {}).get("generation") or "legacy")
+    if current != generation or database_identity != id(db):
+        for cache in _CACHE_LOCAL.values():
+            cache.clear()
+    # Record read START time: a delayed old read may never extend a stale epoch.
+    _cache_epoch_state = (now, current, id(db))
+    return current
+
+
 async def cache_get(namespace: str, key: str):
-    """Ambil dari cache: Redis bila aktif, selain itu TTLCache lokal per-worker.
-    Mengembalikan None saat miss (nilai cache tak pernah None)."""
+    """Capture query epoch; a late fill can never publish under a new dataset."""
+    query_key = (namespace, key)
+    captures = dict(_cache_query_epochs.get() or {})
+    captures.pop(query_key, None)
+    _cache_query_epochs.set(captures)
+    try:
+        epoch = await _cache_epoch()
+    except Exception:
+        # Storage outage: bypass cache rather than serving another dataset.
+        return None
+    captures[query_key] = epoch
+    _cache_query_epochs.set(captures)
+    scoped_key = f"{epoch}:{key}"
     if _redis_aktif():
-        return await _redis_get(namespace, key)
-    return _CACHE_LOCAL[namespace].get(key)
+        return await _redis_get(namespace, scoped_key)
+    return _CACHE_LOCAL[namespace].get(scoped_key)
 
 
 async def cache_set(namespace: str, key: str, value) -> None:
-    """Simpan ke cache: Redis (dengan TTL) bila aktif, selain itu TTLCache lokal."""
+    captures = dict(_cache_query_epochs.get() or {})
+    epoch = captures.pop((namespace, key), None)
+    _cache_query_epochs.set(captures)
+    if epoch is None:
+        # No matching read/query snapshot in this async request context.
+        return
+    scoped_key = f"{epoch}:{key}"
     if _redis_aktif():
-        await _redis_set(namespace, key, value, _CACHE_TTL[namespace])
+        await _redis_set(namespace, scoped_key, value, _CACHE_TTL[namespace])
     else:
-        _CACHE_LOCAL[namespace][key] = value
+        _CACHE_LOCAL[namespace][scoped_key] = value
 
 
 def invalidate_category_cache():
@@ -837,7 +879,7 @@ def nama_pelaku(user: dict) -> str:
     return str(u.get("name") or u.get("username") or "").strip()
 
 
-async def log_audit(action: str, activity_id: str, asset_id: str = "", asset_code: str = "", asset_name: str = "", username: str = "system", changes: list = None, detail: str = "", nup: str = "", kode_satker: str = ""):
+async def log_audit(action: str, activity_id: str, asset_id: str = "", asset_code: str = "", asset_name: str = "", username: str = "system", changes: list = None, detail: str = "", nup: str = "", kode_satker: str = "", *, strict: bool = False):
     # kode_satker (opsional): log SISTEM tanpa activity_id (mis. kejadian
     # kartu pegawai) tetap bisa dibatasi & dilihat per satker di halaman
     # audit — tanpa ini log ber-activity_id "" tak terlihat siapa pun.
@@ -852,6 +894,8 @@ async def log_audit(action: str, activity_id: str, asset_id: str = "", asset_cod
         await db.audit_logs.insert_one(entry)
     except Exception as e:
         logger.error(f"Failed to write audit log: {e}")
+        if strict:
+            raise
 
 def compute_changes(old_doc: dict, new_data: dict) -> list:
     changes = []
@@ -928,128 +972,21 @@ def create_gallery_thumbnail(image_data: Optional[str]) -> Optional[str]:
     """Generate a 256x256 WebP thumbnail for gallery view."""
     return create_thumbnail(image_data, size=256, quality=65)
 
-# --- Inventory Constants ---
-VALID_INVENTORY_STATUSES = ["Belum Diinventarisasi", "Ditemukan", "Tidak Ditemukan", "Berlebih", "Sengketa"]
-VALID_CONDITIONS = ["Baik", "Rusak Ringan", "Rusak Berat"]
-VALID_STATUSES = ["Aktif", "Idle", "Maintenance", "Nonaktif"]
-VALID_STIKER_STATUSES = ["Belum Terpasang", "Sudah Terpasang"]
-VALID_STIKER_SIZES = ["Kecil", "Sedang", "Besar"]
-VALID_KLASIFIKASI = ["Kesalahan Pencatatan", "Tidak Ditemukan Lainnya"]
-# Sub-klasifikasi sebab BMN tidak ditemukan.
-#
-# Daftar di bawah adalah SATU sumber kebenaran, dan harus persis sama dengan
-# `SUB_KLASIFIKASI_OPTIONS` di frontend `InventoryFieldSheet.jsx` — dijaga uji
-# `tests/unit/test_sub_klasifikasi_selaras.py`.
-#
-# Kenapa dijaga: sebelumnya kedua sisi punya daftarnya sendiri dan IRISANNYA
-# NOL. Akibatnya seluruh 10 nilai yang bisa dihasilkan UI aplikasi DITOLAK saat
-# berkasnya diimpor ulang lewat Excel, sementara template Excel menawarkan
-# nilai yang UI-nya tak pernah bisa hasilkan — bahkan baris contoh di template
-# itu sendiri ("Pencatatan Ganda") ditolak validatornya sendiri.
-VALID_SUB_KLASIFIKASI_PENCATATAN = [
-    "Kesalahan Kodefikasi",
-    "Pencatatan Ganda",
-    "BMN Tercatat di Satker Lain",
-    "Kegiatan Perencanaan/Pengembangan Dicatat Sebagai BMN Tersendiri",
-    "BMN Objek Alih Status/Pemindahtanganan/Penghapusan",
-    "Penggabungan BMN Satu Kesatuan Fungsi",
-    "Kesalahan Pencatatan Pihak Ketiga",
-    # Dua di bawah melengkapi pemetaan ke 11 klasifikasi resmi DJKN menjadi
-    # 11/11 (lihat docs/SITASI-DOKUMEN-RESMI.md).
-    "Kegiatan Renovasi Dicatat Sebagai BMN Tersendiri",
-    "Kesalahan Kodefikasi/Klasifikasi (Bukan Objek Revaluasi)",
-]
-VALID_SUB_KLASIFIKASI_LAINNYA = [
-    # Tiga pertama: BAGAIMANA pencarian gagal.
-    "Tidak Ditemukan Fisiknya",
-    "Tidak Dapat Ditelusuri",
-    "Tertimpa Bangunan Lain/Beralih Fungsi",
-    # Sisanya: SEBAB barangnya lenyap — termasuk keadaan kahar. Ditambahkan
-    # atas keputusan pemilik agar kejadian tak terduga (kebakaran, bencana,
-    # pencurian) punya kategorinya sendiri, bukan menumpuk di satu ember.
-    #
-    # Catatan jujur: dua kelompok ini memang DUA SUMBU yang berbeda — satu
-    # menjawab "bagaimana kami gagal menemukannya", satu menjawab "kenapa ia
-    # tidak ada". Meleburnya ke satu daftar adalah keputusan pemilik yang
-    # diambil sadar; konsekuensinya operator memilih salah satu sudut pandang,
-    # tidak keduanya sekaligus.
-    "Hilang / Dicuri",
-    "Kebakaran",
-    "Bencana Alam",
-    "Kerusuhan / Huru-hara",
-    "Rusak Total / Hancur",
-    "Sebab Lain (Diuraikan)",
-]
-
-# Nilai yang DITAWARKAN aplikasi hari ini (UI + dropdown template Excel).
-SUB_KLASIFIKASI_DITAWARKAN = (VALID_SUB_KLASIFIKASI_PENCATATAN
-                              + VALID_SUB_KLASIFIKASI_LAINNYA)
-
-# Nilai LAMA yang dulu divalidasi impor & ditawarkan template. Tidak lagi
-# ditawarkan, tetapi tetap DITERIMA: berkas Excel dan data yang sudah terlanjur
-# memakainya tak boleh mendadak ditolak hanya karena daftarnya dirapikan.
-# Longgar saat menerima, ketat saat menawarkan.
-SUB_KLASIFIKASI_LAWAS = [
-    "Salah Kode Barang/NUP",
-    "Salah Pembukuan (SIMAK-BMN Error)",
-    "Perubahan Kondisi Belum Dicatat",
-    "Aset Sudah Dihibahkan/Dipindahtangankan",
-    "Aset Sudah Dihapuskan",
-    "Pencatatan Ganda (Double Counting)",
-    "Pemecahan/Penggabungan Belum Dicatat",
-    "Transfer Masuk/Keluar Belum Diproses",
-    # "Hilang / Dicuri", "Bencana Alam", dan "Rusak Total / Hancur" DIPROMOSIKAN
-    # kembali ke daftar yang ditawarkan (lihat VALID_SUB_KLASIFIKASI_LAINNYA),
-    # jadi tak lagi tercantum di sini — keduanya wajib saling lepas.
-    "Lainnya",
-]
-
-VALID_SUB_KLASIFIKASI_ALL = SUB_KLASIFIKASI_DITAWARKAN + SUB_KLASIFIKASI_LAWAS
-
-
-# ── Temuan pencatatan lapangan ──────────────────────────────────────────────
-# Klasifikasi yang BERDIRI SENDIRI, sengaja lepas dari `klasifikasi_tidak_
-# ditemukan`. Alasannya sederhana dan datang dari lapangan: cacat pencatatan
-# paling sering ditemukan pada barang yang JUSTRU KETEMU — kodenya tak sesuai
-# fisik, stikernya tertempel di barang lain, namanya beda dengan barangnya.
-#
-# Sebelum ini tak ada tempat menandainya. Sub-klasifikasi hanya hidup ketika
-# aset berstatus "Tidak Ditemukan", sehingga temuan pada aset yang ditemukan
-# hanya bisa dititipkan ke kolom Catatan — tidak terhitung, tidak tersaring,
-# dan hilang dari rekapitulasi.
-#
-# Penanda ini yang kelak menyuplai usul REKLASIFIKASI: kode barang yang salah
-# baru bisa diusulkan diperbaiki kalau ada yang mencatatnya saat inventarisasi.
-# Daftar ini memuat DUA macam kejadian, dan itu disengaja:
-#
-#   (a) CACAT CATATAN — catatan tak sesuai fisik (kode, stiker, nama, jumlah);
-#   (b) HAMBATAN PEMERIKSAAN — barangnya tidak bisa diperiksa saat itu, tetapi
-#       BUKAN berarti hilang (ruangan terkunci, sedang dipinjam, di bengkel).
-#
-# Meleburnya aman di sini, berbeda dengan `sub_klasifikasi`. Alasannya: penanda
-# ini NETRAL — tidak ada satu pun naskah resmi yang berubah isinya karena nilai
-# di field ini. Sub-klasifikasi menggerakkan Berita Acara, SPTJM, dan usul
-# penghapusan; kalau dua sumbu dilebur di sana, dokumen bermeterai ikut salah
-# bicara. Di sini paling jauh akibatnya adalah satu baris di rekapitulasi.
-#
-# Golongan (b) penting justru karena tanpanya operator terpaksa memilih antara
-# dua-duanya salah: menandai "Ditemukan" padahal tak diperiksa, atau "Tidak
-# Ditemukan" padahal barangnya jelas ada di tangan seseorang.
-VALID_TEMUAN_PENCATATAN = [
-    # (a) cacat catatan
-    "Kodefikasi Tidak Sesuai Fisik",
-    "Stiker Tertempel di Barang Lain",
-    "Stiker Rusak/Tidak Terbaca",
-    "NUP Ganda pada Fisik Berbeda",
-    "Nama/Spesifikasi Tidak Sesuai Fisik",
-    "Lokasi Tercatat Tidak Sesuai",
-    "Fisik Ada, Jumlah Tidak Sesuai Catatan",
-    # (b) hambatan pemeriksaan — barang belum tentu hilang
-    "Tidak Dapat Diakses (Ruangan Terkunci)",
-    "Sedang Dipinjam/Dibawa Pemegang",
-    "Sedang Diperbaiki/Di Luar Kantor",
-    "Temuan Lain (Diuraikan)",
-]
+# Domain options stay import-compatible without duplicating their values.
+from asset_options import (
+    VALID_INVENTORY_STATUSES,
+    VALID_CONDITIONS,
+    VALID_STATUSES,
+    VALID_STIKER_STATUSES,
+    VALID_STIKER_SIZES,
+    VALID_KLASIFIKASI,
+    VALID_SUB_KLASIFIKASI_PENCATATAN,
+    VALID_SUB_KLASIFIKASI_LAINNYA,
+    SUB_KLASIFIKASI_DITAWARKAN,
+    SUB_KLASIFIKASI_LAWAS,
+    VALID_SUB_KLASIFIKASI_ALL,
+    VALID_TEMUAN_PENCATATAN,
+)
 
 
 # ── Penanda tangan dokumen resmi (temuan review #26 — satu resolver lintas modul) ──

@@ -18,6 +18,9 @@ SKIP_COLLECTIONS = {
     # backup dapat menghidupkan token atau browser yang telah dicabut.
     "portal_pemegang_tokens", "portal_pemegang_sesi", "portal_pemegang_batas",
     "row_locks", "otp_store", "backup_jobs", "idempotency_keys",
+    # Durable recovery gate and transient request leases must never be restored.
+    "restore_control", "restore_write_leases",
+    "dataset_state", "batch_operations", "meili_sync_state", "export_resource_budget",
     "ws_events", "media_previews",
     # Kontrol keamanan lokal instalasi: jangan pernah ditimpa oleh arsip data
     # (terutama backup lama/kustom yang dapat membuka kembali bootstrap admin).
@@ -157,7 +160,7 @@ def collections_from_backup(zip_names):
     dipulihkan meski DB tujuan masih kosong, tanpa dapat menimpa kontrol
     keamanan lokal instalasi."""
     return sorted(n[:-5] for n in (zip_names or [])
-                  if n.endswith(".json") and n != "metadata.json"
+                  if n.endswith(".json") and n not in {"metadata.json", "backup-manifest.json"}
                   and "/" not in n and n[:-5] not in SKIP_COLLECTIONS)
 
 

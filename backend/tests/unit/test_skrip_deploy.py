@@ -182,13 +182,14 @@ class TestRollback:
         t = _teks(DEPLOY)
         assert t.index("PREV=") < t.index('git reset --hard "$DEPLOY_SHA"')
 
-    def test_kedua_gerbang_kesehatan_memanggil_pulihkan(self):
-        """Dangkal DAN mendalam — melewatkan satu berarti separuh perlindungan."""
-        t = _teks(DEPLOY)
-        assert t.count("pulihkan") >= 3   # 1 definisi + 2 pemanggilan
-        for penanda in ("health-check timeout", "deep health 503/timeout"):
-            i = t.index(penanda)
-            assert "pulihkan" in t[i:i + 500], penanda
+    def test_kedua_gerbang_memakai_exit_handler_pemulihan(self):
+        """Kedua health gate gagal ke EXIT yang sama, termasuk setelah switch."""
+        t = _kode(DEPLOY)
+        assert "health-check timeout" in t and "deep health 503/timeout" in t
+        assert "trap aman_deploy_keluar EXIT" in t
+        handler = t[t.index("aman_deploy_keluar() {"):t.index("trap aman_deploy_keluar EXIT")]
+        assert "pulihkan" in handler
+        assert '"$KODE_TERSENTUH" = 1' in handler
 
     def test_pulihkan_kembali_ke_PREV(self):
         t = _teks(DEPLOY)
@@ -282,15 +283,7 @@ class TestAnggaranGerbangKesehatan:
 
 
 class TestGerbangRestoreDeploy:
-    """Prasyarat C30 — deploy tak boleh menimpa pemulihan data yang berjalan.
-
-    `restart_backend` membunuh task restore di TENGAH wipe; sampai gerbang
-    ini ada, itu terjadi DIAM-DIAM dan meninggalkan DB separuh terisi.
-    Gerbang memeriksa job restore aktif (active_lock GLOBAL, denyut < 30
-    menit) langsung ke Mongo SEBELUM skrip menyentuh apa pun. GAGAL-BUKA
-    disengaja: pemeriksa yang rusak (mongosh hilang, URI tak terbaca) tak
-    boleh memblokir semua deploy selamanya.
-    """
+    """Restore destructive/recovery dan deployment saling mengunci tanpa TTL."""
 
     def test_fungsinya_ada_dan_dipanggil(self):
         k = _kode(DEPLOY)
@@ -308,24 +301,21 @@ class TestGerbangRestoreDeploy:
 
     def test_kueri_menyaring_job_restore_aktif_dan_segar(self):
         k = _kode(DEPLOY)
-        i = k.index("periksa_restore_aktif() {")
-        badan = k[i:k.index("\n}", i)]
-        assert "'restore'" in badan
-        assert "'GLOBAL'" in badan
-        assert "'queued'" in badan and "'running'" in badan
-        # Kesegaran denyut: tanpa filter updated_at, job macet yang tak
-        # pernah dibersihkan memblokir deploy SELAMANYA.
-        assert "updated_at" in badan
-        assert "30 minutes ago" in badan
+        i = k.index("kelola_kontrol_restore() {")
+        badan = k[i:k.index("periksa_restore_aktif()", i)]
+        assert '"restore"' in badan and '"GLOBAL"' in badan
+        assert '"queued"' in badan and '"running"' in badan
+        assert "updated_at" in badan and "timedelta(minutes=30)" in badan
+        assert "restore_control" in badan
+        assert "find_one_and_update" in badan and "DuplicateKeyError" in badan
 
-    def test_gagal_buka_bukan_gagal_tutup(self):
+    def test_status_tidak_diketahui_gagal_tertutup(self):
         k = _kode(DEPLOY)
         i = k.index("periksa_restore_aktif() {")
         badan = k[i:k.index("\n}", i)]
-        # Dua jalur lewat (mongosh hilang; URI tak terbaca) harus return 0,
-        # dan HANYA temuan restore aktif yang boleh exit 1.
-        assert badan.count("return 0") >= 2
-        assert badan.count("exit 1") == 1
+        assert 'if ! hasil="$(kelola_kontrol_restore check)"' in badan
+        assert "return 1" in badan
+        assert "return 0" not in badan
         assert "DIBATALKAN" in _teks(DEPLOY)
 
 

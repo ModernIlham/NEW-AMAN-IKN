@@ -74,7 +74,9 @@ class TestBackupSukses:
 
         async def _jalankan(job_id, *a, **k):
             await dbx.backup_jobs.update_one(
-                {"job_id": job_id}, {"$set": {"status": "completed"}})
+                {"job_id": job_id}, {"$set": {"status": "completed",
+                    "durable_verified": True, "archive_state": "archived",
+                    "arsip_nama": "backup_otomatis_20260808_020000.zip"}})
         monkeypatch.setattr(rb, "run_backup_task", _jalankan, raising=False)
 
         _jalan(rb._jalankan_backup_otomatis(7))
@@ -88,7 +90,9 @@ class TestBackupSukses:
 
         async def _jalankan(job_id, *a, **k):
             await dbx.backup_jobs.update_one(
-                {"job_id": job_id}, {"$set": {"status": "completed"}})
+                {"job_id": job_id}, {"$set": {"status": "completed",
+                    "durable_verified": True, "archive_state": "archived",
+                    "arsip_nama": "backup_otomatis_20260808_020000.zip"}})
         monkeypatch.setattr(rb, "run_backup_task", _jalankan, raising=False)
 
         _jalan(rb._jalankan_backup_otomatis(7))
@@ -100,7 +104,9 @@ class TestBackupSukses:
 
         async def _jalankan(job_id, *a, **k):
             await dbx.backup_jobs.update_one(
-                {"job_id": job_id}, {"$set": {"status": "completed"}})
+                {"job_id": job_id}, {"$set": {"status": "completed",
+                    "durable_verified": True, "archive_state": "archived",
+                    "arsip_nama": "backup_otomatis_20260808_020000.zip"}})
         monkeypatch.setattr(rb, "run_backup_task", _jalankan, raising=False)
         monkeypatch.setattr(rb, "_terapkan_retensi",
                             lambda n: dipanggil.append(n), raising=False)

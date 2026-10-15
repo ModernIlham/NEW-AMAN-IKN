@@ -1,128 +1,162 @@
-"""Mode pemeliharaan saat restore — temuan C30.
+"""Restore maintenance separates durable data safety from worker liveness.
 
-Restore mengosongkan koleksi satu per satu (`delete_many({})` lalu isi
-ulang) sementara aplikasi TETAP melayani penuh — dengan `--workers 2`,
-worker saudara tak tahu apa-apa dan tetap menerima tulisan di atas DB yang
-sedang setengah terhapus. Middleware di bawah membalas 503 untuk lalu
-lintas biasa selama restore berlangsung.
-
-DESAIN: status pemeliharaan DITURUNKAN dari dokumen job yang sudah ada —
-`db.backup_jobs.find_one({"active_lock": "GLOBAL"})` — bukan bendera baru
-yang dinyalakan/dimatikan manual. Tiga alasan, masing-masing pernah jadi
-kegagalan nyata di kelasnya:
-
-  1. Bendera manual punya kasus gagal terburuk: worker mati (OOM) di tengah
-     wipe meninggalkan aplikasi 503 SELAMANYA sampai manusia menyunting DB.
-     Di sini aturan dievaluasi saat BACA (denyut `updated_at` < 30 menit,
-     cutoff yang sama dengan `cleanup_stale_jobs`) — pemeliharaan padam
-     sendiri, tidak ada bendera yang bisa nyangkut.
-  2. Dokumen `active_lock` sudah atomik (indeks parsial unik single-flight)
-     dan `update_job` meng-`$unset`-nya di setiap status terminal — sukses,
-     gagal, maupun setelah rollback. Nol baris ditambahkan ke backup.py.
-  3. Kebal arsip buatan tangan: `backup_jobs` ada di SKIP_COLLECTIONS dan
-     tak pernah diiterasi restore, jadi ZIP yang disunting manual tak bisa
-     mewipe sumber kebenaran gerbang ini di tengah jalan. JANGAN
-     "menyederhanakan" ini menjadi dokumen bendera di koleksi lain.
+A stale heartbeat never proves a half-restored dataset is safe. restore_control
+is local, excluded from archives/reset and has no TTL. Request writer leases
+let the restore coordinator drain requests admitted just before the gate rose.
 """
+import asyncio
+import contextlib
 import time
+import uuid
+import logging
 from datetime import datetime, timezone
 
+from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
-# Jalur yang TETAP dilayani selama pemeliharaan.
-#
-# `/api/health` SENGAJA TIDAK ADA di daftar ini — dan itu inti temuannya:
-# frontend/lib/connectivity.js hanya melihat `res.ok`, jadi 503 di
-# /api/health adalah SATU-SATUNYA cara memberi tahu PWA untuk MENAHAN
-# antrean simpan luringnya. Mengecualikannya (tetap 200) membuat
-# `flushPending` menembakkan seluruh antrean ke server yang 503 dan tiap
-# item ditandai gagal beruntun — menukar satu penyakit dengan penyakit lain.
 JALUR_BEBAS = ("/health", "/api/health/deep", "/api/backup/", "/api/ws")
+_RESTORE_STATES = {"preparing", "restoring", "rolling_back", "recovery_required"}
+_CACHE_TTL = 3.0
+_cache = (0.0, False)
+logger = logging.getLogger(__name__)
 
 
-def jalur_bebas(path: str) -> bool:
+def jalur_bebas(path):
     return any((path or "").startswith(p) for p in JALUR_BEBAS)
 
 
-def pemeliharaan_dari_job(job, sekarang, batas_menit: int = 30) -> bool:
-    """MURNI. True bila job RESTORE yang aktif masih berdenyut.
-
-    Hanya `type == "restore"` — backup hanya MEMBACA; men-503-kan aplikasi
-    selama backup harian adalah regresi ketersediaan yang tak diminta
-    siapa pun. `queued` ikut dihitung: jendela antara insert dokumen di
-    start_restore dan baris pertama run_restore_task adalah justru saat
-    safety-backup membaca seluruh DB.
-    """
-    if not job or job.get("type") != "restore":
-        return False
-    if job.get("status") not in ("queued", "running"):
-        return False
-    u = job.get("updated_at")
-    if not u:
+def pemeliharaan_dari_job(job, sekarang, batas_menit=30):
+    """Legacy pre-control jobs, only; current restore uses durable control."""
+    if not job or job.get("type") != "restore" or job.get("status") not in ("queued", "running"):
         return False
     try:
-        t = datetime.fromisoformat(str(u))
+        updated = datetime.fromisoformat(str(job.get("updated_at") or ""))
+        if updated.tzinfo is None:
+            updated = updated.replace(tzinfo=timezone.utc)
+        return (sekarang - updated).total_seconds() < batas_menit * 60
     except ValueError:
         return False
-    if t.tzinfo is None:
-        t = t.replace(tzinfo=timezone.utc)
-    return (sekarang - t).total_seconds() < batas_menit * 60
 
 
-# Cache per-worker: /api/health disondir tiap event `online` peramban, dan
-# middleware ini menyentuh Mongo. TTL 3 detik membatasinya ke ≤0,33 kueri/
-# detik/worker lewat indeks parsial single-flight — TANPA TTL ini, satu
-# kueri per request untuk SELURUH aplikasi. Konsekuensi dua arah jendela
-# 3 detik diketahui: awal restore, worker lain masih melayani tulisan
-# hingga 3 detik (kecil dibanding durasi wipe; menutupnya butuh pub/sub
-# lintas-worker); akhir restore, 503 berlanjut hingga 3 detik (jinak).
-_CACHE_TTL = 3.0
-_cache = (0.0, False)
+def pemeliharaan_dari_kontrol(control):
+    return bool(control and (control.get("state") in _RESTORE_STATES
+                            or (control.get("destructive_started") is True
+                                and control.get("state") not in {"completed", "rolled_back", "aborted", "deploying"})))
 
 
-async def pemeliharaan_aktif() -> bool:
-    global _cache
-    t, nilai = _cache
-    now = time.monotonic()
-    if now - t < _CACHE_TTL:
-        return nilai
-    try:
+async def pemeliharaan_aktif_uncached(untuk_penulisan=False, database=None):
+    if database is None:
         from db import db
-        job = await db.backup_jobs.find_one(
-            {"active_lock": "GLOBAL"},
-            {"type": 1, "status": 1, "updated_at": 1})
-        nilai = pemeliharaan_dari_job(job, datetime.now(timezone.utc))
+    else:
+        db = database
+    control = await db.restore_control.find_one({"_id": "GLOBAL"})
+    if pemeliharaan_dari_kontrol(control) or (untuk_penulisan and control and control.get("state") == "deploying"):
+        return True
+    job = await db.backup_jobs.find_one({"active_lock": "GLOBAL"},
+                                        {"type": 1, "status": 1, "updated_at": 1})
+    return pemeliharaan_dari_job(job, datetime.now(timezone.utc))
+
+
+async def penulisan_ditahan(database=None):
+    return await pemeliharaan_aktif_uncached(untuk_penulisan=True, database=database)
+
+
+async def pemeliharaan_aktif():
+    global _cache
+    stamp, active = _cache
+    now = time.monotonic()
+    if now - stamp < _CACHE_TTL:
+        return active
+    try:
+        active = await pemeliharaan_aktif_uncached()
     except Exception:
-        # GAGAL-BUKA disengaja: Mongo yang tak terjangkau BUKAN pemeliharaan.
-        # Membalas 503-pemeliharaan ke semua orang membuat satu masalah
-        # koneksi menyamar jadi restore yang tak pernah ada.
-        nilai = False
-    _cache = (now, nilai)
-    return nilai
+        # Retain a known active recovery gate across Mongo outages. Otherwise
+        # unavailable Mongo is a storage failure, not evidence of restore.
+        active = _cache[1]
+    _cache = (now, active)
+    return active
+
+
+async def _lease_heartbeat(lease_id, database=None):
+    if database is None:
+        from db import db
+    else:
+        db = database
+    while True:
+        await asyncio.sleep(10)
+        try:
+            result = await db.restore_write_leases.update_one(
+                {"_id": lease_id}, {"$set": {"updated_at": datetime.now(timezone.utc)}})
+            if not result.matched_count:
+                logger.error("Writer lease disappeared while its worker is live")
+        except Exception:
+            # No TTL: an outage leaves the persisted lease blocking restore.
+            # Keep retrying heartbeat for operator observability.
+            logger.warning("Writer lease heartbeat unavailable; persisted admission remains held")
+
+
+@contextlib.asynccontextmanager
+async def writer_admission(database=None):
+    """Lease a detached writer for its ENTIRE claim/render/upload/publish life."""
+    if database is None:
+        from db import db
+    else:
+        db = database
+    lease_id, heartbeat = str(uuid.uuid4()), None
+    await db.restore_write_leases.insert_one({"_id": lease_id,
+        "kind": "background", "updated_at": datetime.now(timezone.utc)})
+    try:
+        if await penulisan_ditahan(database=db):
+            raise HTTPException(503, "Penulis latar ditahan selama restore/deploy")
+        heartbeat = asyncio.create_task(_lease_heartbeat(lease_id, database=db))
+        yield lease_id
+    finally:
+        if heartbeat:
+            heartbeat.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await heartbeat
+        with contextlib.suppress(Exception):
+            await db.restore_write_leases.delete_one({"_id": lease_id})
 
 
 class PemeliharaanMiddleware:
-    """ASGI murni (pola AktivitasMiddleware) — 503 + Retry-After selama
-    restore. WebSocket sengaja lolos (scope != http): memutus semua socket
-    massal memicu badai reconnect; konsekuensinya klien bisa menerima event
-    realtime tentang data yang sedang setengah terhapus — batas yang
-    diketahui, bukan kelalaian. OPTIONS lolos: preflight CORS tak boleh
-    dijawab 503."""
-
     def __init__(self, app):
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if (scope.get("type") != "http"
-                or scope.get("method") == "OPTIONS"
-                or jalur_bebas(scope.get("path", ""))
-                or not await pemeliharaan_aktif()):
+        if scope.get("type") != "http" or scope.get("method") == "OPTIONS" or jalur_bebas(scope.get("path", "")):
             await self.app(scope, receive, send)
             return
-        resp = JSONResponse(
-            status_code=503,
-            content={"detail": "Sistem sedang dalam pemeliharaan "
-                               "(pemulihan data). Coba lagi beberapa saat.",
-                     "pemeliharaan": True},
-            headers={"Retry-After": "60"})
-        await resp(scope, receive, send)
+        # Batch status GET reconciles durable receipts/audit and is a writer.
+        is_writer = (scope.get("method") in {"POST", "PUT", "PATCH", "DELETE"}
+                     or (scope.get("method") == "GET"
+                         and scope.get("path", "").startswith("/api/assets/batch-v2/")))
+        lease_id, heartbeat = None, None
+        try:
+            active = await pemeliharaan_aktif()
+            if is_writer and not active:
+                from db import db
+                lease_id = str(uuid.uuid4())
+                await db.restore_write_leases.insert_one({"_id": lease_id,
+                    "updated_at": datetime.now(timezone.utc)})
+                # Important: uncached second check AFTER admission registration.
+                # Either coordinator sees this lease, or this check sees gate.
+                active = await pemeliharaan_aktif_uncached(untuk_penulisan=True)
+            if active:
+                resp = JSONResponse(status_code=503,
+                    content={"detail": "Sistem sedang dalam pemeliharaan (pemulihan data). Operator memverifikasi keamanan data sebelum layanan dibuka.",
+                             "pemeliharaan": True}, headers={"Retry-After": "60"})
+                await resp(scope, receive, send)
+            else:
+                if lease_id:
+                    heartbeat = asyncio.create_task(_lease_heartbeat(lease_id))
+                await self.app(scope, receive, send)
+        finally:
+            if heartbeat:
+                heartbeat.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await heartbeat
+            if lease_id:
+                from db import db
+                with contextlib.suppress(Exception):
+                    await db.restore_write_leases.delete_one({"_id": lease_id})

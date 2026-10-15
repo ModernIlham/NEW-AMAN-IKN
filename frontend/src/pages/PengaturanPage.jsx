@@ -98,6 +98,7 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
   const [otoSaving, setOtoSaving] = useState(false);
   const [arsip, setArsip] = useState(null); // daftar berkas arsip server
   const [showRestore, setShowRestore] = useState(false);
+  const [restoreControl, setRestoreControl] = useState(null);
   const [showResetAll, setShowResetAll] = useState(false);
   // Pemantauan kuota email Resend (100/hari, 3000/bulan — dinamis dari server)
   const [email, setEmail] = useState(null);
@@ -110,6 +111,7 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
 
   const muatSistem = useCallback(() => {
     if (!isSuperAdmin) return;
+    axios.get(`${API}/backup/restore/recovery`).then(r => setRestoreControl(r.data)).catch(() => {});
     axios.get(`${API}/backup/otomatis`).then((r) => setOto(r.data)).catch(() => {});
     axios.get(`${API}/backup/arsip`).then((r) => setArsip(r.data?.items || [])).catch(() => setArsip([]));
   }, [isSuperAdmin]);
@@ -187,7 +189,7 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
   const pulihkanDariArsip = async (a) => {
     const ok = await confirm({
       title: `Pulihkan data dari ${a.nama}?`,
-      description: "SEMUA data saat ini akan DIGANTI dengan isi arsip ini. Safety backup otomatis dibuat dulu — bila gagal, data dikembalikan.",
+      description: "SEMUA data saat ini akan DIGANTI dengan isi arsip ini. Safety backup dibuat dan diverifikasi terlebih dahulu. Bila restore gagal, server mencoba rollback; layanan tetap ditahan bila recovery belum terverifikasi.",
       confirmLabel: "Lanjut", variant: "danger",
     });
     if (!ok) return;
@@ -316,6 +318,9 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
           </div>
         )}
 
+        {tab === "sistem" && restoreControl?.state === "recovery_required" && <div role="alert" className="rounded-xl border border-red-400 bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950/40 dark:text-red-200" data-testid="pengaturan-recovery-required">
+          Pemulihan memerlukan tindakan operator. Layanan tetap ditahan hingga safety snapshot dipulihkan dan diverifikasi. ID pekerjaan: {restoreControl.job_id}. Menutup hasil pekerjaan tidak membuka layanan.
+        </div>}
         {tab === "sistem" && (
           <div className="space-y-2.5">
             {/* ── 0. Pemantauan kuota email (Resend) ── */}

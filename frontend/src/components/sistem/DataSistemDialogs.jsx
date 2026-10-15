@@ -243,7 +243,7 @@ export function RestoreDialog({ open, onClose, token, onSuccess }) {
         headers: { 'Content-Type': 'multipart/form-data', 'Authorization': `Bearer ${token}` },
         timeout: 120000,
       });
-      toast.success("Proses restore dimulai di background. Anda bisa melanjutkan aktivitas.");
+      toast.success("Proses restore dimulai. Layanan tulis ditahan sampai hasil pemulihan diverifikasi; pantau progresnya.");
       onClose();
       if (onSuccess) onSuccess();
     } catch (err) {
@@ -290,7 +290,7 @@ export function RestoreDialog({ open, onClose, token, onSuccess }) {
                     <li><b>Menimpa seluruh data</b> dengan data dari file backup</li>
                   </ul>
                   <p className="text-yellow-400/90 font-medium mt-2">
-                    Jika restore gagal, data otomatis dikembalikan ke kondisi semula.
+                    Jika restore gagal, server mencoba memulihkan safety snapshot. Bila pemulihan otomatis gagal, layanan tetap ditahan sampai operator menyelesaikan recovery.
                   </p>
                 </div>
               </div>
