@@ -17,6 +17,7 @@ import subprocess
 import sys
 import time
 from urllib.request import urlopen
+from urllib.error import HTTPError
 
 APP = Path("/var/www/inventarisasi")
 MAX_OUTPUT = 48 * 1024
@@ -160,17 +161,25 @@ def collect():
         # Never print exception: a provider/driver error may include a secret URI.
         pass
     health = {"http_status": None, "ok": None, "mongodb_ms": None,
-              "gridfs_ms": None, "redis_ms": None, "index_failures": None, "maintenance": None}
+              "gridfs_ms": None, "redis_ms": None, "index_failures": None, "maintenance": None,
+              "mongodb_ok": None, "gridfs_ok": None, "redis_ok": None, "indexes_ok": None}
     try:
-        with urlopen("http://127.0.0.1:8001/api/health/deep", timeout=5) as response:
+        try:
+            response = urlopen("http://127.0.0.1:8001/api/health/deep", timeout=5)
+        except HTTPError as error:
+            response = error
+        with response:
             health["http_status"] = response.status
             payload = json.loads(response.read(65537))
         health["ok"] = bool(payload.get("ok"))
         checks = payload.get("checks") or {}
         for name in ("mongodb", "gridfs", "redis"):
+            flag = (checks.get(name) or {}).get("ok")
+            health[name + "_ok"] = flag if type(flag) is bool else None
             value = (checks.get(name) or {}).get("latency_ms")
             health[name + "_ms"] = float(value) if isinstance(value, (float, int)) and math.isfinite(value) else None
         index = checks.get("indexes") or checks.get("indeks") or {}
+        health["indexes_ok"] = index.get("ok") if type(index.get("ok")) is bool else None
         value = index.get("failure_count", index.get("gagal"))
         health["index_failures"] = value if type(value) is int else None
         health["maintenance"] = bool((checks.get("pemeliharaan") or {}).get("aktif"))
@@ -194,7 +203,7 @@ def validate_report(report):
         raise ValueError("Invalid capacity classification")
     allowed_keys = {
         "system": {"cpu_count", "architecture", "memory_total_bytes", "memory_available_bytes", "swap_total_bytes", "swap_free_bytes", "disk_total_bytes", "disk_free_bytes", "inode_total", "inode_available", "load_average", "uvicorn_gunicorn_process_count", "observed_backend_fd_count", "process_scan_truncated"},
-        "health": {"http_status", "ok", "mongodb_ms", "gridfs_ms", "redis_ms", "index_failures", "maintenance"},
+        "health": {"http_status", "ok", "mongodb_ms", "gridfs_ms", "redis_ms", "index_failures", "maintenance", "mongodb_ok", "gridfs_ok", "redis_ok", "indexes_ok"},
         "software": {"python_system", "python_backend", "node", "yarn", "mongo_binary", "redis_binary", "nginx", "meili_binary"},
         "services": set(SERVICES), "release": {"backend_git_sha", "frontend_manifest_sha256"},
         "backup": {"archive_count", "archive_total_bytes", "latest_archive_age_seconds", "archive_on_separate_device"},
@@ -253,7 +262,7 @@ def validate_report(report):
         value = report["health"][name]
         if value is not None and (type(value) not in (int, float) or not math.isfinite(value) or value < 0):
             raise ValueError("Invalid health latency")
-    for value in (report["health"]["ok"], report["health"]["maintenance"], report["system"]["process_scan_truncated"], report["backup"]["archive_on_separate_device"], report["mongo"]["readable"],
+    for value in (report["health"]["mongodb_ok"], report["health"]["gridfs_ok"], report["health"]["redis_ok"], report["health"]["indexes_ok"], report["health"]["ok"], report["health"]["maintenance"], report["system"]["process_scan_truncated"], report["backup"]["archive_on_separate_device"], report["mongo"]["readable"],
                   report["mongo"]["write_concern_acknowledged"], report["mongo"]["restore_destructive_started"]):
         if value is not None and type(value) is not bool:
             raise ValueError("Invalid inventory flag")

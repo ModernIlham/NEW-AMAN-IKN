@@ -617,7 +617,8 @@ async def _wait_writer_drain(timeout=120):
     while (await db.restore_write_leases.count_documents({})
            or await db.background_jobs.count_documents({
                "status": {"$nin": ["done", "error", "completed", "failed", "cancelled", "canceled", "dismissed", "downloaded"]},
-               "done": {"$ne": True}})
+               "done": {"$ne": True},
+               "$nor": [{"worker_protocol": "export_v1", "status": "queued"}]})
            or await db.unduhan.count_documents({"status": {"$in": ["queued", "running"]}})):
         if asyncio.get_running_loop().time() > deadline:
             raise RuntimeError("Request penulis belum selesai; restore dibatalkan sebelum wipe")

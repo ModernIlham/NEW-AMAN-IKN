@@ -29,6 +29,10 @@ SKIP_COLLECTIONS = {
     # Progress job latar bersama (ekspor async dll.) — sama transiennya dengan
     # backup_jobs; membawanya ke DB hasil restore = job "running" hantu.
     "background_jobs",
+    # Download-center jobs/claims/TTL timestamps are runtime state. Replaying
+    # them from JSON would revive ghosts and lose BSON TTL types. GridFS bytes
+    # remain in the media archive for separately authorized orphan cleanup.
+    "unduhan",
     # Kursor migrasi thumbnail WebP + stempel waktu activity-tracker —
     # runtime murni yang dibangun ulang sendiri; membawanya ke DB hasil
     # restore mengembalikan kursor migrasi ke posisi lama (audit kesegaran).

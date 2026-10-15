@@ -504,3 +504,35 @@ def test_live_current_signature_and_other_media_owners_require_blob(env, collect
     run(rb.run_backup_task("test-job", "operator"))
     job = run(database.backup_jobs.find_one({"job_id": "test-job"}))
     assert job["status"] == "failed" and "Referensi GridFS tanpa blob" in job["error"]
+
+
+def test_legacy_download_jobs_are_ignored_without_reviving_claims_or_string_ttl(env):
+    database, bucket = env
+    source = make_archive(rb.BACKUP_TEMP_DIR / "restore_test-job.zip", legacy=True, media=True)
+    fid = "0123456789abcdef01234567"
+    with zipfile.ZipFile(source, "a") as zf:
+        zf.writestr("unduhan.json", json.dumps([{
+            "unduhan_id": "archived-download", "status": "running", "active_lock": True,
+            "dibuat_oleh": "old-owner", "artifact_id": fid,
+            "created_at": "2024-01-01T00:00:00Z", "hapus_pada": "2024-01-02T00:00:00Z",
+        }]))
+    run(rb.run_restore_task("test-job", source, "operator"))
+    assert run(rb.restore_control_status())["state"] == "completed"
+    assert run(database.unduhan.count_documents({})) == 0
+    assert run(database["fs.files"].count_documents({"_id": ObjectId(fid)})) == 1
+    assert bucket.data[fid] == b"b" * 2048
+
+
+def test_backup_excludes_download_job_metadata_but_keeps_gridfs_bytes(env):
+    database, bucket = env
+    fid = ObjectId()
+    bucket.data[str(fid)] = b"download artifact bytes"
+    run(database["fs.files"].insert_one({"_id": fid, "length": len(bucket.data[str(fid)]),
+                                        "metadata": {"unduhan_id": "job-current"}}))
+    run(database.unduhan.insert_one({"unduhan_id": "job-current", "status": "done",
+                                    "artifact_id": str(fid), "created_at": datetime.now(timezone.utc)}))
+    run(rb.run_backup_task("test-job", "operator"))
+    assert run(database.backup_jobs.find_one({"job_id": "test-job"}))["status"] == "completed"
+    with zipfile.ZipFile(rb.BACKUP_TEMP_DIR / "test-job.zip") as zf:
+        assert "unduhan.json" not in zf.namelist()
+        assert zf.read(f"gridfs/{fid}.bin") == b"download artifact bytes"

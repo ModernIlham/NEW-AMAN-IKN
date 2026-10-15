@@ -126,3 +126,28 @@ def test_readonly_script_does_not_write_or_execute_mutating_commands():
     assert not [node.func.attr for node in calls if isinstance(node.func, ast.Attribute) and node.func.attr in writes]
 
     assert not [node for node in calls if isinstance(node.func, ast.Attribute) and node.func.attr == "replace" and not any(keyword.arg == "tzinfo" for keyword in node.keywords)]
+
+
+@pytest.mark.parametrize("http_status,mongo_ok,redis_ok,index_ok", [(503, False, True, True), (200, True, False, False)])
+def test_health_distinguishes_primary_failure_optional_warning_and_maintenance(report, monkeypatch, http_status, mongo_ok, redis_ok, index_ok):
+    from io import BytesIO
+    from urllib.error import HTTPError
+    body = json.dumps({"ok": mongo_ok, "checks": {
+        "mongodb": {"ok": mongo_ok, "latency_ms": 1.2, "error": "SENTINEL_SECRET"},
+        "gridfs": {"ok": mongo_ok, "latency_ms": 0.8},
+        "redis": {"ok": redis_ok, "latency_ms": 0.4},
+        "indexes": {"ok": index_ok, "gagal": int(not index_ok), "detail": ["SENTINEL_SECRET"]},
+        "pemeliharaan": {"aktif": True}}}).encode()
+    def response(*a, **k):
+        error = HTTPError("http://127.0.0.1:8001/api/health/deep", http_status, "ignored", {}, BytesIO(body))
+        if http_status == 503:
+            raise error
+        return error
+    monkeypatch.setattr(inv, "urlopen", response)
+    data = inv.collect()
+    assert data["health"]["http_status"] == http_status
+    assert data["health"]["mongodb_ok"] == mongo_ok
+    assert data["health"]["redis_ok"] == redis_ok
+    assert data["health"]["indexes_ok"] == index_ok
+    assert data["health"]["maintenance"] is True
+    assert "SENTINEL_SECRET" not in inv.validate_report(data)
