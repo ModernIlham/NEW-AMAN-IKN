@@ -32,28 +32,12 @@ from asset_fields import SCALAR_FIELD_NAMES  # noqa: E402
 from . import valuebanks as vb  # noqa: E402
 from .profiles import PROFIL, PROFIL_DEFAULT, maybe_anomali  # noqa: E402
 
-# --- Daftar pilihan sah: ambil dari shared_utils bila tersedia (adaptif),
-#     jatuh ke salinan lokal bila import gagal (mis. lingkungan tanpa env
-#     backend). Mengambil dari aplikasi membuat data ikut valid saat opsi
-#     aplikasi berubah. -----------------------------------------------------
-try:
-    from shared_utils import (  # noqa: E402
-        VALID_CONDITIONS, VALID_INVENTORY_STATUSES, VALID_KLASIFIKASI,
-        VALID_STATUSES, VALID_STIKER_SIZES, VALID_STIKER_STATUSES,
-        VALID_SUB_KLASIFIKASI_ALL,
-        VALID_TEMUAN_PENCATATAN,
-    )
-except Exception:  # pragma: no cover - fallback pertahanan
-    VALID_CONDITIONS = ["Baik", "Rusak Ringan", "Rusak Berat"]
-    VALID_STATUSES = ["Aktif", "Idle", "Maintenance", "Nonaktif"]
-    VALID_STIKER_STATUSES = ["Belum Terpasang", "Sudah Terpasang"]
-    VALID_STIKER_SIZES = ["Kecil", "Sedang", "Besar"]
-    VALID_INVENTORY_STATUSES = ["Belum Diinventarisasi", "Ditemukan",
-                                "Tidak Ditemukan", "Berlebih", "Sengketa"]
-    VALID_KLASIFIKASI = ["Kesalahan Pencatatan", "Tidak Ditemukan Lainnya"]
-    VALID_SUB_KLASIFIKASI_ALL = ["Hilang / Dicuri", "Lainnya"]
-    VALID_TEMUAN_PENCATATAN = ["Kodefikasi Tidak Sesuai Fisik",
-                               "Stiker Tertempel di Barang Lain"]
+# Pilihan domain satu sumber, tanpa mengimpor runtime DB/limiter aplikasi.
+from asset_options import (  # noqa: E402
+    VALID_CONDITIONS, VALID_INVENTORY_STATUSES, VALID_KLASIFIKASI,
+    VALID_STATUSES, VALID_STIKER_SIZES, VALID_STIKER_STATUSES,
+    VALID_SUB_KLASIFIKASI_ALL, VALID_TEMUAN_PENCATATAN,
+)
 
 
 # ─────────────────────────── helper penghasil nilai ───────────────────────────

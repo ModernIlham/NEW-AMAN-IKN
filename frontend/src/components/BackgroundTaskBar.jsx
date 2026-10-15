@@ -71,7 +71,7 @@ export default function BackgroundTaskBar({ isAdmin }) {
         timeout: 10000,
       });
       const data = r.data;
-      if (data.status === "idle" || dismissed.has(data.job_id)) {
+      if (data.status === "idle" || (dismissed.has(data.job_id) && !data.recovery_required)) {
         setJob(null);
         return;
       }
@@ -79,7 +79,7 @@ export default function BackgroundTaskBar({ isAdmin }) {
 
       // Auto-download completed backup using native browser download
       // (guaranteed to work for large files, no memory ceiling).
-      if (data.type === "backup" && data.status === "completed" && !autoDownloadRef.current.has(data.job_id)) {
+      if (data.type === "backup" && data.status === "completed" && data.download_ready !== false && !autoDownloadRef.current.has(data.job_id)) {
         autoDownloadRef.current.add(data.job_id);
         const ok = triggerNativeDownload(data.job_id, data.filename);
         if (ok) {
@@ -118,7 +118,7 @@ export default function BackgroundTaskBar({ isAdmin }) {
   }, [isAdmin, pollProgress, job?.status]);
 
   const handleDismiss = async () => {
-    if (!job?.job_id) return;
+    if (!job?.job_id || job.recovery_required) return;
     setDismissed(prev => new Set([...prev, job.job_id]));
     setJob(null);
     try {
@@ -180,16 +180,20 @@ export default function BackgroundTaskBar({ isAdmin }) {
   const isFailed = job.status === "failed";
   const isBackup = job.type === "backup";
   const isRestore = job.type === "restore";
+  const recoveryRequired = !!job.recovery_required;
+  const archiveFailed = isBackup && job.archive_state === "archive_failed";
 
   // Color schemes
-  const colors = isCompleted
+  const colors = archiveFailed
+    ? "border-amber-500/40 bg-amber-950/95 shadow-amber-900/30"
+    : isCompleted && !recoveryRequired
     ? "border-emerald-500/40 bg-emerald-950/95 shadow-emerald-900/30"
     : isFailed
     ? "border-red-500/40 bg-red-950/95 shadow-red-900/30"
     : "border-blue-500/40 bg-[#0f1729]/95 shadow-blue-900/30";
 
-  const iconColor = isCompleted ? "text-emerald-400" : isFailed ? "text-red-400" : "text-blue-400";
-  const progressBarColor = isCompleted ? "bg-emerald-500" : isFailed ? "bg-red-500" : "bg-blue-500";
+  const iconColor = archiveFailed ? "text-amber-400" : isCompleted && !recoveryRequired ? "text-emerald-400" : isFailed ? "text-red-400" : "text-blue-400";
+  const progressBarColor = archiveFailed ? "bg-amber-500" : isCompleted && !recoveryRequired ? "bg-emerald-500" : isFailed ? "bg-red-500" : "bg-blue-500";
   const Icon = isBackup ? HardDrive : Upload;
 
   if (minimized) {
@@ -200,10 +204,10 @@ export default function BackgroundTaskBar({ isAdmin }) {
         data-testid="bg-task-minimized"
       >
         {isRunning && <Loader2 className={`w-4 h-4 animate-spin ${iconColor}`} />}
-        {isCompleted && <CheckCircle2 className={`w-4 h-4 ${iconColor}`} />}
-        {isFailed && <AlertTriangle className={`w-4 h-4 ${iconColor}`} />}
+        {isCompleted && !archiveFailed && !recoveryRequired && <CheckCircle2 className={`w-4 h-4 ${iconColor}`} />}
+        {(isFailed || archiveFailed || recoveryRequired) && <AlertTriangle className={`w-4 h-4 ${iconColor}`} />}
         <span className="text-xs text-white font-medium">
-          {isBackup ? "Backup" : "Restore"} {job.progress || 0}%
+          {recoveryRequired ? "Pemulihan memerlukan tindakan" : archiveFailed ? "Arsip server gagal" : `${isBackup ? "Backup" : "Restore"} ${job.progress || 0}%`}
         </span>
         <ChevronUp className="w-3 h-3 text-gray-400" />
       </div>
@@ -227,14 +231,16 @@ export default function BackgroundTaskBar({ isAdmin }) {
           <button
             onClick={() => setMinimized(true)}
             className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+            aria-label="Sembunyikan progres"
             data-testid="bg-task-minimize"
           >
             <ChevronDown className="w-3.5 h-3.5" />
           </button>
-          {!isRunning && (
+          {!isRunning && !recoveryRequired && (
             <button
               onClick={handleDismiss}
               className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+              aria-label="Tutup hasil pekerjaan"
               data-testid="bg-task-dismiss"
             >
               <X className="w-3.5 h-3.5" />
@@ -263,8 +269,19 @@ export default function BackgroundTaskBar({ isAdmin }) {
           </span>
         </div>
 
+        {isBackup && isCompleted && <p className={`text-xs ${archiveFailed ? "text-amber-300" : "text-emerald-300"}`} data-testid="backup-archive-state">
+          {archiveFailed ? "File siap diunduh, tetapi penyimpanan arsip server gagal. Unduh file ini dan periksa ruang/izin penyimpanan server."
+            : job.archive_state === "archived" && job.durable_verified ? "File siap diunduh dan arsip server telah diverifikasi."
+            : job.archive_state === "not_requested" ? "File siap diunduh. Arsip server tidak diminta."
+            : "File siap diunduh. Status arsip server belum diverifikasi."}
+          {archiveFailed && job.archive_error ? ` ${job.archive_error}` : ""}
+        </p>}
+        {recoveryRequired && <div role="alert" className="rounded-lg border border-red-700 bg-red-900/40 p-2 text-xs text-red-200" data-testid="restore-recovery-required">
+          Pemulihan otomatis belum berhasil. Layanan tetap ditahan hingga operator memulihkan safety snapshot dan memverifikasi data. Hubungi operator server dengan ID pekerjaan {job.job_id}.
+        </div>}
+
         {/* Completed: stats + download */}
-        {isCompleted && isBackup && (
+        {isCompleted && isBackup && job.download_ready !== false && (
           <div className="space-y-2">
             {job.stats && (
               <div className="grid grid-cols-3 gap-1">

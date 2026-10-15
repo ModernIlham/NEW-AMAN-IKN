@@ -16,6 +16,13 @@ import pytest
 import pytest_asyncio
 
 
+class ContractFixture(SimpleNamespace):
+    def __repr__(self):
+        # Pytest prints fixtures on assertion failures. Keep even synthetic
+        # passwords, bearer tokens and bootstrap credentials out of artifacts.
+        return f"ContractFixture(database={self.database!r})"
+
+
 def local_url(raw, schemes):
     value = urlparse(raw)
     if value.scheme not in schemes or value.hostname not in {"localhost", "127.0.0.1", "::1"}:
@@ -83,7 +90,7 @@ async def contract():
                 })
                 users[letter] = user
                 headers[letter] = {"Authorization": "Bearer " + create_token(user["id"], user["username"])}
-            yield SimpleNamespace(db=db, fs=fs_bucket, http=http, app=app, headers=headers,
+            yield ContractFixture(db=db, fs=fs_bucket, http=http, app=app, headers=headers,
                                   users=users, password=password, bootstrap=bootstrap,
                                   database=database)
     finally:

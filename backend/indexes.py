@@ -479,6 +479,10 @@ async def create_indexes() -> None:
         # job > 7 hari (created_at BSON datetime) agar koleksi tak menumpuk.
         await _idx(db.background_jobs, "job_id", unique=True)
         await _idx(db.background_jobs, "created_at", expireAfterSeconds=7 * 86400)
+        await _idx(db.background_jobs,
+                   [("worker_protocol", 1), ("status", 1),
+                    ("available_at", 1), ("created_at", 1)],
+                   name="export_worker_queue")
         # Pusat Unduhan (routes/unduhan.py): lookup per id, daftar per pemilik
         # terbaru-dulu, dan TTL PER-DOKUMEN pada `hapus_pada` (dibuat + 30 hari,
         # expireAfterSeconds=0 = hapus tepat saat nilainya lewat) — hasil unduhan
@@ -487,6 +491,24 @@ async def create_indexes() -> None:
         await _idx(db.unduhan, "unduhan_id", unique=True)
         await _idx(db.unduhan, [("dibuat_oleh", 1), ("created_at", -1)])
         await _idx(db.unduhan, "hapus_pada", expireAfterSeconds=0)
+        # Admission Pusat Unduhan lintas worker: hitung-lalu-insert saja tidak
+        # menegakkan satu pekerjaan aktif per pemilik. Record legacy tanpa
+        # active_lock tidak dimigrasi sembarangan ketika masih berjalan.
+        await _idx(db.unduhan, [("dibuat_oleh", 1)],
+                   name="unduhan_satu_aktif_per_owner", unique=True,
+                   partialFilterExpression={"active_lock": True})
+        # Receipt batch tidak menjadi otoritas sekali-terapkan; marker CAS di
+        # aset adalah bukti penerapan. Simpan receipt lebih lama dari horizon
+        # retry7hari supaya klien dapat memeriksa hasil operasi kedaluwarsa.
+        await _idx(db.batch_operations, "expires_at", expireAfterSeconds=0,
+                   name="batch_operations_retention")
+        await _idx(db.batch_operations,
+                   [("owner_id", 1), ("kode_satker", 1), ("created_at", -1)],
+                   name="batch_operations_owner")
+        # Composite checkpoint: equal timestamps resume by stable ID.
+        for collection in (db.assets, db.surat, db.persediaan):
+            await _idx(collection, [("updated_at", 1), ("id", 1)],
+                       name="meili_updated_id")
         # ── Indeks kunci-sort/filter daftar aset yang belum tertutup (audit perf) ──
         # get_assets menawarkan sort price/condition/eselon1 (dengan tiebreak id)
         # dan filter condition/eselon/stiker_status/inventory_status. Tanpa indeks,

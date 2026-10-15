@@ -6,12 +6,17 @@ import asyncio
 import zipfile
 import logging
 import shutil
+import hashlib
+import contextlib
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Header, UploadFile, File
 from fastapi.responses import FileResponse
 from bson import ObjectId
 from pymongo.errors import DuplicateKeyError
+from pymongo import ReturnDocument
+from backup_archive import (MANIFEST_NAME, CHUNK_SIZE, digest_entry, iter_json_documents,
+                            read_json, validate_archive, write_manifest, usable_central_admin)
 
 from db import db, fs_bucket
 from auth_utils import get_current_user, _KUNCI_EFEMERAL
@@ -56,7 +61,10 @@ from backup_utils import (  # noqa: E402
 
 async def _app_collections():
     """Semua koleksi data aplikasi di DB saat ini (dinamis)."""
-    return collections_to_process(await db.list_collection_names())
+    # Mongo creates collections lazily. Export the required schema even for a
+    # new install so its own empty-data backup can pass full restore preflight.
+    names = set(await db.list_collection_names()) | {"users", "categories", "assets", "inventory_activities"}
+    return collections_to_process(names)
 
 # In-memory lock to prevent concurrent backup/restore
 _active_lock = asyncio.Lock()
@@ -216,6 +224,17 @@ async def cleanup_stale_jobs():
     progres tidak boleh dibunuh di menit ke-30 lalu lock-nya direbut proses
     lain di tengah wipe+isi ulang koleksi."""
     cutoff = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
+    stale_restores = await db.backup_jobs.find(
+        {"type": "restore", "status": {"$in": ["running", "queued"]},
+         "updated_at": {"$lt": cutoff}}, {"job_id": 1}).to_list(100)
+    for stale in stale_restores:
+        control = await db.restore_control.find_one({"_id": "GLOBAL", "job_id": stale["job_id"]})
+        if control and control.get("state") in _RESTORE_ACTIVE_STATES:
+            await db.restore_control.update_one(
+                {"_id": "GLOBAL", "job_id": stale["job_id"], "state": control["state"]},
+                {"$set": {"state": "recovery_required", "active": True,
+                          "error": "Worker lease expired; operator must stop old workers and verify recovery",
+                          "updated_at": datetime.now(timezone.utc).isoformat()}})
     await db.backup_jobs.update_many(
         {"status": {"$in": ["running", "queued"]}, "updated_at": {"$lt": cutoff}},
         {"$set": {"status": "failed", "error": "Timeout: proses terlalu lama",
@@ -228,8 +247,12 @@ async def cleanup_old_files():
     """Remove backup temp files older than 1 hour."""
     if not BACKUP_TEMP_DIR.exists():
         return
+    control = await restore_control_status()
+    protected = {control.get("source_artifact"), control.get("safety_artifact")} if control.get("state") in _RESTORE_ACTIVE_STATES else set()
     cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
     for f in BACKUP_TEMP_DIR.iterdir():
+        if f.name in protected:
+            continue
         if f.is_file():
             mtime = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
             if mtime < cutoff:
@@ -280,90 +303,83 @@ async def repair_ticket_counters():
 # ship a `gridfs/manifest.json` that records metadata + per-file IDs.
 
 async def export_gridfs(zf: zipfile.ZipFile, progress_cb=None) -> int:
-    """Stream every GridFS file into zf as `gridfs/<file_id>.bin` + return count.
-
-    progress_cb is an optional async callable(count_so_far) for progress updates.
-    """
+    """Stream every file; missing/unreadable source media fails the whole backup."""
     manifest = []
-    count = 0
     async for meta in db["fs.files"].find({}):
         file_id = str(meta["_id"])
-        out_name = f"gridfs/{file_id}.bin"
-        # Read the full file from GridFS into memory (photos are typically < 2MB each)
+        stream = await fs_bucket.open_download_stream(meta["_id"])
+        size, digest = 0, hashlib.sha256()
         try:
-            stream = await fs_bucket.open_download_stream(meta["_id"])
-            data = await stream.read()
-        except Exception as e:
-            logger.warning(f"GridFS export: skip file {file_id}: {e}")
-            continue
-        zf.writestr(out_name, data)
+            with zf.open(f"gridfs/{file_id}.bin", "w", force_zip64=True) as fp:
+                while True:
+                    chunk = await stream.readchunk()
+                    if not chunk:
+                        break
+                    fp.write(chunk)
+                    digest.update(chunk)
+                    size += len(chunk)
+                    await asyncio.sleep(0)
+        finally:
+            close = getattr(stream, "close", None)
+            if close:
+                result = close()
+                if asyncio.iscoroutine(result):
+                    await result
+        if size != int(meta.get("length", size)):
+            raise ValueError(f"GridFS berubah atau tidak lengkap saat backup: {file_id}")
         manifest.append({
-            "_id": file_id,
-            "filename": meta.get("filename", file_id),
-            "length": meta.get("length", len(data)),
+            "_id": file_id, "filename": meta.get("filename", file_id),
+            "length": size, "sha256": digest.hexdigest(),
             "chunkSize": meta.get("chunkSize", 261120),
             "uploadDate": meta.get("uploadDate").isoformat() if meta.get("uploadDate") else None,
-            "contentType": meta.get("contentType"),
-            "metadata": meta.get("metadata"),
+            "contentType": meta.get("contentType"), "metadata": meta.get("metadata"),
         })
-        count += 1
-        if count % 25 == 0:
-            if progress_cb:
-                await progress_cb(count)
-            await asyncio.sleep(0)
+        if progress_cb:
+            await progress_cb(len(manifest))
     zf.writestr("gridfs/manifest.json", json.dumps(manifest, ensure_ascii=False, default=str))
-    return count
+    return len(manifest)
 
 
 async def import_gridfs(zf: zipfile.ZipFile, progress_cb=None) -> int:
-    """Wipe existing GridFS and re-upload every file listed in gridfs/manifest.json.
+    """Reconstruct files with bounded chunks; any missing/corrupt media is fatal.
 
-    Preserves the original `_id` so that asset documents still resolve
-    (photo_gridfs_ids refer to these ObjectIds).
+    Full archive preflight must precede destructive application. This helper also
+    validates each manifest entry before its own wipe for independent callers.
     """
-    if "gridfs/manifest.json" not in zf.namelist():
-        # Legacy backup without GridFS section — skip silently.
-        return 0
-
-    # Parse manifest SEBELUM wipe (REVIEW-9 R6): manifest korup dulu meledak
-    # SETELAH GridFS dihapus → seluruh foto lenyap padahal restore koleksi
-    # "berhasil" (galat hanya jadi warning di pemanggil).
-    manifest = json.loads(zf.read("gridfs/manifest.json"))
-
-    # Wipe existing GridFS
+    # Preflight proves legacy archives without this section contain no media
+    # references. Their media set is empty; do not retain stale private blobs.
+    manifest = (read_json(zf, "gridfs/manifest.json")
+                if "gridfs/manifest.json" in zf.namelist() else [])
+    for entry in manifest:
+        name = f"gridfs/{entry['_id']}.bin"
+        result = await asyncio.to_thread(digest_entry, zf, name)
+        if result["size"] != int(entry.get("length", result["size"])):
+            raise ValueError(f"Ukuran blob tidak cocok: {name}")
+        if entry.get("sha256") and result["sha256"] != entry["sha256"]:
+            raise ValueError(f"Checksum blob tidak cocok: {name}")
     await db["fs.files"].delete_many({})
     await db["fs.chunks"].delete_many({})
-
-    restored = 0
-    gagal = 0
-    for entry in manifest:
-        file_id = entry["_id"]
-        blob_name = f"gridfs/{file_id}.bin"
-        if blob_name not in zf.namelist():
-            logger.warning(f"GridFS import: missing blob for {file_id}")
-            continue
+    for count, entry in enumerate(manifest, 1):
+        file_id = str(entry["_id"])
+        oid = ObjectId(file_id) if ObjectId.is_valid(file_id) else file_id
+        stream = fs_bucket.open_upload_stream_with_id(
+            oid, entry.get("filename") or file_id, metadata=entry.get("metadata"))
         try:
-            data = zf.read(blob_name)
-            oid = ObjectId(file_id) if ObjectId.is_valid(file_id) else file_id
-            stream = fs_bucket.open_upload_stream_with_id(
-                oid,
-                entry.get("filename") or str(file_id),
-                metadata=entry.get("metadata"),
-            )
-            await stream.write(data)
+            with zf.open(f"gridfs/{file_id}.bin") as fp:
+                while True:
+                    chunk = fp.read(CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    await stream.write(chunk)
             await stream.close()
-            restored += 1
-            if restored % 25 == 0:
-                if progress_cb:
-                    await progress_cb(restored)
-                await asyncio.sleep(0)
-        except Exception as e:
-            gagal += 1
-            logger.error(f"GridFS import: failed to restore {file_id}: {e}")
-    if gagal:
-        logger.warning(f"GridFS import: {gagal} dari {len(manifest)} berkas "
-                       f"gagal dipulihkan (sisanya sukses)")
-    return restored
+        except BaseException:
+            with contextlib.suppress(Exception):
+                await stream.abort()
+            raise
+        if progress_cb:
+            await progress_cb(count)
+        await asyncio.sleep(0)
+    return len(manifest)
 
 
 # ============================================================================
@@ -432,6 +448,8 @@ async def run_backup_task(job_id: str, username: str, arsipkan: str = ""):
             file_count = 0
             if UPLOADS_DIR.exists():
                 for file_path in UPLOADS_DIR.rglob("*"):
+                    if file_path.is_symlink():
+                        raise ValueError("Symlink dalam uploads tidak boleh diarsipkan")
                     if file_path.is_file():
                         rel_path = file_path.relative_to(UPLOADS_DIR)
                         zf.write(file_path, f"uploads/{rel_path}")
@@ -442,6 +460,8 @@ async def run_backup_task(job_id: str, username: str, arsipkan: str = ""):
             # Write metadata
             metadata = {
                 "version": APP_VERSION,
+                "archive_schema_version": 1,
+                "consistency": "application_best_effort",
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "created_by": username,
                 "collections": stats,
@@ -450,27 +470,65 @@ async def run_backup_task(job_id: str, username: str, arsipkan: str = ""):
                 "upload_files": file_count,
             }
             zf.writestr("metadata.json", json.dumps(metadata, ensure_ascii=False, indent=2))
+            await asyncio.to_thread(write_manifest, zf, stats, gridfs_count, file_count)
 
+        with zipfile.ZipFile(zip_path) as verify_zip:
+            await asyncio.to_thread(validate_archive, verify_zip, False)
         file_size = zip_path.stat().st_size
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         filename = f"backup_{timestamp}.zip"
 
         arsip_nama = ""
+        archive_error = ""
+        archive_state = "not_requested"
         if arsipkan in ("otomatis", "manual"):
-            arsip_nama = f"backup_{arsipkan}_{timestamp}.zip"
+            requested_name = f"backup_{arsipkan}_{timestamp}.zip"
+            staging = BACKUP_ARSIP_DIR / f".{requested_name}.{job_id}.part"
+            final = BACKUP_ARSIP_DIR / requested_name
+            final_published = False
             try:
-                shutil.move(str(zip_path), str(BACKUP_ARSIP_DIR / arsip_nama))
-                filename = arsip_nama
-            except Exception as e:
-                logger.warning(f"Backup [{job_id}]: gagal arsipkan ({e}) — file tetap di temp")
-                arsip_nama = ""
+                # Copy keeps the manual download available if archival fails.
+                shutil.copyfile(zip_path, staging)
+                with staging.open("rb") as fp:
+                    os.fsync(fp.fileno())
+                with zipfile.ZipFile(staging) as verify_zip:
+                    await asyncio.to_thread(validate_archive, verify_zip, False)
+                if staging.stat().st_size != file_size:
+                    raise ValueError("Ukuran arsip persisten tidak cocok")
+                if final.exists():
+                    raise FileExistsError("Nama arsip sudah digunakan; cadangan lama dipertahankan")
+                os.replace(staging, final)
+                final_published = True
+                # Verify final path is readable before durable success/retention.
+                with zipfile.ZipFile(final) as verify_zip:
+                    await asyncio.to_thread(validate_archive, verify_zip, False)
+                fd = os.open(BACKUP_ARSIP_DIR, os.O_RDONLY)
+                try:
+                    os.fsync(fd)
+                finally:
+                    os.close(fd)
+                arsip_nama, filename = requested_name, requested_name
+                archive_state = "archived"
+            except Exception as error:
+                archive_error = str(error)
+                archive_state = "archive_failed"
+                staging.unlink(missing_ok=True)
+                if final_published:
+                    # An unverifiable final artifact must never count as a valid
+                    # archive for future retention; preserve it quarantined.
+                    os.replace(final, BACKUP_ARSIP_DIR / f".{requested_name}.{job_id}.failed")
+                logger.error("Backup [%s] archival failed: %s", job_id, error)
 
         await update_job(
             job_id, status="completed", progress=100,
             message=("Backup selesai & tersimpan di arsip server." if arsip_nama
-                     else "Backup selesai! Siap diunduh."),
+                     else ("Backup siap diunduh; gagal menyimpan arsip server: " + archive_error
+                           if archive_error else "Backup selesai! Siap diunduh.")),
             filename=filename,
             arsip_nama=arsip_nama,
+            download_ready=True, archive_state=archive_state,
+            durable_verified=bool(arsip_nama), archive_error=archive_error,
+            complete=True, archive_schema_version=1,
             file_size=file_size,
             stats=stats,
             total_records=sum(v for k, v in stats.items() if k != "gridfs_files"),
@@ -492,257 +550,370 @@ async def run_backup_task(job_id: str, username: str, arsipkan: str = ""):
 # BACKGROUND RESTORE TASK
 # ============================================================================
 
-async def run_restore_task(job_id: str, zip_path: Path, username: str):
-    """Background task that restores from backup ZIP with progress tracking."""
-    from log_setup import set_job_id
-    set_job_id(job_id)   # korelasi log ke JOB, bukan request pemicu (task latar)
+# Durable gate is installation-local, excluded from backup/reset and has no TTL.
+_RESTORE_ACTIVE_STATES = {"preparing", "restoring", "rolling_back", "recovery_required"}
+_RESTORE_TERMINAL_STATES = ["completed", "rolled_back", "aborted"]
+
+
+async def restore_control_status():
+    return await db.restore_control.find_one({"_id": "GLOBAL"}, {"_id": 0}) or {}
+
+
+async def _guard_recovery():
+    control = await restore_control_status()
+    if (control.get("state") not in (None, *_RESTORE_TERMINAL_STATES)
+            or (control.get("state") is None and (control.get("active") is True
+                                                     or control.get("destructive_started") is True))):
+        raise HTTPException(409, "Pemulihan/deploy belum selesai; periksa status recovery sebelum operasi baru")
+
+
+async def _claim_restore_control(job_id, username, zip_path):
+    now = datetime.now(timezone.utc).isoformat()
     try:
-        await update_job(job_id, status="running", progress=5, message="Memvalidasi file backup...")
+        row = await db.restore_control.find_one_and_update(
+            {"_id": "GLOBAL", "$or": [{"state": {"$in": _RESTORE_TERMINAL_STATES}},
+                                         {"state": {"$exists": False}, "active": {"$ne": True},
+                                          "destructive_started": {"$ne": True}}]},
+            {"$set": {"state": "preparing", "active": True,
+                      "owner": f"restore:{job_id}", "job_id": job_id,
+                      "started_by": username, "started_at": now,
+                      "updated_at": now, "destructive_started": False,
+                      "source_artifact": zip_path.name,
+                      "safety_artifact": f"safety_data_{job_id}.zip"},
+             "$unset": {"error": "", "rollback_error": "", "verified_at": ""}},
+            upsert=True, return_document=ReturnDocument.AFTER)
+    except DuplicateKeyError:
+        raise RuntimeError("Recovery/deploy lain masih menguasai kontrol pemulihan") from None
+    if not row:
+        raise RuntimeError("Kontrol pemulihan tidak dapat diklaim")
+    from dataset_epoch import rotate_generation
+    try:
+        await rotate_generation(db, "restore_claim")
+    except BaseException as error:
+        # Claim is already durable but no destructive IO has started. Release
+        # only this owner's preflight claim; never overwrite another owner.
+        await db.restore_control.update_one(
+            {"_id": "GLOBAL", "job_id": job_id, "owner": f"restore:{job_id}",
+             "state": "preparing", "destructive_started": False},
+            {"$set": {"state": "aborted", "active": False,
+                      "error": "Dataset generation rotation failed before wipe",
+                      "updated_at": datetime.now(timezone.utc).isoformat()}})
+        raise
+    return row
 
-        # Validate ZIP structure
-        with zipfile.ZipFile(str(zip_path), 'r') as zf:
-            names = zf.namelist()
-            if "metadata.json" not in names:
-                await update_job(job_id, status="failed", error="metadata.json tidak ditemukan", message="File backup tidak valid")
-                return
 
-            metadata = json.loads(zf.read("metadata.json"))
+async def _restore_state(job_id, state, **fields):
+    result = await db.restore_control.update_one(
+        {"_id": "GLOBAL", "job_id": job_id, "state": {"$in": list(_RESTORE_ACTIVE_STATES)}},
+        {"$set": {"state": state, "active": state in _RESTORE_ACTIVE_STATES,
+                  "updated_at": datetime.now(timezone.utc).isoformat(), **fields}})
+    if not result.matched_count:
+        raise RuntimeError("Kepemilikan kontrol pemulihan hilang")
+    # Clear this worker's read cache immediately; other writers always recheck.
+    import pemeliharaan
+    pemeliharaan._cache = (0.0, False)
 
-            # Accept legacy alias names for required collections (e.g. "activities" → "inventory_activities")
-            required = ["users", "categories", "assets"]
-            missing = [c for c in required if f"{c}.json" not in names]
-            # inventory_activities may appear under legacy alias "activities.json"
-            if "inventory_activities.json" not in names and "activities.json" not in names:
-                missing.append("inventory_activities")
-            if missing:
-                await update_job(job_id, status="failed", error=f"Data tidak lengkap: {', '.join(missing)}", message="File backup tidak lengkap")
-                return
 
-        await update_job(job_id, progress=10, message="Membuat safety backup...")
+async def _wait_writer_drain(timeout=120):
+    """Gate is already raised. Request leases close the admit-vs-start race."""
+    deadline = asyncio.get_running_loop().time() + timeout
+    while (await db.restore_write_leases.count_documents({})
+           or await db.background_jobs.count_documents({
+               "status": {"$nin": ["done", "error", "completed", "failed", "cancelled", "canceled", "dismissed", "downloaded"]},
+               "done": {"$ne": True},
+               "$nor": [{"worker_protocol": "export_v1", "status": "queued"}]})
+           or await db.unduhan.count_documents({"status": {"$in": ["queued", "running"]}})):
+        if asyncio.get_running_loop().time() > deadline:
+            raise RuntimeError("Request penulis belum selesai; restore dibatalkan sebelum wipe")
+        await asyncio.sleep(0.25)
 
-        # Tutup akses portal SEBELUM safety snapshot maupun pergantian DB.
-        # Jadi rollback pun tidak mengembalikan browser yang masih terotorisasi.
-        from portal_auth import cabut_semua_portal_akses
-        await cabut_semua_portal_akses("Pemulihan backup dimulai")
 
-        # Create safety backup of current data (SEMUA koleksi aplikasi + GridFS)
-        # — ditulis ke DISK per koleksi (REVIEW-9 R6): dulu seluruh isi DB
-        # ditampung di dict memori sampai restore selesai; pada DB besar worker
-        # bisa OOM justru di tengah proses paling berisiko.
-        safety_cols = await _app_collections()
-        safety_data_zip = BACKUP_TEMP_DIR / f"safety_data_{job_id}.zip"
-        with zipfile.ZipFile(str(safety_data_zip), 'w', zipfile.ZIP_DEFLATED) as sz:
-            for i, col_name in enumerate(safety_cols):
-                # Bertahap (S2): pola lama tetap menahan puncak PER-koleksi
-                # penuh di RAM walau antar-koleksi sudah dibersihkan.
-                await _tulis_koleksi_json(
-                    sz, col_name, col_name in KEEP_ID_COLLECTIONS)
-                pct = 10 + int(((i + 1) / max(1, len(safety_cols))) * 15)
-                await update_job(job_id, progress=pct, message=f"Safety backup: {col_name}...")
-                await asyncio.sleep(0)
+async def _restore_heartbeat(job_id):
+    while True:
+        await asyncio.sleep(10)
+        await update_job(job_id)  # Progress lease never silently expires during large IO.
 
-        # Safety backup GridFS: snapshot file_ids + binaries into a temp zip so rollback can repopulate
-        safety_gridfs_zip = BACKUP_TEMP_DIR / f"safety_{job_id}.zip"
-        try:
-            with zipfile.ZipFile(str(safety_gridfs_zip), 'w', zipfile.ZIP_STORED) as sz:
-                await export_gridfs(sz)
-        except Exception as e:
-            logger.warning(f"Safety GridFS snapshot failed (will proceed without full rollback): {e}")
 
-        await update_job(job_id, progress=30, message="Memulihkan data koleksi...")
-
-        # Perform restore — iterasi SEMUA koleksi yang ADA di backup (dinamis),
-        # petakan nama legacy → kanonik, lalu wipe + isi ulang tiap koleksi.
-        restore_stats = {}
-        try:
-            with zipfile.ZipFile(str(zip_path), 'r') as zf:
-                zip_names = set(zf.namelist())
-                backup_cols = collections_from_backup(zip_names)
-                for i, zip_col in enumerate(backup_cols):
-                    col_name = LEGACY_COLLECTION_ALIASES.get(zip_col, zip_col)
-                    pct = 30 + int(((i + 1) / max(1, len(backup_cols))) * 35)
-                    await update_job(job_id, progress=pct, message=f"Restore: {col_name}...")
-
-                    await db[col_name].delete_many({})
-                    docs = json.loads(zf.read(f"{zip_col}.json"))
-                    # Normalize: pastikan setiap aset punya `version` (backfill data lama)
-                    if col_name == "assets":
-                        for d in docs:
-                            if not d.get("version"):
-                                d["version"] = 1
-                    if col_name == "satker":
-                        # C32: arsip pra-indeks-unik bisa memuat dua master
-                        # satu kode; insert_many ordered akan meledak melawan
-                        # indeks unik dan menggagalkan SELURUH restore. Ambil
-                        # yang pertama per kode; create_indexes() di akhir
-                        # restore merapikan sisanya (dedupe merge).
-                        _lihat = set()
-                        docs = [d for d in docs
-                                if not (d.get("kode_satker") in _lihat
-                                        or _lihat.add(d.get("kode_satker")))]
-                    # KEAMANAN (temuan tinjauan): jangan pernah tulis field
-                    # efemeral "Satker Aktif" ke dokumen user. Backup dari pihak
-                    # luar bisa menyelundupkan `_super_admin_asli` yang lalu
-                    # meracuni is_super_admin (backdoor ambil-alih akun pusat).
-                    if col_name == "users":
-                        for d in docs:
-                            for _k in _KUNCI_EFEMERAL:
-                                d.pop(_k, None)
-                    _amankan_portal_hasil_pulih(col_name, docs)
-                    if docs:
-                        await db[col_name].insert_many(docs)
-                    restore_stats[col_name] = len(docs)
-                    logger.info(f"Restore [{job_id}]: {col_name} = {len(docs)} docs")
+async def _apply_archive(zf, job_id):
+    """Apply prevalidated archive, batching BSON inserts and streaming all files."""
+    restore_stats = {}
+    cols = collections_from_backup(zf.namelist())
+    for index, zip_col in enumerate(cols):
+        col = LEGACY_COLLECTION_ALIASES.get(zip_col, zip_col)
+        await update_job(job_id, progress=30 + int(35 * (index + 1) / max(1, len(cols))),
+                         message=f"Restore: {col}...")
+        await db[col].delete_many({})
+        count, batch, batch_bytes, seen_satker = 0, [], 0, set()
+        with zf.open(f"{zip_col}.json") as fp:
+            for doc in iter_json_documents(fp):
+                if col == "assets" and not doc.get("version"):
+                    doc["version"] = 1
+                if col == "satker":
+                    key = doc.get("kode_satker")
+                    if key in seen_satker:
+                        continue
+                    seen_satker.add(key)
+                if col == "users":
+                    for key in _KUNCI_EFEMERAL:
+                        doc.pop(key, None)
+                batch.append(doc)
+                batch_bytes += len(json.dumps(doc, ensure_ascii=False, default=str).encode("utf-8"))
+                if len(batch) >= 200 or batch_bytes >= 4 * 1024 * 1024:
+                    _amankan_portal_hasil_pulih(col, batch)
+                    await db[col].insert_many(batch)
+                    count, batch, batch_bytes = count + len(batch), [], 0
                     await asyncio.sleep(0)
+            if batch:
+                _amankan_portal_hasil_pulih(col, batch)
+                await db[col].insert_many(batch)
+                count += len(batch)
+        restore_stats[col] = count
+    for col in await _app_collections():
+        if col not in restore_stats and col != "users":
+            await db[col].delete_many({})
+    await repair_ticket_counters()
+    await update_job(job_id, progress=70, message="Memulihkan foto (GridFS)...")
+    async def progress(n):
+        await update_job(job_id, progress=70, message=f"Memulihkan foto ({n})...")
+    gridfs_count = await import_gridfs(zf, progress_cb=progress)
+    # Safety snapshot includes uploads; replace complete directory contents too.
+    # Backup without uploads means an empty uploads tree, not stale old files.
+    if UPLOADS_DIR.exists():
+        shutil.rmtree(UPLOADS_DIR)
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    upload_count = 0
+    for name in zf.namelist():
+        if not name.startswith("uploads/") or name.endswith("/"):
+            continue
+        target = UPLOADS_DIR / name[len("uploads/"):]
+        root = UPLOADS_DIR.resolve()
+        if root not in target.resolve().parents:
+            raise ValueError("Path upload di luar root")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with zf.open(name) as source, target.open("wb") as dest:
+            shutil.copyfileobj(source, dest, CHUNK_SIZE)
+        upload_count += 1
+        await asyncio.sleep(0)
+    return restore_stats, gridfs_count, upload_count
 
-                # Koleksi yang ADA di DB tapi TIDAK ada di arsip ikut
-                # DIKOSONGKAN (audit kesegaran): koleksi Mongo baru terbentuk
-                # pada tulisan pertama sehingga arsip lama tak memuat
-                # .json-nya — tanpa langkah ini jurnal/register era baru
-                # (mis. transaksi_persediaan, penilaian_koreksi) selamat utuh
-                # dan bercampur dengan data hasil pemulihan point-in-time.
-                # `users` dikecualikan: arsip tanpa users tak boleh mengunci
-                # semua akun (termasuk admin yang sedang memulihkan).
-                restored_names = {LEGACY_COLLECTION_ALIASES.get(c, c)
-                                  for c in backup_cols}
-                sisa = [n for n in collections_to_process(
-                            await db.list_collection_names())
-                        if n not in restored_names and n != "users"]
-                for name in sisa:
-                    res = await db[name].delete_many({})
-                    if res.deleted_count:
-                        logger.info(f"Restore [{job_id}]: {name} dikosongkan "
-                                    f"({res.deleted_count} dok di luar arsip)")
 
-                # Backup lama tidak membawa counters.json — bangun ulang sequence
-                # tiket dari ticket_number kegiatan yang barusan direstore agar
-                # nomor tiket baru tidak duplikat.
-                await repair_ticket_counters()
-
-                # Restore GridFS (photos stored outside regular collections)
-                await update_job(job_id, progress=70, message="Memulihkan foto (GridFS)...")
-                gridfs_restored = 0
-                try:
-                    async def _gr_progress(n):
-                        await update_job(job_id, progress=70, message=f"Memulihkan foto ({n})...")
-                    gridfs_restored = await import_gridfs(zf, progress_cb=_gr_progress)
-                    logger.info(f"Restore [{job_id}]: gridfs = {gridfs_restored} files")
-                except Exception as e:
-                    logger.warning(f"Restore [{job_id}] GridFS import warning: {e}")
-
-                # Restore upload files
-                await update_job(job_id, progress=85, message="Memulihkan file uploads...")
-                upload_files_restored = 0
-                uploads_root = UPLOADS_DIR.resolve()
-                for name in zf.namelist():
-                    if name.startswith("uploads/") and not name.endswith("/"):
-                        rel_path = name[len("uploads/"):]
-                        target = (UPLOADS_DIR / rel_path).resolve()
-                        # Cegah zip-slip / path traversal: target WAJIB di dalam
-                        # UPLOADS_DIR (tolak entri absolut atau ber-"..").
-                        if uploads_root != target and uploads_root not in target.parents:
-                            logger.warning(f"Restore [{job_id}] tolak entri di luar uploads: {name}")
-                            continue
-                        target.parent.mkdir(parents=True, exist_ok=True)
-                        with open(target, 'wb') as f:
-                            f.write(zf.read(name))
-                        upload_files_restored += 1
-                        if upload_files_restored % 50 == 0:
-                            await asyncio.sleep(0)
-
-        except Exception as e:
-            # ROLLBACK
-            logger.error(f"Restore [{job_id}] failed, rolling back: {e}")
-            await update_job(job_id, progress=90, message="Restore gagal, mengembalikan data...")
+async def _verify_applied(zf, stats):
+    usable_admin = False
+    async for user in db.users.find({"role": "admin"}):
+        if usable_central_admin(user):
+            usable_admin = True
+            break
+    if not usable_admin:
+        raise ValueError("Verifikasi hasil restore: tidak ada admin pusat aktif yang dapat login")
+    for col, expected in stats.items():
+        # Ticket repair intentionally creates missing/maxes counters.
+        actual = await db[col].count_documents({})
+        if (col != "counters" and actual != expected) or (col == "counters" and actual < expected):
+            raise ValueError(f"Verifikasi jumlah {col} gagal: {actual} != {expected}")
+    if "gridfs/manifest.json" not in zf.namelist():
+        if await db["fs.files"].count_documents({}) or await db["fs.chunks"].count_documents({}):
+            raise ValueError("GridFS legacy hasil restore seharusnya kosong")
+    else:
+        manifest = read_json(zf, "gridfs/manifest.json")
+        if await db["fs.files"].count_documents({}) != len(manifest):
+            raise ValueError("Jumlah GridFS hasil restore tidak cocok")
+        for entry in manifest:
+            fid = str(entry["_id"])
+            oid = ObjectId(fid) if ObjectId.is_valid(fid) else fid
+            stream = await fs_bucket.open_download_stream(oid)
+            actual = hashlib.sha256()
+            size = 0
             try:
-                # Kembalikan SEMUA koleksi dari snapshot safety di disk
-                with zipfile.ZipFile(str(safety_data_zip), 'r') as sz:
-                    for name in sz.namelist():
-                        if not name.endswith(".json"):
-                            continue
-                        col_name = name[:-5]
-                        docs = json.loads(sz.read(name))
-                        _amankan_portal_hasil_pulih(col_name, docs)
-                        await db[col_name].delete_many({})
-                        if docs:
-                            await db[col_name].insert_many(docs)
-                        await asyncio.sleep(0)
-                # Rollback GridFS
-                if safety_gridfs_zip.exists():
-                    with zipfile.ZipFile(str(safety_gridfs_zip), 'r') as sz:
-                        await import_gridfs(sz)
-                logger.info(f"Restore [{job_id}] rollback completed")
-            except Exception as rb_err:
-                logger.error(f"Restore [{job_id}] rollback also failed: {rb_err}")
+                while True:
+                    chunk = await stream.readchunk()
+                    if not chunk:
+                        break
+                    actual.update(chunk)
+                    size += len(chunk)
+            finally:
+                close = getattr(stream, "close", None)
+                if close:
+                    result = close()
+                    if asyncio.iscoroutine(result):
+                        await result
+            expected = await asyncio.to_thread(digest_entry, zf, f"gridfs/{fid}.bin")
+            if expected != {"size": size, "sha256": actual.hexdigest()}:
+                raise ValueError(f"Verifikasi checksum GridFS gagal: {fid}")
+    for name in zf.namelist():
+        if name.startswith("uploads/") and not name.endswith("/"):
+            actual, size = hashlib.sha256(), 0
+            with (UPLOADS_DIR / name[8:]).open("rb") as fp:
+                while True:
+                    chunk = fp.read(CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    actual.update(chunk)
+                    size += len(chunk)
+            if await asyncio.to_thread(digest_entry, zf, name) != {"size": size, "sha256": actual.hexdigest()}:
+                raise ValueError(f"Verifikasi upload gagal: {name}")
 
-            await update_job(job_id, status="failed", error=str(e), message="Restore gagal. Data telah dikembalikan ke kondisi semula.")
-            return
-        finally:
-            # Always cleanup safety snapshot zips
-            if safety_gridfs_zip.exists():
-                safety_gridfs_zip.unlink(missing_ok=True)
-            if safety_data_zip.exists():
-                safety_data_zip.unlink(missing_ok=True)
 
-        # Pemetaan dalam arsip dapat lebih tua daripada pencabutan terakhir.
-        # Pemulihan data bukan persetujuan membuka akses; admin verifikasi ulang.
-        await cabut_semua_portal_akses("Verifikasi ulang setelah pemulihan backup")
+async def _invalidate_restored_projections():
+    """Await cross-worker invalidation before reopening a replaced dataset."""
+    import shared_utils
+    import redis_utils
+    for cache in shared_utils._CACHE_LOCAL.values():
+        cache.clear()
+    if redis_utils.redis_aktif():
+        client = redis_utils._get_client()
+        for namespace in shared_utils._CACHE_LOCAL:
+            # Deliberately do not use best-effort fire-and-forget _bump here.
+            await client.incr(redis_utils._GENP + namespace)
+    from meili_utils import invalidate_after_restore
+    await invalidate_after_restore(database=db)
 
-        # Rebuild indexes
-        await update_job(job_id, progress=95, message="Membangun ulang index database...")
+
+async def _finish_recovered_data(zf, stats):
+    from portal_auth import cabut_semua_portal_akses
+    await cabut_semua_portal_akses("Verifikasi ulang setelah pemulihan backup", database=db)
+    await _verify_applied(zf, stats)
+    from indexes import create_indexes, _KEGAGALAN_INDEKS
+    await create_indexes()
+    if _KEGAGALAN_INDEKS:
+        raise RuntimeError("Index pasca-restore gagal; layanan tetap ditahan")
+    from shared_utils import bersihkan_penanda_migrasi
+    await bersihkan_penanda_migrasi()
+    await _invalidate_restored_projections()
+    # Rollback/recovery may rotate more recently than the initial claim. Allow
+    # all workers to expire their local epoch lookup before reopening reads.
+    import shared_utils
+    await asyncio.sleep(shared_utils._CACHE_EPOCH_TTL + 0.05)
+
+
+async def recover_restore(job_id, username):
+    """Operator recovery uses retained safety archive; never blindly clears gate."""
+    control = await restore_control_status()
+    if control.get("job_id") != job_id or control.get("state") != "recovery_required":
+        raise HTTPException(409, "Tidak ada recovery_required untuk job ini")
+    safety_name = control.get("safety_artifact", "")
+    if safety_name != f"safety_data_{job_id}.zip":
+        raise RuntimeError("Nama safety artifact tidak valid")
+    safety = BACKUP_TEMP_DIR / safety_name
+    with zipfile.ZipFile(safety) as zf:
+        await asyncio.to_thread(validate_archive, zf, False, True)
+    claim = await db.restore_control.update_one(
+        {"_id": "GLOBAL", "job_id": job_id, "state": "recovery_required"},
+        {"$set": {"state": "rolling_back", "active": True,
+                  "recovered_by": username}})
+    if not claim.modified_count:
+        raise HTTPException(409, "Recovery sudah diklaim operator lain")
+    try:
+        await _wait_writer_drain()
+        from dataset_epoch import rotate_generation
+        await rotate_generation(db, "restore_recovery")
+        with zipfile.ZipFile(safety) as zf:
+            stats, _, _ = await _apply_archive(zf, job_id)
+            await _finish_recovered_data(zf, stats)
+        await update_job(job_id, status="failed", recovery_required=False,
+                         message="Recovery terverifikasi; safety snapshot berhasil dipulihkan")
+        await _restore_state(job_id, "rolled_back", verified_at=datetime.now(timezone.utc).isoformat())
+        # Artifacts retained for operator review; cleanup only after terminal.
+        return {"ok": True, "state": "rolled_back", "job_id": job_id}
+    except BaseException as error:
+        await _restore_state(job_id, "recovery_required", rollback_error=str(error))
+        raise
+
+
+async def run_restore_task(job_id: str, zip_path: Path, username: str):
+    """Validate completely, snapshot, then replace; unsafe failure stays closed."""
+    from log_setup import set_job_id
+    set_job_id(job_id)
+    destructive, claimed, verified_terminal = False, False, False
+    safety_data_zip = BACKUP_TEMP_DIR / f"safety_data_{job_id}.zip"
+    heartbeat = None
+    try:
+        await update_job(job_id, status="running", progress=5, message="Memvalidasi seluruh file backup...")
+        with zipfile.ZipFile(zip_path) as zf:
+            preflight = await asyncio.to_thread(validate_archive, zf)
+        await _claim_restore_control(job_id, username, zip_path)
+        claimed = True
+        heartbeat = asyncio.create_task(_restore_heartbeat(job_id))
+        await _wait_writer_drain()
+        # Let all workers expire their negative read-maintenance cache before
+        # touching data. Mutating admission already checks uncached above.
+        import pemeliharaan
+        await asyncio.sleep(pemeliharaan._CACHE_TTL + 0.05)
+        from portal_auth import cabut_semua_portal_akses
+        await cabut_semua_portal_akses("Pemulihan backup dimulai", database=db)
+        safety_cols, safety_stats = await _app_collections(), {}
+        with zipfile.ZipFile(safety_data_zip, "w", zipfile.ZIP_DEFLATED) as sz:
+            for col_name in safety_cols:
+                safety_stats[col_name] = await _tulis_koleksi_json(sz, col_name, col_name in KEEP_ID_COLLECTIONS)
+                await update_job(job_id, progress=15, message=f"Safety backup: {col_name}...")
+            # Safety backup GridFS is mandatory; errors abort BEFORE first wipe.
+            gridfs = await export_gridfs(sz)
+            uploads = 0
+            if UPLOADS_DIR.exists():
+                for source in UPLOADS_DIR.rglob("*"):
+                    if source.is_symlink():
+                        raise ValueError("Symlink dalam uploads tidak boleh dipulihkan")
+                    if source.is_file():
+                        sz.write(source, "uploads/" + source.relative_to(UPLOADS_DIR).as_posix())
+                        uploads += 1
+            sz.writestr("metadata.json", json.dumps({"version": APP_VERSION,
+                        "created_by": username, "purpose": "restore_safety"}))
+            await asyncio.to_thread(write_manifest, sz, safety_stats, gridfs, uploads)
+        with safety_data_zip.open("rb") as safety_file:
+            os.fsync(safety_file.fileno())
+        with zipfile.ZipFile(safety_data_zip) as sz:
+            await asyncio.to_thread(validate_archive, sz, False, True)
+        # Persist BEFORE destructive IO. A killed process never auto-opens data.
+        from dataset_epoch import rotate_generation
+        await _restore_state(job_id, "restoring", destructive_started=True)
+        destructive = True
         try:
-            from indexes import create_indexes
-            await create_indexes()
-        except Exception as e:
-            logger.warning(f"Index rebuild warning: {e}")
-
-        # Penanda migrasi startup (S6): `app_runtime` ada di SKIP_COLLECTIONS
-        # sehingga TIDAK dikosongkan restore — tanpa pembersihan ini, DB hasil
-        # pemulihan arsip lama membawa penanda DB sebelumnya dan backfill
-        # (mis. normalisasi "Sudah Diinventarisasi", yang tak punya jalur
-        # lazy) tak pernah jalan lagi. Backfill jalan ulang pada restart
-        # berikutnya — persis perilaku sebelum penanda ada.
-        try:
-            from shared_utils import bersihkan_penanda_migrasi
-            n_penanda = await bersihkan_penanda_migrasi()
-            if n_penanda:
-                logger.info(f"Restore [{job_id}]: {n_penanda} penanda migrasi dibersihkan (backfill jalan ulang saat restart)")
-        except Exception as e:
-            logger.warning(f"Pembersihan penanda migrasi pasca-restore gagal: {e}")
-
-        # Reindex Meilisearch (REVIEW-9 R6): isi DB baru saja diganti total —
-        # tanpa ini hasil pencarian menunjuk data pra-restore. Best-effort.
-        try:
-            from meili_utils import meili_aktif, reindex_semua
-            if meili_aktif():
-                await update_job(job_id, progress=97,
-                                 message="Reindex Meilisearch...")
-                await reindex_semua()
-        except Exception as e:
-            logger.warning(f"Meili reindex pasca-restore gagal (non-fatal): {e}")
-
-        await update_job(
-            job_id, status="completed", progress=100,
-            message="Data berhasil dipulihkan!",
-            restore_stats=restore_stats,
-            total_restored=sum(restore_stats.values()),
-            gridfs_files_restored=gridfs_restored,
-            upload_files_restored=upload_files_restored,
-            backup_metadata={
-                "created_at": metadata.get("created_at"),
-                "created_by": metadata.get("created_by"),
-                "version": metadata.get("version"),
-            },
-        )
-        logger.info(f"Restore [{job_id}] complete: {sum(restore_stats.values())} records + {gridfs_restored} gridfs files")
-
-    except Exception as e:
-        logger.error(f"Restore [{job_id}] unexpected error: {e}")
-        await update_job(job_id, status="failed", error=str(e), message=f"Error: {str(e)}")
+            with zipfile.ZipFile(zip_path) as zf:
+                stats, gridfs, uploads = await _apply_archive(zf, job_id)
+                await _finish_recovered_data(zf, stats)
+            await update_job(job_id, status="completed", progress=100,
+                             message="Data berhasil dipulihkan dan diverifikasi!",
+                             restore_stats=stats, total_restored=sum(stats.values()),
+                             gridfs_files_restored=gridfs, upload_files_restored=uploads,
+                             recovery_required=False, backup_metadata=preflight["metadata"])
+            await _restore_state(job_id, "completed", verified_at=datetime.now(timezone.utc).isoformat())
+            verified_terminal = True
+        except BaseException as error:
+            await _restore_state(job_id, "rolling_back", error=str(error))
+            try:
+                await rotate_generation(db, "restore_rollback")
+                with zipfile.ZipFile(safety_data_zip) as sz:
+                    await asyncio.to_thread(validate_archive, sz, False, True)
+                    old_stats, _, _ = await _apply_archive(sz, job_id)
+                    await _finish_recovered_data(sz, old_stats)
+                await update_job(job_id, status="failed", error=str(error), recovery_required=False,
+                                 message="Restore gagal; safety snapshot telah dipulihkan dan diverifikasi.")
+                await _restore_state(job_id, "rolled_back", verified_at=datetime.now(timezone.utc).isoformat())
+                verified_terminal = True
+            except BaseException as rollback_error:
+                await _restore_state(job_id, "recovery_required", error=str(error), rollback_error=str(rollback_error))
+                await update_job(job_id, status="failed", error=str(error),
+                                 rollback_error=str(rollback_error), recovery_required=True,
+                                 message="Restore dan rollback gagal. Layanan ditahan; operator wajib menjalankan recovery.")
+            if isinstance(error, asyncio.CancelledError):
+                raise
+    except BaseException as error:
+        if claimed and not destructive:
+            await _restore_state(job_id, "aborted", error=str(error))
+            verified_terminal = True
+        await update_job(job_id, status="failed", error=str(error),
+                         message=f"Restore dibatalkan sebelum wipe: {error}" if not destructive
+                         else "Pemulihan terhenti; periksa status recovery sebelum membuka layanan.")
+        if isinstance(error, asyncio.CancelledError):
+            raise
     finally:
-        # Cleanup uploaded zip
-        if zip_path.exists():
+        if heartbeat:
+            heartbeat.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await heartbeat
+        # Never delete source or safety files while recovery is unresolved.
+        if verified_terminal or not claimed:
             zip_path.unlink(missing_ok=True)
+            safety_data_zip.unlink(missing_ok=True)
 
 
 # ============================================================================
@@ -768,6 +939,7 @@ async def start_backup(authorization: str = Header(None), arsipkan: bool = False
     """
     user = await require_super_admin(authorization)
     await cleanup_stale_jobs()
+    await _guard_recovery()
     await cleanup_old_files()
 
     # Fast-path (ramah): tolak cepat bila ada job aktif; gerbang ATOMIK ada di
@@ -812,6 +984,7 @@ async def start_restore(
     user = await require_super_admin(authorization)
     _tolak_bila_act_as(x_satker_aktif)
     await cleanup_stale_jobs()
+    await _guard_recovery()
 
     if not file.filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="File harus berformat ZIP")
@@ -828,11 +1001,16 @@ async def start_restore(
     # dulu; itu vektor OOM di VPS kecil.
     zip_path = BACKUP_TEMP_DIR / f"restore_{job_id}.zip"
     try:
+        upload_bytes = 0
+        upload_budget = min(100 * 1024 ** 3, max(0, shutil.disk_usage(BACKUP_TEMP_DIR).free - 200 * 1024 ** 2))
         with open(zip_path, 'wb') as f:
             while True:
                 chunk = await file.read(1 << 20)  # 1 MB
                 if not chunk:
                     break
+                upload_bytes += len(chunk)
+                if upload_bytes > upload_budget:
+                    raise ValueError("Berkas backup melebihi ruang disk aman atau batas ukuran")
                 f.write(chunk)
     except Exception:
         logger.exception("Restore: gagal menyimpan file upload")
@@ -963,6 +1141,9 @@ async def dismiss_job(job_id: str, authorization: str = Header(None)):
         {"job_id": job_id, "status": {"$in": ["completed", "failed"]}},
         {"$set": {"status": "dismissed", "updated_at": datetime.now(timezone.utc).isoformat()}}
     )
+    control = await restore_control_status()
+    if control.get("job_id") == job_id and control.get("state") in _RESTORE_ACTIVE_STATES:
+        return {"ok": True, "recovery_required": True}
     # Cleanup file
     for pattern in [f"{job_id}.zip", f"restore_{job_id}.zip"]:
         p = BACKUP_TEMP_DIR / pattern
@@ -1026,6 +1207,11 @@ def _terapkan_retensi(retensi: int):
 
 async def _jalankan_backup_otomatis(retensi: int):
     """Satu siklus backup otomatis: job + tunggu selesai + terapkan retensi."""
+    try:
+        await _guard_recovery()
+    except HTTPException:
+        await db.report_settings.update_one({"type": "backup_otomatis"}, {"$set": {"terakhir": ""}})
+        return
     job_id = str(uuid.uuid4())[:12]
     try:
         await db.backup_jobs.insert_one({
@@ -1039,14 +1225,19 @@ async def _jalankan_backup_otomatis(retensi: int):
     except DuplicateKeyError:
         # Ada backup/restore aktif — lewati siklus otomatis ini (bukan galat).
         logger.info("Backup otomatis dilewati: ada proses backup/restore aktif")
+        await db.report_settings.update_one({"type": "backup_otomatis"}, {"$set": {"terakhir": ""}})
         return
     await run_backup_task(job_id, "backup-otomatis", arsipkan="otomatis")
     # Terapkan retensi HANYA bila backup SUKSES — kalau gagal, JANGAN pangkas
     # arsip lama (menghindari kehilangan cadangan yang masih valid saat backup
     # baru gagal, mis. disk penuh).
     job = await db.backup_jobs.find_one(
-        {"job_id": job_id}, {"_id": 0, "status": 1, "message": 1}) or {}
-    berhasil = job.get("status") == "completed"
+        {"job_id": job_id}, {"_id": 0, "status": 1, "message": 1, "durable_verified": 1,
+                             "archive_state": 1, "arsip_nama": 1}) or {}
+    berhasil = (job.get("status") == "completed"
+                and job.get("durable_verified") is True
+                and job.get("archive_state") == "archived"
+                and nama_arsip_valid(job.get("arsip_nama")))
 
     # ── HASIL, terpisah dari KLAIM (temuan C5 tinjauan 2026-08) ─────────────
     #
@@ -1242,6 +1433,7 @@ async def restore_dari_arsip(nama: str, authorization: str = Header(None),
     user = await require_super_admin(authorization)
     _tolak_bila_act_as(x_satker_aktif)
     await cleanup_stale_jobs()
+    await _guard_recovery()
     if not nama_arsip_valid(nama):
         raise HTTPException(status_code=400, detail="Nama berkas arsip tidak dikenal")
     sumber = BACKUP_ARSIP_DIR / nama
@@ -1274,3 +1466,19 @@ async def restore_dari_arsip(nama: str, authorization: str = Header(None),
     _track_bg(asyncio.create_task(run_restore_task(job_id, zip_path, user.get("username"))))
     logger.info(f"Restore dari arsip {nama} dimulai oleh {user.get('username')}")
     return {"job_id": job_id, "message": "Proses restore dari arsip dimulai di background"}
+
+
+@backup_router.get("/restore/recovery")
+async def get_restore_recovery(authorization: str = Header(None)):
+    await require_super_admin(authorization)
+    return await restore_control_status()
+
+
+@backup_router.post("/restore/recovery/{job_id}")
+async def retry_restore_recovery(job_id: str, confirm_workers_stopped: bool = False, authorization: str = Header(None),
+                                  x_satker_aktif: str = Header(default="", alias="X-Satker-Aktif")):
+    user = await require_super_admin(authorization)
+    _tolak_bila_act_as(x_satker_aktif)
+    if not confirm_workers_stopped:
+        raise HTTPException(400, "Operator wajib menghentikan worker lama sebelum recovery; gunakan CLI recovery")
+    return await recover_restore(job_id, user.get("username"))

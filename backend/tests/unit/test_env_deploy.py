@@ -186,9 +186,14 @@ def test_alur_deploy_stdin_sukses_rollback_dan_gagal_build(tmp_path, mode):
     app = tmp_path / "aplikasi"
     (app / "backend").mkdir(parents=True)
     (app / "frontend" / "build").mkdir(parents=True)
-    (app / "backend" / ".env").write_text("ENV_UJI=backend\n")
+    backend_env = "MONGO_URL=mongodb://invalid.test/\nENV_UJI=backend\n"
+    (app / "backend" / ".env").write_text(backend_env)
     (app / "frontend" / ".env").write_text("ENV_UJI=frontend\n")
     (app / "frontend" / "build" / "index.html").write_text("bundel lama")
+    (app / "frontend" / "build" / "asset-manifest.json").write_text('{"files":{}}')
+    (app / "scripts").mkdir()
+    (app / "scripts" / "retain_static_assets.py").write_text(
+        (AKAR / "scripts" / "retain_static_assets.py").read_text())
     target = "a" * 40
     # Hanya batas eksternal dimock. Snapshot/restore/trap/cp/mv/rm yang
     # berjalan adalah implementasi produksi dengan data dan direktori uji.
@@ -203,12 +208,20 @@ git() {
 mongosh() { echo 0; }
 sudo() { return 0; }
 sleep() { return 0; }
-curl() { test "$MODE_UJI" != backend_gagal; }
+jumlah_health_uji=0
+curl() {
+  if [ "$MODE_UJI" = backend_gagal ] && [ "$jumlah_health_uji" -lt 45 ]; then
+    jumlah_health_uji=$((jumlah_health_uji + 1))
+    return 1
+  fi
+  return 0
+}
 yarn() {
   if [ "$1" = build ]; then
     [ "$MODE_UJI" != frontend_gagal ] || return 9
     mkdir -p build.new
     printf 'bundel baru' > build.new/index.html
+    printf '{"files":{}}' > build.new/asset-manifest.json
   fi
 }
 mktemp() {
@@ -226,7 +239,7 @@ mktemp() {
     assert hasil.returncode == (0 if mode == "sukses" else 1 if mode == "backend_gagal" else 9), hasil.stderr
     if mode == "backend_gagal":
         assert "ROLLBACK selesai" in hasil.stderr
-    assert (app / "backend" / ".env").read_text() == "ENV_UJI=backend\n"
+    assert (app / "backend" / ".env").read_text() == backend_env
     assert (app / "frontend" / ".env").read_text() == "ENV_UJI=frontend\n"
     assert (app / "frontend" / "build" / "index.html").read_text() == (
         "bundel baru" if mode == "sukses" else "bundel lama")

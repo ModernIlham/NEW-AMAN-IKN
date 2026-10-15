@@ -183,6 +183,13 @@ class _DbPencatat:
         self._job = job
 
     @property
+    def restore_control(self):
+        class _K:
+            async def find_one(self, *a, **kw):
+                return None
+        return _K()
+
+    @property
     def backup_jobs(self):
         induk = self
 

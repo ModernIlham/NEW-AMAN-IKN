@@ -7,8 +7,22 @@ TTLCache lokal per-worker.
 """
 import asyncio
 
+import pytest
+from mongomock_motor import AsyncMongoMockClient
+
 import redis_utils as r
 import shared_utils as su
+
+
+@pytest.fixture(autouse=True)
+def isolated_epoch(monkeypatch):
+    monkeypatch.setattr(su, "db", AsyncMongoMockClient()["cache_epoch_test"])
+    monkeypatch.setattr(su, "_cache_epoch_state", (0.0, None, None))
+
+
+async def set_after_query(namespace, key, value):
+    await su.cache_get(namespace, key)
+    await su.cache_set(namespace, key, value)
 
 
 # ── Feature flag nonaktif di test ───────────────────────────────────────────
@@ -37,7 +51,7 @@ def test_cache_set_get_lokal():
     # miss awal
     assert run(su.cache_get("stats", "kk")) is None
     # set lalu get (jalur lokal karena Redis nonaktif)
-    run(su.cache_set("stats", "kk", {"total_assets": 7}))
+    run(set_after_query("stats", "kk", {"total_assets": 7}))
     assert run(su.cache_get("stats", "kk")) == {"total_assets": 7}
 
 
@@ -45,15 +59,15 @@ def test_cache_nilai_kosong_bukan_miss():
     run = asyncio.run
     su._cache_categories.clear()
     # Nilai [] (kategori kosong) valid — HARUS dikembalikan, bukan dianggap miss.
-    run(su.cache_set("categories", "all", []))
+    run(set_after_query("categories", "all", []))
     assert run(su.cache_get("categories", "all")) == []
 
 
 def test_invalidate_membersihkan_cache_lokal():
     run = asyncio.run
-    run(su.cache_set("stats", "x", {"n": 1}))
-    run(su.cache_set("filter_opts", "y", {"locations": []}))
-    run(su.cache_set("analytics", "z", {"by_category": []}))
+    run(set_after_query("stats", "x", {"n": 1}))
+    run(set_after_query("filter_opts", "y", {"locations": []}))
+    run(set_after_query("analytics", "z", {"by_category": []}))
     su.invalidate_asset_cache()
     assert run(su.cache_get("stats", "x")) is None
     assert run(su.cache_get("filter_opts", "y")) is None
@@ -62,7 +76,7 @@ def test_invalidate_membersihkan_cache_lokal():
 
 def test_invalidate_kategori():
     run = asyncio.run
-    run(su.cache_set("categories", "all", [{"id": "1"}]))
+    run(set_after_query("categories", "all", [{"id": "1"}]))
     su.invalidate_category_cache()
     assert run(su.cache_get("categories", "all")) is None
 

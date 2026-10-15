@@ -1,0 +1,71 @@
+# Strictly read-only; publish only validated JSON through the Checks API.
+name: Inventaris VPS (sanitized)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read fixed-path inventory via SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$VPS_HOST" ] || [ -z "$VPS_USER" ] || [ -z "$VPS_SSH_KEY" ]; then
+            echo '::error::VPS access configuration is incomplete.'
+            exit 1
+          fi
+          key_path="$RUNNER_TEMP/inventory-key"
+          trap 'rm -f "$key_path"' EXIT
+          umask 077
+          printf '%s\n' "$VPS_SSH_KEY" | tr -d '\r' > "$key_path"
+          if ! ssh-keygen -y -f "$key_path" >/dev/null 2>&1; then
+            printf '%s' "$VPS_SSH_KEY" | tr -d ' \t\r\n' | base64 -d > "$key_path" 2>/dev/null
+          fi
+          ssh-keygen -y -f "$key_path" >/dev/null 2>&1
+          # Fixed interpreter/path only. The script accepts no target arguments.
+          # No retries: a connection failure is reported without SSH bursts.
+          ssh -i "$key_path" -p "${VPS_PORT:-22}" \
+            -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 \
+            "$VPS_USER@$VPS_HOST" \
+            'if [ -x /var/www/inventarisasi/backend/venv/bin/python ]; then exec /var/www/inventarisasi/backend/venv/bin/python -; else exec python3 -; fi' \
+            < scripts/inventaris_vps_json.py > "$RUNNER_TEMP/inventory-raw.json"
+          python3 scripts/inventaris_vps_json.py --validate \
+            < "$RUNNER_TEMP/inventory-raw.json" > "$RUNNER_TEMP/inventory-sanitized.json"
+      - name: Publish bounded sanitized report on the exact SHA
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const text = fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'inventory-sanitized.json'), 'utf8');
+            if (Buffer.byteLength(text, 'utf8') > 48 * 1024) throw new Error('Inventory exceeds publication limit');
+            const data = JSON.parse(text);
+            if (data.schema_version !== 1 || data.read_only !== true) throw new Error('Inventory schema failed');
+            const sha = process.env.GITHUB_SHA;
+            if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error('Invalid workflow SHA');
+            const summary = '```json\n' + JSON.stringify(data, null, 2) + '\n```';
+            const {data: check} = await github.rest.checks.create({
+              owner: context.repo.owner, repo: context.repo.repo, head_sha: sha,
+              name: 'Inventaris VPS (sanitized)', status: 'completed', conclusion: 'success',
+              output: {title: 'Read-only VPS inventory', summary}
+            });
+            await core.summary.addHeading('Inventaris VPS (sanitized)')
+              .addLink('Read validated inventory through the Checks API', check.html_url)
+              .addCodeBlock(JSON.stringify(data, null, 2), 'json').write();

@@ -1,5 +1,6 @@
 """Restore portal mempertahankan riwayat, bukan akses maupun lease worker lama."""
 import asyncio
+import bcrypt
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import json
@@ -16,8 +17,14 @@ import routes.backup as rb
 import shared_utils
 
 
+_TEST_ADMIN = {"id": "operator-id", "username": "operator", "name": "Local test operator",
+               "role": "admin", "kode_satker": "", "is_active": True,
+               "created_at": "2026-10-15T00:00:00+00:00",
+               "password": bcrypt.hashpw(b"Local-Only-Test123!", bcrypt.gensalt(rounds=4)).decode()}
+
+
 def arsip(tmp_path, **collections):
-    docs = {"users": [], "categories": [], "assets": [],
+    docs = {"users": [dict(_TEST_ADMIN)], "categories": [], "assets": [],
             "inventory_activities": [], **collections}
     path = tmp_path / "unggahan.zip"
     with zipfile.ZipFile(path, "w") as zf:
@@ -45,6 +52,7 @@ def env(monkeypatch, tmp_path):
     database = AsyncMongoMockClient()["portal_restore"]
     monkeypatch.setattr(rb, "db", database)
     monkeypatch.setattr(pa, "db", database)
+    monkeypatch.setattr(indexes, "_KEGAGALAN_INDEKS", [])
     monkeypatch.setattr(rb, "BACKUP_TEMP_DIR", tmp_path)
     monkeypatch.setattr(rb, "UPLOADS_DIR", tmp_path / "uploads")
     monkeypatch.setattr(rb, "export_gridfs", AsyncMock(return_value=0))
@@ -58,6 +66,9 @@ def env(monkeypatch, tmp_path):
     async def update_job(job_id, **fields):
         jobs.append(fields)
 
+    async def seed_admin():
+        await database.users.insert_one(dict(_TEST_ADMIN))
+    asyncio.run(seed_admin())
     monkeypatch.setattr(rb, "update_job", update_job)
     revoke = AsyncMock(wraps=pa.cabut_semua_portal_akses)
     monkeypatch.setattr(pa, "cabut_semua_portal_akses", revoke)
@@ -117,19 +128,26 @@ async def test_worker_terputus_setelah_insert_tidak_menghidupkan_akses(env, tmp_
     database, jobs, revoke = env
     path = arsip(tmp_path, portal_pemegang_akses=[akses()], portal_penugasan=[penugasan()])
 
+    fired = False
+    await database.portal_pemegang_akses.insert_one(akses("p-sebelum"))
+
     async def worker_berhenti(job_id, **fields):
+        nonlocal fired
         jobs.append(fields)
-        # Urutan koleksi: akses telah diinsert, belum mencapai hook akhir.
-        if fields.get("message") == "Restore: portal_penugasan...":
+        # A graceful cancellation runs a verified safety rollback. A hard kill
+        # is covered by the durable journal/failure-injection suite instead.
+        if fields.get("message") == "Restore: portal_penugasan..." and not fired:
+            fired = True
             raise asyncio.CancelledError()
 
     monkeypatch.setattr(rb, "update_job", worker_berhenti)
     with pytest.raises(asyncio.CancelledError):
         await rb.run_restore_task("terputus", path, "pengelola")
-    assert revoke.await_count == 1
-    restored = await database.portal_pemegang_akses.find_one({"id": "p-arsip"})
+    assert revoke.await_count == 2
+    assert await database.portal_pemegang_akses.find_one({"id": "p-arsip"}) is None
+    restored = await database.portal_pemegang_akses.find_one({"id": "p-sebelum"})
     assert restored is not None and restored["aktif"] is False
-    assert restored["epoch"] == 8 and restored["version"] == 10
+    assert (await rb.restore_control_status())["state"] == "rolled_back"
 
 
 @pytest.mark.asyncio
@@ -139,15 +157,19 @@ async def test_rollback_juga_membuang_lease_dari_safety_snapshot(env, tmp_path, 
     await database.portal_penugasan.insert_one(penugasan("t-sebelum"))
     path = arsip(tmp_path, portal_pemegang_akses=[akses()], portal_penugasan=[penugasan()])
 
+    fired = False
     async def gagal_di_akhir_koleksi(job_id, **fields):
+        nonlocal fired
         jobs.append(fields)
-        if fields.get("message") == "Restore: users...":
+        if fields.get("message") == "Restore: users..." and not fired:
+            fired = True
             raise RuntimeError("Simulasi kegagalan restore")
 
     monkeypatch.setattr(rb, "update_job", gagal_di_akhir_koleksi)
     await rb.run_restore_task("rollback", path, "pengelola")
     assert jobs[-1]["status"] == "failed"
-    assert revoke.await_count == 1
+    assert revoke.await_count == 2  # initial revocation and verified rollback
+    assert (await rb.restore_control_status())["state"] == "rolled_back"
     restored_access = await database.portal_pemegang_akses.find_one({"id": "p-sebelum"})
     assert restored_access is not None and restored_access["aktif"] is False
     assert await database.portal_pemegang_akses.find_one({"id": "p-arsip"}) is None

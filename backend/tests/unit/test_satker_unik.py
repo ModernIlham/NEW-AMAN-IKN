@@ -267,8 +267,8 @@ class TestRestoreArsipLama:
 
     def test_blok_satker_ada_di_run_restore_task(self):
         src = (BACKEND / "routes" / "backup.py").read_text(encoding="utf-8")
-        i_blok = src.index('if col_name == "satker":')
-        i_insert = src.index("insert_many(docs)", i_blok)
+        i_blok = src.index('if col == "satker":')
+        i_insert = src.index("insert_many(batch)", i_blok)
         assert i_blok < i_insert
 
 
