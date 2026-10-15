@@ -1,5 +1,9 @@
 # REFACTORING STATUS: Backend Modular Architecture
 
+> Snapshot historis. Peta risiko dan pekerjaan berikutnya ada pada
+> [review Oktober 2026](../docs/REVIEW-ARSITEKTUR-2026-10.md) dan
+> [rencana eksekusi](../docs/RENCANA-OPTIMASI-SKALABILITAS.md).
+
 > **Status: COMPLETED + EXTENDED (v2.1 Juli 2025)** — Refactoring dari monolith ke 19 route modules berhasil. Ditambah modul `event_bus.py` untuk cross-worker fanout.
 >
 > **Pemutakhiran Juli 2026 (v2.5):** backend kini ±55 route modules (siklus

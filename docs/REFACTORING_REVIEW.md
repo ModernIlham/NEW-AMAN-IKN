@@ -1,5 +1,9 @@
 # Review Refactoring — AMAN IKN
 
+> Review historis; beberapa rekomendasi di bawah sudah diterapkan. Gunakan
+> [review Oktober 2026](REVIEW-ARSITEKTUR-2026-10.md) dan
+> [backlog optimasi terbaru](RENCANA-OPTIMASI-SKALABILITAS.md) untuk pekerjaan berikutnya.
+
 > Tujuan: set refactoring **terkecil** dengan payoff **terbesar**, agar pengembangan
 > lanjutan cepat & aman dan kebutuhan refactoring besar di masa depan minimal.
 > Disusun dari review 3-dimensi (struktur frontend, struktur backend, testing/DevEx)

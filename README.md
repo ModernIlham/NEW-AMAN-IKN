@@ -1,5 +1,10 @@
 # AMAN - Aplikasi Manajemen Aset Negara
 
+Rencana teknis terbaru (15 Oktober 2026): [review arsitektur](docs/REVIEW-ARSITEKTUR-2026-10.md),
+[29 paket optimasi bertahap](docs/RENCANA-OPTIMASI-SKALABILITAS.md), dan
+[panduan eksekusi GPT-6.1 Sol](docs/PANDUAN-EKSEKUSI-GPT-6.1-SOL.md).
+Status implementasi dicatat per paket; dokumen rencana tidak menyatakan optimasi sudah dirilis.
+
 > Sistem Inventarisasi Barang Milik Negara (BMN) berbasis web, standar pemerintah Indonesia (SE 17/SE/M/2024 & LKPP 85/2025)
 
 **Versi:** 2.7 (Agustus 2026) — Setiap permohonan aset kini punya register & gerbangnya: gerbang persetujuan KPB untuk transaksi aset (reklasifikasi/KDP/revaluasi final) + persediaan, surat usulan resmi PDF ber-nomor (Nota Dinas Pemindahtanganan/Penghapusan, surat register Penggunaan), dan LIMA register yang dulu hilang total — TGR aset hilang (gerbang SK jalur Tidak Ditemukan), usulan pemanfaatan + perpanjangan (PMK 115/2020), usulan pemusnahan (PMK 83/2016, BA lahir dari usulan), transfer masuk alih status (aset lahir otomatis + jurnal 102), dan henti guna mandiri ber-SK/BA (jurnal 401/402). Ditambah fondasi SIMAK: registry 99 kode mutasi, barang bersejarah, modul KDP (502/503/505+105), amortisasi ATB, dan Persediaan ber-persetujuan KPB (45 kode transaksi + 7 laporan format SAKTI)

@@ -1,0 +1,118 @@
+{
+  "review_date": "2026-10-15",
+  "user_timezone": "Asia/Makassar",
+  "repository": "ModernIlham/NEW-AMAN-IKN",
+  "baseline_sha": "62e345422b0828f54d3ca3fd5b2c6cb876f01aa2",
+  "scope": "Source review, local baseline checks, isolated synthetic reproductions, implementation planning",
+  "runtime_changes_implemented": false,
+  "production_access_performed_in_review": false,
+  "production_capacity_measured": false,
+  "environment": {
+    "python_local": "3.12.14",
+    "node_local": "24.19.0",
+    "yarn_local": "1.22.22",
+    "ci_declared_python": "3.11",
+    "ci_declared_node": "22",
+    "httpx_probe": "0.28.1"
+  },
+  "inventory": {
+    "backend_non_test_python_files": 208,
+    "backend_non_test_lines": 98338,
+    "backend_route_modules_excluding_init": 67,
+    "route_http_websocket_decorators_excluding_server_py": 670,
+    "frontend_non_test_source_files": 332,
+    "frontend_non_test_lines": 85472,
+    "router_import_occurrences_including_function_local": 91,
+    "import_metric_proves_runtime_circular_import_failure": false
+  },
+  "checks": {
+    "backend_pytest_default": {
+      "command": "XDG_DATA_HOME=/workspace/.local/share XDG_CACHE_HOME=/workspace/.cache .venv/bin/python -m pytest -q",
+      "passed": 5567,
+      "warnings": 133,
+      "seconds": 304.91,
+      "excludes_live_integration_by_default": true
+    },
+    "frontend_jest": {
+      "command": "CI=true corepack yarn test --watchAll=false --runInBand",
+      "working_directory": "frontend",
+      "suites_passed": 198,
+      "tests_passed": 2189,
+      "seconds": 128.411
+    },
+    "frontend_lint": {"errors": 0, "warnings": 7},
+    "frontend_build": {"success": true, "seconds": 57.59, "deployed": false},
+    "pip_check": {"success": true},
+    "tracked_secret_pattern_check": {"success": true}
+  },
+  "local_build_sizes": {
+    "method": "Python gzip.compress(bytes, mtime=0); byte counts; all lazy chunks are not initial route payload",
+    "js_files": 102,
+    "all_js_raw_bytes": 6012507,
+    "all_js_gzip_bytes": 1655287,
+    "main_js_gzip_bytes": 133623,
+    "dashboard_3060_js_gzip_bytes": 123322,
+    "main_css_gzip_bytes": 38601,
+    "production_rum_or_network_measurement": false
+  },
+  "probes": {
+    "method": "Actual source functions extracted via AST with decorators removed and synthetic injected dependencies; mongomock for data cases. Transport probe uses real installed httpx with a synthetic ASGI producer. No live Mongo, production requests or authentication proof.",
+    "batch_lost_update": {
+      "write_filter": {"id": "a1"},
+      "concurrent_checklist_item": "ConcurrentEdit",
+      "final_items": ["Lama", "BatchEdit"],
+      "final_version": 3,
+      "concurrent_item_retained": false
+    },
+    "batch_reported_count": {
+      "requested_ids": ["a1", "missing", "a1"],
+      "actual_matching_documents": 1,
+      "reported_updated": 3
+    },
+    "meili_checkpoint_ties": {
+      "source_documents": 2001,
+      "same_updated_at": true,
+      "first_pass_sent": 2000,
+      "second_pass_sent": 0,
+      "unique_sent": 2000
+    },
+    "price_zero_max": {"requested_max": 0, "actual_filter_max": 999999999999},
+    "price_string_sort": {
+      "stored_prices": ["2", "10", "100"],
+      "ascending_result": ["10", "100", "2"]
+    },
+    "restore_missing_gridfs_blob": {
+      "manifest_references_missing_blob": true,
+      "returned_without_exception": true,
+      "restored_files": 0,
+      "remaining_old_files": 0,
+      "remaining_old_chunks": 0
+    },
+    "queued_download_heartbeat": {"heartbeats_while_semaphore_held": 0},
+    "download_heartbeat_fail_once": {"update_calls": 1, "heartbeat_task_finished": true},
+    "download_concurrent_admission": {"configured_user_limit": 1, "accepted_jobs": 2},
+    "asgi_transport_buffering": {
+      "body_mib": 8,
+      "chunks_total": 8,
+      "chunks_emitted_before_consumer_started": 8,
+      "first_consumed_chunk_bytes": 65536,
+      "tracemalloc_peak_mib": 32.04,
+      "is_vps_rss_measurement": false
+    },
+    "objectid_watermark_counterexample": {
+      "first_id": "65000000ffffffffffffffff",
+      "later_id": "650000000000000000000001",
+      "same_timestamp": true,
+      "later_id_passes_gt_first": false,
+      "real_capped_mongo_test_executed": false
+    }
+  },
+  "unverified": [
+    "Current VPS topology, workers, package versions and resource utilization",
+    "Production query plans, volume distribution and concurrent user workload",
+    "Current external monitoring, offsite backup configuration and restore RPO/RTO",
+    "Meilisearch current activation and observed index lag",
+    "Browser field Core Web Vitals and storage pressure",
+    "Actual production incidents for the reviewed conditional failure paths"
+  ]
+}
