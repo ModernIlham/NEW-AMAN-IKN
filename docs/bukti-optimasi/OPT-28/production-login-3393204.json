@@ -1,0 +1,177 @@
+{
+  "ok": true,
+  "origin": "https://amanikn-inventarisasi.com",
+  "authentication_attempted": false,
+  "production_mutations": false,
+  "runtime_exceptions": [],
+  "console_errors": [],
+  "network_failures": [],
+  "blocked_mutations": [],
+  "responses": [
+    {
+      "host": "amanikn-inventarisasi.com",
+      "path": "/",
+      "status": 200,
+      "mime": "text/html",
+      "protocol": "http/1.1"
+    },
+    {
+      "host": "amanikn-inventarisasi.com",
+      "path": "/static/js/main.365425a9.js",
+      "status": 200,
+      "mime": "application/javascript",
+      "protocol": "http/1.1"
+    },
+    {
+      "host": "amanikn-inventarisasi.com",
+      "path": "/manifest.json",
+      "status": 200,
+      "mime": "application/json",
+      "protocol": "http/1.1"
+    },
+    {
+      "host": "amanikn-inventarisasi.com",
+      "path": "/static/css/main.e8853573.css",
+      "status": 200,
+      "mime": "text/css",
+      "protocol": "http/1.1"
+    },
+    {
+      "host": "amanikn-inventarisasi.com",
+      "path": "/static/media/plus-jakarta-sans-latin-wght-normal.d6578b4e85b986795c74.woff2",
+      "status": 200,
+      "mime": "font/woff2",
+      "protocol": "http/1.1"
+    },
+    {
+      "host": "amanikn-inventarisasi.com",
+      "path": "/favicon.svg",
+      "status": 200,
+      "mime": "image/svg+xml",
+      "protocol": "http/1.1"
+    },
+    {
+      "host": "amanikn-inventarisasi.com",
+      "path": "/static/js/5244.8c24146b.chunk.js",
+      "status": 200,
+      "mime": "application/javascript",
+      "protocol": "http/1.1"
+    },
+    {
+      "host": "amanikn-inventarisasi.com",
+      "path": "/static/js/9311.407fabd1.chunk.js",
+      "status": 200,
+      "mime": "application/javascript",
+      "protocol": "http/1.1"
+    },
+    {
+      "host": "amanikn-inventarisasi.com",
+      "path": "/favicon.svg",
+      "status": 200,
+      "mime": "image/svg+xml",
+      "protocol": "http/1.1"
+    },
+    {
+      "host": "amanikn-inventarisasi.com",
+      "path": "/static/js/efek-cair.c5162679.chunk.js",
+      "status": 200,
+      "mime": "application/javascript",
+      "protocol": "http/1.1"
+    },
+    {
+      "host": "amanikn-inventarisasi.com",
+      "path": "/favicon.ico",
+      "status": 200,
+      "mime": "image/x-icon",
+      "protocol": "http/1.1"
+    },
+    {
+      "host": "amanikn-inventarisasi.com",
+      "path": "/static/media/tekstur-cair-login.aeb5688f4c36e2f624d9.jpg",
+      "status": 200,
+      "mime": "image/jpeg",
+      "protocol": "http/1.1"
+    },
+    {
+      "host": "amanikn-inventarisasi.com",
+      "path": "/aman-release.json",
+      "status": 200,
+      "mime": "application/json",
+      "protocol": "http/1.1"
+    },
+    {
+      "host": "amanikn-inventarisasi.com",
+      "path": "/api/health",
+      "status": 200,
+      "mime": "application/json",
+      "protocol": "http/1.1"
+    },
+    {
+      "host": "amanikn-inventarisasi.com",
+      "path": "/static/media/tekstur-cair-login.aeb5688f4c36e2f624d9.jpg",
+      "status": 200,
+      "mime": "image/jpeg",
+      "protocol": "http/1.1"
+    }
+  ],
+  "viewports": [
+    {
+      "viewport": 1440,
+      "document_width": 1440,
+      "login_form_visible": true,
+      "username_empty": true,
+      "password_empty": true,
+      "decoded_images": [],
+      "fonts_ready": true,
+      "login_button_visible": true,
+      "width": 1440,
+      "height": 1000,
+      "mobile": false
+    },
+    {
+      "viewport": 360,
+      "document_width": 360,
+      "login_form_visible": true,
+      "username_empty": true,
+      "password_empty": true,
+      "decoded_images": [],
+      "fonts_ready": true,
+      "login_button_visible": true,
+      "width": 360,
+      "height": 800,
+      "mobile": true
+    }
+  ],
+  "cleanup_errors": [],
+  "transport": "CDP Fetch adapter; production HTTPS verified using configured OS CA and proxy",
+  "release": {
+    "source_sha": "33932042e1f41e2a594405b5c16a50b10718c80e",
+    "assets": 131
+  },
+  "health": {
+    "ok": true,
+    "release_sha": "33932042e1f41e2a594405b5c16a50b10718c80e",
+    "budget": {
+      "enabled": false,
+      "ok": true,
+      "slots": 2,
+      "satker_slots": 2,
+      "error_category": null
+    }
+  },
+  "scripts": [
+    {
+      "path": "/static/js/main.365425a9.js",
+      "integrity": false,
+      "crossorigin": null
+    }
+  ],
+  "decoded_backgrounds": [
+    {
+      "path": "/static/media/tekstur-cair-login.aeb5688f4c36e2f624d9.jpg",
+      "ok": true,
+      "width": 1024,
+      "height": 1024
+    }
+  ]
+}
