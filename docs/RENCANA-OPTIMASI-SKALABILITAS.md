@@ -10,10 +10,9 @@ jangan mengulang paket yang sudah diimplementasikan.
 serta dirilis pada `c3ac5559178472358aa5d3d03bf5eeb17b2adaa5`
 (CI `38740257953`, deploy `38741148877`). Paket lain memiliki implementasi/bukti
 lokal dengan tingkat penyelesaian berbeda; rilis gabungan berikutnya dan
-OPT-28 belum ditutup. Frontend wave3 lulus 214 suite/2.297 tes, build dan lint;
-delta indeks lampiran berikutnya lulus pengujian terfokus dan menunggu ulang
-gerbang penuh/build/browser. Backend gabungan, CI/rilis berikutnya masih
-menunggu bukti akhir koordinator.
+OPT-28 belum ditutup. Frontend final lulus 217 suite/2.308 tes, build, lint dan
+16 pemeriksaan browser aplikasi. Kontrak lokal gabungan 127 tes lulus pada
+snapshot validasi; CI/rilis gabungan berikutnya masih menunggu bukti akhir.
 
 [Status Eksekusi Optimasi](STATUS-EKSEKUSI-OPTIMASI.md) menjadi rujukan status
 per paket, pemetaan R01–R25, hasil gerbang dan pekerjaan yang masih terbuka.

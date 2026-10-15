@@ -143,8 +143,15 @@ def guard():
     if action=='drain':print(1 if fault()=='active_jobs' else 0)
     elif action=='release':
         if fault()=='release':print(1)
+        elif fault() in ['release_committed_acklost','release_new_owner','signal_release_committed','signal_release_new_owner']:
+            assert current.get('owner')==os.environ['AMAN_GUARD_OWNER']
+            lock.write_text(json.dumps({'state':'completed','active':False,'owner':current['owner']}))
+            if fault() in ['release_new_owner','signal_release_new_owner']:
+                lock.write_text(json.dumps({'state':'restoring','active':True,'owner':'restore:next-owner','destructive_started':True}))
+            if fault().startswith('signal_release_'):signal_root()
+            print(1)
         elif current.get('owner')==os.environ['AMAN_GUARD_OWNER']:
-            lock.write_text(json.dumps({'state':'completed','active':False}));print(0)
+            lock.write_text(json.dumps({'state':'completed','active':False,'owner':current['owner']}));print(0)
         else:print(1)
     elif current['state'] not in ['completed','rolled_back','aborted']:print(1)
     elif action=='acquire':
@@ -641,14 +648,14 @@ def test_every_mutating_failure_restores_verified_old_pair(deploy_case,fault):
 
 @pytest.mark.parametrize("fault", [
     "rollback_git","rollback_env","rollback_venv","rollback_inventory","rollback_restart","rollback_process","rollback_health",
-    "rollback_sha","rollback_frontend","rollback_stop","rollback_status","stop_persistent","release",
+    "rollback_sha","rollback_frontend","rollback_stop","rollback_status","stop_persistent",
 ])
 def test_failed_recovery_never_announces_success_and_blocks_next_deploy(deploy_case,fault):
     app,state,prev,target,latest,git_run,run = deploy_case
     result,events = run(fault)
     assert result.returncode == 70,result.stderr
     assert "RECOVERY_REQUIRED" in result.stderr
-    if fault != "release":assert "ROLLBACK selesai" not in result.stderr
+    assert "ROLLBACK selesai" not in result.stderr
     assert "Deploy selesai:" not in result.stdout
     assert json.loads((state / "lock.json").read_text())["state"] == "deploying"
     if fault == "rollback_frontend":
@@ -659,13 +666,56 @@ def test_failed_recovery_never_announces_success_and_blocks_next_deploy(deploy_c
     if fault == "stop_persistent":
         assert git_run("rev-parse","HEAD") == prev
         assert not any(e["name"] == "git" and e["args"][:2] == ["reset","--hard"] for e in events)
-    if fault == "release":
-        _assert_original_venv(app,state)
-        assert not (app / "backend/.venv-releases/legacy-retained.json").exists()
     blocked,blocked_events = run()
     assert blocked.returncode != 0
     assert not any(e["name"] in ["pip","supervisorctl","yarn"] for e in blocked_events)
     assert not any(e["name"] == "git" and e["args"][0] in ["fetch","reset"] for e in blocked_events)
+
+
+@pytest.mark.parametrize("fault", [
+    "release","release_committed_acklost","release_new_owner","signal_release_committed","signal_release_new_owner",
+])
+def test_uncertain_final_release_preserves_verified_new_pair_without_mutating_next_owner(deploy_case,fault):
+    app,state,prev,target,latest,git_run,run = deploy_case
+    result,events = run(fault)
+    assert result.returncode == 70,result.stderr
+    assert "RECOVERY_REQUIRED" in result.stderr
+    assert "ROLLBACK fase" not in result.stderr
+    assert "ROLLBACK selesai" not in result.stderr
+    assert "Deploy selesai:" not in result.stdout
+    assert git_run("rev-parse","HEAD") == target
+    assert (state / "backend-version").read_text() == "new"
+    assert (state / "backend-sha").read_text() == target
+    assert (state / "service-state").read_text() == "RUNNING"
+    assert (app / "frontend/build/index.html").read_text() == "bundel baru"
+    assert (app / "frontend/build.old/index.html").read_text() == "bundel lama"
+    stable = app / "backend/venv"
+    assert stable.is_symlink()
+    descriptor = json.loads((stable / ".aman-environment.json").read_text())
+    assert descriptor["source_sha"] == target
+    assert descriptor["distributions"] == {"aman-deploy-fixture":"2.0"}
+    journals = list((app / "backend/.venv-releases").glob(".run-*/state.json"))
+    assert len(journals) == 1
+    assert json.loads(journals[0].read_text())["phase"] == "completed"
+    releases = [index for index,event in enumerate(events) if event["action"] == "release"]
+    assert len(releases) == 1
+    for event in events[releases[0]+1:]:
+        assert event["name"] not in ["venv_move","venv_link","venv_restore","pip","worker_started"]
+        assert not (event["name"] == "git" and event["args"][:2] == ["reset","--hard"])
+        assert not (event["name"] == "supervisorctl" and event["args"][0] in ["stop","start","restart"])
+        assert not (event["name"] == "mv" and any("build" in argument for argument in event["args"]))
+    control = json.loads((state / "lock.json").read_text())
+    if fault in ["release_new_owner","signal_release_new_owner"]:
+        assert control == {"state":"restoring","active":True,"owner":"restore:next-owner","destructive_started":True}
+        blocked,blocked_events = run()
+        assert blocked.returncode != 0
+        assert not any(event["action"] == "release" for event in blocked_events)
+        assert not any(event["name"] in ["pip","supervisorctl","yarn"] for event in blocked_events)
+        assert json.loads((state / "lock.json").read_text()) == control
+    elif fault == "release":
+        assert control["state"] == "deploying"
+    else:
+        assert control["state"] == "completed" and control["active"] is False
 
 
 @pytest.mark.parametrize("control", ["preparing","restoring","rolling_back","recovery_required","deploying","unknown"])

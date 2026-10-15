@@ -57,6 +57,17 @@ aman_env_bersihkan() {
       *) echo "GAGAL: jalur salinan env tidak sesuai; tidak dihapus." >&2; rc=1 ;;
     esac
   fi
+  if [ "${AMAN_EMIT_DEPLOY_RESULT:-0}" = 1 ]; then
+    local fase_aman pemulihan=false
+    case "${DEPLOY_FASE:-}" in
+      preflight|siapkan_environment_backend|hentikan_backend|kode|env|environment_backend|restart_backend|kesehatan_backend|dependency_frontend|build_frontend|retensi_static|aktivasi_frontend|verifikasi_akhir)
+        fase_aman="$DEPLOY_FASE" ;;
+      *) fase_aman=unknown ;;
+    esac
+    if [ "${AMAN_DEPLOY_RECOVERY:-0}" = 1 ] || [ "${AMAN_ENV_PULIH_GAGAL:-0}" = 1 ]; then pemulihan=true; fi
+    printf 'AMAN_DEPLOY_RESULT {"exit_code":%d,"phase":"%s","deploy_sha":"%s","recovery_required":%s}\n' \
+      "$rc" "$fase_aman" "$DEPLOY_SHA" "$pemulihan"
+  fi
   exit "$rc"
 }
 
@@ -295,6 +306,7 @@ periksa_restore_aktif
 # membungkus helper, sehingga snapshot tetap dibersihkan pada semua jalur.
 aman_env_siapkan "$APP_DIR" 1
 DEPLOY_FASE=preflight
+AMAN_EMIT_DEPLOY_RESULT=1
 KODE_TERSENTUH=0
 SERVICE_TERSENTUH=0
 VENV_SWITCH_DICOBA=0
@@ -307,6 +319,7 @@ FRONTEND_LAMA_DIPINDAH=0
 FRONTEND_BARU_DICOBA=0
 FRONTEND_SEBELUMNYA=0
 DEPLOY_SELESAI=0
+AMAN_RELEASE_TENTATIF=0
 AMAN_DEPLOY_RECOVERY=0
 PERCOBAAN_KESEHATAN=45
 HEALTH_URL="${BACKEND_HEALTH_URL:-http://127.0.0.1:8001/api/health}"
@@ -469,6 +482,14 @@ aman_deploy_keluar() {
   # Sinyal berulang jangan memutus kompensasi yang sedang memulihkan data.
   trap '' HUP INT TERM
   set +e
+  # Mongo mungkin sudah melepas GLOBAL meski balasan terputus. Sesudah
+  # percobaan final release, jangan reset/stop/abort tanpa ownership baru.
+  if [ "$rc" -ne 0 ] && [ "$AMAN_RELEASE_TENTATIF" = 1 ]; then
+    AMAN_DEPLOY_RECOVERY=1
+    DEPLOY_SELESAI=1
+    rc=70
+    echo "RECOVERY_REQUIRED: acknowledgement release GLOBAL tidak terbukti; rilis sehat saat ini dipertahankan tanpa rollback otomatis." >&2
+  fi
   if [ -n "$AMAN_HEALTH_TMP" ]; then rm -f -- "$AMAN_HEALTH_TMP"; fi
   if [ "$rc" -ne 0 ] && { [ "$KODE_TERSENTUH" = 1 ] || [ "$SERVICE_TERSENTUH" = 1 ]; } && [ "$DEPLOY_SELESAI" = 0 ]; then
     if ! pulihkan; then rc=70; AMAN_DEPLOY_RECOVERY=1; fi
@@ -484,7 +505,11 @@ aman_deploy_keluar() {
       AMAN_DEPLOY_RECOVERY=1
     fi
   elif [ "$AMAN_DEPLOY_RECOVERY" = 1 ]; then
-    echo "Mutex deployment dipertahankan: $AMAN_DEPLOY_OWNER; pemulihan operator wajib sebelum run berikutnya." >&2
+    if [ "$AMAN_RELEASE_TENTATIF" = 1 ]; then
+      echo "Status mutex tidak pasti untuk $AMAN_DEPLOY_OWNER; periksa owner GLOBAL aktual sebelum tindakan operator." >&2
+    else
+      echo "Mutex deployment dipertahankan: $AMAN_DEPLOY_OWNER; pemulihan operator wajib sebelum run berikutnya." >&2
+    fi
   fi
   if [ -n "$AMAN_BACKEND_CONTROL" ]; then
     if [ "$AMAN_DEPLOY_RECOVERY" = 1 ]; then
@@ -670,11 +695,12 @@ periksa_kesehatan "$DEPLOY_SHA" "$((1 - TARGET_LEGACY))"
 transaksi_environment success
 DEPLOY_SELESAI=1
 # Pelepasan mutex juga wajib berhasil SEBELUM pesan sukses final.
+AMAN_RELEASE_TENTATIF=1
 if ! hasil_kontrol="$(kelola_kontrol_restore release)" || [ "$hasil_kontrol" != 0 ]; then
-  DEPLOY_SELESAI=0
-  echo "GAGAL: mutex deployment gagal dilepas." >&2
-  exit 1
+  echo "GAGAL: pelepasan mutex tidak terverifikasi; rilis sehat dipertahankan." >&2
+  exit 70
 fi
 AMAN_DEPLOY_LOCK=0
+AMAN_RELEASE_TENTATIF=0
 echo "Bundel frontend ditukar; salinan sebelumnya tersimpan di frontend/build.old"
 echo "Deploy selesai: $(git -C "$APP_DIR" rev-parse --short HEAD)"

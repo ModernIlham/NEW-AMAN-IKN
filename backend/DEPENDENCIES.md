@@ -33,7 +33,7 @@ bash scripts/lock_dependencies.sh
 Python **3.11** menjadi baseline CI/produksi (`.python-version`); compatibility
 suite lokal juga berjalan pada3.12. Node **22LTS** (`.nvmrc`) dan Yarn
 **1.22.22** (`frontend/package.json#packageManager`) menjadi baseline frontend.
-Node 24 dipakai pada validasi cloud saat ini. Versi patch aktual dan native
+Gerbang final cloud memakai Node 22.23.2. Versi patch aktual dan native
 libraries dicatat pada manifest build; Node VPS harus diperiksa sebelum menghapus
 bypass engine pada skrip instalasi lama.
 

@@ -57,6 +57,9 @@ jobs:
     outputs:
       summary: ${{ steps.result.outputs.summary }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -102,10 +105,21 @@ jobs:
       - name: Ringkasan unit tanpa fixture
         id: result
         run: python scripts/ci_verification.py junit "$RUNNER_TEMP/backend-unit.xml"
+      - name: Identitas tes gagal tanpa pesan atau fixture
+        if: ${{ failure() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          python scripts/ci_failure_summary.py
+          --junit "$RUNNER_TEMP/backend-unit.xml"
+          --check-name 'Backend unit failure details' --expected-sha "$GITHUB_SHA"
 
   deploy-operations:
     name: Deploy dan rollback (Git + venv nyata)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
     timeout-minutes: 25
     outputs:
       summary: ${{ steps.result.outputs.summary }}
@@ -133,6 +147,14 @@ jobs:
       - name: Ringkasan operasi tanpa fixture
         id: result
         run: python scripts/ci_verification.py junit "$RUNNER_TEMP/deploy-operations.xml"
+      - name: Identitas tes gagal tanpa pesan atau fixture
+        if: ${{ failure() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          python scripts/ci_failure_summary.py
+          --junit "$RUNNER_TEMP/deploy-operations.xml"
+          --check-name 'Deployment failure details' --expected-sha "$GITHUB_SHA"
 
   frontend:
     name: Frontend (eslint + build)
@@ -173,6 +195,9 @@ jobs:
     outputs:
       summary: ${{ steps.result.outputs.summary }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
     timeout-minutes: 20
     services:
       mongo:
@@ -210,6 +235,14 @@ jobs:
       - name: Ringkasan kontrak tanpa fixture
         id: result
         run: python scripts/ci_verification.py junit "$RUNNER_TEMP/backend-contract.xml"
+      - name: Identitas tes gagal tanpa pesan atau fixture
+        if: ${{ failure() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          python scripts/ci_failure_summary.py
+          --junit "$RUNNER_TEMP/backend-contract.xml"
+          --check-name 'Contract failure details' --expected-sha "$GITHUB_SHA"
 
   browser:
     name: Chromium (aplikasi nyata dan MongoDB)

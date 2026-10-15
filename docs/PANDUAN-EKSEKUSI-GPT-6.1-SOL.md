@@ -5,8 +5,10 @@ Mulai dari [rencana OPT-00–OPT-28](RENCANA-OPTIMASI-SKALABILITAS.md).
 `62e345422b0828f54d3ca3fd5b2c6cb876f01aa2`, 15 Oktober 2026.
 [Bukti baseline](bukti-review-2026-10.json) menyimpan hasil pemeriksaan lokal.
 
-Ini handoff implementasi. Penyusun rencana belum memperbaiki runtime berdasarkan
-review ini. Status “rencana selesai” tidak berarti optimasi produksi sudah selesai.
+Implementasi telah berjalan. Baca [status pelaksanaan](STATUS-EKSEKUSI-OPTIMASI.md)
+untuk membedakan paket yang sudah dirilis, hasil pengujian, flag dan pekerjaan
+operasional yang masih memerlukan akses eksternal. Jangan mengulang implementasi
+berdasarkan baseline review lama.
 
 ## Prompt siap pakai: mulai pelaksanaan
 
@@ -14,12 +16,13 @@ review ini. Status “rencana selesai” tidak berarti optimasi produksi sudah s
 Anda GPT-6.1 Sol. Lanjutkan repositori ModernIlham/NEW-AMAN-IKN.
 Baca docs/PANDUAN-EKSEKUSI-GPT-6.1-SOL.md,
 docs/REVIEW-ARSITEKTUR-2026-10.md, dan
-docs/RENCANA-OPTIMASI-SKALABILITAS.md.
+docs/RENCANA-OPTIMASI-SKALABILITAS.md dan
+docs/STATUS-EKSEKUSI-OPTIMASI.md.
 
-Kerjakan rencana tersebut bertahap sampai tuntas. Revalidasi main, siapkan
-baseline/fixture OPT-00 secukupnya dan inventaris OPT-17, lalu prioritaskan
-OPT-05/06 (backup/restore), OPT-02→03→04 (batch), dan OPT-08 (deploy).
-OPT-01/11/12/27 dapat dikerjakan paralel jika file tidak bertabrakan.
+Revalidasi main dan bukti rilis terakhir. Lanjutkan hanya pekerjaan yang masih
+terbuka pada status tersebut; jangan mengulang paket yang telah lulus dan dirilis.
+Untuk gap offsite, kapasitas, monitoring dan aktivasi flag, buktikan prasyarat
+operasional sebelum mengubah konfigurasi.
 Ikuti dependency setiap paket. Satu PR menangani satu perubahan yang dapat diuji;
 pecah paket besar menurut sub-PR di rencana.
 

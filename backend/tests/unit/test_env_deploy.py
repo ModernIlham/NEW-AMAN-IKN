@@ -199,7 +199,7 @@ def test_alur_deploy_stdin_sukses_rollback_dan_gagal_build(tmp_path, mode):
     # its real venv/rollback behavior has its own executable contract suite.
     (app / "scripts" / "fake-environment.py").write_text('''import pathlib,sys
 action=sys.argv[1]
-if action=="attest":raise SystemExit(0)
+if action in {"attest","attest-process"}:raise SystemExit(0)
 control=pathlib.Path(sys.argv[sys.argv.index("--control")+1])
 if action=="prepare":(control/"state.json").write_text("{}")
 if action=="show":print(0)
@@ -224,7 +224,11 @@ git() {
 }
 mongosh() { echo 0; }
 sudo() { return 1; }
-supervisorctl() { if [ "$1" = status ]; then echo 'inventarisasi-backend STOPPED'; fi; return 0; }
+supervisorctl() {
+  if [ "$1" = status ]; then echo 'inventarisasi-backend STOPPED';
+  elif [ "$1" = pid ]; then echo 123; fi
+  return 0
+}
 sleep() { return 0; }
 jumlah_health_uji=0
 curl() {
