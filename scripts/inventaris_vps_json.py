@@ -24,16 +24,24 @@ MAX_OUTPUT = 48 * 1024
 SERVICES = ("mongod", "nginx", "redis-server", "meilisearch", "supervisor", "cron")
 VERSION_RE = re.compile(r"(?<![0-9])\d{1,3}\.\d{1,3}(?:\.\d{1,5})?(?:[-+][A-Za-z0-9.]{1,30})?\b")
 KNOWN_OLD_CHUNK = "static/js/9311.08c8148e.chunk.js"
+PUBLIC_JS_RE = re.compile(r"static/js/[A-Za-z0-9_.-]{1,90}\.[0-9a-f]{8,64}(?:\.chunk)?\.js")
 
 
 def static_retention_inventory(app=APP, nginx=Path("/etc/nginx")):
     """Fixed public build metadata only; never publish config text or paths."""
-    result={}
+    result={};current_assets={}
+    try:
+        path=app/"frontend/build/.aman-static-retention.json"
+        if path.is_file() and not path.is_symlink() and path.stat().st_size<=8*1024*1024:
+            value=json.loads(path.read_text())
+            if value.get("schema_version")==1 and isinstance(value.get("assets"),dict) and len(value["assets"])<=20000:current_assets=value["assets"]
+    except Exception:pass
     for label,directory in (("current","build"),("previous","build.old")):
         root=app/"frontend"/directory;asset=root/KNOWN_OLD_CHUNK
         row={"file_present":asset.exists(),"file_regular":False,"file_bytes":None,"file_sha256":None,
              "own_manifest_contains":None,"ledger_present":False,"ledger_contains":None,
-             "ledger_sha256":None,"ledger_bytes":None,"ledger_last_seen_epoch":None,"ledger_created_epoch":None}
+             "ledger_sha256":None,"ledger_bytes":None,"ledger_last_seen_epoch":None,"ledger_created_epoch":None,
+             "own_manifest_sha256":None,"own_js_sample":[],"ledger_grace_hours":None}
         try:
             row["file_regular"]=asset.is_file() and not asset.is_symlink()
             if row["file_regular"]:
@@ -41,9 +49,23 @@ def static_retention_inventory(app=APP, nginx=Path("/etc/nginx")):
                 if row["file_bytes"]<=2*1024*1024:row["file_sha256"]=hashlib.sha256(asset.read_bytes()).hexdigest()
             manifest=root/"asset-manifest.json"
             if manifest.is_file() and not manifest.is_symlink() and manifest.stat().st_size<=8*1024*1024:
-                value=json.loads(manifest.read_text());files=value.get("files",{})
+                content=manifest.read_bytes();row["own_manifest_sha256"]=hashlib.sha256(content).hexdigest()
+                value=json.loads(content);files=value.get("files",{})
                 if isinstance(files,dict) and len(files)<=20000:
                     row["own_manifest_contains"]=any(isinstance(value,str) and value.lstrip("/")==KNOWN_OLD_CHUNK for value in files.values())
+                    names={value.lstrip("/") for value in files.values() if isinstance(value,str) and PUBLIC_JS_RE.fullmatch(value.lstrip("/"))}
+                    for name in sorted(names,key=lambda item:(not item.startswith("static/js/main."),item))[:3]:
+                        sample={"path":name,"file_sha256":None,"file_bytes":None,"current_ledger_contains":name in current_assets,
+                                "current_ledger_sha256":None,"current_ledger_last_seen_epoch":None}
+                        source=root/name
+                        if source.is_file() and not source.is_symlink() and source.stat().st_size<=2*1024*1024:
+                            sample["file_bytes"]=source.stat().st_size;sample["file_sha256"]=hashlib.sha256(source.read_bytes()).hexdigest()
+                        metadata=current_assets.get(name)
+                        if isinstance(metadata,dict):
+                            checksum=metadata.get("sha256");seen=metadata.get("last_seen")
+                            if isinstance(checksum,str) and re.fullmatch(r"[0-9a-f]{64}",checksum):sample["current_ledger_sha256"]=checksum
+                            if type(seen) in (int,float) and math.isfinite(seen) and 0<=seen<2**63:sample["current_ledger_last_seen_epoch"]=seen
+                        row["own_js_sample"].append(sample)
             ledger=root/".aman-static-retention.json"
             row["ledger_present"]=ledger.is_file() and not ledger.is_symlink()
             if row["ledger_present"] and ledger.stat().st_size<=8*1024*1024:
@@ -53,7 +75,7 @@ def static_retention_inventory(app=APP, nginx=Path("/etc/nginx")):
                     metadata=assets.get(KNOWN_OLD_CHUNK) or {}
                     checksum=metadata.get("sha256")
                     row["ledger_sha256"]=checksum if isinstance(checksum,str) and re.fullmatch(r"[0-9a-f]{64}",checksum) else None
-                    for output,raw in (("ledger_bytes",metadata.get("bytes")),("ledger_last_seen_epoch",metadata.get("last_seen")),("ledger_created_epoch",value.get("created_at"))):
+                    for output,raw in (("ledger_bytes",metadata.get("bytes")),("ledger_last_seen_epoch",metadata.get("last_seen")),("ledger_created_epoch",value.get("created_at")),("ledger_grace_hours",value.get("grace_hours"))):
                         if type(raw) in (int,float) and math.isfinite(raw) and 0<=raw<2**63:row[output]=raw
         except Exception:pass
         result[label]=row
@@ -281,9 +303,15 @@ def validate_report(report):
             for key, entry in value.items():
                 check(entry, path + (key,))
         elif isinstance(value, list):
-            if path != ("system", "load_average") or len(value) != 3 or any(not isinstance(n, (float, int)) for n in value):
+            if path in {("static_retention","current","own_js_sample"),("static_retention","previous","own_js_sample")}:
+                if len(value)>3:raise ValueError("Invalid static sample count")
+                for entry in value:check(entry,path+("sample",))
+            elif path != ("system", "load_average") or len(value) != 3 or any(not isinstance(n, (float, int)) for n in value):
                 raise ValueError("Invalid list")
         elif isinstance(value, str):
+            if len(path)==5 and path[:1]==("static_retention",) and path[2:]==("own_js_sample","sample","path"):
+                if not PUBLIC_JS_RE.fullmatch(value) or len(value)>128:raise ValueError("Invalid public JS sample")
+                return
             if len(value) > 128 or any(char in value for char in ("/", "\\", "@", "\n", "`", "<", ">")):
                 raise ValueError("Unsafe inventory value")
             if path[0] == "software" or path == ("mongo", "version"):
@@ -294,18 +322,26 @@ def validate_report(report):
     check(report)
     retention=report["static_retention"]
     if set(retention)!={"current","previous","nginx_flags"}:raise ValueError("Invalid static inventory")
-    row_keys={"file_present","file_regular","file_bytes","file_sha256","own_manifest_contains","ledger_present","ledger_contains","ledger_sha256","ledger_bytes","ledger_last_seen_epoch","ledger_created_epoch"}
+    row_keys={"file_present","file_regular","file_bytes","file_sha256","own_manifest_contains","ledger_present","ledger_contains","ledger_sha256","ledger_bytes","ledger_last_seen_epoch","ledger_created_epoch","own_manifest_sha256","own_js_sample","ledger_grace_hours"}
     for label in ("current","previous"):
         row=retention[label]
         if set(row)!=row_keys:raise ValueError("Invalid static metadata fields")
-        for key in ("file_sha256","ledger_sha256"):
+        for key in ("file_sha256","ledger_sha256","own_manifest_sha256"):
             if row[key] is not None and not re.fullmatch(r"[0-9a-f]{64}",row[key]):raise ValueError("Invalid public static digest")
         for key in ("file_present","file_regular","ledger_present"):
             if type(row[key]) is not bool:raise ValueError("Invalid public static presence")
         for key in ("own_manifest_contains","ledger_contains"):
             if row[key] is not None and type(row[key]) is not bool:raise ValueError("Invalid static reference flag")
-        for key in ("file_bytes","ledger_bytes","ledger_last_seen_epoch","ledger_created_epoch"):
+        for key in ("file_bytes","ledger_bytes","ledger_last_seen_epoch","ledger_created_epoch","ledger_grace_hours"):
             if row[key] is not None and (type(row[key]) not in (int,float) or not math.isfinite(row[key]) or not 0<=row[key]<2**63):raise ValueError("Invalid static count/time")
+        for sample in row["own_js_sample"]:
+            if not isinstance(sample,dict) or set(sample)!={"path","file_sha256","file_bytes","current_ledger_contains","current_ledger_sha256","current_ledger_last_seen_epoch"}:raise ValueError("Invalid static sample fields")
+            if type(sample["current_ledger_contains"]) is not bool:raise ValueError("Invalid static sample presence")
+            for key in ("file_sha256","current_ledger_sha256"):
+                if sample[key] is not None and (not isinstance(sample[key],str) or not re.fullmatch(r"[0-9a-f]{64}",sample[key])):raise ValueError("Invalid static sample digest")
+            for key in ("file_bytes","current_ledger_last_seen_epoch"):
+                raw=sample[key]
+                if raw is not None and (type(raw) not in (int,float) or not math.isfinite(raw) or not 0<=raw<2**63):raise ValueError("Invalid static sample number")
     flags=retention["nginx_flags"]
     if set(flags)!={"enabled_config_readable","enabled_config_truncated","current_root_mentioned","previous_root_mentioned","previous_static_alias_mentioned","loaded_config_attested"} or any(type(value) is not bool for value in flags.values()):raise ValueError("Invalid nginx public flags")
     datetime.datetime.fromisoformat(report["collected_at"])
