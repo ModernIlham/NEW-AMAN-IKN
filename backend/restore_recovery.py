@@ -12,13 +12,23 @@ import json
 async def main(args):
     from routes.backup import restore_control_status, recover_restore
     if args.action == "status":
-        print(json.dumps(await restore_control_status(), ensure_ascii=False, default=str, indent=2))
-        return
-    if args.action == "clear-writer-leases":
-        if not args.workers_stopped:
-            raise SystemExit("Hentikan semua worker dahulu; --workers-stopped wajib")
         from db import db
-        result = await db.restore_write_leases.delete_many({})
+        leases = await db.restore_write_leases.find({}, {"_id": 1, "kind": 1, "status": 1,
+            "uncertainty_reason": 1, "updated_at": 1}).limit(25).to_list(25)
+        print(json.dumps({"control": await restore_control_status(), "writer_leases": leases,
+            "writer_lease_count": await db.restore_write_leases.count_documents({})},
+            ensure_ascii=False, default=str, indent=2))
+        return
+    if args.action in {"clear-writer-leases", "release-writer-lease"}:
+        if not args.workers_stopped or not getattr(args, "mongo_outcomes_verified", False):
+            raise SystemExit("Hentikan penulis dan verifikasi seluruh outcome operasi Mongo; --workers-stopped dan --mongo-outcomes-verified wajib")
+        from db import db
+        if args.action == "release-writer-lease":
+            if not args.lease_id or len(args.lease_id) > 128:
+                raise SystemExit("--lease-id eksplisit wajib")
+            result = await db.restore_write_leases.delete_one({"_id": args.lease_id})
+        else:
+            result = await db.restore_write_leases.delete_many({})
         print(json.dumps({"cleared_writer_leases": result.deleted_count}))
         return
     if not args.workers_stopped or not args.job_id:
@@ -48,7 +58,9 @@ async def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["status", "recover", "abort-preflight", "clear-writer-leases"])
+    parser.add_argument("action", choices=["status", "recover", "abort-preflight", "clear-writer-leases", "release-writer-lease"])
     parser.add_argument("--job-id")
     parser.add_argument("--workers-stopped", action="store_true")
+    parser.add_argument("--mongo-outcomes-verified", action="store_true")
+    parser.add_argument("--lease-id")
     asyncio.run(main(parser.parse_args()))

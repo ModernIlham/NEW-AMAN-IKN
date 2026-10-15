@@ -50,7 +50,9 @@ def test_route_post_benar_memanggil_create_dengan_auth(basis):
     assert r.status_code == 200, r.text
     assert r.json()["kode_satker"] == "B"
     assert jalan(basis.satker.find_one({"kode_satker": "B"}))["nama_satker"] == "Satker B"
-    route = next(r for r in app.routes if r.path == "/inventory-activities" and "POST" in r.methods)
+    # The real POST above proves app wiring; current FastAPI keeps included
+    # routers lazy, so inspect the original registered dependency definition.
+    route = next(r for r in ra.activities_router.routes if getattr(r, "path", None) == "/inventory-activities" and "POST" in r.methods)
     assert route.endpoint is ra.create_inventory_activity
     assert any(d.call is ra.require_writer for d in route.dependant.dependencies)
 

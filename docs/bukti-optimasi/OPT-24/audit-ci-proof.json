@@ -1,0 +1,18 @@
+{
+  "tool": "pip-audit2.9.0",
+  "actual_runtime_gate_exit": 0,
+  "actual_dev_gate_exit": 0,
+  "runtime_packages": 137,
+  "dev_packages": 156,
+  "advisories": 0,
+  "skipped": 0,
+  "ignored": 0,
+  "advisory_cache": "fresh temporary directory per invocation",
+  "network_fault": "Injected requests.ConnectTimeout inside real CLI child process; no proxy/policy change",
+  "network_fault_exit": 1,
+  "stale_report_removed": true,
+  "error_tail": [
+    "ERROR:pip_audit._cli:Tip: your network may be blocking this service. Try another service with `-s SERVICE`",
+    "AUDIT GAGAL: pip-audit gagal (exit 1); periksa advisory atau jaringan. Audit tidak lulus."
+  ]
+}

@@ -9,6 +9,7 @@ import contextlib
 import time
 import uuid
 import logging
+from contextvars import ContextVar
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
@@ -19,6 +20,41 @@ _RESTORE_STATES = {"preparing", "restoring", "rolling_back", "recovery_required"
 _CACHE_TTL = 3.0
 _cache = (0.0, False)
 logger = logging.getLogger(__name__)
+
+
+_writer_lease_context = ContextVar("aman_current_writer_lease_id", default=None)
+_writer_state_context = ContextVar("aman_current_writer_state", default=None)
+_UNCERTAINTY_REASONS = {"asset_create", "asset_put", "asset_patch", "batch_asset", "checklist_backfill"}
+
+
+def current_writer_lease_id():
+    return _writer_lease_context.get()
+
+
+async def mark_current_writer_uncertain(reason):
+    """Keep the existing physical lease until an operator proves write outcome.
+
+    The mutable context value is intentional: ASGI inner tasks inherit the
+    same admission object, so their mark is visible to outer finally cleanup.
+    """
+    if reason not in _UNCERTAINTY_REASONS:
+        raise ValueError("Alasan ketidakpastian penulis tidak dikenal")
+    state = _writer_state_context.get()
+    if state is None:
+        logger.error("Unknown write outcome has no admitted writer context")
+        return False
+    state["uncertain"] = True  # Set BEFORE any fallible database operation.
+    state["reason"] = reason
+    try:
+        result = await state["database"].restore_write_leases.update_one(
+            {"_id": state["lease_id"]}, {"$set": {"status": "uncertain_write",
+                "uncertainty_reason": reason, "updated_at": datetime.now(timezone.utc)}})
+        if not result.matched_count:
+            logger.error("Unknown write outcome lost its persistent writer admission")
+        return bool(result.matched_count)
+    except Exception:
+        logger.warning("Writer uncertainty metadata unavailable; physical lease remains held")
+        return False
 
 
 def jalur_bebas(path):
@@ -104,19 +140,25 @@ async def writer_admission(database=None):
         db = database
     lease_id, heartbeat = str(uuid.uuid4()), None
     await db.restore_write_leases.insert_one({"_id": lease_id,
-        "kind": "background", "updated_at": datetime.now(timezone.utc)})
+        "kind": "background", "status": "active", "updated_at": datetime.now(timezone.utc)})
+    context_token = _writer_lease_context.set(lease_id)
+    state = {"lease_id": lease_id, "database": db, "uncertain": False}
+    state_token = _writer_state_context.set(state)
     try:
         if await penulisan_ditahan(database=db):
             raise HTTPException(503, "Penulis latar ditahan selama restore/deploy")
         heartbeat = asyncio.create_task(_lease_heartbeat(lease_id, database=db))
         yield lease_id
     finally:
+        _writer_lease_context.reset(context_token)
+        _writer_state_context.reset(state_token)
         if heartbeat:
             heartbeat.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await heartbeat
-        with contextlib.suppress(Exception):
-            await db.restore_write_leases.delete_one({"_id": lease_id})
+        if not state["uncertain"]:
+            with contextlib.suppress(Exception):
+                await db.restore_write_leases.delete_one({"_id": lease_id})
 
 
 class PemeliharaanMiddleware:
@@ -131,14 +173,17 @@ class PemeliharaanMiddleware:
         is_writer = (scope.get("method") in {"POST", "PUT", "PATCH", "DELETE"}
                      or (scope.get("method") == "GET"
                          and scope.get("path", "").startswith("/api/assets/batch-v2/")))
-        lease_id, heartbeat = None, None
+        lease_id, heartbeat, context_token, state_token, state = None, None, None, None, None
         try:
             active = await pemeliharaan_aktif()
             if is_writer and not active:
                 from db import db
                 lease_id = str(uuid.uuid4())
                 await db.restore_write_leases.insert_one({"_id": lease_id,
-                    "updated_at": datetime.now(timezone.utc)})
+                    "kind": "http", "status": "active", "updated_at": datetime.now(timezone.utc)})
+                context_token = _writer_lease_context.set(lease_id)
+                state = {"lease_id": lease_id, "database": db, "uncertain": False}
+                state_token = _writer_state_context.set(state)
                 # Important: uncached second check AFTER admission registration.
                 # Either coordinator sees this lease, or this check sees gate.
                 active = await pemeliharaan_aktif_uncached(untuk_penulisan=True)
@@ -152,11 +197,15 @@ class PemeliharaanMiddleware:
                     heartbeat = asyncio.create_task(_lease_heartbeat(lease_id))
                 await self.app(scope, receive, send)
         finally:
+            if context_token is not None:
+                _writer_lease_context.reset(context_token)
+            if state_token is not None:
+                _writer_state_context.reset(state_token)
             if heartbeat:
                 heartbeat.cancel()
                 with contextlib.suppress(asyncio.CancelledError, Exception):
                     await heartbeat
-            if lease_id:
+            if lease_id and not state["uncertain"]:
                 from db import db
                 with contextlib.suppress(Exception):
                     await db.restore_write_leases.delete_one({"_id": lease_id})

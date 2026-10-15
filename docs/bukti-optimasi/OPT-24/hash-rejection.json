@@ -1,0 +1,6 @@
+{
+  "intentional_bad_hash_rejected": true,
+  "installer": "pip",
+  "exit_code": 1,
+  "target": "fresh disposable venv, not production"
+}

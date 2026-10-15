@@ -130,6 +130,7 @@ if [[ -n "${BASH_SOURCE[0]:-}" && "${BASH_SOURCE[0]}" != "$0" ]]; then
 fi
 
 set -euo pipefail
+AMAN_CLEAN_VENV_PROTOCOL=1
 
 APP_DIR="${APP_DIR:-/var/www/inventarisasi}"
 # Cabang tujuan bisa diganti untuk uji coba; bawaannya main.
@@ -140,6 +141,7 @@ DEPLOY_SHA="${1:-${DEPLOY_SHA:-}}"
 # Mode otomatis wajib monoton; mode manual boleh memilih commit CI lama untuk
 # rollback operator yang disengaja. Argumen kedua kembali menang atas env.
 DEPLOY_MODE="${2:-${DEPLOY_MODE:-manual}}"
+CONTROLLER_SHA="${3:-${CONTROLLER_SHA:-$DEPLOY_SHA}}"
 
 if [[ ! "$DEPLOY_SHA" =~ ^[0-9A-Fa-f]{40}$ ]]; then
   echo "DEPLOY DIBATALKAN: berikan DEPLOY_SHA berupa commit SHA lengkap 40 karakter." >&2
@@ -147,9 +149,16 @@ if [[ ! "$DEPLOY_SHA" =~ ^[0-9A-Fa-f]{40}$ ]]; then
   exit 2
 fi
 DEPLOY_SHA="${DEPLOY_SHA,,}"
+if [[ ! "$CONTROLLER_SHA" =~ ^[0-9A-Fa-f]{40}$ ]]; then
+  echo "DEPLOY DIBATALKAN: CONTROLLER_SHA wajib SHA lengkap." >&2; exit 2
+fi
+CONTROLLER_SHA="${CONTROLLER_SHA,,}"
 if [[ "$DEPLOY_MODE" != "otomatis" && "$DEPLOY_MODE" != "manual" ]]; then
   echo "DEPLOY DIBATALKAN: DEPLOY_MODE hanya boleh 'otomatis' atau 'manual'." >&2
   exit 2
+fi
+if [ "$DEPLOY_MODE" = otomatis ] && [ "$CONTROLLER_SHA" != "$DEPLOY_SHA" ]; then
+  echo "DEPLOY DIBATALKAN: controller deploy otomatis wajib identik dengan target CI." >&2; exit 2
 fi
 cd "$APP_DIR"
 
@@ -287,7 +296,13 @@ periksa_restore_aktif
 aman_env_siapkan "$APP_DIR" 1
 DEPLOY_FASE=preflight
 KODE_TERSENTUH=0
-DEPENDENSI_TERSENTUH=0
+SERVICE_TERSENTUH=0
+VENV_SWITCH_DICOBA=0
+ENV_SIAP=0
+AMAN_BACKEND_CONTROL=""
+AMAN_BACKEND_CONTROL_IDENT=""
+BASE_PYTHON=""
+TARGET_LEGACY=0
 FRONTEND_LAMA_DIPINDAH=0
 FRONTEND_BARU_DICOBA=0
 FRONTEND_SEBELUMNYA=0
@@ -296,29 +311,103 @@ AMAN_DEPLOY_RECOVERY=0
 PERCOBAAN_KESEHATAN=45
 HEALTH_URL="${BACKEND_HEALTH_URL:-http://127.0.0.1:8001/api/health}"
 DEEP_HEALTH_URL="${BACKEND_DEEP_HEALTH_URL:-http://127.0.0.1:8001/api/health/deep}"
+AMAN_HEALTH_TMP=""
+ROLLBACK_PERLU_SHA=0
+# Rilis pra-identitas masih dapat dipulihkan pada rollout pertama. Semua rilis
+# berikutnya wajib membuktikan SHA worker, termasuk sesudah rollback.
+if [ -f backend/release_info.py ]; then ROLLBACK_PERLU_SHA=1; fi
 
 pasang_env() { aman_env_pasang; }
-pasang_dependensi_backend() {
-  if [ -x backend/venv/bin/pip ]; then
-    backend/venv/bin/pip install -q -r backend/requirements.txt
-  fi
+transaksi_environment() {
+  "$BASE_PYTHON" -I "$AMAN_BACKEND_CONTROL/backend_environment.py" "$1" \
+    --app "$APP_DIR" --control "$AMAN_BACKEND_CONTROL" "${@:2}"
 }
-restart_backend() {
-  sudo -n supervisorctl restart inventarisasi-backend 2>/dev/null \
-    || supervisorctl restart inventarisasi-backend
+jalankan_supervisor() {
+  sudo -n supervisorctl "$1" inventarisasi-backend 2>/dev/null \
+    || supervisorctl "$1" inventarisasi-backend
+}
+periksa_proses_backend() {
+  local pid
+  pid="$(sudo -n supervisorctl pid inventarisasi-backend 2>/dev/null)" \
+    || pid="$(supervisorctl pid inventarisasi-backend 2>/dev/null)" || return 1
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
+  "$BASE_PYTHON" -I "$AMAN_BACKEND_CONTROL/backend_environment.py" attest-process \
+    --app "$APP_DIR" --pid "$pid" --base-python "$BASE_PYTHON"
+}
+backend_berhenti() {
+  local hasil nama status sisa
+  hasil="$(sudo -n supervisorctl status inventarisasi-backend 2>/dev/null)" \
+    || hasil="$(supervisorctl status inventarisasi-backend 2>/dev/null)" || :
+  read -r nama status sisa <<< "$hasil"
+  [ "$nama" = inventarisasi-backend ] && [ "$status" = STOPPED ]
+}
+hentikan_backend() {
+  local i
+  jalankan_supervisor stop || { backend_berhenti || return 1; }
+  for i in $(seq 1 30); do
+    backend_berhenti && return 0
+    sleep 1
+  done
+  echo "GAGAL: Supervisor belum membuktikan seluruh backend STOPPED." >&2
+  return 1
+}
+siapkan_environment_backend() {
+  local nama
+  [ -x backend/venv/bin/python ] || { echo "GAGAL: interpreter venv lama wajib tersedia." >&2; return 1; }
+  BASE_PYTHON="$(backend/venv/bin/python -I -c 'import os,sys;print(os.path.realpath(sys._base_executable))')"
+  if [ -L backend/.venv-releases ]; then echo "GAGAL: root venv tidak boleh symlink." >&2; return 1; fi
+  mkdir -p backend/.venv-releases
+  AMAN_BACKEND_CONTROL="$(umask 077; mktemp -d "$APP_DIR/backend/.venv-releases/.run-XXXXXXXXXX")"
+  AMAN_BACKEND_CONTROL_IDENT="$(stat -c %d:%i:%u -- "$AMAN_BACKEND_CONTROL")"
+  # Workflow hanya mengirim controller shell lewat stdin. Helper berasal dari
+  # objek Git controller immutable sebelum target code disentuh.
+  for nama in backend_environment.py pinned_installer.py runtime_native_smoke.py; do
+    git show "${CONTROLLER_SHA}:scripts/releases/${nama}" > "$AMAN_BACKEND_CONTROL/$nama"
+    chmod 600 "$AMAN_BACKEND_CONTROL/$nama"
+  done
+  git show "${CONTROLLER_SHA}:backend/assets/fonts/Inter.ttf" > "$AMAN_BACKEND_CONTROL/Inter.ttf"
+  chmod 600 "$AMAN_BACKEND_CONTROL/Inter.ttf"
+  if ! git show "${DEPLOY_SHA}:backend/requirements-runtime.lock" > "$AMAN_BACKEND_CONTROL/runtime.lock"; then
+    [ "$DEPLOY_MODE" = manual ] || return 1
+    : > "$AMAN_BACKEND_CONTROL/runtime.lock"
+  fi
+  "$BASE_PYTHON" -I "$AMAN_BACKEND_CONTROL/backend_environment.py" attest --app "$APP_DIR" \
+    --supervisor-config "${AMAN_SUPERVISOR_CONFIG:-/etc/supervisor/conf.d/inventarisasi-backend.conf}"
+  if [ "$DEPLOY_MODE" = manual ]; then
+    transaksi_environment prepare --target "$DEPLOY_SHA" --previous "$PREV" --owner "$AMAN_DEPLOY_OWNER" \
+      --lock "$AMAN_BACKEND_CONTROL/runtime.lock" --manual
+  else
+    transaksi_environment prepare --target "$DEPLOY_SHA" --previous "$PREV" --owner "$AMAN_DEPLOY_OWNER" \
+      --lock "$AMAN_BACKEND_CONTROL/runtime.lock"
+  fi
+  ENV_SIAP=1
+  TARGET_LEGACY="$(transaksi_environment show --field candidate_legacy)"
+  [ "$TARGET_LEGACY" = 0 ] || [ "$TARGET_LEGACY" = 1 ]
 }
 periksa_kesehatan() {
-  local i gagal=0
+  local i gagal=0 sha="${1:-$DEPLOY_SHA}" perlu_sha="${2:-1}" python_health
+  python_health="$APP_DIR/backend/venv/bin/python"
+  if [ ! -x "$python_health" ]; then python_health=python3; fi
+  AMAN_HEALTH_TMP="$(mktemp "${TMPDIR:-/tmp}/aman-health.XXXXXX")" || return 1
   echo "Cek kesehatan backend di ${HEALTH_URL} ..."
   for i in $(seq 1 "$PERCOBAAN_KESEHATAN"); do
-    if curl -fsS --max-time 3 "$HEALTH_URL" >/dev/null 2>&1; then break; fi
+    if curl -fsS --max-time 3 -o "$AMAN_HEALTH_TMP" "$HEALTH_URL" >/dev/null 2>&1; then
+      if [ "$perlu_sha" = 0 ] || "$python_health" -c '
+import json,re,sys
+with open(sys.argv[1]) as source: value=json.load(source)
+sha=value.get("release_sha")
+sys.exit(0 if isinstance(sha,str) and re.fullmatch("[0-9a-f]{40}",sha) and sha==sys.argv[2] else 1)
+' "$AMAN_HEALTH_TMP" "$sha" >/dev/null 2>&1; then break; fi
+    fi
     if [ "$i" -eq "$PERCOBAAN_KESEHATAN" ]; then
-      echo "GAGAL: backend tidak sehat (health-check timeout)." >&2
+      echo "GAGAL: backend tidak sehat atau SHA worker tidak cocok (health-check timeout)." >&2
       gagal=1
     else
       sleep 2
     fi
   done
+  rm -f -- "$AMAN_HEALTH_TMP"
+  AMAN_HEALTH_TMP=""
   [ "$gagal" = 0 ] || return 1
   echo "Cek kesehatan mendalam (Mongo+GridFS) di ${DEEP_HEALTH_URL} ..."
   for i in $(seq 1 "$PERCOBAAN_KESEHATAN"); do
@@ -340,10 +429,16 @@ pulihkan() {
   local gagal=0
   echo "ROLLBACK fase ${DEPLOY_FASE}: kembali ke ${PREV} ..." >&2
   cd "$APP_DIR" || return 1
+  # Candidate juga wajib berhenti sebelum code/env kembali: lazy imports tidak
+  # boleh melintasi dua generasi dependency.
+  if ! hentikan_backend; then
+    echo "RECOVERY_REQUIRED: backend belum STOPPED; kode/env tidak ditukar saat worker mungkin hidup." >&2
+    return 1
+  fi
   git reset --hard "$PREV" || gagal=1
   pasang_env || gagal=1
-  if [ "$DEPENDENSI_TERSENTUH" = 1 ]; then
-    pasang_dependensi_backend || { echo "ROLLBACK: pip install GAGAL." >&2; gagal=1; }
+  if [ "$VENV_SWITCH_DICOBA" = 1 ]; then
+    transaksi_environment restore || { echo "ROLLBACK: environment lama belum terbukti pulih." >&2; gagal=1; }
   fi
   if [ "$FRONTEND_LAMA_DIPINDAH" = 1 ] && [ -d frontend/build.old ]; then
     if rm -rf -- frontend/build; then
@@ -354,9 +449,13 @@ pulihkan() {
   elif [ "$FRONTEND_SEBELUMNYA" = 0 ] && [ "$FRONTEND_BARU_DICOBA" = 1 ]; then
     rm -rf -- frontend/build || gagal=1
   fi
-  restart_backend || { echo "ROLLBACK: restart backend GAGAL." >&2; gagal=1; }
+  if [ "$gagal" = 0 ]; then
+    if ! jalankan_supervisor start || ! periksa_proses_backend; then
+      echo "ROLLBACK: start/identitas process backend GAGAL." >&2; gagal=1
+    fi
+  fi
   [ "$(git rev-parse HEAD)" = "$PREV" ] || gagal=1
-  periksa_kesehatan || gagal=1
+  periksa_kesehatan "$PREV" "$ROLLBACK_PERLU_SHA" || gagal=1
   if [ "$gagal" = 0 ]; then
     echo "ROLLBACK selesai: SHA dan kesehatan rilis sebelumnya terverifikasi." >&2
   else
@@ -370,16 +469,34 @@ aman_deploy_keluar() {
   # Sinyal berulang jangan memutus kompensasi yang sedang memulihkan data.
   trap '' HUP INT TERM
   set +e
-  if [ "$rc" -ne 0 ] && [ "$KODE_TERSENTUH" = 1 ] && [ "$DEPLOY_SELESAI" = 0 ]; then
+  if [ -n "$AMAN_HEALTH_TMP" ]; then rm -f -- "$AMAN_HEALTH_TMP"; fi
+  if [ "$rc" -ne 0 ] && { [ "$KODE_TERSENTUH" = 1 ] || [ "$SERVICE_TERSENTUH" = 1 ]; } && [ "$DEPLOY_SELESAI" = 0 ]; then
     if ! pulihkan; then rc=70; AMAN_DEPLOY_RECOVERY=1; fi
+  fi
+  if [ "$rc" -ne 0 ] && [ "$AMAN_DEPLOY_RECOVERY" = 0 ] && [ -n "$AMAN_BACKEND_CONTROL" ] \
+      && [ -f "$AMAN_BACKEND_CONTROL/state.json" ]; then
+    if ! transaksi_environment abort; then rc=70; AMAN_DEPLOY_RECOVERY=1; fi
   fi
   if [ "$AMAN_DEPLOY_LOCK" = 1 ] && [ "$AMAN_DEPLOY_RECOVERY" = 0 ]; then
     if ! hasil="$(kelola_kontrol_restore release)" || [ "$hasil" != 0 ]; then
       echo "RECOVERY_REQUIRED: mutex deployment tidak dapat dilepas; periksa restore_control GLOBAL milik run ini." >&2
       rc=70
+      AMAN_DEPLOY_RECOVERY=1
     fi
   elif [ "$AMAN_DEPLOY_RECOVERY" = 1 ]; then
     echo "Mutex deployment dipertahankan: $AMAN_DEPLOY_OWNER; pemulihan operator wajib sebelum run berikutnya." >&2
+  fi
+  if [ -n "$AMAN_BACKEND_CONTROL" ]; then
+    if [ "$AMAN_DEPLOY_RECOVERY" = 1 ]; then
+      echo "State environment dipertahankan di $AMAN_BACKEND_CONTROL; jangan hapus env lama/candidate sebelum pemeriksaan operator." >&2
+    elif [[ "$AMAN_BACKEND_CONTROL" == "$APP_DIR/backend/.venv-releases/.run-"* ]] \
+        && [ ! -L "$AMAN_BACKEND_CONTROL" ] \
+        && [ "$(stat -c %d:%i:%u -- "$AMAN_BACKEND_CONTROL" 2>/dev/null)" = "$AMAN_BACKEND_CONTROL_IDENT" ]; then
+      rm -rf -- "$AMAN_BACKEND_CONTROL" || rc=70
+    else
+      echo "RECOVERY_REQUIRED: ownership control berubah; jalur tidak dihapus." >&2
+      rc=70
+    fi
   fi
   # aman_env_bersihkan mengambil status perintah sebelumnya. Jangan menimpa
   # exit kegagalan asli atau 70 ketika pemulihan belum terbukti.
@@ -441,6 +558,11 @@ if ! git merge-base --is-ancestor "$DEPLOY_SHA" "origin/${DEPLOY_BRANCH}"; then
   echo "DEPLOY DIBATALKAN: commit ${DEPLOY_SHA} bukan bagian origin/${DEPLOY_BRANCH}." >&2
   exit 1
 fi
+if ! git cat-file -e "${CONTROLLER_SHA}^{commit}" 2>/dev/null \
+    || ! git merge-base --is-ancestor "$CONTROLLER_SHA" "origin/${DEPLOY_BRANCH}"; then
+  echo "DEPLOY DIBATALKAN: controller bukan commit pada origin/${DEPLOY_BRANCH}." >&2
+  exit 1
+fi
 
 # Concurrency menyerialkan job tetapi rerun CI lama tetap bisa datang setelah
 # rilis baru. Auto-deploy tidak boleh menurunkan produksi; rollback ke ancestor
@@ -470,6 +592,11 @@ if [ -L frontend/build ] || [ -L frontend/build.old ] || [ -L frontend/build.new
   exit 1
 fi
 if [ -d frontend/build ]; then FRONTEND_SEBELUMNYA=1; fi
+DEPLOY_FASE=siapkan_environment_backend
+siapkan_environment_backend
+DEPLOY_FASE=hentikan_backend
+SERVICE_TERSENTUH=1
+hentikan_backend
 DEPLOY_FASE=kode
 KODE_TERSENTUH=1
 git reset --hard "$DEPLOY_SHA"
@@ -481,13 +608,17 @@ fi
 echo "Commit rilis terkunci dan terpasang: $(git rev-parse --short HEAD)"
 DEPLOY_FASE=env
 pasang_env
-DEPLOY_FASE=dependency_backend
-DEPENDENSI_TERSENTUH=1
-pasang_dependensi_backend
+DEPLOY_FASE=environment_backend
+VENV_SWITCH_DICOBA=1
+transaksi_environment activate
 DEPLOY_FASE=restart_backend
-restart_backend
+jalankan_supervisor start
+periksa_proses_backend
 DEPLOY_FASE=kesehatan_backend
-periksa_kesehatan
+if [ "$TARGET_LEGACY" = 1 ]; then
+  echo "MANUAL LEGACY: retained environment terverifikasi; health legacy tidak melaporkan SHA worker." >&2
+fi
+periksa_kesehatan "$DEPLOY_SHA" "$((1 - TARGET_LEGACY))"
 
 # Bangun ke staging; install/build gagal pun mengembalikan backend + kode.
 DEPLOY_FASE=dependency_frontend
@@ -496,7 +627,7 @@ yarn install --frozen-lockfile --ignore-engines
 export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=2048}"
 DEPLOY_FASE=build_frontend
 rm -rf build.new
-BUILD_PATH=build.new yarn build
+BUILD_PATH=build.new REACT_APP_RELEASE_SHA="$DEPLOY_SHA" yarn build
 if [ ! -f build.new/index.html ]; then
   echo "GAGAL: build.new/index.html tidak ada — build tidak menghasilkan bundel." >&2
   exit 1
@@ -504,7 +635,25 @@ fi
 DEPLOY_FASE=retensi_static
 PYTHON_RETENSI="$APP_DIR/backend/venv/bin/python"
 if [ ! -x "$PYTHON_RETENSI" ]; then PYTHON_RETENSI=python3; fi
-"$PYTHON_RETENSI" "$APP_DIR/scripts/retain_static_assets.py" --current build --staged build.new
+if [ "$TARGET_LEGACY" = 1 ]; then
+  # Hanya retained foundation yang dibuktikan manifest/inventory. Controller
+  # baru mencatat SHA build lama; tidak mengubah daftar aset/precache SW.
+  "$PYTHON_RETENSI" -c 'import json,sys;open("build.new/aman-release.json","x").write(json.dumps({"source_sha":sys.argv[1],"legacy_controller_stamp":True}))' "$DEPLOY_SHA"
+fi
+"$PYTHON_RETENSI" -c '
+import json,pathlib,sys
+manifest=pathlib.Path("build.new/aman-release.json")
+if manifest.is_symlink() or not manifest.is_file() or manifest.stat().st_size>1024*1024:
+    raise SystemExit("GAGAL: metadata SHA frontend tidak aman atau hilang")
+value=json.loads(manifest.read_text())
+if value.get("source_sha")!=sys.argv[1]:
+    raise SystemExit("GAGAL: SHA build frontend tidak cocok dengan DEPLOY_SHA")
+' "$DEPLOY_SHA"
+if [ ! -f "$APP_DIR/scripts/retain_static_assets.py" ]; then
+  git show "${CONTROLLER_SHA}:scripts/retain_static_assets.py" > "$AMAN_BACKEND_CONTROL/retain_static_assets.py"
+  RETENSI_HELPER="$AMAN_BACKEND_CONTROL/retain_static_assets.py"
+else RETENSI_HELPER="$APP_DIR/scripts/retain_static_assets.py"; fi
+"$PYTHON_RETENSI" "$RETENSI_HELPER" --current build --staged build.new
 DEPLOY_FASE=aktivasi_frontend
 rm -rf build.old
 if [ -d build ]; then
@@ -517,7 +666,8 @@ cd "$APP_DIR"
 DEPLOY_FASE=verifikasi_akhir
 [ -f frontend/build/index.html ]
 [ "$(git rev-parse HEAD)" = "$DEPLOY_SHA" ]
-periksa_kesehatan
+periksa_kesehatan "$DEPLOY_SHA" "$((1 - TARGET_LEGACY))"
+transaksi_environment success
 DEPLOY_SELESAI=1
 # Pelepasan mutex juga wajib berhasil SEBELUM pesan sukses final.
 if ! hasil_kontrol="$(kelola_kontrol_restore release)" || [ "$hasil_kontrol" != 0 ]; then

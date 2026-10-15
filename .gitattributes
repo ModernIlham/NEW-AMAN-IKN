@@ -1,0 +1,2 @@
+# Preserve the upstream licensed text byte-for-byte for checksum verification.
+backend/assets/fonts/OFL.txt -text whitespace=-blank-at-eol

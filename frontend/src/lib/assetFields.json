@@ -1,0 +1,206 @@
+{
+  "asset_code": {
+    "defaultValue": "",
+    "label": "Kode Aset"
+  },
+  "NUP": {
+    "defaultValue": "",
+    "label": "NUP"
+  },
+  "asset_name": {
+    "defaultValue": "",
+    "label": "Nama Aset"
+  },
+  "category": {
+    "defaultValue": "",
+    "label": "Kategori"
+  },
+  "brand": {
+    "defaultValue": "",
+    "label": "Brand"
+  },
+  "model": {
+    "defaultValue": "",
+    "label": "Model"
+  },
+  "kode_register": {
+    "defaultValue": "",
+    "label": "Kode Register"
+  },
+  "serial_number": {
+    "defaultValue": "",
+    "label": "Serial Number"
+  },
+  "purchase_date": {
+    "defaultValue": "",
+    "label": "Tgl Beli"
+  },
+  "purchase_price": {
+    "defaultValue": "",
+    "label": "Harga"
+  },
+  "location": {
+    "defaultValue": "",
+    "label": "Lokasi"
+  },
+  "eselon1": {
+    "defaultValue": "",
+    "label": "Eselon I"
+  },
+  "eselon2": {
+    "defaultValue": "",
+    "label": "Eselon II"
+  },
+  "eselon3": {
+    "defaultValue": "",
+    "label": "Eselon III"
+  },
+  "eselon4": {
+    "defaultValue": "",
+    "label": "Eselon IV"
+  },
+  "eselon5": {
+    "defaultValue": "",
+    "label": "Eselon V"
+  },
+  "user": {
+    "defaultValue": "",
+    "label": "Pengguna"
+  },
+  "condition": {
+    "defaultValue": "Baik",
+    "label": "Kondisi"
+  },
+  "status": {
+    "defaultValue": "Aktif",
+    "label": "Status"
+  },
+  "pengguna_melekat_ke": {
+    "defaultValue": "",
+    "label": "Melekat Ke"
+  },
+  "pengguna_jabatan": {
+    "defaultValue": "",
+    "label": "Jabatan Pengguna"
+  },
+  "pengguna_nip": {
+    "defaultValue": "",
+    "label": "NIP/NIK Pegawai"
+  },
+  "operasional_jenis": {
+    "defaultValue": "",
+    "label": "Jenis Operasional"
+  },
+  "nomor_bast": {
+    "defaultValue": "",
+    "label": "Nomor BAST"
+  },
+  "nomor_spm": {
+    "defaultValue": "",
+    "label": "Nomor SPM"
+  },
+  "perolehan_dari_nama": {
+    "defaultValue": "",
+    "label": "Perolehan Dari"
+  },
+  "nomor_kontrak": {
+    "defaultValue": "",
+    "label": "Nomor Kontrak"
+  },
+  "cara_bayar_kontrak": {
+    "defaultValue": "",
+    "label": "Cara Bayar Kontrak"
+  },
+  "nomor_bukti_perolehan": {
+    "defaultValue": "",
+    "label": "Bukti Perolehan"
+  },
+  "supplier": {
+    "defaultValue": "",
+    "label": "Supplier"
+  },
+  "notes": {
+    "defaultValue": "",
+    "label": "Catatan"
+  },
+  "stiker_status": {
+    "defaultValue": "Belum Terpasang",
+    "label": "Stiker Status"
+  },
+  "stiker_ukuran": {
+    "defaultValue": "",
+    "label": "Ukuran Stiker"
+  },
+  "inventory_status": {
+    "defaultValue": "Belum Diinventarisasi",
+    "label": "Status Inventarisasi"
+  },
+  "temuan_pencatatan": {
+    "defaultValue": "",
+    "label": "Temuan Pencatatan"
+  },
+  "klasifikasi_tidak_ditemukan": {
+    "defaultValue": "",
+    "label": "Klasifikasi"
+  },
+  "sub_klasifikasi": {
+    "defaultValue": "",
+    "label": "Sub Klasifikasi"
+  },
+  "uraian_tidak_ditemukan": {
+    "defaultValue": "",
+    "label": "Uraian Tidak Ditemukan"
+  },
+  "tindak_lanjut": {
+    "defaultValue": "",
+    "label": "Tindak Lanjut"
+  },
+  "koordinat_latitude": {
+    "defaultValue": "",
+    "label": "Latitude"
+  },
+  "koordinat_longitude": {
+    "defaultValue": "",
+    "label": "Longitude"
+  },
+  "kronologis": {
+    "defaultValue": "",
+    "label": "Kronologis"
+  },
+  "marker_pin": {
+    "defaultValue": "",
+    "label": "Desain Marker Pin"
+  },
+  "keterangan_berlebih": {
+    "defaultValue": "",
+    "label": "Keterangan Berlebih"
+  },
+  "asal_usul_berlebih": {
+    "defaultValue": "",
+    "label": "Asal Usul Berlebih"
+  },
+  "nomor_perkara": {
+    "defaultValue": "",
+    "label": "Nomor Perkara"
+  },
+  "pihak_bersengketa": {
+    "defaultValue": "",
+    "label": "Pihak Bersengketa"
+  },
+  "keterangan_sengketa": {
+    "defaultValue": "",
+    "label": "Keterangan Sengketa"
+  },
+  "garansi_hingga": {
+    "defaultValue": "",
+    "label": "Garansi Hingga"
+  },
+  "garansi_jenis": {
+    "defaultValue": "",
+    "label": "Jenis Garansi"
+  },
+  "barang_bersejarah": {
+    "defaultValue": "",
+    "label": "Barang Bersejarah"
+  }
+}

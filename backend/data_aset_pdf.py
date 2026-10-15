@@ -4,6 +4,7 @@ Satu dasar per unduhan. Urutan kelompok mengikuti kemunculan pertama pada
 hasil sort; urutan aset di dalam kelompok tidak diubah. Tidak membuang aset
 tanpa kode/lokasi/identitas/PSP dan tidak memodifikasi dokumen sumber.
 """
+from asset_sorting import harga_float
 import math
 
 from asset_sorting import ASSET_SORT_OPTIONS
@@ -82,7 +83,7 @@ pemanggil. Metadata jumlah/nilai kelompok tetap meliputi seluruh hasil filter.
         g = kelompok.setdefault(key, {"label": label, "rows": [], "value": 0.0})
         g["rows"].append(a)
         try:
-            nilai = float(a.get("purchase_price") or 0)
+            nilai = harga_float(a.get("purchase_price"))
             if math.isfinite(nilai):
                 g["value"] += nilai
         except (ValueError, TypeError):

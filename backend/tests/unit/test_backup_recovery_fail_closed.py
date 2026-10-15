@@ -623,3 +623,35 @@ def test_fresh_install_builder_exports_required_empty_collections_and_can_restor
     run(rb.run_restore_task("test-job", path, "operator"))
     assert run(rb.restore_control_status())["state"] == "completed"
     assert run(database.users.find_one({"username": "operator"}))["password"] == _TEST_ADMIN["password"]
+
+
+def test_reset_can_exclude_only_its_own_admitted_writer_lease(env):
+    database, _ = env
+    run(database.backup_jobs.delete_many({}))
+    async def scenario():
+        async with pm.writer_admission(database=database) as own_lease:
+            assert pm.current_writer_lease_id() == own_lease
+            await rb._wait_writer_drain(timeout=-1, exclude_lease_id=pm.current_writer_lease_id())
+            await database.restore_write_leases.insert_one({"_id": "someone-else"})
+            with pytest.raises(RuntimeError, match="belum selesai"):
+                await rb._wait_writer_drain(timeout=-1, exclude_lease_id=own_lease)
+            await database.restore_write_leases.delete_one({"_id": "someone-else"})
+        assert pm.current_writer_lease_id() is None
+    run(scenario())
+
+
+def test_reset_preserve_master_collections_keeps_live_bson_types_and_identity(env):
+    database, _ = env
+    original_id = ObjectId()
+    bson_date = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    run(database.report_settings.insert_one({"_id": original_id, "type": "master", "created_at": bson_date}))
+    source = make_archive(rb.BACKUP_TEMP_DIR / "preserve.zip", legacy=True, media=False)
+    with zipfile.ZipFile(source, "a") as zf:
+        zf.writestr("report_settings.json", json.dumps([{"type": "master", "created_at": "different-string"}]))
+    with zipfile.ZipFile(source) as zf:
+        stats, _, _ = run(rb._apply_archive(zf, "test-job", preserve_collections={"users", "report_settings"}))
+    actual = run(database.report_settings.find_one({"type": "master"}))
+    assert actual["_id"] == original_id and isinstance(actual["created_at"], datetime)
+    assert stats["report_settings"] == 1
+    assert run(database.users.find_one({"username": "operator"}))["password"] == _TEST_ADMIN["password"]
+    assert run(database.assets.find_one({"id": "restored"}))

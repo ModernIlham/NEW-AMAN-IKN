@@ -21,7 +21,7 @@ import laporan_kolom as lkl
 import laporan_linimasa as llm
 import kodefikasi_utils as kod
 import data_aset_pdf as dap
-from asset_sorting import ASSET_SORT_OPTIONS
+from asset_sorting import ASSET_SORT_OPTIONS, urutkan_harga_aset, batas_harga, harga_float
 import organisasi_utils as org
 import spasial_utils as su
 from pathlib import Path
@@ -43,6 +43,7 @@ from shared_utils import (pastikan_akses_kegiatan_id, ambang_kapitalisasi,
                           kode_satker_user, _q_pejabat_satker,
                           eselon_satker)
 from report_filters import active_asset_filter
+from report_read_limits import baca_laporan_lengkap
 from report_utils import berstiker, hitung_status_stiker, distribusi_pengguna
 from satker_utils import NILAI_DOKUMEN, NILAI_DOKUMEN_DEFAULT
 from markupsafe import Markup
@@ -101,10 +102,13 @@ def _jinja_env():
     alphabet has no HTML metacharacters). Server-built HTML (e.g. status_detail)
     is passed through markupsafe.Markup so only that trusted markup stays raw."""
     from jinja2 import Environment, FileSystemLoader, select_autoescape
-    return Environment(
+    env = Environment(
         loader=FileSystemLoader(TEMPLATES_DIR),
         autoescape=select_autoescape(["html", "xml"]),
     )
+    from report_fonts import report_font_css
+    env.globals["report_font_css"] = report_font_css
+    return env
 
 
 # ============================================================================
@@ -1137,10 +1141,10 @@ async def get_rekapitulasi(activity_id: str, _user: dict = Depends(require_user_
     await pastikan_akses_kegiatan_id(_user, activity_id)
 
     # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
-    assets = await db.assets.find(
+    assets = await baca_laporan_lengkap(db.assets.find(
         {"activity_id": activity_id},
         {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
-    ).to_list(100000)
+    ), 100000, "Data aset laporan")
 
     total = len(assets)
     ditemukan = [a for a in assets if a.get("inventory_status") == "Ditemukan"]
@@ -1150,8 +1154,7 @@ async def get_rekapitulasi(activity_id: str, _user: dict = Depends(require_user_
     sengketa = [a for a in assets if a.get("inventory_status") == "Sengketa"]
 
     def safe_price(a):
-        try: return float(a.get("purchase_price", 0) or 0)
-        except: return 0
+        return harga_float(a.get("purchase_price"))
 
     # Tiga ember yang JUMLAHNYA GENAP dengan total tidak-ditemukan. Sebelumnya
     # hanya dua yang dilaporkan, sehingga aset yang sebabnya belum ditetapkan
@@ -1281,17 +1284,17 @@ async def _data_ba_tidak_ditemukan(activity, settings):
     import ba_utils
     from pelaporan_utils import narasi_hari_tanggal
 
-    assets = await db.assets.find(
+    assets = await baca_laporan_lengkap(db.assets.find(
         {"activity_id": activity["id"]},
         {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
-    ).to_list(100000)
+    ), 100000, "Data aset laporan")
     tidak_ditemukan = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan"]
     ditemukan = [a for a in assets if a.get("inventory_status") == "Ditemukan"]
     kesalahan, lainnya, belum_klas = ba_utils.klasifikasikan_tidak_ditemukan(tidak_ditemukan)
 
     def safe_price(a):
         try:
-            return float(a.get("purchase_price", 0) or 0)
+            return harga_float(a.get("purchase_price"))
         except (ValueError, TypeError):
             return 0.0
 
@@ -1719,10 +1722,10 @@ async def generate_sptjm_pdf(activity_id: str, _user: dict = Depends(require_use
 
     settings = await pengaturan_kop(activity)
     # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
-    assets = await db.assets.find(
+    assets = await baca_laporan_lengkap(db.assets.find(
         {"activity_id": activity_id},
         {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
-    ).to_list(100000)
+    ), 100000, "Data aset laporan")
     tidak_ditemukan = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan"]
     # SPTJM adalah syarat usul PENGHAPUSAN BMN yang benar-benar hilang, jadi
     # cakupannya hanya "Tidak Ditemukan Lainnya". Aset "Kesalahan Pencatatan"
@@ -1734,8 +1737,7 @@ async def generate_sptjm_pdf(activity_id: str, _user: dict = Depends(require_use
     _kes, hilang, belum_klas = ba_utils.klasifikasikan_tidak_ditemukan(tidak_ditemukan)
 
     def safe_price(a):
-        try: return float(a.get("purchase_price", 0) or 0)
-        except: return 0
+        return harga_float(a.get("purchase_price"))
 
     def fmt_rp(val):
         try: return f"Rp {int(val):,}".replace(",", ".")
@@ -1869,15 +1871,14 @@ async def generate_surat_koreksi_pdf(activity_id: str, _user: dict = Depends(req
 
     settings = await pengaturan_kop(activity)
     # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
-    assets = await db.assets.find(
+    assets = await baca_laporan_lengkap(db.assets.find(
         {"activity_id": activity_id},
         {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
-    ).to_list(100000)
+    ), 100000, "Data aset laporan")
     koreksi_assets = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan" and a.get("klasifikasi_tidak_ditemukan") == "Kesalahan Pencatatan"]
 
     def safe_price(a):
-        try: return float(a.get("purchase_price", 0) or 0)
-        except: return 0
+        return harga_float(a.get("purchase_price"))
 
     def fmt_rp(val):
         try: return f"Rp {int(val):,}".replace(",", ".")
@@ -2000,10 +2001,10 @@ async def _konten_surat_pernyataan(activity, settings):
     saling membantah: `koreksi` untuk Surat Koreksi, `hilang` untuk SPTJM, dan
     `belum_klas` tidak masuk keduanya."""
     import ba_utils
-    assets = await db.assets.find(
+    assets = await baca_laporan_lengkap(db.assets.find(
         {"activity_id": activity["id"]},
         {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
-    ).to_list(100000)
+    ), 100000, "Data aset laporan")
     tidak_ditemukan = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan"]
     koreksi, hilang, belum_klas = ba_utils.klasifikasikan_tidak_ditemukan(tidak_ditemukan)
     ident = _activity_identity(activity, settings)
@@ -2030,7 +2031,7 @@ def _fmt_rp_id(val):
 
 def _safe_price(a):
     try:
-        return float(a.get("purchase_price", 0) or 0)
+        return harga_float(a.get("purchase_price"))
     except (ValueError, TypeError):
         return 0.0
 
@@ -2229,10 +2230,10 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str, _user: dict = Depe
 
     settings = await pengaturan_kop(activity)
     # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
-    all_assets = await db.assets.find(
+    all_assets = await baca_laporan_lengkap(db.assets.find(
         {"activity_id": activity_id},
         {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
-    ).to_list(100000)
+    ), 100000, "Data aset laporan")
     # Urut baku daftar resmi: kode barang menaik, lalu NUP menaik. Sebelumnya
     # baris keluar dalam urutan penyimpanan Mongo — pemeriksa yang menelusuri
     # per kode barang melihat daftar yang tampak acak.
@@ -2251,7 +2252,7 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str, _user: dict = Depe
 
     def safe_price(a):
         try:
-            return float(a.get("purchase_price", 0) or 0)
+            return harga_float(a.get("purchase_price"))
         except (ValueError, TypeError):
             return 0.0
 
@@ -2422,10 +2423,10 @@ async def generate_dbhi_docx(activity_id: str, dbhi_type: str,
     await pastikan_akses_kegiatan_id(_user, activity_id)
     settings = await pengaturan_kop(activity)
     ident = _activity_identity(activity, settings)
-    all_assets = await db.assets.find(
+    all_assets = await baca_laporan_lengkap(db.assets.find(
         {"activity_id": activity_id},
         {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
-    ).to_list(100000)
+    ), 100000, "Data aset laporan")
     # Urut baku sama dengan versi PDF (kode barang → NUP): dua format dari satu
     # daftar tak boleh berbeda urutannya.
     filtered = urut_bmn([a for a in all_assets if cfg["filter"](a)])
@@ -2520,14 +2521,13 @@ async def generate_rhi_pdf(activity_id: str, _user: dict = Depends(require_user_
 
     settings = await pengaturan_kop(activity)
     # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
-    assets = await db.assets.find(
+    assets = await baca_laporan_lengkap(db.assets.find(
         {"activity_id": activity_id},
         {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
-    ).to_list(100000)
+    ), 100000, "Data aset laporan")
 
     def safe_price(a):
-        try: return float(a.get("purchase_price", 0) or 0)
-        except: return 0.0
+        return harga_float(a.get("purchase_price"))
 
     def fmt_rp(val):
         try: return f"{int(val):,}".replace(",", ".")
@@ -2657,10 +2657,10 @@ async def generate_rhi_docx(activity_id: str, _user: dict = Depends(require_user
     await pastikan_akses_kegiatan_id(_user, activity_id)
     settings = await pengaturan_kop(activity)
     ident = _activity_identity(activity, settings)
-    assets = await db.assets.find(
+    assets = await baca_laporan_lengkap(db.assets.find(
         {"activity_id": activity_id},
         {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
-    ).to_list(100000)
+    ), 100000, "Data aset laporan")
 
     def sp(a):
         return _safe_price(a)
@@ -2754,10 +2754,10 @@ async def generate_dbkp_pdf(activity_id: str, _user: dict = Depends(require_user
     settings = await pengaturan_kop(activity)
     # Kecualikan aset yang sudah DIHAPUS (SK penghapusan, #234) agar DBKP tidak
     # double-count nilai BMN yang tak lagi dimiliki (§5A Prinsip 3).
-    assets = await db.assets.find(
+    assets = await baca_laporan_lengkap(db.assets.find(
         active_asset_filter({"activity_id": activity_id}),
         {"_id": 0, "asset_code": 1, "purchase_price": 1, "nilai_wajar_terakhir": 1},
-    ).to_list(100000)
+    ), 100000, "Data aset laporan")
 
     # Uraian golongan: referensi kodefikasi (level 1) menimpa default standar
     uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
@@ -2869,10 +2869,10 @@ async def generate_dbkp_docx(activity_id: str, _user: dict = Depends(require_use
     await pastikan_akses_kegiatan_id(_user, activity_id)
     settings = await pengaturan_kop(activity)
     ident = _activity_identity(activity, settings)
-    assets = await db.assets.find(
+    assets = await baca_laporan_lengkap(db.assets.find(
         active_asset_filter({"activity_id": activity_id}),
         {"_id": 0, "asset_code": 1, "purchase_price": 1, "nilai_wajar_terakhir": 1},
-    ).to_list(100000)
+    ), 100000, "Data aset laporan")
     uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
     async for k in db.kodefikasi.find({"level": 1}, {"_id": 0, "kode": 1, "uraian": 1}):
         if k.get("uraian"):
@@ -2962,14 +2962,14 @@ async def generate_posisi_bmn_pdf(request: Request, _user: dict = Depends(requir
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     # Posisi BMN di Neraca: hanya aset yang MASIH dimiliki — aset ber-SK
     # penghapusan (#234) dikecualikan agar nilai neraca tidak lebih saji (§5A).
-    assets = await db.assets.find(
+    assets = await baca_laporan_lengkap(db.assets.find(
         await filter_aset_perhitungan(await scope_query_aset(_user, active_asset_filter())),
         {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "purchase_price": 1, "purchase_date": 1, "condition": 1,
          "inventory_status": 1, "nilai_wajar_terakhir": 1, "revaluasi": 1,
          "masa_manfaat_tambah_tahun": 1,
          "masa_manfaat_override_semester": 1},
-    ).to_list(500000)
+    ), 500000, "Data aset laporan")
 
     uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
     async for k in db.kodefikasi.find({"level": 1}, {"_id": 0, "kode": 1, "uraian": 1}):
@@ -3159,11 +3159,11 @@ async def generate_dbr_pdf(request: Request, _user: dict = Depends(require_user_
     from pembukuan_utils import parse_harga
 
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
-    assets = await db.assets.find(
+    assets = await baca_laporan_lengkap(db.assets.find(
         await filter_aset_perhitungan(await scope_query_aset(_user, active_asset_filter())),
         {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1, "condition": 1,
          "purchase_price": 1, "location": 1, "operasional_jenis": 1, "user": 1},
-    ).to_list(500000)
+    ), 500000, "Data aset laporan")
     rows = kelompok_dbr(assets)
 
     def fmt_rp(val):
@@ -3239,19 +3239,19 @@ async def generate_kir_pdf(request: Request, _user: dict = Depends(require_user_
     from pembukuan_utils import parse_harga
 
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
-    assets = await db.assets.find(
+    assets = await baca_laporan_lengkap(db.assets.find(
         await filter_aset_perhitungan(await scope_query_aset(_user, active_asset_filter())),
         {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1, "condition": 1,
          "purchase_price": 1, "location": 1, "operasional_jenis": 1, "user": 1},
-    ).to_list(500000)
+    ), 500000, "Data aset laporan")
     # ISOLASI SATKER: master ruangan WAJIB ter-scope. Tanpa ini `master` memuat
     # ruangan SELURUH satker, lalu `cocok_ruangan_master` di bawah mencocokkan
     # berdasarkan NAMA ruangan — sehingga nama Penanggung Jawab Ruangan milik
     # satker lain (yang kebetulan menamai ruangannya sama, mis. "Ruang Rapat")
     # ikut tercetak di KIR satker ini. Kueri aset di atas sudah ter-scope lewat
     # `scope_query_aset`; baris inilah satu-satunya yang terlewat.
-    master = await db.ruangan.find(
-        scope_query_field_satker(_user), {"_id": 0}).to_list(5000)
+    master = await baca_laporan_lengkap(db.ruangan.find(
+        scope_query_field_satker(_user), {"_id": 0}), 5000, "Data ruangan laporan")
     rows = kelompok_dbr(assets)
 
     def fmt_rp(val):
@@ -3357,7 +3357,7 @@ async def generate_penyusutan_pdf(
             "inventory_status": 1, "nilai_wajar_terakhir": 1, "revaluasi": 1,
             "masa_manfaat_tambah_tahun": 1,
          "masa_manfaat_override_semester": 1}
-    assets = await db.assets.find(await filter_aset_perhitungan(await scope_query_aset(_user, active_asset_filter())), proj).to_list(500000)
+    assets = await baca_laporan_lengkap(db.assets.find(await filter_aset_perhitungan(await scope_query_aset(_user, active_asset_filter())), proj), 500000, "Data aset laporan")
     diusulkan_ids = set()
     async for u in db.usulan_penghapusan.find(
             scope_query_field_satker(_user, {"status": {"$ne": "ditolak"}}),
@@ -3498,11 +3498,11 @@ async def generate_lbkp_pdf(
     # ISOLASI SATKER (REVIEW-9 R9): filter_aset_perhitungan TIDAK men-scope
     # satker (docstring-nya: dipanggil SESUDAH scoping). Query kosong = saldo
     # & mutasi SELURUH satker masuk laporan resmi milik satu satker.
-    assets = await db.assets.find(
+    assets = await baca_laporan_lengkap(db.assets.find(
         await filter_aset_perhitungan(await scope_query_aset(_user, {})),
         {"_id": 0, "asset_code": 1, "purchase_price": 1, "purchase_date": 1,
          "created_at": 1, "dihapus": 1, "penghapusan": 1},
-    ).to_list(500000)
+    ), 500000, "Data aset laporan")
     tombstones = []
     # ISOLASI SATKER (REVIEW-9 R10). Tombstone = aset yang DIHAPUS KERAS; ia
     # masuk laporan sebagai "mutasi kurang" TERPISAH dari query assets di atas.
@@ -3653,11 +3653,11 @@ async def generate_lkb_pdf(request: Request, _user: dict = Depends(require_user_
     # LKB = laporan posisi/snapshot kondisi — aset ber-SK penghapusan (soft-delete
     # dihapus=True) TIDAK ikut, selaras DBKP/Posisi Neraca/penyusutan/rekonsiliasi
     # (temuan review: tanpa filter ini LKB lebih saji & tak pernah rekon).
-    assets = await db.assets.find(
+    assets = await baca_laporan_lengkap(db.assets.find(
         await filter_aset_perhitungan(await scope_query_aset(_user, active_asset_filter())),
         {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "condition": 1, "purchase_price": 1},
-    ).to_list(500000)
+    ), 500000, "Data aset laporan")
     if not assets:
         raise HTTPException(status_code=404, detail="Belum ada data aset")
 
@@ -3824,7 +3824,7 @@ async def generate_calbmn_pdf(
     sufiks_final = penanda_final(periode_rec)
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     # ISOLASI SATKER (REVIEW-9 R9) — lihat catatan di LBKP.
-    assets = await db.assets.find(
+    assets = await baca_laporan_lengkap(db.assets.find(
         await filter_aset_perhitungan(await scope_query_aset(_user, {})),
         {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
              "purchase_price": 1, "purchase_date": 1, "condition": 1,
@@ -3833,7 +3833,7 @@ async def generate_calbmn_pdf(
              "nilai_wajar_terakhir": 1, "revaluasi": 1,
              "masa_manfaat_tambah_tahun": 1,
          "masa_manfaat_override_semester": 1},
-    ).to_list(500000)
+    ), 500000, "Data aset laporan")
     tombstones = []
     # ISOLASI SATKER (REVIEW-9 R10). Tombstone = aset yang DIHAPUS KERAS; ia
     # masuk laporan sebagai "mutasi kurang" TERPISAH dari query assets di atas.
@@ -4171,12 +4171,12 @@ async def generate_rekonsiliasi_xlsx(request: Request, _user: dict = Depends(req
     # Rekonsiliasi Posisi BMN harus SELARAS dengan Neraca (#248): kecualikan aset
     # ber-SK penghapusan agar sandingan SAKTI/MonSAKTI tidak selisih hanya karena
     # aset yang sudah dihapus masih ikut terhitung (§5A Prinsip 3).
-    assets = await db.assets.find(
+    assets = await baca_laporan_lengkap(db.assets.find(
         await filter_aset_perhitungan(await scope_query_aset(_user, active_asset_filter())),
         {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "purchase_price": 1, "location": 1, "condition": 1,
          "nilai_wajar_terakhir": 1},
-    ).to_list(500000)
+    ), 500000, "Data aset laporan")
     uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
     async for k in db.kodefikasi.find({"level": 1}, {"_id": 0, "kode": 1, "uraian": 1}):
         if k.get("uraian"):
@@ -4190,11 +4190,11 @@ async def generate_rekonsiliasi_xlsx(request: Request, _user: dict = Depends(req
     # menjumlahkan persediaan SELURUH satker: nilainya lebih saji dan tak akan
     # pernah tie-out dengan SAKTI satker itu, sekaligus data satker lain
     # terbaca oleh yang tak berhak — endpoint ini menerima token kueri.
-    persediaan = await db.persediaan.find(
+    persediaan = await baca_laporan_lengkap(db.persediaan.find(
         scope_query_field_satker(_user),
         {"_id": 0, "kode_barang": 1, "nup": 1, "nama_barang": 1,
          "satuan": 1, "stok": 1, "batches": 1},
-    ).to_list(100000)
+    ), 100000, "Persediaan laporan rekonsiliasi")
     p_nilai = sum(nilai_persediaan_dari_batches(it.get("batches")) for it in persediaan)
     posisi = posisi_neraca(rows, total_aset, len(persediaan), p_nilai)
 
@@ -4335,14 +4335,13 @@ async def generate_bahi_pdf(activity_id: str, _user: dict = Depends(require_user
 
     settings = await pengaturan_kop(activity)
     # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
-    assets = await db.assets.find(
+    assets = await baca_laporan_lengkap(db.assets.find(
         {"activity_id": activity_id},
         {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
-    ).to_list(100000)
+    ), 100000, "Data aset laporan")
 
     def safe_price(a):
-        try: return float(a.get("purchase_price", 0) or 0)
-        except: return 0.0
+        return harga_float(a.get("purchase_price"))
 
     def fmt_rp(val):
         try: return f"Rp {int(val):,}".replace(",", ".")
@@ -4511,10 +4510,10 @@ async def generate_bahi_docx(activity_id: str, _user: dict = Depends(require_use
     await pastikan_akses_kegiatan_id(_user, activity_id)
     settings = await pengaturan_kop(activity)
     ident = _activity_identity(activity, settings)
-    assets = await db.assets.find(
+    assets = await baca_laporan_lengkap(db.assets.find(
         {"activity_id": activity_id},
         {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
-    ).to_list(100000)
+    ), 100000, "Data aset laporan")
 
     def rp(v):
         return _fmt_rp_id(v)
@@ -5271,7 +5270,8 @@ def filter_laporan_dari_map(m) -> FilterLaporan:
     from routes.assets import build_asset_search_query, nilai_filter
 
     def s(k):
-        return str((m or {}).get(k) or "").strip()
+        value = (m or {}).get(k)
+        return str(value if value is not None else "").strip()
 
     def d(k):
         """Nilai filter multi-pilih — selalu daftar bersih."""
@@ -5280,8 +5280,8 @@ def filter_laporan_dari_map(m) -> FilterLaporan:
     def f(k):
         v = s(k)
         try:
-            return float(v) if v else None
-        except ValueError:
+            return batas_harga(v).to_decimal() if v else None
+        except (ValueError, HTTPException):
             return None
 
     q = build_asset_search_query(
@@ -5385,14 +5385,16 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
     # ringkasan lain tidak mengubah urutan lama bila sort_by tidak diberikan.
     if sort_by:
         dap.validasi_pilihan(data_group_by, sort_by)
-        cursor_aset = cursor_aset.sort(ASSET_SORT_OPTIONS[sort_by])
-    all_assets = await cursor_aset.to_list(100000)
+        if sort_by not in {"price_asc", "price_desc"}:
+            cursor_aset = cursor_aset.sort(ASSET_SORT_OPTIONS[sort_by])
+    all_assets = await baca_laporan_lengkap(cursor_aset, 100000, "Data aset laporan")
+    if sort_by in {"price_asc", "price_desc"}:
+        urutkan_harga_aset(all_assets, sort_by)
     categories = await db.categories.find({}, {"_id": 0}).to_list(10000)
     cat_map = {c.get("kode_aset", ""): c.get("label", "") for c in categories}
 
     def sp(a):
-        try: return float(a.get("purchase_price", 0) or 0)
-        except: return 0.0
+        return harga_float(a.get("purchase_price"))
     def fmt(v):
         try: return f"{int(v):,}".replace(",", ".")
         except: return "0"
@@ -6600,12 +6602,12 @@ async def _peta_denah(aset):
     if not ids:
         return {}, ()
     _P = {"_id": 0, "id": 1, "nama": 1, "tipe": 1, "ancestors": 1}
-    node = await db.spasial_node.find({"id": {"$in": list(ids)}}, _P).to_list(20000)
+    node = await baca_laporan_lengkap(db.spasial_node.find({"id": {"$in": list(ids)}}, _P), 20000, "Data ruangan laporan")
     leluhur = {i for n in node for i in (n.get("ancestors") or [])}
     semua = {n["id"]: n for n in node}
     kurang = [i for i in leluhur if i not in semua]
     if kurang:
-        for n in await db.spasial_node.find({"id": {"$in": kurang}}, _P).to_list(20000):
+        for n in await baca_laporan_lengkap(db.spasial_node.find({"id": {"$in": kurang}}, _P), 20000, "Data ruangan laporan"):
             semua[n["id"]] = n
 
     peta, terpakai = {}, set()
@@ -6659,15 +6661,15 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
     if not kode_satker:
         satker_acts = [source_act]
     else:
-        satker_acts = await db.inventory_activities.find({"kode_satker": kode_satker}, {"_id": 0}).sort("created_at", -1).to_list(100)
+        satker_acts = await baca_laporan_lengkap(db.inventory_activities.find({"kode_satker": kode_satker}, {"_id": 0}).sort("created_at", -1), 100, "Kegiatan laporan gabungan")
 
     act_ids = [a.get("id") for a in satker_acts if a.get("id")]
     # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO);
     # 'document_checklist' TETAP diambil (statistik & tabel kelengkapan dokumen)
-    all_assets = await db.assets.find(
+    all_assets = await baca_laporan_lengkap(db.assets.find(
         {"activity_id": {"$in": act_ids}},
         {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0},
-    ).to_list(100000)
+    ), 100000, "Data aset laporan")
     categories = await db.categories.find({}, {"_id": 0}).to_list(10000)
     cat_map = {c.get("kode_aset", ""): c.get("label", "") for c in categories}
     # Referensi kodefikasi BMN — uraian per jenjang (Golongan → Sub Kelompok).
@@ -6691,8 +6693,7 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
     act_name_map = {a.get("id", ""): (a.get("nama_kegiatan") or "") for a in satker_acts}
 
     def sp(a):
-        try: return float(a.get("purchase_price", 0) or 0)
-        except: return 0.0
+        return harga_float(a.get("purchase_price"))
     def fmt(v):
         try: return f"{int(v):,}".replace(",", ".")
         except: return "0"
@@ -6826,10 +6827,10 @@ async def _build_satker_report_v2(activity_id: str, filter_dipilih: dict = None)
     # satu pun garis penghubung: pembacanya harus mencocokkan sendiri Biro mana
     # milik Kementerian mana. Kini satu panel berjenjang sampai Eselon V,
     # jenjangnya dipilih pembacanya seperti pada panel kategori dan lokasi.
-    unit_kerja = await db.unit_kerja.find(
+    unit_kerja = await baca_laporan_lengkap(db.unit_kerja.find(
         {"kode_satker": {"$in": [kode_satker, "", None]}},
         {"_id": 0, "id": 1, "nama_unit": 1, "eselon": 1,
-         "parent_id": 1}).to_list(5000) if kode_satker else []
+         "parent_id": 1}), 5000, "Unit organisasi laporan") if kode_satker else []
     _peta_unit = {u["id"]: u for u in unit_kerja}
     _peta_parent = {u["id"]: u.get("parent_id") for u in unit_kerja}
 
@@ -7597,13 +7598,13 @@ async def generate_daftar_pemegang_pdf(activity_id: str,
     await pastikan_akses_kegiatan_id(_user, activity_id)
     settings = await pengaturan_kop(activity)
 
-    assets = await db.assets.find(
+    assets = await baca_laporan_lengkap(db.assets.find(
         {"activity_id": activity_id},
         {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "user": 1, "pengguna_nip": 1, "pengguna_melekat_ke": 1,
          "pengguna_jabatan": 1, "operasional_jenis": 1, "nomor_bast": 1,
          "bast_file_id": 1, "location": 1},
-    ).to_list(100000)
+    ), 100000, "Data aset laporan")
     rekap = rekap_pemegang(assets)
     tanpa_pemegang = [a for a in assets if kunci_pemegang(a) is None]
 
@@ -7734,13 +7735,13 @@ async def generate_daftar_pemegang_docx(activity_id: str, _user: dict = Depends(
     settings = await pengaturan_kop(activity)
     ident = _activity_identity(activity, settings)
 
-    assets = await db.assets.find(
+    assets = await baca_laporan_lengkap(db.assets.find(
         {"activity_id": activity_id},
         {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "user": 1, "pengguna_nip": 1, "pengguna_melekat_ke": 1,
          "pengguna_jabatan": 1, "operasional_jenis": 1, "nomor_bast": 1,
          "bast_file_id": 1, "location": 1},
-    ).to_list(100000)
+    ), 100000, "Data aset laporan")
     rekap = rekap_pemegang(assets)
     tanpa_pemegang = [a for a in assets if kunci_pemegang(a) is None]
     per_kunci = {}
@@ -7818,7 +7819,7 @@ async def generate_lhi_pdf(activity_id: str, _user: dict = Depends(require_user_
     Combines: Cover Page + BAHI + RHI + 6 DBHI + DBKP per Golongan +
     SP Hasil + SP Pelaksanaan
     """
-    from PyPDF2 import PdfMerger
+    from pypdf import PdfWriter
 
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
@@ -7827,7 +7828,8 @@ async def generate_lhi_pdf(activity_id: str, _user: dict = Depends(require_user_
 
     settings = await pengaturan_kop(activity)
 
-    merger = PdfMerger()
+    merger = PdfWriter()
+    merger.add_metadata({"/Title": "Laporan Hasil Inventarisasi BMN", "/Creator": "AMAN IKN"})
 
     # 1. Cover page
     sections_added = 0
@@ -7970,6 +7972,7 @@ async def batch_download_pdf_zip(request: Request, activity_id: str,
     zip_buffer = io.BytesIO()
     generated = []
     errors = []
+    failure_statuses = []
 
     # PENTING: `_user` WAJIB diteruskan ke tiap generator — dipanggil
     # internal (bukan lewat FastAPI), tanpa ini guard satker di dalam
@@ -8053,6 +8056,7 @@ async def batch_download_pdf_zip(request: Request, activity_id: str,
                     errors.append(f"{report_type}: tipe laporan tidak dikenal")
 
             except HTTPException as e:
+                failure_statuses.append(e.status_code)
                 logger.warning(f"Batch ZIP: Failed to generate {report_type}: {e.detail}")
                 errors.append(f"{report_type}: {e.detail}")
             except Exception as e:
@@ -8069,6 +8073,8 @@ async def batch_download_pdf_zip(request: Request, activity_id: str,
                 + "\n".join(f"- {e}" for e in errors) + "\n")
 
     if not generated:
+        if failure_statuses and len(failure_statuses) == len(errors) and all(code == 413 for code in failure_statuses):
+            raise HTTPException(413, "Dataset laporan terlalu besar. Buat laporan per kegiatan atau gunakan ekspor CSV; tidak ada laporan parsial yang dibuat.")
         raise HTTPException(status_code=500, detail="Tidak ada laporan yang berhasil di-generate")
 
     zip_buffer.seek(0)

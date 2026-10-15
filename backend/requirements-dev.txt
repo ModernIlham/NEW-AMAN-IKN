@@ -1,0 +1,3 @@
+# CI/local development includes runtime plus isolated test/lint/type tooling.
+--require-hashes
+-r requirements-dev.lock

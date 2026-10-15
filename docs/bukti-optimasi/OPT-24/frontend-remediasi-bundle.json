@@ -1,0 +1,60 @@
+{
+  "basis": "Production JavaScript source-map sources from private Node22 build; not proof for external scripts or server/dev tools",
+  "remaining_packages": {
+    "@tootallnate/once": {
+      "source_count": 0,
+      "sources": []
+    },
+    "braces": {
+      "source_count": 0,
+      "sources": []
+    },
+    "node-forge": {
+      "source_count": 0,
+      "sources": []
+    },
+    "nth-check": {
+      "source_count": 0,
+      "sources": []
+    },
+    "postcss": {
+      "source_count": 0,
+      "sources": []
+    },
+    "postcss-selector-parser": {
+      "source_count": 0,
+      "sources": []
+    },
+    "serialize-javascript": {
+      "source_count": 0,
+      "sources": []
+    },
+    "sprintf-js": {
+      "source_count": 0,
+      "sources": []
+    },
+    "svgo": {
+      "source_count": 0,
+      "sources": []
+    },
+    "underscore": {
+      "source_count": 0,
+      "sources": []
+    },
+    "uuid": {
+      "source_count": 0,
+      "sources": []
+    },
+    "webpack-dev-middleware": {
+      "source_count": 0,
+      "sources": []
+    },
+    "webpack-dev-server": {
+      "source_count": 0,
+      "sources": []
+    }
+  },
+  "axios_source_count": 54,
+  "react_router_source_count": 1,
+  "limits": "Package-path source-map inventory does not identify opaque inline vendored code or prove absence of vulnerabilities."
+}

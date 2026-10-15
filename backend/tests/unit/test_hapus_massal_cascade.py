@@ -1,32 +1,10 @@
-"""Dua lubang SIMETRIS pada penghapusan massal — temuan C18 & C19 tinjauan 2026-08.
+"""Bulk deletion preserves receipts, CAS conflicts and media ordering.
 
-Repo ini punya DUA pintu yang menghapus seluruh aset sebuah kegiatan, dan
-masing-masing mengerjakan separuh pekerjaan yang benar:
-
-  • `routes/exports.py` bulk-delete  → menulis `log_audit`, TAPI tak pernah
-    mengumpulkan blob GridFS sebelum `delete_many`.
-  • `routes/activities.py` hapus kegiatan → mengumpulkan blob dengan benar,
-    TAPI `grep log_audit` di berkas itu tak menghasilkan apa pun.
-
-Keduanya kehilangan sesuatu yang TIDAK BISA DIPULIHKAN:
-
-  Blob yatim bersifat PERMANEN, bukan sekadar boros. Id blob hanya hidup di
-  dokumen asetnya; begitu dokumen itu terhapus, id-nya ikut lenyap. Menghapus
-  kegiatannya belakangan pun tak menolong — cascade di sana beriterasi atas
-  kumpulan aset yang sudah kosong. Byte-nya tetap memakan disk VPS selamanya
-  tanpa ada cara menemukannya lagi.
-
-  Jejak audit yang absen membutakan DUA pembaca: feed delta luring di
-  `routes/assets.py` (klien lapangan tak diberi tahu asetnya lenyap, antrean
-  simpannya berakhir 404) dan tombstone LBKP di `routes/lbp.py` (saldo periode
-  turun tanpa baris "mutasi kurang" — pemeriksa tak bisa merekonstruksinya).
-
-Uji ini menghitung `fs.files` sebelum/sesudah dan menagih jejaknya, di KEDUA
-pintu. Cascade-nya kini satu helper bersama supaya pintu ketiga tak bisa lagi
-lupa; uji terakhir menguncinya di tingkat sumber.
+Both routes share one deletion helper. Read the media references and reconcile
+application proofs before deleting a matching asset; release media afterward.
+Audit intent precedes every irreversible deletion and a conflict retains parent.
 """
 import asyncio
-import inspect
 
 import pytest
 from mongomock_motor import AsyncMongoMockClient
@@ -34,12 +12,14 @@ from mongomock_motor import AsyncMongoMockClient
 import shared_utils as su
 import routes.exports as rex
 import routes.activities as ract
+import batch_operations as batch
+from fastapi import HTTPException
 
 ADMIN = {"username": "adm", "name": "Admin Satu", "role": "admin", "kode_satker": "527010"}
 
 
 def _jalan(coro):
-    return asyncio.get_event_loop_policy().new_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 @pytest.fixture()
@@ -60,7 +40,7 @@ def lingkungan(monkeypatch):
     async def _catat(action, target, *a, **k):
         jejak.append({"action": action, "target": target, "detail": k.get("detail", "")})
 
-    for mod in (su, rex, ract):
+    for mod in (su, rex, ract, batch):
         monkeypatch.setattr(mod, "db", fake, raising=False)
         if hasattr(mod, "delete_photo_from_gridfs"):
             monkeypatch.setattr(mod, "delete_photo_from_gridfs", _hapus_foto, raising=False)
@@ -68,10 +48,6 @@ def lingkungan(monkeypatch):
             monkeypatch.setattr(mod, "delete_document_from_gridfs", _hapus_dok, raising=False)
         if hasattr(mod, "log_audit"):
             monkeypatch.setattr(mod, "log_audit", _catat, raising=False)
-    # Helper cascade memakai delete_* dari modulnya SENDIRI (shared_utils), dan
-    # rex/ract memanggil helper itu — jadi tambalan di su yang menentukan.
-    monkeypatch.setattr(rex, "cascade_hapus_blob_aset", su.cascade_hapus_blob_aset, raising=False)
-    monkeypatch.setattr(ract, "cascade_hapus_blob_aset", su.cascade_hapus_blob_aset, raising=False)
     monkeypatch.setattr(rex, "invalidate_asset_cache", lambda *a, **k: None, raising=False)
 
     async def _lolos(*a, **k):
@@ -153,31 +129,73 @@ def test_hapus_kegiatan_menulis_jejak_audit(lingkungan):
     assert "2 aset" in baris[0]["detail"]
 
 
-def test_audit_ditulis_SEBELUM_delete_many():
-    """Urutannya bagian dari perbaikan, bukan kebetulan.
+@pytest.mark.parametrize("activity_delete", [False, True])
+def test_audit_dan_snapshot_mendahului_delete_media_sesudahnya(lingkungan, monkeypatch, activity_delete):
+    dbx, blob, jejak = lingkungan
+    _jalan(_seed(dbx))
+    original = type(dbx.assets).delete_one
+    events = []
 
-    Kalau `log_audit` dipindah ke bawah `delete_many`, proses yang mati di
-    tengah penghapusan meninggalkan aset yang sudah lenyap TANPA jejak —
-    persis keadaan yang temuan C19 keluhkan. Dan `count_documents` yang
-    dipanggil setelahnya akan mengembalikan 0, membuat detail jejaknya
-    berbohong soal berapa aset yang hilang.
-    """
-    src = inspect.getsource(ract.delete_inventory_activity)
-    i_audit = src.index("log_audit(")
-    i_hapus = src.index("assets.delete_many(")
-    i_hitung = src.index("count_documents(")
-    assert i_hitung < i_audit < i_hapus, "urutan hitung → audit → hapus wajib"
+    async def deleting(collection, query, *args, **kwargs):
+        if collection.name != "assets":
+            return await original(collection, query, *args, **kwargs)
+        document = await collection.find_one(query)
+        assert jejak and jejak[0]["action"] == "bulk_delete"
+        assert document
+        assert all(gid in blob for gid in document.get("photo_gridfs_ids", []))
+        events.append(document["id"])
+        return await original(collection, query, *args, **kwargs)
+
+    monkeypatch.setattr(type(dbx.assets), "delete_one", deleting)
+    if activity_delete:
+        _jalan(ract.delete_inventory_activity("keg-1", _admin=ADMIN))
+    else:
+        _jalan(rex.bulk_delete_assets.__wrapped__(_Req(), "keg-1", _admin=ADMIN))
+    assert set(events) == {"a1", "a2"}
+    assert not ({"foto-1", "foto-2", "foto-3"} & blob)
 
 
-def test_kedua_pintu_memakai_helper_yang_SAMA():
-    """Penjaga struktural: sumber kebenaran cascade cuma boleh satu.
+@pytest.mark.parametrize("activity_delete", [False, True])
+def test_cas_conflict_mempertahankan_media_dan_kegiatan(lingkungan, monkeypatch, activity_delete):
+    dbx, blob, jejak = lingkungan
+    _jalan(_seed(dbx))
+    original = type(dbx.assets).delete_one
+    first = True
 
-    Sebelum ini blok pengumpul blob ditulis inline di activities.py saja, dan
-    exports.py melewatkannya. Menyalin blok itu ke pintu ketiga adalah cara
-    paling mudah bug ini kembali — jadi keduanya wajib memanggil helper.
-    """
-    for mod in (rex, ract):
-        src = inspect.getsource(mod)
-        assert "cascade_hapus_blob_aset(activity_id)" in src, mod.__name__
-        # Tidak boleh ada lagi pengumpul inline (penanda: nama variabel lamanya).
-        assert "photo_gids.extend" not in src, mod.__name__
+    async def interleaved(collection, query, *args, **kwargs):
+        nonlocal first
+        if collection.name == "assets" and first:
+            first = False
+            # Another editor committed after the deleter read its snapshot.
+            await dbx.assets.update_one({"id": "a1"}, {"$set": {"version": 2, "location": "Concurrent"}})
+        return await original(collection, query, *args, **kwargs)
+
+    monkeypatch.setattr(type(dbx.assets), "delete_one", interleaved)
+    with pytest.raises(HTTPException) as error:
+        if activity_delete:
+            _jalan(ract.delete_inventory_activity("keg-1", _admin=ADMIN))
+        else:
+            _jalan(rex.bulk_delete_assets.__wrapped__(_Req(), "keg-1", _admin=ADMIN))
+    assert error.value.status_code == 409
+    assert _jalan(dbx.assets.count_documents({"id": "a1"})) == 1
+    assert {"foto-1", "foto-2", "dok-bast", "blob-kegiatan"} <= blob
+    assert _jalan(dbx.inventory_activities.count_documents({"id": "keg-1"})) == 1
+    assert jejak
+
+
+def test_bulk_delete_merekonsiliasi_receipt_sebelum_bukti_hilang(lingkungan):
+    dbx, _, _ = lingkungan
+    async def scenario():
+        await _seed(dbx)
+        operation = {"_id": "op-bulk-uji", "payload_hash": "hash-uji", "asset_ids": ["a1"],
+                     "results": [{"id": "a1", "status": "pending"}]}
+        result = {"id": "a1", "status": "applied", "version": 2}
+        marker = {"operation_id": operation["_id"], "payload_hash": operation["payload_hash"],
+                  "issued_epoch": batch.now_utc().timestamp(), "result": result}
+        await dbx.batch_operations.insert_one(operation)
+        await dbx.assets.update_one({"id": "a1"}, {"$set": {batch.MARKERS: [marker], "version": 2}})
+        await rex.bulk_delete_assets.__wrapped__(_Req(), "keg-1", _admin=ADMIN)
+        receipt = await dbx.batch_operations.find_one({"_id": operation["_id"]})
+        assert receipt["results"] == [result]
+        assert await dbx.assets.count_documents({"id": "a1"}) == 0
+    _jalan(scenario())

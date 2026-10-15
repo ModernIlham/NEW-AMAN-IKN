@@ -197,11 +197,12 @@ class TestRollback:
         assert 'git reset --hard "$PREV"' in t[i:i + 900]
 
     def test_pulihkan_menghidupkan_kembali_backend(self):
-        # Mengembalikan kode tanpa restart = produksi tetap menjalankan proses
-        # dari commit yang sudah terbukti tidak sehat.
+        # Stop/fresh start mencegah lazy imports memakai dua generasi venv.
         t = _teks(DEPLOY)
-        i = t.index("pulihkan() {")
-        assert "restart_backend" in t[i:i + 900]
+        recovery = t[t.index("pulihkan() {"):t.index("aman_deploy_keluar() {")]
+        assert recovery.index("hentikan_backend") < recovery.index('git reset --hard "$PREV"')
+        assert recovery.index("transaksi_environment restore") < recovery.index("jalankan_supervisor start")
+        assert recovery.index("jalankan_supervisor start") < recovery.index("periksa_kesehatan")
 
 
 class TestCabangTujuan:
@@ -249,7 +250,8 @@ class TestAnggaranGerbangKesehatan:
         k = _kode(DEPLOY)
         m = re.search(r"^PERCOBAAN_KESEHATAN=(\d+)$", k, re.M)
         assert m, "variabel PERCOBAAN_KESEHATAN hilang"
-        tidur = re.findall(r"^\s*sleep (\d+)$", k, re.M)
+        health = k[k.index("periksa_kesehatan() {"):k.index("pulihkan() {")]
+        tidur = re.findall(r"^\s*sleep (\d+)$", health, re.M)
         assert tidur, "sleep di badan gerbang hilang"
         return int(m.group(1)), min(int(t) for t in tidur)
 
@@ -262,7 +264,8 @@ class TestAnggaranGerbangKesehatan:
     def test_kedua_gerbang_memakai_variabel_yang_sama(self):
         k = _kode(DEPLOY)
         assert k.count('seq 1 "$PERCOBAAN_KESEHATAN"') == 2
-        assert not re.search(r"seq 1 \d", k), "masih ada gerbang berangka literal"
+        health = k[k.index("periksa_kesehatan() {"):k.index("pulihkan() {")]
+        assert not re.search(r"seq 1 \d", health), "masih ada gerbang kesehatan berangka literal"
 
     def test_ambang_kegagalan_ikut_variabel(self):
         # Mutasi paling mungkin lolos tinjauan mata: menaikkan `seq` tapi

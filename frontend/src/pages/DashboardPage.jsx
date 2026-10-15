@@ -12,6 +12,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import axios from "axios";
+import { getSatkerAktif } from "@/lib/satkerAktif";
+import { statusSeleksiHalaman, toggleSeleksiHalaman } from "@/lib/seleksiHalaman";
 import { getApiError } from "@/lib/utils";
 import { downloadFileWithProgress, makeDownloadProgress, pesanGalatRespons } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
@@ -19,7 +21,7 @@ import { exportViaJob } from "@/lib/jobExport";
 import { reserveDummyNup, cariKategoriDummy } from "@/lib/dummyNup";
 import { buatTempId, apakahTempId } from "@/lib/idAntrean";
 import { titikSah } from "@/lib/titikDenah";
-import { cocokAset } from "@/lib/pencarianLokal";
+import { filterSnapshotRows, sortSnapshotRows } from "@/lib/querySnapshotAset";
 import { useDragSelect } from "@/lib/useDragSelect";
 import { idsCetakKartu, galatPlafonKartu } from "@/lib/cakupanCetak";
 import { syncSnapshot, upsertSnapshotAsset, removeSnapshotAsset } from "@/lib/offlineSnapshot";
@@ -29,11 +31,11 @@ import {
   LoadingIndicator,
   VirtualizedAssetTable,
   VirtualizedMobileCards,
-  AssetForm,
   CategoryManagerDialog,
   BulkDeleteDialog,
   AssetGalleryView,
 } from "@/components/assets";
+import AssetFormSidebar from "@/components/assets/AssetFormSidebar";
 import CetakStikerDialog from "@/components/assets/CetakStikerDialog";
 // Heavy panels - lazy loaded (only when user opens them)
 const BatchEditPanel = lazy(() => import("@/components/assets/BatchEditPanel"));
@@ -62,9 +64,13 @@ import { useOptimisticQueue } from "@/hooks/useOptimisticQueue";
 import { haptic } from "@/lib/haptics";
 import { useUnsyncedGuard } from "@/hooks/useUnsyncedGuard";
 import { useRowLocking } from "@/hooks/useRowLocking";
-import { useAssetFilters, normalkanMulti } from "@/hooks/useAssetFilters";
+import { useAssetFilters } from "@/hooks/useAssetFilters";
+import { buatCacheHalamanAset } from "@/lib/cacheHalamanAset";
 import { buatPemuatDaftarAset } from "@/lib/pemuatDaftarAset";
 import { HASIL_USANG, usePenjagaPermintaan } from "@/hooks/usePenjagaPermintaan";
+import { useOperasiBatch } from "@/hooks/useOperasiBatch";
+import { ringkasBatch, pesanGalatBatch, terapkanHasilBatchKeTampilan } from "@/lib/operasiBatch";
+import BatchOperationStatus from "@/components/assets/BatchOperationStatus";
 import { useMuatUlangManual } from "@/hooks/useMuatUlangManual";
 import { useDragDropImport } from "@/hooks/useDragDropImport";
 import { useBackGuard } from "@/hooks/useBackGuard";
@@ -109,81 +115,6 @@ function PanelSegment({ active, onClick, testid, icon: Icon, label, badge, activ
 // Mirrors the server behavior of GET /assets (routes/assets.py) as closely
 // as feasible so switching between live and cached data feels identical.
 // ============================================================================
-function filterSnapshotRows(rows, { search, category, filters }) {
-  let out = rows;
-  // Pencarian teks bebas memakai SATU semantik dengan server (lib/pencarianLokal
-  // mencerminkan pencarian_utils.py): tiap kata wajib ada, boleh di field
-  // berbeda, kode boleh diketik tanpa pemisah. Dulu di sini kata kunci
-  // diperlakukan sebagai satu frasa utuh pada 16 field saja, sehingga hasil
-  // luring berbeda dari hasil daring untuk kata kunci yang sama.
-  if (search) out = out.filter(r => cocokAset(r, search));
-  if (filters) {
-    // Tujuh filter berbasis pilihan bernilai BANYAK: nilai dalam satu filter
-    // berarti ATAU (cermin `$in` di server), antar-filter tetap DAN. Daftar
-    // kosong = tanpa filter, BUKAN "tak cocok apa pun". String tunggal tetap
-    // diterima supaya snapshot/pemanggil lama tak pecah.
-    const eqMulti = (field, val) => {
-      const v = normalkanMulti(val);
-      if (v.length) out = out.filter(r => v.includes(String(r[field] ?? "")));
-    };
-    const subMulti = (field, val) => {
-      const v = normalkanMulti(val).map(s => s.toLowerCase());
-      if (v.length) out = out.filter(r => {
-        const isi = String(r[field] ?? "").toLowerCase();
-        return v.some(s => isi.includes(s));
-      });
-    };
-    const sub = (field, val) => { if (val) { const v = val.toLowerCase(); out = out.filter(r => String(r[field] ?? "").toLowerCase().includes(v)); } };
-    // Kategori ikut jalur multi yang sama dengan tujuh filter lain — hasil
-    // luring harus identik dengan hasil daring untuk filter yang sama.
-    eqMulti("category", category);
-    eqMulti("condition", filters.condition);
-    eqMulti("status", filters.status);
-    subMulti("location", filters.location);
-    subMulti("eselon1", filters.eselon1);
-    subMulti("eselon2", filters.eselon2);
-    subMulti("eselon3", filters.eselon3);
-    subMulti("eselon4", filters.eselon4);
-    subMulti("eselon5", filters.eselon5);
-    eqMulti("stiker_status", filters.stiker);
-    eqMulti("inventory_status", filters.inventoryStatus);
-    sub("nomor_spm", filters.nomorSpm);
-    sub("supplier", filters.perolehanDari);
-    sub("user", filters.user);
-    sub("pengguna_nip", filters.penggunaNip);
-    const pMin = parseFloat(filters.priceMin);
-    const pMax = parseFloat(filters.priceMax);
-    if (!Number.isNaN(pMin)) out = out.filter(r => (Number(r.purchase_price) || 0) >= pMin);
-    if (!Number.isNaN(pMax)) out = out.filter(r => (Number(r.purchase_price) || 0) <= pMax);
-    // Rentang tanggal beli (purchase_date YYYY-MM-DD) — bukan tanggal input.
-    // Selaras dengan filter server (/assets & ekspor geo) agar peta ikut tersaring.
-    // Aset tanpa tanggal beli keluar dari hasil saat rentang diisi.
-    if (filters.dateFrom) out = out.filter(r => String(r.purchase_date ?? "").slice(0, 10) >= filters.dateFrom && String(r.purchase_date ?? "").trim() !== "");
-    if (filters.dateTo) out = out.filter(r => { const d = String(r.purchase_date ?? "").slice(0, 10); return d !== "" && d <= filters.dateTo; });
-  }
-  return out;
-}
-
-function sortSnapshotRows(rows, sortBy) {
-  const s = (v) => String(v ?? "");
-  const n = (v) => Number(v) || 0;
-  const cmp = {
-    newest: (a, b) => s(b.created_at).localeCompare(s(a.created_at)),
-    oldest: (a, b) => s(a.created_at).localeCompare(s(b.created_at)),
-    name_asc: (a, b) => s(a.asset_name).localeCompare(s(b.asset_name)),
-    name_desc: (a, b) => s(b.asset_name).localeCompare(s(a.asset_name)),
-    price_asc: (a, b) => n(a.purchase_price) - n(b.purchase_price),
-    price_desc: (a, b) => n(b.purchase_price) - n(a.purchase_price),
-    category_asc: (a, b) => s(a.category).localeCompare(s(b.category)),
-    category_desc: (a, b) => s(b.category).localeCompare(s(a.category)),
-    location_asc: (a, b) => s(a.location).localeCompare(s(b.location)),
-    eselon1_asc: (a, b) => s(a.eselon1).localeCompare(s(b.eselon1)),
-    condition_asc: (a, b) => s(a.condition).localeCompare(s(b.condition)),
-    status_asc: (a, b) => s(a.status).localeCompare(s(b.status)),
-  }[sortBy];
-  // Rows arrive already newest-first from getSnapshotAssets
-  return cmp ? [...rows].sort(cmp) : rows;
-}
 
 // Lazy-loaded dialogs (loaded on demand when user opens them)
 const LazyImportDialog = lazy(() => import("@/components/assets/ImportDialog"));
@@ -277,7 +208,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const [stats, setStats] = useState({ totalAssets: 0, totalValue: 0, activeCount: 0, maintenanceCount: 0 });
 
   // === CUSTOM HOOKS ===
-  const filterHook = useAssetFilters({ activityId: activity?.id, userId: user?.id, kodeSatker: user?.kode_satker });
+  const filterHook = useAssetFilters({ activityId: activity?.id, userId: user?.id, kodeSatker: String(user?.kode_satker || "").trim() || getSatkerAktif() });
   const {
     searchInput, setSearchInput, filterCategory, setFilterCategory,
     sortBy, setSortBy, debouncedSearch, showAdvancedFilter, setShowAdvancedFilter,
@@ -298,8 +229,9 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
 
   // Halaman bukan bagian lingkup: fetch sendiri boleh mengubah currentPage.
   // Semua filter API (termasuk multi-nilai), kegiatan, akun dan satker ikut.
-  const lingkupPermintaan = JSON.stringify([activity?.id, user?.id, user?.kode_satker, filterLaporan, sortBy, pageSize]);
+  const lingkupPermintaan = JSON.stringify([activity?.id, user?.id, String(user?.kode_satker || "").trim() || getSatkerAktif(), filterLaporan, sortBy, pageSize]);
   const penjaga = usePenjagaPermintaan(lingkupPermintaan);
+  const mobilePageCache = useMemo(() => buatCacheHalamanAset({ scope: lingkupPermintaan }), [lingkupPermintaan]);
 
   // === FORM / EDIT STATE ===
   const [editAssetForForm, setEditAssetForForm] = useState(null);
@@ -370,10 +302,11 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   editAssetRef.current = editAssetForForm;
   const wsNeedsRefreshRef = useRef(false);
   const wsRefreshTimerRef = useRef(null);
+  const refreshLocksRef = useRef(null);
   const pendingItemsRef = useRef(() => []);
   const { terapkanBaris, muatBaris } = useRekonsiliasiBaris({
     activityId: activity?.id, lingkupPermintaan, penjaga,
-    setAssets, setMobileAssets, pendingItemsRef, editAssetRef, wsNeedsRefreshRef,
+    setAssets, setMobileAssets, pendingItemsRef, editAssetRef, wsNeedsRefreshRef, mobilePageCache,
   });
 
   const onWsAssetChange = useCallback((eventType, assetInfo) => {
@@ -390,6 +323,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     if (eventType === "asset_deleted" && assetInfo?.id) {
       penjaga.batalkan(`baris:${assetInfo.id}`);
       setAssets(prev => prev.filter(a => a.id !== assetInfo.id));
+      mobilePageCache.removeRow(assetInfo.id);
       setMobileAssets(prev => prev.filter(a => a.id !== assetInfo.id));
       setTotalItems(prev => Math.max(0, prev - 1));
       if (activity?.id) removeSnapshotAsset(activity.id, assetInfo.id);
@@ -418,12 +352,13 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         refreshData();
       }
     }, 2000);
-  }, [activity?.id, muatBaris, penjaga]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activity?.id, muatBaris, penjaga, mobilePageCache]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { if (wsRefreshTimerRef.current) clearTimeout(wsRefreshTimerRef.current); }, []);
   const { onlineUsers, connected: wsConnected, sendMessage: wsSend } = useWebSocket({
     activityId: activity?.id, userId: user?.id,
     userName: user?.name || user?.username,
     onAssetChange: onWsAssetChange,
+    onResync: () => { onWsAssetChange("resync_required"); refreshLocksRef.current?.(); },
     // eslint-disable-next-line no-use-before-define
     onLocksUpdate: (locks) => setRowLocks(locks),
   });
@@ -583,9 +518,10 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   useUnsyncedGuard({ pendingCount, actionCount, isOnline, onFlush: flushForUnload });
 
   // === ROW LOCKING ===
-  const { rowLocks, setRowLocks, sessionId, lockAsset, unlockAsset } = useRowLocking({
+  const { rowLocks, setRowLocks, sessionId, lockAsset, unlockAsset, refreshLocks } = useRowLocking({
     activityId: activity?.id, user, wsSend,
   });
+  refreshLocksRef.current = refreshLocks;
 
   // Progres inventarisasi: bump refreshKey saat ada save yang baru selesai
   // (transisi status → 'saved') agar InventoryProgressBar refetch rekapitulasi.
@@ -607,6 +543,19 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
 
   // === BATCH SELECTION ===
   const [selectedAssets, setSelectedAssets] = useState(new Set());
+  const [desktopSelection, setDesktopSelection] = useState(() =>
+    typeof window !== 'undefined' && !!window.matchMedia?.('(min-width: 1024px)').matches);
+  useEffect(() => {
+    const media = window.matchMedia?.('(min-width: 1024px)');
+    if (!media) return undefined;
+    const update = () => setDesktopSelection(media.matches);
+    update();
+    media.addEventListener?.('change', update);
+    return () => media.removeEventListener?.('change', update);
+  }, []);
+  const visibleSelectionAssets = desktopSelection && viewMode !== 'gallery' ? assets : mobileAssets;
+  const visibleSelectionIds = useMemo(() => visibleSelectionAssets.map(asset => asset.id), [visibleSelectionAssets]);
+  const visibleSelection = statusSeleksiHalaman(selectedAssets, visibleSelectionIds);
   const [showBatchPanel, setShowBatchPanel] = useState(false);
   const [batchDraftRevision, setBatchDraftRevision] = useState(0);
   const tutupPanelMassal = useCallback(() => {
@@ -614,6 +563,11 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     setShowBatchPanel(false);
   }, [rekamPosisi]);
   const [batchUpdating, setBatchUpdating] = useState(false);
+  const batchFlow = useOperasiBatch({ owner: user?.id || user?.username,
+    satker: String(user?.kode_satker || "").trim() || getSatkerAktif(), activityId: activity?.id, sessionId });
+  const batchSummary = ringkasBatch(batchFlow.operation);
+  const batchNeedsReview = !!batchFlow.operation && (!batchSummary.done || batchSummary.attention > 0);
+  const batchSubmitRef = useRef(false);
   // Drag-to-select: tekan-tahan kotak select lalu geser → seleksi rentang
   // (mouse; sentuh tetap menggulir). Dipasang lewat containerProps di pembungkus
   // daftar/galeri + atribut data-select-box pada tiap kotak.
@@ -628,44 +582,34 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   }, []);
 
   const toggleSelectAll = useCallback(() => {
-    setSelectedAssets(prev => {
-      if (prev.size === assets.length && assets.length > 0) return new Set();
-      return new Set(assets.map(a => a.id));
-    });
+    setSelectedAssets(prev => toggleSeleksiHalaman(prev, assets.map(a => a.id)));
   }, [assets]);
 
   const selectAllPages = useCallback(async () => {
+    const tiket = penjaga.mulaiBaca("seleksi-semua", lingkupPermintaan);
+    if (!tiket) return;
     try {
       const params = new URLSearchParams();
       params.append("activity_id", activity?.id || "");
       if (debouncedSearch) params.append("search", debouncedSearch);
       buildFilterParams(params);
-      const r = await axios.get(`${API}/assets/all-ids?${params.toString()}`);
+      const r = await axios.get(`${API}/assets/all-ids?${params.toString()}`, { signal: tiket.signal });
+      if (!penjaga.berlaku(tiket)) return;
       const allIds = r.data.ids || [];
-      setSelectedAssets(new Set(allIds));
+      setSelectedAssets(prev => new Set([...prev, ...allIds]));
       toast.success(`${allIds.length} aset dipilih dari semua halaman`);
-    } catch { toast.error("Gagal memilih semua aset"); }
-  }, [activity?.id, debouncedSearch, buildFilterParams]);
+    } catch { if (penjaga.berlaku(tiket)) toast.error("Gagal memilih semua aset"); }
+    finally { penjaga.selesai(tiket); }
+  }, [activity?.id, debouncedSearch, buildFilterParams, penjaga, lingkupPermintaan]);
 
-  const clearSelection = useCallback(() => { setSelectedAssets(new Set()); setShowBatchPanel(false); }, []);
+  const clearSelection = useCallback(() => { penjaga.batalkan("seleksi-semua"); setSelectedAssets(new Set()); setShowBatchPanel(false); }, [penjaga]);
 
   // Pilih/kosongkan SEMUA aset yang tampil di viewport aktif (desktop = tabel
   // `assets`; galeri/HP/tablet = `mobileAssets`) — memberi select-all/deselect
   // di semua tampilan, bukan hanya header tabel desktop.
   const toggleSelectAllVisible = useCallback(() => {
-    const isDesktopList = viewModeRef.current !== 'gallery'
-      && typeof window !== 'undefined'
-      && window.matchMedia('(min-width: 1024px)').matches;
-    const list = isDesktopList ? assets : mobileAssets;
-    const ids = list.map(a => a.id);
-    setSelectedAssets(prev => {
-      const semua = ids.length > 0 && ids.every(id => prev.has(id));
-      const next = new Set(prev);
-      if (semua) ids.forEach(id => next.delete(id));
-      else ids.forEach(id => next.add(id));
-      return next;
-    });
-  }, [assets, mobileAssets]);
+    setSelectedAssets(prev => toggleSeleksiHalaman(prev, visibleSelectionIds));
+  }, [visibleSelectionIds]);
 
   // Panel "Ubah Massal" muncul otomatis saat seleksi PERTAMA (0 → >0) dan
   // hilang saat seleksi dikosongkan; tapi menutup panel (X/Batal) hanya
@@ -705,70 +649,53 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     }
   }, [activity?.id, setSearchInput]);
 
-  const handleBatchUpdate = useCallback(async (updates, idsArg) => {
-    // Snapshot ID target dari panel (idsArg): simpan massal KEBAL terhadap
-    // seleksi yang dikosongkan tepat setelah klik Terapkan — JANGAN baca ulang
-    // `selectedAssets` yang bisa keburu kosong (dulu → early-return senyap,
-    // data batal tersimpan tanpa pesan). Fallback ke state bila idsArg absen.
-    const allIds = (Array.isArray(idsArg) && idsArg.length)
-      ? idsArg : Array.from(selectedAssets);
-    if (allIds.length === 0) return;
-    const tiketTampilan = penjaga.mulai("massal", lingkupPermintaan);
+  const selesaiOperasiMassal = useCallback(async (operation, tiketTampilan) => {
+    const summary = ringkasBatch(operation);
+    if (summary.done && summary.attention === 0) {
+      toast.success(`${summary.applied} aset diperbarui; ${summary.unchanged} sudah sesuai`);
+    } else {
+      toast.info(`${summary.success}/${summary.total} aset selesai. Periksa hasil konflik, gagal, atau menunggu di status ubah massal.`);
+    }
+    return terapkanHasilBatchKeTampilan({ operation, penjaga, ticket: tiketTampilan, activityId: activity?.id,
+      resetDraft: () => setBatchDraftRevision(revision => revision + 1), hidePanel: tutupPanelMassal,
+      // eslint-disable-next-line no-use-before-define
+      refresh: (...args) => refreshDataRef.current?.(...args),
+    });
+  }, [penjaga, activity?.id, tutupPanelMassal]);
+
+  const handleBatchUpdate = useCallback(async (updates, idsArg, plan) => {
+    if (batchSubmitRef.current) return;
+    if (!plan) throw new Error("Periksa target dan versi sebelum menerapkan perubahan.");
+    batchSubmitRef.current = true;
+    const tiketTampilan = penjaga.mulai("massal", plan.context || lingkupPermintaan);
     setBatchUpdating(true);
     try {
-      const CHUNK_SIZE = 200;
-      if (allIds.length > CHUNK_SIZE) {
-        let totalUpdated = 0;
-        let compressionInfo = null;
-        const chunks = [];
-        for (let i = 0; i < allIds.length; i += CHUNK_SIZE) chunks.push(allIds.slice(i, i + CHUNK_SIZE));
-        for (let ci = 0; ci < chunks.length; ci++) {
-          toast.loading(`Memproses batch ${ci + 1}/${chunks.length}...`, { id: 'batch-progress' });
-          const r = await axios.put(`${API}/assets/batch-update`, { asset_ids: chunks[ci], updates }, {
-            headers: { "X-User-Id": user?.id, "X-User-Name": user?.name || user?.username }, timeout: 300000,
-          });
-          totalUpdated += r.data.updated || 0;
-          if (r.data.photo_compression) compressionInfo = r.data.photo_compression;
-        }
-        toast.dismiss('batch-progress');
-        const msg = compressionInfo
-          ? `${totalUpdated} aset diupdate. Foto dikompres ${compressionInfo.method}: ${compressionInfo.original_kb}KB → ${compressionInfo.compressed_kb}KB (-${compressionInfo.reduction_pct}%)`
-          : `${totalUpdated} aset berhasil diupdate`;
-        toast.success(msg);
-      } else {
-        const r = await axios.put(`${API}/assets/batch-update`, { asset_ids: allIds, updates }, {
-          headers: { "X-User-Id": user?.id, "X-User-Name": user?.name || user?.username }, timeout: 300000,
-        });
-        const ci = r.data.photo_compression;
-        const msg = ci
-          ? `${r.data.updated} aset diupdate. Foto dikompres ${ci.method}: ${ci.original_kb}KB → ${ci.compressed_kb}KB (-${ci.reduction_pct}%)`
-          : `${r.data.updated} aset berhasil diupdate`;
-        toast.success(msg);
-      }
-      // Seleksi DIPERTAHANKAN setelah simpan massal berhasil (permintaan
-      // lapangan): tutup panel edit tetapi biarkan baris tetap terseleksi agar
-      // pengguna bisa lanjut aksi lain atau memverifikasi hasil tanpa memilih
-      // ulang. Kosongkan manual lewat tombol "Batal pilih" bila perlu.
-      // Simpan tetap menyelesaikan ID yang dikonfirmasi, tetapi hasil lama
-      // tidak boleh menutup panel atau memindahkan gulir di filter/kegiatan baru.
-      if (!penjaga.berlaku(tiketTampilan)) return;
-      // Setelah berhasil, buka panel dengan draf baru agar foto/perubahan
-      // yang sudah diterapkan tidak terkirim lagi saat pengguna membukanya.
-      setBatchDraftRevision(revision => revision + 1);
-      tutupPanelMassal();
-      // Ref dipasang setelah pemuat data; dibaca ketika batch selesai,
-      // memakai konteks yang masih tampil tanpa mengunci closure awal.
-      // eslint-disable-next-line no-use-before-define
-      await refreshDataRef.current?.(undefined, { refreshWindow: true });
-    } catch (err) {
-      console.error("Batch update error:", err?.response?.status, err?.response?.data, err?.message);
-      toast.dismiss('batch-progress');
-      const detail = getApiError(err);
-      if (err.code === 'ECONNABORTED') toast.error("Request timeout — coba lagi dengan lebih sedikit aset");
-      else if (err.response?.status === 413) toast.error("Data terlalu besar — kurangi jumlah foto/file");
-      else toast.error(detail || `Gagal batch update: ${err.message || 'Unknown error'}`);
-    } finally { penjaga.selesai(tiketTampilan); setBatchUpdating(false); }
-  }, [selectedAssets, user, penjaga, lingkupPermintaan, tutupPanelMassal]);
+      const operation = await batchFlow.start(plan);
+      await selesaiOperasiMassal(operation, tiketTampilan);
+    } catch (error) { toast.error(pesanGalatBatch(error)); }
+    finally { batchSubmitRef.current = false; penjaga.selesai(tiketTampilan); setBatchUpdating(false); }
+  }, [batchFlow, penjaga, lingkupPermintaan, selesaiOperasiMassal]);
+
+  const lanjutkanOperasiMassal = async () => {
+    if (batchSubmitRef.current) return;
+    batchSubmitRef.current = true;
+    const tiket = penjaga.mulai("massal", lingkupPermintaan);
+    setBatchUpdating(true);
+    try { await selesaiOperasiMassal(await batchFlow.resume(), tiket); }
+    catch (error) { toast.error(pesanGalatBatch(error)); }
+    finally { batchSubmitRef.current = false; penjaga.selesai(tiket); setBatchUpdating(false); }
+  };
+  const tinjauOperasiMassal = async () => {
+    if (batchFlow.operation?.activityId !== activity?.id) {
+      toast.info("Buka kegiatan pada rincian operasi untuk meninjau aset yang bermasalah."); return;
+    }
+    const ids = batchSummary.results.filter(r => ["conflict", "failed"].includes(r.status)).map(r => r.id);
+    if (!await confirm({ title: "Siapkan draf baru untuk aset bermasalah?",
+      description: `${batchSummary.success} aset yang sudah selesai tetap tersimpan. Draf sebelumnya akan dikosongkan; periksa ${ids.length} aset konflik/gagal sebelum membuat perubahan baru.`,
+      confirmLabel: "Siapkan draf baru" })) return;
+    batchFlow.clear();
+    setSelectedAssets(new Set(ids)); setBatchDraftRevision(n => n + 1); setShowBatchPanel(ids.length > 0);
+  };
 
   const handleGroupBatchEdit = useCallback((assetIds) => {
     if (!assetIds || assetIds.length === 0) return;
@@ -785,7 +712,9 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
 
   // === DATA FETCHING ===
   const { doFetch, doFetchJendela, doFetchStats, loadMoreMobile, loadPrevMobile } = buatPemuatDaftarAset({
-    activity, filters, isOnlineRef, getPendingItems, serverHasPendingRow,
+    activity, ownerId: user?.id, kodeSatker: String(user?.kode_satker || "").trim() || getSatkerAktif(),
+    pagedSnapshot: process.env.REACT_APP_OFFLINE_QUERY_CACHE !== "false", mobilePageCache,
+    filters, isOnlineRef, getPendingItems, serverHasPendingRow,
     filterSnapshotRows, sortSnapshotRows, buildFilterParams,
     mobileLoading, mobileCurrentPage, mobileFirstPage, totalPages, pageSize,
     debouncedSearch, filterCategory, sortBy, penjaga, lingkupPermintaan,
@@ -1343,6 +1272,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     // Optimistis: baris langsung HILANG dari layar (tak perlu tunggu server /
     // refresh manual). refreshData() di bawah hanya rekonsiliasi hitungan.
     setAssets(prev => prev.filter(a => a.id !== id));
+    mobilePageCache.removeRow(id);
     setMobileAssets(prev => prev.filter(a => a.id !== id));
     setTotalItems(prev => Math.max(0, prev - 1));
     setSelectedAssets(prev => { if (!prev.has(id)) return prev; const n = new Set(prev); n.delete(id); return n; });
@@ -1357,7 +1287,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       refreshDataRef.current(); // rollback: muat ulang agar baris kembali bila hapus gagal
       return false;
     } finally { setIsDeleting(null); }
-  }, [confirm, activity?.id, dismissSync]);
+  }, [confirm, activity?.id, dismissSync, mobilePageCache]);
 
   // Kartu Inventarisasi — riwayat pengesahan lintas kegiatan per identitas aset.
   // kode_satker kegiatan aktif ikut dikirim agar riwayat dibatasi pada satuan
@@ -1635,16 +1565,9 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
           </button>
         )}
 
-        {/* ASSET FORM SIDEBAR - only for admin/operator */}
+        {/* Satu form persisten: draf, tab, media, dan fokus mengikuti resize. */}
         {perms.canEdit && (
-          <div className={`hidden lg:block ${formPanelVisible ? 'w-[320px] min-w-[320px]' : 'w-0 min-w-0 overflow-hidden'}`} style={{ transition: 'width 0.3s ease, min-width 0.3s ease', willChange: 'width', contain: 'layout style' }}>
-            <AssetForm isOpen={isSidebarOpen || formPanelVisible} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} onCameraReviewSaved={handleCameraReviewSaved} onExitToNewAsset={() => setEditAssetForForm(null)} assetIndex={editAssetIndex} totalAssetsInView={mobileAssets.length} hasMoreToLoad={mobileCurrentPage < totalPages} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} onOpenTimeline={handleOpenTimeline} onOpenLokasiDenah={perms.canEdit ? handleOpenLokasiDenah : undefined} alwaysExpanded={formPanelVisible} />
-          </div>
-        )}
-        {perms.canEdit && (
-          <div className="lg:hidden">
-            <AssetForm isOpen={isSidebarOpen} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} onCameraReviewSaved={handleCameraReviewSaved} onExitToNewAsset={() => setEditAssetForForm(null)} assetIndex={editAssetIndex} totalAssetsInView={mobileAssets.length} hasMoreToLoad={mobileCurrentPage < totalPages} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} onOpenTimeline={handleOpenTimeline} onOpenLokasiDenah={perms.canEdit ? handleOpenLokasiDenah : undefined} />
-          </div>
+            <AssetFormSidebar isDesktop={desktopSelection} panelVisible={formPanelVisible} isOpen={isSidebarOpen} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} onCameraReviewSaved={handleCameraReviewSaved} onExitToNewAsset={() => setEditAssetForForm(null)} assetIndex={editAssetIndex} totalAssetsInView={mobileAssets.length} hasMoreToLoad={mobileCurrentPage < totalPages} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} onOpenTimeline={handleOpenTimeline} onOpenLokasiDenah={perms.canEdit ? handleOpenLokasiDenah : undefined} />
         )}
 
         {/* MAIN CONTENT */}
@@ -1689,6 +1612,12 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
               inventoryMode={inventoryMode} setInventoryMode={setInventoryMode}
               onRefreshData={onRefreshData} refreshing={refreshing}
             />
+
+            <BatchOperationStatus operation={batchFlow.operation} busy={batchUpdating || batchFlow.busy} error={batchFlow.error}
+              onRefresh={() => batchFlow.refresh().catch(() => {})}
+              onResume={perms.canEdit ? lanjutkanOperasiMassal : undefined}
+              onReview={tinjauOperasiMassal}
+              onAbandon={() => batchFlow.abandonPreparation().catch(error => toast.error(pesanGalatBatch(error)))} />
 
             {/* Tiga panel (Analytics/Rekapitulasi/Barang Serupa) disatukan jadi
                 SATU kontrol segmented menyamping di semua viewport — hemat ruang
@@ -1809,12 +1738,12 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                     hitungan + pilih-semua/kosongkan + buka-tutup Ubah Massal. */}
                 {perms.canEdit && (
                   <SelectionToolbar count={selectedAssets.size} expanded={showBatchPanel}
-                    onSelectAll={toggleSelectAllVisible} onClear={clearSelection} disabled={batchUpdating}
+                    onSelectAll={toggleSelectAllVisible} onClear={clearSelection} disabled={batchUpdating || batchFlow.busy}
                     onTogglePanel={() => showBatchPanel ? tutupPanelMassal() : setShowBatchPanel(true)} />
                 )}
-                {selectedAssets.size === assets.length && totalItems > assets.length && (
+                {visibleSelection.all && totalItems > visibleSelection.total && (
                   <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-1.5 flex items-center justify-between text-xs">
-                    <span className="text-amber-800 dark:text-amber-300">{selectedAssets.size} aset di halaman ini dipilih. Total ada <b>{totalItems}</b> aset.</span>
+                    <span className="text-amber-800 dark:text-amber-300">{visibleSelection.count} aset di tampilan ini dipilih. Total ada <b>{totalItems}</b> aset.</span>
                     <button onClick={selectAllPages} className="text-blue-600 dark:text-blue-400 hover:underline font-semibold ml-2" data-testid="select-all-pages-btn">Pilih semua {totalItems} aset</button>
                   </div>
                 )}
@@ -1822,7 +1751,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                 {perms.canEdit && (
                   <div id="asset-batch-panel" hidden={!showBatchPanel}>
                     <Suspense fallback={null}>
-                      <BatchEditPanel key={batchDraftRevision} attached selectedCount={selectedAssets.size} categories={categories} onApply={handleBatchUpdate} onClose={tutupPanelMassal} updating={batchUpdating} activity={activity} assets={assets} selectedAssets={selectedAssets} />
+                      <BatchEditPanel key={batchDraftRevision} attached selectedCount={selectedAssets.size} categories={categories} onPrepare={async (updates, ids, versions) => { const plan = await batchFlow.plan(ids, updates, versions); return { ...plan, context: lingkupPermintaan, metadata: { ...plan.metadata, activityName: activity?.nama_kegiatan } }; }} onApply={handleBatchUpdate} onClose={tutupPanelMassal} updating={batchUpdating || batchFlow.busy || batchNeedsReview} activity={activity} assets={[...assets, ...mobileAssets]} selectedAssets={selectedAssets} />
                     </Suspense>
                   </div>
                 )}
@@ -1832,7 +1761,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                   lintas kotak select (mouse). */}
               <div ref={daftarContentRef} {...(perms.canEdit ? dragSelectProps : {})}>
               {viewMode === 'gallery' ? (
-                <AssetGalleryView daftarkanGulir={daftarkanGulir} assets={mobileAssets} editId={editAssetForForm?.id} onEdit={perms.canEdit ? handleEdit : undefined} onDelete={perms.canDelete ? handleDelete : undefined} onPrintCard={handlePrintCard} onLoadMore={loadMoreMobile} onLoadPrev={loadPrevMobile} hasPrev={mobileFirstPage > 1} isLoadingMore={mobileLoading} hasMore={mobileCurrentPage < totalPages} totalItems={totalItems} rowLocks={rowLocks} currentSessionId={sessionId} selectedAssets={selectedAssets} onToggleSelect={perms.canEdit ? toggleSelectAsset : undefined} />
+                <AssetGalleryView daftarkanGulir={daftarkanGulir} onVisibleAssets={mobilePageCache.setVisible} assets={mobileAssets} editId={editAssetForForm?.id} onEdit={perms.canEdit ? handleEdit : undefined} onDelete={perms.canDelete ? handleDelete : undefined} onPrintCard={handlePrintCard} onLoadMore={loadMoreMobile} onLoadPrev={loadPrevMobile} hasPrev={mobileFirstPage > 1} isLoadingMore={mobileLoading} hasMore={mobileCurrentPage < totalPages} totalItems={totalItems} rowLocks={rowLocks} currentSessionId={sessionId} selectedAssets={selectedAssets} onToggleSelect={perms.canEdit ? toggleSelectAsset : undefined} />
               ) : (<>
                 <div className="relative hidden lg:block">
                   <TooltipProvider>
@@ -1840,7 +1769,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                   </TooltipProvider>
                 </div>
                 <div className="lg:hidden">
-                  <VirtualizedMobileCards daftarkanGulir={daftarkanGulir} assets={mobileAssets} editId={editAssetForForm?.id} onEdit={perms.canEdit ? handleEdit : undefined} onDelete={perms.canDelete ? handleDelete : undefined} onOpenKartu={handleOpenKartu} onViewAudit={handleViewAssetAudit} onPrintCard={handlePrintCard} onOpenPhoto={setPhotoLightboxAsset} onLoadMore={loadMoreMobile} isLoadingMore={mobileLoading} hasMore={mobileCurrentPage < totalPages} totalItems={totalItems} rowLocks={rowLocks} currentSessionId={sessionId} syncStatuses={syncStatuses} onRetrySync={retrySync} onDismissSync={dismissSync} selectedAssets={selectedAssets} onToggleSelect={perms.canEdit ? toggleSelectAsset : undefined} />
+                  <VirtualizedMobileCards daftarkanGulir={daftarkanGulir} onVisibleAssets={mobilePageCache.setVisible} onLoadPrev={loadPrevMobile} hasPrev={mobileFirstPage > 1} assets={mobileAssets} editId={editAssetForForm?.id} onEdit={perms.canEdit ? handleEdit : undefined} onDelete={perms.canDelete ? handleDelete : undefined} onOpenKartu={handleOpenKartu} onViewAudit={handleViewAssetAudit} onPrintCard={handlePrintCard} onOpenPhoto={setPhotoLightboxAsset} onLoadMore={loadMoreMobile} isLoadingMore={mobileLoading} hasMore={mobileCurrentPage < totalPages} totalItems={totalItems} rowLocks={rowLocks} currentSessionId={sessionId} syncStatuses={syncStatuses} onRetrySync={retrySync} onDismissSync={dismissSync} selectedAssets={selectedAssets} onToggleSelect={perms.canEdit ? toggleSelectAsset : undefined} />
                 </div>
                 <div className="hidden lg:block">
                   <AssetPagination currentPage={currentPage} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} setPageSize={setPageSize} goToPage={goToPage} />

@@ -1,6 +1,8 @@
 import React, { useState } from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import * as pdfCompression from "../../../lib/pdfCompression";
+import { toast } from "sonner";
 import { DocumentChecklist } from "../DocumentChecklist";
 
 const photo = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160"><rect width="160" height="160" fill="#d9e9e5"/><path d="M20 100h120v30H20zM40 70h65l25 30H30z" fill="#14877a"/><circle cx="45" cy="130" r="13" fill="#334155"/><circle cx="115" cy="130" r="13" fill="#334155"/></svg>');
@@ -70,3 +72,32 @@ test("PDF tersimpan dibuka melalui endpoint media dengan versi aset", () => {
   open.mockRestore();
 });
 
+
+test("PDF hasil kompresi di atas 8MB ditolak sebelum masuk draf", async () => {
+  const compression = jest.spyOn(pdfCompression, "compressPdfFile").mockResolvedValue({ dataUrl: "data:application/pdf;base64,YQ==", originalBytes: 10 * 1024 * 1024, compressedBytes: 9 * 1024 * 1024, savingsPercent: 10, method: "test" });
+  const error = jest.spyOn(toast, "error"); const onChange = jest.fn();
+  render(<DocumentChecklist checklist={[{ name: "STNK", checked: true, photos: [], documents: [] }]} onChange={onChange} />);
+  fireEvent.change(screen.getByLabelText("Tambah foto atau PDF STNK"), { target: { files: [new File(["pdf"], "besar.pdf", { type: "application/pdf" })] } });
+  await waitFor(() => expect(error).toHaveBeenCalledWith(expect.stringContaining("melebihi 8 MB"), expect.anything()));
+  expect(onChange).not.toHaveBeenCalled(); compression.mockRestore(); error.mockRestore();
+});
+
+test.each([false, true])("urutan visual tidak mengubah URL foto/PDF asal, dengan thumbnail=%s", thumbnail => {
+  const open = jest.spyOn(window, "open").mockReturnValue({});
+  const stored = { id: "stnk-id", name: "STNK", checked: true, _serverItemIndex: 0,
+    photos: ["__existing__:2"], photo_thumbnails: thumbnail ? ["", "", photo] : [],
+    documents: [{ id: "pdf-id", name: "Asli.pdf", data: "__existing__:1" }] };
+  const other = { name: "Rekomendasi", checked: false, photos: [], documents: [] };
+  const view = render(<DocumentChecklist checklist={[other, stored]} assetId="a1" assetVersion={9} onChange={jest.fn()} />);
+  try {
+    for (const items of [[other, stored], [stored, other]]) {
+      view.rerender(<DocumentChecklist checklist={items} assetId="a1" assetVersion={9} onChange={jest.fn()} />);
+      expect(screen.getByRole("img", { name: "STNK foto 1" })).toHaveAttribute("src", thumbnail ? photo : expect.stringContaining("/checklist/0/photos/2?v=9"));
+      fireEvent.click(screen.getByRole("button", { name: "Lihat foto 1 STNK" }));
+      expect(screen.getByRole("img", { name: "Preview" })).toHaveAttribute("src", expect.stringContaining("/checklist/0/photos/2?v=9"));
+      fireEvent.click(screen.getByRole("button", { name: "Tutup pratinjau foto" }));
+      fireEvent.click(screen.getByRole("button", { name: "Lihat PDF Asli.pdf" }));
+      expect(open.mock.lastCall[0]).toContain("/checklist/0/documents/1?v=9");
+    }
+  } finally { open.mockRestore(); }
+});

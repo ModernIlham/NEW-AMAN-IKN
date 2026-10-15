@@ -1,0 +1,427 @@
+{
+  "checked_at": "2026-10-15T14:01:20.694576+00:00",
+  "tool": "Yarn Classic 1.22.22",
+  "node": "22.23.2",
+  "command": "yarn audit --json",
+  "lock_sha256": "c029992a16b988f0778cf1f5dc4b9cdd3ddbbbbb53adb8595de6eef8622ee640",
+  "summary": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 3,
+      "moderate": 25,
+      "high": 21,
+      "critical": 0
+    },
+    "dependencies": 1569,
+    "devDependencies": 0,
+    "optionalDependencies": 0,
+    "totalDependencies": 1569
+  },
+  "advisory_occurrences": 49,
+  "unique_dependency_path_strings": 37,
+  "distinct_ghsa": 25,
+  "distinct_packages": 13,
+  "advisories": [
+    {
+      "module_name": "postcss-selector-parser",
+      "github_advisory_id": "GHSA-rj75-hqrm-r3gf",
+      "severity": "moderate",
+      "title": "PostCSS: Quadratic complexity in flat selector parsing allows CPU exhaustion",
+      "vulnerable_versions": "<7.1.6",
+      "patched_versions": ">=7.1.6",
+      "url": "https://github.com/advisories/GHSA-rj75-hqrm-r3gf",
+      "installed_versions": [
+        "6.1.4"
+      ],
+      "dependency_paths": [
+        "react-scripts>css-minimizer-webpack-plugin>cssnano>cssnano-preset-default>postcss-calc>postcss-selector-parser",
+        "react-scripts>css-minimizer-webpack-plugin>cssnano>cssnano-preset-default>postcss-merge-longhand>stylehacks>postcss-selector-parser",
+        "react-scripts>tailwindcss>postcss-nested>postcss-selector-parser",
+        "tailwindcss>postcss-nested>postcss-selector-parser",
+        "tailwindcss>postcss-selector-parser"
+      ]
+    },
+    {
+      "module_name": "nth-check",
+      "github_advisory_id": "GHSA-rp65-9cf3-cjxr",
+      "severity": "high",
+      "title": "Inefficient Regular Expression Complexity in nth-check",
+      "vulnerable_versions": "<2.0.1",
+      "patched_versions": ">=2.0.1",
+      "url": "https://github.com/advisories/GHSA-rp65-9cf3-cjxr",
+      "installed_versions": [
+        "1.0.2"
+      ],
+      "dependency_paths": [
+        "react-scripts>@svgr/webpack>@svgr/plugin-svgo>svgo>css-select>nth-check"
+      ]
+    },
+    {
+      "module_name": "webpack-dev-server",
+      "github_advisory_id": "GHSA-9jgg-88mc-972h",
+      "severity": "moderate",
+      "title": "webpack-dev-server users' source code may be stolen when they access a malicious web site with non-Chromium based browser",
+      "vulnerable_versions": "<=5.2.0",
+      "patched_versions": ">=5.2.1",
+      "url": "https://github.com/advisories/GHSA-9jgg-88mc-972h",
+      "installed_versions": [
+        "4.15.2"
+      ],
+      "dependency_paths": [
+        "react-scripts>webpack-dev-server"
+      ]
+    },
+    {
+      "module_name": "webpack-dev-server",
+      "github_advisory_id": "GHSA-4v9v-hfq4-rm2v",
+      "severity": "moderate",
+      "title": "webpack-dev-server users' source code may be stolen when they access a malicious web site",
+      "vulnerable_versions": "<=5.2.0",
+      "patched_versions": ">=5.2.1",
+      "url": "https://github.com/advisories/GHSA-4v9v-hfq4-rm2v",
+      "installed_versions": [
+        "4.15.2"
+      ],
+      "dependency_paths": [
+        "react-scripts>webpack-dev-server"
+      ]
+    },
+    {
+      "module_name": "webpack-dev-server",
+      "github_advisory_id": "GHSA-79cf-xcqc-c78w",
+      "severity": "moderate",
+      "title": "webpack-dev-server vulnerable to cross-origin source code exposure on non-HTTPS origins",
+      "vulnerable_versions": "<=5.2.3",
+      "patched_versions": ">=5.2.4",
+      "url": "https://github.com/advisories/GHSA-79cf-xcqc-c78w",
+      "installed_versions": [
+        "4.15.2"
+      ],
+      "dependency_paths": [
+        "react-scripts>webpack-dev-server"
+      ]
+    },
+    {
+      "module_name": "webpack-dev-server",
+      "github_advisory_id": "GHSA-mx8g-39q3-5c79",
+      "severity": "moderate",
+      "title": "webpack-dev-server vulnerable to HMR WebSocket interception via permissive user proxies",
+      "vulnerable_versions": "<5.2.5",
+      "patched_versions": ">=5.2.5",
+      "url": "https://github.com/advisories/GHSA-mx8g-39q3-5c79",
+      "installed_versions": [
+        "4.15.2"
+      ],
+      "dependency_paths": [
+        "react-scripts>webpack-dev-server"
+      ]
+    },
+    {
+      "module_name": "webpack-dev-server",
+      "github_advisory_id": "GHSA-f5vj-f2hx-8m93",
+      "severity": "moderate",
+      "title": "webpack-dev-server vulnerable to cross-site request forgery via internal developer endpoints",
+      "vulnerable_versions": "<=5.2.5",
+      "patched_versions": ">=5.2.6",
+      "url": "https://github.com/advisories/GHSA-f5vj-f2hx-8m93",
+      "installed_versions": [
+        "4.15.2"
+      ],
+      "dependency_paths": [
+        "react-scripts>webpack-dev-server"
+      ]
+    },
+    {
+      "module_name": "webpack-dev-server",
+      "github_advisory_id": "GHSA-m28w-2pqf-7qgj",
+      "severity": "moderate",
+      "title": "webpack-dev-server vulnerable to denial of service via a malformed Host or Origin header",
+      "vulnerable_versions": "<=5.2.5",
+      "patched_versions": ">=5.2.6",
+      "url": "https://github.com/advisories/GHSA-m28w-2pqf-7qgj",
+      "installed_versions": [
+        "4.15.2"
+      ],
+      "dependency_paths": [
+        "react-scripts>webpack-dev-server"
+      ]
+    },
+    {
+      "module_name": "postcss",
+      "github_advisory_id": "GHSA-7fh5-64p2-3v2j",
+      "severity": "moderate",
+      "title": "PostCSS line return parsing error",
+      "vulnerable_versions": "<8.4.31",
+      "patched_versions": ">=8.4.31",
+      "url": "https://github.com/advisories/GHSA-7fh5-64p2-3v2j",
+      "installed_versions": [
+        "7.0.39"
+      ],
+      "dependency_paths": [
+        "react-scripts>resolve-url-loader>postcss"
+      ]
+    },
+    {
+      "module_name": "postcss",
+      "github_advisory_id": "GHSA-qx2v-qp2m-jg93",
+      "severity": "moderate",
+      "title": "PostCSS has XSS via Unescaped </style> in its CSS Stringify Output",
+      "vulnerable_versions": "<8.5.10",
+      "patched_versions": ">=8.5.10",
+      "url": "https://github.com/advisories/GHSA-qx2v-qp2m-jg93",
+      "installed_versions": [
+        "7.0.39"
+      ],
+      "dependency_paths": [
+        "react-scripts>resolve-url-loader>postcss"
+      ]
+    },
+    {
+      "module_name": "postcss",
+      "github_advisory_id": "GHSA-6g55-p6wh-862q",
+      "severity": "high",
+      "title": "PostCSS: Arbitrary file read and information disclosure via attacker-controlled sourceMappingURL in CSS comments",
+      "vulnerable_versions": "<=8.5.11",
+      "patched_versions": ">=8.5.12",
+      "url": "https://github.com/advisories/GHSA-6g55-p6wh-862q",
+      "installed_versions": [
+        "7.0.39"
+      ],
+      "dependency_paths": [
+        "react-scripts>resolve-url-loader>postcss"
+      ]
+    },
+    {
+      "module_name": "postcss",
+      "github_advisory_id": "GHSA-fxqj-rqcc-2cmp",
+      "severity": "moderate",
+      "title": "PostCSS: incomplete fix of GHSA-6g55-p6wh-862q \u2014 attacker-controlled sourceMappingURL reads arbitrary .map files when `from` is unset",
+      "vulnerable_versions": "<=8.5.22",
+      "patched_versions": ">=8.5.23",
+      "url": "https://github.com/advisories/GHSA-fxqj-rqcc-2cmp",
+      "installed_versions": [
+        "7.0.39"
+      ],
+      "dependency_paths": [
+        "react-scripts>resolve-url-loader>postcss"
+      ]
+    },
+    {
+      "module_name": "postcss",
+      "github_advisory_id": "GHSA-r28c-9q8g-f849",
+      "severity": "high",
+      "title": "PostCSS: Path Traversal in Previous Source Map Auto-Loading (sourceMappingURL) leads to Arbitrary .map File Disclosure",
+      "vulnerable_versions": "<=8.5.17",
+      "patched_versions": ">=8.5.18",
+      "url": "https://github.com/advisories/GHSA-r28c-9q8g-f849",
+      "installed_versions": [
+        "7.0.39"
+      ],
+      "dependency_paths": [
+        "react-scripts>resolve-url-loader>postcss"
+      ]
+    },
+    {
+      "module_name": "serialize-javascript",
+      "github_advisory_id": "GHSA-5c6j-r48x-rmvq",
+      "severity": "high",
+      "title": "Serialize JavaScript is Vulnerable to RCE via RegExp.flags and Date.prototype.toISOString()",
+      "vulnerable_versions": "<=7.0.2",
+      "patched_versions": ">=7.0.3",
+      "url": "https://github.com/advisories/GHSA-5c6j-r48x-rmvq",
+      "installed_versions": [
+        "4.0.0",
+        "6.0.2"
+      ],
+      "dependency_paths": [
+        "react-scripts>css-minimizer-webpack-plugin>serialize-javascript",
+        "react-scripts>workbox-webpack-plugin>workbox-build>rollup-plugin-terser>serialize-javascript"
+      ]
+    },
+    {
+      "module_name": "serialize-javascript",
+      "github_advisory_id": "GHSA-qj8w-gfj5-8c6v",
+      "severity": "moderate",
+      "title": "Serialize JavaScript has CPU Exhaustion Denial of Service via crafted array-like objects",
+      "vulnerable_versions": ">=5.0.0 <7.0.5",
+      "patched_versions": ">=7.0.5",
+      "url": "https://github.com/advisories/GHSA-qj8w-gfj5-8c6v",
+      "installed_versions": [
+        "6.0.2"
+      ],
+      "dependency_paths": [
+        "react-scripts>css-minimizer-webpack-plugin>serialize-javascript"
+      ]
+    },
+    {
+      "module_name": "underscore",
+      "github_advisory_id": "GHSA-qpx9-hpmf-5gmw",
+      "severity": "high",
+      "title": "Underscore has unlimited recursion in _.flatten and _.isEqual, potential for DoS attack",
+      "vulnerable_versions": "<=1.13.7",
+      "patched_versions": ">=1.13.8",
+      "url": "https://github.com/advisories/GHSA-qpx9-hpmf-5gmw",
+      "installed_versions": [
+        "1.13.6"
+      ],
+      "dependency_paths": [
+        "react-scripts>bfj>jsonpath>underscore"
+      ]
+    },
+    {
+      "module_name": "@tootallnate/once",
+      "github_advisory_id": "GHSA-vpq2-c234-7xj6",
+      "severity": "low",
+      "title": "@tootallnate/once vulnerable to Incorrect Control Flow Scoping",
+      "vulnerable_versions": "<2.0.1",
+      "patched_versions": ">=2.0.1",
+      "url": "https://github.com/advisories/GHSA-vpq2-c234-7xj6",
+      "installed_versions": [
+        "1.1.2"
+      ],
+      "dependency_paths": [
+        "react-scripts>jest>@jest/core>jest-config>jest-environment-jsdom>jsdom>http-proxy-agent>@tootallnate/once",
+        "react-scripts>jest>jest-cli>@jest/core>jest-config>jest-environment-jsdom>jsdom>http-proxy-agent>@tootallnate/once",
+        "react-scripts>jest>jest-cli>@jest/core>jest-config>jest-runner>jest-environment-jsdom>jsdom>http-proxy-agent>@tootallnate/once"
+      ]
+    },
+    {
+      "module_name": "uuid",
+      "github_advisory_id": "GHSA-w5hq-g745-h8pq",
+      "severity": "moderate",
+      "title": "uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided",
+      "vulnerable_versions": "<11.1.1",
+      "patched_versions": ">=11.1.1",
+      "url": "https://github.com/advisories/GHSA-w5hq-g745-h8pq",
+      "installed_versions": [
+        "8.3.2"
+      ],
+      "dependency_paths": [
+        "react-scripts>webpack-dev-server>sockjs>uuid"
+      ]
+    },
+    {
+      "module_name": "svgo",
+      "github_advisory_id": "GHSA-2p49-hgcm-8545",
+      "severity": "high",
+      "title": "SVGO removeScripts plugin leaves some executable scripts intact",
+      "vulnerable_versions": ">=1.0.0 <2.8.3",
+      "patched_versions": ">=2.8.3",
+      "url": "https://github.com/advisories/GHSA-2p49-hgcm-8545",
+      "installed_versions": [
+        "1.3.2"
+      ],
+      "dependency_paths": [
+        "react-scripts>@svgr/webpack>@svgr/plugin-svgo>svgo"
+      ]
+    },
+    {
+      "module_name": "svgo",
+      "github_advisory_id": "GHSA-w27v-7q3p-w38r",
+      "severity": "high",
+      "title": "SVGO: removeScripts allows executable links through namespace and control-character bypasses",
+      "vulnerable_versions": ">=1.0.0 <2.8.4",
+      "patched_versions": ">=2.8.4",
+      "url": "https://github.com/advisories/GHSA-w27v-7q3p-w38r",
+      "installed_versions": [
+        "1.3.2"
+      ],
+      "dependency_paths": [
+        "react-scripts>@svgr/webpack>@svgr/plugin-svgo>svgo"
+      ]
+    },
+    {
+      "module_name": "svgo",
+      "github_advisory_id": "GHSA-4vpr-x523-8j87",
+      "severity": "moderate",
+      "title": "SVGO: removeScripts incompletely sanitizes executable HTML in SVG foreignObject elements",
+      "vulnerable_versions": ">=1.0.0 <2.8.4",
+      "patched_versions": ">=2.8.4",
+      "url": "https://github.com/advisories/GHSA-4vpr-x523-8j87",
+      "installed_versions": [
+        "1.3.2"
+      ],
+      "dependency_paths": [
+        "react-scripts>@svgr/webpack>@svgr/plugin-svgo>svgo"
+      ]
+    },
+    {
+      "module_name": "webpack-dev-middleware",
+      "github_advisory_id": "GHSA-g84c-rxfj-3j2c",
+      "severity": "high",
+      "title": "webpack-dev-middleware vulnerable to Path Traversal via non-slash-terminated publicPath",
+      "vulnerable_versions": "<7.4.5",
+      "patched_versions": ">=7.4.6",
+      "url": "https://github.com/advisories/GHSA-g84c-rxfj-3j2c",
+      "installed_versions": [
+        "5.3.4"
+      ],
+      "dependency_paths": [
+        "react-scripts>webpack-dev-server>webpack-dev-middleware"
+      ]
+    },
+    {
+      "module_name": "node-forge",
+      "github_advisory_id": "GHSA-86w9-cpqp-85rv",
+      "severity": "high",
+      "title": "node-forge RSA PKCS#1 v1.5 signature verification accepts extra nested DigestAlgorithm elements",
+      "vulnerable_versions": "<=1.4.0",
+      "patched_versions": "<0.0.0",
+      "url": "https://github.com/advisories/GHSA-86w9-cpqp-85rv",
+      "installed_versions": [
+        "1.4.0"
+      ],
+      "dependency_paths": [
+        "react-scripts>webpack-dev-server>selfsigned>node-forge"
+      ]
+    },
+    {
+      "module_name": "braces",
+      "github_advisory_id": "GHSA-vfj7-8cjw-p6xm",
+      "severity": "high",
+      "title": "braces vulnerable to stack-exhaustion denial of service through deeply nested patterns",
+      "vulnerable_versions": "<=3.0.3",
+      "patched_versions": "<0.0.0",
+      "url": "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
+      "installed_versions": [
+        "3.0.3"
+      ],
+      "dependency_paths": [
+        "react-scripts>eslint-config-react-app>@typescript-eslint/eslint-plugin>@typescript-eslint/type-utils>@typescript-eslint/typescript-estree>globby>fast-glob>micromatch>braces",
+        "react-scripts>eslint-config-react-app>@typescript-eslint/eslint-plugin>@typescript-eslint/type-utils>@typescript-eslint/utils>@typescript-eslint/typescript-estree>globby>fast-glob>micromatch>braces",
+        "react-scripts>eslint-config-react-app>@typescript-eslint/parser>@typescript-eslint/typescript-estree>globby>fast-glob>micromatch>braces",
+        "react-scripts>jest>@jest/core>@jest/transform>jest-haste-map>micromatch>braces",
+        "react-scripts>jest>jest-cli>@jest/core>jest-config>@jest/test-sequencer>jest-runtime>@jest/globals>@jest/environment>@jest/fake-timers>jest-message-util>micromatch>braces",
+        "react-scripts>jest>jest-cli>@jest/core>jest-config>@jest/test-sequencer>jest-runtime>@jest/transform>jest-haste-map>micromatch>braces",
+        "react-scripts>jest>jest-cli>@jest/core>jest-config>@jest/test-sequencer>jest-runtime>jest-snapshot>@jest/transform>jest-haste-map>micromatch>braces",
+        "react-scripts>react-dev-utils>fork-ts-checker-webpack-plugin>chokidar>braces",
+        "react-scripts>react-dev-utils>globby>fast-glob>micromatch>braces",
+        "react-scripts>tailwindcss>chokidar>braces",
+        "tailwindcss>chokidar>braces"
+      ]
+    },
+    {
+      "module_name": "sprintf-js",
+      "github_advisory_id": "GHSA-hp3w-g68c-fv3c",
+      "severity": "moderate",
+      "title": "sprintf-js vulnerable to denial of service through unbounded precision specifiers",
+      "vulnerable_versions": "<=1.1.3",
+      "patched_versions": "<0.0.0",
+      "url": "https://github.com/advisories/GHSA-hp3w-g68c-fv3c",
+      "installed_versions": [
+        "1.0.3"
+      ],
+      "dependency_paths": [
+        "react-scripts>@svgr/webpack>@svgr/plugin-svgo>svgo>js-yaml>argparse>sprintf-js",
+        "react-scripts>babel-jest>@jest/transform>babel-plugin-istanbul>@istanbuljs/load-nyc-config>js-yaml>argparse>sprintf-js",
+        "react-scripts>jest>@jest/core>@jest/reporters>@jest/transform>babel-plugin-istanbul>@istanbuljs/load-nyc-config>js-yaml>argparse>sprintf-js",
+        "react-scripts>jest>@jest/core>@jest/transform>babel-plugin-istanbul>@istanbuljs/load-nyc-config>js-yaml>argparse>sprintf-js",
+        "react-scripts>jest>@jest/core>jest-config>babel-jest>@jest/transform>babel-plugin-istanbul>@istanbuljs/load-nyc-config>js-yaml>argparse>sprintf-js",
+        "react-scripts>jest>jest-cli>@jest/core>jest-config>@jest/test-sequencer>jest-runtime>@jest/transform>babel-plugin-istanbul>@istanbuljs/load-nyc-config>js-yaml>argparse>sprintf-js",
+        "react-scripts>jest>jest-cli>@jest/core>jest-config>@jest/test-sequencer>jest-runtime>jest-snapshot>@jest/transform>babel-plugin-istanbul>@istanbuljs/load-nyc-config>js-yaml>argparse>sprintf-js",
+        "react-scripts>jest>jest-cli>@jest/core>jest-config>babel-jest>@jest/transform>babel-plugin-istanbul>@istanbuljs/load-nyc-config>js-yaml>argparse>sprintf-js"
+      ]
+    }
+  ],
+  "exit_code": 14
+}

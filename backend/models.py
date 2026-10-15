@@ -53,10 +53,12 @@ class CategoryResponse(BaseModel):
     kode_aset: Optional[str] = ""
 
 class DocumentCheckItem(BaseModel):
+    id: Optional[str] = None
     name: str
     checked: bool = False
     notes: Optional[str] = ""
     photos: Optional[List[str]] = []
+    photo_gridfs_ids: List[str] = Field(default_factory=list)
     documents: Optional[List[dict]] = []
 
 class AssetCreate(BaseModel):
@@ -148,10 +150,12 @@ class AssetCreate(BaseModel):
 
 class DocumentCheckItemResponse(BaseModel):
     """Response model for document checklist items - includes photo/doc counts for exclude_media mode"""
+    id: Optional[str] = None
     name: str
     checked: bool = False
     notes: Optional[str] = ""
     photos: Optional[List[str]] = []
+    photo_gridfs_ids: List[str] = Field(default_factory=list)
     documents: Optional[List[dict]] = []
     photo_count: Optional[int] = None  # Added for exclude_media mode
     document_count: Optional[int] = None  # Added for exclude_media mode

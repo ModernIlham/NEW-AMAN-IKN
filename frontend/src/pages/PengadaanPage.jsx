@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useRevisiSatker } from "@/hooks/useReferensiSatker";
 import axios from "axios";
+import { usePencarianBaca } from "@/hooks/usePencarianBaca";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, ShoppingCart, Plus, Search, Trash2, X, Coins,
@@ -46,7 +47,7 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 // Diekspor UNTUK DIUJI: perilaku dua-sumbernya (referensi kodefikasi +
 // persediaan terdaftar) adalah inti fitur ini, dan menguji lewat teks
 // sumber saja sudah pernah meloloskan mutasi di modul lain.
-export function KodeBarangPicker({ value, onChange, onPick, onPickPersediaan, testid }) {
+export function KodeBarangPicker({ value, onChange, onPick, onPickPersediaan, testid, lingkup }) {
   const [sug, setSug] = useState(null);   // null = tertutup; [] = kosong
   // Barang persediaan yang SUDAH terdaftar di inventarisasi satker. Dulu
   // pemilih ini hanya menarik referensi kodefikasi — yang maksimal 10 digit —
@@ -54,28 +55,26 @@ export function KodeBarangPicker({ value, onChange, onPick, onPickPersediaan, te
   // untuk dipilih, dan setiap pembelian ulang berujung master baru.
   const [psd, setPsd] = useState(null);
   const [buka, setBuka] = useState(false);
-  const timerRef = useRef(null);
-  const cari = (q) => {
-    clearTimeout(timerRef.current);
-    if (!q || q.length < 2) { setSug(null); setPsd(null); return; }
-    timerRef.current = setTimeout(async () => {
-      // Dua sumber, satu ketikan: keduanya berjalan berbarengan supaya daftar
-      // tak menunggu dua kali putaran jaringan. `allSettled` — bukan `all` —
-      // karena satu sumber yang mati tak boleh mengosongkan sumber lainnya.
-      const [rKode, rPsd] = await Promise.allSettled([
-        axios.get(`${API}/kodefikasi`, { params: { search: q, page_size: 12 } }),
-        axios.get(`${API}/persediaan`, { params: { search: q, page_size: 8 } }),
-      ]);
+  const [query, setQuery] = useState("");
+  usePencarianBaca({
+    lingkup, kunci: query, aktif: query.length >= 2,
+    jalankan: (signal) => Promise.allSettled([
+      axios.get(`${API}/kodefikasi`, { signal, params: { search: query, page_size: 12 } }),
+      axios.get(`${API}/persediaan`, { signal, params: { search: query, page_size: 8 } }),
+    ]),
+    padaHasil: ([rKode, rPsd]) => {
       setSug(rKode.status === "fulfilled" ? (rKode.value.data?.items || []) : null);
       setPsd(rPsd.status === "fulfilled" ? (rPsd.value.data?.items || []) : null);
-    }, 300);
-  };
+    },
+    padaKosong: () => { setSug(null); setPsd(null); },
+  });
+  useEffect(() => { if (!value?.trim()) setQuery(""); }, [value]);
   const adaIsi = (Array.isArray(sug) && sug.length > 0)
     || (Array.isArray(psd) && psd.length > 0);
   return (
     <div className="relative">
       <Input placeholder="Kode barang — ketik kode/nama" className="font-mono" value={value}
-        onChange={(e) => { onChange(e.target.value); cari(e.target.value.trim()); setBuka(true); }}
+        onChange={(e) => { onChange(e.target.value); setQuery(e.target.value.trim()); setBuka(true); }}
         onFocus={() => { if (sug || psd) setBuka(true); }}
         onBlur={() => setTimeout(() => setBuka(false), 150)}
         data-testid={testid} />
@@ -88,7 +87,7 @@ export function KodeBarangPicker({ value, onChange, onPick, onPickPersediaan, te
               </p>
               {psd.map((m) => (
                 <button key={m.id} type="button"
-                  onMouseDown={(e) => { e.preventDefault(); onPickPersediaan?.(m); setBuka(false); }}
+                  onMouseDown={(e) => { e.preventDefault(); onPickPersediaan?.(m); setQuery(""); setBuka(false); }}
                   className="w-full px-2 py-1.5 text-left hover:bg-accent flex items-start gap-2 min-h-0 min-w-0"
                   data-testid={`${testid}-psd-${m.id}`}>
                   <span className="font-mono text-[11px] text-sky-700 dark:text-sky-400 flex-shrink-0">{m.kode_barang}</span>
@@ -111,7 +110,7 @@ export function KodeBarangPicker({ value, onChange, onPick, onPickPersediaan, te
               )}
               {sug.map((k) => (
                 <button key={k.kode} type="button"
-                  onMouseDown={(e) => { e.preventDefault(); onPick(k); setBuka(false); }}
+                  onMouseDown={(e) => { e.preventDefault(); onPick(k); setQuery(""); setBuka(false); }}
                   className="w-full px-2 py-1.5 text-left hover:bg-accent flex items-start gap-2 min-h-0 min-w-0">
                   <span className="font-mono text-[11px] text-teal-700 dark:text-teal-400 flex-shrink-0">{k.kode}</span>
                   <span className="text-[11px] text-foreground flex-1 leading-snug">
@@ -159,7 +158,6 @@ export default function PengadaanPage({ user, onBack }) {
   const [cari, setCari] = useState("");
   const [hasilCari, setHasilCari] = useState([]);
   const [mencari, setMencari] = useState(false);
-  const cariTimer = useRef(null);
   const { confirm, confirmDialog } = useConfirm();
   // Dialog ber-field bersama — dipakai memilih PPK dari beberapa yang
   // sama-sama berlaku pada tanggal BAST (lihat `ubahPpk`).
@@ -241,18 +239,16 @@ export default function PengadaanPage({ user, onBack }) {
   }, []);
   useEffect(() => { muat(); }, [muat]);
 
-  useEffect(() => {
-    if (!taut || cari.trim().length < 2) { setHasilCari([]); return undefined; }
-    clearTimeout(cariTimer.current);
-    cariTimer.current = setTimeout(async () => {
-      setMencari(true);
-      try {
-        const r = await axios.get(`${API}/assets`, { params: { search: cari.trim(), page_size: 8 } });
-        setHasilCari(r.data?.items || []);
-      } catch { setHasilCari([]); } finally { setMencari(false); }
-    }, 300);
-    return () => clearTimeout(cariTimer.current);
-  }, [cari, taut]);
+  usePencarianBaca({
+    lingkup: JSON.stringify([user?.id, String(user?.kode_satker || "").trim() || getSatkerAktif()]), kunci: [taut?.perolehan?.id, cari.trim()],
+    aktif: !!taut && cari.trim().length >= 2,
+    jalankan: signal => axios.get(`${API}/assets`, { signal, params: { search: cari.trim(), page_size: 8 } }),
+    padaMulai: () => setMencari(true),
+    padaHasil: r => setHasilCari(r.data?.items || []),
+    padaGagal: () => setHasilCari([]),
+    padaSelesai: () => setMencari(false),
+    padaKosong: () => { setHasilCari([]); setMencari(false); },
+  });
 
   const fmtRp = (n) => `Rp${Math.round(Number(n || 0)).toLocaleString("id-ID")}`;
   const labelJenis = data?.label_jenis || {};
@@ -1212,7 +1208,7 @@ export default function PengadaanPage({ user, onBack }) {
                         {kunciBarang ? (
                           <Input value={b.kode} disabled data-testid={`pengadaan-barang-kode-${i}`} />
                         ) : (
-                          <KodeBarangPicker value={b.kode}
+                          <KodeBarangPicker lingkup={JSON.stringify([user?.id, String(user?.kode_satker || "").trim() || getSatkerAktif()])} value={b.kode}
                             onChange={(v) => gantiFormBaris(i, (r) => barisSetelahUbahKode(r, v))}
                             onPick={(k) => gantiFormBaris(i, (r) => ({
                               ...barisSetelahUbahKode(r, k.kode),

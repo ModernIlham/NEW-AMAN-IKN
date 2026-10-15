@@ -52,7 +52,11 @@ worker dan scheduler penulis sebelum mengambil alih proses yang terputus.
 cd /var/www/inventarisasi/backend
 venv/bin/python restore_recovery.py status
 # Sesuaikan path interpreter dengan instalasi yang sebenarnya.
-venv/bin/python restore_recovery.py clear-writer-leases --workers-stopped
+# Verifikasi outcome setiap operasi Mongo yang tertunda setelah semua penulis
+# dihentikan. Untuk satu lease, pilih ID eksplisit dari output status:
+venv/bin/python restore_recovery.py release-writer-lease --lease-id LEASE_ID --workers-stopped --mongo-outcomes-verified
+# Clear semua hanya setelah seluruh outcome diperiksa:
+venv/bin/python restore_recovery.py clear-writer-leases --workers-stopped --mongo-outcomes-verified
 venv/bin/python restore_recovery.py recover --job-id JOB_ID --workers-stopped
 ```
 
@@ -70,6 +74,15 @@ Endpoint pemulihan: `POST /api/backup/restore/recovery/{job_id}` dengan
 untuk crash yang menghilangkan dokumen user atau memerlukan penghentian server.
 Konfirmasi endpoint adalah pernyataan operator; expiry lease sendiri bukan
 izin mengadopsi worker lama.
+
+Write yang sudah dikirim tetapi tidak memperoleh acknowledgement Mongo dapat
+tetap selesai di server setelah request HTTP berakhir. Admission tersebut
+dipertahankan tanpa TTL dengan status `uncertain_write` dan alasan enum tetap;
+restore/deploy tetap menolak drain walau HTTP sudah selesai. Metadata gagal
+ditulis tidak mengizinkan penghapusan lease fisik. Tidak ada negative read,
+heartbeat expiry, restart, atau retry yang otomatis melepaskannya. Operator
+wajib menghentikan asal penulis, memeriksa operasi Mongo yang masih berjalan
+beserta bukti hasil/version/receipt/media, kemudian melepas lease eksplisit.
 
 ## Bukti
 

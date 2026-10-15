@@ -1,0 +1,10 @@
+{
+  "package.json": {
+    "baseline_sha256": "d66a1a6d11f9a3cdee777c1a65ecb1c1d3a318fbdf6f3017f8d4abda4eeac1b2",
+    "candidate_sha256": "9d9f6b9bb0c8a8e744ee0b01ec642ae097dbf66b8b4407b262755ff463ca3c1e"
+  },
+  "yarn.lock": {
+    "baseline_sha256": "564de6edb292337ffe01fbdac75ad222c95cda40a5dccded75ddfcf076cf8db1",
+    "candidate_sha256": "c029992a16b988f0778cf1f5dc4b9cdd3ddbbbbb53adb8595de6eef8622ee640"
+  }
+}

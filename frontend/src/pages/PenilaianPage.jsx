@@ -1,5 +1,8 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
+import { getSatkerAktif } from "@/lib/satkerAktif";
+import { usePencarianBaca } from "@/hooks/usePencarianBaca";
+import { usePenjagaPermintaan } from "@/hooks/usePenjagaPermintaan";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, Scale, Coins, TrendingDown, Wallet, AlertTriangle,
@@ -37,6 +40,8 @@ const WARNA_SAKTI = {
  */
 export default function PenilaianPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";
+  const lingkupBaca = JSON.stringify([user?.id, String(user?.kode_satker || "").trim() || getSatkerAktif()]);
+  const penjagaBaca = usePenjagaPermintaan(lingkupBaca);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [perTanggal, setPerTanggal] = useState(new Date().toISOString().slice(0, 10));
@@ -45,18 +50,15 @@ export default function PenilaianPage({ user, onBack }) {
   const [formRef, setFormRef] = useState(null);
   // Uraian kodefikasi utk kode kelompok di dialog: null | "memuat" | {jenjang, uraian_terdalam}
   const [infoKode, setInfoKode] = useState(null);
-  const infoKodeTimer = useRef(null);
   // Register koreksi nilai: data GET + dialog catat {data, aset, saving}
   const [koreksi, setKoreksi] = useState(null);
   const [formKoreksi, setFormKoreksi] = useState(null);
   const [cari, setCari] = useState("");
   const [hasilCari, setHasilCari] = useState([]);
-  const cariTimer = useRef(null);
   // Riwayat nilai per aset (read-only, #203): {aset, peristiwa, ...} | null
   const [cariRiw, setCariRiw] = useState("");
   const [hasilRiw, setHasilRiw] = useState([]);
   const [riwayat, setRiwayat] = useState(null);
-  const cariRiwTimer = useRef(null);
   const { confirm, confirmDialog } = useConfirm();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
@@ -71,57 +73,41 @@ export default function PenilaianPage({ user, onBack }) {
   // Kode kelompok diketik → tarik uraian berjenjang dari Referensi Kodefikasi
   // Barang dan langsung tampilkan; kolom Uraian yang masih kosong diisi
   // otomatis dari uraian kelompoknya (tetap boleh disunting).
-  useEffect(() => {
-    const kode = String(formRef?.kode || "").trim();
-    if (!formRef || !/^\d{5}$/.test(kode)) { setInfoKode(null); return undefined; }
-    setInfoKode("memuat");
-    clearTimeout(infoKodeTimer.current);
-    infoKodeTimer.current = setTimeout(async () => {
-      try {
-        const r = await axios.get(`${API}/kodefikasi/lookup/${kode}`);
-        setInfoKode(r.data);
-        const uraian = String(r.data?.uraian_terdalam || "").trim();
-        if (uraian) {
-          setFormRef((f) => (f && !String(f.uraian || "").trim()
-            ? { ...f, uraian } : f));
-        }
-      } catch { setInfoKode(null); }
-    }, 300);
-    return () => clearTimeout(infoKodeTimer.current);
-  }, [formRef?.kode, formRef]);
-
-  useEffect(() => {
-    if (!formKoreksi || cari.trim().length < 2) { setHasilCari([]); return undefined; }
-    clearTimeout(cariTimer.current);
-    cariTimer.current = setTimeout(async () => {
-      try {
-        const r = await axios.get(`${API}/assets`, { params: { search: cari.trim(), page_size: 8 } });
-        setHasilCari(r.data?.items || []);
-      } catch { setHasilCari([]); }
-    }, 300);
-    return () => clearTimeout(cariTimer.current);
-  }, [cari, formKoreksi]);
-
-  useEffect(() => {
-    if (cariRiw.trim().length < 2) { setHasilRiw([]); return undefined; }
-    clearTimeout(cariRiwTimer.current);
-    cariRiwTimer.current = setTimeout(async () => {
-      try {
-        const r = await axios.get(`${API}/assets`, { params: { search: cariRiw.trim(), page_size: 8 } });
-        setHasilRiw(r.data?.items || []);
-      } catch { setHasilRiw([]); }
-    }, 300);
-    return () => clearTimeout(cariRiwTimer.current);
-  }, [cariRiw]);
+  const kodeRef = String(formRef?.kode || "").trim();
+  usePencarianBaca({
+    lingkup: lingkupBaca, kunci: kodeRef, aktif: !!formRef && /^\d{5}$/.test(kodeRef),
+    jalankan: signal => axios.get(`${API}/kodefikasi/lookup/${kodeRef}`, { signal }),
+    padaMulai: () => setInfoKode("memuat"),
+    padaHasil: r => {
+      setInfoKode(r.data);
+      const uraian = String(r.data?.uraian_terdalam || "").trim();
+      if (uraian) setFormRef(f => f && !String(f.uraian || "").trim() ? { ...f, uraian } : f);
+    },
+    padaGagal: () => setInfoKode(null), padaKosong: () => setInfoKode(null),
+  });
+  usePencarianBaca({
+    lingkup: lingkupBaca, kunci: cari.trim(), aktif: !!formKoreksi && cari.trim().length >= 2,
+    jalankan: signal => axios.get(`${API}/assets`, { signal, params: { search: cari.trim(), page_size: 8 } }),
+    padaHasil: r => setHasilCari(r.data?.items || []),
+    padaGagal: () => setHasilCari([]), padaKosong: () => setHasilCari([]),
+  });
+  usePencarianBaca({
+    lingkup: lingkupBaca, kunci: cariRiw.trim(), aktif: cariRiw.trim().length >= 2,
+    jalankan: signal => axios.get(`${API}/assets`, { signal, params: { search: cariRiw.trim(), page_size: 8 } }),
+    padaHasil: r => setHasilRiw(r.data?.items || []),
+    padaGagal: () => setHasilRiw([]), padaKosong: () => setHasilRiw([]),
+  });
 
   const muatRiwayat = async (aset) => {
+    const tiket = penjagaBaca.mulaiBaca("riwayat", lingkupBaca);
+    if (!tiket) return;
     setCariRiw(""); setHasilRiw([]);
     try {
-      const r = await axios.get(`${API}/penilaian/riwayat-nilai/${aset.id}`);
-      setRiwayat(r.data);
+      const r = await axios.get(`${API}/penilaian/riwayat-nilai/${aset.id}`, { signal: tiket.signal });
+      if (penjagaBaca.berlaku(tiket)) setRiwayat(r.data);
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Gagal memuat riwayat nilai");
-    }
+      if (penjagaBaca.berlaku(tiket)) toast.error(e?.response?.data?.detail || "Gagal memuat riwayat nilai");
+    } finally { penjagaBaca.selesai(tiket); }
   };
 
   const simpanKoreksi = async () => {
@@ -185,18 +171,27 @@ export default function PenilaianPage({ user, onBack }) {
     }
   };
 
-  const muatPosisi = useCallback(() => {
+  const muatPosisi = useCallback(async () => {
+    const tiket = penjagaBaca.mulaiBaca("posisi", lingkupBaca);
+    if (!tiket) return;
     setLoading(true);
-    axios.get(`${API}/penilaian/penyusutan`, { params: { per_tanggal: perTanggal } })
-      .then((r) => setData(r.data))
-      .catch(() => toast.error("Gagal memuat posisi penyusutan"))
-      .finally(() => setLoading(false));
-  }, [perTanggal]);
-  const muatRef = useCallback(() => {
-    axios.get(`${API}/penilaian/masa-manfaat`)
-      .then((r) => setRef(r.data))
-      .catch(() => toast.error("Gagal memuat referensi masa manfaat"));
-  }, []);
+    try {
+      const r = await axios.get(`${API}/penilaian/penyusutan`, { signal: tiket.signal, params: { per_tanggal: perTanggal } });
+      if (penjagaBaca.berlaku(tiket)) setData(r.data);
+    } catch {
+      if (penjagaBaca.berlaku(tiket)) toast.error("Gagal memuat posisi penyusutan");
+    } finally { if (penjagaBaca.selesai(tiket)) setLoading(false); }
+  }, [perTanggal, lingkupBaca, penjagaBaca]);
+  const muatRef = useCallback(async () => {
+    const tiket = penjagaBaca.mulaiBaca("referensi", lingkupBaca);
+    if (!tiket) return;
+    try {
+      const r = await axios.get(`${API}/penilaian/masa-manfaat`, { signal: tiket.signal });
+      if (penjagaBaca.berlaku(tiket)) setRef(r.data);
+    } catch {
+      if (penjagaBaca.berlaku(tiket)) toast.error("Gagal memuat referensi masa manfaat");
+    } finally { penjagaBaca.selesai(tiket); }
+  }, [lingkupBaca, penjagaBaca]);
   useEffect(() => { muatPosisi(); }, [muatPosisi]);
   useEffect(() => { muatRef(); }, [muatRef]);
 

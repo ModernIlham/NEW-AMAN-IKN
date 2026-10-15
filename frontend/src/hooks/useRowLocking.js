@@ -6,46 +6,49 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
 import { toast } from "sonner";
+import { usePenjagaPermintaan } from "./usePenjagaPermintaan";
+import { getSatkerAktif } from "@/lib/satkerAktif";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 export function useRowLocking({ activityId, user, wsSend }) {
   const [rowLocks, setRowLocks] = useState({});
+  const scope = JSON.stringify([activityId, user?.id, String(user?.kode_satker || "").trim() || getSatkerAktif()]);
+  const penjaga = usePenjagaPermintaan(scope);
   // Map of assetId → heartbeat interval ID
   const activeLocksRef = useRef(new Map());
 
   // Session ID - unique per browser tab
-  const sessionId = useRef(() => {
+  const [sessionId] = useState(() => {
     let sid = sessionStorage.getItem('inv_session_id');
     if (!sid) {
-      sid = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      sid = globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       sessionStorage.setItem('inv_session_id', sid);
     }
     return sid;
-  }).current();
+  });
 
-  // Fetch all active locks periodically — scoped to current activity for efficiency
-  useEffect(() => {
+  const refreshLocks = useCallback(async () => {
     if (!activityId) return;
-    const fetchLocks = async () => {
-      try {
-        const res = await axios.get(`${API}/assets/locks`, { params: { activity_id: activityId } });
-        const next = res.data.locks || {};
-        // Identitas stabil: umumnya hasil poll = {} yang sama — objek baru tiap
-        // 30 detik memicu render ulang seluruh halaman + semua baris tanpa perlu.
-        setRowLocks(prev => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
-      } catch (e) {
-        // Non-fatal: lock state polling — WS will catch up on next real-time event.
-        if (process.env.NODE_ENV !== "production") {
-          console.warn("[useRowLocking] Failed to fetch active locks:", e?.message);
-        }
+    const tiket = penjaga.mulaiBaca("locks", scope);
+    if (!tiket) return;
+    try {
+      const res = await axios.get(`${API}/assets/locks`, { signal: tiket.signal, params: { activity_id: activityId } });
+      if (!penjaga.berlaku(tiket)) return;
+      const next = res.data.locks || {};
+      setRowLocks(prev => JSON.stringify(prev) === JSON.stringify(next) ? prev : next);
+    } catch (error) {
+      if (penjaga.berlaku(tiket) && process.env.NODE_ENV !== "production") {
+        console.warn("[useRowLocking] Failed to fetch active locks:", error?.message);
       }
-    };
-    fetchLocks();
-    // Poll every 30s (WebSocket covers real-time lock events; this is a safety net)
-    const interval = setInterval(fetchLocks, 30000);
+    } finally { penjaga.selesai(tiket); }
+  }, [activityId, penjaga, scope]);
+  useEffect(() => {
+    setRowLocks({});
+    refreshLocks();
+    const interval = setInterval(refreshLocks, 30000);
     return () => clearInterval(interval);
-  }, [activityId]);
+  }, [refreshLocks]);
 
   const lockAsset = useCallback(async (assetId) => {
     try {
@@ -124,5 +127,5 @@ export function useRowLocking({ activityId, user, wsSend }) {
     };
   }, [user, sessionId]);
 
-  return { rowLocks, setRowLocks, sessionId, lockAsset, unlockAsset };
+  return { rowLocks, setRowLocks, sessionId, lockAsset, unlockAsset, refreshLocks };
 }

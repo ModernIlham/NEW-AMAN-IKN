@@ -51,10 +51,13 @@ async def buat_job(jenis: str, dibuat_oleh: str = "",
     return job_id
 
 
-async def update_job(job_id: str, **fields) -> None:
-    """Patch field job (selalu memperbarui updated_at). Aman dipanggil berkala."""
+async def update_job(job_id: str, **fields) -> bool:
+    """Patch a live job only; late workers cannot revive terminal reaped jobs."""
     fields["updated_at"] = _now()
-    await _JOBS.update_one({"job_id": job_id}, {"$set": fields})
+    result = await _JOBS.update_one(
+        {"job_id": job_id, "status": {"$nin": ["done", "error", "failed", "cancelled"]}},
+        {"$set": fields})
+    return result.matched_count > 0
 
 
 async def get_job(job_id: str) -> Optional[dict]:
@@ -75,24 +78,45 @@ async def simpan_artifact(job_id: str, data: bytes, filename: str,
         file_id, filename=filename,
         metadata={"content_type": content_type, "size": len(data),
                   "job_id": job_id})
-    await grid_in.write(data)
-    await grid_in.close()
-    await update_job(job_id, artifact_id=str(file_id), artifact_nama=filename,
-                     artifact_type=content_type, artifact_size=len(data))
+    uploaded = False
+    try:
+        await grid_in.write(data)
+        await grid_in.close()
+        uploaded = True
+        accepted = await update_job(
+            job_id, artifact_id=str(file_id), artifact_nama=filename,
+            artifact_type=content_type, artifact_size=len(data))
+        if not accepted:
+            raise RuntimeError("Job sudah berakhir sebelum artifact disimpan")
+    except BaseException:
+        if not uploaded:
+            with contextlib.suppress(Exception):
+                await grid_in.abort()
+            with contextlib.suppress(Exception):
+                await fs_bucket.delete(file_id)
+        else:
+            # Unknown commit status must not remove a possibly published blob.
+            with contextlib.suppress(Exception):
+                current = await _JOBS.find_one({"job_id": job_id}, {"artifact_id": 1})
+                if not current or current.get("artifact_id") != str(file_id):
+                    await fs_bucket.delete(file_id)
+        raise
     return str(file_id)
 
 
 async def ambil_artifact(job_id: str):
-    """(bytes, filename, content_type) artifact job dari GridFS; None bila job/
+    """(GridOut, filename, content_type) artifact job; None bila job/
     artifact tak ada atau sudah kedaluwarsa."""
     job = await _JOBS.find_one({"job_id": job_id}, {"_id": 0})
     if not job or not job.get("artifact_id"):
         return None
-    from shared_utils import get_document_from_gridfs
-    data = await get_document_from_gridfs(job["artifact_id"])
-    if data is None:
+    from bson import ObjectId
+    from shared_utils import fs_bucket
+    try:
+        stream = await fs_bucket.open_download_stream(ObjectId(job["artifact_id"]))
+    except Exception:
         return None
-    return (data, job.get("artifact_nama") or "download.bin",
+    return (stream, job.get("artifact_nama") or "download.bin",
             job.get("artifact_type") or "application/octet-stream")
 
 
@@ -103,6 +127,7 @@ async def bersihkan_job_basi(menit: int = 60) -> int:
     batas = _now() - timedelta(minutes=max(1, menit))
     res = await _JOBS.update_many(
         {"status": {"$in": ["queued", "running", "importing"]},
+         "worker_protocol": {"$ne": "export_v1"},
          "updated_at": {"$lt": batas}},
         {"$set": {"status": "error", "error_message": "Timeout (job macet)",
                   "done": True, "updated_at": _now()}})
@@ -148,13 +173,15 @@ async def denyut_job(job_id: str, detik: int = DENYUT_DETIK):
                 await update_job(job_id)     # hanya menyentuh updated_at
             except Exception:                # noqa: BLE001
                 pass                         # denyut gagal ≠ job gagal
-    t = asyncio.create_task(_loop())
-    try:
-        yield
-    finally:
-        t.cancel()
-        with contextlib.suppress(asyncio.CancelledError, Exception):
-            await t
+    from pemeliharaan import writer_admission
+    async with writer_admission(database=db):
+        t = asyncio.create_task(_loop())
+        try:
+            yield
+        finally:
+            t.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await t
 
 
 async def bersihkan_artifact_yatim(hari: int = 7) -> int:

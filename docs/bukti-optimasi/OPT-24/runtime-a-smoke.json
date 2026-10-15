@@ -1,0 +1,59 @@
+{
+  "checks": {
+    "auth_bootstrap_login_me": true,
+    "backup_manifest": true,
+    "docx": {
+      "bytes": 48065,
+      "geometry": [
+        {
+          "height_emu": 10058400,
+          "width_emu": 7772400
+        }
+      ]
+    },
+    "pdf": {
+      "bytes": 8970,
+      "geometry": [
+        [
+          841.8898,
+          595.2756
+        ]
+      ]
+    },
+    "pptx": {
+      "bytes": 50769,
+      "geometry": {
+        "height_emu": 6858000,
+        "slides": 10,
+        "width_emu": 12191695
+      }
+    },
+    "weasyprint_native_pango": true,
+    "xlsx": {
+      "bytes": 10623,
+      "geometry": {
+        "Data Aset": {
+          "columns": 55,
+          "rows": 4
+        },
+        "Data Kegiatan": {
+          "columns": 2,
+          "rows": 24
+        },
+        "Kelengkapan Dokumen": {
+          "columns": 9,
+          "rows": 1
+        },
+        "Tim Inventarisasi": {
+          "columns": 6,
+          "rows": 12
+        }
+      }
+    }
+  },
+  "distribution_count": 140,
+  "distribution_manifest_sha256": "06ef74fc9e464bace03f5a46898310011a0210cd6652dbb539ffdfb83c0e5fb4",
+  "python": "3.11.17",
+  "rate_limit_storage": "isolated-memory",
+  "runtime_only": true
+}

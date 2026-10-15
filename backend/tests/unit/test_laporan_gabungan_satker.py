@@ -795,13 +795,10 @@ def test_lembar_simpulan_dipaginasi_agar_tak_terpotong_diam_diam(dbr):
 def _render_pdf(d):
     """(jumlah lembar HTML, jumlah halaman PDF) untuk data laporan `d`."""
     import re
-    from jinja2 import Environment, FileSystemLoader, select_autoescape
     import weasyprint
     import pypdfium2
 
-    env = Environment(
-        loader=FileSystemLoader(os.path.join(os.path.dirname(TPL))),
-        autoescape=select_autoescape(["html"]))
+    env = rp._jinja_env()
     html = env.get_template(os.path.basename(TPL)).render(preview=False, **d)
     lembar = len(re.findall(r'<div class="hal[ "]', html))
     data_pdf = weasyprint.HTML(string=html).write_pdf()

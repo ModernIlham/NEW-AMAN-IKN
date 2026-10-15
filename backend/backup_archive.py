@@ -147,6 +147,7 @@ def write_manifest(zf, stats, gridfs_files, upload_files, consistency="applicati
 # Add a path here whenever a new current GridFS owner/consumer is introduced.
 CURRENT_MEDIA_REFERENCES = {
     "assets": ("photo_gridfs_ids.*", "bast_file_id",
+               "document_checklist.*.photo_gridfs_ids.*",
                "document_checklist.*.documents.*.gridfs_id"),
     "inventory_activities": ("documents.*.gridfs_id", "pengesahan_dokumen.*.gridfs_id"),
     "pegawai": ("foto_file_id", "foto_asli_file_id", "ttd_file_id"),

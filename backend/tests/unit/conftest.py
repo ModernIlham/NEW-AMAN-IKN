@@ -21,6 +21,26 @@ os.environ.setdefault("JWT_SECRET", "unit-test-secret")
 
 
 @pytest.fixture
+def mongomock_update_sort_compat(monkeypatch):
+    """Bridge PyMongo's optional sort=None to mongomock's older bulk API.
+
+    Keep the original builder responsible for filters, update operators and
+    upserts. A real sort remains unsupported and must fail visibly rather
+    than silently change which document the test updates.
+    """
+    from mongomock.collection import BulkOperationBuilder
+
+    original = BulkOperationBuilder.add_update
+
+    def add_update(self, *args, sort=None, **kwargs):
+        if sort is not None:
+            raise NotImplementedError("mongomock bulk update does not support sort")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(BulkOperationBuilder, "add_update", add_update)
+
+
+@pytest.fixture
 def mongo_not_regex(monkeypatch):
     """MongoDB menerima $not: {$regex, $options}; mongomock belum mendukungnya.
 

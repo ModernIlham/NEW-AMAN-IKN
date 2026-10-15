@@ -109,3 +109,20 @@ it("ketikan di bawah 2 huruf tak menembak jaringan sama sekali", async () => {
   jest.advanceTimersByTime(400);
   expect(axios.get).not.toHaveBeenCalled();
 });
+
+it("respons dua sumber lama tidak muncul setelah query dibersihkan atau scope berubah", async () => {
+  const pending = [];
+  axios.get.mockImplementation((url, config) => new Promise(resolve => pending.push({ url, config, resolve })));
+  const { rerender, unmount } = render(<KodeBarangPicker value="initial" onChange={() => {}} onPick={() => {}} testid="kode-0" lingkup="A" />);
+  await ketik("query");
+  fireEvent.change(screen.getByTestId("kode-0"), { target: { value: "" } });
+  expect(pending[0].config.signal.aborted).toBe(true);
+  for (const request of pending) request.resolve(request.url.endsWith("/persediaan") ? PERSEDIAAN : KODEFIKASI);
+  await waitFor(() => expect(screen.queryByText("Kertas dan Cover")).not.toBeInTheDocument());
+  fireEvent.change(screen.getByTestId("kode-0"), { target: { value: "lain" } });
+  jest.advanceTimersByTime(400);
+  await waitFor(() => expect(pending.length).toBe(4));
+  rerender(<KodeBarangPicker value="lain" onChange={() => {}} onPick={() => {}} testid="kode-0" lingkup="B" />);
+  expect(pending[2].config.signal.aborted).toBe(true);
+  unmount();
+});

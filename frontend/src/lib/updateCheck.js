@@ -61,17 +61,35 @@ async function checkOnce() {
 /** Pasang pemeriksa versi: interval + saat tab kembali terlihat + saat online. */
 export function startUpdateCheck() {
   if (typeof window === "undefined") return () => {};
-  const onVisible = () => { if (document.visibilityState === "visible") checkOnce(); };
+  const pinRelease = () => {
+    const main = currentMainBundle();
+    if (main) navigator.serviceWorker?.controller?.postMessage({ type: "AMAN_PIN_RELEASE", main: `/static/js/${main}` });
+  };
+  const onWorkerMessage = event => {
+    if (event.data?.type === "AMAN_CACHE_RELEASE") pinRelease();
+    if (event.data?.type === "AMAN_CACHE_UPDATE_BLOCKED") toast.info(event.data.reason === "cache_lock_unavailable" ? "Perbarui browser untuk mengaktifkan penyimpanan luring lintas versi." : "Pembaruan luring belum siap. Tutup tab aplikasi lama setelah menyimpan perubahan, lalu coba lagi saat daring.", { id: "app-cache-update-blocked", duration: Infinity });
+  };
+  const onControllerChange = () => pinRelease();
+  const onVisible = () => { if (document.visibilityState === "visible") { pinRelease(); checkOnce(); } };
+  const onOnline = () => { pinRelease(); checkOnce(); };
+  navigator.serviceWorker?.addEventListener("message", onWorkerMessage);
+  navigator.serviceWorker?.addEventListener("controllerchange", onControllerChange);
+  navigator.serviceWorker?.ready?.then(pinRelease).catch(() => {});
+  pinRelease();
+  const pinInterval = setInterval(pinRelease, 60000);
   const interval = setInterval(checkOnce, CHECK_INTERVAL_MS);
   document.addEventListener("visibilitychange", onVisible);
-  window.addEventListener("online", checkOnce);
+  window.addEventListener("online", onOnline);
   // Pemeriksaan pertama sesaat setelah aplikasi siap
   const t = setTimeout(checkOnce, 15000);
   return () => {
     clearInterval(interval);
     clearTimeout(t);
     document.removeEventListener("visibilitychange", onVisible);
-    window.removeEventListener("online", checkOnce);
+    window.removeEventListener("online", onOnline);
+    clearInterval(pinInterval);
+    navigator.serviceWorker?.removeEventListener("message", onWorkerMessage);
+    navigator.serviceWorker?.removeEventListener("controllerchange", onControllerChange);
   };
 }
 

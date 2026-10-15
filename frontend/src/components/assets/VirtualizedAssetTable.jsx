@@ -1,4 +1,5 @@
 import React, { useRef, memo } from "react";
+import { statusSeleksiHalaman } from "@/lib/seleksiHalaman";
 import { unitTerdalam, jalurEselon } from "@/lib/pohonUnit";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useJangkarDaftarAset } from "@/hooks/usePosisiDaftarAset";
@@ -128,7 +129,7 @@ const VirtualizedAssetTable = memo(({ daftarkanGulir, assets, editId, onEdit, on
   const maxVisibleRows = Math.min(pageSize, 15);
   const containerHeight = Math.min(assets.length, maxVisibleRows) * ROW_HEIGHT + HEADER_HEIGHT;
   const hasSelection = selectedAssets && selectedAssets.size > 0;
-  const allSelected = assets.length > 0 && selectedAssets && selectedAssets.size === assets.length;
+  const selection = statusSeleksiHalaman(selectedAssets, assets.map(asset => asset.id));
 
   const virtualizer = useVirtualizer({
     count: assets.length,
@@ -147,7 +148,10 @@ const VirtualizedAssetTable = memo(({ daftarkanGulir, assets, editId, onEdit, on
           <div className="w-7 flex-shrink-0 flex justify-center">
             <input
               type="checkbox"
-              checked={allSelected}
+              checked={selection.all}
+              ref={element => { if (element) element.indeterminate = selection.partial; }}
+              aria-label="Pilih semua aset di halaman ini"
+              aria-checked={selection.partial ? "mixed" : selection.all}
               onChange={onToggleSelectAll}
               className="w-3 h-3 rounded cursor-pointer accent-blue-600"
               data-testid="select-all-checkbox"
@@ -206,6 +210,7 @@ const VirtualizedAssetTable = memo(({ daftarkanGulir, assets, editId, onEdit, on
                   tabIndex: 0,
                   "aria-label": `Edit aset ${a.asset_code || ''}${a.asset_name ? ' - ' + a.asset_name : ''}`.trim(),
                   onKeyDown: (e) => {
+                    if (e.target !== e.currentTarget) return;
                     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEdit(a); }
                   },
                 } : {})}
@@ -302,6 +307,7 @@ const VirtualizedAssetTable = memo(({ daftarkanGulir, assets, editId, onEdit, on
                     <input
                       type="checkbox"
                       checked={selectedAssets?.has(a.id) || false}
+                      aria-label={`Pilih aset ${a.asset_code || a.asset_name || a.id}`}
                       onChange={() => onToggleSelect(a.id)}
                       className="w-3 h-3 rounded cursor-pointer accent-blue-600"
                       data-testid={`select-asset-${a.id}`}

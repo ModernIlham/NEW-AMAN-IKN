@@ -1,0 +1,12 @@
+{
+  "all_writers_enumerated": false,
+  "reviewed_at": "WAJIB_DIISI_SETELAH_INVENTARIS",
+  "reviewed_by": "OPERATOR",
+  "supervisor_services": ["inventarisasi-backend"],
+  "external_upload_writers": ["BELUM_DIVERIFIKASI"],
+  "review_required": [
+    "Inventaris cron, supervisor worker, timer dan penulis uploads eksternal",
+    "Pastikan semua penulis tercatat dalam supervisor_services dan dihentikan",
+    "Set external_upload_writers=[] hanya sesudah penulis eksternal dibuktikan tidak ada atau dihentikan"
+  ]
+}

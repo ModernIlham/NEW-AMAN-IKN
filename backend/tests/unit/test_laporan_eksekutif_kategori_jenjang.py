@@ -218,10 +218,7 @@ def _render_dist(d, judul="Distribusi Kategori Aset"):
     akhir berkas ikut menangkap halaman lain, lalu lulus/gagal karena baris
     yang bukan urusannya.
     """
-    import os
-    from jinja2 import Environment, FileSystemLoader
-    env = Environment(loader=FileSystemLoader(
-        os.path.join(os.path.dirname(__file__), "..", "..", "templates")))
+    env = rp._jinja_env()
     html = env.get_template("executive_summary.html").render(**d)
     awal = html.index("<h1>" + judul)
     # Blok distribusi bisa kosong (tak ada datanya) sehingga judulnya tak

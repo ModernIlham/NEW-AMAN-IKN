@@ -5,7 +5,7 @@ Tests the new executive summary PDF report endpoint
 import pytest
 import requests
 import os
-from PyPDF2 import PdfReader
+from pypdf import PdfReader
 import io
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')

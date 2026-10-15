@@ -10,19 +10,34 @@ export function buatPenjagaPermintaan() {
   let generasi = 0;
   let aktif = false;
   const kanal = new Map();
+  const batalkan = (nama) => {
+    kanal.get(nama)?.controller?.abort();
+    kanal.delete(nama);
+  };
+  const kosongkan = () => { for (const nama of kanal.keys()) batalkan(nama); };
   return {
-    aktifkan(kunci) { lingkup = kunci; aktif = true; generasi++; kanal.clear(); },
-    tutup() { aktif = false; generasi++; kanal.clear(); },
+    aktifkan(kunci) { kosongkan(); lingkup = kunci; aktif = true; generasi++; },
+    tutup() { kosongkan(); aktif = false; generasi++; },
     mulai(nama, kunci, eksklusif = false) {
       if (!aktif || kunci !== lingkup || (eksklusif && kanal.has(nama))) return null;
+      batalkan(nama);
       const tiket = { nama, generasi };
       kanal.set(nama, tiket);
+      return tiket;
+    },
+    // Hanya READ diberi AbortController. Tiket mutasi tetap dipakai untuk
+    // menjaga commit UI, tanpa mengira pembatalan HTTP membatalkan write server.
+    mulaiBaca(nama, kunci, eksklusif = false) {
+      const tiket = this.mulai(nama, kunci, eksklusif);
+      if (!tiket) return null;
+      tiket.controller = new AbortController();
+      tiket.signal = tiket.controller.signal;
       return tiket;
     },
     berlaku(tiket) {
       return !!tiket && aktif && tiket.generasi === generasi && kanal.get(tiket.nama) === tiket;
     },
-    batalkan(nama) { kanal.delete(nama); },
+    batalkan,
     sibuk(nama) { return kanal.has(nama); },
     selesai(tiket) {
       if (!this.berlaku(tiket)) return false;

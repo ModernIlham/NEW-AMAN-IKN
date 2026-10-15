@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
+import { getSatkerAktif } from "@/lib/satkerAktif";
+import { HASIL_USANG, usePenjagaPermintaan } from "@/hooks/usePenjagaPermintaan";
 import { toast } from "sonner";
 import {
   ArrowLeft, Search, Plus, Upload, Download, Pencil, Trash2, Loader2,
@@ -63,6 +65,8 @@ const META_ORDER = ["satuan", "dasar", "jenis_bmn", "tb_stb", "bukti_kepemilikan
  */
 export default function KodefikasiPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";
+  const lingkupBaca = JSON.stringify([user?.id, String(user?.kode_satker || "").trim() || getSatkerAktif()]);
+  const penjagaBaca = usePenjagaPermintaan(lingkupBaca);
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -83,26 +87,33 @@ export default function KodefikasiPage({ user, onBack }) {
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
   const load = useCallback(async (p = 1, s = search, lv = level) => {
+    const tiket = penjagaBaca.mulaiBaca("daftar", lingkupBaca);
+    if (!tiket) return HASIL_USANG;
     setLoading(true);
     try {
       const r = await axios.get(`${API}/kodefikasi`, {
+        signal: tiket.signal,
         params: { search: s, level: lv || undefined, page: p, page_size: 50 },
       });
+      if (!penjagaBaca.berlaku(tiket)) return HASIL_USANG;
       setItems(r.data?.items || []);
       setTotal(r.data?.total || 0);
       setTotalPages(r.data?.total_pages || 1);
       setPage(p);
     } catch (err) {
+      if (!penjagaBaca.berlaku(tiket)) return HASIL_USANG;
       toast.error(getApiError(err, "Gagal memuat kodefikasi"));
     } finally {
-      setLoading(false);
+      if (penjagaBaca.selesai(tiket)) setLoading(false);
     }
-  }, [search, level]);
+  }, [lingkupBaca, penjagaBaca, search, level]);
 
-  useEffect(() => { load(1, "", 0); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(1, "", 0); }, [lingkupBaca]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cari dengan debounce ringan — tanpa tombol, langsung menyaring.
   const onSearchChange = (v) => {
+    penjagaBaca.batalkan("daftar");
+    setLoading(false);
     setSearch(v);
     if (searchTimer.current) clearTimeout(searchTimer.current);
     searchTimer.current = setTimeout(() => load(1, v, level), 350);
@@ -110,6 +121,7 @@ export default function KodefikasiPage({ user, onBack }) {
   useEffect(() => () => { if (searchTimer.current) clearTimeout(searchTimer.current); }, []);
 
   const changeLevel = (lv) => {
+    clearTimeout(searchTimer.current);
     setLevel(lv);
     load(1, search, lv);
   };
@@ -190,14 +202,20 @@ export default function KodefikasiPage({ user, onBack }) {
     setImporting(false);
   };
 
+  useEffect(() => { if (!detail) penjagaBaca.batalkan("detail"); }, [detail, penjagaBaca]);
+
   const openDetail = async (item) => {
+    const tiket = penjagaBaca.mulaiBaca("detail", lingkupBaca);
+    if (!tiket) return;
     setDetail({ item, jenjang: [], loading: true });
     try {
-      const r = await axios.get(`${API}/kodefikasi/lookup/${item.kode}`);
+      const r = await axios.get(`${API}/kodefikasi/lookup/${item.kode}`, { signal: tiket.signal });
+      if (!penjagaBaca.berlaku(tiket)) return;
       setDetail({ item, jenjang: r.data?.jenjang || [], loading: false });
     } catch (err) {
+      if (!penjagaBaca.berlaku(tiket)) return;
       setDetail({ item, jenjang: [], loading: false });
-    }
+    } finally { penjagaBaca.selesai(tiket); }
   };
 
   const downloadTemplate = () => {

@@ -1,12 +1,13 @@
 import fs from "fs";
 import path from "path";
-import vm from "vm";
-const { berkasLightbox, LightboxPrecachePlugin } = require("../../../plugins/lightbox-precache-plugin.cjs");
+const { berkasLightbox, manifestRilis, LightboxPrecachePlugin } = require("../../../plugins/lightbox-precache-plugin.cjs");
 const templatePath = path.resolve(__dirname, "../../../public/service-worker.js");
 const template = fs.readFileSync(templatePath, "utf8");
 const files = ["static/js/penampil.123.chunk.js", "static/js/bersama.456.chunk.js", "static/css/penampil.123.css"];
 function kompilasi(list = files) {
-  return { namedChunkGroups: new Map([["photo-lightbox", { getFiles: () => list }]]), getAsset: jest.fn(() => ({})) };
+  return { namedChunkGroups: new Map([["photo-lightbox", { getFiles: () => list }], ["asset-dashboard", { getFiles: () => ["static/js/asset-dashboard.789.chunk.js"] }], ["module-home", { getFiles: () => ["static/js/module-home.abc.chunk.js"] }]]),
+    entrypoints: new Map([["main", { getFiles: () => ["static/js/main.abc.js"] }]]),
+    getAssets: () => [...files, "static/js/asset-dashboard.789.chunk.js", "static/js/module-home.abc.chunk.js", "static/js/main.abc.js"].map(name => ({ name })), getAsset: jest.fn(() => ({ source: { source: () => "compiled bytes" } })) };
 }
 test("precache memuat semua dependensi grup, mengabaikan map dan menolak URL non-statis", () => {
   expect(berkasLightbox(kompilasi([...files, ...files, "static/js/penampil.js.map", "/api/foto.jpg", "https://lain/foto.js"])))
@@ -28,31 +29,14 @@ test("plugin menghasilkan worker dengan URL hash final, bukan berkas manifest ya
   expect(source).not.toContain("/* AMAN_LIGHTBOX_PRECACHE */ []");
   for (const file of files) expect(source).toContain(`/${file}`);
 });
-function worker(gagal = false) {
-  const handlers = {};
-  const cache = { addAll: jest.fn(() => gagal ? Promise.reject(new Error("404 chunk")) : Promise.resolve()) };
-  const caches = { open: jest.fn(async () => cache), delete: jest.fn() };
-  const self = { addEventListener: (type, handler) => { handlers[type] = handler; }, skipWaiting: jest.fn(async () => {}), clients: { claim: jest.fn() } };
-  vm.runInNewContext(template.replace("/* AMAN_LIGHTBOX_PRECACHE */ []", JSON.stringify(files.map(f => `/${f}`))), { self, caches, URL, console });
-  let selesai;
-  handlers.install({ waitUntil: p => { selesai = p; } });
-  return { cache, caches, self, selesai, handlers };
-}
-test("worker baru aktif hanya setelah semua chunk siap", async () => {
-  const w = worker(); await w.selesai;
-  expect(w.cache.addAll).toHaveBeenCalledWith(["/", "/index.html", "/manifest.json", ...files.map(f => `/${f}`)]);
-  expect(w.self.skipWaiting).toHaveBeenCalledTimes(1);
-});
-test("precache gagal tidak mengaktifkan worker baru atau menghapus cache lama", async () => {
-  const w = worker(true); await expect(w.selesai).rejects.toThrow("404 chunk");
-  expect(w.self.skipWaiting).not.toHaveBeenCalled();
-  expect(w.caches.delete).not.toHaveBeenCalled();
-});
-test("API privat termasuk foto tidak masuk strategi cache statis", () => {
-  const w = worker();
-  const respondWith = jest.fn();
-  w.handlers.fetch({ request: { method: "GET", url: "https://aman.test/api/assets/a/photos/0.jpg" }, respondWith });
-  expect(respondWith).not.toHaveBeenCalled();
+test("manifest memuat bootstrap dan grup editor luring, hash stabil serta source SHA terpisah", () => {
+  const manifest = manifestRilis(kompilasi());
+  expect(manifest.main).toBe("/static/js/main.abc.js");
+  expect(manifest.critical).toEqual(expect.arrayContaining([manifest.main, "/static/js/asset-dashboard.789.chunk.js", "/static/js/module-home.abc.chunk.js", ...files.map(f => `/${f}`)]));
+  expect(manifest.id).toMatch(/^[a-f0-9]{16}$/);
+  const previous = process.env.REACT_APP_RELEASE_SHA;
+  try { process.env.REACT_APP_RELEASE_SHA = "a".repeat(40); const tagged = manifestRilis(kompilasi()); expect(tagged.id).toBe(manifest.id); expect(tagged.source_sha).toBe("a".repeat(40)); }
+  finally { if (previous === undefined) delete process.env.REACT_APP_RELEASE_SHA; else process.env.REACT_APP_RELEASE_SHA = previous; }
 });
 test("ketiga pintu masuk memakai loader bersama, tidak mengimpor penampil langsung", () => {
   for (const file of ["components/assets/AssetGalleryView.jsx", "components/assets/AssetMapFullView.jsx", "pages/DashboardPage.jsx"]) {

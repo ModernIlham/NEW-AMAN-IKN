@@ -169,182 +169,44 @@ def _tabel_lbkp(d, judul, rows, total):
     _tabel(d, header, baris, align_kanan=set(range(2, 10)))
 
 
-@lbp_router.get("/pelaporan/lbp-docx")
-async def generate_lbp_docx(tahun: int, semester: int = 0,
-                            user: dict = Depends(require_user)):
-    """Rakit LBP .docx per satker untuk periode tahun/semester."""
-    from kodefikasi_utils import GOLONGAN_DEFAULTS
-    from pemeliharaan_utils import rentang_periode
-    from pembukuan_utils import (build_dbkp_rows, build_lbkp_rows,
-                                 parse_harga, tombstones_penghapusan)
-    from penilaian_utils import MASA_MANFAAT_DEFAULT, rekap_penyusutan
-    from persediaan_akun_utils import akun_persediaan
-    from persediaan_utils import (nilai_persediaan_dari_batches,
-                                  stok_dari_batches)
+def _build_lbp_docx(*,
+    aktif,
+    akumulasi,
+    ambang,
+    banding,
+    hibah_rows,
+    hilang_rows,
+    instansi,
+    jurnal_per_gol,
+    kode,
+    label,
+    label_rentang,
+    mutasi_gol,
+    n_idle,
+    n_psp,
+    n_sengketa,
+    n_tertib,
+    nama_satker,
+    netto,
+    per_iso,
+    per_kelas,
+    persediaan_per_akun,
+    pnbp_rows,
+    polis_rows,
+    posisi_akun,
+    psd_nilai,
+    rows_dbkp,
+    rumah_negara,
+    sengketa_rows,
+    settings,
+    susut,
+    total_dbkp,
+    total_pnbp,
+    transfer_rows,
+    ttd,
+):
+    """Plain prepared snapshot→DOCX bytes; no Motor or shared document state."""
     from routes.reports import _fmt_tanggal_id
-
-    sem = semester if semester in (1, 2) else None
-    dari, sampai, label_rentang = rentang_periode(tahun, sem)
-    per_iso = tanggal_akhir_periode(tahun, sem)
-    label = label_periode_lbp(tahun, sem)
-
-    kode = kode_satker_user(user)
-    settings = await pengaturan_kop(kode_satker=kode)
-    ttd = await resolve_penandatangan_kpb(settings, per_iso=per_iso, kode_satker=kode)
-    ambang = await ambang_kapitalisasi()
-
-    # ── Data aset (scoped satker) ──
-    q = await filter_aset_perhitungan(await scope_query_aset(user, {}))
-    assets = await db.assets.find(q, {
-        "_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
-        "purchase_price": 1, "purchase_date": 1, "created_at": 1,
-        "dihapus": 1, "penghapusan": 1, "nilai_wajar_terakhir": 1,
-        "revaluasi": 1, "location": 1,
-        "masa_manfaat_tambah_tahun": 1,
-        "masa_manfaat_override_semester": 1,
-        "barang_bersejarah": 1}).to_list(500000)
-    aktif = [a for a in assets if not a.get("dihapus")]
-
-    uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
-    async for k in db.kodefikasi.find({"level": 1},
-                                      {"_id": 0, "kode": 1, "uraian": 1}):
-        if k.get("uraian"):
-            uraian_map[k["kode"]] = k["uraian"]
-    peta_akun = {}
-    async for m in db.akun_bas.find({}, {"_id": 0}):
-        peta_akun[str(m.get("golongan"))] = m
-
-    # Posisi (DBKP) + persediaan per akun 117xxx
-    rows_dbkp, total_dbkp = build_dbkp_rows(aktif, uraian_map, ambang)
-    peta_psd_override = {}
-    async for m in db.persediaan_akun.find({}, {"_id": 0}):
-        peta_psd_override[m.get("sub_kelompok", "")] = m
-    psd_akun = {}
-    psd_jumlah = 0
-    async for it in db.persediaan.find(
-            scope_query_field_satker(user),
-            {"_id": 0, "kode_barang": 1, "batches": 1}):
-        info = akun_persediaan(it.get("kode_barang"), peta_psd_override)
-        r = psd_akun.setdefault(info["akun"], {
-            "akun": info["akun"], "uraian": info["uraian"], "nilai": 0.0})
-        r["nilai"] += nilai_persediaan_dari_batches(it.get("batches"))
-        psd_jumlah += stok_dari_batches(it.get("batches"))
-    persediaan_per_akun = sorted(psd_akun.values(), key=lambda x: x["akun"])
-    psd_nilai = sum(x["nilai"] for x in persediaan_per_akun)
-
-    # Mutasi periode (LBKP) — tombstone audit + SK penghapusan
-    tombstones = []
-    # ISOLASI SATKER (REVIEW-9 R15). Tombstone = aset yang DIHAPUS KERAS; ia
-    # masuk laporan sebagai "mutasi kurang" TERPISAH dari query assets di atas
-    # (yang sudah ter-scope). Tanpa scope di sini, LBP satker ini memuat
-    # penghapusan satker LAIN → saldo akhir bisa MINUS dan cacah/nilai
-    # penghapusan mereka bocor ke laporan resmi. Sama seperti perbaikan
-    # LBKP/CaLBMN di reports.py.
-    from routes.audit import _batas_activity_satker
-    _tq, _kosong = await _batas_activity_satker(user, "")
-    _q_tomb = {"action": "delete"} if not _kosong else {"_id": {"$in": []}}
-    if not _kosong:
-        _q_tomb.update(_tq)
-    async for t in db.audit_logs.find(
-            _q_tomb,
-            {"_id": 0, "asset_code": 1, "timestamp": 1, "changes": 1}):
-        nilai = 0.0
-        for c in t.get("changes") or []:
-            if c.get("field") == "purchase_price":
-                nilai = parse_harga(c.get("from"))
-                break
-        tombstones.append({"asset_code": t.get("asset_code"),
-                           "timestamp": t.get("timestamp"), "nilai": nilai})
-    tombstones += tombstones_penghapusan(assets, ambang=ambang)
-    per_kelas, _tanpa_nilai = build_lbkp_rows(
-        assets, tombstones, dari, sampai, uraian_map, ambang)
-
-    # Penyusutan per golongan — `diusulkan_ids` WAJIB ikut: tanpanya aset
-    # Rusak Berat yang sudah diusulkan hapus tetap disusutkan di CaLBMN
-    # sementara Laporan Penyusutan menghentikannya (dua angka resmi beda).
-    peta_masa = dict(MASA_MANFAAT_DEFAULT)
-    async for m in db.masa_manfaat.find({}, {"_id": 0}):
-        peta_masa[m["kode"]] = int(m["tahun"])
-    diusulkan_ids = set()
-    async for u in db.usulan_penghapusan.find(
-            scope_query_field_satker(user, {"status": {"$ne": "ditolak"}}),
-            {"_id": 0, "asset_id": 1}):
-        if u.get("asset_id"):
-            diusulkan_ids.add(u["asset_id"])
-    susut = rekap_penyusutan(aktif, per_iso, peta=peta_masa,
-                             uraian_golongan=uraian_map,
-                             diusulkan_ids=diusulkan_ids)
-
-    # Susunan tabel CaLBMN
-    posisi_akun = baris_posisi_per_akun(rows_dbkp, persediaan_per_akun,
-                                        peta_akun)
-    akumulasi = baris_akumulasi_per_akun(susut)
-    banding = baris_perbandingan_lb_lk(posisi_akun, akumulasi)
-    mutasi_gol = baris_mutasi_golongan(per_kelas)
-    netto = posisi_akun["total"] - akumulasi["total"]
-
-    # Jurnal Buku Barang periode (per kode transaksi, utk CaLBMN)
-    ids_scoped = [a.get("id") for a in assets if a.get("id")]
-    jurnal_periode = await db.mutasi_bmn.find(
-        {"asset_id": {"$in": ids_scoped},
-         "tanggal_buku": {"$gte": dari, "$lte": sampai}},
-        {"_id": 0, "kode_barang": 1, "kode_transaksi": 1, "jumlah": 1,
-         "nilai": 1}).to_list(100000)
-    jurnal_per_gol = {}
-    for j in jurnal_periode:
-        g = str(j.get("kode_barang") or "")[:1] or "?"
-        jurnal_per_gol.setdefault(g, []).append(j)
-
-    # Register pendukung "Informasi BMN Lainnya"
-    f_satker = scope_query_field_satker(user)
-    n_sengketa = await db.pengamanan_kasus.count_documents(
-        {**f_satker, "status": {"$ne": "selesai"}})
-    n_idle = await db.bmn_idle.count_documents(
-        {**f_satker, "status": {"$in": ["klarifikasi", "usul_serah"]}})
-    n_psp = await db.psp.count_documents(f_satker)
-    n_tertib = await db.penertiban.count_documents(
-        {**f_satker, "status": "berjalan"})
-
-    # Data LAMPIRAN
-    sengketa_rows = await db.pengamanan_kasus.find(
-        {**f_satker, "status": {"$ne": "selesai"}},
-        {"_id": 0, "asset_name": 1, "asset_code": 1, "kategori": 1,
-         "status": 1, "pihak_lawan": 1}).to_list(50)
-    polis_rows = await db.pengamanan_polis.find(
-        {**f_satker}, {"_id": 0, "nomor_polis": 1, "penanggung": 1,
-                       "asset_name": 1, "nilai_pertanggungan": 1,
-                       "premi": 1, "mulai": 1, "berakhir": 1}).to_list(100)
-    pnbp_rows = []
-    total_pnbp = 0.0
-    async for pm in db.pemanfaatan.find(
-            {**f_satker}, {"_id": 0, "bentuk": 1, "mitra": 1,
-                           "kontribusi": 1}):
-        for kt in pm.get("kontribusi") or []:
-            tgl = str(kt.get("tanggal") or "")[:10]
-            if tgl and not (dari <= tgl <= sampai):
-                continue
-            nilai_k = float(kt.get("jumlah") or 0)
-            total_pnbp += nilai_k
-            if len(pnbp_rows) < 100:
-                pnbp_rows.append([tgl, pm.get("bentuk") or "",
-                                  pm.get("mitra") or "",
-                                  kt.get("ntpn") or "", fmt_rp(nilai_k)])
-    hilang_rows = await db.usulan_penghapusan.find(
-        {**f_satker, "jalur": "tidak_ditemukan"},
-        {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1,
-         "status": 1, "nomor_sk": 1}).to_list(100)
-    rumah_negara = [a for a in aktif
-                    if "rumah negara" in str(a.get("asset_name") or "").lower()][:100]
-    transfer_rows = [j for j in jurnal_periode
-                     if str(j.get("kode_transaksi")) in ("102", "302")]
-    hibah_rows = [j for j in jurnal_periode
-                  if str(j.get("kode_transaksi")) == "103"]
-
-    nama_satker = (settings.get("nama_sub_unit")
-                   or settings.get("nama_unit_organisasi")
-                   or settings.get("nama_instansi") or "Satuan Kerja")
-    instansi = settings.get("nama_instansi") or nama_satker
-
     # ══ Rakit dokumen ══
     d = _doc_baru()
 
@@ -827,10 +689,226 @@ async def generate_lbp_docx(tahun: int, semester: int = 0,
 
     buf = io.BytesIO()
     d.save(buf)
+    return buf.getvalue()
+
+
+@lbp_router.get("/pelaporan/lbp-docx")
+async def generate_lbp_docx(tahun: int, semester: int = 0,
+                            user: dict = Depends(require_user)):
+    """Rakit LBP .docx per satker untuk periode tahun/semester."""
+    from kodefikasi_utils import GOLONGAN_DEFAULTS
+    from pemeliharaan_utils import rentang_periode
+    from pembukuan_utils import (build_dbkp_rows, build_lbkp_rows,
+                                 parse_harga, tombstones_penghapusan)
+    from penilaian_utils import MASA_MANFAAT_DEFAULT, rekap_penyusutan
+    from persediaan_akun_utils import akun_persediaan
+    from persediaan_utils import (nilai_persediaan_dari_batches,
+                                  stok_dari_batches)
+    from routes.reports import _fmt_tanggal_id
+
+    sem = semester if semester in (1, 2) else None
+    dari, sampai, label_rentang = rentang_periode(tahun, sem)
+    per_iso = tanggal_akhir_periode(tahun, sem)
+    label = label_periode_lbp(tahun, sem)
+
+    kode = kode_satker_user(user)
+    settings = await pengaturan_kop(kode_satker=kode)
+    ttd = await resolve_penandatangan_kpb(settings, per_iso=per_iso, kode_satker=kode)
+    ambang = await ambang_kapitalisasi()
+
+    # ── Data aset (scoped satker) ──
+    q = await filter_aset_perhitungan(await scope_query_aset(user, {}))
+    assets = await db.assets.find(q, {
+        "_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+        "purchase_price": 1, "purchase_date": 1, "created_at": 1,
+        "dihapus": 1, "penghapusan": 1, "nilai_wajar_terakhir": 1,
+        "revaluasi": 1, "location": 1,
+        "masa_manfaat_tambah_tahun": 1,
+        "masa_manfaat_override_semester": 1,
+        "barang_bersejarah": 1}).to_list(500000)
+    aktif = [a for a in assets if not a.get("dihapus")]
+
+    uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
+    async for k in db.kodefikasi.find({"level": 1},
+                                      {"_id": 0, "kode": 1, "uraian": 1}):
+        if k.get("uraian"):
+            uraian_map[k["kode"]] = k["uraian"]
+    peta_akun = {}
+    async for m in db.akun_bas.find({}, {"_id": 0}):
+        peta_akun[str(m.get("golongan"))] = m
+
+    # Posisi (DBKP) + persediaan per akun 117xxx
+    rows_dbkp, total_dbkp = build_dbkp_rows(aktif, uraian_map, ambang)
+    peta_psd_override = {}
+    async for m in db.persediaan_akun.find({}, {"_id": 0}):
+        peta_psd_override[m.get("sub_kelompok", "")] = m
+    psd_akun = {}
+    psd_jumlah = 0
+    async for it in db.persediaan.find(
+            scope_query_field_satker(user),
+            {"_id": 0, "kode_barang": 1, "batches": 1}):
+        info = akun_persediaan(it.get("kode_barang"), peta_psd_override)
+        r = psd_akun.setdefault(info["akun"], {
+            "akun": info["akun"], "uraian": info["uraian"], "nilai": 0.0})
+        r["nilai"] += nilai_persediaan_dari_batches(it.get("batches"))
+        psd_jumlah += stok_dari_batches(it.get("batches"))
+    persediaan_per_akun = sorted(psd_akun.values(), key=lambda x: x["akun"])
+    psd_nilai = sum(x["nilai"] for x in persediaan_per_akun)
+
+    # Mutasi periode (LBKP) — tombstone audit + SK penghapusan
+    tombstones = []
+    # ISOLASI SATKER (REVIEW-9 R15). Tombstone = aset yang DIHAPUS KERAS; ia
+    # masuk laporan sebagai "mutasi kurang" TERPISAH dari query assets di atas
+    # (yang sudah ter-scope). Tanpa scope di sini, LBP satker ini memuat
+    # penghapusan satker LAIN → saldo akhir bisa MINUS dan cacah/nilai
+    # penghapusan mereka bocor ke laporan resmi. Sama seperti perbaikan
+    # LBKP/CaLBMN di reports.py.
+    from routes.audit import _batas_activity_satker
+    _tq, _kosong = await _batas_activity_satker(user, "")
+    _q_tomb = {"action": "delete"} if not _kosong else {"_id": {"$in": []}}
+    if not _kosong:
+        _q_tomb.update(_tq)
+    async for t in db.audit_logs.find(
+            _q_tomb,
+            {"_id": 0, "asset_code": 1, "timestamp": 1, "changes": 1}):
+        nilai = 0.0
+        for c in t.get("changes") or []:
+            if c.get("field") == "purchase_price":
+                nilai = parse_harga(c.get("from"))
+                break
+        tombstones.append({"asset_code": t.get("asset_code"),
+                           "timestamp": t.get("timestamp"), "nilai": nilai})
+    tombstones += tombstones_penghapusan(assets, ambang=ambang)
+    per_kelas, _tanpa_nilai = build_lbkp_rows(
+        assets, tombstones, dari, sampai, uraian_map, ambang)
+
+    # Penyusutan per golongan — `diusulkan_ids` WAJIB ikut: tanpanya aset
+    # Rusak Berat yang sudah diusulkan hapus tetap disusutkan di CaLBMN
+    # sementara Laporan Penyusutan menghentikannya (dua angka resmi beda).
+    peta_masa = dict(MASA_MANFAAT_DEFAULT)
+    async for m in db.masa_manfaat.find({}, {"_id": 0}):
+        peta_masa[m["kode"]] = int(m["tahun"])
+    diusulkan_ids = set()
+    async for u in db.usulan_penghapusan.find(
+            scope_query_field_satker(user, {"status": {"$ne": "ditolak"}}),
+            {"_id": 0, "asset_id": 1}):
+        if u.get("asset_id"):
+            diusulkan_ids.add(u["asset_id"])
+    susut = rekap_penyusutan(aktif, per_iso, peta=peta_masa,
+                             uraian_golongan=uraian_map,
+                             diusulkan_ids=diusulkan_ids)
+
+    # Susunan tabel CaLBMN
+    posisi_akun = baris_posisi_per_akun(rows_dbkp, persediaan_per_akun,
+                                        peta_akun)
+    akumulasi = baris_akumulasi_per_akun(susut)
+    banding = baris_perbandingan_lb_lk(posisi_akun, akumulasi)
+    mutasi_gol = baris_mutasi_golongan(per_kelas)
+    netto = posisi_akun["total"] - akumulasi["total"]
+
+    # Jurnal Buku Barang periode (per kode transaksi, utk CaLBMN)
+    ids_scoped = [a.get("id") for a in assets if a.get("id")]
+    jurnal_periode = await db.mutasi_bmn.find(
+        {"asset_id": {"$in": ids_scoped},
+         "tanggal_buku": {"$gte": dari, "$lte": sampai}},
+        {"_id": 0, "kode_barang": 1, "kode_transaksi": 1, "jumlah": 1,
+         "nilai": 1}).to_list(100000)
+    jurnal_per_gol = {}
+    for j in jurnal_periode:
+        g = str(j.get("kode_barang") or "")[:1] or "?"
+        jurnal_per_gol.setdefault(g, []).append(j)
+
+    # Register pendukung "Informasi BMN Lainnya"
+    f_satker = scope_query_field_satker(user)
+    n_sengketa = await db.pengamanan_kasus.count_documents(
+        {**f_satker, "status": {"$ne": "selesai"}})
+    n_idle = await db.bmn_idle.count_documents(
+        {**f_satker, "status": {"$in": ["klarifikasi", "usul_serah"]}})
+    n_psp = await db.psp.count_documents(f_satker)
+    n_tertib = await db.penertiban.count_documents(
+        {**f_satker, "status": "berjalan"})
+
+    # Data LAMPIRAN
+    sengketa_rows = await db.pengamanan_kasus.find(
+        {**f_satker, "status": {"$ne": "selesai"}},
+        {"_id": 0, "asset_name": 1, "asset_code": 1, "kategori": 1,
+         "status": 1, "pihak_lawan": 1}).to_list(50)
+    polis_rows = await db.pengamanan_polis.find(
+        {**f_satker}, {"_id": 0, "nomor_polis": 1, "penanggung": 1,
+                       "asset_name": 1, "nilai_pertanggungan": 1,
+                       "premi": 1, "mulai": 1, "berakhir": 1}).to_list(100)
+    pnbp_rows = []
+    total_pnbp = 0.0
+    async for pm in db.pemanfaatan.find(
+            {**f_satker}, {"_id": 0, "bentuk": 1, "mitra": 1,
+                           "kontribusi": 1}):
+        for kt in pm.get("kontribusi") or []:
+            tgl = str(kt.get("tanggal") or "")[:10]
+            if tgl and not (dari <= tgl <= sampai):
+                continue
+            nilai_k = float(kt.get("jumlah") or 0)
+            total_pnbp += nilai_k
+            if len(pnbp_rows) < 100:
+                pnbp_rows.append([tgl, pm.get("bentuk") or "",
+                                  pm.get("mitra") or "",
+                                  kt.get("ntpn") or "", fmt_rp(nilai_k)])
+    hilang_rows = await db.usulan_penghapusan.find(
+        {**f_satker, "jalur": "tidak_ditemukan"},
+        {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1,
+         "status": 1, "nomor_sk": 1}).to_list(100)
+    rumah_negara = [a for a in aktif
+                    if "rumah negara" in str(a.get("asset_name") or "").lower()][:100]
+    transfer_rows = [j for j in jurnal_periode
+                     if str(j.get("kode_transaksi")) in ("102", "302")]
+    hibah_rows = [j for j in jurnal_periode
+                  if str(j.get("kode_transaksi")) == "103"]
+
+    nama_satker = (settings.get("nama_sub_unit")
+                   or settings.get("nama_unit_organisasi")
+                   or settings.get("nama_instansi") or "Satuan Kerja")
+    instansi = settings.get("nama_instansi") or nama_satker
+
+    from render_executor import run_renderer
+    data = await run_renderer(_build_lbp_docx,
+        aktif=aktif,
+        akumulasi=akumulasi,
+        ambang=ambang,
+        banding=banding,
+        hibah_rows=hibah_rows,
+        hilang_rows=hilang_rows,
+        instansi=instansi,
+        jurnal_per_gol=jurnal_per_gol,
+        kode=kode,
+        label=label,
+        label_rentang=label_rentang,
+        mutasi_gol=mutasi_gol,
+        n_idle=n_idle,
+        n_psp=n_psp,
+        n_sengketa=n_sengketa,
+        n_tertib=n_tertib,
+        nama_satker=nama_satker,
+        netto=netto,
+        per_iso=per_iso,
+        per_kelas=per_kelas,
+        persediaan_per_akun=persediaan_per_akun,
+        pnbp_rows=pnbp_rows,
+        polis_rows=polis_rows,
+        posisi_akun=posisi_akun,
+        psd_nilai=psd_nilai,
+        rows_dbkp=rows_dbkp,
+        rumah_negara=rumah_negara,
+        sengketa_rows=sengketa_rows,
+        settings=settings,
+        susut=susut,
+        total_dbkp=total_dbkp,
+        total_pnbp=total_pnbp,
+        transfer_rows=transfer_rows,
+        ttd=ttd,
+    )
     nama_file = (f"LBP_{(kode or 'satker')}_{tahun}"
                  f"{'_S' + str(sem) if sem else ''}.docx")
     return Response(
-        content=buf.getvalue(),
+        content=data,
         media_type=("application/vnd.openxmlformats-officedocument"
                     ".wordprocessingml.document"),
         headers={"Content-Disposition":

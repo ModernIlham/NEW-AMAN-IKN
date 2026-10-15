@@ -2,6 +2,7 @@
 
 Dipisah dari routes/reports.py agar dapat diuji unit tanpa WeasyPrint/Mongo.
 """
+from asset_sorting import harga_float
 
 
 #: Satu-satunya nilai `stiker_status` yang berarti "stikernya sudah menempel".
@@ -97,7 +98,7 @@ def distribusi_pengguna(assets, pegawai_by_nip=None):
                     (master or {}).get(f"eselon{_n}") or "").strip()
         g["count"] += 1
         try:
-            g["value"] += float(a.get("purchase_price", 0) or 0)
+            g["value"] += harga_float(a.get("purchase_price"))
         except (ValueError, TypeError):
             pass
     rows = sorted(grup.values(),

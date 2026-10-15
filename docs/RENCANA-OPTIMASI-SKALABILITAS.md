@@ -1,13 +1,24 @@
 # Rencana optimasi dan skalabilitas AMAN
 
 
-Status implementasi, pengujian, dan rilis terbaru dicatat pada
-[Status Eksekusi Optimasi](STATUS-EKSEKUSI-OPTIMASI.md). Tabel awal di bawah
-adalah baseline perencanaan; gunakan status eksekusi untuk pekerjaan lanjutan.
+**Diperbarui:** 15 Oktober 2026 · **Baseline review/perencanaan:**
+`62e345422b0828f54d3ca3fd5b2c6cb876f01aa2`.
+**Pelaksana berikutnya:** GPT-6.1 Sol; lanjutkan dari bukti dan gap operasional,
+jangan mengulang paket yang sudah diimplementasikan.
 
-**Disusun:** 15 Oktober 2026 · **Baseline:** `62e345422b0828f54d3ca3fd5b2c6cb876f01aa2`.
-**Pelaksana berikutnya:** GPT-6.1 Sol, satu paket/PR pada satu waktu.
-**Status:** rencana siap dikerjakan; seluruh OPT di bawah **belum diimplementasikan**.
+**Status berjalan:** fondasi OPT-05/06/08 dan pengaman OPT-14 sudah masuk main
+serta dirilis pada `c3ac5559178472358aa5d3d03bf5eeb17b2adaa5`
+(CI `38740257953`, deploy `38741148877`). Paket lain memiliki implementasi/bukti
+lokal dengan tingkat penyelesaian berbeda; rilis gabungan berikutnya dan
+OPT-28 belum ditutup. Frontend wave3 lulus 214 suite/2.297 tes, build dan lint;
+delta indeks lampiran berikutnya lulus pengujian terfokus dan menunggu ulang
+gerbang penuh/build/browser. Backend gabungan, CI/rilis berikutnya masih
+menunggu bukti akhir koordinator.
+
+[Status Eksekusi Optimasi](STATUS-EKSEKUSI-OPTIMASI.md) menjadi rujukan status
+per paket, pemetaan R01–R25, hasil gerbang dan pekerjaan yang masih terbuka.
+Uraian paket di bawah tetap merupakan kontrak target dan panduan kelanjutan;
+keberadaan implementasi tidak berarti semua syarat operasionalnya sudah lewat.
 
 Baca [review dan bukti](REVIEW-ARSITEKTUR-2026-10.md) untuk alasan prioritas,
 lalu [panduan eksekusi](PANDUAN-EKSEKUSI-GPT-6.1-SOL.md) untuk prompt, perintah,
@@ -42,9 +53,11 @@ flowchart LR
   Events --> UI
 ```
 
-Diagram menunjukkan arah target bertahap. Worker tahan restart dan receipt batch
-belum tersedia sesuai kontrak target. Mongo tetap sumber kebenaran; cache/search/
-WebSocket adalah turunan, bukan otoritas akses atau catatan transaksi utama.
+Diagram menunjukkan arah target bertahap. Receipt batch dan worker XLSX tahan
+restart sudah tersedia dalam implementasi lokal; worker persisten/global budget
+tetap default mati sampai staging dan aktivasi terverifikasi. Mongo tetap sumber
+kebenaran; cache/search/WebSocket adalah turunan, bukan otoritas akses atau
+catatan transaksi utama.
 
 ## 2. Urutan kerja dan daftar status
 
@@ -52,37 +65,42 @@ Ukuran **S/M/L** menunjukkan keluasan perubahan relatif, bukan janji durasi.
 Paket L wajib dipecah menjadi PR `a`, `b`, dan seterusnya sesuai uraian. Jangan
 menumpuk perbaikan domain, migrasi schema, bundler, dan deploy dalam satu PR.
 
+`Lokal` berarti belum dirilis sebagai paket gabungan; `fondasi produksi` hanya
+merujuk bagian yang telah dibuktikan pada SHA di atas. Flag observabilitas,
+budget/worker dan checklist refs tetap mati; cursor adalah opt-in per request
+dengan default API page. Detail batas dan syarat aktivasi ada pada status eksekusi.
+
 | ID | Prioritas / ukuran | Hasil konkret | Dependensi sebelum dinyatakan selesai | Status |
 |---|---|---|---|---|
-| OPT-00 | P1 / M | Fixture dan smoke integrasi nyata | — | Belum mulai |
-| OPT-01 | P1 / S | Seleksi tabel dan keyboard benar | — | Belum mulai |
-| OPT-02 | P1 / M | Batch CAS, media rollback, hasil per ID | — | Belum mulai |
-| OPT-03 | P1 / L | Batch aman retry sesudah crash/timeout | OPT-02 | Belum mulai |
-| OPT-04 | P1 / M | UI progres/resume batch parsial | OPT-03 | Belum mulai |
-| OPT-05 | P1 / M | Backup lengkap dan sukses-arsip terverifikasi | — | Belum mulai |
-| OPT-06 | P1 / L | Restore fail-closed dan recovery state | — | Belum mulai |
-| OPT-07 | P1 / L | Backup konsisten, offsite, restore drill | OPT-05, OPT-06 | Belum mulai |
-| OPT-08 | P1 / M | Semua fase deploy memiliki pemulihan | — | Belum mulai |
-| OPT-09 | P1 / M | Transport artifact/download berbatas memori | OPT-10 untuk jalur job gabungan | Belum mulai |
-| OPT-10 | P1 / M | Heartbeat, klaim, status unduhan atomik | — | Belum mulai |
-| OPT-11 | P1 / M | Sort/filter harga numerik benar | — | Belum mulai |
-| OPT-12 | P1 / M | Pencarian tidak ditimpa respons lama | — | Belum mulai |
-| OPT-13 | P2 / M | Resume realtime tanpa asumsi ObjectId | OPT-00 | Belum mulai |
-| OPT-14 | P2* / M | Search index lengkap dan dapat rekonsiliasi | OPT-00; P1 bila Meili dipakai untuk hasil operasional | Belum mulai |
-| OPT-15 | P2* / M | Laporan lengkap dan restore berbatas memori | OPT-06 khusus restore PR15b; P1 bila truncation terbukti | Belum mulai |
-| OPT-16 | P1 / M | Load harness sah dan baseline kapasitas | OPT-00 | Belum mulai |
-| OPT-17 | P2 / M | Inventaris, SLO, metrik dan alert teruji | — | Belum mulai |
-| OPT-18 | P2 / L | Query/cursor/read model terukur | OPT-11, OPT-16 | Belum mulai |
-| OPT-19 | P2 / M | Query luring tidak dihitung penuh per halaman | OPT-12, OPT-16 | Belum mulai |
-| OPT-20 | P2 / M | Cache halaman mobile berbatas | OPT-19 | Belum mulai |
-| OPT-21 | P2 / M | Retensi service worker aman lintas rilis | OPT-00 browser smoke | Belum mulai |
-| OPT-22 | P2 / L | Budget global dan worker ekspor tahan restart | OPT-09, OPT-10, OPT-16, OPT-17 | Belum mulai |
-| OPT-23 | P2 / L | Service/form/registry diekstrak per use-case | OPT-02, OPT-04, OPT-12 | Belum mulai |
-| OPT-24 | P2 / M | Toolchain dan lock dependency dapat direproduksi | OPT-00 | Belum mulai |
-| OPT-25 | P2 / L | Artefak rilis immutable dan aktivasi atomik | OPT-08, OPT-21, OPT-24 | Belum mulai |
-| OPT-26 | P2 / L | Lampiran checklist berbasis referensi berbatas | OPT-02, OPT-05, OPT-06 | Belum mulai |
-| OPT-27 | P1 / S | Tombstone luring tidak terpotong senyap | — | Belum mulai |
-| OPT-28 | Gerbang / M | Verifikasi akhir, kapasitas dan handoff aktual | Semua paket yang berlaku; keputusan tunda dibuktikan | Belum mulai |
+| OPT-00 | P1 / M | Fixture dan smoke integrasi nyata | — | Fondasi kontrak main; browser/penguatan lokal, final CI menunggu |
+| OPT-01 | P1 / S | Seleksi tabel dan keyboard benar | — | Lokal teruji; menunggu CI/rilis |
+| OPT-02 | P1 / M | Batch CAS, media rollback, hasil per ID | — | Lokal teruji CAS/Mongo; menunggu CI/rilis |
+| OPT-03 | P1 / L | Batch aman retry sesudah crash/timeout | OPT-02 | Lokal teruji crash/retry; menunggu CI/rilis |
+| OPT-04 | P1 / M | UI progres/resume batch parsial | OPT-03 | Lokal teruji UI/resume; menunggu CI/rilis |
+| OPT-05 | P1 / M | Backup lengkap dan sukses-arsip terverifikasi | — | Fondasi produksi; pelengkap UI lokal |
+| OPT-06 | P1 / L | Restore fail-closed dan recovery state | — | Fondasi produksi; pelengkap lokal; DR host lain belum |
+| OPT-07 | P1 / L | Backup konsisten, offsite, restore drill | OPT-05, OPT-06 | Tooling lokal; offsite/key/host drill operasional belum |
+| OPT-08 | P1 / M | Semua fase deploy memiliki pemulihan | — | Fondasi produksi; cutover immutable terpisah OPT-25 |
+| OPT-09 | P1 / M | Transport artifact/download berbatas memori | OPT-10 untuk jalur job gabungan | Lokal teruji transport; menunggu CI/rilis |
+| OPT-10 | P1 / M | Heartbeat, klaim, status unduhan atomik | — | Lokal teruji multiproses; audit/drain rollout perlu |
+| OPT-11 | P1 / M | Sort/filter harga numerik benar | — | Lokal eksak/finite teruji; menunggu CI/rilis |
+| OPT-12 | P1 / M | Pencarian tidak ditimpa respons lama | — | Lokal respons terbalik/abort teruji; menunggu CI/rilis |
+| OPT-13 | P2 / M | Resume realtime tanpa asumsi ObjectId | OPT-00 | Lokal replay/resync teruji; menunggu CI/rilis |
+| OPT-14 | P2* / M | Search index lengkap dan dapat rekonsiliasi | OPT-00; P1 bila Meili dipakai untuk hasil operasional | Fondasi produksi; Mongo default, Meili prefix opt-in belum divalidasi nyata |
+| OPT-15 | P2* / M | Laporan lengkap dan restore berbatas memori | OPT-06 khusus restore PR15b; P1 bila truncation terbukti | Laporan lokal teruji; restore bertahap fondasi produksi |
+| OPT-16 | P1 / M | Load harness sah dan baseline kapasitas | OPT-00 | Harness/smoke lokal; ramp/soak staging belum |
+| OPT-17 | P2 / M | Inventaris, SLO, metrik dan alert teruji | — | Inventaris produksi ada; collector lokal default mati, monitor eksternal belum |
+| OPT-18 | P2 / L | Query/cursor/read model terukur | OPT-11, OPT-16 | Explain/indeks/cursor lokal; page default, read model ditunda berbukti |
+| OPT-19 | P2 / M | Query luring tidak dihitung penuh per halaman | OPT-12, OPT-16 | Lokal terukur native IDB; menunggu CI/rilis |
+| OPT-20 | P2 / M | Cache halaman mobile berbatas | OPT-19 | Lokal terukur 200 halaman; menunggu CI/rilis |
+| OPT-21 | P2 / M | Retensi service worker aman lintas rilis | OPT-00 browser smoke | SW lokal teruji; static server fondasi, rollout lintas rilis belum |
+| OPT-22 | P2 / L | Budget global dan worker ekspor tahan restart | OPT-09, OPT-10, OPT-16, OPT-17 | Executor/worker lokal teruji; flag budget/worker default mati |
+| OPT-23 | P2 / L | Service/form/registry diekstrak per use-case | OPT-02, OPT-04, OPT-12 | Boundary/registry/form lokal teruji; menunggu CI/rilis |
+| OPT-24 | P2 / M | Toolchain dan lock dependency dapat direproduksi | OPT-00 | Python lock/audit/clean install dan cohort frontend teruji; 25 GHSA tooling residual, native Async/Vite terpisah |
+| OPT-25 | P2 / L | Artefak rilis immutable dan aktivasi atomik | OPT-08, OPT-21, OPT-24 | Staging mekanisme teruji; belum cutover produksi |
+| OPT-26 | P2 / L | Lampiran checklist berbasis referensi berbatas | OPT-02, OPT-05, OPT-06 | Adapter/batas lokal teruji; flag write mati, tanpa purge/GC |
+| OPT-27 | P1 / S | Tombstone luring tidak terpotong senyap | — | Lokal boundary Mongo teruji; menunggu CI/rilis |
+| OPT-28 | Gerbang / M | Verifikasi akhir, kapasitas dan handoff aktual | Semua paket yang berlaku; keputusan tunda dibuktikan | Berjalan; backend/browser/CI/rilis akhir dan gap operasional belum ditutup |
 
 **Gelombang A:** OPT-00/17 inventaris berjalan paralel dengan OPT-05/06/08 dan
 perbaikan kecil OPT-01/11/12/27. OPT-02→03→04 adalah satu rantai integritas mutasi.

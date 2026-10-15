@@ -47,6 +47,7 @@ def penyimpanan(monkeypatch):
     async def simpan(uri):
         gid = f"foto-baru-{len(unggahan)}"
         blobs[gid] = base64.b64decode(uri.split(",", 1)[1])
+        await db["fs.files"].insert_one({"_id": gid, "metadata": {}})
         unggahan.append(gid)
         return gid
 
@@ -56,7 +57,9 @@ def penyimpanan(monkeypatch):
     async def hapus(gid):
         hapusan.append(gid)
         blobs.pop(gid, None)
+        await db["fs.files"].delete_one({"_id": gid})
 
+    monkeypatch.setattr(ra, "fs_bucket", SimpleNamespace(delete=hapus))
     monkeypatch.setattr(ra, "db", db)
     for name in ("pastikan_akses_aset", "ensure_activity_not_sealed", "notify_asset_change", "log_audit"):
         monkeypatch.setattr(ra, name, diam)
@@ -137,7 +140,13 @@ def test_pemulihan_gagal_tidak_menghapus_salinan_cover_terakhir(penyimpanan, mon
             # pin wrapper yang disuntik galat agar handler memakai yang sama.
             aset = db.assets
             monkeypatch.setattr(aset, "update_one", tulis_gagal)
-            monkeypatch.setattr(ra, "db", SimpleNamespace(assets=aset))
+            class DatabaseFault:
+                assets = aset
+
+                def __getitem__(self, name):
+                    return db[name]
+
+            monkeypatch.setattr(ra, "db", DatabaseFault())
         with pytest.raises(ra.HTTPException) as err:
             await ra.patch_asset("a1", Req({"photo_ops": {
                 "keep": [0], "add": [uri_baru], "thumbnail_index": 0, "base_version": 3,
@@ -145,8 +154,16 @@ def test_pemulihan_gagal_tidak_menghapus_salinan_cover_terakhir(penyimpanan, mon
         assert err.value.status_code == (409 if gagal == "konflik_db" else 500)
         assert await db.assets.find_one({"id": "a1"}) == sebelum
         assert (await ra.get_asset_photo_full("a1", 0, Req(), _user=USER)).body == lama
-        assert blobs == {}, "blob percobaan baru harus dibersihkan, bukan foto lama"
-        assert set(hapusan) == set(unggahan)
+        if gagal == "galat_db":
+            # A dispatched write error cannot prove rollback. Keep all staged
+            # bytes with ownership evidence until its outcome is reconciled.
+            assert set(blobs) == set(unggahan)
+            for gid in unggahan:
+                record = await db["fs.files"].find_one({"_id": gid})
+                assert record["metadata"]["asset_photo_commit"]["state"] == "pending"
+        else:
+            assert blobs == {}, "blob yang pasti belum committed harus dibersihkan"
+        assert set(hapusan) == (set() if gagal == "galat_db" else set(unggahan))
         assert "cover-lama" not in hapusan
 
     asyncio.run(skenario())

@@ -7,7 +7,7 @@ DI SERVER sebagai job latar:
 
   POST /api/unduhan/mulai {path, nama_file, label}
       → job antre; worker memanggil endpoint GET internal `path` (in-process,
-        httpx.ASGITransport — tetap melewati routing + auth + isolasi satker
+        bounded ASGI transport — tetap melewati routing + auth + isolasi satker
         karena header Authorization/X-Satker-Aktif pemohon DITERUSKAN apa
         adanya, hanya di memori, tidak pernah disimpan ke DB) lalu menyimpan
         hasilnya ke GridFS.
@@ -18,8 +18,8 @@ DI SERVER sebagai job latar:
 Keandalan file banyak & besar:
   - antrean: maksimal 2 job diproses bersamaan (semaphore) + jeda 2 detik
     sebelum tiap job supaya server bernapas; sisanya menunggu giliran;
-  - maksimal 3 job aktif per pengguna (409 bila melebihi);
-  - plafon hasil 500 MB; timeout internal 30 menit;
+  - maksimal 1 job aktif per pengguna, diklaim atomik di Mongo;
+  - plafon hasil 200 MB; timeout internal 30 menit;
   - 429 dari rate-limiter endpoint laporan di dalam → dicoba ulang hingga
     3x mengikuti Retry-After.
 
@@ -30,6 +30,7 @@ menumpang loop pemeliharaan jobs.py — blob yatim (dokumen sudah di-TTL)
 ikut terhapus sehingga disk kembali nol.
 """
 import asyncio
+import contextlib
 import logging
 import re
 import time
@@ -37,7 +38,9 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from urllib.parse import unquote
 
-import httpx
+from pymongo.errors import DuplicateKeyError
+
+from asgi_artifact import stream_asgi_artifact
 from bson import ObjectId
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -109,9 +112,16 @@ def _naive_utc(dt):
     return dt
 
 
-async def _update(unduhan_id: str, **fields) -> None:
+async def _update(unduhan_id: str, **fields) -> bool:
+    """Only a live job may transition: stale workers cannot revive terminal jobs."""
     fields["updated_at"] = _now()
-    await _COL.update_one({"unduhan_id": unduhan_id}, {"$set": fields})
+    patch = {"$set": fields}
+    if fields.get("status") in ("done", "error"):
+        patch["$unset"] = {"active_lock": ""}
+    result = await _COL.update_one(
+        {"unduhan_id": unduhan_id, "status": {"$in": ["queued", "running"]}},
+        patch)
+    return result.matched_count > 0
 
 
 def _potong_detail(teks, maks: int = 300) -> str:
@@ -161,85 +171,99 @@ def _app_internal():
 
 
 async def _denyut(unduhan_id: str):
-    """Perbarui updated_at berkala selama job hidup (antre di belakang _SEM
-    maupun fase generate yang buffered tanpa progres) agar sapuan tak
-    salah me-relabel job yang masih berjalan sebagai macet."""
-    try:
-        while True:
-            await asyncio.sleep(HEARTBEAT_DETIK)
-            await _COL.update_one({"unduhan_id": unduhan_id},
-                                  {"$set": {"updated_at": _now()}})
-    except asyncio.CancelledError:
-        raise
-    except Exception:       # denyut best-effort — tak boleh menjatuhkan job
-        pass
+    """Cover queue, delay, render and upload; one DB failure cannot stop liveness."""
+    while True:
+        await asyncio.sleep(HEARTBEAT_DETIK)
+        try:
+            if not await _update(unduhan_id):
+                return
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.warning("Denyut unduhan %s sementara gagal", unduhan_id)
 
 
 async def _ambil_dan_simpan(unduhan_id: str, path: str, headers: dict) -> None:
-    """Panggil endpoint internal, alirkan hasil LANGSUNG ke GridFS (tanpa
-    menampung dua kali di RAM), stempel metadata unduhan_id."""
-    transport = httpx.ASGITransport(app=_app_internal())
-    async with httpx.AsyncClient(transport=transport,
-                                 base_url="http://internal") as klien:
-        for percobaan in range(3):
-            async with klien.stream("GET", f"/api{path}",
-                                     headers=headers) as r:
-                if r.status_code == 429 and percobaan < 2:
-                    # Rate-limiter endpoint laporan — tunggu lalu ulangi.
-                    try:
-                        tunggu = float(r.headers.get("retry-after") or 30)
-                    except ValueError:
-                        tunggu = 30.0
-                    await r.aread()
-                    await _update(unduhan_id,
-                                  message="Server sibuk — menunggu "
-                                          f"{int(tunggu)} detik")
-                    await asyncio.sleep(min(tunggu, 120.0))
-                    continue
-                if r.status_code != 200:
-                    badan = await r.aread()
-                    raise RuntimeError(
-                        f"HTTP {r.status_code}: "
-                        f"{_potong_detail(badan) or 'galat server'}")
-                ctype = (r.headers.get("content-type")
-                         or "application/octet-stream").split(";")[0].strip()
-                doc = await _COL.find_one({"unduhan_id": unduhan_id},
-                                          {"_id": 0, "nama_file": 1})
-                nama = (doc or {}).get("nama_file") or "unduhan.bin"
-                file_id = ObjectId()
-                keluar = fs_bucket.open_upload_stream_with_id(
-                    file_id, filename=nama,
-                    metadata={"content_type": ctype, "unduhan_id": unduhan_id})
-                terunduh = 0
-                t_lapor = 0.0
-                try:
-                    async for potongan in r.aiter_bytes(65536):
-                        if terunduh + len(potongan) > MAKS_UKURAN:
-                            raise RuntimeError("Hasil melebihi plafon 200 MB")
-                        await keluar.write(potongan)      # langsung ke GridFS
-                        terunduh += len(potongan)
-                        kini = time.monotonic()
-                        if kini - t_lapor > 1.5:
-                            t_lapor = kini
-                            await _update(
+    """Run the original ASGI stack with direct, backpressured GridFS writes."""
+    for percobaan in range(3):
+        file_id = None
+        ctype = "application/octet-stream"
+        terunduh = 0
+        t_lapor = 0.0
+
+        async def open_sink(response_headers):
+            nonlocal file_id, ctype
+            doc = await _COL.find_one({"unduhan_id": unduhan_id,
+                                       "status": {"$in": ["queued", "running"]}},
+                                      {"_id": 0, "nama_file": 1})
+            if not doc:
+                raise RuntimeError("Unduhan sudah berakhir")
+            ctype = (response_headers.get("content-type") or ctype).split(";")[0].strip()
+            file_id = ObjectId()
+            grid_in = fs_bucket.open_upload_stream_with_id(
+                file_id, filename=doc.get("nama_file") or "unduhan.bin",
+                metadata={"content_type": ctype, "unduhan_id": unduhan_id})
+
+            class ProgressSink:
+                async def write(self, chunk):
+                    nonlocal terunduh, t_lapor
+                    await grid_in.write(chunk)
+                    terunduh += len(chunk)
+                    kini = time.monotonic()
+                    if kini - t_lapor > 1.5:
+                        t_lapor = kini
+                        if not await _update(
                                 unduhan_id, ukuran=terunduh,
-                                message="Menyusun file… "
-                                        f"{terunduh // 1024:,} KB".replace(
-                                            ",", "."))
-                    await keluar.close()
-                except BaseException:
-                    # Batalkan unggahan parsial agar tak meninggalkan chunk
-                    # GridFS yatim saat gagal/timeout/plafon terlampaui.
+                                message=f"Menyusun file… {terunduh // 1024:,} KB".replace(",", ".")):
+                            raise RuntimeError("Unduhan sudah berakhir")
+
+                async def close(self):
+                    await grid_in.close()
+
+                async def abort(self):
                     try:
-                        await keluar.abort()
-                    except Exception:
-                        pass
-                    raise
-                await _update(unduhan_id, status="done", progress=100,
-                              ukuran=terunduh, artifact_id=str(file_id),
-                              artifact_type=ctype, message="Selesai")
-                return
-        raise RuntimeError("Server sibuk — coba lagi nanti")
+                        await grid_in.abort()
+                    finally:
+                        # close() can fail after persisting the GridFS file.
+                        with contextlib.suppress(Exception):
+                            await fs_bucket.delete(file_id)
+            return ProgressSink()
+
+        result = await stream_asgi_artifact(
+            _app_internal(), f"/api{path}", headers, open_sink,
+            max_bytes=MAKS_UKURAN, timeout=TIMEOUT_INTERNAL)
+        if result.status == 429 and percobaan < 2:
+            try:
+                tunggu = max(0, min(float(result.headers.get("retry-after") or 30), 120))
+            except (ValueError, OverflowError):
+                tunggu = 30.0
+            await _update(unduhan_id, message=f"Server sibuk — menunggu {int(tunggu)} detik")
+            await asyncio.sleep(tunggu)
+            continue
+        if result.status != 200:
+            raise RuntimeError(f"HTTP {result.status}: "
+                               f"{_potong_detail(result.error_body) or 'galat server'}")
+        # Publication is conditional after upload commit. A concurrent reaper
+        # must not be overwritten, and its late blob must be removed.
+        try:
+            accepted = await _update(
+                unduhan_id, status="done", progress=100, ukuran=result.size,
+                artifact_id=str(file_id), artifact_type=ctype, message="Selesai")
+        except BaseException:
+            # A lost Mongo reply may hide a successful publication. Never
+            # delete its blob unless a subsequent read proves it unreferenced.
+            # If DB is unavailable, retention cleanup safely owns the orphan.
+            with contextlib.suppress(Exception):
+                current = await _COL.find_one({"unduhan_id": unduhan_id}, {"artifact_id": 1})
+                if not current or current.get("artifact_id") != str(file_id):
+                    await fs_bucket.delete(file_id)
+            raise
+        if not accepted:
+            with contextlib.suppress(Exception):
+                await fs_bucket.delete(file_id)
+            raise RuntimeError("Unduhan sudah berakhir sebelum hasil disimpan")
+        return
+    raise RuntimeError("Server sibuk — coba lagi nanti")
 
 
 async def _jalankan_unduhan(unduhan_id: str, path: str, headers: dict) -> None:
@@ -247,37 +271,35 @@ async def _jalankan_unduhan(unduhan_id: str, path: str, headers: dict) -> None:
 
     `headers` (Authorization + X-Satker-Aktif pemohon) hanya hidup di closure
     task ini — TIDAK pernah ditulis ke database."""
-    async with _SEM:
-        await asyncio.sleep(JEDA_ANTAR_JOB)
-        denyut = asyncio.create_task(_denyut(unduhan_id))
-        try:
-            await _update(unduhan_id, status="running",
-                          message="Menyusun file di server")
-            # asyncio.timeout MENEGAKKAN batas (httpx.Timeout DIABAIKAN oleh
-            # ASGITransport) → slot _SEM pasti lepas walau endpoint menggantung.
-            async with asyncio.timeout(TIMEOUT_INTERNAL):
+    denyut = asyncio.create_task(_denyut(unduhan_id))
+    try:
+        from pemeliharaan import writer_admission
+        # The deadline includes queue waiting and all rate-limit retry delays.
+        # Physical lease covers late rendering/upload even when a reaper has
+        # already changed the visible job status to terminal.
+        async with writer_admission(database=db), asyncio.timeout(TIMEOUT_INTERNAL):
+            async with _SEM:
+                await asyncio.sleep(JEDA_ANTAR_JOB)
+                if not await _update(unduhan_id, status="running",
+                                     message="Menyusun file di server"):
+                    return
                 await _ambil_dan_simpan(unduhan_id, path, headers)
-        except asyncio.TimeoutError:
-            logger.warning("Unduhan %s: melebihi batas waktu", unduhan_id)
-            try:
-                await _update(unduhan_id, status="error", message="Gagal",
-                              error_message="Melebihi batas 30 menit — coba "
-                                            "persempit rentang lalu ulangi")
-            except Exception:
-                pass
-        except Exception as e:      # noqa: BLE001 — job tak boleh mati senyap
-            logger.warning("Unduhan %s gagal: %s", unduhan_id, e)
-            try:
-                await _update(unduhan_id, status="error",
-                              error_message=str(e)[:300], message="Gagal")
-            except Exception:
-                pass
-        finally:
-            denyut.cancel()
-            try:
-                await denyut
-            except (asyncio.CancelledError, Exception):
-                pass
+    except asyncio.CancelledError:
+        with contextlib.suppress(Exception):
+            await _update(unduhan_id, status="error", message="Gagal",
+                          error_message="Pekerjaan dihentikan — silakan ulangi")
+        raise
+    except Exception as e:
+        logger.warning("Unduhan %s gagal: %s", unduhan_id, type(e).__name__)
+        detail = ("Melebihi batas waktu — coba persempit rentang lalu ulangi"
+                  if isinstance(e, TimeoutError) else str(e)[:300])
+        with contextlib.suppress(Exception):
+            await _update(unduhan_id, status="error", error_message=detail,
+                          message="Gagal")
+    finally:
+        denyut.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await denyut
 
 
 @unduhan_router.post("/unduhan/mulai")
@@ -287,6 +309,25 @@ async def mulai_unduhan(payload: MulaiUnduhanIn, request: Request,
     """Daftarkan unduhan berat sebagai job latar; kembalikan {unduhan_id}."""
     if not path_unduhan_valid(payload.path):
         raise HTTPException(status_code=400, detail="Path unduhan tidak valid")
+    # Deploy acquires this gate and drains middleware writer leases before
+    # checking active downloads. Uncached checking keeps admission closed.
+    try:
+        deploying = await db.restore_control.find_one(
+            {"_id": "GLOBAL", "state": "deploying", "active": True}, {"_id": 1})
+    except Exception:
+        raise HTTPException(status_code=503, detail="Pusat Unduhan belum siap; coba lagi nanti")
+    if deploying:
+        raise HTTPException(status_code=503, detail="Pembaruan sistem berlangsung; coba lagi nanti")
+    # Index creation is idempotent and deliberately verified at admission.
+    # Startup indexes are best-effort elsewhere; this invariant must fail
+    # closed even if startup failed or an operator dropped the index later.
+    try:
+        await _COL.create_index(
+            [("dibuat_oleh", 1)], name="unduhan_satu_aktif_per_owner",
+            unique=True, partialFilterExpression={"active_lock": True})
+    except Exception:
+        logger.error("Admission unduhan ditahan: indeks klaim tidak tersedia")
+        raise HTTPException(status_code=503, detail="Pusat Unduhan belum siap; coba lagi nanti")
     username = str(user.get("username") or "")
     aktif = await _COL.count_documents(
         {"dibuat_oleh": username, "status": {"$in": ["queued", "running"]}})
@@ -297,18 +338,21 @@ async def mulai_unduhan(payload: MulaiUnduhanIn, request: Request,
                    "bersamaan — tunggu yang lain selesai")
     unduhan_id = uuid.uuid4().hex
     kini = _now()
-    await _COL.insert_one({
-        "unduhan_id": unduhan_id,
-        "label": payload.label or payload.nama_file,
-        "nama_file": payload.nama_file,
-        "path": payload.path,
-        "status": "queued", "message": "Menunggu giliran",
-        "ukuran": 0,
-        "dibuat_oleh": username,
-        "kode_satker": kode_satker_user(user),
-        "created_at": kini, "updated_at": kini,
-        "hapus_pada": kini + timedelta(days=RETENSI_HARI),
-    })
+    try:
+        await _COL.insert_one({
+            "unduhan_id": unduhan_id,
+            "label": payload.label or payload.nama_file,
+            "nama_file": payload.nama_file,
+            "path": payload.path,
+            "status": "queued", "active_lock": True, "message": "Menunggu giliran",
+            "ukuran": 0,
+            "dibuat_oleh": username,
+            "kode_satker": kode_satker_user(user),
+            "created_at": kini, "updated_at": kini,
+            "hapus_pada": kini + timedelta(days=RETENSI_HARI),
+        })
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="Masih ada unduhan aktif — tunggu hingga selesai")
     # Header auth pemohon diteruskan ke panggilan internal (di memori saja).
     headers = {}
     auth = request.headers.get("authorization")
@@ -379,6 +423,8 @@ async def hapus_unduhan(unduhan_id: str, user: dict = Depends(require_user)):
         raise HTTPException(status_code=404, detail="Unduhan tidak ditemukan")
     if not _boleh_akses(doc, user):
         raise HTTPException(status_code=403, detail="Bukan unduhan Anda")
+    if doc.get("status") in ("queued", "running"):
+        raise HTTPException(status_code=409, detail="Unduhan masih berjalan; tunggu hingga selesai")
     if doc.get("artifact_id"):
         try:
             await fs_bucket.delete(ObjectId(doc["artifact_id"]))
@@ -431,7 +477,7 @@ async def bersihkan_unduhan_kedaluwarsa(ambang_macet_menit: int = 90) -> int:
             {"$set": {"status": "error", "message": "Gagal",
                       "error_message": "Terputus (server dimulai ulang) — "
                                        "silakan mulai ulang unduhan",
-                      "updated_at": _now()}})
+                      "updated_at": _now()}, "$unset": {"active_lock": ""}})
     except Exception as e:
         logger.warning("bersihkan_unduhan_kedaluwarsa gagal: %s", e)
     return n

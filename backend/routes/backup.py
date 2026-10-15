@@ -614,10 +614,11 @@ async def _restore_state(job_id, state, **fields):
     pemeliharaan._cache = (0.0, False)
 
 
-async def _wait_writer_drain(timeout=120):
+async def _wait_writer_drain(timeout=120, exclude_lease_id=None):
     """Gate is already raised. Request leases close the admit-vs-start race."""
     deadline = asyncio.get_running_loop().time() + timeout
-    while (await db.restore_write_leases.count_documents({})
+    lease_query = {"_id": {"$ne": exclude_lease_id}} if exclude_lease_id else {}
+    while (await db.restore_write_leases.count_documents(lease_query)
            or await db.background_jobs.count_documents({
                "status": {"$nin": ["done", "error", "completed", "failed", "cancelled", "canceled", "dismissed", "downloaded"]},
                "done": {"$ne": True},
@@ -634,12 +635,28 @@ async def _restore_heartbeat(job_id):
         await update_job(job_id)  # Progress lease never silently expires during large IO.
 
 
-async def _apply_archive(zf, job_id):
-    """Apply prevalidated archive, batching BSON inserts and streaming all files."""
+async def _apply_archive(zf, job_id, preserve_collections=None):
+    """Apply prevalidated archive; reset may keep approved live master BSON.
+
+    Full restore/rollback/recovery uses the default, replacing all collections.
+    A reset can preserve only RESET_KEEP collections to avoid JSON retyping
+    their existing BSON dates and semantic IDs.
+    """
+    preserve = set(preserve_collections or ())
+    if not preserve.issubset(RESET_KEEP_COLLECTIONS):
+        raise ValueError("Hanya koleksi konfigurasi/master reset yang boleh dipertahankan")
     restore_stats = {}
     cols = collections_from_backup(zf.namelist())
     for index, zip_col in enumerate(cols):
         col = LEGACY_COLLECTION_ALIASES.get(zip_col, zip_col)
+        if col in preserve:
+            def count_preserved():
+                with zf.open(f"{zip_col}.json") as reader:
+                    return sum(1 for _ in iter_json_documents(reader))
+            # Verification must compare against the immutable target, rather
+            # than blessing whatever live count happens to remain.
+            restore_stats[col] = await asyncio.to_thread(count_preserved)
+            continue
         await update_job(job_id, progress=30 + int(35 * (index + 1) / max(1, len(cols))),
                          message=f"Restore: {col}...")
         await db[col].delete_many({})
@@ -669,7 +686,7 @@ async def _apply_archive(zf, job_id):
                 count += len(batch)
         restore_stats[col] = count
     for col in await _app_collections():
-        if col not in restore_stats and col != "users":
+        if col not in restore_stats and col != "users" and col not in preserve:
             await db[col].delete_many({})
     await repair_ticket_counters()
     await update_job(job_id, progress=70, message="Memulihkan foto (GridFS)...")
@@ -819,29 +836,19 @@ async def recover_restore(job_id, username):
         raise
 
 
-async def run_restore_task(job_id: str, zip_path: Path, username: str):
-    """Validate completely, snapshot, then replace; unsafe failure stays closed."""
-    from log_setup import set_job_id
-    set_job_id(job_id)
-    destructive, claimed, verified_terminal = False, False, False
+async def create_safety_archive(job_id, username):
+    """Return a fully verified/auth-usable snapshot after caller gates/drains writers.
+
+    Caller owns durable control, portal revocation and recovery artifact cleanup.
+    This helper performs no destructive data changes.
+    """
     safety_data_zip = BACKUP_TEMP_DIR / f"safety_data_{job_id}.zip"
-    heartbeat = None
+    safety_cols, safety_stats = await _app_collections(), {}
+    if UPLOADS_DIR.is_symlink():
+        raise ValueError("Root uploads berupa symlink tidak boleh dipulihkan")
+    descriptor = os.open(safety_data_zip, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600)
     try:
-        await update_job(job_id, status="running", progress=5, message="Memvalidasi seluruh file backup...")
-        with zipfile.ZipFile(zip_path) as zf:
-            preflight = await asyncio.to_thread(validate_archive, zf)
-        await _claim_restore_control(job_id, username, zip_path)
-        claimed = True
-        heartbeat = asyncio.create_task(_restore_heartbeat(job_id))
-        await _wait_writer_drain()
-        # Let all workers expire their negative read-maintenance cache before
-        # touching data. Mutating admission already checks uncached above.
-        import pemeliharaan
-        await asyncio.sleep(pemeliharaan._CACHE_TTL + 0.05)
-        from portal_auth import cabut_semua_portal_akses
-        await cabut_semua_portal_akses("Pemulihan backup dimulai", database=db)
-        safety_cols, safety_stats = await _app_collections(), {}
-        with zipfile.ZipFile(safety_data_zip, "w", zipfile.ZIP_DEFLATED) as sz:
+        with os.fdopen(descriptor, "w+b") as raw, zipfile.ZipFile(raw, "w", zipfile.ZIP_DEFLATED) as sz:
             for col_name in safety_cols:
                 safety_stats[col_name] = await _tulis_koleksi_json(sz, col_name, col_name in KEEP_ID_COLLECTIONS)
                 await update_job(job_id, progress=15, message=f"Safety backup: {col_name}...")
@@ -862,6 +869,41 @@ async def run_restore_task(job_id: str, zip_path: Path, username: str):
             os.fsync(safety_file.fileno())
         with zipfile.ZipFile(safety_data_zip) as sz:
             await asyncio.to_thread(validate_archive, sz, False, True)
+        directory = os.open(BACKUP_TEMP_DIR, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+        return safety_data_zip
+    except BaseException:
+        safety_data_zip.unlink(missing_ok=True)
+        raise
+
+
+async def run_restore_task(job_id: str, zip_path: Path, username: str):
+    """Validate completely, snapshot, then replace; unsafe failure stays closed."""
+    from log_setup import set_job_id
+    set_job_id(job_id)
+    destructive, claimed, verified_terminal = False, False, False
+    safety_created = False
+    safety_data_zip = BACKUP_TEMP_DIR / f"safety_data_{job_id}.zip"
+    heartbeat = None
+    try:
+        await update_job(job_id, status="running", progress=5, message="Memvalidasi seluruh file backup...")
+        with zipfile.ZipFile(zip_path) as zf:
+            preflight = await asyncio.to_thread(validate_archive, zf)
+        await _claim_restore_control(job_id, username, zip_path)
+        claimed = True
+        heartbeat = asyncio.create_task(_restore_heartbeat(job_id))
+        await _wait_writer_drain()
+        # Let all workers expire their negative read-maintenance cache before
+        # touching data. Mutating admission already checks uncached above.
+        import pemeliharaan
+        await asyncio.sleep(pemeliharaan._CACHE_TTL + 0.05)
+        from portal_auth import cabut_semua_portal_akses
+        await cabut_semua_portal_akses("Pemulihan backup dimulai", database=db)
+        safety_data_zip = await create_safety_archive(job_id, username)
+        safety_created = True
         # Persist BEFORE destructive IO. A killed process never auto-opens data.
         from dataset_epoch import rotate_generation
         await _restore_state(job_id, "restoring", destructive_started=True)
@@ -913,7 +955,8 @@ async def run_restore_task(job_id: str, zip_path: Path, username: str):
         # Never delete source or safety files while recovery is unresolved.
         if verified_terminal or not claimed:
             zip_path.unlink(missing_ok=True)
-            safety_data_zip.unlink(missing_ok=True)
+            if safety_created:
+                safety_data_zip.unlink(missing_ok=True)
 
 
 # ============================================================================

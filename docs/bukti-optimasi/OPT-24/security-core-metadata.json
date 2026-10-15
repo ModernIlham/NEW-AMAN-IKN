@@ -1,0 +1,95 @@
+[
+  {
+    "name": "fastapi",
+    "version": "0.143.1",
+    "requires_python": ">=3.10",
+    "relevant_requires": [
+      "starlette>=0.46.0",
+      "pydantic>=2.9.0",
+      "python-multipart>=0.0.18; extra == \"standard\"",
+      "pydantic-settings>=2.0.0; extra == \"standard\"",
+      "pydantic-extra-types>=2.0.0; extra == \"standard\"",
+      "python-multipart>=0.0.18; extra == \"standard-no-fastapi-cloud-cli\"",
+      "pydantic-settings>=2.0.0; extra == \"standard-no-fastapi-cloud-cli\"",
+      "pydantic-extra-types>=2.0.0; extra == \"standard-no-fastapi-cloud-cli\"",
+      "python-multipart>=0.0.18; extra == \"all\"",
+      "pydantic-settings>=2.0.0; extra == \"all\"",
+      "pydantic-extra-types>=2.0.0; extra == \"all\""
+    ]
+  },
+  {
+    "name": "starlette",
+    "version": "1.8.0",
+    "requires_python": ">=3.11",
+    "relevant_requires": [
+      "python-multipart>=0.0.18; extra == \"full\""
+    ]
+  },
+  {
+    "name": "motor",
+    "version": "3.7.1",
+    "requires_python": ">=3.9",
+    "relevant_requires": [
+      "pymongo<5.0,>=4.9",
+      "pymongo[aws]<5,>=4.5; extra == \"aws\"",
+      "pymongo[encryption]<5,>=4.5; extra == \"encryption\"",
+      "pymongo[gssapi]<5,>=4.5; extra == \"gssapi\"",
+      "pymongo[ocsp]<5,>=4.5; extra == \"ocsp\"",
+      "pymongo[snappy]<5,>=4.5; extra == \"snappy\"",
+      "pymongo[encryption]<5,>=4.5; extra == \"test\"",
+      "pymongo[zstd]<5,>=4.5; extra == \"zstd\""
+    ]
+  },
+  {
+    "name": "pymongo",
+    "version": "4.19.0",
+    "requires_python": ">=3.11",
+    "relevant_requires": [
+      "pymongo-auth-aws<2.0.0,>=1.3.0; extra == \"aws\"",
+      "pymongo-auth-aws<2.0.0,>=1.3.0; extra == \"encryption\"",
+      "pymongocrypt<2.0.0,>=1.18.1; extra == \"encryption\"",
+      "cryptography>=47.0.0; extra == \"ocsp\""
+    ]
+  },
+  {
+    "name": "PyJWT",
+    "version": "2.15.1",
+    "requires_python": ">=3.9",
+    "relevant_requires": [
+      "cryptography>=3.4.0; extra == \"crypto\""
+    ]
+  },
+  {
+    "name": "python-multipart",
+    "version": "0.0.32",
+    "requires_python": ">=3.10",
+    "relevant_requires": []
+  },
+  {
+    "name": "Pillow",
+    "version": "12.3.0",
+    "requires_python": ">=3.10",
+    "relevant_requires": []
+  },
+  {
+    "name": "pypdf",
+    "version": "6.20.1",
+    "requires_python": ">=3.9",
+    "relevant_requires": [
+      "cryptography>3.0; extra == \"crypto\"",
+      "cryptography>3.0; extra == \"full\""
+    ]
+  },
+  {
+    "name": "weasyprint",
+    "version": "70.0",
+    "requires_python": ">=3.10",
+    "relevant_requires": []
+  },
+  {
+    "name": "cryptography",
+    "version": "50.0.2",
+    "requires_python": "!=3.9.0,!=3.9.1,>=3.9",
+    "relevant_requires": []
+  }
+]

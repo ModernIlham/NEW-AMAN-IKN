@@ -152,12 +152,12 @@ export function useAssetFilters({ activityId, userId, kodeSatker }) {
 
   // Fetch filter options
   const fetchFilterOptions = useCallback(async () => {
-    const tiket = penjagaOpsi.mulai("opsi", lingkupOpsi);
+    const tiket = penjagaOpsi.mulaiBaca("opsi", lingkupOpsi);
     if (!tiket) return HASIL_USANG;
     try {
       const params = new URLSearchParams();
       if (activityId) params.append("activity_id", activityId);
-      const r = await axios.get(`${API}/assets/filter-options?${params.toString()}`);
+      const r = await axios.get(`${API}/assets/filter-options?${params.toString()}`, { signal: tiket.signal });
       if (!penjagaOpsi.berlaku(tiket)) return HASIL_USANG;
       setFilterOptions(r.data);
     } catch (e) {

@@ -39,8 +39,15 @@ export function indeksJangkar(idsLama, index, assets) {
   return Math.max(0, Math.min(index, assets.length - 1));
 }
 
-export function useJangkarDaftarAset({ daftarkan, nama, assets, virtualizer, columns = 1 }) {
+export function useJangkarDaftarAset({ daftarkan, nama, assets, virtualizer, columns = 1, onVisibleAssets }) {
   const posisi = useRef(null);
+  useLayoutEffect(() => {
+    if (!onVisibleAssets) return;
+    const el = virtualizer.scrollElement;
+    if (!el?.clientHeight) return;
+    const rows = virtualizer.getVirtualItems().filter(item => item.end > el.scrollTop && item.start < el.scrollTop + el.clientHeight);
+    onVisibleAssets(rows.flatMap(item => assets.slice(item.index * columns, (item.index + 1) * columns)).map(a => a.id));
+  });
   useLayoutEffect(() => {
     if (!daftarkan) return undefined;
     return daftarkan(nama, () => {

@@ -68,6 +68,9 @@ def _slot_foto(owner, nama):
         if not isinstance(item, dict) or not isinstance(item.get("photos"), list):
             continue
         for photo_index, value in enumerate(item["photos"]):
+            references = item.get("photo_gridfs_ids")
+            if isinstance(references, list) and photo_index < len(references) and references[photo_index]:
+                continue  # Exact-byte mirrored storage must not diverge.
             if isinstance(value, str) and value:
                 parent = f"document_checklist.{index}.photos"
                 yield f"{parent}.{photo_index}", parent, value

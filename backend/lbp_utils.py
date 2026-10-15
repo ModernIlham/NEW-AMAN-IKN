@@ -18,6 +18,7 @@ build_dbkp_rows/build_lbkp_rows/posisi_neraca, penilaian_utils
 rekap_penyusutan, akun_bas_utils, persediaan) — file ini hanya menyusun
 BENTUK: baris tabel, narasi baku, dan terbilang. Semua fungsi murni.
 """
+from asset_sorting import harga_float
 from akun_bas_utils import AKUN_NERACA_DEFAULT
 from pelaporan_utils import terbilang_id
 
@@ -364,7 +365,7 @@ def susun_barang_bersejarah(assets) -> dict:
         r = agg.setdefault(kode, [str(a.get("asset_name") or ""), 0, 0.0])
         r[1] += 1
         try:
-            r[2] += float(a.get("purchase_price") or 0)
+            r[2] += harga_float(a.get("purchase_price"))
         except (TypeError, ValueError):
             pass
     baris = [(k, agg[k][0], agg[k][1], agg[k][2]) for k in sorted(agg)]

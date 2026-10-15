@@ -18,6 +18,7 @@ Panel B: detail administratif (grid 2 kolom).
 Panel C/D: riwayat inventarisasi (tabel ringkas, 3 baris per panel).
 """
 import io
+from asset_sorting import harga_float
 import asyncio
 import base64
 import logging
@@ -479,7 +480,7 @@ def create_ktp_card_elements(asset, history=None):
 
     price = asset.get('purchase_price', 0)
     try:
-        price_str = f"Rp {float(price or 0):,.0f}".replace(",", ".")
+        price_str = f"Rp {harga_float(price):,.0f}".replace(",", ".")
     except (ValueError, TypeError):
         price_str = "-"
 

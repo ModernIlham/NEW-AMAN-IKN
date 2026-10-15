@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
+import { getSatkerAktif } from "@/lib/satkerAktif";
+import { usePencarianBaca } from "@/hooks/usePencarianBaca";
+import { HASIL_USANG, usePenjagaPermintaan } from "@/hooks/usePenjagaPermintaan";
 import { toast } from "sonner";
 import {
   ArrowLeft, Search, Plus, Pencil, Trash2, Loader2, Boxes,
@@ -76,6 +79,8 @@ function getApiError(err, fallback) {
  */
 export default function PersediaanPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";
+  const lingkupBaca = JSON.stringify([user?.id, String(user?.kode_satker || "").trim() || getSatkerAktif()]);
+  const penjagaBaca = usePenjagaPermintaan(lingkupBaca);
   // Mengirim LPB ke TTD adalah operasi TULIS (server: require_writer) —
   // menyembunyikan tombolnya dari viewer mencegah 403 yang baru ketahuan
   // setelah dialog konfirmasi dijawab.
@@ -146,7 +151,6 @@ export default function PersediaanPage({ user, onBack }) {
   const [hapusSk, setHapusSk] = useState(null);
   // Koreksi nilai per barang: {item, jenis, nilai, alasan, no_bukti, saving}
   const [koreksiNilai, setKoreksiNilai] = useState(null);
-  const massalTimer = useRef(null);
   const { confirm, confirmDialog } = useConfirm();
   // Tautan TTD yang baru terbit: {nomor, links[]} — ditampilkan agar bisa
   // disalin/dibagikan manual saat email tak terkonfigurasi.
@@ -161,22 +165,27 @@ export default function PersediaanPage({ user, onBack }) {
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
   const load = useCallback(async (p = 1, s = search, st = status, g = gudang) => {
+    const tiket = penjagaBaca.mulaiBaca("daftar", lingkupBaca);
+    if (!tiket) return HASIL_USANG;
     setLoading(true);
     try {
       const r = await axios.get(`${API}/persediaan`, {
+        signal: tiket.signal,
         params: { search: s, status: st || undefined,
                   gudang: g || undefined, page: p, page_size: 50 },
       });
+      if (!penjagaBaca.berlaku(tiket)) return HASIL_USANG;
       setItems(r.data?.items || []);
       setTotal(r.data?.total || 0);
       setTotalPages(r.data?.total_pages || 1);
       setPage(p);
     } catch (err) {
+      if (!penjagaBaca.berlaku(tiket)) return HASIL_USANG;
       toast.error(getApiError(err, "Gagal memuat persediaan"));
     } finally {
-      setLoading(false);
+      if (penjagaBaca.selesai(tiket)) setLoading(false);
     }
-  }, [search, status, gudang]);
+  }, [lingkupBaca, penjagaBaca, search, status, gudang]);
 
   useEffect(() => {
     load(1, "", "");
@@ -212,41 +221,39 @@ export default function PersediaanPage({ user, onBack }) {
     axios.get(`${API}/pengadaan`)
       .then((r) => setPengadaanList(r.data?.items || []))
       .catch(() => setPengadaanList([]));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [lingkupBaca]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onSearchChange = (v) => {
+    penjagaBaca.batalkan("daftar");
+    setLoading(false);
     setSearch(v);
     if (searchTimer.current) clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => load(1, v, status), 350);
+    searchTimer.current = setTimeout(() => load(1, v, status, gudang), 350);
   };
   useEffect(() => () => { if (searchTimer.current) clearTimeout(searchTimer.current); }, []);
 
   // Pencarian barang untuk dialog transaksi massal (debounce)
   const massalCari = massal?.cari || "";
-  useEffect(() => {
-    if (!massal || massalCari.trim().length < 2) return undefined;
-    clearTimeout(massalTimer.current);
-    massalTimer.current = setTimeout(async () => {
-      setMassal((m) => (m ? { ...m, mencari: true } : m));
-      try {
-        const r = await axios.get(`${API}/persediaan`, {
-          params: { search: massalCari.trim(), page_size: 8 },
-        });
-        setMassal((m) => (m ? { ...m, hasil: r.data?.items || [], mencari: false } : m));
-      } catch {
-        setMassal((m) => (m ? { ...m, hasil: [], mencari: false } : m));
-      }
-    }, 300);
-    return () => clearTimeout(massalTimer.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [massalCari]);
+  usePencarianBaca({
+    lingkup: lingkupBaca, kunci: massalCari.trim(), aktif: !!massal && massalCari.trim().length >= 2,
+    jalankan: (signal) => axios.get(`${API}/persediaan`, {
+      signal, params: { search: massalCari.trim(), page_size: 8 },
+    }),
+    padaMulai: () => setMassal(m => m ? { ...m, mencari: true } : m),
+    padaHasil: r => setMassal(m => m ? { ...m, hasil: r.data?.items || [] } : m),
+    padaGagal: () => setMassal(m => m ? { ...m, hasil: [] } : m),
+    padaSelesai: () => setMassal(m => m ? { ...m, mencari: false } : m),
+    padaKosong: () => setMassal(m => m ? { ...m, hasil: [], mencari: false } : m),
+  });
 
   const changeStatus = (st) => {
+    clearTimeout(searchTimer.current);
     setStatus(st);
     load(1, search, st);
   };
 
   const changeGudang = (g) => {
+    clearTimeout(searchTimer.current);
     setGudang(g);
     load(1, search, status, g);
   };

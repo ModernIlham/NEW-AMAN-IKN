@@ -1,0 +1,182 @@
+{
+  "schema_version": 1,
+  "dataset_rows": 10000,
+  "scope_rows": 2000,
+  "cache": "warm_repeated_queries_no_restart",
+  "source": "checked_out_handler_pipeline",
+  "index_count": 40,
+  "index_bytes": 20221952,
+  "data_bytes": 37789629,
+  "queries": [
+    {
+      "name": "list_first",
+      "returned": 50,
+      "samples": 7,
+      "p50_ms": 11.327,
+      "p95_ms": 11.895,
+      "docs_examined": 50,
+      "keys_examined": 50,
+      "indexes": [
+        "activity_id_1_created_at_-1_id_1"
+      ],
+      "in_memory_sort": false,
+      "used_disk": false
+    },
+    {
+      "name": "list_deep",
+      "returned": 50,
+      "samples": 7,
+      "p50_ms": 197.583,
+      "p95_ms": 379.237,
+      "docs_examined": 50,
+      "keys_examined": 2000,
+      "indexes": [
+        "activity_id_1_created_at_-1_id_1"
+      ],
+      "in_memory_sort": false,
+      "used_disk": false
+    },
+    {
+      "name": "list_name",
+      "returned": 50,
+      "samples": 7,
+      "p50_ms": 21.309,
+      "p95_ms": 104.522,
+      "docs_examined": 2000,
+      "keys_examined": 2000,
+      "indexes": [
+        "activity_id_1"
+      ],
+      "in_memory_sort": true,
+      "used_disk": false
+    },
+    {
+      "name": "list_price",
+      "returned": 50,
+      "samples": 7,
+      "p50_ms": 49.026,
+      "p95_ms": 77.009,
+      "docs_examined": 2000,
+      "keys_examined": 2000,
+      "indexes": [
+        "activity_id_1"
+      ],
+      "in_memory_sort": true,
+      "used_disk": false
+    },
+    {
+      "name": "list_substring",
+      "returned": 50,
+      "samples": 7,
+      "p50_ms": 8.74,
+      "p95_ms": 36.49,
+      "docs_examined": 50,
+      "keys_examined": 50,
+      "indexes": [
+        "activity_id_1_created_at_-1_id_1"
+      ],
+      "in_memory_sort": false,
+      "used_disk": false
+    },
+    {
+      "name": "list_multi_filter",
+      "returned": 50,
+      "samples": 7,
+      "p50_ms": 9.671,
+      "p95_ms": 35.483,
+      "docs_examined": 257,
+      "keys_examined": 257,
+      "indexes": [
+        "activity_id_1_category_1_created_at_-1"
+      ],
+      "in_memory_sort": true,
+      "used_disk": false
+    },
+    {
+      "name": "count_exact",
+      "returned": 1,
+      "samples": 7,
+      "p50_ms": 2.607,
+      "p95_ms": 5.081,
+      "docs_examined": 0,
+      "keys_examined": 2001,
+      "indexes": [
+        "activity_id_1_purchase_date_1"
+      ],
+      "in_memory_sort": false,
+      "used_disk": false
+    },
+    {
+      "name": "stats",
+      "returned": 1,
+      "samples": 7,
+      "p50_ms": 13.817,
+      "p95_ms": 19.696,
+      "docs_examined": 2000,
+      "keys_examined": 2000,
+      "indexes": [
+        "activity_id_1"
+      ],
+      "in_memory_sort": false,
+      "used_disk": false
+    },
+    {
+      "name": "analytics",
+      "returned": 1,
+      "samples": 7,
+      "p50_ms": 32.898,
+      "p95_ms": 39.567,
+      "docs_examined": 2000,
+      "keys_examined": 2000,
+      "indexes": [
+        "activity_id_1"
+      ],
+      "in_memory_sort": true,
+      "used_disk": false
+    },
+    {
+      "name": "groups",
+      "returned": 1,
+      "samples": 7,
+      "p50_ms": 24.811,
+      "p95_ms": 32.971,
+      "docs_examined": 2000,
+      "keys_examined": 2000,
+      "indexes": [
+        "activity_id_1"
+      ],
+      "in_memory_sort": true,
+      "used_disk": false
+    },
+    {
+      "name": "snapshot_first",
+      "returned": 1000,
+      "samples": 7,
+      "p50_ms": 56.643,
+      "p95_ms": 66.272,
+      "docs_examined": 1000,
+      "keys_examined": 1000,
+      "indexes": [
+        "snapshot_keyset_activity_id"
+      ],
+      "in_memory_sort": false,
+      "used_disk": false
+    },
+    {
+      "name": "candidate_created_id_cursor",
+      "returned": 50,
+      "samples": 7,
+      "p50_ms": 5.791,
+      "p95_ms": 24.484,
+      "docs_examined": 50,
+      "keys_examined": 50,
+      "indexes": [
+        "activity_id_1_created_at_-1_id_1",
+        "created_at_1"
+      ],
+      "in_memory_sort": true,
+      "used_disk": false
+    }
+  ],
+  "limits": "Local synthetic query latency, not API/concurrency/production capacity; no write benchmark"
+}

@@ -24,6 +24,10 @@ class ContractFixture(SimpleNamespace):
 
 
 def local_url(raw, schemes):
+    if schemes == {"mongodb"}:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+        from fixture_target import mongo_loopback
+        return mongo_loopback(raw)
     value = urlparse(raw)
     if value.scheme not in schemes or value.hostname not in {"localhost", "127.0.0.1", "::1"}:
         raise ValueError("Kontrak hanya menerima layanan loopback, bukan target produksi")
@@ -35,7 +39,7 @@ async def contract():
     mongo = os.environ.get("AMAN_CONTRACT_MONGO_URL", "")
     if not mongo:
         pytest.fail("AMAN_CONTRACT_MONGO_URL wajib diset ke Mongo lokal terisolasi")
-    local_url(mongo, {"mongodb"})
+    mongo = local_url(mongo, {"mongodb"})
     redis = os.environ.get("AMAN_CONTRACT_REDIS_URL", "")
     if redis:
         local_url(redis, {"redis"})

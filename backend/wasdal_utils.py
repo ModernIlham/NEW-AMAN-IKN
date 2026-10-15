@@ -9,6 +9,7 @@ laporan wasdal semesteran; kanal resmi pelaporan tetap SIMAN v2.
 
 Fungsi murni tanpa Mongo/IO agar teruji unit.
 """
+from asset_sorting import harga_desimal
 from datetime import date, timedelta
 
 from pegawai_utils import info_kewajiban_ahli_waris, pegawai_perlu_serah_terima
@@ -401,7 +402,7 @@ def temuan_penatausahaan(assets):
         if not _terisi(a.get("condition")):
             out.append({"jenis": "tanpa_kondisi", **_identitas(a), "detail": ""})
         try:
-            bernilai = float(a.get("purchase_price") or 0) > 0
+            bernilai = harga_desimal(a.get("purchase_price")) > 0
         except (TypeError, ValueError):
             bernilai = False
         if not bernilai:

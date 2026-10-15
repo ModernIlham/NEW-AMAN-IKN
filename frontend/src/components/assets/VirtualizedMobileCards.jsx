@@ -13,6 +13,9 @@ import AssetMobileCard from "./AssetMobileCard";
 // ============================================================================
 const VirtualizedMobileCards = memo(({
   daftarkanGulir,
+  onVisibleAssets,
+  onLoadPrev,
+  hasPrev = false,
   assets,
   editId,
   onEdit,
@@ -47,7 +50,7 @@ const VirtualizedMobileCards = memo(({
     // baris tak "tertukar" antar-aset saat daftar berubah (mis. setelah filter).
     getItemKey: (index) => assets[index]?.id ?? `row-${index}`,
   });
-  useJangkarDaftarAset({ daftarkan: daftarkanGulir, nama: "mobile", assets, virtualizer });
+  useJangkarDaftarAset({ daftarkan: daftarkanGulir, nama: "mobile", assets, virtualizer, onVisibleAssets });
 
   // Re-measure HANYA saat LEBAR container berubah (rotasi HP / resize), BUKAN
   // tiap `assets` berubah. Sebelumnya `virtualizer.measure()` dipanggil blanket
@@ -90,10 +93,13 @@ const VirtualizedMobileCards = memo(({
   // menggantikan IntersectionObserver (elemen sentinel kini absolut/virtual).
   const virtualItems = virtualizer.getVirtualItems();
   useEffect(() => {
-    if (!onLoadMore || !hasMore || isLoadingMore) return;
+    if (isLoadingMore) return;
+    const firstVisible = virtualItems.find(item => item.end > (scrollRef.current?.scrollTop || 0));
+    if (onLoadPrev && hasPrev && firstVisible?.index <= 1) { onLoadPrev(); return; }
+    if (!onLoadMore || !hasMore) return;
     const last = virtualItems[virtualItems.length - 1];
     if (last && last.index >= assets.length) onLoadMore();
-  }, [virtualItems, onLoadMore, hasMore, isLoadingMore, assets.length]);
+  }, [virtualItems, onLoadMore, onLoadPrev, hasPrev, hasMore, isLoadingMore, assets.length]);
 
   return (
     <div

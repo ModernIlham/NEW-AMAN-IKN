@@ -143,9 +143,11 @@ class TestPenguncianPerbaikan:
         dan meninggalkan safety-snapshot memakai pola lama — persis
         setengah-perbaikan yang paling mungkin terjadi."""
         src = inspect.getsource(rb.run_restore_task)
-        a = src.index("safety_data_zip")
-        b = src.index("Safety backup GridFS")
-        blok = src[a:b]
+        assert "create_safety_archive(job_id, username)" in src
+        safety = inspect.getsource(rb.create_safety_archive)
+        a = safety.index("safety_data_zip")
+        b = safety.index("Safety backup GridFS")
+        blok = safety[a:b]
         assert "_tulis_koleksi_json(" in blok
         assert "docs = []" not in blok
 

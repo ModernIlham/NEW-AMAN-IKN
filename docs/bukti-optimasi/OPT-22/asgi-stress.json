@@ -1,0 +1,31 @@
+{
+  "measured_at": "2026-10-15T12:48:53.073816+00:00",
+  "scope": "synthetic loopback ASGI, two satker, two employees",
+  "global_slots": 1,
+  "tested_queue_limit": 2,
+  "production_default_queue_limit": 32,
+  "executor_threads": 2,
+  "executor_pending": 2,
+  "light_requests": 12,
+  "light_p50_ms": 0.362,
+  "light_p95_ms": 0.664,
+  "light_max_ms": 0.863,
+  "queued_wait_ms": [
+    560.204,
+    655.026
+  ],
+  "process_peak_rss_before_kib": 142276,
+  "process_peak_rss_after_kib": 165824,
+  "cancel_holds_slot": true,
+  "cancel_holds_writer_lease": true,
+  "queue_and_owner_overload_429": true,
+  "fifo_order": [
+    "satker-a-first",
+    "satker-b",
+    "satker-a-second"
+  ],
+  "artifacts_valid": true,
+  "remaining_holders": 0,
+  "remaining_waiters": 0,
+  "remaining_request_leases": 0
+}

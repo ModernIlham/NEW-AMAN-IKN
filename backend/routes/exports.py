@@ -5,6 +5,7 @@ Extracted from assets.py for clean separation of concerns.
 import io
 from pegawai_utils import label_identitas_cetak
 import asyncio
+from decimal import Decimal
 import os
 import base64
 import logging
@@ -28,13 +29,14 @@ import xlsxwriter
 from PIL import Image as PILImage
 
 from asset_fields import SCALAR_FIELD_NAMES
+from checklist_storage import photo_count as checklist_photo_count, safe_checklist
 from operasional_utils import nama_jenis_operasional
-from routes.assets import build_asset_search_query
+from routes.assets import build_asset_search_query, array_field
 import organisasi_utils as org
 from db import db
+from asset_sorting import ekspresi_harga, harga_float
 from shared_utils import (limiter, invalidate_asset_cache, log_audit,
                           get_photo_from_gridfs, kode_satker_user,
-                          cascade_hapus_blob_aset,
                           pastikan_akses_aset,
                           pastikan_akses_kegiatan_id, scope_query_aset, sel_csv)
 
@@ -70,7 +72,7 @@ def _safe_price_float(val) -> float:
     """purchase_price berupa string bebas — nilai tak numerik dihitung 0
     (selaras $convert onError:0 pada agregasi ringkasan), bukan error 500."""
     try:
-        return float(val or 0)
+        return harga_float(val)
     except (ValueError, TypeError):
         return 0.0
 
@@ -138,7 +140,7 @@ def format_document_checklist_for_csv(checklist: list, asset_id: str, base_url: 
         "kelengkapan_pdf_links": ""
     }
     
-    if not checklist:
+    if not isinstance(checklist, list) or not checklist:
         return result
     
     items = []
@@ -146,11 +148,13 @@ def format_document_checklist_for_csv(checklist: list, asset_id: str, base_url: 
     pdf_links = []
     
     for idx, item in enumerate(checklist):
+        if not isinstance(item, dict):
+            continue
         name = item.get('name', '')
         checked = "✓" if item.get('checked') else "✗"
         notes = item.get('notes', '')
-        photos = item.get('photos', [])
-        documents = item.get('documents', [])
+        photos = item.get('photos', []) if isinstance(item.get('photos', []), list) else []
+        documents = item.get('documents', []) if isinstance(item.get('documents', []), list) else []
         
         # Item info
         item_str = f"{name}:{checked}"
@@ -159,14 +163,14 @@ def format_document_checklist_for_csv(checklist: list, asset_id: str, base_url: 
         items.append(item_str)
         
         # Photo links
-        if photos and base_url:
-            for pi in range(len(photos)):
+        if checklist_photo_count(item) and base_url:
+            for pi in range(checklist_photo_count(item)):
                 foto_links.append(_docfile_url(base_url, asset_id, idx, "photo", pi, token))
         
         # Document links
         if documents and base_url:
             for di in range(len(documents)):
-                doc_name = documents[di].get('name', f'doc_{di}.pdf')
+                doc_name = documents[di].get('name', f'doc_{di}.pdf') if isinstance(documents[di], dict) else f'doc_{di}.pdf'
                 pdf_links.append(
                     f"{doc_name}=" + _docfile_url(base_url, asset_id, idx, "document", di, token))
     
@@ -181,30 +185,32 @@ def format_document_checklist_for_xlsx(checklist: list, asset_id: str, base_url:
     """Format document_checklist for XLSX export - returns list of dicts for separate sheet"""
     rows = []
     
-    if not checklist:
+    if not isinstance(checklist, list) or not checklist:
         return rows
     
     for idx, item in enumerate(checklist):
+        if not isinstance(item, dict):
+            continue
         name = item.get('name', '')
         checked = item.get('checked', False)
         notes = item.get('notes', '')
-        photos = item.get('photos', [])
-        documents = item.get('documents', [])
+        photos = item.get('photos', []) if isinstance(item.get('photos', []), list) else []
+        documents = item.get('documents', []) if isinstance(item.get('documents', []), list) else []
         
         row = {
             "asset_id": asset_id,
             "item_name": name,
             "status": "✓ Ada" if checked else "✗ Tidak Ada",
             "catatan": notes,
-            "jumlah_foto": len(photos),
+            "jumlah_foto": checklist_photo_count(item),
             "jumlah_dokumen": len(documents),
             "foto_links": [],
             "dokumen_links": []
         }
         
-        if photos and base_url:
+        if checklist_photo_count(item) and base_url:
             row["foto_links"] = [_docfile_url(base_url, asset_id, idx, "photo", pi, token)
-                                 for pi in range(len(photos))]
+                                 for pi in range(checklist_photo_count(item))]
         
         if documents and base_url:
             row["dokumen_links"] = [_docfile_url(base_url, asset_id, idx, "document", di, token)
@@ -236,59 +242,23 @@ def _docfile_url(base_url: str, asset_id: str, idx: int, kind: str, i: int,
 @exports_router.get("/assets/{asset_id}/doc-file/{item_idx}/{file_type}/{file_idx}")
 async def get_asset_doc_file(asset_id: str, item_idx: int, file_type: str, file_idx: int,
                              _user: dict = Depends(require_user_docfile)):
-    """Get a specific file (photo or document) from document_checklist"""
-    asset = await db.assets.find_one(
-        {"id": asset_id}, {"_id": 0, "document_checklist": 1, "activity_id": 1})
+    """Serve legacy inline or owned-reference files behind the existing gate."""
+    from urllib.parse import quote
+    from db import fs_bucket
+    from checklist_storage import read_media
+    asset = await db.assets.find_one({"id": asset_id}, {"_id": 0, "id": 1,
+        "document_checklist": 1, "activity_id": 1})
     if not asset:
-        raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
-    await pastikan_akses_aset(_user, asset)   # isolasi satker (REVIEW-9 R9)
+        raise HTTPException(404, "Aset tidak ditemukan")
+    await pastikan_akses_aset(_user, asset)
+    if file_type not in {"photo", "document"}:
+        raise HTTPException(400, "Tipe file tidak valid")
+    raw, content_type, name = await read_media(asset, item_idx, file_idx, file_type, db, fs_bucket)
+    disposition = "attachment" if file_type == "document" else "inline"
+    return StreamingResponse(io.BytesIO(raw), media_type=content_type, headers={
+        "Content-Disposition": disposition + "; filename*=UTF-8''" + quote(name, safe=""),
+        **_DOCFILE_NOSNIFF})
 
-    checklist = asset.get('document_checklist', [])
-    if item_idx >= len(checklist):
-        raise HTTPException(status_code=404, detail="Item tidak ditemukan")
-
-    item = checklist[item_idx]
-
-    if file_type == "photo":
-        photos = item.get('photos', [])
-        if file_idx >= len(photos):
-            raise HTTPException(status_code=404, detail="Foto tidak ditemukan")
-        photo_data = photos[file_idx]
-
-        # Ignore any stored data-URL MIME — photos are always served as JPEG.
-        encoded = photo_data.split("base64,", 1)[1] if "base64," in photo_data else photo_data
-        image_bytes = base64.b64decode(encoded)
-        return StreamingResponse(
-            io.BytesIO(image_bytes),
-            media_type="image/jpeg",
-            headers={
-                "Content-Disposition": f"inline; filename=foto_{item_idx}_{file_idx}.jpg",
-                **_DOCFILE_NOSNIFF,
-            },
-        )
-
-    elif file_type == "document":
-        documents = item.get('documents', [])
-        if file_idx >= len(documents):
-            raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
-        doc = documents[file_idx]
-        doc_data = doc.get('data', '')
-        doc_name = doc.get('name', f'document_{file_idx}.pdf')
-
-        # Documents are always PDFs — serve as application/pdf regardless of the
-        # stored data-URL MIME. `attachment` (not inline) is safer for docs.
-        encoded = doc_data.split("base64,", 1)[1] if "base64," in doc_data else doc_data
-        doc_bytes = base64.b64decode(encoded)
-        return StreamingResponse(
-            io.BytesIO(doc_bytes),
-            media_type="application/pdf",
-            headers={
-                "Content-Disposition": f'attachment; filename="{doc_name}"',
-                **_DOCFILE_NOSNIFF,
-            },
-        )
-
-    raise HTTPException(status_code=400, detail="Tipe file tidak valid")
 
 @exports_router.delete("/assets/bulk-delete/{activity_id}")
 @limiter.limit("3/minute")
@@ -307,42 +277,24 @@ async def bulk_delete_assets(request: Request, activity_id: str, _admin: dict = 
     if count == 0:
         return {"message": "Tidak ada aset untuk dihapus", "deleted": 0}
     
-    # Cabut dari indeks pencarian SEBELUM dihapus — dokumen yatim di
-    # Meili memakan kuota hasil dan memangkas pencarian sah.
-    try:
-        from meili_utils import jadwalkan_hapus
-        async for _a in db.assets.find({"activity_id": activity_id},
-                                       {"_id": 0, "id": 1}):
-            if _a.get("id"):
-                jadwalkan_hapus("assets", _a["id"])
-    except Exception:
-        pass
-
-    # Cascade blob GridFS — SEBELUM delete_many (C18 tinjauan 2026-08).
-    #
-    # Jalur ini dulu melewatkannya sama sekali: hanya Meili yang dibersihkan,
-    # sedangkan foto lapangan, berkas BAST, dan lampiran checklist ditinggal
-    # yatim PERMANEN. Permanen karena id blob-nya hanya hidup di dokumen aset;
-    # begitu dokumennya terhapus, menghapus kegiatannya pun tak menolong —
-    # cascade di sana beriterasi atas kumpulan aset yang sudah kosong.
-    # Penyapu berkala hanya menyasar artefak ekspor, bukan blob ini.
-    n_foto, n_dok = await cascade_hapus_blob_aset(activity_id)
-
-    result = await db.assets.delete_many({"activity_id": activity_id})
-
-    logger.info(f"Bulk deleted {result.deleted_count} assets for activity {activity_id} "
-                f"(freed {n_foto} photo + {n_dok} doc GridFS blobs)")
-    invalidate_asset_cache()
-    # Pelaku dari identitas TERAUTENTIKASI (bukan header X-Audit-User yang
-    # bisa dipalsukan) — selaras konvensi hardening repo.
+    # Write the deletion intent before the first irreversible mutation. Every
+    # asset then reconciles batch proofs and uses CAS before releasing media.
     audit_user = _admin.get("name") or _admin.get("username") or "admin"
     await log_audit("bulk_delete", activity_id, "", "", "", audit_user,
-                    detail=(f"Hapus massal {result.deleted_count} aset "
-                            f"({n_foto} foto + {n_dok} dokumen GridFS dibebaskan)"))
+                    detail=f"Permintaan hapus massal {count} aset", strict=True)
+    from asset_deletion import delete_activity_assets
+    result = await delete_activity_assets(activity_id, db)
+    invalidate_asset_cache()
+    logger.info("Bulk deleted %s assets for activity %s", result["deleted"], activity_id)
+    if result["conflicts"]:
+        raise HTTPException(status_code=409, detail={
+            "message": "Sebagian aset berubah saat penghapusan; aset tersebut beserta medianya dipertahankan.",
+            **result,
+        })
     
     return {
-        "message": f"Berhasil menghapus {result.deleted_count} aset dari kegiatan ini",
-        "deleted": result.deleted_count
+        "message": f"Berhasil menghapus {result['deleted']} aset dari kegiatan ini",
+        "deleted": result["deleted"]
     }
 
 # ============================================================================
@@ -491,6 +443,10 @@ def _build_shp_zip(features: list) -> bytes:
         return zbuf.getvalue()
 
 
+MAX_GEO_FEATURES = 100000
+MAX_GEO_SELECTED_IDS = 5000
+
+
 @exports_router.get("/export/geo")
 @limiter.limit("10/minute")
 async def export_geo(
@@ -511,8 +467,8 @@ async def export_geo(
     eselon5_filter: List[str] = Query(default=[]),
     stiker_status: List[str] = Query(default=[]),
     inventory_status: List[str] = Query(default=[]),
-    price_min: float = None,
-    price_max: float = None,
+    price_min: Decimal = None,
+    price_max: Decimal = None,
     nomor_spm: str = "",
     perolehan_dari: str = "",
     user_filter: str = "",
@@ -530,8 +486,10 @@ async def export_geo(
     if fmt not in ("kml", "kmz", "shp"):
         raise HTTPException(status_code=400, detail="Format harus kml, kmz, atau shp")
 
-    # Daftar id terpilih (dibatasi 5000 agar $in tetap wajar); None → tanpa batas.
-    id_list = [x for x in ids.split(",") if x][:5000] if ids else None
+    # Refuse overflow rather than silently exporting only part of a selection.
+    id_list = [x for x in ids.split(",") if x] if ids else None
+    if id_list is not None and len(id_list) > MAX_GEO_SELECTED_IDS:
+        raise HTTPException(413, "Maksimal 5000 aset terpilih per ekspor peta. Kurangi pilihan atau ekspor per kegiatan.")
 
     query = build_asset_search_query(
         search=search, category=category, activity_id=activity_id,
@@ -552,9 +510,9 @@ async def export_geo(
     pipeline = [
         {"$match": query},
         {"$addFields": {"photo_count": {"$cond": [
-            {"$gt": [{"$size": {"$ifNull": ["$photo_gridfs_ids", []]}}, 0]},
-            {"$size": {"$ifNull": ["$photo_gridfs_ids", []]}},
-            {"$size": {"$ifNull": ["$photos", []]}},
+            {"$gt": [{"$size": array_field("$photo_gridfs_ids")}, 0]},
+            {"$size": array_field("$photo_gridfs_ids")},
+            {"$size": array_field("$photos")},
         ]}}},
         {"$project": _GEO_MEDIA_EXCLUDE},
         {"$sort": {"created_at": -1, "id": 1}},
@@ -565,14 +523,14 @@ async def export_geo(
         lng = _geo_coord(a.get("koordinat_longitude"), limit=180.0)
         if lat is None or lng is None:
             continue
+        if len(features) >= MAX_GEO_FEATURES:
+            raise HTTPException(413, "Ekspor peta melebihi batas titik. Persempit filter atau ekspor per kegiatan.")
         features.append({
             "name": a.get("asset_name") or a.get("asset_code") or "Aset",
             "lat": lat, "lng": lng,
             "status": a.get("inventory_status") or "Belum Diinventarisasi",
             "attrs": _geo_attrs(a),
         })
-        if len(features) >= 100000:
-            break
     if not features:
         raise HTTPException(status_code=404, detail="Tidak ada aset dengan titik koordinat sesuai filter")
 
@@ -615,8 +573,8 @@ def filter_aset_ekspor(
     eselon5_filter: List[str] = Query(default=[]),
     stiker_status: List[str] = Query(default=[]),
     inventory_status: List[str] = Query(default=[]),
-    price_min: float = None,
-    price_max: float = None,
+    price_min: Decimal = None,
+    price_max: Decimal = None,
     nomor_spm: str = "",
     perolehan_dari: str = "",
     user_filter: str = "",
@@ -704,13 +662,18 @@ async def export_csv(request: Request, activity_id: Optional[str] = None, base_u
         _proj = {n: 1 for n in SCALAR_FIELD_NAMES}
         _proj.update({
             "_id": 0, "id": 1, "created_at": 1, "photo_gridfs_ids": 1,
+            "photo_count": {"$cond": [
+                {"$gt": [{"$size": array_field("$photo_gridfs_ids")}, 0]},
+                {"$size": array_field("$photo_gridfs_ids")}, {"$size": array_field("$photos")}]},
             "document_checklist": {"$map": {
-                "input": {"$ifNull": ["$document_checklist", []]}, "as": "it",
+                "input": array_field("$document_checklist"), "as": "it",
                 "in": {
                     "name": "$$it.name", "checked": "$$it.checked", "notes": "$$it.notes",
-                    "photos": {"$map": {"input": {"$ifNull": ["$$it.photos", []]},
+                    "photos": {"$map": {"input": array_field("$$it.photos"),
                                         "as": "p", "in": 1}},
-                    "documents": {"$map": {"input": {"$ifNull": ["$$it.documents", []]},
+                    "photo_gridfs_ids": {"$map": {"input": array_field("$$it.photo_gridfs_ids"),
+                                                  "as": "p", "in": 1}},
+                    "documents": {"$map": {"input": array_field("$$it.documents"),
                                            "as": "d", "in": {"name": "$$d.name"}}},
                 }}},
         })
@@ -726,7 +689,7 @@ async def export_csv(request: Request, activity_id: Optional[str] = None, base_u
             )
             
             # Photo count from photo_gridfs_ids or photos array
-            photo_count = len(asset.get('photo_gridfs_ids', []))
+            photo_count = asset.get("photo_count", 0)
             
             row = [
                 *[nama_jenis_operasional(asset.get(n)) if n == 'operasional_jenis'
@@ -776,7 +739,7 @@ async def export_pdf(request: Request, activity_id: Optional[str] = None,
     # sehingga angkanya salah sekaligus bocor.
     stats_pipeline = [{"$match": query}, {"$group": {
         "_id": None,
-        "total_value": {"$sum": {"$convert": {"input": "$purchase_price", "to": "double", "onError": 0, "onNull": 0}}},
+        "total_value": {"$sum": ekspresi_harga()},
         "active": {"$sum": {"$cond": [{"$eq": ["$status", "Aktif"]}, 1, 0]}},
         "maintenance": {"$sum": {"$cond": [{"$eq": ["$status", "Maintenance"]}, 1, 0]}},
         "idle": {"$sum": {"$cond": [{"$eq": ["$status", "Idle"]}, 1, 0]}},
@@ -784,7 +747,7 @@ async def export_pdf(request: Request, activity_id: Optional[str] = None,
     }}]
     stats_result = await db.assets.aggregate(stats_pipeline).to_list(1)
     sr = stats_result[0] if stats_result else {}
-    total_value = sr.get("total_value", 0)
+    total_value = harga_float(sr.get("total_value", 0))
     
     from reportlab.lib.pagesizes import landscape
     from reportlab.platypus import PageBreak, KeepTogether
@@ -982,13 +945,16 @@ async def export_pdf(request: Request, activity_id: Optional[str] = None,
     
     if total <= 500:
         from reportlab.pdfgen import canvas as pdf_canvas
-        from PyPDF2 import PdfReader, PdfWriter
+        from pypdf import PdfReader, PdfWriter
         try:
             reader = PdfReader(buffer)
             total_pages = len(reader.pages)
             writer = PdfWriter()
+            if reader.metadata:
+                writer.add_metadata(reader.metadata)
             
             for page_idx, page in enumerate(reader.pages):
+                page = writer.add_page(page)
                 overlay_buf = io.BytesIO()
                 overlay_canvas = pdf_canvas.Canvas(overlay_buf, pagesize=landscape(A4))
                 overlay_canvas.setFont('Helvetica', 7)
@@ -1000,7 +966,6 @@ async def export_pdf(request: Request, activity_id: Optional[str] = None,
                 
                 overlay_reader = PdfReader(overlay_buf)
                 page.merge_page(overlay_reader.pages[0])
-                writer.add_page(page)
             
             final_buffer = io.BytesIO()
             writer.write(final_buffer)
@@ -1229,7 +1194,9 @@ async def bangun_xlsx_bytes(query, activity_id="", base_url="", token=""):
         worksheet.write(row, 50, asset.get('barang_bersejarah', ''), cell_format)
 
         # Jumlah Foto
-        photo_count = len(asset.get('photo_gridfs_ids', []) or asset.get('photos', []))
+        refs = asset.get("photo_gridfs_ids")
+        inline = asset.get("photos")
+        photo_count = len(refs if isinstance(refs, list) else []) or len(inline if isinstance(inline, list) else [])
         worksheet.write(row, 51, photo_count, cell_format)
         # Tanggal Input
         worksheet.write(row, 52, asset.get('created_at', ''), cell_format)
@@ -1238,7 +1205,7 @@ async def bangun_xlsx_bytes(query, activity_id="", base_url="", token=""):
         worksheet.write(row, 54, asset.get('marker_pin') or '', cell_format)
         
         # Write document checklist to separate sheet - ONLY items with checked=True (✓ Ada)
-        checklist = asset.get('document_checklist', [])
+        checklist = safe_checklist(asset.get('document_checklist'))
         for idx, item in enumerate(checklist):
             checked = item.get('checked', False)
             
@@ -1264,12 +1231,13 @@ async def bangun_xlsx_bytes(query, activity_id="", base_url="", token=""):
             # Photo columns (Foto 1, Foto 2, Foto 3) - with thumbnails and clickable links
             for pi in range(3):  # Max 3 photos
                 col_idx = 5 + pi  # Columns 5, 6, 7
-                if pi < len(photos) and photos[pi] and base_url:
+                if pi < checklist_photo_count(item) and base_url:
                     photo_url = _docfile_url(base_url, asset_id, idx, "photo", pi, token)
                     
                     # Try to embed thumbnail image
                     try:
-                        thumb_buf = await asyncio.to_thread(_xlsx_image_buffer, photos[pi], 110, quality=60)
+                        source = photos[pi] if pi < len(photos) and photos[pi] else (item.get("photo_thumbnails") or [])[pi]
+                        thumb_buf = await asyncio.to_thread(_xlsx_image_buffer, source, 110, quality=60)
                         
                         # Insert thumbnail image with hyperlink
                         doc_sheet.insert_image(doc_row, col_idx, 'thumb.jpg', {
@@ -1523,6 +1491,17 @@ async def export_xlsx_async(request: Request, activity_id: Optional[str] = None,
             detail=(f"Terlalu banyak aset ({total}) untuk ekspor Excel berfoto "
                     f"(maks {MAX_FOTO_EXPORT_ASSETS}). Persempit filter/kegiatan, "
                     "atau gunakan Ekspor CSV (ringan, tanpa foto)."))
+    from export_worker import enabled as durable_enabled, parameters_from_query, submit
+    if durable_enabled():
+        from export_budget import enabled as budget_enabled
+        if not budget_enabled():
+            raise HTTPException(503, "Worker ekspor memerlukan budget global yang telah diverifikasi.")
+        from pydantic import ValidationError
+        try:
+            parameters = parameters_from_query(request.query_params, activity_id or "", base_url)
+        except ValidationError:
+            raise HTTPException(422, "Parameter ekspor tidak valid atau melebihi batas.")
+        return await submit(parameters, _user, total, db)
     from jobs import buat_job
     nama = f"inventory_{(activity_id or 'semua')[:8]}.xlsx"
     job_id = await buat_job(
@@ -1533,14 +1512,14 @@ async def export_xlsx_async(request: Request, activity_id: Optional[str] = None,
         status="queued", progress=0, done=False, total=total, nama_file=nama)
     t = asyncio.create_task(
         _jalankan_ekspor_xlsx(job_id, query, activity_id or "", base_url, nama,
-                              _token_media(_user)))
+                              _token_media(_user), str(_user.get("id") or _user.get("username")), kode_satker_user(_user)))
     _EKSPOR_TASKS.add(t)
     t.add_done_callback(_EKSPOR_TASKS.discard)
     return {"job_id": job_id, "total": total,
             "message": f"Ekspor Excel dimulai untuk {total} aset."}
 
 
-async def _jalankan_ekspor_xlsx(job_id, query, activity_id, base_url, nama, token=""):
+async def _jalankan_ekspor_xlsx(job_id, query, activity_id, base_url, nama, token="", owner_id="", kode_satker=""):
     """Worker job latar: rakit XLSX (reuse bangun_xlsx_bytes) → GridFS."""
     from log_setup import set_job_id
     from jobs import update_job, simpan_artifact, denyut_job
@@ -1555,7 +1534,10 @@ async def _jalankan_ekspor_xlsx(job_id, query, activity_id, base_url, nama, toke
             async with _EKSPOR_SEM:
                 await update_job(job_id, status="running", progress=10,
                                  message="Merakit workbook Excel...")
-                data = await bangun_xlsx_bytes(query, activity_id, base_url, token)
+                from export_budget import run_budgeted
+                data = await run_budgeted(
+                    lambda: bangun_xlsx_bytes(query, activity_id, base_url, token),
+                    owner_id or job_id, kode_satker, wait_seconds=1800)
                 await update_job(job_id, progress=90, message="Menyimpan hasil...")
                 await simpan_artifact(job_id, data, nama, _XLSX_MIME)
         await update_job(job_id, status="done", done=True, progress=100,

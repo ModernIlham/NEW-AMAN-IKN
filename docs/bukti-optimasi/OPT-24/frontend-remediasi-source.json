@@ -1,0 +1,6 @@
+{
+  "files_checked": 594,
+  "mismatches": [],
+  "scope": "src/public/plugins and frontend top-level JavaScript/JSON config + yarn.lock; excludes node_modules/build/cache",
+  "candidate_source_matches_shared_checkout": true
+}

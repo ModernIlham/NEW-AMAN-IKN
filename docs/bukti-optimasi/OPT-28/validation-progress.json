@@ -1,0 +1,71 @@
+{
+  "status": "in_progress_not_final_release",
+  "production_foundation": {
+    "sha": "c3ac5559178472358aa5d3d03bf5eeb17b2adaa5",
+    "ci": 38740257953,
+    "deploy": 38741148877,
+    "health_ok": true,
+    "old_chunk_retained": true
+  },
+  "backend_contracts": {
+    "snapshot": "dfebb908ff380d05861333f7cc0237055d162b11",
+    "passed": 116,
+    "failed": 0,
+    "seconds": 159.47,
+    "python": "3.11.17",
+    "log": "/tmp/aman-contract-frozen3.log"
+  },
+  "frontend_before_dependency_cohort": {
+    "node": "22.23.2",
+    "jest_suites": 216,
+    "jest_passed": 2302,
+    "jest_failed": 0,
+    "jest_seconds": 261.804,
+    "production_build_seconds": 85.21,
+    "lint_errors": 0,
+    "lint_baseline_warnings": 7
+  },
+  "browser_actual_application": {
+    "checks": 16,
+    "viewports_themes": 8,
+    "seconds": 51.44,
+    "offline_snapshot_rows": 202,
+    "offline_pending_verified": true,
+    "reconnect_version_before": 4,
+    "reconnect_version_after": 5,
+    "second_reconnect_no_replay": true,
+    "media_preserved": true,
+    "image_decode_verified": true,
+    "cleanup_errors": []
+  },
+  "backend_unit_previous_run": {
+    "snapshot": "af0ab73dedd36fdccb9cce13baa61f904b64b2c4",
+    "passed": 5920,
+    "failed": 13,
+    "seconds": 764.62,
+    "status": "failures_reproduced_compatibility_fixtures_corrected_final_full_rerun_pending"
+  },
+  "python_security": {
+    "runtime_lock_packages": 137,
+    "runtime_lock_advisories": 0,
+    "dev_lock_packages": 156,
+    "dev_lock_advisories": 0,
+    "fresh_runtime_installs": 2,
+    "fresh_runtime_actual_installed": 137,
+    "fresh_runtime_installed_advisories": 0
+  },
+  "remaining_gates": [
+    "compatible frontend dependency cohort",
+    "local report-font reproducibility",
+    "full final backend unit suite",
+    "clean-venv deploy/rollback fault gates",
+    "corrected graceful-stop soak",
+    "PR CI and exact main SHA CI",
+    "deploy exact main SHA and verify production"
+  ],
+  "external_unavailable": [
+    "offsite destination and separate key escrow",
+    "independent restore host/provider access",
+    "representative separate VPS staging for capacity certification"
+  ]
+}

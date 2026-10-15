@@ -18,7 +18,8 @@ import {
 } from "../ui/dropdown-menu";
 import { DocumentChecklist } from "./DocumentChecklist";
 import { InputTanggal } from "@/components/ui/input-tanggal";
-import { normalisasiJenisOperasional } from "../../lib/jenisOperasional";
+import { buildAssetPatch, buildEditFormData, emptyAssetForm } from "../../lib/assetFormData";
+import { ASSET_FIELD_REGISTRY } from "../../lib/assetFields";
 import { bangunChecklist, rekomendasiKelengkapan } from "@/lib/kelengkapanBmn";
 import InventoryFieldSheet, { PENGGUNA_MELEKAT_OPTIONS, PENGGUNA_NAME_LABELS, OPERASIONAL_JENIS_OPTIONS, CONDITION_OPTIONS, SUB_KLASIFIKASI_OPTIONS, TEMUAN_PENCATATAN_OPTIONS } from "./InventoryFieldSheet";
 import FullCameraSheet from "./FullCameraSheet";
@@ -39,6 +40,7 @@ import {
 import PemilihUnitOrganisasi from "./PemilihUnitOrganisasi";
 import { fieldLevel, labelLevel, levelAkar, levelRingkas } from "../../lib/eselonSatker";
 import { keIndeksFinal } from "../../lib/indeksFotoLuring";
+import { gabungMediaChecklist } from "../../lib/mediaChecklist";
 import { compressImageFile, compressDataUrl, generateThumbnailFromDataUrl, dataUrlBytes } from "../../lib/imageCompression";
 import { reserveDummyNup as reserveDummyNupLib } from "../../lib/dummyNup";
 import { statusInventarisasiOtomatis, autoInventarisasiEnabled } from "../../lib/inventoryStatus";
@@ -442,63 +444,6 @@ const compressPhotos = async (photos, opts) => {
   return compressed;
 };
 
-/**
- * Map a server asset row (GET /assets/{id}?exclude_media=true) OR a cached
- * list-projection row (offline snapshot / list state) to the edit form shape.
- * Both carry the same text fields; media (photos, full checklist) is loaded
- * separately. Missing fields default exactly like the empty-form branches.
- */
-function buildEditFormData(a, activityId) {
-  const existingCL = Array.isArray(a.document_checklist) ? a.document_checklist : [];
-  // Aset yang SUDAH punya checklist dibiarkan apa adanya — daftar itu hasil
-  // kerja petugas dan tak boleh diaduk saat form dibuka. Yang belum punya
-  // baru diisi rekomendasi menurut kode barangnya; bila kodenya pun belum ada,
-  // hasilnya daftar KOSONG (0/0), bukan lima baris tebakan.
-  const mergedChecklist = existingCL.length
-    ? existingCL
-    : bangunChecklist(rekomendasiKelengkapan(a.asset_code), []);
-  return {
-    asset_code: a.asset_code || "", NUP: a.NUP || "", asset_name: a.asset_name || "", category: a.category || "",
-    brand: a.brand || "", model: a.model || "", kode_register: a.kode_register || "",
-    serial_number: a.serial_number || "", purchase_date: a.purchase_date || "", purchase_price: a.purchase_price || "",
-    location: a.location || "", eselon1: a.eselon1 || "", eselon2: a.eselon2 || "",
-    eselon3: a.eselon3 || "", eselon4: a.eselon4 || "", eselon5: a.eselon5 || "", user: a.user || "",
-    pengguna_melekat_ke: a.pengguna_melekat_ke || "", pengguna_jabatan: a.pengguna_jabatan || "",
-    pengguna_nip: a.pengguna_nip || "",
-    operasional_jenis: normalisasiJenisOperasional(a.operasional_jenis),
-    nomor_bast: a.nomor_bast || "",
-    condition: a.condition || "Baik", status: a.status || "Aktif",
-    nomor_spm: a.nomor_spm || "", perolehan_dari_nama: a.perolehan_dari_nama || "",
-    nomor_kontrak: a.nomor_kontrak || "", cara_bayar_kontrak: a.cara_bayar_kontrak || "",
-    nomor_bukti_perolehan: a.nomor_bukti_perolehan || "",
-    supplier: a.supplier || "", notes: a.notes || "", photos: [],
-    thumbnail_index: a.thumbnail_index || 0,
-    stiker_status: a.stiker_status || "Belum Terpasang",
-    stiker_ukuran: a.stiker_ukuran || "",
-    stiker_photo_index: a.stiker_photo_index != null ? a.stiker_photo_index : null,
-    inventory_status: a.inventory_status || "Belum Diinventarisasi",
-    klasifikasi_tidak_ditemukan: a.klasifikasi_tidak_ditemukan || "",
-    temuan_pencatatan: a.temuan_pencatatan || "",
-    sub_klasifikasi: a.sub_klasifikasi || "",
-    uraian_tidak_ditemukan: a.uraian_tidak_ditemukan || "",
-    tindak_lanjut: a.tindak_lanjut || "",
-    koordinat_latitude: a.koordinat_latitude || "",
-    koordinat_longitude: a.koordinat_longitude || "",
-    marker_pin: a.marker_pin || "",
-    kronologis: a.kronologis || "",
-    keterangan_berlebih: a.keterangan_berlebih || "",
-    asal_usul_berlebih: a.asal_usul_berlebih || "",
-    nomor_perkara: a.nomor_perkara || "",
-    pihak_bersengketa: a.pihak_bersengketa || "",
-    keterangan_sengketa: a.keterangan_sengketa || "",
-    garansi_hingga: a.garansi_hingga || "",
-    garansi_jenis: a.garansi_jenis || "",
-    barang_bersejarah: a.barang_bersejarah || "",
-    document_checklist: mergedChecklist,
-    activity_id: activityId || null
-  };
-}
-
 // ============================================================================
 // INLINE FIELD VALIDATION
 // ============================================================================
@@ -594,29 +539,7 @@ const AssetForm = memo(({
   const [infoPspAset, setInfoPspAset] = useState(null);
   const [bastUploading, setBastUploading] = useState(false);
 
-  const emptyForm = useMemo(() => ({
-    asset_code: "", NUP: "", asset_name: "", category: "", brand: "", model: "",
-    kode_register: "", serial_number: "", purchase_date: "", purchase_price: "",
-    location: "", eselon1: "", eselon2: "", eselon3: "", eselon4: "", eselon5: "", user: "",
-    pengguna_melekat_ke: "", pengguna_jabatan: "", pengguna_nip: "", operasional_jenis: "", nomor_bast: "",
-    condition: "Baik", status: "Aktif",
-    nomor_spm: "", perolehan_dari_nama: "", nomor_kontrak: "", cara_bayar_kontrak: "",
-    nomor_bukti_perolehan: "", supplier: "", notes: "", photos: [],
-    thumbnail_index: 0,
-    stiker_status: "Belum Terpasang", stiker_ukuran: "", stiker_photo_index: null,
-    inventory_status: "Belum Diinventarisasi", temuan_pencatatan: "", klasifikasi_tidak_ditemukan: "", sub_klasifikasi: "", uraian_tidak_ditemukan: "", tindak_lanjut: "",
-    koordinat_latitude: "", koordinat_longitude: "", kronologis: "",
-    marker_pin: "",
-    keterangan_berlebih: "", asal_usul_berlebih: "", nomor_perkara: "", pihak_bersengketa: "", keterangan_sengketa: "",
-    garansi_hingga: "", garansi_jenis: "", barang_bersejarah: "",
-    // KOSONG (0/0), bukan lima baris bawaan. Daftar lama ("Buku Manual,
-    // Charger/Adapter, Kabel USB, Kartu Garansi, CD Driver") masuk akal untuk
-    // laptop dan tidak untuk apa pun yang lain — sebidang tanah tak punya
-    // kabel USB. Baris terisi sendiri begitu Kode Barang dipilih; lihat efek
-    // rekomendasi kelengkapan di bawah.
-    document_checklist: [],
-    activity_id: activity?.id || null
-  }), [activity?.id]);
+  const emptyForm = useMemo(() => emptyAssetForm(activity?.id), [activity?.id]);
 
   const [formData, setFormData] = useState(emptyForm);
   const [markerBusy, setMarkerBusy] = useState(false);
@@ -1077,29 +1000,7 @@ const AssetForm = memo(({
         if (cancelled) return;
         const fullChecklist = r.data?.document_checklist || [];
         setFormData(prev => {
-          const fullByName = new Map(fullChecklist.map(it => [it.name, it]));
-          const merged = (prev.document_checklist || []).map(item => {
-            const f = fullByName.get(item.name);
-            if (!f) return item;
-            // Build sentinel arrays for existing media. The backend resolves
-            // "__existing__:<idx>" back to the original photo/document on save
-            // — this lets us avoid re-shipping multi-MB base64 blobs.
-            const photoCount = f.photo_count || 0;
-            const sentinelPhotos = Array.from({ length: photoCount }, (_, i) => `__existing__:${i}`);
-            const docCount = f.document_count || (f.documents || []).length;
-            const sentinelDocs = (f.documents || []).map((d, i) => ({
-              name: d.name || "document.pdf",
-              data: `__existing__:${typeof d.idx === "number" ? d.idx : i}`,
-            }));
-            return {
-              ...item,
-              checked: f.checked != null ? f.checked : item.checked,
-              notes: f.notes != null ? f.notes : item.notes,
-              photos: sentinelPhotos,
-              photo_thumbnails: f.photo_thumbnails || item.photo_thumbnails || [],
-              documents: sentinelDocs.length === docCount ? sentinelDocs : sentinelDocs,
-            };
-          });
+          const merged = gabungMediaChecklist(prev.document_checklist || [], fullChecklist);
           if (originalDataRef.current) {
             originalDataRef.current = {
               ...originalDataRef.current,
@@ -1851,84 +1752,26 @@ const AssetForm = memo(({
       if (isEditing && editId && originalDataRef.current) {
         // === EDIT MODE: Build diff payload — only send changed fields ===
         const orig = originalDataRef.current;
-        const patch = {};
-
-        // Compare text/select fields
-        const TEXT_FIELDS = [
-          "asset_code", "NUP", "asset_name", "category", "brand", "model",
-          "kode_register", "serial_number", "purchase_date", "purchase_price",
-          "location", "eselon1", "eselon2", "eselon3", "eselon4", "eselon5",
-          "user", "condition", "status",
-          "pengguna_melekat_ke", "pengguna_jabatan", "pengguna_nip", "operasional_jenis", "nomor_bast",
-          "nomor_spm", "perolehan_dari_nama", "nomor_kontrak", "cara_bayar_kontrak",
-          "nomor_bukti_perolehan", "supplier", "notes",
-          "stiker_status", "stiker_ukuran",
-          "inventory_status", "temuan_pencatatan", "klasifikasi_tidak_ditemukan", "sub_klasifikasi",
-          "uraian_tidak_ditemukan", "tindak_lanjut",
-          "koordinat_latitude", "koordinat_longitude", "kronologis",
-          "marker_pin",
-          "keterangan_berlebih", "asal_usul_berlebih",
-          "nomor_perkara", "pihak_bersengketa", "keterangan_sengketa",
-          "garansi_hingga", "garansi_jenis", "barang_bersejarah",
-          "activity_id",
-        ];
-        for (const key of TEXT_FIELDS) {
-          if (String(formData[key] ?? "") !== String(orig[key] ?? "")) {
-            patch[key] = formData[key];
-          }
-        }
-
-        // Terapkan status inventarisasi otomatis ke patch (override hasil loop
-        // bila perlu). Hanya dikirim bila berbeda dari nilai asli server.
-        if (autoStatus !== (orig.inventory_status ?? "")) patch.inventory_status = autoStatus;
-        else delete patch.inventory_status;
-
-        // Compare simple numeric/nullable fields
-        if (formData.thumbnail_index !== orig.thumbnail_index) patch.thumbnail_index = formData.thumbnail_index;
-        if (formData.stiker_photo_index !== orig.stiker_photo_index) patch.stiker_photo_index = formData.stiker_photo_index;
-
-        // Photos: use photo_ops (server-side manipulation, no full photos sent)
-        if (photosModifiedRef.current) {
-          const keepIndices = [];
-          const newPhotosToAdd = [];
-          // Photo strip never built (offline edit from cache — the light
-          // fetch never succeeded): photoItems only holds NEW photos, so an
-          // empty keep[] would wipe every existing server photo. Preserve
-          // them all by index — offline edits can only ADD photos, never remove.
-          if (!mediaLoadedRef.current) {
-            const known = Number(originalDataRef.current?._photoCount) || 0;
-            for (let i = 0; i < known; i++) keepIndices.push(i);
-          }
-          // Ref, BUKAN state: inilah bacaan yang benar-benar membangun
-          // photo_ops.add. Dengan state, jalur kamera cabang edit mengirim
-          // add: [] dan foto jepretan terakhir hilang tanpa jejak.
+        // Capture latest ref synchronously before asynchronous compression.
+        // A camera-only state update must never leave the submit closure stale.
+        const photoItemsForPatch = photoItemsRef.current;
+        const photosModified = photosModifiedRef.current;
+        const mediaLoaded = mediaLoadedRef.current;
+        const newPhotosToAdd = [];
+        if (photosModified) {
           for (const item of photoItemsRef.current) {
-            if (item.type === 'existing') {
-              keepIndices.push(item.originalIndex);
-            } else if (item.type === 'new' && item.newData) {
-              // Compress new photos before sending (server-side Tinify, dengan
-              // fallback kompresi lokal via canvas saat offline/gagal; alur
-              // kamera memakai kompresi lokal saja agar tidak menunggu)
+            if (item.type === 'new' && item.newData) {
               newPhotosToAdd.push(await compressOnePhoto(item.newData, { localOnly: cameraFlow }));
             }
           }
           if (newPhotosToAdd.length > 0) toast.info("Mengompres foto baru...", { duration: 2000 });
-          patch.photo_ops = {
-            keep: keepIndices,
-            add: newPhotosToAdd,
-            thumbnail_index: formData.thumbnail_index || 0,
-            // `keep` adalah indeks POSISIONAL pada array foto versi INI —
-            // sertakan versinya supaya server bisa menolak (409) bila array
-            // sudah bergeser saat patch akhirnya tiba (antrean luring bisa
-            // menahan patch berjam-jam). Tanpa ikatan ini, keep yang sama
-            // menunjuk foto yang berbeda tanpa satu galat pun.
-            base_version: assetVersion,
-          };
         }
+        let cleanedChecklist;
 
         // Document checklist: only send if modified
-        if (checklistModifiedRef.current) {
-          const cleanedChecklist = await Promise.all((formData.document_checklist || []).map(async item => {
+        const checklistModified = checklistModifiedRef.current;
+        if (checklistModified) {
+          cleanedChecklist = await Promise.all((formData.document_checklist || []).map(async item => {
             // Photos: pass through "__existing__:<idx>" sentinels untouched —
             // the backend will resolve them to the original photo bytes. Only
             // newly added photos (raw data URLs) are compressed.
@@ -1943,17 +1786,23 @@ const AssetForm = memo(({
             // Documents: pass through sentinels untouched. New uploads ship
             // their data URL as before.
             const cleanedDocs = Array.isArray(item.documents) ? item.documents.map(doc => ({
-              name: doc.name || "document.pdf",
+              ...(doc.id ? { id: doc.id } : {}), name: doc.name || "document.pdf",
               data: doc.data || "",
             })) : [];
             return {
-              name: item.name || "", checked: Boolean(item.checked), notes: item.notes || "",
+              ...(item.id ? { id: item.id } : {}), name: item.name || "", checked: Boolean(item.checked), notes: item.notes || "",
               photos: compressedItemPhotos,
               documents: cleanedDocs,
             };
           }));
-          patch.document_checklist = cleanedChecklist;
         }
+        const patch = buildAssetPatch({
+          formData, original: orig, autoStatus,
+          photosModified,
+          mediaLoaded, photoItems: photoItemsForPatch,
+          compressedNewPhotos: newPhotosToAdd, assetVersion,
+          checklistModified, cleanedChecklist,
+        });
 
         // Tanpa perubahan: berhenti — KECUALI ini aksi navigasi Kamera Penuh,
         // supaya surveyor tetap bisa berpindah antar aset tersimpan meski tak
@@ -1975,9 +1824,9 @@ const AssetForm = memo(({
         const coverPhoto = compressedPhotos[coverIdx] || compressedPhotos[0] || null;
 
         const cleanedChecklist = await Promise.all((formData.document_checklist || []).map(async item => ({
-          name: item.name || '', checked: Boolean(item.checked), notes: item.notes || '',
+          ...(item.id ? { id: item.id } : {}), name: item.name || '', checked: Boolean(item.checked), notes: item.notes || '',
           photos: await compressPhotos(item.photos || []),
-          documents: Array.isArray(item.documents) ? item.documents.map(doc => ({ name: doc.name || 'document.pdf', data: doc.data || '' })) : []
+          documents: Array.isArray(item.documents) ? item.documents.map(doc => ({ ...(doc.id ? { id: doc.id } : {}), name: doc.name || 'document.pdf', data: doc.data || '' })) : []
         })));
 
         payload = {
@@ -2589,7 +2438,7 @@ const AssetForm = memo(({
                   checked={(formData.barang_bersejarah || "").toLowerCase() === "ya"}
                   onChange={(e) => handleInputChange({ target: { name: "barang_bersejarah", value: e.target.checked ? "Ya" : "" } })}
                   data-testid="asset-barang-bersejarah" />
-                <span><b>Barang Bersejarah</b> — masuk seksi Laporan Barang Bersejarah pada LBP (PSAP 07: diungkapkan dalam kuantitas).</span>
+                <span><b>{ASSET_FIELD_REGISTRY.barang_bersejarah.label}</b> — masuk seksi Laporan Barang Bersejarah pada LBP (PSAP 07: diungkapkan dalam kuantitas).</span>
               </label>
               <div className="space-y-1"><Label className="text-xs">Lokasi</Label><Input name="location" value={formData.location} onChange={handleInputChange} className="h-8" list="daftar-ruangan-master" placeholder="pilih ruangan / ketik bebas" /><datalist id="daftar-ruangan-master">{ruanganNames.map((n) => <option key={n} value={n} />)}</datalist></div>
               <div className="space-y-1">

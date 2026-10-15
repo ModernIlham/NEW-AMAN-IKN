@@ -334,19 +334,26 @@ def test_hook_put_hapus_dan_bentrok_create_mencabut_akses(env):
 def test_hook_impor_mencabut_identitas_dan_revisi_mencegah_hidup_kembali(env, monkeypatch):
     login(env)
     # mongomock versi ini belum menerima argumen sort dari pymongo UpdateOne.
-    # Jalankan operasi aslinya satu per satu; query/update tetap dipakai utuh.
-    async def bulk(ops, ordered=False):
+    # AsyncMongoMockDatabase membuat wrapper collection baru tiap akses.
+    # Patch delegate sinkron yang stabil, bukan satu wrapper yang kemudian
+    # tidak dipakai route. Query/update/upsert tetap dijalankan utuh.
+    bulk_calls = []
+    def bulk(ops, ordered=False):
         from types import SimpleNamespace
-        n = 0
+        n, upserted = 0, 0
+        bulk_calls.append(len(ops))
         for op in ops:
-            result = await env["db"].pegawai.update_one(op._filter, op._doc, upsert=op._upsert)
+            assert getattr(op, "_sort", None) is None
+            result = env["db"].delegate.pegawai.update_one(op._filter, op._doc, upsert=op._upsert)
             n += result.modified_count
-        return SimpleNamespace(upserted_count=0, inserted_count=0, modified_count=n)
+            upserted += int(result.upserted_id is not None)
+        return SimpleNamespace(upserted_count=upserted, inserted_count=0, modified_count=n)
 
-    monkeypatch.setattr(env["db"].pegawai, "bulk_write", bulk)
+    monkeypatch.setattr(env["db"].delegate.pegawai, "bulk_write", bulk)
     data = "NIP/NIK/NRP,Nama Lengkap,Email\n198501012010011001,Ani,baru@example.org\n"
     result = env["client"].post("/api/pegawai/impor", files={"file": ("pegawai.csv", data.encode(), "text/csv")})
     assert result.status_code == 200, result.text
+    assert bulk_calls == [1]
     assert run(env["db"].portal_pemegang_akses.find_one({"id": "p-a"}))["aktif"] is False
     peg = run(env["db"].pegawai.find_one({"id": "p-a"}))
     assert peg["portal_identitas_epoch"] and peg["version"] == 2

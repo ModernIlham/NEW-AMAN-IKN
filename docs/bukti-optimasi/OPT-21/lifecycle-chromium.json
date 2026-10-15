@@ -1,0 +1,28 @@
+{
+  "firstColdInstall": true,
+  "oldTabUnseenEditorLightboxOffline": true,
+  "newReleaseOfflineColdReload": true,
+  "chunk404InstallRetainsPrevious": true,
+  "interruptedUpdateRetainsPrevious": true,
+  "sriMismatchRetainsPrevious": true,
+  "nativeQuotaPreservesNetworkResponse": {
+    "ok": true,
+    "cached": false
+  },
+  "idbQueueAndDraftPreserved": true,
+  "releaseCaches": [
+    "inventory-release-meta-v1",
+    "inventory-release-aaa",
+    "inventory-release-bbb"
+  ],
+  "pins": {
+    "b95c222f-d4fe-4eea-aef1-3964c371fe61": {
+      "releaseId": "aaa"
+    },
+    "4dacaad5-7192-46c9-9f4b-f45155072815": {
+      "releaseId": "bbb"
+    }
+  },
+  "elapsedSeconds": 7.37,
+  "browser": "Chrome/154.0.8037.57"
+}

@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import subprocess
+import sys
 
 import pytest
 
@@ -194,6 +195,21 @@ def test_alur_deploy_stdin_sukses_rollback_dan_gagal_build(tmp_path, mode):
     (app / "scripts").mkdir()
     (app / "scripts" / "retain_static_assets.py").write_text(
         (AKAR / "scripts" / "retain_static_assets.py").read_text())
+    # Dependency transaction is an external boundary for these env-only tests;
+    # its real venv/rollback behavior has its own executable contract suite.
+    (app / "scripts" / "fake-environment.py").write_text('''import pathlib,sys
+action=sys.argv[1]
+if action=="attest":raise SystemExit(0)
+control=pathlib.Path(sys.argv[sys.argv.index("--control")+1])
+if action=="prepare":(control/"state.json").write_text("{}")
+if action=="show":print(0)
+''')
+    old_python=app/"backend/venv/bin/python"
+    old_python.parent.mkdir(parents=True)
+    old_python.write_text('''#!/usr/bin/env bash
+if [ "${1:-}" = - ]; then cat >/dev/null; printf '0\\n'; else exec "$PY_UJI" "$@"; fi
+''')
+    old_python.chmod(0o755)
     target = "a" * 40
     # Hanya batas eksternal dimock. Snapshot/restore/trap/cp/mv/rm yang
     # berjalan adalah implementasi produksi dengan data dan direktori uji.
@@ -202,11 +218,13 @@ git() {
   case "$1" in
     rev-parse) if [ "$2" = --short ]; then echo aaaaaaaa; else echo TARGET; fi ;;
     -C) echo aaaaaaaa ;;
+    show) case "$2" in *backend_environment.py|*pinned_installer.py) cat "$APP_DIR/scripts/fake-environment.py";; *) printf 'fixture==1.0\\n';; esac ;;
     *) return 0 ;;
   esac
 }
 mongosh() { echo 0; }
-sudo() { return 0; }
+sudo() { return 1; }
+supervisorctl() { if [ "$1" = status ]; then echo 'inventarisasi-backend STOPPED'; fi; return 0; }
 sleep() { return 0; }
 jumlah_health_uji=0
 curl() {
@@ -214,6 +232,11 @@ curl() {
     jumlah_health_uji=$((jumlah_health_uji + 1))
     return 1
   fi
+  local sebelumnya="" arg
+  for arg in "$@"; do
+    if [ "$sebelumnya" = -o ]; then printf '{"release_sha":"TARGET"}' > "$arg"; fi
+    sebelumnya="$arg"
+  done
   return 0
 }
 yarn() {
@@ -222,6 +245,7 @@ yarn() {
     mkdir -p build.new
     printf 'bundel baru' > build.new/index.html
     printf '{"files":{}}' > build.new/asset-manifest.json
+    printf '{"source_sha":"%s"}' "$REACT_APP_RELEASE_SHA" > build.new/aman-release.json
   fi
 }
 mktemp() {
@@ -232,7 +256,7 @@ mktemp() {
 }
 '''.replace("TARGET", target)
     # Trap verifikasi terpisah setelah anak bash selesai, termasuk exit gagal.
-    lingkungan = dict(os.environ, APP_DIR=app.as_posix(), MODE_UJI=mode)
+    lingkungan = dict(os.environ, APP_DIR=app.as_posix(), MODE_UJI=mode,PY_UJI=sys.executable)
     hasil = subprocess.run(["bash", "-s", "--", target],
                            input=stub + SKRIP.read_text(encoding="utf-8"), env=lingkungan,
                            text=True, encoding="utf-8", capture_output=True, timeout=25)

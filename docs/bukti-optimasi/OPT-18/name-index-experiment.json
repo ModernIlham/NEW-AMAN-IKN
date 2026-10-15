@@ -1,0 +1,97 @@
+{
+  "dataset_rows": 50000,
+  "scope_rows": 10000,
+  "candidate": {
+    "name": "asset_activity_name_id",
+    "keys": [
+      [
+        "activity_id",
+        1
+      ],
+      [
+        "asset_name",
+        1
+      ],
+      [
+        "id",
+        1
+      ]
+    ],
+    "build_ms": 304.19528202037327
+  },
+  "before": {
+    "label": "without_candidate",
+    "query_samples_ms": [
+      686.5228700044099,
+      673.4821149730124,
+      32.43823299999349,
+      40.30879901256412,
+      33.22902400395833,
+      49.78418198879808,
+      37.54725900944322
+    ],
+    "write_batch_rows": 500,
+    "insert_samples_ms": [
+      240.1354000030551,
+      171.06423998484388,
+      151.3384040154051,
+      404.9536180100404,
+      186.55713100451976
+    ],
+    "delete_samples_ms": [
+      214.18764899135567,
+      189.11680800374597,
+      215.85933401365764,
+      262.94415100710467,
+      278.93551700981334
+    ],
+    "index_count": 41,
+    "candidate_index_bytes": 0,
+    "total_index_bytes": 86077440,
+    "docs_examined": 10000,
+    "keys_examined": 10000,
+    "indexes": [
+      "activity_id_1"
+    ],
+    "in_memory_sort": true,
+    "used_disk": false
+  },
+  "after": {
+    "label": "with_candidate",
+    "query_samples_ms": [
+      13.27740601846017,
+      6.8194749765098095,
+      1.2766529980581254,
+      0.6260630034375936,
+      0.6053519900888205,
+      0.5222259787842631,
+      0.7593139889650047
+    ],
+    "write_batch_rows": 500,
+    "insert_samples_ms": [
+      172.80903601204045,
+      182.52214600215666,
+      181.62008799845353,
+      159.85636299592443,
+      180.0093149940949
+    ],
+    "delete_samples_ms": [
+      299.9756890058052,
+      222.0803119998891,
+      249.2936170019675,
+      202.60710100410506,
+      253.72578500537202
+    ],
+    "index_count": 42,
+    "candidate_index_bytes": 684032,
+    "total_index_bytes": 86761472,
+    "docs_examined": 0,
+    "keys_examined": 50,
+    "indexes": [
+      "asset_activity_name_id"
+    ],
+    "in_memory_sort": false,
+    "used_disk": false
+  },
+  "limits": "Warm local synthetic shared-host samples; writes are bulk batches, not API/production capacity; candidate remains installed"
+}

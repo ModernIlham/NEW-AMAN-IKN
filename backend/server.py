@@ -26,6 +26,7 @@ load_dotenv(ROOT_DIR / '.env')
 # Shared modules
 from db import db, client
 from shared_utils import limiter
+from release_info import RELEASE_SHA
 
 # Logging terstruktur + korelasi request-id (observability) — ganti basicConfig.
 # Format & level dari env (LOG_FORMAT=plain|json, LOG_LEVEL); tiap baris membawa
@@ -75,6 +76,14 @@ logger.info(f"CORS allowed origins: {ALLOWED_ORIGINS}")
 from pemeliharaan import PemeliharaanMiddleware
 app.add_middleware(PemeliharaanMiddleware)
 
+# Keep the writer lease alive until a shielded renderer has actually finished,
+# even when its HTTP client disconnects. Starlette's last-added layer is outer.
+from export_budget import ExportBudgetMiddleware
+app.add_middleware(ExportBudgetMiddleware)
+
+from asset_body_limit import AssetBodyLimitMiddleware
+app.add_middleware(AssetBodyLimitMiddleware)
+
 from portal_middleware import PortalPemegangMiddleware
 app.add_middleware(PortalPemegangMiddleware)
 
@@ -95,6 +104,10 @@ app.add_middleware(RequestContextMiddleware)
 # WebP latar agar HANYA bekerja saat aplikasi benar-benar sepi.
 from activity_tracker import AktivitasMiddleware
 app.add_middleware(AktivitasMiddleware)
+
+# Optional bounded per-process metrics; disabled until overhead is measured.
+from runtime_observability import RuntimeMetricsMiddleware,start_observability,stop_observability
+app.add_middleware(RuntimeMetricsMiddleware)
 
 
 # Log config status
@@ -178,6 +191,7 @@ async def jalankan_backfill_startup():
 
 @app.on_event("startup")
 async def startup_event():
+    start_observability(app)
     await create_indexes()
     await jalankan_backfill_startup()
     # Start cross-worker WebSocket event bus (capped collection + tailable cursor)
@@ -224,6 +238,7 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
+    await stop_observability()
     try:
         from routes.websocket import stop_event_bus
         await stop_event_bus()
@@ -269,7 +284,7 @@ async def shutdown_event():
 @app.get("/health")
 async def root_health_check():
     """Root-level health check for Kubernetes load balancer probes"""
-    return {"status": "ok"}
+    return {"status": "ok", "release_sha": RELEASE_SHA}
 
 @api_router.get("/health")
 async def api_health_check():
@@ -282,7 +297,9 @@ async def api_health_check():
     tahu PWA untuk menahan antrean simpan luringnya selama restore —
     "memperbaikinya" agar selalu 200 membuat flushPending menembakkan
     seluruh antrean ke server yang 503."""
-    return {"ok": True}
+    from export_budget import runtime_capabilities
+    return {"ok": True, "release_sha": RELEASE_SHA,
+            "capabilities": {"export_global_budget": runtime_capabilities()}}
 
 @api_router.get("/")
 async def health_check():
@@ -510,7 +527,9 @@ from routes.email_monitor import email_monitor_router
 from routes.peta_kolaborasi import peta_kolaborasi_router
 from routes.search_admin import search_router
 from routes.tautan_pendek import tautan_pendek_router
+from routes.observability import observability_router
 
+api_router.include_router(observability_router)
 api_router.include_router(auth_router)
 api_router.include_router(categories_router)
 api_router.include_router(batch_router)      # MUST be before assets_router (specific routes before {asset_id} catch-all)
@@ -653,53 +672,10 @@ async def reset_all_data(data: ResetConfirmation, _admin: dict = Depends(require
     if data.confirmation != "HAPUS SEMUA":
         raise HTTPException(status_code=400, detail="Kata konfirmasi tidak valid")
 
-    # Kredensial transien tidak masuk collections_to_reset. Cabut sebelum
-    # menghapus data agar tidak hidup lagi jika identitas yang sama dipulihkan.
-    from portal_auth import cabut_semua_portal_akses
-    await cabut_semua_portal_akses("Reset sistem")
-
-    # DINAMIS (#290): hapus SELURUH koleksi data (operasional & referensi) +
-    # GridFS, KECUALI akun & konfigurasi (users/report_settings/quotas) agar admin
-    # tetap bisa login & kop surat tak hilang. Sebelumnya hanya 6 koleksi lama
-    # yang dihapus sehingga modul baru (penilaian, penghapusan, persediaan, dll.)
-    # + foto menyisakan data yatim. Koleksi baru kini otomatis ikut ter-reset.
-    from backup_utils import (collections_to_reset, RESET_KEEP_GRIDFS_JENIS,
-                              RESET_KEEP_GRIDFS_KIND)
-    all_names = await db.list_collection_names()
-    deleted = {}
-    for col_name in collections_to_reset(all_names):
-        res = await db[col_name].delete_many({})
-        deleted[col_name] = res.deleted_count
-    # Bersihkan GridFS (foto aset & lampiran dokumen yang datanya sudah dihapus),
-    # KECUALI berkas yang tertaut koleksi RESET_KEEP (pegawai/pejabat): foto
-    # pegawai (krop + asli) & spesimen TTD — menghapusnya meninggalkan
-    # foto_file_id/foto_asli_file_id/ttd_file_id yatim (avatar/tanda tangan
-    # rusak). Kebijakan penanda ada di backup_utils (teruji unit).
-    keep_query = {"$or": [
-        {"metadata.jenis": {"$in": list(RESET_KEEP_GRIDFS_JENIS)}},
-        {"metadata.kind": {"$in": list(RESET_KEEP_GRIDFS_KIND)}},
-    ]}
-    keep_ids = [d["_id"] async for d in db["fs.files"].find(keep_query, {"_id": 1})]
-    gridfs_files = await db["fs.files"].count_documents({"_id": {"$nin": keep_ids}})
-    await db["fs.files"].delete_many({"_id": {"$nin": keep_ids}})
-    await db["fs.chunks"].delete_many({"files_id": {"$nin": keep_ids}})
-    deleted["gridfs_files"] = gridfs_files
-
-    logger.warning(f"SYSTEM RESET by admin {admin_user.get('username')}: {deleted}")
-
-    # Reindex Meilisearch (REVIEW-9 R6): data operasional baru saja di-wipe —
-    # tanpa ini pencarian masih memunculkan aset/surat yang sudah tak ada.
-    try:
-        from meili_utils import meili_aktif, reindex_semua
-        if meili_aktif():
-            await reindex_semua()
-    except Exception as e:
-        logger.warning(f"Meili reindex pasca-reset gagal (non-fatal): {e}")
-
-    return {
-        "message": "Semua data berhasil dihapus. Sistem telah direset.",
-        "deleted": deleted,
-    }
+    from reset_service import reset_system
+    result = await reset_system(admin_user.get("username"))
+    logger.warning("SYSTEM RESET by admin %s: %s", admin_user.get("username"), result["deleted"])
+    return result
 
 
 # ============================================================================

@@ -49,12 +49,17 @@ function tanpaKomentar(teks) {
     .join("\n");
 }
 
-/** Kemunculan `photoItems` yang BUKAN bagian dari `photoItemsRef`. */
+/** Bacaan identifier, bukan nama properti parameter milik builder murni. */
 function bacaanState(teks) {
-  return tanpaKomentar(teks).match(/\bphotoItems\b(?!Ref)/g) || [];
+  return tanpaKomentar(teks).match(/\bphotoItems\b(?!Ref|\s*:)/g) || [];
 }
 
 describe("handleSubmit membaca foto lewat ref, bukan state yang bisa basi", () => {
+  test("penjaga membedakan key builder dari bacaan state atau shorthand", () => {
+    expect(bacaanState("buildAssetPatch({ photoItems: photoItemsRef.current })")).toEqual([]);
+    expect(bacaanState("buildAssetPatch({ photoItems: photoItems })")).toEqual(["photoItems"]);
+    expect(bacaanState("buildAssetPatch({ photoItems })")).toEqual(["photoItems"]);
+  });
   test("cermin ref-nya ada dan disinkronkan dari state", () => {
     expect(SUMBER).toMatch(/const photoItemsRef = useRef\(photoItems\);/);
     expect(SUMBER).toMatch(/photoItemsRef\.current = photoItems;/);

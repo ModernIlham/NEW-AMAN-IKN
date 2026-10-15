@@ -1,0 +1,208 @@
+{
+  "schema_version": 1,
+  "synthetic_bson_shape": {
+    "summary": [
+      {
+        "count": 50000,
+        "min": 1543,
+        "max": 22131,
+        "avg": 3696.11078,
+        "checklist_max": 201,
+        "checklist_avg": 53.8
+      }
+    ],
+    "histogram": [
+      {
+        "lower_bound_bytes": 1024,
+        "count": 31614
+      },
+      {
+        "lower_bound_bytes": 4096,
+        "count": 18329
+      },
+      {
+        "lower_bound_bytes": 16384,
+        "count": 57
+      }
+    ]
+  },
+  "dataset_rows": 50000,
+  "scope_rows": 10000,
+  "cache": "warm_repeated_queries_no_restart",
+  "source": "checked_out_handler_pipeline",
+  "index_count": 42,
+  "index_bytes": 86777856,
+  "data_bytes": 184805539,
+  "queries": [
+    {
+      "name": "list_first",
+      "returned": 50,
+      "samples": 7,
+      "p50_ms": 5.327,
+      "p95_ms": 16.045,
+      "docs_examined": 50,
+      "keys_examined": 50,
+      "indexes": [
+        "activity_id_1_created_at_-1_id_1"
+      ],
+      "in_memory_sort": false,
+      "used_disk": false
+    },
+    {
+      "name": "list_deep",
+      "returned": 50,
+      "samples": 7,
+      "p50_ms": 1256.463,
+      "p95_ms": 1606.026,
+      "docs_examined": 50,
+      "keys_examined": 10000,
+      "indexes": [
+        "activity_id_1_created_at_-1_id_1"
+      ],
+      "in_memory_sort": false,
+      "used_disk": false
+    },
+    {
+      "name": "list_name",
+      "returned": 50,
+      "samples": 7,
+      "p50_ms": 4.236,
+      "p95_ms": 12.231,
+      "docs_examined": 50,
+      "keys_examined": 50,
+      "indexes": [
+        "asset_activity_name_id"
+      ],
+      "in_memory_sort": false,
+      "used_disk": false
+    },
+    {
+      "name": "list_price",
+      "returned": 50,
+      "samples": 7,
+      "p50_ms": 106.967,
+      "p95_ms": 360.543,
+      "docs_examined": 10000,
+      "keys_examined": 10000,
+      "indexes": [
+        "activity_id_1"
+      ],
+      "in_memory_sort": true,
+      "used_disk": false
+    },
+    {
+      "name": "list_substring",
+      "returned": 50,
+      "samples": 7,
+      "p50_ms": 4.218,
+      "p95_ms": 15.345,
+      "docs_examined": 50,
+      "keys_examined": 50,
+      "indexes": [
+        "activity_id_1_created_at_-1_id_1"
+      ],
+      "in_memory_sort": false,
+      "used_disk": false
+    },
+    {
+      "name": "list_multi_filter",
+      "returned": 50,
+      "samples": 7,
+      "p50_ms": 10.217,
+      "p95_ms": 104.687,
+      "docs_examined": 1193,
+      "keys_examined": 1193,
+      "indexes": [
+        "activity_id_1_category_1_created_at_-1"
+      ],
+      "in_memory_sort": true,
+      "used_disk": false
+    },
+    {
+      "name": "count_exact",
+      "returned": 1,
+      "samples": 7,
+      "p50_ms": 4.516,
+      "p95_ms": 5.816,
+      "docs_examined": 0,
+      "keys_examined": 10001,
+      "indexes": [
+        "activity_id_1_purchase_date_1"
+      ],
+      "in_memory_sort": false,
+      "used_disk": false
+    },
+    {
+      "name": "stats",
+      "returned": 1,
+      "samples": 7,
+      "p50_ms": 67.459,
+      "p95_ms": 76.395,
+      "docs_examined": 10000,
+      "keys_examined": 10000,
+      "indexes": [
+        "activity_id_1"
+      ],
+      "in_memory_sort": false,
+      "used_disk": false
+    },
+    {
+      "name": "analytics",
+      "returned": 1,
+      "samples": 7,
+      "p50_ms": 259.562,
+      "p95_ms": 358.504,
+      "docs_examined": 10000,
+      "keys_examined": 10000,
+      "indexes": [
+        "activity_id_1"
+      ],
+      "in_memory_sort": true,
+      "used_disk": false
+    },
+    {
+      "name": "groups",
+      "returned": 1,
+      "samples": 7,
+      "p50_ms": 169.688,
+      "p95_ms": 251.304,
+      "docs_examined": 10000,
+      "keys_examined": 10000,
+      "indexes": [
+        "activity_id_1"
+      ],
+      "in_memory_sort": true,
+      "used_disk": false
+    },
+    {
+      "name": "snapshot_first",
+      "returned": 1000,
+      "samples": 7,
+      "p50_ms": 77.239,
+      "p95_ms": 313.746,
+      "docs_examined": 1000,
+      "keys_examined": 1000,
+      "indexes": [
+        "snapshot_keyset_activity_id"
+      ],
+      "in_memory_sort": false,
+      "used_disk": false
+    },
+    {
+      "name": "candidate_created_id_cursor",
+      "returned": 50,
+      "samples": 7,
+      "p50_ms": 9.983,
+      "p95_ms": 42.532,
+      "docs_examined": 50,
+      "keys_examined": 50,
+      "indexes": [
+        "activity_id_1_created_at_-1_id_1",
+        "created_at_1"
+      ],
+      "in_memory_sort": true,
+      "used_disk": false
+    }
+  ],
+  "limits": "Local synthetic query latency, not API/concurrency/production capacity; no write benchmark"
+}

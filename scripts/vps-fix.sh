@@ -19,7 +19,14 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-APP_DIR="/var/www/inventarisasi"
+APP_DIR="${APP_DIR:-/var/www/inventarisasi}"
+# Managed environments are pipless and shared through a stable pointer. The
+# legacy activation+unqualified pip flow could otherwise reach system pip.
+if [ -L "$APP_DIR/backend/venv" ] || [ -e "$APP_DIR/backend/.venv-releases" ] \
+    || { [ -d "$APP_DIR/backend/venv" ] && [ ! -x "$APP_DIR/backend/venv/bin/pip" ]; }; then
+    echo "GAGAL: environment backend managed/pipless; gunakan deploy_vps.sh controller terbaru dengan SHA CI yang disetujui. Skrip legacy tidak mengubah aplikasi." >&2
+    exit 1
+fi
 BACKUP_DIR="/root/backup_env_$(date +%Y%m%d_%H%M%S)"
 
 echo -e "${BLUE}============================================${NC}"

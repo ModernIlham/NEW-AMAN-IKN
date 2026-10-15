@@ -1,13 +1,18 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
 import { toast } from "sonner";
+import { getSatkerAktif } from "@/lib/satkerAktif";
 
 const WS_BASE = process.env.REACT_APP_BACKEND_URL?.replace(/^http/, "ws") + "/api";
 
 // Connection must survive this long to be considered "working"
 const STABLE_MS = 4000;
 
-export function useWebSocket({ activityId, userId, userName, onAssetChange, onLocksUpdate }) {
+export function useWebSocket({ activityId, userId, userName, onAssetChange, onLocksUpdate, onResync }) {
   const wsRef = useRef(null);
+  const resyncTimer = useRef(null);
+  const scope = JSON.stringify([activityId, userId, getSatkerAktif()]);
+  const scopeRef = useRef(scope);
+  useLayoutEffect(() => { scopeRef.current = scope; }, [scope]);
   const reconnectTimer = useRef(null);
   const pingTimer = useRef(null);
   const [onlineUsers, setOnlineUsers] = useState([]);
@@ -20,12 +25,13 @@ export function useWebSocket({ activityId, userId, userName, onAssetChange, onLo
   const lastEventRef = useRef(0);
 
   // Use refs for callbacks to avoid dependency issues
-  const cbRefs = useRef({ onAssetChange, onLocksUpdate, userId });
-  useEffect(() => {
-    cbRefs.current = { onAssetChange, onLocksUpdate, userId };
+  const cbRefs = useRef({ onAssetChange, onLocksUpdate, onResync, userId });
+  useLayoutEffect(() => {
+    cbRefs.current = { onAssetChange, onLocksUpdate, onResync, userId };
   });
 
   const doCleanup = useCallback(() => {
+    if (resyncTimer.current) { clearTimeout(resyncTimer.current); resyncTimer.current = null; }
     if (pingTimer.current) { clearInterval(pingTimer.current); pingTimer.current = null; }
     if (reconnectTimer.current) { clearTimeout(reconnectTimer.current); reconnectTimer.current = null; }
     if (wsRef.current) {
@@ -42,6 +48,9 @@ export function useWebSocket({ activityId, userId, userName, onAssetChange, onLo
   useEffect(() => {
     mountedRef.current = true;
     failCountRef.current = 0;
+    hasConnectedRef.current = false;
+    connectedRef.current = false;
+    setConnected(false); setOnlineUsers([]);
 
     if (!activityId || !userId) return;
 
@@ -65,9 +74,21 @@ export function useWebSocket({ activityId, userId, userName, onAssetChange, onLo
       try {
         const ws = new WebSocket(url);
         wsRef.current = ws;
+        const current = () => mountedRef.current && wsRef.current === ws && scopeRef.current === scope;
+        const scheduleResync = () => {
+          if (!current()) return;
+          if (resyncTimer.current) clearTimeout(resyncTimer.current);
+          resyncTimer.current = setTimeout(() => {
+            resyncTimer.current = null;
+            if (!current()) return;
+            const callbacks = cbRefs.current;
+            if (callbacks.onResync) callbacks.onResync();
+            else callbacks.onAssetChange?.("resync_required");
+          }, 200);
+        };
 
         ws.onopen = () => {
-          if (!mountedRef.current) { ws.close(); return; }
+          if (!current()) { ws.close(); return; }
           openTimeRef.current = Date.now();
           lastEventRef.current = Date.now();
           setConnected(true);
@@ -77,7 +98,7 @@ export function useWebSocket({ activityId, userId, userName, onAssetChange, onLo
           // we were down are lost, so refetch once. Routed through the parent's
           // edit-guard + debounce (onWsAssetChange in DashboardPage).
           if (hasConnectedRef.current) {
-            cbRefs.current.onAssetChange?.();
+            scheduleResync();
           }
           hasConnectedRef.current = true;
 
@@ -90,12 +111,16 @@ export function useWebSocket({ activityId, userId, userName, onAssetChange, onLo
         };
 
         ws.onmessage = (event) => {
+          if (!current()) return;
           lastEventRef.current = Date.now();
           try {
             const msg = JSON.parse(event.data);
             const { onAssetChange: oac, onLocksUpdate: olu, userId: uid } = cbRefs.current;
 
             switch (msg.type) {
+              case "resync_required":
+                scheduleResync();
+                break;
               case "online_users":
                 setOnlineUsers(msg.users || []);
                 break;
@@ -142,7 +167,7 @@ export function useWebSocket({ activityId, userId, userName, onAssetChange, onLo
         };
 
         ws.onclose = (event) => {
-          if (!mountedRef.current) return;
+          if (!current()) return;
           setConnected(false);
           connectedRef.current = false;
           if (pingTimer.current) { clearInterval(pingTimer.current); pingTimer.current = null; }
@@ -186,7 +211,9 @@ export function useWebSocket({ activityId, userId, userName, onAssetChange, onLo
       if (document.visibilityState !== "visible") return;
       if (!connectedRef.current || Date.now() - lastEventRef.current > 60000) {
         lastEventRef.current = Date.now(); // don't refire on rapid tab flips
-        cbRefs.current.onAssetChange?.();
+        const callbacks = cbRefs.current;
+        if (callbacks.onResync) callbacks.onResync();
+        else callbacks.onAssetChange?.("resync_required");
       }
     };
     document.addEventListener("visibilitychange", onVisibility);
@@ -196,7 +223,7 @@ export function useWebSocket({ activityId, userId, userName, onAssetChange, onLo
       document.removeEventListener("visibilitychange", onVisibility);
       doCleanup();
     };
-  }, [activityId, userId, userName, doCleanup]);
+  }, [activityId, userId, userName, doCleanup, scope]);
 
   const sendMessage = useCallback((msg) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
