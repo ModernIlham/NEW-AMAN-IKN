@@ -61,7 +61,10 @@ from backup_utils import (  # noqa: E402
 
 async def _app_collections():
     """Semua koleksi data aplikasi di DB saat ini (dinamis)."""
-    return collections_to_process(await db.list_collection_names())
+    # Mongo creates collections lazily. Export the required schema even for a
+    # new install so its own empty-data backup can pass full restore preflight.
+    names = set(await db.list_collection_names()) | {"users", "categories", "assets", "inventory_activities"}
+    return collections_to_process(names)
 
 # In-memory lock to prevent concurrent backup/restore
 _active_lock = asyncio.Lock()

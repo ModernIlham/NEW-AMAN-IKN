@@ -605,3 +605,21 @@ def test_applied_auth_invariant_failure_rolls_back_before_opening_or_deleting_sa
     assert run(rb.restore_control_status())["state"] == "rolled_back"
     assert run(database.users.find_one({"username": "operator"}))["is_active"] is True
     assert run(database.backup_jobs.find_one({"job_id": "test-job"}))["status"] == "failed"
+
+
+def test_fresh_install_builder_exports_required_empty_collections_and_can_restore_itself(env):
+    database, _ = env
+    for collection in ("assets", "categories", "inventory_activities"):
+        run(database.drop_collection(collection))
+    run(rb.run_backup_task("test-job", "operator"))
+    job = run(database.backup_jobs.find_one({"job_id": "test-job"}))
+    assert job["status"] == "completed"
+    path = rb.BACKUP_TEMP_DIR / "test-job.zip"
+    with zipfile.ZipFile(path) as zf:
+        result = validate_archive(zf)
+        for name in ("assets", "categories", "inventory_activities"):
+            assert result["collections"][name] == 0
+            assert json.loads(zf.read(name + ".json")) == []
+    run(rb.run_restore_task("test-job", path, "operator"))
+    assert run(rb.restore_control_status())["state"] == "completed"
+    assert run(database.users.find_one({"username": "operator"}))["password"] == _TEST_ADMIN["password"]
