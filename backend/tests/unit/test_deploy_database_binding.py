@@ -1,5 +1,8 @@
 """Actual deployer DB-binding predicate without private-value diagnostics."""
 from pathlib import Path
+import os
+import subprocess
+import sys
 import pytest
 
 ROOT=Path(__file__).resolve().parents[3]
@@ -26,3 +29,28 @@ def test_supervisor_storage_override_is_rejected_before_any_mutation(tmp_path,ke
     config=tmp_path/'supervisor.conf';config.write_text('[program:inventarisasi-backend]\nenvironment='+key+'="private-sentinel"\n')
     with pytest.raises(ValueError) as error:verify(tmp_path,123,config,tmp_path/'proc')
     assert 'private-sentinel' not in str(error.value)
+
+
+@pytest.mark.parametrize('sudo',['absent','fails','available'])
+def test_actual_cli_falls_back_when_sudo_is_unavailable_without_private_output(tmp_path,sudo):
+    (tmp_path/'backend').mkdir()
+    (tmp_path/'backend/.env').write_text('MONGO_URL=mongodb://private.fixture/\nDB_NAME=fixture\n')
+    config=tmp_path/'supervisor.conf'
+    config.write_text('[program:inventarisasi-backend]\nenvironment=PATH="/safe"\n')
+    tools=tmp_path/'bin';tools.mkdir()
+    child_env=dict(os.environ,MONGO_URL='mongodb://private.fixture/',DB_NAME='fixture')
+    child=subprocess.Popen([sys.executable,'-I','-c','import time;time.sleep(20)'],env=child_env)
+    try:
+        supervisor=tools/'supervisorctl'
+        supervisor.write_text('#!/bin/sh\nprintf "%s\\n" '+str(child.pid)+'\n')
+        supervisor.chmod(0o755)
+        if sudo!='absent':
+            command=tools/'sudo'
+            command.write_text('#!/bin/sh\n'+('exit 1\n' if sudo=='fails' else 'printf "%s\\n" '+str(child.pid)+'\n'))
+            command.chmod(0o755)
+        result=subprocess.run([sys.executable,'-I','-c',source,str(tmp_path),str(config)],
+                              env=dict(os.environ,PATH=str(tools)),capture_output=True,text=True,timeout=10)
+        assert result.returncode==0,result.stderr
+        assert result.stdout=='' and result.stderr==''
+    finally:
+        child.terminate();child.wait(timeout=5)

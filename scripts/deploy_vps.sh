@@ -197,8 +197,9 @@ def verify_database_binding(app,pid,config_path,proc=pathlib.Path('/proc')):
         if name in inherited and inherited[name]!=value:raise ValueError('Process DB differs')
 if __name__=='__main__':
     try:
-        result=subprocess.run(['sudo','-n','supervisorctl','pid','inventarisasi-backend'],capture_output=True,text=True,timeout=10)
-        if result.returncode:result=subprocess.run(['supervisorctl','pid','inventarisasi-backend'],capture_output=True,text=True,timeout=10)
+        try:result=subprocess.run(['sudo','-n','supervisorctl','pid','inventarisasi-backend'],capture_output=True,text=True,timeout=10)
+        except FileNotFoundError:result=None
+        if result is None or result.returncode:result=subprocess.run(['supervisorctl','pid','inventarisasi-backend'],capture_output=True,text=True,timeout=10)
         pid=int(result.stdout.strip())
         if result.returncode or pid<=1:raise ValueError('PID unproven')
         verify_database_binding(sys.argv[1],pid,sys.argv[2])

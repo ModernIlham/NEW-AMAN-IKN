@@ -124,9 +124,13 @@ class TestPagarPembersihanVPS:
     def test_panduan_membedakan_checkout_lama_dari_clone_baru(self):
         panduan = _teks(PANDUAN_DEPLOY)
         assert 'if [ -d ".git" ]; then' in panduan
-        assert "git fetch --prune origin main" in panduan
-        assert "git reset --hard origin/main" in panduan
+        checkout_lama = panduan.split('if [ -d ".git" ]; then', 1)[1].split("\nelse", 1)[0]
+        assert "git fetch --prune origin main" in checkout_lama
+        # Fetch may update remote refs; activation of the live checkout must
+        # use the approved SHA/controller transaction described separately.
+        assert not re.search(r"^\s*git\s+(?:reset|checkout|switch|pull|clean)\b", checkout_lama, re.M)
         assert 'if [ -n "$(ls -A)" ]; then' in panduan
+        assert "git clone https://github.com/ModernIlham/NEW-AMAN-IKN.git ." in panduan
 
 
 class TestPagarMemori:
