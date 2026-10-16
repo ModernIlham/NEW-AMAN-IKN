@@ -69,6 +69,11 @@ berlaku; PSP turunan dari SIMAN yang tidak valid dibersihkan dari respons.
 Dokumen asli dan versi aset tetap tersimpan utuh. Riwayat global tanpa kode
 pemilik tidak dijadikan hasil terbaru Satker Aktif; detail/CSV/draft untuk
 riwayat yang tidak sesuai satker juga ditolak.
+Stempel pemilik riwayat saja tidak cukup: impor lama pernah menerima file
+satker lain sambil memberi stempel Satker Aktif. Hasil aktif mensyaratkan
+`baris_diproses` dari importer yang memvalidasi sebelum tulis serta kode
+sumber yang cocok. Riwayat lama tanpa bukti tersebut tetap tersimpan, tetapi
+meminta impor ulang sebelum dijadikan hasil aktif atau sumber draft.
 
 Panel frontend direset ketika Satker Aktif berubah, membatalkan request lama
 dan mengabaikan respons yang terlambat. Unggahan, retry, penerapan, draft,

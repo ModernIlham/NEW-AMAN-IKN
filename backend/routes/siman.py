@@ -504,7 +504,24 @@ def _scope_riwayat_siman(user):
     kode = kode_satker_user(user)
     owner = {"$type": "string", "$not": {"$type": "array"}}
     owner.update({"$eq": kode} if kode else {"$nin": ["", None]})
-    return {"kode_satker": owner}
+    # baris_diproses ditulis sejak importer memvalidasi sumber sebelum tulis.
+    # Stempel pemilik saja tidak membuktikan file lama berasal dari satker itu.
+    return {"kode_satker": owner, "baris_diproses": {"$type": "number", "$gt": 0}}
+
+
+def _sumber_riwayat_siman(reg):
+    validation = reg.get("validasi_satker")
+    codes = validation.get("kode_file") if isinstance(validation, dict) else None
+    return codes if isinstance(codes, list) else []
+
+
+def _riwayat_siman_terverifikasi(reg):
+    owner, processed = reg.get("kode_satker"), reg.get("baris_diproses")
+    sources = _sumber_riwayat_siman(reg)
+    return bool(isinstance(owner, str) and owner.strip()
+                and isinstance(processed, int) and not isinstance(processed, bool) and processed > 0
+                and sources and all(isinstance(code, str) and kode_satker_sama(owner, code)
+                                    for code in sources))
 
 
 async def _pastikan_akses_riwayat_siman(user, reg):
@@ -512,6 +529,12 @@ async def _pastikan_akses_riwayat_siman(user, reg):
     kode = kode_satker_user(user)
     if kode and not kode_satker_sama(kode, reg.get("kode_satker")):
         raise HTTPException(403, "Riwayat impor tidak terverifikasi untuk Satker Aktif; unggah ulang ekspor SIMAN satker yang sesuai")
+    if kode:
+        if any(isinstance(code, str) and code and not kode_satker_sama(kode, code)
+               for code in _sumber_riwayat_siman(reg)):
+            raise HTTPException(403, "Satker sumber pada riwayat impor berbeda dengan Satker Aktif; unggah ekspor satker yang sesuai")
+        if not _riwayat_siman_terverifikasi(reg):
+            raise HTTPException(409, "Riwayat impor lama belum memverifikasi satker sumber; unggah ulang ekspor SIMAN satker ini")
 
 
 async def _rekap_per_kegiatan(user: dict, kelompok=None) -> list:
@@ -568,11 +591,17 @@ async def ringkasan_siman(_user: dict = Depends(require_user)):
     counts = {status: 0 for status in (*_STATUS_SIMAN, "belum_dicek")}
     for group in kelompok:
         counts[group["status_terverifikasi"]] += group["n"]
-    riwayat = await db.siman_imports.find(
+    riwayat = []
+    cursor = db.siman_imports.find(
         _scope_riwayat_siman(_user),
         {"_id": 0, "contoh_siman_tanpa_aset": 0, "contoh_aman_tanpa_siman": 0,
          "baris_belum_tercatat": 0},
-    ).sort("waktu", -1).limit(10).to_list(10)
+    ).sort("waktu", -1).batch_size(10)
+    async for reg in cursor:
+        if _riwayat_siman_terverifikasi(reg):
+            riwayat.append(reg)
+            if len(riwayat) == 10:
+                break
     return {
         **counts,
         "per_kegiatan": await _rekap_per_kegiatan(_user, kelompok),
@@ -601,7 +630,8 @@ async def csv_belum_tercatat(import_id: str, _user: dict = Depends(require_user)
 
     reg = await db.siman_imports.find_one(
         {"id": import_id},
-        {"_id": 0, "baris_belum_tercatat": 1, "filename": 1, "kode_satker": 1})
+        {"_id": 0, "baris_belum_tercatat": 1, "filename": 1, "kode_satker": 1,
+         "baris_diproses": 1, "validasi_satker": 1})
     if not reg:
         raise HTTPException(status_code=404, detail="Riwayat impor tidak ditemukan")
     await _pastikan_akses_riwayat_siman(_user, reg)
@@ -648,7 +678,8 @@ async def buat_draft_dari_siman(request: Request, import_id: str,
 
     reg = await db.siman_imports.find_one(
         {"id": import_id},
-        {"_id": 0, "baris_belum_tercatat": 1, "filename": 1, "kode_satker": 1})
+        {"_id": 0, "baris_belum_tercatat": 1, "filename": 1, "kode_satker": 1,
+         "baris_diproses": 1, "validasi_satker": 1})
     if not reg:
         raise HTTPException(status_code=404, detail="Riwayat impor tidak ditemukan")
     await _pastikan_akses_riwayat_siman(user, reg)

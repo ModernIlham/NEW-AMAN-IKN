@@ -367,11 +367,19 @@ async def test_siman_reads_revalidate_saved_references_when_active_satker_change
                 "created_at": "2026-10-15T00:00:00+00:00",
             })
         history = [
-            {"id": case.user + "-history-a", "kode_satker": "621001", "waktu": "2099-01-01"},
-            {"id": case.user + "-history-b", "kode_satker": "621002", "waktu": "2099-01-02"},
+            {"id": case.user + "-history-a", "kode_satker": "621001", "waktu": "2099-01-01",
+             "baris_diproses": 1, "validasi_satker": {"kode_file": [full_a]}},
+            {"id": case.user + "-history-b", "kode_satker": "621002", "waktu": "2099-01-02",
+             "baris_diproses": 1, "validasi_satker": {"kode_file": [full_b]}},
             {"id": case.user + "-history-blank", "kode_satker": "", "waktu": "2099-01-04",
              "validasi_satker": {"kode_file": [full_a]}},
             {"id": case.user + "-history-missing", "waktu": "2099-01-03"},
+            # The old importer stamped the active B owner even when the
+            # uploaded file belonged to A and only emitted a warning.
+            {"id": case.user + "-history-wrong-file", "kode_satker": "621002",
+             "waktu": "2099-01-06", "validasi_satker": {"kode_file": [full_a]}},
+            {"id": case.user + "-history-unknown-proof", "kode_satker": "621002",
+             "waktu": "2099-01-05"},
         ]
         await contract.db.siman_imports.insert_many([
             {**row, "oleh": case.user, "filename": "historical-siman.xlsx"} for row in history])
@@ -397,12 +405,13 @@ async def test_siman_reads_revalidate_saved_references_when_active_satker_change
             assert [row["id"] for row in listed.json()["items"]] == [case.assets[name]]
 
         headers_b = {**case.headers, "X-Satker-Aktif": "621002"}
-        for name in ("a", "blank", "missing"):
+        for name, expected_status in (("a", 403), ("blank", 403), ("missing", 403),
+                                      ("wrong-file", 403), ("unknown-proof", 409)):
             history_id = case.user + "-history-" + name
             for suffix in ("", "/belum-tercatat.csv"):
                 denied = await contract.http.get(
                     f"/api/siman/import/{history_id}{suffix}", headers=headers_b)
-                assert denied.status_code == 403, denied.text
+                assert denied.status_code == expected_status, denied.text
         for suffix in ("", "/belum-tercatat.csv"):
             own_history = await contract.http.get(
                 f"/api/siman/import/{case.user}-history-b{suffix}", headers=headers_b)
@@ -467,3 +476,29 @@ async def test_siman_reads_hide_reference_after_parent_full_satker_identity_chan
             json={"fields": ["brand"]})
         assert applied.status_code == 409, applied.text
         assert await contract.db.assets.find_one({"id": case.assets["a"]}) == asset_before
+
+
+async def test_native_asset_patch_clears_foreign_siman_in_response_without_deleting_history(contract):
+    identities = {"b": {"kode_satker": "621002"}}
+    async with _satker_case(contract, identities, user_satker="621002") as case:
+        identifier = case.assets["b"]
+        historical_reference = {
+            "status": "selisih", "kode_satker": "621001", "kode_satker_aset": "621001",
+            "selisih": [{"field": "brand", "label": "Merk", "aman": "Lenovo", "siman": "Wrong satker"}],
+        }
+        await contract.db.assets.update_one(
+            {"id": identifier}, {"$set": {"siman": historical_reference}})
+        response = await contract.http.patch(
+            "/api/assets/" + identifier, headers={**case.headers, "If-Match": "1"},
+            json={"brand": "Merek edit inventarisasi"})
+        assert response.status_code == 200, response.text
+        assert response.json()["brand"] == "Merek edit inventarisasi"
+        assert response.json()["version"] == 2
+        assert "siman" in response.json() and response.json()["siman"] is None
+        stored = await contract.db.assets.find_one({"id": identifier})
+        assert stored["brand"] == "Merek edit inventarisasi" and stored["version"] == 2
+        assert stored["siman"] == historical_reference
+        audits = await contract.db.audit_logs.find(
+            {"asset_id": identifier, "action": "update"}).to_list(None)
+        assert len(audits) == 1
+        assert any(change["field"] == "brand" for change in audits[0]["changes"])
