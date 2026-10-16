@@ -11,6 +11,7 @@ Pencocokan (paling stabil dulu):
   1. `Kode Register` SIMAN ↔ field `kode_register` aset (ID internal SIMAN,
      tahan terhadap reklasifikasi kode barang).
   2. Kode Barang + NUP (dinormalisasi digit).
+Kedua jalur hanya berlaku dalam identitas satker yang sama.
 
 Fungsi murni tanpa Mongo/IO agar teruji unit. Jebakan yang ditangani:
 tanggal placeholder SIMAN `9999-12-31` (= tidak ada) — JANGAN strptime
@@ -20,6 +21,7 @@ tanggal placeholder SIMAN `9999-12-31` (= tidak ada) — JANGAN strptime
 import re
 
 from pembukuan_utils import parse_harga
+from siman_satker import kode_satker_sama, norm_kode_satker
 
 # ── Peta kolom SIMAN → kunci internal (header di-normalisasi lowercase) ──
 KOLOM_SIMAN = {
@@ -197,12 +199,6 @@ def deteksi_header(rows, maks_baris=25):
     return None
 
 
-def norm_kode_satker(v) -> str:
-    """Kode satker utk perbandingan: alfanumerik kapital saja
-    ('126.01.1600691778.000-KP' == '126011600691778000KP')."""
-    return re.sub(r"[^0-9A-Za-z]", "", str(v or "")).upper()
-
-
 def validasi_satker(kode_file_set, kode_terdaftar_set):
     """Bandingkan kode satker pada FILE dengan kode satker TERDAFTAR di AMAN.
 
@@ -210,17 +206,15 @@ def validasi_satker(kode_file_set, kode_terdaftar_set):
     Bila salah satu sisi kosong (file tanpa kolom satker / AMAN belum diisi)
     dianggap cocok — validasi hanya bermakna saat keduanya terisi.
 
-    AMAN memakai kode satker 6 digit sedangkan SIMAN V2 memakai kode LENGKAP
-    ±20 digit yang MENGANDUNG 6 digit itu sebagai segmen — maka selain irisan
-    persis, kode terdaftar (≥6 digit) yang terkandung di dalam kode file
-    (atau sebaliknya) juga dianggap cocok.
+    Enam digit hanya cocok dengan segmen satker pada kode lengkap resmi.
+    Setiap kode file harus punya padanan; satu baris benar tidak menutupi
+    file campuran. Fungsi ini merangkum peringatan, bukan izin pencocokan.
     """
     file_norm = {norm_kode_satker(k) for k in (kode_file_set or set())} - {""}
     daftar_norm = {norm_kode_satker(k) for k in (kode_terdaftar_set or set())} - {""}
     cocok = (not file_norm or not daftar_norm
-             or bool(file_norm & daftar_norm)
-             or any(len(d) >= 6 and len(f) >= 6 and (d in f or f in d)
-                    for d in daftar_norm for f in file_norm))
+             or all(any(kode_satker_sama(f, d) for d in daftar_norm)
+                    for f in file_norm))
     return {
         "cocok": cocok,
         "kode_file": sorted(file_norm)[:5],
@@ -240,6 +234,8 @@ def ringkas_baris_belum_tercatat(b):
         "nilai_perolehan": b.get("nilai_perolehan", 0),
         "tanggal_perolehan": b.get("tanggal_perolehan", ""),
         "kode_register": b.get("kode_register", ""),
+        "kode_satker": b.get("kode_satker", ""),
+        "nama_satker": b.get("nama_satker", ""),
     }
 
 

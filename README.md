@@ -477,7 +477,7 @@ Detail lengkap per PR di [`CHANGELOG.md`](./CHANGELOG.md) (#604–#614).
 
 ## 🆕 Highlight Rilis v2.4 (Juli 2026)
 
-- 🔄 **Sinkronisasi SIMAN V2 tangguh** — impor ekspor "Master Aset" dengan deteksi header di semua sheet, unggah andal (progres %, timeout longgar, coba-ulang otomatis saat koneksi putus), **validasi kode satker cerdas 6↔20 digit** (kode lengkap SIMAN ikut di kegiatan & Master Satker; kode 6 digit AMAN yang terkandung dalam kode 20 digit dianggap cocok), tanda "≠ SIMAN" per aset + sinkron 1-klik dari galeri/list; baris SIMAN belum tercatat bisa **diunduh CSV atau dibuat aset draft massal 1-klik** (#405, #462–#463).
+- 🔄 **Sinkronisasi SIMAN V2 tangguh** — impor ekspor "Master Aset" dengan deteksi header di semua sheet, unggah andal (progres %, timeout longgar, coba-ulang otomatis saat koneksi putus), **pencocokan berdasarkan satker, kode barang, dan NUP** (kode 6 digit memakai segmen satker resmi pada kode lengkap 20 karakter; dua kode lengkap berbeda tetap terpisah, termasuk jalur kode register dan pembuatan draft), tanda "≠ SIMAN" per aset + sinkron 1-klik dari galeri/list; baris SIMAN belum tercatat bisa **diunduh CSV atau dibuat aset draft massal 1-klik** (#405, #462–#463).
 - 🏷️ **Cetak Stiker Label BMN** — 3 ukuran (besar/sedang/kecil) × kertas A4/A3 penuh-halaman, ikut filter & kelompok, QR ber-payload kode register + logo di tengah (level H), header nama/kode satker, rekap jumlah per ukuran (#397–#402).
   Panduan **Font dan ukuran teks** menampilkan font, ukuran pt, dan dimensi aktual
   sesuai pilihan cetak; lihat [tipografi dan contoh cetak](docs/TIPOGRAFI-STIKER.md).

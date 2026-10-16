@@ -2,7 +2,8 @@
 pembaruan berkala (pengganti API yang belum tersedia untuk satker).
 
 Alur: unggah XLSX hasil ekspor SIMAN V2 → tiap baris dicocokkan ke aset
-AMAN (Kode Register dulu, lalu Kode Barang+NUP) → perbedaan field kunci
+AMAN dalam satker yang sama (Kode Register dulu, lalu Kode Barang+NUP) →
+perbedaan field kunci
 tercatat pada subdoc `siman` aset (tanda di halaman aset) → pengguna
 meninjau lalu "terapkan nilai SIMAN" per aset (SIMAN = data valid).
 Riwayat impor tersimpan di register `siman_imports`.
@@ -31,6 +32,7 @@ from siman_utils import (
     parse_baris, referensi_siman, ringkas_baris_belum_tercatat, ringkas_import,
     validasi_satker,
 )
+from siman_satker import IndeksSatker, identitas_satker, kode_satker_sama
 
 siman_router = APIRouter()
 
@@ -41,9 +43,59 @@ _PROJ_ASET = {
     "_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
     "category": 1, "brand": 1, "model": 1, "condition": 1, "status": 1,
     "purchase_price": 1, "purchase_date": 1, "user": 1, "kode_register": 1,
-    "activity_id": 1, "siman": 1,
+    "activity_id": 1, "kode_satker": 1, "kode_satker_lengkap": 1,
+    "version": 1, "siman": 1,
 }
 _MAKS_CONTOH = 200  # batas daftar contoh yang disimpan di register impor
+
+
+async def _identitas_satker_aset(assets):
+    """Identitas pemilik dari kegiatan, dengan kode lengkap master sebagai pelengkap.
+
+    Kepemilikan kegiatan tetap otoritatif. Kop global bukan identitas semua
+    aset; data tanpa identitas tidak boleh dicocokkan secara lintas satker.
+    Baca berkelompok agar tidak menambah satu query untuk setiap aset.
+    """
+    kegiatan, master = {}, {}
+    ids = sorted({a.get("activity_id") for a in assets if a.get("activity_id")})
+    for awal in range(0, len(ids), 1000):
+        async for item in db.inventory_activities.find(
+                {"id": {"$in": ids[awal:awal + 1000]}},
+                {"_id": 0, "id": 1, "kode_satker": 1, "kode_satker_lengkap": 1}):
+            kegiatan[item["id"]] = item
+    kode = sorted({str((kegiatan.get(a.get("activity_id")) or {}).get("kode_satker")
+                       or a.get("kode_satker") or "").strip() for a in assets} - {""})
+    for awal in range(0, len(kode), 1000):
+        async for item in db.satker.find(
+                {"kode_satker": {"$in": kode[awal:awal + 1000]}},
+                {"_id": 0, "kode_satker": 1, "kode_satker_lengkap": 1}):
+            master[item["kode_satker"]] = item
+    hasil = {}
+    for a in assets:
+        act = kegiatan.get(a.get("activity_id")) or {}
+        if act.get("kode_satker") or act.get("kode_satker_lengkap"):
+            pendek = str(act.get("kode_satker") or "").strip()
+            lengkap = (act.get("kode_satker_lengkap")
+                       or (master.get(pendek) or {}).get("kode_satker_lengkap") or "")
+        else:
+            pendek = str(a.get("kode_satker") or "").strip()
+            lengkap = (a.get("kode_satker_lengkap")
+                       or (master.get(pendek) or {}).get("kode_satker_lengkap") or "")
+        hasil[a["id"]] = identitas_satker(pendek, lengkap)
+    return hasil
+
+
+async def _pastikan_satker_tetap(assets, semula):
+    """Periksa lagi induk/master setelah pekerjaan impor yang dapat memakan waktu.
+
+    CAS aset menangkap perpindahan activity_id/versi; pemeriksaan ini juga
+    menangkap edit identitas pada dokumen induknya sebelum penulisan dimulai.
+    Ini bukan transaksi atomik lintas koleksi pada MongoDB standalone.
+    """
+    terkini = await _identitas_satker_aset(assets)
+    if any(not semula.get(a["id"]) or terkini.get(a["id"]) != semula[a["id"]]
+           for a in assets):
+        raise HTTPException(409, "Identitas satker kegiatan atau master berubah selama sinkronisasi; muat ulang data lalu unggah ulang ekspor SIMAN")
 
 
 class TerapkanIn(BaseModel):
@@ -152,33 +204,62 @@ async def import_siman(request: Request, file: UploadFile = File(...),
     # sinkron — yang dibungkus TITIK PANGGILNYA (pola _tutup_dan_ambil).
     hasil_parse = await asyncio.to_thread(_parse_siman_xlsx, isi)
     peta_header, baris_data, sheet_dipakai = hasil_parse
+    total_baris_file = len(baris_data)
 
-    # Peta pencocokan: kode register (paling stabil) & kode+NUP.
+    # Identitas sumber wajib diketahui sebelum pencocokan atau penulisan.
+    # Satker kosong tidak menjadi wildcard bagi semua aset ber-kode/NUP sama.
+    if "kode_satker" not in peta_header:
+        raise HTTPException(400, "Kolom Kode Satker wajib ada pada ekspor SIMAN agar aset antar satker tidak tercampur")
+    tanpa_kode_satker = sum(not identitas_satker(b.get("kode_satker")) for b in baris_data)
+    baris_data = [b for b in baris_data if identitas_satker(b.get("kode_satker"))]
+    if not baris_data:
+        raise HTTPException(400, "Kode satker pada file SIMAN kosong atau tidak dapat dipastikan; periksa ekspor lalu unggah ulang")
+    kode_user = kode_satker_user(user)
+    baris_satker_lain = 0
+    if kode_user:
+        sesuai = [b for b in baris_data if kode_satker_sama(kode_user, b.get("kode_satker"))]
+        baris_satker_lain = len(baris_data) - len(sesuai)
+        baris_data = sesuai
+        if not baris_data:
+            raise HTTPException(400, "Kode satker pada file SIMAN berbeda dengan Satker Aktif; pilih satker atau file ekspor yang sesuai")
+
+    # Batas akses tetap diterapkan pada kueri aset. Sesudah itu, identitas
+    # kegiatan membatasi pencocokan setiap baris, termasuk bagi admin pusat.
+    assets = await db.assets.find(
+        await scope_query_aset(user, active_asset_filter()),
+        _PROJ_ASET).to_list(500000)
+    satker_aset = await _identitas_satker_aset(assets)
+    indeks_satker = IndeksSatker([
+        *satker_aset.values(), *(b.get("kode_satker") for b in baris_data)])
+    baris_ambigu = sum(not indeks_satker.kunci(b.get("kode_satker")) for b in baris_data)
+    baris_data = [b for b in baris_data if indeks_satker.kunci(b.get("kode_satker"))]
+    if not baris_data:
+        raise HTTPException(400, "Kode satker enam digit pada file memiliki lebih dari satu kode lengkap; gunakan kode satker lengkap agar pencocokan tidak salah")
+
+    # Kedua jalur memakai kunci satker: register pun bukan jalan pintas
+    # untuk menempelkan referensi dari satker lain.
     per_register, per_kunci, duplikat_kunci = {}, {}, 0
     for b in baris_data:
+        satker = indeks_satker.kunci(b.get("kode_satker"))
         if b["kode_register"]:
-            per_register.setdefault(b["kode_register"], b)
-        k = kunci_aset(b["kode_barang"], b["nup"])
+            per_register.setdefault((satker, b["kode_register"]), b)
+        k = (satker, kunci_aset(b["kode_barang"], b["nup"]))
         if k in per_kunci:
             duplikat_kunci += 1
         else:
             per_kunci[k] = b
 
-    # ISOLASI SATKER: impor hanya menyentuh aset satker si pengunggah
-    # (super-admin lintas-satker). Cegah penulisan subdoc siman / penandaan
-    # "tidak ditemukan" pada aset satker lain.
-    assets = await db.assets.find(
-        await scope_query_aset(user, active_asset_filter()),
-        _PROJ_ASET).to_list(500000)
-
     now = datetime.now(timezone.utc).isoformat()
     import_id = str(uuid.uuid4())
     hasil, terpakai = [], set()
     for a in assets:
+        satker = indeks_satker.kunci(satker_aset.get(a["id"]))
+        if not satker:
+            continue
         reg = str(a.get("kode_register") or "").strip()
-        b = per_register.get(reg) if reg else None
+        b = per_register.get((satker, reg)) if reg else None
         if b is None:
-            b = per_kunci.get(kunci_aset(a.get("asset_code"), a.get("NUP")))
+            b = per_kunci.get((satker, kunci_aset(a.get("asset_code"), a.get("NUP"))))
         if b is None:
             continue
         terpakai.add(id(b))
@@ -192,7 +273,9 @@ async def import_siman(request: Request, file: UploadFile = File(...),
                       "reklasifikasi": reklas})
 
     aset_cocok_id = {r["aset"]["id"] for r in hasil}
-    aman_tanpa_siman = [a for a in assets if a["id"] not in aset_cocok_id]
+    satker_file = {indeks_satker.kunci(b.get("kode_satker")) for b in baris_data}
+    aman_tanpa_siman = [a for a in assets if a["id"] not in aset_cocok_id
+                        and indeks_satker.kunci(satker_aset.get(a["id"])) in satker_file]
     siman_tanpa_aset = [b for b in baris_data if id(b) not in terpakai]
 
     # Tulis subdoc `siman` per aset yang cocok (bulk, $inc version).
@@ -206,6 +289,8 @@ async def import_siman(request: Request, file: UploadFile = File(...),
             "reklasifikasi": r.get("reklasifikasi") or {},
             "referensi": referensi_siman(r["baris"]),
             "kode_register": r["baris"]["kode_register"],
+            "kode_satker": r["baris"]["kode_satker"],
+            "kode_satker_aset": satker_aset[r["aset"]["id"]],
             "import_id": import_id,
             "diperiksa_pada": now,
         }
@@ -215,19 +300,29 @@ async def import_siman(request: Request, file: UploadFile = File(...),
         if r["baris"]["kode_register"] and not str(r["aset"].get("kode_register") or "").strip():
             set_doc["kode_register"] = r["baris"]["kode_register"]
             register_diadopsi += 1
-        ops.append(UpdateOne({"id": r["aset"]["id"]},
+        ops.append(UpdateOne({"id": r["aset"]["id"],
+                              "activity_id": r["aset"].get("activity_id"),
+                              "version": r["aset"].get("version"),
+                              "dihapus": {"$ne": True}},
                              {"$set": set_doc, "$inc": {"version": 1}}))
     if tandai_tidak_ditemukan:
         for a in aman_tanpa_siman:
             ops.append(UpdateOne(
-                {"id": a["id"]},
+                {"id": a["id"], "activity_id": a.get("activity_id"),
+                 "version": a.get("version"), "dihapus": {"$ne": True}},
                 {"$set": {"siman": {"status": "tidak_di_siman", "selisih": [],
                                     "import_id": import_id,
                                     "diperiksa_pada": now},
                           "updated_at": now},
                  "$inc": {"version": 1}}))
     if ops:
-        await db.assets.bulk_write(ops, ordered=False)
+        akan_ditulis = [r["aset"] for r in hasil]
+        if tandai_tidak_ditemukan:
+            akan_ditulis += aman_tanpa_siman
+        await _pastikan_satker_tetap(akan_ditulis, satker_aset)
+        ditulis = await db.assets.bulk_write(ops, ordered=False)
+        if ditulis.matched_count != len(ops):
+            raise HTTPException(409, "Sebagian aset berubah saat impor SIMAN; data yang telah cocok dapat tersimpan, tetapi aset yang berubah tidak ditimpa. Unggah ulang file untuk menghitung ulang hasil")
 
     # "SIMAN menang" (pilihan pemilik): tiap impor langsung memperbarui
     # referensi masa manfaat kelompok terkait (dipakai Penilaian). Kolom
@@ -262,11 +357,8 @@ async def import_siman(request: Request, file: UploadFile = File(...),
     if mm_ops:
         await db.masa_manfaat.bulk_write(mm_ops, ordered=False)
 
-    # Validasi satker: kode satker pada FILE vs satker terdaftar di AMAN
-    # (master satker + kop global + KEGIATAN inventarisasi — kegiatan kini
-    # membawa kode_satker_lengkap ±20 digit versi SIMAN V2, sementara AMAN
-    # memakai 6 digit) — file milik satker lain terdeteksi dini, dan file
-    # satker sendiri tidak lagi salah diperingatkan.
+    # Ringkasan validasi memakai master/kegiatan dalam scope pemanggil.
+    # Kop global bukan identitas pemilik setiap aset dan tidak menjadi alias.
     # ISOLASI SATKER (REVIEW-9 R15): daftar pembanding dibatasi satker
     # PEMANGGIL. Tanpa ini daftar memuat kode SELURUH satker terdaftar, lalu
     # pesan peringatan di bawah mencetaknya kembali ke pengguna — jadi cukup
@@ -281,12 +373,18 @@ async def import_siman(request: Request, file: UploadFile = File(...),
             _sqfs(user, {}), {"_id": 0, "kode_satker": 1, "kode_satker_lengkap": 1}):
         kode_terdaftar.add(keg.get("kode_satker_lengkap") or "")
         kode_terdaftar.add(keg.get("kode_satker") or "")
-    setelan = await db.report_settings.find_one(
-        {"type": "global"}, {"_id": 0, "kode_satker_lengkap": 1}) or {}
-    kode_terdaftar.add(setelan.get("kode_satker_lengkap") or "")
     cek_satker = validasi_satker(
         {b.get("kode_satker") for b in baris_data}, kode_terdaftar)
     peringatan = []
+    if tanpa_kode_satker:
+        peringatan.append(f"{tanpa_kode_satker} baris dilewati karena kode satkernya kosong atau tidak dapat dipastikan")
+    if baris_satker_lain:
+        peringatan.append(f"{baris_satker_lain} baris satker lain dilewati; hanya Satker Aktif yang diproses")
+    if baris_ambigu:
+        peringatan.append(f"{baris_ambigu} baris dilewati karena kode enam digit merujuk lebih dari satu kode satker lengkap")
+    aset_tanpa_identitas = sum(not indeks_satker.kunci(satker_aset.get(a["id"])) for a in assets)
+    if aset_tanpa_identitas:
+        peringatan.append(f"{aset_tanpa_identitas} aset tidak dibandingkan karena identitas satkernya kosong, bertentangan, atau ambigu; lengkapi kode satker kegiatan/master")
     if not cek_satker["cocok"]:
         peringatan.append(
             "Kode satker pada file ({}) BERBEDA dengan satker terdaftar di AMAN "
@@ -295,7 +393,7 @@ async def import_siman(request: Request, file: UploadFile = File(...),
                 ", ".join(cek_satker["kode_terdaftar"]) or "-"))
     if duplikat_kunci:
         peringatan.append(
-            f"{duplikat_kunci} baris duplikat kode+NUP pada file dilewati "
+            f"{duplikat_kunci} baris duplikat satker+kode barang+NUP pada file dilewati "
             "(baris pertama yang dipakai)")
     # Kolom perbandingan yang TIDAK ADA di header file (C9). Hanya kode barang
     # + NUP yang berstatus wajib, jadi kolom lain yang hilang selama ini lolos
@@ -319,7 +417,9 @@ async def import_siman(request: Request, file: UploadFile = File(...),
         "waktu": now,
         "oleh": user.get("username", "system"),
         "sheet": sheet_dipakai,
-        "total_baris": len(baris_data),
+        "total_baris": total_baris_file,
+        "baris_diproses": len(baris_data),
+        "baris_dilewati": tanpa_kode_satker + baris_satker_lain + baris_ambigu,
         "duplikat_kunci": duplikat_kunci,
         "register_diadopsi": register_diadopsi,
         "masa_manfaat_diperbarui": len(mm_teramati),
@@ -334,7 +434,7 @@ async def import_siman(request: Request, file: UploadFile = File(...),
         "satker": sorted({b["nama_satker"] for b in baris_data if b.get("nama_satker")})[:10],
         # Contoh (dibatasi) untuk ditinjau di UI — bukan data lengkap.
         "contoh_siman_tanpa_aset": [
-            {"kode_barang": b["kode_barang"], "nup": b["nup"],
+            {"kode_satker": b["kode_satker"], "kode_barang": b["kode_barang"], "nup": b["nup"],
              "nama_barang": b["nama_barang"], "nilai_perolehan": b["nilai_perolehan"]}
             for b in siman_tanpa_aset[:_MAKS_CONTOH]],
         "contoh_aman_tanpa_siman": [
@@ -454,13 +554,15 @@ async def csv_belum_tercatat(import_id: str, _user: dict = Depends(require_user)
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["Kode Barang", "NUP", "Nama Barang", "Merk", "Tipe", "Kondisi",
-                "Nilai Perolehan", "Tanggal Perolehan", "Kode Register SIMAN"])
+                "Nilai Perolehan", "Tanggal Perolehan", "Kode Register SIMAN",
+                "Kode Satker", "Nama Satker"])
     for b in baris:
         w.writerow([b.get("kode_barang", ""), b.get("nup", ""),
                     b.get("nama_barang", ""), b.get("merk", ""),
                     b.get("tipe", ""), b.get("kondisi", ""),
                     b.get("nilai_perolehan", 0), b.get("tanggal_perolehan", ""),
-                    b.get("kode_register", "")])
+                    b.get("kode_register", ""), b.get("kode_satker", ""),
+                    b.get("nama_satker", "")])
     buf.seek(0)
     return StreamingResponse(
         iter([("\ufeff" + buf.getvalue()).encode("utf-8")]), media_type="text/csv",
@@ -507,6 +609,13 @@ async def buat_draft_dari_siman(request: Request, import_id: str,
     # Draft dibuat ke kegiatan ini — pastikan milik satker admin.
     await pastikan_akses_kegiatan_id(user, payload.activity_id)
 
+    tujuan = (await _identitas_satker_aset([
+        {"id": "tujuan", "activity_id": payload.activity_id}])).get("tujuan", "")
+    if not tujuan:
+        raise HTTPException(400, "Lengkapi kode satker kegiatan tujuan sebelum membuat draft dari SIMAN")
+    if not any(identitas_satker(b.get("kode_satker")) for b in baris):
+        raise HTTPException(409, "Riwayat impor belum menyimpan kode satker tiap baris; unggah ulang ekspor SIMAN sebelum membuat draft")
+
     kategori_by_kode = {
         c["kode_aset"]: c.get("label", "")
         async for c in db.categories.find({}, {"_id": 0, "kode_aset": 1, "label": 1})
@@ -525,40 +634,53 @@ async def buat_draft_dari_siman(request: Request, import_id: str,
     pasangan.discard(("", ""))
     kode_semua = sorted({k for k, _ in pasangan if k})
     sudah_tercatat = set()
+    calon_duplikat = []
     if kode_semua:
         # Saring dulu dengan `$in` pada kode barang (ber-indeks), baru cocokkan
         # pasangan lengkapnya di Python — jauh lebih murah daripada `$or`
-        # sepanjang ribuan klausa. Yang ditukar: himpunan ini memuat SEMUA aset
-        # ber-kode sama, bukan hanya yang diminta. Proyeksinya dua field, jadi
-        # 50.000 aset ≈ 2,5 MB — masih jauh lebih murah daripada 1.000
-        # perjalanan bolak-balik, dan jumlah kode barang unik (bukan jumlah
-        # baris) yang menentukan panjang `$in`.
+        # sepanjang ribuan klausa. Kepemilikan tetap dibatasi scope pemanggil
+        # lalu identitas satker kegiatan; kode/NUP di satker lain tidak boleh
+        # menghalangi draft. Proyeksi hanya memuat identitas yang diperlukan.
         #
         # NUP dinormalkan ke teks di kedua sisi. Model menyimpannya sebagai
         # `Optional[str]`, tetapi data lama hasil impor bisa berupa angka —
         # `find_one` versi sebelumnya membandingkannya mentah, sehingga NUP 5
         # (angka) di basis data tak cocok dengan "5" dari berkas dan barisnya
         # dibuat DUA KALI.
-        async for a in db.assets.find(
-            {"asset_code": {"$in": kode_semua}, "dihapus": {"$ne": True}},
-            {"_id": 0, "asset_code": 1, "NUP": 1},
-        ):
-            sudah_tercatat.add((str(a.get("asset_code") or ""), str(a.get("NUP") or "")))
+        calon_duplikat = await db.assets.find(
+            await scope_query_aset(user, {
+                "asset_code": {"$in": kode_semua}, "dihapus": {"$ne": True}}),
+            {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "activity_id": 1,
+             "kode_satker": 1, "kode_satker_lengkap": 1},
+        ).to_list(500000)
+    satker_calon = await _identitas_satker_aset(calon_duplikat)
+    indeks = IndeksSatker([tujuan, *satker_calon.values(),
+                          *(b.get("kode_satker") for b in baris)])
+    kunci_tujuan = indeks.kunci(tujuan)
+    if not kunci_tujuan:
+        raise HTTPException(400, "Kode satker kegiatan tujuan ambigu; lengkapi kode satker lengkap sebelum membuat draft")
+    baris_sesuai = [b for b in baris
+                   if indeks.kunci(b.get("kode_satker")) == kunci_tujuan]
+    if not baris_sesuai:
+        raise HTTPException(400, "Kode satker baris SIMAN berbeda dengan kegiatan tujuan; pilih kegiatan dari satker yang sesuai")
+    for a in calon_duplikat:
+        if indeks.kunci(satker_calon.get(a["id"])) == kunci_tujuan:
+            sudah_tercatat.add(kunci_aset(a.get("asset_code"), a.get("NUP")))
 
-    for b in baris:
+    for b in baris_sesuai:
         if dibuat >= maks:
             break
         kode, nup = b.get("kode_barang", ""), b.get("nup", "")
         if not kode or not nup:
             continue
         # Lewati bila kini sudah tercatat (impor ulang / dibuat manual).
-        if (str(kode), str(nup)) in sudah_tercatat:
+        if kunci_aset(kode, nup) in sudah_tercatat:
             dilewati_sudah_ada += 1
             continue
         # Baris kembar DI DALAM berkas yang sama juga harus dilewati: tanpa ini
         # daftar di atas tak ikut bertambah saat draft dibuat, sehingga dua
         # baris ber-NUP sama melahirkan dua aset.
-        sudah_tercatat.add((str(kode), str(nup)))
+        sudah_tercatat.add(kunci_aset(kode, nup))
         draft = AssetCreate(
             asset_code=kode,
             NUP=nup,
@@ -575,6 +697,8 @@ async def buat_draft_dari_siman(request: Request, import_id: str,
             notes=f"Draft otomatis dari impor SIMAN V2 ({reg.get('filename', '')})",
             activity_id=payload.activity_id,
         )
+        await _pastikan_satker_tetap(
+            [{"id": "tujuan", "activity_id": payload.activity_id}], {"tujuan": tujuan})
         try:
             doc = await buat_aset_draft(
                 draft, audit_user=user.get("name") or user.get("username") or "system")
@@ -583,6 +707,8 @@ async def buat_draft_dari_siman(request: Request, import_id: str,
                 {"id": doc["id"]},
                 {"$set": {"siman": {"status": "cocok", "selisih": [],
                                     "kode_register": b.get("kode_register", ""),
+                                    "kode_satker": b["kode_satker"],
+                                    "kode_satker_aset": tujuan,
                                     "import_id": import_id,
                                     "diperiksa_pada": now}}})
             # Jurnal Buku Barang (temuan selisih mutasi vs SIMAN): aset yang
@@ -613,7 +739,8 @@ async def buat_draft_dari_siman(request: Request, import_id: str,
                             f"{dibuat} dibuat, {dilewati_sudah_ada} sudah ada, "
                             f"{len(gagal)} gagal"))
     return {"dibuat": dibuat, "dilewati_sudah_ada": dilewati_sudah_ada,
-            "gagal": gagal, "sisa": max(0, len(baris) - dibuat - dilewati_sudah_ada),
+            "gagal": gagal, "sisa": max(0, len(baris_sesuai) - dibuat - dilewati_sudah_ada),
+            "dilewati_satker_lain": len(baris) - len(baris_sesuai),
             "kegiatan": act.get("nama_kegiatan", "")}
 
 
@@ -680,6 +807,7 @@ async def terapkan_siman(asset_id: str, payload: TerapkanIn,
     a = await db.assets.find_one({"id": asset_id, "dihapus": {"$ne": True}},
                                  {"_id": 0, "id": 1, "NUP": 1, "asset_code": 1,
                                   "asset_name": 1, "activity_id": 1, "siman": 1,
+                                  "kode_satker": 1, "kode_satker_lengkap": 1,
                                   "version": 1})
     if not a:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
@@ -688,6 +816,13 @@ async def terapkan_siman(asset_id: str, payload: TerapkanIn,
     selisih = sub.get("selisih") or []
     if not selisih:
         raise HTTPException(status_code=400, detail="Tidak ada selisih SIMAN pada aset ini")
+
+    identitas = (await _identitas_satker_aset([a])).get(asset_id, "")
+    sumber = sub.get("kode_satker")
+    saat_impor = sub.get("kode_satker_aset") or sumber
+    if (not identitas or not sumber or not kode_satker_sama(identitas, sumber)
+            or not kode_satker_sama(identitas, saat_impor)):
+        raise HTTPException(409, "Identitas satker referensi SIMAN belum terverifikasi atau telah berubah; unggah ulang ekspor SIMAN untuk satker aset ini sebelum menerapkan nilai")
 
     pilih = set(payload.fields) if payload.fields else None
     terapkan = [s for s in selisih
@@ -726,13 +861,15 @@ async def terapkan_siman(asset_id: str, payload: TerapkanIn,
     sub.update({"selisih": sisa, "status": "selisih" if sisa else "cocok",
                 "disinkron_pada": datetime.now(timezone.utc).isoformat()})
     now = datetime.now(timezone.utc).isoformat()
+    await _pastikan_satker_tetap([a], {asset_id: identitas})
     res = await db.assets.find_one_and_update(
-        {"id": asset_id, "dihapus": {"$ne": True}},
+        {"id": asset_id, "dihapus": {"$ne": True},
+         "activity_id": a.get("activity_id"), "version": a.get("version")},
         {"$set": {**set_fields, "siman": sub, "updated_at": now},
          "$inc": {"version": 1}},
         projection={"_id": 0, "version": 1})
     if res is None:
-        raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+        raise HTTPException(status_code=409, detail="Aset berubah saat sinkronisasi; muat ulang data dan periksa kembali referensi SIMAN")
     # Dokumen berubah → indeks pencarian ikut disegarkan (best-effort).
     try:
         from meili_utils import jadwalkan_sync

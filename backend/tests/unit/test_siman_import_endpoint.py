@@ -80,7 +80,7 @@ def dbx(monkeypatch, mongomock_update_sort_compat):
 
 async def _seed(dbx):
     await dbx.inventory_activities.insert_one(
-        {"id": "keg1", "nama_kegiatan": "Inv", "kode_satker": ""})
+        {"id": "keg1", "nama_kegiatan": "Inv", "kode_satker": "621001"})
     await dbx.assets.insert_one(
         # "Nama Barang" pada ekspor SIMAN dibandingkan dengan `category`
         # (lihat siman_utils.PERBANDINGAN), bukan dengan `asset_name`.
@@ -89,7 +89,7 @@ async def _seed(dbx):
          "purchase_price": "15000000",
          "brand": "Lenovo", "model": "T14", "condition": "Baik",
          "purchase_date": "2024-03-01", "user": "Budi",
-         "kode_satker": "", "version": 1})
+         "kode_satker": "621001", "version": 1})
 
 
 async def _impor(dbx, baris_list=None, header=HEADER, **kw):
