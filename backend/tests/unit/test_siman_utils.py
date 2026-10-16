@@ -211,13 +211,19 @@ class TestValidasiSatker:
         assert validasi_satker({"X"}, set())["cocok"] is True
         assert validasi_satker({""}, {"X"})["cocok"] is True
 
-    def test_kode_6_digit_terkandung_dalam_20_digit_cocok(self):
-        # AMAN 6 digit vs SIMAN V2 kode lengkap ±20 digit yang memuatnya.
-        r = validasi_satker({"126011600691778000KP"}, {"160069"})
+    def test_kode_6_digit_memakai_segmen_satker_resmi(self):
+        # BA3 + eselon2 + wilayah4 + satker6 + subsatker3 + kewenangan2.
+        r = validasi_satker({"126011600691778000KP"}, {"691778"})
         assert r["cocok"] is True
         # Arah sebaliknya (file 6 digit, terdaftar 20 digit) juga cocok.
-        r = validasi_satker({"160069"}, {"126.01.1600691778.000-KP"})
+        r = validasi_satker({"691778"}, {"126.01.1600.691778.000.KP"})
         assert r["cocok"] is True
+
+    def test_substring_bukan_segmen_satker_ditolak(self):
+        assert validasi_satker({"126011600691778000KP"}, {"160069"})["cocok"] is False
+
+    def test_satu_kode_benar_tidak_menutupi_file_campuran(self):
+        assert validasi_satker({"691778", "621001"}, {"691778"})["cocok"] is False
 
     def test_kode_pendek_tidak_memicu_containment(self):
         # Kode <6 digit terlalu pendek untuk pencocokan terkandung —
@@ -235,4 +241,4 @@ class TestRingkasBelumTercatat:
         assert r["kode_register"] == b["kode_register"]
         assert set(r) == {"kode_barang", "nup", "nama_barang", "merk", "tipe",
                           "kondisi", "nilai_perolehan", "tanggal_perolehan",
-                          "kode_register"}
+                          "kode_register", "kode_satker", "nama_satker"}
