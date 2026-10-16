@@ -52,3 +52,37 @@ tersimpan; impor bukan transaksi lintas semua aset. Identitas kegiatan/master
 juga diperiksa ulang tepat sebelum penulisan. Pemeriksaan ulang dan CAS tidak
 mengklaim transaksi atomik lintas koleksi atau mengunci seluruh jalur perubahan
 identitas satker pada arsitektur MongoDB standalone saat ini.
+
+Perbaikan lanjutan juga memvalidasi **hasil yang dibaca**, bukan hanya impor:
+ringkasan, rekap kegiatan, dan daftar selisih hanya memakai referensi dengan
+satker sumber serta snapshot pemilik yang masih cocok dengan pemilik terkini.
+Referensi asing atau lama tanpa bukti tersebut dihitung `belum_dicek`, dan
+tidak menampilkan badge kecocokan/selisih. Filter validasi berlaku sebelum
+count dan pagination. Penghitungan mengelompokkan metadata di Mongo, lalu
+memeriksa pemilik secara batch; tidak mengunduh seluruh dokumen aset/foto.
+Batas eksplisit 50.000 kelompok dan 12 MiB kueri menghasilkan 503 dengan
+petunjuk mempersempit lingkup, bukan angka yang terpotong diam-diam.
+
+Daftar, detail, respons penyimpanan/idempotensi, dan snapshot aset mengirim
+`siman: null` jika referensi tidak terverifikasi. PSP resmi dari register tetap
+berlaku; PSP turunan dari SIMAN yang tidak valid dibersihkan dari respons.
+Dokumen asli dan versi aset tetap tersimpan utuh. Riwayat global tanpa kode
+pemilik tidak dijadikan hasil terbaru Satker Aktif; detail/CSV/draft untuk
+riwayat yang tidak sesuai satker juga ditolak.
+Stempel pemilik riwayat saja tidak cukup: impor lama pernah menerima file
+satker lain sambil memberi stempel Satker Aktif. Hasil aktif mensyaratkan
+`baris_diproses` dari importer yang memvalidasi sebelum tulis serta kode
+sumber yang cocok. Riwayat lama tanpa bukti tersebut tetap tersimpan, tetapi
+meminta impor ulang sebelum dijadikan hasil aktif atau sumber draft.
+
+Panel frontend direset ketika Satker Aktif berubah, membatalkan request lama
+dan mengabaikan respons yang terlambat. Unggahan, retry, penerapan, draft,
+reklasifikasi, dan CSV terikat pada konteks asal. Proyeksi cache offline versi
+3 meminta penarikan penuh berikutnya saat daring agar status lama disegarkan,
+termasuk aset yang versi/tanggal pembaruannya tidak berubah; antrean penulisan
+luring dan cache kegiatan lain tidak dihapus.
+
+Ekspor lampiran pengguna juga diuji secara privat melalui ASGI dan Mongo lokal
+terisolasi: 221 baris terbaca, Satker Aktif salah ditolak, benturan kode/NUP dan
+register pada pemilik lain tetap utuh, dan hasil tidak mengikuti pergantian
+satker. Berkas pelanggan tidak dimasukkan ke repositori atau data produksi.

@@ -24,8 +24,7 @@ from db import db
 from report_filters import active_asset_filter
 from shared_utils import (limiter, log_audit, kode_satker_user,
                           pastikan_akses_aset, pastikan_akses_dok_satker,
-                          pastikan_akses_kegiatan_id, scope_query_aset,
-                          scope_query_field_satker)
+                          pastikan_akses_kegiatan_id, scope_query_aset)
 from siman_utils import (
     FIELD_TERAPKAN, banding_aset, deteksi_header, kolom_banding_hilang,
     kunci_aset, nilai_terapkan,
@@ -33,6 +32,7 @@ from siman_utils import (
     validasi_satker,
 )
 from siman_satker import IndeksSatker, identitas_satker, kode_satker_sama
+from siman_provenance import identitas_satker_aset, referensi_siman_terverifikasi
 
 siman_router = APIRouter()
 
@@ -50,39 +50,8 @@ _MAKS_CONTOH = 200  # batas daftar contoh yang disimpan di register impor
 
 
 async def _identitas_satker_aset(assets):
-    """Identitas pemilik dari kegiatan, dengan kode lengkap master sebagai pelengkap.
-
-    Kepemilikan kegiatan tetap otoritatif. Kop global bukan identitas semua
-    aset; data tanpa identitas tidak boleh dicocokkan secara lintas satker.
-    Baca berkelompok agar tidak menambah satu query untuk setiap aset.
-    """
-    kegiatan, master = {}, {}
-    ids = sorted({a.get("activity_id") for a in assets if a.get("activity_id")})
-    for awal in range(0, len(ids), 1000):
-        async for item in db.inventory_activities.find(
-                {"id": {"$in": ids[awal:awal + 1000]}},
-                {"_id": 0, "id": 1, "kode_satker": 1, "kode_satker_lengkap": 1}):
-            kegiatan[item["id"]] = item
-    kode = sorted({str((kegiatan.get(a.get("activity_id")) or {}).get("kode_satker")
-                       or a.get("kode_satker") or "").strip() for a in assets} - {""})
-    for awal in range(0, len(kode), 1000):
-        async for item in db.satker.find(
-                {"kode_satker": {"$in": kode[awal:awal + 1000]}},
-                {"_id": 0, "kode_satker": 1, "kode_satker_lengkap": 1}):
-            master[item["kode_satker"]] = item
-    hasil = {}
-    for a in assets:
-        act = kegiatan.get(a.get("activity_id")) or {}
-        if act.get("kode_satker") or act.get("kode_satker_lengkap"):
-            pendek = str(act.get("kode_satker") or "").strip()
-            lengkap = (act.get("kode_satker_lengkap")
-                       or (master.get(pendek) or {}).get("kode_satker_lengkap") or "")
-        else:
-            pendek = str(a.get("kode_satker") or "").strip()
-            lengkap = (a.get("kode_satker_lengkap")
-                       or (master.get(pendek) or {}).get("kode_satker_lengkap") or "")
-        hasil[a["id"]] = identitas_satker(pendek, lengkap)
-    return hasil
+    """Wrapper bersama; database eksplisit menjaga isolasi fixture pengujian."""
+    return await identitas_satker_aset(assets, database=db)
 
 
 async def _pastikan_satker_tetap(assets, semula):
@@ -311,6 +280,8 @@ async def import_siman(request: Request, file: UploadFile = File(...),
                 {"id": a["id"], "activity_id": a.get("activity_id"),
                  "version": a.get("version"), "dihapus": {"$ne": True}},
                 {"$set": {"siman": {"status": "tidak_di_siman", "selisih": [],
+                                    "kode_satker": indeks_satker.kunci(satker_aset[a["id"]]),
+                                    "kode_satker_aset": satker_aset[a["id"]],
                                     "import_id": import_id,
                                     "diperiksa_pada": now},
                           "updated_at": now},
@@ -451,7 +422,122 @@ async def import_siman(request: Request, file: UploadFile = File(...),
     return {k: v for k, v in register.items() if k != "baris_belum_tercatat"}
 
 
-async def _rekap_per_kegiatan(user: dict) -> list:
+_STATUS_SIMAN = ("cocok", "selisih", "tidak_di_siman")
+_MAKS_KELOMPOK_STATUS = 50000
+_MAKS_KUER_STATUS = 12 * 1024 * 1024
+_FIELD_KELOMPOK = {
+    "activity_id": "activity_id", "kode_satker": "kode_satker",
+    "kode_satker_lengkap": "kode_satker_lengkap",
+    "sumber": "siman.kode_satker", "saat_impor": "siman.kode_satker_aset",
+    "status": "siman.status",
+}
+
+
+async def _kelompok_status_siman(user, query=None):
+    """Hitung metadata kelompok, bukan memuat dokumen setiap NUP.
+
+    Pemilik terkini diperiksa setelah pengelompokan Mongo. Jumlah metadata
+    mengikuti kombinasi kegiatan/pemilik/provenance/status, bukan jumlah
+    barang. Referensi lama/asing masuk belum_dicek tanpa mengubah dokumen.
+    Batas eksplisit mencegah truncation diam-diam dan kueri BSON berlebihan.
+    """
+    q = query if query is not None else await scope_query_aset(user, active_asset_filter())
+    cursor = db.assets.aggregate([
+        {"$match": q},
+        {"$group": {
+            "_id": {key: {"$ifNull": ["$" + field, ""]}
+                    for key, field in _FIELD_KELOMPOK.items()},
+            "n": {"$sum": 1},
+        }},
+    ], allowDiskUse=True)
+    groups, contexts = [], []
+    async for item in cursor:
+        if len(groups) >= _MAKS_KELOMPOK_STATUS:
+            raise HTTPException(503, "Metadata sinkronisasi terlalu besar; persempit lingkup satker atau kegiatan lalu muat ulang")
+        key = item["_id"]
+        item["status_terverifikasi"] = "belum_dicek"
+        # Nilai historis malformed tidak menjadi operator Mongo atau alias
+        # identitas. activity_id juga tidak boleh berupa array/object.
+        scalar = all(isinstance(v, (str, int, float)) and not isinstance(v, bool)
+                     for v in key.values()) and isinstance(key["activity_id"], str)
+        if scalar:
+            context = {"id": str(len(groups)), **{f: key[f] for f in
+                       ("activity_id", "kode_satker", "kode_satker_lengkap")}}
+            contexts.append(context)
+            item["context_id"] = context["id"]
+        groups.append(item)
+    identities = await _identitas_satker_aset(contexts)
+    for group in groups:
+        key = group["_id"]
+        sub = {"kode_satker": key["sumber"], "kode_satker_aset": key["saat_impor"]}
+        if (key["status"] in _STATUS_SIMAN
+                and referensi_siman_terverifikasi(sub, identities.get(group.get("context_id")))):
+            group["status_terverifikasi"] = key["status"]
+    return groups
+
+
+def _kueri_kelompok_terverifikasi(query, groups):
+    """Filter kelompok valid DI MONGO sebelum count/sort/skip/limit."""
+    from bson import BSON
+
+    clauses = []
+    for group in groups:
+        if group["status_terverifikasi"] not in _STATUS_SIMAN:
+            continue
+        clause = {"siman": {"$type": "object", "$not": {"$type": "array"}}}
+        for key, field in _FIELD_KELOMPOK.items():
+            value = group["_id"][key]
+            # Equality Mongo biasanya juga cocok anggota array. Larang array
+            # agar grup malformed tidak menyusup melalui grup scalar valid.
+            predicate = {"$in": ["", None]} if value == "" else {"$eq": value}
+            clause[field] = {**predicate, "$not": {"$type": "array"}}
+        clauses.append(clause)
+    result = {"$and": [query, {"$or": clauses} if clauses else {"id": {"$in": []}}]}
+    if len(BSON.encode(result)) > _MAKS_KUER_STATUS:
+        raise HTTPException(503, "Lingkup referensi SIMAN terlalu besar; pilih satu kegiatan lalu muat ulang")
+    return result
+
+
+def _scope_riwayat_siman(user):
+    # Kompatibilitas dokumen global pada helper umum tidak berlaku untuk
+    # hasil sinkronisasi. Pemilik kosong tidak membuktikan hasil satker aktif.
+    kode = kode_satker_user(user)
+    owner = {"$type": "string", "$not": {"$type": "array"}}
+    owner.update({"$eq": kode} if kode else {"$nin": ["", None]})
+    # baris_diproses ditulis sejak importer memvalidasi sumber sebelum tulis.
+    # Stempel pemilik saja tidak membuktikan file lama berasal dari satker itu.
+    return {"kode_satker": owner, "baris_diproses": {"$type": "number", "$gt": 0}}
+
+
+def _sumber_riwayat_siman(reg):
+    validation = reg.get("validasi_satker")
+    codes = validation.get("kode_file") if isinstance(validation, dict) else None
+    return codes if isinstance(codes, list) else []
+
+
+def _riwayat_siman_terverifikasi(reg):
+    owner, processed = reg.get("kode_satker"), reg.get("baris_diproses")
+    sources = _sumber_riwayat_siman(reg)
+    return bool(isinstance(owner, str) and owner.strip()
+                and isinstance(processed, int) and not isinstance(processed, bool) and processed > 0
+                and sources and all(isinstance(code, str) and kode_satker_sama(owner, code)
+                                    for code in sources))
+
+
+async def _pastikan_akses_riwayat_siman(user, reg):
+    await pastikan_akses_dok_satker(user, reg)
+    kode = kode_satker_user(user)
+    if kode and not kode_satker_sama(kode, reg.get("kode_satker")):
+        raise HTTPException(403, "Riwayat impor tidak terverifikasi untuk Satker Aktif; unggah ulang ekspor SIMAN satker yang sesuai")
+    if kode:
+        if any(isinstance(code, str) and code and not kode_satker_sama(kode, code)
+               for code in _sumber_riwayat_siman(reg)):
+            raise HTTPException(403, "Satker sumber pada riwayat impor berbeda dengan Satker Aktif; unggah ekspor satker yang sesuai")
+        if not _riwayat_siman_terverifikasi(reg):
+            raise HTTPException(409, "Riwayat impor lama belum memverifikasi satker sumber; unggah ulang ekspor SIMAN satker ini")
+
+
+async def _rekap_per_kegiatan(user: dict, kelompok=None) -> list:
     """Rekap status sinkron SIMAN DIPECAH per kegiatan inventarisasi.
 
     KENAPA PERLU. Angka global ("12 selisih") tak bisa ditindaklanjuti begitu
@@ -464,17 +550,14 @@ async def _rekap_per_kegiatan(user: dict) -> list:
     Satu pipeline agregasi, bukan N kueri per kegiatan: jumlah kegiatan tumbuh
     tiap tahun anggaran dan panel ini dimuat pada tiap kunjungan halaman.
     """
-    q = await scope_query_aset(user, active_asset_filter({"siman": {"$exists": True}}))
-    baris = await db.assets.aggregate([
-        {"$match": q},
-        {"$group": {"_id": {"kegiatan": "$activity_id", "status": "$siman.status"},
-                    "n": {"$sum": 1}}},
-    ]).to_list(5000)
+    baris = kelompok if kelompok is not None else await _kelompok_status_siman(user)
 
     per = {}
     for b in baris:
-        kunci = (b.get("_id") or {}).get("kegiatan") or ""
-        status = (b.get("_id") or {}).get("status") or "belum_dicek"
+        kunci = (b.get("_id") or {}).get("activity_id") or ""
+        status = b["status_terverifikasi"]
+        if status not in _STATUS_SIMAN:
+            continue
         slot = per.setdefault(kunci, {"activity_id": kunci, "nama_kegiatan": "",
                                       "cocok": 0, "selisih": 0, "tidak_di_siman": 0})
         if status in slot:
@@ -504,23 +587,24 @@ async def _rekap_per_kegiatan(user: dict) -> list:
 @siman_router.get("/siman/ringkasan")
 async def ringkasan_siman(_user: dict = Depends(require_user)):
     """Status sinkronisasi terkini + riwayat impor (untuk panel UI)."""
-    selisih = await db.assets.count_documents(
-        await scope_query_aset(_user, active_asset_filter({"siman.status": "selisih"})))
-    cocok = await db.assets.count_documents(
-        await scope_query_aset(_user, active_asset_filter({"siman.status": "cocok"})))
-    tidak_di_siman = await db.assets.count_documents(
-        await scope_query_aset(_user, active_asset_filter({"siman.status": "tidak_di_siman"})))
-    belum_dicek = await db.assets.count_documents(
-        await scope_query_aset(_user, active_asset_filter({"siman": {"$exists": False}})))
-    riwayat = await db.siman_imports.find(
-        scope_query_field_satker(_user),
+    kelompok = await _kelompok_status_siman(_user)
+    counts = {status: 0 for status in (*_STATUS_SIMAN, "belum_dicek")}
+    for group in kelompok:
+        counts[group["status_terverifikasi"]] += group["n"]
+    riwayat = []
+    cursor = db.siman_imports.find(
+        _scope_riwayat_siman(_user),
         {"_id": 0, "contoh_siman_tanpa_aset": 0, "contoh_aman_tanpa_siman": 0,
          "baris_belum_tercatat": 0},
-    ).sort("waktu", -1).limit(10).to_list(10)
+    ).sort("waktu", -1).batch_size(10)
+    async for reg in cursor:
+        if _riwayat_siman_terverifikasi(reg):
+            riwayat.append(reg)
+            if len(riwayat) == 10:
+                break
     return {
-        "selisih": selisih, "cocok": cocok,
-        "tidak_di_siman": tidak_di_siman, "belum_dicek": belum_dicek,
-        "per_kegiatan": await _rekap_per_kegiatan(_user),
+        **counts,
+        "per_kegiatan": await _rekap_per_kegiatan(_user, kelompok),
         "riwayat": riwayat,
         "import_terakhir": riwayat[0] if riwayat else None,
     }
@@ -533,7 +617,7 @@ async def detail_import_siman(import_id: str, _user: dict = Depends(require_user
         {"id": import_id}, {"_id": 0, "baris_belum_tercatat": 0})
     if not reg:
         raise HTTPException(status_code=404, detail="Riwayat impor tidak ditemukan")
-    await pastikan_akses_dok_satker(_user, reg)
+    await _pastikan_akses_riwayat_siman(_user, reg)
     return reg
 
 
@@ -546,10 +630,11 @@ async def csv_belum_tercatat(import_id: str, _user: dict = Depends(require_user)
 
     reg = await db.siman_imports.find_one(
         {"id": import_id},
-        {"_id": 0, "baris_belum_tercatat": 1, "filename": 1, "kode_satker": 1})
+        {"_id": 0, "baris_belum_tercatat": 1, "filename": 1, "kode_satker": 1,
+         "baris_diproses": 1, "validasi_satker": 1})
     if not reg:
         raise HTTPException(status_code=404, detail="Riwayat impor tidak ditemukan")
-    await pastikan_akses_dok_satker(_user, reg)
+    await _pastikan_akses_riwayat_siman(_user, reg)
     baris = reg.get("baris_belum_tercatat") or []
     buf = io.StringIO()
     w = csv.writer(buf)
@@ -593,10 +678,11 @@ async def buat_draft_dari_siman(request: Request, import_id: str,
 
     reg = await db.siman_imports.find_one(
         {"id": import_id},
-        {"_id": 0, "baris_belum_tercatat": 1, "filename": 1, "kode_satker": 1})
+        {"_id": 0, "baris_belum_tercatat": 1, "filename": 1, "kode_satker": 1,
+         "baris_diproses": 1, "validasi_satker": 1})
     if not reg:
         raise HTTPException(status_code=404, detail="Riwayat impor tidak ditemukan")
-    await pastikan_akses_dok_satker(user, reg)
+    await _pastikan_akses_riwayat_siman(user, reg)
     baris = reg.get("baris_belum_tercatat") or []
     if not baris:
         raise HTTPException(status_code=400, detail=(
@@ -777,11 +863,17 @@ async def daftar_selisih_siman(page: int = 1, page_size: int = 50,
                                     {"activity_id": {"$exists": False}}]}]}
     elif pilih:
         q = {**q, "$and": [*q.get("$and", []), {"activity_id": pilih}]}
+    groups = await _kelompok_status_siman(_user, q)
+    q = _kueri_kelompok_terverifikasi(q, groups)
     total = await db.assets.count_documents(q)
     items = await (db.assets.find(q, _PROJ_ASET)
                    .sort([("asset_code", 1), ("NUP", 1)])
                    .skip((page - 1) * page_size).limit(page_size)
                    .to_list(page_size))
+    identities = await _identitas_satker_aset(items)
+    if any(not referensi_siman_terverifikasi(i.get("siman"), identities.get(i["id"]))
+           for i in items):
+        raise HTTPException(409, "Identitas satker berubah ketika daftar SIMAN dimuat; muat ulang untuk memeriksa hasil terkini")
     # Nama kegiatan disematkan di sini supaya tiap baris bisa berdiri sendiri:
     # tanpa ini daftar gabungan tak menunjukkan aset ini milik kegiatan mana.
     ids = {i.get("activity_id") for i in items if i.get("activity_id")}
@@ -812,16 +904,18 @@ async def terapkan_siman(asset_id: str, payload: TerapkanIn,
     if not a:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
     await pastikan_akses_aset(user, a)
-    sub = a.get("siman") or {}
+    sub = a.get("siman")
+    if sub is not None and not isinstance(sub, dict):
+        raise HTTPException(409, "Referensi SIMAN lama tidak valid; unggah ulang ekspor SIMAN satker aset ini")
+    sub = sub or {}
     selisih = sub.get("selisih") or []
+    if not isinstance(selisih, list) or any(not isinstance(s, dict) for s in selisih):
+        raise HTTPException(409, "Rincian referensi SIMAN lama tidak valid; unggah ulang ekspor SIMAN satker aset ini")
     if not selisih:
         raise HTTPException(status_code=400, detail="Tidak ada selisih SIMAN pada aset ini")
 
     identitas = (await _identitas_satker_aset([a])).get(asset_id, "")
-    sumber = sub.get("kode_satker")
-    saat_impor = sub.get("kode_satker_aset") or sumber
-    if (not identitas or not sumber or not kode_satker_sama(identitas, sumber)
-            or not kode_satker_sama(identitas, saat_impor)):
+    if not referensi_siman_terverifikasi(sub, identitas):
         raise HTTPException(409, "Identitas satker referensi SIMAN belum terverifikasi atau telah berubah; unggah ulang ekspor SIMAN untuk satker aset ini sebelum menerapkan nilai")
 
     pilih = set(payload.fields) if payload.fields else None

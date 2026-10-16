@@ -121,7 +121,10 @@ def test_builder_sort_sama_dengan_daftar_mongo_dan_filter(database, sort):
 def test_psp_register_resmi_scope_dan_fallback_siman(database):
     async def run():
         await seed(database, 4)
-        await database.assets.update_one({"id": "id0001"}, {"$set": {"siman": {"referensi": {"no_psp": "SIMAN-1"}}}})
+        await database.assets.update_one({"id": "id0001"}, {"$set": {"siman": {
+            "status": "cocok", "kode_satker": "A", "kode_satker_aset": "A",
+            "referensi": {"no_psp": "SIMAN-1"},
+        }}})
         await database.psp.insert_many([
             {"nomor_sk": "SK-LAMA", "tanggal_sk": "2020-01-01", "status_pengajuan": "ditetapkan", "kode_satker": "A", "aset": [{"asset_id": "id0000"}]},
             {"nomor_sk": "SK-BARU", "tanggal_sk": "2021-01-01", "status_pengajuan": "ditetapkan", "kode_satker": "A", "aset": [{"asset_id": "id0000"}]},

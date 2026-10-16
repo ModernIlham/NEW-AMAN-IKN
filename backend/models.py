@@ -161,6 +161,8 @@ class DocumentCheckItemResponse(BaseModel):
     document_count: Optional[int] = None  # Added for exclude_media mode
 
 class AssetResponse(BaseModel):
+    # Null eksplisit membatalkan referensi SIMAN lama pada cache/detail klien.
+    siman: Optional[dict] = None
     id: str
     asset_code: str
     NUP: Optional[str] = ""

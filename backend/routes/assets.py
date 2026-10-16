@@ -44,6 +44,7 @@ from shared_utils import (
     scope_query_aset, scope_query_field_satker,
 )
 from penggunaan_utils import info_psp_aset, peta_psp_dari_sk
+from siman_provenance import bersihkan_referensi_siman
 from routes.websocket import notify_asset_change
 from photo_rotate_utils import normalisasi_derajat, rotate_jpeg_bytes
 from meili_utils import jadwalkan_sync, jadwalkan_hapus, cari_id_aset
@@ -281,6 +282,9 @@ LIST_PROJECTION = {
     # Sinkronisasi SIMAN V2: status cocok/selisih + rincian selisih + referensi
     # (nilai penyusutan/buku dsb.) — ringkas, dipakai penanda di halaman aset.
     "siman": 1,
+    # Flat owner stamps are only a fallback for legacy assets whose activity
+    # has no owner identity; provenance validation needs them in list reads.
+    "kode_satker": 1, "kode_satker_lengkap": 1,
     # Jejak BAST serah terima terakhir (badge riwayat handover per aset).
     "bast_terakhir": 1,
     "amanah_bast": 1,
@@ -342,6 +346,7 @@ async def lengkapi_psp(assets, user):
     Query di-scope satker via `scope_query_field_satker`: SK milik satker lain
     tak boleh menerangi aset siapa pun, sekalipun id-nya kebetulan tercantum.
     """
+    await bersihkan_referensi_siman(assets or [], database=db)
     ids = [str(a.get("id")) for a in (assets or []) if a.get("id")]
     if not ids:
         return assets
@@ -362,9 +367,30 @@ async def lengkapi_psp(assets, user):
                 peta[aid] = info
     for a in assets:
         info = info_psp_aset(a, peta)
-        if info:
-            a["psp"] = info
+        a["psp"] = info or None
     return assets
+
+
+async def _respons_aset_terverifikasi(asset, user, *, replay=False):
+    """Revalidate response evidence, including idempotent replay snapshots."""
+    if replay:
+        # Keep the original idempotent native payload, but do not mistake its
+        # historical activity_id for the current owner after an asset move.
+        current = await db.assets.find_one(
+            {"id": asset["id"], "dihapus": {"$ne": True}},
+            {"_id": 0, "id": 1, "activity_id": 1,
+             "kode_satker": 1, "kode_satker_lengkap": 1})
+        if current:
+            evidence = {**asset, "activity_id": current.get("activity_id"),
+                        "kode_satker": current.get("kode_satker"),
+                        "kode_satker_lengkap": current.get("kode_satker_lengkap")}
+            await lengkapi_psp([evidence], user)
+            asset["siman"], asset["psp"] = evidence["siman"], evidence["psp"]
+        else:
+            asset["siman"], asset["psp"] = None, None
+    else:
+        await lengkapi_psp([asset], user)
+    return AssetResponse(**asset)
 
 
 def build_asset_search_query(
@@ -1167,7 +1193,7 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
         cached = await get_idempotent_response(idem_key)
         if cached and cached.get("response"):
             logger.info(f"Idempotent replay for key {idem_key[:8]}...")
-            return AssetResponse(**cached["response"])
+            return await _respons_aset_terverifikasi({**cached["response"]}, _user, replay=True)
         # DEDUP PERMANEN (temuan audit G3): cache respons di atas ber-TTL 24
         # jam, sedangkan antrean luring bisa jauh lebih tua. Dokumen aset
         # sendiri menyimpan idem_key sejak dibuat, jadi replay yang datang
@@ -1180,14 +1206,14 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
             # base64 seluruh foto aset, sementara jalur sukses tepat di bawah
             # justru membuangnya. Replay lazim terjadi persis saat sinyal buruk —
             # keadaan yang paling tak sanggup menanggung respons multi-MB.
-            return AssetResponse(**_strip_media(
-                {k: v for k, v in _sudah.items() if k in AssetResponse.model_fields}))
+            return await _respons_aset_terverifikasi(_strip_media(
+                {k: v for k, v in _sudah.items() if k in AssetResponse.model_fields}), _user, replay=True)
         # Atomically claim the key so concurrent duplicates can't both run.
         _idem = await reserve_idempotency_key(idem_key)
         if _idem == "done":
             cached = await get_idempotent_response(idem_key)
             if cached and cached.get("response"):
-                return AssetResponse(**cached["response"])
+                return await _respons_aset_terverifikasi({**cached["response"]}, _user, replay=True)
         elif _idem == "pending":
             raise HTTPException(status_code=409, detail="Permintaan dengan kunci idempotensi ini sedang diproses, coba lagi sebentar")
 
@@ -1307,8 +1333,8 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
         await discard_uncommitted_photos(db, fs_bucket, asset_id, photo_gridfs_ids)
         _menang = await db.assets.find_one({"idem_key": idem_key}, {"_id": 0}) if idem_key else None
         if _menang:
-            return AssetResponse(**_strip_media(
-                {k: v for k, v in _menang.items() if k in AssetResponse.model_fields}))
+            return await _respons_aset_terverifikasi(_strip_media(
+                {k: v for k, v in _menang.items() if k in AssetResponse.model_fields}), _user, replay=True)
         raise HTTPException(status_code=409, detail="Aset dengan kunci idempotensi ini sudah tersimpan")
     except Exception as e:
         # A timed-out Mongo call may still commit after this handler returns.
@@ -1384,6 +1410,8 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
 
     # Respons TANPA media (lihat _strip_media): klien sudah punya fotonya —
     # jangan kirim balik base64 besar. Salinan dangkal agar asset_doc asli utuh.
+    # AssetCreate tidak menerima referensi SIMAN; aset baru belum mempunyai
+    # hasil impor atau register PSP. Null bawaan cukup, tanpa query tambahan.
     response = AssetResponse(**_strip_media({**asset_doc}))
     # Cache the response for idempotent retries
     if idem_key:
@@ -2429,7 +2457,7 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
     jadwalkan_sync("assets", updated_asset)
     # Real-time notification
     await notify_asset_change(asset.activity_id, "asset_updated", {"id": asset_id, "asset_code": asset.asset_code, "asset_name": asset.asset_name}, audit_user, user_id=audit_user_id)
-    return AssetResponse(**updated_asset)
+    return await _respons_aset_terverifikasi(updated_asset, _user)
 
 
 # Fields that can be patched individually
@@ -2449,12 +2477,12 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
         cached = await get_idempotent_response(idem_key)
         if cached and cached.get("response"):
             logger.info(f"Idempotent PATCH replay for key {idem_key[:8]}...")
-            return AssetResponse(**cached["response"])
+            return await _respons_aset_terverifikasi({**cached["response"]}, _user, replay=True)
         _idem = await reserve_idempotency_key(idem_key)
         if _idem == "done":
             cached = await get_idempotent_response(idem_key)
             if cached and cached.get("response"):
-                return AssetResponse(**cached["response"])
+                return await _respons_aset_terverifikasi({**cached["response"]}, _user, replay=True)
         elif _idem == "pending":
             raise HTTPException(status_code=409, detail="Permintaan dengan kunci idempotensi ini sedang diproses, coba lagi sebentar")
 
@@ -2944,7 +2972,7 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
         {"id": asset_id, "asset_code": merged.get("asset_code", ""), "asset_name": merged.get("asset_name", "")},
         audit_user, user_id=audit_user_id
     )
-    response = AssetResponse(**updated_asset)
+    response = await _respons_aset_terverifikasi(updated_asset, _user)
     if idem_key:
         await store_idempotent_response(idem_key, response.model_dump(mode="json"), 200)
     return response
