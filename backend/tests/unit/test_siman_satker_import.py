@@ -279,6 +279,7 @@ def test_apply_accepts_verified_source_for_current_asset_satker(dbx, source):
         await _activities(dbx)
         await dbx.assets.insert_one(_asset("a", brand="Old", siman={
             "status": "selisih", "import_id": "current-import", "kode_satker": source,
+            "kode_satker_aset": SATKER_A,
             "selisih": [{"field": "brand", "label": "Merk", "aman": "Old", "siman": "New"}],
         }))
 
@@ -305,6 +306,7 @@ def test_apply_rejects_unverified_or_stale_satker_provenance_without_writes(dbx,
         ]}
         if invalid_source == "moved_activity":
             siman["kode_satker"] = SATKER_A
+            siman["kode_satker_aset"] = SATKER_A
         activity = "activity-b" if invalid_source == "moved_activity" else "activity-a"
         await dbx.assets.insert_one(_asset("a", activity, brand="Old", siman=siman))
         before = await _snapshot(dbx)

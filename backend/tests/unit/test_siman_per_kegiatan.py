@@ -19,6 +19,7 @@ import routes.siman as rs
 # kode_satker "" = super-admin lintas satker → guard akses no-op, sehingga uji
 # ini fokus pada rekap (isolasi satker punya uji sendiri di modul lain).
 USER = {"username": "admin", "role": "admin", "kode_satker": ""}
+KODE_SATKER = "621001"
 
 
 def _jalan(coro):
@@ -36,21 +37,25 @@ def dbx(monkeypatch):
     monkeypatch.setattr(rs, "log_audit", _diam)
     import shared_utils as su_mod
     monkeypatch.setattr(su_mod, "db", fake)
+    import siman_provenance as provenance
+    monkeypatch.setattr(provenance, "db", fake)
     return fake
 
 
 def _aset(i, keg, status):
     return {"id": i, "activity_id": keg, "asset_code": "3.05.01.05.007",
-            "NUP": i[-1], "asset_name": f"Barang {i}", "kode_satker": "",
-            "siman": {"status": status, "selisih": [{"field": "asset_name",
+            "NUP": i[-1], "asset_name": f"Barang {i}", "kode_satker": KODE_SATKER,
+            "siman": {"status": status, "kode_satker": KODE_SATKER,
+                      "kode_satker_aset": KODE_SATKER,
+                      "selisih": [{"field": "asset_name",
                                                      "label": "Nama",
                                                      "aman": "A", "siman": "B"}]}}
 
 
 async def _seed(dbx):
     await dbx.inventory_activities.insert_many([
-        {"id": "keg1", "nama_kegiatan": "Inventarisasi Semester I", "kode_satker": ""},
-        {"id": "keg2", "nama_kegiatan": "Inventarisasi Semester II", "kode_satker": ""},
+        {"id": "keg1", "nama_kegiatan": "Inventarisasi Semester I", "kode_satker": KODE_SATKER},
+        {"id": "keg2", "nama_kegiatan": "Inventarisasi Semester II", "kode_satker": KODE_SATKER},
     ])
     await dbx.assets.insert_many([
         _aset("a1", "keg1", "selisih"),
@@ -158,10 +163,12 @@ def test_penyaring_tak_bisa_menembus_batas_satker(dbx):
     _jalan(dbx.assets.insert_many([
         {"id": "sa1", "activity_id": "kegA", "kode_satker": "111111",
          "asset_code": "x", "NUP": "1", "asset_name": "Milik A",
-         "siman": {"status": "selisih", "selisih": []}},
+         "siman": {"status": "selisih", "selisih": [],
+                   "kode_satker": "111111", "kode_satker_aset": "111111"}},
         {"id": "sb1", "activity_id": "kegB", "kode_satker": "222222",
          "asset_code": "y", "NUP": "1", "asset_name": "Milik B",
-         "siman": {"status": "selisih", "selisih": []}},
+         "siman": {"status": "selisih", "selisih": [],
+                   "kode_satker": "222222", "kode_satker_aset": "222222"}},
     ]))
     user_a = {"username": "a", "role": "admin", "kode_satker": "111111"}
     hasil = _jalan(rs.daftar_selisih_siman(
@@ -185,10 +192,12 @@ def test_pengguna_ter_scope_TETAP_bisa_menyaring_kegiatannya_sendiri(dbx):
     _jalan(dbx.assets.insert_many([
         {"id": "sa1", "activity_id": "kegA", "kode_satker": "111111",
          "asset_code": "x", "NUP": "1", "asset_name": "Milik A",
-         "siman": {"status": "selisih", "selisih": []}},
+         "siman": {"status": "selisih", "selisih": [],
+                   "kode_satker": "111111", "kode_satker_aset": "111111"}},
         {"id": "sa2", "activity_id": "kegA2", "kode_satker": "111111",
          "asset_code": "x", "NUP": "2", "asset_name": "Milik A dua",
-         "siman": {"status": "selisih", "selisih": []}},
+         "siman": {"status": "selisih", "selisih": [],
+                   "kode_satker": "111111", "kode_satker_aset": "111111"}},
     ]))
     user_a = {"username": "a", "role": "admin", "kode_satker": "111111"}
 

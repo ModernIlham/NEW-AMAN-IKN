@@ -152,6 +152,10 @@ export function makeDownloadProgress(label) {
  * @param {*} [opts.data] - Body request saat method "post".
  * @param {number} [opts.timeout] - Timeout axios (ms); baku 120 dtk.
  * @param {string} [opts.timeoutMessage] - Pesan khusus saat timeout.
+ * @param {Object} [opts.headers] - Header konteks saat tombol ditekan.
+ * @param {AbortSignal} [opts.signal] - Batalkan saat konteks ditinggalkan.
+ *   Unduhan dengan headers/signal tetap sinkron agar fallback tidak berpindah
+ *   konteks ke satker yang baru dipilih.
  * @param {boolean|"langsung"} [opts.viaPusat] - `"langsung"`: langsung
  *   daftarkan ke Pusat Unduhan tanpa mencoba unduh sinkron (untuk laporan yang
  *   SUDAH diketahui berat) — HANYA berlaku untuk method GET dengan URL API
@@ -164,7 +168,15 @@ export function makeDownloadProgress(label) {
  */
 export async function downloadFileWithProgress(url, filename, opts = {}) {
   const { label = filename, params, method = "get", data, timeout,
-          timeoutMessage, viaPusat } = opts;
+          timeoutMessage, viaPusat, headers, signal } = opts;
+  const pastikanAktif = () => {
+    if (signal?.aborted) {
+      const error = new Error("Unduhan dibatalkan");
+      error.code = "ERR_CANCELED";
+      throw error;
+    }
+  };
+  pastikanAktif();
 
   // URL final (query params ikut) → path internal /api untuk Pusat Unduhan.
   // Pakai axios.getUri agar serialisasi query PERSIS sama dengan request
@@ -183,7 +195,7 @@ export async function downloadFileWithProgress(url, filename, opts = {}) {
   };
 
   const { toastId, onDownloadProgress } = makeDownloadProgress(label);
-  if (viaPusat === "langsung") {
+  if (viaPusat === "langsung" && !headers && !signal) {
     // "langsung" hanya berlaku untuk GET ke URL API internal (.../api/...).
     // Di luar itu turun ke unduhan sinkron (dengan peringatan konsol) alih-alih
     // gagal senyap, agar caller keliru tetap mendapat file.
@@ -202,13 +214,21 @@ export async function downloadFileWithProgress(url, filename, opts = {}) {
       }
     }
   }
+  const batalkanToast = () => toast.dismiss(toastId);
+  signal?.addEventListener("abort", batalkanToast, { once: true });
   try {
-    const config = { responseType: "blob", onDownloadProgress };
+    pastikanAktif();
+    const config = { responseType: "blob", onDownloadProgress: signal
+      ? (event) => { if (!signal.aborted) onDownloadProgress(event); }
+      : onDownloadProgress };
     if (params) config.params = params;
+    if (headers) config.headers = headers;
+    if (signal) config.signal = signal;
     config.timeout = timeout || TIMEOUT_UNDUH_BAKU;
     const r = method === "post"
       ? await axios.post(url, data, config)
       : await axios.get(url, config);
+    pastikanAktif();
 
     const blobUrl = window.URL.createObjectURL(new Blob([r.data]));
     const link = document.createElement("a");
@@ -221,12 +241,16 @@ export async function downloadFileWithProgress(url, filename, opts = {}) {
     toast.success(`${label} berhasil diunduh`, { id: toastId });
     return r;
   } catch (err) {
+    if (signal?.aborted || err?.code === "ERR_CANCELED") {
+      batalkanToast();
+      throw err;
+    }
     // Waktu habis pada GET = server kemungkinan MASIH menyusun file — jangan
     // dibuang: daftarkan ke Pusat Unduhan agar dilanjutkan di latar dan bisa
     // diunduh dari sana tanpa request ulang.
     const habisWaktu = err?.code === "ECONNABORTED"
       || (typeof err?.message === "string" && err.message.includes("timeout"));
-    if (habisWaktu && method === "get" && viaPusat !== false) {
+    if (habisWaktu && method === "get" && viaPusat !== false && !headers && !signal) {
       try {
         if (await kePusat(toastId)) return { viaPusat: true };
       } catch (errPusat) {
@@ -239,7 +263,10 @@ export async function downloadFileWithProgress(url, filename, opts = {}) {
       }
     }
     const msg = await pesanGalatRespons(err, timeoutMessage);
+    pastikanAktif();
     toast.error(`Gagal mengunduh ${label}: ${msg}`, { id: toastId });
     throw err;
+  } finally {
+    signal?.removeEventListener("abort", batalkanToast);
   }
 }

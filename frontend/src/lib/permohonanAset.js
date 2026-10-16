@@ -11,20 +11,21 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
  * halaman; gagal membaca setelan dianggap MATI (perilaku lama) agar
  * transaksi tidak terkunci oleh galat jaringan sesaat.
  */
-export async function gerbangPermohonanAsetAktif() {
+export async function gerbangPermohonanAsetAktif(requestConfig) {
   try {
-    const r = await axios.get(`${API}/pembukuan/permohonan-pengaturan`);
+    const r = await axios.get(`${API}/pembukuan/permohonan-pengaturan`, ...(requestConfig ? [requestConfig] : []));
     return !!r.data?.aktif;
-  } catch {
+  } catch (error) {
+    if (requestConfig?.signal?.aborted) throw error;
     return false;
   }
 }
 
 /** Ajukan permohonan transaksi aset — mengembalikan dokumen permohonan. */
-export async function ajukanPermohonanAset(jalur, assetId, payload, catatan = "") {
+export async function ajukanPermohonanAset(jalur, assetId, payload, catatan = "", requestConfig) {
   const r = await axios.post(`${API}/pembukuan/permohonan`, {
     jalur, asset_id: assetId, payload, catatan,
-  });
+  }, ...(requestConfig ? [requestConfig] : []));
   return r.data?.permohonan;
 }
 

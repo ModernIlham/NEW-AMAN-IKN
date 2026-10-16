@@ -8,6 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
+import { getSatkerAktif, SATKER_AKTIF_EVENT } from "@/lib/satkerAktif";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -28,6 +29,26 @@ function fmtRp(v) {
  * tinjau selisih per aset di panel ini → "Terapkan nilai SIMAN".
  */
 export default function SimanSyncCard({ isAdmin }) {
+  const [satker, setSatker] = useState(getSatkerAktif);
+  useEffect(() => {
+    const segarkan = () => setSatker(getSatkerAktif());
+    const antarTab = (event) => {
+      if (event.key === "satker_aktif" || event.key === null) segarkan();
+    };
+    window.addEventListener(SATKER_AKTIF_EVENT, segarkan);
+    window.addEventListener("storage", antarTab);
+    // A change between the initial render and listener registration also
+    // requires a new card; all summaries, selections and drafts belong to it.
+    segarkan();
+    return () => {
+      window.removeEventListener(SATKER_AKTIF_EVENT, segarkan);
+      window.removeEventListener("storage", antarTab);
+    };
+  }, []);
+  return <SimanSyncSatker key={satker} isAdmin={isAdmin} satker={satker} />;
+}
+
+function SimanSyncSatker({ isAdmin, satker }) {
   const [ringkasan, setRingkasan] = useState(null);
   const [mengunggah, setMengunggah] = useState(false);
   const [persenUnggah, setPersenUnggah] = useState(0);
@@ -45,27 +66,58 @@ export default function SimanSyncCard({ isAdmin }) {
   // {importId, activities, activityId, sibuk, hasil}
   const [draft, setDraft] = useState(null);
   const fileRef = useRef(null);
+  const controllerRef = useRef(null);
+  if (!controllerRef.current) controllerRef.current = new AbortController();
+  const ringkasanSeq = useRef(0);
+  const selisihSeq = useRef(0);
+  const draftSeq = useRef(0);
+
+  useEffect(() => {
+    // React StrictMode repeats effects on the same mount. Each effect lifetime
+    // needs a live controller, and old responses remain tied to the old one.
+    if (controllerRef.current.signal.aborted) controllerRef.current = new AbortController();
+    const controller = controllerRef.current;
+    return () => controller.abort();
+  }, []);
+
+  const lingkupRequest = useCallback(() => {
+    const controller = controllerRef.current;
+    return {
+      config: { signal: controller.signal, headers: { "X-Satker-Aktif": satker } },
+      aktif: () => !controller.signal.aborted && getSatkerAktif() === satker,
+    };
+  }, [satker]);
 
   const muatRingkasan = useCallback(() => {
-    axios.get(`${API}/siman/ringkasan`)
-      .then((r) => setRingkasan(r.data))
-      .catch(() => setRingkasan({ gagal: true }));
-  }, []);
+    const lingkup = lingkupRequest();
+    if (!lingkup.aktif()) return;
+    const seq = ++ringkasanSeq.current;
+    axios.get(`${API}/siman/ringkasan`, lingkup.config)
+      .then((r) => {
+        if (lingkup.aktif() && seq === ringkasanSeq.current) setRingkasan(r.data);
+      })
+      .catch(() => {
+        if (lingkup.aktif() && seq === ringkasanSeq.current) setRingkasan({ gagal: true });
+      });
+  }, [lingkupRequest]);
 
   useEffect(() => { muatRingkasan(); }, [muatRingkasan]);
 
   const ambilSelisih = useCallback(async (page = 1, kegiatan = kegiatanPilih) => {
+    const lingkup = lingkupRequest();
+    if (!lingkup.aktif()) return;
+    const seq = ++selisihSeq.current;
     setMuatSelisih(true);
     try {
       const q = kegiatan ? `&activity_id=${encodeURIComponent(kegiatan)}` : "";
-      const r = await axios.get(`${API}/siman/selisih?page=${page}&page_size=50${q}`);
-      setSelisih(r.data);
+      const r = await axios.get(`${API}/siman/selisih?page=${page}&page_size=50${q}`, lingkup.config);
+      if (lingkup.aktif() && seq === selisihSeq.current) setSelisih(r.data);
     } catch {
-      toast.error("Gagal memuat daftar selisih SIMAN");
+      if (lingkup.aktif() && seq === selisihSeq.current) toast.error("Gagal memuat daftar selisih SIMAN");
     } finally {
-      setMuatSelisih(false);
+      if (lingkup.aktif() && seq === selisihSeq.current) setMuatSelisih(false);
     }
-  }, [kegiatanPilih]);
+  }, [kegiatanPilih, lingkupRequest]);
 
   // Menyaring daftar selisih ke SATU kegiatan. Klik ulang baris yang sama =
   // kembali ke seluruh kegiatan, jadi tak perlu tombol "hapus filter" tersendiri.
@@ -84,6 +136,8 @@ export default function SimanSyncCard({ isAdmin }) {
 
   const unggah = async (file) => {
     if (!file) return;
+    const lingkup = lingkupRequest();
+    if (!lingkup.aktif()) return;
     setMengunggah(true);
     setPersenUnggah(0);
     const fd = new FormData();
@@ -92,21 +146,25 @@ export default function SimanSyncCard({ isAdmin }) {
     // gagal JARINGAN (tanpa respons server). Error 4xx/5xx TIDAK diulang.
     let r = null;
     for (let percobaan = 0; ; percobaan++) {
+      if (!lingkup.aktif()) return;
       try {
         r = await axios.post(
           `${API}/siman/import?tandai_tidak_ditemukan=${tandaiHilang}`, fd, {
-            headers: { "Content-Type": "multipart/form-data" },
+            ...lingkup.config,
+            headers: { ...lingkup.config.headers, "Content-Type": "multipart/form-data" },
             timeout: 180000,
             onUploadProgress: (ev) => {
-              if (ev.total) setPersenUnggah(Math.round((ev.loaded / ev.total) * 100));
+              if (lingkup.aktif() && ev.total) setPersenUnggah(Math.round((ev.loaded / ev.total) * 100));
             },
           });
         break;
       } catch (e) {
+        if (!lingkup.aktif()) return;
         const putus = !e?.response; // network error / timeout — layak diulang
         if (putus && percobaan < JEDA_RETRY.length) {
           toast.info(`Koneksi terputus saat mengunggah — mencoba ulang (${percobaan + 2}/${JEDA_RETRY.length + 1})…`);
           await new Promise((res) => setTimeout(res, JEDA_RETRY[percobaan]));
+          if (!lingkup.aktif()) return;
           setPersenUnggah(0);
           continue;
         }
@@ -122,6 +180,7 @@ export default function SimanSyncCard({ isAdmin }) {
         return;
       }
     }
+    if (!lingkup.aktif()) return;
     const rk = r.data?.ringkasan || {};
     toast.success(
       `Impor SIMAN selesai: ${rk.aset_dicek || 0} aset dicek — ` +
@@ -137,24 +196,32 @@ export default function SimanSyncCard({ isAdmin }) {
   };
 
   const bukaBuatDraft = async (importId) => {
+    const lingkup = lingkupRequest();
+    if (!lingkup.aktif()) return;
+    const seq = ++draftSeq.current;
     setDraft({ importId, activities: null, activityId: "", sibuk: false, hasil: null });
     try {
-      const r = await axios.get(`${API}/inventory-activities`);
+      const r = await axios.get(`${API}/inventory-activities`, lingkup.config);
+      if (!lingkup.aktif() || seq !== draftSeq.current) return;
       const items = Array.isArray(r.data) ? r.data : (r.data?.items || []);
       setDraft((d) => d && { ...d, activities: items });
     } catch {
+      if (!lingkup.aktif() || seq !== draftSeq.current) return;
       toast.error("Gagal memuat daftar kegiatan");
       setDraft(null);
     }
   };
 
   const jalankanBuatDraft = async () => {
+    const lingkup = lingkupRequest();
+    if (!lingkup.aktif()) return;
     if (!draft?.activityId) { toast.error("Pilih kegiatan tujuan dulu"); return; }
     setDraft((d) => ({ ...d, sibuk: true }));
     try {
       const r = await axios.post(
         `${API}/siman/import/${draft.importId}/buat-draft`,
-        { activity_id: draft.activityId });
+        { activity_id: draft.activityId }, lingkup.config);
+      if (!lingkup.aktif()) return;
       const d = r.data || {};
       toast.success(
         `${d.dibuat} aset draft dibuat di kegiatan "${d.kegiatan}"` +
@@ -165,12 +232,15 @@ export default function SimanSyncCard({ isAdmin }) {
       setDraft((prev) => prev && { ...prev, sibuk: false, hasil: d });
       muatRingkasan();
     } catch (e) {
+      if (!lingkup.aktif()) return;
       toast.error(e?.response?.data?.detail || "Gagal membuat draft aset");
       setDraft((prev) => prev && { ...prev, sibuk: false });
     }
   };
 
   const terapkan = async (aset) => {
+    const lingkup = lingkupRequest();
+    if (!lingkup.aktif()) return;
     setMenerapkan(aset.id);
     try {
       // Kode barang DIKECUALIKAN dari jalur timpa — reklasifikasi punya
@@ -178,15 +248,16 @@ export default function SimanSyncCard({ isAdmin }) {
       // disertakan (integrasi audit #5).
       const fields = (aset.siman?.selisih || [])
         .map((s) => s.field).filter((f) => f !== "asset_code");
-      const r = await axios.post(`${API}/siman/terapkan/${aset.id}`, { fields });
+      const r = await axios.post(`${API}/siman/terapkan/${aset.id}`, { fields }, lingkup.config);
+      if (!lingkup.aktif()) return;
       toast.success(
         `Aset ${aset.asset_code} NUP ${aset.NUP}: ${r.data.diterapkan.length} field disinkronkan ke nilai SIMAN`);
       muatRingkasan();
       ambilSelisih(selisih?.page || 1);
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Gagal menerapkan nilai SIMAN");
+      if (lingkup.aktif()) toast.error(e?.response?.data?.detail || "Gagal menerapkan nilai SIMAN");
     } finally {
-      setMenerapkan(null);
+      if (lingkup.aktif()) setMenerapkan(null);
     }
   };
 
@@ -194,6 +265,8 @@ export default function SimanSyncCard({ isAdmin }) {
   // Reklasifikasi resmi (kode+NUP in-place, jurnal 304/107, riwayat) —
   // bukan sekadar menimpa kode via sinkron.
   const reklasSiman = async (aset, kodeBaru) => {
+    const lingkup = lingkupRequest();
+    if (!lingkup.aktif()) return;
     const ok = await confirm({
       title: `Reklasifikasi ${aset.asset_code} → ${kodeBaru}?`,
       description:
@@ -202,34 +275,47 @@ export default function SimanSyncCard({ isAdmin }) {
         "Barang. Sumber: kode barang SIMAN berbeda dengan AMAN.",
       confirmLabel: "Reklasifikasi",
     });
-    if (!ok) return;
+    if (!ok || !lingkup.aktif()) return;
     setMereklas(aset.id);
     try {
       // Gerbang ASET-GERBANG-1: wajib-persetujuan aktif → reklasifikasi
       // dari sinkron SIMAN pun lewat permohonan (tetap tercatat sumbernya).
       const { ajukanPermohonanAset, gerbangPermohonanAsetAktif,
               pesanPermohonanTerkirim } = await import("@/lib/permohonanAset");
-      if (await gerbangPermohonanAsetAktif()) {
+      if (!lingkup.aktif()) return;
+      const gerbangAktif = await gerbangPermohonanAsetAktif(lingkup.config);
+      if (!lingkup.aktif()) return;
+      if (gerbangAktif) {
         await ajukanPermohonanAset("reklasifikasi", aset.id,
           { kode_baru: kodeBaru,
-            alasan: "Reklasifikasi terdeteksi dari sinkron SIMAN V2" });
+            alasan: "Reklasifikasi terdeteksi dari sinkron SIMAN V2" }, "", lingkup.config);
+        if (!lingkup.aktif()) return;
         toast.success(pesanPermohonanTerkirim("Reklasifikasi"));
       } else {
         const r = await axios.post(`${API}/pembukuan/reklasifikasi`, {
           asset_id: aset.id, kode_baru: kodeBaru,
-          alasan: "Reklasifikasi terdeteksi dari sinkron SIMAN V2" });
+          alasan: "Reklasifikasi terdeteksi dari sinkron SIMAN V2" }, lingkup.config);
+        if (!lingkup.aktif()) return;
         toast.success(`Reklasifikasi tercatat — kode baru ${r.data.kode_baru} · NUP ${r.data.nup_baru}`);
       }
       muatRingkasan();
       ambilSelisih(selisih?.page || 1);
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Gagal reklasifikasi");
+      if (lingkup.aktif()) toast.error(e?.response?.data?.detail || "Gagal reklasifikasi");
     } finally {
-      setMereklas(null);
+      if (lingkup.aktif()) setMereklas(null);
     }
   };
 
   const impor = ringkasan?.import_terakhir;
+  const unduhCsv = () => {
+    const lingkup = lingkupRequest();
+    if (!lingkup.aktif()) return;
+    downloadFileWithProgress(
+      `${API}/siman/import/${impor.id}/belum-tercatat.csv`,
+      "siman_belum_tercatat.csv",
+      { label: "CSV baris SIMAN belum tercatat", ...lingkup.config }).catch(() => {});
+  };
 
   return (
     <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="siman-sync-card">
@@ -499,10 +585,7 @@ export default function SimanSyncCard({ isAdmin }) {
             <div className="flex items-center gap-1.5 flex-wrap">
               <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1 min-h-0"
                 title="Unduh daftar baris SIMAN yang belum tercatat (CSV)"
-                onClick={() => downloadFileWithProgress(
-                  `${API}/siman/import/${impor.id}/belum-tercatat.csv`,
-                  "siman_belum_tercatat.csv",
-                  { label: "CSV baris SIMAN belum tercatat" }).catch(() => {})}
+                onClick={unduhCsv}
                 data-testid="siman-csv-belum">
                 <FileDown className="w-3 h-3" />CSV
               </Button>

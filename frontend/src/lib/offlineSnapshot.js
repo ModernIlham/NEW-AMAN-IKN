@@ -31,9 +31,10 @@ const DB_NAME = "aman_offline_snapshot";
 // jadi upgrade mengosongkan cache agar sync berikutnya full resync.
 const DB_VERSION = 2;
 // Muat ulang proyeksi saat daring tanpa menghapus cache baca/antrean luring.
-// v2 menambah marker_pin; tab lama mungkin telah memajukan cursor sambil
-// membuang field baru. Tarik penuh sekali supaya marker tidak polos luring.
-const VERSI_PROYEKSI = 2;
+// v3 memuat SIMAN/PSP yang telah diverifikasi satkernya. Sanitasi proyeksi
+// tidak mengubah version/updated_at aset, sehingga delta tidak memperbaiki
+// badge lama. Tarik penuh sekali saat daring; cache dan antrean tetap ada.
+const VERSI_PROYEKSI = 3;
 const ASSET_STORE = "assets"; // keyed by asset id, indexed by activity_id
 const META_STORE = "meta";    // keyed by activityId → {activityId, userId, lastSync, count}
 
@@ -76,7 +77,7 @@ const SNAPSHOT_FIELDS = [
   "thumbnail", "thumbnail_index", "gallery_thumbnail", "created_at", "updated_at",
   "activity_id", "version", "stiker_photo_index", "di_denah", "denah_nama",
   "denah_jalur", "denah_titik", "photo_count", "doc_total", "doc_checked",
-  "doc_summary", "siman",
+  "doc_summary", "siman", "psp",
 ];
 
 let databasePromise;

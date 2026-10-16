@@ -124,6 +124,35 @@ describe("upsertSnapshotAsset — baca-gabung-tulis", () => {
     expect(baris.siman).toEqual({ beda: true });     // badge SIMAN selamat
   });
 
+  test("proyeksi otoritatif null membersihkan badge SIMAN dan PSP lama di cache", async () => {
+    mockSimpanan.assets.set("a1", {
+      id: "a1", activity_id: "keg1", version: 7, asset_name: "Meja",
+      siman: { status: "selisih", import_id: "import-satker-lama" },
+      psp: { no_psp: "SK-SATKER-LAMA" }, doc_total: 4,
+    });
+
+    await upsertSnapshotAsset("keg1", { id: "a1", version: 8, siman: null, psp: null });
+
+    expect(mockSimpanan.assets.get("a1")).toMatchObject({
+      id: "a1", version: 8, asset_name: "Meja", doc_total: 4,
+      siman: null, psp: null,
+    });
+  });
+
+  test("patch tanpa proyeksi SIMAN atau PSP mempertahankan kedua badge yang tersimpan", async () => {
+    const siman = { status: "cocok", import_id: "import-satker-aktif" };
+    const psp = { no_psp: "SK-SATKER-AKTIF" };
+    mockSimpanan.assets.set("a1", {
+      id: "a1", activity_id: "keg1", version: 7, asset_name: "Meja", siman, psp,
+    });
+
+    await upsertSnapshotAsset("keg1", { id: "a1", version: 8, asset_name: "Meja Kayu" });
+
+    expect(mockSimpanan.assets.get("a1")).toMatchObject({
+      version: 8, asset_name: "Meja Kayu", siman, psp,
+    });
+  });
+
   test("baris baru (belum ada di snapshot) tetap tertulis", async () => {
     await upsertSnapshotAsset("keg1", { id: "b2", asset_name: "Kursi", condition: "Baik" });
     expect(mockSimpanan.assets.get("b2").asset_name).toBe("Kursi");
@@ -168,4 +197,38 @@ test("paged IDB: halaman berikutnya membaca hanya halaman, upsert/delete/fullsyn
   await syncSnapshot(activityId, "u", undefined, { forceFull: true });
   const afterFull = await getSnapshotPage(activityId, { ownerId: "u" });
   expect(afterFull.total).toBe(1); expect(afterFull.items.map(r => r.id)).toEqual(["only"]);
+});
+
+test("proyeksi v2 menarik penuh badge terverifikasi meski versi aset tetap, lalu kembali delta", async () => {
+  const activityId = "projection-upgrade";
+  const oldCursor = new Date(Date.now() - 60000).toISOString();
+  const firstCursor = new Date().toISOString();
+  const original = {
+    id: "unchanged", activity_id: activityId, version: 7, updated_at: oldCursor,
+    asset_name: "Laptop lapangan", NUP: "1", marker_pin: "pin asli", location: "Ruang A",
+    thumbnail: "data:image/png;base64,thumbnail", doc_total: 4, doc_checked: 2,
+    siman: { status: "cocok", import_id: "impor-lama" }, psp: { no_psp: "PSP-LAMA" },
+  };
+  mockSimpanan.meta.set(activityId, {
+    activityId, userId: "u", versiProyeksi: 2, lastSync: oldCursor, disegarkanPada: firstCursor,
+  });
+  mockSimpanan.assets.set(original.id, original);
+  const otherActivity = { id: "other", activity_id: "kegiatan-lain", asset_name: "Cache kegiatan lain" };
+  mockSimpanan.assets.set(otherActivity.id, otherActivity);
+  axios.get.mockResolvedValueOnce({ data: {
+    items: [{ id: original.id, activity_id: activityId, version: 7, updated_at: oldCursor,
+      siman: null, psp: null }], total: 1, server_time: firstCursor,
+  } });
+
+  await syncSnapshot(activityId, "u");
+
+  expect(new URL(axios.get.mock.calls[0][0], "http://localhost").searchParams.has("since")).toBe(false);
+  expect(mockSimpanan.assets.get(original.id)).toEqual({ ...original, siman: null, psp: null });
+  expect(mockSimpanan.assets.get(otherActivity.id)).toEqual(otherActivity);
+  expect(mockSimpanan.meta.get(activityId)).toMatchObject({ versiProyeksi: 3, lastSync: firstCursor });
+
+  axios.get.mockResolvedValueOnce({ data: { items: [], total: 1, server_time: firstCursor } });
+  await syncSnapshot(activityId, "u");
+  expect(new URL(axios.get.mock.calls[1][0], "http://localhost").searchParams.get("since")).toBe(firstCursor);
+  expect(mockSimpanan.assets.get(original.id)).toEqual({ ...original, siman: null, psp: null });
 });

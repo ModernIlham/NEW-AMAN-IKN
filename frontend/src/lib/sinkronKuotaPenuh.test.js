@@ -146,7 +146,7 @@ describe("kursor delta berhenti saat kuota perangkat penuh", () => {
     expect(globalThis.__ambilHalaman.mock.calls[0][0]).not.toContain("since=");
     expect(mockSimpanan.assets.get("a1").denah_jalur).toBe("Gedung / Ruang");
     expect(mockSimpanan.assets.get("a1").marker_pin).toBe(marker_pin);
-    expect((await snapshotMeta("keg1")).versiProyeksi).toBe(2);
+    expect((await snapshotMeta("keg1")).versiProyeksi).toBe(3);
     await syncSnapshot("keg1", "u1");
     expect(globalThis.__ambilHalaman.mock.calls[1][0]).toContain("since=2026-08-08T10%3A00%3A00Z");
   });

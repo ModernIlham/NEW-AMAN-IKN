@@ -71,6 +71,7 @@ async def _satker_case(contract, activities, *, user_satker=""):
             "asset_name": "Laptop", "purchase_price": "16000000",
             "brand": "Lenovo", "model": "T14", "condition": "Baik",
             "purchase_date": "2024-03-01", "user": "Budi", "version": 1,
+            "created_at": "2026-10-15T00:00:00+00:00",
             # A register is deliberately shared across the distinct satkers.
             "kode_register": "SIMAN-SHARED-REGISTER",
         })
@@ -327,3 +328,142 @@ async def test_siman_unmatched_row_creates_own_draft_despite_foreign_duplicate(c
         assert repeated.json()["sisa"] == 0
         assert await contract.db.assets.count_documents({"activity_id": case.activities["a"]}) == 1
         assert await contract.db.assets.find_one({"id": case.assets["b"]}) == foreign_before
+
+
+@pytest.mark.parametrize("source_b", ["621002", "126011600621002000KP"])
+async def test_siman_reads_revalidate_saved_references_when_active_satker_changes(contract, source_b):
+    """Historical marks must not become actionable merely by switching satker."""
+    full_a, full_b = "126011600621001000KP", "126011600621002000KP"
+    identities = {
+        "a": {"kode_satker": "621001", "kode_satker_lengkap": full_a},
+        "b": {"kode_satker": "621002", "kode_satker_lengkap": full_b},
+    }
+    async with _satker_case(contract, identities) as case:
+        difference = [{"field": "brand", "label": "Merk", "aman": "Old", "siman": "New"}]
+        valid_a = {"status": "selisih", "selisih": difference,
+                   "kode_satker": full_a, "kode_satker_aset": full_a}
+        valid_b = {"status": "selisih", "selisih": difference,
+                   "kode_satker": source_b, "kode_satker_aset": full_b}
+        for name, reference in (("a", valid_a), ("b", valid_b)):
+            await contract.db.assets.update_one(
+                {"id": case.assets[name]}, {"$set": {"siman": reference}})
+        invalid = {
+            "foreign": {"status": "selisih", "selisih": difference,
+                        "kode_satker": full_a, "kode_satker_aset": full_b},
+            "legacy": {"status": "selisih", "selisih": difference},
+            "missing-owner": {"status": "selisih", "selisih": difference,
+                              "kode_satker": source_b},
+        }
+        invalid_ids = set()
+        for index, (name, reference) in enumerate(invalid.items()):
+            identifier = case.assets["b"] + "-" + name
+            invalid_ids.add(identifier)
+            await contract.db.assets.insert_one({
+                "id": identifier, "activity_id": case.activities["b"],
+                # These sort before the valid asset: filtering after limit
+                # would return an empty first page or an incorrect total.
+                "asset_code": f"299960000{index}", "NUP": "1", "version": 7,
+                "asset_name": name, "category": "Laptop", "siman": reference,
+                "created_at": "2026-10-15T00:00:00+00:00",
+            })
+        history = [
+            {"id": case.user + "-history-a", "kode_satker": "621001", "waktu": "2099-01-01"},
+            {"id": case.user + "-history-b", "kode_satker": "621002", "waktu": "2099-01-02"},
+            {"id": case.user + "-history-blank", "kode_satker": "", "waktu": "2099-01-04",
+             "validasi_satker": {"kode_file": [full_a]}},
+            {"id": case.user + "-history-missing", "waktu": "2099-01-03"},
+        ]
+        await contract.db.siman_imports.insert_many([
+            {**row, "oleh": case.user, "filename": "historical-siman.xlsx"} for row in history])
+        owned_query = {"activity_id": {"$in": list(case.activities.values())}}
+        assets_before = await contract.db.assets.find(owned_query).sort("id").to_list(None)
+        history_before = await contract.db.siman_imports.find({"oleh": case.user}).sort("id").to_list(None)
+
+        for name, code, expected_unchecked in (("a", "621001", 0), ("b", "621002", 3)):
+            headers = {**case.headers, "X-Satker-Aktif": code}
+            summary = await contract.http.get("/api/siman/ringkasan", headers=headers)
+            assert summary.status_code == 200, summary.text
+            body = summary.json()
+            assert (body["selisih"], body["cocok"], body["tidak_di_siman"], body["belum_dicek"]) == (
+                1, 0, 0, expected_unchecked)
+            assert [row["id"] for row in body["riwayat"]] == [case.user + "-history-" + name]
+            assert body["import_terakhir"]["id"] == case.user + "-history-" + name
+            assert sum(row["selisih"] for row in body["per_kegiatan"]) == 1
+            assert {row["activity_id"] for row in body["per_kegiatan"]} == {case.activities[name]}
+            listed = await contract.http.get(
+                "/api/siman/selisih", headers=headers, params={"page_size": 1})
+            assert listed.status_code == 200, listed.text
+            assert listed.json()["total"] == 1
+            assert [row["id"] for row in listed.json()["items"]] == [case.assets[name]]
+
+        headers_b = {**case.headers, "X-Satker-Aktif": "621002"}
+        for name in ("a", "blank", "missing"):
+            history_id = case.user + "-history-" + name
+            for suffix in ("", "/belum-tercatat.csv"):
+                denied = await contract.http.get(
+                    f"/api/siman/import/{history_id}{suffix}", headers=headers_b)
+                assert denied.status_code == 403, denied.text
+        for suffix in ("", "/belum-tercatat.csv"):
+            own_history = await contract.http.get(
+                f"/api/siman/import/{case.user}-history-b{suffix}", headers=headers_b)
+            assert own_history.status_code == 200, own_history.text
+        for endpoint in ("/api/assets", "/api/assets/offline-snapshot"):
+            response = await contract.http.get(
+                endpoint, headers=headers_b, params={"activity_id": case.activities["b"]})
+            assert response.status_code == 200, response.text
+            rows = {row["id"]: row for row in response.json()["items"]}
+            assert set(rows) == {case.assets["b"], *invalid_ids}
+            assert rows[case.assets["b"]]["siman"] == valid_b
+            for identifier in invalid_ids:
+                # Explicit null overwrites a previously cached wrong badge.
+                assert "siman" in rows[identifier] and rows[identifier]["siman"] is None
+        foreign_id = case.assets["b"] + "-foreign"
+        for lightweight in (False, True):
+            detail = await contract.http.get(
+                "/api/assets/" + foreign_id, headers=headers_b,
+                params={"exclude_media": str(lightweight).lower()})
+            assert detail.status_code == 200, detail.text
+            assert "siman" in detail.json() and detail.json()["siman"] is None
+        assert await contract.db.assets.find(owned_query).sort("id").to_list(None) == assets_before
+        assert await contract.db.siman_imports.find({"oleh": case.user}).sort("id").to_list(None) == history_before
+
+
+async def test_siman_reads_hide_reference_after_parent_full_satker_identity_changes(contract):
+    full_a, moved_full = "126011600621001000KP", "126011601621001000KP"
+    identities = {"a": {"kode_satker": "621001", "kode_satker_lengkap": full_a}}
+    async with _satker_case(contract, identities, user_satker="621001") as case:
+        imported = await _import_rows(
+            contract, case.headers, [{"satker": full_a, "brand": "Merk sebelum pindah"}],
+        )
+        assert imported.status_code == 200, imported.text
+        assert imported.json()["ringkasan"]["selisih"] == 1
+        await contract.db.inventory_activities.update_one(
+            {"id": case.activities["a"]}, {"$set": {"kode_satker_lengkap": moved_full}})
+        asset_before = await contract.db.assets.find_one({"id": case.assets["a"]})
+
+        summary = await contract.http.get("/api/siman/ringkasan", headers=case.headers)
+        assert summary.status_code == 200, summary.text
+        assert summary.json()["selisih"] == 0
+        assert summary.json()["belum_dicek"] == 1
+        assert sum(row["selisih"] for row in summary.json()["per_kegiatan"]) == 0
+        listed = await contract.http.get("/api/siman/selisih", headers=case.headers)
+        assert listed.status_code == 200, listed.text
+        assert listed.json()["total"] == 0 and listed.json()["items"] == []
+        for endpoint in ("/api/assets", "/api/assets/offline-snapshot"):
+            response = await contract.http.get(
+                endpoint, headers=case.headers, params={"activity_id": case.activities["a"]})
+            assert response.status_code == 200, response.text
+            row = response.json()["items"][0]
+            assert row["id"] == case.assets["a"]
+            assert "siman" in row and row["siman"] is None
+        for lightweight in (False, True):
+            detail = await contract.http.get(
+                "/api/assets/" + case.assets["a"], headers=case.headers,
+                params={"exclude_media": str(lightweight).lower()})
+            assert detail.status_code == 200, detail.text
+            assert "siman" in detail.json() and detail.json()["siman"] is None
+        applied = await contract.http.post(
+            "/api/siman/terapkan/" + case.assets["a"], headers=case.headers,
+            json={"fields": ["brand"]})
+        assert applied.status_code == 409, applied.text
+        assert await contract.db.assets.find_one({"id": case.assets["a"]}) == asset_before
