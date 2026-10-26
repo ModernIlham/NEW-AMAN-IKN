@@ -39,6 +39,7 @@ import PortalPemegangPanel from "@/components/penggunaan/PortalPemegangPanel";
 import PilihPegawaiBast, { pihakDariPegawai } from "@/components/penggunaan/PilihPegawaiBast";
 import PilihanRingkas from "@/components/ui/PilihanRingkas";
 import StatusOtomasiBast from "@/components/penggunaan/StatusOtomasiBast";
+import DokumenAkhirBast from "@/components/penggunaan/DokumenAkhirBast";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -2024,7 +2025,7 @@ export default function PenggunaanPage({ user, onBack }) {
       <Dialog open={!!buktiUntuk} onOpenChange={o => { if (!o && !buktiUntuk?.sibuk) setBuktiUntuk(null); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Periksa bukti BAST</DialogTitle><DialogDescription>
-            {buktiUntuk?.bast?.nomor || "BAST"} · Pilih dokumen yang benar. Unggah berkas saja belum mengaktifkan penugasan BMN Saya.
+            {buktiUntuk?.bast?.nomor || "BAST"} · Scan bertanda tangan manual boleh menggunakan format lain, selama isi dan kelengkapannya sesuai BAST ini. Unggah berkas saja belum mengaktifkan penugasan BMN Saya.
           </DialogDescription></DialogHeader>
           <div className="space-y-3">
             <Button type="button" variant="outline" className="min-h-[44px]" disabled={buktiUntuk?.sibuk} data-testid="bast-bukti-pilih" onClick={() => buktiRef.current?.click()}>Pilih bukti PDF/foto</Button>
@@ -2052,8 +2053,8 @@ export default function PenggunaanPage({ user, onBack }) {
           ) : (
             <ul className="space-y-2">
               {riwayatBast.items.map((b) => {
-                // Bukti elektronik bukan scan `bukti.file_id`. Jangan menawarkan
-                // unggah ulang setelah final, termasuk ketika proyeksi perlu ditinjau.
+                // Bukti dasar tetap terkunci setelah final. Dokumen pelengkap
+                // masuk arsip terpisah, tidak mengganti PDF elektronik/scan dasar.
                 const elektronikFinal = Boolean(b.ttd?.id && b.ttd.semua_selesai
                   && b.ttd.status === "selesai" && !b.tt_dicabut && !b.direvisi_oleh
                   && (!b.signature_request_id || b.signature_request_id === b.ttd.id));
@@ -2072,7 +2073,7 @@ export default function PenggunaanPage({ user, onBack }) {
                       </p>
                       {elektronikFinal && (
                         <p className="text-[10px] text-emerald-600 dark:text-emerald-400" data-testid={`bast-bukti-elektronik-${b.id}`}>
-                          Bukti elektronik lengkap — tidak perlu unggah scan tanda tangan ulang.
+                          Bukti elektronik lengkap — dokumen setelah e-meterai atau scan tambahan dapat diunggah sebagai dokumen akhir di bawah.
                         </p>
                       )}
                       {b.bukti?.file_id ? (
@@ -2176,6 +2177,7 @@ export default function PenggunaanPage({ user, onBack }) {
                       )}
                     </div>
                   </div>
+                  <DokumenAkhirBast bast={b} editable={["admin", "operator"].includes(user?.role)} onUpdated={bukaRiwayatBast} />
                 </li>
                 );
               })}

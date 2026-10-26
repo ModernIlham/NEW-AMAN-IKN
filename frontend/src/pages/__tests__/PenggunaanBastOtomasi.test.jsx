@@ -40,7 +40,8 @@ test.each([true, false])("BAST revisi final menampilkan PDF ber-TTD tanpa unggah
   localStorage.setItem("satker_aktif", "SATKER-UJI");
   try {
     await buka(); fireEvent.click(screen.getByTestId("penggunaan-riwayat-bast"));
-    expect(await screen.findByTestId("bast-bukti-elektronik-b1")).toHaveTextContent("tidak perlu unggah scan");
+    expect(await screen.findByTestId("bast-bukti-elektronik-b1")).toHaveTextContent("dokumen setelah e-meterai");
+    expect(screen.getByTestId("bast-unggah-akhir-b1")).toBeInTheDocument();
     expect(screen.queryByTestId("bast-unggah-bukti-b1")).not.toBeInTheDocument();
     expect(screen.queryByTestId("bast-kirim-ttd-b1")).not.toBeInTheDocument();
     expect(screen.queryByText(/Bukti ttd belum diunggah/)).not.toBeInTheDocument();

@@ -25,7 +25,7 @@ def env(monkeypatch):
     return db, bucket, ObjectId()
 
 
-@pytest.mark.parametrize("rujukan", ["bukti", "bukti_riwayat", "dok_file_id"])
+@pytest.mark.parametrize("rujukan", ["bukti", "bukti_riwayat", "dokumen_akhir", "dok_file_id"])
 @pytest.mark.parametrize("bson_id", [False, True])
 def test_bukti_aktif_arsip_dan_pdf_ttd_dipertahankan(env, rujukan, bson_id):
     db, bucket, fid = env
@@ -37,7 +37,7 @@ def test_bukti_aktif_arsip_dan_pdf_ttd_dipertahankan(env, rujukan, bson_id):
             await db.signature_requests.insert_one({"id": "sr1", "status": "batal", "dok_file_id": value})
         else:
             doc = {"id": "b1", "kode_satker": "satker-lain", "direvisi_oleh": "b2"}
-            doc[rujukan] = [{"file_id": value}] if rujukan == "bukti_riwayat" else {"file_id": value}
+            doc[rujukan] = [{"file_id": value}] if rujukan in {"bukti_riwayat", "dokumen_akhir"} else {"file_id": value}
             await db.bast_serah_terima.insert_one(doc)
         assert await su.delete_document_from_gridfs(str(fid)) is False
         bucket.delete.assert_not_awaited()
@@ -92,4 +92,5 @@ def test_lookup_bukti_memiliki_indeks_path_yang_sesuai():
     source = inspect.getsource(indexes.create_indexes)
     assert 'await _idx(db.bast_serah_terima, "bukti.file_id", sparse=True)' in source
     assert 'await _idx(db.bast_serah_terima, "bukti_riwayat.file_id", sparse=True)' in source
+    assert 'await _idx(db.bast_serah_terima, "dokumen_akhir.file_id", sparse=True)' in source
     assert 'await _idx(db.signature_requests, "dok_file_id", sparse=True)' in source
