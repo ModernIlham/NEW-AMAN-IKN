@@ -27,6 +27,9 @@ from spasial_utils import terapkan_geo, sisip_geo_ke_update, entri_riwayat_lokas
 import spasial_penempatan as sp
 import inventarisasi_stempel as stempel_inv
 from models import AssetCreate, AssetResponse
+from jenis_dokumen_pengadaan import (
+    normalisasi_jenis_dokumen_pengadaan, pertahankan_jenis_dokumen_lama,
+)
 from auth_utils import (
     require_admin, require_super_admin, require_user,
     require_user_or_query_token, require_writer,
@@ -2328,6 +2331,8 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
+    pertahankan_jenis_dokumen_lama(update_data, existing, asset.model_fields_set)
+
     # WAKTU INVENTARISASI. Jalur ini juga bisa menandai aset "Ditemukan"
     # untuk PERTAMA kalinya (form aset disimpan dengan status baru), jadi
     # tanpa panggilan ini aset yang diinventarisasi lewat form tak akan
@@ -2534,6 +2539,12 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
 
     # Filter to patchable fields only
     update_data = {k: v for k, v in body.items() if k in PATCHABLE_FIELDS}
+    if "jenis_dokumen_pengadaan" in update_data:
+        try:
+            update_data["jenis_dokumen_pengadaan"] = normalisasi_jenis_dokumen_pengadaan(
+                update_data["jenis_dokumen_pengadaan"])
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     has_photo_ops = "photo_ops" in body
 
     # Tolak operator NoSQL (mis. {"$ne": null}) agar tak menyusup ke query

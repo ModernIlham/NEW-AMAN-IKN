@@ -51,6 +51,7 @@ import MarkerPinEditor from "./MarkerPinEditor";
 import MarkerDesignIcon from "./MarkerDesignIcon";
 import { STATUS_COLORS } from "../../lib/warnaAset";
 import { UKURAN_STIKER } from "../../lib/stikerAset";
+import PengadaanKontrakFields from "./PengadaanKontrakFields";
 
 // ============================================================================
 // INVENTORY CLASSIFICATION INFO DATA (SE 17/SE/M/2024)
@@ -456,7 +457,7 @@ const FIELD_SECTION = {
   kode_register: "basic", inventory_status: "basic",
   stiker_status: "basic", stiker_ukuran: "basic",
   nomor_spm: "procurement", perolehan_dari_nama: "procurement",
-  nomor_kontrak: "procurement", cara_bayar_kontrak: "procurement", nomor_bukti_perolehan: "procurement",
+  jenis_dokumen_pengadaan: "procurement", nomor_kontrak: "procurement", cara_bayar_kontrak: "procurement", nomor_bukti_perolehan: "procurement",
   supplier: "procurement",
 };
 
@@ -469,6 +470,7 @@ const SERVER_ERROR_FIELD_PATTERNS = [
   [/kombinasi kode barang|\bNUP\b/i, "NUP"],
   [/kode aset|kode barang|asset_code/i, "asset_code"],
   [/nomor spm|\bspm\b/i, "nomor_spm"],
+  [/jenis dokumen pengadaan/i, "jenis_dokumen_pengadaan"],
   [/kategori|category/i, "category"],
   [/kondisi|condition/i, "condition"],
   [/stiker_ukuran|ukuran stiker/i, "stiker_ukuran"],
@@ -2988,16 +2990,8 @@ const AssetForm = memo(({
               </div>
               <div className="space-y-1"><Label className="text-xs">Nomor SPM</Label><Input name="nomor_spm" value={formData.nomor_spm} onChange={handleInputChange} placeholder="02847T/621001/2024" className="h-8" /></div>
               <div className="space-y-1"><Label className="text-xs">Perolehan Dari</Label><Input name="perolehan_dari_nama" value={formData.perolehan_dari_nama} onChange={handleInputChange} className="h-8" /></div>
-              <div className="space-y-1"><Label className="text-xs">Nomor Kontrak</Label><Input name="nomor_kontrak" value={formData.nomor_kontrak} onChange={handleInputChange} className="h-8" /></div>
-              <div className="space-y-1">
-                <Label className="text-xs">Cara Bayar Kontrak</Label>
-                <select name="cara_bayar_kontrak" value={formData.cara_bayar_kontrak} onChange={handleInputChange} className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm" data-testid="asset-cara-bayar-kontrak-select">
-                  <option value="">— Pilih —</option>
-                  <option value="Sekaligus">Sekaligus</option>
-                  <option value="Bertahap (Termin)">Bertahap (Termin)</option>
-                </select>
-              </div>
-              <div className="space-y-1"><Label className="text-xs">Bukti Perolehan (BAST)</Label><Input name="nomor_bukti_perolehan" value={formData.nomor_bukti_perolehan} onChange={handleInputChange} className="h-8" /></div>
+              <PengadaanKontrakFields formData={formData} onChange={handleInputChange} />
+              <div className="space-y-1"><Label htmlFor="asset-bukti-perolehan" className="text-xs">Bukti Perolehan (BAST/Kuitansi)</Label><Input id="asset-bukti-perolehan" name="nomor_bukti_perolehan" value={formData.nomor_bukti_perolehan} onChange={handleInputChange} className="h-8" data-testid="asset-bukti-perolehan" /></div>
               <div className="space-y-1"><Label className="text-xs">Supplier</Label><Input name="supplier" value={formData.supplier} onChange={handleInputChange} className="h-8" /></div>
             </>)}
             

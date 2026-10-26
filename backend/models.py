@@ -94,6 +94,7 @@ class AssetCreate(BaseModel):
     status: Optional[str] = "Aktif"
     nomor_spm: Optional[str] = ""
     perolehan_dari_nama: Optional[str] = ""
+    jenis_dokumen_pengadaan: Optional[str] = ""
     nomor_kontrak: Optional[str] = ""
     cara_bayar_kontrak: Optional[str] = ""
     nomor_bukti_perolehan: Optional[str] = ""
@@ -127,6 +128,12 @@ class AssetCreate(BaseModel):
     barang_bersejarah: Optional[str] = ""
 
     marker_pin: Optional[str] = ""
+
+    @field_validator('jenis_dokumen_pengadaan', mode='before')
+    @classmethod
+    def jenis_pengadaan_valid(cls, v):
+        from jenis_dokumen_pengadaan import normalisasi_jenis_dokumen_pengadaan
+        return normalisasi_jenis_dokumen_pengadaan(v)
 
     @field_validator('marker_pin', mode='before')
     @classmethod
@@ -197,6 +204,7 @@ class AssetResponse(BaseModel):
     status: Optional[str] = "Aktif"
     nomor_spm: Optional[str] = ""
     perolehan_dari_nama: Optional[str] = ""
+    jenis_dokumen_pengadaan: Optional[str] = ""
     nomor_kontrak: Optional[str] = ""
     cara_bayar_kontrak: Optional[str] = ""
     nomor_bukti_perolehan: Optional[str] = ""
