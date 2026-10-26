@@ -472,6 +472,7 @@ async def create_indexes() -> None:
         # Bukti aktif dan riwayat arsip dapat berbagi blob dengan lampiran aset.
         await _idx(db.bast_serah_terima, "bukti.file_id", sparse=True)
         await _idx(db.bast_serah_terima, "bukti_riwayat.file_id", sparse=True)
+        await _idx(db.bast_serah_terima, "dokumen_akhir.file_id", sparse=True)
         # Buku agenda surat: sort {tahun,no_agenda} saat filter `jenis` TIDAK
         # dipakai — indeks (jenis,tahun,no_agenda) yang ada tak melayani sort ini.
         await _idx(db.surat, [("tahun", -1), ("no_agenda", -1)])

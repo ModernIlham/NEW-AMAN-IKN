@@ -18,6 +18,24 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1107] Arsip dokumen akhir BAST setelah TTD atau e-meterai — 2026-10-26
+
+- Riwayat BAST menyediakan unggah dokumen akhir PDF/JPG/PNG, termasuk scan
+  manual berformat lain dan hasil setelah e-meterai, meskipun BAST sudah
+  diterapkan. Bukti dasar dan PDF elektronik asli tidak pernah ditimpa.
+- Arsip baru menunggu pemeriksaan petugas: pratinjau, hasil sesuai/tidak
+  sesuai, konfirmasi dan catatan wajib. Semua versi, pengunggah, pemeriksa,
+  waktu dan sidik berkas dipertahankan. Batas 10 MB/berkas, 20 arsip/BAST;
+  byte asli disimpan tanpa kompresi ulang, berkas identik ditolak.
+- Arsip tambahan tidak menerapkan ulang aset/BMN Saya, mengubah nomor,
+  status surat, pemegang, atau pembukuan. Scan sebagai bukti awal tetap
+  melalui Unggah Bukti TTD dan verifikasi kelengkapan; perubahan isi melalui
+  revisi resmi. Pemeriksaan petugas bukan validasi otomatis sertifikat TTE
+  atau keaslian e-meterai.
+- Akses satker, OCC, idempotensi, konflik dengan revisi, integritas saat baca,
+  backup dan perlindungan penghapusan arsip ikut diuji. BAST digantikan atau
+  TTD dicabut hanya dapat membuka arsip, tidak menambah/memeriksa dokumen.
+
 ## [#1094] Posisi daftar tetap setelah ubah massal dengan filter aktif — 2026-10-09
 
 - Ubah massal menyegarkan seluruh rentang halaman yang sudah dimuat, bukan
