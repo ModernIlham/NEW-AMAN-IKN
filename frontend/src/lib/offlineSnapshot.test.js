@@ -56,6 +56,14 @@ beforeEach(() => {
 });
 
 describe("upsertSnapshotAsset — baca-gabung-tulis", () => {
+  test("jenis dokumen pengadaan bertahan saat PATCH luring parsial", async () => {
+    await upsertSnapshotAsset("keg1", { id: "pengadaan", version: 1,
+      jenis_dokumen_pengadaan: "Non Kontrak BLU", nomor_kontrak: "K-arsip" });
+    await upsertSnapshotAsset("keg1", { id: "pengadaan", version: 2, notes: "Diperiksa" });
+    expect(mockSimpanan.assets.get("pengadaan")).toMatchObject({
+      jenis_dokumen_pengadaan: "Non Kontrak BLU", nomor_kontrak: "K-arsip", notes: "Diperiksa",
+    });
+  });
   test("nilai barang bersejarah dan pengosongan tersimpan pada snapshot", async () => {
     await upsertSnapshotAsset("keg1", { id: "sejarah", version: 1, barang_bersejarah: "Ya" });
     expect(mockSimpanan.assets.get("sejarah").barang_bersejarah).toBe("Ya");

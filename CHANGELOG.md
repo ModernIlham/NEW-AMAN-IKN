@@ -18,6 +18,23 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1106] Jenis dokumen pengadaan dan penguncian isian nonkontrak — 2026-10-26
+
+- Tab Pengadaan pada tambah/edit aset menyediakan Kontrak, Non
+  Kontrak/Penerimaan Barang, Kontrak BLU, dan Non Kontrak BLU. Data lama
+  tanpa klasifikasi tetap "Belum ditentukan", bukan ditebak dari nomor.
+- Pilihan nonkontrak menonaktifkan Nomor Kontrak dan Cara Bayar Kontrak;
+  Bukti Perolehan (BAST/Kuitansi) tetap dapat diisi. Nilai kontrak lama
+  dipertahankan, tidak dihapus hanya karena berganti kategori.
+- Jenis dokumen mengikuti registry aset: PATCH parsial, riwayat perubahan,
+  proyeksi daftar, antrean/cache luring, ekspor CSV/XLSX dan template impor.
+  API dan impor menolak kategori di luar pilihan. PUT/file impor lama yang
+  tidak membawa kolom baru tidak menghapus klasifikasi yang sudah disimpan.
+- Uji pilihan, penguncian, penyimpanan luring, keselarasan registry,
+  generator, serta tampilan 320/375/768/1280 px terang/gelap ditambahkan.
+  Kontrak API memeriksa penyimpanan, OCC, idempotensi, isolasi satker,
+  ekspor dan kompatibilitas impor. Rilis ditunda sesuai arahan pemilik.
+
 ## [#1094] Posisi daftar tetap setelah ubah massal dengan filter aktif — 2026-10-09
 
 - Ubah massal menyegarkan seluruh rentang halaman yang sudah dimuat, bukan

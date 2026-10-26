@@ -60,6 +60,34 @@ test.each([["", "Ya"], ["Ya", ""]])(
   },
 );
 
+test("tambah aset menyediakan jenis dokumen tanpa menebak nilai bawaan", async () => {
+  render(<AssetForm {...props()} editAsset={null} />);
+  await screen.findByTestId("asset-barang-bersejarah");
+  fireEvent.click(screen.getByRole("button", { name: "Pengadaan" }));
+  expect(screen.getByLabelText("Jenis Dokumen Pengadaan")).toHaveValue("");
+  fireEvent.change(screen.getByLabelText("Jenis Dokumen Pengadaan"), { target: { value: "Non Kontrak BLU" } });
+  expect(screen.getByLabelText("Nomor Kontrak")).toBeDisabled();
+  expect(screen.getByTestId("asset-bukti-perolehan")).not.toBeDisabled();
+});
+
+test.each(["Non Kontrak/Penerimaan Barang", "Non Kontrak BLU"])("jenis %s tersimpan sebagai PATCH luring, bukti perolehan tetap aktif", async jenis => {
+  const initial = props();
+  initial.editAsset.nomor_kontrak = "K-1";
+  initial.editAsset.cara_bayar_kontrak = "Sekaligus";
+  render(<AssetForm {...initial} />);
+  await screen.findByTestId("asset-barang-bersejarah");
+  fireEvent.click(screen.getByRole("button", { name: "Pengadaan" }));
+  fireEvent.change(screen.getByLabelText("Jenis Dokumen Pengadaan"), { target: { value: jenis } });
+  expect(screen.getByLabelText("Nomor Kontrak")).toBeDisabled();
+  expect(screen.getByLabelText("Cara Bayar Kontrak")).toBeDisabled();
+  expect(screen.getByTestId("asset-bukti-perolehan")).not.toBeDisabled();
+  fireEvent.change(screen.getByTestId("asset-bukti-perolehan"), { target: { value: "KW-1" } });
+  fireEvent.click(screen.getByTestId("asset-form-submit"));
+  await waitFor(() => expect(initial.onOptimisticSubmit).toHaveBeenCalledWith(
+    { jenis_dokumen_pengadaan: jenis, nomor_bukti_perolehan: "KW-1" }, true, "a1", true,
+  ));
+});
+
 test("resize and panel hide keep input identity/focus; tabs and reopening keep the draft", async () => {
   const initial = props();
   const view = render(<AssetForm {...initial} />);
