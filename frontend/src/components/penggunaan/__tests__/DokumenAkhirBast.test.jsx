@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import axios from "axios";
 import { toast } from "sonner";
 import DokumenAkhirBast from "../DokumenAkhirBast";
@@ -111,4 +111,20 @@ test("konflik versi meminta pembaruan arsip, tidak menampilkan sukses", async ()
   await waitFor(() => expect(updated).toHaveBeenCalled());
   expect(toast.error).toHaveBeenCalledWith("BAST berubah");
   expect(toast.success).not.toHaveBeenCalled();
+});
+
+test.each([false, true])("menutup riwayat saat proses tidak dibuka paksa oleh respons terlambat (konflik=%s)", async konflik => {
+  const view = render(<DokumenAkhirBast bast={bast} editable onUpdated={updated} />);
+  fireEvent.click(screen.getByTestId("bast-unggah-akhir-b1"));
+  fireEvent.change(screen.getByTestId("bast-akhir-file"), { target: { files: [new File(["pdf"], "a.pdf")] } });
+  fireEvent.change(screen.getByTestId("bast-akhir-catatan"), { target: { value: "Dokumen lengkap" } });
+  let resolve, reject;
+  axios.post.mockImplementationOnce(() => new Promise((a, b) => { resolve = a; reject = b; }));
+  fireEvent.click(screen.getByTestId("bast-akhir-simpan"));
+  view.unmount();
+  await act(async () => {
+    if (konflik) reject({ response: { status: 409, data: { detail: "BAST berubah" } } });
+    else resolve({ data: { ok: true } });
+  });
+  expect(updated).not.toHaveBeenCalled();
 });

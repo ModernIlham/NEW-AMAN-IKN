@@ -16,6 +16,11 @@ export default function DokumenAkhirBast({ bast, editable, onUpdated }) {
   const [preview, setPreview] = useState("");
   const inputRef = useRef(null);
   const lock = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
   const dokumen = bast.dokumen_akhir || [];
   const boleh = editable && !bast.direvisi_oleh && !bast.tt_dicabut;
   useEffect(() => {
@@ -49,12 +54,14 @@ export default function DokumenAkhirBast({ bast, editable, onUpdated }) {
         "If-Match": String(bast.dokumen_akhir_version || 1), "Idempotency-Key": draft.key,
       }, timeout: 30000 });
       toast.success(unggah ? "Dokumen akhir diarsipkan; menunggu pemeriksaan petugas" : "Hasil pemeriksaan dicatat; dokumen asli tetap utuh");
-      setUnggah(null); setPeriksa(null);
-      await onUpdated();
+      if (mounted.current) {
+        setUnggah(null); setPeriksa(null);
+        await onUpdated();
+      }
     } catch (e) {
       toast.error(typeof e.response?.data?.detail === "string" ? e.response.data.detail : "Belum dapat memastikan hasil. Coba kembali dengan berkas dan isian yang sama.");
-      if (e.response?.status === 409) await onUpdated();
-    } finally { lock.current = false; setSibuk(false); }
+      if (e.response?.status === 409 && mounted.current) await onUpdated();
+    } finally { lock.current = false; if (mounted.current) setSibuk(false); }
   };
   const bukaDokumen = id => window.open(authMediaUrl(`${API}/bast/${bast.id}/dokumen-akhir/${id}`), "_blank", "noopener,noreferrer");
 
