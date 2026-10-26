@@ -14,6 +14,40 @@ from fastapi import HTTPException
 # format bukan angka diperlakukan nol. Negatif tetap negatif (data historis).
 _NUMBER = r"^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$"
 PRICE_SORT_FIELD = "_aman_price_sort"
+CODE_NUP_SORTS = {"code_nup_asc", "code_nup_desc"}
+_INTEGER_TEXT = r"^([0-9]+)(?:\.0+)?$"
+
+
+def angka_identitas(value):
+    """Deret angka tanpa pembulatan; .0 dari impor Excel dan nol awal setara."""
+    match = re.fullmatch(_INTEGER_TEXT, str(value if value is not None else "").strip())
+    return (match[1].lstrip("0") or "0") if match else None
+
+
+def ekspresi_identitas(field):
+    return {"$let": {"vars": {"parsed": {"$regexFind": {
+        "input": {"$trim": {"input": {"$convert": {
+            "input": f"${field}", "to": "string", "onError": "", "onNull": ""}}}},
+        "regex": _INTEGER_TEXT,
+    }}}, "in": {"$let": {"vars": {"digits": {"$ltrim": {
+        "input": {"$ifNull": [{"$arrayElemAt": ["$$parsed.captures", 0]}, ""]},
+        "chars": "0",
+    }}}, "in": {
+        "invalid": {"$cond": [{"$eq": ["$$parsed", None]}, 1, 0]},
+        "length": {"$strLenCP": "$$digits"}, "digits": "$$digits",
+    }}}}}
+
+
+def urutkan_kode_nup_aset(assets, sort_by):
+    # Urutan bertingkat: kode, NUP numerik, ID. Yang tidak valid selalu terakhir
+    # pada tiap tingkat. Jangan float/int: angka panjang harus tetap eksak.
+    assets.sort(key=lambda item: str(item.get("id") or ""))
+    for field in ("NUP", "asset_code"):
+        parsed = {id(item): angka_identitas(item.get(field)) for item in assets}
+        assets.sort(key=lambda item: (len(parsed[id(item)] or ""), parsed[id(item)] or ""),
+                    reverse=sort_by == "code_nup_desc")
+        assets.sort(key=lambda item: parsed[id(item)] is None)
+    return assets
 
 
 def harga_desimal(value):
@@ -114,6 +148,15 @@ def harga_teks_eksak(value):
 
 
 def tahapan_urutan_aset(sort_by):
+    if sort_by in CODE_NUP_SORTS:
+        direction = -1 if sort_by == "code_nup_desc" else 1
+        fields = {"_aman_code_sort": ekspresi_identitas("asset_code"),
+                  "_aman_nup_sort": ekspresi_identitas("NUP")}
+        sort = {}
+        for field in fields:
+            sort.update({f"{field}.invalid": 1, f"{field}.length": direction,
+                         f"{field}.digits": direction})
+        return [{"$set": fields}, {"$sort": {**sort, "id": 1}}, {"$unset": list(fields)}]
     if sort_by in {"price_asc", "price_desc"}:
         return [{"$set": {PRICE_SORT_FIELD: ekspresi_harga()}},
                 {"$sort": {PRICE_SORT_FIELD: 1 if sort_by == "price_asc" else -1, "id": 1}},
@@ -130,6 +173,10 @@ def urutkan_harga_aset(assets, sort_by):
 
 
 ASSET_SORT_OPTIONS = {
+    # Reader wajib memakai tahapan_urutan_aset / urutkan_kode_nup_aset agar
+    # NUP string dan numerik setara; pasangan ini juga menjadi daftar pilihan.
+    "code_nup_asc": [("asset_code", 1), ("NUP", 1), ("id", 1)],
+    "code_nup_desc": [("asset_code", -1), ("NUP", -1), ("id", 1)],
     "newest": [("created_at", -1), ("id", 1)],
     "oldest": [("created_at", 1), ("id", 1)],
     "name_asc": [("asset_name", 1), ("id", 1)],

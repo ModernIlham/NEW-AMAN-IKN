@@ -18,6 +18,18 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1105] Urutan kode barang dan NUP numerik dua arah — 2026-10-26
+
+- Menu urutan HP, tablet dan PC memiliki Kode & NUP naik/turun: kode barang
+  menjadi kunci pertama, NUP menjadi kunci kedua, dan ID menjaga urutan stabil.
+- Nilai angka/string, nol awal dan akhiran .0 dari impor dibaca setara.
+  NUP 2 mendahului 10 saat menaik; angka panjang tidak kehilangan presisi.
+  Nilai kosong/nonangka tetap ditampilkan di akhir pada tiap tingkat.
+- Urutan yang sama berlaku pada daftar daring, snapshot/cache luring dan
+  PDF Data Aset. Filter, pengelompokan laporan dan pagination tetap diikuti.
+- Regresi memakai fixture bersama frontend/backend serta kontrak Mongo nyata
+  untuk memastikan pagination tidak melewatkan atau menggandakan barang.
+
 ## [#1094] Posisi daftar tetap setelah ubah massal dengan filter aktif — 2026-10-09
 
 - Ubah massal menyegarkan seluruh rentang halaman yang sudah dimuat, bukan
