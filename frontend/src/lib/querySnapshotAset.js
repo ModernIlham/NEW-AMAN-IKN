@@ -1,6 +1,7 @@
 import { cocokAset } from "./pencarianLokal";
 import { normalkanMulti } from "@/hooks/useAssetFilters";
 import { bandingkanHargaTerurai, hargaEksak } from "./hargaEksak";
+import { urutkanKodeNup } from "./urutKodeNup";
 
 export function filterSnapshotRows(rows, { search, category, filters }) {
   let out = rows;
@@ -63,6 +64,7 @@ export function filterSnapshotRows(rows, { search, category, filters }) {
 }
 
 export function sortSnapshotRows(rows, sortBy) {
+  if (sortBy === "code_nup_asc" || sortBy === "code_nup_desc") return urutkanKodeNup(rows, sortBy);
   const s = (v) => String(v ?? "");
 
   if (sortBy === "price_asc" || sortBy === "price_desc") {

@@ -1,0 +1,19 @@
+{
+  "rows": [
+    {"id":"c10", "asset_code":"10", "NUP":"1"},
+    {"id":"n10", "asset_code":"2", "NUP":"10"},
+    {"id":"n2b", "asset_code":"02.0", "NUP":"002"},
+    {"id":"n2a", "asset_code":2, "NUP":2},
+    {"id":"zero", "asset_code":"2", "NUP":"000"},
+    {"id":"large-b", "asset_code":"2", "NUP":"9007199254740993"},
+    {"id":"large-a", "asset_code":"2", "NUP":"9007199254740992"},
+    {"id":"huge", "asset_code":"2", "NUP":"1234567890123456789012345678901234567890"},
+    {"id":"invalid-nup", "asset_code":"2", "NUP":"belum ada"},
+    {"id":"empty-nup", "asset_code":"2", "NUP":null},
+    {"id":"c3", "asset_code":" 3 ", "NUP":"1"},
+    {"id":"invalid-code", "asset_code":"lama", "NUP":"2"},
+    {"id":"empty-code", "NUP":"10"}
+  ],
+  "code_nup_asc": ["zero","n2a","n2b","n10","large-a","large-b","huge","empty-nup","invalid-nup","c3","c10","invalid-code","empty-code"],
+  "code_nup_desc": ["c10","c3","huge","large-b","large-a","n10","n2a","n2b","zero","empty-nup","invalid-nup","empty-code","invalid-code"]
+}
