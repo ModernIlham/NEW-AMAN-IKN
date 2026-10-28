@@ -1,3 +1,4 @@
+import PencarianAset from "@/components/assets/PencarianAset";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
@@ -678,27 +679,8 @@ export default function PelaporanPage({ user, onBack }) {
             <div className="space-y-2.5 text-sm">
               {!reklas.aset ? (
                 <div>
-                  <Input placeholder="Cari kode/nama aset (min. 2 huruf)" value={reklas.cari}
-                    data-testid="reklas-cari"
-                    onChange={async (e) => {
-                      const v = e.target.value;
-                      setReklas((r) => ({ ...r, cari: v }));
-                      if (v.trim().length >= 2) {
-                        try {
-                          const rr = await axios.get(`${API}/assets`, { params: { search: v.trim(), page_size: 8 } });
-                          setReklas((r) => (r ? { ...r, hasil: rr.data?.items || [] } : r));
-                        } catch { /* biarkan */ }
-                      }
-                    }} />
-                  <div className="mt-1.5 max-h-40 overflow-y-auto divide-y divide-border/60 border border-border rounded-lg">
-                    {(reklas.hasil || []).map((a) => (
-                      <button key={a.id} type="button" className="w-full px-2.5 py-1.5 text-left hover:bg-muted"
-                        onClick={() => setReklas((r) => ({ ...r, aset: a }))}>
-                        <span className="block text-xs font-semibold text-foreground truncate">{a.asset_name}</span>
-                        <span className="block text-[10px] text-muted-foreground font-mono">{a.asset_code} · NUP {a.NUP}</span>
-                      </button>
-                    ))}
-                  </div>
+                  <PencarianAset user={user} testId="reklas-cari"
+                    value={reklas.cari} onChange={text => setReklas(r => ({ ...r, cari: text }))} onPilih={a => setReklas((r) => ({ ...r, aset: a }))} />
                 </div>
               ) : (
                 <>

@@ -1,11 +1,8 @@
+import PencarianAset from "@/components/assets/PencarianAset";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
-import {
-  ArrowLeft, Loader2, Handshake, Plus, Search, Trash2, X, Pencil,
-  CalendarClock, Coins, AlertTriangle, Paperclip, Upload, Download,
-  Recycle, ChevronUp, ChevronDown, FileSignature, CalendarPlus,
-} from "lucide-react";
+import { ArrowLeft, Loader2, Handshake, Plus, Trash2, X, Pencil, CalendarClock, Coins, AlertTriangle, Paperclip, Upload, Download, Recycle, ChevronUp, ChevronDown, FileSignature, CalendarPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -84,9 +81,7 @@ export default function PemanfaatanPage({ user, onBack }) {
   const [lamp, setLamp] = useState(null);
   const lampInputRef = useRef(null);
   const [cari, setCari] = useState("");
-  const [hasilCari, setHasilCari] = useState([]);
-  const [mencari, setMencari] = useState(false);
-  const cariTimer = useRef(null);
+
   // Integrasi Penggunaan → Pemanfaatan: kandidat dari BMN idle
   const [idle, setIdle] = useState(null); // {kandidat, jumlah}
   const [idleBuka, setIdleBuka] = useState(false);
@@ -94,9 +89,7 @@ export default function PemanfaatanPage({ user, onBack }) {
   const [usulanData, setUsulanData] = useState(null);
   const [formU, setFormU] = useState(null); // {data, aset, saving}
   const [cariU, setCariU] = useState("");
-  const [hasilCariU, setHasilCariU] = useState([]);
-  const [mencariU, setMencariU] = useState(false);
-  const cariUTimer = useRef(null);
+
   const { confirm, confirmDialog } = useConfirm();
   const { minta, transitionDialog } = useTransitionDialog();
 
@@ -122,33 +115,9 @@ export default function PemanfaatanPage({ user, onBack }) {
   }, []);
 
   // Pencarian aset (debounce) untuk objek BMN
-  useEffect(() => {
-    if (!form || form.aset || cari.trim().length < 2) { setHasilCari([]); return undefined; }
-    clearTimeout(cariTimer.current);
-    cariTimer.current = setTimeout(async () => {
-      setMencari(true);
-      try {
-        const r = await axios.get(`${API}/assets`, { params: { search: cari.trim(), page_size: 8 } });
-        setHasilCari(r.data?.items || []);
-      } catch { setHasilCari([]); } finally { setMencari(false); }
-    }, 300);
-    return () => clearTimeout(cariTimer.current);
-  }, [cari, form]);
 
   // Pencarian aset (debounce) untuk dialog usulan baru — kembaran efek di
   // atas; state dipisah agar dua dialog tidak saling menimpa hasil.
-  useEffect(() => {
-    if (!formU || formU.aset || cariU.trim().length < 2) { setHasilCariU([]); return undefined; }
-    clearTimeout(cariUTimer.current);
-    cariUTimer.current = setTimeout(async () => {
-      setMencariU(true);
-      try {
-        const r = await axios.get(`${API}/assets`, { params: { search: cariU.trim(), page_size: 8 } });
-        setHasilCariU(r.data?.items || []);
-      } catch { setHasilCariU([]); } finally { setMencariU(false); }
-    }, 300);
-    return () => clearTimeout(cariUTimer.current);
-  }, [cariU, formU]);
 
   const fmtRp = (n) => `Rp${Math.round(Number(n || 0)).toLocaleString("id-ID")}`;
   const setField = (k, v) => setForm((f) => ({ ...f, data: { ...f.data, [k]: v } }));
@@ -157,7 +126,7 @@ export default function PemanfaatanPage({ user, onBack }) {
   const labelBentuk = data?.label_bentuk || {};
 
   const buka = (p = null) => {
-    setCari(""); setHasilCari([]);
+    setCari("");
     setForm(p ? {
       id: p.id, saving: false,
       aset: p.asset_id ? { id: p.asset_id, asset_name: p.asset_name, asset_code: p.asset_code, NUP: p.NUP } : null,
@@ -176,7 +145,7 @@ export default function PemanfaatanPage({ user, onBack }) {
 
   // Buka form perjanjian baru dengan objek BMN sudah terisi (dari kandidat idle).
   const tawarkanIdle = (k) => {
-    setCari(""); setHasilCari([]); setIdleBuka(false);
+    setCari("");  setIdleBuka(false);
     setForm({
       id: null, saving: false,
       aset: { id: k.asset_id, asset_name: k.asset_name, asset_code: k.asset_code, NUP: k.NUP },
@@ -481,7 +450,7 @@ export default function PemanfaatanPage({ user, onBack }) {
                   </Button>
                 )}
                 <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
-                  onClick={() => { setCariU(""); setHasilCariU([]); setFormU({ aset: null, saving: false, data: { ...FORM_USULAN_KOSONG } }); }}
+                  onClick={() => { setCariU("");  setFormU({ aset: null, saving: false, data: { ...FORM_USULAN_KOSONG } }); }}
                   data-testid="pemanfaatan-usulan-baru">
                   <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Usulan Baru</span>
                 </Button>
@@ -678,25 +647,8 @@ export default function PemanfaatanPage({ user, onBack }) {
                     </button>
                   </div>
                 ) : (
-                  <div className="relative">
-                    <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
-                    <Input id="pmf-aset" className="pl-8" placeholder="Cari nama/kode aset (min. 2 huruf)"
-                      value={cari} onChange={(e) => setCari(e.target.value)} />
-                    {(mencari || hasilCari.length > 0) && cari.trim().length >= 2 && (
-                      <div className="absolute z-50 mt-1 w-full max-h-44 overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
-                        {mencari ? (
-                          <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-teal-600" /></div>
-                        ) : hasilCari.map((a) => (
-                          <button key={a.id} type="button"
-                            onClick={() => { setForm((f) => ({ ...f, aset: a })); setCari(""); setHasilCari([]); }}
-                            className="w-full px-2.5 py-1.5 text-left hover:bg-muted">
-                            <span className="block text-xs font-semibold text-foreground truncate">{a.asset_name}</span>
-                            <span className="block text-[10px] text-muted-foreground font-mono">{a.asset_code} · {a.NUP}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  <PencarianAset user={user} id="pmf-aset" testId="pmf-aset"
+                    value={cari} onChange={setCari} onPilih={a => { setForm((f) => ({ ...f, aset: a })); setCari("");  }} />
                 )}
               </div>
               <div className="sm:col-span-2">
@@ -838,25 +790,8 @@ export default function PemanfaatanPage({ user, onBack }) {
                     </button>
                   </div>
                 ) : (
-                  <div className="relative">
-                    <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
-                    <Input id="pmf-u-aset" className="pl-8" placeholder="Cari nama/kode aset (min. 2 huruf)"
-                      value={cariU} onChange={(e) => setCariU(e.target.value)} />
-                    {(mencariU || hasilCariU.length > 0) && cariU.trim().length >= 2 && (
-                      <div className="absolute z-50 mt-1 w-full max-h-44 overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
-                        {mencariU ? (
-                          <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-teal-600" /></div>
-                        ) : hasilCariU.map((a) => (
-                          <button key={a.id} type="button"
-                            onClick={() => { setFormU((f) => ({ ...f, aset: a })); setCariU(""); setHasilCariU([]); }}
-                            className="w-full px-2.5 py-1.5 text-left hover:bg-muted">
-                            <span className="block text-xs font-semibold text-foreground truncate">{a.asset_name}</span>
-                            <span className="block text-[10px] text-muted-foreground font-mono">{a.asset_code} · {a.NUP}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  <PencarianAset user={user} id="pmf-u-aset" testId="pmf-u-aset"
+                    value={cariU} onChange={setCariU} onPilih={a => { setFormU((f) => ({ ...f, aset: a })); setCariU("");  }} />
                 )}
               </div>
               <div className="sm:col-span-2">

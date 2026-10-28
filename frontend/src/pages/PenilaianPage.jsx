@@ -1,13 +1,11 @@
+import PencarianAset from "@/components/assets/PencarianAset";
 import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { getSatkerAktif } from "@/lib/satkerAktif";
 import { usePencarianBaca } from "@/hooks/usePencarianBaca";
 import { usePenjagaPermintaan } from "@/hooks/usePenjagaPermintaan";
 import { toast } from "sonner";
-import {
-  ArrowLeft, Loader2, Scale, Coins, TrendingDown, Wallet, AlertTriangle,
-  BookOpen, FileSignature, Plus, Pencil, Search, Trash2, Download, RefreshCw,
-} from "lucide-react";
+import { ArrowLeft, Loader2, Scale, Coins, TrendingDown, Wallet, AlertTriangle, BookOpen, FileSignature, Plus, Pencil, Trash2, Download, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -54,10 +52,10 @@ export default function PenilaianPage({ user, onBack }) {
   const [koreksi, setKoreksi] = useState(null);
   const [formKoreksi, setFormKoreksi] = useState(null);
   const [cari, setCari] = useState("");
-  const [hasilCari, setHasilCari] = useState([]);
+
   // Riwayat nilai per aset (read-only, #203): {aset, peristiwa, ...} | null
   const [cariRiw, setCariRiw] = useState("");
-  const [hasilRiw, setHasilRiw] = useState([]);
+
   const [riwayat, setRiwayat] = useState(null);
   const { confirm, confirmDialog } = useConfirm();
 
@@ -85,23 +83,11 @@ export default function PenilaianPage({ user, onBack }) {
     },
     padaGagal: () => setInfoKode(null), padaKosong: () => setInfoKode(null),
   });
-  usePencarianBaca({
-    lingkup: lingkupBaca, kunci: cari.trim(), aktif: !!formKoreksi && cari.trim().length >= 2,
-    jalankan: signal => axios.get(`${API}/assets`, { signal, params: { search: cari.trim(), page_size: 8 } }),
-    padaHasil: r => setHasilCari(r.data?.items || []),
-    padaGagal: () => setHasilCari([]), padaKosong: () => setHasilCari([]),
-  });
-  usePencarianBaca({
-    lingkup: lingkupBaca, kunci: cariRiw.trim(), aktif: cariRiw.trim().length >= 2,
-    jalankan: signal => axios.get(`${API}/assets`, { signal, params: { search: cariRiw.trim(), page_size: 8 } }),
-    padaHasil: r => setHasilRiw(r.data?.items || []),
-    padaGagal: () => setHasilRiw([]), padaKosong: () => setHasilRiw([]),
-  });
 
   const muatRiwayat = async (aset) => {
     const tiket = penjagaBaca.mulaiBaca("riwayat", lingkupBaca);
     if (!tiket) return;
-    setCariRiw(""); setHasilRiw([]);
+    setCariRiw("");
     try {
       const r = await axios.get(`${API}/penilaian/riwayat-nilai/${aset.id}`, { signal: tiket.signal });
       if (penjagaBaca.berlaku(tiket)) setRiwayat(r.data);
@@ -420,7 +406,7 @@ export default function PenilaianPage({ user, onBack }) {
                   </Button>
                 )}
                 <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
-                  onClick={() => { setCari(""); setHasilCari([]); setFormKoreksi({ data: { jenis: "revaluasi", jenis_dokumen: "lhip", nomor_dokumen: "", tanggal_dokumen: "", nilai_lama: "", nilai_baru: "", penilai_pelaksana: "", dampak_masa_manfaat: "tetap", masa_manfaat_semester: "", catatan: "" }, aset: null, saving: false }); }}
+                  onClick={() => { setCari("");  setFormKoreksi({ data: { jenis: "revaluasi", jenis_dokumen: "lhip", nomor_dokumen: "", tanggal_dokumen: "", nilai_lama: "", nilai_baru: "", penilai_pelaksana: "", dampak_masa_manfaat: "tetap", masa_manfaat_semester: "", catatan: "" }, aset: null, saving: false }); }}
                   data-testid="penilaian-koreksi-tambah">
                   <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Catat</span>
                 </Button>
@@ -485,7 +471,7 @@ export default function PenilaianPage({ user, onBack }) {
                 </div>
                 {riwayat && (
                   <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
-                    onClick={() => { setRiwayat(null); setCariRiw(""); setHasilRiw([]); }}
+                    onClick={() => { setRiwayat(null); setCariRiw("");  }}
                     data-testid="penilaian-riwayat-tutup">
                     Ganti aset
                   </Button>
@@ -494,30 +480,8 @@ export default function PenilaianPage({ user, onBack }) {
               <div className="p-3">
                 {!riwayat ? (
                   <div>
-                    <div className="relative">
-                      <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
-                      <Input className="pl-8" placeholder="Cari aset: nama / kode / NUP…"
-                        value={cariRiw} onChange={(e) => setCariRiw(e.target.value)} data-testid="riwayat-cari" />
-                    </div>
-                    {hasilRiw.length > 0 && (
-                      <ul className="mt-2 space-y-1.5 max-h-48 overflow-y-auto">
-                        {hasilRiw.map((a) => (
-                          <li key={a.id}>
-                            <button type="button" onClick={() => muatRiwayat(a)}
-                              className="w-full text-left rounded-lg border border-border p-2 text-xs hover:bg-muted min-h-0"
-                              data-testid={`riwayat-pilih-${a.id}`}>
-                              <span className="text-foreground/90">{a.asset_name || "-"}</span>{" "}
-                              <span className="font-mono text-[10px] text-muted-foreground">({a.asset_code} · {a.NUP})</span>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    <p className="text-[11px] text-muted-foreground text-center py-3">
-                      {cariRiw.trim().length < 2
-                        ? "Ketik minimal 2 huruf untuk mencari aset."
-                        : hasilRiw.length === 0 ? "Tidak ada aset yang cocok." : ""}
-                    </p>
+                    <PencarianAset user={user} testId="riwayat-cari"
+                    value={cariRiw} onChange={setCariRiw} onPilih={a => muatRiwayat(a)} itemTestId={id => `riwayat-pilih-${id}`} />
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -760,24 +724,8 @@ export default function PenilaianPage({ user, onBack }) {
               {!formKoreksi.aset ? (
                 <div>
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kor-cari">Cari aset</label>
-                  <div className="relative">
-                    <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
-                    <Input id="kor-cari" className="pl-8" placeholder="nama / kode / NUP…"
-                      value={cari} onChange={(e) => setCari(e.target.value)} data-testid="koreksi-cari" />
-                  </div>
-                  <ul className="mt-2 space-y-1.5 max-h-40 overflow-y-auto">
-                    {hasilCari.map((a) => (
-                      <li key={a.id}>
-                        <button type="button"
-                          onClick={() => setFormKoreksi((f) => ({ ...f, aset: a, data: { ...f.data, nilai_lama: a.purchase_price ?? f.data.nilai_lama } }))}
-                          className="w-full text-left rounded-lg border border-border p-2 text-xs hover:bg-muted min-h-0"
-                          data-testid={`koreksi-pilih-${a.id}`}>
-                          <span className="text-foreground/90">{a.asset_name || "-"}</span>{" "}
-                          <span className="font-mono text-[10px] text-muted-foreground">({a.asset_code} · {a.NUP})</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                  <PencarianAset user={user} id="kor-cari" testId="koreksi-cari"
+                    value={cari} onChange={setCari} onPilih={a => setFormKoreksi((f) => ({ ...f, aset: a, data: { ...f.data, nilai_lama: a.purchase_price ?? f.data.nilai_lama } }))} itemTestId={id => `koreksi-pilih-${id}`} />
                 </div>
               ) : (
                 <div className="rounded-lg border border-border p-2 text-xs flex items-center justify-between gap-2">

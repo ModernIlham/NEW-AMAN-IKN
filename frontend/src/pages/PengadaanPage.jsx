@@ -1,13 +1,10 @@
+import PencarianAset from "@/components/assets/PencarianAset";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useRevisiSatker } from "@/hooks/useReferensiSatker";
 import axios from "axios";
 import { usePencarianBaca } from "@/hooks/usePencarianBaca";
 import { toast } from "sonner";
-import {
-  ArrowLeft, Loader2, ShoppingCart, Plus, Search, Trash2, X, Coins,
-  ClipboardCheck, Download, Link2, Paperclip, Upload, PackagePlus,
-  Check, Circle, Boxes, FileDown, PenLine, FileSignature, Pencil,
-} from "lucide-react";
+import { ArrowLeft, Loader2, ShoppingCart, Plus, Trash2, X, Coins, ClipboardCheck, Link2, Paperclip, Upload, PackagePlus, Check, Circle, Boxes, FileDown, PenLine, FileSignature, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -156,8 +153,7 @@ export default function PengadaanPage({ user, onBack }) {
   const [kegiatanList, setKegiatanList] = useState([]);
   const lampInputRef = useRef(null);
   const [cari, setCari] = useState("");
-  const [hasilCari, setHasilCari] = useState([]);
-  const [mencari, setMencari] = useState(false);
+
   const { confirm, confirmDialog } = useConfirm();
   // Dialog ber-field bersama — dipakai memilih PPK dari beberapa yang
   // sama-sama berlaku pada tanggal BAST (lihat `ubahPpk`).
@@ -238,17 +234,6 @@ export default function PengadaanPage({ user, onBack }) {
       .catch(() => setOpsiPpk([]));
   }, []);
   useEffect(() => { muat(); }, [muat]);
-
-  usePencarianBaca({
-    lingkup: JSON.stringify([user?.id, String(user?.kode_satker || "").trim() || getSatkerAktif()]), kunci: [taut?.perolehan?.id, cari.trim()],
-    aktif: !!taut && cari.trim().length >= 2,
-    jalankan: signal => axios.get(`${API}/assets`, { signal, params: { search: cari.trim(), page_size: 8 } }),
-    padaMulai: () => setMencari(true),
-    padaHasil: r => setHasilCari(r.data?.items || []),
-    padaGagal: () => setHasilCari([]),
-    padaSelesai: () => setMencari(false),
-    padaKosong: () => { setHasilCari([]); setMencari(false); },
-  });
 
   const fmtRp = (n) => `Rp${Math.round(Number(n || 0)).toLocaleString("id-ID")}`;
   const labelJenis = data?.label_jenis || {};
@@ -943,7 +928,7 @@ export default function PengadaanPage({ user, onBack }) {
                                 pasti gagal hanyalah undangan untuk mencoba. */}
                             {!b.psd_item_id && (
                               <Button size="sm" variant="outline" className="h-6 text-[10px] min-h-0 px-2"
-                                onClick={() => { setCari(""); setHasilCari([]); setTaut({ perolehan: p, index: i, saving: false, mode: "taut" }); }}
+                                onClick={() => { setCari("");  setTaut({ perolehan: p, index: i, saving: false, mode: "taut" }); }}
                                 data-testid={`pengadaan-taut-${p.id}-${i}`}>
                                 {b.asset_id ? "Ubah Tautan" : "Tautkan"}
                               </Button>
@@ -956,7 +941,7 @@ export default function PengadaanPage({ user, onBack }) {
                             {bolehLeburkan(b) && (
                               <Button size="sm" variant="outline"
                                 className="h-6 text-[10px] min-h-0 px-2 text-sky-700 dark:text-sky-400 border-sky-500/40"
-                                onClick={() => { setCari(""); setHasilCari([]); setTaut({ perolehan: p, index: i, saving: false, mode: "lebur" }); }}
+                                onClick={() => { setCari("");  setTaut({ perolehan: p, index: i, saving: false, mode: "lebur" }); }}
                                 title="Kembangkan nilai aset yang sudah tercatat — kuantitasnya tetap"
                                 data-testid={`pengadaan-lebur-${p.id}-${i}`}>
                                 Leburkan ke NUP
@@ -1336,25 +1321,8 @@ export default function PengadaanPage({ user, onBack }) {
               </p>
             </div>
           )}
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
-            <Input className="pl-8" placeholder="Cari nama/kode aset (min. 2 huruf)"
-              value={cari} onChange={(e) => setCari(e.target.value)} data-testid="pengadaan-cari-aset" />
-          </div>
-          {(mencari || hasilCari.length > 0) && cari.trim().length >= 2 && (
-            <div className="max-h-52 overflow-y-auto rounded-lg border border-border">
-              {mencari ? (
-                <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-orange-600" /></div>
-              ) : hasilCari.map((a) => (
-                <button key={a.id} type="button" disabled={taut?.saving}
-                  onClick={() => (taut?.mode === "lebur" ? leburkan(a.id) : tautkan(a.id))}
-                  className="w-full px-2.5 py-1.5 text-left hover:bg-muted">
-                  <span className="block text-xs font-semibold text-foreground truncate">{a.asset_name}</span>
-                  <span className="block text-[10px] text-muted-foreground font-mono">{a.asset_code} · {a.NUP} · {a.condition}</span>
-                </button>
-              ))}
-            </div>
-          )}
+          <PencarianAset user={user} testId="pengadaan-cari-aset"
+                    value={cari} onChange={setCari} onPilih={a => taut?.mode === "lebur" ? leburkan(a.id) : tautkan(a.id)} disabled={taut?.saving} />
           <DialogFooter className="gap-2">
             {taut?.mode !== "lebur" && taut?.perolehan?.barang?.[taut?.index]?.asset_id && (
               <Button variant="outline" className="text-red-500 hover:text-red-600" disabled={taut?.saving}

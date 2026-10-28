@@ -1,10 +1,8 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import PencarianAset from "@/components/assets/PencarianAset";
+import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
-import {
-  ArrowLeft, CalendarClock, Loader2, Wallet, Plus, Search, X, Coins,
-  Download, TicketCheck, Trash2, TrendingUp,
-} from "lucide-react";
+import { ArrowLeft, CalendarClock, Loader2, Wallet, Plus, X, Coins, TicketCheck, Trash2, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -13,7 +11,7 @@ import {
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import StatKartu from "@/components/ui/StatKartu";
 import { useBackGuard } from "@/hooks/useBackGuard";
-import { downloadFileWithProgress } from "@/lib/downloadFile";
+
 import MenuKepala from "@/components/ui/MenuKepala";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
@@ -48,9 +46,7 @@ export default function PenganggaranPage({ user, onBack }) {
   const [kalender, setKalender] = useState(null);
   const [formTahapan, setFormTahapan] = useState(null);
   const [cari, setCari] = useState("");
-  const [hasilCari, setHasilCari] = useState([]);
-  const [mencari, setMencari] = useState(false);
-  const cariTimer = useRef(null);
+
   const { confirm, confirmDialog } = useConfirm();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
@@ -65,19 +61,6 @@ export default function PenganggaranPage({ user, onBack }) {
       .catch(() => {});
   }, []);
   useEffect(() => { muat(); }, [muat]);
-
-  useEffect(() => {
-    if (!form || cari.trim().length < 2) { setHasilCari([]); return undefined; }
-    clearTimeout(cariTimer.current);
-    cariTimer.current = setTimeout(async () => {
-      setMencari(true);
-      try {
-        const r = await axios.get(`${API}/assets`, { params: { search: cari.trim(), page_size: 8 } });
-        setHasilCari(r.data?.items || []);
-      } catch { setHasilCari([]); } finally { setMencari(false); }
-    }, 300);
-    return () => clearTimeout(cariTimer.current);
-  }, [cari, form]);
 
   const fmtRp = (n) => `Rp${Math.round(Number(n || 0)).toLocaleString("id-ID")}`;
   const labelStatus = data?.label_status || {};
@@ -180,7 +163,7 @@ export default function PenganggaranPage({ user, onBack }) {
   const setTrxField = (k, v) => setTrx((t) => ({ ...t, fields: { ...t.fields, [k]: v } }));
   // Buka dialog usulan/tahapan baru — dipakai tombol header & CTA empty-state
   const bukaFormUsulan = () => {
-    setCari(""); setHasilCari([]);
+    setCari("");
     setForm({ data: { jenis: "pemeliharaan", uraian: "", tahun_anggaran: String(new Date().getFullYear() + 2), nilai_usulan: "", akun: "523", sumber: "", keterangan: "" }, aset: [], saving: false });
   };
   const bukaFormTahapan = () =>
@@ -696,25 +679,8 @@ export default function PenganggaranPage({ user, onBack }) {
               </div>
               <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="agr-cari">Tautkan aset (opsional)</label>
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
-                  <Input id="agr-cari" className="pl-8" placeholder="Cari nama/kode aset (min. 2 huruf)"
-                    value={cari} onChange={(e) => setCari(e.target.value)} data-testid="penganggaran-cari" />
-                  {(mencari || hasilCari.length > 0) && cari.trim().length >= 2 && (
-                    <div className="absolute z-50 mt-1 w-full max-h-44 overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
-                      {mencari ? (
-                        <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-teal-600" /></div>
-                      ) : hasilCari.map((a) => (
-                        <button key={a.id} type="button"
-                          onClick={() => { setForm((f) => (f.aset.some((x) => x.id === a.id) ? f : { ...f, aset: [...f.aset, a] })); setCari(""); setHasilCari([]); }}
-                          className="w-full px-2.5 py-1.5 text-left hover:bg-muted">
-                          <span className="block text-xs font-semibold text-foreground truncate">{a.asset_name}</span>
-                          <span className="block text-[10px] text-muted-foreground font-mono">{a.asset_code} · {a.NUP} · {a.condition}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <PencarianAset user={user} id="agr-cari" testId="penganggaran-cari"
+                    value={cari} onChange={setCari} onPilih={a => setForm(f => f.aset.some(x => x.id === a.id) ? f : { ...f, aset: [...f.aset, a] })} selectedIds={form.aset.map(a => a.id)} />
               </div>
               {form.aset.length > 0 && (
                 <ul className="sm:col-span-2 space-y-1">

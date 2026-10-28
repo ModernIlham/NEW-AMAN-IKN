@@ -1,11 +1,9 @@
+import PencarianAset from "@/components/assets/PencarianAset";
 import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import useReferensiSatker from "@/hooks/useReferensiSatker";
 import axios from "axios";
 import { toast } from "sonner";
-import {
-  ArrowLeft, ArrowRight, Loader2, ClipboardList, CheckCircle2, XCircle, Coins, FileDown,
-  Plus, Scale, Search, Send, Trash2, CalendarDays,
-} from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2, ClipboardList, CheckCircle2, XCircle, Coins, FileDown, Plus, Scale, Send, Trash2, CalendarDays } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
@@ -79,9 +77,7 @@ export default function PerencanaanPage({ user, onBack }) {
   const [usulan, setUsulan] = useState(null);
   const [formUsulan, setFormUsulan] = useState(null);
   const [cari, setCari] = useState("");
-  const [hasilCari, setHasilCari] = useState([]);
-  const [mencari, setMencari] = useState(false);
-  const cariTimer = useRef(null);
+
   const refTidak = useRef(null); // jalan pintas dari kartu ringkasan "Tidak layak"
   const { confirm, confirmDialog } = useConfirm();
 
@@ -150,19 +146,6 @@ export default function PerencanaanPage({ user, onBack }) {
   }, [tahun]);
 
   useEffect(() => { muatUsulan(); }, [muatUsulan]);
-
-  useEffect(() => {
-    if (!formUsulan || cari.trim().length < 2) { setHasilCari([]); return undefined; }
-    clearTimeout(cariTimer.current);
-    cariTimer.current = setTimeout(async () => {
-      setMencari(true);
-      try {
-        const r = await axios.get(`${API}/assets`, { params: { search: cari.trim(), page_size: 8 } });
-        setHasilCari(r.data?.items || []);
-      } catch { setHasilCari([]); } finally { setMencari(false); }
-    }, 300);
-    return () => clearTimeout(cariTimer.current);
-  }, [cari, formUsulan]);
 
   const simpanUsulan = async () => {
     if (!formUsulan) return;
@@ -384,7 +367,7 @@ export default function PerencanaanPage({ user, onBack }) {
                   </span>
                 )}
                 <Button size="sm" className="h-7 text-[11px] min-h-0 flex-shrink-0 bg-teal-700 hover:bg-teal-800 text-white"
-                  onClick={() => { setCari(""); setHasilCari([]); setFormUsulan({ data: { tahun_rkbmn: String(th + 2), jenis: "pemeliharaan", unit_pengusul: "", uraian: "", volume: "1", satuan: "unit", keterangan: "" }, aset: null, saving: false }); }}
+                  onClick={() => { setCari("");  setFormUsulan({ data: { tahun_rkbmn: String(th + 2), jenis: "pemeliharaan", unit_pengusul: "", uraian: "", volume: "1", satuan: "unit", keterangan: "" }, aset: null, saving: false }); }}
                   title="Buat usulan RKBMN baru" aria-label="Buat usulan RKBMN baru"
                   data-testid="perencanaan-usulan-tambah">
                   <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Buat Usulan</span>
@@ -644,25 +627,8 @@ export default function PerencanaanPage({ user, onBack }) {
               {!formUsulan.aset ? (
                 <div>
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="usl-cari">Tautkan aset (ops., untuk pemeliharaan/eksisting)</label>
-                  <div className="relative">
-                    <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
-                    <Input id="usl-cari" className="pl-8" placeholder="nama / kode / NUP…"
-                      value={cari} onChange={(e) => setCari(e.target.value)} data-testid="usulan-cari" />
-                  </div>
-                  {mencari && <p className="text-[11px] text-muted-foreground mt-1">Mencari…</p>}
-                  <ul className="mt-2 space-y-1.5 max-h-40 overflow-y-auto">
-                    {hasilCari.map((a) => (
-                      <li key={a.id}>
-                        <button type="button"
-                          onClick={() => setFormUsulan((f) => ({ ...f, aset: a }))}
-                          className="w-full text-left rounded-lg border border-border p-2 text-xs hover:bg-muted min-h-0"
-                          data-testid={`usulan-pilih-${a.id}`}>
-                          <span className="text-foreground/90">{a.asset_name || "-"}</span>{" "}
-                          <span className="font-mono text-[10px] text-muted-foreground">({a.asset_code} · {a.NUP})</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                  <PencarianAset user={user} id="usl-cari" testId="usulan-cari"
+                    value={cari} onChange={setCari} onPilih={a => setFormUsulan((f) => ({ ...f, aset: a }))} itemTestId={id => `usulan-pilih-${id}`} />
                 </div>
               ) : (
                 <div className="rounded-lg border border-border p-2 text-xs flex items-center justify-between gap-2">
