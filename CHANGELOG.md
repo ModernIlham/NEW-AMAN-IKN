@@ -18,6 +18,17 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1104] Ringkasan hasil ubah massal dapat ditutup — 2026-10-26
+
+- Hasil final memiliki tombol tutup; hasil seluruhnya berhasil/sudah sesuai
+  menutup otomatis setelah 10 detik. Timer dijeda saat panel dibaca dengan
+  pointer/fokus atau tab tidak terlihat. Konflik dan kegagalan tidak ditutup otomatis.
+- Proses belum selesai bisa diringkas menjadi satu baris tanpa menghilangkan
+  akses pemulihan. Menutup hasil final hanya membersihkan checkpoint tampilan,
+  tidak menghapus perubahan maupun riwayat server.
+- Koneksi pulih/muat ulang tidak memunculkan kembali hasil yang sudah ditutup;
+  timer operasi lama tidak dapat menghapus checkpoint operasi yang baru.
+
 ## [#1094] Posisi daftar tetap setelah ubah massal dengan filter aktif — 2026-10-09
 
 - Ubah massal menyegarkan seluruh rentang halaman yang sudah dimuat, bukan

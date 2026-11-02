@@ -23,7 +23,11 @@ export function useOperasiBatch({ owner, satker, activityId, sessionId }) {
     const previous = client.read();
     setOperation(previous); setError(null); setBusy(false);
     if (!previous) return undefined;
-    const check = () => run(() => client.refresh(client.read() || previous)).catch(() => {});
+    const check = () => {
+      const current = client.read();
+      // Ringkasan yang sudah ditutup tidak dihidupkan lagi saat koneksi pulih.
+      if (current) run(() => client.refresh(current)).catch(() => {});
+    };
     check();
     const onOnline = () => { if (mounted) check(); };
     window.addEventListener("online", onOnline);
@@ -34,7 +38,7 @@ export function useOperasiBatch({ owner, satker, activityId, sessionId }) {
     start: value => run(() => client.start(value)),
     refresh: () => run(() => client.refresh(client.read() || operation)),
     resume: () => run(() => client.resume(client.read() || operation)),
-    clear: () => client.clear(operation),
+    clear: (expected = operation) => client.clear(expected),
     abandonPreparation: () => run(() => client.abandonPreparation(operation)),
   };
 }

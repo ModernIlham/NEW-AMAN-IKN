@@ -12,6 +12,7 @@ function uuid() {
   return [...bytes].map((b, i) => `${[4, 6, 8, 10].includes(i) ? "-" : ""}${b.toString(16).padStart(2, "0")}`).join("");
 }
 export const kunciCheckpointBatch = (owner, satker) => `aman_batch_v2:${JSON.stringify([owner, satker || ""])}`;
+export const identitasBatch = group => JSON.stringify((group?.children || []).map(c => c.operation_id));
 export function bacaCheckpointBatch(storage, key) {
   try { const value = JSON.parse(storage.getItem(key) || "null"); return value?.schema === 1 ? value : null; }
   catch { return null; }
@@ -149,9 +150,14 @@ export function buatKlienOperasiBatch({ owner, satker = "", activityId, sessionI
       return null;
     }); },
     clear(group) {
+      if (busy) throw apiError("Operasi masih berjalan. Tunggu hasil sebelum menutup ringkasan.", "operation_busy");
+      const current = bacaCheckpointBatch(storage, key);
+      // Timer/tab lama tidak boleh menghapus checkpoint operasi penggantinya.
+      if (!current || identitasBatch(current) !== identitasBatch(group)) return false;
       const s = ringkasBatch(group);
-      if (!s.done) throw apiError("Operasi belum selesai; periksa hasil server terlebih dahulu.", "operation_pending");
+      if (!s.done || !ringkasBatch(current).done) throw apiError("Operasi belum selesai; periksa hasil server terlebih dahulu.", "operation_pending");
       storage.removeItem(key); onChange(null);
+      return true;
     },
   };
 }
