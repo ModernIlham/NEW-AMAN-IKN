@@ -502,6 +502,7 @@ def test_historical_deleted_media_references_do_not_make_current_backup_incomple
     ("signature_requests", {"id": "sr", "signers": [{"signature_file_id": "missing-signature"}]}),
     ("report_settings", {"kasatker_ttd_file_id": "missing-specimen"}),
     ("bast_serah_terima", {"id": "bast", "bukti": {"file_id": "missing-evidence"}}),
+    ("bast_serah_terima", {"id": "bast", "dokumen_akhir": [{"file_id": "missing-final"}]}),
     ("pengadaan", {"id": "purchase", "lampiran_berkas": [{"file_id": "missing-attachment"}]}),
     ("spasial_node", {"id": "map", "properties": {"denah_overlay": {"file_id": "missing-overlay"}}}),
 ])
