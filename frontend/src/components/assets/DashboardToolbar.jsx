@@ -223,12 +223,14 @@ const DashboardToolbar = memo(function DashboardToolbar({
                 berubah. Refresh langsung di sini akan membaca urutan LAMA. */}
             <Select value={sortBy} onValueChange={setSortBy}>
               {/* Ikut jadi katup terakhir bersama Select kategori — lihat catatan di sana. */}
-              <SelectTrigger className={`h-8 text-xs min-w-0 ${tampil("urut") ? "w-32" : "w-[88px]"}`}><SelectValue /></SelectTrigger>
+              <SelectTrigger aria-label="Urutkan" data-testid="desktop-sort-select" className={`h-8 text-xs min-w-0 ${tampil("urut") ? "w-32" : "w-[88px]"}`}><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="newest">Terbaru</SelectItem>
                 <SelectItem value="oldest">Terlama</SelectItem>
                 <SelectItem value="name_asc">Nama A-Z</SelectItem>
                 <SelectItem value="name_desc">Nama Z-A</SelectItem>
+                <SelectItem value="code_nup_asc" data-testid="desktop-sort-code-nup-asc">Kode &amp; NUP ↑</SelectItem>
+                <SelectItem value="code_nup_desc" data-testid="desktop-sort-code-nup-desc">Kode &amp; NUP ↓</SelectItem>
                 <SelectItem value="price_asc">Harga Terendah</SelectItem>
                 <SelectItem value="price_desc">Harga Tertinggi</SelectItem>
                 <SelectItem value="category_asc">Kategori A-Z</SelectItem>
@@ -338,6 +340,8 @@ const DashboardToolbar = memo(function DashboardToolbar({
               <SelectItem value="oldest">Terlama</SelectItem>
               <SelectItem value="name_asc">A-Z</SelectItem>
               <SelectItem value="name_desc">Z-A</SelectItem>
+              <SelectItem value="code_nup_asc" data-testid="mobile-sort-code-nup-asc">Kode &amp; NUP ↑</SelectItem>
+              <SelectItem value="code_nup_desc" data-testid="mobile-sort-code-nup-desc">Kode &amp; NUP ↓</SelectItem>
               <SelectItem value="price_asc">Harga ↑</SelectItem>
               <SelectItem value="price_desc">Harga ↓</SelectItem>
             </SelectContent>

@@ -39,6 +39,7 @@ export function buatCacheQuerySnapshot({ maxEntries = 4, maxBytes = 16 * 1024 * 
   };
 }
 const SORT_FIELD = { newest: "created_at", oldest: "created_at", name_asc: "asset_name", name_desc: "asset_name",
+  code_nup_asc: "asset_code", code_nup_desc: "asset_code",
   price_asc: "purchase_price", price_desc: "purchase_price", category_asc: "category", category_desc: "category",
   location_asc: "location", eselon1_asc: "eselon1", condition_asc: "condition", status_asc: "status" };
 const QUERY_FIELDS = new Set([...FIELD_CARI_ASET, "id", "purchase_price", "purchase_date", "created_at", "inventory_status", "stiker_status", "pengguna_nip"]);
@@ -101,7 +102,8 @@ export async function queryHalamanSnapshot({ source, cache, scope, meta, query, 
       const filtered = filterSnapshotRows(rows, query);
       const partial = hitungStatistikBaris(filtered);
       for (const k of Object.keys(stats)) stats[k] += partial[k];
-      for (const row of filtered) candidates.push({ id: row.id, [field]: row[field] });
+      for (const row of filtered) candidates.push({ id: row.id, [field]: row[field],
+        ...(["code_nup_asc", "code_nup_desc"].includes(query.sort) ? { NUP: row.NUP } : {}) });
       timing.queryMs += clock() - start;
     }
     if (baseRows) cache.putBase(baseKey, baseRows, baseBytes);
