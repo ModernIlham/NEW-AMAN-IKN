@@ -18,6 +18,64 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1104] Ringkasan hasil ubah massal dapat ditutup — 2026-10-26
+
+- Hasil final memiliki tombol tutup; hasil seluruhnya berhasil/sudah sesuai
+  menutup otomatis setelah 10 detik. Timer dijeda saat panel dibaca dengan
+  pointer/fokus atau tab tidak terlihat. Konflik dan kegagalan tidak ditutup otomatis.
+- Proses belum selesai bisa diringkas menjadi satu baris tanpa menghilangkan
+  akses pemulihan. Menutup hasil final hanya membersihkan checkpoint tampilan,
+  tidak menghapus perubahan maupun riwayat server.
+- Koneksi pulih/muat ulang tidak memunculkan kembali hasil yang sudah ditutup;
+  timer operasi lama tidak dapat menghapus checkpoint operasi yang baru.
+
+## [#1105] Urutan kode barang dan NUP numerik dua arah — 2026-10-26
+
+- Menu urutan HP, tablet dan PC memiliki Kode & NUP naik/turun: kode barang
+  menjadi kunci pertama, NUP menjadi kunci kedua, dan ID menjaga urutan stabil.
+- Nilai angka/string, nol awal dan akhiran .0 dari impor dibaca setara.
+  NUP 2 mendahului 10 saat menaik; angka panjang tidak kehilangan presisi.
+  Nilai kosong/nonangka tetap ditampilkan di akhir pada tiap tingkat.
+- Urutan yang sama berlaku pada daftar daring, snapshot/cache luring dan
+  PDF Data Aset. Filter, pengelompokan laporan dan pagination tetap diikuti.
+- Regresi memakai fixture bersama frontend/backend serta kontrak Mongo nyata
+  untuk memastikan pagination tidak melewatkan atau menggandakan barang.
+
+## [#1106] Jenis dokumen pengadaan dan penguncian isian nonkontrak — 2026-10-26
+
+- Tab Pengadaan pada tambah/edit aset menyediakan Kontrak, Non
+  Kontrak/Penerimaan Barang, Kontrak BLU, dan Non Kontrak BLU. Data lama
+  tanpa klasifikasi tetap "Belum ditentukan", bukan ditebak dari nomor.
+- Pilihan nonkontrak menonaktifkan Nomor Kontrak dan Cara Bayar Kontrak;
+  Bukti Perolehan (BAST/Kuitansi) tetap dapat diisi. Nilai kontrak lama
+  dipertahankan, tidak dihapus hanya karena berganti kategori.
+- Jenis dokumen mengikuti registry aset: PATCH parsial, riwayat perubahan,
+  proyeksi daftar, antrean/cache luring, ekspor CSV/XLSX dan template impor.
+  API dan impor menolak kategori di luar pilihan. PUT/file impor lama yang
+  tidak membawa kolom baru tidak menghapus klasifikasi yang sudah disimpan.
+- Uji pilihan, penguncian, penyimpanan luring, keselarasan registry,
+  generator, serta tampilan 320/375/768/1280 px terang/gelap ditambahkan.
+  Kontrak API memeriksa penyimpanan, OCC, idempotensi, isolasi satker,
+  ekspor dan kompatibilitas impor. Rilis ditunda sesuai arahan pemilik.
+
+## [#1107] Arsip dokumen akhir BAST setelah TTD atau e-meterai — 2026-10-26
+
+- Riwayat BAST menyediakan unggah dokumen akhir PDF/JPG/PNG, termasuk scan
+  manual berformat lain dan hasil setelah e-meterai, meskipun BAST sudah
+  diterapkan. Bukti dasar dan PDF elektronik asli tidak pernah ditimpa.
+- Arsip baru menunggu pemeriksaan petugas: pratinjau, hasil sesuai/tidak
+  sesuai, konfirmasi dan catatan wajib. Semua versi, pengunggah, pemeriksa,
+  waktu dan sidik berkas dipertahankan. Batas 10 MB/berkas, 20 arsip/BAST;
+  byte asli disimpan tanpa kompresi ulang, berkas identik ditolak.
+- Arsip tambahan tidak menerapkan ulang aset/BMN Saya, mengubah nomor,
+  status surat, pemegang, atau pembukuan. Scan sebagai bukti awal tetap
+  melalui Unggah Bukti TTD dan verifikasi kelengkapan; perubahan isi melalui
+  revisi resmi. Pemeriksaan petugas bukan validasi otomatis sertifikat TTE
+  atau keaslian e-meterai.
+- Akses satker, OCC, idempotensi, konflik dengan revisi, integritas saat baca,
+  backup dan perlindungan penghapusan arsip ikut diuji. BAST digantikan atau
+  TTD dicabut hanya dapat membuka arsip, tidak menambah/memeriksa dokumen.
+
 ## [#1094] Posisi daftar tetap setelah ubah massal dengan filter aktif — 2026-10-09
 
 - Ubah massal menyegarkan seluruh rentang halaman yang sudah dimuat, bukan

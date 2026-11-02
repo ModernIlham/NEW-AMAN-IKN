@@ -115,3 +115,30 @@ test("penyimpanan checkpoint gagal: tidak melakukan admission/mutasi tanpa metad
   const plan = await c.plan(ids(1), { notes: "A" }); axios.post.mockClear();
   await expect(c.start(plan)).rejects.toMatchObject({ code: "checkpoint_storage" }); expect(axios.post).not.toHaveBeenCalled();
 });
+
+test("tutup hasil hanya membersihkan checkpoint lokal, tidak menghapus hasil server", async () => {
+  const api = server(), onChange = jest.fn(), c = client({ onChange });
+  const done = await c.start(await c.plan(ids(2), { notes: "A" }));
+  axios.post.mockClear(); axios.get.mockClear();
+  expect(c.clear(done)).toBe(true);
+  expect(client().read()).toBeNull();
+  expect(onChange).toHaveBeenLastCalledWith(null);
+  expect(api.operations.size).toBe(1);
+  expect(api.photos.size).toBe(2);
+  expect(axios.post).not.toHaveBeenCalled(); expect(axios.get).not.toHaveBeenCalled();
+});
+
+test("timer operasi lama tidak menghapus hasil operasi baru", async () => {
+  server(); const c = client();
+  const old = await c.start(await c.plan(ids(1), { notes: "A" }));
+  const latest = await c.start(await c.plan(ids(2), { notes: "B" }));
+  expect(c.clear(old)).toBe(false);
+  expect(c.read().children[0].operation_id).toBe(latest.children[0].operation_id);
+});
+
+test("checkpoint belum selesai tidak dapat ditutup", async () => {
+  server({ timeoutChild: 0 }); const c = client();
+  const pending = await c.start(await c.plan(ids(1), { notes: "A" }));
+  expect(() => c.clear(pending)).toThrow("Operasi belum selesai");
+  expect(c.read()).not.toBeNull();
+});

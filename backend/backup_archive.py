@@ -154,7 +154,7 @@ CURRENT_MEDIA_REFERENCES = {
     "pejabat": ("ttd_file_id",),
     "report_settings": ("kasatker_ttd_file_id",),
     "signature_requests": ("dok_file_id", "signers.*.signature_file_id"),
-    "bast_serah_terima": ("bukti.file_id",),
+    "bast_serah_terima": ("bukti.file_id", "dokumen_akhir.*.file_id"),
     "spasial_node": ("properties.denah_overlay.file_id",),
     "psp": ("lampiran.*.file_id",),
     "pengadaan": ("lampiran_berkas.*.file_id",),

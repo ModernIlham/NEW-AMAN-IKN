@@ -9,6 +9,9 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Request, Header,
 import csv as csv_module
 
 from asset_fields import ASSET_SCALAR_FIELDS, import_row_value
+from jenis_dokumen_pengadaan import (
+    normalisasi_jenis_dokumen_pengadaan, pertahankan_jenis_dokumen_lama,
+)
 from spasial_utils import (terapkan_geo, sisip_geo_ke_update,
                            normalisasi_koordinat_doc)
 from impor_tanggal import normalkan_tanggal_baris
@@ -70,6 +73,10 @@ def validate_import_row(row_data: dict, valid_categories: list, row_num: int, ca
     category_map: dict mapping kode_aset -> label (deskripsi) for validation
     """
     errors = []
+    try:
+        normalisasi_jenis_dokumen_pengadaan(row_data.get("jenis_dokumen_pengadaan"))
+    except ValueError as exc:
+        errors.append(f"Baris {row_num}: {exc}")
     
     # Required fields check
     for field in REQUIRED_IMPORT_FIELDS:
@@ -295,7 +302,8 @@ async def import_assets(request: Request, file: UploadFile = File(...), force_up
         existing_assets = await db.assets.find(
             {"activity_id": activity_id},
             {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
-             "purchase_price": 1, "kode_register": 1, "marker_pin": 1}
+             "purchase_price": 1, "kode_register": 1, "marker_pin": 1,
+             "jenis_dokumen_pengadaan": 1}
         ).to_list(None)
         existing_map = {(str(a.get("asset_code") or ""), str(a.get("NUP") or "")): a
                         for a in existing_assets}
@@ -419,6 +427,8 @@ async def import_assets(request: Request, file: UploadFile = File(...), force_up
             # Semua field skalar dipetakan dari registry (asset_fields.py) —
             # field baru otomatis ikut ter-impor tanpa mengedit mapping ini.
             asset_data = {f.name: import_row_value(row, f) for f in ASSET_SCALAR_FIELDS}
+            if existing:
+                pertahankan_jenis_dokumen_lama(asset_data, existing, row)
             if existing and "marker_pin" not in row:
                 asset_data["marker_pin"] = existing.get("marker_pin", "")
             asset_data["asset_code"] = asset_code

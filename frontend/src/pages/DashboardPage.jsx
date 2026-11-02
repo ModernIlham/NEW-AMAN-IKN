@@ -1614,6 +1614,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
             />
 
             <BatchOperationStatus operation={batchFlow.operation} busy={batchUpdating || batchFlow.busy} error={batchFlow.error}
+              onDismiss={operation => { try { batchFlow.clear(operation); } catch (error) { toast.error(pesanGalatBatch(error)); } }}
               onRefresh={() => batchFlow.refresh().catch(() => {})}
               onResume={perms.canEdit ? lanjutkanOperasiMassal : undefined}
               onReview={tinjauOperasiMassal}

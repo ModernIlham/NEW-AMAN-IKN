@@ -103,6 +103,10 @@
     "defaultValue": "",
     "label": "Perolehan Dari"
   },
+  "jenis_dokumen_pengadaan": {
+    "defaultValue": "",
+    "label": "Jenis Dokumen Pengadaan"
+  },
   "nomor_kontrak": {
     "defaultValue": "",
     "label": "Nomor Kontrak"

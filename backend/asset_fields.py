@@ -66,6 +66,7 @@ ASSET_SCALAR_FIELDS = (
                import_default="Aktif", import_force_default=True),
     AssetField("nomor_spm", "Nomor SPM", batchable=True),
     AssetField("perolehan_dari_nama", "Perolehan Dari", batchable=True),
+    AssetField("jenis_dokumen_pengadaan", "Jenis Dokumen Pengadaan"),
     AssetField("nomor_kontrak", "Nomor Kontrak", batchable=True),
     AssetField("cara_bayar_kontrak", "Cara Bayar Kontrak", batchable=True),
     AssetField("nomor_bukti_perolehan", "Bukti Perolehan", batchable=True),

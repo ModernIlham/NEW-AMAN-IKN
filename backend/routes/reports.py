@@ -21,7 +21,8 @@ import laporan_kolom as lkl
 import laporan_linimasa as llm
 import kodefikasi_utils as kod
 import data_aset_pdf as dap
-from asset_sorting import ASSET_SORT_OPTIONS, urutkan_harga_aset, batas_harga, harga_float
+from asset_sorting import (ASSET_SORT_OPTIONS, urutkan_harga_aset, batas_harga, harga_float,
+                          CODE_NUP_SORTS, urutkan_kode_nup_aset)
 import organisasi_utils as org
 import spasial_utils as su
 from pathlib import Path
@@ -5385,11 +5386,13 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
     # ringkasan lain tidak mengubah urutan lama bila sort_by tidak diberikan.
     if sort_by:
         dap.validasi_pilihan(data_group_by, sort_by)
-        if sort_by not in {"price_asc", "price_desc"}:
+        if sort_by not in {"price_asc", "price_desc", *CODE_NUP_SORTS}:
             cursor_aset = cursor_aset.sort(ASSET_SORT_OPTIONS[sort_by])
     all_assets = await baca_laporan_lengkap(cursor_aset, 100000, "Data aset laporan")
     if sort_by in {"price_asc", "price_desc"}:
         urutkan_harga_aset(all_assets, sort_by)
+    elif sort_by in CODE_NUP_SORTS:
+        urutkan_kode_nup_aset(all_assets, sort_by)
     categories = await db.categories.find({}, {"_id": 0}).to_list(10000)
     cat_map = {c.get("kode_aset", ""): c.get("label", "") for c in categories}
 

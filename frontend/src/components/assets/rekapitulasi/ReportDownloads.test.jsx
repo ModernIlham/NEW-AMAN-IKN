@@ -63,6 +63,17 @@ test("info halaman lama tidak menimpa hasil filter baru", async () => {
   expect(screen.queryByTestId("download-data-page-1")).not.toBeInTheDocument();
 });
 
+test.each(["code_nup_asc", "code_nup_desc"])("PDF mempertahankan urutan kode/NUP %s serta filter dan kelompok", async sortBy => {
+  render(<ReportDownloads {...props} sortBy={sortBy} />);
+  await screen.findByTestId("download-data-page-1");
+  fireEvent.change(screen.getByTestId("data-aset-group"), { target: { value: "kode_5" } });
+  await userEvent.click(screen.getByTestId("download-data-page-1"));
+  const url = new URL(downloadFileWithProgress.mock.calls[0][0], "https://uji.invalid");
+  expect(url.searchParams.get("sort_by")).toBe(sortBy);
+  expect(url.searchParams.get("data_group_by")).toBe("kode_5");
+  expect(url.searchParams.getAll("location")).toEqual(["Gedung A", "Gedung B"]);
+});
+
 test("pengaturan PDF dapat diperiksa dengan CSS produksi", async () => {
   render(<ReportDownloads {...props} />);
   await waitFor(() => expect(screen.getByTestId("download-data-page-1")).toBeInTheDocument());

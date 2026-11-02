@@ -109,3 +109,15 @@ test.each([["desktop", 0], ["HP/tablet", 1]])(
     expect(doFetchStats).not.toHaveBeenCalled();
   },
 );
+
+test.each([["desktop", 0], ["HP/tablet", 1]])(
+  "%s: kode barang dan NUP tersedia dua arah tanpa permintaan ganda", async (_, index) => {
+    const { doFetch, pengguna, pemicu } = pasang();
+    for (const label of ["Kode & NUP ↑", "Kode & NUP ↓"]) {
+      await pengguna.click(pemicu[index]);
+      await pengguna.click(await screen.findByRole("option", { name: label }));
+    }
+    expect(doFetch.mock.calls.map(a => a[4])).toEqual(["code_nup_asc", "code_nup_desc"]);
+    expect(doFetch.mock.calls.map(a => a[0])).toEqual([1, 1]);
+  },
+);

@@ -203,7 +203,8 @@ async def delete_document_from_gridfs(gridfs_id: str):
         # dilindungi bagi referensi lama yang belum diserialisasi ke string.
         nilai = {"$in": [str(fid), fid]}
         bast = await db.bast_serah_terima.find_one(
-            {"$or": [{"bukti.file_id": nilai}, {"bukti_riwayat.file_id": nilai}]},
+            {"$or": [{"bukti.file_id": nilai}, {"bukti_riwayat.file_id": nilai},
+                     {"dokumen_akhir.file_id": nilai}]},
             {"_id": 1}, max_time_ms=2000)
         if bast:
             return True

@@ -28,6 +28,7 @@ if _BACKEND_DIR not in sys.path:
     sys.path.insert(0, _BACKEND_DIR)
 
 from asset_fields import SCALAR_FIELD_NAMES  # noqa: E402
+from jenis_dokumen_pengadaan import JENIS_DOKUMEN_PENGADAAN  # noqa: E402
 
 from . import valuebanks as vb  # noqa: E402
 from .profiles import PROFIL, PROFIL_DEFAULT, maybe_anomali  # noqa: E402
@@ -173,6 +174,7 @@ FIELD_STRATEGIES = {
         if r.random() < 0.5 else "")),
     "perolehan_dari_nama": _s("teks", lambda r, c: (
         r.choice(vb.SUPPLIER) if r.random() < 0.6 else "")),
+    "jenis_dokumen_pengadaan": _s("teks", lambda r, c: r.choice(("", *JENIS_DOKUMEN_PENGADAAN))),
     "nomor_kontrak": _s("teks", lambda r, c: (
         f"KTR-{r.randint(1, 999):03d}/PPK/{c['tgl_beli'].year}"
         if r.random() < 0.5 else "")),
@@ -264,7 +266,7 @@ def generate_asset(rng, profil_cfg, index=0, activity_id=None):
         nilai = strat["fn"](rng, ctx)
         # Desain adalah JSON ber-skema ketat; uji payload liar ada di test
         # validator, bukan dataset yang dijanjikan selalu lolos AssetCreate.
-        anom = maybe_anomali(rng, strat["jenis"], 0 if name == "marker_pin" else rasio)
+        anom = maybe_anomali(rng, strat["jenis"], 0 if name in {"marker_pin", "jenis_dokumen_pengadaan"} else rasio)
         record[name] = anom if anom is not None else nilai
     if activity_id is not None:
         record["activity_id"] = activity_id
