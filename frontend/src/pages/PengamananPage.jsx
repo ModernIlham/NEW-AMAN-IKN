@@ -1,11 +1,8 @@
+import PencarianAset from "@/components/assets/PencarianAset";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
-import {
-  ArrowLeft, ChevronRight, Loader2, ShieldCheck, ShieldAlert, Scale, BadgeCheck, Camera,
-  Gavel, Paperclip, Plus, QrCode, MapPin, Search, Trash2, Umbrella,
-  Upload, UserCheck, FileText, Download,
-} from "lucide-react";
+import { ArrowLeft, ChevronRight, Loader2, ShieldCheck, ShieldAlert, Scale, BadgeCheck, Camera, Gavel, Paperclip, Plus, QrCode, MapPin, Trash2, Umbrella, Upload, UserCheck, FileText, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -78,9 +75,7 @@ export default function PengamananPage({ user, onBack }) {
   const [polis, setPolis] = useState(null);
   const [formPolis, setFormPolis] = useState(null);
   const [cari, setCari] = useState("");
-  const [hasilCari, setHasilCari] = useState([]);
-  const [mencari, setMencari] = useState(false);
-  const cariTimer = useRef(null);
+
   const { confirm, confirmDialog } = useConfirm();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
@@ -120,19 +115,6 @@ export default function PengamananPage({ user, onBack }) {
     muatCek();
     muatPolis();
   }, [muatKasus, muatDokumen, muatCek, muatPolis]);
-
-  useEffect(() => {
-    if ((!formKasus && !formDok && !formCek && !formPolis) || cari.trim().length < 2) { setHasilCari([]); return undefined; }
-    clearTimeout(cariTimer.current);
-    cariTimer.current = setTimeout(async () => {
-      setMencari(true);
-      try {
-        const r = await axios.get(`${API}/assets`, { params: { search: cari.trim(), page_size: 8 } });
-        setHasilCari(r.data?.items || []);
-      } catch { setHasilCari([]); } finally { setMencari(false); }
-    }, 300);
-    return () => clearTimeout(cariTimer.current);
-  }, [cari, formKasus, formDok, formCek, formPolis]);
 
   const simpanKasus = async () => {
     if (!formKasus?.aset) return;
@@ -303,7 +285,7 @@ export default function PengamananPage({ user, onBack }) {
   };
 
   const bukaFormCek = (aset, existing) => {
-    setCari(""); setHasilCari([]);
+    setCari("");
     const jenis = existing?.jenis_objek || tebakJenisObjek(aset);
     setFormCek({
       data: { jenis_objek: jenis, butir: { ...(existing?.butir || {}) }, keterangan: existing?.keterangan || "" },
@@ -480,7 +462,7 @@ export default function PengamananPage({ user, onBack }) {
                   </Button>
                 )}
                 <Button size="sm" className="h-7 text-[11px] min-h-0 flex-shrink-0 bg-amber-600 hover:bg-amber-700 text-white"
-                  onClick={() => { setCari(""); setHasilCari([]); setFormKasus({ data: { kategori: "dikuasai_pihak_lain", uraian: "", pihak_lawan: "", nomor_perkara: "", pendamping: "" }, aset: null, saving: false }); }}
+                  onClick={() => { setCari("");  setFormKasus({ data: { kategori: "dikuasai_pihak_lain", uraian: "", pihak_lawan: "", nomor_perkara: "", pendamping: "" }, aset: null, saving: false }); }}
                   aria-label="Buka kasus BMN bermasalah baru"
                   data-testid="pengamanan-kasus-tambah">
                   <Plus className="w-3.5 h-3.5 mr-1" /><span className="sm:hidden">Buka</span><span className="hidden sm:inline">Buka Kasus</span>
@@ -558,7 +540,7 @@ export default function PengamananPage({ user, onBack }) {
                   </Button>
                 )}
                 <Button size="sm" className="h-7 text-[11px] min-h-0 flex-shrink-0 bg-amber-600 hover:bg-amber-700 text-white"
-                  onClick={() => { setCari(""); setHasilCari([]); setFormDok({ data: { jenis: "sertipikat", nomor: "", atas_nama: "", lokasi_simpan: "pengelola_barang", berlaku_sampai: "", kategori_sertipikasi: "", keterangan: "" }, aset: null, saving: false }); }}
+                  onClick={() => { setCari("");  setFormDok({ data: { jenis: "sertipikat", nomor: "", atas_nama: "", lokasi_simpan: "pengelola_barang", berlaku_sampai: "", kategori_sertipikasi: "", keterangan: "" }, aset: null, saving: false }); }}
                   aria-label="Catat dokumen kepemilikan baru"
                   data-testid="pengamanan-dokumen-tambah">
                   <Plus className="w-3.5 h-3.5 mr-1" /><span className="sm:hidden">Catat</span><span className="hidden sm:inline">Catat Dokumen</span>
@@ -726,7 +708,7 @@ export default function PengamananPage({ user, onBack }) {
                   </Button>
                 )}
                 <Button size="sm" className="h-7 text-[11px] min-h-0 flex-shrink-0 bg-amber-600 hover:bg-amber-700 text-white"
-                  onClick={() => { setCari(""); setHasilCari([]); setFormPolis({ data: { nomor_polis: "", penanggung: "Konsorsium Asuransi BMN", kategori_objek: "program_preferen", nilai_pertanggungan: "", premi: "", sumber_dana: "dipa", mulai: "", berakhir: "", keterangan: "" }, aset: null, saving: false }); }}
+                  onClick={() => { setCari("");  setFormPolis({ data: { nomor_polis: "", penanggung: "Konsorsium Asuransi BMN", kategori_objek: "program_preferen", nilai_pertanggungan: "", premi: "", sumber_dana: "dipa", mulai: "", berakhir: "", keterangan: "" }, aset: null, saving: false }); }}
                   aria-label="Catat polis asuransi baru"
                   data-testid="pengamanan-polis-tambah">
                   <Plus className="w-3.5 h-3.5 mr-1" /><span className="sm:hidden">Catat</span><span className="hidden sm:inline">Catat Polis</span>
@@ -794,25 +776,8 @@ export default function PengamananPage({ user, onBack }) {
               {!formKasus.aset ? (
                 <div>
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kss-cari">Cari aset</label>
-                  <div className="relative">
-                    <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
-                    <Input id="kss-cari" className="pl-8" placeholder="nama / kode / NUP…"
-                      value={cari} onChange={(e) => setCari(e.target.value)} data-testid="kasus-cari" />
-                  </div>
-                  {mencari && <p className="text-[11px] text-muted-foreground mt-1">Mencari…</p>}
-                  <ul className="mt-2 space-y-1.5 max-h-48 overflow-y-auto">
-                    {hasilCari.map((a) => (
-                      <li key={a.id}>
-                        <button type="button"
-                          onClick={() => setFormKasus((f) => ({ ...f, aset: a }))}
-                          className="w-full text-left rounded-lg border border-border p-2 text-xs hover:bg-muted min-h-0"
-                          data-testid={`kasus-pilih-${a.id}`}>
-                          <span className="text-foreground/90">{a.asset_name || "-"}</span>{" "}
-                          <span className="font-mono text-[10px] text-muted-foreground">({a.asset_code} · {a.NUP})</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                  <PencarianAset user={user} id="kss-cari" testId="kasus-cari"
+                    value={cari} onChange={setCari} onPilih={a => setFormKasus((f) => ({ ...f, aset: a }))} itemTestId={id => `kasus-pilih-${id}`} />
                 </div>
               ) : (
                 <div className="rounded-lg border border-border p-2 text-xs flex items-center justify-between gap-2">
@@ -889,25 +854,8 @@ export default function PengamananPage({ user, onBack }) {
               {!formDok.aset ? (
                 <div>
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="dok-cari">Cari aset</label>
-                  <div className="relative">
-                    <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
-                    <Input id="dok-cari" className="pl-8" placeholder="nama / kode / NUP…"
-                      value={cari} onChange={(e) => setCari(e.target.value)} data-testid="dokumen-cari" />
-                  </div>
-                  {mencari && <p className="text-[11px] text-muted-foreground mt-1">Mencari…</p>}
-                  <ul className="mt-2 space-y-1.5 max-h-48 overflow-y-auto">
-                    {hasilCari.map((a) => (
-                      <li key={a.id}>
-                        <button type="button"
-                          onClick={() => setFormDok((f) => ({ ...f, aset: a }))}
-                          className="w-full text-left rounded-lg border border-border p-2 text-xs hover:bg-muted min-h-0"
-                          data-testid={`dokumen-pilih-${a.id}`}>
-                          <span className="text-foreground/90">{a.asset_name || "-"}</span>{" "}
-                          <span className="font-mono text-[10px] text-muted-foreground">({a.asset_code} · {a.NUP})</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                  <PencarianAset user={user} id="dok-cari" testId="dokumen-cari"
+                    value={cari} onChange={setCari} onPilih={a => setFormDok((f) => ({ ...f, aset: a }))} itemTestId={id => `dokumen-pilih-${id}`} />
                 </div>
               ) : (
                 <div className="rounded-lg border border-border p-2 text-xs flex items-center justify-between gap-2">
@@ -1004,25 +952,8 @@ export default function PengamananPage({ user, onBack }) {
               {!formPolis.aset ? (
                 <div>
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pol-cari">Cari aset (gedung/bangunan)</label>
-                  <div className="relative">
-                    <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
-                    <Input id="pol-cari" className="pl-8" placeholder="nama / kode / NUP…"
-                      value={cari} onChange={(e) => setCari(e.target.value)} data-testid="polis-cari" />
-                  </div>
-                  {mencari && <p className="text-[11px] text-muted-foreground mt-1">Mencari…</p>}
-                  <ul className="mt-2 space-y-1.5 max-h-48 overflow-y-auto">
-                    {hasilCari.map((a) => (
-                      <li key={a.id}>
-                        <button type="button"
-                          onClick={() => setFormPolis((f) => ({ ...f, aset: a }))}
-                          className="w-full text-left rounded-lg border border-border p-2 text-xs hover:bg-muted min-h-0"
-                          data-testid={`polis-pilih-${a.id}`}>
-                          <span className="text-foreground/90">{a.asset_name || "-"}</span>{" "}
-                          <span className="font-mono text-[10px] text-muted-foreground">({a.asset_code} · {a.NUP})</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                  <PencarianAset user={user} id="pol-cari" testId="polis-cari"
+                    value={cari} onChange={setCari} onPilih={a => setFormPolis((f) => ({ ...f, aset: a }))} itemTestId={id => `polis-pilih-${id}`} />
                 </div>
               ) : (
                 <div className="rounded-lg border border-border p-2 text-xs flex items-center justify-between gap-2">
@@ -1125,25 +1056,8 @@ export default function PengamananPage({ user, onBack }) {
               {!formCek.aset ? (
                 <div>
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="cek-cari">Cari aset</label>
-                  <div className="relative">
-                    <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
-                    <Input id="cek-cari" className="pl-8" placeholder="nama / kode / NUP…"
-                      value={cari} onChange={(e) => setCari(e.target.value)} data-testid="checklist-cari" />
-                  </div>
-                  {mencari && <p className="text-[11px] text-muted-foreground mt-1">Mencari…</p>}
-                  <ul className="mt-2 space-y-1.5 max-h-48 overflow-y-auto">
-                    {hasilCari.map((a) => (
-                      <li key={a.id}>
-                        <button type="button"
-                          onClick={() => setFormCek((f) => ({ ...f, aset: a, data: { ...f.data, jenis_objek: tebakJenisObjek(a), butir: {} } }))}
-                          className="w-full text-left rounded-lg border border-border p-2 text-xs hover:bg-muted min-h-0"
-                          data-testid={`checklist-pilih-${a.id}`}>
-                          <span className="text-foreground/90">{a.asset_name || "-"}</span>{" "}
-                          <span className="font-mono text-[10px] text-muted-foreground">({a.asset_code} · {a.NUP})</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                  <PencarianAset user={user} id="cek-cari" testId="checklist-cari"
+                    value={cari} onChange={setCari} onPilih={a => setFormCek((f) => ({ ...f, aset: a, data: { ...f.data, jenis_objek: tebakJenisObjek(a), butir: {} } }))} itemTestId={id => `checklist-pilih-${id}`} />
                 </div>
               ) : (
                 <>

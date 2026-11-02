@@ -416,6 +416,7 @@ def build_asset_search_query(
     beli_dari: str = "",
     beli_sampai: str = "",
     ids: list = None,
+    nup: str = "",
 ) -> dict:
     """Query pencarian + filter aset — SATU builder untuk GET /assets dan
     ekspor geo (KML/KMZ/SHP) supaya filter tidak pernah drift antar-endpoint.
@@ -443,6 +444,18 @@ def build_asset_search_query(
     query.update(klausa_teks(
         search, FIELD_CARI_ASET, tambahan=_klausa_harga,
         fields_kode=FIELD_KODE_ASET, fields_angka=FIELD_ANGKA_ASET))
+
+    # NUP pada pemilih aset adalah kesetaraan, bukan substring di nama/harga.
+    # Data lama dapat berupa integer atau teks dengan nol depan.
+    if nup:
+        nup = str(nup).strip()
+        if not re.fullmatch(r"[0-9]{1,20}", nup):
+            raise HTTPException(400, "NUP harus berupa 1–20 digit angka")
+        canonical = str(int(nup))
+        alternatives = [{"NUP": {"$regex": "^0*" + canonical + "$", "$not": {"$type": "array"}}}]
+        if int(canonical) <= 9223372036854775807:
+            alternatives.append({"NUP": {"$eq": int(canonical), "$not": {"$type": "array"}}})
+        query.setdefault("$and", []).append({"$or": alternatives})
 
     # Advanced filters — semuanya boleh BANYAK NILAI (lihat klausa_* di atas).
     # Kategori ikut di sini sejak kategori boleh dipilih lebih dari satu; ia
@@ -525,6 +538,8 @@ async def kueri_aset_terlihat(
     _user: dict,
     *,
     search: str = "",
+    nup: str = "",
+    pencarian_lengkap: bool = False,
     category=None,
     activity_id: str = "",
     condition=None,
@@ -563,11 +578,15 @@ async def kueri_aset_terlihat(
     # PENCARIAN TEKS BEBAS via Meilisearch (bila aktif) — lihat catatan panjang
     # di `get_assets`. Hasil KOSONG dari Meili tidak dipercaya sebagai "memang
     # tak ada": indeks bisa tertinggal, jadi jatuh ke regex Mongo yang otoritatif.
-    meili_ids = await cari_id_aset(_user, activity_id, search) if _search_len_ok(search) else None
+    # Pemilih harus dapat menjangkau semua NUP. Indeks pencarian dapat
+    # tertinggal atau membatasi kandidat; Mongo adalah sumber otoritatifnya.
+    meili_ids = (await cari_id_aset(_user, activity_id, search)
+                 if _search_len_ok(search) and not (nup or pencarian_lengkap) else None)
     if meili_ids is not None and not meili_ids:
         meili_ids = None
     query = build_asset_search_query(
         search=("" if meili_ids is not None else search),
+        nup=nup,
         category=category, activity_id=activity_id,
         condition=condition, status=status, location=location,
         eselon1_filter=eselon1_filter, eselon2_filter=eselon2_filter,
@@ -610,6 +629,8 @@ def kunci_cache_kueri(_user, query: dict) -> str:
 @assets_router.get("/assets")
 async def get_assets(
     search: str = "",
+    nup: str = "",
+    pencarian_lengkap: bool = False,
     # Kategori MULTI-NILAI (parameter berulang, mis. ?category=A&category=B).
     # Satu nilai tetap sah dan menghasilkan kueri yang identik dengan versi
     # lama — bookmark & klien luring yang belum diperbarui tak pecah.
@@ -648,7 +669,8 @@ async def get_assets(
     # daftar dan angka ringkasannya tak pernah lagi menjawab pertanyaan yang
     # berbeda.
     query = await kueri_aset_terlihat(
-        _user, search=search, category=category, activity_id=activity_id,
+        _user, search=search, nup=nup, pencarian_lengkap=pencarian_lengkap,
+        category=category, activity_id=activity_id,
         condition=condition, status=status, location=location,
         eselon1_filter=eselon1_filter, eselon2_filter=eselon2_filter,
         eselon3_filter=eselon3_filter, eselon4_filter=eselon4_filter,
@@ -916,6 +938,8 @@ async def get_filter_options(activity_id: str = "", _user: dict = Depends(requir
 @assets_router.get("/assets/stats")
 async def get_assets_stats(
     search: str = "",
+    nup: str = "",
+    pencarian_lengkap: bool = False,
     category: List[str] = Query(default=[]),
     activity_id: str = "",
     # Filter lanjutan — DAFTAR PARAMETER YANG SAMA PERSIS dengan GET /assets.
@@ -948,7 +972,8 @@ async def get_assets_stats(
     sehingga "Total Aset" di kartu selalu sama dengan total daftar di bawahnya.
     """
     query = await kueri_aset_terlihat(
-        _user, search=search, category=category, activity_id=activity_id,
+        _user, search=search, nup=nup, pencarian_lengkap=pencarian_lengkap,
+        category=category, activity_id=activity_id,
         condition=condition, status=status, location=location,
         eselon1_filter=eselon1_filter, eselon2_filter=eselon2_filter,
         eselon3_filter=eselon3_filter, eselon4_filter=eselon4_filter,

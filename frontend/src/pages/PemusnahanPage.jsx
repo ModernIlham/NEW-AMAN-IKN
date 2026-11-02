@@ -1,10 +1,8 @@
+import PencarianAset from "@/components/assets/PencarianAset";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
-import {
-  ArrowLeft, Loader2, Flame, Plus, Search, Trash2, X, Coins, Download,
-  Check, FileDown, FileText, Paperclip, Upload, FileSignature,
-} from "lucide-react";
+import { ArrowLeft, Loader2, Flame, Plus, Trash2, X, Coins, Download, Check, FileDown, FileText, Paperclip, Upload, FileSignature } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -58,9 +56,7 @@ export default function PemusnahanPage({ user, onBack }) {
   // Dialog: {data, aset: [], saving}
   const [form, setForm] = useState(null);
   const [cari, setCari] = useState("");
-  const [hasilCari, setHasilCari] = useState([]);
-  const [mencari, setMencari] = useState(false);
-  const cariTimer = useRef(null);
+
   // Dialog lampiran bukti: {ba, uploading}
   const [lamp, setLamp] = useState(null);
   const lampInputRef = useRef(null);
@@ -88,23 +84,9 @@ export default function PemusnahanPage({ user, onBack }) {
   // kandidat Rusak Berat langsung (1-klik, selaras kandidat Penghapusan).
   // Dipakai bersama dialog BA (form) DAN dialog usulan (formU) — dua
   // dialog tak pernah terbuka bersamaan.
-  useEffect(() => {
-    if (!form && !formU) { setHasilCari([]); return undefined; }
-    clearTimeout(cariTimer.current);
-    cariTimer.current = setTimeout(async () => {
-      setMencari(true);
-      try {
-        const r = await axios.get(`${API}/assets`, {
-          params: { search: cari.trim(), condition: "Rusak Berat", page_size: 8 },
-        });
-        setHasilCari(r.data?.items || []);
-      } catch { setHasilCari([]); } finally { setMencari(false); }
-    }, 300);
-    return () => clearTimeout(cariTimer.current);
-  }, [cari, form, formU]);
 
   const fmtRp = (n) => `Rp${Math.round(Number(n || 0)).toLocaleString("id-ID")}`;
-  const bukaForm = () => { setCari(""); setHasilCari([]); setForm({ data: { ...FORM_KOSONG }, aset: [], saving: false }); };
+  const bukaForm = () => { setCari("");  setForm({ data: { ...FORM_KOSONG }, aset: [], saving: false }); };
   const setField = (k, v) => setForm((f) => ({ ...f, data: { ...f.data, [k]: v } }));
   const tambahAset = (a) => setForm((f) => (
     f.aset.some((x) => x.id === a.id) ? { ...f } : { ...f, aset: [...f.aset, a] }
@@ -197,7 +179,7 @@ export default function PemusnahanPage({ user, onBack }) {
   const labelStatusUsulan = usulanData?.label_status || {};
 
   const bukaUsulanForm = () => {
-    setCari(""); setHasilCari([]);
+    setCari("");
     setFormU({ data: { cara: "dihancurkan", keterangan: "" }, aset: [], saving: false });
   };
   const tambahAsetU = (a) => setFormU((f) => (
@@ -542,25 +524,8 @@ export default function PemusnahanPage({ user, onBack }) {
               </div>
               <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pms-cari">Tambah aset (Rusak Berat)</label>
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
-                  <Input id="pms-cari" className="pl-8" placeholder="Ketik untuk menyaring — kosongkan untuk melihat kandidat Rusak Berat"
-                    value={cari} onChange={(e) => setCari(e.target.value)} data-testid="pemusnahan-cari" />
-                  {(mencari || hasilCari.length > 0) && (
-                    <div className="absolute z-50 mt-1 w-full max-h-44 overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
-                      {mencari ? (
-                        <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-orange-700" /></div>
-                      ) : hasilCari.map((a) => (
-                        <button key={a.id} type="button"
-                          onClick={() => { tambahAset(a); setHasilCari((h) => h.filter((x) => x.id !== a.id)); }}
-                          className="w-full px-2.5 py-1.5 text-left hover:bg-muted">
-                          <span className="block text-xs font-semibold text-foreground truncate">{a.asset_name}</span>
-                          <span className="block text-[10px] text-muted-foreground font-mono">{a.asset_code} · {a.NUP} · {a.condition}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <PencarianAset user={user} id="pms-cari" testId="pemusnahan-cari"
+                    value={cari} onChange={setCari} onPilih={a => { tambahAset(a);  }} selectedIds={form.aset.map(a => a.id)} allowEmpty filters={{ condition: "Rusak Berat" }} />
               </div>
               {form.aset.length > 0 && (
                 <ul className="sm:col-span-2 space-y-1">
@@ -621,25 +586,8 @@ export default function PemusnahanPage({ user, onBack }) {
               </div>
               <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pms-u-cari">Tambah aset (Rusak Berat)</label>
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
-                  <Input id="pms-u-cari" className="pl-8" placeholder="Ketik untuk menyaring — kosongkan untuk melihat kandidat Rusak Berat"
-                    value={cari} onChange={(e) => setCari(e.target.value)} data-testid="pemusnahan-usulan-cari" />
-                  {(mencari || hasilCari.length > 0) && (
-                    <div className="absolute z-50 mt-1 w-full max-h-44 overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
-                      {mencari ? (
-                        <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-orange-700" /></div>
-                      ) : hasilCari.map((a) => (
-                        <button key={a.id} type="button"
-                          onClick={() => { tambahAsetU(a); setHasilCari((h) => h.filter((x) => x.id !== a.id)); }}
-                          className="w-full px-2.5 py-1.5 text-left hover:bg-muted">
-                          <span className="block text-xs font-semibold text-foreground truncate">{a.asset_name}</span>
-                          <span className="block text-[10px] text-muted-foreground font-mono">{a.asset_code} · {a.NUP} · {a.condition}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <PencarianAset user={user} id="pms-u-cari" testId="pemusnahan-usulan-cari"
+                    value={cari} onChange={setCari} onPilih={a => { tambahAsetU(a);  }} selectedIds={formU.aset.map(a => a.id)} allowEmpty filters={{ condition: "Rusak Berat" }} />
               </div>
               {formU.aset.length > 0 && (
                 <ul className="sm:col-span-2 space-y-1">

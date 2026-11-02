@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from "react";
+import PencarianAset from "@/components/assets/PencarianAset";
 import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, BookOpen, FileDown, IdCard, Loader2, Save, ScrollText,
-  Search, Table2,
+  Table2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,8 +62,6 @@ export default function PembukuanPage({ user, onBack }) {
   const [page, setPage] = useState(1);
   // KIB: pencarian aset → info jenis + form field khusus
   const [qKib, setQKib] = useState("");
-  const [hasilKib, setHasilKib] = useState([]);   // hasil pencarian aset
-  const [cariKib, setCariKib] = useState(false);
   const [kib, setKib] = useState(null);           // {jenis,label,fields,data,aset}
   const [formKib, setFormKib] = useState({});
   const [simpanKib, setSimpanKib] = useState(false);
@@ -80,9 +79,8 @@ export default function PembukuanPage({ user, onBack }) {
 
   // Filter jurnal per ASET terpilih (REVIEW-9 R5): dulu input teks mentah
   // yang menuntut user menyalin ID internal aset — kini cari nama/kode lalu
-  // pilih dari saran (pola cariAsetKib di tab KIB).
+  // pilih dari pemilih aset yang juga dipakai tab KIB.
   const [filterAset, setFilterAset] = useState(null);   // {id, asset_name, ...}
-  const [saranAset, setSaranAset] = useState([]);
   const muatJurnal = useCallback(async (p = 1, asetBaru) => {
     try {
       const aset = asetBaru !== undefined ? asetBaru : filterAset;
@@ -95,22 +93,9 @@ export default function PembukuanPage({ user, onBack }) {
       toast.error(apiErr(e, "Gagal memuat jurnal Buku Barang"));
     }
   }, [filterAset]);
-  const cariAsetJurnal = useCallback(async () => {
-    if (!q.trim()) { setFilterAset(null); setSaranAset([]); muatJurnal(1, null); return; }
-    try {
-      const r = await axios.get(`${API}/assets`, {
-        params: { search: q.trim(), page_size: 8 } });
-      const items = r.data?.items || [];
-      setSaranAset(items);
-      if (items.length === 0) toast.info("Tidak ada aset yang cocok — coba kata kunci lain");
-    } catch (e) {
-      toast.error(apiErr(e, "Gagal mencari aset"));
-    }
-  }, [q, muatJurnal]);
   const pilihFilterAset = useCallback((a) => {
     setFilterAset(a);
-    setSaranAset([]);
-    setQ(`${a.asset_name || "?"} (${a.asset_code || "-"}${a.NUP ? `/${a.NUP}` : ""})`);
+    setQ("");
     muatJurnal(1, a);
   }, [muatJurnal]);
   useEffect(() => { if (tab === "jurnal" && !jurnal) muatJurnal(1); }, [tab, jurnal, muatJurnal]);
@@ -140,18 +125,6 @@ export default function PembukuanPage({ user, onBack }) {
       setBackfilling(false);
     }
   }, [confirm, muatJurnal]);
-
-  const cariAsetKib = useCallback(async () => {
-    if (!qKib.trim()) return;
-    setCariKib(true);
-    try {
-      const r = await axios.get(`${API}/assets`, {
-        params: { search: qKib.trim(), page_size: 10 } });
-      setHasilKib(r.data?.items || []);
-    } catch (e) {
-      toast.error(apiErr(e, "Gagal mencari aset"));
-    } finally { setCariKib(false); }
-  }, [qKib]);
 
   const bukaKib = useCallback(async (aset) => {
     setKib(null);
@@ -338,30 +311,14 @@ export default function PembukuanPage({ user, onBack }) {
               )}
             </div>
             <div className="px-3 py-2 border-b border-border/60">
-              {/* Ikon cari HARUS di wrapper relatif khusus input — kalau tidak,
-                  top-1/2 ikut menghitung tinggi teks bantuan di bawah lalu
-                  ikonnya melorot ke bawah (temuan HP: berantakan kebawah). */}
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input value={q} onChange={(e) => setQ(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && cariAsetJurnal()}
-                  placeholder="Cari aset (nama / kode barang / NUP) — Enter" className="pl-8 h-9 text-xs" />
-              </div>
-              {saranAset.length > 0 && (
-                <div className="mt-1 rounded-md border border-border divide-y divide-border/60 overflow-hidden" data-testid="jurnal-saran-aset">
-                  {saranAset.map((a) => (
-                    <button key={a.id} type="button" onClick={() => pilihFilterAset(a)}
-                      className="w-full text-left px-2.5 py-1.5 text-[11px] hover:bg-muted min-w-0 min-h-0"
-                      data-testid={`jurnal-saran-${a.id}`}>
-                      <span className="font-semibold">{a.asset_name || "?"}</span>
-                      <span className="text-muted-foreground font-mono ml-1.5">{a.asset_code || "-"}{a.NUP ? `/${a.NUP}` : ""}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              <p className="text-[10px] text-muted-foreground mt-1">
-                Ketik nama/kode barang lalu Enter, pilih asetnya — jurnal tersaring ke aset itu.
-              </p>
+              <PencarianAset user={user} testId="jurnal-cari" value={q} onChange={setQ}
+                onPilih={pilihFilterAset} itemTestId={id => `jurnal-saran-${id}`} />
+              {filterAset && <p className="mt-1 text-xs text-muted-foreground">
+                Filter: {filterAset.asset_name} · {filterAset.asset_code} · NUP {filterAset.NUP}
+                <button type="button" className="ml-2 underline" onClick={() => {
+                  setQ(""); setFilterAset(null); muatJurnal(1, null);
+                }}>Hapus filter aset</button>
+              </p>}
             </div>
             {!jurnal ? (
               <div className="py-12 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" /></div>
@@ -372,7 +329,7 @@ export default function PembukuanPage({ user, onBack }) {
                   <>
                     <p className="text-xs font-semibold text-muted-foreground">Tidak ada entri jurnal untuk aset ini</p>
                     <Button size="sm" variant="outline" className="mt-3 h-8 text-xs min-h-0 min-w-0"
-                      onClick={() => { setQ(""); setFilterAset(null); setSaranAset([]); muatJurnal(1, null); }} data-testid="jurnal-reset-filter">
+                      onClick={() => { setQ(""); setFilterAset(null); muatJurnal(1, null); }} data-testid="jurnal-reset-filter">
                       Hapus filter
                     </Button>
                   </>
@@ -433,31 +390,8 @@ export default function PembukuanPage({ user, onBack }) {
                 KIB per-unit untuk <b>tanah</b> (gol 2), <b>bangunan gedung</b> (gol 4), <b>alat angkutan</b> (302),
                 <b> alat besar</b> (301), dan <b>alat persenjataan</b> (307). Cari aset → lengkapi data khusus → cetak kartu.
               </p>
-              <div className="flex items-center gap-1.5">
-                <div className="relative flex-1">
-                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <Input value={qKib} onChange={(e) => setQKib(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && cariAsetKib()}
-                    placeholder="Cari kode/nama aset… (Enter)" className="pl-8 h-9 text-xs" data-testid="kib-cari" />
-                </div>
-                <Button size="sm" variant="outline" className="h-9 text-xs" disabled={cariKib} onClick={cariAsetKib}>
-                  {cariKib ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Cari"}
-                </Button>
-              </div>
-              {hasilKib.length > 0 && (
-                <div className="divide-y divide-border/60 rounded-lg border border-border max-h-48 overflow-y-auto">
-                  {hasilKib.map((a) => (
-                    <button key={a.id} type="button" onClick={() => bukaKib(a)}
-                      className="w-full text-left px-2.5 py-1.5 hover:bg-muted/60 min-w-0 min-h-0"
-                      data-testid={`kib-pilih-${a.id}`}>
-                      <p className="text-[12px] font-semibold truncate">{a.asset_name}</p>
-                      <p className="text-[10px] text-muted-foreground truncate">
-                        {a.asset_code}{a.NUP ? `/${a.NUP}` : ""} · {a.location || "-"}
-                      </p>
-                    </button>
-                  ))}
-                </div>
-              )}
+              <PencarianAset user={user} testId="kib-cari" value={qKib} onChange={setQKib}
+                onPilih={bukaKib} itemTestId={id => `kib-pilih-${id}`} />
             </div>
 
             {kib && (

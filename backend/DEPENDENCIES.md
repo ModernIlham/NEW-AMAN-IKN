@@ -1,5 +1,13 @@
 # Dependensi dan runtime yang dapat direproduksi
 
+Pembaruan kesiapan rilis **2 November 2026** menaikkan aiohttp 3.14.4,
+Brotli 1.2.1, certifi 2026.10.18, dnspython 2.9.0, filelock 4.2.1,
+Pillow 13.0.0, pyasn1 0.6.5, pypdf 6.21.4, dan Black 26.10.1 (dev).
+Yarl 1.25.1 memenuhi batas minimum aiohttp baru. Kedua hash lock diregenerasi
+dengan uv 0.12.23 untuk Python 3.11; audit ulang lengkap mencakup 137 paket
+runtime dan 156 paket dev dengan **0 advisory, 0 skip, 0 ignore**. Audit ini
+adalah hasil pada tanggal pemeriksaan, bukan jaminan untuk rilis berikutnya.
+
 Runtime produksi memakai `requirements.txt` → `requirements-runtime.lock`.
 Pengembangan/CI memakai `requirements-dev.txt` → `requirements-dev.lock`.
 Keduanya mewajibkan SHA256. File `.in` adalah input yang ditinjau; `.lock`

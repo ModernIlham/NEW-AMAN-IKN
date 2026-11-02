@@ -1,8 +1,9 @@
+import PencarianAset from "@/components/assets/PencarianAset";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import useReferensiSatker from "@/hooks/useReferensiSatker";
 import axios from "axios";
 import { getSatkerAktif } from "@/lib/satkerAktif";
-import { usePencarianBaca } from "@/hooks/usePencarianBaca";
+
 import { HASIL_USANG, usePenjagaPermintaan } from "@/hooks/usePenjagaPermintaan";
 import { toast } from "sonner";
 import {
@@ -112,7 +113,7 @@ export default function PenggunaanPage({ user, onBack }) {
   // Dialog catat SK PSP: {data, aset: [], saving}
   const [formPsp, setFormPsp] = useState(null);
   const [cariPsp, setCariPsp] = useState("");
-  const [hasilCariPsp, setHasilCariPsp] = useState([]);
+
   // Dialog lampiran SK PSP: {sk, uploading}
   // {sk, uploading, jenis} — `jenis` = kode dokumen yang sedang diunggah.
   const [lampPsp, setLampPsp] = useState(null);
@@ -279,7 +280,7 @@ export default function PenggunaanPage({ user, onBack }) {
       id: a.asset_id, asset_code: a.asset_code, NUP: a.NUP,
       asset_name: a.asset_name,
     }));
-    setCariPsp(""); setHasilCariPsp([]);
+    setCariPsp("");
     setFormPsp({
       data: {
         nomor_sk: k.no_psp,
@@ -645,14 +646,6 @@ export default function PenggunaanPage({ user, onBack }) {
   };
 
   // Pencarian aset (debounce) untuk dialog catat SK PSP
-  usePencarianBaca({
-    lingkup: lingkupBaca, kunci: [cariPsp.trim(), !!formPsp, !!formProses, !!formHenti],
-    aktif: !!(formPsp || formProses || formHenti) && cariPsp.trim().length >= 2,
-    jalankan: signal => axios.get(`${API}/assets`, { signal, params: { search: cariPsp.trim(), page_size: 8 } }),
-    padaHasil: r => setHasilCariPsp(r.data?.items || []),
-    padaGagal: () => setHasilCariPsp([]),
-    padaKosong: () => setHasilCariPsp([]),
-  });
 
   // ── Henti guna mandiri (SK/BA di luar jalur idle; jurnal 401/402) ──
   const catatHenti = async () => {
@@ -1215,7 +1208,7 @@ export default function PenggunaanPage({ user, onBack }) {
               </Button>
             )}
             <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
-              onClick={() => { setCariPsp(""); setHasilCariPsp([]); setFormHenti({ aset: null, saving: false, data: { nomor_dokumen: "", tanggal_dokumen: new Date().toISOString().slice(0, 10), alasan: "" } }); }}
+              onClick={() => { setCariPsp("");  setFormHenti({ aset: null, saving: false, data: { nomor_dokumen: "", tanggal_dokumen: new Date().toISOString().slice(0, 10), alasan: "" } }); }}
               data-testid="penggunaan-henti-catat">
               <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Catat Penghentian</span>
             </Button>
@@ -1281,7 +1274,7 @@ export default function PenggunaanPage({ user, onBack }) {
               </Button>
             )}
             <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
-              onClick={() => { setCariPsp(""); setHasilCariPsp([]); setFormProses({ data: { jenis_proses: "alih_status", arah: "keluar", pihak_asal: "", pihak_tujuan: "", nomor_permohonan: "", tanggal_permohonan: "", tanggal_mulai: "", tanggal_berakhir: "", keterangan: "" }, aset: [], barang: [], barangBaru: { asset_code: "", nup: "", asset_name: "", nilai: "" }, saving: false }); }}
+              onClick={() => { setCariPsp("");  setFormProses({ data: { jenis_proses: "alih_status", arah: "keluar", pihak_asal: "", pihak_tujuan: "", nomor_permohonan: "", tanggal_permohonan: "", tanggal_mulai: "", tanggal_berakhir: "", keterangan: "" }, aset: [], barang: [], barangBaru: { asset_code: "", nup: "", asset_name: "", nilai: "" }, saving: false }); }}
               data-testid="penggunaan-proses-tambah">
               <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Buka Tiket</span>
             </Button>
@@ -1375,7 +1368,7 @@ export default function PenggunaanPage({ user, onBack }) {
                   <FileDown className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">CSV</span>
                 </Button>
               )}
-              <Button size="sm" onClick={() => { setCariPsp(""); setHasilCariPsp([]); setFormPsp({ data: { nomor_sk: "", tanggal_sk: new Date().toISOString().slice(0, 10), jenis: "psp", penetap: "", keterangan: "", sebagai_draf: false }, aset: [], saving: false }); }}
+              <Button size="sm" onClick={() => { setCariPsp("");  setFormPsp({ data: { nomor_sk: "", tanggal_sk: new Date().toISOString().slice(0, 10), jenis: "psp", penetap: "", keterangan: "", sebagai_draf: false }, aset: [], saving: false }); }}
                 className="h-7 text-[11px] min-h-0 bg-sky-600 hover:bg-sky-700 text-white" data-testid="penggunaan-psp-tambah">
                 <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Catat SK</span>
               </Button>
@@ -1536,24 +1529,8 @@ export default function PenggunaanPage({ user, onBack }) {
                   </div>
                 ) : (
                   <>
-                    <div className="relative">
-                      <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
-                      <Input id="hg-cari" className="pl-8" placeholder="nama / kode / NUP…"
-                        value={cariPsp} onChange={(e) => setCariPsp(e.target.value)} data-testid="penggunaan-henti-cari" />
-                    </div>
-                    <ul className="mt-2 space-y-1.5 max-h-32 overflow-y-auto">
-                      {hasilCariPsp.map((a) => (
-                        <li key={a.id}>
-                          <button type="button"
-                            onClick={() => { setFormHenti((f) => ({ ...f, aset: a })); setCariPsp(""); setHasilCariPsp([]); }}
-                            className="w-full text-left rounded-lg border border-border p-2 text-xs hover:bg-muted min-h-0"
-                            data-testid={`penggunaan-henti-pilih-${a.id}`}>
-                            <span className="text-foreground/90">{a.asset_name || "-"}</span>{" "}
-                            <span className="font-mono text-[10px] text-muted-foreground">({a.asset_code} · {a.NUP})</span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
+                    <PencarianAset user={user} id="hg-cari" testId="penggunaan-henti-cari"
+                    value={cariPsp} onChange={setCariPsp} onPilih={a => { setFormHenti((f) => ({ ...f, aset: a })); setCariPsp("");  }} itemTestId={id => `penggunaan-henti-pilih-${id}`} />
                   </>
                 )}
               </div>
@@ -1718,24 +1695,8 @@ export default function PenggunaanPage({ user, onBack }) {
               ) : (
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="prs-cari">Tambah aset</label>
-                <div className="relative">
-                  <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
-                  <Input id="prs-cari" className="pl-8" placeholder="nama / kode / NUP…"
-                    value={cariPsp} onChange={(e) => setCariPsp(e.target.value)} data-testid="proses-cari" />
-                </div>
-                <ul className="mt-2 space-y-1.5 max-h-32 overflow-y-auto">
-                  {hasilCariPsp.map((a) => (
-                    <li key={a.id}>
-                      <button type="button"
-                        onClick={() => setFormProses((f) => (f.aset.some((x) => x.id === a.id) ? f : { ...f, aset: [...f.aset, a] }))}
-                        className="w-full text-left rounded-lg border border-border p-2 text-xs hover:bg-muted min-h-0"
-                        data-testid={`proses-pilih-${a.id}`}>
-                        <span className="text-foreground/90">{a.asset_name || "-"}</span>{" "}
-                        <span className="font-mono text-[10px] text-muted-foreground">({a.asset_code} · {a.NUP})</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                <PencarianAset user={user} id="prs-cari" testId="proses-cari"
+                    value={cariPsp} onChange={setCariPsp} onPilih={a => setFormProses((f) => (f.aset.some((x) => x.id === a.id) ? f : { ...f, aset: [...f.aset, a] }))} selectedIds={formProses.aset.map(a => a.id)} itemTestId={id => `proses-pilih-${id}`} />
                 {formProses.aset.length > 0 && (
                   <ul className="mt-2 space-y-1">
                     {formProses.aset.map((a) => (
@@ -1816,23 +1777,8 @@ export default function PenggunaanPage({ user, onBack }) {
               </label>
               <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psp-cari">Tambah aset</label>
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
-                  <Input id="psp-cari" className="pl-8" placeholder="Cari nama/kode aset (min. 2 huruf)"
-                    value={cariPsp} onChange={(e) => setCariPsp(e.target.value)} data-testid="penggunaan-psp-cari" />
-                  {hasilCariPsp.length > 0 && cariPsp.trim().length >= 2 && (
-                    <div className="absolute z-50 mt-1 w-full max-h-44 overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
-                      {hasilCariPsp.map((a) => (
-                        <button key={a.id} type="button"
-                          onClick={() => { setFormPsp((f) => (f.aset.some((x) => x.id === a.id) ? f : { ...f, aset: [...f.aset, a] })); setCariPsp(""); setHasilCariPsp([]); }}
-                          className="w-full px-2.5 py-1.5 text-left hover:bg-muted">
-                          <span className="block text-xs font-semibold text-foreground truncate">{a.asset_name}</span>
-                          <span className="block text-[10px] text-muted-foreground font-mono">{a.asset_code} · {a.NUP}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <PencarianAset user={user} id="psp-cari" testId="penggunaan-psp-cari"
+                    value={cariPsp} onChange={setCariPsp} onPilih={a => setFormPsp(f => f.aset.some(x => x.id === a.id) ? f : { ...f, aset: [...f.aset, a] })} selectedIds={formPsp.aset.map(a => a.id)} />
               </div>
               {formPsp.aset.length > 0 && (
                 <ul className="sm:col-span-2 space-y-1">

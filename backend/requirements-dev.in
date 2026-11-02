@@ -1,6 +1,6 @@
 # Development/test tooling; production uses only requirements-runtime.lock.
 -r requirements-runtime.in
-black==26.3.1
+black==26.10.1
 flake8==7.3.0
 iniconfig==2.3.0
 isort==7.0.0
