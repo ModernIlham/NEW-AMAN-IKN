@@ -90,7 +90,7 @@ test.each([["desktop", 0], ["HP/tablet", 1]])(
 test.each([["desktop", 0], ["HP/tablet", 1]])(
   "%s: beberapa pilihan berturut-turut tidak menyisipkan permintaan urutan sebelumnya", async (_, index) => {
     const { doFetch, doFetchStats, pengguna, pemicu } = pasang();
-    for (const nama of ["Terlama", index === 0 ? "Nama A-Z" : "A-Z", "Terbaru"]) {
+    for (const nama of ["Terlama", "Nama A-Z", "Terbaru"]) {
       await pengguna.click(pemicu[index]);
       await pengguna.click(await screen.findByRole("option", { name: nama }));
     }
@@ -119,5 +119,29 @@ test.each([["desktop", 0], ["HP/tablet", 1]])(
     }
     expect(doFetch.mock.calls.map(a => a[4])).toEqual(["code_nup_asc", "code_nup_desc"]);
     expect(doFetch.mock.calls.map(a => a[0])).toEqual([1, 1]);
+  },
+);
+
+const pilihanLengkap = [
+  ["newest", "Terbaru"], ["oldest", "Terlama"],
+  ["name_asc", "Nama A-Z"], ["name_desc", "Nama Z-A"],
+  ["code_nup_asc", "Kode & NUP ↑"], ["code_nup_desc", "Kode & NUP ↓"],
+  ["price_asc", "Harga Terendah"], ["price_desc", "Harga Tertinggi"],
+  ["category_asc", "Kategori A-Z"], ["location_asc", "Lokasi A-Z"],
+  ["eselon1_asc", "Eselon I A-Z"],
+];
+
+test.each([["desktop", 0], ["HP/tablet", 1]])(
+  "%s: seluruh pilihan tersedia dan memuat halaman pertama dengan urutan yang dipilih", async (_, index) => {
+    const { doFetch, doFetchStats, pengguna, pemicu } = pasang();
+    for (const [value, label] of pilihanLengkap) {
+      await pengguna.click(pemicu[index]);
+      expect(screen.getAllByRole("option").map(el => el.textContent)).toEqual(pilihanLengkap.map(p => p[1]));
+      await pengguna.click(screen.getByRole("option", { name: label, exact: true }));
+      pemicu.forEach(el => expect(el).toHaveTextContent(label));
+    }
+    expect(doFetch.mock.calls.map(a => a[4])).toEqual(pilihanLengkap.slice(1).map(p => p[0]));
+    expect(doFetch.mock.calls.map(a => a[0])).toEqual(Array(10).fill(1));
+    expect(doFetchStats).toHaveBeenCalledTimes(10);
   },
 );
