@@ -19,6 +19,22 @@ import { CategorySelect, TinifyQuotaIndicator, TinifyQuotaMobile, AdvancedFilter
 import QrScanButton from "@/components/assets/QrScanButton";
 import { InventoryModeSwitch } from "@/components/assets/StatsBar";
 
+// Desktop dan HP/tablet memakai pilihan yang sama; ukuran pemicu diatur per layout.
+const PILIHAN_URUTAN = [
+  ["newest", "Terbaru"], ["oldest", "Terlama"],
+  ["name_asc", "Nama A-Z"], ["name_desc", "Nama Z-A"],
+  ["code_nup_asc", "Kode & NUP ↑"], ["code_nup_desc", "Kode & NUP ↓"],
+  ["price_asc", "Harga Terendah"], ["price_desc", "Harga Tertinggi"],
+  ["category_asc", "Kategori A-Z"], ["location_asc", "Lokasi A-Z"],
+  ["eselon1_asc", "Eselon I A-Z"],
+];
+const pilihanUrutan = perangkat => PILIHAN_URUTAN.map(([value, label]) => (
+  <SelectItem key={value} value={value}
+    data-testid={value.startsWith("code_nup_") ? `${perangkat}-sort-code-nup-${value.endsWith("asc") ? "asc" : "desc"}` : undefined}>
+    {label}
+  </SelectItem>
+));
+
 // Kotak cari dengan state LOKAL: tiap ketukan hanya me-render komponen kecil
 // ini, lalu nilainya didorong ke halaman (setSearchInput) setelah jeda 250 ms.
 // Sebelumnya setiap huruf me-render ulang seluruh dashboard (~1.400 baris +
@@ -225,17 +241,7 @@ const DashboardToolbar = memo(function DashboardToolbar({
               {/* Ikut jadi katup terakhir bersama Select kategori — lihat catatan di sana. */}
               <SelectTrigger aria-label="Urutkan" data-testid="desktop-sort-select" className={`h-8 text-xs min-w-0 ${tampil("urut") ? "w-32" : "w-[88px]"}`}><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="newest">Terbaru</SelectItem>
-                <SelectItem value="oldest">Terlama</SelectItem>
-                <SelectItem value="name_asc">Nama A-Z</SelectItem>
-                <SelectItem value="name_desc">Nama Z-A</SelectItem>
-                <SelectItem value="code_nup_asc" data-testid="desktop-sort-code-nup-asc">Kode &amp; NUP ↑</SelectItem>
-                <SelectItem value="code_nup_desc" data-testid="desktop-sort-code-nup-desc">Kode &amp; NUP ↓</SelectItem>
-                <SelectItem value="price_asc">Harga Terendah</SelectItem>
-                <SelectItem value="price_desc">Harga Tertinggi</SelectItem>
-                <SelectItem value="category_asc">Kategori A-Z</SelectItem>
-                <SelectItem value="location_asc">Lokasi A-Z</SelectItem>
-                <SelectItem value="eselon1_asc">Eselon I A-Z</SelectItem>
+                {pilihanUrutan("desktop")}
               </SelectContent>
             </Select>
 
@@ -336,14 +342,7 @@ const DashboardToolbar = memo(function DashboardToolbar({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="newest">Terbaru</SelectItem>
-              <SelectItem value="oldest">Terlama</SelectItem>
-              <SelectItem value="name_asc">A-Z</SelectItem>
-              <SelectItem value="name_desc">Z-A</SelectItem>
-              <SelectItem value="code_nup_asc" data-testid="mobile-sort-code-nup-asc">Kode &amp; NUP ↑</SelectItem>
-              <SelectItem value="code_nup_desc" data-testid="mobile-sort-code-nup-desc">Kode &amp; NUP ↓</SelectItem>
-              <SelectItem value="price_asc">Harga ↑</SelectItem>
-              <SelectItem value="price_desc">Harga ↓</SelectItem>
+              {pilihanUrutan("mobile")}
             </SelectContent>
           </Select>
 
