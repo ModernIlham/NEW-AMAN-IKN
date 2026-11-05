@@ -74,3 +74,15 @@ test("konfirmasi draf tidak ikut berpindah ke aset lain", async () => {
   expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
   expect(props.onOptimisticSubmit).not.toHaveBeenCalled();
 });
+
+test("Tutup berada di kanan Simpan dan menutup tanpa mengirim draf", async () => {
+  const { props } = await open();
+  const close = screen.getByTestId("sheet-close");
+  expect(close).toHaveAttribute("type", "button");
+  expect(close.previousElementSibling).toBe(screen.getByTestId("sheet-submit-next"));
+  fireEvent.change(document.querySelector('input[name="location"]'), { target: { value: "Draf lokasi" } });
+  fireEvent.click(close);
+  expect(props.onClose).toHaveBeenCalledTimes(1);
+  expect(props.onOptimisticSubmit).not.toHaveBeenCalled();
+  expect(axios.patch).not.toHaveBeenCalled();
+});
