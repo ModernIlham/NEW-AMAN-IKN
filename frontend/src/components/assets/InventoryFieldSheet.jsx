@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import {
-  Check, Camera, Images, MapPin, LocateFixed, RefreshCw, Loader2, Copy,
-  ChevronDown, ArrowRight, ScanLine, Sparkles,
+  Check, MapPin, LocateFixed, RefreshCw, Loader2, Copy,
+  ChevronDown, ArrowRight, Sparkles, X,
 } from "lucide-react";
+import PhotoInputTiles from "./PhotoInputTiles";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
@@ -152,6 +153,8 @@ const InventoryFieldSheet = ({
   onStikerUkuranChange,
   onPenggunaMelekatChange,
   onOperasionalJenisChange,
+  onOpenPhoto,
+  onRemovePhoto,
   onOpenCamera,
   onOpenFullCamera,
   onOpenFullCameraScan,
@@ -405,60 +408,18 @@ const InventoryFieldSheet = ({
                 </span>
               }
             />
-            {photoItems.length > 0 && (
-              <div className="flex gap-1.5 overflow-x-auto pb-2 mb-1">
-                {photoItems.map((item, i) => (
-                  <img
-                    key={i}
-                    src={item.thumbnail}
-                    alt={`Foto ${i + 1}`}
-                    loading="lazy"
-                    className="w-14 h-14 flex-shrink-0 object-cover rounded-lg border border-border bg-muted"
-                    data-testid={`sheet-photo-thumb-${i}`}
-                  />
-                ))}
-              </div>
-            )}
-            {onOpenFullCamera && (
-              <button
-                type="button"
-                onClick={onOpenFullCamera}
-                disabled={photoCount >= 6}
-                data-testid="sheet-full-camera-btn"
-                className="w-full h-11 mb-2 rounded-lg bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:pointer-events-none"
-              >
-                <Camera className="w-4 h-4" />Mode Kamera Penuh (Jam + GPS Live)
-              </button>
-            )}
-            {onOpenFullCameraScan && typeof window !== "undefined" && "BarcodeDetector" in window && (
-              <button
-                type="button"
-                onClick={onOpenFullCameraScan}
-                data-testid="sheet-full-camera-scan-btn"
-                className="w-full h-11 mb-2 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
-              >
-                <ScanLine className="w-4 h-4" />Kamera + Scan QR (edit cepat antar-aset)
-              </button>
-            )}
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={onOpenCamera}
-                disabled={photoCount >= 6}
-                data-testid="sheet-camera-btn"
-                className="h-11 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:pointer-events-none"
-              >
-                <Camera className="w-4 h-4" />Kamera
-              </button>
-              <button
-                type="button"
-                onClick={onOpenGallery}
-                disabled={photoCount >= 6}
-                data-testid="sheet-gallery-btn"
-                className="h-11 rounded-lg border border-border bg-background text-foreground/80 hover:bg-accent text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:pointer-events-none"
-              >
-                <Images className="w-4 h-4" />Galeri
-              </button>
+            <div className="flex flex-wrap gap-2" data-testid="sheet-photo-strip">
+              {photoItems.map((item, i) => <div key={i} className="relative w-14 h-14 shrink-0">
+                <button type="button" onClick={() => onOpenPhoto(i)} aria-label={`Lihat foto ${i + 1}`} className="w-14 h-14 rounded-lg overflow-hidden border border-border">
+                  <img src={item.thumbnail} alt={`Foto ${i + 1}`} loading="lazy" className="w-full h-full object-cover bg-muted" data-testid={`sheet-photo-thumb-${i}`} />
+                </button>
+                <button type="button" onClick={() => onRemovePhoto(i)} disabled={isSubmitting} aria-label={`Hapus foto ${i + 1}`}
+                  data-testid={`sheet-photo-remove-${i}`} className="absolute -top-1 -right-1 w-7 h-7 min-h-0 min-w-0 flex items-center justify-center rounded-full bg-card shadow">
+                  <span className="w-5 h-5 rounded-full bg-red-600 text-white flex items-center justify-center"><X className="w-3 h-3" /></span>
+                </button>
+              </div>)}
+              <PhotoInputTiles full={photoCount >= 6} disabled={isSubmitting} prefix="sheet"
+                onCamera={onOpenCamera} onGallery={onOpenGallery} onTimemark={onOpenFullCamera} onScan={onOpenFullCameraScan} />
             </div>
           </Card>
 
