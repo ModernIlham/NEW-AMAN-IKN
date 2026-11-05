@@ -243,6 +243,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
   onClose,
   canEdit = false,
   onEditAsset,        // (row) => void — buka form edit (peta TETAP terbuka)
+  onAssetUpdated,
   onDeleteAsset,      // async (id) => bool — hapus aset (konfirmasi di pemanggil)
   onSaveCoords,       // (row, lat, lng) => void — simpan koordinat (throw = tolak)
   buildParams,        // () => URLSearchParams — filter aktif dashboard (tanpa page)
@@ -2202,6 +2203,10 @@ const AssetMapFullView = memo(function AssetMapFullView({
           asset={lightboxRow}
           onClose={() => setLightboxRow(null)}
           onEdit={onEditAsset}
+          onAssetUpdated={updated => {
+            setRows(prev => prev.map(row => row.id === updated.id ? { ...row, ...updated } : row));
+            onAssetUpdated?.(updated);
+          }}
           siblings={displayRows}
           onSelectAsset={setLightboxRow}
         />

@@ -1667,6 +1667,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                     onClose={() => setMapOpen(false)}
                     canEdit={perms.canEdit}
                     onEditAsset={perms.canEdit ? handleEdit : undefined}
+                    onAssetUpdated={updated => onWsAssetChange("asset_updated", updated)}
                     onDeleteAsset={perms.canDelete ? handleDelete : undefined}
                     onSaveCoords={handleMapCoordsSave}
                     buildParams={buildMapParams}
@@ -1762,7 +1763,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                   lintas kotak select (mouse). */}
               <div ref={daftarContentRef} {...(perms.canEdit ? dragSelectProps : {})}>
               {viewMode === 'gallery' ? (
-                <AssetGalleryView daftarkanGulir={daftarkanGulir} onVisibleAssets={mobilePageCache.setVisible} assets={mobileAssets} editId={editAssetForForm?.id} onEdit={perms.canEdit ? handleEdit : undefined} onDelete={perms.canDelete ? handleDelete : undefined} onPrintCard={handlePrintCard} onLoadMore={loadMoreMobile} onLoadPrev={loadPrevMobile} hasPrev={mobileFirstPage > 1} isLoadingMore={mobileLoading} hasMore={mobileCurrentPage < totalPages} totalItems={totalItems} rowLocks={rowLocks} currentSessionId={sessionId} selectedAssets={selectedAssets} onToggleSelect={perms.canEdit ? toggleSelectAsset : undefined} />
+                <AssetGalleryView daftarkanGulir={daftarkanGulir} onAssetUpdated={updated => onWsAssetChange("asset_updated", updated)} onVisibleAssets={mobilePageCache.setVisible} assets={mobileAssets} editId={editAssetForForm?.id} onEdit={perms.canEdit ? handleEdit : undefined} onDelete={perms.canDelete ? handleDelete : undefined} onPrintCard={handlePrintCard} onLoadMore={loadMoreMobile} onLoadPrev={loadPrevMobile} hasPrev={mobileFirstPage > 1} isLoadingMore={mobileLoading} hasMore={mobileCurrentPage < totalPages} totalItems={totalItems} rowLocks={rowLocks} currentSessionId={sessionId} selectedAssets={selectedAssets} onToggleSelect={perms.canEdit ? toggleSelectAsset : undefined} />
               ) : (<>
                 <div className="relative hidden lg:block">
                   <TooltipProvider>
@@ -1816,7 +1817,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
           />
         )}
         {/* Lightbox foto dari baris mode list (tabel/kartu HP) — sama seperti galeri & popup peta. */}
-        {photoLightboxAsset && <PhotoLightbox asset={photoLightboxAsset} onClose={() => setPhotoLightboxAsset(null)} onEdit={perms.canEdit ? handleEdit : undefined} siblings={mobileAssets?.length ? mobileAssets : assets} onSelectAsset={setPhotoLightboxAsset} />}
+        {photoLightboxAsset && <PhotoLightbox onAssetUpdated={updated => onWsAssetChange("asset_updated", updated)} asset={photoLightboxAsset} onClose={() => setPhotoLightboxAsset(null)} onEdit={perms.canEdit ? handleEdit : undefined} siblings={mobileAssets?.length ? mobileAssets : assets} onSelectAsset={setPhotoLightboxAsset} />}
       </Suspense>
       {confirmDialog}
 

@@ -23,6 +23,10 @@ import { ASSET_FIELD_REGISTRY } from "../../lib/assetFields";
 import { bangunChecklist, rekomendasiKelengkapan } from "@/lib/kelengkapanBmn";
 import InventoryFieldSheet, { PENGGUNA_MELEKAT_OPTIONS, PENGGUNA_NAME_LABELS, OPERASIONAL_JENIS_OPTIONS, CONDITION_OPTIONS, SUB_KLASIFIKASI_OPTIONS, TEMUAN_PENCATATAN_OPTIONS } from "./InventoryFieldSheet";
 import FullCameraSheet from "./FullCameraSheet";
+import PhotoPreview from "./PhotoPreview";
+import ConfirmPhotoDelete from "./ConfirmPhotoDelete";
+import PhotoInputTiles from "./PhotoInputTiles";
+import { sumberFotoItem } from "../../lib/fotoAset";
 import KartuTapDialog from "../pegawai/KartuTapDialog";
 import { useBackGuard } from "../../hooks/useBackGuard";
 import { toast } from "sonner";
@@ -1482,6 +1486,19 @@ const AssetForm = memo(({
 
   // In edit mode, photo count comes from photoItems. In create mode, from formData.photos
   const currentPhotoCount = isEditing ? photoItems.length : formData.photos.length;
+  const photoSources = useMemo(() => isEditing
+    ? photoItems.map(item => ({ key: item, src: sumberFotoItem(item, editAsset?.id, assetVersion), thumbnail: item.thumbnail }))
+    : formData.photos.map((src, key) => ({ key, src, thumbnail: src })),
+  [isEditing, photoItems, editAsset?.id, assetVersion, formData.photos]);
+  const [photoToView, setPhotoToView] = useState(null);
+  const [photoToDelete, setPhotoToDelete] = useState(null);
+  const closePhotoPreview = useCallback(() => setPhotoToView(null), []);
+  const requestPhotoDelete = index => {
+    if (!isSubmitting && !isFormLoading && photoSources[index]) {
+      setPhotoToDelete({ ...photoSources[index], session: sesiAset });
+    }
+  };
+
 
   // INDEKS STRIP → INDEKS FINAL (temuan audit G3). Saat edit LURING, foto
   // server tak dimuat ke strip (mediaLoaded false) padahal backend menyusun
@@ -2032,11 +2049,27 @@ const AssetForm = memo(({
         document.body
       )}
 
+      {isOpen && photoToView?.session === sesiAset && (
+        <PhotoPreview key={sesiAset} photos={photoSources} initialIndex={Math.max(0, photoSources.findIndex(p => p.key === photoToView.key))}
+          onClose={closePhotoPreview} onRequestDelete={requestPhotoDelete} busy={isSubmitting || isFormLoading} />
+      )}
+      {isOpen && photoToDelete?.session === sesiAset && (
+        <ConfirmPhotoDelete src={photoToDelete.src} busy={isSubmitting || isFormLoading}
+          description="Foto dikeluarkan dari isian ini. Perubahan diterapkan saat Anda menyimpan aset."
+          onCancel={() => setPhotoToDelete(null)} onConfirm={() => {
+            if (isSubmitting || isFormLoading || photoToDelete.session !== sesiAsetRef.current) return;
+            const index = photoSources.findIndex(p => p.key === photoToDelete.key);
+            if (index >= 0) removePhoto(index);
+            setPhotoToDelete(null);
+          }} />
+      )}
+
       {/* Mode Kamera Penuh ala Timemark */}
       {fullCameraOpen && (
         <FullCameraSheet
           formData={formData}
-          photos={isEditing ? photoItems.map(it => it.thumbnail) : formData.photos}
+          photos={photoSources.map(p => p.src)}
+          thumbnails={photoSources.map(p => p.thumbnail)}
           isEditing={isEditing}
           assetIndex={assetIndex}
           totalAssetsInView={totalAssetsInView}
@@ -2135,7 +2168,7 @@ const AssetForm = memo(({
                 <span className="hidden sm:inline">Denah</span>
               </Button>
             )}
-            {!alwaysExpanded && <Button variant="ghost" size="sm" className="lg:hidden h-7 w-7 p-0" onClick={onClose}><X className="w-4 h-4" /></Button>}
+            {!alwaysExpanded && <Button variant="ghost" size="sm" className="lg:hidden h-7 w-7 p-0" aria-label="Tutup form aset" data-testid="asset-form-close" onClick={onClose}><X className="w-4 h-4" /></Button>}
           </div>
         </div>
 
@@ -2248,6 +2281,8 @@ const AssetForm = memo(({
               formData={formData}
               photoItems={photoItems}
               photoCount={currentPhotoCount}
+              onOpenPhoto={index => setPhotoToView({ key: photoSources[index]?.key, session: sesiAset })}
+              onRemovePhoto={requestPhotoDelete}
               isSubmitting={isSubmitting}
               gpsLoading={gpsLoading}
               lastCtx={lastCtx}
@@ -2933,7 +2968,7 @@ const AssetForm = memo(({
                     photoItems.map((item, i) => (
                       <div key={i} className="relative group">
                         <img src={item.thumbnail} alt="" loading="lazy" className={`w-14 h-14 object-cover rounded cursor-pointer border-2 bg-muted ${indeksFinal(i) === formData.thumbnail_index ? 'border-blue-500' : indeksFinal(i) === formData.stiker_photo_index ? 'border-emerald-500' : 'border-border'}`} onClick={() => setFormData(prev => ({ ...prev, thumbnail_index: indeksFinal(i) }))} data-testid={`photo-thumb-${i}`} />
-                        <button type="button" onClick={() => removePhoto(i)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 min-w-0 min-h-0 flex items-center justify-center opacity-0 group-hover:opacity-100" title="Hapus foto" aria-label="Hapus foto"><X className="w-3 h-3" /></button>
+                        <button type="button" onClick={() => requestPhotoDelete(i)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 min-w-0 min-h-0 flex items-center justify-center opacity-0 group-hover:opacity-100" title="Hapus foto" aria-label="Hapus foto"><X className="w-3 h-3" /></button>
                         {indeksFinal(i) === formData.thumbnail_index && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-blue-500 text-white text-[8px] px-1 rounded">Cover</div>}
                         {indeksFinal(i) === formData.stiker_photo_index && indeksFinal(i) !== formData.thumbnail_index && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[8px] px-1 rounded">Stiker</div>}
                       </div>
@@ -2943,24 +2978,17 @@ const AssetForm = memo(({
                     formData.photos.map((p, i) => (
                       <div key={i} className="relative group">
                         <img src={p} alt="" className={`w-14 h-14 object-cover rounded cursor-pointer border-2 ${i === formData.thumbnail_index ? 'border-blue-500' : i === formData.stiker_photo_index ? 'border-emerald-500' : 'border-border'}`} onClick={() => setFormData(prev => ({ ...prev, thumbnail_index: i }))} />
-                        <button type="button" onClick={() => removePhoto(i)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 min-w-0 min-h-0 flex items-center justify-center opacity-0 group-hover:opacity-100" title="Hapus foto" aria-label="Hapus foto"><X className="w-3 h-3" /></button>
+                        <button type="button" onClick={() => requestPhotoDelete(i)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 min-w-0 min-h-0 flex items-center justify-center opacity-0 group-hover:opacity-100" title="Hapus foto" aria-label="Hapus foto"><X className="w-3 h-3" /></button>
                         {i === formData.thumbnail_index && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-blue-500 text-white text-[8px] px-1 rounded">Cover</div>}
                         {i === formData.stiker_photo_index && i !== formData.thumbnail_index && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[8px] px-1 rounded">Stiker</div>}
                       </div>
                     ))
                   )}
-                  {currentPhotoCount < 6 && (<>
-                    <button type="button" onClick={() => fileInputRef.current?.click()} className="w-14 h-14 border-2 border-dashed border-border rounded flex flex-col items-center justify-center hover:border-blue-400 gap-0.5" title="Pilih File">
-                      <Plus className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-[7px] text-muted-foreground">File</span>
-                    </button>
-                    <button type="button" onClick={() => cameraInputRef.current?.click()} className="w-14 h-14 border-2 border-dashed border-blue-300 dark:border-teal-700 rounded flex flex-col items-center justify-center hover:border-blue-500 bg-blue-50/50 dark:bg-blue-900/30 gap-0.5" title="Ambil Foto" data-testid="camera-capture-btn">
-                      <Camera className="w-4 h-4 text-blue-500 dark:text-blue-400" />
-                      <span className="text-[7px] text-blue-500 dark:text-blue-400">Kamera</span>
-                    </button>
-                    <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageChange} className="hidden" />
-                    <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageChange} className="hidden" />
-                  </>)}
+                  <PhotoInputTiles full={currentPhotoCount >= 6} disabled={isSubmitting || isFormLoading}
+                    onGallery={openGallery} onCamera={openCamera} onTimemark={openFullCamera}
+                    onScan={isEditing && inventoryMode ? openFullCameraScan : undefined} />
+                  <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageChange} className="hidden" />
+                  <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageChange} className="hidden" />
                 </div>
               </div>
               <div className="space-y-1"><Label className="text-xs">Catatan</Label><Input name="notes" value={formData.notes} onChange={handleInputChange} className="h-8" /></div>

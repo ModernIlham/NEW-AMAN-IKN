@@ -450,6 +450,67 @@ def run(args):
             "version_after": synced["version"], "same_asset_id": True, "media_retained": True,
             "second_reconnect_did_not_replay": True}
         report["checks"].append("reconnect_flush_once_preserves_media")
+        # Foto sintetis besar membedakan pratinjau asli dari thumbnail 100px.
+        report["stage"] = "photo_preview_delete"
+        current = asset(ids[1])
+        hd = BytesIO()
+        Image.new("RGB", (1280, 960), (30, 120, 180)).save(hd, "PNG")
+        response = HTTP.patch(backend + "/api/assets/" + ids[1],
+            headers={**headers, "If-Match": str(current["version"])}, json={"photo_ops": {
+                "keep": [], "add": ["data:image/png;base64," + base64.b64encode(hd.getvalue()).decode()],
+                "thumbnail_index": 0, "base_version": current["version"]}}, timeout=30)
+        assert response.status_code == 200, "Foto HD fixture gagal disiapkan"
+        current = asset(ids[1])
+        # Mulai dari halaman daring segar: form yang sengaja dibuka luring
+        # sebelumnya mempertahankan draf tanpa memuat ulang medianya.
+        browser.call("Page.reload", {"ignoreCache": False})
+        browser.wait("Boolean(document.querySelector('[data-testid=asset-main-content]'))", 45)
+        browser.input(testid("search-input"), fixture_name)
+        browser.wait("document.querySelectorAll('[data-scroll-asset-id]').length===2", 45)
+        browser.js("Array.from(document.querySelectorAll('[data-testid=inventory-mode-toggle]')).find(el=>el.getClientRects().length).click()")
+        browser.click(testid("camera-choice-form"))
+        browser.click('[data-scroll-asset-id="' + ids[1] + '"]')
+        browser.wait("Boolean(document.querySelector('[data-testid=sheet-photo-thumb-0]'))")
+        browser.call("Emulation.setDeviceMetricsOverride", {"width": 360,
+            "height": 800, "deviceScaleFactor": 1, "mobile": True})
+        browser.wait_images('[data-testid=sheet-photo-strip] img')
+        browser.screenshot(output / "quick-edit-photo-tiles.png")
+        assert browser.js("document.documentElement.scrollWidth<=innerWidth+1"), "Foto edit cepat meluap"
+        for control in ("sheet-full-camera-btn", "sheet-camera-btn", "sheet-gallery-btn"):
+            assert browser.visible(testid(control)), "Pemicu foto tidak terlihat"
+        browser.click('[data-testid=sheet-photo-strip] [aria-label="Lihat foto 1"]')
+        browser.wait_images('[data-testid=lightbox-fullscreen-view] img')
+        assert browser.js("document.querySelector('[data-testid=lightbox-fullscreen-view] img').naturalWidth===1280"), "Pratinjau masih memakai thumbnail"
+        browser.screenshot(output / "quick-edit-photo-full.png")
+        browser.click(testid("photo-preview-delete"))
+        browser.wait_images('[role=alertdialog] img')
+        assert browser.js("document.querySelector('[role=alertdialog] img').naturalWidth===1280")
+        browser.js("Array.from(document.querySelectorAll('[role=alertdialog] button')).find(el=>el.textContent==='Batal').click()")
+        browser.wait("!document.querySelector('[role=alertdialog]')")
+        assert browser.visible(testid("lightbox-fullscreen-view")), "Batal ikut menutup pratinjau"
+        assert asset(ids[1])["version"] == current["version"], "Batal mengubah foto server"
+        browser.click(testid("lightbox-fullscreen-close"))
+        report["checks"].append("quick_photo_original_preview_cancel_no_write")
+        browser.call("Emulation.setDeviceMetricsOverride", {"width": 1440,
+            "height": 1000, "deviceScaleFactor": 1, "mobile": False})
+        browser.js("Array.from(document.querySelectorAll('[data-testid=inventory-mode-toggle-dashboard]')).find(el=>el.getClientRects().length).click()")
+        browser.click(testid("row-photo-" + ids[1]))
+        browser.wait_images('[data-testid=gallery-lightbox] img')
+        browser.click(testid("lightbox-delete"))
+        browser.wait_images('[role=alertdialog] img')
+        browser.screenshot(output / "photo-delete-confirm.png")
+        browser.click(testid("photo-delete-confirm"))
+        deadline = time.monotonic() + 30
+        # GET penuh menghidrasi photos; photo_count hanya di respons ringan.
+        while asset(ids[1]).get("photos"):
+            assert time.monotonic() < deadline, "Hapus foto tidak terkonfirmasi di server"
+            time.sleep(.2)
+        deleted = asset(ids[1])
+        assert deleted["version"] == current["version"] + 1
+        assert deleted["document_checklist"] == current["document_checklist"], "Hapus foto utama mengubah checklist"
+        browser.wait("!document.querySelector('[data-testid=lightbox-delete]')")
+        browser.click(testid("lightbox-close"))
+        report["checks"].append("lightbox_delete_last_photo_real_api_readback")
         report["seconds"] = round(time.monotonic() - started, 2)
         report["ok"] = True
         report["stage"] = "completed"

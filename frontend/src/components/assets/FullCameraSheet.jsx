@@ -1,7 +1,7 @@
 import React, { memo, useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import {
-  X, Camera, MapPin, Clock, Pencil, SwitchCamera, Loader2, Check, Trash2,
+  X, Camera, MapPin, Clock, Pencil, SwitchCamera, Loader2, Check,
   ChevronLeft, ChevronRight, RotateCcw, AlertTriangle, Zap, ZapOff, Sun, ScanLine,
   Volume2, VolumeX, Sparkles, Settings2, Smartphone, RectangleHorizontal, Wand2, Flower2,
 } from "lucide-react";
@@ -11,6 +11,8 @@ import { useMakroKamera } from "../../hooks/useMakroKamera";
 import { useLensaKamera } from "../../hooks/useLensaKamera";
 import { bukaLensa, idLensa } from "../../lib/lensaKamera";
 import CameraLensPanel from "./CameraLensPanel";
+import PhotoPreview from "./PhotoPreview";
+import ConfirmPhotoDelete from "./ConfirmPhotoDelete";
 import { gambarWatermarkKamera } from "../../lib/watermarkKamera";
 import { gpsPemegangLayak } from "../../lib/gpsKameraPemegang";
 import { extractScannedCode } from "./QrScanButton";
@@ -123,6 +125,7 @@ function bakeBrightnessFallback(ctx, w, h, b) {
 const FullCameraSheet = memo(function FullCameraSheet({
   formData,
   photos = [],
+  thumbnails = photos,
   maxPhotos = 6,
   isEditing = false,
   assetIndex = -1,
@@ -172,7 +175,13 @@ const FullCameraSheet = memo(function FullCameraSheet({
   const [gps, setGps] = useState(null); // {lat, lng, accuracy}
   const [gpsDenied, setGpsDenied] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [confirmIdx, setConfirmIdx] = useState(null); // index foto yang mau dihapus
+  const [confirmPhoto, setConfirmPhoto] = useState(null);
+  const [previewPhoto, setPreviewPhoto] = useState(null);
+  const photoScope = sesiAset || formData?.id || formData?.asset_code || "";
+  const confirmIdx = confirmPhoto?.scope === photoScope && photos[confirmPhoto.index] === confirmPhoto.src ? confirmPhoto.index : null;
+  const setConfirmIdx = useCallback(index => setConfirmPhoto(index == null ? null : { index, src: photos[index], scope: photoScope }), [photos, photoScope]);
+  const previewOpen = previewPhoto?.scope === photoScope;
+  const closePhotoPreview = useCallback(() => setPreviewPhoto(null), []);
   const [camError, setCamError] = useState(null); // { name, msg } bila gagal buka kamera
   const [suspended, setSuspended] = useState(false); // track berhenti (background/lock/direbut app lain)
   const [camNonce, setCamNonce] = useState(0); // bump utk coba-sambung-ulang kamera
@@ -286,7 +295,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
     if (confirmIdx !== null) { setConfirmIdx(null); return; }
     if (scanActive) { setScanActive(false); return; }
     onCloseRef.current?.();
-  }, [editOpen, panelSetel, panelLensa, confirmIdx, scanActive]));
+  }, [editOpen, panelSetel, panelLensa, confirmIdx, scanActive, setConfirmIdx]));
 
   // Kunci scroll latar selama kamera terbuka
   useEffect(() => {
@@ -528,7 +537,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
   // tidak boleh menyimpan form setengah-terketik & berpindah aset diam-diam.
   useEffect(() => {
     if (!scanActive || !scanSupported || !onScanAsset) return undefined;
-    if (editOpen || confirmIdx !== null) return undefined;
+    if (editOpen || confirmIdx !== null || previewOpen) return undefined;
     let stopped = false;
     let detecting = false;
     (async () => {
@@ -563,7 +572,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
       finally { detecting = false; }
     }, 300);
     return () => { stopped = true; clearInterval(timer); };
-  }, [scanActive, scanSupported, onScanAsset, editOpen, confirmIdx, modePemegang]);
+  }, [scanActive, scanSupported, onScanAsset, editOpen, confirmIdx, previewOpen, modePemegang]);
 
   const startScan = useCallback(() => {
     if (!scanSupported) { toast.error("Scanner QR tidak didukung browser ini"); return; }
@@ -1026,10 +1035,12 @@ const FullCameraSheet = memo(function FullCameraSheet({
           <div className={`camera-photo-strip absolute bottom-0 left-0 flex gap-2 overflow-x-auto py-1 pointer-events-auto ${ready && !camError && !suspended ? "right-14" : "right-0"}`} data-testid="full-camera-photos">
             {photos.map((p, i) => (
               <div key={i} className="relative w-14 h-14 shrink-0">
-                <img src={p} alt={`Foto ${i + 1}`} className="w-14 h-14 object-cover rounded-lg border border-white/30" />
-                <button type="button" aria-label={`Hapus foto ${i + 1}`} onClick={() => setConfirmIdx(i)}
+                <button type="button" onClick={() => setPreviewPhoto({ index: i, scope: photoScope })} aria-label={`Lihat foto ${i + 1}`} className="w-14 h-14 rounded-lg overflow-hidden">
+                  <img src={thumbnails[i] || p} alt={`Foto ${i + 1}`} className="w-14 h-14 object-cover rounded-lg border border-white/30" />
+                </button>
+                <button type="button" aria-label={`Hapus foto ${i + 1}`} onClick={() => setConfirmIdx(i)} disabled={busy || preparing || !onRemovePhoto}
                   data-testid={`full-camera-del-${i}`}
-                  className="absolute top-0 right-0 w-11 h-11 p-0.5 rounded-lg text-white flex items-start justify-end">
+                  className="absolute -top-1 -right-1 w-7 h-7 min-h-0 min-w-0 rounded-full text-white flex items-center justify-center">
                   <span className="w-[18px] h-[18px] rounded-full bg-red-600 border border-white/70 flex items-center justify-center shadow" data-testid={`full-camera-del-icon-${i}`}><X className="w-3 h-3" /></span>
                 </button>
               </div>
@@ -1201,24 +1212,16 @@ const FullCameraSheet = memo(function FullCameraSheet({
         onClose={() => setPanelLensa(false)} onPilih={pilihMakro}
         onFokus={() => { setPanelLensa(false); makro.toggle(); }} />}
 
-      {/* ── Konfirmasi hapus foto ── */}
-      {confirmIdx !== null && (
-        <div className="absolute inset-0 z-20 bg-black/70 flex items-center justify-center p-6" onClick={() => setConfirmIdx(null)}>
-          <div className="bg-card rounded-2xl p-4 w-full max-w-xs space-y-3" onClick={e => e.stopPropagation()}>
-            <img src={photos[confirmIdx]} alt="Foto yang akan dihapus" className="w-full h-40 object-cover rounded-lg" />
-            <p className="text-sm text-foreground font-medium text-center">Hapus foto ini?</p>
-            <div className="grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => setConfirmIdx(null)}
-                className="h-10 rounded-lg border border-border text-sm font-medium text-foreground/80">Batal</button>
-              <button type="button" data-testid="full-camera-del-confirm"
-                onClick={() => { onRemovePhoto(confirmIdx); setConfirmIdx(null); toast.success("Foto dihapus"); }}
-                className="h-10 rounded-lg bg-red-600 text-white text-sm font-semibold flex items-center justify-center gap-1.5">
-                <Trash2 className="w-4 h-4" />Hapus
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {previewOpen && <PhotoPreview key={photoScope}
+        photos={photos.map((src, i) => ({ key: i, src }))} initialIndex={previewPhoto.index} onClose={closePhotoPreview}
+        busy={busy || preparing} onRequestDelete={onRemovePhoto ? setConfirmIdx : undefined} />}
+      {confirmIdx !== null && <ConfirmPhotoDelete src={confirmPhoto.src} busy={busy || preparing}
+        testId="full-camera-del-confirm" description="Foto dikeluarkan dari isian ini. Simpan aset atau laporan untuk menerapkan perubahan."
+        onCancel={() => setConfirmIdx(null)} onConfirm={() => {
+          if (busy || preparing || photos[confirmIdx] !== confirmPhoto.src) return;
+          onRemovePhoto(confirmIdx); setConfirmIdx(null);
+          toast.success("Foto dikeluarkan dari isian");
+        }} />}
 
       {/* ── Panel Edit Info (bottom sheet di dalam kamera) ── */}
       {editOpen && (
