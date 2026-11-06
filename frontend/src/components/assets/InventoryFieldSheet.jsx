@@ -4,6 +4,7 @@ import {
   ChevronDown, ArrowRight, Sparkles, X,
 } from "lucide-react";
 import PhotoInputTiles from "./PhotoInputTiles";
+import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
@@ -163,6 +164,7 @@ const InventoryFieldSheet = ({
   onApplyLastCtx,
   onQueueNextIntent,
   onShowFullForm,
+  onClose,
 }) => {
   const [notesOpen, setNotesOpen] = useState(false);
   // Auto-inventaris: bila ada foto + koordinat & status masih default, saat
@@ -414,8 +416,8 @@ const InventoryFieldSheet = ({
                   <img src={item.thumbnail} alt={`Foto ${i + 1}`} loading="lazy" className="w-full h-full object-cover bg-muted" data-testid={`sheet-photo-thumb-${i}`} />
                 </button>
                 <button type="button" onClick={() => onRemovePhoto(i)} disabled={isSubmitting} aria-label={`Hapus foto ${i + 1}`}
-                  data-testid={`sheet-photo-remove-${i}`} className="absolute -top-1 -right-1 w-7 h-7 min-h-0 min-w-0 flex items-center justify-center rounded-full bg-card shadow">
-                  <span className="w-5 h-5 rounded-full bg-red-600 text-white flex items-center justify-center"><X className="w-3 h-3" /></span>
+                  data-testid={`sheet-photo-remove-${i}`} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 min-w-0 min-h-0 flex items-center justify-center" title="Hapus foto">
+                  <X className="w-3 h-3" />
                 </button>
               </div>)}
               <PhotoInputTiles full={photoCount >= 6} disabled={isSubmitting} prefix="sheet"
@@ -586,12 +588,13 @@ const InventoryFieldSheet = ({
 
       {/* Footer sticky — jalur submit sama persis dengan form penuh */}
       <div className="flex-shrink-0 border-t border-border bg-background/95 backdrop-blur p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] space-y-2">
-        <button
+        <div className="flex gap-2 items-stretch" data-testid="sheet-primary-actions">
+        <Button
           type="submit"
           onClick={onQueueNextIntent}
           disabled={isSubmitting}
           data-testid="sheet-submit-next"
-          className="w-full h-12 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-60 disabled:pointer-events-none"
+          className="flex-1 h-9 min-w-0 text-xs px-2 gap-1 bg-teal-700 hover:bg-teal-800 text-white disabled:opacity-60"
         >
           {isSubmitting ? (
             <><Loader2 className="w-4 h-4 animate-spin" />Menyimpan...</>
@@ -600,7 +603,12 @@ const InventoryFieldSheet = ({
           ) : (
             <>Simpan</>
           )}
-        </button>
+        </Button>
+        <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}
+          className="h-9 shrink-0 border-amber-300 text-amber-700" data-testid="sheet-close">
+          <X className="w-4 h-4" />Tutup
+        </Button>
+        </div>
         <div className="grid grid-cols-2 gap-2">
           {canSaveNext && (
             <button

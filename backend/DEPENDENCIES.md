@@ -8,6 +8,11 @@ dengan uv 0.12.23 untuk Python 3.11; audit ulang lengkap mencakup 137 paket
 runtime dan 156 paket dev dengan **0 advisory, 0 skip, 0 ignore**. Audit ini
 adalah hasil pada tanggal pemeriksaan, bukan jaminan untuk rilis berikutnya.
 
+Gerbang rilis penyesuaian tombol inventarisasi cepat mendeteksi advisory baru
+GHSA-3jp2-3mrg-2vxc pada oauthlib 4.0.0. Pin dinaikkan ke patch 4.0.1;
+kedua hash lock diregenerasi dengan uv terpin. Audit penuh 137 runtime/156 dev
+kembali tanpa advisory/skip/ignore, dan pemasangan runtime bersih diverifikasi.
+
 Runtime produksi memakai `requirements.txt` → `requirements-runtime.lock`.
 Pengembangan/CI memakai `requirements-dev.txt` → `requirements-dev.lock`.
 Keduanya mewajibkan SHA256. File `.in` adalah input yang ditinjau; `.lock`

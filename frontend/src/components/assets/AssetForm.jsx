@@ -2306,6 +2306,7 @@ const AssetForm = memo(({
               onApplyLastCtx={applyLastCtx}
               onQueueNextIntent={queueNextIntent}
               onShowFullForm={() => setShowFullForm(true)}
+              onClose={() => { resetForm(); onClose?.(); }}
             />
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageChange} className="hidden" />
             <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageChange} className="hidden" />
