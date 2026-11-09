@@ -5,14 +5,29 @@ const BATAS_SEGAR = 15000;
 const BATAS_SENYAP = 30000;
 const JEDA_TAMPIL = 1000;
 
-function bacaPosisi(pos) {
-  const { latitude: lat, longitude: lng, accuracy } = pos?.coords || {};
+// Selisih jam yang dianggap "jam perangkat ≠ jam GPS", bukan fix basi: dua
+// fix beruntun dengan selisih (sekarang − timestamp) yang konsisten.
+const TOLERANSI_SELISIH_JAM = 3000;
+
+/**
+ * Validasi satu pembacaan. `offsetJam` = koreksi jam perangkat (ms) yang sudah
+ * dipelajari; 0 bila jam sinkron.
+ * → { fix } bila sah; { basi: true, selisih } bila koordinat sah tapi
+ *   waktunya di luar jendela segar; null bila datanya rusak.
+ */
+export function bacaPosisi(pos, offsetJam = 0) {
+  const { latitude: lat, longitude: lng, accuracy, heading, speed } = pos?.coords || {};
   const timestamp = pos?.timestamp;
   if (![lat, lng, accuracy, timestamp].every(Number.isFinite)
       || lat < -90 || lat > 90 || lng < -180 || lng > 180 || accuracy < 0
-      || timestamp <= 0 || Date.now() - timestamp > BATAS_SEGAR
-      || timestamp - Date.now() > 5000) return null;
-  return { lat, lng, accuracy, timestamp };
+      || timestamp <= 0) return null;
+  const selisih = Date.now() - timestamp;
+  const umur = selisih - offsetJam;
+  if (umur > BATAS_SEGAR || umur < -5000) return { basi: true, selisih };
+  // Arah & kecepatan opsional: banyak perangkat memberi null/NaN saat diam.
+  const arah = Number.isFinite(heading) && heading >= 0 && heading <= 360 ? heading : null;
+  const laju = Number.isFinite(speed) && speed >= 0 ? speed : null;
+  return { fix: { lat, lng, accuracy, timestamp, heading: arah, speed: laju } };
 }
 
 export function buatPemantauLokasi({ onPosition, onStatus }) {
@@ -29,6 +44,13 @@ export function buatPemantauLokasi({ onPosition, onStatus }) {
   let posisi = null;
   let tertunda = null;
   let tampilTerakhir = 0;
+  // Ponsel murah tanpa sinkron waktu jaringan: jam perangkat bisa meleset
+  // puluhan detik dari timestamp GPS. Tanpa koreksi, SETIAP fix tertolak
+  // sebagai "basi" dan fitur mati diam-diam. Koreksi hanya dipelajari dari
+  // dua fix beruntun yang selisihnya konsisten & timestamp-nya maju — satu
+  // fix cache lama tak cukup untuk menipunya.
+  let offsetJam = 0;
+  let kandidatSelisih = null;
 
   const status = (nilai, message) => onStatus({ status: nilai, active: aktif, position: posisi, message });
   const bolehMemantau = () => aktif && terlihat && halamanAktif
@@ -90,8 +112,23 @@ export function buatPemantauLokasi({ onPosition, onStatus }) {
     try {
       const id = navigator.geolocation.watchPosition((hasil) => {
         if (sesi !== generasi || !bolehMemantau()) return;
-        const fix = bacaPosisi(hasil);
-        if (!fix || (posisi && fix.timestamp <= posisi.timestamp)) return;
+        let baca = bacaPosisi(hasil, offsetJam);
+        if (!baca) return;
+        if (baca.basi) {
+          const k = kandidatSelisih;
+          if (k && Math.abs(k.selisih - baca.selisih) <= TOLERANSI_SELISIH_JAM && hasil.timestamp > k.timestamp) {
+            // Selisih konsisten → itu jam perangkat, bukan cache. Fix yang
+            // mengonfirmasinya langsung dipakai.
+            offsetJam = baca.selisih;
+            baca = bacaPosisi(hasil, offsetJam);
+          } else {
+            kandidatSelisih = { selisih: baca.selisih, timestamp: hasil.timestamp };
+            return;
+          }
+        }
+        kandidatSelisih = null;
+        const fix = baca.fix;
+        if (posisi && fix.timestamp <= posisi.timestamp) return;
         // Saat berjalan, fix terbaru tetap dipakai meski akurasinya menurun.
         // Memilih akurasi terbaik sepanjang sesi akan membekukan titik lama.
         posisi = fix;

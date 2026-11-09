@@ -18,6 +18,20 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1116] Lokasi Anda di peta: aset terdekat, jejak, arah gerak, layar menyala — 2026-11-09
+
+- **Aset terdekat:** panel di Peta Aset saat lokasi aktif — jumlah aset ≤ 50 m,
+  5 aset terdekat dengan jarak + panah arah, ketuk untuk membuka pin, pensil
+  untuk edit. Filter "hanya yang belum diinventarisasi" diingat. Peringatan bila
+  akurasi GPS > ±30 m. Jalan luring (dihitung di perangkat).
+- **Popup pin** menampilkan jarak & arah mata angin dari lokasi Anda.
+- **Kerucut arah gerak** pada titik biru saat bergerak (heading GPS, ≥ 0,7 m/s).
+- **Jejak perjalanan** sesi ini (memori tab saja) + panjangnya; jitter diam disaring.
+- **Layar tetap menyala** (Screen Wake Lock) opsional selama lokasi aktif.
+- **Keandalan:** ponsel dengan jam meleset dari jam GPS tak lagi menolak semua
+  fix sebagai basi — selisih dipelajari dari dua fix konsisten.
+- Berlaku juga di Peta Kolaborasi (kecuali panel aset terdekat).
+
 ## [#1114] Kepala form edit aset ringkas di semua mode — 2026-11-09
 
 - Kepala form jadi satu blok rapat: **kode aset** (tak pernah dipotong) di baris
