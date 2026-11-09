@@ -1,7 +1,7 @@
 import React, { memo, useState, useCallback, useRef, useEffect, useMemo, startTransition } from "react";
 import { createPortal } from "react-dom";
 import {
-  Plus, Edit3, X, Camera, Trash2, Check, ChevronDown, Search,
+  Plus, X, Camera, Trash2, Check, ChevronDown, Search,
   Package, Briefcase, ShieldCheck, Settings, Tag, Save, Loader2, ClipboardList,
   Info, ChevronRight, BookOpen, Wrench, ArrowRight, HelpCircle, MapPin, LocateFixed,
   ChevronLeft, CloudOff, Upload, Eye, UserRound, AlertTriangle, History, IdCard,
@@ -26,6 +26,7 @@ import FullCameraSheet from "./FullCameraSheet";
 import PhotoPreview from "./PhotoPreview";
 import ConfirmPhotoDelete from "./ConfirmPhotoDelete";
 import KonfirmasiKeluarForm from "./KonfirmasiKeluarForm";
+import StripStatusForm from "./StripStatusForm";
 import {
   kunciDraf, ringkasPerubahan, teksPerubahan, sidikForm, bangunRekamanDraf,
   pulihkanDrafEdit, pulihkanDrafBaru, simpanDraf, muatDraf, hapusDraf, labelField,
@@ -2381,24 +2382,43 @@ const AssetForm = memo(({
         className={`${alwaysExpanded ? 'translate-x-0' : (isOpen ? "translate-x-0" : "-translate-x-full")} ${alwaysExpanded ? 'relative w-full' : 'fixed lg:relative inset-y-0 left-0 z-40 lg:z-auto w-[85vw] sm:w-80 xl:w-96'} bg-card border-r border-border transition-transform duration-300 print:hidden shadow-2xl lg:shadow-none flex flex-col overflow-hidden h-full`}
       >
         {/* Header */}
-        <div className={`p-3 border-b-2 flex justify-between items-center flex-shrink-0 ${isEditing ? "bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700" : "bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700"}`}>
-          <div className="flex items-center gap-2">
-            <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isEditing ? "bg-amber-500" : "bg-teal-700"}`}>
-              {isEditing ? <Edit3 className="w-3.5 h-3.5 text-white" /> : <Plus className="w-3.5 h-3.5 text-white" />}
-            </div>
-            <div>
-              <h2 className={`font-bold text-sm ${isEditing ? "text-amber-900 dark:text-amber-300" : "text-blue-900 dark:text-blue-300"}`}>
-                {isEditing ? "Edit Aset" : "Tambah Aset Baru"}
+        {/* Kepala RINGKAS satu baris: identitas aset (kode · NUP · nama) +
+            tombol aksi. Mode inventarisasi cepat tak lagi punya kepala
+            identitas kedua — semuanya di sini agar ruang isian maksimal. */}
+        <div className={`px-2 py-1 border-b-2 flex items-center gap-1.5 flex-shrink-0 ${isEditing ? "bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700" : "bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700"}`} data-testid="asset-form-header">
+          {/* Tanpa ikon persegi: warna kepala (kuning = edit, biru = baru)
+              sudah membedakan mode, dan lebarnya lebih berguna untuk kode aset. */}
+          <div className="min-w-0 flex-1 pl-1">
+            {isEditing ? (
+              <>
+                <h2 className="flex items-center gap-1 min-w-0 text-amber-900 dark:text-amber-300" title="Edit Aset">
+                  <span className="sr-only">Edit Aset </span>
+                  {ringkasan.dirty && (
+                    <span className="w-2 h-2 shrink-0 rounded-full bg-red-500 animate-pulse" title="Belum disimpan" data-testid="asset-form-dirty-badge">
+                      <span className="sr-only">Belum disimpan</span>
+                    </span>
+                  )}
+                  {/* Kode aset = identitas utama → tak pernah dipotong. */}
+                  <span className="font-mono font-bold text-sm whitespace-nowrap">{formData.asset_code || "—"}</span>
+                </h2>
+                <p className="flex items-center gap-1 min-w-0 text-[11px] leading-tight text-amber-800/80 dark:text-amber-300/80">
+                  {formData.NUP && <span className="shrink-0 rounded bg-amber-200/70 dark:bg-amber-800/50 px-1 text-[10px] font-semibold text-amber-900 dark:text-amber-200">NUP {formData.NUP}</span>}
+                  {sheetMode && assetIndex >= 0 && totalAssetsInView > 0 && (
+                    <span className="shrink-0 text-[10px] font-semibold tabular-nums" title="Urutan aset di daftar">{assetIndex + 1}/{totalAssetsInView}</span>
+                  )}
+                  <span className="truncate" data-testid="asset-form-header-nama">{formData.asset_name || "—"}</span>
+                </p>
+              </>
+            ) : (
+              <h2 className="flex items-center gap-1.5 font-bold text-sm text-blue-900 dark:text-blue-300 min-w-0">
+                {ringkasan.dirty
+                  ? <span className="w-2 h-2 shrink-0 rounded-full bg-red-500 animate-pulse" title="Belum disimpan" data-testid="asset-form-dirty-badge"><span className="sr-only">Belum disimpan</span></span>
+                  : <Plus className="w-4 h-4 shrink-0" />}
+                <span className="truncate">Tambah Aset Baru</span>
               </h2>
-              {isEditing && <p className="text-[10px] text-amber-600 dark:text-amber-400 truncate max-w-[160px]">{formData.asset_code}</p>}
-              {ringkasan.dirty && (
-                <span className="inline-flex items-center gap-1 mt-0.5 text-[9px] font-semibold px-1.5 py-px rounded-full bg-amber-500 text-white" data-testid="asset-form-dirty-badge">
-                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />Belum disimpan
-                </span>
-              )}
-            </div>
+            )}
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5 shrink-0">
             {isEditing && onOpenKartu && (
               <Button
                 type="button" variant="ghost" size="sm"
@@ -2471,7 +2491,7 @@ const AssetForm = memo(({
             { key: "documents", label: "Dokumen", icon: ShieldCheck }
           ].map(t => (
             <button key={t.key} type="button" onClick={() => setFormSection(t.key)}
-              className={`flex-1 flex items-center justify-center gap-1 py-2 text-xs font-medium border-b-2 ${
+              className={`flex-1 flex items-center justify-center gap-1 py-1 text-xs font-medium border-b-2 ${
                 formSection === t.key ? 'border-teal-700 text-blue-700 bg-card' : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
@@ -2519,72 +2539,73 @@ const AssetForm = memo(({
           </div>
         )}
 
-        {/* Perubahan belum disimpan (draf) — pembeda data yang sudah diedit
-            tapi belum dikirim. Draf tersimpan otomatis di perangkat. */}
-        {!isFormLoading && ringkasan.dirty && (
-          <div className="mx-3 mt-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg px-2.5 py-1.5 flex-shrink-0" data-testid="draf-banner">
-            <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">
-              Belum disimpan{drafInfo ? ` · draf dipulihkan (${new Date(drafInfo.updatedAt).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })})` : ""}
-            </p>
-            <p className="text-[10px] leading-snug text-amber-700 dark:text-amber-300/90 mt-0.5 break-words">
-              {teksPerubahan(ringkasan)}. Tersimpan otomatis sebagai draf di perangkat ini — tekan Simpan untuk mengirim ke server.
-            </p>
-            {drafInfo?.versiBerubah && (
-              <p className="text-[10px] leading-snug text-red-700 dark:text-red-300 mt-0.5" data-testid="draf-banner-versi">
-                Data server berubah sejak draf dibuat{drafInfo.bentrok?.length ? ` (juga diubah di server: ${drafInfo.bentrok.map(labelField).join(", ")})` : ""}; susunan foto lama tidak diubah. Periksa sebelum menyimpan.
+        {/* Status ringkas SATU baris (draf belum disimpan, cache luring,
+            selisih/absen SIMAN) — rincian dibuka dengan satu ketuk. */}
+        {!isFormLoading && <StripStatusForm key={editAsset?.id || "baru"} items={[
+          ringkasan.dirty && {
+            key: "draf", nada: "amber", utama: true, testId: "draf-banner",
+            buka: !!drafInfo?.versiBerubah,
+            ringkas: `Belum disimpan${drafInfo ? " (draf dipulihkan)" : ""}: ${teksPerubahan(ringkasan, 3)}`,
+            rinci: (
+              <div className="text-[11px] leading-snug text-amber-800 dark:text-amber-200" data-testid="draf-rinci">
+                <p><b>Belum disimpan</b>{drafInfo ? ` · draf dipulihkan (${new Date(drafInfo.updatedAt).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })})` : ""}: {teksPerubahan(ringkasan, 20)}.</p>
+                <p className="text-[10px] opacity-90">Tersimpan otomatis sebagai draf di perangkat ini — tekan Simpan/Update untuk mengirim ke server.</p>
+                {drafInfo?.versiBerubah && (
+                  <p className="text-[10px] text-red-700 dark:text-red-300 mt-0.5" data-testid="draf-banner-versi">
+                    Data server berubah sejak draf dibuat{drafInfo.bentrok?.length ? ` (juga diubah di server: ${drafInfo.bentrok.map(labelField).join(", ")})` : ""}; susunan foto lama tidak diubah. Periksa sebelum menyimpan.
+                  </p>
+                )}
+                <button type="button" data-testid="draf-banner-buang"
+                  onClick={() => { if (yakinBuangBanner) buangDrafBanner(); else setYakinBuangBanner(true); }}
+                  className="inline-flex items-center text-[11px] font-medium underline text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
+                  {yakinBuangBanner ? "Ketuk lagi untuk membuang perubahan" : "Buang perubahan"}
+                </button>
+              </div>
+            ),
+          },
+          isEditing && offlineNotice && {
+            key: "luring", nada: "amber", testId: "offline-form-notice", ringkas: "Luring",
+            rinci: (
+              <p className="flex items-start gap-1.5 text-[11px] leading-snug text-amber-700 dark:text-amber-300">
+                <CloudOff className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                Data dimuat dari cache offline — foto &amp; checklist penuh tidak tersedia sampai online. Perubahan tetap bisa disimpan dan akan disinkronkan otomatis.
               </p>
-            )}
-            <button type="button" data-testid="draf-banner-buang"
-              onClick={() => { if (yakinBuangBanner) buangDrafBanner(); else setYakinBuangBanner(true); }}
-              className="mt-0.5 inline-flex items-center text-[10px] font-medium underline text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
-              {yakinBuangBanner ? "Ketuk lagi untuk membuang perubahan" : "Buang perubahan"}
-            </button>
-          </div>
-        )}
-
-        {/* Offline: form initialized from the cached list row */}
-        {!isFormLoading && isEditing && offlineNotice && (
-          <div className="mx-3 mt-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg px-2.5 py-1.5 flex items-start gap-1.5 flex-shrink-0" data-testid="offline-form-notice">
-            <CloudOff className="w-3.5 h-3.5 mt-0.5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
-            <p className="text-[11px] leading-snug text-amber-700 dark:text-amber-300">
-              Data dimuat dari cache offline — foto &amp; checklist penuh tidak tersedia sampai online. Perubahan tetap bisa disimpan dan akan disinkronkan otomatis.
-            </p>
-          </div>
-        )}
-
-        {/* Sinkronisasi SIMAN V2: aset ini berbeda dengan data SIMAN (valid).
-            Rincian + arah sinkron; tindakan "terapkan" ada di Pelaporan ›
-            Sinkronisasi SIMAN agar tidak bentrok dengan draft form ini. */}
-        {!isFormLoading && isEditing && editAsset?.siman?.status === "selisih" && (
-          <div className="mx-3 mt-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg px-2.5 py-1.5 flex-shrink-0" data-testid="siman-form-banner">
-            <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">
-              ≠ SIMAN — {(editAsset.siman.selisih || []).length} field berbeda dengan data SIMAN V2
-            </p>
-            <ul className="mt-0.5 space-y-0.5">
-              {(editAsset.siman.selisih || []).slice(0, 6).map((s) => (
-                <li key={s.field} className="text-[10px] leading-snug text-amber-700/90 dark:text-amber-300/90">
-                  {s.label}: <span className="line-through opacity-70">{s.aman || "(kosong)"}</span> → <b>{s.siman || "(kosong)"}</b>
-                </li>
-              ))}
-              {(editAsset.siman.selisih || []).length > 6 && (
-                <li className="text-[10px] text-amber-700/70 dark:text-amber-300/70">… dan {(editAsset.siman.selisih || []).length - 6} field lain</li>
-              )}
-            </ul>
-            <p className="text-[10px] mt-1 text-amber-700/80 dark:text-amber-300/80">
-              Sinkronkan lewat menu <b>Pelaporan › Sinkronisasi SIMAN V2</b> (nilai SIMAN = data valid), atau perbaiki manual di form ini.
-            </p>
-          </div>
-        )}
-        {!isFormLoading && isEditing && editAsset?.siman?.status === "tidak_di_siman" && (
-          <div className="mx-3 mt-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg px-2.5 py-1.5 flex-shrink-0" data-testid="siman-form-banner-hilang">
-            <p className="text-[11px] font-semibold text-red-700 dark:text-red-300">
-              Tidak ditemukan di SIMAN V2 (impor {String(editAsset.siman.diperiksa_pada || "").slice(0, 10)})
-            </p>
-            <p className="text-[10px] mt-0.5 text-red-700/80 dark:text-red-300/80">
-              Periksa: aset belum tercatat di SIMAN, sudah dihapuskan, atau kode barang/NUP-nya berubah (reklasifikasi).
-            </p>
-          </div>
-        )}
+            ),
+          },
+          /* Sinkronisasi SIMAN V2: rincian + arah sinkron; tindakan "terapkan"
+             ada di Pelaporan › Sinkronisasi SIMAN agar tak bentrok dgn draf. */
+          isEditing && editAsset?.siman?.status === "selisih" && {
+            key: "siman", nada: "amber", testId: "siman-form-banner",
+            ringkas: `≠ SIMAN ${(editAsset.siman.selisih || []).length}`,
+            rinci: (
+              <div className="text-amber-700 dark:text-amber-300">
+                <p className="text-[11px] font-semibold">≠ SIMAN — {(editAsset.siman.selisih || []).length} field berbeda dengan data SIMAN V2</p>
+                <ul className="mt-0.5 space-y-0.5">
+                  {(editAsset.siman.selisih || []).slice(0, 6).map((sel) => (
+                    <li key={sel.field} className="text-[10px] leading-snug opacity-90">
+                      {sel.label}: <span className="line-through opacity-70">{sel.aman || "(kosong)"}</span> → <b>{sel.siman || "(kosong)"}</b>
+                    </li>
+                  ))}
+                  {(editAsset.siman.selisih || []).length > 6 && (
+                    <li className="text-[10px] opacity-70">… dan {(editAsset.siman.selisih || []).length - 6} field lain</li>
+                  )}
+                </ul>
+                <p className="text-[10px] mt-1 opacity-80">
+                  Sinkronkan lewat menu <b>Pelaporan › Sinkronisasi SIMAN V2</b> (nilai SIMAN = data valid), atau perbaiki manual di form ini.
+                </p>
+              </div>
+            ),
+          },
+          isEditing && editAsset?.siman?.status === "tidak_di_siman" && {
+            key: "siman-hilang", nada: "red", testId: "siman-form-banner-hilang", ringkas: "Tak di SIMAN",
+            rinci: (
+              <div className="text-red-700 dark:text-red-300">
+                <p className="text-[11px] font-semibold">Tidak ditemukan di SIMAN V2 (impor {String(editAsset.siman.diperiksa_pada || "").slice(0, 10)})</p>
+                <p className="text-[10px] mt-0.5 opacity-80">Periksa: aset belum tercatat di SIMAN, sudah dihapuskan, atau kode barang/NUP-nya berubah (reklasifikasi).</p>
+              </div>
+            ),
+          },
+        ].filter(Boolean)} />}
 
         {/* Mode inventarisasi lapangan — sheet eksklusif menggantikan body form.
             Dirender di dalam <form onSubmit={handleSubmit}> agar tombol submit
@@ -2600,8 +2621,6 @@ const AssetForm = memo(({
               isSubmitting={isSubmitting}
               gpsLoading={gpsLoading}
               lastCtx={lastCtx}
-              assetIndex={assetIndex}
-              totalAssetsInView={totalAssetsInView}
               canSaveNext={canSaveNext}
               onInputChange={handleInputChange}
               onInventoryStatusChange={handleInventoryStatusChange}

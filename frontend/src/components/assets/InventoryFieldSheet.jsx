@@ -142,8 +142,6 @@ const InventoryFieldSheet = ({
   isSubmitting,
   gpsLoading,
   lastCtx,
-  assetIndex = -1,
-  totalAssetsInView = 0,
   canSaveNext = false,
   onInputChange,
   onInventoryStatusChange,
@@ -188,26 +186,8 @@ const InventoryFieldSheet = ({
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="inventory-field-sheet">
       {/* Area gulir */}
       <div className="flex-1 overflow-y-auto">
-        {/* 1. Header identitas aset (read-only, sticky) */}
-        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b border-border px-3 py-2 flex items-center gap-2">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="font-mono font-bold text-sm truncate">{formData.asset_code || "—"}</span>
-              {formData.NUP && (
-                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground flex-shrink-0">
-                  NUP {formData.NUP}
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground truncate">{formData.asset_name || "—"}</p>
-          </div>
-          {assetIndex >= 0 && totalAssetsInView > 0 && (
-            <span className="flex-shrink-0 rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground tabular-nums">
-              {assetIndex + 1}/{totalAssetsInView}
-            </span>
-          )}
-        </div>
-
+        {/* Identitas aset (kode · NUP · nama · urutan) tampil di kepala form
+            AssetForm — tidak diulang di sini agar ruang isian maksimal. */}
         <div className="p-3 space-y-3">
           {/* Card 1 — Status Inventarisasi */}
           <Card testId="sheet-card-status">
