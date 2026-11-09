@@ -95,6 +95,28 @@ test("menolak koordinat rusak, cache lama, timestamp masa depan, dan callback ya
   expect(onPosition).toHaveBeenLastCalledWith(expect.objectContaining({ lat: -1.5 }));
 });
 
+test("jam perangkat meleset dari jam GPS: dipelajari dari dua fix konsisten, bukan dari satu fix basi", () => {
+  pemantau.start();
+  const meleset = (detik, tambahan = {}) => ({ ...fix(tambahan), timestamp: Date.now() - 60000 + detik * 1000 });
+  sesi[0].ok(meleset(0));
+  expect(onPosition).not.toHaveBeenCalled();
+  jest.advanceTimersByTime(1000);
+  sesi[0].ok(meleset(1, { latitude: -1.41 }));
+  expect(onPosition).toHaveBeenCalledTimes(1);
+  jest.advanceTimersByTime(1000);
+  sesi[0].ok(meleset(2, { latitude: -1.42 }));
+  expect(onPosition).toHaveBeenLastCalledWith(expect.objectContaining({ lat: -1.42 }));
+});
+
+test("arah & kecepatan ikut diteruskan bila sah, null bila tidak", () => {
+  pemantau.start();
+  sesi[0].ok(fix({ heading: 270, speed: 1.5 }));
+  expect(onPosition).toHaveBeenLastCalledWith(expect.objectContaining({ heading: 270, speed: 1.5 }));
+  jest.advanceTimersByTime(1000);
+  sesi[0].ok(fix({ heading: NaN, speed: -1 }));
+  expect(onPosition).toHaveBeenLastCalledWith(expect.objectContaining({ heading: null, speed: null }));
+});
+
 test.each([2, 3])("galat GPS sementara %i memulai ulang dengan backoff, mengabaikan callback watch lama", (code) => {
   pemantau.start();
   sesi[0].ok(fix());

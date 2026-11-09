@@ -34,6 +34,19 @@ peta memakai aturan yang sama. Fitur pengiriman posisi perangkat di halaman
 Lacak serta pengambilan GPS untuk formulir/kamera memiliki tujuan dan lifecycle
 tersendiri.
 
+## Fitur lapangan tambahan (November 2026)
+
+| Fitur | Perilaku |
+| --- | --- |
+| **Aset terdekat** (Peta Aset) | Panel di tengah atas muncul saat lokasi aktif: "N aset ≤ 50 m · terdekat X m". Ketuk untuk daftar 5 aset terdekat (radius 5 km) dengan jarak + panah arah (peta selalu menghadap utara). Ketuk baris untuk membawa peta ke pin dan membuka popup-nya; tombol pensil membuka form edit (bila berhak). Filter **Hanya yang belum diinventarisasi** diingat per perangkat. Bila akurasi GPS lebih buruk dari ±30 m, panel memperingatkan bahwa jarak bisa meleset sebesar itu. Dihitung di perangkat (juga luring dari snapshot), O(jumlah aset) per fix. |
+| **Jarak di popup pin** | Popup aset menampilkan "📍 X m dari Anda · arah mata angin" selama lokasi aktif. |
+| **Kerucut arah gerak** | Titik biru diberi kerucut arah dari `coords.heading` hanya saat bergerak (kecepatan ≥ 0,7 m/s). Saat diam, arah GPS acak sehingga kerucut disembunyikan. Tidak memakai kompas/DeviceOrientation (perlu izin tambahan di iOS). |
+| **Jejak perjalanan** | Garis putus-putus jalur yang sudah dilalui sesi ini + panjangnya di status ("jejak 120 m"). Hanya fix dengan akurasi ≤ 50 m yang bergeser ≥ max(5 m, ½ akurasi) yang dicatat, supaya jitter saat diam tidak menggambar coretan. Maks 3.000 titik. Tombol jejak menyembunyikan/menampilkan garis. **Hanya di memori tab**: hilang saat lokasi dimatikan, tidak dikirim ke server. |
+| **Layar tetap menyala** | Tombol opsional (hanya bila browser mendukung Screen Wake Lock) agar layar tidak padam selama survei. Diminta hanya atas ketukan pengguna, diminta ulang saat tab kembali terlihat, dilepas saat lokasi dimatikan. Menambah konsumsi baterai — sengaja tidak otomatis. |
+| **Jam perangkat meleset** | Ponsel tanpa sinkron waktu jaringan bisa berbeda puluhan detik dari timestamp GPS sehingga setiap fix tertolak sebagai "basi". Selisih kini dipelajari dari **dua** fix beruntun yang selisihnya konsisten (±3 dtk) dan timestamp-nya maju, sehingga satu fix cache lama tetap tertolak. |
+
+Logika murni ada di `frontend/src/lib/asetTerdekat.js` (jarak, arah, aset terdekat, jejak); panel di `components/assets/PanelAsetTerdekat.jsx`. Posisi dialirkan lewat toko kecil (`buatTokoPosisi`) agar komponen peta besar tidak di-render ulang tiap fix.
+
 ## Batas perangkat dan koneksi
 
 - Gunakan **HTTPS** pada produksi; `localhost` dapat dipakai saat pengembangan.

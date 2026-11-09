@@ -159,3 +159,63 @@ test("izin dicabut menghapus titik dan mematikan tombol dengan satu pesan izin",
   expect(toast.error).toHaveBeenCalledTimes(1);
   expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/Izin lokasi ditolak/));
 });
+
+test("jejak perjalanan: garis bertambah saat bergerak, jitter diam diabaikan, panjang tampil, terhapus saat berhenti", () => {
+  const jejakBtn = () => host.querySelector('[data-testid="peta-lokasi-saya-jejak"]');
+  expect(jejakBtn().hidden).toBe(true);
+  tombol().click();
+  expect(jejakBtn().hidden).toBe(false);
+  sesi[0].ok(fix(-1.4, 8));
+  jest.advanceTimersByTime(1000);
+  sesi[0].ok(fix(-1.40001, 8)); // ±1 m: jitter
+  jest.advanceTimersByTime(1000);
+  sesi[0].ok(fix(-1.4002, 8)); // ±22 m: langkah nyata
+  const [garis] = lapisan(L.Polyline).filter((l) => !(l instanceof L.Circle));
+  expect(garis.getLatLngs()).toHaveLength(2);
+  expect(pesan()).toMatch(/jejak 2\d,\d m/);
+  jejakBtn().click(); // sembunyikan
+  expect(lapisan(L.Polyline).filter((l) => !(l instanceof L.Circle))).toHaveLength(0);
+  jejakBtn().click();
+  tombol().click(); // berhenti
+  expect(lapisan(L.Polyline)).toHaveLength(0);
+});
+
+test("kerucut arah tampil hanya saat bergerak dengan heading sah; onPosisi menerima fix & null", () => {
+  kontrol.destroy();
+  const onPosisi = jest.fn();
+  kontrol = pasangLokasiSaya(map, { onPosisi });
+  tombol().click();
+  sesi[0].ok({ coords: { latitude: -1.4, longitude: 116.7, accuracy: 8, heading: 90, speed: 1.4 }, timestamp: Date.now() });
+  const arah = host.querySelector("[data-arah]");
+  expect(arah.style.display).toBe("block");
+  expect(arah.style.transform).toBe("rotate(90deg)");
+  expect(onPosisi).toHaveBeenLastCalledWith(expect.objectContaining({ lat: -1.4, heading: 90 }));
+  jest.advanceTimersByTime(1000);
+  sesi[0].ok({ coords: { latitude: -1.4, longitude: 116.7, accuracy: 8, heading: 90, speed: 0 }, timestamp: Date.now() });
+  expect(arah.style.display).toBe("none");
+  tombol().click();
+  expect(onPosisi).toHaveBeenLastCalledWith(null);
+});
+
+test("layar tetap menyala: hanya bila didukung, atas permintaan, dilepas saat lokasi dimatikan", async () => {
+  const lepas = jest.fn(() => Promise.resolve());
+  const request = jest.fn(() => Promise.resolve({ release: lepas, addEventListener: jest.fn() }));
+  Object.defineProperty(navigator, "wakeLock", { configurable: true, value: { request } });
+  try {
+    kontrol.destroy();
+    kontrol = pasangLokasiSaya(map);
+    const layar = () => host.querySelector('[data-testid="peta-lokasi-saya-layar"]');
+    expect(layar().hidden).toBe(true);
+    tombol().click();
+    expect(layar().hidden).toBe(false);
+    expect(request).not.toHaveBeenCalled(); // tidak otomatis
+    layar().click();
+    await Promise.resolve(); await Promise.resolve();
+    expect(request).toHaveBeenCalledWith("screen");
+    expect(layar()).toHaveAttribute("aria-pressed", "true");
+    tombol().click();
+    expect(lepas).toHaveBeenCalled();
+  } finally {
+    delete navigator.wakeLock;
+  }
+});
