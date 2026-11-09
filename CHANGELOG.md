@@ -35,6 +35,9 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
   tambah aset tak lagi tertutup panel/kolom tombol.
 - Diuji end-to-end di Chromium nyata (komponen peta penuh, GPS simulasi, HP):
   14/14 alur lulus tanpa galat JS.
+- Perbaikan sampingan (CI): validasi foto kamera Portal Pemegang tak lagi
+  memakai regex ber-grup atas string bermegabita — di sebagian mesin V8 regex
+  itu melempar "Maximum call stack size exceeded" alih-alih pesan "maks 3 MB".
 
 ## [#1116] Lokasi Anda di peta: aset terdekat, jejak, arah gerak, layar menyala — 2026-11-09
 
