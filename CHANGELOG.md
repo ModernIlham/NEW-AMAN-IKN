@@ -18,6 +18,21 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1114] Kepala form edit aset ringkas di semua mode — 2026-11-09
+
+- Kepala form jadi satu blok rapat: **kode aset** (tak pernah dipotong) di baris
+  pertama, lalu NUP · urutan (mode inventarisasi cepat) · nama aset di baris
+  kedua; ikon persegi "Edit Aset" dihapus (warna kepala kuning/biru sudah
+  membedakan edit vs baru). Titik merah = ada perubahan belum disimpan.
+- Kepala identitas kedua di mode inventarisasi cepat dihapus (dulu kode/NUP/
+  nama tampil dua kali).
+- Banner draf belum disimpan, cache luring, selisih SIMAN, dan "tak di SIMAN"
+  digabung menjadi **satu baris status berpil** yang bisa dibuka untuk rincian
+  (tombol "Buang perubahan" ada di rincian). Peringatan kritis (data server
+  berubah sejak draf) tetap terbuka otomatis. Tab form lengkap dirapatkan.
+- Hasil: ruang di atas isian pertama turun dari ±400 px menjadi ±96 px
+  (inventarisasi cepat) / ±140 px (form lengkap) pada HP; tap-target 44 px tetap.
+
 ## [#1113] Draf otomatis form aset & foto — perubahan tak hilang saat Back/tutup — 2026-11-09
 
 - Isian form aset dan foto baru (galeri, kamera biasa, Mode Kamera Penuh)

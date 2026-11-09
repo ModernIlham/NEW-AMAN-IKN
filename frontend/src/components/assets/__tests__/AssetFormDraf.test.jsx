@@ -80,6 +80,9 @@ test("draf dipulihkan saat aset dibuka lagi dan bisa dibuang", async () => {
   await buka();
   await waitFor(() => expect(document.querySelector('input[name="location"]').value).toBe("Gudang"));
   expect(screen.getByTestId("draf-banner")).toHaveTextContent("draf dipulihkan");
+  // Rincian (termasuk tombol Buang) tersembunyi di balik baris status ringkas.
+  expect(screen.queryByTestId("draf-banner-buang")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByTestId("strip-status-toggle"));
   fireEvent.click(screen.getByTestId("draf-banner-buang"));
   fireEvent.click(screen.getByTestId("draf-banner-buang"));
   await waitFor(() => expect(document.querySelector('input[name="location"]').value).toBe(""));
