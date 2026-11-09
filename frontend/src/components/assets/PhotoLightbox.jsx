@@ -2,13 +2,16 @@ import React, { memo, useState, useCallback, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import { hitungSebaran } from "@/components/ui/stacked-cards-interaction";
-import { Loader2, X, ChevronLeft, ChevronRight, MapPin, Tag, User, QrCode, FileCheck, FileX, StickyNote, Download, Maximize2, RotateCw } from "lucide-react";
+import { Loader2, X, ChevronLeft, ChevronRight, MapPin, Tag, User, QrCode, FileCheck, FileX, StickyNote, Download, Maximize2, RotateCw, Trash2 } from "lucide-react";
 import { authMediaUrl } from "../../lib/mediaUrl";
 import { peekAnim } from "../../lib/lightboxAnim";
 import { namaBerkasFoto, pemantauMacet, persenUnduh, pesanGagalUnduh } from "../../lib/unduhFoto";
-import {
-  SKALA_MIN, jepitGeser, jarak, skalaCubit, skalaGulir, titikTengah, zoomKeTitik,
-} from "../../lib/zoomPan";
+import { FullscreenPhoto } from "./PhotoPreview";
+import ConfirmPhotoDelete from "./ConfirmPhotoDelete";
+import { patchHapusFoto } from "../../lib/fotoAset";
+import { getSatkerAktif } from "../../lib/satkerAktif";
+import { idUnik } from "../../lib/idAntrean";
+import { getApiError } from "../../lib/utils";
 import { useBackGuard } from "../../hooks/useBackGuard";
 import { toast } from "sonner";
 import axios from "axios";
@@ -41,228 +44,11 @@ function buildPhotoUrls(src) {
 }
 
 // ============================================================================
-// FULLSCREEN PHOTO — penampil foto layar penuh DI DALAM aplikasi (bukan tab
-// baru). Menampilkan foto resolusi ASLI/HD. Memakai Fullscreen API bila
-// tersedia; kalau ditolak (mis. iOS Safari untuk elemen non-video), overlay
-// `fixed inset-0` tetap memenuhi layar. useBackGuard memastikan tombol Back /
-// gesture geser MENUTUP penampil ini (kembali ke lightbox), BUKAN keluar
-// aplikasi — memperbaiki bug "Back saat fullscreen malah keluar aplikasi".
-// ============================================================================
-const FullscreenPhoto = memo(({ src, alt, rot = 0, onClose }) => {
-  const containerRef = useRef(null);
-  const [imgLoading, setImgLoading] = useState(true);
-  // Zoom & geser TANPA tombol: gulir roda tetikus / cubit dua jari untuk
-  // perbesar-perkecil, seret untuk menggeser saat sudah diperbesar. State
-  // dicermin ke ref agar terbaca di listener native (non-passive) tanpa
-  // memasang ulang listener tiap perubahan.
-  const [view, setViewState] = useState({ scale: SKALA_MIN, tx: 0, ty: 0 });
-  const viewRef = useRef(view);
-  const gestureRef = useRef({ mode: "none" });
-  const pannedRef = useRef(false); // menandai gestur menggeser → jangan tutup saat klik
-  useBackGuard(onClose);
-
-  const setView = useCallback((next) => { viewRef.current = next; setViewState(next); }, []);
-  const resetView = useCallback(() => setView({ scale: SKALA_MIN, tx: 0, ty: 0 }), [setView]);
-  // Terapkan skala+geser dengan jepit batas; skala kembali ke pas layar → nol.
-  const terapkan = useCallback((scale, tx, ty) => {
-    if (scale <= SKALA_MIN) { setView({ scale: SKALA_MIN, tx: 0, ty: 0 }); return; }
-    const c = jepitGeser(tx, ty, scale, window.innerWidth, window.innerHeight);
-    setView({ scale, tx: c.tx, ty: c.ty });
-  }, [setView]);
-
-  // Ganti foto / rotasi → kembalikan ke pas layar.
-  useEffect(() => { resetView(); }, [src, rot, resetView]);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    let requested = false;
-    if (el && el.requestFullscreen) {
-      requested = true;
-      el.requestFullscreen().catch(() => { /* ditolak (mis. iOS) → overlay fixed tetap penuh layar */ });
-    }
-    // Keluar fullscreen via Escape/tombol sistem → tutup penampil juga.
-    const onFsChange = () => { if (!document.fullscreenElement) onClose(); };
-    const onKey = (e) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("fullscreenchange", onFsChange);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("fullscreenchange", onFsChange);
-      window.removeEventListener("keydown", onKey);
-      try { if (requested && document.fullscreenElement) document.exitFullscreen?.(); } catch { /* abaikan */ }
-    };
-  }, [onClose]);
-
-  // Listener native non-passive (React memasang wheel/touchmove sebagai passive
-  // sehingga preventDefault tak berlaku) → pasang manual agar zoom lancar &
-  // tak menggulir/zoom halaman.
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return undefined;
-    const dxPusat = () => window.innerWidth / 2;
-    const dyPusat = () => window.innerHeight / 2;
-
-    const onWheel = (e) => {
-      e.preventDefault();
-      const cur = viewRef.current;
-      const fx = e.clientX - dxPusat(), fy = e.clientY - dyPusat();
-      const s = skalaGulir(cur.scale, e.deltaY);
-      const t = zoomKeTitik(cur.scale, cur.tx, cur.ty, s, fx, fy);
-      terapkan(s, t.tx, t.ty);
-    };
-
-    const onTouchStart = (e) => {
-      pannedRef.current = false;
-      const cur = viewRef.current;
-      if (e.touches.length === 2) {
-        const [a, b] = e.touches;
-        const mid = titikTengah(a.clientX, a.clientY, b.clientX, b.clientY);
-        gestureRef.current = {
-          mode: "pinch",
-          startDist: jarak(a.clientX, a.clientY, b.clientX, b.clientY),
-          startScale: cur.scale, startTx: cur.tx, startTy: cur.ty,
-          startMidX: mid.x - dxPusat(), startMidY: mid.y - dyPusat(),
-        };
-        e.preventDefault();
-      } else if (e.touches.length === 1 && cur.scale > SKALA_MIN) {
-        const t = e.touches[0];
-        gestureRef.current = { mode: "pan", startX: t.clientX, startY: t.clientY, startTx: cur.tx, startTy: cur.ty };
-        e.preventDefault();
-      } else {
-        gestureRef.current = { mode: "none" };
-      }
-    };
-
-    const onTouchMove = (e) => {
-      const g = gestureRef.current;
-      if (g.mode === "pinch" && e.touches.length >= 2) {
-        const [a, b] = e.touches;
-        const d = jarak(a.clientX, a.clientY, b.clientX, b.clientY);
-        const mid = titikTengah(a.clientX, a.clientY, b.clientX, b.clientY);
-        const s = skalaCubit(g.startScale, g.startDist, d);
-        const t1 = zoomKeTitik(g.startScale, g.startTx, g.startTy, s, g.startMidX, g.startMidY);
-        const curMidX = mid.x - dxPusat(), curMidY = mid.y - dyPusat();
-        pannedRef.current = true;
-        terapkan(s, t1.tx + (curMidX - g.startMidX), t1.ty + (curMidY - g.startMidY));
-        e.preventDefault();
-      } else if (g.mode === "pan" && e.touches.length === 1) {
-        const t = e.touches[0];
-        pannedRef.current = true;
-        terapkan(viewRef.current.scale, g.startTx + (t.clientX - g.startX), g.startTy + (t.clientY - g.startY));
-        e.preventDefault();
-      }
-    };
-
-    const onTouchEnd = (e) => {
-      if (e.touches.length === 0) {
-        if (viewRef.current.scale <= SKALA_MIN) resetView();
-        gestureRef.current = { mode: "none" };
-      } else if (e.touches.length === 1) {
-        // Satu jari terlepas dari cubit → lanjutkan sebagai geser bila diperbesar.
-        const t = e.touches[0];
-        const cur = viewRef.current;
-        gestureRef.current = cur.scale > SKALA_MIN
-          ? { mode: "pan", startX: t.clientX, startY: t.clientY, startTx: cur.tx, startTy: cur.ty }
-          : { mode: "none" };
-      }
-    };
-
-    el.addEventListener("wheel", onWheel, { passive: false });
-    el.addEventListener("touchstart", onTouchStart, { passive: false });
-    el.addEventListener("touchmove", onTouchMove, { passive: false });
-    el.addEventListener("touchend", onTouchEnd);
-    el.addEventListener("touchcancel", onTouchEnd);
-    return () => {
-      el.removeEventListener("wheel", onWheel);
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove", onTouchMove);
-      el.removeEventListener("touchend", onTouchEnd);
-      el.removeEventListener("touchcancel", onTouchEnd);
-    };
-  }, [terapkan, resetView]);
-
-  // Seret tetikus (desktop) untuk menggeser saat sudah diperbesar.
-  const onMouseDown = useCallback((e) => {
-    const cur = viewRef.current;
-    if (cur.scale <= SKALA_MIN) return;
-    e.preventDefault();
-    pannedRef.current = false;
-    const startX = e.clientX, startY = e.clientY, startTx = cur.tx, startTy = cur.ty;
-    const move = (ev) => {
-      pannedRef.current = true;
-      terapkan(viewRef.current.scale, startTx + (ev.clientX - startX), startTy + (ev.clientY - startY));
-    };
-    const up = () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); };
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", up);
-  }, [terapkan]);
-
-  // Klik-ganda: sudah diperbesar → kembali pas layar; pas layar → perbesar ke titik.
-  const onDoubleClick = useCallback((e) => {
-    e.stopPropagation();
-    const cur = viewRef.current;
-    if (cur.scale > SKALA_MIN) { resetView(); return; }
-    const fx = e.clientX - window.innerWidth / 2, fy = e.clientY - window.innerHeight / 2;
-    const t = zoomKeTitik(SKALA_MIN, 0, 0, 2.5, fx, fy);
-    terapkan(2.5, t.tx, t.ty);
-  }, [resetView, terapkan]);
-
-  const onContainerClick = useCallback(() => {
-    if (pannedRef.current) { pannedRef.current = false; return; } // habis menggeser → jangan tutup
-    onClose();
-  }, [onClose]);
-
-  const swapped = rot % 180 === 90; // 90°/270° → tinggi↔lebar bertukar
-  const zoomed = view.scale > SKALA_MIN;
-  return createPortal(
-    <div
-      ref={containerRef}
-      className="fixed inset-0 z-[120] bg-black flex items-center justify-center overflow-hidden"
-      onClick={onContainerClick}
-      style={{ touchAction: "none" }}
-      data-testid="lightbox-fullscreen-view"
-    >
-      <button
-        onClick={(e) => { e.stopPropagation(); onClose(); }}
-        title="Tutup layar penuh"
-        aria-label="Tutup layar penuh"
-        className="absolute top-3 right-3 z-10 w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white ring-1 ring-white/40 shadow-lg flex items-center justify-center backdrop-blur-sm transition-colors"
-        data-testid="lightbox-fullscreen-close"
-      >
-        <X className="w-5 h-5" />
-      </button>
-      {imgLoading && <Loader2 className="absolute w-10 h-10 text-white animate-spin" />}
-      <img
-        src={src}
-        alt={alt || "Foto"}
-        onLoad={() => setImgLoading(false)}
-        onError={() => setImgLoading(false)}
-        onClick={(e) => e.stopPropagation()}
-        onDoubleClick={onDoubleClick}
-        onMouseDown={onMouseDown}
-        className={`object-contain select-none transition-opacity duration-200 ${imgLoading ? "opacity-0" : "opacity-100"}`}
-        style={{
-          transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.scale})${rot ? ` rotate(${rot}deg)` : ""}`,
-          transformOrigin: "center center",
-          maxHeight: swapped ? "100vw" : "100vh",
-          maxWidth: swapped ? "100vh" : "100vw",
-          cursor: zoomed ? "grab" : "auto",
-          willChange: "transform",
-          touchAction: "none",
-        }}
-        draggable={false}
-      />
-    </div>,
-    document.body
-  );
-});
-FullscreenPhoto.displayName = "FullscreenPhoto";
-
-// ============================================================================
 // LIGHTBOX - Photo gallery with full asset info
 // Dipakai bersama oleh galeri (AssetGalleryView) dan popup marker peta
 // (AssetMapFullView) — supaya pengalaman "buka foto" identik di kedua tempat.
 // ============================================================================
-const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset = null }) => {
+const Lightbox = memo(({ asset, onClose: closeRequested, onEdit, onAssetUpdated, siblings = null, onSelectAsset = null }) => {
   // Foto diseed SEKETIKA dari data aset yang diklik (peta/galeri sudah bawa
   // photo_count + version) supaya <img> mulai memuat langsung — bukan setelah
   // round-trip metadata. `builtRef` mengingat jumlah/versi terakhir yang
@@ -291,6 +77,59 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
   const [fullscreen, setFullscreen] = useState(false); // penampil foto layar penuh DALAM aplikasi
   const closeFullscreen = useCallback(() => setFullscreen(false), []);
   const [rotating, setRotating] = useState(false); // putar PERMANEN sedang diproses server
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [metadataReady, setMetadataReady] = useState(false);
+  const deleteLock = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const assetRef = useRef(asset);
+  assetRef.current = asset;
+  const activeId = useRef(asset?.id);
+  activeId.current = asset?.id;
+  const metadataGeneration = useRef(0);
+  const metadataScope = useRef(getSatkerAktif());
+  const onClose = useCallback(() => { if (!deleteLock.current) closeRequested(); }, [closeRequested]);
+  const requestDelete = () => {
+    const current = fullAsset || asset;
+    if (!onEdit || !metadataReady || rotating || deleteLock.current || !photos.length) return;
+    if (metadataScope.current !== getSatkerAktif()) {
+      toast.error("Satker berubah. Tutup dan buka ulang foto sebelum menghapus."); return;
+    }
+    setDeleteTarget({ asset: current, index: idx, src: photos[idx], scope: getSatkerAktif(), key: idUnik("hapus-foto-") });
+  };
+  const deletePhoto = async () => {
+    const target = deleteTarget;
+    if (!target || deleteLock.current) return;
+    if (target.asset.id !== activeId.current || target.scope !== getSatkerAktif()) {
+      setDeleteTarget(null); toast.error("Aset atau satker berubah. Buka ulang foto sebelum menghapus."); return;
+    }
+    deleteLock.current = true; setDeleting(true);
+    metadataGeneration.current++;
+    try {
+      const response = await axios.patch(`${API}/assets/${target.asset.id}`, patchHapusFoto(target.asset, target.index), {
+        headers: { "If-Match": String(target.asset.version), "Idempotency-Key": target.key, "X-Satker-Aktif": target.scope || "" },
+      });
+      const updated = { ...target.asset, ...response.data };
+      if (mounted.current && activeId.current === updated.id && getSatkerAktif() === target.scope) {
+        const next = buildPhotoUrls({ ...updated, thumbnail: Number(updated.photo_count) ? updated.thumbnail : null });
+        builtRef.current = { id: updated.id, count: next.count, version: next.version };
+        setFullAsset(updated); setPhotos(next.photos); setThumbs(next.thumbs);
+        setIdx(Math.min(target.index, Math.max(0, next.count - 1)));
+        setDeleteTarget(null);
+        toast.success("Foto dihapus");
+        onAssetUpdated?.(updated);
+      }
+    } catch (error) {
+      if (!mounted.current || activeId.current !== target.asset.id) return;
+      if (error.response?.status === 409) {
+        setDeleteTarget(null);
+        toast.error("Susunan foto telah berubah. Tutup dan buka ulang foto sebelum mencoba lagi.");
+        setMetadataReady(false);
+      } else toast.error(getApiError(error, "Penghapusan belum terkonfirmasi. Periksa koneksi lalu coba kembali."));
+    } finally { deleteLock.current = false; if (mounted.current) setDeleting(false); }
+  };
+
 
   // Navigasi antar-ASET (bukan antar-foto): geser/klik pada kartu info → aset
   // sebelum/sesudah sesuai urutan & filter aktif (daftar `siblings` dari
@@ -299,11 +138,11 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
   const hasPrevAsset = sibIndex > 0;
   const hasNextAsset = sibIndex >= 0 && sibIndex < siblings.length - 1;
   const goAsset = useCallback((dir) => {
-    if (!siblings || !onSelectAsset || sibIndex < 0) return;
+    if (deleteLock.current || deleteTarget || !siblings || !onSelectAsset || sibIndex < 0) return;
     const ni = sibIndex + dir;
     if (ni < 0 || ni >= siblings.length) return;
     onSelectAsset(siblings[ni]);
-  }, [siblings, onSelectAsset, sibIndex]);
+  }, [siblings, onSelectAsset, sibIndex, deleteTarget]);
 
   // Geser kartu info: umpan balik drag + snap; lepas melewati ambang → pindah
   // aset. stopPropagation agar TIDAK ikut memicu geser-foto pada overlay.
@@ -393,7 +232,7 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
   const rotatePhotoPersist = useCallback(async () => {
     const cur = fullAsset || asset;
     const id = cur?.id;
-    if (!id || rotating || photos.length === 0) return;
+    if (!id || rotating || deleteLock.current || deleteTarget || photos.length === 0) return;
     setRotating(true);
     setRot((r) => (r + 90) % 360); // umpan balik instan (CSS) selama proses
     try {
@@ -414,10 +253,15 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
     } finally {
       setRotating(false);
     }
-  }, [fullAsset, asset, idx, rotating, photos.length]);
+  }, [fullAsset, asset, idx, rotating, photos.length, deleteTarget]);
 
   useEffect(() => {
+    const asset = assetRef.current;
     if (!asset?.id) return undefined;
+    setDeleteTarget(null); setMetadataReady(false);
+    const generation = ++metadataGeneration.current;
+    const scope = getSatkerAktif();
+    metadataScope.current = scope;
     // Aset berganti (mis. dari galeri) → seed ulang foto. Pada MOUNT pertama
     // state sudah diseed via useState di atas, jadi lewati agar tak set ulang
     // (yang memicu kedip). w=1280: varian preview tajam (~100-250KB), di-resize
@@ -435,10 +279,11 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
     // rekonsiliasi jumlah/versi. Foto sudah tampil; array hanya dibangun ulang
     // bila jumlah/versi BERBEDA — sehingga tak me-reset foto yang sedang dimuat.
     let alive = true;
-    axios.get(`${API}/assets/${asset.id}?exclude_media=true`)
+    axios.get(`${API}/assets/${asset.id}?exclude_media=true`, { headers: { "X-Satker-Aktif": scope || "" } })
       .then(r => {
-        if (!alive) return;
+        if (!alive || generation !== metadataGeneration.current || scope !== getSatkerAktif()) return;
         const data = r.data;
+        setMetadataReady(true);
         // GABUNG, bukan ganti: respons exclude_media TIDAK menghitung
         // doc_total/doc_checked/doc_summary (field itu hanya di proyeksi list).
         // Mengganti fullAsset dengan data mentah membuat badge "Dok x/y" dari
@@ -462,6 +307,7 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
 
   useEffect(() => {
     const handler = (e) => {
+      if (deleteTarget || deleting) return;
       if (e.key === "Escape") onClose();
       if (e.key === "ArrowLeft") setIdx(i => (i - 1 + photos.length) % photos.length);
       if (e.key === "ArrowRight") setIdx(i => (i + 1) % photos.length);
@@ -471,7 +317,7 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [photos.length, onClose, goAsset]);
+  }, [photos.length, onClose, goAsset, deleteTarget, deleting]);
 
   // Foto berpindah → tandai "sedang memuat" agar tampil spinner (bukan foto lama
   // yang terlihat "freeze"). Dibersihkan oleh onLoad/onError <img>. Bila foto
@@ -524,11 +370,11 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
   const onTouchStart = useCallback((e) => { startX.current = e.touches[0].clientX; }, []);
   const onTouchEnd = useCallback((e) => {
     const diff = e.changedTouches[0].clientX - startX.current;
-    if (Math.abs(diff) > 50) {
+    if (!deleteTarget && !deleting && photos.length > 0 && Math.abs(diff) > 50) {
       if (diff > 0) setIdx(i => (i - 1 + photos.length) % photos.length);
       else setIdx(i => (i + 1) % photos.length);
     }
-  }, [photos.length]);
+  }, [photos.length, deleteTarget, deleting]);
 
   if (!asset) return null;
   const a = fullAsset || asset;
@@ -607,7 +453,7 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); rotatePhotoPersist(); }}
-              disabled={rotating}
+              disabled={rotating || deleting}
               title="Putar foto 90° (permanen — berlaku di semua tampilan & unduhan)"
               aria-label="Putar foto 90 derajat secara permanen"
               className="w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white ring-1 ring-white/40 shadow-lg flex items-center justify-center backdrop-blur-sm transition-colors disabled:opacity-70"
@@ -615,6 +461,11 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
             >
               {rotating ? <Loader2 className="w-5 h-5 animate-spin" /> : <RotateCw className="w-5 h-5" />}
             </button>
+            {onEdit && <button type="button" onClick={requestDelete} disabled={!metadataReady || rotating || deleting}
+              aria-label="Hapus foto" title="Hapus foto" data-testid="lightbox-delete"
+              className="w-11 h-11 rounded-full bg-red-600/90 text-white ring-1 ring-white/40 shadow-lg flex items-center justify-center disabled:opacity-50">
+              {deleting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
+            </button>}
           </div>
         )}
         {loading ? (
@@ -624,7 +475,7 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
             <img
               key={photos[idx]}
               src={photos[idx]}
-              alt={a.name || "Asset"}
+              alt={a.name || a.asset_name || "Foto aset"}
               onLoad={() => setImgLoading(false)}
               onError={() => setImgLoading(false)}
               className={`object-contain rounded-lg shadow-2xl transition-all duration-200 ${imgLoading ? "opacity-0" : "opacity-100"}`}
@@ -745,8 +596,14 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
           </motion.div>
         </div>
       </div>
+      {deleteTarget && <ConfirmPhotoDelete src={deleteTarget.src} busy={deleting}
+        onCancel={() => setDeleteTarget(null)} onConfirm={deletePhoto} />}
       {fullscreen && fullSrc && (
-        <FullscreenPhoto src={fullSrc} alt={a.name || a.asset_name} rot={rot} onClose={closeFullscreen} />
+        <FullscreenPhoto src={fullSrc} alt={a.name || a.asset_name} rot={rot} onClose={closeFullscreen}>
+          {onEdit && <button type="button" disabled={!metadataReady || rotating || deleting}
+            onClick={e => { e.stopPropagation(); setFullscreen(false); requestDelete(); }} aria-label="Hapus foto"
+            data-testid="lightbox-fullscreen-delete" className="absolute left-3 top-3 z-10 w-11 h-11 rounded-full bg-red-600/90 text-white flex items-center justify-center disabled:opacity-50"><Trash2 className="w-5 h-5" /></button>}
+        </FullscreenPhoto>
       )}
     </div>,
     document.body

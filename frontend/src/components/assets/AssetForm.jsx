@@ -1,7 +1,7 @@
 import React, { memo, useState, useCallback, useRef, useEffect, useMemo, startTransition } from "react";
 import { createPortal } from "react-dom";
 import {
-  Plus, Edit3, X, Camera, Trash2, Check, ChevronDown, Search,
+  Plus, X, Camera, Trash2, Check, ChevronDown, Search,
   Package, Briefcase, ShieldCheck, Settings, Tag, Save, Loader2, ClipboardList,
   Info, ChevronRight, BookOpen, Wrench, ArrowRight, HelpCircle, MapPin, LocateFixed,
   ChevronLeft, CloudOff, Upload, Eye, UserRound, AlertTriangle, History, IdCard,
@@ -23,10 +23,18 @@ import { ASSET_FIELD_REGISTRY } from "../../lib/assetFields";
 import { bangunChecklist, rekomendasiKelengkapan } from "@/lib/kelengkapanBmn";
 import InventoryFieldSheet, { PENGGUNA_MELEKAT_OPTIONS, PENGGUNA_NAME_LABELS, OPERASIONAL_JENIS_OPTIONS, CONDITION_OPTIONS, SUB_KLASIFIKASI_OPTIONS, TEMUAN_PENCATATAN_OPTIONS } from "./InventoryFieldSheet";
 import FullCameraSheet from "./FullCameraSheet";
+import PhotoPreview from "./PhotoPreview";
+import ConfirmPhotoDelete from "./ConfirmPhotoDelete";
+import KonfirmasiKeluarForm from "./KonfirmasiKeluarForm";
+import StripStatusForm from "./StripStatusForm";
+import {
+  kunciDraf, ringkasPerubahan, teksPerubahan, sidikForm, bangunRekamanDraf,
+  pulihkanDrafEdit, pulihkanDrafBaru, simpanDraf, muatDraf, hapusDraf, labelField,
+  keluarOtomatisSesiIni, setKeluarOtomatisSesiIni,
+} from "../../lib/drafAset";
+import PhotoInputTiles from "./PhotoInputTiles";
+import { sumberFotoItem } from "../../lib/fotoAset";
 import KartuTapDialog from "../pegawai/KartuTapDialog";
-import { useDrafAset } from "../../hooks/useDrafAset";
-import { idPenggunaAktif } from "../../lib/pemilikAntrean";
-import { getSatkerAktif } from "../../lib/satkerAktif";
 import { useBackGuard } from "../../hooks/useBackGuard";
 import { toast } from "sonner";
 import axios from "axios";
@@ -509,6 +517,7 @@ const AssetForm = memo(({
   onOpenKartu,
   onOpenTimeline,
   onOpenLokasiDenah,
+  closeGuardRef,
   alwaysExpanded = false
 }) => {
   const [formSection, setFormSection] = useState("basic");
@@ -522,6 +531,8 @@ const AssetForm = memo(({
   const pendingScrollFieldRef = useRef(null);
   const formScrollRef = useRef(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitBusyRef = useRef(false);
+  submitBusyRef.current = isSubmitting;
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
   const [showGuide, setShowGuide] = useState(false);
@@ -758,6 +769,126 @@ const AssetForm = memo(({
   const photoItemsRef = useRef(photoItems);
   photoItemsRef.current = photoItems;
 
+  // === DRAF (perubahan belum disimpan) — lihat lib/drafAset.js ===
+  // Autosave ke IndexedDB agar isian & foto selamat dari Back tak sengaja,
+  // tutup form, reload, maupun tab di-kill. Autosave baru aktif setelah
+  // pemeriksaan/pemulihan draf untuk kunci aktif selesai (drafSiapRef).
+  const userIdDraf = useMemo(() => {
+    try { return JSON.parse(localStorage.getItem("user") || "null")?.id || ""; } catch { return ""; }
+  }, []);
+  const kunciAktif = kunciDraf(userIdDraf, activity?.id, editAsset?.id);
+  const kunciAktifRef = useRef(kunciAktif);
+  kunciAktifRef.current = kunciAktif;
+  const drafSiapRef = useRef(null);      // kunci yang sudah diperiksa → autosave boleh jalan
+  const drafAdaRef = useRef(false);      // draf kunci aktif tertunda/tertulis di IDB
+  const drafTertundaRef = useRef(null);  // { timer, rec } — tulis berdebounce
+  const drafGagalRef = useRef(false);    // penulisan terakhir gagal (mis. kuota penuh)
+  const sidikTersimpanRef = useRef(null); // keadaan yang SUDAH diserahkan ke antrean simpan
+  const [drafInfo, setDrafInfo] = useState(null); // { updatedAt, bentrok, versiBerubah }
+  const [muatUlangNonce, setMuatUlangNonce] = useState(0);
+  const unduhCadanganDraf = () => {
+    const rec = bangunRekamanDraf({ key: kunciAktif, userId: userIdDraf, activityId: activity?.id,
+      assetId: editAsset?.id, isEditing, formData, original: originalDataRef.current, photoItems,
+      photosModified: photosModifiedRef.current, baseVersion: assetVersion, checklistModified: checklistModifiedRef.current });
+    const url = URL.createObjectURL(new Blob([JSON.stringify(rec)], { type: "application/json" }));
+    const link = document.createElement("a"); link.href = url; link.download = "aman-draf-aset.json"; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  const drafWritingRef = useRef(Promise.resolve());
+  const drafBusyRef = useRef(false);
+  const tulisDrafSekarang = useCallback(() => {
+    const t = drafTertundaRef.current;
+    if (!t) return drafWritingRef.current;
+    clearTimeout(t.timer);
+    drafTertundaRef.current = null;
+    drafBusyRef.current = true;
+    const work = drafWritingRef.current.catch(() => {}).then(() => simpanDraf(t.rec));
+    drafWritingRef.current = work;
+    work.then(() => { drafGagalRef.current = false; }).catch((error) => {
+      if (!drafGagalRef.current) toast.error(error?.message || "Draf tidak bisa disimpan. Jangan tutup halaman; unduh cadangan atau periksa ruang penyimpanan.", { duration: Infinity });
+      drafGagalRef.current = true;
+      if (drafWritingRef.current === work && kunciAktifRef.current === t.rec.key && !drafTertundaRef.current) drafTertundaRef.current = { rec: t.rec };
+    }).finally(() => { if (drafWritingRef.current === work) drafBusyRef.current = false; });
+    return work;
+  }, []);
+  const batalDrafTertunda = useCallback(() => {
+    const t = drafTertundaRef.current;
+    if (t) clearTimeout(t.timer);
+    drafTertundaRef.current = null;
+  }, []);
+  // Dipanggil SEBELUM form berganti aset/di-reset oleh efek init: tulis draf
+  // yang masih tertunda, beri tahu bila aset sebelumnya punya draf, lalu
+  // matikan autosave sampai pemeriksaan draf kunci baru selesai.
+  const lepasDrafLama = () => {
+    if (drafAdaRef.current && drafSiapRef.current) {
+      toast.info("Perubahan aset sebelumnya yang belum disimpan tersimpan sebagai draf — buka lagi asetnya untuk melanjutkan", { duration: 4000 });
+    }
+    tulisDrafSekarang().catch(() => {});
+    drafAdaRef.current = false;
+    drafSiapRef.current = null;
+    sidikTersimpanRef.current = null;
+    setDrafInfo(null);
+  };
+  // Setelah keadaan form diserahkan ke jalur simpan: draf tak diperlukan lagi.
+  const selesaikanDrafRef = useRef(null);
+  selesaikanDrafRef.current = async (key, sidik) => {
+    if (kunciAktifRef.current === key) {
+      batalDrafTertunda();
+      drafAdaRef.current = false;
+      sidikTersimpanRef.current = sidik;
+      setDrafInfo(null);
+    }
+    await drafWritingRef.current.catch(() => {});
+    // A durable outbox receipt already protects the payload if draft cleanup fails.
+    try { await hapusDraf(key); } catch { toast.error("Aset sudah masuk antrean, tetapi draf lama belum dapat dibersihkan."); }
+  };
+  // Pemeriksaan draf aset BARU (dipanggil saat form kosong disiapkan/dibuka).
+  const periksaDrafBaruRef = useRef(null);
+  const drafDiperiksaRef = useRef(null); // kunci yang pemeriksaannya sedang berjalan
+  periksaDrafBaruRef.current = () => {
+    const key = kunciDraf(userIdDraf, activity?.id, null);
+    if (drafDiperiksaRef.current === key) return undefined;
+    drafDiperiksaRef.current = key;
+    let batal = false;
+    muatDraf(key).then((d) => {
+      if (drafDiperiksaRef.current === key) drafDiperiksaRef.current = null;
+      if (batal || kunciAktifRef.current !== key) return;
+      if (d) {
+        setFormData(pulihkanDrafBaru({ draf: d, emptyForm: emptyAssetForm(activity?.id) }));
+        photosModifiedRef.current = (d.fotoBaru || []).length > 0;
+        if (Array.isArray(d.checklist)) checklistModifiedRef.current = true;
+        drafAdaRef.current = true;
+        setDrafInfo({ updatedAt: d.updatedAt, bentrok: [], versiBerubah: false });
+        toast.info("Draf aset baru yang belum disimpan dipulihkan", { duration: 3000 });
+      }
+      drafSiapRef.current = key;
+    });
+    return () => { batal = true; if (drafDiperiksaRef.current === key) drafDiperiksaRef.current = null; };
+  };
+  // Terapkan hasil pulihkanDrafEdit ke state form (fungsional: ketikan yang
+  // sudah masuk sejak fase 1 tidak tertimpa kecuali field yang ada di draf).
+  const terapkanDrafEdit = (d, r) => {
+    if (r.fotoDisusun) {
+      photosModifiedRef.current = true;
+      setPhotoItems(r.items);
+    }
+    if (Array.isArray(r.checklist)) checklistModifiedRef.current = true;
+    setFormData(prev => {
+      const next = { ...prev };
+      for (const k of r.diubah) next[k] = r.formData[k];
+      next.thumbnail_index = r.formData.thumbnail_index;
+      next.stiker_photo_index = r.formData.stiker_photo_index;
+      if (r.fotoDisusun) next.photos = r.items.map(it => (it.type === "existing" ? "__existing__" : it.newData));
+      if (Array.isArray(r.checklist)) next.document_checklist = r.checklist;
+      return next;
+    });
+    drafAdaRef.current = true;
+    setDrafInfo({ updatedAt: d.updatedAt, bentrok: r.bentrok, versiBerubah: r.versiBerubah });
+    toast.info(r.versiBerubah
+      ? "Draf dipulihkan — data server sudah berubah sejak draf dibuat, periksa sebelum menyimpan"
+      : "Draf perubahan yang belum disimpan dipulihkan", { duration: 4000 });
+  };
+
   // Load edit data when editAsset changes — two-phase: light data first, then media separately.
   // Keyed by editAsset?.id (not object identity) + an initialized-id guard, so
   // list refreshes or re-clicks that merely re-point the same row can never
@@ -767,6 +898,9 @@ const AssetForm = memo(({
     if (editAsset) {
       if (initializedIdRef.current === editAsset.id) return; // same row already loaded — keep user's typing
       initializedIdRef.current = editAsset.id;
+      lepasDrafLama();
+      const kunciEdit = kunciDraf(userIdDraf, activity?.id, editAsset.id);
+      const drafP = muatDraf(kunciEdit);
       setIsFormLoading(true);
       setEditId(editAsset.id);
       setFormSection("basic");
@@ -792,7 +926,7 @@ const AssetForm = memo(({
       // version). Media (photos, full checklist) stays unloaded — the guards
       // in handleSubmit keep the save non-destructive for those. Saving flows
       // through the optimistic queue with baseVersion from this same row.
-      const initFromCacheRow = () => {
+      const initFromCacheRow = async () => {
         const lightData = buildEditFormData(editAsset, activity?.id);
         setAssetVersion(Number(editAsset.version) || 1);
         setBastInfo(_bastInfoDari(editAsset));
@@ -807,11 +941,21 @@ const AssetForm = memo(({
         originalDataRef.current = { ...lightData, _photoCount: Number(editAsset.photo_count) || 0 };
         setOfflineNotice(true);
         setIsFormLoading(false);
+        const d = await drafP;
+        if (cancelled) return;
+        if (d) {
+          // Luring: foto server tak ada di strip → hanya foto BARU + isian yang
+          // dipulihkan; penghapusan foto lama menunggu daring (aman, tak merusak).
+          const r = pulihkanDrafEdit({ draf: d, lightData, existingItems: [],
+            versiKini: Number(editAsset.version) || null, mediaLoaded: false });
+          terapkanDrafEdit(d, r);
+        }
+        drafSiapRef.current = kunciEdit;
       };
       (async () => {
         // Known-offline: the GET below cannot succeed — open from cache
         // immediately (no error toast, no unusable form).
-        if (!navigator.onLine) { initFromCacheRow(); return; }
+        if (!navigator.onLine) { await initFromCacheRow(); return; }
         try {
           // Phase 1: Fetch lightweight data (no base64 photos/documents)
           const r = await axios.get(`${API}/assets/${editAsset.id}?exclude_media=true`);
@@ -857,11 +1001,19 @@ const AssetForm = memo(({
           startTransition(() => {
             setFormData(prev => ({ ...prev, photos: placeholderPhotos }));
           });
+          const d = await drafP;
+          if (cancelled) return;
+          if (d) {
+            const r = pulihkanDrafEdit({ draf: d, lightData, existingItems: items,
+              versiKini: version, mediaLoaded: true });
+            terapkanDrafEdit(d, r);
+          }
+          drafSiapRef.current = kunciEdit;
         } catch (err) {
           if (cancelled) return;
           if (!err?.response) {
             // Network-level failure (offline / server unreachable) → cache row
-            initFromCacheRow();
+            await initFromCacheRow();
           } else {
             // Server answered with an error (404 asset deleted, 401, …) —
             // cached data would be misleading here; keep the explicit error.
@@ -874,6 +1026,7 @@ const AssetForm = memo(({
       return () => { cancelled = true; };
     } else {
       initializedIdRef.current = null;
+      lepasDrafLama();
       setFormData({...emptyForm});
       setEditId(null);
       setInfoDenahAset(null);
@@ -896,9 +1049,10 @@ const AssetForm = memo(({
       setPhotoItems([]);
       setBastInfo(null);
       setBastUploading(false);
+      return periksaDrafBaruRef.current();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editAsset?.id, activity?.id]);
+  }, [editAsset?.id, activity?.id, muatUlangNonce]);
 
   const resetForm = useCallback(() => {
     setFormData({...emptyForm});
@@ -1485,6 +1639,143 @@ const AssetForm = memo(({
 
   // In edit mode, photo count comes from photoItems. In create mode, from formData.photos
   const currentPhotoCount = isEditing ? photoItems.length : formData.photos.length;
+  const photoSources = useMemo(() => isEditing
+    ? photoItems.map(item => ({ key: item, src: sumberFotoItem(item, editAsset?.id, assetVersion), thumbnail: item.thumbnail }))
+    : formData.photos.map((src, key) => ({ key, src, thumbnail: src })),
+  [isEditing, photoItems, editAsset?.id, assetVersion, formData.photos]);
+  // Ringkasan perubahan yang belum disimpan — sumber lencana, banner, sorotan
+  // field, autosave draf, dan gerbang dialog keluar. Field yang diisi OTOMATIS
+  // (GPS pinjaman, garansi riwayat) tidak dihitung agar dialog tidak muncul
+  // pada form yang tak disentuh pengguna.
+  const ringkasan = useMemo(() => {
+    const kosong = { dirty: false, fields: [], fotoBaru: 0, fotoDihapus: 0, checklist: false };
+    if (isFormLoading) return kosong;
+    const r = ringkasPerubahan({
+      isEditing, formData, original: originalDataRef.current, emptyForm,
+      photoItems, photosModified: photosModifiedRef.current, mediaLoaded: mediaLoadedRef.current,
+      checklistModified: checklistModifiedRef.current,
+      abaikan: garansiOtomatis ? ["garansi_hingga"] : [],
+    });
+    if (r.dirty && sidikTersimpanRef.current
+        && sidikTersimpanRef.current === sidikForm(formData, isEditing ? photoItems : [], checklistModifiedRef.current)) {
+      return kosong; // keadaan ini sudah diserahkan ke antrean simpan
+    }
+    return r;
+  }, [isEditing, isFormLoading, formData, photoItems, emptyForm, garansiOtomatis]);
+  const ringkasanRef = useRef(ringkasan);
+  ringkasanRef.current = ringkasan;
+
+  // Autosave draf (debounce 700 ms). Draf dihapus begitu form kembali bersih.
+  useEffect(() => {
+    const key = kunciAktif;
+    if (drafSiapRef.current !== key) return;
+    if (ringkasan.dirty) {
+      const rec = bangunRekamanDraf({
+        key, userId: userIdDraf, activityId: activity?.id, assetId: editAsset?.id,
+        isEditing, formData, original: originalDataRef.current, photoItems,
+        photosModified: photosModifiedRef.current, baseVersion: assetVersion,
+        checklistModified: checklistModifiedRef.current,
+      });
+      batalDrafTertunda();
+      drafTertundaRef.current = { timer: setTimeout(() => tulisDrafSekarang().catch(() => {}), 300), rec };
+      drafAdaRef.current = true;
+    } else if (drafAdaRef.current) {
+      batalDrafTertunda();
+      drafAdaRef.current = false;
+      hapusDraf(key).catch(() => { drafGagalRef.current = true; });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ringkasan, kunciAktif]);
+
+  // Halaman disembunyikan / ditutup / di-reload: tulis draf tertunda SEKARANG.
+  // Dialog bawaan peramban HANYA bila draf gagal tersimpan (mis. kuota penuh) —
+  // satu-satunya keadaan di mana menutup halaman benar-benar menghilangkan data.
+  useEffect(() => {
+    const onVis = () => { if (document.visibilityState === "hidden") tulisDrafSekarang().catch(() => {}); };
+    const onPageHide = () => tulisDrafSekarang().catch(() => {});
+    const onBeforeUnload = (e) => {
+      tulisDrafSekarang().catch(() => {});
+      if (ringkasanRef.current.dirty && (drafGagalRef.current || drafBusyRef.current || drafTertundaRef.current)) {
+        e.preventDefault();
+        e.returnValue = "Perubahan aset belum disimpan dan draf tidak bisa disimpan di perangkat. Yakin keluar?";
+        return e.returnValue;
+      }
+      return undefined;
+    };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      tulisDrafSekarang().catch(() => {}); // unmount (pindah modul/kegiatan) — jangan hilangkan draf tertunda
+    };
+  }, [tulisDrafSekarang]);
+
+  // Form aset BARU dibuka lagi setelah ditutup "simpan sebagai draf" /
+  // "buang": efek init tak berjalan ulang (editAsset tetap null), jadi periksa
+  // draf di sini agar draf yang tersimpan dipulihkan.
+  useEffect(() => {
+    if (!isOpen || editAsset || drafSiapRef.current === kunciAktif) return undefined;
+    return periksaDrafBaruRef.current();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
+  // GERBANG KELUAR. Form bersih → langsung keluar tanpa dialog. Ada perubahan
+  // → dialog (kecuali pengguna memilih "jangan tanya lagi" untuk sesi ini:
+  // draf disimpan diam-diam, cukup toast).
+  const [konfirmasiKeluar, setKonfirmasiKeluar] = useState(null); // { aksi }
+  const keluarSimpanDraf = useCallback(async (aksi) => {
+    try {
+      do { await tulisDrafSekarang(); } while (drafTertundaRef.current);
+      drafSiapRef.current = null;
+      drafAdaRef.current = false;
+      aksi?.();
+      toast.info("Draf disimpan di perangkat ini — dipulihkan saat aset dibuka lagi", { duration: 3000 });
+    } catch { /* keep form and photos open; persistent error already displayed */ }
+  }, [tulisDrafSekarang]);
+  const formTerlihatRef = useRef(false);
+  formTerlihatRef.current = !!(isOpen || alwaysExpanded);
+  const mintaKeluar = useCallback((aksi) => {
+    if (submitBusyRef.current) { toast.info("Tunggu hingga simpanan aman di perangkat."); return; }
+    // Form tertutup (HP) atau bersih → tidak ada yang perlu ditanyakan.
+    if (!formTerlihatRef.current || !ringkasanRef.current.dirty) { aksi?.(); return; }
+    if (keluarOtomatisSesiIni()) {
+      keluarSimpanDraf(aksi);
+      return;
+    }
+    setKonfirmasiKeluar({ aksi });
+  }, [keluarSimpanDraf]);
+  useEffect(() => {
+    if (!closeGuardRef) return undefined;
+    closeGuardRef.current = mintaKeluar;
+    return () => { if (closeGuardRef.current === mintaKeluar) closeGuardRef.current = null; };
+  }, [closeGuardRef, mintaKeluar]);
+  // Buang draf dari banner: hapus lalu muat ulang data asli (server/cache).
+  const [yakinBuangBanner, setYakinBuangBanner] = useState(false);
+  useEffect(() => { setYakinBuangBanner(false); }, [kunciAktif, ringkasan.dirty]);
+  const buangDrafBanner = useCallback(() => {
+    const key = kunciAktifRef.current;
+    batalDrafTertunda();
+    drafSiapRef.current = null;
+    drafAdaRef.current = false;
+    hapusDraf(key).then(() => {
+      if (editAsset) { initializedIdRef.current = null; setMuatUlangNonce(n => n + 1); }
+      else { resetForm(); drafSiapRef.current = key; setDrafInfo(null); }
+      toast.success("Perubahan dibuang");
+    }).catch(error => toast.error(error.message));
+  }, [batalDrafTertunda, editAsset, resetForm]);
+
+  const [photoToView, setPhotoToView] = useState(null);
+  const [photoToDelete, setPhotoToDelete] = useState(null);
+  const closePhotoPreview = useCallback(() => setPhotoToView(null), []);
+  const requestPhotoDelete = index => {
+    if (!isSubmitting && !isFormLoading && photoSources[index]) {
+      setPhotoToDelete({ ...photoSources[index], session: sesiAset });
+    }
+  };
+
 
   // INDEKS STRIP → INDEKS FINAL (temuan audit G3). Saat edit LURING, foto
   // server tak dimuat ke strip (mediaLoaded false) padahal backend menyusun
@@ -1587,8 +1878,7 @@ const AssetForm = memo(({
     if (cameraInputRef.current) cameraInputRef.current.value = "";
   }, [isEditing, photoItems.length, formData.photos.length]);
 
-  const removePhoto = useCallback((index, confirmed = false) => {
-    if (!confirmed && !window.confirm("Hapus foto ini dari formulir?")) return;
+  const removePhoto = useCallback(index => {
     photosModifiedRef.current = true;
     if (isEditing) {
       // Edit mode: remove from photoItems. Perbandingan memakai indeks FINAL:
@@ -1627,58 +1917,13 @@ const AssetForm = memo(({
     }
   }, [isEditing]);
 
-  const draftOwner = idPenggunaAktif();
-  const draftScope = draftOwner && activity?.id
-    ? JSON.stringify([draftOwner, getSatkerAktif(), activity.id, editAsset?.id || "new"]) : "";
-  const draftValue = useMemo(() => ({ formData, photoItems, assetVersion,
-    original: originalDataRef.current, photosModified: photosModifiedRef.current,
-    checklistModified: checklistModifiedRef.current, mediaLoaded: mediaLoadedRef.current,
-    checklistFullLoaded, statusManual: statusDipilihManualRef.current,
-  }), [formData, photoItems, assetVersion, checklistFullLoaded]);
-  const baseline = originalDataRef.current || emptyForm;
-  const draftDirty = photosModifiedRef.current || checklistModifiedRef.current
-    || Object.keys(emptyForm).some(k => !["photos", "document_checklist"].includes(k)
-      && formData[k] !== baseline[k]);
-  const draft = useDrafAset({ scope: draftScope, value: draftValue,
-    resetToken: `${isOpen}:${cameraSavedCount}`,
-    enabled: isOpen && !isFormLoading && (editAsset ? editId === editAsset.id : !editId),
-    dirty: draftDirty,
-    onRestore: saved => {
-      // Jangan menerapkan indeks foto/checklist dari versi server berbeda.
-      if (isEditing && saved.assetVersion !== assetVersion) {
-        toast.error("Versi aset sudah berubah. Unduh draf untuk meninjau isian dan foto sebelum menggabungkannya.");
-        return false;
-      }
-      originalDataRef.current = saved.original;
-      photosModifiedRef.current = saved.photosModified;
-      checklistModifiedRef.current = saved.checklistModified;
-      mediaLoadedRef.current = saved.mediaLoaded;
-      statusDipilihManualRef.current = saved.statusManual;
-      setChecklistFullLoaded(saved.checklistFullLoaded);
-      setFormData(saved.formData);
-      setPhotoItems(saved.photoItems);
-    },
-  });
-  const closeWithDraft = async () => {
-    if (isSubmitting) return;
-    try { if (draftDirty && draftScope) await draft.flush(); onClose?.(); }
-    catch { toast.error("Draf belum aman tersimpan. Biarkan formulir terbuka lalu coba lagi."); }
-  };
-  const downloadDraft = () => {
-    const data = draft.candidate?.value || draftValue;
-    const url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: "application/json" }));
-    const a = document.createElement("a"); a.href = url; a.download = "draf-aset.json";
-    a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
-
   const handleSubmit = useCallback(async e => {
     e.preventDefault();
-    if (draft.candidate) { toast.info("Pulihkan atau hapus draf sebelumnya sebelum menyimpan."); return; }
-    const clearSubmittedDraft = draft.clearCurrent();
     // Tangkap & bersihkan intent navigasi di awal agar tidak tersisa "basi"
     // saat submit gagal validasi (mis. tombol Kamera Penuh ditekan tanpa nama).
     const navIntent = navigationIntentRef.current;
     navigationIntentRef.current = null;
+    const kunciSubmit = kunciAktifRef.current;
 
     // Jangan submit saat aset yang sedang ditinjau BELUM selesai dimuat — kalau
     // dipaksa, jalur EDIT (butuh originalDataRef) belum siap dan bisa jatuh ke
@@ -1917,12 +2162,14 @@ const AssetForm = memo(({
       // Optimistic mode: pass payload to parent, close immediately
       if (onOptimisticSubmit || onSaveAndNavigate) {
         const navDirection = navIntent;
+        // Muatan kini dipegang antrean simpan persisten — draf tak diperlukan.
+        const sidikSubmit = sidikForm(formData, isEditing ? photoItemsRef.current : [], checklistModifiedRef.current);
+        const selesai = () => selesaikanDrafRef.current(kunciSubmit, sidikSubmit);
 
         // Kamera Penuh — simpan lalu SIAPKAN ASET BARU (tetap di kamera):
         // form direset ke aset baru (kategori dummy + NUP baru via effect).
         if (navDirection === "camera:new") {
-          if (onOptimisticSubmit) await onOptimisticSubmit(payload, isEditing, editId, usePatch);
-          await clearSubmittedDraft().catch(() => {});
+          if (onOptimisticSubmit) { await onOptimisticSubmit(payload, isEditing, editId, usePatch); await selesai(); }
           setCameraSavedCount(c => c + 1);
           if (isEditing) {
             // Sedang meninjau aset lama: minta induk melepas editAsset agar form
@@ -1938,15 +2185,15 @@ const AssetForm = memo(({
         }
         // Kamera Penuh — simpan lalu TINJAU aset tersimpan sebelumnya (edit).
         if (navDirection === "camera:review") {
-          if (onCameraReviewSaved) { await onCameraReviewSaved(payload, isEditing, editId, usePatch); await clearSubmittedDraft().catch(() => {}); setCameraSavedCount(c => c + 1); }
-          else if (onOptimisticSubmit) { await onOptimisticSubmit(payload, isEditing, editId, usePatch); await clearSubmittedDraft().catch(() => {}); resetForm(); onClose?.(); }
+          if (onCameraReviewSaved) { await onCameraReviewSaved(payload, isEditing, editId, usePatch); await selesai(); setCameraSavedCount(c => c + 1); }
+          else if (onOptimisticSubmit) { await onOptimisticSubmit(payload, isEditing, editId, usePatch); await selesai(); resetForm(); onClose?.(); }
           setIsSubmitting(false);
           return;
         }
 
         if (navDirection && onSaveAndNavigate) {
           await onSaveAndNavigate(payload, isEditing, editId, navDirection, usePatch);
-          await clearSubmittedDraft().catch(() => {});
+          await selesai();
           // Don't call resetForm() here — onSaveAndNavigate is async (awaits lockAsset),
           // so resetForm would clear the form BEFORE the next asset is set.
           // The useEffect will handle reset when editAsset changes to the next row.
@@ -1956,7 +2203,7 @@ const AssetForm = memo(({
 
         if (onOptimisticSubmit) {
           await onOptimisticSubmit(payload, isEditing, editId, usePatch);
-          await clearSubmittedDraft().catch(() => {});
+          await selesai();
           resetForm();
           onClose?.();
           setIsSubmitting(false);
@@ -1976,7 +2223,7 @@ const AssetForm = memo(({
         await axiosLargeUpload.post(`${API}/assets`, payload, { headers: getAuditHeaders() });
         toast.success("Aset ditambahkan");
       }
-      await clearSubmittedDraft().catch(() => {});
+      await selesaikanDrafRef.current(kunciSubmit, null);
       resetForm();
       onSubmitSuccess?.();
       onClose?.();
@@ -1988,7 +2235,7 @@ const AssetForm = memo(({
       else if (err.code === 'ECONNABORTED') errorMsg = "Koneksi timeout. Coba kurangi ukuran file.";
       toast.error(errorMsg);
     } finally { setIsSubmitting(false); }
-  }, [formData, isEditing, editId, assetVersion, isFormLoading, markerBusy, resetForm, onSubmitSuccess, onOptimisticSubmit, onSaveAndNavigate, onCameraReviewSaved, onExitToNewAsset, onClose, focusFieldError, draft]);
+  }, [formData, isEditing, editId, assetVersion, isFormLoading, markerBusy, resetForm, onSubmitSuccess, onOptimisticSubmit, onSaveAndNavigate, onCameraReviewSaved, onExitToNewAsset, onClose, focusFieldError]);
 
   // — Aksi alur beruntun Mode Kamera Penuh (semua lewat handleSubmit agar
   //   validasi + kompresi + payload tetap konsisten) —
@@ -2054,7 +2301,32 @@ const AssetForm = memo(({
 
   return (
     <>
-      {isOpen && !alwaysExpanded && <div className="fixed inset-0 bg-black/40 z-30 lg:hidden" onClick={closeWithDraft} />}
+      {isOpen && !alwaysExpanded && <div className="fixed inset-0 bg-black/40 z-30 lg:hidden" onClick={() => mintaKeluar(onClose)} />}
+
+      {konfirmasiKeluar && (
+        <KonfirmasiKeluarForm
+          ringkasan={teksPerubahan(ringkasan, 6)}
+          busy={isSubmitting || isFormLoading}
+          onLanjut={() => setKonfirmasiKeluar(null)}
+          onSimpan={() => { setKonfirmasiKeluar(null); handleSubmit({ preventDefault: () => {} }); }}
+          onKeluarDraf={(jangan) => {
+            if (jangan) setKeluarOtomatisSesiIni(true);
+            const { aksi } = konfirmasiKeluar;
+            setKonfirmasiKeluar(null);
+            keluarSimpanDraf(aksi);
+          }}
+          onBuang={async () => {
+            const { aksi } = konfirmasiKeluar;
+            const key = kunciAktifRef.current;
+            setKonfirmasiKeluar(null);
+            batalDrafTertunda();
+            drafSiapRef.current = null;
+            drafAdaRef.current = false;
+            try { await hapusDraf(key); aksi?.(); }
+            catch (error) { toast.error(error.message); }
+          }}
+        />
+      )}
 
       {/* Dialog pilihan saat Tambah Aset Baru di mode inventarisasi */}
       {cameraPromptOpen && createPortal(
@@ -2086,11 +2358,27 @@ const AssetForm = memo(({
         document.body
       )}
 
+      {isOpen && photoToView?.session === sesiAset && (
+        <PhotoPreview key={sesiAset} photos={photoSources} initialIndex={Math.max(0, photoSources.findIndex(p => p.key === photoToView.key))}
+          onClose={closePhotoPreview} onRequestDelete={requestPhotoDelete} busy={isSubmitting || isFormLoading} />
+      )}
+      {isOpen && photoToDelete?.session === sesiAset && (
+        <ConfirmPhotoDelete src={photoToDelete.src} busy={isSubmitting || isFormLoading}
+          description="Foto dikeluarkan dari isian ini. Perubahan diterapkan saat Anda menyimpan aset."
+          onCancel={() => setPhotoToDelete(null)} onConfirm={() => {
+            if (isSubmitting || isFormLoading || photoToDelete.session !== sesiAsetRef.current) return;
+            const index = photoSources.findIndex(p => p.key === photoToDelete.key);
+            if (index >= 0) removePhoto(index);
+            setPhotoToDelete(null);
+          }} />
+      )}
+
       {/* Mode Kamera Penuh ala Timemark */}
       {fullCameraOpen && (
         <FullCameraSheet
           formData={formData}
-          photos={isEditing ? photoItems.map(it => it.thumbnail) : formData.photos}
+          photos={photoSources.map(p => p.src)}
+          thumbnails={photoSources.map(p => p.thumbnail)}
           isEditing={isEditing}
           assetIndex={assetIndex}
           totalAssetsInView={totalAssetsInView}
@@ -2101,7 +2389,7 @@ const AssetForm = memo(({
           preparing={isFormLoading || isSubmitting || (!isEditing && !!formData.category && !formData.NUP)}
           onClose={closeFullCamera}
           onCapture={addCameraPhoto}
-          onRemovePhoto={index => removePhoto(index, true)}
+          onRemovePhoto={removePhoto}
           onSetField={cameraSetField}
           onGpsFix={handleCameraGpsFix}
           onSaveAndNew={cameraSaveAndNew}
@@ -2112,23 +2400,51 @@ const AssetForm = memo(({
           autoScan={cameraAutoScan}
         />
       )}
+      {ringkasan.fields.length > 0 && (
+        <style>{`${ringkasan.fields.map(k => `[data-asset-form] [name="${k}"]`).join(",")}{border-color:#f59e0b !important;box-shadow:inset 3px 0 0 #f59e0b !important}`}</style>
+      )}
       <aside
+        data-asset-form=""
         className={`${alwaysExpanded ? 'translate-x-0' : (isOpen ? "translate-x-0" : "-translate-x-full")} ${alwaysExpanded ? 'relative w-full' : 'fixed lg:relative inset-y-0 left-0 z-40 lg:z-auto w-[85vw] sm:w-80 xl:w-96'} bg-card border-r border-border transition-transform duration-300 print:hidden shadow-2xl lg:shadow-none flex flex-col overflow-hidden h-full`}
       >
         {/* Header */}
-        <div className={`p-3 border-b-2 flex justify-between items-center flex-shrink-0 ${isEditing ? "bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700" : "bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700"}`}>
-          <div className="flex items-center gap-2">
-            <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isEditing ? "bg-amber-500" : "bg-teal-700"}`}>
-              {isEditing ? <Edit3 className="w-3.5 h-3.5 text-white" /> : <Plus className="w-3.5 h-3.5 text-white" />}
-            </div>
-            <div>
-              <h2 className={`font-bold text-sm ${isEditing ? "text-amber-900 dark:text-amber-300" : "text-blue-900 dark:text-blue-300"}`}>
-                {isEditing ? "Edit Aset" : "Tambah Aset Baru"}
+        {/* Kepala RINGKAS satu baris: identitas aset (kode · NUP · nama) +
+            tombol aksi. Mode inventarisasi cepat tak lagi punya kepala
+            identitas kedua — semuanya di sini agar ruang isian maksimal. */}
+        <div className={`px-2 py-1 border-b-2 flex items-center gap-1.5 flex-shrink-0 ${isEditing ? "bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700" : "bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700"}`} data-testid="asset-form-header">
+          {/* Tanpa ikon persegi: warna kepala (kuning = edit, biru = baru)
+              sudah membedakan mode, dan lebarnya lebih berguna untuk kode aset. */}
+          <div className="min-w-0 flex-1 pl-1">
+            {isEditing ? (
+              <>
+                <h2 className="flex items-center gap-1 min-w-0 text-amber-900 dark:text-amber-300" title="Edit Aset">
+                  <span className="sr-only">Edit Aset </span>
+                  {ringkasan.dirty && (
+                    <span className="w-2 h-2 shrink-0 rounded-full bg-red-500 animate-pulse" title="Belum disimpan" data-testid="asset-form-dirty-badge">
+                      <span className="sr-only">Belum disimpan</span>
+                    </span>
+                  )}
+                  {/* Kode aset = identitas utama → tak pernah dipotong. */}
+                  <span className="font-mono font-bold text-sm whitespace-nowrap">{formData.asset_code || "—"}</span>
+                </h2>
+                <p className="flex items-center gap-1 min-w-0 text-[11px] leading-tight text-amber-800/80 dark:text-amber-300/80">
+                  {formData.NUP && <span className="shrink-0 rounded bg-amber-200/70 dark:bg-amber-800/50 px-1 text-[10px] font-semibold text-amber-900 dark:text-amber-200">NUP {formData.NUP}</span>}
+                  {sheetMode && assetIndex >= 0 && totalAssetsInView > 0 && (
+                    <span className="shrink-0 text-[10px] font-semibold tabular-nums" title="Urutan aset di daftar">{assetIndex + 1}/{totalAssetsInView}</span>
+                  )}
+                  <span className="truncate" data-testid="asset-form-header-nama">{formData.asset_name || "—"}</span>
+                </p>
+              </>
+            ) : (
+              <h2 className="flex items-center gap-1.5 font-bold text-sm text-blue-900 dark:text-blue-300 min-w-0">
+                {ringkasan.dirty
+                  ? <span className="w-2 h-2 shrink-0 rounded-full bg-red-500 animate-pulse" title="Belum disimpan" data-testid="asset-form-dirty-badge"><span className="sr-only">Belum disimpan</span></span>
+                  : <Plus className="w-4 h-4 shrink-0" />}
+                <span className="truncate">Tambah Aset Baru</span>
               </h2>
-              {isEditing && <p className="text-[10px] text-amber-600 dark:text-amber-400 truncate max-w-[160px]">{formData.asset_code}</p>}
-            </div>
+            )}
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5 shrink-0">
             {isEditing && onOpenKartu && (
               <Button
                 type="button" variant="ghost" size="sm"
@@ -2189,7 +2505,7 @@ const AssetForm = memo(({
                 <span className="hidden sm:inline">Denah</span>
               </Button>
             )}
-            {!alwaysExpanded && <Button variant="ghost" size="sm" className="lg:hidden h-7 w-7 p-0" onClick={closeWithDraft}><X className="w-4 h-4" /></Button>}
+            {!alwaysExpanded && <Button variant="ghost" size="sm" className="lg:hidden h-7 w-7 p-0" aria-label="Tutup form aset" data-testid="asset-form-close" onClick={() => mintaKeluar(onClose)}><X className="w-4 h-4" /></Button>}
           </div>
         </div>
 
@@ -2201,28 +2517,13 @@ const AssetForm = memo(({
             { key: "documents", label: "Dokumen", icon: ShieldCheck }
           ].map(t => (
             <button key={t.key} type="button" onClick={() => setFormSection(t.key)}
-              className={`flex-1 flex items-center justify-center gap-1 py-2 text-xs font-medium border-b-2 ${
+              className={`flex-1 flex items-center justify-center gap-1 py-1 text-xs font-medium border-b-2 ${
                 formSection === t.key ? 'border-teal-700 text-blue-700 bg-card' : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
               <t.icon className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t.label}</span>
             </button>
           ))}
-        </div>}
-
-        {draftScope && <div className="px-3 py-2 text-xs border-b" role="status" data-testid="asset-draft-status">
-          {draft.candidate ? <>
-            <p>Draf isian dan foto sebelumnya tersedia di perangkat ini.</p>
-            <button type="button" onClick={draft.restore} disabled={isFormLoading} className="mr-3 underline">Pulihkan draf</button>
-            <button type="button" onClick={downloadDraft} className="mr-3 underline">Unduh draf</button>
-            <button type="button" onClick={() => {
-              if (window.confirm("Hapus draf beserta foto yang belum dikirim?")) draft.clear().catch(() => toast.error("Draf gagal dihapus"));
-            }} className="underline">Hapus draf</button>
-          </> : draft.status === "error" ? <>
-            <p className="text-red-700">Draf belum tersimpan di perangkat. Jangan tutup halaman.</p>
-            <button type="button" onClick={() => draft.flush().catch(() => {})} className="mr-3 underline">Coba lagi</button>
-            <button type="button" onClick={downloadDraft} className="underline">Unduh draf</button>
-          </> : <span>{draft.status === "saved" ? "Draf tersimpan di perangkat · belum dikirim" : draft.status === "saving" ? "Menyimpan draf…" : "Isian dan foto disimpan otomatis sebagai draf"}</span>}
         </div>}
 
         {/* Loading Skeleton */}
@@ -2264,65 +2565,90 @@ const AssetForm = memo(({
           </div>
         )}
 
-        {/* Offline: form initialized from the cached list row */}
-        {!isFormLoading && isEditing && offlineNotice && (
-          <div className="mx-3 mt-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg px-2.5 py-1.5 flex items-start gap-1.5 flex-shrink-0" data-testid="offline-form-notice">
-            <CloudOff className="w-3.5 h-3.5 mt-0.5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
-            <p className="text-[11px] leading-snug text-amber-700 dark:text-amber-300">
-              Data dimuat dari cache offline — foto &amp; checklist penuh tidak tersedia sampai online. Perubahan tetap bisa disimpan dan akan disinkronkan otomatis.
-            </p>
-          </div>
-        )}
-
-        {/* Sinkronisasi SIMAN V2: aset ini berbeda dengan data SIMAN (valid).
-            Rincian + arah sinkron; tindakan "terapkan" ada di Pelaporan ›
-            Sinkronisasi SIMAN agar tidak bentrok dengan draft form ini. */}
-        {!isFormLoading && isEditing && editAsset?.siman?.status === "selisih" && (
-          <div className="mx-3 mt-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg px-2.5 py-1.5 flex-shrink-0" data-testid="siman-form-banner">
-            <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">
-              ≠ SIMAN — {(editAsset.siman.selisih || []).length} field berbeda dengan data SIMAN V2
-            </p>
-            <ul className="mt-0.5 space-y-0.5">
-              {(editAsset.siman.selisih || []).slice(0, 6).map((s) => (
-                <li key={s.field} className="text-[10px] leading-snug text-amber-700/90 dark:text-amber-300/90">
-                  {s.label}: <span className="line-through opacity-70">{s.aman || "(kosong)"}</span> → <b>{s.siman || "(kosong)"}</b>
-                </li>
-              ))}
-              {(editAsset.siman.selisih || []).length > 6 && (
-                <li className="text-[10px] text-amber-700/70 dark:text-amber-300/70">… dan {(editAsset.siman.selisih || []).length - 6} field lain</li>
-              )}
-            </ul>
-            <p className="text-[10px] mt-1 text-amber-700/80 dark:text-amber-300/80">
-              Sinkronkan lewat menu <b>Pelaporan › Sinkronisasi SIMAN V2</b> (nilai SIMAN = data valid), atau perbaiki manual di form ini.
-            </p>
-          </div>
-        )}
-        {!isFormLoading && isEditing && editAsset?.siman?.status === "tidak_di_siman" && (
-          <div className="mx-3 mt-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg px-2.5 py-1.5 flex-shrink-0" data-testid="siman-form-banner-hilang">
-            <p className="text-[11px] font-semibold text-red-700 dark:text-red-300">
-              Tidak ditemukan di SIMAN V2 (impor {String(editAsset.siman.diperiksa_pada || "").slice(0, 10)})
-            </p>
-            <p className="text-[10px] mt-0.5 text-red-700/80 dark:text-red-300/80">
-              Periksa: aset belum tercatat di SIMAN, sudah dihapuskan, atau kode barang/NUP-nya berubah (reklasifikasi).
-            </p>
-          </div>
-        )}
+        {/* Status ringkas SATU baris (draf belum disimpan, cache luring,
+            selisih/absen SIMAN) — rincian dibuka dengan satu ketuk. */}
+        {!isFormLoading && <StripStatusForm key={editAsset?.id || "baru"} items={[
+          ringkasan.dirty && {
+            key: "draf", nada: "amber", utama: true, testId: "draf-banner",
+            buka: !!drafInfo?.versiBerubah,
+            ringkas: `Belum disimpan${drafInfo ? " (draf dipulihkan)" : ""}: ${teksPerubahan(ringkasan, 3)}`,
+            rinci: (
+              <div className="text-[11px] leading-snug text-amber-800 dark:text-amber-200" data-testid="draf-rinci">
+                <p><b>Belum disimpan</b>{drafInfo ? ` · draf dipulihkan (${new Date(drafInfo.updatedAt).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })})` : ""}: {teksPerubahan(ringkasan, 20)}.</p>
+                <p className="text-[10px] opacity-90">Tersimpan otomatis sebagai draf di perangkat ini — tekan Simpan/Update untuk mengirim ke server.</p>
+                {drafInfo?.versiBerubah && (
+                  <p className="text-[10px] text-red-700 dark:text-red-300 mt-0.5" data-testid="draf-banner-versi">
+                    Data server berubah sejak draf dibuat{drafInfo.bentrok?.length ? ` (juga diubah di server: ${drafInfo.bentrok.map(labelField).join(", ")})` : ""}; susunan foto lama tidak diubah. Periksa sebelum menyimpan.
+                  </p>
+                )}
+                <button type="button" onClick={unduhCadanganDraf} className="text-xs underline mr-3" data-testid="draft-download">Unduh cadangan isian</button>
+                <button type="button" data-testid="draf-banner-buang"
+                  onClick={() => { if (yakinBuangBanner) buangDrafBanner(); else setYakinBuangBanner(true); }}
+                  className="inline-flex items-center text-[11px] font-medium underline text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
+                  {yakinBuangBanner ? "Ketuk lagi untuk membuang perubahan" : "Buang perubahan"}
+                </button>
+              </div>
+            ),
+          },
+          isEditing && offlineNotice && {
+            key: "luring", nada: "amber", testId: "offline-form-notice", ringkas: "Luring",
+            rinci: (
+              <p className="flex items-start gap-1.5 text-[11px] leading-snug text-amber-700 dark:text-amber-300">
+                <CloudOff className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                Data dimuat dari cache offline — foto &amp; checklist penuh tidak tersedia sampai online. Perubahan tetap bisa disimpan dan akan disinkronkan otomatis.
+              </p>
+            ),
+          },
+          /* Sinkronisasi SIMAN V2: rincian + arah sinkron; tindakan "terapkan"
+             ada di Pelaporan › Sinkronisasi SIMAN agar tak bentrok dgn draf. */
+          isEditing && editAsset?.siman?.status === "selisih" && {
+            key: "siman", nada: "amber", testId: "siman-form-banner",
+            ringkas: `≠ SIMAN ${(editAsset.siman.selisih || []).length}`,
+            rinci: (
+              <div className="text-amber-700 dark:text-amber-300">
+                <p className="text-[11px] font-semibold">≠ SIMAN — {(editAsset.siman.selisih || []).length} field berbeda dengan data SIMAN V2</p>
+                <ul className="mt-0.5 space-y-0.5">
+                  {(editAsset.siman.selisih || []).slice(0, 6).map((sel) => (
+                    <li key={sel.field} className="text-[10px] leading-snug opacity-90">
+                      {sel.label}: <span className="line-through opacity-70">{sel.aman || "(kosong)"}</span> → <b>{sel.siman || "(kosong)"}</b>
+                    </li>
+                  ))}
+                  {(editAsset.siman.selisih || []).length > 6 && (
+                    <li className="text-[10px] opacity-70">… dan {(editAsset.siman.selisih || []).length - 6} field lain</li>
+                  )}
+                </ul>
+                <p className="text-[10px] mt-1 opacity-80">
+                  Sinkronkan lewat menu <b>Pelaporan › Sinkronisasi SIMAN V2</b> (nilai SIMAN = data valid), atau perbaiki manual di form ini.
+                </p>
+              </div>
+            ),
+          },
+          isEditing && editAsset?.siman?.status === "tidak_di_siman" && {
+            key: "siman-hilang", nada: "red", testId: "siman-form-banner-hilang", ringkas: "Tak di SIMAN",
+            rinci: (
+              <div className="text-red-700 dark:text-red-300">
+                <p className="text-[11px] font-semibold">Tidak ditemukan di SIMAN V2 (impor {String(editAsset.siman.diperiksa_pada || "").slice(0, 10)})</p>
+                <p className="text-[10px] mt-0.5 opacity-80">Periksa: aset belum tercatat di SIMAN, sudah dihapuskan, atau kode barang/NUP-nya berubah (reklasifikasi).</p>
+              </div>
+            ),
+          },
+        ].filter(Boolean)} />}
 
         {/* Mode inventarisasi lapangan — sheet eksklusif menggantikan body form.
             Dirender di dalam <form onSubmit={handleSubmit}> agar tombol submit
             sheet memakai jalur simpan/validasi yang sama persis. */}
         {!isFormLoading && sheetMode && (
           <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden min-h-0">
-            <fieldset disabled={!!draft.candidate} className="contents">
+          <fieldset disabled={isSubmitting} className="contents">
             <InventoryFieldSheet
               formData={formData}
               photoItems={photoItems}
               photoCount={currentPhotoCount}
+              onOpenPhoto={index => setPhotoToView({ key: photoSources[index]?.key, session: sesiAset })}
+              onRemovePhoto={requestPhotoDelete}
               isSubmitting={isSubmitting}
               gpsLoading={gpsLoading}
               lastCtx={lastCtx}
-              assetIndex={assetIndex}
-              totalAssetsInView={totalAssetsInView}
               canSaveNext={canSaveNext}
               onInputChange={handleInputChange}
               onInventoryStatusChange={handleInventoryStatusChange}
@@ -2341,16 +2667,18 @@ const AssetForm = memo(({
               onApplyLastCtx={applyLastCtx}
               onQueueNextIntent={queueNextIntent}
               onShowFullForm={() => setShowFullForm(true)}
+              onClose={() => mintaKeluar(() => { resetForm(); onClose?.(); })}
             />
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageChange} className="hidden" />
             <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageChange} className="hidden" />
-          </fieldset></form>
+          </fieldset>
+          </form>
         )}
 
         {/* Form */}
         {!isFormLoading && !sheetMode && <div ref={formScrollRef} className="flex-1 overflow-y-auto">
-          <form onSubmit={handleSubmit} className="p-3">
-            <fieldset disabled={!!draft.candidate} className="space-y-2.5 min-w-0">
+          <form onSubmit={handleSubmit} className="p-3 space-y-2.5">
+          <fieldset disabled={isSubmitting} className="contents">
             {/* Mode inventarisasi: kembali ke tampilan cepat dari form lengkap */}
             {inventoryMode && isEditing && showFullForm && (
               <button
@@ -3004,7 +3332,8 @@ const AssetForm = memo(({
                     photoItems.map((item, i) => (
                       <div key={i} className="relative group">
                         <img src={item.thumbnail} alt="" loading="lazy" className={`w-14 h-14 object-cover rounded cursor-pointer border-2 bg-muted ${indeksFinal(i) === formData.thumbnail_index ? 'border-blue-500' : indeksFinal(i) === formData.stiker_photo_index ? 'border-emerald-500' : 'border-border'}`} onClick={() => setFormData(prev => ({ ...prev, thumbnail_index: indeksFinal(i) }))} data-testid={`photo-thumb-${i}`} />
-                        <button type="button" onClick={() => removePhoto(i)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 min-w-0 min-h-0 flex items-center justify-center opacity-0 group-hover:opacity-100" title="Hapus foto" aria-label="Hapus foto"><X className="w-3 h-3" /></button>
+                        <button type="button" onClick={() => requestPhotoDelete(i)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 min-w-0 min-h-0 flex items-center justify-center opacity-0 group-hover:opacity-100" title="Hapus foto" aria-label="Hapus foto"><X className="w-3 h-3" /></button>
+                        {item.type === 'new' && <div className="absolute -top-1 -left-1 bg-amber-500 text-white text-[8px] px-1 rounded" title="Foto baru — belum disimpan" data-testid={`photo-new-${i}`}>Baru</div>}
                         {indeksFinal(i) === formData.thumbnail_index && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-blue-500 text-white text-[8px] px-1 rounded">Cover</div>}
                         {indeksFinal(i) === formData.stiker_photo_index && indeksFinal(i) !== formData.thumbnail_index && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[8px] px-1 rounded">Stiker</div>}
                       </div>
@@ -3014,24 +3343,17 @@ const AssetForm = memo(({
                     formData.photos.map((p, i) => (
                       <div key={i} className="relative group">
                         <img src={p} alt="" className={`w-14 h-14 object-cover rounded cursor-pointer border-2 ${i === formData.thumbnail_index ? 'border-blue-500' : i === formData.stiker_photo_index ? 'border-emerald-500' : 'border-border'}`} onClick={() => setFormData(prev => ({ ...prev, thumbnail_index: i }))} />
-                        <button type="button" onClick={() => removePhoto(i)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 min-w-0 min-h-0 flex items-center justify-center opacity-0 group-hover:opacity-100" title="Hapus foto" aria-label="Hapus foto"><X className="w-3 h-3" /></button>
+                        <button type="button" onClick={() => requestPhotoDelete(i)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 min-w-0 min-h-0 flex items-center justify-center opacity-0 group-hover:opacity-100" title="Hapus foto" aria-label="Hapus foto"><X className="w-3 h-3" /></button>
                         {i === formData.thumbnail_index && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-blue-500 text-white text-[8px] px-1 rounded">Cover</div>}
                         {i === formData.stiker_photo_index && i !== formData.thumbnail_index && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[8px] px-1 rounded">Stiker</div>}
                       </div>
                     ))
                   )}
-                  {currentPhotoCount < 6 && (<>
-                    <button type="button" onClick={() => fileInputRef.current?.click()} className="w-14 h-14 border-2 border-dashed border-border rounded flex flex-col items-center justify-center hover:border-blue-400 gap-0.5" title="Pilih File">
-                      <Plus className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-[7px] text-muted-foreground">File</span>
-                    </button>
-                    <button type="button" onClick={() => cameraInputRef.current?.click()} className="w-14 h-14 border-2 border-dashed border-blue-300 dark:border-teal-700 rounded flex flex-col items-center justify-center hover:border-blue-500 bg-blue-50/50 dark:bg-blue-900/30 gap-0.5" title="Ambil Foto" data-testid="camera-capture-btn">
-                      <Camera className="w-4 h-4 text-blue-500 dark:text-blue-400" />
-                      <span className="text-[7px] text-blue-500 dark:text-blue-400">Kamera</span>
-                    </button>
-                    <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageChange} className="hidden" />
-                    <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageChange} className="hidden" />
-                  </>)}
+                  <PhotoInputTiles full={currentPhotoCount >= 6} disabled={isSubmitting || isFormLoading}
+                    onGallery={openGallery} onCamera={openCamera} onTimemark={openFullCamera}
+                    onScan={isEditing && inventoryMode ? openFullCameraScan : undefined} />
+                  <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageChange} className="hidden" />
+                  <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageChange} className="hidden" />
                 </div>
               </div>
               <div className="space-y-1"><Label className="text-xs">Catatan</Label><Input name="notes" value={formData.notes} onChange={handleInputChange} className="h-8" /></div>
@@ -3108,10 +3430,11 @@ const AssetForm = memo(({
                     </span>
                   )}
                 </Button>
-                {isEditing && <Button type="button" variant="outline" onClick={closeWithDraft} className="border-amber-300 text-amber-700" disabled={isSubmitting}><X className="w-4 h-4" />Tutup</Button>}
+                {isEditing && <Button type="button" variant="outline" onClick={() => mintaKeluar(() => { resetForm(); onClose?.(); })} className="border-amber-300 text-amber-700" disabled={isSubmitting}><X className="w-4 h-4" />Tutup</Button>}
               </div>
             </div>
-          </fieldset></form>
+          </fieldset>
+          </form>
         </div>}
       </aside>
       {/* Tap kartu e-KTP → pegawai dikenali → isi pengguna barang */}

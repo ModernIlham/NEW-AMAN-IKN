@@ -18,6 +18,45 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1114] Kepala form edit aset ringkas di semua mode — 2026-11-09
+
+- Kepala form jadi satu blok rapat: **kode aset** (tak pernah dipotong) di baris
+  pertama, lalu NUP · urutan (mode inventarisasi cepat) · nama aset di baris
+  kedua; ikon persegi "Edit Aset" dihapus (warna kepala kuning/biru sudah
+  membedakan edit vs baru). Titik merah = ada perubahan belum disimpan.
+- Kepala identitas kedua di mode inventarisasi cepat dihapus (dulu kode/NUP/
+  nama tampil dua kali).
+- Banner draf belum disimpan, cache luring, selisih SIMAN, dan "tak di SIMAN"
+  digabung menjadi **satu baris status berpil** yang bisa dibuka untuk rincian
+  (tombol "Buang perubahan" ada di rincian). Peringatan kritis (data server
+  berubah sejak draf) tetap terbuka otomatis. Tab form lengkap dirapatkan.
+- Hasil: ruang di atas isian pertama turun dari ±400 px menjadi ±96 px
+  (inventarisasi cepat) / ±140 px (form lengkap) pada HP; tap-target 44 px tetap.
+
+## [#1113] Draf otomatis form aset & foto — perubahan tak hilang saat Back/tutup — 2026-11-09
+
+- Isian form aset dan foto baru (galeri, kamera biasa, Mode Kamera Penuh)
+  tersimpan otomatis sebagai **draf di IndexedDB perangkat** (debounce 0,7 dtk,
+  ditulis seketika saat halaman disembunyikan/ditutup). Back HP, ketuk latar,
+  tombol Tutup, pindah baris di desktop, reload, atau tab di-kill Android tidak
+  lagi menghilangkan data. Draf dipulihkan otomatis saat aset yang sama (atau
+  form aset baru) dibuka lagi; dihapus begitu disimpan ke antrean/server.
+- **Pembeda belum disimpan:** lencana "Belum disimpan" di kepala form, banner
+  berisi daftar field yang berubah + jumlah foto baru/dihapus, sorotan kuning
+  pada input yang berubah, tanda "Baru" pada foto yang belum tersimpan, dan
+  chip **Draf** pada baris tabel, kartu HP, dan kartu galeri.
+- **Dialog keluar hanya bila perlu:** muncul HANYA jika ada perubahan bermakna;
+  isian otomatis (GPS pinjaman, garansi riwayat, kategori+NUP dummy) tidak
+  memicunya. Pilihan: Simpan Sekarang · Keluar, Simpan sebagai Draf · Lanjut
+  Edit · Buang Perubahan (dua ketuk). Back HP saat dialog terbuka = Lanjut Edit.
+  Opsi "Jangan tanya lagi selama sesi ini" (sessionStorage) agar dialog tak
+  mengganggu ritme lapangan. Dialog bawaan peramban (beforeunload) hanya bila
+  draf gagal disimpan (mis. penyimpanan penuh).
+- Pemulihan aman terhadap perubahan server: hanya field yang diubah pengguna
+  yang ditimpakan; bila versi aset berubah sejak draf dibuat, penghapusan foto
+  lama & pilihan sampul tidak diterapkan dan field yang juga diubah di server
+  ditampilkan. Draf per pengguna + kegiatan + aset, kedaluwarsa 14 hari.
+
 ## [#1104] Ringkasan hasil ubah massal dapat ditutup — 2026-10-26
 
 - Hasil final memiliki tombol tutup; hasil seluruhnya berhasil/sudah sesuai

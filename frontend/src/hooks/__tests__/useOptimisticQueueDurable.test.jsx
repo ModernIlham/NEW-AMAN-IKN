@@ -54,3 +54,14 @@ test("form yang menyimpan ulang sesudah disk gagal tidak meninggalkan percobaan 
   expect(p.result.current.getPendingItems()[0].payload.photos).toEqual(["foto"]);
   online.mockRestore();
 });
+
+test("kuota penuh memberi peringatan menetap dan callback, tanpa mengirim foto ke server", async () => {
+  const { toast } = require("sonner");
+  appendOperation.mockRejectedValue(new DOMException("storage full", "QuotaExceededError"));
+  const onKuotaPenuh = jest.fn();
+  const p = renderHook(() => useOptimisticQueue({ onKuotaPenuh }));
+  await act(async () => { await p.result.current.enqueue(item).persisted.catch(() => {}); });
+  expect(onKuotaPenuh).toHaveBeenCalledTimes(1);
+  expect(toast.error).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ duration: Infinity }));
+  expect(axios.upload.post).not.toHaveBeenCalled();
+});

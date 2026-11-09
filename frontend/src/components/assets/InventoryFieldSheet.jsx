@@ -1,8 +1,10 @@
 import React, { useState } from "react";
 import {
-  Check, Camera, Images, MapPin, LocateFixed, RefreshCw, Loader2, Copy,
-  ChevronDown, ArrowRight, ScanLine, Sparkles,
+  Check, MapPin, LocateFixed, RefreshCw, Loader2, Copy,
+  ChevronDown, ArrowRight, Sparkles, X,
 } from "lucide-react";
+import PhotoInputTiles from "./PhotoInputTiles";
+import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
@@ -140,8 +142,6 @@ const InventoryFieldSheet = ({
   isSubmitting,
   gpsLoading,
   lastCtx,
-  assetIndex = -1,
-  totalAssetsInView = 0,
   canSaveNext = false,
   onInputChange,
   onInventoryStatusChange,
@@ -152,6 +152,8 @@ const InventoryFieldSheet = ({
   onStikerUkuranChange,
   onPenggunaMelekatChange,
   onOperasionalJenisChange,
+  onOpenPhoto,
+  onRemovePhoto,
   onOpenCamera,
   onOpenFullCamera,
   onOpenFullCameraScan,
@@ -160,6 +162,7 @@ const InventoryFieldSheet = ({
   onApplyLastCtx,
   onQueueNextIntent,
   onShowFullForm,
+  onClose,
 }) => {
   const [notesOpen, setNotesOpen] = useState(false);
   // Auto-inventaris: bila ada foto + koordinat & status masih default, saat
@@ -183,26 +186,8 @@ const InventoryFieldSheet = ({
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="inventory-field-sheet">
       {/* Area gulir */}
       <div className="flex-1 overflow-y-auto">
-        {/* 1. Header identitas aset (read-only, sticky) */}
-        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b border-border px-3 py-2 flex items-center gap-2">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="font-mono font-bold text-sm truncate">{formData.asset_code || "—"}</span>
-              {formData.NUP && (
-                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground flex-shrink-0">
-                  NUP {formData.NUP}
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground truncate">{formData.asset_name || "—"}</p>
-          </div>
-          {assetIndex >= 0 && totalAssetsInView > 0 && (
-            <span className="flex-shrink-0 rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground tabular-nums">
-              {assetIndex + 1}/{totalAssetsInView}
-            </span>
-          )}
-        </div>
-
+        {/* Identitas aset (kode · NUP · nama · urutan) tampil di kepala form
+            AssetForm — tidak diulang di sini agar ruang isian maksimal. */}
         <div className="p-3 space-y-3">
           {/* Card 1 — Status Inventarisasi */}
           <Card testId="sheet-card-status">
@@ -405,60 +390,19 @@ const InventoryFieldSheet = ({
                 </span>
               }
             />
-            {photoItems.length > 0 && (
-              <div className="flex gap-1.5 overflow-x-auto pb-2 mb-1">
-                {photoItems.map((item, i) => (
-                  <img
-                    key={i}
-                    src={item.thumbnail}
-                    alt={`Foto ${i + 1}`}
-                    loading="lazy"
-                    className="w-14 h-14 flex-shrink-0 object-cover rounded-lg border border-border bg-muted"
-                    data-testid={`sheet-photo-thumb-${i}`}
-                  />
-                ))}
-              </div>
-            )}
-            {onOpenFullCamera && (
-              <button
-                type="button"
-                onClick={onOpenFullCamera}
-                disabled={photoCount >= 6}
-                data-testid="sheet-full-camera-btn"
-                className="w-full h-11 mb-2 rounded-lg bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:pointer-events-none"
-              >
-                <Camera className="w-4 h-4" />Mode Kamera Penuh (Jam + GPS Live)
-              </button>
-            )}
-            {onOpenFullCameraScan && typeof window !== "undefined" && "BarcodeDetector" in window && (
-              <button
-                type="button"
-                onClick={onOpenFullCameraScan}
-                data-testid="sheet-full-camera-scan-btn"
-                className="w-full h-11 mb-2 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
-              >
-                <ScanLine className="w-4 h-4" />Kamera + Scan QR (edit cepat antar-aset)
-              </button>
-            )}
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={onOpenCamera}
-                disabled={photoCount >= 6}
-                data-testid="sheet-camera-btn"
-                className="h-11 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:pointer-events-none"
-              >
-                <Camera className="w-4 h-4" />Kamera
-              </button>
-              <button
-                type="button"
-                onClick={onOpenGallery}
-                disabled={photoCount >= 6}
-                data-testid="sheet-gallery-btn"
-                className="h-11 rounded-lg border border-border bg-background text-foreground/80 hover:bg-accent text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:pointer-events-none"
-              >
-                <Images className="w-4 h-4" />Galeri
-              </button>
+            <div className="flex flex-wrap gap-2" data-testid="sheet-photo-strip">
+              {photoItems.map((item, i) => <div key={i} className="relative w-14 h-14 shrink-0">
+                <button type="button" onClick={() => onOpenPhoto(i)} aria-label={`Lihat foto ${i + 1}`} className="w-14 h-14 rounded-lg overflow-hidden border border-border">
+                  <img src={item.thumbnail} alt={`Foto ${i + 1}`} loading="lazy" className="w-full h-full object-cover bg-muted" data-testid={`sheet-photo-thumb-${i}`} />
+                </button>
+                {item.type === "new" && <span className="absolute -top-1 -left-1 bg-amber-500 text-white text-[8px] px-1 rounded pointer-events-none" title="Foto baru — belum disimpan" data-testid={`sheet-photo-new-${i}`}>Baru</span>}
+                <button type="button" onClick={() => onRemovePhoto(i)} disabled={isSubmitting} aria-label={`Hapus foto ${i + 1}`}
+                  data-testid={`sheet-photo-remove-${i}`} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 min-w-0 min-h-0 flex items-center justify-center" title="Hapus foto">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>)}
+              <PhotoInputTiles full={photoCount >= 6} disabled={isSubmitting} prefix="sheet"
+                onCamera={onOpenCamera} onGallery={onOpenGallery} onTimemark={onOpenFullCamera} onScan={onOpenFullCameraScan} />
             </div>
           </Card>
 
@@ -625,12 +569,13 @@ const InventoryFieldSheet = ({
 
       {/* Footer sticky — jalur submit sama persis dengan form penuh */}
       <div className="flex-shrink-0 border-t border-border bg-background/95 backdrop-blur p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] space-y-2">
-        <button
+        <div className="flex gap-2 items-stretch" data-testid="sheet-primary-actions">
+        <Button
           type="submit"
           onClick={onQueueNextIntent}
           disabled={isSubmitting}
           data-testid="sheet-submit-next"
-          className="w-full h-12 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-60 disabled:pointer-events-none"
+          className="flex-1 h-9 min-w-0 text-xs px-2 gap-1 bg-teal-700 hover:bg-teal-800 text-white disabled:opacity-60"
         >
           {isSubmitting ? (
             <><Loader2 className="w-4 h-4 animate-spin" />Menyimpan...</>
@@ -639,7 +584,12 @@ const InventoryFieldSheet = ({
           ) : (
             <>Simpan</>
           )}
-        </button>
+        </Button>
+        <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}
+          className="h-9 shrink-0 border-amber-300 text-amber-700" data-testid="sheet-close">
+          <X className="w-4 h-4" />Tutup
+        </Button>
+        </div>
         <div className="grid grid-cols-2 gap-2">
           {canSaveNext && (
             <button

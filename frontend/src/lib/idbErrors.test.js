@@ -70,24 +70,7 @@ describe("keputusanGagalTulisAntrean", () => {
 describe("keputusannya benar-benar tersambung ke kode produksi", () => {
   const baca = (rel) => fs.readFileSync(path.join(__dirname, "..", rel), "utf8");
 
-  test("persistQueueItem memanggil keputusanGagalTulisAntrean, bukan catch kosong", () => {
-    const src = baca("hooks/useOptimisticQueue.js");
-    const badan = src.slice(src.indexOf("async function persistQueueItem"));
-    const catchPertama = badan.slice(badan.indexOf("catch"), badan.indexOf("catch") + 700);
-    expect(catchPertama).toMatch(/keputusanGagalTulisAntrean/);
-    expect(catchPertama).toMatch(/onKuotaPenuh/);
-    expect(src).toMatch(/import \{ keputusanGagalTulisAntrean \} from "\.\.\/lib\/idbErrors"/);
-  });
-
-  test("SEMUA pemanggilan persistQueueItem membawa pelapornya", () => {
-    // Satu titik panggil yang terlewat = satu jalur simpan yang tetap bisu.
-    const src = baca("hooks/useOptimisticQueue.js");
-    const panggilan = src.match(/persistQueueItem\([^)]*\)/g)
-      .filter((p) => !p.startsWith("persistQueueItem(item, statusKey, onKuotaPenuh"));
-    expect(panggilan.length).toBeGreaterThanOrEqual(4);
-    for (const p of panggilan) expect(p).toMatch(/laporKuotaPenuh/);
-  });
-
+  // Runtime reporting/durability is covered in useOptimisticQueueDurable.test.jsx.
   test("DashboardPage menampilkan peringatan MENETAP (duration: 0)", () => {
     const src = baca("pages/DashboardPage.jsx");
     const i = src.indexOf("onKuotaPenuh:");

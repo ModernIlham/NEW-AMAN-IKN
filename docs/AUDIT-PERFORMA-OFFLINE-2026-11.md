@@ -7,11 +7,37 @@ Kode backend daftar/snapshot dan observabilitas juga ditinjau. Pengukuran memaka
 Chromium lokal dengan data sintetis, bukan pengukuran produksi atau seluruh
 rute bisnis. Tidak ada pengiriman data/tes beban ke server produksi.
 
+## Integrasi dengan produksi terbaru
+
+Merge diselaraskan dengan `main` **57e734165fd56f8c5b2d9f862ddf2ed9d21d7a75**
+(PR #1102–#1105), yang sudah terdeploy. Implementasi akhir mempertahankan
+pratinjau foto, konfirmasi hapus, kepala form ringkas, chip draf, dan dialog
+keluar dari rilis tersebut.
+
+Draf memakai database produksi **aman_draf_aset**, store **draf**, serta kunci
+`pengguna|kegiatan|aset` yang sama. Rekaman lama tanpa `revision` dibaca sebagai
+revisi 0, lalu dinaikkan pada commit. Tidak ada migrasi ke database draf baru.
+Pemulihan otomatis, format foto/checklist dan TTL 14 hari mengikuti rilis
+produksi. Hook/vault draf eksperimental tahap awal telah digantikan; bukti
+pengujiannya di bawah tetap merupakan catatan historis, bukan format aktif.
+
+Tambahan perlindungan pada alur produksi: keluar menunggu commit lokal dan
+tertahan bila disk gagal, isian menunggu receipt antrean sebelum direset, tulisan
+per kunci diserialkan, serta compare-and-swap menolak tulis/hapus dari revisi
+usang. Cadangan JSON dapat diunduh dari rincian draf. Kontrak penyimpanan lama,
+UI foto terbaru, dan ringkasan kepala form diuji kembali bersama perubahan ini.
+Validasi hasil gabungan: **2.493 tes pada 239 suite frontend lulus**; seluruh
+lint tidak memiliki error. API `/api/health` dan `/aman-release.json` produksi
+sama-sama melaporkan SHA dasar di atas sebelum rilis ini.
+Tab versi lama tetap perlu ditutup sebelum upgrade outbox; kode lama belum
+memeriksa revisi sehingga koordinasi penuh selama dua versi aktif bersamaan
+belum dijamin.
+
 ## Temuan dan tindakan
 
 | Prioritas | Temuan dan akibat | Tindakan/status |
 | --- | --- | --- |
-| P1 | `AssetForm.jsx` menyimpan isian/foto belum dikirim dalam state; tombol Tutup mereset isian, sedangkan Back dapat menutup panel atau mengganti aset. | **Diperbaiki:** draf IndexedDB dengan debounce 300 ms, flush saat keluar/halaman tersembunyi, pemulihan eksplisit, tombol unduh cadangan. Tutup tidak lagi mereset sebelum draf tersimpan. Back menunggu commit lokal dan ditahan bila gagal. |
+| P1 | `AssetForm.jsx` menyimpan isian/foto belum dikirim dalam state; tombol Tutup mereset isian, sedangkan Back dapat menutup panel atau mengganti aset. | **Diperbaiki:** draf IndexedDB kompatibel produksi dengan debounce 300 ms, flush saat keluar/halaman tersembunyi, pemulihan otomatis sesuai rilis terbaru, tombol unduh cadangan. Tutup tidak lagi mereset sebelum draf tersimpan. Back menunggu commit lokal dan ditahan bila gagal. |
 | P1 | `useOptimisticQueue.js` menulis IndexedDB tanpa menunggu hasil, lalu langsung mengirim; induk menutup/reset form sebelum tahu data aman di perangkat. | **Diperbaiki:** receipt `persisted` terpisah dari respons server; request menunggu commit; form/alur kamera/peta menunggu receipt sebelum melanjutkan. Semua kegagalan penyimpanan memberi pesan, bukan hanya kuota. |
 | P1 | Pemeriksaan identitas simpanan lalu penghapusan antrean memakai operasi IDB terpisah; penulisan baru dapat masuk di antaranya. | **Diperbaiki dan diperkuat:** ack, penghapusan payload, dan pembaruan dependensi dalam satu transaksi readwrite yang memeriksa token lease. |
 | P1 | Respons health check lama dapat datang setelah event offline dan mengubah status menjadi online. Backend mati tanpa event jaringan juga tidak terdeteksi oleh hook. | **Diperbaiki:** nomor generasi membuang respons usang; probe awal dan berkala 10 detik saat antarmuka jaringan aktif. Penghapusan otomatis database antrean warisan saat mount dihilangkan agar audit tidak membuang pekerjaan lama. |
@@ -23,30 +49,25 @@ rute bisnis. Tidak ada pengiriman data/tes beban ke server produksi.
 | P2 | Snapshot baca berumur tujuh hari dan tidak menyimpan foto/dokumen penuh; portal mempunyai TTL sesi dan menghapus data kedaluwarsa sesuai kebijakan yang ada. | **Batas saat ini:** offline lama dan media penuh tidak dijamin. Pisahkan retensi bukti belum terkirim dari cache yang bisa dibangun kembali; tinjau kebijakan portal bersama pemilik alur sebelum mengubahnya. |
 | P2 | Edit massal memiliki checkpoint operasi, tetapi isian sebelum membuat operasi belum otomatis mendapat perlindungan draf form aset. | **Lanjutan:** perluas vault draf ke editor massal dan formulir lain dengan schema serta scope masing-masing; jangan menganggap satu hook sudah melindungi seluruh halaman. |
 
-## Perilaku draf yang diterapkan
+## Perilaku draf akhir
 
-- Draf terikat akun, satker aktif, kegiatan, serta ID aset/mode tambah baru.
-  Draf akun lain tidak ditawarkan melalui UI akun aktif. Ini isolasi aplikasi,
-  bukan enkripsi terhadap orang yang menguasai profil browser perangkat.
-- Foto baru, dokumen checklist, baseline edit, versi aset, dan penanda perubahan
-  disimpan bersama agar pemulihan tetap menghasilkan patch yang benar.
-- Pemulihan membutuhkan tindakan pengguna. Form menunggu pilihan pemulihan
-  ketika draf tersedia, sehingga isian lama tidak diam-diam menimpa isian baru.
-- Versi server berbeda menahan pemulihan edit yang membawa indeks foto lama.
-  Draf tetap bisa diunduh untuk peninjauan; penggabungan konflik media otomatis
-  belum diterapkan.
-- Revisi draf diperiksa dalam transaksi untuk mencegah dua penulis menimpa
-  draf satu sama lain. Penyelesaian penyimpanan aset lama hanya membersihkan
-  draf sesi lama, bukan draf aset berikutnya.
-- Meminta persistent storage sekali bila API tersedia. Persetujuan browser
-  tidak dijamin. Jangan mengandalkan IndexedDB sebagai satu-satunya backup.
-- Gagal tulis menampilkan peringatan menetap dan pilihan unduh JSON yang
-  menyertakan media. Draf terhapus setelah handoff ke antrean lokal berhasil,
-  respons simpan langsung berhasil, atau penghapusan eksplisit yang dikonfirmasi.
-- UI membedakan “draf tersimpan di perangkat” dari data terkirim. Browser Back
-  menunggu flush lokal; reload/penutupan tab yang masih memiliki pekerjaan
-  tertunda memakai beforeunload sebagai perlindungan tambahan. OS kill tetap
-  dapat menghilangkan ketikan terakhir sebelum transaksi selesai.
+- Draf tetap terikat pengguna, kegiatan dan ID aset/mode baru, menggunakan
+  database dan kunci yang sudah terdeploy. Ini isolasi aplikasi, bukan enkripsi
+  terhadap orang yang menguasai profil browser perangkat.
+- Foto baru, baseline edit, versi, susunan foto lama dan checklist disimpan
+  dalam schema produksi. Pemulihan otomatis mempertahankan perilaku yang
+  sudah dipakai; perubahan server pada field lain tetap terbawa. Versi berbeda
+  tidak menerapkan ulang penghapusan/indeks foto lama secara otomatis.
+- Revisi diperiksa dalam transaksi untuk menolak tab yang menulis/hapus dari
+  dasar usang. Autosave satu tab dan penghapusan draf menunggu urutan commit.
+  Penyelesaian simpan aset lama tidak membersihkan state draf aset berikutnya.
+- Keluar/Back melalui gerbang form menunggu commit lokal. Jika gagal, form
+  tetap terbuka dan cadangan JSON berisi media dapat diunduh. Form hanya direset
+  setelah parent membuktikan handoff ke outbox lokal atau server berhasil.
+- Persistent storage diminta sekali bila API tersedia. Persetujuan browser
+  tidak dijamin. OS kill sebelum commit masih dapat menghilangkan ketikan
+  terakhir; IndexedDB bukan pengganti backup server. TTL draf produksi tetap
+  14 hari dan perlu ditinjau tersendiri untuk kerja offline sangat panjang.
 
 ## Hasil pengukuran
 

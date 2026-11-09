@@ -74,6 +74,7 @@ import BatchOperationStatus from "@/components/assets/BatchOperationStatus";
 import { useMuatUlangManual } from "@/hooks/useMuatUlangManual";
 import { useDragDropImport } from "@/hooks/useDragDropImport";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { muatIndeksDraf } from "@/lib/drafAset";
 import { usePenyegaranAset } from "@/hooks/usePenyegaranAset";
 import { useRekonsiliasiBaris } from "@/hooks/useRekonsiliasiBaris";
 import { usePosisiDaftarAset } from "@/hooks/usePosisiDaftarAset";
@@ -235,6 +236,10 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
 
   // === FORM / EDIT STATE ===
   const [editAssetForForm, setEditAssetForForm] = useState(null);
+  // Gerbang keluar milik AssetForm (dialog "perubahan belum disimpan" / draf).
+  const formGuardRef = useRef(null);
+  // Indeks chip "Draf" (perubahan tersimpan di perangkat, belum dikirim).
+  useEffect(() => { muatIndeksDraf(user?.id); }, [user?.id]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [formPanelVisible, setFormPanelVisible] = useState(true);
   const [exporting, setExporting] = useState(false);
@@ -1081,7 +1086,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         // removed only via dismissSync → onItemDismissed.
       });
       try { await saving.persisted; } catch (error) {
-        if (!isEdit) dismissSync(assetId); // isian masih di form; hindari create ganda
+        saving.discardUncommitted(); // isian tetap di form; lepaskan hanya percobaan gagal commit
         throw error;
       }
       toast.info("Menyimpan di background...", { duration: 1200 });
@@ -1208,7 +1213,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       setEditAssetForForm(null);
       setIsSidebarOpen(false);
     }
-  }, [assets, mobileAssets, mobileCurrentPage, currentPage, totalPages, lockAsset, unlockAsset, enqueueOptimistic, dismissSync, rowLocks, sessionId, activity?.id, activity?.nama_kegiatan, setSearchInput]);
+  }, [assets, mobileAssets, mobileCurrentPage, currentPage, totalPages, lockAsset, unlockAsset, enqueueOptimistic, rowLocks, sessionId, activity?.id, activity?.nama_kegiatan, setSearchInput]);
 
   // Mode Kamera Penuh — "tinjau aset tersimpan": simpan aset saat ini lalu muat
   // aset yang tersimpan sebelumnya (paling atas daftar) ke form untuk ditinjau/
@@ -1232,7 +1237,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       const saving = enqueueOptimistic({ tempId: assetId, payload, isEdit, editId: isEdit ? editId : undefined, usePatch, baseVersion });
       saving.catch(() => {});
       try { await saving.persisted; } catch (error) {
-        if (!isEdit) dismissSync(assetId); // isian masih di form; hindari create ganda
+        saving.discardUncommitted(); // isian tetap di form; lepaskan hanya percobaan gagal commit
         throw error;
       }
     }
@@ -1252,7 +1257,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     const locked = await lockAsset(target.id);
     if (locked) setEditAssetForForm(target);
     else toast.error("Aset sedang dikunci pengguna lain");
-  }, [assets, lockAsset, enqueueOptimistic, dismissSync, rowLocks, sessionId, syncStatuses]);
+  }, [assets, lockAsset, enqueueOptimistic, rowLocks, sessionId, syncStatuses]);
 
   const handleDelete = useCallback(async id => {
     // Aset yang BELUM tersinkron (id "temp_") → batalkan dari antrean simpan.
@@ -1510,11 +1515,14 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     if (selectedAssets.size > 0) { clearSelection(); return; }
     // Form edit versi mobile adalah overlay (di desktop selalu tampil) — tutup
     // hanya di layar kecil agar tidak mengganggu panel desktop.
+    // Ada perubahan belum disimpan → gerbang form (dialog/draf) yang memutuskan.
+    const lewatGerbangForm = (aksi) => (formGuardRef.current ? formGuardRef.current(aksi) : aksi());
     if (isSidebarOpen && typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) {
-      handleFormClose(); return;
+      lewatGerbangForm(handleFormClose); return;
     }
     if (showAdvancedFilter) { setShowAdvancedFilter(false); return; }
-    onBack();
+    // Desktop: panel form selalu tampil — keluar ke daftar kegiatan juga lewat gerbang.
+    lewatGerbangForm(onBack);
   }, [kartuIdentity, dialogs, auditOpen, selectedAssets, isSidebarOpen, showAdvancedFilter, closeDialog, setDialog, clearSelection, handleFormClose, setShowAdvancedFilter, onBack]);
   useBackGuard(handleAppBack);
 
@@ -1582,7 +1590,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
 
         {/* Satu form persisten: draf, tab, media, dan fokus mengikuti resize. */}
         {perms.canEdit && (
-            <AssetFormSidebar isDesktop={desktopSelection} panelVisible={formPanelVisible} isOpen={isSidebarOpen} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} onCameraReviewSaved={handleCameraReviewSaved} onExitToNewAsset={() => setEditAssetForForm(null)} assetIndex={editAssetIndex} totalAssetsInView={mobileAssets.length} hasMoreToLoad={mobileCurrentPage < totalPages} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} onOpenTimeline={handleOpenTimeline} onOpenLokasiDenah={perms.canEdit ? handleOpenLokasiDenah : undefined} />
+            <AssetFormSidebar isDesktop={desktopSelection} panelVisible={formPanelVisible} isOpen={isSidebarOpen} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} onCameraReviewSaved={handleCameraReviewSaved} onExitToNewAsset={() => setEditAssetForForm(null)} assetIndex={editAssetIndex} totalAssetsInView={mobileAssets.length} hasMoreToLoad={mobileCurrentPage < totalPages} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} onOpenTimeline={handleOpenTimeline} onOpenLokasiDenah={perms.canEdit ? handleOpenLokasiDenah : undefined} closeGuardRef={formGuardRef} />
         )}
 
         {/* MAIN CONTENT */}
@@ -1682,6 +1690,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                     onClose={() => setMapOpen(false)}
                     canEdit={perms.canEdit}
                     onEditAsset={perms.canEdit ? handleEdit : undefined}
+                    onAssetUpdated={updated => onWsAssetChange("asset_updated", updated)}
                     onDeleteAsset={perms.canDelete ? handleDelete : undefined}
                     onSaveCoords={handleMapCoordsSave}
                     buildParams={buildMapParams}
@@ -1777,7 +1786,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                   lintas kotak select (mouse). */}
               <div ref={daftarContentRef} {...(perms.canEdit ? dragSelectProps : {})}>
               {viewMode === 'gallery' ? (
-                <AssetGalleryView daftarkanGulir={daftarkanGulir} onVisibleAssets={mobilePageCache.setVisible} assets={mobileAssets} editId={editAssetForForm?.id} onEdit={perms.canEdit ? handleEdit : undefined} onDelete={perms.canDelete ? handleDelete : undefined} onPrintCard={handlePrintCard} onLoadMore={loadMoreMobile} onLoadPrev={loadPrevMobile} hasPrev={mobileFirstPage > 1} isLoadingMore={mobileLoading} hasMore={mobileCurrentPage < totalPages} totalItems={totalItems} rowLocks={rowLocks} currentSessionId={sessionId} selectedAssets={selectedAssets} onToggleSelect={perms.canEdit ? toggleSelectAsset : undefined} />
+                <AssetGalleryView daftarkanGulir={daftarkanGulir} onAssetUpdated={updated => onWsAssetChange("asset_updated", updated)} onVisibleAssets={mobilePageCache.setVisible} assets={mobileAssets} editId={editAssetForForm?.id} onEdit={perms.canEdit ? handleEdit : undefined} onDelete={perms.canDelete ? handleDelete : undefined} onPrintCard={handlePrintCard} onLoadMore={loadMoreMobile} onLoadPrev={loadPrevMobile} hasPrev={mobileFirstPage > 1} isLoadingMore={mobileLoading} hasMore={mobileCurrentPage < totalPages} totalItems={totalItems} rowLocks={rowLocks} currentSessionId={sessionId} selectedAssets={selectedAssets} onToggleSelect={perms.canEdit ? toggleSelectAsset : undefined} />
               ) : (<>
                 <div className="relative hidden lg:block">
                   <TooltipProvider>
@@ -1831,7 +1840,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
           />
         )}
         {/* Lightbox foto dari baris mode list (tabel/kartu HP) — sama seperti galeri & popup peta. */}
-        {photoLightboxAsset && <PhotoLightbox asset={photoLightboxAsset} onClose={() => setPhotoLightboxAsset(null)} onEdit={perms.canEdit ? handleEdit : undefined} siblings={mobileAssets?.length ? mobileAssets : assets} onSelectAsset={setPhotoLightboxAsset} />}
+        {photoLightboxAsset && <PhotoLightbox onAssetUpdated={updated => onWsAssetChange("asset_updated", updated)} asset={photoLightboxAsset} onClose={() => setPhotoLightboxAsset(null)} onEdit={perms.canEdit ? handleEdit : undefined} siblings={mobileAssets?.length ? mobileAssets : assets} onSelectAsset={setPhotoLightboxAsset} />}
       </Suspense>
       {confirmDialog}
 

@@ -1,5 +1,5 @@
 import React from "react";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { PREFERENSI_BAWAAN } from "../../../lib/preferensiKamera";
 import { bacaCache, muatPreferensi, simpanPreferensi } from "../../../lib/preferensiKameraApi";
 import { gambarWatermarkKamera } from "../../../lib/watermarkKamera";
@@ -51,13 +51,13 @@ test("pilih rasio lalu potret memakai bidang yang sama, tetap terikat aset dan m
   expect(gambarWatermarkKamera).toHaveBeenCalledWith(ctx, 1080, 1080, expect.arrayContaining(["3080158999  NUP 10", "Trainer Kit • Lokasi uji"]));
   expect(onCapture).toHaveBeenCalledWith("data:image/jpeg;base64,dGVzdA==", "aset-a");
 });
-test("silang kecil menempel di sudut thumbnail dan tetap membutuhkan konfirmasi", async () => {
+test("silang di sudut tidak menutup pusat thumbnail dan tetap membutuhkan konfirmasi", async () => {
   const onRemovePhoto = jest.fn(); const { unmount } = render(<FullCameraSheet formData={fd} onClose={jest.fn()}
     photos={["data:image/jpeg;base64,dGVzdA=="]} onRemovePhoto={onRemovePhoto} />);
   await screen.findByTestId("full-camera-macro");
   await waitFor(() => expect(screen.getByTestId("full-camera-macro")).not.toBeDisabled());
   expect(screen.getByTestId("full-camera-macro")).toHaveAttribute("aria-pressed", "false");
-  expect(screen.getByTestId("full-camera-del-0")).toHaveClass("absolute", "top-0", "right-0", "w-11", "h-11");
+  expect(screen.getByTestId("full-camera-del-0")).toHaveClass("absolute", "-top-1", "-right-1", "w-7", "h-7");
   expect(screen.getByTestId("full-camera-del-icon-0")).toHaveClass("w-[18px]", "h-[18px]");
   expect(screen.getByAltText("Foto 1").parentElement).toHaveClass("w-14", "h-14");
   fireEvent.click(screen.getByTestId("full-camera-del-0")); expect(onRemovePhoto).not.toHaveBeenCalled();
@@ -303,4 +303,39 @@ test("pilihan lokal kamera bernama umum digunakan lagi tanpa menebak lensa", asy
   await screen.findByTestId("camera-lens-active");
   expect(screen.queryByTestId("camera-lens-panel")).not.toBeInTheDocument();
   expect(navigator.mediaDevices.getUserMedia.mock.calls[1][0].video.deviceId).toEqual({ exact: "tambahan" });
+});
+
+
+test("foto kamera dapat diperbesar memakai sumber penuh, bukan thumbnail atau dialog hapus", async () => {
+  const onRemovePhoto = jest.fn();
+  render(<FullCameraSheet formData={fd} sesiAset="aset-a" onClose={jest.fn()}
+    photos={["/foto-asli-1920.jpg", "/foto-kedua.jpg"]} thumbnails={["/thumbnail-100.jpg", "/thumb-2.jpg"]} onRemovePhoto={onRemovePhoto} />);
+  fireEvent.click(screen.getByRole("button", { name: "Lihat foto 1" }));
+  const viewer = screen.getByTestId("lightbox-fullscreen-view");
+  const img = within(viewer).getByRole("img");
+  expect(img).toHaveAttribute("src", "/foto-asli-1920.jpg");
+  fireEvent.doubleClick(img, { clientX: 100, clientY: 100 });
+  expect(img.style.transform).toContain("scale(2.5)");
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Foto berikutnya" }));
+  expect(within(viewer).getByRole("img")).toHaveAttribute("src", "/foto-kedua.jpg");
+  fireEvent.click(screen.getByTestId("photo-preview-delete"));
+  expect(screen.getByAltText("Foto yang akan dihapus")).toHaveAttribute("src", "/foto-kedua.jpg");
+  expect(onRemovePhoto).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByTestId("full-camera-del-confirm"));
+  expect(onRemovePhoto).toHaveBeenCalledWith(1);
+});
+
+test("silang memakai foto penuh, diblokir selama simpan, dan konfirmasi tidak pindah aset", async () => {
+  const props = { formData: fd, sesiAset: "aset-a", photos: ["/foto-asli.jpg"], thumbnails: ["/thumb-kecil.jpg"], onClose: jest.fn(), onRemovePhoto: jest.fn() };
+  const view = render(<FullCameraSheet {...props} />);
+  fireEvent.click(screen.getByTestId("full-camera-del-0"));
+  expect(screen.getByAltText("Foto yang akan dihapus")).toHaveAttribute("src", "/foto-asli.jpg");
+  expect(screen.getByAltText("Foto yang akan dihapus")).toHaveClass("object-contain");
+  view.rerender(<FullCameraSheet {...props} busy />);
+  expect(screen.getByTestId("full-camera-del-confirm")).toBeDisabled();
+  fireEvent.click(screen.getByTestId("full-camera-del-confirm"));
+  expect(props.onRemovePhoto).not.toHaveBeenCalled();
+  view.rerender(<FullCameraSheet {...props} sesiAset="aset-b" />);
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
 });
