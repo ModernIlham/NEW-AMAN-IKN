@@ -7,9 +7,9 @@ const rad = (d) => (d * Math.PI) / 180;
 
 /** Arah awal (azimut, 0° = utara, searah jarum jam) dari a ke b, derajat 0–360. */
 export function arahDerajat(a, b) {
-  const φ1 = rad(a.lat), φ2 = rad(b.lat), Δλ = rad(b.lng - a.lng);
-  const y = Math.sin(Δλ) * Math.cos(φ2);
-  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  const lat1 = rad(a.lat), lat2 = rad(b.lat), dLng = rad(b.lng - a.lng);
+  const y = Math.sin(dLng) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
 

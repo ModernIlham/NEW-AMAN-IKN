@@ -28,6 +28,8 @@ function lapisan(Jenis) {
 
 beforeEach(() => {
   jest.useFakeTimers();
+  // Legenda sekali-per-sesi diuji tersendiri; di uji lain ia menutupi status.
+  sessionStorage.setItem("aman_lokasi_legenda", "1");
   Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
   sesi = [];
   gps = {
@@ -218,4 +220,44 @@ test("layar tetap menyala: hanya bila didukung, atas permintaan, dilepas saat lo
   } finally {
     delete navigator.wakeLock;
   }
+});
+
+test("tombol memakai kelas ukuran yang sama dengan tombol zoom (bukan 44 px inline)", () => {
+  for (const b of host.querySelectorAll(".peta-lokasi-btn")) {
+    expect(b.style.width).toBe("");
+    expect(b.style.minHeight).toBe("");
+  }
+  expect(host.querySelectorAll(".peta-lokasi-bar .peta-lokasi-btn")).toHaveLength(4);
+});
+
+test("tiap ketukan menjelaskan efeknya di kotak status, lalu kembali ke status lokasi", () => {
+  tombol().click();
+  sesi[0].ok(fix());
+  const klik = (id) => host.querySelector(`[data-testid="peta-lokasi-saya-${id}"]`).click();
+  klik("jejak");
+  expect(pesan()).toMatch(/Garis jejak disembunyikan/);
+  klik("jejak");
+  expect(pesan()).toMatch(/^Jejak: garis putus-putus/);
+  map.fire("movestart");
+  expect(pesan()).toMatch(/Ikuti berhenti karena peta digeser/);
+  klik("ikuti");
+  expect(pesan()).toMatch(/^Ikuti: peta bergeser otomatis/);
+  klik("ikuti");
+  expect(pesan()).toBe("Peta dipusatkan ke lokasi Anda");
+  jest.advanceTimersByTime(3000);
+  expect(pesan()).toBe("Lokasi aktif · ±8 m");
+  tombol().click();
+  expect(pesan()).toMatch(/Lokasi dimatikan/);
+  jest.advanceTimersByTime(3000);
+  expect(host.querySelector('[role="status"]').hidden).toBe(true);
+});
+
+test("legenda tombol tampil SEKALI per sesi saat lokasi pertama dinyalakan", () => {
+  sessionStorage.removeItem("aman_lokasi_legenda");
+  tombol().click();
+  expect(pesan()).toMatch(/ikuti lokasi · .* jejak .* layar tetap menyala/);
+  jest.advanceTimersByTime(7000);
+  tombol().click();
+  tombol().click();
+  expect(pesan()).not.toMatch(/Tombol di bawah/);
 });

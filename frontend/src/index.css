@@ -272,6 +272,23 @@ aside .overflow-x-auto::-webkit-scrollbar-thumb:hover, .category-dropdown-scroll
   button, a { min-height: 44px; min-width: 44px; }
 }
 
+/* ── Tombol "Lokasi Anda" (lib/lokasiSayaPeta.js) ─────────────────────────────
+   Disamakan dengan tombol zoom +/− Leaflet: 26/30 px di desktop (bawaan
+   .leaflet-bar a / .leaflet-touch), 36 px di HP lewat blok pengecualian di bawah.
+   Dulu 44 px inline sehingga kolomnya lebih lebar dari tombol zoom. */
+.leaflet-container .peta-lokasi-btn {
+  width: 30px; height: 30px; min-width: 0; min-height: 0;
+  padding: 0; border: 0; border-bottom: 1px solid #ccc;
+  display: flex; align-items: center; justify-content: center;
+  background: #fff; color: #0f172a; cursor: pointer;
+}
+/* Leaflet sendiri: 26 px tanpa layar sentuh, 30 px di perangkat sentuh. */
+.leaflet-container:not(.leaflet-touch) .peta-lokasi-btn { width: 26px; height: 26px; }
+.leaflet-container .peta-lokasi-btn[hidden] { display: none; }
+.leaflet-container .peta-lokasi-bar .peta-lokasi-btn:first-child { border-top-left-radius: 2px; border-top-right-radius: 2px; }
+.leaflet-container .peta-lokasi-bar .peta-lokasi-btn:last-of-type { border-bottom: 0; }
+.leaflet-container .peta-lokasi-btn:focus-visible { outline: 2px solid #2563eb; outline-offset: -2px; }
+
 /* ── Kontrol Leaflet DIKECUALIKAN dari aturan 44px di layar sempit ──────────
    Tombol kontrol Leaflet & geoman adalah <a> di dalam .leaflet-bar, jadi
    aturan global di atas ikut memaksanya jadi 44x44. Di editor denah itu berarti
@@ -288,6 +305,7 @@ aside .overflow-x-auto::-webkit-scrollbar-thumb:hover, .category-dropdown-scroll
      ini `line-height: 36px` ikut mengenainya dan kotak atribusi membengkak jadi
      pita putih setinggi ~40 px di sudut peta — persis keluhan lapangan. */
   .leaflet-container .leaflet-bar a,
+  .leaflet-container .leaflet-bar button.peta-lokasi-btn,
   .leaflet-container .leaflet-control:not(.leaflet-control-attribution):not(.leaflet-control-scale) a,
   .leaflet-container .leaflet-buttons-control-button {
     min-height: 36px;

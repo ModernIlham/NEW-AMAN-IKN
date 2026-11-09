@@ -47,6 +47,20 @@ tersendiri.
 
 Logika murni ada di `frontend/src/lib/asetTerdekat.js` (jarak, arah, aset terdekat, jejak); panel di `components/assets/PanelAsetTerdekat.jsx`. Posisi dialirkan lewat toko kecil (`buatTokoPosisi`) agar komponen peta besar tidak di-render ulang tiap fix.
 
+## Tombol kontrol lokasi (urutan dari atas, di bawah zoom +/−)
+
+Ukuran disamakan dengan tombol zoom (26/30 px desktop, 36 px HP) lewat kelas
+`.peta-lokasi-btn` di `index.css`. **Biru isi + ikon putih = aktif**, putih =
+mati. Setiap ketukan menjelaskan efeknya di kotak status (±3 dtk), dan saat
+lokasi pertama kali dinyalakan dalam satu sesi muncul legenda singkat.
+
+| Ikon | Nama | Efek |
+| --- | --- | --- |
+| ◎ | Lokasi | Menyalakan/mematikan GPS. Mati = titik, radius, dan jejak dihapus; tombol lain disembunyikan. |
+| ➤ | Ikuti | Aktif: peta bergeser otomatis bila titik mendekati tepi. Menggeser peta manual mematikannya (dijelaskan di status). Ketuk untuk memusatkan & mengikuti lagi. |
+| 〰 | Jejak | Menyembunyikan/menampilkan garis jalur yang sudah dilalui (tetap dicatat selama lokasi aktif). |
+| 📱☀ | Layar | Menjaga layar tetap menyala selama lokasi aktif (Wake Lock). Hanya tampil bila browser mendukung; ditolak perangkat → dimatikan kembali dengan penjelasan. |
+
 ## Batas perangkat dan koneksi
 
 - Gunakan **HTTPS** pada produksi; `localhost` dapat dipakai saat pengembangan.
