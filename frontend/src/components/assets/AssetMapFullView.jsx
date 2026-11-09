@@ -29,9 +29,9 @@ import { JARAK_DARI_MARKER, kotakLabel, pasangLebarLabel, pilihLabelTampil } fro
 import { parseKoordinat } from "../../lib/koordinatAset";
 import { opsiPinDesain } from "../../lib/markerPin";
 import { pasangLokasiSaya } from "../../lib/lokasiSayaPeta";
-import { siapkanTitikAset, arahDerajat, mataAngin } from "../../lib/asetTerdekat";
+import { siapkanTitikAset, arahDerajat, mataAngin, cukupPresisi, AKURASI_TITIK_M, urlGoogleMaps } from "../../lib/asetTerdekat";
 import { jarakMeter as jarakMeterTitik, formatJarak } from "../../lib/ukurPeta";
-import PanelAsetTerdekat, { buatTokoPosisi } from "./PanelAsetTerdekat";
+import PanelLapanganPeta, { buatTokoPosisi } from "./PanelLapanganPeta";
 import { useBackGuard } from "../../hooks/useBackGuard";
 import { useUkurPeta } from "../../hooks/useUkurPeta";
 import { useDenahSpasial } from "../../hooks/useDenahSpasial";
@@ -368,6 +368,10 @@ const AssetMapFullView = memo(function AssetMapFullView({
   // Callback disimpan di ref agar marker tidak dibangun ulang hanya karena
   // identitas arrow function induk berubah tiap render.
   const onEditRef = useRef(onEditAsset);
+  const canEditRef = useRef(canEdit);
+  canEditRef.current = canEdit;
+  const panduRef = useRef(null);   // (row) => void — mulai memandu ke aset
+  const setTitikRef = useRef(null); // (row) => bool — titik aset = lokasi saya
   const onDeleteRef = useRef(onDeleteAsset);
   const onSaveRef = useRef(onSaveCoords);
   const deletedIdsRef = useRef(new Set()); // id aset terhapus → pin diberi tanda silang
@@ -628,6 +632,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
     const map = mapRef.current;
     const entry = markersRef.current.get(row.id);
     if (!map || !entry) return;
+    lokasiSayaRef.current?.berhentiMengikuti();
     const layer = layerRef.current;
     if (layer && typeof layer.zoomToShowLayer === "function" && layer.hasLayer?.(entry.marker)) {
       layer.zoomToShowLayer(entry.marker, () => entry.marker.openPopup());
@@ -636,6 +641,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
       entry.marker.openPopup();
     }
   }, []);
+
 
   // ── Lingkup yang dibagikan ────────────────────────────────────────────
   //
@@ -778,7 +784,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
     });
     new NorthControl({ position: "topright" }).addTo(map);
 
-    lokasiSayaRef.current = pasangLokasiSaya(map, { onPosisi: (p) => tokoPosisiRef.current.set(p) });
+    lokasiSayaRef.current = pasangLokasiSaya(map, { onPosisi: (p) => tokoPosisiRef.current.set(p), tampilAkurasi: false });
     // Info skala nominal (1:N) + level zoom — diperbarui tiap zoom/geser.
     const scaleInfo = L.control({ position: "bottomleft" });
     scaleInfo.onAdd = () => {
@@ -824,7 +830,8 @@ const AssetMapFullView = memo(function AssetMapFullView({
       // sebelumnya dianggap interaksi peta (preclick Leaflet) sehingga
       // popup hilang saat mulai mengetik nama.
       const popup = L.popup({ closeButton: true, autoClose: false,
-                              closeOnClick: false, className: "aman-peta-tambah" })
+                              closeOnClick: false, className: "aman-peta-tambah",
+                              autoPanPaddingTopLeft: L.point(56, 64) })
         .setLatLng(ev.latlng).setContent(wrap).openOn(map);
       L.DomEvent.disableClickPropagation(wrap);
       L.DomEvent.disableScrollPropagation(wrap);
@@ -848,6 +855,9 @@ const AssetMapFullView = memo(function AssetMapFullView({
           '<div data-isi="pratinjau" style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px"></div>' +
           '<p style="margin:6px 0;color:#64748b;font-size:10px;line-height:1.4">Kategori dummy + NUP & status inventarisasi terisi otomatis — lengkapi detail lain nanti dari daftar aset.</p>' +
           '<button type="button" data-aksi="simpan" data-testid="peta-tambah-simpan" style="width:100%;background:#059669;color:#fff;border:0;border-radius:8px;padding:9px 10px;font-weight:700;font-size:12px;cursor:pointer">Simpan Titik Aset</button>';
+        // Isi popup membesar → hitung ulang ukuran & geser peta agar seluruh
+        // isian (termasuk kolom nama) tak tertutup panel/tepi peta.
+        popup.update();
         const input = wrap.querySelector('[data-isi="nama"]');
         const inKamera = wrap.querySelector('[data-isi="in-kamera"]');
         const inGaleri = wrap.querySelector('[data-isi="in-galeri"]');
@@ -965,6 +975,64 @@ const AssetMapFullView = memo(function AssetMapFullView({
     }, 2500);
   }, []);
 
+  // ── Pekerjaan lapangan dari Lokasi Anda ──
+  const [tujuanPandu, setTujuanPandu] = useState(null); // baris aset yang dituju
+  useEffect(() => {
+    const lat = tujuanPandu ? parseKoordinat(tujuanPandu.koordinat_latitude) : null;
+    const lng = tujuanPandu ? parseKoordinat(tujuanPandu.koordinat_longitude) : null;
+    lokasiSayaRef.current?.setTujuan(lat !== null && lng !== null ? { lat, lng } : null);
+  }, [tujuanPandu]);
+  panduRef.current = setTujuanPandu;
+
+  // Titik aset = lokasi saya. Gerbang akurasi SAMA dengan rana kamera (≤8 m);
+  // jalur simpan SAMA dengan geser pin (antrean OCC luring).
+  const setTitikDariLokasi = useCallback((row) => {
+    const saya = tokoPosisiRef.current?.get();
+    if (!saya) { toast.error("Nyalakan Lokasi Anda (◎) dulu"); return false; }
+    if (!cukupPresisi(saya)) {
+      toast.error(`GPS ±${Math.round(saya.accuracy)} m — tunggu ≤ ${AKURASI_TITIK_M} m sebelum menyimpan titik aset`);
+      return false;
+    }
+    const entry = markersRef.current.get(row.id);
+    const newLat = saya.lat.toFixed(6);
+    const newLng = saya.lng.toFixed(6);
+    const geser = entry ? jarakMeterTitik(saya, { lat: entry.lat, lng: entry.lng }) : null;
+    try { onSaveRef.current?.(row, newLat, newLng); } catch { return false; } // ditolak: kunci/terbuka di form
+    if (entry) {
+      entry.lat = parseFloat(newLat); entry.lng = parseFloat(newLng);
+      entry.marker.setLatLng([entry.lat, entry.lng]);
+      layerRef.current?.refreshClusters?.(entry.marker);
+    }
+    setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, koordinat_latitude: newLat, koordinat_longitude: newLng } : r)));
+    setTujuanPandu((t) => (t?.id === row.id ? { ...t, koordinat_latitude: newLat, koordinat_longitude: newLng } : t));
+    toast.success(`Titik "${row.asset_name || row.asset_code}" ${geser !== null ? `dipindah ${formatJarak(geser)} ` : ""}ke lokasi Anda (GPS ±${Math.round(saya.accuracy)} m)`
+      + (navigator.onLine ? "" : " — masuk antrean, tersinkron saat online"));
+    refreshRowVersion(row.id);
+    return true;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  setTitikRef.current = setTitikDariLokasi;
+
+  // Tambah aset di lokasi saya: memakai popup "Tambah aset di sini" yang sama
+  // dengan tekan-lama peta (nama + foto + antrean), di titik GPS Anda.
+  const tambahDiLokasiSaya = useCallback(() => {
+    const map = mapRef.current;
+    const saya = tokoPosisiRef.current?.get();
+    if (!map || !saya) return;
+    if (!cukupPresisi(saya)) {
+      toast.error(`GPS ±${Math.round(saya.accuracy)} m — tunggu ≤ ${AKURASI_TITIK_M} m sebelum menambah titik aset`);
+      return;
+    }
+    const ll = L.latLng(saya.lat, saya.lng);
+    // Berhenti mengikuti selama mengisi: langkah kecil petugas tak boleh
+    // menggeser peta (dan popup isian) dari bawah jarinya.
+    lokasiSayaRef.current?.berhentiMengikuti();
+    map.setView(ll, Math.max(map.getZoom(), 18), { animate: false });
+    map.fire("contextmenu", { latlng: ll });
+    // Langsung ke isian nama (lewati langkah "+ Tambah aset di sini").
+    setTimeout(() => containerRef.current?.querySelector('[data-testid="peta-tambah-disini"]')?.click(), 0);
+  }, []);
+
   // Konten popup dibangun ulang tiap dibuka (data baris terbaru dari entry).
   // Tata letak padat: bingkai foto (bila ada) + identitas, pill status/kondisi
   // berwarna, baris info berlabel, koordinat, tombol Edit selebar popup.
@@ -1038,7 +1106,9 @@ const AssetMapFullView = memo(function AssetMapFullView({
     head.appendChild(title);
     el.appendChild(head);
 
-    // ── Jarak dari Lokasi Anda (hanya bila fitur lokasi aktif) ──
+    // ── Lapangan: jarak dari Anda + Pandu / Titik = lokasi saya ──
+    // Hanya saat Lokasi Anda aktif. Aksi dibaca ulang dari toko saat diketuk
+    // (popup bisa terbuka lama sementara posisi terus bergerak).
     const saya = tokoPosisiRef.current?.get();
     if (saya && lat !== null && lng !== null) {
       const jarak = jarakMeterTitik(saya, { lat, lng });
@@ -1046,8 +1116,50 @@ const AssetMapFullView = memo(function AssetMapFullView({
       dari.setAttribute("data-testid", "popup-jarak-saya");
       dari.style.cssText = "margin-top:6px;font-size:10.5px;color:#1d4ed8;font-weight:600";
       dari.textContent = `📍 ${formatJarak(jarak)} dari Anda · ${mataAngin(arahDerajat(saya, { lat, lng }))}`
-        + (saya.accuracy > 30 ? ` (GPS ±${Math.round(saya.accuracy)} m)` : "");
+        + ` (GPS ±${Math.round(saya.accuracy)} m)`;
       el.appendChild(dari);
+      const baris = document.createElement("div");
+      baris.style.cssText = "display:flex;gap:5px;margin-top:5px";
+      const gayaBtn = (warna) => `flex:1;min-width:0;padding:6px 4px;border-radius:8px;font-size:10.5px;font-weight:700;cursor:pointer;background:#fff;border:1.5px solid ${warna};color:${warna}`;
+      const pandu = document.createElement("button");
+      pandu.type = "button";
+      pandu.textContent = "🧭 Pandu ke sini";
+      pandu.setAttribute("data-testid", "popup-pandu");
+      pandu.style.cssText = gayaBtn("#7c3aed");
+      pandu.addEventListener("click", () => { entry.marker.closePopup(); panduRef.current?.(entry.row); });
+      baris.appendChild(pandu);
+      if (onSaveRef.current && canEditRef.current) {
+        const set = document.createElement("button");
+        set.type = "button";
+        set.setAttribute("data-testid", "popup-set-titik");
+        set.style.cssText = gayaBtn("#059669");
+        let yakin = false;
+        const label = () => {
+          const kini = tokoPosisiRef.current?.get();
+          if (!kini) return "📍 Lokasi mati";
+          if (!cukupPresisi(kini)) return `📍 Tunggu GPS ≤ ${AKURASI_TITIK_M} m`;
+          return yakin ? `Ketuk lagi: pindah ${formatJarak(jarakMeterTitik(kini, { lat: entry.lat, lng: entry.lng }))}` : "📍 Titik = lokasi saya";
+        };
+        set.textContent = label();
+        set.addEventListener("click", () => {
+          const kini = tokoPosisiRef.current?.get();
+          if (!kini || !cukupPresisi(kini)) { set.textContent = label(); setTitikRef.current?.(entry.row); return; }
+          if (!yakin) { yakin = true; set.textContent = label(); return; }
+          if (setTitikRef.current?.(entry.row)) entry.marker.closePopup();
+          yakin = false;
+        });
+        baris.appendChild(set);
+      }
+      el.appendChild(baris);
+      if (jarak > 300) {
+        const gm = document.createElement("a");
+        gm.href = urlGoogleMaps(lat, lng);
+        gm.target = "_blank";
+        gm.rel = "noopener noreferrer";
+        gm.textContent = "Rute Google Maps ↗";
+        gm.style.cssText = "display:block;margin-top:4px;font-size:10.5px;color:#2563eb;text-align:center";
+        el.appendChild(gm);
+      }
     }
 
     // ── Pill status inventarisasi + kondisi + kelengkapan pengguna ──
@@ -1243,7 +1355,9 @@ const AssetMapFullView = memo(function AssetMapFullView({
       // bertumpuk saat pin diketuk di layar sentuh). Dalam Mode Seleksi, klik
       // pin = pilih/lepas (bukan buka popup) — kendali klik diambil alih di
       // bawah (buang auto-open bawaan leaflet agar tak bentrok).
-      marker.bindPopup(() => buildPopupEl(entry));
+      // Padding kiri/atas: popup tak boleh tertutup kolom tombol zoom/lokasi
+      // maupun panel lapangan di atas.
+      marker.bindPopup(() => buildPopupEl(entry), { autoPanPaddingTopLeft: L.point(56, 64) });
       if (marker._openPopup) marker.off("click", marker._openPopup, marker);
       marker.on("click", () => {
         if (selectModeRef.current && toggleOneRef.current) toggleOneRef.current(entry.row.id);
@@ -1940,9 +2054,12 @@ const AssetMapFullView = memo(function AssetMapFullView({
           </div>
         )}
 
-        {/* ── Panel ASET TERDEKAT (atas tengah) — hanya saat Lokasi Anda aktif ── */}
-        <PanelAsetTerdekat toko={tokoPosisiRef.current} titik={titikTerdekat} onFokus={fokusAset}
-          onEdit={canEdit && onEditAsset ? onEditAsset : undefined} />
+        {/* ── Panel LAPANGAN (atas tengah) — hanya saat Lokasi Anda aktif ── */}
+        <PanelLapanganPeta toko={tokoPosisiRef.current} titik={titikTerdekat} onFokus={fokusAset}
+          tujuan={tujuanPandu} onPandu={setTujuanPandu}
+          onEdit={canEdit && onEditAsset ? onEditAsset : undefined}
+          onSetTitik={canEdit && onSaveCoords ? setTitikDariLokasi : undefined}
+          onTambahDiSini={canEdit && onQuickAdd ? tambahDiLokasiSaya : undefined} />
 
         {/* ── Panel ALAT UKUR (kiri atas, di bawah kontrol zoom) ──
             Ditempatkan di kiri supaya tak menutupi panel Lapis Denah di kanan.

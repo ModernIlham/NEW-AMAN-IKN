@@ -1,6 +1,6 @@
 import {
   arahDerajat, mataAngin, siapkanTitikAset, cariTerdekat, jumlahDalamRadius,
-  langkahJejak, arahGerakSah,
+  arahGerakSah, statusPandu, cukupPresisi, urlGoogleMaps, AKURASI_TITIK_M,
 } from "./asetTerdekat";
 
 const P = { lat: -1.0, lng: 116.0 };
@@ -49,13 +49,24 @@ test("cariTerdekat: urut jarak, dibatasi n, filter belum-didata & radius maks", 
   expect(jumlahDalamRadius(titik, P, 50, { hanyaBelum: true })).toBe(2);
 });
 
-test("jejak menyaring jitter diam & fix kasar, mencatat langkah nyata", () => {
-  expect(langkahJejak(null, { ...P, accuracy: 8 })).toBe(0);
-  expect(langkahJejak(null, { ...P, accuracy: 80 })).toBeNull();
-  expect(langkahJejak(P, { lat: P.lat + 0.00002, lng: P.lng, accuracy: 8 })).toBeNull(); // ±2 m
-  expect(langkahJejak(P, { lat: P.lat + 0.0001, lng: P.lng, accuracy: 30 })).toBeNull(); // 11 m < 15 m
-  expect(langkahJejak(P, { lat: P.lat + 0.0001, lng: P.lng, accuracy: 8 })).toBeGreaterThan(10);
+test("pandu: jarak, arah, tiba bila ≤ max(5 m, akurasi)", () => {
+  const tujuan = { lat: P.lat + 0.0003, lng: P.lng }; // ±33 m ke utara
+  const jauh = statusPandu({ ...P, accuracy: 6 }, tujuan);
+  expect(jauh.tiba).toBe(false);
+  expect(Math.round(jauh.arah)).toBe(0);
+  expect(statusPandu({ lat: P.lat + 0.00028, lng: P.lng, accuracy: 4 }, tujuan).tiba).toBe(true); // 2 m
+  expect(statusPandu({ ...P, accuracy: 40 }, tujuan).tiba).toBe(true); // GPS kasar: tak bisa dibedakan
+  expect(statusPandu(null, tujuan)).toBeNull();
 });
+
+test("gerbang presisi titik aset = 8 m (sama dengan rana kamera); tautan Google Maps", () => {
+  expect(AKURASI_TITIK_M).toBe(8);
+  expect(cukupPresisi({ accuracy: 8 })).toBe(true);
+  expect(cukupPresisi({ accuracy: 8.1 })).toBe(false);
+  expect(cukupPresisi(null)).toBe(false);
+  expect(urlGoogleMaps(-1.2, 116.85)).toBe("https://www.google.com/maps/dir/?api=1&destination=-1.200000,116.850000");
+});
+
 
 test("arah gerak hanya sah saat benar-benar bergerak", () => {
   expect(arahGerakSah({ heading: 90, speed: 1.2 })).toBe(true);

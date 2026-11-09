@@ -18,20 +18,23 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
-## [#1117] Tombol Lokasi Anda seukuran tombol zoom + penjelasan tiap tombol — 2026-11-09
+## [#1117] Lokasi Anda dirancang ulang untuk kerja lapangan: pandu, titik = lokasi saya, tambah di sini — 2026-11-09
 
-- Empat tombol lokasi (Lokasi, Ikuti, Jejak, Layar) kini **seukuran tombol
-  zoom +/−** (36 px HP, 26/30 px desktop) — dulu 44 px sehingga kolomnya lebih
-  lebar dan menutupi peta.
-- Keadaan terbaca sekilas: **biru isi + ikon putih = aktif**, putih = mati
-  (dulu biru muda vs putih, sulit dibedakan di luar ruangan).
-- Tiap ketukan menjelaskan efeknya di kotak status (mis. "Garis jejak
-  disembunyikan", "Ikuti berhenti karena peta digeser — ketuk ➤ untuk mengikuti
-  lagi"); legenda singkat sekali per sesi saat lokasi pertama dinyalakan.
-- Ikon "layar tetap menyala" diganti ponsel bermatahari; bila perangkat menolak
-  Wake Lock, tombol kembali mati dengan penjelasan.
-- Diuji di Chromium nyata (Playwright, GPS simulasi, HP & desktop): 34 cek
-  fungsi & ukuran lulus.
+- **Dihapus** (umpan balik pemilik: kurang bermanfaat): jejak perjalanan, tombol
+  ikuti terpisah, tombol layar tetap menyala. Kolom tombol kini hanya **satu
+  tombol ◎ seukuran zoom +/−**: mati → nyala+ikuti; peta digeser → ketuk kembali
+  ke lokasi; mengikuti → ketuk mati.
+- **Pandu ke aset**: garis ungu + jarak & arah langsung; tiba (≤ max(5 m,
+  akurasi)) → getar, "Anda di lokasi …", tombol Edit/foto & Titik = lokasi saya;
+  > 300 m → Rute Google Maps. Dari daftar terdekat atau popup pin.
+- **Titik = lokasi saya** (popup pin & saat tiba) dan **Tambah aset di lokasi
+  saya** (panel) — bergerbang akurasi **≤ 8 m** seperti rana kamera; dua ketuk
+  untuk memindah titik; simpan lewat antrean luring yang sama dengan geser pin.
+- Panel lapangan menampilkan pil **GPS ±N m** berwarna; kotak status di Peta
+  Aset hanya untuk pesan & masalah (tak lagi menutupi popup). Popup pin & popup
+  tambah aset tak lagi tertutup panel/kolom tombol.
+- Diuji end-to-end di Chromium nyata (komponen peta penuh, GPS simulasi, HP):
+  14/14 alur lulus tanpa galat JS.
 
 ## [#1116] Lokasi Anda di peta: aset terdekat, jejak, arah gerak, layar menyala — 2026-11-09
 

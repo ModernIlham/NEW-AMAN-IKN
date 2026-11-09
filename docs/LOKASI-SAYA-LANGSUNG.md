@@ -34,32 +34,43 @@ peta memakai aturan yang sama. Fitur pengiriman posisi perangkat di halaman
 Lacak serta pengambilan GPS untuk formulir/kamera memiliki tujuan dan lifecycle
 tersendiri.
 
-## Fitur lapangan tambahan (November 2026)
+## Kerja lapangan dari Lokasi Anda (Peta Aset)
+
+Dirancang ulang November 2026 setelah umpan balik pemilik: jejak perjalanan,
+tombol ikuti terpisah, dan tombol "layar tetap menyala" **dihapus** karena tidak
+menjawab kebutuhan lapangan. Yang tersisa berpusat pada tiga pertanyaan petugas:
+*aset apa di dekat saya?*, *di mana aset X?*, dan *titik aset ini salah/belum
+ada*.
+
+**Satu tombol ◎** (seukuran tombol zoom, kelas `.peta-lokasi-btn`):
+
+| Keadaan tombol | Ketuk → |
+| --- | --- |
+| Putih, ikon gelap (mati) | Nyalakan GPS + ikuti lokasi |
+| Biru isi (aktif & mengikuti) | Matikan lokasi |
+| Putih, ikon biru (aktif, peta sedang digeser) | Kembali ke lokasi Anda & ikuti lagi |
+
+Menggeser peta sendiri memunculkan pesan "Peta digeser — ketuk ◎ untuk kembali";
+gerakan peta oleh aplikasi (fokus pin, tambah aset) berhenti mengikuti tanpa
+pesan agar tidak menutupi popup.
+
+**Panel lapangan** (tengah atas, hanya saat lokasi aktif):
 
 | Fitur | Perilaku |
 | --- | --- |
-| **Aset terdekat** (Peta Aset) | Panel di tengah atas muncul saat lokasi aktif: "N aset ≤ 50 m · terdekat X m". Ketuk untuk daftar 5 aset terdekat (radius 5 km) dengan jarak + panah arah (peta selalu menghadap utara). Ketuk baris untuk membawa peta ke pin dan membuka popup-nya; tombol pensil membuka form edit (bila berhak). Filter **Hanya yang belum diinventarisasi** diingat per perangkat. Bila akurasi GPS lebih buruk dari ±30 m, panel memperingatkan bahwa jarak bisa meleset sebesar itu. Dihitung di perangkat (juga luring dari snapshot), O(jumlah aset) per fix. |
-| **Jarak di popup pin** | Popup aset menampilkan "📍 X m dari Anda · arah mata angin" selama lokasi aktif. |
-| **Kerucut arah gerak** | Titik biru diberi kerucut arah dari `coords.heading` hanya saat bergerak (kecepatan ≥ 0,7 m/s). Saat diam, arah GPS acak sehingga kerucut disembunyikan. Tidak memakai kompas/DeviceOrientation (perlu izin tambahan di iOS). |
-| **Jejak perjalanan** | Garis putus-putus jalur yang sudah dilalui sesi ini + panjangnya di status ("jejak 120 m"). Hanya fix dengan akurasi ≤ 50 m yang bergeser ≥ max(5 m, ½ akurasi) yang dicatat, supaya jitter saat diam tidak menggambar coretan. Maks 3.000 titik. Tombol jejak menyembunyikan/menampilkan garis. **Hanya di memori tab**: hilang saat lokasi dimatikan, tidak dikirim ke server. |
-| **Layar tetap menyala** | Tombol opsional (hanya bila browser mendukung Screen Wake Lock) agar layar tidak padam selama survei. Diminta hanya atas ketukan pengguna, diminta ulang saat tab kembali terlihat, dilepas saat lokasi dimatikan. Menambah konsumsi baterai — sengaja tidak otomatis. |
-| **Jam perangkat meleset** | Ponsel tanpa sinkron waktu jaringan bisa berbeda puluhan detik dari timestamp GPS sehingga setiap fix tertolak sebagai "basi". Selisih kini dipelajari dari **dua** fix beruntun yang selisihnya konsisten (±3 dtk) dan timestamp-nya maju, sehingga satu fix cache lama tetap tertolak. |
+| Ringkasan | "N aset ≤ 50 m · terdekat X m" + pil **GPS ±N m** (hijau ≤ 8 m, kuning ≤ 30 m, merah > 30 m). |
+| Aset terdekat | 5 terdekat (5 km) + jarak & panah arah; ketuk = fokus pin (daftar dilipat agar popup bisa diketuk); 🧭 = pandu; ✎ = edit. Filter "hanya yang belum diinventarisasi" diingat. |
+| **Pandu ke aset** | Garis ungu putus-putus Anda → aset, jarak & arah mata angin langsung; peta menampilkan keduanya. **Tiba** bila jarak ≤ max(5 m, akurasi GPS): getar sekali, judul "Anda di lokasi …", tombol **Edit / foto aset** dan **Titik = lokasi saya**. Aset > 300 m: tautan **Rute Google Maps**. Mematikan lokasi menghentikan pandu. |
+| **Titik = lokasi saya** | Di panel saat tiba & di popup pin. Dua ketuk (ketuk kedua menyebut jarak pemindahan). Jalur simpan sama dengan geser pin (antrean OCC, jalan luring). **Gerbang akurasi ≤ 8 m**, sama dengan rana Mode Kamera Penuh. |
+| **Tambah aset di lokasi saya** | Membuka popup "Aset baru di titik ini" (nama + foto, sama dengan tekan-lama peta) tepat di titik GPS Anda. Gerbang ≤ 8 m. |
+| Popup pin | "📍 X m dari Anda · arah (GPS ±N m)" + **Pandu ke sini** + **Titik = lokasi saya**; > 300 m: Rute Google Maps. |
+| Kerucut arah gerak | Dari `coords.heading` hanya saat kecepatan ≥ 0,7 m/s. |
+| Jam perangkat meleset | Selisih jam perangkat vs GPS dipelajari dari dua fix konsisten — fix tak lagi ditolak semua sebagai basi. |
 
-Logika murni ada di `frontend/src/lib/asetTerdekat.js` (jarak, arah, aset terdekat, jejak); panel di `components/assets/PanelAsetTerdekat.jsx`. Posisi dialirkan lewat toko kecil (`buatTokoPosisi`) agar komponen peta besar tidak di-render ulang tiap fix.
-
-## Tombol kontrol lokasi (urutan dari atas, di bawah zoom +/−)
-
-Ukuran disamakan dengan tombol zoom (26/30 px desktop, 36 px HP) lewat kelas
-`.peta-lokasi-btn` di `index.css`. **Biru isi + ikon putih = aktif**, putih =
-mati. Setiap ketukan menjelaskan efeknya di kotak status (±3 dtk), dan saat
-lokasi pertama kali dinyalakan dalam satu sesi muncul legenda singkat.
-
-| Ikon | Nama | Efek |
-| --- | --- | --- |
-| ◎ | Lokasi | Menyalakan/mematikan GPS. Mati = titik, radius, dan jejak dihapus; tombol lain disembunyikan. |
-| ➤ | Ikuti | Aktif: peta bergeser otomatis bila titik mendekati tepi. Menggeser peta manual mematikannya (dijelaskan di status). Ketuk untuk memusatkan & mengikuti lagi. |
-| 〰 | Jejak | Menyembunyikan/menampilkan garis jalur yang sudah dilalui (tetap dicatat selama lokasi aktif). |
-| 📱☀ | Layar | Menjaga layar tetap menyala selama lokasi aktif (Wake Lock). Hanya tampil bila browser mendukung; ditolak perangkat → dimatikan kembali dengan penjelasan. |
+Logika murni: `frontend/src/lib/asetTerdekat.js`; panel:
+`components/assets/PanelLapanganPeta.jsx`; kontrol & garis pandu:
+`lib/lokasiSayaPeta.js` (`setTujuan`, `berhentiMengikuti`). Peta Kolaborasi
+memakai kontrol yang sama tanpa panel (kotak status tetap menampilkan akurasi).
 
 ## Batas perangkat dan koneksi
 
